@@ -88,6 +88,8 @@ include(${ZEPHYR_BASE}/cmake/extensions.cmake)
 
 find_package(PythonInterp 3.4)
 
+include(${ZEPHYR_BASE}/cmake/ccache.cmake)
+
 if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_BINARY_DIR})
   message(FATAL_ERROR "Source directory equals build directory.\
  In-source builds are not supported.\
@@ -180,7 +182,11 @@ set(CACHED_BOARD ${BOARD} CACHE STRING "Selected board")
 # Use BOARD to search zephyr/boards/** for a _defconfig file,
 # e.g. zephyr/boards/arm/96b_carbon_nrf51/96b_carbon_nrf51_defconfig. When
 # found, use that path to infer the ARCH we are building for.
-find_path(BOARD_DIR NAMES "${BOARD}_defconfig" PATHS ${ZEPHYR_BASE}/boards/*/* NO_DEFAULT_PATH)
+if(NOT BOARD_ROOT)
+  set(BOARD_ROOT ${ZEPHYR_BASE})
+endif()
+
+find_path(BOARD_DIR NAMES "${BOARD}_defconfig" PATHS ${BOARD_ROOT}/boards/*/* NO_DEFAULT_PATH)
 
 assert_with_usage(BOARD_DIR "No board named '${BOARD}' found")
 
@@ -210,6 +216,22 @@ the configuration settings specified in an alternate .conf file using this param
 These settings will override the settings in the application’s .config file or its default .conf file.\
 Multiple files may be listed, e.g. CONF_FILE=\"prj1.conf prj2.conf\"")
 
+if(DTC_OVERLAY_FILE)
+  # DTC_OVERLAY_FILE has either been specified on the cmake CLI or is already
+  # in the CMakeCache.txt. This has precedence over the environment
+  # variable DTC_OVERLAY_FILE
+elseif(DEFINED ENV{DTC_OVERLAY_FILE})
+  set(DTC_OVERLAY_FILE $ENV{DTC_OVERLAY_FILE})
+elseif(EXISTS          ${APPLICATION_SOURCE_DIR}/${BOARD}.overlay)
+  set(DTC_OVERLAY_FILE ${APPLICATION_SOURCE_DIR}/${BOARD}.overlay)
+endif()
+
+set(DTC_OVERLAY_FILE ${DTC_OVERLAY_FILE} CACHE STRING "If desired, you can \
+build the application using the DT configuration settings specified in an \
+alternate .overlay file using this parameter. These settings will override the \
+settings in the board's .dts file. Multiple files may be listed, e.g. \
+DTC_OVERLAY_FILE=\"dts1.overlay dts2.overlay\"")
+
 # Prevent CMake from testing the toolchain
 set(CMAKE_C_COMPILER_FORCED   1)
 set(CMAKE_CXX_COMPILER_FORCED 1)
@@ -219,12 +241,23 @@ include(${ZEPHYR_BASE}/cmake/host-tools.cmake)
 include(${ZEPHYR_BASE}/cmake/kconfig.cmake)
 include(${ZEPHYR_BASE}/cmake/toolchain.cmake)
 
+set(SOC_NAME ${CONFIG_SOC})
+set(SOC_SERIES ${CONFIG_SOC_SERIES})
+set(SOC_FAMILY ${CONFIG_SOC_FAMILY})
+
+if("${SOC_SERIES}" STREQUAL "")
+  set(SOC_PATH ${SOC_NAME})
+else()
+  set(SOC_PATH ${SOC_FAMILY}/${SOC_SERIES})
+endif()
+
+
 # DTS should be run directly after kconfig because CONFIG_ variables
 # from kconfig and dts should be available at the same time. But
 # running DTS involves running the preprocessor, so we put it behind
 # toolchain. Meaning toolchain.cmake is the only component where
 # kconfig and dts variables aren't available at the same time.
-include(${ZEPHYR_BASE}/dts/dts.cmake)
+include(${ZEPHYR_BASE}/cmake/dts.cmake)
 
 set(KERNEL_NAME ${CONFIG_KERNEL_BIN_NAME})
 

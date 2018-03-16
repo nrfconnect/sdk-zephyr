@@ -36,6 +36,22 @@
 #include "rpl.h"
 #include "net_stats.h"
 
+/* Timeout value to be used when allocating net buffer during various
+ * neighbor discovery procedures.
+ */
+#define ND_NET_BUF_TIMEOUT MSEC(100)
+
+/* Maximum reachable time value specified in RFC 4861 section
+ * 6.2.1. Router Configuration Variables, AdvReachableTime
+ */
+#define MAX_REACHABLE_TIME 3600000
+
+/* IPv6 minimum link MTU specified in RFC 8200 section 5
+ * Packet Size Issues
+ */
+#define MIN_IPV6_MTU NET_IPV6_MTU
+#define MAX_IPV6_MTU 0xffff
+
 /* IPv6 wildcard and loopback address defined by RFC2553 */
 const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
 const struct in6_addr in6addr_loopback = IN6ADDR_LOOPBACK_INIT;
@@ -105,7 +121,10 @@ static inline bool net_is_solicited(struct net_pkt *pkt)
 	struct net_icmpv6_na_hdr hdr, *na_hdr;
 
 	na_hdr = net_icmpv6_get_na_hdr(pkt, &hdr);
-	NET_ASSERT(na_hdr);
+	if (!na_hdr) {
+		NET_ERR("could not get na_hdr");
+		return false;
+	}
 
 	return na_hdr->flags & NET_ICMPV6_NA_FLAG_SOLICITED;
 }
@@ -115,7 +134,10 @@ static inline bool net_is_router(struct net_pkt *pkt)
 	struct net_icmpv6_na_hdr hdr, *na_hdr;
 
 	na_hdr = net_icmpv6_get_na_hdr(pkt, &hdr);
-	NET_ASSERT(na_hdr);
+	if (!na_hdr) {
+		NET_ERR("could not get na_hdr");
+		return false;
+	}
 
 	return na_hdr->flags & NET_ICMPV6_NA_FLAG_ROUTER;
 }
@@ -125,7 +147,10 @@ static inline bool net_is_override(struct net_pkt *pkt)
 	struct net_icmpv6_na_hdr hdr, *na_hdr;
 
 	na_hdr = net_icmpv6_get_na_hdr(pkt, &hdr);
-	NET_ASSERT(na_hdr);
+	if (!na_hdr) {
+		NET_ERR("could not get na_hdr");
+		return false;
+	}
 
 	return na_hdr->flags & NET_ICMPV6_NA_FLAG_OVERRIDE;
 }
@@ -238,15 +263,6 @@ static struct net_nbr *nbr_lookup(struct net_nbr_table *table,
 	}
 
 	return NULL;
-}
-
-struct net_ipv6_nbr_data *net_ipv6_get_nbr_by_index(u8_t idx)
-{
-	struct net_nbr *nbr = get_nbr(idx);
-
-	NET_ASSERT_INFO(nbr, "Invalid ll index %d", idx);
-
-	return net_ipv6_nbr_data(nbr);
 }
 
 static inline void nbr_clear_ns_pending(struct net_ipv6_nbr_data *data)
@@ -461,6 +477,7 @@ struct net_nbr *net_ipv6_nbr_add(struct net_if *iface,
 				 enum net_ipv6_nbr_state state)
 {
 	struct net_nbr *nbr;
+	int ret;
 #if defined(CONFIG_NET_MGMT_EVENT_INFO)
 	struct net_event_ipv6_nbr info;
 #endif
@@ -500,7 +517,10 @@ struct net_nbr *net_ipv6_nbr_add(struct net_if *iface,
 		/* Send NS so that we can verify that the neighbor is
 		 * reachable.
 		 */
-		net_ipv6_send_ns(iface, NULL, NULL, NULL, addr, false);
+		ret = net_ipv6_send_ns(iface, NULL, NULL, NULL, addr, false);
+		if (ret < 0) {
+			NET_DBG("Cannot send NS (%d)", ret);
+		}
 	}
 
 	NET_DBG("[%d] nbr %p state %d router %d IPv6 %s ll %s iface %p",
@@ -569,6 +589,11 @@ struct in6_addr *net_ipv6_nbr_lookup_by_index(struct net_if *iface,
 	}
 
 	return NULL;
+}
+#else
+const char *net_ipv6_nbr_state2str(enum net_ipv6_nbr_state state)
+{
+	return "<unknown state>";
 }
 #endif /* CONFIG_NET_IPV6_NBR_CACHE */
 
@@ -961,6 +986,7 @@ struct net_pkt *net_ipv6_prepare_for_send(struct net_pkt *pkt)
 	struct in6_addr *nexthop = NULL;
 	struct net_if *iface = NULL;
 	struct net_nbr *nbr;
+	int ret;
 
 	NET_ASSERT(pkt && pkt->frags);
 
@@ -972,8 +998,6 @@ struct net_pkt *net_ipv6_prepare_for_send(struct net_pkt *pkt)
 		size_t pkt_len = net_pkt_get_len(pkt);
 
 		if (pkt_len > NET_IPV6_MTU) {
-			int ret;
-
 			ret = net_ipv6_send_fragmented_pkt(net_pkt_iface(pkt),
 							   pkt, pkt_len);
 			if (ret < 0) {
@@ -1125,20 +1149,21 @@ try_send:
 
 #if defined(CONFIG_NET_IPV6_ND)
 	/* We need to send NS and wait for NA before sending the packet. */
-	if (net_ipv6_send_ns(net_pkt_iface(pkt),
-			     pkt,
-			     &NET_IPV6_HDR(pkt)->src,
-			     NULL,
-			     nexthop,
-			     false) < 0) {
+	ret = net_ipv6_send_ns(net_pkt_iface(pkt), pkt,
+			       &NET_IPV6_HDR(pkt)->src, NULL,
+			       nexthop, false);
+	if (ret < 0) {
 		/* In case of an error, the NS send function will unref
 		 * the pkt.
 		 */
+		NET_DBG("Cannot send NS (%d)", ret);
 		return NULL;
 	}
 
 	NET_DBG("pkt %p (frag %p) will be sent later", pkt, pkt->frags);
 #else
+	ARG_UNUSED(ret);
+
 	NET_DBG("pkt %p (frag %p) cannot be sent, dropping it.", pkt,
 		pkt->frags);
 
@@ -1229,8 +1254,9 @@ static void setup_headers(struct net_pkt *pkt, u8_t nd6_len,
 	net_pkt_icmp_data(pkt)->code = 0;
 }
 
-static inline void handle_ns_neighbor(struct net_pkt *pkt, u8_t ll_len,
-				      u16_t sllao_offset)
+static inline struct net_nbr *handle_ns_neighbor(struct net_pkt *pkt,
+						 u8_t ll_len,
+						 u16_t sllao_offset)
 {
 	struct net_linkaddr_storage lladdr;
 	struct net_linkaddr nbr_lladdr;
@@ -1242,7 +1268,7 @@ static inline void handle_ns_neighbor(struct net_pkt *pkt, u8_t ll_len,
 	frag = net_frag_read(pkt->frags, sllao_offset,
 			     &pos, lladdr.len, lladdr.addr);
 	if (!frag && pos == 0xffff) {
-		return;
+		return NULL;
 	}
 
 	nbr_lladdr.len = lladdr.len;
@@ -1257,7 +1283,7 @@ static inline void handle_ns_neighbor(struct net_pkt *pkt, u8_t ll_len,
 		nbr_lladdr.len = net_pkt_ll_src(pkt)->len;
 	}
 
-	nbr_add(pkt, &nbr_lladdr, false, NET_IPV6_NBR_STATE_INCOMPLETE);
+	return nbr_add(pkt, &nbr_lladdr, false, NET_IPV6_NBR_STATE_INCOMPLETE);
 }
 
 int net_ipv6_send_na(struct net_if *iface, const struct in6_addr *src,
@@ -1270,13 +1296,16 @@ int net_ipv6_send_na(struct net_if *iface, const struct in6_addr *src,
 	u8_t llao_len;
 
 	pkt = net_pkt_get_reserve_tx(net_if_get_ll_reserve(iface, dst),
-				     K_FOREVER);
+				     ND_NET_BUF_TIMEOUT);
+	if (!pkt) {
+		return -ENOMEM;
+	}
 
-	NET_ASSERT_INFO(pkt, "Out of TX packets");
-
-	frag = net_pkt_get_frag(pkt, K_FOREVER);
-
-	NET_ASSERT_INFO(frag, "Out of DATA buffers");
+	frag = net_pkt_get_frag(pkt, ND_NET_BUF_TIMEOUT);
+	if (!frag) {
+		net_pkt_unref(pkt);
+		return -ENOMEM;
+	}
 
 	net_pkt_frag_add(pkt, frag);
 
@@ -1296,7 +1325,10 @@ int net_ipv6_send_na(struct net_if *iface, const struct in6_addr *src,
 	net_buf_add(frag, sizeof(struct net_icmpv6_na_hdr) + llao_len);
 
 	na_hdr = net_icmpv6_get_na_hdr(pkt, &hdr);
-	NET_ASSERT_INFO(na_hdr, "Too short fragment for NA");
+	if (!na_hdr) {
+		NET_ERR("fragment too short for NA");
+		goto drop;
+	}
 
 	net_ipaddr_copy(&NET_IPV6_HDR(pkt)->src, src);
 	net_ipaddr_copy(&NET_IPV6_HDR(pkt)->dst, dst);
@@ -1367,7 +1399,10 @@ static enum net_verdict handle_ns_input(struct net_pkt *pkt)
 	size_t left_len;
 
 	ns_hdr = net_icmpv6_get_ns_hdr(pkt, &nshdr);
-	NET_ASSERT(ns_hdr);
+	if (!ns_hdr) {
+		NET_ERR("NULL NS header - dropping");
+		goto drop;
+	}
 
 	dbg_addr_recv_tgt("Neighbor Solicitation",
 			  &NET_IPV6_HDR(pkt)->src,
@@ -1417,12 +1452,20 @@ static enum net_verdict handle_ns_input(struct net_pkt *pkt)
 				goto drop;
 			}
 
-			handle_ns_neighbor(pkt, nd_opt_hdr->len,
-					   net_pkt_ip_hdr_len(pkt) +
-					   net_pkt_ipv6_ext_len(pkt) +
-					   sizeof(struct net_icmp_hdr) +
-					   net_pkt_ipv6_ext_opt_len(pkt) +
-					   1 + 1);
+			if (nd_opt_hdr->len > 2) {
+				NET_ERR("Too long source link-layer address "
+					"in NS option");
+				goto drop;
+			}
+
+			if (!handle_ns_neighbor(pkt, nd_opt_hdr->len,
+						net_pkt_ip_hdr_len(pkt) +
+						net_pkt_ipv6_ext_len(pkt) +
+						sizeof(struct net_icmp_hdr) +
+						net_pkt_ipv6_ext_opt_len(pkt) +
+						1 + 1)) {
+				goto drop;
+			}
 			break;
 
 		default:
@@ -1587,6 +1630,7 @@ send_na:
 			       tgt,
 			       flags);
 	if (!ret) {
+		NET_DBG("Cannot send NA (%d)", ret);
 		net_pkt_unref(pkt);
 		return NET_OK;
 	}
@@ -1608,6 +1652,7 @@ static void nd_reachable_timeout(struct k_work *work)
 						      reachable);
 
 	struct net_nbr *nbr = get_nbr_from_data(data);
+	int ret;
 
 	if (!data || !nbr) {
 		NET_DBG("ND reachable timeout but no nbr data "
@@ -1638,8 +1683,11 @@ static void nd_reachable_timeout(struct k_work *work)
 			NET_DBG("nbr %p incomplete count %u", nbr,
 				data->ns_count);
 
-			net_ipv6_send_ns(nbr->iface, NULL, NULL, NULL,
-					 &data->addr, false);
+			ret = net_ipv6_send_ns(nbr->iface, NULL, NULL, NULL,
+					       &data->addr, false);
+			if (ret < 0) {
+				NET_DBG("Cannot send NS (%d)", ret);
+			}
 		}
 		break;
 
@@ -1685,8 +1733,11 @@ static void nd_reachable_timeout(struct k_work *work)
 			NET_DBG("nbr %p probe count %u", nbr,
 				data->ns_count);
 
-			net_ipv6_send_ns(nbr->iface, NULL, NULL, NULL,
-					 &data->addr, false);
+			ret = net_ipv6_send_ns(nbr->iface, NULL, NULL, NULL,
+					       &data->addr, false);
+			if (ret < 0) {
+				NET_DBG("Cannot send NS (%d)", ret);
+			}
 
 			k_delayed_work_submit(
 				&net_ipv6_nbr_data(nbr)->reachable,
@@ -1898,7 +1949,10 @@ static enum net_verdict handle_na_input(struct net_pkt *pkt)
 	size_t left_len;
 
 	na_hdr = net_icmpv6_get_na_hdr(pkt, &nahdr);
-	NET_ASSERT(na_hdr);
+	if (!na_hdr) {
+		NET_ERR("NULL NA header - dropping");
+		goto drop;
+	}
 
 	dbg_addr_recv_tgt("Neighbor Advertisement",
 			  &NET_IPV6_HDR(pkt)->src,
@@ -2008,13 +2062,16 @@ int net_ipv6_send_ns(struct net_if *iface,
 	u8_t llao_len;
 
 	pkt = net_pkt_get_reserve_tx(net_if_get_ll_reserve(iface, dst),
-				     K_FOREVER);
+				     ND_NET_BUF_TIMEOUT);
+	if (!pkt) {
+		return -ENOMEM;
+	}
 
-	NET_ASSERT_INFO(pkt, "Out of TX packets");
-
-	frag = net_pkt_get_frag(pkt, K_FOREVER);
-
-	NET_ASSERT_INFO(frag, "Out of DATA buffers");
+	frag = net_pkt_get_frag(pkt, ND_NET_BUF_TIMEOUT);
+	if (!frag) {
+		net_pkt_unref(pkt);
+		return -ENOMEM;
+	}
 
 	net_pkt_frag_add(pkt, frag);
 
@@ -2033,7 +2090,13 @@ int net_ipv6_send_ns(struct net_if *iface,
 	net_buf_add(frag, sizeof(struct net_icmpv6_ns_hdr));
 
 	ns_hdr = net_icmpv6_get_ns_hdr(pkt, &hdr);
-	NET_ASSERT(ns_hdr);
+	if (!ns_hdr) {
+		NET_ERR("could not get ns_hdr");
+
+		net_pkt_unref(pkt);
+
+		return -EINVAL;
+	}
 
 	if (!dst) {
 		net_ipv6_addr_create_solicited_node(tgt,
@@ -2143,9 +2206,16 @@ int net_ipv6_send_rs(struct net_if *iface)
 	u8_t llao_len = 0;
 
 	pkt = net_pkt_get_reserve_tx(net_if_get_ll_reserve(iface, NULL),
-				     K_FOREVER);
+				     ND_NET_BUF_TIMEOUT);
+	if (!pkt) {
+		return -ENOMEM;
+	}
 
-	frag = net_pkt_get_frag(pkt, K_FOREVER);
+	frag = net_pkt_get_frag(pkt, ND_NET_BUF_TIMEOUT);
+	if (!frag) {
+		net_pkt_unref(pkt);
+		return -ENOMEM;
+	}
 
 	net_pkt_frag_add(pkt, frag);
 
@@ -2543,9 +2613,12 @@ static enum net_verdict handle_ra_input(struct net_pkt *pkt)
 	}
 
 	ra_hdr = net_icmpv6_get_ra_hdr(pkt, &hdr);
-	NET_ASSERT(ra_hdr);
+	if (!ra_hdr) {
+		NET_ERR("could not get ra_hdr");
+		goto drop;
+	}
 
-	if (reachable_time &&
+	if (reachable_time && reachable_time <= MAX_REACHABLE_TIME &&
 	    (net_if_ipv6_get_reachable_time(net_pkt_iface(pkt)) !=
 	     ra_hdr->reachable_time)) {
 		net_if_ipv6_set_base_reachable_time(net_pkt_iface(pkt),
@@ -2583,12 +2656,14 @@ static enum net_verdict handle_ra_input(struct net_pkt *pkt)
 				goto drop;
 			}
 
-			net_if_set_mtu(net_pkt_iface(pkt), mtu);
-
-			if (mtu > 0xffff) {
-				/* TODO: discard packet? */
-				NET_ERR("MTU %u, max is %u", mtu, 0xffff);
+			if (mtu < MIN_IPV6_MTU || mtu > MAX_IPV6_MTU) {
+				NET_ERR("Unsupported MTU %u, min is %u, "
+					"max is %u",
+					mtu, MIN_IPV6_MTU, MAX_IPV6_MTU);
+				goto drop;
 			}
+
+			net_if_set_mtu(net_pkt_iface(pkt), mtu);
 
 			break;
 		case NET_ICMPV6_ND_OPT_PREFIX_INFO:
@@ -3792,7 +3867,10 @@ static inline enum net_verdict process_icmpv6_pkt(struct net_pkt *pkt,
 	struct net_icmp_hdr hdr, *icmp_hdr;
 
 	icmp_hdr = net_icmpv6_get_hdr(pkt, &hdr);
-	NET_ASSERT(icmp_hdr);
+	if (!icmp_hdr) {
+		NET_DBG("NULL ICMPv6 header - dropping");
+		return NET_DROP;
+	}
 
 	NET_DBG("ICMPv6 %s received type %d code %d",
 		net_icmpv6_type2str(icmp_hdr->type), icmp_hdr->type,

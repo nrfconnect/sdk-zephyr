@@ -197,10 +197,10 @@
 #define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_1M_NS  600 /* 0.6 */
 #define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_2M_US  1 /* ceil(0.6) */
 #define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_2M_NS  600 /* 0.6 */
-#define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S2_US  6 /* ceil(6.0) */
-#define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S2_NS  6000 /* 6.0 */
-#define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S8_US  6 /* ceil(6.0) */
-#define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S8_NS  6000 /* 6.0 */
+#define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S2_US  1 /* ceil(0.6) */
+#define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S2_NS  600 /* 0.6 */
+#define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S8_US  1 /* ceil(0.6) */
+#define HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S8_NS  600 /* 0.6 */
 
 #define HAL_RADIO_NRF52840_RX_CHAIN_DELAY_1M_US  10 /* ceil(9.4) */
 #define HAL_RADIO_NRF52840_RX_CHAIN_DELAY_1M_NS  9400 /* 9.4 */
@@ -356,6 +356,13 @@
 #define SW_SWITCH_TIMER_TASK_GROUP_BASE 0
 #endif /* !CONFIG_BT_CTLR_TIFS_HW */
 
+static inline void hal_radio_reset(void)
+{
+	/* Anomalies 102, 106 and 107 */
+	*(volatile u32_t *)0x40001774 = ((*(volatile u32_t *)0x40001774) &
+					 0xfffffffe) | 0x01000000;
+}
+
 static inline void hal_radio_ram_prio_setup(void)
 {
 	struct {
@@ -404,28 +411,39 @@ static inline u32_t hal_radio_phy_mode_get(u8_t phy, u8_t flags)
 	case BIT(0):
 	default:
 		mode = RADIO_MODE_MODE_Ble_1Mbit;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 		/* Workaround: nRF52840 Engineering A Errata ID 164 */
 		*(volatile u32_t *)0x4000173c &= ~0x80000000;
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
+
 		break;
 
 	case BIT(1):
+		mode = RADIO_MODE_MODE_Ble_2Mbit;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 		/* Workaround: nRF52840 Engineering A Errata ID 164 */
 		*(volatile u32_t *)0x4000173c &= ~0x80000000;
-		mode = RADIO_MODE_MODE_Ble_2Mbit;
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
+
 		break;
 
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 	case BIT(2):
 		if (flags & 0x01) {
 			mode = RADIO_MODE_MODE_Ble_LR125Kbit;
 		} else {
 			mode = RADIO_MODE_MODE_Ble_LR500Kbit;
 		}
+
 		/* Workaround: nRF52840 Engineering A Errata ID 164 */
 		*(volatile u32_t *)0x4000173c |= 0x80000000;
 		*(volatile u32_t *)0x4000173c =
 				((*(volatile u32_t *)0x4000173c) & 0xFFFFFF00) |
 				0x5C;
 		break;
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 
 	return mode;
@@ -439,12 +457,15 @@ static inline u32_t hal_radio_tx_ready_delay_us_get(u8_t phy, u8_t flags)
 		return HAL_RADIO_NRF52840_TXEN_TXIDLE_TX_1M_US;
 	case BIT(1):
 		return HAL_RADIO_NRF52840_TXEN_TXIDLE_TX_2M_US;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 	case BIT(2):
 		if (flags & 0x01) {
 			return HAL_RADIO_NRF52840_TXEN_TXIDLE_TX_S8_US;
 		} else {
 			return HAL_RADIO_NRF52840_TXEN_TXIDLE_TX_S2_US;
 		}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 }
 
@@ -456,12 +477,15 @@ static inline u32_t hal_radio_rx_ready_delay_us_get(u8_t phy, u8_t flags)
 		return HAL_RADIO_NRF52840_RXEN_RXIDLE_RX_1M_US;
 	case BIT(1):
 		return HAL_RADIO_NRF52840_RXEN_RXIDLE_RX_2M_US;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 	case BIT(2):
 		if (flags & 0x01) {
 			return HAL_RADIO_NRF52840_RXEN_RXIDLE_RX_S8_US;
 		} else {
 			return HAL_RADIO_NRF52840_RXEN_RXIDLE_RX_S2_US;
 		}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 }
 
@@ -473,12 +497,15 @@ static inline u32_t hal_radio_tx_chain_delay_us_get(u8_t phy, u8_t flags)
 		return HAL_RADIO_NRF52840_TX_CHAIN_DELAY_1M_US;
 	case BIT(1):
 		return HAL_RADIO_NRF52840_TX_CHAIN_DELAY_2M_US;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 	case BIT(2):
 		if (flags & 0x01) {
 			return HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S8_US;
 		} else {
 			return HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S2_US;
 		}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 }
 
@@ -490,12 +517,15 @@ static inline u32_t hal_radio_rx_chain_delay_us_get(u8_t phy, u8_t flags)
 		return HAL_RADIO_NRF52840_RX_CHAIN_DELAY_1M_US;
 	case BIT(1):
 		return HAL_RADIO_NRF52840_RX_CHAIN_DELAY_2M_US;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 	case BIT(2):
 		if (flags & 0x01) {
 			return HAL_RADIO_NRF52840_RX_CHAIN_DELAY_S8_US;
 		} else {
 			return HAL_RADIO_NRF52840_RX_CHAIN_DELAY_S2_US;
 		}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 }
 
@@ -507,12 +537,15 @@ static inline u32_t hal_radio_tx_ready_delay_ns_get(u8_t phy, u8_t flags)
 		return HAL_RADIO_NRF52840_TXEN_TXIDLE_TX_1M_NS;
 	case BIT(1):
 		return HAL_RADIO_NRF52840_TXEN_TXIDLE_TX_2M_NS;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 	case BIT(2):
 		if (flags & 0x01) {
 			return HAL_RADIO_NRF52840_TXEN_TXIDLE_TX_S8_NS;
 		} else {
 			return HAL_RADIO_NRF52840_TXEN_TXIDLE_TX_S2_NS;
 		}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 }
 
@@ -524,12 +557,15 @@ static inline u32_t hal_radio_rx_ready_delay_ns_get(u8_t phy, u8_t flags)
 		return HAL_RADIO_NRF52840_RXEN_RXIDLE_RX_1M_NS;
 	case BIT(1):
 		return HAL_RADIO_NRF52840_RXEN_RXIDLE_RX_2M_NS;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 	case BIT(2):
 		if (flags & 0x01) {
 			return HAL_RADIO_NRF52840_RXEN_RXIDLE_RX_S8_NS;
 		} else {
 			return HAL_RADIO_NRF52840_RXEN_RXIDLE_RX_S2_NS;
 		}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 }
 
@@ -541,12 +577,15 @@ static inline u32_t hal_radio_tx_chain_delay_ns_get(u8_t phy, u8_t flags)
 		return HAL_RADIO_NRF52840_TX_CHAIN_DELAY_1M_NS;
 	case BIT(1):
 		return HAL_RADIO_NRF52840_TX_CHAIN_DELAY_2M_NS;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 	case BIT(2):
 		if (flags & 0x01) {
 			return HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S8_NS;
 		} else {
 			return HAL_RADIO_NRF52840_TX_CHAIN_DELAY_S2_NS;
 		}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 }
 
@@ -558,11 +597,14 @@ static inline u32_t hal_radio_rx_chain_delay_ns_get(u8_t phy, u8_t flags)
 		return HAL_RADIO_NRF52840_RX_CHAIN_DELAY_1M_NS;
 	case BIT(1):
 		return HAL_RADIO_NRF52840_RX_CHAIN_DELAY_2M_NS;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 	case BIT(2):
 		if (flags & 0x01) {
 			return HAL_RADIO_NRF52840_RX_CHAIN_DELAY_S8_NS;
 		} else {
 			return HAL_RADIO_NRF52840_RX_CHAIN_DELAY_S2_NS;
 		}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 }

@@ -55,7 +55,7 @@
 		uart0: uart@400E0600 {
 			compatible = "atmel,sam-uart";
 			reg = <0x400E0600 0x200>;
-			interrupts = <8 0>;
+			interrupts = <8 1>;
 			peripheral-id = <8>;
 			status = "disabled";
 			label = "UART_0";
@@ -64,7 +64,7 @@
 		uart1: uart@400E0800 {
 			compatible = "atmel,sam-uart";
 			reg = <0x400E0800 0x200>;
-			interrupts = <9 0>;
+			interrupts = <9 1>;
 			peripheral-id = <9>;
 			status = "disabled";
 			label = "UART_1";
@@ -73,7 +73,7 @@
 		usart0: usart@40024000 {
 			compatible = "atmel,sam-usart";
 			reg = <0x40024000 0x130>;
-			interrupts = <14 0>;
+			interrupts = <14 1>;
 			peripheral-id = <14>;
 			status = "disabled";
 			label = "USART_0";
@@ -82,10 +82,34 @@
 		usart1: usart@40028000 {
 			compatible = "atmel,sam-usart";
 			reg = <0x40028000 0x130>;
-			interrupts = <15 0>;
+			interrupts = <15 1>;
 			peripheral-id = <15>;
 			status = "disabled";
 			label = "USART_1";
+		};
+
+		porta: gpio@400E0E00 {
+			compatible = "atmel,sam-gpio";
+			reg = <0x400E0E00 0x190>;
+			interrupts = <11 1>;
+			peripheral-id = <11>;
+			label = "PORTA";
+		};
+
+		portb: gpio@400E1000 {
+			compatible = "atmel,sam-gpio";
+			reg = <0x400E1000 0x190>;
+			interrupts = <12 1>;
+			peripheral-id = <12>;
+			label = "PORTB";
+		};
+
+		portc: gpio@400E1200 {
+			compatible = "atmel,sam-gpio";
+			reg = <0x400E1200 0x190>;
+			interrupts = <13 1>;
+			peripheral-id = <13>;
+			label = "PORTC";
 		};
 	};
 };

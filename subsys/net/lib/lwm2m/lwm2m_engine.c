@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017 Linaro Limited
- * Copyright (c) 2017 Open Source Foundries Limited.
+ * Copyright (c) 2018 Open Source Foundries Ltd.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -1133,7 +1133,7 @@ u16_t lwm2m_get_rd_data(u8_t *client_data, u16_t size)
 
 /* input / output selection */
 
-static u16_t select_writer(struct lwm2m_output_context *out, u16_t accept)
+static int select_writer(struct lwm2m_output_context *out, u16_t accept)
 {
 	switch (accept) {
 
@@ -1159,15 +1159,12 @@ static u16_t select_writer(struct lwm2m_output_context *out, u16_t accept)
 #endif
 
 	default:
-		SYS_LOG_ERR("Unknown Accept type %u, using LWM2M plain text",
-			    accept);
-		out->writer = &plain_text_writer;
-		accept = LWM2M_FORMAT_PLAIN_TEXT;
-		break;
+		SYS_LOG_WRN("Unknown content type %u", accept);
+		return -ENOMSG;
 
 	}
 
-	return accept;
+	return 0;
 }
 
 static int select_reader(struct lwm2m_input_context *in, u16_t format)
@@ -1190,7 +1187,7 @@ static int select_reader(struct lwm2m_input_context *in, u16_t format)
 		return -ENOMSG;
 	}
 
-	return format;
+	return 0;
 }
 
 /* user data setter functions */
@@ -1900,6 +1897,11 @@ static int lwm2m_read_handler(struct lwm2m_engine_obj_inst *obj_inst,
 	}
 
 	if (res->multi_count_var != NULL) {
+		/* if multi_count_var is 0 (none assigned) return NOT_FOUND */
+		if (*res->multi_count_var == 0) {
+			return -ENOENT;
+		}
+
 		engine_put_begin_ri(out, path);
 		loop_max = *res->multi_count_var;
 		res_inst_id_tmp = path->res_inst_id;
@@ -3045,7 +3047,7 @@ static int handle_request(struct coap_packet *request,
 		}
 	}
 
-	/* read Content Format */
+	/* read Content Format / setup in.reader */
 	r = coap_find_options(in.in_cpkt, COAP_OPTION_CONTENT_FORMAT,
 			      options, 1);
 	if (r > 0) {
@@ -3056,13 +3058,18 @@ static int handle_request(struct coap_packet *request,
 		}
 	}
 
-	/* read Accept */
+	/* read Accept / setup out.writer */
 	r = coap_find_options(in.in_cpkt, COAP_OPTION_ACCEPT, options, 1);
 	if (r > 0) {
 		accept = coap_option_value_to_int(&options[0]);
 	} else {
 		SYS_LOG_DBG("No accept option given. Assume OMA TLV.");
 		accept = LWM2M_FORMAT_OMA_TLV;
+	}
+
+	r = select_writer(&out, accept);
+	if (r < 0) {
+		goto error;
 	}
 
 	if (!well_known) {
@@ -3074,8 +3081,6 @@ static int handle_request(struct coap_packet *request,
 			goto error;
 		}
 	}
-
-	accept = select_writer(&out, accept);
 
 	/* set the operation */
 	switch (code & COAP_REQUEST_MASK) {

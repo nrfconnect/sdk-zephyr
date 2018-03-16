@@ -15,7 +15,6 @@
 #define _ARM_CORTEXM_ISR__H_
 
 #include <arch/cpu.h>
-#include <asm_inline.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,7 +46,7 @@ extern volatile irq_offload_routine_t offload_routine;
  */
 static ALWAYS_INLINE int _IsInIsr(void)
 {
-	u32_t vector = _IpsrGet();
+	u32_t vector = __get_IPSR();
 
 	/* IRQs + PendSV (14) + SYSTICK (15) are interrupts. */
 	return (vector > 13)
@@ -55,12 +54,12 @@ static ALWAYS_INLINE int _IsInIsr(void)
 		/* Only non-NULL if currently running an offloaded function */
 		|| offload_routine != NULL
 #endif
-#if defined(CONFIG_ARMV6_M)
+#if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
 		/* On ARMv6-M there is no nested execution bit, so we check
 		 * exception 3, hard fault, to a detect a nested exception.
 		 */
 		|| (vector == 3)
-#elif defined(CONFIG_ARMV7_M)
+#elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
 		/* If not in thread mode, and if RETTOBASE bit in ICSR is 0,
 		 * then there are preempted active exceptions to execute.
 		 */
@@ -75,7 +74,7 @@ static ALWAYS_INLINE int _IsInIsr(void)
 #endif /* CONFIG_BOARD_QEMU_CORTEX_M3 */
 #else
 #error Unknown ARM architecture
-#endif /* CONFIG_ARMV6_M */
+#endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
 		;
 }
 
@@ -103,10 +102,24 @@ static ALWAYS_INLINE void _ExcSetup(void)
 	NVIC_SetPriority(MemoryManagement_IRQn, _EXC_FAULT_PRIO);
 	NVIC_SetPriority(BusFault_IRQn, _EXC_FAULT_PRIO);
 	NVIC_SetPriority(UsageFault_IRQn, _EXC_FAULT_PRIO);
+#if defined(CONFIG_ARM_SECURE_FIRMWARE)
+	NVIC_SetPriority(SecureFault_IRQn, _EXC_FAULT_PRIO);
+#endif /* CONFIG_ARM_SECURE_FIRMWARE */
 
 	/* Enable Usage, Mem, & Bus Faults */
 	SCB->SHCSR |= SCB_SHCSR_USGFAULTENA_Msk | SCB_SHCSR_MEMFAULTENA_Msk |
 		      SCB_SHCSR_BUSFAULTENA_Msk;
+#if defined(CONFIG_ARM_SECURE_FIRMWARE)
+	/* Enable Secure Fault */
+	SCB->SHCSR |= SCB_SHCSR_SECUREFAULTENA_Msk;
+	/* Clear BFAR before setting BusFaults to target Non-Secure state. */
+	SCB->BFAR = 0;
+	/* Set NMI, Hard, and Bus Faults as Non-Secure.
+	 * NMI and Bus Faults targeting the Secure state will
+	 * escalate to a SecureFault or SecureHardFault.
+	 */
+	SCB->AIRCR |= SCB_AIRCR_BFHFNMINS_Msk;
+#endif /* CONFIG_ARM_SECURE_FIRMWARE */
 #endif
 }
 
@@ -119,8 +132,8 @@ static ALWAYS_INLINE void _ExcSetup(void)
  */
 static ALWAYS_INLINE void _ClearFaults(void)
 {
-#if defined(CONFIG_ARMV6_M)
-#elif defined(CONFIG_ARMV7_M)
+#if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
+#elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
 	/* Reset all faults */
 	SCB->CFSR = SCB_CFSR_USGFAULTSR_Msk |
 		    SCB_CFSR_MEMFAULTSR_Msk |
@@ -130,7 +143,7 @@ static ALWAYS_INLINE void _ClearFaults(void)
 	SCB->HFSR = 0xffffffff;
 #else
 #error Unknown ARM architecture
-#endif /* CONFIG_ARMV6_M */
+#endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
 }
 
 #endif /* _ASMLANGUAGE */

@@ -32,6 +32,8 @@
 #define NUM_FDS 5
 #endif
 
+#define PORT 4242
+
 /* Number of simultaneous client connections will be NUM_FDS be minus 2 */
 struct pollfd pollfds[NUM_FDS];
 int pollnum;
@@ -40,6 +42,12 @@ static void nonblock(int fd)
 {
 	int fl = fcntl(fd, F_GETFL, 0);
 	fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+}
+
+static void block(int fd)
+{
+	int fl = fcntl(fd, F_GETFL, 0);
+	fcntl(fd, F_SETFL, fl & ~O_NONBLOCK);
 }
 
 int pollfds_add(int fd)
@@ -81,14 +89,14 @@ int main(void)
 	int serv4, serv6;
 	struct sockaddr_in bind_addr4 = {
 		.sin_family = AF_INET,
-		.sin_port = htons(4242),
+		.sin_port = htons(PORT),
 		.sin_addr = {
 			.s_addr = htonl(INADDR_ANY),
 		},
 	};
 	struct sockaddr_in6 bind_addr6 = {
 		.sin6_family = AF_INET6,
-		.sin6_port = htons(4242),
+		.sin6_port = htons(PORT),
 		.sin6_addr = IN6ADDR_ANY_INIT,
 	};
 
@@ -119,7 +127,7 @@ int main(void)
 	pollfds_add(serv4);
 	pollfds_add(serv6);
 
-	printf("Listening on port 4242...\n");
+	printf("Asynchronous TCP echo server waits for connections on port %d...\n", PORT);
 
 	while (1) {
 		struct sockaddr_storage client_addr;
@@ -157,13 +165,36 @@ int main(void)
 			} else {
 				char buf[128];
 				int len = recv(fd, buf, sizeof(buf), 0);
-				if (len == 0) {
+				if (len <= 0) {
+					if (len < 0) {
+						printf("error: recv: %d\n", errno);
+					}
+error:
 					pollfds_del(fd);
 					close(fd);
 					printf("Connection fd=%d closed\n", fd);
 				} else {
-					/* We assume this won't be short write, d'oh */
-					send(fd, buf, len, 0);
+					int out_len;
+					const char *p;
+					/* We implement semi-async server,
+					 * where reads are async, but writes
+					 * *can* be sync (blocking). Note that
+					 * in majority of cases they expected
+					 * to not block, but to be robust, we
+					 * handle all possibilities.
+					 */
+					block(fd);
+					for (p = buf; len; len -= out_len) {
+						out_len = send(fd, p, len, 0);
+						if (out_len < 0) {
+							printf("error: "
+							       "send: %d\n",
+							       errno);
+							goto error;
+						}
+						p += out_len;
+					}
+					nonblock(fd);
 				}
 			}
 		}

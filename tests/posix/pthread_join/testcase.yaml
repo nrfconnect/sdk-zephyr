@@ -1,0 +1,3 @@
+tests:
+  posix.pthread_join:
+    tags: core

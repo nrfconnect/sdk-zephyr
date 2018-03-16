@@ -137,8 +137,7 @@ class Loader(yaml.Loader):
         if not os.path.isfile(filepath):
             # we need to look in bindings/* directories
             # take path and back up 1 directory and parse in '/bindings/*'
-            filepath = os.path.dirname(self._root).split('/')
-            filepath = '/'.join(filepath[:-1])
+            filepath = os.path.dirname(os.path.dirname(self._root))
             for root, dirnames, file in os.walk(filepath):
                 if fnmatch.filter(file, filename):
                     filepath = os.path.join(root, filename)
@@ -272,7 +271,7 @@ def extract_reg_prop(node_address, names, defs, def_label, div, post_label):
     address_cells = reduced['/']['props'].get('#address-cells')
     size_cells = reduced['/']['props'].get('#size-cells')
     address = ''
-    for comp in node_address.split('/')[1:]:
+    for comp in node_address.split('/')[1:-1]:
         address += '/' + comp
         address_cells = reduced[address]['props'].get(
             '#address-cells', address_cells)
@@ -850,8 +849,15 @@ def main():
         raise Exception("No information parsed from dts file.")
 
     if 'zephyr,flash' in chosen:
+        node_addr = chosen['zephyr,flash']
         extract_reg_prop(chosen['zephyr,flash'], None,
                          defs, "CONFIG_FLASH", 1024, None)
+
+        flash_keys = ["label", "write-block-size", "erase-block-size"]
+        for key in flash_keys:
+            if key in reduced[node_addr]['props']:
+                prop = reduced[node_addr]['props'][key]
+                extract_single(node_addr, None, prop, key, None, defs, "FLASH")
     else:
         # We will add address/size of 0 for systems with no flash controller
         # This is what they already do in the Kconfig options anyway
@@ -862,11 +868,16 @@ def main():
         extract_reg_prop(chosen['zephyr,sram'], None,
                          defs, "CONFIG_SRAM", 1024, None)
 
+    if 'zephyr,ccm' in chosen:
+        extract_reg_prop(chosen['zephyr,ccm'], None,
+                         defs, "CONFIG_CCM", 1024, None)
+
     name_dict = {
             "CONFIG_UART_CONSOLE_ON_DEV_NAME": "zephyr,console",
             "CONFIG_BT_UART_ON_DEV_NAME": "zephyr,bt-uart",
             "CONFIG_UART_PIPE_ON_DEV_NAME": "zephyr,uart-pipe",
-            "CONFIG_BT_MONITOR_ON_DEV_NAME": "zephyr,bt-mon-uart"
+            "CONFIG_BT_MONITOR_ON_DEV_NAME": "zephyr,bt-mon-uart",
+            "CONFIG_UART_MCUMGR_ON_DEV_NAME": "zephyr,uart-mcumgr",
             }
 
     for k, v in name_dict.items():
@@ -893,7 +904,8 @@ def main():
         load_defs['CONFIG_FLASH_LOAD_OFFSET'] = 0
         load_defs['CONFIG_FLASH_LOAD_SIZE'] = 0
 
-    insert_defs(chosen['zephyr,flash'], defs, load_defs, {})
+    if 'zephyr,flash' in chosen:
+        insert_defs(chosen['zephyr,flash'], defs, load_defs, {})
 
     # generate include file
     if args.keyvalue:

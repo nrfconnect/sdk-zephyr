@@ -1,0 +1,3 @@
+tests:
+  posix.clock:
+    tags: core

@@ -142,7 +142,8 @@ static bool write(u8_t *buf, u16_t size)
 	 */
 	stage = SEND_CSW;
 
-	if (!usb_write(CONFIG_MASS_STORAGE_IN_EP_ADDR, buf, size, NULL)) {
+	if (usb_write(CONFIG_MASS_STORAGE_IN_EP_ADDR, buf, size, NULL)) {
+		SYS_LOG_ERR("USB write failed");
 		return false;
 	}
 
@@ -225,11 +226,7 @@ static bool requestSense(void)
 		0x00,
 	};
 
-	if (!write(request_sense, sizeof(request_sense))) {
-		return false;
-	}
-
-	return true;
+	return write(request_sense, sizeof(request_sense));
 }
 
 static bool inquiryRequest(void)
@@ -242,20 +239,14 @@ static bool inquiryRequest(void)
 	'0', '.', '0', '1',
 	};
 
-	if (!write(inquiry, sizeof(inquiry))) {
-		return false;
-	}
-	return true;
+	return write(inquiry, sizeof(inquiry));
 }
 
 static bool modeSense6(void)
 {
 	u8_t sense6[] = { 0x03, 0x00, 0x00, 0x00 };
 
-	if (!write(sense6, sizeof(sense6))) {
-		return false;
-	}
-	return true;
+	return write(sense6, sizeof(sense6));
 }
 
 static bool readFormatCapacity(void)
@@ -270,11 +261,9 @@ static bool readFormatCapacity(void)
 			(u8_t)((BLOCK_SIZE >> 16) & 0xff),
 			(u8_t)((BLOCK_SIZE >> 8) & 0xff),
 			(u8_t)((BLOCK_SIZE >> 0) & 0xff),
-			 };
-	if (!write(capacity, sizeof(capacity))) {
-		return false;
-	}
-	return true;
+	};
+
+	return write(capacity, sizeof(capacity));
 }
 
 static bool readCapacity(void)
@@ -290,10 +279,8 @@ static bool readCapacity(void)
 		(u8_t)((BLOCK_SIZE >> 8) & 0xff),
 		(u8_t)((BLOCK_SIZE >> 0) & 0xff),
 	};
-	if (!write(capacity, sizeof(capacity))) {
-		return false;
-	}
-	return true;
+
+	return write(capacity, sizeof(capacity));
 }
 
 static void thread_memory_read_done(void)

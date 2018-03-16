@@ -332,7 +332,8 @@ struct radio_pdu_node_rx {
  * Controller Interface Functions
  ****************************************************************************/
 /* Downstream */
-u32_t radio_init(void *hf_clock, u8_t sca, u8_t connection_count_max,
+u32_t radio_init(void *hf_clock, u8_t sca, void *entropy,
+		 u8_t connection_count_max,
 		 u8_t rx_count_max, u8_t tx_count_max,
 		 u16_t packet_data_octets_max,
 		 u16_t packet_tx_data_size, u8_t *mem_radio,
@@ -352,14 +353,14 @@ u32_t radio_adv_enable(u16_t interval, u8_t chan_map, u8_t filter_policy,
 #endif /* !CONFIG_BT_CTLR_ADV_EXT */
 
 u32_t radio_adv_disable(void);
-u32_t radio_adv_is_enabled(void);
+u32_t ll_adv_is_enabled(void);
 u32_t radio_adv_filter_pol_get(void);
 /* Downstream - Scanner */
 u32_t radio_scan_enable(u8_t type, u8_t init_addr_type, u8_t *init_addr,
 			u16_t interval, u16_t window, u8_t filter_policy,
 			u8_t rpa_gen, u8_t rl_idx);
 u32_t radio_scan_disable(void);
-u32_t radio_scan_is_enabled(void);
+u32_t ll_scan_is_enabled(void);
 u32_t radio_scan_filter_pol_get(void);
 
 u32_t radio_connect_enable(u8_t adv_addr_type, u8_t *adv_addr,

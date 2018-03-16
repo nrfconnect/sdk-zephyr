@@ -38,6 +38,9 @@
 #define HTTP_CONTENT_LEN   "Content-Length"
 #define HTTP_CONT_LEN_SIZE 6
 
+/* Default network activity timeout in seconds */
+#define HTTP_NETWORK_TIMEOUT	K_SECONDS(CONFIG_HTTP_CLIENT_NETWORK_TIMEOUT)
+
 int client_reset(struct http_ctx *ctx)
 {
 	http_parser_init(&ctx->http.parser, HTTP_RESPONSE);
@@ -69,41 +72,41 @@ int http_request(struct http_ctx *ctx, struct http_request *req, s32_t timeout,
 		ctx->pending = NULL;
 	}
 
-	ret = http_add_header(ctx, method, user_data);
+	ret = http_add_header(ctx, method, NULL, user_data);
 	if (ret < 0) {
 		goto out;
 	}
 
-	ret = http_add_header(ctx, " ", user_data);
+	ret = http_add_header(ctx, " ", NULL, user_data);
 	if (ret < 0) {
 		goto out;
 	}
 
-	ret = http_add_header(ctx, req->url, user_data);
+	ret = http_add_header(ctx, req->url, NULL, user_data);
 	if (ret < 0) {
 		goto out;
 	}
 
-	ret = http_add_header(ctx, req->protocol, user_data);
+	ret = http_add_header(ctx, req->protocol, NULL, user_data);
 	if (ret < 0) {
 		goto out;
 	}
 
-	ret = http_add_header(ctx, HTTP_CRLF, user_data);
+	ret = http_add_header(ctx, HTTP_CRLF, NULL, user_data);
 	if (ret < 0) {
 		goto out;
 	}
 
 	if (req->host) {
 		ret = http_add_header_field(ctx, HTTP_HOST, req->host,
-					    user_data);
+					    NULL, user_data);
 		if (ret < 0) {
 			goto out;
 		}
 	}
 
 	if (req->header_fields) {
-		ret = http_add_header(ctx, req->header_fields, user_data);
+		ret = http_add_header(ctx, req->header_fields, NULL, user_data);
 		if (ret < 0) {
 			goto out;
 		}
@@ -112,7 +115,7 @@ int http_request(struct http_ctx *ctx, struct http_request *req, s32_t timeout,
 	if (req->content_type_value) {
 		ret = http_add_header_field(ctx, HTTP_CONTENT_TYPE,
 					    req->content_type_value,
-					    user_data);
+					    NULL, user_data);
 		if (ret < 0) {
 			goto out;
 		}
@@ -120,7 +123,6 @@ int http_request(struct http_ctx *ctx, struct http_request *req, s32_t timeout,
 
 	if (req->payload && req->payload_size) {
 		char content_len_str[HTTP_CONT_LEN_SIZE];
-		int i;
 
 		ret = snprintk(content_len_str, HTTP_CONT_LEN_SIZE,
 			       "%u", req->payload_size);
@@ -130,30 +132,25 @@ int http_request(struct http_ctx *ctx, struct http_request *req, s32_t timeout,
 		}
 
 		ret = http_add_header_field(ctx, HTTP_CONTENT_LEN,
-					    content_len_str, user_data);
+					    content_len_str,
+					    NULL, user_data);
 		if (ret < 0) {
 			goto out;
 		}
 
-		ret = http_add_header(ctx, HTTP_CRLF, user_data);
+		ret = http_add_header(ctx, HTTP_CRLF, NULL, user_data);
 		if (ret < 0) {
 			goto out;
 		}
 
-		for (i = 0; i < req->payload_size;) {
-			ret = http_send_chunk(ctx,
-					      req->payload + i,
-					      req->payload_size - i,
-					      user_data);
-			if (ret < 0) {
-				NET_ERR("Cannot send data to peer (%d)", ret);
-				return ret;
-			}
-
-			i += ret;
+		ret = http_prepare_and_send(ctx, req->payload,
+					    req->payload_size,
+					    NULL, user_data);
+		if (ret < 0) {
+			goto out;
 		}
 	} else {
-		ret = http_add_header(ctx, HTTP_EOF, user_data);
+		ret = http_add_header(ctx, HTTP_EOF, NULL, user_data);
 		if (ret < 0) {
 			goto out;
 		}
@@ -235,7 +232,7 @@ int http_client_send_req(struct http_ctx *ctx,
 
 	ctx->http.rsp.cb = cb;
 
-	ret = net_app_connect(&ctx->app_ctx, timeout);
+	ret = net_app_connect(&ctx->app_ctx, HTTP_NETWORK_TIMEOUT);
 	if (ret < 0) {
 		NET_DBG("Cannot connect to server (%d)", ret);
 		return ret;
@@ -244,7 +241,7 @@ int http_client_send_req(struct http_ctx *ctx,
 	/* We might wait longer than timeout if the first connection
 	 * establishment takes long time (like with HTTPS)
 	 */
-	if (k_sem_take(&ctx->http.connect_wait, timeout)) {
+	if (k_sem_take(&ctx->http.connect_wait, HTTP_NETWORK_TIMEOUT)) {
 		NET_DBG("Connection timed out");
 		ret = -ETIMEDOUT;
 		goto out;
@@ -419,6 +416,13 @@ static int on_headers_complete(struct http_parser *parser)
 	if ((ctx->http.req.method == HTTP_HEAD ||
 	     ctx->http.req.method == HTTP_OPTIONS)
 	    && ctx->http.rsp.content_length > 0) {
+		NET_DBG("No body expected");
+		return 1;
+	}
+
+	if ((ctx->http.req.method == HTTP_PUT ||
+	     ctx->http.req.method == HTTP_POST)
+	    && ctx->http.rsp.content_length == 0) {
 		NET_DBG("No body expected");
 		return 1;
 	}
@@ -604,8 +608,10 @@ static void http_connected(struct net_app_ctx *app_ctx,
 		return;
 	}
 
-	if (ctx->cb.connect) {
-		ctx->cb.connect(ctx, HTTP_CONNECTION, ctx->user_data);
+	if (ctx->cb.connect && app_ctx->default_ctx) {
+		ctx->cb.connect(ctx, HTTP_CONNECTION,
+				&app_ctx->default_ctx->remote,
+				ctx->user_data);
 	}
 
 	if (ctx->is_connected) {

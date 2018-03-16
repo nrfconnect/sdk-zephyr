@@ -16,8 +16,10 @@
 
 #include <kernel.h>
 #include <kernel_structs.h>
+#include <kernel_internal.h>
 #include <wait_q.h>
 #include <ksched.h>
+#include <kswap.h>
 #include <misc/slist.h>
 #include <misc/dlist.h>
 #include <misc/__assert.h>
@@ -265,7 +267,7 @@ int k_poll(struct k_poll_event *events, int num_events, s32_t timeout)
 }
 
 /* must be called with interrupts locked */
-static int _signal_poll_event(struct k_poll_event *event, u32_t state,
+static int signal_poll_event(struct k_poll_event *event, u32_t state,
 			      int *must_reschedule)
 {
 	*must_reschedule = 0;
@@ -316,7 +318,7 @@ int _handle_obj_poll_events(sys_dlist_t *events, u32_t state)
 		return 0;
 	}
 
-	(void)_signal_poll_event(poll_event, state, &must_reschedule);
+	(void) signal_poll_event(poll_event, state, &must_reschedule);
 	return must_reschedule;
 }
 
@@ -342,7 +344,7 @@ int k_poll_signal(struct k_poll_signal *signal, int result)
 		return 0;
 	}
 
-	int rc = _signal_poll_event(poll_event, K_POLL_STATE_SIGNALED,
+	int rc = signal_poll_event(poll_event, K_POLL_STATE_SIGNALED,
 				    &must_reschedule);
 
 	if (must_reschedule) {

@@ -12,24 +12,69 @@
 
 static u8_t max_partitions;
 
-static void ensure_w_xor_x(u32_t attrs)
-{
 #if defined(CONFIG_EXECUTE_XOR_WRITE) && __ASSERT_ON
-	bool writable = K_MEM_PARTITION_IS_WRITABLE(attrs);
-	bool executable = K_MEM_PARTITION_IS_EXECUTABLE(attrs);
+static bool sane_partition(const struct k_mem_partition *part,
+			   const struct k_mem_partition *parts,
+			   u32_t num_parts)
+{
+	bool exec, write;
+	u32_t end;
+	u32_t i;
 
-	__ASSERT(writable != executable, "writable page not executable");
-#else
-	ARG_UNUSED(attrs);
-#endif
+	end = part->start + part->size;
+	exec = K_MEM_PARTITION_IS_EXECUTABLE(part->attr);
+	write = K_MEM_PARTITION_IS_WRITABLE(part->attr);
+
+	if (exec && write) {
+		__ASSERT(0, "partition is writable and executable <start %x>",
+			 part->start);
+		return false;
+	}
+
+	for (i = 0; i < num_parts; i++) {
+		bool cur_write, cur_exec;
+		u32_t cur_end;
+
+		cur_end = parts[i].start + parts[i].size;
+
+		if (end < parts[i].start || cur_end < part->start) {
+			continue;
+		}
+
+		cur_write = K_MEM_PARTITION_IS_WRITABLE(parts[i].attr);
+		cur_exec = K_MEM_PARTITION_IS_EXECUTABLE(parts[i].attr);
+
+		if ((cur_write && exec) || (cur_exec && write)) {
+			__ASSERT(0, "overlapping partitions are "
+				 "writable and executable "
+				 "<%x...%x>, <%x...%x>",
+				 part->start, end,
+				 parts[i].start, cur_end);
+			return false;
+		}
+	}
+
+	return true;
 }
 
-void k_mem_domain_init(struct k_mem_domain *domain, u32_t num_parts,
-		struct k_mem_partition *parts[])
+static inline bool sane_partition_domain(const struct k_mem_domain *domain,
+					 const struct k_mem_partition *part)
+{
+	return sane_partition(part, domain->partitions,
+			      domain->num_partitions);
+}
+#else
+#define sane_partition(...) (true)
+#define sane_partition_domain(...) (true)
+#endif
+
+void k_mem_domain_init(struct k_mem_domain *domain, u8_t num_parts,
+		       struct k_mem_partition *parts[])
 {
 	unsigned int key;
 
-	__ASSERT(domain && (!num_parts || parts), "");
+	__ASSERT(domain != NULL, "");
+	__ASSERT(num_parts == 0 || parts != NULL, "");
 	__ASSERT(num_parts <= max_partitions, "");
 
 	key = irq_lock();
@@ -42,11 +87,19 @@ void k_mem_domain_init(struct k_mem_domain *domain, u32_t num_parts,
 
 		for (i = 0; i < num_parts; i++) {
 			__ASSERT(parts[i], "");
-
-			ensure_w_xor_x(parts[i]->attr);
+			__ASSERT((parts[i]->start + parts[i]->size) >
+				 parts[i]->start, "");
 
 			domain->partitions[i] = *parts[i];
 		}
+
+#if defined(CONFIG_EXECUTE_XOR_WRITE)
+		for (i = 0; i < num_parts; i++) {
+			__ASSERT(sane_partition_domain(domain,
+						       &domain->partitions[i]),
+				 "");
+		}
+#endif
 	}
 
 	sys_dlist_init(&domain->mem_domain_q);
@@ -59,7 +112,7 @@ void k_mem_domain_destroy(struct k_mem_domain *domain)
 	unsigned int key;
 	sys_dnode_t *node, *next_node;
 
-	__ASSERT(domain, "");
+	__ASSERT(domain != NULL, "");
 
 	key = irq_lock();
 
@@ -80,15 +133,18 @@ void k_mem_domain_destroy(struct k_mem_domain *domain)
 }
 
 void k_mem_domain_add_partition(struct k_mem_domain *domain,
-			       struct k_mem_partition *part)
+				struct k_mem_partition *part)
 {
 	int p_idx;
 	unsigned int key;
 
-	__ASSERT(domain && part, "");
-	__ASSERT(part->start + part->size > part->start, "");
+	__ASSERT(domain != NULL, "");
+	__ASSERT(part != NULL, "");
+	__ASSERT((part->start + part->size) > part->start, "");
 
-	ensure_w_xor_x(part->attr);
+#if defined(CONFIG_EXECUTE_XOR_WRITE)
+	__ASSERT(sane_partition_domain(domain, part), "");
+#endif
 
 	key = irq_lock();
 
@@ -117,7 +173,8 @@ void k_mem_domain_remove_partition(struct k_mem_domain *domain,
 	int p_idx;
 	unsigned int key;
 
-	__ASSERT(domain && part, "");
+	__ASSERT(domain != NULL, "");
+	__ASSERT(part != NULL, "");
 
 	key = irq_lock();
 
@@ -150,7 +207,10 @@ void k_mem_domain_add_thread(struct k_mem_domain *domain, k_tid_t thread)
 {
 	unsigned int key;
 
-	__ASSERT(domain && thread && !thread->mem_domain_info.mem_domain, "");
+	__ASSERT(domain != NULL, "");
+	__ASSERT(thread != NULL, "");
+	__ASSERT(thread->mem_domain_info.mem_domain == NULL,
+		 "mem domain unset");
 
 	key = irq_lock();
 
@@ -169,7 +229,8 @@ void k_mem_domain_remove_thread(k_tid_t thread)
 {
 	unsigned int key;
 
-	__ASSERT(thread && thread->mem_domain_info.mem_domain, "");
+	__ASSERT(thread != NULL, "");
+	__ASSERT(thread->mem_domain_info.mem_domain != NULL, "mem domain set");
 
 	key = irq_lock();
 	if (_current == thread) {

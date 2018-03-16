@@ -31,12 +31,19 @@ extern "C" {
  * @brief Representation of a sensor readout value.
  *
  * The value is represented as having an integer and a fractional part,
- * and can be obtained using the formula val1 + val2 * 10^(-6).
+ * and can be obtained using the formula val1 + val2 * 10^(-6). Negative
+ * values also adhere to the above formula, but may need special attention.
+ * Here are some examples of the value representation:
+ *
+ *      0.5: val1 =  0, val2 =  500000
+ *     -0.5: val1 =  0, val2 = -500000
+ *     -1.0: val1 = -1, val2 =  0
+ *     -1.5: val1 = -1, val2 = -500000
  */
 struct sensor_value {
 	/** Integer part of the value. */
 	s32_t val1;
-	/** Fractional part of the value. */
+	/** Fractional part of the value (in one-millionth parts). */
 	s32_t val2;
 };
 
@@ -119,8 +126,19 @@ enum sensor_channel {
 	SENSOR_CHAN_PM_2_5,
 	/** 10 micro-meters Particulate Matter, in ug/m^3 */
 	SENSOR_CHAN_PM_10,
-	/** Distance. From sensor to target, in millimeters */
+	/** Distance. From sensor to target, in meters */
 	SENSOR_CHAN_DISTANCE,
+
+	/** CO2 level, in parts per million (ppm) **/
+	SENSOR_CHAN_CO2,
+	/** VOC level, in parts per billion (ppb) **/
+	SENSOR_CHAN_VOC,
+
+	/** Voltage, in volts **/
+	SENSOR_CHAN_VOLTAGE,
+	/** Current, in amps **/
+	SENSOR_CHAN_CURRENT,
+
 	/** All channels. */
 	SENSOR_CHAN_ALL,
 };

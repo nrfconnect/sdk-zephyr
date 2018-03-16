@@ -63,7 +63,7 @@ static void set_kernel_idle_time_in_ticks(s32_t ticks)
 #define set_kernel_idle_time_in_ticks(x) do { } while (0)
 #endif
 
-static void _sys_power_save_idle(s32_t ticks)
+static void sys_power_save_idle(s32_t ticks)
 {
 #ifdef CONFIG_TICKLESS_KERNEL
 	if (ticks != K_FOREVER) {
@@ -164,9 +164,23 @@ void idle(void *unused1, void *unused2, void *unused3)
 	__idle_time_stamp = (u64_t)k_cycle_get_32();
 #endif
 
+#ifdef CONFIG_SMP
+	/* Simplified idle for non-default SMP CPUs pending driver
+	 * support.  The busy waiting is needed to prevent lock
+	 * contention.  Long term we need to wake up idle CPUs with an
+	 * IPI.
+	 */
+	if (_arch_curr_cpu()->id > 0) {
+		while (1) {
+			k_busy_wait(100);
+			k_yield();
+		}
+	}
+#endif
+
 	for (;;) {
 		(void)irq_lock();
-		_sys_power_save_idle(_get_next_timeout_expiry());
+		sys_power_save_idle(_get_next_timeout_expiry());
 
 		IDLE_YIELD_IF_COOP();
 	}

@@ -8,12 +8,11 @@
 #include <logging/sys_log.h>
 
 #include "spi_context.h"
-#include <device.h>
 #include <errno.h>
-#include <init.h>
-#include <misc/__assert.h>
-#include <soc.h>
+#include <device.h>
 #include <spi.h>
+#include <soc.h>
+#include <board.h>
 
 #if defined(CONFIG_SPI_LEGACY_API)
 #error "This driver does not support the SPI legacy API."
@@ -22,12 +21,9 @@
 /* Device constant configuration parameters */
 struct spi_sam0_config {
 	SercomSpi *regs;
-	u32_t ctrla;
+	u32_t pads;
 	u32_t pm_apbcmask;
 	u16_t gclk_clkctrl_id;
-	struct soc_gpio_pin pin_miso;
-	struct soc_gpio_pin pin_mosi;
-	struct soc_gpio_pin pin_sck;
 };
 
 /* Device run time data */
@@ -77,13 +73,11 @@ static int spi_sam0_configure(struct spi_config *config)
 		ctrla.bit.CPHA = 1;
 	}
 
-	/* MOSI on PAD2, SCK on PAD3 */
-	ctrla.bit.DOPO = 1;
+	ctrla.reg |= cfg->pads;
 
 	if ((config->operation & SPI_MODE_LOOP) != 0) {
-		/* Put MISO on the same pin as MOSI */
-		ctrla.bit.DIPO = 2;
-	} else {
+		/* Put MISO and MOSI on the same pad */
+		ctrla.bit.DOPO = 0;
 		ctrla.bit.DIPO = 0;
 	}
 
@@ -151,6 +145,17 @@ static void spi_sam0_shift_master(SercomSpi *regs, struct spi_sam0_data *data)
 	spi_context_update_rx(&data->ctx, 1, 1);
 }
 
+/* Finish any ongoing writes and drop any remaining read data */
+static void spi_sam0_finish(SercomSpi *regs)
+{
+	while (!regs->INTFLAG.bit.TXC) {
+	}
+
+	while (regs->INTFLAG.bit.RXC) {
+		(void)regs->DATA.reg;
+	}
+}
+
 /* Fast path that transmits a buf */
 static void spi_sam0_fast_tx(SercomSpi *regs, const struct spi_buf *tx_buf)
 {
@@ -167,7 +172,7 @@ static void spi_sam0_fast_tx(SercomSpi *regs, const struct spi_buf *tx_buf)
 		regs->DATA.reg = ch;
 	}
 
-	/* Note that the RX buf is full and the transmit may be ongoing */
+	spi_sam0_finish(regs);
 }
 
 /* Fast path that reads into a buf */
@@ -181,15 +186,6 @@ static void spi_sam0_fast_rx(SercomSpi *regs, struct spi_buf *rx_buf)
 	}
 
 	/* See the comment in spi_sam0_fast_txrx re: interleaving. */
-
-	/* Ensure transmit is idle */
-	while (!regs->INTFLAG.bit.DRE) {
-	}
-
-	/* Flush the receive buffer */
-	while (regs->INTFLAG.bit.RXC) {
-		(void)regs->DATA.reg;
-	}
 
 	/* Write the first byte */
 	regs->DATA.reg = 0;
@@ -212,6 +208,8 @@ static void spi_sam0_fast_rx(SercomSpi *regs, struct spi_buf *rx_buf)
 	}
 
 	*rx = regs->DATA.reg;
+
+	spi_sam0_finish(regs);
 }
 
 /* Fast path that writes and reads bufs of the same length */
@@ -239,15 +237,6 @@ static void spi_sam0_fast_txrx(SercomSpi *regs, const struct spi_buf *tx_buf,
 	 * Receive the final byte
 	 */
 
-	/* Ensure transmit is idle */
-	while (!regs->INTFLAG.bit.DRE) {
-	}
-
-	/* Flush the receive buffer */
-	while (regs->INTFLAG.bit.RXC) {
-		(void)regs->DATA.reg;
-	}
-
 	/* Write the first byte */
 	regs->DATA.reg = *tx++;
 
@@ -270,17 +259,8 @@ static void spi_sam0_fast_txrx(SercomSpi *regs, const struct spi_buf *tx_buf,
 	}
 
 	*rx = regs->DATA.reg;
-}
 
-/* Finish any ongoing writes and drop any remaining read data */
-static void spi_sam0_finish(SercomSpi *regs)
-{
-	while (!regs->INTFLAG.bit.DRE) {
-	}
-
-	while (regs->INTFLAG.bit.RXC) {
-		(void)regs->DATA.reg;
-	}
+	spi_sam0_finish(regs);
 }
 
 /* Fast path where every overlapping tx and rx buffer is the same length */
@@ -313,8 +293,6 @@ static void spi_sam0_fast_transceive(struct spi_config *config,
 	for (; rx_count != 0; rx_count--) {
 		spi_sam0_fast_rx(regs, rx_bufs++);
 	}
-
-	spi_sam0_finish(regs);
 }
 
 /* Returns true if the request is suitable for the fast
@@ -419,11 +397,6 @@ static int spi_sam0_init(struct device *dev)
 	/* Enable SERCOM clock in PM */
 	PM->APBCMASK.reg |= cfg->pm_apbcmask;
 
-	/* Connect pins to the peripheral */
-	soc_gpio_configure(&cfg->pin_mosi);
-	soc_gpio_configure(&cfg->pin_miso);
-	soc_gpio_configure(&cfg->pin_sck);
-
 	/* Disable all SPI interrupts */
 	regs->INTENCLR.reg = SERCOM_SPI_INTENCLR_MASK;
 	wait_synchronization(regs);
@@ -447,14 +420,10 @@ static const struct spi_driver_api spi_sam0_driver_api = {
 
 #define SPI_SAM0_DEFINE_CONFIG(n)                                            \
 	static const struct spi_sam0_config spi_sam0_config_##n = {          \
-		.regs = &SERCOM##n->SPI,                                     \
+		.regs = (SercomSpi *)CONFIG_SPI_SAM0_SERCOM##n##_BASE_ADDRESS, \
 		.pm_apbcmask = PM_APBCMASK_SERCOM##n,                        \
 		.gclk_clkctrl_id = GCLK_CLKCTRL_ID_SERCOM##n##_CORE,         \
-		.ctrla = SERCOM_USART_CTRLA_RXPO(3) |                        \
-			 SERCOM_USART_CTRLA_TXPO(1),                         \
-		.pin_miso = PIN_SPI_SAM0_SERCOM##n##_MISO,                   \
-		.pin_mosi = PIN_SPI_SAM0_SERCOM##n##_MOSI,                   \
-		.pin_sck = PIN_SPI_SAM0_SERCOM##n##_SCK,                     \
+		.pads = CONFIG_SPI_SAM0_SERCOM##n##_PADS                     \
 	}
 
 #define SPI_SAM0_DEVICE_INIT(n)                                              \
@@ -463,31 +432,32 @@ static const struct spi_driver_api spi_sam0_driver_api = {
 		SPI_CONTEXT_INIT_LOCK(spi_sam0_dev_data_##n, ctx),           \
 		SPI_CONTEXT_INIT_SYNC(spi_sam0_dev_data_##n, ctx),           \
 	};                                                                   \
-	DEVICE_AND_API_INIT(spi_sam0_##n, CONFIG_SPI_##n##_NAME,             \
+	DEVICE_AND_API_INIT(spi_sam0_##n, \
+			    CONFIG_SPI_SAM0_SERCOM##n##_LABEL,               \
 			    &spi_sam0_init, &spi_sam0_dev_data_##n,          \
 			    &spi_sam0_config_##n, POST_KERNEL,               \
 			    CONFIG_SPI_INIT_PRIORITY, &spi_sam0_driver_api)
 
-#if CONFIG_SPI_0
+#if CONFIG_SPI_SAM0_SERCOM0_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(0);
 #endif
 
-#if CONFIG_SPI_1
+#if CONFIG_SPI_SAM0_SERCOM1_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(1);
 #endif
 
-#if CONFIG_SPI_2
+#if CONFIG_SPI_SAM0_SERCOM2_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(2);
 #endif
 
-#if CONFIG_SPI_3
+#if CONFIG_SPI_SAM0_SERCOM3_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(3);
 #endif
 
-#if CONFIG_SPI_4
+#if CONFIG_SPI_SAM0_SERCOM4_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(4);
 #endif
 
-#if CONFIG_SPI_5
+#if CONFIG_SPI_SAM0_SERCOM5_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(5);
 #endif

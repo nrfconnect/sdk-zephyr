@@ -23,6 +23,10 @@ choice
 
 config BT_LL_SW
 	bool "Software-based BLE Link Layer"
+	select ENTROPY_GENERATOR
+	select ENTROPY_NRF5_RNG if SOC_FAMILY_NRF5
+	select ENTROPY_NRF5_BIAS_CORRECTION if SOC_FAMILY_NRF5
+	select ENTROPY_DEVICE_RANDOM_GENERATOR
 	help
 	  Use Zephyr software BLE Link Layer implementation.
 
@@ -108,10 +112,15 @@ config BT_CTLR_TX_BUFFER_SIZE
 config BT_CTLR_COMPANY_ID
 	prompt "Company Id"
 	hex
-	default 0xFFFF
+	default 0x05F1
 	range 0x0000 0xFFFF
 	help
-	  Set the Company Id that will be used in VERSION_IND PDU.
+	  Set the Bluetooth Company Identifier that will be used in
+	  the VERSION_IND PDU. The Linux Foundation's Company Identifier
+	  (0x05F1) is the default value for this option although silicon vendors
+	  and hardware manufacturers can set their own. The full list of
+	  Bluetooth Company Identifiers can be found here:
+	  https://www.bluetooth.com/specifications/assigned-numbers/company-identifiers
 
 config BT_CTLR_SUBVERSION_NUMBER
 	prompt "Subversion Number"
@@ -318,12 +327,11 @@ config BT_CTLR_XTAL_THRESHOLD
 	prompt "Crystal shutdown threshold in uS"
 	depends on BT_CTLR_XTAL_ADVANCED
 	int
-	default 5168
+	default 1500
 	help
 	  Configure the optimal delta in micro seconds between two consecutive
-	  radio events below which (active clock) crystal will be retained. This
-	  value is board dependent. The value 5168 is based on crude calculation
-	  for nRF51 current versus startup time of high frequency crystal.
+	  radio events, event done to next preparation, below which (active
+	  clock) crystal will be retained. This value is board dependent.
 
 config BT_CTLR_SCHED_ADVANCED
 	bool "Advanced scheduling"

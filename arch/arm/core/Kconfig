@@ -23,7 +23,7 @@ config CPU_CORTEX_M
 	select HAS_FLASH_LOAD_OFFSET
 	select HAS_DTS
 	select ARCH_HAS_STACK_PROTECTION if ARM_CORE_MPU
-	select ARCH_HAS_USERSPACE if ARM_USERSPACE
+	select ARCH_HAS_USERSPACE if ARM_CORE_MPU
 	help
 	  This option signifies the use of a CPU of the Cortex-M family.
 
@@ -37,18 +37,27 @@ config CPU_HAS_SYSTICK
 config ARM_STACK_PROTECTION
 	bool
 	default y if HW_STACK_PROTECTION
-	select MPU_STACK_GUARD if ARM_CORE_MPU
+	select MPU_STACK_GUARD
 	help
 	  This option enables MPU stack guard to cause a system fatal error
 	  if the bounds of the current process stack are overflowed.
 
-config ARM_USERSPACE
+config ARM_SECURE_FIRMWARE
 	bool
 	default n
 	help
-	  This option enables APIs to drop a thread's privileges,	supporting
-	  user-level threads that are protected from each other and from
-	  crashing the kernel.
+	  This option enables Zephyr to include code that executes in
+	  Secure state, as well as to exclude code that is designed to
+	  execute only in Non-secure state. The option is only applicable
+	  to ARMv8-M MCUs that implement the Security Extension.
+
+	  Code executing in Secure state has access to both the Secure
+	  and Non-Secure resources of the Cortex-M MCU.
+
+	  Code executing in Non-Secure state may trigger Secure Faults,
+	  if Secure MCU resources are accessed from the Non-Secure state.
+	  Secure Faults may only be handled by code executing in Secure
+	  state.
 
 menu "Architectue Floating Point Options"
 depends on CPU_HAS_FPU
@@ -77,9 +86,7 @@ endchoice
 
 endmenu
 
-if CPU_CORTEX_M
 source "arch/arm/core/cortex_m/Kconfig"
-endif
 
 if CPU_HAS_MPU
 source "arch/arm/core/cortex_m/mpu/Kconfig"

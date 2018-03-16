@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Nordic Semiconductor ASA
+ * Copyright (c) 2016-2018 Nordic Semiconductor ASA
  * Copyright (c) 2016 Vinayak Kariappa Chettimada
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -7,32 +7,6 @@
 
 #ifndef _TICKER_H_
 #define _TICKER_H_
-
-/** \brief Macro to translate microseconds to tick units.
-*
-* \note This returns the floor value.
-*/
-#define TICKER_US_TO_TICKS(x) \
-	( \
-		((u32_t)(((u64_t) (x) * 1000000000UL) / 30517578125UL)) \
-		& 0x00FFFFFF \
-	)
-
-/** \brief Macro returning remainder in nanoseconds over-and-above a tick unit.
-*/
-#define TICKER_REMAINDER(x) \
-	( \
-		( \
-			((u64_t) (x) * 1000000000UL) \
-			- ((u64_t) TICKER_US_TO_TICKS(x) * 30517578125UL) \
-		) \
-		/ 1000UL \
-	)
-
-/** \brief Macro to translate tick units to microseconds.
-*/
-#define TICKER_TICKS_TO_US(x) \
-	((u32_t)(((u64_t) (x) * 30517578125UL) / 1000000000UL))
 
 /** \defgroup Timer API return codes.
 *
@@ -64,7 +38,7 @@
 
 /** \brief Timer node type size.
 */
-#define TICKER_NODE_T_SIZE	36
+#define TICKER_NODE_T_SIZE	40
 
 /** \brief Timer user type size.
 */
@@ -72,7 +46,19 @@
 
 /** \brief Timer user operation type size.
 */
-#define TICKER_USER_OP_T_SIZE	44
+#define TICKER_USER_OP_T_SIZE	48
+
+#define TICKER_CALL_ID_NONE    0
+#define TICKER_CALL_ID_ISR     1
+#define TICKER_CALL_ID_TRIGGER 2
+#define TICKER_CALL_ID_WORKER  3
+#define TICKER_CALL_ID_JOB     4
+#define TICKER_CALL_ID_PROGRAM 5
+
+typedef u8_t (*ticker_caller_id_get_cb_t)(u8_t user_id);
+typedef void (*ticker_sched_cb_t)(u8_t caller_id, u8_t callee_id, u8_t chain,
+				  void *instance);
+typedef void (*ticker_trigger_set_cb_t)(u32_t value);
 
 /** \brief Timer timeout function type.
 */
@@ -95,12 +81,17 @@ typedef void (*ticker_op_func) (u32_t status, void *op_context);
 * \param[in]  user_op
 */
 u32_t ticker_init(u8_t instance_index, u8_t count_node, void *node,
-		  u8_t count_user, void *user, u8_t count_op, void *user_op);
+		  u8_t count_user, void *user, u8_t count_op, void *user_op,
+		  ticker_caller_id_get_cb_t caller_id_get_cb,
+		  ticker_sched_cb_t sched_cb,
+		  ticker_trigger_set_cb_t trigger_set_cb);
 bool ticker_is_initialized(u8_t instance_index);
 void ticker_trigger(u8_t instance_index);
+void ticker_worker(void *param);
+void ticker_job(void *param);
 u32_t ticker_start(u8_t instance_index, u8_t user_id, u8_t ticker_id,
 		   u32_t ticks_anchor, u32_t ticks_first, u32_t ticks_periodic,
-		   u32_t remainder_periodic, u16_t lazy, u16_t ticks_slot,
+		   u32_t remainder_periodic, u16_t lazy, u32_t ticks_slot,
 		   ticker_timeout_func fp_timeout_func, void *context,
 		   ticker_op_func fp_op_func, void *op_context);
 u32_t ticker_update(u8_t instance_index, u8_t user_id, u8_t ticker_id,

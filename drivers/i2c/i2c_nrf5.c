@@ -11,6 +11,8 @@
 #include <misc/util.h>
 #include <gpio.h>
 
+#include "i2c-priv.h"
+
 #define SYS_LOG_LEVEL CONFIG_SYS_LOG_I2C_LEVEL
 #include <logging/sys_log.h>
 
@@ -33,7 +35,9 @@
 struct i2c_nrf5_config {
 	volatile NRF_TWI_Type *base;
 	void (*irq_config_func)(struct device *dev);
-	u32_t default_cfg;
+	u32_t bitrate;
+	u32_t sda_pin;
+	u32_t scl_pin;
 };
 
 
@@ -44,19 +48,25 @@ struct i2c_nrf5_data {
 	u32_t err:1;
 	u32_t stopped:1;
 	struct device *gpio;
+	struct k_sem lock;
 };
 
 
 static int i2c_nrf5_configure(struct device *dev, u32_t dev_config_raw)
 {
 	const struct i2c_nrf5_config *config = dev->config->config_info;
+	struct i2c_nrf5_data *data = dev->driver_data;
 	volatile NRF_TWI_Type *twi = config->base;
+	int ret = 0;
+
 
 	SYS_LOG_DBG("");
 
 	if (I2C_ADDR_10_BITS & dev_config_raw) {
 		return -EINVAL;
 	}
+
+	k_sem_take(&data->lock, K_FOREVER);
 
 	switch (I2C_SPEED_GET(dev_config_raw)) {
 	case I2C_SPEED_STANDARD:
@@ -67,10 +77,12 @@ static int i2c_nrf5_configure(struct device *dev, u32_t dev_config_raw)
 		break;
 	default:
 		SYS_LOG_ERR("unsupported speed");
-		return -EINVAL;
+		ret = -EINVAL;
 	}
 
-	return 0;
+	k_sem_give(&data->lock);
+
+	return ret;
 }
 
 static int i2c_nrf5_read(struct device *dev, struct i2c_msg *msg)
@@ -197,7 +209,11 @@ static int i2c_nrf5_transfer(struct device *dev, struct i2c_msg *msgs,
 			     u8_t num_msgs, u16_t addr)
 {
 	const struct i2c_nrf5_config *config = dev->config->config_info;
+	struct i2c_nrf5_data *data = dev->driver_data;
 	volatile NRF_TWI_Type *twi = config->base;
+	int ret = 0;
+
+	k_sem_take(&data->lock, K_FOREVER);
 
 	SYS_LOG_DBG("transaction-start addr=0x%x", addr);
 
@@ -210,8 +226,6 @@ static int i2c_nrf5_transfer(struct device *dev, struct i2c_msg *msgs,
 	twi->ENABLE = TWI_ENABLE_ENABLE_Enabled;
 	twi->ADDRESS = addr;
 	for (int i = 0; i < num_msgs; i++) {
-		int r;
-
 		SYS_LOG_DBG("msg len=%d %s%s%s", msgs[i].len,
 			    (msgs[i].flags & I2C_MSG_READ) ? "R":"W",
 			    (msgs[i].flags & I2C_MSG_STOP) ? "S":"-",
@@ -223,19 +237,20 @@ static int i2c_nrf5_transfer(struct device *dev, struct i2c_msg *msgs,
 					 | NRF5_TWI_INT_RXDREADY
 					 | NRF5_TWI_INT_ERROR
 					 | NRF5_TWI_INT_STOPPED);
-			r = i2c_nrf5_read(dev, msgs + i);
+			ret = i2c_nrf5_read(dev, msgs + i);
 		} else {
-			r = i2c_nrf5_write(dev, msgs + i);
+			ret = i2c_nrf5_write(dev, msgs + i);
 		}
 
-		if (r != 0) {
-			twi->ENABLE = TWI_ENABLE_ENABLE_Disabled;
-			return r;
+		if (ret != 0) {
+			break;
 		}
 	}
 	twi->ENABLE = TWI_ENABLE_ENABLE_Disabled;
 
-	return 0;
+	k_sem_give(&data->lock);
+
+	return ret;
 }
 
 static void i2c_nrf5_isr(void *arg)
@@ -275,6 +290,7 @@ static int i2c_nrf5_init(struct device *dev)
 	const struct i2c_nrf5_config *config = dev->config->config_info;
 	struct i2c_nrf5_data *data = dev->driver_data;
 	volatile NRF_TWI_Type *twi = config->base;
+	u32_t bitrate_cfg;
 	int status;
 
 	SYS_LOG_DBG("");
@@ -287,20 +303,20 @@ static int i2c_nrf5_init(struct device *dev)
 
 	twi->ENABLE = TWI_ENABLE_ENABLE_Disabled;
 
-	status = gpio_pin_configure(data->gpio, CONFIG_I2C_NRF5_GPIO_SCL_PIN,
+	status = gpio_pin_configure(data->gpio, config->scl_pin,
 				    GPIO_DIR_IN
 				    | GPIO_PUD_PULL_UP
 				    | GPIO_DS_DISCONNECT_HIGH);
 	__ASSERT_NO_MSG(status == 0);
 
-	status = gpio_pin_configure(data->gpio, CONFIG_I2C_NRF5_GPIO_SCA_PIN,
+	status = gpio_pin_configure(data->gpio, config->sda_pin,
 				    GPIO_DIR_IN
 				    | GPIO_PUD_PULL_UP
 				    | GPIO_DS_DISCONNECT_HIGH);
 	__ASSERT_NO_MSG(status == 0);
 
-	twi->PSELSCL = CONFIG_I2C_NRF5_GPIO_SCL_PIN;
-	twi->PSELSDA = CONFIG_I2C_NRF5_GPIO_SCA_PIN;
+	twi->PSELSCL = config->scl_pin;
+	twi->PSELSDA = config->sda_pin;
 	twi->ERRORSRC = twi->ERRORSRC;
 	twi->EVENTS_TXDSENT = 0;
 	twi->EVENTS_RXDREADY = 0;
@@ -310,12 +326,12 @@ static int i2c_nrf5_init(struct device *dev)
 			 | NRF5_TWI_INT_ERROR
 			 | NRF5_TWI_INT_STOPPED);
 
-	status = i2c_nrf5_configure(dev, config->default_cfg);
-	if (status) {
-		return status;
-	}
+	bitrate_cfg = _i2c_map_dt_bitrate(config->bitrate);
+	status = i2c_nrf5_configure(dev, I2C_MODE_MASTER | bitrate_cfg);
 
-	return 0;
+	k_sem_give(&data->lock);
+
+	return status;
 }
 
 static const struct i2c_driver_api i2c_nrf5_driver_api = {
@@ -330,12 +346,16 @@ static const struct i2c_driver_api i2c_nrf5_driver_api = {
 static void i2c_nrf5_config_func_0(struct device *dev);
 
 static const struct i2c_nrf5_config i2c_nrf5_config_0 = {
-	.base = NRF_TWI0,
+	.base = (volatile NRF_TWI_Type *)CONFIG_I2C_0_BASE_ADDR,
 	.irq_config_func = i2c_nrf5_config_func_0,
-	.default_cfg = CONFIG_I2C_0_DEFAULT_CFG,
+	.bitrate = CONFIG_I2C_0_BITRATE,
+	.sda_pin = CONFIG_I2C_NRF5_0_GPIO_SDA_PIN,
+	.scl_pin = CONFIG_I2C_NRF5_0_GPIO_SCL_PIN,
 };
 
-static struct i2c_nrf5_data i2c_nrf5_data_0;
+static struct i2c_nrf5_data i2c_nrf5_data_0 = {
+	.lock = _K_SEM_INITIALIZER(i2c_nrf5_data_0.lock, 1, 1),
+};
 
 DEVICE_AND_API_INIT(i2c_nrf5_0, CONFIG_I2C_0_NAME, i2c_nrf5_init,
 		    &i2c_nrf5_data_0, &i2c_nrf5_config_0,
@@ -344,10 +364,10 @@ DEVICE_AND_API_INIT(i2c_nrf5_0, CONFIG_I2C_0_NAME, i2c_nrf5_init,
 
 static void i2c_nrf5_config_func_0(struct device *dev)
 {
-	IRQ_CONNECT(NRF5_IRQ_SPI0_TWI0_IRQn, CONFIG_I2C_0_IRQ_PRI,
-		    i2c_nrf5_isr, DEVICE_GET(i2c_nrf5_0), 0);
+	IRQ_CONNECT(CONFIG_I2C_0_IRQ, CONFIG_I2C_0_IRQ_PRI, i2c_nrf5_isr,
+		    DEVICE_GET(i2c_nrf5_0), 0);
 
-	irq_enable(NRF5_IRQ_SPI0_TWI0_IRQn);
+	irq_enable(CONFIG_I2C_0_IRQ);
 }
 #endif /* CONFIG_I2C_0 && !CONFIG_SPI_0 */
 
@@ -355,12 +375,16 @@ static void i2c_nrf5_config_func_0(struct device *dev)
 static void i2c_nrf5_config_func_1(struct device *dev);
 
 static const struct i2c_nrf5_config i2c_nrf5_config_1 = {
-	.base = NRF_TWI1,
+	.base = (volatile NRF_TWI_Type *)CONFIG_I2C_1_BASE_ADDR,
 	.irq_config_func = i2c_nrf5_config_func_1,
-	.default_cfg = CONFIG_I2C_1_DEFAULT_CFG,
+	.bitrate = CONFIG_I2C_1_BITRATE,
+	.sda_pin = CONFIG_I2C_NRF5_1_GPIO_SDA_PIN,
+	.scl_pin = CONFIG_I2C_NRF5_1_GPIO_SCL_PIN,
 };
 
-static struct i2c_nrf5_data i2c_nrf5_data_1;
+static struct i2c_nrf5_data i2c_nrf5_data_1 = {
+	.lock = _K_SEM_INITIALIZER(i2c_nrf5_data_1.lock, 1, 1),
+};
 
 DEVICE_AND_API_INIT(i2c_nrf5_1, CONFIG_I2C_1_NAME, i2c_nrf5_init,
 		    &i2c_nrf5_data_1, &i2c_nrf5_config_1,
@@ -369,9 +393,9 @@ DEVICE_AND_API_INIT(i2c_nrf5_1, CONFIG_I2C_1_NAME, i2c_nrf5_init,
 
 static void i2c_nrf5_config_func_1(struct device *dev)
 {
-	IRQ_CONNECT(NRF5_IRQ_SPI1_TWI1_IRQn, CONFIG_I2C_1_IRQ_PRI,
-		    i2c_nrf5_isr, DEVICE_GET(i2c_nrf5_1), 0);
+	IRQ_CONNECT(CONFIG_I2C_1_IRQ, CONFIG_I2C_1_IRQ_PRI, i2c_nrf5_isr,
+		    DEVICE_GET(i2c_nrf5_1), 0);
 
-	irq_enable(NRF5_IRQ_SPI1_TWI1_IRQn);
+	irq_enable(CONFIG_I2C_1_IRQ);
 }
 #endif /* CONFIG_I2C_1 && !CONFIG_SPI_1 */

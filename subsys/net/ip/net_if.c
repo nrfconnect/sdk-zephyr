@@ -367,11 +367,29 @@ struct net_if *net_if_lookup_by_dev(struct device *dev)
 
 struct net_if *net_if_get_default(void)
 {
+	struct net_if *iface = NULL;
+
 	if (__net_if_start == __net_if_end) {
 		return NULL;
 	}
 
-	return __net_if_start;
+#if defined(CONFIG_NET_DEFAULT_IF_ETHERNET)
+	iface = net_if_get_first_by_type(&NET_L2_GET_NAME(ETHERNET));
+#endif
+#if defined(CONFIG_NET_DEFAULT_IF_IEEE802154)
+	iface = net_if_get_first_by_type(&NET_L2_GET_NAME(IEEE802154));
+#endif
+#if defined(CONFIG_NET_DEFAULT_IF_BLUETOOTH)
+	iface = net_if_get_first_by_type(&NET_L2_GET_NAME(BLUETOOTH));
+#endif
+#if defined(CONFIG_NET_DEFAULT_IF_DUMMY)
+	iface = net_if_get_first_by_type(&NET_L2_GET_NAME(DUMMY));
+#endif
+#if defined(CONFIG_NET_DEFAULT_IF_OFFLOAD)
+	iface = net_if_get_first_by_type(&NET_L2_GET_NAME(OFFLOAD_IP));
+#endif
+
+	return iface ? iface : __net_if_start;
 }
 
 struct net_if *net_if_get_first_by_type(const struct net_l2 *l2)
@@ -1856,6 +1874,17 @@ done:
 	net_mgmt_event_notify(NET_EVENT_IF_UP, iface);
 
 	return 0;
+}
+
+void net_if_carrier_down(struct net_if *iface)
+{
+	NET_DBG("iface %p", iface);
+
+	atomic_clear_bit(iface->flags, NET_IF_UP);
+
+	net_if_flush_tx(iface);
+
+	net_mgmt_event_notify(NET_EVENT_IF_DOWN, iface);
 }
 
 int net_if_down(struct net_if *iface)

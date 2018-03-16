@@ -13,13 +13,12 @@
 
 #include "board.h"
 
-#define CID_INTEL 0x0002
-#define MOD_INTEL 0x0000
+#define MOD_LF 0x0000
 
 #define GROUP_ADDR 0xc000
 #define PUBLISHER_ADDR  0x000f
 
-#define OP_VENDOR_BUTTON BT_MESH_MODEL_OP_3(0x00, CID_INTEL)
+#define OP_VENDOR_BUTTON BT_MESH_MODEL_OP_3(0x00, BT_COMP_ID_LF)
 
 static const u8_t net_key[16] = {
 	0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
@@ -89,9 +88,7 @@ static struct bt_mesh_health_srv health_srv = {
 	.cb = &health_srv_cb,
 };
 
-static struct bt_mesh_model_pub health_pub = {
-	.msg  = BT_MESH_HEALTH_FAULT_MSG(0),
-};
+BT_MESH_HEALTH_PUB_DEFINE(health_pub, 0);
 
 static struct bt_mesh_model root_models[] = {
 	BT_MESH_MODEL_CFG_SRV(&cfg_srv),
@@ -119,7 +116,7 @@ static const struct bt_mesh_model_op vnd_ops[] = {
 };
 
 static struct bt_mesh_model vnd_models[] = {
-	BT_MESH_MODEL_VND(CID_INTEL, MOD_INTEL, vnd_ops, NULL, NULL),
+	BT_MESH_MODEL_VND(BT_COMP_ID_LF, MOD_LF, vnd_ops, NULL, NULL),
 };
 
 static struct bt_mesh_elem elements[] = {
@@ -127,7 +124,7 @@ static struct bt_mesh_elem elements[] = {
 };
 
 static const struct bt_mesh_comp comp = {
-	.cid = CID_INTEL,
+	.cid = BT_COMP_ID_LF,
 	.elem = elements,
 	.elem_count = ARRAY_SIZE(elements),
 };
@@ -141,7 +138,7 @@ static void configure(void)
 
 	/* Bind to vendor model */
 	bt_mesh_cfg_mod_app_bind_vnd(net_idx, addr, addr, app_idx,
-				     MOD_INTEL, CID_INTEL, NULL);
+				     MOD_LF, BT_COMP_ID_LF, NULL);
 
 	/* Bind to Health model */
 	bt_mesh_cfg_mod_app_bind(net_idx, addr, addr, app_idx,
@@ -149,7 +146,7 @@ static void configure(void)
 
 	/* Add model subscription */
 	bt_mesh_cfg_mod_sub_add_vnd(net_idx, addr, addr, GROUP_ADDR,
-				    MOD_INTEL, CID_INTEL, NULL);
+				    MOD_LF, BT_COMP_ID_LF, NULL);
 
 #if NODE_ADDR == PUBLISHER_ADDR
 	{
@@ -222,7 +219,7 @@ static u16_t target = GROUP_ADDR;
 
 void board_button_1_pressed(void)
 {
-	struct net_buf_simple *msg = NET_BUF_SIMPLE(3 + 4);
+	NET_BUF_SIMPLE_DEFINE(msg, 3 + 4);
 	struct bt_mesh_msg_ctx ctx = {
 		.net_idx = net_idx,
 		.app_idx = app_idx,
@@ -231,9 +228,9 @@ void board_button_1_pressed(void)
 	};
 
 	/* Bind to Health model */
-	bt_mesh_model_msg_init(msg, OP_VENDOR_BUTTON);
+	bt_mesh_model_msg_init(&msg, OP_VENDOR_BUTTON);
 
-	if (bt_mesh_model_send(&vnd_models[0], &ctx, msg, NULL, NULL)) {
+	if (bt_mesh_model_send(&vnd_models[0], &ctx, &msg, NULL, NULL)) {
 		printk("Unable to send Vendor Button message\n");
 	}
 

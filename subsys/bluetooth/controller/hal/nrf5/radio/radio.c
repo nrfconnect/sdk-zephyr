@@ -9,13 +9,6 @@
 #include <arch/arm/cortex_m/cmsis.h>
 #endif
 
-#if defined(CONFIG_BOARD_NRFXX_NWTSIM)
-#define SIM_SIDE_EFFECTS_MISSING \
-	posix_print_warning("%s() not yet with sideeffects\n", __func__)
-#else
-#define SIM_SIDE_EFFECTS_MISSING
-#endif
-
 #include "util/mem.h"
 #include "hal/ccm.h"
 #include "hal/radio.h"
@@ -97,6 +90,8 @@ void radio_reset(void)
 #if defined(CONFIG_BOARD_NRFXX_NWTSIM)
 	NRF_RADIO_regw_sideeffects_POWER();
 #endif
+
+	hal_radio_reset();
 }
 
 void radio_phy_set(u8_t phy, u8_t flags)
@@ -176,6 +171,7 @@ void radio_pkt_configure(u8_t bits_len, u8_t max_len, u8_t flags)
 			 RADIO_PCNF0_PLEN_Msk;
 		break;
 
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 #if defined(CONFIG_SOC_NRF52840)
 	case BIT(2):
 		extra |= (RADIO_PCNF0_PLEN_LongRange << RADIO_PCNF0_PLEN_Pos) &
@@ -185,6 +181,7 @@ void radio_pkt_configure(u8_t bits_len, u8_t max_len, u8_t flags)
 			 RADIO_PCNF0_TERMLEN_Msk;
 		break;
 #endif /* CONFIG_SOC_NRF52840 */
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 
 	/* To use same Data Channel PDU structure with nRF5 specific overhead
@@ -395,6 +392,7 @@ static void sw_switch(u8_t dir, u8_t phy_curr, u8_t flags_curr, u8_t phy_next,
 
 		hal_radio_txen_on_sw_switch(ppi);
 
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 #if defined(CONFIG_SOC_NRF52840)
 		if (phy_curr & BIT(2)) {
 			/* Switching to TX after RX on LE Coded PHY. */
@@ -479,6 +477,7 @@ static void sw_switch(u8_t dir, u8_t phy_curr, u8_t flags_curr, u8_t phy_next,
 				    sw_tifs_toggle);
 		}
 #endif /* CONFIG_SOC_NRF52840 */
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	} else {
 		/* RX */
 		delay = HAL_RADIO_NS2US_CEIL(
@@ -488,6 +487,7 @@ static void sw_switch(u8_t dir, u8_t phy_curr, u8_t flags_curr, u8_t phy_next,
 
 		hal_radio_rxen_on_sw_switch(ppi);
 
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 #if defined(CONFIG_SOC_NRF52840)
 		if (1) {
 			u8_t ppi_dis =
@@ -508,6 +508,7 @@ static void sw_switch(u8_t dir, u8_t phy_curr, u8_t flags_curr, u8_t phy_next,
 				~(HAL_SW_SWITCH_RADIO_ENABLE_S2_PPI_INCLUDE);
 		}
 #endif /* CONFIG_SOC_NRF52840 */
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
 
 	if (delay <
@@ -639,10 +640,11 @@ u32_t radio_filter_match_get(void)
 
 void radio_bc_configure(u32_t n)
 {
-	SIM_SIDE_EFFECTS_MISSING;
-
 	NRF_RADIO->BCC = n;
 	NRF_RADIO->SHORTS |= RADIO_SHORTS_ADDRESS_BCSTART_Msk;
+#if defined(CONFIG_BOARD_NRFXX_NWTSIM)
+	NRF_RADIO_regw_sideeffects_BCC();
+#endif
 }
 
 void radio_bc_status_reset(void)
@@ -669,12 +671,14 @@ void radio_tmr_status_reset(void)
 			HAL_RADIO_RECV_TIMEOUT_CANCEL_PPI_DISABLE |
 			HAL_RADIO_DISABLE_ON_HCTO_PPI_DISABLE |
 			HAL_RADIO_END_TIME_CAPTURE_PPI_DISABLE |
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 #if defined(CONFIG_SOC_NRF52840)
 			HAL_TRIGGER_RATEOVERRIDE_PPI_DISABLE |
 #if !defined(CONFIG_BT_CTLR_TIFS_HW)
 			HAL_SW_SWITCH_TIMER_S8_DISABLE_PPI_DISABLE |
 #endif /* !CONFIG_BT_CTLR_TIFS_HW */
 #endif /* CONFIG_SOC_NRF52840 */
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 			HAL_TRIGGER_CRYPT_PPI_DISABLE;
 
 #if defined(CONFIG_BOARD_NRFXX_NWTSIM)
@@ -749,7 +753,10 @@ u32_t radio_tmr_start(u8_t trx, u32_t ticks_start, u32_t remainder)
 	HAL_SW_SWITCH_TIMER_CLEAR_PPI_REGISTER_TASK =
 		HAL_SW_SWITCH_TIMER_CLEAR_PPI_TASK;
 
-#if !defined(CONFIG_SOC_NRF52840)
+#if !defined(CONFIG_BT_CTLR_PHY_CODED) || !defined(CONFIG_SOC_NRF52840)
+	/* NOTE: PPI channel group disable is setup explicitly in sw_switch
+	 *       function when Coded PHY on nRF52840 is supported.
+	 */
 	HAL_SW_SWITCH_GROUP_TASK_DISABLE_PPI_REGISTER_EVT(
 		HAL_SW_SWITCH_GROUP_TASK_DISABLE_PPI(0)) =
 		HAL_SW_SWITCH_GROUP_TASK_DISABLE_PPI_EVT(
@@ -765,7 +772,8 @@ u32_t radio_tmr_start(u8_t trx, u32_t ticks_start, u32_t remainder)
 	HAL_SW_SWITCH_GROUP_TASK_DISABLE_PPI_REGISTER_TASK(
 		HAL_SW_SWITCH_GROUP_TASK_DISABLE_PPI(1)) =
 		HAL_SW_SWITCH_GROUP_TASK_DISABLE_PPI_TASK(1);
-#endif /* !defined(CONFIG_SOC_NRF52840) */
+#endif /* !CONFIG_BT_CTLR_PHY_CODED || !CONFIG_SOC_NRF52840 */
+
 	NRF_PPI->CHG[SW_SWITCH_TIMER_TASK_GROUP(0)] =
 		HAL_SW_SWITCH_GROUP_TASK_DISABLE_PPI_0_INCLUDE |
 			HAL_SW_SWITCH_RADIO_ENABLE_PPI_0_INCLUDE;
@@ -1072,7 +1080,6 @@ static u8_t MALIGN(4) _ccm_scratch[(RADIO_PDU_LEN_MAX - 4) + 16];
 
 void *radio_ccm_rx_pkt_set(struct ccm *ccm, u8_t phy, void *pkt)
 {
-	SIM_SIDE_EFFECTS_MISSING;
 
 	u32_t mode;
 
@@ -1080,6 +1087,7 @@ void *radio_ccm_rx_pkt_set(struct ccm *ccm, u8_t phy, void *pkt)
 	NRF_CCM->ENABLE = CCM_ENABLE_ENABLE_Enabled;
 	mode = (CCM_MODE_MODE_Decryption << CCM_MODE_MODE_Pos) &
 	       CCM_MODE_MODE_Msk;
+
 #if defined(CONFIG_SOC_SERIES_NRF52X)
 	/* Enable CCM support for 8-bit length field PDUs. */
 	mode |= (CCM_MODE_LENGTH_Extended << CCM_MODE_LENGTH_Pos) &
@@ -1100,6 +1108,7 @@ void *radio_ccm_rx_pkt_set(struct ccm *ccm, u8_t phy, void *pkt)
 			CCM_MODE_DATARATE_Msk;
 		break;
 
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
 #if defined(CONFIG_SOC_NRF52840)
 	case BIT(2):
 		mode |= (CCM_MODE_DATARATE_125Kbps <<
@@ -1118,11 +1127,13 @@ void *radio_ccm_rx_pkt_set(struct ccm *ccm, u8_t phy, void *pkt)
 		NRF_PPI->CHENSET = HAL_TRIGGER_RATEOVERRIDE_PPI_ENABLE;
 #if defined(CONFIG_BOARD_NRFXX_NWTSIM)
 		NRF_PPI_regw_sideeffects();
-#endif
+#endif /* CONFIG_BOARD_NRFXX_NWTSIM */
 		break;
 #endif /* CONFIG_SOC_NRF52840 */
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
-#endif
+#endif /* CONFIG_SOC_SERIES_NRF52X */
+
 	NRF_CCM->MODE = mode;
 	NRF_CCM->CNFPTR = (u32_t)ccm;
 	NRF_CCM->INPTR = (u32_t)_pkt_scratch;
@@ -1149,8 +1160,6 @@ void *radio_ccm_rx_pkt_set(struct ccm *ccm, u8_t phy, void *pkt)
 
 void *radio_ccm_tx_pkt_set(struct ccm *ccm, void *pkt)
 {
-	SIM_SIDE_EFFECTS_MISSING;
-
 	u32_t mode;
 
 	NRF_CCM->ENABLE = CCM_ENABLE_ENABLE_Disabled;
@@ -1187,15 +1196,19 @@ void *radio_ccm_tx_pkt_set(struct ccm *ccm, void *pkt)
 
 u32_t radio_ccm_is_done(void)
 {
-	SIM_SIDE_EFFECTS_MISSING;
-
 	NRF_CCM->INTENSET = CCM_INTENSET_ENDCRYPT_Msk;
+#if defined(CONFIG_BOARD_NRFXX_NWTSIM)
+	NRF_CCM_regw_sideeffects_INTENSET();
+#endif
 	while (NRF_CCM->EVENTS_ENDCRYPT == 0) {
 		__WFE();
 		__SEV();
 		__WFE();
 	}
 	NRF_CCM->INTENCLR = CCM_INTENCLR_ENDCRYPT_Msk;
+#if defined(CONFIG_BOARD_NRFXX_NWTSIM)
+	NRF_CCM_regw_sideeffects_INTENCLR();
+#endif
 	NVIC_ClearPendingIRQ(CCM_AAR_IRQn);
 
 	return (NRF_CCM->EVENTS_ERROR == 0);

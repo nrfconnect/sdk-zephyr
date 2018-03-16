@@ -53,6 +53,8 @@ const char *otype_to_str(enum k_objects otype)
 		return "counter driver";
 	case K_OBJ_DRIVER_CRYPTO:
 		return "crypto driver";
+	case K_OBJ_DRIVER_DMA:
+		return "dma driver";
 	case K_OBJ_DRIVER_FLASH:
 		return "flash driver";
 	case K_OBJ_DRIVER_GPIO:
@@ -302,7 +304,7 @@ void _k_object_uninit(void *object)
 	ko->flags &= ~K_OBJ_FLAG_INITIALIZED;
 }
 
-static u32_t _handler_bad_syscall(u32_t bad_id, u32_t arg2, u32_t arg3,
+static u32_t handler_bad_syscall(u32_t bad_id, u32_t arg2, u32_t arg3,
 				  u32_t arg4, u32_t arg5, u32_t arg6, void *ssf)
 {
 	printk("Bad system call id %u invoked\n", bad_id);
@@ -310,7 +312,7 @@ static u32_t _handler_bad_syscall(u32_t bad_id, u32_t arg2, u32_t arg3,
 	CODE_UNREACHABLE;
 }
 
-static u32_t _handler_no_syscall(u32_t arg1, u32_t arg2, u32_t arg3,
+static u32_t handler_no_syscall(u32_t arg1, u32_t arg2, u32_t arg3,
 				 u32_t arg4, u32_t arg5, u32_t arg6, void *ssf)
 {
 	printk("Unimplemented system call\n");

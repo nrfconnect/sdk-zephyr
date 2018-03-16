@@ -98,8 +98,9 @@ Follow these steps to create a new application directory. (Refer to
       cd app
       mkdir src
 
-#. Create a :file:`CMakeLists.txt` file in your application directory with the
-   following contents:
+#. Create an empty :file:`CMakeLists.txt` file in your application directory.
+
+#. Include the :file:`boilerplate.cmake` to pull in the Zephyr build system:
 
    .. code-block:: cmake
 
@@ -117,15 +118,15 @@ Follow these steps to create a new application directory. (Refer to
 
       target_sources(app PRIVATE src/main.c)
 
-#. Create one or more files containing your application's configuration
-   options. Zephyr's configuration uses the same Kconfig system used by the
-   Linux kernel, but with its own configuration tree.
-
-   If you followed the above steps, you can now create a file named
-   ``prj.conf`` in your application directory. It will be used automatically by
-   the Zephyr build system.
-
-   More information on Zephyr configuration is available below.
+#. Configure features used by your application. Zephyr's configuration uses
+   the same Kconfig and Device Tree systems used by the Linux kernel, but with
+   its own configuration trees. Usually, you just create a file named
+   :file:`prj.conf` in your application directory, where you enable or disable
+   features provided by Zephyr's Kconfig configuration system. Optionally you
+   can also configure any Device Tree overlays needed by your application
+   (this is usually not necessary; see :ref:`application_dt` below for more
+   details). You can use existing samples to get started. For more information,
+   see :ref:`application_configuration` below.
 
 Applications integrate with the Zephyr build system using the boilerplate code
 shown above in :file:`CMakeLists.txt`. The following important variables
@@ -147,6 +148,11 @@ configure the Zephyr build system:
   also be defined in the environment, in your application's
   :file:`CMakeLists.txt` file, or in the ``cmake`` command line.
 
+* :makevar:`DTC_OVERLAY_FILE`: Indicates the name of one or more Device Tree
+  overlay files.  Each file includes Device Tree values that
+  override the default DT values.  Like :makevar:`CONF_FILE`, this
+  can also be defined in the environment, in your application's
+  :file:`CMakeLists.txt` file, or in the ``cmake`` command line.
 
 .. _build_an_application:
 
@@ -363,6 +369,81 @@ again.
 
 .. _application_debugging:
 
+
+Custom Board Definition
+***********************
+
+In cases where the board or platform you are developing for is not yet supported
+by Zephyr, you can add the board definition to your application and build for
+this board without having to add it to the Zephyr tree.
+
+The structure needed to support out-of-tree board development
+is similar to how boards are maintained in the Zephyr tree.  By using
+this structure, it will be much easier to upstream your board work into
+the Zephyr tree after your initial development is done.
+
+Add the custom board to your application using the following structure:
+
+.. code-block:: console
+
+   boards/
+   CMakeLists.txt
+   prj.conf
+   README.rst
+   src/
+
+where the ``boards`` directory hosts the board you are building for:
+
+.. code-block:: console
+
+   .
+   ├── boards
+   │   └── x86
+   │       └── my_custom_board
+   │           ├── doc
+   │           │   └── img
+   │           └── support
+   └── src
+
+
+Use the proper architecture folder name (e.g., ``x86``, ``arm``, etc.)
+under ``boards`` for ``my_custom_board``.  (See  :ref:`boards` for a
+list of board architectures.)
+
+Documentation (under ``doc/``) and support files (under ``support/``) are optional, but
+will be needed when submitting to Zephyr.
+
+The contents of ``my_custom_board`` should follow the same guidelines for any
+Zephyr board, and provide the following files::
+
+    my_custom_board_defconfig
+    my_custom_board.dts
+    my_custom_board.yaml
+    board.cmake
+    board.h
+    CMakeLists.txt
+    doc/
+    dts.fixup
+    Kconfig.board
+    Kconfig.defconfig
+    pinmux.c
+    support/
+
+
+Once the board structure is in place, you can build your application
+targeting this board by specifying the location of your custom board
+information with the ``-DBOARD_ROOT`` parameter to the CMake
+build system::
+
+   cmake -DBOARD=<board name> -DBOARD_ROOT=<path to boards> ..
+
+
+This will use your custom board configuration and will generate the
+Zephyr binary into your application directory.
+
+You can also define the ``BOARD_ROOT`` variable in the application
+:file:`CMakeLists.txt` file.
+
 Application Debugging
 *********************
 
@@ -560,7 +641,13 @@ Make sure to follow these steps in order.
    ``YOUR_BOARD`` is a board name), add lines setting the
    :makevar:`CONF_FILE` variable to these files appropriately.
 
-   More details are available below in :ref:`application_configuration`.
+   More details are available below in :ref:`application_kconfig`.
+
+#. If your application uses a Device Tree overlay file or files other than
+   the usual :file:`<board>.overlay`, add lines setting the
+   :makevar:`DTC_OVERLAY_FILE` variable to these files appropriately.
+
+   More details are available below in :ref:`application_dt`.
 
 #. If your application has its own kernel configuration options, add a
    line setting the location of the Kconfig file that defines them.
@@ -620,8 +707,13 @@ Below is a simple example :file:`CMakeList.txt`:
 Application Configuration
 *************************
 
+.. _application_kconfig:
+
+Kconfig Configuration
+=====================
+
 The application is configured using a set of options that can be customized for
-application-specific purposes.  The Zephyr build system takes a configuration
+application-specific purposes. The Zephyr build system takes a configuration
 option's value from the first source in which it is specified, taken from the
 following available sources, in order:
 
@@ -641,11 +733,12 @@ following available sources, in order:
    the option in one of Zephyr's :file:`Kconfig` files).
 
 The Zephyr build system determines a value for :makevar:`CONF_FILE` by
-checking the following, in order:
+checking the following until one is found, in order:
 
 - Any value given to :makevar:`CONF_FILE` in your application
-  :file:`CMakeLists.txt`, passed to the the CMake command line, or present
-  in the CMake variable cache, takes precedence.
+  :file:`CMakeLists.txt` (**before including the boilerplate.cmake file**),
+  passed to the the CMake command line, or present in the CMake variable cache,
+  takes precedence.
 
 - If a CMake command, macro, or function ``set_conf_file`` is defined, it
   will be invoked and must set :makevar:`CONF_FILE`.
@@ -664,7 +757,7 @@ inter-dependencies between options, see the :ref:`configuration`.
 .. _application_set_conf:
 
 Setting Application Configuration Values
-========================================
+----------------------------------------
 
 This section describes how to edit Zephyr configuration
 (:file:`.conf`) files.
@@ -711,7 +804,7 @@ The example below shows a comment line and an override setting
 .. _override_kernel_conf:
 
 Overriding Default Configuration
-================================
+--------------------------------
 
 Follow these steps to override an application's configuration
 temporarily, perhaps to test the effect of a change.
@@ -867,6 +960,67 @@ preferred, since it correctly handles dependencies between options.
 
 #. Press :kbd:`Enter` to retire the menu display and return to the console
    command line.
+
+.. _application_dt:
+
+Device Tree Overlays
+====================
+
+As described in :ref:`device-tree`, Zephyr uses Device Tree to
+describe the hardware it runs on. This section describes how you can
+modify an application build's device tree using overlay files.
+
+Overlay files, which customarily have the :file:`.overlay` extension,
+contain device tree fragments which add to or modify the device tree
+used while building a Zephyr application. To add an overlay file or
+files to the build, set the CMake variable :makevar:`DTC_OVERLAY_FILE`
+to a whitespace-separated list of your overlay files.
+
+The Zephyr build system begins creation of a device tree by running
+the C preprocessor on a file which includes the following:
+
+#. Configuration options from :ref:`Kconfig <configuration>`.
+
+#. The board's device tree source file, which by default is the Zephyr
+   file :file:`boards/<ARCHITECTURE>/<BOARD>/<BOARD>.dts`. (This location
+   can be overridden by setting the :makevar:`DTS_SOURCE` CMake
+   variable.)
+
+#. Any "common" overlays provided by the build system. Currently, this
+   is just the file :file:`dts/common/common.dts`. (The common
+   overlays can be overridden by setting the
+   :makevar:`DTS_COMMON_OVERLAYS` CMake variable.)
+
+   The file :file:`common.dts` conditionally includes device tree
+   fragments based on Kconfig settings. For example, it includes a
+   fragment for MCUboot chain-loading, located at
+   :file:`dts/common/mcuboot.overlay`, if
+   :option:`CONFIG_BOOTLOADER_MCUBOOT` is set.
+
+#. Any file or files given by the :makevar:`DTC_OVERLAY_FILE` CMake
+   variable.
+
+The Zephyr build system determines :makevar:`DTC_OVERLAY_FILE` as
+follows:
+
+- Any value given to :makevar:`DTC_OVERLAY_FILE` in your application
+  :file:`CMakeLists.txt` (**before including the boilerplate.cmake file**),
+  passed to the the CMake command line, or present in the CMake variable cache,
+  takes precedence.
+
+- The environment variable :envvar:`DTC_OVERLAY_FILE` is checked
+  next. This mechanism is now deprecated; users should set this
+  variable using CMake instead of the environment.
+
+- If the file :file:`BOARD.overlay` exists in your application directory,
+  where ``BOARD`` is the BOARD value set earlier, it will be used.
+
+If :makevar:`DTC_OVERLAY_FILE` specifies multiple files, they are
+included in order by the C preprocessor.
+
+After running the preprocessor, the final device tree used in the
+build is created by running the device tree compiler, ``dtc``, on the
+preprocessor output.
 
 Application-Specific Code
 *************************

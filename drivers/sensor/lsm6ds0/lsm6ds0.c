@@ -207,6 +207,10 @@ static int lsm6ds0_sample_fetch_temp(struct device *dev)
 static int lsm6ds0_sample_fetch(struct device *dev, enum sensor_channel chan)
 {
 	__ASSERT_NO_MSG(chan == SENSOR_CHAN_ALL ||
+			chan == SENSOR_CHAN_ACCEL_XYZ ||
+#if defined(CONFIG_LSM6DS0_ENABLE_TEMP)
+			chan == SENSOR_CHAN_TEMP ||
+#endif
 			chan == SENSOR_CHAN_GYRO_XYZ);
 
 	switch (chan) {
@@ -488,8 +492,6 @@ static int lsm6ds0_init(struct device *dev)
 		return -EIO;
 	}
 
-	dev->driver_api = &lsm6ds0_api_funcs;
-
 	return 0;
 }
 
@@ -500,6 +502,6 @@ static const struct lsm6ds0_config lsm6ds0_config = {
 
 static struct lsm6ds0_data lsm6ds0_data;
 
-DEVICE_INIT(lsm6ds0, CONFIG_LSM6DS0_DEV_NAME, lsm6ds0_init,
-	    &lsm6ds0_data, &lsm6ds0_config, POST_KERNEL,
-	    CONFIG_SENSOR_INIT_PRIORITY);
+DEVICE_AND_API_INIT(lsm6ds0, CONFIG_LSM6DS0_DEV_NAME, lsm6ds0_init,
+		    &lsm6ds0_data, &lsm6ds0_config, POST_KERNEL,
+		    CONFIG_SENSOR_INIT_PRIORITY, &lsm6ds0_api_funcs);

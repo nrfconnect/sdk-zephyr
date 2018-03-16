@@ -64,6 +64,11 @@ Install tools to build Zephyr binaries:
    cd ~/zephyr   # or to the folder where you cloned the zephyr repo
    pip3 install --user -r scripts/requirements.txt
 
+If you require pyocd, an open source python2 library for programming and
+debugging ARM Cortex-M microcontrollers, use this command::
+
+   pip2 install --user -r scripts/py2-requirements.txt
+
 Source :file:`zephyr-env.sh` wherever you have cloned the Zephyr Git repository:
 
 .. code-block:: console
@@ -232,7 +237,7 @@ and use the target location where the toolchain was installed, type:
 
 .. code-block:: console
 
-   export ZEPHYR_GCC_VARIANT=xtools
+   export ZEPHYR_TOOLCHAIN_VARIANT=xtools
    export XTOOLS_TOOLCHAIN_PATH=/Volumes/CrossToolNG/x-tools
 
 
@@ -243,7 +248,7 @@ variables in the file :file:`${HOME}/.zephyrrc`, for example:
 
    cat <<EOF > ~/.zephyrrc
    export XTOOLS_TOOLCHAIN_PATH=/Volumes/CrossToolNG/x-tools
-   export ZEPHYR_GCC_VARIANT=xtools
+   export ZEPHYR_TOOLCHAIN_VARIANT=xtools
    EOF
 
 .. _Homebrew site: http://brew.sh/

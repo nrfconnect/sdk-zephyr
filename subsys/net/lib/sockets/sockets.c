@@ -33,7 +33,7 @@ static inline void sock_set_flag(struct net_context *ctx, u32_t mask,
 				 u32_t flag)
 {
 	u32_t val = POINTER_TO_INT(ctx->user_data);
-	val = (val & mask) | flag;
+	val = (val & ~mask) | flag;
 	(ctx)->user_data = INT_TO_POINTER(val);
 }
 
@@ -78,6 +78,10 @@ int zsock_socket(int family, int type, int proto)
 	struct net_context *ctx;
 
 	SET_ERRNO(net_context_get(family, type, proto, &ctx));
+
+	/* Initialize user_data, all other calls will preserve it */
+	ctx->user_data = NULL;
+
 	/* recv_q and accept_q are in union */
 	k_fifo_init(&ctx->recv_q);
 
@@ -108,13 +112,16 @@ static void zsock_accepted_cb(struct net_context *new_ctx,
 			      int status, void *user_data) {
 	struct net_context *parent = user_data;
 
-	/* This just installs a callback, so cannot fail. */
-	(void)net_context_recv(new_ctx, zsock_received_cb, K_NO_WAIT, NULL);
-	k_fifo_init(&new_ctx->recv_q);
-
 	NET_DBG("parent=%p, ctx=%p, st=%d", parent, new_ctx, status);
 
-	k_fifo_put(&parent->accept_q, new_ctx);
+	if (status == 0) {
+		/* This just installs a callback, so cannot fail. */
+		(void)net_context_recv(new_ctx, zsock_received_cb, K_NO_WAIT,
+				       NULL);
+		k_fifo_init(&new_ctx->recv_q);
+
+		k_fifo_put(&parent->accept_q, new_ctx);
+	}
 }
 
 static void zsock_received_cb(struct net_context *ctx, struct net_pkt *pkt,
@@ -169,7 +176,7 @@ int zsock_bind(int sock, const struct sockaddr *addr, socklen_t addrlen)
 	 */
 	if (net_context_get_type(ctx) == SOCK_DGRAM) {
 		SET_ERRNO(net_context_recv(ctx, zsock_received_cb, K_NO_WAIT,
-					   NULL));
+					   ctx->user_data));
 	}
 
 	return 0;
@@ -181,7 +188,7 @@ int zsock_connect(int sock, const struct sockaddr *addr, socklen_t addrlen)
 
 	SET_ERRNO(net_context_connect(ctx, addr, addrlen, NULL, K_FOREVER,
 				      NULL));
-	SET_ERRNO(net_context_recv(ctx, zsock_received_cb, K_NO_WAIT, NULL));
+	SET_ERRNO(net_context_recv(ctx, zsock_received_cb, K_NO_WAIT, ctx->user_data));
 
 	return 0;
 }
@@ -258,7 +265,7 @@ ssize_t zsock_sendto(int sock, const void *buf, size_t len, int flags,
 	/* Register the callback before sending in order to receive the response
 	 * from the peer.
 	 */
-	err = net_context_recv(ctx, zsock_received_cb, K_NO_WAIT, NULL);
+	err = net_context_recv(ctx, zsock_received_cb, K_NO_WAIT, ctx->user_data);
 	if (err < 0) {
 		net_pkt_unref(send_pkt);
 		errno = -err;
@@ -267,9 +274,9 @@ ssize_t zsock_sendto(int sock, const void *buf, size_t len, int flags,
 
 	if (dest_addr) {
 		err = net_context_sendto(send_pkt, dest_addr, addrlen, NULL,
-					 timeout, NULL, NULL);
+					 timeout, NULL, ctx->user_data);
 	} else {
-		err = net_context_send(send_pkt, NULL, timeout, NULL, NULL);
+		err = net_context_send(send_pkt, NULL, timeout, NULL, ctx->user_data);
 	}
 
 	if (err < 0) {
@@ -281,10 +288,72 @@ ssize_t zsock_sendto(int sock, const void *buf, size_t len, int flags,
 	return len;
 }
 
+static inline ssize_t zsock_recv_dgram(struct net_context *ctx,
+				       void *buf,
+				       size_t max_len,
+				       int flags,
+				       struct sockaddr *src_addr,
+				       socklen_t *addrlen)
+{
+	ARG_UNUSED(flags);
+	size_t recv_len = 0;
+	s32_t timeout = K_FOREVER;
+	unsigned int header_len;
+	struct net_pkt *pkt;
+
+	if (sock_is_nonblock(ctx)) {
+		timeout = K_NO_WAIT;
+	}
+
+	pkt = k_fifo_get(&ctx->recv_q, timeout);
+	if (!pkt) {
+		errno = EAGAIN;
+		return -1;
+	}
+
+	if (src_addr && addrlen) {
+		int rv;
+
+		rv = net_pkt_get_src_addr(pkt, src_addr, *addrlen);
+		if (rv < 0) {
+			errno = rv;
+			return -1;
+		}
+
+		/* addrlen is a value-result argument, set to actual
+		 * size of source address
+		 */
+		if (src_addr->sa_family == AF_INET) {
+			*addrlen = sizeof(struct sockaddr_in);
+		} else if (src_addr->sa_family == AF_INET6) {
+			*addrlen = sizeof(struct sockaddr_in6);
+		} else {
+			errno = ENOTSUP;
+			return -1;
+		}
+	}
+
+	/* Remove packet header since we've handled src addr and port */
+	header_len = net_pkt_appdata(pkt) - pkt->frags->data;
+	net_buf_pull(pkt->frags, header_len);
+
+	recv_len = net_pkt_appdatalen(pkt);
+	if (recv_len > max_len) {
+		recv_len = max_len;
+	}
+
+	net_frag_linearize(buf, recv_len, pkt, 0, recv_len);
+	net_pkt_unref(pkt);
+
+	return recv_len;
+}
+
 static inline ssize_t zsock_recv_stream(struct net_context *ctx,
 					void *buf,
-					size_t max_len)
+					size_t max_len,
+					int flags)
 {
+	ARG_UNUSED(flags);
 	size_t recv_len = 0;
 	s32_t timeout = K_FOREVER;
 	int res;
@@ -324,8 +393,12 @@ static inline ssize_t zsock_recv_stream(struct net_context *ctx,
 		}
 
 		frag = pkt->frags;
-		__ASSERT(frag != NULL,
-			 "net_pkt has empty fragments on start!");
+		if (!frag) {
+			NET_ERR("net_pkt has empty fragments on start!");
+			errno = EAGAIN;
+			return -1;
+		}
+
 		frag_len = frag->len;
 		recv_len = frag_len;
 		if (recv_len > max_len) {
@@ -365,67 +438,18 @@ ssize_t zsock_recv(int sock, void *buf, size_t max_len, int flags)
 ssize_t zsock_recvfrom(int sock, void *buf, size_t max_len, int flags,
 		       struct sockaddr *src_addr, socklen_t *addrlen)
 {
-	ARG_UNUSED(flags);
 	struct net_context *ctx = INT_TO_POINTER(sock);
 	enum net_sock_type sock_type = net_context_get_type(ctx);
-	size_t recv_len = 0;
-	unsigned int header_len;
 
 	if (sock_type == SOCK_DGRAM) {
-
-		struct net_pkt *pkt;
-		s32_t timeout = K_FOREVER;
-
-		if (sock_is_nonblock(ctx)) {
-			timeout = K_NO_WAIT;
-		}
-
-		pkt = k_fifo_get(&ctx->recv_q, timeout);
-		if (!pkt) {
-			errno = EAGAIN;
-			return -1;
-		}
-
-		if (src_addr && addrlen) {
-			int rv;
-
-			rv = net_pkt_get_src_addr(pkt, src_addr, *addrlen);
-			if (rv < 0) {
-				errno = rv;
-				return -1;
-			}
-
-			/* addrlen is a value-result argument, set to actual
-			 * size of source address
-			 */
-			if (src_addr->sa_family == AF_INET) {
-				*addrlen = sizeof(struct sockaddr_in);
-			} else if (src_addr->sa_family == AF_INET6) {
-				*addrlen = sizeof(struct sockaddr_in6);
-			} else {
-				errno = ENOTSUP;
-				return -1;
-			}
-		}
-		/* Remove packet header since we've handled src addr and port */
-		header_len = net_pkt_appdata(pkt) - pkt->frags->data;
-		net_buf_pull(pkt->frags, header_len);
-
-		recv_len = net_pkt_appdatalen(pkt);
-		if (recv_len > max_len) {
-			recv_len = max_len;
-		}
-
-		net_frag_linearize(buf, recv_len, pkt, 0, recv_len);
-		net_pkt_unref(pkt);
-
+		return zsock_recv_dgram(ctx, buf, max_len, flags, src_addr, addrlen);
 	} else if (sock_type == SOCK_STREAM) {
-		return zsock_recv_stream(ctx, buf, max_len);
+		return zsock_recv_stream(ctx, buf, max_len, flags);
 	} else {
 		__ASSERT(0, "Unknown socket type");
 	}
 
-	return recv_len;
+	return 0;
 }
 
 /* As this is limited function, we don't follow POSIX signature, with

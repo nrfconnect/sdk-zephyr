@@ -171,20 +171,21 @@ void _net_app_received(struct net_context *net_ctx,
 
 #if defined(CONFIG_NET_APP_SERVER)
 	if (ctx->app_type == NET_APP_SERVER) {
-		if (!pkt) {
-#if defined(CONFIG_NET_TCP)
-			int i;
-#endif
+		bool close = true;
 
-			if (ctx->cb.close) {
-				ctx->cb.close(ctx, status, ctx->user_data);
+		if (pkt) {
+			if (ctx->cb.recv) {
+				ctx->cb.recv(ctx, pkt, status, ctx->user_data);
 			}
 
+			return;
+		}
+
 #if defined(CONFIG_NET_TCP)
-			for (i = 0;
-			     ctx->proto == IPPROTO_TCP &&
-				     i < CONFIG_NET_APP_SERVER_NUM_CONN;
-			     i++) {
+		if (ctx->proto == IPPROTO_TCP) {
+			int i;
+
+			for (i = 0; i < CONFIG_NET_APP_SERVER_NUM_CONN; i++) {
 				if (ctx->server.net_ctxs[i] == net_ctx &&
 				    ctx == net_ctx->net_app) {
 					net_context_put(net_ctx);
@@ -193,13 +194,21 @@ void _net_app_received(struct net_context *net_ctx,
 					break;
 				}
 			}
-#endif
 
-			return;
+			/* Go through the loop and check if there are any
+			 * active net_contexts. If there is any active net
+			 * context do not call the close callback.
+			 */
+			for (i = 0; i < CONFIG_NET_APP_SERVER_NUM_CONN; i++) {
+				if (!ctx->server.net_ctxs[i]) {
+					close = false;
+					break;
+				}
+			}
 		}
-
-		if (ctx->cb.recv) {
-			ctx->cb.recv(ctx, pkt, status, ctx->user_data);
+#endif
+		if (close && ctx->cb.close) {
+			ctx->cb.close(ctx, status, ctx->user_data);
 		}
 	}
 #endif
@@ -387,6 +396,7 @@ int _net_app_config_local_ctx(struct net_app_ctx *ctx,
 
 		if (!ret) {
 			select_default_ctx(ctx);
+			return ret;
 		}
 #endif
 
@@ -562,27 +572,45 @@ struct net_context *select_client_ctx(struct net_app_ctx *ctx,
 
 #if defined(CONFIG_NET_APP_SERVER)
 #if defined(CONFIG_NET_TCP)
+
+static struct net_context *get_server_ctx_without_dst(struct net_app_ctx *ctx)
+{
+	int i;
+
+	for (i = 0; i < CONFIG_NET_APP_SERVER_NUM_CONN; i++) {
+		struct net_context *tmp = ctx->server.net_ctxs[i];
+
+		if (!tmp || !net_context_is_used(tmp)) {
+			continue;
+		}
+
+		if (tmp->net_app != ctx) {
+			continue;
+		}
+
+		NET_DBG("Selecting net_ctx %p iface %p for NULL dst",
+			tmp, net_context_get_iface(tmp));
+
+		return tmp;
+	}
+
+	return NULL;
+}
+
 static struct net_context *get_server_ctx(struct net_app_ctx *ctx,
 					  const struct sockaddr *dst)
 {
 	int i;
+
+	if (!dst) {
+		return get_server_ctx_without_dst(ctx);
+	}
 
 	for (i = 0; i < CONFIG_NET_APP_SERVER_NUM_CONN; i++) {
 		struct net_context *tmp = ctx->server.net_ctxs[i];
 		u16_t port, rport;
 
 		if (!tmp || !net_context_is_used(tmp)) {
-			continue;
-		}
-
-		if (!dst) {
-			if (tmp->net_app == ctx) {
-				NET_DBG("Selecting net_ctx %p iface %p for "
-					"NULL dst",
-					tmp, net_context_get_iface(tmp));
-				return tmp;
-			}
-
 			continue;
 		}
 
@@ -603,16 +631,6 @@ static struct net_context *get_server_ctx(struct net_app_ctx *ctx,
 				NET_DBG("Selecting net_ctx %p iface %p for "
 					"AF_INET6 port %d", tmp,
 					net_context_get_iface(tmp),
-					ntohs(rport));
-				return tmp;
-			}
-
-			if (tmp->net_app == ctx) {
-				NET_DBG("Selecting net_ctx %p iface %p"
-					" for %s port %d", tmp,
-					net_context_get_iface(tmp),
-					dst->sa_family == AF_UNSPEC ?
-					"AF_UNSPEC" : "AF_INET6",
 					ntohs(rport));
 				return tmp;
 			}
@@ -637,20 +655,10 @@ static struct net_context *get_server_ctx(struct net_app_ctx *ctx,
 					ntohs(port));
 				return tmp;
 			}
-
-			if (tmp->net_app == ctx) {
-				NET_DBG("Selecting net_ctx %p iface %p"
-					" for %s port %d", tmp,
-					net_context_get_iface(tmp),
-					dst->sa_family == AF_UNSPEC ?
-					"AF_UNSPEC" : "AF_INET",
-					ntohs(port));
-				return tmp;
-			}
 		}
 	}
 
-	return NULL;
+	return get_server_ctx_without_dst(ctx);
 }
 #endif /* CONFIG_NET_TCP */
 
@@ -958,6 +966,28 @@ struct net_pkt *net_app_get_net_pkt(struct net_app_ctx *ctx,
 	dst.sa_family = family;
 
 	net_ctx = _net_app_select_net_ctx(ctx, &dst);
+	if (!net_ctx) {
+		return NULL;
+	}
+
+	return net_pkt_get_tx(net_ctx, timeout);
+}
+
+struct net_pkt *net_app_get_net_pkt_with_dst(struct net_app_ctx *ctx,
+					     const struct sockaddr *dst,
+					     s32_t timeout)
+{
+	struct net_context *net_ctx;
+
+	if (!ctx || !dst) {
+		return NULL;
+	}
+
+	if (!ctx->is_init) {
+		return NULL;
+	}
+
+	net_ctx = _net_app_select_net_ctx(ctx, dst);
 	if (!net_ctx) {
 		return NULL;
 	}
@@ -2091,7 +2121,18 @@ reset:
 				u16_t pos;
 
 				frag = net_frag_get_pos(pkt, hdr_len, &pos);
-				NET_ASSERT(frag);
+				if (!frag) {
+					/* FIXME: if pos is 0 here, hdr_len
+					 * bytes were successfully skipped.
+					 * Is closing the connection here the
+					 * right thing?
+					 */
+					NET_ERR("could not skip %zu bytes",
+						hdr_len);
+					net_pkt_unref(pkt);
+					ret = -EINVAL;
+					goto close;
+				}
 
 				net_pkt_set_appdata(pkt, frag->data + pos);
 			} else {
@@ -2166,7 +2207,7 @@ int _net_app_tls_init(struct net_app_ctx *ctx, int client_or_server)
 	mbedtls_ctr_drbg_init(&ctx->tls.mbedtls.ctr_drbg);
 
 #if defined(MBEDTLS_DEBUG_C) && defined(CONFIG_NET_DEBUG_APP)
-	mbedtls_debug_set_threshold(DEBUG_THRESHOLD);
+	mbedtls_debug_set_threshold(CONFIG_MBEDTLS_DEBUG_LEVEL);
 	mbedtls_ssl_conf_dbg(&ctx->tls.mbedtls.conf, my_debug, NULL);
 #endif
 
