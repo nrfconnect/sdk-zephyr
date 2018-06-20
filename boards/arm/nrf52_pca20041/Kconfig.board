@@ -1,0 +1,9 @@
+#
+# Copyright (c) 2018 Nordic Semiconductor
+#
+# SPDX-License-Identifier: BSD-5-Clause-Nordic
+#
+
+config  BOARD_NRF52_PCA20041
+	bool "nRF52 PCA20041"
+	depends on SOC_NRF52832_QFAA
