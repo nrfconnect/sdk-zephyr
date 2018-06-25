@@ -12,7 +12,9 @@
 #include <net/net_core.h>
 #include <net/net_l2.h>
 #include <net/net_if.h>
+#include <net/net_mgmt.h>
 #include <net/ethernet.h>
+#include <net/ethernet_mgmt.h>
 #include <net/arp.h>
 
 #include "net_private.h"
@@ -154,7 +156,7 @@ static enum net_verdict ethernet_recv(struct net_if *iface,
 		family = AF_INET6;
 		break;
 	default:
-		NET_DBG("Unknown hdr type 0x%04x", type);
+		NET_DBG("Unknown hdr type 0x%04x iface %p", type, iface);
 		return NET_DROP;
 	}
 
@@ -317,18 +319,19 @@ static void set_vlan_priority(struct ethernet_context *ctx,
 
 struct net_eth_hdr *net_eth_fill_header(struct ethernet_context *ctx,
 					struct net_pkt *pkt,
-					struct net_buf *frag,
 					u32_t ptype,
 					u8_t *src,
 					u8_t *dst)
 {
 	struct net_eth_hdr *hdr;
-
-	NET_ASSERT(net_buf_headroom(frag) > sizeof(struct net_eth_addr));
+	struct net_buf *frag = pkt->frags;
 
 #if defined(CONFIG_NET_VLAN)
 	if (net_eth_is_vlan_enabled(ctx, net_pkt_iface(pkt))) {
 		struct net_eth_vlan_hdr *hdr_vlan;
+
+		NET_ASSERT(net_buf_headroom(frag) >=
+			   sizeof(struct net_eth_vlan_hdr));
 
 		hdr_vlan = (struct net_eth_vlan_hdr *)(frag->data -
 						       net_pkt_ll_reserve(pkt));
@@ -356,6 +359,8 @@ struct net_eth_hdr *net_eth_fill_header(struct ethernet_context *ctx,
 	}
 #endif
 
+	NET_ASSERT(net_buf_headroom(frag) >= sizeof(struct net_eth_hdr));
+
 	hdr = (struct net_eth_hdr *)(frag->data - net_pkt_ll_reserve(pkt));
 
 	if (dst && ((u8_t *)&hdr->dst != dst)) {
@@ -377,7 +382,6 @@ static enum net_verdict ethernet_send(struct net_if *iface,
 				      struct net_pkt *pkt)
 {
 	struct ethernet_context *ctx = net_if_l2_data(iface);
-	struct net_buf *frag;
 	u16_t ptype;
 
 #ifdef CONFIG_NET_ARP
@@ -492,19 +496,11 @@ setup_hdr:
 	}
 #endif /* CONFIG_NET_VLAN */
 
-	/* Then go through the fragments and set the ethernet header.
+	/* Then set the ethernet header.
 	 */
-	frag = pkt->frags;
-
-	NET_ASSERT_INFO(frag, "No data!");
-
-	while (frag) {
-		net_eth_fill_header(ctx, pkt, frag, ptype,
-				    net_pkt_ll_src(pkt)->addr,
-				    net_pkt_ll_dst(pkt)->addr);
-
-		frag = frag->frags;
-	}
+	net_eth_fill_header(ctx, pkt, ptype,
+			    net_pkt_ll_src(pkt)->addr,
+			    net_pkt_ll_dst(pkt)->addr);
 
 #ifdef CONFIG_NET_ARP
 send:
@@ -532,10 +528,8 @@ static inline u16_t ethernet_reserve(struct net_if *iface, void *unused)
 
 static inline int ethernet_enable(struct net_if *iface, bool state)
 {
-	ARG_UNUSED(iface);
-
 	if (!state) {
-		net_arp_clear_cache();
+		net_arp_clear_cache(iface);
 	}
 
 	return 0;
@@ -757,17 +751,71 @@ int net_eth_vlan_disable(struct net_if *iface, u16_t tag)
 NET_L2_INIT(ETHERNET_L2, ethernet_recv, ethernet_send, ethernet_reserve,
 	    ethernet_enable);
 
+static void carrier_on(struct k_work *work)
+{
+	struct ethernet_context *ctx = CONTAINER_OF(work,
+						    struct ethernet_context,
+						    carrier_mgmt.work);
+
+	NET_DBG("Carrier ON for interface %p", ctx->carrier_mgmt.iface);
+
+	ethernet_mgmt_raise_carrier_on_event(ctx->carrier_mgmt.iface);
+
+	net_if_up(ctx->carrier_mgmt.iface);
+}
+
+static void carrier_off(struct k_work *work)
+{
+	struct ethernet_context *ctx = CONTAINER_OF(work,
+						    struct ethernet_context,
+						    carrier_mgmt.work);
+
+	NET_DBG("Carrier OFF for interface %p", ctx->carrier_mgmt.iface);
+
+	ethernet_mgmt_raise_carrier_off_event(ctx->carrier_mgmt.iface);
+
+	net_if_carrier_down(ctx->carrier_mgmt.iface);
+}
+
+static void handle_carrier(struct ethernet_context *ctx,
+			   struct net_if *iface,
+			   k_work_handler_t handler)
+{
+	k_work_init(&ctx->carrier_mgmt.work, handler);
+
+	ctx->carrier_mgmt.iface = iface;
+
+	k_work_submit(&ctx->carrier_mgmt.work);
+}
+
+void net_eth_carrier_on(struct net_if *iface)
+{
+	struct ethernet_context *ctx = net_if_l2_data(iface);
+
+	handle_carrier(ctx, iface, carrier_on);
+}
+
+void net_eth_carrier_off(struct net_if *iface)
+{
+	struct ethernet_context *ctx = net_if_l2_data(iface);
+
+	handle_carrier(ctx, iface, carrier_off);
+}
+
 void ethernet_init(struct net_if *iface)
 {
-#if defined(CONFIG_NET_VLAN)
 	struct ethernet_context *ctx = net_if_l2_data(iface);
-	int i;
 
+#if defined(CONFIG_NET_VLAN)
+	int i;
+#endif
+
+	NET_DBG("Initializing Ethernet L2 %p for iface %p", ctx, iface);
+
+#if defined(CONFIG_NET_VLAN)
 	if (!(net_eth_get_hw_capabilities(iface) & ETHERNET_HW_VLAN)) {
 		return;
 	}
-
-	NET_DBG("Initializing Ethernet L2 %p for iface %p", ctx, iface);
 
 	for (i = 0; i < CONFIG_NET_VLAN_COUNT; i++) {
 		if (!ctx->vlan[i].iface) {
@@ -782,9 +830,7 @@ void ethernet_init(struct net_if *iface)
 			break;
 		}
 	}
+#endif
 
 	ctx->is_init = true;
-#else
-	ARG_UNUSED(iface);
-#endif
 }

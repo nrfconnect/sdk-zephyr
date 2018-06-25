@@ -332,7 +332,7 @@ static int update_attrs(void *ref, struct notification_attrs *out)
 	int i;
 
 	for (i = 0; i < CONFIG_LWM2M_NUM_ATTR; i++) {
-		if (ref == write_attr_pool[i].ref) {
+		if (ref != write_attr_pool[i].ref) {
 			continue;
 		}
 
@@ -3939,7 +3939,10 @@ static int lwm2m_engine_init(struct device *dev)
 			&engine_thread_stack[0],
 			K_THREAD_STACK_SIZEOF(engine_thread_stack),
 			(k_thread_entry_t) lwm2m_engine_service,
-			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
+			NULL, NULL, NULL,
+			/* Lowest priority cooperative thread */
+			K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1),
+			0, K_NO_WAIT);
 	SYS_LOG_DBG("LWM2M engine thread started");
 	return 0;
 }

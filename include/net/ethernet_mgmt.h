@@ -27,7 +27,7 @@ extern "C" {
  */
 
 #define _NET_ETHERNET_LAYER	NET_MGMT_LAYER_L2
-#define _NET_ETHERNET_CODE	0x802
+#define _NET_ETHERNET_CODE	0x208
 #define _NET_ETHERNET_BASE	(NET_MGMT_IFACE_BIT |			\
 				 NET_MGMT_LAYER(_NET_ETHERNET_LAYER) |	\
 				 NET_MGMT_LAYER_CODE(_NET_ETHERNET_CODE))
@@ -90,10 +90,21 @@ enum net_event_ethernet_cmd {
 
 struct net_if;
 
+#if defined(CONFIG_NET_L2_ETHERNET_MGMT)
 void ethernet_mgmt_raise_carrier_on_event(struct net_if *iface);
 
 void ethernet_mgmt_raise_carrier_off_event(struct net_if *iface);
+#else
+static inline void ethernet_mgmt_raise_carrier_on_event(struct net_if *iface)
+{
+	ARG_UNUSED(iface);
+}
 
+static inline void ethernet_mgmt_raise_carrier_off_event(struct net_if *iface)
+{
+	ARG_UNUSED(iface);
+}
+#endif
 /**
  * @}
  */

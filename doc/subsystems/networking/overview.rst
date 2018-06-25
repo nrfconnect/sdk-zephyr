@@ -99,6 +99,14 @@ can be disabled if not needed.
   is even possible to have zero-copy data path from application to device
   driver.
 
+* **Virtual LAN support.** Virtual LANs (VLANs) allow partitioning of physical
+  ethernet networks into logical networks. See :ref:`vlan-support` for more
+  details.
+
+* **Network traffic classification.** The sent and received network packets can
+  be prioritized depending on application needs.
+  See :ref:`traffic-class-support` for more details.
+
 Additionally these network technologies (link layers) are supported in
 Zephyr OS v1.7 and later:
 

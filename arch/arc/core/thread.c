@@ -132,7 +132,24 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 #ifdef CONFIG_ARC_STACK_CHECKING
 	pInitCtx->status32 = _ARC_V2_STATUS32_SC |
 		 _ARC_V2_STATUS32_E(_ARC_V2_DEF_IRQ_LEVEL);
-	thread->arch.stack_base = (u32_t) stackEnd;
+#ifdef CONFIG_USERSPACE
+	if (options & K_USER) {
+		thread->arch.u_stack_top = (u32_t)pStackMem;
+		thread->arch.u_stack_base = (u32_t)stackEnd;
+		thread->arch.k_stack_top =
+			 (u32_t)(stackEnd + STACK_GUARD_SIZE);
+		thread->arch.k_stack_base = (u32_t)
+		(stackEnd + STACK_GUARD_SIZE + CONFIG_PRIVILEGED_STACK_SIZE);
+	} else {
+		thread->arch.k_stack_top = (u32_t)pStackMem;
+		thread->arch.k_stack_base = (u32_t)stackEnd;
+		thread->arch.u_stack_top = 0;
+		thread->arch.u_stack_base = 0;
+	}
+#else
+	thread->arch.k_stack_top = (u32_t) pStackMem;
+	thread->arch.k_stack_base = (u32_t) stackEnd;
+#endif
 #else
 	pInitCtx->status32 = _ARC_V2_STATUS32_E(_ARC_V2_DEF_IRQ_LEVEL);
 #endif
@@ -149,7 +166,7 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 
 	if (options & K_USER) {
 		thread->arch.priv_stack_start =
-			(u32_t) (stackEnd + STACK_GUARD_SIZE);
+			(u32_t)(stackEnd + STACK_GUARD_SIZE);
 		thread->arch.priv_stack_size =
 			(u32_t)CONFIG_PRIVILEGED_STACK_SIZE;
 	} else {
@@ -157,15 +174,6 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 		thread->arch.priv_stack_size = 0;
 	}
 #endif
-
-#ifdef CONFIG_THREAD_MONITOR
-	/*
-	 * In debug mode thread->entry give direct access to the thread entry
-	 * and the corresponding parameters.
-	 */
-	thread->entry = (struct __thread_entry *)(pInitCtx);
-#endif
-
 	/*
 	 * intlock_key is constructed based on ARCv2 ISA Programmer's
 	 * Reference Manual CLRI instruction description:
@@ -178,8 +186,6 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 		(u32_t)pInitCtx - ___callee_saved_stack_t_SIZEOF;
 
 	/* initial values in all other regs/k_thread entries are irrelevant */
-
-	thread_monitor_init(thread);
 }
 
 
@@ -188,10 +194,9 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 FUNC_NORETURN void _arch_user_mode_enter(k_thread_entry_t user_entry,
 	void *p1, void *p2, void *p3)
 {
-	_current->base.user_options |= K_USER;
 
 	/*
-	 * ajust the thread stack layout
+	 * adjust the thread stack layout
 	 * |----------------|    |---------------------|
 	 * | stack guard    |    |  user stack         |
 	 * |----------------| to |---------------------|
@@ -204,10 +209,19 @@ FUNC_NORETURN void _arch_user_mode_enter(k_thread_entry_t user_entry,
 	_current->stack_info.size -= CONFIG_PRIVILEGED_STACK_SIZE;
 
 	_current->arch.priv_stack_start =
-			(u32_t) (_current->stack_info.start +
-				 _current->stack_info.size + STACK_GUARD_SIZE);
+			(u32_t)(_current->stack_info.start +
+				_current->stack_info.size + STACK_GUARD_SIZE);
 	_current->arch.priv_stack_size =
 			(u32_t)CONFIG_PRIVILEGED_STACK_SIZE;
+
+#ifdef CONFIG_ARC_STACK_CHECKING
+	_current->arch.k_stack_top = _current->arch.priv_stack_start;
+	_current->arch.k_stack_base = _current->arch.priv_stack_start +
+				_current->arch.priv_stack_size;
+	_current->arch.u_stack_top = _current->stack_info.start;
+	_current->arch.u_stack_base = _current->stack_info.start +
+				_current->stack_info.size;
+#endif
 
 	/* possible optimizaiton: no need to load mem domain anymore */
 	/* need to lock cpu here ? */

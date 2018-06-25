@@ -37,7 +37,7 @@
 #include "tcp_internal.h"
 #include "net_stats.h"
 
-#define ALLOC_TIMEOUT 500
+#define ALLOC_TIMEOUT K_MSEC(500)
 
 /*
  * Each TCP connection needs to be tracked by net_context, so
@@ -760,7 +760,7 @@ int net_tcp_prepare_reset(struct net_tcp *tcp,
 
 const char *net_tcp_state_str(enum net_tcp_state state)
 {
-#if defined(CONFIG_NET_DEBUG_TCP)
+#if defined(CONFIG_NET_DEBUG_TCP) || defined(CONFIG_NET_SHELL)
 	switch (state) {
 	case NET_TCP_CLOSED:
 		return "CLOSED";
@@ -1830,8 +1830,14 @@ static inline int send_syn_segment(struct net_context *context,
 {
 	struct net_pkt *pkt = NULL;
 	int ret;
+	u8_t options[NET_TCP_MAX_OPT_SIZE];
+	u8_t optionlen = 0;
 
-	ret = net_tcp_prepare_segment(context->tcp, flags, NULL, 0,
+	if (flags == NET_TCP_SYN) {
+		net_tcp_set_syn_opt(context->tcp, options, &optionlen);
+	}
+
+	ret = net_tcp_prepare_segment(context->tcp, flags, options, optionlen,
 				      local, remote, &pkt);
 	if (ret) {
 		return ret;
@@ -1954,6 +1960,7 @@ NET_CONN_CB(tcp_established)
 		/* RFC793 specifies that "highest" (i.e. current from our PoV)
 		 * ack # value can/should be sent, so we just force resend.
 		 */
+resend_ack:
 		send_ack(context, &conn->remote_addr, true);
 		return NET_DROP;
 	}
@@ -2044,6 +2051,18 @@ NET_CONN_CB(tcp_established)
 
 	data_len = net_pkt_appdatalen(pkt);
 	if (data_len > net_tcp_get_recv_wnd(context->tcp)) {
+		/* In case we have zero window, we should still accept
+		 * Zero Window Probes from peer, which per convention
+		 * come with len=1. Note that normally we need to check
+		 * for net_tcp_get_recv_wnd(context->tcp) == 0, but
+		 * given the if above, we know that if data_len == 1,
+		 * then net_tcp_get_recv_wnd(context->tcp) can be only 0
+		 * here.
+		 */
+		if (data_len == 1) {
+			goto resend_ack;
+		}
+
 		NET_ERR("Context %p: overflow of recv window (%d vs %d), "
 			"pkt dropped",
 			context, net_tcp_get_recv_wnd(context->tcp), data_len);

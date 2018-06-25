@@ -173,7 +173,7 @@ static struct dev_common_descriptor common_desc = {
 	.device_descriptor = {
 		.bLength = sizeof(struct usb_device_descriptor),
 		.bDescriptorType = USB_DEVICE_DESC,
-		.bcdUSB = sys_cpu_to_le16(USB_1_1),
+		.bcdUSB = sys_cpu_to_le16(USB_2_0),
 #ifdef CONFIG_USB_COMPOSITE_DEVICE
 		.bDeviceClass = MISC_CLASS,
 		.bDeviceSubClass = 0x02,
@@ -230,7 +230,7 @@ static struct dev_common_descriptor common_desc = {
 			.bNumEndpoints = 1,
 			.bInterfaceClass = COMMUNICATION_DEVICE_CLASS,
 			.bInterfaceSubClass = ACM_SUBCLASS,
-			.bInterfaceProtocol = V25TER_PROTOCOL,
+			.bInterfaceProtocol = 0,
 			.iInterface = 0,
 		},
 		/* Header Functional Descriptor */
