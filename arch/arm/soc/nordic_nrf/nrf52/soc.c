@@ -26,6 +26,7 @@ extern void _NmiInit(void);
 #endif
 
 #include "nrf.h"
+#include "nrf_power.h"
 
 #define __SYSTEM_CLOCK_64M (64000000UL)
 
@@ -387,6 +388,12 @@ static int nordicsemi_nrf52_init(struct device *arg)
 #ifdef CONFIG_SOC_NRF52840
 	nordicsemi_nrf52840_init();
 #endif
+
+#ifdef CONFIG_NRF_ENABLE_ICACHE
+	/* Enable the instruction cache */
+	NRF_NVMC->ICACHECNF = NVMC_ICACHECNF_CACHEEN_Msk;
+#endif /* CONFIG_NRF_ENABLE_ICACHE */
+
 	/* Enable the FPU if the compiler used floating point unit
 	 * instructions. Since the FPU consumes energy, remember to
 	 * disable FPU use in the compiler if floating point unit
@@ -422,6 +429,10 @@ static int nordicsemi_nrf52_init(struct device *arg)
 		}
 		NVIC_SystemReset();
 	}
+#endif
+
+#if defined(CONFIG_SOC_DCDC_NRF52X)
+	nrf_power_dcdcen_set(true);
 #endif
 
 	_ClearFaults();

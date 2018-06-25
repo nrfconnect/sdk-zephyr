@@ -21,12 +21,15 @@
 #include <net/net_core.h>
 #include <net/net_pkt.h>
 #include <net/net_if.h>
+#include <net/net_mgmt.h>
 #include "net_private.h"
 
 #include <net/udp.h>
 #include "udp_internal.h"
 #include <net/dhcpv4.h>
 #include <net/dns_resolve.h>
+
+static struct net_mgmt_event_callback mgmt4_cb;
 
 struct dhcp_msg {
 	u8_t op;		/* Message type, 1:BOOTREQUEST, 2:BOOTREPLY */
@@ -273,7 +276,7 @@ static bool setup_header(struct net_pkt *pkt, const struct in_addr *server_addr)
 	ipv4->proto = IPPROTO_UDP;
 	ipv4->len[0] = len >> 8;
 	ipv4->len[1] = (u8_t)len;
-	ipv4->chksum = ~net_calc_chksum_ipv4(pkt);
+	ipv4->chksum = 0;
 
 	net_ipaddr_copy(&ipv4->dst, server_addr);
 
@@ -282,8 +285,11 @@ static bool setup_header(struct net_pkt *pkt, const struct in_addr *server_addr)
 	udp->src_port = htons(DHCPV4_CLIENT_PORT);
 	udp->dst_port = htons(DHCPV4_SERVER_PORT);
 	udp->len = htons(len);
-	udp->chksum = 0;
-	udp->chksum = ~net_calc_chksum_udp(pkt);
+
+	if (net_if_need_calc_tx_checksum(net_pkt_iface(pkt))) {
+		ipv4->chksum = ~net_calc_chksum_ipv4(pkt);
+		net_udp_set_chksum(pkt, pkt->frags);
+	}
 
 	net_udp_set_hdr(pkt, udp);
 
@@ -430,8 +436,7 @@ static void send_request(struct net_if *iface)
 	timeout = DHCPV4_INITIAL_RETRY_TIMEOUT <<
 					iface->config.dhcpv4.attempts;
 
-	k_delayed_work_submit(&iface->config.dhcpv4.timer,
-			      timeout * MSEC_PER_SEC);
+	k_delayed_work_submit(&iface->config.dhcpv4.timer, K_SECONDS(timeout));
 
 	iface->config.dhcpv4.attempts++;
 
@@ -491,8 +496,7 @@ static void send_discover(struct net_if *iface)
 
 	timeout = DHCPV4_INITIAL_RETRY_TIMEOUT << iface->config.dhcpv4.attempts;
 
-	k_delayed_work_submit(&iface->config.dhcpv4.timer,
-			      timeout * MSEC_PER_SEC);
+	k_delayed_work_submit(&iface->config.dhcpv4.timer, K_SECONDS(timeout));
 
 	iface->config.dhcpv4.attempts++;
 
@@ -621,11 +625,11 @@ static void enter_bound(struct net_if *iface)
 
 	/* Start renewal time */
 	k_delayed_work_submit(&iface->config.dhcpv4.t1_timer,
-			      renewal_time * MSEC_PER_SEC);
+			      K_SECONDS(renewal_time));
 
 	/* Start rebinding time */
 	k_delayed_work_submit(&iface->config.dhcpv4.t2_timer,
-			      rebinding_time * MSEC_PER_SEC);
+			      K_SECONDS(rebinding_time));
 }
 
 static void dhcpv4_timeout(struct k_work *work)
@@ -1068,6 +1072,37 @@ drop:
 	return NET_DROP;
 }
 
+static void iface_event_handler(struct net_mgmt_event_callback *cb,
+				u32_t mgmt_event, struct net_if *iface)
+{
+	if (mgmt_event == NET_EVENT_IF_DOWN) {
+		NET_DBG("Interface %p going down", iface);
+
+		/* Cancel the timers as they are not useful at this point */
+		k_delayed_work_cancel(&iface->config.dhcpv4.timer);
+		k_delayed_work_cancel(&iface->config.dhcpv4.t1_timer);
+		k_delayed_work_cancel(&iface->config.dhcpv4.t2_timer);
+
+		if (iface->config.dhcpv4.state == NET_DHCPV4_BOUND) {
+			iface->config.dhcpv4.attempts = 0;
+			iface->config.dhcpv4.state = NET_DHCPV4_RENEWING;
+			NET_DBG("enter state=%s", net_dhcpv4_state_name(
+					iface->config.dhcpv4.state));
+		}
+
+	} else if (mgmt_event == NET_EVENT_IF_UP) {
+		NET_DBG("Interface %p coming up", iface);
+
+		/* We should not call send_request() directly here as
+		 * the CONFIG_NET_MGMT_EVENT_STACK_SIZE is not large
+		 * enough. Instead we can generate a request timeout
+		 * which will then call send_request() automatically.
+		 */
+		k_delayed_work_submit(&iface->config.dhcpv4.timer,
+				      K_NO_WAIT);
+	}
+}
+
 void net_dhcpv4_start(struct net_if *iface)
 {
 	u32_t timeout;
@@ -1117,7 +1152,7 @@ void net_dhcpv4_start(struct net_if *iface)
 		NET_DBG("wait timeout=%"PRIu32"s", timeout);
 
 		k_delayed_work_submit(&iface->config.dhcpv4.timer,
-				      timeout * MSEC_PER_SEC);
+				      K_SECONDS(timeout));
 		break;
 	case NET_DHCPV4_INIT:
 	case NET_DHCPV4_SELECTING:
@@ -1127,10 +1162,19 @@ void net_dhcpv4_start(struct net_if *iface)
 	case NET_DHCPV4_BOUND:
 		break;
 	}
+
+	/* Catch network interface UP or DOWN events and renew the address
+	 * if interface is coming back up again.
+	 */
+	net_mgmt_init_event_callback(&mgmt4_cb, iface_event_handler,
+				     NET_EVENT_IF_DOWN | NET_EVENT_IF_UP);
+	net_mgmt_add_event_callback(&mgmt4_cb);
 }
 
 void net_dhcpv4_stop(struct net_if *iface)
 {
+	net_mgmt_del_event_callback(&mgmt4_cb);
+
 	switch (iface->config.dhcpv4.state) {
 	case NET_DHCPV4_DISABLED:
 		break;

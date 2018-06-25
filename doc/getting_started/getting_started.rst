@@ -28,7 +28,7 @@ using Git to clone the repository anonymously. Enter:
    git clone https://github.com/zephyrproject-rtos/zephyr.git
 
 You have successfully checked out a copy of the source code to your local
-machine in the ~/zephyr folder.
+machine in a ``zephyr`` folder in your home directory.
 
 .. _getting_started_cmake:
 
@@ -43,7 +43,7 @@ by Zephyr:
  * ``make``: Supported on UNIX-like platforms (Linux, macOS).
  * ``ninja``: Supported on all platforms.
 
-Most of the examples in the Zephyr documentation use `ninja` as a build tool
+Most of the examples in the Zephyr documentation use ``ninja`` as a build tool,
 but you should be able to use any generator on any of the examples listed.
 
 Set Up the Development Environment
@@ -70,19 +70,17 @@ Use the following procedures to create a new development environment.
 Building and Running an Application
 ***********************************
 
-Using the 'Hello World' sample application as a base model, the following
-section will describe the pieces necessary for creating a Zephyr application.
+Next, build a sample Zephyr application. You can then run it either in
+emulation or using POSIX APIs available on your host.
 
-The processes to build and run a Zephyr application are the same across
-operating systems. Nevertheless, the commands needed do differ from one OS to
-the next. The following sections contain the commands used in a Linux
-development environment. If you are using macOS please use the appropriate
-commands for your OS.
+If your board is supported by Zephyr (see :ref:`boards` for a list),
+consult its documentation for flashing and running instructions.
 
 Building a Sample Application
 =============================
 
-To build an example application follow these steps:
+Follow these steps to build the :ref:`hello_world` sample application
+provided with Zephyr.
 
 #. Navigate to the main project directory:
 
@@ -90,7 +88,7 @@ To build an example application follow these steps:
 
       cd zephyr
 
-#. Set the project environment variables:
+#. Set up your build environment:
 
    .. code-block:: console
 

@@ -319,10 +319,7 @@ struct net_pkt *net_pkt_get_reserve(struct k_mem_slab *slab,
 	pkt->ref = 1;
 	pkt->slab = slab;
 
-#if defined(CONFIG_NET_TX_DEFAULT_PRIORITY) && (NET_TC_COUNT > 1)
 	net_pkt_set_priority(pkt, CONFIG_NET_TX_DEFAULT_PRIORITY);
-#endif
-
 	net_pkt_set_vlan_tag(pkt, NET_VLAN_TAG_UNSPEC);
 
 #if defined(CONFIG_NET_DEBUG_NET_PKT)
@@ -573,10 +570,9 @@ static struct net_pkt *net_pkt_get(struct k_mem_slab *slab,
 		if (IS_ENABLED(CONFIG_NET_UDP) && proto == IPPROTO_UDP) {
 			data_len -= NET_UDPH_LEN;
 
-#if defined(CONFIG_NET_RPL_INSERT_HBH_OPTION)
-			data_len -= NET_RPL_HOP_BY_HOP_LEN;
-#endif
-
+			if (IS_ENABLED(CONFIG_NET_RPL_INSERT_HBH_OPTION)) {
+				data_len -= NET_RPL_HOP_BY_HOP_LEN;
+			}
 		}
 
 		if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6) {

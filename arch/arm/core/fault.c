@@ -235,9 +235,11 @@ static u32_t _MpuFault(const NANO_ESF *esf, int fromHardFault)
 
 	if (SCB->CFSR & SCB_CFSR_MSTKERR_Msk) {
 		PR_EXC("  Stacking error\n");
-	} else if (SCB->CFSR & SCB_CFSR_MUNSTKERR_Msk) {
+	}
+	if (SCB->CFSR & SCB_CFSR_MUNSTKERR_Msk) {
 		PR_EXC("  Unstacking error\n");
-	} else if (SCB->CFSR & SCB_CFSR_DACCVIOL_Msk) {
+	}
+	if (SCB->CFSR & SCB_CFSR_DACCVIOL_Msk) {
 		PR_EXC("  Data Access Violation\n");
 		/* In a fault handler, to determine the true faulting address:
 		 * 1. Read and save the MMFAR value.
@@ -247,7 +249,7 @@ static u32_t _MpuFault(const NANO_ESF *esf, int fromHardFault)
 		 * Software must follow this sequence because another higher
 		 * priority exception might change the MMFAR value.
 		 */
-		STORE_xFAR(mmfar, SCB->MMFAR);
+		u32_t mmfar = SCB->MMFAR;
 
 		if (SCB->CFSR & SCB_CFSR_MMARVALID_Msk) {
 			PR_EXC("  Address: 0x%x\n", mmfar);
@@ -271,21 +273,23 @@ static u32_t _MpuFault(const NANO_ESF *esf, int fromHardFault)
 #else
 				guard_start = thread->stack_info.start;
 #endif
-				if (SCB->MMFAR >= guard_start &&
-					SCB->MMFAR < guard_start +
+				if (mmfar >= guard_start &&
+					mmfar < guard_start +
 					MPU_GUARD_ALIGN_AND_SIZE) {
 					/* Thread stack corruption */
 					reason = _NANO_ERR_STACK_CHK_FAIL;
 				}
 			}
+#else
+		(void)mmfar;
 #endif /* CONFIG_HW_STACK_PROTECTION */
 		}
-	} else if (SCB->CFSR & SCB_CFSR_IACCVIOL_Msk) {
-		PR_EXC("  Instruction Access Violation\n");
-#if !defined(CONFIG_ARMV7_M_ARMV8_M_FP)
 	}
-#else
-	} else if (SCB->CFSR & SCB_CFSR_MLSPERR_Msk) {
+	if (SCB->CFSR & SCB_CFSR_IACCVIOL_Msk) {
+		PR_EXC("  Instruction Access Violation\n");
+	}
+#if defined(CONFIG_ARMV7_M_ARMV8_M_FP)
+	if (SCB->CFSR & SCB_CFSR_MLSPERR_Msk) {
 		PR_EXC("  Floating-point lazy state preservation error\n");
 	}
 #endif /* !defined(CONFIG_ARMV7_M_ARMV8_M_FP) */

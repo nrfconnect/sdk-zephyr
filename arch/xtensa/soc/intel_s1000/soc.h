@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation
+ * Copyright (c) 2018 Intel Corporation
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -28,28 +28,12 @@
 #define INTR_CNTL_IRQ_NUM(_irq) \
 	(((_irq >> INTR_CNTL_IRQ_NUM_SHIFT) & INTR_CNTL_IRQ_NUM_MASK) - 1)
 
-/* CAVS interrupt logic */
-#define CAVS_ICTL_BASE_ADDR			0x00078800
-#define CAVS_ICTL_0_IRQ				0x00000006
-#define CAVS_ICTL_0_IRQ_FLAGS			0
-
-#define CAVS_ICTL_1_IRQ				0x0000000A
-#define CAVS_ICTL_1_IRQ_FLAGS			0
-
-#define CAVS_ICTL_2_IRQ				0x0000000D
-#define CAVS_ICTL_2_IRQ_FLAGS			0
-
-#define CAVS_ICTL_3_IRQ				0x00000010
-#define CAVS_ICTL_3_IRQ_FLAGS			0
-
 #define IOAPIC_EDGE				0
 #define IOAPIC_HIGH				0
 
 /* DW interrupt controller */
-#define DW_ICTL_IRQ				0x00000706
 #define DW_ICTL_IRQ_CAVS_OFFSET			CAVS_IRQ_NUMBER(DW_ICTL_IRQ)
 #define DW_ICTL_NUM_IRQS			9
-#define DW_ICTL_IRQ_FLAGS			0
 
 /* GPIO */
 #define GPIO_DW_0_BASE_ADDR			0x00080C00
@@ -58,18 +42,6 @@
 #define GPIO_DW_0_IRQ_FLAGS			0
 #define GPIO_DW_0_IRQ				0x00040706
 #define GPIO_DW_0_IRQ_ICTL_OFFSET		INTR_CNTL_IRQ_NUM(GPIO_DW_0_IRQ)
-
-/* UART - UART0 */
-#define CONFIG_UART_NS16550_P0_IRQ_ICTL_OFFSET	INTR_CNTL_IRQ_NUM(\
-						NS16550_80800_IRQ_0)
-#define CONFIG_UART_NS16550_PORT_0_IRQ_FLAGS	0
-
-/* I2C - I2C0 */
-#define I2C_DW_0_BASE_ADDR			0x00080400
-#define I2C_DW_0_IRQ				0x00020706
-#define I2C_DW_0_IRQ_ICTL_OFFSET		INTR_CNTL_IRQ_NUM(I2C_DW_0_IRQ)
-#define I2C_DW_IRQ_FLAGS			0
-#define I2C_DW_CLOCK_SPEED			38
 
 /* low power DMACs */
 #define LP_GP_DMA_SIZE				0x00001000
@@ -107,6 +79,8 @@
 
 #define SSP_SIZE				0x0000200
 #define SSP_BASE(x)				(0x00077000 + (x) * SSP_SIZE)
+#define SSP_MN_DIV_SIZE				(8)
+#define SSP_MN_DIV_BASE(x)		(0x00078D00 + ((x) * SSP_MN_DIV_SIZE))
 
 #define SOC_INTEL_S1000_MCK_XTAL_FREQ_HZ	38400000
 
@@ -116,8 +90,23 @@
 #define SUE_DSP_RES_ALLOC_REG_BASE		0x00071A60
 #define SUE_DSPIOPO_REG			(SUE_DSP_RES_ALLOC_REG_BASE + 0x08)
 #define I2S_OWNSEL(x)				(0x1 << (8 + (x)))
+
+/* Address and bit field definition for general ownership register */
+#define DSP_RES_ALLOC_GEN_OWNER		(SUE_DSP_RES_ALLOC_REG_BASE + 0x0C)
+#define DSP_RES_ALLOC_GENO_DIOPTOSEL		(BIT(2))
+#define DSP_RES_ALLOC_GENO_MDIVOSEL		(BIT(1))
+
 #define USB_DW_BASE				0x000A0000
 #define USB_DW_IRQ				0x00000806
+
+/* Global Control registers */
+#define SOC_S1000_GLB_CTRL_BASE			(0x00081C00)
+
+#define SOC_S1000_GLB_CTRL_STRAPS		(SOC_S1000_GLB_CTRL_BASE + 0x40)
+#define SOC_S1000_STRAP_REF_CLK			(BIT_MASK(2) << 3)
+#define SOC_S1000_STRAP_REF_CLK_38P4		(0 << 3)
+#define SOC_S1000_STRAP_REF_CLK_19P2		(1 << 3)
+#define SOC_S1000_STRAP_REF_CLK_24P576		(2 << 3)
 
 extern void _soc_irq_enable(u32_t irq);
 extern void _soc_irq_disable(u32_t irq);
@@ -126,5 +115,6 @@ extern void setup_ownership_dma1(void);
 extern void setup_ownership_dma2(void);
 extern void dcache_writeback_region(void *addr, size_t size);
 extern void setup_ownership_i2s(void);
+extern u32_t soc_get_ref_clk_freq(void);
 
 #endif /* __INC_SOC_H */

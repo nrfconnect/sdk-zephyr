@@ -45,9 +45,6 @@
 /* Thread is suspended */
 #define _THREAD_SUSPENDED (1 << 4)
 
-/* Thread is actively looking at events to see if they are ready */
-#define _THREAD_POLLING (1 << 5)
-
 /* Thread is present in the ready queue */
 #define _THREAD_QUEUED (1 << 6)
 
@@ -96,7 +93,12 @@ struct _cpu {
 	/* one assigned idle thread per CPU */
 	struct k_thread *idle_thread;
 
-	int id;
+	u8_t id;
+
+#ifdef CONFIG_SMP
+	/* True when _current is allowed to context switch */
+	u8_t swap_ok;
+#endif
 };
 
 typedef struct _cpu _cpu_t;
@@ -241,25 +243,6 @@ static ALWAYS_INLINE void _new_thread_init(struct k_thread *thread,
 	thread->stack_info.size = (u32_t)stackSize;
 #endif /* CONFIG_THREAD_STACK_INFO */
 }
-
-#if defined(CONFIG_THREAD_MONITOR)
-/*
- * Add a thread to the kernel's list of active threads.
- */
-static ALWAYS_INLINE void thread_monitor_init(struct k_thread *thread)
-{
-	unsigned int key;
-
-	key = irq_lock();
-	thread->next_thread = _kernel.threads;
-	_kernel.threads = thread;
-	irq_unlock(key);
-}
-#else
-#define thread_monitor_init(thread)		\
-	do {/* do nothing */			\
-	} while ((0))
-#endif /* CONFIG_THREAD_MONITOR */
 
 #endif /* _ASMLANGUAGE */
 

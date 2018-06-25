@@ -23,4 +23,19 @@ config ETH_NATIVE_POSIX
 
 endif # NETWORKING
 
-endif
+if ENTROPY_GENERATOR
+
+config FAKE_ENTROPY_NATIVE_POSIX
+	def_bool y
+
+endif # ENTROPY_GENERATOR
+
+if BT_HCI
+
+choice BT_HCI_BUS_TYPE
+	default BT_USERCHAN
+endchoice
+
+endif # BT_HCI
+
+endif # BOARD_NATIVE_POSIX

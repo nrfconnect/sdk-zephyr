@@ -21,7 +21,8 @@
 #include <net/arp.h>
 #include "net_private.h"
 
-#define NET_BUF_TIMEOUT MSEC(100)
+#define NET_BUF_TIMEOUT K_MSEC(100)
+#define ARP_REQUEST_TIMEOUT K_SECONDS(2)
 
 static struct arp_entry arp_table[CONFIG_NET_ARP_TABLE_SIZE];
 
@@ -139,7 +140,7 @@ static inline struct net_pkt *prepare_arp(struct net_if *iface,
 	net_pkt_set_vlan_tag(pkt, vlan_tag);
 #endif
 
-	eth = net_eth_fill_header(ctx, pkt, frag, htons(NET_ETH_PTYPE_ARP),
+	eth = net_eth_fill_header(ctx, pkt, htons(NET_ETH_PTYPE_ARP),
 				  NULL, NULL);
 
 	/* If entry is not set, then we are just about to send
@@ -150,6 +151,9 @@ static inline struct net_pkt *prepare_arp(struct net_if *iface,
 	if (entry) {
 		entry->pending = net_pkt_ref(pending);
 		entry->iface = net_pkt_iface(pkt);
+
+		k_delayed_work_submit(&entry->arp_request_timer,
+				      ARP_REQUEST_TIMEOUT);
 
 		net_ipaddr_copy(&entry->ip, next_addr);
 
@@ -194,11 +198,26 @@ static inline struct net_pkt *prepare_arp(struct net_if *iface,
 	return pkt;
 }
 
+static void arp_request_timeout(struct k_work *work)
+{
+	/* This means that the ARP failed. */
+	struct arp_entry *entry = CONTAINER_OF(work,
+					       struct arp_entry,
+					       arp_request_timer);
+
+	if (entry->pending) {
+		NET_DBG("Releasing pending pkt %p (ref %d)", entry->pending,
+			entry->pending->ref - 1);
+		net_pkt_unref(entry->pending);
+		entry->pending = NULL;
+		entry->iface = NULL;
+	}
+}
+
 struct net_pkt *net_arp_prepare(struct net_pkt *pkt)
 {
 	struct arp_entry *entry, *free_entry = NULL, *non_pending = NULL;
 	struct ethernet_context *ctx;
-	struct net_buf *frag;
 	struct net_linkaddr *ll;
 	struct net_eth_hdr *hdr;
 	struct in_addr *addr;
@@ -221,10 +240,6 @@ struct net_pkt *net_arp_prepare(struct net_pkt *pkt)
 		if (!header) {
 			return NULL;
 		}
-
-		net_eth_fill_header(ctx, pkt, header, htons(NET_ETH_PTYPE_IP),
-				    net_pkt_ll_src(pkt)->addr,
-				    net_pkt_ll_dst(pkt)->addr);
 
 		net_pkt_frag_insert(pkt, header);
 
@@ -290,22 +305,9 @@ struct net_pkt *net_arp_prepare(struct net_pkt *pkt)
 		net_sprint_ll_addr(ll->addr, sizeof(struct net_eth_addr)),
 		net_sprint_ipv4_addr(&NET_IPV4_HDR(pkt)->src));
 
-	frag = pkt->frags;
-	while (frag) {
-		/* If there is no room for link layer header, then
-		 * just send the packet as is.
-		 */
-		if (!net_buf_headroom(frag)) {
-			frag = frag->frags;
-			continue;
-		}
-
-		hdr = net_eth_fill_header(ctx, pkt, frag,
-					  htons(NET_ETH_PTYPE_IP),
-					  ll->addr, entry->eth.addr);
-
-		frag = frag->frags;
-	}
+	net_eth_fill_header(ctx, pkt,
+			    htons(NET_ETH_PTYPE_IP),
+			    ll->addr, entry->eth.addr);
 
 	return pkt;
 }
@@ -350,6 +352,8 @@ static inline void arp_update(struct net_if *iface,
 			/* We only update the ARP cache if we were
 			 * initiating a request.
 			 */
+			k_delayed_work_cancel(&arp_table[i].arp_request_timer);
+
 			memcpy(&arp_table[i].eth, hwaddr,
 			       sizeof(struct net_eth_addr));
 
@@ -407,7 +411,7 @@ static inline struct net_pkt *prepare_arp_reply(struct net_if *iface,
 	net_pkt_set_vlan_tag(pkt, net_pkt_vlan_tag(req));
 #endif
 
-	net_eth_fill_header(ctx, pkt, frag, htons(NET_ETH_PTYPE_ARP),
+	net_eth_fill_header(ctx, pkt, htons(NET_ETH_PTYPE_ARP),
 			    net_if_get_link_addr(iface)->addr,
 			    eth_query->src.addr);
 
@@ -500,17 +504,26 @@ enum net_verdict net_arp_input(struct net_pkt *pkt)
 	return NET_OK;
 }
 
-void net_arp_clear_cache(void)
+void net_arp_clear_cache(struct net_if *iface)
 {
 	int i;
 
 	for (i = 0; i < CONFIG_NET_ARP_TABLE_SIZE; i++) {
+		if (iface && iface != arp_table[i].iface) {
+			continue;
+		}
+
 		if (arp_table[i].pending) {
 			net_pkt_unref(arp_table[i].pending);
+			k_delayed_work_cancel(&arp_table[i].arp_request_timer);
 		}
-	}
 
-	memset(&arp_table, 0, sizeof(arp_table));
+		arp_table[i].pending = NULL;
+		arp_table[i].iface = NULL;
+
+		memset(&arp_table[i].ip, 0, sizeof(arp_table[i].ip));
+		memset(&arp_table[i].eth, 0, sizeof(arp_table[i].eth));
+	}
 }
 
 int net_arp_foreach(net_arp_cb_t cb, void *user_data)
@@ -532,5 +545,12 @@ int net_arp_foreach(net_arp_cb_t cb, void *user_data)
 
 void net_arp_init(void)
 {
-	net_arp_clear_cache();
+	int i;
+
+	net_arp_clear_cache(NULL);
+
+	for (i = 0; i < CONFIG_NET_ARP_TABLE_SIZE; i++) {
+		k_delayed_work_init(&arp_table[i].arp_request_timer,
+				    arp_request_timeout);
+	}
 }

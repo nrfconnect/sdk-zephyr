@@ -235,7 +235,8 @@ static inline int lis2dh_burst_read(struct device *dev, u8_t start_addr,
 
 	return lis2dh_spi_access(lis2dh, start_addr, buf, num_bytes);
 #elif defined(CONFIG_LIS2DH_BUS_I2C)
-	return i2c_burst_read(lis2dh->bus, LIS2DH_BUS_ADDRESS, start_addr,
+	return i2c_burst_read(lis2dh->bus, LIS2DH_BUS_ADDRESS,
+			      start_addr | LIS2DH_AUTOINCREMENT_ADDR,
 			      buf, num_bytes);
 #else
 	return -ENODEV;
@@ -259,7 +260,7 @@ static inline int lis2dh_reg_read_byte(struct device *dev, u8_t reg_addr,
 #endif
 }
 
-static inline int lis2dh_burst_write(struct device *bus, u8_t start_addr,
+static inline int lis2dh_burst_write(struct device *dev, u8_t start_addr,
 				     u8_t *buf, u8_t num_bytes)
 {
 	struct lis2dh_data *lis2dh = dev->driver_data;
@@ -269,7 +270,8 @@ static inline int lis2dh_burst_write(struct device *bus, u8_t start_addr,
 
 	return lis2dh_spi_access(lis2dh, start_addr, buf, num_bytes);
 #elif defined(CONFIG_LIS2DH_BUS_I2C)
-	return i2c_burst_write(lis2dh->bus, LIS2DH_BUS_ADDRESS, start_addr,
+	return i2c_burst_write(lis2dh->bus, LIS2DH_BUS_ADDRESS,
+			       start_addr | LIS2DH_AUTOINCREMENT_ADDR,
 			       buf, num_bytes);
 #else
 	return -ENODEV;

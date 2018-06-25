@@ -1279,7 +1279,7 @@ int net_shell_cmd_arp(int argc, char *argv[])
 
 	if (strcmp(argv[arg], "flush") == 0) {
 		printk("Flushing ARP cache.\n");
-		net_arp_clear_cache();
+		net_arp_clear_cache(NULL);
 		return 0;
 	}
 #else
@@ -1321,7 +1321,7 @@ int net_shell_cmd_conn(int argc, char *argv[])
 
 #if defined(CONFIG_NET_TCP)
 	printk("\nTCP        Context   Src port Dst port   Send-Seq   Send-Ack  MSS"
-	       "%s\n", IS_ENABLED(CONFIG_NET_DEBUG_TCP) ? "    State" : "");
+	       "    State\n");
 
 	count = 0;
 
@@ -1336,6 +1336,11 @@ int net_shell_cmd_conn(int argc, char *argv[])
 		net_tcp_foreach(tcp_sent_list_cb, &count);
 #endif /* CONFIG_NET_DEBUG_TCP */
 	}
+
+#if !defined(CONFIG_NET_DEBUG_TCP)
+	printk("\nEnable CONFIG_NET_DEBUG_TCP for additional info\n");
+#endif /* CONFIG_NET_DEBUG_TCP */
+
 #endif
 
 #if defined(CONFIG_NET_IPV6_FRAGMENT)
@@ -1456,7 +1461,7 @@ static void print_dns_info(struct dns_resolve_context *ctx)
 int net_shell_cmd_dns(int argc, char *argv[])
 {
 #if defined(CONFIG_DNS_RESOLVER)
-#define DNS_TIMEOUT 2000 /* ms */
+#define DNS_TIMEOUT K_MSEC(2000) /* ms */
 
 	struct dns_resolve_context *ctx;
 	enum dns_query_type qtype = DNS_QUERY_TYPE_A;
@@ -2947,7 +2952,7 @@ static struct shell_cmd net_commands[] = {
 		"iface up [idx]\n\tTake network interface up\n"
 		"iface down [idx]\n\tTake network interface down" },
 	{ "mem", net_shell_cmd_mem,
-		"\n\tPrint information about network interfaces" },
+		"\n\tPrint information about network memory usage" },
 	{ "nbr", net_shell_cmd_nbr, "\n\tPrint neighbor information\n"
 		"nbr rm <IPv6 address>\n\tRemove neighbor from cache" },
 	{ "ping", net_shell_cmd_ping, "<host>\n\tPing a network host" },

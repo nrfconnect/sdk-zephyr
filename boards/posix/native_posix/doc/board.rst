@@ -164,6 +164,10 @@ available options::
    $ zephyr/zephyr.exe --help
 
      [-h] [--h] [--help] [-?]  :Display this help
+     [-rt]                     :Slow down the execution to the host real time
+     [-no-rt]                  :Do NOT slow down the execution to real time, but
+                                advance Zephyr's time as fast as possible and
+                                decoupled from the host time
      [-stop_at=<time>]         :In simulated seconds, when to stop automatically
      [-seed=<r_seed>]          :Seed for the entropy device
      [-testargs <arg>...]      :Any argument that follows will be ignored
@@ -374,8 +378,7 @@ The following peripherals are currently provided with this board:
   This peripheral driver also provides the needed functionality for this
   architecture-specific :c:func:`k_busy_wait`.
 
-  This timer, is configured by default with
-  :option:`CONFIG_NATIVE_POSIX_SLOWDOWN_TO_REAL_TIME`
+  This timer, may be configured
   to slow down the execution to real host time.
   This will provide the illusion that the simulated time is running at the same
   speed as the real host time.
@@ -384,6 +387,9 @@ The following peripherals are currently provided with this board:
   the execution before raising its next timer interrupt.
   Normally the Zephyr application and HW models run in very little time
   on the host CPU, so this is a good enough approach.
+  To configure the timer to slow down the execution, either set the option
+  :option:`CONFIG_NATIVE_POSIX_SLOWDOWN_TO_REAL_TIME`
+  or use the command line switch --rt.
 
 **Entropy device**:
   An entropy device based on the host :c:func:`random` API.
@@ -410,6 +416,16 @@ The following peripherals are currently provided with this board:
 
   Note that this device can only be used with Linux hosts, and that the user
   needs elevated permissions.
+
+**Bluetooth controller**:
+  It's possible to use the host's Bluetooth adapter as a Bluetooth
+  controller for Zephyr. To do this the HCI device needs to be passed as
+  a command line option to ``zephyr.exe``. For example, to use ``hci0``,
+  use ``sudo zephyr.exe --bt-dev=hci0``. Using the device requires root
+  privileges (or the CAP_NET_ADMIN POSIX capability, to be exact) so
+  ``zephyr.exe`` needs to be run through ``sudo``. The chosen HCI device
+  must be powered down and support Bluetooth Low Energy (i.e. support the
+  Bluetooth specification version 4.0 or greater).
 
 Shell support
 *************
