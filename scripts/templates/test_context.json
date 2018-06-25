@@ -1,0 +1,8 @@
+{
+    "postfixes":[
+        "VOID",
+        "",
+        "RET64"
+    ],
+    "instances":"11"
+}
