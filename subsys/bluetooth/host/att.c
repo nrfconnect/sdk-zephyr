@@ -975,6 +975,7 @@ static u8_t att_read_blob_req(struct bt_att *att, struct net_buf *buf)
 			    BT_ATT_OP_READ_BLOB_RSP, handle, offset);
 }
 
+#if defined(CONFIG_BT_GATT_READ_MULTIPLE)
 static u8_t att_read_mult_req(struct bt_att *att, struct net_buf *buf)
 {
 	struct bt_conn *conn = att->chan.chan.conn;
@@ -1020,6 +1021,7 @@ static u8_t att_read_mult_req(struct bt_att *att, struct net_buf *buf)
 
 	return 0;
 }
+#endif /* CONFIG_BT_GATT_READ_MULTIPLE */
 
 struct read_group_data {
 	struct bt_att *att;
@@ -1470,6 +1472,7 @@ static u8_t att_write_cmd(struct bt_att *att, struct net_buf *buf)
 	return att_write_rsp(conn, 0, 0, handle, 0, buf->data, buf->len);
 }
 
+#if defined(CONFIG_BT_SIGNING)
 static u8_t att_signed_write_cmd(struct bt_att *att, struct net_buf *buf)
 {
 	struct bt_conn *conn = att->chan.chan.conn;
@@ -1498,6 +1501,7 @@ static u8_t att_signed_write_cmd(struct bt_att *att, struct net_buf *buf)
 	return att_write_rsp(conn, 0, 0, handle, 0, buf->data,
 			     buf->len - sizeof(struct bt_att_signature));
 }
+#endif /* CONFIG_BT_SIGNING */
 
 #if defined(CONFIG_BT_SMP)
 static int att_change_security(struct bt_conn *conn, u8_t err)
@@ -1634,12 +1638,14 @@ static u8_t att_handle_read_blob_rsp(struct bt_att *att, struct net_buf *buf)
 	return att_handle_rsp(att, buf->data, buf->len, 0);
 }
 
+#if defined(CONFIG_BT_GATT_READ_MULTIPLE)
 static u8_t att_handle_read_mult_rsp(struct bt_att *att, struct net_buf *buf)
 {
 	BT_DBG("");
 
 	return att_handle_rsp(att, buf->data, buf->len, 0);
 }
+#endif /* CONFIG_BT_GATT_READ_MULTIPLE */
 
 static u8_t att_handle_write_rsp(struct bt_att *att, struct net_buf *buf)
 {
@@ -1763,14 +1769,18 @@ static const struct att_handler {
 		sizeof(struct bt_att_read_blob_rsp),
 		ATT_RESPONSE,
 		att_handle_read_blob_rsp },
+#if defined(CONFIG_BT_GATT_READ_MULTIPLE)
 	{ BT_ATT_OP_READ_MULT_REQ,
 		BT_ATT_READ_MULT_MIN_LEN_REQ,
 		ATT_REQUEST,
 		att_read_mult_req },
+#endif /* CONFIG_BT_GATT_READ_MULTIPLE */
+#if defined(CONFIG_BT_GATT_READ_MULTIPLE)
 	{ BT_ATT_OP_READ_MULT_RSP,
 		sizeof(struct bt_att_read_mult_rsp),
 		ATT_RESPONSE,
 		att_handle_read_mult_rsp },
+#endif /* CONFIG_BT_GATT_READ_MULTIPLE */
 	{ BT_ATT_OP_READ_GROUP_REQ,
 		sizeof(struct bt_att_read_group_req),
 		ATT_REQUEST,
@@ -1815,11 +1825,13 @@ static const struct att_handler {
 		sizeof(struct bt_att_write_cmd),
 		ATT_COMMAND,
 		att_write_cmd },
+#if defined(CONFIG_BT_SIGNING)
 	{ BT_ATT_OP_SIGNED_WRITE_CMD,
 		(sizeof(struct bt_att_write_cmd) +
 		 sizeof(struct bt_att_signature)),
 		ATT_COMMAND,
 		att_signed_write_cmd },
+#endif /* CONFIG_BT_SIGNING */
 };
 
 static att_type_t att_op_get_type(u8_t op)
