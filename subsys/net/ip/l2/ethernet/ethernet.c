@@ -309,11 +309,10 @@ static enum net_verdict set_vlan_tag(struct ethernet_context *ctx,
 static void set_vlan_priority(struct ethernet_context *ctx,
 			      struct net_pkt *pkt)
 {
-	/* FIXME: Currently just convert packet priority to VLAN
-	 * priority. This needs to be fixed as VLAN priority is not necessarily
-	 * the same as packet priority.
-	 */
-	net_pkt_set_vlan_priority(pkt, net_pkt_priority(pkt));
+	u8_t vlan_priority;
+
+	vlan_priority = net_priority2vlan(net_pkt_priority(pkt));
+	net_pkt_set_vlan_priority(pkt, vlan_priority);
 }
 #endif /* CONFIG_NET_VLAN */
 
@@ -800,6 +799,26 @@ void net_eth_carrier_off(struct net_if *iface)
 	struct ethernet_context *ctx = net_if_l2_data(iface);
 
 	handle_carrier(ctx, iface, carrier_off);
+}
+
+struct device *net_eth_get_ptp_clock(struct net_if *iface)
+{
+#if defined(CONFIG_PTP_CLOCK)
+	struct device *dev = net_if_get_device(iface);
+	const struct ethernet_api *api = dev->driver_api;
+
+	if (net_if_l2(iface) != &NET_L2_GET_NAME(ETHERNET)) {
+		return NULL;
+	}
+
+	if (!(api->get_capabilities(dev) & ETHERNET_PTP)) {
+		return NULL;
+	}
+
+	return api->get_ptp_clock(net_if_get_device(iface));
+#else
+	return NULL;
+#endif
 }
 
 void ethernet_init(struct net_if *iface)

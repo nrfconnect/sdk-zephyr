@@ -22,7 +22,7 @@ config CPU_CORTEX_M
 	select HAS_CMSIS
 	select HAS_FLASH_LOAD_OFFSET
 	select HAS_DTS
-	select ARCH_HAS_STACK_PROTECTION if ARM_CORE_MPU
+	select ARCH_HAS_STACK_PROTECTION if ARM_CORE_MPU || CPU_CORTEX_M_HAS_SPLIM
 	select ARCH_HAS_USERSPACE if ARM_CORE_MPU
 	help
 	  This option signifies the use of a CPU of the Cortex-M family.
@@ -60,12 +60,16 @@ config ARM_STACK_PROTECTION
 
 config ARM_SECURE_FIRMWARE
 	bool
+	depends on ARMV8_M_SE
 	default n
 	help
+	  This option indicates that we are building a Zephyr image that
+	  is intended to execute in Secure state. The option is only
+	  applicable to ARMv8-M MCUs that implement the Security Extension.
+
 	  This option enables Zephyr to include code that executes in
 	  Secure state, as well as to exclude code that is designed to
-	  execute only in Non-secure state. The option is only applicable
-	  to ARMv8-M MCUs that implement the Security Extension.
+	  execute only in Non-secure state.
 
 	  Code executing in Secure state has access to both the Secure
 	  and Non-Secure resources of the Cortex-M MCU.
@@ -74,6 +78,26 @@ config ARM_SECURE_FIRMWARE
 	  if Secure MCU resources are accessed from the Non-Secure state.
 	  Secure Faults may only be handled by code executing in Secure
 	  state.
+
+config ARM_NONSECURE_FIRMWARE
+	bool
+	depends on !ARM_SECURE_FIRMWARE
+	depends on ARMV8_M_SE
+	default n
+	help
+	  This option indicates that we are building a Zephyr image that
+	  is intended to execute in Non-Secure state. Execution of this
+	  image is triggered by Secure firmware that executes in Secure
+	  state. The option is only applicable to ARMv8-M MCUs that
+	  implement the Security Extension.
+
+	  This option enables Zephyr to include code that executes in
+	  Non-Secure state only, as well as to exclude code that is
+	  designed to execute only in Secure state.
+
+	  Code executing in Non-Secure state has no access to Secure
+	  resources of the Cortex-M MCU, and, therefore, it shall avoid
+	  accessing them.
 
 menu "Architecture Floating Point Options"
 depends on CPU_HAS_FPU

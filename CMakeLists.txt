@@ -91,11 +91,14 @@ endif()
 set_ifndef(OPTIMIZE_FOR_NO_OPTIMIZATIONS_FLAG "-O0")
 set_ifndef(OPTIMIZE_FOR_DEBUG_FLAG            "-Og")
 set_ifndef(OPTIMIZE_FOR_SIZE_FLAG             "-Os")
+set_ifndef(OPTIMIZE_FOR_SPEED_FLAG            "-O2")
 
 if(CONFIG_NO_OPTIMIZATIONS)
   set(OPTIMIZATION_FLAG ${OPTIMIZE_FOR_NO_OPTIMIZATIONS_FLAG})
 elseif(CONFIG_DEBUG_OPTIMIZATIONS)
   set(OPTIMIZATION_FLAG ${OPTIMIZE_FOR_DEBUG_FLAG})
+elseif(CONFIG_SPEED_OPTIMIZATIONS)
+  set(OPTIMIZATION_FLAG ${OPTIMIZE_FOR_SPEED_FLAG})
 elseif(CONFIG_SIZE_OPTIMIZATIONS)
   set(OPTIMIZATION_FLAG ${OPTIMIZE_FOR_SIZE_FLAG}) # Default
 else()
@@ -222,7 +225,8 @@ if(CONFIG_OVERRIDE_FRAME_POINTER_DEFAULT)
   endif()
 endif()
 
-zephyr_compile_options(${CONFIG_COMPILER_OPT})
+separate_arguments(CONFIG_COMPILER_OPT_AS_LIST UNIX_COMMAND ${CONFIG_COMPILER_OPT})
+zephyr_compile_options(${CONFIG_COMPILER_OPT_AS_LIST})
 
 # TODO: Include arch compiler options at this point.
 
@@ -341,9 +345,9 @@ add_custom_target(syscall_macros_h_target DEPENDS ${syscall_macros_h})
 add_custom_command(                       OUTPUT  ${syscall_macros_h}
   COMMAND
   ${PYTHON_EXECUTABLE}
-  ${PROJECT_SOURCE_DIR}/scripts/gen_syscall_header.py
+  ${ZEPHYR_BASE}/scripts/gen_syscall_header.py
   > ${syscall_macros_h}
-  DEPENDS ${PROJECT_SOURCE_DIR}/scripts/gen_syscall_header.py
+  DEPENDS ${ZEPHYR_BASE}/scripts/gen_syscall_header.py
   )
 
 
@@ -361,14 +365,20 @@ set(syscalls_subdirs_txt ${CMAKE_CURRENT_BINARY_DIR}/misc/generated/syscalls_sub
 # handling. The trigger file will update when a folder is added / removed.
 set(syscalls_subdirs_trigger ${CMAKE_CURRENT_BINARY_DIR}/misc/generated/syscalls_subdirs.trigger)
 
+if(NOT (${CMAKE_HOST_SYSTEM_NAME} STREQUAL Windows))
+  set(syscalls_links --create-links ${CMAKE_CURRENT_BINARY_DIR}/misc/generated/syscalls_links)
+endif()
+
 # When running CMake it must be ensured that all dependencies are correctly acquired.
 execute_process(
   COMMAND
   ${PYTHON_EXECUTABLE}
-  ${PROJECT_SOURCE_DIR}/scripts/subfolder_list.py
-  --directory        ${PROJECT_SOURCE_DIR}/include # Walk this directory
-  --out-file         ${syscalls_subdirs_txt}       # Write this file
-  )
+  ${ZEPHYR_BASE}/scripts/subfolder_list.py
+  --directory        ${ZEPHYR_BASE}/include      # Walk this directory
+  --out-file         ${syscalls_subdirs_txt}     # Write file with discovered folder
+  --trigger          ${syscalls_subdirs_trigger} # Trigger file that is used for json generation
+  ${syscalls_links}                              # If defined, create symlinks for dependencies
+)
 file(STRINGS ${syscalls_subdirs_txt} PARSE_SYSCALLS_PATHS_DEPENDS)
 
 if(${CMAKE_HOST_SYSTEM_NAME} STREQUAL Windows)
@@ -378,41 +388,42 @@ if(${CMAKE_HOST_SYSTEM_NAME} STREQUAL Windows)
 
   # Also On Windows each header file must be monitored as file modifications are not reflected
   # on directory level.
-  file(GLOB_RECURSE PARSE_SYSCALLS_HEADER_DEPENDS ${PROJECT_SOURCE_DIR}/include/*.h)
+  file(GLOB_RECURSE PARSE_SYSCALLS_HEADER_DEPENDS ${ZEPHYR_BASE}/include/*.h)
 else()
   # The syscall parsing depends on the folders in order to detect add/removed/modified files.
   # When a folder is removed, CMake will try to find a target that creates that dependency.
   # This command sets up the target for CMake to find.
-  # With out this code, CMake will fail with the following error:
+  # Without this code, CMake will fail with the following error:
   #   <folder> needed by '<target>', missing and no known rule to make it
   # when a folder is removed.
   add_custom_command(OUTPUT ${PARSE_SYSCALLS_PATHS_DEPENDS}
     COMMAND ${CMAKE_COMMAND} -E echo ""
     COMMENT "Preparing syscall dependency handling"
-    )
+  )
 
   add_custom_command(
     OUTPUT
-    ${syscalls_subdirs_txt}
+    ${syscalls_subdirs_trigger}
     COMMAND
     ${PYTHON_EXECUTABLE}
-    ${PROJECT_SOURCE_DIR}/scripts/subfolder_list.py
-    --directory        ${PROJECT_SOURCE_DIR}/include # Walk this directory
-    --out-file         ${syscalls_subdirs_txt}       # Write this file
-    --trigger          ${syscalls_subdirs_trigger}   # Trigger file that will result in CMake rerun
+    ${ZEPHYR_BASE}/scripts/subfolder_list.py
+    --directory        ${ZEPHYR_BASE}/include      # Walk this directory
+    --out-file         ${syscalls_subdirs_txt}     # Write file with discovered folder
+    --trigger          ${syscalls_subdirs_trigger} # Trigger file that is used for json generation
+    ${syscalls_links}                              # If defined, create symlinks for dependencies
     DEPENDS ${PARSE_SYSCALLS_PATHS_DEPENDS}
-    )
+  )
 
-  # Ensure trigger file always exists when specifying CMake dependency.
-  if(NOT EXISTS ${syscalls_subdirs_trigger})
-    file(WRITE ${syscalls_subdirs_trigger} "")
+  # Ensure subdir file always exists when specifying CMake dependency.
+  if(NOT EXISTS ${syscalls_subdirs_txt})
+    file(WRITE ${syscalls_subdirs_txt} "")
   endif()
 
   # On other OS'es, modifying a file is reflected on the folder timestamp and hence detected
   # when using depend on directory level.
   # Thus CMake only needs to re-run when sub-directories are added / removed, which is indicated
   # using a trigger file.
-  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${syscalls_subdirs_trigger})
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${syscalls_subdirs_txt})
 endif()
 
 add_custom_command(
@@ -420,10 +431,10 @@ add_custom_command(
   ${syscalls_json}
   COMMAND
   ${PYTHON_EXECUTABLE}
-  ${PROJECT_SOURCE_DIR}/scripts/parse_syscalls.py
-  --include          ${PROJECT_SOURCE_DIR}/include        # Read files from this dir
-  --json-file        ${syscalls_json}                     # Write this file
-  DEPENDS ${syscalls_subdirs_txt} ${PARSE_SYSCALLS_HEADER_DEPENDS}
+  ${ZEPHYR_BASE}/scripts/parse_syscalls.py
+  --include          ${ZEPHYR_BASE}/include        # Read files from this dir
+  --json-file        ${syscalls_json}              # Write this file
+  DEPENDS ${syscalls_subdirs_trigger} ${PARSE_SYSCALLS_HEADER_DEPENDS}
   )
 
 add_custom_target(syscall_list_h_target DEPENDS                ${syscall_list_h})
@@ -431,7 +442,7 @@ add_custom_command(OUTPUT include/generated/syscall_dispatch.c ${syscall_list_h}
   # Also, some files are written to include/generated/syscalls/
   COMMAND
   ${PYTHON_EXECUTABLE}
-  ${PROJECT_SOURCE_DIR}/scripts/gen_syscalls.py
+  ${ZEPHYR_BASE}/scripts/gen_syscalls.py
   --json-file        ${syscalls_json}                     # Read this file
   --base-output      include/generated/syscalls           # Write to this dir
   --syscall-dispatch include/generated/syscall_dispatch.c # Write this file
@@ -797,6 +808,7 @@ if(CONFIG_ARM AND CONFIG_USERSPACE)
   add_custom_command(
     OUTPUT ${PRIV_STACKS_OUTPUT_SRC}
     COMMAND
+    ${PYTHON_EXECUTABLE}
     ${PROCESS_PRIV_STACKS_GPERF}
     -i ${PRIV_STACKS_OUTPUT_SRC_PRE}
     -o ${PRIV_STACKS_OUTPUT_SRC}
@@ -910,6 +922,7 @@ if(CONFIG_USERSPACE)
   add_custom_command(
     OUTPUT ${OUTPUT_SRC}
     COMMAND
+    ${PYTHON_EXECUTABLE}
     ${PROCESS_GPERF}
     -i ${OUTPUT_SRC_PRE}
     -o ${OUTPUT_SRC}

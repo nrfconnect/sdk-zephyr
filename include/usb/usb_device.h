@@ -43,6 +43,30 @@
 extern "C" {
 #endif
 
+/*
+ * These macros should be used to place the USB descriptors
+ * in predetermined order in the RAM.
+ */
+#define USBD_DEVICE_DESCR_DEFINE(p) \
+	static __in_section(usb, descriptor_##p, 0) __used
+#define USBD_CLASS_DESCR_DEFINE(p) \
+	static __in_section(usb, descriptor_##p, 1) __used
+#define USBD_MISC_DESCR_DEFINE(p) \
+	static __in_section(usb, descriptor_##p, 2) __used
+#define USBD_USER_DESCR_DEFINE(p) \
+	static __in_section(usb, descriptor_##p, 3) __used
+#define USBD_STRING_DESCR_DEFINE(p) \
+	static __in_section(usb, descriptor_##p, 4) __used
+#define USBD_TERM_DESCR_DEFINE(p) \
+	static __in_section(usb, descriptor_##p, 5) __used
+
+/*
+ * This macro should be used to place the struct usb_cfg_data
+ * inside usb data section in the RAM.
+ */
+#define USBD_CFG_DATA_DEFINE(name) \
+	static __in_section(usb, data, name) __used
+
 /*************************************************************************
  *  USB configuration
  **************************************************************************/
@@ -80,6 +104,11 @@ typedef void (*usb_ep_callback)(u8_t ep,
  */
 typedef int (*usb_request_handler) (struct usb_setup_packet *detup,
 		s32_t *transfer_len, u8_t **payload_data);
+
+/**
+ * Function for interface runtime configuration
+ */
+typedef void (*usb_interface_config)(u8_t bInterfaceNumber);
 
 /*
  * USB Endpoint Configuration
@@ -143,6 +172,10 @@ struct usb_cfg_data {
 	 * http://www.beyondlogic.org/usbnutshell/usb5.shtml#DeviceDescriptors
 	 */
 	const u8_t *usb_device_description;
+	/** Pointer to interface descriptor */
+	const void *interface_descriptor;
+	/** Function for interface runtime configuration */
+	usb_interface_config interface_config;
 	/** Callback to be notified on USB connection status change */
 	usb_status_callback cb_usb_status;
 	/** USB interface (Class) handler and storage space */

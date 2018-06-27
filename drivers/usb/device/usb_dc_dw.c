@@ -526,11 +526,15 @@ static int usb_dw_init(void)
 		return ret;
 	}
 
-	/* Set device speed to FS */
-#ifdef USB_PHY_2
-	USB_DW->dcfg &= ~USB_DW_DCFG_DEV_SPD_FS;
-	USB_DW->dcfg |= 0x01;
+#ifdef CONFIG_USB_DW_USB_2_0
+	/* set the PHY interface to be 16-bit UTMI */
+	USB_DW->gusbcfg = (USB_DW->gusbcfg & ~USB_DW_GUSBCFG_PHY_IF_MASK) |
+		USB_DW_GUSBCFG_PHY_IF_16_BIT;
+
+	/* Set USB2.0 High Speed */
+	USB_DW->dcfg |= USB_DW_DCFG_DEV_SPD_USB2_HS;
 #else
+	/* Set device speed to Full Speed */
 	USB_DW->dcfg |= USB_DW_DCFG_DEV_SPD_FS;
 #endif
 
@@ -810,6 +814,38 @@ int usb_dc_set_address(const u8_t addr)
 
 	USB_DW->dcfg &= ~USB_DW_DCFG_DEV_ADDR_MASK;
 	USB_DW->dcfg |= addr << USB_DW_DCFG_DEV_ADDR_OFFSET;
+
+	return 0;
+}
+
+int usb_dc_ep_check_cap(const struct usb_dc_ep_cfg_data * const cfg)
+{
+	u8_t ep_idx = USB_DW_EP_ADDR2IDX(cfg->ep_addr);
+
+	SYS_LOG_DBG("ep %x, mps %d, type %d", cfg->ep_addr, cfg->ep_mps,
+		    cfg->ep_type);
+
+	if ((cfg->ep_type == USB_DC_EP_CONTROL) && ep_idx) {
+		SYS_LOG_ERR("invalid endpoint configuration");
+		return -1;
+	}
+
+	if (cfg->ep_mps > DW_USB_MAX_PACKET_SIZE) {
+		SYS_LOG_WRN("unsupported packet size");
+		return -1;
+	}
+
+	if ((USB_DW_EP_ADDR2DIR(cfg->ep_addr) == USB_EP_DIR_OUT) &&
+	    (ep_idx >= DW_USB_OUT_EP_NUM)) {
+		SYS_LOG_WRN("OUT endpoint address out of range");
+		return -1;
+	}
+
+	if ((USB_DW_EP_ADDR2DIR(cfg->ep_addr) == USB_EP_DIR_IN) &&
+	    (ep_idx >= DW_USB_IN_EP_NUM)) {
+		SYS_LOG_WRN("IN endpoint address out of range");
+		return -1;
+	}
 
 	return 0;
 }

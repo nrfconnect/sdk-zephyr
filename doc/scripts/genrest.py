@@ -61,7 +61,7 @@ are organized based on their common characteristics and on what new symbols
 they add to the configuration menus.
 
 The configuration options' information below is extracted directly from
-:program:`Kconfig` using the :file:`~/doc/scripts/genrest.py` script. Click on
+:program:`Kconfig`. Click on
 the option name in the table below for detailed information about each option.
 
 Supported Options
@@ -209,17 +209,32 @@ def defaults_rst(sc):
     # Returns RST that lists the 'default' properties of 'sc' (symbol or
     # choice)
 
-    if not sc.defaults:
+    if isinstance(sc, kconfiglib.Symbol) and sc.choice:
+        # 'default's on choice symbols have no effect (and generate a warning).
+        # The implicit value hint below would be misleading as well.
         return ""
 
     rst = "Defaults\n" \
           "========\n\n"
 
-    for value, cond in sc.defaults:
-        default_str = kconfiglib.expr_str(value)
-        if cond is not sc.kconfig.y:
-            default_str += " if " + kconfiglib.expr_str(cond)
-        rst += "- {}\n".format(default_str)
+    if sc.defaults:
+        for value, cond in sc.defaults:
+            rst += "- " + kconfiglib.expr_str(value)
+            if cond is not sc.kconfig.y:
+                rst += " if " + kconfiglib.expr_str(cond)
+            rst += "\n"
+
+    else:
+        rst += "No defaults. Implicitly defaults to "
+
+        if isinstance(sc, kconfiglib.Choice):
+            rst += "the first (visible) choice option.\n"
+        elif sc.orig_type in (kconfiglib.BOOL, kconfiglib.TRISTATE):
+            rst += "``n``.\n"
+        else:
+            # This is accurate even for int/hex symbols, though an active
+            # 'range' might clamp the value (which is then treated as zero)
+            rst += "the empty string.\n"
 
     return rst + "\n"
 
@@ -362,14 +377,14 @@ def write_if_updated(filename, s):
     # which trigger documentation rebuilds.
 
     try:
-        with open(filename) as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             if s == f.read():
                 return
     except OSError as e:
         if e.errno != errno.ENOENT:
             raise
 
-    with open(filename, "w") as f:
+    with open(filename, "w", encoding='utf-8') as f:
         f.write(s)
 
 

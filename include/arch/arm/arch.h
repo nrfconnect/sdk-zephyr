@@ -26,11 +26,6 @@ extern "C" {
 /* ARM GPRs are often designated by two different names */
 #define sys_define_gpr_with_alias(name1, name2) union { u32_t name1, name2; }
 
-/* APIs need to support non-byte addressable architectures */
-
-#define OCTET_TO_SIZEOFUNIT(X) (X)
-#define SIZEOFUNIT_TO_OCTET(X) (X)
-
 #ifdef CONFIG_CPU_CORTEX_M
 #include <arch/arm/cortex_m/exc.h>
 #include <arch/arm/cortex_m/irq.h>
@@ -247,12 +242,12 @@ extern "C" {
 #ifndef _ASMLANGUAGE
 #include <arch/arm/cortex_m/mpu/arm_mpu.h>
 
-#define K_MEM_PARTITION_P_NA_U_NA	(NO_ACCESS | NOT_EXEC)
-#define K_MEM_PARTITION_P_RW_U_RW	(P_RW_U_RW | NOT_EXEC)
-#define K_MEM_PARTITION_P_RW_U_RO	(P_RW_U_RO | NOT_EXEC)
-#define K_MEM_PARTITION_P_RW_U_NA	(P_RW_U_NA | NOT_EXEC)
-#define K_MEM_PARTITION_P_RO_U_RO	(P_RO_U_RO | NOT_EXEC)
-#define K_MEM_PARTITION_P_RO_U_NA	(P_RO_U_NA | NOT_EXEC)
+#define K_MEM_PARTITION_P_NA_U_NA	(NO_ACCESS | MPU_RASR_XN_Msk)
+#define K_MEM_PARTITION_P_RW_U_RW	(P_RW_U_RW | MPU_RASR_XN_Msk)
+#define K_MEM_PARTITION_P_RW_U_RO	(P_RW_U_RO | MPU_RASR_XN_Msk)
+#define K_MEM_PARTITION_P_RW_U_NA	(P_RW_U_NA | MPU_RASR_XN_Msk)
+#define K_MEM_PARTITION_P_RO_U_RO	(P_RO_U_RO | MPU_RASR_XN_Msk)
+#define K_MEM_PARTITION_P_RO_U_NA	(P_RO_U_NA | MPU_RASR_XN_Msk)
 
 /* Execution-allowed attributes */
 #define K_MEM_PARTITION_P_RWX_U_RWX	(P_RW_U_RW)
@@ -274,7 +269,7 @@ extern "C" {
 		__is_writable__; \
 	})
 #define K_MEM_PARTITION_IS_EXECUTABLE(attr) \
-	(!((attr) & (NOT_EXEC)))
+	(!((attr) & (MPU_RASR_XN_Msk)))
 
 #endif /* _ASMLANGUAGE */
 #define _ARCH_MEM_PARTITION_ALIGN_CHECK(start, size) \

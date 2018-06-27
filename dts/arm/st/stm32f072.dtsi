@@ -51,8 +51,6 @@
 			interrupts = <31 0>;
 			interrupt-names = "usb";
 			num-bidir-endpoints = <8>;
-			num-in-endpoints = <0>;
-			num-out-endpoints = <0>;
 			ram-size = <1024>;
 			status = "disabled";
 			label= "USB";
@@ -64,6 +62,7 @@
 			#size-cells = <0>;
 			reg = <0x40006400 0x400>;
 			interrupts = <30 0>;
+			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x02000000>;
 			status = "disabled";
 			label = "CAN_1";
 			bus-speed = <250000>;

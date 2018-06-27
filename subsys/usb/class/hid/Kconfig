@@ -15,19 +15,17 @@ config USB_DEVICE_HID
 
 if USB_DEVICE_HID
 
-config HID_INT_EP_ADDR
-	hex
-	prompt "USB HID Device Interrupt Endpoint address"
-	default 0x81
-	range 0x81 0x8F
-	help
-	  USB HID Device interrupt endpoint address
-
 config HID_INTERRUPT_EP_MPS
 	int
 	prompt "USB HID Device Interrupt Endpoint size"
 	default 16
 	help
 	  USB HID Device interrupt endpoint size
+
+config USB_HID_MAX_PAYLOAD_SIZE
+	int
+	default 64
+	help
+	  Max allowed payload size over USB HID Class
 
 endif # USB_DEVICE_HID
