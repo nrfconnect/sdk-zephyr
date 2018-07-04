@@ -6,7 +6,7 @@
 #ifndef __DT_BINDING_ST_MEM_H
 #define __DT_BINDING_ST_MEM_H
 
-#define __SIZE_K(x) (x * 1024)
+#define __SIZE_K(x) ((x) * 1024)
 
 #if defined(CONFIG_SOC_NRF51822_QFAA)
 #define DT_FLASH_SIZE		__SIZE_K(256)
@@ -17,6 +17,9 @@
 #elif defined(CONFIG_SOC_NRF51822_QFAC)
 #define DT_FLASH_SIZE		__SIZE_K(256)
 #define DT_SRAM_SIZE		__SIZE_K(32)
+#elif defined(CONFIG_SOC_NRF52810_QFAA)
+#define DT_FLASH_SIZE		__SIZE_K(192)
+#define DT_SRAM_SIZE		__SIZE_K(24)
 #elif defined(CONFIG_SOC_NRF52832_QFAA)
 #define DT_FLASH_SIZE		__SIZE_K(512)
 #define DT_SRAM_SIZE		__SIZE_K(64)

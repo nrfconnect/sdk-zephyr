@@ -7,6 +7,7 @@
  */
 
 #include <init.h>
+#include <misc/byteorder.h>
 
 #include <usb/usb_device.h>
 #include <usb/usb_common.h>
@@ -39,11 +40,92 @@ NET_BUF_POOL_DEFINE(tx_pool, CONFIG_BT_HCI_CMD_COUNT, CMD_BUF_SIZE,
 #define BT_BUF_ACL_SIZE BT_L2CAP_BUF_SIZE(BT_L2CAP_MTU)
 NET_BUF_POOL_DEFINE(acl_tx_pool, 2, BT_BUF_ACL_SIZE, sizeof(u8_t), NULL);
 
+#define BLUETOOTH_INT_EP_ADDR		0x81
+#define BLUETOOTH_OUT_EP_ADDR		0x02
+#define BLUETOOTH_IN_EP_ADDR		0x82
+
 /* HCI RX/TX threads */
 static K_THREAD_STACK_DEFINE(rx_thread_stack, 512);
 static struct k_thread rx_thread_data;
 static K_THREAD_STACK_DEFINE(tx_thread_stack, 512);
 static struct k_thread tx_thread_data;
+
+struct usb_bluetooth_config {
+	struct usb_if_descriptor if0;
+	struct usb_ep_descriptor if0_int_ep;
+	struct usb_ep_descriptor if0_out_ep;
+	struct usb_ep_descriptor if0_in_ep;
+} __packed;
+
+USBD_CLASS_DESCR_DEFINE(primary) struct usb_bluetooth_config bluetooth_cfg = {
+	/* Interface descriptor 0 */
+	.if0 = {
+		.bLength = sizeof(struct usb_if_descriptor),
+		.bDescriptorType = USB_INTERFACE_DESC,
+		.bInterfaceNumber = 0,
+		.bAlternateSetting = 0,
+		.bNumEndpoints = 3,
+		.bInterfaceClass = WIRELESS_DEVICE_CLASS,
+		.bInterfaceSubClass = RF_SUBCLASS,
+		.bInterfaceProtocol = BLUETOOTH_PROTOCOL,
+		.iInterface = 0,
+	},
+
+	/* Interrupt Endpoint */
+	.if0_int_ep = {
+		.bLength = sizeof(struct usb_ep_descriptor),
+		.bDescriptorType = USB_ENDPOINT_DESC,
+		.bEndpointAddress = BLUETOOTH_INT_EP_ADDR,
+		.bmAttributes = USB_DC_EP_INTERRUPT,
+		.wMaxPacketSize =
+			sys_cpu_to_le16(
+			CONFIG_BLUETOOTH_INT_EP_MPS),
+		.bInterval = 0x01,
+	},
+
+	/* Data Endpoint OUT */
+	.if0_out_ep = {
+		.bLength = sizeof(struct usb_ep_descriptor),
+		.bDescriptorType = USB_ENDPOINT_DESC,
+		.bEndpointAddress = BLUETOOTH_OUT_EP_ADDR,
+		.bmAttributes = USB_DC_EP_BULK,
+		.wMaxPacketSize =
+			sys_cpu_to_le16(
+			CONFIG_BLUETOOTH_BULK_EP_MPS),
+		.bInterval = 0x01,
+	},
+
+	/* Data Endpoint IN */
+	.if0_in_ep = {
+		.bLength = sizeof(struct usb_ep_descriptor),
+		.bDescriptorType = USB_ENDPOINT_DESC,
+		.bEndpointAddress = BLUETOOTH_IN_EP_ADDR,
+		.bmAttributes = USB_DC_EP_BULK,
+		.wMaxPacketSize =
+			sys_cpu_to_le16(
+			CONFIG_BLUETOOTH_BULK_EP_MPS),
+		.bInterval = 0x01,
+	},
+};
+
+#define HCI_INT_EP_IDX			0
+#define HCI_OUT_EP_IDX			1
+#define HCI_IN_EP_IDX			2
+
+static struct usb_ep_cfg_data bluetooth_ep_data[] = {
+	{
+		.ep_cb = usb_transfer_ep_callback,
+		.ep_addr = BLUETOOTH_INT_EP_ADDR,
+	},
+	{
+		.ep_cb = usb_transfer_ep_callback,
+		.ep_addr = BLUETOOTH_OUT_EP_ADDR,
+	},
+	{
+		.ep_cb = usb_transfer_ep_callback,
+		.ep_addr = BLUETOOTH_IN_EP_ADDR,
+	},
+};
 
 static void hci_rx_thread(void)
 {
@@ -56,14 +138,16 @@ static void hci_rx_thread(void)
 
 		switch (bt_buf_get_type(buf)) {
 		case BT_BUF_EVT:
-			usb_transfer_sync(CONFIG_BLUETOOTH_INT_EP_ADDR,
-					  buf->data, buf->len,
-					  USB_TRANS_WRITE);
+			usb_transfer_sync(
+				bluetooth_ep_data[HCI_INT_EP_IDX].ep_addr,
+				buf->data, buf->len,
+				USB_TRANS_WRITE);
 			break;
 		case BT_BUF_ACL_IN:
-			usb_transfer_sync(CONFIG_BLUETOOTH_IN_EP_ADDR,
-					  buf->data, buf->len,
-					  USB_TRANS_WRITE);
+			usb_transfer_sync(
+				bluetooth_ep_data[HCI_IN_EP_IDX].ep_addr,
+				buf->data, buf->len,
+				USB_TRANS_WRITE);
 			break;
 		default:
 			SYS_LOG_ERR("Unknown type %u", bt_buf_get_type(buf));
@@ -111,8 +195,46 @@ static void acl_read_cb(u8_t ep, int size, void *priv)
 	net_buf_reserve(buf, CONFIG_BT_HCI_RESERVE);
 
 	/* Start a new read transfer */
-	usb_transfer(CONFIG_BLUETOOTH_OUT_EP_ADDR, buf->data, BT_BUF_ACL_SIZE,
-		     USB_TRANS_READ, acl_read_cb, buf);
+	usb_transfer(bluetooth_ep_data[HCI_OUT_EP_IDX].ep_addr, buf->data,
+		     BT_BUF_ACL_SIZE, USB_TRANS_READ, acl_read_cb, buf);
+}
+
+static void bluetooth_status_cb(enum usb_dc_status_code status, u8_t *param)
+{
+	/* Check the USB status and do needed action if required */
+	switch (status) {
+	case USB_DC_ERROR:
+		SYS_LOG_DBG("USB device error");
+		break;
+	case USB_DC_RESET:
+		SYS_LOG_DBG("USB device reset detected");
+		break;
+	case USB_DC_CONNECTED:
+		SYS_LOG_DBG("USB device connected");
+		break;
+	case USB_DC_CONFIGURED:
+		SYS_LOG_DBG("USB device configured");
+		/* Start reading */
+		acl_read_cb(bluetooth_ep_data[HCI_OUT_EP_IDX].ep_addr, 0, NULL);
+		break;
+	case USB_DC_DISCONNECTED:
+		SYS_LOG_DBG("USB device disconnected");
+		/* Cancel any transfer */
+		usb_cancel_transfer(bluetooth_ep_data[HCI_INT_EP_IDX].ep_addr);
+		usb_cancel_transfer(bluetooth_ep_data[HCI_IN_EP_IDX].ep_addr);
+		usb_cancel_transfer(bluetooth_ep_data[HCI_OUT_EP_IDX].ep_addr);
+		break;
+	case USB_DC_SUSPEND:
+		SYS_LOG_DBG("USB device suspended");
+		break;
+	case USB_DC_RESUME:
+		SYS_LOG_DBG("USB device resumed");
+		break;
+	case USB_DC_UNKNOWN:
+	default:
+		SYS_LOG_DBG("USB unknown state");
+		break;
+	}
 }
 
 static int bluetooth_class_handler(struct usb_setup_packet *setup,
@@ -143,61 +265,15 @@ static int bluetooth_class_handler(struct usb_setup_packet *setup,
 	return 0;
 }
 
-static void bluetooth_status_cb(enum usb_dc_status_code status, u8_t *param)
+static void bluetooth_interface_config(u8_t bInterfaceNumber)
 {
-	/* Check the USB status and do needed action if required */
-	switch (status) {
-	case USB_DC_ERROR:
-		SYS_LOG_DBG("USB device error");
-		break;
-	case USB_DC_RESET:
-		SYS_LOG_DBG("USB device reset detected");
-		break;
-	case USB_DC_CONNECTED:
-		SYS_LOG_DBG("USB device connected");
-		break;
-	case USB_DC_CONFIGURED:
-		SYS_LOG_DBG("USB device configured");
-		/* Start reading */
-		acl_read_cb(CONFIG_BLUETOOTH_OUT_EP_ADDR, 0, NULL);
-		break;
-	case USB_DC_DISCONNECTED:
-		SYS_LOG_DBG("USB device disconnected");
-		/* Cancel any transfer */
-		usb_cancel_transfer(CONFIG_BLUETOOTH_INT_EP_ADDR);
-		usb_cancel_transfer(CONFIG_BLUETOOTH_IN_EP_ADDR);
-		usb_cancel_transfer(CONFIG_BLUETOOTH_OUT_EP_ADDR);
-		break;
-	case USB_DC_SUSPEND:
-		SYS_LOG_DBG("USB device suspended");
-		break;
-	case USB_DC_RESUME:
-		SYS_LOG_DBG("USB device resumed");
-		break;
-	case USB_DC_UNKNOWN:
-	default:
-		SYS_LOG_DBG("USB unknown state");
-		break;
-	}
+	bluetooth_cfg.if0.bInterfaceNumber = bInterfaceNumber;
 }
 
-static struct usb_ep_cfg_data bluetooth_ep_data[] = {
-	{
-		.ep_cb = usb_transfer_ep_callback,
-		.ep_addr = CONFIG_BLUETOOTH_INT_EP_ADDR,
-	},
-	{
-		.ep_cb = usb_transfer_ep_callback,
-		.ep_addr = CONFIG_BLUETOOTH_OUT_EP_ADDR,
-	},
-	{
-		.ep_cb = usb_transfer_ep_callback,
-		.ep_addr = CONFIG_BLUETOOTH_IN_EP_ADDR,
-	},
-};
-
-static struct usb_cfg_data bluetooth_config = {
+USBD_CFG_DATA_DEFINE(hci) struct usb_cfg_data bluetooth_config = {
 	.usb_device_description = NULL,
+	.interface_config = bluetooth_interface_config,
+	.interface_descriptor = &bluetooth_cfg.if0,
 	.cb_usb_status = bluetooth_status_cb,
 	.interface = {
 		.class_handler = bluetooth_class_handler,
@@ -205,7 +281,7 @@ static struct usb_cfg_data bluetooth_config = {
 		.vendor_handler = NULL,
 		.payload_data = NULL,
 	},
-	.num_endpoints = NUMOF_ENDPOINTS_BLUETOOTH,
+	.num_endpoints = ARRAY_SIZE(bluetooth_ep_data),
 	.endpoint = bluetooth_ep_data,
 };
 
@@ -221,14 +297,7 @@ static int bluetooth_init(struct device *dev)
 		return ret;
 	}
 
-#ifdef CONFIG_USB_COMPOSITE_DEVICE
-	ret = composite_add_function(&bluetooth_config,
-				     FIRST_IFACE_BLUETOOTH);
-	if (ret < 0) {
-		SYS_LOG_ERR("Failed to add bluetooth function");
-		return ret;
-	}
-#else
+#ifndef CONFIG_USB_COMPOSITE_DEVICE
 	bluetooth_config.interface.payload_data = interface_data;
 	bluetooth_config.usb_device_description =
 		usb_get_device_descriptor();

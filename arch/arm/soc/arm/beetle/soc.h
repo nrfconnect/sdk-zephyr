@@ -89,13 +89,13 @@
 
 #ifndef _ASMLANGUAGE
 
-#include <device.h>
-#include <misc/util.h>
+#include <kernel_includes.h>
 
 #include "soc_pins.h"
 #include "soc_power.h"
 #include "soc_registers.h"
 #include "soc_pll.h"
+#include "soc_mpu.h"
 
 /* System Control Register (SYSCON) */
 #define __BEETLE_SYSCON ((volatile struct syscon *)_BEETLE_SYSCON_BASE)

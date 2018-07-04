@@ -660,7 +660,7 @@ class SizeCalculator:
                    "net_if", "net_if_dev", "net_stack", "net_l2_data",
                    "_k_queue_area", "_net_buf_pool_area", "app_datas",
                    "kobject_data", "mmu_tables", "app_pad", "priv_stacks",
-                   "ccm_data"]
+                   "ccm_data", "usb_descriptor", "usb_data", "usb_bos_desc"]
     # These get copied into RAM only on non-XIP
     ro_sections = ["text", "ctors", "init_array", "reset", "object_access",
                    "rodata", "devconfig", "net_l2", "vector", "_bt_settings_area"]
@@ -913,7 +913,7 @@ class MakeGenerator:
         else:
             generator = "Unix Makefiles"
             generator_cmd = "$(MAKE)"
-            verb = "VERBOSE=1" if VERBOSE else "VERBOSE=0"
+            verb = "VERBOSE=1" if VERBOSE else ""
 
         if phase == 'running':
             return MakeGenerator.MAKE_RULE_TMPL_RUN.format(

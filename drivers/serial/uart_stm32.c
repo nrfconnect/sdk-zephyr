@@ -263,7 +263,7 @@ static void uart_stm32_usart_set_baud_rate(struct device *dev,
 			     baud_rate);
 }
 
-#if defined(CONFIG_SOC_SERIES_STM32L0X) || defined(CONFIG_SOC_SERIES_STM32L4X)
+#ifdef CONFIG_UART_STM32_LPUART_1
 static void uart_stm32_lpuart_set_baud_rate(struct device *dev,
 					    u32_t clock_rate, u32_t baud_rate)
 {
@@ -319,7 +319,7 @@ static int uart_stm32_init(struct device *dev)
 			       (clock_control_subsys_t *)&config->pclken,
 			       &clock_rate);
 
-#if defined(CONFIG_SOC_SERIES_STM32L0X) || defined(CONFIG_SOC_SERIES_STM32L4X)
+#ifdef CONFIG_UART_STM32_LPUART_1
 	if (IS_LPUART_INSTANCE(UartInstance)) {
 		uart_stm32_lpuart_set_baud_rate(dev, clock_rate, baud_rate);
 	} else {
@@ -331,12 +331,17 @@ static int uart_stm32_init(struct device *dev)
 
 	LL_USART_Enable(UartInstance);
 
-#if !defined(CONFIG_SOC_SERIES_STM32F4X) && !defined(CONFIG_SOC_SERIES_STM32F1X)
-	/* Polling USART initialisation */
-	while ((!(LL_USART_IsActiveFlag_TEACK(UartInstance))) ||
-	      (!(LL_USART_IsActiveFlag_REACK(UartInstance))))
+#ifdef USART_ISR_TEACK
+	/* Wait until TEACK flag is set */
+	while (!(LL_USART_IsActiveFlag_TEACK(UartInstance)))
 		;
-#endif /* !CONFIG_SOC_SERIES_STM32F4X */
+#endif /* !USART_ISR_TEACK */
+
+#ifdef USART_ISR_REACK
+	/* Wait until REACK flag is set */
+	while (!(LL_USART_IsActiveFlag_REACK(UartInstance)))
+		;
+#endif /* !USART_ISR_REACK */
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	config->uconf.irq_config_func(dev);

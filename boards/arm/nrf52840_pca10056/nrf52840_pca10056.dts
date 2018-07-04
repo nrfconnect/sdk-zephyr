@@ -22,6 +22,18 @@
 	};
 };
 
+&gpiote {
+	status ="ok";
+};
+
+&gpio0 {
+	status ="ok";
+};
+
+&gpio1 {
+	status ="ok";
+};
+
 &uart0 {
 	compatible = "nordic,nrf-uart";
 	current-speed = <115200>;
@@ -30,10 +42,14 @@
 
 &i2c0 {
 	status = "ok";
+	sda-pin = <26>;
+	scl-pin = <27>;
 };
 
 &i2c1 {
 	status = "ok";
+	sda-pin = <30>;
+	scl-pin = <31>;
 };
 
 &flash0 {

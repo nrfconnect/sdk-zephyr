@@ -33,6 +33,13 @@ endchoice
 
 comment "BLE Controller configuration"
 
+config BT_CTLR_CRYPTO
+	bool "Enable crypto functions in Controller"
+	default y
+	help
+	  Use random number generation and AES encryption support functions
+	  provided by the controller.
+
 config BT_CTLR_RX_PRIO_STACK_SIZE
 	# Hidden option for Controller's Co-Operative high priority Rx thread
 	# stack size.
@@ -576,7 +583,7 @@ config BT_CTLR_PROFILE_ISR
 
 config BT_CTLR_DEBUG_PINS
 	bool "Bluetooth Controller Debug Pins"
-	depends on BOARD_NRF51_PCA10028 || BOARD_NRF52_PCA10040 || BOARD_NRF52840_PCA10056
+	depends on BOARD_NRF51_PCA10028 || BOARD_NRF52_PCA10040 || BOARD_NRF52810_PCA10040 || BOARD_NRF52840_PCA10056
 	help
 	  Turn on debug GPIO toggling for the BLE Controller. This is useful
 	  when debugging with a logic analyzer or profiling certain sections of

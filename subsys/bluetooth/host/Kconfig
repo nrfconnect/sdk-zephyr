@@ -124,10 +124,10 @@ source "subsys/bluetooth/host/mesh/Kconfig"
 
 config BT_HOST_CRYPTO
 	# Hidden option that compiles in random number generation and AES
-	# encryption support using TinyCrypt library if software-based
-	# controller is disabled.
+	# encryption support using TinyCrypt library if this is not provided
+	# by the controller implementation.
 	bool
-	default y if !BT_CTLR
+	default y if !BT_CTLR_CRYPTO
 	select TINYCRYPT
 	select TINYCRYPT_AES
 	select TINYCRYPT_SHA256
@@ -306,6 +306,13 @@ config BT_GATT_CLIENT
 	bool "GATT client support"
 	help
 	  This option enables support for the GATT Client role.
+
+config BT_GATT_READ_MULTIPLE
+	bool "GATT Read Multiple Characteristic Values support"
+	default y
+	help
+	  This option enables support for the GATT Read Multiple Characteristic
+	  Values procedure.
 
 config BT_MAX_PAIRED
 	int "Maximum number of paired devices"

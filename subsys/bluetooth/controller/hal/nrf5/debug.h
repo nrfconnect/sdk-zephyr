@@ -5,9 +5,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef _DEBUG_H_
-#define _DEBUG_H_
-
 #ifdef CONFIG_BT_CTLR_DEBUG_PINS
 #if defined(CONFIG_BOARD_NRF52840_PCA10056)
 #define DEBUG_PORT       NRF_P1
@@ -21,7 +18,8 @@
 #define DEBUG_PIN7       BIT(8)
 #define DEBUG_PIN8       BIT(10)
 #define DEBUG_PIN9       BIT(11)
-#elif defined(CONFIG_BOARD_NRF52_PCA10040)
+#elif defined(CONFIG_BOARD_NRF52_PCA10040) || \
+      defined(CONFIG_BOARD_NRF52810_PCA10040)
 #define DEBUG_PORT       NRF_GPIO
 #define DEBUG_PIN0       BIT(11)
 #define DEBUG_PIN1       BIT(12)
@@ -245,5 +243,3 @@
 #define DEBUG_RADIO_START_M(flag)
 
 #endif /* CONFIG_BT_CTLR_DEBUG_PINS */
-
-#endif /* _DEBUG_H_ */

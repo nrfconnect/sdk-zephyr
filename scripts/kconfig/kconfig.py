@@ -2,6 +2,7 @@
 # Modified from: https://github.com/ulfalizer/Kconfiglib/blob/master/examples/merge_config.py
 import argparse
 import sys
+import textwrap
 
 from kconfiglib import Kconfig, Symbol, BOOL, STRING, TRISTATE, TRI_TO_STR
 
@@ -13,10 +14,9 @@ WARNING_WHITELIST = (
     # selected. These should be investigated, but whitelist them for now.
     "unsatisfied direct dependencies",
 
-    # Assignments to certain undefined symbols. These are only defined for ARC
-    # and x86, respectively, but are set in some "shared" .conf files.
+    # This symbol is only defined for ARC, but is set in some "shared" .conf
+    # files
     "undefined symbol ARC_INIT",  # Issue #7977
-    "undefined symbol SSE",       # Issue #7978
 )
 
 def fatal(warning):
@@ -97,6 +97,28 @@ def main():
     kconf.write_autoconf(args.autoconf)
 
 
+# Message printed when a promptless symbol is assigned (and doesn't get the
+# assigned value)
+PROMPTLESS_HINT = """
+This symbol has no prompt, meaning assignments in configuration files have no
+effect on it. It can only be set indirectly, via Kconfig defaults (e.g. in a
+Kconfig.defconfig file) or through being 'select'ed or 'imply'd (note: try to
+avoid Kconfig 'select's except for trivial promptless "helper" symbols without
+dependencies, as it ignores dependencies and forces symbols on).
+"""
+
+# Message about where to look up symbol information
+SYM_INFO_HINT = """
+You can check symbol information (including dependencies) in the 'menuconfig'
+interface (see the Application Development Primer section of the manual), or in
+the Kconfig reference at
+http://docs.zephyrproject.org/reference/kconfig/CONFIG_{}.html (which is
+updated regularly from the master branch). See the 'Setting configuration
+values' section of the Board Porting Guide as well.
+"""[1:]  # Remove initial newline for nicer textwrap output when joining texts
+
+PROMPTLESS_HINT_EXTRA = "It covers Kconfig.defconfig files."
+
 def verify_assigned_value(sym):
     # Verifies that the value assigned to 'sym' "took" (matches the value the
     # symbol actually got), printing a warning otherwise
@@ -109,14 +131,21 @@ def verify_assigned_value(sym):
         user_value = sym.user_value
 
     if user_value != sym.str_value:
-        print('warning: {} was assigned the value "{}" but got the value "{}". '
-              "Check its dependencies in the 'menuconfig' interface (see the "
-              "Application Development Primer section of the manual), or in "
-              "the Kconfig reference at "
-              "http://docs.zephyrproject.org/reference/kconfig/CONFIG_{}.html "
-              "(which is updated regularly from the master branch)"
-              .format(name_and_loc(sym), user_value, sym.str_value, sym.name),
-              file=sys.stderr)
+        msg = "warning: {} was assigned the value '{}' but got the " \
+              "value '{}'. " \
+              .format(name_and_loc(sym), user_value, sym.str_value)
+
+        if promptless(sym):
+            msg += PROMPTLESS_HINT
+
+        msg += SYM_INFO_HINT.format(sym.name)
+
+        if promptless(sym):
+            msg += PROMPTLESS_HINT_EXTRA
+
+        # Use a large fill() width to try to avoid linebreaks in the symbol
+        # reference link
+        print(textwrap.fill(msg, 100), file=sys.stderr)
 
 
 def name_and_loc(sym):
@@ -129,6 +158,17 @@ def name_and_loc(sym):
         sym.name,
         ", ".join("{}:{}".format(node.filename, node.linenr)
                   for node in sym.nodes))
+
+
+def promptless(sym):
+    # Returns True if 'sym' has no prompt. Since the symbol might be defined in
+    # multiple locations, we need to check all locations.
+
+    for node in sym.nodes:
+        if node.prompt:
+            return False
+
+    return True
 
 
 def parse_args():
