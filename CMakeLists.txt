@@ -120,8 +120,6 @@ zephyr_compile_options(
 )
 
 zephyr_compile_options(
-  $<$<COMPILE_LANGUAGE:C>:-std=c99>
-
   $<$<COMPILE_LANGUAGE:CXX>:-std=c++11>
   $<$<COMPILE_LANGUAGE:CXX>:-fcheck-new>
   $<$<COMPILE_LANGUAGE:CXX>:-ffunction-sections>
@@ -230,9 +228,17 @@ zephyr_compile_options(${CONFIG_COMPILER_OPT_AS_LIST})
 
 # TODO: Include arch compiler options at this point.
 
-# TODO: This Clang check is broken
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
   zephyr_cc_option(
+    #FIXME: need to fix all of those
+    -Wno-sometimes-uninitialized
+    -Wno-shift-overflow
+    -Wno-missing-braces
+    -Wno-self-assign
+    -Wno-address-of-packed-member
+    -Wno-unused-function
+    -Wno-initializer-overrides
+    -Wno-section
     -Wno-unknown-warning-option
     -Wno-unused-variable
     -Wno-format-invalid-specifier
@@ -705,13 +711,10 @@ set_property(TARGET
   ${ZEPHYR_INCLUDE_DIRS}
   )
 
-get_property(E_KERNEL_ENTRY GLOBAL PROPERTY E_KERNEL_ENTRY)
-
 set(zephyr_lnk
   ${LINKERFLAGPREFIX},-Map=${PROJECT_BINARY_DIR}/${KERNEL_MAP_NAME}
   -u_OffsetAbsSyms
   -u_ConfigAbsSyms
-  ${E_KERNEL_ENTRY}
   ${LINKERFLAGPREFIX},--start-group
   ${LINKERFLAGPREFIX},--whole-archive
   ${ZEPHYR_LIBS_PROPERTY}
@@ -990,6 +993,13 @@ get_property(GKSF GLOBAL PROPERTY GENERATED_KERNEL_SOURCE_FILES)
 
 get_property(TOPT GLOBAL PROPERTY TOPT)
 set_ifndef(  TOPT -T)
+
+get_property(CSTD GLOBAL PROPERTY CSTD)
+set_ifndef(CSTD c99)
+
+zephyr_compile_options(
+  $<$<COMPILE_LANGUAGE:C>:-std=${CSTD}>
+)
 
 configure_file(
      $ENV{ZEPHYR_BASE}/include/arch/arm/cortex_m/scripts/app_data_alignment.ld

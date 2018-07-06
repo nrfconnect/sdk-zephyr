@@ -1,7 +1,6 @@
 zephyr_cc_option_ifdef(CONFIG_LTO -flto)
 
 zephyr_compile_options(
-  -Wno-format-truncation
   -fno-freestanding
   -Wno-undef
   -Wno-implicit-function-declaration
@@ -19,6 +18,12 @@ zephyr_compile_options_ifdef(CONFIG_COVERAGE
 zephyr_link_libraries_ifdef(CONFIG_COVERAGE
 	-lgcov
 	)
+
+if (CONFIG_ASAN)
+	zephyr_compile_options(-fsanitize=address)
+	zephyr_link_libraries(-lasan)
+	zephyr_ld_options(-fsanitize=address)
+endif ()
 
 zephyr_compile_definitions(_POSIX_C_SOURCE=200809)
 

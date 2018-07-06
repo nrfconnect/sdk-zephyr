@@ -1,9 +1,3 @@
-/** @file
- @brief ARP handler
-
- This is not to be included by the application.
- */
-
 /*
  * Copyright (c) 2016 Intel Corporation
  *
@@ -19,6 +13,7 @@ extern "C" {
 
 #if defined(CONFIG_NET_ARP)
 
+#include <misc/slist.h>
 #include <net/ethernet.h>
 
 /**
@@ -51,11 +46,14 @@ struct net_pkt *net_arp_prepare(struct net_pkt *pkt);
 enum net_verdict net_arp_input(struct net_pkt *pkt);
 
 struct arp_entry {
-	struct k_delayed_work arp_request_timer;
+	sys_snode_t node;
+	s64_t req_start;
 	struct net_if *iface;
-	struct net_pkt *pending;
 	struct in_addr ip;
-	struct net_eth_addr eth;
+	union {
+		struct net_pkt *pending;
+		struct net_eth_addr eth;
+	};
 };
 
 typedef void (*net_arp_cb_t)(struct arp_entry *entry,

@@ -181,7 +181,7 @@ static void timestamp_setup(void)
 
 	iface = eth_interfaces[0];
 
-	net_if_register_timestamp_cb(&timestamp_cb, iface,
+	net_if_register_timestamp_cb(&timestamp_cb, NULL, iface,
 				     timestamp_callback);
 
 	timestamp_cb_called = false;
@@ -228,7 +228,7 @@ static void timestamp_setup_2nd_iface(void)
 
 	iface = eth_interfaces[1];
 
-	net_if_register_timestamp_cb(&timestamp_cb_2, iface,
+	net_if_register_timestamp_cb(&timestamp_cb_2, NULL, iface,
 				     timestamp_callback_2);
 
 	timestamp_cb_called = false;
@@ -248,7 +248,7 @@ static void timestamp_setup_all(void)
 {
 	struct net_pkt *pkt;
 
-	net_if_register_timestamp_cb(&timestamp_cb_3, NULL,
+	net_if_register_timestamp_cb(&timestamp_cb_3, NULL, NULL,
 				     timestamp_callback);
 
 	timestamp_cb_called = false;
@@ -323,6 +323,11 @@ static void iface_cb(struct net_if *iface, void *user_data)
 	    net_if_get_by_iface(iface));
 
 	if (net_if_l2(iface) == &NET_L2_GET_NAME(ETHERNET)) {
+		if (ud->eth_if_count >= ARRAY_SIZE(eth_interfaces)) {
+			DBG("Invalid interface %p\n", iface);
+			return;
+		}
+
 		eth_interfaces[ud->eth_if_count++] = iface;
 	}
 

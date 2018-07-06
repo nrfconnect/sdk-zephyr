@@ -154,6 +154,23 @@ extern "C" {
 #endif
 
 /**
+ * @brief Calculate size of stacks to be allocated in a stack array
+ *
+ * This macro calculates the size to be allocated for the stacks
+ * inside a stack array. It accepts the indicated "size" as a parameter
+ * and if required, pads some extra bytes (e.g. for MPU scenarios). Refer
+ * K_THREAD_STACK_ARRAY_DEFINE definition to see how this is used.
+ *
+ * @param size Size of the stack memory region
+ */
+#if defined(CONFIG_USERSPACE) && \
+	defined(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT)
+#define _ARCH_THREAD_STACK_LEN(size) (POW2_CEIL(size))
+#else
+#define _ARCH_THREAD_STACK_LEN(size) ((size)+MPU_GUARD_ALIGN_AND_SIZE)
+#endif
+
+/**
  * @brief Declare a toplevel array of thread stack memory regions
  *
  * Create an array of equally sized stacks. See K_THREAD_STACK_DEFINE
@@ -171,12 +188,12 @@ extern "C" {
 #define _ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
 	struct _k_thread_stack_element __kernel_noinit \
 		__aligned(POW2_CEIL(size)) \
-		sym[nmemb][POW2_CEIL(size)]
+		sym[nmemb][_ARCH_THREAD_STACK_LEN(size)]
 #else
 #define _ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
 	struct _k_thread_stack_element __kernel_noinit \
 		__aligned(STACK_ALIGN) \
-		sym[nmemb][size+MPU_GUARD_ALIGN_AND_SIZE]
+		sym[nmemb][_ARCH_THREAD_STACK_LEN(size)]
 #endif
 
 /**
@@ -241,36 +258,6 @@ extern "C" {
 #ifdef CONFIG_ARM_MPU
 #ifndef _ASMLANGUAGE
 #include <arch/arm/cortex_m/mpu/arm_mpu.h>
-
-#define K_MEM_PARTITION_P_NA_U_NA	(NO_ACCESS | MPU_RASR_XN_Msk)
-#define K_MEM_PARTITION_P_RW_U_RW	(P_RW_U_RW | MPU_RASR_XN_Msk)
-#define K_MEM_PARTITION_P_RW_U_RO	(P_RW_U_RO | MPU_RASR_XN_Msk)
-#define K_MEM_PARTITION_P_RW_U_NA	(P_RW_U_NA | MPU_RASR_XN_Msk)
-#define K_MEM_PARTITION_P_RO_U_RO	(P_RO_U_RO | MPU_RASR_XN_Msk)
-#define K_MEM_PARTITION_P_RO_U_NA	(P_RO_U_NA | MPU_RASR_XN_Msk)
-
-/* Execution-allowed attributes */
-#define K_MEM_PARTITION_P_RWX_U_RWX	(P_RW_U_RW)
-#define K_MEM_PARTITION_P_RWX_U_RX	(P_RW_U_RO)
-#define K_MEM_PARTITION_P_RX_U_RX	(P_RO_U_RO)
-
-#define K_MEM_PARTITION_IS_WRITABLE(attr) \
-	({ \
-		int __is_writable__; \
-		switch (attr) { \
-		case P_RW_U_RW: \
-		case P_RW_U_RO: \
-		case P_RW_U_NA: \
-			__is_writable__ = 1; \
-			break; \
-		default: \
-			__is_writable__ = 0; \
-		} \
-		__is_writable__; \
-	})
-#define K_MEM_PARTITION_IS_EXECUTABLE(attr) \
-	(!((attr) & (MPU_RASR_XN_Msk)))
-
 #endif /* _ASMLANGUAGE */
 #define _ARCH_MEM_PARTITION_ALIGN_CHECK(start, size) \
 	BUILD_ASSERT_MSG(!(((size) & ((size) - 1))) && (size) >= 32 && \
