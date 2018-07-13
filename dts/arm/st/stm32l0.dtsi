@@ -141,6 +141,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x40005400 0x400>;
+			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00200000>;
 			interrupts = <23 0>;
 			interrupt-names = "combined";
 			status = "disabled";
@@ -152,6 +153,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x40013000 0x400>;
+			clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00001000>;
 			interrupts = <25 3>;
 			status = "disabled";
 			label = "SPI_1";

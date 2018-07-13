@@ -19,54 +19,12 @@
 #include "nrf_common.h"
 #include "gpio_utils.h"
 
-#if defined(CONFIG_SOC_SERIES_NRF51X)
-#define GPIOTE_CHAN_COUNT (4)
-#elif defined(CONFIG_SOC_SERIES_NRF52X)
-#define GPIOTE_CHAN_COUNT (8)
-#else
-#error "Platform not defined."
-#endif
 #define GPIO_PIN_CNF_SENSE_Invalid	0x01
 
-/* GPIO structure for nRF5X. More detailed description of each register can be found in nrf5X.h */
-struct _gpio {
-	__I  u32_t RESERVED0[321];
-	__IO u32_t OUT;
-	__IO u32_t OUTSET;
-	__IO u32_t OUTCLR;
-
-	__I u32_t  IN;
-	__IO u32_t DIR;
-	__IO u32_t DIRSET;
-	__IO u32_t DIRCLR;
-	__IO u32_t LATCH;
-	__IO u32_t DETECTMODE;
-	__I u32_t  RESERVED1[118];
-	__IO u32_t PIN_CNF[32];
-};
-
-/* GPIOTE structure for nRF5X. More detailed description of each register can be found in nrf5X.h */
-struct _gpiote {
-	__O u32_t  TASKS_OUT[8];
-	__I u32_t  RESERVED0[4];
-
-	__O u32_t  TASKS_SET[8];
-	__I u32_t  RESERVED1[4];
-
-	__O u32_t  TASKS_CLR[8];
-	__I u32_t  RESERVED2[32];
-	__IO u32_t EVENTS_IN[8];
-	__I u32_t  RESERVED3[23];
-	__IO u32_t EVENTS_PORT;
-	__I u32_t  RESERVED4[97];
-	__IO u32_t INTENSET;
-	__IO u32_t INTENCLR;
-	__I u32_t  RESERVED5[129];
-	__IO u32_t CONFIG[8];
-};
-
 /*@todo: move GPIOTE channel management to a separate module */
-static u32_t gpiote_chan_mask;
+/* Reserve channels below the base index */
+#define GPIOTE_CH_BASE CONFIG_GPIO_NRF5_GPIOTE_CHAN_BASE
+static u32_t gpiote_chan_mask = BIT_MASK(GPIOTE_CH_BASE);
 
 /** Configuration data */
 struct gpio_nrf5_config {
@@ -89,7 +47,7 @@ struct gpio_nrf5_data {
 #define DEV_GPIO_DATA(dev) \
 	((struct gpio_nrf5_data * const)(dev)->driver_data)
 #define GPIO_STRUCT(dev) \
-	((volatile struct _gpio *)(DEV_GPIO_CFG(dev))->gpio_base_addr)
+	((volatile NRF_GPIO_Type *)(DEV_GPIO_CFG(dev))->gpio_base_addr)
 #define GPIO_PORT(dev) \
 	(DEV_GPIO_CFG(dev)->gpio_port)
 
@@ -152,10 +110,10 @@ struct gpio_nrf5_data {
 
 static int gpiote_find_channel(struct device *dev, u32_t pin, u32_t port)
 {
-	volatile struct _gpiote *gpiote = (void *)NRF_GPIOTE_BASE;
+	volatile NRF_GPIOTE_Type *gpiote = (void *)NRF_GPIOTE_BASE;
 	int i;
 
-	for (i = 0; i < GPIOTE_CHAN_COUNT; i++) {
+	for (i = GPIOTE_CH_BASE; i < GPIOTE_CH_NUM; i++) {
 		if ((gpiote_chan_mask & BIT(i)) &&
 		    (GPIOTE_CFG_PIN_GET(gpiote->CONFIG[i]) == pin) &&
 		    (GPIOTE_CFG_PORT_GET(gpiote->CONFIG[i]) == port)) {
@@ -179,8 +137,8 @@ static int gpio_nrf5_config(struct device *dev,
 		{0, 0, 0, 0},
 		{GPIO_DRIVE_D0S1, GPIO_DRIVE_D0H1, 0, GPIO_DRIVE_S0S1}
 	};
-	volatile struct _gpiote *gpiote = (void *)NRF_GPIOTE_BASE;
-	volatile struct _gpio *gpio = GPIO_STRUCT(dev);
+	volatile NRF_GPIOTE_Type *gpiote = (void *)NRF_GPIOTE_BASE;
+	volatile NRF_GPIO_Type *gpio = GPIO_STRUCT(dev);
 
 	if (access_op == GPIO_ACCESS_BY_PIN) {
 
@@ -233,6 +191,20 @@ static int gpio_nrf5_config(struct device *dev,
 		u32_t config = 0;
 		u32_t port = GPIO_PORT(dev);
 
+		/* check if already allocated to replace */
+		int i = gpiote_find_channel(dev, pin, port);
+
+		if (i < 0) {
+			if (popcount(gpiote_chan_mask) == GPIOTE_CH_NUM) {
+				return -EIO;
+			}
+
+			/* allocate a GPIOTE channel */
+			i = find_lsb_set(~gpiote_chan_mask) - 1;
+			gpiote_chan_mask |= BIT(i);
+		}
+
+		/* configure GPIOTE channel */
 		if (flags & GPIO_INT_EDGE) {
 			if (flags & GPIO_INT_DOUBLE_EDGE) {
 				config |= GPIOTE_CFG_POL_TOGG;
@@ -245,21 +217,6 @@ static int gpio_nrf5_config(struct device *dev,
 			/*@todo: use SENSE for this? */
 			return -ENOTSUP;
 		}
-		if (popcount(gpiote_chan_mask) == GPIOTE_CHAN_COUNT) {
-			return -EIO;
-		}
-
-		/* check if already allocated to replace */
-		int i = gpiote_find_channel(dev, pin, port);
-
-		if (i < 0) {
-			/* allocate a GPIOTE channel */
-			i = find_lsb_set(~gpiote_chan_mask) - 1;
-		}
-
-		gpiote_chan_mask |= BIT(i);
-
-		/* configure GPIOTE channel */
 		config |= GPIOTE_CFG_EVT;
 		config |= GPIOTE_CFG_PIN(pin);
 		config |= GPIOTE_CFG_PORT(port);
@@ -274,7 +231,7 @@ static int gpio_nrf5_config(struct device *dev,
 static int gpio_nrf5_read(struct device *dev,
 			  int access_op, u32_t pin, u32_t *value)
 {
-	volatile struct _gpio *gpio = GPIO_STRUCT(dev);
+	volatile NRF_GPIO_Type *gpio = GPIO_STRUCT(dev);
 
 	if (access_op == GPIO_ACCESS_BY_PIN) {
 		*value = (gpio->IN >> pin) & 0x1;
@@ -287,7 +244,7 @@ static int gpio_nrf5_read(struct device *dev,
 static int gpio_nrf5_write(struct device *dev,
 			   int access_op, u32_t pin, u32_t value)
 {
-	volatile struct _gpio *gpio = GPIO_STRUCT(dev);
+	volatile NRF_GPIO_Type *gpio = GPIO_STRUCT(dev);
 
 	if (access_op == GPIO_ACCESS_BY_PIN) {
 		if (value) { /* 1 */
@@ -315,7 +272,7 @@ static int gpio_nrf5_enable_callback(struct device *dev,
 				    int access_op, u32_t pin)
 {
 	if (access_op == GPIO_ACCESS_BY_PIN) {
-		volatile struct _gpiote *gpiote = (void *)NRF_GPIOTE_BASE;
+		volatile NRF_GPIOTE_Type *gpiote = (void *)NRF_GPIOTE_BASE;
 		struct gpio_nrf5_data *data = DEV_GPIO_DATA(dev);
 		int port = GPIO_PORT(dev);
 		int i;
@@ -341,7 +298,7 @@ static int gpio_nrf5_disable_callback(struct device *dev,
 				     int access_op, u32_t pin)
 {
 	if (access_op == GPIO_ACCESS_BY_PIN) {
-		volatile struct _gpiote *gpiote = (void *)NRF_GPIOTE_BASE;
+		volatile NRF_GPIOTE_Type *gpiote = (void *)NRF_GPIOTE_BASE;
 		struct gpio_nrf5_data *data = DEV_GPIO_DATA(dev);
 		int port = GPIO_PORT(dev);
 		int i;
@@ -377,7 +334,7 @@ DEVICE_DECLARE(gpio_nrf5_P1);
  */
 static void gpio_nrf5_port_isr(void *arg)
 {
-	volatile struct _gpiote *gpiote = (void *)NRF_GPIOTE_BASE;
+	volatile NRF_GPIOTE_Type *gpiote = (void *)NRF_GPIOTE_BASE;
 	struct gpio_nrf5_data *data;
 #if defined(CONFIG_GPIO_NRF5_P0)
 	u32_t int_status_p0 = 0;
@@ -389,7 +346,7 @@ static void gpio_nrf5_port_isr(void *arg)
 	u32_t enabled_int;
 	int i;
 
-	for (i = 0; i < GPIOTE_CHAN_COUNT; i++) {
+	for (i = GPIOTE_CH_BASE; i < GPIOTE_CH_NUM; i++) {
 		if (gpiote->EVENTS_IN[i]) {
 			int port = GPIOTE_CFG_PORT_GET(gpiote->CONFIG[i]);
 			int pin = GPIOTE_CFG_PIN_GET(gpiote->CONFIG[i]);
