@@ -73,7 +73,7 @@ extern "C" {
 #define K_HIGHEST_APPLICATION_THREAD_PRIO (K_HIGHEST_THREAD_PRIO)
 #define K_LOWEST_APPLICATION_THREAD_PRIO (K_LOWEST_THREAD_PRIO - 1)
 
-#ifdef CONFIG_WAITQ_FAST
+#ifdef CONFIG_WAITQ_SCALABLE
 
 typedef struct {
 	struct _priq_rb waitq;
@@ -406,7 +406,7 @@ struct _thread_base {
 		struct rbnode qnode_rb;
 	};
 
-#ifdef CONFIG_WAITQ_FAST
+#ifdef CONFIG_WAITQ_SCALABLE
 	/* wait queue on which the thread is pended (needed only for
 	 * trees, not dumb lists)
 	 */
@@ -1319,47 +1319,53 @@ __syscall void *k_thread_custom_data_get(void);
 
 /* kernel clocks */
 
-#if	(sys_clock_ticks_per_sec == 1000) || \
-	(sys_clock_ticks_per_sec == 500)  || \
-	(sys_clock_ticks_per_sec == 250)  || \
-	(sys_clock_ticks_per_sec == 125)  || \
-	(sys_clock_ticks_per_sec == 100)  || \
-	(sys_clock_ticks_per_sec == 50)   || \
-	(sys_clock_ticks_per_sec == 25)   || \
-	(sys_clock_ticks_per_sec == 20)   || \
-	(sys_clock_ticks_per_sec == 10)   || \
-	(sys_clock_ticks_per_sec == 1)
-
-	#define _ms_per_tick (MSEC_PER_SEC / sys_clock_ticks_per_sec)
-#else
-	/* yields horrible 64-bit math on many architectures: try to avoid */
+#ifdef CONFIG_SYS_CLOCK_EXISTS
+#if	(CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC % sys_clock_ticks_per_sec) != 0
+	#define _NEED_PRECISE_TICK_MS_CONVERSION
+#elif	(MSEC_PER_SEC % sys_clock_ticks_per_sec) != 0
 	#define _NON_OPTIMIZED_TICKS_PER_SEC
 #endif
 
-#ifdef _NON_OPTIMIZED_TICKS_PER_SEC
-extern s32_t _ms_to_ticks(s32_t ms);
-#else
-static ALWAYS_INLINE s32_t _ms_to_ticks(s32_t ms)
-{
-	return (s32_t)ceiling_fraction((u32_t)ms, _ms_per_tick);
-}
+#ifdef	_NON_OPTIMIZED_TICKS_PER_SEC
+	#define _NEED_PRECISE_TICK_MS_CONVERSION
+#endif
 #endif
 
-/* added tick needed to account for tick in progress */
-#ifdef CONFIG_TICKLESS_KERNEL
-#define _TICK_ALIGN 0
+static ALWAYS_INLINE s32_t _ms_to_ticks(s32_t ms)
+{
+#ifdef CONFIG_SYS_CLOCK_EXISTS
+
+#ifdef _NEED_PRECISE_TICK_MS_CONVERSION
+	/* use 64-bit math to keep precision */
+	s64_t ms_ticks_per_sec = (s64_t)ms * sys_clock_ticks_per_sec;
+
+	return (s32_t)ceiling_fraction(ms_ticks_per_sec, MSEC_PER_SEC);
 #else
-#define _TICK_ALIGN 1
+	/* simple division keeps precision */
+	s32_t ms_per_tick = MSEC_PER_SEC / sys_clock_ticks_per_sec;
+
+	return (s32_t)ceiling_fraction(ms, ms_per_tick);
 #endif
+
+#else
+	__ASSERT(ms == 0, "ms not zero");
+	return 0;
+#endif
+}
 
 static inline s64_t __ticks_to_ms(s64_t ticks)
 {
 #ifdef CONFIG_SYS_CLOCK_EXISTS
 
-#ifdef _NON_OPTIMIZED_TICKS_PER_SEC
-	return (MSEC_PER_SEC * (u64_t)ticks) / sys_clock_ticks_per_sec;
+#ifdef _NEED_PRECISE_TICK_MS_CONVERSION
+	/* use 64-bit math to keep precision */
+	return (u64_t)ticks * sys_clock_hw_cycles_per_tick * MSEC_PER_SEC /
+		CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC;
 #else
-	return (u64_t)ticks * _ms_per_tick;
+	/* simple multiplication keeps precision */
+	u32_t ms_per_tick = MSEC_PER_SEC / sys_clock_ticks_per_sec;
+
+	return (u64_t)ticks * ms_per_tick;
 #endif
 
 #else
@@ -1367,6 +1373,13 @@ static inline s64_t __ticks_to_ms(s64_t ticks)
 	return 0;
 #endif
 }
+
+/* added tick needed to account for tick in progress */
+#ifdef CONFIG_TICKLESS_KERNEL
+#define _TICK_ALIGN 0
+#else
+#define _TICK_ALIGN 1
+#endif
 
 struct k_timer {
 	/*
@@ -4586,6 +4599,7 @@ extern void _timer_expiration_handler(struct _timeout *t);
 #define K_THREAD_STACK_DEFINE(sym, size) _ARCH_THREAD_STACK_DEFINE(sym, size)
 #define K_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
 		_ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size)
+#define K_THREAD_STACK_LEN(size) _ARCH_THREAD_STACK_LEN(size)
 #define K_THREAD_STACK_MEMBER(sym, size) _ARCH_THREAD_STACK_MEMBER(sym, size)
 #define K_THREAD_STACK_SIZEOF(sym) _ARCH_THREAD_STACK_SIZEOF(sym)
 static inline char *K_THREAD_STACK_BUFFER(k_thread_stack_t *sym)
@@ -4623,6 +4637,19 @@ static inline char *K_THREAD_STACK_BUFFER(k_thread_stack_t *sym)
 	struct _k_thread_stack_element __noinit __aligned(STACK_ALIGN) sym[size]
 
 /**
+ * @brief Calculate size of stacks to be allocated in a stack array
+ *
+ * This macro calculates the size to be allocated for the stacks
+ * inside a stack array. It accepts the indicated "size" as a parameter
+ * and if required, pads some extra bytes (e.g. for MPU scenarios). Refer
+ * K_THREAD_STACK_ARRAY_DEFINE definition to see how this is used.
+ *
+ * @param size Size of the stack memory region
+ * @req K-TSTACK-001
+ */
+#define K_THREAD_STACK_LEN(size) (size)
+
+/**
  * @brief Declare a toplevel array of thread stack memory regions
  *
  * Create an array of equally sized stacks. See K_THREAD_STACK_DEFINE
@@ -4638,7 +4665,7 @@ static inline char *K_THREAD_STACK_BUFFER(k_thread_stack_t *sym)
  */
 #define K_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
 	struct _k_thread_stack_element __noinit \
-		__aligned(STACK_ALIGN) sym[nmemb][size]
+		__aligned(STACK_ALIGN) sym[nmemb][K_THREAD_STACK_LEN(size)]
 
 /**
  * @brief Declare an embedded stack memory region

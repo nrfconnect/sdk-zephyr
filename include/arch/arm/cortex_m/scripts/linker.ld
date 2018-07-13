@@ -8,7 +8,7 @@
  * @file
  * @brief Linker command/script file
  *
- * Linker script for the Cortex-M3 platform.
+ * Linker script for the Cortex-M platforms.
  */
 
 #define _LINKER
@@ -82,6 +82,8 @@ MEMORY
     /* Used by and documented in include/linker/intlist.ld */
     IDT_LIST  (wx)      : ORIGIN = (RAM_ADDR + RAM_SIZE), LENGTH = 2K
     }
+
+ENTRY(CONFIG_KERNEL_ENTRY)
 
 SECTIONS
     {

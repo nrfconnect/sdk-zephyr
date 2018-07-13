@@ -12,21 +12,25 @@
 #include <kernel_arch_func.h>
 #include <syscall_handler.h>
 
-#ifdef CONFIG_SCHED_DUMB
+#if defined(CONFIG_SCHED_DUMB)
 #define _priq_run_add		_priq_dumb_add
 #define _priq_run_remove	_priq_dumb_remove
 #define _priq_run_best		_priq_dumb_best
-#else
+#elif defined(CONFIG_SCHED_SCALABLE)
 #define _priq_run_add		_priq_rb_add
 #define _priq_run_remove	_priq_rb_remove
 #define _priq_run_best		_priq_rb_best
+#elif defined(CONFIG_SCHED_MULTIQ)
+#define _priq_run_add		_priq_mq_add
+#define _priq_run_remove	_priq_mq_remove
+#define _priq_run_best		_priq_mq_best
 #endif
 
-#ifdef CONFIG_WAITQ_FAST
+#if defined(CONFIG_WAITQ_SCALABLE)
 #define _priq_wait_add		_priq_rb_add
 #define _priq_wait_remove	_priq_rb_remove
 #define _priq_wait_best		_priq_rb_best
-#else
+#elif defined(CONFIG_WAITQ_DUMB)
 #define _priq_wait_add		_priq_dumb_add
 #define _priq_wait_remove	_priq_dumb_remove
 #define _priq_wait_best		_priq_dumb_best
@@ -62,10 +66,12 @@ static inline int is_metairq(struct k_thread *thread)
 #endif
 }
 
+#if CONFIG_ASSERT
 static inline int _is_thread_dummy(struct k_thread *thread)
 {
 	return !!(thread->base.thread_state & _THREAD_DUMMY);
 }
+#endif
 
 static inline int _is_idle(struct k_thread *thread)
 {
@@ -77,15 +83,6 @@ static inline int _is_idle(struct k_thread *thread)
 	return thread == _idle_thread;
 #endif
 }
-
-#ifdef _NON_OPTIMIZED_TICKS_PER_SEC
-s32_t _ms_to_ticks(s32_t ms)
-{
-	s64_t ms_ticks_per_sec = (s64_t)ms * sys_clock_ticks_per_sec;
-
-	return (s32_t)ceiling_fraction(ms_ticks_per_sec, MSEC_PER_SEC);
-}
-#endif
 
 int _is_t1_higher_prio_than_t2(struct k_thread *t1, struct k_thread *t2)
 {
@@ -273,7 +270,7 @@ static void pend(struct k_thread *thread, _wait_q_t *wait_q, s32_t timeout)
 	}
 
 	if (wait_q) {
-#ifdef CONFIG_WAITQ_FAST
+#ifdef CONFIG_WAITQ_SCALABLE
 		thread->base.pended_on = wait_q;
 #endif
 		_priq_wait_add(&wait_q->waitq, thread);
@@ -292,7 +289,7 @@ void _pend_thread(struct k_thread *thread, _wait_q_t *wait_q, s32_t timeout)
 
 static _wait_q_t *pended_on(struct k_thread *thread)
 {
-#ifdef CONFIG_WAITQ_FAST
+#ifdef CONFIG_WAITQ_SCALABLE
 	__ASSERT_NO_MSG(thread->base.pended_on);
 
 	return thread->base.pended_on;
@@ -323,7 +320,7 @@ void _unpend_thread_no_timeout(struct k_thread *thread)
 		_mark_thread_as_not_pending(thread);
 	}
 
-#if defined(CONFIG_ASSERT) && defined(CONFIG_WAITQ_FAST)
+#if defined(CONFIG_ASSERT) && defined(CONFIG_WAITQ_SCALABLE)
 	thread->base.pended_on = NULL;
 #endif
 }
@@ -557,6 +554,42 @@ struct k_thread *_priq_rb_best(struct _priq_rb *pq)
 	return CONTAINER_OF(n, struct k_thread, base.qnode_rb);
 }
 
+#ifdef CONFIG_SCHED_MULTIQ
+# if (K_LOWEST_THREAD_PRIO - K_HIGHEST_THREAD_PRIO) > 31
+# error Too many priorities for multiqueue scheduler (max 32)
+# endif
+#endif
+
+void _priq_mq_add(struct _priq_mq *pq, struct k_thread *thread)
+{
+	int priority_bit = thread->base.prio - K_HIGHEST_THREAD_PRIO;
+
+	sys_dlist_append(&pq->queues[priority_bit], &thread->base.qnode_dlist);
+	pq->bitmask |= (1 << priority_bit);
+}
+
+void _priq_mq_remove(struct _priq_mq *pq, struct k_thread *thread)
+{
+	int priority_bit = thread->base.prio - K_HIGHEST_THREAD_PRIO;
+
+	sys_dlist_remove(&thread->base.qnode_dlist);
+	if (sys_dlist_is_empty(&pq->queues[priority_bit])) {
+		pq->bitmask &= ~(1 << priority_bit);
+	}
+}
+
+struct k_thread *_priq_mq_best(struct _priq_mq *pq)
+{
+	if (!pq->bitmask) {
+		return NULL;
+	}
+
+	sys_dlist_t *l = &pq->queues[__builtin_ctz(pq->bitmask)];
+
+	return CONTAINER_OF(sys_dlist_peek_head(l),
+			    struct k_thread, base.qnode_dlist);
+}
+
 #ifdef CONFIG_TIMESLICING
 extern s32_t _time_slice_duration;    /* Measured in ms */
 extern s32_t _time_slice_elapsed;     /* Measured in ms */
@@ -642,12 +675,20 @@ void _sched_init(void)
 {
 #ifdef CONFIG_SCHED_DUMB
 	sys_dlist_init(&_kernel.ready_q.runq);
-#else
+#endif
+
+#ifdef CONFIG_SCHED_SCALABLE
 	_kernel.ready_q.runq = (struct _priq_rb) {
 		.tree = {
 			.lessthan_fn = _priq_rb_lessthan,
 		}
 	};
+#endif
+
+#ifdef CONFIG_SCHED_MULTIQ
+	for (int i = 0; i < ARRAY_SIZE(_kernel.ready_q.runq.queues); i++) {
+		sys_dlist_init(&_kernel.ready_q.runq.queues[i]);
+	}
 #endif
 }
 

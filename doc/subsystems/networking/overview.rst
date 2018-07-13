@@ -113,6 +113,9 @@ can be disabled if not needed.
   currently not supported by the websocket API.
   See :ref:`websocket-server-sample` for information how to use the API.
 
+* **Time Sensitive Networking.** The gPTP (generalized Precision Time Protocol)
+  is supported. See :ref:`gptp-support` for more details.
+
 Additionally these network technologies (link layers) are supported in
 Zephyr OS v1.7 and later:
 
@@ -126,10 +129,14 @@ Zephyr OS v1.7 and later:
 Source Tree Layout
 ******************
 
-The IP stack source code tree is organized as follows:
+The networking stack source code tree is organized as follows:
 
 ``subsys/net/ip/``
   This is where the IP stack code is located.
+
+``subsys/net/l2/``
+  This is where the IP stack layer 2 code is located. This includes generic
+  support for Bluetooth IPSP adaptation, Ethernet, IEEE 802.15.4 and WiFI.
 
 ``subsys/net/lib/``
   Application-level protocols (DNS, MQTT, etc.) and additional stack

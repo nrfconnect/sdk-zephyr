@@ -15,7 +15,6 @@
 
 #include <nrf_common.h>
 #include <nrf.h>
-#include <kernel_includes.h>
 
 /* Add include for DTS generated information */
 #include <generated_dts_board.h>
