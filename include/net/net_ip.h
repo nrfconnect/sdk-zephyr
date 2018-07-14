@@ -54,6 +54,13 @@ enum net_ip_protocol {
 	IPPROTO_ICMPV6 = 58,
 };
 
+/* Protocol numbers for TLS protocols */
+enum net_ip_protocol_secure {
+	IPPROTO_TLS_1_0 = 256,
+	IPPROTO_TLS_1_1 = 257,
+	IPPROTO_TLS_1_2 = 258,
+};
+
 /** Socket type */
 enum net_sock_type {
 	SOCK_STREAM = 1,
@@ -62,8 +69,10 @@ enum net_sock_type {
 
 #define ntohs(x) sys_be16_to_cpu(x)
 #define ntohl(x) sys_be32_to_cpu(x)
+#define ntohll(x) sys_be64_to_cpu(x)
 #define htons(x) sys_cpu_to_be16(x)
 #define htonl(x) sys_cpu_to_be32(x)
+#define htonll(x) sys_cpu_to_be64(x)
 
 /** IPv6 address structure */
 struct in6_addr {

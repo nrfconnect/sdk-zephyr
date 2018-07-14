@@ -66,7 +66,7 @@ zephyr_compile_definitions(
   __ZEPHYR__=1
 )
 
-if(NOT CONFIG_COVERAGE)
+if(NOT CONFIG_NO_OPTIMIZATIONS)
 zephyr_compile_definitions(
   _FORTIFY_SOURCE=2
 )
@@ -120,8 +120,6 @@ zephyr_compile_options(
 )
 
 zephyr_compile_options(
-  $<$<COMPILE_LANGUAGE:C>:-std=c99>
-
   $<$<COMPILE_LANGUAGE:CXX>:-std=c++11>
   $<$<COMPILE_LANGUAGE:CXX>:-fcheck-new>
   $<$<COMPILE_LANGUAGE:CXX>:-ffunction-sections>
@@ -230,9 +228,17 @@ zephyr_compile_options(${CONFIG_COMPILER_OPT_AS_LIST})
 
 # TODO: Include arch compiler options at this point.
 
-# TODO: This Clang check is broken
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
   zephyr_cc_option(
+    #FIXME: need to fix all of those
+    -Wno-sometimes-uninitialized
+    -Wno-shift-overflow
+    -Wno-missing-braces
+    -Wno-self-assign
+    -Wno-address-of-packed-member
+    -Wno-unused-function
+    -Wno-initializer-overrides
+    -Wno-section
     -Wno-unknown-warning-option
     -Wno-unused-variable
     -Wno-format-invalid-specifier
@@ -426,13 +432,20 @@ else()
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${syscalls_subdirs_txt})
 endif()
 
+# SYSCALL_INCLUDE_DIRECTORY will include the directories that needs to be
+# searched for syscall declarations if CONFIG_APPLICATION_DEFINED_SYSCALL is set
+if(CONFIG_APPLICATION_DEFINED_SYSCALL)
+  set(SYSCALL_INCLUDE_DIRECTORY --include ${APPLICATION_SOURCE_DIR})
+endif()
+
 add_custom_command(
   OUTPUT
   ${syscalls_json}
   COMMAND
   ${PYTHON_EXECUTABLE}
   ${ZEPHYR_BASE}/scripts/parse_syscalls.py
-  --include          ${ZEPHYR_BASE}/include        # Read files from this dir
+   --include          ${ZEPHYR_BASE}/include        # Read files from this dir
+  ${SYSCALL_INCLUDE_DIRECTORY}
   --json-file        ${syscalls_json}              # Write this file
   DEPENDS ${syscalls_subdirs_trigger} ${PARSE_SYSCALLS_HEADER_DEPENDS}
   )
@@ -705,13 +718,10 @@ set_property(TARGET
   ${ZEPHYR_INCLUDE_DIRS}
   )
 
-get_property(E_KERNEL_ENTRY GLOBAL PROPERTY E_KERNEL_ENTRY)
-
 set(zephyr_lnk
   ${LINKERFLAGPREFIX},-Map=${PROJECT_BINARY_DIR}/${KERNEL_MAP_NAME}
   -u_OffsetAbsSyms
   -u_ConfigAbsSyms
-  ${E_KERNEL_ENTRY}
   ${LINKERFLAGPREFIX},--start-group
   ${LINKERFLAGPREFIX},--whole-archive
   ${ZEPHYR_LIBS_PROPERTY}
@@ -991,6 +1001,13 @@ get_property(GKSF GLOBAL PROPERTY GENERATED_KERNEL_SOURCE_FILES)
 get_property(TOPT GLOBAL PROPERTY TOPT)
 set_ifndef(  TOPT -T)
 
+get_property(CSTD GLOBAL PROPERTY CSTD)
+set_ifndef(CSTD c99)
+
+zephyr_compile_options(
+  $<$<COMPILE_LANGUAGE:C>:-std=${CSTD}>
+)
+
 configure_file(
      $ENV{ZEPHYR_BASE}/include/arch/arm/cortex_m/scripts/app_data_alignment.ld
      ${PROJECT_BINARY_DIR}/include/generated/app_data_alignment.ld)
@@ -1127,19 +1144,19 @@ list_append_ifdef(CONFIG_CHECK_LINK_MAP
 list_append_ifdef(
   CONFIG_BUILD_OUTPUT_HEX
   post_build_commands
-  COMMAND ${CMAKE_OBJCOPY} -S -Oihex   -R .comment -R COMMON -R .eh_frame  ${KERNEL_ELF_NAME}    ${KERNEL_HEX_NAME}
+  COMMAND ${CMAKE_OBJCOPY} -S -Oihex --gap-fill 0xFF  -R .comment -R COMMON -R .eh_frame  ${KERNEL_ELF_NAME}    ${KERNEL_HEX_NAME}
   )
 
 list_append_ifdef(
   CONFIG_BUILD_OUTPUT_BIN
   post_build_commands
-  COMMAND ${CMAKE_OBJCOPY} -S -Obinary -R .comment -R COMMON -R .eh_frame  ${KERNEL_ELF_NAME}    ${KERNEL_BIN_NAME}
+  COMMAND ${CMAKE_OBJCOPY} -S -Obinary --gap-fill 0xFF -R .comment -R COMMON -R .eh_frame  ${KERNEL_ELF_NAME}    ${KERNEL_BIN_NAME}
   )
 
 list_append_ifdef(
   CONFIG_BUILD_OUTPUT_S19
   post_build_commands
-  COMMAND ${CMAKE_OBJCOPY} --srec-len 1 --output-target=srec ${KERNEL_ELF_NAME} ${KERNEL_S19_NAME}
+  COMMAND ${CMAKE_OBJCOPY} --gap-fill 0xFF --srec-len 1 --output-target=srec ${KERNEL_ELF_NAME} ${KERNEL_S19_NAME}
   )
 
 list_append_ifdef(

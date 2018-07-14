@@ -184,6 +184,8 @@ struct net_tcp;
 
 struct net_conn_handle;
 
+struct tls_context;
+
 /**
  * Note that we do not store the actual source IP address in the context
  * because the address is already be set in the network interface struct.
@@ -275,6 +277,11 @@ struct net_context {
 		struct k_fifo recv_q;
 		struct k_fifo accept_q;
 	};
+
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	/** TLS context information */
+	struct tls_context *tls;
+#endif /* CONFIG_NET_SOCKETS_SOCKOPT_TLS */
 #endif /* CONFIG_NET_SOCKETS */
 };
 
@@ -553,6 +560,58 @@ int net_context_ref(struct net_context *context);
  * @return The new reference count, zero if the context was destroyed
  */
 int net_context_unref(struct net_context *context);
+
+/**
+ * @brief Create IPv4 packet in provided net_pkt from context
+ *
+ * @param context Network context for a connection
+ * @param pkt Network packet
+ * @param src Source address, or NULL to choose a default
+ * @param dst Destination IPv4 address
+ *
+ * @return Return network packet that contains the IPv4 packet.
+ */
+#if defined(CONFIG_NET_IPV4)
+struct net_pkt *net_context_create_ipv4(struct net_context *context,
+					struct net_pkt *pkt,
+					const struct in_addr *src,
+					const struct in_addr *dst);
+#else
+static inline
+struct net_pkt *net_context_create_ipv4(struct net_context *context,
+					struct net_pkt *pkt,
+					const struct in_addr *src,
+					const struct in_addr *dst)
+{
+	return NULL;
+}
+#endif /* CONFIG_NET_IPV4 */
+
+/**
+ * @brief Create IPv6 packet in provided net_pkt from context
+ *
+ * @param context Network context for a connection
+ * @param pkt Network packet
+ * @param src Source address, or NULL to choose a default from context
+ * @param dst Destination IPv6 address
+ *
+ * @return Return network packet that contains the IPv6 packet.
+ */
+#if defined(CONFIG_NET_IPV6)
+struct net_pkt *net_context_create_ipv6(struct net_context *context,
+					struct net_pkt *pkt,
+					const struct in6_addr *src,
+					const struct in6_addr *dst);
+#else
+static inline
+struct net_pkt *net_context_create_ipv6(struct net_context *context,
+					struct net_pkt *pkt,
+					const struct in6_addr *src,
+					const struct in6_addr *dst)
+{
+	return NULL;
+}
+#endif /* CONFIG_NET_IPV6 */
 
 /**
  * @brief Assign a socket a local address.

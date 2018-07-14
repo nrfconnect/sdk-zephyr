@@ -6,6 +6,7 @@
 menuconfig PWM_NRFX
 	bool "nRF PWM nrfx driver"
 	depends on SOC_SERIES_NRF52X
+	select NRFX_PWM
 	help
 	  Enable support for nrfx Hardware PWM driver for nRF52 MCU series.
 
@@ -50,7 +51,6 @@ config PWM_0_NRF_CH1_PIN
 
 config PWM_0_NRF_CH1_INVERTED
 	bool "CH1 inverted"
-	default n
 	help
 	  Inverses the polarity.
 
@@ -121,7 +121,6 @@ config PWM_1_NRF_CH1_PIN
 
 config PWM_1_NRF_CH1_INVERTED
 	bool "CH1 inverted"
-	default n
 	help
 	  Inverses the polarity.
 
@@ -193,7 +192,6 @@ config PWM_2_NRF_CH1_PIN
 
 config PWM_2_NRF_CH1_INVERTED
 	bool "CH1 inverted"
-	default n
 	help
 	  Inverses the polarity.
 
@@ -264,7 +262,6 @@ config PWM_3_NRF_CH1_PIN
 
 config PWM_3_NRF_CH1_INVERTED
 	bool "CH1 inverted"
-	default n
 	help
 	  Inverses the polarity.
 

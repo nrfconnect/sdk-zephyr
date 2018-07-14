@@ -9,7 +9,6 @@
 menuconfig SENSOR
 	bool
 	prompt "Sensor Drivers"
-	default n
 	help
 	  Include sensor drivers in system config
 
@@ -37,6 +36,8 @@ config SENSOR_INIT_PRIORITY
 	  Sensor initialization priority.
 
 comment "Device Drivers"
+
+source "drivers/sensor/adt7420/Kconfig"
 
 source "drivers/sensor/adxl362/Kconfig"
 
