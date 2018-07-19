@@ -29,12 +29,29 @@ extern "C" {
 
 typedef u32_t (*timestamp_get_t)(void);
 
-/**
- * @brief Function for initializing logger core.
+/** @brief Function system initialization of the logger.
  *
- * @return 0 on success or error.
+ * Function is called during start up to allow logging before user can
+ * explicitly initialize the logger.
  */
-int log_init(void);
+void log_core_init(void);
+
+/**
+ * @brief Function for user initialization of the logger.
+ *
+ */
+void log_init(void);
+
+/**
+ * @brief Function for providing thread which is processing logs.
+ *
+ * See CONFIG_LOG_PROCESS_TRIGGER_THRESHOLD.
+ *
+ * @note Function has asserts and has no effect when CONFIG_LOG_PROCESS is set.
+ *
+ * @param process_tid Process thread id. Used to wake up the thread.
+ */
+void log_thread_set(k_tid_t process_tid);
 
 /**
  * @brief Function for providing timestamp function.
@@ -65,6 +82,13 @@ void log_panic(void);
  * @retval false No messages pending.
  */
 bool log_process(bool bypass);
+
+/**
+ * @brief Return number of buffered log messages.
+ *
+ * @return Number of currently buffered log messages.
+ */
+u32_t log_buffered_cnt(void);
 
 /** @brief Get number of independent logger sources (modules and instances)
  *
@@ -138,7 +162,7 @@ void log_backend_enable(struct log_backend const *const backend,
  */
 void log_backend_disable(struct log_backend const *const backend);
 
-#if defined(CONFIG_LOG) && CONFIG_LOG
+#if CONFIG_LOG
 #define LOG_INIT() log_init()
 #define LOG_PANIC() log_panic()
 #define LOG_PROCESS() log_process(false)

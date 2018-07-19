@@ -30,6 +30,7 @@
 #include <kernel_internal.h>
 #include <kswap.h>
 #include <entropy.h>
+#include <logging/log_ctrl.h>
 
 /* kernel build timestamp items */
 #define BUILD_TIMESTAMP "BUILD: " __DATE__ " " __TIME__
@@ -127,6 +128,7 @@ K_THREAD_STACK_DEFINE(_interrupt_stack3, CONFIG_ISR_STACK_SIZE);
 
 extern void idle(void *unused1, void *unused2, void *unused3);
 
+/* LCOV_EXCL_START */
 #if defined(CONFIG_INIT_STACKS) && defined(CONFIG_PRINTK)
 extern K_THREAD_STACK_DEFINE(sys_work_q_stack,
 			     CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE);
@@ -143,6 +145,7 @@ void k_call_stacks_analyze(void)
 #else
 void k_call_stacks_analyze(void) { }
 #endif
+/* LCOV_EXCL_STOP */
 
 /**
  *
@@ -458,6 +461,10 @@ FUNC_NORETURN void _Cstart(void)
 	 */
 
 	_IntLibInit();
+
+	if (IS_ENABLED(CONFIG_LOG)) {
+		log_core_init();
+	}
 
 	/* perform any architecture-specific initialization */
 	kernel_arch_init();
