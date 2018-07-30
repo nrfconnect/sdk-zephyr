@@ -56,6 +56,24 @@ typedef void (*bt_ready_cb_t)(int err);
  */
 int bt_enable(bt_ready_cb_t cb);
 
+/** @brief Set Bluetooth Device Name
+ *
+ *  Set Bluetooth GAP Device Name.
+ *
+ *  @param name New name
+ *
+ *  @return Zero on success or (negative) error code otherwise.
+ */
+int bt_set_name(const char *name);
+
+/** @brief Get Bluetooth Device Name
+ *
+ *  Get Bluetooth GAP Device Name.
+ *
+ *  @return Bluetooth Device Name
+ */
+const char *bt_get_name(void);
+
 /** @brief Set the local Identity Address
  *
  *  Allows setting the local Identity Address from the application.
@@ -136,6 +154,9 @@ enum {
 	 *           must be taken when using this option.
 	 */
 	BT_LE_ADV_OPT_USE_IDENTITY = BIT(2),
+
+	/* Advertise using GAP device name */
+	BT_LE_ADV_OPT_USE_NAME = BIT(3),
 };
 
 /** LE Advertising Parameters. */
@@ -167,8 +188,17 @@ struct bt_le_adv_param {
 				       BT_GAP_ADV_FAST_INT_MIN_2, \
 				       BT_GAP_ADV_FAST_INT_MAX_2)
 
+#define BT_LE_ADV_CONN_NAME BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONNECTABLE | \
+					    BT_LE_ADV_OPT_USE_NAME, \
+					    BT_GAP_ADV_FAST_INT_MIN_2, \
+					    BT_GAP_ADV_FAST_INT_MAX_2)
+
 #define BT_LE_ADV_NCONN BT_LE_ADV_PARAM(0, BT_GAP_ADV_FAST_INT_MIN_2, \
 					BT_GAP_ADV_FAST_INT_MAX_2)
+
+#define BT_LE_ADV_NCONN_NAME BT_LE_ADV_PARAM(BT_LE_ADV_OPT_USE_NAME, \
+					     BT_GAP_ADV_FAST_INT_MIN_2, \
+					     BT_GAP_ADV_FAST_INT_MAX_2)
 
 /** @brief Start advertising
  *

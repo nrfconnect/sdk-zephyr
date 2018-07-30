@@ -37,9 +37,9 @@ extern struct _static_thread_data _static_thread_data_list_end[];
 	     thread_data < _static_thread_data_list_end; \
 	     thread_data++)
 
-#if defined(CONFIG_THREAD_MONITOR)
 void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data)
 {
+#if defined(CONFIG_THREAD_MONITOR)
 	struct k_thread *thread;
 	unsigned int key;
 
@@ -56,10 +56,8 @@ void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data)
 		user_cb(thread, user_data);
 	}
 	irq_unlock(key);
-}
-#else
-void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data) { }
 #endif
+}
 
 int k_is_in_isr(void)
 {
@@ -314,6 +312,7 @@ void _setup_new_thread(struct k_thread *new_thread,
 	_k_object_init(new_thread);
 	_k_object_init(stack);
 	new_thread->stack_obj = stack;
+	new_thread->errno_location = (int *)K_THREAD_STACK_BUFFER(stack);
 
 	/* Any given thread has access to itself */
 	k_object_access_grant(new_thread, new_thread);
@@ -444,6 +443,7 @@ Z_SYSCALL_HANDLER(k_thread_create,
 #endif /* CONFIG_USERSPACE */
 #endif /* CONFIG_MULTITHREADING */
 
+/* LCOV_EXCL_START */
 int _impl_k_thread_cancel(k_tid_t tid)
 {
 	struct k_thread *thread = tid;
@@ -467,6 +467,7 @@ int _impl_k_thread_cancel(k_tid_t tid)
 #ifdef CONFIG_USERSPACE
 Z_SYSCALL_HANDLER1_SIMPLE(k_thread_cancel, K_OBJ_THREAD, struct k_thread *);
 #endif
+/* LCOV_EXCL_STOP */
 
 void _k_thread_single_suspend(struct k_thread *thread)
 {

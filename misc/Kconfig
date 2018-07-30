@@ -249,6 +249,13 @@ config BUILD_OUTPUT_STRIPPED
 	  Build a stripped binary. This will build a zephyr.stripped file need
 	  by some platforms.
 
+config APPLICATION_DEFINED_SYSCALL
+	bool "Scan application folder for any syscall definition"
+	default n
+	help
+	  Scan additional folders inside application source folder
+	  for application defined syscalls.
+
 endmenu
 endmenu
 
@@ -347,6 +354,15 @@ config BOOTLOADER_ESP_IDF
 	  This option will trigger the compilation of the ESP-IDF booloader
 	  inside the build folder.
 	  At flash time, the bootloader will be flashed with the zephyr image
+
+config REALMODE
+	bool
+	prompt "boot from x86 real mode"
+	default n
+	depends on X86
+	help
+	  This option enabled Zephyr to start in x86 real mode, instead of
+	  protected mode.
 
 config BOOTLOADER_KEXEC
 	bool

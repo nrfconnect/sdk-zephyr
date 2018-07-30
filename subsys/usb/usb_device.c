@@ -75,6 +75,7 @@
 #include <logging/sys_log.h>
 
 #include <usb/bos.h>
+#include <os_desc.h>
 
 #define MAX_DESC_HANDLERS           4 /** Device, interface, endpoint, other */
 
@@ -145,6 +146,8 @@ static struct usb_dev_priv {
 	s32_t data_buf_len;
 	/** Installed custom request handler */
 	usb_request_handler custom_req_handler;
+	/** Installed vendor request handler */
+	usb_request_handler vendor_req_handler;
 	/** USB stack status clalback */
 	usb_status_callback status_callback;
 	/** Pointer to registered descriptors */
@@ -198,7 +201,7 @@ static void usb_print_setup(struct usb_setup_packet *setup)
  * @return true if the request was handles successfully
  */
 static bool usb_handle_request(struct usb_setup_packet *setup,
-		s32_t *len, u8_t **data)
+			       s32_t *len, u8_t **data)
 {
 	u32_t type = REQTYPE_GET_TYPE(setup->bmRequestType);
 	usb_request_handler handler = usb_dev.req_handlers[type];
@@ -248,7 +251,7 @@ static void usb_data_to_host(void)
  * @return N/A
  */
 static void usb_handle_control_transfer(u8_t ep,
-		enum usb_dc_ep_cb_status_code ep_status)
+					enum usb_dc_ep_cb_status_code ep_status)
 {
 	u32_t chunk = 0;
 	u32_t type = 0;
@@ -262,7 +265,7 @@ static void usb_handle_control_transfer(u8_t ep,
 		 * reset request message state machine
 		 */
 		if (usb_dc_ep_read(ep,
-		    (u8_t *)setup, sizeof(*setup), NULL) < 0) {
+				   (u8_t *)setup, sizeof(*setup), NULL) < 0) {
 			SYS_LOG_DBG("Read Setup Packet failed\n");
 			usb_dc_ep_set_stall(USB_CONTROL_IN_EP0);
 			return;
@@ -271,6 +274,13 @@ static void usb_handle_control_transfer(u8_t ep,
 		/* Defaults for data pointer and residue */
 		type = REQTYPE_GET_TYPE(setup->bmRequestType);
 		usb_dev.data_buf = usb_dev.data_store[type];
+		if (!usb_dev.data_buf) {
+			SYS_LOG_DBG("buffer not available\n");
+			usb_dc_ep_set_stall(USB_CONTROL_OUT_EP0);
+			usb_dc_ep_set_stall(USB_CONTROL_IN_EP0);
+			return;
+		}
+
 		usb_dev.data_buf_residue = setup->wLength;
 		usb_dev.data_buf_len = setup->wLength;
 
@@ -282,7 +292,8 @@ static void usb_handle_control_transfer(u8_t ep,
 
 		/* Ask installed handler to process request */
 		if (!usb_handle_request(setup,
-		    &usb_dev.data_buf_len, &usb_dev.data_buf)) {
+					&usb_dev.data_buf_len,
+					&usb_dev.data_buf)) {
 			SYS_LOG_DBG("usb_handle_request failed\n");
 			usb_dc_ep_set_stall(USB_CONTROL_IN_EP0);
 			return;
@@ -290,7 +301,7 @@ static void usb_handle_control_transfer(u8_t ep,
 
 		/* Send smallest of requested and offered length */
 		usb_dev.data_buf_residue = min(usb_dev.data_buf_len,
-			    setup->wLength);
+					       setup->wLength);
 		/* Send first part (possibly a zero-length status message) */
 		usb_data_to_host();
 	} else if (ep == USB_CONTROL_OUT_EP0) {
@@ -298,7 +309,7 @@ static void usb_handle_control_transfer(u8_t ep,
 		if (usb_dev.data_buf_residue <= 0) {
 			/* absorb zero-length status message */
 			if (usb_dc_ep_read(USB_CONTROL_OUT_EP0,
-			    usb_dev.data_buf, 0, &chunk) < 0) {
+					   usb_dev.data_buf, 0, &chunk) < 0) {
 				SYS_LOG_DBG("Read DATA Packet failed\n");
 				usb_dc_ep_set_stall(USB_CONTROL_IN_EP0);
 			}
@@ -306,10 +317,11 @@ static void usb_handle_control_transfer(u8_t ep,
 		}
 
 		if (usb_dc_ep_read(USB_CONTROL_OUT_EP0,
-		    usb_dev.data_buf,
-		    usb_dev.data_buf_residue, &chunk) < 0) {
+				   usb_dev.data_buf,
+				   usb_dev.data_buf_residue, &chunk) < 0) {
 			SYS_LOG_DBG("Read DATA Packet failed\n");
 			usb_dc_ep_set_stall(USB_CONTROL_IN_EP0);
+			usb_dc_ep_set_stall(USB_CONTROL_OUT_EP0);
 			return;
 		}
 
@@ -320,7 +332,8 @@ static void usb_handle_control_transfer(u8_t ep,
 			type = REQTYPE_GET_TYPE(setup->bmRequestType);
 			usb_dev.data_buf = usb_dev.data_store[type];
 			if (!usb_handle_request(setup,
-			    &usb_dev.data_buf_len,	&usb_dev.data_buf)) {
+						&usb_dev.data_buf_len,
+						&usb_dev.data_buf)) {
 				SYS_LOG_DBG("usb_handle_request1 failed\n");
 				usb_dc_ep_set_stall(USB_CONTROL_IN_EP0);
 				return;
@@ -340,7 +353,6 @@ static void usb_handle_control_transfer(u8_t ep,
 	}
 }
 
-
 /*
  * @brief register a callback for handling requests
  *
@@ -351,7 +363,8 @@ static void usb_handle_control_transfer(u8_t ep,
  * @return N/A
  */
 static void usb_register_request_handler(s32_t type,
-		usb_request_handler handler, u8_t *data_store)
+					 usb_request_handler handler,
+					 u8_t *data_store)
 {
 	usb_dev.req_handlers[type] = handler;
 	usb_dev.data_store[type] = data_store;
@@ -726,11 +739,12 @@ static bool usb_handle_std_endpoint_req(struct usb_setup_packet *setup,
 		s32_t *len, u8_t **data_buf)
 {
 	u8_t *data = *data_buf;
+	u8_t ep = setup->wIndex;
 
 	switch (setup->bRequest) {
 	case REQ_GET_STATUS:
 		/* bit 0 = endpointed halted or not */
-		usb_dc_ep_is_stalled(setup->wIndex, &data[0]);
+		usb_dc_ep_is_stalled(ep, &data[0]);
 		data[1] = 0;
 		*len = 2;
 		break;
@@ -738,8 +752,11 @@ static bool usb_handle_std_endpoint_req(struct usb_setup_packet *setup,
 	case REQ_CLEAR_FEATURE:
 		if (setup->wValue == FEA_ENDPOINT_HALT) {
 			/* clear HALT by unstalling */
-			SYS_LOG_INF("... EP clear halt %x\n", setup->wIndex);
-			usb_dc_ep_clear_stall(setup->wIndex);
+			SYS_LOG_INF("... EP clear halt %x\n", ep);
+			usb_dc_ep_clear_stall(ep);
+			if (usb_dev.status_callback) {
+				usb_dev.status_callback(USB_DC_CLEAR_HALT, &ep);
+			}
 			break;
 		}
 		/* only ENDPOINT_HALT defined for endpoints */
@@ -748,8 +765,11 @@ static bool usb_handle_std_endpoint_req(struct usb_setup_packet *setup,
 	case REQ_SET_FEATURE:
 		if (setup->wValue == FEA_ENDPOINT_HALT) {
 			/* set HALT by stalling */
-			SYS_LOG_INF("--- EP SET halt %x\n", setup->wIndex);
-			usb_dc_ep_set_stall(setup->wIndex);
+			SYS_LOG_INF("--- EP SET halt %x\n", ep);
+			usb_dc_ep_set_stall(ep);
+			if (usb_dev.status_callback) {
+				usb_dev.status_callback(USB_DC_SET_HALT, &ep);
+			}
 			break;
 		}
 		/* only ENDPOINT_HALT defined for endpoints */
@@ -780,11 +800,15 @@ static bool usb_handle_std_endpoint_req(struct usb_setup_packet *setup,
  * @return true if the request was handled successfully
  */
 static int usb_handle_standard_request(struct usb_setup_packet *setup,
-		s32_t *len, u8_t **data_buf)
+				       s32_t *len, u8_t **data_buf)
 {
 	int rc = 0;
 
 	if (!usb_handle_bos(setup, len, data_buf)) {
+		return 0;
+	}
+
+	if (!usb_handle_os_desc(setup, len, data_buf)) {
 		return 0;
 	}
 
@@ -813,6 +837,23 @@ static int usb_handle_standard_request(struct usb_setup_packet *setup,
 	return rc;
 }
 
+static int usb_handle_vendor_request(struct usb_setup_packet *setup,
+				     s32_t *len, u8_t **data_buf)
+{
+	SYS_LOG_DBG("\n");
+
+	if (usb_os_desc_enabled()) {
+		if (!usb_handle_os_desc_feature(setup, len, data_buf)) {
+			return 0;
+		}
+	}
+
+	if (usb_dev.vendor_req_handler) {
+		return usb_dev.vendor_req_handler(setup, len, data_buf);
+	}
+
+	return -ENOTSUP;
+}
 
 /*
  * @brief Registers a callback for custom device requests
@@ -887,20 +928,28 @@ int usb_set_config(struct usb_cfg_data *config)
 
 	/* register standard request handler */
 	usb_register_request_handler(REQTYPE_TYPE_STANDARD,
-	    &(usb_handle_standard_request), usb_dev.std_req_data);
+				     usb_handle_standard_request,
+				     usb_dev.std_req_data);
 
 	/* register class request handlers for each interface*/
 	if (config->interface.class_handler != NULL) {
 		usb_register_request_handler(REQTYPE_TYPE_CLASS,
-		    config->interface.class_handler,
-		    config->interface.payload_data);
+					     config->interface.class_handler,
+					     config->interface.payload_data);
 	}
-	/* register vendor request handlers */
-	if (config->interface.vendor_handler) {
+
+	/* register vendor request handler */
+	if (config->interface.vendor_handler || usb_os_desc_enabled()) {
 		usb_register_request_handler(REQTYPE_TYPE_VENDOR,
-					     config->interface.vendor_handler,
+					     usb_handle_vendor_request,
 					     config->interface.vendor_data);
+
+		if (config->interface.vendor_handler) {
+			usb_dev.vendor_req_handler =
+				config->interface.vendor_handler;
+		}
 	}
+
 	/* register class request handlers for each interface*/
 	if (config->interface.custom_handler != NULL) {
 		usb_register_custom_req_handler(
@@ -1392,12 +1441,19 @@ static int vendor_handler(struct usb_setup_packet *pSetup,
 	SYS_LOG_DBG("bRequest 0x%x, wIndex 0x%x",
 		    pSetup->bRequest, pSetup->wIndex);
 
+	if (usb_os_desc_enabled()) {
+		if (!usb_handle_os_desc_feature(pSetup, len, data)) {
+			return 0;
+		}
+	}
+
 	for (size_t i = 0; i < size; i++) {
 		iface = &(__usb_data_start[i].interface);
 		if_descr = __usb_data_start[i].interface_descriptor;
-		if ((iface->vendor_handler) &&
-		    (if_descr->bInterfaceNumber == pSetup->wIndex)) {
-			return iface->vendor_handler(pSetup, len, data);
+		if (iface->vendor_handler) {
+			if (!iface->vendor_handler(pSetup, len, data)) {
+				return 0;
+			}
 		}
 	}
 

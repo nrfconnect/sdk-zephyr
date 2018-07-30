@@ -1,3 +1,5 @@
+.. _gptp-support:
+
 gPTP stack for Zephyr
 #####################
 
@@ -48,8 +50,8 @@ Application interfaces
 Only two Application Interfaces as defined in section 9 of the standard
 are available:
 
-- ClockTargetPhaseDiscontinuity interface (:cpp:func:`gptp_event_capture()`)
-- ClockTargetEventCapture interface (:cpp:func:`gptp_register_phase_dis_cb()`)
+- ClockTargetPhaseDiscontinuity interface (:cpp:func:`gptp_register_phase_dis_cb()`)
+- ClockTargetEventCapture interface  (:cpp:func:`gptp_event_capture()`)
 
 Function prototypes can be found in :file:`include/net/gptp.h` and in the
 :ref:`networking_api` documentation.
@@ -58,7 +60,8 @@ Testing
 *******
 
 The stack has been informally tested using the OpenAVB gPTP and
-Linux ptp4l daemons.
+Linux ptp4l daemons. The :ref:`gptp-sample` sample application from the Zephyr
+source distribution can be used for testing.
 
 .. _IEEE 802.1AS-2011 standard:
    https://standards.ieee.org/findstds/standard/802.1AS-2011.html

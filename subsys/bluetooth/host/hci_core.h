@@ -36,6 +36,7 @@ enum {
 	BT_DEV_PUB_KEY_BUSY,
 
 	BT_DEV_ADVERTISING,
+	BT_DEV_ADVERTISING_NAME,
 	BT_DEV_KEEP_ADVERTISING,
 	BT_DEV_SCANNING,
 	BT_DEV_EXPLICIT_SCAN,
@@ -163,6 +164,9 @@ struct bt_dev {
 	/* Work used for RPA rotation */
 	struct k_delayed_work rpa_update;
 #endif
+
+	/* Local Name */
+	char			name[CONFIG_BT_DEVICE_NAME_MAX];
 };
 
 extern struct bt_dev bt_dev;

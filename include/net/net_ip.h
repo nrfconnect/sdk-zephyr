@@ -54,6 +54,13 @@ enum net_ip_protocol {
 	IPPROTO_ICMPV6 = 58,
 };
 
+/* Protocol numbers for TLS protocols */
+enum net_ip_protocol_secure {
+	IPPROTO_TLS_1_0 = 256,
+	IPPROTO_TLS_1_1 = 257,
+	IPPROTO_TLS_1_2 = 258,
+};
+
 /** Socket type */
 enum net_sock_type {
 	SOCK_STREAM = 1,
@@ -126,19 +133,12 @@ struct sockaddr_in_ptr {
 	struct in_addr		*sin_addr;     /* IPv4 address */
 };
 
-#if defined(CONFIG_NET_IPV6)
-#define NET_SOCKADDR_MAX_SIZE (sizeof(struct sockaddr_in6))
-#define NET_SOCKADDR_PTR_MAX_SIZE (sizeof(struct sockaddr_in6_ptr))
-#elif defined(CONFIG_NET_IPV4)
+#if defined(CONFIG_NET_IPV4) && !defined(CONFIG_NET_IPV6)
 #define NET_SOCKADDR_MAX_SIZE (sizeof(struct sockaddr_in))
 #define NET_SOCKADDR_PTR_MAX_SIZE (sizeof(struct sockaddr_in_ptr))
 #else
-#if !defined(CONFIG_NET_RAW_MODE)
-#error "Either IPv6 or IPv4 needs to be selected."
-#else
 #define NET_SOCKADDR_MAX_SIZE (sizeof(struct sockaddr_in6))
 #define NET_SOCKADDR_PTR_MAX_SIZE (sizeof(struct sockaddr_in6_ptr))
-#endif
 #endif
 
 struct sockaddr {

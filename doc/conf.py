@@ -17,13 +17,17 @@ import os
 
 if "ZEPHYR_BASE" not in os.environ:
     sys.exit("$ZEPHYR_BASE environment variable undefined.")
-ZEPHYR_BASE = os.environ["ZEPHYR_BASE"]
+ZEPHYR_BASE = os.path.abspath(os.environ["ZEPHYR_BASE"])
+
+if "ZEPHYR_BUILD" not in os.environ:
+    sys.exit("$ZEPHYR_BUILD environment variable undefined.")
+ZEPHYR_BUILD = os.path.abspath(os.environ["ZEPHYR_BUILD"])
 
 # Add the 'extensions' directory to sys.path, to enable finding Sphinx
 # extensions within.
-sys.path.insert(0, os.path.join(os.path.abspath('.'), 'extensions'))
+sys.path.insert(0, os.path.join(ZEPHYR_BASE, 'doc', 'extensions'))
 # Also add west, to be able to pull in its API docs.
-sys.path.append(os.path.abspath(os.path.join(ZEPHYR_BASE, 'scripts', 'meta')))
+sys.path.append(os.path.join(ZEPHYR_BASE, 'scripts', 'meta'))
 
 # -- General configuration ------------------------------------------------
 
@@ -149,14 +153,14 @@ try:
     import sphinx_rtd_theme
 except ImportError:
     html_theme = 'zephyr'
-    html_theme_path = ['./themes']
+    html_theme_path = ['{}/doc/themes'.format(ZEPHYR_BASE)]
 else:
     html_theme = "sphinx_rtd_theme"
     html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
 if tags.has('daily') or tags.has('release'):
     html_theme = 'zephyr-docs-theme'
-    html_theme_path = ['./themes']
+    html_theme_path = ['{}/doc/themes'.format(ZEPHYR_BASE)]
 
 
 if tags.has('release'):
@@ -179,17 +183,17 @@ html_title = "Zephyr Project Documentation"
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-#html_logo = None
+html_logo = 'images/zephyr_logo_line_small.png'
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
 # pixels large.
-#html_favicon = None
+html_favicon = 'images/zp_favicon.png'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['static']
+html_static_path = ['{}/doc/static'.format(ZEPHYR_BASE)]
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
@@ -341,8 +345,8 @@ texinfo_documents = [
 #texinfo_no_detailmenu = False
 
 breathe_projects = {
-    "Zephyr": "doxygen/xml",
-    "doc-examples": "doxygen/xml"
+    "Zephyr": "{}/doxygen/xml".format(ZEPHYR_BUILD),
+    "doc-examples": "{}/doxygen/xml".format(ZEPHYR_BUILD)
 }
 breathe_default_project = "Zephyr"
 
@@ -359,6 +363,14 @@ html_context = {
     'show_license': html_show_license,
     'docs_title': docs_title,
     'is_release': is_release,
+    'theme_logo_only': True,
+    'current_version': version,
+    'versions': ( ("latest", "/"),
+                 ("1.12.0", "/1.12.0/"),
+                 ("1.11.0", "/1.11.0/"),
+                 ("1.10.0", "/1.10.0/"),
+                 ("1.9.2", "/1.9.0/"),
+                )
 }
 
 extlinks = {'jira': ('https://jira.zephyrproject.org/browse/%s', ''),

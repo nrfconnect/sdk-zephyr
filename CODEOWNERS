@@ -61,6 +61,8 @@ boards/xtensa/                           @andrewboie @ramakrishnapallala
 cmake/                                   @nashif @SebastianBoe
 /CMakeLists.txt                          @nashif @SebastianBoe
 doc/                                     @dbkinder
+doc/CMakeLists.txt                       @carlescufi
+doc/scripts/*                            @carlescufi
 doc/subsystems/bluetooth/                @sjanc @jhedberg @Vudentz
 drivers/*/*mcux*                         @MaureenHelm
 drivers/*/*qmsi*                         @nashif
@@ -80,7 +82,7 @@ drivers/interrupt_controller/*           @andrewboie
 drivers/led/*                            @Mani-Sadhasivam
 drivers/led_strip/*                      @mbolivar
 drivers/pinmux/stm32/*                   @rsalveti @idlethread
-drivers/sensor/*                         @bogdan-davidoaia
+drivers/sensor/                          @bogdan-davidoaia @MaureenHelm
 drivers/serial/uart_altera_jtag_hal.c    @ramakrishnapallala
 drivers/serial/uart_riscv_qemu.c         @fractalclone @kgugala @pgielda
 drivers/net/slip.c                       @jukkar @tbursztyka

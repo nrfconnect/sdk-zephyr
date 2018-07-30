@@ -184,6 +184,8 @@ struct net_tcp;
 
 struct net_conn_handle;
 
+struct tls_context;
+
 /**
  * Note that we do not store the actual source IP address in the context
  * because the address is already be set in the network interface struct.
@@ -209,14 +211,6 @@ struct net_context {
 	/** Remote IP address. Note that the values are in network byte order.
 	 */
 	struct sockaddr remote;
-
-	/** Option values */
-	struct {
-#if defined(CONFIG_NET_CONTEXT_PRIORITY)
-		/** Priority of the network data sent via this net_context */
-		u8_t priority;
-#endif
-	} options;
 
 	/** Connection handle */
 	struct net_conn_handle *conn_handler;
@@ -246,19 +240,6 @@ struct net_context {
 	net_pkt_get_pool_func_t data_pool;
 #endif /* CONFIG_NET_CONTEXT_NET_PKT_POOL */
 
-#if defined(CONFIG_NET_CONTEXT_SYNC_RECV)
-	/**
-	 * Semaphore to signal synchronous recv call completion.
-	 */
-	struct k_sem recv_data_wait;
-#endif /* CONFIG_NET_CONTEXT_SYNC_RECV */
-
-	/** Network interface assigned to this context */
-	u8_t iface;
-
-	/** Flags for the context */
-	u8_t flags;
-
 #if defined(CONFIG_NET_TCP)
 	/** TCP connection information */
 	struct net_tcp *tcp;
@@ -269,13 +250,44 @@ struct net_context {
 	void *net_app;
 #endif /* CONFIG_NET_APP */
 
+#if defined(CONFIG_NET_CONTEXT_SYNC_RECV)
+	/**
+	 * Semaphore to signal synchronous recv call completion.
+	 */
+	struct k_sem recv_data_wait;
+#endif /* CONFIG_NET_CONTEXT_SYNC_RECV */
+
 #if defined(CONFIG_NET_SOCKETS)
 	/** Per-socket packet or connection queues */
 	union {
 		struct k_fifo recv_q;
 		struct k_fifo accept_q;
 	};
+
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	/** TLS context information */
+	struct tls_context *tls;
+#endif /* CONFIG_NET_SOCKETS_SOCKOPT_TLS */
 #endif /* CONFIG_NET_SOCKETS */
+
+#if defined(CONFIG_NET_OFFLOAD)
+	/** context for use by offload drivers */
+	void *offload_context;
+#endif /* CONFIG_NET_OFFLOAD */
+
+	/** Option values */
+	struct {
+#if defined(CONFIG_NET_CONTEXT_PRIORITY)
+		/** Priority of the network data sent via this net_context */
+		u8_t priority;
+#endif
+	} options;
+
+	/** Network interface assigned to this context */
+	u8_t iface;
+
+	/** Flags for the context */
+	u8_t flags;
 };
 
 static inline bool net_context_is_used(struct net_context *context)

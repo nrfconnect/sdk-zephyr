@@ -19,7 +19,7 @@ struct device *button_device[4];
 static struct k_work button_work;
 
 static void button_pressed(struct device *dev,
-			   struct gpio_callback *cb, uint32_t pins)
+			   struct gpio_callback *cb, u32_t pins)
 {
 	k_work_submit(&button_work);
 }
@@ -101,7 +101,7 @@ void update_light_state(void)
 
 	printk("power-> %d, color-> %d\n", power, color);
 
-	if (gen_onoff_srv_root_user_data.onoff == 0x01) {
+	if (gen_onoff_srv_root_user_data.onoff == STATE_ON) {
 		/* LED1 On */
 		gpio_pin_write(led_device[0], LED0_GPIO_PIN, 0);
 	} else {
@@ -143,4 +143,6 @@ void main(void)
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
 	}
+
+	randomize_publishers_TID();
 }

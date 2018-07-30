@@ -6,6 +6,7 @@
 
 #include <logging/log_output.h>
 #include <logging/log_ctrl.h>
+#include <assert.h>
 #include <ctype.h>
 
 #define HEXDUMP_BYTES_IN_LINE 8
@@ -23,8 +24,8 @@
 static const char *const severity[] = {
 	NULL,
 	"err",
-	"warn",
-	"info",
+	"wrn",
+	"inf",
 	"dbg"
 };
 
@@ -89,7 +90,7 @@ static int timestamp_print(struct log_msg *msg,
 
 	if (!format) {
 		length = print(ctx, "[%08lu] ", timestamp);
-	} else {
+	} else if (freq) {
 		u32_t reminder;
 		u32_t seconds;
 		u32_t hours;
@@ -110,6 +111,8 @@ static int timestamp_print(struct log_msg *msg,
 
 		length = print(ctx, "[%02d:%02d:%02d.%03d,%03d] ",
 			       hours, mins, seconds, ms, us);
+	} else {
+		length = 0;
 	}
 
 	return length;
@@ -210,6 +213,39 @@ static void std_print(struct log_msg *msg,
 		      log_msg_arg_get(msg, 4),
 		      log_msg_arg_get(msg, 5));
 		break;
+	case 7:
+		print(ctx, str,
+		      log_msg_arg_get(msg, 0),
+		      log_msg_arg_get(msg, 1),
+		      log_msg_arg_get(msg, 2),
+		      log_msg_arg_get(msg, 3),
+		      log_msg_arg_get(msg, 4),
+		      log_msg_arg_get(msg, 5),
+		      log_msg_arg_get(msg, 6));
+		break;
+	case 8:
+		print(ctx, str,
+		      log_msg_arg_get(msg, 0),
+		      log_msg_arg_get(msg, 1),
+		      log_msg_arg_get(msg, 2),
+		      log_msg_arg_get(msg, 3),
+		      log_msg_arg_get(msg, 4),
+		      log_msg_arg_get(msg, 5),
+		      log_msg_arg_get(msg, 6),
+		      log_msg_arg_get(msg, 7));
+		break;
+	case 9:
+		print(ctx, str,
+		      log_msg_arg_get(msg, 0),
+		      log_msg_arg_get(msg, 1),
+		      log_msg_arg_get(msg, 2),
+		      log_msg_arg_get(msg, 3),
+		      log_msg_arg_get(msg, 4),
+		      log_msg_arg_get(msg, 5),
+		      log_msg_arg_get(msg, 6),
+		      log_msg_arg_get(msg, 7),
+		      log_msg_arg_get(msg, 8));
+		break;
 	}
 }
 
@@ -276,15 +312,17 @@ static void hexdump_print(struct log_msg *msg,
 static void raw_string_print(struct log_msg *msg,
 			     struct log_output_ctx *ctx)
 {
+	assert(ctx->length);
+
 	size_t offset = 0;
 	size_t length;
 
-	while (length > 0) {
+	do {
 		length = ctx->length;
 		log_msg_hexdump_data_get(msg, ctx->data, &length, offset);
 		offset += length;
 		ctx->func(ctx->data, length, ctx->ctx);
-	}
+	} while (length > 0);
 
 	print(ctx, "\r");
 }

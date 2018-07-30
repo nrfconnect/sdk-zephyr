@@ -181,6 +181,8 @@ from xml.sax.saxutils import escape
 from collections import OrderedDict
 from itertools import islice
 from functools import cmp_to_key
+from pathlib import Path
+from distutils.spawn import find_executable
 
 import logging
 from sanity_chk import scl
@@ -302,17 +304,21 @@ class Handler:
         """
         self.lock = threading.Lock()
         self.state = "waiting"
+        self.run = False
         self.metrics = {}
         self.metrics["handler_time"] = 0
         self.metrics["ram_size"] = 0
         self.metrics["rom_size"] = 0
+
+        self.binary = None
+        self.call_make_run = False
 
         self.name = instance.name
         self.instance = instance
         self.timeout = instance.test.timeout
         self.sourcedir = instance.test.code_location
         self.outdir = instance.outdir
-        self.handler_log = os.path.join(self.outdir, "handler.log")
+        self.log = os.path.join(self.outdir, "handler.log")
         self.returncode = 0
         self.set_state("running", {})
 
@@ -328,6 +334,77 @@ class Handler:
         self.lock.release()
         return ret
 
+class BinaryHandler(Handler):
+    def __init__(self, instance):
+        """Constructor
+
+        @param instance Test Instance
+        """
+        super().__init__(instance)
+
+        self.valgrind = False
+
+    def _output_reader(self, proc, harness):
+        log_out_fp = open(self.log, "wt")
+        for line in iter(proc.stdout.readline, b''):
+            verbose("OUTPUT: {0}".format(line.decode('utf-8').rstrip()))
+            log_out_fp.write(line.decode('utf-8'))
+            log_out_fp.flush()
+            harness.handle(line.decode('utf-8').rstrip())
+            if harness.state:
+                proc.terminate()
+                break
+
+        log_out_fp.close()
+
+    def handle(self):
+        out_state = "failed"
+
+        harness_name = self.instance.test.harness.capitalize()
+        harness_import = HarnessImporter(harness_name)
+        harness = harness_import.instance
+        harness.configure(self.instance)
+
+        if self.call_make_run:
+            if options.ninja:
+                generator_cmd = "ninja"
+            else:
+                generator_cmd = "make"
+            command = [generator_cmd, "-C", self.outdir, "run"]
+        else:
+            command = [self.binary]
+
+        if shutil.which("valgrind") and self.valgrind:
+            command = ["valgrind", "--error-exitcode=2",
+                       "--leak-check=full"] + command
+
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+            t = threading.Thread(target=self._output_reader, args=(proc, harness, ))
+            t.start()
+            t.join(self.timeout)
+            if t.is_alive():
+                proc.terminate()
+                out_state = "timeout"
+                t.join()
+
+            proc.wait()
+            self.returncode = proc.returncode
+            if proc.returncode != 0:
+                out_state = "failed"
+
+        if options.enable_coverage:
+            returncode = subprocess.call(["GCOV_PREFIX=" + self.outdir,
+                "gcov", self.sourcedir, "-b", "-s", self.outdir], shell=True)
+
+        # FIME: This is needed when killing the simulator, the console is
+        # garbled and needs to be reset. Did not find a better way to do that.
+
+        subprocess.call(["stty", "sane"])
+        self.instance.results = harness.tests
+        if harness.state:
+            self.set_state(harness.state, {})
+        else:
+            self.set_state(out_state, {})
 
 class DeviceHandler(Handler):
 
@@ -339,7 +416,7 @@ class DeviceHandler(Handler):
         super().__init__(instance)
 
     def monitor_serial(self, ser, harness):
-        log_out_fp = open(self.handler_log, "wt")
+        log_out_fp = open(self.log, "wt")
 
         while ser.isOpen():
             try:
@@ -414,105 +491,6 @@ class DeviceHandler(Handler):
             self.set_state(harness.state, {})
         else:
             self.set_state(out_state, {})
-
-class NativeHandler(Handler):
-    def __init__(self, instance):
-        """Constructor
-
-        @param instance Test Instance
-        """
-        super().__init__(instance)
-
-        self.valgrind = False
-
-    def _output_reader(self, proc, harness):
-        log_out_fp = open(self.handler_log, "wt")
-        for line in iter(proc.stdout.readline, b''):
-            verbose("NATIVE: {0}".format(line.decode('utf-8').rstrip()))
-            log_out_fp.write(line.decode('utf-8'))
-            log_out_fp.flush()
-            harness.handle(line.decode('utf-8').rstrip())
-            if harness.state:
-                proc.terminate()
-                break
-
-        log_out_fp.close()
-
-    def handle(self):
-        out_state = "failed"
-
-        harness_name = self.instance.test.harness.capitalize()
-        harness_import = HarnessImporter(harness_name)
-        harness = harness_import.instance
-        harness.configure(self.instance)
-
-        binary = os.path.join(self.outdir, "zephyr", "zephyr.exe")
-        command = [binary]
-        if shutil.which("valgrind") and self.valgrind:
-            command = ["valgrind", "--error-exitcode=2",
-                       "--leak-check=full"] + command
-
-        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
-            t = threading.Thread(target=self._output_reader, args=(proc, harness, ))
-            t.start()
-            t.join(self.timeout)
-            if t.is_alive():
-                proc.terminate()
-                out_state = "timeout"
-                t.join()
-
-            proc.wait()
-            self.returncode = proc.returncode
-            if proc.returncode != 0:
-                out_state = "failed"
-
-        returncode = subprocess.call(["GCOV_PREFIX=" + self.outdir, "gcov", self.sourcedir, "-b", "-s", self.outdir], shell=True)
-
-
-        self.instance.results = harness.tests
-        if harness.state:
-            self.set_state(harness.state, {})
-        else:
-            self.set_state(out_state, {})
-
-
-class UnitHandler(Handler):
-    def __init__(self, instance):
-        """Constructor
-
-        @param instance Test instance
-        """
-        super().__init__(instance)
-
-
-    def handle(self):
-        out_state = "failed"
-
-        with open(self.handler_log, "wt") as hl:
-            try:
-                binary = os.path.join(self.outdir, "testbinary")
-                command = [binary]
-                if shutil.which("valgrind"):
-                    command = ["valgrind", "--error-exitcode=2",
-                               "--leak-check=full"] + command
-                returncode = subprocess.call(command, timeout=self.timeout,
-                                             stdout=hl, stderr=hl)
-                self.returncode = returncode
-                if returncode != 0:
-                    if self.returncode == 1:
-                        out_state = "failed"
-                    else:
-                        out_state = "failed valgrind"
-                else:
-                    out_state = "passed"
-            except subprocess.TimeoutExpired:
-                out_state = "timeout"
-                self.returncode = 1
-
-        returncode = subprocess.call(
-            ["GCOV_PREFIX=" + self.outdir, "gcov", self.sourcedir, "-s", self.outdir], shell=True)
-
-        self.set_state(out_state, {})
 
 
 class QEMUHandler(Handler):
@@ -618,6 +596,7 @@ class QEMUHandler(Handler):
         super().__init__(instance)
 
         self.results = {}
+        self.run = True
 
         # We pass this to QEMU which looks for fifos with .in and .out
         # suffixes.
@@ -627,7 +606,7 @@ class QEMUHandler(Handler):
         if os.path.exists(self.pid_fn):
             os.unlink(self.pid_fn)
 
-        self.log_fn = self.handler_log
+        self.log_fn = self.log
 
         harness_import = HarnessImporter(instance.test.harness.capitalize())
         harness = harness_import.instance
@@ -662,7 +641,7 @@ class SizeCalculator:
                    "kobject_data", "mmu_tables", "app_pad", "priv_stacks",
                    "ccm_data", "usb_descriptor", "usb_data", "usb_bos_desc",
                    'log_backends_sections', 'log_dynamic_sections',
-                   'log_const_sections']
+                   'log_const_sections',"app_smem"]
     # These get copied into RAM only on non-XIP
     ro_sections = ["text", "ctors", "init_array", "reset", "object_access",
                    "rodata", "devconfig", "net_l2", "vector", "_bt_settings_area"]
@@ -946,18 +925,9 @@ class MakeGenerator:
     def _get_rule_footer(self, name):
         return MakeGenerator.GOAL_FOOTER_TMPL.format(goal=name)
 
-    def _add_goal(self, outdir):
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-
-    def add_instance_build_goal(self, instance, args, buildlog, make_args=""):
-
-        self.add_build_goal(instance.name, instance.test.code_location,
-                instance.outdir, args, buildlog, make_args)
-
     def add_build_goal(self, name, directory, outdir,
                        args, buildlog, make_args=""):
-        """Add a goal to invoke a Kbuild session
+        """Add a goal to invoke a build session
 
         @param name A unique string name for this build goal. The results
             dictionary returned by execute() will be keyed by this name.
@@ -968,46 +938,29 @@ class MakeGenerator:
         @param args Extra command line arguments to pass to 'cmake', typically
             environment variables or specific Make goals
         """
-        self._add_goal(outdir)
-        build_logfile = os.path.join(outdir, buildlog)
-        text = (
-            self._get_rule_header(name) +
-            self._get_sub_make(
-                name,
-                "building",
-                directory,
-                outdir,
-                build_logfile,
-                args,
-                make_args=make_args) +
-            self._get_rule_footer(name))
-        self.goals[name] = MakeGoal(
-            name,
-            text,
-            None,
-            self.logfile,
-            build_logfile,
-            None,
-            None)
 
-    def add_qemu_goal(self, instance, args):
-        """Add a goal to build a Zephyr project and then run it under QEMU
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+
+        build_logfile = os.path.join(outdir, buildlog)
+        text = self._get_rule_header(name)
+        text +=  self._get_sub_make(name, "building", directory, outdir, build_logfile,
+                args, make_args=make_args)
+        text += self._get_rule_footer(name)
+
+        self.goals[name] = MakeGoal( name, text, None, self.logfile, build_logfile, None, None)
+
+    def add_goal(self, instance, type, args, make_args=""):
+
+        """Add a goal to build a Zephyr project and then run it using a handler
 
         The generated make goal invokes Make twice, the first time it will
         build the default goal, and the second will invoke the 'qemu' goal.
-        The output of the QEMU session will be monitored, and terminated
+        The output of the handler session will be monitored, and terminated
         either upon pass/fail result of the test program, or the timeout
         is reached.
 
-        @param name A unique string name for this build goal. The results
-            dictionary returned by execute() will be keyed by this name.
-        @param directory Absolute path to working directory, will be passed
-            to make -C
-        @param outdir Absolute path to output directory, will be passed to
-            Kbuild via -O=<path>
         @param args Extra cache entries to define in CMake.
-        @param timeout Maximum length of time QEMU session should be allowed
-            to run before automatically killing it. Default is 30 seconds.
         """
 
         name = instance.name
@@ -1016,88 +969,45 @@ class MakeGenerator:
 
         build_logfile = os.path.join(outdir, "build.log")
         run_logfile = os.path.join(outdir, "run.log")
-        handler_logfile = os.path.join(outdir, "handler.log")
-        self._add_goal(outdir)
 
-        qemu_handler = QEMUHandler(instance)
-        args.append("QEMU_PIPE=%s" % qemu_handler.get_fifo())
-        text = (self._get_rule_header(name) +
-                self._get_sub_make(name, "building", directory,
-                                   outdir, build_logfile, args) +
-                self._get_sub_make(name, "running", directory,
-                                   outdir, run_logfile,
-                                   args, make_args="run") +
-                self._get_rule_footer(name))
-        self.goals[name] = MakeGoal(name, text, qemu_handler, self.logfile, build_logfile,
-                                    run_logfile, handler_logfile)
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
 
-    def add_unit_goal(self, instance, args, timeout=30):
-        outdir = instance.outdir
-        timeout = instance.test.timeout
-        name = instance.name
-        directory = instance.test.code_location
-
-        self._add_goal(outdir)
-        build_logfile = os.path.join(outdir, "build.log")
-        run_logfile = os.path.join(outdir, "run.log")
-        handler_logfile = os.path.join(outdir, "handler.log")
+        handler = None
+        if type == "qemu":
+            handler = QEMUHandler(instance)
+        elif type == "native":
+            handler = BinaryHandler(instance)
+            handler.binary = os.path.join(outdir, "zephyr", "zephyr.exe")
+        elif type == "nsim":
+            handler = BinaryHandler(instance)
+            handler.call_make_run = True
+        elif type == "unit":
+            handler = BinaryHandler(instance)
+            handler.binary = os.path.join(outdir, "testbinary")
+        elif type == "device":
+            handler = DeviceHandler(instance)
 
         if options.enable_coverage:
             args += ["COVERAGE=1", "EXTRA_LDFLAGS=--coverage"]
-
-        # we handle running in the UnitHandler class
-        text = (self._get_rule_header(name) +
-                self._get_sub_make(name, "building", directory,
-                                   outdir, build_logfile, args) +
-                self._get_rule_footer(name))
-        unit_handler = UnitHandler(instance)
-        self.goals[name] = MakeGoal(name, text, unit_handler, self.logfile, build_logfile,
-                                    run_logfile, handler_logfile)
-
-    def add_native_goal(self, instance, args):
-
-        outdir = instance.outdir
-        timeout = instance.test.timeout
-        name = instance.name
-        directory = instance.test.code_location
-
-        self._add_goal(outdir)
-        build_logfile = os.path.join(outdir, "build.log")
-        run_logfile = os.path.join(outdir, "run.log")
-        handler_logfile = os.path.join(outdir, "handler.log")
-
-        if options.enable_coverage:
             args += ["CONFIG_COVERAGE=y"]
 
-        # we handle running in the NativeHandler class
+        if type == 'qemu':
+            args.append("QEMU_PIPE=%s" % handler.get_fifo())
+
         text = (self._get_rule_header(name) +
                 self._get_sub_make(name, "building", directory,
-                                   outdir, build_logfile, args) +
-                self._get_rule_footer(name))
-        native_handler = NativeHandler(instance)
-        self.goals[name] = MakeGoal(name, text, native_handler, self.logfile, build_logfile,
-                                    run_logfile, handler_logfile)
+                                   outdir, build_logfile, args, make_args=make_args))
+        if handler and handler.run:
+            text += self._get_sub_make(name, "running", directory,
+                                   outdir, run_logfile,
+                                   args, make_args="run")
 
-    def add_device_goal(self, instance, args):
+        text += self._get_rule_footer(name)
 
-        outdir = instance.outdir
-        timeout = instance.test.timeout
-        name = instance.name
-        directory = instance.test.code_location
-
-        self._add_goal(outdir)
-        build_logfile = os.path.join(outdir, "build.log")
-        run_logfile = os.path.join(outdir, "run.log")
-        handler_logfile = os.path.join(outdir, "handler.log")
-
-        # we handle running in the NativeHandler class
-        text = (self._get_rule_header(name) +
-                self._get_sub_make(name, "building", directory,
-                                   outdir, build_logfile, args) +
-                self._get_rule_footer(name))
-        handler = DeviceHandler(instance)
         self.goals[name] = MakeGoal(name, text, handler, self.logfile, build_logfile,
-                                    run_logfile, handler_logfile)
+                                    run_logfile, handler.log if handler else None)
+
 
     def add_test_instance(self, ti, extra_args=[]):
         """Add a goal to build/test a TestInstance object
@@ -1117,20 +1027,21 @@ class MakeGenerator:
         do_build_only = ti.build_only or options.build_only
         do_run = (not do_build_only) and do_run_slow
 
+        # FIXME: Need refactoring and cleanup
+        type = None
         if ti.platform.qemu_support and do_run:
-            self.add_qemu_goal(ti, args)
-
+            type = "qemu"
         elif ti.test.type == "unit":
-            self.add_unit_goal(ti, args)
-
+            type = "unit"
         elif ti.platform.type == "native" and do_run:
-            self.add_native_goal(ti, args)
-
+            type = "native"
+        elif ti.platform.simulation == "nsim" and do_run:
+            if find_executable("nsimdrv"):
+                type = "nsim"
         elif options.device_testing and (not ti.build_only) and (not options.build_only):
-            self.add_device_goal(ti, args)
+            type = "device"
 
-        else:
-            self.add_instance_build_goal(ti, args, "build.log")
+        self.add_goal(ti, type, args)
 
     def execute(self, callback_fn=None, context=None):
         """Execute all the registered build goals
@@ -1195,7 +1106,7 @@ class MakeGenerator:
                         if goal.handler:
                             if hasattr(goal.handler, "handle"):
                                 goal.handler.handle()
-                                goal.handler_log = goal.handler.handler_log
+                                goal.handler_log = goal.handler.log
 
                             thread_status, metrics = goal.handler.get_state()
                             goal.metrics.update(metrics)
@@ -1400,6 +1311,7 @@ class Platform:
         data = scp.data
 
         self.name = data['identifier']
+        self.sanitycheck = data.get("sanitycheck", True)
         # if no RAM size is specified by the board, take a default of 128K
         self.ram = data.get("ram", 128)
         testing = data.get("testing", {})
@@ -1714,7 +1626,8 @@ class TestSuite:
                 verbose("Found plaform configuration " + fn)
                 try:
                     platform = Platform(fn)
-                    self.platforms.append(platform)
+                    if platform.sanitycheck:
+                        self.platforms.append(platform)
                 except RuntimeError as e:
                     error("E: %s: can't load: %s" % (fn, e))
                     self.load_errors += 1
@@ -1885,14 +1798,10 @@ class TestSuite:
                             args.append("CONFIG_COVERAGE=y")
 
                         o = os.path.join(self.outdir, plat.name, tc.path)
-                        dlist[tc, plat, tc.name.split(
-                            "/")[-1]] = os.path.join(o, "zephyr", ".config")
-                        goal = "_".join([plat.name, "_".join(
-                            tc.name.split("/")), "config-sanitycheck"])
-                        mg.add_build_goal(goal,
-                                os.path.join(ZEPHYR_BASE, tc.code_location),
-                                o, args,
-                                "config-sanitycheck.log", make_args="config-sanitycheck")
+                        dlist[tc, plat, tc.name.split("/")[-1]] = os.path.join(o, "zephyr", ".config")
+                        goal = "_".join([plat.name, "_".join(tc.name.split("/")), "config-sanitycheck"])
+                        mg.add_build_goal(goal, os.path.join(ZEPHYR_BASE, tc.code_location),
+                                o, args, "config-sanitycheck.log", make_args="config-sanitycheck")
 
         info("Building testcase defconfigs...")
         results = mg.execute(defconfig_cb)
@@ -2062,11 +1971,16 @@ class TestSuite:
 
         def calc_one_elf_size(name, goal):
             if not goal.failed:
-                i = self.instances[name]
-                sc = i.calculate_sizes()
-                goal.metrics["ram_size"] = sc.get_ram_size()
-                goal.metrics["rom_size"] = sc.get_rom_size()
-                goal.metrics["unrecognized"] = sc.unrecognized_sections()
+                if self.instances[name].platform.type != "native":
+                    i = self.instances[name]
+                    sc = i.calculate_sizes()
+                    goal.metrics["ram_size"] = sc.get_ram_size()
+                    goal.metrics["rom_size"] = sc.get_rom_size()
+                    goal.metrics["unrecognized"] = sc.unrecognized_sections()
+                else:
+                    goal.metrics["ram_size"] = 0
+                    goal.metrics["rom_size"] = 0
+                    goal.metrics["unrecognized"] = []
 
         mg = MakeGenerator(self.outdir)
         for i in self.instances.values():

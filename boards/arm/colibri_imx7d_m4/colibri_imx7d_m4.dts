@@ -18,6 +18,8 @@
 		uart-2 = &uart2;
 		led0   = &green_led;
 		sw0    = &user_switch_1;
+		i2c-4  = &i2c4;
+		pwm-1  = &pwm1;
 	};
 
 	chosen {
@@ -48,7 +50,7 @@
 &uart2 {
 	status = "ok";
 	current-speed = <115200>;
-	modem-mode = <1>;
+	modem-mode = <64>;
 };
 
 &gpio1 {
@@ -56,5 +58,13 @@
 };
 
 &gpio2 {
+	status = "ok";
+};
+
+&i2c4 {
+	status = "ok";
+};
+
+&pwm1 {
 	status = "ok";
 };

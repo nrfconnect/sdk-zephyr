@@ -685,6 +685,7 @@ int lwm2m_create_obj_inst(u16_t obj_id, u16_t obj_inst_id,
 			  struct lwm2m_engine_obj_inst **obj_inst)
 {
 	struct lwm2m_engine_obj *obj;
+	int ret;
 
 	*obj_inst = NULL;
 	obj = get_engine_obj(obj_id);
@@ -718,6 +719,17 @@ int lwm2m_create_obj_inst(u16_t obj_id, u16_t obj_inst_id,
 	(*obj_inst)->obj = obj;
 	(*obj_inst)->obj_inst_id = obj_inst_id;
 	engine_register_obj_inst(*obj_inst);
+
+	if (obj->user_create_cb) {
+		ret = obj->user_create_cb(obj_inst_id);
+		if (ret < 0) {
+			SYS_LOG_ERR("Error in user obj create %u/%u: %d",
+				    obj_id, obj_inst_id, ret);
+			lwm2m_delete_obj_inst(obj_id, obj_inst_id);
+			return ret;
+		}
+	}
+
 #ifdef CONFIG_LWM2M_RD_CLIENT_SUPPORT
 	engine_trigger_update();
 #endif
@@ -738,6 +750,15 @@ int lwm2m_delete_obj_inst(u16_t obj_id, u16_t obj_inst_id)
 	obj_inst = get_engine_obj_inst(obj_id, obj_inst_id);
 	if (!obj_inst) {
 		return -ENOENT;
+	}
+
+	if (obj->user_delete_cb) {
+		ret = obj->user_delete_cb(obj_inst_id);
+		if (ret < 0) {
+			SYS_LOG_ERR("Error in user obj delete %u/%u: %d",
+				    obj_id, obj_inst_id, ret);
+			/* don't return error */
+		}
 	}
 
 	engine_unregister_obj_inst(obj_inst);
@@ -845,7 +866,7 @@ static int atof32(const char *input, float32_value_t *out)
 		return 0;
 	}
 
-	while (*(++pos) && base > 1 && isdigit(*pos)) {
+	while (*(++pos) && base > 1 && isdigit((unsigned char)*pos)) {
 		out->val2 = out->val2 * 10 + (*pos - '0');
 		base /= 10;
 	}
@@ -1209,7 +1230,7 @@ static int string_to_path(char *pathstr, struct lwm2m_obj_path *path,
 	for (i = 0; i <= end_index; i++) {
 		/* search for first numeric */
 		if (tokstart == -1) {
-			if (!isdigit(pathstr[i])) {
+			if (!isdigit((unsigned char)pathstr[i])) {
 				continue;
 			}
 
@@ -1883,7 +1904,7 @@ int lwm2m_engine_register_post_write_callback(char *pathstr,
 }
 
 int lwm2m_engine_register_exec_callback(char *pathstr,
-					lwm2m_engine_exec_cb_t cb)
+					lwm2m_engine_user_cb_t cb)
 {
 	int ret;
 	struct lwm2m_engine_res_inst *res = NULL;
@@ -1894,6 +1915,36 @@ int lwm2m_engine_register_exec_callback(char *pathstr,
 	}
 
 	res->execute_cb = cb;
+	return 0;
+}
+
+int lwm2m_engine_register_create_callback(u16_t obj_id,
+					  lwm2m_engine_user_cb_t cb)
+{
+	struct lwm2m_engine_obj *obj = NULL;
+
+	obj = get_engine_obj(obj_id);
+	if (!obj) {
+		SYS_LOG_ERR("unable to find obj: %u", obj_id);
+		return -ENOENT;
+	}
+
+	obj->user_create_cb = cb;
+	return 0;
+}
+
+int lwm2m_engine_register_delete_callback(u16_t obj_id,
+					  lwm2m_engine_user_cb_t cb)
+{
+	struct lwm2m_engine_obj *obj = NULL;
+
+	obj = get_engine_obj(obj_id);
+	if (!obj) {
+		SYS_LOG_ERR("unable to find obj: %u", obj_id);
+		return -ENOENT;
+	}
+
+	obj->user_delete_cb = cb;
 	return 0;
 }
 
@@ -3073,7 +3124,8 @@ static int handle_request(struct coap_packet *request,
 	}
 
 	/* parse the URL path into components */
-	r = coap_find_options(in.in_cpkt, COAP_OPTION_URI_PATH, options, 4);
+	r = coap_find_options(in.in_cpkt, COAP_OPTION_URI_PATH, options,
+			      ARRAY_SIZE(options));
 	if (r <= 0) {
 		/* '/' is used by bootstrap-delete only */
 
