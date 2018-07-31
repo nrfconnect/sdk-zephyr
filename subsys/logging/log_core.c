@@ -12,8 +12,6 @@
 #include <misc/printk.h>
 #include <assert.h>
 #include <atomic.h>
-#include <stdio.h>
-#include <atomic.h>
 
 #ifndef CONFIG_LOG_PRINTK_MAX_STRING_LENGTH
 #define CONFIG_LOG_PRINTK_MAX_STRING_LENGTH 1
@@ -48,14 +46,6 @@ static inline void msg_finalize(struct log_msg *msg,
 
 	atomic_inc(&buffered_cnt);
 
-	if (!IS_ENABLED(CONFIG_LOG_INPLACE_PROCESS) &&
-	    CONFIG_LOG_PROCESS_TRIGGER_THRESHOLD) {
-		if (buffered_cnt == CONFIG_LOG_PROCESS_TRIGGER_THRESHOLD &&
-		    proc_tid) {
-			k_wakeup(proc_tid);
-		}
-	}
-
 	key = irq_lock();
 
 	log_list_add_tail(&list, msg);
@@ -64,6 +54,12 @@ static inline void msg_finalize(struct log_msg *msg,
 
 	if (IS_ENABLED(CONFIG_LOG_INPLACE_PROCESS) || panic_mode) {
 		(void)log_process(false);
+	} else if (!IS_ENABLED(CONFIG_LOG_INPLACE_PROCESS) &&
+		   CONFIG_LOG_PROCESS_TRIGGER_THRESHOLD) {
+		if (buffered_cnt == CONFIG_LOG_PROCESS_TRIGGER_THRESHOLD &&
+		    proc_tid) {
+			k_wakeup(proc_tid);
+		}
 	}
 }
 
@@ -153,7 +149,7 @@ int log_printk(const char *fmt, va_list ap)
 		struct log_msg *msg;
 		int length;
 
-		length = vsnprintf(formatted_str,
+		length = vsnprintk(formatted_str,
 				   sizeof(formatted_str), fmt, ap);
 
 		length = (length > sizeof(formatted_str)) ?

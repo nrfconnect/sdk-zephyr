@@ -21,7 +21,9 @@
 static enum power_states states_list[] = {
 	SYS_POWER_STATE_CPU_LPS,
 	SYS_POWER_STATE_CPU_LPS_1,
+#ifdef CONFIG_X86
 	SYS_POWER_STATE_CPU_LPS_2,
+#endif
 #if (CONFIG_SYS_POWER_DEEP_SLEEP)
 	SYS_POWER_STATE_DEEP_SLEEP,
 	SYS_POWER_STATE_DEEP_SLEEP_1,
@@ -31,6 +33,7 @@ static enum power_states states_list[] = {
 #define TIMEOUT 5 /* in seconds */
 #define MAX_SUSPEND_DEVICE_COUNT 15
 #define NB_STATES ARRAY_SIZE(states_list)
+#define MAX_SYS_PM_STATES	5
 
 /* In Tickless Kernel mode, time is passed in milliseconds instead of ticks */
 #ifdef CONFIG_TICKLESS_KERNEL
@@ -48,6 +51,7 @@ static struct device *suspend_devices[MAX_SUSPEND_DEVICE_COUNT];
 static int suspend_device_count;
 static unsigned int current_state = NB_STATES - 1;
 static int post_ops_done = 1;
+static int test_complete;
 
 static enum power_states get_next_state(void)
 {
@@ -62,8 +66,10 @@ static const char *state_to_string(int state)
 		return "SYS_POWER_STATE_CPU_LPS";
 	case SYS_POWER_STATE_CPU_LPS_1:
 		return "SYS_POWER_STATE_CPU_LPS_1";
+#ifdef CONFIG_X86
 	case SYS_POWER_STATE_CPU_LPS_2:
 		return "SYS_POWER_STATE_CPU_LPS_2";
+#endif
 	case SYS_POWER_STATE_DEEP_SLEEP:
 		return "SYS_POWER_STATE_DEEP_SLEEP";
 	case SYS_POWER_STATE_DEEP_SLEEP_1:
@@ -252,6 +258,11 @@ int _sys_soc_suspend(s32_t ticks)
 		return SYS_PM_NOT_HANDLED;
 	}
 
+	/* If test is comepleted then do not enter LPS states */
+	if (test_complete) {
+		return SYS_PM_NOT_HANDLED;
+	}
+
 	state = get_next_state();
 
 	printk("Entering %s state\n", state_to_string(state));
@@ -259,7 +270,9 @@ int _sys_soc_suspend(s32_t ticks)
 	switch (state) {
 	case SYS_POWER_STATE_CPU_LPS:
 	case SYS_POWER_STATE_CPU_LPS_1:
+#ifdef CONFIG_X86
 	case SYS_POWER_STATE_CPU_LPS_2:
+#endif
 		/*
 		 * A wake event is needed in the following cases:
 		 *
@@ -321,7 +334,9 @@ void _sys_soc_resume(void)
 	switch (state) {
 	case SYS_POWER_STATE_CPU_LPS:
 	case SYS_POWER_STATE_CPU_LPS_1:
+#ifdef CONFIG_X86
 	case SYS_POWER_STATE_CPU_LPS_2:
+#endif
 		if (!post_ops_done) {
 			post_ops_done = 1;
 			printk("Exiting %s state\n", state_to_string(state));
@@ -383,7 +398,9 @@ static void build_suspend_device_list(void)
 
 void main(void)
 {
-	printk("Quark SE: Power Management sample application\n");
+	int i;
+	printk("Quark SE(%s): Power Management sample application\n",
+								CONFIG_ARCH);
 
 #if (CONFIG_RTC)
 	setup_rtc();
@@ -403,8 +420,11 @@ void main(void)
 	/* All our application does is putting the task to sleep so the kernel
 	 * triggers the suspend operation.
 	 */
-	while (1) {
+	for (i = 0; i < MAX_SYS_PM_STATES; i++) {
 		k_sleep(TIMEOUT * 1000);
 		printk("Back to the application\n");
 	}
+	test_complete = 1;
+
+	printk("**Power States test complete**\n");
 }

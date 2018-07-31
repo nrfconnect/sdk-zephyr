@@ -77,6 +77,9 @@ struct net_if_addr {
  * Stores the multicast IP addresses assigned to this network interface.
  */
 struct net_if_mcast_addr {
+	/** IP address */
+	struct net_addr address;
+
 	/** Is this multicast IP address used or not */
 	u8_t is_used : 1;
 
@@ -84,9 +87,6 @@ struct net_if_mcast_addr {
 	u8_t is_joined : 1;
 
 	u8_t _unused : 6;
-
-	/** IP address */
-	struct net_addr address;
 };
 
 #if defined(CONFIG_NET_IPV6)
@@ -161,6 +161,9 @@ enum {
 	/* interface is pointopoint */
 	NET_IF_POINTOPOINT,
 
+	/* interface is in promiscuous mode */
+	NET_IF_PROMISC,
+
 	/* Total number of flags - must be at the end of the enum */
 	NET_IF_NUM_FLAGS
 };
@@ -233,6 +236,15 @@ struct net_if_ipv4 {
 
 #if defined(CONFIG_NET_DHCPV4)
 struct net_if_dhcpv4 {
+	/** Used for timer lists */
+	sys_snode_t node;
+
+	/** Timer start */
+	s64_t timer_start;
+
+	/** Time for INIT, DISCOVER, REQUESTING, RENEWAL */
+	u32_t request_time;
+
 	u32_t xid;
 
 	/** IP address Lease time */
@@ -249,16 +261,6 @@ struct net_if_dhcpv4 {
 
 	/** Requested IP addr */
 	struct in_addr requested_ip;
-
-	/** Timer for DHCPv4 Client requests (DISCOVER, REQUEST or RENEWAL)
-	 */
-	struct k_delayed_work timer;
-
-	/** T1 (Renewal) timer */
-	struct k_delayed_work t1_timer;
-
-	/** T2 (Rebinding) timer */
-	struct k_delayed_work t2_timer;
 
 	/**
 	 *  DHCPv4 client state in the process of network
@@ -348,9 +350,6 @@ struct net_if_dev {
 	/** The hardware link address */
 	struct net_linkaddr link_addr;
 
-	/** The hardware MTU */
-	u16_t mtu;
-
 #if defined(CONFIG_NET_OFFLOAD)
 	/** TCP/IP Offload functions.
 	 * If non-NULL, then the TCP/IP stack is located
@@ -359,6 +358,9 @@ struct net_if_dev {
 	 */
 	struct net_offload *offload;
 #endif /* CONFIG_NET_OFFLOAD */
+
+	/** The hardware MTU */
+	u16_t mtu;
 };
 
 /**
@@ -411,11 +413,7 @@ static inline const struct net_l2 * const net_if_l2(struct net_if *iface)
  *
  * @return verdict about the packet
  */
-static inline enum net_verdict net_if_recv_data(struct net_if *iface,
-						struct net_pkt *pkt)
-{
-	return net_if_l2(iface)->recv(iface, pkt);
-}
+enum net_verdict net_if_recv_data(struct net_if *iface, struct net_pkt *pkt);
 
 /**
  * @brief Get link layer header size for this network interface
@@ -1672,6 +1670,34 @@ void net_if_call_timestamp_cb(struct net_pkt *pkt);
  */
 void net_if_add_tx_timestamp(struct net_pkt *pkt);
 #endif /* CONFIG_NET_PKT_TIMESTAMP */
+
+/**
+ * @brief Set network interface into promiscuous mode
+ *
+ * @details Note that not all network technologies will support this.
+ *
+ * @param iface Pointer to network interface
+ *
+ * @return 0 on success, <0 if error
+ */
+int net_if_set_promisc(struct net_if *iface);
+
+/**
+ * @brief Set network interface into normal mode
+ *
+ * @param iface Pointer to network interface
+ */
+void net_if_unset_promisc(struct net_if *iface);
+
+/**
+ * @brief Check if promiscuous mode is set or not.
+ *
+ * @param iface Pointer to network interface
+ *
+ * @return True if interface is in promisc mode,
+ *         False if interface is not in in promiscuous mode.
+ */
+bool net_if_is_promisc(struct net_if *iface);
 
 struct net_if_api {
 	void (*init)(struct net_if *iface);

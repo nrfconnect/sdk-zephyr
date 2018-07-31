@@ -21,6 +21,7 @@
 
 #include <settings/settings.h>
 
+#include <bluetooth/hci.h>
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/conn.h>
 #include <bluetooth/l2cap.h>
@@ -526,6 +527,88 @@ static int cmd_init(int argc, char *argv[])
 	return 0;
 }
 
+#if defined(CONFIG_BT_HCI) || defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
+static void hexdump(const u8_t *data, size_t len)
+{
+	int n = 0;
+
+	while (len--) {
+		if (n % 16 == 0) {
+			printk("%08X ", n);
+		}
+
+		printk("%02X ", *data++);
+
+		n++;
+		if (n % 8 == 0) {
+			if (n % 16 == 0) {
+				printk("\n");
+			} else {
+				printk(" ");
+			}
+		}
+	}
+
+	if (n % 16) {
+		printk("\n");
+	}
+}
+#endif /* CONFIG_BT_HCI || CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */
+
+#if defined(CONFIG_BT_HCI)
+static int cmd_hci_cmd(int argc, char *argv[])
+{
+	u8_t ogf;
+	u16_t ocf;
+	struct net_buf *buf = NULL, *rsp;
+	int err;
+
+	if (argc < 3) {
+		return -EINVAL;
+	}
+
+	ogf = strtoul(argv[1], NULL, 16);
+	ocf = strtoul(argv[2], NULL, 16);
+
+	if (argc > 3) {
+		int i;
+
+		buf = bt_hci_cmd_create(BT_OP(ogf, ocf), argc - 3);
+
+		for (i = 3; i < argc; i++) {
+			net_buf_add_u8(buf, strtoul(argv[i], NULL, 16));
+		}
+	}
+
+	err = bt_hci_cmd_send_sync(BT_OP(ogf, ocf), buf, &rsp);
+	if (err) {
+		printk("HCI command failed (err %d)\n", err);
+	} else {
+		hexdump(rsp->data, rsp->len);
+		net_buf_unref(rsp);
+	}
+
+	return 0;
+}
+#endif /* CONFIG_BT_HCI */
+
+static int cmd_name(int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 2) {
+		printk("Bluetooth Local Name: %s\n", bt_get_name());
+		return 0;
+	}
+
+	err = bt_set_name(argv[1]);
+	if (err) {
+		printk("Unable to set name %s (err %d)", argv[1], err);
+	}
+
+	return 0;
+}
+
 static void cmd_active_scan_on(int dups)
 {
 	int err;
@@ -620,10 +703,6 @@ static const struct bt_data ad_discov[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
 };
 
-static const struct bt_data sd[] = {
-	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
-};
-
 static int cmd_advertise(int argc, char *argv[])
 {
 	struct bt_le_adv_param param;
@@ -649,13 +728,10 @@ static int cmd_advertise(int argc, char *argv[])
 	param.interval_max = BT_GAP_ADV_FAST_INT_MAX_2;
 
 	if (!strcmp(argv[1], "on")) {
-		param.options = BT_LE_ADV_OPT_CONNECTABLE;
-		scan_rsp = sd;
-		scan_rsp_len = ARRAY_SIZE(sd);
+		param.options = (BT_LE_ADV_OPT_CONNECTABLE |
+				 BT_LE_ADV_OPT_USE_NAME);
 	} else if (!strcmp(argv[1], "scan")) {
-		param.options = 0;
-		scan_rsp = sd;
-		scan_rsp_len = ARRAY_SIZE(sd);
+		param.options = BT_LE_ADV_OPT_USE_NAME;
 	} else if (!strcmp(argv[1], "nconn")) {
 		param.options = 0;
 		scan_rsp = NULL;
@@ -1343,32 +1419,6 @@ static int cmd_bredr_discovery(int argc, char *argv[])
 #endif /* CONFIG_BT_BREDR */
 
 #if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
-static void hexdump(const u8_t *data, size_t len)
-{
-	int n = 0;
-
-	while (len--) {
-		if (n % 16 == 0) {
-			printk("%08X ", n);
-		}
-
-		printk("%02X ", *data++);
-
-		n++;
-		if (n % 8 == 0) {
-			if (n % 16 == 0) {
-				printk("\n");
-			} else {
-				printk(" ");
-			}
-		}
-	}
-
-	if (n % 16) {
-		printk("\n");
-	}
-}
-
 static u32_t l2cap_rate;
 
 static void l2cap_recv_metrics(struct bt_l2cap_chan *chan, struct net_buf *buf)
@@ -1916,6 +1966,10 @@ static int cmd_bredr_sdp_find_record(int argc, char *argv[])
 
 static const struct shell_cmd bt_commands[] = {
 	{ "init", cmd_init, HELP_ADDR_LE },
+#if defined(CONFIG_BT_HCI)
+	{ "hci-cmd", cmd_hci_cmd, "<ogf> <ocf> [data]" },
+#endif
+	{ "name", cmd_name, "[name]" },
 	{ "scan", cmd_scan,
 	  "<value: on, passive, off> <dup filter: dups, nodups>" },
 	{ "advertise", cmd_advertise,

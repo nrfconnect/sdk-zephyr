@@ -19,6 +19,8 @@
 #include <misc/__assert.h>
 #include <soc.h>
 
+#include <settings/settings.h>
+
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/conn.h>
 #include <bluetooth/l2cap.h>
@@ -4656,6 +4658,8 @@ int bt_enable(bt_ready_cb_t cb)
 		if (err) {
 			return err;
 		}
+	} else {
+		bt_set_name(CONFIG_BT_DEVICE_NAME);
 	}
 
 	ready_cb = cb;
@@ -4692,6 +4696,108 @@ int bt_enable(bt_ready_cb_t cb)
 
 	k_work_submit(&bt_dev.init);
 	return 0;
+}
+
+struct bt_ad {
+	const struct bt_data *data;
+	size_t len;
+};
+
+static int set_ad(u16_t hci_op, const struct bt_ad *ad, size_t ad_len)
+{
+	struct bt_hci_cp_le_set_adv_data *set_data;
+	struct net_buf *buf;
+	int c, i;
+
+	buf = bt_hci_cmd_create(hci_op, sizeof(*set_data));
+	if (!buf) {
+		return -ENOBUFS;
+	}
+
+	set_data = net_buf_add(buf, sizeof(*set_data));
+
+	memset(set_data, 0, sizeof(*set_data));
+
+	for (c = 0; c < ad_len; c++) {
+		const struct bt_data *data = ad[c].data;
+
+		for (i = 0; i < ad[c].len; i++) {
+			int len = data[i].data_len;
+			u8_t type = data[i].type;
+
+			/* Check if ad fit in the remaining buffer */
+			if (set_data->len + len + 2 > 31) {
+				len = 31 - (set_data->len + 2);
+				if (type != BT_DATA_NAME_COMPLETE || !len) {
+					net_buf_unref(buf);
+					return -EINVAL;
+				}
+				type = BT_DATA_NAME_SHORTENED;
+			}
+
+			set_data->data[set_data->len++] = len + 1;
+			set_data->data[set_data->len++] = type;
+
+			memcpy(&set_data->data[set_data->len], data[i].data,
+			       len);
+			set_data->len += len;
+		}
+	}
+
+	return bt_hci_cmd_send_sync(hci_op, buf, NULL);
+}
+
+int bt_set_name(const char *name)
+{
+#if CONFIG_BT_DEVICE_NAME_MAX > 0
+	size_t len = strlen(name);
+	int err;
+
+	if (len >= sizeof(bt_dev.name)) {
+		return -ENOMEM;
+	}
+
+	if (!strcmp(bt_dev.name, name)) {
+		return 0;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+		err = settings_save_one("bt/name", CONFIG_BT_DEVICE_NAME);
+		if (err) {
+			return err;
+		}
+	}
+
+	strncpy(bt_dev.name, name, sizeof(bt_dev.name));
+
+	/* Update advertising name if in use */
+	if (atomic_test_bit(bt_dev.flags, BT_DEV_ADVERTISING_NAME)) {
+		struct bt_data data[] = { BT_DATA(BT_DATA_NAME_COMPLETE, name,
+						strlen(name)) };
+		struct bt_ad sd = { data, ARRAY_SIZE(data) };
+
+		set_ad(BT_HCI_OP_LE_SET_SCAN_RSP_DATA, &sd, 1);
+
+		/* Make sure the new name is set */
+		if (atomic_test_bit(bt_dev.flags, BT_DEV_ADVERTISING)) {
+			set_advertise_enable(false);
+			set_advertise_enable(true);
+		}
+	}
+
+	return 0;
+#else
+	return -ENOMEM;
+#endif
+}
+
+const char *bt_get_name(void)
+{
+#if CONFIG_BT_DEVICE_NAME_MAX > 0
+	return bt_dev.name;
+#else
+	return CONFIG_BT_DEVICE_NAME;
+#endif
 }
 
 int bt_set_id_addr(const bt_addr_le_t *addr)
@@ -4748,45 +4854,13 @@ static bool valid_adv_param(const struct bt_le_adv_param *param)
 	return true;
 }
 
-static int set_ad(u16_t hci_op, const struct bt_data *ad, size_t ad_len)
-{
-	struct bt_hci_cp_le_set_adv_data *set_data;
-	struct net_buf *buf;
-	int i;
-
-	buf = bt_hci_cmd_create(hci_op, sizeof(*set_data));
-	if (!buf) {
-		return -ENOBUFS;
-	}
-
-	set_data = net_buf_add(buf, sizeof(*set_data));
-
-	memset(set_data, 0, sizeof(*set_data));
-
-	for (i = 0; i < ad_len; i++) {
-		/* Check if ad fit in the remaining buffer */
-		if (set_data->len + ad[i].data_len + 2 > 31) {
-			net_buf_unref(buf);
-			return -EINVAL;
-		}
-
-		set_data->data[set_data->len++] = ad[i].data_len + 1;
-		set_data->data[set_data->len++] = ad[i].type;
-
-		memcpy(&set_data->data[set_data->len], ad[i].data,
-		       ad[i].data_len);
-		set_data->len += ad[i].data_len;
-	}
-
-	return bt_hci_cmd_send_sync(hci_op, buf, NULL);
-}
-
 int bt_le_adv_start(const struct bt_le_adv_param *param,
 		    const struct bt_data *ad, size_t ad_len,
 		    const struct bt_data *sd, size_t sd_len)
 {
 	struct bt_hci_cp_le_set_adv_param set_param;
 	struct net_buf *buf;
+	struct bt_ad d[2] = {};
 	int err;
 
 	if (!valid_adv_param(param)) {
@@ -4797,22 +4871,51 @@ int bt_le_adv_start(const struct bt_le_adv_param *param,
 		return -EALREADY;
 	}
 
-	err = set_ad(BT_HCI_OP_LE_SET_ADV_DATA, ad, ad_len);
+	d[0].data = ad;
+	d[0].len = ad_len;
+
+	err = set_ad(BT_HCI_OP_LE_SET_ADV_DATA, d, 1);
 	if (err) {
 		return err;
+	}
+
+	d[0].data = sd;
+	d[0].len = sd_len;
+
+	if (param->options & BT_LE_ADV_OPT_USE_NAME) {
+		const char *name;
+
+		if (sd) {
+			int i;
+
+			/* Cannot use name if name is already set */
+			for (i = 0; i < sd_len; i++) {
+				if (sd[i].type == BT_DATA_NAME_COMPLETE ||
+				    sd[i].type == BT_DATA_NAME_SHORTENED) {
+					return -EINVAL;
+				}
+			}
+		}
+
+		name = bt_get_name();
+
+		d[1].data = (&(struct bt_data)BT_DATA(BT_DATA_NAME_COMPLETE,
+						      name, strlen(name)));
+		d[1].len = 1;
 	}
 
 	/*
 	 * We need to set SCAN_RSP when enabling advertising type that allows
 	 * for Scan Requests.
 	 *
-	 * If sd was not provided but we enable connectable undirected
+	 * If any data was not provided but we enable connectable undirected
 	 * advertising sd needs to be cleared from values set by previous calls.
 	 * Clearing sd is done by calling set_ad() with NULL data and zero len.
 	 * So following condition check is unusual but correct.
 	 */
-	if (sd || (param->options & BT_LE_ADV_OPT_CONNECTABLE)) {
-		err = set_ad(BT_HCI_OP_LE_SET_SCAN_RSP_DATA, sd, sd_len);
+	if (d[0].data || d[1].data ||
+	    (param->options & BT_LE_ADV_OPT_CONNECTABLE)) {
+		err = set_ad(BT_HCI_OP_LE_SET_SCAN_RSP_DATA, d, 2);
 		if (err) {
 			return err;
 		}
@@ -4897,6 +5000,10 @@ int bt_le_adv_start(const struct bt_le_adv_param *param,
 
 	if (!(param->options & BT_LE_ADV_OPT_ONE_TIME)) {
 		atomic_set_bit(bt_dev.flags, BT_DEV_KEEP_ADVERTISING);
+	}
+
+	if (param->options & BT_LE_ADV_OPT_USE_NAME) {
+		atomic_set_bit(bt_dev.flags, BT_DEV_ADVERTISING_NAME);
 	}
 
 	return 0;

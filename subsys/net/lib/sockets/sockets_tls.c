@@ -13,6 +13,7 @@
 #include <stdbool.h>
 
 #include <init.h>
+#include <misc/util.h>
 #include <net/net_context.h>
 #include <net/socket.h>
 
@@ -32,6 +33,17 @@
 #include <mbedtls/debug.h>
 #endif /* CONFIG_MBEDTLS */
 
+#include "tls_internal.h"
+
+/** A list of secure tags that TLS context should use. */
+struct sec_tag_list {
+	/** An array of secure tags referencing TLS credentials. */
+	sec_tag_t sec_tags[CONFIG_NET_SOCKETS_TLS_MAX_CREDENTIALS];
+
+	/** Number of configured secure tags. */
+	int sec_tag_count;
+};
+
 /** TLS context information. */
 struct tls_context {
 	/** Information whether TLS context is used. */
@@ -43,12 +55,40 @@ struct tls_context {
 	/** Socket flags passed to a socket call. */
 	int flags;
 
+	/** TLS specific option values. */
+	struct {
+		/** Select which credentials to use with TLS. */
+		struct sec_tag_list sec_tag_list;
+
+		/** 0-terminated list of allowed ciphersuites (mbedTLS format).
+		 */
+		int ciphersuites[CONFIG_NET_SOCKETS_TLS_MAX_CIPHERSUITES + 1];
+
+		/** Information if hostname was explicitly set on a socket. */
+		bool is_hostname_set;
+
+		/** Peer verification level. */
+		s8_t verify_level;
+	} options;
+
 #if defined(CONFIG_MBEDTLS)
 	/** mbedTLS context. */
 	mbedtls_ssl_context ssl;
 
 	/** mbedTLS configuration. */
 	mbedtls_ssl_config config;
+
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+	/** mbedTLS structure for CA chain. */
+	mbedtls_x509_crt ca_chain;
+
+	/** mbedTLS structure for own certificate. */
+	mbedtls_x509_crt own_cert;
+
+	/** mbedTLS structure for own private key. */
+	mbedtls_pk_context priv_key;
+#endif /* MBEDTLS_X509_CRT_PARSE_C */
+
 #endif /* CONFIG_MBEDTLS */
 };
 
@@ -170,6 +210,7 @@ static struct tls_context *tls_alloc(void)
 			tls = &tls_contexts[i];
 			memset(tls, 0, sizeof(*tls));
 			tls->is_used = true;
+			tls->options.verify_level = -1;
 
 			NET_DBG("Allocated TLS context, %p", tls);
 			break;
@@ -181,6 +222,11 @@ static struct tls_context *tls_alloc(void)
 	if (tls) {
 		mbedtls_ssl_init(&tls->ssl);
 		mbedtls_ssl_config_init(&tls->config);
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+		mbedtls_x509_crt_init(&tls->ca_chain);
+		mbedtls_x509_crt_init(&tls->own_cert);
+		mbedtls_pk_init(&tls->priv_key);
+#endif
 
 #if defined(MBEDTLS_DEBUG_C) && defined(CONFIG_NET_DEBUG_SOCKETS)
 		mbedtls_ssl_conf_dbg(&tls->config, tls_debug, NULL);
@@ -204,6 +250,14 @@ static struct tls_context *tls_clone(struct tls_context *source_tls)
 
 	target_tls->tls_version = source_tls->tls_version;
 
+	memcpy(&target_tls->options, &source_tls->options,
+	       sizeof(target_tls->options));
+
+	if (target_tls->options.is_hostname_set) {
+		mbedtls_ssl_set_hostname(&target_tls->ssl,
+					 source_tls->ssl.hostname);
+	}
+
 	return target_tls;
 }
 
@@ -222,6 +276,11 @@ static int tls_release(struct tls_context *tls)
 
 	mbedtls_ssl_config_free(&tls->config);
 	mbedtls_ssl_free(&tls->ssl);
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+	mbedtls_x509_crt_free(&tls->ca_chain);
+	mbedtls_x509_crt_free(&tls->own_cert);
+	mbedtls_pk_free(&tls->priv_key);
+#endif
 
 	tls->is_used = false;
 
@@ -266,12 +325,168 @@ static int tls_rx(void *ctx, unsigned char *buf, size_t len)
 	return received;
 }
 
-static int tls_mbedtls_set_credentials(struct tls_context *tls)
+static int tls_add_ca_certificate(struct tls_context *tls,
+				  struct tls_credential *ca_cert)
 {
-	/* TODO Temporary solution to verify communication */
-	mbedtls_ssl_conf_authmode(&tls->config, MBEDTLS_SSL_VERIFY_NONE);
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+	int err = mbedtls_x509_crt_parse(&tls->ca_chain,
+					 ca_cert->buf, ca_cert->len);
+	if (err != 0) {
+		return -EINVAL;
+	}
 
 	return 0;
+#endif /* MBEDTLS_X509_CRT_PARSE_C */
+
+	return -ENOTSUP;
+}
+
+static void tls_set_ca_chain(struct tls_context *tls)
+{
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+	mbedtls_ssl_conf_ca_chain(&tls->config, &tls->ca_chain, NULL);
+	mbedtls_ssl_conf_cert_profile(&tls->config,
+				      &mbedtls_x509_crt_profile_default);
+#endif /* MBEDTLS_X509_CRT_PARSE_C */
+}
+
+static int tls_set_own_cert(struct tls_context *tls,
+			    struct tls_credential *own_cert,
+			    struct tls_credential *priv_key)
+{
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+	int err = mbedtls_x509_crt_parse(&tls->own_cert,
+					 own_cert->buf, own_cert->len);
+	if (err != 0) {
+		return -EINVAL;
+	}
+
+	err = mbedtls_pk_parse_key(&tls->priv_key, priv_key->buf,
+				   priv_key->len, NULL, 0);
+	if (err != 0) {
+		return -EINVAL;
+	}
+
+	err = mbedtls_ssl_conf_own_cert(&tls->config, &tls->own_cert,
+					&tls->priv_key);
+	if (err != 0) {
+		err = -ENOMEM;
+	}
+
+	return 0;
+#endif /* MBEDTLS_X509_CRT_PARSE_C */
+
+	return -ENOTSUP;
+}
+
+static int tls_set_psk(struct tls_context *tls,
+		       struct tls_credential *psk,
+		       struct tls_credential *psk_id)
+{
+#if defined(MBEDTLS_KEY_EXCHANGE__SOME__PSK_ENABLED)
+	int err = mbedtls_ssl_conf_psk(&tls->config,
+				       psk->buf, psk->len,
+				       (const unsigned char *)psk_id->buf,
+				       psk_id->len - 1);
+	if (err != 0) {
+		return -EINVAL;
+	}
+
+	return 0;
+#endif
+
+	return -ENOTSUP;
+}
+
+static int tls_set_credential(struct tls_context *tls,
+			      struct tls_credential *cred)
+{
+	switch (cred->type) {
+	case TLS_CREDENTIAL_CA_CERTIFICATE:
+		return tls_add_ca_certificate(tls, cred);
+
+	case TLS_CREDENTIAL_SERVER_CERTIFICATE:
+	{
+		struct tls_credential *priv_key =
+			credential_get(cred->tag, TLS_CREDENTIAL_PRIVATE_KEY);
+		if (!priv_key) {
+			return -ENOENT;
+		}
+
+		return tls_set_own_cert(tls, cred, priv_key);
+	}
+
+	case TLS_CREDENTIAL_PRIVATE_KEY:
+		/* Ignore private key - it will be used together
+		 * with public certificate
+		 */
+		break;
+
+	case TLS_CREDENTIAL_PSK:
+	{
+		struct tls_credential *psk_id =
+			credential_get(cred->tag, TLS_CREDENTIAL_PSK_ID);
+		if (!psk_id) {
+			return -ENOENT;
+		}
+
+		return tls_set_psk(tls, cred, psk_id);
+	}
+
+	case TLS_CREDENTIAL_PSK_ID:
+		/* Ignore PSK ID - it will be used together
+		 * with PSK
+		 */
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int tls_mbedtls_set_credentials(struct tls_context *tls)
+{
+	struct tls_credential *cred;
+	sec_tag_t tag;
+	int i, err = 0;
+	bool tag_found, ca_cert_present = false;
+
+	credentials_lock();
+
+	for (i = 0; i < tls->options.sec_tag_list.sec_tag_count; i++) {
+		tag = tls->options.sec_tag_list.sec_tags[i];
+		cred = NULL;
+		tag_found = false;
+
+		while ((cred = credential_next_get(tag, cred)) != NULL) {
+			tag_found = true;
+
+			err = tls_set_credential(tls, cred);
+			if (err != 0) {
+				goto exit;
+			}
+
+			if (cred->type == TLS_CREDENTIAL_CA_CERTIFICATE) {
+				ca_cert_present = true;
+			}
+		}
+
+		if (!tag_found) {
+			err = -ENOENT;
+			goto exit;
+		}
+	}
+
+exit:
+	credentials_unlock();
+
+	if (err == 0 && ca_cert_present) {
+		tls_set_ca_chain(tls);
+	}
+
+	return err;
 }
 
 static int tls_mbedtls_handshake(struct net_context *context)
@@ -321,6 +536,22 @@ static int tls_mbedtls_init(struct net_context *context, bool is_server)
 		return -ENOMEM;
 	}
 
+	/* For TLS clients, set hostname to empty string to enforce it's
+	 * verification - only if hostname option was not set. Otherwise
+	 * depend on user configuration.
+	 */
+	if (!is_server && !context->tls->options.is_hostname_set) {
+		mbedtls_ssl_set_hostname(&context->tls->ssl, "");
+	}
+
+	/* If verification level was specified explicitly, set it. Otherwise,
+	 * use mbedTLS default values (required for client, none for server)
+	 */
+	if (context->tls->options.verify_level != -1) {
+		mbedtls_ssl_conf_authmode(&context->tls->config,
+					  context->tls->options.verify_level);
+	}
+
 	mbedtls_ssl_conf_rng(&context->tls->config,
 			     mbedtls_ctr_drbg_random,
 			     &tls_ctr_drbg);
@@ -338,6 +569,166 @@ static int tls_mbedtls_init(struct net_context *context, bool is_server)
 		 */
 		return -ENOMEM;
 	}
+
+	return 0;
+}
+
+static int tls_opt_sec_tag_list_set(struct net_context *context,
+				    const void *optval, socklen_t optlen)
+{
+	int sec_tag_cnt;
+
+	if (!optval) {
+		return -EFAULT;
+	}
+
+	if (optlen % sizeof(sec_tag_t) != 0) {
+		return -EINVAL;
+	}
+
+	sec_tag_cnt = optlen / sizeof(sec_tag_t);
+	if (sec_tag_cnt >
+		ARRAY_SIZE(context->tls->options.sec_tag_list.sec_tags)) {
+		return -EINVAL;
+	}
+
+	memcpy(context->tls->options.sec_tag_list.sec_tags, optval, optlen);
+	context->tls->options.sec_tag_list.sec_tag_count = sec_tag_cnt;
+
+	return 0;
+}
+
+static int tls_opt_sec_tag_list_get(struct net_context *context,
+				    void *optval, socklen_t *optlen)
+{
+	int len;
+
+	if (*optlen % sizeof(sec_tag_t) != 0 || *optlen == 0) {
+		return -EINVAL;
+	}
+
+	len = min(context->tls->options.sec_tag_list.sec_tag_count *
+		  sizeof(sec_tag_t), *optlen);
+
+	memcpy(optval, context->tls->options.sec_tag_list.sec_tags, len);
+	*optlen = len;
+
+	return 0;
+}
+
+static int tls_opt_hostname_set(struct net_context *context,
+				const void *optval, socklen_t optlen)
+{
+	ARG_UNUSED(optlen);
+
+	if (mbedtls_ssl_set_hostname(&context->tls->ssl, optval) != 0) {
+		return -EINVAL;
+	}
+
+	context->tls->options.is_hostname_set = true;
+
+	return 0;
+}
+
+static int tls_opt_ciphersuite_list_set(struct net_context *context,
+					const void *optval, socklen_t optlen)
+{
+	int cipher_cnt;
+
+	if (!optval) {
+		return -EFAULT;
+	}
+
+	if (optlen % sizeof(int) != 0) {
+		return -EINVAL;
+	}
+
+	cipher_cnt = optlen / sizeof(int);
+
+	/* + 1 for 0-termination. */
+	if (cipher_cnt + 1 > ARRAY_SIZE(context->tls->options.ciphersuites)) {
+		return -EINVAL;
+	}
+
+	memcpy(context->tls->options.ciphersuites, optval, optlen);
+	context->tls->options.ciphersuites[cipher_cnt] = 0;
+
+	return 0;
+}
+
+static int tls_opt_ciphersuite_list_get(struct net_context *context,
+					void *optval, socklen_t *optlen)
+{
+	const int *selected_ciphers;
+	int cipher_cnt, i = 0;
+	int *ciphers = optval;
+
+	if (*optlen % sizeof(int) != 0 || *optlen == 0) {
+		return -EINVAL;
+	}
+
+	if (context->tls->options.ciphersuites[0] == 0) {
+		/* No specific ciphersuites configured, return all available. */
+		selected_ciphers = mbedtls_ssl_list_ciphersuites();
+	} else {
+		selected_ciphers = context->tls->options.ciphersuites;
+	}
+
+	cipher_cnt = *optlen / sizeof(int);
+	while (selected_ciphers[i] != 0) {
+		ciphers[i] = selected_ciphers[i];
+
+		if (++i == cipher_cnt) {
+			break;
+		}
+	}
+
+	*optlen = i * sizeof(int);
+
+	return 0;
+}
+
+static int tls_opt_ciphersuite_used_get(struct net_context *context,
+					void *optval, socklen_t *optlen)
+{
+	const char *ciph;
+
+	if (*optlen != sizeof(int)) {
+		return -EINVAL;
+	}
+
+	ciph = mbedtls_ssl_get_ciphersuite(&context->tls->ssl);
+	if (ciph == NULL) {
+		return -ENOTCONN;
+	}
+
+	*(int *)optval = mbedtls_ssl_get_ciphersuite_id(ciph);
+
+	return 0;
+}
+
+static int tls_opt_peer_verify_set(struct net_context *context,
+				   const void *optval, socklen_t optlen)
+{
+	int *peer_verify;
+
+	if (!optval) {
+		return -EFAULT;
+	}
+
+	if (optlen != sizeof(int)) {
+		return -EINVAL;
+	}
+
+	peer_verify = (int *)optval;
+
+	if (*peer_verify != MBEDTLS_SSL_VERIFY_NONE &&
+	    *peer_verify != MBEDTLS_SSL_VERIFY_OPTIONAL &&
+	    *peer_verify != MBEDTLS_SSL_VERIFY_REQUIRED) {
+		return -EINVAL;
+	}
+
+	context->tls->options.verify_level = *peer_verify;
 
 	return 0;
 }
@@ -667,4 +1058,107 @@ int ztls_poll(struct zsock_pollfd *fds, int nfds, int timeout)
 	}
 
 	return ret;
+}
+
+int ztls_getsockopt(int sock, int level, int optname,
+		    void *optval, socklen_t *optlen)
+{
+	int err;
+	struct net_context *context = INT_TO_POINTER(sock);
+
+	if (level != SOL_TLS) {
+		return zsock_getsockopt(sock, level, optname, optval, optlen);
+	}
+
+	if (!context || !context->tls) {
+		return -EBADF;
+	}
+
+	if (!optval || !optlen) {
+		return -EFAULT;
+	}
+
+	switch (optname) {
+	case TLS_SEC_TAG_LIST:
+		err =  tls_opt_sec_tag_list_get(context, optval, optlen);
+		break;
+
+	case TLS_HOSTNAME:
+		/* Write-only option. */
+		err = -ENOPROTOOPT;
+		break;
+
+	case TLS_CIPHERSUITE_LIST:
+		err = tls_opt_ciphersuite_list_get(context, optval, optlen);
+		break;
+
+	case TLS_CIPHERSUITE_USED:
+		err = tls_opt_ciphersuite_used_get(context, optval, optlen);
+		break;
+
+	case TLS_PEER_VERIFY:
+		/* Write-only option. */
+		err = -ENOPROTOOPT;
+		break;
+
+	default:
+		err = -ENOPROTOOPT;
+		break;
+	}
+
+	if (err < 0) {
+		errno = -err;
+		return -1;
+	}
+
+	return 0;
+}
+
+int ztls_setsockopt(int sock, int level, int optname,
+		    const void *optval, socklen_t optlen)
+{
+	int err;
+	struct net_context *context = INT_TO_POINTER(sock);
+
+	if (level != SOL_TLS) {
+		return zsock_setsockopt(sock, level, optname, optval, optlen);
+	}
+
+	if (!context || !context->tls) {
+		return -EBADF;
+	}
+
+	switch (optname) {
+	case TLS_SEC_TAG_LIST:
+		err =  tls_opt_sec_tag_list_set(context, optval, optlen);
+		break;
+
+	case TLS_HOSTNAME:
+		err = tls_opt_hostname_set(context, optval, optlen);
+		break;
+
+	case TLS_CIPHERSUITE_LIST:
+		err = tls_opt_ciphersuite_list_set(context, optval, optlen);
+		break;
+
+	case TLS_CIPHERSUITE_USED:
+		/* Read-only option. */
+		err = -ENOPROTOOPT;
+		break;
+
+	case TLS_PEER_VERIFY:
+		err = tls_opt_peer_verify_set(context, optval, optlen);
+		break;
+
+	default:
+		err = -ENOPROTOOPT;
+		break;
+	}
+
+	if (err < 0) {
+		errno = -err;
+		return -1;
+	}
+
+	return 0;
 }

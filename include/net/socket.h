@@ -25,6 +25,7 @@
 #include <zephyr/types.h>
 #include <net/net_ip.h>
 #include <net/dns_resolve.h>
+#include <stdlib.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,6 +43,45 @@ struct zsock_pollfd {
 
 #define ZSOCK_MSG_PEEK 0x02
 #define ZSOCK_MSG_DONTWAIT 0x40
+
+/* Protocol level for TLS.
+ * Here, the same socket protocol level for TLS as in Linux was used.
+ */
+#define SOL_TLS 282
+
+/* Socket options for TLS */
+
+/* Socket option to select TLS credentials to use. It accepts and returns an
+ * array of sec_tag_t that indicate which TLS credentials should be used with
+ * specific socket
+ */
+#define TLS_SEC_TAG_LIST 1
+/* Write-only socket option to set hostname. It accepts a string containing
+ * the hostname (may be NULL to disable hostname verification). By default,
+ * hostname check is enforced for TLS clients.
+ */
+#define TLS_HOSTNAME 2
+/* Socket option to select ciphersuites to use. It accepts and returns an array
+ * of integers with IANA assigned ciphersuite identifiers.
+ * If not set, socket will allow all ciphersuites available in the system
+ * (mebdTLS default behavior).
+ */
+#define TLS_CIPHERSUITE_LIST 3
+/* Read-only socket option to read a ciphersuite chosen during TLS handshake.
+ * It returns an integer containing an IANA assigned ciphersuite identifier
+ * of chosen ciphersuite.
+ */
+#define TLS_CIPHERSUITE_USED 4
+/* Write-only socket option to set peer verification level for TLS connection.
+ * This option accepts an integer with a peer verification level, compatible
+ * with mbedTLS values:
+ * 0 - none,
+ * 1 - optional
+ * 2 - required.
+ * If not set, socket will use mbedTLS defaults (none for servers, required
+ * for clients).
+ */
+#define TLS_PEER_VERIFY 5
 
 struct zsock_addrinfo {
 	struct zsock_addrinfo *ai_next;
@@ -71,6 +111,10 @@ ssize_t zsock_recvfrom(int sock, void *buf, size_t max_len, int flags,
 		       struct sockaddr *src_addr, socklen_t *addrlen);
 int zsock_fcntl(int sock, int cmd, int flags);
 int zsock_poll(struct zsock_pollfd *fds, int nfds, int timeout);
+int zsock_getsockopt(int sock, int level, int optname,
+		     void *optval, socklen_t *optlen);
+int zsock_setsockopt(int sock, int level, int optname,
+		     const void *optval, socklen_t optlen);
 int zsock_inet_pton(sa_family_t family, const char *src, void *dst);
 int zsock_getaddrinfo(const char *host, const char *service,
 		      const struct zsock_addrinfo *hints,
@@ -92,6 +136,10 @@ ssize_t ztls_recvfrom(int sock, void *buf, size_t max_len, int flags,
 		      struct sockaddr *src_addr, socklen_t *addrlen);
 int ztls_fcntl(int sock, int cmd, int flags);
 int ztls_poll(struct zsock_pollfd *fds, int nfds, int timeout);
+int ztls_getsockopt(int sock, int level, int optname,
+		    void *optval, socklen_t *optlen);
+int ztls_setsockopt(int sock, int level, int optname,
+		    const void *optval, socklen_t optlen);
 
 #endif /* defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS) */
 
@@ -213,6 +261,26 @@ static inline int poll(struct zsock_pollfd *fds, int nfds, int timeout)
 #define MSG_PEEK ZSOCK_MSG_PEEK
 #define MSG_DONTWAIT ZSOCK_MSG_DONTWAIT
 
+static inline int getsockopt(int sock, int level, int optname,
+			     void *optval, socklen_t *optlen)
+{
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	return ztls_getsockopt(sock, level, optname, optval, optlen);
+#else
+	return zsock_getsockopt(sock, level, optname, optval, optlen);
+#endif
+}
+
+static inline int setsockopt(int sock, int level, int optname,
+			     const void *optval, socklen_t optlen)
+{
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	return ztls_setsockopt(sock, level, optname, optval, optlen);
+#else
+	return zsock_setsockopt(sock, level, optname, optval, optlen);
+#endif
+}
+
 static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 			      size_t size)
 {
@@ -233,7 +301,7 @@ static inline int getaddrinfo(const char *host, const char *service,
 
 static inline void freeaddrinfo(struct zsock_addrinfo *ai)
 {
-	ARG_UNUSED(ai);
+	free(ai);
 }
 
 #define addrinfo zsock_addrinfo

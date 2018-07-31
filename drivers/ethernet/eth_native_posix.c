@@ -58,6 +58,7 @@ struct eth_context {
 	int dev_fd;
 	bool init_done;
 	bool status;
+	bool promisc_mode;
 
 #if defined(CONFIG_NET_STATISTICS_ETHERNET)
 	struct net_stats_eth stats;
@@ -178,6 +179,7 @@ static int eth_send(struct net_if *iface, struct net_pkt *pkt)
 	struct eth_context *ctx = get_context(iface);
 	struct net_buf *frag;
 	int count = 0;
+	int ret;
 
 	/* First fragment contains link layer (Ethernet) headers.
 	 */
@@ -210,11 +212,14 @@ static int eth_send(struct net_if *iface, struct net_pkt *pkt)
 
 	SYS_LOG_DBG("Send pkt %p len %d", pkt, count);
 
-	eth_write_data(ctx->dev_fd, ctx->send, count);
+	ret = eth_write_data(ctx->dev_fd, ctx->send, count);
+	if (ret < 0) {
+		SYS_LOG_DBG("Cannot send pkt %p (%d)", pkt, ret);
+	} else {
+		net_pkt_unref(pkt);
+	}
 
-	net_pkt_unref(pkt);
-
-	return 0;
+	return ret < 0 ? ret : 0;
 }
 
 static int eth_init(struct device *dev)
@@ -429,6 +434,9 @@ enum ethernet_hw_caps eth_posix_native_get_capabilities(struct device *dev)
 #if defined(CONFIG_ETH_NATIVE_POSIX_PTP_CLOCK)
 		| ETHERNET_PTP
 #endif
+#if defined(CONFIG_NET_PROMISCUOUS_MODE)
+		| ETHERNET_PROMISC_MODE
+#endif
 		;
 }
 
@@ -442,19 +450,51 @@ static struct device *eth_get_ptp_clock(struct device *dev)
 #endif
 
 #if defined(CONFIG_NET_STATISTICS_ETHERNET)
-static struct net_stats_eth *get_stats(struct net_if *iface)
+static struct net_stats_eth *get_stats(struct device *dev)
 {
-	struct eth_context *context = net_if_get_device(iface)->driver_data;
+	struct eth_context *context = dev->driver_data;
 
 	return &(context->stats);
 }
 #endif
+
+static int set_config(struct device *dev,
+		      enum ethernet_config_type type,
+		      const struct ethernet_config *config)
+{
+	int ret = 0;
+
+	if (IS_ENABLED(CONFIG_NET_PROMISCUOUS_MODE) &&
+	    type == ETHERNET_CONFIG_TYPE_PROMISC_MODE) {
+		struct eth_context *context = dev->driver_data;
+
+		if (config->promisc_mode) {
+			if (context->promisc_mode) {
+				return -EALREADY;
+			}
+
+			context->promisc_mode = true;
+		} else {
+			if (!context->promisc_mode) {
+				return -EALREADY;
+			}
+
+			context->promisc_mode = false;
+		}
+
+		ret = eth_promisc_mode(context->if_name,
+				       context->promisc_mode);
+	}
+
+	return ret;
+}
 
 static const struct ethernet_api eth_if_api = {
 	.iface_api.init = eth_iface_init,
 	.iface_api.send = eth_send,
 
 	.get_capabilities = eth_posix_native_get_capabilities,
+	.set_config = set_config,
 
 #if defined(CONFIG_NET_STATISTICS_ETHERNET)
 	.get_stats = get_stats,

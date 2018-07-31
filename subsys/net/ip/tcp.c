@@ -48,11 +48,11 @@ static struct net_tcp tcp_context[NET_MAX_TCP_CONTEXT];
 
 static struct tcp_backlog_entry {
 	struct net_tcp *tcp;
-	struct sockaddr remote;
 	u32_t send_seq;
 	u32_t send_ack;
-	u16_t send_mss;
 	struct k_delayed_work ack_timer;
+	struct sockaddr remote;
+	u16_t send_mss;
 } tcp_backlog[CONFIG_NET_TCP_BACKLOG_SIZE];
 
 #if defined(CONFIG_NET_TCP_ACK_TIMEOUT)
@@ -361,8 +361,7 @@ static int finalize_segment(struct net_context *context, struct net_pkt *pkt)
 {
 #if defined(CONFIG_NET_IPV4)
 	if (net_pkt_family(pkt) == AF_INET) {
-		return net_ipv4_finalize(pkt,
-					 net_context_get_ip_proto(context));
+		net_ipv4_finalize(pkt, net_context_get_ip_proto(context));
 	} else
 #endif
 #if defined(CONFIG_NET_IPV6)

@@ -78,6 +78,15 @@ enum ethernet_hw_caps {
 
 	/** IEEE 802.1Qav (credit-based shaping) supported */
 	ETHERNET_QAV			= BIT(9),
+
+	/** Promiscuous mode supported */
+	ETHERNET_PROMISC_MODE		= BIT(10),
+
+	/** Priority queues available */
+	ETHERNET_PRIORITY_QUEUES	= BIT(11),
+
+	/** MAC address filtering supported */
+	ETHERNET_HW_FILTERING		= BIT(12),
 };
 
 enum ethernet_config_type {
@@ -87,6 +96,9 @@ enum ethernet_config_type {
 	ETHERNET_CONFIG_TYPE_MAC_ADDRESS,
 	ETHERNET_CONFIG_TYPE_QAV_DELTA_BANDWIDTH,
 	ETHERNET_CONFIG_TYPE_QAV_IDLE_SLOPE,
+	ETHERNET_CONFIG_TYPE_PROMISC_MODE,
+	ETHERNET_CONFIG_TYPE_PRIORITY_QUEUES_NUM,
+	ETHERNET_CONFIG_TYPE_FILTER,
 };
 
 struct ethernet_qav_queue_param {
@@ -97,11 +109,26 @@ struct ethernet_qav_queue_param {
 	};
 };
 
+enum ethernet_filter_type {
+	ETHERNET_FILTER_TYPE_SRC_MAC_ADDRESS,
+	ETHERNET_FILTER_TYPE_DST_MAC_ADDRESS,
+};
+
+struct ethernet_filter {
+	/** Type of filter */
+	enum ethernet_filter_type type;
+	/** MAC address to filter */
+	struct net_eth_addr mac_address;
+	/** Set (true) or unset (false) the filter */
+	bool set;
+};
+
 struct ethernet_config {
 /** @cond ignore */
 	union {
 		bool auto_negotiation;
 		bool full_duplex;
+		bool promisc_mode;
 
 		struct {
 			bool link_10bt;
@@ -112,6 +139,10 @@ struct ethernet_config {
 		struct net_eth_addr mac_address;
 
 		struct ethernet_qav_queue_param qav_queue_param;
+
+		int priority_queues_num;
+
+		struct ethernet_filter filter;
 	};
 /* @endcond */
 };
@@ -128,7 +159,7 @@ struct ethernet_api {
 	 * should be set by driver if statistics needs to be collected
 	 * for that driver.
 	 */
-	struct net_stats_eth *(*get_stats)(struct net_if *iface);
+	struct net_stats_eth *(*get_stats)(struct device *dev);
 #endif
 
 	/** Get the device capabilities */
@@ -138,6 +169,11 @@ struct ethernet_api {
 	int (*set_config)(struct device *dev,
 			  enum ethernet_config_type type,
 			  const struct ethernet_config *config);
+
+	/** Get hardware specific configuration */
+	int (*get_config)(struct device *dev,
+			  enum ethernet_config_type type,
+			  struct ethernet_config *config);
 
 #if defined(CONFIG_NET_VLAN)
 	/** The IP stack will call this function when a VLAN tag is enabled
@@ -467,6 +503,17 @@ void net_eth_carrier_on(struct net_if *iface);
  * @param iface Network interface
  */
 void net_eth_carrier_off(struct net_if *iface);
+
+/**
+ * @brief Set promiscuous mode either ON or OFF.
+ *
+ * @param iface Network interface
+ *
+ * @param enable on (true) or off (false)
+ *
+ * @return 0 if mode set or unset was successful, <0 otherwise.
+ */
+int net_eth_promisc_mode(struct net_if *iface, bool enable);
 
 /**
  * @brief Return PTP clock that is tied to this ethernet network interface.
