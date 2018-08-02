@@ -712,7 +712,7 @@ static void smp_pairing_br_complete(struct bt_smp_br *smp, u8_t status)
 			bt_keys_clear(keys);
 		}
 
-		if (bt_auth->pairing_failed) {
+		if (bt_auth && bt_auth->pairing_failed) {
 			bt_auth->pairing_failed(smp->chan.chan.conn);
 		}
 	} else {
@@ -722,7 +722,7 @@ static void smp_pairing_br_complete(struct bt_smp_br *smp, u8_t status)
 			bt_keys_store(keys);
 		}
 
-		if (bt_auth->pairing_complete) {
+		if (bt_auth && bt_auth->pairing_complete) {
 			bt_auth->pairing_complete(smp->chan.chan.conn,
 						  bond_flag);
 		}
@@ -1500,11 +1500,11 @@ static void smp_pairing_complete(struct bt_smp *smp, u8_t status)
 			bt_keys_store(smp->chan.chan.conn->le.keys);
 		}
 
-		if (bt_auth->pairing_complete) {
+		if (bt_auth && bt_auth->pairing_complete) {
 			bt_auth->pairing_complete(smp->chan.chan.conn,
 						  bond_flag);
 		}
-	} else if (bt_auth->pairing_failed) {
+	} else if (bt_auth && bt_auth->pairing_failed) {
 		bt_auth->pairing_failed(smp->chan.chan.conn);
 	}
 
@@ -4429,6 +4429,10 @@ bool bt_smp_get_tk(struct bt_conn *conn, u8_t *tk)
 	}
 
 	if (!atomic_test_bit(smp->flags, SMP_FLAG_PAIRING)) {
+		return false;
+	}
+
+	if (!atomic_test_bit(smp->flags, SMP_FLAG_ENC_PENDING)) {
 		return false;
 	}
 
