@@ -18,6 +18,7 @@
 #include "ll.h"
 
 #if defined(CONFIG_SOC_FAMILY_NRF)
+#include <drivers/clock_control/nrf5_clock_control.h>
 #include <drivers/entropy/nrf5_entropy.h>
 #endif /* CONFIG_SOC_FAMILY_NRF */
 
@@ -160,6 +161,8 @@ static struct {
 
 	u32_t ticks_anchor;
 	u32_t remainder_anchor;
+
+	u8_t  is_k32src_stable;
 
 	u8_t  volatile ticker_id_prepare;
 	u8_t  volatile ticker_id_event;
@@ -4614,6 +4617,28 @@ static void mayfly_xtal_stop(void *params)
 	DEBUG_RADIO_CLOSE(0);
 }
 
+#define DRV_NAME CONFIG_CLOCK_CONTROL_NRF5_K32SRC_DRV_NAME
+#define K32SRC   CLOCK_CONTROL_NRF5_K32SRC
+static void k32src_wait(void)
+{
+	if (!_radio.is_k32src_stable) {
+		struct device *clk_k32;
+
+		_radio.is_k32src_stable = 1;
+
+		clk_k32 = device_get_binding(DRV_NAME);
+		LL_ASSERT(clk_k32);
+
+		while (clock_control_on(clk_k32, (void *)K32SRC)) {
+			DEBUG_CPU_SLEEP(1);
+			cpu_sleep();
+			DEBUG_CPU_SLEEP(0);
+		}
+	}
+}
+#undef K32SRC
+#undef DRV_NAME
+
 #if defined(CONFIG_BT_CTLR_XTAL_ADVANCED)
 #define XON_BITMASK BIT(31) /* XTAL has been retained from previous prepare */
 
@@ -5793,9 +5818,18 @@ static void chan_set(u32_t chan)
  * - It shall have no more than 24 transitions.
  * - It shall have a minimum of two transitions in the most significant six
  *   bits.
+ *
+ * LE Coded PHY requirements:
+ * - It shall have at least three ones in the least significant 8 bits.
+ * - It shall have no more than eleven transitions in the least significant 16
+ *   bits.
  */
 static u32_t access_addr_get(void)
 {
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+	u8_t transitions_lsb16;
+	u8_t ones_count_lsb8;
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	u8_t consecutive_cnt;
 	u8_t consecutive_bit;
 	u32_t adv_aa_check;
@@ -5814,8 +5848,17 @@ again:
 	bit_idx = 31;
 	transitions = 0;
 	consecutive_cnt = 1;
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+	ones_count_lsb8 = 0;
+	transitions_lsb16 = 0;
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	consecutive_bit = (access_addr >> bit_idx) & 0x01;
 	while (bit_idx--) {
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+		u8_t transitions_lsb16_prev = transitions_lsb16;
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
+		u8_t consecutive_cnt_prev = consecutive_cnt;
+		u8_t transitions_prev = transitions;
 		u8_t bit;
 
 		bit = (access_addr >> bit_idx) & 0x01;
@@ -5825,29 +5868,81 @@ again:
 			consecutive_cnt = 1;
 			consecutive_bit = bit;
 			transitions++;
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+			if (bit_idx < 15) {
+				transitions_lsb16++;
+			}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 		}
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+		if ((bit_idx < 8) && bit) {
+			ones_count_lsb8++;
+		}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 
 		/* It shall have no more than six consecutive zeros or ones. */
 		/* It shall have a minimum of two transitions in the most
 		 * significant six bits.
 		 */
 		if ((consecutive_cnt > 6) ||
-		    ((bit_idx < 28) && (transitions < 1)) ||
-		    ((bit_idx < 27) && (transitions < 2))) {
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+		    (!bit && (((bit_idx < 6) && (ones_count_lsb8 < 1)) ||
+			      ((bit_idx < 5) && (ones_count_lsb8 < 2)) ||
+			      ((bit_idx < 4) && (ones_count_lsb8 < 3)))) ||
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
+		    ((consecutive_cnt < 6) &&
+		     (((bit_idx < 29) && (transitions < 1)) ||
+		      ((bit_idx < 28) && (transitions < 2))))) {
 			if (consecutive_bit) {
 				consecutive_bit = 0;
 				access_addr &= ~BIT(bit_idx);
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+				if (bit_idx < 8) {
+					ones_count_lsb8--;
+				}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 			} else {
 				consecutive_bit = 1;
 				access_addr |= BIT(bit_idx);
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+				if (bit_idx < 8) {
+					ones_count_lsb8++;
+				}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 			}
 
-			consecutive_cnt = 1;
-			transitions++;
+			if (transitions != transitions_prev) {
+				consecutive_cnt = consecutive_cnt_prev;
+				transitions = transitions_prev;
+			} else {
+				consecutive_cnt = 1;
+				transitions++;
+			}
+
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+			if (bit_idx < 15) {
+				if (transitions_lsb16 !=
+				    transitions_lsb16_prev) {
+					transitions_lsb16 =
+						transitions_lsb16_prev;
+				} else {
+					transitions_lsb16++;
+				}
+			}
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
 		}
 
-		/* It shall have no more than 24 transitions */
-		if (transitions > 24) {
+		/* It shall have no more than 24 transitions
+		 * It shall have no more than eleven transitions in the least
+		 * significant 16 bits.
+		 */
+		if ((transitions > 24) ||
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+		    (transitions_lsb16 > 11) ||
+#endif /* CONFIG_BT_CTLR_PHY_CODED */
+		    0) {
 			if (consecutive_bit) {
 				access_addr &= ~(BIT(bit_idx + 1) - 1);
 			} else {
@@ -10070,6 +10165,9 @@ u32_t radio_adv_enable(u16_t interval, u8_t chan_map, u8_t filter_policy,
 		conn->rssi_sample_count = 0;
 #endif /* CONFIG_BT_CTLR_CONN_RSSI */
 
+		/* wait for stable 32KHz clock */
+		k32src_wait();
+
 		_radio.advertiser.conn = conn;
 	} else {
 		conn = NULL;
@@ -10548,6 +10646,9 @@ u32_t radio_connect_enable(u8_t adv_addr_type, u8_t *adv_addr, u16_t interval,
 	conn->rssi_reported = 0x7F;
 	conn->rssi_sample_count = 0;
 #endif /* CONFIG_BT_CTLR_CONN_RSSI */
+
+	/* wait for stable 32KHz clock */
+	k32src_wait();
 
 	_radio.scanner.conn = conn;
 

@@ -281,6 +281,13 @@ config BT_SMP_SC_ONLY
 	  Security Mode 1 Level 4 stands for authenticated LE Secure Connections
 	  pairing with encryption. Enabling this option disables legacy pairing.
 
+config BT_FIXED_PASSKEY
+	bool "Use a fixed passkey for pairing"
+	help
+	  With this option enabled, the application will be able to call the
+	  bt_passkey_set() API to set a fixed passkey. If set, the
+	  pairing_confim() callback will be called for all incoming pairings.
+
 config BT_USE_DEBUG_KEYS
 	bool "Enable Security Manager Debug Mode"
 	depends on BT_TINYCRYPT_ECC
@@ -334,16 +341,28 @@ config BT_SCAN_WITH_IDENTITY
 	  disclosing local identity information. However, if the use case
 	  requires disclosing it then enable this option.
 
+config BT_DEVICE_NAME_DYNAMIC
+	bool "Allow to set Bluetooth device name on runtime"
+	help
+	  Enabling this option allows for runtime configuration of Bluetooth
+	  device name.
+
 config BT_DEVICE_NAME_MAX
 	int "Maximum size in bytes for device name"
+	depends on BT_DEVICE_NAME_DYNAMIC
 	default 28
-	default 0 if !BT_SETTINGS
-	range 0 248
+	range 2 248
 	help
 	  Bluetooth device name storage size. Storage can be up to 248 bytes
-	  long (excluding NULL termination). 0 means that no storage space is
-	  allocated for device name in which case the device name cannot be
-	  changed at runtime.
+	  long (excluding NULL termination).
+
+config BT_DEVICE_NAME_GATT_WRITABLE
+	bool "Allow to write name by remote GATT clients"
+	depends on BT_CONN && BT_DEVICE_NAME_DYNAMIC
+	default y
+	help
+	  Enabling this option allows remote GATT clients to write to device
+	  name GAP characteristic.
 
 config BT_DEVICE_NAME
 	string "Bluetooth device name"
@@ -368,6 +387,7 @@ config BT_TINYCRYPT_ECC
 	select TINYCRYPT
 	select TINYCRYPT_ECC_DH
 	depends on BT_HCI_RAW || BT_HCI_HOST
+	default y if BT_CTLR && (BT_SMP || BT_MESH_PROV)
 	help
 	  If this option is set TinyCrypt library is used for emulating the
 	  ECDH HCI commands and events needed by e.g. LE Secure Connections.
@@ -376,7 +396,9 @@ config BT_TINYCRYPT_ECC
 	  commands the LE Secure Connections support will be disabled.
 	  In builds including the HCI Raw interface and the BLE Controller, this
 	  option injects support for the 2 HCI commands required for LE Secure
-	  Connections so that Hosts can make use of those.
+	  Connections so that Hosts can make use of those. The option defaults
+	  to enabled for a combined build with Zephyr's own controller, since it
+	  does not have any special ECC support itself (at least not currently).
 
 if BT_DEBUG
 config BT_DEBUG_SETTINGS
@@ -521,8 +543,8 @@ config BT_RFCOMM_L2CAP_MTU
 	default BT_RX_BUF_LEN
 	default BT_L2CAP_RX_MTU if BT_HCI_ACL_FLOW_CONTROL
 	depends on BT_RFCOMM
-	range BT_RX_BUF_LEN 32767
 	range BT_L2CAP_RX_MTU 32767 if BT_HCI_ACL_FLOW_CONTROL
+	range BT_RX_BUF_LEN 32767
 	help
 	  Maximum size of L2CAP PDU for RFCOMM frames.
 

@@ -72,12 +72,12 @@
 #pragma message "CONFIG_NET_BUF_DATA_SIZE should be a multiple of 64 bytes " \
 	"due to the granularity of RX DMA"
 #endif
-#endif /* !CONFIG_NET_TEST */
 
 #if (CONFIG_ETH_SAM_GMAC_BUF_RX_COUNT + 1) * CONFIG_ETH_SAM_GMAC_QUEUES \
 	> CONFIG_NET_BUF_RX_COUNT
 #error Not enough RX buffers to allocate descriptors for each HW queue
 #endif
+#endif /* !CONFIG_NET_TEST */
 
 /* RX descriptors list */
 static struct gmac_desc rx_desc_que0[MAIN_QUEUE_RX_DESC_COUNT]
@@ -651,8 +651,7 @@ static int get_mck_clock_divisor(u32_t mck)
 	return mck_divisor;
 }
 
-static int eth_sam_gmac_setup_qav_idle_slope(Gmac *gmac, int queue_id,
-					     int idle_slope)
+static int eth_sam_gmac_setup_qav(Gmac *gmac, int queue_id, bool enable)
 {
 	/* Verify queue id */
 	if (queue_id < 1 || queue_id > GMAC_PRIORITY_QUEUE_NO) {
@@ -660,23 +659,66 @@ static int eth_sam_gmac_setup_qav_idle_slope(Gmac *gmac, int queue_id,
 	}
 
 	if (queue_id == 1) {
-		gmac->GMAC_CBSCR &= ~GMAC_CBSCR_QAE;
-		gmac->GMAC_CBSISQA = idle_slope;
-		gmac->GMAC_CBSCR |= GMAC_CBSCR_QAE;
+		if (enable) {
+			gmac->GMAC_CBSCR |= GMAC_CBSCR_QAE;
+		} else {
+			gmac->GMAC_CBSCR &= ~GMAC_CBSCR_QAE;
+		}
 	} else {
-		gmac->GMAC_CBSCR &= ~GMAC_CBSCR_QBE;
-		gmac->GMAC_CBSISQB = idle_slope;
-		gmac->GMAC_CBSCR |= GMAC_CBSCR_QBE;
+		if (enable) {
+			gmac->GMAC_CBSCR |= GMAC_CBSCR_QBE;
+		} else {
+			gmac->GMAC_CBSCR &= ~GMAC_CBSCR_QBE;
+		}
 	}
 
 	return 0;
 }
 
-static int eth_sam_gmac_setup_qav_delta_bandwidth(Gmac *gmac, int queue_id,
-						  int queue_share)
+static int eth_sam_gmac_get_qav_status(Gmac *gmac, int queue_id, bool *enabled)
+{
+	/* Verify queue id */
+	if (queue_id < 1 || queue_id > GMAC_PRIORITY_QUEUE_NO) {
+		return -EINVAL;
+	}
+
+	if (queue_id == 1) {
+		*enabled = gmac->GMAC_CBSCR & GMAC_CBSCR_QAE;
+	} else {
+		*enabled = gmac->GMAC_CBSCR & GMAC_CBSCR_QBE;
+	}
+
+	return 0;
+}
+
+static int eth_sam_gmac_setup_qav_idle_slope(Gmac *gmac, int queue_id,
+					     unsigned int idle_slope)
+{
+	u32_t cbscr_val;
+
+	/* Verify queue id */
+	if (queue_id < 1 || queue_id > GMAC_PRIORITY_QUEUE_NO) {
+		return -EINVAL;
+	}
+
+	cbscr_val = gmac->GMAC_CBSISQA;
+
+	if (queue_id == 1) {
+		gmac->GMAC_CBSCR &= ~GMAC_CBSCR_QAE;
+		gmac->GMAC_CBSISQA = idle_slope;
+	} else {
+		gmac->GMAC_CBSCR &= ~GMAC_CBSCR_QBE;
+		gmac->GMAC_CBSISQB = idle_slope;
+	}
+
+	gmac->GMAC_CBSCR = cbscr_val;
+
+	return 0;
+}
+
+static u32_t eth_sam_gmac_get_bandwidth(Gmac *gmac)
 {
 	u32_t bandwidth;
-	u32_t idle_slope;
 
 	/* See if we operate in 10Mbps or 100Mbps mode,
 	 * Note: according to the manual, portTransmitRate is 0x07735940 for
@@ -690,6 +732,69 @@ static int eth_sam_gmac_setup_qav_delta_bandwidth(Gmac *gmac, int queue_id,
 		/* 10Mbps */
 		bandwidth = (10 * 1000 * 1000) / 8;
 	}
+
+	return bandwidth;
+}
+
+static int eth_sam_gmac_get_qav_idle_slope(Gmac *gmac, int queue_id,
+					   unsigned int *idle_slope)
+{
+	/* Verify queue id */
+	if (queue_id < 1 || queue_id > GMAC_PRIORITY_QUEUE_NO) {
+		return -EINVAL;
+	}
+
+	if (queue_id == 1) {
+		*idle_slope = gmac->GMAC_CBSISQA;
+	} else {
+		*idle_slope = gmac->GMAC_CBSISQB;
+	}
+
+	/* Convert to bps as expected by upper layer */
+	*idle_slope *= 8;
+
+	return 0;
+}
+
+static int eth_sam_gmac_get_qav_delta_bandwidth(Gmac *gmac, int queue_id,
+						unsigned int *delta_bandwidth)
+{
+	u32_t bandwidth;
+	unsigned int idle_slope;
+	int ret;
+
+	ret = eth_sam_gmac_get_qav_idle_slope(gmac, queue_id, &idle_slope);
+	if (ret) {
+		return ret;
+	}
+
+	/* Calculate in Bps */
+	idle_slope /= 8;
+
+	/* Get bandwidth and convert to bps */
+	bandwidth = eth_sam_gmac_get_bandwidth(gmac);
+
+	/* Calculate percentage - instead of multiplying idle_slope by 100,
+	 * divide bandwidth - these numbers are so large that it should not
+	 * influence the outcome and saves us from employing larger data types.
+	 */
+	*delta_bandwidth = idle_slope / (bandwidth / 100);
+
+	return 0;
+}
+
+static int eth_sam_gmac_setup_qav_delta_bandwidth(Gmac *gmac, int queue_id,
+						  int queue_share)
+{
+	u32_t bandwidth;
+	u32_t idle_slope;
+
+	/* Verify queue id */
+	if (queue_id < 1 || queue_id > GMAC_PRIORITY_QUEUE_NO) {
+		return -EINVAL;
+	}
+
+	bandwidth = eth_sam_gmac_get_bandwidth(gmac);
 
 	idle_slope = (bandwidth * queue_share) / 100;
 
@@ -743,9 +848,12 @@ static int gmac_init(Gmac *gmac, u32_t gmac_ncfgr_val)
 	 */
 #if GMAC_PRIORITY_QUEUE_NO == 1
 	eth_sam_gmac_setup_qav_delta_bandwidth(gmac, 1, 75);
+	eth_sam_gmac_setup_qav(gmac, 1, true);
 #elif GMAC_PRIORITY_QUEUE_NO == 2
 	eth_sam_gmac_setup_qav_delta_bandwidth(gmac, 1, 0);
 	eth_sam_gmac_setup_qav_delta_bandwidth(gmac, 2, 75);
+	eth_sam_gmac_setup_qav(gmac, 1, true);
+	eth_sam_gmac_setup_qav(gmac, 2, true);
 #endif
 
 	return 0;
@@ -1119,9 +1227,11 @@ static void eth_rx(struct gmac_queue *queue)
 	}
 }
 
+#if (CONFIG_ETH_SAM_GMAC_QUEUES != NET_TC_TX_COUNT) || \
+	((NET_TC_TX_COUNT != NET_TC_RX_COUNT) && defined(CONFIG_NET_VLAN))
 static int priority2queue(enum net_priority priority)
 {
-	u8_t queue_priority_map[] = {
+	static const u8_t queue_priority_map[] = {
 #if CONFIG_ETH_SAM_GMAC_QUEUES == 1
 		0, 0, 0, 0, 0, 0, 0, 0
 #endif
@@ -1135,6 +1245,7 @@ static int priority2queue(enum net_priority priority)
 
 	return queue_priority_map[priority];
 }
+#endif
 
 static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 {
@@ -1150,6 +1261,7 @@ static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 	u16_t frag_len;
 	u32_t err_tx_flushed_count_at_entry;
 	unsigned int key;
+	u8_t pkt_prio;
 
 	__ASSERT(pkt, "buf pointer is NULL");
 	__ASSERT(pkt->frags, "Frame data missing");
@@ -1157,7 +1269,15 @@ static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 	SYS_LOG_DBG("ETH tx");
 
 	/* Decide which queue should be used */
-	queue = &dev_data->queue_list[priority2queue(net_pkt_priority(pkt))];
+	pkt_prio = net_pkt_priority(pkt);
+
+#if CONFIG_ETH_SAM_GMAC_QUEUES == CONFIG_NET_TC_TX_COUNT
+	/* Prefer to chose queue based on its traffic class */
+	queue = &dev_data->queue_list[net_tx_priority2tc(pkt_prio)];
+#else
+	/* If that's not possible due to config - use builtin mapping */
+	queue = &dev_data->queue_list[priority2queue(pkt_prio)];
+#endif
 
 	tx_desc_list = &queue->tx_desc_list;
 	err_tx_flushed_count_at_entry = queue->err_tx_flushed_count;
@@ -1469,8 +1589,17 @@ static void eth0_iface_init(struct net_if *iface)
 	}
 
 #if GMAC_PRIORITY_QUEUE_NO >= 1
+#if CONFIG_ETH_SAM_GMAC_QUEUES == NET_TC_RX_COUNT
+	/* If TC configuration is compatible with HW configuration, setup the
+	 * screening registers based on the DS/TC values.
+	 * Map them 1:1 - TC 0 -> Queue 0, TC 1 -> Queue 1 etc.
+	 */
+	for (i = 0; i < CONFIG_NET_TC_RX_COUNT; ++i) {
+		cfg->regs->GMAC_ST1RPQ[i] =
+			GMAC_ST1RPQ_DSTCM(i) | GMAC_ST1RPQ_QNB(i);
+	}
+#elif defined(CONFIG_NET_VLAN)
 	/* If VLAN is enabled, route packets according to VLAN priority */
-#if defined(CONFIG_NET_VLAN)
 	int j;
 
 	i = 0;
@@ -1526,40 +1655,107 @@ static enum ethernet_hw_caps eth_sam_gmac_get_capabilities(struct device *dev)
 		ETHERNET_LINK_100BASE_T;
 }
 
-static int eth_sam_gmac_set_config(struct device *dev,
-				   enum ethernet_config_type type,
-				   const struct ethernet_config *config)
+static int eth_sam_gmac_set_qav_param(struct device *dev,
+				      enum ethernet_config_type type,
+				      const struct ethernet_config *config)
 {
 	const struct eth_sam_dev_cfg *const cfg = DEV_CFG(dev);
 	Gmac *gmac = cfg->regs;
-	int queue_id;
+	enum ethernet_qav_param_type qav_param_type;
 	unsigned int delta_bandwidth;
 	unsigned int idle_slope;
+	int queue_id;
+	bool enable;
 
-	switch (type) {
-	case ETHERNET_CONFIG_TYPE_QAV_DELTA_BANDWIDTH:
-		queue_id = config->qav_queue_param.queue_id;
+	/* Priority queue IDs start from 1 for SAM GMAC */
+	queue_id = config->qav_param.queue_id + 1;
 
-		/* Priority queue IDs start from 1 for SAM GMAC */
-		queue_id++;
+	qav_param_type = config->qav_param.type;
 
-		delta_bandwidth = config->qav_queue_param.delta_bandwidth;
+	switch (qav_param_type) {
+	case ETHERNET_QAV_PARAM_TYPE_STATUS:
+		enable = config->qav_param.enabled;
+		return eth_sam_gmac_setup_qav(gmac, queue_id, enable);
+	case ETHERNET_QAV_PARAM_TYPE_DELTA_BANDWIDTH:
+		delta_bandwidth = config->qav_param.delta_bandwidth;
 
 		return eth_sam_gmac_setup_qav_delta_bandwidth(gmac, queue_id,
 							      delta_bandwidth);
-	case ETHERNET_CONFIG_TYPE_QAV_IDLE_SLOPE:
-		queue_id = config->qav_queue_param.queue_id;
+	case ETHERNET_QAV_PARAM_TYPE_IDLE_SLOPE:
+		idle_slope = config->qav_param.idle_slope;
 
-		/* Priority queue IDs start from 1 for SAM GMAC */
-		queue_id++;
-
-		idle_slope = config->qav_queue_param.idle_slope;
+		/* The standard uses bps, SAM GMAC uses Bps - convert now */
+		idle_slope /= 8;
 
 		return eth_sam_gmac_setup_qav_idle_slope(gmac, queue_id,
 							 idle_slope);
 	default:
-		return -ENOTSUP;
+		break;
 	}
+
+	return -ENOTSUP;
+}
+
+static int eth_sam_gmac_set_config(struct device *dev,
+				   enum ethernet_config_type type,
+				   const struct ethernet_config *config)
+{
+	switch (type) {
+	case ETHERNET_CONFIG_TYPE_QAV_PARAM:
+		return eth_sam_gmac_set_qav_param(dev, type, config);
+	default:
+		break;
+	}
+
+	return -ENOTSUP;
+}
+
+static int eth_sam_gmac_get_qav_param(struct device *dev,
+				      enum ethernet_config_type type,
+				      struct ethernet_config *config)
+{
+	const struct eth_sam_dev_cfg *const cfg = DEV_CFG(dev);
+	Gmac *gmac = cfg->regs;
+	enum ethernet_qav_param_type qav_param_type;
+	int queue_id;
+	bool *enabled;
+	unsigned int *idle_slope;
+	unsigned int *delta_bandwidth;
+
+	/* Priority queue IDs start from 1 for SAM GMAC */
+	queue_id = config->qav_param.queue_id + 1;
+
+	qav_param_type = config->qav_param.type;
+
+	switch (qav_param_type) {
+	case ETHERNET_QAV_PARAM_TYPE_STATUS:
+		enabled = &config->qav_param.enabled;
+		return eth_sam_gmac_get_qav_status(gmac, queue_id, enabled);
+	case ETHERNET_QAV_PARAM_TYPE_IDLE_SLOPE:
+		idle_slope = &config->qav_param.idle_slope;
+		return eth_sam_gmac_get_qav_idle_slope(gmac, queue_id,
+						       idle_slope);
+	case ETHERNET_QAV_PARAM_TYPE_OPER_IDLE_SLOPE:
+		idle_slope = &config->qav_param.oper_idle_slope;
+		return eth_sam_gmac_get_qav_idle_slope(gmac, queue_id,
+						       idle_slope);
+	case ETHERNET_QAV_PARAM_TYPE_DELTA_BANDWIDTH:
+		delta_bandwidth = &config->qav_param.delta_bandwidth;
+		return eth_sam_gmac_get_qav_delta_bandwidth(gmac, queue_id,
+							    delta_bandwidth);
+	case ETHERNET_QAV_PARAM_TYPE_TRAFFIC_CLASS:
+#if CONFIG_ETH_SAM_GMAC_QUEUES == NET_TC_TX_COUNT
+		config->qav_param.traffic_class = queue_id;
+		return 0;
+#else
+		/* Invalid configuration - no direct TC to queue mapping */
+		return -ENOTSUP;
+#endif
+	default:
+		break;
+	}
+
+	return -ENOTSUP;
 }
 
 static int eth_sam_gmac_get_config(struct device *dev,
@@ -1569,12 +1765,14 @@ static int eth_sam_gmac_get_config(struct device *dev,
 	switch (type) {
 	case ETHERNET_CONFIG_TYPE_PRIORITY_QUEUES_NUM:
 		config->priority_queues_num = GMAC_PRIORITY_QUEUE_NO;
-		break;
+		return 0;
+	case ETHERNET_CONFIG_TYPE_QAV_PARAM:
+		return eth_sam_gmac_get_qav_param(dev, type, config);
 	default:
-		return -ENOTSUP;
+		break;
 	}
 
-	return 0;
+	return -ENOTSUP;
 }
 
 #if defined(CONFIG_PTP_CLOCK_SAM_GMAC)

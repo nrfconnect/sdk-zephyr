@@ -4749,7 +4749,7 @@ static int set_ad(u16_t hci_op, const struct bt_ad *ad, size_t ad_len)
 
 int bt_set_name(const char *name)
 {
-#if CONFIG_BT_DEVICE_NAME_MAX > 0
+#if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
 	size_t len = strlen(name);
 	int err;
 
@@ -4759,13 +4759,6 @@ int bt_set_name(const char *name)
 
 	if (!strcmp(bt_dev.name, name)) {
 		return 0;
-	}
-
-	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		err = settings_save_one("bt/name", CONFIG_BT_DEVICE_NAME);
-		if (err) {
-			return err;
-		}
 	}
 
 	strncpy(bt_dev.name, name, sizeof(bt_dev.name));
@@ -4785,6 +4778,20 @@ int bt_set_name(const char *name)
 		}
 	}
 
+	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+		char buf[BT_SETTINGS_SIZE(CONFIG_BT_DEVICE_NAME_MAX - 1)];
+		char *str;
+
+		str = settings_str_from_bytes(bt_dev.name, len, buf,
+					      sizeof(buf));
+		if (str) {
+			err = settings_save_one("bt/name", str);
+			if (err) {
+				BT_WARN("Unable to store name");
+			}
+		}
+	}
+
 	return 0;
 #else
 	return -ENOMEM;
@@ -4793,7 +4800,7 @@ int bt_set_name(const char *name)
 
 const char *bt_get_name(void)
 {
-#if CONFIG_BT_DEVICE_NAME_MAX > 0
+#if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
 	return bt_dev.name;
 #else
 	return CONFIG_BT_DEVICE_NAME;

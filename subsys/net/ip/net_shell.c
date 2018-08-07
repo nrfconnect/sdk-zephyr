@@ -49,8 +49,12 @@
 #include "ethernet/arp.h"
 #endif
 
-#if defined(CONFIG_NET_VLAN)
+#if defined(CONFIG_NET_L2_ETHERNET)
 #include <net/ethernet.h>
+#endif
+
+#if defined(CONFIG_NET_L2_ETHERNET_MGMT)
+#include <net/ethernet_mgmt.h>
 #endif
 
 #if defined(CONFIG_NET_GPTP)
@@ -171,6 +175,43 @@ static const char *iface2str(struct net_if *iface, const char **extra)
 	return "<unknown type>";
 }
 
+#if defined(CONFIG_NET_L2_ETHERNET)
+struct ethernet_capabilities {
+	enum ethernet_hw_caps capability;
+	const char * const description;
+};
+
+#define EC(cap, desc) { .capability = cap, .description = desc }
+
+static struct ethernet_capabilities eth_hw_caps[] = {
+	EC(ETHERNET_HW_TX_CHKSUM_OFFLOAD, "TX checksum offload"),
+	EC(ETHERNET_HW_RX_CHKSUM_OFFLOAD, "RX checksum offload"),
+	EC(ETHERNET_HW_VLAN,              "Virtual LAN"),
+	EC(ETHERNET_AUTO_NEGOTIATION_SET, "Auto negotiation"),
+	EC(ETHERNET_LINK_10BASE_T,        "10 Mbits"),
+	EC(ETHERNET_LINK_100BASE_T,       "100 Mbits"),
+	EC(ETHERNET_LINK_1000BASE_T,      "1 Gbits"),
+	EC(ETHERNET_DUPLEX_SET,           "Half/full duplex"),
+	EC(ETHERNET_PTP,                  "IEEE 802.1AS gPTP clock"),
+	EC(ETHERNET_QAV,                  "IEEE 802.1Qav (credit shaping)"),
+	EC(ETHERNET_PROMISC_MODE,         "Promiscuous mode"),
+	EC(ETHERNET_PRIORITY_QUEUES,      "Priority queues"),
+	EC(ETHERNET_HW_FILTERING,         "MAC address filtering"),
+};
+
+static void print_supported_ethernet_capabilities(struct net_if *iface)
+{
+	enum ethernet_hw_caps caps = net_eth_get_hw_capabilities(iface);
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(eth_hw_caps); i++) {
+		if (caps & eth_hw_caps[i].capability) {
+			printk("\t%s\n", eth_hw_caps[i].description);
+		}
+	}
+}
+#endif /* CONFIG_NET_L2_ETHERNET */
+
 static void iface_cb(struct net_if *iface, void *user_data)
 {
 #if defined(CONFIG_NET_IPV6)
@@ -186,6 +227,10 @@ static void iface_cb(struct net_if *iface, void *user_data)
 #endif
 	struct net_if_addr *unicast;
 	struct net_if_mcast_addr *mcast;
+#if defined(CONFIG_NET_L2_ETHERNET_MGMT)
+	struct ethernet_req_params params;
+	int ret;
+#endif
 	const char *extra;
 	int i, count;
 
@@ -208,6 +253,36 @@ static void iface_cb(struct net_if *iface, void *user_data)
 	}
 
 	printk("MTU       : %d\n", net_if_get_mtu(iface));
+
+#if defined(CONFIG_NET_L2_ETHERNET_MGMT)
+	count = 0;
+	ret = net_mgmt(NET_REQUEST_ETHERNET_GET_PRIORITY_QUEUES_NUM,
+		       iface,
+		       &params, sizeof(struct ethernet_req_params));
+
+	if (!ret && params.priority_queues_num) {
+		count = params.priority_queues_num;
+		printk("Priority queues:\n");
+		for (i = 0; i < count; ++i) {
+			params.qav_param.queue_id = i;
+			params.qav_param.type = ETHERNET_QAV_PARAM_TYPE_STATUS;
+			ret = net_mgmt(NET_REQUEST_ETHERNET_GET_QAV_PARAM,
+				       iface,
+				       &params,
+				       sizeof(struct ethernet_req_params));
+
+			printk("\t%d: Qav ", i);
+			if (ret) {
+				printk("not supported\n");
+			} else {
+				printk("%s\n",
+				       params.qav_param.enabled ?
+				       "enabled" :
+				       "disabled");
+			}
+		}
+	}
+#endif
 
 #if defined(CONFIG_NET_PROMISCUOUS_MODE)
 	printk("Promiscuous mode : %s\n",
@@ -235,6 +310,13 @@ static void iface_cb(struct net_if *iface, void *user_data)
 		}
 	}
 #endif
+
+#ifdef CONFIG_NET_L2_ETHERNET
+	if (net_if_l2(iface) == &NET_L2_GET_NAME(ETHERNET)) {
+		printk("Ethernet capabilities supported:\n");
+		print_supported_ethernet_capabilities(iface);
+	}
+#endif /* CONFIG_NET_L2_ETHERNET */
 
 #if defined(CONFIG_NET_IPV6)
 	count = 0;
@@ -536,6 +618,20 @@ static void print_eth_stats(struct net_if *iface, struct net_stats_eth *data)
 	printk("Bcast sent       : %u\n", data->broadcast.tx);
 	printk("Mcast received   : %u\n", data->multicast.rx);
 	printk("Mcast sent       : %u\n", data->multicast.tx);
+
+#if defined(CONFIG_NET_STATISTICS_ETHERNET_VENDOR)
+	if (data->vendor) {
+		printk("Vendor specific statistics for Ethernet interface %p [%d]:\n",
+			iface, net_if_get_by_iface(iface));
+		size_t i = 0;
+
+		do {
+			printk("%s : %u\n", data->vendor[i].key,
+				data->vendor[i].value);
+			i++;
+		} while (data->vendor[i].key);
+	}
+#endif /* CONFIG_NET_STATISTICS_ETHERNET_VENDOR */
 }
 #endif /* CONFIG_NET_STATISTICS_ETHERNET && CONFIG_NET_STATISTICS_USER_API */
 
@@ -2087,7 +2183,7 @@ int net_shell_cmd_gptp(int argc, char *argv[])
 		char *endptr;
 		int port = strtol(argv[arg], &endptr, 10);
 
-		if (endptr != argv[arg]) {
+		if (*endptr == '\0') {
 			gptp_print_port_info(port);
 		} else {
 			printk("Not a valid gPTP port number: %s\n", argv[arg]);
@@ -2234,7 +2330,7 @@ int net_shell_cmd_iface(int argc, char *argv[])
 {
 	int arg = 0;
 	bool up = false;
-	char *endptr = NULL;
+	char *endptr;
 	struct net_if *iface;
 	int idx, ret;
 
@@ -3051,7 +3147,7 @@ int net_shell_cmd_stats(int argc, char *argv[])
 		net_shell_print_statistics_all();
 	} else {
 		struct net_if *iface;
-		char *endptr = NULL;
+		char *endptr;
 		int idx;
 
 		idx = strtol(argv[arg], &endptr, 10);
@@ -3276,6 +3372,7 @@ int net_shell_cmd_tcp(int argc, char *argv[])
 	if (argv[arg]) {
 		if (!strcmp(argv[arg], "connect")) {
 			/* tcp connect <ip> port */
+			char *endptr;
 			char *ip;
 			u16_t port;
 
@@ -3296,7 +3393,11 @@ int net_shell_cmd_tcp(int argc, char *argv[])
 				return 0;
 			}
 
-			port = strtol(argv[arg], NULL, 10);
+			port = strtol(argv[arg], &endptr, 10);
+			if (*endptr != '\0') {
+				printk("Invalid port %s\n", argv[arg]);
+				return 0;
+			}
 
 			return tcp_connect(ip, port, &tcp_ctx);
 		}
@@ -3454,6 +3555,7 @@ int net_shell_cmd_vlan(int argc, char *argv[])
 	if (!strcmp(argv[arg], "add")) {
 		/* vlan add <tag> <interface index> */
 		struct net_if *iface;
+		char *endptr;
 		u32_t iface_idx;
 
 		if (!argv[++arg]) {
@@ -3461,14 +3563,22 @@ int net_shell_cmd_vlan(int argc, char *argv[])
 			return 0;
 		}
 
-		tag = strtol(argv[arg], NULL, 10);
+		tag = strtol(argv[arg], &endptr, 10);
+		if (*endptr != '\0') {
+			printk("Invalid tag %s\n", argv[arg]);
+			return 0;
+		}
 
 		if (!argv[++arg]) {
 			printk("Network interface index missing.\n");
 			return 0;
 		}
 
-		iface_idx = strtol(argv[arg], NULL, 10);
+		iface_idx = strtol(argv[arg], &endptr, 10);
+		if (*endptr != '\0') {
+			printk("Invalid index %s\n", argv[arg]);
+			return 0;
+		}
 
 		iface = net_if_get_by_index(iface_idx);
 		if (!iface) {
@@ -3500,13 +3610,18 @@ int net_shell_cmd_vlan(int argc, char *argv[])
 
 	if (!strcmp(argv[arg], "del")) {
 		/* vlan del <tag> */
+		char *endptr;
 
 		if (!argv[++arg]) {
 			printk("VLAN tag missing.\n");
 			return 0;
 		}
 
-		tag = strtol(argv[arg], NULL, 10);
+		tag = strtol(argv[arg], &endptr, 10);
+		if (*endptr != '\0') {
+			printk("Invalid tag %s\n", argv[arg]);
+			return 0;
+		}
 
 		net_if_foreach(iface_vlan_del_cb,
 			       UINT_TO_POINTER((u32_t)tag));

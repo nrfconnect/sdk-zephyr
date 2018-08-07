@@ -20,6 +20,7 @@
 #include "arp.h"
 #include "net_private.h"
 #include "ipv6.h"
+#include "ipv4_autoconf_internal.h"
 
 #if defined(CONFIG_NET_IPV6)
 static const struct net_eth_addr multicast_eth_addr = {
@@ -212,6 +213,11 @@ static enum net_verdict ethernet_recv(struct net_if *iface,
 		NET_DBG("ARP packet from %s received",
 			net_sprint_ll_addr((u8_t *)hdr->src.addr,
 					   sizeof(struct net_eth_addr)));
+#ifdef CONFIG_NET_IPV4_AUTO
+		if (net_ipv4_autoconf_input(iface, pkt) == NET_DROP) {
+			return NET_DROP;
+		}
+#endif
 		return net_arp_input(pkt);
 	}
 #endif
@@ -413,24 +419,30 @@ static enum net_verdict ethernet_send(struct net_if *iface,
 			goto setup_hdr;
 		}
 
-		arp_pkt = net_arp_prepare(pkt);
-		if (!arp_pkt) {
-			return NET_DROP;
-		}
+		/* Trying to send ARP message so no need to setup it twice */
+		if (ntohs(NET_ETH_HDR(pkt)->type) != NET_ETH_PTYPE_ARP) {
+			arp_pkt = net_arp_prepare(pkt, &NET_IPV4_HDR(pkt)->dst,
+						  NULL);
+			if (!arp_pkt) {
+				return NET_DROP;
+			}
 
-		if (pkt != arp_pkt) {
-			NET_DBG("Sending arp pkt %p (orig %p) to iface %p",
-				arp_pkt, pkt, iface);
+			if (pkt != arp_pkt) {
+				NET_DBG("Sending arp pkt %p (orig %p) to "
+					"iface %p",
+					arp_pkt, pkt, iface);
 
-			/* Either pkt went to ARP pending queue or
-			 * there was no space in the queue anymore.
-			 */
-			net_pkt_unref(pkt);
+				/* Either pkt went to ARP pending queue or
+				 * there was no space in the queue anymore.
+				 */
+				net_pkt_unref(pkt);
 
-			pkt = arp_pkt;
-		} else {
-			NET_DBG("Found ARP entry, sending pkt %p to iface %p",
-				pkt, iface);
+				pkt = arp_pkt;
+			} else {
+				NET_DBG("Found ARP entry, sending pkt %p to "
+					"iface %p",
+					pkt, iface);
+			}
 		}
 
 		net_pkt_ll_src(pkt)->addr = (u8_t *)&NET_ETH_HDR(pkt)->src;

@@ -12,7 +12,6 @@
  */
 
 #define _DEFAULT_SOURCE
-#define _XOPEN_SOURCE
 
 /* Host include files */
 #include <stdio.h>
@@ -21,11 +20,13 @@
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <net/if.h>
 #include <time.h>
+#include "posix_trace.h"
 
 #ifdef __linux
 #include <linux/if_tun.h>
@@ -96,8 +97,7 @@ static int ssystem(const char *fmt, ...)
 	vsnprintf(cmd, sizeof(cmd), fmt, ap);
 	va_end(ap);
 
-	printk("%s\n", cmd);
-	fflush(stdout);
+	posix_print_trace("%s\n", cmd);
 
 	ret = system(cmd);
 
@@ -112,6 +112,23 @@ int eth_setup_host(const char *if_name)
 	 */
 	return ssystem("%s -i %s", CONFIG_ETH_NATIVE_POSIX_SETUP_SCRIPT,
 		       if_name);
+}
+
+int eth_start_script(const char *if_name)
+{
+	if (CONFIG_ETH_NATIVE_POSIX_STARTUP_SCRIPT[0] == '\0') {
+		return 0;
+	}
+
+	if (CONFIG_ETH_NATIVE_POSIX_STARTUP_SCRIPT_USER[0] == '\0') {
+		return ssystem("%s %s", CONFIG_ETH_NATIVE_POSIX_STARTUP_SCRIPT,
+			       if_name);
+	} else {
+		return ssystem("sudo -u %s %s %s",
+			       CONFIG_ETH_NATIVE_POSIX_STARTUP_SCRIPT_USER,
+			       CONFIG_ETH_NATIVE_POSIX_STARTUP_SCRIPT,
+			       if_name);
+	}
 }
 
 int eth_wait_data(int fd)

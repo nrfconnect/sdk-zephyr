@@ -139,9 +139,9 @@ Logging in a module
 ===================
 
 In order to use logger in the module, a unique name of a module must be
-specified and module must be registered to the logger. Optionally, local,
-compile time level can be specified. If module consists of multiple files then
-registration is present only in one file.
+specified and module must be registered with the logger core using
+:c:macro:`LOG_MODULE_REGISTER`. Optionally, a compile time log level for the
+module can be specified as well.
 
 .. code-block:: c
 
@@ -149,6 +149,17 @@ registration is present only in one file.
    #define LOG_LEVEL CONFIG_FOO_LOG_LEVEL /* From foo module Kconfig */
    #include <logging/log.h>
    LOG_MODULE_REGISTER(); /* One per given LOG_MODULE_NAME */
+
+If the module consists of multiple files, then ``LOG_MODULE_REGISTER()`` should
+appear in exactly one of them. Each other file should use
+:c:macro:`LOG_MODULE_DECLARE` to declare its membership in the module.
+
+.. code-block:: c
+
+   #define LOG_MODULE_NAME foo
+   #define LOG_LEVEL CONFIG_FOO_LOG_LEVEL /* From foo module Kconfig */
+   #include <logging/log.h>
+   LOG_MODULE_DECLARE(); /* In all files comprising the module but one */
 
 Logging in a module instance
 ============================
@@ -322,7 +333,7 @@ When log processing is triggered, a message is removed from the list of pending
 messages.  If runtime filtering is disabled, the message is passed to all
 active backends, otherwise the message is passed to only those backends that
 have requested messages from that particular source (based on the source ID in
-the message), and security level. Once all backends are iterated, the message
+the message), and severity level. Once all backends are iterated, the message
 is considered processed by the logger, but the message may still be in use by a
 backend.
 

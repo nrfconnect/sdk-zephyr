@@ -1074,6 +1074,24 @@ static void auth_pairing_confirm(struct bt_conn *conn)
 	printk("Confirm pairing for %s\n", addr);
 }
 
+static void auth_pairing_complete(struct bt_conn *conn, bool bonded)
+{
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("%s with %s\n", bonded ? "Bonded" : "Paired",  addr);
+}
+
+static void auth_pairing_failed(struct bt_conn *conn)
+{
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Pairing failed with %s\n", addr);
+}
+
 #if defined(CONFIG_BT_BREDR)
 static void auth_pincode_entry(struct bt_conn *conn, bool highsec)
 {
@@ -1115,6 +1133,8 @@ static struct bt_conn_auth_cb auth_cb_display = {
 #endif
 	.cancel = auth_cancel,
 	.pairing_confirm = auth_pairing_confirm,
+	.pairing_failed = auth_pairing_failed,
+	.pairing_complete = auth_pairing_complete,
 };
 
 static struct bt_conn_auth_cb auth_cb_display_yes_no = {
@@ -1126,6 +1146,8 @@ static struct bt_conn_auth_cb auth_cb_display_yes_no = {
 #endif
 	.cancel = auth_cancel,
 	.pairing_confirm = auth_pairing_confirm,
+	.pairing_failed = auth_pairing_failed,
+	.pairing_complete = auth_pairing_complete,
 };
 
 static struct bt_conn_auth_cb auth_cb_input = {
@@ -1137,6 +1159,18 @@ static struct bt_conn_auth_cb auth_cb_input = {
 #endif
 	.cancel = auth_cancel,
 	.pairing_confirm = auth_pairing_confirm,
+	.pairing_failed = auth_pairing_failed,
+	.pairing_complete = auth_pairing_complete,
+};
+
+static struct bt_conn_auth_cb auth_cb_confirm = {
+#if defined(CONFIG_BT_BREDR)
+	.pincode_entry = auth_pincode_entry,
+#endif
+	.cancel = auth_cancel,
+	.pairing_confirm = auth_pairing_confirm,
+	.pairing_failed = auth_pairing_failed,
+	.pairing_complete = auth_pairing_complete,
 };
 
 static struct bt_conn_auth_cb auth_cb_all = {
@@ -1148,6 +1182,8 @@ static struct bt_conn_auth_cb auth_cb_all = {
 #endif
 	.cancel = auth_cancel,
 	.pairing_confirm = auth_pairing_confirm,
+	.pairing_failed = auth_pairing_failed,
+	.pairing_complete = auth_pairing_complete,
 };
 
 static int cmd_auth(int argc, char *argv[])
@@ -1164,6 +1200,8 @@ static int cmd_auth(int argc, char *argv[])
 		bt_conn_auth_cb_register(&auth_cb_display);
 	} else if (!strcmp(argv[1], "yesno")) {
 		bt_conn_auth_cb_register(&auth_cb_display_yes_no);
+	} else if (!strcmp(argv[1], "confirm")) {
+		bt_conn_auth_cb_register(&auth_cb_confirm);
 	} else if (!strcmp(argv[1], "none")) {
 		bt_conn_auth_cb_register(NULL);
 	} else {
@@ -1218,6 +1256,33 @@ static int cmd_auth_pairing_confirm(int argc, char *argv[])
 
 	return 0;
 }
+
+#if defined(CONFIG_BT_FIXED_PASSKEY)
+static int cmd_fixed_passkey(int argc, char *argv[])
+{
+	unsigned int passkey;
+	int err;
+
+	if (argc < 2) {
+		bt_passkey_set(BT_PASSKEY_INVALID);
+		printk("Fixed passkey cleared\n");
+		return 0;
+	}
+
+	passkey = atoi(argv[1]);
+	if (passkey > 999999) {
+		printk("Passkey should be between 0-999999\n");
+		return 0;
+	}
+
+	err = bt_passkey_set(passkey);
+	if (err) {
+		printk("Setting fixed passkey failed (err %d)\n", err);
+	}
+
+	return 0;
+}
+#endif
 
 static int cmd_auth_passkey(int argc, char *argv[])
 {
@@ -1985,11 +2050,14 @@ static const struct shell_cmd bt_commands[] = {
 #if defined(CONFIG_BT_SMP) || defined(CONFIG_BT_BREDR)
 	{ "security", cmd_security, "<security level: 0, 1, 2, 3>" },
 	{ "auth", cmd_auth,
-	  "<authentication method: all, input, display, yesno, none>" },
+	  "<auth method: all, input, display, yesno, confirm, none>" },
 	{ "auth-cancel", cmd_auth_cancel, HELP_NONE },
 	{ "auth-passkey", cmd_auth_passkey, "<passkey>" },
 	{ "auth-passkey-confirm", cmd_auth_passkey_confirm, HELP_NONE },
 	{ "auth-pairing-confirm", cmd_auth_pairing_confirm, HELP_NONE },
+#if defined(CONFIG_BT_FIXED_PASSKEY)
+	{ "fixed-passkey", cmd_fixed_passkey, "[passkey]" },
+#endif
 #if defined(CONFIG_BT_BREDR)
 	{ "auth-pincode", cmd_auth_pincode, "<pincode>" },
 #endif /* CONFIG_BT_BREDR */

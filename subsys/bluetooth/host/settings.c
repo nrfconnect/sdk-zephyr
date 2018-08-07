@@ -121,18 +121,16 @@ static int set(int argc, char **argv, char *val)
 		return 0;
 	}
 
+#if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
 	if (!strcmp(argv[0], "name")) {
-		if (strlen(val) >= sizeof(bt_dev.name)) {
-			BT_ERR("Invalid length for device name in storage: name"
-			       " will be truncated");
-		}
-
-		strncpy(bt_dev.name, val, sizeof(bt_dev.name) - 1);
-		bt_dev.name[sizeof(bt_dev.name) - 1] = '\0';
+		len = sizeof(bt_dev.name) - 1;
+		settings_bytes_from_str(val, &bt_dev.name, &len);
+		bt_dev.name[len] = '\0';
 
 		BT_DBG("Name set to %s", bt_dev.name);
 		return 0;
 	}
+#endif
 
 #if defined(CONFIG_BT_PRIVACY)
 	if (!strcmp(argv[0], "irk")) {
@@ -216,7 +214,7 @@ static int commit(void)
 		generate_static_addr();
 	}
 
-#if CONFIG_BT_DEVICE_NAME_MAX > 0
+#if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
 	if (bt_dev.name[0] == '\0') {
 		bt_set_name(CONFIG_BT_DEVICE_NAME);
 	}
