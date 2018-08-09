@@ -22,6 +22,7 @@ if(CONFIG_HAS_NRFX)
 
   zephyr_sources_ifdef(CONFIG_NRFX_ADC   nrfx/drivers/src/nrfx_adc.c)
   zephyr_sources_ifdef(CONFIG_NRFX_PWM   nrfx/drivers/src/nrfx_pwm.c)
+  zephyr_sources_ifdef(CONFIG_NRFX_QDEC  nrfx/drivers/src/nrfx_qdec.c)
   zephyr_sources_ifdef(CONFIG_NRFX_RTC   nrfx/drivers/src/nrfx_rtc.c)
   zephyr_sources_ifdef(CONFIG_NRFX_SAADC nrfx/drivers/src/nrfx_saadc.c)
   zephyr_sources_ifdef(CONFIG_NRFX_SPI   nrfx/drivers/src/nrfx_spi.c)
