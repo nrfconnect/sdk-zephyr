@@ -77,6 +77,14 @@
 			label = "I2C_0";
 		};
 
+		qdec: qdec@40012000 {
+			compatible = "nordic,nrf-qdec";
+			reg = <0x40012000 0x1000>;
+			interrupts = <18 1>;
+			status = "disabled";
+			label = "QDEC";
+		};
+
 		wdt: watchdog@40010000 {
 			compatible = "nordic,nrf-watchdog";
 			reg = <0x40010000 0x1000>;
