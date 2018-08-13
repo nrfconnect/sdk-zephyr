@@ -108,6 +108,14 @@
 			label = "I2C_1";
 		};
 
+		qdec: qdec@40012000 {
+			compatible = "nordic,nrf-qdec";
+			reg = <0x40012000 0x1000>;
+			interrupts = <18 1>;
+			status = "disabled";
+			label = "QDEC";
+		};
+
 		usbd: usbd@40027000 {
 			compatible = "nordic,nrf-usbd";
 			reg = <0x40027000 0x1000>;
