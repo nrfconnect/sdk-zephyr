@@ -7,3 +7,8 @@ if exist "%userprofile%\zephyrrc.cmd" (
 
 rem Zephyr meta-tool (west) launcher alias
 doskey west=py -3 %ZEPHYR_BASE%\scripts\west-win.py $*
+
+echo %PROMPT% | findstr /C:"Zephyr"
+if errorlevel 1 (
+	set PROMPT=(Zephyr) %PROMPT%
+)

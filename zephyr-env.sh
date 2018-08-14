@@ -67,3 +67,7 @@ unset zephyr_answer_file
 zephyr_answer_file=~/.zephyrrc
 [ -f ${zephyr_answer_file} ] &&  . ${zephyr_answer_file};
 unset zephyr_answer_file
+
+if [[ $PS1 != *"(Zephyr)"* ]]; then
+	export PS1="(Zephyr) "$PS1
+fi
