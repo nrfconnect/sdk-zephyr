@@ -35,6 +35,8 @@
 #include "net_private.h"
 #include "ipv6.h"
 
+#define BUF_TIMEOUT K_MSEC(50)
+
 #define L2CAP_IPSP_PSM 0x0023
 #define L2CAP_IPSP_MTU 1280
 
@@ -105,8 +107,13 @@ static int net_bt_enable(struct net_if *iface, bool state)
 	return 0;
 }
 
+static enum net_l2_flags net_bt_flags(struct net_if *iface)
+{
+	return NET_L2_MULTICAST | NET_L2_MULTICAST_SKIP_JOIN_SOLICIT_NODE;
+}
+
 NET_L2_INIT(BLUETOOTH_L2, net_bt_recv, net_bt_send, net_bt_reserve,
-	    net_bt_enable);
+	    net_bt_enable, net_bt_flags);
 
 static void ipsp_connected(struct bt_l2cap_chan *chan)
 {
@@ -185,7 +192,10 @@ static void ipsp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		net_buf_frags_len(buf));
 
 	/* Get packet for bearer / protocol related data */
-	pkt = net_pkt_get_reserve_rx(0, K_FOREVER);
+	pkt = net_pkt_get_reserve_rx(0, BUF_TIMEOUT);
+	if (!pkt) {
+		return;
+	}
 
 	/* Set destination address */
 	net_pkt_ll_dst(pkt)->addr = ctxt->src.val;

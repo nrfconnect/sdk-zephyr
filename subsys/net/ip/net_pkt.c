@@ -1201,6 +1201,77 @@ u16_t net_pkt_append(struct net_pkt *pkt, u16_t len, const u8_t *data,
 	return appended;
 }
 
+u16_t net_pkt_append_memset(struct net_pkt *pkt, u16_t len, const u8_t data,
+			    s32_t timeout)
+{
+	struct net_buf *frag;
+	struct net_context *ctx = NULL;
+	u16_t max_len, appended = 0;
+
+	if (!pkt || !len) {
+		return 0;
+	}
+
+	if (!pkt->frags) {
+		frag = net_pkt_get_frag(pkt, timeout);
+		if (!frag) {
+			return 0;
+		}
+
+		net_pkt_frag_add(pkt, frag);
+	} else {
+		frag = net_buf_frag_last(pkt->frags);
+	}
+
+	if (pkt->slab != &rx_pkts) {
+		ctx = net_pkt_context(pkt);
+	}
+
+	if (ctx) {
+		/* Make sure we don't send more data in one packet than
+		 * protocol or MTU allows when there is a context for the
+		 * packet.
+		 */
+		max_len = pkt->data_len;
+
+#if defined(CONFIG_NET_TCP)
+		if (ctx->tcp && (ctx->tcp->send_mss < max_len)) {
+			max_len = ctx->tcp->send_mss;
+		}
+#endif
+
+		if (len > max_len) {
+			len = max_len;
+		}
+	}
+
+	do {
+		u16_t count = min(len, net_buf_tailroom(frag));
+		void *mem = net_buf_add(frag, count);
+
+		memset(mem, data, count);
+		len -= count;
+		appended += count;
+
+		if (len == 0) {
+			break;
+		}
+
+		frag = net_pkt_append_allocator(timeout, pkt);
+		if (!frag) {
+			break;
+		}
+
+		net_buf_frag_add(net_buf_frag_last(pkt->frags), frag);
+	} while (1);
+
+	if (ctx) {
+		pkt->data_len -= appended;
+	}
+
+	return appended;
+}
+
 /* Helper routine to retrieve single byte from fragment and move
  * offset. If required byte is last byte in fragment then return
  * next fragment and set offset = 0.
@@ -1997,8 +2068,6 @@ struct net_tcp_hdr *net_pkt_tcp_data(struct net_pkt *pkt)
 struct net_pkt *net_pkt_clone(struct net_pkt *pkt, s32_t timeout)
 {
 	struct net_pkt *clone;
-	struct net_buf *frag;
-	u16_t pos;
 
 	if (!pkt) {
 		return NULL;
@@ -2024,11 +2093,6 @@ struct net_pkt *net_pkt_clone(struct net_pkt *pkt, s32_t timeout)
 	clone->iface = pkt->iface;
 
 	if (clone->frags) {
-		frag = net_frag_get_pos(clone, net_pkt_ip_hdr_len(pkt), &pos);
-
-		net_pkt_set_appdata(clone, frag->data + pos);
-		net_pkt_set_appdatalen(clone, net_pkt_appdatalen(pkt));
-
 		/* The link header pointers are only usable if there is
 		 * a fragment that we copied because those pointers point
 		 * to start of the fragment which we do not have right now.
@@ -2042,6 +2106,7 @@ struct net_pkt *net_pkt_clone(struct net_pkt *pkt, s32_t timeout)
 	net_pkt_set_next_hdr(clone, NULL);
 	net_pkt_set_ip_hdr_len(clone, net_pkt_ip_hdr_len(pkt));
 	net_pkt_set_vlan_tag(clone, net_pkt_vlan_tag(pkt));
+	net_pkt_set_appdatalen(clone, net_pkt_appdatalen(pkt));
 
 	net_pkt_set_family(clone, net_pkt_family(pkt));
 

@@ -27,69 +27,74 @@
 
 static sys_slist_t handlers;
 
-struct net_icmp_hdr *net_icmpv4_set_hdr(struct net_pkt *pkt,
-					struct net_icmp_hdr *hdr)
+int net_icmpv4_set_hdr(struct net_pkt *pkt, struct net_icmp_hdr *hdr)
 {
-	struct net_icmp_hdr *icmp_hdr;
 	struct net_buf *frag;
 	u16_t pos;
 
-	icmp_hdr = net_pkt_icmp_data(pkt);
-	if (net_icmp_header_fits(pkt, icmp_hdr) && (hdr == icmp_hdr)) {
-		return icmp_hdr;
-	}
-
-	frag = net_pkt_write_u8(pkt, pkt->frags,
+	frag = net_pkt_write(pkt, pkt->frags,
 				net_pkt_ip_hdr_len(pkt),
-				&pos, hdr->type);
-	frag = net_pkt_write_u8(pkt, frag, pos, &pos, hdr->code);
-	frag = net_pkt_write(pkt, frag, pos, &pos, sizeof(hdr->chksum),
-			     (u8_t *)&hdr->chksum, PKT_WAIT_TIME);
-	if (!frag) {
-		NET_ASSERT(frag);
-		return NULL;
+				&pos, sizeof(*hdr), (u8_t *)hdr,
+				PKT_WAIT_TIME);
+	if (pos > 0 && !frag) {
+		return -EINVAL;
 	}
 
-	return hdr;
+	return 0;
 }
 
-struct net_icmp_hdr *net_icmpv4_get_hdr(struct net_pkt *pkt,
-					struct net_icmp_hdr *hdr)
+int net_icmpv4_get_hdr(struct net_pkt *pkt, struct net_icmp_hdr *hdr)
 {
-	size_t hlen = sizeof(struct net_icmp_hdr);
-	size_t bytes_read = net_frag_linearize((u8_t *) hdr, hlen, pkt,
-						net_pkt_ip_hdr_len(pkt), hlen);
-	return bytes_read == hlen ? hdr : NULL;
-}
-
-struct net_buf *net_icmpv4_set_chksum(struct net_pkt *pkt,
-				      struct net_buf *frag)
-{
-	struct net_icmp_hdr *icmp_hdr;
-	u16_t chksum = 0;
+	struct net_buf *frag;
 	u16_t pos;
 
-	icmp_hdr = net_pkt_icmp_data(pkt);
-	if (net_icmp_header_fits(pkt, icmp_hdr)) {
-		icmp_hdr->chksum = 0;
-		icmp_hdr->chksum = ~net_calc_chksum_icmpv4(pkt);
-
-		return frag;
+	frag = net_frag_read(pkt->frags, net_pkt_ip_hdr_len(pkt), &pos,
+			     sizeof(*hdr), (u8_t *)hdr);
+	if (pos > 0 && !frag) {
+		return -EINVAL;
 	}
 
-	frag = net_pkt_write(pkt, frag,
+	return 0;
+}
+
+int net_icmpv4_set_chksum(struct net_pkt *pkt)
+{
+	u16_t chksum = 0;
+	struct net_buf *frag;
+	struct net_buf *temp_frag;
+	u16_t temp_pos;
+	u16_t pos;
+
+	frag = net_frag_skip(pkt->frags, 0, &pos,
 			     net_pkt_ip_hdr_len(pkt) +
-			     1 + 1 /* type + code */, &pos,
-			     sizeof(chksum), (u8_t *)&chksum, PKT_WAIT_TIME);
+			     1 + 1 /* type + code */);
+	if (pos > 0 && !frag) {
+		return -EINVAL;
+	}
+
+	/* Cache checksum fragment and postion, to be safe side first
+	 * write 0's in checksum position and calculate checksum and
+	 * write checksum in the packet.
+	 */
+	temp_frag = frag;
+	temp_pos = pos;
+
+	frag = net_pkt_write(pkt, frag, pos, &pos, sizeof(chksum),
+			     (u8_t *)&chksum, PKT_WAIT_TIME);
+	if (pos > 0 && !frag) {
+		return -EINVAL;
+	}
 
 	chksum = ~net_calc_chksum_icmpv4(pkt);
 
-	frag = net_pkt_write(pkt, frag, pos - 2, &pos, sizeof(chksum),
-			     (u8_t *)&chksum, PKT_WAIT_TIME);
+	temp_frag = net_pkt_write(pkt, temp_frag, temp_pos, &temp_pos,
+				  sizeof(chksum), (u8_t *)&chksum,
+				  PKT_WAIT_TIME);
+	if (temp_pos > 0 && !temp_frag) {
+		return -EINVAL;
+	}
 
-	NET_ASSERT(frag);
-
-	return frag;
+	return 0;
 }
 
 static inline enum net_verdict icmpv4_handle_echo_request(struct net_pkt *pkt)
@@ -97,8 +102,9 @@ static inline enum net_verdict icmpv4_handle_echo_request(struct net_pkt *pkt)
 	/* Note that we send the same data packets back and just swap
 	 * the addresses etc.
 	 */
-	struct net_icmp_hdr hdr, *icmp_hdr;
+	struct net_icmp_hdr icmp_hdr;
 	struct in_addr addr;
+	int ret;
 
 #if defined(CONFIG_NET_DEBUG_ICMPV4)
 	char out[sizeof("xxx.xxx.xxx.xxx")];
@@ -114,12 +120,18 @@ static inline enum net_verdict icmpv4_handle_echo_request(struct net_pkt *pkt)
 			&NET_IPV4_HDR(pkt)->dst);
 	net_ipaddr_copy(&NET_IPV4_HDR(pkt)->dst, &addr);
 
-	icmp_hdr = net_icmpv4_get_hdr(pkt, &hdr);
-	icmp_hdr->type = NET_ICMPV4_ECHO_REPLY;
-	icmp_hdr->code = 0;
+	icmp_hdr.type = NET_ICMPV4_ECHO_REPLY;
+	icmp_hdr.code = 0;
 
-	net_icmpv4_set_hdr(pkt, icmp_hdr);
-	net_icmpv4_set_chksum(pkt, pkt->frags);
+	ret = net_icmpv4_set_hdr(pkt, &icmp_hdr);
+	if (ret < 0) {
+		return NET_DROP;
+	}
+
+	ret = net_icmpv4_set_chksum(pkt);
+	if (ret < 0) {
+		return NET_DROP;
+	}
 
 #if defined(CONFIG_NET_DEBUG_ICMPV4)
 	snprintk(out, sizeof(out), "%s",
@@ -138,16 +150,19 @@ static inline enum net_verdict icmpv4_handle_echo_request(struct net_pkt *pkt)
 	return NET_OK;
 }
 
-static void icmpv4_create(struct net_pkt *pkt, u8_t icmp_type, u8_t icmp_code)
+static struct net_buf *icmpv4_create(struct net_pkt *pkt, u8_t icmp_type,
+				     u8_t icmp_code)
 {
 	struct net_buf *frag = pkt->frags;
 	u16_t pos;
 
 	net_buf_add(frag, sizeof(struct net_icmp_hdr));
 
-	frag = net_pkt_write_u8(pkt, frag, net_pkt_ip_hdr_len(pkt), &pos,
-				icmp_type);
-	frag = net_pkt_write_u8(pkt, frag, pos, &pos, icmp_code);
+	frag = net_pkt_write_u8_timeout(pkt, frag, net_pkt_ip_hdr_len(pkt),
+					&pos, icmp_type, PKT_WAIT_TIME);
+	frag = net_pkt_write_u8_timeout(pkt, frag, pos, &pos, icmp_code,
+					PKT_WAIT_TIME);
+	return frag;
 }
 
 int net_icmpv4_send_echo_request(struct net_if *iface,
@@ -158,6 +173,7 @@ int net_icmpv4_send_echo_request(struct net_if *iface,
 	struct net_if_ipv4 *ipv4 = iface->config.ip.ipv4;
 	const struct in_addr *src;
 	struct net_pkt *pkt;
+	int ret;
 
 	if (!ipv4) {
 		return -EINVAL;
@@ -172,12 +188,22 @@ int net_icmpv4_send_echo_request(struct net_if *iface,
 	 */
 	pkt = net_pkt_get_reserve_tx(net_if_get_ll_reserve(iface,
 					      (const struct in6_addr *)dst),
-				     K_FOREVER);
+				     PKT_WAIT_TIME);
+	if (!pkt) {
+		return -ENOMEM;
+	}
+
 	net_pkt_set_iface(pkt, iface);
 
-	net_ipv4_create(pkt, src, dst, iface, IPPROTO_ICMP);
+	if (!net_ipv4_create(pkt, src, dst, iface, IPPROTO_ICMP)) {
+		ret = -ENOMEM;
+		goto drop;
+	}
 
-	icmpv4_create(pkt, NET_ICMPV4_ECHO_REQUEST, 0);
+	if (!icmpv4_create(pkt, NET_ICMPV4_ECHO_REQUEST, 0)) {
+		ret = -ENOMEM;
+		goto drop;
+	}
 
 	net_buf_add(pkt->frags, sizeof(struct net_icmpv4_echo_req));
 
@@ -206,10 +232,22 @@ int net_icmpv4_send_echo_request(struct net_if *iface,
 
 	net_stats_update_icmp_drop(iface);
 
+	ret = -EIO;
+
+drop:
 	net_pkt_unref(pkt);
 
-	return -EIO;
+	return ret;
 }
+
+#define append(pkt, type, value)					\
+	do {								\
+		if (!net_pkt_append_##type##_timeout(pkt, value,	\
+						     PKT_WAIT_TIME)) {	\
+			err = -ENOMEM;					\
+			goto drop;					\
+		}							\
+	} while (0)
 
 int net_icmpv4_send_error(struct net_pkt *orig, u8_t type, u8_t code)
 {
@@ -223,12 +261,11 @@ int net_icmpv4_send_error(struct net_pkt *orig, u8_t type, u8_t code)
 	iface = net_pkt_iface(orig);
 
 	if (NET_IPV4_HDR(orig)->proto == IPPROTO_ICMP) {
-		struct net_icmp_hdr icmp_hdr[1];
+		struct net_icmp_hdr icmp_hdr;
 
-		if (!net_icmpv4_get_hdr(orig, icmp_hdr) ||
-		    icmp_hdr->code < 8) {
+		err = net_icmpv4_get_hdr(orig, &icmp_hdr);
+		if (err < 0 || icmp_hdr.code < 8) {
 			/* We must not send ICMP errors back */
-			err = -EINVAL;
 			goto drop_no_pkt;
 		}
 	}
@@ -246,12 +283,18 @@ int net_icmpv4_send_error(struct net_pkt *orig, u8_t type, u8_t code)
 
 	net_pkt_set_iface(pkt, iface);
 
-	net_ipv4_create(pkt, src, dst, iface, IPPROTO_ICMP);
+	if (!net_ipv4_create(pkt, src, dst, iface, IPPROTO_ICMP)) {
+		err = -ENOMEM;
+		goto drop;
+	}
 
-	icmpv4_create(pkt, type, code);
+	if (!icmpv4_create(pkt, type, code)) {
+		err = -ENOMEM;
+		goto drop;
+	}
 
 	/* Appending unused part, filled with 0s */
-	net_pkt_append_be32(pkt, 0);
+	append(pkt, be32, 0);
 
 	if (NET_IPV4_HDR(orig)->proto == IPPROTO_UDP) {
 		copy_len = sizeof(struct net_ipv4_hdr) +
@@ -315,22 +358,23 @@ void net_icmpv4_unregister_handler(struct net_icmpv4_handler *handler)
 enum net_verdict net_icmpv4_input(struct net_pkt *pkt)
 {
 	struct net_icmpv4_handler *cb;
-	struct net_icmp_hdr hdr, *icmp_hdr;
+	struct net_icmp_hdr icmp_hdr;
+	int ret;
 
-	icmp_hdr = net_icmpv4_get_hdr(pkt, &hdr);
-	if (!icmp_hdr) {
+	ret = net_icmpv4_get_hdr(pkt, &icmp_hdr);
+	if (ret < 0) {
 		NET_DBG("NULL ICMPv4 header - dropping");
 		return NET_DROP;
 	}
 
 	NET_DBG("ICMPv4 packet received type %d code %d",
-		icmp_hdr->type, icmp_hdr->code);
+		icmp_hdr.type, icmp_hdr.code);
 
 	net_stats_update_icmp_recv(net_pkt_iface(pkt));
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&handlers, cb, node) {
-		if (cb->type == icmp_hdr->type &&
-				(cb->code == icmp_hdr->code || cb->code == 0)) {
+		if (cb->type == icmp_hdr.type &&
+				(cb->code == icmp_hdr.code || cb->code == 0)) {
 			return cb->handler(pkt);
 		}
 	}

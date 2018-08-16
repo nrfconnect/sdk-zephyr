@@ -120,7 +120,10 @@ struct net_pkt {
 				 * Used only if defined(CONFIG_NET_ROUTE)
 				 */
 	u8_t family     : 4;	/* IPv4 vs IPv6 */
-	u8_t _unused    : 1;
+	u8_t ipv4_auto_arp_msg : 1; /* Is this pkt IPv4 autoconf ARP message.
+				     * Used only if
+				     * defined(CONFIG_NET_IPV4_AUTO)
+				     */
 
 	union {
 		/* IPv6 hop limit or IPv4 ttl for this network packet.
@@ -637,6 +640,19 @@ static inline void net_pkt_set_ieee802154_lqi(struct net_pkt *pkt,
 					      u8_t lqi)
 {
 	pkt->ieee802154_lqi = lqi;
+}
+#endif
+
+#if defined(CONFIG_NET_IPV4_AUTO)
+static inline bool net_pkt_ipv4_auto(struct net_pkt *pkt)
+{
+	return pkt->ipv4_auto_arp_msg;
+}
+
+static inline void net_pkt_set_ipv4_auto(struct net_pkt *pkt,
+					 bool is_auto_arp_msg)
+{
+	pkt->ipv4_auto_arp_msg = is_auto_arp_msg;
 }
 #endif
 
@@ -1172,6 +1188,28 @@ static inline bool net_pkt_append_all(struct net_pkt *pkt, u16_t len,
 }
 
 /**
+ * @brief Append fixed bytes of data to fragment list of a packet
+ *
+ * @details Append data to last fragment. If there is not enough space in
+ * last fragment then more data fragments will be added, unless there are
+ * no free fragments and timeout occurs.
+ *
+ * @param pkt Network packet.
+ * @param len Total length of input data
+ * @param data Byte to initialise fragment with
+ * @param timeout Affects the action taken should the net buf pool be empty.
+ *        If K_NO_WAIT, then return immediately. If K_FOREVER, then
+ *        wait as long as necessary. Otherwise, wait up to the specified
+ *        number of milliseconds before timing out.
+ *
+ * @return Length of data actually added. This may be less than input
+ *         length if other timeout than K_FOREVER was used, and there
+ *         were no free fragments in a pool to accommodate all data.
+ */
+u16_t net_pkt_append_memset(struct net_pkt *pkt, u16_t len, const u8_t data,
+			    s32_t timeout);
+
+/**
  * @brief Append u8_t data to last fragment in fragment list of a packet
  *
  * @details Append data to last fragment. If there is not enough space in last
@@ -1254,6 +1292,102 @@ static inline bool net_pkt_append_le32(struct net_pkt *pkt, u32_t data)
 
 	return net_pkt_append_all(pkt, sizeof(u32_t), (u8_t *)&value,
 			      K_FOREVER);
+}
+
+/**
+ * @brief Append u8_t data to last fragment in fragment list of a packet
+ *
+ * @details Append data to last fragment. If there is not enough space in last
+ * fragment then new data fragment will be created and will be added to
+ * fragment list. Caller has to take care of endianness if needed.
+ *
+ * @param pkt Network packet.
+ * @param data Data to be added
+ * @param timeout Timeout for buffer allocations
+ *
+ * @return True if all the data is placed at end of fragment list,
+ *         False otherwise (In-case of false pkt might contain input
+ *         data in the process of placing into fragments).
+ */
+static inline bool net_pkt_append_u8_timeout(struct net_pkt *pkt, u8_t data,
+					     s32_t timeout)
+{
+	return net_pkt_append_all(pkt, 1, &data, timeout);
+}
+
+/**
+ * @brief Append u16_t data to last fragment in fragment list of a packet
+ *
+ * @details Append data to last fragment. If there is not enough space in last
+ * fragment then new data fragment will be created and will be added to
+ * fragment list. Caller has to take care of endianness if needed.
+ *
+ * @param pkt Network packet.
+ * @param data Data to be added
+ * @param timeout Timeout for buffer allocations
+ *
+ * @return True if all the data is placed at end of fragment list,
+ *         False otherwise (In-case of false pkt might contain input data
+ *         in the process of placing into fragments).
+ */
+static inline bool net_pkt_append_be16_timeout(struct net_pkt *pkt,
+					       u16_t data,
+					       s32_t timeout)
+{
+	u16_t value = sys_cpu_to_be16(data);
+
+	return net_pkt_append_all(pkt, sizeof(u16_t), (u8_t *)&value,
+				  timeout);
+}
+
+/**
+ * @brief Append u32_t data to last fragment in fragment list of a packet
+ *
+ * @details Append data to last fragment. If there is not enough space in last
+ * fragment then new data fragment will be created and will be added to
+ * fragment list. Caller has to take care of endianness if needed.
+ *
+ * @param pkt Network packet.
+ * @param data Data to be added
+ * @param timeout Timeout for buffer allocations
+ *
+ * @return True if all the data is placed at end of fragment list,
+ *         False otherwise (In-case of false pkt might contain input data
+ *         in the process of placing into fragments).
+ */
+static inline bool net_pkt_append_be32_timeout(struct net_pkt *pkt,
+					       u32_t data,
+					       s32_t timeout)
+{
+	u32_t value = sys_cpu_to_be32(data);
+
+	return net_pkt_append_all(pkt, sizeof(u32_t), (u8_t *)&value,
+				  timeout);
+}
+
+/**
+ * @brief Append u32_t data to last fragment in fragment list
+ *
+ * @details Append data to last fragment. If there is not enough space in last
+ * fragment then new data fragment will be created and will be added to
+ * fragment list. Convert data to LE.
+ *
+ * @param pkt Network packet fragment list.
+ * @param data Data to be added
+ * @param timeout Timeout for buffer allocations
+ *
+ * @return True if all the data is placed at end of fragment list,
+ *         False otherwise (In-case of false pkt might contain input data
+ *         in the process of placing into fragments).
+ */
+static inline bool net_pkt_append_le32_timeout(struct net_pkt *pkt,
+					       u32_t data,
+					       s32_t timeout)
+{
+	u32_t value = sys_cpu_to_le32(data);
+
+	return net_pkt_append_all(pkt, sizeof(u32_t), (u8_t *)&value,
+				  timeout);
 }
 
 /**
@@ -1455,6 +1589,46 @@ static inline struct net_buf *net_pkt_write_be32(struct net_pkt *pkt,
 			     (u8_t *)&value, K_FOREVER);
 }
 
+/* Write u8_t data to an arbitrary offset in fragment. */
+static inline struct net_buf *net_pkt_write_u8_timeout(struct net_pkt *pkt,
+						       struct net_buf *frag,
+						       u16_t offset,
+						       u16_t *pos,
+						       u8_t data,
+						       s32_t timeout)
+{
+	return net_pkt_write(pkt, frag, offset, pos, sizeof(u8_t),
+			     &data, timeout);
+}
+
+/* Write u16_t big endian value to an arbitrary offset in fragment. */
+static inline struct net_buf *net_pkt_write_be16_timeout(struct net_pkt *pkt,
+							 struct net_buf *frag,
+							 u16_t offset,
+							 u16_t *pos,
+							 u16_t data,
+							 s32_t timeout)
+{
+	u16_t value = htons(data);
+
+	return net_pkt_write(pkt, frag, offset, pos, sizeof(u16_t),
+			     (u8_t *)&value, timeout);
+}
+
+/* Write u32_t big endian value to an arbitrary offset in fragment. */
+static inline struct net_buf *net_pkt_write_be32_timeout(struct net_pkt *pkt,
+							 struct net_buf *frag,
+							 u16_t offset,
+							 u16_t *pos,
+							 u32_t data,
+							 s32_t timeout)
+{
+	u32_t value = htonl(data);
+
+	return net_pkt_write(pkt, frag, offset, pos, sizeof(u32_t),
+			     (u8_t *)&value, timeout);
+}
+
 /**
  * @brief Insert data at an arbitrary offset in a series of fragments.
  *
@@ -1521,6 +1695,47 @@ static inline bool net_pkt_insert_be32(struct net_pkt *pkt,
 
 	return net_pkt_insert(pkt, frag, offset, sizeof(u32_t),
 			      (u8_t *)&value, K_FOREVER);
+}
+
+/* Insert u8_t data at an arbitrary offset in a series of fragments. */
+static inline bool net_pkt_insert_u8_timeout(struct net_pkt *pkt,
+					     struct net_buf *frag,
+					     u16_t offset,
+					     u8_t data,
+					     s32_t timeout)
+{
+	return net_pkt_insert(pkt, frag, offset, sizeof(u8_t), &data,
+			      timeout);
+}
+
+/* Insert u16_t big endian value at an arbitrary offset in a series of
+ * fragments.
+ */
+static inline bool net_pkt_insert_be16_timeout(struct net_pkt *pkt,
+					       struct net_buf *frag,
+					       u16_t offset,
+					       u16_t data,
+					       s32_t timeout)
+{
+	u16_t value = htons(data);
+
+	return net_pkt_insert(pkt, frag, offset, sizeof(u16_t),
+			      (u8_t *)&value, timeout);
+}
+
+/* Insert u32_t big endian value at an arbitrary offset in a series of
+ * fragments.
+ */
+static inline bool net_pkt_insert_be32_timeout(struct net_pkt *pkt,
+					       struct net_buf *frag,
+					       u16_t offset,
+					       u32_t data,
+					       s32_t timeout)
+{
+	u32_t value = htonl(data);
+
+	return net_pkt_insert(pkt, frag, offset, sizeof(u32_t),
+			      (u8_t *)&value, timeout);
 }
 
 /**

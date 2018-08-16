@@ -11,11 +11,19 @@ choice
 	default SOC_SERIES_KINETIS_K6X
 	depends on ARM
 
-	gsource "arch/arm/soc/*/Kconfig.soc"
+	source "arch/arm/soc/*/Kconfig.soc"
 endchoice
 
 menu "ARM Options"
 	depends on ARM
+
+menu "SoC Configuration"
+# Include these first so that any properties (e.g. defaults) below can be
+# overriden (by defining symbols in multiple locations)
+source "arch/arm/soc/*/Kconfig"
+endmenu
+
+source "arch/arm/core/Kconfig"
 
 config ARCH
 	default "arm"
@@ -24,12 +32,4 @@ config ARCH_DEFCONFIG
 	string
 	default "arch/arm/defconfig"
 
-
-source "arch/arm/core/Kconfig"
-
-menu "SoC Configuration"
-
-gsource "arch/arm/soc/*/Kconfig"
-
-endmenu
 endmenu

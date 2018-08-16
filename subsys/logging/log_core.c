@@ -9,6 +9,7 @@
 #include <logging/log_backend.h>
 #include <logging/log_ctrl.h>
 #include <logging/log_output.h>
+#include <logging/log_backend_uart.h>
 #include <misc/printk.h>
 #include <assert.h>
 #include <atomic.h>
@@ -18,8 +19,10 @@
 #endif
 
 #ifdef CONFIG_LOG_BACKEND_UART
-#include <logging/log_backend_uart.h>
 LOG_BACKEND_UART_DEFINE(log_backend_uart);
+const struct log_backend *uart_backend = &log_backend_uart;
+#else
+const struct log_backend *uart_backend;
 #endif
 
 static struct log_list_t list;
@@ -128,11 +131,12 @@ void log_n(const char *str,
 	msg_finalize(msg, src_level);
 }
 
-void log_hexdump(const u8_t *data,
+void log_hexdump(const char *str,
+		 const u8_t *data,
 		 u32_t length,
 		 struct log_msg_ids src_level)
 {
-	struct log_msg *msg = log_msg_hexdump_create(data, length);
+	struct log_msg *msg = log_msg_hexdump_create(str, data, length);
 
 	if (msg == NULL) {
 		return;
@@ -155,7 +159,7 @@ int log_printk(const char *fmt, va_list ap)
 		length = (length > sizeof(formatted_str)) ?
 			 sizeof(formatted_str) : length;
 
-		msg = log_msg_hexdump_create(formatted_str, length);
+		msg = log_msg_hexdump_create(NULL, formatted_str, length);
 		if (!msg) {
 			return 0;
 		}
@@ -215,11 +219,6 @@ void log_core_init(void)
 }
 
 /*
- * This ifdef is needed to avoid -Werror=unused-function failures in unit tests
- * when no backends are enabled.
- */
-#ifdef CONFIG_LOG_BACKEND_UART
-/*
  * Initialize a backend's runtime filters to match the compile-time
  * settings.
  *
@@ -241,7 +240,6 @@ static void backend_filter_init(struct log_backend const *const backend)
 		}
 	}
 }
-#endif
 
 void log_init(void)
 {
@@ -262,11 +260,11 @@ void log_init(void)
 				   i + LOG_FILTER_FIRST_BACKEND_SLOT_IDX);
 	}
 
-#ifdef CONFIG_LOG_BACKEND_UART
-	backend_filter_init(&log_backend_uart);
-	log_backend_uart_init();
-	log_backend_activate(&log_backend_uart, NULL);
-#endif
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_UART)) {
+		backend_filter_init(uart_backend);
+		log_backend_uart_init();
+		log_backend_activate(uart_backend, NULL);
+	}
 }
 
 static void thread_set(k_tid_t process_tid)

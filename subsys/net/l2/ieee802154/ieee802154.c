@@ -32,6 +32,8 @@
 #include "ieee802154_security.h"
 #include "ieee802154_utils.h"
 
+#define BUF_TIMEOUT K_MSEC(50)
+
 #define PKT_TITLE      "IEEE 802.15.4 packet content:"
 #define TX_PKT_TITLE   "> " PKT_TITLE
 #define RX_PKT_TITLE   "< " PKT_TITLE
@@ -75,12 +77,16 @@ static inline void ieee802154_acknowledge(struct net_if *iface,
 		return;
 	}
 
-	pkt = net_pkt_get_reserve_tx(IEEE802154_ACK_PKT_LENGTH, K_FOREVER);
+	pkt = net_pkt_get_reserve_tx(IEEE802154_ACK_PKT_LENGTH, BUF_TIMEOUT);
 	if (!pkt) {
 		return;
 	}
 
-	frag = net_pkt_get_frag(pkt, K_FOREVER);
+	frag = net_pkt_get_frag(pkt, BUF_TIMEOUT);
+	if (!frag) {
+		net_pkt_unref(pkt);
+		return;
+	}
 
 	net_pkt_frag_insert(pkt, frag);
 
@@ -305,9 +311,16 @@ static int ieee802154_enable(struct net_if *iface, bool state)
 	return ieee802154_stop(iface);
 }
 
+enum net_l2_flags ieee802154_flags(struct net_if *iface)
+{
+	struct ieee802154_context *ctx = net_if_l2_data(iface);
+
+	return ctx->flags;
+}
+
 NET_L2_INIT(IEEE802154_L2,
 	    ieee802154_recv, ieee802154_send,
-	    ieee802154_reserve, ieee802154_enable);
+	    ieee802154_reserve, ieee802154_enable, ieee802154_flags);
 
 void ieee802154_init(struct net_if *iface)
 {
@@ -319,6 +332,7 @@ void ieee802154_init(struct net_if *iface)
 	NET_DBG("Initializing IEEE 802.15.4 stack on iface %p", iface);
 
 	ctx->channel = IEEE802154_NO_CHANNEL;
+	ctx->flags = NET_L2_MULTICAST;
 
 	ieee802154_mgmt_init(iface);
 

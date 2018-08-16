@@ -5,8 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 menuconfig ETH_MCUX
-	bool
-	prompt "MCUX Ethernet driver"
+	bool "MCUX Ethernet driver"
 	depends on NET_L2_ETHERNET && HAS_MCUX
 	help
 	  Enable MCUX Ethernet driver.  Note, this driver performs one shot PHY
@@ -116,8 +115,7 @@ endif
 
 config PTP_CLOCK_MCUX
 	bool "MCUX PTP clock driver support"
-	default n
-	default y if PTP_CLOCK
+	default y
 	depends on PTP_CLOCK && NET_PKT_TIMESTAMP
 	help
 	  Enable MCUX PTP clock support.

@@ -59,6 +59,8 @@ enum net_ip_protocol_secure {
 	IPPROTO_TLS_1_0 = 256,
 	IPPROTO_TLS_1_1 = 257,
 	IPPROTO_TLS_1_2 = 258,
+	IPPROTO_DTLS_1_0 = 272,
+	IPPROTO_DTLS_1_2 = 273,
 };
 
 /** Socket type */
@@ -204,7 +206,7 @@ enum net_priority {
 	NET_PRIORITY_VO = 5, /* Voice, < 10 ms latency and jitter  */
 	NET_PRIORITY_IC = 6, /* Internetwork control               */
 	NET_PRIORITY_NC = 7  /* Network control                    */
-};
+} __packed;
 
 /** IPv6/IPv4 network connection tuple */
 struct net_tuple {
@@ -227,7 +229,7 @@ enum net_addr_type {
 	NET_ADDR_DHCP,
 	NET_ADDR_MANUAL,
 	NET_ADDR_OVERRIDABLE,
-};
+} __packed;
 
 #if NET_LOG_ENABLED > 0
 static inline char *net_addr_type2str(enum net_addr_type type)
@@ -263,13 +265,13 @@ enum net_addr_state {
 	NET_ADDR_TENTATIVE = 0,
 	NET_ADDR_PREFERRED,
 	NET_ADDR_DEPRECATED,
-};
+} __packed;
 
 struct net_ipv6_hdr {
 	u8_t vtc;
 	u8_t tcflow;
 	u16_t flow;
-	u8_t len[2];
+	u16_t len;
 	u8_t nexthdr;
 	u8_t hop_limit;
 	struct in6_addr src;
@@ -286,7 +288,7 @@ struct net_ipv6_frag_hdr {
 struct net_ipv4_hdr {
 	u8_t vhl;
 	u8_t tos;
-	u8_t len[2];
+	u16_t len;
 	u8_t id[2];
 	u8_t offset[2];
 	u8_t ttl;

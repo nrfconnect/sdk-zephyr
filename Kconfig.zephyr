@@ -7,6 +7,19 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# Include these first so that any properties (e.g. defaults) below can be
+# overriden in *.defconfig files (by defining symbols in multiple locations).
+# After merging all the symbol definitions, Kconfig picks the first property
+# (e.g. the first default) with a satisfied condition.
+#
+# Board defaults should be parsed before SoC defaults, because boards usually
+# overrides SoC values.
+#
+# Note: $ENV_VAR_ARCH and $ENV_VAR_BOARD_DIR might be glob patterns.
+source "$ENV_VAR_BOARD_DIR/Kconfig.defconfig"
+source "arch/$ENV_VAR_ARCH/soc/*/Kconfig.defconfig"
+
+
 source "arch/Kconfig"
 
 source "kernel/Kconfig"
@@ -25,17 +38,4 @@ source "ext/Kconfig"
 
 source "tests/Kconfig"
 
-gsource "../nrf/Kconfig.nrf"
-
-#
-# The following are for Kconfig files for default values only.
-# These should be parsed at the end.
-#
-# Board defaults should be parsed after SoC defaults
-# because board usually overrides SoC values.
-#
-
-# $ENV_VAR_ARCH and $ENV_VAR_BOARD_DIR might be glob patterns
-
-gsource "arch/$ENV_VAR_ARCH/soc/*/Kconfig.defconfig"
-gsource "$ENV_VAR_BOARD_DIR/Kconfig.defconfig"
+orsource "../nrf/Kconfig.nrf"
