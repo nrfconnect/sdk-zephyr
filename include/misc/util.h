@@ -117,8 +117,22 @@ static inline s64_t arithmetic_shift_right(s64_t value, u8_t shift)
 #define MHZ(x) (KHZ(x) * 1000)
 
 #ifndef BIT
+#if defined(_ASMLANGUAGE)
+#define BIT(n)  (1 << (n))
+#else
 #define BIT(n)  (1UL << (n))
 #endif
+#endif
+
+/**
+ * @brief Macro sets or clears bit depending on boolean value
+ *
+ * @param var Variable to be altered
+ * @param bit Bit number
+ * @param set Value 0 clears bit, any other value sets bit
+ */
+#define WRITE_BIT(var, bit, set) \
+	((var) = (set) ? ((var) | BIT(bit)) : ((var) & ~BIT(bit)))
 
 #define BIT_MASK(n) (BIT(n) - 1)
 

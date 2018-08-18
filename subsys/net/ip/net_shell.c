@@ -2543,6 +2543,9 @@ static void nbr_cb(struct net_nbr *nbr, void *user_data)
 	char *padding = "";
 	char *state_pad = "";
 	const char *state_str;
+#if defined(CONFIG_NET_IPV6_ND)
+	s64_t remaining;
+#endif
 
 #if defined(CONFIG_NET_L2_IEEE802154)
 	padding = "      ";
@@ -2565,7 +2568,13 @@ static void nbr_cb(struct net_nbr *nbr, void *user_data)
 		state_pad = "    ";
 	}
 
-	printk("[%2d] %p %p %5d/%d/%d/%d %s%s %6d  %17s%s %s\n",
+#if defined(CONFIG_NET_IPV6_ND)
+	remaining = net_ipv6_nbr_data(nbr)->reachable +
+		    net_ipv6_nbr_data(nbr)->reachable_timeout -
+		    k_uptime_get();
+#endif
+
+	printk("[%2d] %p %p %5d/%d/%d/%d %s%s %6lld  %17s%s %s\n",
 	       *count, nbr, nbr->iface,
 	       net_ipv6_nbr_data(nbr)->link_metric,
 	       nbr->ref,
@@ -2574,10 +2583,9 @@ static void nbr_cb(struct net_nbr *nbr, void *user_data)
 	       state_str,
 	       state_pad,
 #if defined(CONFIG_NET_IPV6_ND)
-	       k_delayed_work_remaining_get(
-		       &net_ipv6_nbr_data(nbr)->reachable),
+	       remaining > 0 ? remaining : 0,
 #else
-	       0,
+	       0LL,
 #endif
 	       nbr->idx == NET_NBR_LLADDR_UNKNOWN ? "?" :
 	       net_sprint_ll_addr(
@@ -2656,13 +2664,9 @@ static inline void _remove_ipv6_ping_handler(void)
 
 static enum net_verdict _handle_ipv6_echo_reply(struct net_pkt *pkt)
 {
-	char addr[NET_IPV6_ADDR_LEN];
-
-	snprintk(addr, sizeof(addr), "%s",
-		 net_sprint_ipv6_addr(&NET_IPV6_HDR(pkt)->dst));
-
 	printk("Received echo reply from %s to %s\n",
-	       net_sprint_ipv6_addr(&NET_IPV6_HDR(pkt)->src), addr);
+		net_sprint_ipv6_addr(&NET_IPV6_HDR(pkt)->src),
+		net_sprint_ipv6_addr(&NET_IPV6_HDR(pkt)->dst));
 
 	k_sem_give(&ping_timeout);
 	_remove_ipv6_ping_handler();
@@ -2734,13 +2738,9 @@ static inline void _remove_ipv4_ping_handler(void)
 
 static enum net_verdict _handle_ipv4_echo_reply(struct net_pkt *pkt)
 {
-	char addr[NET_IPV4_ADDR_LEN];
-
-	snprintk(addr, sizeof(addr), "%s",
-		 net_sprint_ipv4_addr(&NET_IPV4_HDR(pkt)->dst));
-
 	printk("Received echo reply from %s to %s\n",
-	       net_sprint_ipv4_addr(&NET_IPV4_HDR(pkt)->src), addr);
+		net_sprint_ipv4_addr(&NET_IPV4_HDR(pkt)->src),
+		net_sprint_ipv4_addr(&NET_IPV4_HDR(pkt)->dst));
 
 	k_sem_give(&ping_timeout);
 	_remove_ipv4_ping_handler();
@@ -3000,27 +3000,24 @@ int net_shell_cmd_rpl(int argc, char *argv[])
 
 	printk("Instance DAGs   :\n");
 	for (i = 0, count = 0; i < CONFIG_NET_RPL_MAX_DAG_PER_INSTANCE; i++) {
-		char prefix[NET_IPV6_ADDR_LEN];
 
 		if (!instance->dags[i].is_used) {
 			continue;
 		}
 
-		snprintk(prefix, sizeof(prefix), "%s",
-			 net_sprint_ipv6_addr(
-				 &instance->dags[i].prefix_info.prefix));
-
 		printk("[%2d]%s %s prefix %s/%d rank %d/%d ver %d flags %c%c "
-		       "parent %p\n",
-		       ++count,
-		       &instance->dags[i] == instance->current_dag ? "*" : " ",
-		       net_sprint_ipv6_addr(&instance->dags[i].dag_id),
-		       prefix, instance->dags[i].prefix_info.length,
-		       instance->dags[i].rank, instance->dags[i].min_rank,
-		       instance->dags[i].version,
-		       instance->dags[i].is_grounded ? 'G' : 'g',
-		       instance->dags[i].is_joined ? 'J' : 'j',
-		       instance->dags[i].preferred_parent);
+			"parent %p\n",
+			++count,
+			&instance->dags[i] == instance->current_dag ? "*" : " ",
+			net_sprint_ipv6_addr(&instance->dags[i].dag_id),
+			net_sprint_ipv6_addr(
+					&instance->dags[i].prefix_info.prefix),
+			instance->dags[i].prefix_info.length,
+			instance->dags[i].rank, instance->dags[i].min_rank,
+			instance->dags[i].version,
+			instance->dags[i].is_grounded ? 'G' : 'g',
+			instance->dags[i].is_joined ? 'J' : 'j',
+			instance->dags[i].preferred_parent);
 	}
 	printk("\n");
 

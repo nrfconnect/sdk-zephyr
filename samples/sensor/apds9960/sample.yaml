@@ -1,8 +1,8 @@
 sample:
-  description: TBD
-  name: TBD
+  name: APDS9960 sample
 tests:
   test:
     harness: sensor
+    platform_whitelist: reel_board
     tags: samples sensor
     depends_on: i2c gpio
