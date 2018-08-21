@@ -16,6 +16,9 @@
 #include <nrf_power.h>
 #include <drivers/clock_control/nrf5_clock_control.h>
 #endif
+#if defined(CONFIG_NRFXLIB_NFC)
+#include <nfc/hal_nfc_t2t.h>
+#endif
 
 static u8_t m16src_ref;
 static u8_t m16src_grd;
@@ -304,6 +307,10 @@ static void _power_clock_isr(void *arg)
 
 	if (hf) {
 		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
+
+#if defined(CONFIG_NRFXLIB_NFC)
+		hal_nrf_clock_event_cb(NRF_CLOCK_EVENT_HFCLKSTARTED);
+#endif
 	}
 
 	if (hf_intenset && hf_stat) {
