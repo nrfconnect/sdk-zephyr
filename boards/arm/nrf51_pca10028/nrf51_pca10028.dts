@@ -47,6 +47,20 @@
 	scl-pin = <6>;
 };
 
+&spi0 {
+	status = "ok";
+	sclk-pin = <21>;
+	mosi-pin = <30>;
+	miso-pin = <7>;
+};
+
+&spi1 {
+	status = "ok";
+	sclk-pin = <4>;
+	mosi-pin = <6>;
+	miso-pin = <5>;
+};
+
 &flash0 {
 	/*
 	 * For more information, see:

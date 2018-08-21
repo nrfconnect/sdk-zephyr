@@ -67,7 +67,7 @@
 		};
 
 		i2c0: i2c@40003000 {
-			compatible = "nordic,nrf5-i2c";
+			compatible = "nordic,nrf-i2c";
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x40003000 0x1000>;
@@ -75,6 +75,16 @@
 			interrupts = <3 1>;
 			status = "disabled";
 			label = "I2C_0";
+		};
+
+		spi0: spi@40004000 {
+			compatible = "nordic,nrf-spi";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x40004000 0x1000>;
+			interrupts = <4 1>;
+			status = "disabled";
+			label = "SPI_0";
 		};
 
 		qdec: qdec@40012000 {
