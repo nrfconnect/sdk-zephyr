@@ -39,6 +39,14 @@
 	};
 
 	soc {
+		adc: adc@40007000 {
+			compatible = "nordic,nrf-saadc";
+			reg = <0x40007000 0x1000>;
+			interrupts = <7 1>;
+			status = "disabled";
+			label = "ADC_0";
+		};
+
 		uart0: uart@40002000 {
 			compatible = "nordic,nrf-uarte";
 			reg = <0x40002000 0x1000>;
@@ -67,7 +75,7 @@
 		};
 
 		i2c0: i2c@40003000 {
-			compatible = "nordic,nrf5-i2c";
+			compatible = "nordic,nrf-i2c";
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x40003000 0x1000>;
@@ -83,6 +91,16 @@
 			interrupts = <18 1>;
 			status = "disabled";
 			label = "QDEC";
+		};
+
+		spi0: spi@40004000 {
+			compatible = "nordic,nrf-spi";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x40004000 0x1000>;
+			interrupts = <4 1>;
+			status = "disabled";
+			label = "SPI_0";
 		};
 
 		wdt: watchdog@40010000 {

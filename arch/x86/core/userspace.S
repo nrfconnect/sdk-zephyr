@@ -19,7 +19,7 @@ GTEXT(z_arch_user_string_nlen_fault_end)
 GTEXT(z_arch_user_string_nlen_fixup)
 
 /* Imports */
-GTEXT(_k_syscall_table)
+GDATA(_k_syscall_table)
 
 /* Landing site for syscall SW IRQ. Marshal arguments and call C function for
  * further processing. We're on the kernel stack for the invoking thread.
@@ -222,6 +222,19 @@ SECTION_FUNC(TEXT, _x86_userspace_enter)
 	pushfl			/* EFLAGS */
 	push	$USER_CODE_SEG	/* CS */
 	push	$_thread_entry	/* EIP */
+
+#ifdef CONFIG_EXECUTION_BENCHMARKING
+	/* Save the eax and edx registers before reading the time stamp
+	* once done pop the values.
+	*/
+	push %eax
+	push %edx
+	rdtsc
+	mov %eax,__end_drop_to_usermode_time
+	mov %edx,__end_drop_to_usermode_time+4
+	pop %edx
+	pop %eax
+#endif
 
 	/* We will land in _thread_entry() in user mode after this */
 	iret

@@ -21,7 +21,6 @@ extern void _check_stack_sentinel(void);
 #define _check_stack_sentinel() /**/
 #endif
 
-extern void _sys_k_event_logger_context_switch(void);
 
 /* In SMP, the irq_lock() is a spinlock which is implicitly released
  * and reacquired on context switch to preserve the existing
@@ -46,13 +45,18 @@ static inline unsigned int _Swap(unsigned int key)
 	struct k_thread *new_thread, *old_thread;
 	int ret = 0;
 
+#ifdef CONFIG_EXECUTION_BENCHMARKING
+	extern void read_timer_start_of_swap(void);
+	read_timer_start_of_swap();
+#endif
+
 	old_thread = _current;
 
 	_check_stack_sentinel();
 	_update_time_slice_before_swap();
 
-#ifdef CONFIG_KERNEL_EVENT_LOGGER_CONTEXT_SWITCH
-	_sys_k_event_logger_context_switch();
+#ifdef CONFIG_TRACING
+	sys_trace_thread_switched_out();
 #endif
 
 	new_thread = _get_next_ready_thread();
@@ -75,6 +79,10 @@ static inline unsigned int _Swap(unsigned int key)
 		ret = _current->swap_retval;
 	}
 
+#ifdef CONFIG_TRACING
+	sys_trace_thread_switched_in();
+#endif
+
 	irq_unlock(key);
 
 	return ret;
@@ -86,10 +94,19 @@ extern unsigned int __swap(unsigned int key);
 
 static inline unsigned int _Swap(unsigned int key)
 {
+	unsigned int ret;
 	_check_stack_sentinel();
 	_update_time_slice_before_swap();
 
-	return __swap(key);
+#ifdef CONFIG_TRACING
+	sys_trace_thread_switched_out();
+#endif
+	ret = __swap(key);
+#ifdef CONFIG_TRACING
+	sys_trace_thread_switched_in();
+#endif
+
+	return ret;
 }
 #endif
 

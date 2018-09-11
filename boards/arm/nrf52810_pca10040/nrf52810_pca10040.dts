@@ -66,6 +66,10 @@
 	};
 };
 
+&adc {
+	status = "ok";
+};
+
 &gpiote {
 	status ="ok";
 };
@@ -83,6 +87,13 @@
 	status = "ok";
 	sda-pin = <26>;
 	scl-pin = <27>;
+};
+
+&spi0 {
+	status = "ok";
+	sck-pin = <29>;
+	mosi-pin = <31>;
+	miso-pin = <30>;
 };
 
 &flash0 {
