@@ -276,9 +276,7 @@ static void pend(struct k_thread *thread, _wait_q_t *wait_q, s32_t timeout)
 		_priq_wait_add(&wait_q->waitq, thread);
 	}
 
-#ifdef CONFIG_KERNEL_EVENT_LOGGER_THREAD
-	_sys_k_event_logger_thread_pend(thread);
-#endif
+	sys_trace_thread_pend(thread);
 }
 
 void _pend_thread(struct k_thread *thread, _wait_q_t *wait_q, s32_t timeout)
@@ -371,6 +369,7 @@ void _thread_priority_set(struct k_thread *thread, int prio)
 			thread->base.prio = prio;
 		}
 	}
+	sys_trace_thread_priority_set(thread);
 
 	if (need_sched) {
 		_reschedule(irq_lock());
@@ -630,6 +629,15 @@ int _is_thread_time_slicing(struct k_thread *thread)
 
 	return ret;
 }
+
+#ifdef CONFIG_TICKLESS_KERNEL
+void z_reset_timeslice(void)
+{
+	if (_is_thread_time_slicing(_get_next_ready_thread())) {
+		_set_time(_time_slice_duration);
+	}
+}
+#endif
 
 /* Must be called with interrupts locked */
 /* Should be called only immediately before a thread switch */

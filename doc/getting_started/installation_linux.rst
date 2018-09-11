@@ -64,7 +64,8 @@ On Ubuntu host system:
    sudo apt-get install --no-install-recommends git cmake ninja-build gperf \
      ccache doxygen dfu-util device-tree-compiler \
      python3-ply python3-pip python3-setuptools python3-wheel xz-utils file \
-     make gcc-multilib autoconf automake libtool
+     make gcc-multilib autoconf automake libtool librsvg2-bin \
+     texlive-latex-base texlive-latex-extra latexmk texlive-fonts-recommended
 
 On Fedora host system:
 
@@ -74,14 +75,15 @@ On Fedora host system:
    sudo dnf install git cmake ninja-build gperf ccache\
      doxygen dfu-util dtc python3-pip \
      python3-ply python3-yaml dfu-util dtc python3-pykwalify \
-     glibc-devel.i686 libstdc++-devel.i686 autoconf automake libtool
+     glibc-devel.i686 libstdc++-devel.i686 autoconf automake libtool \
+     texlive-latex latexmk texlive-collection-fontsrecommended librsvg2-tools
 
 On Clear Linux host system:
 
 .. code-block:: console
 
    sudo swupd bundle-add c-basic dev-utils dfu-util dtc \
-     os-core-dev python-basic python3-basic
+     os-core-dev python-basic python3-basic texlive
 
 Install additional packages required for development with Zephyr::
 
@@ -162,15 +164,6 @@ Follow these steps to install the SDK on your Linux host system.
       export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
       export ZEPHYR_SDK_INSTALL_DIR=<sdk installation directory>
 
-   .. note::
-      Some Linux distributions have default CFLAGS and CXXFLAGS
-      environment variables already set. For all distros, they need to be
-      unset to prevent these settings from interfering with cmake:
-
-      .. code-block:: console
-
-         unset CFLAGS CXXFLAGS
-
   To use the same toolchain in new sessions in the future, you can set the
   variables in the file :file:`${HOME}/.zephyrrc`, for example:
 
@@ -185,17 +178,6 @@ Follow these steps to install the SDK on your Linux host system.
      Use ``<sdk installation directory>`` in place of ``/opt/zephyr-sdk/`` in the
      above shown example if the SDK installation location is not default.
 
-
-  .. note::
-     Some Linux distributions have default CFLAGS and CXXFLAGS
-     environment variables already set. For all distros, they need to be
-     unset to prevent these settings from interfering with cmake:
-
-     .. code-block:: console
-
-        cat <<EOF >> ~/.zephyrrc
-        unset CFLAGS CXXFLAGS
-        EOF
 
 .. note:: In previous releases of Zephyr, the ``ZEPHYR_TOOLCHAIN_VARIANT``
           variable was called ``ZEPHYR_GCC_VARIANT``.

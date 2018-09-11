@@ -1363,7 +1363,8 @@ static ALWAYS_INLINE s32_t _ms_to_ticks(s32_t ms)
 	/* use 64-bit math to keep precision */
 	return (s32_t)ceiling_fraction(
 		(s64_t)ms * sys_clock_hw_cycles_per_sec,
-		(s64_t)MSEC_PER_SEC * sys_clock_hw_cycles_per_tick);
+		((s64_t)MSEC_PER_SEC * sys_clock_hw_cycles_per_sec) /
+		sys_clock_ticks_per_sec);
 #else
 	/* simple division keeps precision */
 	s32_t ms_per_tick = MSEC_PER_SEC / sys_clock_ticks_per_sec;
@@ -1383,8 +1384,7 @@ static inline s64_t __ticks_to_ms(s64_t ticks)
 
 #ifdef _NEED_PRECISE_TICK_MS_CONVERSION
 	/* use 64-bit math to keep precision */
-	return (u64_t)ticks * sys_clock_hw_cycles_per_tick * MSEC_PER_SEC /
-		sys_clock_hw_cycles_per_sec;
+	return (u64_t)ticks * MSEC_PER_SEC / sys_clock_ticks_per_sec;
 #else
 	/* simple multiplication keeps precision */
 	u32_t ms_per_tick = MSEC_PER_SEC / sys_clock_ticks_per_sec;
@@ -1815,6 +1815,9 @@ __syscall void k_queue_init(struct k_queue *queue);
  *
  * This routine causes first thread pending on @a queue, if any, to
  * return from k_queue_get() call with NULL value (as if timeout expired).
+ * If the queue is being waited on by k_poll(), it will return with
+ * -EINTR and K_POLL_STATE_CANCELLED state (and per above, subsequent
+ * k_queue_get() will return NULL).
  *
  * @note Can be called by ISRs.
  *
@@ -4242,6 +4245,9 @@ enum _poll_states_bits {
 	/* data is available to read on queue/fifo/lifo */
 	_POLL_STATE_DATA_AVAILABLE,
 
+	/* queue/fifo/lifo wait was cancelled */
+	_POLL_STATE_CANCELLED,
+
 	_POLL_NUM_STATES
 };
 
@@ -4287,6 +4293,7 @@ enum k_poll_modes {
 #define K_POLL_STATE_SEM_AVAILABLE _POLL_STATE_BIT(_POLL_STATE_SEM_AVAILABLE)
 #define K_POLL_STATE_DATA_AVAILABLE _POLL_STATE_BIT(_POLL_STATE_DATA_AVAILABLE)
 #define K_POLL_STATE_FIFO_DATA_AVAILABLE K_POLL_STATE_DATA_AVAILABLE
+#define K_POLL_STATE_CANCELLED _POLL_STATE_BIT(_POLL_STATE_CANCELLED)
 
 /* public - poll signal object */
 struct k_poll_signal {
@@ -4418,7 +4425,11 @@ extern void k_poll_event_init(struct k_poll_event *event, u32_t type,
  *
  * @retval 0 One or more events are ready.
  * @retval -EAGAIN Waiting period timed out.
- * @retval -EINTR Poller thread has been interrupted.
+ * @retval -EINTR Polling has been interrupted, e.g. with
+ *         k_queue_cancel_wait(). All output events are still set and valid,
+ *         cancelled event(s) will be set to K_POLL_STATE_CANCELLED. In other
+ *         words, -EINTR status means that at least one of output events is
+ *         K_POLL_STATE_CANCELLED.
  * @retval -ENOMEM Thread resource pool insufficient memory (user mode only)
  * @retval -EINVAL Bad parameters (user mode only)
  * @req K-POLL-001
@@ -4967,6 +4978,7 @@ inline void *operator new[](size_t size, void *ptr)
 
 #endif /* defined(CONFIG_CPLUSPLUS) && defined(__cplusplus) */
 
+#include <tracing.h>
 #include <syscalls/kernel.h>
 
 #endif /* !_ASMLANGUAGE */
