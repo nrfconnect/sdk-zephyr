@@ -106,8 +106,11 @@ int _impl_zsock_close(int sock)
 	 * as these are fail-free operations and we're closing
 	 * socket anyway.
 	 */
-	(void)net_context_accept(ctx, NULL, K_NO_WAIT, NULL);
-	(void)net_context_recv(ctx, NULL, K_NO_WAIT, NULL);
+	if (net_context_get_state(ctx) == NET_CONTEXT_LISTENING) {
+		(void)net_context_accept(ctx, NULL, K_NO_WAIT, NULL);
+	} else {
+		(void)net_context_recv(ctx, NULL, K_NO_WAIT, NULL);
+	}
 
 	zsock_flush_queue(ctx);
 
@@ -714,7 +717,8 @@ int _impl_zsock_poll(struct zsock_pollfd *fds, int nfds, int timeout)
 	}
 
 	ret = k_poll(poll_events, pev - poll_events, timeout);
-	if (ret != 0 && ret != -EAGAIN) {
+	/* EAGAIN when timeout expired, EINTR when cancelled (i.e. EOF) */
+	if (ret != 0 && ret != -EAGAIN && ret != -EINTR) {
 		errno = -ret;
 		return -1;
 	}

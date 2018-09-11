@@ -14,6 +14,11 @@
 	defined(CONFIG_CPU_CORTEX_M4) || \
 	defined(CONFIG_CPU_CORTEX_M7)
 #include <arch/arm/cortex_m/mpu/arm_mpu_v7m.h>
+#elif defined(CONFIG_CPU_CORTEX_M23) || \
+	defined(CONFIG_CPU_CORTEX_M33)
+#include <arch/arm/cortex_m/mpu/arm_mpu_v8m.h>
+#else
+#error "Unsupported ARM CPU"
 #endif
 
 #ifdef CONFIG_USERSPACE
@@ -50,6 +55,16 @@
 #endif /* _ASMLANGUAGE */
 #endif /* USERSPACE */
 
+/* Region definition data structure */
+struct arm_mpu_region {
+	/* Region Base Address */
+	u32_t base;
+	/* Region Name */
+	const char *name;
+	/* Region Attributes */
+	arm_mpu_region_attr_t attr;
+};
+
 /* MPU configuration data structure */
 struct arm_mpu_config {
 	/* Number of regions */
@@ -57,6 +72,13 @@ struct arm_mpu_config {
 	/* Regions */
 	struct arm_mpu_region *mpu_regions;
 };
+
+#define MPU_REGION_ENTRY(_name, _base, _attr) \
+	{\
+		.name = _name, \
+		.base = _base, \
+		.attr = _attr, \
+	}
 
 /* Reference to the MPU configuration */
 extern struct arm_mpu_config mpu_config;

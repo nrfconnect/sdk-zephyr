@@ -43,17 +43,17 @@ GDATA(_kernel)
 
 SECTION_FUNC(TEXT, __pendsv)
 
-#ifdef CONFIG_KERNEL_EVENT_LOGGER_CONTEXT_SWITCH
+#ifdef CONFIG_TRACING
     /* Register the context switch */
     push {lr}
-    bl _sys_k_event_logger_context_switch
+    bl z_sys_trace_thread_switched_in
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
     pop {r0}
     mov lr, r0
 #else
     pop {lr}
 #endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
-#endif /* CONFIG_KERNEL_EVENT_LOGGER_CONTEXT_SWITCH  */
+#endif /* CONFIG_TRACING */
 
     /* protect the kernel state while we play with the thread lists */
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)

@@ -116,6 +116,8 @@ static const unsigned char ipv6_hbho[] = {
 };
 
 static bool expecting_ra;
+static bool expecting_dad;
+static u32_t dad_time[3];
 static bool test_failed;
 static struct k_sem wait_data;
 
@@ -225,6 +227,22 @@ static int tester_send(struct net_if *iface, struct net_pkt *pkt)
 		if (expecting_ra) {
 			pkt = prepare_ra_message();
 		} else {
+			goto out;
+		}
+	}
+
+	if (icmp->type == NET_ICMPV6_NS) {
+		if (expecting_dad) {
+			net_pkt_unref(pkt);
+
+			if (dad_time[0] == 0) {
+				dad_time[0] = k_uptime_get_32();
+			} else if (dad_time[1] == 0) {
+				dad_time[1] = k_uptime_get_32();
+			} else if (dad_time[2] == 0) {
+				dad_time[2] = k_uptime_get_32();
+			}
+
 			goto out;
 		}
 	}
@@ -507,36 +525,36 @@ static void test_prefix_timeout(void)
 			net_sprint_ipv6_addr(&addr), len);
 }
 
-#if 0
-/* This test has issues so disabling it temporarily */
-static bool net_test_prefix_timeout_overflow(void)
+static void test_prefix_timeout_long(void)
 {
-	struct net_if_ipv6_prefix *prefix;
-	struct in6_addr addr = { { { 0x20, 1, 0x0d, 0xb8, 0, 0, 0, 0,
-				     0, 0, 0, 0, 0, 0, 0, 1 } } };
-	int len = 64, lifetime = 0xfffffffe;
+	struct net_if_ipv6_prefix *ifprefix;
+	struct in6_addr prefix = { { { 0x20, 1, 0x0d, 0xb8, 43, 0, 0, 0,
+				     0, 0, 0, 0, 0, 0, 0, 0 } } };
+	u32_t lifetime = 0xfffffffe;
+	int len = 64;
+	u64_t remaining;
+	int ret;
 
-	prefix = net_if_ipv6_prefix_add(net_if_get_default(),
-					&addr, len, lifetime);
+	ifprefix = net_if_ipv6_prefix_add(net_if_get_default(),
+					  &prefix, len, lifetime);
 
-	net_if_ipv6_prefix_set_lf(prefix, false);
-	net_if_ipv6_prefix_set_timer(prefix, lifetime);
+	net_if_ipv6_prefix_set_lf(ifprefix, false);
+	net_if_ipv6_prefix_set_timer(ifprefix, lifetime);
 
-	if (!k_sem_take(&wait_data, (lifetime * 3 / 2) * MSEC_PER_SEC)) {
-		TC_ERROR("Prefix %s/%d lock should still be there",
-			 net_sprint_ipv6_addr(&addr), len);
-		return false;
-	}
+	zassert_equal(ifprefix->lifetime.wrap_counter, 2000,
+		      "Wrap counter wrong (%d)",
+		      ifprefix->lifetime.wrap_counter);
+	remaining = K_SECONDS((u64_t)lifetime) -
+		NET_TIMEOUT_MAX_VALUE * (u64_t)ifprefix->lifetime.wrap_counter;
 
-	if (!net_if_ipv6_prefix_rm(net_if_get_default(), &addr, len)) {
-		TC_ERROR("Prefix %s/%d should have been removed",
-			 net_sprint_ipv6_addr(&addr), len);
-		return false;
-	}
+	zassert_equal(remaining, ifprefix->lifetime.timer_timeout,
+		     "Remaining time wrong (%llu vs %d)", remaining,
+		      ifprefix->lifetime.timer_timeout);
 
-	return true;
+	ret = net_if_ipv6_prefix_rm(net_if_get_default(), &prefix, len);
+	zassert_equal(ret, true, "Prefix %s/%d should have been removed",
+		      net_sprint_ipv6_addr(&prefix), len);
 }
-#endif
 
 static void test_rs_message(void)
 {
@@ -916,6 +934,75 @@ static void test_hbho_message_3(void)
 		      "IPv6 mismatch ext hdr length");
 }
 
+#define FIFTY_DAYS (60 * 60 * 24 * 50)
+
+/* Implemented in subsys/net/ip/net_if.c */
+extern void net_address_lifetime_timeout(void);
+
+static void test_address_lifetime(void)
+{
+	struct in6_addr addr = { { { 0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0,
+				     0, 0, 0, 0, 0, 0, 0x20, 0x1 } } };
+	struct net_if *iface = net_if_get_default();
+	u32_t vlifetime = 0xffff;
+	u64_t timeout = K_SECONDS((u64_t)vlifetime);
+	struct net_if_addr *ifaddr;
+	u64_t remaining;
+	bool ret;
+
+	ifaddr = net_if_ipv6_addr_add(iface, &addr, NET_ADDR_AUTOCONF,
+				      vlifetime);
+	zassert_not_null(ifaddr, "Address with lifetime cannot be added");
+
+	/* Make sure DAD gets some time to run */
+	k_sleep(K_MSEC(200));
+
+	/* Then check that the timeout values in net_if_addr are set correctly.
+	 * Start first with smaller timeout values.
+	 */
+	zassert_equal(ifaddr->lifetime.timer_timeout, timeout,
+		      "Timer timeout set wrong (%d vs %llu)",
+		      ifaddr->lifetime.timer_timeout, timeout);
+	zassert_equal(ifaddr->lifetime.wrap_counter, 0,
+		      "Wrap counter wrong (%d)", ifaddr->lifetime.wrap_counter);
+
+	/* Then update the lifetime and check that timeout values are correct
+	 */
+	vlifetime = FIFTY_DAYS;
+	net_if_ipv6_addr_update_lifetime(ifaddr, vlifetime);
+
+	zassert_equal(ifaddr->lifetime.wrap_counter, 2,
+		      "Wrap counter wrong (%d)", ifaddr->lifetime.wrap_counter);
+	remaining = K_SECONDS((u64_t)vlifetime) -
+		NET_TIMEOUT_MAX_VALUE * (u64_t)ifaddr->lifetime.wrap_counter;
+
+	zassert_equal(remaining, ifaddr->lifetime.timer_timeout,
+		     "Remaining time wrong (%llu vs %d)", remaining,
+		      ifaddr->lifetime.timer_timeout);
+
+	/* The address should not expire */
+	net_address_lifetime_timeout();
+
+	zassert_equal(ifaddr->lifetime.wrap_counter, 2,
+		      "Wrap counter wrong (%d)", ifaddr->lifetime.wrap_counter);
+
+	ifaddr->lifetime.timer_timeout = K_MSEC(10);
+	ifaddr->lifetime.timer_start = k_uptime_get_32() - K_MSEC(10);
+	ifaddr->lifetime.wrap_counter = 0;
+
+	net_address_lifetime_timeout();
+
+	/* The address should be expired now */
+	zassert_equal(ifaddr->lifetime.timer_timeout, 0,
+		      "Timer timeout set wrong (%llu vs %llu)",
+		      ifaddr->lifetime.timer_timeout, 0);
+	zassert_equal(ifaddr->lifetime.wrap_counter, 0,
+		      "Wrap counter wrong (%d)", ifaddr->lifetime.wrap_counter);
+
+	ret = net_if_ipv6_addr_rm(iface, &addr);
+	zassert_true(ret, "Address with lifetime cannot be removed");
+}
+
 /**
  * @brief IPv6 change ll address
  */
@@ -980,6 +1067,49 @@ static void test_change_ll_addr(void)
 		     "Wrong link address 2");
 }
 
+static void test_dad_timeout(void)
+{
+#if defined(CONFIG_NET_IPV6_DAD)
+	struct in6_addr addr1 = { { { 0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0,
+				      0, 0, 0, 0, 0, 0, 0x99, 0x1 } } };
+	struct in6_addr addr2 = { { { 0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0,
+				      0, 0, 0, 0, 0, 0, 0x99, 0x2 } } };
+	struct in6_addr addr3 = { { { 0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0,
+				      0, 0, 0, 0, 0, 0, 0x99, 0x3 } } };
+	struct net_if *iface = net_if_get_default();
+
+	struct net_if_addr *ifaddr;
+
+	expecting_dad = true;
+
+	ifaddr = net_if_ipv6_addr_add(iface, &addr1, NET_ADDR_AUTOCONF, 0xffff);
+	zassert_not_null(ifaddr, "Address 1 cannot be added");
+
+	k_sleep(K_MSEC(10));
+
+	ifaddr = net_if_ipv6_addr_add(iface, &addr2, NET_ADDR_AUTOCONF, 0xffff);
+	zassert_not_null(ifaddr, "Address 2 cannot be added");
+
+	k_sleep(K_MSEC(10));
+
+	ifaddr = net_if_ipv6_addr_add(iface, &addr3, NET_ADDR_AUTOCONF, 0xffff);
+	zassert_not_null(ifaddr, "Address 3 cannot be added");
+
+	k_sleep(K_MSEC(200));
+
+	/* We should have received three DAD queries, make sure they are in
+	 * proper order.
+	 */
+	zassert_true(dad_time[0] < dad_time[1], "DAD timer 1+2 failure");
+	zassert_true(dad_time[1] < dad_time[2], "DAD timer 2+3 failure");
+	zassert_true((dad_time[2] - dad_time[0]) < 100,
+		     "DAD timers took too long time [%u] [%u] [%u]",
+		     dad_time[0], dad_time[1], dad_time[2]);
+
+	expecting_dad = false;
+#endif
+}
+
 void test_main(void)
 {
 	ztest_test_suite(test_ipv6_fn,
@@ -996,8 +1126,11 @@ void test_main(void)
 			 ztest_unit_test(test_hbho_message_1),
 			 ztest_unit_test(test_hbho_message_2),
 			 ztest_unit_test(test_hbho_message_3),
+			 ztest_unit_test(test_address_lifetime),
 			 ztest_unit_test(test_change_ll_addr),
-			 ztest_unit_test(test_prefix_timeout)
+			 ztest_unit_test(test_prefix_timeout),
+			 ztest_unit_test(test_prefix_timeout_long),
+			 ztest_unit_test(test_dad_timeout)
 			 );
 	ztest_run_test_suite(test_ipv6_fn);
 }
