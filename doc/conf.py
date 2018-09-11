@@ -44,6 +44,10 @@ extensions = [
     'zephyr.application',
 ]
 
+# Only use SVG converter when it is really needed, e.g. LaTeX.
+if tags.has("svgconvert"):
+    extensions.append('sphinxcontrib.rsvgconverter')
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
@@ -60,7 +64,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Zephyr Project'
-copyright = u'2015-2017 Zephyr Project members and individual contributors.'
+copyright = u'2015-2018 Zephyr Project members and individual contributors'
 author = u'many'
 
 # The following code tries to extract the information by reading the Makefile,
@@ -221,7 +225,7 @@ html_show_sourcelink = False
 html_show_sphinx = False
 
 # If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
-html_show_copyright = tags.has('development')
+# html_show_copyright = tags.has('development')
 
 # If true, license is shown in the HTML footer. Default is True.
 html_show_license = True
@@ -263,7 +267,7 @@ latex_elements = {
 #'pointsize': '10pt',
 
 # Additional stuff for the LaTeX preamble.
-#'preamble': '',
+'preamble': '\setcounter{tocdepth}{2}',
 
 # Latex figure (float) alignment
 #'figure_align': 'htbp',
@@ -296,7 +300,6 @@ latex_documents = [
 
 # If false, no module index is generated.
 #latex_domain_indices = True
-
 
 # -- Options for manual page output ---------------------------------------
 
@@ -356,6 +359,7 @@ html_context = {
     'theme_logo_only': False,
     'current_version': version,
     'versions': ( ("latest", "/"),
+                 ("1.13.0", "/1.13.0/"),
                  ("1.12.0", "/1.12.0/"),
                  ("1.11.0", "/1.11.0/"),
                  ("1.10.0", "/1.10.0/"),

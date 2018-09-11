@@ -21,16 +21,9 @@ GTEXT(_k_neg_eagain)
 GTEXT(_is_next_thread_current)
 GTEXT(_get_next_ready_thread)
 
-#ifdef CONFIG_KERNEL_EVENT_LOGGER_CONTEXT_SWITCH
-GTEXT(_sys_k_event_logger_context_switch)
-#endif
-
-#ifdef CONFIG_KERNEL_EVENT_LOGGER_SLEEP
-GTEXT(_sys_k_event_logger_exit_sleep)
-#endif
-
-#ifdef CONFIG_KERNEL_EVENT_LOGGER_INTERRUPT
-GTEXT(_sys_k_event_logger_interrupt)
+#ifdef CONFIG_TRACING
+GTEXT(z_sys_trace_thread_switched_in)
+GTEXT(z_sys_trace_isr_enter)
 #endif
 
 #ifdef CONFIG_IRQ_OFFLOAD
@@ -100,6 +93,9 @@ SECTION_FUNC(exception.entry, __irq_wrapper)
 	sw a6, __NANO_ESF_a6_OFFSET(sp)
 	sw a7, __NANO_ESF_a7_OFFSET(sp)
 
+#ifdef CONFIG_EXECUTION_BENCHMARKING
+	call read_timer_start_of_isr
+#endif
 	/* Save MEPC register */
 	csrr t0, mepc
 	sw t0, __NANO_ESF_mepc_OFFSET(sp)
@@ -228,12 +224,8 @@ on_irq_stack:
 	tail _irq_do_offload
 
 call_irq:
-#ifdef CONFIG_KERNEL_EVENT_LOGGER_SLEEP
-	call _sys_k_event_logger_exit_sleep
-#endif
-
-#ifdef CONFIG_KERNEL_EVENT_LOGGER_INTERRUPT
-	call _sys_k_event_logger_interrupt
+#ifdef CONFIG_TRACING
+	call z_sys_trace_isr_enter
 #endif
 
 	/* Get IRQ causing interrupt */
@@ -261,6 +253,9 @@ call_irq:
 	/* Load ISR function address in register t1 */
 	lw t1, 0x04(t0)
 
+#ifdef CONFIG_EXECUTION_BENCHMARKING
+	call read_timer_end_of_isr
+#endif
 	/* Call ISR function */
 	jalr ra, t1
 
@@ -304,9 +299,9 @@ reschedule:
 #if CONFIG_TIMESLICING
 	call _update_time_slice_before_swap
 #endif
-#if CONFIG_KERNEL_EVENT_LOGGER_CONTEXT_SWITCH
-	call _sys_k_event_logger_context_switch
-#endif /* CONFIG_KERNEL_EVENT_LOGGER_CONTEXT_SWITCH */
+#if CONFIG_TRACING
+	call z_sys_trace_thread_switched_in
+#endif
 	/* Get reference to _kernel */
 	la t0, _kernel
 
@@ -363,6 +358,53 @@ reschedule:
 	lw s9, _thread_offset_to_s9(t1)
 	lw s10, _thread_offset_to_s10(t1)
 	lw s11, _thread_offset_to_s11(t1)
+
+#ifdef CONFIG_EXECUTION_BENCHMARKING
+	addi sp, sp, -__NANO_ESF_SIZEOF
+
+	sw ra, __NANO_ESF_ra_OFFSET(sp)
+	sw gp, __NANO_ESF_gp_OFFSET(sp)
+	sw tp, __NANO_ESF_tp_OFFSET(sp)
+	sw t0, __NANO_ESF_t0_OFFSET(sp)
+	sw t1, __NANO_ESF_t1_OFFSET(sp)
+	sw t2, __NANO_ESF_t2_OFFSET(sp)
+	sw t3, __NANO_ESF_t3_OFFSET(sp)
+	sw t4, __NANO_ESF_t4_OFFSET(sp)
+	sw t5, __NANO_ESF_t5_OFFSET(sp)
+	sw t6, __NANO_ESF_t6_OFFSET(sp)
+	sw a0, __NANO_ESF_a0_OFFSET(sp)
+	sw a1, __NANO_ESF_a1_OFFSET(sp)
+	sw a2, __NANO_ESF_a2_OFFSET(sp)
+	sw a3, __NANO_ESF_a3_OFFSET(sp)
+	sw a4, __NANO_ESF_a4_OFFSET(sp)
+	sw a5, __NANO_ESF_a5_OFFSET(sp)
+	sw a6, __NANO_ESF_a6_OFFSET(sp)
+	sw a7, __NANO_ESF_a7_OFFSET(sp)
+
+	call read_timer_end_of_swap
+
+	lw ra, __NANO_ESF_ra_OFFSET(sp)
+	lw gp, __NANO_ESF_gp_OFFSET(sp)
+	lw tp, __NANO_ESF_tp_OFFSET(sp)
+	lw t0, __NANO_ESF_t0_OFFSET(sp)
+	lw t1, __NANO_ESF_t1_OFFSET(sp)
+	lw t2, __NANO_ESF_t2_OFFSET(sp)
+	lw t3, __NANO_ESF_t3_OFFSET(sp)
+	lw t4, __NANO_ESF_t4_OFFSET(sp)
+	lw t5, __NANO_ESF_t5_OFFSET(sp)
+	lw t6, __NANO_ESF_t6_OFFSET(sp)
+	lw a0, __NANO_ESF_a0_OFFSET(sp)
+	lw a1, __NANO_ESF_a1_OFFSET(sp)
+	lw a2, __NANO_ESF_a2_OFFSET(sp)
+	lw a3, __NANO_ESF_a3_OFFSET(sp)
+	lw a4, __NANO_ESF_a4_OFFSET(sp)
+	lw a5, __NANO_ESF_a5_OFFSET(sp)
+	lw a6, __NANO_ESF_a6_OFFSET(sp)
+	lw a7, __NANO_ESF_a7_OFFSET(sp)
+
+	/* Release stack space */
+	addi sp, sp, __NANO_ESF_SIZEOF
+#endif
 
 no_reschedule:
 #ifdef CONFIG_RISCV_SOC_CONTEXT_SAVE

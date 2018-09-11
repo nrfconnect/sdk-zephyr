@@ -90,12 +90,8 @@ def write_kconfig_rst():
     # String with the RST for the index page
     index_rst = INDEX_RST_HEADER
 
-    # - Sort the symbols by name so that they end up in sorted order in
-    #   index.rst
-    #
-    # - Use set() to get rid of duplicates for symbols defined in multiple
-    #   locations.
-    for sym in sorted(set(kconf.defined_syms), key=lambda sym: sym.name):
+    # Sort the symbols by name so that they end up in sorted order in index.rst
+    for sym in sorted(kconf.unique_defined_syms, key=lambda sym: sym.name):
         # Write an RST file for the symbol
         write_sym_rst(sym, out_dir)
 
@@ -107,7 +103,7 @@ def write_kconfig_rst():
             " / ".join(node.prompt[0]
                        for node in sym.nodes if node.prompt))
 
-    for choice in kconf.choices:
+    for choice in kconf.unique_choices:
         # Write an RST file for the choice
         write_choice_rst(choice, out_dir)
 
@@ -123,6 +119,7 @@ def write_sym_rst(sym, out_dir):
                      direct_deps_rst(sym) +
                      defaults_rst(sym) +
                      select_imply_rst(sym) +
+                     selecting_implying_rst(sym) +
                      kconfig_definition_rst(sym))
 
 
@@ -259,46 +256,89 @@ def choice_syms_rst(choice):
 
 
 def select_imply_rst(sym):
+    # Returns RST that lists the symbols 'select'ed or 'imply'd by the symbol
+
+    rst = ""
+
+    def add_select_imply_rst(type_str, lst):
+        # Adds RST that lists the selects/implies from 'lst', which holds
+        # (<symbol>, <condition>) tuples, if any. Also adds a heading derived
+        # from 'type_str' if there any selects/implies.
+
+        nonlocal rst
+
+        if lst:
+            heading = "Symbols {} by this symbol".format(type_str)
+            rst += "{}\n{}\n\n".format(heading, len(heading)*"=")
+
+            for select, cond in lst:
+                rst += "- " + rst_link(select)
+                if cond is not sym.kconfig.y:
+                    rst += " if " + expr_str(cond)
+                rst += "\n"
+
+            rst += "\n"
+
+    add_select_imply_rst("selected", sym.selects)
+    add_select_imply_rst("implied", sym.implies)
+
+    return rst
+
+
+def selecting_implying_rst(sym):
     # Returns RST that lists the symbols that are 'select'ing or 'imply'ing the
     # symbol
 
     rst = ""
 
-    def add_select_imply_rst(type_str, expr):
-        # Writes a link for each selecting symbol (if 'expr' is sym.rev_dep) or
-        # each implying symbol (if 'expr' is sym.weak_rev_dep). Also adds a
-        # heading at the top, derived from type_str ("select"/"imply").
+    def add_selecting_implying_rst(type_str, expr):
+        # Writes a link for each symbol that selects the symbol (if 'expr' is
+        # sym.rev_dep) or each symbol that imply's the symbol (if 'expr' is
+        # sym.weak_rev_dep). Also adds a heading at the top derived from
+        # type_str ("select"/"imply"), if there are any selecting/implying
+        # symbols.
 
         nonlocal rst
 
-        heading = "Symbols that ``{}`` this symbol".format(type_str)
-        rst += "{}\n{}\n\n".format(heading, len(heading)*"=")
+        if expr is not sym.kconfig.n:
+            heading = "Symbols that {} this symbol".format(type_str)
+            rst += "{}\n{}\n\n".format(heading, len(heading)*"=")
 
-        # The reverse dependencies from each select/imply are ORed together
-        for select in kconfiglib.split_expr(expr, kconfiglib.OR):
-            # - 'select/imply A if B' turns into A && B
-            # - 'select/imply A' just turns into A
-            #
-            # In both cases, we can split on AND and pick the first
-            # operand.
+            # The reverse dependencies from each select/imply are ORed together
+            for select in kconfiglib.split_expr(expr, kconfiglib.OR):
+                # - 'select/imply A if B' turns into A && B
+                # - 'select/imply A' just turns into A
+                #
+                # In both cases, we can split on AND and pick the first
+                # operand.
 
-            rst += "- {}\n".format(rst_link(
-                kconfiglib.split_expr(select, kconfiglib.AND)[0]))
+                rst += "- {}\n".format(rst_link(
+                    kconfiglib.split_expr(select, kconfiglib.AND)[0]))
 
-        rst += "\n"
+            rst += "\n"
 
-    if sym.rev_dep is not sym.kconfig.n:
-        add_select_imply_rst("select", sym.rev_dep)
-
-    if sym.weak_rev_dep is not sym.kconfig.n:
-        add_select_imply_rst("imply", sym.weak_rev_dep)
+    add_selecting_implying_rst("select", sym.rev_dep)
+    add_selecting_implying_rst("imply", sym.weak_rev_dep)
 
     return rst
 
 
 def kconfig_definition_rst(sc):
-    # Returns RST that lists the Kconfig definition(s) of 'sc' (symbol or
-    # choice)
+    # Returns RST that lists the Kconfig definition location, include path,
+    # menu path, and Kconfig definition for each node (definition location) of
+    # 'sc' (symbol or choice)
+
+    # Fancy Unicode arrow. Added in '93, so ought to be pretty safe.
+    arrow = " \N{RIGHTWARDS ARROW} "
+
+    def include_path(node):
+        if not node.include_path:
+            # In the top-level Kconfig file
+            return ""
+
+        return "Included via {}\n\n".format(
+            arrow.join("``{}:{}``".format(filename, linenr)
+                       for filename, linenr in node.include_path))
 
     def menu_path(node):
         path = ""
@@ -316,8 +356,7 @@ def kconfig_definition_rst(sc):
             if node is node.kconfig.top_node:
                 break
 
-            # Fancy Unicode arrow. Added in '93, so ought to be pretty safe.
-            path = " → " + node.prompt[0] + path
+            path = arrow + node.prompt[0] + path
 
         return "(top menu)" + path
 
@@ -325,14 +364,22 @@ def kconfig_definition_rst(sc):
     if len(sc.nodes) > 1: heading += "s"
     rst = "{}\n{}\n\n".format(heading, len(heading)*"=")
 
-    rst += ".. highlight:: kconfig\n\n"
+    rst += ".. highlight:: kconfig"
 
-    rst += "\n\n".join(
-        "At ``{}:{}``, in menu ``{}``:\n\n"
-        ".. parsed-literal::\n\n"
-        "{}".format(node.filename, node.linenr, menu_path(node),
-                    textwrap.indent(node.custom_str(rst_link), " "*4))
-        for node in sc.nodes)
+    for node in sc.nodes:
+        rst += "\n\n" \
+               "At ``{}:{}``\n\n" \
+               "{}" \
+               "Menu path: {}\n\n" \
+               ".. parsed-literal::\n\n{}" \
+               .format(node.filename, node.linenr,
+                       include_path(node), menu_path(node),
+                       textwrap.indent(node.custom_str(rst_link), 4*" "))
+
+        # Not the last node?
+        if node is not sc.nodes[-1]:
+            # Add a horizontal line between multiple definitions
+            rst += "\n\n----"
 
     rst += "\n\n*(Definitions include propagated dependencies, " \
            "including from if's and menus.)*"
