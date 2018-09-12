@@ -1,5 +1,6 @@
 #include <arm/armv6-m.dtsi>
 #include <dt-bindings/i2c/i2c.h>
+#include <dt-bindings/gpio/gpio.h>
 #include <nordic/mem.h>
 
 / {
@@ -27,6 +28,7 @@
 				compatible = "soc-nv-flash";
 				label = "NRF_FLASH";
 				reg = <0x00000000 DT_FLASH_SIZE>;
+				erase-block-size = <1024>;
 				write-block-size = <4>;
 			};
 	};
@@ -38,6 +40,14 @@
 	};
 
 	soc {
+		adc: adc@40007000 {
+			compatible = "nordic,nrf-adc";
+			reg = <0x40007000 0x1000>;
+			interrupts = <7 1>;
+			status = "disabled";
+			label = "ADC_0";
+		};
+
 		uart0: uart@40002000 {
 			compatible = "nordic,nrf-uart";
 			reg = <0x40002000 0x1000>;
@@ -65,7 +75,7 @@
 		};
 
 		i2c0: i2c@40003000 {
-			compatible = "nordic,nrf5-i2c";
+			compatible = "nordic,nrf-i2c";
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x40003000 0x1000>;
@@ -76,7 +86,7 @@
 		};
 
 		i2c1: i2c@40004000 {
-			compatible = "nordic,nrf5-i2c";
+			compatible = "nordic,nrf-i2c";
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x40004000 0x1000>;
@@ -92,6 +102,26 @@
 			interrupts = <18 1>;
 			status = "disabled";
 			label = "QDEC";
+		};
+
+		spi0: spi@40003000 {
+			compatible = "nordic,nrf-spi";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x40003000 0x1000>;
+			interrupts = <3 1>;
+			status = "disabled";
+			label = "SPI_0";
+		};
+
+		spi1: spi@40004000 {
+			compatible = "nordic,nrf-spi";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x40004000 0x1000>;
+			interrupts = <4 1>;
+			status = "disabled";
+			label = "SPI_1";
 		};
 
 		wdt: watchdog@40010000 {

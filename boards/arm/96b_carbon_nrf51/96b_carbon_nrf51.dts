@@ -30,4 +30,14 @@
 &uart0 {
 	current-speed = <115200>;
 	status = "ok";
+	tx-pin = <29>;
+	rx-pin = <11>;
+};
+
+&spi1 {
+	status = "ok";
+	sck-pin = <7>;
+	mosi-pin = <0>;
+	miso-pin = <30>;
+	csn-pin = <25>;
 };

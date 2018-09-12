@@ -489,6 +489,11 @@ void _timer_int_handler(void *params)
 {
 	ARG_UNUSED(params);
 
+#ifdef CONFIG_EXECUTION_BENCHMARKING
+	extern void read_timer_start_of_tick_handler(void);
+	read_timer_start_of_tick_handler();
+#endif
+
 #ifdef CONFIG_XTENSA_ASM2
 	/* FIXME: the legacy xtensa code did this in the assembly
 	 * hook, and was a little more sophisticated.  We should track
@@ -500,10 +505,7 @@ void _timer_int_handler(void *params)
 	SET_TIMER_FIRE_TIME(GET_TIMER_CURRENT_TIME() + _xt_tick_divisor);
 #endif
 
-#ifdef CONFIG_KERNEL_EVENT_LOGGER_INTERRUPT
-	extern void _sys_k_event_logger_interrupt(void);
-	_sys_k_event_logger_interrupt();
-#endif
+	sys_trace_isr_enter();
 
 #ifdef CONFIG_SMP
 	/* The timer infractructure isn't prepared to handle
@@ -536,6 +538,11 @@ void _timer_int_handler(void *params)
 	/* Announce the tick event to the kernel. */
 	_sys_clock_final_tick_announce();
 #endif	/* CONFIG_TICKLESS_KERNEL */
+
+#ifdef CONFIG_EXECUTION_BENCHMARKING
+	extern void read_timer_end_of_tick_handler(void);
+	read_timer_end_of_tick_handler();
+#endif
 }
 
 

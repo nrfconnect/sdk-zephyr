@@ -105,16 +105,17 @@ osStatus osMailPut(osMailQId queue_id, void *mail)
 		return osErrorParameter;
 	}
 
+	if (mail == NULL) {
+		return osErrorValue;
+	}
+
 	memset(&mmsg, 0, sizeof(mmsg));
 	mmsg.tx_data = mail;
 	mmsg.rx_source_thread = K_ANY;
 	mmsg.tx_target_thread = K_ANY;
 
-	if (k_mbox_put(queue_def->mbox, &mmsg, 100) == 0) {
-		return osOK;
-	} else {
-		return osErrorValue;
-	}
+	k_mbox_async_put(queue_def->mbox, &mmsg, NULL);
+	return osOK;
 }
 
 /**
@@ -124,7 +125,7 @@ osEvent osMailGet(osMailQId queue_id, uint32_t millisec)
 {
 	osMailQDef_t *queue_def = (osMailQDef_t *)queue_id;
 	struct k_mbox_msg mmsg;
-	osEvent evt;
+	osEvent evt = {0};
 	int retval;
 
 	if (queue_def == NULL) {
@@ -146,6 +147,7 @@ osEvent osMailGet(osMailQId queue_id, uint32_t millisec)
 
 	if (retval == 0) {
 		evt.status = osEventMail;
+		evt.value.p = mmsg.tx_data;
 	} else if (retval == -EAGAIN) {
 		evt.status = osEventTimeout;
 	} else if (retval == -ENOMSG) {
@@ -154,7 +156,6 @@ osEvent osMailGet(osMailQId queue_id, uint32_t millisec)
 		evt.status = osErrorValue;
 	}
 
-	evt.value.p = mmsg.tx_data;
 	evt.def.mail_id = queue_id;
 
 	return evt;

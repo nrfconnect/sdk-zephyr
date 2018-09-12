@@ -3,8 +3,9 @@ breathe==4.9.1
 sphinx==1.7.5
 docutils==0.14
 sphinx_rtd_theme
+sphinxcontrib-svg2pdfconverter
 junit2html
-PyYAML==3.12
+PyYAML>=3.12
 ply==3.10
 hub==2.0
 gitlint
