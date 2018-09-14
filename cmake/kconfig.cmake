@@ -22,6 +22,7 @@ set(ENV{KCONFIG_AUTOHEADER} ${AUTOCONF_H})
 # files for other architectures
 set(ENV{ARCH}      ${ARCH})
 set(ENV{BOARD_DIR} ${BOARD_DIR})
+set(ENV{SOC_DIR}   ${SOC_DIR})
 
 add_custom_target(
   menuconfig
@@ -31,6 +32,7 @@ add_custom_target(
   KCONFIG_CONFIG=${DOTCONFIG}
   ARCH=$ENV{ARCH}
   BOARD_DIR=$ENV{BOARD_DIR}
+  SOC_DIR=$ENV{SOC_DIR}
   ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/kconfig/menuconfig.py ${KCONFIG_ROOT}
   WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/kconfig
   USES_TERMINAL
