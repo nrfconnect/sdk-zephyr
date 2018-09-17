@@ -9,6 +9,8 @@ add_subdirectory_ifdef(CONFIG_BT_SHELL shell)
 if(CONFIG_BT_CTLR)
   if(CONFIG_BT_LL_SW)
     add_subdirectory(controller)
+  elseif(CONFIG_BT_LL_NORDIC)
+	add_subdirectory(nordic-controller)
   endif()
 endif()
 
