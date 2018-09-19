@@ -7,8 +7,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __BT_GATT_H
-#define __BT_GATT_H
+#ifndef ZEPHYR_INCLUDE_BLUETOOTH_GATT_H_
+#define ZEPHYR_INCLUDE_BLUETOOTH_GATT_H_
 
 /**
  * @brief Generic Attribute Profile (GATT)
@@ -581,8 +581,8 @@ ssize_t bt_gatt_attr_read_cep(struct bt_conn *conn,
  *  @param _value Descriptor attribute value.
  */
 #define BT_GATT_CEP(_value)						\
-	BT_GATT_ATTRIBUTE(BT_UUID_GATT_CEP, BT_GATT_PERM_READ,		\
-			  bt_gatt_attr_read_cep, NULL, _value)
+	BT_GATT_DESCRIPTOR(BT_UUID_GATT_CEP, BT_GATT_PERM_READ,		\
+			  bt_gatt_attr_read_cep, NULL, (void *)_value)
 
 /** @brief Read Characteristic User Description Descriptor Attribute helper
  *
@@ -612,8 +612,8 @@ ssize_t bt_gatt_attr_read_cud(struct bt_conn *conn,
  *  @param _perm Descriptor attribute access permissions.
  */
 #define BT_GATT_CUD(_value, _perm)					\
-	BT_GATT_ATTRIBUTE(BT_UUID_GATT_CUD, _perm, bt_gatt_attr_read_cud, \
-			  NULL, _value)
+	BT_GATT_DESCRIPTOR(BT_UUID_GATT_CUD, _perm, bt_gatt_attr_read_cud, \
+			   NULL, (void *)_value)
 
 /** @brief Read Characteristic Presentation format Descriptor Attribute helper
  *
@@ -642,8 +642,8 @@ ssize_t bt_gatt_attr_read_cpf(struct bt_conn *conn,
  *  @param _value Descriptor attribute value.
  */
 #define BT_GATT_CPF(_value)						\
-	BT_GATT_ATTRIBUTE(BT_UUID_GATT_CPF, BT_GATT_PERM_READ,		\
-			  bt_gatt_attr_read_cpf, NULL, _value)
+	BT_GATT_DESCRIPTOR(BT_UUID_GATT_CPF, BT_GATT_PERM_READ,		\
+			  bt_gatt_attr_read_cpf, NULL, (void *)_value)
 
 /** @def BT_GATT_DESCRIPTOR
  *  @brief Descriptor Declaration Macro.
@@ -1090,4 +1090,4 @@ void bt_gatt_cancel(struct bt_conn *conn, void *params);
  * @}
  */
 
-#endif /* __BT_GATT_H */
+#endif /* ZEPHYR_INCLUDE_BLUETOOTH_GATT_H_ */

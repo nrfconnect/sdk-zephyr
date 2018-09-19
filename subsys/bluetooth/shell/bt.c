@@ -155,7 +155,7 @@ static void device_found(const bt_addr_le_t *addr, s8_t rssi, u8_t evtype,
 	char le_addr[BT_ADDR_LE_STR_LEN];
 	char name[NAME_LEN];
 
-	memset(name, 0, sizeof(name));
+	(void)memset(name, 0, sizeof(name));
 
 	bt_data_parse(buf, data_cb, name);
 
@@ -1544,7 +1544,7 @@ static void br_device_found(const bt_addr_t *addr, s8_t rssi,
 	char name[239];
 	int len = 240;
 
-	memset(name, 0, sizeof(name));
+	(void)memset(name, 0, sizeof(name));
 
 	while (len) {
 		if (len < 2) {
@@ -2234,9 +2234,9 @@ static const struct shell_cmd bt_commands[] = {
 #if defined(CONFIG_BT_GATT_CLIENT)
 	{ "gatt-exchange-mtu", cmd_gatt_exchange_mtu, HELP_NONE },
 	{ "gatt-discover-primary", cmd_gatt_discover,
-	  "<UUID> [start handle] [end handle]" },
+	  "[UUID] [start handle] [end handle]" },
 	{ "gatt-discover-secondary", cmd_gatt_discover,
-	  "<UUID> [start handle] [end handle]" },
+	  "[UUID] [start handle] [end handle]" },
 	{ "gatt-discover-include", cmd_gatt_discover,
 	  "[UUID] [start handle] [end handle]" },
 	{ "gatt-discover-characteristic", cmd_gatt_discover,

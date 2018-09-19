@@ -3,7 +3,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include <logging/log_backend_uart.h>
+
+#include <logging/log_backend.h>
 #include <logging/log_core.h>
 #include <logging/log_msg.h>
 #include <logging/log_output.h>
@@ -33,11 +34,11 @@ static void put(const struct log_backend *const backend,
 
 	u32_t flags = 0;
 
-	if (IS_ENABLED(CONFIG_LOG_BACKEND_UART_SHOW_COLOR)) {
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_SHOW_COLOR)) {
 		flags |= LOG_OUTPUT_FLAG_COLORS;
 	}
 
-	if (IS_ENABLED(CONFIG_LOG_BACKEND_UART_FORMAT_TIMESTAMP)) {
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_FORMAT_TIMESTAMP)) {
 		flags |= LOG_OUTPUT_FLAG_FORMAT_TIMESTAMP;
 	}
 
@@ -59,10 +60,12 @@ void log_backend_uart_init(void)
 
 static void panic(struct log_backend const *const backend)
 {
-
 }
 
 const struct log_backend_api log_backend_uart_api = {
 	.put = put,
 	.panic = panic,
+	.init = log_backend_uart_init,
 };
+
+LOG_BACKEND_DEFINE(log_backend_uart, log_backend_uart_api);

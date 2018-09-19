@@ -32,6 +32,7 @@
 #include <entropy.h>
 #include <logging/log_ctrl.h>
 #include <tracing.h>
+#include <stdbool.h>
 
 /* kernel build timestamp items */
 #define BUILD_TIMESTAMP "BUILD: " __DATE__ " " __TIME__
@@ -55,7 +56,7 @@ static const unsigned int boot_delay;
 #endif
 
 #if !defined(CONFIG_BOOT_BANNER)
-#define PRINT_BOOT_BANNER() do { } while (0)
+#define PRINT_BOOT_BANNER() do { } while (false)
 #else
 #define PRINT_BOOT_BANNER() printk("***** " BOOT_BANNER " *****\n")
 #endif
@@ -158,15 +159,15 @@ void k_call_stacks_analyze(void) { }
  */
 void _bss_zero(void)
 {
-	memset(&__bss_start, 0,
-		 ((u32_t) &__bss_end - (u32_t) &__bss_start));
+	(void)memset(&__bss_start, 0,
+		     ((u32_t) &__bss_end - (u32_t) &__bss_start));
 #ifdef CONFIG_CCM_BASE_ADDRESS
-	memset(&__ccm_bss_start, 0,
-		((u32_t) &__ccm_bss_end - (u32_t) &__ccm_bss_start));
+	(void)memset(&__ccm_bss_start, 0,
+		     ((u32_t) &__ccm_bss_end - (u32_t) &__ccm_bss_start));
 #endif
 #ifdef CONFIG_APPLICATION_MEMORY
-	memset(&__app_bss_start, 0,
-		 ((u32_t) &__app_bss_end - (u32_t) &__app_bss_start));
+	(void)memset(&__app_bss_start, 0,
+		     ((u32_t) &__app_bss_end - (u32_t) &__app_bss_start));
 #endif
 }
 
@@ -387,7 +388,7 @@ static void switch_to_main_thread(void)
 	 * will never be rescheduled in.
 	 */
 
-	_Swap(irq_lock());
+	(void)_Swap(irq_lock());
 #endif
 }
 #endif /* CONFIG_MULTITHREDING */
@@ -458,7 +459,7 @@ FUNC_NORETURN void _Cstart(void)
 	char dummy_thread_memory[sizeof(struct k_thread)];
 	struct k_thread *dummy_thread = (struct k_thread *)&dummy_thread_memory;
 
-	memset(dummy_thread_memory, 0, sizeof(dummy_thread_memory));
+	(void)memset(dummy_thread_memory, 0, sizeof(dummy_thread_memory));
 #endif
 #endif
 	/*
@@ -493,7 +494,7 @@ FUNC_NORETURN void _Cstart(void)
 	bg_thread_main(NULL, NULL, NULL);
 
 	irq_lock();
-	while (1) {
+	while (true) {
 	}
 #endif
 
