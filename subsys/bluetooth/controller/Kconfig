@@ -29,6 +29,12 @@ config BT_LL_SW
 	help
 	  Use Zephyr software BLE Link Layer implementation.
 
+config BT_LL_NORDIC
+	bool "Nordic proprietary software-based BLE Link Layer"
+	select ZERO_LATENCY_IRQS
+	help
+	  Use Nordic software BLE Link Layer implementation.
+
 endchoice
 
 comment "BLE Controller configuration"
