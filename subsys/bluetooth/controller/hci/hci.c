@@ -1741,6 +1741,7 @@ static int controller_cmd_handle(u16_t  ocf, struct net_buf *cmd,
 	return 0;
 }
 
+#if defined(CONFIG_BT_HCI_VS)
 static void vs_read_version_info(struct net_buf *buf, struct net_buf **evt)
 {
 	struct bt_hci_rp_vs_read_version_info *rp;
@@ -1951,6 +1952,31 @@ static int vendor_cmd_handle(u16_t ocf, struct net_buf *cmd,
 
 	return 0;
 }
+#endif
+
+#if !defined(CONFIG_BT_HCI_VS_EXT)
+uint8_t bt_read_static_addr(bt_addr_le_t *addr)
+{
+#if defined(CONFIG_SOC_FAMILY_NRF)
+	if (((NRF_FICR->DEVICEADDR[0] != UINT32_MAX) ||
+	    ((NRF_FICR->DEVICEADDR[1] & UINT16_MAX) != UINT16_MAX)) &&
+	     (NRF_FICR->DEVICEADDRTYPE & 0x01)) {
+		sys_put_le32(NRF_FICR->DEVICEADDR[0], &addr->a.val[0]);
+		sys_put_le16(NRF_FICR->DEVICEADDR[1], &addr->a.val[4]);
+
+		/* The FICR value is a just a random number, with no knowledge
+		 * of the Bluetooth Specification requirements for random
+		 * static addresses.
+		 */
+		BT_ADDR_SET_STATIC(&addr->a);
+
+		addr->type = BT_ADDR_LE_RANDOM;
+		return 1;
+	}
+#endif /* CONFIG_SOC_FAMILY_NRF */
+	return 0;
+}
+#endif /* !CONFIG_BT_HCI_VS_EXT */
 
 static void data_buf_overflow(struct net_buf **buf)
 {
@@ -2009,9 +2035,11 @@ struct net_buf *hci_cmd_handle(struct net_buf *cmd)
 	case BT_OGF_LE:
 		err = controller_cmd_handle(ocf, cmd, &evt);
 		break;
+#if defined(CONFIG_BT_HCI_VS)
 	case BT_OGF_VS:
 		err = vendor_cmd_handle(ocf, cmd, &evt);
 		break;
+#endif
 	default:
 		err = -EINVAL;
 		break;

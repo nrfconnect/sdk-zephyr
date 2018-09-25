@@ -28,7 +28,7 @@
 #include <bluetooth/rfcomm.h>
 #include <bluetooth/sdp.h>
 
-#include <shell/shell.h>
+#include <shell/legacy_shell.h>
 
 #include "bt.h"
 #include "gatt.h"
@@ -448,16 +448,16 @@ static int char2hex(const char *c, u8_t *x)
 	return 0;
 }
 
-static int str2bt_addr(const char *str, bt_addr_t *addr)
+static int hexstr2array(const char *str, u8_t *array, u8_t size)
 {
 	int i, j;
 	u8_t tmp;
 
-	if (strlen(str) != 17) {
+	if (strlen(str) != ((size * 2) + (size - 1))) {
 		return -EINVAL;
 	}
 
-	for (i = 5, j = 1; *str != '\0'; str++, j++) {
+	for (i = size - 1, j = 1; *str != '\0'; str++, j++) {
 		if (!(j % 3) && (*str != ':')) {
 			return -EINVAL;
 		} else if (*str == ':') {
@@ -465,16 +465,21 @@ static int str2bt_addr(const char *str, bt_addr_t *addr)
 			continue;
 		}
 
-		addr->val[i] = addr->val[i] << 4;
+		array[i] = array[i] << 4;
 
 		if (char2hex(str, &tmp) < 0) {
 			return -EINVAL;
 		}
 
-		addr->val[i] |= tmp;
+		array[i] |= tmp;
 	}
 
 	return 0;
+}
+
+static int str2bt_addr(const char *str, bt_addr_t *addr)
+{
+	return hexstr2array(str, addr->val, 6);
 }
 
 static int str2bt_addr_le(const char *str, const char *type, bt_addr_le_t *addr)
@@ -1154,6 +1159,31 @@ static int cmd_clear(int argc, char *argv[])
 
 	return 0;
 }
+
+static int cmd_chan_map(int argc, char *argv[])
+{
+	u8_t chan_map[5];
+	int err;
+
+	if (argc != 2) {
+		return -EINVAL;
+	}
+
+	err = hexstr2array(argv[1], chan_map, 5);
+	if (err) {
+		printk("Invalid channel map\n");
+		return err;
+	}
+
+	err = bt_le_set_chan_map(chan_map);
+	if (err) {
+		printk("Failed to set channel map (err %d)\n", err);
+	} else {
+		printk("Channel map set\n");
+	}
+
+	return 0;
+}
 #endif /* CONFIG_BT_CONN */
 
 #if defined(CONFIG_BT_SMP) || defined(CONFIG_BT_BREDR)
@@ -1175,6 +1205,26 @@ static int cmd_security(int argc, char *argv[])
 	err = bt_conn_security(default_conn, sec);
 	if (err) {
 		printk("Setting security failed (err %d)\n", err);
+	}
+
+	return 0;
+}
+
+static int cmd_bondable(int argc, char *argv[])
+{
+	const char *bondable;
+
+	if (argc < 2) {
+		return -EINVAL;
+	}
+
+	bondable = argv[1];
+	if (!strcmp(bondable, "on")) {
+		bt_set_bondable(true);
+	} else if (!strcmp(bondable, "off")) {
+		bt_set_bondable(false);
+	} else {
+		return -EINVAL;
 	}
 
 	return 0;
@@ -1648,8 +1698,17 @@ static int cmd_bredr_discovery(int argc, char *argv[])
 
 #if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
 static u32_t l2cap_rate;
+static u32_t l2cap_recv_delay;
+static K_FIFO_DEFINE(l2cap_recv_fifo);
+struct l2ch {
+	struct k_delayed_work recv_work;
+	struct bt_l2cap_le_chan ch;
+};
+#define L2CH_CHAN(_chan) CONTAINER_OF(_chan, struct l2ch, ch.chan)
+#define L2CH_WORK(_work) CONTAINER_OF(_work, struct l2ch, recv_work)
+#define L2CAP_CHAN(_chan) _chan->ch.chan
 
-static void l2cap_recv_metrics(struct bt_l2cap_chan *chan, struct net_buf *buf)
+static int l2cap_recv_metrics(struct bt_l2cap_chan *chan, struct net_buf *buf)
 {
 	static u32_t len;
 	static u32_t cycle_stamp;
@@ -1669,19 +1728,52 @@ static void l2cap_recv_metrics(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		len += buf->len;
 		l2cap_rate = ((u64_t)len << 3) * 1000000000 / delta;
 	}
+
+	return 0;
 }
 
-static void l2cap_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
+static void l2cap_recv_cb(struct k_work *work)
 {
+	struct l2ch *c = L2CH_WORK(work);
+	struct net_buf *buf;
+
+	while ((buf = net_buf_get(&l2cap_recv_fifo, K_NO_WAIT))) {
+		printk("Confirming reception\n");
+		bt_l2cap_chan_recv_complete(&c->ch.chan, buf);
+	}
+}
+
+static int l2cap_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
+{
+	struct l2ch *l2ch = L2CH_CHAN(chan);
+
 	printk("Incoming data channel %p len %u\n", chan, buf->len);
 
 	if (buf->len) {
 		hexdump(buf->data, buf->len);
 	}
+
+	if (l2cap_recv_delay) {
+		/* Submit work only if queue is empty */
+		if (k_fifo_is_empty(&l2cap_recv_fifo)) {
+			printk("Delaying response in %u ms...\n",
+			       l2cap_recv_delay);
+			k_delayed_work_submit(&l2ch->recv_work,
+					      l2cap_recv_delay);
+		}
+		net_buf_put(&l2cap_recv_fifo, buf);
+		return -EINPROGRESS;
+	}
+
+	return 0;
 }
 
 static void l2cap_connected(struct bt_l2cap_chan *chan)
 {
+	struct l2ch *c = L2CH_CHAN(chan);
+
+	k_delayed_work_init(&c->recv_work, l2cap_recv_cb);
+
 	printk("Channel %p connected\n", chan);
 }
 
@@ -1707,21 +1799,22 @@ static struct bt_l2cap_chan_ops l2cap_ops = {
 	.disconnected	= l2cap_disconnected,
 };
 
-static struct bt_l2cap_le_chan l2cap_chan = {
-	.chan.ops	= &l2cap_ops,
-	.rx.mtu		= DATA_MTU,
+
+static struct l2ch l2ch_chan = {
+	.ch.chan.ops	= &l2cap_ops,
+	.ch.rx.mtu	= DATA_MTU,
 };
 
 static int l2cap_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)
 {
 	printk("Incoming conn %p\n", conn);
 
-	if (l2cap_chan.chan.conn) {
+	if (l2ch_chan.ch.chan.conn) {
 		printk("No channels available\n");
 		return -ENOMEM;
 	}
 
-	*chan = &l2cap_chan.chan;
+	*chan = &l2ch_chan.ch.chan;
 
 	return 0;
 }
@@ -1772,14 +1865,14 @@ static int cmd_l2cap_connect(int argc, char *argv[])
 		return -EINVAL;
 	}
 
-	if (l2cap_chan.chan.conn) {
+	if (l2ch_chan.ch.chan.conn) {
 		printk("Channel already in use\n");
 		return -EINVAL;
 	}
 
 	psm = strtoul(argv[1], NULL, 16);
 
-	err = bt_l2cap_chan_connect(default_conn, &l2cap_chan.chan, psm);
+	err = bt_l2cap_chan_connect(default_conn, &l2ch_chan.ch.chan, psm);
 	if (err < 0) {
 		printk("Unable to connect to psm %u (err %u)\n", psm, err);
 	} else {
@@ -1793,7 +1886,7 @@ static int cmd_l2cap_disconnect(int argc, char *argv[])
 {
 	int err;
 
-	err = bt_l2cap_chan_disconnect(&l2cap_chan.chan);
+	err = bt_l2cap_chan_disconnect(&l2ch_chan.ch.chan);
 	if (err) {
 		printk("Unable to disconnect: %u\n", -err);
 	}
@@ -1811,19 +1904,30 @@ static int cmd_l2cap_send(int argc, char *argv[])
 		count = strtoul(argv[1], NULL, 10);
 	}
 
-	len = min(l2cap_chan.tx.mtu, DATA_MTU - BT_L2CAP_CHAN_SEND_RESERVE);
+	len = min(l2ch_chan.ch.tx.mtu, DATA_MTU - BT_L2CAP_CHAN_SEND_RESERVE);
 
 	while (count--) {
 		buf = net_buf_alloc(&data_tx_pool, K_FOREVER);
 		net_buf_reserve(buf, BT_L2CAP_CHAN_SEND_RESERVE);
 
 		net_buf_add_mem(buf, buf_data, len);
-		ret = bt_l2cap_chan_send(&l2cap_chan.chan, buf);
+		ret = bt_l2cap_chan_send(&l2ch_chan.ch.chan, buf);
 		if (ret < 0) {
 			printk("Unable to send: %d\n", -ret);
 			net_buf_unref(buf);
 			break;
 		}
+	}
+
+	return 0;
+}
+
+static int cmd_l2cap_recv(int argc, char *argv[])
+{
+	if (argc > 1) {
+		l2cap_recv_delay = strtoul(argv[1], NULL, 10);
+	} else {
+		printk("l2cap receive delay: %u ms\n", l2cap_recv_delay);
 	}
 
 	return 0;
@@ -1857,9 +1961,11 @@ static int cmd_l2cap_metrics(int argc, char *argv[])
 #endif
 
 #if defined(CONFIG_BT_BREDR)
-static void l2cap_bredr_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
+static int l2cap_bredr_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 {
 	printk("Incoming data channel %p len %u\n", chan, buf->len);
+
+	return 0;
 }
 
 static void l2cap_bredr_connected(struct bt_l2cap_chan *chan)
@@ -2216,8 +2322,10 @@ static const struct shell_cmd bt_commands[] = {
 	{ "conn-update", cmd_conn_update, "<min> <max> <latency> <timeout>" },
 	{ "oob", cmd_oob },
 	{ "clear", cmd_clear },
+	{ "channel-map", cmd_chan_map, "<channel-map: XX:XX:XX:XX:XX> (36-0)" },
 #if defined(CONFIG_BT_SMP) || defined(CONFIG_BT_BREDR)
 	{ "security", cmd_security, "<security level: 0, 1, 2, 3>" },
+	{ "bondable", cmd_bondable, "<bondable: on, off>" },
 	{ "auth", cmd_auth,
 	  "<auth method: all, input, display, yesno, confirm, none>" },
 	{ "auth-cancel", cmd_auth_cancel, HELP_NONE },
@@ -2266,6 +2374,7 @@ static const struct shell_cmd bt_commands[] = {
 	{ "l2cap-connect", cmd_l2cap_connect, "<psm>" },
 	{ "l2cap-disconnect", cmd_l2cap_disconnect, HELP_NONE },
 	{ "l2cap-send", cmd_l2cap_send, "<number of packets>" },
+	{ "l2cap-recv", cmd_l2cap_recv, "[delay (in miliseconds)]" },
 	{ "l2cap-metrics", cmd_l2cap_metrics, "<value on, off>" },
 #endif
 #if defined(CONFIG_BT_BREDR)

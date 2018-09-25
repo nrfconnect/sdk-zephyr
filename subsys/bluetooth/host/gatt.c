@@ -69,10 +69,6 @@ static ssize_t write_name(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 {
 	char value[CONFIG_BT_DEVICE_NAME_MAX] = {};
 
-	if (flags & BT_GATT_WRITE_FLAG_PREPARE) {
-		return len;
-	}
-
 	if (offset) {
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
 	}
@@ -1170,10 +1166,12 @@ static void gatt_discover_next(struct bt_conn *conn, u16_t last_handle,
 	params->start_handle = last_handle;
 	if (params->start_handle < UINT16_MAX) {
 		params->start_handle++;
+	} else {
+		goto done;
 	}
 
 	/* Stop if over the range or the requests */
-	if (params->start_handle >= params->end_handle) {
+	if (params->start_handle > params->end_handle) {
 		goto done;
 	}
 
