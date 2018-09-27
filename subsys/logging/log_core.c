@@ -299,6 +299,10 @@ void log_panic(void)
 {
 	struct log_backend const *backend;
 
+	if (panic_mode) {
+		return;
+	}
+
 	for (int i = 0; i < log_backend_count_get(); i++) {
 		backend = log_backend_get(i);
 
@@ -491,7 +495,7 @@ static void log_process_thread_func(void *dummy1, void *dummy2, void *dummy3)
 	}
 }
 
-K_THREAD_DEFINE(log_process_thread, CONFIG_LOG_PROCESS_THREAD_STACK_SIZE,
+K_THREAD_DEFINE(logging, CONFIG_LOG_PROCESS_THREAD_STACK_SIZE,
 		log_process_thread_func, NULL, NULL, NULL,
 		CONFIG_LOG_PROCESS_THREAD_PRIO, 0, K_NO_WAIT);
 #else

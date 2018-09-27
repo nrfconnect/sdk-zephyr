@@ -736,16 +736,23 @@ static int hci_le_set_phy(struct bt_conn *conn)
 	return 0;
 }
 
-static void update_conn_param(struct bt_conn *conn)
+static void slave_update_conn_param(struct bt_conn *conn)
 {
+	if (!IS_ENABLED(CONFIG_BT_PERIPHERAL)) {
+		return;
+	}
+
+	/* don't start timer again on PHY update etc */
+	if (atomic_test_bit(conn->flags, BT_CONN_SLAVE_PARAM_UPDATE)) {
+		return;
+	}
+
 	/*
 	 * Core 4.2 Vol 3, Part C, 9.3.12.2
 	 * The Peripheral device should not perform a Connection Parameter
 	 * Update procedure within 5 s after establishing a connection.
 	 */
-	k_delayed_work_submit(&conn->le.update_work,
-				 conn->role == BT_HCI_ROLE_MASTER ? K_NO_WAIT :
-				 CONN_UPDATE_TIMEOUT);
+	k_delayed_work_submit(&conn->le.update_work, CONN_UPDATE_TIMEOUT);
 }
 
 #if defined(CONFIG_BT_SMP)
@@ -938,7 +945,10 @@ static void le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 		}
 	}
 
-	update_conn_param(conn);
+	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
+	    conn->role == BT_CONN_ROLE_SLAVE) {
+		slave_update_conn_param(conn);
+	}
 
 done:
 	bt_conn_unref(conn);
@@ -1029,7 +1039,10 @@ static void le_remote_feat_complete(struct net_buf *buf)
 		}
 	}
 
-	update_conn_param(conn);
+	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
+	    conn->role == BT_CONN_ROLE_SLAVE) {
+		slave_update_conn_param(conn);
+	}
 
 done:
 	bt_conn_unref(conn);
@@ -1058,7 +1071,10 @@ static void le_data_len_change(struct net_buf *buf)
 		goto done;
 	}
 
-	update_conn_param(conn);
+	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
+	    conn->role == BT_CONN_ROLE_SLAVE) {
+		slave_update_conn_param(conn);
+	}
 
 done:
 	bt_conn_unref(conn);
@@ -1095,7 +1111,10 @@ static void le_phy_update_complete(struct net_buf *buf)
 		}
 	}
 
-	update_conn_param(conn);
+	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
+	    conn->role == BT_CONN_ROLE_SLAVE) {
+		slave_update_conn_param(conn);
+	}
 
 done:
 	bt_conn_unref(conn);
@@ -3095,6 +3114,8 @@ static int start_le_scan(u8_t scan_type, u16_t interval, u16_t window)
 			}
 
 			set_param.addr_type = BT_ADDR_LE_RANDOM;
+		} else if (set_param.addr_type == BT_ADDR_LE_RANDOM) {
+			set_random_address(&bt_dev.id_addr[0].a);
 		}
 	}
 
@@ -3154,8 +3175,8 @@ int bt_le_scan_update(bool fast_scan)
 			interval = BT_GAP_SCAN_FAST_INTERVAL;
 			window = BT_GAP_SCAN_FAST_WINDOW;
 		} else {
-			interval = BT_GAP_SCAN_SLOW_INTERVAL_1;
-			window = BT_GAP_SCAN_SLOW_WINDOW_1;
+			interval = CONFIG_BT_BACKGROUND_SCAN_INTERVAL;
+			window = CONFIG_BT_BACKGROUND_SCAN_WINDOW;
 		}
 
 		return start_le_scan(BT_HCI_LE_SCAN_PASSIVE, interval, window);
