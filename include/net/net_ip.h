@@ -44,6 +44,7 @@ extern "C" {
 #define PF_INET6        2          /**< IP protocol family version 6. */
 #define PF_PACKET       3          /**< Packet family.                */
 #define PF_CAN          4          /**< Controller Area Network.      */
+#define PF_LTE          102        /**< Specific to LTE.              */
 
 /* Address families. */
 #define AF_UNSPEC       PF_UNSPEC  /**< Unspecified address family.   */
@@ -51,6 +52,7 @@ extern "C" {
 #define AF_INET6        PF_INET6   /**< IP protocol family version 6. */
 #define AF_PACKET       PF_PACKET  /**< Packet family.                */
 #define AF_CAN          PF_CAN     /**< Controller Area Network.      */
+#define AF_LTE          PF_LTE     /**< Specific to LTE.              */
 
 /** Protocol numbers from IANA/BSD */
 enum net_ip_protocol {
@@ -69,6 +71,11 @@ enum net_ip_protocol_secure {
 	IPPROTO_TLS_1_2 = 258,     /**< TLS 1.2 protocol */
 	IPPROTO_DTLS_1_0 = 272,    /**< DTLS 1.0 protocol */
 	IPPROTO_DTLS_1_2 = 273,    /**< DTLS 1.2 protocol */
+};
+
+/* Protocol numbers for LTE protocols */
+enum net_lte_protocol {
+	NPROTO_AT = 513,
 };
 
 /** Socket type */
