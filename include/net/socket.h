@@ -55,14 +55,12 @@ struct zsock_pollfd {
 
 /** zsock_recv: Read data without removing it from socket input queue */
 #define ZSOCK_MSG_PEEK 0x02
-/** zsock_recv: return the real length of the datagram, even when it was longer
- *  than the passed buffer
- */
-#define ZSOCK_MSG_TRUNC 0x20
+/** zsock_recv: Control received data truncation */
+#define ZSOCK_MSG_TRUNC 0x10
+/** zsock_recv: Request a blocking operation until the request is satisfied. */
+#define ZSOCK_MSG_WAITALL 0x20
 /** zsock_recv/zsock_send: Override operation to non-blocking */
 #define ZSOCK_MSG_DONTWAIT 0x40
-/** zsock_recv: block until the full amount of data can be returned */
-#define ZSOCK_MSG_WAITALL 0x100
 
 /* Well-known values, e.g. from Linux man 2 shutdown:
  * "The constants SHUT_RD, SHUT_WR, SHUT_RDWR have the value 0, 1, 2,
@@ -126,6 +124,7 @@ struct zsock_pollfd {
  *    - 1 - server
  */
 #define TLS_DTLS_ROLE 6
+
 /** Socket option for setting the supported Application Layer Protocols.
  *  It accepts and returns a const char array of NULL terminated strings
  *  representing the supported application layer protocols listed during
@@ -139,6 +138,12 @@ struct zsock_pollfd {
 #define TLS_DTLS_HANDSHAKE_TIMEOUT_MIN 8
 #define TLS_DTLS_HANDSHAKE_TIMEOUT_MAX 9
 
+/** Socket option to control TLS session caching. Accepted values:
+ *  - 0 - Disabled.
+ *  - 1 - Enabled.
+ */
+#define TLS_SESSION_CACHE 8
+
 /** @} */
 
 /* Valid values for TLS_PEER_VERIFY option */
@@ -149,6 +154,10 @@ struct zsock_pollfd {
 /* Valid values for TLS_DTLS_ROLE option */
 #define TLS_DTLS_ROLE_CLIENT 0 /**< Client role in a DTLS session. */
 #define TLS_DTLS_ROLE_SERVER 1 /**< Server role in a DTLS session. */
+
+/* Valid values for TLS_SESSION_CACHE option */
+#define TLS_SESSION_CACHE_DISABLED 0 /**< Disable TLS session caching. */
+#define TLS_SESSION_CACHE_ENABLED 1 /**< Enable TLS session caching. */
 
 struct zsock_addrinfo {
 	struct zsock_addrinfo *ai_next;
@@ -828,7 +837,7 @@ struct ifreq {
 #define SOL_SOCKET 1
 
 /* Socket options for SOL_SOCKET level */
-/** sockopt: Enable server address reuse (ignored, for compatibility) */
+/** sockopt: Enable server address reuse */
 #define SO_REUSEADDR 2
 /** sockopt: Type of the socket */
 #define SO_TYPE 3
@@ -844,7 +853,13 @@ struct ifreq {
 #define SO_SNDTIMEO 21
 
 /** sockopt: Bind a socket to an interface */
-#define SO_BINDTODEVICE	25
+#define SO_BINDTODEVICE 25
+/** sockopt: disable all replies to unexpected traffics */
+#define SO_SILENCE_ALL 30
+/** sockopt: disable IPv4 ICMP replies */
+#define SO_IP_ECHO_REPLY 31
+/** sockopt: disable IPv6 ICMP replies */
+#define SO_IPV6_ECHO_REPLY 32
 
 /** sockopt: Timestamp TX packets */
 #define SO_TIMESTAMPING 37
@@ -869,6 +884,27 @@ struct ifreq {
 /* Socket options for SOCKS5 proxy */
 /** sockopt: Enable SOCKS5 for Socket */
 #define SO_SOCKS5 60
+
+/* Protocol level for PDN. */
+#define SOL_PDN 514
+
+/* Socket options for SOL_PDN level */
+#define SO_PDN_AF 1
+#define SO_PDN_CONTEXT_ID 2
+#define SO_PDN_STATE 3
+
+/* Protocol level for DFU. */
+#define SOL_DFU 515
+
+/* Socket options for SOL_DFU level */
+#define SO_DFU_FW_VERSION 1
+#define SO_DFU_RESOURCES 2
+#define SO_DFU_TIMEO 3
+#define SO_DFU_APPLY 4
+#define SO_DFU_REVERT 5
+#define SO_DFU_BACKUP_DELETE 6
+#define SO_DFU_OFFSET 7
+#define SO_DFU_ERROR 20
 
 /** @cond INTERNAL_HIDDEN */
 /**
