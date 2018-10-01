@@ -40,11 +40,13 @@ extern "C" {
 #define PF_UNSPEC	0	/* Unspecified.  */
 #define PF_INET		2	/* IP protocol family.  */
 #define PF_INET6	10	/* IP version 6.  */
+#define PF_LTE		102
 
 /** Address families.  */
 #define AF_UNSPEC	PF_UNSPEC
 #define AF_INET		PF_INET
 #define AF_INET6	PF_INET6
+#define AF_LTE		PF_LTE
 
 /** Protocol numbers from IANA */
 enum net_ip_protocol {
@@ -61,6 +63,11 @@ enum net_ip_protocol_secure {
 	IPPROTO_TLS_1_2 = 258,
 	IPPROTO_DTLS_1_0 = 272,
 	IPPROTO_DTLS_1_2 = 273,
+};
+
+/* Protocol numbers for LTE protocols */
+enum net_lte_protocol {
+	NPROTO_AT = 513,
 };
 
 /** Socket type */
