@@ -766,6 +766,8 @@ static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 #define SO_REUSEADDR 2
 /** sockopt: Async error (ignored, for compatibility) */
 #define SO_ERROR 4
+#define SO_RCVTIMEO 20
+#define SO_BINDTODEVICE 25
 
 /** sockopt: Timestamp TX packets */
 #define SO_TIMESTAMPING 37
@@ -788,6 +790,34 @@ static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 /* Socket options for SOCKS5 proxy */
 /** sockopt: Enable SOCKS5 for Socket */
 #define SO_SOCKS5 60
+
+/* Interface description structure */
+#define IFNAMSIZ 64
+
+struct ifreq {
+    char ifr_name[IFNAMSIZ]; /* Interface name */
+};
+
+/* Protocol level for PDN. */
+#define SOL_PDN 514
+
+/* Socket options for SOL_PDN level */
+#define SO_PDN_AF 1
+#define SO_PDN_CONTEXT_ID 2
+#define SO_PDN_STATE 3
+
+/* Protocol level for DFU. */
+#define SOL_DFU 515
+
+/* Socket options for SOL_DFU level */
+#define SO_DFU_FW_VERSION 1
+#define SO_DFU_RESOURCES 2
+#define SO_DFU_TIMEO 3
+#define SO_DFU_APPLY 4
+#define SO_DFU_REVERT 5
+#define SO_DFU_BACKUP_DELETE 6
+#define SO_DFU_OFFSET 7
+#define SO_DFU_ERROR 20
 
 /** @cond INTERNAL_HIDDEN */
 /**
