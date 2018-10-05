@@ -10,10 +10,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_CONTEXT)
-#define SYS_LOG_DOMAIN "net/ctx"
-#define NET_LOG_ENABLED 1
-#endif
+#define LOG_MODULE_NAME net_ctx
+#define NET_LOG_LEVEL CONFIG_NET_CONTEXT_LOG_LEVEL
 
 #include <kernel.h>
 #include <string.h>
@@ -450,7 +448,8 @@ int net_context_bind(struct net_context *context, const struct sockaddr *addr,
 
 		if (!iface) {
 			NET_ERR("Cannot bind to %s",
-				net_sprint_ipv6_addr(&addr6->sin6_addr));
+				log_strdup(net_sprint_ipv6_addr(
+						   &addr6->sin6_addr)));
 
 			return -EADDRNOTAVAIL;
 		}
@@ -489,8 +488,8 @@ int net_context_bind(struct net_context *context, const struct sockaddr *addr,
 		NET_DBG("Context %p binding to %s [%s]:%d iface %p",
 			context,
 			net_proto2str(net_context_get_ip_proto(context)),
-			net_sprint_ipv6_addr(ptr), ntohs(addr6->sin6_port),
-			iface);
+			log_strdup(net_sprint_ipv6_addr(ptr)),
+			ntohs(addr6->sin6_port), iface);
 
 		return 0;
 	}
@@ -536,7 +535,8 @@ int net_context_bind(struct net_context *context, const struct sockaddr *addr,
 
 		if (!iface) {
 			NET_ERR("Cannot bind to %s",
-				net_sprint_ipv4_addr(&addr4->sin_addr));
+				log_strdup(net_sprint_ipv4_addr(
+						   &addr4->sin_addr)));
 
 			return -EADDRNOTAVAIL;
 		}
@@ -575,7 +575,7 @@ int net_context_bind(struct net_context *context, const struct sockaddr *addr,
 		NET_DBG("Context %p binding to %s %s:%d iface %p",
 			context,
 			net_proto2str(net_context_get_ip_proto(context)),
-			net_sprint_ipv4_addr(ptr),
+			log_strdup(net_sprint_ipv4_addr(ptr)),
 			ntohs(addr4->sin_port), iface);
 
 		return 0;

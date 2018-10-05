@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_GPTP)
-#define SYS_LOG_DOMAIN "net/gptp"
-#define NET_LOG_ENABLED 1
-#endif
+#define LOG_MODULE_NAME net_gptp_mi
+#define NET_LOG_LEVEL CONFIG_NET_GPTP_LOG_LEVEL
 
 #include <ptp_clock.h>
 
@@ -16,8 +14,6 @@
 #include "gptp_state.h"
 #include "gptp_private.h"
 
-#if defined(CONFIG_NET_DEBUG_GPTP) &&			\
-	(CONFIG_SYS_LOG_NET_LEVEL > SYS_LOG_LEVEL_INFO)
 static const char * const state2str(enum gptp_port_state state)
 {
 	switch (state) {
@@ -43,7 +39,6 @@ static const char * const state2str(enum gptp_port_state state)
 
 	return "<unknown>";
 }
-#endif
 
 void gptp_change_port_state(int port, enum gptp_port_state state)
 {
@@ -168,10 +163,10 @@ static void gptp_mi_init_port_announce_rcv_sm(int port)
 
 static void gptp_mi_init_clock_master_sync_rcv_sm(void)
 {
-	struct gptp_clk_master_sync_state *cms_rcv;
+	struct gptp_clk_master_sync_rcv_state *cms_rcv;
 
 	cms_rcv = &GPTP_STATE()->clk_master_sync_receive;
-	(void)memset(cms_rcv, 0, sizeof(struct gptp_clk_master_sync_state));
+	(void)memset(cms_rcv, 0, sizeof(struct gptp_clk_master_sync_rcv_state));
 	cms_rcv->state = GPTP_CMS_RCV_INITIALIZING;
 }
 
@@ -294,6 +289,23 @@ use_uptime:
 	 * only in milliseconds.
 	 */
 	return k_uptime_get() * 1000000;
+}
+
+u64_t gptp_get_current_master_time_nanosecond(void)
+{
+	int port;
+	enum gptp_port_state *port_role;
+
+	port_role = GPTP_GLOBAL_DS()->selected_role;
+
+	for (port = GPTP_PORT_START; port < GPTP_PORT_END; port++) {
+		if (port_role[port] == GPTP_PORT_MASTER) {
+			return gptp_get_current_time_nanosecond(port);
+		}
+	}
+
+	/* No master */
+	return 0;
 }
 
 static void gptp_mi_pss_rcv_compute(int port)
@@ -484,8 +496,7 @@ static void gptp_mi_pss_send_state_machine(int port)
 						&port_ds->half_sync_itv);
 
 		/* Start 0.5 * syncInterval timeout timer. */
-		k_timer_start(&state->half_sync_itv_timer,
-			      duration, duration);
+		k_timer_start(&state->half_sync_itv_timer, duration, 0);
 
 		gptp_mi_pss_send_md_sync_send(port);
 
@@ -523,8 +534,7 @@ static void gptp_mi_pss_send_state_machine(int port)
 			k_timer_stop(&state->send_sync_receipt_timeout_timer);
 			state->send_sync_receipt_timeout_timer_expired = false;
 
-			duration = (state->last_sync_receipt_timeout_time -
-				    gptp_get_current_time_nanosecond(port)) /
+			duration = port_ds->sync_receipt_timeout_time_itv /
 				(NSEC_PER_USEC * USEC_PER_MSEC);
 
 			k_timer_start(&state->send_sync_receipt_timeout_timer,
@@ -616,12 +626,14 @@ static void gptp_mi_site_sync_sync_state_machine(void)
 static void gptp_mi_clk_slave_sync_compute(void)
 {
 	struct gptp_clk_slave_sync_state *state;
+	struct gptp_clk_master_sync_offset_state *offset_state;
 	struct gptp_global_ds *global_ds;
 	struct gptp_md_sync_info *pss;
 	struct gptp_port_ds *port_ds;
 	u64_t sync_receipt_time;
 
 	state = &GPTP_STATE()->clk_slave_sync;
+	offset_state = &GPTP_STATE()->clk_master_sync_offset;
 	global_ds = GPTP_GLOBAL_DS();
 	port_ds = GPTP_PORT_DS(state->pss_rcv_ptr->local_port_number);
 
@@ -634,11 +646,11 @@ static void gptp_mi_clk_slave_sync_compute(void)
 	sync_receipt_time += port_ds->delay_asymmetry;
 
 	global_ds->sync_receipt_time.second = sync_receipt_time / NSEC_PER_SEC;
-	global_ds->sync_receipt_time.nanosecond =
-		sync_receipt_time % NSEC_PER_SEC;
+	global_ds->sync_receipt_time.fract_nsecond =
+		(sync_receipt_time % NSEC_PER_SEC) * GPTP_POW2(16);
 	global_ds->sync_receipt_time.second += pss->precise_orig_ts.second;
-	global_ds->sync_receipt_time.nanosecond +=
-		pss->precise_orig_ts.nanosecond;
+	global_ds->sync_receipt_time.fract_nsecond +=
+		pss->precise_orig_ts.nanosecond * GPTP_POW2(16);
 
 	global_ds->sync_receipt_local_time = port_ds->delay_asymmetry;
 	global_ds->sync_receipt_local_time /= pss->rate_ratio;
@@ -650,6 +662,8 @@ static void gptp_mi_clk_slave_sync_compute(void)
 	global_ds->last_gm_phase_change.high = pss->last_gm_phase_change.high;
 	global_ds->last_gm_phase_change.low = pss->last_gm_phase_change.low;
 	global_ds->last_gm_freq_change = pss->last_gm_freq_change;
+
+	offset_state->rcvd_sync_receipt_time = true;
 }
 
 #if defined(CONFIG_NET_GPTP_USE_DEFAULT_CLOCK_UPDATE)
@@ -681,7 +695,8 @@ static void gptp_update_local_port_clock(void)
 
 	second_diff = global_ds->sync_receipt_time.second -
 		(global_ds->sync_receipt_local_time / NSEC_PER_SEC);
-	nanosecond_diff = global_ds->sync_receipt_time.nanosecond -
+	nanosecond_diff =
+		(global_ds->sync_receipt_time.fract_nsecond / GPTP_POW2(16)) -
 		(global_ds->sync_receipt_local_time % NSEC_PER_SEC);
 
 	clk = net_eth_get_ptp_clock(GPTP_PORT_IFACE(port));
@@ -771,47 +786,329 @@ static void gptp_mi_clk_slave_sync_state_machine(void)
 	}
 }
 
-static void gptp_mi_clk_master_sync_rcv_state_machine(void)
+static void gptp_mi_clk_master_sync_offset_state_machine(void)
 {
-	struct gptp_clk_master_sync_state *state;
+	struct gptp_clk_master_sync_offset_state *state;
+	struct gptp_global_ds *global_ds;
+
+	state = &GPTP_STATE()->clk_master_sync_offset;
+	global_ds = GPTP_GLOBAL_DS();
+
+	switch (state->state) {
+	case GPTP_CMS_OFFSET_INITIALIZING:
+		state->rcvd_sync_receipt_time = false;
+		state->state = GPTP_CMS_OFFSET_INDICATION;
+		break;
+	case GPTP_CMS_OFFSET_INDICATION:
+		if (!state->rcvd_sync_receipt_time) {
+			break;
+		}
+
+		state->rcvd_sync_receipt_time = false;
+
+		if (global_ds->selected_role[0] == GPTP_PORT_PASSIVE) {
+			/* TODO Calculate real values for proper BC support */
+			memset(&global_ds->clk_src_phase_offset, 0x0,
+			       sizeof(struct gptp_scaled_ns));
+			global_ds->clk_src_freq_offset = 0;
+		} else if (global_ds->clk_src_time_base_indicator_prev
+			   != global_ds->clk_src_time_base_indicator) {
+			memcpy(&global_ds->clk_src_phase_offset,
+			       &global_ds->last_gm_phase_change,
+			       sizeof(struct gptp_scaled_ns));
+
+			global_ds->clk_src_freq_offset =
+				global_ds->last_gm_freq_change;
+		}
+
+		break;
+	default:
+		NET_ERR("Unrecognised state %d", state->state);
+		break;
+	}
+}
+
+#if defined(CONFIG_NET_GPTP_GM_CAPABLE)
+static inline void gptp_mi_setup_sync_send_time(void)
+{
+	struct gptp_clk_master_sync_snd_state *state;
+	struct gptp_global_ds *global_ds;
+	u64_t time_helper;
+
+	state = &GPTP_STATE()->clk_master_sync_send;
+	global_ds = GPTP_GLOBAL_DS();
+
+	time_helper = state->sync_send_time.low;
+
+	state->sync_send_time.low +=
+		global_ds->clk_master_sync_itv;
+
+	/* Check for overflow */
+	if (state->sync_send_time.low < time_helper) {
+		state->sync_send_time.high += 1;
+		state->sync_send_time.low =
+			UINT64_MAX - state->sync_send_time.low;
+	}
+}
+
+static void gptp_mi_set_ps_sync_cmss(void)
+{
+	struct gptp_clk_master_sync_snd_state *state;
+	struct gptp_global_ds *global_ds;
+	struct gptp_md_sync_info *sync_info;
+	u64_t current_time;
+
+	global_ds = GPTP_GLOBAL_DS();
+	state = &GPTP_STATE()->clk_master_sync_send;
+
+	sync_info = &state->pss_snd.sync_info;
+
+	state->pss_snd.local_port_number = 0;
+
+	current_time = gptp_get_current_master_time_nanosecond();
+
+	sync_info->precise_orig_ts.second = current_time / NSEC_PER_SEC;
+	sync_info->precise_orig_ts.nanosecond = current_time % NSEC_PER_SEC;
+
+	/* TODO calculate correction field properly, rate_ratio is also set to
+	 * zero instead of being copied from global_ds as it affects the final
+	 * value of FUP correction field.
+	 */
+	sync_info->follow_up_correction_field = 0;
+	sync_info->rate_ratio = 0;
+
+	memcpy(&sync_info->src_port_id.clk_id,
+	       GPTP_DEFAULT_DS()->clk_id,
+	       GPTP_CLOCK_ID_LEN);
+
+	sync_info->src_port_id.port_number = 0;
+	sync_info->log_msg_interval = CONFIG_NET_GPTP_INIT_LOG_SYNC_ITV;
+	sync_info->upstream_tx_time = global_ds->local_time.low;
+
+	state->pss_snd.sync_receipt_timeout_time = UINT64_MAX;
+
+	sync_info->gm_time_base_indicator =
+		global_ds->clk_src_time_base_indicator;
+
+	memcpy(&sync_info->last_gm_phase_change,
+	       &global_ds->clk_src_phase_offset,
+	       sizeof(struct gptp_scaled_ns));
+
+	sync_info->last_gm_freq_change = global_ds->clk_src_freq_offset;
+}
+
+static inline void gptp_mi_tx_ps_sync_cmss(void)
+{
+	struct gptp_clk_master_sync_snd_state *state;
+	struct gptp_pss_send_state *pss_send;
+	int port;
+
+	state = &GPTP_STATE()->clk_master_sync_send;
+
+	for (port = GPTP_PORT_START; port < GPTP_PORT_END; port++) {
+		pss_send = &GPTP_PORT_STATE(port)->pss_send;
+		pss_send->pss_sync_ptr = &state->pss_snd;
+
+		pss_send->rcvd_pss_sync = true;
+	}
+}
+
+static void gptp_mi_clk_master_sync_snd_state_machine(void)
+{
+	struct gptp_clk_master_sync_snd_state *state;
+	struct gptp_global_ds *global_ds;
+	u64_t current_time;
+
+	state = &GPTP_STATE()->clk_master_sync_send;
+	global_ds = GPTP_GLOBAL_DS();
+
+	switch (state->state) {
+	case GPTP_CMS_SND_INITIALIZING:
+		gptp_mi_setup_sync_send_time();
+
+		state->state = GPTP_CMS_SND_INDICATION;
+		break;
+
+	case GPTP_CMS_SND_INDICATION:
+		current_time = gptp_get_current_master_time_nanosecond();
+
+		if (current_time >= state->sync_send_time.low) {
+			gptp_mi_set_ps_sync_cmss();
+			gptp_mi_tx_ps_sync_cmss();
+
+			gptp_mi_setup_sync_send_time();
+		}
+
+		break;
+
+	default:
+		NET_ERR("Unrecognised state %d", state->state);
+		break;
+	}
+}
+#endif
+
+static void gptp_compute_gm_rate_ratio(void)
+{
+	static struct net_ptp_extended_time src_time_0;
+	static struct gptp_uscaled_ns local_time_0;
+	struct net_ptp_extended_time src_time_n;
+	struct gptp_uscaled_ns local_time_n;
+	struct net_ptp_extended_time src_time_t;
+	struct gptp_uscaled_ns local_time_t;
+	struct gptp_clk_master_sync_rcv_state *state;
+	struct gptp_global_ds *global_ds;
+	double new_gm_rate;
 
 	state = &GPTP_STATE()->clk_master_sync_receive;
-	switch (state->state) {
+	global_ds = GPTP_GLOBAL_DS();
+
+	/* Get current local and source time */
+	memcpy(&src_time_n, &state->rcvd_clk_src_req.src_time,
+	       sizeof(struct net_ptp_extended_time));
+
+	memcpy(&local_time_n, &global_ds->local_time,
+	       sizeof(struct gptp_uscaled_ns));
+
+	if ((src_time_0.second == 0 && src_time_0.fract_nsecond == 0)
+	    || (local_time_0.high == 0 && local_time_0.low == 0)) {
+		memcpy(&src_time_0, &src_time_n,
+		       sizeof(struct net_ptp_extended_time));
+
+		memcpy(&local_time_0, &local_time_n,
+		       sizeof(struct gptp_uscaled_ns));
+
+		global_ds->gm_rate_ratio = 1.0;
+
+		return;
+	}
+
+	/* Take care of the sign of the result */
+	new_gm_rate = 1.0;
+
+	if ((src_time_n.second < src_time_0.second)
+	    || (src_time_n.second == src_time_0.second
+		&& src_time_n.fract_nsecond < src_time_0.fract_nsecond)) {
+		/* Change result sign and swap src_time_n and src_time_0 */
+		memcpy(&src_time_t, &src_time_n,
+		       sizeof(struct net_ptp_extended_time));
+		memcpy(&src_time_n, &src_time_0,
+		       sizeof(struct net_ptp_extended_time));
+		memcpy(&src_time_0, &src_time_t,
+		       sizeof(struct net_ptp_extended_time));
+
+		new_gm_rate *= -1;
+	}
+
+	if ((local_time_n.high < local_time_0.high)
+	    || (local_time_n.high == local_time_0.high
+		&& local_time_n.low < local_time_0.low)) {
+		/* Change result sign and swap local_time_n and local_time_0 */
+		memcpy(&local_time_t, &local_time_n,
+		       sizeof(struct gptp_uscaled_ns));
+		memcpy(&local_time_n, &local_time_0,
+		       sizeof(struct gptp_uscaled_ns));
+		memcpy(&local_time_0, &local_time_t,
+		       sizeof(struct gptp_uscaled_ns));
+
+		new_gm_rate *= -1;
+	}
+
+	/* At this point src_time_n >= src_time_0 */
+	src_time_n.second -= src_time_0.second;
+
+	if (src_time_n.fract_nsecond >= src_time_0.fract_nsecond) {
+		src_time_n.fract_nsecond -= src_time_0.fract_nsecond;
+	} else {
+		src_time_n.second -= 1;
+		src_time_n.fract_nsecond = (NSEC_PER_SEC * GPTP_POW2(16))
+			- src_time_0.fract_nsecond;
+	}
+
+	/* At this point local_time_n >= local_time_0 */
+	local_time_n.high -= local_time_0.high;
+
+	if (local_time_n.low >= local_time_0.low) {
+		local_time_n.low -= local_time_n.low;
+	} else {
+		local_time_n.high -= 1;
+		local_time_n.low = UINT64_MAX - local_time_0.low;
+	}
+
+	/* Calculate it in nanoseconds, new_gm_rate is either 1 or -1 here */
+	new_gm_rate *= ((src_time_n.second * NSEC_PER_SEC)
+		+ (src_time_n.fract_nsecond / GPTP_POW2(16)));
+
+	new_gm_rate /= local_time_n.low;
+
+	global_ds->gm_rate_ratio = new_gm_rate;
+}
+
+static void gptp_mi_clk_master_sync_rcv_state_machine(void)
+{
+	struct gptp_clk_master_sync_rcv_state *s;
+	struct gptp_global_ds *global_ds;
+
+#ifdef CONFIG_NET_GPTP_PROBE_CLOCK_SOURCE_ON_DEMAND
+	struct gptp_clk_src_time_invoke_params invoke_args = {};
+	u64_t cur = gptp_get_current_master_time_nanosecond();
+
+	invoke_args.src_time.second = cur / NSEC_PER_SEC;
+	cur -= (invoke_args.src_time.second * NSEC_PER_SEC);
+
+	invoke_args.src_time.fract_nsecond = cur * GPTP_POW2(16);
+
+	memset(&invoke_args.last_gm_phase_change, 0x0,
+	       sizeof(struct gptp_scaled_ns));
+	invoke_args.last_gm_freq_change = 0;
+
+	gptp_clk_src_time_invoke(&invoke_args);
+#endif
+
+	global_ds = GPTP_GLOBAL_DS();
+
+	s = &GPTP_STATE()->clk_master_sync_receive;
+	switch (s->state) {
 	case GPTP_CMS_RCV_INITIALIZING:
-		state->state = GPTP_CMS_RCV_WAITING;
+		s->state = GPTP_CMS_RCV_WAITING;
 		break;
 
 	case GPTP_CMS_RCV_WAITING:
-		if (state->rcvd_clock_source_req ||
-		    state->rcvd_local_clock_tick) {
-			state->state = GPTP_CMS_RCV_SOURCE_TIME;
+		if (s->rcvd_clock_source_req || s->rcvd_local_clock_tick) {
+			s->state = GPTP_CMS_RCV_SOURCE_TIME;
 		}
 
 		break;
 
 	case GPTP_CMS_RCV_SOURCE_TIME:
-		/* TODO:
-		 *     updateMasterTime();
-		 *     localTime = currentTime;
-		 */
-		if (state->rcvd_clock_source_req) {
-			/* TODO:
-			 *    computeGMRateRatio();
-			 *    Update:
-			 *    clockSourceTimeBaseIndicatorOld;
-			 *    clockSourceTimeBaseIndicator
-			 *    clockSourceLastGmPhaseChange
-			 *    clockSourceLastGmFreqChange
-			 */
+		global_ds->local_time.high = 0;
+		global_ds->local_time.low =
+			gptp_get_current_master_time_nanosecond();
+
+		if (s->rcvd_clock_source_req) {
+			gptp_compute_gm_rate_ratio();
+
+			global_ds->clk_src_time_base_indicator_prev =
+				global_ds->clk_src_time_base_indicator;
+
+			global_ds->clk_src_time_base_indicator =
+				s->rcvd_clk_src_req.time_base_indicator;
+
+			memcpy(&global_ds->clk_src_last_gm_phase_change,
+			       &s->rcvd_clk_src_req.last_gm_phase_change,
+			       sizeof(struct gptp_scaled_ns));
+
+			global_ds->clk_src_last_gm_freq_change =
+				s->rcvd_clk_src_req.last_gm_freq_change;
 		}
 
-		state->rcvd_clock_source_req = false;
-		state->rcvd_local_clock_tick = false;
-		state->state = GPTP_CMS_RCV_WAITING;
+		s->rcvd_clock_source_req = false;
+		s->rcvd_local_clock_tick = false;
+		s->state = GPTP_CMS_RCV_WAITING;
 		break;
 
 	default:
-		NET_ERR("Unrecognised state %d", state->state);
+		NET_ERR("Unrecognised state %d", s->state);
 		break;
 	}
 }
@@ -1613,5 +1910,9 @@ void gptp_mi_state_machines(void)
 	gptp_mi_site_sync_sync_state_machine();
 	gptp_mi_clk_slave_sync_state_machine();
 	gptp_mi_port_role_selection_state_machine();
+	gptp_mi_clk_master_sync_offset_state_machine();
+#if defined(CONFIG_NET_GPTP_GM_CAPABLE)
+	gptp_mi_clk_master_sync_snd_state_machine();
+#endif
 	gptp_mi_clk_master_sync_rcv_state_machine();
 }

@@ -44,6 +44,7 @@ if SHELL
 module = SHELL
 module-str = Shell
 source "subsys/logging/Kconfig.template.log_config"
+source "subsys/shell/Kconfig.backends"
 
 config SHELL_STACK_SIZE
 	int "Shell thread stack size"

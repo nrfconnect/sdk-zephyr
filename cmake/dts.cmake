@@ -10,7 +10,7 @@
 # See ~/zephyr/doc/dts
 set(GENERATED_DTS_BOARD_H    ${PROJECT_BINARY_DIR}/include/generated/generated_dts_board.h)
 set(GENERATED_DTS_BOARD_CONF ${PROJECT_BINARY_DIR}/include/generated/generated_dts_board.conf)
-set_ifndef(DTS_SOURCE ${BOARD_ROOT}/boards/${ARCH}/${BOARD_FAMILY}/${BOARD}.dts)
+set_ifndef(DTS_SOURCE ${BOARD_DIR}/${BOARD}.dts)
 set_ifndef(DTS_COMMON_OVERLAYS ${ZEPHYR_BASE}/dts/common/common.dts)
 set_ifndef(DTS_APP_BINDINGS ${APPLICATION_SOURCE_DIR}/dts/bindings)
 
@@ -86,14 +86,12 @@ if(CONFIG_HAS_DTS)
     COMMAND ${CMAKE_C_COMPILER}
     -x assembler-with-cpp
     -nostdinc
-    -I${ZEPHYR_BASE}/soc/${ARCH}
     -isystem ${ZEPHYR_BASE}/include
     -isystem ${ZEPHYR_BASE}/dts/${ARCH}
     -isystem ${ZEPHYR_BASE}/dts
     -include ${AUTOCONF_H}
     ${DTC_INCLUDE_FLAG_FOR_DTS}  # include the DTS source and overlays
     -I${ZEPHYR_BASE}/dts/common
-    -I${ZEPHYR_BASE}/drivers
     -undef -D__DTS__
     -P
     -E ${ZEPHYR_BASE}/misc/empty_file.c
@@ -111,6 +109,8 @@ if(CONFIG_HAS_DTS)
     -O dts
     -o ${BOARD}.dts_compiled
     -b 0
+    -E unit_address_vs_reg
+    ${EXTRA_DTC_FLAGS} # User settable
     ${BOARD}.dts.pre.tmp
     WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
     RESULT_VARIABLE ret
@@ -121,7 +121,7 @@ if(CONFIG_HAS_DTS)
 
   # Run extract_dts_includes.py for the header file
   # generated_dts_board.h
-  set_ifndef(DTS_BOARD_FIXUP_FILE       ${BOARD_ROOT}/boards/${ARCH}/${BOARD_FAMILY}/dts.fixup)
+  set_ifndef(DTS_BOARD_FIXUP_FILE ${BOARD_DIR}/dts.fixup)
   set_ifndef(DTS_SOC_FIXUP_FILE   ${PROJECT_SOURCE_DIR}/soc/${ARCH}/${SOC_PATH}/dts.fixup)
 
   list(APPEND dts_fixups

@@ -5,7 +5,7 @@
  */
 
 /dts-v1/;
-#include <st/stm32f412.dtsi>
+#include <st/f4/stm32f412cg.dtsi>
 
 / {
 	model = "Tocoding Argonkey 96boards";
@@ -19,11 +19,11 @@
 
 	leds {
 		compatible = "gpio-leds";
-		green_led_0: led@0 {
+		green_led_0: led_0 {
 			gpios = <&gpioc 13 GPIO_INT_ACTIVE_HIGH>;
 			label = "USR0 LED";
 		};
-		green_led_1: led@1 {
+		green_led_1: led_1 {
 			gpios = <&gpiob 2 GPIO_INT_ACTIVE_HIGH>;
 			label = "USR1 LED";
 		};

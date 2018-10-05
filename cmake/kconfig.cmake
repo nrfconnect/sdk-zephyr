@@ -21,9 +21,8 @@ string(REPLACE " " ";" CONF_FILE_AS_LIST "${CONF_FILE}")
 endif()
 
 set(ENV{srctree}            ${ZEPHYR_BASE})
-set(ENV{KERNELVERSION}      ${PROJECT_VERSION})
+set(ENV{KERNELVERSION}      ${KERNELVERSION})
 set(ENV{KCONFIG_CONFIG}     ${DOTCONFIG})
-set(ENV{KCONFIG_AUTOHEADER} ${AUTOCONF_H})
 
 # Set environment variables so that Kconfig can prune Kconfig source
 # files for other architectures
@@ -35,7 +34,7 @@ add_custom_target(
   menuconfig
   ${CMAKE_COMMAND} -E env
   srctree=${ZEPHYR_BASE}
-  KERNELVERSION=${PROJECT_VERSION}
+  KERNELVERSION=${KERNELVERSION}
   KCONFIG_CONFIG=${DOTCONFIG}
   ARCH=$ENV{ARCH}
   BOARD_DIR=$ENV{BOARD_DIR}
@@ -146,8 +145,8 @@ execute_process(
   ${PYTHON_EXECUTABLE}
   ${ZEPHYR_BASE}/scripts/kconfig/kconfig.py
   ${KCONFIG_ROOT}
-  ${PROJECT_BINARY_DIR}/.config
-  ${PROJECT_BINARY_DIR}/include/generated/autoconf.h
+  ${DOTCONFIG}
+  ${AUTOCONF_H}
   ${merge_fragments}
   WORKING_DIRECTORY ${APPLICATION_SOURCE_DIR}
   # The working directory is set to the app dir such that the user

@@ -88,7 +88,7 @@ int k_mem_pool_alloc(struct k_mem_pool *p, struct k_mem_block *block,
 		block->id.block = block_num;
 
 		if (ret == 0 || timeout == K_NO_WAIT ||
-		    (ret && ret != -ENOMEM)) {
+		    ret != -ENOMEM) {
 			return ret;
 		}
 
@@ -209,7 +209,7 @@ void *z_thread_malloc(size_t size)
 {
 	void *ret;
 
-	if (_current->resource_pool) {
+	if (_current->resource_pool != NULL) {
 		ret = k_mem_pool_malloc(_current->resource_pool, size);
 	} else {
 		ret = NULL;

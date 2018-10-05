@@ -9,10 +9,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_IPV4_AUTOCONF)
-#define SYS_LOG_DOMAIN "net/ipv4ll"
-#define NET_LOG_ENABLED 1
-#endif
+#define LOG_MODULE_NAME net_ipv4_autoconf
+#define NET_LOG_LEVEL CONFIG_NET_IPV4_AUTOCONF_LOG_LEVEL
 
 #include "net_private.h"
 #include <errno.h>
@@ -141,9 +139,9 @@ enum net_verdict net_ipv4_autoconf_input(struct net_if *iface,
 	}
 
 	NET_DBG("Conflict detected from %s for %s, state %d",
-		net_sprint_ll_addr((u8_t *)&arp_hdr->src_hwaddr,
-				   arp_hdr->hwlen),
-		net_sprint_ipv4_addr(&arp_hdr->dst_ipaddr),
+		log_strdup(net_sprint_ll_addr((u8_t *)&arp_hdr->src_hwaddr,
+					      arp_hdr->hwlen)),
+		log_strdup(net_sprint_ipv4_addr(&arp_hdr->dst_ipaddr)),
 		cfg->ipv4auto.state);
 
 	cfg->ipv4auto.conflict_cnt++;

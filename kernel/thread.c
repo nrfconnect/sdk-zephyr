@@ -44,7 +44,7 @@ void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data)
 	struct k_thread *thread;
 	unsigned int key;
 
-	__ASSERT(user_cb, "user_cb can not be NULL");
+	__ASSERT(user_cb != NULL, "user_cb can not be NULL");
 
 	/*
 	 * Lock is needed to make sure that the _kernel.threads is not being
@@ -394,7 +394,7 @@ void _setup_new_thread(struct k_thread *new_thread,
 #endif
 #ifdef CONFIG_USERSPACE
 	/* New threads inherit any memory domain membership by the parent */
-	if (_current->mem_domain_info.mem_domain) {
+	if (_current->mem_domain_info.mem_domain != NULL) {
 		k_mem_domain_add_thread(_current->mem_domain_info.mem_domain,
 					new_thread);
 	}
@@ -449,9 +449,9 @@ Z_SYSCALL_HANDLER(k_thread_create,
 	/* The thread and stack objects *must* be in an uninitialized state */
 	Z_OOPS(Z_SYSCALL_OBJ_NEVER_INIT(new_thread, K_OBJ_THREAD));
 	stack_object = _k_object_find(stack);
-	Z_OOPS(Z_SYSCALL_VERIFY_MSG(!_obj_validation_check(stack_object, stack,
+	Z_OOPS(Z_SYSCALL_VERIFY_MSG(_obj_validation_check(stack_object, stack,
 						K_OBJ__THREAD_STACK_ELEMENT,
-						_OBJ_INIT_FALSE),
+						_OBJ_INIT_FALSE) == 0,
 				    "bad stack object"));
 
 #ifndef CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT

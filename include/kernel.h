@@ -16,6 +16,7 @@
 #if !defined(_ASMLANGUAGE)
 #include <kernel_includes.h>
 #include <errno.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -80,7 +81,7 @@ typedef struct {
 	struct _priq_rb waitq;
 } _wait_q_t;
 
-extern int _priq_rb_lessthan(struct rbnode *a, struct rbnode *b);
+extern bool _priq_rb_lessthan(struct rbnode *a, struct rbnode *b);
 
 #define _WAIT_Q_INIT(wait_q) { { { .lessthan_fn = _priq_rb_lessthan } } }
 
@@ -99,7 +100,7 @@ typedef struct {
 #define _OBJECT_TRACING_INIT .__next = NULL,
 #else
 #define _OBJECT_TRACING_INIT
-#define _OBJECT_TRACING_NEXT_PTR(type)
+#define _OBJECT_TRACING_NEXT_PTR(type) u8_t __dummy_next[0]
 #endif
 
 #ifdef CONFIG_POLL
@@ -4206,9 +4207,9 @@ extern void *k_calloc(size_t nmemb, size_t size);
 /* polling API - PRIVATE */
 
 #ifdef CONFIG_POLL
-#define _INIT_OBJ_POLL_EVENT(obj) do { (obj)->poll_event = NULL; } while ((0))
+#define _INIT_OBJ_POLL_EVENT(obj) do { (obj)->poll_event = NULL; } while (false)
 #else
-#define _INIT_OBJ_POLL_EVENT(obj) do { } while ((0))
+#define _INIT_OBJ_POLL_EVENT(obj) do { } while (false)
 #endif
 
 /* private - implementation data created as needed, per-type */
@@ -4563,7 +4564,7 @@ extern void _sys_power_save_idle_exit(s32_t ticks);
 		printk("@ %s:%d:\n", __FILE__,  __LINE__); \
 		_NanoFatalErrorHandler(reason, &_default_esf); \
 		CODE_UNREACHABLE; \
-	} while (0)
+	} while (false)
 
 #endif /* _ARCH__EXCEPT */
 
@@ -4605,7 +4606,7 @@ extern void _init_static_threads(void);
 /**
  * @internal
  */
-#define _init_static_threads() do { } while ((0))
+#define _init_static_threads() do { } while (false)
 #endif
 
 /**
@@ -4802,7 +4803,7 @@ struct k_mem_partition {
 #endif	/* CONFIG_USERSPACE */
 };
 
-/* memory domian
+/* memory domain
  * Note: Always declare this structure with __kernel prefix
  */
 struct k_mem_domain {

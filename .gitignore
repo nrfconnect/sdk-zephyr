@@ -7,8 +7,7 @@
 *.swp
 *.swo
 *~
-build
-build-*
+build*
 cscope.*
 .dir
 
@@ -30,7 +29,7 @@ doc/boards
 doc/samples
 doc/latex
 doc/themes/zephyr-docs-theme
-sanity-out/
+sanity-out*
 scripts/grub
 doc/reference/kconfig/*.rst
 doc/doc.warnings
@@ -41,5 +40,7 @@ tags
 .envrc
 .vscode
 
-# Disables the warning about the changed behavior for Kconfig defaults
-hide-defaults-note
+# Tag files
+GPATH
+GRTAGS
+GTAGS

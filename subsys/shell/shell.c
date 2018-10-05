@@ -32,7 +32,7 @@
 /* Initial cursor position is: (1, 1). */
 #define SHELL_INITIAL_CURS_POS		(1u)
 
-static void shell_execute(const struct shell *shell);
+static int shell_execute(const struct shell *shell);
 
 extern const struct shell_cmd_entry __shell_root_cmds_start[0];
 extern const struct shell_cmd_entry __shell_root_cmds_end[0];
@@ -44,8 +44,8 @@ static inline const struct shell_cmd_entry *shell_root_cmd_get(u32_t id)
 
 static inline u32_t shell_root_cmd_count(void)
 {
-	return ((void *)__shell_root_cmds_end -
-			(void *)__shell_root_cmds_start)/
+	return ((u8_t *)__shell_root_cmds_end -
+			(u8_t *)__shell_root_cmds_start)/
 				sizeof(struct shell_cmd_entry);
 }
 
@@ -507,10 +507,6 @@ static void find_completion_candidates(const struct shell_static_entry *cmd,
 			}
 
 			found = true;
-		} else {
-			if (found) {
-				break;
-			}
 		}
 		idx++;
 	}
@@ -577,8 +573,10 @@ static size_t shell_str_common(const char *s1, const char *s2, size_t n)
 
 static void tab_options_print(const struct shell *shell,
 			      const struct shell_static_entry *cmd,
-			      size_t first, size_t cnt, u16_t longest)
+			      const char *str, size_t first, size_t cnt,
+			      u16_t longest)
 {
+	size_t str_len = shell_strlen(str);
 	const struct shell_static_entry *match;
 	size_t idx = first;
 
@@ -591,9 +589,15 @@ static void tab_options_print(const struct shell *shell,
 		 */
 		cmd_get(cmd ? cmd->subcmd : NULL, cmd ? 1 : 0,
 			idx, &match, &shell->ctx->active_cmd);
+		idx++;
+
+		if (str && match->syntax &&
+		    !is_completion_candidate(match->syntax, str, str_len)) {
+			continue;
+		}
+
 		tab_item_print(shell, match->syntax, longest);
 		cnt--;
-		idx++;
 	}
 
 	shell_fprintf(shell, SHELL_INFO, "\r\n%s", shell->prompt);
@@ -677,7 +681,8 @@ static void shell_tab_handle(const struct shell *shell)
 		/* Autocompletion.*/
 		autocomplete(shell, cmd, argv[arg_idx], first);
 	} else {
-		tab_options_print(shell, cmd, first, cnt, longest);
+		tab_options_print(shell, cmd, argv[arg_idx], first, cnt,
+				  longest);
 		partial_autocomplete(shell, cmd, argv[arg_idx], first, cnt);
 	}
 }
@@ -759,14 +764,15 @@ static void shell_state_collect(const struct shell *shell)
 
 		switch (shell->ctx->receive_state) {
 		case SHELL_RECEIVE_DEFAULT:
-			if (data == shell->newline_char) {
+			if ((data == '\r') || (data == '\n')) {
 				if (!shell->ctx->cmd_buff_len) {
 					history_mode_exit(shell);
 					cursor_next_line_move(shell);
 				} else {
 					/* Command execution */
-					shell_execute(shell);
+					(void)shell_execute(shell);
 				}
+
 				shell_state_set(shell, SHELL_STATE_ACTIVE);
 				return;
 			}
@@ -922,7 +928,7 @@ static const struct shell_cmd_entry *root_cmd_find(const char *syntax)
  * invokes the  last recognized command which has a handler and passes the rest
  * of command buffer as arguments.
  */
-static void shell_execute(const struct shell *shell)
+static int shell_execute(const struct shell *shell)
 {
 	struct shell_static_entry d_entry; /* Memory for dynamic commands. */
 	char *argv[CONFIG_SHELL_ARGC_MAX + 1]; /* +1 reserved for NULL */
@@ -931,6 +937,7 @@ static void shell_execute(const struct shell *shell)
 	size_t cmd_lvl = SHELL_CMD_ROOT_LVL;
 	size_t cmd_with_handler_lvl = 0;
 	bool wildcard_found = false;
+	int ret_val = 0;
 	size_t cmd_idx;
 	size_t argc;
 	char quote;
@@ -956,13 +963,13 @@ static void shell_execute(const struct shell *shell)
 				CONFIG_SHELL_ARGC_MAX);
 
 	if (!argc) {
-		return;
+		return -ENOEXEC;
 	}
 
 	if (quote != 0) {
 		shell_fprintf(shell, SHELL_ERROR, "not terminated: %c\r\n",
 			      quote);
-		return;
+		return -ENOEXEC;
 	}
 
 	/*  Searching for a matching root command. */
@@ -970,7 +977,7 @@ static void shell_execute(const struct shell *shell)
 	if (p_cmd == NULL) {
 		shell_fprintf(shell, SHELL_ERROR, "%s%s\r\n", argv[0],
 					SHELL_MSG_COMMAND_NOT_FOUND);
-		return;
+		return -ENOEXEC;
 	}
 
 	/* Root command shall be always static. */
@@ -1047,7 +1054,7 @@ static void shell_execute(const struct shell *shell)
 							" executions\r\n");
 						help_flag_clear(shell);
 
-						return;
+						return -ENOEXEC;
 					}
 				}
 
@@ -1079,14 +1086,17 @@ static void shell_execute(const struct shell *shell)
 		} else {
 			shell_fprintf(shell, SHELL_ERROR,
 				      SHELL_MSG_SPECIFY_SUBCOMMAND);
+			ret_val = -ENOEXEC;
 		}
 	} else {
-		shell->ctx->active_cmd.handler(shell,
-					       argc - cmd_with_handler_lvl,
-					       &argv[cmd_with_handler_lvl]);
+		ret_val = shell->ctx->active_cmd.handler(shell,
+						   argc - cmd_with_handler_lvl,
+						   &argv[cmd_with_handler_lvl]);
 	}
 
 	help_flag_clear(shell);
+
+	return ret_val;
 }
 
 static void shell_transport_evt_handler(enum shell_transport_evt evt_type,
@@ -1144,8 +1154,6 @@ static int shell_instance_init(const struct shell *shell, const void *p_config,
 {
 	__ASSERT_NO_MSG(shell);
 	__ASSERT_NO_MSG(shell->ctx && shell->iface && shell->prompt);
-	__ASSERT_NO_MSG((shell->newline_char == '\n') ||
-			(shell->newline_char == '\r'));
 
 	int err;
 
@@ -1533,11 +1541,23 @@ static void help_item_print(const struct shell *shell, const char *item_name,
 		return;
 	}
 
-	/* print option name */
-	shell_fprintf(shell, SHELL_NORMAL, "%s%-*s%s:",
-		      tabulator,
-		      item_name_width, item_name,
-		      tabulator);
+	if (!IS_ENABLED(CONFIG_NEWLIB_LIBC) && !IS_ENABLED(CONFIG_ARCH_POSIX)) {
+		/* print option name */
+		shell_fprintf(shell, SHELL_NORMAL, "%s%-*s%s:",
+			      tabulator,
+			      item_name_width, item_name,
+			      tabulator);
+	} else {
+		u16_t tmp = item_name_width - strlen(item_name);
+		char space = ' ';
+
+		shell_fprintf(shell, SHELL_NORMAL, "%s%s", tabulator,
+			      item_name);
+		for (u16_t i = 0; i < tmp; i++) {
+			shell_write(shell, &space, 1);
+		}
+		shell_fprintf(shell, SHELL_NORMAL, "%s:", tabulator);
+	}
 
 	if (item_help == NULL) {
 		cursor_next_line_move(shell);
@@ -1701,4 +1721,22 @@ bool shell_cmd_precheck(const struct shell *shell,
 	}
 
 	return true;
+}
+
+int shell_execute_cmd(const struct shell *shell, const char *cmd)
+{
+	u16_t cmd_len = shell_strlen(cmd);
+
+	if ((cmd == NULL) || (shell == NULL)) {
+		return -ENOEXEC;
+	}
+
+	if (cmd_len > (CONFIG_SHELL_CMD_BUFF_SIZE - 1)) {
+		return -ENOEXEC;
+	}
+
+	strcpy(shell->ctx->cmd_buff, cmd);
+	shell->ctx->cmd_buff_len = cmd_len;
+
+	return shell_execute(shell);
 }

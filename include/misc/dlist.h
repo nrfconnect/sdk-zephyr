@@ -21,6 +21,7 @@
 #define ZEPHYR_INCLUDE_MISC_DLIST_H_
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,7 +57,7 @@ typedef struct _dnode sys_dnode_t;
  * @param __dn A sys_dnode_t pointer to peek each node of the list
  */
 #define SYS_DLIST_FOR_EACH_NODE(__dl, __dn)				\
-	for (__dn = sys_dlist_peek_head(__dl); __dn;			\
+	for (__dn = sys_dlist_peek_head(__dl); __dn != NULL;		\
 	     __dn = sys_dlist_peek_next(__dl, __dn))
 
 /**
@@ -82,7 +83,7 @@ typedef struct _dnode sys_dnode_t;
 #define SYS_DLIST_ITERATE_FROM_NODE(__dl, __dn) \
 	for (__dn = __dn ? sys_dlist_peek_next_no_check(__dl, __dn) \
 			 : sys_dlist_peek_head(__dl); \
-	     __dn; \
+	     __dn != NULL; \
 	     __dn = sys_dlist_peek_next(__dl, __dn))
 
 /**
@@ -104,7 +105,7 @@ typedef struct _dnode sys_dnode_t;
 #define SYS_DLIST_FOR_EACH_NODE_SAFE(__dl, __dn, __dns)			\
 	for (__dn = sys_dlist_peek_head(__dl),				\
 		     __dns = sys_dlist_peek_next(__dl, __dn);		\
-	     __dn; __dn = __dns,					\
+	     __dn != NULL; __dn = __dns,				\
 		     __dns = sys_dlist_peek_next(__dl, __dn))
 
 /*
@@ -153,7 +154,8 @@ typedef struct _dnode sys_dnode_t;
  * @param __n The field name of sys_dnode_t within the container struct
  */
 #define SYS_DLIST_FOR_EACH_CONTAINER(__dl, __cn, __n)			\
-	for (__cn = SYS_DLIST_PEEK_HEAD_CONTAINER(__dl, __cn, __n); __cn; \
+	for (__cn = SYS_DLIST_PEEK_HEAD_CONTAINER(__dl, __cn, __n);     \
+	     __cn != NULL;                                              \
 	     __cn = SYS_DLIST_PEEK_NEXT_CONTAINER(__dl, __cn, __n))
 
 /**
@@ -173,8 +175,8 @@ typedef struct _dnode sys_dnode_t;
  */
 #define SYS_DLIST_FOR_EACH_CONTAINER_SAFE(__dl, __cn, __cns, __n)	\
 	for (__cn = SYS_DLIST_PEEK_HEAD_CONTAINER(__dl, __cn, __n),	\
-	     __cns = SYS_DLIST_PEEK_NEXT_CONTAINER(__dl, __cn, __n); __cn; \
-	     __cn = __cns,						\
+	     __cns = SYS_DLIST_PEEK_NEXT_CONTAINER(__dl, __cn, __n);    \
+	     __cn != NULL; __cn = __cns,				\
 	     __cns = SYS_DLIST_PEEK_NEXT_CONTAINER(__dl, __cn, __n))
 
 /**
@@ -199,10 +201,10 @@ static inline void sys_dlist_init(sys_dlist_t *list)
  * @param list the doubly-linked list to operate on
  * @param node the node to check
  *
- * @return 1 if node is the head, 0 otherwise
+ * @return true if node is the head, false otherwise
  */
 
-static inline int sys_dlist_is_head(sys_dlist_t *list, sys_dnode_t *node)
+static inline bool sys_dlist_is_head(sys_dlist_t *list, sys_dnode_t *node)
 {
 	return list->head == node;
 }
@@ -213,10 +215,10 @@ static inline int sys_dlist_is_head(sys_dlist_t *list, sys_dnode_t *node)
  * @param list the doubly-linked list to operate on
  * @param node the node to check
  *
- * @return 1 if node is the tail, 0 otherwise
+ * @return true if node is the tail, false otherwise
  */
 
-static inline int sys_dlist_is_tail(sys_dlist_t *list, sys_dnode_t *node)
+static inline bool sys_dlist_is_tail(sys_dlist_t *list, sys_dnode_t *node)
 {
 	return list->tail == node;
 }
@@ -226,10 +228,10 @@ static inline int sys_dlist_is_tail(sys_dlist_t *list, sys_dnode_t *node)
  *
  * @param list the doubly-linked list to operate on
  *
- * @return 1 if empty, 0 otherwise
+ * @return true if empty, false otherwise
  */
 
-static inline int sys_dlist_is_empty(sys_dlist_t *list)
+static inline bool sys_dlist_is_empty(sys_dlist_t *list)
 {
 	return list->head == list;
 }
@@ -241,10 +243,10 @@ static inline int sys_dlist_is_empty(sys_dlist_t *list)
  *
  * @param list the doubly-linked list to operate on
  *
- * @return 1 if multiple nodes, 0 otherwise
+ * @return true if multiple nodes, false otherwise
  */
 
-static inline int sys_dlist_has_multiple_nodes(sys_dlist_t *list)
+static inline bool sys_dlist_has_multiple_nodes(sys_dlist_t *list)
 {
 	return list->head != list->tail;
 }
