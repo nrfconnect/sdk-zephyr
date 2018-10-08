@@ -1,0 +1,10 @@
+/*
+ * Basic Device Tree overlay file for chain-loading by SecureBoot.
+ * Automatically pulled in when CONFIG_SECURE_BOOT is set.
+ */
+
+/ {
+	chosen {
+		zephyr,code-partition = &app_partition;
+	};
+};
