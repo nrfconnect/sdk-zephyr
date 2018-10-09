@@ -130,7 +130,24 @@
 		compatible = "fixed-partitions";
 		#address-cells = <1>;
 		#size-cells = <1>;
-
+#if defined(CONFIG_SECURE_BOOT)
+		b0_partition: partition@0 {
+			label = "secure-boot";
+			reg = <0x000000000 0x00001000>;
+		};
+		b1_s0_partition: partition@1000 {
+			label = "s0";
+			reg = <0x00001000 0x00000C000>;
+		};
+		b1_s1_partition: partition@D000 {
+			label = "s1";
+			reg = <0x0000D000 0x00000C000>;
+		};
+		app_partition: partition@19000 {
+			label = "app";
+			reg = <0x00019000 0x000027000>;
+		};
+#else
 		boot_partition: partition@0 {
 			label = "mcuboot";
 			reg = <0x00000000 0x8000>;
@@ -147,6 +164,7 @@
 			label = "image-scratch";
 			reg = <0x0003c000 0x2000>;
 		};
+#endif
 
 #if defined(CONFIG_FS_FLASH_STORAGE_PARTITION)
 		storage_partition: partition@3e000 {
