@@ -854,21 +854,6 @@ __syscall void k_wakeup(k_tid_t thread);
 __syscall k_tid_t k_current_get(void);
 
 /**
- * @brief Cancel thread performing a delayed start.
- *
- * This routine prevents @a thread from executing if it has not yet started
- * execution. The thread must be re-spawned before it will execute.
- *
- * @param thread ID of thread to cancel.
- *
- * @retval 0 Thread spawning canceled.
- * @retval -EINVAL Thread has already started executing.
- *
- * @deprecated This API is deprecated.  Use k_thread_abort().
- */
-__deprecated __syscall int k_thread_cancel(k_tid_t thread);
-
-/**
  * @brief Abort a thread.
  *
  * This routine permanently stops execution of @a thread. The thread is taken
@@ -1984,6 +1969,34 @@ __syscall void *k_queue_get(struct k_queue *queue, s32_t timeout);
 static inline bool k_queue_remove(struct k_queue *queue, void *data)
 {
 	return sys_sflist_find_and_remove(&queue->data_q, (sys_sfnode_t *)data);
+}
+
+/**
+ * @brief Append an element to a queue only if it's not present already.
+ *
+ * This routine appends data item to @a queue. The first 32 bits of the
+ * data item are reserved for the kernel's use. Appending elements to k_queue
+ * relies on sys_slist_is_node_in_list which is not a constant time operation.
+ *
+ * @note Can be called by ISRs
+ *
+ * @param queue Address of the queue.
+ * @param data Address of the data item.
+ *
+ * @return true if data item was added, false if not
+ */
+static inline bool k_queue_unique_append(struct k_queue *queue, void *data)
+{
+	sys_sfnode_t *test;
+
+	SYS_SFLIST_FOR_EACH_NODE(&queue->data_q, test) {
+		if (test == (sys_sfnode_t *) data) {
+			return false;
+		}
+	}
+
+	k_queue_append(queue, data);
+	return true;
 }
 
 /**

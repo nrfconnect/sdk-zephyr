@@ -223,10 +223,11 @@ static void conn_le_update_timeout(struct k_work *work)
 
 	if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
 	    conn->role == BT_CONN_ROLE_MASTER) {
-		if (conn->state == BT_CONN_CONNECT) {
-			bt_conn_disconnect(conn,
-					   BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-		}
+		/* we don't call bt_conn_disconnect as it would also clear
+		 * auto connect flag if it was set, instead just cancel
+		 * connection directly
+		 */
+		bt_hci_cmd_send(BT_HCI_OP_LE_CREATE_CONN_CANCEL, NULL);
 		return;
 	}
 
@@ -1933,7 +1934,7 @@ struct bt_conn *bt_conn_create_le(const bt_addr_le_t *peer,
 	return conn;
 }
 
-int bt_le_set_auto_conn(bt_addr_le_t *addr,
+int bt_le_set_auto_conn(const bt_addr_le_t *addr,
 			const struct bt_le_conn_param *param)
 {
 	struct bt_conn *conn;

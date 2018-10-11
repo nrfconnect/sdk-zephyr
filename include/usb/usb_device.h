@@ -38,10 +38,17 @@
 
 #include <drivers/usb/usb_dc.h>
 #include <usb/usbstruct.h>
+#include <logging/log.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define USB_DBG(fmt, ...) LOG_DBG("(%p): %s: " fmt, k_current_get(), \
+				  __func__, ##__VA_ARGS__)
+#define USB_ERR(fmt, ...) LOG_ERR(fmt, ##__VA_ARGS__)
+#define USB_WRN(fmt, ...) LOG_WRN(fmt, ##__VA_ARGS__)
+#define USB_INF(fmt, ...) LOG_INF(fmt, ##__VA_ARGS__)
 
 /*
  * These macros should be used to place the USB descriptors
@@ -91,12 +98,6 @@ struct usb_setup_packet {
  * @defgroup _usb_device_core_api USB Device Core API
  * @{
  */
-
-/**
- * @brief Callback function signature for the device
- */
-typedef void (*usb_status_callback)(enum usb_dc_status_code status_code,
-				    u8_t *param);
 
 /**
  * @brief Callback function signature for the USB Endpoint status
@@ -194,7 +195,7 @@ struct usb_cfg_data {
 	/** Function for interface runtime configuration */
 	usb_interface_config interface_config;
 	/** Callback to be notified on USB connection status change */
-	usb_status_callback cb_usb_status;
+	usb_dc_status_callback cb_usb_status;
 	/** USB interface (Class) handler and storage space */
 	struct usb_interface_cfg_data interface;
 	/** Number of individual endpoints in the device configuration */

@@ -8,7 +8,7 @@
 #define NET_LOG_LEVEL CONFIG_NET_SOCKETS_LOG_LEVEL
 
 /* libc headers */
-#include <sys/fcntl.h>
+#include <fcntl.h>
 
 /* Zephyr headers */
 #include <kernel.h>
@@ -51,6 +51,9 @@ static void zsock_flush_queue(struct net_context *ctx)
 			net_pkt_unref(p);
 		}
 	}
+
+	/* Some threads might be waiting on recv, cancel the wait */
+	k_fifo_cancel_wait(&ctx->recv_q);
 }
 
 int _impl_zsock_socket(int family, int type, int proto)

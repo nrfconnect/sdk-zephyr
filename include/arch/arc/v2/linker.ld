@@ -21,8 +21,6 @@
 #include <linker/linker-defs.h>
 #include <linker/linker-tool.h>
 
-#define KOBJECT_TEXT_AREA 256
-
 /* physical address of RAM */
 #ifdef CONFIG_HARVARD
 	#define ROMABLE_REGION ICCM
@@ -75,6 +73,9 @@ MEMORY {
 }
 
 SECTIONS {
+
+#include <linker/rel-sections.ld>
+
 	GROUP_START(ROMABLE_REGION)
 
 	SECTION_PROLOGUE(_TEXT_SECTION_NAME,,ALIGN(1024)) {
@@ -108,6 +109,10 @@ SECTIONS {
 		*(.rodata)
 		*(".rodata.*")
 		*(.gnu.linkonce.r.*)
+
+#ifdef CONFIG_SOC_RODATA_LD
+#include <soc-rodata.ld>
+#endif
 
 #ifdef CONFIG_CUSTOM_RODATA_LD
 /* Located in project source directory */
@@ -230,6 +235,10 @@ SECTIONS {
 		 KERNEL_INPUT_SECTION(".noinit.*")
 		 *(".kernel_noinit.*")
 
+#ifdef CONFIG_SOC_NOINIT_LD
+#include <soc-noinit.ld>
+#endif
+
 	} GROUP_LINK_IN(RAMABLE_REGION)
 
 	SECTION_DATA_PROLOGUE(_DATA_SECTION_NAME,,) {
@@ -239,6 +248,10 @@ SECTIONS {
 		KERNEL_INPUT_SECTION(.data)
 		KERNEL_INPUT_SECTION(".data.*")
 		*(".kernel.*")
+
+#ifdef CONFIG_SOC_RWDATA_LD
+#include <soc-rwdata.ld>
+#endif
 
 #ifdef CONFIG_CUSTOM_RWDATA_LD
 /* Located in project source directory */
@@ -273,4 +286,7 @@ SECTIONS {
 #ifdef CONFIG_GEN_ISR_TABLES
 #include <linker/intlist.ld>
 #endif
+
+#include <linker/debug-sections.ld>
+
 	}

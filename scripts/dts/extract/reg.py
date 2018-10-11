@@ -33,14 +33,7 @@ class DTReg(DTDirective):
         reg = reduced[node_address]['props']['reg']
         if type(reg) is not list: reg = [ reg, ]
 
-        nr_address_cells = reduced['/']['props'].get('#address-cells')
-        nr_size_cells = reduced['/']['props'].get('#size-cells')
-        address = ''
-        for comp in node_address.split('/')[1:-1]:
-            address += '/' + comp
-            nr_address_cells = reduced[address]['props'].get(
-                '#address-cells', nr_address_cells)
-            nr_size_cells = reduced[address]['props'].get('#size-cells', nr_size_cells)
+        (nr_address_cells, nr_size_cells) = get_addr_size_cells(node_address)
 
         # generate defines
         post_label = "BASE_ADDRESS"
@@ -77,6 +70,9 @@ class DTReg(DTDirective):
                 addr += props.pop(0) << (32 * (nr_address_cells - x - 1))
             for x in range(nr_size_cells):
                 size += props.pop(0) << (32 * (nr_size_cells - x - 1))
+
+            addr += translate_addr(addr, node_address,
+                    nr_address_cells, nr_size_cells)
 
             l_addr_fqn = '_'.join(l_base + l_addr + l_idx)
             l_size_fqn = '_'.join(l_base + l_size + l_idx)
