@@ -1131,70 +1131,6 @@ target_link_libraries(zephyr_prebuilt ${TOPT} ${PROJECT_BINARY_DIR}/linker.cmd $
 set_property(TARGET   zephyr_prebuilt PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker.cmd)
 add_dependencies(     zephyr_prebuilt ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP} linker_script offsets)
 
-# BOOTLOADER STUFF
-  
-set(bl_zephyr_lnk
-  ${LINKERFLAGPREFIX},-Map=${PROJECT_BINARY_DIR}/bootloader.map
-  -u_OffsetAbsSyms
-  -u_ConfigAbsSyms
-  bootloader # include bootloader library
-  ${OFFSETS_O_PATH}
-  ${LIB_INCLUDE_DIR}
-  ${TOOLCHAIN_LIBS}
-  )
-construct_add_custom_command_for_linker_pass(bootloader custom_command)
-add_custom_command(
-    ${custom_command}
-    )
-
-add_custom_target(
-    bootloader_script
-    DEPENDS
-    ${ALIGN_SIZING_DEP} 
-    bootloader.cmd
-    offsets_h
-    )
-set_property(TARGET
-    bootloader_script
-    PROPERTY INCLUDE_DIRECTORIES
-    ${ZEPHYR_INCLUDE_DIRS}
-    )
-add_executable(       bootloader_elf misc/empty_file.c)
-target_link_libraries(bootloader_elf ${TOPT} ${PROJECT_BINARY_DIR}/bootloader.cmd ${bl_zephyr_lnk})
-set_property(TARGET   bootloader_elf PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/bootloader.cmd)
-add_dependencies(     bootloader_elf ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP} bootloader_script offsets)
-
-# This is defined further down, buuuut we need it here because CMake reads top down, TODO move merging to bottom.
-add_custom_target(zephyr_hex DEPENDS zephyr_img.hex)
-list(APPEND my_hex_targets zephyr_hex)
-list(APPEND my_hex_files zephyr_img.hex)
-
-list(APPEND my_hex_targets bootloader_hex)
-list(APPEND my_hex_files bootloader.hex)
-add_custom_command(
-  OUTPUT bootloader.hex 
-  COMMAND ${CMAKE_OBJCOPY} 
-  -S 
-  -Oihex 
-  --gap-fill 0xFF  
-  -R .comment 
-  -R COMMON 
-  -R .eh_frame 
-  bootloader_elf.elf 
-  bootloader.hex 
-  DEPENDS bootloader_elf
-)
-add_custom_target(bootloader_hex DEPENDS bootloader.hex)
-print(my_hex_files)
-add_custom_command(
-  OUTPUT merged.hex 
-  COMMAND mergehex  
-  -m ${my_hex_files} 
-  -o merged.hex
-  DEPENDS ${my_hex_targets} 
-)
-add_custom_target(merged_hex DEPENDS merged.hex)
-
 if(NOT CONFIG_NATIVE_APPLICATION)
 	set(NOSTDINC_F -nostdinc)
 endif()
@@ -1304,6 +1240,69 @@ add_custom_command(
   COMMENT "Generating files from zephyr.elf for board: ${BOARD}"
   # NB: COMMENT only works for some CMake-Generators
 )
+
+# BOOTLOADER STUFF
+set(bl_zephyr_lnk
+  ${LINKERFLAGPREFIX},-Map=${PROJECT_BINARY_DIR}/bootloader.map
+  -u_OffsetAbsSyms
+  -u_ConfigAbsSyms
+  bootloader # include bootloader library
+  ${OFFSETS_O_PATH}
+  ${LIB_INCLUDE_DIR}
+  ${TOOLCHAIN_LIBS}
+  )
+construct_add_custom_command_for_linker_pass(bootloader custom_command)
+add_custom_command(
+    ${custom_command}
+    )
+
+add_custom_target(
+    bootloader_script
+    DEPENDS
+    ${ALIGN_SIZING_DEP} 
+    bootloader.cmd
+    offsets_h
+    )
+set_property(TARGET
+    bootloader_script
+    PROPERTY INCLUDE_DIRECTORIES
+    ${ZEPHYR_INCLUDE_DIRS}
+    )
+add_executable(       bootloader_elf misc/empty_file.c)
+target_link_libraries(bootloader_elf ${TOPT} ${PROJECT_BINARY_DIR}/bootloader.cmd ${bl_zephyr_lnk})
+set_property(TARGET   bootloader_elf PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/bootloader.cmd)
+add_dependencies(     bootloader_elf ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP} bootloader_script offsets)
+
+# This is defined further down, buuuut we need it here because CMake reads top down, TODO move merging to bottom.
+add_custom_target(zephyr_hex DEPENDS zephyr_img.hex)
+list(APPEND my_hex_targets zephyr_hex)
+list(APPEND my_hex_files zephyr_img.hex)
+
+list(APPEND my_hex_targets bootloader_hex)
+list(APPEND my_hex_files bootloader.hex)
+add_custom_command(
+  OUTPUT bootloader.hex 
+  COMMAND ${CMAKE_OBJCOPY} 
+  -S 
+  -Oihex 
+  --gap-fill 0xFF  
+  -R .comment 
+  -R COMMON 
+  -R .eh_frame 
+  bootloader_elf.elf 
+  bootloader.hex 
+  DEPENDS bootloader_elf
+)
+add_custom_target(bootloader_hex DEPENDS bootloader.hex)
+
+add_custom_command(
+  OUTPUT merged.hex 
+  COMMAND mergehex  
+  -m ${my_hex_files} 
+  -o merged.hex
+  DEPENDS ${my_hex_targets} 
+)
+add_custom_target(merged_hex DEPENDS merged.hex)
 
 if(CONFIG_OUTPUT_PRINT_MEMORY_USAGE)
   # Use --print-memory-usage with the first link.
