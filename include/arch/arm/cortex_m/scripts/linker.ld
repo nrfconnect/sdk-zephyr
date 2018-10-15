@@ -70,10 +70,11 @@
 
 MEMORY
     {
-#ifdef CONFIG_SECURE_BOOT
-    BOOTLOADER_FLASH      (rx) : ORIGIN = 0x0, LENGTH = FLASH_AREA_SECURE_BOOT_SIZE_0 
-#endif
+#ifdef LINKER_OUTPUT_NAME_bootloader
+    FLASH                 (rx) : ORIGIN = 0x0, LENGTH = 0x4000 
+#else
     FLASH                 (rx) : ORIGIN = ROM_ADDR, LENGTH = ROM_SIZE
+#endif
 #ifdef CONFIG_TI_CCFG_PRESENT
     FLASH_CCFG            (rwx): ORIGIN = CCFG_ADDR, LENGTH = CCFG_SIZE
 #endif

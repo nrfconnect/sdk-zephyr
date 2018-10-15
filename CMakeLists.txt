@@ -693,6 +693,7 @@ function(construct_add_custom_command_for_linker_pass linker_output_name output_
     ${ZEPHYR_INCLUDES}
     ${LINKER_SCRIPT_DEFINES}
     ${LINKER_PASS_DEFINE}
+    -DLINKER_OUTPUT_NAME_${linker_output_name}
     -E ${LINKER_SCRIPT}
     -P # Prevent generation of debug `#line' directives.
     -o ${linker_cmd_file_name}
@@ -1006,6 +1007,7 @@ if(CONFIG_USERSPACE)
 endif()
 
 # Read global variables into local variables
+
 get_property(GKOF GLOBAL PROPERTY GENERATED_KERNEL_OBJECT_FILES)
 get_property(GKSF GLOBAL PROPERTY GENERATED_KERNEL_SOURCE_FILES)
 
@@ -1129,6 +1131,69 @@ target_link_libraries(zephyr_prebuilt ${TOPT} ${PROJECT_BINARY_DIR}/linker.cmd $
 set_property(TARGET   zephyr_prebuilt PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker.cmd)
 add_dependencies(     zephyr_prebuilt ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP} linker_script offsets)
 
+# BOOTLOADER STUFF
+  
+set(bl_zephyr_lnk
+  ${LINKERFLAGPREFIX},-Map=${PROJECT_BINARY_DIR}/bootloader.map
+  -u_OffsetAbsSyms
+  -u_ConfigAbsSyms
+  bootloader # include bootloader library
+  ${OFFSETS_O_PATH}
+  ${LIB_INCLUDE_DIR}
+  ${TOOLCHAIN_LIBS}
+  )
+construct_add_custom_command_for_linker_pass(bootloader custom_command)
+add_custom_command(
+    ${custom_command}
+    )
+
+add_custom_target(
+    bootloader_script
+    DEPENDS
+    ${ALIGN_SIZING_DEP} 
+    bootloader.cmd
+    offsets_h
+    )
+set_property(TARGET
+    bootloader_script
+    PROPERTY INCLUDE_DIRECTORIES
+    ${ZEPHYR_INCLUDE_DIRS}
+    )
+add_executable(       bootloader_elf misc/empty_file.c)
+target_link_libraries(bootloader_elf ${TOPT} ${PROJECT_BINARY_DIR}/bootloader.cmd ${bl_zephyr_lnk})
+set_property(TARGET   bootloader_elf PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/bootloader.cmd)
+add_dependencies(     bootloader_elf ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP} bootloader_script offsets)
+
+# This is defined further down, buuuut we need it here because CMake reads top down, TODO move merging to bottom.
+add_custom_target(zephyr_hex DEPENDS zephyr_img.hex)
+list(APPEND my_hex_targets zephyr_hex)
+list(APPEND my_hex_files zephyr_img.hex)
+
+list(APPEND my_hex_targets bootloader_hex)
+list(APPEND my_hex_files bootloader.hex)
+add_custom_command(
+  OUTPUT bootloader.hex 
+  COMMAND ${CMAKE_OBJCOPY} 
+  -S 
+  -Oihex 
+  --gap-fill 0xFF  
+  -R .comment 
+  -R COMMON 
+  -R .eh_frame 
+  bootloader_elf.elf 
+  bootloader.hex 
+  DEPENDS bootloader_elf
+)
+add_custom_target(bootloader_hex DEPENDS bootloader.hex)
+print(my_hex_files)
+add_custom_command(
+  OUTPUT merged.hex 
+  COMMAND mergehex  
+  -m ${my_hex_files} 
+  -o merged.hex
+  DEPENDS ${my_hex_targets} 
+)
+add_custom_target(merged_hex DEPENDS merged.hex)
 
 if(NOT CONFIG_NATIVE_APPLICATION)
 	set(NOSTDINC_F -nostdinc)
@@ -1158,7 +1223,9 @@ if(GKOF OR GKSF)
     PROPERTY INCLUDE_DIRECTORIES
     ${ZEPHYR_INCLUDE_DIRS}
   )
-
+  print(GKOF)
+  print(zephyr_lnk)
+  message("HERE")
   add_executable(       kernel_elf misc/empty_file.c ${GKSF})
   target_link_libraries(kernel_elf ${GKOF} ${TOPT} ${PROJECT_BINARY_DIR}/linker_pass_final.cmd ${zephyr_lnk})
   set_property(TARGET   kernel_elf PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker_pass_final.cmd)
@@ -1168,6 +1235,20 @@ else()
   # Use the prebuilt elf as the final elf since we don't have a
   # generation stage.
 endif()
+
+add_custom_command(
+  OUTPUT zephyr_img.hex
+  COMMAND ${CMAKE_OBJCOPY} 
+  -S 
+  -Oihex 
+  --gap-fill 0xFF  
+  -R .comment 
+  -R COMMON 
+  -R .eh_frame 
+  ${KERNEL_ELF_NAME} 
+  zephyr_img.hex 
+  DEPENDS ${logical_target_for_zephyr_elf} 
+)
 
 # To avoid having the same logical target name for the zephyr lib and
 # the zephyr elf, we set the kernel_elf file name to zephyr.elf.
@@ -1179,13 +1260,7 @@ list_append_ifdef(CONFIG_CHECK_LINK_MAP
   post_build_commands
   COMMAND ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/check_link_map.py ${KERNEL_MAP_NAME}
   )
-
-list_append_ifdef(
-  CONFIG_BUILD_OUTPUT_HEX
-  post_build_commands
-  COMMAND ${CMAKE_OBJCOPY} -S -Oihex --gap-fill 0xFF  -R .comment -R COMMON -R .eh_frame  ${KERNEL_ELF_NAME}    ${KERNEL_HEX_NAME}
-  )
-
+# TODO what to do when removing the post build command for generating the hex file and replace with custom command?
 list_append_ifdef(
   CONFIG_BUILD_OUTPUT_BIN
   post_build_commands
