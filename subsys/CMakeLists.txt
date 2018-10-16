@@ -1,8 +1,7 @@
 add_subdirectory_ifdef(CONFIG_APP_SHARED_MEM       app_memory)
 add_subdirectory(debug)
 add_subdirectory(logging)
-#TODO fix this to be ifdef on secure boot stuff.
-add_subdirectory(bootloader)
+add_subdirectory_ifdef(CONFIG_SECURE_BOOT          bootloader)
 add_subdirectory_ifdef(CONFIG_BT                   bluetooth)
 add_subdirectory_ifdef(CONFIG_CONSOLE_SUBSYS       console)
 add_subdirectory_ifdef(CONFIG_CONSOLE_SHELL        shell)
