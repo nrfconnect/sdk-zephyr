@@ -693,7 +693,7 @@ function(construct_add_custom_command_for_linker_pass linker_output_name output_
     ${ZEPHYR_INCLUDES}
     ${LINKER_SCRIPT_DEFINES}
     ${LINKER_PASS_DEFINE}
-    -DLINKER_OUTPUT_NAME_${linker_output_name}
+    -DLINKER_OUTPUT_NAME_${linker_output_name} # Used to identify custom linker scripts
     -E ${LINKER_SCRIPT}
     -P # Prevent generation of debug `#line' directives.
     -o ${linker_cmd_file_name}
@@ -1185,6 +1185,8 @@ add_custom_command(
   zephyr_img.hex 
   DEPENDS ${logical_target_for_zephyr_elf} 
 )
+# Create target to allow dependency to generated file.
+add_custom_target(zephyr_hex DEPENDS zephyr_img.hex)
 
 # To avoid having the same logical target name for the zephyr lib and
 # the zephyr elf, we set the kernel_elf file name to zephyr.elf.
@@ -1241,68 +1243,101 @@ add_custom_command(
   # NB: COMMENT only works for some CMake-Generators
 )
 
-# BOOTLOADER STUFF
-set(bl_zephyr_lnk
-  ${LINKERFLAGPREFIX},-Map=${PROJECT_BINARY_DIR}/bootloader.map
-  -u_OffsetAbsSyms
-  -u_ConfigAbsSyms
-  bootloader # include bootloader library
-  ${OFFSETS_O_PATH}
-  ${LIB_INCLUDE_DIR}
-  ${TOOLCHAIN_LIBS}
-  )
-construct_add_custom_command_for_linker_pass(bootloader custom_command)
-add_custom_command(
-    ${custom_command}
-    )
+######### Bootloader handling ########
+if(CONFIG_SECURE_BOOT)
+    # Create linker flags for zephyr bootloader
+    set(bl_zephyr_lnk
+        ${LINKERFLAGPREFIX},-Map=${PROJECT_BINARY_DIR}/bootloader.map
+        -u_OffsetAbsSyms
+        -u_ConfigAbsSyms
+        bootloader # include bootloader library
+        ${OFFSETS_O_PATH}
+        ${LIB_INCLUDE_DIR}
+        ${TOOLCHAIN_LIBS}
+        )
 
-add_custom_target(
-    bootloader_script
-    DEPENDS
-    ${ALIGN_SIZING_DEP} 
-    bootloader.cmd
-    offsets_h
-    )
-set_property(TARGET
-    bootloader_script
-    PROPERTY INCLUDE_DIRECTORIES
-    ${ZEPHYR_INCLUDE_DIRS}
-    )
-add_executable(       bootloader_elf misc/empty_file.c)
-target_link_libraries(bootloader_elf ${TOPT} ${PROJECT_BINARY_DIR}/bootloader.cmd ${bl_zephyr_lnk})
-set_property(TARGET   bootloader_elf PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/bootloader.cmd)
-add_dependencies(     bootloader_elf ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP} bootloader_script offsets)
+    # Create custom linker script, will be named 'bootloader.cmd'
+    # and will be called with define
+    # '-DLINKER_OUTPUT_NAME_bootloader'
+    # The function below generates the command which is then passed to 
+    # 'add_custom_command'.
+    construct_add_custom_command_for_linker_pass(bootloader custom_command)
+    add_custom_command(
+        ${custom_command}
+        )
 
-# This is defined further down, buuuut we need it here because CMake reads top down, TODO move merging to bottom.
-add_custom_target(zephyr_hex DEPENDS zephyr_img.hex)
-list(APPEND my_hex_targets zephyr_hex)
-list(APPEND my_hex_files zephyr_img.hex)
+    # Create custom target for generated linker script 'bootloader.cmd'
+    # This is done since CMake does not handle dependencies to files very 
+    # well, so this is done to be able to represent a dependency to the 
+    # generated 'bootloader.cmd' file.
+    add_custom_target(
+        bootloader_script
+        DEPENDS
+        ${ALIGN_SIZING_DEP} 
+        bootloader.cmd
+        offsets_h
+        )
 
-list(APPEND my_hex_targets bootloader_hex)
-list(APPEND my_hex_files bootloader.hex)
-add_custom_command(
-  OUTPUT bootloader.hex 
-  COMMAND ${CMAKE_OBJCOPY} 
-  -S 
-  -Oihex 
-  --gap-fill 0xFF  
-  -R .comment 
-  -R COMMON 
-  -R .eh_frame 
-  bootloader_elf.elf 
-  bootloader.hex 
-  DEPENDS bootloader_elf
-)
-add_custom_target(bootloader_hex DEPENDS bootloader.hex)
+    # Create the executable target with a dummy file.
+    add_executable(       bootloader_elf misc/empty_file.c)
 
-add_custom_command(
-  OUTPUT merged.hex 
-  COMMAND mergehex  
-  -m ${my_hex_files} 
-  -o merged.hex
-  DEPENDS ${my_hex_targets} 
-)
-add_custom_target(merged_hex DEPENDS merged.hex)
+    # Link executable target with custom bootloader linker script 'bootloader.cmd' and the linker flags in 'bl_zephyr_lnk'
+    target_link_libraries(bootloader_elf ${TOPT} ${PROJECT_BINARY_DIR}/bootloader.cmd ${bl_zephyr_lnk})
+
+    # Create dependency between elf target and linker script.
+    set_property(TARGET   bootloader_elf PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/bootloader.cmd)
+
+    # Since CMake does not handle file dependencies very well, create dependency to 'bootloader_script' 
+    # target, as well as standard stuff.
+    add_dependencies(     bootloader_elf ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP} bootloader_script offsets)
+
+    # Create custom command for creating hex file from bootloader elf file.
+    add_custom_command(
+        OUTPUT bootloader.hex 
+        COMMAND ${CMAKE_OBJCOPY} 
+        -S 
+        -Oihex 
+        --gap-fill 0xFF  
+        -R .comment 
+        -R COMMON 
+        -R .eh_frame 
+        bootloader_elf.elf 
+        bootloader.hex 
+        DEPENDS bootloader_elf
+        )
+    # Create target with the generated custom command.
+    # This is needed since CMake does not represent denpendencies to files in a good manner.
+    add_custom_target(bootloader_hex DEPENDS bootloader.hex)
+
+    # Create list of all files to be merged.
+    list(APPEND my_hex_files zephyr_img.hex)
+    list(APPEND my_hex_files bootloader.hex)
+
+    # Create a list of the targets of the files to be merged.
+    list(APPEND my_hex_targets zephyr_hex)
+    list(APPEND my_hex_targets bootloader_hex)
+
+    # Create custom command for merging all files in the list.
+    add_custom_command(
+        OUTPUT merged.hex 
+        COMMAND mergehex  
+        -m ${my_hex_files} 
+        -o merged.hex
+        DEPENDS ${my_hex_targets} 
+        )
+    add_custom_target(merged_hex DEPENDS merged.hex)
+    if(CONFIG_OUTPUT_PRINT_MEMORY_USAGE)
+        set(option ${LINKERFLAGPREFIX},--print-memory-usage)
+        string(MAKE_C_IDENTIFIER check${option} check)
+
+        set(SAVED_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
+        set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${option}")
+        zephyr_check_compiler_flag(C "" ${check})
+        set(CMAKE_REQUIRED_FLAGS ${SAVED_CMAKE_REQUIRED_FLAGS})
+
+        target_link_libraries_ifdef(${check} bootloader_elf ${option})
+    endif()
+endif()
 
 if(CONFIG_OUTPUT_PRINT_MEMORY_USAGE)
   # Use --print-memory-usage with the first link.
