@@ -1325,7 +1325,7 @@ if(CONFIG_SECURE_BOOT)
         -o merged.hex
         DEPENDS ${my_hex_targets} 
         )
-    add_custom_target(merged_hex DEPENDS merged.hex)
+    add_custom_target(merged_hex ALL DEPENDS merged.hex)
     if(CONFIG_OUTPUT_PRINT_MEMORY_USAGE)
         set(option ${LINKERFLAGPREFIX},--print-memory-usage)
         string(MAKE_C_IDENTIFIER check${option} check)
