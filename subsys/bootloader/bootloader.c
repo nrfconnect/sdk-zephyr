@@ -49,7 +49,9 @@ static void boot_from(uint32_t *address)
 	((void(*)(void))address[1])( ) ;
 }
 
-int __start()
+
+
+int main(void)
 {
 	//boot_from((uint32_t *) 0x00008000);
 	//
@@ -85,5 +87,30 @@ int __start()
 
 	
 	}
+}
+
+extern uint32_t __data_rom_start;
+extern uint32_t __data_ram_start;
+
+extern uint32_t __data_ram_end;
+extern uint32_t __bss_start;
+extern uint32_t __bss_end;
+
+
+
+void __start(){
+	register uint32_t *src, *dst;
+	src = &__data_rom_start;
+	dst = &__data_ram_start;
+	while(dst < &__data_ram_end){
+		*dst++ = *src++;
+	}
+
+	dst = &__bss_start;
+	while(dst < &__bss_end){
+		*dst++ = 0;
+	}
+	main();
+	while(1);
 }
 

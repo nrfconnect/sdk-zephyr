@@ -117,6 +117,10 @@ void _PrepC(void)
 #ifdef CONFIG_BOOT_TIME_MEASUREMENT
 	__start_time_stamp = 0;
 #endif
+#ifdef CUSTOM_START
+	main();
+#else
 	_Cstart();
+#endif /* CUSTOM_START */
 	CODE_UNREACHABLE;
 }
