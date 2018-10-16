@@ -291,7 +291,7 @@ zephyr_ld_options(
 # skip this flag even though the compiler flag check passes
 # (e.g. ARC and Xtensa). So keep it at =warn, for now.
 zephyr_ld_options(
-  ${LINKERFLAGPREFIX},--orphan-handling=place
+  ${LINKERFLAGPREFIX},--orphan-handling=warn
   )
 
 if(CONFIG_HAVE_CUSTOM_LINKER_SCRIPT)
