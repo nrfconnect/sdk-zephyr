@@ -1007,7 +1007,6 @@ if(CONFIG_USERSPACE)
 endif()
 
 # Read global variables into local variables
-
 get_property(GKOF GLOBAL PROPERTY GENERATED_KERNEL_OBJECT_FILES)
 get_property(GKSF GLOBAL PROPERTY GENERATED_KERNEL_SOURCE_FILES)
 
@@ -1130,6 +1129,7 @@ add_executable(       zephyr_prebuilt misc/empty_file.c)
 target_link_libraries(zephyr_prebuilt ${TOPT} ${PROJECT_BINARY_DIR}/linker.cmd ${PRIV_STACK_LIB} ${zephyr_lnk})
 set_property(TARGET   zephyr_prebuilt PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker.cmd)
 add_dependencies(     zephyr_prebuilt ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP} linker_script offsets)
+
 
 if(NOT CONFIG_NATIVE_APPLICATION)
 	set(NOSTDINC_F -nostdinc)
