@@ -153,7 +153,6 @@ static void e1000_isr(struct device *device)
 int e1000_probe(struct device *device)
 {
 	struct e1000_dev *dev = device->driver_data;
-	bool found = false;
 
 	pci_bus_scan_init();
 
@@ -165,10 +164,10 @@ int e1000_probe(struct device *device)
 
 		pci_show(&dev->pci);
 
-		found = true;
+		return 0;
 	}
 
-	return found;
+	return -ENODEV;
 }
 
 static struct device DEVICE_NAME_GET(eth_e1000);

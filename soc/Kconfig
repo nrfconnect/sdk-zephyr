@@ -17,38 +17,15 @@ source "subsys/logging/Kconfig.template.log_config"
 
 endmenu
 
-#
-# SOC_*_LD: SoC specific Linker script additions
-#
-config SOC_NOINIT_LD
+# The helper symbols below are put here due to an unusual setup: The simulated
+# nrf52_bsim board uses the POSIX arch, but is compatible with Nordic ARM
+# boards
+
+config SOC_COMPATIBLE_NRF
 	bool
-	depends on (ARC || ARM || X86 || NIOS2 || RISCV32)
-	help
-	  Include an SoC specific linker script fragment named soc-noinit.ld
-	  for inserting additional data and linker directives into
-	  the noinit section.
 
-	  This only has effect if the SoC uses the common linker script
-	  under include/arch/.
-
-config SOC_RODATA_LD
+config SOC_COMPATIBLE_NRF52X
 	bool
-	depends on (ARC || ARM || X86 || NIOS2 || RISCV32)
-	help
-	  Include an SoC specific linker script fragment named soc-rodata.ld
-	  for inserting additional data and linker directives into
-	  the rodata section.
 
-	  This only has effect if the SoC uses the common linker script
-	  under include/arch/.
-
-config SOC_RWDATA_LD
+config SOC_COMPATIBLE_NRF52832
 	bool
-	depends on (ARC || ARM || X86 || NIOS2 || RISCV32)
-	help
-	  Include an SoC specific linker script fragment named soc-rwdata.ld
-	  for inserting additional data and linker directives into
-	  the data section.
-
-	  This only has effect if the SoC uses the common linker script
-	  under include/arch/.

@@ -34,6 +34,7 @@ static u8_t __noinit __aligned(sizeof(u32_t))
 static struct log_list_t list;
 static atomic_t initialized;
 static bool panic_mode;
+static bool backend_attached;
 static atomic_t buffered_cnt;
 static k_tid_t proc_tid;
 
@@ -257,7 +258,7 @@ void log_init(void)
 	}
 
 	k_mem_slab_init(&log_strdup_pool, log_strdup_pool_buf,
-			CONFIG_LOG_STRDUP_MAX_STRING,
+			LOG_STRBUF_BUF_SIZE,
 			CONFIG_LOG_STRDUP_BUF_COUNT);
 
 	/* Set default timestamp. */
@@ -271,12 +272,15 @@ void log_init(void)
 		log_backend_id_set(backend,
 				   i + LOG_FILTER_FIRST_BACKEND_SLOT_IDX);
 
-		backend_filter_init(backend);
-		if (backend->api->init) {
-			backend->api->init();
-		}
+		if (backend->autostart) {
+			backend_filter_init(backend);
+			if (backend->api->init) {
+				backend->api->init();
+			}
 
-		log_backend_activate(backend, NULL);
+			log_backend_activate(backend, NULL);
+			backend_attached = true;
+		}
 	}
 }
 
@@ -373,6 +377,9 @@ bool log_process(bool bypass)
 {
 	struct log_msg *msg;
 
+	if (!backend_attached) {
+		return false;
+	}
 	unsigned int key = irq_lock();
 
 	msg = log_list_head_get(&list);
@@ -475,6 +482,7 @@ void log_backend_enable(struct log_backend const *const backend,
 {
 	backend_filter_set(backend, level);
 	log_backend_activate(backend, ctx);
+	backend_attached = true;
 }
 
 void log_backend_disable(struct log_backend const *const backend)

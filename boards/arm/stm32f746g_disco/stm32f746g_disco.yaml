@@ -5,3 +5,8 @@ arch: arm
 toolchain:
   - zephyr
   - gnuarmemb
+ram: 320
+flash: 1024
+supported:
+  - netif:eth
+  - gpio
