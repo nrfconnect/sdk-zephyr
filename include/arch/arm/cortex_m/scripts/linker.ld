@@ -71,7 +71,7 @@
 MEMORY
     {
 #ifdef LINKER_OUTPUT_NAME_bootloader
-    FLASH                 (rx) : ORIGIN = 0x0, LENGTH = 0x4000 
+    FLASH                 (rx) : ORIGIN = CONFIG_FLASH_BASE_ADDRESS + FLASH_AREA_SECURE_BOOT_OFFSET_0, LENGTH = FLASH_AREA_SECURE_BOOT_SIZE_0
 #else
     FLASH                 (rx) : ORIGIN = ROM_ADDR, LENGTH = ROM_SIZE
 #endif
