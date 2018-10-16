@@ -1278,6 +1278,14 @@ if(CONFIG_SECURE_BOOT)
         offsets_h
         )
 
+    # Associate include directories to linker script target.
+    # This needs to be done since preprocessing is done in linker script.
+    set_property(TARGET
+        bootloader_script
+        PROPERTY INCLUDE_DIRECTORIES
+        ${ZEPHYR_INCLUDE_DIRS}
+        )
+
     # Create the executable target with a dummy file.
     add_executable(       bootloader_elf misc/empty_file.c)
 
