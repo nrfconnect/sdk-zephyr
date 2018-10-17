@@ -5,8 +5,9 @@
 #define LED1_GPIO (13UL)
 #define LED2_GPIO (14UL)
 #define LED4_GPIO (16UL)
-#define BUTTON1_GPIO (11UL)
-#define BUTTON2_GPIO (12UL)
+#define BUTTON1_GPIO (GPIO_KEYS_BUTTON_0_GPIO_PIN)
+#define BUTTON2_GPIO (GPIO_KEYS_BUTTON_1_GPIO_PIN)
+#define BUTTON3_GPIO (GPIO_KEYS_BUTTON_2_GPIO_PIN)
 
 #define EnablePrivilegedMode() __asm("SVC #0")
 
@@ -61,6 +62,7 @@ int main(void)
 	config_led(LED4_GPIO);
 	config_input(BUTTON1_GPIO);
 	config_input(BUTTON2_GPIO);
+	config_input(BUTTON3_GPIO);
 	while(1){
 		uint32_t volatile input;
 		input = (NRF_GPIO->IN >> BUTTON1_GPIO) & 1UL;
@@ -70,7 +72,7 @@ int main(void)
 		/* TODO: Clean up configurations before jump */
 		else{
 			NRF_GPIO->OUTCLR = (1UL << LED1_GPIO);
-			boot_from((uint32_t *) (0x00000000 + FLASH_AREA_APP_OFFSET));
+			boot_from((uint32_t *) (0x00000000 + FLASH_AREA_S0_OFFSET));
 		}
 		input = (NRF_GPIO->IN >> BUTTON2_GPIO) & 1UL;
 		if(input){
@@ -78,7 +80,16 @@ int main(void)
 		}
 		else{
 			NRF_GPIO->OUTCLR = (1UL << LED2_GPIO);
-			boot_from((uint32_t *) 0x00014000); 
+			boot_from((uint32_t *) (0x00000000 + FLASH_AREA_S1_OFFSET));
+		}
+		input = (NRF_GPIO->IN >> BUTTON3_GPIO) & 1UL;
+		if(input){
+			NRF_GPIO->OUTSET = (1UL << LED1_GPIO);
+		}
+		/* TODO: Clean up configurations before jump */
+		else{
+			NRF_GPIO->OUTCLR = (1UL << LED1_GPIO);
+			boot_from((uint32_t *) (0x00000000 + FLASH_AREA_APP_OFFSET));
 		}
 		uint32_t volatile tm0 = 1000000;
 		while(tm0--);
