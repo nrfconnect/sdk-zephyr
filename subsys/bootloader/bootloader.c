@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <nrf.h>
+#include <generated_dts_board.h>
 
 #define LED1_GPIO (13UL)
 #define LED2_GPIO (14UL)
@@ -31,7 +32,7 @@ static void boot_from(uint32_t *address)
 	{
 		EnablePrivilegedMode();
 	}
-	//__disable_irq();
+	__disable_irq();
 	for(uint8_t i = 0; i < 8; i++) NVIC->ICER[i] = 0xFFFFFFFF;
 	for(uint8_t i = 0; i < 8; i++) NVIC->ICPR[i] = 0xFFFFFFFF;
 	SysTick->CTRL = 0;
@@ -41,10 +42,10 @@ static void boot_from(uint32_t *address)
 	{
 		__set_CONTROL(__get_CONTROL() & ~CONTROL_SPSEL_Msk);
 	}
-	//__DSB(); /* Force Memory Write before continuing */
-	//__ISB(); /* Flush and refill pipeline with updated premissions */
+	__DSB(); /* Force Memory Write before continuing */
+	__ISB(); /* Flush and refill pipeline with updated premissions */
 	SCB->VTOR = (uint32_t) address;
-	//__enable_irq();
+	__enable_irq();
 	__set_MSP(address[0]);
 	((void(*)(void))address[1])( ) ;
 }
@@ -66,9 +67,10 @@ int main(void)
 		if(input){
 			NRF_GPIO->OUTSET = (1UL << LED1_GPIO);
 		}
+		/* TODO: Clean up configurations before jump */
 		else{
 			NRF_GPIO->OUTCLR = (1UL << LED1_GPIO);
-			boot_from((uint32_t *) 0x00001000);
+			boot_from((uint32_t *) (0x00000000 + FLASH_AREA_APP_OFFSET));
 		}
 		input = (NRF_GPIO->IN >> BUTTON2_GPIO) & 1UL;
 		if(input){
@@ -76,7 +78,7 @@ int main(void)
 		}
 		else{
 			NRF_GPIO->OUTCLR = (1UL << LED2_GPIO);
-			boot_from((uint32_t *) 0x00014000);
+			boot_from((uint32_t *) 0x00014000); 
 		}
 		uint32_t volatile tm0 = 1000000;
 		while(tm0--);
@@ -87,30 +89,5 @@ int main(void)
 
 	
 	}
-}
-
-extern uint32_t __data_rom_start;
-extern uint32_t __data_ram_start;
-
-extern uint32_t __data_ram_end;
-extern uint32_t __bss_start;
-extern uint32_t __bss_end;
-
-
-
-void __start(){
-	register uint32_t *src, *dst;
-	src = &__data_rom_start;
-	dst = &__data_ram_start;
-	while(dst < &__data_ram_end){
-		*dst++ = *src++;
-	}
-
-	dst = &__bss_start;
-	while(dst < &__bss_end){
-		*dst++ = 0;
-	}
-	main();
-	while(1);
 }
 

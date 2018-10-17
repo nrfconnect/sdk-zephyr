@@ -21,25 +21,13 @@ extern uint32_t __bss_end;
 extern uint32_t __data_rom_start;
 extern uint32_t __data_ram_start;
 extern uint32_t __data_ram_end;
-extern uint32_t __image_text_start;
-extern uint32_t __image_text_end;
-extern uint32_t __start_stack;
-extern uint32_t __end_stack;
-extern uint32_t _main_stack;
-
-extern uint32_t _image_rodata_start;
-extern uint32_t _image_rodata_end;
-extern uint32_t _image_rom_start;
-extern uint32_t _image_rom_end;
-
+extern uint32_t _image_text_end;
 
 /* C main function to be called from the reset_handler */
 extern int main(void);
 
-/* Device specific intialization functions for erratas and system clock setup
- */
-extern void system_init(void);
-
+/* Device specific intialization functions for erratas and system clock setup */
+extern void SystemInit(void);
 /* Forward decleration for dummy handler */
 void dummy_handler(void);
 #define ALIAS(name) __attribute__((weak, alias (name)))
@@ -59,7 +47,10 @@ void secure_fault_handler(void) ALIAS("dummy_handler");
 void svc_handler(void) ALIAS("dummy_handler");
 void pend_sv_handler(void) ALIAS("dummy_handler");
 void sys_tick_handler(void) ALIAS("dummy_handler");
-extern uint32_t __kernel_ram_start;
+
+extern uint32_t __kernel_ram_start; //TODO: Find _end_of_stack symbol
+
+/* TODO: Add vendor specific vectors to vector table */
 void *core_vector_table[16] __attribute__((section(".exc_vector_table"))) = {
 	&__kernel_ram_start + CONFIG_MAIN_STACK_SIZE,
 	reset_handler, //__reset
@@ -100,56 +91,37 @@ void *core_vector_table[16] __attribute__((section(".exc_vector_table"))) = {
 	0, /* reserved */
 #endif /* CONFIG_CORTEX_M_SYSTICK */
 };
-/*
-_image_text_end == _end_text
-__data_rom_start == _start_data
-__data_ram_end == _end_data
-*/
 
-
-void _bss_zero(register uint32_t *dest, uint32_t *end)
+/* TODO: Do we need to tag these for the compiler not to optimize away? */
+void _bss_zero(uint32_t *dest, uint32_t *end)
 {
-	while(dest < &end)
+	while(dest < (uint32_t *) &end)
 	{
 		*dest++ = 0;
 	}
-	/* Alternative implementation
-	 * size = (uint32_t)&__bss_end - (uint32_t)&__bss_start
-	 * for(;dest < &end; dest++)
-	 * {
-	 * 	*dest = 0;
-	 * }
-	 */
 }
 
-void _data_copy( register uint32_t *src, register uint32_t *dest, uint32_t *end)
+void _data_copy(uint32_t *src, uint32_t *dest, uint32_t *end)
 {
-	while(dest < &end)
+	while(dest < (uint32_t *) &end)
 	{
 		*dest++ = *src++;
 	}
 }
 
-extern uint32_t _image_text_end;
 void reset_handler(void)
 {
 	_bss_zero(&__bss_start, &__bss_end);
-	//maybe __data_ram_start instead of image_text_end
 	_data_copy(&_image_text_end, &__data_ram_start, &__data_ram_end);
-	//register uint32_t *src, *dst;
-	//src = &_image_text_end;
-	//dst = &__data_ram_start;
-	//while(dst < &__data_ram_end)
-	//{
-	//	*dst++ = *src++;
-	//}
-	
+	SystemInit(); /* Create define for system INIT */
 	#ifdef SYSTEM_INIT
-	system_init();	
+	//system_init();	
 	#endif
 	main();
 	while(1);
 }
+
+/* Find a way to redefine the entry point from __start to reset handler? */
 void __start(void){
 	reset_handler();
 }
