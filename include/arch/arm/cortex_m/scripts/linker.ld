@@ -87,6 +87,23 @@ ENTRY(CONFIG_KERNEL_ENTRY)
 
 SECTIONS
     {
+
+#include <linker/rel-sections.ld>
+
+    /*
+     * .plt and .iplt are here according to 'arm-zephyr-elf-ld --verbose',
+     * before text section.
+     */
+    SECTION_PROLOGUE(.plt,,)
+	{
+	*(.plt)
+	}
+
+    SECTION_PROLOGUE(.iplt,,)
+	{
+	*(.iplt)
+	}
+
     GROUP_START(ROMABLE_REGION)
 
 	_image_rom_start = ROM_ADDR;
@@ -114,6 +131,8 @@ SECTIONS
 
 	KEEP(*(IRQ_VECTOR_TABLE))
 
+	KEEP(*(.vectors))
+
 	KEEP(*(.openocd_dbg))
 	KEEP(*(".openocd_dbg.*"))
 
@@ -130,6 +149,12 @@ SECTIONS
 	*(.text)
 	*(".text.*")
 	*(.gnu.linkonce.t.*)
+
+	/*
+	 * These are here according to 'arm-zephyr-elf-ld --verbose',
+	 * after .gnu.linkonce.t.*
+	 */
+	*(.glue_7t) *(.glue_7) *(.vfp11_veneer) *(.v4_bx)
 
 #include <linker/priv_stacks-text.ld>
 #include <linker/kobject-text.ld>
@@ -162,6 +187,10 @@ SECTIONS
 	*(.rodata)
 	*(".rodata.*")
 	*(.gnu.linkonce.r.*)
+
+#ifdef CONFIG_SOC_RODATA_LD
+#include <soc-rodata.ld>
+#endif
 
 #ifdef CONFIG_CUSTOM_RODATA_LD
 /* Located in project source directory */
@@ -212,6 +241,18 @@ SECTIONS
     KEEP(*(TI_CCFG))
     } > FLASH_CCFG
 #endif
+
+    /*
+     * These are here according to 'arm-zephyr-elf-ld --verbose',
+     * before data section.
+     */
+    SECTION_PROLOGUE(.got,,)
+	{
+	*(.got.plt)
+	*(.igot.plt)
+	*(.got)
+	*(.igot)
+	}
 
     GROUP_START(RAMABLE_REGION)
 
@@ -313,6 +354,8 @@ SECTIONS
 	KERNEL_INPUT_SECTION(COMMON)
 	*(".kernel_bss.*")
 
+#include <linker/priv_stacks-noinit.ld>
+
         /*
          * As memory is cleared in words only, it is simpler to ensure the BSS
          * section ends on a 4 byte boundary. This wastes a maximum of 3 bytes.
@@ -330,6 +373,10 @@ SECTIONS
         KERNEL_INPUT_SECTION(".noinit.*")
 	*(".kernel_noinit.*")
 
+#ifdef CONFIG_SOC_NOINIT_LD
+#include <soc-noinit.ld>
+#endif
+
         } GROUP_LINK_IN(RAMABLE_REGION)
 
     SECTION_DATA_PROLOGUE(_DATA_SECTION_NAME,,)
@@ -338,6 +385,10 @@ SECTIONS
 	KERNEL_INPUT_SECTION(.data)
 	KERNEL_INPUT_SECTION(".data.*")
 	*(".kernel.*")
+
+#ifdef CONFIG_SOC_RWDATA_LD
+#include <soc-rwdata.ld>
+#endif
 
 #ifdef CONFIG_CUSTOM_RWDATA_LD
 /* Located in project source directory */
@@ -412,5 +463,13 @@ SECTIONS
 #ifdef CONFIG_GEN_ISR_TABLES
 #include <linker/intlist.ld>
 #endif
+
+#include <linker/debug-sections.ld>
+
+    SECTION_PROLOGUE(.ARM.attributes, 0,)
+	{
+	KEEP(*(.ARM.attributes))
+	KEEP(*(.gnu.attributes))
+	}
 
     }
