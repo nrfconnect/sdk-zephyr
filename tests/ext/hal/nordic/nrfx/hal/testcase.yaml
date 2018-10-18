@@ -1,0 +1,5 @@
+tests:
+  section.subsection:
+    platform_whitelist: nrf52840_pca10056
+    build_only: true
+    tags: my_tags
