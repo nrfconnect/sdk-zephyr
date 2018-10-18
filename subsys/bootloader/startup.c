@@ -1,6 +1,5 @@
 /*
  * Nordic Semiconductor ASA Copyright 2018
- * Free USE
  * Sigvart M. Hovland
  */
 
@@ -8,15 +7,12 @@
 
 /* Linker-defined symbols for addresses of flash and ram */
 
-//extern uint32_t __end_text;
-//extern uint32_t __start_data;
-//extern uint32_t __end_data; 
 /* Block started by symbol, data container for statically allocated objects
  * Such as uninitialized objects both variables and constatns declared in 
  * file scope and uninitialized static local variables
  * Short name BETTER SAVE SPACE(BSS)
  */
-extern uint32_t __bss_start;  //__start_bss;
+extern uint32_t __bss_start;  
 extern uint32_t __bss_end;
 extern uint32_t __data_rom_start;
 extern uint32_t __data_ram_start;
@@ -113,9 +109,8 @@ void reset_handler(void)
 {
 	_bss_zero(&__bss_start, &__bss_end);
 	_data_copy(&_image_text_end, &__data_ram_start, &__data_ram_end);
-	SystemInit(); /* Create define for system INIT */
 	#ifdef SYSTEM_INIT
-	//system_init();	
+	SystemInit(); /* Create define for system INIT */
 	#endif
 	main();
 	while(1);

@@ -1,0 +1,14 @@
+#
+# Copyright (c) 2018 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+config SECURE_BOOT 
+	bool "Secure Boot Support"
+if SECURE_BOOT
+config SECURE_BOOT_SYSTEM_INIT
+	bool "Add system intialization code to bootloader"
+	select SYSTEM_INIT
+endif 
+##endmenu
