@@ -79,6 +79,8 @@ source "drivers/sensor/isl29035/Kconfig"
 
 source "drivers/sensor/lis2dh/Kconfig"
 
+source "drivers/sensor/lis2mdl/Kconfig"
+
 source "drivers/sensor/lis3dh/Kconfig"
 
 source "drivers/sensor/lis3mdl/Kconfig"
@@ -86,6 +88,10 @@ source "drivers/sensor/lis3mdl/Kconfig"
 source "drivers/sensor/lps22hb/Kconfig"
 
 source "drivers/sensor/lps25hb/Kconfig"
+
+source "drivers/sensor/lsm303dlhc_accel/Kconfig"
+
+source "drivers/sensor/lsm303dlhc_magn/Kconfig"
 
 source "drivers/sensor/lsm6ds0/Kconfig"
 
@@ -104,6 +110,8 @@ source "drivers/sensor/mcp9808/Kconfig"
 source "drivers/sensor/mma8451q/Kconfig"
 
 source "drivers/sensor/mpu6050/Kconfig"
+
+source "drivers/sensor/ms5837/Kconfig"
 
 source "drivers/sensor/nrf5/Kconfig"
 

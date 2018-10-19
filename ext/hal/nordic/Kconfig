@@ -38,6 +38,9 @@ config NRFX_SPIM
 config NRFX_SPIS
 	bool
 
+config NRFX_SYSTICK
+	bool
+
 config NRFX_TIMER
 	bool
 
@@ -66,6 +69,10 @@ config NRFX_TWI
 
 config NRFX_TWIM
 	bool
+
+config NRFX_USBD
+	bool
+	select NRFX_SYSTICK
 
 config NRFX_WDT
 	bool
