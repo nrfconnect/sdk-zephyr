@@ -70,7 +70,11 @@
 
 MEMORY
     {
+#ifdef LINKER_OUTPUT_NAME_bootloader
+    FLASH                 (rx) : ORIGIN = CONFIG_FLASH_BASE_ADDRESS + FLASH_AREA_SECURE_BOOT_OFFSET_0, LENGTH = FLASH_AREA_SECURE_BOOT_SIZE_0
+#else
     FLASH                 (rx) : ORIGIN = ROM_ADDR, LENGTH = ROM_SIZE
+#endif
 #ifdef CONFIG_TI_CCFG_PRESENT
     FLASH_CCFG            (rwx): ORIGIN = CCFG_ADDR, LENGTH = CCFG_SIZE
 #endif
