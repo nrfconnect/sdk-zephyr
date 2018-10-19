@@ -38,125 +38,94 @@
 extern "C" {
 #endif
 
-/* TODO Should this be here? AFAICS we can not use KConfig here*/
-#define NRF_ACL_PERMISSIONS_SIZE_MAX_VAL 512*1024
-
-/**
- * @enum nrf_acl_instance_t
- * @brief ACL instances.
- */
-typedef enum
-{
-    NRF_ACL0 = 0,  /**< Instance 0. */
-    NRF_ACL1 = 1,  /**< Instance 1. */
-    NRF_ACL2 = 2,  /**< Instance 2. */
-    NRF_ACL3 = 3,  /**< Instance 3. */
-    NRF_ACL4 = 4,  /**< Instance 4. */
-    NRF_ACL5 = 5,  /**< Instance 5. */
-    NRF_ACL6 = 6,  /**< Instance 6. */
-    NRF_ACL7 = 7,  /**< Instance 7. */
-    NRF_ACL_NUM_INSTANCES
-} nrf_acl_instance_t;
-
-/* TODO - Have these as define instead? Since their type does not need to be exposed */
-/** @brief ACL Read permissions. */
-typedef enum
-{
-    NRF_ACL_PERMISSIONS_READ_ENABLE  = \
-        (ACL_ACL_PERM_READ_Enable  << ACL_ACL_PERM_READ_Pos) & ACL_ACL_PERM_READ_Msk, /**< Read enable. */
-    NRF_ACL_PERMISSIONS_READ_DISABLE = \
-        (ACL_ACL_PERM_READ_Disable << ACL_ACL_PERM_READ_Pos) & ACL_ACL_PERM_READ_Msk, /**< Read disable. */
-} nrf_acl_permissions_read_t;
-
-/** @brief ACL Write permissions. */
-typedef enum
-{
-    NRF_ACL_PERMISSIONS_WRITE_ENABLE  = \
-        (ACL_ACL_PERM_WRITE_Enable  << ACL_ACL_PERM_WRITE_Pos) & ACL_ACL_PERM_WRITE_Msk, /**< Write enable. */
-    NRF_ACL_PERMISSIONS_WRITE_DISABLE = \
-        (ACL_ACL_PERM_WRITE_Disable << ACL_ACL_PERM_WRITE_Pos) & ACL_ACL_PERM_WRITE_Msk, /**< Write disable. */
-} nrf_acl_permissions_write_t;
+#define NRF_ACL_SIZE_MAX_VAL 512*1024
 
 /** @brief ACL permissions. */
 typedef enum
 {
-    NRF_ACL_PERMISSIONS_NO_PROTECTION = 0, /**< No protection. Illegal value. */
-    NRF_ACL_PERMISSIONS_READ_NO_WRITE    = NRF_ACL_PERMISSIONS_READ_ENABLE  | NRF_ACL_PERMISSIONS_WRITE_DISABLE, /**< Read allowed, write disallowed. */
-    NRF_ACL_PERMISSIONS_NO_READ_WRITE    = NRF_ACL_PERMISSIONS_READ_DISABLE | NRF_ACL_PERMISSIONS_WRITE_ENABLE,  /**< Read disallowed, write allowed. */
-    NRF_ACL_PERMISSIONS_NO_READ_NO_WRITE = NRF_ACL_PERMISSIONS_READ_DISABLE | NRF_ACL_PERMISSIONS_WRITE_DISABLE, /**< Read disallowed, write disallowed. */
-} nrf_acl_permissions_t;
+    NRF_ACL_PERM_READ_NO_WRITE    = ACL_ACL_PERM_WRITE_Msk,                        /**< Read allowed, write disallowed. */
+    NRF_ACL_PERM_NO_READ_WRITE    = ACL_ACL_PERM_READ_Msk,                         /**< Read disallowed, write allowed. */
+    NRF_ACL_PERM_NO_READ_NO_WRITE = ACL_ACL_PERM_READ_Msk | ACL_ACL_PERM_WRITE_Msk /**< Read disallowed, write disallowed. */
+} nrf_acl_perm_t;
 
 /**
- * @brief Function for setting ACL control for given instance.
+ * @brief Function for setting region parameters  for given ACL region.
  *
- * @param[in] instance ACL instance to use.
- * @param[in] address  Word aligned start address. Must be page aligned.
- * @param[in] size     Size of region to protect in bytes. Must be page aligned.
- * @param[in] perm     Permissions to set for region to protect.
+ * Address must be word and page aligned. Size must be page aligned.
+ *
+ * @param[in] p_reg       Pointer to the peripheral register structure.
+ * @param[in] region_id   ACL region index.
+ * @param[in] address     Start address.
+ * @param[in] size        Size of region to protect in bytes.
+ * @param[in] perm        Permissions to set for region to protect.
  */
-__STATIC_INLINE void nrf_acl_access_control_set(nrf_acl_instance_t instance,
-                                                uint32_t address,
-                                                size_t size,
-                                                nrf_acl_permissions_t perm);
+__STATIC_INLINE void nrf_acl_region_set(NRF_ACL_Type * p_reg,
+                                        uint32_t       region_id,
+                                        uint32_t       address,
+                                        size_t         size,
+                                        nrf_acl_perm_t perm);
 
 /**
- * @brief Function for getting the configured region address of a specific ACL instance.
+ * @brief Function for getting the configured region address of a specific ACL region.
  *
- * @param[in] instance ACL instance to use.
+ * @param[in] p_reg       Pointer to the peripheral register structure.
+ * @param[in] region_id   ACL region index.
  *
- * @return Configured region address of given ACL instance.
+ * @return Configured region address of given ACL region.
  */
-__STATIC_INLINE uint32_t nrf_acl_access_control_address_get(nrf_acl_instance_t instance);
+__STATIC_INLINE uint32_t nrf_acl_region_address_get(NRF_ACL_Type * p_reg, uint32_t region_id);
 
 /**
- * @brief Function for getting the configured region size of a specific ACL instance.
+ * @brief Function for getting the configured region size of a specific ACL region.
  *
- * @param[in] instance ACL instance to use.
+ * @param[in] p_reg       Pointer to the peripheral register structure.
+ * @param[in] region_id   ACL region index.
  *
- * @return Configured region size of given ACL instance.
+ * @return Configured region size of given ACL region.
  */
-__STATIC_INLINE size_t nrf_acl_access_control_size_get(nrf_acl_instance_t instance);
+__STATIC_INLINE size_t nrf_acl_region_size_get(NRF_ACL_Type * p_reg, uint32_t region_id);
 
 /**
- * @brief Function for getting the configured region permissions of a specific ACL instance.
+ * @brief Function for getting the configured region permissions of a specific ACL region.
  *
- * @param[in] instance ACL instance to use.
+ * @param[in] p_reg       Pointer to the peripheral register structure.
+ * @param[in] region_id   ACL region index.
  *
- * @return Configured permissions of given ACL instance.
+ * @return Configured region permissions of given ACL region.
  */
-__STATIC_INLINE nrf_acl_permissions_t nrf_acl_access_control_perm_get(nrf_acl_instance_t instance);
+__STATIC_INLINE nrf_acl_perm_t nrf_acl_region_perm_get(NRF_ACL_Type * p_reg, uint32_t region_id);
 
 #ifndef SUPPRESS_INLINE_IMPLEMENTATION
 
-__STATIC_INLINE void nrf_acl_access_control_set(nrf_acl_instance_t instance,
-                                                uint32_t address,
-                                                size_t size,
-                                                nrf_acl_permissions_t perm)
+__STATIC_INLINE void nrf_acl_region_set(NRF_ACL_Type * p_reg,
+                                        uint32_t       region_id,
+                                        uint32_t       address,
+                                        size_t         size,
+                                        nrf_acl_perm_t perm)
 {
-    NRFX_ASSERT(perm != NRF_ACL_PERMISSIONS_NO_PROTECTION);
-    NRFX_ASSERT(instance < NRF_ACL_NUM_INSTANCES);
-    NRFX_ASSERT(address != 0);
+    NRFX_ASSERT(region_id < ACL_REGIONS_COUNT);
     NRFX_ASSERT(address % NRF_FICR->CODEPAGESIZE == 0);
-    NRFX_ASSERT(size <= NRF_ACL_PERMISSIONS_SIZE_MAX_VAL);
+    NRFX_ASSERT(size <= NRF_ACL_SIZE_MAX_VAL);
+    NRFX_ASSERT(size != 0);
 
-    NRF_ACL->ACL[instance].ADDR = address;
-    NRF_ACL->ACL[instance].SIZE = size;
-    NRF_ACL->ACL[instance].PERM = perm;
+    p_reg->ACL[region_id].ADDR = address;
+    p_reg->ACL[region_id].SIZE = size;
+    p_reg->ACL[region_id].PERM = perm;
 }
 
-__STATIC_INLINE uint32_t nrf_acl_access_control_address_get(nrf_acl_instance_t instance)
+__STATIC_INLINE uint32_t nrf_acl_region_address_get(NRF_ACL_Type * p_reg, uint32_t region_id)
 {
-    return NRF_ACL->ACL[instance].ADDR;
+    return (uint32_t)p_reg->ACL[region_id].ADDR;
 }
 
-__STATIC_INLINE size_t nrf_acl_access_control_size_get(nrf_acl_instance_t instance)
+__STATIC_INLINE size_t nrf_acl_region_size_get(NRF_ACL_Type * p_reg, uint32_t region_id)
 {
-    return NRF_ACL->ACL[instance].SIZE;
+    return (size_t)p_reg->ACL[region_id].SIZE;
 }
 
-__STATIC_INLINE nrf_acl_permissions_t nrf_acl_access_control_perm_get(nrf_acl_instance_t instance)
+__STATIC_INLINE nrf_acl_perm_t nrf_acl_region_perm_get(NRF_ACL_Type * p_reg, uint32_t region_id)
 {
-    return (nrf_acl_permissions_t)NRF_ACL->ACL[instance].PERM;
+    return (nrf_acl_perm_t)p_reg->ACL[region_id].PERM;
 }
 
 #endif // SUPPRESS_INLINE_IMPLEMENTATION
