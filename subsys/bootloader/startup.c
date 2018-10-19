@@ -3,16 +3,48 @@
  * Sigvart M. Hovland
  */
 
+/* General TODO: put stack after .bss and .data
+ * +--------------+
+ * | .bss + .data |
+ * |--------------|
+ * |	.stack	  |
+ * |      |       |
+ * |	  V		  |
+ * |--------------|
+ * | 	 End      |
+ * +--------------+
+ * And upwards growing heap if heap is present ontop of .bss and .data
+ * This gives you MMU less stack protection for both .heap and .stack
+ * +--------------+
+ * |--------------|
+ * |	  ^		  |
+ * |	  |       |
+ * |	.heap	  |
+ * |--------------|
+ * | .bss + .data |
+ * |--------------|
+ * |	.stack	  |
+ * |      |       |
+ * |	  V		  |
+ * |--------------|
+ * | 	 End      |
+ * +--------------+
+ * MMU Less stack and heap protection, but limited heap size
+ * You can't resize the stack to account for more heap etc. so this
+ * should be configurable. As you may  want the heap to grow towards
+ * the stack for for small devices with low memory.
+ */
+
 #include <stdint.h>
 
 /* Linker-defined symbols for addresses of flash and ram */
 
 /* Block started by symbol, data container for statically allocated objects
- * Such as uninitialized objects both variables and constatns declared in 
+ * Such as uninitialized objects both variables and constatns declared in
  * file scope and uninitialized static local variables
  * Short name BETTER SAVE SPACE(BSS)
  */
-extern uint32_t __bss_start;  
+extern uint32_t __bss_start;
 extern uint32_t __bss_end;
 extern uint32_t __data_rom_start;
 extern uint32_t __data_ram_start;
@@ -26,8 +58,9 @@ extern int main(void);
 extern void SystemInit(void);
 /* Forward decleration for dummy handler */
 void dummy_handler(void);
-#define ALIAS(name) __attribute__((weak, alias (name)))
 
+/* weak assign all interrupt handlers to dummy_handler */
+#define ALIAS(name) __attribute__((weak, alias (name)))
 void reset_handler(void);
 void nmi_handler(void) ALIAS("dummy_handler");
 void hard_fault_handler(void) ALIAS("dummy_handler");
@@ -44,6 +77,7 @@ void svc_handler(void) ALIAS("dummy_handler");
 void pend_sv_handler(void) ALIAS("dummy_handler");
 void sys_tick_handler(void) ALIAS("dummy_handler");
 
+
 extern uint32_t __kernel_ram_start; //TODO: Find _end_of_stack symbol
 
 /* TODO: Add vendor specific vectors to vector table */
@@ -53,7 +87,7 @@ void *core_vector_table[16] __attribute__((section(".exc_vector_table"))) = {
 	nmi_handler, // __nmi
 	hard_fault_handler, //__hard_fault
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
-	0, /* reserved */ //__reserved 
+	0, /* reserved */ //__reserved
 	0, /* reserved */
 	0, /* reserved */
 	0, /* reserved */
@@ -88,7 +122,6 @@ void *core_vector_table[16] __attribute__((section(".exc_vector_table"))) = {
 #endif /* CONFIG_CORTEX_M_SYSTICK */
 };
 
-/* TODO: Do we need to tag these for the compiler not to optimize away? */
 void _bss_zero(uint32_t *dest, uint32_t *end)
 {
 	while(dest < (uint32_t *) &end)
@@ -109,14 +142,14 @@ void reset_handler(void)
 {
 	_bss_zero(&__bss_start, &__bss_end);
 	_data_copy(&_image_text_end, &__data_ram_start, &__data_ram_end);
-	#ifdef SYSTEM_INIT
+	#if defined(CONFIG_SECURE_BOOT_SYSTEM_INIT)
 	SystemInit(); /* Create define for system INIT */
-	#endif
+	#endif /* CONFIG_SECURE_BOOT TODO: Find a way to use select defines? */
 	main();
 	while(1);
 }
 
-/* Find a way to redefine the entry point from __start to reset handler? */
+/* TODO: Find a way to redefine the entry point from __start to reset handler? */
 void __start(void){
 	reset_handler();
 }
