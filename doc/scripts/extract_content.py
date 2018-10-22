@@ -109,9 +109,10 @@ def find_content(zephyr_base, src, dest, fnfilter, ignore):
     outputs = []
     output_dirs = set()
     for dirpath, dirnames, filenames in os.walk(path.join(zephyr_base, src)):
+        ignore = tuple(path.normpath(x) for x in ignore)
         # Limit the rest of the walk to subdirectories that aren't ignored.
         dirnames[:] = [d for d in dirnames if not
-                       path.join(dirpath, d).startswith(ignore)]
+                       path.normpath(path.join(dirpath, d)).startswith(ignore)]
 
         # If the current directory contains no matching files, keep going.
         sources = fnmatch.filter(filenames, fnfilter)
