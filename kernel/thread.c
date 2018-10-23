@@ -97,14 +97,10 @@ int _is_thread_essential(void)
 #if !defined(CONFIG_ARCH_HAS_CUSTOM_BUSY_WAIT)
 void k_busy_wait(u32_t usec_to_wait)
 {
-#if defined(CONFIG_TICKLESS_KERNEL) && \
-	    !defined(CONFIG_BUSY_WAIT_USES_ALTERNATE_CLOCK)
-int saved_always_on = k_enable_sys_clock_always_on();
-#endif
 	/* use 64-bit math to prevent overflow when multiplying */
 	u32_t cycles_to_wait = (u32_t)(
 		(u64_t)usec_to_wait *
-		(u64_t)sys_clock_hw_cycles_per_sec /
+		(u64_t)sys_clock_hw_cycles_per_sec() /
 		(u64_t)USEC_PER_SEC
 	);
 	u32_t start_cycles = k_cycle_get_32();
@@ -117,10 +113,6 @@ int saved_always_on = k_enable_sys_clock_always_on();
 			break;
 		}
 	}
-#if defined(CONFIG_TICKLESS_KERNEL) && \
-	    !defined(CONFIG_BUSY_WAIT_USES_ALTERNATE_CLOCK)
-	_sys_clock_always_on = saved_always_on;
-#endif
 }
 #endif
 
@@ -283,7 +275,7 @@ static void schedule_new_thread(struct k_thread *thread, s32_t delay)
 		s32_t ticks = _TICK_ALIGN + _ms_to_ticks(delay);
 		int key = irq_lock();
 
-		_add_thread_timeout(thread, NULL, ticks);
+		_add_thread_timeout(thread, ticks);
 		irq_unlock(key);
 	}
 #else

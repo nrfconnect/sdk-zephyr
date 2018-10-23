@@ -16,17 +16,36 @@ LOG_MODULE_REGISTER(spi_sam);
 #include <soc.h>
 #include <board.h>
 
+#define SAM_SPI_CHIP_SELECT_COUNT			4
+
 /* Device constant configuration parameters */
 struct spi_sam_config {
 	Spi *regs;
 	u32_t periph_id;
 	struct soc_gpio_pin pins;
+	struct soc_gpio_pin cs[SAM_SPI_CHIP_SELECT_COUNT];
 };
 
 /* Device run time data */
 struct spi_sam_data {
 	struct spi_context ctx;
 };
+
+static int spi_slave_to_mr_pcs(int slave)
+{
+	int pcs[SAM_SPI_CHIP_SELECT_COUNT] = {0x0, 0x1, 0x3, 0x7};
+
+	/* SPI worked in fixed perieral mode(SPI_MR.PS = 0) and disabled chip
+	 * select decode(SPI_MR.PCSDEC = 0), based on Atmel | SMART ARM-based
+	 * Flash MCU DATASHEET 40.8.2 SPI Mode Register:
+	 * PCS = xxx0    NPCS[3:0] = 1110
+	 * PCS = xx01    NPCS[3:0] = 1101
+	 * PCS = x011    NPCS[3:0] = 1011
+	 * PCS = 0111    NPCS[3:0] = 0111
+	 */
+
+	return pcs[slave];
+}
 
 static int spi_sam_configure(struct device *dev,
 			     const struct spi_config *config)
@@ -41,10 +60,17 @@ static int spi_sam_configure(struct device *dev,
 		return -ENOTSUP;
 	}
 
+	if (config->slave > (SAM_SPI_CHIP_SELECT_COUNT - 1)) {
+		LOG_ERR("Slave %d is greater than %d",
+			config->slave, SAM_SPI_CHIP_SELECT_COUNT - 1);
+		return -EINVAL;
+	}
+
 	/* Set master mode, disable mode fault detection, set fixed peripheral
 	 * select mode.
 	 */
-	spi_mr |= (SPI_MR_MSTR | SPI_MR_MODFDIS | SPI_MR_PCS(config->slave));
+	spi_mr |= (SPI_MR_MSTR | SPI_MR_MODFDIS);
+	spi_mr |= SPI_MR_PCS(spi_slave_to_mr_pcs(config->slave));
 
 	if ((config->operation & SPI_MODE_CPOL) != 0) {
 		spi_csr |= SPI_CSR_CPOL;
@@ -241,7 +267,7 @@ static void spi_sam_fast_transceive(struct device *dev,
 	size_t tx_count = 0;
 	size_t rx_count = 0;
 	Spi *regs = cfg->regs;
-	struct spi_buf *tx = NULL, *rx = NULL;
+	const struct spi_buf *tx = NULL, *rx = NULL;
 
 	if (tx_bufs) {
 		tx = tx_bufs->buffers;
@@ -388,9 +414,16 @@ static int spi_sam_init(struct device *dev)
 {
 	const struct spi_sam_config *cfg = dev->config->config_info;
 	struct spi_sam_data *data = dev->driver_data;
+	int i;
 
 	soc_pmc_peripheral_enable(cfg->periph_id);
 	soc_gpio_configure(&cfg->pins);
+
+	for (i = 0; i < SAM_SPI_CHIP_SELECT_COUNT; i++) {
+		if (cfg->cs[i].regs) {
+			soc_gpio_configure(&cfg->cs[i]);
+		}
+	}
 
 	spi_context_unlock_unconditionally(&data->ctx);
 
@@ -409,11 +442,20 @@ static const struct spi_driver_api spi_sam_driver_api = {
 	.release = spi_sam_release,
 };
 
+#ifndef PINS_SPI0_CS
+#define PINS_SPI0_CS { {0, (Pio *)0, 0, 0}, }
+#endif
+
+#ifndef PINS_SPI1_CS
+#define PINS_SPI1_CS { {0, (Pio *)0, 0, 0}, }
+#endif
+
 #define SPI_SAM_DEFINE_CONFIG(n)					\
 	static const struct spi_sam_config spi_sam_config_##n = {	\
 		.regs = (Spi *)CONFIG_SPI_##n##_BASE_ADDRESS,		\
 		.periph_id = CONFIG_SPI_##n##_PERIPHERAL_ID,		\
 		.pins = PINS_SPI##n,					\
+		.cs = PINS_SPI##n##_CS,					\
 	}
 
 #define SPI_SAM_DEVICE_INIT(n)						\

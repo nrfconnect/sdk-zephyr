@@ -37,9 +37,9 @@ void _move_thread_to_end_of_prio_q(struct k_thread *thread);
 void _remove_thread_from_ready_q(struct k_thread *thread);
 int _is_thread_time_slicing(struct k_thread *thread);
 void _unpend_thread_no_timeout(struct k_thread *thread);
-int _pend_current_thread(int key, _wait_q_t *wait_q, s32_t timeout);
+int _pend_current_thread(u32_t key, _wait_q_t *wait_q, s32_t timeout);
 void _pend_thread(struct k_thread *thread, _wait_q_t *wait_q, s32_t timeout);
-void _reschedule(int key);
+void _reschedule(u32_t key);
 struct k_thread *_unpend_first_thread(_wait_q_t *wait_q);
 void _unpend_thread(struct k_thread *thread);
 int _unpend_all(_wait_q_t *wait_q);
@@ -48,10 +48,7 @@ void *_get_next_switch_handle(void *interrupted);
 struct k_thread *_find_first_thread_to_unpend(_wait_q_t *wait_q,
 					      struct k_thread *from);
 void idle(void *a, void *b, void *c);
-
-#ifdef CONFIG_TIMESLICING
-void z_reset_timeslice(void);
-#endif
+void z_time_slice(int ticks);
 
 /* find which one is the next thread to run */
 /* must be called with interrupts locked */
@@ -87,7 +84,7 @@ static inline int _is_thread_prevented_from_running(struct k_thread *thread)
 static inline bool _is_thread_timeout_active(struct k_thread *thread)
 {
 #ifdef CONFIG_SYS_CLOCK_EXISTS
-	return thread->base.timeout.delta_ticks_from_prev != _INACTIVE;
+	return thread->base.timeout.dticks != _INACTIVE;
 #else
 	return false;
 #endif
@@ -227,13 +224,7 @@ static inline void _ready_thread(struct k_thread *thread)
 		_add_thread_to_ready_q(thread);
 	}
 
-#if defined(CONFIG_TICKLESS_KERNEL) && !defined(CONFIG_SMP) && \
-    defined(CONFIG_TIMESLICING)
-	z_reset_timeslice();
-#endif
-
 	sys_trace_thread_ready(thread);
-
 }
 
 static inline void _ready_one_thread(_wait_q_t *wq)
@@ -275,7 +266,7 @@ static ALWAYS_INLINE void _sched_unlock_no_reschedule(void)
 static ALWAYS_INLINE bool _is_thread_timeout_expired(struct k_thread *thread)
 {
 #ifdef CONFIG_SYS_CLOCK_EXISTS
-	return thread->base.timeout.delta_ticks_from_prev == _EXPIRED;
+	return thread->base.timeout.dticks == _EXPIRED;
 #else
 	return 0;
 #endif

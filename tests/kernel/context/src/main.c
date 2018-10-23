@@ -24,6 +24,7 @@
 #include <kernel_structs.h>
 #include <arch/cpu.h>
 #include <irq_offload.h>
+#include <sys_clock.h>
 
 /*
  * Include board.h from platform to get IRQ number.
@@ -94,9 +95,6 @@
 #endif
 
 
-
-extern u32_t _tick_get_32(void);
-extern s64_t _tick_get(void);
 
 typedef struct {
 	int command;            /* command to process   */
@@ -227,7 +225,16 @@ void irq_enable_wrapper(int irq)
 	irq_enable(irq);
 }
 
-#ifdef HAS_POWERSAVE_INSTRUCTION
+#if defined(CONFIG_TICKLESS_KERNEL)
+static void test_kernel_cpu_idle(void)
+{
+	ztest_test_skip();
+}
+static void test_kernel_cpu_idle_atomic(void)
+{
+	ztest_test_skip();
+}
+#elif defined(HAS_POWERSAVE_INSTRUCTION)
 static void _test_kernel_cpu_idle(int atomic)
 {
 	int tms, tms2;;         /* current time in millisecond */
@@ -310,15 +317,15 @@ static void _test_kernel_interrupts(disable_int_func disable_int,
 	int imask;
 
 	/* Align to a "tick boundary" */
-	tick = _tick_get_32();
-	while (_tick_get_32() == tick) {
+	tick = z_tick_get_32();
+	while (z_tick_get_32() == tick) {
 #if defined(CONFIG_ARCH_POSIX)
 		k_busy_wait(1000);
 #endif
 	}
 
 	tick++;
-	while (_tick_get_32() == tick) {
+	while (z_tick_get_32() == tick) {
 #if defined(CONFIG_ARCH_POSIX)
 		k_busy_wait(1000);
 #endif
@@ -335,15 +342,15 @@ static void _test_kernel_interrupts(disable_int_func disable_int,
 	count <<= 4;
 
 	imask = disable_int(irq);
-	tick = _tick_get_32();
+	tick = z_tick_get_32();
 	for (i = 0; i < count; i++) {
-		_tick_get_32();
+		z_tick_get_32();
 #if defined(CONFIG_ARCH_POSIX)
 		k_busy_wait(1000);
 #endif
 	}
 
-	tick2 = _tick_get_32();
+	tick2 = z_tick_get_32();
 
 	/*
 	 * Re-enable interrupts before returning (for both success and failure
@@ -356,13 +363,13 @@ static void _test_kernel_interrupts(disable_int_func disable_int,
 
 	/* Now repeat with interrupts unlocked. */
 	for (i = 0; i < count; i++) {
-		_tick_get_32();
+		z_tick_get_32();
 #if defined(CONFIG_ARCH_POSIX)
 		k_busy_wait(1000);
 #endif
 	}
 
-	tick2 = _tick_get_32();
+	tick2 = z_tick_get_32();
 	zassert_not_equal(tick, tick2,
 			  "tick didn't advance as expected");
 }
@@ -380,6 +387,11 @@ static void _test_kernel_interrupts(disable_int_func disable_int,
  */
 static void test_kernel_interrupts(void)
 {
+	/* IRQ locks don't prevent ticks from advancing in tickless mode */
+	if (IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
+		return;
+	}
+
 	_test_kernel_interrupts(irq_lock_wrapper, irq_unlock_wrapper, -1);
 }
 

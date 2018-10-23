@@ -16,6 +16,7 @@
 #include <bluetooth/hci_driver.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
+#define LOG_MODULE_NAME bt_driver
 #include "common/log.h"
 
 #define HCI_CMD			0x01
@@ -71,7 +72,7 @@ static K_SEM_DEFINE(sem_initialised, 0, 1);
 static K_SEM_DEFINE(sem_request, 0, 1);
 static K_SEM_DEFINE(sem_busy, 1, 1);
 
-static BT_STACK_NOINIT(rx_stack, 448);
+static K_THREAD_STACK_DEFINE(rx_stack, 448);
 static struct k_thread rx_thread_data;
 
 #if defined(CONFIG_BT_DEBUG_HCI_DRIVER)
