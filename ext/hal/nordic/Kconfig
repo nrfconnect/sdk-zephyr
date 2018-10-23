@@ -23,9 +23,6 @@ config NRFX_NFCT
 config NRFX_PWM
 	bool
 
-config NRFX_QDEC
-	bool
-
 config NRFX_SAADC
 	bool
 
