@@ -27,20 +27,32 @@
 				NET_EVENT_WIFI_CONNECT_RESULT |		\
 				NET_EVENT_WIFI_DISCONNECT_RESULT)
 
-static union {
-	struct {
-		const struct shell *shell;
+static struct {
+	const struct shell *shell;
 
-		u8_t connecting		: 1;
-		u8_t disconnecting	: 1;
-		u8_t _unused		: 6;
+	union {
+		struct {
+
+			u8_t connecting		: 1;
+			u8_t disconnecting	: 1;
+			u8_t _unused		: 6;
+		};
+		u8_t all;
 	};
-	u8_t all;
 } context;
 
 static u32_t scan_result;
 
 static struct net_mgmt_event_callback wifi_shell_mgmt_cb;
+
+#define print(shell, level, fmt, ...)					\
+	do {								\
+		if (shell) {						\
+			shell_fprintf(shell, level, fmt, ##__VA_ARGS__); \
+		} else {						\
+			printk(fmt, ##__VA_ARGS__);			\
+		}							\
+	} while (false)
 
 static void handle_wifi_scan_result(struct net_mgmt_event_callback *cb)
 {
@@ -50,17 +62,17 @@ static void handle_wifi_scan_result(struct net_mgmt_event_callback *cb)
 	scan_result++;
 
 	if (scan_result == 1) {
-		shell_fprintf(context.shell, SHELL_NORMAL,
-			      "%-4s | %-32s %-5s | %-4s | %-4s | %-5s\n",
-			      "Num", "SSID", "(len)", "Chan", "RSSI", "Sec");
+		print(context.shell, SHELL_NORMAL,
+		      "%-4s | %-32s %-5s | %-4s | %-4s | %-5s\n",
+		      "Num", "SSID", "(len)", "Chan", "RSSI", "Sec");
 	}
 
-	shell_fprintf(context.shell, SHELL_NORMAL,
-		      "%-4d | %-32s %-5u | %-4u | %-4d | %-5s\n",
-		      scan_result, entry->ssid, entry->ssid_length,
-		      entry->channel, entry->rssi,
-		      (entry->security == WIFI_SECURITY_TYPE_PSK ?
-		       "WPA/WPA2" : "Open"));
+	print(context.shell, SHELL_NORMAL,
+	      "%-4d | %-32s %-5u | %-4u | %-4d | %-5s\n",
+	      scan_result, entry->ssid, entry->ssid_length,
+	      entry->channel, entry->rssi,
+	      (entry->security == WIFI_SECURITY_TYPE_PSK ?
+	       "WPA/WPA2" : "Open"));
 }
 
 static void handle_wifi_scan_done(struct net_mgmt_event_callback *cb)
@@ -69,11 +81,10 @@ static void handle_wifi_scan_done(struct net_mgmt_event_callback *cb)
 		(const struct wifi_status *)cb->info;
 
 	if (status->status) {
-		shell_fprintf(context.shell, SHELL_WARNING,
-			      "Scan request failed (%d)\n", status->status);
+		print(context.shell, SHELL_WARNING,
+		      "Scan request failed (%d)\n", status->status);
 	} else {
-		shell_fprintf(context.shell, SHELL_NORMAL,
-			      "Scan request done\n");
+		print(context.shell, SHELL_NORMAL, "Scan request done\n");
 	}
 
 	scan_result = 0;
@@ -85,11 +96,10 @@ static void handle_wifi_connect_result(struct net_mgmt_event_callback *cb)
 		(const struct wifi_status *) cb->info;
 
 	if (status->status) {
-		shell_fprintf(context.shell, SHELL_WARNING,
-			      "Connection request failed (%d)\n",
-			      status->status);
+		print(context.shell, SHELL_WARNING,
+		      "Connection request failed (%d)\n", status->status);
 	} else {
-		shell_fprintf(context.shell, SHELL_NORMAL, "Connected\n");
+		print(context.shell, SHELL_NORMAL, "Connected\n");
 	}
 
 	context.connecting = false;
@@ -101,14 +111,14 @@ static void handle_wifi_disconnect_result(struct net_mgmt_event_callback *cb)
 		(const struct wifi_status *) cb->info;
 
 	if (context.disconnecting) {
-		shell_fprintf(context.shell,
-			      status->status ? SHELL_WARNING : SHELL_NORMAL,
-			      "Disconnection request %s (%d)\n",
-			      status->status ? "failed" : "done",
-			      status->status);
+		print(context.shell,
+		      status->status ? SHELL_WARNING : SHELL_NORMAL,
+		      "Disconnection request %s (%d)\n",
+		      status->status ? "failed" : "done",
+		      status->status);
 		context.disconnecting = false;
 	} else {
-		shell_fprintf(context.shell, SHELL_NORMAL, "Disconnected\n");
+		print(context.shell, SHELL_NORMAL, "Disconnected\n");
 	}
 }
 
@@ -138,15 +148,16 @@ static int cmd_wifi_connect(const struct shell *shell, size_t argc,
 {
 	struct net_if *iface = net_if_get_default();
 	static struct wifi_connect_req_params cnx_params;
+	char *endptr;
 	int idx = 3;
 
-	if (shell_help_requested(shell) || argc < 2) {
+	if (shell_help_requested(shell) || argc < 3) {
 		shell_help_print(shell, NULL, 0);
 		return -ENOEXEC;
 	}
 
-	cnx_params.ssid_length = atoi(argv[2]);
-	if (cnx_params.ssid_length <= 2) {
+	cnx_params.ssid_length = strtol(argv[2], &endptr, 10);
+	if (*endptr != '\0' || cnx_params.ssid_length <= 2) {
 		shell_help_print(shell, NULL, 0);
 		return -ENOEXEC;
 	}
@@ -156,7 +167,12 @@ static int cmd_wifi_connect(const struct shell *shell, size_t argc,
 	argv[1][cnx_params.ssid_length + 1] = '\0';
 
 	if ((idx < argc) && (strlen(argv[idx]) <= 2)) {
-		cnx_params.channel = atoi(argv[2]);
+		cnx_params.channel = strtol(argv[idx], &endptr, 10);
+		if (*endptr != '\0') {
+			shell_help_print(shell, NULL, 0);
+			return -ENOEXEC;
+		}
+
 		if (cnx_params.channel == 0) {
 			cnx_params.channel = WIFI_CHANNEL_ANY;
 		}

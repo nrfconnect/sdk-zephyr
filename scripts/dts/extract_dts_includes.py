@@ -62,14 +62,14 @@ class Bindings(yaml.Loader):
         yaml_list = {}
         file_load_list = set()
         for file in cls._files:
-            for line in open(file, 'r'):
+            for line in open(file, 'r', encoding='utf-8'):
                 if re.search('^\s+constraint:*', line):
                     c = line.split(':')[1].strip()
                     c = c.strip('"')
                     if c in s:
                         if file not in file_load_list:
                             file_load_list.add(file)
-                            with open(file, 'r') as yf:
+                            with open(file, 'r', encoding='utf-8') as yf:
                                 cls._included = []
                                 yaml_list[c] = yaml.load(yf, cls)
         return yaml_list
@@ -122,7 +122,7 @@ class Bindings(yaml.Loader):
                       format(filename), filepaths)
                 raise yaml.constructor.ConstructorError
             filepaths = files
-        with open(filepaths[0], 'r') as f:
+        with open(filepaths[0], 'r', encoding='utf-8') as f:
             return yaml.load(f, Bindings)
 
 
@@ -387,11 +387,16 @@ def extract_property(node_compat, yaml, node_address, prop, prop_val, names,
         extract_cells(node_address, yaml, prop, prop_values,
                       names, 0, def_label, 'gpio')
     else:
-        default.extract(node_address, yaml, prop, def_label)
+        default.extract(node_address, yaml, prop, prop_val['type'], def_label)
 
 
 def extract_node_include_info(reduced, root_node_address, sub_node_address,
                               yaml, y_sub):
+
+    filter_list = ['interrupt-names',
+                    'reg-names',
+                    'phandle',
+                    'linux,phandle']
     node = reduced[sub_node_address]
     node_compat = get_compat(root_node_address)
     label_override = None
@@ -420,9 +425,11 @@ def extract_node_include_info(reduced, root_node_address, sub_node_address,
                             reduced, root_node_address, c, yaml, v)
             if 'generation' in v:
 
+                match = False
                 for c in node['props'].keys():
-                    if c.endswith("-names"):
-                        pass
+                    # if prop is in filter list - ignore it
+                    if c in filter_list:
+                        continue
 
                     if re.match(k + '$', c):
 
@@ -436,15 +443,21 @@ def extract_node_include_info(reduced, root_node_address, sub_node_address,
                                 if not names:
                                     names = deepcopy(node['props'].get(
                                                             c + '-names', []))
-                            else:
-                                names = []
                         if not isinstance(names, list):
                             names = [names]
 
                         extract_property(
                             node_compat, yaml, sub_node_address, c, v, names,
                             label_override)
+                        match = True
 
+                # Handle the case that we have a boolean property, but its not
+                # in the dts
+                if not match:
+                    if v['type'] == "boolean":
+                        extract_property(
+                            node_compat, yaml, sub_node_address, k, v, None,
+                            label_override)
 
 def dict_merge(dct, merge_dct):
     # from https://gist.github.com/angstwad/bf22d1822c38a92ec0a9
@@ -615,7 +628,7 @@ def output_include_lines(fd, fixups):
                 fd.write(
                     "/* Following definitions fixup the generated include */\n")
                 try:
-                    with open(fixup, "r") as fixup_fd:
+                    with open(fixup, "r", encoding="utf-8") as fixup_fd:
                         for line in fixup_fd.readlines():
                             fd.write(line)
                         fd.write("\n")
@@ -633,7 +646,7 @@ def generate_include_file(inc_file, fixups):
 
 
 def load_and_parse_dts(dts_file):
-    with open(dts_file, "r") as fd:
+    with open(dts_file, "r", encoding="utf-8") as fd:
         dts = parse_file(fd)
 
     return dts

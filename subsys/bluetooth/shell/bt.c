@@ -365,8 +365,9 @@ static int cmd_hci_cmd(const struct shell *shell, size_t argc, char *argv[])
 	struct net_buf *buf = NULL, *rsp;
 	int err;
 
-	if (!shell_cmd_precheck(shell, (argc == 3), NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc == 3), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	ogf = strtoul(argv[1], NULL, 16);
@@ -414,6 +415,7 @@ static int cmd_name(const struct shell *shell, size_t argc, char *argv[])
 
 static int cmd_id_create(const struct shell *shell, size_t argc, char *argv[])
 {
+	char addr_str[BT_ADDR_LE_STR_LEN];
 	bt_addr_le_t addr;
 	int err;
 
@@ -431,14 +433,15 @@ static int cmd_id_create(const struct shell *shell, size_t argc, char *argv[])
 		error(shell, "Creating new ID failed (err %d)", err);
 	}
 
-	print(shell, "New identity (%d) created: %s", err,
-	      bt_addr_le_str(&addr));
+	bt_addr_le_to_str(&addr, addr_str, sizeof(addr_str));
+	print(shell, "New identity (%d) created: %s", err, addr_str);
 
 	return 0;
 }
 
 static int cmd_id_reset(const struct shell *shell, size_t argc, char *argv[])
 {
+	char addr_str[BT_ADDR_LE_STR_LEN];
 	bt_addr_le_t addr;
 	u8_t id;
 	int err;
@@ -466,7 +469,8 @@ static int cmd_id_reset(const struct shell *shell, size_t argc, char *argv[])
 		return err;
 	}
 
-	print(shell, "Identity %u reset: %s", id, bt_addr_le_str(&addr));
+	bt_addr_le_to_str(&addr, addr_str, sizeof(addr_str));
+	print(shell, "Identity %u reset: %s", id, addr_str);
 
 	return 0;
 }
@@ -502,8 +506,11 @@ static int cmd_id_show(const struct shell *shell, size_t argc, char *argv[])
 	bt_id_get(addrs, &count);
 
 	for (i = 0; i < count; i++) {
+		char addr_str[BT_ADDR_LE_STR_LEN];
+
+		bt_addr_le_to_str(&addrs[i], addr_str, sizeof(addr_str));
 		print(shell, "%s%zu: %s", i == selected_id ? "*" : " ", i,
-		      bt_addr_le_str(&addrs[i]));
+		      addr_str);
 	}
 
 	return 0;
@@ -511,13 +518,15 @@ static int cmd_id_show(const struct shell *shell, size_t argc, char *argv[])
 
 static int cmd_id_select(const struct shell *shell, size_t argc, char *argv[])
 {
+	char addr_str[BT_ADDR_LE_STR_LEN];
 	bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
 	size_t count = CONFIG_BT_ID_MAX;
 	u8_t id;
 
 	if (argc < 2) {
 		shell_help_print(shell, NULL, 0);
-		return 0;
+		/* shell_cmd_precheck returns 1 when help is printed */
+		return 1;
 	}
 
 	id = strtol(argv[1], NULL, 10);
@@ -528,8 +537,8 @@ static int cmd_id_select(const struct shell *shell, size_t argc, char *argv[])
 		return -ENOEXEC;
 	}
 
-	print(shell, "Selected identity: %s",
-		     bt_addr_le_str(&addrs[id]));
+	bt_addr_le_to_str(&addrs[id], addr_str, sizeof(addr_str));
+	print(shell, "Selected identity: %s", addr_str);
 	selected_id = id;
 
 	return 0;
@@ -604,9 +613,11 @@ static int cmd_scan(const struct shell *shell, size_t argc, char *argv[])
 {
 	const char *action;
 	int dups = -1;
+	int err;
 
-	if (!shell_cmd_precheck(shell, (argc >= 2), NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc >= 2), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	/* Parse duplicate filtering data */
@@ -619,7 +630,8 @@ static int cmd_scan(const struct shell *shell, size_t argc, char *argv[])
 			dups = BT_HCI_LE_SCAN_FILTER_DUP_ENABLE;
 		} else {
 			shell_help_print(shell, NULL, 0);
-			return 0;
+			/* shell_cmd_precheck returns 1 when help is printed */
+			return 1;
 		}
 	}
 
@@ -632,6 +644,8 @@ static int cmd_scan(const struct shell *shell, size_t argc, char *argv[])
 		return cmd_passive_scan_on(shell, dups);
 	} else {
 		shell_help_print(shell, NULL, 0);
+		/* shell_cmd_precheck returns 1 when help is printed */
+		return 1;
 	}
 
 	return 0;
@@ -644,12 +658,13 @@ static const struct bt_data ad_discov[] = {
 static int cmd_advertise(const struct shell *shell, size_t argc, char *argv[])
 {
 	struct bt_le_adv_param param;
-	const struct bt_data *ad, *scan_rsp;
-	size_t ad_len, scan_rsp_len;
+	const struct bt_data *ad;
+	size_t ad_len;
 	int err;
 
-	if (!shell_cmd_precheck(shell, (argc >= 2), NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc >= 2), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	if (!strcmp(argv[1], "off")) {
@@ -674,8 +689,6 @@ static int cmd_advertise(const struct shell *shell, size_t argc, char *argv[])
 		param.options = BT_LE_ADV_OPT_USE_NAME;
 	} else if (!strcmp(argv[1], "nconn")) {
 		param.options = 0;
-		scan_rsp = NULL;
-		scan_rsp_len = 0;
 	} else {
 		goto fail;
 	}
@@ -698,7 +711,7 @@ static int cmd_advertise(const struct shell *shell, size_t argc, char *argv[])
 		ad_len = ARRAY_SIZE(ad_discov);
 	}
 
-	err = bt_le_adv_start(&param, ad, ad_len, scan_rsp, scan_rsp_len);
+	err = bt_le_adv_start(&param, ad, ad_len, NULL, 0);
 	if (err < 0) {
 		error(shell, "Failed to start advertising (err %d)",
 			    err);
@@ -723,7 +736,8 @@ static int cmd_connect_le(const struct shell *shell, size_t argc, char *argv[])
 
 	if (argc < 3) {
 		shell_help_print(shell, NULL, 0);
-		return 0;
+		/* shell_cmd_precheck returns 1 when help is printed */
+		return 1;
 	}
 
 	err = str2bt_addr_le(argv[1], argv[2], &addr);
@@ -760,7 +774,8 @@ static int cmd_disconnect(const struct shell *shell, size_t argc, char *argv[])
 
 		if (argc < 3) {
 			shell_help_print(shell, NULL, 0);
-			return 0;
+			/* shell_cmd_precheck returns 1 when help is printed */
+			return 1;
 		}
 
 		err = str2bt_addr_le(argv[1], argv[2], &addr);
@@ -796,7 +811,8 @@ static int cmd_auto_conn(const struct shell *shell, size_t argc, char *argv[])
 
 	if (argc < 3) {
 		shell_help_print(shell, NULL, 0);
-		return 0;
+		/* shell_cmd_precheck returns 1 when help is printed */
+		return 1;
 	}
 
 	err = str2bt_addr_le(argv[1], argv[2], &addr);
@@ -813,6 +829,8 @@ static int cmd_auto_conn(const struct shell *shell, size_t argc, char *argv[])
 		return bt_le_set_auto_conn(&addr, NULL);
 	} else {
 		shell_help_print(shell, NULL, 0);
+		/* shell_cmd_precheck returns 1 when help is printed */
+		return 1;
 	}
 
 	return 0;
@@ -826,8 +844,9 @@ static int cmd_directed_adv(const struct shell *shell,
 	struct bt_conn *conn;
 	struct bt_le_adv_param *param = BT_LE_ADV_CONN_DIR;
 
-	if (!shell_cmd_precheck(shell, (argc >= 2), NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc >= 2), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	err = str2bt_addr_le(argv[1], argv[2], &addr);
@@ -841,7 +860,8 @@ static int cmd_directed_adv(const struct shell *shell,
 			param = BT_LE_ADV_CONN_DIR_LOW_DUTY;
 		} else {
 			shell_help_print(shell, NULL, 0);
-			return 0;
+			/* shell_cmd_precheck returns 1 when help is printed */
+			return 1;
 		}
 	}
 
@@ -865,8 +885,9 @@ static int cmd_select(const struct shell *shell, size_t argc, char *argv[])
 	bt_addr_le_t addr;
 	int err;
 
-	if (!shell_cmd_precheck(shell, argc == 3, NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc == 3), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	err = str2bt_addr_le(argv[1], argv[2], &addr);
@@ -896,8 +917,9 @@ static int cmd_conn_update(const struct shell *shell,
 	struct bt_le_conn_param param;
 	int err;
 
-	if (!shell_cmd_precheck(shell, argc == 5, NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc == 5), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	param.interval_min = strtoul(argv[1], NULL, 16);
@@ -987,11 +1009,12 @@ static int cmd_clear(const struct shell *shell, size_t argc, char *argv[])
 
 static int cmd_chan_map(const struct shell *shell, size_t argc, char *argv[])
 {
-	u8_t chan_map[5];
+	u8_t chan_map[5] = {};
 	int err;
 
-	if (!shell_cmd_precheck(shell, argc == 2, NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc == 2), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	err = hexstr2array(argv[1], chan_map, 5);
@@ -1021,8 +1044,9 @@ static int cmd_security(const struct shell *shell, size_t argc, char *argv[])
 		return -ENOEXEC;
 	}
 
-	if (!shell_cmd_precheck(shell, argc == 2, NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc == 2), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	sec = *argv[1] - '0';
@@ -1038,9 +1062,11 @@ static int cmd_security(const struct shell *shell, size_t argc, char *argv[])
 static int cmd_bondable(const struct shell *shell, size_t argc, char *argv[])
 {
 	const char *bondable;
+	int err;
 
-	if (!shell_cmd_precheck(shell, argc == 2, NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc == 2), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	bondable = argv[1];
@@ -1050,6 +1076,8 @@ static int cmd_bondable(const struct shell *shell, size_t argc, char *argv[])
 		bt_set_bondable(false);
 	} else {
 		shell_help_print(shell, NULL, 0);
+		/* shell_cmd_precheck returns 1 when help is printed */
+		return 1;
 	}
 
 	return 0;
@@ -1227,8 +1255,10 @@ static struct bt_conn_auth_cb auth_cb_all = {
 
 static int cmd_auth(const struct shell *shell, size_t argc, char *argv[])
 {
-	if (!shell_cmd_precheck(shell, argc == 2, NULL, 0)) {
-		return 0;
+	int err = shell_cmd_precheck(shell, (argc == 2), NULL, 0);
+
+	if (err) {
+		return err;
 	}
 
 	if (!strcmp(argv[1], "all")) {
@@ -1245,6 +1275,8 @@ static int cmd_auth(const struct shell *shell, size_t argc, char *argv[])
 		bt_conn_auth_cb_register(NULL);
 	} else {
 		shell_help_print(shell, NULL, 0);
+		/* shell_cmd_precheck returns 1 when help is printed */
+		return 1;
 	}
 
 	return 0;
@@ -1328,6 +1360,7 @@ static int cmd_fixed_passkey(const struct shell *shell,
 static int cmd_auth_passkey(const struct shell *shell,
 			    size_t argc, char *argv[])
 {
+	int err;
 	unsigned int passkey;
 
 	if (!default_conn) {
@@ -1335,14 +1368,15 @@ static int cmd_auth_passkey(const struct shell *shell,
 		return -ENOEXEC;
 	}
 
-	if (!shell_cmd_precheck(shell, argc == 2, NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc == 2), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	passkey = atoi(argv[1]);
 	if (passkey > 999999) {
 		print(shell, "Passkey should be between 0-999999");
-		return -ENOEXEC;
+		return -EINVAL;
 	}
 
 	bt_conn_auth_passkey_entry(default_conn, passkey);
@@ -1418,18 +1452,22 @@ SHELL_CREATE_STATIC_SUBCMD_SET(bt_cmds) {
 
 static int cmd_bt(const struct shell *shell, size_t argc, char **argv)
 {
+	int err;
+
 	if (argc == 1) {
 		shell_help_print(shell, NULL, 0);
-		return 0;
+		/* shell_cmd_precheck returns 1 when help is printed */
+		return 1;
 	}
 
-	if (!shell_cmd_precheck(shell, (argc == 2), NULL, 0)) {
-		return 0;
+	err = shell_cmd_precheck(shell, (argc == 2), NULL, 0);
+	if (err) {
+		return err;
 	}
 
 	error(shell, "%s unknown parameter: %s", argv[0], argv[1]);
 
-	return -ENOEXEC;
+	return -EINVAL;
 }
 
 SHELL_CMD_REGISTER(bt, &bt_cmds, "Bluetooth shell commands", cmd_bt);

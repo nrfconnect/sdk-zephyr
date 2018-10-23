@@ -55,10 +55,50 @@ Our documentation processing has been tested to run with:
 * sphinxcontrib-svg2pdfconverter version 0.1.0
 * Latexmk version version 4.56
 
-In order to install the documentation tools, clone a copy of the git repository
-for the Zephyr project and set up your development environment as described in
-:ref:`getting_started`. This will ensure all the required tools are installed
-on your system.
+In order to install the documentation tools, first install Zephyr as
+described in :ref:`getting_started`. Then install additional tools
+that are only required to generate the documentation,
+as described below:
+
+On Ubuntu Linux:
+
+.. code-block:: console
+
+   sudo apt-get install --no-install-recommends doxygen librsvg2-bin \
+     texlive-latex-base texlive-latex-extra latexmk texlive-fonts-recommended
+
+On Fedora Linux:
+
+.. code-block:: console
+
+   sudo dnf install doxygen texlive-latex latexmk \
+     texlive-collection-fontsrecommended librsvg2-tools
+
+On Clear Linux:
+
+.. code-block:: console
+
+  sudo swupd bundle-add texlive
+
+On Arch Linux:
+
+.. code-block:: console
+
+   sudo pacman -S doxygen librsvg texlive-core texlive-bin
+
+On macOS:
+
+.. code-block:: console
+
+   brew install doxygen mactex librsvg
+   tlmgr install latexmk
+   tlmgr install collection-fontsrecommended
+
+On Windows in an Administrator ``cmd.exe`` prompt:
+
+.. code-block:: console
+
+   choco install doxygen.install strawberryperl miktex rsvg-convert
 
 .. note::
    On Windows, the Sphinx executable ``sphinx-build.exe`` is placed in
@@ -108,6 +148,17 @@ folder, here are the commands to generate the html content locally:
 
    # To generate PDF output, run ninja on the generated build system:
    ninja pdfdocs
+
+.. warning::
+
+   The documentation build system creates copies in the build
+   directory of every .rst file used to generate the documentation,
+   along with dependencies referenced by those .rst files.
+
+   This means that Sphinx warnings and errors refer to the **copies**,
+   and **not the version-controlled original files in Zephyr**. Be
+   careful to make sure you don't accidentally edit the copy of the
+   file in an error message, as these changes will not be saved.
 
 Depending on your development system, it will take up to 15 minutes to
 collect and generate the HTML content.  When done, you can view the HTML

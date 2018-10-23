@@ -11,8 +11,12 @@
 #include <sensor.h>
 #include <string.h>
 #include <zephyr.h>
+#include <logging/log.h>
 
 #include "dht.h"
+
+#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
+LOG_MODULE_REGISTER(DHT);
 
 /**
  * @brief Measure duration of signal send by sensor
@@ -30,7 +34,7 @@ static s8_t dht_measure_signal_duration(struct dht_data *drv_data,
 	u32_t elapsed_cycles;
 	u32_t max_wait_cycles = (u32_t)(
 		(u64_t)DHT_SIGNAL_MAX_WAIT_DURATION *
-		(u64_t)sys_clock_hw_cycles_per_sec /
+		(u64_t)sys_clock_hw_cycles_per_sec() /
 		(u64_t)USEC_PER_SEC
 	);
 	u32_t start_cycles = k_cycle_get_32();
@@ -46,7 +50,7 @@ static s8_t dht_measure_signal_duration(struct dht_data *drv_data,
 
 	return (u64_t)elapsed_cycles *
 	       (u64_t)USEC_PER_SEC /
-	       (u64_t)sys_clock_hw_cycles_per_sec;
+	       (u64_t)sys_clock_hw_cycles_per_sec();
 }
 
 static int dht_sample_fetch(struct device *dev, enum sensor_channel chan)
@@ -141,7 +145,7 @@ static int dht_sample_fetch(struct device *dev, enum sensor_channel chan)
 
 	/* verify checksum */
 	if (((buf[0] + buf[1] + buf[2] + buf[3]) & 0xFF) != buf[4]) {
-		SYS_LOG_DBG("Invalid checksum in fetched sample");
+		LOG_DBG("Invalid checksum in fetched sample");
 		ret = -EIO;
 	} else {
 		memcpy(drv_data->sample, buf, 4);
@@ -216,7 +220,7 @@ static int dht_init(struct device *dev)
 
 	drv_data->gpio = device_get_binding(CONFIG_DHT_GPIO_DEV_NAME);
 	if (drv_data->gpio == NULL) {
-		SYS_LOG_ERR("Failed to get GPIO device.");
+		LOG_ERR("Failed to get GPIO device.");
 		return -EINVAL;
 	}
 

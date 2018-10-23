@@ -18,6 +18,7 @@
 #include <bluetooth/mesh.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_MESH_DEBUG_ADV)
+#define LOG_MODULE_NAME bt_mesh_adv
 #include "common/log.h"
 
 #include "../hci_core.h"
@@ -55,7 +56,7 @@
 
 static K_FIFO_DEFINE(adv_queue);
 static struct k_thread adv_thread_data;
-static BT_STACK_NOINIT(adv_thread_stack, ADV_STACK_SIZE);
+static K_THREAD_STACK_DEFINE(adv_thread_stack, ADV_STACK_SIZE);
 
 static const u8_t adv_type[] = {
 	[BT_MESH_ADV_PROV]   = BT_DATA_MESH_PROV,

@@ -24,6 +24,7 @@
 #include <bluetooth/att.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_CONN)
+#define LOG_MODULE_NAME bt_conn
 #include "common/log.h"
 
 #include "hci_core.h"
@@ -238,14 +239,16 @@ static void conn_le_update_timeout(struct k_work *work)
 					 conn->le.interval_max,
 					 conn->le.latency,
 					 conn->le.timeout);
+
+		send_conn_le_param_update(conn, param);
 	} else {
 		param = BT_LE_CONN_PARAM(CONFIG_BT_PERIPHERAL_PREF_MIN_INT,
 					 CONFIG_BT_PERIPHERAL_PREF_MAX_INT,
 					 CONFIG_BT_PERIPHERAL_PREF_SLAVE_LATENCY,
 					 CONFIG_BT_PERIPHERAL_PREF_TIMEOUT);
-	}
 
-	send_conn_le_param_update(conn, param);
+		send_conn_le_param_update(conn, param);
+	}
 #else
 	/* update only if application set own params */
 	if (atomic_test_and_clear_bit(conn->flags, BT_CONN_SLAVE_PARAM_SET)) {

@@ -196,7 +196,6 @@ char *lwm2m_sprint_ip_addr(const struct sockaddr *addr)
 	return NULL;
 }
 
-#if LOG_LEVEL >= LOG_LEVEL_DBG
 static u8_t to_hex_digit(u8_t digit)
 {
 	if (digit >= 10) {
@@ -230,7 +229,6 @@ static char *sprint_token(const u8_t *token, u8_t tkl)
 
 	return buf;
 }
-#endif
 
 /* block-wise transfer functions */
 
@@ -4043,6 +4041,8 @@ static int lwm2m_engine_init(struct device *dev)
 			/* Lowest priority cooperative thread */
 			K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1),
 			0, K_NO_WAIT);
+	k_thread_name_set(&engine_thread_data, "lwm2m");
+
 	LOG_DBG("LWM2M engine thread started");
 	return 0;
 }

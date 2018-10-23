@@ -9,18 +9,12 @@ menuconfig FXOS8700
 	bool "FXOS8700 accelerometer/magnetometer driver"
 	depends on I2C && HAS_DTS_I2C && HAS_DTS_GPIO
 	help
-	  Enable driver for the FXOS8700 accelerometer/magnetometer
+	  Enable driver for the FXOS8700 accelerometer/magnetometer.
+	  The driver also supports MMA8451Q, MMA8652FC and MMA8653FC
+	  accelerometers. If the driver is used with one of these
+	  accelerometers then the Accelerometer-only mode should be selected."
 
 if FXOS8700
-
-config FXOS8700_WHOAMI
-	hex "WHOAMI value"
-	range 0x00 0xff
-	default 0xc7
-	help
-	  The datasheet defines the value of the WHOAMI register, but some
-	  pre-production devices can have a different value. It is unlikely you
-	  should need to change this configuration option from the default.
 
 choice
 	prompt "Mode"
@@ -57,6 +51,24 @@ config FXOS8700_RANGE_4G
 
 config FXOS8700_RANGE_2G
 	bool "2g (0.244 mg/LSB)"
+
+endchoice
+
+choice
+	prompt "Power mode"
+	default FXOS8700_PM_NORMAL
+
+config FXOS8700_PM_NORMAL
+	bool "Normal power mode"
+
+config FXOS8700_PM_LOW_NOISE_LOW_POWER
+	bool "Low noise low power mode"
+
+config FXOS8700_PM_HIGH_RESOLUTION
+	bool "High resolution power mode"
+
+config FXOS8700_PM_LOW_POWER
+	bool "Low power mode"
 
 endchoice
 
@@ -187,6 +199,20 @@ config FXOS8700_PULSE_WIND
 	  resolution is 1.25 ms/LSB.
 
 endif # FXOS8700_PULSE
+
+menuconfig FXOS8700_MOTION
+	bool "Motion detection"
+	help
+	  Enable motion detection
+
+if FXOS8700_MOTION
+
+config FXOS8700_MOTION_INT1
+	bool "Motion interrupt to INT1 pin"
+	help
+	  Say Y to route motion interrupt to INT1 pin. Say N to route to INT2 pin.
+
+endif # FXOS8700_MOTION
 
 endif # FXOS8700_TRIGGER
 

@@ -11,6 +11,7 @@
 #include <kswap.h>
 #include <kernel_arch_func.h>
 #include <syscall_handler.h>
+#include <drivers/system_timer.h>
 
 #if defined(CONFIG_SCHED_DUMB)
 #define _priq_run_add		_priq_dumb_add
@@ -200,12 +201,66 @@ static struct k_thread *next_up(void)
 #endif
 }
 
+#ifdef CONFIG_TIMESLICING
+
+static int slice_time;
+static int slice_max_prio;
+
+static void reset_time_slice(void)
+{
+	int to = _get_next_timeout_expiry();
+
+	/* Add the elapsed time since the last announced tick to the
+	 * slice count, as we'll see those "expired" ticks arrive in a
+	 * FUTURE z_time_slice() call.
+	 */
+	_current_cpu->slice_ticks = slice_time + z_clock_elapsed();
+
+	if (to == K_FOREVER || slice_time < to) {
+		z_clock_set_timeout(slice_time, false);
+	}
+}
+
+void k_sched_time_slice_set(s32_t duration_in_ms, int prio)
+{
+	slice_time = _ms_to_ticks(duration_in_ms);
+	slice_max_prio = prio;
+	reset_time_slice();
+}
+
+static inline int sliceable(struct k_thread *t)
+{
+	return _is_preempt(t)
+		&& !_is_prio_higher(t->base.prio, slice_max_prio)
+		&& !_is_idle(t)
+		&& !_is_thread_timeout_active(t);
+}
+
+/* Called out of each timer interrupt */
+void z_time_slice(int ticks)
+{
+	if (slice_time && sliceable(_current)) {
+		if (ticks >= _current_cpu->slice_ticks) {
+			_move_thread_to_end_of_prio_q(_current);
+			reset_time_slice();
+		} else {
+			_current_cpu->slice_ticks -= ticks;
+		}
+	}
+}
+#else
+static void reset_time_slice(void) { /* !CONFIG_TIMESLICING */ }
+#endif
+
 static void update_cache(int preempt_ok)
 {
 #ifndef CONFIG_SMP
 	struct k_thread *th = next_up();
 
 	if (should_preempt(th, preempt_ok)) {
+		if (th != _current) {
+			reset_time_slice();
+		}
 		_kernel.ready_q.cache = th;
 	} else {
 		_kernel.ready_q.cache = _current;
@@ -237,7 +292,7 @@ void _move_thread_to_end_of_prio_q(struct k_thread *thread)
 		_priq_run_remove(&_kernel.ready_q.runq, thread);
 		_priq_run_add(&_kernel.ready_q.runq, thread);
 		_mark_thread_as_queued(thread);
-		update_cache(0);
+		update_cache(thread == _current);
 	}
 }
 
@@ -257,23 +312,15 @@ static void pend(struct k_thread *thread, _wait_q_t *wait_q, s32_t timeout)
 	_remove_thread_from_ready_q(thread);
 	_mark_thread_as_pending(thread);
 
-	/* The timeout handling is currently synchronized external to
-	 * the scheduler using the legacy global lock.  Should fix
-	 * that.
-	 */
-	if (timeout != K_FOREVER) {
-		s32_t ticks = _TICK_ALIGN + _ms_to_ticks(timeout);
-		unsigned int key = irq_lock();
-
-		_add_thread_timeout(thread, wait_q, ticks);
-		irq_unlock(key);
+	if (wait_q != NULL) {
+		thread->base.pended_on = wait_q;
+		_priq_wait_add(&wait_q->waitq, thread);
 	}
 
-	if (wait_q != NULL) {
-#ifdef CONFIG_WAITQ_SCALABLE
-		thread->base.pended_on = wait_q;
-#endif
-		_priq_wait_add(&wait_q->waitq, thread);
+	if (timeout != K_FOREVER) {
+		s32_t ticks = _TICK_ALIGN + _ms_to_ticks(timeout);
+
+		_add_thread_timeout(thread, ticks);
 	}
 
 	sys_trace_thread_pend(thread);
@@ -287,14 +334,9 @@ void _pend_thread(struct k_thread *thread, _wait_q_t *wait_q, s32_t timeout)
 
 static _wait_q_t *pended_on(struct k_thread *thread)
 {
-#ifdef CONFIG_WAITQ_SCALABLE
 	__ASSERT_NO_MSG(thread->base.pended_on);
 
 	return thread->base.pended_on;
-#else
-	ARG_UNUSED(thread);
-	return NULL;
-#endif
 }
 
 struct k_thread *_find_first_thread_to_unpend(_wait_q_t *wait_q,
@@ -318,12 +360,24 @@ void _unpend_thread_no_timeout(struct k_thread *thread)
 		_mark_thread_as_not_pending(thread);
 	}
 
-#if defined(CONFIG_ASSERT) && defined(CONFIG_WAITQ_SCALABLE)
 	thread->base.pended_on = NULL;
-#endif
 }
 
-int _pend_current_thread(int key, _wait_q_t *wait_q, s32_t timeout)
+#ifdef CONFIG_SYS_CLOCK_EXISTS
+/* Timeout handler for *_thread_timeout() APIs */
+void z_thread_timeout(struct _timeout *to)
+{
+	struct k_thread *th = CONTAINER_OF(to, struct k_thread, base.timeout);
+
+	if (th->base.pended_on != NULL) {
+		_unpend_thread_no_timeout(th);
+	}
+	_mark_thread_as_started(th);
+	_ready_thread(th);
+}
+#endif
+
+int _pend_current_thread(u32_t key, _wait_q_t *wait_q, s32_t timeout)
 {
 	pend(_current, wait_q, timeout);
 	return _Swap(key);
@@ -376,7 +430,7 @@ void _thread_priority_set(struct k_thread *thread, int prio)
 	}
 }
 
-void _reschedule(int key)
+void _reschedule(u32_t key)
 {
 #ifdef CONFIG_SMP
 	if (!_current_cpu->swap_ok) {
@@ -451,6 +505,7 @@ void *_get_next_switch_handle(void *interrupted)
 		struct k_thread *th = next_up();
 
 		if (_current != th) {
+			reset_time_slice();
 			_current_cpu->swap_ok = 0;
 			_current = th;
 		}
@@ -588,82 +643,6 @@ struct k_thread *_priq_mq_best(struct _priq_mq *pq)
 	return CONTAINER_OF(sys_dlist_peek_head(l),
 			    struct k_thread, base.qnode_dlist);
 }
-
-#ifdef CONFIG_TIMESLICING
-extern s32_t _time_slice_duration;    /* Measured in ticks */
-extern s32_t _time_slice_elapsed;     /* Measured in ticks */
-extern int _time_slice_prio_ceiling;
-
-void k_sched_time_slice_set(s32_t duration_in_ms, int prio)
-{
-	__ASSERT(duration_in_ms >= 0, "");
-	__ASSERT((prio >= 0) && (prio < CONFIG_NUM_PREEMPT_PRIORITIES), "");
-
-	_time_slice_duration = _ms_to_ticks(duration_in_ms);
-	_time_slice_elapsed = 0;
-	_time_slice_prio_ceiling = prio;
-}
-
-int _is_thread_time_slicing(struct k_thread *thread)
-{
-	int ret = 0;
-
-	/* Should fix API.  Doesn't make sense for non-running threads
-	 * to call this
-	 */
-	__ASSERT_NO_MSG(thread == _current);
-
-	if (_time_slice_duration <= 0 || !_is_preempt(thread) ||
-	    _is_prio_higher(thread->base.prio, _time_slice_prio_ceiling)) {
-		return 0;
-	}
-
-
-	LOCKED(&sched_lock) {
-		struct k_thread *next = _priq_run_best(&_kernel.ready_q.runq);
-
-		if (next != NULL) {
-			ret = thread->base.prio == next->base.prio;
-		}
-	}
-
-	return ret;
-}
-
-#ifdef CONFIG_TICKLESS_KERNEL
-void z_reset_timeslice(void)
-{
-	if (_is_thread_time_slicing(_get_next_ready_thread())) {
-		_set_time(_time_slice_duration);
-	}
-}
-#endif
-
-/* Must be called with interrupts locked */
-/* Should be called only immediately before a thread switch */
-void _update_time_slice_before_swap(void)
-{
-#if defined(CONFIG_TICKLESS_KERNEL) && !defined(CONFIG_SMP)
-	if (!_is_thread_time_slicing(_get_next_ready_thread())) {
-		return;
-	}
-
-	u32_t remaining = _get_remaining_program_time();
-
-	if (!remaining || (_time_slice_duration < remaining)) {
-		_set_time(_time_slice_duration);
-	} else {
-		/* Account previous elapsed time and reprogram
-		 * timer with remaining time
-		 */
-		_set_time(remaining);
-	}
-
-#endif
-	/* Restart time slice count at new thread switch */
-	_time_slice_elapsed = 0;
-}
-#endif /* CONFIG_TIMESLICING */
 
 int _unpend_all(_wait_q_t *waitq)
 {
@@ -825,7 +804,7 @@ void _impl_k_sleep(s32_t duration)
 	key = irq_lock();
 
 	_remove_thread_from_ready_q(_current);
-	_add_thread_timeout(_current, NULL, ticks);
+	_add_thread_timeout(_current, ticks);
 
 	(void)_Swap(key);
 #endif

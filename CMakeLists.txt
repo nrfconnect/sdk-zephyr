@@ -287,6 +287,32 @@ zephyr_ld_options(
   ${LINKERFLAGPREFIX},--build-id=none
   )
 
+if(NOT CONFIG_NATIVE_APPLICATION)
+  # Funny thing is if this is set to =error, some architectures will
+  # skip this flag even though the compiler flag check passes
+  # (e.g. ARC and Xtensa). So warning should be the default for now.
+  #
+  # Skip this for native application as Zephyr only provides
+  # additions to the host toolchain linker script. The relocation
+  # sections (.rel*) requires us to override those provided
+  # by host toolchain. As we can't account for all possible
+  # combination of compiler and linker on all machines used
+  # for development, it is better to turn this off.
+  #
+  # CONFIG_LINKER_ORPHAN_SECTION_PLACE is to place the orphan sections
+  # without any warnings or errors, which is the default behavior.
+  # So there is no need to explicity set a linker flag.
+  if(CONFIG_LINKER_ORPHAN_SECTION_WARN)
+    zephyr_ld_options(
+      ${LINKERFLAGPREFIX},--orphan-handling=warn
+      )
+  elseif(CONFIG_LINKER_ORPHAN_SECTION_ERROR)
+    zephyr_ld_options(
+      ${LINKERFLAGPREFIX},--orphan-handling=error
+      )
+  endif()
+endif()
+
 if(CONFIG_HAVE_CUSTOM_LINKER_SCRIPT)
   set(LINKER_SCRIPT ${APPLICATION_SOURCE_DIR}/${CONFIG_CUSTOM_LINKER_SCRIPT})
   if(NOT EXISTS ${LINKER_SCRIPT})
@@ -1170,6 +1196,10 @@ else()
   # generation stage.
 endif()
 
+# Export the variable to the application's scope to allow the
+# application to know what the name of the final elf target is.
+set(logical_target_for_zephyr_elf ${logical_target_for_zephyr_elf} PARENT_SCOPE)
+
 # To avoid having the same logical target name for the zephyr lib and
 # the zephyr elf, we set the kernel_elf file name to zephyr.elf.
 set_target_properties(${logical_target_for_zephyr_elf} PROPERTIES OUTPUT_NAME ${KERNEL_NAME})
@@ -1220,7 +1250,7 @@ list_append_ifdef(
 list_append_ifdef(
   CONFIG_BUILD_OUTPUT_EXE
   post_build_commands
-  COMMAND ${CMAKE_COMMAND} -E rename ${KERNEL_ELF_NAME}    ${KERNEL_EXE_NAME}
+  COMMAND ${CMAKE_COMMAND} -E copy ${KERNEL_ELF_NAME}    ${KERNEL_EXE_NAME}
   )
 
 add_custom_command(

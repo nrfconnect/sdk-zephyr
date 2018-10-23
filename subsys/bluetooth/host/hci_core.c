@@ -29,6 +29,7 @@
 #include <bluetooth/hci_driver.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_CORE)
+#define LOG_MODULE_NAME bt_hci_core
 #include "common/log.h"
 
 #include "common/rpa.h"
@@ -54,10 +55,10 @@
 /* Stacks for the threads */
 #if !defined(CONFIG_BT_RECV_IS_RX_THREAD)
 static struct k_thread rx_thread_data;
-static BT_STACK_NOINIT(rx_thread_stack, CONFIG_BT_RX_STACK_SIZE);
+static K_THREAD_STACK_DEFINE(rx_thread_stack, CONFIG_BT_RX_STACK_SIZE);
 #endif
 static struct k_thread tx_thread_data;
-static BT_STACK_NOINIT(tx_thread_stack, CONFIG_BT_HCI_TX_STACK_SIZE);
+static K_THREAD_STACK_DEFINE(tx_thread_stack, CONFIG_BT_HCI_TX_STACK_SIZE);
 
 static void init_work(struct k_work *work);
 
@@ -2919,7 +2920,7 @@ static void le_ltk_request(struct net_buf *buf)
 		goto done;
 	}
 
-#if !defined(CONFIG_BT_SMP_SC_ONLY)
+#if !defined(CONFIG_BT_SMP_SC_PAIR_ONLY)
 	if (conn->le.keys && (conn->le.keys->keys & BT_KEYS_SLAVE_LTK) &&
 	    !memcmp(conn->le.keys->slave_ltk.rand, &evt->rand, 8) &&
 	    !memcmp(conn->le.keys->slave_ltk.ediv, &evt->ediv, 2)) {
@@ -2944,7 +2945,7 @@ static void le_ltk_request(struct net_buf *buf)
 		bt_hci_cmd_send(BT_HCI_OP_LE_LTK_REQ_REPLY, buf);
 		goto done;
 	}
-#endif /* !CONFIG_BT_SMP_SC_ONLY */
+#endif /* !CONFIG_BT_SMP_SC_PAIR_ONLY */
 
 	le_ltk_neg_reply(evt->handle);
 
@@ -4734,6 +4735,7 @@ static int set_ad(u16_t hci_op, const struct bt_ad *ad, size_t ad_len)
 				len = 31 - (set_data->len + 2);
 				if (type != BT_DATA_NAME_COMPLETE || !len) {
 					net_buf_unref(buf);
+					BT_ERR("Too big advertising data");
 					return -EINVAL;
 				}
 				type = BT_DATA_NAME_SHORTENED;
