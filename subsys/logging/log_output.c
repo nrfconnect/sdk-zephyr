@@ -177,7 +177,9 @@ static int ids_print(struct log_msg *msg,
 		total += print_formatted(log_output, "<%s> ", severity[level]);
 	}
 
-	total += print_formatted(log_output, "%s: ",
+	total += print_formatted(log_output,
+				IS_ENABLED(CONFIG_LOG_FUNCTION_NAME) ?
+				"%s." : "%s: ",
 				log_source_name_get(domain_id, source_id));
 
 	return total;
@@ -276,6 +278,19 @@ static void std_print(struct log_msg *msg,
 		      log_msg_arg_get(msg, 6),
 		      log_msg_arg_get(msg, 7),
 		      log_msg_arg_get(msg, 8));
+		break;
+	case 10:
+		print_formatted(log_output, str,
+		      log_msg_arg_get(msg, 0),
+		      log_msg_arg_get(msg, 1),
+		      log_msg_arg_get(msg, 2),
+		      log_msg_arg_get(msg, 3),
+		      log_msg_arg_get(msg, 4),
+		      log_msg_arg_get(msg, 5),
+		      log_msg_arg_get(msg, 6),
+		      log_msg_arg_get(msg, 7),
+		      log_msg_arg_get(msg, 8),
+		      log_msg_arg_get(msg, 9));
 		break;
 	default:
 		/* Unsupported number of arguments. */

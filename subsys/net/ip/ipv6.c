@@ -540,6 +540,22 @@ enum net_verdict net_ipv6_process_pkt(struct net_pkt *pkt)
 			 */
 			goto drop;
 
+		case NET_IPV6_NEXTHDR_DESTO:
+			frag = net_frag_read_u8(frag, offset, &offset,
+						(u8_t *)&length);
+			if (!frag) {
+				goto drop;
+			}
+			length = length * 8 + 8;
+			total_len += length;
+
+			ext_bitmap |= NET_IPV6_NEXTHDR_DESTO;
+
+			frag = handle_ext_hdr_options(pkt, frag, real_len,
+						      length, offset, &offset,
+						      &verdict);
+			break;
+
 		case NET_IPV6_NEXTHDR_HBHO:
 			if (ext_bitmap & NET_IPV6_EXT_HDR_BITMAP_HBHO) {
 				NET_ERR("Dropping packet with multiple HBHO");
@@ -596,6 +612,7 @@ enum net_verdict net_ipv6_process_pkt(struct net_pkt *pkt)
 upper_proto:
 
 	net_pkt_set_ipv6_ext_len(pkt, total_len);
+	net_pkt_set_transport_proto(pkt, next);
 
 	switch (next) {
 	case IPPROTO_ICMPV6:

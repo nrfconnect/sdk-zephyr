@@ -805,20 +805,21 @@ static void le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 	}
 #endif
 
-	if (evt->status) {
-		/*
-		 * if there was an error we are only interested in pending
-		 * connection so there is no need to check ID address as
-		 * only one connection can be in that state
-		 *
-		 * Depending on error code address might not be valid anyway.
-		 */
-		conn = find_pending_connect(NULL);
-		if (!conn) {
-			return;
-		}
+	if (IS_ENABLED(CONFIG_BT_CENTRAL)) {
+		if (evt->status) {
+			/*
+			 * if there was an error we are only interested in pending
+			 * connection so there is no need to check ID address as
+			 * only one connection can be in that state
+			 *
+			 * Depending on error code address might not be valid anyway.
+			 */
+			conn = find_pending_connect(NULL);
+			if (!conn) {
+				return;
+			}
 
-		conn->err = evt->status;
+			conn->err = evt->status;
 
 		/*
 		 * Handle advertising timeout after high duty directed
@@ -828,14 +829,17 @@ static void le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 			atomic_clear_bit(bt_dev.flags, BT_DEV_ADVERTISING);
 		}
 
-		bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
+			bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
 
-		/* check if device is market for auto connect */
-		if (atomic_test_bit(conn->flags, BT_CONN_AUTO_CONNECT)) {
-			bt_conn_set_state(conn, BT_CONN_CONNECT_SCAN);
+			/* check if device is market for auto connect */
+			if (atomic_test_bit(conn->flags, BT_CONN_AUTO_CONNECT)) {
+				bt_conn_set_state(conn, BT_CONN_CONNECT_SCAN);
+			}
+
+			goto done;
 		}
-
-		goto done;
+	} else {
+		BT_ASSERT(evt->status == 0);
 	}
 
 	bt_addr_le_copy(&id_addr, &evt->peer_addr);
@@ -2693,7 +2697,8 @@ static void update_sec_level(struct bt_conn *conn)
 	}
 
 	if (conn->le.keys && (conn->le.keys->flags & BT_KEYS_AUTHENTICATED)) {
-		if (conn->le.keys->flags & BT_KEYS_SC) {
+		if (conn->le.keys->flags & BT_KEYS_SC &&
+		    conn->le.keys->enc_size == BT_SMP_MAX_ENC_KEY_SIZE) {
 			conn->sec_level = BT_SECURITY_FIPS;
 		} else {
 			conn->sec_level = BT_SECURITY_HIGH;
@@ -5121,6 +5126,79 @@ static inline bool ad_has_name(const struct bt_data *ad, size_t ad_len)
 	return false;
 }
 
+static int le_adv_update(const struct bt_data *ad, size_t ad_len,
+			 const struct bt_data *sd, size_t sd_len,
+			 bool connectable, bool use_name)
+{
+	struct bt_ad d[2] = {};
+	int err;
+
+	d[0].data = ad;
+	d[0].len = ad_len;
+
+	err = set_ad(BT_HCI_OP_LE_SET_ADV_DATA, d, 1);
+	if (err) {
+		return err;
+	}
+
+	d[0].data = sd;
+	d[0].len = sd_len;
+
+	if (use_name) {
+		const char *name;
+
+		if (sd) {
+			/* Cannot use name if name is already set */
+			if (ad_has_name(sd, sd_len)) {
+				return -EINVAL;
+			}
+		}
+
+		name = bt_get_name();
+
+		d[1].data = (&(struct bt_data)BT_DATA(
+					BT_DATA_NAME_COMPLETE,
+					name, strlen(name)));
+		d[1].len = 1;
+	}
+
+	/*
+	 * We need to set SCAN_RSP when enabling advertising type that
+	 * allows for Scan Requests.
+	 *
+	 * If any data was not provided but we enable connectable
+	 * undirected advertising sd needs to be cleared from values set
+	 * by previous calls.
+	 * Clearing sd is done by calling set_ad() with NULL data and
+	 * zero len.
+	 * So following condition check is unusual but correct.
+	 */
+	if (d[0].data || d[1].data || connectable) {
+		err = set_ad(BT_HCI_OP_LE_SET_SCAN_RSP_DATA, d, 2);
+		if (err) {
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+int bt_le_adv_update_data(const struct bt_data *ad, size_t ad_len,
+			  const struct bt_data *sd, size_t sd_len)
+{
+	bool connectable, use_name;
+
+	if (!atomic_test_bit(bt_dev.flags, BT_DEV_ADVERTISING)) {
+		return -EAGAIN;
+	}
+
+	connectable = atomic_test_bit(bt_dev.flags,
+				      BT_DEV_ADVERTISING_CONNECTABLE);
+	use_name = atomic_test_bit(bt_dev.flags, BT_DEV_ADVERTISING_NAME);
+
+	return le_adv_update(ad, ad_len, sd, sd_len, connectable, use_name);
+}
+
 int bt_le_adv_start_internal(const struct bt_le_adv_param *param,
 			     const struct bt_data *ad, size_t ad_len,
 			     const struct bt_data *sd, size_t sd_len,
@@ -5141,54 +5219,11 @@ int bt_le_adv_start_internal(const struct bt_le_adv_param *param,
 	}
 
 	if (!dir_adv) {
-		struct bt_ad d[2] = {};
-
-		d[0].data = ad;
-		d[0].len = ad_len;
-
-		err = set_ad(BT_HCI_OP_LE_SET_ADV_DATA, d, 1);
+		err = le_adv_update(ad, ad_len, sd, sd_len,
+				    param->options & BT_LE_ADV_OPT_CONNECTABLE,
+				    param->options & BT_LE_ADV_OPT_USE_NAME);
 		if (err) {
 			return err;
-		}
-
-		d[0].data = sd;
-		d[0].len = sd_len;
-
-		if (param->options & BT_LE_ADV_OPT_USE_NAME) {
-			const char *name;
-
-			if (sd) {
-				/* Cannot use name if name is already set */
-				if (ad_has_name(sd, sd_len)) {
-					return -EINVAL;
-				}
-			}
-
-			name = bt_get_name();
-
-			d[1].data = (&(struct bt_data)BT_DATA(
-						BT_DATA_NAME_COMPLETE,
-						name, strlen(name)));
-			d[1].len = 1;
-		}
-
-		/*
-		 * We need to set SCAN_RSP when enabling advertising type that
-		 * allows for Scan Requests.
-		 *
-		 * If any data was not provided but we enable connectable
-		 * undirected advertising sd needs to be cleared from values set
-		 * by previous calls.
-		 * Clearing sd is done by calling set_ad() with NULL data and
-		 * zero len.
-		 * So following condition check is unusual but correct.
-		 */
-		if (d[0].data || d[1].data ||
-		    (param->options & BT_LE_ADV_OPT_CONNECTABLE)) {
-			err = set_ad(BT_HCI_OP_LE_SET_SCAN_RSP_DATA, d, 2);
-			if (err) {
-				return err;
-			}
 		}
 	}
 
@@ -5286,6 +5321,10 @@ int bt_le_adv_start_internal(const struct bt_le_adv_param *param,
 
 	if (param->options & BT_LE_ADV_OPT_USE_NAME) {
 		atomic_set_bit(bt_dev.flags, BT_DEV_ADVERTISING_NAME);
+	}
+
+	if (param->options & BT_LE_ADV_OPT_CONNECTABLE) {
+		atomic_set_bit(bt_dev.flags, BT_DEV_ADVERTISING_CONNECTABLE);
 	}
 
 	return 0;

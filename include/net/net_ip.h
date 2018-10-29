@@ -477,23 +477,6 @@ static inline bool net_is_ipv4_ll_addr(const struct in_addr *addr)
 	return (ntohl(UNALIGNED_GET(&addr->s_addr)) & 0xA9FE0000) == 0xA9FE0000;
 }
 
-extern struct net_if_addr *net_if_ipv4_addr_lookup(const struct in_addr *addr,
-						   struct net_if **iface);
-
-/**
- * @brief Check if the IPv4 address is assigned to any network interface
- * in the system.
- *
- * @param addr A valid pointer on an IPv4 address
- *
- * @return True if IPv4 address is found in one of the network interfaces,
- * False otherwise.
- */
-static inline bool net_is_my_ipv4_addr(const struct in_addr *addr)
-{
-	return net_if_ipv4_addr_lookup(addr, NULL) != NULL;
-}
-
 /**
  *  @def net_ipaddr_copy
  *  @brief Copy an IPv4 or IPv6 address
@@ -569,21 +552,66 @@ const struct in_addr *net_ipv4_broadcast_address(void);
 
 struct net_if;
 extern bool net_if_ipv4_addr_mask_cmp(struct net_if *iface,
-				      struct in_addr *addr);
+				      const struct in_addr *addr);
 
 /**
  * @brief Check if the given address belongs to same subnet that
  * has been configured for the interface.
  *
  * @param iface A valid pointer on an interface
- * @param addr pointer on an address
+ * @param addr IPv4 address
  *
  * @return True if address is in same subnet, false otherwise.
  */
 static inline bool net_ipv4_addr_mask_cmp(struct net_if *iface,
-					  struct in_addr *addr)
+					  const struct in_addr *addr)
 {
 	return net_if_ipv4_addr_mask_cmp(iface, addr);
+}
+
+extern bool net_if_ipv4_is_addr_bcast(struct net_if *iface,
+				      const struct in_addr *addr);
+
+/**
+ * @brief Check if the given IPv4 address is a broadcast address.
+ *
+ * @param iface Interface to use. Must be a valid pointer to an interface.
+ * @param addr IPv4 address
+ *
+ * @return True if address is a broadcast address, false otherwise.
+ */
+static inline bool net_is_ipv4_addr_bcast(struct net_if *iface,
+					  const struct in_addr *addr)
+{
+	if (net_ipv4_addr_cmp(addr, net_ipv4_broadcast_address())) {
+		return true;
+	}
+
+	return net_if_ipv4_is_addr_bcast(iface, addr);
+}
+
+extern struct net_if_addr *net_if_ipv4_addr_lookup(const struct in_addr *addr,
+						   struct net_if **iface);
+
+/**
+ * @brief Check if the IPv4 address is assigned to any network interface
+ * in the system.
+ *
+ * @param addr A valid pointer on an IPv4 address
+ *
+ * @return True if IPv4 address is found in one of the network interfaces,
+ * False otherwise.
+ */
+static inline bool net_is_my_ipv4_addr(const struct in_addr *addr)
+{
+	bool ret;
+
+	ret = net_if_ipv4_addr_lookup(addr, NULL) != NULL;
+	if (!ret) {
+		ret = net_is_ipv4_addr_bcast(NULL, addr);
+	}
+
+	return ret;
 }
 
 /**
