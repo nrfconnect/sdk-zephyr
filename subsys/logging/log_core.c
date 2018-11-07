@@ -17,14 +17,13 @@
 #define CONFIG_LOG_PRINTK_MAX_STRING_LENGTH 1
 #endif
 
-#define LOG_STRBUF_STR_SIZE \
-	(CONFIG_LOG_STRDUP_MAX_STRING + 1) /* additional byte for termination */
-
-#define LOG_STRBUF_BUF_SIZE \
-	ROUND_UP(LOG_STRBUF_STR_SIZE + sizeof(u32_t), sizeof(u32_t))
+struct log_strdup_buf {
+	atomic_t refcount;
+	char buf[CONFIG_LOG_STRDUP_MAX_STRING + 1]; /* for termination */
+};
 
 #define LOG_STRDUP_POOL_BUFFER_SIZE \
-	(LOG_STRBUF_BUF_SIZE * CONFIG_LOG_STRDUP_BUF_COUNT)
+	(sizeof(struct log_strdup_buf) * CONFIG_LOG_STRDUP_BUF_COUNT)
 
 static const char *log_strdup_fail_msg = "log_strdup pool empty!";
 struct k_mem_slab log_strdup_pool;
@@ -180,18 +179,39 @@ int log_printk(const char *fmt, va_list ap)
 	}
 }
 
+/** @brief Count number of arguments in formatted string.
+ *
+ * Function counts number of '%' not followed by '%'.
+ */
+static u32_t count_args(const char *fmt)
+{
+	u32_t args = 0;
+	bool prev = false; /* if previous char was a modificator. */
+
+	while (*fmt != '\0') {
+		if (*fmt == '%') {
+			prev = !prev;
+		} else if (prev) {
+			args++;
+			prev = false;
+		}
+		fmt++;
+	}
+
+	return args;
+}
+
 void log_generic(struct log_msg_ids src_level, const char *fmt, va_list ap)
 {
 	u32_t args[LOG_MAX_NARGS];
+	u32_t nargs = count_args(fmt);
 
-	for (int i = 0; i < LOG_MAX_NARGS; i++) {
-		args[i] = va_arg(ap, u32_t);
+	for (int i = 0; i < nargs; i++) {
+		u32_t arg = va_arg(ap, u32_t);
+		args[i] = arg;
 	}
 
-	/* Assume maximum amount of parameters. Determining exact number would
-	 * require string analysis.
-	 */
-	log_n(fmt, args, LOG_MAX_NARGS, src_level);
+	log_n(fmt, args, nargs, src_level);
 }
 
 static u32_t timestamp_get(void)
@@ -258,7 +278,7 @@ void log_init(void)
 	}
 
 	k_mem_slab_init(&log_strdup_pool, log_strdup_pool_buf,
-			LOG_STRBUF_BUF_SIZE,
+			sizeof(struct log_strdup_buf),
 			CONFIG_LOG_STRDUP_BUF_COUNT);
 
 	/* Set default timestamp. */
@@ -510,51 +530,44 @@ u32_t log_filter_get(struct log_backend const *const backend,
 
 char *log_strdup(const char *str)
 {
-	u32_t *dupl;
-	char *sdupl;
+	struct log_strdup_buf *dup;
 	int err;
 
-	err = k_mem_slab_alloc(&log_strdup_pool, (void **)&dupl, K_NO_WAIT);
+	err = k_mem_slab_alloc(&log_strdup_pool, (void **)&dup, K_NO_WAIT);
 	if (err) {
 		/* failed to allocate */
 		return (char *)log_strdup_fail_msg;
 	}
 
 	/* Set 'allocated' flag. */
-	*dupl = 1;
-	dupl++;
-	sdupl = (char *)dupl;
+	atomic_set(&dup->refcount, 1);
 
-	strncpy(sdupl, str, CONFIG_LOG_STRDUP_MAX_STRING - 1);
-	sdupl[LOG_STRBUF_STR_SIZE - 1] = '\0';
-	sdupl[LOG_STRBUF_STR_SIZE - 2] = '~';
+	strncpy(dup->buf, str, sizeof(dup->buf) - 2);
+	dup->buf[sizeof(dup->buf) - 2] = '~';
+	dup->buf[sizeof(dup->buf) - 1] = '\0';
 
-	return sdupl;
+	return dup->buf;
 }
 
 bool log_is_strdup(void *buf)
 {
-	/* Lowest possible address is located at the second word of the first
-	 * buffer in the pool. First word is dedicated for 'allocated' flag.
-	 *
-	 * Highest possible address is the second word of the last buffer in the
-	 * pool.
-	 */
-	static const void *start = log_strdup_pool_buf + sizeof(u32_t);
-	static const void *end = &log_strdup_pool_buf[
-						 LOG_STRDUP_POOL_BUFFER_SIZE
-					       - LOG_STRBUF_BUF_SIZE
-					       + sizeof(u32_t)];
-	return (buf >= start) && (buf <= end);
+	struct log_strdup_buf *pool_first, *pool_last;
+
+	pool_first = (struct log_strdup_buf *)log_strdup_pool_buf;
+	pool_last = pool_first + CONFIG_LOG_STRDUP_BUF_COUNT - 1;
+
+	return ((char *)buf >= pool_first->buf) &&
+	       ((char *)buf <= pool_last->buf);
+
 }
 
 void log_free(void *str)
 {
-	u32_t *buf = (u32_t *)str;
+	struct log_strdup_buf *dup = CONTAINER_OF(str, struct log_strdup_buf,
+						  buf);
 
-	buf--;
-	if (atomic_dec((atomic_t *)buf) == 1) {
-		k_mem_slab_free(&log_strdup_pool, (void **)&buf);
+	if (atomic_dec(&dup->refcount) == 1) {
+		k_mem_slab_free(&log_strdup_pool, (void **)&dup);
 	}
 }
 

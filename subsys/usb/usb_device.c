@@ -1132,7 +1132,8 @@ static struct usb_transfer_data *usb_ep_get_transfer(u8_t ep)
 static void usb_transfer_work(struct k_work *item)
 {
 	struct usb_transfer_data *trans;
-	int ret = 0, bytes;
+	int ret = 0;
+	u32_t bytes;
 	u8_t ep;
 
 	trans = CONTAINER_OF(item, struct usb_transfer_data, work);
@@ -1218,7 +1219,7 @@ void usb_transfer_ep_callback(u8_t ep, enum usb_dc_ep_cb_status_code status)
 	}
 
 	if (!trans) {
-		if (status == USB_DC_EP_DATA_IN) {
+		if (status == USB_DC_EP_DATA_OUT) {
 			u32_t bytes;
 			/* In the unlikely case we receive data while no
 			 * transfer is ongoing, we have to consume the data
