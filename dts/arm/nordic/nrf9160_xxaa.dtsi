@@ -1,0 +1,38 @@
+/*
+ * Copyright (c) 2018 Linaro Limited
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <mem.h>
+#ifndef CONFIG_ARM_NONSECURE_FIRMWARE
+#include <nordic/nrf9160.dtsi>
+
+/ {
+	flash-controller@50039000 {
+		flash0: flash@0 {
+			reg = <0x00000000 DT_SIZE_K(1024)>;
+		};
+	};
+
+	sram0: memory@20000000 {
+		reg = <0x20000000 DT_SIZE_K(256)>;
+	};
+};
+
+#else
+#include <nordic/nrf9160_ns.dtsi>
+
+/ {
+	flash-controller@40039000 {
+		flash0: flash@0 {
+			reg = <0x00000000 DT_SIZE_K(1024)>;
+		};
+	};
+
+	sram0: memory@20000000 {
+		reg = <0x20000000 DT_SIZE_K(256)>;
+	};
+};
+
+#endif

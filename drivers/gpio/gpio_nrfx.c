@@ -433,7 +433,7 @@ static int gpio_nrfx_init(struct device *port)
 	return 0;
 }
 
-#ifdef CONFIG_SOC_SERIES_NRF51X
+#ifndef NRF_P0
 #define NRF_P0 NRF_GPIO
 #endif
 

@@ -1,0 +1,7 @@
+identifier: nrf9160_pca10090
+name: nRF9160-PCA10090
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb

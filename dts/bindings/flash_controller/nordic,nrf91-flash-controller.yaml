@@ -1,0 +1,16 @@
+---
+title: Nordic NVMC
+id: nordic,nrf91-flash-controller
+version: 0.1
+
+description: >
+    This binding gives a base representation of the Nordic NVMC
+
+inherits:
+    !include flash-controller.yaml
+
+properties:
+    compatible:
+      constraint: "nrf,nrf91-flash-controller"
+
+...
