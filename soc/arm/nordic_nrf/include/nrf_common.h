@@ -8,6 +8,8 @@
 #ifndef _NRF_SOC_COMMON_H_
 #define _NRF_SOC_COMMON_H_
 
+#if defined(CONFIG_SOC_SERIES_NRF51X) || defined(CONFIG_SOC_SERIES_NRF52X)
+
 /**
  * @file Common definitions for NRF51/NRF52 family processors.
  *
@@ -60,5 +62,13 @@
 #define NRF52_IRQ_RTC2_IRQn                    36
 #define NRF52_IRQ_I2S_IRQn                     37
 #define NRF52_IRQ_FPU_IRQn                     38
+
+#elif defined(CONFIG_SOC_NRF9160)
+
+/* for the 9160 interrupts are defined in the device tree */
+
+#else
+#error "Platform not defined."
+#endif
 
 #endif /* _NRF_SOC_COMMON_H_ */
