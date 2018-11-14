@@ -41,6 +41,7 @@
 				status = "disabled";
 				st,prescaler = <0>;
 				label = "PWM_5";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -56,6 +57,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_6";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -71,14 +73,15 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_7";
+				#pwm-cells = <2>;
 			};
 		};
 
-		spi3: spi@40003C00 {
+		spi3: spi@40003c00 {
 			compatible = "st,stm32-spi";
 			#address-cells = <1>;
 			#size-cells = <0>;
-			reg = <0x40003C00 0x400>;
+			reg = <0X40003c00 0x400>;
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00008000>;
 			interrupts = <51 5>;
 			status = "disabled";
@@ -95,6 +98,15 @@
 				clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00000081>;
 				label = "GPIOF";
 			};
+
+			gpiog: gpio@40012000 {
+				compatible = "st,stm32-gpio";
+				gpio-controller;
+				#gpio-cells = <2>;
+				reg = <0x40012000 0x400>;
+				clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00000101>;
+				label = "GPIOG";
+			};
 		};
 
 		timers8: timers@40013400 {
@@ -109,6 +121,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_8";
+				#pwm-cells = <2>;
 			};
 		};
 	};

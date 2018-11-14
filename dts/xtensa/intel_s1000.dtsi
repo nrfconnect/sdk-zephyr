@@ -30,7 +30,7 @@
 	sram0: memory@be000000 {
 		device_type = "memory";
 		compatible = "mmio-sram";
-		reg = <0xbe000000 0x300000>;
+		reg = <0xbe000000 0x400000>;
 	};
 
 	soc {
@@ -109,5 +109,16 @@
 
 			status = "disabled";
 		};
+
+		spi0: spi@e000 {
+			compatible = "snps,designware-spi";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x0000E000 0x400>;
+			interrupts = <7 0 0>;
+			interrupt-parent = <&dw_intc>;
+			label = "SPI_0";
+		};
+
 	};
 };

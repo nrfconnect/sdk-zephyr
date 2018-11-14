@@ -562,6 +562,19 @@ fail:
 	return NULL;
 }
 
+static bool arp_hdr_check(struct net_arp_hdr *arp_hdr)
+{
+	if (ntohs(arp_hdr->hwtype) != NET_ARP_HTYPE_ETH ||
+	    ntohs(arp_hdr->protocol) != NET_ETH_PTYPE_IP ||
+	    arp_hdr->hwlen != sizeof(struct net_eth_addr) ||
+	    arp_hdr->protolen != NET_ARP_IPV4_PTYPE_SIZE) {
+		NET_DBG("Invalid ARP header");
+		return false;
+	}
+
+	return true;
+}
+
 enum net_verdict net_arp_input(struct net_pkt *pkt)
 {
 	struct net_arp_hdr *arp_hdr;
@@ -578,6 +591,9 @@ enum net_verdict net_arp_input(struct net_pkt *pkt)
 	}
 
 	arp_hdr = NET_ARP_HDR(pkt);
+	if (!arp_hdr_check(arp_hdr)) {
+		return NET_DROP;
+	}
 
 	switch (ntohs(arp_hdr->opcode)) {
 	case NET_ARP_REQUEST:

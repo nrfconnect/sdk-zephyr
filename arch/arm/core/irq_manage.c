@@ -108,10 +108,10 @@ void _irq_priority_set(unsigned int irq, unsigned int prio, u32_t flags)
 	 * affecting performance (can still be useful on systems with a
 	 * reduced set of priorities, like Cortex-M0/M0+).
 	 */
-	__ASSERT(prio <= ((1 << CONFIG_NUM_IRQ_PRIO_BITS) - 1),
+	__ASSERT(prio <= ((1 << DT_NUM_IRQ_PRIO_BITS) - 1),
 		 "invalid priority %d! values must be less than %d\n",
 		 prio - _IRQ_PRIO_OFFSET,
-		 (1 << CONFIG_NUM_IRQ_PRIO_BITS) - (_IRQ_PRIO_OFFSET));
+		 (1 << DT_NUM_IRQ_PRIO_BITS) - (_IRQ_PRIO_OFFSET));
 	NVIC_SetPriority((IRQn_Type)irq, prio);
 }
 
@@ -238,3 +238,13 @@ int irq_target_state_is_secure(unsigned int irq)
 
 #endif /* CONFIG_ARM_SECURE_FIRMWARE */
 
+#ifdef CONFIG_DYNAMIC_INTERRUPTS
+int _arch_irq_connect_dynamic(unsigned int irq, unsigned int priority,
+			      void (*routine)(void *parameter), void *parameter,
+			      u32_t flags)
+{
+	z_isr_install(irq, routine, parameter);
+	_irq_priority_set(irq, priority, flags);
+	return irq;
+}
+#endif /* CONFIG_DYNAMIC_INTERRUPTS */
