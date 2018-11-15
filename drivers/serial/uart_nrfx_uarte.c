@@ -32,6 +32,7 @@ struct uarte_nrfx_data {
 	uart_irq_callback_user_data_t cb; /**< Callback function pointer */
 	void *cb_data; /**< Callback function arg */
 	u8_t *tx_buffer;
+	volatile bool disable_tx_irq;
 #endif /* UARTE_INTERRUPT_DRIVEN */
 };
 
@@ -74,6 +75,8 @@ static inline NRF_UARTE_Type *get_uarte_instance(struct device *dev)
 }
 
 #ifdef UARTE_INTERRUPT_DRIVEN
+
+
 /**
  * @brief Interrupt service routine.
  *
@@ -86,7 +89,22 @@ static inline NRF_UARTE_Type *get_uarte_instance(struct device *dev)
 static void uarte_nrfx_isr(void *arg)
 {
 	struct device *dev = arg;
-	const struct uarte_nrfx_data *data = get_dev_data(dev);
+	struct uarte_nrfx_data *data = get_dev_data(dev);
+	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
+
+	if (data->disable_tx_irq
+	    && nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_ENDTX)) {
+		nrf_uarte_int_disable(uarte, NRF_UARTE_INT_ENDTX_MASK);
+
+		/* If there is nothing to send, driver will save an energy
+		 * when TX is stopped.
+		 */
+		nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STOPTX);
+
+		data->disable_tx_irq = false;
+
+		return;
+	}
 
 	if (data->cb) {
 		data->cb(data->cb_data);
@@ -279,6 +297,9 @@ static int uarte_nrfx_fifo_fill(struct device *dev,
 	struct uarte_nrfx_data *data = get_dev_data(dev);
 	const struct uarte_nrfx_config *config = get_dev_config(dev);
 
+	if (!nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_ENDTX)) {
+		return 0;
+	}
 
 	if (len > config->tx_buff_size) {
 		len = config->tx_buff_size;
@@ -324,21 +345,18 @@ static int uarte_nrfx_fifo_read(struct device *dev,
 static void uarte_nrfx_irq_tx_enable(struct device *dev)
 {
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
+	struct uarte_nrfx_data *data = get_dev_data(dev);
 
+	data->disable_tx_irq = false;
 	nrf_uarte_int_enable(uarte, NRF_UARTE_INT_ENDTX_MASK);
 }
 
 /** Interrupt driven transfer disabling function */
 static void uarte_nrfx_irq_tx_disable(struct device *dev)
 {
-	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
-
-	nrf_uarte_int_disable(uarte, NRF_UARTE_INT_ENDTX_MASK);
-
-	/* If there is nothing to send, driver will save an energy
-	 * when TX is stopped.
-	 */
-	nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STOPTX);
+	struct uarte_nrfx_data *data = get_dev_data(dev);
+	/* TX IRQ will be disabled after current transmission is finished */
+	data->disable_tx_irq = true;
 }
 
 /** Interrupt driven transfer ready function */
@@ -346,7 +364,8 @@ static int uarte_nrfx_irq_tx_ready_complete(struct device *dev)
 {
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
 
-	return nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_ENDTX);
+	return nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_ENDTX) &&
+	       nrf_uarte_int_enable_check(uarte, NRF_UARTE_INT_ENDTX_MASK);
 }
 
 static int uarte_nrfx_irq_rx_ready(struct device *dev)
