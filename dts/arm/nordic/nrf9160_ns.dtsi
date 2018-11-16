@@ -59,7 +59,7 @@
 			label = "UART_1";
 		};
 
-		uart2: uart@4000A000 {
+		uart2: uart@4000a000 {
 			compatible = "nordic,nrf-uarte";
 			reg = <0x4000A000 0x1000>;
 			interrupts = <10 1>;
@@ -67,7 +67,7 @@
 			label = "UART_2";
 		};
 
-		uart3: uart@4000B000 {
+		uart3: uart@4000b000 {
 			compatible = "nordic,nrf-uarte";
 			reg = <0x4000B000 0x1000>;
 			interrupts = <11 1>;
@@ -115,7 +115,7 @@
 			label = "I2C_1";
 		};
 
-		i2c2: i2c@4000A000 {
+		i2c2: i2c@4000a000 {
 			compatible = "nordic,nrf-i2c";
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -126,7 +126,7 @@
 			label = "I2C_2";
 		};
 
-		i2c3: i2c@4000B000 {
+		i2c3: i2c@4000b000 {
 			compatible = "nordic,nrf-i2c";
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -157,7 +157,7 @@
 			label = "SPI_1";
 		};
 
-		spi2: spi@4000A000 {
+		spi2: spi@4000a000 {
 			compatible = "nordic,nrf-spi";
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -167,7 +167,7 @@
 			label = "SPI_2";
 		};
 
-		spi3: spi@4000B000 {
+		spi3: spi@4000b000 {
 			compatible = "nordic,nrf-spi";
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -202,13 +202,13 @@
 		nrf-rtc1 = &rtc1;
 		nrf-clock = &clock;
 		nrf-power = &power;
-		config-nvmc = &nvmc;
-		config-uart-0 = &uart0;
-		config-uart-1 = &uart1;
-		config-uart-2 = &uart2;
-		config-uart-3 = &uart3;
-		config-gpio-0 = &gpio0;
-		config-gpiote = &gpiote;
+		dt-nvmc = &nvmc;
+		dt-uart-0 = &uart0;
+		dt-uart-1 = &uart1;
+		dt-uart-2 = &uart2;
+		dt-uart-3 = &uart3;
+		dt-gpio-0 = &gpio0;
+		dt-gpiote = &gpiote;
 		i2c0 = &i2c0;
 		i2c1 = &i2c1;
 		i2c2 = &i2c2;
