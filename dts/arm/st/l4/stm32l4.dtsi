@@ -147,12 +147,12 @@
 			label= "I2C_1";
 		};
 
-		i2c3: i2c@40005C00 {
+		i2c3: i2c@40005c00 {
 			compatible = "st,stm32-i2c-v2";
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			reg = <0x40005C00 0x400>;
+			reg = <0x40005c00 0x400>;
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00800000>;
 			interrupts = <72 0>, <73 0>;
 			interrupt-names = "event", "error";
@@ -194,6 +194,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_1";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -209,6 +210,7 @@
 				status = "disabled";
 				st,prescaler = <0>;
 				label = "PWM_2";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -224,6 +226,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_6";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -239,6 +242,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_7";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -254,6 +258,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_15";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -269,6 +274,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_16";
+				#pwm-cells = <2>;
 			};
 		};
 

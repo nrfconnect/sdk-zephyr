@@ -646,7 +646,7 @@ class SizeCalculator:
     rw_sections = ["datas", "initlevel", "_k_task_list", "_k_event_list",
                    "_k_memory_pool", "exceptions", "initshell",
                    "_static_thread_area", "_k_timer_area", "_k_work_area",
-                   "_k_mem_slab_area", "_k_mem_pool_area",
+                   "_k_mem_slab_area", "_k_mem_pool_area", "sw_isr_table",
                    "_k_sem_area", "_k_mutex_area", "_k_alert_area",
                    "_k_fifo_area", "_k_lifo_area", "_k_stack_area",
                    "_k_msgq_area", "_k_mbox_area", "_k_pipe_area",
@@ -660,7 +660,8 @@ class SizeCalculator:
                    "priv_stacks_noinit"]
     # These get copied into RAM only on non-XIP
     ro_sections = ["text", "ctors", "init_array", "reset", "object_access",
-                   "rodata", "devconfig", "net_l2", "vector", "_bt_settings_area"]
+                   "rodata", "devconfig", "net_l2", "vector", "sw_isr_table",
+                   "_bt_settings_area"]
 
     def __init__(self, filename, extra_sections):
         """Constructor
@@ -2527,6 +2528,10 @@ def parse_arguments():
         "-S", "--enable-slow", action="store_true",
         help="Execute time-consuming test cases that have been marked "
         "as 'slow' in testcase.yaml. Normally these are only built.")
+    parser.add_argument(
+        "--disable-unrecognized-section-test", action="store_true",
+        default=False,
+        help="Skip the 'unrecognized section' test.")
     parser.add_argument("-R", "--enable-asserts", action="store_true",
                         default=True,
                         help="deprecated, left for compatibility")
@@ -2937,7 +2942,7 @@ def main():
     for name, goal in goals.items():
         if goal.failed:
             failed += 1
-        elif goal.metrics.get("unrecognized"):
+        elif goal.metrics.get("unrecognized") and not options.disable_unrecognized_section_test:
             info("%sFAILED%s: %s has unrecognized binary sections: %s" %
                  (COLOR_RED, COLOR_NORMAL, goal.name,
                   str(goal.metrics["unrecognized"])))

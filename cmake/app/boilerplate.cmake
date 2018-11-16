@@ -14,19 +14,6 @@
 # modified by the entry point ${APPLICATION_SOURCE_DIR}/CMakeLists.txt
 # that was specified when cmake was called.
 
-# Determine if we are using MSYS.
-#
-# We don't use project() because it would take some time to rewrite
-# the build scripts to be compatible with everything project() does.
-execute_process(
-  COMMAND
-  uname
-  OUTPUT_VARIABLE uname_output
-  )
-if(uname_output MATCHES "MSYS")
-  set(MSYS 1)
-endif()
-
 # CMake version 3.8.2 is the real minimum supported version.
 #
 # Unfortunately CMake requires the toplevel CMakeLists.txt file to
@@ -114,18 +101,6 @@ add_custom_target(
   COMMAND ${CMAKE_COMMAND} -P ${ZEPHYR_BASE}/cmake/pristine.cmake
   # Equivalent to rm -rf build/*
   )
-
-# Must be run before kconfig.cmake
-if(MSYS)
-  execute_process(
-    COMMAND
-    ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/check_host_is_ok.py
-    RESULT_VARIABLE ret
-    )
-  if(NOT "${ret}" STREQUAL "0")
-    message(FATAL_ERROR "command failed with return code: ${ret}")
-  endif()
-endif()
 
 # The BOARD can be set by 3 sources. Through environment variables,
 # through the cmake CLI, and through CMakeLists.txt.
@@ -326,6 +301,28 @@ endif()
 message(STATUS "Cache files will be written to: ${USER_CACHE_DIR}")
 
 include(${BOARD_DIR}/board.cmake OPTIONAL)
+
+# If we are using a suitable ethernet driver inside qemu, then these options
+# must be set, otherwise a zephyr instance cannot receive any network packets.
+# The Qemu supported ethernet driver should define CONFIG_ETH_NIC_MODEL
+# string that tells what nic model Qemu should use.
+if(CONFIG_QEMU_TARGET)
+  if(CONFIG_NET_QEMU_ETHERNET)
+    if(CONFIG_ETH_NIC_MODEL)
+      list(APPEND QEMU_FLAGS_${ARCH}
+	-nic tap,model=${CONFIG_ETH_NIC_MODEL},script=no,downscript=no,ifname=zeth
+	)
+    else()
+      message(FATAL_ERROR
+	"No Qemu ethernet driver configured!
+Enable Qemu supported ethernet driver like e1000 at drivers/ethernet")
+    endif()
+  else()
+    list(APPEND QEMU_FLAGS_${ARCH}
+      -net none
+      )
+  endif()
+endif()
 
 zephyr_library_named(app)
 

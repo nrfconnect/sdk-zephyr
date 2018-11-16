@@ -1245,6 +1245,7 @@ static void le_conn_update_complete(struct net_buf *buf)
 		   conn->role == BT_HCI_ROLE_SLAVE &&
 		   !atomic_test_and_set_bit(conn->flags,
 					    BT_CONN_SLAVE_PARAM_L2CAP)) {
+		/* CPR not supported, let's try L2CAP CPUP instead */
 		struct bt_le_conn_param param;
 
 		param.interval_min = conn->le.interval_min;
@@ -3180,6 +3181,13 @@ int bt_le_scan_update(bool fast_scan)
 	if (IS_ENABLED(CONFIG_BT_CENTRAL)) {
 		u16_t interval, window;
 		struct bt_conn *conn;
+
+		/* don't restart scan if we have pending connection */
+		conn = bt_conn_lookup_state_le(NULL, BT_CONN_CONNECT);
+		if (conn) {
+			bt_conn_unref(conn);
+			return 0;
+		}
 
 		conn = bt_conn_lookup_state_le(NULL, BT_CONN_CONNECT_SCAN);
 		if (!conn) {

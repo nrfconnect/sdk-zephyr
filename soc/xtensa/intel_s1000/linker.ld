@@ -371,7 +371,6 @@ SECTIONS
     _data_start = ABSOLUTE(.);
     *(.data)
     *(.data.*)
-    KEEP(*(SW_ISR_TABLE))
     *(.gnu.linkonce.d.*)
     KEEP(*(.gnu.linkonce.d.*personality*))
     *(.data1)
@@ -382,6 +381,8 @@ SECTIONS
     *(.sdata2.*)
     *(.gnu.linkonce.s2.*)
     KEEP(*(.jcr))
+    . = ALIGN(4096);
+    *(.gna_model)
     _data_end = ABSOLUTE(.);
   } >data :data_phdr
   .lit4 : ALIGN(4)
@@ -418,7 +419,7 @@ SECTIONS
   /* stack */
   _end = ALIGN(8);
   PROVIDE(end = ALIGN(8));
-  __stack = L2_SRAM_BASE + L2_SRAM_SIZE;
+  __stack = DT_L2_SRAM_BASE + DT_L2_SRAM_SIZE;
   .comment  0 :  { *(.comment) }
   .debug 0 : { *(.debug) }
   .line 0 : { *(.line) }

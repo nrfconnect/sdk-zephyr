@@ -33,8 +33,8 @@ struct codec_driver_data {
 
 static struct codec_driver_config codec_device_config = {
 	.i2c_device	= NULL,
-	.i2c_dev_name	= CONFIG_CODEC_I2C_BUS_NAME,
-	.i2c_address	= CONFIG_CODEC_I2C_BUS_ADDR,
+	.i2c_dev_name	= DT_CODEC_I2C_BUS_NAME,
+	.i2c_address	= DT_CODEC_I2C_BUS_ADDR,
 };
 
 static struct codec_driver_data codec_device_data;
@@ -429,7 +429,7 @@ static void codec_configure_output(struct device *dev)
 static int codec_set_output_volume(struct device *dev, int vol)
 {
 	u8_t vol_val;
-	int vol_index, vol_count;
+	int vol_index;
 	u8_t vol_array[] = {
 		107, 108, 110, 113, 116, 120, 125, 128, 132, 138, 144
 	};
@@ -449,8 +449,7 @@ static int codec_set_output_volume(struct device *dev, int vol)
 		vol_val = HPX_ANA_VOL_FLOOR;
 	} else if (vol > HPX_ANA_VOL_LOW_THRESH) {
 		/* lookup low volume values */
-		vol_count = sizeof(vol_array)/sizeof(u8_t);
-		for (vol_index = 0; vol_index < vol_count; vol_index++) {
+		for (vol_index = 0; vol_index < ARRAY_SIZE(vol_array); vol_index++) {
 			if (vol_array[vol_index] >= vol) {
 				break;
 			}
@@ -510,6 +509,6 @@ static const struct audio_codec_api codec_driver_api = {
 	.apply_properties	= codec_apply_properties,
 };
 
-DEVICE_AND_API_INIT(tlv320dac310x, CONFIG_CODEC_NAME, codec_initialize,
+DEVICE_AND_API_INIT(tlv320dac310x, DT_CODEC_NAME, codec_initialize,
 		&codec_device_data, &codec_device_config, POST_KERNEL,
 		CONFIG_AUDIO_CODEC_INIT_PRIORITY, &codec_driver_api);
