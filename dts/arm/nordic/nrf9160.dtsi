@@ -42,6 +42,7 @@
 		nrf-power = &power;
 		nvmc = &nvmc;
 		spu = &spu;
+		ficr = &ficr;
 		uart-0 = &uart0;
 		uart-1 = &uart1;
 		uart-2 = &uart2;
@@ -224,6 +225,12 @@
 			compatible = "nordic,nrf-spu";
 			reg = <0x50003000 0x1000>;
 			interrupts = <3 0>;
+			status = "ok";
+		};
+
+		ficr: ficr@00ff0000 {
+			compatible = "nordic,nrf-ficr";
+			reg = <0x00FF0000 0x1000>;
 			status = "ok";
 		};
 	};

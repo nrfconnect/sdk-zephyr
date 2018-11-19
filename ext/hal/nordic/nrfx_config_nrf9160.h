@@ -64,6 +64,10 @@
 #define NRF_GPIO                       ((NRF_GPIO_Type*) GPIO_0_BASE_ADDRESS)
 #endif
 
+#ifdef FICR_BASE_ADDRESS
+#define NRF_FICR                       ((FICR_INFO_Type*) FICR_BASE_ADDRESS)
+#endif
+
 #ifdef GPIOTE_0_BASE_ADDRESS
 #define NRF_GPIOTE                     ((NRF_GPIOTE_Type*) GPIOTE_0_BASE_ADDRESS)
 #endif
