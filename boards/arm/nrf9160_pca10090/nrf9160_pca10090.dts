@@ -136,12 +136,10 @@
 			reg = <0x000f0000 0xa000>;
 		};
 
-#if defined(CONFIG_FILE_SYSTEM_NFFS)
-		nffs_partition: partition@fa000 {
-			label = "nffs";
+		storage_partition: partition@fa000 {
+			label = "storage";
 			reg = <0x000fa000 0x00006000>;
 		};
-#endif
 	};
 };
 
