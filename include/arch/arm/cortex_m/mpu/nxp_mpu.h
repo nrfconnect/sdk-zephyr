@@ -146,12 +146,19 @@ struct nxp_mpu_config {
 	/* Number of regions */
 	u32_t num_regions;
 	/* Regions */
-	struct nxp_mpu_region *mpu_regions;
+	const struct nxp_mpu_region *mpu_regions;
 	/* SRAM Region */
 	u32_t sram_region;
 };
 
-/* Reference to the MPU configuration */
-extern struct nxp_mpu_config mpu_config;
+/* Reference to the MPU configuration.
+ *
+ * This struct is defined and populated for each SoC (in the SoC definition),
+ * and holds the build-time configuration information for the fixed MPU
+ * regions enabled during kernel initialization. Dynamic MPU regions (e.g.
+ * for Thread Stack, Stack Guards, etc.) are programmed during runtime, thus,
+ * not kept here.
+ */
+extern const struct nxp_mpu_config mpu_config;
 
 #endif /* ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_MPU_NXP_MPU_H_ */

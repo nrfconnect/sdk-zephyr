@@ -34,7 +34,6 @@ void calculate_rt(struct transition *transition)
 		duration_remainder = transition->total_duration -
 				     (now - transition->start_timestamp);
 
-
 		if (duration_remainder > 620000) {
 			/* > 620 seconds -> resolution = 0b11 [10 minutes] */
 			resolution = 0x03;
@@ -61,6 +60,29 @@ void calculate_rt(struct transition *transition)
 }
 
 /* Function to calculate Remaining Time (End) */
+
+static void bound_states_transition_type_reassignment(u8_t type)
+{
+	switch (type) {
+	case ONOFF:
+	case LEVEL:
+	case ACTUAL:
+	case LINEAR:
+		light_ctl_srv_user_data.transition = &lightness_transition;
+		break;
+	case CTL:
+		light_ctl_srv_user_data.transition = &lightness_transition;
+		gen_level_srv_s0_user_data.transition = &lightness_transition;
+		break;
+	case LEVEL_TEMP:
+	case CTL_TEMP:
+		gen_level_srv_s0_user_data.transition = &temp_transition;
+		light_ctl_srv_user_data.transition = &temp_transition;
+		break;
+	default:
+		break;
+	}
+}
 
 static void tt_values_calculator(struct transition *transition)
 {
@@ -93,9 +115,11 @@ static void tt_values_calculator(struct transition *transition)
 	ptr_counter = &transition->counter;
 }
 
-void onoff_tt_values(struct generic_onoff_state *state)
+void onoff_tt_values(struct generic_onoff_state *state, u8_t tt, u8_t delay)
 {
-	light_ctl_srv_user_data.transition = &lightness_transition;
+	bound_states_transition_type_reassignment(ONOFF);
+	state->transition->tt = tt;
+	state->transition->delay = delay;
 
 	tt_values_calculator(state->transition);
 
@@ -109,16 +133,17 @@ void onoff_tt_values(struct generic_onoff_state *state)
 	}
 }
 
-void level_tt_values(struct generic_level_state *state)
+void level_tt_values(struct generic_level_state *state, u8_t tt, u8_t delay)
 {
 	u32_t counter;
 
 	if (state == &gen_level_srv_root_user_data) {
-		light_ctl_srv_user_data.transition = &lightness_transition;
+		bound_states_transition_type_reassignment(LEVEL);
 	} else if (state == &gen_level_srv_s0_user_data) {
-		state->transition = &temp_transition;
-		light_ctl_srv_user_data.transition = &temp_transition;
+		bound_states_transition_type_reassignment(LEVEL_TEMP);
 	}
+	state->transition->tt = tt;
+	state->transition->delay = delay;
 
 	tt_values_calculator(state->transition);
 
@@ -141,11 +166,14 @@ void level_tt_values(struct generic_level_state *state)
 			   counter);
 }
 
-void light_lightness_actual_tt_values(struct light_lightness_state *state)
+void light_lightness_actual_tt_values(struct light_lightness_state *state,
+				      u8_t tt, u8_t delay)
 {
 	u32_t counter;
 
-	light_ctl_srv_user_data.transition = &lightness_transition;
+	bound_states_transition_type_reassignment(ACTUAL);
+	state->transition->tt = tt;
+	state->transition->delay = delay;
 
 	tt_values_calculator(state->transition);
 
@@ -165,11 +193,14 @@ void light_lightness_actual_tt_values(struct light_lightness_state *state)
 		 counter);
 }
 
-void light_lightness_linear_tt_values(struct light_lightness_state *state)
+void light_lightness_linear_tt_values(struct light_lightness_state *state,
+				      u8_t tt, u8_t delay)
 {
 	u32_t counter;
 
-	light_ctl_srv_user_data.transition = &lightness_transition;
+	bound_states_transition_type_reassignment(LINEAR);
+	state->transition->tt = tt;
+	state->transition->delay = delay;
 
 	tt_values_calculator(state->transition);
 
@@ -189,12 +220,13 @@ void light_lightness_linear_tt_values(struct light_lightness_state *state)
 		 counter);
 }
 
-void light_ctl_tt_values(struct light_ctl_state *state)
+void light_ctl_tt_values(struct light_ctl_state *state, u8_t tt, u8_t delay)
 {
 	u32_t counter;
 
-	state->transition = &lightness_transition;
-	gen_level_srv_s0_user_data.transition = &lightness_transition;
+	bound_states_transition_type_reassignment(CTL);
+	state->transition->tt = tt;
+	state->transition->delay = delay;
 
 	tt_values_calculator(state->transition);
 
@@ -222,12 +254,14 @@ void light_ctl_tt_values(struct light_ctl_state *state)
 		 counter);
 }
 
-void light_ctl_temp_tt_values(struct light_ctl_state *state)
+void light_ctl_temp_tt_values(struct light_ctl_state *state,
+			      u8_t tt, u8_t delay)
 {
 	u32_t counter;
 
-	state->transition = &temp_transition;
-	gen_level_srv_s0_user_data.transition = &temp_transition;
+	bound_states_transition_type_reassignment(CTL_TEMP);
+	state->transition->tt = tt;
+	state->transition->delay = delay;
 
 	tt_values_calculator(state->transition);
 
@@ -257,21 +291,13 @@ static void onoff_work_handler(struct k_work *work)
 
 	if (state->transition->just_started) {
 		state->transition->just_started = false;
+		state->transition->start_timestamp = k_uptime_get();
 
-		if (state->transition->counter == 0) {
+		if (state->target_onoff == STATE_ON) {
+			state->onoff = STATE_ON;
+
 			state_binding(ONOFF, IGNORE_TEMP);
 			update_light_state();
-
-			k_timer_stop(&onoff_transition_timer);
-		} else {
-			state->transition->start_timestamp = k_uptime_get();
-
-			if (state->target_onoff == STATE_ON) {
-				state->onoff = STATE_ON;
-
-				state_binding(ONOFF, IGNORE_TEMP);
-				update_light_state();
-			}
 		}
 
 		return;
@@ -287,7 +313,7 @@ static void onoff_work_handler(struct k_work *work)
 		state_binding(ONOFF, IGNORE_TEMP);
 		update_light_state();
 
-		k_timer_stop(&onoff_transition_timer);
+		k_timer_stop(ptr_timer);
 	}
 }
 
@@ -298,13 +324,11 @@ static void level_lightness_work_handler(struct k_work *work)
 
 	switch (transition_type) {
 	case LEVEL_TT:
+	case LEVEL_TT_MOVE:
 		level = LEVEL;
 		break;
 	case LEVEL_TT_DELTA:
 		level = DELTA_LEVEL;
-		break;
-	case LEVEL_TT_MOVE:
-		level = LEVEL;
 		break;
 	default:
 		return;
@@ -312,16 +336,7 @@ static void level_lightness_work_handler(struct k_work *work)
 
 	if (state->transition->just_started) {
 		state->transition->just_started = false;
-
-		if (state->transition->counter == 0) {
-			state_binding(level, IGNORE_TEMP);
-			update_light_state();
-
-			k_timer_stop(&level_lightness_transition_timer);
-		} else {
-			state->transition->start_timestamp = k_uptime_get();
-		}
-
+		state->transition->start_timestamp = k_uptime_get();
 		return;
 	}
 
@@ -340,7 +355,7 @@ static void level_lightness_work_handler(struct k_work *work)
 		state_binding(level, IGNORE_TEMP);
 		update_light_state();
 
-		k_timer_stop(&level_lightness_transition_timer);
+		k_timer_stop(ptr_timer);
 	}
 }
 
@@ -348,29 +363,9 @@ static void level_temp_work_handler(struct k_work *work)
 {
 	struct generic_level_state *state = &gen_level_srv_s0_user_data;
 
-	switch (transition_type) {
-	case LEVEL_TEMP_TT:
-		break;
-	case LEVEL_TEMP_TT_DELTA:
-		break;
-	case LEVEL_TEMP_TT_MOVE:
-		break;
-	default:
-		return;
-	}
-
 	if (state->transition->just_started) {
 		state->transition->just_started = false;
-
-		if (state->transition->counter == 0) {
-			state_binding(IGNORE, LEVEL_TEMP);
-			update_light_state();
-
-			k_timer_stop(&level_temp_transition_timer);
-		} else {
-			state->transition->start_timestamp = k_uptime_get();
-		}
-
+		state->transition->start_timestamp = k_uptime_get();
 		return;
 	}
 
@@ -389,7 +384,7 @@ static void level_temp_work_handler(struct k_work *work)
 		state_binding(IGNORE, LEVEL_TEMP);
 		update_light_state();
 
-		k_timer_stop(&level_temp_transition_timer);
+		k_timer_stop(ptr_timer);
 	}
 }
 
@@ -399,16 +394,7 @@ static void light_lightness_actual_work_handler(struct k_work *work)
 
 	if (state->transition->just_started) {
 		state->transition->just_started = false;
-
-		if (state->transition->counter == 0) {
-			state_binding(ACTUAL, IGNORE_TEMP);
-			update_light_state();
-
-			k_timer_stop(&light_lightness_actual_transition_timer);
-		} else {
-			state->transition->start_timestamp = k_uptime_get();
-		}
-
+		state->transition->start_timestamp = k_uptime_get();
 		return;
 	}
 
@@ -427,7 +413,7 @@ static void light_lightness_actual_work_handler(struct k_work *work)
 		state_binding(ACTUAL, IGNORE_TEMP);
 		update_light_state();
 
-		k_timer_stop(&light_lightness_actual_transition_timer);
+		k_timer_stop(ptr_timer);
 	}
 }
 
@@ -437,16 +423,7 @@ static void light_lightness_linear_work_handler(struct k_work *work)
 
 	if (state->transition->just_started) {
 		state->transition->just_started = false;
-
-		if (state->transition->counter == 0) {
-			state_binding(LINEAR, IGNORE_TEMP);
-			update_light_state();
-
-			k_timer_stop(&light_lightness_linear_transition_timer);
-		} else {
-			state->transition->start_timestamp = k_uptime_get();
-		}
-
+		state->transition->start_timestamp = k_uptime_get();
 		return;
 	}
 
@@ -465,7 +442,7 @@ static void light_lightness_linear_work_handler(struct k_work *work)
 		state_binding(LINEAR, IGNORE_TEMP);
 		update_light_state();
 
-		k_timer_stop(&light_lightness_linear_transition_timer);
+		k_timer_stop(ptr_timer);
 	}
 }
 
@@ -475,16 +452,7 @@ static void light_ctl_work_handler(struct k_work *work)
 
 	if (state->transition->just_started) {
 		state->transition->just_started = false;
-
-		if (state->transition->counter == 0) {
-			state_binding(CTL, CTL_TEMP);
-			update_light_state();
-
-			k_timer_stop(&light_ctl_transition_timer);
-		} else {
-			state->transition->start_timestamp = k_uptime_get();
-		}
-
+		state->transition->start_timestamp = k_uptime_get();
 		return;
 	}
 
@@ -512,7 +480,7 @@ static void light_ctl_work_handler(struct k_work *work)
 		state_binding(CTL, CTL_TEMP);
 		update_light_state();
 
-		k_timer_stop(&light_ctl_transition_timer);
+		k_timer_stop(ptr_timer);
 	}
 }
 
@@ -522,16 +490,7 @@ static void light_ctl_temp_work_handler(struct k_work *work)
 
 	if (state->transition->just_started) {
 		state->transition->just_started = false;
-
-		if (state->transition->counter == 0) {
-			state_binding(IGNORE, CTL_TEMP);
-			update_light_state();
-
-			k_timer_stop(&light_ctl_temp_transition_timer);
-		} else {
-			state->transition->start_timestamp = k_uptime_get();
-		}
-
+		state->transition->start_timestamp = k_uptime_get();
 		return;
 	}
 
@@ -555,7 +514,7 @@ static void light_ctl_temp_work_handler(struct k_work *work)
 		state_binding(IGNORE, CTL_TEMP);
 		update_light_state();
 
-		k_timer_stop(&light_ctl_temp_transition_timer);
+		k_timer_stop(ptr_timer);
 	}
 }
 
@@ -605,93 +564,148 @@ static void light_ctl_temp_tt_handler(struct k_timer *dummy)
 
 K_TIMER_DEFINE(dummy_timer, NULL, NULL);
 
-K_TIMER_DEFINE(onoff_transition_timer, onoff_tt_handler, NULL);
-
-K_TIMER_DEFINE(level_lightness_transition_timer,
-	       level_lightness_tt_handler, NULL);
-K_TIMER_DEFINE(level_temp_transition_timer,
-	       level_temp_tt_handler, NULL);
-
-K_TIMER_DEFINE(light_lightness_actual_transition_timer,
-	       light_lightness_actual_tt_handler, NULL);
-K_TIMER_DEFINE(light_lightness_linear_transition_timer,
-	       light_lightness_linear_tt_handler, NULL);
-
-K_TIMER_DEFINE(light_ctl_transition_timer,
-	       light_ctl_tt_handler, NULL);
-K_TIMER_DEFINE(light_ctl_temp_transition_timer,
-	       light_ctl_temp_tt_handler, NULL);
-
 /* Messages handlers (Start) */
 void onoff_handler(struct generic_onoff_state *state)
 {
-	ptr_timer = &onoff_transition_timer;
-	state->transition->just_started = true;
+	k_sleep(5 * state->transition->delay);
 
-	k_timer_start(&onoff_transition_timer,
-		      K_MSEC(5 * state->transition->delay),
-		      K_MSEC(state->transition->quo_tt));
+	if (state->transition->counter == 0) {
+		state->transition->just_started = false;
+		state_binding(ONOFF, IGNORE_TEMP);
+		update_light_state();
+	} else {
+		ptr_timer = &state->transition->timer;
+
+		k_timer_init(ptr_timer, onoff_tt_handler, NULL);
+
+		k_timer_start(ptr_timer, 0,
+			      K_MSEC(state->transition->quo_tt));
+	}
 }
 
 void level_lightness_handler(struct generic_level_state *state)
 {
-	ptr_timer = &level_lightness_transition_timer;
-	state->transition->just_started = true;
+	u8_t level;
 
-	k_timer_start(&level_lightness_transition_timer,
-		      K_MSEC(5 * state->transition->delay),
-		      K_MSEC(state->transition->quo_tt));
+	k_sleep(5 * state->transition->delay);
+
+	switch (transition_type) {
+	case LEVEL_TT:
+	case LEVEL_TT_MOVE:
+		level = LEVEL;
+		break;
+	case LEVEL_TT_DELTA:
+		level = DELTA_LEVEL;
+		break;
+	default:
+		return;
+	}
+
+	if (state->transition->counter == 0) {
+		state->transition->just_started = false;
+		state_binding(level, IGNORE_TEMP);
+		update_light_state();
+	} else {
+		ptr_timer = &state->transition->timer;
+
+		k_timer_init(ptr_timer, level_lightness_tt_handler, NULL);
+
+		k_timer_start(ptr_timer, 0,
+			      K_MSEC(state->transition->quo_tt));
+	}
 }
 
 void level_temp_handler(struct generic_level_state *state)
 {
-	ptr_timer = &level_temp_transition_timer;
-	state->transition->just_started = true;
+	k_sleep(5 * state->transition->delay);
 
-	k_timer_start(&level_temp_transition_timer,
-		      K_MSEC(5 * state->transition->delay),
-		      K_MSEC(state->transition->quo_tt));
+	if (state->transition->counter == 0) {
+		state->transition->just_started = false;
+		state_binding(IGNORE, LEVEL_TEMP);
+		update_light_state();
+	} else {
+		ptr_timer = &state->transition->timer;
+
+		k_timer_init(ptr_timer, level_temp_tt_handler, NULL);
+
+		k_timer_start(ptr_timer, 0,
+			      K_MSEC(state->transition->quo_tt));
+	}
 }
 
 void light_lightness_actual_handler(struct light_lightness_state *state)
 {
-	ptr_timer = &light_lightness_actual_transition_timer;
-	state->transition->just_started = true;
+	k_sleep(5 * state->transition->delay);
 
+	if (state->transition->counter == 0) {
+		state->transition->just_started = false;
+		state_binding(ACTUAL, IGNORE_TEMP);
+		update_light_state();
+	} else {
+		ptr_timer = &state->transition->timer;
 
-	k_timer_start(&light_lightness_actual_transition_timer,
-		      K_MSEC(5 * state->transition->delay),
-		      K_MSEC(state->transition->quo_tt));
+		k_timer_init(ptr_timer,
+			     light_lightness_actual_tt_handler, NULL);
+
+		k_timer_start(ptr_timer, 0,
+			      K_MSEC(state->transition->quo_tt));
+	}
 }
 
 void light_lightness_linear_handler(struct light_lightness_state *state)
 {
-	ptr_timer = &light_lightness_linear_transition_timer;
-	state->transition->just_started = true;
+	k_sleep(5 * state->transition->delay);
 
-	k_timer_start(&light_lightness_linear_transition_timer,
-		      K_MSEC(5 * state->transition->delay),
-		      K_MSEC(state->transition->quo_tt));
+	if (state->transition->counter == 0) {
+		state->transition->just_started = false;
+		state_binding(LINEAR, IGNORE_TEMP);
+		update_light_state();
+	} else {
+		ptr_timer = &state->transition->timer;
+
+		k_timer_init(ptr_timer,
+			     light_lightness_linear_tt_handler, NULL);
+
+		k_timer_start(ptr_timer, 0,
+			      K_MSEC(state->transition->quo_tt));
+	}
 }
 
 void light_ctl_handler(struct light_ctl_state *state)
 {
-	ptr_timer = &light_ctl_transition_timer;
-	state->transition->just_started = true;
+	k_sleep(5 * state->transition->delay);
 
-	k_timer_start(&light_ctl_transition_timer,
-		      K_MSEC(5 * state->transition->delay),
-		      K_MSEC(state->transition->quo_tt));
+	if (state->transition->counter == 0) {
+		state->transition->just_started = false;
+		state_binding(CTL, CTL_TEMP);
+		update_light_state();
+	} else {
+		ptr_timer = &state->transition->timer;
+
+		k_timer_init(ptr_timer, light_ctl_tt_handler, NULL);
+
+		k_timer_start(ptr_timer, 0,
+			      K_MSEC(state->transition->quo_tt));
+	}
 }
 
 void light_ctl_temp_handler(struct light_ctl_state *state)
 {
-	ptr_timer = &light_ctl_temp_transition_timer;
-	state->transition->just_started = true;
+	k_sleep(5 * state->transition->delay);
 
-	k_timer_start(&light_ctl_temp_transition_timer,
-		      K_MSEC(5 * state->transition->delay),
-		      K_MSEC(state->transition->quo_tt));
+	if (state->transition->counter == 0) {
+		state->transition->just_started = false;
+		state_binding(IGNORE, CTL_TEMP);
+		update_light_state();
+
+	} else {
+		ptr_timer = &state->transition->timer;
+
+		k_timer_init(ptr_timer, light_ctl_temp_tt_handler, NULL);
+
+		k_timer_start(ptr_timer, 0,
+			      K_MSEC(state->transition->quo_tt));
+	}
 }
 /* Messages handlers (End) */
 

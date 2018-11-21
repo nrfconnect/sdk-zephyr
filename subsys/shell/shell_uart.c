@@ -21,7 +21,7 @@ LOG_MODULE_REGISTER(shell_uart);
 SHELL_UART_DEFINE(shell_transport_uart,
 		  CONFIG_SHELL_BACKEND_SERIAL_TX_RING_BUFFER_SIZE,
 		  CONFIG_SHELL_BACKEND_SERIAL_RX_RING_BUFFER_SIZE);
-SHELL_DEFINE(uart_shell, "uart:~$ ", &shell_transport_uart, 10,
+SHELL_DEFINE(shell_uart, "uart:~$ ", &shell_transport_uart, 10,
 	     SHELL_FLAG_OLF_CRLF);
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
@@ -35,13 +35,25 @@ static void uart_rx_handle(const struct shell_uart *sh_uart)
 	do {
 		len = ring_buf_put_claim(sh_uart->rx_ringbuf, &data,
 					 sh_uart->rx_ringbuf->size);
-		rd_len = uart_fifo_read(sh_uart->ctrl_blk->dev, data, len);
 
-		if (rd_len) {
-			new_data = true;
+		if (len) {
+			rd_len = uart_fifo_read(sh_uart->ctrl_blk->dev,
+						data, len);
+
+			if (rd_len) {
+				new_data = true;
+			}
+
+			ring_buf_put_finish(sh_uart->rx_ringbuf, rd_len);
+		} else {
+			u8_t dummy;
+
+			/* No space in the ring buffer - consume byte. */
+			LOG_WRN("RX ring buffer full.");
+
+			rd_len = uart_fifo_read(sh_uart->ctrl_blk->dev,
+						&dummy, 1);
 		}
-
-		ring_buf_put_finish(sh_uart->rx_ringbuf, rd_len);
 	} while (rd_len && (rd_len == len));
 
 	if (new_data) {
@@ -218,12 +230,18 @@ static int enable_shell_uart(struct device *arg)
 	ARG_UNUSED(arg);
 	struct device *dev =
 			device_get_binding(CONFIG_UART_CONSOLE_ON_DEV_NAME);
-	shell_init(&uart_shell, dev, true, true, LOG_LEVEL_INF);
+	bool log_backend = CONFIG_SHELL_BACKEND_SERIAL_LOG_LEVEL > 0;
+	u32_t level =
+		(CONFIG_SHELL_BACKEND_SERIAL_LOG_LEVEL > LOG_LEVEL_DBG) ?
+		CONFIG_LOG_MAX_LEVEL : CONFIG_SHELL_BACKEND_SERIAL_LOG_LEVEL;
+
+	shell_init(&shell_uart, dev, true, log_backend, level);
+
 	return 0;
 }
 SYS_INIT(enable_shell_uart, POST_KERNEL, 0);
 
 const struct shell *shell_backend_uart_get_ptr(void)
 {
-	return &uart_shell;
+	return &shell_uart;
 }

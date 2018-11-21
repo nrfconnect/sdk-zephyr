@@ -25,7 +25,7 @@ SANITYCHECK="${ZEPHYR_BASE}/scripts/sanitycheck"
 MATRIX_BUILDS=1
 MATRIX=1
 
-while getopts ":pm:b:r:M:" opt; do
+while getopts ":pm:b:B:r:M:" opt; do
   case $opt in
     p)
       echo "Testing a Pull Request." >&2
@@ -43,6 +43,10 @@ while getopts ":pm:b:r:M:" opt; do
       echo "Base Branch: $OPTARG" >&2
       BRANCH=$OPTARG
       ;;
+    B)
+      echo "bsim BT tests xml results file: $OPTARG" >&2
+      BSIM_BT_TEST_RESULTS_FILE=$OPTARG
+      ;;
     r)
       echo "Remote: $OPTARG" >&2
       REMOTE=$OPTARG
@@ -54,6 +58,7 @@ while getopts ":pm:b:r:M:" opt; do
 done
 
 DOC_MATRIX=${MATRIX_BUILDS}
+
 if [ -z "$BRANCH" ]; then
 	echo "No base branch given"
 	exit
@@ -136,12 +141,6 @@ if [ ! -z "${BSIM_OUT_PATH}" ]; then
 	fi
 else
 	echo "Skipping BT simulator tests"
-fi
-
-# Build Docs on matrix 5 in a pull request
-if [ "${MATRIX}" = "${DOC_MATRIX}" -a -n "${PULL_REQUEST}" ]; then
-	build_docs
-	./scripts/ci/check-compliance.py --commits ${COMMIT_RANGE} || true;
 fi
 
 # In a pull-request see if we have changed any tests or board definitions

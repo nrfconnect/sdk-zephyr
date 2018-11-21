@@ -36,6 +36,20 @@
 		compatible = "mmio-sram";
 	};
 
+	aliases {
+		i2c-0 = &i2c0;
+		i2c-1 = &i2c1;
+		spi-0 = &spi0;
+		spi-1 = &spi1;
+		spi-2 = &spi2;
+		uart-0 = &uart0;
+		adc-0 = &adc;
+		gpio-0 = &gpio0;
+		gpiote-0 = &gpiote;
+		wdt-0 = &wdt;
+		qdec-0 = &qdec;
+	};
+
 	soc {
 		adc: adc@40007000 {
 			compatible = "nordic,nrf-saadc";
@@ -58,7 +72,6 @@
 			compatible = "nordic,nrf-gpiote";
 			reg = <0x40006000 0x1000>;
 			interrupts = <6 5>;
-			interrupt-names = "gpiote";
 			status = "disabled";
 			label = "GPIOTE_0";
 		};
@@ -137,7 +150,6 @@
 			compatible = "nordic,nrf-watchdog";
 			reg = <0x40010000 0x1000>;
 			interrupts = <16 1>;
-			interrupt-names = "wdt";
 			label = "WDT";
 		};
 	};
