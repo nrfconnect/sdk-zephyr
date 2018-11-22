@@ -258,6 +258,7 @@ config BT_ATT_TX_MAX
 
 config BT_AUTO_PHY_UPDATE
 	bool "Auto-initiate PHY Update Procedure"
+	depends on BT_PHY_UPDATE
 	default y
 	help
 	  Initiate PHY Update Procedure on connection establishment.
@@ -272,6 +273,7 @@ config BT_SMP
 	select TINYCRYPT_AES
 	select TINYCRYPT_AES_CMAC
 	select BT_RPA
+	select BT_ECC
 	help
 	  This option enables support for the Security Manager Protocol
 	  (SMP), making it possible to pair devices over LE.
@@ -487,12 +489,17 @@ config BT_ID_MAX
 
 endif # BT_HCI_HOST
 
+config BT_ECC
+	bool "Enable ECDH key generation support"
+	help
+	  This option adds support for ECDH HCI commands.
+
 config BT_TINYCRYPT_ECC
 	bool "Use TinyCrypt library for ECDH"
 	select TINYCRYPT
 	select TINYCRYPT_ECC_DH
-	depends on BT_HCI_RAW || BT_HCI_HOST
-	default y if BT_CTLR && (BT_SMP || BT_MESH_PROV)
+	depends on BT_ECC && (BT_HCI_RAW || BT_HCI_HOST)
+	default y if BT_CTLR
 	help
 	  If this option is set TinyCrypt library is used for emulating the
 	  ECDH HCI commands and events needed by e.g. LE Secure Connections.

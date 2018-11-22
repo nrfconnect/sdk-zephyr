@@ -357,13 +357,13 @@ static struct adc_sam_data adc0_sam_data = {
 	ADC_CONTEXT_INIT_SYNC(adc0_sam_data, ctx),
 };
 
-DEVICE_AND_API_INIT(adc0_sam, CONFIG_ADC_0_NAME, adc_sam_init,
+DEVICE_AND_API_INIT(adc0_sam, DT_ADC_0_NAME, adc_sam_init,
 		    &adc0_sam_data, &adc0_sam_cfg, POST_KERNEL,
 		    CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &adc_sam_api);
 
 static void adc0_sam_cfg_func(struct device *dev)
 {
-	IRQ_CONNECT(DT_ADC_0_IRQ, CONFIG_ADC_0_IRQ_PRI, adc_sam_isr,
+	IRQ_CONNECT(DT_ADC_0_IRQ, DT_ADC_0_IRQ_PRI, adc_sam_isr,
 		    DEVICE_GET(adc0_sam), 0);
 	irq_enable(DT_ADC_0_IRQ);
 }
@@ -386,13 +386,13 @@ static struct adc_sam_data adc1_sam_data = {
 	ADC_CONTEXT_INIT_SYNC(adc1_sam_data, ctx),
 };
 
-DEVICE_AND_API_INIT(adc1_sam, CONFIG_ADC_1_NAME, adc_sam_init,
+DEVICE_AND_API_INIT(adc1_sam, DT_ADC_1_NAME, adc_sam_init,
 		    &adc1_sam_data, &adc1_sam_cfg, POST_KERNEL,
 		    CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &adc_sam_api);
 
 static void adc1_sam_cfg_func(struct device *dev)
 {
-	IRQ_CONNECT(DT_ADC_1_IRQ, CONFIG_ADC_1_IRQ_PRI, adc_sam_isr,
+	IRQ_CONNECT(DT_ADC_1_IRQ, DT_ADC_1_IRQ_PRI, adc_sam_isr,
 		    DEVICE_GET(adc1_sam), 0);
 	irq_enable(DT_ADC_1_IRQ);
 }

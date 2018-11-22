@@ -233,14 +233,14 @@ static struct mcux_adc16_data mcux_adc16_data_0 = {
 	ADC_CONTEXT_INIT_SYNC(mcux_adc16_data_0, ctx),
 };
 
-DEVICE_AND_API_INIT(mcux_adc16_0, CONFIG_ADC_0_NAME, &mcux_adc16_init,
+DEVICE_AND_API_INIT(mcux_adc16_0, DT_ADC_0_NAME, &mcux_adc16_init,
 		    &mcux_adc16_data_0, &mcux_adc16_config_0,
 		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 		    &mcux_adc16_driver_api);
 
 static void mcux_adc16_config_func_0(struct device *dev)
 {
-	IRQ_CONNECT(DT_ADC_0_IRQ, CONFIG_ADC_0_IRQ_PRI,
+	IRQ_CONNECT(DT_ADC_0_IRQ, DT_ADC_0_IRQ_PRI,
 		    mcux_adc16_isr, DEVICE_GET(mcux_adc16_0), 0);
 
 	irq_enable(DT_ADC_0_IRQ);
@@ -261,14 +261,14 @@ static struct mcux_adc16_data mcux_adc16_data_1 = {
 	ADC_CONTEXT_INIT_SYNC(mcux_adc16_data_1, ctx),
 };
 
-DEVICE_AND_API_INIT(mcux_adc16_1, CONFIG_ADC_1_NAME, &mcux_adc16_init,
+DEVICE_AND_API_INIT(mcux_adc16_1, DT_ADC_1_NAME, &mcux_adc16_init,
 		    &mcux_adc16_data_1, &mcux_adc16_config_1,
 		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 		    &mcux_adc16_driver_api);
 
 static void mcux_adc16_config_func_1(struct device *dev)
 {
-	IRQ_CONNECT(DT_ADC_1_IRQ, CONFIG_ADC_1_IRQ_PRI,
+	IRQ_CONNECT(DT_ADC_1_IRQ, DT_ADC_1_IRQ_PRI,
 		    mcux_adc16_isr, DEVICE_GET(mcux_adc16_1), 0);
 
 	irq_enable(DT_ADC_1_IRQ);

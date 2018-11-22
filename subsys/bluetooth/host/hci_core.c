@@ -83,9 +83,11 @@ static bt_ready_cb_t ready_cb;
 
 static bt_le_scan_cb_t *scan_dev_found_cb;
 
+#if defined(CONFIG_BT_ECC)
 static u8_t pub_key[64];
 static struct bt_pub_key_cb *pub_key_cb;
 static bt_dh_key_cb_t dh_key_cb;
+#endif /* CONFIG_BT_ECC */
 
 #if defined(CONFIG_BT_BREDR)
 static bt_br_discovery_cb_t *discovery_cb;
@@ -945,7 +947,8 @@ static void le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 		}
 	}
 
-	if (BT_FEAT_LE_DLE(bt_dev.le.features)) {
+	if (IS_ENABLED(CONFIG_BT_DATA_LEN_UPDATE) &&
+	    BT_FEAT_LE_DLE(bt_dev.le.features)) {
 		hci_le_set_data_len(conn);
 	}
 
@@ -1032,7 +1035,8 @@ static void le_remote_feat_complete(struct net_buf *buf)
 		}
 	}
 
-	if (BT_FEAT_LE_DLE(bt_dev.le.features) &&
+	if (IS_ENABLED(CONFIG_BT_DATA_LEN_UPDATE) &&
+	    BT_FEAT_LE_DLE(bt_dev.le.features) &&
 	    BT_FEAT_LE_DLE(conn->le.features)) {
 		hci_le_set_data_len(conn);
 	}
@@ -1046,6 +1050,7 @@ done:
 	bt_conn_unref(conn);
 }
 
+#if defined(CONFIG_BT_DATA_LEN_UPDATE)
 static void le_data_len_change(struct net_buf *buf)
 {
 	struct bt_hci_evt_le_data_len_change *evt = (void *)buf->data;
@@ -1069,7 +1074,9 @@ static void le_data_len_change(struct net_buf *buf)
 
 	bt_conn_unref(conn);
 }
+#endif /* CONFIG_BT_DATA_LEN_UPDATE */
 
+#if defined(CONFIG_BT_PHY_UPDATE)
 static void le_phy_update_complete(struct net_buf *buf)
 {
 	struct bt_hci_evt_le_phy_update_complete *evt = (void *)buf->data;
@@ -1090,7 +1097,8 @@ static void le_phy_update_complete(struct net_buf *buf)
 		goto done;
 	}
 
-	if (BT_FEAT_LE_DLE(bt_dev.le.features) &&
+	if (IS_ENABLED(CONFIG_BT_DATA_LEN_UPDATE) &&
+	    BT_FEAT_LE_DLE(bt_dev.le.features) &&
 	    BT_FEAT_LE_DLE(conn->le.features)) {
 		hci_le_set_data_len(conn);
 	}
@@ -1103,6 +1111,7 @@ static void le_phy_update_complete(struct net_buf *buf)
 done:
 	bt_conn_unref(conn);
 }
+#endif /* CONFIG_BT_PHY_UPDATE */
 
 bool bt_le_conn_params_valid(const struct bt_le_conn_param *param)
 {
@@ -2951,6 +2960,7 @@ done:
 }
 #endif /* CONFIG_BT_SMP */
 
+#if defined(CONFIG_BT_ECC)
 static void le_pkey_complete(struct net_buf *buf)
 {
 	struct bt_hci_evt_le_p256_public_key_complete *evt = (void *)buf->data;
@@ -2981,6 +2991,7 @@ static void le_dhkey_complete(struct net_buf *buf)
 		dh_key_cb = NULL;
 	}
 }
+#endif /* CONFIG_BT_ECC */
 
 static void hci_reset_complete(struct net_buf *buf)
 {
@@ -3301,24 +3312,30 @@ static void hci_le_meta_event(struct net_buf *buf)
 	case BT_HCI_EVT_LE_CONN_PARAM_REQ:
 		le_conn_param_req(buf);
 		break;
+#if defined(CONFIG_BT_DATA_LEN_UPDATE)
 	case BT_HCI_EVT_LE_DATA_LEN_CHANGE:
 		le_data_len_change(buf);
 		break;
+#endif /* CONFIG_BT_DATA_LEN_UPDATE */
+#if defined(CONFIG_BT_PHY_UPDATE)
 	case BT_HCI_EVT_LE_PHY_UPDATE_COMPLETE:
 		le_phy_update_complete(buf);
 		break;
+#endif /* CONFIG_BT_PHY_UPDATE */
 #endif /* CONFIG_BT_CONN */
 #if defined(CONFIG_BT_SMP)
 	case BT_HCI_EVT_LE_LTK_REQUEST:
 		le_ltk_request(buf);
 		break;
 #endif /* CONFIG_BT_SMP */
+#if defined(CONFIG_BT_ECC)
 	case BT_HCI_EVT_LE_P256_PUBLIC_KEY_COMPLETE:
 		le_pkey_complete(buf);
 		break;
 	case BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE:
 		le_dhkey_complete(buf);
 		break;
+#endif /* CONFIG_BT_SMP */
 #if defined(CONFIG_BT_OBSERVER)
 	case BT_HCI_EVT_LE_ADVERTISING_REPORT:
 		le_adv_report(buf);
@@ -3787,12 +3804,14 @@ static int le_set_event_mask(void)
 			mask |= BT_EVT_MASK_LE_CONN_PARAM_REQ;
 		}
 
-		if (BT_FEAT_LE_DLE(bt_dev.le.features)) {
+		if (IS_ENABLED(CONFIG_BT_DATA_LEN_UPDATE) &&
+		    BT_FEAT_LE_DLE(bt_dev.le.features)) {
 			mask |= BT_EVT_MASK_LE_DATA_LEN_CHANGE;
 		}
 
-		if (BT_FEAT_LE_PHY_2M(bt_dev.le.features) ||
-		    BT_FEAT_LE_PHY_CODED(bt_dev.le.features)) {
+		if (IS_ENABLED(CONFIG_BT_PHY_UPDATE) &&
+		    (BT_FEAT_LE_PHY_2M(bt_dev.le.features) ||
+		     BT_FEAT_LE_PHY_CODED(bt_dev.le.features))) {
 			mask |= BT_EVT_MASK_LE_PHY_UPDATE_COMPLETE;
 		}
 	}
@@ -3879,6 +3898,7 @@ static int le_init(void)
 	}
 
 	if (IS_ENABLED(CONFIG_BT_CONN) &&
+	    IS_ENABLED(CONFIG_BT_DATA_LEN_UPDATE) &&
 	    BT_FEAT_LE_DLE(bt_dev.le.features)) {
 		struct bt_hci_cp_le_write_default_data_len *cp;
 		struct bt_hci_rp_le_read_max_data_len *rp;
@@ -5726,6 +5746,7 @@ u16_t bt_hci_get_cmd_opcode(struct net_buf *buf)
 	return cmd(buf)->opcode;
 }
 
+#if defined(CONFIG_BT_ECC)
 int bt_pub_key_gen(struct bt_pub_key_cb *new_cb)
 {
 	struct bt_pub_key_cb *cb;
@@ -5811,6 +5832,7 @@ int bt_dh_key_gen(const u8_t remote_pk[64], bt_dh_key_cb_t cb)
 
 	return 0;
 }
+#endif /* CONFIG_BT_ECC */
 
 #if defined(CONFIG_BT_BREDR)
 int bt_br_oob_get_local(struct bt_br_oob *oob)
