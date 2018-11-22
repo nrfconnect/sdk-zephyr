@@ -35,8 +35,8 @@
 #include <generated_dts_board.h>
 
 /* CONNECTION TO DEVICETREE DTS DTSI */
-#ifdef DT_NVMC_BASE_ADDRESS
-#define NRF_NVMC                                ((NRF_NVMC_Type*) DT_NVMC_BASE_ADDRESS)
+#ifdef NVMC_BASE_ADDRESS
+#define NRF_NVMC                                ((NRF_NVMC_Type*) NVMC_BASE_ADDRESS)
 #endif
 
 #ifdef NRF_RTC1_BASE_ADDRESS
@@ -56,131 +56,64 @@
 #endif
 #endif
 
-#ifdef DT_SPU_BASE_ADDRESS
-#define NRF_SPU                        ((NRF_SPU_Type*) DT_SPU_BASE_ADDRESS)
+#ifdef SPU_BASE_ADDRESS
+#define NRF_SPU                        ((NRF_SPU_Type*) SPU_BASE_ADDRESS)
 #endif
 
-#ifdef DT_GPIO_0_BASE_ADDRESS
-#define NRF_GPIO                       ((NRF_GPIO_Type*) DT_GPIO_0_BASE_ADDRESS)
-#define DT_GPIO_P0_DEV_NAME            DT_GPIO_0_LABEL
+#ifdef GPIO_0_BASE_ADDRESS
+#define NRF_GPIO                       ((NRF_GPIO_Type*) GPIO_0_BASE_ADDRESS)
 #endif
 
-#ifdef DT_GPIOTE_BASE_ADDRESS
-#define NRF_GPIOTE                     ((NRF_GPIOTE_Type*) DT_GPIOTE_BASE_ADDRESS)
-#define DT_GPIOTE_IRQ_PRI              DT_GPIOTE_IRQ_GPIOTE_PRIORITY
-#define DT_GPIOTE_IRQ                  DT_GPIOTE_IRQ_GPIOTE
+#ifdef GPIOTE_0_BASE_ADDRESS
+#define NRF_GPIOTE                     ((NRF_GPIOTE_Type*) GPIOTE_0_BASE_ADDRESS)
 #endif
 
 #ifdef I2C0_BASE_ADDRESS
 #define NRF_TWIM0                      ((NRF_TWIM_Type*) I2C0_BASE_ADDRESS)
-#define CONFIG_I2C_0_IRQ               I2C0_IRQ
-#define CONFIG_I2C_0_IRQ_PRI           I2C0_IRQ_PRIORITY
-#define DT_I2C_0_SCL_PIN               I2C0_SCL_PIN
-#define DT_I2C_0_SDA_PIN               I2C0_SDA_PIN
-#define CONFIG_I2C_0_NAME              I2C0_LABEL
 #endif
 
 #ifdef I2C1_BASE_ADDRESS
 #define NRF_TWIM1                      ((NRF_TWIM_Type*) I2C1_BASE_ADDRESS)
-#define CONFIG_I2C_1_IRQ               I2C1_IRQ
-#define CONFIG_I2C_1_IRQ_PRI           I2C1_IRQ_PRIORITY
-#define DT_I2C_1_SCL_PIN               I2C1_SCL_PIN
-#define DT_I2C_1_SDA_PIN               I2C1_SDA_PIN
-#define CONFIG_I2C_1_NAME              I2C1_LABEL
 #endif
 
 #ifdef I2C2_BASE_ADDRESS
 #define NRF_TWIM2                      ((NRF_TWIM_Type*) I2C2_BASE_ADDRESS)
-#define CONFIG_I2C_2_IRQ               I2C2_IRQ
-#define CONFIG_I2C_2_IRQ_PRI           I2C2_IRQ_PRIORITY
-#define DT_I2C_2_SCL_PIN               I2C2_SCL_PIN
-#define DT_I2C_2_SDA_PIN               I2C2_SDA_PIN
-#define CONFIG_I2C_2_NAME              I2C2_LABEL
 #endif
 
 #ifdef I2C3_BASE_ADDRESS
 #define NRF_TWIM3                      ((NRF_TWIM_Type*) I2C3_BASE_ADDRESS)
-#define CONFIG_I2C_3_IRQ               I2C3_IRQ
-#define CONFIG_I2C_3_IRQ_PRI           I2C3_IRQ_PRIORITY
-#define DT_I2C_3_SCL_PIN               I2C3_SCL_PIN
-#define DT_I2C_3_SDA_PIN               I2C3_SDA_PIN
-#define CONFIG_I2C_3_NAME              I2C3_LABEL
 #endif
 
 #ifdef SPI0_BASE_ADDRESS
 #define NRF_SPIM0                      ((NRF_SPIM_Type*) SPI0_BASE_ADDRESS)
-#define CONFIG_SPI_0_NRF_SCK_PIN       SPI0_SCK_PIN
-#define CONFIG_SPI_0_NRF_MOSI_PIN      SPI0_MOSI_PIN
-#define CONFIG_SPI_0_NRF_MISO_PIN      SPI0_MISO_PIN
-#define CONFIG_SPI_0_NAME              SPI0_LABEL
-#define CONFIG_SPI_0_IRQ_PRI           SPI0_IRQ_PRIORITY
-#define CONFIG_SPI_0_IRQ               SPI0_IRQ
 #endif
 
 #ifdef SPI1_BASE_ADDRESS
 #define NRF_SPIM1                      ((NRF_SPIM_Type*) SPI1_BASE_ADDRESS)
-#define DT_SPI_1_NRF_SCK_PIN           SPI1_SCK_PIN
-#define DT_SPI_1_NRF_MOSI_PIN          SPI1_MOSI_PIN
-#define DT_SPI_1_NRF_MISO_PIN          SPI1_MISO_PIN
-#define CONFIG_SPI_1_NAME              SPI1_LABEL
-#define CONFIG_SPI_1_IRQ_PRI           SPI1_IRQ_PRIORITY
-#define CONFIG_SPI_1_IRQ               SPI1_IRQ
 #endif
 
 #ifdef SPI2_BASE_ADDRESS
 #define NRF_SPIM2                      ((NRF_SPIM_Type*) SPI2_BASE_ADDRESS)
-#define DT_SPI_2_NRF_SCK_PIN           SPI2_SCK_PIN
-#define DT_SPI_2_NRF_MOSI_PIN          SPI2_MOSI_PIN
-#define DT_SPI_2_NRF_MISO_PIN          SPI2_MISO_PIN
-#define CONFIG_SPI_2_NAME              SPI2_LABEL
-#define CONFIG_SPI_2_IRQ_PRI           SPI2_IRQ_PRIORITY
-#define CONFIG_SPI_2_IRQ               SPI2_IRQ
 #endif
 
 #ifdef SPI3_BASE_ADDRESS
 #define NRF_SPIM3                      ((NRF_SPIM_Type*) SPI3_BASE_ADDRESS)
-#define DT_SPI_3_NRF_SCK_PIN           SPI3_SCK_PIN
-#define DT_SPI_3_NRF_MOSI_PIN          SPI3_MOSI_PIN
-#define DT_SPI_3_NRF_MISO_PIN          SPI3_MISO_PIN
-#define CONFIG_SPI_3_NAME              SPI3_LABEL
-#define CONFIG_SPI_3_IRQ_PRI           SPI3_IRQ_PRIORITY
-#define CONFIG_SPI_3_IRQ               SPI3_IRQ
 #endif
 
-#if defined(DT_UART_0_BASE_ADDRESS)
-#define NRF_UARTE0                     ((NRF_UARTE_Type*) DT_UART_0_BASE_ADDRESS)
-#define DT_UART_0_IRQ_PRI              DT_UART_0_IRQ_PRIORITY
-#define DT_UART_0_IRQ_NUM              DT_UART_0_IRQ
-#define DT_UART_0_BAUD_RATE            DT_UART_0_CURRENT_SPEED
-#define DT_UART_0_BASE                 DT_UART_0_BASE_ADDRESS
-#define DT_UART_0_NAME                 DT_UART_0_LABEL
+#if defined(UART_0_BASE_ADDRESS)
+#define NRF_UARTE0                     ((NRF_UARTE_Type*) UART_0_BASE_ADDRESS)
 #endif
 
-#if defined(DT_UART_1_BASE_ADDRESS)
-#define NRF_UARTE1                     ((NRF_UARTE_Type*) DT_UART_1_BASE_ADDRESS)
-#define DT_UART_1_IRQ_PRI              DT_UART_1_IRQ_PRIORITY
-#define DT_UART_1_IRQ_NUM              DT_UART_1_IRQ
-#define DT_UART_1_BAUD_RATE            DT_UART_1_CURRENT_SPEED
-#define DT_UART_1_BASE                 DT_UART_1_BASE_ADDRESS
-#define DT_UART_1_NAME                 DT_UART_1_LABEL
+#if defined(UART_1_BASE_ADDRESS)
+#define NRF_UARTE1                     ((NRF_UARTE_Type*) UART_1_BASE_ADDRESS)
 #endif
 
-#if defined(DT_UART_2_BASE_ADDRESS)
-#define NRF_UARTE2                     ((NRF_UARTE_Type*) DT_UART_2_BASE_ADDRESS)
-#define DT_UART_2_IRQ_PRI              DT_UART_2_IRQ_PRIORITY
-#define DT_UART_2_IRQ_NUM              DT_UART_2_IRQ
-#define DT_UART_2_BAUD_RATE            DT_UART_2_CURRENT_SPEED
-#define DT_UART_2_BASE                 DT_UART_2_BASE_ADDRESS
-#define DT_UART_2_NAME                 DT_UART_2_LABEL
+#if defined(UART_2_BASE_ADDRESS)
+#define NRF_UARTE2                     ((NRF_UARTE_Type*) UART_2_BASE_ADDRESS)
 #endif
 
-#if defined(DT_UART_3_BASE_ADDRESS)
-#define NRF_UARTE3                     ((NRF_UARTE_Type*) DT_UART_3_BASE_ADDRESS)
-#define DT_UART_3_IRQ_PRI              DT_UART_3_IRQ_PRIORITY
-#define DT_UART_3_IRQ_NUM              DT_UART_3_IRQ
-#define DT_UART_3_BAUD_RATE            DT_UART_3_CURRENT_SPEED
-#define DT_UART_3_BASE                 DT_UART_3_BASE_ADDRESS
-#define DT_UART_3_NAME                 DT_UART_3_LABEL
+#if defined(UART_3_BASE_ADDRESS)
+#define NRF_UARTE3                     ((NRF_UARTE_Type*) UART_3_BASE_ADDRESS)
 #endif
 
 // <<< Use Configuration Wizard in Context Menu >>>\n
