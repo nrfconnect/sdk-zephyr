@@ -14,19 +14,6 @@
 # modified by the entry point ${APPLICATION_SOURCE_DIR}/CMakeLists.txt
 # that was specified when cmake was called.
 
-# Determine if we are using MSYS.
-#
-# We don't use project() because it would take some time to rewrite
-# the build scripts to be compatible with everything project() does.
-execute_process(
-  COMMAND
-  uname
-  OUTPUT_VARIABLE uname_output
-  )
-if(uname_output MATCHES "MSYS")
-  set(MSYS 1)
-endif()
-
 # CMake version 3.8.2 is the real minimum supported version.
 #
 # Unfortunately CMake requires the toplevel CMakeLists.txt file to
@@ -94,12 +81,20 @@ set(AUTOCONF_H ${__build_dir}/include/generated/autoconf.h)
 # Re-configure (Re-execute all CMakeLists.txt code) when autoconf.h changes
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${AUTOCONF_H})
 
-include(${ZEPHYR_BASE}/cmake/extensions.cmake)
 
-find_package(
-  PythonInterp 3.4
-  REQUIRED
-  )
+# The 'FindPythonInterp' that is distributed with CMake 3.8 has a bug
+# that we need to work around until we upgrade to 3.13. Until then we
+# maintain a patched copy in our repo. Bug:
+# https://github.com/zephyrproject-rtos/zephyr/issues/11103
+set(PythonInterp_FIND_VERSION 3.4)
+set(PythonInterp_FIND_VERSION_COUNT 2)
+set(PythonInterp_FIND_VERSION_MAJOR 3)
+set(PythonInterp_FIND_VERSION_MINOR 4)
+set(PythonInterp_FIND_VERSION_EXACT 0)
+set(PythonInterp_FIND_REQUIRED 1)
+include(${ZEPHYR_BASE}/cmake/backports/FindPythonInterp.cmake)
+
+include(${ZEPHYR_BASE}/cmake/extensions.cmake)
 
 include(${ZEPHYR_BASE}/cmake/ccache.cmake)
 
@@ -114,18 +109,6 @@ add_custom_target(
   COMMAND ${CMAKE_COMMAND} -P ${ZEPHYR_BASE}/cmake/pristine.cmake
   # Equivalent to rm -rf build/*
   )
-
-# Must be run before kconfig.cmake
-if(MSYS)
-  execute_process(
-    COMMAND
-    ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/check_host_is_ok.py
-    RESULT_VARIABLE ret
-    )
-  if(NOT "${ret}" STREQUAL "0")
-    message(FATAL_ERROR "command failed with return code: ${ret}")
-  endif()
-endif()
 
 # The BOARD can be set by 3 sources. Through environment variables,
 # through the cmake CLI, and through CMakeLists.txt.
@@ -218,7 +201,12 @@ foreach(root ${BOARD_ROOT})
   endif()
 endforeach()
 
-assert_with_usage(BOARD_DIR "No board named '${BOARD}' found")
+if(NOT BOARD_DIR)
+  message("No board named '${BOARD}' found")
+  print_usage()
+  unset(CACHED_BOARD CACHE)
+  message(FATAL_ERROR "Invalid usage")
+endif()
 
 get_filename_component(BOARD_ARCH_DIR ${BOARD_DIR} DIRECTORY)
 get_filename_component(BOARD_FAMILY   ${BOARD_DIR} NAME     )
@@ -326,6 +314,28 @@ endif()
 message(STATUS "Cache files will be written to: ${USER_CACHE_DIR}")
 
 include(${BOARD_DIR}/board.cmake OPTIONAL)
+
+# If we are using a suitable ethernet driver inside qemu, then these options
+# must be set, otherwise a zephyr instance cannot receive any network packets.
+# The Qemu supported ethernet driver should define CONFIG_ETH_NIC_MODEL
+# string that tells what nic model Qemu should use.
+if(CONFIG_QEMU_TARGET)
+  if(CONFIG_NET_QEMU_ETHERNET)
+    if(CONFIG_ETH_NIC_MODEL)
+      list(APPEND QEMU_FLAGS_${ARCH}
+	-nic tap,model=${CONFIG_ETH_NIC_MODEL},script=no,downscript=no,ifname=zeth
+	)
+    else()
+      message(FATAL_ERROR
+	"No Qemu ethernet driver configured!
+Enable Qemu supported ethernet driver like e1000 at drivers/ethernet")
+    endif()
+  else()
+    list(APPEND QEMU_FLAGS_${ARCH}
+      -net none
+      )
+  endif()
+endif()
 
 zephyr_library_named(app)
 

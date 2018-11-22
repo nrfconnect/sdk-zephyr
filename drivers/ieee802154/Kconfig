@@ -15,14 +15,6 @@ menuconfig IEEE802154
 
 if IEEE802154
 
-if NET_L2_IEEE802154
-module = IEEE802154
-module-dep = LOG
-module-str = Log level for IEEE 802.15.4 driver
-module-help = Sets log level for IEEE 802.15.4 Device Drivers.
-source "subsys/net/Kconfig.template.log_config.net"
-endif # NET_L2_IEEE802154
-
 config IEEE802154_RAW_MODE
 	bool "Use IEEE 802.15.4 driver without the MAC stack"
 	select NET_RAW_MODE
@@ -95,5 +87,10 @@ config IEEE802154_UPIPE_MAC7
 	  This is the byte 7 of the MAC address.
 
 endif # IEEE802154_UPIPE_RANDOM_MAC
+
+module = IEEE802154_DRIVER
+module-str = IEEE 802.15.4 driver
+module-help = Sets log level for IEEE 802.15.4 Device Drivers.
+source "subsys/logging/Kconfig.template.log_config"
 
 endif # IEEE802154

@@ -206,6 +206,14 @@ menu "Interrupt Configuration"
 #
 # Interrupt related configs
 #
+config DYNAMIC_INTERRUPTS
+	bool "Enable installation of IRQs at runtime"
+	default n
+	help
+	  Enable installation of interrupts at runtime, which will move some
+	  interrupt-related data structures to RAM instead of ROM, and
+	  on some architectures increase code size.
+
 config GEN_ISR_TABLES
 	bool "Use generated IRQ tables"
 	help
@@ -413,8 +421,7 @@ config SOC
 	help
 	  SoC name which can be found under soc/<arch>/<soc name>.
 	  This option holds the directory name used by the build system to locate
-	  the correct linker and header files for the SoC. This option will go away
-	  once all SoCs are using family/series structure.
+	  the correct linker and header files for the SoC.
 
 config SOC_SERIES
 	string

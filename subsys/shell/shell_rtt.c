@@ -10,7 +10,7 @@
 #include <logging/sys_log.h>
 
 SHELL_RTT_DEFINE(shell_transport_rtt);
-SHELL_DEFINE(rtt_shell, "rtt:~$ ", &shell_transport_rtt, 10,
+SHELL_DEFINE(shell_rtt, "rtt:~$ ", &shell_transport_rtt, 10,
 	     SHELL_FLAG_OLF_CRLF);
 
 static struct k_thread rtt_rx_thread;
@@ -25,7 +25,8 @@ static void shell_rtt_rx_process(struct shell_rtt *sh_rtt)
 
 		if (count > 0) {
 			sh_rtt->rx_cnt = count;
-			sh_rtt->handler(SHELL_TRANSPORT_EVT_RX_RDY, sh_rtt->context);
+			sh_rtt->handler(SHELL_TRANSPORT_EVT_RX_RDY,
+					sh_rtt->context);
 		}
 
 		k_sleep(K_MSEC(10));
@@ -68,8 +69,7 @@ static int write(const struct shell_transport *transport,
 	struct shell_rtt *sh_rtt = (struct shell_rtt *)transport->ctx;
 	const u8_t *data8 = (const u8_t *)data;
 
-	SEGGER_RTT_Write(0, data8, length);
-	*cnt = length;
+	*cnt = SEGGER_RTT_Write(0, data8, length);
 
 	sh_rtt->handler(SHELL_TRANSPORT_EVT_TX_RDY, sh_rtt->context);
 	return 0;
@@ -102,8 +102,11 @@ const struct shell_transport_api shell_rtt_transport_api = {
 static int enable_shell_rtt(struct device *arg)
 {
 	ARG_UNUSED(arg);
+	bool log_backend = CONFIG_SHELL_BACKEND_RTT_LOG_LEVEL > 0;
+	u32_t level = (CONFIG_SHELL_BACKEND_RTT_LOG_LEVEL > LOG_LEVEL_DBG) ?
+		      CONFIG_LOG_MAX_LEVEL : CONFIG_SHELL_BACKEND_RTT_LOG_LEVEL;
 
-	shell_init(&rtt_shell, NULL, false, false, LOG_LEVEL_INF);
+	shell_init(&shell_rtt, NULL, true, log_backend, level);
 
 	return 0;
 }
@@ -111,6 +114,6 @@ static int enable_shell_rtt(struct device *arg)
 /* Function is used for testing purposes */
 const struct shell *shell_backend_rtt_get_ptr(void)
 {
-	return &rtt_shell;
+	return &shell_rtt;
 }
 SYS_INIT(enable_shell_rtt, POST_KERNEL, 0);

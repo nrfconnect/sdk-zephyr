@@ -7,9 +7,6 @@ if BOARD_INTEL_S1000_CRB
 config BOARD
 	default "intel_s1000_crb"
 
-config BOARD_XTENSA
-	def_bool y
-
 config CAVS_ICTL_0_OFFSET
 	default 0x06
 config CAVS_ICTL_1_OFFSET
@@ -63,13 +60,38 @@ config HEAP_MEM_POOL_SIZE
 
 endif # DMA_CAVS
 
+config SPI_DW_FIFO_DEPTH
+	default 32
+
+config SPI_NOR
+	def_bool y
+
+config SPI_NOR_JEDEC_ID
+	default 0xC2803A
+
+config SPI_NOR_PAGE_SIZE
+	default 256
+
+config SPI_NOR_SECTOR_SIZE
+	default 4096
+
+config SPI_NOR_SECTORS
+	default 1024
+
+config SPI_NOR_BLOCK_SIZE
+	default 65536
+
+choice SPI_NOR_BLOCK_ERASE_SIZE
+	default SPI_NOR_BLOCK_ERASE_64K
+endchoice
+
 if USB
 config USB_DW
-	def_bool y
+	default y
 config USB_DW_IRQ_PRI
 	default 3
 config USB_DW_USB_2_0
-	def_bool y
+	default y
 config USB_HID_MAX_PAYLOAD_SIZE
 	default 128
 config USB_COMPOSITE_BUFFER_SIZE
@@ -79,17 +101,83 @@ endif # USB
 if UART_NS16550
 
 config UART_NS16550_PORT_0
-	def_bool y
+	default y
 
 if UART_NS16550_PORT_0
 
 config UART_NS16550_PORT_0_OPTIONS
 	default 0
 config UART_INTERRUPT_DRIVEN
-	def_bool y
+	default y
 
 endif # UART_NS16550_PORT_0
 
 endif # UART_NS16550
+
+if I2C
+
+config I2C_DW
+	default y
+config I2C_0
+	default y
+
+endif
+
+if DMA
+
+config DMA_CAVS
+	default y
+
+config DCACHE_WRITEBACK
+	default y
+
+endif
+
+if I2S
+config I2S_CAVS
+	default y
+endif
+
+if AUDIO
+config AUDIO_CODEC
+	default y
+
+config AUDIO_TLV320DAC
+	default y
+
+config AUDIO_DMIC
+	default y
+
+config AUDIO_INTEL_DMIC
+	default y
+
+endif
+
+
+if NEURAL_NET_ACCEL
+
+config INTEL_GNA
+	default y
+endif
+
+if GPIO
+
+config GPIO_DW
+	default y
+
+config GPIO_DW_0
+	default y
+
+endif
+
+if SPI
+
+config SPI_DW
+	def_bool y
+
+config SPI_0
+	def_bool y
+
+endif
 
 endif # BOARD_INTEL_S1000_CRB

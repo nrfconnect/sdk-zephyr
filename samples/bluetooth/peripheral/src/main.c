@@ -23,7 +23,6 @@
 #include <bluetooth/gatt.h>
 
 #include <gatt/hrs.h>
-#include <gatt/dis.h>
 #include <gatt/bas.h>
 #include <gatt/cts.h>
 
@@ -160,6 +159,33 @@ static const struct bt_uuid_128 vnd_signed_uuid = BT_UUID_INIT_128(
 	0xf3, 0xde, 0xbc, 0x9a, 0x78, 0x56, 0x34, 0x13,
 	0x78, 0x56, 0x34, 0x12, 0x78, 0x56, 0x34, 0x13);
 
+static const struct bt_uuid_128 vnd_write_cmd_uuid = BT_UUID_INIT_128(
+	0xf4, 0xde, 0xbc, 0x9a, 0x78, 0x56, 0x34, 0x12,
+	0x78, 0x56, 0x34, 0x12, 0x78, 0x56, 0x34, 0x12);
+
+static ssize_t write_without_rsp_vnd(struct bt_conn *conn,
+				     const struct bt_gatt_attr *attr,
+				     const void *buf, u16_t len, u16_t offset,
+				     u8_t flags)
+{
+	u8_t *value = attr->user_data;
+
+	/* Write request received. Reject it since this char only accepts
+	 * Write Commands.
+	 */
+	if (!(flags | BT_GATT_WRITE_FLAG_CMD)) {
+		return BT_GATT_ERR(BT_ATT_ERR_WRITE_REQ_REJECTED);
+	}
+
+	if (offset + len > sizeof(vnd_value)) {
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+	}
+
+	memcpy(value + offset, buf, len);
+
+	return len;
+}
+
 /* Vendor Primary Service Declaration */
 static struct bt_gatt_attr vnd_attrs[] = {
 	/* Vendor Primary Service Declaration */
@@ -186,6 +212,10 @@ static struct bt_gatt_attr vnd_attrs[] = {
 			       BT_GATT_CHRC_WRITE | BT_GATT_CHRC_AUTH,
 			       BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
 			       read_signed, write_signed, &signed_value),
+	BT_GATT_CHARACTERISTIC(&vnd_write_cmd_uuid.uuid,
+			       BT_GATT_CHRC_WRITE_WITHOUT_RESP,
+			       BT_GATT_PERM_WRITE, NULL,
+			       write_without_rsp_vnd, &vnd_value),
 };
 
 static struct bt_gatt_service vnd_svc = BT_GATT_SERVICE(vnd_attrs);
@@ -230,7 +260,6 @@ static void bt_ready(int err)
 	hrs_init(0x01);
 	bas_init();
 	cts_init();
-	dis_init(CONFIG_SOC, "Manufacturer");
 	bt_gatt_service_register(&vnd_svc);
 
 	if (IS_ENABLED(CONFIG_SETTINGS)) {

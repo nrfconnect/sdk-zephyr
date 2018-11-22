@@ -79,6 +79,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_6";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -94,6 +95,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_7";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -109,6 +111,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_8";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -124,6 +127,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_12";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -139,6 +143,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_13";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -154,7 +159,14 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_14";
+				#pwm-cells = <2>;
 			};
+		};
+
+		otghs_fs_phy: otghs_fs_phy {
+			compatible = "usb-nop-xceiv";
+			#phy-cells = <0>;
+			label = "OTGHS_FS_PHY";
 		};
 
 		usbotg_hs: usb@40040000 {
@@ -165,6 +177,7 @@
 			num-bidir-endpoints = <6>;
 			ram-size = <4096>;
 			maximum-speed = "full-speed";
+			phys = <&otghs_fs_phy>;
 			status = "disabled";
 			label= "OTGHS";
 		};

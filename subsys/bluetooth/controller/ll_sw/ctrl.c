@@ -7167,6 +7167,42 @@ static inline void event_fex_prep(struct connection *conn)
 {
 	struct radio_pdu_node_tx *node_tx;
 
+	if (conn->common.fex_valid) {
+		struct radio_pdu_node_rx *node_rx;
+		struct pdu_data *pdu_ctrl_rx;
+
+		/* procedure request acked */
+		conn->llcp_ack = conn->llcp_req;
+
+		/* Prepare the rx packet structure */
+		node_rx = packet_rx_reserve_get(2);
+		LL_ASSERT(node_rx);
+
+		node_rx->hdr.handle = conn->handle;
+		node_rx->hdr.type = NODE_RX_TYPE_DC_PDU;
+
+		/* prepare feature rsp structure */
+		pdu_ctrl_rx = (void *)node_rx->pdu_data;
+		pdu_ctrl_rx->ll_id = PDU_DATA_LLID_CTRL;
+		pdu_ctrl_rx->len = offsetof(struct pdu_data_llctrl,
+					    feature_rsp) +
+				   sizeof(struct pdu_data_llctrl_feature_rsp);
+		pdu_ctrl_rx->llctrl.opcode = PDU_DATA_LLCTRL_TYPE_FEATURE_RSP;
+		(void)memset(&pdu_ctrl_rx->llctrl.feature_rsp.features[0], 0x00,
+			     sizeof(pdu_ctrl_rx->llctrl.feature_rsp.features));
+		pdu_ctrl_rx->llctrl.feature_req.features[0] =
+			conn->llcp_features & 0xFF;
+		pdu_ctrl_rx->llctrl.feature_req.features[1] =
+			(conn->llcp_features >> 8) & 0xFF;
+		pdu_ctrl_rx->llctrl.feature_req.features[2] =
+			(conn->llcp_features >> 16) & 0xFF;
+
+		/* enqueue feature rsp structure into rx queue */
+		packet_rx_enqueue();
+
+		return;
+	}
+
 	node_tx = mem_acquire(&_radio.pkt_tx_ctrl_free);
 	if (node_tx) {
 		struct pdu_data *pdu_ctrl_tx = (void *)node_tx->pdu_data;
@@ -10504,9 +10540,13 @@ u32_t radio_scan_enable(u8_t type, u8_t init_addr_type, u8_t *init_addr,
 	return 0;
 }
 
-u32_t radio_scan_disable(void)
+u32_t radio_scan_disable(bool scanner)
 {
 	u32_t status;
+
+	if (scanner && _radio.scanner.conn) {
+		return BT_HCI_ERR_CMD_DISALLOWED;
+	}
 
 	status = role_disable(RADIO_TICKER_ID_SCAN,
 			      RADIO_TICKER_ID_SCAN_STOP);
@@ -10518,7 +10558,7 @@ u32_t radio_scan_disable(void)
 		}
 	}
 
-	return status ? BT_HCI_ERR_CMD_DISALLOWED : 0;
+	return _radio.scanner.is_enabled ? BT_HCI_ERR_CMD_DISALLOWED : 0;
 }
 
 u32_t ll_scan_is_enabled(void)
@@ -10709,7 +10749,7 @@ u32_t ll_connect_disable(void **node_rx)
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
 
-	status = radio_scan_disable();
+	status = radio_scan_disable(false);
 	if (!status) {
 		struct connection *conn = _radio.scanner.conn;
 		struct radio_pdu_node_rx *rx;

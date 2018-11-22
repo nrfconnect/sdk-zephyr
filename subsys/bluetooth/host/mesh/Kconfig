@@ -22,6 +22,7 @@ if BT_MESH
 # Virtual option enabled whenever Generic Provisioning layer is needed
 config BT_MESH_PROV
 	bool
+	select BT_ECC
 
 config BT_MESH_PB_ADV
 	bool "Provisioning support using the advertising bearer (PB-ADV)"
@@ -425,7 +426,7 @@ config BT_MESH_HEALTH_CLI
 
 config BT_MESH_SHELL
 	bool "Enable Bluetooth Mesh shell"
-	select CONSOLE_SHELL
+	select SHELL
 	depends on BT_MESH_CFG_CLI
 	depends on BT_MESH_HEALTH_CLI
 	help

@@ -15,7 +15,7 @@
 #ifdef SW0_GPIO_NAME
 #define SW0_GPIO_CONTROLLER SW0_GPIO_NAME
 #else
-#error SW0_GPIO_NAME or SW0_GPIO_CONTROLLER needs to be set in board.h
+#error SW0_GPIO_NAME or SW0_GPIO_CONTROLLER needs to be set
 #endif
 #endif
 #define PORT SW0_GPIO_CONTROLLER
@@ -24,8 +24,16 @@
 #ifdef SW0_GPIO_PIN
 #define PIN     SW0_GPIO_PIN
 #else
-#error SW0_GPIO_PIN needs to be set in board.h
+#error SW0_GPIO_PIN needs to be set
 #endif
+
+/* The switch pin pull-up/down flags */
+#ifdef SW0_GPIO_FLAGS
+#define PIN_FLAGS SW0_GPIO_FLAGS
+#else
+#error SW0_GPIO_FLAGS needs to be set
+#endif
+
 
 static const u8_t hid_report_desc[] = {
 	HID_GI_USAGE_PAGE, USAGE_GEN_DESKTOP,
@@ -34,9 +42,9 @@ static const u8_t hid_report_desc[] = {
 	/* USAGE (Mouse)					09 02 */
 		HID_MI_COLLECTION, COLLECTION_APPLICATION,
 		/* COLLECTION (Application)			A1 01 */
-		HID_LI_USAGE, USAGE_GEN_DESKTOP_POINTER,
+			HID_LI_USAGE, USAGE_GEN_DESKTOP_POINTER,
 		/* 	USAGE (Pointer)				09 01 */
-		HID_MI_COLLECTION, COLLECTION_PHYSICAL,
+			HID_MI_COLLECTION, COLLECTION_PHYSICAL,
 		/* 	COLLECTION (Physical)			A1 00 */
 				HID_GI_USAGE_PAGE, USAGE_GEN_BUTTON,
 		/* 		USAGE_PAGE (Button)		05 09 */
@@ -78,10 +86,10 @@ static const u8_t hid_report_desc[] = {
 		/* 		REPORT_COUNT (3)		95 03 */
 				HID_MI_INPUT, 0x06,
 		/* 		INPUT (Data,Var,Rel)		81 06 */
-				HID_MI_COLLECTION_END,
-		/* 		END_COLLECTION			C0    */
 			HID_MI_COLLECTION_END,
 		/* 	END_COLLECTION				C0    */
+		HID_MI_COLLECTION_END,
+		/* END_COLLECTION				C0    */
 };
 
 static int get_report_cb(struct usb_setup_packet *setup, s32_t *len,
@@ -137,7 +145,8 @@ void main(void)
 
 	gpio_pin_configure(gpio, PIN,
 			   GPIO_DIR_IN | GPIO_INT |
-			   GPIO_INT_EDGE | GPIO_INT_DOUBLE_EDGE);
+			   GPIO_INT_EDGE | GPIO_INT_DOUBLE_EDGE |
+			   PIN_FLAGS);
 
 	gpio_pin_read(gpio, PIN, &def_val);
 	gpio_init_callback(&gpio_cb, button_pressed, BIT(PIN));

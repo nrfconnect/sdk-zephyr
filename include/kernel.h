@@ -800,7 +800,7 @@ __syscall s32_t k_sleep(s32_t duration);
  *
  * @return N/A
  */
-extern void k_busy_wait(u32_t usec_to_wait);
+__syscall void k_busy_wait(u32_t usec_to_wait);
 
 /**
  * @brief Yield the current thread.
@@ -3326,6 +3326,23 @@ __syscall int k_msgq_put(struct k_msgq *q, void *data, s32_t timeout);
  * @req K-MSGQ-002
  */
 __syscall int k_msgq_get(struct k_msgq *q, void *data, s32_t timeout);
+
+/**
+ * @brief Peek/read a message from a message queue.
+ *
+ * This routine reads a message from message queue @a q in a "first in,
+ * first out" manner and leaves the message in the queue.
+ *
+ * @note Can be called by ISRs.
+ *
+ * @param q Address of the message queue.
+ * @param data Address of area to hold the message read from the queue.
+ *
+ * @retval 0 Message read.
+ * @retval -ENOMSG Returned when the queue has no message.
+ * @req K-MSGQ-002
+ */
+__syscall int k_msgq_peek(struct k_msgq *q, void *data);
 
 /**
  * @brief Purge a message queue.

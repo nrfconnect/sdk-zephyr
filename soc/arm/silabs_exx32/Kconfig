@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2017 Christian Taedcke
+# Copyright (c) 2018 Gil Benkoe
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -7,6 +8,7 @@
 config SOC_FAMILY_EXX32
 	bool
 	# omit prompt to signify a "hidden" option
+	select HAS_SEGGER_RTT
 
 if SOC_FAMILY_EXX32
 config SOC_FAMILY
@@ -21,6 +23,7 @@ config SOC_PART_NUMBER
 	default SOC_PART_NUMBER_EXX32_EFR32FG1P if SOC_SERIES_EFR32FG1P
 	default SOC_PART_NUMBER_EXX32_EFM32HG if SOC_SERIES_EFM32HG
 	default SOC_PART_NUMBER_EXX32_EFR32MG12P if SOC_SERIES_EFR32MG12P
+	default SOC_PART_NUMBER_EXX32_EFM32PG12B if SOC_SERIES_EFM32PG12B
 	help
 	  This string holds the full part number of the SoC. It is a hidden option
 	  that you should not set directly. The part number selection choice defines

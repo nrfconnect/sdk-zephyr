@@ -22,6 +22,8 @@ extern "C" {
 
 #define IMS_RXO		(1 << 6) /* Receiver FIFO Overrun */
 
+#define RCTL_MPE	(1 << 4) /* Multicast Promiscuous Enabled */
+
 #define TDESC_EOP	     (1) /* End Of Packet */
 #define TDESC_RS	(1 << 3) /* Report Status */
 
@@ -88,14 +90,14 @@ static const char *e1000_reg_to_string(enum e1000_reg_t r)
 	__attribute__((unused));
 
 #define iow32(_dev, _reg, _val) do {					\
-	dev_dbg("iow32 %s 0x%08x", e1000_reg_to_string(_reg), _val); 	\
+	LOG_DBG("iow32 %s 0x%08x", e1000_reg_to_string(_reg), _val); 	\
 	sys_write32(_val, (_dev)->pci.addr + _reg);			\
 } while (0)
 
 #define ior32(_dev, _reg)						\
 ({									\
 	u32_t val = sys_read32((_dev)->pci.addr + (_reg));		\
-	dev_dbg("ior32 %s 0x%08x", e1000_reg_to_string(_reg), val); 	\
+	LOG_DBG("ior32 %s 0x%08x", e1000_reg_to_string(_reg), val); 	\
 	val;								\
 })
 

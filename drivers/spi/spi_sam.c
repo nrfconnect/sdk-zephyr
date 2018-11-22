@@ -14,7 +14,6 @@ LOG_MODULE_REGISTER(spi_sam);
 #include <device.h>
 #include <spi.h>
 #include <soc.h>
-#include <board.h>
 
 #define SAM_SPI_CHIP_SELECT_COUNT			4
 
@@ -51,9 +50,14 @@ static int spi_sam_configure(struct device *dev,
 			     const struct spi_config *config)
 {
 	const struct spi_sam_config *cfg = dev->config->config_info;
+	struct spi_sam_data *data = dev->driver_data;
 	Spi *regs = cfg->regs;
 	u32_t spi_mr = 0, spi_csr = 0;
 	int div;
+
+	if (spi_context_configured(&data->ctx, config)) {
+		return 0;
+	}
 
 	if (SPI_OP_MODE_GET(config->operation) != SPI_OP_MODE_MASTER) {
 		/* Slave mode is not implemented. */
@@ -95,6 +99,10 @@ static int spi_sam_configure(struct device *dev,
 	regs->SPI_MR = spi_mr;
 	regs->SPI_CSR[config->slave] = spi_csr;
 	regs->SPI_CR = SPI_CR_SPIEN; /* Enable SPI */
+
+	spi_context_cs_configure(&data->ctx);
+
+	data->ctx.config = config;
 
 	return 0;
 }
@@ -363,8 +371,6 @@ static int spi_sam_transceive(struct device *dev,
 		goto done;
 	}
 
-	data->ctx.config = config;
-	spi_context_cs_configure(&data->ctx);
 	spi_context_cs_control(&data->ctx, true);
 
 	/* This driver special cases the common send only, receive
@@ -389,6 +395,17 @@ done:
 	return err;
 }
 
+static int spi_sam0_transceive_sync(struct device *dev,
+				    const struct spi_config *config,
+				    const struct spi_buf_set *tx_bufs,
+				    const struct spi_buf_set *rx_bufs)
+{
+	struct spi_sam0_data *data = dev->driver_data;
+
+	spi_context_lock(&data->ctx, false, NULL);
+	return spi_sam0_transceive(dev, config, tx_bufs, rx_bufs);
+}
+
 #ifdef CONFIG_SPI_ASYNC
 static int spi_sam_transceive_async(struct device *dev,
 				     const struct spi_config *config,
@@ -396,7 +413,10 @@ static int spi_sam_transceive_async(struct device *dev,
 				     const struct spi_buf_set *rx_bufs,
 				     struct k_poll_signal *async)
 {
-	return -ENOTSUP;
+	struct spi_sam0_data *data = dev->driver_data;
+
+	spi_context_lock(&data->ctx, true, async);
+	return spi_sam0_transceive(dev, config, tx_bufs, rx_bufs);
 }
 #endif /* CONFIG_SPI_ASYNC */
 
@@ -435,25 +455,53 @@ static int spi_sam_init(struct device *dev)
 }
 
 static const struct spi_driver_api spi_sam_driver_api = {
-	.transceive = spi_sam_transceive,
+	.transceive = spi_sam_transceive_sync,
 #ifdef CONFIG_SPI_ASYNC
 	.transceive_async = spi_sam_transceive_async,
 #endif
 	.release = spi_sam_release,
 };
 
-#ifndef PINS_SPI0_CS
-#define PINS_SPI0_CS { {0, (Pio *)0, 0, 0}, }
+#ifndef PIN_SPI0_CS0
+#define PIN_SPI0_CS0 {0, (Pio *)0, 0, 0}
 #endif
 
-#ifndef PINS_SPI1_CS
-#define PINS_SPI1_CS { {0, (Pio *)0, 0, 0}, }
+#ifndef PIN_SPI0_CS1
+#define PIN_SPI0_CS1 {0, (Pio *)0, 0, 0}
 #endif
+
+#ifndef PIN_SPI0_CS2
+#define PIN_SPI0_CS2 {0, (Pio *)0, 0, 0}
+#endif
+
+#ifndef PIN_SPI0_CS3
+#define PIN_SPI0_CS3 {0, (Pio *)0, 0, 0}
+#endif
+
+#define PINS_SPI0_CS { PIN_SPI0_CS0, PIN_SPI0_CS1, PIN_SPI0_CS2, PIN_SPI0_CS3 }
+
+#ifndef PIN_SPI1_CS0
+#define PIN_SPI1_CS0 {0, (Pio *)0, 0, 0}
+#endif
+
+#ifndef PIN_SPI1_CS1
+#define PIN_SPI1_CS1 {0, (Pio *)0, 0, 0}
+#endif
+
+#ifndef PIN_SPI1_CS2
+#define PIN_SPI1_CS2 {0, (Pio *)0, 0, 0}
+#endif
+
+#ifndef PIN_SPI1_CS3
+#define PIN_SPI1_CS3 {0, (Pio *)0, 0, 0}
+#endif
+
+#define PINS_SPI1_CS { PIN_SPI1_CS0, PIN_SPI1_CS1, PIN_SPI1_CS2, PIN_SPI1_CS3 }
 
 #define SPI_SAM_DEFINE_CONFIG(n)					\
 	static const struct spi_sam_config spi_sam_config_##n = {	\
-		.regs = (Spi *)CONFIG_SPI_##n##_BASE_ADDRESS,		\
-		.periph_id = CONFIG_SPI_##n##_PERIPHERAL_ID,		\
+		.regs = (Spi *)DT_SPI_##n##_BASE_ADDRESS,		\
+		.periph_id = DT_SPI_##n##_PERIPHERAL_ID,		\
 		.pins = PINS_SPI##n,					\
 		.cs = PINS_SPI##n##_CS,					\
 	}
@@ -470,11 +518,10 @@ static const struct spi_driver_api spi_sam_driver_api = {
 			    &spi_sam_config_##n, POST_KERNEL,		\
 			    CONFIG_SPI_INIT_PRIORITY, &spi_sam_driver_api)
 
-#if CONFIG_SPI_0_BASE_ADDRESS
+#if DT_SPI_0_BASE_ADDRESS
 SPI_SAM_DEVICE_INIT(0);
 #endif
 
-#if CONFIG_SPI_1_BASE_ADDRESS
+#if DT_SPI_1_BASE_ADDRESS
 SPI_SAM_DEVICE_INIT(1);
 #endif
-

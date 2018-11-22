@@ -13,6 +13,7 @@ set(GENERATED_DTS_BOARD_CONF ${PROJECT_BINARY_DIR}/include/generated/generated_d
 set_ifndef(DTS_SOURCE ${BOARD_DIR}/${BOARD}.dts)
 set_ifndef(DTS_COMMON_OVERLAYS ${ZEPHYR_BASE}/dts/common/common.dts)
 set_ifndef(DTS_APP_BINDINGS ${APPLICATION_SOURCE_DIR}/dts/bindings)
+set_ifndef(DTS_APP_INCLUDE ${APPLICATION_SOURCE_DIR}/dts)
 
 set(dts_files
   ${DTS_SOURCE}
@@ -55,8 +56,6 @@ foreach(board_root ${BOARD_ROOT})
   endforeach()
 endforeach()
 
-message(STATUS "Generating zephyr/include/generated/generated_dts_board.h")
-
 if(CONFIG_HAS_DTS)
 
   if(DTC_OVERLAY_FILE)
@@ -68,10 +67,19 @@ if(CONFIG_HAS_DTS)
       )
   endif()
 
+  set(i 0)
   unset(DTC_INCLUDE_FLAG_FOR_DTS)
   foreach(dts_file ${dts_files})
     list(APPEND DTC_INCLUDE_FLAG_FOR_DTS
          -include ${dts_file})
+
+	if(i EQUAL 0)
+	  message(STATUS "Loading ${dts_file} as base")
+	else()
+	  message(STATUS "Overlaying ${dts_file}")
+	endif()
+
+	math(EXPR i "${i}+1")
   endforeach()
 
   # TODO: Cut down on CMake configuration time by avoiding
@@ -87,6 +95,7 @@ if(CONFIG_HAS_DTS)
     COMMAND ${CMAKE_C_COMPILER}
     -x assembler-with-cpp
     -nostdinc
+    -isystem ${DTS_APP_INCLUDE}
     -isystem ${ZEPHYR_BASE}/include
     -isystem ${ZEPHYR_BASE}/dts/${ARCH}
     -isystem ${ZEPHYR_BASE}/dts
@@ -140,7 +149,7 @@ if(CONFIG_HAS_DTS)
   # Run extract_dts_includes.py for the header file
   # generated_dts_board.h
   set_ifndef(DTS_BOARD_FIXUP_FILE ${BOARD_DIR}/dts_fixup.h)
-  set_ifndef(DTS_SOC_FIXUP_FILE   ${PROJECT_SOURCE_DIR}/soc/${ARCH}/${SOC_PATH}/dts_fixup.h)
+  set_ifndef(DTS_SOC_FIXUP_FILE   ${SOC_DIR}/${ARCH}/${SOC_PATH}/dts_fixup.h)
 
   list(APPEND dts_fixups
     ${DTS_BOARD_FIXUP_FILE}
@@ -170,6 +179,7 @@ if(CONFIG_HAS_DTS)
     ${DTS_FIXUPS_WITH_FLAG}
     --keyvalue ${GENERATED_DTS_BOARD_CONF}
     --include ${GENERATED_DTS_BOARD_H}
+    --old-alias-names
     )
 
   # Run extract_dts_includes.py to create a .conf and a header file that can be

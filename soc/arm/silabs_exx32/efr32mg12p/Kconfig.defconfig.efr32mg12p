@@ -13,22 +13,22 @@ config SOC
 	default "efr32mg12p"
 
 config GPIO
-	def_bool y
+	default y
 
 if GPIO
 
 config GPIO_GECKO
-	def_bool y
+	default y
 
 endif # GPIO
 
 if SERIAL
 
 config UART_GECKO
-	def_bool y
+	default y
 
 config LEUART_GECKO
-	def_bool y
+	default y
 
 endif # SERIAL
 
@@ -38,5 +38,12 @@ config I2C_GECKO
 	def_bool y
 
 endif # I2C
+
+if FLASH
+
+config SOC_FLASH_GECKO
+	default y
+
+endif # FLASH
 
 endif # SOC_EFR32MG12P

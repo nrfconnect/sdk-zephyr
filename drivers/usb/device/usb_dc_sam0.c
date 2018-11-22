@@ -21,8 +21,8 @@ LOG_MODULE_REGISTER(usb_dc_sam0);
 
 #define USB_SAM0_IN_EP 0x80
 
-#define REGS ((Usb *)CONFIG_USB_DC_SAM0_BASE_ADDRESS)
-#define USB_NUM_ENDPOINTS CONFIG_USB_DC_SAM0_NUM_BIDIR_ENDPOINTS
+#define REGS ((Usb *)DT_USB_DC_SAM0_BASE_ADDRESS)
+#define USB_NUM_ENDPOINTS DT_USB_DC_SAM0_NUM_BIDIR_ENDPOINTS
 
 struct usb_sam0_data {
 	UsbDeviceDescriptor descriptors[USB_NUM_ENDPOINTS];
@@ -203,9 +203,9 @@ int usb_dc_attach(void)
 	regs->INTENSET.reg = USB_DEVICE_INTENSET_EORST;
 
 	/* Connect and enable the interrupt */
-	IRQ_CONNECT(CONFIG_USB_DC_SAM0_IRQ, CONFIG_USB_DC_SAM0_IRQ_PRIORITY,
+	IRQ_CONNECT(DT_USB_DC_SAM0_IRQ, DT_USB_DC_SAM0_IRQ_PRIORITY,
 		    usb_sam0_isr, 0, 0);
-	irq_enable(CONFIG_USB_DC_SAM0_IRQ);
+	irq_enable(DT_USB_DC_SAM0_IRQ);
 
 	/* Enable and attach */
 	regs->CTRLA.bit.ENABLE = 1;
@@ -231,7 +231,7 @@ int usb_dc_reset(void)
 {
 	UsbDevice *regs = &REGS->DEVICE;
 
-	irq_disable(CONFIG_USB_DC_SAM0_IRQ);
+	irq_disable(DT_USB_DC_SAM0_IRQ);
 
 	regs->CTRLA.bit.SWRST = 1;
 	usb_sam0_wait_syncbusy();
@@ -265,12 +265,12 @@ int usb_dc_ep_check_cap(const struct usb_dc_ep_cfg_data * const cfg)
 	u8_t ep_idx = cfg->ep_addr & ~USB_EP_DIR_MASK;
 
 	if ((cfg->ep_type == USB_DC_EP_CONTROL) && ep_idx) {
-		USB_ERR("invalid endpoint configuration");
+		LOG_ERR("invalid endpoint configuration");
 		return -1;
 	}
 
-	if (ep_idx > CONFIG_USB_DC_SAM0_NUM_BIDIR_ENDPOINTS) {
-		USB_ERR("endpoint index/address too high");
+	if (ep_idx > DT_USB_DC_SAM0_NUM_BIDIR_ENDPOINTS) {
+		LOG_ERR("endpoint index/address too high");
 		return -1;
 	}
 

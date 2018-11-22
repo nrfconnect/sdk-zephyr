@@ -16,6 +16,8 @@ import os
 import subprocess
 import sys
 
+import colorama
+
 if sys.version_info < (3,):
     sys.exit('fatal error: you are running Python 2')
 
@@ -95,10 +97,18 @@ def main():
     except WestNotFound:
         topdir = None
 
-    if topdir is not None:
-        wrap(topdir, sys.argv[1:])
-    else:
-        run_scripts_meta_west()
+    try:
+        if topdir is not None:
+            wrap(topdir, sys.argv[1:])
+        else:
+            run_scripts_meta_west()
+    finally:
+        print(colorama.Fore.LIGHTRED_EX, end='')
+        print('NOTE: you just ran a copy of west from {};'.
+              format(os.path.dirname(__file__)),
+              'this will be removed from the Zephyr repository in the future.',
+              'West is now developed separately.')
+        print(colorama.Style.RESET_ALL, end='', flush=True)
 
 
 if __name__ == '__main__':

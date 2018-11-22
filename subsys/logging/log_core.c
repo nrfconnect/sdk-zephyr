@@ -10,6 +10,7 @@
 #include <logging/log_ctrl.h>
 #include <logging/log_output.h>
 #include <misc/printk.h>
+#include <init.h>
 #include <assert.h>
 #include <atomic.h>
 
@@ -445,10 +446,10 @@ static u32_t max_filter_get(u32_t filters)
 	return max_filter;
 }
 
-void log_filter_set(struct log_backend const *const backend,
-		    u32_t domain_id,
-		    u32_t src_id,
-		    u32_t level)
+u32_t log_filter_set(struct log_backend const *const backend,
+		     u32_t domain_id,
+		     u32_t src_id,
+		     u32_t level)
 {
 	assert(src_id < log_sources_count());
 
@@ -459,13 +460,23 @@ void log_filter_set(struct log_backend const *const backend,
 
 		if (backend == NULL) {
 			struct log_backend const *backend;
+			u32_t max = 0;
+			u32_t current;
 
 			for (int i = 0; i < log_backend_count_get(); i++) {
 				backend = log_backend_get(i);
-				log_filter_set(backend, domain_id,
-					       src_id, level);
+				current = log_filter_set(backend, domain_id,
+							 src_id, level);
+				max = max(current, max);
 			}
+
+			level = max;
 		} else {
+			u32_t max = log_filter_get(backend, domain_id,
+						   src_id, false);
+
+			level = min(level, max);
+
 			LOG_FILTER_SLOT_SET(filters,
 					    log_backend_id_get(backend),
 					    level);
@@ -480,6 +491,8 @@ void log_filter_set(struct log_backend const *const backend,
 					    new_aggr_filter);
 		}
 	}
+
+	return level;
 }
 
 static void backend_filter_set(struct log_backend const *const backend,
@@ -584,16 +597,24 @@ static void log_process_thread_func(void *dummy1, void *dummy2, void *dummy3)
 	}
 }
 
-K_THREAD_DEFINE(logging, CONFIG_LOG_PROCESS_THREAD_STACK_SIZE,
-		log_process_thread_func, NULL, NULL, NULL,
-		CONFIG_LOG_PROCESS_THREAD_PRIO, 0, K_NO_WAIT);
-#else
-#include <init.h>
+K_THREAD_STACK_DEFINE(logging_stack, CONFIG_LOG_PROCESS_THREAD_STACK_SIZE);
+struct k_thread logging_thread;
+#endif /* CONFIG_LOG_PROCESS_THREAD */
+
 static int enable_logger(struct device *arg)
 {
 	ARG_UNUSED(arg);
+#ifdef CONFIG_LOG_PROCESS_THREAD
+	/* start logging thread */
+	k_thread_create(&logging_thread, logging_stack,
+			K_THREAD_STACK_SIZEOF(logging_stack),
+			log_process_thread_func, NULL, NULL, NULL,
+			CONFIG_LOG_PROCESS_THREAD_PRIO, 0, K_NO_WAIT);
+	k_thread_name_set(&logging_thread, "logging");
+#else
 	log_init();
+#endif
 	return 0;
 }
+
 SYS_INIT(enable_logger, POST_KERNEL, 0);
-#endif /* CONFIG_LOG_PROCESS_THREAD */

@@ -237,12 +237,15 @@ static int gpio_nrfx_read(struct device *port, int access_op,
 	NRF_GPIO_Type *reg = get_port_cfg(port)->port;
 	struct gpio_nrfx_data *data = get_port_data(port);
 
-	u32_t port_in = nrf_gpio_port_in_read(reg) ^ data->inverted;
+	u32_t dir = nrf_gpio_port_dir_read(reg);
+	u32_t port_in = nrf_gpio_port_in_read(reg) & ~dir;
+	u32_t port_out = nrf_gpio_port_out_read(reg) & dir;
+	u32_t port_val = (port_in | port_out) ^ data->inverted;
 
 	if (access_op == GPIO_ACCESS_BY_PORT) {
-		*value = port_in;
+		*value = port_val;
 	} else {
-		*value = (port_in & BIT(pin)) ? 1 : 0;
+		*value = (port_val & BIT(pin)) ? 1 : 0;
 	}
 
 	return 0;
@@ -419,10 +422,11 @@ static int gpio_nrfx_init(struct device *port)
 
 	if (!gpio_initialized) {
 		gpio_initialized = true;
-		IRQ_CONNECT(CONFIG_GPIOTE_IRQ, CONFIG_GPIOTE_IRQ_PRI,
+		IRQ_CONNECT(DT_NORDIC_NRF_GPIOTE_GPIOTE_0_IRQ,
+			    DT_NORDIC_NRF_GPIOTE_GPIOTE_0_IRQ_PRIORITY,
 			    gpiote_event_handler, NULL, 0);
 
-		irq_enable(CONFIG_GPIOTE_IRQ);
+		irq_enable(DT_NORDIC_NRF_GPIOTE_GPIOTE_0_IRQ);
 		nrf_gpiote_int_enable(NRF_GPIOTE_INT_PORT_MASK);
 	}
 
@@ -442,7 +446,7 @@ static int gpio_nrfx_init(struct device *port)
 	static struct gpio_nrfx_data gpio_nrfx_p##id##_data;		\
 									\
 	DEVICE_AND_API_INIT(gpio_nrfx_p##id,				\
-			    CONFIG_GPIO_P##id##_DEV_NAME,		\
+			    DT_NORDIC_NRF_GPIO_GPIO_##id##_LABEL,	\
 			    gpio_nrfx_init,				\
 			    &gpio_nrfx_p##id##_data,			\
 			    &gpio_nrfx_p##id##_cfg,			\

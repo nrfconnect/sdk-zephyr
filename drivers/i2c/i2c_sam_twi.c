@@ -23,7 +23,7 @@
 
 #define LOG_LEVEL CONFIG_I2C_LOG_LEVEL
 #include <logging/log.h>
-LOG_MODULE_REGISTER(i2c_sam_twi)
+LOG_MODULE_REGISTER(i2c_sam_twi);
 
 #include "i2c-priv.h"
 
@@ -343,20 +343,20 @@ static struct device DEVICE_NAME_GET(i2c0_sam);
 
 static void i2c0_sam_irq_config(void)
 {
-	IRQ_CONNECT(CONFIG_I2C_0_IRQ, CONFIG_I2C_0_IRQ_PRI, i2c_sam_twi_isr,
+	IRQ_CONNECT(DT_I2C_0_IRQ, DT_I2C_0_IRQ_PRI, i2c_sam_twi_isr,
 		    DEVICE_GET(i2c0_sam), 0);
 }
 
 static const struct soc_gpio_pin pins_twi0[] = PINS_TWI0;
 
 static const struct i2c_sam_twi_dev_cfg i2c0_sam_config = {
-	.regs = (Twi *)CONFIG_I2C_0_BASE_ADDRESS,
+	.regs = (Twi *)DT_I2C_0_BASE_ADDRESS,
 	.irq_config = i2c0_sam_irq_config,
-	.periph_id = CONFIG_I2C_0_PERIPHERAL_ID,
-	.irq_id = CONFIG_I2C_0_IRQ,
+	.periph_id = DT_I2C_0_PERIPHERAL_ID,
+	.irq_id = DT_I2C_0_IRQ,
 	.pin_list = pins_twi0,
 	.pin_list_size = ARRAY_SIZE(pins_twi0),
-	.bitrate = CONFIG_I2C_0_BITRATE,
+	.bitrate = DT_I2C_0_BITRATE,
 };
 
 static struct i2c_sam_twi_dev_data i2c0_sam_data;
@@ -373,20 +373,20 @@ static struct device DEVICE_NAME_GET(i2c1_sam);
 
 static void i2c1_sam_irq_config(void)
 {
-	IRQ_CONNECT(CONFIG_I2C_1_IRQ, CONFIG_I2C_1_IRQ_PRI, i2c_sam_twi_isr,
+	IRQ_CONNECT(DT_I2C_1_IRQ, DT_I2C_1_IRQ_PRI, i2c_sam_twi_isr,
 		    DEVICE_GET(i2c1_sam), 0);
 }
 
 static const struct soc_gpio_pin pins_twi1[] = PINS_TWI1;
 
 static const struct i2c_sam_twi_dev_cfg i2c1_sam_config = {
-	.regs = (Twi *)CONFIG_I2C_1_BASE_ADDRESS,
+	.regs = (Twi *)DT_I2C_1_BASE_ADDRESS,
 	.irq_config = i2c1_sam_irq_config,
-	.periph_id = CONFIG_I2C_1_PERIPHERAL_ID,
-	.irq_id = CONFIG_I2C_1_IRQ,
+	.periph_id = DT_I2C_1_PERIPHERAL_ID,
+	.irq_id = DT_I2C_1_IRQ,
 	.pin_list = pins_twi1,
 	.pin_list_size = ARRAY_SIZE(pins_twi1),
-	.bitrate = CONFIG_I2C_1_BITRATE,
+	.bitrate = DT_I2C_1_BITRATE,
 };
 
 static struct i2c_sam_twi_dev_data i2c1_sam_data;

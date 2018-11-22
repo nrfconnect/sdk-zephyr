@@ -154,6 +154,12 @@
 			label = "SPI_1";
 		};
 
+		usb_fs_phy: usbphy {
+			compatible = "usb-nop-xceiv";
+			#phy-cells = <0>;
+			label = "USB_FS_PHY";
+		};
+
 		usb: usb@40005c00 {
 			compatible = "st,stm32-usb";
 			reg = <0x40005c00 0x400>;
@@ -161,6 +167,7 @@
 			interrupt-names = "usb";
 			num-bidir-endpoints = <8>;
 			ram-size = <512>;
+			phys = <&usb_fs_phy>;
 			status = "disabled";
 			label= "USB";
 		};
@@ -177,6 +184,7 @@
 				status = "disabled";
 				st,prescaler = <0>;
 				label = "PWM_2";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -192,6 +200,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_3";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -207,6 +216,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_6";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -222,6 +232,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_7";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -237,6 +248,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_15";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -252,6 +264,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_16";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -267,6 +280,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_17";
+				#pwm-cells = <2>;
 			};
 		};
 

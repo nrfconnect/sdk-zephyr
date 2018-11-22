@@ -193,9 +193,9 @@
 			label = "UART_7";
 		};
 
-		uart8: serial@40007C00 {
+		uart8: serial@40007c00 {
 			compatible = "st,stm32-uart";
-			reg = <0x40007C00 0x400>;
+			reg = <0x40007c00 0x400>;
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x80000000>;
 			interrupts = <83 0>;
 			status = "disabled";
@@ -228,12 +228,12 @@
 			label = "I2C_2";
 		};
 
-		i2c3: i2c@40005C00 {
+		i2c3: i2c@40005c00 {
 			compatible = "st,stm32-i2c-v2";
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			reg = <0x40005C00 0x400>;
+			reg = <0x40005c00 0x400>;
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00800000>;
 			interrupts = <72 0>, <73 0>;
 			interrupt-names = "event", "error";
@@ -263,11 +263,11 @@
 			label = "SPI_2";
 		};
 
-		spi3: spi@40003C00 {
+		spi3: spi@40003c00 {
 			compatible = "st,stm32-spi";
 			#address-cells = <1>;
 			#size-cells = <0>;
-			reg = <0x40003C00 0x400>;
+			reg = <0x40003c00 0x400>;
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00008000>;
 			interrupts = <51 5>;
 			status = "disabled";
@@ -319,6 +319,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_1";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -334,6 +335,7 @@
 				status = "disabled";
 				st,prescaler = <0>;
 				label = "PWM_2";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -349,6 +351,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_3";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -364,6 +367,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_4";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -379,6 +383,7 @@
 				status = "disabled";
 				st,prescaler = <0>;
 				label = "PWM_5";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -394,6 +399,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_6";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -409,6 +415,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_7";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -424,6 +431,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_8";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -439,6 +447,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_9";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -454,6 +463,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_10";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -469,6 +479,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_11";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -484,6 +495,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_12";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -499,6 +511,7 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_13";
+				#pwm-cells = <2>;
 			};
 		};
 
@@ -514,7 +527,14 @@
 				status = "disabled";
 				st,prescaler = <10000>;
 				label = "PWM_14";
+				#pwm-cells = <2>;
 			};
+		};
+
+		otgfs_phy: otgfs_phy {
+			compatible = "usb-nop-xceiv";
+			#phy-cells = <0>;
+			label = "OTGFS_PHY";
 		};
 
 		usbotg_fs: usb@50000000 {
@@ -525,8 +545,15 @@
 			num-bidir-endpoints = <6>;
 			ram-size = <1280>;
 			maximum-speed = "full-speed";
+			phys = <&otgfs_phy>;
 			status = "disabled";
 			label = "OTGFS";
+		};
+
+		otghs_fs_phy: otghs_fs_phy {
+			compatible = "usb-nop-xceiv";
+			#phy-cells = <0>;
+			label = "OTGHS_FS_PHY";
 		};
 
 		usbotg_hs: usb@40040000 {
@@ -537,6 +564,7 @@
 			num-bidir-endpoints = <9>;
 			ram-size = <4096>;
 			maximum-speed = "full-speed";
+			phys = <&otghs_fs_phy>;
 			status = "disabled";
 			label= "OTGHS";
 		};
