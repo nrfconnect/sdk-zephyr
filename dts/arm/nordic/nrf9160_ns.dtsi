@@ -1,6 +1,7 @@
 #include <arm/armv8-m.dtsi>
-#include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/i2c/i2c.h>
+#include <dt-bindings/gpio/gpio.h>
+
 / {
 	cpus {
 		#address-cells = <1>;
@@ -33,6 +34,27 @@
 	sram0: memory@20000000 {
 		device_type = "memory";
 		compatible = "mmio-sram";
+	};
+
+	aliases {
+		nrf-rtc1 = &rtc1;
+		nrf-clock = &clock;
+		nrf-power = &power;
+		nvmc = &nvmc;
+		uart-0 = &uart0;
+		uart-1 = &uart1;
+		uart-2 = &uart2;
+		uart-3 = &uart3;
+		gpio-0 = &gpio0;
+		gpiote-0 = &gpiote; /* FIXME alias should be gpiote-1 */
+		i2c-0 = &i2c0;
+		i2c-1 = &i2c1;
+		i2c-2 = &i2c2;
+		i2c-3 = &i2c3;
+		spi-0 = &spi0;
+		spi-1 = &spi1;
+		spi-2 = &spi2;
+		spi-3 = &spi3;
 	};
 
 	soc {
@@ -79,7 +101,6 @@
 			compatible = "nordic,nrf-gpiote";
 			reg = <0x40031000 0x1000>;
 			interrupts = <49 5>;
-			interrupt-names = "gpiote";
 			status = "disabled";
 			label = "GPIOTE_1";
 		};
@@ -197,26 +218,6 @@
 			interrupts = <5 0>;
 			status = "ok";
 		};
-	};
-	aliases {
-		nrf-rtc1 = &rtc1;
-		nrf-clock = &clock;
-		nrf-power = &power;
-		dt-nvmc = &nvmc;
-		dt-uart-0 = &uart0;
-		dt-uart-1 = &uart1;
-		dt-uart-2 = &uart2;
-		dt-uart-3 = &uart3;
-		dt-gpio-0 = &gpio0;
-		dt-gpiote = &gpiote;
-		i2c0 = &i2c0;
-		i2c1 = &i2c1;
-		i2c2 = &i2c2;
-		i2c3 = &i2c3;
-		spi0 = &spi0;
-		spi1 = &spi1;
-		spi2 = &spi2;
-		spi3 = &spi3;
 	};
 };
 
