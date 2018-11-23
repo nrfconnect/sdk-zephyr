@@ -1,0 +1,10 @@
+identifier: nrf52840_pca10090
+name: nRF52840-PCA10090
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+supported:
+  - ble
+  - ieee802154
