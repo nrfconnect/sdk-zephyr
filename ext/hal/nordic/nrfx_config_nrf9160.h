@@ -120,6 +120,10 @@
 #define NRF_UARTE3                     ((NRF_UARTE_Type*) UART_3_BASE_ADDRESS)
 #endif
 
+#if defined(ADC_0_BASE_ADDRESS)
+#define NRF_SAADC                      ((NRF_SAADC_Type*) ADC_0_BASE_ADDRESS)
+#endif
+
 // <<< Use Configuration Wizard in Context Menu >>>\n
 
 // <h> nRF_Drivers
