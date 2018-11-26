@@ -124,6 +124,10 @@
 #define NRF_SAADC                      ((NRF_SAADC_Type*) ADC_0_BASE_ADDRESS)
 #endif
 
+#if defined(WDT_0_BASE_ADDRESS)
+#define NRF_WDT                        ((NRF_WDT_Type*) WDT_0_BASE_ADDRESS)
+#endif
+
 // <<< Use Configuration Wizard in Context Menu >>>\n
 
 // <h> nRF_Drivers
