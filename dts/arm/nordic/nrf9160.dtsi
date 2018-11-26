@@ -58,6 +58,7 @@
 		spi-1 = &spi1;
 		spi-2 = &spi2;
 		spi-3 = &spi3;
+		wdt-0 = &wdt;
 	};
 
 	soc {
@@ -241,6 +242,13 @@
 			compatible = "nordic,nrf-ficr";
 			reg = <0x00FF0000 0x1000>;
 			status = "ok";
+		};
+
+		wdt: watchdog@50018000 {
+			compatible = "nordic,nrf-watchdog";
+			reg = <0x50018000 0x1000>;
+			interrupts = <24 0>;
+			label = "WDT";
 		};
 	};
 };
