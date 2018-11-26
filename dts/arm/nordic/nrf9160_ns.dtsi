@@ -45,6 +45,7 @@
 		uart-1 = &uart1;
 		uart-2 = &uart2;
 		uart-3 = &uart3;
+		adc-0 = &adc;
 		gpio-0 = &gpio0;
 		gpiote-0 = &gpiote; /* FIXME alias should be gpiote-1 */
 		i2c-0 = &i2c0;
@@ -63,6 +64,14 @@
 			reg = <0x40039000 0x1000>;
 			status = "ok";
 			label = "NVMC";
+		};
+
+		adc: adc@0x4000e000 {
+			compatible = "nordic,nrf-saadc";
+			reg = <0x4000E000 0x1000>;
+			interrupts = <14 1>;
+			status = "disabled";
+			label = "ADC_0";
 		};
 
 		uart0: uart@40008000 {
