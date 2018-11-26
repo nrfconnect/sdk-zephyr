@@ -21,4 +21,6 @@
 #define DT_SPI_2_NAME			DT_NORDIC_NRF_SPI_SPI_2_LABEL
 #define DT_SPI_3_NAME			DT_NORDIC_NRF_SPI_SPI_3_LABEL
 
+#define DT_ADC_0_NAME                   ADC_0_LABEL
+
 /* End of SoC Level DTS fixup file */
