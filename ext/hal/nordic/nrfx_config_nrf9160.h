@@ -36,7 +36,7 @@
 
 /* CONNECTION TO DEVICETREE DTS DTSI */
 #ifdef NVMC_BASE_ADDRESS
-#define NRF_NVMC                                ((NRF_NVMC_Type*) NVMC_BASE_ADDRESS)
+#define NRF_NVMC                       ((NRF_NVMC_Type*) NVMC_BASE_ADDRESS)
 #endif
 
 #ifdef NRF_RTC1_BASE_ADDRESS
@@ -72,51 +72,51 @@
 #define NRF_GPIOTE                     ((NRF_GPIOTE_Type*) GPIOTE_0_BASE_ADDRESS)
 #endif
 
-#ifdef I2C0_BASE_ADDRESS
-#define NRF_TWIM0                      ((NRF_TWIM_Type*) I2C0_BASE_ADDRESS)
+#ifdef I2C_0_BASE_ADDRESS
+#define NRF_TWIM0                      ((NRF_TWIM_Type*) I2C_0_BASE_ADDRESS)
 #endif
 
-#ifdef I2C1_BASE_ADDRESS
-#define NRF_TWIM1                      ((NRF_TWIM_Type*) I2C1_BASE_ADDRESS)
+#ifdef I2C_1_BASE_ADDRESS
+#define NRF_TWIM1                      ((NRF_TWIM_Type*) I2C_1_BASE_ADDRESS)
 #endif
 
-#ifdef I2C2_BASE_ADDRESS
-#define NRF_TWIM2                      ((NRF_TWIM_Type*) I2C2_BASE_ADDRESS)
+#ifdef I2C_2_BASE_ADDRESS
+#define NRF_TWIM2                      ((NRF_TWIM_Type*) I2C_2_BASE_ADDRESS)
 #endif
 
-#ifdef I2C3_BASE_ADDRESS
-#define NRF_TWIM3                      ((NRF_TWIM_Type*) I2C3_BASE_ADDRESS)
+#ifdef I2C_3_BASE_ADDRESS
+#define NRF_TWIM3                      ((NRF_TWIM_Type*) I2C_3_BASE_ADDRESS)
 #endif
 
-#ifdef SPI0_BASE_ADDRESS
-#define NRF_SPIM0                      ((NRF_SPIM_Type*) SPI0_BASE_ADDRESS)
+#ifdef SPI_0_BASE_ADDRESS
+#define NRF_SPIM0                      ((NRF_SPIM_Type*) SPI_0_BASE_ADDRESS)
 #endif
 
-#ifdef SPI1_BASE_ADDRESS
-#define NRF_SPIM1                      ((NRF_SPIM_Type*) SPI1_BASE_ADDRESS)
+#ifdef SPI_1_BASE_ADDRESS
+#define NRF_SPIM1                      ((NRF_SPIM_Type*) SPI_1_BASE_ADDRESS)
 #endif
 
-#ifdef SPI2_BASE_ADDRESS
-#define NRF_SPIM2                      ((NRF_SPIM_Type*) SPI2_BASE_ADDRESS)
+#ifdef SPI_2_BASE_ADDRESS
+#define NRF_SPIM2                      ((NRF_SPIM_Type*) SPI_2_BASE_ADDRESS)
 #endif
 
-#ifdef SPI3_BASE_ADDRESS
-#define NRF_SPIM3                      ((NRF_SPIM_Type*) SPI3_BASE_ADDRESS)
+#ifdef SPI_3_BASE_ADDRESS
+#define NRF_SPIM3                      ((NRF_SPIM_Type*) SPI_3_BASE_ADDRESS)
 #endif
 
-#if defined(UART_0_BASE_ADDRESS)
+#ifdef UART_0_BASE_ADDRESS
 #define NRF_UARTE0                     ((NRF_UARTE_Type*) UART_0_BASE_ADDRESS)
 #endif
 
-#if defined(UART_1_BASE_ADDRESS)
+#ifdef UART_1_BASE_ADDRESS
 #define NRF_UARTE1                     ((NRF_UARTE_Type*) UART_1_BASE_ADDRESS)
 #endif
 
-#if defined(UART_2_BASE_ADDRESS)
+#ifdef UART_2_BASE_ADDRESS
 #define NRF_UARTE2                     ((NRF_UARTE_Type*) UART_2_BASE_ADDRESS)
 #endif
 
-#if defined(UART_3_BASE_ADDRESS)
+#ifdef UART_3_BASE_ADDRESS
 #define NRF_UARTE3                     ((NRF_UARTE_Type*) UART_3_BASE_ADDRESS)
 #endif
 
