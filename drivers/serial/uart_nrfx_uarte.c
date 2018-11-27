@@ -684,10 +684,10 @@ static int uarte_instance_init(struct device *dev,
 
 	#ifdef CONFIG_UART_2_NRF_FLOW_CONTROL
 		#define UARTE_2_NRF_HWFC_CONFIG	       UARTE_NRF_HWFC_ENABLED(2)
-		#ifndef CONFIG_UART_2_RTS_PIN
+		#ifndef DT_NORDIC_NRF_UARTE_UART_2_RTS_PIN
 		#error Flow control for UARTE2 is enabled, but RTS pin is not defined.
 		#endif
-		#ifndef CONFIG_UART_2_CTS_PIN
+		#ifndef DT_NORDIC_NRF_UARTE_UART_2_CTS_PIN
 		#error Flow control for UARTE2 is enabled, but CTS pin is not defined.
 		#endif
 	#else
@@ -720,10 +720,10 @@ static int uarte_instance_init(struct device *dev,
 
 	#ifdef CONFIG_UART_3_NRF_FLOW_CONTROL
 		#define UARTE_3_NRF_HWFC_CONFIG	       UARTE_NRF_HWFC_ENABLED(3)
-		#ifndef CONFIG_UART_3_RTS_PIN
+		#ifndef DT_NORDIC_NRF_UARTE_UART_3_RTS_PIN
 		#error Flow control for UARTE3 is enabled, but RTS pin is not defined.
 		#endif
-		#ifndef CONFIG_UART_3_CTS_PIN
+		#ifndef DT_NORDIC_NRF_UARTE_UART_3_CTS_PIN
 		#error Flow control for UARTE3 is enabled, but CTS pin is not defined.
 		#endif
 	#else
