@@ -313,6 +313,7 @@ static void vnd_hello(struct bt_mesh_model *model,
 		      struct net_buf_simple *buf)
 {
 	char str[32];
+	size_t len;
 
 	printk("Hello message from 0x%04x\n", ctx->addr);
 
@@ -321,8 +322,9 @@ static void vnd_hello(struct bt_mesh_model *model,
 		return;
 	}
 
-	strncpy(str, buf->data, HELLO_MAX);
-	str[HELLO_MAX] = '\0';
+	len = min(buf->len, HELLO_MAX);
+	memcpy(str, buf->data, len);
+	str[len] = '\0';
 
 	board_add_hello(ctx->addr, str);
 
@@ -414,7 +416,8 @@ static void send_hello(struct k_work *work)
 	const char *name = bt_get_name();
 
 	bt_mesh_model_msg_init(&msg, OP_VND_HELLO);
-	net_buf_simple_add_mem(&msg, name, first_name_len(name));
+	net_buf_simple_add_mem(&msg, name,
+			       min(HELLO_MAX, first_name_len(name)));
 
 	if (bt_mesh_model_send(&vnd_models[0], &ctx, &msg, NULL, NULL) == 0) {
 		board_show_text("Saying \"hi!\" to everyone", false,
