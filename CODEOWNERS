@@ -14,8 +14,7 @@
 # *                                        @galak @nashif
 
 /.known-issues/                           @nashif
-/.github/				  @nashif
-/.github/workflows/                       @galak @nashif
+/.github/                                 @thst-nordic
 /.buildkite/				  @galak
 /MAINTAINERS.yml                          @ioannisg @MaureenHelm
 /arch/arc/                                @abrodkin @ruuddw
@@ -457,6 +456,7 @@
 /include/toolchain.h                      @dcpleung @andyross @nashif
 /include/toolchain/                       @dcpleung @nashif @andyross
 /include/zephyr.h                         @dcpleung @nashif @andyross
+/Jenkinsfile                              @thst-nordic
 /kernel/                                  @dcpleung @nashif @andyross
 /lib/util/                                @carlescufi @jakub-uC
 /lib/util/fnmatch/                        @carlescufi @jakub-uC
