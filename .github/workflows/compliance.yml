@@ -38,8 +38,14 @@ jobs:
         git config --global user.name "Your Name"
         git remote -v
         # Ensure there's no merge commits in the PR
-        [[ "$(git rev-list --merges --count origin/${BASE_REF}..)" == "0" ]] || \
-        (echo "::error ::Merge commits not allowed, rebase instead";false)
+        #[[ "$(git rev-list --merges --count origin/${BASE_REF}..)" == "0" ]] || \
+        #(echo "::error ::Merge commits not allowed, rebase instead";false)
+        # Sauce tag checks before rebasing
+        # Handle single commit separately
+        if [[ "$(git rev-list --first-parent --count origin/${BASE_REF}..HEAD)" == "1" ]]; then COMMITS="--commit"; else COMMITS="--commits"; fi
+        git rev-list --first-parent origin/${BASE_REF}..HEAD | paste -sd, | \
+        xargs gitlint -c ncs-sauce-tags.enable=true \
+        -c title-starts-with-subsystem.regex=".*" $COMMITS
         git rebase origin/${BASE_REF}
         # debug
         git log  --pretty=oneline | head -n 10
@@ -56,7 +62,7 @@ jobs:
         # debug
         ls -la
         git log  --pretty=oneline | head -n 10
-        ./scripts/ci/check_compliance.py --annotate -e KconfigBasic \
+        ./scripts/ci/check_compliance.py --annotate -e KconfigBasic -e Kconfig \
         -c origin/${BASE_REF}..
 
     - name: upload-results
