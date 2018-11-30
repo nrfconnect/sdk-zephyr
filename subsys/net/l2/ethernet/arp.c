@@ -567,8 +567,9 @@ static bool arp_hdr_check(struct net_arp_hdr *arp_hdr)
 	if (ntohs(arp_hdr->hwtype) != NET_ARP_HTYPE_ETH ||
 	    ntohs(arp_hdr->protocol) != NET_ETH_PTYPE_IP ||
 	    arp_hdr->hwlen != sizeof(struct net_eth_addr) ||
-	    arp_hdr->protolen != NET_ARP_IPV4_PTYPE_SIZE) {
-		NET_DBG("Invalid ARP header");
+	    arp_hdr->protolen != NET_ARP_IPV4_PTYPE_SIZE ||
+	    net_ipv4_is_addr_loopback(&arp_hdr->src_ipaddr)) {
+		NET_DBG("DROP: Invalid ARP header");
 		return false;
 	}
 
@@ -577,6 +578,7 @@ static bool arp_hdr_check(struct net_arp_hdr *arp_hdr)
 
 enum net_verdict net_arp_input(struct net_pkt *pkt)
 {
+	struct net_eth_hdr *eth_hdr;
 	struct net_arp_hdr *arp_hdr;
 	struct net_pkt *reply;
 	struct in_addr *addr;
@@ -597,9 +599,9 @@ enum net_verdict net_arp_input(struct net_pkt *pkt)
 
 	switch (ntohs(arp_hdr->opcode)) {
 	case NET_ARP_REQUEST:
-		if (IS_ENABLED(CONFIG_NET_ARP_GRATUITOUS)) {
-			struct net_eth_hdr *eth_hdr = NET_ETH_HDR(pkt);
+		eth_hdr = NET_ETH_HDR(pkt);
 
+		if (IS_ENABLED(CONFIG_NET_ARP_GRATUITOUS)) {
 			if (memcmp(&eth_hdr->dst,
 				   net_eth_broadcast_addr(),
 				   sizeof(struct net_eth_addr)) == 0 &&
@@ -617,6 +619,16 @@ enum net_verdict net_arp_input(struct net_pkt *pkt)
 					   true);
 				break;
 			}
+		}
+
+		/* Discard ARP request if Ethernet address is broadcast
+		 * and Source IP address is Multicast address.
+		 */
+		if (memcmp(&eth_hdr->dst, net_eth_broadcast_addr(),
+			   sizeof(struct net_eth_addr)) == 0 &&
+		    net_ipv4_is_addr_mcast(&arp_hdr->src_ipaddr)) {
+			NET_DBG("DROP: eth addr is bcast, src addr is mcast");
+			return NET_DROP;
 		}
 
 		/* Someone wants to know our ll address */

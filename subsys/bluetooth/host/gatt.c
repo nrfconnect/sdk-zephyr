@@ -19,6 +19,7 @@
 
 #include <bluetooth/hci.h>
 #include <bluetooth/bluetooth.h>
+#include <bluetooth/conn.h>
 #include <bluetooth/uuid.h>
 #include <bluetooth/gatt.h>
 #include <bluetooth/hci_driver.h>
@@ -168,6 +169,11 @@ static void sc_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 
 static struct bt_gatt_attr gatt_attrs[] = {
 	BT_GATT_PRIMARY_SERVICE(BT_UUID_GATT),
+	/* Bluetooth 5.0, Vol3 Part G:
+	 * The Service Changed characteristic Attribute Handle on the server
+	 * shall not change if the server has a trusted relationship with any
+	 * client.
+	 */
 	BT_GATT_CHARACTERISTIC(BT_UUID_GATT_SC, BT_GATT_CHRC_INDICATE,
 			       BT_GATT_PERM_NONE, NULL, NULL, NULL),
 	BT_GATT_CCC(sc_ccc_cfg, sc_ccc_cfg_changed),
@@ -284,12 +290,12 @@ static struct gatt_ccc_store {
 
 static bool gatt_ccc_conn_is_queued(struct bt_conn *conn)
 {
-	return (conn == gatt_ccc_store.conn_list[bt_conn_get_id(conn)]);
+	return (conn == gatt_ccc_store.conn_list[bt_conn_index(conn)]);
 }
 
 static void gatt_ccc_conn_unqueue(struct bt_conn *conn)
 {
-	u8_t index = bt_conn_get_id(conn);
+	u8_t index = bt_conn_index(conn);
 
 	if (gatt_ccc_store.conn_list[index] != NULL) {
 		bt_conn_unref(gatt_ccc_store.conn_list[index]);
@@ -336,8 +342,8 @@ void bt_gatt_init(void)
 	}
 
 	/* Register mandatory services */
-	gatt_register(&gap_svc);
 	gatt_register(&gatt_svc);
+	gatt_register(&gap_svc);
 
 	k_delayed_work_init(&gatt_sc.work, sc_process);
 #if defined(CONFIG_BT_SETTINGS_CCC_STORE_ON_WRITE)
@@ -722,7 +728,7 @@ ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
 			/* Store the connection with the same index it has in
 			 * the conns array
 			 */
-			gatt_ccc_store.conn_list[bt_conn_get_id(conn)] =
+			gatt_ccc_store.conn_list[bt_conn_index(conn)] =
 				bt_conn_ref(conn);
 			k_delayed_work_submit(&gatt_ccc_store.work,
 					      CCC_STORE_DELAY);
@@ -2557,6 +2563,29 @@ save:
 	return 0;
 }
 
+static u8_t remove_peer_from_attr(const struct bt_gatt_attr *attr,
+				       void *user_data)
+{
+	const bt_addr_le_t *peer = user_data;
+	struct _bt_gatt_ccc *ccc;
+	struct bt_gatt_ccc_cfg *cfg;
+
+	/* Check if attribute is a CCC */
+	if (attr->write != bt_gatt_attr_write_ccc) {
+		return BT_GATT_ITER_CONTINUE;
+	}
+
+	ccc = attr->user_data;
+
+	/* Check if there is a cfg for the peer */
+	cfg = ccc_find_cfg(ccc, peer);
+	if (cfg) {
+		memset(cfg, 0, sizeof(*cfg));
+	}
+
+	return BT_GATT_ITER_CONTINUE;
+}
+
 int bt_gatt_clear_ccc(u8_t id, const bt_addr_le_t *addr)
 {
 	char key[BT_SETTINGS_KEY_MAX];
@@ -2571,6 +2600,9 @@ int bt_gatt_clear_ccc(u8_t id, const bt_addr_le_t *addr)
 		bt_settings_encode_key(key, sizeof(key), "ccc",
 				       (bt_addr_le_t *)addr, NULL);
 	}
+
+	bt_gatt_foreach_attr(0x0001, 0xffff, remove_peer_from_attr,
+			     (void *)addr);
 
 	return settings_save_one(key, NULL);
 }
