@@ -11,7 +11,7 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(test_flash);
 
-#define FLASH_TEST_REGION_OFFSET 0x10000
+#define FLASH_TEST_REGION_OFFSET 0x3F0000
 #define FLASH_SECTOR_SIZE        0x10000
 #define TEST_DATA_BYTE_0         0x4f
 #define TEST_DATA_BYTE_1         0x4a
@@ -51,13 +51,13 @@ void test_flash(void)
 
 	LOG_INF("   Attempted to write %x %x\n", buf[0], buf[1]);
 	if (flash_write(flash_dev, FLASH_TEST_REGION_OFFSET, buf,
-	    TEST_DATA_LEN) != TEST_DATA_LEN) {
+	    TEST_DATA_LEN) != 0) {
 		LOG_ERR("   Flash write failed!\n");
 		return;
 	}
 
 	if (flash_read(flash_dev, FLASH_TEST_REGION_OFFSET, buf,
-	    TEST_DATA_LEN) != TEST_DATA_LEN) {
+	    TEST_DATA_LEN) != 0) {
 		LOG_ERR("   Flash read failed!\n");
 		return;
 	}

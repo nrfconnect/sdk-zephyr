@@ -1000,7 +1000,8 @@ def _prefer_toggle(item):
            (isinstance(item, Choice) and len(item.assignable) > 1)
 
 def _enter_menu(menu):
-    # Makes 'menu' the currently displayed menu. "Menu" here includes choices.
+    # Makes 'menu' the currently displayed menu. "Menu" here includes choices
+    # and symbols defined with the 'menuconfig' keyword.
 
     global _cur_menu
     global _shown
@@ -1420,9 +1421,23 @@ def _shown_nodes(menu):
         #
         # Note: Named choices are pretty broken in the C tools, and this is
         # super obscure, so you probably won't find much that relies on this.
-        return [node
-                for choice_node in menu.item.nodes
-                    for node in rec(choice_node.list)]
+
+        # Do some additional work to avoid listing choice symbols twice if all
+        # or part of the choice is copied in multiple locations (e.g. by
+        # including some Kconfig file multiple times). We give the prompts at
+        # the current location precedence.
+        seen_syms = {node.item for node in rec(menu.list)
+                     if isinstance(node.item, Symbol)}
+        res = []
+        for choice_node in menu.item.nodes:
+            for node in rec(choice_node.list):
+                # 'choice_node is menu' checks if we're dealing with the
+                # current location
+                if node.item not in seen_syms or choice_node is menu:
+                    res.append(node)
+                    if isinstance(node.item, Symbol):
+                        seen_syms.add(node.item)
+        return res
 
     return rec(menu.list)
 
@@ -2790,15 +2805,25 @@ def _node_str(node):
         # choices in y mode
         sym = node.item.selection
         if sym:
-            for node_ in sym.nodes:
-                if node_.prompt:
-                    s += " ({})".format(node_.prompt[0])
+            for sym_node in sym.nodes:
+                # Use the prompt used at this choice location, in case the
+                # choice symbol is defined in multiple locations
+                if sym_node.parent is node and sym_node.prompt:
+                    s += " ({})".format(sym_node.prompt[0])
+                    break
+            else:
+                # If the symbol isn't defined at this choice location, then
+                # just use whatever prompt we can find for it
+                for sym_node in sym.nodes:
+                    if sym_node.prompt:
+                        s += " ({})".format(sym_node.prompt[0])
+                        break
 
     # Print "--->" next to nodes that have menus that can potentially be
-    # entered. Add "(empty)" if the menu is empty. We don't allow those to be
+    # entered. Print "----" if the menu is empty. We don't allow those to be
     # entered.
     if node.is_menuconfig:
-        s += "  --->" if _shown_nodes(node) else "  ---> (empty)"
+        s += "  --->" if _shown_nodes(node) else "  ----"
 
     return s
 
