@@ -6,3 +6,6 @@
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include "mcuboot.overlay"
 #endif
+#ifdef CONFIG_SECURE_BOOT
+#include "secureboot.overlay"
+#endif

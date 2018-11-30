@@ -1,0 +1,118 @@
+#ifdef CONFIG_SOC_NRF52840
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		b0_partition: partition@0 {
+			label = "secure-boot";
+			reg = <0x000000000 0x4000>;
+		};
+		b1_s0_partition: partition@4000 {
+			label = "s0";
+			reg = <0x4000 0xC000>;
+		};
+		b1_s1_partition: partition@10000 {
+			label = "s1";
+			reg = <0x10000 0xC000>;
+		};
+		app_partition: partition@1C000 {
+			label = "app";
+			reg = <0x1C000 0x000E3000>;
+		};
+		provision_partition: partition@FF000 {
+			label = "provision";
+			reg = <0x000FF000 0x00001000>;
+		};
+	};
+};
+#elif CONFIG_SOC_NRF51822_QFAC
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		b0_partition: partition@0 {
+			label = "secure-boot";
+			reg = <0x000000000 0x4000>;
+		};
+		b1_s0_partition: partition@4000 {
+			label = "s0";
+			reg = <0x4000 0xC000>;
+		};
+		b1_s1_partition: partition@10000 {
+			label = "s1";
+			reg = <0x10000 0xC000>;
+		};
+		app_partition: partition@1C000 {
+			label = "app";
+			reg = <0x1C000 0x00023000>;
+		};
+		provision_partition: partition@3F000 {
+			label = "provision";
+			reg = <0x0003F000 0x00001000>;
+		};
+	};
+};
+#elif CONFIG_SOC_NRF52832
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		b0_partition: partition@0 {
+			label = "secure-boot";
+			reg = <0x000000000 0x4000>;
+		};
+		b1_s0_partition: partition@4000 {
+			label = "s0";
+			reg = <0x4000 0xC000>;
+		};
+		b1_s1_partition: partition@10000 {
+			label = "s1";
+			reg = <0x10000 0xC000>;
+		};
+		app_partition: partition@1C000 {
+			label = "app";
+			reg = <0x1C000 0x00063000>;
+		};
+		provision_partition: partition@7F000 {
+			label = "provision";
+			reg = <0x0007F000 0x00001000>;
+		};
+	};
+};
+#elif CONFIG_SOC_NRF9160
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		b0_partition: partition@0 {
+			label = "secure-boot";
+			reg = <0x000000000 0x8000>;
+		};
+		b1_s0_partition: partition@8000 {
+			label = "s0";
+			reg = <0x8000 0x4000>;
+		};
+		b1_s1_partition: partition@C0000 {
+			label = "s1";
+			reg = <0xC0000 0x4000>;
+		};
+		app_partition: partition@10000 {
+			label = "app";
+			reg = <0x10000 0x000EF000>;
+		};
+		provision_partition: partition@EF000 {
+			label = "provision";
+			reg = <0x000EF000 0x00001000>;
+		};
+	};
+};
+#endif
+/ {
+	chosen {
+		zephyr,code-partition = &app_partition;
+	};
+};
