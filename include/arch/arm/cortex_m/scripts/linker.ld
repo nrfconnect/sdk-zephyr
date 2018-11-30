@@ -161,6 +161,12 @@ SECTIONS
 	KEEP(*(".kinetis_flash_config.*"))
 
 	_vector_end = .;
+
+#if defined(CONFIG_SB_FIRMWARE_INFO_OFFSET)
+	. = CONFIG_SB_FIRMWARE_INFO_OFFSET;
+	KEEP(*(.firmware_info))
+#endif
+
 	_image_text_start = .;
 	*(.text)
 	*(".text.*")
