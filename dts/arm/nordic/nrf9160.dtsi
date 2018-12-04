@@ -59,6 +59,9 @@
 		spi-2 = &spi2;
 		spi-3 = &spi3;
 		wdt-0 = &wdt;
+		timer-0 = &timer0;
+		timer-1 = &timer1;
+		timer-2 = &timer2;
 	};
 
 	soc {
@@ -71,7 +74,7 @@
 
 		adc: adc@0x5000e000 {
 			compatible = "nordic,nrf-saadc";
-			reg = <0x5000E000 0x1000>;
+			reg = <0x5000e000 0x1000>;
 			interrupts = <14 1>;
 			status = "disabled";
 			label = "ADC_0";
@@ -95,7 +98,7 @@
 
 		uart2: uart@5000a000 {
 			compatible = "nordic,nrf-uarte";
-			reg = <0x5000A000 0x1000>;
+			reg = <0x5000a000 0x1000>;
 			interrupts = <10 1>;
 			status = "disabled";
 			label = "UART_2";
@@ -103,7 +106,7 @@
 
 		uart3: uart@5000b000 {
 			compatible = "nordic,nrf-uarte";
-			reg = <0x5000B000 0x1000>;
+			reg = <0x5000b000 0x1000>;
 			interrupts = <11 1>;
 			status = "disabled";
 			label = "UART_3";
@@ -111,7 +114,7 @@
 
 		gpiote: gpiote@5000d000 {
 			compatible = "nordic,nrf-gpiote";
-			reg = <0x5000D000 0x1000>;
+			reg = <0x5000d000 0x1000>;
 			interrupts = <13 5>;
 			status = "disabled";
 			label = "GPIOTE_0";
@@ -152,7 +155,7 @@
 			compatible = "nordic,nrf-i2c";
 			#address-cells = <1>;
 			#size-cells = <0>;
-			reg = <0x5000A000 0x1000>;
+			reg = <0x5000a000 0x1000>;
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			interrupts = <10 1>;
 			status = "disabled";
@@ -163,7 +166,7 @@
 			compatible = "nordic,nrf-i2c";
 			#address-cells = <1>;
 			#size-cells = <0>;
-			reg = <0x5000B000 0x1000>;
+			reg = <0x5000b000 0x1000>;
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			interrupts = <11 1>;
 			status = "disabled";
@@ -194,7 +197,7 @@
 			compatible = "nordic,nrf-spi";
 			#address-cells = <1>;
 			#size-cells = <0>;
-			reg = <0x5000A000 0x1000>;
+			reg = <0x5000a000 0x1000>;
 			interrupts = <10 1>;
 			status = "disabled";
 			label = "SPI_2";
@@ -204,7 +207,7 @@
 			compatible = "nordic,nrf-spi";
 			#address-cells = <1>;
 			#size-cells = <0>;
-			reg = <0x5000B000 0x1000>;
+			reg = <0x5000b000 0x1000>;
 			interrupts = <11 1>;
 			status = "disabled";
 			label = "SPI_3";
@@ -240,7 +243,7 @@
 
 		ficr: ficr@00ff0000 {
 			compatible = "nordic,nrf-ficr";
-			reg = <0x00FF0000 0x1000>;
+			reg = <0x00ff0000 0x1000>;
 			status = "ok";
 		};
 
@@ -249,6 +252,30 @@
 			reg = <0x50018000 0x1000>;
 			interrupts = <24 0>;
 			label = "WDT";
+		};
+
+		timer0: timer@5000f000 {
+			compatible = "nordic,nrf-timer";
+			status = "disabled";
+			reg = <0x5000f000 0x1000>;
+			interrupts = <15 0>;
+			label = "TIMER0";
+		};
+
+		timer1: timer@50010000 {
+			compatible = "nordic,nrf-timer";
+			status = "disabled";
+			reg = <0x50010000 0x1000>;
+			interrupts = <16 0>;
+			label = "TIMER1";
+		};
+
+		timer2: timer@50011000 {
+			compatible = "nordic,nrf-timer";
+			status = "disabled";
+			reg = <0x50011000 0x1000>;
+			interrupts = <17 0>;
+			label = "TIMER2";
 		};
 	};
 };
