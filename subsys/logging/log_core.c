@@ -26,7 +26,7 @@ struct log_strdup_buf {
 #define LOG_STRDUP_POOL_BUFFER_SIZE \
 	(sizeof(struct log_strdup_buf) * CONFIG_LOG_STRDUP_BUF_COUNT)
 
-static const char *log_strdup_fail_msg = "log_strdup pool empty!";
+static const char *log_strdup_fail_msg = "<log_strdup alloc failed>";
 struct k_mem_slab log_strdup_pool;
 static u8_t __noinit __aligned(sizeof(u32_t))
 		log_strdup_pool_buf[LOG_STRDUP_POOL_BUFFER_SIZE];
@@ -36,6 +36,7 @@ static atomic_t initialized;
 static bool panic_mode;
 static bool backend_attached;
 static atomic_t buffered_cnt;
+static atomic_t dropped_cnt;
 static k_tid_t proc_tid;
 
 static u32_t dummy_timestamp(void);
@@ -225,6 +226,14 @@ void log_core_init(void)
 	log_msg_pool_init();
 	log_list_init(&list);
 
+	k_mem_slab_init(&log_strdup_pool, log_strdup_pool_buf,
+				sizeof(struct log_strdup_buf),
+				CONFIG_LOG_STRDUP_BUF_COUNT);
+
+	/* Set default timestamp. */
+	timestamp_func = timestamp_get;
+	log_output_timestamp_freq_set(CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC);
+
 	/*
 	 * Initialize aggregated runtime filter levels (no backends are
 	 * attached yet, so leave backend slots in each dynamic filter set
@@ -277,14 +286,6 @@ void log_init(void)
 	if (atomic_inc(&initialized)) {
 		return;
 	}
-
-	k_mem_slab_init(&log_strdup_pool, log_strdup_pool_buf,
-			sizeof(struct log_strdup_buf),
-			CONFIG_LOG_STRDUP_BUF_COUNT);
-
-	/* Set default timestamp. */
-	timestamp_func = timestamp_get;
-	log_output_timestamp_freq_set(CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC);
 
 	/* Assign ids to backends. */
 	for (i = 0; i < log_backend_count_get(); i++) {
@@ -389,9 +390,24 @@ static void msg_process(struct log_msg *msg, bool bypass)
 				log_backend_put(backend, msg);
 			}
 		}
+	} else {
+		atomic_inc(&dropped_cnt);
 	}
 
 	log_msg_put(msg);
+}
+
+void dropped_notify(void)
+{
+	u32_t dropped = atomic_set(&dropped_cnt, 0);
+
+	for (int i = 0; i < log_backend_count_get(); i++) {
+		struct log_backend const *backend = log_backend_get(i);
+
+		if (log_backend_is_active(backend)) {
+			log_backend_dropped(backend, dropped);
+		}
+	}
 }
 
 bool log_process(bool bypass)
@@ -409,6 +425,10 @@ bool log_process(bool bypass)
 	if (msg != NULL) {
 		atomic_dec(&buffered_cnt);
 		msg_process(msg, bypass);
+	}
+
+	if (!bypass && dropped_cnt) {
+		dropped_notify();
 	}
 
 	return (log_list_head_peek(&list) != NULL);
@@ -553,7 +573,7 @@ char *log_strdup(const char *str)
 	}
 
 	/* Set 'allocated' flag. */
-	atomic_set(&dup->refcount, 1);
+	(void)atomic_set(&dup->refcount, 1);
 
 	strncpy(dup->buf, str, sizeof(dup->buf) - 2);
 	dup->buf[sizeof(dup->buf) - 2] = '~';
@@ -609,7 +629,7 @@ static int enable_logger(struct device *arg)
 	k_thread_create(&logging_thread, logging_stack,
 			K_THREAD_STACK_SIZEOF(logging_stack),
 			log_process_thread_func, NULL, NULL, NULL,
-			CONFIG_LOG_PROCESS_THREAD_PRIO, 0, K_NO_WAIT);
+			K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
 	k_thread_name_set(&logging_thread, "logging");
 #else
 	log_init();

@@ -29,11 +29,16 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(usb_nrfx);
 
-#define USB_BMREQUEST_SETADDRESS 0x05
-#define USB_BMREQUESTTYPE_POS    7uL
-#define USB_BMREQUESTTYPE_MASK   (1uL << USB_BMREQUESTTYPE_POS)
-#define USB_BMREQUESTTYPE_HOSTTODEVICE_MASK  0uL
-#define USB_BMREQUESTTYPE_DEVICETOHOST_MASK  (1uL << USB_BMREQUESTTYPE_POS)
+#define USB_BREQUEST_SETADDRESS 		0x05
+#define USB_BMREQUESTTYPE_DIR_POS		7uL
+#define USB_BMREQUESTTYPE_DIR_MASK		(1uL << USB_BMREQUESTTYPE_DIR_POS)
+#define USB_BMREQUESTTYPE_DIR_HOSTTODEVICE_MASK	0uL
+#define USB_BMREQUESTTYPE_DIR_DEVICETOHOST_MASK	(1uL << USB_BMREQUESTTYPE_DIR_POS)
+#define USB_BMREQUESTTYPE_TYPE_POS		5uL
+#define USB_BMREQUESTTYPE_TYPE_MASK		(3uL << USB_BMREQUESTTYPE_TYPE_POS)
+#define USB_BMREQUESTTYPE_TYPE_STANDARD_MASK	0uL
+#define USB_BMREQUESTTYPE_TYPE_CLASS_MASK	(1uL << USB_BMREQUESTTYPE_TYPE_POS)
+#define USB_BMREQUESTTYPE_TYPE_CLASS_VENDOR	(2uL << USB_BMREQUESTTYPE_TYPE_POS)
 
 #define MAX_EP_BUF_SZ           64UL
 #define MAX_ISO_EP_BUF_SZ       1024UL
@@ -241,6 +246,8 @@ struct nrf_usbd_ctx {
 	struct k_mutex drv_lock;
 
 	struct nrf_usbd_ep_ctx ep_ctx[CFG_EP_CNT];
+
+	u16_t ctrl_read_len;
 };
 
 
@@ -728,10 +735,17 @@ static inline void usbd_work_process_setup(struct nrf_usbd_ep_ctx *ep_ctx)
 	/* Inform the stack. */
 	ep_ctx->cfg.cb(ep_ctx->cfg.addr, USB_DC_EP_SETUP);
 
-	if (((usbd_setup->bmRequestType & USB_BMREQUESTTYPE_MASK)
-	     == USB_BMREQUESTTYPE_HOSTTODEVICE_MASK)
+	struct nrf_usbd_ctx *ctx = get_usbd_ctx();
+
+	if (((usbd_setup->bmRequestType & USB_BMREQUESTTYPE_DIR_MASK)
+	     == USB_BMREQUESTTYPE_DIR_HOSTTODEVICE_MASK)
 	    && (usbd_setup->wLength)) {
+		struct nrf_usbd_ctx *ctx = get_usbd_ctx();
+
+		ctx->ctrl_read_len -= usbd_setup->wLength;
 		nrfx_usbd_setup_data_clear();
+	} else {
+		ctx->ctrl_read_len = 0;
 	}
 }
 
@@ -871,6 +885,7 @@ static void usbd_event_transfer_ctrl(nrfx_usbd_evt_t const *const p_event)
 		break;
 
 		case NRFX_USBD_EP_OK: {
+			struct nrf_usbd_ctx *ctx = get_usbd_ctx();
 			struct usbd_ep_event *ev = usbd_evt_alloc();
 			nrfx_err_t err_code;
 
@@ -887,6 +902,13 @@ static void usbd_event_transfer_ctrl(nrfx_usbd_evt_t const *const p_event)
 				__ASSERT_NO_MSG(0);
 			}
 			LOG_DBG("ctrl read done: %d", ep_ctx->buf.len);
+
+			if (ctx->ctrl_read_len > ep_ctx->buf.len) {
+				ctx->ctrl_read_len -= ep_ctx->buf.len;
+				nrfx_usbd_setup_data_clear();
+			} else {
+				ctx->ctrl_read_len = 0;
+			}
 
 			usbd_evt_put(ev);
 			usbd_work_schedule();
@@ -1026,7 +1048,9 @@ static void usbd_event_handler(nrfx_usbd_evt_t const *const p_event)
 		nrfx_usbd_setup_t drv_setup;
 
 		nrfx_usbd_setup_get(&drv_setup);
-		if (drv_setup.bmRequest != USB_BMREQUEST_SETADDRESS) {
+		if ((drv_setup.bRequest != USB_BREQUEST_SETADDRESS)
+		    || ((drv_setup.bmRequestType & USB_BMREQUESTTYPE_TYPE_MASK)
+			!= USB_BMREQUESTTYPE_TYPE_STANDARD_MASK)) {
 			/* SetAddress is habdled by USBD hardware.
 			 * No software action required.
 			 */
