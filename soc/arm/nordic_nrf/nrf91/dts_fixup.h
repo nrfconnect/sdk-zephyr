@@ -25,4 +25,8 @@
 
 #define DT_WDT_0_NAME                   DT_NORDIC_NRF_WATCHDOG_WDT_0_LABEL
 
+#define DT_TIMER_0_NAME                 DT_NORDIC_NRF_TIMER_TIMER_0_LABEL
+#define DT_TIMER_1_NAME                 DT_NORDIC_NRF_TIMER_TIMER_1_LABEL
+#define DT_TIMER_2_NAME                 DT_NORDIC_NRF_TIMER_TIMER_2_LABEL
+
 /* End of SoC Level DTS fixup file */
