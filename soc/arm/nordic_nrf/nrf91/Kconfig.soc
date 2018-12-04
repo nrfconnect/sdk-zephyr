@@ -36,6 +36,7 @@ config SOC_NRF9160
 	select HAS_HW_NRF_SPIS1
 	select HAS_HW_NRF_SPIS2
 	select HAS_HW_NRF_SPIS3
+	select HAS_HW_NRF_SPU
 	select HAS_HW_NRF_TIMER0
 	select HAS_HW_NRF_TIMER1
 	select HAS_HW_NRF_TIMER2
