@@ -101,6 +101,10 @@
 	status = "ok";
 };
 
+&timer0 {
+	status = "ok";
+};
+
 &flash0 {
 	/*
 	 * For more information, see:

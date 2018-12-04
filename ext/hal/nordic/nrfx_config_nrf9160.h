@@ -128,6 +128,18 @@
 #define NRF_WDT                        ((NRF_WDT_Type*) WDT_0_BASE_ADDRESS)
 #endif
 
+#ifdef TIMER_0_BASE_ADDRESS
+#define NRF_TIMER0                     ((NRF_TIMER_Type*) TIMER_0_BASE_ADDRESS)
+#endif
+
+#ifdef TIMER_1_BASE_ADDRESS
+#define NRF_TIMER1                     ((NRF_TIMER_Type*) TIMER_1_BASE_ADDRESS)
+#endif
+
+#ifdef TIMER_2_BASE_ADDRESS
+#define NRF_TIMER2                     ((NRF_TIMER_Type*) TIMER_2_BASE_ADDRESS)
+#endif
+
 // <<< Use Configuration Wizard in Context Menu >>>\n
 
 // <h> nRF_Drivers
