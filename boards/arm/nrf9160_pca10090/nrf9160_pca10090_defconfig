@@ -21,3 +21,5 @@ CONFIG_UART_CONSOLE=y
 
 # additional board options
 # CONFIG_GPIO_AS_PINRESET=y
+
+CONFIG_ENTROPY_NRF5_RNG=n
