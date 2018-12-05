@@ -84,8 +84,8 @@ static int shell_cmd_connect(const struct shell *shell,
 	bt_addr_le_t addr;
 	struct net_if *iface = net_if_get_default();
 
-	if (argc < 3 || shell_help_requested(shell)) {
-		shell_help_print(shell, NULL, 0);
+	if (argc < 3) {
+		shell_help(shell);
 		return -ENOEXEC;
 	}
 
@@ -112,8 +112,8 @@ static int shell_cmd_scan(const struct shell *shell,
 {
 	struct net_if *iface = net_if_get_default();
 
-	if (argc < 2 || shell_help_requested(shell)) {
-		shell_help_print(shell, NULL, 0);
+	if (argc < 2) {
+		shell_help(shell);
 		return -ENOEXEC;
 	}
 
@@ -133,11 +133,6 @@ static int shell_cmd_disconnect(const struct shell *shell,
 {
 	struct net_if *iface = net_if_get_default();
 
-	if (shell_help_requested(shell)) {
-		shell_help_print(shell, NULL, 0);
-		return -ENOEXEC;
-	}
-
 	if (net_mgmt(NET_REQUEST_BT_DISCONNECT, iface, NULL, 0)) {
 		shell_fprintf(shell, SHELL_WARNING,
 			      "Disconnect failed\n");
@@ -154,8 +149,8 @@ static int shell_cmd_advertise(const struct shell *shell,
 {
 	struct net_if *iface = net_if_get_default();
 
-	if (argc < 2 || shell_help_requested(shell)) {
-		shell_help_print(shell, NULL, 0);
+	if (argc < 2) {
+		shell_help(shell);
 		return -ENOEXEC;
 	}
 

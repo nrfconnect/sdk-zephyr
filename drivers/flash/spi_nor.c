@@ -184,11 +184,6 @@ static int spi_nor_read(struct device *dev, off_t addr, void *dest,
 		return -EINVAL;
 	}
 
-	/* start address should be aligned on a page size */
-	if ((addr & (params->page_size - 1)) != 0) {
-		return -EINVAL;
-	}
-
 	SYNC_LOCK();
 
 	spi_nor_wait_until_ready(dev);
@@ -226,11 +221,6 @@ static int spi_nor_write(struct device *dev, off_t addr, const void *src,
 	/* should be between 0 and flash size */
 	if ((addr < 0) || ((size + addr) > (params->sector_size *
 						params->n_sectors))) {
-		return -EINVAL;
-	}
-
-	/* start address should be aligned on a page size */
-	if ((addr & (params->page_size - 1)) != 0) {
 		return -EINVAL;
 	}
 
@@ -407,8 +397,7 @@ static const struct flash_driver_api spi_nor_api = {
 static const struct spi_nor_config flash_id = {
 	JEDEC_ID(CONFIG_SPI_NOR_JEDEC_ID),
 	CONFIG_SPI_NOR_PAGE_SIZE, CONFIG_SPI_NOR_SECTOR_SIZE,
-	CONFIG_SPI_NOR_SECTORS, CONFIG_SPI_NOR_BLOCK_SIZE,
-	CONFIG_SPI_NOR_BLOCK_ERASE_SIZE,
+	CONFIG_SPI_NOR_SECTORS, CONFIG_SPI_NOR_BLOCK_ERASE_SIZE,
 };
 
 static struct spi_nor_data spi_nor_memory_data;

@@ -13,6 +13,7 @@
 #include <toolchain.h>
 #include <linker/sections.h>
 
+#include <net/dummy.h>
 #include <net/net_mgmt.h>
 #include <net/net_pkt.h>
 #include <ztest.h>
@@ -49,7 +50,7 @@ static int test_mgmt_request(u32_t mgmt_request,
 	ARG_UNUSED(iface);
 
 	if (len == sizeof(u32_t)) {
-		*test_data = 1;
+		*test_data = 1U;
 
 		return 0;
 	}
@@ -73,15 +74,13 @@ static void fake_iface_init(struct net_if *iface)
 	net_if_set_link_addr(iface, mac, 8, NET_LINK_DUMMY);
 }
 
-static int fake_iface_send(struct net_if *iface, struct net_pkt *pkt)
+static int fake_iface_send(struct device *dev, struct net_pkt *pkt)
 {
-	net_pkt_unref(pkt);
-
-	return NET_OK;
+	return 0;
 }
 
-static struct net_if_api fake_iface_api = {
-	.init = fake_iface_init,
+static struct dummy_api fake_iface_api = {
+	.iface_api.init = fake_iface_init,
 	.send = fake_iface_send,
 };
 
@@ -91,7 +90,7 @@ NET_DEVICE_INIT(net_event_test, "net_event_test",
 
 void test_requesting_nm(void)
 {
-	u32_t data = 0;
+	u32_t data = 0U;
 
 	TC_PRINT("- Request Net MGMT\n");
 
@@ -167,7 +166,7 @@ static int sending_event(u32_t times, bool receiver, bool info)
 		zassert_equal(rx_calls, times, "rx_calls check failed");
 
 		net_mgmt_del_event_callback(&rx_cb);
-		rx_event = rx_calls = 0;
+		rx_event = rx_calls = 0U;
 	}
 
 	return TC_PASS;
@@ -221,13 +220,13 @@ static int test_synchronous_event_listener(u32_t times, bool on_iface)
 
 static void initialize_event_tests(void)
 {
-	event2throw = 0;
-	throw_times = 0;
+	event2throw = 0U;
+	throw_times = 0U;
 	throw_sleep = K_NO_WAIT;
 	with_info = false;
 
-	rx_event = 0;
-	rx_calls = 0;
+	rx_event = 0U;
+	rx_calls = 0U;
 
 	k_sem_init(&thrower_lock, 0, UINT_MAX);
 
@@ -255,7 +254,7 @@ static int test_core_event(u32_t event, bool (*func)(void))
 	zassert_equal(rx_event, event, "rx_event check failed");
 
 	net_mgmt_del_event_callback(&rx_cb);
-	rx_event = rx_calls = 0;
+	rx_event = rx_calls = 0U;
 
 	return TC_PASS;
 }

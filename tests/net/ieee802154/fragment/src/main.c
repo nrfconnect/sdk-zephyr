@@ -23,6 +23,7 @@
 #include <net/net_core.h>
 #include <net/net_pkt.h>
 #include <net/net_ip.h>
+#include <net/dummy.h>
 
 #include <tc_util.h>
 
@@ -158,14 +159,13 @@ static void net_fragment_iface_init(struct net_if *iface)
 	net_if_set_link_addr(iface, mac, 8, NET_LINK_IEEE802154);
 }
 
-static int tester_send(struct net_if *iface, struct net_pkt *pkt)
+static int tester_send(struct device *dev, struct net_pkt *pkt)
 {
-	net_pkt_unref(pkt);
-	return NET_OK;
+	return 0;
 }
 
-static struct net_if_api net_fragment_if_api = {
-	.init = net_fragment_iface_init,
+static struct dummy_api net_fragment_if_api = {
+	.iface_api.init = net_fragment_iface_init,
 	.send = tester_send,
 };
 
@@ -178,7 +178,7 @@ NET_DEVICE_INIT(net_fragment_test, "net_fragment_test",
 static bool compare_data(struct net_pkt *pkt, struct net_fragment_data *data)
 {
 	struct net_buf *frag;
-	u8_t bytes, pos, compare, offset = 0;
+	u8_t bytes, pos, compare, offset = 0U;
 	int remaining = data->len;
 
 	if (net_pkt_get_len(pkt) != (NET_IPV6UDPH_LEN + remaining)) {
@@ -195,7 +195,7 @@ static bool compare_data(struct net_pkt *pkt, struct net_fragment_data *data)
 		return false;
 	}
 
-	pos = 0;
+	pos = 0U;
 	offset = NET_IPV6UDPH_LEN;
 
 	while (remaining > 0 && frag) {
@@ -211,7 +211,7 @@ static bool compare_data(struct net_pkt *pkt, struct net_fragment_data *data)
 		pos += compare;
 		remaining -= compare;
 		frag = frag->frags;
-		offset = 0;
+		offset = 0U;
 	}
 
 	return true;
@@ -243,7 +243,7 @@ static struct net_pkt *create_pkt(struct net_fragment_data *data)
 	memcpy(frag->data, (u8_t *) data, NET_IPV6UDPH_LEN);
 	net_buf_add(frag, NET_IPV6UDPH_LEN);
 
-	pos = 0;
+	pos = 0U;
 	remaining = data->len;
 
 	len = NET_UDPH_LEN + remaining;

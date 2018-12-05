@@ -240,13 +240,6 @@ config LOG_PROCESS_THREAD_SLEEP_MS
 	  Log processing thread sleeps for requested period given in
 	  milliseconds. When waken up, thread process any buffered messages.
 
-config LOG_PROCESS_THREAD_PRIO
-	int "Priority of the log internal thread"
-	default -2
-	help
-	  Change with care since log processing can be time consuming thus it
-	  should be on low priority.
-
 config LOG_PROCESS_THREAD_STACK_SIZE
 	int "Stack size for the internal log processing thread"
 	default 768
@@ -273,8 +266,11 @@ config LOG_STRDUP_BUF_COUNT
 	int "Number of buffers in the pool used by log_strdup()"
 	default 4
 	help
-	  When pool is empty log_strdup() returns warning string instead of the
-	  copy.
+	  Number of calls to log_strdup() which can be pending before flushed
+	  to output. If "<log_strdup alloc failed>" message is seen in the log
+	  output, it means this value is too small and should be increased.
+	  Each entry takes CONFIG_LOG_STRDUP_MAX_STRING bytes of memory plus
+	  some additional fixed overhead.
 
 config LOG_DOMAIN_ID
 	int "Domain ID"
@@ -285,6 +281,7 @@ config LOG_DOMAIN_ID
 
 config LOG_CMDS
 	bool "Enable shell commands"
+	depends on SHELL
 	default y if SHELL
 
 config LOG_BACKEND_UART
@@ -297,7 +294,7 @@ config LOG_BACKEND_UART
 config LOG_BACKEND_RTT
 	bool "Enable Segger J-Link RTT backend"
 	depends on USE_SEGGER_RTT
-	default y
+	default y if !SHELL_BACKEND_RTT
 	help
 	  When enabled, backend will use RTT for logging. This backend works on a per
 	  message basis. Only a whole message (terminated with a carriage return: '\r')
@@ -360,6 +357,53 @@ config LOG_BACKEND_NATIVE_POSIX
 	default n
 	help
 	  Enable backend in native_posix
+
+config LOG_BACKEND_NET
+	bool "Enable networking backend"
+	depends on NETWORKING
+	select NET_CONTEXT_NET_PKT_POOL
+	help
+	  Send syslog messages to network server.
+	  See RFC 5424 (syslog protocol) and RFC 5426 (syslog over UDP)
+	  specifications for details.
+
+if LOG_BACKEND_NET
+
+config LOG_BACKEND_NET_SERVER
+	string "Syslog server IP address"
+	help
+	  This can be either IPv4 or IPv6 address.
+	  Server listen UDP port number can be configured here too.
+	  Following syntax is supported:
+	  192.0.2.1:514
+	  192.0.2.42
+	  [2001:db8::1]:514
+	  [2001:db8::2]
+	  2001:db::42
+
+config LOG_BACKEND_NET_MAX_BUF
+	int "How many network buffers to allocate for sending messages"
+	range 3 256
+	default 3
+	help
+	  Each syslog message should fit into a network packet that will be
+	  sent to server. This number tells how many syslog messages can be
+	  in transit to the server.
+
+config LOG_BACKEND_NET_MAX_BUF_SIZE
+	int "Max syslog message size"
+	range 64 1180
+	default 1180 if NET_IPV6
+	default 480 if NET_IPV4
+	default 256
+	help
+	  As each syslog message needs to fit to UDP packet, set this value
+	  so that messages are not truncated.
+	  The RFC 5426 recommends that for IPv4 the size is 480 octets and for
+	  IPv6 the size is 1180 octets. As each buffer will use RAM, the value
+	  should be selected so that typical messages will fit the buffer.
+
+endif # LOG_BACKEND_NET
 
 config LOG_BACKEND_SHOW_COLOR
 	bool "Enable colors in the backend"

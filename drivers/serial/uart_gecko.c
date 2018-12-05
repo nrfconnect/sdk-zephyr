@@ -43,13 +43,11 @@ static int uart_gecko_poll_in(struct device *dev, unsigned char *c)
 	return -1;
 }
 
-static unsigned char uart_gecko_poll_out(struct device *dev, unsigned char c)
+static void uart_gecko_poll_out(struct device *dev, unsigned char c)
 {
 	const struct uart_gecko_config *config = dev->config->config_info;
 
 	USART_Tx(config->base, c);
-
-	return c;
 }
 
 static int uart_gecko_err_check(struct device *dev)
@@ -82,7 +80,7 @@ static int uart_gecko_fifo_fill(struct device *dev, const u8_t *tx_data,
 			       int len)
 {
 	const struct uart_gecko_config *config = dev->config->config_info;
-	u8_t num_tx = 0;
+	u8_t num_tx = 0U;
 
 	while ((len - num_tx > 0) &&
 	       (config->base->STATUS & USART_STATUS_TXBL)) {
@@ -97,7 +95,7 @@ static int uart_gecko_fifo_read(struct device *dev, u8_t *rx_data,
 			       const int len)
 {
 	const struct uart_gecko_config *config = dev->config->config_info;
-	u8_t num_rx = 0;
+	u8_t num_rx = 0U;
 
 	while ((len - num_rx > 0) &&
 	       (config->base->STATUS & USART_STATUS_RXDATAV)) {

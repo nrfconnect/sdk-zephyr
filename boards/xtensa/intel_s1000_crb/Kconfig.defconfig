@@ -73,12 +73,14 @@ config SPI_NOR_SECTOR_SIZE
 config SPI_NOR_SECTORS
 	default 1024
 
-config SPI_NOR_BLOCK_SIZE
-	default 65536
-
 choice SPI_NOR_BLOCK_ERASE_SIZE
 	default SPI_NOR_BLOCK_ERASE_64K
 endchoice
+
+if BOOTLOADER_MCUBOOT
+config TEXT_SECTION_OFFSET
+	default 0x100
+endif
 
 if USB
 config USB_DW
@@ -171,6 +173,13 @@ config SPI_DW
 	def_bool y
 
 config SPI_0
+	def_bool y
+
+endif
+
+if PINMUX
+
+config PINMUX_INTEL_S1000
 	def_bool y
 
 endif

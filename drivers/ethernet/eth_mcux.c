@@ -182,7 +182,7 @@ static inline struct net_if *get_iface(struct eth_context *ctx, u16_t vlan_tag)
 
 static void eth_mcux_phy_enter_reset(struct eth_context *context)
 {
-	const u32_t phy_addr = 0;
+	const u32_t phy_addr = 0U;
 
 	/* Reset the PHY. */
 	ENET_StartSMIWrite(ENET, phy_addr, PHY_BASICCONTROL_REG,
@@ -193,7 +193,7 @@ static void eth_mcux_phy_enter_reset(struct eth_context *context)
 
 static void eth_mcux_phy_start(struct eth_context *context)
 {
-	const u32_t phy_addr = 0;
+	const u32_t phy_addr = 0U;
 #ifdef CONFIG_ETH_MCUX_PHY_EXTRA_DEBUG
 	LOG_DBG("phy_state=%s", phy_state_name(context->phy_state));
 #endif
@@ -259,7 +259,7 @@ static void eth_mcux_phy_event(struct eth_context *context)
 	bool link_up;
 	phy_duplex_t phy_duplex = kPHY_FullDuplex;
 	phy_speed_t phy_speed = kPHY_Speed100M;
-	const u32_t phy_addr = 0;
+	const u32_t phy_addr = 0U;
 
 #ifdef CONFIG_ETH_MCUX_PHY_EXTRA_DEBUG
 	LOG_DBG("phy_state=%s", phy_state_name(context->phy_state));
@@ -449,9 +449,9 @@ static bool eth_get_ptp_data(struct net_if *iface, struct net_pkt *pkt,
 }
 #endif /* CONFIG_PTP_CLOCK_MCUX */
 
-static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
+static int eth_tx(struct device *dev, struct net_pkt *pkt)
 {
-	struct eth_context *context = net_if_get_device(iface)->driver_data;
+	struct eth_context *context = dev->driver_data;
 	const struct net_buf *frag;
 	u8_t *dst;
 	status_t status;
@@ -501,7 +501,7 @@ static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 				total_len);
 
 #if defined(CONFIG_PTP_CLOCK_MCUX)
-	timestamped_frame = eth_get_ptp_data(iface, pkt, NULL);
+	timestamped_frame = eth_get_ptp_data(net_pkt_iface(pkt), pkt, NULL);
 	if (timestamped_frame) {
 		if (!status) {
 			ts_tx_pkt[ts_tx_wr] = net_pkt_ref(pkt);
@@ -523,8 +523,6 @@ static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 		return -1;
 	}
 
-	net_pkt_unref(pkt);
-
 	return 0;
 }
 
@@ -534,7 +532,7 @@ static void eth_rx(struct device *iface)
 	struct net_buf *prev_buf;
 	struct net_pkt *pkt;
 	const u8_t *src;
-	u32_t frame_length = 0;
+	u32_t frame_length = 0U;
 	status_t status;
 	unsigned int imask;
 	u16_t vlan_tag = NET_VLAN_TAG_UNSPEC;
@@ -929,14 +927,12 @@ static struct device *eth_mcux_get_ptp_clock(struct device *dev)
 #endif
 
 static const struct ethernet_api api_funcs = {
-	.iface_api.init = eth_iface_init,
-	.iface_api.send = eth_tx,
-
-	.get_capabilities = eth_mcux_get_capabilities,
-
+	.iface_api.init		= eth_iface_init,
 #if defined(CONFIG_PTP_CLOCK_MCUX)
-	.get_ptp_clock = eth_mcux_get_ptp_clock,
+	.get_ptp_clock		= eth_mcux_get_ptp_clock,
 #endif
+	.get_capabilities	= eth_mcux_get_capabilities,
+	.send			= eth_tx,
 };
 
 #if defined(CONFIG_PTP_CLOCK_MCUX)

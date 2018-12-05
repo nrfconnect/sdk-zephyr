@@ -162,6 +162,10 @@ zephyr_compile_options(
 )
 endif()
 
+zephyr_ld_options(
+  ${TOOLCHAIN_LD_FLAGS}
+)
+
 if(NOT CONFIG_NATIVE_APPLICATION)
 zephyr_ld_options(
   -nostdlib
@@ -308,6 +312,20 @@ zephyr_cc_option(-Wpointer-arith)
 # TODO: Archiver arguments
 # ar_option(D)
 
+# Declare MPU userspace dependencies before the linker scripts to make
+# sure the order of dependencies are met
+if(CONFIG_CPU_HAS_MPU AND CONFIG_USERSPACE)
+  if(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT AND CONFIG_APP_SHARED_MEM )
+    set(APP_SMEM_DEP app_smem_linker)
+  endif()
+  if(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT AND CONFIG_ARC AND CONFIG_APPLICATION_MEMORY)
+    set(ALIGN_SIZING_DEP app_sizing_prebuilt linker_app_sizing_script)
+  endif()
+  if(CONFIG_ARM)
+    set(PRIV_STACK_DEP priv_stacks_prebuilt)
+  endif()
+endif()
+
 set_ifndef(LINKERFLAGPREFIX -Wl)
 
 if(NOT CONFIG_NATIVE_APPLICATION)
@@ -321,6 +339,13 @@ zephyr_ld_options(
   ${LINKERFLAGPREFIX},--gc-sections
   ${LINKERFLAGPREFIX},--build-id=none
   )
+
+if(NOT CONFIG_NATIVE_APPLICATION)
+  set(NOSTDINC_F -nostdinc)
+endif()
+
+get_property(TOPT GLOBAL PROPERTY TOPT)
+set_ifndef(  TOPT -T)
 
 if(NOT CONFIG_NATIVE_APPLICATION)
   # Funny thing is if this is set to =error, some architectures will
@@ -375,6 +400,57 @@ if(CONFIG_CUSTOM_RODATA_LD OR CONFIG_CUSTOM_RWDATA_LD OR CONFIG_CUSTOM_SECTIONS_
 endif()
 
 configure_file(version.h.in ${PROJECT_BINARY_DIR}/include/generated/version.h)
+
+function(construct_add_custom_command_for_linker_pass linker_output_name output_variable)
+  set(linker_cmd_file_name ${linker_output_name}.cmd)
+
+  if (${linker_output_name} MATCHES "^linker_pass_final$")
+    set(linker_pass_define -DLINKER_PASS2)
+  else()
+    set(linker_pass_define "")
+  endif()
+
+  # Different generators deal with depfiles differently.
+  if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
+    # Note that the IMPLICIT_DEPENDS option is currently supported only
+    # for Makefile generators and will be ignored by other generators.
+    set(linker_script_dep IMPLICIT_DEPENDS C ${LINKER_SCRIPT})
+  elseif(CMAKE_GENERATOR STREQUAL "Ninja")
+    # Using DEPFILE with other generators than Ninja is an error.
+    set(linker_script_dep DEPFILE ${PROJECT_BINARY_DIR}/${linker_cmd_file_name}.dep)
+  else()
+    # TODO: How would the linker script dependencies work for non-linker
+    # script generators.
+    message(STATUS "Warning; this generator is not well supported. The
+  Linker script may not be regenerated when it should.")
+    set(linker_script_dep "")
+  endif()
+
+  zephyr_get_include_directories_for_lang(C current_includes)
+  get_filename_component(base_name ${CMAKE_CURRENT_BINARY_DIR} NAME)
+  get_property(current_defines GLOBAL PROPERTY PROPERTY_LINKER_SCRIPT_DEFINES)
+
+  set(${output_variable}
+    OUTPUT ${linker_cmd_file_name}
+    DEPENDS ${LINKER_SCRIPT}
+    ${linker_script_dep}
+    COMMAND ${CMAKE_C_COMPILER}
+    -x assembler-with-cpp
+    ${NOSTDINC_F}
+    ${NOSYSDEF_CFLAG}
+    -MD -MF ${linker_cmd_file_name}.dep -MT ${base_name}/${linker_cmd_file_name}
+    ${current_includes}
+    ${current_defines}
+    ${linker_pass_define}
+    -E ${LINKER_SCRIPT}
+    -P # Prevent generation of debug `#line' directives.
+    -o ${linker_cmd_file_name}
+    VERBATIM
+    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+
+    PARENT_SCOPE
+    )
+endfunction()
 
 # Unfortunately, the order in which CMakeLists.txt code is processed
 # matters so we need to be careful about how we order the processing
@@ -609,8 +685,6 @@ endforeach()
 
 get_property(OUTPUT_FORMAT        GLOBAL PROPERTY PROPERTY_OUTPUT_FORMAT)
 
-get_property(LINKER_SCRIPT_DEFINES GLOBAL PROPERTY PROPERTY_LINKER_SCRIPT_DEFINES)
-
 if(CONFIG_APPLICATION_MEMORY)
   # Objects default to being in kernel space, and then we exclude
   # certain items.
@@ -700,71 +774,14 @@ if(CONFIG_APPLICATION_MEMORY)
   foreach(f ${ks})
     set(def "${def} ${f}")
   endforeach()
-  list(APPEND LINKER_SCRIPT_DEFINES ${def})
+  set_property(GLOBAL APPEND PROPERTY
+	PROPERTY_LINKER_SCRIPT_DEFINES
+	${def}
+	)
 endif() # CONFIG_APPLICATION_MEMORY
 
-# Declare MPU userspace dependencies before the linker scripts to make
-# sure the order of dependencies are met
-if(CONFIG_CPU_HAS_MPU AND CONFIG_USERSPACE)
-	if(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT AND CONFIG_APP_SHARED_MEM )
-    set(APP_SMEM_DEP app_smem_linker)
-  endif()
-  if(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT AND CONFIG_APPLICATION_MEMORY)
-    set(ALIGN_SIZING_DEP app_sizing_prebuilt linker_app_sizing_script)
-  endif()
-  if(CONFIG_ARM)
-  set(PRIV_STACK_DEP priv_stacks_prebuilt)
-  endif()
-endif()
 
-function(construct_add_custom_command_for_linker_pass linker_output_name output_variable)
-  set(linker_cmd_file_name ${linker_output_name}.cmd)
 
-  if (${linker_output_name} MATCHES "^linker_pass_final$")
-    set(LINKER_PASS_DEFINE -DLINKER_PASS2)
-  else()
-    set(LINKER_PASS_DEFINE "")
-  endif()
-
-  # Different generators deal with depfiles differently.
-  if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
-    # Note that the IMPLICIT_DEPENDS option is currently supported only
-    # for Makefile generators and will be ignored by other generators.
-    set(LINKER_SCRIPT_DEP IMPLICIT_DEPENDS C ${LINKER_SCRIPT})
-  elseif(CMAKE_GENERATOR STREQUAL "Ninja")
-    # Using DEPFILE with other generators than Ninja is an error.
-    set(LINKER_SCRIPT_DEP DEPFILE ${PROJECT_BINARY_DIR}/${linker_cmd_file_name}.dep)
-  else()
-    # TODO: How would the linker script dependencies work for non-linker
-    # script generators.
-    message(STATUS "Warning; this generator is not well supported. The
-  Linker script may not be regenerated when it should.")
-    set(LINKER_SCRIPT_DEP "")
-  endif()
-
-  set(${output_variable}
-    OUTPUT ${linker_cmd_file_name}
-    DEPENDS ${LINKER_SCRIPT}
-    ${LINKER_SCRIPT_DEP}
-    COMMAND ${CMAKE_C_COMPILER}
-    -x assembler-with-cpp
-    ${NOSTDINC_F}
-    ${NOSYSDEF_CFLAG}
-    -MD -MF ${linker_cmd_file_name}.dep -MT ${BASE_NAME}/${linker_cmd_file_name}
-    ${ZEPHYR_INCLUDES}
-    ${LINKER_SCRIPT_DEFINES}
-    ${LINKER_PASS_DEFINE}
-    -E ${LINKER_SCRIPT}
-    -P # Prevent generation of debug `#line' directives.
-    -o ${linker_cmd_file_name}
-    VERBATIM
-    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-
-    PARENT_SCOPE
-    )
-endfunction()
-
-get_filename_component(BASE_NAME ${CMAKE_CURRENT_BINARY_DIR} NAME)
 construct_add_custom_command_for_linker_pass(linker custom_command)
 add_custom_command(
   ${custom_command}
@@ -1071,8 +1088,6 @@ endif()
 get_property(GKOF GLOBAL PROPERTY GENERATED_KERNEL_OBJECT_FILES)
 get_property(GKSF GLOBAL PROPERTY GENERATED_KERNEL_SOURCE_FILES)
 
-get_property(TOPT GLOBAL PROPERTY TOPT)
-set_ifndef(  TOPT -T)
 
 get_property(CSTD GLOBAL PROPERTY CSTD)
 set_ifndef(CSTD c99)
@@ -1082,7 +1097,7 @@ zephyr_compile_options(
 )
 
 configure_file(
-     $ENV{ZEPHYR_BASE}/include/arch/arm/cortex_m/scripts/app_data_alignment.ld
+     $ENV{ZEPHYR_BASE}/include/arch/arc/v2/app_data_alignment.ld
      ${PROJECT_BINARY_DIR}/include/generated/app_data_alignment.ld)
 
 configure_file(
@@ -1114,7 +1129,7 @@ if(CONFIG_CPU_HAS_MPU AND CONFIG_USERSPACE)
   endif()
 
 
-  if(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT AND CONFIG_APPLICATION_MEMORY)
+  if(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT AND CONFIG_ARC AND CONFIG_APPLICATION_MEMORY)
 
     construct_add_custom_command_for_linker_pass(linker_app_sizing custom_command)
     add_custom_command(
@@ -1191,10 +1206,6 @@ target_link_libraries(zephyr_prebuilt ${TOPT} ${PROJECT_BINARY_DIR}/linker.cmd $
 set_property(TARGET   zephyr_prebuilt PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker.cmd)
 add_dependencies(     zephyr_prebuilt ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP} linker_script offsets)
 
-
-if(NOT CONFIG_NATIVE_APPLICATION)
-	set(NOSTDINC_F -nostdinc)
-endif()
 
 if(GKOF OR GKSF)
   set(logical_target_for_zephyr_elf kernel_elf)
@@ -1300,6 +1311,28 @@ add_custom_command(
   COMMENT "Generating files from zephyr.elf for board: ${BOARD}"
   # NB: COMMENT only works for some CMake-Generators
 )
+
+# To populate with hex files to merge, do the following:
+#  set_property(GLOBAL APPEND PROPERTY HEX_FILES_TO_MERGE ${my_local_list})
+# Note that the zephyr.hex file will not be included automatically.
+get_property(HEX_FILES_TO_MERGE GLOBAL PROPERTY HEX_FILES_TO_MERGE)
+if(HEX_FILES_TO_MERGE)
+  # Merge in out-of-tree hex files.
+  set(MERGED_HEX_NAME merged.hex)
+
+  add_custom_command(
+    OUTPUT ${MERGED_HEX_NAME}
+    COMMAND
+    ${PYTHON_EXECUTABLE}
+    ${ZEPHYR_BASE}/scripts/mergehex.py
+    -o ${MERGED_HEX_NAME}
+    ${HEX_FILES_TO_MERGE}
+    DEPENDS ${HEX_FILES_TO_MERGE} ${logical_target_for_zephyr_elf}
+    )
+
+  add_custom_target(mergehex ALL DEPENDS ${MERGED_HEX_NAME})
+  list(APPEND FLASH_DEPS mergehex)
+endif()
 
 if(CONFIG_OUTPUT_PRINT_MEMORY_USAGE)
   # Use --print-memory-usage with the first link.

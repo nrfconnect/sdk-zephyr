@@ -233,6 +233,9 @@ extern char _image_rom_start[];
 extern char _image_rom_end[];
 extern char _image_rom_size[];
 
+/* Includes all ROMable data, i.e. the size of the output image file. */
+extern char _flash_used[];
+
 /* datas, bss, noinit */
 extern char _image_ram_start[];
 extern char _image_ram_end[];
@@ -270,6 +273,19 @@ extern char __sg_end[];
 extern char __sg_size[];
 #endif /* CONFIG_ARM_FIRMWARE_HAS_SECURE_ENTRY_FUNCS */
 
+/*
+ * Non-cached kernel memory region, currently only available on ARM Cortex-M7
+ * with a MPU. Start and end will be aligned for memory management/protection
+ * hardware for the target architecture.
+ *
+ * All the functions with '__nocache' keyword will be placed into this
+ * section.
+ */
+#ifdef CONFIG_NOCACHE_MEMORY
+extern char _nocache_ram_start[];
+extern char _nocache_ram_end[];
+extern char _nocache_ram_size[];
+#endif /* CONFIG_NOCACHE_MEMORY */
 
 #endif /* ! _ASMLANGUAGE */
 
