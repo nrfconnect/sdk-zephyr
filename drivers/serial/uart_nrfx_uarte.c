@@ -748,16 +748,19 @@ static int uarte_instance_init(struct device *dev,
 	#endif /* CONFIG_UART_2_INTERRUPT_DRIVEN */
 
 	#ifdef CONFIG_UART_2_NRF_FLOW_CONTROL
-		#define UARTE_2_NRF_HWFC_CONFIG	       UARTE_NRF_HWFC_ENABLED(2)
-		#ifndef DT_NORDIC_NRF_UARTE_UART_2_RTS_PIN
-		#error Flow control for UARTE2 is enabled, but RTS pin is not defined.
-		#endif
-		#ifndef DT_NORDIC_NRF_UARTE_UART_2_CTS_PIN
-		#error Flow control for UARTE2 is enabled, but CTS pin is not defined.
-		#endif
+		#define UARTE_2_NRF_HWFC_CONFIG        NRF_UARTE_HWFC_ENABLED
 	#else
-		#define UARTE_2_NRF_HWFC_CONFIG	       UARTE_NRF_HWFC_DISABLED
+		#define UARTE_2_NRF_HWFC_CONFIG        NRF_UARTE_HWFC_DISABLED
 	#endif /* CONFIG_UART_2_NRF_FLOW_CONTROL */
+
+	#if defined(DT_NORDIC_NRF_UARTE_UART_2_RTS_PIN) && \
+	    defined(DT_NORDIC_NRF_UARTE_UART_2_CTS_PIN)
+		#define UARTE_2_NRF_RTS_CTS_PINS       UARTE_NRF_RTS_CTS_SET(2)
+		#define UARTE_2_CONFIG_RTS_CTS         .rts_cts_pins_set = true
+	#else
+		#define UARTE_2_NRF_RTS_CTS_PINS       UARTE_NRF_RTS_CTS_NOT_SET
+		#define UARTE_2_CONFIG_RTS_CTS         .rts_cts_pins_set = false
+	#endif
 
 	#ifdef CONFIG_UART_2_NRF_PARITY_BIT
 		#define UARTE_2_NRF_PARITY_BIT	       NRF_UARTE_PARITY_INCLUDED
@@ -784,16 +787,19 @@ static int uarte_instance_init(struct device *dev,
 	#endif /* CONFIG_UART_3_INTERRUPT_DRIVEN */
 
 	#ifdef CONFIG_UART_3_NRF_FLOW_CONTROL
-		#define UARTE_3_NRF_HWFC_CONFIG	       UARTE_NRF_HWFC_ENABLED(3)
-		#ifndef DT_NORDIC_NRF_UARTE_UART_3_RTS_PIN
-		#error Flow control for UARTE3 is enabled, but RTS pin is not defined.
-		#endif
-		#ifndef DT_NORDIC_NRF_UARTE_UART_3_CTS_PIN
-		#error Flow control for UARTE3 is enabled, but CTS pin is not defined.
-		#endif
+		#define UARTE_3_NRF_HWFC_CONFIG        NRF_UARTE_HWFC_ENABLED
 	#else
-		#define UARTE_3_NRF_HWFC_CONFIG	       UARTE_NRF_HWFC_DISABLED
+		#define UARTE_3_NRF_HWFC_CONFIG        NRF_UARTE_HWFC_DISABLED
 	#endif /* CONFIG_UART_3_NRF_FLOW_CONTROL */
+
+	#if defined(DT_NORDIC_NRF_UARTE_UART_3_RTS_PIN) && \
+	    defined(DT_NORDIC_NRF_UARTE_UART_3_CTS_PIN)
+		#define UARTE_3_NRF_RTS_CTS_PINS       UARTE_NRF_RTS_CTS_SET(3)
+		#define UARTE_3_CONFIG_RTS_CTS         .rts_cts_pins_set = true
+	#else
+		#define UARTE_3_NRF_RTS_CTS_PINS       UARTE_NRF_RTS_CTS_NOT_SET
+		#define UARTE_3_CONFIG_RTS_CTS         .rts_cts_pins_set = false
+	#endif
 
 	#ifdef CONFIG_UART_3_NRF_PARITY_BIT
 		#define UARTE_3_NRF_PARITY_BIT	       NRF_UARTE_PARITY_INCLUDED
