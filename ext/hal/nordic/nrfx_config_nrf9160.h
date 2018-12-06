@@ -229,6 +229,64 @@
 
 // </e>
 
+// <e> NRFX_DPPI_ENABLED - nrfx_dppi - DPPI allocator.
+//==========================================================
+#ifndef NRFX_DPPI_ENABLED
+#define NRFX_DPPI_ENABLED 1
+#endif
+// <e> NRFX_DPPI_CONFIG_LOG_ENABLED - Enables logging in the module.
+//==========================================================
+#ifndef NRFX_DPPI_CONFIG_LOG_ENABLED
+#define NRFX_DPPI_CONFIG_LOG_ENABLED 0
+#endif
+// <o> NRFX_DPPI_CONFIG_LOG_LEVEL  - Default severity level.
+
+// <0=> Off
+// <1=> Error
+// <2=> Warning
+// <3=> Info
+// <4=> Debug
+
+#ifndef NRFX_DPPI_CONFIG_LOG_LEVEL
+#define NRFX_DPPI_CONFIG_LOG_LEVEL 3
+#endif
+
+// <o> NRFX_DPPI_CONFIG_INFO_COLOR  - ANSI escape code prefix.
+
+// <0=> Default
+// <1=> Black
+// <2=> Red
+// <3=> Green
+// <4=> Yellow
+// <5=> Blue
+// <6=> Magenta
+// <7=> Cyan
+// <8=> White
+
+#ifndef NRFX_DPPI_CONFIG_INFO_COLOR
+#define NRFX_DPPI_CONFIG_INFO_COLOR 0
+#endif
+
+// <o> NRFX_DPPI_CONFIG_DEBUG_COLOR  - ANSI escape code prefix.
+
+// <0=> Default
+// <1=> Black
+// <2=> Red
+// <3=> Green
+// <4=> Yellow
+// <5=> Blue
+// <6=> Magenta
+// <7=> Cyan
+// <8=> White
+
+#ifndef NRFX_DPPI_CONFIG_DEBUG_COLOR
+#define NRFX_DPPI_CONFIG_DEBUG_COLOR 0
+#endif
+
+// </e>
+
+// </e>
+
 // <e> NRFX_GPIOTE_ENABLED - nrfx_gpiote - GPIOTE peripheral driver
 //==========================================================
 #ifndef NRFX_GPIOTE_ENABLED
@@ -395,11 +453,6 @@
 // <o> NRFX_I2S_CONFIG_MCK_SETUP  - MCK behavior
 
 // <0=> Disabled
-// <2147483648=> 32MHz/2
-// <1342177280=> 32MHz/3
-// <1073741824=> 32MHz/4
-// <805306368=> 32MHz/5
-// <671088640=> 32MHz/6
 // <536870912=> 32MHz/8
 // <402653184=> 32MHz/10
 // <369098752=> 32MHz/11
@@ -431,7 +484,7 @@
 // <8=> 512x
 
 #ifndef NRFX_I2S_CONFIG_RATIO
-#define NRFX_I2S_CONFIG_RATIO 2000
+#define NRFX_I2S_CONFIG_RATIO 5
 #endif
 
 // <o> NRFX_I2S_CONFIG_IRQ_PRIORITY  - Interrupt priority
@@ -632,15 +685,6 @@
 #define NRFX_POWER_CONFIG_DEFAULT_DCDCEN 0
 #endif
 
-// <q> NRFX_POWER_CONFIG_DEFAULT_DCDCENHV  - The default configuration of High Voltage DCDC regulator
-
-
-// <i> This settings means only that components for DCDC regulator are installed and it can be enabled.
-
-#ifndef NRFX_POWER_CONFIG_DEFAULT_DCDCENHV
-#define NRFX_POWER_CONFIG_DEFAULT_DCDCENHV 0
-#endif
-
 // </e>
 
 // <e> NRFX_PRS_ENABLED - nrfx_prs - Peripheral Resource Sharing module
@@ -674,13 +718,6 @@
 
 #ifndef NRFX_PRS_BOX_3_ENABLED
 #define NRFX_PRS_BOX_3_ENABLED 0
-#endif
-
-// <q> NRFX_PRS_BOX_4_ENABLED  - Enables box 4 in the module.
-
-
-#ifndef NRFX_PRS_BOX_4_ENABLED
-#define NRFX_PRS_BOX_4_ENABLED 0
 #endif
 
 // <e> NRFX_PRS_CONFIG_LOG_ENABLED - Enables logging in the module.
@@ -1160,6 +1197,7 @@
 #define NRFX_SPIM3_ENABLED 1
 #endif
 
+
 // <o> NRFX_SPIM_MISO_PULL_CFG  - MISO pin pull configuration.
 
 // <0=> NRF_GPIO_PIN_NOPULL
@@ -1236,6 +1274,8 @@
 
 // </e>
 
+// </e>
+
 // <e> NRFX_SPIS_ENABLED - nrfx_spis - SPIS peripheral driver
 //==========================================================
 #ifdef CONFIG_NRFX_SPIS
@@ -1260,6 +1300,13 @@
 
 #ifdef CONFIG_SPI_2_NRF_SPIS
 #define NRFX_SPIS2_ENABLED 1
+#endif
+
+// <q> NRFX_SPIS3_ENABLED  - Enables SPIS3 instance.
+
+
+#ifdef CONFIG_SPI_3_NRF_SPIS
+#define NRFX_SPIS3_ENABLED 1
 #endif
 
 // <o> NRFX_SPIS_DEFAULT_CONFIG_IRQ_PRIORITY  - Interrupt priority
@@ -1726,6 +1773,20 @@
 #define NRFX_TWIS1_ENABLED 0
 #endif
 
+// <q> NRFX_TWIS2_ENABLED  - Enables TWIS2 instance.
+
+
+#ifndef NRFX_TWIS2_ENABLED
+#define NRFX_TWIS2_ENABLED 1
+#endif
+
+// <q> NRFX_TWIS3_ENABLED  - Enables TWIS3 instance.
+
+
+#ifndef NRFX_TWIS3_ENABLED
+#define NRFX_TWIS3_ENABLED 1
+#endif
+
 // <q> NRFX_TWIS_ASSUME_INIT_AFTER_RESET_ONLY  - Assume that any instance would be initialized only once
 
 
@@ -1855,6 +1916,16 @@
 // <o> NRFX_UARTE1_ENABLED - Enable UARTE1 instance
 #ifdef CONFIG_NRFX_UARTE1
 #define NRFX_UARTE1_ENABLED 1
+#endif
+
+// <o> NRFX_UARTE2_ENABLED - Enables UARTE2 instance.
+#ifdef CONFIG_NRFX_UARTE2
+#define NRFX_UARTE2_ENABLED 1
+#endif
+
+// <o> NRFX_UARTE3_ENABLED - Enables UARTE3 instance.
+#ifdef CONFIG_NRFX_UARTE2
+#define NRFX_UARTE3_ENABLED 1
 #endif
 
 // <o> NRFX_UARTE_DEFAULT_CONFIG_HWFC  - Hardware Flow Control
@@ -1989,6 +2060,15 @@
 
 #ifndef NRFX_WDT_CONFIG_RELOAD_VALUE
 #define NRFX_WDT_CONFIG_RELOAD_VALUE 2000
+#endif
+
+// <o> NRFX_WDT_CONFIG_NO_IRQ  - Remove WDT IRQ handling from WDT driver
+
+// <0=> Include WDT IRQ handling
+// <1=> Remove WDT IRQ handling
+
+#ifndef NRFX_WDT_CONFIG_NO_IRQ
+#define NRFX_WDT_CONFIG_NO_IRQ 0
 #endif
 
 // <o> NRFX_WDT_CONFIG_IRQ_PRIORITY  - Interrupt priority
