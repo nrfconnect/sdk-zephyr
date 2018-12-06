@@ -42,7 +42,7 @@ static int mcux_lpsci_poll_in(struct device *dev, unsigned char *c)
 	return ret;
 }
 
-static unsigned char mcux_lpsci_poll_out(struct device *dev, unsigned char c)
+static void mcux_lpsci_poll_out(struct device *dev, unsigned char c)
 {
 	const struct mcux_lpsci_config *config = dev->config->config_info;
 
@@ -51,8 +51,6 @@ static unsigned char mcux_lpsci_poll_out(struct device *dev, unsigned char c)
 		;
 
 	LPSCI_WriteByte(config->base, c);
-
-	return c;
 }
 
 static int mcux_lpsci_err_check(struct device *dev)
@@ -85,7 +83,7 @@ static int mcux_lpsci_fifo_fill(struct device *dev, const u8_t *tx_data,
 				int len)
 {
 	const struct mcux_lpsci_config *config = dev->config->config_info;
-	u8_t num_tx = 0;
+	u8_t num_tx = 0U;
 
 	while ((len - num_tx > 0) &&
 	       (LPSCI_GetStatusFlags(config->base)
@@ -101,7 +99,7 @@ static int mcux_lpsci_fifo_read(struct device *dev, u8_t *rx_data,
 				const int len)
 {
 	const struct mcux_lpsci_config *config = dev->config->config_info;
-	u8_t num_rx = 0;
+	u8_t num_rx = 0U;
 
 	while ((len - num_rx > 0) &&
 	       (LPSCI_GetStatusFlags(config->base)

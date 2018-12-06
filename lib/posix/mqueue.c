@@ -51,7 +51,7 @@ mqd_t mq_open(const char *name, int oflags, ...)
 	va_list va;
 	mode_t mode;
 	mq_attr *attrs = NULL;
-	u32_t msg_size = 0, max_msgs = 0;
+	u32_t msg_size = 0U, max_msgs = 0U;
 	mqueue_object *msg_queue;
 	mqueue_desc *msg_queue_desc = NULL, *mqd = (mqueue_desc *)(-1);
 	char *mq_desc_ptr, *mq_obj_ptr, *mq_buf_ptr, *mq_name_ptr;
@@ -144,7 +144,7 @@ mqd_t mq_open(const char *name, int oflags, ...)
 			goto free_mq_buffer;
 		}
 
-		atomic_set(&msg_queue->ref_count, 1);
+		(void)atomic_set(&msg_queue->ref_count, 1);
 		/* initialize zephyr message queue */
 		k_msgq_init(&msg_queue->queue, msg_queue->mem_buffer, msg_size,
 			    max_msgs);

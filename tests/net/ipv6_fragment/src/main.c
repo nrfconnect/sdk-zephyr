@@ -20,6 +20,7 @@
 #include <ztest.h>
 
 #include <net/ethernet.h>
+#include <net/dummy.h>
 #include <net/buf.h>
 #include <net/net_ip.h>
 #include <net/net_if.h>
@@ -923,9 +924,9 @@ small:
 
 large:
 	if (frag_count == 1) {
-		u16_t exp_ext_len = 1040; /* 1032 (HBHO) + 8 (FRAG)*/
+		u16_t exp_ext_len = 1040U; /* 1032 (HBHO) + 8 (FRAG)*/
 		u16_t recv_ext_len;
-		u16_t exp_payload_len = 200;
+		u16_t exp_payload_len = 200U;
 		u16_t recv_payload_len;
 		u16_t frag_offset;
 		struct net_buf *frag;
@@ -966,9 +967,9 @@ large:
 	}
 
 	if (frag_count == 2) {
-		u16_t exp_ext_len = 1040; /* 1032 (HBHO) + 8 (FRAG)*/
+		u16_t exp_ext_len = 1040U; /* 1032 (HBHO) + 8 (FRAG)*/
 		u16_t recv_ext_len;
-		u16_t exp_payload_len = 200;
+		u16_t exp_payload_len = 200U;
 		u16_t recv_payload_len;
 		u16_t frag_offset;
 		struct net_buf *frag;
@@ -1009,9 +1010,9 @@ large:
 	}
 
 	if (frag_count == 3) {
-		u16_t exp_ext_len = 1040; /* 1032 (HBHO) + 8 (FRAG)*/
+		u16_t exp_ext_len = 1040U; /* 1032 (HBHO) + 8 (FRAG)*/
 		u16_t recv_ext_len;
-		u16_t exp_payload_len = 16;
+		u16_t exp_payload_len = 16U;
 		u16_t recv_payload_len;
 		u16_t frag_offset;
 		struct net_buf *frag;
@@ -1054,7 +1055,7 @@ large:
 	return 0;
 }
 
-static int sender_iface(struct net_if *iface, struct net_pkt *pkt)
+static int sender_iface(struct device *dev, struct net_pkt *pkt)
 {
 	if (!pkt->frags) {
 		DBG("No data to send!\n");
@@ -1062,24 +1063,6 @@ static int sender_iface(struct net_if *iface, struct net_pkt *pkt)
 	}
 
 	if (test_started) {
-		struct net_if_test *data =
-			net_if_get_device(iface)->driver_data;
-
-		DBG("Sending at iface %d %p\n", net_if_get_by_iface(iface),
-		    iface);
-
-		if (net_pkt_iface(pkt) != iface) {
-			DBG("Invalid interface %p, expecting %p\n",
-				 net_pkt_iface(pkt), iface);
-			test_failed = true;
-		}
-
-		if (net_if_get_by_iface(iface) != data->idx) {
-			DBG("Invalid interface %d index, expecting %d\n",
-				 data->idx, net_if_get_by_iface(iface));
-			test_failed = true;
-		}
-
 		/* Verify the fragments */
 		if (verify_fragment(pkt) < 0) {
 			DBG("Fragments cannot be verified\n");
@@ -1091,16 +1074,14 @@ static int sender_iface(struct net_if *iface, struct net_pkt *pkt)
 
 	zassert_false(test_failed, "Fragment verify failed");
 
-	net_pkt_unref(pkt);
-
 	return 0;
 }
 
 struct net_if_test net_iface1_data;
 struct net_if_test net_iface2_data;
 
-static struct net_if_api net_iface_api = {
-	.init = net_iface_init,
+static struct dummy_api net_iface_api = {
+	.iface_api.init = net_iface_init,
 	.send = sender_iface,
 };
 
@@ -1186,8 +1167,8 @@ static void test_setup(void)
 	iface1 = net_if_get_by_index(0);
 	iface2 = net_if_get_by_index(1);
 
-	((struct net_if_test *)net_if_get_device(iface1)->driver_data)->idx = 0;
-	((struct net_if_test *)net_if_get_device(iface2)->driver_data)->idx = 1;
+	((struct net_if_test *)net_if_get_device(iface1)->driver_data)->idx = 0U;
+	((struct net_if_test *)net_if_get_device(iface2)->driver_data)->idx = 1U;
 
 	idx = net_if_get_by_iface(iface1);
 	zassert_equal(idx, 0, "Invalid index iface1");
@@ -1238,8 +1219,8 @@ static void test_setup(void)
 
 static void test_find_last_ipv6_fragment_udp(void)
 {
-	u16_t next_hdr_idx = 0;
-	u16_t last_hdr_pos = 0;
+	u16_t next_hdr_idx = 0U;
+	u16_t last_hdr_pos = 0U;
 	struct net_pkt *pkt;
 	int ret;
 
@@ -1275,8 +1256,8 @@ static void test_find_last_ipv6_fragment_udp(void)
 
 static void test_find_last_ipv6_fragment_hbho_udp(void)
 {
-	u16_t next_hdr_idx = 0;
-	u16_t last_hdr_pos = 0;
+	u16_t next_hdr_idx = 0U;
+	u16_t last_hdr_pos = 0U;
 	struct net_pkt *pkt;
 	int ret;
 
@@ -1312,8 +1293,8 @@ static void test_find_last_ipv6_fragment_hbho_udp(void)
 
 static void test_find_last_ipv6_fragment_hbho_1(void)
 {
-	u16_t next_hdr_idx = 0;
-	u16_t last_hdr_pos = 0;
+	u16_t next_hdr_idx = 0U;
+	u16_t last_hdr_pos = 0U;
 	struct net_pkt *pkt;
 	struct net_buf *frag;
 	u8_t next_hdr;
@@ -1354,8 +1335,8 @@ static void test_find_last_ipv6_fragment_hbho_1(void)
 
 static void test_find_last_ipv6_fragment_hbho_2(void)
 {
-	u16_t next_hdr_idx = 0;
-	u16_t last_hdr_pos = 0;
+	u16_t next_hdr_idx = 0U;
+	u16_t last_hdr_pos = 0U;
 	struct net_pkt *pkt;
 	struct net_buf *frag;
 	u8_t next_hdr;
@@ -1397,8 +1378,8 @@ static void test_find_last_ipv6_fragment_hbho_2(void)
 
 static void test_find_last_ipv6_fragment_hbho_3(void)
 {
-	u16_t next_hdr_idx = 0;
-	u16_t last_hdr_pos = 0;
+	u16_t next_hdr_idx = 0U;
+	u16_t last_hdr_pos = 0U;
 	struct net_pkt *pkt;
 	struct net_buf *frag;
 	u8_t next_hdr;
@@ -1440,8 +1421,8 @@ static void test_find_last_ipv6_fragment_hbho_3(void)
 
 static void test_find_last_ipv6_fragment_hbho_frag(void)
 {
-	u16_t next_hdr_idx = 0;
-	u16_t last_hdr_pos = 0;
+	u16_t next_hdr_idx = 0U;
+	u16_t last_hdr_pos = 0U;
 	struct net_pkt *pkt;
 	int ret;
 
@@ -1476,8 +1457,8 @@ static void test_find_last_ipv6_fragment_hbho_frag(void)
 
 static void test_find_last_ipv6_fragment_hbho_frag_1(void)
 {
-	u16_t next_hdr_idx = 0;
-	u16_t last_hdr_pos = 0;
+	u16_t next_hdr_idx = 0U;
+	u16_t last_hdr_pos = 0U;
 	struct net_pkt *pkt;
 	struct net_buf *frag;
 	u8_t next_hdr;
@@ -1529,7 +1510,7 @@ static void test_send_ipv6_fragment(void)
 
 	large_hbho = false;
 
-	pkt_data_len = 0;
+	pkt_data_len = 0U;
 
 	pkt = net_pkt_get_reserve_tx(0, ALLOC_TIMEOUT);
 	zassert_not_null(pkt, "packet");
@@ -1591,7 +1572,7 @@ static void test_send_ipv6_fragment_large_hbho(void)
 
 	frag_count = 0;
 	large_hbho = true;
-	pkt_data_len = 416;
+	pkt_data_len = 416U;
 
 	pkt = net_pkt_get_reserve_tx(0, ALLOC_TIMEOUT);
 	zassert_not_null(pkt, "packet");

@@ -135,7 +135,7 @@ static int __parse_ipv4_address(char *str, char *ssid, u8_t ip[4])
 	while (*str) {
 		if (byte == -1) {
 			if (!strncmp(str, ssid, strlen(ssid))) {
-				byte = 0;
+				byte = 0U;
 				str += strlen(ssid);
 			}
 			str++;
@@ -493,7 +493,6 @@ static int eswifi_init(struct device *dev)
 
 static const struct net_wifi_mgmt_offload eswifi_offload_api = {
 	.iface_api.init = eswifi_iface_init,
-	.iface_api.send = NULL,
 	.scan		= eswifi_mgmt_scan,
 	.connect	= eswifi_mgmt_connect,
 	.disconnect	= eswifi_mgmt_disconnect,

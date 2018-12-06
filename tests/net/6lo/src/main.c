@@ -23,6 +23,7 @@
 #include <net/net_core.h>
 #include <net/net_pkt.h>
 #include <net/net_ip.h>
+#include <net/dummy.h>
 
 #include <tc_util.h>
 
@@ -201,14 +202,13 @@ static void net_6lo_iface_init(struct net_if *iface)
 	net_if_set_link_addr(iface, src_mac, 8, NET_LINK_IEEE802154);
 }
 
-static int tester_send(struct net_if *iface, struct net_pkt *pkt)
+static int tester_send(struct device *dev, struct net_pkt *pkt)
 {
-	net_pkt_unref(pkt);
-	return NET_OK;
+	return 0;
 }
 
-static struct net_if_api net_6lo_if_api = {
-	.init = net_6lo_iface_init,
+static struct dummy_api net_6lo_if_api = {
+	.iface_api.init = net_6lo_iface_init,
 	.send = tester_send,
 };
 
@@ -222,8 +222,8 @@ static bool compare_data(struct net_pkt *pkt, struct net_6lo_data *data)
 	struct net_buf *frag;
 	u8_t bytes;
 	u8_t compare;
-	u8_t pos = 0;
-	u8_t offset = 0;
+	u8_t pos = 0U;
+	u8_t offset = 0U;
 	int remaining = data->small ? SIZE_OF_SMALL_DATA : SIZE_OF_LARGE_DATA;
 
 	if (data->nh_udp) {
@@ -298,7 +298,7 @@ static bool compare_data(struct net_pkt *pkt, struct net_6lo_data *data)
 		pos += compare;
 		remaining -= compare;
 		frag = frag->frags;
-		offset = 0;
+		offset = 0U;
 	}
 
 	return true;
@@ -344,7 +344,7 @@ static struct net_pkt *create_pkt(struct net_6lo_data *data)
 		net_buf_add(frag, NET_IPV6H_LEN);
 	}
 
-	pos = 0;
+	pos = 0U;
 	remaining = data->small ? SIZE_OF_SMALL_DATA : SIZE_OF_LARGE_DATA;
 
 	if (data->nh_udp) {

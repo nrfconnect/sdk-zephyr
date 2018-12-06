@@ -10,7 +10,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <nvs/nvs.h>
-#include <crc8.h>
+#include <crc.h>
 #include "nvs_priv.h"
 
 #define LOG_LEVEL CONFIG_NVS_LOG_LEVEL
@@ -709,7 +709,7 @@ ssize_t nvs_write(struct nvs_fs *fs, u16_t id, const void *data, size_t len)
 	/* find latest entry with same id */
 	wlk_addr = fs->ate_wra;
 	rd_addr = wlk_addr;
-	freed_space = 0;
+	freed_space = 0U;
 
 	while (1) {
 		rd_addr = wlk_addr;
@@ -811,7 +811,7 @@ ssize_t nvs_read_hist(struct nvs_fs *fs, u16_t id, void *data, size_t len,
 		return -EINVAL;
 	}
 
-	cnt_his = 0;
+	cnt_his = 0U;
 
 	wlk_addr = fs->ate_wra;
 	rd_addr = wlk_addr;

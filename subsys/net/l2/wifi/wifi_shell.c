@@ -87,7 +87,7 @@ static void handle_wifi_scan_done(struct net_mgmt_event_callback *cb)
 		print(context.shell, SHELL_NORMAL, "Scan request done\n");
 	}
 
-	scan_result = 0;
+	scan_result = 0U;
 }
 
 static void handle_wifi_connect_result(struct net_mgmt_event_callback *cb)
@@ -151,14 +151,14 @@ static int cmd_wifi_connect(const struct shell *shell, size_t argc,
 	char *endptr;
 	int idx = 3;
 
-	if (shell_help_requested(shell) || argc < 3) {
-		shell_help_print(shell, NULL, 0);
+	if (argc < 3) {
+		shell_help(shell);
 		return -ENOEXEC;
 	}
 
 	cnx_params.ssid_length = strtol(argv[2], &endptr, 10);
 	if (*endptr != '\0' || cnx_params.ssid_length <= 2) {
-		shell_help_print(shell, NULL, 0);
+		shell_help(shell);
 		return -ENOEXEC;
 	}
 
@@ -167,7 +167,7 @@ static int cmd_wifi_connect(const struct shell *shell, size_t argc,
 	if ((idx < argc) && (strlen(argv[idx]) <= 2)) {
 		cnx_params.channel = strtol(argv[idx], &endptr, 10);
 		if (*endptr != '\0') {
-			shell_help_print(shell, NULL, 0);
+			shell_help(shell);
 			return -ENOEXEC;
 		}
 
@@ -212,11 +212,6 @@ static int cmd_wifi_disconnect(const struct shell *shell, size_t argc,
 	struct net_if *iface = net_if_get_default();
 	int status;
 
-	if (shell_help_requested(shell)) {
-		shell_help_print(shell, NULL, 0);
-		return -ENOEXEC;
-	}
-
 	context.disconnecting = true;
 	context.shell = shell;
 
@@ -244,11 +239,6 @@ static int cmd_wifi_disconnect(const struct shell *shell, size_t argc,
 static int cmd_wifi_scan(const struct shell *shell, size_t argc, char *argv[])
 {
 	struct net_if *iface = net_if_get_default();
-
-	if (shell_help_requested(shell)) {
-		shell_help_print(shell, NULL, 0);
-		return -ENOEXEC;
-	}
 
 	if (net_mgmt(NET_REQUEST_WIFI_SCAN, iface, NULL, 0)) {
 		shell_fprintf(shell, SHELL_WARNING, "Scan request failed\n");
@@ -281,8 +271,8 @@ static int wifi_shell_init(struct device *unused)
 	ARG_UNUSED(unused);
 
 	context.shell = NULL;
-	context.all = 0;
-	scan_result = 0;
+	context.all = 0U;
+	scan_result = 0U;
 
 	net_mgmt_init_event_callback(&wifi_shell_mgmt_cb,
 				     wifi_mgmt_event_handler,

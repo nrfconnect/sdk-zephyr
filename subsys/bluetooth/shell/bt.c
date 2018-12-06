@@ -613,8 +613,8 @@ static int cmd_scan(const struct shell *shell, size_t argc, char *argv[])
 		} else if (!strcmp(dup_filter, "nodups")) {
 			dups = BT_HCI_LE_SCAN_FILTER_DUP_ENABLE;
 		} else {
-			shell_help_print(shell, NULL, 0);
-			/* shell_cmd_precheck returns 1 when help is printed */
+			shell_help(shell);
+			/* shell returns 1 when help is printed */
 			return 1;
 		}
 	}
@@ -627,8 +627,8 @@ static int cmd_scan(const struct shell *shell, size_t argc, char *argv[])
 	} else if (!strcmp(action, "passive")) {
 		return cmd_passive_scan_on(shell, dups);
 	} else {
-		shell_help_print(shell, NULL, 0);
-		/* shell_cmd_precheck returns 1 when help is printed */
+		shell_help(shell);
+		/* shell returns 1 when help is printed */
 		return 1;
 	}
 
@@ -702,7 +702,7 @@ static int cmd_advertise(const struct shell *shell, size_t argc, char *argv[])
 	return 0;
 
 fail:
-	shell_help_print(shell, NULL, 0);
+	shell_help(shell);
 	return -ENOEXEC;
 }
 
@@ -746,8 +746,8 @@ static int cmd_disconnect(const struct shell *shell, size_t argc, char *argv[])
 		bt_addr_le_t addr;
 
 		if (argc < 3) {
-			shell_help_print(shell, NULL, 0);
-			/* shell_cmd_precheck returns 1 when help is printed */
+			shell_help(shell);
+			/* shell returns 1 when help is printed */
 			return 1;
 		}
 
@@ -795,8 +795,8 @@ static int cmd_auto_conn(const struct shell *shell, size_t argc, char *argv[])
 	} else if (!strcmp(argv[3], "off")) {
 		return bt_le_set_auto_conn(&addr, NULL);
 	} else {
-		shell_help_print(shell, NULL, 0);
-		/* shell_cmd_precheck returns 1 when help is printed */
+		shell_help(shell);
+		/* shell returns 1 when help is printed */
 		return 1;
 	}
 
@@ -822,8 +822,8 @@ static int cmd_directed_adv(const struct shell *shell,
 	}
 
 	if (strcmp(argv[3], "low")) {
-		shell_help_print(shell, NULL, 0);
-		/* shell_cmd_precheck returns 1 when help is printed */
+		shell_help(shell);
+		/* shell returns 1 when help is printed */
 		return 1;
 	}
 
@@ -1014,8 +1014,8 @@ static int cmd_bondable(const struct shell *shell, size_t argc, char *argv[])
 	} else if (!strcmp(bondable, "off")) {
 		bt_set_bondable(false);
 	} else {
-		shell_help_print(shell, NULL, 0);
-		/* shell_cmd_precheck returns 1 when help is printed */
+		shell_help(shell);
+		/* shell returns 1 when help is printed */
 		return 1;
 	}
 
@@ -1208,8 +1208,8 @@ static int cmd_auth(const struct shell *shell, size_t argc, char *argv[])
 	} else if (!strcmp(argv[1], "none")) {
 		bt_conn_auth_cb_register(NULL);
 	} else {
-		shell_help_print(shell, NULL, 0);
-		/* shell_cmd_precheck returns 1 when help is printed */
+		shell_help(shell);
+		/* shell returns 1 when help is printed */
 		return 1;
 	}
 
@@ -1389,8 +1389,8 @@ SHELL_CREATE_STATIC_SUBCMD_SET(bt_cmds) {
 static int cmd_bt(const struct shell *shell, size_t argc, char **argv)
 {
 	if (argc == 1) {
-		shell_help_print(shell, NULL, 0);
-		/* shell_cmd_precheck returns 1 when help is printed */
+		shell_help(shell);
+		/* shell returns 1 when help is printed */
 		return 1;
 	}
 

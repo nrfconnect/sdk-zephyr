@@ -68,8 +68,8 @@ static int l2cap_recv_metrics(struct bt_l2cap_chan *chan, struct net_buf *buf)
 	 * reset the metrics.
 	 */
 	if (delta > 1000000000) {
-		len = 0;
-		l2cap_rate = 0;
+		len = 0U;
+		l2cap_rate = 0U;
 		cycle_stamp = k_cycle_get_32();
 	} else {
 		len += buf->len;
@@ -354,7 +354,7 @@ static int cmd_metrics(const struct shell *shell, size_t argc, char *argv[])
 	} else if (!strcmp(action, "off")) {
 		l2cap_ops.recv = l2cap_recv;
 	} else {
-		shell_help_print(shell, NULL, 0);
+		shell_help(shell);
 		return 0;
 	}
 
@@ -416,8 +416,8 @@ SHELL_CREATE_STATIC_SUBCMD_SET(l2cap_cmds) {
 static int cmd_l2cap(const struct shell *shell, size_t argc, char **argv)
 {
 	if (argc == 1) {
-		shell_help_print(shell, NULL, 0);
-		/* shell_cmd_precheck returns 1 when help is printed */
+		shell_help(shell);
+		/* shell returns 1 when help is printed */
 		return 1;
 	}
 

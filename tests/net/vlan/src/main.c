@@ -20,6 +20,7 @@
 #include <ztest.h>
 
 #include <net/ethernet.h>
+#include <net/dummy.h>
 #include <net/buf.h>
 #include <net/net_ip.h>
 #include <net/ethernet_vlan.h>
@@ -102,9 +103,9 @@ static void eth_vlan_iface_init(struct net_if *iface)
 	ethernet_init(iface);
 }
 
-static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
+static int eth_tx(struct device *dev, struct net_pkt *pkt)
 {
-	struct eth_context *context = net_if_get_device(iface)->driver_data;
+	struct eth_context *context = dev->driver_data;
 
 	zassert_equal_ptr(&eth_vlan_context, context,
 			  "Context pointers do not match (%p vs %p)",
@@ -132,8 +133,6 @@ static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 		k_sem_give(&wait_data);
 	}
 
-	net_pkt_unref(pkt);
-
 	return 0;
 }
 
@@ -144,9 +143,9 @@ static enum ethernet_hw_caps eth_capabilities(struct device *dev)
 
 static struct ethernet_api api_funcs = {
 	.iface_api.init = eth_vlan_iface_init,
-	.iface_api.send = eth_tx,
 
 	.get_capabilities = eth_capabilities,
+	.send = eth_tx,
 };
 
 static void generate_mac(u8_t *mac_addr)
@@ -229,18 +228,16 @@ static void net_iface_init(struct net_if *iface)
 			     NET_LINK_ETHERNET);
 }
 
-static int sender_iface(struct net_if *iface, struct net_pkt *pkt)
+static int sender_iface(struct device *dev, struct net_pkt *pkt)
 {
-	net_pkt_unref(pkt);
-
 	return 0;
 }
 
 struct net_if_test net_iface1_data;
 struct net_if_test net_iface2_data;
 
-static struct net_if_api net_iface_api = {
-	.init = net_iface_init,
+static struct dummy_api net_iface_api = {
+	.iface_api.init = net_iface_init,
 	.send = sender_iface,
 };
 
@@ -427,7 +424,7 @@ static void test_vlan_tci(void)
 	tag = NET_VLAN_TAG_UNSPEC;
 	net_pkt_set_vlan_tag(pkt, tag);
 
-	priority = 0;
+	priority = 0U;
 	net_pkt_set_vlan_priority(pkt, priority);
 
 	zassert_equal(net_pkt_vlan_tag(pkt), NET_VLAN_TAG_UNSPEC,
@@ -441,7 +438,7 @@ static void test_vlan_tci(void)
 	/* TCI should be zero now */
 	zassert_equal(net_pkt_vlan_tci(pkt), 0, "invalid VLAN TCI");
 
-	priority = 1;
+	priority = 1U;
 	net_pkt_set_vlan_priority(pkt, priority);
 
 	zassert_equal(net_pkt_vlan_priority(pkt), priority,
@@ -480,14 +477,14 @@ static void test_vlan_tci(void)
 	zassert_equal(net_pkt_vlan_priority(pkt), priority,
 		      "invalid VLAN priority");
 
-	tag = 0;
+	tag = 0U;
 	net_pkt_set_vlan_tag(pkt, tag);
 	zassert_equal(net_pkt_vlan_tag(pkt), tag, "invalid VLAN tag");
 	zassert_equal(net_pkt_vlan_dei(pkt), dei, "invalid VLAN DEI");
 	zassert_equal(net_pkt_vlan_priority(pkt), priority,
 		      "invalid VLAN priority");
 
-	priority = 0;
+	priority = 0U;
 	net_pkt_set_vlan_priority(pkt, priority);
 	zassert_equal(net_pkt_vlan_tag(pkt), tag, "invalid VLAN tag");
 	zassert_equal(net_pkt_vlan_dei(pkt), dei, "invalid VLAN DEI");
@@ -496,9 +493,9 @@ static void test_vlan_tci(void)
 
 	zassert_equal(net_pkt_vlan_tci(pkt), 0, "invalid VLAN TCI");
 
-	tci = 0;
-	tag = 100;
-	priority = 3;
+	tci = 0U;
+	tag = 100U;
+	priority = 3U;
 
 	tci = net_eth_vlan_set_vid(tci, tag);
 	tci = net_eth_vlan_set_pcp(tci, priority);

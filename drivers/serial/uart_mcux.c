@@ -42,7 +42,7 @@ static int uart_mcux_poll_in(struct device *dev, unsigned char *c)
 	return ret;
 }
 
-static unsigned char uart_mcux_poll_out(struct device *dev, unsigned char c)
+static void uart_mcux_poll_out(struct device *dev, unsigned char c)
 {
 	const struct uart_mcux_config *config = dev->config->config_info;
 
@@ -50,8 +50,6 @@ static unsigned char uart_mcux_poll_out(struct device *dev, unsigned char c)
 		;
 
 	UART_WriteByte(config->base, c);
-
-	return c;
 }
 
 static int uart_mcux_err_check(struct device *dev)
@@ -84,7 +82,7 @@ static int uart_mcux_fifo_fill(struct device *dev, const u8_t *tx_data,
 			       int len)
 {
 	const struct uart_mcux_config *config = dev->config->config_info;
-	u8_t num_tx = 0;
+	u8_t num_tx = 0U;
 
 	while ((len - num_tx > 0) &&
 	       (UART_GetStatusFlags(config->base) & kUART_TxDataRegEmptyFlag)) {
@@ -99,7 +97,7 @@ static int uart_mcux_fifo_read(struct device *dev, u8_t *rx_data,
 			       const int len)
 {
 	const struct uart_mcux_config *config = dev->config->config_info;
-	u8_t num_rx = 0;
+	u8_t num_rx = 0U;
 
 	while ((len - num_rx > 0) &&
 	       (UART_GetStatusFlags(config->base) & kUART_RxDataRegFullFlag)) {

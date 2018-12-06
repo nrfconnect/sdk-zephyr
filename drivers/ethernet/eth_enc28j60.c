@@ -115,10 +115,10 @@ static void eth_enc28j60_read_reg(struct device *dev, u16_t reg_addr,
 		.buffers = &rx_buf,
 		.count = 1
 	};
-	u8_t rx_size = 2;
+	u8_t rx_size = 2U;
 
 	if (reg_addr & 0xF000) {
-		rx_size = 3;
+		rx_size = 3U;
 	}
 
 	rx_buf.len = rx_size;
@@ -130,7 +130,7 @@ static void eth_enc28j60_read_reg(struct device *dev, u16_t reg_addr,
 		*value = buf[rx_size - 1];
 	} else {
 		LOG_DBG("Failure while reading register 0x%04x", reg_addr);
-		*value = 0;
+		*value = 0U;
 	}
 }
 
@@ -405,9 +405,8 @@ static void eth_enc28j60_init_phy(struct device *dev)
 	}
 }
 
-static int eth_enc28j60_tx(struct net_if *iface, struct net_pkt *pkt)
+static int eth_enc28j60_tx(struct device *dev, struct net_pkt *pkt)
 {
-	struct device *dev = net_if_get_device(iface);
 	struct eth_enc28j60_runtime *context = dev->driver_data;
 	u16_t len = net_pkt_ll_reserve(pkt) + net_pkt_get_len(pkt);
 	u16_t tx_bufaddr = ENC28J60_TXSTART;
@@ -487,8 +486,6 @@ static int eth_enc28j60_tx(struct net_if *iface, struct net_pkt *pkt)
 		return -EIO;
 	}
 
-	net_pkt_unref(pkt);
-
 	LOG_DBG("Tx successful");
 
 	return 0;
@@ -516,12 +513,12 @@ static int eth_enc28j60_rx(struct device *dev)
 	do {
 		struct net_buf *pkt_buf = NULL;
 		struct net_buf *last_buf = NULL;
-		u16_t frm_len = 0;
+		u16_t frm_len = 0U;
 		u8_t info[RSV_SIZE];
 		struct net_pkt *pkt;
 		u16_t next_packet;
-		u8_t rdptl = 0;
-		u8_t rdpth = 0;
+		u8_t rdptl = 0U;
+		u8_t rdpth = 0U;
 
 		/* remove read fifo address to packet header address */
 		eth_enc28j60_set_bank(dev, ENC28J60_REG_ERXRDPTL);
@@ -672,9 +669,9 @@ static void eth_enc28j60_iface_init(struct net_if *iface)
 
 static const struct ethernet_api api_funcs = {
 	.iface_api.init		= eth_enc28j60_iface_init,
-	.iface_api.send		= eth_enc28j60_tx,
 
 	.get_capabilities	= eth_enc28j60_get_capabilities,
+	.send			= eth_enc28j60_tx,
 };
 
 static int eth_enc28j60_init(struct device *dev)

@@ -30,10 +30,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <net/net_if.h>
 #include <net/ethernet.h>
 
-#if defined(CONFIG_ETH_NATIVE_POSIX_PTP_CLOCK)
 #include <ptp_clock.h>
 #include <net/gptp.h>
-#endif
 
 #include "eth_native_posix_priv.h"
 #include "ethernet/eth_stats.h"
@@ -106,11 +104,6 @@ static struct k_thread rx_thread_data;
 
 /* TODO: support multiple interfaces */
 static struct eth_context eth_context_data;
-
-static struct eth_context *get_context(struct net_if *iface)
-{
-	return net_if_get_device(iface)->driver_data;
-}
 
 #if defined(CONFIG_NET_GPTP)
 static bool need_timestamping(struct gptp_hdr *hdr)
@@ -205,9 +198,9 @@ static void update_gptp(struct net_if *iface, struct net_pkt *pkt,
 #define update_gptp(iface, pkt, send)
 #endif /* CONFIG_NET_GPTP */
 
-static int eth_send(struct net_if *iface, struct net_pkt *pkt)
+static int eth_send(struct device *dev, struct net_pkt *pkt)
 {
-	struct eth_context *ctx = get_context(iface);
+	struct eth_context *ctx = dev->driver_data;
 	struct net_buf *frag;
 	int count = 0;
 	int ret;
@@ -225,29 +218,27 @@ static int eth_send(struct net_if *iface, struct net_pkt *pkt)
 		frag = frag->frags;
 	}
 
-	eth_stats_update_bytes_tx(iface, count);
-	eth_stats_update_pkts_tx(iface);
+	eth_stats_update_bytes_tx(net_pkt_iface(pkt), count);
+	eth_stats_update_pkts_tx(net_pkt_iface(pkt));
 
 	if (IS_ENABLED(CONFIG_NET_STATISTICS_ETHERNET)) {
 		if (net_eth_is_addr_broadcast(
 			    &((struct net_eth_hdr *)NET_ETH_HDR(pkt))->dst)) {
-			eth_stats_update_broadcast_tx(iface);
+			eth_stats_update_broadcast_tx(net_pkt_iface(pkt));
 		} else if (net_eth_is_addr_multicast(
 				   &((struct net_eth_hdr *)
 						NET_ETH_HDR(pkt))->dst)) {
-			eth_stats_update_multicast_tx(iface);
+			eth_stats_update_multicast_tx(net_pkt_iface(pkt));
 		}
 	}
 
-	update_gptp(iface, pkt, true);
+	update_gptp(net_pkt_iface(pkt), pkt, true);
 
 	LOG_DBG("Send pkt %p len %d", pkt, count);
 
 	ret = eth_write_data(ctx->dev_fd, ctx->send, count);
 	if (ret < 0) {
 		LOG_DBG("Cannot send pkt %p (%d)", pkt, ret);
-	} else {
-		net_pkt_unref(pkt);
 	}
 
 	return ret < 0 ? ret : 0;
@@ -565,12 +556,12 @@ static int eth_stop_device(struct device *dev)
 
 static const struct ethernet_api eth_if_api = {
 	.iface_api.init = eth_iface_init,
-	.iface_api.send = eth_send,
 
 	.get_capabilities = eth_posix_native_get_capabilities,
 	.set_config = set_config,
 	.start = eth_start_device,
 	.stop = eth_stop_device,
+	.send = eth_send,
 
 #if defined(CONFIG_NET_VLAN)
 	.vlan_setup = vlan_setup,
@@ -664,6 +655,6 @@ static int ptp_init(struct device *port)
 
 DEVICE_AND_API_INIT(eth_native_posix_ptp_clock_0, PTP_CLOCK_NAME,
 		    ptp_init, &ptp_0_context, NULL, POST_KERNEL,
-		    CONFIG_APPLICATION_INIT_PRIORITY, &api);
+		    CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &api);
 
 #endif /* CONFIG_ETH_NATIVE_POSIX_PTP_CLOCK */

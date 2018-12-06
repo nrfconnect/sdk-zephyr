@@ -50,7 +50,7 @@ static int uart_stm32_poll_in(struct device *dev, unsigned char *c)
 	return 0;
 }
 
-static unsigned char uart_stm32_poll_out(struct device *dev,
+static void uart_stm32_poll_out(struct device *dev,
 					unsigned char c)
 {
 	USART_TypeDef *UartInstance = UART_STRUCT(dev);
@@ -62,8 +62,6 @@ static unsigned char uart_stm32_poll_out(struct device *dev,
 	LL_USART_ClearFlag_TC(UartInstance);
 
 	LL_USART_TransmitData8(UartInstance, (u8_t)c);
-
-	return c;
 }
 
 static inline void __uart_stm32_get_clock(struct device *dev)
@@ -83,7 +81,7 @@ static int uart_stm32_fifo_fill(struct device *dev, const u8_t *tx_data,
 				  int size)
 {
 	USART_TypeDef *UartInstance = UART_STRUCT(dev);
-	u8_t num_tx = 0;
+	u8_t num_tx = 0U;
 
 	while ((size - num_tx > 0) &&
 	       LL_USART_IsActiveFlag_TXE(UartInstance)) {
@@ -100,7 +98,7 @@ static int uart_stm32_fifo_read(struct device *dev, u8_t *rx_data,
 				  const int size)
 {
 	USART_TypeDef *UartInstance = UART_STRUCT(dev);
-	u8_t num_rx = 0;
+	u8_t num_rx = 0U;
 
 	while ((size - num_rx > 0) &&
 	       LL_USART_IsActiveFlag_RXNE(UartInstance)) {

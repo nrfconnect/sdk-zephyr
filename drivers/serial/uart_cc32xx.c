@@ -102,20 +102,18 @@ static int uart_cc32xx_poll_in(struct device *dev, unsigned char *c)
 	return 0;
 }
 
-static unsigned char uart_cc32xx_poll_out(struct device *dev, unsigned char c)
+static void uart_cc32xx_poll_out(struct device *dev, unsigned char c)
 {
 	const struct uart_device_config *config = DEV_CFG(dev);
 
 	MAP_UARTCharPut((unsigned long)config->base, c);
-
-	return c;
 }
 
 static int uart_cc32xx_err_check(struct device *dev)
 {
 	const struct uart_device_config *config = DEV_CFG(dev);
 	unsigned long cc32xx_errs = 0L;
-	unsigned int z_err = 0;
+	unsigned int z_err = 0U;
 
 	cc32xx_errs = MAP_UARTRxErrorGet((unsigned long)config->base);
 
@@ -137,7 +135,7 @@ static int uart_cc32xx_fifo_fill(struct device *dev, const u8_t *tx_data,
 				 int size)
 {
 	const struct uart_device_config *config = DEV_CFG(dev);
-	unsigned int num_tx = 0;
+	unsigned int num_tx = 0U;
 
 	while ((size - num_tx) > 0) {
 		/* Send a character */
@@ -156,7 +154,7 @@ static int uart_cc32xx_fifo_read(struct device *dev, u8_t *rx_data,
 				 const int size)
 {
 	const struct uart_device_config *config = DEV_CFG(dev);
-	unsigned int num_rx = 0;
+	unsigned int num_rx = 0U;
 
 	while (((size - num_rx) > 0) &&
 		MAP_UARTCharsAvail((unsigned long)config->base)) {
