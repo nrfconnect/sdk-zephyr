@@ -33,6 +33,13 @@ POSSIBILITY OF SUCH DAMAGE.
 #ifndef _NRF9160_PERIPHERALS_H
 #define _NRF9160_PERIPHERALS_H
 
+/* UICR */
+#define UICR_KEYSLOT_COUNT 128
+
+/* Clock Peripheral */
+#define CLOCK_PRESENT
+#define CLOCK_COUNT 1
+
 /* Power Peripheral */
 #define POWER_PRESENT
 #define POWER_COUNT 1
@@ -52,7 +59,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #define DPPI_COUNT 1
 
 #define DPPI_CH_NUM 16
-#define DPPI_GROUP_NUM 16
+#define DPPI_GROUP_NUM 6
 
 /* Event Generator Unit */
 #define EGU_PRESENT
@@ -157,7 +164,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 /* Pulse Width Modulator */
 #define PWM_PRESENT
-#define PWM_COUNT 1
+#define PWM_COUNT 4
 
 #define PWM_CH_NUM 4
 
@@ -175,9 +182,12 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #define I2S_EASYDMA_MAXCNT_SIZE 14
 
-/* IPC */
+/* Inter Processor Communication */
 #define IPC_PRESENT
 #define IPC_COUNT 1
+
+#define IPC_CH_NUM 8
+#define IPC_GPMEM_NUM 4
 
 /* FPU */
 #define FPU_PRESENT
@@ -193,7 +203,18 @@ POSSIBILITY OF SUCH DAMAGE.
 
 /* KMU */
 #define KMU_PRESENT
-#define KMU_CPUNT 1
+#define KMU_COUNT 1
+
+#define KMU_KEYSLOT_PRESENT
+
+/* MAGPIO */
+#define MAGPIO_PRESENT
+#define MAGPIO_COUNT 1
+#define MAGPIO_PIN_NUM 3
+
+/* REGULATORS */
+#define REGULATORS_PRESENT
+#define REGULATORS_COUNT 1
 
 
 #endif  // _NRF9160_PERIPHERALS_H

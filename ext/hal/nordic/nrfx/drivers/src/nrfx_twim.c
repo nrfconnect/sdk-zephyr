@@ -33,8 +33,10 @@
 
 #if NRFX_CHECK(NRFX_TWIM_ENABLED)
 
-#if !(NRFX_CHECK(NRFX_TWIM0_ENABLED) || NRFX_CHECK(NRFX_TWIM1_ENABLED) || \
-      NRFX_CHECK(NRFX_TWIM2_ENABLED) || NRFX_CHECK(NRFX_TWIM3_ENABLED))
+#if !(NRFX_CHECK(NRFX_TWIM0_ENABLED) || \
+      NRFX_CHECK(NRFX_TWIM1_ENABLED) || \
+      NRFX_CHECK(NRFX_TWIM2_ENABLED) || \
+      NRFX_CHECK(NRFX_TWIM3_ENABLED))
 #error "No enabled TWIM instances. Check <nrfx_config.h>."
 #endif
 
@@ -108,7 +110,6 @@
      TWIM1_LENGTH_VALIDATE(drv_inst_idx, len1, len2) || \
      TWIM2_LENGTH_VALIDATE(drv_inst_idx, len1, len2) || \
      TWIM3_LENGTH_VALIDATE(drv_inst_idx, len1, len2))
-    
 
 // Control block - driver instance local data.
 typedef struct
