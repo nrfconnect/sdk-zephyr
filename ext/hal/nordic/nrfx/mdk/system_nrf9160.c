@@ -42,6 +42,12 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
     uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK;
 #endif
 
+/* Errata are only handled in secure mode since they usually need access to FICR. */
+#if !defined(NRF_TRUSTZONE_NONSECURE)
+    static bool errata_6(void);
+    static bool errata_14(void);
+    static bool errata_15(void);
+#endif
 
 void SystemCoreClockUpdate(void)
 {
@@ -50,15 +56,30 @@ void SystemCoreClockUpdate(void)
 
 void SystemInit(void)
 {
-    /* Set all ARM SAU regions to NonSecure if TrustZone extensions are enabled.
-     * Nordic SPU should handle Secure Attribution tasks */
-    #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
-        SAU->CTRL |= (1 << SAU_CTRL_ALLNS_Pos);
-    #endif
-    
     #if !defined(NRF_TRUSTZONE_NONSECURE)
-      /* Make sure UICR->HFXOSRC is set */
-      if ((NRF_UICR_S->HFXOSRC & UICR_HFXOSRC_HFXOSRC_Msk) != UICR_HFXOSRC_HFXOSRC_TCXO) {
+        /* Perform Secure-mode initialization routines. */
+
+        /* Set all ARM SAU regions to NonSecure if TrustZone extensions are enabled.
+        * Nordic SPU should handle Secure Attribution tasks */
+        #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+          SAU->CTRL |= (1 << SAU_CTRL_ALLNS_Pos);
+        #endif
+
+        /* Trimming of the device. Copy all the trimming values from FICR into the target addresses. Trim 
+         until one ADDR is not initialized. */
+        uint32_t index = 0;
+        for (index = 0; index < 256ul && NRF_FICR_S->TRIMCNF[index].ADDR != 0xFFFFFFFFul; index++){
+          #if defined ( __ICCARM__ )
+              #pragma diag_suppress=Pa082
+          #endif
+          *(volatile uint32_t *)NRF_FICR_S->TRIMCNF[index].ADDR = NRF_FICR_S->TRIMCNF[index].DATA;
+          #if defined ( __ICCARM__ )
+              #pragma diag_default=Pa082
+          #endif
+        }
+          
+        /* Make sure UICR->HFXOSRC is set */
+        if ((NRF_UICR_S->HFXOSRC & UICR_HFXOSRC_HFXOSRC_Msk) != UICR_HFXOSRC_HFXOSRC_TCXO) {
           /* Wait for pending NVMC operations to finish */
           while (NRF_NVMC_S->READY != NVMC_READY_READY_Ready);
           
@@ -76,19 +97,79 @@ void SystemInit(void)
           
           /* Reset to apply clock select update */
           NVIC_SystemReset();
-      }
+        }
+        
+        if (errata_6()){
+            NRF_POWER_S->EVENTS_SLEEPENTER = (POWER_EVENTS_SLEEPENTER_EVENTS_SLEEPENTER_NotGenerated << POWER_EVENTS_SLEEPENTER_EVENTS_SLEEPENTER_Pos);
+            NRF_POWER_S->EVENTS_SLEEPEXIT = (POWER_EVENTS_SLEEPEXIT_EVENTS_SLEEPEXIT_NotGenerated << POWER_EVENTS_SLEEPEXIT_EVENTS_SLEEPEXIT_Pos);
+        }
+        
+        if (errata_14()){
+            *(uint32_t *)0x50004A38 = 0x01ul;
+            NRF_REGULATORS_S->DCDCEN = REGULATORS_DCDCEN_DCDCEN_Enabled << REGULATORS_DCDCEN_DCDCEN_Pos;
+        }
+
+        if (errata_15()){
+            *(uint32_t *)0x50004A38 = 0x00ul;
+            NRF_REGULATORS_S->DCDCEN = REGULATORS_DCDCEN_DCDCEN_Enabled << REGULATORS_DCDCEN_DCDCEN_Pos;
+        }
+
+        /* Allow Non-Secure code to run FPU instructions. 
+         * If only the secure code should control FPU power state these registers should be configured accordingly in the secure application code. */
+        SCB->NSACR |= (3UL << 10);
     #endif
     
     /* Enable the FPU if the compiler used floating point unit instructions. __FPU_USED is a MACRO defined by the
-     * compiler. Since the FPU consumes energy, remember to disable FPU use in the compiler if floating point unit
-     * operations are not used in your code. */
+    * compiler. Since the FPU consumes energy, remember to disable FPU use in the compiler if floating point unit
+    * operations are not used in your code. */
     #if (__FPU_USED == 1)
-        SCB->CPACR |= (3UL << 20) | (3UL << 22);
-        __DSB();
-        __ISB();
+      SCB->CPACR |= (3UL << 20) | (3UL << 22);
+      __DSB();
+      __ISB();
     #endif
     
     SystemCoreClockUpdate();
 }
+
+
+#if !defined(NRF_TRUSTZONE_NONSECURE)
+    bool errata_6()
+    {
+        if (*(uint32_t *)0x00FF0130 == 0x9ul){
+            if (*(uint32_t *)0x00FF0134 == 0x01ul){
+                return true;
+            }
+            if (*(uint32_t *)0x00FF0134 == 0x02ul){
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    
+    bool errata_14()
+    {
+        if (*(uint32_t *)0x00FF0130 == 0x9ul){
+            if (*(uint32_t *)0x00FF0134 == 0x01ul){
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    bool errata_15()
+    {
+        if (*(uint32_t *)0x00FF0130 == 0x9ul){
+            if (*(uint32_t *)0x00FF0134 == 0x02ul){
+                return true;
+            }
+        }
+
+        return false;
+    }
+#endif
 
 /*lint --flb "Leave library region" */

@@ -275,6 +275,45 @@ POSSIBILITY OF SUCH DAMAGE.\n
           </register>
         </cluster>
         <cluster>
+          <dim>256</dim>
+          <dimIncrement>0x008</dimIncrement>
+          <name>TRIMCNF[%s]</name>
+          <description>Unspecified</description>
+          <headerStructName>FICR_TRIMCNF</headerStructName>
+          <access>read-write</access>
+          <addressOffset>0x300</addressOffset>
+          <register>
+            <name>ADDR</name>
+            <description>Description cluster: Address</description>
+            <addressOffset>0x000</addressOffset>
+            <access>read-only</access>
+            <resetValue>0xFFFFFFFF</resetValue>
+            <fields>
+              <field>
+                <name>Address</name>
+                <description>Address</description>
+                <lsb>0</lsb>
+                <msb>31</msb>
+              </field>
+            </fields>
+          </register>
+          <register>
+            <name>DATA</name>
+            <description>Description cluster: Data</description>
+            <addressOffset>0x004</addressOffset>
+            <access>read-only</access>
+            <resetValue>0xFFFFFFFF</resetValue>
+            <fields>
+              <field>
+                <name>Data</name>
+                <description>Data</description>
+                <lsb>0</lsb>
+                <msb>31</msb>
+              </field>
+            </fields>
+          </register>
+        </cluster>
+        <cluster>
           <name>TRNG90B</name>
           <description>NIST800-90B RNG calibration data</description>
           <headerStructName>FICR_TRNG90B</headerStructName>
@@ -405,7 +444,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral>
       <name>UICR_S</name>
-      <description>User information configuration registers User Information Configuration Registers</description>
+      <description>User information configuration registers User information configuration registers</description>
       <baseAddress>0x00FF8000</baseAddress>
       <headerStructName>UICR</headerStructName>
       <!--Security dma=NA-->
@@ -571,17 +610,17 @@ POSSIBILITY OF SUCH DAMAGE.\n
           </fields>
         </register>
         <register>
-          <dim>0xC0</dim>
+          <dim>0xBE</dim>
           <dimIncrement>0x4</dimIncrement>
           <name>OTP[%s]</name>
           <description>Description collection: OTP bits [31+n*32:0+n*32].</description>
-          <addressOffset>0x100</addressOffset>
+          <addressOffset>0x108</addressOffset>
           <access>read-write</access>
           <resetValue>0xFFFFFFFF</resetValue>
           <fields>
             <field>
               <name>OTP</name>
-              <description>Bits [31+n*32:0+n*32] of OTP Region</description>
+              <description>Bits [31+n*32:0+n*32] of OTP region</description>
               <lsb>0</lsb>
               <msb>31</msb>
             </field>
@@ -603,7 +642,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
             <addressOffset>0x000</addressOffset>
             <register>
               <name>DEST</name>
-              <description>Description cluster: Destination address where content of registers KEYSLOT.KEY[n].VALUE[0-3]
+              <description>Description cluster: Destination address where content of the key value registers (KEYSLOT.KEYn.VALUE[0-3])
           will be pushed by KMU. Note that this address MUST match that of a peripherals
           APB mapped write-only key registers, else the KMU can push this key value into
           an address range which the CPU can potentially read!</description>
@@ -613,7 +652,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
               <fields>
                 <field>
                   <name>DEST</name>
-                  <description>Destination address for key slot n</description>
+                  <description>Secure APB destination address</description>
                   <lsb>0</lsb>
                   <msb>31</msb>
                 </field>
@@ -621,79 +660,79 @@ POSSIBILITY OF SUCH DAMAGE.\n
             </register>
             <register>
               <name>PERM</name>
-              <description>Description cluster: Define permissions for key slot n. Bits 0-15 and 16-31 can only be written once.</description>
+              <description>Description cluster: Define permissions for the key slot with ID=n+1. Bits 0-15 and 16-31 can only be written once.</description>
               <addressOffset>0x004</addressOffset>
               <access>read-write</access>
               <resetValue>0xFFFFFFFF</resetValue>
               <fields>
                 <field>
                   <name>WRITE</name>
-                  <description>Write permission for key slot n</description>
+                  <description>Write permission for key slot</description>
                   <lsb>0</lsb>
                   <msb>0</msb>
                   <enumeratedValues>
                     <enumeratedValue>
                       <name>Disabled</name>
-                      <description>Disable write to registers KEYSLOT.KEY[n].VALUE[0-3]</description>
+                      <description>Disable write to the key value registers</description>
                       <value>0</value>
                     </enumeratedValue>
                     <enumeratedValue>
                       <name>Enabled</name>
-                      <description>Registers KEYSLOT.KEY[n].VALUE[0-3] can be written</description>
+                      <description>Enable write to the key value registers</description>
                       <value>1</value>
                     </enumeratedValue>
                   </enumeratedValues>
                 </field>
                 <field>
                   <name>READ</name>
-                  <description>Read permission for key slot n.</description>
+                  <description>Read permission for key slot</description>
                   <lsb>1</lsb>
                   <msb>1</msb>
                   <enumeratedValues>
                     <enumeratedValue>
                       <name>Disabled</name>
-                      <description>Disable read from registers KEYSLOT.KEY[n].VALUE[0-3]</description>
+                      <description>Disable read from key value registers</description>
                       <value>0</value>
                     </enumeratedValue>
                     <enumeratedValue>
                       <name>Enabled</name>
-                      <description>Registers KEYSLOT.KEY[n].VALUE[0-3] can be read</description>
+                      <description>Enable read from key value registers</description>
                       <value>1</value>
                     </enumeratedValue>
                   </enumeratedValues>
                 </field>
                 <field>
                   <name>PUSH</name>
-                  <description>Push permission for key slot n</description>
+                  <description>Push permission for key slot</description>
                   <lsb>2</lsb>
                   <msb>2</msb>
                   <enumeratedValues>
                     <enumeratedValue>
                       <name>Disabled</name>
-                      <description>Content of registers KEYSLOT.KEY[n].VALUE[0-3] can not be pushed, but can be read if field READ is 'Enabled'</description>
+                      <description>Disable pushing of key value registers over secure APB, but can be read if field READ is Enabled</description>
                       <value>0</value>
                     </enumeratedValue>
                     <enumeratedValue>
                       <name>Enabled</name>
-                      <description>Content of registers KEYSLOT.KEY[n].VALUE[0-3] can be pushed over secure APB. Register KEYSLOT.CONFIG[n].DEST must contain a valid destination address!</description>
+                      <description>Enable pushing of key value registers over secure APB. Register KEYSLOT.CONFIGn.DEST must contain a valid destination address!</description>
                       <value>1</value>
                     </enumeratedValue>
                   </enumeratedValues>
                 </field>
                 <field>
                   <name>STATE</name>
-                  <description>Revocation state for key slot n</description>
+                  <description>Revocation state for the key slot</description>
                   <lsb>16</lsb>
                   <msb>16</msb>
                   <enumeratedValues>
                     <enumeratedValue>
                       <name>Revoked</name>
-                      <description>Registers KEYSLOT.KEY[n].VALUE[0-3] can no longer be read or pushed</description>
+                      <description>Key value registers can no longer be read or pushed</description>
                       <value>0</value>
                     </enumeratedValue>
                     <enumeratedValue>
                       <name>Active</name>
-                      <description>Registers KEYSLOT.KEY[n].VALUE[0-3] are readable (if enabled) and can be pushed (if enabled)</description>
+                      <description>Key value registers are readable (if enabled) and can be pushed (if enabled)</description>
                       <value>1</value>
                     </enumeratedValue>
                   </enumeratedValues>
@@ -713,14 +752,14 @@ POSSIBILITY OF SUCH DAMAGE.\n
               <dim>0x4</dim>
               <dimIncrement>0x4</dimIncrement>
               <name>VALUE[%s]</name>
-              <description>Description collection: Define bits [31+o*32:0+o*32] of key value assigned to key slot n</description>
+              <description>Description collection: Define bits [31+o*32:0+o*32] of value assigned to KMU key slot ID=n+1</description>
               <addressOffset>0x000</addressOffset>
               <access>read-write</access>
               <resetValue>0xFFFFFFFF</resetValue>
               <fields>
                 <field>
                   <name>VALUE</name>
-                  <description>Define bits [31+o*32:0+o*32] of key value assigned to key slot n</description>
+                  <description>Define bits [31+o*32:0+o*32] of value assigned to KMU key slot ID=n+1</description>
                   <lsb>0</lsb>
                   <msb>31</msb>
                 </field>
@@ -1524,10 +1563,10 @@ POSSIBILITY OF SUCH DAMAGE.\n
           <addressOffset>0x480</addressOffset>
           <register>
             <name>PERM</name>
-            <description>Description cluster: Select between secure and non-secure attribute  for the DPPI channels. Only a secure peripheral can publish or subscribe to a channel with secure attribute set.</description>
+            <description>Description cluster: Select between secure and non-secure attribute  for the DPPI channels.</description>
             <addressOffset>0x000</addressOffset>
             <access>read-write</access>
-            <resetValue>0xFFFFFFFF</resetValue>
+            <resetValue>0x0000FFFF</resetValue>
             <fields>
               <field>
                 <name>CHANNEL0</name>
@@ -1856,43 +1895,583 @@ POSSIBILITY OF SUCH DAMAGE.\n
           <addressOffset>0x4C0</addressOffset>
           <register>
             <name>PERM</name>
-            <description>Description cluster: Select between secure and non-secure attribute  for pins 0 to 31  of port n. Only a secure peripheral access a pin with secure attribute set.</description>
+            <description>Description cluster: Select between secure and non-secure attribute  for pins 0 to 31  of port n.</description>
             <addressOffset>0x000</addressOffset>
             <access>read-write</access>
             <resetValue>0xFFFFFFFF</resetValue>
             <fields>
               <field>
                 <name>PIN0</name>
-                <description>Select secure attribute attribute for PIN0.</description>
+                <description>Select secure attribute attribute for PIN 0.</description>
                 <lsb>0</lsb>
                 <msb>0</msb>
                 <enumeratedValues>
                   <enumeratedValue>
                     <name>Secure</name>
-                    <description>Pin0  has its secure attribute set</description>
+                    <description>Pin 0 has its secure attribute set</description>
                     <value>1</value>
                   </enumeratedValue>
                   <enumeratedValue>
                     <name>NonSecure</name>
-                    <description>Pin0 has its non-secure attribute set</description>
+                    <description>Pin 0 has its non-secure attribute set</description>
                     <value>0</value>
                   </enumeratedValue>
                 </enumeratedValues>
               </field>
               <field>
                 <name>PIN1</name>
-                <description>Select secure attribute attribute for PIN1.</description>
+                <description>Select secure attribute attribute for PIN 1.</description>
                 <lsb>1</lsb>
                 <msb>1</msb>
                 <enumeratedValues>
                   <enumeratedValue>
                     <name>Secure</name>
-                    <description>Pin1  has its secure attribute set</description>
+                    <description>Pin 1 has its secure attribute set</description>
                     <value>1</value>
                   </enumeratedValue>
                   <enumeratedValue>
                     <name>NonSecure</name>
-                    <description>Pin1 has its non-secure attribute set</description>
+                    <description>Pin 1 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN2</name>
+                <description>Select secure attribute attribute for PIN 2.</description>
+                <lsb>2</lsb>
+                <msb>2</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 2 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 2 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN3</name>
+                <description>Select secure attribute attribute for PIN 3.</description>
+                <lsb>3</lsb>
+                <msb>3</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 3 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 3 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN4</name>
+                <description>Select secure attribute attribute for PIN 4.</description>
+                <lsb>4</lsb>
+                <msb>4</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 4 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 4 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN5</name>
+                <description>Select secure attribute attribute for PIN 5.</description>
+                <lsb>5</lsb>
+                <msb>5</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 5 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 5 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN6</name>
+                <description>Select secure attribute attribute for PIN 6.</description>
+                <lsb>6</lsb>
+                <msb>6</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 6 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 6 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN7</name>
+                <description>Select secure attribute attribute for PIN 7.</description>
+                <lsb>7</lsb>
+                <msb>7</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 7 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 7 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN8</name>
+                <description>Select secure attribute attribute for PIN 8.</description>
+                <lsb>8</lsb>
+                <msb>8</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 8 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 8 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN9</name>
+                <description>Select secure attribute attribute for PIN 9.</description>
+                <lsb>9</lsb>
+                <msb>9</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 9 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 9 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN10</name>
+                <description>Select secure attribute attribute for PIN 10.</description>
+                <lsb>10</lsb>
+                <msb>10</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 10 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 10 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN11</name>
+                <description>Select secure attribute attribute for PIN 11.</description>
+                <lsb>11</lsb>
+                <msb>11</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 11 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 11 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN12</name>
+                <description>Select secure attribute attribute for PIN 12.</description>
+                <lsb>12</lsb>
+                <msb>12</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 12 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 12 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN13</name>
+                <description>Select secure attribute attribute for PIN 13.</description>
+                <lsb>13</lsb>
+                <msb>13</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 13 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 13 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN14</name>
+                <description>Select secure attribute attribute for PIN 14.</description>
+                <lsb>14</lsb>
+                <msb>14</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 14 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 14 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN15</name>
+                <description>Select secure attribute attribute for PIN 15.</description>
+                <lsb>15</lsb>
+                <msb>15</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 15 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 15 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN16</name>
+                <description>Select secure attribute attribute for PIN 16.</description>
+                <lsb>16</lsb>
+                <msb>16</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 16 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 16 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN17</name>
+                <description>Select secure attribute attribute for PIN 17.</description>
+                <lsb>17</lsb>
+                <msb>17</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 17 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 17 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN18</name>
+                <description>Select secure attribute attribute for PIN 18.</description>
+                <lsb>18</lsb>
+                <msb>18</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 18 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 18 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN19</name>
+                <description>Select secure attribute attribute for PIN 19.</description>
+                <lsb>19</lsb>
+                <msb>19</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 19 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 19 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN20</name>
+                <description>Select secure attribute attribute for PIN 20.</description>
+                <lsb>20</lsb>
+                <msb>20</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 20 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 20 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN21</name>
+                <description>Select secure attribute attribute for PIN 21.</description>
+                <lsb>21</lsb>
+                <msb>21</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 21 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 21 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN22</name>
+                <description>Select secure attribute attribute for PIN 22.</description>
+                <lsb>22</lsb>
+                <msb>22</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 22 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 22 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN23</name>
+                <description>Select secure attribute attribute for PIN 23.</description>
+                <lsb>23</lsb>
+                <msb>23</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 23 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 23 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN24</name>
+                <description>Select secure attribute attribute for PIN 24.</description>
+                <lsb>24</lsb>
+                <msb>24</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 24 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 24 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN25</name>
+                <description>Select secure attribute attribute for PIN 25.</description>
+                <lsb>25</lsb>
+                <msb>25</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 25 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 25 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN26</name>
+                <description>Select secure attribute attribute for PIN 26.</description>
+                <lsb>26</lsb>
+                <msb>26</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 26 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 26 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN27</name>
+                <description>Select secure attribute attribute for PIN 27.</description>
+                <lsb>27</lsb>
+                <msb>27</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 27 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 27 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN28</name>
+                <description>Select secure attribute attribute for PIN 28.</description>
+                <lsb>28</lsb>
+                <msb>28</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 28 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 28 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN29</name>
+                <description>Select secure attribute attribute for PIN 29.</description>
+                <lsb>29</lsb>
+                <msb>29</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 29 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 29 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN30</name>
+                <description>Select secure attribute attribute for PIN 30.</description>
+                <lsb>30</lsb>
+                <msb>30</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 30 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 30 has its non-secure attribute set</description>
+                    <value>0</value>
+                  </enumeratedValue>
+                </enumeratedValues>
+              </field>
+              <field>
+                <name>PIN31</name>
+                <description>Select secure attribute attribute for PIN 31.</description>
+                <lsb>31</lsb>
+                <msb>31</msb>
+                <enumeratedValues>
+                  <enumeratedValue>
+                    <name>Secure</name>
+                    <description>Pin 31 has its secure attribute set</description>
+                    <value>1</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
+                    <name>NonSecure</name>
+                    <description>Pin 31 has its non-secure attribute set</description>
                     <value>0</value>
                   </enumeratedValue>
                 </enumeratedValues>
@@ -2429,6 +3008,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
                 <description>Indicate if the peripheral has DMA capabilities and if DMA transfer can be assigned to a different security attribute than the peripheral itself</description>
                 <lsb>2</lsb>
                 <msb>3</msb>
+                <access>read-only</access>
                 <enumeratedValues>
                   <enumeratedValue>
                     <name>NoDMA</name>
@@ -2505,6 +3085,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
                 <description>Indicate if a peripheral is present with ID n</description>
                 <lsb>31</lsb>
                 <msb>31</msb>
+                <access>read-only</access>
                 <enumeratedValues>
                   <enumeratedValue>
                     <name>NotPresent</name>
@@ -2525,7 +3106,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral>
       <name>REGULATORS_NS</name>
-      <description>Voltage Regulators control 0</description>
+      <description>Voltage regulators control 0</description>
       <baseAddress>0x40004000</baseAddress>
       <headerStructName>REGULATORS</headerStructName>
       <!--Security dma=NA-->
@@ -2561,14 +3142,14 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>POFCON</name>
-          <description>Power failure comparator configuration</description>
+          <description>Power-fail comparator configuration</description>
           <addressOffset>0x510</addressOffset>
           <access>read-write</access>
           <resetValue>0x00000008</resetValue>
           <fields>
             <field>
               <name>POF</name>
-              <description>Enable or disable power failure comparator</description>
+              <description>Enable or disable power-fail comparator</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -2586,7 +3167,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
             </field>
             <field>
               <name>THRESHOLD</name>
-              <description>Power failure comparator threshold setting</description>
+              <description>Power-fail comparator threshold setting</description>
               <lsb>1</lsb>
               <msb>4</msb>
               <enumeratedValues>
@@ -2646,7 +3227,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>DCDCEN</name>
-          <description>Enable DC/DC mode of the main voltage regulator.</description>
+          <description>Enable DC/DC mode of the main voltage regulator</description>
           <addressOffset>0x578</addressOffset>
           <access>read-write</access>
           <fields>
@@ -2674,7 +3255,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral derivedFrom="REGULATORS_NS">
       <name>REGULATORS_S</name>
-      <description>Voltage Regulators control 1</description>
+      <description>Voltage regulators control 1</description>
       <baseAddress>0x50004000</baseAddress>
       <!--Security dma=NA-->
       <!--Security securemapping=US-->
@@ -3262,7 +3843,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>HFCLKSTAT</name>
-          <description>The register shows if HFXO has been requested by triggering HFCLKSTART task and if it has been started (STATE).</description>
+          <description>The register shows if HFXO has been requested by triggering HFCLKSTART task and if it has been started (STATE)</description>
           <addressOffset>0x40C</addressOffset>
           <access>read-only</access>
           <fields>
@@ -3287,12 +3868,12 @@ POSSIBILITY OF SUCH DAMAGE.\n
               <enumeratedValues>
                 <enumeratedValue>
                   <name>NotRunning</name>
-                  <description>HFXO has not been started or HFCLKSTOP task has been triggered.</description>
+                  <description>HFXO has not been started or HFCLKSTOP task has been triggered</description>
                   <value>0</value>
                 </enumeratedValue>
                 <enumeratedValue>
                   <name>Running</name>
-                  <description>HFXO has been started (HFCLKSTARTED event has been generated).</description>
+                  <description>HFXO has been started (HFCLKSTARTED event has been generated)</description>
                   <value>1</value>
                 </enumeratedValue>
               </enumeratedValues>
@@ -3327,7 +3908,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>LFCLKSTAT</name>
-          <description>The register shows which LFCLK source has been requested (SRC) when triggering LFCLKSTART task and if the source has been started (STATE).</description>
+          <description>The register shows which LFCLK source has been requested (SRC) when triggering LFCLKSTART task and if the source has been started (STATE)</description>
           <addressOffset>0x418</addressOffset>
           <access>read-only</access>
           <fields>
@@ -3362,12 +3943,12 @@ POSSIBILITY OF SUCH DAMAGE.\n
               <enumeratedValues>
                 <enumeratedValue>
                   <name>NotRunning</name>
-                  <description>Requested LFCLK source has not been started or LFCLKSTOP task has been triggered.</description>
+                  <description>Requested LFCLK source has not been started or LFCLKSTOP task has been triggered</description>
                   <value>0</value>
                 </enumeratedValue>
                 <enumeratedValue>
                   <name>Running</name>
-                  <description>Requested LFCLK source has been started (LFCLKSTARTED event has been generated).</description>
+                  <description>Requested LFCLK source has been started (LFCLKSTARTED event has been generated)</description>
                   <value>1</value>
                 </enumeratedValue>
               </enumeratedValues>
@@ -3376,7 +3957,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>LFCLKSRCCOPY</name>
-          <description>Copy of LFCLKSRC register, set after LFCLKSTART task has been triggered.</description>
+          <description>Copy of LFCLKSRC register, set after LFCLKSTART task has been triggered</description>
           <addressOffset>0x41C</addressOffset>
           <access>read-only</access>
           <resetValue>0x00000001</resetValue>
@@ -3983,7 +4564,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
           <fields>
             <field>
               <name>RESETPIN</name>
-              <description>Reset from pin-reset detected</description>
+              <description>Reset from pin reset detected</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -4019,7 +4600,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
             </field>
             <field>
               <name>OFF</name>
-              <description>Reset due to wake up from System OFF mode when wakeup is triggered from DETECT signal from GPIO</description>
+              <description>Reset due to wakeup from System OFF mode, when wakeup is triggered by DETECT signal from GPIO</description>
               <lsb>2</lsb>
               <msb>2</msb>
               <enumeratedValues>
@@ -4037,7 +4618,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
             </field>
             <field>
               <name>DIF</name>
-              <description>Reset due to wake up from System OFF mode when wakeup is triggered from entering into debug interface mode</description>
+              <description>Reset due to wakeup from System OFF mode, when wakeup is triggered by entering debug interface mode</description>
               <lsb>4</lsb>
               <msb>4</msb>
               <enumeratedValues>
@@ -4117,18 +4698,18 @@ POSSIBILITY OF SUCH DAMAGE.\n
           <fields>
             <field>
               <name>LTEMODEM</name>
-              <description>LTE Modem domain status</description>
+              <description>LTE modem domain status</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
                 <enumeratedValue>
                   <name>OFF</name>
-                  <description>LTE Modem domain is powered off</description>
+                  <description>LTE modem domain is powered off</description>
                   <value>0</value>
                 </enumeratedValue>
                 <enumeratedValue>
                   <name>ON</name>
-                  <description>LTE Modem domain is powered on</description>
+                  <description>LTE modem domain is powered on</description>
                   <value>1</value>
                 </enumeratedValue>
               </enumeratedValues>
@@ -17310,7 +17891,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral>
       <name>RTC0_NS</name>
-      <description>Real time counter 0</description>
+      <description>Real-time counter 0</description>
       <baseAddress>0x40014000</baseAddress>
       <headerStructName>RTC</headerStructName>
       <!--Security dma=NA-->
@@ -17329,13 +17910,13 @@ POSSIBILITY OF SUCH DAMAGE.\n
       <registers>
         <register>
           <name>TASKS_START</name>
-          <description>Start RTC COUNTER</description>
+          <description>Start RTC counter</description>
           <addressOffset>0x000</addressOffset>
           <access>write-only</access>
           <fields>
             <field>
               <name>TASKS_START</name>
-              <description>Start RTC COUNTER</description>
+              <description>Start RTC counter</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -17350,13 +17931,13 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>TASKS_STOP</name>
-          <description>Stop RTC COUNTER</description>
+          <description>Stop RTC counter</description>
           <addressOffset>0x004</addressOffset>
           <access>write-only</access>
           <fields>
             <field>
               <name>TASKS_STOP</name>
-              <description>Stop RTC COUNTER</description>
+              <description>Stop RTC counter</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -17371,13 +17952,13 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>TASKS_CLEAR</name>
-          <description>Clear RTC COUNTER</description>
+          <description>Clear RTC counter</description>
           <addressOffset>0x008</addressOffset>
           <access>write-only</access>
           <fields>
             <field>
               <name>TASKS_CLEAR</name>
-              <description>Clear RTC COUNTER</description>
+              <description>Clear RTC counter</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -17392,13 +17973,13 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>TASKS_TRIGOVRFLW</name>
-          <description>Set COUNTER to 0xFFFFF0</description>
+          <description>Set counter to 0xFFFFF0</description>
           <addressOffset>0x00C</addressOffset>
           <access>write-only</access>
           <fields>
             <field>
               <name>TASKS_TRIGOVRFLW</name>
-              <description>Set COUNTER to 0xFFFFF0</description>
+              <description>Set counter to 0xFFFFF0</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -17537,13 +18118,13 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>EVENTS_TICK</name>
-          <description>Event on COUNTER increment</description>
+          <description>Event on counter increment</description>
           <addressOffset>0x100</addressOffset>
           <access>read-write</access>
           <fields>
             <field>
               <name>EVENTS_TICK</name>
-              <description>Event on COUNTER increment</description>
+              <description>Event on counter increment</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -17563,13 +18144,13 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>EVENTS_OVRFLW</name>
-          <description>Event on COUNTER overflow</description>
+          <description>Event on counter overflow</description>
           <addressOffset>0x104</addressOffset>
           <access>read-write</access>
           <fields>
             <field>
               <name>EVENTS_OVRFLW</name>
-              <description>Event on COUNTER overflow</description>
+              <description>Event on counter overflow</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -18508,7 +19089,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>COUNTER</name>
-          <description>Current COUNTER value</description>
+          <description>Current counter value</description>
           <addressOffset>0x504</addressOffset>
           <access>read-only</access>
           <fields>
@@ -18522,7 +19103,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>PRESCALER</name>
-          <description>12 bit prescaler for COUNTER frequency (32768/(PRESCALER+1)).Must be written when RTC is stopped</description>
+          <description>12-bit prescaler for counter frequency (32768/(PRESCALER+1)). Must be written when RTC is stopped.</description>
           <addressOffset>0x508</addressOffset>
           <access>read-write</access>
           <fields>
@@ -18554,7 +19135,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral derivedFrom="RTC0_NS">
       <name>RTC0_S</name>
-      <description>Real time counter 1</description>
+      <description>Real-time counter 1</description>
       <baseAddress>0x50014000</baseAddress>
       <!--Security dma=NA-->
       <!--Security securemapping=US-->
@@ -18565,7 +19146,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral derivedFrom="RTC0_NS">
       <name>RTC1_NS</name>
-      <description>Real time counter 2</description>
+      <description>Real-time counter 2</description>
       <baseAddress>0x40015000</baseAddress>
       <!--Security dma=NA-->
       <!--Security securemapping=US-->
@@ -18576,7 +19157,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral derivedFrom="RTC0_NS">
       <name>RTC1_S</name>
-      <description>Real time counter 3</description>
+      <description>Real-time counter 3</description>
       <baseAddress>0x50015000</baseAddress>
       <!--Security dma=NA-->
       <!--Security securemapping=US-->
@@ -27119,7 +27700,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral>
       <name>KMU_NS</name>
-      <description>Key Management Unit 0</description>
+      <description>Key management unit 0</description>
       <baseAddress>0x40039000</baseAddress>
       <headerStructName>KMU</headerStructName>
       <!--Security dma=NA-->
@@ -27138,13 +27719,13 @@ POSSIBILITY OF SUCH DAMAGE.\n
       <registers>
         <register>
           <name>TASKS_PUSH_KEYSLOT</name>
-          <description>Push a key slot over secure APB.</description>
+          <description>Push a key slot over secure APB</description>
           <addressOffset>0x0000</addressOffset>
           <access>write-only</access>
           <fields>
             <field>
               <name>TASKS_PUSH_KEYSLOT</name>
-              <description>Push a key slot over secure APB.</description>
+              <description>Push a key slot over secure APB</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -27159,13 +27740,13 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>EVENTS_KEYSLOT_PUSHED</name>
-          <description>Key successfully pushed over secure APB.</description>
+          <description>Key successfully pushed over secure APB</description>
           <addressOffset>0x100</addressOffset>
           <access>read-write</access>
           <fields>
             <field>
               <name>EVENTS_KEYSLOT_PUSHED</name>
-              <description>Key successfully pushed over secure APB.</description>
+              <description>Key successfully pushed over secure APB</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -27185,13 +27766,13 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>EVENTS_KEYSLOT_REVOKED</name>
-          <description>Key has been revoked and cannot be tasked for selection.</description>
+          <description>Key has been revoked and cannot be tasked for selection</description>
           <addressOffset>0x104</addressOffset>
           <access>read-write</access>
           <fields>
             <field>
               <name>EVENTS_KEYSLOT_REVOKED</name>
-              <description>Key has been revoked and cannot be tasked for selection.</description>
+              <description>Key has been revoked and cannot be tasked for selection</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -27211,13 +27792,13 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>EVENTS_KEYSLOT_ERROR</name>
-          <description>No key slot selected or no destination address defined or error during push mechanism.</description>
+          <description>No key slot selected, no destination address defined, or error during push operation</description>
           <addressOffset>0x108</addressOffset>
           <access>read-write</access>
           <fields>
             <field>
               <name>EVENTS_KEYSLOT_ERROR</name>
-              <description>No key slot selected or no destination address defined or error during push mechanism.</description>
+              <description>No key slot selected, no destination address defined, or error during push operation</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -27542,14 +28123,14 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>STATUS</name>
-          <description>Status bits for KMU operation.</description>
+          <description>Status bits for KMU operation</description>
           <addressOffset>0x40C</addressOffset>
           <access>read-only</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
               <name>SELECTED</name>
-              <description>Key slot ID successfully selected by the KMU.</description>
+              <description>Key slot ID successfully selected by the KMU</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -27573,12 +28154,12 @@ POSSIBILITY OF SUCH DAMAGE.\n
               <enumeratedValues>
                 <enumeratedValue>
                   <name>Disabled</name>
-                  <description>No access violation detected.</description>
+                  <description>No access violation detected</description>
                   <value>0</value>
                 </enumeratedValue>
                 <enumeratedValue>
                   <name>Enabled</name>
-                  <description>Access violation detected and blocked.</description>
+                  <description>Access violation detected and blocked</description>
                   <value>1</value>
                 </enumeratedValue>
               </enumeratedValues>
@@ -27587,14 +28168,14 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>SELECTKEYSLOT</name>
-          <description>Select key slot ID to be read over AHB or pushed over secure APB when TASKS_PUSH_KEYSLOT is started.</description>
+          <description>Select key slot ID to be read over AHB or pushed over secure APB when TASKS_PUSH_KEYSLOT is started</description>
           <addressOffset>0x500</addressOffset>
           <access>read-write</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
               <name>ID</name>
-              <description>Select key slot ID to be read over AHB or pushed over secure APB when TASKS_PUSH_KEYSLOT is started.</description>
+              <description>Select key slot ID to be read over AHB, or pushed over secure APB, when TASKS_PUSH_KEYSLOT is started NOTE: ID=0 is not a valid key ID. The 0 ID should be used when the KMU is idle or not in use NOTE: Note that index N in UICR-&amp;gt;KEYSLOT.KEY[N] and UICR-&amp;gt;KEYSLOT.CONFIG[N] corresponds to KMU keyslot ID=N+1</description>
               <lsb>0</lsb>
               <msb>7</msb>
             </field>
@@ -27604,7 +28185,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral>
       <name>NVMC_NS</name>
-      <description>Non Volatile Memory Controller 0</description>
+      <description>Non-volatile memory controller 0</description>
       <baseAddress>0x40039000</baseAddress>
       <alternatePeripheral>KMU_NS</alternatePeripheral>
       <headerStructName>NVMC</headerStructName>
@@ -27624,6 +28205,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
           <addressOffset>0x400</addressOffset>
           <access>read-only</access>
           <resetValue>0x00000001</resetValue>
+          <!--Security securemapping=NS-->
           <fields>
             <field>
               <name>READY</name>
@@ -27651,6 +28233,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
           <addressOffset>0x408</addressOffset>
           <access>read-only</access>
           <resetValue>0x00000001</resetValue>
+          <!--Security securemapping=NS-->
           <fields>
             <field>
               <name>READYNEXT</name>
@@ -27677,6 +28260,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
           <description>Configuration register</description>
           <addressOffset>0x504</addressOffset>
           <access>read-write</access>
+          <!--Security securemapping=S-->
           <fields>
             <field>
               <name>WEN</name>
@@ -27701,7 +28285,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
                 </enumeratedValue>
                 <enumeratedValue>
                   <name>PEen</name>
-                  <description>Partial Erase enabled</description>
+                  <description>Partial erase enabled</description>
                   <value>4</value>
                 </enumeratedValue>
               </enumeratedValues>
@@ -27713,10 +28297,11 @@ POSSIBILITY OF SUCH DAMAGE.\n
           <description>Register for erasing all non-volatile user memory</description>
           <addressOffset>0x50C</addressOffset>
           <access>read-write</access>
+          <!--Security securemapping=S-->
           <fields>
             <field>
               <name>ERASEALL</name>
-              <description>Erase all non-volatile memory including UICR registers. Note that erasing must enabled by setting CONFIG.WEN = Een before the non-volatile memory can be erased.</description>
+              <description>Erase all non-volatile memory including UICR registers. Note that erasing must be enabled by setting CONFIG.WEN = Een before the non-volatile memory can be erased.</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -27740,6 +28325,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
           <addressOffset>0x51C</addressOffset>
           <access>read-write</access>
           <resetValue>0x0000000A</resetValue>
+          <!--Security securemapping=S-->
           <fields>
             <field>
               <name>DURATION</name>
@@ -27751,10 +28337,11 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>ICACHECNF</name>
-          <description>I-code cache configuration register.</description>
+          <description>I-code cache configuration register</description>
           <addressOffset>0x540</addressOffset>
           <access>read-write</access>
           <resetValue>0x00000000</resetValue>
+          <!--Security securemapping=S-->
           <fields>
             <field>
               <name>CACHEEN</name>
@@ -27796,9 +28383,10 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>IHIT</name>
-          <description>I-code cache hit counter.</description>
+          <description>I-code cache hit counter</description>
           <addressOffset>0x548</addressOffset>
           <access>read-write</access>
+          <!--Security securemapping=S-->
           <fields>
             <field>
               <name>HITS</name>
@@ -27810,9 +28398,10 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>IMISS</name>
-          <description>I-code cache miss counter.</description>
+          <description>I-code cache miss counter</description>
           <addressOffset>0x54C</addressOffset>
           <access>read-write</access>
+          <!--Security securemapping=S-->
           <fields>
             <field>
               <name>MISSES</name>
@@ -27824,9 +28413,10 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>CONFIGNS</name>
-          <description>Non SecureConfiguration register</description>
+          <description>Unspecified</description>
           <addressOffset>0x584</addressOffset>
           <access>read-write</access>
+          <!--Security securemapping=NS-->
           <fields>
             <field>
               <name>WEN</name>
@@ -27855,13 +28445,14 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>WRITEUICRNS</name>
-          <description>Non Secure APPROTECT enable register</description>
+          <description>Non-secure APPROTECT enable register</description>
           <addressOffset>0x588</addressOffset>
           <access>write-only</access>
+          <!--Security securemapping=NS-->
           <fields>
             <field>
               <name>SET</name>
-              <description>Allow non secure to set APPROTECT</description>
+              <description>Allow non-secure code to set APPROTECT</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -27874,7 +28465,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
             </field>
             <field>
               <name>KEY</name>
-              <description>Key to write in order to valid the write operation</description>
+              <description>Key to write in order to validate the write operation</description>
               <lsb>4</lsb>
               <msb>31</msb>
               <enumeratedValues>
@@ -27889,13 +28480,14 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>FORCEONNVM</name>
-          <description>Force on all NVM supplies. See also the internal section in the NVMC chapter.</description>
+          <description>Force on all NVM supplies. Also see the internal section in the NVMC chapter.</description>
           <addressOffset>0x700</addressOffset>
           <access>read-write</access>
+          <!--Security securemapping=S-->
           <fields>
             <field>
               <name>FORCEONNVM</name>
-              <description>Force on all NVM supplies. See also the internal section in the NVMC chapter.</description>
+              <description>Force on all NVM supplies. Also see the internal section in the NVMC chapter.</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
@@ -27915,42 +28507,43 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
         <register>
           <name>FORCEOFFNVM</name>
-          <description>Force off NVM supply. See also the internal section in the NVMC chapter.</description>
+          <description>Force off NVM supply. Also see the internal section in the NVMC chapter.</description>
           <addressOffset>0x728</addressOffset>
           <access>read-write</access>
+          <!--Security securemapping=S-->
           <fields>
             <field>
               <name>FORCEOFFNVM0</name>
-              <description>Force off NVM supply 0. See also the internal section in the NVMC chapter.</description>
+              <description>Force off NVM supply 0. Also see the internal section in the NVMC chapter.</description>
               <lsb>0</lsb>
               <msb>0</msb>
               <enumeratedValues>
                 <enumeratedValue>
                   <name>DoNotForceOff</name>
-                  <description>Do not force off supply.</description>
+                  <description>Do not force off supply</description>
                   <value>0</value>
                 </enumeratedValue>
                 <enumeratedValue>
                   <name>ForceOff</name>
-                  <description>Force off supply.</description>
+                  <description>Force off supply</description>
                   <value>1</value>
                 </enumeratedValue>
               </enumeratedValues>
             </field>
             <field>
               <name>FORCEOFFNVM1</name>
-              <description>Force off NVM supply 1. See also the internal section in the NVMC chapter.</description>
+              <description>Force off NVM supply 1. Also see the internal section in the NVMC chapter.</description>
               <lsb>1</lsb>
               <msb>1</msb>
               <enumeratedValues>
                 <enumeratedValue>
                   <name>DoNotForceOff</name>
-                  <description>Do not force off supply.</description>
+                  <description>Do not force off supply</description>
                   <value>0</value>
                 </enumeratedValue>
                 <enumeratedValue>
                   <name>ForceOff</name>
-                  <description>Force off supply.</description>
+                  <description>Force off supply</description>
                   <value>1</value>
                 </enumeratedValue>
               </enumeratedValues>
@@ -27975,7 +28568,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral derivedFrom="KMU_NS">
       <name>KMU_S</name>
-      <description>Key Management Unit 1</description>
+      <description>Key management unit 1</description>
       <baseAddress>0x50039000</baseAddress>
       <!--Security dma=NA-->
       <!--Security securemapping=SPLIT-->
@@ -27986,7 +28579,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
     </peripheral>
     <peripheral derivedFrom="NVMC_NS">
       <name>NVMC_S</name>
-      <description>Non Volatile Memory Controller 1</description>
+      <description>Non-volatile memory controller 1</description>
       <baseAddress>0x50039000</baseAddress>
       <alternatePeripheral>KMU_S</alternatePeripheral>
       <!--Security dma=NA-->
@@ -28453,7 +29046,7 @@ POSSIBILITY OF SUCH DAMAGE.\n
       </registers>
     </peripheral>
     <peripheral>
-      <name>GPIO_NS</name>
+      <name>P0_NS</name>
       <description>GPIO Port 0</description>
       <baseAddress>0x40842500</baseAddress>
       <headerStructName>GPIO</headerStructName>
@@ -34490,8 +35083,8 @@ POSSIBILITY OF SUCH DAMAGE.\n
         </register>
       </registers>
     </peripheral>
-    <peripheral derivedFrom="GPIO_NS">
-      <name>GPIO_S</name>
+    <peripheral derivedFrom="P0_NS">
+      <name>P0_S</name>
       <description>GPIO Port 1</description>
       <baseAddress>0x50842500</baseAddress>
       <!--Security dma=NA-->
