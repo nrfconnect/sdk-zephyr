@@ -42,7 +42,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #elif defined(__APPLE__)
     /* Do not include nrf specific files when building for PC host */
 #else
-
+    
     #if defined(NRF51)
         #include "nrf51_peripherals.h"
         
@@ -52,9 +52,6 @@ POSSIBILITY OF SUCH DAMAGE.
         #include "nrf52832_peripherals.h"
     #elif defined(NRF52840_XXAA)
         #include "nrf52840_peripherals.h"
-
-    #elif defined (NRF9160_XXAA)
-        #include "nrf9160_peripherals.h"
         
     #elif defined(NRF9160_XXAA)
         #include "nrf9160_peripherals.h"
