@@ -82,6 +82,34 @@
 		};
 	};
 };
+#elif CONFIG_SOC_NRF52810
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		b0_partition: partition@0 {
+			label = "secure-boot";
+			reg = <0x000000000 0x4000>;
+		};
+		b1_s0_partition: partition@4000 {
+			label = "s0";
+			reg = <0x4000 0xC000>;
+		};
+		b1_s1_partition: partition@10000 {
+			label = "s1";
+			reg = <0x10000 0xC000>;
+		};
+		app_partition: partition@1C000 {
+			label = "app";
+			reg = <0x1C000 0x00013000>;
+		};
+		provision_partition: partition@2F000 {
+			label = "provision";
+			reg = <0x0002F000 0x00001000>;
+		};
+	};
+};
 #elif CONFIG_SOC_NRF9160
 &flash0 {
 	partitions {
