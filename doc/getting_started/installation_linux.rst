@@ -54,8 +54,6 @@ On Arch Linux:
 
    sudo pacman -Syu
 
-.. _linux_requirements:
-
 Install Requirements and Dependencies
 *************************************
 
