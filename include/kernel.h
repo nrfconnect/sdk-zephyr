@@ -199,7 +199,7 @@ struct _k_object_assignment {
  * Intended to be called as the last statement in kernel object init
  * functions.
  *
- * @param object Address of the kernel object
+ * @param obj Address of the kernel object
  */
 void _k_object_init(void *obj);
 #else
@@ -1316,10 +1316,10 @@ struct k_timer {
 	_wait_q_t wait_q;
 
 	/* runs in ISR context */
-	void (*expiry_fn)(struct k_timer *);
+	void (*expiry_fn)(struct k_timer *timer);
 
 	/* runs in the context of the thread that calls k_timer_stop() */
-	void (*stop_fn)(struct k_timer *);
+	void (*stop_fn)(struct k_timer *timer);
 
 	/* timer period */
 	s32_t period;
@@ -1499,11 +1499,11 @@ extern s32_t z_timeout_remaining(struct _timeout *timeout);
  *
  * @return Remaining time (in milliseconds).
  */
-__syscall s32_t k_timer_remaining_get(struct k_timer *timer);
+__syscall u32_t k_timer_remaining_get(struct k_timer *timer);
 
-static inline s32_t _impl_k_timer_remaining_get(struct k_timer *timer)
+static inline u32_t _impl_k_timer_remaining_get(struct k_timer *timer)
 {
-	return __ticks_to_ms(z_timeout_remaining(&timer->timeout));
+	return (u32_t)__ticks_to_ms(z_timeout_remaining(&timer->timeout));
 }
 
 /**
@@ -4760,18 +4760,6 @@ static inline char *K_THREAD_STACK_BUFFER(k_thread_stack_t *sym)
  */
 
 /**
- * @def MEM_PARTITION_ENTRY
- * @brief Used to declare a memory partition entry
- * @req K-MP-001
- */
-#define MEM_PARTITION_ENTRY(_start, _size, _attr) \
-	{\
-		.start = _start, \
-		.size = _size, \
-		.attr = _attr, \
-	}
-
-/**
  * @def K_MEM_PARTITION_DEFINE
  * @brief Used to declare a memory partition
  * @req K-MP-001
@@ -4780,11 +4768,11 @@ static inline char *K_THREAD_STACK_BUFFER(k_thread_stack_t *sym)
 #define K_MEM_PARTITION_DEFINE(name, start, size, attr) \
 	_ARCH_MEM_PARTITION_ALIGN_CHECK(start, size); \
 	__kernel struct k_mem_partition name =\
-		MEM_PARTITION_ENTRY((u32_t)start, size, attr)
+		{ (u32_t)start, size, attr}
 #else
 #define K_MEM_PARTITION_DEFINE(name, start, size, attr) \
 	__kernel struct k_mem_partition name =\
-		MEM_PARTITION_ENTRY((u32_t)start, size, attr)
+		{ (u32_t)start, size, attr}
 #endif /* _ARCH_MEM_PARTITION_ALIGN_CHECK */
 
 /* memory partition */
@@ -4793,10 +4781,10 @@ struct k_mem_partition {
 	u32_t start;
 	/* size of memory partition */
 	u32_t size;
-#ifdef CONFIG_USERSPACE
+#if defined(CONFIG_MEMORY_PROTECTION)
 	/* attribute of memory partition */
 	k_mem_partition_attr_t attr;
-#endif	/* CONFIG_USERSPACE */
+#endif /* CONFIG_MEMORY_PROTECTION */
 };
 
 /* memory domain
@@ -4919,7 +4907,7 @@ __syscall void k_str_out(char *c, size_t n);
  * @param arg Untyped argument to be passed to "fn"
  */
 extern void _arch_start_cpu(int cpu_num, k_thread_stack_t *stack, int sz,
-			    void (*fn)(int, void *), void *arg);
+			    void (*fn)(int key, void *data), void *arg);
 
 #ifdef __cplusplus
 }

@@ -8,13 +8,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define LOG_MODULE_NAME net_ipv6
-#define NET_LOG_LEVEL CONFIG_NET_IPV6_LOG_LEVEL
-
 /* By default this prints too much data, set the value to 1 to see
  * neighbor cache contents.
  */
 #define NET_DEBUG_NBR 0
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_ipv6, CONFIG_NET_IPV6_LOG_LEVEL);
 
 #include <errno.h>
 #include <stdlib.h>
@@ -144,36 +144,6 @@ int net_ipv6_finalize(struct net_pkt *pkt, u8_t next_header_proto)
 	}
 
 	return 0;
-}
-
-static inline enum net_verdict process_icmpv6_pkt(struct net_pkt *pkt,
-						  struct net_ipv6_hdr *ipv6)
-{
-	struct net_icmp_hdr icmp_hdr;
-	u16_t chksum;
-	int ret;
-
-	ret = net_icmpv6_get_hdr(pkt, &icmp_hdr);
-	if (ret < 0) {
-		NET_DBG("NULL ICMPv6 header - dropping");
-		return NET_DROP;
-	}
-
-	chksum = icmp_hdr.chksum;
-	net_icmpv6_set_chksum(pkt);
-	(void)net_icmpv6_get_hdr(pkt, &icmp_hdr);
-
-	if (chksum != icmp_hdr.chksum) {
-		NET_DBG("ICMPv6 invalid checksum (0x%04x instead of 0x%04x)",
-			ntohs(chksum), ntohs(icmp_hdr.chksum));
-		return NET_DROP;
-	}
-
-	NET_DBG("ICMPv6 %s received type %d code %d",
-		net_icmpv6_type2str(icmp_hdr.type), icmp_hdr.type,
-		icmp_hdr.code);
-
-	return net_icmpv6_input(pkt, icmp_hdr.type, icmp_hdr.code);
 }
 
 static inline struct net_pkt *check_unknown_option(struct net_pkt *pkt,
@@ -651,19 +621,11 @@ upper_proto:
 
 	switch (next) {
 	case IPPROTO_ICMPV6:
-		return process_icmpv6_pkt(pkt, hdr);
+		return net_icmpv6_input(pkt);
 	case IPPROTO_UDP:
-#if defined(CONFIG_NET_UDP)
-		return net_conn_input(IPPROTO_UDP, pkt);
-#else
-		return NET_DROP;
-#endif
+		/* Fall through */
 	case IPPROTO_TCP:
-#if defined(CONFIG_NET_TCP)
-		return net_conn_input(IPPROTO_TCP, pkt);
-#else
-		return NET_DROP;
-#endif
+		return net_conn_input(next, pkt);
 	}
 
 drop:

@@ -25,6 +25,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <net/net_pkt.h>
 #include <net/net_if.h>
 #include <net/ethernet.h>
+#include <ethernet/eth_stats.h>
 
 #if defined(CONFIG_PTP_CLOCK_MCUX)
 #include <ptp_clock.h>
@@ -378,9 +379,9 @@ static enet_ptp_time_data_t ptp_rx_buffer[CONFIG_ETH_MCUX_PTP_RX_BUFFERS];
 static enet_ptp_time_data_t ptp_tx_buffer[CONFIG_ETH_MCUX_PTP_TX_BUFFERS];
 
 static bool eth_get_ptp_data(struct net_if *iface, struct net_pkt *pkt,
-			     enet_ptp_time_data_t *ptpTsData)
+			     enet_ptp_time_data_t *ptpTsData, bool is_tx)
 {
-	struct gptp_hdr *hdr;
+	int eth_hlen;
 
 #if defined(CONFIG_NET_VLAN)
 	struct net_eth_vlan_hdr *hdr_vlan;
@@ -395,29 +396,38 @@ static bool eth_get_ptp_data(struct net_if *iface, struct net_pkt *pkt,
 		if (ntohs(hdr_vlan->type) != NET_ETH_PTYPE_PTP) {
 			return false;
 		}
+
+		eth_hlen = sizeof(struct net_eth_vlan_hdr);
 	} else
 #endif
 	{
 		if (ntohs(NET_ETH_HDR(pkt)->type) != NET_ETH_PTYPE_PTP) {
 			return false;
 		}
+
+		eth_hlen = sizeof(struct net_eth_hdr);
 	}
 
 	net_pkt_set_priority(pkt, NET_PRIORITY_CA);
 
 	if (ptpTsData) {
-
 		/* Cannot use GPTP_HDR as net_pkt fields are not all filled */
+		struct gptp_hdr *hdr;
 
-#if defined(CONFIG_NET_VLAN)
-		if (vlan_enabled) {
-			hdr = (struct gptp_hdr *)((u8_t *)net_pkt_ll(pkt)
-				+ sizeof(struct net_eth_vlan_hdr));
-		} else
-#endif
-		{
-			hdr = (struct gptp_hdr *)((u8_t *)net_pkt_ll(pkt)
-						  + sizeof(struct net_eth_hdr));
+		/* In TX, the first net_buf contains the Ethernet header
+		 * and the actual gPTP header is in the second net_buf.
+		 * In RX, the Ethernet header + other headers are in the
+		 * first net_buf.
+		 */
+		if (is_tx) {
+			if (pkt->frags->frags == NULL) {
+				return false;
+			}
+
+			hdr = (struct gptp_hdr *)pkt->frags->frags->data;
+		} else {
+			hdr = (struct gptp_hdr *)(pkt->frags->data +
+							   eth_hlen);
 		}
 
 		ptpTsData->version = hdr->ptp_version;
@@ -460,7 +470,7 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 	bool timestamped_frame;
 #endif
 
-	u16_t total_len = net_pkt_ll_reserve(pkt) + net_pkt_get_len(pkt);
+	u16_t total_len = net_pkt_get_len(pkt);
 
 	k_sem_take(&context->tx_buf_sem, K_FOREVER);
 
@@ -469,18 +479,9 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 	 */
 	imask = irq_lock();
 
-	/* Gather fragment buffers into flat Ethernet frame buffer
-	 * which can be fed to MCUX Ethernet functions. First
-	 * fragment is special - it contains link layer (Ethernet
-	 * in our case) headers and must be treated specially.
-	 */
+	/* Copy the fragments */
 	dst = context->frame_buf;
-	memcpy(dst, net_pkt_ll(pkt),
-	       net_pkt_ll_reserve(pkt) + pkt->frags->len);
-	dst += net_pkt_ll_reserve(pkt) + pkt->frags->len;
-
-	/* Continue with the rest of fragments (which contain only data) */
-	frag = pkt->frags->frags;
+	frag = pkt->frags;
 	while (frag) {
 		memcpy(dst, frag->data, frag->len);
 		dst += frag->len;
@@ -501,7 +502,8 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 				total_len);
 
 #if defined(CONFIG_PTP_CLOCK_MCUX)
-	timestamped_frame = eth_get_ptp_data(net_pkt_iface(pkt), pkt, NULL);
+	timestamped_frame = eth_get_ptp_data(net_pkt_iface(pkt), pkt, NULL,
+					     true);
 	if (timestamped_frame) {
 		if (!status) {
 			ts_tx_pkt[ts_tx_wr] = net_pkt_ref(pkt);
@@ -550,36 +552,18 @@ static void eth_rx(struct device *iface)
 
 		ENET_GetRxErrBeforeReadFrame(&context->enet_handle,
 					     &error_stats);
-		/* Flush the current read buffer.  This operation can
-		 * only report failure if there is no frame to flush,
-		 * which cannot happen in this context.
-		 */
-		status = ENET_ReadFrame(ENET, &context->enet_handle, NULL, 0);
-		assert(status == kStatus_Success);
-		return;
+		goto flush;
 	}
 
-	pkt = net_pkt_get_reserve_rx(0, K_NO_WAIT);
+	pkt = net_pkt_get_reserve_rx(K_NO_WAIT);
 	if (!pkt) {
-		/* We failed to get a receive buffer.  We don't add
-		 * any further logging here because the allocator
-		 * issued a diagnostic when it failed to allocate.
-		 *
-		 * Flush the current read buffer.  This operation can
-		 * only report failure if there is no frame to flush,
-		 * which cannot happen in this context.
-		 */
-		status = ENET_ReadFrame(ENET, &context->enet_handle, NULL, 0);
-		assert(status == kStatus_Success);
-		return;
+		goto flush;
 	}
 
 	if (sizeof(context->frame_buf) < frame_length) {
 		LOG_ERR("frame too large (%d)", frame_length);
 		net_pkt_unref(pkt);
-		status = ENET_ReadFrame(ENET, &context->enet_handle, NULL, 0);
-		assert(status == kStatus_Success);
-		return;
+		goto flush;
 	}
 
 	/* As context->frame_buf is shared resource used by both eth_tx
@@ -593,7 +577,7 @@ static void eth_rx(struct device *iface)
 		irq_unlock(imask);
 		LOG_ERR("ENET_ReadFrame failed: %d", (int)status);
 		net_pkt_unref(pkt);
-		return;
+		goto error;
 	}
 
 	src = context->frame_buf;
@@ -608,7 +592,7 @@ static void eth_rx(struct device *iface)
 			LOG_ERR("Failed to get fragment buf");
 			net_pkt_unref(pkt);
 			assert(status == kStatus_Success);
-			return;
+			goto error;
 		}
 
 		if (!prev_buf) {
@@ -656,7 +640,7 @@ static void eth_rx(struct device *iface)
 
 #if defined(CONFIG_PTP_CLOCK_MCUX)
 	if (eth_get_ptp_data(get_iface(context, vlan_tag), pkt,
-			     &ptpTimeData) &&
+			     &ptpTimeData, false) &&
 	    (ENET_GetRxFrameTime(&context->enet_handle,
 				 &ptpTimeData) == kStatus_Success)) {
 		pkt->timestamp.nanosecond = ptpTimeData.timeStamp.nanosecond;
@@ -672,7 +656,19 @@ static void eth_rx(struct device *iface)
 
 	if (net_recv_data(get_iface(context, vlan_tag), pkt) < 0) {
 		net_pkt_unref(pkt);
+		goto error;
 	}
+
+	return;
+flush:
+	/* Flush the current read buffer.  This operation can
+	 * only report failure if there is no frame to flush,
+	 * which cannot happen in this context.
+	 */
+	status = ENET_ReadFrame(ENET, &context->enet_handle, NULL, 0);
+	assert(status == kStatus_Success);
+error:
+	eth_stats_update_errors_rx(get_iface(context, vlan_tag));
 }
 
 #if defined(CONFIG_PTP_CLOCK_MCUX)
@@ -683,7 +679,8 @@ static inline void ts_register_tx_event(struct eth_context *context)
 
 	pkt = ts_tx_pkt[ts_tx_rd];
 	if (pkt && pkt->ref > 0) {
-		if (eth_get_ptp_data(net_pkt_iface(pkt), pkt, &timeData)) {
+		if (eth_get_ptp_data(net_pkt_iface(pkt), pkt, &timeData,
+				     true)) {
 			int status;
 
 			status = ENET_GetTxFrameTime(&context->enet_handle,

@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_mqtt_publisher_sample, LOG_LEVEL_DBG);
+
 #include <zephyr.h>
 #include <net/socket.h>
 #include <net/mqtt.h>
@@ -54,7 +57,7 @@ static int tls_init(void)
 	err = tls_credential_add(APP_CA_CERT_TAG, TLS_CREDENTIAL_CA_CERTIFICATE,
 				 ca_certificate, sizeof(ca_certificate));
 	if (err < 0) {
-		NET_ERR("Failed to register public certificate: %d", err);
+		LOG_ERR("Failed to register public certificate: %d", err);
 		return err;
 	}
 #endif
@@ -63,14 +66,14 @@ static int tls_init(void)
 	err = tls_credential_add(APP_PSK_TAG, TLS_CREDENTIAL_PSK,
 				 client_psk, sizeof(client_psk));
 	if (err < 0) {
-		NET_ERR("Failed to register PSK: %d", err);
+		LOG_ERR("Failed to register PSK: %d", err);
 		return err;
 	}
 
 	err = tls_credential_add(APP_PSK_TAG, TLS_CREDENTIAL_PSK_ID,
 				 client_psk_id, sizeof(client_psk_id) - 1);
 	if (err < 0) {
-		NET_ERR("Failed to register PSK ID: %d", err);
+		LOG_ERR("Failed to register PSK ID: %d", err);
 	}
 #endif
 

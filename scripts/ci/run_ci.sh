@@ -17,19 +17,19 @@
 # The script can be run locally using for exmaple:
 # ./scripts/ci/run_ci.sh -b master -r upstream  -p
 
-set -x
+set -xe
 
 SANITYCHECK_OPTIONS=" --inline-logs --enable-coverage -N"
 SANITYCHECK_OPTIONS_RETRY="${SANITYCHECK_OPTIONS} --only-failed --outdir=out-2nd-pass"
 SANITYCHECK_OPTIONS_RETRY_2="${SANITYCHECK_OPTIONS} --only-failed --outdir=out-3nd-pass"
-export BSIM_OUT_PATH="/opt/bsim/"
+export BSIM_OUT_PATH="${BSIM_OUT_PATH:-/opt/bsim/}"
 export BSIM_COMPONENTS_PATH="${BSIM_OUT_PATH}/components/"
 BSIM_BT_TEST_RESULTS_FILE="./bsim_bt_out/bsim_results.xml"
 
 MATRIX_BUILDS=1
 MATRIX=1
 
-while getopts ":p:m:b:r:M:cfsB:" opt; do
+while getopts ":p:m:b:r:M:cfs" opt; do
 	case $opt in
 		c)
 			echo "Execute CI" >&2
@@ -58,10 +58,6 @@ while getopts ":p:m:b:r:M:cfsB:" opt; do
 		b)
 			echo "Base Branch: $OPTARG" >&2
 			BRANCH=$OPTARG
-			;;
-		B)
-			echo "bsim BT tests xml results file: $OPTARG" >&2
-			BSIM_BT_TEST_RESULTS_FILE=$OPTARG
 			;;
 		r)
 			echo "Remote: $OPTARG" >&2
@@ -143,13 +139,6 @@ function on_complete() {
 	mkdir -p shippable/testresults
 	mkdir -p shippable/codecoverage
 
-	if [ "$MATRIX" = "1" ]; then
-		echo "Handle coverage data..."
-		handle_coverage
-	else
-		rm -rf sanity-out out-2nd-pass;
-	fi;
-
 	if [ -e compliance.xml ]; then
 		echo "Copy compliance.xml"
 		cp compliance.xml shippable/testresults/;
@@ -164,6 +153,13 @@ function on_complete() {
 		echo "Copy ${BSIM_BT_TEST_RESULTS_FILE}"
 		cp ${BSIM_BT_TEST_RESULTS_FILE} shippable/testresults/;
 	fi;
+
+	if [ "$MATRIX" = "1" ]; then
+		echo "Handle coverage data..."
+		handle_coverage
+	else
+		rm -rf sanity-out out-2nd-pass;
+	fi;
 }
 
 
@@ -174,12 +170,12 @@ function build_btsim() {
 	if [ -d ext_NRF52_hw_models ]; then
 		cd ext_NRF52_hw_models
 		git describe --tags --abbrev=0 ${NRF52_HW_MODELS_TAG}\
-		> /dev/null
-		if [ "$?" != "0" ]; then
+		> /dev/null ||
+		(
 			echo "`pwd` seems to contain the nRF52 HW\
  models but they are out of date"
 			exit 1;
-		fi
+		)
 	else
 		git clone -b ${NRF_HW_MODELS_VERSION} \
 		https://github.com/BabbleSim/ext_NRF52_hw_models.git
@@ -198,11 +194,8 @@ function run_bsim_bt_tests() {
 
 function build_docs() {
 	echo "- Building Documentation";
-	make htmldocs
-	if [ "$?" != "0" ]; then
-		echo "Documentation build failed";
-		exit 1;
-	fi
+	make htmldocs || ( echo "Documentation build failed" ; exit 1 )
+
 	if [ -s doc/_build/doc.warnings ]; then
 		echo " => New documentation warnings/errors";
 		cp doc/_build/doc.warnings doc.warnings
@@ -247,13 +240,11 @@ if [ -n "$MAIN_CI" ]; then
 	${SANITYCHECK} ${SANITYCHECK_OPTIONS} --save-tests test_file.txt || exit 1
 
 	# Run a subset of tests based on matrix size
-	${SANITYCHECK} ${SANITYCHECK_OPTIONS} --load-tests test_file.txt --subset ${MATRIX}/${MATRIX_BUILDS}
-	if [ "$?" != 0 ]; then
-		# let the host settle down
-		sleep 10
-		${SANITYCHECK} ${SANITYCHECK_OPTIONS_RETRY} || \
-			( sleep 10; ${SANITYCHECK} ${SANITYCHECK_OPTIONS_RETRY}; )
-	fi
+	${SANITYCHECK} ${SANITYCHECK_OPTIONS} --load-tests test_file.txt \
+		--subset ${MATRIX}/${MATRIX_BUILDS} || \
+		( sleep 10; ${SANITYCHECK} ${SANITYCHECK_OPTIONS_RETRY} ) || \
+		( sleep 10; ${SANITYCHECK} ${SANITYCHECK_OPTIONS_RETRY_2}; )
+		# sleep 10 to let the host settle down
 
 	# cleanup
 	rm -f test_file.txt

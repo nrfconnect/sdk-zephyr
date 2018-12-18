@@ -185,6 +185,13 @@ static void usb_dc_stm32_isr(void *arg)
 	HAL_PCD_IRQHandler(&usb_dc_stm32_state.pcd);
 }
 
+#ifdef CONFIG_USB_DEVICE_SOF
+void HAL_PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
+{
+	usb_dc_stm32_state.status_cb(USB_DC_SOF, NULL);
+}
+#endif
+
 static int usb_dc_stm32_clock_enable(void)
 {
 	struct device *clk = device_get_binding(STM32_CLOCK_CONTROL_NAME);
@@ -253,7 +260,10 @@ static int usb_dc_stm32_clock_enable(void)
 	}
 #endif /* RCC_HSI48_SUPPORT / LL_RCC_USB_CLKSOURCE_NONE */
 
-	clock_control_on(clk, (clock_control_subsys_t *)&pclken);
+	if (clock_control_on(clk, (clock_control_subsys_t *)&pclken) != 0) {
+		LOG_ERR("Unable to enable USB clock");
+		return -EIO;
+	}
 
 #ifdef DT_USB_HS_BASE_ADDRESS
 
@@ -341,6 +351,10 @@ static int usb_dc_stm32_init(void)
 #endif
 
 #endif /* USB */
+
+#ifdef CONFIG_USB_DEVICE_SOF
+	usb_dc_stm32_state.pcd.Init.Sof_enable = 1;
+#endif /* CONFIG_USB_DEVICE_SOF */
 
 	LOG_DBG("HAL_PCD_Init");
 	status = HAL_PCD_Init(&usb_dc_stm32_state.pcd);

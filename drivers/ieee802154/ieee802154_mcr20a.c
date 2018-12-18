@@ -547,7 +547,7 @@ static inline void mcr20a_rx(struct mcr20a_context *mcr20a, u8_t len)
 
 	pkt_len = len - MCR20A_FCS_LENGTH;
 
-	pkt = net_pkt_get_reserve_rx(0, K_NO_WAIT);
+	pkt = net_pkt_get_reserve_rx(K_NO_WAIT);
 	if (!pkt) {
 		LOG_ERR("No buf available");
 		goto out;
@@ -1065,7 +1065,7 @@ static inline bool write_txfifo_content(struct mcr20a_context *dev,
 					struct net_pkt *pkt,
 					struct net_buf *frag)
 {
-	size_t payload_len = net_pkt_ll_reserve(pkt) + frag->len;
+	size_t payload_len = frag->len;
 	u8_t cmd_buf[2] = {
 		MCR20A_BUF_WRITE,
 		payload_len + MCR20A_FCS_LENGTH
@@ -1076,7 +1076,7 @@ static inline bool write_txfifo_content(struct mcr20a_context *dev,
 			.len = 2
 		},
 		{
-			.buf = frag->data - net_pkt_ll_reserve(pkt),
+			.buf = frag->data,
 			.len = payload_len
 		}
 	};
@@ -1104,8 +1104,7 @@ static int mcr20a_tx(struct device *dev,
 
 	k_mutex_lock(&mcr20a->phy_mutex, K_FOREVER);
 
-	LOG_DBG("%p (%u)",
-		    frag, net_pkt_ll_reserve(pkt) + frag->len);
+	LOG_DBG("%p (%u)", frag, frag->len);
 
 	if (!mcr20a_mask_irqb(mcr20a, true)) {
 		LOG_ERR("Failed to mask IRQ_B");
@@ -1258,7 +1257,7 @@ static int mcr20a_update_overwrites(struct mcr20a_context *dev)
 	     i < sizeof(overwrites_indirect) / sizeof(overwrites_t);
 	     i++) {
 
-		if (!_mcr20a_write_reg(dev, true,
+		if (!_mcr20a_write_reg(dev, false,
 				       overwrites_indirect[i].address,
 				       overwrites_indirect[i].data)) {
 			goto error;
@@ -1344,7 +1343,7 @@ static inline int configure_gpios(struct device *dev)
 	mcr20a->irq_gpio = device_get_binding(DT_MCR20A_GPIO_IRQ_B_NAME);
 	if (mcr20a->irq_gpio == NULL) {
 		LOG_ERR("Failed to get pointer to %s device",
-			    DT_MCR20A_GPIO_IRQ_B_NAME);
+			DT_MCR20A_GPIO_IRQ_B_NAME);
 		return -EINVAL;
 	}
 
@@ -1354,17 +1353,20 @@ static inline int configure_gpios(struct device *dev)
 			   GPIO_PUD_PULL_UP |
 			   GPIO_INT_ACTIVE_LOW);
 
-	/* setup gpio for the modems reset */
-	mcr20a->reset_gpio = device_get_binding(DT_MCR20A_GPIO_RESET_NAME);
-	if (mcr20a->reset_gpio == NULL) {
-		LOG_ERR("Failed to get pointer to %s device",
-			    DT_MCR20A_GPIO_RESET_NAME);
-		return -EINVAL;
-	}
+	if (!PART_OF_KW2XD_SIP) {
+		/* setup gpio for the modems reset */
+		mcr20a->reset_gpio = device_get_binding(
+					DT_MCR20A_GPIO_RESET_NAME);
+		if (mcr20a->reset_gpio == NULL) {
+			LOG_ERR("Failed to get pointer to %s device",
+				DT_MCR20A_GPIO_RESET_NAME);
+			return -EINVAL;
+		}
 
-	gpio_pin_configure(mcr20a->reset_gpio, DT_MCR20A_GPIO_RESET_PIN,
-			   GPIO_DIR_OUT);
-	set_reset(dev, 1);
+		gpio_pin_configure(mcr20a->reset_gpio, DT_MCR20A_GPIO_RESET_PIN,
+				   GPIO_DIR_OUT);
+		set_reset(dev, 0);
+	}
 
 	return 0;
 }
@@ -1373,8 +1375,7 @@ static inline int configure_spi(struct device *dev)
 {
 	struct mcr20a_context *mcr20a = dev->driver_data;
 
-	mcr20a->spi = device_get_binding(
-			DT_IEEE802154_MCR20A_SPI_DRV_NAME);
+	mcr20a->spi = device_get_binding(DT_IEEE802154_MCR20A_SPI_DRV_NAME);
 	if (!mcr20a->spi) {
 		LOG_ERR("Unable to get SPI device");
 		return -ENODEV;
@@ -1394,8 +1395,8 @@ static inline int configure_spi(struct device *dev)
 	mcr20a->spi_cfg.cs = &mcr20a->cs_ctrl;
 
 	LOG_DBG("SPI GPIO CS configured on %s:%u",
-		    DT_IEEE802154_MCR20A_GPIO_SPI_CS_DRV_NAME,
-		    DT_IEEE802154_MCR20A_GPIO_SPI_CS_PIN);
+		DT_IEEE802154_MCR20A_GPIO_SPI_CS_DRV_NAME,
+		DT_IEEE802154_MCR20A_GPIO_SPI_CS_PIN);
 #endif /* CONFIG_IEEE802154_MCR20A_GPIO_SPI_CS */
 
 	mcr20a->spi_cfg.frequency = DT_IEEE802154_MCR20A_SPI_FREQ;
@@ -1403,8 +1404,8 @@ static inline int configure_spi(struct device *dev)
 	mcr20a->spi_cfg.slave = DT_IEEE802154_MCR20A_SPI_SLAVE;
 
 	LOG_DBG("SPI configured %s, %d",
-		    DT_IEEE802154_MCR20A_SPI_DRV_NAME,
-		    DT_IEEE802154_MCR20A_SPI_SLAVE);
+		DT_IEEE802154_MCR20A_SPI_DRV_NAME,
+		DT_IEEE802154_MCR20A_SPI_SLAVE);
 
 	return 0;
 }

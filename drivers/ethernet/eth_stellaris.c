@@ -65,12 +65,6 @@ static int eth_stellaris_send(struct device *dev, struct net_pkt *pkt)
 	u16_t head_len_left, i, data_len;
 	u8_t *eth_hdr;
 
-	if (!pkt->frags) {
-		LOG_ERR("No data to send");
-		net_pkt_unref(pkt);
-		return -ENODATA;
-	}
-
 	/* Frame transmission
 	 * First two bytes are data_len for frame,
 	 * Initially send the data_len
@@ -78,13 +72,6 @@ static int eth_stellaris_send(struct device *dev, struct net_pkt *pkt)
 	data_len = net_pkt_get_len(pkt);
 	eth_stellaris_send_byte(dev, data_len & 0xff);
 	eth_stellaris_send_byte(dev, (data_len & 0xff00) >> 8);
-
-	/* Send the header, header is 14 bytes */
-	head_len_left = net_pkt_ll_reserve(pkt);
-	eth_hdr = net_pkt_ll(pkt);
-	for (i = 0; i < head_len_left; ++i) {
-		eth_stellaris_send_byte(dev, eth_hdr[i]);
-	}
 
 	/* Send the payload */
 	for (frag = pkt->frags; frag; frag = frag->frags) {
@@ -104,27 +91,10 @@ static int eth_stellaris_send(struct device *dev, struct net_pkt *pkt)
 
 	if (dev_data->tx_err) {
 		dev_data->tx_err = false;
-		net_pkt_unref(pkt);
 		return -EIO;
 	}
 
-	if (IS_ENABLED(CONFIG_NET_STATISTICS_ETHERNET)) {
-		struct net_eth_hdr *pkt_hdr;
-
-		/* Update statistics counters */
-		eth_stats_update_bytes_tx(net_pkt_iface(pkt),
-					  data_len);
-		eth_stats_update_pkts_tx(net_pkt_iface(pkt));
-		pkt_hdr = NET_ETH_HDR(pkt);
-		if (net_eth_is_addr_multicast(&pkt_hdr->dst)) {
-			eth_stats_update_multicast_tx(net_pkt_iface(pkt));
-		} else if (net_eth_is_addr_broadcast(&pkt_hdr->dst)) {
-			eth_stats_update_broadcast_tx(net_pkt_iface(pkt));
-		}
-	}
-
-	LOG_DBG("pkt send %p len %d", pkt, net_pkt_get_len(pkt));
-	net_pkt_unref(pkt);
+	LOG_DBG("pkt sent %p len %d", pkt, data_len);
 
 	return 0;
 }
@@ -223,7 +193,7 @@ static void eth_stellaris_rx(struct device *dev)
 	int frame_len, ret;
 
 	/* Obtain the packet to be populated. */
-	pkt = net_pkt_get_reserve_rx(0, K_NO_WAIT);
+	pkt = net_pkt_get_reserve_rx(K_NO_WAIT);
 	if (!pkt) {
 		LOG_ERR("Could not allocate pkt");
 		goto err_mem;
@@ -239,20 +209,6 @@ static void eth_stellaris_rx(struct device *dev)
 	if (ret < 0) {
 		LOG_ERR("Failed to place frame in RX Queue");
 		goto pkt_unref;
-	}
-
-	if (IS_ENABLED(CONFIG_NET_STATISTICS_ETHERNET)) {
-		struct net_eth_hdr *pkt_hdr;
-
-		/* Update statistics counters */
-		eth_stats_update_bytes_rx(iface, frame_len - 6);
-		eth_stats_update_pkts_rx(iface);
-		pkt_hdr = NET_ETH_HDR(pkt);
-		if (net_eth_is_addr_broadcast(&pkt_hdr->dst)) {
-			eth_stats_update_broadcast_rx(iface);
-		} else if (net_eth_is_addr_multicast(&pkt_hdr->dst)) {
-			eth_stats_update_multicast_rx(iface);
-		}
 	}
 
 	return;

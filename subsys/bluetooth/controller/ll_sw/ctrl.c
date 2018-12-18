@@ -302,8 +302,8 @@ static u8_t conn_update(struct connection *conn, struct pdu_data *pdu_data_rx);
 static u32_t conn_update_req(struct connection *conn);
 #endif /* CONFIG_BT_CTLR_XTAL_ADVANCED && CONFIG_BT_CTLR_SCHED_ADVANCED */
 
-static u32_t chan_map_update(struct connection *conn,
-			     struct pdu_data *pdu_data_rx);
+static u8_t chan_map_update(struct connection *conn,
+			    struct pdu_data *pdu_data_rx);
 
 #if defined(CONFIG_BT_CTLR_PHY)
 static inline u8_t phy_upd_ind_recv(struct radio_pdu_node_rx *node_rx,
@@ -2452,17 +2452,21 @@ isr_rx_conn_pkt_ctrl(struct radio_pdu_node_rx *node_rx, u8_t *rx_enqueue)
 	break;
 
 	case PDU_DATA_LLCTRL_TYPE_CHAN_MAP_IND:
+	{
+		u8_t err;
+
 		if (!_radio.conn_curr->role ||
 		    !pdu_len_cmp(PDU_DATA_LLCTRL_TYPE_CHAN_MAP_IND,
 				 pdu_data_rx->len)) {
 			goto isr_rx_conn_unknown_rsp_send;
 		}
 
-		if (chan_map_update(_radio.conn_curr, pdu_data_rx)) {
-			_radio.conn_curr->llcp_terminate.reason_peer =
-				BT_HCI_ERR_INSTANT_PASSED;
+		err = chan_map_update(_radio.conn_curr, pdu_data_rx);
+		if (err) {
+			_radio.conn_curr->llcp_terminate.reason_peer = err;
 		}
-		break;
+	}
+	break;
 
 	case PDU_DATA_LLCTRL_TYPE_TERMINATE_IND:
 		if (!pdu_len_cmp(PDU_DATA_LLCTRL_TYPE_TERMINATE_IND,
@@ -7468,7 +7472,7 @@ static inline void event_conn_param_rsp(struct connection *conn)
 		conn->llcp.conn_upd.win_offset_us = 0U;
 		if (conn->llcp_conn_param.preferred_periodicity) {
 			conn->llcp.conn_upd.interval =
-				((conn->llcp_conn_param.interval_max /
+				((conn->llcp_conn_param.interval_min /
 				  conn->llcp_conn_param.preferred_periodicity) +
 				 1) *
 				conn->llcp_conn_param.preferred_periodicity;
@@ -9334,15 +9338,19 @@ static u32_t conn_update_req(struct connection *conn)
 }
 #endif /* CONFIG_BT_CTLR_XTAL_ADVANCED && CONFIG_BT_CTLR_SCHED_ADVANCED */
 
-static u32_t chan_map_update(struct connection *conn,
-			     struct pdu_data *pdu_data_rx)
+static u8_t chan_map_update(struct connection *conn,
+			    struct pdu_data *pdu_data_rx)
 {
 	if (((pdu_data_rx->llctrl.chan_map_ind.instant -
 	      conn->event_counter) & 0xffff) > 0x7fff) {
-		return 1;
+		return BT_HCI_ERR_INSTANT_PASSED;
 	}
 
-	LL_ASSERT(conn->llcp_req == conn->llcp_ack);
+	/* different transaction collision */
+	if (conn->llcp_req != conn->llcp_ack) {
+		return BT_HCI_ERR_DIFF_TRANS_COLLISION;
+	}
+
 
 	memcpy(&conn->llcp.chan_map.chm[0],
 	       &pdu_data_rx->llctrl.chan_map_ind.chm[0],

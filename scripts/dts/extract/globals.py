@@ -15,6 +15,9 @@ chosen = {}
 reduced = {}
 defs = {}
 structs = {}
+bindings = {}
+bus_bindings = {}
+bindings_compat = []
 old_alias_names = False
 
 regs_config = {
@@ -25,6 +28,7 @@ regs_config = {
 
 name_config = {
     'zephyr,console'     : 'CONFIG_UART_CONSOLE_ON_DEV_NAME',
+    'zephyr,shell-uart'  : 'CONFIG_UART_SHELL_ON_DEV_NAME',
     'zephyr,bt-uart'     : 'CONFIG_BT_UART_ON_DEV_NAME',
     'zephyr,uart-pipe'   : 'CONFIG_UART_PIPE_ON_DEV_NAME',
     'zephyr,bt-mon-uart' : 'CONFIG_BT_MONITOR_ON_DEV_NAME',
@@ -273,7 +277,7 @@ def enable_old_alias_names(enable):
     global old_alias_names
     old_alias_names = enable
 
-def add_prop_aliases(node_address, yaml,
+def add_prop_aliases(node_address,
                      alias_label_function, prop_label, prop_aliases):
     node_compat = get_compat(node_address)
     new_alias_prefix = 'DT_' + convert_string_to_label(node_compat)
@@ -286,3 +290,25 @@ def add_prop_aliases(node_address, yaml,
             prop_aliases[new_alias_label] = prop_label
         if (old_alias_names and old_alias_label != prop_label):
             prop_aliases[old_alias_label] = prop_label
+
+def get_binding(node_address):
+    compat = get_compat(node_address)
+
+    # For just look for the binding in the main dict
+    # if we find it here, return it, otherwise it best
+    # be in the bus specific dict
+    if compat in bindings:
+        return bindings[compat]
+
+    parent_addr = get_parent_address(node_address)
+    parent_compat = get_compat(parent_addr)
+
+    parent_binding = bindings[parent_compat]
+
+    bus = parent_binding['child']['bus']
+    binding = bus_bindings[bus][compat]
+
+    return binding
+
+def get_binding_compats():
+    return bindings_compat

@@ -10,15 +10,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define LOG_MODULE_NAME net_pkt
-#define NET_LOG_LEVEL CONFIG_NET_PKT_LOG_LEVEL
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_pkt, CONFIG_NET_PKT_LOG_LEVEL);
 
 /* This enables allocation debugging but does not print so much output
  * as that can slow things down a lot.
  */
-#if defined(CONFIG_NET_DEBUG_NET_PKT_ALL)
 #undef NET_LOG_LEVEL
+#if defined(CONFIG_NET_DEBUG_NET_PKT_ALLOC)
 #define NET_LOG_LEVEL 5
+#else
+#define NET_LOG_LEVEL CONFIG_NET_PKT_LOG_LEVEL
 #endif
 
 #include <kernel.h>
@@ -87,16 +89,8 @@ NET_PKT_SLAB_DEFINE(tx_pkts, CONFIG_NET_PKT_TX_COUNT);
 NET_PKT_DATA_POOL_DEFINE(rx_bufs, CONFIG_NET_BUF_RX_COUNT);
 NET_PKT_DATA_POOL_DEFINE(tx_bufs, CONFIG_NET_BUF_TX_COUNT);
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
-
-#define NET_FRAG_CHECK_IF_NOT_IN_USE(frag, ref)				\
-	do {								\
-		if (!(ref)) {                                           \
-			NET_ERR("**ERROR** frag %p not in use (%s:%s():%d)", \
-				frag, __FILE__, __func__, __LINE__);     \
-		}                                                       \
-	} while (0)
-
+/* Allocation tracking is only available if separately enabled */
+#if defined(CONFIG_NET_DEBUG_NET_PKT_ALLOC)
 struct net_pkt_alloc {
 	union {
 		struct net_pkt *pkt;
@@ -119,7 +113,7 @@ struct net_pkt_alloc {
 
 static struct net_pkt_alloc net_pkt_allocs[MAX_NET_PKT_ALLOCS];
 
-static bool net_pkt_alloc_add(void *alloc_data, bool is_pkt,
+static void net_pkt_alloc_add(void *alloc_data, bool is_pkt,
 			      const char *func, int line)
 {
 	int i;
@@ -135,13 +129,11 @@ static bool net_pkt_alloc_add(void *alloc_data, bool is_pkt,
 		net_pkt_allocs[i].func_alloc = func;
 		net_pkt_allocs[i].line_alloc = line;
 
-		return true;
+		return;
 	}
-
-	return false;
 }
 
-static bool net_pkt_alloc_del(void *alloc_data, const char *func, int line)
+static void net_pkt_alloc_del(void *alloc_data, const char *func, int line)
 {
 	int i;
 
@@ -152,11 +144,9 @@ static bool net_pkt_alloc_del(void *alloc_data, const char *func, int line)
 			net_pkt_allocs[i].line_free = line;
 			net_pkt_allocs[i].in_use = false;
 
-			return true;
+			return;
 		}
 	}
-
-	return false;
 }
 
 static bool net_pkt_alloc_find(void *alloc_data,
@@ -212,6 +202,22 @@ void net_pkt_allocs_foreach(net_pkt_allocs_cb_t cb, void *user_data)
 		}
 	}
 }
+#else
+#define net_pkt_alloc_add(alloc_data, is_pkt, func, line)
+#define net_pkt_alloc_del(alloc_data, func, line)
+#define net_pkt_alloc_find(alloc_data, func_free, line_free) false
+#endif /* CONFIG_NET_DEBUG_NET_PKT_ALLOC */
+
+#if defined(CONFIG_NET_DEBUG_NET_PKT_ALLOC) || \
+	CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+
+#define NET_FRAG_CHECK_IF_NOT_IN_USE(frag, ref)				\
+	do {								\
+		if (!(ref)) {                                           \
+			NET_ERR("**ERROR** frag %p not in use (%s:%s():%d)", \
+				frag, __FILE__, __func__, __LINE__);     \
+		}                                                       \
+	} while (0)
 
 const char *net_pkt_slab2str(struct k_mem_slab *slab)
 {
@@ -234,7 +240,10 @@ const char *net_pkt_pool2str(struct net_buf_pool *pool)
 
 	return "EDATA";
 }
+#endif
 
+#if defined(CONFIG_NET_DEBUG_NET_PKT_ALLOC) || \
+	CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
 static inline s16_t get_frees(struct net_buf_pool *pool)
 {
 #if defined(CONFIG_NET_BUF_POOL_USAGE)
@@ -243,7 +252,9 @@ static inline s16_t get_frees(struct net_buf_pool *pool)
 	return 0;
 #endif
 }
+#endif
 
+#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
 static inline const char *get_name(struct net_buf_pool *pool)
 {
 #if defined(CONFIG_NET_BUF_POOL_USAGE)
@@ -276,7 +287,7 @@ void net_pkt_print_frags(struct net_pkt *pkt)
 {
 	struct net_buf *frag;
 	size_t total = 0;
-	int count = 0, frag_size = 0, ll_overhead = 0;
+	int count = 0, frag_size = 0;
 
 	if (!pkt) {
 		NET_INFO("pkt %p", pkt);
@@ -292,10 +303,9 @@ void net_pkt_print_frags(struct net_pkt *pkt)
 		total += frag->len;
 
 		frag_size = frag->size;
-		ll_overhead = net_buf_headroom(frag);
 
-		NET_INFO("[%d] frag %p len %d size %d reserve %d pool %p",
-			 count, frag, frag->len, frag_size, ll_overhead,
+		NET_INFO("[%d] frag %p len %d size %d pool %p",
+			 count, frag, frag->len, frag_size,
 			 net_buf_pool_get(frag->pool_id));
 
 		count++;
@@ -303,22 +313,22 @@ void net_pkt_print_frags(struct net_pkt *pkt)
 		frag = frag->frags;
 	}
 
-	NET_INFO("Total data size %zu, occupied %d bytes, ll overhead %d, "
-		 "utilization %zu%%",
-		 total, count * frag_size - count * ll_overhead,
-		 count * ll_overhead, count ? (total * 100) / (count * frag_size) : 0);
+	NET_INFO("Total data size %zu, occupied %d bytes, utilization %zu%%",
+		 total, count * frag_size,
+		 count ? (total * 100) / (count * frag_size) : 0);
 }
+#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 
 struct net_pkt *net_pkt_get_reserve_debug(struct k_mem_slab *slab,
-					  u16_t reserve_head,
 					  s32_t timeout,
 					  const char *caller,
 					  int line)
-#else /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#else /* #if NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 struct net_pkt *net_pkt_get_reserve(struct k_mem_slab *slab,
-				    u16_t reserve_head,
 				    s32_t timeout)
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* #if NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 {
 	struct net_pkt *pkt;
 	int ret;
@@ -335,35 +345,31 @@ struct net_pkt *net_pkt_get_reserve(struct k_mem_slab *slab,
 
 	(void)memset(pkt, 0, sizeof(struct net_pkt));
 
-	net_pkt_set_ll_reserve(pkt, reserve_head);
-
 	pkt->ref = 1;
 	pkt->slab = slab;
 
 	net_pkt_set_priority(pkt, CONFIG_NET_TX_DEFAULT_PRIORITY);
 	net_pkt_set_vlan_tag(pkt, NET_VLAN_TAG_UNSPEC);
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
 	net_pkt_alloc_add(pkt, true, caller, line);
 
-	NET_DBG("%s [%u] pkt %p reserve %u ref %d (%s():%d)",
+#if NET_LOG_LEVEL == LOG_LEVEL_DBG
+	NET_DBG("%s [%u] pkt %p ref %d (%s():%d)",
 		slab2str(slab), k_mem_slab_num_free_get(slab),
-		pkt, reserve_head, pkt->ref, caller, line);
+		pkt, pkt->ref, caller, line);
 #endif
 	return pkt;
 }
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 struct net_buf *net_pkt_get_reserve_data_debug(struct net_buf_pool *pool,
-					       u16_t reserve_head,
 					       s32_t timeout,
 					       const char *caller,
 					       int line)
-#else /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#else /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 struct net_buf *net_pkt_get_reserve_data(struct net_buf_pool *pool,
-					 u16_t reserve_head,
 					 s32_t timeout)
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 {
 	struct net_buf *frag;
 
@@ -382,16 +388,16 @@ struct net_buf *net_pkt_get_reserve_data(struct net_buf_pool *pool,
 		return NULL;
 	}
 
-	net_buf_reserve(frag, reserve_head);
-
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 	NET_FRAG_CHECK_IF_NOT_IN_USE(frag, frag->ref + 1);
+#endif
 
 	net_pkt_alloc_add(frag, false, caller, line);
 
-	NET_DBG("%s (%s) [%d] frag %p reserve %u ref %d (%s():%d)",
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
+	NET_DBG("%s (%s) [%d] frag %p ref %d (%s():%d)",
 		pool2str(pool), get_name(pool), get_frees(pool),
-		frag, reserve_head, frag->ref, caller, line);
+		frag, frag->ref, caller, line);
 #endif
 
 	return frag;
@@ -400,7 +406,7 @@ struct net_buf *net_pkt_get_reserve_data(struct net_buf_pool *pool,
 /* Get a fragment, try to figure out the pool from where to get
  * the data.
  */
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 struct net_buf *net_pkt_get_frag_debug(struct net_pkt *pkt,
 				       s32_t timeout,
 				       const char *caller, int line)
@@ -414,100 +420,82 @@ struct net_buf *net_pkt_get_frag(struct net_pkt *pkt,
 
 	context = net_pkt_context(pkt);
 	if (context && context->data_pool) {
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 		return net_pkt_get_reserve_data_debug(context->data_pool(),
-						      net_pkt_ll_reserve(pkt),
 						      timeout, caller, line);
 #else
-		return net_pkt_get_reserve_data(context->data_pool(),
-						net_pkt_ll_reserve(pkt),
-						timeout);
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+		return net_pkt_get_reserve_data(context->data_pool(), timeout);
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 	}
 #endif /* CONFIG_NET_CONTEXT_NET_PKT_POOL */
 
 	if (pkt->slab == &rx_pkts) {
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
-		return net_pkt_get_reserve_rx_data_debug(
-			net_pkt_ll_reserve(pkt), timeout, caller, line);
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
+		return net_pkt_get_reserve_rx_data_debug(timeout,
+							 caller, line);
 #else
-		return net_pkt_get_reserve_rx_data(net_pkt_ll_reserve(pkt),
-						   timeout);
+		return net_pkt_get_reserve_rx_data(timeout);
 #endif
 	}
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
-	return net_pkt_get_reserve_tx_data_debug(net_pkt_ll_reserve(pkt),
-						 timeout, caller, line);
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
+	return net_pkt_get_reserve_tx_data_debug(timeout, caller, line);
 #else
-	return net_pkt_get_reserve_tx_data(net_pkt_ll_reserve(pkt),
-					   timeout);
+	return net_pkt_get_reserve_tx_data(timeout);
 #endif
 }
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
-struct net_pkt *net_pkt_get_reserve_rx_debug(u16_t reserve_head,
-					     s32_t timeout,
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
+struct net_pkt *net_pkt_get_reserve_rx_debug(s32_t timeout,
 					     const char *caller, int line)
 {
-	return net_pkt_get_reserve_debug(&rx_pkts, reserve_head, timeout,
-					 caller, line);
+	return net_pkt_get_reserve_debug(&rx_pkts, timeout, caller, line);
 }
 
-struct net_pkt *net_pkt_get_reserve_tx_debug(u16_t reserve_head,
-					     s32_t timeout,
+struct net_pkt *net_pkt_get_reserve_tx_debug(s32_t timeout,
 					     const char *caller, int line)
 {
-	return net_pkt_get_reserve_debug(&tx_pkts, reserve_head, timeout,
-					 caller, line);
+	return net_pkt_get_reserve_debug(&tx_pkts, timeout, caller, line);
 }
 
-struct net_buf *net_pkt_get_reserve_rx_data_debug(u16_t reserve_head,
-						  s32_t timeout,
+struct net_buf *net_pkt_get_reserve_rx_data_debug(s32_t timeout,
 						  const char *caller, int line)
 {
-	return net_pkt_get_reserve_data_debug(&rx_bufs, reserve_head,
-					      timeout, caller, line);
+	return net_pkt_get_reserve_data_debug(&rx_bufs, timeout, caller, line);
 }
 
-struct net_buf *net_pkt_get_reserve_tx_data_debug(u16_t reserve_head,
-						  s32_t timeout,
+struct net_buf *net_pkt_get_reserve_tx_data_debug(s32_t timeout,
 						  const char *caller, int line)
 {
-	return net_pkt_get_reserve_data_debug(&tx_bufs, reserve_head,
-					      timeout, caller, line);
+	return net_pkt_get_reserve_data_debug(&tx_bufs, timeout, caller, line);
 }
 
-#else /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#else /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 
-struct net_pkt *net_pkt_get_reserve_rx(u16_t reserve_head,
-				       s32_t timeout)
+struct net_pkt *net_pkt_get_reserve_rx(s32_t timeout)
 {
-	return net_pkt_get_reserve(&rx_pkts, reserve_head, timeout);
+	return net_pkt_get_reserve(&rx_pkts, timeout);
 }
 
-struct net_pkt *net_pkt_get_reserve_tx(u16_t reserve_head,
-				       s32_t timeout)
+struct net_pkt *net_pkt_get_reserve_tx(s32_t timeout)
 {
-	return net_pkt_get_reserve(&tx_pkts, reserve_head, timeout);
+	return net_pkt_get_reserve(&tx_pkts, timeout);
 }
 
-struct net_buf *net_pkt_get_reserve_rx_data(u16_t reserve_head,
-					    s32_t timeout)
+struct net_buf *net_pkt_get_reserve_rx_data(s32_t timeout)
 {
-	return net_pkt_get_reserve_data(&rx_bufs, reserve_head, timeout);
+	return net_pkt_get_reserve_data(&rx_bufs, timeout);
 }
 
-struct net_buf *net_pkt_get_reserve_tx_data(u16_t reserve_head,
-					    s32_t timeout)
+struct net_buf *net_pkt_get_reserve_tx_data(s32_t timeout)
 {
-	return net_pkt_get_reserve_data(&tx_bufs, reserve_head, timeout);
+	return net_pkt_get_reserve_data(&tx_bufs, timeout);
 }
 
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 static struct net_pkt *net_pkt_get_debug(struct k_mem_slab *slab,
 					 struct net_context *context,
 					 s32_t timeout,
@@ -516,7 +504,7 @@ static struct net_pkt *net_pkt_get_debug(struct k_mem_slab *slab,
 static struct net_pkt *net_pkt_get(struct k_mem_slab *slab,
 				   struct net_context *context,
 				   s32_t timeout)
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 {
 	struct in6_addr *addr6 = NULL;
 	struct net_if *iface;
@@ -537,13 +525,10 @@ static struct net_pkt *net_pkt_get(struct k_mem_slab *slab,
 		addr6 = &((struct sockaddr_in6 *) &context->remote)->sin6_addr;
 	}
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
-	pkt = net_pkt_get_reserve_debug(slab,
-					net_if_get_ll_reserve(iface, addr6),
-					timeout, caller, line);
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
+	pkt = net_pkt_get_reserve_debug(slab, timeout, caller, line);
 #else
-	pkt = net_pkt_get_reserve(slab, net_if_get_ll_reserve(iface, addr6),
-				  timeout);
+	pkt = net_pkt_get_reserve(slab, timeout);
 #endif
 	if (!pkt) {
 		return NULL;
@@ -606,7 +591,7 @@ static struct net_pkt *net_pkt_get(struct k_mem_slab *slab,
 	return pkt;
 }
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 static struct net_buf *_pkt_get_data_debug(struct net_buf_pool *pool,
 					   struct net_context *context,
 					   s32_t timeout,
@@ -615,7 +600,7 @@ static struct net_buf *_pkt_get_data_debug(struct net_buf_pool *pool,
 static struct net_buf *_pkt_get_data(struct net_buf_pool *pool,
 				     struct net_context *context,
 				     s32_t timeout)
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 {
 	struct in6_addr *addr6 = NULL;
 	struct net_if *iface;
@@ -635,15 +620,10 @@ static struct net_buf *_pkt_get_data(struct net_buf_pool *pool,
 		addr6 = &((struct sockaddr_in6 *) &context->remote)->sin6_addr;
 	}
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
-	frag = net_pkt_get_reserve_data_debug(pool,
-					      net_if_get_ll_reserve(iface,
-								    addr6),
-					      timeout, caller, line);
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
+	frag = net_pkt_get_reserve_data_debug(pool, timeout, caller, line);
 #else
-	frag = net_pkt_get_reserve_data(pool,
-					net_if_get_ll_reserve(iface, addr6),
-					timeout);
+	frag = net_pkt_get_reserve_data(pool, timeout);
 #endif
 	return frag;
 }
@@ -672,7 +652,7 @@ static inline struct net_buf_pool *get_data_pool(struct net_context *context)
 #define get_data_pool(...) NULL
 #endif /* CONFIG_NET_CONTEXT_NET_PKT_POOL */
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 struct net_pkt *net_pkt_get_rx_debug(struct net_context *context,
 				     s32_t timeout,
 				     const char *caller, int line)
@@ -700,7 +680,7 @@ struct net_buf *net_pkt_get_data_debug(struct net_context *context,
 				   timeout, caller, line);
 }
 
-#else /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#else /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 
 struct net_pkt *net_pkt_get_rx(struct net_context *context, s32_t timeout)
 {
@@ -734,10 +714,10 @@ struct net_buf *net_pkt_get_data(struct net_context *context, s32_t timeout)
 	return _pkt_get_data(pool ? pool : &tx_bufs, context, timeout);
 }
 
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 void net_pkt_unref_debug(struct net_pkt *pkt, const char *caller, int line)
 {
 	struct net_buf *frag;
@@ -745,16 +725,16 @@ void net_pkt_unref_debug(struct net_pkt *pkt, const char *caller, int line)
 #else
 void net_pkt_unref(struct net_pkt *pkt)
 {
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 	if (!pkt) {
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 		NET_ERR("*** ERROR *** pkt %p (%s():%d)", pkt, caller, line);
 #endif
 		return;
 	}
 
 	if (!pkt->ref) {
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 		const char *func_freed;
 		int line_freed;
 
@@ -770,22 +750,25 @@ void net_pkt_unref(struct net_pkt *pkt)
 		return;
 	}
 
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 #if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
 	NET_DBG("%s [%d] pkt %p ref %d frags %p (%s():%d)",
 		slab2str(pkt->slab), k_mem_slab_num_free_get(pkt->slab),
 		pkt, pkt->ref - 1, pkt->frags, caller, line);
-
+#endif
 	if (pkt->ref > 1) {
 		goto done;
 	}
 
 	frag = pkt->frags;
 	while (frag) {
+#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
 		NET_DBG("%s (%s) [%d] frag %p ref %d frags %p (%s():%d)",
 			pool2str(net_buf_pool_get(frag->pool_id)),
 			get_name(net_buf_pool_get(frag->pool_id)),
 			get_frees(net_buf_pool_get(frag->pool_id)), frag,
 			frag->ref - 1, frag->frags, caller, line);
+#endif
 
 		if (!frag->ref) {
 			const char *func_freed;
@@ -810,9 +793,9 @@ void net_pkt_unref(struct net_pkt *pkt)
 	}
 
 	net_pkt_alloc_del(pkt, caller, line);
-
 done:
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
+
 	if (--pkt->ref > 0) {
 		return;
 	}
@@ -824,15 +807,15 @@ done:
 	k_mem_slab_free(pkt->slab, (void **)&pkt);
 }
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 struct net_pkt *net_pkt_ref_debug(struct net_pkt *pkt, const char *caller,
 				  int line)
 #else
 struct net_pkt *net_pkt_ref(struct net_pkt *pkt)
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 {
 	if (!pkt) {
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 		NET_ERR("*** ERROR *** pkt %p (%s():%d)", pkt, caller, line);
 #endif
 		return NULL;
@@ -849,15 +832,15 @@ struct net_pkt *net_pkt_ref(struct net_pkt *pkt)
 	return pkt;
 }
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 struct net_buf *net_pkt_frag_ref_debug(struct net_buf *frag,
 				       const char *caller, int line)
 #else
 struct net_buf *net_pkt_frag_ref(struct net_buf *frag)
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 {
 	if (!frag) {
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 		NET_ERR("*** ERROR *** frag %p (%s():%d)", frag, caller, line);
 #endif
 		return NULL;
@@ -875,15 +858,15 @@ struct net_buf *net_pkt_frag_ref(struct net_buf *frag)
 }
 
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 void net_pkt_frag_unref_debug(struct net_buf *frag,
 			      const char *caller, int line)
 #else
 void net_pkt_frag_unref(struct net_buf *frag)
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* NET_LOG_LEVEL >= LOG_LEVEL_DBG */
 {
 	if (!frag) {
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 		NET_ERR("*** ERROR *** frag %p (%s():%d)", frag, caller, line);
 #endif
 		return;
@@ -895,15 +878,16 @@ void net_pkt_frag_unref(struct net_buf *frag)
 		get_name(net_buf_pool_get(frag->pool_id)),
 		get_frees(net_buf_pool_get(frag->pool_id)),
 		frag, frag->ref - 1, caller, line);
+#endif
 
 	if (frag->ref == 1) {
 		net_pkt_alloc_del(frag, caller, line);
 	}
-#endif
+
 	net_buf_unref(frag);
 }
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 struct net_buf *net_pkt_frag_del_debug(struct net_pkt *pkt,
 				       struct net_buf *parent,
 				       struct net_buf *frag,
@@ -917,14 +901,14 @@ struct net_buf *net_pkt_frag_del(struct net_pkt *pkt,
 #if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
 	NET_DBG("pkt %p parent %p frag %p ref %u (%s:%d)",
 		pkt, parent, frag, frag->ref, caller, line);
-
-	if (frag->ref == 1) {
-		net_pkt_alloc_del(frag, caller, line);
-	}
 #endif
 
 	if (pkt->frags == frag && !parent) {
 		struct net_buf *tmp;
+
+		if (frag->ref == 1) {
+			net_pkt_alloc_del(frag, caller, line);
+		}
 
 		tmp = net_buf_frag_del(NULL, frag);
 		pkt->frags = tmp;
@@ -932,10 +916,14 @@ struct net_buf *net_pkt_frag_del(struct net_pkt *pkt,
 		return tmp;
 	}
 
+	if (frag->ref == 1) {
+		net_pkt_alloc_del(frag, caller, line);
+	}
+
 	return net_buf_frag_del(parent, frag);
 }
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 void net_pkt_frag_add_debug(struct net_pkt *pkt, struct net_buf *frag,
 			    const char *caller, int line)
 #else
@@ -957,7 +945,7 @@ void net_pkt_frag_add(struct net_pkt *pkt, struct net_buf *frag)
 	net_buf_frag_insert(net_buf_frag_last(pkt->frags), frag);
 }
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 void net_pkt_frag_insert_debug(struct net_pkt *pkt, struct net_buf *frag,
 			       const char *caller, int line)
 #else
@@ -1972,7 +1960,7 @@ int net_pkt_get_dst_addr(struct net_pkt *pkt, struct sockaddr *addr,
 	return net_pkt_get_addr(pkt, false, addr, addrlen);
 }
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if defined(CONFIG_NET_DEBUG_NET_PKT_ALLOC)
 void net_pkt_print(void)
 {
 	NET_DBG("TX %u RX %u RDATA %d TDATA %d",
@@ -1980,7 +1968,7 @@ void net_pkt_print(void)
 		k_mem_slab_num_free_get(&rx_pkts),
 		get_frees(&rx_bufs), get_frees(&tx_bufs));
 }
-#endif /* CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG */
+#endif /* CONFIG_NET_DEBUG_NET_PKT_ALLOC */
 
 struct net_buf *net_frag_get_pos(struct net_pkt *pkt,
 				 u16_t offset,
@@ -2139,7 +2127,7 @@ struct net_pkt *net_pkt_clone(struct net_pkt *pkt, s32_t timeout)
 		return NULL;
 	}
 
-	clone = net_pkt_get_reserve(pkt->slab, 0, timeout);
+	clone = net_pkt_get_reserve(pkt->slab, timeout);
 	if (!clone) {
 		return NULL;
 	}

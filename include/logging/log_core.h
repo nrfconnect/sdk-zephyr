@@ -25,6 +25,12 @@ extern "C" {
 #define CONFIG_LOG_MAX_LEVEL 0
 #endif
 
+#define LOG_FUNCTION_PREFIX_MASK \
+	((IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_ERR) << LOG_LEVEL_ERR) | \
+	 (IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_WRN) << LOG_LEVEL_WRN) | \
+	 (IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_INF) << LOG_LEVEL_INF) | \
+	 (IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_DBG) << LOG_LEVEL_DBG))
+
 /** @brief Macro for returning local level value if defined or default.
  *
  * Check @ref IS_ENABLED macro for detailed explanation of the trick.
@@ -55,8 +61,9 @@ extern "C" {
 /**
  * @brief Macro for conditional code generation if provided log level allows.
  *
- * Macro behaves similarly to standard #if #else #endif clause. The difference
- * is that it is evaluated when used and not when header file is included.
+ * Macro behaves similarly to standard \#if \#else \#endif clause. The
+ * difference is that it is evaluated when used and not when header file is
+ * included.
  *
  * @param _eval_level Evaluated level. If level evaluates to one of existing log
  *		      log level (1-4) then macro evaluates to _iftrue.
@@ -157,15 +164,13 @@ extern "C" {
  *	  argument. In order to handle string with no arguments _LOG_Z_EVAL is
  *	  used.
  */
-#if CONFIG_LOG_FUNCTION_NAME
+
 #define _LOG_STR(...) "%s: " __LOG_ARG_1(__VA_ARGS__), __func__\
 		_LOG_Z_EVAL(NUM_VA_ARGS_LESS_1(__VA_ARGS__),\
 			    (),\
 			    (, __LOG_ARGS_LESS1(__VA_ARGS__))\
 			   )
-#else
-#define _LOG_STR(...) __VA_ARGS__
-#endif
+
 
 /******************************************************************************/
 /****************** Internal macros for log frontend **************************/
@@ -242,7 +247,13 @@ extern "C" {
 				.domain_id = CONFIG_LOG_DOMAIN_ID,	    \
 				.source_id = _id			    \
 			};						    \
-			__LOG_INTERNAL(src_level, _LOG_STR(__VA_ARGS__));   \
+									    \
+			if ((1 << _level) & LOG_FUNCTION_PREFIX_MASK) {	    \
+				__LOG_INTERNAL(src_level,		    \
+						_LOG_STR(__VA_ARGS__));	    \
+			} else {					    \
+				__LOG_INTERNAL(src_level, __VA_ARGS__);	    \
+			}						    \
 		} else if (0) {						    \
 			/* Arguments checker present but never evaluated.*/ \
 			/* Placed here to ensure that __VA_ARGS__ are*/     \

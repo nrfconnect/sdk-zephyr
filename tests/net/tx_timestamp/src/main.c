@@ -6,8 +6,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define LOG_MODULE_NAME net_test
 #define NET_LOG_LEVEL CONFIG_NET_L2_ETHERNET_LOG_LEVEL
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_test, NET_LOG_LEVEL);
 
 #include <zephyr/types.h>
 #include <stdbool.h>
@@ -190,7 +192,7 @@ static void timestamp_setup(void)
 	timestamp_cb_called = false;
 	do_timestamp = false;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 	net_pkt_set_iface(pkt, iface);
 
 	/* Make sure that the callback function is called */
@@ -237,7 +239,7 @@ static void timestamp_setup_2nd_iface(void)
 	timestamp_cb_called = false;
 	do_timestamp = false;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 	net_pkt_set_iface(pkt, iface);
 
 	/* Make sure that the callback function is called */
@@ -257,7 +259,7 @@ static void timestamp_setup_all(void)
 	timestamp_cb_called = false;
 	do_timestamp = false;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 	net_pkt_set_iface(pkt, eth_interfaces[0]);
 
 	/* The callback is called twice because we have two matching callbacks
@@ -287,7 +289,7 @@ static void timestamp_cleanup(void)
 	timestamp_cb_called = false;
 	do_timestamp = false;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 	net_pkt_set_iface(pkt, iface);
 
 	/* Make sure that the callback function is not called after unregister

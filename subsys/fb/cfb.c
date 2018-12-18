@@ -162,7 +162,6 @@ static int cfb_invert(const struct char_framebuffer *fb)
 
 int cfb_framebuffer_clear(struct device *dev, bool clear_display)
 {
-	const struct display_driver_api *api = dev->driver_api;
 	const struct char_framebuffer *fb = &char_fb;
 	struct display_buffer_descriptor desc;
 
@@ -171,16 +170,24 @@ int cfb_framebuffer_clear(struct device *dev, bool clear_display)
 	}
 
 	desc.buf_size = fb->size;
-	desc.width = 0;
-	desc.height = 0;
-	desc.pitch = 0;
+	desc.width = fb->x_res;
+	desc.height = fb->y_res;
+	desc.pitch = fb->x_res;
 	memset(fb->buf, 0, fb->size);
 
-	if (clear_display && (fb->screen_info & SCREEN_INFO_EPD)) {
-		api->set_contrast(dev, 1);
-		api->write(dev, 0, 0, &desc, fb->buf);
-		api->set_contrast(dev, 0);
+	return 0;
+}
+
+
+int cfb_framebuffer_invert(struct device *dev)
+{
+	struct char_framebuffer *fb = &char_fb;
+
+	if (!fb || !fb->buf) {
+		return -1;
 	}
+
+	fb->inverted = !fb->inverted;
 
 	return 0;
 }
@@ -196,9 +203,9 @@ int cfb_framebuffer_finalize(struct device *dev)
 	}
 
 	desc.buf_size = fb->size;
-	desc.width = 0;
-	desc.height = 0;
-	desc.pitch = 0;
+	desc.width = fb->x_res;
+	desc.height = fb->y_res;
+	desc.pitch = fb->x_res;
 
 	if (!(fb->pixel_format & PIXEL_FORMAT_MONO10) != !(fb->inverted)) {
 		cfb_invert(fb);
@@ -267,6 +274,13 @@ int cfb_get_font_size(struct device *dev, u8_t idx, u8_t *width, u8_t *height)
 	}
 
 	return 0;
+}
+
+int cfb_get_numof_fonts(struct device *dev)
+{
+	const struct char_framebuffer *fb = &char_fb;
+
+	return fb->numof_fonts;
 }
 
 int cfb_framebuffer_init(struct device *dev)

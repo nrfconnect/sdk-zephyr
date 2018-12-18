@@ -147,6 +147,11 @@ void _bss_zero(void)
 	(void)memset(&__ccm_bss_start, 0,
 		     ((u32_t) &__ccm_bss_end - (u32_t) &__ccm_bss_start));
 #endif
+#ifdef CONFIG_CODE_DATA_RELOCATION
+	extern void bss_zeroing_relocation(void);
+
+	bss_zeroing_relocation();
+#endif	/* CONFIG_CODE_DATA_RELOCATION */
 #ifdef CONFIG_APPLICATION_MEMORY
 	(void)memset(&__app_bss_start, 0,
 		     ((u32_t) &__app_bss_end - (u32_t) &__app_bss_start));
@@ -171,6 +176,11 @@ void _data_copy(void)
 	(void)memcpy(&__ccm_data_start, &__ccm_data_rom_start,
 		 ((u32_t) &__ccm_data_end - (u32_t) &__ccm_data_start));
 #endif
+#ifdef CONFIG_CODE_DATA_RELOCATION
+	extern void data_copy_xip_relocation(void);
+
+	data_copy_xip_relocation();
+#endif	/* CONFIG_CODE_DATA_RELOCATION */
 #ifdef CONFIG_APP_SHARED_MEM
 	(void)memcpy(&_app_smem_start, &_app_smem_rom_start,
 		 ((u32_t) &_app_smem_end - (u32_t) &_app_smem_start));
@@ -249,6 +259,7 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 void __weak main(void)
 {
 	/* NOP default main() if the application does not provide one. */
+	arch_nop();
 }
 
 #if defined(CONFIG_MULTITHREADING)
