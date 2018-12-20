@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define LOG_MODULE_NAME net_syslog
-#define NET_LOG_LEVEL LOG_LEVEL_DBG
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_syslog, LOG_LEVEL_DBG);
 
 #include <zephyr.h>
 
@@ -21,17 +21,17 @@ void main(void)
 	/* Allow some setup time before starting to send data */
 	k_sleep(SLEEP_BETWEEN_PRINTS);
 
-	NET_DBG("Starting");
+	LOG_DBG("Starting");
 
 	do {
-		NET_ERR("Error message");
-		NET_WARN("Warning message");
-		NET_INFO("Info message");
-		NET_DBG("Debug message");
+		LOG_ERR("Error message");
+		LOG_WRN("Warning message");
+		LOG_INF("Info message");
+		LOG_DBG("Debug message");
 
 		k_sleep(SLEEP_BETWEEN_PRINTS);
 
 	} while (count--);
 
-	NET_DBG("Stopping");
+	LOG_DBG("Stopping");
 }

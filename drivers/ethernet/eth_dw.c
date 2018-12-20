@@ -22,6 +22,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <string.h>
 #include <sys_io.h>
 #include <net/ethernet.h>
+#include <ethernet/eth_stats.h>
 
 #include "eth_dw_priv.h"
 
@@ -80,30 +81,34 @@ static void eth_rx(struct device *dev)
 	 */
 	if (frm_len < sizeof(u32_t)) {
 		LOG_ERR("Frame too small: %u", frm_len);
-		goto release_desc;
+		goto error;
 	} else {
 		frm_len -= sizeof(u32_t);
 	}
 
-	pkt = net_pkt_get_reserve_rx(0, K_NO_WAIT);
+	pkt = net_pkt_get_reserve_rx(K_NO_WAIT);
 	if (!pkt) {
 		LOG_ERR("Failed to obtain RX buffer");
-		goto release_desc;
+		goto error;
 	}
 
 	if (!net_pkt_append_all(pkt, frm_len, (u8_t *)context->rx_buf,
 				K_NO_WAIT)) {
 		LOG_ERR("Failed to append RX buffer to context buffer");
 		net_pkt_unref(pkt);
-		goto release_desc;
+		goto error;
 	}
 
 	r = net_recv_data(context->iface, pkt);
 	if (r < 0) {
 		LOG_ERR("Failed to enqueue frame into RX queue: %d", r);
 		net_pkt_unref(pkt);
+		goto error;
 	}
 
+	goto release_desc;
+error:
+	eth_stats_update_errors_rx(context->iface);
 release_desc:
 	/* Return ownership of the RX descriptor to the device. */
 	context->rx_desc.own = 1U;
@@ -167,21 +172,13 @@ static void eth_tx_data(struct eth_runtime *context, u8_t *data, u16_t len)
 static int eth_tx(struct device *dev, struct net_pkt *pkt)
 {
 	struct eth_runtime *context = dev->driver_data;
+	struct net_buf *frag;
 
 	/* Ensure we're clear to transmit. */
 	eth_tx_spin_wait(context);
 
-	if (!pkt->frags) {
-		eth_tx_data(context, net_pkt_ll(pkt),
-			    net_pkt_ll_reserve(pkt));
-	} else {
-		struct net_buf *frag;
-
-		eth_tx_data(context, net_pkt_ll(pkt),
-			    net_pkt_ll_reserve(pkt) + pkt->frags->len);
-		for (frag = pkt->frags->frags; frag; frag = frag->frags) {
-			eth_tx_data(context, frag->data, frag->len);
-		}
+	for (frag = pkt->frags; frag; frag = frag->frags) {
+		eth_tx_data(context, frag->data, frag->len);
 	}
 
 	return 0;

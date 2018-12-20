@@ -27,6 +27,12 @@ cmake_minimum_required(VERSION 3.8.2)
 
 cmake_policy(SET CMP0002 NEW)
 
+if(NOT (${CMAKE_VERSION} VERSION_LESS "3.13.0"))
+  # Use the old CMake behaviour until 3.13.x is required and the build
+  # scripts have been ported to the new behaviour.
+  cmake_policy(SET CMP0079 OLD)
+endif()
+
 define_property(GLOBAL PROPERTY ZEPHYR_LIBS
     BRIEF_DOCS "Global list of all Zephyr CMake libs that should be linked in"
     FULL_DOCS  "Global list of all Zephyr CMake libs that should be linked in.
@@ -61,6 +67,8 @@ set(APPLICATION_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE PATH "Application B
 set(__build_dir ${CMAKE_CURRENT_BINARY_DIR}/zephyr)
 
 set(PROJECT_BINARY_DIR ${__build_dir})
+
+add_custom_target(code_data_relocation_target)
 
 # CMake's 'project' concept has proven to not be very useful for Zephyr
 # due in part to how Zephyr is organized and in part to it not fitting well
@@ -256,8 +264,22 @@ set(CMAKE_CXX_COMPILER_FORCED 1)
 
 include(${ZEPHYR_BASE}/cmake/version.cmake)
 include(${ZEPHYR_BASE}/cmake/host-tools.cmake)
+
+# DTS should be close to kconfig because CONFIG_ variables from
+# kconfig and dts should be available at the same time.
+#
+# The DT system uses a C preprocessor for it's code generation needs.
+# This creates an awkward chicken-and-egg problem, because we don't
+# always know exactly which toolchain the user needs until we know
+# more about the target, e.g. after DT and Kconfig.
+#
+# To resolve this we find "some" C toolchain, configure it generically
+# with the minimal amount of configuration needed to have it
+# preprocess DT sources, and then, after we have finished processing
+# both DT and Kconfig we complete the target-specific configuration,
+# and possibly change the toolchain.
+include(${ZEPHYR_BASE}/cmake/generic_toolchain.cmake)
 include(${ZEPHYR_BASE}/cmake/kconfig.cmake)
-include(${ZEPHYR_BASE}/cmake/toolchain.cmake)
 
 find_package(Git QUIET)
 if(GIT_FOUND)
@@ -286,13 +308,9 @@ else()
   set(SOC_PATH ${SOC_FAMILY}/${SOC_SERIES})
 endif()
 
-
-# DTS should be run directly after kconfig because CONFIG_ variables
-# from kconfig and dts should be available at the same time. But
-# running DTS involves running the preprocessor, so we put it behind
-# toolchain. Meaning toolchain.cmake is the only component where
-# kconfig and dts variables aren't available at the same time.
 include(${ZEPHYR_BASE}/cmake/dts.cmake)
+
+include(${ZEPHYR_BASE}/cmake/target_toolchain.cmake)
 
 set(KERNEL_NAME ${CONFIG_KERNEL_BIN_NAME})
 
@@ -338,6 +356,7 @@ Enable Qemu supported ethernet driver like e1000 at drivers/ethernet")
 endif()
 
 zephyr_library_named(app)
+set_property(TARGET app PROPERTY ARCHIVE_OUTPUT_DIRECTORY app)
 
 add_subdirectory(${ZEPHYR_BASE} ${__build_dir})
 

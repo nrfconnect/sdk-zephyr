@@ -6,8 +6,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define LOG_MODULE_NAME net_test
 #define NET_LOG_LEVEL CONFIG_NET_UDP_LOG_LEVEL
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_test, NET_LOG_LEVEL);
 
 #include <zephyr.h>
 #include <linker/sections.h>
@@ -356,7 +358,7 @@ static bool send_ipv6_udp_msg(struct net_if *iface,
 	struct net_buf *frag;
 	int ret;
 
-	pkt = net_pkt_get_reserve_tx(0, K_SECONDS(1));
+	pkt = net_pkt_get_reserve_tx(K_SECONDS(1));
 	zassert_not_null(pkt, "Out of mem");
 
 	frag = net_pkt_get_frag(pkt, K_SECONDS(1));
@@ -365,7 +367,6 @@ static bool send_ipv6_udp_msg(struct net_if *iface,
 	net_pkt_frag_add(pkt, frag);
 
 	net_pkt_set_iface(pkt, iface);
-	net_pkt_set_ll_reserve(pkt, net_buf_headroom(frag));
 
 	setup_ipv6_udp(pkt, src, dst, src_port, dst_port);
 
@@ -406,7 +407,7 @@ static bool send_ipv6_udp_long_msg(struct net_if *iface,
 	struct net_buf *frag;
 	int ret;
 
-	pkt = net_pkt_get_reserve_tx(0, K_SECONDS(1));
+	pkt = net_pkt_get_reserve_tx(K_SECONDS(1));
 	zassert_not_null(pkt, "Out of mem");
 
 	frag = net_pkt_get_frag(pkt, K_SECONDS(1));
@@ -415,7 +416,6 @@ static bool send_ipv6_udp_long_msg(struct net_if *iface,
 	net_pkt_frag_add(pkt, frag);
 
 	net_pkt_set_iface(pkt, iface);
-	net_pkt_set_ll_reserve(pkt, net_buf_headroom(frag));
 
 	setup_ipv6_udp_long(pkt, src, dst, src_port, dst_port);
 
@@ -456,7 +456,7 @@ static bool send_ipv4_udp_msg(struct net_if *iface,
 	struct net_buf *frag;
 	int ret;
 
-	pkt = net_pkt_get_reserve_tx(0, K_SECONDS(1));
+	pkt = net_pkt_get_reserve_tx(K_SECONDS(1));
 	zassert_not_null(pkt, "Out of mem");
 
 	frag = net_pkt_get_frag(pkt, K_SECONDS(1));
@@ -465,7 +465,6 @@ static bool send_ipv4_udp_msg(struct net_if *iface,
 	net_pkt_frag_add(pkt, frag);
 
 	net_pkt_set_iface(pkt, iface);
-	net_pkt_set_ll_reserve(pkt, net_buf_headroom(frag));
 
 	setup_ipv4_udp(pkt, src, dst, src_port, dst_port);
 

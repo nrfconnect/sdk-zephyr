@@ -18,6 +18,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <net/net_pkt.h>
 #include <net/net_if.h>
 #include <net/ethernet.h>
+#include <ethernet/eth_stats.h>
 #include <soc.h>
 #include <misc/printk.h>
 #include <clock_control.h>
@@ -73,7 +74,7 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 
 	k_mutex_lock(&dev_data->tx_mutex, K_FOREVER);
 
-	total_len = net_pkt_ll_reserve(pkt) + net_pkt_get_len(pkt);
+	total_len = net_pkt_get_len(pkt);
 	if (total_len > ETH_TX_BUF_SIZE) {
 		LOG_ERR("PKT to big");
 		res = -EIO;
@@ -87,11 +88,7 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 
 	dma_buffer = (u8_t *)(dma_tx_desc->Buffer1Addr);
 
-	memcpy(dma_buffer, net_pkt_ll(pkt),
-		net_pkt_ll_reserve(pkt) + pkt->frags->len);
-	dma_buffer += net_pkt_ll_reserve(pkt) + pkt->frags->len;
-
-	frag = pkt->frags->frags;
+	frag = pkt->frags;
 	while (frag) {
 		memcpy(dma_buffer, frag->data, frag->len);
 		dma_buffer += frag->len;
@@ -149,7 +146,7 @@ static struct net_pkt *eth_rx(struct device *dev)
 	total_len = heth->RxFrameInfos.length;
 	dma_buffer = (u8_t *)heth->RxFrameInfos.buffer;
 
-	pkt = net_pkt_get_reserve_rx(0, K_NO_WAIT);
+	pkt = net_pkt_get_reserve_rx(K_NO_WAIT);
 	if (!pkt) {
 		LOG_ERR("Failed to obtain RX buffer");
 		goto release_desc;
@@ -186,6 +183,10 @@ release_desc:
 		heth->Instance->DMARPDR = 0;
 	}
 
+	if (!pkt) {
+		eth_stats_update_errors_rx(dev_data->iface);
+	}
+
 	return pkt;
 }
 
@@ -212,6 +213,7 @@ static void rx_thread(void *arg1, void *unused1, void *unused2)
 			net_pkt_print_frags(pkt);
 			res = net_recv_data(dev_data->iface, pkt);
 			if (res < 0) {
+				eth_stats_update_errors_rx(dev_data->iface);
 				LOG_ERR("Failed to enqueue frame "
 					"into RX queue: %d", res);
 				net_pkt_unref(pkt);
@@ -257,6 +259,7 @@ static int eth_initialize(struct device *dev)
 {
 	struct eth_stm32_hal_dev_data *dev_data;
 	struct eth_stm32_hal_dev_cfg *cfg;
+	int ret = 0;
 
 	__ASSERT_NO_MSG(dev != NULL);
 
@@ -270,14 +273,19 @@ static int eth_initialize(struct device *dev)
 	__ASSERT_NO_MSG(dev_data->clock != NULL);
 
 	/* enable clock */
-	clock_control_on(dev_data->clock,
+	ret = clock_control_on(dev_data->clock,
 		(clock_control_subsys_t *)&cfg->pclken);
-	clock_control_on(dev_data->clock,
+	ret |= clock_control_on(dev_data->clock,
 		(clock_control_subsys_t *)&cfg->pclken_tx);
-	clock_control_on(dev_data->clock,
+	ret |= clock_control_on(dev_data->clock,
 		(clock_control_subsys_t *)&cfg->pclken_rx);
-	clock_control_on(dev_data->clock,
+	ret |= clock_control_on(dev_data->clock,
 		(clock_control_subsys_t *)&cfg->pclken_ptp);
+
+	if (ret) {
+		LOG_ERR("Failed to enable ethernet clock");
+		return -EIO;
+	}
 
 	__ASSERT_NO_MSG(cfg->config_func != NULL);
 

@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define LOG_MODULE_NAME net_gptp_mi
-#define NET_LOG_LEVEL CONFIG_NET_GPTP_LOG_LEVEL
+#include <logging/log.h>
+LOG_MODULE_DECLARE(net_gptp, CONFIG_NET_GPTP_LOG_LEVEL);
 
 #include <ptp_clock.h>
 
@@ -14,6 +14,7 @@
 #include "gptp_state.h"
 #include "gptp_private.h"
 
+#if CONFIG_NET_GPTP_LOG_LEVEL >= LOG_LEVEL_DBG
 static const char * const state2str(enum gptp_port_state state)
 {
 	switch (state) {
@@ -39,8 +40,15 @@ static const char * const state2str(enum gptp_port_state state)
 
 	return "<unknown>";
 }
+#endif
 
+#if CONFIG_NET_GPTP_LOG_LEVEL >= LOG_LEVEL_DBG
+void gptp_change_port_state_debug(int port, enum gptp_port_state state,
+				  const char *caller,
+				  int line)
+#else
 void gptp_change_port_state(int port, enum gptp_port_state state)
+#endif
 {
 	struct gptp_global_ds *global_ds = GPTP_GLOBAL_DS();
 
@@ -48,9 +56,11 @@ void gptp_change_port_state(int port, enum gptp_port_state state)
 		return;
 	}
 
-	NET_DBG("[%d] state %s -> %s", port,
+#if CONFIG_NET_GPTP_LOG_LEVEL >= LOG_LEVEL_DBG
+	NET_DBG("[%d] state %s -> %s (%s():%d)", port,
 		state2str(global_ds->selected_role[port]),
-		state2str(state));
+		state2str(state), caller, line);
+#endif
 
 	global_ds->selected_role[port] = state;
 };

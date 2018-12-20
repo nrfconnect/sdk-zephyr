@@ -167,6 +167,16 @@ SECTIONS
 	KEEP(*(.firmware_info))
 #endif
 
+	} GROUP_LINK_IN(ROMABLE_REGION)
+
+#ifdef CONFIG_CODE_DATA_RELOCATION
+
+#include <linker_relocate.ld>
+
+#endif /* CONFIG_CODE_DATA_RELOCATION */
+
+    SECTION_PROLOGUE(_TEXT_SECTION_NAME_2,,)
+	{
 	_image_text_start = .;
 	*(.text)
 	*(".text.*")
@@ -288,6 +298,7 @@ SECTIONS
 
     GROUP_START(RAMABLE_REGION)
 
+	. = RAM_ADDR;
 	/* Align the start of image SRAM with the
 	 * minimum granularity required by MPU.
 	 */
@@ -342,15 +353,15 @@ SECTIONS
 	{
 		APP_INPUT_SECTION(.noinit)
 		APP_INPUT_SECTION(".noinit.*")
+
+		__app_last_address_used = .;
+
+		/* Align the end of the application memory
+		 * with MPU alignment requirement.
+		 */
+		MPU_ALIGN(__app_ram_size);
+		__app_ram_end = .;
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
-
-	__app_last_address_used = .;
-
-	/* Align the end of the application memory
-	 * with MPU alignment requirement.
-	 */
-	MPU_ALIGN(__app_ram_size);
-	__app_ram_end = .;
 	__app_ram_size = __app_ram_end - __app_ram_start;
 #endif /* CONFIG_APPLICATION_MEMORY */
 

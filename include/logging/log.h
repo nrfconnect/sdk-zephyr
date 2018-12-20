@@ -15,17 +15,24 @@ extern "C" {
 #endif
 
 /**
+ * @brief Logging
+ * @defgroup logging Logging
+ * @{
+ * @}
+ */
+
+/**
  * @brief Logger API
  * @defgroup log_api Logging API
  * @ingroup logger
  * @{
  */
 
-#define LOG_LEVEL_NONE  0
-#define LOG_LEVEL_ERR   1
-#define LOG_LEVEL_WRN   2
-#define LOG_LEVEL_INF   3
-#define LOG_LEVEL_DBG   4
+#define LOG_LEVEL_NONE 0
+#define LOG_LEVEL_ERR  1
+#define LOG_LEVEL_WRN  2
+#define LOG_LEVEL_INF  3
+#define LOG_LEVEL_DBG  4
 
 /**
  * @brief Writes an ERROR level message to the log.

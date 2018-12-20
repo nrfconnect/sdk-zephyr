@@ -6,8 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define LOG_MODULE_NAME net_test
-#define NET_LOG_LEVEL CONFIG_NET_TCP_LOG_LEVEL
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_test, CONFIG_NET_TCP_LOG_LEVEL);
 
 #include <zephyr.h>
 
@@ -94,6 +94,34 @@ int net_tcp_dev_init(struct device *dev)
 
 static void net_tcp_iface_init(struct net_if *iface)
 {
+	static u8_t mac_addr_1[6];
+	static u8_t mac_addr_2[6];
+
+	if (mac_addr_1[0] == 0) {
+		/* 00-00-5E-00-53-xx Documentation RFC 7042 */
+		mac_addr_1[0] = 0x00;
+		mac_addr_1[1] = 0x00;
+		mac_addr_1[2] = 0x5E;
+		mac_addr_1[3] = 0x00;
+		mac_addr_1[4] = 0x53;
+		mac_addr_1[5] = 0x01;
+
+		net_if_set_link_addr(iface, mac_addr_1, 6,
+				     NET_LINK_ETHERNET);
+	}
+
+	if (mac_addr_2[0] == 0) {
+		mac_addr_2[0] = 0x00;
+		mac_addr_2[1] = 0x00;
+		mac_addr_2[2] = 0x5E;
+		mac_addr_2[3] = 0x00;
+		mac_addr_2[4] = 0x53;
+		mac_addr_2[5] = 0x02;
+
+		net_if_set_link_addr(iface, mac_addr_2, 6,
+				     NET_LINK_ETHERNET);
+	}
+
 	return;
 }
 
@@ -404,9 +432,7 @@ static bool send_ipv6_tcp_msg(struct net_if *iface,
 	struct net_buf *frag;
 	int ret;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
-
-	net_pkt_set_ll_reserve(pkt, 0);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 
 	frag = net_pkt_get_frag(pkt, K_FOREVER);
 
@@ -455,9 +481,7 @@ static bool send_ipv4_tcp_msg(struct net_if *iface,
 	struct net_buf *frag;
 	int ret;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
-
-	net_pkt_set_ll_reserve(pkt, 0);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 
 	frag = net_pkt_get_frag(pkt, K_FOREVER);
 
@@ -506,9 +530,7 @@ static bool send_ipv6_tcp_long_msg(struct net_if *iface,
 	struct net_buf *frag;
 	int ret;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
-
-	net_pkt_set_ll_reserve(pkt, 0);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 
 	frag = net_pkt_get_frag(pkt, K_FOREVER);
 

@@ -268,6 +268,12 @@ described above.)
 * :file:`.config`, which contains the configuration settings
   used to build the application.
 
+  .. note::
+
+     The previous version of :file:`.config` is saved to :file:`.config.old`
+     whenever the configuration is updated. This is for convenience, as
+     comparing the old and new versions can be handy.
+
 * Various object files (:file:`.o` files and :file:`.a` files) containing
   compiled kernel and application code.
 
@@ -1208,7 +1214,11 @@ As described in :ref:`device-tree`, Zephyr uses Device Tree to
 describe the hardware it runs on. This section describes how you can
 modify an application build's device tree using overlay files. For additional
 information regarding the relationship between Device Tree and Kconfig see
-:ref:`dt_vs_kconfig`.
+:ref:`dt_vs_kconfig`. In some cases the information contained in Device Tree
+files is closely connected to the software and might need to be modified
+using the overlay file concept. This can be relevant for many of the different
+Device Tree nodes, but is particularly useful for :ref:`certain types
+of nodes <dt-alias-chosen>`.
 
 Overlay files, which customarily have the :file:`.overlay` extension,
 contain device tree fragments which add to or modify the device tree

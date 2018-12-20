@@ -692,6 +692,14 @@ function(zephyr_check_compiler_flag lang option check)
   endif()
 endfunction()
 
+# Helper function for CONFIG_CODE_DATA_RELOCATION
+# Call this function with 2 arguments file and then memory location
+function(zephyr_code_relocate file location)
+  set_property(TARGET code_data_relocation_target
+    APPEND PROPERTY COMPILE_DEFINITIONS
+    "${location}:${CMAKE_CURRENT_SOURCE_DIR}/${file}")
+endfunction()
+
 ########################################################
 # 2. Kconfig-aware extensions
 ########################################################
@@ -736,20 +744,21 @@ endfunction()
 
 # 2.2 Misc
 #
-# Parse a KConfig formatted file (typically named *.config) and
-# introduce all the CONF_ variables into the CMake namespace
-function(import_kconfig config_file)
-  # Parse the lines prefixed with CONFIG_ in ${config_file}
+# Parse a KConfig fragment (typically with extension .config) and
+# introduce all the symbols that are prefixed with 'prefix' into the
+# CMake namespace
+function(import_kconfig prefix kconfig_fragment)
+  # Parse the lines prefixed with 'prefix' in ${kconfig_fragment}
   file(
     STRINGS
-    ${config_file}
+    ${kconfig_fragment}
     DOT_CONFIG_LIST
-    REGEX "^CONFIG_"
+    REGEX "^${prefix}"
     ENCODING "UTF-8"
   )
 
   foreach (CONFIG ${DOT_CONFIG_LIST})
-    # CONFIG looks like: CONFIG_NET_BUF=y
+    # CONFIG could look like: CONFIG_NET_BUF=y
 
     # Match the first part, the variable name
     string(REGEX MATCH "[^=]+" CONF_VARIABLE_NAME ${CONFIG})
