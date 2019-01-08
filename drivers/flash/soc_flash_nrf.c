@@ -14,6 +14,7 @@
 #include <soc.h>
 #include <flash.h>
 #include <string.h>
+#include <nrfx.h>
 
 #if defined(CONFIG_SOC_FLASH_NRF_RADIO_SYNC)
 #include <misc/__assert.h>
@@ -77,6 +78,17 @@ static struct k_sem sem_lock;
 #define SYNC_UNLOCK()
 #endif
 
+#if defined(CONFIG_SOC_SERIES_NRF51X)
+#define CODEPAGESIZE 1024
+#define CODESIZE 256
+#elif defined(CONFIG_SOC_NRF52832)
+#define CODEPAGESIZE 4096
+#define CODESIZE 128
+#elif defined(CONFIG_SOC_NRF9160) || defined(CONFIG_SOC_NRF52840)
+#define CODEPAGESIZE 4096
+#define CODESIZE 256
+#endif
+
 static int write(off_t addr, const void *data, size_t len);
 static int erase(u32_t addr, u32_t size);
 
@@ -87,10 +99,10 @@ static inline bool is_aligned_32(u32_t data)
 
 static inline bool is_regular_addr_valid(off_t addr, size_t len)
 {
-	if (addr >= NRF_FICR->CODEPAGESIZE * NRF_FICR->CODESIZE ||
+	if (addr >= CODEPAGESIZE * CODESIZE ||
 	    addr < 0 ||
-	    len > NRF_FICR->CODEPAGESIZE * NRF_FICR->CODESIZE ||
-	    addr + len > NRF_FICR->CODEPAGESIZE * NRF_FICR->CODESIZE) {
+	    len > CODEPAGESIZE * CODESIZE ||
+	    addr + len > CODEPAGESIZE * CODESIZE) {
 		return false;
 	}
 
@@ -127,8 +139,33 @@ static void nvmc_wait_ready(void)
 	}
 }
 
-static int flash_nrf_read(struct device *dev, off_t addr,
-			    void *data, size_t len)
+enum nvmc_config {
+#ifdef CONFIG_SOC_NRF9160
+	REN = NVMC_CONFIGNS_WEN_Ren << NVMC_CONFIGNS_WEN_Pos,
+	WEN = NVMC_CONFIGNS_WEN_Wen << NVMC_CONFIGNS_WEN_Pos,
+	EEN = NVMC_CONFIGNS_WEN_Een << NVMC_CONFIGNS_WEN_Pos,
+#else
+	REN = NVMC_CONFIG_WEN_Ren << NVMC_CONFIG_WEN_Pos,
+	WEN = NVMC_CONFIG_WEN_Wen << NVMC_CONFIG_WEN_Pos,
+	EEN = NVMC_CONFIG_WEN_Een << NVMC_CONFIG_WEN_Pos,
+#endif
+};
+
+static u32_t nvmc_config_set(enum nvmc_config mode)
+{
+#ifdef CONFIG_SOC_NRF9160
+	const u32_t cfg = NRF_NVMC->CONFIGNS;
+	NRF_NVMC->CONFIGNS = mode;
+#else
+	const u32_t cfg = NRF_NVMC->CONFIG;
+	NRF_NVMC->CONFIG = mode;
+#endif
+	nvmc_wait_ready();
+	return cfg;
+}
+
+static int flash_nrf_read(struct device *dev, off_t addr, void *data,
+			  size_t len)
 {
 	if (!is_addr_valid(addr, len)) {
 		return -EINVAL;
@@ -143,8 +180,8 @@ static int flash_nrf_read(struct device *dev, off_t addr,
 	return 0;
 }
 
-static int flash_nrf_write(struct device *dev, off_t addr,
-			     const void *data, size_t len)
+static int flash_nrf_write(struct device *dev, off_t addr, const void *data,
+			   size_t len)
 {
 	int ret;
 
@@ -174,7 +211,7 @@ static int flash_nrf_write(struct device *dev, off_t addr,
 
 static int flash_nrf_erase(struct device *dev, off_t addr, size_t size)
 {
-	u32_t pg_size = NRF_FICR->CODEPAGESIZE;
+	u32_t pg_size = CODEPAGESIZE;
 	u32_t n_pages = size / pg_size;
 	int ret;
 
@@ -217,12 +254,7 @@ static int flash_nrf_write_protection(struct device *dev, bool enable)
 {
 	SYNC_LOCK();
 
-	if (enable) {
-		NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Ren << NVMC_CONFIG_WEN_Pos;
-	} else {
-		NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Wen << NVMC_CONFIG_WEN_Pos;
-	}
-	nvmc_wait_ready();
+	nvmc_config_set(enable ? REN : WEN);
 
 	SYNC_UNLOCK();
 
@@ -233,8 +265,8 @@ static int flash_nrf_write_protection(struct device *dev, bool enable)
 static struct flash_pages_layout dev_layout;
 
 static void flash_nrf_pages_layout(struct device *dev,
-				     const struct flash_pages_layout **layout,
-				     size_t *layout_size)
+				   const struct flash_pages_layout **layout,
+				   size_t *layout_size)
 {
 	*layout = &dev_layout;
 	*layout_size = 1;
@@ -261,8 +293,8 @@ static int nrf_flash_init(struct device *dev)
 #endif /* CONFIG_SOC_FLASH_NRF_RADIO_SYNC */
 
 #if defined(CONFIG_FLASH_PAGE_LAYOUT)
-	dev_layout.pages_count = NRF_FICR->CODESIZE;
-	dev_layout.pages_size = NRF_FICR->CODEPAGESIZE;
+	dev_layout.pages_count = CODESIZE;
+	dev_layout.pages_size = CODEPAGESIZE;
 #endif
 
 	return 0;
@@ -309,7 +341,7 @@ static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder,
 }
 
 static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder,
-		u16_t lazy, void *context)
+				      u16_t lazy, void *context)
 {
 	u8_t instance_index;
 	u8_t ticker_id;
@@ -432,8 +464,7 @@ static int write_in_timeslice(off_t addr, const void *data, size_t len)
 
 static int erase_op(void *context)
 {
-	u32_t prev_nvmc_cfg = NRF_NVMC->CONFIG;
-	u32_t pg_size = NRF_FICR->CODEPAGESIZE;
+	u32_t pg_size = CODEPAGESIZE;
 	struct flash_context *e_ctx = context;
 
 #if defined(CONFIG_SOC_FLASH_NRF_RADIO_SYNC)
@@ -446,9 +477,8 @@ static int erase_op(void *context)
 	}
 #endif /* CONFIG_SOC_FLASH_NRF_RADIO_SYNC */
 
-	/* Erase uses a specific configuration register */
-	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Een << NVMC_CONFIG_WEN_Pos;
-	nvmc_wait_ready();
+	/* Enable erase operation */
+	nvmc_config_set(EEN);
 
 #ifdef CONFIG_SOC_FLASH_NRF_UICR
 	if (e_ctx->flash_addr == (off_t)NRF_UICR) {
@@ -461,7 +491,11 @@ static int erase_op(void *context)
 #endif
 
 	do {
+#ifdef CONFIG_SOC_NRF9160
+		*(u32_t *)e_ctx->flash_addr = 0xFFFFFFFF;
+#else
 		NRF_NVMC->ERASEPAGE = e_ctx->flash_addr;
+#endif
 		nvmc_wait_ready();
 
 		e_ctx->len -= pg_size;
@@ -483,8 +517,7 @@ static int erase_op(void *context)
 
 	} while (e_ctx->len > 0);
 
-	NRF_NVMC->CONFIG = prev_nvmc_cfg;
-	nvmc_wait_ready();
+	nvmc_config_set(REN);
 
 	return (e_ctx->len > 0) ? FLASH_OP_ONGOING : FLASH_OP_DONE;
 }
@@ -512,6 +545,9 @@ static int write_op(void *context)
 		ticks_begin = ticker_ticks_now_get();
 	}
 #endif /* CONFIG_SOC_FLASH_NRF_RADIO_SYNC */
+
+	/* Enable write operation */
+	nvmc_config_set(WEN);
 
 	/* Start with a word-aligned address and handle the offset */
 	addr_word = (u32_t)w_ctx->flash_addr & ~0x3;
@@ -581,7 +617,7 @@ static int write_op(void *context)
 		shift_write_context(w_ctx->len, w_ctx);
 	}
 
-	nvmc_wait_ready();
+	nvmc_config_set(REN);
 
 	return FLASH_OP_DONE;
 }
