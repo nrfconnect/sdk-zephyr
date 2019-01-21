@@ -21,7 +21,6 @@ bindings_compat = []
 old_alias_names = False
 
 regs_config = {
-    'zephyr,flash' : 'CONFIG_FLASH',
     'zephyr,sram'  : 'CONFIG_SRAM',
     'zephyr,ccm'   : 'CONFIG_CCM'
 }
@@ -147,7 +146,12 @@ def insert_defs(node_address, new_defs, new_aliases):
         if key.startswith('DT_COMPAT_'):
             node_address = 'compatibles'
 
+    remove = [k for k in new_aliases if k in new_defs.keys()]
+    for k in remove: del new_aliases[k]
+
     if node_address in defs:
+        remove = [k for k in new_aliases if k in defs[node_address].keys()]
+        for k in remove: del new_aliases[k]
         if 'aliases' in defs[node_address]:
             defs[node_address]['aliases'].update(new_aliases)
         else:
@@ -169,6 +173,9 @@ def find_node_by_path(nodes, path):
 
 def get_reduced(nodes, path):
     # compress nodes list to nodes w/ paths, add interrupt parent
+    if 'last_used_id' not in get_reduced.__dict__:
+        get_reduced.last_used_id = {}
+
     if 'props' in nodes:
         status = nodes['props'].get('status')
 
@@ -177,11 +184,24 @@ def get_reduced(nodes, path):
 
     if isinstance(nodes, dict):
         reduced[path] = dict(nodes)
+
+        # assign an instance ID for each compat
+        compat = nodes['props'].get('compatible')
+        if (compat is not None):
+            if type(compat) is not list: compat = [ compat, ]
+            reduced[path]['instance_id'] = {}
+            for k in compat:
+                if k not in get_reduced.last_used_id.keys():
+                    get_reduced.last_used_id[k] = 0
+                else:
+                    get_reduced.last_used_id[k] += 1
+                reduced[path]['instance_id'][k] = get_reduced.last_used_id[k]
+
         reduced[path].pop('children', None)
         if path != '/':
             path += '/'
         if nodes['children']:
-            for k, v in nodes['children'].items():
+            for k, v in sorted(nodes['children'].items()):
                 get_reduced(v, path + k)
 
 
@@ -276,6 +296,14 @@ def translate_addr(addr, node_address, nr_addr_cells, nr_size_cells):
 def enable_old_alias_names(enable):
     global old_alias_names
     old_alias_names = enable
+
+def add_compat_alias(node_address, label_postfix, label, prop_aliases):
+    if ('instance_id' in reduced[node_address]):
+        instance = reduced[node_address]['instance_id']
+        for k in instance:
+            i = instance[k]
+            b = 'DT_' + convert_string_to_label(k) + '_' + str(i) + '_' + label_postfix
+            prop_aliases[b] = label
 
 def add_prop_aliases(node_address,
                      alias_label_function, prop_label, prop_aliases):

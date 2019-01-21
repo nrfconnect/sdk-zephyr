@@ -7,7 +7,7 @@
 
 #include <soc.h>
 #include <clock_control.h>
-#include <drivers/clock_control/nrf5_clock_control.h>
+#include <drivers/clock_control/nrf_clock_control.h>
 #include <system_timer.h>
 #include <sys_clock.h>
 #include <nrf_rtc.h>
@@ -49,7 +49,7 @@ static u32_t counter(void)
  * it by pointer at runtime, maybe?) so we don't have this leaky
  * symbol.
  */
-void rtc1_nrf5_isr(void *arg)
+void rtc1_nrf_isr(void *arg)
 {
 	ARG_UNUSED(arg);
 	RTC->EVENTS_COMPARE[0] = 0;
@@ -79,12 +79,12 @@ int z_clock_driver_init(struct device *device)
 
 	ARG_UNUSED(device);
 
-	clock = device_get_binding(CONFIG_CLOCK_CONTROL_NRF5_K32SRC_DRV_NAME);
+	clock = device_get_binding(CONFIG_CLOCK_CONTROL_NRF_K32SRC_DRV_NAME);
 	if (!clock) {
 		return -1;
 	}
 
-	clock_control_on(clock, (void *)CLOCK_CONTROL_NRF5_K32SRC);
+	clock_control_on(clock, (void *)CLOCK_CONTROL_NRF_K32SRC);
 
 	/* TODO: replace with counter driver to access RTC */
 	nrf_rtc_prescaler_set(RTC, 0);
@@ -94,10 +94,10 @@ int z_clock_driver_init(struct device *device)
 
 	/* Clear the event flag and possible pending interrupt */
 	nrf_rtc_event_clear(RTC, NRF_RTC_EVENT_COMPARE_0);
-	NVIC_ClearPendingIRQ(NRF5_IRQ_RTC1_IRQn);
+	NVIC_ClearPendingIRQ(RTC1_IRQn);
 
-	IRQ_CONNECT(NRF5_IRQ_RTC1_IRQn, 1, rtc1_nrf5_isr, 0, 0);
-	irq_enable(NRF5_IRQ_RTC1_IRQn);
+	IRQ_CONNECT(RTC1_IRQn, 1, rtc1_nrf_isr, 0, 0);
+	irq_enable(RTC1_IRQn);
 
 	nrf_rtc_task_trigger(RTC, NRF_RTC_TASK_CLEAR);
 	nrf_rtc_task_trigger(RTC, NRF_RTC_TASK_START);

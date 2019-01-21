@@ -121,7 +121,17 @@ static bool should_preempt(struct k_thread *th, int preempt_ok)
 	}
 
 	/* Or if we're pended/suspended/dummy (duh) */
-	if (!_current || !_is_thread_ready(_current)) {
+	if (!_current || _is_thread_prevented_from_running(_current)) {
+		return true;
+	}
+
+	/* Edge case on ARM where a thread can be pended out of an
+	 * interrupt handler before the "synchronous" swap starts
+	 * context switching.  Platforms with atomic swap can never
+	 * hit this.
+	 */
+	if (IS_ENABLED(CONFIG_SWAP_NONATOMIC)
+	    && _is_thread_timeout_active(th)) {
 		return true;
 	}
 
@@ -207,17 +217,15 @@ static struct k_thread *next_up(void)
 static int slice_time;
 static int slice_max_prio;
 
-/* Subtle note on locking here: in theory we're subject to a race
- * where _get_next_timeout_expiry() returns a value that changes
- * between the return and the z_clock_set_timeout() of the adjusted
- * time: another context can add a new timeout that should expire
- * sooner, and we'll miss it.  But that's OK, because (1) we're inside
- * the scheduler lock, so cannot be interrupted on uniprocessor
- * systems, and (2) it's an interrupt time for our local CPU -- in
- * SMP, it's safe to miss a timeout as long as another CPU (i.e. the
- * one we're racing against) is available to wake up at the
- * appropriate time.
+#ifdef CONFIG_SWAP_NONATOMIC
+/* If _Swap() isn't atomic, then it's possible for a timer interrupt
+ * to try to timeslice away _current after it has already pended
+ * itself but before the corresponding context switch.  Treat that as
+ * a noop condition in z_time_slice().
  */
+static struct k_thread *pending_current;
+#endif
+
 static void reset_time_slice(void)
 {
 	/* Add the elapsed time since the last announced tick to the
@@ -250,6 +258,15 @@ static inline int sliceable(struct k_thread *t)
 /* Called out of each timer interrupt */
 void z_time_slice(int ticks)
 {
+#ifdef CONFIG_SWAP_NONATOMIC
+	if (pending_current == _current) {
+		pending_current = NULL;
+		reset_time_slice();
+		return;
+	}
+	pending_current = NULL;
+#endif
+
 	if (slice_time && sliceable(_current)) {
 		if (ticks >= _current_cpu->slice_ticks) {
 			_move_thread_to_end_of_prio_q(_current);
@@ -390,6 +407,9 @@ void z_thread_timeout(struct _timeout *to)
 
 int _pend_current_thread(u32_t key, _wait_q_t *wait_q, s32_t timeout)
 {
+#if defined(CONFIG_TIMESLICING) && defined(CONFIG_SWAP_NONATOMIC)
+	pending_current = _current;
+#endif
 	pend(_current, wait_q, timeout);
 	return _Swap(key);
 }

@@ -39,7 +39,8 @@ See the :ref:`shell_api` documentation for more information.
 Connecting to Segger RTT via TCP (on macOS, for example)
 ========================================================
 
-On macOS JLinkRTTClient won't let you enter input. Instead, please use following procedure:
+On macOS JLinkRTTClient won't let you enter input. Instead, please use following
+procedure:
 
 * Open up a first Terminal window and enter:
 
@@ -55,7 +56,8 @@ On macOS JLinkRTTClient won't let you enter input. Instead, please use following
 
      nc localhost 19021
 
-* Now you should have a network connection to RTT that will let you enter input to the shell.
+* Now you should have a network connection to RTT that will let you enter input
+  to the shell.
 
 
 Commands
@@ -235,13 +237,41 @@ Simple command handler implementation:
 		return 0;
 	}
 
-.. warning::
-	Do not use function :cpp:func:`shell_fprintf` or shell print macros:
-	:c:macro:`shell_print`, :c:macro:`shell_info`, :c:macro:`shell_warn`,
-	:c:macro:`shell_error` outside of the command handler because this
-	might lead to incorrect text display on the screen. If any text should
-	be displayed outside of the command context, then use the
-	:ref:`logger` or `printk` function.
+Function :cpp:func:`shell_fprintf` or the shell print macros:
+:c:macro:`shell_print`, :c:macro:`shell_info`, :c:macro:`shell_warn` and
+:c:macro:`shell_error` can only be used from the command handler, or if the
+command context is forced to stay in the foreground by calling
+:cpp:func:`shell_command_enter` from within the command handler. In this latter
+case, the shell stops reading input and writing to the output (except for the
+logs), allowing a user to print from any thread context. Function
+:cpp:func:`shell_command_exit` or entering a :kbd:`CTRL+C` terminates a
+'foreground' command.
+
+Here is an example foreground command implementation:
+
+.. code-block:: c
+
+	static int cmd_handler(const struct shell *shell, size_t argc,
+				char **argv)
+	{
+		ARG_UNUSED(argc);
+		ARG_UNUSED(argv);
+
+		shell_command_enter(shell);
+
+		foo_shell = shell;
+		foo_signal_thread(); /* Swtich context */
+
+		return 0;
+	}
+
+	static void foo_thread_context(void)
+	{
+		shell_print(foo_shell, "Lorem ipsum");
+
+		/* Terminate foreground command. */
+		shell_command_exit(foo_shell);
+	}
 
 Command help
 ------------
@@ -335,21 +365,33 @@ The shell module supports the following meta keys:
 
    * - Meta keys
      - Action
-   * - ctrl + a
+   * - :kbd:`Ctrl + a`
      - Moves the cursor to the beginning of the line.
-   * - ctrl + c
+   * - :kbd:`Ctrl + b`
+     - Moves the cursor backward one character.
+   * - :kbd:`Ctrl + c`
      - Preserves the last command on the screen and starts a new command in
        a new line.
-   * - ctrl + e
+   * - :kbd:`Ctrl + d`
+     - Deletes the character under the cursor.
+   * - :kbd:`Ctrl + e`
      - Moves the cursor to the end of the line.
-   * - ctrl + l
+   * - :kbd:`Ctrl + f`
+     - Moves the cursor forward one character.
+   * - :kbd:`Ctrl + k`
+     - Deletes from the cursor to the end of the line.
+   * - :kbd:`Ctrl + l`
      - Clears the screen and leaves the currently typed command at the top of
        the screen.
-   * - ctrl + u
+   * - :kbd:`Ctrl + u`
      - Clears the currently typed command.
-   * - ctrl + w
+   * - :kbd:`Ctrl + w`
      - Removes the word or part of the word to the left of the cursor. Words
        separated by period instead of space are treated as one word.
+   * - :kbd:`Alt + b`
+     - Moves the cursor backward one word.
+   * - :kbd:`Alt + f`
+     - Moves the cursor forward one word.
 
 Usage
 *****
@@ -435,4 +477,21 @@ the shell will only print the subcommands registered for this command:
 
 	  params  ping
 
+Shell as the logger backend
+***************************
 
+Shell instance can act as the :ref:`logger` backend. Shell ensures that log
+messages are correctly multiplexed with shell output. Log messages from logger
+thread are enqueued and processed in the shell thread. Logger thread will block
+for configurable amount of time if queue is full, blocking logger thread context
+for that time. Oldest log message is removed from the queue after timeout and
+new message is enqueued. Use the ``shell stats show`` command to retrieve
+number of log messages dropped by the shell instance. Log queue size and timeout
+are :c:macro:`SHELL_DEFINE` arguments.
+
+.. warning::
+	Enqueuing timeout must be set carefully when multiple backends are used
+	in the system. The shell instance could	have a slow transport or could
+	block, for example, by a UART with hardware flow control. If timeout is
+	set too high, the logger thread could be blocked and impact other logger
+	backends.

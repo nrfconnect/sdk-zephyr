@@ -32,7 +32,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <random/rand32.h>
 
 #include <net/ieee802154_radio.h>
-#include <drivers/clock_control/nrf5_clock_control.h>
+#include <drivers/clock_control/nrf_clock_control.h>
 #include <clock_control.h>
 
 #include "nrf52840.h"
@@ -121,9 +121,13 @@ static void nrf5_rx_thread(void *arg1, void *arg2, void *arg3)
 			goto out;
 		}
 
-		net_analyze_stack("nRF5 rx stack",
-				  K_THREAD_STACK_BUFFER(nrf5_radio->rx_stack),
-				  K_THREAD_STACK_SIZEOF(nrf5_radio->rx_stack));
+		if (CONFIG_IEEE802154_DRIVER_LOG_LEVEL >= LOG_LEVEL_DBG) {
+			net_analyze_stack(
+				"nRF5 rx stack",
+				K_THREAD_STACK_BUFFER(nrf5_radio->rx_stack),
+				K_THREAD_STACK_SIZEOF(nrf5_radio->rx_stack));
+		}
+
 		continue;
 
 out:
@@ -350,7 +354,7 @@ static int nrf5_init(struct device *dev)
 	k_sem_init(&nrf5_radio->tx_wait, 0, 1);
 	k_sem_init(&nrf5_radio->cca_wait, 0, 1);
 
-	clk_m16 = device_get_binding(CONFIG_CLOCK_CONTROL_NRF5_M16SRC_DRV_NAME);
+	clk_m16 = device_get_binding(CONFIG_CLOCK_CONTROL_NRF_M16SRC_DRV_NAME);
 	if (!clk_m16) {
 		return -ENODEV;
 	}

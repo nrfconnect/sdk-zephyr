@@ -15,7 +15,7 @@
 	};
 
 	flash-controller@4001E000 {
-			compatible = "nrf,nrf52-flash-controller";
+			compatible = "nordic,nrf52-flash-controller";
 			reg = <0x4001E000 0x550>;
 
 			#address-cells = <1>;
@@ -67,6 +67,13 @@
 			interrupts = <7 1>;
 			status = "disabled";
 			label = "ADC_0";
+		};
+
+		clock: clock@40000000 {
+			compatible = "nordic,nrf-clock";
+			reg = <0x40000000 0x1000>;
+			interrupts = <0 1>;
+			status = "ok";
 		};
 
 		uart0: uart@40002000 {
@@ -160,9 +167,9 @@
 			label = "PWM_2";
 		};
 
-		pwm3: pwm@4002D000 {
+		pwm3: pwm@4002d000 {
 			compatible = "nordic,nrf-pwm";
-			reg = <0x4002D000 0x1000>;
+			reg = <0x4002d000 0x1000>;
 			interrupts = <45 1>;
 			status = "disabled";
 			label = "PWM_3";

@@ -18,6 +18,7 @@
 		gpio-3= &gpio3;
 		gpio-4= &gpio4;
 		gpio-5= &gpio5;
+		i2c-1 = &i2c1;
 		uart-1 = &uart1;
 		uart-3 = &uart3;
 		led0 = &green_led;
@@ -63,10 +64,29 @@
 arduino_serial: &uart3 {};
 
 &flexspi0 {
+	reg = <0x402a8000 0x4000>, <0x60000000 0x4000000>;
 	hyperflash0: hyperflash@0 {
-		/* Cypress S26KS512SDPBHI02 */
-		reg = <0x60000000 0x4000000>;
+		compatible = "cypress,s26ks512s";
+		reg = <0>;
 		status = "ok";
+	};
+};
+
+&i2c1 {
+	status = "ok";
+
+	fxos8700@1f {
+		compatible = "nxp,fxos8700";
+		reg = <0x1f>;
+		label = "FXOS8700";
+
+		/* Two zero ohm resistors (R263 and R264) isolate sensor
+		 * interrupt gpios from the soc and are unpopulated by default.
+		 * Note that if you populate them, they conflict with LCD and
+		 * Ethernet interrupt gpios.
+		 */
+		int1-gpios = <&gpio1 10 0>;
+		int2-gpios = <&gpio1 11 0>;
 	};
 };
 

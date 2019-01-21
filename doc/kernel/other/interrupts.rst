@@ -166,12 +166,8 @@ processing to a thread.
 * An ISR can signal a helper thread to do interrupt-related processing
   using a kernel object, such as a fifo, lifo, or semaphore.
 
-* An ISR can signal an alert which causes the system workqueue thread
-  to execute an associated alert handler function.
-  (See :ref:`alerts_v2`.)
-
 * An ISR can instruct the system workqueue thread to execute a work item.
-  (See TBD.)
+  (See :ref:`workqueues_v2`.)
 
 When an ISR offloads work to a thread, there is typically a single context
 switch to that thread when the ISR completes, allowing interrupt-related
@@ -312,8 +308,8 @@ struct _isr_list which is placed in a special .intList section:
     };
 
 Zephyr is built in two phases; the first phase of the build produces
-zephyr_prebuilt.elf which contains all the entries in the .intList section
-preceded by a header:
+``${ZEPHYR_PREBUILT_EXECUTABLE}``.elf which contains all the entries in
+the .intList section preceded by a header:
 
 .. code-block:: c
 
@@ -326,9 +322,10 @@ preceded by a header:
     };
 
 This data consisting of the header and instances of struct _isr_list inside
-zephyr_prebuilt.elf is then used by the gen_isr_tables.py script to generate a
-C file defining a vector table and software ISR table that are then compiled
-and linked into the final application.
+``${ZEPHYR_PREBUILT_EXECUTABLE}``.elf is then used by the
+gen_isr_tables.py script to generate a C file defining a vector table and
+software ISR table that are then compiled and linked into the final
+application.
 
 The priority level of any interrupt is not encoded in these tables, instead
 :c:macro:`IRQ_CONNECT` also has a runtime component which programs the desired

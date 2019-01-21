@@ -14,7 +14,7 @@
 # modified by the entry point ${APPLICATION_SOURCE_DIR}/CMakeLists.txt
 # that was specified when cmake was called.
 
-# CMake version 3.8.2 is the real minimum supported version.
+# CMake version 3.13.1 is the real minimum supported version.
 #
 # Unfortunately CMake requires the toplevel CMakeLists.txt file to
 # define the required version, not even invoking it from an included
@@ -23,13 +23,15 @@
 #
 # Under these restraints we use a second 'cmake_minimum_required'
 # invocation in every toplevel CMakeLists.txt.
-cmake_minimum_required(VERSION 3.8.2)
+cmake_minimum_required(VERSION 3.13.1)
 
+# CMP0002: "Logical target names must be globally unique"
 cmake_policy(SET CMP0002 NEW)
 
 if(NOT (${CMAKE_VERSION} VERSION_LESS "3.13.0"))
   # Use the old CMake behaviour until 3.13.x is required and the build
   # scripts have been ported to the new behaviour.
+  # CMP0079: "target_link_libraries() allows use with targets in other directories"
   cmake_policy(SET CMP0079 OLD)
 endif()
 
@@ -73,7 +75,7 @@ add_custom_target(code_data_relocation_target)
 # CMake's 'project' concept has proven to not be very useful for Zephyr
 # due in part to how Zephyr is organized and in part to it not fitting well
 # with cross compilation.
-# CMake therefore tries to rely as little as possible on project()
+# Zephyr therefore tries to rely as little as possible on project()
 # and its associated variables, e.g. PROJECT_SOURCE_DIR.
 # It is recommended to always use ZEPHYR_BASE instead of PROJECT_SOURCE_DIR
 # when trying to reference ENV${ZEPHYR_BASE}.
@@ -90,20 +92,21 @@ set(AUTOCONF_H ${__build_dir}/include/generated/autoconf.h)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${AUTOCONF_H})
 
 
-# The 'FindPythonInterp' that is distributed with CMake 3.8 has a bug
-# that we need to work around until we upgrade to 3.13. Until then we
-# maintain a patched copy in our repo. Bug:
-# https://github.com/zephyrproject-rtos/zephyr/issues/11103
-set(PythonInterp_FIND_VERSION 3.4)
-set(PythonInterp_FIND_VERSION_COUNT 2)
-set(PythonInterp_FIND_VERSION_MAJOR 3)
-set(PythonInterp_FIND_VERSION_MINOR 4)
-set(PythonInterp_FIND_VERSION_EXACT 0)
-set(PythonInterp_FIND_REQUIRED 1)
-include(${ZEPHYR_BASE}/cmake/backports/FindPythonInterp.cmake)
+#
+# Import more CMake functions and macros
+#
 
+include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
 include(${ZEPHYR_BASE}/cmake/extensions.cmake)
+include(${ZEPHYR_BASE}/cmake/version.cmake)  # depends on hex.cmake
 
+#
+# Find tools
+#
+
+include(${ZEPHYR_BASE}/cmake/python.cmake)
+include(${ZEPHYR_BASE}/cmake/git.cmake)  # depends on version.cmake
 include(${ZEPHYR_BASE}/cmake/ccache.cmake)
 
 if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_BINARY_DIR})
@@ -183,6 +186,65 @@ message(STATUS "Selected BOARD ${BOARD}")
 # Store the selected board in the cache
 set(CACHED_BOARD ${BOARD} CACHE STRING "Selected board")
 
+# The SHIELD can be set by 3 sources. Through environment variables,
+# through the cmake CLI, and through CMakeLists.txt.
+#
+# CLI has the highest precedence, then comes environment variables,
+# and then finally CMakeLists.txt.
+#
+# A user can ignore all the precedence rules if he simply always uses
+# the same source. E.g. always specifies -DSHIELD= on the command line,
+# always has an environment variable set, or always has a set(SHIELD
+# foo) line in his CMakeLists.txt and avoids mixing sources.
+#
+# The selected SHIELD can be accessed through the variable 'SHIELD'.
+
+# Read out the cached shield value if present
+get_property(cached_shield_value CACHE SHIELD PROPERTY VALUE)
+
+# There are actually 4 sources, the three user input sources, and the
+# previously used value (CACHED_SHIELD). The previously used value has
+# precedence, and if we detect that the user is trying to change the
+# value we give him a warning about needing to clean the build
+# directory to be able to change shields.
+
+set(shield_cli_argument ${cached_shield_value}) # Either new or old
+if(shield_cli_argument STREQUAL CACHED_SHIELD)
+  # We already have a CACHED_SHIELD so there is no new input on the CLI
+  unset(shield_cli_argument)
+endif()
+
+set(shield_app_cmake_lists ${SHIELD})
+if(cached_shield_value STREQUAL SHIELD)
+  # The app build scripts did not set a default, The SHIELD we are
+  # reading is the cached value from the CLI
+  unset(shield_app_cmake_lists)
+endif()
+
+if(CACHED_SHIELD)
+  # Warn the user if it looks like he is trying to change the shield
+  # without cleaning first
+  if(shield_cli_argument)
+    if(NOT (CACHED_SHIELD STREQUAL shield_cli_argument))
+      message(WARNING "The build directory must be cleaned pristinely when changing shields")
+      # TODO: Support changing shields without requiring a clean build
+    endif()
+  endif()
+
+  set(SHIELD ${CACHED_SHIELD})
+elseif(shield_cli_argument)
+  set(SHIELD ${shield_cli_argument})
+
+elseif(DEFINED ENV{SHIELD})
+  set(SHIELD $ENV{SHIELD})
+
+elseif(shield_app_cmake_lists)
+  set(SHIELD ${shield_app_cmake_lists})
+endif()
+
+# Store the selected shield in the cache
+set(CACHED_SHIELD ${SHIELD} CACHE STRING "Selected shield")
+
 # 'BOARD_ROOT' is a prioritized list of directories where boards may
 # be found. It always includes ${ZEPHYR_BASE} at the lowest priority.
 list(APPEND BOARD_ROOT ${ZEPHYR_BASE})
@@ -200,12 +262,54 @@ foreach(root ${BOARD_ROOT})
   # NB: find_path will return immediately if the output variable is
   # already set
   find_path(BOARD_DIR
-	NAMES ${BOARD}_defconfig
-	PATHS ${root}/boards/*/*
-	NO_DEFAULT_PATH
-	)
+    NAMES ${BOARD}_defconfig
+    PATHS ${root}/boards/*/*
+    NO_DEFAULT_PATH
+    )
   if(BOARD_DIR AND NOT (${root} STREQUAL ${ZEPHYR_BASE}))
-	set(USING_OUT_OF_TREE_BOARD 1)
+    set(USING_OUT_OF_TREE_BOARD 1)
+  endif()
+
+  set(shield_dir ${root}/boards/shields)
+  if(DEFINED SHIELD)
+     string(REPLACE " " ";" SHIELD_AS_LIST "${SHIELD}")
+  endif()
+  # Match the .overlay files in the shield directories to make sure we are
+  # finding shields, e.g. x_nucleo_iks01a1/x_nucleo_iks01a1.overlay
+  file(GLOB_RECURSE shields_refs_list
+    RELATIVE ${shield_dir}
+    ${shield_dir}/*/*.overlay
+    )
+
+  # The above gives a list like
+  # x_nucleo_iks01a1/x_nucleo_iks01a1.overlay;x_nucleo_iks01a2/x_nucleo_iks01a2.overlay
+  # we construct a list of shield names by extracting file name and
+  # removing the extension.
+  foreach(shield_path ${shields_refs_list})
+    get_filename_component(shield ${shield_path} NAME_WE)
+    list(APPEND SHIELD_LIST ${shield})
+  endforeach()
+
+  if(DEFINED SHIELD)
+    foreach(s ${SHIELD_AS_LIST})
+      list(FIND SHIELD_LIST ${s} _idx)
+      if (NOT _idx EQUAL -1)
+        list(GET shields_refs_list ${_idx} s_path)
+
+        # if shield config flag is on, add shield overlay to the shield overlays
+        # list and dts_fixup file to the shield fixup file
+        list(APPEND
+          shield_dts_files
+          ${shield_dir}/${s_path}
+        )
+        list(APPEND
+          shield_dts_fixups
+          ${shield_dir}/${s}/dts_fixup.h
+        )
+      else()
+        list(APPEND NOT_FOUND_SHIELD_LIST ${s})
+      endif()
+    endforeach()
   endif()
 endforeach()
 
@@ -216,8 +320,17 @@ if(NOT BOARD_DIR)
   message(FATAL_ERROR "Invalid usage")
 endif()
 
-get_filename_component(BOARD_ARCH_DIR ${BOARD_DIR} DIRECTORY)
-get_filename_component(BOARD_FAMILY   ${BOARD_DIR} NAME     )
+if(DEFINED SHIELD AND DEFINED NOT_FOUND_SHIELD_LIST)
+  foreach (s ${NOT_FOUND_SHIELD_LIST})
+    message("No shield named '${s}' found")
+  endforeach()
+  print_usage()
+  unset(CACHED_SHIELD CACHE)
+  message(FATAL_ERROR "Invalid usage")
+endif()
+
+get_filename_component(BOARD_ARCH_DIR ${BOARD_DIR}      DIRECTORY)
+get_filename_component(BOARD_FAMILY   ${BOARD_DIR}      NAME)
 get_filename_component(ARCH           ${BOARD_ARCH_DIR} NAME)
 
 if(CONF_FILE)
@@ -262,7 +375,6 @@ DTC_OVERLAY_FILE=\"dts1.overlay dts2.overlay\"")
 set(CMAKE_C_COMPILER_FORCED   1)
 set(CMAKE_CXX_COMPILER_FORCED 1)
 
-include(${ZEPHYR_BASE}/cmake/version.cmake)
 include(${ZEPHYR_BASE}/cmake/host-tools.cmake)
 
 # DTS should be close to kconfig because CONFIG_ variables from
@@ -281,24 +393,7 @@ include(${ZEPHYR_BASE}/cmake/host-tools.cmake)
 include(${ZEPHYR_BASE}/cmake/generic_toolchain.cmake)
 include(${ZEPHYR_BASE}/cmake/kconfig.cmake)
 
-find_package(Git QUIET)
-if(GIT_FOUND)
-  execute_process(COMMAND ${GIT_EXECUTABLE} describe
-    WORKING_DIRECTORY ${ZEPHYR_BASE}
-    OUTPUT_VARIABLE BUILD_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_STRIP_TRAILING_WHITESPACE
-    ERROR_VARIABLE stderr
-    RESULT_VARIABLE return_code
-    )
-  if(return_code)
-    message(STATUS "git describe failed: ${stderr}; ${KERNEL_VERSION_STRING} will be used instead")
-  elseif(CMAKE_VERBOSE_MAKEFILE)
-    message(STATUS "git describe stderr: ${stderr}")
-  endif()
-endif()
-
-set(SOC_NAME ${CONFIG_SOC})
+set(SOC_NAME   ${CONFIG_SOC})
 set(SOC_SERIES ${CONFIG_SOC_SERIES})
 set(SOC_FAMILY ${CONFIG_SOC_FAMILY})
 
@@ -341,20 +436,24 @@ if(CONFIG_QEMU_TARGET)
   if(CONFIG_NET_QEMU_ETHERNET)
     if(CONFIG_ETH_NIC_MODEL)
       list(APPEND QEMU_FLAGS_${ARCH}
-	-nic tap,model=${CONFIG_ETH_NIC_MODEL},script=no,downscript=no,ifname=zeth
-	)
+        -nic tap,model=${CONFIG_ETH_NIC_MODEL},script=no,downscript=no,ifname=zeth
+      )
     else()
-      message(FATAL_ERROR
-	"No Qemu ethernet driver configured!
-Enable Qemu supported ethernet driver like e1000 at drivers/ethernet")
+      message(FATAL_ERROR "
+        No Qemu ethernet driver configured!
+        Enable Qemu supported ethernet driver like e1000 at drivers/ethernet"
+      )
     endif()
   else()
     list(APPEND QEMU_FLAGS_${ARCH}
       -net none
-      )
+    )
   endif()
 endif()
 
+# "app" is a CMake library containing all the application code and is
+# modified by the entry point ${APPLICATION_SOURCE_DIR}/CMakeLists.txt
+# that was specified when cmake was called.
 zephyr_library_named(app)
 set_property(TARGET app PROPERTY ARCHIVE_OUTPUT_DIRECTORY app)
 

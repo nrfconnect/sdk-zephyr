@@ -33,7 +33,7 @@ static void _printk_dec_ulong(out_func_t out, void *ctx,
 			      const unsigned long num, enum pad_type padding,
 			      int min_width);
 static void _printk_hex_ulong(out_func_t out, void *ctx,
-			      const unsigned long num, enum pad_type padding,
+			      const unsigned long long num, enum pad_type padding,
 			      int min_width);
 
 /**
@@ -80,6 +80,13 @@ void __printk_hook_install(int (*fn)(int))
 void *__printk_get_hook(void)
 {
 	return _char_out;
+}
+
+static void print_err(out_func_t out, void *ctx)
+{
+	out('E', ctx);
+	out('R', ctx);
+	out('R', ctx);
 }
 
 /**
@@ -141,11 +148,25 @@ void _vprintk(out_func_t out, void *ctx, const char *fmt, va_list ap)
 				goto still_might_format;
 			case 'd':
 			case 'i': {
-				long d;
-				if (long_ctr < 2) {
-					d = va_arg(ap, long);
+				s32_t d;
+
+				if (long_ctr == 0) {
+					d = va_arg(ap, int);
+				} else if (long_ctr == 1) {
+					long ld = va_arg(ap, long);
+					if (ld > INT32_MAX || ld < INT32_MIN) {
+						print_err(out, ctx);
+						break;
+					}
+					d = (s32_t)ld;
 				} else {
-					d = (long)va_arg(ap, long long);
+					long long lld = va_arg(ap, long long);
+					if (lld > INT32_MAX ||
+					    lld < INT32_MIN) {
+						print_err(out, ctx);
+						break;
+					}
+					d = (s32_t)lld;
 				}
 
 				if (d < 0) {
@@ -158,14 +179,27 @@ void _vprintk(out_func_t out, void *ctx, const char *fmt, va_list ap)
 				break;
 			}
 			case 'u': {
-				unsigned long u;
+				u32_t u;
 
-				if (long_ctr < 2) {
-					u = va_arg(ap, unsigned long);
+				if (long_ctr == 0) {
+					u = va_arg(ap, unsigned int);
+				} else if (long_ctr == 1) {
+					long lu = va_arg(ap, unsigned long);
+					if (lu > INT32_MAX) {
+						print_err(out, ctx);
+						break;
+					}
+					u = (u32_t)lu;
 				} else {
-					u = (unsigned long)va_arg(ap,
-							unsigned long long);
+					unsigned long long llu =
+						va_arg(ap, unsigned long long);
+					if (llu > INT32_MAX) {
+						print_err(out, ctx);
+						break;
+					}
+					u = (u32_t)llu;
 				}
+
 				_printk_dec_ulong(out, ctx, u, padding,
 						  min_width);
 				break;
@@ -179,13 +213,12 @@ void _vprintk(out_func_t out, void *ctx, const char *fmt, va_list ap)
 				  /* Fall through */
 			case 'x':
 			case 'X': {
-				unsigned long x;
+				unsigned long long x;
 
 				if (long_ctr < 2) {
 					x = va_arg(ap, unsigned long);
 				} else {
-					x = (unsigned long)va_arg(ap,
-							unsigned long long);
+					x = va_arg(ap, unsigned long long);
 				}
 
 				_printk_hex_ulong(out, ctx, x, padding,
@@ -346,21 +379,22 @@ void printk(const char *fmt, ...)
 }
 
 /**
- * @brief Output an unsigned long in hex format
+ * @brief Output an unsigned long long in hex format
  *
- * Output an unsigned long on output installed by platform at init time. Should
- * be able to handle an unsigned long of any size, 32 or 64 bit.
+ * Output an unsigned long long on output installed by platform at init time.
+ * Able to print full 64-bit values.
  * @param num Number to output
  *
  * @return N/A
  */
 static void _printk_hex_ulong(out_func_t out, void *ctx,
-			      const unsigned long num, enum pad_type padding,
+			      const unsigned long long num,
+			      enum pad_type padding,
 			      int min_width)
 {
 	int size = sizeof(num) * 2;
 	int found_largest_digit = 0;
-	int remaining = 8; /* 8 digits max */
+	int remaining = 16; /* 16 digits max */
 	int digits = 0;
 
 	for (; size; size--) {

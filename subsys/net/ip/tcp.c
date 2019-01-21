@@ -2198,6 +2198,8 @@ NET_CONN_CB(tcp_synack_received)
 
 		net_stats_update_tcp_seg_rst(net_pkt_iface(pkt));
 
+		k_sem_give(&context->tcp->connect_wait);
+
 		if (context->connect_cb) {
 			context->connect_cb(context, -ECONNREFUSED,
 					    context->user_data);
@@ -2407,8 +2409,8 @@ NET_CONN_CB(tcp_syn_rcvd)
 		pkt_get_sockaddr(net_context_get_family(context),
 				 pkt, &pkt_src_addr);
 		send_syn_ack(context, &pkt_src_addr, &remote_addr);
-
-		return NET_DROP;
+		net_pkt_unref(pkt);
+		return NET_OK;
 	}
 
 	/*
@@ -2523,6 +2525,8 @@ NET_CONN_CB(tcp_syn_rcvd)
 					addrlen,
 					0,
 					context->user_data);
+		net_pkt_unref(pkt);
+		return NET_OK;
 	}
 
 	return NET_DROP;
