@@ -89,6 +89,15 @@ struct shell_static_args {
 
 /**
  * @brief Shell command handler prototype.
+ *
+ * @param shell Shell instance.
+ * @param argc  Arguments count.
+ * @param argv  Arguments.
+ *
+ * @retval 0 Successful command execution.
+ * @retval 1 Help printed and command not executed.
+ * @retval -EINVAL Argument validation failed.
+ * @retval -ENOEXEC Command not executed.
  */
 typedef int (*shell_cmd_handler)(const struct shell *shell,
 				 size_t argc, char **argv);
@@ -238,6 +247,7 @@ enum shell_state {
 	SHELL_STATE_UNINITIALIZED,
 	SHELL_STATE_INITIALIZED,
 	SHELL_STATE_ACTIVE,
+	SHELL_STATE_COMMAND,
 	SHELL_STATE_PANIC_MODE_ACTIVE,  /*!< Panic activated.*/
 	SHELL_STATE_PANIC_MODE_INACTIVE /*!< Panic requested, not supported.*/
 };
@@ -297,10 +307,10 @@ struct shell_transport_api {
 	/**
 	 * @brief Function for writing data to the transport interface.
 	 *
-	 * @param[in] transport  Pointer to the transfer instance.
-	 * @param[in] data       Pointer to the source buffer.
-	 * @param[in] length     Source buffer length.
-	 * @param[in] cnt        Pointer to the sent bytes counter.
+	 * @param[in]  transport  Pointer to the transfer instance.
+	 * @param[in]  data       Pointer to the source buffer.
+	 * @param[in]  length     Source buffer length.
+	 * @param[out] cnt        Pointer to the sent bytes counter.
 	 *
 	 * @return Standard error code.
 	 */
@@ -310,15 +320,24 @@ struct shell_transport_api {
 	/**
 	 * @brief Function for reading data from the transport interface.
 	 *
-	 * @param[in] p_transport  Pointer to the transfer instance.
-	 * @param[in] p_data       Pointer to the destination buffer.
-	 * @param[in] length       Destination buffer length.
-	 * @param[in] cnt          Pointer to the received bytes counter.
+	 * @param[in]  p_transport  Pointer to the transfer instance.
+	 * @param[in]  p_data       Pointer to the destination buffer.
+	 * @param[in]  length       Destination buffer length.
+	 * @param[out] cnt          Pointer to the received bytes counter.
 	 *
 	 * @return Standard error code.
 	 */
 	int (*read)(const struct shell_transport *transport,
 		    void *data, size_t length, size_t *cnt);
+
+	/**
+	 * @brief Function called in shell thread loop.
+	 *
+	 * Can be used for backend operations that require longer execution time
+	 *
+	 * @param[in] transport Pointer to the transfer instance.
+	 */
+	void (*update)(const struct shell_transport *transport);
 
 };
 
@@ -370,9 +389,10 @@ union shell_internal {
 
 enum shell_signal {
 	SHELL_SIGNAL_RXRDY,
-	SHELL_SIGNAL_TXDONE,
 	SHELL_SIGNAL_LOG_MSG,
 	SHELL_SIGNAL_KILL,
+	SHELL_SIGNAL_COMMAND_EXIT,
+	SHELL_SIGNAL_TXDONE,
 	SHELL_SIGNALS
 };
 
@@ -407,6 +427,9 @@ struct shell_ctx {
 
 	struct k_poll_signal signals[SHELL_SIGNALS];
 	struct k_poll_event events[SHELL_SIGNALS];
+
+	struct k_mutex wr_mtx;
+	k_tid_t tid;
 };
 
 extern const struct log_backend_api log_backend_shell_api;
@@ -452,18 +475,23 @@ extern void shell_print_stream(const void *user_ctx, const char *data,
  *
  * @param[in] _name		Instance name.
  * @param[in] _prompt		Shell prompt string.
- * @param[in] transport_iface	Pointer to the transport interface.
- * @param[in] log_queue_size	Logger processing queue size.
+ * @param[in] _transport_iface	Pointer to the transport interface.
+ * @param[in] _log_queue_size	Logger processing queue size.
+ * @param[in] _log_timeout	Logger thread timeout in milliseconds on full
+ *				log queue. If queue is full logger thread is
+ *				blocked for given amount of time before log
+ *				message is dropped.
  * @param[in] _shell_flag	Shell output newline sequence.
  */
-#define SHELL_DEFINE(_name, _prompt, transport_iface,			      \
-		     log_queue_size, _shell_flag)			      \
+#define SHELL_DEFINE(_name, _prompt, _transport_iface,			      \
+		     _log_queue_size, _log_timeout, _shell_flag)	      \
 	static const struct shell _name;				      \
 	static struct shell_ctx UTIL_CAT(_name, _ctx);			      \
 	static char _name##prompt[CONFIG_SHELL_PROMPT_LENGTH + 1] = _prompt;  \
 	static u8_t _name##_out_buffer[CONFIG_SHELL_PRINTF_BUFF_SIZE];	      \
 	SHELL_LOG_BACKEND_DEFINE(_name, _name##_out_buffer,		      \
-					 CONFIG_SHELL_PRINTF_BUFF_SIZE);      \
+				 CONFIG_SHELL_PRINTF_BUFF_SIZE,		      \
+				 _log_queue_size, _log_timeout);	      \
 	SHELL_HISTORY_DEFINE(_name, 128, 8);/*todo*/			      \
 	SHELL_FPRINTF_DEFINE(_name##_fprintf, &_name, _name##_out_buffer,     \
 			     CONFIG_SHELL_PRINTF_BUFF_SIZE,		      \
@@ -474,7 +502,7 @@ extern void shell_print_stream(const void *user_ctx, const char *data,
 	static struct k_thread _name##_thread;				      \
 	static const struct shell _name = {				      \
 		.prompt = _name##prompt,				      \
-		.iface = transport_iface,				      \
+		.iface = _transport_iface,				      \
 		.ctx = &UTIL_CAT(_name, _ctx),				      \
 		.history = SHELL_HISTORY_PTR(_name),			      \
 		.shell_flag = _shell_flag,				      \
@@ -556,7 +584,11 @@ int shell_stop(const struct shell *shell);
 
 /**
  * @brief printf-like function which sends formatted data stream to the shell.
- *	  This function shall not be used outside of the shell command context.
+ *
+ * This function shall not be used outside of the shell command context unless
+ * command requested to stay in the foreground (see @ref shell_command_enter).
+ * In that case, function can be called from any thread context until command is
+ * terminated with CTRL+C or @ref shell_command_exit call.
  *
  * @param[in] shell	Pointer to the shell instance.
  * @param[in] color	Printed text color.
@@ -569,7 +601,7 @@ void shell_fprintf(const struct shell *shell, enum shell_vt100_color color,
 /**
  * @brief Print info message to the shell.
  *
- *  This function shall not be used outside of the shell command context.
+ * See @ref shell_fprintf.
  *
  * @param[in] _sh Pointer to the shell instance.
  * @param[in] _ft Format string.
@@ -581,7 +613,7 @@ void shell_fprintf(const struct shell *shell, enum shell_vt100_color color,
 /**
  * @brief Print normal message to the shell.
  *
- *  This function shall not be used outside of the shell command context.
+ * See @ref shell_fprintf.
  *
  * @param[in] _sh Pointer to the shell instance.
  * @param[in] _ft Format string.
@@ -593,7 +625,7 @@ void shell_fprintf(const struct shell *shell, enum shell_vt100_color color,
 /**
  * @brief Print warning message to the shell.
  *
- * This function shall not be used outside of the shell command context.
+ * See @ref shell_fprintf.
  *
  * @param[in] _sh Pointer to the shell instance.
  * @param[in] _ft Format string.
@@ -605,7 +637,8 @@ void shell_fprintf(const struct shell *shell, enum shell_vt100_color color,
 /**
  * @brief Print error message to the shell.
  *
- * This function shall not be used outside of the shell command context.
+ * See @ref shell_fprintf.
+ *
  * @param[in] _sh Pointer to the shell instance.
  * @param[in] _ft Format string.
  * @param[in] ... List of parameters to print.
@@ -620,6 +653,24 @@ void shell_fprintf(const struct shell *shell, enum shell_vt100_color color,
  * @param[in] shell Pointer to the shell instance.
  */
 void shell_process(const struct shell *shell);
+
+/**
+ * @brief Indicate to shell that command stay in foreground, blocking the shell.
+ *
+ * Command in foreground is terminated by @ref shell_command_exit or CTRL+C.
+ *
+ * @param[in] shell	Pointer to the shell instance.
+ */
+void shell_command_enter(const struct shell *shell);
+
+/**
+ * @brief Exit command in foreground state.
+ *
+ * See @ref shell_command_enter.
+ *
+ * @param[in] shell	Pointer to the shell instance.
+ */
+void shell_command_exit(const struct shell *shell);
 
 /**
  * @brief Change displayed shell prompt.

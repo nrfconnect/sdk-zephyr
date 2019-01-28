@@ -14,6 +14,29 @@ find_program(CMAKE_READELF    ${CROSS_COMPILE}readelf PATH ${TOOLCHAIN_HOME} NO_
 find_program(CMAKE_GDB        ${CROSS_COMPILE}gdb     PATH ${TOOLCHAIN_HOME} NO_DEFAULT_PATH)
 find_program(CMAKE_NM         ${CROSS_COMPILE}nm      PATH ${TOOLCHAIN_HOME} NO_DEFAULT_PATH)
 
+# x86_64 should pick up a proper cross compiler if one is provided,
+# but falling back to using the host toolchain is a very sane behavior
+# too.
+if(CONFIG_X86_64)
+  if(CMAKE_C_COMPILER STREQUAL CMAKE_C_COMPILER-NOTFOUND)
+    find_program(CMAKE_C_COMPILER   gcc    )
+    find_program(CMAKE_OBJCOPY      objcopy)
+    find_program(CMAKE_OBJDUMP      objdump)
+    find_program(CMAKE_AR           ar     )
+    find_program(CMAKE_RANLILB      ranlib )
+    find_program(CMAKE_READELF      readelf)
+    find_program(CMAKE_GDB          gdb    )
+  endif()
+
+  # When building in x32 mode with a host compiler, there is no libgcc
+  # shipped (because it's an x86_64 compiler, not x32).  That's
+  # actually non-fatal, as no known features we hit in existing code
+  # actually require the library.  But I can't find an exaustive list
+  # of exactly what can break, so this is fragile.  Long term we
+  # really need to be blessing a proper cross toolchain.
+  set(no_libgcc Y)
+endif()
+
 if(CONFIG_CPLUSPLUS)
   set(cplusplus_compiler ${CROSS_COMPILE}${C++})
 else()
@@ -49,9 +72,9 @@ endforeach()
 if("${ZEPHYR_TOOLCHAIN_VARIANT}" STREQUAL "xcc")
 
   list(APPEND TOOLCHAIN_LIBS
-	gcc
-	hal
-	)
+    gcc
+    hal
+    )
 
 else()
   include(${ZEPHYR_BASE}/cmake/gcc-m-cpu.cmake)
@@ -85,20 +108,23 @@ else()
       )
   endif()
 
-  execute_process(
-    COMMAND ${CMAKE_C_COMPILER} ${TOOLCHAIN_C_FLAGS} --print-libgcc-file-name
-    OUTPUT_VARIABLE LIBGCC_FILE_NAME
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
+  if(NOT no_libgcc)
+    # This libgcc code is partially duplicated in compiler/*/target.cmake
+    execute_process(
+      COMMAND ${CMAKE_C_COMPILER} ${TOOLCHAIN_C_FLAGS} --print-libgcc-file-name
+      OUTPUT_VARIABLE LIBGCC_FILE_NAME
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      )
 
-  assert_exists(LIBGCC_FILE_NAME)
+    assert_exists(LIBGCC_FILE_NAME)
 
-  get_filename_component(LIBGCC_DIR ${LIBGCC_FILE_NAME} DIRECTORY)
+    get_filename_component(LIBGCC_DIR ${LIBGCC_FILE_NAME} DIRECTORY)
 
-  assert_exists(LIBGCC_DIR)
+    assert_exists(LIBGCC_DIR)
 
-  LIST(APPEND LIB_INCLUDE_DIR "-L\"${LIBGCC_DIR}\"")
-  LIST(APPEND TOOLCHAIN_LIBS gcc)
+    LIST(APPEND LIB_INCLUDE_DIR "-L\"${LIBGCC_DIR}\"")
+    LIST(APPEND TOOLCHAIN_LIBS gcc)
+  endif()
 
   if(SYSROOT_DIR)
     # The toolchain has specified a sysroot dir that we can use to set
@@ -124,5 +150,13 @@ endif()
 foreach(isystem_include_dir ${NOSTDINC})
   list(APPEND isystem_include_flags -isystem "\"${isystem_include_dir}\"")
 endforeach()
-set(CMAKE_REQUIRED_FLAGS -nostartfiles -nostdlib ${isystem_include_flags} -Wl,--unresolved-symbols=ignore-in-object-files)
+# The CMAKE_REQUIRED_FLAGS variable is used by check_c_compiler_flag()
+# (and other commands which end up calling check_c_source_compiles())
+# to add additional compiler flags used during checking. These flags
+# are unused during "real" builds of Zephyr source files linked into
+# the final executable.
+#
+# Appending onto any existing values lets users specify
+# toolchain-specific flags at generation time.
+list(APPEND CMAKE_REQUIRED_FLAGS -nostartfiles -nostdlib ${isystem_include_flags} -Wl,--unresolved-symbols=ignore-in-object-files)
 string(REPLACE ";" " " CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")

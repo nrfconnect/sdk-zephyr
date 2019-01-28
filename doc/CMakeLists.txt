@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.8.2)
-project(Zephyr-Kernel-Doc VERSION ${PROJECT_VERSION} LANGUAGES)
+cmake_minimum_required(VERSION 3.13.1)
+project(Zephyr-Kernel-Doc LANGUAGES)
 
 set(ZEPHYR_BASE $ENV{ZEPHYR_BASE})
 
@@ -144,6 +144,7 @@ add_custom_target(
   ARCH=*
   SOC_DIR=soc/
   SRCARCH=x86
+  KCONFIG_TURBO_MODE=${KCONFIG_TURBO_MODE}
   ${PYTHON_EXECUTABLE} scripts/genrest.py Kconfig ${RST_OUT}/doc/reference/kconfig/
   WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
 )

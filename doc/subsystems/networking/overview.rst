@@ -55,14 +55,6 @@ can be disabled if not needed.
   configuration options for sockets API. Secure functions for the implementation
   are provided by mbedTLS library.
 
-* **HTTP** Hypertext Transfer Protocol (RFC 2116) is supported. A simple
-  library is provided that applications can use. Sample applications are
-  implemented for :ref:`http-client-sample` and :ref:`http-server-sample`.
-  Both :ref:`http-client-sample` and :ref:`http-server-sample` can use
-  TLS (Transport Layer Security) v1.2 (RFC 5246) or SSL (Secure Sockets
-  Layer) v3.0 (RFC 6101) functionality to encrypt the network traffic.
-  The secured connections are provided by mbed library.
-
 * **MQTT** Message Queue Telemetry Transport (ISO/IEC PRF 20922) is supported.
   A sample :ref:`mqtt-publisher-sample` client application for MQTT v3.1.1 is
   implemented.
@@ -81,9 +73,6 @@ can be disabled if not needed.
   and has template implementations for Security, Server, Device Management and
   Firmware objects.   DTLS and Bootstrap support are currently not supported.
   :ref:`lwm2m-client-sample` implements the library as an example.
-
-* **RPL** IPv6 Routing Protocol for Low-Power and Lossy Networks (RFC 6550)
-  is supported. RPL is an IPv6 based mesh routing protocol.
 
 * **DNS** Domain Name Service (RFC 1035) client functionality is supported.
   Applications can use an API to query domain name information or IP addresses
@@ -113,12 +102,6 @@ can be disabled if not needed.
 * **Network traffic classification.** The sent and received network packets can
   be prioritized depending on application needs.
   See :ref:`traffic-class-support` for more details.
-
-* **Websocket** Websocket (RFC 6455) server side functionality is supported.
-  The HTTP server API will enable websocket support if
-  :option:`CONFIG_WEBSOCKET` is enabled. Client side websocket functionality is
-  currently not supported by the websocket API.
-  See :ref:`websocket-server-sample` for information how to use the API.
 
 * **Time Sensitive Networking.** The gPTP (generalized Precision Time Protocol)
   is supported. See :ref:`gptp-support` for more details.

@@ -297,6 +297,19 @@ void net_buf_simple_push_u8(struct net_buf_simple *buf, u8_t val);
 void *net_buf_simple_pull(struct net_buf_simple *buf, size_t len);
 
 /**
+ *  @brief Remove data from the beginning of the buffer.
+ *
+ *  Removes data from the beginning of the buffer by modifying the data
+ *  pointer and buffer length.
+ *
+ *  @param buf Buffer to update.
+ *  @param len Number of bytes to remove.
+ *
+ *  @return Pointer to the old location of the buffer data.
+ */
+void *net_buf_simple_pull_mem(struct net_buf_simple *buf, size_t len);
+
+/**
  *  @brief Remove a 8-bit value from the beginning of the buffer
  *
  *  Same idea as with net_buf_simple_pull(), but a helper for operating
@@ -1148,6 +1161,20 @@ static inline void *net_buf_user_data(const struct net_buf *buf)
 #define net_buf_pull(buf, len) net_buf_simple_pull(&(buf)->b, len)
 
 /**
+ *  @def net_buf_pull_mem
+ *  @brief Remove data from the beginning of the buffer.
+ *
+ *  Removes data from the beginning of the buffer by modifying the data
+ *  pointer and buffer length.
+ *
+ *  @param buf Buffer to update.
+ *  @param len Number of bytes to remove.
+ *
+ *  @return Pointer to the old beginning of the buffer data.
+ */
+#define net_buf_pull_mem(buf, len) net_buf_simple_pull_mem(&(buf)->b, len)
+
+/**
  *  @def net_buf_pull_u8
  *  @brief Remove a 8-bit value from the beginning of the buffer
  *
@@ -1300,21 +1327,22 @@ struct net_buf *net_buf_frag_del(struct net_buf *parent, struct net_buf *frag);
 #endif
 
 /**
- * @brief Copy len bytes from src starting from offset to dst buffer
+ * @brief Copy bytes from net_buf chain starting at offset to linear buffer
  *
- * This routine assumes that dst is large enough to store @a len bytes
- * starting from offset at src.
+ * Copy (extract) @a len bytes from @a src net_buf chain, starting from @a
+ * offset in it, to a linear buffer @a dst. Return number of bytes actually
+ * copied, which may be less than requested, if net_buf chain doesn't have
+ * enough data, or destination buffer is too small.
  *
  * @param dst Destination buffer
- * @param dst_len Destination buffer max length
- * @param src Source buffer that may be fragmented
- * @param offset Starting point to copy from
+ * @param dst_len Destination buffer length
+ * @param src Source net_buf chain
+ * @param offset Starting offset to copy from
  * @param len Number of bytes to copy
- * @return number of bytes copied if everything is ok
- * @return -ENOMEM on error
+ * @return number of bytes actually copied
  */
-int net_buf_linearize(void *dst, size_t dst_len,
-		      struct net_buf *src, size_t offset, size_t len);
+size_t net_buf_linearize(void *dst, size_t dst_len,
+			 struct net_buf *src, size_t offset, size_t len);
 
 /**
  * @typedef net_buf_allocator_cb

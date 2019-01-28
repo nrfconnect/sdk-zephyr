@@ -8,6 +8,9 @@
 #include <gpio.h>
 #include <sensor.h>
 #include "board.h"
+#include "mesh.h"
+
+#include <bluetooth/mesh.h>
 
 struct device_info {
 	struct device *dev;
@@ -29,8 +32,8 @@ static struct led_device_info led_dev_info[] = {
 
 static struct device_info dev_info[] = {
 	{ NULL, SW0_GPIO_CONTROLLER },
-	{ NULL, DT_HDC1008_NAME },
-	{ NULL, DT_FXOS8700_NAME },
+	{ NULL, DT_TI_HDC1010_0_LABEL },
+	{ NULL, DT_NXP_MMA8652FC_0_LABEL },
 	{ NULL, DT_APDS9960_DRV_NAME },
 	{ NULL, DT_SSD1673_DEV_NAME },
 };
@@ -123,6 +126,65 @@ int get_apds9960_val(struct sensor_value *val)
 	return 0;
 }
 
+#define MOTION_TIMEOUT K_MINUTES(30)
+
+static struct k_delayed_work motion_work;
+
+static void motion_timeout(struct k_work *work)
+{
+	int err;
+
+	printk("power save\n");
+
+	if (!mesh_is_initialized()) {
+		k_delayed_work_submit(&motion_work, MOTION_TIMEOUT);
+		return;
+	}
+
+	err = bt_mesh_suspend();
+	if (err && err != -EALREADY) {
+		printk("failed to suspend mesh (err %d)\n", err);
+	}
+}
+
+static void motion_handler(struct device *dev, struct sensor_trigger *trig)
+{
+	int err;
+
+	printk("motion!\n");
+
+	if (!mesh_is_initialized()) {
+		return;
+	}
+
+	err = bt_mesh_resume();
+	if (err && err != -EALREADY) {
+		printk("failed to resume mesh (err %d)\n", err);
+	}
+
+	k_delayed_work_submit(&motion_work, MOTION_TIMEOUT);
+}
+
+static void configure_accel(void)
+{
+	struct device_info *accel = &dev_info[DEV_IDX_MMA8652];
+	struct sensor_trigger trig_motion = {
+		.type = SENSOR_TRIG_DELTA,
+		.chan = SENSOR_CHAN_ACCEL_XYZ,
+	};
+	int err;
+
+	err = sensor_trigger_set(accel->dev, &trig_motion, motion_handler);
+	if (err) {
+		printk("setting motion trigger failed, err %d\n", err);
+		return;
+	}
+
+
+	k_delayed_work_init(&motion_work, motion_timeout);
+	k_delayed_work_submit(&motion_work, MOTION_TIMEOUT);
+}
+
 int periphs_init(void)
 {
 	unsigned int i;
@@ -147,5 +209,8 @@ int periphs_init(void)
 	}
 
 	configure_gpios();
+
+	configure_accel();
+
 	return 0;
 }

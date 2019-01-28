@@ -5,7 +5,7 @@ Samples and Demos
 
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 2
    :glob:
 
    kernel
@@ -22,6 +22,8 @@ Samples and Demos
    display/*
    shields/*
    portability/*
+   gui/*
 
-To add a new sample document, please use the template available under
-:file:`doc/templates/sample.tmpl`
+.. comment
+   To add a new sample document, please use the template available under
+   :file:`doc/templates/sample.tmpl`

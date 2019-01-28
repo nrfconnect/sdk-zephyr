@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation
+ * Copyright (c) 2019 Intel Corporation
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -117,6 +117,16 @@ struct soc_resource_alloc_regs {
 	u32_t	geno;
 };
 
+/* DMIC SHIM Registers */
+#define SOC_DMIC_SHIM_REG_BASE			0x00071E80
+#define SOC_DMIC_SHIM_DMICLCTL_SPA		BIT(0)
+#define SOC_DMIC_SHIM_DMICLCTL_CPA		BIT(8)
+
+struct soc_dmic_shim_regs {
+	u32_t	dmiclcap;
+	u32_t	dmiclctl;
+};
+
 /* SOC DSP SHIM Registers */
 #define SOC_DSP_SHIM_REG_BASE			0x00071F00
 /* SOC DSP SHIM Register - Clock Control */
@@ -151,11 +161,21 @@ struct soc_dsp_shim_regs {
 /* Global Control registers */
 #define SOC_S1000_GLB_CTRL_BASE			(0x00081C00)
 
-#define SOC_S1000_GLB_CTRL_STRAPS		(SOC_S1000_GLB_CTRL_BASE + 0x40)
+#define SOC_GNA_POWER_CONTROL_SPA		(BIT(0))
+#define SOC_GNA_POWER_CONTROL_CPA		(BIT(8))
+#define SOC_GNA_POWER_CONTROL_CLK_EN		(BIT(16))
+
 #define SOC_S1000_STRAP_REF_CLK			(BIT_MASK(2) << 3)
 #define SOC_S1000_STRAP_REF_CLK_38P4		(0 << 3)
 #define SOC_S1000_STRAP_REF_CLK_19P2		(1 << 3)
 #define SOC_S1000_STRAP_REF_CLK_24P576		(2 << 3)
+
+struct soc_global_regs {
+	u32_t	reserved1[8];
+	u32_t	gna_power_control;
+	u32_t	reserved2[7];
+	u32_t	straps;
+};
 
 extern void _soc_irq_enable(u32_t irq);
 extern void _soc_irq_disable(u32_t irq);

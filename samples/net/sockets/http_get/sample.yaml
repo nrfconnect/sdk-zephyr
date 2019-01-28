@@ -3,7 +3,8 @@ sample:
   name: socket_http_get
 tests:
   test:
-    platform_exclude: esp32
+    platform_exclude: esp32 qemu_x86_64 # No newlib
     harness: net
     min_ram: 32
-    tags: net
+    min_flash: 80
+    tags: net socket

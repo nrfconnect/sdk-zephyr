@@ -5,11 +5,7 @@
  */
 
 &i2c0 {
-        status = "ok";
-        sda-pin = <0>;
-        scl-pin = <1>;
-
-	sht3xd: sht3xd@44 {
+	sht3xd@44 {
 		compatible = "sensirion,sht3xd";
 		reg = <0x44>;
 		label = "SHT3XD";

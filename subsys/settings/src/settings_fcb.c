@@ -159,7 +159,7 @@ static void settings_fcb_compress(struct settings_fcb *cf)
 			break;
 		}
 
-		off_t val1_off;
+		size_t val1_off;
 
 		rc = settings_line_name_read(name1, sizeof(name1), &val1_off,
 					     &loc1);
@@ -178,7 +178,7 @@ static void settings_fcb_compress(struct settings_fcb *cf)
 		copy = 1;
 
 		while (fcb_getnext(&cf->cf_fcb, &loc2.loc) == 0) {
-			off_t val2_off;
+			size_t val2_off;
 
 			rc = settings_line_name_read(name2, sizeof(name2),
 						     &val2_off, &loc2);
@@ -251,7 +251,7 @@ static int settings_fcb_save(struct settings_store *cs, const char *name,
 	wbs = flash_area_align(cf->cf_fcb.fap);
 	len = settings_line_len_calc(name, val_len);
 
-	for (i = 0; i < CONFIG_SETTINGS_FCB_NUM_AREAS; i++) {
+	for (i = 0; i < cf->cf_fcb.f_sector_cnt - 1; i++) {
 		rc = fcb_append(&cf->cf_fcb, len, &loc.loc);
 		if (rc != FCB_ERR_NOSPACE) {
 			break;

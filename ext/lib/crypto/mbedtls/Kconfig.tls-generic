@@ -175,6 +175,11 @@ config MBEDTLS_CIPHER_AES_ENABLED
 	bool "Enable the AES block cipher"
 	default y
 
+config MBEDTLS_AES_ROM_TABLES
+	depends on MBEDTLS_CIPHER_AES_ENABLED
+	bool "Use precomputed AES tables stored in ROM."
+	default y
+
 config MBEDTLS_CIPHER_CAMELLIA_ENABLED
 	bool "Enable the Camellia block cipher"
 
@@ -265,6 +270,14 @@ config MBEDTLS_PEM_CERTIFICATE_FORMAT
 	help
 	  By default only DER (binary) format of certificates is supported. Enable
 	  this option to enable support for PEM format.
+
+config MBEDTLS_HAVE_ASM
+	bool "Enable use of assembly code"
+	default y if !ARM
+	help
+	  Enable use of assembly code in mbedTLS. This improves the performances
+	  of asymetric cryptography, however this might have an impact on the
+	  code size.
 
 config MBEDTLS_USER_CONFIG_ENABLE
 	bool "Enable user mbedTLS config file"

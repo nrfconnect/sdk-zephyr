@@ -91,12 +91,13 @@
 		reg = <0x1d>;
 		label = "MMA8652FC";
 		int1-gpios = <&gpio0 24 0>;
+		int2-gpios = <&gpio0 25 0>;
 	};
 
 	hdc1008@43 {
-		compatible = "ti,hdc1008";
+		compatible = "ti,hdc1008","ti,hdc1010";
 		reg = <0x43>;
-		label = "HDC1008";
+		label = "HDC1010";
 		drdy-gpios = <&gpio0 22 GPIO_PUD_PULL_UP>;
 	};
 

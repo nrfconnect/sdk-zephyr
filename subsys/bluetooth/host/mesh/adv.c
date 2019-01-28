@@ -214,6 +214,11 @@ struct net_buf *bt_mesh_adv_create_from_pool(struct net_buf_pool *pool,
 	struct bt_mesh_adv *adv;
 	struct net_buf *buf;
 
+	if (atomic_test_bit(bt_mesh.flags, BT_MESH_SUSPENDED)) {
+		BT_WARN("Refusing to allocate buffer while suspended");
+		return NULL;
+	}
+
 	buf = net_buf_alloc(pool, timeout);
 	if (!buf) {
 		return NULL;
@@ -306,6 +311,7 @@ void bt_mesh_adv_init(void)
 	k_thread_create(&adv_thread_data, adv_thread_stack,
 			K_THREAD_STACK_SIZEOF(adv_thread_stack), adv_thread,
 			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
+	k_thread_name_set(&adv_thread_data, "BT Mesh adv");
 }
 
 int bt_mesh_scan_enable(void)

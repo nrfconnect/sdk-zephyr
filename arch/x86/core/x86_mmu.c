@@ -29,6 +29,12 @@ MMU_BOOT_REGION((u32_t)&__app_ram_start, (u32_t)&__app_ram_size,
 MMU_BOOT_REGION((u32_t)&_app_smem_start, (u32_t)&_app_smem_size,
 		MMU_ENTRY_WRITE | MMU_ENTRY_USER | MMU_ENTRY_EXECUTE_DISABLE);
 #endif
+
+#ifdef CONFIG_COVERAGE_GCOV
+MMU_BOOT_REGION((u32_t)&__gcov_bss_start, (u32_t)&__gcov_bss_size,
+		MMU_ENTRY_WRITE | MMU_ENTRY_USER | MMU_ENTRY_EXECUTE_DISABLE);
+#endif
+
 /* __kernel_ram_size includes all unused memory, which is used for heaps.
  * User threads cannot access this unless granted at runtime. This is done
  * automatically for stacks.
@@ -46,7 +52,7 @@ void _x86_mmu_get_flags(void *addr,
 	*pde_flags = (x86_page_entry_data_t)(X86_MMU_GET_PDE(addr)->value &
 				~(x86_page_entry_data_t)MMU_PDE_PAGE_TABLE_MASK);
 
-	if (*pde_flags & MMU_ENTRY_PRESENT) {
+	if ((*pde_flags & MMU_ENTRY_PRESENT) != 0) {
 		*pte_flags = (x86_page_entry_data_t)
 			(X86_MMU_GET_PTE(addr)->value &
 			 ~(x86_page_entry_data_t)MMU_PTE_PAGE_MASK);
@@ -191,7 +197,7 @@ void _x86_mmu_set_flags(void *ptr,
 	__ASSERT(!(addr & MMU_PAGE_MASK), "unaligned address provided");
 	__ASSERT(!(size & MMU_PAGE_MASK), "unaligned size provided");
 
-	while (size) {
+	while (size != 0) {
 
 #ifdef CONFIG_X86_PAE_MODE
 		/* TODO we're not generating 2MB entries at the moment */

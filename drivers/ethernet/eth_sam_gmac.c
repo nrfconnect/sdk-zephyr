@@ -929,22 +929,6 @@ static void link_configure(Gmac *gmac, u32_t flags)
 	gmac->GMAC_NCR |= (GMAC_NCR_RXEN | GMAC_NCR_TXEN);
 }
 
-static void eth_tx_timeout_work(struct k_work *item)
-{
-	struct gmac_queue *queue =
-		CONTAINER_OF(item, struct gmac_queue, tx_timeout_work);
-	struct eth_sam_dev_data *dev_data =
-		CONTAINER_OF(queue, struct eth_sam_dev_data,
-			     queue_list[queue->que_idx]);
-
-	struct device *const dev = net_if_get_device(dev_data->iface);
-	const struct eth_sam_dev_cfg *const cfg = DEV_CFG(dev);
-	Gmac *gmac = cfg->regs;
-
-	/* Just treat it as an error and discard all packets in the queue */
-	tx_error_handler(gmac, queue);
-}
-
 static int nonpriority_queue_init(Gmac *gmac, struct gmac_queue *queue)
 {
 	int result;
@@ -970,9 +954,6 @@ static int nonpriority_queue_init(Gmac *gmac, struct gmac_queue *queue)
 	 */
 	k_sem_init(&queue->tx_desc_sem, queue->tx_desc_list.len - 1,
 		   queue->tx_desc_list.len - 1);
-
-	k_delayed_work_init(&queue->tx_timeout_work,
-			    eth_tx_timeout_work);
 
 	/* Set Receive Buffer Queue Pointer Register */
 	gmac->GMAC_RBQB = (u32_t)queue->rx_desc_list.buf;
@@ -1029,9 +1010,6 @@ static int priority_queue_init(Gmac *gmac, struct gmac_queue *queue)
 
 	k_sem_init(&queue->tx_desc_sem, queue->tx_desc_list.len - 1,
 		   queue->tx_desc_list.len - 1);
-
-	k_delayed_work_init(&queue->tx_timeout_work,
-			    eth_tx_timeout_work);
 
 	/* Setup RX buffer size for DMA */
 	gmac->GMAC_RBSRPQ[queue_index] =
@@ -1311,6 +1289,7 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 	struct gmac_queue *queue;
 	struct gmac_desc_list *tx_desc_list;
 	struct gmac_desc *tx_desc;
+	struct gmac_desc *tx_first_desc;
 	struct net_buf *frag;
 	u8_t *frag_data;
 	u16_t frag_len;
@@ -1338,6 +1317,10 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 	err_tx_flushed_count_at_entry = queue->err_tx_flushed_count;
 
 	frag = pkt->frags;
+
+	/* Keep reference to the descriptor */
+	tx_first_desc = &tx_desc_list->buf[tx_desc_list->head];
+
 	while (frag) {
 		frag_data = frag->data;
 		frag_len = frag->len;
@@ -1365,16 +1348,15 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 		/* Update buffer descriptor address word */
 		gmac_desc_set_w0(tx_desc, (u32_t)frag_data);
 
-		/* Guarantee that address word is written before the status
-		 * word to avoid race condition.
+		/* Update buffer descriptor status word (clear used bit except
+		 * for the first frag).
 		 */
-		__DMB();  /* data memory barrier */
-		/* Update buffer descriptor status word (clear used bit) */
 		gmac_desc_set_w1(tx_desc,
 			  (frag_len & GMAC_TXW1_LEN)
 			| (!frag->frags ? GMAC_TXW1_LASTBUFFER : 0)
 			| (tx_desc_list->head == tx_desc_list->len - 1
-			   ? GMAC_TXW1_WRAP : 0));
+			   ? GMAC_TXW1_WRAP : 0)
+			| (tx_desc == tx_first_desc ? GMAC_TXW1_USED : 0));
 
 		/* Update descriptor position */
 		MODULO_INC(tx_desc_list->head, tx_desc_list->len);
@@ -1398,7 +1380,18 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 
 	/* Ensure the descriptor following the last one is marked as used */
 	tx_desc = &tx_desc_list->buf[tx_desc_list->head];
-	gmac_desc_append_w1(tx_desc, GMAC_TXW1_USED);
+	gmac_desc_set_w1(tx_desc, GMAC_TXW1_USED);
+
+	/* Guarantee that all the fragments have been written before removing
+	 * the used bit to avoid race condition.
+	 */
+	__DMB();  /* data memory barrier */
+
+	/* Remove the used bit of the first fragment to allow the controller
+	 * to process it and the following fragments.
+	 */
+	gmac_desc_set_w1(tx_first_desc,
+			 gmac_desc_get_w1(tx_first_desc) & ~GMAC_TXW1_USED);
 
 	/* Account for a sent frame */
 	ring_buf_put(&queue->tx_frames, POINTER_TO_UINT(pkt));
@@ -1408,14 +1401,13 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 	/* pkt is internally queued, so it requires to hold a reference */
 	net_pkt_ref(pkt);
 
+	/* Guarantee that the first fragment got its bit removed before starting
+	 * sending packets to avoid packets getting stuck.
+	 */
+	__DMB();  /* data memory barrier */
+
 	/* Start transmission */
 	gmac->GMAC_NCR |= GMAC_NCR_TSTART;
-
-	/* Set timeout for queue */
-	if (k_delayed_work_remaining_get(&queue->tx_timeout_work) == 0) {
-		k_delayed_work_submit(&queue->tx_timeout_work,
-				      CONFIG_ETH_SAM_GMAC_TX_TIMEOUT_MSEC);
-	}
 
 	return 0;
 }
@@ -1460,10 +1452,7 @@ static void queue0_isr(void *arg)
 			gmac_desc_get_w1(tail_desc),
 			tx_desc_list->tail);
 
-		/* Check if it is not too late */
-		if (k_delayed_work_cancel(&queue->tx_timeout_work) == 0) {
-			tx_completed(gmac, queue);
-		}
+		tx_completed(gmac, queue);
 	}
 
 	if (isr & GMAC_IER_HRESP) {
@@ -1511,10 +1500,7 @@ static inline void priority_queue_isr(void *arg, unsigned int queue_idx)
 			gmac_desc_get_w1(tail_desc),
 			tx_desc_list->tail);
 
-		/* Check if it is not too late */
-		if (k_delayed_work_cancel(&queue->tx_timeout_work) == 0) {
-			tx_completed(gmac, queue);
-		}
+		tx_completed(gmac, queue);
 	}
 
 	if (isrpq & GMAC_IERPQ_HRESP) {

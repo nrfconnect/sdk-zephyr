@@ -253,6 +253,7 @@ config LOG_PROCESS_THREAD_SLEEP_MS
 
 config LOG_PROCESS_THREAD_STACK_SIZE
 	int "Stack size for the internal log processing thread"
+	default 2048 if COVERAGE_GCOV
 	default 768
 	help
 	  Set the internal stack size for log processing thread.
@@ -302,6 +303,31 @@ config LOG_BACKEND_UART
 	help
 	  When enabled backend is using UART to output logs.
 
+config LOG_BACKEND_SWO
+	bool "Enable Serial Wire Output (SWO) backend"
+	depends on HAS_SWO
+	help
+	  When enabled, backend will use SWO for logging.
+
+if LOG_BACKEND_SWO
+
+config LOG_BACKEND_SWO_FREQ_HZ
+	int "Set SWO output frequency"
+	default 0
+	help
+	  Set SWO output frequency. Value 0 will select maximum frequency
+	  supported by the given MCU. Not all debug probes support high
+	  frequency SWO operation. In this case the frequency has to be set
+	  manually.
+
+	  SWO value defined by this option will be configured at boot. Most SWO
+	  viewer programs will configure SWO frequency when attached to the
+	  debug probe. Such configuration will persist only until the device
+	  reset. To ensure flawless operation the frequency configured here and
+	  by the SWO viewer program has to match.
+
+endif # LOG_BACKEND_SWO
+
 config LOG_BACKEND_RTT
 	bool "Enable Segger J-Link RTT backend"
 	depends on USE_SEGGER_RTT
@@ -330,10 +356,11 @@ config LOG_BACKEND_RTT_MODE_DROP
 config LOG_BACKEND_RTT_MODE_BLOCK
 	bool "Block until message is transferred to host."
 	help
-	  Waits until there is enough space in the up-buffer for a message
-	  and until the message is completely transferred to the host.
+	  Waits until there is enough space in the up-buffer for a message.
 
 endchoice
+
+if LOG_BACKEND_RTT_MODE_DROP
 
 config LOG_BACKEND_RTT_MESSAGE_SIZE
 	int "Size of internal buffer for storing messages."
@@ -341,6 +368,36 @@ config LOG_BACKEND_RTT_MESSAGE_SIZE
 	default 128
 	help
 	  This option defines maximum message size transferable to up-buffer.
+
+endif #LOG_BACKEND_RTT_MODE_DROP
+
+if LOG_BACKEND_RTT_MODE_BLOCK
+
+config LOG_BACKEND_RTT_OUTPUT_BUFFER_SIZE
+	int "Size of the output buffer"
+	default 16
+	help
+	  Buffer is used by log_output module for preparing output data (e.g.
+	  string formatting).
+
+config LOG_BACKEND_RTT_RETRY_CNT
+	int "Number of retries"
+	default 4
+	help
+	  Number of TX retries before dropping the data and assuming that
+	  RTT session is inactive.
+
+config LOG_BACKEND_RTT_RETRY_DELAY_MS
+	int "Delay between TX retries in milliseconds"
+	default 5
+	help
+	  Sleep period between TX retry attempts. During RTT session, host pulls
+	  data periodically. Period starts from 1-2 milliseconds and can be
+	  increased if traffic on RTT increases (also from host to device). In
+	  case of heavy traffic data can be lost and it may be necessary to
+	  increase delay or number of retries.
+
+endif #LOG_BACKEND_RTT_MODE_BLOCK
 
 config LOG_BACKEND_RTT_BUFFER
 	int "Buffer number used for logger output."
@@ -360,7 +417,6 @@ config LOG_BACKEND_RTT_BUFFER_SIZE
 
 endif # LOG_BACKEND_RTT_BUFFER
 endif # LOG_BACKEND_RTT
-
 
 config LOG_BACKEND_NATIVE_POSIX
 	bool "Enable native backend"
@@ -418,14 +474,16 @@ endif # LOG_BACKEND_NET
 
 config LOG_BACKEND_SHOW_COLOR
 	bool "Enable colors in the backend"
-	depends on LOG_BACKEND_UART || LOG_BACKEND_NATIVE_POSIX || LOG_BACKEND_RTT
+	depends on LOG_BACKEND_UART || LOG_BACKEND_NATIVE_POSIX || LOG_BACKEND_RTT \
+	           || LOG_BACKEND_SWO
 	default y
 	help
 	  When enabled selected backend prints errors in red and warning in yellow.
 
 config LOG_BACKEND_FORMAT_TIMESTAMP
 	bool "Enable timestamp formatting in the backend"
-	depends on LOG_BACKEND_UART || LOG_BACKEND_NATIVE_POSIX || LOG_BACKEND_RTT
+	depends on LOG_BACKEND_UART || LOG_BACKEND_NATIVE_POSIX || LOG_BACKEND_RTT \
+	           || LOG_BACKEND_SWO
 	default y
 	help
 	  When enabled timestamp is formatted to hh:mm:ss:ms,us.

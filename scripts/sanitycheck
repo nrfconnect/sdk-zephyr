@@ -27,10 +27,10 @@ pairs:
     skip testcase unconditionally. This can be used for broken tests.
 
   slow: <True|False> (default False)
-    Don't run this test case unless --enable-slow was passed in on the
-    command line. Intended for time-consuming test cases that are only
-    run under certain circumstances, like daily builds. These test cases
-    are still compiled.
+    Don't build or run this test case unless --enable-slow was passed
+    in on the command line. Intended for time-consuming test cases
+    that are only run under certain circumstances, like daily
+    builds.
 
   extra_args: <list of extra arguments>
     Extra cache entries to pass to CMake when building or running the
@@ -156,13 +156,20 @@ To load arguments from a file, write '+' before the file name, e.g.,
 line break instead of white spaces.
 
 Most everyday users will run with no arguments.
+
 """
+
+import os
+
+if os.name == 'nt':
+    print("Running sanitycheck on Windows is not supported yet.")
+    print("https://github.com/zephyrproject-rtos/zephyr/issues/2664")
+    exit(1)
 
 import contextlib
 import string
 import mmap
 import argparse
-import os
 import sys
 import re
 import subprocess
@@ -311,6 +318,7 @@ class Handler:
         self.metrics["rom_size"] = 0
 
         self.binary = None
+        self.pid_fn = None
         self.call_make_run = False
 
         self.name = instance.name
@@ -343,6 +351,17 @@ class BinaryHandler(Handler):
         super().__init__(instance)
 
         self.valgrind = False
+        self.terminated = False
+
+    def try_kill_process_by_pid(self):
+        if self.pid_fn != None:
+            pid = int(open(self.pid_fn).read())
+            os.unlink(self.pid_fn)
+            self.pid_fn = None  # clear so we don't try to kill the binary twice
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
 
     def _output_reader(self, proc, harness):
         log_out_fp = open(self.log, "wt")
@@ -352,13 +371,18 @@ class BinaryHandler(Handler):
             log_out_fp.flush()
             harness.handle(line.decode('utf-8').rstrip())
             if harness.state:
-                proc.terminate()
+                try:
+                    #POSIX arch based ztests end on their own,
+                    #so let's give it up to 100ms to do so
+                    proc.wait(0.1)
+                except subprocess.TimeoutExpired:
+                    proc.terminate()
+                    self.terminated = True
                 break
 
         log_out_fp.close()
 
     def handle(self):
-        out_state = "failed"
 
         harness_name = self.instance.test.harness.capitalize()
         harness_import = HarnessImporter(harness_name)
@@ -376,35 +400,42 @@ class BinaryHandler(Handler):
 
         if shutil.which("valgrind") and self.valgrind:
             command = ["valgrind", "--error-exitcode=2",
-                       "--leak-check=full"] + command
+                       "--leak-check=full",
+                       "--suppressions="+ZEPHYR_BASE+"/scripts/valgrind.supp",
+                       "--log-file="+self.outdir+"/valgrind.log"
+                       ] + command
 
         with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
             t = threading.Thread(target=self._output_reader, args=(proc, harness, ))
             t.start()
             t.join(self.timeout)
             if t.is_alive():
+                self.try_kill_process_by_pid()
                 proc.terminate()
-                out_state = "timeout"
+                self.terminated = True
                 t.join()
-
             proc.wait()
             self.returncode = proc.returncode
-            if proc.returncode != 0:
-                out_state = "failed"
 
         if options.enable_coverage:
             returncode = subprocess.call(["GCOV_PREFIX=" + self.outdir,
                 "gcov", self.sourcedir, "-b", "-s", self.outdir], shell=True)
+
+        self.try_kill_process_by_pid()
 
         # FIME: This is needed when killing the simulator, the console is
         # garbled and needs to be reset. Did not find a better way to do that.
 
         subprocess.call(["stty", "sane"])
         self.instance.results = harness.tests
-        if harness.state:
+        if self.terminated==False and self.returncode != 0:
+            #When a process is killed, the default handler returns 128 + SIGTERM
+            #so in that case the return code itself is not meaningful
+            self.set_state("error", {})
+        elif harness.state:
             self.set_state(harness.state, {})
         else:
-            self.set_state(out_state, {})
+            self.set_state("timeout", {})
 
 class DeviceHandler(Handler):
 
@@ -486,7 +517,6 @@ class DeviceHandler(Handler):
                     harness.tests[c] = "BLOCK"
 
         self.instance.results = harness.tests
-
         if harness.state:
             self.set_state(harness.state, {})
         else:
@@ -531,6 +561,7 @@ class QEMUHandler(Handler):
 
         metrics = {}
         line = ""
+        timeout_extended = False
         while True:
             this_timeout = int((timeout_time - time.time()) * 1000)
             if this_timeout < 0 or not p.poll(this_timeout):
@@ -568,13 +599,15 @@ class QEMUHandler(Handler):
                     out_state = harness.state
 
                 # if we get some state, that means test is doing well, we reset
-                # the timeout and wait for 5 more seconds just in case we have
+                # the timeout and wait for 2 more seconds just in case we have
                 # crashed after test has completed
 
                 if harness.type:
                     break
                 else:
-                    timeout_time = time.time() + 2
+                    if not timeout_extended:
+                        timeout_extended= True
+                        timeout_time = time.time() + 2
 
             # TODO: Add support for getting numerical performance data
             # from test cases. Will involve extending test case reporting
@@ -647,7 +680,7 @@ class SizeCalculator:
                    "_k_memory_pool", "exceptions", "initshell",
                    "_static_thread_area", "_k_timer_area",
                    "_k_mem_slab_area", "_k_mem_pool_area", "sw_isr_table",
-                   "_k_sem_area", "_k_mutex_area", "_k_alert_area",
+                   "_k_sem_area", "_k_mutex_area",
                    "_k_fifo_area", "_k_lifo_area", "_k_stack_area",
                    "_k_msgq_area", "_k_mbox_area", "_k_pipe_area",
                    "net_if", "net_if_dev", "net_stack", "net_l2_data",
@@ -657,7 +690,9 @@ class SizeCalculator:
                    'log_backends_sections', 'log_dynamic_sections',
                    'log_const_sections',"app_smem", 'shell_root_cmds_sections',
                    'log_const_sections',"app_smem", "font_entry_sections",
-                   "priv_stacks_noinit", "_TEXT_SECTION_NAME_2"]
+                   "priv_stacks_noinit", "_TEXT_SECTION_NAME_2",
+                   '_GCOV_BSS_SECTION_NAME', 'gcov']
+
     # These get copied into RAM only on non-XIP
     ro_sections = ["text", "ctors", "init_array", "reset", "object_access",
                    "rodata", "devconfig", "net_l2", "vector", "sw_isr_table",
@@ -1013,6 +1048,10 @@ class MakeGenerator:
             handler.binary = os.path.join(outdir, "testbinary")
         elif type == "device":
             handler = DeviceHandler(instance)
+        elif type == "renode":
+            handler = BinaryHandler(instance)
+            handler.pid_fn = os.path.join(instance.outdir, "renode.pid")
+            handler.call_make_run = True
 
         if options.enable_coverage:
             args += ["EXTRA_LDFLAGS=--coverage"]
@@ -1051,9 +1090,9 @@ class MakeGenerator:
         args.append("BOARD={}".format(ti.platform.name))
         args.extend(extra_args)
 
-        do_run_slow = options.enable_slow or not ti.test.slow
         do_build_only = ti.build_only or options.build_only
-        do_run = (not do_build_only) and do_run_slow
+        do_run = not do_build_only
+        skip_slow = ti.test.slow and not options.enable_slow
 
         # FIXME: Need refactoring and cleanup
         type = None
@@ -1066,10 +1105,16 @@ class MakeGenerator:
         elif ti.platform.simulation == "nsim" and do_run:
             if find_executable("nsimdrv"):
                 type = "nsim"
+        elif ti.platform.simulation == "renode" and do_run:
+            if find_executable("renode"):
+                type = "renode"
         elif options.device_testing and (not ti.build_only) and (not options.build_only):
             type = "device"
 
-        self.add_goal(ti, type, args)
+        if not skip_slow:
+            self.add_goal(ti, type, args)
+        else:
+            verbose("Skipping slow test: " + ti.name)
 
     def execute(self, callback_fn=None, context=None):
         """Execute all the registered build goals
@@ -1573,7 +1618,7 @@ class TestInstance:
 
         return build_only
 
-    def create_overlay(self):
+    def create_overlay(self, platform):
         file = os.path.join(self.outdir, "overlay.conf")
         os.makedirs(self.outdir, exist_ok=True)
         f = open(file, "w")
@@ -1582,7 +1627,8 @@ class TestInstance:
         if len(self.test.extra_configs) > 0:
             content = "\n".join(self.test.extra_configs)
         if options.enable_coverage:
-            content = content + "\nCONFIG_COVERAGE=y"
+            if platform in options.coverage_platform:
+                content = content + "\nCONFIG_COVERAGE=y"
 
         f.write(content)
         f.close()
@@ -1739,12 +1785,12 @@ class TestSuite:
                 name = os.path.join(row[0], row[1])
                 platforms = self.arches[row[3]].platforms
                 myp = None
-                for p in platforms:
-                    if p.name == row[2]:
-                        myp = p
+                for platform in platforms:
+                    if platform.name == row[2]:
+                        selected_platform = platform
                         break
-                instance = TestInstance(self.testcases[name], myp, self.outdir)
-                instance.create_overlay()
+                instance = TestInstance(self.testcases[name], selected_platform, self.outdir)
+                instance.create_overlay(selected_platform.name)
                 instance_list.append(instance)
             self.add_instances(instance_list)
 
@@ -2072,7 +2118,7 @@ class TestSuite:
                     self.add_instances(instance_list)
 
                 for name, case in self.instances.items():
-                    case.create_overlay()
+                    case.create_overlay(case.platform.name)
 
         self.discards = discards
         return discards
@@ -2101,11 +2147,17 @@ class TestSuite:
             mg.add_test_instance(i, options.extra_args)
         self.goals = mg.execute(cb, cb_context)
 
-        # Parallelize size calculation
-        executor = concurrent.futures.ThreadPoolExecutor(JOBS)
-        futures = [executor.submit(calc_one_elf_size, name, goal)
-                   for name, goal in self.goals.items()]
-        concurrent.futures.wait(futures)
+        if not options.disable_size_report:
+            # Parallelize size calculation
+            executor = concurrent.futures.ThreadPoolExecutor(JOBS)
+            futures = [executor.submit(calc_one_elf_size, name, goal)
+                       for name, goal in self.goals.items()]
+            concurrent.futures.wait(futures)
+        else:
+            for goal in self.goals.values():
+                goal.metrics["ram_size"] = 0
+                goal.metrics["rom_size"] = 0
+                goal.metrics["unrecognized"] = []
 
         return self.goals
 
@@ -2606,6 +2658,8 @@ def parse_arguments():
                         help="deprecated, left for compatibility")
     parser.add_argument("-Q", "--error-on-deprecations", action="store_false",
                         help="Error on deprecation warnings.")
+    parser.add_argument("--disable-size-report", action="store_true",
+                        help="Skip expensive computation of ram/rom segment sizes.")
 
     parser.add_argument(
         "-x", "--extra-args", action="append", default=[],
@@ -2627,6 +2681,11 @@ def parse_arguments():
 
     parser.add_argument("-C", "--coverage", action="store_true",
                         help="Generate coverage reports. Implies --enable_coverage")
+
+    coverage_platforms = ["native_posix", "nrf52_bsim"]
+    parser.add_argument("--coverage-platform", action="append", default=coverage_platforms,
+                        help="Plarforms to run coverage reports on. "
+                        "This option may be used multiple times.")
 
     return parser.parse_args()
 
@@ -2724,8 +2783,59 @@ def size_report(sc):
          (sc.rom_size, sc.ram_size))
     info("")
 
+def retrieve_data(intput_file):
+    if VERBOSE:
+        print("Working on %s" %intput_file)
+    extracted_coverage_info = {}
+    capture_data = False
+    with open(intput_file, 'r') as fp:
+        for line in fp.readlines():
+            if re.search("GCOV_COVERAGE_DUMP_START", line):
+                capture_data = True
+                continue
+            if re.search("GCOV_COVERAGE_DUMP_END", line):
+                capture_data = True
+                break
+            # Loop until the coverage data is found.
+            if not capture_data:
+                continue
+            if line.startswith("*"):
+                sp = line.split("<")
+                if len(sp) > 1:
+                    # Remove the leading delimiter "*"
+                    file_name = sp[0][1:]
+                    # Remove the trailing new line char
+                    hex_dump = sp[1][:-1]
+                else:
+                    continue
+            else:
+                continue
+            extracted_coverage_info.update({file_name:hex_dump})
+    return extracted_coverage_info
+
+def create_gcda_files(extracted_coverage_info):
+    if VERBOSE:
+        print("Generating gcda files")
+    for filename, hexdump_val in extracted_coverage_info.items():
+        # if kobject_hash is given for coverage gcovr fails
+        # hence skipping it problem only in gcovr v4.1
+        if "kobject_hash" in filename:
+            filename = (filename[:-4]) +"gcno"
+            try:
+                os.remove(filename)
+            except:
+                pass
+            continue
+
+        with open(filename, 'wb') as fp:
+            fp.write(bytes.fromhex(hexdump_val))
 
 def generate_coverage(outdir, ignores):
+
+    for filename in glob.glob("%s/**/handler.log" %outdir, recursive=True):
+        extracted_coverage_info = retrieve_data(filename)
+        create_gcda_files(extracted_coverage_info)
+
     with open(os.path.join(outdir, "coverage.log"), "a") as coveragelog:
         coveragefile = os.path.join(outdir, "coverage.info")
         ztestfile = os.path.join(outdir, "ztest.info")

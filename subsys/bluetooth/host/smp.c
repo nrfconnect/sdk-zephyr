@@ -1299,7 +1299,7 @@ static int smp_br_error(struct bt_smp_br *smp, u8_t reason)
 static int bt_smp_br_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 {
 	struct bt_smp_br *smp = CONTAINER_OF(chan, struct bt_smp_br, chan);
-	struct bt_smp_hdr *hdr = (void *)buf->data;
+	struct bt_smp_hdr *hdr;
 	u8_t err;
 
 	if (buf->len < sizeof(*hdr)) {
@@ -1307,9 +1307,8 @@ static int bt_smp_br_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		return 0;
 	}
 
+	hdr = net_buf_pull_mem(buf, sizeof(*hdr));
 	BT_DBG("Received SMP code 0x%02x len %u", hdr->code, buf->len);
-
-	net_buf_pull(buf, sizeof(*hdr));
 
 	/*
 	 * If SMP timeout occurred "no further SMP commands shall be sent over
@@ -3513,7 +3512,7 @@ static const struct {
 static int bt_smp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 {
 	struct bt_smp *smp = CONTAINER_OF(chan, struct bt_smp, chan);
-	struct bt_smp_hdr *hdr = (void *)buf->data;
+	struct bt_smp_hdr *hdr;
 	u8_t err;
 
 	if (buf->len < sizeof(*hdr)) {
@@ -3521,9 +3520,8 @@ static int bt_smp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		return 0;
 	}
 
+	hdr = net_buf_pull_mem(buf, sizeof(*hdr));
 	BT_DBG("Received SMP code 0x%02x len %u", hdr->code, buf->len);
-
-	net_buf_pull(buf, sizeof(*hdr));
 
 	/*
 	 * If SMP timeout occurred "no further SMP commands shall be sent over
@@ -3713,7 +3711,7 @@ static void bt_smp_encrypt_change(struct bt_l2cap_chan *chan,
 	}
 }
 
-#if defined(CONFIG_BT_SIGNING)
+#if defined(CONFIG_BT_SIGNING) || defined(CONFIG_BT_SMP_SELFTEST)
 /* Sign message using msg as a buffer, len is a size of the message,
  * msg buffer contains message itself, 32 bit count and signature,
  * so total buffer size is len + 4 + 8 octets.
@@ -3751,7 +3749,9 @@ static int smp_sign_buf(const u8_t *key, u8_t *msg, u16_t len)
 
 	return 0;
 }
+#endif
 
+#if defined(CONFIG_BT_SIGNING)
 int bt_smp_sign_verify(struct bt_conn *conn, struct net_buf *buf)
 {
 	struct bt_keys *keys;

@@ -757,6 +757,7 @@ static void rfcomm_dlc_connected(struct bt_rfcomm_dlc *dlc)
 			K_THREAD_STACK_SIZEOF(dlc->stack),
 			rfcomm_dlc_tx_thread, dlc, NULL, NULL, K_PRIO_COOP(7),
 			0, K_NO_WAIT);
+	k_thread_name_set(&dlc->tx_thread, "BT DLC");
 
 	if (dlc->ops && dlc->ops->connected) {
 		dlc->ops->connected(dlc);
@@ -1261,16 +1262,20 @@ static void rfcomm_handle_disc(struct bt_rfcomm_session *session, u8_t dlci)
 static void rfcomm_handle_msg(struct bt_rfcomm_session *session,
 			      struct net_buf *buf)
 {
-	struct bt_rfcomm_msg_hdr *hdr = (void *)buf->data;
+	struct bt_rfcomm_msg_hdr *hdr;
 	u8_t msg_type, len, cr;
 
+	if (buf->len < sizeof(*hdr)) {
+		BT_ERR("Too small RFCOMM message");
+		return;
+	}
+
+	hdr = net_buf_pull_mem(buf, sizeof(*hdr));
 	msg_type = BT_RFCOMM_GET_MSG_TYPE(hdr->type);
 	cr = BT_RFCOMM_GET_MSG_CR(hdr->type);
 	len = BT_RFCOMM_GET_LEN(hdr->len);
 
 	BT_DBG("msg type %x cr %x", msg_type, cr);
-
-	net_buf_pull(buf, sizeof(*hdr));
 
 	switch (msg_type) {
 	case BT_RFCOMM_PN:

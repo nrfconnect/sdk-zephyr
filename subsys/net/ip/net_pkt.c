@@ -40,7 +40,6 @@ LOG_MODULE_REGISTER(net_pkt, CONFIG_NET_PKT_LOG_LEVEL);
 
 #include "net_private.h"
 #include "tcp_internal.h"
-#include "rpl.h"
 
 /* Find max header size of IP protocol (IPv4 or IPv6) */
 #if defined(CONFIG_NET_IPV6) || defined(CONFIG_NET_RAW_MODE)
@@ -353,7 +352,7 @@ struct net_pkt *net_pkt_get_reserve(struct k_mem_slab *slab,
 
 	net_pkt_alloc_add(pkt, true, caller, line);
 
-#if NET_LOG_LEVEL == LOG_LEVEL_DBG
+#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
 	NET_DBG("%s [%u] pkt %p ref %d (%s():%d)",
 		slab2str(slab), k_mem_slab_num_free_get(slab),
 		pkt, pkt->ref, caller, line);
@@ -394,7 +393,7 @@ struct net_buf *net_pkt_get_reserve_data(struct net_buf_pool *pool,
 
 	net_pkt_alloc_add(frag, false, caller, line);
 
-#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
+#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
 	NET_DBG("%s (%s) [%d] frag %p ref %d (%s():%d)",
 		pool2str(pool), get_name(pool), get_frees(pool),
 		frag, frag->ref, caller, line);
@@ -575,10 +574,6 @@ static struct net_pkt *net_pkt_get(struct k_mem_slab *slab,
 
 		if (IS_ENABLED(CONFIG_NET_UDP) && proto == IPPROTO_UDP) {
 			data_len -= NET_UDPH_LEN;
-
-			if (IS_ENABLED(CONFIG_NET_RPL_INSERT_HBH_OPTION)) {
-				data_len -= NET_RPL_HOP_BY_HOP_LEN;
-			}
 		}
 
 		if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6) {
@@ -1097,8 +1092,8 @@ int net_frag_linear_copy(struct net_buf *dst, struct net_buf *src,
 	return 0;
 }
 
-int net_frag_linearize(u8_t *dst, size_t dst_len, struct net_pkt *src,
-			 u16_t offset, u16_t len)
+size_t net_frag_linearize(void *dst, size_t dst_len, struct net_pkt *src,
+			  size_t offset, size_t len)
 {
 	return net_buf_linearize(dst, dst_len, src->frags, offset, len);
 }
