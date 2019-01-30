@@ -68,6 +68,7 @@ enum net_ip_protocol_secure {
 /* Protocol numbers for LTE protocols */
 enum net_lte_protocol {
 	NPROTO_AT = 513,
+	NPROTO_DFU = 515,
 };
 
 /** Socket type */
