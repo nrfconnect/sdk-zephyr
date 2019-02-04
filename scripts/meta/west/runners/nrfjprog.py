@@ -1,5 +1,4 @@
 # Copyright (c) 2017 Linaro Limited.
-# Copyright (c) 2019 Nordic Semiconductor ASA.
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -8,7 +7,6 @@
 import sys
 
 from west import log
-
 from west.runners.core import ZephyrBinaryRunner, RunnerCaps
 
 
@@ -34,7 +32,7 @@ class NrfJprogBinaryRunner(ZephyrBinaryRunner):
     @classmethod
     def do_add_parser(cls, parser):
         parser.add_argument('--nrf-family', required=True,
-                            choices=['NRF51', 'NRF52', 'NRF91'],
+                            choices=['NRF51', 'NRF52'],
                             help='family of nRF MCU')
         parser.add_argument('--softreset', required=False,
                             action='store_true',
@@ -105,10 +103,10 @@ class NrfJprogBinaryRunner(ZephyrBinaryRunner):
                 program_cmd
             ])
         else:
-            if self.family == 'NRF52':
-                commands.append(program_cmd + ['--sectoranduicrerase'])
-            else:
+            if self.family == 'NRF51':
                 commands.append(program_cmd + ['--sectorerase'])
+            else:
+                commands.append(program_cmd + ['--sectoranduicrerase'])
 
         if self.family == 'NRF52' and not self.softreset:
             commands.extend([
