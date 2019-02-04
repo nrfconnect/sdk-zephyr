@@ -14,8 +14,12 @@
 
 #include "hts221.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LEVEL
+#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
 LOG_MODULE_REGISTER(HTS221);
+
+static const char * const hts221_odr_strings[] = {
+	"1", "7", "12.5"
+};
 
 static int hts221_channel_get(struct device *dev,
 			       enum sensor_channel chan,

@@ -60,9 +60,6 @@ zephyr_library_named(zephyr)
 zephyr_include_directories(
   kernel/include
   arch/${ARCH}/include
-  ${SOC_DIR}/${ARCH}/${SOC_PATH}
-  ${SOC_DIR}/${ARCH}/${SOC_PATH}/include
-  ${SOC_DIR}/${ARCH}/${SOC_FAMILY}/include
   include
   include/drivers
   ${PROJECT_BINARY_DIR}/include/generated
@@ -70,15 +67,30 @@ zephyr_include_directories(
   ${STDINCLUDE}
 )
 
+# Don't add non-existing include directories, it creates noise and
+# warnings in some tooling
+foreach(optional_include_dir
+  ${SOC_DIR}/${ARCH}/${SOC_PATH}
+  ${SOC_DIR}/${ARCH}/${SOC_PATH}/include
+  ${SOC_DIR}/${ARCH}/${SOC_FAMILY}/include
+  )
+  if(EXISTS ${optional_include_dir})
+    zephyr_include_directories(${optional_include_dir})
+  endif()
+endforeach()
+
 zephyr_compile_definitions(
   KERNEL
   __ZEPHYR__=1
 )
 
-if(NOT CONFIG_NO_OPTIMIZATIONS)
-zephyr_compile_definitions(
-  _FORTIFY_SOURCE=2
-)
+# @Intent: Set compiler flags to enable buffer overflow checks in libc functions
+# @config in CONFIG_NO_OPTIMIZATIONS optional : Optimizations may affect security
+toolchain_cc_security_fortify()
+
+# @Intent: Set compiler flags to detect general stack overflows across all functions
+if(CONFIG_STACK_CANARIES)
+  toolchain_cc_security_canaries()
 endif()
 
 if(BUILD_VERSION)
@@ -247,6 +259,12 @@ if(W MATCHES "3")
     )
 endif()
 
+if(NOT CONFIG_STD_CPP98) # "register" keyword was deprecated since C++11.
+  zephyr_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:-Wno-register>
+    )
+endif()
+
 # Allow the user to inject options when calling cmake, e.g.
 # 'cmake -DEXTRA_CFLAGS="-Werror -Wno-deprecated-declarations" ..'
 include(cmake/extra_flags.cmake)
@@ -262,13 +280,6 @@ zephyr_cc_option(-fno-pie)
 zephyr_cc_option(-fno-pic)
 zephyr_cc_option(-fno-strict-overflow)
 zephyr_cc_option(-Wno-pointer-sign)
-
-if(CONFIG_STACK_CANARIES)
-  zephyr_compile_options(-fstack-protector-all)
-
-  # Only a valid option with GCC 7.x and above
-  zephyr_cc_option(-mstack-protector-guard=global)
-endif()
 
 if(CONFIG_OVERRIDE_FRAME_POINTER_DEFAULT)
   if(CONFIG_OMIT_FRAME_POINTER)
@@ -487,32 +498,21 @@ endforeach()
 set_ifndef(  DTS_BOARD_FIXUP_FILE                                   ${BOARD_DIR}/dts_fixup.h)
 set_ifndef(    DTS_SOC_FIXUP_FILE                 ${SOC_DIR}/${ARCH}/${SOC_PATH}/dts_fixup.h)
 set(           DTS_APP_FIXUP_FILE                      ${APPLICATION_SOURCE_DIR}/dts_fixup.h)
-set_ifndef(DTS_SHIELDS_FIXUP_FILE ${ZEPHYR_BINARY_DIR}/include/generated/shields/dts_fixup.h)
 
-# Concatenate the shield fixups into a single file for easy
+set_ifndef(DTS_CAT_OF_FIXUP_FILES ${ZEPHYR_BINARY_DIR}/include/generated/generated_dts_board_fixups.h)
+
+# Concatenate the fixups into a single header file for easy
 # #include'ing
-foreach(f ${shield_dts_fixups})
-  if(EXISTS ${f})
-	file(READ ${f} contents)
-	file(APPEND ${DTS_SHIELDS_FIXUP_FILE} "${contents}")
-  endif()
-endforeach()
-
-foreach(fixup_source
-      DTS_BOARD_FIXUP_FILE
-        DTS_SOC_FIXUP_FILE
-        DTS_APP_FIXUP_FILE
-	DTS_SHIELDS_FIXUP_FILE
+file(WRITE ${DTS_CAT_OF_FIXUP_FILES} "/* May only be included by generated_dts_board.h */\n\n")
+foreach(fixup_file
+      ${DTS_BOARD_FIXUP_FILE}
+      ${DTS_SOC_FIXUP_FILE}
+      ${DTS_APP_FIXUP_FILE}
+      ${shield_dts_fixups}
 	)
-  if(EXISTS ${${fixup_source}})
-	# Add defines such that generated_dts_board.h knows which fixups
-	# are present and where they
-	# are. e.g. -DDTS_SOC_FIXUP_FILE=/path/to/fixup.h
-	zephyr_compile_definitions(${fixup_source}="${${fixup_source}}")
-	set_property(GLOBAL APPEND PROPERTY
-	  PROPERTY_LINKER_SCRIPT_DEFINES
-	  -D${fixup_source}="${${fixup_source}}"
-	  )
+  if(EXISTS ${fixup_file})
+	file(READ ${fixup_file} contents)
+	file(APPEND ${DTS_CAT_OF_FIXUP_FILES} "${contents}")
   endif()
 endforeach()
 
@@ -1030,9 +1030,10 @@ if(CONFIG_ARM AND CONFIG_USERSPACE)
   set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${PRIV_STACKS_OUTPUT_SRC}
     PROPERTIES COMPILE_DEFINITIONS "${compile_definitions_interface}")
 
+  # always compile priv_stacks_hash.c at optimization -Os
   set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${PRIV_STACKS_OUTPUT_SRC}
     PROPERTIES COMPILE_FLAGS
-    "${NO_COVERAGE_FLAGS} -fno-function-sections -fno-data-sections ")
+    "${NO_COVERAGE_FLAGS} -Os -fno-function-sections -fno-data-sections ")
 
   # We need precise control of where generated text/data ends up in the final
   # kernel image. Disable function/data sections and use objcopy to move
@@ -1427,13 +1428,23 @@ list_append_ifdef(
   COMMAND ${CMAKE_COMMAND} -E copy ${KERNEL_ELF_NAME}    ${KERNEL_EXE_NAME}
   )
 
+get_property(extra_post_build_commands
+  GLOBAL PROPERTY
+  extra_post_build_commands
+  )
+
+list(APPEND
+  post_build_commands
+  ${extra_post_build_commands}
+  )
+
 add_custom_command(
   TARGET ${logical_target_for_zephyr_elf}
   POST_BUILD
   ${post_build_commands}
   COMMENT "Generating files from zephyr.elf for board: ${BOARD}"
   # NB: COMMENT only works for some CMake-Generators
-)
+  )
 
 # To populate with hex files to merge, do the following:
 #  set_property(GLOBAL APPEND PROPERTY HEX_FILES_TO_MERGE ${my_local_list})

@@ -138,17 +138,6 @@ static int line_out_drop_mode(void)
 	return 0;
 }
 
-static void on_write(void)
-{
-	host_present = true;
-
-	if (panic_mode) {
-		while (SEGGER_RTT_HasDataUp(CONFIG_LOG_BACKEND_RTT_BUFFER)) {
-			/* Pend until data is fetched by the host. */
-		}
-	}
-}
-
 static void on_failed_write(int retry_cnt)
 {
 	if (retry_cnt == 0) {
@@ -158,6 +147,23 @@ static void on_failed_write(int retry_cnt)
 	} else {
 		k_sleep(RETRY_DELAY_MS);
 	}
+}
+
+static void on_write(int retry_cnt)
+{
+	host_present = true;
+	if (panic_mode) {
+		/* In panic mode block on each write until host reads it. This
+		 * way it is ensured that if system resets all messages are read
+		 * by the host. While pending on data being read by the host we
+		 * must also detect situation where host is disconnected.
+		 */
+		while (SEGGER_RTT_HasDataUp(CONFIG_LOG_BACKEND_RTT_BUFFER) &&
+			host_present) {
+			on_failed_write(retry_cnt--);
+		}
+	}
+
 }
 
 static int data_out_block_mode(u8_t *data, size_t length, void *ctx)
@@ -178,7 +184,7 @@ static int data_out_block_mode(u8_t *data, size_t length, void *ctx)
 		}
 
 		if (ret) {
-			on_write();
+			on_write(retry_cnt);
 		} else {
 			retry_cnt--;
 			on_failed_write(retry_cnt);
@@ -243,11 +249,56 @@ static void dropped(const struct log_backend *const backend, u32_t cnt)
 	log_output_dropped_process(&log_output, cnt);
 }
 
+static void sync_string(const struct log_backend *const backend,
+		     struct log_msg_ids src_level, u32_t timestamp,
+		     const char *fmt, va_list ap)
+{
+	u32_t flags = LOG_OUTPUT_FLAG_LEVEL | LOG_OUTPUT_FLAG_TIMESTAMP;
+	u32_t key;
+
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_SHOW_COLOR)) {
+		flags |= LOG_OUTPUT_FLAG_COLORS;
+	}
+
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_FORMAT_TIMESTAMP)) {
+		flags |= LOG_OUTPUT_FLAG_FORMAT_TIMESTAMP;
+	}
+
+	key = irq_lock();
+	log_output_string(&log_output, src_level, timestamp, fmt, ap, flags);
+	irq_unlock(key);
+}
+
+static void sync_hexdump(const struct log_backend *const backend,
+			 struct log_msg_ids src_level, u32_t timestamp,
+			 const char *metadata, const u8_t *data, u32_t length)
+{
+	u32_t flags = LOG_OUTPUT_FLAG_LEVEL | LOG_OUTPUT_FLAG_TIMESTAMP;
+	u32_t key;
+
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_SHOW_COLOR)) {
+		flags |= LOG_OUTPUT_FLAG_COLORS;
+	}
+
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_FORMAT_TIMESTAMP)) {
+		flags |= LOG_OUTPUT_FLAG_FORMAT_TIMESTAMP;
+	}
+
+	key = irq_lock();
+	log_output_hexdump(&log_output, src_level, timestamp,
+			metadata, data, length, flags);
+	irq_unlock(key);
+}
+
 const struct log_backend_api log_backend_rtt_api = {
-	.put = put,
+	.put = IS_ENABLED(CONFIG_LOG_IMMEDIATE) ? NULL : put,
+	.put_sync_string = IS_ENABLED(CONFIG_LOG_IMMEDIATE) ?
+			sync_string : NULL,
+	.put_sync_hexdump = IS_ENABLED(CONFIG_LOG_IMMEDIATE) ?
+			sync_hexdump : NULL,
 	.panic = panic,
 	.init = log_backend_rtt_init,
-	.dropped = dropped,
+	.dropped = IS_ENABLED(CONFIG_LOG_IMMEDIATE) ? NULL : dropped,
 };
 
 LOG_BACKEND_DEFINE(log_backend_rtt, log_backend_rtt_api, true);

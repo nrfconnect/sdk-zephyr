@@ -48,9 +48,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define PACKET_TYPE             0
 #define EVT_BLUE_INITIALIZED    0x01
 
-#define SPI_HCI_DEV_NAME        CONFIG_BT_CTLR_TO_HOST_SPI_DEV_NAME
-#define GPIO_IRQ_DEV_NAME       CONFIG_BT_CTLR_TO_HOST_SPI_IRQ_DEV_NAME
-#define GPIO_IRQ_PIN            CONFIG_BT_CTLR_TO_HOST_SPI_IRQ_PIN
+#define GPIO_IRQ_PIN            DT_ZEPHYR_BT_HCI_SPI_SLAVE_0_IRQ_GPIO_PIN
 
 /* Needs to be aligned with the SPI master buffer size */
 #define SPI_MAX_MSG_LEN         255
@@ -96,7 +94,7 @@ NET_BUF_POOL_DEFINE(acl_tx_pool, TX_BUF_COUNT, BT_BUF_ACL_SIZE,
 
 static struct device *spi_hci_dev;
 static struct spi_config spi_cfg = {
-	.operation = SPI_WORD_SET(8),
+	.operation = SPI_WORD_SET(8) | SPI_OP_MODE_SLAVE,
 };
 static struct device *gpio_dev;
 static K_THREAD_STACK_DEFINE(bt_tx_thread_stack, CONFIG_BT_HCI_TX_STACK_SIZE);
@@ -107,11 +105,10 @@ static K_SEM_DEFINE(sem_spi_tx, 0, 1);
 
 static inline int spi_send(struct net_buf *buf)
 {
+	u8_t header_master[5] = { 0 };
+	u8_t header_slave[5] = { READY_NOW, SANITY_CHECK,
+				 0x00, 0x00, 0x00 };
 	int ret;
-
-	txmsg[0] = READY_NOW;
-	txmsg[1] = SANITY_CHECK;
-	txmsg[2] = 0x00;
 
 	LOG_DBG("buf %p type %u len %u", buf, bt_buf_get_type(buf), buf->len);
 
@@ -133,25 +130,23 @@ static inline int spi_send(struct net_buf *buf)
 		net_buf_unref(buf);
 		return -EINVAL;
 	}
-
-	txmsg[STATUS_HEADER_TOREAD] = buf->len;
-	txmsg[4] = 0x00;
-
-	tx.buf = txmsg;
-	tx.len = 5;
-	rx.buf = rxmsg;
-	rx.len = 5;
+	header_slave[STATUS_HEADER_TOREAD] = buf->len;
 
 	gpio_pin_write(gpio_dev, GPIO_IRQ_PIN, 1);
 
 	/* Coordinate transfer lock with the spi rx thread */
 	k_sem_take(&sem_spi_tx, K_FOREVER);
+
+	tx.buf = header_slave;
+	tx.len = 5;
+	rx.buf = header_master;
+	rx.len = 5;
 	do {
 		ret = spi_transceive(spi_hci_dev, &spi_cfg, &tx_bufs, &rx_bufs);
 		if (ret < 0) {
 			LOG_ERR("SPI transceive error: %d", ret);
 		}
-	} while (rxmsg[STATUS_HEADER_READY] != SPI_READ);
+	} while (header_master[STATUS_HEADER_READY] != SPI_READ);
 
 	tx.buf = buf->data;
 	tx.len = buf->len;
@@ -277,12 +272,13 @@ static int hci_spi_init(struct device *unused)
 
 	LOG_DBG("");
 
-	spi_hci_dev = device_get_binding(SPI_HCI_DEV_NAME);
+	spi_hci_dev = device_get_binding(DT_ZEPHYR_BT_HCI_SPI_SLAVE_0_BUS_NAME);
 	if (!spi_hci_dev) {
 		return -EINVAL;
 	}
 
-	gpio_dev = device_get_binding(GPIO_IRQ_DEV_NAME);
+	gpio_dev = device_get_binding(
+		DT_ZEPHYR_BT_HCI_SPI_SLAVE_0_IRQ_GPIO_CONTROLLER);
 	if (!gpio_dev) {
 		return -EINVAL;
 	}

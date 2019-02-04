@@ -306,7 +306,6 @@ static void prepare_multithreading(struct k_thread *dummy_thread)
 #ifdef CONFIG_TRACING
 	sys_trace_thread_switched_out();
 #endif
-	_current = dummy_thread;
 #ifdef CONFIG_TRACING
 	sys_trace_thread_switched_in();
 #endif
@@ -403,7 +402,7 @@ static void switch_to_main_thread(void)
 	(void)_Swap(irq_lock());
 #endif
 }
-#endif /* CONFIG_MULTITHREDING */
+#endif /* CONFIG_MULTITHREADING */
 
 u32_t z_early_boot_rand32_get(void)
 {
@@ -464,26 +463,23 @@ FUNC_NORETURN void _Cstart(void)
 	/* gcov hook needed to get the coverage report.*/
 	gcov_static_init();
 
-#ifdef CONFIG_MULTITHREADING
-#ifdef CONFIG_ARCH_HAS_CUSTOM_SWAP_TO_MAIN
-	struct k_thread *dummy_thread = NULL;
-#else
-	/* Normally, kernel objects are not allowed on the stack, special case
-	 * here since this is just being used to bootstrap the first _Swap()
-	 */
-	char dummy_thread_memory[sizeof(struct k_thread)];
-	struct k_thread *dummy_thread = (struct k_thread *)&dummy_thread_memory;
-
-	(void)memset(dummy_thread_memory, 0, sizeof(dummy_thread_memory));
-#endif
-#endif
-
 	if (IS_ENABLED(CONFIG_LOG)) {
 		log_core_init();
 	}
 
 	/* perform any architecture-specific initialization */
 	kernel_arch_init();
+
+#ifdef CONFIG_MULTITHREADING
+	struct k_thread dummy_thread = {
+		 .base.thread_state = _THREAD_DUMMY,
+# ifdef CONFIG_SCHED_CPU_MASK
+		 .base.cpu_mask = -1,
+# endif
+	};
+
+	_current = &dummy_thread;
+#endif
 
 	/* perform basic hardware initialization */
 	_sys_device_do_config_level(_SYS_INIT_LEVEL_PRE_KERNEL_1);
@@ -494,7 +490,7 @@ FUNC_NORETURN void _Cstart(void)
 #endif
 
 #ifdef CONFIG_MULTITHREADING
-	prepare_multithreading(dummy_thread);
+	prepare_multithreading(&dummy_thread);
 	switch_to_main_thread();
 #else
 	bg_thread_main(NULL, NULL, NULL);

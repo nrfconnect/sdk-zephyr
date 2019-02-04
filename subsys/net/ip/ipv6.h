@@ -118,8 +118,8 @@ int net_ipv6_start_dad(struct net_if *iface, struct net_if_addr *ifaddr);
 #endif
 
 int net_ipv6_send_ns(struct net_if *iface, struct net_pkt *pending,
-		     struct in6_addr *src, struct in6_addr *dst,
-		     struct in6_addr *tgt, bool is_my_address);
+		     const struct in6_addr *src, const struct in6_addr *dst,
+		     const struct in6_addr *tgt, bool is_my_address);
 
 int net_ipv6_send_rs(struct net_if *iface);
 int net_ipv6_start_rs(struct net_if *iface);
@@ -127,6 +127,13 @@ int net_ipv6_start_rs(struct net_if *iface);
 int net_ipv6_send_na(struct net_if *iface, const struct in6_addr *src,
 		     const struct in6_addr *dst, const struct in6_addr *tgt,
 		     u8_t flags);
+
+
+static inline bool net_ipv6_is_nexthdr_upper_layer(u8_t nexthdr)
+{
+	return (nexthdr == IPPROTO_ICMPV6 || nexthdr == IPPROTO_UDP ||
+		nexthdr == IPPROTO_TCP);
+}
 
 /**
  * @brief Create IPv6 packet in provided net_pkt.
@@ -158,6 +165,34 @@ struct net_pkt *net_ipv6_create(struct net_pkt *pkt,
  * @return Return 0 on Success, < 0 on Failure.
  */
 int net_ipv6_finalize(struct net_pkt *pkt, u8_t next_header_proto);
+
+
+/**
+ * @brief Create IPv6 packet in provided net_pkt.
+ *
+ * @param pkt Network packet
+ * @param src Source IPv6 address
+ * @param dst Destination IPv6 address
+ *
+ * @return 0 on success, negative errno otherwise.
+ */
+int net_ipv6_create_new(struct net_pkt *pkt,
+			const struct in6_addr *src,
+			const struct in6_addr *dst);
+
+/**
+ * @brief Finalize IPv6 packet. It should be called right before
+ * sending the packet and after all the data has been added into
+ * the packet. This function will set the length of the
+ * packet and calculate the higher protocol checksum if needed.
+ *
+ * @param pkt Network packet
+ * @param next_header_proto Protocol type of the next header after IPv6 header.
+ *
+ * @return 0 on success, negative errno otherwise.
+ */
+int net_ipv6_finalize_new(struct net_pkt *pkt, u8_t next_header_proto);
+
 
 #if defined(CONFIG_NET_IPV6_MLD)
 /**
@@ -204,9 +239,9 @@ typedef void (*net_nbr_cb_t)(struct net_nbr *nbr, void *user_data);
  *
  * @param pkt Network packet
  *
- * @return Return network packet to be sent.
+ * @return Return a verdict.
  */
-struct net_pkt *net_ipv6_prepare_for_send(struct net_pkt *pkt);
+enum net_verdict net_ipv6_prepare_for_send(struct net_pkt *pkt);
 
 /**
  * @brief Look for a neighbor from it's address on an iface
@@ -282,9 +317,9 @@ bool net_ipv6_nbr_rm(struct net_if *iface, struct in6_addr *addr);
 void net_ipv6_nbr_foreach(net_nbr_cb_t cb, void *user_data);
 
 #else /* CONFIG_NET_IPV6_NBR_CACHE */
-static inline struct net_pkt *net_ipv6_prepare_for_send(struct net_pkt *pkt)
+static inline enum net_verdict net_ipv6_prepare_for_send(struct net_pkt *pkt)
 {
-	return pkt;
+	return NET_OK;
 }
 
 static inline struct net_nbr *net_ipv6_nbr_lookup(struct net_if *iface,
@@ -389,34 +424,40 @@ void net_ipv6_frag_foreach(net_ipv6_frag_cb_t cb, void *user_data);
  * @brief Find the last IPv6 extension header in the network packet.
  *
  * @param pkt Network head packet.
- * @param next_hdr_idx Where is the index to next header field that points
+ * @param next_hdr_off Offset of the next header field that points
  * to last header. This is returned to caller.
- * @param last_hdr_idx Where is the last header field in the packet.
+ * @param last_hdr_off Offset of the last header field in the packet.
  * This is returned to caller.
  *
- * @return Return 0 if ok or <0 if the packet is malformed.
+ * @return 0 on success, a negative errno otherwise.
  */
-int net_ipv6_find_last_ext_hdr(struct net_pkt *pkt, u16_t *next_hdr_idx,
-			       u16_t *last_hdr_idx);
+int net_ipv6_find_last_ext_hdr(struct net_pkt *pkt, u16_t *next_hdr_off,
+			       u16_t *last_hdr_off);
 
 /**
  * @brief Handles IPv6 fragmented packets.
  *
- * @param pkt Network head packet.
- * @param frag Network packet fragment
- * @param total_len Total length of the packet
- * @param offset Start of fragment header
- * @param loc End of fragment header, this is returned to the caller
+ * @param pkt     Network head packet.
+ * @param hdr     The IPv6 header of the current packet
  * @param nexthdr IPv6 next header after fragment header part
  *
  * @return Return verdict about the packet
  */
 enum net_verdict net_ipv6_handle_fragment_hdr(struct net_pkt *pkt,
-					      struct net_buf *frag,
-					      int total_len,
-					      u16_t buf_offset,
-					      u16_t *loc,
+					      struct net_ipv6_hdr *hdr,
 					      u8_t nexthdr);
+#else
+static inline
+enum net_verdict net_ipv6_handle_fragment_hdr(struct net_pkt *pkt,
+					      struct net_ipv6_hdr *hdr,
+					      u8_t nexthdr)
+{
+	ARG_UNUSED(pkt);
+	ARG_UNUSED(hdr);
+	ARG_UNUSED(nexthdr);
+
+	return NET_DROP;
+}
 #endif /* CONFIG_NET_IPV6_FRAGMENT */
 
 #if defined(CONFIG_NET_IPV6)

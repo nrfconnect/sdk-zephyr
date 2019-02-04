@@ -393,11 +393,20 @@ static inline enum net_tcp_state net_tcp_get_state(const struct net_tcp *tcp)
  * @brief Check if the sequence number is valid i.e., it is inside the window.
  *
  * @param tcp TCP context
- * @param pkt Network packet
+ * @param tcp_hdr TCP header pointer
  *
  * @return true if network packet sequence number is valid, false otherwise
  */
-bool net_tcp_validate_seq(struct net_tcp *tcp, struct net_pkt *pkt);
+bool net_tcp_validate_seq(struct net_tcp *tcp, struct net_tcp_hdr *tcp_hdr);
+
+/**
+ * @brief Finalize TCP packet
+ *
+ * @param pkt Network packet
+ *
+ * @return 0 on success, negative errno otherwise.
+ */
+int net_tcp_finalize(struct net_pkt *pkt);
 
 /**
  * @brief Set TCP checksum in network packet.
@@ -409,17 +418,6 @@ bool net_tcp_validate_seq(struct net_tcp *tcp, struct net_pkt *pkt);
  * @return Return the actual fragment where the checksum was written.
  */
 struct net_buf *net_tcp_set_chksum(struct net_pkt *pkt, struct net_buf *frag);
-
-/**
- * @brief Get TCP checksum from network packet.
- *
- * @param pkt Network packet
- * @param frag Fragment where to start calculating the offset.
- * Typically this is set to pkt->frags by the caller.
- *
- * @return Return the checksum in host byte order.
- */
-u16_t net_tcp_get_chksum(struct net_pkt *pkt, struct net_buf *frag);
 
 /**
  * @brief Parse TCP options from network packet.
@@ -547,6 +545,9 @@ int net_tcp_connect(struct net_context *context,
 		    net_context_connect_cb_t cb,
 		    void *user_data);
 
+struct net_tcp_hdr *net_tcp_input(struct net_pkt *pkt,
+				  struct net_pkt_data_access *tcp_access);
+
 #else
 static inline struct net_tcp *net_tcp_alloc(struct net_context *context)
 {
@@ -654,18 +655,16 @@ static inline enum net_tcp_state net_tcp_get_state(const struct net_tcp *tcp)
 }
 
 static inline bool net_tcp_validate_seq(struct net_tcp *tcp,
-					struct net_pkt *pkt)
+					struct net_tcp_hdr *tcp_hdr)
 {
 	ARG_UNUSED(tcp);
-	ARG_UNUSED(pkt);
+	ARG_UNUSED(tcp_hdr);
 	return false;
 }
 
-static inline u16_t net_tcp_get_chksum(struct net_pkt *pkt,
-				       struct net_buf *frag)
+static inline int net_tcp_finalize(struct net_pkt *pkt)
 {
 	ARG_UNUSED(pkt);
-	ARG_UNUSED(frag);
 	return 0;
 }
 
@@ -772,6 +771,16 @@ static inline int net_tcp_connect(struct net_context *context,
 	ARG_UNUSED(user_data);
 
 	return -EPROTONOSUPPORT;
+}
+
+static inline
+struct net_tcp_hdr *net_tcp_input(struct net_pkt *pkt,
+				  struct net_pkt_data_access *tcp_access)
+{
+	ARG_UNUSED(pkt);
+	ARG_UNUSED(tcp_access);
+
+	return NULL;
 }
 
 #endif

@@ -54,7 +54,7 @@ enum mdm_control_pins {
 	MDM_KEEP_AWAKE,
 	MDM_RESET,
 	SHLD_3V3_1V8_SIG_TRANS_ENA,
-#ifdef DT_WNCM14A2A_GPIO_MDM_SEND_OK_PIN
+#ifdef DT_WNC_M14A2A_0_MDM_SEND_OK_GPIOS_PIN
 	MDM_SEND_OK,
 #endif
 	MAX_MDM_CONTROL_PINS,
@@ -62,33 +62,33 @@ enum mdm_control_pins {
 
 static const struct mdm_control_pinconfig pinconfig[] = {
 	/* MDM_BOOT_MODE_SEL */
-	PINCONFIG(DT_WNCM14A2A_GPIO_MDM_BOOT_MODE_SEL_NAME,
-		  DT_WNCM14A2A_GPIO_MDM_BOOT_MODE_SEL_PIN),
+	PINCONFIG(DT_WNC_M14A2A_0_MDM_BOOT_MODE_SEL_GPIOS_CONTROLLER,
+		  DT_WNC_M14A2A_0_MDM_BOOT_MODE_SEL_GPIOS_PIN),
 
 	/* MDM_POWER */
-	PINCONFIG(DT_WNCM14A2A_GPIO_MDM_POWER_NAME,
-		  DT_WNCM14A2A_GPIO_MDM_POWER_PIN),
+	PINCONFIG(DT_WNC_M14A2A_0_MDM_POWER_GPIOS_CONTROLLER,
+		  DT_WNC_M14A2A_0_MDM_POWER_GPIOS_PIN),
 
 	/* MDM_KEEP_AWAKE */
-	PINCONFIG(DT_WNCM14A2A_GPIO_MDM_KEEP_AWAKE_NAME,
-		  DT_WNCM14A2A_GPIO_MDM_KEEP_AWAKE_PIN),
+	PINCONFIG(DT_WNC_M14A2A_0_MDM_KEEP_AWAKE_GPIOS_CONTROLLER,
+		  DT_WNC_M14A2A_0_MDM_KEEP_AWAKE_GPIOS_PIN),
 
 	/* MDM_RESET */
-	PINCONFIG(DT_WNCM14A2A_GPIO_MDM_RESET_NAME,
-		  DT_WNCM14A2A_GPIO_MDM_RESET_PIN),
+	PINCONFIG(DT_WNC_M14A2A_0_MDM_RESET_GPIOS_CONTROLLER,
+		  DT_WNC_M14A2A_0_MDM_RESET_GPIOS_PIN),
 
 	/* SHLD_3V3_1V8_SIG_TRANS_ENA */
-	PINCONFIG(DT_WNCM14A2A_GPIO_MDM_SHLD_TRANS_ENA_NAME,
-		  DT_WNCM14A2A_GPIO_MDM_SHLD_TRANS_ENA_PIN),
+	PINCONFIG(DT_WNC_M14A2A_0_MDM_SHLD_TRANS_ENA_GPIOS_CONTROLLER,
+		  DT_WNC_M14A2A_0_MDM_SHLD_TRANS_ENA_GPIOS_PIN),
 
-#ifdef DT_WNCM14A2A_GPIO_MDM_SEND_OK_PIN
+#ifdef DT_WNC_M14A2A_0_MDM_SEND_OK_GPIOS_PIN
 	/* MDM_SEND_OK */
-	PINCONFIG(DT_WNCM14A2A_GPIO_MDM_SEND_OK_NAME,
-		  DT_WNCM14A2A_GPIO_MDM_SEND_OK_PIN),
+	PINCONFIG(DT_WNC_M14A2A_0_MDM_SEND_OK_GPIOS_CONTROLLER,
+		  DT_WNC_M14A2A_0_MDM_SEND_OK_GPIOS_PIN),
 #endif
 };
 
-#define MDM_UART_DEV_NAME		DT_WNCM14A2A_UART_DRV_NAME
+#define MDM_UART_DEV_NAME		DT_WNC_M14A2A_0_BUS_NAME
 
 #define MDM_BOOT_MODE_SPECIAL		0
 #define MDM_BOOT_MODE_NORMAL		1
@@ -603,7 +603,7 @@ static void on_cmd_atcmdecho_nosock_imei(struct net_buf **buf, u16_t len)
 	if (len < MDM_IMEI_LENGTH) {
 		LOG_DBG("Waiting for data");
 		/* wait for more data */
-		k_sleep(K_MSEC(100));
+		k_sleep(K_MSEC(500));
 		wncm14a2a_read_rx(buf);
 	}
 
@@ -777,7 +777,8 @@ static void sockreadrecv_cb_work(struct k_work *work)
 	pkt = sock->recv_pkt;
 	sock->recv_pkt = NULL;
 	if (sock->recv_cb) {
-		sock->recv_cb(sock->context, pkt, 0, sock->recv_user_data);
+		sock->recv_cb(sock->context, pkt, NULL, NULL,
+			      0, sock->recv_user_data);
 	} else {
 		net_pkt_unref(pkt);
 	}
@@ -1273,7 +1274,7 @@ static int modem_pin_init(void)
 	LOG_DBG("MDM_KEEP_AWAKE_PIN -> ENABLED");
 	gpio_pin_write(ictx.gpio_port_dev[MDM_KEEP_AWAKE],
 		       pinconfig[MDM_KEEP_AWAKE].pin, MDM_KEEP_AWAKE_ENABLED);
-#ifdef DT_WNCM14A2A_GPIO_MDM_SEND_OK_PIN
+#ifdef DT_WNC_M14A2A_0_MDM_SEND_OK_GPIOS_PIN
 	LOG_DBG("MDM_SEND_OK_PIN -> ENABLED");
 	gpio_pin_write(ictx.gpio_port_dev[MDM_SEND_OK],
 		       pinconfig[MDM_SEND_OK].pin, MDM_SEND_OK_ENABLED);
@@ -1445,14 +1446,8 @@ error:
 	return;
 }
 
-static void wncm14a2a_modem_reset_work(struct k_work *work)
-{
-	wncm14a2a_modem_reset();
-}
-
 static int wncm14a2a_init(struct device *dev)
 {
-	static struct k_delayed_work reset_work;
 	int i, ret = 0;
 
 	ARG_UNUSED(dev);
@@ -1513,10 +1508,7 @@ static int wncm14a2a_init(struct device *dev)
 	/* init RSSI query */
 	k_delayed_work_init(&ictx.rssi_query_work, wncm14a2a_rssi_query_work);
 
-	/* Let's start the modem reset in a workq so that init can proceed */
-	k_delayed_work_init(&reset_work, wncm14a2a_modem_reset_work);
-	ret = k_delayed_work_submit_to_queue(&wncm14a2a_workq,
-					     &reset_work, K_MSEC(10));
+	wncm14a2a_modem_reset();
 
 error:
 	return ret;

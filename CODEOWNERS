@@ -99,7 +99,6 @@ drivers/ethernet/                        @jukkar @tbursztyka @pfalcon
 drivers/flash/                           @nashif
 drivers/flash/*stm32*                    @superna9999
 drivers/gpio/*stm32*                     @rsalveti @idlethread
-drivers/gpio/gpio_pulpino.c              @kgugala @pgielda @nategraff-sifive
 drivers/i2s/i2s_ll_stm32*                @avisconti
 drivers/ieee802154/                      @jukkar @tbursztyka
 drivers/interrupt_controller/            @andrewboie
@@ -117,7 +116,6 @@ drivers/net/slip.c                       @jukkar @tbursztyka
 drivers/spi/                             @tbursztyka
 drivers/spi/spi_ll_stm32.*               @superna9999
 drivers/timer/altera_avalon_timer_hal.c  @ramakrishnapallala
-drivers/timer/pulpino_timer.c            @nategraff-sifive @kgugala @pgielda
 drivers/timer/riscv_machine_timer.c      @nategraff-sifive @kgugala @pgielda
 drivers/usb/                             @jfischer-phytec-iot @finikorg
 drivers/usb/device/usb_dc_stm32.c        @ydamigos @loicpoulain
@@ -176,6 +174,7 @@ include/logging/                         @nordic-krch
 include/misc/                            @andrewboie @andyross
 include/net/                             @jukkar @tbursztyka @pfalcon
 include/net/buf.h                        @jukkar @jhedberg @tbursztyka @pfalcon
+include/posix/                           @pfalcon
 include/power.h                          @ramakrishnapallala @nashif
 include/sensor.h                         @bogdan-davidoaia
 include/shared_irq.h                     @andrewboie @andyross
@@ -189,7 +188,7 @@ include/toolchain/                       @andrewboie @andyross
 include/zephyr.h                         @andrewboie @andyross
 kernel/                                  @andrewboie @andyross
 lib/gui/                                 @vanwinkeljan
-lib/posix/                               @ramakrishnapallala @nniranjhana
+lib/posix/                               @ramakrishnapallala @nniranjhana @pfalcon
 kernel/device.c                          @ramakrishnapallala @nashif
 kernel/idle.c                            @ramakrishnapallala @nashif
 samples/bluetooth/                       @sjanc @jhedberg @Vudentz
@@ -222,9 +221,10 @@ scripts/gen_syscalls.py                  @andrewboie
 scripts/process_gperf.py                 @andrewboie
 scripts/sanity_chk/                      @andrewboie @nashif
 scripts/sanitycheck                      @andrewboie @nashif
-scripts/support/runner/                  @mbolivar
+scripts/west_commands/                   @mbolivar
+scripts/west-commands.yml                @mbolivar
 subsys/bluetooth/                        @sjanc @jhedberg @Vudentz
-subsys/bluetooth/controller/             @carlescufi @cvinayak
+subsys/bluetooth/controller/             @carlescufi @cvinayak @thoh-ot
 subsys/fs/                               @nashif
 subsys/logging/                          @nordic-krch
 subsys/net/buf.c                         @jukkar @jhedberg @tbursztyka @pfalcon
@@ -241,7 +241,7 @@ subsys/*/*native_posix*/                 @aescolar
 subsys/usb/                              @jfischer-phytec-iot @finikorg
 tests/boards/native_posix/               @aescolar
 tests/bluetooth/                         @sjanc @jhedberg @Vudentz
-tests/posix/                             @nniranjhana
+tests/posix/                             @nniranjhana @pfalcon
 tests/crypto/                            @ceolin
 tests/crypto/mbedtls/                    @nashif @ceolin
 tests/drivers/spi/                       @tbursztyka

@@ -11,8 +11,8 @@ void shell_op_cursor_vert_move(const struct shell *shell, s32_t delta)
 {
 	if (delta != 0) {
 		shell_raw_fprintf(shell->fprintf_ctx, "\033[%d%c",
-				delta > 0 ? delta : -delta,
-				delta > 0 ? 'A' : 'B');
+				  delta > 0 ? delta : -delta,
+				  delta > 0 ? 'A' : 'B');
 	}
 }
 
@@ -20,8 +20,8 @@ void shell_op_cursor_horiz_move(const struct shell *shell, s32_t delta)
 {
 	if (delta != 0) {
 		shell_raw_fprintf(shell->fprintf_ctx, "\033[%d%c",
-				delta > 0 ? delta : -delta,
-				delta > 0 ? 'C' : 'D');
+				  delta > 0 ? delta : -delta,
+				  delta > 0 ? 'C' : 'D');
 	}
 }
 
@@ -224,7 +224,7 @@ static void reprint_from_cursor(const struct shell *shell, u16_t diff,
 	}
 
 	shell_fprintf(shell, SHELL_NORMAL, "%s",
-			&shell->ctx->cmd_buff[shell->ctx->cmd_buff_pos]);
+		      &shell->ctx->cmd_buff[shell->ctx->cmd_buff_pos]);
 	shell->ctx->cmd_buff_pos = shell->ctx->cmd_buff_len;
 
 	if (full_line_cmd(shell)) {
@@ -258,9 +258,14 @@ static void data_insert(const struct shell *shell, const char *data, u16_t len)
 	reprint_from_cursor(shell, after, false);
 }
 
-void char_replace(const struct shell *shell, char data)
+static void char_replace(const struct shell *shell, char data)
 {
 	shell->ctx->cmd_buff[shell->ctx->cmd_buff_pos++] = data;
+
+	if (!flag_echo_get(shell)) {
+		return;
+	}
+
 	shell_raw_fprintf(shell->fprintf_ctx, "%c", data);
 	if (shell_cursor_in_empty_line(shell)) {
 		cursor_next_line_move(shell);
@@ -322,7 +327,8 @@ void shell_cmd_line_erase(const struct shell *shell)
 	shell_multiline_data_calc(&shell->ctx->vt100_ctx.cons,
 				  shell->ctx->cmd_buff_pos,
 				  shell->ctx->cmd_buff_len);
-	shell_op_cursor_horiz_move(shell, -shell->ctx->vt100_ctx.cons.cur_x);
+	shell_op_cursor_horiz_move(shell,
+				   -(shell->ctx->vt100_ctx.cons.cur_x - 1));
 	shell_op_cursor_vert_move(shell, shell->ctx->vt100_ctx.cons.cur_y - 1);
 
 	clear_eos(shell);

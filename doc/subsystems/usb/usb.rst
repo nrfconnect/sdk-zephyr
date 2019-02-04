@@ -111,13 +111,82 @@ the vendor requests:
 The class driver waits for the :makevar:`USB_DC_CONFIGURED` device status code
 before transmitting any data.
 
-Further reading
-***************
+Testing USB over USP/IP in native_posix
+***************************************
 
-More information on the stack and its usage can be found in the following
-subsections:
+Virtual USB controller implemented through USB/IP might be used to test USB
+Device stack. Follow general build procedure to build USB sample for
+the native_posix configuration.
 
-.. toctree::
-   :maxdepth: 2
+Run built sample with:
 
-   ../../api/usb_api.rst
+.. code-block:: console
+
+   $ make run
+
+In a terminal window, run the following command to list USB devices:
+
+.. code-block:: console
+
+   $ usbip list -r localhost
+   Exportable USB devices
+   ======================
+    - 127.0.0.1
+           1-1: unknown vendor : unknown product (2fe3:0100)
+              : /sys/devices/pci0000:00/0000:00:01.2/usb1/1-1
+              : (Defined at Interface level) (00/00/00)
+              :  0 - Vendor Specific Class / unknown subclass / unknown protocol (ff/00/00)
+
+In a terminal window, run the following command to attach USB device:
+
+.. code-block:: console
+
+   $ sudo usbip attach -r localhost -b 1-1
+
+The USB device should be connected to your Linux host, and verified with the following commands:
+
+.. code-block:: console
+
+   $ sudo usbip port
+   Imported USB devices
+   ====================
+   Port 00: <Port in Use> at Full Speed(12Mbps)
+          unknown vendor : unknown product (2fe3:0100)
+          7-1 -> usbip://localhost:3240/1-1
+              -> remote bus/dev 001/002
+   $ lsusb -d 2fe3:0100
+   Bus 007 Device 004: ID 2fe3:0100
+
+API Reference
+*************
+
+There are two ways to transmit data, using the 'low' level read/write API or
+the 'high' level transfer API.
+
+Low level API
+  To transmit data to the host, the class driver should call usb_write().
+  Upon completion the registered endpoint callback will be called. Before
+  sending another packet the class driver should wait for the completion of
+  the previous write. When data is received, the registered endpoint callback
+  is called. usb_read() should be used for retrieving the received data.
+  For CDC ACM sample driver this happens via the OUT bulk endpoint handler
+  (cdc_acm_bulk_out) mentioned in the endpoint array (cdc_acm_ep_data).
+
+High level API
+  The usb_transfer method can be used to transfer data to/from the host. The
+  transfer API will automatically split the data transmission into one or more
+  USB transaction(s), depending endpoint max packet size. The class driver does
+  not have to implement endpoint callback and should set this callback to the
+  generic usb_transfer_ep_callback.
+
+USB Device Controller
+=====================
+
+.. doxygengroup:: _usb_device_controller_api
+   :project: Zephyr
+
+USB Device Core Layer
+=====================
+
+.. doxygengroup:: _usb_device_core_api
+   :project: Zephyr

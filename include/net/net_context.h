@@ -76,6 +76,8 @@ struct net_context;
  * @param pkt Network buffer that is received. If the pkt is not NULL,
  * then the callback will own the buffer and it needs to to unref the pkt
  * as soon as it has finished working with it.  On EOF, pkt will be NULL.
+ * @param ip_hdr a pointer to relevant IP (v4 or v6) header.
+ * @param proto_hdr a pointer to relevant protocol (udp or tcp) header.
  * @param status Value is set to 0 if some data or the connection is
  * at EOF, <0 if there was an error receiving data, in this case the
  * pkt parameter is set to NULL.
@@ -83,6 +85,8 @@ struct net_context;
  */
 typedef void (*net_context_recv_cb_t)(struct net_context *context,
 				      struct net_pkt *pkt,
+				      union net_ip_header *ip_hdr,
+				      union net_proto_header *proto_hdr,
 				      int status,
 				      void *user_data);
 
@@ -203,6 +207,10 @@ struct net_context {
 	/** Reference count
 	 */
 	atomic_t refcount;
+
+	/** Internal lock for protecting this context from multiple access.
+	 */
+	struct k_mutex lock;
 
 	/** Local IP address. Note that the values are in network byte order.
 	 */
@@ -592,6 +600,20 @@ struct net_pkt *net_context_create_ipv4(struct net_context *context,
 	return NULL;
 }
 #endif /* CONFIG_NET_IPV4 */
+#if defined(CONFIG_NET_IPV4)
+int net_context_create_ipv4_new(struct net_context *context,
+				struct net_pkt *pkt,
+				const struct in_addr *src,
+				const struct in_addr *dst);
+#else
+static inline int net_context_create_ipv4_new(struct net_context *context,
+					      struct net_pkt *pkt,
+					      const struct in_addr *src,
+					      const struct in_addr *dst)
+{
+	return -1;
+}
+#endif /* CONFIG_NET_IPV4 */
 
 /**
  * @brief Create IPv6 packet in provided net_pkt from context
@@ -616,6 +638,20 @@ struct net_pkt *net_context_create_ipv6(struct net_context *context,
 					const struct in6_addr *dst)
 {
 	return NULL;
+}
+#endif /* CONFIG_NET_IPV6 */
+#if defined(CONFIG_NET_IPV6)
+int net_context_create_ipv6_new(struct net_context *context,
+				struct net_pkt *pkt,
+				const struct in6_addr *src,
+				const struct in6_addr *dst);
+#else
+static inline int net_context_create_ipv6_new(struct net_context *context,
+					      struct net_pkt *pkt,
+					      const struct in6_addr *src,
+					      const struct in6_addr *dst)
+{
+	return -1;
 }
 #endif /* CONFIG_NET_IPV6 */
 
@@ -744,6 +780,41 @@ int net_context_send(struct net_pkt *pkt,
 		     void *user_data);
 
 /**
+ * @brief Send a network buffer to a peer.
+ *
+ * @details This function can be used to send network data to a peer
+ * connection. This function will return immediately if the timeout
+ * is set to K_NO_WAIT. If the timeout is set to K_FOREVER, the function
+ * will wait until the network buffer is sent. Timeout value > 0 will
+ * wait as many ms. After the network buffer is sent,
+ * a caller-supplied callback is called. The callback is called even
+ * if timeout was set to K_FOREVER, the callback is called
+ * before this function will return in this case. The callback is not
+ * called if the timeout expires. For context of type SOCK_DGRAM,
+ * the destination address must have been set by the call to
+ * net_context_connect().
+ * This is similar as BSD send() function.
+ *
+ * @param context The network context to use.
+ * @param buf The data buffer to send
+ * @param len Length of the buffer
+ * @param cb Caller-supplied callback function.
+ * @param timeout Timeout for the connection. Possible values
+ * are K_FOREVER, K_NO_WAIT, >0.
+ * @param token Caller specified value that is passed as is to callback.
+ * @param user_data Caller-supplied user data.
+ *
+ * @return 0 if ok, < 0 if error
+ */
+int net_context_send_new(struct net_context *context,
+			 const void *buf,
+			 size_t len,
+			 net_context_send_cb_t cb,
+			 s32_t timeout,
+			 void *token,
+			 void *user_data);
+
+/**
  * @brief Send a network buffer to a peer specified by address.
  *
  * @details This function can be used to send network data to a peer
@@ -777,6 +848,46 @@ int net_context_sendto(struct net_pkt *pkt,
 		       s32_t timeout,
 		       void *token,
 		       void *user_data);
+
+
+/**
+ * @brief Send a network buffer to a peer specified by address.
+ *
+ * @details This function can be used to send network data to a peer
+ * specified by address. This variant can only be used for datagram
+ * connections of type SOCK_DGRAM. This function will return immediately
+ * if the timeout is set to K_NO_WAIT. If the timeout is set to K_FOREVER,
+ * the function will wait until the network buffer is sent. Timeout
+ * value > 0 will wait as many ms. After the network buffer
+ * is sent, a caller-supplied callback is called. The callback is called
+ * even if timeout was set to K_FOREVER, the callback is called
+ * before this function will return. The callback is not called if the
+ * timeout expires.
+ * This is similar as BSD sendto() function.
+ *
+ * @param context The network context to use.
+ * @param buf The data buffer to send
+ * @param len Length of the buffer
+ * @param dst_addr Destination address. This will override the address
+ * already set in network buffer.
+ * @param addrlen Length of the address.
+ * @param cb Caller-supplied callback function.
+ * @param timeout Timeout for the connection. Possible values
+ * are K_FOREVER, K_NO_WAIT, >0.
+ * @param token Caller specified value that is passed as is to callback.
+ * @param user_data Caller-supplied user data.
+ *
+ * @return numbers of bytes sent on success, a negative errno otherwise
+ */
+int net_context_sendto_new(struct net_context *context,
+			   const void *buf,
+			   size_t len,
+			   const struct sockaddr *dst_addr,
+			   socklen_t addrlen,
+			   net_context_send_cb_t cb,
+			   s32_t timeout,
+			   void *token,
+			   void *user_data);
 
 /**
  * @brief Receive network data from a peer specified by context.

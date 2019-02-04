@@ -15,7 +15,7 @@
 # -r  the remote to rebase on
 #
 # The script can be run locally using for exmaple:
-# ./scripts/ci/run_ci.sh -b master -r upstream  -p
+# ./scripts/ci/run_ci.sh -b master -r upstream  -l
 
 set -xe
 
@@ -25,14 +25,20 @@ SANITYCHECK_OPTIONS_RETRY_2="${SANITYCHECK_OPTIONS} --only-failed --outdir=out-3
 export BSIM_OUT_PATH="${BSIM_OUT_PATH:-/opt/bsim/}"
 export BSIM_COMPONENTS_PATH="${BSIM_OUT_PATH}/components/"
 BSIM_BT_TEST_RESULTS_FILE="./bsim_bt_out/bsim_results.xml"
+WEST_COMMANDS_RESULTS_FILE="./pytest_out/west_commands.xml"
 
 MATRIX_BUILDS=1
 MATRIX=1
 
-while getopts ":p:m:b:r:M:cfs" opt; do
+while getopts ":p:m:b:r:M:cfsl" opt; do
 	case $opt in
 		c)
 			echo "Execute CI" >&2
+			MAIN_CI=1
+			;;
+		l)
+			echo "Executing script locally" >&2
+			LOCAL_RUN=1
 			MAIN_CI=1
 			;;
 		s)
@@ -72,6 +78,15 @@ done
 DOC_MATRIX=${MATRIX_BUILDS}
 
 if [ -n "$MAIN_CI" ]; then
+
+	# West handling
+        pushd ..
+	if [ ! -d .west ]; then
+		west init -l zephyr
+		west update
+	fi
+        popd
+
 	if [ -z "$BRANCH" ]; then
 		echo "No base branch given"
 		exit
@@ -154,6 +169,11 @@ function on_complete() {
 		cp ${BSIM_BT_TEST_RESULTS_FILE} shippable/testresults/;
 	fi;
 
+	if [ -e ${WEST_COMMANDS_RESULTS_FILE} ]; then
+		echo "Copy ${WEST_COMMANDS_RESULTS_FILE}"
+		cp ${WEST_COMMANDS_RESULTS_FILE} shippable/testresults;
+	fi;
+
 	if [ "$MATRIX" = "1" ]; then
 		echo "Handle coverage data..."
 		handle_coverage
@@ -192,17 +212,6 @@ function run_bsim_bt_tests() {
 	tests/bluetooth/bsim_bt/run_parallel.sh
 }
 
-function build_docs() {
-	echo "- Building Documentation";
-	make htmldocs || ( echo "Documentation build failed" ; exit 1 )
-
-	if [ -s doc/_build/doc.warnings ]; then
-		echo " => New documentation warnings/errors";
-		cp doc/_build/doc.warnings doc.warnings
-	fi
-	echo "- Verify commit message, coding style, doc build";
-}
-
 function get_tests_to_run() {
 	./scripts/ci/get_modified_tests.py --commits ${COMMIT_RANGE} > modified_tests.args;
 	./scripts/ci/get_modified_boards.py --commits ${COMMIT_RANGE} > modified_boards.args;
@@ -231,8 +240,22 @@ if [ -n "$MAIN_CI" ]; then
 		echo "Skipping BT simulator tests"
 	fi
 
+	if [ "$MATRIX" = "1" ]; then
+		# Run pytest-based testing for Python in matrix
+		# builder 1.  For now, this is just done for the west
+		# extension commands, but additional directories which
+		# run pytest could go here too.
+		mkdir -p $(dirname ${WEST_COMMANDS_RESULTS_FILE})
+		WEST_SRC=$(west list --format='{abspath}' west)/src
+		PYTHONPATH=./scripts/west_commands:$WEST_SRC pytest \
+			  --junitxml=${WEST_COMMANDS_RESULTS_FILE} \
+			  ./scripts/west_commands/tests
+	else
+		echo "Skipping west command tests"
+	fi
+
 	# In a pull-request see if we have changed any tests or board definitions
-	if [ -n "${PULL_REQUEST_NR}" ]; then
+	if [ -n "${PULL_REQUEST_NR}" -o -n "${LOCAL_RUN}"  ]; then
 		get_tests_to_run
 	fi
 

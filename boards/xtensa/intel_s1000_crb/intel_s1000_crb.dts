@@ -7,7 +7,7 @@
 	compatible = "intel,s1000";
 
 	aliases {
-		uart_0 = &uart0;
+		uart-0 = &uart0;
 	};
 
 	chosen {
@@ -39,11 +39,12 @@
 	status = "ok";
 
 	flash0: flash@0 {
-		compatible = "spi,flash";
-		label = "MX25UM512";
+		compatible = "jedec,spi-nor";
 		reg = <0>;
-		size = <0x400000>;
 		spi-max-frequency = <2000000>;
+		label = "MX25UM512";
+		jedec-id = <0xc2 0x80 0x3a>;
+		size = <0x2000000>;
 		erase-block-size = <0x10000>;
 		write-block-size = <1>;
 	};

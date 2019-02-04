@@ -102,19 +102,20 @@ static inline enum net_verdict process_data(struct net_pkt *pkt,
 		}
 	}
 
+	/* L2 has modified the buffer starting point, it is easier
+	 * to re-initialize the cursor rather than updating it.
+	 */
+	net_pkt_cursor_init(pkt);
+
 	/* IP version and header length. */
 	switch (NET_IPV6_HDR(pkt)->vtc & 0xf0) {
 #if defined(CONFIG_NET_IPV6)
 	case 0x60:
-		net_stats_update_ipv6_recv(net_pkt_iface(pkt));
-		net_pkt_set_family(pkt, PF_INET6);
-		return net_ipv6_process_pkt(pkt, is_loopback);
+		return net_ipv6_input(pkt, is_loopback);
 #endif
 #if defined(CONFIG_NET_IPV4)
 	case 0x40:
-		net_stats_update_ipv4_recv(net_pkt_iface(pkt));
-		net_pkt_set_family(pkt, PF_INET);
-		return net_ipv4_process_pkt(pkt);
+		return net_ipv4_input(pkt);
 #endif
 	}
 
@@ -296,6 +297,8 @@ int net_send_data(struct net_pkt *pkt)
 	}
 #endif
 
+	net_pkt_cursor_init(pkt);
+
 	status = check_ip_addr(pkt);
 	if (status < 0) {
 		return status;
@@ -380,6 +383,9 @@ int net_recv_data(struct net_if *iface, struct net_pkt *pkt)
 	if (!atomic_test_bit(iface->if_dev->flags, NET_IF_UP)) {
 		return -ENETDOWN;
 	}
+
+	net_pkt_set_overwrite(pkt, true);
+	net_pkt_cursor_init(pkt);
 
 	NET_DBG("prio %d iface %p pkt %p len %zu", net_pkt_priority(pkt),
 		iface, pkt, net_pkt_get_len(pkt));

@@ -16,6 +16,7 @@
 		zephyr,shell-uart = &usart0;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
+		zephyr,code-partition = &slot0_partition;
 	};
 
 	/* These aliases are provided for compatibility with samples */
@@ -56,7 +57,8 @@
 
 &usart0 {
 	current-speed = <115200>;
-	location = <0>;
+	location-rx = <GECKO_LOCATION(0) GECKO_PORT_A GECKO_PIN(1)>;
+	location-tx = <GECKO_LOCATION(0) GECKO_PORT_A GECKO_PIN(0)>;
 	status = "ok";
 };
 

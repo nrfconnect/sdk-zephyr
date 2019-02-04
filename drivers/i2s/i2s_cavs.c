@@ -28,8 +28,81 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(LOG_DOMAIN);
 
+#define I2S_IRQ_CONNECT(i2s_id)					\
+	IRQ_CONNECT(I2S##i2s_id##_CAVS_IRQ,			\
+			CONFIG_I2S_CAVS_IRQ_PRI,		\
+			i2s_cavs_isr,				\
+			DEVICE_GET(i2s##i2s_id##_cavs), 0)
+
+#define I2S_DEVICE_NAME(i2s_id)		i2s##i2s_id##_cavs
+#define I2S_DEVICE_DATA_NAME(i2s_id)	i2s##i2s_id##_cavs_data
+#define I2S_DEVICE_CONFIG_NAME(i2s_id)	i2s##i2s_id##_cavs_config
+
+#define I2S_DEVICE_CONFIG_DEFINE(i2s_id)				\
+	static const struct i2s_cavs_config i2s##i2s_id##_cavs_config = {\
+		.regs = (struct i2s_cavs_ssp *)SSP_BASE(i2s_id),	\
+		.mn_regs = (struct i2s_cavs_mn_div *)SSP_MN_DIV_BASE(i2s_id),\
+		.irq_id = I2S##i2s_id##_CAVS_IRQ,		\
+		.irq_connect = i2s##i2s_id##_cavs_irq_connect,	\
+	}
+
+#define I2S_DMA_CHANNEL(i2s_id, dir)				\
+		CONFIG_I2S_CAVS_##i2s_id##_DMA_##dir##_CHANNEL
+
+#define I2S_DEVICE_OBJECT_DECLARE(i2s_id)			\
+	DEVICE_DECLARE(I2S_DEVICE_NAME(i2s_id))
+
+#define I2S_DEVICE_OBJECT(i2s_id)				\
+		DEVICE_GET(I2S_DEVICE_NAME(i2s_id))
+
+#define I2S_DEVICE_DATA_DEFINE(i2s_id)				\
+	static struct i2s_cavs_dev_data i2s##i2s_id##_cavs_data = {\
+		.tx = {						\
+			.dma_channel = I2S_DMA_CHANNEL(i2s_id, TX),	\
+			.dma_cfg = {				\
+				.source_burst_length = CAVS_I2S_DMA_BURST_SIZE,\
+				.dest_burst_length = CAVS_I2S_DMA_BURST_SIZE,\
+				.dma_callback = i2s_dma_tx_callback,	\
+				.callback_arg = I2S_DEVICE_OBJECT(i2s_id),\
+				.complete_callback_en = 1,	\
+				.error_callback_en = 1,		\
+				.block_count = 1,		\
+				.head_block =			\
+				&i2s##i2s_id##_cavs_data.tx.dma_block,\
+				.channel_direction = MEMORY_TO_PERIPHERAL,\
+				.dma_slot = DMA_HANDSHAKE_SSP##i2s_id##_TX,\
+			},					\
+		},						\
+		.rx = {						\
+			.dma_channel = I2S_DMA_CHANNEL(i2s_id, RX),	\
+			.dma_cfg = {				\
+				.source_burst_length = CAVS_I2S_DMA_BURST_SIZE,\
+				.dest_burst_length = CAVS_I2S_DMA_BURST_SIZE,\
+				.dma_callback = i2s_dma_rx_callback,\
+				.callback_arg = I2S_DEVICE_OBJECT(i2s_id),\
+				.complete_callback_en = 1,	\
+				.error_callback_en = 1,		\
+				.block_count = 1,		\
+				.head_block =			\
+				&i2s##i2s_id##_cavs_data.rx.dma_block,\
+				.channel_direction = PERIPHERAL_TO_MEMORY,\
+				.dma_slot = DMA_HANDSHAKE_SSP##i2s_id##_RX,\
+				},				\
+		},						\
+	}
+
+#define I2S_DEVICE_AND_API_INIT(i2s_id)				\
+	DEVICE_AND_API_INIT(I2S_DEVICE_NAME(i2s_id),		\
+			CONFIG_I2S_CAVS_##i2s_id##_NAME,	\
+			i2s_cavs_initialize,			\
+			&I2S_DEVICE_DATA_NAME(i2s_id),		\
+			&I2S_DEVICE_CONFIG_NAME(i2s_id),	\
+			POST_KERNEL,				\
+			CONFIG_I2S_INIT_PRIORITY,		\
+			&i2s_cavs_driver_api)
+
 /* length of the buffer queue */
-#define I2S_CAVS_BUF_Q_LEN			4
+#define I2S_CAVS_BUF_Q_LEN			2
 
 #ifdef CONFIG_DCACHE_WRITEBACK
 #define DCACHE_INVALIDATE(addr, size) \
@@ -85,6 +158,7 @@ struct i2s_cavs_config {
 	struct i2s_cavs_ssp *regs;
 	struct i2s_cavs_mn_div *mn_regs;
 	u32_t irq_id;
+	void (*irq_connect)(void);
 };
 
 /* Device run time data */
@@ -101,15 +175,28 @@ struct i2s_cavs_dev_data {
 #define DEV_DATA(dev) \
 	((struct i2s_cavs_dev_data *const)(dev)->driver_data)
 
-static struct device DEVICE_NAME_GET(i2s1_cavs);
-static struct device DEVICE_NAME_GET(i2s2_cavs);
-static struct device DEVICE_NAME_GET(i2s3_cavs);
+I2S_DEVICE_OBJECT_DECLARE(1);
+I2S_DEVICE_OBJECT_DECLARE(2);
+I2S_DEVICE_OBJECT_DECLARE(3);
 
 static void i2s_dma_tx_callback(void *, u32_t, int);
 static void i2s_tx_stream_disable(struct i2s_cavs_dev_data *,
 		volatile struct i2s_cavs_ssp *const, struct device *);
 static void i2s_rx_stream_disable(struct i2s_cavs_dev_data *,
 		volatile struct i2s_cavs_ssp *const, struct device *);
+
+static inline void i2s_purge_stream_buffers(struct stream *strm,
+	struct k_mem_slab *mem_slab)
+{
+	void *buffer;
+
+	while (k_msgq_get(&strm->in_queue, &buffer, K_NO_WAIT) == 0) {
+		k_mem_slab_free(mem_slab, &buffer);
+	}
+	while (k_msgq_get(&strm->out_queue, &buffer, K_NO_WAIT) == 0) {
+		k_mem_slab_free(mem_slab, &buffer);
+	}
+}
 
 /* This function is executed in the interrupt context */
 static void i2s_dma_tx_callback(void *arg, u32_t channel,
@@ -147,21 +234,23 @@ static void i2s_dma_tx_callback(void *arg, u32_t channel,
 			ssp->ssc1 |= SSCR1_TSRE;
 			k_msgq_put(&strm->out_queue, &buffer, K_NO_WAIT);
 		}
+
+		if (ret || status) {
+			/*
+			 * DMA encountered an error (status != 0)
+			 * or
+			 * No bufers in input queue
+			 */
+			LOG_ERR("DMA status %08x channel %u k_msgq_get ret %d",
+					status, channel, ret);
+			strm->state = I2S_STATE_STOPPING;
+			i2s_tx_stream_disable(dev_data, ssp, dev_data->dev_dma);
+		}
+
 		break;
 
 	case I2S_STATE_STOPPING:
-		strm->state = I2S_STATE_READY;
-		/* fall through */
-
-	case I2S_STATE_ERROR:
 		i2s_tx_stream_disable(dev_data, ssp, dev_data->dev_dma);
-		/* purge buffer queue */
-		while (k_msgq_get(&strm->in_queue, &buffer, K_NO_WAIT) == 0) {
-			k_mem_slab_free(dev_data->cfg.mem_slab, &buffer);
-		}
-		while (k_msgq_get(&strm->out_queue, &buffer, K_NO_WAIT) == 0) {
-			k_mem_slab_free(dev_data->cfg.mem_slab, &buffer);
-		}
 		break;
 	}
 }
@@ -197,8 +286,8 @@ static void i2s_dma_rx_callback(void *arg, u32_t channel, int status)
 		if (ret != 0) {
 			LOG_ERR("buffer alloc from slab %p err %d",
 					dev_data->cfg.mem_slab, ret);
-			strm->state = I2S_STATE_ERROR;
 			i2s_rx_stream_disable(dev_data, ssp, dev_data->dev_dma);
+			strm->state = I2S_STATE_READY;
 		} else {
 			/* put buffer in input queue */
 			ret = k_msgq_put(&strm->in_queue, &buffer, K_NO_WAIT);
@@ -218,20 +307,8 @@ static void i2s_dma_rx_callback(void *arg, u32_t channel, int status)
 		}
 		break;
 	case I2S_STATE_STOPPING:
-		strm->state = I2S_STATE_READY;
-		/* fall-through */
-
-	case I2S_STATE_ERROR:
 		i2s_rx_stream_disable(dev_data, ssp, dev_data->dev_dma);
-		/*
-		 * retrieve all buffers from input & output queues and free them
-		 */
-		while (k_msgq_get(&strm->in_queue, &buffer, K_NO_WAIT) == 0) {
-			k_mem_slab_free(dev_data->cfg.mem_slab, &buffer);
-		}
-		while (k_msgq_get(&strm->out_queue, &buffer, K_NO_WAIT) == 0) {
-			k_mem_slab_free(dev_data->cfg.mem_slab, &buffer);
-		}
+		strm->state = I2S_STATE_READY;
 		break;
 	}
 }
@@ -302,10 +379,10 @@ static int i2s_cavs_configure(struct device *dev, enum i2s_dir dir,
 
 	/* reset SSP settings */
 	/* sscr0 dynamic settings are DSS, EDSS, SCR, FRDC, ECS */
-	ssc0 = SSCR0_MOD | SSCR0_PSP | SSCR0_RIM | SSCR0_TIM;
+	ssc0 = SSCR0_MOD | SSCR0_PSP | SSCR0_RIM;
 
 	/* sscr1 dynamic settings are SFRMDIR, SCLKDIR, SCFR */
-	ssc1 = SSCR1_TTE | SSCR1_TTELP | SSCR1_TRAIL | SSCR1_TSRE | SSCR1_RSRE;
+	ssc1 = SSCR1_TTE | SSCR1_TTELP | SSCR1_TRAIL;
 
 	/* sscr2 dynamic setting is LJDFD */
 	ssc2 = 0U;
@@ -490,8 +567,12 @@ static int i2s_cavs_configure(struct device *dev, enum i2s_dir dir,
 	/* enable port */
 	ssp->ssc0 |= SSCR0_SSE;
 
+	/* enable interrupt */
+	irq_enable(dev_cfg->irq_id);
+
 	dev_data->tx.state = I2S_STATE_READY;
 	dev_data->rx.state = I2S_STATE_READY;
+
 	return 0;
 }
 
@@ -534,6 +615,7 @@ static int i2s_tx_stream_start(struct i2s_cavs_dev_data *dev_data,
 
 	/* Enable transmit operation */
 	key = irq_lock();
+	ssp->ssc1 |= SSCR1_TSRE;
 	ssp->sstsa |= SSTSA_TXEN;
 	irq_unlock(key);
 
@@ -581,6 +663,7 @@ static int i2s_rx_stream_start(struct i2s_cavs_dev_data *dev_data,
 
 	/* Enable Receive operation */
 	key = irq_lock();
+	ssp->ssc1 |= SSCR1_RSRE;
 	ssp->ssrsa |= SSRSA_RXEN;
 	irq_unlock(key);
 
@@ -592,14 +675,22 @@ static void i2s_tx_stream_disable(struct i2s_cavs_dev_data *dev_data,
 			      struct device *dev_dma)
 {
 	struct stream *strm = &dev_data->tx;
+	unsigned int key;
 
-	/* Disable DMA service request handshake logic. Handshake is
-	 * not required now since DMA is not in operation.
+	/*
+	 * Enable transmit undderrun interrupt to allow notification
+	 * upon transmit FIFO being emptied.
+	 * Defer disabling of TX to the underrun processing in ISR
 	 */
-	ssp->sstsa &= ~SSTSA_TXEN;
+	key = irq_lock();
+	ssp->ssc0 &= ~SSCR0_TIM;
+	irq_unlock(key);
 
-	LOG_INF("Stopping TX stream & DMA channel %u", strm->dma_channel);
+	LOG_INF("Stopping DMA channel %u for TX stream", strm->dma_channel);
 	dma_stop(dev_dma, strm->dma_channel);
+
+	/* purge buffers queued in the stream */
+	i2s_purge_stream_buffers(strm, dev_data->cfg.mem_slab);
 }
 
 static void i2s_rx_stream_disable(struct i2s_cavs_dev_data *dev_data,
@@ -607,6 +698,7 @@ static void i2s_rx_stream_disable(struct i2s_cavs_dev_data *dev_data,
 			      struct device *dev_dma)
 {
 	struct stream *strm = &dev_data->rx;
+	u32_t data;
 
 	/* Disable DMA service request handshake logic. Handshake is
 	 * not required now since DMA is not in operation.
@@ -615,6 +707,15 @@ static void i2s_rx_stream_disable(struct i2s_cavs_dev_data *dev_data,
 
 	LOG_INF("Stopping RX stream & DMA channel %u", strm->dma_channel);
 	dma_stop(dev_dma, strm->dma_channel);
+
+	/* Empty the FIFO */
+	while (ssp->sss & SSSR_RNE) {
+		/* read the RX FIFO */
+		data = ssp->ssd;
+	}
+
+	/* purge buffers queued in the stream */
+	i2s_purge_stream_buffers(strm, dev_data->cfg.mem_slab);
 }
 
 static int i2s_cavs_trigger(struct device *dev, enum i2s_dir dir,
@@ -625,7 +726,7 @@ static int i2s_cavs_trigger(struct device *dev, enum i2s_dir dir,
 	volatile struct i2s_cavs_ssp *const ssp = dev_cfg->regs;
 	struct stream *strm;
 	unsigned int key;
-	int ret;
+	int ret = 0;
 
 	strm = (dir == I2S_DIR_TX) ? &dev_data->tx : &dev_data->rx;
 
@@ -633,9 +734,9 @@ static int i2s_cavs_trigger(struct device *dev, enum i2s_dir dir,
 	switch (cmd) {
 	case I2S_TRIGGER_START:
 		if (strm->state != I2S_STATE_READY) {
-			irq_unlock(key);
 			LOG_ERR("START trigger: invalid state %u", strm->state);
-			return -EIO;
+			ret = -EIO;
+			break;
 		}
 
 		__ASSERT_NO_MSG(strm->mem_block == NULL);
@@ -649,63 +750,34 @@ static int i2s_cavs_trigger(struct device *dev, enum i2s_dir dir,
 		}
 
 		if (ret < 0) {
-			irq_unlock(key);
 			LOG_DBG("START trigger failed %d", ret);
-			return ret;
+			break;
 		}
 
 		strm->state = I2S_STATE_RUNNING;
 		break;
 
 	case I2S_TRIGGER_STOP:
-		if (strm->state != I2S_STATE_RUNNING) {
-			irq_unlock(key);
-			LOG_DBG("STOP trigger: invalid state");
-			return -EIO;
-		}
-		strm->state = I2S_STATE_STOPPING;
-		break;
-
 	case I2S_TRIGGER_DRAIN:
+	case I2S_TRIGGER_DROP:
 		if (strm->state != I2S_STATE_RUNNING) {
-			irq_unlock(key);
-			LOG_DBG("DRAIN trigger: invalid state");
-			return -EIO;
+			LOG_DBG("STOP/DRAIN/DROP trigger: invalid state");
+			ret = -EIO;
+			break;
 		}
 		strm->state = I2S_STATE_STOPPING;
-		break;
-
-	case I2S_TRIGGER_DROP:
-		if (strm->state == I2S_STATE_NOT_READY) {
-			irq_unlock(key);
-			LOG_DBG("DROP trigger: invalid state");
-			return -EIO;
-		}
-		if (dir == I2S_DIR_TX) {
-			i2s_tx_stream_disable(dev_data, ssp, dev_data->dev_dma);
-		} else {
-			i2s_rx_stream_disable(dev_data, ssp, dev_data->dev_dma);
-		}
-		strm->state = I2S_STATE_READY;
 		break;
 
 	case I2S_TRIGGER_PREPARE:
-		if (strm->state != I2S_STATE_ERROR) {
-			irq_unlock(key);
-			LOG_DBG("PREPARE trigger: invalid state");
-			return -EIO;
-		}
-		strm->state = I2S_STATE_READY;
 		break;
 
 	default:
-		irq_unlock(key);
 		LOG_ERR("Unsupported trigger command");
-		return -EINVAL;
+		ret = -EINVAL;
 	}
 
 	irq_unlock(key);
-	return 0;
+	return ret;
 }
 
 static int i2s_cavs_read(struct device *dev, void **mem_block, size_t *size)
@@ -715,8 +787,7 @@ static int i2s_cavs_read(struct device *dev, void **mem_block, size_t *size)
 	void *buffer;
 	int ret = 0;
 
-	if ((strm->state == I2S_STATE_NOT_READY) ||
-		(strm->state == I2S_STATE_ERROR)) {
+	if (strm->state == I2S_STATE_NOT_READY) {
 		LOG_ERR("invalid state %d", strm->state);
 		return -EIO;
 	}
@@ -760,15 +831,28 @@ static void i2s_cavs_isr(void *arg)
 	struct device *dev = (struct device *)arg;
 	const struct i2s_cavs_config *const dev_cfg = DEV_CFG(dev);
 	volatile struct i2s_cavs_ssp *const ssp = dev_cfg->regs;
-	u32_t temp;
+	struct i2s_cavs_dev_data *const dev_data = DEV_DATA(dev);
+	u32_t status;
 
-	/* clear IRQ */
-	temp = ssp->sss;
-	ssp->sss = temp;
+	/* clear interrupts */
+	status = ssp->sss;
+	ssp->sss = status;
+
+	if (status & SSSR_TUR) {
+		/*
+		 * transmit underrun occurred.
+		 * 1. disable transmission
+		 * 2. disable underrun interrupt
+		 */
+		ssp->sstsa &= ~SSTSA_TXEN;
+		ssp->ssc0 |= SSCR0_TIM;
+		dev_data->tx.state = I2S_STATE_READY;
+	}
 }
 
 static int i2s_cavs_initialize(struct device *dev)
 {
+	const struct i2s_cavs_config *const dev_cfg = DEV_CFG(dev);
 	struct i2s_cavs_dev_data *const dev_data = DEV_DATA(dev);
 
 	dev_data->dev_dma = device_get_binding(CONFIG_I2S_CAVS_DMA_NAME);
@@ -787,6 +871,9 @@ static int i2s_cavs_initialize(struct device *dev)
 	k_msgq_init(&dev_data->rx.out_queue, (char *)dev_data->rx.out_msgs,
 			sizeof(void *), I2S_CAVS_BUF_Q_LEN);
 
+	/* register ISR */
+	dev_cfg->irq_connect();
+
 	dev_data->tx.state = I2S_STATE_NOT_READY;
 	dev_data->rx.state = I2S_STATE_NOT_READY;
 
@@ -802,129 +889,29 @@ static const struct i2s_driver_api i2s_cavs_driver_api = {
 	.trigger = i2s_cavs_trigger,
 };
 
-static const struct i2s_cavs_config i2s1_cavs_config = {
-	.regs = (struct i2s_cavs_ssp *)SSP_BASE(1),
-	.mn_regs = (struct i2s_cavs_mn_div *)SSP_MN_DIV_BASE(1),
-	.irq_id = I2S1_CAVS_IRQ,
-};
+static void i2s1_cavs_irq_connect(void)
+{
+	I2S_IRQ_CONNECT(1);
+}
 
-static const struct i2s_cavs_config i2s2_cavs_config = {
-	.regs = (struct i2s_cavs_ssp *)SSP_BASE(2),
-	.mn_regs = (struct i2s_cavs_mn_div *)SSP_MN_DIV_BASE(2),
-	.irq_id = I2S2_CAVS_IRQ,
-};
+I2S_DEVICE_CONFIG_DEFINE(1);
+I2S_DEVICE_DATA_DEFINE(1);
+I2S_DEVICE_AND_API_INIT(1);
 
-static const struct i2s_cavs_config i2s3_cavs_config = {
-	.regs = (struct i2s_cavs_ssp *)SSP_BASE(3),
-	.mn_regs = (struct i2s_cavs_mn_div *)SSP_MN_DIV_BASE(3),
-	.irq_id = I2S3_CAVS_IRQ,
-};
+static void i2s2_cavs_irq_connect(void)
+{
+	I2S_IRQ_CONNECT(2);
+}
 
-static struct i2s_cavs_dev_data i2s1_cavs_data = {
-	.tx = {
-		.dma_channel = CONFIG_I2S_CAVS_1_DMA_TX_CHANNEL,
-		.dma_cfg = {
-			.source_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dest_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dma_callback = i2s_dma_tx_callback,
-			.callback_arg = &DEVICE_NAME_GET(i2s1_cavs),
-			.complete_callback_en = 1,
-			.error_callback_en = 1,
-			.block_count = 1,
-			.head_block = &i2s1_cavs_data.tx.dma_block,
-			.channel_direction = MEMORY_TO_PERIPHERAL,
-			.dma_slot = DMA_HANDSHAKE_SSP1_TX,
-		},
-	},
-	.rx = {
-		.dma_channel = CONFIG_I2S_CAVS_1_DMA_RX_CHANNEL,
-		.dma_cfg = {
-			.source_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dest_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dma_callback = i2s_dma_rx_callback,
-			.callback_arg = &DEVICE_NAME_GET(i2s1_cavs),
-			.complete_callback_en = 1,
-			.error_callback_en = 1,
-			.block_count = 1,
-			.head_block = &i2s1_cavs_data.rx.dma_block,
-			.channel_direction = PERIPHERAL_TO_MEMORY,
-			.dma_slot = DMA_HANDSHAKE_SSP1_RX,
-		},
-	}
-};
+I2S_DEVICE_CONFIG_DEFINE(2);
+I2S_DEVICE_DATA_DEFINE(2);
+I2S_DEVICE_AND_API_INIT(2);
 
-static struct i2s_cavs_dev_data i2s2_cavs_data = {
-	.tx = {
-		.dma_channel = CONFIG_I2S_CAVS_2_DMA_TX_CHANNEL,
-		.dma_cfg = {
-			.source_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dest_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dma_callback = i2s_dma_tx_callback,
-			.callback_arg = &DEVICE_NAME_GET(i2s2_cavs),
-			.complete_callback_en = 1,
-			.error_callback_en = 1,
-			.block_count = 1,
-			.head_block = &i2s2_cavs_data.tx.dma_block,
-			.channel_direction = MEMORY_TO_PERIPHERAL,
-			.dma_slot = DMA_HANDSHAKE_SSP2_TX,
-		},
-	},
-	.rx = {
-		.dma_channel = CONFIG_I2S_CAVS_2_DMA_RX_CHANNEL,
-		.dma_cfg = {
-			.source_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dest_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dma_callback = i2s_dma_rx_callback,
-			.callback_arg = &DEVICE_NAME_GET(i2s2_cavs),
-			.complete_callback_en = 1,
-			.error_callback_en = 1,
-			.block_count = 1,
-			.head_block = &i2s2_cavs_data.rx.dma_block,
-			.channel_direction = PERIPHERAL_TO_MEMORY,
-			.dma_slot = DMA_HANDSHAKE_SSP2_RX,
-		},
-	},
-};
+static void i2s3_cavs_irq_connect(void)
+{
+	I2S_IRQ_CONNECT(3);
+}
 
-static struct i2s_cavs_dev_data i2s3_cavs_data = {
-	.tx = {
-		.dma_channel = CONFIG_I2S_CAVS_3_DMA_TX_CHANNEL,
-		.dma_cfg = {
-			.source_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dest_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dma_callback = i2s_dma_tx_callback,
-			.callback_arg = &DEVICE_NAME_GET(i2s3_cavs),
-			.complete_callback_en = 1,
-			.error_callback_en = 1,
-			.block_count = 1,
-			.head_block = &i2s3_cavs_data.tx.dma_block,
-			.channel_direction = MEMORY_TO_PERIPHERAL,
-			.dma_slot = DMA_HANDSHAKE_SSP3_TX,
-		},
-	},
-	.rx = {
-		.dma_channel = CONFIG_I2S_CAVS_3_DMA_RX_CHANNEL,
-		.dma_cfg = {
-			.source_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dest_burst_length = CAVS_I2S_DMA_BURST_SIZE,
-			.dma_callback = i2s_dma_rx_callback,
-			.callback_arg = &DEVICE_NAME_GET(i2s3_cavs),
-			.complete_callback_en = 1,
-			.error_callback_en = 1,
-			.block_count = 1,
-			.head_block = &i2s3_cavs_data.rx.dma_block,
-			.channel_direction = PERIPHERAL_TO_MEMORY,
-			.dma_slot = DMA_HANDSHAKE_SSP3_RX,
-		},
-	},
-};
-
-DEVICE_AND_API_INIT(i2s1_cavs, CONFIG_I2S_CAVS_1_NAME, i2s_cavs_initialize,
-		    &i2s1_cavs_data, &i2s1_cavs_config, POST_KERNEL,
-		    CONFIG_I2S_INIT_PRIORITY, &i2s_cavs_driver_api);
-DEVICE_AND_API_INIT(i2s2_cavs, CONFIG_I2S_CAVS_2_NAME, i2s_cavs_initialize,
-		    &i2s2_cavs_data, &i2s2_cavs_config, POST_KERNEL,
-		    CONFIG_I2S_INIT_PRIORITY, &i2s_cavs_driver_api);
-DEVICE_AND_API_INIT(i2s3_cavs, CONFIG_I2S_CAVS_3_NAME, i2s_cavs_initialize,
-		    &i2s3_cavs_data, &i2s3_cavs_config, POST_KERNEL,
-		    CONFIG_I2S_INIT_PRIORITY, &i2s_cavs_driver_api);
+I2S_DEVICE_CONFIG_DEFINE(3);
+I2S_DEVICE_DATA_DEFINE(3);
+I2S_DEVICE_AND_API_INIT(3);

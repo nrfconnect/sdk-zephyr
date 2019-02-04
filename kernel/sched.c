@@ -17,7 +17,11 @@
 #if defined(CONFIG_SCHED_DUMB)
 #define _priq_run_add		_priq_dumb_add
 #define _priq_run_remove	_priq_dumb_remove
-#define _priq_run_best		_priq_dumb_best
+# if defined(CONFIG_SCHED_CPU_MASK)
+#  define _priq_run_best	_priq_dumb_mask_best
+# else
+#  define _priq_run_best	_priq_dumb_best
+# endif
 #elif defined(CONFIG_SCHED_SCALABLE)
 #define _priq_run_add		_priq_rb_add
 #define _priq_run_remove	_priq_rb_remove
@@ -111,7 +115,7 @@ bool _is_t1_higher_prio_than_t2(struct k_thread *t1, struct k_thread *t2)
 	return false;
 }
 
-static bool should_preempt(struct k_thread *th, int preempt_ok)
+static ALWAYS_INLINE bool should_preempt(struct k_thread *th, int preempt_ok)
 {
 	/* Preemption is OK if it's being explicitly allowed by
 	 * software state (e.g. the thread called k_yield())
@@ -120,8 +124,10 @@ static bool should_preempt(struct k_thread *th, int preempt_ok)
 		return true;
 	}
 
+	__ASSERT(_current != NULL, "");
+
 	/* Or if we're pended/suspended/dummy (duh) */
-	if (!_current || _is_thread_prevented_from_running(_current)) {
+	if (_is_thread_prevented_from_running(_current)) {
 		return true;
 	}
 
@@ -146,14 +152,31 @@ static bool should_preempt(struct k_thread *th, int preempt_ok)
 	 * preemptible priorities (this is sort of an API glitch).
 	 * They must always be preemptible.
 	 */
-	if (_is_idle(_current)) {
+	if (!IS_ENABLED(CONFIG_PREEMPT_ENABLED) && _is_idle(_current)) {
 		return true;
 	}
 
 	return false;
 }
 
-static struct k_thread *next_up(void)
+#ifdef CONFIG_SCHED_CPU_MASK
+static ALWAYS_INLINE struct k_thread *_priq_dumb_mask_best(sys_dlist_t *pq)
+{
+	/* With masks enabled we need to be prepared to walk the list
+	 * looking for one we can run
+	 */
+	struct k_thread *t;
+
+	SYS_DLIST_FOR_EACH_CONTAINER(pq, t, base.qnode_dlist) {
+		if ((t->base.cpu_mask & BIT(_current_cpu->id)) != 0) {
+			return t;
+		}
+	}
+	return NULL;
+}
+#endif
+
+static ALWAYS_INLINE struct k_thread *next_up(void)
 {
 #ifndef CONFIG_SMP
 	/* In uniprocessor mode, we can leave the current thread in
@@ -367,8 +390,8 @@ static _wait_q_t *pended_on(struct k_thread *thread)
 	return thread->base.pended_on;
 }
 
-struct k_thread *_find_first_thread_to_unpend(_wait_q_t *wait_q,
-					      struct k_thread *from)
+ALWAYS_INLINE struct k_thread *_find_first_thread_to_unpend(_wait_q_t *wait_q,
+						     struct k_thread *from)
 {
 	ARG_UNUSED(from);
 
@@ -381,7 +404,7 @@ struct k_thread *_find_first_thread_to_unpend(_wait_q_t *wait_q,
 	return ret;
 }
 
-void _unpend_thread_no_timeout(struct k_thread *thread)
+ALWAYS_INLINE void _unpend_thread_no_timeout(struct k_thread *thread)
 {
 	LOCKED(&sched_lock) {
 		_priq_wait_remove(&pended_on(thread)->waitq, thread);
@@ -565,7 +588,7 @@ void *_get_next_switch_handle(void *interrupted)
 }
 #endif
 
-void _priq_dumb_add(sys_dlist_t *pq, struct k_thread *thread)
+ALWAYS_INLINE void _priq_dumb_add(sys_dlist_t *pq, struct k_thread *thread)
 {
 	struct k_thread *t;
 
@@ -573,8 +596,8 @@ void _priq_dumb_add(sys_dlist_t *pq, struct k_thread *thread)
 
 	SYS_DLIST_FOR_EACH_CONTAINER(pq, t, base.qnode_dlist) {
 		if (_is_t1_higher_prio_than_t2(thread, t)) {
-			sys_dlist_insert_before(pq, &t->base.qnode_dlist,
-						&thread->base.qnode_dlist);
+			sys_dlist_insert(&t->base.qnode_dlist,
+					 &thread->base.qnode_dlist);
 			return;
 		}
 	}
@@ -667,7 +690,7 @@ struct k_thread *_priq_rb_best(struct _priq_rb *pq)
 # endif
 #endif
 
-void _priq_mq_add(struct _priq_mq *pq, struct k_thread *thread)
+ALWAYS_INLINE void _priq_mq_add(struct _priq_mq *pq, struct k_thread *thread)
 {
 	int priority_bit = thread->base.prio - K_HIGHEST_THREAD_PRIO;
 
@@ -675,7 +698,7 @@ void _priq_mq_add(struct _priq_mq *pq, struct k_thread *thread)
 	pq->bitmask |= (1 << priority_bit);
 }
 
-void _priq_mq_remove(struct _priq_mq *pq, struct k_thread *thread)
+ALWAYS_INLINE void _priq_mq_remove(struct _priq_mq *pq, struct k_thread *thread)
 {
 	int priority_bit = thread->base.prio - K_HIGHEST_THREAD_PRIO;
 
@@ -931,3 +954,47 @@ int _impl_k_is_preempt_thread(void)
 #ifdef CONFIG_USERSPACE
 Z_SYSCALL_HANDLER0_SIMPLE(k_is_preempt_thread);
 #endif
+
+#ifdef CONFIG_SCHED_CPU_MASK
+# ifdef CONFIG_SMP
+/* Right now we use a single byte for this mask */
+BUILD_ASSERT_MSG(CONFIG_MP_NUM_CPU <= 8, "Too many CPUs for mask word");
+# endif
+
+
+static int cpu_mask_mod(k_tid_t t, u32_t enable_mask, u32_t disable_mask)
+{
+	int ret = 0;
+
+	LOCKED(&sched_lock) {
+		if (_is_thread_prevented_from_running(t)) {
+			t->base.cpu_mask |= enable_mask;
+			t->base.cpu_mask  &= ~disable_mask;
+		} else {
+			ret = -EINVAL;
+		}
+	}
+	return ret;
+}
+
+int k_thread_cpu_mask_clear(k_tid_t thread)
+{
+	return cpu_mask_mod(thread, 0, 0xffffffff);
+}
+
+int k_thread_cpu_mask_enable_all(k_tid_t thread)
+{
+	return cpu_mask_mod(thread, 0xffffffff, 0);
+}
+
+int k_thread_cpu_mask_enable(k_tid_t thread, int cpu)
+{
+	return cpu_mask_mod(thread, BIT(cpu), 0);
+}
+
+int k_thread_cpu_mask_disable(k_tid_t thread, int cpu)
+{
+	return cpu_mask_mod(thread, 0, BIT(cpu));
+}
+
+#endif /* CONFIG_SCHED_CPU_MASK */

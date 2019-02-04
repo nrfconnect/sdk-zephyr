@@ -28,6 +28,17 @@
 #define INTR_CNTL_IRQ_NUM(_irq) \
 	(((_irq >> INTR_CNTL_IRQ_NUM_SHIFT) & INTR_CNTL_IRQ_NUM_MASK) - 1)
 
+/* Macro that aggregates the tri-level interrupt into an IRQ number */
+#define SOC_AGGREGATE_IRQ(ictl_irq, cavs_irq, core_irq)		\
+	(((core_irq & XTENSA_IRQ_NUM_MASK) << XTENSA_IRQ_NUM_SHIFT) |	\
+	(((cavs_irq) & CAVS_IRQ_NUM_MASK) << CAVS_IRQ_NUM_SHIFT) |	\
+	(((ictl_irq) & INTR_CNTL_IRQ_NUM_MASK) << INTR_CNTL_IRQ_NUM_SHIFT))
+
+#define CAVS_L2_AGG_INT_LEVEL2			DT_CAVS_ICTL_0_IRQ
+#define CAVS_L2_AGG_INT_LEVEL3			DT_CAVS_ICTL_1_IRQ
+#define CAVS_L2_AGG_INT_LEVEL4			DT_CAVS_ICTL_2_IRQ
+#define CAVS_L2_AGG_INT_LEVEL5			DT_CAVS_ICTL_3_IRQ
+
 #define IOAPIC_EDGE				0
 #define IOAPIC_HIGH				0
 
@@ -77,10 +88,13 @@
 #define DMA_CHANNEL_DMIC_RXB			1
 
 /* I2S */
-#define I2S0_CAVS_IRQ				0x00000010
-#define I2S1_CAVS_IRQ				0x00000110
-#define I2S2_CAVS_IRQ				0x00000210
-#define I2S3_CAVS_IRQ				0x00000310
+#define I2S_CAVS_IRQ(i2s_num)			\
+	SOC_AGGREGATE_IRQ(0, (i2s_num) + 1, CAVS_L2_AGG_INT_LEVEL5)
+
+#define I2S0_CAVS_IRQ				I2S_CAVS_IRQ(0)
+#define I2S1_CAVS_IRQ				I2S_CAVS_IRQ(1)
+#define I2S2_CAVS_IRQ				I2S_CAVS_IRQ(2)
+#define I2S3_CAVS_IRQ				I2S_CAVS_IRQ(3)
 
 #define SSP_SIZE				0x0000200
 #define SSP_BASE(x)				(0x00077000 + (x) * SSP_SIZE)

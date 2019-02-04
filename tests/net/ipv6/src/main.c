@@ -1166,10 +1166,12 @@ static enum net_verdict recv_msg(struct in6_addr *src, struct in6_addr *dst)
 
 	setup_ipv6_udp(pkt, src, dst, 4242, 4321);
 
+	net_pkt_cursor_init(pkt);
+
 	/* We by-pass the normal packet receiving flow in this case in order
 	 * to simplify the testing.
 	 */
-	return net_ipv6_process_pkt(pkt, false);
+	return net_ipv6_input(pkt, false);
 }
 
 static int send_msg(struct in6_addr *src, struct in6_addr *dst)
@@ -1297,11 +1299,15 @@ static void net_ctx_listen(struct net_context *ctx)
 
 static void recv_cb(struct net_context *context,
 		    struct net_pkt *pkt,
+		    union net_ip_header *ip_hdr,
+		    union net_proto_header *proto_hdr,
 		    int status,
 		    void *user_data)
 {
 	ARG_UNUSED(context);
 	ARG_UNUSED(pkt);
+	ARG_UNUSED(ip_hdr);
+	ARG_UNUSED(proto_hdr);
 	ARG_UNUSED(status);
 	ARG_UNUSED(user_data);
 

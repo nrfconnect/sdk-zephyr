@@ -25,16 +25,16 @@
 #define NET_ICMPV4_DST_UNREACH_NO_PROTO  2 /* Protocol not supported */
 #define NET_ICMPV4_DST_UNREACH_NO_PORT   3 /* Port unreachable */
 
+#define NET_ICMPV4_UNUSED_LEN 4
+
 struct net_icmpv4_echo_req {
 	u16_t identifier;
 	u16_t sequence;
 } __packed;
 
-#define NET_ICMPV4_ECHO_REQ(pkt)					\
-	((struct net_icmpv4_echo_req *)((u8_t *)net_pkt_icmp_data(pkt) + \
-					sizeof(struct net_icmp_hdr)))
-
-typedef enum net_verdict (*icmpv4_callback_handler_t)(struct net_pkt *pkt);
+typedef enum net_verdict (*icmpv4_callback_handler_t)(
+					struct net_pkt *pkt,
+					struct net_ipv4_hdr *ip_hdr);
 
 struct net_icmpv4_handler {
 	sys_snode_t node;
@@ -73,12 +73,11 @@ void net_icmpv4_register_handler(struct net_icmpv4_handler *handler);
 
 void net_icmpv4_unregister_handler(struct net_icmpv4_handler *handler);
 
-enum net_verdict net_icmpv4_input(struct net_pkt *pkt, bool bcast);
-
-int net_icmpv4_get_hdr(struct net_pkt *pkt, struct net_icmp_hdr *hdr);
-int net_icmpv4_set_hdr(struct net_pkt *pkt, struct net_icmp_hdr *hdr);
+enum net_verdict net_icmpv4_input(struct net_pkt *pkt,
+				  struct net_ipv4_hdr *ip_hdr);
 
 int net_icmpv4_set_chksum(struct net_pkt *pkt);
+int net_icmpv4_finalize(struct net_pkt *pkt);
 
 #if defined(CONFIG_NET_IPV4)
 void net_icmpv4_init(void);

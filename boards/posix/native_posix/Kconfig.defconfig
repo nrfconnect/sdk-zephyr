@@ -52,10 +52,10 @@ config LOG_BACKEND_NATIVE_POSIX
 
 # For native_posix we can log immediately without any problem
 # Doing so will be nicer for debugging
-config LOG_INPLACE_PROCESS
+config LOG_IMMEDIATE
 	default y
 
-# If we set LOG_INPLACE_PROCESS, there is no need to have the logging thread
+# If we set LOG_IMMEDIATE, there is no need to have the logging thread
 # running
 config LOG_PROCESS_THREAD
 	default n
@@ -79,4 +79,18 @@ config SDL_DISPLAY
 
 endif # DISPLAY
 
+if TRACING_CTF
+
+config TRACING_CTF_BOTTOM_POSIX
+	default y
+
+endif # TRACING_CTF
+
 endif # BOARD_NATIVE_POSIX
+
+if USB
+
+config USB_NATIVE_POSIX
+	def_bool y
+
+endif # USB

@@ -88,7 +88,7 @@ static void net_ctx_get_fail(void)
 	zassert_equal(ret, -EPROTONOSUPPORT,
 		      "Invalid context protocol test failed");
 
-	ret = net_context_get(1, SOCK_DGRAM, IPPROTO_UDP, &context);
+	ret = net_context_get(4, SOCK_DGRAM, IPPROTO_UDP, &context);
 	zassert_equal(ret, -EAFNOSUPPORT,
 		      "Invalid context family test failed");
 
@@ -508,6 +508,8 @@ static void net_ctx_sendto_v4(void)
 
 static void recv_cb(struct net_context *context,
 		    struct net_pkt *pkt,
+		    union net_ip_header *ip_hdr,
+		    union net_proto_header *proto_hdr,
 		    int status,
 		    void *user_data)
 {
@@ -683,6 +685,8 @@ static void net_ctx_recv_v4_again(void)
 
 static void recv_cb_another(struct net_context *context,
 			    struct net_pkt *pkt,
+			    union net_ip_header *ip_hdr,
+			    union net_proto_header *proto_hdr,
 			    int status,
 			    void *user_data)
 {
@@ -738,6 +742,8 @@ static struct k_thread thread_data;
 
 static void recv_cb_timeout(struct net_context *context,
 			    struct net_pkt *pkt,
+			    union net_ip_header *ip_hdr,
+			    union net_proto_header *proto_hdr,
 			    int status,
 			    void *user_data)
 {
@@ -766,7 +772,7 @@ void timeout_thread(struct net_context *ctx, void *param2, void *param3)
 		return;
 	}
 
-	if (recv_cb_timeout_called) {
+	if (!recv_cb_timeout_called) {
 		DBG("Data received on time, recv test failed\n");
 		cb_failure = true;
 		return;

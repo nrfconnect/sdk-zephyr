@@ -15,7 +15,7 @@ inherits:
 
 properties:
     compatible:
-      constraint: "solomon,ssd1673fb-spi"
+      constraint: "solomon,ssd1673fb"
 
     height:
       type: int
@@ -27,6 +27,18 @@ properties:
       type: int
       category: required
       description: Width in pixel of the panel driven by the controller
+      generation: define
+
+    pp-height-bits:
+      type: int
+      category: required
+      description: Number of bits used for the height parameters
+      generation: define
+
+    pp-width-bits:
+      type: int
+      category: required
+      description: Number of bits used for the width parameters
       generation: define
 
     orientation-flipped:

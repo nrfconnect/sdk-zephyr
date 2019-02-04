@@ -82,9 +82,23 @@ Source Tree Structure
 Understanding the Zephyr source tree can be helpful in locating the code
 associated with a particular Zephyr feature.
 
-The Zephyr source tree provides the following top-level directories,
-each of which may have one or more additional levels of subdirectories
-which are not described here.
+At the top of the tree there are several files that are of importance:
+
+:file:`CMakeLists.txt`
+    The top-level file for the CMake build system, containing a lot of the
+    logic required to build Zephyr.
+
+:file:`Kconfig`
+    The top-level Kconfig file, which refers to the file :file:`Kconfig.zephyr`
+    also found at the top-level directory.
+
+:file:`west.yml`
+    The :ref:`west` manifest, listing the external repositories required to
+    build Zephyr.
+
+The Zephyr source tree also contains the following top-level
+directories, each of which may have one or more additional levels of
+subdirectories which are not described here.
 
 :file:`arch`
     Architecture-specific kernel and system-on-chip (SoC) code.
@@ -221,7 +235,7 @@ Follow these steps to create a new application directory. (Refer to
    directory, and enable or disable Kconfig features as needed. You can use
    existing :ref:`samples-and-demos` to get started with Kconfig variables you
    are interested in.  See :ref:`application_kconfig` for more details, and
-   :ref:`configuration` for a complete list of available options.
+   :ref:`configuration_options` for a complete list of available options.
 
 #. Optionally, you can also configure any Device Tree overlays needed by your
    application. Zephyr uses the same Device Tree system as the Linux kernel,
@@ -1100,7 +1114,7 @@ For some tips and general recommendations when writing Kconfig files, see the
 :ref:`kconfig_tips_and_tricks` page.
 
 For information on available kernel configuration options, including
-inter-dependencies between options, see the :ref:`configuration`.
+inter-dependencies between options, see the :ref:`configuration_options`.
 
 .. note::
 
@@ -1309,7 +1323,7 @@ to a whitespace-separated list of your overlay files.
 The Zephyr build system begins creation of a device tree by running
 the C preprocessor on a file which includes the following:
 
-#. Configuration options from :ref:`Kconfig <configuration>`.
+#. Configuration options from :ref:`Kconfig <configuration_options>`.
 
 #. The board's device tree source file, which by default is the Zephyr
    file :file:`boards/<ARCHITECTURE>/<BOARD>/<BOARD>.dts`. (This location

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017 Linaro Limited
- * Copyright (c) 2018 Foundries.io
+ * Copyright (c) 2018-2019 Foundries.io
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -45,36 +45,6 @@
 #define COAP_REPLY_STATUS_NONE		0
 #define COAP_REPLY_STATUS_ERROR		1
 
-struct lwm2m_message;
-
-/* Establish a message timeout callback */
-typedef void (*lwm2m_message_timeout_cb_t)(struct lwm2m_message *msg);
-
-/* Internal LwM2M message structure to track in-flight messages. */
-struct lwm2m_message {
-	/** LwM2M context related to this message */
-	struct lwm2m_ctx *ctx;
-
-	/** CoAP packet data related to this message */
-	struct coap_packet cpkt;
-
-	/** Message transmission handling for TYPE_CON */
-	struct coap_pending *pending;
-	struct coap_reply *reply;
-
-	/** Message configuration */
-	u8_t *token;
-	coap_reply_t reply_cb;
-	lwm2m_message_timeout_cb_t message_timeout_cb;
-	u16_t mid;
-	u8_t type;
-	u8_t code;
-	u8_t tkl;
-
-	/** Counter for message re-send / abort handling */
-	u8_t send_attempts;
-};
-
 /* Establish a request handler callback type */
 typedef int (*udp_request_handler_cb_t)(struct coap_packet *request,
 					struct lwm2m_message *msg);
@@ -91,12 +61,17 @@ lwm2m_get_engine_obj_field(struct lwm2m_engine_obj *obj, int res_id);
 int  lwm2m_create_obj_inst(u16_t obj_id, u16_t obj_inst_id,
 			   struct lwm2m_engine_obj_inst **obj_inst);
 int  lwm2m_delete_obj_inst(u16_t obj_id, u16_t obj_inst_id);
-int  lwm2m_get_or_create_engine_obj(struct lwm2m_engine_context *context,
+int  lwm2m_get_or_create_engine_obj(struct lwm2m_message *msg,
 				    struct lwm2m_engine_obj_inst **obj_inst,
 				    u8_t *created);
 
 /* LwM2M context functions */
+int lwm2m_engine_context_close(struct lwm2m_ctx *client_ctx);
 void lwm2m_engine_context_init(struct lwm2m_ctx *client_ctx);
+
+/* Message buffer functions */
+u8_t *lwm2m_get_message_buf(void);
+int lwm2m_put_message_buf(u8_t *buf);
 
 /* LwM2M message functions */
 struct lwm2m_message *lwm2m_get_message(struct lwm2m_ctx *client_ctx);
@@ -107,21 +82,16 @@ int lwm2m_send_message(struct lwm2m_message *msg);
 u16_t lwm2m_get_rd_data(u8_t *client_data, u16_t size);
 
 int lwm2m_perform_read_op(struct lwm2m_engine_obj *obj,
-			  struct lwm2m_engine_context *context,
-			  u16_t content_format);
+			  struct lwm2m_message *msg, u16_t content_format);
 
 int lwm2m_write_handler(struct lwm2m_engine_obj_inst *obj_inst,
 			struct lwm2m_engine_res_inst *res,
 			struct lwm2m_engine_obj_field *obj_field,
-			struct lwm2m_engine_context *context);
-
-void lwm2m_udp_receive(struct lwm2m_ctx *client_ctx, struct net_pkt *pkt,
-		       bool handle_separate_response,
-		       udp_request_handler_cb_t udp_request_handler);
+			struct lwm2m_message *msg);
 
 enum coap_block_size lwm2m_default_block_size(void);
 
-int lwm2m_engine_add_service(void (*service)(void), u32_t period_ms);
+int lwm2m_engine_add_service(k_work_handler_t service, u32_t period_ms);
 
 int lwm2m_engine_get_resource(char *pathstr,
 			      struct lwm2m_engine_res_inst **res);
@@ -129,11 +99,20 @@ int lwm2m_engine_get_resource(char *pathstr,
 size_t lwm2m_engine_get_opaque_more(struct lwm2m_input_context *in,
 				    u8_t *buf, size_t buflen, bool *last_block);
 
+int lwm2m_security_inst_id_to_index(u16_t obj_inst_id);
+int lwm2m_security_index_to_inst_id(int index);
+
 #if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT)
 u8_t lwm2m_firmware_get_update_state(void);
 void lwm2m_firmware_set_update_state(u8_t state);
 void lwm2m_firmware_set_update_result(u8_t result);
 u8_t lwm2m_firmware_get_update_result(void);
 #endif
+
+/* Network Layer */
+int  lwm2m_socket_add(struct lwm2m_ctx *ctx);
+void lwm2m_socket_del(struct lwm2m_ctx *ctx);
+int  lwm2m_socket_start(struct lwm2m_ctx *client_ctx);
+int  lwm2m_parse_peerinfo(char *url, struct sockaddr *addr, bool *use_dtls);
 
 #endif /* LWM2M_ENGINE_H */

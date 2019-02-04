@@ -6,9 +6,10 @@
 
 menuconfig LWM2M
 	bool "OMA LWM2M protocol stack"
-	depends on COAP_NET_PKT
-	select NET_APP_CLIENT
+	select COAP
 	select HTTP_PARSER_URL
+	select NET_SOCKETS
+	select NET_SOCKETS_POSIX_NAMES
 	help
 	  This option adds logic for managing OMA LWM2M data
 
@@ -18,6 +19,14 @@ module = LWM2M
 module-dep = LOG
 module-str = Log level for LWM2M library
 source "subsys/net/Kconfig.template.log_config.net"
+
+config LWM2M_DTLS_SUPPORT
+	bool "Enable DTLS support in the LwM2M client"
+	select MBEDTLS
+	select MBEDTLS_ENABLE_HEAP
+	select TLS_CREDENTIALS
+	select NET_SOCKETS_SOCKOPT_TLS
+	select NET_SOCKETS_ENABLE_DTLS
 
 config LWM2M_ENGINE_STACK_SIZE
 	int "LWM2M engine stack size"
@@ -32,6 +41,21 @@ config LWM2M_ENGINE_MAX_MESSAGES
 	default 10
 	help
 	  Set the maximum message objects for the LWM2M library client
+
+config LWM2M_COAP_BLOCK_SIZE
+	int "LWM2M CoAP block-wise transfer size"
+	default 256
+	range 64 1024
+	help
+	  CoAP block size used by LWM2M when performing block-wise
+	  transfers. Possible values: 16, 32, 64, 128, 256, 512 and 1024.
+
+config LWM2M_ENGINE_MESSAGE_HEADER_SIZE
+	int "Room for CoAP header data"
+	default 48
+	range 24 128
+	help
+	  Extra room allocated to handle CoAP header data
 
 config LWM2M_ENGINE_MAX_PENDING
 	int "LWM2M engine max. pending objects"
@@ -71,10 +95,19 @@ config LWM2M_LOCAL_PORT
 config LWM2M_SECURITY_INSTANCE_COUNT
 	int "Maximum # of LWM2M Security object instances"
 	default 1
+	default 2 if LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP
 	range 1 10
 	help
 	  This setting establishes the total count of LWM2M Security instances
 	  available to the client.
+
+config LWM2M_SECURITY_KEY_SIZE
+	int "Buffer size of the security key resources"
+	default 16
+	range 16 256
+	help
+	  This setting establishes the size of the key (pre-shared / public)
+	  resources in the security object instances.
 
 config LWM2M_SERVER_INSTANCE_COUNT
 	int "Maximum # of LWM2M Server object instances"
@@ -91,12 +124,17 @@ config LWM2M_RD_CLIENT_SUPPORT
 	  Client will use registration state machine to locate and connect to
 	  LWM2M servers (including bootstrap server support)
 
+config LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP
+	bool "Enable bootstrap support"
+	help
+	  Enabling this setting allows the RD client to support bootstrap mode.
+
 config LWM2M_PEER_PORT
 	int "LWM2M server port"
 	depends on LWM2M_RD_CLIENT_SUPPORT
 	default 5683
 	help
-	  This is the server port to connect to for LWM2M communication
+	  This is the default server port to connect to for LWM2M communication
 
 config LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT
 	bool "Firmware Update object support"
@@ -122,16 +160,6 @@ config LWM2M_FIRMWARE_UPDATE_PULL_LOCAL_PORT
 	  This is the client port for LWM2M firmware download.  The default
 	  setting of 0 sets a random port for the client to be used for
 	  outgoing communication.
-
-config LWM2M_COAP_BLOCK_SIZE
-	int "LWM2M CoAP block-wise transfer size"
-	default 64 if NET_L2_BT
-	default 64 if NET_L2_IEEE802154
-	default 256
-	range 16 1024
-	help
-	  CoAP block size used by LWM2M when performing block-wise
-	  transfers. Possible values: 16, 32, 64, 128, 256, 512 and 1024.
 
 config LWM2M_NUM_BLOCK1_CONTEXT
 	int "Maximum # of LWM2M block1 contexts"

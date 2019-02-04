@@ -1,0 +1,63 @@
+#
+# Copyright (c) 2019 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+---
+title: Nordic nRF Family SPIS (SPI Slave)
+version: 0.1
+
+description: >
+    This is a representation of the Nordic nRF SPIS node
+
+inherits:
+    !include spi.yaml
+
+properties:
+    compatible:
+      constraint: "nordic,nrf-spis"
+
+    reg:
+      type: array
+      category: required
+      description: mmio register space
+      generation: define
+
+    interrupts:
+      type: array
+      category: required
+      description: required interrupts
+      generation: define
+
+    sck-pin:
+      type: int
+      category: required
+      description: SCK pin
+      generation: define
+
+    mosi-pin:
+      type: int
+      category: required
+      description: MOSI pin
+      generation: define
+
+    miso-pin:
+      type: int
+      category: required
+      description: MISO pin
+      generation: define
+
+    csn-pin:
+      type: int
+      category: required
+      description: CSN pin
+      generation: define
+
+    def-char:
+      type: int
+      category: required
+      description: >
+          Default character. Character clocked out when the slave was not
+          provided with buffers and is ignoring the transaction.
+      generation: define
+...

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017 Linaro Limited
+ * Copyright (c) 2018-2019 Foundries.io
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,7 +11,6 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
-#include <net/coap.h>
 #include <string.h>
 #include <init.h>
 
@@ -156,12 +156,13 @@ void lwm2m_firmware_set_update_result(u8_t result)
 		lwm2m_firmware_set_update_state(STATE_IDLE);
 		break;
 	case RESULT_UPDATE_FAILED:
-		if (update_state != STATE_UPDATING) {
+		if (update_state != STATE_DOWNLOADING &&
+		    update_state != STATE_UPDATING) {
 			error = true;
 			state = update_state;
 		}
 
-		/* Next state could be idle or downloaded */
+		lwm2m_firmware_set_update_state(STATE_IDLE);
 		break;
 	default:
 		LOG_ERR("Unhandled result: %u", result);

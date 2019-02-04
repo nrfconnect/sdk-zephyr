@@ -64,8 +64,8 @@ class DTFlash(DTDirective):
 
         if node_address == 'dummy-flash':
             load_defs = {
-                'CONFIG_FLASH_BASE_ADDRESS': 0,
-                'CONFIG_FLASH_SIZE': 0
+                'DT_FLASH_BASE_ADDRESS': 0,
+                'DT_FLASH_SIZE': 0
             }
 
             # We will add addr/size of 0 for systems with no flash controller
@@ -92,12 +92,6 @@ class DTFlash(DTDirective):
         if type(reg) is not list: reg = [ reg, ]
         props = list(reg)
 
-        # Newer versions of dtc might have the reg propertly look like
-        # reg = <1 2>, <3 4>;
-        # So we need to flatten the list in that case
-        if isinstance(props[0], list):
-            props = [item for sublist in props for item in sublist]
-
         num_reg_elem = len(props)/(nr_address_cells + nr_size_cells)
 
         # if we found a spi flash, but don't have mmio direct access support
@@ -119,8 +113,8 @@ class DTFlash(DTDirective):
             addr += translate_addr(addr, node_address,
                     nr_address_cells, nr_size_cells)
 
-            load_defs['CONFIG_FLASH_BASE_ADDRESS'] = hex(addr)
-            load_defs['CONFIG_FLASH_SIZE'] = int(size / 1024)
+            load_defs['DT_FLASH_BASE_ADDRESS'] = hex(addr)
+            load_defs['DT_FLASH_SIZE'] = int(size / 1024)
 
         flash_props = ["label", "write-block-size", "erase-block-size"]
         for prop in flash_props:
@@ -149,12 +143,12 @@ class DTFlash(DTDirective):
             # only compute the load offset if the code partition
             # is not the same as the flash base address
             load_offset = node['props']['reg'][0]
-            load_defs['CONFIG_FLASH_LOAD_OFFSET'] = load_offset
+            load_defs['DT_CODE_PARTITION_OFFSET'] = load_offset
             load_size = node['props']['reg'][1]
-            load_defs['CONFIG_FLASH_LOAD_SIZE'] = load_size
+            load_defs['DT_CODE_PARTITION_SIZE'] = load_size
         else:
-            load_defs['CONFIG_FLASH_LOAD_OFFSET'] = 0
-            load_defs['CONFIG_FLASH_LOAD_SIZE'] = 0
+            load_defs['DT_CODE_PARTITION_OFFSET'] = 0
+            load_defs['DT_CODE_PARTITION_SIZE'] = 0
 
         insert_defs(node_address, load_defs, {})
 

@@ -42,8 +42,12 @@ static inline void *get_sock_vtable(
 				       (const struct fd_op_vtable **)vtable);
 }
 
-static void zsock_received_cb(struct net_context *ctx, struct net_pkt *pkt,
-			      int status, void *user_data);
+static void zsock_received_cb(struct net_context *ctx,
+			      struct net_pkt *pkt,
+			      union net_ip_header *ip_hdr,
+			      union net_proto_header *proto_hdr,
+			      int status,
+			      void *user_data);
 
 static inline int _k_fifo_wait_non_empty(struct k_fifo *fifo, int32_t timeout)
 {
@@ -193,8 +197,13 @@ static void zsock_accepted_cb(struct net_context *new_ctx,
 	}
 }
 
-static void zsock_received_cb(struct net_context *ctx, struct net_pkt *pkt,
-			      int status, void *user_data) {
+static void zsock_received_cb(struct net_context *ctx,
+			      struct net_pkt *pkt,
+			      union net_ip_header *ip_hdr,
+			      union net_proto_header *proto_hdr,
+			      int status,
+			      void *user_data)
+{
 	unsigned int header_len;
 
 	NET_DBG("ctx=%p, pkt=%p, st=%d, user_data=%p", ctx, pkt, status,
@@ -392,51 +401,38 @@ ssize_t zsock_sendto_ctx(struct net_context *ctx, const void *buf, size_t len,
 			 int flags,
 			 const struct sockaddr *dest_addr, socklen_t addrlen)
 {
-	int err;
-	struct net_pkt *send_pkt;
 	s32_t timeout = K_FOREVER;
+	int status;
 
 	if ((flags & ZSOCK_MSG_DONTWAIT) || sock_is_nonblock(ctx)) {
 		timeout = K_NO_WAIT;
 	}
 
-	send_pkt = net_pkt_get_tx(ctx, timeout);
-	if (!send_pkt) {
-		errno = EAGAIN;
-		return -1;
-	}
-
-	len = net_pkt_append(send_pkt, len, buf, timeout);
-	if (!len) {
-		net_pkt_unref(send_pkt);
-		errno = EAGAIN;
-		return -1;
-	}
-
 	/* Register the callback before sending in order to receive the response
 	 * from the peer.
 	 */
-	err = net_context_recv(ctx, zsock_received_cb, K_NO_WAIT, ctx->user_data);
-	if (err < 0) {
-		net_pkt_unref(send_pkt);
-		errno = -err;
+	status = net_context_recv(ctx, zsock_received_cb,
+				  K_NO_WAIT, ctx->user_data);
+	if (status < 0) {
+		errno = -status;
 		return -1;
 	}
 
 	if (dest_addr) {
-		err = net_context_sendto(send_pkt, dest_addr, addrlen, NULL,
-					 timeout, NULL, ctx->user_data);
+		status = net_context_sendto_new(ctx, buf, len, dest_addr,
+						addrlen, NULL, timeout,
+						NULL, ctx->user_data);
 	} else {
-		err = net_context_send(send_pkt, NULL, timeout, NULL, ctx->user_data);
+		status = net_context_send_new(ctx, buf, len, NULL, timeout,
+					      NULL, ctx->user_data);
 	}
 
-	if (err < 0) {
-		net_pkt_unref(send_pkt);
-		errno = -err;
+	if (status < 0) {
+		errno = -status;
 		return -1;
 	}
 
-	return len;
+	return status;
 }
 
 ssize_t _impl_zsock_sendto(int sock, const void *buf, size_t len, int flags,

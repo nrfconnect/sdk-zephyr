@@ -114,6 +114,12 @@
 			};
 		};
 
+		idwg: watchdog@40003000 {
+			compatible = "st,stm32-watchdog";
+			reg = <0x40003000 0x400>;
+			label = "IWDG";
+			status = "disabled";
+		};
 
 		usart1: serial@40011000 {
 			compatible = "st,stm32-usart", "st,stm32-uart";
@@ -203,6 +209,8 @@
 
 		i2s1: i2s@40013000 {
 			compatible = "st,stm32-i2s";
+			#address-cells = <1>;
+			#size-cells = <0>;
 			reg = <0x40013000 0x400>;
 			clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00001000>;
 			interrupts = <35 5>;

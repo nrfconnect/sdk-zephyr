@@ -36,6 +36,8 @@ struct net_conn_handle;
  */
 typedef enum net_verdict (*net_conn_cb_t)(struct net_conn *conn,
 					  struct net_pkt *pkt,
+					  union net_ip_header *ip_hdr,
+					  union net_proto_header *proto_hdr,
 					  void *user_data);
 
 /**
@@ -133,11 +135,15 @@ int net_conn_change_callback(struct net_conn_handle *handle,
  * disabled, the function will always return NET_DROP.
  */
 #if defined(CONFIG_NET_UDP) || defined(CONFIG_NET_TCP)
-enum net_verdict net_conn_input(enum net_ip_protocol proto,
-				struct net_pkt *pkt);
+enum net_verdict net_conn_input(struct net_pkt *pkt,
+				union net_ip_header *ip_hdr,
+				u8_t proto,
+				union net_proto_header *proto_hdr);
 #else
-static inline enum net_verdict net_conn_input(enum net_ip_protocol proto,
-					      struct net_pkt *pkt)
+static inline enum net_verdict net_conn_input(struct net_pkt *pkt,
+					      union net_ip_header *ip_hdr,
+					      u8_t proto,
+					      union net_proto_header *proto_hdr)
 {
 	return NET_DROP;
 }

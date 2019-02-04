@@ -96,6 +96,81 @@ void net_ipv4_finalize(struct net_pkt *pkt, u8_t next_header_proto)
 	}
 }
 
+int net_ipv4_create_new(struct net_pkt *pkt,
+			const struct in_addr *src,
+			const struct in_addr *dst)
+{
+	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ipv4_access, struct net_ipv4_hdr);
+	struct net_ipv4_hdr *ipv4_hdr;
+
+	ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data_new(pkt,
+							       &ipv4_access);
+	if (!ipv4_hdr) {
+		return -ENOBUFS;
+	}
+
+	ipv4_hdr->vhl       = 0x45;
+	ipv4_hdr->tos       = 0x00;
+	ipv4_hdr->len       = 0;
+	ipv4_hdr->id[0]     = 0;
+	ipv4_hdr->id[1]     = 0;
+	ipv4_hdr->offset[0] = 0;
+	ipv4_hdr->offset[1] = 0;
+
+	ipv4_hdr->ttl       = net_pkt_ipv4_ttl(pkt);
+	if (ipv4_hdr->ttl == 0) {
+		ipv4_hdr->ttl = net_if_ipv4_get_ttl(net_pkt_iface(pkt));
+	}
+
+	ipv4_hdr->proto     = 0;
+	ipv4_hdr->chksum    = 0;
+
+	net_ipaddr_copy(&ipv4_hdr->dst, dst);
+	net_ipaddr_copy(&ipv4_hdr->src, src);
+
+	net_pkt_set_ip_hdr_len(pkt, sizeof(struct net_ipv4_hdr));
+
+	return net_pkt_set_data(pkt, &ipv4_access);
+}
+
+int net_ipv4_finalize_new(struct net_pkt *pkt, u8_t next_header_proto)
+{
+	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ipv4_access, struct net_ipv4_hdr);
+	struct net_ipv4_hdr *ipv4_hdr;
+
+	net_pkt_set_overwrite(pkt, true);
+
+	ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data_new(pkt,
+							       &ipv4_access);
+	if (!ipv4_hdr) {
+		return -ENOBUFS;
+	}
+
+	ipv4_hdr->len   = htons(net_pkt_get_len(pkt));
+	ipv4_hdr->proto = next_header_proto;
+
+	if (net_if_need_calc_tx_checksum(net_pkt_iface(pkt)) ||
+	    next_header_proto == IPPROTO_ICMP) {
+		ipv4_hdr->chksum = net_calc_chksum_ipv4(pkt);
+
+		net_pkt_set_data(pkt, &ipv4_access);
+
+		if (IS_ENABLED(CONFIG_NET_UDP) &&
+		    next_header_proto == IPPROTO_UDP) {
+			return net_udp_finalize(pkt);
+		} else if (IS_ENABLED(CONFIG_NET_TCP) &&
+			   next_header_proto == IPPROTO_TCP) {
+			net_tcp_finalize(pkt);
+		} else if (next_header_proto == IPPROTO_ICMP) {
+			net_icmpv4_finalize(pkt);
+		}
+	} else {
+		net_pkt_set_data(pkt, &ipv4_access);
+	}
+
+	return 0;
+}
+
 const struct in_addr *net_ipv4_unspecified_address(void)
 {
 	static const struct in_addr addr;
@@ -110,19 +185,33 @@ const struct in_addr *net_ipv4_broadcast_address(void)
 	return &addr;
 }
 
-enum net_verdict net_ipv4_process_pkt(struct net_pkt *pkt)
+enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 {
-	struct net_ipv4_hdr *hdr = NET_IPV4_HDR(pkt);
+	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ipv4_access, struct net_ipv4_hdr);
+	NET_PKT_DATA_ACCESS_DEFINE(udp_access, struct net_udp_hdr);
+	NET_PKT_DATA_ACCESS_DEFINE(tcp_access, struct net_tcp_hdr);
 	int real_len = net_pkt_get_len(pkt);
-	int pkt_len = ntohs(hdr->len);
 	enum net_verdict verdict = NET_DROP;
+	union net_proto_header proto_hdr;
+	struct net_ipv4_hdr *hdr;
+	union net_ip_header ip;
+	int pkt_len;
 
+	net_stats_update_ipv4_recv(net_pkt_iface(pkt));
+
+	hdr = (struct net_ipv4_hdr *)net_pkt_get_data_new(pkt, &ipv4_access);
+	if (!hdr) {
+		NET_DBG("DROP: no buffer");
+		goto drop;
+	}
+
+	pkt_len = ntohs(hdr->len);
 	if (real_len < pkt_len) {
 		NET_DBG("DROP: pkt len per hdr %d != pkt real len %d",
 			pkt_len, real_len);
 		goto drop;
 	} else if (real_len > pkt_len) {
-		net_pkt_pull(pkt, pkt_len, real_len - pkt_len);
+		net_pkt_update_length(pkt, pkt_len);
 	}
 
 	if (net_ipv4_is_addr_mcast(&hdr->src)) {
@@ -161,23 +250,40 @@ enum net_verdict net_ipv4_process_pkt(struct net_pkt *pkt)
 
 	net_pkt_set_transport_proto(pkt, hdr->proto);
 
+	net_pkt_set_family(pkt, PF_INET);
+
+	net_pkt_acknowledge_data(pkt, &ipv4_access);
+
 	switch (hdr->proto) {
 	case IPPROTO_ICMP:
-		verdict = net_icmpv4_input(
-			pkt, net_ipv4_is_addr_bcast(net_pkt_iface(pkt),
-						    &hdr->dst));
+		verdict = net_icmpv4_input(pkt, hdr);
 		break;
 	case IPPROTO_TCP:
-		/* Fall through */
+		proto_hdr.tcp = net_tcp_input(pkt, &tcp_access);
+		if (proto_hdr.tcp) {
+			verdict = NET_OK;
+		}
+		break;
 	case IPPROTO_UDP:
-		verdict = net_conn_input(hdr->proto, pkt);
+		proto_hdr.udp = net_udp_input(pkt, &udp_access);
+		if (proto_hdr.udp) {
+			verdict = NET_OK;
+		}
 		break;
 	}
 
-	if (verdict != NET_DROP) {
+	if (verdict == NET_DROP) {
+		goto drop;
+	} else if (hdr->proto == IPPROTO_ICMP) {
 		return verdict;
 	}
 
+	ip.ipv4 = hdr;
+
+	verdict = net_conn_input(pkt, &ip, hdr->proto, &proto_hdr);
+	if (verdict != NET_DROP) {
+		return verdict;
+	}
 drop:
 	net_stats_update_ipv4_drop(net_pkt_iface(pkt));
 	return NET_DROP;

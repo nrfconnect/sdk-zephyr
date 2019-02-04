@@ -38,19 +38,20 @@ K_SEM_DEFINE(expect_fault_sem, 0, 1);
  * ztest and this test suite. part1 and part2 are for
  * subsequent test specifically for this new implementation.
  */
-FOR_EACH(appmem_partition, part0, part1, part2);
+FOR_EACH(K_APPMEM_PARTITION_DEFINE, part0, part1, part2);
 
 /*
  * Create memory domains. dom0 is for the ztest and this
  * test suite, specifically. dom1 is for a specific test
  * in this test suite.
  */
-FOR_EACH(appmem_domain, dom0, dom1);
+struct k_mem_domain dom0;
+struct k_mem_domain dom1;
 
-_app_dmem(part0) static volatile bool give_uthread_end_sem;
-_app_dmem(part0) bool mem_access_check;
+K_APP_DMEM(part0) static volatile bool give_uthread_end_sem;
+K_APP_DMEM(part0) bool mem_access_check;
 
-_app_bmem(part0) static volatile bool expect_fault;
+K_APP_BMEM(part0) static volatile bool expect_fault;
 
 #if defined(CONFIG_X86)
 #define REASON_HW_EXCEPTION _NANO_ERR_CPU_EXCEPTION
@@ -64,7 +65,7 @@ _app_bmem(part0) static volatile bool expect_fault;
 #else
 #error "Not implemented for this architecture"
 #endif
-_app_bmem(part0) static volatile unsigned int expected_reason;
+K_APP_BMEM(part0) static volatile unsigned int expected_reason;
 
 /*
  * We need something that can act as a memory barrier
@@ -311,15 +312,15 @@ static void write_kernel_data(void)
 /*
  * volatile to avoid compiler mischief.
  */
-_app_dmem(part0) volatile int *priv_stack_ptr;
+K_APP_DMEM(part0) volatile int *priv_stack_ptr;
 #if defined(CONFIG_X86)
 /*
  * We can't inline this in the code or make it static
  * or local without triggering a warning on -Warray-bounds.
  */
-_app_dmem(part0) size_t size = MMU_PAGE_SIZE;
+K_APP_DMEM(part0) size_t size = MMU_PAGE_SIZE;
 #elif defined(CONFIG_ARC)
-_app_dmem(part0) s32_t size = (0 - CONFIG_PRIVILEGED_STACK_SIZE -
+K_APP_DMEM(part0) s32_t size = (0 - CONFIG_PRIVILEGED_STACK_SIZE -
 			       STACK_GUARD_SIZE);
 #endif
 
@@ -376,7 +377,7 @@ static void write_priv_stack(void)
 }
 
 
-_app_bmem(part0) static struct k_sem sem;
+K_APP_BMEM(part0) static struct k_sem sem;
 
 /**
  * @brief Test to pass a user object to system call
@@ -581,7 +582,7 @@ static void user_mode_enter(void)
 
 /* Define and initialize pipe. */
 K_PIPE_DEFINE(kpipe, PIPE_LEN, BYTES_TO_READ_WRITE);
-_app_bmem(part0) static size_t bytes_written_read;
+K_APP_BMEM(part0) static size_t bytes_written_read;
 
 /**
  * @brief Test to write to kobject using pipe
@@ -633,7 +634,7 @@ static void read_kobject_user_pipe(void)
  */
 
 /* Create bool in part1 partitions */
-_app_dmem(part1) bool thread_bool;
+K_APP_DMEM(part1) bool thread_bool;
 
 static void shared_mem_thread(void)
 {
@@ -656,19 +657,18 @@ static void shared_mem_thread(void)
  */
 static void access_other_memdomain(void)
 {
+	struct k_mem_partition *parts[] = {&part0, &part2};
 	/*
 	 * Following tests the ability for a thread to access data
 	 * in a domain that it is denied.
 	 */
 
 	/* initialize domain dom1 with partition part2 */
-	appmem_init_domain_dom1(part2);
-	/* add partition part0 for test globals */
-	appmem_add_part_dom1(part0);
-	/* remove current thread from domain dom0 */
-	appmem_rm_thread_dom0(k_current_get());
-	/* initialize domain with current thread*/
-	appmem_add_thread_dom1(k_current_get());
+	k_mem_domain_init(&dom1, 2, parts);
+
+	/* remove current thread from domain dom0 and add to dom1 */
+	k_mem_domain_remove_thread(k_current_get());
+	k_mem_domain_add_thread(&dom1, k_current_get());
 
 	/* Create user mode thread */
 	k_thread_create(&uthread_thread, uthread_stack, STACKSIZE,
@@ -687,30 +687,10 @@ extern k_thread_stack_t ztest_thread_stack[];
 
 void test_main(void)
 {
-	/* partitions must be initialized first */
-	FOR_EACH(appmem_init_part, part0, part1, part2);
-	/*
-	 * Next, the app_memory must be initialized in order to
-	 * calculate size of the dynamically created subsections.
-	 */
-#if defined(CONFIG_ARC)
-	/*
-	 * appmem_init_app_memory will access all partitions
-	 * For CONFIG_ARC_MPU_VER == 3, these partitions are not added
-	 * into MPU now, so need to disable mpu first to do app_bss_zero()
-	 */
-	arc_core_mpu_disable();
-	appmem_init_app_memory();
-	arc_core_mpu_enable();
-#else
-	appmem_init_app_memory();
-#endif
-	/* Domain is initialized with partition part0 */
-	appmem_init_domain_dom0(part0);
-	/* Next, the partition must be added to the domain */
-	appmem_add_part_dom0(part1);
-	/* Finally, the current thread is added to domain */
-	appmem_add_thread_dom0(k_current_get());
+	struct k_mem_partition *parts[] = {&part0, &part1};
+
+	k_mem_domain_init(&dom0, 2, parts);
+	k_mem_domain_add_thread(&dom0, k_current_get());
 
 #if defined(CONFIG_ARM)
 	priv_stack_ptr = (int *)_k_priv_stack_find(ztest_thread_stack) -

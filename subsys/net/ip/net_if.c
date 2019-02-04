@@ -284,11 +284,7 @@ enum net_verdict net_if_send_data(struct net_if *iface, struct net_pkt *pkt)
 	 * cache.
 	 */
 	if (net_pkt_family(pkt) == AF_INET6) {
-		pkt = net_ipv6_prepare_for_send(pkt);
-		if (!pkt) {
-			verdict = NET_CONTINUE;
-			goto done;
-		}
+		verdict = net_ipv6_prepare_for_send(pkt);
 	}
 #endif
 
@@ -1970,6 +1966,13 @@ static struct in6_addr *net_if_ipv6_get_best_match(struct net_if *iface,
 
 		len = get_diff_ipv6(dst, &ipv6->unicast[i].address.in6_addr);
 		if (len >= *best_so_far) {
+			/* Mesh local address can only be selected for the same
+			 * subnet.
+			 */
+			if (ipv6->unicast[i].is_mesh_local && len < 64) {
+				continue;
+			}
+
 			*best_so_far = len;
 			src = &ipv6->unicast[i].address.in6_addr;
 		}

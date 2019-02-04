@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017 Linaro Limited
+ * Copyright (c) 2018-2019 Foundries.io
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,7 +13,6 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <stdint.h>
 #include <init.h>
-#include <net/lwm2m.h>
 
 #include "lwm2m_object.h"
 #include "lwm2m_engine.h"
@@ -53,15 +53,20 @@ static char  transport_binding[MAX_INSTANCE_COUNT][TRANSPORT_BINDING_LEN];
 
 static struct lwm2m_engine_obj server;
 static struct lwm2m_engine_obj_field fields[] = {
-	OBJ_FIELD_DATA(SERVER_SHORT_SERVER_ID, R, U16),
+	/*
+	 * LwM2M TS "E.2 LwM2M Object: LwM2M Server" page 107, describes
+	 * Short Server ID as READ-ONLY, but BOOTSTRAP server will attempt
+	 * to write it, so it needs to be RW
+	 */
+	OBJ_FIELD_DATA(SERVER_SHORT_SERVER_ID, RW, U16),
 	OBJ_FIELD_DATA(SERVER_LIFETIME_ID, RW, U32),
 	OBJ_FIELD_DATA(SERVER_DEFAULT_MIN_PERIOD_ID, RW_OPT, U32),
 	OBJ_FIELD_DATA(SERVER_DEFAULT_MAX_PERIOD_ID, RW_OPT, U32),
 	OBJ_FIELD_EXECUTE_OPT(SERVER_DISABLE_ID),
 	OBJ_FIELD_DATA(SERVER_DISABLE_TIMEOUT_ID, RW_OPT, U32),
 	OBJ_FIELD_DATA(SERVER_STORE_NOTIFY_ID, RW, U8),
-	/* Mark Transport Binding RO as we only support UDP atm */
-	OBJ_FIELD_DATA(SERVER_TRANSPORT_BINDING_ID, R, STRING),
+	/* Mark Transport Binding is RO but BOOTSTRAP needs to write it */
+	OBJ_FIELD_DATA(SERVER_TRANSPORT_BINDING_ID, RW, STRING),
 	OBJ_FIELD_EXECUTE(SERVER_REG_UPDATE_TRIGGER_ID),
 };
 

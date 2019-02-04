@@ -21,7 +21,7 @@ build:
         - ${SHIPPABLE_BUILD_DIR}/ccache
     pre_ci_boot:
         image_name: zephyrprojectrtos/ci
-        image_tag: v0.5-rc5
+        image_tag: v0.6
         pull: true
         options: "-e HOME=/home/buildslave --privileged=true --tty --net=bridge --user buildslave"
 
@@ -59,7 +59,7 @@ integrations:
         only:
           - master
       on_success: never
-      on_failure: always
+      on_failure: never
     - integrationName: email
       type: email
       recipients:

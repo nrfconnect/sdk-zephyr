@@ -34,17 +34,27 @@
 	__attribute__((aligned(MEM_DOMAIN_ALIGN_SIZE), \
 		section("data_smem_" #id "b")))
 
-/*
- * Qualifier to collect any object preceded with _app
- * and place into section "data_smem_".
- * _app_dmem(#) is for variables meant to be stored in .data .
- * _app_bmem(#) is intended for static variables that are
- * initialized to zero.
+/**
+ * @brief Place data in a partition's data section
+ *
+ * Globals tagged with this will end up in the data section for the
+ * specified memory partition. This data should be initalized to some
+ * desired value.
+ *
+ * @param id Name of the memory partition to associate this data
  */
-#define _app_dmem(id) \
+#define K_APP_DMEM(id) \
 	__attribute__((section("data_smem_" #id)))
 
-#define _app_bmem(id) \
+/**
+ * @brief Place data in a partition's bss section
+ *
+ * Globals tagged with this will end up in the bss section for the
+ * specified memory partition. This data will be zeroed at boot.
+ *
+ * @param id Name of the memory partition to associate this data
+ */
+#define K_APP_BMEM(id) \
 	__attribute__((section("data_smem_" #id "b")))
 
 /*
@@ -55,15 +65,8 @@
 struct app_region {
 	char *dmem_start;
 	char *bmem_start;
-#ifdef CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT
-	char *smem_size;
-#else
 	u32_t smem_size;
-#endif	/* CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT */
-	u32_t dmem_size;
-	u32_t bmem_size;
 	struct k_mem_partition *partition;
-	sys_dnode_t lnode;
 };
 
 /*
@@ -75,77 +78,40 @@ struct app_region {
  * calculate the region sizes.
  */
 #define smem_size_declare(name) extern char data_smem_##name##_size[]
-#define smem_size_assign(name) name.smem_size = data_smem_##name##_size
+#define smem_size_val(name) ((u32_t)&data_smem_##name##_size)
 #else
 #define smem_size_declare(name)
-#define smem_size_assign(name)
+#define smem_size_val(name) 0
 #endif	/* CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT */
 
-#define appmem_partition(name) \
+/**
+ * @brief Define an application memory partition with linker support
+ *
+ * Defines a k_mem_paritition with the provided name.
+ * This name may be used with the K_APP_DMEM and K_APP_BMEM macros to
+ * place globals automatically in this partition.
+ *
+ * NOTE: placeholder char variable is defined here to prevent build errors
+ * if a partition is defined but nothing ever placed in it.
+ *
+ * @param name Name of the k_mem_partition to declare
+ */
+#define K_APPMEM_PARTITION_DEFINE(name) \
 	extern char *data_smem_##name; \
 	extern char *data_smem_##name##b; \
 	smem_size_declare(name);		  \
 	_app_dmem_pad(name) char name##_dmem_pad; \
 	_app_bmem_pad(name) char name##_bmem_pad; \
-	__kernel struct k_mem_partition mem_domain_##name; \
-	__kernel struct app_region name; \
-	static inline void appmem_init_part_##name(void) \
-	{ \
-		name.dmem_start = (char *)&data_smem_##name; \
-		name.bmem_start = (char *)&data_smem_##name##b; \
-		smem_size_assign(name);				\
-		sys_dlist_append(&app_mem_list, &name.lnode); \
-		mem_domain_##name.start = (u32_t) name.dmem_start; \
-		mem_domain_##name.attr = K_MEM_PARTITION_P_RW_U_RW; \
-		name.partition = &mem_domain_##name; \
-	}
-
-/*
- * A wrapper around the k_mem_domain_* functions. Goal here was
- * to a) differentiate these operations from the k_mem_domain*
- * functions, and b) to simply the usage and handling of data
- * types (i.e. app_region, k_mem_domain, etc).
- */
-#define appmem_domain(name) \
-	__kernel struct k_mem_domain domain_##name; \
-	static inline void appmem_add_thread_##name(k_tid_t thread) \
-	{ \
-		k_mem_domain_add_thread(&domain_##name, thread); \
-	} \
-	static inline void appmem_rm_thread_##name(k_tid_t thread) \
-	{ \
-		k_mem_domain_remove_thread(thread); \
-	} \
-	static inline void appmem_add_part_##name(struct app_region region) \
-	{ \
-		k_mem_domain_add_partition(&domain_##name, \
-			&region.partition[0]); \
-	} \
-	static inline void appmem_rm_part_##name(struct app_region region) \
-	{ \
-		k_mem_domain_remove_partition(&domain_##name, \
-			&region.partition[0]); \
-	} \
-	static inline void appmem_init_domain_##name(struct app_region region) \
-	{ \
-		k_mem_domain_init(&domain_##name, 1, &region.partition); \
-	}
-
-/*
- * The following allows the FOR_EACH macro to call each partition's
- * appmem_init_part_##name . Note: semicolon needed or else compiler
- * complains as semicolon needed for function call once expanded by
- * macro.
- */
-#define appmem_init_part(name) \
-	appmem_init_part_##name();
-
-extern sys_dlist_t app_mem_list;
-
-extern void app_bss_zero(void);
-
-extern void app_calc_size(void);
-
-extern void appmem_init_app_memory(void);
+	struct k_mem_partition name = { \
+		.start = (u32_t) &data_smem_##name, \
+		.attr = K_MEM_PARTITION_P_RW_U_RW \
+	}; \
+	_GENERIC_SECTION(.app_regions.name) \
+	struct app_region name##_region = { \
+		.dmem_start = (char *)&data_smem_##name, \
+		.bmem_start = (char *)&data_smem_##name##b, \
+		.smem_size = smem_size_val(name), \
+		.partition = &name \
+	};
 
 #endif /* ZEPHYR_INCLUDE_APP_MEMORY_APP_MEMDOMAIN_H_ */

@@ -180,12 +180,6 @@ IEEE 802.15.4 Management
 Network and application libraries
 *********************************
 
-Network application
-===================
-
-.. doxygengroup:: net_app
-   :project: Zephyr
-
 DHCPv4
 ======
 
@@ -195,7 +189,7 @@ DHCPv4
 MQTT 3.1.1
 ==========
 
-.. doxygengroup:: mqtt
+.. doxygengroup:: mqtt_socket
    :project: Zephyr
 
 CoAP over Sockets

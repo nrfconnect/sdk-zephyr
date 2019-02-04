@@ -229,6 +229,8 @@ static struct ud *returned_ud;
 
 static enum net_verdict test_ok(struct net_conn *conn,
 				struct net_pkt *pkt,
+				union net_ip_header *ip_hdr,
+				union net_proto_header *proto_hdr,
 				void *user_data)
 {
 	struct ud *ud = (struct ud *)user_data;
@@ -254,6 +256,8 @@ static enum net_verdict test_ok(struct net_conn *conn,
 
 static enum net_verdict test_fail(struct net_conn *conn,
 				  struct net_pkt *pkt,
+				  union net_ip_header *ip_hdr,
+				  union net_proto_header *proto_hdr,
 				  void *user_data)
 {
 	/* This function should never be called as there should not
@@ -1451,6 +1455,7 @@ static bool test_tcp_seq_validity(void)
 	struct net_tcp *tcp = v6_ctx->tcp;
 	u8_t flags = NET_TCP_RST;
 	struct net_pkt *pkt = NULL;
+	struct net_tcp_hdr hdr, *tcp_hdr;
 	int ret;
 
 	ret = net_tcp_prepare_segment(tcp, flags, NULL, 0, NULL,
@@ -1460,34 +1465,40 @@ static bool test_tcp_seq_validity(void)
 		return false;
 	}
 
-	tcp->send_ack = sys_get_be32(NET_TCP_HDR(pkt)->seq) -
+	tcp_hdr = net_tcp_get_hdr(pkt, &hdr);
+	if (!tcp_hdr) {
+		DBG("Grabbing TCP hdr failed\n");
+		return false;
+	}
+
+	tcp->send_ack = sys_get_be32(tcp_hdr->seq) -
 		get_recv_wnd(tcp) / 2;
-	if (!net_tcp_validate_seq(tcp, pkt)) {
+	if (!net_tcp_validate_seq(tcp, tcp_hdr)) {
 		DBG("1) Sequence validation failed (send_ack %u vs seq %u)\n",
-		    tcp->send_ack, sys_get_be32(NET_TCP_HDR(pkt)->seq));
+		    tcp->send_ack, sys_get_be32(tcp_hdr->seq));
 		return false;
 	}
 
-	tcp->send_ack = sys_get_be32(NET_TCP_HDR(pkt)->seq);
-	if (!net_tcp_validate_seq(tcp, pkt)) {
+	tcp->send_ack = sys_get_be32(tcp_hdr->seq);
+	if (!net_tcp_validate_seq(tcp, tcp_hdr)) {
 		DBG("2) Sequence validation failed (send_ack %u vs seq %u)\n",
-		    tcp->send_ack, sys_get_be32(NET_TCP_HDR(pkt)->seq));
+		    tcp->send_ack, sys_get_be32(tcp_hdr->seq));
 		return false;
 	}
 
-	tcp->send_ack = sys_get_be32(NET_TCP_HDR(pkt)->seq) +
+	tcp->send_ack = sys_get_be32(tcp_hdr->seq) +
 		2 * get_recv_wnd(tcp);
-	if (net_tcp_validate_seq(tcp, pkt)) {
+	if (net_tcp_validate_seq(tcp, tcp_hdr)) {
 		DBG("3) Sequence validation failed (send_ack %u vs seq %u)\n",
-		    tcp->send_ack, sys_get_be32(NET_TCP_HDR(pkt)->seq));
+		    tcp->send_ack, sys_get_be32(tcp_hdr->seq));
 		return false;
 	}
 
-	tcp->send_ack = sys_get_be32(NET_TCP_HDR(pkt)->seq) -
+	tcp->send_ack = sys_get_be32(tcp_hdr->seq) -
 		2 * get_recv_wnd(tcp);
-	if (net_tcp_validate_seq(tcp, pkt)) {
+	if (net_tcp_validate_seq(tcp, tcp_hdr)) {
 		DBG("4) Sequence validation failed (send_ack %u vs seq %u)\n",
-		    tcp->send_ack, sys_get_be32(NET_TCP_HDR(pkt)->seq));
+		    tcp->send_ack, sys_get_be32(tcp_hdr->seq));
 		return false;
 	}
 

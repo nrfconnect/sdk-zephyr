@@ -37,9 +37,9 @@ extern "C" {
 #define NET_VLAN_TAG_UNSPEC 0x0fff
 
 /** Protocol families */
-#define PF_UNSPEC	0	/* Unspecified.  */
-#define PF_INET		2	/* IP protocol family.  */
-#define PF_INET6	10	/* IP version 6.  */
+#define PF_UNSPEC	0	/* Unspecified. */
+#define PF_INET		1	/* IP protocol family version 4. */
+#define PF_INET6	2	/* IP protocol family version 6. */
 #define PF_LTE		102
 
 /** Address families.  */
@@ -318,6 +318,20 @@ struct net_tcp_hdr {
 	u8_t urg[2];
 	u8_t optdata[0];
 } __packed;
+
+/**
+ * This 2 unions are here temporarly, as long as net_context.h will
+ * be still public and not part of the core only.
+ */
+union net_ip_header {
+	struct net_ipv4_hdr *ipv4;
+	struct net_ipv6_hdr *ipv6;
+};
+
+union net_proto_header {
+	struct net_udp_hdr *udp;
+	struct net_tcp_hdr *tcp;
+};
 
 #define NET_UDPH_LEN	8			/* Size of UDP header */
 #define NET_TCPH_LEN	20			/* Size of TCP header */

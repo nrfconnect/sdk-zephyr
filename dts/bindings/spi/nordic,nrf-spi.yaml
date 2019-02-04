@@ -15,16 +15,13 @@ inherits:
 
 properties:
     compatible:
-      type: string
-      category: required
-      description: compatible strings
       constraint: "nordic,nrf-spi"
 
     reg:
       type: array
+      category: required
       description: mmio register space
       generation: define
-      category: required
 
     interrupts:
       type: array
@@ -34,26 +31,19 @@ properties:
 
     sck-pin:
       type: int
+      category: required
       description: SCK pin
       generation: define
-      category: required
 
     mosi-pin:
       type: int
+      category: required
       description: MOSI pin
       generation: define
-      category: required
 
     miso-pin:
       type: int
+      category: required
       description: MISO pin
       generation: define
-      category: required
-
-    csn-pin:
-      type: int
-      description: CSN pin
-      generation: define
-      category: optional
-
 ...
