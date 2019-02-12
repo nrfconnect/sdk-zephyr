@@ -34,7 +34,8 @@ config HAS_COVERAGE_SUPPORT
 	bool
 	help
 	  The code coverage report generation is only available on boards
-	  with enough RAM.
+	  with enough spare RAM to buffer the coverage data, or on boards
+	  based on the POSIX ARCH.
 
 config COVERAGE
 	bool "Create coverage data"
@@ -62,7 +63,7 @@ config TEST_USERSPACE
 	depends on ARCH_HAS_USERSPACE
 	depends on TEST
 	select USERSPACE
-	select APPLICATION_MEMORY
+	select APP_SHARED_MEM
 	select DYNAMIC_OBJECTS
 	default y
 	help

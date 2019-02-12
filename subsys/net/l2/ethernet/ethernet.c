@@ -493,6 +493,18 @@ static void ethernet_update_tx_stats(struct net_if *iface, struct net_pkt *pkt)
 }
 #endif /* CONFIG_NET_STATISTICS_ETHERNET */
 
+static void ethernet_remove_l2_header(struct net_pkt *pkt)
+{
+	struct net_buf *buf;
+
+	/* Remove the buffer added in ethernet_fill_header() */
+	buf = pkt->buffer;
+	pkt->buffer = buf->frags;
+	buf->frags = NULL;
+
+	net_pkt_frag_unref(buf);
+}
+
 static int ethernet_send(struct net_if *iface, struct net_pkt *pkt)
 {
 	const struct ethernet_api *api = net_if_get_device(iface)->driver_api;
@@ -521,6 +533,9 @@ static int ethernet_send(struct net_if *iface, struct net_pkt *pkt)
 	} else if (IS_ENABLED(CONFIG_NET_IPV6) &&
 		   net_pkt_family(pkt) == AF_INET6) {
 		ptype = htons(NET_ETH_PTYPE_IPV6);
+	} else if (IS_ENABLED(CONFIG_NET_SOCKETS_PACKET) &&
+		   net_pkt_family(pkt) == AF_PACKET) {
+		goto send;
 	} else if (IS_ENABLED(CONFIG_NET_GPTP) && net_pkt_is_gptp(pkt)) {
 		ptype = htons(NET_ETH_PTYPE_PTP);
 	} else if (IS_ENABLED(CONFIG_NET_LLDP) && net_pkt_is_lldp(pkt)) {
@@ -563,15 +578,18 @@ static int ethernet_send(struct net_if *iface, struct net_pkt *pkt)
 
 	net_pkt_cursor_init(pkt);
 
+send:
 	ret = api->send(net_if_get_device(iface), pkt);
 	if (ret != 0) {
 		eth_stats_update_errors_tx(iface);
+		ethernet_remove_l2_header(pkt);
 		goto error;
 	}
 #if defined(CONFIG_NET_STATISTICS_ETHERNET)
 	ethernet_update_tx_stats(iface, pkt);
 #endif
 	ret = net_pkt_get_len(pkt);
+	ethernet_remove_l2_header(pkt);
 
 	net_pkt_unref(pkt);
 error:

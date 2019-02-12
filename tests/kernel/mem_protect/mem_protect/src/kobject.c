@@ -5,6 +5,7 @@
  */
 
 #include "mem_protect.h"
+#include <syscall_handler.h>
 
 /* Kernel objects */
 K_THREAD_STACK_DEFINE(kobject_stack_1, KOBJECT_STACK_SIZE);
@@ -15,25 +16,25 @@ K_THREAD_STACK_DEFINE(kobject_stack_4, KOBJECT_STACK_SIZE);
 K_SEM_DEFINE(kobject_sem, SEMAPHORE_INIT_COUNT, SEMAPHORE_MAX_COUNT);
 K_SEM_DEFINE(kobject_public_sem, SEMAPHORE_INIT_COUNT, SEMAPHORE_MAX_COUNT);
 K_MUTEX_DEFINE(kobject_mutex);
-__kernel struct k_thread kobject_test_4_tid;
-__kernel struct k_thread kobject_test_6_tid;
-__kernel struct k_thread kobject_test_7_tid;
+struct k_thread kobject_test_4_tid;
+struct k_thread kobject_test_6_tid;
+struct k_thread kobject_test_7_tid;
 
-__kernel struct k_thread kobject_test_9_tid;
-__kernel struct k_thread kobject_test_13_tid;
-__kernel struct k_thread kobject_test_14_tid;
+struct k_thread kobject_test_9_tid;
+struct k_thread kobject_test_13_tid;
+struct k_thread kobject_test_14_tid;
 
-__kernel struct k_thread kobject_test_reuse_1_tid, kobject_test_reuse_2_tid;
-__kernel struct k_thread kobject_test_reuse_3_tid, kobject_test_reuse_4_tid;
-__kernel struct k_thread kobject_test_reuse_5_tid, kobject_test_reuse_6_tid;
-__kernel struct k_thread kobject_test_reuse_7_tid, kobject_test_reuse_8_tid;
+struct k_thread kobject_test_reuse_1_tid, kobject_test_reuse_2_tid;
+struct k_thread kobject_test_reuse_3_tid, kobject_test_reuse_4_tid;
+struct k_thread kobject_test_reuse_5_tid, kobject_test_reuse_6_tid;
+struct k_thread kobject_test_reuse_7_tid, kobject_test_reuse_8_tid;
 
 struct k_thread kobject_test_10_tid_uninitialized;
 
 struct k_sem *random_sem_type;
 struct k_sem kobject_sem_not_hash_table;
-__kernel struct k_sem kobject_sem_no_init_no_access;
-__kernel struct k_sem kobject_sem_no_init_access;
+struct k_sem kobject_sem_no_init_no_access;
+struct k_sem kobject_sem_no_init_access;
 
 
 /****************************************************************************/
@@ -434,11 +435,8 @@ void test_kobject_access_grant_to_invalid_thread(void *p1, void *p2, void *p3)
 	k_object_access_revoke(&kobject_sem,
 			       &kobject_test_10_tid_uninitialized);
 
-	/* Test if this has actually taken the required branch */
-	extern void *_k_object_find(void *object);
-	void *ret_value = _k_object_find(&kobject_test_10_tid_uninitialized);
-
-	if (ret_value == NULL) {
+	if (Z_SYSCALL_OBJ(&kobject_test_10_tid_uninitialized, K_OBJ_THREAD)
+	    != 0) {
 		ztest_test_pass();
 	} else {
 		zassert_unreachable(ERROR_STR_TEST_10);

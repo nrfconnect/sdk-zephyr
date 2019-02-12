@@ -16,6 +16,8 @@
 extern struct k_mem_pool _k_mem_pool_list_start[];
 extern struct k_mem_pool _k_mem_pool_list_end[];
 
+static struct k_spinlock lock;
+
 static struct k_mem_pool *get_pool(int id)
 {
 	return &_k_mem_pool_list_start[id];
@@ -90,7 +92,7 @@ int k_mem_pool_alloc(struct k_mem_pool *p, struct k_mem_block *block,
 			return ret;
 		}
 
-		(void)_pend_current_thread(irq_lock(), &p->wait_q, timeout);
+		_pend_curr_unlocked(&p->wait_q, timeout);
 
 		if (timeout != K_FOREVER) {
 			timeout = end - z_tick_get();
@@ -106,22 +108,26 @@ int k_mem_pool_alloc(struct k_mem_pool *p, struct k_mem_block *block,
 
 void k_mem_pool_free_id(struct k_mem_block_id *id)
 {
-	int key, need_sched = 0;
+	int need_sched = 0;
 	struct k_mem_pool *p = get_pool(id->pool);
 
 	_sys_mem_pool_block_free(&p->base, id->level, id->block);
 
 	/* Wake up anyone blocked on this pool and let them repeat
 	 * their allocation attempts
+	 *
+	 * (Note that this spinlock only exists because _unpend_all()
+	 * is unsynchronized.  Maybe we want to put the lock into the
+	 * wait_q instead and make the API safe?)
 	 */
-	key = irq_lock();
+	k_spinlock_key_t key = k_spin_lock(&lock);
 
 	need_sched = _unpend_all(&p->wait_q);
 
-	if (need_sched && !_is_in_isr()) {
-		_reschedule(key);
+	if (need_sched) {
+		_reschedule(&lock, key);
 	} else {
-		irq_unlock(key);
+		k_spin_unlock(&lock, key);
 	}
 }
 

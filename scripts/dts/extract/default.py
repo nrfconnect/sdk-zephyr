@@ -28,7 +28,7 @@ class DTDefault(DTDirective):
         prop_alias = {}
 
         if prop_type == 'boolean':
-            if prop in reduced[node_address]['props'].keys():
+            if prop in reduced[node_address]['props']:
                 prop_values = 1
             else:
                 prop_values = 0
@@ -37,7 +37,7 @@ class DTDefault(DTDirective):
 
         if isinstance(prop_values, list):
             for i, prop_value in enumerate(prop_values):
-                prop_name = convert_string_to_label(prop)
+                prop_name = str_to_label(prop)
                 label = def_label + '_' + prop_name
                 if isinstance(prop_value, str):
                     prop_value = "\"" + prop_value + "\""
@@ -47,7 +47,7 @@ class DTDefault(DTDirective):
                         label + '_' + str(i),
                         prop_alias)
         else:
-            prop_name = convert_string_to_label(prop)
+            prop_name = str_to_label(prop)
             label = def_label + '_' + prop_name
 
             if prop_values == 'parent-label':
@@ -62,8 +62,7 @@ class DTDefault(DTDirective):
             if node_address in aliases:
                 add_prop_aliases(
                     node_address,
-                    lambda alias:
-                        convert_string_to_label(alias) + '_' + prop_name,
+                    lambda alias: str_to_label(alias) + '_' + prop_name,
                     label,
                     prop_alias)
 

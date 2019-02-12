@@ -7,20 +7,24 @@
 #include <ztest.h>
 #include <stdio.h>
 #include <app_memory/app_memdomain.h>
-#ifdef KERNEL
-__kernel static struct k_thread ztest_thread;
+#ifdef CONFIG_APP_SHARED_MEM
+#include <misc/libc-hooks.h>
 #endif
 
-/* APPDMEMP0 and APPBMEMP0 are used for the application shared memory test  */
+#ifdef KERNEL
+static struct k_thread ztest_thread;
+#endif
 
-APPDMEMP0 enum {
+/* ZTEST_DMEM and ZTEST_BMEM are used for the application shared memory test  */
+
+ZTEST_DMEM enum {
 	TEST_PHASE_SETUP,
 	TEST_PHASE_TEST,
 	TEST_PHASE_TEARDOWN,
 	TEST_PHASE_FRAMEWORK
 } phase = TEST_PHASE_FRAMEWORK;
 
-APPBMEMP0 static int test_status;
+static ZTEST_BMEM int test_status;
 
 static int cleanup_test(struct unit_test *test)
 {
@@ -152,10 +156,9 @@ out:
 
 K_THREAD_STACK_DEFINE(ztest_thread_stack, CONFIG_ZTEST_STACKSIZE +
 		      CONFIG_TEST_EXTRA_STACKSIZE);
-/* APPBMEMP0 is used for the application shared memory test    */
-APPBMEMP0 static int test_result;
+static ZTEST_BMEM int test_result;
 
-__kernel static struct k_sem test_end_signal;
+static struct k_sem test_end_signal;
 
 void ztest_test_fail(void)
 {
@@ -279,6 +282,11 @@ void end_report(void)
 	}
 }
 
+#ifdef CONFIG_APP_SHARED_MEM
+struct k_mem_domain ztest_mem_domain;
+K_APPMEM_PARTITION_DEFINE(ztest_mem_partition);
+#endif
+
 #ifndef KERNEL
 int main(void)
 {
@@ -291,6 +299,25 @@ int main(void)
 #else
 void main(void)
 {
+#ifdef CONFIG_APP_SHARED_MEM
+	struct k_mem_partition *parts[] = {
+		&ztest_mem_partition,
+#ifdef CONFIG_NEWLIB_LIBC
+		/* Newlib libc.a library and hooks globals */
+		&z_newlib_partition,
+#endif
+		/* Both minimal and newlib libc expose this for malloc arena */
+		&z_malloc_partition
+	};
+
+	/* Ztests just have one memory domain with one partition.
+	 * Any variables that user code may reference need to go in them,
+	 * using the ZTEST_DMEM and ZTEST_BMEM macros.
+	 */
+	k_mem_domain_init(&ztest_mem_domain, ARRAY_SIZE(parts), parts);
+	k_mem_domain_add_thread(&ztest_mem_domain, k_current_get());
+#endif /* CONFIG_APP_SHARED_MEM */
+
 	_init_mock();
 	test_main();
 	end_report();

@@ -314,13 +314,13 @@ __csSet:
 
 	call	_x86_data_copy
 
-#ifdef CONFIG_APPLICATION_MEMORY
-	movl	$__app_data_ram_start, %edi /* DATA in RAM (dest) */
-	movl	$__app_data_rom_start, %esi /* DATA in ROM (src) */
-	movl	$__app_data_num_words, %ecx /* Size of DATA in quad bytes */
+#ifdef CONFIG_APP_SHARED_MEM
+	movl	$_app_smem_start, %edi /* DATA in RAM (dest) */
+	movl	$_app_smem_rom_start, %esi /* DATA in ROM (src) */
+	movl	$_app_smem_num_words, %ecx /* Size of DATA in quad bytes */
 
 	call	_x86_data_copy
-#endif /* CONFIG_APPLICATION_MEMORY */
+#endif /* CONFIG_APP_SHARED_MEM */
 
 #endif /* CONFIG_XIP */
 
@@ -340,12 +340,6 @@ __csSet:
 	call	_x86_bss_zero
 #endif /* CONFIG_COVERAGE_GCOV */
 
-#ifdef CONFIG_APPLICATION_MEMORY
-	movl	$__app_bss_start, %edi		/* load app BSS start address */
-	movl	$__app_bss_num_words, %ecx	/* number of quad bytes */
-	call	_x86_bss_zero
-#endif
-
 #ifdef CONFIG_GDT_DYNAMIC
 	/* activate RAM-based Global Descriptor Table (GDT) */
 	lgdt	%ds:_gdt
@@ -357,12 +351,7 @@ __csSet:
 	movl $__mmu_tables_start, %eax
 	movl %eax, %cr3
 
-#ifndef CONFIG_X86_PAE_MODE
-	/*Set CR4.PAE = 0 (5th bit in CR4*/
-	movl %cr4, %eax
-	andl $CR4_PAE_DISABLE, %eax
-	movl %eax, %cr4
-#else
+	/* Enable PAE */
 	movl %cr4, %eax
 	orl $CR4_PAE_ENABLE, %eax
 	movl %eax, %cr4
@@ -372,7 +361,7 @@ __csSet:
 	rdmsr
 	orl $0x800, %eax
 	wrmsr
-#endif
+
 	/* Enable paging (CR0.PG, bit 31) / write protect (CR0.WP, bit 16) */
 	movl %cr0, %eax
 	orl $CR0_PG_WP_ENABLE, %eax

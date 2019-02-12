@@ -25,7 +25,7 @@ int flash_region_is_empty(u32_t off, void *dst, u32_t len)
 	int rc;
 	const struct flash_area *fap;
 
-	rc = flash_area_open(3, &fap);
+	rc = flash_area_open(DT_FLASH_AREA_IMAGE_SCRATCH_ID, &fap);
 	if (rc != 0) {
 		LOG_ERR("SPI flash area open failed!\n");
 		return -1;
@@ -56,7 +56,7 @@ void test_flash(void)
 	u32_t magic[4];
 	int i;
 
-	flash_dev = device_get_binding(DT_SPI_NOR_DRV_NAME);
+	flash_dev = device_get_binding(DT_JEDEC_SPI_NOR_0_LABEL);
 
 	if (!flash_dev) {
 		LOG_ERR("SPI flash driver was not found!\n");

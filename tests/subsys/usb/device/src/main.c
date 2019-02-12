@@ -12,16 +12,10 @@
 #include <usb/usb_device.h>
 #include <usb/usb_common.h>
 
-#define WPANUSB_SUBCLASS	0
-#define WPANUSB_PROTOCOL	0
-
 /* Max packet size for endpoints */
-#define WPANUSB_BULK_EP_MPS		64
+#define BULK_EP_MPS		64
 
-/* Max Bluetooth command data size */
-#define WPANUSB_CLASS_MAX_DATA_SIZE	100
-
-#define WPANUSB_ENDP_BULK_IN		0x81
+#define ENDP_BULK_IN		0x81
 
 static const struct dev_common_descriptor {
 	struct usb_device_descriptor device_descriptor;
@@ -33,7 +27,7 @@ static const struct dev_common_descriptor {
 	/*
 	 * String descriptors not enabled at the moment
 	 */
-} __packed wpanusb_desc = {
+} __packed desc = {
 	/* Device descriptor */
 	.device_descriptor = {
 		.bLength = sizeof(struct usb_device_descriptor),
@@ -75,8 +69,8 @@ static const struct dev_common_descriptor {
 			.bAlternateSetting = 0,
 			.bNumEndpoints = 1,
 			.bInterfaceClass = CUSTOM_CLASS,
-			.bInterfaceSubClass = WPANUSB_SUBCLASS,
-			.bInterfaceProtocol = WPANUSB_PROTOCOL,
+			.bInterfaceSubClass = 0,
+			.bInterfaceProtocol = 0,
 			.iInterface = 0,
 		},
 
@@ -84,55 +78,55 @@ static const struct dev_common_descriptor {
 		.if0_in_ep = {
 			.bLength = sizeof(struct usb_ep_descriptor),
 			.bDescriptorType = USB_ENDPOINT_DESC,
-			.bEndpointAddress = WPANUSB_ENDP_BULK_IN,
+			.bEndpointAddress = ENDP_BULK_IN,
 			.bmAttributes = USB_DC_EP_BULK,
-			.wMaxPacketSize = sys_cpu_to_le16(WPANUSB_BULK_EP_MPS),
+			.wMaxPacketSize = sys_cpu_to_le16(BULK_EP_MPS),
 			.bInterval = 0x00,
 		},
 	},
 };
 
-struct usb_desc_header *__usb_descriptor_start = (void *)&wpanusb_desc;
+struct usb_desc_header *__usb_descriptor_start = (void *)&desc;
 
-static void wpanusb_status_cb(enum usb_dc_status_code status, const u8_t *param)
+static void status_cb(enum usb_dc_status_code status, const u8_t *param)
 {
 }
 
 /* EP Bulk IN handler, used to send data to the Host */
-static void wpanusb_bulk_in(u8_t ep, enum usb_dc_ep_cb_status_code ep_status)
+static void bulk_in(u8_t ep, enum usb_dc_ep_cb_status_code ep_status)
 {
 }
 
 /* Describe EndPoints configuration */
-static struct usb_ep_cfg_data wpanusb_ep[] = {
+static struct usb_ep_cfg_data device_ep[] = {
 	{
-		.ep_cb = wpanusb_bulk_in,
-		.ep_addr = WPANUSB_ENDP_BULK_IN
+		.ep_cb = bulk_in,
+		.ep_addr = ENDP_BULK_IN
 	},
 };
 
-static struct usb_cfg_data wpanusb_config = {
-	.usb_device_description = (u8_t *)&wpanusb_desc,
-	.cb_usb_status = wpanusb_status_cb,
+static struct usb_cfg_data device_config = {
+	.usb_device_description = (u8_t *)&desc,
+	.cb_usb_status = status_cb,
 	.interface = {
 		.vendor_handler = NULL,
 		.class_handler = NULL,
 		.custom_handler = NULL,
 	},
-	.num_endpoints = ARRAY_SIZE(wpanusb_ep),
-	.endpoint = wpanusb_ep,
+	.num_endpoints = ARRAY_SIZE(device_ep),
+	.endpoint = device_ep,
 };
 
-static int wpanusb_init(void)
+static int device_init(void)
 {
 	int ret;
 
 	/* Initialize the USB driver with the right configuration */
-	ret = usb_set_config(&wpanusb_config);
+	ret = usb_set_config(&device_config);
 	zassert_equal(ret, 0, "usb_set_config() failed");
 
 	/* Enable USB driver */
-	ret = usb_enable(&wpanusb_config);
+	ret = usb_enable(&device_config);
 	zassert_equal(ret, 0, "usb_enable() failed");
 
 	return 0;
@@ -142,15 +136,48 @@ static void test_device_setup(void)
 {
 	int ret;
 
-	ret = wpanusb_init();
+	ret = device_init();
 	zassert_equal(ret, 0, "init failed");
+}
+
+static void test_device_disable(void)
+{
+	zassert_equal(usb_disable(), TC_PASS, "usb_disable() failed");
+}
+
+static void test_device_deconfig(void)
+{
+	zassert_equal(usb_deconfig(), TC_PASS, "usb_deconfig() failed");
+}
+
+static void test_device_dc_api(void)
+{
+	zassert_equal(usb_dc_ep_mps(0x20), -EINVAL,
+		      "Invalid test usb_dc_ep_mps(INVALID) failed");
+
+	zassert_equal(usb_dc_ep_mps(0x0), 64,
+		      "usb_dc_ep_mps(0x00) failed");
+	zassert_equal(usb_dc_ep_mps(0x80), 64,
+		      "usb_dc_ep_mps(0x80) failed");
+
+	/* Bulk EP is not configured yet */
+	zassert_equal(usb_dc_ep_mps(ENDP_BULK_IN), 0,
+		      "usb_dc_ep_mps(ENDP_BULK_IN) failed");
+
+	zassert_equal(usb_dc_set_address(0x01), TC_PASS,
+		      "usb_dc_set_address(0x01) failed");
 }
 
 /*test case main entry*/
 void test_main(void)
 {
 	ztest_test_suite(test_device,
-			 ztest_unit_test(test_device_setup));
+			 /* Should return TC_PASS if not enabled yet */
+			 ztest_unit_test(test_device_disable),
+			 ztest_unit_test(test_device_setup),
+			 ztest_unit_test(test_device_dc_api),
+			 ztest_unit_test(test_device_deconfig),
+			 ztest_unit_test(test_device_disable));
 
 	ztest_run_test_suite(test_device);
 }

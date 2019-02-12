@@ -12,20 +12,20 @@
 #define BYTES_TO_READ BYTES_TO_WRITE
 K_MEM_POOL_DEFINE(mpool, BYTES_TO_WRITE, PIPE_LEN, 1, BYTES_TO_WRITE);
 
-static unsigned char __aligned(4) data[] = "abcd1234$%^&PIPE";
+static ZTEST_DMEM unsigned char __aligned(4) data[] = "abcd1234$%^&PIPE";
 /**TESTPOINT: init via K_PIPE_DEFINE*/
 K_PIPE_DEFINE(kpipe, PIPE_LEN, 4);
 K_PIPE_DEFINE(khalfpipe, (PIPE_LEN / 2), 4);
 K_PIPE_DEFINE(kpipe1, PIPE_LEN, 4);
 K_PIPE_DEFINE(pipe_test_alloc, PIPE_LEN, 4);
-__kernel struct k_pipe pipe;
+struct k_pipe pipe;
 
 K_THREAD_STACK_DEFINE(tstack, STACK_SIZE);
 K_THREAD_STACK_DEFINE(tstack1, STACK_SIZE);
 K_THREAD_STACK_DEFINE(tstack2, STACK_SIZE);
-__kernel struct k_thread tdata;
-__kernel struct k_thread tdata1;
-__kernel struct k_thread tdata2;
+struct k_thread tdata;
+struct k_thread tdata1;
+struct k_thread tdata2;
 K_SEM_DEFINE(end_sema, 0, 1);
 
 /* By design, only two blocks. We should never need more than that, one

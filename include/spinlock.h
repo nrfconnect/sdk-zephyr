@@ -8,8 +8,27 @@
 
 #include <atomic.h>
 
+/* These stubs aren't provided by the mocking framework, and I can't
+ * find a proper place to put them as mocking seems not to have a
+ * proper "arch" layer.
+ */
+#ifdef ZTEST_UNITTEST
+static inline int _arch_irq_lock(void)
+{
+	return 0;
+}
+
+static inline void _arch_irq_unlock(int key)
+{
+	ARG_UNUSED(key);
+}
+#endif
+
 #if defined(CONFIG_ASSERT) && (CONFIG_MP_NUM_CPUS < 4)
-#include <kernel_structs.h>
+#include <misc/__assert.h>
+struct k_spinlock;
+int z_spin_lock_valid(struct k_spinlock *l);
+int z_spin_unlock_valid(struct k_spinlock *l);
 #define SPIN_VALIDATE
 #endif
 
@@ -34,6 +53,7 @@ struct k_spinlock {
 
 static ALWAYS_INLINE k_spinlock_key_t k_spin_lock(struct k_spinlock *l)
 {
+	ARG_UNUSED(l);
 	k_spinlock_key_t k;
 
 	/* Note that we need to use the underlying arch-specific lock
@@ -43,11 +63,7 @@ static ALWAYS_INLINE k_spinlock_key_t k_spin_lock(struct k_spinlock *l)
 	k.key = _arch_irq_lock();
 
 #ifdef SPIN_VALIDATE
-	if (l->thread_cpu) {
-		__ASSERT((l->thread_cpu & 3) != _current_cpu->id,
-			 "Recursive spinlock");
-	}
-	l->thread_cpu = _current_cpu->id | (u32_t)_current;
+	__ASSERT(z_spin_lock_valid(l), "Recursive spinlock");
 #endif
 
 #ifdef CONFIG_SMP
@@ -61,12 +77,10 @@ static ALWAYS_INLINE k_spinlock_key_t k_spin_lock(struct k_spinlock *l)
 static ALWAYS_INLINE void k_spin_unlock(struct k_spinlock *l,
 					k_spinlock_key_t key)
 {
+	ARG_UNUSED(l);
 #ifdef SPIN_VALIDATE
-	__ASSERT(l->thread_cpu == (_current_cpu->id | (u32_t)_current),
-		 "Not my spinlock!");
-	l->thread_cpu = 0;
+	__ASSERT(z_spin_unlock_valid(l), "Not my spinlock!");
 #endif
-
 
 #ifdef CONFIG_SMP
 	/* Strictly we don't need atomic_clear() here (which is an
@@ -80,5 +94,20 @@ static ALWAYS_INLINE void k_spin_unlock(struct k_spinlock *l,
 #endif
 	_arch_irq_unlock(key.key);
 }
+
+/* Internal function: releases the lock, but leaves local interrupts
+ * disabled
+ */
+static ALWAYS_INLINE void k_spin_release(struct k_spinlock *l)
+{
+	ARG_UNUSED(l);
+#ifdef SPIN_VALIDATE
+	__ASSERT(z_spin_unlock_valid(l), "Not my spinlock!");
+#endif
+#ifdef CONFIG_SMP
+	atomic_clear(&l->locked);
+#endif
+}
+
 
 #endif /* ZEPHYR_INCLUDE_SPINLOCK_H_ */

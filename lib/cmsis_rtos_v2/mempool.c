@@ -7,10 +7,10 @@
 #include <kernel_structs.h>
 #include "wrapper.h"
 
-#define TIME_OUT_TICKS	10
+#define TIME_OUT_TICKS  10
 
 K_MEM_SLAB_DEFINE(cv2_mem_slab, sizeof(struct cv2_mslab),
-			CONFIG_CMSIS_V2_MEM_SLAB_MAX_COUNT, 4);
+		  CONFIG_CMSIS_V2_MEM_SLAB_MAX_COUNT, 4);
 
 static const osMemoryPoolAttr_t init_mslab_attrs = {
 	.name = "ZephyrMemPool",
@@ -25,24 +25,24 @@ static const osMemoryPoolAttr_t init_mslab_attrs = {
  * @brief Create and Initialize a memory pool.
  */
 osMemoryPoolId_t osMemoryPoolNew(uint32_t block_count, uint32_t block_size,
-				const osMemoryPoolAttr_t *attr)
+				 const osMemoryPoolAttr_t *attr)
 {
 	struct cv2_mslab *mslab;
+
+	BUILD_ASSERT_MSG(CONFIG_HEAP_MEM_POOL_SIZE >=
+			 CONFIG_CMSIS_V2_MEM_SLAB_MAX_DYNAMIC_SIZE,
+			 "heap must be configured to be at least the max dynamic size");
 
 	if (k_is_in_isr()) {
 		return NULL;
 	}
 
-	if (attr == NULL) {
-		attr = &init_mslab_attrs;
+	if ((attr != NULL) && (attr->mp_size < block_count * block_size)) {
+		return NULL;
 	}
 
-	/* This implementation requires memory to be allocated by the
-	 * App layer
-	 */
-	if ((attr->mp_mem == NULL) ||
-		(attr->mp_size < block_count*block_size)) {
-		return NULL;
+	if (attr == NULL) {
+		attr = &init_mslab_attrs;
 	}
 
 	if (k_mem_slab_alloc(&cv2_mem_slab, (void **)&mslab, 100) == 0) {
@@ -51,8 +51,30 @@ osMemoryPoolId_t osMemoryPoolNew(uint32_t block_count, uint32_t block_size,
 		return NULL;
 	}
 
-	k_mem_slab_init(&mslab->z_mslab, attr->mp_mem, block_size, block_count);
-	memcpy(mslab->name, attr->name, 16);
+	if (attr->mp_mem == NULL) {
+		__ASSERT((block_count * block_size) <=
+			 CONFIG_CMSIS_V2_MEM_SLAB_MAX_DYNAMIC_SIZE,
+			 "memory slab/pool size exceeds dynamic maximum");
+
+		mslab->pool = k_calloc(block_count, block_size);
+		if (mslab->pool == NULL) {
+			k_mem_slab_free(&cv2_mem_slab, (void *) &mslab);
+			return NULL;
+		}
+		mslab->is_dynamic_allocation = TRUE;
+	} else {
+		mslab->pool = attr->mp_mem;
+		mslab->is_dynamic_allocation = FALSE;
+	}
+
+	k_mem_slab_init(&mslab->z_mslab, mslab->pool, block_size, block_count);
+
+	if (attr->name == NULL) {
+		strncpy(mslab->name, init_mslab_attrs.name,
+			sizeof(mslab->name) - 1);
+	} else {
+		strncpy(mslab->name, attr->name, sizeof(mslab->name) - 1);
+	}
 
 	return (osMemoryPoolId_t)mslab;
 }
@@ -77,16 +99,16 @@ void *osMemoryPoolAlloc(osMemoryPoolId_t mp_id, uint32_t timeout)
 
 	if (timeout == 0) {
 		retval = k_mem_slab_alloc(
-				(struct k_mem_slab *)(&mslab->z_mslab),
-				(void **)&ptr, K_NO_WAIT);
+			(struct k_mem_slab *)(&mslab->z_mslab),
+			(void **)&ptr, K_NO_WAIT);
 	} else if (timeout == osWaitForever) {
 		retval = k_mem_slab_alloc(
-				(struct k_mem_slab *)(&mslab->z_mslab),
-				(void **)&ptr, K_FOREVER);
+			(struct k_mem_slab *)(&mslab->z_mslab),
+			(void **)&ptr, K_FOREVER);
 	} else {
 		retval = k_mem_slab_alloc(
-				(struct k_mem_slab *)(&mslab->z_mslab),
-				(void **)&ptr, __ticks_to_ms(timeout));
+			(struct k_mem_slab *)(&mslab->z_mslab),
+			(void **)&ptr, __ticks_to_ms(timeout));
 	}
 
 	if (retval == 0) {
@@ -207,6 +229,9 @@ osStatus_t osMemoryPoolDelete(osMemoryPoolId_t mp_id)
 	 * supported in Zephyr.
 	 */
 
+	if (mslab->is_dynamic_allocation) {
+		k_free(mslab->pool);
+	}
 	k_mem_slab_free(&cv2_mem_slab, (void *)&mslab);
 
 	return osOK;

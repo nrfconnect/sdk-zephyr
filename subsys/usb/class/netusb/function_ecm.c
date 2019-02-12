@@ -101,7 +101,7 @@ USBD_CLASS_DESCR_DEFINE(primary, 0) struct usb_cdc_ecm_config cdc_ecm_cfg = {
 		.bDescriptorSubtype = ETHERNET_FUNC_DESC,
 		.iMACAddress = 4,
 		.bmEthernetStatistics = sys_cpu_to_le32(0), /* None */
-		.wMaxSegmentSize = sys_cpu_to_le16(1514),
+		.wMaxSegmentSize = sys_cpu_to_le16(NETUSB_MTU),
 		.wNumberMCFilters = sys_cpu_to_le16(0), /* None */
 		.bNumberPowerFilters = 0, /* No wake up */
 	},
@@ -407,9 +407,12 @@ USBD_STRING_DESCR_DEFINE(primary) struct usb_cdc_ecm_mac_descr utf16le_mac = {
 	.bString = CONFIG_USB_DEVICE_NETWORK_ECM_MAC
 };
 
-static void ecm_interface_config(u8_t bInterfaceNumber)
+static void ecm_interface_config(struct usb_desc_header *head,
+				 u8_t bInterfaceNumber)
 {
 	int idx = usb_get_str_descriptor_idx(&utf16le_mac);
+
+	ARG_UNUSED(head);
 
 	if (idx) {
 		LOG_DBG("fixup string %d", idx);

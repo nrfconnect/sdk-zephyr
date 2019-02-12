@@ -144,7 +144,7 @@ void _bss_zero(void)
 {
 	(void)memset(&__bss_start, 0,
 		     ((u32_t) &__bss_end - (u32_t) &__bss_start));
-#ifdef CONFIG_CCM_BASE_ADDRESS
+#ifdef DT_CCM_BASE_ADDRESS
 	(void)memset(&__ccm_bss_start, 0,
 		     ((u32_t) &__ccm_bss_end - (u32_t) &__ccm_bss_start));
 #endif
@@ -153,10 +153,6 @@ void _bss_zero(void)
 
 	bss_zeroing_relocation();
 #endif	/* CONFIG_CODE_DATA_RELOCATION */
-#ifdef CONFIG_APPLICATION_MEMORY
-	(void)memset(&__app_bss_start, 0,
-		     ((u32_t) &__app_bss_end - (u32_t) &__app_bss_start));
-#endif
 #ifdef CONFIG_COVERAGE_GCOV
 	(void)memset(&__gcov_bss_start, 0,
 		 ((u32_t) &__gcov_bss_end - (u32_t) &__gcov_bss_start));
@@ -177,7 +173,7 @@ void _data_copy(void)
 {
 	(void)memcpy(&__data_ram_start, &__data_rom_start,
 		 ((u32_t) &__data_ram_end - (u32_t) &__data_ram_start));
-#ifdef CONFIG_CCM_BASE_ADDRESS
+#ifdef DT_CCM_BASE_ADDRESS
 	(void)memcpy(&__ccm_data_start, &__ccm_data_rom_start,
 		 ((u32_t) &__ccm_data_end - (u32_t) &__ccm_data_start));
 #endif
@@ -189,10 +185,6 @@ void _data_copy(void)
 #ifdef CONFIG_APP_SHARED_MEM
 	(void)memcpy(&_app_smem_start, &_app_smem_rom_start,
 		 ((u32_t) &_app_smem_end - (u32_t) &_app_smem_start));
-#endif
-#ifdef CONFIG_APPLICATION_MEMORY
-	(void)memcpy(&__app_data_ram_start, &__app_data_rom_start,
-		 ((u32_t) &__app_data_ram_end - (u32_t) &__app_data_ram_start));
 #endif
 }
 #endif
@@ -398,8 +390,7 @@ static void switch_to_main_thread(void)
 	 * current fake thread is not on a wait queue or ready queue, so it
 	 * will never be rescheduled in.
 	 */
-
-	(void)_Swap(irq_lock());
+	_Swap_unlocked();
 #endif
 }
 #endif /* CONFIG_MULTITHREADING */

@@ -75,9 +75,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
  */
 enum sm_engine_state {
 	ENGINE_INIT,
-	ENGINE_DO_BOOTSTRAP,
-	ENGINE_BOOTSTRAP_SENT,
-	ENGINE_BOOTSTRAP_DONE,
+#if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP)
+	ENGINE_DO_BOOTSTRAP_REG,
+	ENGINE_BOOTSTRAP_REG_SENT,
+	ENGINE_BOOTSTRAP_REG_DONE,
+	ENGINE_BOOTSTRAP_TRANS_DONE,
+#endif
 	ENGINE_DO_REGISTRATION,
 	ENGINE_REGISTRATION_SENT,
 	ENGINE_REGISTRATION_DONE,
@@ -215,7 +218,6 @@ static int do_bootstrap_reply_cb(const struct coap_packet *response,
 		LOG_ERR("Failed with code %u.%u. Retrying ...",
 			COAP_RESPONSE_CODE_CLASS(code),
 			COAP_RESPONSE_CODE_DETAIL(code));
-		lwm2m_engine_context_close(client.ctx);
 		set_sm_state(ENGINE_INIT);
 	}
 
@@ -225,9 +227,6 @@ static int do_bootstrap_reply_cb(const struct coap_packet *response,
 static void do_bootstrap_reg_timeout_cb(struct lwm2m_message *msg)
 {
 	LOG_WRN("Bootstrap Timeout");
-
-	/* close down context resources */
-	lwm2m_engine_context_close(msg->ctx);
 
 	/* TODO:
 	 * Look for the "next" BOOTSTRAP server entry in our security info
@@ -302,9 +301,6 @@ static void do_registration_timeout_cb(struct lwm2m_message *msg)
 {
 	LOG_WRN("Registration Timeout");
 
-	/* close down context resources */
-	lwm2m_engine_context_close(msg->ctx);
-
 	/* Restart from scratch */
 	sm_handle_timeout_state(msg, ENGINE_INIT);
 }
@@ -376,9 +372,6 @@ static void do_deregister_timeout_cb(struct lwm2m_message *msg)
 {
 	LOG_WRN("De-Registration Timeout");
 
-	/* close down context resources */
-	lwm2m_engine_context_close(msg->ctx);
-
 	/* Abort de-registration and start from scratch */
 	sm_handle_timeout_state(msg, ENGINE_INIT);
 }
@@ -401,7 +394,7 @@ static int sm_select_next_sec_inst(bool bootstrap_server,
 	end = (i == -1 ? CONFIG_LWM2M_SECURITY_INSTANCE_COUNT : i);
 
 	/* loop through servers starting from the index after the current one */
-	for (i++; i != end; i++) {
+	for (i++; i < end; i++) {
 		if (i >= CONFIG_LWM2M_SECURITY_INSTANCE_COUNT) {
 			i = 0;
 		}
@@ -411,6 +404,7 @@ static int sm_select_next_sec_inst(bool bootstrap_server,
 			continue;
 		}
 
+		/* Query for bootstrap support */
 		snprintk(pathstr, sizeof(pathstr), "0/%d/1",
 			 obj_inst_id);
 		ret = lwm2m_engine_get_bool(pathstr, &temp);
@@ -443,11 +437,10 @@ static int sm_select_next_sec_inst(bool bootstrap_server,
 
 	if (*sec_obj_inst < 0) {
 		/* no servers found */
-		LOG_DBG("sec_obj_inst: NOT_FOUND");
+		LOG_WRN("sec_obj_inst: No matching servers found.");
 		return -ENOENT;
 	}
 
-	LOG_DBG("sec_obj_inst: %d", *sec_obj_inst);
 	return 0;
 }
 
@@ -455,12 +448,13 @@ static int sm_select_next_sec_inst(bool bootstrap_server,
 
 static int sm_do_init(void)
 {
+	client.ctx->sec_obj_inst = -1;
 	client.trigger_update = 0U;
 	client.lifetime = 0U;
 
 	/* Do bootstrap or registration */
-#if defined(CONFIG_LWM2M_BOOTSTRAP_SERVER)
-	set_sm_state(ENGINE_DO_BOOTSTRAP);
+#if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP)
+	set_sm_state(ENGINE_DO_BOOTSTRAP_REG);
 #else
 	set_sm_state(ENGINE_DO_REGISTRATION);
 #endif
@@ -473,14 +467,19 @@ static int sm_do_bootstrap_reg(void)
 	struct lwm2m_message *msg;
 	int ret;
 
-	/* TODO: clear out connection data? */
+	/* clear out existing connection data */
+	if (client.ctx->sock_fd > -1) {
+		lwm2m_engine_context_close(client.ctx);
+	}
 
 	client.ctx->bootstrap_mode = true;
 	ret = sm_select_next_sec_inst(client.ctx->bootstrap_mode,
 				      &client.ctx->sec_obj_inst,
 				      &client.lifetime);
 	if (ret < 0) {
-		/* try again */
+		/* no bootstrap server found, let's move to registration */
+		LOG_WRN("Bootstrap server not found! Try normal registration.");
+		set_sm_state(ENGINE_DO_REGISTRATION);
 		return ret;
 	}
 
@@ -672,7 +671,10 @@ static int sm_do_registration(void)
 {
 	int ret = 0;
 
-	/* TODO: clear out connection data? */
+	/* clear out existing connection data */
+	if (client.ctx->sock_fd > -1) {
+		lwm2m_engine_context_close(client.ctx);
+	}
 
 	client.ctx->bootstrap_mode = false;
 	ret = sm_select_next_sec_inst(client.ctx->bootstrap_mode,

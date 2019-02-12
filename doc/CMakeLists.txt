@@ -14,7 +14,7 @@ find_package(LATEX)
 
 find_program(
   SPHINXBUILD
-  sphinx-build
+  NAMES sphinx-build-3 sphinx-build
   )
 if(${SPHINXBUILD} STREQUAL SPHINXBUILD-NOTFOUND)
   message(FATAL_ERROR "The 'sphinx-build' command was not found. Make sure you have Sphinx installed.")
@@ -73,6 +73,7 @@ set(DOC_WARN ${CMAKE_CURRENT_BINARY_DIR}/doc.warnings)
 set(CONTENT_OUTPUTS ${CMAKE_CURRENT_BINARY_DIR}/extracted-content.txt)
 
 configure_file(${DOXYFILE_IN} ${DOXYFILE_OUT} @ONLY)
+file(TOUCH ${CMAKE_CURRENT_BINARY_DIR}/Kconfig.modules)
 
 # This command is used to copy all documentation source files into the build
 # directory,
@@ -142,8 +143,10 @@ add_custom_target(
   KERNELVERSION=${KERNELVERSION}
   BOARD_DIR=boards/*/*/
   ARCH=*
+  ARCH_DIR=arch/
   SOC_DIR=soc/
   SRCARCH=x86
+  PROJECT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
   KCONFIG_TURBO_MODE=${KCONFIG_TURBO_MODE}
   KCONFIG_DOC_MODE=1
   ${PYTHON_EXECUTABLE} scripts/genrest.py Kconfig ${RST_OUT}/doc/reference/kconfig/

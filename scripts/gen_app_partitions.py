@@ -13,16 +13,36 @@ from elf_helper import ElfHelper
 from elftools.elf.elffile import ELFFile
 
 
-# This script will create linker comands for power of two aligned MPU
-# when APP_SHARED_MEM is enabled.
-print_template = """
+# This script will create sections and linker variables to place the
+# application shared memory partitions.
+# these are later read by the macros defined in app_memdomain.h for
+# initialization purpose when APP_SHARED_MEM is enabled.
+data_template = """
 		/* Auto generated code do not modify */
-		MPU_ALIGN(data_smem_{0}b_end - data_smem_{0});
-		data_smem_{0} = .;
-		KEEP(*(SORT(data_smem_{0}*)))
-		MPU_ALIGN(data_smem_{0}b_end - data_smem_{0});
-		data_smem_{0}b_end = .;
+		SMEM_PARTITION_ALIGN(data_smem_{0}_bss_end - data_smem_{0}_start);
+		data_smem_{0}_start = .;
+		KEEP(*(data_smem_{0}_data))
 """
+
+library_data_template = """
+		*{0}:*(.data .data.*)
+"""
+
+bss_template = """
+		data_smem_{0}_bss_start = .;
+		KEEP(*(data_smem_{0}_bss))
+"""
+
+library_bss_template = """
+		*{0}:*(.bss .bss.* COMMON COMMON.*)
+"""
+
+footer_template = """
+		SMEM_PARTITION_ALIGN(data_smem_{0}_bss_end - data_smem_{0}_start);
+		data_smem_{0}_bss_end = .;
+		data_smem_{0}_end = .;
+"""
+
 linker_start_seq = """
 	SECTION_PROLOGUE(_APP_SMEM_SECTION_NAME, (OPTIONAL),)
 	{
@@ -31,45 +51,51 @@ linker_start_seq = """
 """
 
 linker_end_seq = """
-		_app_smem_end = .;
 		APP_SHARED_ALIGN;
+		_app_smem_end = .;
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 """
 
 size_cal_string = """
-	data_smem_{0}_size = data_smem_{0}b_end - data_smem_{0};
+	data_smem_{0}_size = data_smem_{0}_end - data_smem_{0}_start;
+	data_smem_{0}_bss_size = data_smem_{0}_bss_end - data_smem_{0}_bss_start;
 """
 
+section_regex = re.compile(r'data_smem_([A-Za-z0-9_]*)_(data|bss)')
 
-def find_partitions(filename, full_list_of_partitions, partitions_source_file):
+def find_partitions(filename, partitions, sources):
     with open(filename, 'rb') as f:
         full_lib = ELFFile( f)
         if (not full_lib):
             print("Error parsing file: ",filename)
             os.exit(1)
 
-        sections = [ x for x in full_lib.iter_sections()]
+        sections = [x for x in full_lib.iter_sections()]
         for section in sections:
-            if ("smem" in  section.name and not ".rel" in section.name):
-                partition_name = section.name.split("data_smem_")[1]
-                if partition_name not in full_list_of_partitions:
-                    full_list_of_partitions.append(partition_name)
-                    if args.verbose:
-                        partitions_source_file.update({partition_name: filename})
+            m = section_regex.match(section.name)
+            if not m:
+                continue
 
-    return( full_list_of_partitions, partitions_source_file)
+            partition_name = m.groups()[0]
+            if partition_name not in partitions:
+                partitions[partition_name] = []
+                if args.verbose:
+                    sources.update({partition_name: filename})
 
-def cleanup_remove_bss_regions(full_list_of_partitions):
-    for partition in full_list_of_partitions:
-        if (partition+"b" in full_list_of_partitions):
-            full_list_of_partitions.remove(partition+"b")
-    return full_list_of_partitions
+    return (partitions, sources)
 
-def generate_final_linker(linker_file, full_list_of_partitions):
+
+def generate_final_linker(linker_file, partitions):
     string = linker_start_seq
     size_string = ''
-    for partition in full_list_of_partitions:
-        string += print_template.format(partition)
+    for partition, libs in partitions.items():
+        string += data_template.format(partition)
+        for lib in libs:
+            string += library_data_template.format(lib)
+        string += bss_template.format(partition)
+        for lib in libs:
+            string += library_bss_template.format(lib)
+        string += footer_template.format(partition)
         size_string += size_cal_string.format(partition)
 
     string += linker_end_seq
@@ -89,27 +115,37 @@ def parse_args():
                         help="Output ld file")
     parser.add_argument("-v", "--verbose", action="count", default =0,
                         help="Verbose Output")
+    parser.add_argument("-l", "--library", nargs=2, action="append", default=[],
+                        metavar=("LIBRARY", "PARTITION"),
+                        help="Include globals for a particular library or object filename into a designated partition")
+
     args = parser.parse_args()
 
 
 def main():
     parse_args()
-    root_directory = args.directory
     linker_file = args.output
-    full_list_of_partitions = []
-    partitions_source_file= {}
+    partitions = {}
+    sources = {}
 
-    for dirpath, dirs, files in os.walk(root_directory):
+    for dirpath, dirs, files in os.walk(args.directory):
         for filename in files:
             if re.match(".*\.obj$",filename):
                 fullname = os.path.join(dirpath, filename)
-                full_list_of_partitions, partitions_source_file = find_partitions(fullname, full_list_of_partitions, partitions_source_file)
+                find_partitions(fullname, partitions,
+                                sources)
 
-    full_list_of_partitions = cleanup_remove_bss_regions(full_list_of_partitions)
-    generate_final_linker(linker_file, full_list_of_partitions)
+    for lib, ptn in args.library:
+        if ptn not in partitions:
+            partitions[ptn] = [lib]
+        else:
+            partitions[ptn].append(lib)
+
+    generate_final_linker(args.output, partitions)
     if args.verbose:
-        print("Partitions retrieved: PARTITION, FILENAME")
-        print([key + " "+ partitions_source_file[key] for key in full_list_of_partitions])
+        print("Partitions retrieved:")
+        for key in partitions:
+            print("    %s: %s\n", key, sources[key])
 
 if __name__ == '__main__':
     main()

@@ -93,8 +93,8 @@ MEMORY
 #ifdef CONFIG_TI_CCFG_PRESENT
     FLASH_CCFG            (rwx): ORIGIN = CCFG_ADDR, LENGTH = CCFG_SIZE
 #endif
-#ifdef CONFIG_CCM_BASE_ADDRESS
-    CCM                   (rw) : ORIGIN = CONFIG_CCM_BASE_ADDRESS, LENGTH = CONFIG_CCM_SIZE * 1K
+#ifdef DT_CCM_BASE_ADDRESS
+    CCM                   (rw) : ORIGIN = DT_CCM_BASE_ADDRESS, LENGTH = DT_CCM_SIZE * 1K
 #endif
     SRAM                  (wx) : ORIGIN = RAM_ADDR, LENGTH = RAM_SIZE
 
@@ -354,55 +354,14 @@ SECTIONS
 
 #endif /* CONFIG_COVERAGE_GCOV */
 
-#ifdef CONFIG_APPLICATION_MEMORY
-	SECTION_DATA_PROLOGUE(_APP_DATA_SECTION_NAME, (OPTIONAL),)
-	{
-
-		MPU_ALIGN(__app_ram_size);
-		__app_ram_start = .;
-		__app_data_ram_start = .;
-		APP_INPUT_SECTION(.data)
-		APP_INPUT_SECTION(".data.*")
-		__app_data_ram_end = .;
-	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
-
-	__app_data_rom_start = LOADADDR(_APP_DATA_SECTION_NAME);
-
-	SECTION_PROLOGUE(_APP_BSS_SECTION_NAME, (NOLOAD OPTIONAL),)
-	{
-		__app_bss_start = .;
-		APP_INPUT_SECTION(.bss)
-		APP_INPUT_SECTION(".bss.*")
-		APP_INPUT_SECTION(COMMON)
-		__app_bss_end = .;
-	} GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
-
-	__app_bss_num_words = (__app_bss_end - __app_bss_start) >> 2;
-
-	SECTION_PROLOGUE(_APP_NOINIT_SECTION_NAME, (NOLOAD OPTIONAL),)
-	{
-		APP_INPUT_SECTION(.noinit)
-		APP_INPUT_SECTION(".noinit.*")
-
-		__app_last_address_used = .;
-
-		/* Align the end of the application memory
-		 * with MPU alignment requirement.
-		 */
-		MPU_ALIGN(__app_ram_size);
-		__app_ram_end = .;
-	} GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
-	__app_ram_size = __app_ram_end - __app_ram_start;
-#endif /* CONFIG_APPLICATION_MEMORY */
-
 #if defined(CONFIG_NOCACHE_MEMORY)
 	/* Non-cached region of RAM */
 	SECTION_PROLOGUE(_NOCACHE_SECTION_NAME,(NOLOAD),)
 	{
 		MPU_ALIGN(_nocache_ram_size);
 		_nocache_ram_start = .;
-		KERNEL_INPUT_SECTION(.nocache)
-		KERNEL_INPUT_SECTION(".nocache.*")
+		*(.nocache)
+		*(".nocache.*")
 		MPU_ALIGN(_nocache_ram_size);
 		_nocache_ram_end = .;
 	} GROUP_LINK_IN(RAMABLE_REGION)
@@ -411,22 +370,9 @@ SECTIONS
 
 #if defined(CONFIG_APP_SHARED_MEM)
 #define APP_SHARED_ALIGN . = ALIGN(_region_min_align);
-#if defined(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT)
-		#include <app_smem.ld>
-#else
-	SECTION_PROLOGUE(_APP_SMEM_SECTION_NAME, (OPTIONAL),)
-	{
-		APP_SHARED_ALIGN;
-		_app_smem_start = .;
-		APP_SMEM_SECTION()
-		/* Align the end of shared app mem section with the
-		 * minimum granularity required by MPU.
-		 */
-		APP_SHARED_ALIGN;
-		_app_smem_end = .;
+#define SMEM_PARTITION_ALIGN MPU_ALIGN
 
-	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
-#endif  /* CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT */
+#include <app_smem.ld>
 
 	_app_smem_size = _app_smem_end - _app_smem_start;
 	_app_smem_rom_start = LOADADDR(_APP_SMEM_SECTION_NAME);
@@ -442,9 +388,9 @@ SECTIONS
 	__bss_start = .;
 	__kernel_ram_start = .;
 
-	KERNEL_INPUT_SECTION(.bss)
-	KERNEL_INPUT_SECTION(".bss.*")
-	KERNEL_INPUT_SECTION(COMMON)
+	*(.bss)
+	*(".bss.*")
+	*(COMMON)
 	*(".kernel_bss.*")
 
         /*
@@ -460,8 +406,8 @@ SECTIONS
          * This section is used for non-initialized objects that
          * will not be cleared during the boot process.
          */
-        KERNEL_INPUT_SECTION(.noinit)
-        KERNEL_INPUT_SECTION(".noinit.*")
+        *(.noinit)
+        *(".noinit.*")
 	*(".kernel_noinit.*")
 
 #ifdef CONFIG_SOC_NOINIT_LD
@@ -473,8 +419,8 @@ SECTIONS
     SECTION_DATA_PROLOGUE(_DATA_SECTION_NAME,,)
 	{
 	__data_ram_start = .;
-	KERNEL_INPUT_SECTION(.data)
-	KERNEL_INPUT_SECTION(".data.*")
+	*(.data)
+	*(".data.*")
 	*(".kernel.*")
 
 #ifdef CONFIG_SOC_RWDATA_LD
@@ -509,7 +455,7 @@ SECTIONS
 
     GROUP_END(RAMABLE_REGION)
 
-#ifdef CONFIG_CCM_BASE_ADDRESS
+#ifdef DT_CCM_BASE_ADDRESS
 
     GROUP_START(CCM)
 
@@ -546,7 +492,7 @@ SECTIONS
 
     GROUP_END(CCM)
 
-#endif /* CONFIG_CCM_BASE_ADDRESS */
+#endif /* DT_CCM_BASE_ADDRESS */
 
 #ifdef CONFIG_CUSTOM_SECTIONS_LD
 /* Located in project source directory */

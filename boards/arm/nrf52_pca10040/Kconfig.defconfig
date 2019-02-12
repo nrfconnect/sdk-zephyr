@@ -23,11 +23,21 @@ config I2C_0
 
 endif # I2C
 
+if PWM
+
+config PWM_0
+	default y
+
+endif # PWM
+
 if SPI
 
 config SPI_1
 	default y
 
 endif # SPI
+
+config BT_CTLR
+	default BT
 
 endif # BOARD_NRF52_PCA10040

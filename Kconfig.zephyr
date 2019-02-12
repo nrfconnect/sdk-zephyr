@@ -41,6 +41,7 @@ source "ext/Kconfig"
 source "tests/Kconfig"
 
 orsource "../nrf/Kconfig.nrf"
+source "$(PROJECT_BINARY_DIR)/Kconfig.modules"
 
 menu "Build and Link Features"
 

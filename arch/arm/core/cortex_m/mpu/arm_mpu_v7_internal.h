@@ -23,7 +23,8 @@ static void _mpu_init(void)
  * Note:
  *   The caller must provide a valid region index.
  */
-static void _region_init(u32_t index, const struct arm_mpu_region *region_conf)
+static void _region_init(const u32_t index,
+	const struct arm_mpu_region *region_conf)
 {
 	/* Select the region you want to access */
 	MPU->RNR = index;
@@ -35,11 +36,30 @@ static void _region_init(u32_t index, const struct arm_mpu_region *region_conf)
 		index, region_conf->base, region_conf->attr.rasr);
 }
 
-#if defined(CONFIG_USERSPACE) || defined(CONFIG_MPU_STACK_GUARD) || \
-	defined(CONFIG_APPLICATION_MEMORY) || defined(CONFIG_NOCACHE_MEMORY)
+/* @brief Partition sanity check
+ *
+ * This internal function performs run-time sanity check for
+ * MPU region start address and size.
+ *
+ * @param part Pointer to the data structure holding the partition
+ *             information (must be valid).
+ */
+static int _mpu_partition_is_valid(const struct k_mem_partition *part)
+{
+	/* Partition size must be power-of-two,
+	 * and greater or equal to the minimum
+	 * MPU region size. Start address of the
+	 * partition must align with size.
+	 */
+	int partition_is_valid =
+		((part->size & (part->size - 1)) == 0)
+		&&
+		(part->size >= CONFIG_ARM_MPU_REGION_MIN_ALIGN_AND_SIZE)
+		&&
+		((part->start & (part->size - 1)) == 0);
 
-static inline u8_t _get_num_regions(void);
-static inline u32_t _get_region_index_by_type(u32_t type);
+	return partition_is_valid;
+}
 
 /**
  * This internal function converts the region size to
@@ -70,69 +90,13 @@ static inline u32_t _size_to_mpu_rasr_size(u32_t size)
 }
 
 /**
- * Generate the value of the MPU Region Attribute and Size Register
- * (MPU_RASR) that corresponds to the supplied MPU region attributes.
- * This function is internal to the driver.
- */
-static inline u32_t _get_region_attr(u32_t xn, u32_t ap, u32_t tex,
-				     u32_t c, u32_t b, u32_t s,
-				     u32_t srd, u32_t region_size)
-{
-	int size = _size_to_mpu_rasr_size(region_size);
-
-	return (((xn << MPU_RASR_XN_Pos) & MPU_RASR_XN_Msk)
-		| ((ap << MPU_RASR_AP_Pos) & MPU_RASR_AP_Msk)
-		| ((tex << MPU_RASR_TEX_Pos) & MPU_RASR_TEX_Msk)
-		| ((s << MPU_RASR_S_Pos) & MPU_RASR_S_Msk)
-		| ((c << MPU_RASR_C_Pos) & MPU_RASR_C_Msk)
-		| ((b << MPU_RASR_B_Pos) & MPU_RASR_B_Msk)
-		| ((srd << MPU_RASR_SRD_Pos) & MPU_RASR_SRD_Msk)
-		| (size));
-}
-
-#if defined(CONFIG_USERSPACE) || defined(CONFIG_MPU_STACK_GUARD) || \
-	defined(CONFIG_APPLICATION_MEMORY)
-/**
- * This internal function allocates default RAM cache-ability, share-ability,
- * and execution allowance attributes along with the requested access
- * permissions and size.
- */
-static inline void _get_mpu_ram_region_attr(arm_mpu_region_attr_t *p_attr,
-	u32_t ap, u32_t base, u32_t size)
-{
-	/* in ARMv7-M MPU the base address is not required
-	 * to determine region attributes.
-	 */
-	(void) base;
-
-	p_attr->rasr = _get_region_attr(1, ap, 1, 1, 1, 0, 0, size);
-}
-#endif /* USERSPACE || MPU_STACK_GUARD || APPLICATION_MEMORY */
-
-#if defined(CONFIG_NOCACHE_MEMORY)
-/**
- * This internal function allocates non-cached, shareable, non-executable
- * memory along with the requested access permissions ans size.
- */
-static inline void _get_mpu_ram_nocache_region_attr(arm_mpu_region_attr_t *p_attr,
-	u32_t ap, u32_t base, u32_t size)
-{
-	/* in ARMv7-M MPU the base address is not required
-	 * to determine region attributes.
-	 */
-	(void) base;
-
-	p_attr->rasr = _get_region_attr(1, ap, 1, 0, 0, 1, 0, size);
-}
-#endif /* CONFIG_NO_CACHE_MEMORY */
-
-/**
  * This internal function is utilized by the MPU driver to combine a given
- * MPU RAM attribute configuration and region size and return the correct
- * parameter set.
+ * region attribute configuration and size and fill-in a driver-specific
+ * structure with the correct MPU region configuration.
  */
-static inline void _get_ram_region_attr_by_conf(arm_mpu_region_attr_t *p_attr,
-	k_mem_partition_attr_t *attr, u32_t base, u32_t size)
+static inline void _get_region_attr_from_k_mem_partition_info(
+	arm_mpu_region_attr_t *p_attr,
+	const k_mem_partition_attr_t *attr, u32_t base, u32_t size)
 {
 	/* in ARMv7-M MPU the base address is not required
 	 * to determine region attributes
@@ -142,17 +106,59 @@ static inline void _get_ram_region_attr_by_conf(arm_mpu_region_attr_t *p_attr,
 	p_attr->rasr = attr->rasr_attr | _size_to_mpu_rasr_size(size);
 }
 
+#if defined(CONFIG_USERSPACE)
+
+/**
+ * This internal function converts the SIZE field value of MPU_RASR
+ * to the region size (in bytes).
+ */
+static inline u32_t _mpu_rasr_size_to_size(u32_t rasr_size)
+{
+	return 1 << (rasr_size + 1);
+}
+
+static inline u32_t _mpu_region_get_base(u32_t index)
+{
+	MPU->RNR = index;
+	return MPU->RBAR & MPU_RBAR_ADDR_Msk;
+}
+
+static inline u32_t _mpu_region_get_size(u32_t index)
+{
+	MPU->RNR = index;
+	u32_t rasr_size = (MPU->RASR & MPU_RASR_SIZE_Msk) >> MPU_RASR_SIZE_Pos;
+
+	return _mpu_rasr_size_to_size(rasr_size);
+}
+
 /**
  * This internal function checks if region is enabled or not.
  *
  * Note:
  *   The caller must provide a valid region number.
  */
-static inline int _is_enabled_region(u32_t r_index)
+static inline int _is_enabled_region(u32_t index)
+{
+	MPU->RNR = index;
+	return (MPU->RASR & MPU_RASR_ENABLE_Msk) ? 1 : 0;
+}
+
+/* Only a single bit is set for all user accessible permissions.
+ * In ARMv7-M MPU this is bit AP[1].
+ */
+#define MPU_USER_READ_ACCESSIBLE_Msk (P_RW_U_RO & P_RW_U_RW & P_RO_U_RO & RO)
+
+/**
+ * This internal function returns the access permissions of an MPU region
+ * specified by its region index.
+ *
+ * Note:
+ *   The caller must provide a valid region number.
+ */
+static inline u32_t _get_region_ap(u32_t r_index)
 {
 	MPU->RNR = r_index;
-
-	return MPU->RASR & MPU_RASR_ENABLE_Msk;
+	return (MPU->RASR & MPU_RASR_AP_Msk) >> MPU_RASR_AP_Pos;
 }
 
 /**
@@ -181,25 +187,6 @@ static inline int _is_in_region(u32_t r_index, u32_t start, u32_t size)
 }
 
 /**
- * This internal function returns the access permissions of an MPU region
- * specified by its region index.
- *
- * Note:
- *   The caller must provide a valid region number.
- */
-static inline u32_t _get_region_ap(u32_t r_index)
-{
-	MPU->RNR = r_index;
-	return (MPU->RASR & MPU_RASR_AP_Msk) >> MPU_RASR_AP_Pos;
-}
-
-/* Only a single bit is set for all user accessible permissions.
- * In ARMv7-M MPU this is bit AP[1].
- */
-#define MPU_USER_READ_ACCESSIBLE_Msk (P_RW_U_RO & P_RW_U_RW & P_RO_U_RO & RO)
-
-#if defined(CONFIG_USERSPACE)
-/**
  * This internal function checks if the region is user accessible or not.
  *
  * Note:
@@ -209,10 +196,6 @@ static inline int _is_user_accessible_region(u32_t r_index, int write)
 {
 	u32_t r_ap = _get_region_ap(r_index);
 
-	/* always return true if this is the thread stack region */
-	if (_get_region_index_by_type(THREAD_STACK_REGION) == r_index) {
-		return 1;
-	}
 
 	if (write) {
 		return r_ap == P_RW_U_RW;
@@ -251,9 +234,106 @@ static inline int _mpu_buffer_validate(void *addr, size_t size, int write)
 	return -EPERM;
 
 }
+
 #endif /* CONFIG_USERSPACE */
 
-#endif /* USERSPACE || MPU_STACK_GUARD || APPLICATION_MEMORY
-		|| NOCACHE_MEMORY */
+static int _mpu_configure_region(const u8_t index,
+	const struct k_mem_partition *new_region);
+
+/* This internal function programs a set of given MPU regions
+ * over a background memory area, optionally performing a
+ * sanity check of the memory regions to be programmed.
+ */
+static int _mpu_configure_regions(const struct k_mem_partition
+	regions[], u8_t regions_num, u8_t start_reg_index,
+	bool do_sanity_check)
+{
+	int i;
+	u8_t reg_index = start_reg_index;
+
+	for (i = 0; i < regions_num; i++) {
+		if (regions[i].size == 0) {
+			continue;
+		}
+		/* Non-empty region. */
+
+		if (do_sanity_check &&
+				(!_mpu_partition_is_valid(&regions[i]))) {
+			LOG_ERR("Partition %u: sanity check failed.", i);
+			return -EINVAL;
+		}
+
+		reg_index = _mpu_configure_region(reg_index, &regions[i]);
+
+		if (reg_index == -EINVAL) {
+			return reg_index;
+		}
+
+		/* Increment number of programmed MPU indices. */
+		reg_index++;
+	}
+
+	return reg_index;
+}
+
+/* This internal function programs the static MPU regions.
+ *
+ * It returns the number of MPU region indices configured.
+ *
+ * Note:
+ * If the static MPU regions configuration has not been successfully
+ * performed, the error signal is propagated to the caller of the function.
+ */
+static int _mpu_configure_static_mpu_regions(const struct k_mem_partition
+	static_regions[], const u8_t regions_num,
+	const u32_t background_area_base,
+	const u32_t background_area_end)
+{
+	int mpu_reg_index = static_regions_num;
+
+	/* In ARMv7-M architecture the static regions are
+	 * programmed on top of SRAM region configuration.
+	 */
+	ARG_UNUSED(background_area_base);
+	ARG_UNUSED(background_area_end);
+
+	mpu_reg_index = _mpu_configure_regions(static_regions,
+		regions_num, mpu_reg_index, true);
+
+	static_regions_num = mpu_reg_index;
+
+	return mpu_reg_index;
+}
+
+/* This internal function programs the dynamic MPU regions.
+ *
+ * It returns the number of MPU region indices configured.
+ *
+ * Note:
+ * If the dynamic MPU regions configuration has not been successfully
+ * performed, the error signal is propagated to the caller of the function.
+ */
+static int _mpu_configure_dynamic_mpu_regions(const struct k_mem_partition
+		dynamic_regions[], u8_t regions_num)
+{
+	u32_t mpu_reg_index = static_regions_num;
+
+	/* In ARMv7-M architecture the dynamic regions are
+	 * programmed on top of existing SRAM region configuration.
+	 */
+
+	mpu_reg_index = _mpu_configure_regions(dynamic_regions,
+		regions_num, mpu_reg_index, false);
+
+	if (mpu_reg_index != -EINVAL) {
+
+		/* Disable the non-programmed MPU regions. */
+		for (int i = mpu_reg_index; i < _get_num_regions(); i++) {
+			ARM_MPU_ClrRegion(i);
+		}
+	}
+
+	return mpu_reg_index;
+}
 
 #endif	/* ZEPHYR_ARCH_ARM_CORE_CORTEX_M_MPU_ARM_MPU_V7_INTERNAL_H_ */

@@ -40,13 +40,13 @@ SECTION_FUNC(TEXT,_arm_userspace_enter)
     /* move user_entry to lr */
     mov lr, r0
 
-#if defined (CONFIG_MPU_STACK_GUARD)
-    /* Re-program MPU to guard the privileged stack. */
-    push {r1,r2,r3,lr}
+#if defined (CONFIG_ARM_MPU)
+    /* Re-program dynamic memory map */
+    push {r1,r2,r3,ip,lr}
     ldr r0, =_kernel
     ldr r0, [r0, #_kernel_offset_to_current]
-    bl configure_mpu_stack_guard
-    pop {r1,r2,r3,lr}
+    bl _arch_configure_dynamic_mpu_regions
+    pop {r1,r2,r3,ip,lr}
 #endif
 
     /* set stack to privileged stack */
@@ -97,16 +97,6 @@ SECTION_FUNC(TEXT,_arm_userspace_enter)
 #endif
     bl memset
 
-    /* setup arguments to configure_mpu_mem_domain */
-    ldr r0, =_kernel
-    ldr r0, [r0, #_kernel_offset_to_current]
-    bl configure_mpu_mem_domain
-
-    /* setup arguments to configure_mpu_user_context */
-    ldr r0, =_kernel
-    ldr r0, [r0, #_kernel_offset_to_current]
-    bl configure_mpu_user_context
-
     pop {r0,r1,r2,r3,ip,lr}
 
     /* r0 contains user stack start, ip contains user stack size */
@@ -128,10 +118,16 @@ SECTION_FUNC(TEXT,_arm_userspace_enter)
 
 #ifdef CONFIG_EXECUTION_BENCHMARKING
     stm sp!,{r0-r3} /* Save regs r0 to r4 on stack */
-    push {lr}
+    push {r0, lr}
     bl read_timer_end_of_userspace_enter
-    pop {lr}
-    ldm sp!,{r0-r3} /* Load back regs ro to r4 */
+#if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
+    pop {r0, r3}
+    mov lr,r3
+#else
+    pop {r0, lr}
+#endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
+    ldm sp!,{r0-r3} /* Restore r0 to r3 regs */
+
 #endif /* CONFIG_EXECUTION_BENCHMARKING */
 
     /* change processor mode to unprivileged */

@@ -46,7 +46,7 @@ class DTPinCtrl(DTDirective):
             if cell_prefix is not None:
                 post_fix.append(cell_prefix)
 
-            for subnode in reduced.keys():
+            for subnode in reduced:
                 if pin_subnode in subnode and pin_node_address != subnode:
                     # found a subnode underneath the pinmux handle
                     pin_label = def_prefix + post_fix + subnode.split('/')[-2:]
@@ -56,8 +56,8 @@ class DTPinCtrl(DTDirective):
                             [cell_yaml['#cells'][0]] + [str(i)]
                         func_label = key_label[:-2] + \
                             [cell_yaml['#cells'][1]] + [str(i)]
-                        key_label = convert_string_to_label('_'.join(key_label))
-                        func_label = convert_string_to_label('_'.join(func_label))
+                        key_label = str_to_label('_'.join(key_label))
+                        func_label = str_to_label('_'.join(func_label))
 
                         prop_def[key_label] = cells
                         prop_def[func_label] = \

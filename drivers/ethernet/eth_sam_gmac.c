@@ -103,6 +103,15 @@ static struct net_buf *rx_frag_list_que1[PRIORITY_QUEUE1_RX_DESC_COUNT];
 #if GMAC_PRIORITY_QUEUE_NO == 2
 static struct net_buf *rx_frag_list_que2[PRIORITY_QUEUE2_RX_DESC_COUNT];
 #endif
+/* TX buffer accounting list */
+static struct net_buf *tx_frag_list_que0[MAIN_QUEUE_TX_DESC_COUNT];
+#if GMAC_PRIORITY_QUEUE_NO >= 1
+static struct net_buf *tx_frag_list_que1[PRIORITY_QUEUE1_TX_DESC_COUNT];
+#endif
+#if GMAC_PRIORITY_QUEUE_NO == 2
+static struct net_buf *tx_frag_list_que2[PRIORITY_QUEUE2_TX_DESC_COUNT];
+#endif
+#if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 /* TX frames accounting list */
 static struct net_pkt *tx_frame_list_que0[CONFIG_NET_PKT_TX_COUNT + 1];
 #if GMAC_PRIORITY_QUEUE_NO >= 1
@@ -110,6 +119,7 @@ static struct net_pkt *tx_frame_list_que1[CONFIG_NET_PKT_TX_COUNT + 1];
 #endif
 #if GMAC_PRIORITY_QUEUE_NO == 2
 static struct net_pkt *tx_frame_list_que2[CONFIG_NET_PKT_TX_COUNT + 1];
+#endif
 #endif
 
 #define MODULO_INC(val, max) {val = (++val < max) ? val : 0; }
@@ -274,7 +284,10 @@ static void tx_descriptors_init(Gmac *gmac, struct gmac_queue *queue)
 	tx_desc_list->buf[tx_desc_list->len - 1].w1 |= GMAC_TXW1_WRAP;
 
 	/* Reset TX frame list */
+	ring_buf_reset(&queue->tx_frag_list);
+#if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 	ring_buf_reset(&queue->tx_frames);
+#endif
 }
 
 #if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
@@ -474,8 +487,9 @@ static void tx_completed(Gmac *gmac, struct gmac_queue *queue)
 {
 	struct gmac_desc_list *tx_desc_list = &queue->tx_desc_list;
 	struct gmac_desc *tx_desc;
-	struct net_pkt *pkt;
+	struct net_buf *frag;
 #if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
+	struct net_pkt *pkt;
 	u16_t vlan_tag = NET_VLAN_TAG_UNSPEC;
 	struct gptp_hdr *hdr;
 	struct eth_sam_dev_data *dev_data =
@@ -492,10 +506,15 @@ static void tx_completed(Gmac *gmac, struct gmac_queue *queue)
 		MODULO_INC(tx_desc_list->tail, tx_desc_list->len);
 		k_sem_give(&queue->tx_desc_sem);
 
+		/* Release net buffer to the buffer pool */
+		frag = UINT_TO_POINTER(ring_buf_get(&queue->tx_frag_list));
+		net_pkt_frag_unref(frag);
+		LOG_DBG("Dropping frag %p", frag);
+
 		if (tx_desc->w1 & GMAC_TXW1_LASTBUFFER) {
-			/* Release net buffer to the buffer pool */
-			pkt = UINT_TO_POINTER(ring_buf_get(&queue->tx_frames));
 #if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
+			/* Release net packet to the packet pool */
+			pkt = UINT_TO_POINTER(ring_buf_get(&queue->tx_frames));
 #if defined(CONFIG_NET_VLAN)
 			struct net_eth_hdr *eth_hdr = NET_ETH_HDR(pkt);
 
@@ -511,10 +530,9 @@ static void tx_completed(Gmac *gmac, struct gmac_queue *queue)
 			if (hdr && need_timestamping(hdr)) {
 				net_if_add_tx_timestamp(pkt);
 			}
-#endif
 			net_pkt_unref(pkt);
 			LOG_DBG("Dropping pkt %p", pkt);
-
+#endif
 			break;
 		}
 	}
@@ -525,22 +543,37 @@ static void tx_completed(Gmac *gmac, struct gmac_queue *queue)
  */
 static void tx_error_handler(Gmac *gmac, struct gmac_queue *queue)
 {
+	struct net_buf *frag;
+	struct ring_buf *tx_frag_list = &queue->tx_frag_list;
+#if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 	struct net_pkt *pkt;
 	struct ring_buf *tx_frames = &queue->tx_frames;
+#endif
 
 	queue->err_tx_flushed_count++;
 
 	/* Stop transmission, clean transmit pipeline and control registers */
 	gmac->GMAC_NCR &= ~GMAC_NCR_TXEN;
 
+	/* Free all frag resources in the TX path */
+	while (tx_frag_list->tail != tx_frag_list->head) {
+		/* Release net buffer to the buffer pool */
+		frag = UINT_TO_POINTER(tx_frag_list->buf[tx_frag_list->tail]);
+		net_pkt_frag_unref(frag);
+		LOG_DBG("Dropping frag %p", frag);
+		MODULO_INC(tx_frag_list->tail, tx_frag_list->len);
+	}
+
+#if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 	/* Free all pkt resources in the TX path */
 	while (tx_frames->tail != tx_frames->head) {
-		/* Release net buffer to the buffer pool */
+		/* Release net packet to the packet pool */
 		pkt = UINT_TO_POINTER(tx_frames->buf[tx_frames->tail]);
 		net_pkt_unref(pkt);
 		LOG_DBG("Dropping pkt %p", pkt);
 		MODULO_INC(tx_frames->tail, tx_frames->len);
 	}
+#endif
 
 	/* Reinitialize TX descriptor list */
 	k_sem_reset(&queue->tx_desc_sem);
@@ -1306,6 +1339,12 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 		__ASSERT(tx_desc_list->head != tx_desc_list->tail,
 			 "tx_desc_list overflow");
 
+		/* Account for a sent frag */
+		ring_buf_put(&queue->tx_frag_list, POINTER_TO_UINT(frag));
+
+		/* frag is internally queued, so it requires to hold a reference */
+		net_pkt_frag_ref(frag);
+
 		irq_unlock(key);
 
 		/* Continue with the rest of fragments (only data) */
@@ -1333,11 +1372,13 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 	 */
 	tx_first_desc->w1 &= ~GMAC_TXW1_USED;
 
+#if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 	/* Account for a sent frame */
 	ring_buf_put(&queue->tx_frames, POINTER_TO_UINT(pkt));
 
 	/* pkt is internally queued, so it requires to hold a reference */
 	net_pkt_ref(pkt);
+#endif
 
 	irq_unlock(key);
 
@@ -1490,10 +1531,9 @@ static void get_mac_addr_from_i2c_eeprom(u8_t mac_addr[6])
 		return;
 	}
 
-	i2c_burst_read_addr(dev, CONFIG_ETH_SAM_GMAC_MAC_I2C_SLAVE_ADDRESS,
-			    (u8_t *)&iaddr,
-			    CONFIG_ETH_SAM_GMAC_MAC_I2C_INT_ADDRESS_SIZE,
-			    mac_addr, 6);
+	i2c_write_read(dev, CONFIG_ETH_SAM_GMAC_MAC_I2C_SLAVE_ADDRESS,
+		       &iaddr, CONFIG_ETH_SAM_GMAC_MAC_I2C_INT_ADDRESS_SIZE,
+		       mac_addr, 6);
 }
 #endif
 
@@ -1861,10 +1901,16 @@ static struct eth_sam_dev_data eth0_data = {
 				.buf = (u32_t *)rx_frag_list_que0,
 				.len = ARRAY_SIZE(rx_frag_list_que0),
 			},
+			.tx_frag_list = {
+				.buf = (u32_t *)tx_frag_list_que0,
+				.len = ARRAY_SIZE(tx_frag_list_que0),
+			},
+#if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 			.tx_frames = {
 				.buf = (u32_t *)tx_frame_list_que0,
 				.len = ARRAY_SIZE(tx_frame_list_que0),
 			},
+#endif
 		}, {
 			.que_idx = GMAC_QUE_1,
 			.rx_desc_list = {
@@ -1880,10 +1926,16 @@ static struct eth_sam_dev_data eth0_data = {
 				.buf = (u32_t *)rx_frag_list_que1,
 				.len = ARRAY_SIZE(rx_frag_list_que1),
 			},
+			.tx_frag_list = {
+				.buf = (u32_t *)tx_frag_list_que1,
+				.len = ARRAY_SIZE(tx_frag_list_que1),
+			},
+#if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 			.tx_frames = {
 				.buf = (u32_t *)tx_frame_list_que1,
 				.len = ARRAY_SIZE(tx_frame_list_que1),
 			}
+#endif
 #endif
 		}, {
 			.que_idx = GMAC_QUE_2,
@@ -1900,10 +1952,16 @@ static struct eth_sam_dev_data eth0_data = {
 				.buf = (u32_t *)rx_frag_list_que2,
 				.len = ARRAY_SIZE(rx_frag_list_que2),
 			},
+			.tx_frag_list = {
+				.buf = (u32_t *)tx_frag_list_que2,
+				.len = ARRAY_SIZE(tx_frag_list_que2),
+			},
+#if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 			.tx_frames = {
 				.buf = (u32_t *)tx_frame_list_que2,
 				.len = ARRAY_SIZE(tx_frame_list_que2),
 			}
+#endif
 #endif
 		}
 	},

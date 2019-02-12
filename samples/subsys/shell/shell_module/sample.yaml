@@ -2,13 +2,17 @@ sample:
   name: Shell Sample
 tests:
   test:
-    filter: ( CONFIG_UART_CONSOLE and CONFIG_SERIAL_SUPPORT_INTERRUPT )
+    filter: ( CONFIG_SERIAL and CONFIG_UART_SHELL_ON_DEV_NAME )
     tags: shell
     harness: keyboard
     min_ram: 40
   test_minimal:
-    filter: ( CONFIG_UART_CONSOLE and CONFIG_SERIAL_SUPPORT_INTERRUPT )
+    filter: ( CONFIG_SERIAL and CONFIG_UART_SHELL_ON_DEV_NAME )
     tags: shell
     harness: keyboard
     extra_args: CONF_FILE="prj_minimal.conf"
-
+  test_minimal_rtt:
+    filter: ( CONFIG_RTT_CONSOLE and CONFIG_HAS_SEGGER_RTT and CONFIG_USE_SEGGER_RTT)
+    tags: shell
+    harness: keyboard
+    extra_args: CONF_FILE="prj_minimal_rtt.conf"

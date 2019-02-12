@@ -38,9 +38,12 @@ void _move_thread_to_end_of_prio_q(struct k_thread *thread);
 void _remove_thread_from_ready_q(struct k_thread *thread);
 int _is_thread_time_slicing(struct k_thread *thread);
 void _unpend_thread_no_timeout(struct k_thread *thread);
-int _pend_current_thread(u32_t key, _wait_q_t *wait_q, s32_t timeout);
+int _pend_curr(struct k_spinlock *lock, k_spinlock_key_t key,
+	       _wait_q_t *wait_q, s32_t timeout);
+int _pend_curr_irqlock(u32_t key, _wait_q_t *wait_q, s32_t timeout);
 void _pend_thread(struct k_thread *thread, _wait_q_t *wait_q, s32_t timeout);
-void _reschedule(u32_t key);
+void _reschedule(struct k_spinlock *lock, k_spinlock_key_t key);
+void _reschedule_irqlock(u32_t key);
 struct k_thread *_unpend_first_thread(_wait_q_t *wait_q);
 void _unpend_thread(struct k_thread *thread);
 int _unpend_all(_wait_q_t *wait_q);
@@ -50,6 +53,16 @@ struct k_thread *_find_first_thread_to_unpend(_wait_q_t *wait_q,
 					      struct k_thread *from);
 void idle(void *a, void *b, void *c);
 void z_time_slice(int ticks);
+
+static inline void _pend_curr_unlocked(_wait_q_t *wait_q, s32_t timeout)
+{
+	(void) _pend_curr_irqlock(_arch_irq_lock(), wait_q, timeout);
+}
+
+static inline void _reschedule_unlocked(void)
+{
+	(void) _reschedule_irqlock(_arch_irq_lock());
+}
 
 /* find which one is the next thread to run */
 /* must be called with interrupts locked */
@@ -61,7 +74,6 @@ static ALWAYS_INLINE struct k_thread *_get_next_ready_thread(void)
 	return _kernel.ready_q.cache;
 }
 #endif
-
 
 static inline bool _is_idle_thread(void *entry_point)
 {

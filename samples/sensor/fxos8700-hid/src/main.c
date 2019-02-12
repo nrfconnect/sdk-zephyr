@@ -57,62 +57,7 @@ LOG_MODULE_REGISTER(main);
 #define SENSOR_ACCEL_NAME DT_NXP_FXOS8700_0_LABEL
 #endif
 
-static const u8_t hid_report_desc[] = {
-	HID_GI_USAGE_PAGE, USAGE_GEN_DESKTOP,
-	/* USAGE_PAGE (Generic Desktop)				05 01 */
-	HID_LI_USAGE, USAGE_GEN_DESKTOP_MOUSE,
-	/* USAGE (Mouse)					09 02 */
-		HID_MI_COLLECTION, COLLECTION_APPLICATION,
-		/* COLLECTION (Application)			A1 01 */
-			HID_LI_USAGE, USAGE_GEN_DESKTOP_POINTER,
-		/*	USAGE (Pointer)				09 01 */
-			HID_MI_COLLECTION, COLLECTION_PHYSICAL,
-		/*	COLLECTION (Physical)			A1 00 */
-				HID_GI_USAGE_PAGE, USAGE_GEN_BUTTON,
-		/*		USAGE_PAGE (Button)		05 09 */
-				HID_LI_USAGE_MIN(1), 0x01,
-		/*		USAGE_MINIMUM (Button 1)	19 01 */
-				HID_LI_USAGE_MAX(1), 0x03,
-		/*		USAGE_MAXIMUM (Button 3)	29 03 */
-				HID_GI_LOGICAL_MIN(1), 0,
-		/*		LOGICAL_MINIMUM (0)		15 00 */
-				HID_GI_LOGICAL_MAX(1), 1,
-		/*		LOGICAL_MAXIMUM (1)		25 01 */
-				HID_GI_REPORT_COUNT, 3,
-		/*		REPORT_COUNT (3)		95 03 */
-				HID_GI_REPORT_SIZE, 1,
-		/*		REPORT_SIZE (1)			75 01 */
-				HID_MI_INPUT, 0x02,
-		/*		INPUT (Data,Var,Abs)		81 02 */
-				HID_GI_REPORT_COUNT, 1,
-		/*		REPORT_COUNT (1)		95 01 */
-				HID_GI_REPORT_SIZE, 5,
-		/*		REPORT_SIZE (5)			75 05 */
-				HID_MI_INPUT, 0x01,
-		/*		INPUT (Cnst,Ary,Abs)		81 01 */
-				HID_GI_USAGE_PAGE, USAGE_GEN_DESKTOP,
-		/*		USAGE_PAGE (Generic Desktop)	05 01 */
-				HID_LI_USAGE, USAGE_GEN_DESKTOP_X,
-		/*		USAGE (X)			09 30 */
-				HID_LI_USAGE, USAGE_GEN_DESKTOP_Y,
-		/*		USAGE (Y)			09 31 */
-				HID_LI_USAGE, USAGE_GEN_DESKTOP_WHEEL,
-		/*		USAGE (Wheel)			09 38 */
-				HID_GI_LOGICAL_MIN(1), -127,
-		/*		LOGICAL_MINIMUM (-127)		15 81 */
-				HID_GI_LOGICAL_MAX(1), 127,
-		/*		LOGICAL_MAXIMUM (127)		25 7F */
-				HID_GI_REPORT_SIZE, 8,
-		/*		REPORT_SIZE (8)			75 08 */
-				HID_GI_REPORT_COUNT, 3,
-		/*		REPORT_COUNT (3)		95 03 */
-				HID_MI_INPUT, 0x06,
-		/*		INPUT (Data,Var,Rel)		81 06 */
-			HID_MI_COLLECTION_END,
-		/*	END_COLLECTION				C0    */
-		HID_MI_COLLECTION_END,
-		/* END_COLLECTION				C0    */
-};
+static const u8_t hid_report_desc[] = HID_MOUSE_REPORT_DESC(2);
 
 static u32_t def_val[4];
 static volatile u8_t status[4];
@@ -187,12 +132,12 @@ int callbacks_configure(struct device *gpio, u32_t pin, int flags,
 	return 0;
 }
 
-static bool read_accel(struct device *accel)
+static bool read_accel(struct device *dev)
 {
 	struct sensor_value val[3];
 	int ret;
 
-	ret = sensor_channel_get(accel, SENSOR_CHAN_ACCEL_XYZ, val);
+	ret = sensor_channel_get(dev, SENSOR_CHAN_ACCEL_XYZ, val);
 	if (ret < 0) {
 		LOG_ERR("Cannot read sensor channels");
 		return false;
@@ -220,19 +165,19 @@ static bool read_accel(struct device *accel)
 	}
 }
 
-static void trigger_handler(struct device *accel, struct sensor_trigger *tr)
+static void trigger_handler(struct device *dev, struct sensor_trigger *tr)
 {
 	ARG_UNUSED(tr);
 
 	/* Always fetch the sample to clear the data ready interrupt in the
 	 * sensor.
 	 */
-	if (sensor_sample_fetch(accel)) {
+	if (sensor_sample_fetch(dev)) {
 		LOG_ERR("sensor_sample_fetch failed");
 		return;
 	}
 
-	if (read_accel(accel)) {
+	if (read_accel(dev)) {
 		k_sem_give(&sem);
 	}
 }
@@ -241,15 +186,21 @@ void main(void)
 {
 	u8_t report[4] = { 0x00 };
 	u8_t toggle = 0;
-	struct device *dev, *accel;
+	struct device *led_dev, *accel_dev, *hid_dev;
 
-	dev = device_get_binding(LED_PORT);
-	if (dev == NULL) {
+	led_dev = device_get_binding(LED_PORT);
+	if (led_dev == NULL) {
 		LOG_ERR("Could not get %s device", LED_PORT);
 		return;
 	}
 
-	gpio_pin_configure(dev, LED, GPIO_DIR_OUT);
+	hid_dev = device_get_binding(CONFIG_USB_HID_DEVICE_NAME_0);
+	if (hid_dev == NULL) {
+		LOG_ERR("Cannot get USB HID Device");
+		return;
+	}
+
+	gpio_pin_configure(led_dev, LED, GPIO_DIR_OUT);
 
 	if (callbacks_configure(device_get_binding(PORT0), PIN0, PIN0_FLAGS,
 				&left_button, &callback[0], &def_val[0])) {
@@ -265,8 +216,8 @@ void main(void)
 	}
 #endif
 
-	accel = device_get_binding(SENSOR_ACCEL_NAME);
-	if (accel == NULL) {
+	accel_dev = device_get_binding(SENSOR_ACCEL_NAME);
+	if (accel_dev == NULL) {
 		LOG_ERR("Could not get %s device", SENSOR_ACCEL_NAME);
 		return;
 	}
@@ -276,7 +227,7 @@ void main(void)
 		.val2 = 250000,
 	};
 
-	if (sensor_attr_set(accel, SENSOR_CHAN_ALL,
+	if (sensor_attr_set(accel_dev, SENSOR_CHAN_ALL,
 			    SENSOR_ATTR_SAMPLING_FREQUENCY, &attr)) {
 		LOG_ERR("Could not set sampling frequency");
 		return;
@@ -287,13 +238,14 @@ void main(void)
 		.chan = SENSOR_CHAN_ACCEL_XYZ,
 	};
 
-	if (sensor_trigger_set(accel, &trig, trigger_handler)) {
+	if (sensor_trigger_set(accel_dev, &trig, trigger_handler)) {
 		LOG_ERR("Could not set trigger");
 		return;
 	}
 
-	usb_hid_register_device(hid_report_desc, sizeof(hid_report_desc), NULL);
-	usb_hid_init();
+	usb_hid_register_device(hid_dev, hid_report_desc,
+				sizeof(hid_report_desc), NULL);
+	usb_hid_init(hid_dev);
 
 	while (true) {
 		k_sem_take(&sem, K_FOREVER);
@@ -303,10 +255,10 @@ void main(void)
 		status[MOUSE_X_REPORT_POS] = 0;
 		report[MOUSE_Y_REPORT_POS] = status[MOUSE_Y_REPORT_POS];
 		status[MOUSE_Y_REPORT_POS] = 0;
-		hid_int_ep_write(report, sizeof(report), NULL);
+		hid_int_ep_write(hid_dev, report, sizeof(report), NULL);
 
 		/* Toggle LED on sent report */
-		gpio_pin_write(dev, LED, toggle);
+		gpio_pin_write(led_dev, LED, toggle);
 		toggle = !toggle;
 	}
 }

@@ -18,6 +18,8 @@ LOG_MODULE_REGISTER(net_conn, CONFIG_NET_CONN_LOG_LEVEL);
 #include <net/net_pkt.h>
 #include <net/udp.h>
 #include <net/tcp.h>
+#include <net/ethernet.h>
+#include <net/socket_can.h>
 
 #include "net_private.h"
 #include "icmpv6.h"
@@ -284,7 +286,7 @@ static inline enum net_verdict cache_check(struct net_pkt *pkt,
 
 			NET_DBG("Cache %s listener for pkt %p src port %u "
 				"dst port %u family %d cache[%d] 0x%x",
-				net_proto2str(proto), pkt,
+				net_proto2str(net_pkt_family(pkt), proto), pkt,
 				src_port, dst_port,
 				net_pkt_family(pkt), *pos,
 				conn_cache[*pos].value);
@@ -421,7 +423,7 @@ void prepare_register_debug_print(char *dst, int dst_len,
 }
 
 /* Check if we already have identical connection handler installed. */
-static int find_conn_handler(enum net_ip_protocol proto,
+static int find_conn_handler(u16_t proto, u8_t family,
 			     const struct sockaddr *remote_addr,
 			     const struct sockaddr *local_addr,
 			     u16_t remote_port,
@@ -435,6 +437,10 @@ static int find_conn_handler(enum net_ip_protocol proto,
 		}
 
 		if (conns[i].proto != proto) {
+			continue;
+		}
+
+		if (conns[i].family != family) {
 			continue;
 		}
 
@@ -530,7 +536,7 @@ static int find_conn_handler(enum net_ip_protocol proto,
 	return -ENOENT;
 }
 
-int net_conn_register(enum net_ip_protocol proto,
+int net_conn_register(u16_t proto, u8_t family,
 		      const struct sockaddr *remote_addr,
 		      const struct sockaddr *local_addr,
 		      u16_t remote_port,
@@ -542,8 +548,8 @@ int net_conn_register(enum net_ip_protocol proto,
 	int i;
 	u8_t rank = 0U;
 
-	i = find_conn_handler(proto, remote_addr, local_addr, remote_port,
-			      local_port);
+	i = find_conn_handler(proto, family, remote_addr, local_addr,
+			      remote_port, local_port);
 	if (i != -ENOENT) {
 		NET_ERR("Identical connection handler %p already found.",
 			&conns[i]);
@@ -652,6 +658,7 @@ int net_conn_register(enum net_ip_protocol proto,
 		conns[i].user_data = user_data;
 		conns[i].rank = rank;
 		conns[i].proto = proto;
+		conns[i].family = family;
 
 		/* Cache needs to be cleared if new entries are added. */
 		cache_clear();
@@ -665,10 +672,10 @@ int net_conn_register(enum net_ip_protocol proto,
 						     remote_addr,
 						     local_addr);
 
-			NET_DBG("[%d/%d/%u/0x%02x] remote %p/%s/%u ", i,
+			NET_DBG("[%d/%d/%u/%u/0x%02x] remote %p/%s/%u ", i,
 				local_addr ? local_addr->sa_family : AF_UNSPEC,
-				proto, rank, remote_addr, log_strdup(dst),
-				remote_port);
+				proto, family, rank, remote_addr,
+				log_strdup(dst), remote_port);
 			NET_DBG("  local %p/%s/%u cb %p ud %p",
 				local_addr, log_strdup(src), local_port,
 				cb, user_data);
@@ -777,6 +784,17 @@ static bool is_invalid_packet(struct net_pkt *pkt,
 		}
 	}
 
+	/* For AF_PACKET family, we are not not parsing headers. */
+	if (IS_ENABLED(CONFIG_NET_SOCKETS_PACKET) &&
+	    net_pkt_family(pkt) == AF_PACKET) {
+		return false;
+	}
+
+	if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
+	    net_pkt_family(pkt) == AF_CAN) {
+		return false;
+	}
+
 	return true;
 }
 
@@ -802,7 +820,21 @@ enum net_verdict net_conn_input(struct net_pkt *pkt,
 	} else if (IS_ENABLED(CONFIG_NET_TCP) && proto == IPPROTO_TCP) {
 		src_port = proto_hdr->tcp->src_port;
 		dst_port = proto_hdr->tcp->dst_port;
+	} else if (IS_ENABLED(CONFIG_NET_SOCKETS_PACKET)) {
+		if (net_pkt_family(pkt) != AF_PACKET || proto != ETH_P_ALL) {
+			return NET_DROP;
+		}
+
+		src_port = dst_port = 0;
+	} else if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
+		   net_pkt_family(pkt) == AF_CAN) {
+		if (proto != CAN_RAW) {
+			return NET_DROP;
+		}
+
+		src_port = dst_port = 0;
 	} else {
+		NET_DBG("No suitable protocol handler configured");
 		return NET_DROP;
 	}
 
@@ -811,7 +843,12 @@ enum net_verdict net_conn_input(struct net_pkt *pkt,
 		return NET_DROP;
 	}
 
-#if defined(CONFIG_NET_CONN_CACHE)
+	/* TODO : Make core part of networing subsystem less depedant on
+	 * UDP, TCP, IPv4 or IPv6. So that we can add new features with
+	 * less dependency.
+	 */
+#if defined(CONFIG_NET_CONN_CACHE) && \
+	(defined(CONFIG_NET_UDP) || defined(CONFIG_NET_TCP))
 	verdict = cache_check(pkt, ip_hdr, proto_hdr, proto, src_port, dst_port,
 			      &cache_value, &pos);
 	if (verdict != NET_CONTINUE) {
@@ -820,7 +857,7 @@ enum net_verdict net_conn_input(struct net_pkt *pkt,
 #endif
 
 	NET_DBG("Check %s listener for pkt %p src port %u dst port %u"
-		" family %d", net_proto2str(proto), pkt,
+		" family %d", net_proto2str(net_pkt_family(pkt), proto), pkt,
 		ntohs(src_port), ntohs(dst_port), net_pkt_family(pkt));
 
 	for (i = 0; i < CONFIG_NET_MAX_CONN; i++) {
@@ -832,45 +869,61 @@ enum net_verdict net_conn_input(struct net_pkt *pkt,
 			continue;
 		}
 
-		if (net_sin(&conns[i].remote_addr)->sin_port) {
-			if (net_sin(&conns[i].remote_addr)->sin_port !=
-			    src_port) {
-				continue;
-			}
-		}
-
-		if (net_sin(&conns[i].local_addr)->sin_port) {
-			if (net_sin(&conns[i].local_addr)->sin_port !=
-			    dst_port) {
-				continue;
-			}
-		}
-
-		if (conns[i].flags & NET_CONN_REMOTE_ADDR_SET) {
-			if (!check_addr(pkt, ip_hdr,
-					&conns[i].remote_addr, true)) {
-				continue;
-			}
-		}
-
-		if (conns[i].flags & NET_CONN_LOCAL_ADDR_SET) {
-			if (!check_addr(pkt, ip_hdr,
-					&conns[i].local_addr, false)) {
-				continue;
-			}
-		}
-
-		/* If we have an existing best_match, and that one
-		 * specifies a remote port, then we've matched to a
-		 * LISTENING connection that should not override.
-		 */
-		if (best_match >= 0 &&
-		    net_sin(&conns[best_match].remote_addr)->sin_port) {
+		if (conns[i].family != AF_UNSPEC &&
+		    conns[i].family != net_pkt_family(pkt)) {
 			continue;
 		}
 
-		if (best_rank < conns[i].rank) {
-			best_rank = conns[i].rank;
+		if (IS_ENABLED(CONFIG_NET_UDP) ||
+		    IS_ENABLED(CONFIG_NET_TCP)) {
+			if (net_sin(&conns[i].remote_addr)->sin_port) {
+				if (net_sin(&conns[i].remote_addr)->sin_port !=
+				    src_port) {
+					continue;
+				}
+			}
+
+			if (net_sin(&conns[i].local_addr)->sin_port) {
+				if (net_sin(&conns[i].local_addr)->sin_port !=
+				    dst_port) {
+					continue;
+				}
+			}
+
+			if (conns[i].flags & NET_CONN_REMOTE_ADDR_SET) {
+				if (!check_addr(pkt, ip_hdr,
+						&conns[i].remote_addr,
+						true)) {
+					continue;
+				}
+			}
+
+			if (conns[i].flags & NET_CONN_LOCAL_ADDR_SET) {
+				if (!check_addr(pkt, ip_hdr,
+						&conns[i].local_addr,
+						false)) {
+					continue;
+				}
+			}
+
+			/* If we have an existing best_match, and that one
+			 * specifies a remote port, then we've matched to a
+			 * LISTENING connection that should not override.
+			 */
+			if (best_match >= 0 &&
+			    net_sin(&conns[best_match].remote_addr)->sin_port) {
+				continue;
+			}
+
+			if (best_rank < conns[i].rank) {
+				best_rank = conns[i].rank;
+				best_match = i;
+			}
+		} else if (IS_ENABLED(CONFIG_NET_SOCKETS_PACKET)) {
+			best_rank = 0;
+			best_match = i;
+		} else if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN)) {
+			best_rank = 0;
 			best_match = i;
 		}
 	}
@@ -919,6 +972,9 @@ enum net_verdict net_conn_input(struct net_pkt *pkt,
 	} else if (IS_ENABLED(CONFIG_NET_IPV4) &&
 		   net_pkt_family(pkt) == AF_INET &&
 		   net_ipv4_is_addr_mcast(&ip_hdr->ipv4->dst)) {
+		;
+	} else if (IS_ENABLED(CONFIG_NET_SOCKETS_PACKET) &&
+		    net_pkt_family(pkt) == AF_PACKET) {
 		;
 	} else {
 		send_icmp_error(pkt);

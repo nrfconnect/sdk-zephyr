@@ -17,9 +17,14 @@
 #include "qm_aon_counters.h"
 #include "qm_isr.h"
 
+
 static void aonpt_int_callback(void *user_data);
 
-static counter_callback_t user_cb;
+static counter_top_callback_t user_cb;
+
+struct aonpt_config {
+	struct counter_config_info info;
+};
 
 struct aon_data {
 #ifdef CONFIG_AON_API_REENTRANCY
@@ -107,23 +112,19 @@ static u32_t aon_timer_qmsi_read(struct device *dev)
 	return value;
 }
 
-static int aon_timer_qmsi_set_alarm(struct device *dev,
-				    counter_callback_t callback,
-				    u32_t count, void *user_data)
+static int aon_timer_qmsi_set_top(struct device *dev,
+				    u32_t ticks,
+				    counter_top_callback_t callback,
+				    void *user_data)
 {
 	qm_aonpt_config_t qmsi_cfg;
 	int result = 0;
-
-	/* Check if timer has been started */
-	if (QM_AONC[QM_AONC_0]->aonpt_cfg == 0) {
-		return -ENOTSUP;
-	}
 
 	user_cb = callback;
 
 	qmsi_cfg.callback = aonpt_int_callback;
 	qmsi_cfg.int_en = true;
-	qmsi_cfg.count = count;
+	qmsi_cfg.count = ticks;
 	qmsi_cfg.callback_data = user_data;
 
 	if (IS_ENABLED(CONFIG_AON_API_REENTRANCY)) {
@@ -151,7 +152,7 @@ static const struct counter_driver_api aon_timer_qmsi_api = {
 	.start = aon_timer_qmsi_start,
 	.stop = aon_timer_qmsi_stop,
 	.read = aon_timer_qmsi_read,
-	.set_alarm = aon_timer_qmsi_set_alarm,
+	.set_top_value = aon_timer_qmsi_set_top,
 	.get_pending_int = aon_timer_qmsi_get_pending_int,
 };
 
@@ -237,10 +238,18 @@ static int aon_timer_init(struct device *dev)
 	return 0;
 }
 
+static const struct aonpt_config aonpt_conf_info = {
+	.info = {
+		.max_top_value = UINT32_MAX,
+		.freq = 32768,
+		.count_up = false,
+		.channels = 0,
+	}
+};
 
-DEVICE_DEFINE(aon_timer, CONFIG_AON_TIMER_QMSI_DEV_NAME, aon_timer_init,
-	      aonpt_qmsi_device_ctrl, AONPT_CONTEXT, NULL, POST_KERNEL,
-	      CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
+DEVICE_DEFINE(aon_timer, CONFIG_COUNTER_0_NAME, aon_timer_init,
+	      aonpt_qmsi_device_ctrl, AONPT_CONTEXT, &aonpt_conf_info,
+	      POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 	      &aon_timer_qmsi_api);
 
 static void aonpt_int_callback(void *user_data)

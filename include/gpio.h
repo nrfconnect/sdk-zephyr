@@ -77,17 +77,13 @@ struct gpio_callback {
 	/** Actual callback function being called when relevant. */
 	gpio_callback_handler_t handler;
 
-	/** A mask of pins (pin_mask) or a specific pin (pin) the callback
-	 * is interested in, if 0 the callback will never be called.
-	 * The pin_mask or pin can be modified whenever
+	/** A mask of pins the callback is interested in, if 0 the callback
+	 * will never be called. Such pin_mask can be modified whenever
 	 * necessary by the owner, and thus will affect the handler being
 	 * called or not. The selected pins must be configured to trigger
 	 * an interrupt.
 	 */
-	union {
-		u32_t pin_mask;
-		u32_t pin;
-	};
+	u32_t pin_mask;
 };
 
 /**
@@ -260,6 +256,10 @@ static inline void gpio_init_callback(struct gpio_callback *callback,
  * @param callback A valid Application's callback structure pointer.
  * @return 0 if successful, negative errno code on failure.
  *
+ * @note Callbacks may be added to the device from within a callback
+ * handler invocation, but whether they are invoked for the current
+ * GPIO event is not specified.
+ *
  * Note: enables to add as many callback as needed on the same port.
  */
 static inline int gpio_add_callback(struct device *port,
@@ -280,6 +280,13 @@ static inline int gpio_add_callback(struct device *port,
  * @param port Pointer to the device structure for the driver instance.
  * @param callback A valid application's callback structure pointer.
  * @return 0 if successful, negative errno code on failure.
+ *
+ * @warning It is explicitly permitted, within a callback handler, to
+ * remove the registration for the callback that is running, i.e. @p
+ * callback.  Attempts to remove other registrations on the same
+ * device may result in undefined behavior, including failure to
+ * invoke callbacks that remain registered and unintended invocation
+ * of removed callbacks.
  *
  * Note: enables to remove as many callbacks as added through
  *       gpio_add_callback().

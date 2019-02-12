@@ -428,13 +428,23 @@ void z_thread_timeout(struct _timeout *to)
 }
 #endif
 
-int _pend_current_thread(u32_t key, _wait_q_t *wait_q, s32_t timeout)
+int _pend_curr_irqlock(u32_t key, _wait_q_t *wait_q, s32_t timeout)
 {
 #if defined(CONFIG_TIMESLICING) && defined(CONFIG_SWAP_NONATOMIC)
 	pending_current = _current;
 #endif
 	pend(_current, wait_q, timeout);
-	return _Swap(key);
+	return _Swap_irqlock(key);
+}
+
+int _pend_curr(struct k_spinlock *lock, k_spinlock_key_t key,
+	       _wait_q_t *wait_q, s32_t timeout)
+{
+#if defined(CONFIG_TIMESLICING) && defined(CONFIG_SWAP_NONATOMIC)
+	pending_current = _current;
+#endif
+	pend(_current, wait_q, timeout);
+	return _Swap(lock, key);
 }
 
 struct k_thread *_unpend_first_thread(_wait_q_t *wait_q)
@@ -479,37 +489,39 @@ void _thread_priority_set(struct k_thread *thread, int prio)
 	}
 	sys_trace_thread_priority_set(thread);
 
-	if (need_sched) {
-		_reschedule(irq_lock());
+	if (need_sched && _current->base.sched_locked == 0) {
+		_reschedule_unlocked();
 	}
 }
 
-void _reschedule(u32_t key)
+static inline int resched(void)
 {
 #ifdef CONFIG_SMP
 	if (!_current_cpu->swap_ok) {
-		goto noswap;
+		return 0;
 	}
-
 	_current_cpu->swap_ok = 0;
 #endif
 
-	if (_is_in_isr()) {
-		goto noswap;
-	}
+	return !_is_in_isr();
+}
 
-#ifdef CONFIG_SMP
-	(void)_Swap(key);
-	return;
-#else
-	if (_get_next_ready_thread() != _current) {
-		(void)_Swap(key);
-		return;
+void _reschedule(struct k_spinlock *lock, k_spinlock_key_t key)
+{
+	if (resched()) {
+		_Swap(lock, key);
+	} else {
+		k_spin_unlock(lock, key);
 	}
-#endif
+}
 
- noswap:
-	irq_unlock(key);
+void _reschedule_irqlock(u32_t key)
+{
+	if (resched()) {
+		_Swap_irqlock(key);
+	} else {
+		irq_unlock(key);
+	}
 }
 
 void k_sched_lock(void)
@@ -533,7 +545,7 @@ void k_sched_unlock(void)
 	K_DEBUG("scheduler unlocked (%p:%d)\n",
 		_current, _current->base.sched_locked);
 
-	_reschedule(irq_lock());
+	_reschedule_unlocked();
 #endif
 }
 
@@ -847,13 +859,7 @@ void _impl_k_yield(void)
 		}
 	}
 
-#ifdef CONFIG_SMP
-	(void)_Swap(irq_lock());
-#else
-	if (_get_next_ready_thread() != _current) {
-		(void)_Swap(irq_lock());
-	}
-#endif
+	_Swap_unlocked();
 }
 
 #ifdef CONFIG_USERSPACE
@@ -865,7 +871,6 @@ s32_t _impl_k_sleep(s32_t duration)
 #ifdef CONFIG_MULTITHREADING
 	u32_t expected_wakeup_time;
 	s32_t ticks;
-	unsigned int key;
 
 	__ASSERT(!_is_in_isr(), "");
 	__ASSERT(duration != K_FOREVER, "");
@@ -880,12 +885,18 @@ s32_t _impl_k_sleep(s32_t duration)
 
 	ticks = _TICK_ALIGN + _ms_to_ticks(duration);
 	expected_wakeup_time = ticks + z_tick_get_32();
-	key = irq_lock();
+
+	/* Spinlock purely for local interrupt locking to prevent us
+	 * from being interrupted while _current is in an intermediate
+	 * state.  Should unify this implementation with pend().
+	 */
+	struct k_spinlock local_lock = {};
+	k_spinlock_key_t key = k_spin_lock(&local_lock);
 
 	_remove_thread_from_ready_q(_current);
 	_add_thread_timeout(_current, ticks);
 
-	(void)_Swap(key);
+	(void)_Swap(&local_lock, key);
 
 	ticks = expected_wakeup_time - z_tick_get_32();
 	if (ticks > 0) {
@@ -911,25 +922,18 @@ Z_SYSCALL_HANDLER(k_sleep, duration)
 
 void _impl_k_wakeup(k_tid_t thread)
 {
-	unsigned int key = irq_lock();
-
-	/* verify first if thread is not waiting on an object */
 	if (_is_thread_pending(thread)) {
-		irq_unlock(key);
 		return;
 	}
 
 	if (_abort_thread_timeout(thread) < 0) {
-		irq_unlock(key);
 		return;
 	}
 
 	_ready_thread(thread);
 
-	if (_is_in_isr()) {
-		irq_unlock(key);
-	} else {
-		_reschedule(key);
+	if (!_is_in_isr()) {
+		_reschedule_unlocked();
 	}
 }
 
@@ -958,7 +962,7 @@ Z_SYSCALL_HANDLER0_SIMPLE(k_is_preempt_thread);
 #ifdef CONFIG_SCHED_CPU_MASK
 # ifdef CONFIG_SMP
 /* Right now we use a single byte for this mask */
-BUILD_ASSERT_MSG(CONFIG_MP_NUM_CPU <= 8, "Too many CPUs for mask word");
+BUILD_ASSERT_MSG(CONFIG_MP_NUM_CPUS <= 8, "Too many CPUs for mask word");
 # endif
 
 

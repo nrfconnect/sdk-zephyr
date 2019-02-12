@@ -118,7 +118,7 @@
 	cs-gpios = <&gpio0 17 0>;
 
 	ssd1673fb@0 {
-		compatible = "solomon,ssd1673fb";
+		compatible = "solomon,ssd1673fb", "gd,gde0213b1";
 		label = "SSD1673";
 		spi-max-frequency = <4000000>;
 		reg = <0>;
@@ -129,13 +129,18 @@
 		reset-gpios = <&gpio0 15 0>;
 		dc-gpios = <&gpio0 16 0>;
 		busy-gpios = <&gpio0 14 0>;
+		gdv-a = <0x10>;
+		gdv-b = <0x0a>;
+		sdv = <0x19>;
+		vcom = <0xa8>;
+		border-waveform = <0x71>;
 	};
 };
 
 &flash0 {
 	/*
 	 * For more information, see:
-	 * http://docs.zephyrproject.org/latest/devices/dts/flash_partitions.html
+	 * http://docs.zephyrproject.org/latest/guides/dts/index.html#flash-partitions
 	 */
 	partitions {
 		compatible = "fixed-partitions";

@@ -781,6 +781,18 @@
 
 // <e> NRFX_RTC_ENABLED - nrfx_rtc - RTC peripheral driver
 //==========================================================
+#ifdef CONFIG_NRFX_RTC
+#define NRFX_RTC_ENABLED 1
+#endif
+
+#ifdef CONFIG_NRFX_RTC0
+#define NRFX_RTC0_ENABLED 1
+#endif
+
+#ifdef CONFIG_NRFX_RTC1
+#define NRFX_RTC1_ENABLED 1
+#endif
+
 #ifndef NRFX_RTC_ENABLED
 #define NRFX_RTC_ENABLED 0
 #endif
@@ -1169,6 +1181,7 @@
 #ifdef CONFIG_NRFX_TIMER
 #define NRFX_TIMER_ENABLED 1
 #endif
+
 // <q> NRFX_TIMER0_ENABLED  - Enable TIMER0 instance
 
 

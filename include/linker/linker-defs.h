@@ -94,28 +94,6 @@
  * their shell commands are automatically initialized by the kernel.
  */
 
-#ifdef CONFIG_APPLICATION_MEMORY
-/*
- * KERNELSPACE_OBJECT_FILES is a space-separated list of object files
- * and libraries that belong in kernelspace.
- */
-#define MAYBE_EXCLUDE_SOME_FILES EXCLUDE_FILE (KERNELSPACE_OBJECT_FILES)
-#else
-#define MAYBE_EXCLUDE_SOME_FILES
-#endif /* CONFIG_APPLICATION_MEMORY */
-
-/*
- * APP_INPUT_SECTION should be invoked on sections that should be in
- * 'app' space. KERNEL_INPUT_SECTION should be invoked on sections
- * that should be in 'kernel' space.
- *
- * NB: APP_INPUT_SECTION must be invoked before
- * KERNEL_INPUT_SECTION. If it is not all sections will end up in
- * kernelspace.
- */
-#define APP_INPUT_SECTION(sect)    *(MAYBE_EXCLUDE_SOME_FILES sect)
-#define KERNEL_INPUT_SECTION(sect) *(sect)
-
 #define APP_SMEM_SECTION() KEEP(*(SORT("data_smem_*")))
 
 #ifdef CONFIG_X86 /* LINKER FILES: defines used by linker script */
@@ -167,25 +145,13 @@ extern char _app_smem_start[];
 extern char _app_smem_end[];
 extern char _app_smem_size[];
 extern char _app_smem_rom_start[];
-
-#ifdef CONFIG_APPLICATION_MEMORY
-/* Memory owned by the application. Start and end will be aligned for memory
- * management/protection hardware for the target architecture.
-
- * The policy for this memory will be to configure all of it as user thread
- * accessible. It consists of all non-kernel globals.
- */
-extern char __app_ram_start[];
-extern char __app_ram_end[];
-extern char __app_ram_size[];
-#endif
+extern char _app_smem_num_words[];
 
 /* Memory owned by the kernel. Start and end will be aligned for memory
  * management/protection hardware for the target architecture.
  *
  * Consists of all kernel-side globals, all kernel objects, all thread stacks,
- * and all currently unused RAM.  If CONFIG_APPLICATION_MEMORY is not enabled,
- * has all globals, not just kernel side.
+ * and all currently unused RAM.
  *
  * Except for the stack of the currently executing thread, none of this memory
  * is normally accessible to user threads unless specifically granted at
@@ -198,21 +164,12 @@ extern char __kernel_ram_size[];
 /* Used by _bss_zero or arch-specific implementation */
 extern char __bss_start[];
 extern char __bss_end[];
-#ifdef CONFIG_APPLICATION_MEMORY
-extern char __app_bss_start[];
-extern char __app_bss_end[];
-#endif
 
 /* Used by _data_copy() or arch-specific implementation */
 #ifdef CONFIG_XIP
 extern char __data_rom_start[];
 extern char __data_ram_start[];
 extern char __data_ram_end[];
-#ifdef CONFIG_APPLICATION_MEMORY
-extern char __app_data_rom_start[];
-extern char __app_data_ram_start[];
-extern char __app_data_ram_end[];
-#endif /* CONFIG_APPLICATION_MEMORY */
 #endif /* CONFIG_XIP */
 
 /* Includes text and rodata */
@@ -245,7 +202,7 @@ extern char __gcov_bss_size[];
 /* end address of image, used by newlib for the heap */
 extern char _end[];
 
-#ifdef CONFIG_CCM_BASE_ADDRESS
+#ifdef DT_CCM_BASE_ADDRESS
 extern char __ccm_data_rom_start[];
 extern char __ccm_start[];
 extern char __ccm_data_start[];
@@ -255,7 +212,7 @@ extern char __ccm_bss_end[];
 extern char __ccm_noinit_start[];
 extern char __ccm_noinit_end[];
 extern char __ccm_end[];
-#endif /* CONFIG_CCM_BASE_ADDRESS */
+#endif /* DT_CCM_BASE_ADDRESS */
 
 /* Used by the Security Attribution Unit to configure the
  * Non-Secure Callable region.

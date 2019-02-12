@@ -607,7 +607,7 @@ extern struct task_state_segment _main_tss;
 #endif
 
 #define _ARCH_THREAD_STACK_DEFINE(sym, size) \
-	struct _k_thread_stack_element __kernel_noinit \
+	struct _k_thread_stack_element __noinit \
 		__aligned(_STACK_BASE_ALIGN) \
 		sym[ROUND_UP((size), _STACK_SIZE_ALIGN) + _STACK_GUARD_SIZE]
 
@@ -617,7 +617,7 @@ extern struct task_state_segment _main_tss;
 		_STACK_GUARD_SIZE)
 
 #define _ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
-	struct _k_thread_stack_element __kernel_noinit \
+	struct _k_thread_stack_element __noinit \
 		__aligned(_STACK_BASE_ALIGN) \
 		sym[nmemb][_ARCH_THREAD_STACK_LEN(size)]
 
@@ -649,17 +649,9 @@ extern const NANO_ESF _default_esf;
 #ifdef CONFIG_X86_MMU
 /* Linker variable. It is needed to access the start of the Page directory */
 
-
-#ifdef CONFIG_X86_PAE_MODE
 extern u64_t __mmu_tables_start;
-#define X86_MMU_PDPT ((struct x86_mmu_page_directory_pointer *)\
+#define X86_MMU_PDPT ((struct x86_mmu_pdpt *)\
 		      (u32_t *)(void *)&__mmu_tables_start)
-#else
-extern u32_t __mmu_tables_start;
-#define X86_MMU_PD ((struct x86_mmu_page_directory *)\
-		    (void *)&__mmu_tables_start)
-#endif
-
 
 /**
  * @brief Fetch page table flags for a particular page

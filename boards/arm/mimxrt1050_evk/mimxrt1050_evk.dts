@@ -54,6 +54,15 @@
 			gpios = <&gpio5 0 GPIO_INT_ACTIVE_LOW>;
 		};
 	};
+
+	panel {
+		compatible = "rocktech,rk043fn02h-ct";
+		port {
+			lcd_panel_in: endpoint {
+				remote-endpoint = <&lcd_panel_out>;
+			};
+		};
+	};
 };
 
 arduino_serial: &uart3 {};
@@ -64,6 +73,15 @@ arduino_serial: &uart3 {};
 		compatible = "cypress,s26ks512s";
 		reg = <0>;
 		status = "ok";
+	};
+};
+
+&lcdif1 {
+	status = "ok";
+	port {
+		lcd_panel_out: endpoint {
+			remote-endpoint = <&lcd_panel_in>;
+		};
 	};
 };
 

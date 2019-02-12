@@ -23,6 +23,13 @@ config I2C_0
 
 endif # I2C
 
+if PWM
+
+config PWM_0
+	default y
+
+endif # PWM
+
 if SPI
 
 config SPI_1
@@ -49,5 +56,8 @@ config IEEE802154_NRF5
 	default y
 
 endif # IEEE802154
+
+config BT_CTLR
+	default BT
 
 endif # BOARD_NRF52840_PCA10056

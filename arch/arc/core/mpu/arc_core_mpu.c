@@ -7,6 +7,7 @@
 #include <device.h>
 #include <init.h>
 #include <kernel.h>
+#include <kernel_structs.h>
 #include <soc.h>
 #include <arch/arc/v2/mpu/arc_core_mpu.h>
 
@@ -61,8 +62,8 @@ void configure_mpu_stack_guard(struct k_thread *thread)
 		 * -----------------------
 		 */
 		arc_core_mpu_configure(THREAD_STACK_GUARD_REGION,
-			thread->arch.priv_stack_start - STACK_GUARD_SIZE,
-			STACK_GUARD_SIZE);
+				       thread->arch.priv_stack_start - STACK_GUARD_SIZE,
+				       STACK_GUARD_SIZE);
 		return;
 	}
 #endif
@@ -100,7 +101,7 @@ void configure_mpu_user_context(struct k_thread *thread)
 void configure_mpu_mem_domain(struct k_thread *thread)
 {
 	LOG_DBG("configure thread %p's domain", thread);
-	arc_core_mpu_configure_mem_domain(thread->mem_domain_info.mem_domain);
+	arc_core_mpu_configure_mem_domain(thread);
 }
 
 int _arch_mem_domain_max_partitions_get(void)
@@ -112,7 +113,7 @@ int _arch_mem_domain_max_partitions_get(void)
  * Reset MPU region for a single memory partition
  */
 void _arch_mem_domain_partition_remove(struct k_mem_domain *domain,
-				       u32_t  partition_id)
+				       u32_t partition_id)
 {
 	ARG_UNUSED(domain);
 

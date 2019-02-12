@@ -13,22 +13,22 @@
 K_THREAD_STACK_DEFINE(mem_domain_1_stack, MEM_DOMAIN_STACK_SIZE);
 K_THREAD_STACK_DEFINE(mem_domain_2_stack, MEM_DOMAIN_STACK_SIZE);
 K_THREAD_STACK_DEFINE(mem_domain_6_stack, MEM_DOMAIN_STACK_SIZE);
-__kernel struct k_thread mem_domain_1_tid, mem_domain_2_tid, mem_domain_6_tid;
+struct k_thread mem_domain_1_tid, mem_domain_2_tid, mem_domain_6_tid;
 
 /****************************************************************************/
 /* The mem domains needed.*/
-__kernel u8_t MEM_DOMAIN_ALIGNMENT mem_domain_buf[MEM_REGION_ALLOC];
-__kernel u8_t MEM_DOMAIN_ALIGNMENT mem_domain_buf1[MEM_REGION_ALLOC];
+u8_t MEM_DOMAIN_ALIGNMENT mem_domain_buf[MEM_REGION_ALLOC];
+u8_t MEM_DOMAIN_ALIGNMENT mem_domain_buf1[MEM_REGION_ALLOC];
 
 /* partitions added later in the test cases.*/
-__kernel u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part1[MEM_REGION_ALLOC];
-__kernel u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part2[MEM_REGION_ALLOC];
-__kernel u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part3[MEM_REGION_ALLOC];
-__kernel u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part4[MEM_REGION_ALLOC];
-__kernel u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part5[MEM_REGION_ALLOC];
-__kernel u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part6[MEM_REGION_ALLOC];
-__kernel u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part7[MEM_REGION_ALLOC];
-__kernel u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part8[MEM_REGION_ALLOC];
+u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part1[MEM_REGION_ALLOC];
+u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part2[MEM_REGION_ALLOC];
+u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part3[MEM_REGION_ALLOC];
+u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part4[MEM_REGION_ALLOC];
+u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part5[MEM_REGION_ALLOC];
+u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part6[MEM_REGION_ALLOC];
+u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part7[MEM_REGION_ALLOC];
+u8_t MEM_DOMAIN_ALIGNMENT mem_domain_tc3_part8[MEM_REGION_ALLOC];
 
 K_MEM_PARTITION_DEFINE(mem_domain_memory_partition,
 		       mem_domain_buf,
@@ -51,21 +51,23 @@ K_MEM_PARTITION_DEFINE(mem_domain_memory_partition1,
 #endif
 
 struct k_mem_partition *mem_domain_memory_partition_array[] = {
-	&mem_domain_memory_partition
+	&mem_domain_memory_partition,
+	&ztest_mem_partition
 };
 
 struct k_mem_partition *mem_domain_memory_partition_array1[] = {
-	&mem_domain_memory_partition1
+	&mem_domain_memory_partition1,
+	&ztest_mem_partition
 };
-__kernel struct k_mem_domain mem_domain_mem_domain;
-__kernel struct k_mem_domain mem_domain1;
+struct k_mem_domain mem_domain_mem_domain;
+struct k_mem_domain mem_domain1;
 
 /****************************************************************************/
 /* Common init functions */
 static inline void mem_domain_init(void)
 {
 	k_mem_domain_init(&mem_domain_mem_domain,
-			  MEM_PARTITION_INIT_NUM,
+			  ARRAY_SIZE(mem_domain_memory_partition_array),
 			  mem_domain_memory_partition_array);
 }
 
@@ -104,6 +106,7 @@ void mem_domain_test_1(void *tc_number, void *p2, void *p3)
 {
 	if ((u32_t)tc_number == 1) {
 		mem_domain_buf[0] = 10U;
+		k_mem_domain_remove_thread(k_current_get());
 		k_mem_domain_add_thread(&mem_domain_mem_domain,
 					k_current_get());
 	}
@@ -187,9 +190,10 @@ void test_mem_domain_partitions_user_rw(void)
 {
 	/* Initialize the memory domain */
 	k_mem_domain_init(&mem_domain_mem_domain,
-			  MEM_PARTITION_INIT_NUM,
+			  ARRAY_SIZE(mem_domain_memory_partition_array),
 			  mem_domain_memory_partition_array);
 
+	k_mem_domain_remove_thread(k_current_get());
 	k_mem_domain_add_thread(&mem_domain_mem_domain,
 				k_current_get());
 
@@ -229,8 +233,9 @@ void test_mem_domain_partitions_user_ro(void)
 	 * with read only access privilege
 	 */
 	k_mem_domain_init(&mem_domain1,
-			  MEM_PARTITION_INIT_NUM,
+			  ARRAY_SIZE(mem_domain_memory_partition_array1),
 			  mem_domain_memory_partition_array1);
+	k_mem_domain_remove_thread(k_current_get());
 
 	k_mem_domain_add_thread(&mem_domain1, k_current_get());
 
@@ -246,8 +251,9 @@ void test_mem_domain_partitions_user_ro(void)
 void test_mem_domain_partitions_supervisor_rw(void)
 {
 	k_mem_domain_init(&mem_domain_mem_domain,
-			  MEM_PARTITION_INIT_NUM,
+			  ARRAY_SIZE(mem_domain_memory_partition_array1),
 			  mem_domain_memory_partition_array1);
+	k_mem_domain_remove_thread(k_current_get());
 
 	k_mem_domain_add_thread(&mem_domain_mem_domain, k_current_get());
 
@@ -304,6 +310,7 @@ K_MEM_PARTITION_DEFINE(mem_domain_tc3_part8_struct,
 
 
 struct k_mem_partition *mem_domain_tc3_partition_array[] = {
+	&ztest_mem_partition,
 	&mem_domain_tc3_part1_struct,
 	&mem_domain_tc3_part2_struct,
 	&mem_domain_tc3_part3_struct,
@@ -314,7 +321,7 @@ struct k_mem_partition *mem_domain_tc3_partition_array[] = {
 	&mem_domain_tc3_part8_struct
 };
 
-__kernel struct k_mem_domain mem_domain_tc3_mem_domain;
+struct k_mem_domain mem_domain_tc3_mem_domain;
 
 void mem_domain_for_user_tc3(void *max_partitions, void *p2, void *p3)
 {
@@ -351,6 +358,8 @@ void test_mem_domain_add_partitions_invalid(void *p1, void *p2, void *p3)
 	 */
 	u8_t max_partitions = (u8_t)_arch_mem_domain_max_partitions_get() - 1;
 	u8_t index;
+
+	k_mem_domain_remove_thread(k_current_get());
 
 	mem_domain_init();
 	k_mem_domain_init(&mem_domain_tc3_mem_domain,
@@ -425,6 +434,7 @@ void test_mem_domain_add_partitions_simple(void *p1, void *p2, void *p3)
 
 	}
 
+	k_mem_domain_remove_thread(k_current_get());
 	k_mem_domain_add_thread(&mem_domain_tc3_mem_domain,
 				k_current_get());
 
@@ -456,6 +466,7 @@ void mem_domain_for_user_tc5(void *p1, void *p2, void *p3)
  */
 void test_mem_domain_remove_partitions_simple(void *p1, void *p2, void *p3)
 {
+	k_mem_domain_remove_thread(k_current_get());
 	k_mem_domain_add_thread(&mem_domain_tc3_mem_domain,
 				k_current_get());
 
@@ -499,7 +510,7 @@ void mem_domain_test_6_2(void *p1, void *p2, void *p3)
  */
 void test_mem_domain_remove_partitions(void *p1, void *p2, void *p3)
 {
-
+	k_mem_domain_remove_thread(k_current_get());
 	k_mem_domain_add_thread(&mem_domain_tc3_mem_domain,
 				k_current_get());
 
@@ -552,13 +563,14 @@ void mem_domain_for_user_tc7(void *p1, void *p2, void *p3)
  */
 void test_mem_domain_remove_thread(void *p1, void *p2, void *p3)
 {
+	k_mem_domain_remove_thread(k_current_get());
 
 	k_mem_domain_add_thread(&mem_domain_tc3_mem_domain,
 				k_current_get());
 
 
 	k_mem_domain_remove_thread(k_current_get());
-
+	k_mem_domain_add_thread(&ztest_mem_domain, k_current_get());
 
 	k_thread_user_mode_enter(mem_domain_for_user_tc7,
 				 NULL, NULL, NULL);
@@ -575,8 +587,9 @@ void test_mem_domain_remove_thread(void *p1, void *p2, void *p3)
 void test_mem_domain_destroy(void)
 {
 	k_mem_domain_init(&mem_domain1,
-			  MEM_PARTITION_INIT_NUM,
+			  ARRAY_SIZE(mem_domain_memory_partition_array1),
 			  mem_domain_memory_partition_array1);
+	k_mem_domain_remove_thread(k_current_get());
 
 	k_mem_domain_add_thread(&mem_domain1, k_current_get());
 

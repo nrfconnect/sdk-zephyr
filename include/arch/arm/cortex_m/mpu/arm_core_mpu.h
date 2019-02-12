@@ -8,46 +8,32 @@
 
 #include <kernel_structs.h>
 
-#include <arch/arm/cortex_m/mpu/arm_core_mpu_dev.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#if defined(CONFIG_MPU_STACK_GUARD)
 /**
- * @brief Configure MPU stack guard
+ * @brief Use the HW-specific MPU driver to program
+ *        the static MPU regions.
  *
- * This function configures per thread stack guards reprogramming the MPU.
- * The functionality is meant to be used during context switch.
- *
- * @param thread thread info data structure.
+ * Program the static MPU regions through the HW-specific
+ * MPU driver. The function is meant to be invoked once,
+ * during system initialization.
  */
-void configure_mpu_stack_guard(struct k_thread *thread);
-#endif
+void _arch_configure_static_mpu_regions(void);
 
-#if defined(CONFIG_USERSPACE)
-/*
- * @brief Configure MPU memory domain
+/**
+ * @brief Use the HW-specific MPU driver to program
+ *        the dynamic MPU regions.
  *
- * This function configures per thread memory domain reprogramming the MPU.
- * The functionality is meant to be used during context switch.
+ * Program the dynamic MPU regions using the HW-specific MPU
+ * driver. This function is meant to be invoked every time the
+ * memory map is to be re-programmed, e.g during thread context
+ * switch, entering user mode, reconfiguring memory domain, etc.
  *
- * @param thread thread info data structure.
+ * @param thread pointer to the current k_thread context
  */
-void configure_mpu_mem_domain(struct k_thread *thread);
-
-/*
- * @brief Configure MPU user context
- *
- * This function configures the stack and application data regions
- * for user mode threads
- *
- * @param thread thread info data structure.
- */
-void configure_mpu_user_context(struct k_thread *thread);
-
-#endif
+void _arch_configure_dynamic_mpu_regions(struct k_thread *thread);
 
 #ifdef __cplusplus
 }

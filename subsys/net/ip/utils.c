@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(net_utils, CONFIG_NET_UTILS_LOG_LEVEL);
 #include <net/net_ip.h>
 #include <net/net_pkt.h>
 #include <net/net_core.h>
+#include <net/socket_can.h>
 
 char *net_sprint_addr(sa_family_t af, const void *addr)
 {
@@ -32,19 +33,28 @@ char *net_sprint_addr(sa_family_t af, const void *addr)
 	return net_addr_ntop(af, addr, s, NET_IPV6_ADDR_LEN);
 }
 
-const char *net_proto2str(enum net_ip_protocol proto)
+const char *net_proto2str(int family, int proto)
 {
-	switch (proto) {
-	case IPPROTO_ICMP:
-		return "ICMPv4";
-	case IPPROTO_TCP:
-		return "TCP";
-	case IPPROTO_UDP:
-		return "UDP";
-	case IPPROTO_ICMPV6:
-		return "ICMPv6";
-	default:
-		break;
+	if (family == AF_INET || family == AF_INET6) {
+		switch (proto) {
+		case IPPROTO_ICMP:
+			return "ICMPv4";
+		case IPPROTO_TCP:
+			return "TCP";
+		case IPPROTO_UDP:
+			return "UDP";
+		case IPPROTO_ICMPV6:
+			return "ICMPv6";
+		default:
+			break;
+		}
+	} else if (family == AF_CAN) {
+		switch (proto) {
+		case CAN_RAW:
+			return "CAN_RAW";
+		default:
+			break;
+		}
 	}
 
 	return "UNK_PROTO";
@@ -624,6 +634,12 @@ static bool parse_ipv6(const char *str, size_t str_len,
 
 	return true;
 }
+#else
+static inline bool parse_ipv6(const char *str, size_t str_len,
+			      struct sockaddr *addr, bool has_port)
+{
+	return false;
+}
 #endif /* CONFIG_NET_IPV6 */
 
 #if defined(CONFIG_NET_IPV4)
@@ -689,6 +705,12 @@ static bool parse_ipv4(const char *str, size_t str_len,
 		port);
 	return true;
 }
+#else
+static inline bool parse_ipv4(const char *str, size_t str_len,
+			      struct sockaddr *addr, bool has_port)
+{
+	return false;
+}
 #endif /* CONFIG_NET_IPV4 */
 
 bool net_ipaddr_parse(const char *str, size_t str_len, struct sockaddr *addr)
@@ -705,11 +727,7 @@ bool net_ipaddr_parse(const char *str, size_t str_len, struct sockaddr *addr)
 	}
 
 	if (*str == '[') {
-#if defined(CONFIG_NET_IPV6)
 		return parse_ipv6(str, str_len, addr, true);
-#else
-		return false;
-#endif /* CONFIG_NET_IPV6 */
 	}
 
 	for (count = i = 0; str[i] && i < str_len; i++) {
@@ -719,11 +737,7 @@ bool net_ipaddr_parse(const char *str, size_t str_len, struct sockaddr *addr)
 	}
 
 	if (count == 1) {
-#if defined(CONFIG_NET_IPV4)
 		return parse_ipv4(str, str_len, addr, true);
-#else
-		return false;
-#endif /* CONFIG_NET_IPV4 */
 	}
 
 #if defined(CONFIG_NET_IPV4) && defined(CONFIG_NET_IPV6)
@@ -741,6 +755,7 @@ bool net_ipaddr_parse(const char *str, size_t str_len, struct sockaddr *addr)
 #if defined(CONFIG_NET_IPV6) && !defined(CONFIG_NET_IPV4)
 	return parse_ipv6(str, str_len, addr, false);
 #endif
+	return false;
 }
 
 int net_bytes_from_str(u8_t *buf, int buf_len, const char *src)

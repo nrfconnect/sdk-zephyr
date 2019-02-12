@@ -22,7 +22,7 @@ K_SEM_DEFINE(inherit_sem, SEMAPHORE_INIT_COUNT, SEMAPHORE_MAX_COUNT);
 K_MUTEX_DEFINE(inherit_mutex);
 K_TIMER_DEFINE(inherit_timer, dummy_start, dummy_end);
 K_MSGQ_DEFINE(inherit_msgq, MSG_Q_SIZE, MSG_Q_MAX_NUM_MSGS, MSG_Q_ALIGN);
-__kernel struct k_thread test_1_tid;
+struct k_thread test_1_tid;
 
 u8_t MEM_DOMAIN_ALIGNMENT inherit_buf[MEM_REGION_ALLOC]; /* for mem domain */
 
@@ -32,10 +32,11 @@ K_MEM_PARTITION_DEFINE(inherit_memory_partition,
 		       K_MEM_PARTITION_P_RW_U_RW);
 
 struct k_mem_partition *inherit_memory_partition_array[] = {
-	&inherit_memory_partition
+	&inherit_memory_partition,
+	&ztest_mem_partition
 };
 
-__kernel struct k_mem_domain inherit_mem_domain;
+struct k_mem_domain inherit_mem_domain;
 
 /* generic function to do check the access permissions. */
 void access_test(void)
@@ -78,11 +79,11 @@ void test_thread_1_for_SU(void *p1, void *p2, void *p3)
  */
 void test_permission_inheritance(void *p1, void *p2, void *p3)
 {
-
 	k_mem_domain_init(&inherit_mem_domain,
-			  1,
+			  ARRAY_SIZE(inherit_memory_partition_array),
 			  inherit_memory_partition_array);
 
+	k_mem_domain_remove_thread(k_current_get());
 	k_mem_domain_add_thread(&inherit_mem_domain, k_current_get());
 
 	k_thread_access_grant(k_current_get(),

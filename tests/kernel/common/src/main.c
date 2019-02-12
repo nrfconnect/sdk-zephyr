@@ -20,6 +20,9 @@ extern void test_timeout_order(void);
 extern void test_clock_cycle(void);
 extern void test_clock_uptime(void);
 extern void test_multilib(void);
+extern void test_thread_context(void);
+extern void test_verify_bootdelay(void);
+extern void test_irq_offload(void);
 
 /**
  * @defgroup kernel_common_tests Common Tests
@@ -68,6 +71,8 @@ static void test_version(void)
 void test_main(void)
 {
 	ztest_test_suite(common,
+			 ztest_unit_test(test_verify_bootdelay),
+			 ztest_unit_test(test_irq_offload),
 			 ztest_unit_test(test_byteorder_memcpy_swap),
 			 ztest_unit_test(test_byteorder_mem_swap),
 			 ztest_unit_test(test_atomic),
@@ -80,7 +85,8 @@ void test_main(void)
 			 ztest_unit_test(test_clock_uptime),
 			 ztest_unit_test(test_clock_cycle),
 			 ztest_unit_test(test_version),
-			 ztest_unit_test(test_multilib)
+			 ztest_unit_test(test_multilib),
+			 ztest_unit_test(test_thread_context)
 			 );
 
 	ztest_run_test_suite(common);

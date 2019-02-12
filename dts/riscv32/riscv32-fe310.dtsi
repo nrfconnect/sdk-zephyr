@@ -81,6 +81,7 @@
 			interrupts = <52>;
 			reg = <0x10016000 0x1000>;
 			reg-names = "control";
+			label = "i2c_0";
 			status = "disabled";
 		};
 		plic: interrupt-controller@c000000 {
@@ -116,7 +117,9 @@
 			interrupts = <40 41 42 43>;
 			reg = <0x10015000 0x1000>;
 			reg-names = "control";
+			label = "pwm_0";
 			status = "disabled";
+			sifive,compare-width = <8>;
 			#pwm-cells = <2>;
 		};
 		pwm1: pwm@10025000 {
@@ -125,7 +128,9 @@
 			interrupts = <44 45 46 47>;
 			reg = <0x10025000 0x1000>;
 			reg-names = "control";
+			label = "pwm_1";
 			status = "disabled";
+			sifive,compare-width = <16>;
 			#pwm-cells = <2>;
 		};
 		pwm2: pwm@10035000 {
@@ -134,7 +139,9 @@
 			interrupts = <48 49 50 51>;
 			reg = <0x10035000 0x1000>;
 			reg-names = "control";
+			label = "pwm_2";
 			status = "disabled";
+			sifive,compare-width = <16>;
 			#pwm-cells = <2>;
 		};
 		modeselect: rom@1000 {
@@ -170,6 +177,7 @@
 			interrupts = <5>;
 			reg = <0x10014000 0x1000 0x20000000 0x20000000>;
 			reg-names = "control", "mem";
+			label = "spi_0";
 			status = "disabled";
 		};
 		spi1: spi@10024000 {
@@ -178,6 +186,7 @@
 			interrupts = <6>;
 			reg = <0x10024000 0x1000>;
 			reg-names = "control";
+			label = "spi_1";
 			status = "disabled";
 		};
 		spi2: spi@10034000 {
@@ -186,6 +195,7 @@
 			interrupts = <7>;
 			reg = <0x10034000 0x1000>;
 			reg-names = "control";
+			label = "spi_2";
 			status = "disabled";
 		};
 		teststatus: teststatus@4000 {

@@ -193,7 +193,7 @@ SECTIONS
 	{
 		MMU_PAGE_ALIGN
 		__gcov_bss_start = .;
-		KERNEL_INPUT_SECTION(".bss.__gcov0.*");
+		*(".bss.__gcov0.*");
 		. = ALIGN(4);
 		MMU_PAGE_ALIGN
 		__gcov_bss_end = .;
@@ -203,61 +203,26 @@ SECTIONS
 	__gcov_bss_size = __gcov_bss_end - __gcov_bss_start;
 #endif /* CONFIG_COVERAGE_GCOV */
 
+#ifdef CONFIG_APP_SHARED_MEM
 	/* APP SHARED MEMORY REGION */
-	SECTION_PROLOGUE(_APP_SMEM_SECTION_NAME, (OPTIONAL),)
-	{
-		_image_ram_start = .;
-		_app_smem_start = .;
-		APP_SMEM_SECTION()
-		MMU_PAGE_ALIGN
-		_app_smem_end = .;
-	} GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
+#define SMEM_PARTITION_ALIGN(size) MMU_PAGE_ALIGN
+#define APP_SHARED_ALIGN  MMU_PAGE_ALIGN
 
+#include <app_smem.ld>
+
+	_image_ram_start = _app_smem_start;
 	_app_smem_size = _app_smem_end - _app_smem_start;
+	_app_smem_num_words = _app_smem_size >> 2;
 	_app_smem_rom_start = LOADADDR(_APP_SMEM_SECTION_NAME);
-
-
-#ifdef CONFIG_APPLICATION_MEMORY
-	SECTION_DATA_PROLOGUE(_APP_DATA_SECTION_NAME, (OPTIONAL),)
-	{
-#ifndef CONFIG_XIP
-		MMU_PAGE_ALIGN
-#endif
-		__app_ram_start = .;
-		__app_data_ram_start = .;
-		APP_INPUT_SECTION(.data)
-		APP_INPUT_SECTION(".data.*")
-		__app_data_ram_end = .;
-	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
-
-	__app_data_rom_start = LOADADDR(_APP_DATA_SECTION_NAME);
-
-	SECTION_PROLOGUE(_APP_BSS_SECTION_NAME, (NOLOAD OPTIONAL),)
-	{
-		__app_bss_start = .;
-		APP_INPUT_SECTION(.bss)
-		APP_INPUT_SECTION(".bss.*")
-		APP_INPUT_SECTION(COMMON)
-		__app_bss_end = .;
-	} GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
-
-	__app_bss_num_words = (__app_bss_end - __app_bss_start) >> 2;
-
-	SECTION_PROLOGUE(_APP_NOINIT_SECTION_NAME, (NOLOAD OPTIONAL),)
-	{
-		APP_INPUT_SECTION(.noinit)
-		APP_INPUT_SECTION(".noinit.*")
-		MMU_PAGE_ALIGN
-	} GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
-
-	__app_ram_end = .;
-	__app_ram_size = __app_ram_end - __app_ram_start;
-#endif /* CONFIG_APPLICATION_MEMORY */
+	_app_smem_num_words = _app_smem_size >> 2;
+#endif /* CONFIG_APP_SHARED_MEM */
 
 	SECTION_PROLOGUE(_BSS_SECTION_NAME, (NOLOAD OPTIONAL),)
 	{
 	MMU_PAGE_ALIGN
-
+#if !defined(CONFIG_APP_SHARED_MEM)
+	_image_ram_start = .;
+#endif
 	/*
 	 * For performance, BSS section is forced to be both 4 byte aligned and
 	 * a multiple of 4 bytes.
@@ -266,9 +231,9 @@ SECTIONS
 	__kernel_ram_start = .;
 	__bss_start = .;
 
-	KERNEL_INPUT_SECTION(.bss)
-	KERNEL_INPUT_SECTION(".bss.*")
-	KERNEL_INPUT_SECTION(COMMON)
+	*(.bss)
+	*(".bss.*")
+	*(COMMON)
 	*(".kernel_bss.*")
 
 	/*
@@ -287,8 +252,8 @@ SECTIONS
 	 * This section is used for non-initialized objects that
 	 * will not be cleared during the boot process.
 	 */
-	KERNEL_INPUT_SECTION(.noinit)
-	KERNEL_INPUT_SECTION(".noinit.*")
+	*(.noinit)
+	*(".noinit.*")
 	*(".kernel_noinit.*")
 
 #ifdef CONFIG_SOC_NOINIT_LD
@@ -304,8 +269,8 @@ SECTIONS
 
 	__data_ram_start = .;
 
-	KERNEL_INPUT_SECTION(.data)
-	KERNEL_INPUT_SECTION(".data.*")
+	*(.data)
+	*(".data.*")
 	*(".kernel.*")
 
 #ifdef CONFIG_DYNAMIC_INTERRUPTS
@@ -464,9 +429,4 @@ SECTIONS
  */
 __data_size = (__data_ram_end - __data_ram_start);
 __data_num_words = (__data_size + 3) >> 2;
-#ifdef CONFIG_APPLICATION_MEMORY
-__app_data_size = (__app_data_ram_end - __app_data_ram_start);
-__app_data_num_words = (__app_data_size + 3) >> 2;
-#endif
-
 #endif

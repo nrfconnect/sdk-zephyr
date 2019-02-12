@@ -44,15 +44,16 @@ K_STACK_DEFINE(stack2, STACK_LEN);
 
 /* thread info * */
 K_THREAD_STACK_DEFINE(threadstack, TSTACK_SIZE);
-__kernel struct k_thread thread_data;
+struct k_thread thread_data;
 
 /* Data pushed to stack */
-static u32_t data1[STACK_LEN] = { 0xAAAA, 0xBBBB, 0xCCCC, 0xDDDD };
-static u32_t data2[STACK_LEN] = { 0x1111, 0x2222, 0x3333, 0x4444 };
-static u32_t data_isr[STACK_LEN] = { 0xABCD, 0xABCD, 0xABCD, 0xABCD };
+static ZTEST_DMEM u32_t data1[STACK_LEN] = { 0xAAAA, 0xBBBB, 0xCCCC, 0xDDDD };
+static ZTEST_DMEM u32_t data2[STACK_LEN] = { 0x1111, 0x2222, 0x3333, 0x4444 };
+static ZTEST_DMEM u32_t data_isr[STACK_LEN] = { 0xABCD, 0xABCD, 0xABCD,
+						0xABCD };
 
 /* semaphore to sync threads */
-static __kernel struct k_sem end_sema;
+static struct k_sem end_sema;
 
 /* entry of contexts */
 static void tIsr_entry_push(void *p)

@@ -51,7 +51,7 @@
 
 #define STACKSIZE 512
 
-static int tc_rc = TC_PASS;         /* test case return code */
+static ZTEST_DMEM int tc_rc = TC_PASS;         /* test case return code */
 
 K_MUTEX_DEFINE(private_mutex);
 
@@ -228,7 +228,7 @@ void thread_11(void)
 }
 
 K_THREAD_STACK_DEFINE(thread_12_stack_area, STACKSIZE);
-__kernel struct k_thread thread_12_thread_data;
+struct k_thread thread_12_thread_data;
 extern void thread_12(void);
 
 /**

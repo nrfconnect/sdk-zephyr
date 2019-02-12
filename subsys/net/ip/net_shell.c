@@ -181,6 +181,16 @@ static const char *iface2str(struct net_if *iface, const char **extra)
 	}
 #endif
 
+#ifdef CONFIG_NET_L2_CANBUS
+	if (net_if_l2(iface) == &NET_L2_GET_NAME(CANBUS)) {
+		if (extra) {
+			*extra = "======";
+		}
+
+		return "CANBUS";
+	}
+#endif
+
 	if (extra) {
 		*extra = "==============";
 	}
@@ -242,14 +252,18 @@ static void iface_cb(struct net_if *iface, void *user_data)
 #if defined(CONFIG_NET_VLAN)
 	struct ethernet_context *eth_ctx;
 #endif
+#if defined(CONFIG_NET_IPV4) || defined(CONFIG_NET_IPV6)
 	struct net_if_addr *unicast;
 	struct net_if_mcast_addr *mcast;
+#endif
 #if defined(CONFIG_NET_L2_ETHERNET_MGMT)
 	struct ethernet_req_params params;
 	int ret;
 #endif
 	const char *extra;
+#if defined(CONFIG_NET_IPV4) || defined(CONFIG_NET_IPV6)
 	int i, count;
+#endif
 
 	if (data->user_data && data->user_data != iface) {
 		return;
@@ -715,6 +729,7 @@ static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 	   GET_STAT(iface, ip_errors.chkerr),
 	   GET_STAT(iface, ip_errors.protoerr));
 
+#if defined(CONFIG_NET_ICMPV4) || defined(CONFIG_NET_ICMPV6)
 	PR("ICMP recv      %d\tsent\t%d\tdrop\t%d\n",
 	   GET_STAT(iface, icmp.recv),
 	   GET_STAT(iface, icmp.sent),
@@ -722,6 +737,7 @@ static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 	PR("ICMP typeer    %d\tchkerr\t%d\n",
 	   GET_STAT(iface, icmp.typeerr),
 	   GET_STAT(iface, icmp.chkerr));
+#endif
 
 #if defined(CONFIG_NET_UDP)
 	PR("UDP recv       %d\tsent\t%d\tdrop\t%d\n",
@@ -835,6 +851,10 @@ static void get_addresses(struct net_context *context,
 #endif
 	if (context->local.family == AF_UNSPEC) {
 		snprintk(addr_local, local_len, "AF_UNSPEC");
+	} else if (context->local.family == AF_PACKET) {
+		snprintk(addr_local, local_len, "AF_PACKET");
+	} else if (context->local.family == AF_CAN) {
+		snprintk(addr_local, local_len, "AF_CAN");
 	} else {
 		snprintk(addr_local, local_len, "AF_UNK(%d)",
 			 context->local.family);
@@ -863,9 +883,13 @@ static void context_cb(struct net_context *context, void *user_data)
 	PR("[%2d] %p\t%p    %c%c%c   %16s\t%16s\n",
 	   (*count) + 1, context,
 	   net_context_get_iface(context),
-	   net_context_get_family(context) == AF_INET6 ? '6' : '4',
-	   net_context_get_type(context) == SOCK_DGRAM ? 'D' : 'S',
-	   net_context_get_ip_proto(context) == IPPROTO_UDP ? 'U' : 'T',
+	   net_context_get_family(context) == AF_INET6 ? '6' :
+	   (net_context_get_family(context) == AF_INET ? '4' : ' '),
+	   net_context_get_type(context) == SOCK_DGRAM ? 'D' :
+	   (net_context_get_type(context) == SOCK_STREAM ? 'S' :
+	    (net_context_get_type(context) == SOCK_RAW ? 'R' : ' ')),
+	   net_context_get_ip_proto(context) == IPPROTO_UDP ? 'U' :
+	   (net_context_get_ip_proto(context) == IPPROTO_TCP ? 'T' : ' '),
 	   addr_local, addr_remote);
 
 	(*count)++;
@@ -920,7 +944,8 @@ static void conn_handler_cb(struct net_conn *conn, void *user_data)
 	}
 
 	PR("[%2d] %p %p\t%s\t%16s\t%16s\n",
-	   (*count) + 1, conn, conn->cb, net_proto2str(conn->proto),
+	   (*count) + 1, conn, conn->cb,
+	   net_proto2str(conn->local_addr.sa_family, conn->proto),
 	   addr_local, addr_remote);
 
 	(*count)++;
@@ -2767,6 +2792,13 @@ static int _ping_ipv4(const struct shell *shell, char *host)
 
 static int cmd_net_ping(const struct shell *shell, size_t argc, char *argv[])
 {
+#if !defined(CONFIG_NET_IPV4) && !defined(CONFIG_NET_IPV6)
+	ARG_UNUSED(shell);
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	return -EOPNOTSUPP;
+#else
 	char *host;
 	int ret;
 
@@ -2815,6 +2847,7 @@ wait_reply:
 	}
 
 	return 0;
+#endif
 }
 
 static int cmd_net_route(const struct shell *shell, size_t argc, char *argv[])
