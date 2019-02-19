@@ -40,13 +40,13 @@
 #include <soc.h>
 #include "hal/debug.h"
 
-static int _init_reset(void);
+static int init_reset(void);
 static void ticker_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 		      void *param);
 static u8_t disable(u16_t handle);
 
-#define CONFIG_BT_SCAN_MAX 1
-static struct ll_scan_set ll_scan[CONFIG_BT_SCAN_MAX];
+#define BT_CTLR_SCAN_MAX 1
+static struct ll_scan_set ll_scan[BT_CTLR_SCAN_MAX];
 
 u8_t ll_scan_params_set(u8_t type, u16_t interval, u16_t window,
 			u8_t own_addr_type, u8_t filter_policy)
@@ -82,7 +82,7 @@ int ull_scan_init(void)
 {
 	int err;
 
-	err = _init_reset();
+	err = init_reset();
 	if (err) {
 		return err;
 	}
@@ -95,11 +95,11 @@ int ull_scan_reset(void)
 	u16_t handle;
 	int err;
 
-	for (handle = 0; handle < CONFIG_BT_SCAN_MAX; handle++) {
+	for (handle = 0; handle < BT_CTLR_SCAN_MAX; handle++) {
 		(void)disable(handle);
 	}
 
-	err = _init_reset();
+	err = init_reset();
 	if (err) {
 		return err;
 	}
@@ -191,7 +191,7 @@ u8_t ull_scan_enable(struct ll_scan_set *scan)
 		lll->ticks_window = 0;
 	}
 
-	ticks_slot_offset = max(scan->evt.ticks_active_to_start,
+	ticks_slot_offset = MAX(scan->evt.ticks_active_to_start,
 				scan->evt.ticks_xtal_to_start);
 
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
@@ -283,7 +283,7 @@ u8_t ull_scan_disable(u16_t handle, struct ll_scan_set *scan)
 
 struct ll_scan_set *ull_scan_set_get(u16_t handle)
 {
-	if (handle >= CONFIG_BT_SCAN_MAX) {
+	if (handle >= BT_CTLR_SCAN_MAX) {
 		return NULL;
 	}
 
@@ -351,7 +351,7 @@ u32_t ull_scan_filter_pol_get(u16_t handle)
 	return scan->lll.filter_policy;
 }
 
-static int _init_reset(void)
+static int init_reset(void)
 {
 	return 0;
 }
@@ -359,8 +359,8 @@ static int _init_reset(void)
 static void ticker_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 		      void *param)
 {
-	static memq_link_t _link;
-	static struct mayfly _mfy = {0, 0, &_link, NULL, lll_scan_prepare};
+	static memq_link_t link;
+	static struct mayfly mfy = {0, 0, &link, NULL, lll_scan_prepare};
 	static struct lll_prepare_param p;
 	struct ll_scan_set *scan = param;
 	u32_t ret;
@@ -377,11 +377,11 @@ static void ticker_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 	p.remainder = remainder;
 	p.lazy = lazy;
 	p.param = &scan->lll;
-	_mfy.param = &p;
+	mfy.param = &p;
 
 	/* Kick LLL prepare */
 	ret = mayfly_enqueue(TICKER_USER_ID_ULL_HIGH, TICKER_USER_ID_LLL,
-			     0, &_mfy);
+			     0, &mfy);
 	LL_ASSERT(!ret);
 
 #if defined(CONFIG_BT_CENTRAL) && defined(CONFIG_BT_CTLR_SCHED_ADVANCED)
@@ -413,9 +413,15 @@ static u8_t disable(u16_t handle)
 	u8_t ret;
 
 	scan = ull_scan_is_enabled_get(handle);
-	if (!scan || scan->lll.conn) {
+	if (!scan) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
+
+#if defined(CONFIG_BT_CONN)
+	if (scan->lll.conn) {
+		return BT_HCI_ERR_CMD_DISALLOWED;
+	}
+#endif
 
 	ret = ull_scan_disable(handle, scan);
 	if (ret) {

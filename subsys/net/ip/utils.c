@@ -472,9 +472,6 @@ u16_t net_calc_chksum(struct net_pkt *pkt, u8_t proto)
 	struct net_pkt_cursor backup;
 	bool ow;
 
-	net_pkt_cursor_backup(pkt, &backup);
-	net_pkt_cursor_init(pkt);
-
 	if (IS_ENABLED(CONFIG_NET_IPV4) &&
 	    net_pkt_family(pkt) == AF_INET) {
 		if (proto != IPPROTO_ICMP) {
@@ -492,6 +489,9 @@ u16_t net_calc_chksum(struct net_pkt *pkt, u8_t proto)
 		NET_DBG("Unknown protocol family %d", net_pkt_family(pkt));
 		return 0;
 	}
+
+	net_pkt_cursor_backup(pkt, &backup);
+	net_pkt_cursor_init(pkt);
 
 	ow = net_pkt_is_being_overwritten(pkt);
 	net_pkt_set_overwrite(pkt, true);
@@ -526,21 +526,6 @@ u16_t net_calc_chksum_ipv4(struct net_pkt *pkt)
 }
 #endif /* CONFIG_NET_IPV4 */
 
-/* Check if the first fragment of the packet can hold certain size
- * memory area. The start of the said area must be inside the first
- * fragment. This helper is used when checking whether various protocol
- * headers are split between two fragments.
- */
-bool net_header_fits(struct net_pkt *pkt, u8_t *hdr, size_t hdr_size)
-{
-	if (hdr && hdr > pkt->frags->data &&
-	    (hdr + hdr_size) <= (pkt->frags->data + pkt->frags->len)) {
-		return true;
-	}
-
-	return false;
-}
-
 #if defined(CONFIG_NET_IPV6) || defined(CONFIG_NET_IPV4)
 static bool convert_port(const char *buf, u16_t *port)
 {
@@ -570,7 +555,7 @@ static bool parse_ipv6(const char *str, size_t str_len,
 	int end, len, ret, i;
 	u16_t port;
 
-	len = min(INET6_ADDRSTRLEN, str_len);
+	len = MIN(INET6_ADDRSTRLEN, str_len);
 
 	for (i = 0; i < len; i++) {
 		if (!str[i]) {
@@ -586,7 +571,7 @@ static bool parse_ipv6(const char *str, size_t str_len,
 			return false;
 		}
 
-		end = min(len, ptr - (str + 1));
+		end = MIN(len, ptr - (str + 1));
 		memcpy(ipaddr, str + 1, end);
 	} else {
 		end = len;
@@ -652,7 +637,7 @@ static bool parse_ipv4(const char *str, size_t str_len,
 	int end, len, ret, i;
 	u16_t port;
 
-	len = min(NET_IPV4_ADDR_LEN, str_len);
+	len = MIN(NET_IPV4_ADDR_LEN, str_len);
 
 	for (i = 0; i < len; i++) {
 		if (!str[i]) {
@@ -668,7 +653,7 @@ static bool parse_ipv4(const char *str, size_t str_len,
 			return false;
 		}
 
-		end = min(len, ptr - str);
+		end = MIN(len, ptr - str);
 	} else {
 		end = len;
 	}

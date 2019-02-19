@@ -10,6 +10,7 @@ zephyr_library_sources(
     lwm2m_obj_device.c
     lwm2m_rw_plain_text.c
     lwm2m_rw_oma_tlv.c
+    lwm2m_util.c
     )
 
 # LWM2M RD Client Support
@@ -36,6 +37,9 @@ zephyr_library_sources_ifdef(CONFIG_LWM2M_IPSO_TEMP_SENSOR
     )
 zephyr_library_sources_ifdef(CONFIG_LWM2M_IPSO_LIGHT_CONTROL
     ipso_light_control.c
+    )
+zephyr_library_sources_ifdef(CONFIG_LWM2M_IPSO_TIMER
+    ipso_timer.c
     )
 
 zephyr_library_link_libraries_ifdef(CONFIG_MBEDTLS mbedTLS)

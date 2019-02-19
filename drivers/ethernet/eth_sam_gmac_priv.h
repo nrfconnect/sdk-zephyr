@@ -12,6 +12,13 @@
 
 #include <zephyr/types.h>
 
+/* This option enables support to push multiple packets to the DMA engine.
+ * This currently doesn't work given the current version of net_pkt or
+ * net_buf does not allowed access from multiple threads. This option is
+ * therefore currenlty disabled.
+ */
+#define GMAC_MULTIPLE_TX_PACKETS 0
+
 #define GMAC_MTU 1500
 #define GMAC_FRAME_SIZE_MAX (GMAC_MTU + 18)
 
@@ -26,11 +33,8 @@
 
 /** RX descriptors count for main queue */
 #define MAIN_QUEUE_RX_DESC_COUNT CONFIG_ETH_SAM_GMAC_BUF_RX_COUNT
-/** TX descriptors count for main queue. They should be able to store a full
- ** packet, that might use either the TX or the RX buffers.
- */
-#define MAIN_QUEUE_TX_DESC_COUNT (max(CONFIG_NET_BUF_RX_COUNT, \
-				      CONFIG_NET_BUF_TX_COUNT) + 1)
+/** TX descriptors count for main queue */
+#define MAIN_QUEUE_TX_DESC_COUNT (CONFIG_NET_BUF_TX_COUNT + 1)
 
 /** RX/TX descriptors count for priority queues */
 #if GMAC_PRIORITY_QUEUE_NO == 2
@@ -167,12 +171,19 @@ struct gmac_desc_list {
 struct gmac_queue {
 	struct gmac_desc_list rx_desc_list;
 	struct gmac_desc_list tx_desc_list;
+#if GMAC_MULTIPLE_TX_PACKETS == 1
 	struct k_sem tx_desc_sem;
+#else
+	struct k_sem tx_sem;
+#endif
 
-	struct ring_buf rx_frag_list;
+	struct net_buf **rx_frag_list;
+
+#if GMAC_MULTIPLE_TX_PACKETS == 1
 	struct ring_buf tx_frag_list;
 #if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 	struct ring_buf tx_frames;
+#endif
 #endif
 
 	/** Number of RX frames dropped by the driver */

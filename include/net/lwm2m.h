@@ -32,6 +32,7 @@
 
 #define IPSO_OBJECT_TEMP_SENSOR_ID			3303
 #define IPSO_OBJECT_LIGHT_CONTROL_ID			3311
+#define IPSO_OBJECT_TIMER_ID				3340
 
 /**
  * @brief LwM2M context structure
@@ -149,11 +150,14 @@ lwm2m_engine_user_cb_t lwm2m_firmware_get_update_cb(void);
  * Example: 123.456 == val1: 123, val2:456000
  * Example: 123.000456 = val1: 123, val2:456
  */
+
+#define LWM2M_FLOAT32_DEC_MAX 1000000
 typedef struct float32_value {
 	s32_t val1;
 	s32_t val2;
 } float32_value_t;
 
+#define LWM2M_FLOAT64_DEC_MAX 1000000000LL
 typedef struct float64_value {
 	s64_t val1;
 	s64_t val2;

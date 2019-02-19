@@ -17,7 +17,6 @@ LOG_MODULE_DECLARE(net_ipv6, CONFIG_NET_IPV6_LOG_LEVEL);
 #include <net/net_stats.h>
 #include <net/net_context.h>
 #include <net/net_mgmt.h>
-#include <net/tcp.h>
 #include "net_private.h"
 #include "connection.h"
 #include "icmpv6.h"
@@ -118,22 +117,15 @@ static int mld_create_packet(struct net_pkt *pkt, u16_t count)
 		return -ENOBUFS;
 	}
 
+	net_pkt_set_ipv6_next_hdr(pkt, IPPROTO_ICMPV6);
+
 	return 0;
 }
 
 static int mld_send(struct net_pkt *pkt)
 {
 	net_pkt_cursor_init(pkt);
-
-	net_ipv6_finalize_new(pkt, NET_IPV6_NEXTHDR_HBHO);
-
-	/* IPV6 finalization above could not update ICMPv6 checksum
-	 * due to the existence of Router Alert option in between.
-	 * So let's do it here:
-	 */
-	net_pkt_skip(pkt, IPV6_OPT_HDR_ROUTER_ALERT_LEN);
-
-	net_icmpv6_finalize(pkt);
+	net_ipv6_finalize(pkt, NET_IPV6_NEXTHDR_HBHO);
 
 	if (net_send_data(pkt) < 0) {
 		net_stats_update_icmp_drop(net_pkt_iface(pkt));

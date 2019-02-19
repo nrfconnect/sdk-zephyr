@@ -16,7 +16,6 @@ LOG_MODULE_REGISTER(net_ipv4, CONFIG_NET_IPV4_LOG_LEVEL);
 #include <net/net_pkt.h>
 #include <net/net_stats.h>
 #include <net/net_context.h>
-#include <net/tcp.h>
 #include "net_private.h"
 #include "connection.h"
 #include "net_stats.h"
@@ -46,6 +45,7 @@ struct net_pkt *net_ipv4_create(struct net_pkt *pkt,
 	NET_IPV4_HDR(pkt)->vhl = 0x45;
 	NET_IPV4_HDR(pkt)->tos = 0x00;
 	NET_IPV4_HDR(pkt)->proto = next_header_proto;
+	NET_IPV4_HDR(pkt)->chksum = 0;
 
 	/* User can tweak the default TTL if needed */
 	NET_IPV4_HDR(pkt)->ttl = net_pkt_ipv4_ttl(pkt);
@@ -65,35 +65,6 @@ struct net_pkt *net_ipv4_create(struct net_pkt *pkt,
 	net_buf_add(header, sizeof(struct net_ipv4_hdr));
 
 	return pkt;
-}
-
-void net_ipv4_finalize(struct net_pkt *pkt, u8_t next_header_proto)
-{
-	/* Set the length of the IPv4 header */
-	size_t total_len;
-
-	net_pkt_compact(pkt);
-
-	total_len = net_pkt_get_len(pkt);
-
-	NET_IPV4_HDR(pkt)->len = htons(total_len);
-
-	NET_IPV4_HDR(pkt)->chksum = 0;
-
-	if (net_if_need_calc_tx_checksum(net_pkt_iface(pkt)) ||
-	    next_header_proto == IPPROTO_ICMP) {
-		NET_IPV4_HDR(pkt)->chksum = net_calc_chksum_ipv4(pkt);
-
-		if (IS_ENABLED(CONFIG_NET_UDP) &&
-		    next_header_proto == IPPROTO_UDP) {
-			net_udp_set_chksum(pkt, pkt->frags);
-		} else if (IS_ENABLED(CONFIG_NET_TCP) &&
-			   next_header_proto == IPPROTO_TCP) {
-			net_tcp_set_chksum(pkt, pkt->frags);
-		} else if (next_header_proto == IPPROTO_ICMP) {
-			net_icmpv4_set_chksum(pkt);
-		}
-	}
 }
 
 int net_ipv4_create_new(struct net_pkt *pkt,
@@ -133,7 +104,7 @@ int net_ipv4_create_new(struct net_pkt *pkt,
 	return net_pkt_set_data(pkt, &ipv4_access);
 }
 
-int net_ipv4_finalize_new(struct net_pkt *pkt, u8_t next_header_proto)
+int net_ipv4_finalize(struct net_pkt *pkt, u8_t next_header_proto)
 {
 	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ipv4_access, struct net_ipv4_hdr);
 	struct net_ipv4_hdr *ipv4_hdr;
@@ -160,15 +131,13 @@ int net_ipv4_finalize_new(struct net_pkt *pkt, u8_t next_header_proto)
 			return net_udp_finalize(pkt);
 		} else if (IS_ENABLED(CONFIG_NET_TCP) &&
 			   next_header_proto == IPPROTO_TCP) {
-			net_tcp_finalize(pkt);
+			return net_tcp_finalize(pkt);
 		} else if (next_header_proto == IPPROTO_ICMP) {
-			net_icmpv4_finalize(pkt);
+			return net_icmpv4_finalize(pkt);
 		}
-	} else {
-		net_pkt_set_data(pkt, &ipv4_access);
 	}
 
-	return 0;
+	return net_pkt_set_data(pkt, &ipv4_access);
 }
 
 const struct in_addr *net_ipv4_unspecified_address(void)
@@ -247,8 +216,6 @@ enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 
 	net_pkt_set_ip_hdr_len(pkt, sizeof(struct net_ipv4_hdr));
 	net_pkt_set_ipv4_ttl(pkt, hdr->ttl);
-
-	net_pkt_set_transport_proto(pkt, hdr->proto);
 
 	net_pkt_set_family(pkt, PF_INET);
 

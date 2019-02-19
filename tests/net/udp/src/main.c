@@ -190,7 +190,7 @@ static enum net_verdict test_fail(struct net_conn *conn,
 	return NET_DROP;
 }
 
-#define NET_UDP_HDR(pkt)  ((struct net_udp_hdr *)(net_pkt_udp_data(pkt)))
+#define NET_UDP_HDR(pkt)  ((struct net_udp_hdr *)(net_udp_get_hdr(pkt, NULL)))
 
 static void setup_ipv6_udp(struct net_pkt *pkt,
 			   struct in6_addr *remote_addr,
@@ -261,6 +261,8 @@ static void setup_ipv6_udp_long(struct net_pkt *pkt,
 	struct net_udp_hdr hdr, *udp_hdr;
 	struct net_ipv6_hdr ipv6;
 
+	net_pkt_set_family(pkt, AF_INET6);
+
 	ipv6.vtc = 0x60;
 	ipv6.tcflow = 0;
 	ipv6.flow = 0;
@@ -289,18 +291,13 @@ static void setup_ipv6_udp_long(struct net_pkt *pkt,
 	udp_hdr = net_udp_get_hdr(pkt, &hdr);
 
 	/**TESTPOINT: Check if pointer is valid*/
-	zassert_equal_ptr(udp_hdr, &hdr, "Invalid UDP header pointer");
+	zassert_not_null(udp_hdr, "Invalid UDP header pointer");
+
 
 	udp_hdr->src_port = htons(remote_port);
 	udp_hdr->dst_port = htons(local_port);
 
 	net_udp_set_hdr(pkt, &hdr);
-
-	udp_hdr = net_udp_get_hdr(pkt, &hdr);
-	if (udp_hdr != &hdr) {
-		TC_ERROR("Invalid UDP header pointer %p\n", udp_hdr);
-		zassert_true(0, "exiting");
-	}
 
 	if (udp_hdr->src_port != htons(remote_port)) {
 		TC_ERROR("Invalid remote port, should have been %d was %d\n",
@@ -314,7 +311,7 @@ static void setup_ipv6_udp_long(struct net_pkt *pkt,
 		zassert_true(0, "exiting");
 	}
 
-	net_hexdump_frags("frag", pkt, false);
+	net_pkt_hexdump(pkt, "buffer");
 }
 
 static void setup_ipv4_udp(struct net_pkt *pkt,
@@ -323,6 +320,8 @@ static void setup_ipv4_udp(struct net_pkt *pkt,
 			   u16_t remote_port,
 			   u16_t local_port)
 {
+	net_pkt_set_family(pkt, AF_INET);
+
 	NET_IPV4_HDR(pkt)->vhl = 0x45;
 	NET_IPV4_HDR(pkt)->tos = 0;
 	NET_IPV4_HDR(pkt)->len = htons(NET_UDPH_LEN +
@@ -330,6 +329,10 @@ static void setup_ipv4_udp(struct net_pkt *pkt,
 					strlen(payload));
 
 	NET_IPV4_HDR(pkt)->proto = IPPROTO_UDP;
+	NET_IPV4_HDR(pkt)->chksum = 0;
+
+	NET_IPV4_HDR(pkt)->offset[0] = NET_IPV4_HDR(pkt)->offset[1] = 0;
+	NET_IPV4_HDR(pkt)->id[0] = NET_IPV4_HDR(pkt)->id[1] = 0;
 
 	net_ipaddr_copy(&NET_IPV4_HDR(pkt)->src, remote_addr);
 	net_ipaddr_copy(&NET_IPV4_HDR(pkt)->dst, local_addr);
@@ -342,9 +345,11 @@ static void setup_ipv4_udp(struct net_pkt *pkt,
 
 	NET_UDP_HDR(pkt)->src_port = htons(remote_port);
 	NET_UDP_HDR(pkt)->dst_port = htons(local_port);
+	NET_UDP_HDR(pkt)->chksum = 0;
 
 	net_buf_add_mem(pkt->frags, payload, strlen(payload));
 
+	net_pkt_cursor_init(pkt);
 	net_ipv4_finalize(pkt, IPPROTO_UDP);
 }
 

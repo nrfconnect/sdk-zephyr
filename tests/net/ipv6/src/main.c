@@ -22,6 +22,7 @@ LOG_MODULE_REGISTER(net_test, CONFIG_NET_IPV6_LOG_LEVEL);
 #include <net/net_pkt.h>
 #include <net/net_ip.h>
 #include <net/ethernet.h>
+#include <net/udp.h>
 
 #include "icmpv6.h"
 #include "ipv6.h"
@@ -197,15 +198,29 @@ static void prepare_ra_message(struct net_pkt *pkt)
 
 static struct net_icmp_hdr *get_icmp_hdr(struct net_pkt *pkt)
 {
+	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(icmp_access, struct net_icmp_hdr);
 	/* First frag is the ll header */
 	struct net_buf *bak = pkt->frags;
+	struct net_pkt_cursor backup;
 	struct net_icmp_hdr *hdr;
 
 	pkt->frags = bak->frags;
 
-	hdr = net_pkt_icmp_data(pkt);
+	net_pkt_cursor_backup(pkt, &backup);
+	net_pkt_cursor_init(pkt);
 
+	if (net_pkt_skip(pkt, net_pkt_ip_hdr_len(pkt) +
+			 net_pkt_ipv6_ext_len(pkt))) {
+		hdr = NULL;
+		goto out;
+	}
+
+	hdr = (struct net_icmp_hdr *)net_pkt_get_data_new(pkt, &icmp_access);
+
+out:
 	pkt->frags = bak;
+
+	net_pkt_cursor_restore(pkt, &backup);
 
 	return hdr;
 }
@@ -1100,7 +1115,7 @@ static void test_dad_timeout(void)
 #endif
 }
 
-#define NET_UDP_HDR(pkt)  ((struct net_udp_hdr *)(net_pkt_udp_data(pkt)))
+#define NET_UDP_HDR(pkt)  ((struct net_udp_hdr *)(net_udp_get_hdr(pkt, NULL)))
 
 static void setup_ipv6_udp(struct net_pkt *pkt,
 			   struct in6_addr *local_addr,

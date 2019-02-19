@@ -68,48 +68,6 @@ void net_icmpv6_unregister_handler(struct net_icmpv6_handler *handler)
 	sys_slist_find_and_remove(&handlers, &handler->node);
 }
 
-int net_icmpv6_set_chksum(struct net_pkt *pkt)
-{
-	u16_t chksum = 0U;
-	struct net_buf *frag;
-	struct net_buf *temp_frag;
-	u16_t temp_pos;
-	u16_t pos;
-
-	/* Skip to the position of checksum */
-	frag = net_frag_skip(pkt->frags, 0, &pos,
-			     net_pkt_ip_hdr_len(pkt) +
-			     net_pkt_ipv6_ext_len(pkt) +
-			     1 + 1 /* type + code */);
-	if (pos > 0 && !frag) {
-		return -EINVAL;
-	}
-
-	/* Cache checksum fragment and postion, to be safe side first
-	 * write 0's in checksum position and calculate checksum and
-	 * write checksum in the packet.
-	 */
-	temp_frag = frag;
-	temp_pos = pos;
-
-	frag = net_pkt_write(pkt, frag, pos, &pos, sizeof(chksum),
-			     (u8_t *)&chksum, PKT_WAIT_TIME);
-	if (pos > 0 && !frag) {
-		return -EINVAL;
-	}
-
-	chksum = net_calc_chksum_icmpv6(pkt);
-
-	temp_frag = net_pkt_write(pkt, temp_frag, temp_pos, &temp_pos,
-				  sizeof(chksum), (u8_t *)&chksum,
-				  PKT_WAIT_TIME);
-	if (temp_pos > 0 && !temp_frag) {
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 int net_icmpv6_finalize(struct net_pkt *pkt)
 {
 	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(icmp_access,
@@ -196,13 +154,13 @@ enum net_verdict icmpv6_handle_echo_request(struct net_pkt *pkt,
 	}
 
 	if (net_icmpv6_create(reply, NET_ICMPV6_ECHO_REPLY, 0) ||
-	    net_pkt_copy_new(reply, pkt, payload_len)) {
+	    net_pkt_copy(reply, pkt, payload_len)) {
 		NET_DBG("DROP: wrong buffer");
 		goto drop;
 	}
 
 	net_pkt_cursor_init(reply);
-	net_ipv6_finalize_new(reply, IPPROTO_ICMPV6);
+	net_ipv6_finalize(reply, IPPROTO_ICMPV6);
 
 	NET_DBG("Sending Echo Reply from %s to %s",
 		log_strdup(net_sprint_ipv6_addr(src)),
@@ -308,7 +266,7 @@ int net_icmpv6_send_error(struct net_pkt *orig, u8_t type, u8_t code,
 	 */
 	copy_len = net_pkt_available_buffer(pkt);
 
-	if (err || net_pkt_copy_new(pkt, orig, copy_len)) {
+	if (err || net_pkt_copy(pkt, orig, copy_len)) {
 		goto drop;
 	}
 
@@ -318,7 +276,7 @@ int net_icmpv6_send_error(struct net_pkt *orig, u8_t type, u8_t code,
 	net_pkt_lladdr_dst(pkt)->len = net_pkt_lladdr_src(orig)->len;
 
 	net_pkt_cursor_init(pkt);
-	net_ipv6_finalize_new(pkt, IPPROTO_ICMPV6);
+	net_ipv6_finalize(pkt, IPPROTO_ICMPV6);
 
 	NET_DBG("Sending ICMPv6 Error Message type %d code %d param %d"
 		" from %s to %s", type, code, param,
@@ -377,7 +335,7 @@ int net_icmpv6_send_echo_request(struct net_if *iface,
 
 	net_pkt_set_data(pkt, &icmpv6_access);
 
-	net_ipv6_finalize_new(pkt, IPPROTO_ICMPV6);
+	net_ipv6_finalize(pkt, IPPROTO_ICMPV6);
 
 	NET_DBG("Sending ICMPv6 Echo Request type %d from %s to %s",
 		NET_ICMPV6_ECHO_REQUEST,

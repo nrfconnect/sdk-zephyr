@@ -106,8 +106,6 @@ static struct net_icmp_hdr *get_icmp_hdr(struct net_pkt *pkt)
 	return (struct net_icmp_hdr *)net_pkt_cursor_get_pos(pkt);
 }
 
-#define NET_ICMP_HDR(pkt) ((struct net_icmp_hdr *)net_pkt_icmp_data(pkt))
-
 static int tester_send(struct device *dev, struct net_pkt *pkt)
 {
 	struct net_icmp_hdr *icmp;
@@ -367,6 +365,7 @@ static void send_query(struct net_if *iface)
 
 	net_pkt_set_ipv6_ext_len(pkt, ROUTER_ALERT_LEN);
 
+	net_pkt_cursor_init(pkt);
 	net_ipv6_finalize(pkt, NET_IPV6_NEXTHDR_HBHO);
 
 	net_pkt_set_iface(pkt, iface);

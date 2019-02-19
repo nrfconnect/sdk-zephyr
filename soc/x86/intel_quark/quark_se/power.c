@@ -25,7 +25,7 @@ extern void _power_soc_sleep(void);
 extern void _power_restore_cpu_context(void);
 extern void _power_soc_deep_sleep(void);
 
-#if (defined(CONFIG_SYS_POWER_DEEP_SLEEP))
+#if (defined(CONFIG_SYS_POWER_DEEP_SLEEP_STATES))
 static u32_t  *__x86_restore_info =
 	(u32_t *)CONFIG_BSP_SHARED_RESTORE_INFO_RAM_ADDR;
 
@@ -60,7 +60,7 @@ static void _deep_sleep(enum power_states state)
 void sys_set_power_state(enum power_states state)
 {
 	switch (state) {
-#if (defined(CONFIG_SYS_POWER_LOW_POWER_STATE))
+#if (defined(CONFIG_SYS_POWER_LOW_POWER_STATES))
 	case SYS_POWER_STATE_CPU_LPS:
 		qm_power_cpu_c1();
 		break;
@@ -71,7 +71,7 @@ void sys_set_power_state(enum power_states state)
 		qm_power_cpu_c2lp();
 		break;
 #endif
-#if (defined(CONFIG_SYS_POWER_DEEP_SLEEP))
+#if (defined(CONFIG_SYS_POWER_DEEP_SLEEP_STATES))
 	case SYS_POWER_STATE_DEEP_SLEEP:
 	case SYS_POWER_STATE_DEEP_SLEEP_1:
 		_deep_sleep(state);
@@ -85,7 +85,7 @@ void sys_set_power_state(enum power_states state)
 void sys_power_state_post_ops(enum power_states state)
 {
 	switch (state) {
-#if (defined(CONFIG_SYS_POWER_LOW_POWER_STATE))
+#if (defined(CONFIG_SYS_POWER_LOW_POWER_STATES))
 	case SYS_POWER_STATE_CPU_LPS_2:
 		*_REG_TIMER_ICR = 1U;
 	case SYS_POWER_STATE_CPU_LPS_1:
@@ -93,7 +93,7 @@ void sys_power_state_post_ops(enum power_states state)
 		__asm__ volatile("sti");
 		break;
 #endif
-#if (defined(CONFIG_SYS_POWER_DEEP_SLEEP))
+#if (defined(CONFIG_SYS_POWER_DEEP_SLEEP_STATES))
 	case SYS_POWER_STATE_DEEP_SLEEP_1:
 #ifdef CONFIG_ARC_INIT
 		_arc_init(NULL);

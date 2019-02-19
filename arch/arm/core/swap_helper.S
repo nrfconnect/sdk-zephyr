@@ -216,11 +216,9 @@ _thread_irq_disabled:
 
 #ifdef CONFIG_BUILTIN_STACK_GUARD
     /* clear stack pointer limit before setting the PSP */
-    push {r3}
-    mov r3, #0
-    msr PSPLIM, r3
-    pop {r3}
-#endif
+    mov r0, #0
+    msr PSPLIM, r0
+#endif /* CONFIG_BUILTIN_STACK_GUARD */
 
     msr PSP, ip
 
@@ -233,7 +231,6 @@ _thread_irq_disabled:
 #endif /* CONFIG_BUILTIN_STACK_GUARD */
 
 #ifdef CONFIG_EXECUTION_BENCHMARKING
-    stm sp!,{r0-r3} /* Save regs r0 to r3 on stack */
     push {r0, lr}
     bl read_timer_end_of_swap
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
@@ -242,7 +239,6 @@ _thread_irq_disabled:
 #else
     pop {r0, lr}
 #endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
-    ldm sp!,{r0-r3} /* Load back regs r0 to r3 */
 
 #endif /* CONFIG_EXECUTION_BENCHMARKING */
 
@@ -262,6 +258,17 @@ _thread_irq_disabled:
     bx lr
 
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
+
+/**
+ *
+ * @brief Service call handler
+ *
+ * The service call (svc) is used in the following occasions:
+ * - IRQ offloading
+ * - Kernel run-time exceptions
+ *
+ * @return N/A
+ */
 SECTION_FUNC(TEXT, __svc)
     /* Use EXC_RETURN state to find out if stack frame is on the
      * MSP or PSP
@@ -309,16 +316,18 @@ _oops:
     pop {r0, pc}
 
 #elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
+
 /**
  *
  * @brief Service call handler
  *
- * The service call (svc) is only used in __swap() to enter handler mode so we
- * can go through the PendSV exception to perform a context switch.
+ * The service call (svc) is used in the following occasions:
+ * - IRQ offloading
+ * - Kernel run-time exceptions
+ * - System Calls (User mode)
  *
  * @return N/A
  */
-
 SECTION_FUNC(TEXT, __svc)
     tst lr, #0x4    /* did we come from thread mode ? */
     ite eq  /* if zero (equal), came from handler mode */

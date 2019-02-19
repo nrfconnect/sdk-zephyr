@@ -51,6 +51,7 @@ subsystems = [
     "sensor_driver_api",
     "spi_driver_api",
     "uart_driver_api",
+    "can_driver_api",
 ]
 
 
@@ -276,7 +277,7 @@ def main():
         thread_counter = eh.get_thread_counter()
         if thread_counter > max_threads:
             sys.stderr.write("Too many thread objects (%d)\n" % thread_counter)
-            sys.stderr.write("Increase CONFIG_MAX_THREAD_BYTES to %d\n",
+            sys.stderr.write("Increase CONFIG_MAX_THREAD_BYTES to %d\n" %
                              -(-thread_counter // 8))
             sys.exit(1)
 

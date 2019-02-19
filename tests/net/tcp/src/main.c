@@ -23,7 +23,6 @@ LOG_MODULE_REGISTER(net_test, CONFIG_NET_TCP_LOG_LEVEL);
 #include <net/net_core.h>
 #include <net/net_pkt.h>
 #include <net/net_ip.h>
-#include <net/tcp.h>
 #include <net/dummy.h>
 
 #include <tc_util.h>
@@ -67,8 +66,6 @@ static struct sockaddr_in peer_v4_addr;
 
 static struct net_if *my_iface;
 static struct net_if *peer_iface;
-
-#define NET_TCP_HDR(pkt)  net_pkt_tcp_data(pkt)
 
 #define MY_TCP_PORT 5545
 #define PEER_TCP_PORT 9876
@@ -125,10 +122,77 @@ static void net_tcp_iface_init(struct net_if *iface)
 	return;
 }
 
+struct net_tcp_hdr *net_tcp_get_hdr(struct net_pkt *pkt,
+				    struct net_tcp_hdr *hdr)
+{
+	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(tcp_access, struct net_tcp_hdr);
+	struct net_pkt_cursor backup;
+	struct net_tcp_hdr *tcp_hdr;
+	bool overwrite;
+
+	tcp_access.data = hdr;
+
+	overwrite = net_pkt_is_being_overwritten(pkt);
+	net_pkt_set_overwrite(pkt, true);
+
+	net_pkt_cursor_backup(pkt, &backup);
+	net_pkt_cursor_init(pkt);
+
+	if (net_pkt_skip(pkt, net_pkt_ip_hdr_len(pkt) +
+			 net_pkt_ipv6_ext_len(pkt))) {
+		tcp_hdr = NULL;
+		goto out;
+	}
+
+	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, &tcp_access);
+
+out:
+	net_pkt_cursor_restore(pkt, &backup);
+	net_pkt_set_overwrite(pkt, overwrite);
+
+	return tcp_hdr;
+}
+
+struct net_tcp_hdr *net_tcp_set_hdr(struct net_pkt *pkt,
+				    struct net_tcp_hdr *hdr)
+{
+	NET_PKT_DATA_ACCESS_DEFINE(tcp_access, struct net_tcp_hdr);
+	struct net_pkt_cursor backup;
+	struct net_tcp_hdr *tcp_hdr;
+	bool overwrite;
+
+	overwrite = net_pkt_is_being_overwritten(pkt);
+	net_pkt_set_overwrite(pkt, true);
+
+	net_pkt_cursor_backup(pkt, &backup);
+	net_pkt_cursor_init(pkt);
+
+	if (net_pkt_skip(pkt, net_pkt_ip_hdr_len(pkt) +
+			 net_pkt_ipv6_ext_len(pkt))) {
+		tcp_hdr = NULL;
+		goto out;
+	}
+
+	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, &tcp_access);
+	if (!tcp_hdr) {
+		goto out;
+	}
+
+	memcpy(tcp_hdr, hdr, sizeof(struct net_tcp_hdr));
+
+	net_pkt_set_data(pkt, &tcp_access);
+out:
+	net_pkt_cursor_restore(pkt, &backup);
+	net_pkt_set_overwrite(pkt, overwrite);
+
+	return tcp_hdr == NULL ? NULL : hdr;
+}
+
 static void v6_send_syn_ack(struct net_pkt *req)
 {
 	struct net_if *iface = net_pkt_iface(req);
 	struct net_pkt *rsp = NULL;
+	struct net_tcp_hdr *tcp_rsp, *tcp_req;
 	int ret;
 
 	ret = net_tcp_prepare_segment(reply_v6_ctx->tcp,
@@ -140,24 +204,27 @@ static void v6_send_syn_ack(struct net_pkt *req)
 		return;
 	}
 
+	tcp_rsp = net_tcp_get_hdr(rsp, NULL);
+	tcp_req = net_tcp_get_hdr(req, NULL);
+
 	DBG("1) rsp src %s/%d\n", net_sprint_ipv6_addr(&NET_IPV6_HDR(rsp)->src),
-	    ntohs(NET_TCP_HDR(rsp)->src_port));
+	    ntohs(tcp_rsp->src_port));
 	DBG("1) rsp dst %s/%d\n", net_sprint_ipv6_addr(&NET_IPV6_HDR(rsp)->dst),
-	    ntohs(NET_TCP_HDR(rsp)->dst_port));
+	    ntohs(tcp_rsp->dst_port));
 
 	net_ipaddr_copy(&NET_IPV6_HDR(rsp)->src, &NET_IPV6_HDR(req)->dst);
 	net_ipaddr_copy(&NET_IPV6_HDR(rsp)->dst, &NET_IPV6_HDR(req)->src);
 
-	NET_TCP_HDR(rsp)->src_port = NET_TCP_HDR(req)->dst_port;
-	NET_TCP_HDR(rsp)->dst_port = NET_TCP_HDR(req)->src_port;
+	tcp_rsp->src_port = tcp_req->dst_port;
+	tcp_rsp->dst_port = tcp_req->src_port;
 
 	DBG("rsp src %s/%d\n", net_sprint_ipv6_addr(&NET_IPV6_HDR(rsp)->src),
-	    ntohs(NET_TCP_HDR(rsp)->src_port));
+	    ntohs(tcp_rsp->src_port));
 	DBG("rsp dst %s/%d\n", net_sprint_ipv6_addr(&NET_IPV6_HDR(rsp)->dst),
-	    ntohs(NET_TCP_HDR(rsp)->dst_port));
+	    ntohs(tcp_rsp->dst_port));
 
-	net_hexdump_frags("request TCPv6", req, false);
-	net_hexdump_frags("reply   TCPv6", rsp, false);
+	net_pkt_hexdump(req, "request TCPv6");
+	net_pkt_hexdump(rsp, "reply   TCPv6");
 
 	ret =  net_recv_data(iface, rsp);
 	if (!ret) {
@@ -328,8 +395,8 @@ static void setup_ipv4_tcp(struct net_pkt *pkt,
 	net_pkt_append_all(pkt, sizeof(tcp_hdr), (u8_t *)&tcp_hdr, K_FOREVER);
 	net_pkt_append_all(pkt, sizeof(data), data, K_FOREVER);
 
+	net_pkt_cursor_init(pkt);
 	net_ipv4_finalize(pkt, IPPROTO_TCP);
-	net_tcp_set_chksum(pkt, pkt->frags);
 }
 
 u8_t ipv6_hop_by_hop_ext_hdr[] = {
@@ -864,6 +931,10 @@ static bool v6_check_port_and_address(char *test_str, struct net_pkt *pkt,
 				      const struct in6_addr *expected_dst_addr,
 				      u16_t expected_dst_port)
 {
+	struct net_tcp_hdr *tcp_hdr;
+
+	tcp_hdr = net_tcp_get_hdr(pkt, NULL);
+
 	if (!net_ipv6_addr_cmp(&NET_IPV6_HDR(pkt)->src,
 			       &my_v6_addr.sin6_addr)) {
 		DBG("%s: IPv6 source address mismatch, should be %s ",
@@ -873,9 +944,9 @@ static bool v6_check_port_and_address(char *test_str, struct net_pkt *pkt,
 		return false;
 	}
 
-	if (NET_TCP_HDR(pkt)->src_port != my_v6_addr.sin6_port) {
+	if (tcp_hdr->src_port != my_v6_addr.sin6_port) {
 		DBG("%s: IPv6 source port mismatch, %d vs %d\n",
-		    test_str, ntohs(NET_TCP_HDR(pkt)->src_port),
+		    test_str, ntohs(tcp_hdr->src_port),
 		    ntohs(my_v6_addr.sin6_port));
 		return false;
 	}
@@ -888,9 +959,9 @@ static bool v6_check_port_and_address(char *test_str, struct net_pkt *pkt,
 		return false;
 	}
 
-	if (NET_TCP_HDR(pkt)->dst_port != htons(expected_dst_port)) {
+	if (tcp_hdr->dst_port != htons(expected_dst_port)) {
 		DBG("%s: IPv6 destination port mismatch, %d vs %d\n",
-		    test_str, ntohs(NET_TCP_HDR(pkt)->dst_port),
+		    test_str, ntohs(tcp_hdr->dst_port),
 		    expected_dst_port);
 		return false;
 	}
@@ -902,6 +973,10 @@ static bool v4_check_port_and_address(char *test_str, struct net_pkt *pkt,
 				      const struct in_addr *expected_dst_addr,
 				      u16_t expected_dst_port)
 {
+	struct net_tcp_hdr *tcp_hdr;
+
+	tcp_hdr = net_tcp_get_hdr(pkt, NULL);
+
 	if (!net_ipv4_addr_cmp(&NET_IPV4_HDR(pkt)->src,
 			       &my_v4_addr.sin_addr)) {
 		DBG("%s: IPv4 source address mismatch, should be %s ",
@@ -911,9 +986,9 @@ static bool v4_check_port_and_address(char *test_str, struct net_pkt *pkt,
 		return false;
 	}
 
-	if (NET_TCP_HDR(pkt)->src_port != my_v4_addr.sin_port) {
+	if (tcp_hdr->src_port != my_v4_addr.sin_port) {
 		DBG("%s: IPv4 source port mismatch, %d vs %d\n",
-		    test_str, ntohs(NET_TCP_HDR(pkt)->src_port),
+		    test_str, ntohs(tcp_hdr->src_port),
 		    ntohs(my_v4_addr.sin_port));
 		return false;
 	}
@@ -926,9 +1001,9 @@ static bool v4_check_port_and_address(char *test_str, struct net_pkt *pkt,
 		return false;
 	}
 
-	if (NET_TCP_HDR(pkt)->dst_port != htons(expected_dst_port)) {
+	if (tcp_hdr->dst_port != htons(expected_dst_port)) {
 		DBG("%s: IPv4 destination port mismatch, %d vs %d\n",
-		    test_str, ntohs(NET_TCP_HDR(pkt)->dst_port),
+		    test_str, ntohs(tcp_hdr->dst_port),
 		    expected_dst_port);
 		return false;
 	}
@@ -951,7 +1026,7 @@ static bool test_create_v6_reset_packet(void)
 		return false;
 	}
 
-	net_hexdump_frags("TCPv6", pkt, false);
+	net_pkt_hexdump(pkt, "TCPv6");
 
 	tcp_hdr = net_tcp_get_hdr(pkt, &hdr);
 	if (!tcp_hdr) {
@@ -988,7 +1063,7 @@ static bool test_create_v4_reset_packet(void)
 		return false;
 	}
 
-	net_hexdump_frags("TCPv4", pkt, false);
+	net_pkt_hexdump(pkt, "TCPv4");
 
 	tcp_hdr = net_tcp_get_hdr(pkt, &hdr);
 	if (!tcp_hdr) {
@@ -1025,7 +1100,7 @@ static bool test_create_v6_syn_packet(void)
 		return false;
 	}
 
-	net_hexdump_frags("TCPv6", pkt, false);
+	net_pkt_hexdump(pkt, "TCPv6");
 
 	tcp_hdr = net_tcp_get_hdr(pkt, &hdr);
 	if (!tcp_hdr) {
@@ -1062,7 +1137,7 @@ static bool test_create_v4_syn_packet(void)
 		return false;
 	}
 
-	net_hexdump_frags("TCPv4", pkt, false);
+	net_pkt_hexdump(pkt, "TCPv4");
 
 	tcp_hdr = net_tcp_get_hdr(pkt, &hdr);
 	if (!tcp_hdr) {
@@ -1099,7 +1174,7 @@ static bool test_create_v6_synack_packet(void)
 		return false;
 	}
 
-	net_hexdump_frags("TCPv6", pkt, false);
+	net_pkt_hexdump(pkt, "TCPv6");
 
 	tcp_hdr = net_tcp_get_hdr(pkt, &hdr);
 	if (!tcp_hdr) {
@@ -1137,7 +1212,7 @@ static bool test_create_v4_synack_packet(void)
 		return false;
 	}
 
-	net_hexdump_frags("TCPv4", pkt, false);
+	net_pkt_hexdump(pkt, "TCPv4");
 
 	tcp_hdr = net_tcp_get_hdr(pkt, &hdr);
 	if (!tcp_hdr) {
@@ -1175,7 +1250,7 @@ static bool test_create_v6_fin_packet(void)
 		return false;
 	}
 
-	net_hexdump_frags("TCPv6", pkt, false);
+	net_pkt_hexdump(pkt, "TCPv6");
 
 	tcp_hdr = net_tcp_get_hdr(pkt, &hdr);
 	if (!tcp_hdr) {
@@ -1212,7 +1287,7 @@ static bool test_create_v4_fin_packet(void)
 		return false;
 	}
 
-	net_hexdump_frags("TCPv4", pkt, false);
+	net_pkt_hexdump(pkt, "TCPv4");
 
 	tcp_hdr = net_tcp_get_hdr(pkt, &hdr);
 	if (!tcp_hdr) {
@@ -1239,6 +1314,7 @@ static bool test_v6_seq_check(void)
 	struct net_tcp *tcp = v6_ctx->tcp;
 	u8_t flags = NET_TCP_SYN;
 	struct net_pkt *pkt = NULL;
+	struct net_tcp_hdr *tcp_hdr;
 	u32_t seq;
 	int ret;
 
@@ -1249,12 +1325,14 @@ static bool test_v6_seq_check(void)
 		return false;
 	}
 
-	net_hexdump_frags("TCPv6", pkt, false);
+	tcp_hdr = net_tcp_get_hdr(pkt, NULL);
 
-	seq = NET_TCP_HDR(pkt)->seq[0] << 24 |
-		NET_TCP_HDR(pkt)->seq[1] << 16 |
-		NET_TCP_HDR(pkt)->seq[2] << 8 |
-		NET_TCP_HDR(pkt)->seq[3];
+	net_pkt_hexdump(pkt, "TCPv6");
+
+	seq = tcp_hdr->seq[0] << 24 |
+		tcp_hdr->seq[1] << 16 |
+		tcp_hdr->seq[2] << 8 |
+		tcp_hdr->seq[3];
 	if (seq != tcp->send_seq) {
 		DBG("Seq does not match (%u vs %u)\n",
 		    seq, tcp->send_seq);
@@ -1271,6 +1349,7 @@ static bool test_v4_seq_check(void)
 	struct net_tcp *tcp = v4_ctx->tcp;
 	u8_t flags = NET_TCP_SYN;
 	struct net_pkt *pkt = NULL;
+	struct net_tcp_hdr *tcp_hdr;
 	u32_t seq;
 	int ret;
 
@@ -1281,12 +1360,14 @@ static bool test_v4_seq_check(void)
 		return false;
 	}
 
-	net_hexdump_frags("TCPv4", pkt, false);
+	tcp_hdr = net_tcp_get_hdr(pkt, NULL);
 
-	seq = NET_TCP_HDR(pkt)->seq[0] << 24 |
-		NET_TCP_HDR(pkt)->seq[1] << 16 |
-		NET_TCP_HDR(pkt)->seq[2] << 8 |
-		NET_TCP_HDR(pkt)->seq[3];
+	net_pkt_hexdump(pkt, "TCPv4");
+
+	seq = tcp_hdr->seq[0] << 24 |
+		tcp_hdr->seq[1] << 16 |
+		tcp_hdr->seq[2] << 8 |
+		tcp_hdr->seq[3];
 	if (seq != tcp->send_seq) {
 		DBG("Seq does not match (%u vs %u)\n",
 		    seq, tcp->send_seq);
@@ -1449,7 +1530,7 @@ static inline u32_t get_recv_wnd(struct net_tcp *tcp)
 	 * size is always the same.  There are two configurables to
 	 * check though.
 	 */
-	return min(NET_TCP_MAX_WIN, NET_TCP_BUF_MAX_LEN);
+	return MIN(NET_TCP_MAX_WIN, NET_TCP_BUF_MAX_LEN);
 }
 
 static bool test_tcp_seq_validity(void)

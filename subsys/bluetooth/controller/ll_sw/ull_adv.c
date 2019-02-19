@@ -46,7 +46,7 @@
 inline struct ll_adv_set *ull_adv_set_get(u16_t handle);
 inline u16_t ull_adv_handle_get(struct ll_adv_set *adv);
 
-static int _init_reset(void);
+static int init_reset(void);
 static inline struct ll_adv_set *is_disabled_get(u16_t handle);
 static void ticker_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 		      void *param);
@@ -57,12 +57,12 @@ static void ticker_stop_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 			   void *param);
 static void ticker_op_stop_cb(u32_t status, void *params);
 static void disabled_cb(void *param);
-static inline void _conn_release(struct ll_adv_set *adv);
+static inline void conn_release(struct ll_adv_set *adv);
 #endif /* CONFIG_BT_PERIPHERAL */
 
 static inline u8_t disable(u16_t handle);
 
-static struct ll_adv_set ll_adv[CONFIG_BT_ADV_MAX];
+static struct ll_adv_set ll_adv[BT_CTLR_ADV_MAX];
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 u8_t ll_adv_params_set(u8_t handle, u16_t evt_prop, u32_t interval,
@@ -715,7 +715,7 @@ u8_t ll_adv_enable(u8_t enable)
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
 	adv->evt.ticks_slot = HAL_TICKER_US_TO_TICKS(slot_us);
 
-	ticks_slot_offset = max(adv->evt.ticks_active_to_start,
+	ticks_slot_offset = MAX(adv->evt.ticks_active_to_start,
 				adv->evt.ticks_xtal_to_start);
 
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
@@ -803,7 +803,7 @@ failure_cleanup:
 
 #if defined(CONFIG_BT_PERIPHERAL)
 	if (adv->lll.conn) {
-		_conn_release(adv);
+		conn_release(adv);
 	}
 #endif /* CONFIG_BT_PERIPHERAL */
 
@@ -814,7 +814,7 @@ int ull_adv_init(void)
 {
 	int err;
 
-	err = _init_reset();
+	err = init_reset();
 	if (err) {
 		return err;
 	}
@@ -827,11 +827,11 @@ int ull_adv_reset(void)
 	u16_t handle;
 	int err;
 
-	for (handle = 0; handle < CONFIG_BT_ADV_MAX; handle++) {
+	for (handle = 0; handle < BT_CTLR_ADV_MAX; handle++) {
 		(void)disable(handle);
 	}
 
-	err = _init_reset();
+	err = init_reset();
 	if (err) {
 		return err;
 	}
@@ -841,7 +841,7 @@ int ull_adv_reset(void)
 
 inline struct ll_adv_set *ull_adv_set_get(u16_t handle)
 {
-	if (handle >= CONFIG_BT_ADV_MAX) {
+	if (handle >= BT_CTLR_ADV_MAX) {
 		return NULL;
 	}
 
@@ -889,7 +889,7 @@ u32_t ull_adv_filter_pol_get(u16_t handle)
 	return adv->lll.filter_policy;
 }
 
-static int _init_reset(void)
+static int init_reset(void)
 {
 	return 0;
 }
@@ -909,8 +909,8 @@ static inline struct ll_adv_set *is_disabled_get(u16_t handle)
 static void ticker_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 		      void *param)
 {
-	static memq_link_t _link;
-	static struct mayfly _mfy = {0, 0, &_link, NULL, lll_adv_prepare};
+	static memq_link_t link;
+	static struct mayfly mfy = {0, 0, &link, NULL, lll_adv_prepare};
 	static struct lll_prepare_param p;
 	struct ll_adv_set *adv = param;
 	struct lll_adv *lll;
@@ -930,11 +930,11 @@ static void ticker_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 	p.remainder = remainder;
 	p.lazy = lazy;
 	p.param = lll;
-	_mfy.param = &p;
+	mfy.param = &p;
 
 	/* Kick LLL prepare */
 	ret = mayfly_enqueue(TICKER_USER_ID_ULL_HIGH, TICKER_USER_ID_LLL,
-			     0, &_mfy);
+			     0, &mfy);
 	LL_ASSERT(!ret);
 
 	/* Apply adv random delay */
@@ -993,7 +993,7 @@ static void ticker_stop_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 #endif
 
 	handle = ull_adv_handle_get(adv);
-	LL_ASSERT(handle < CONFIG_BT_ADV_MAX);
+	LL_ASSERT(handle < BT_CTLR_ADV_MAX);
 
 	ret = ticker_stop(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_ULL_HIGH,
 			  TICKER_ID_ADV_BASE + handle,
@@ -1004,8 +1004,8 @@ static void ticker_stop_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 
 static void ticker_op_stop_cb(u32_t status, void *param)
 {
-	static memq_link_t _link;
-	static struct mayfly _mfy = {0, 0, &_link, NULL, NULL};
+	static memq_link_t link;
+	static struct mayfly mfy = {0, 0, &link, NULL, NULL};
 	struct ll_adv_set *adv;
 	struct ull_hdr *hdr;
 	u32_t ret;
@@ -1026,20 +1026,20 @@ static void ticker_op_stop_cb(u32_t status, void *param)
 
 	adv = param;
 	hdr = &adv->ull;
-	_mfy.param = &adv->lll;
+	mfy.param = &adv->lll;
 	if (hdr->ref) {
 		LL_ASSERT(!hdr->disabled_cb);
-		hdr->disabled_param = _mfy.param;
+		hdr->disabled_param = mfy.param;
 		hdr->disabled_cb = disabled_cb;
 
-		_mfy.fp = lll_disable;
+		mfy.fp = lll_disable;
 		ret = mayfly_enqueue(TICKER_USER_ID_ULL_LOW,
-				     TICKER_USER_ID_LLL, 0, &_mfy);
+				     TICKER_USER_ID_LLL, 0, &mfy);
 		LL_ASSERT(!ret);
 	} else {
-		_mfy.fp = disabled_cb;
+		mfy.fp = disabled_cb;
 		ret = mayfly_enqueue(TICKER_USER_ID_ULL_LOW,
-				     TICKER_USER_ID_ULL_HIGH, 0, &_mfy);
+				     TICKER_USER_ID_ULL_HIGH, 0, &mfy);
 		LL_ASSERT(!ret);
 	}
 }
@@ -1079,7 +1079,7 @@ static void disabled_cb(void *param)
 	ll_rx_sched();
 }
 
-static inline void _conn_release(struct ll_adv_set *adv)
+static inline void conn_release(struct ll_adv_set *adv)
 {
 	ll_conn_release(adv->lll.conn->hdr.parent);
 	adv->lll.conn = NULL;
@@ -1125,7 +1125,7 @@ static inline u8_t disable(u16_t handle)
 
 #if defined(CONFIG_BT_PERIPHERAL)
 	if (adv->lll.conn) {
-		_conn_release(adv);
+		conn_release(adv);
 	}
 #endif /* CONFIG_BT_PERIPHERAL */
 

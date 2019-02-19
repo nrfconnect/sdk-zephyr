@@ -194,6 +194,21 @@ static int firmware_block_received_cb(u16_t obj_inst_id,
 }
 #endif
 
+static int timer_digital_state_cb(u16_t obj_inst_id,
+				  u8_t *data, u16_t data_len,
+				  bool last_block, size_t total_size)
+{
+	bool *digital_state = (bool *)data;
+
+	if (*digital_state) {
+		LOG_INF("TIMER: ON");
+	} else {
+		LOG_INF("TIMER: OFF");
+	}
+
+	return 0;
+}
+
 static int lwm2m_setup(void)
 {
 	struct float32_value float_value;
@@ -287,9 +302,9 @@ static int lwm2m_setup(void)
 	/* setup TEMP SENSOR object */
 
 	lwm2m_engine_create_obj_inst("3303/0");
-	/* dummy temp data in C*/
+	/* dummy temp data in C: 25.5*/
 	float_value.val1 = 25;
-	float_value.val2 = 0;
+	float_value.val2 = 500000;
 	lwm2m_engine_set_float32("3303/0/5700", &float_value);
 
 	/* IPSO: Light Control object */
@@ -298,6 +313,12 @@ static int lwm2m_setup(void)
 		lwm2m_engine_register_post_write_callback("3311/0/5850",
 				led_on_off_cb);
 	}
+
+	/* IPSO: Timer object */
+	lwm2m_engine_create_obj_inst("3340/0");
+	lwm2m_engine_register_post_write_callback("3340/0/5543",
+			timer_digital_state_cb);
+	lwm2m_engine_set_string("3340/0/5750", "Test timer");
 
 	return 0;
 }

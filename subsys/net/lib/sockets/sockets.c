@@ -192,6 +192,27 @@ Z_SYSCALL_HANDLER(zsock_close, sock)
 }
 #endif /* CONFIG_USERSPACE */
 
+int _impl_zsock_shutdown(int sock, int how)
+{
+	/* shutdown() is described by POSIX as just disabling recv() and/or
+	 * send() operations on socket. Of course, real-world software mostly
+	 * calls it for side effects. We treat it as null operation so far.
+	 */
+	ARG_UNUSED(sock);
+	ARG_UNUSED(how);
+
+	LOG_WRN("shutdown() not implemented");
+
+	return 0;
+}
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(zsock_shutdown, sock, how)
+{
+	return _impl_zsock_shutdown(sock, how);
+}
+#endif /* CONFIG_USERSPACE */
+
 static void zsock_accepted_cb(struct net_context *new_ctx,
 			      struct sockaddr *addr, socklen_t addrlen,
 			      int status, void *user_data) {
@@ -216,8 +237,6 @@ static void zsock_received_cb(struct net_context *ctx,
 			      int status,
 			      void *user_data)
 {
-	unsigned int header_len;
-
 	NET_DBG("ctx=%p, pkt=%p, st=%d, user_data=%p", ctx, pkt, status,
 		user_data);
 
@@ -244,12 +263,7 @@ static void zsock_received_cb(struct net_context *ctx,
 	net_pkt_set_eof(pkt, false);
 
 	if (net_context_get_type(ctx) == SOCK_STREAM) {
-		/* TCP: we don't care about packet header, get rid of it asap.
-		 * UDP: keep packet header to support recvfrom().
-		 */
-		header_len = net_pkt_appdata(pkt) - pkt->frags->data;
-		net_buf_pull(pkt->frags, header_len);
-		net_context_update_recv_wnd(ctx, -net_pkt_appdatalen(pkt));
+		net_context_update_recv_wnd(ctx, -net_pkt_remaining_data(pkt));
 	}
 
 	k_fifo_put(&ctx->recv_q, pkt);
@@ -356,7 +370,7 @@ int zsock_accept_ctx(struct net_context *parent, struct sockaddr *addr,
 #endif
 
 	if (addr != NULL && addrlen != NULL) {
-		int len = min(*addrlen, sizeof(ctx->remote));
+		int len = MIN(*addrlen, sizeof(ctx->remote));
 
 		memcpy(addr, &ctx->remote, len);
 		/* addrlen is a value-result argument, set to actual
@@ -471,6 +485,107 @@ Z_SYSCALL_HANDLER(zsock_sendto, sock, buf, len, flags, dest_addr, addrlen)
 }
 #endif /* CONFIG_USERSPACE */
 
+static int sock_get_pkt_src_addr(struct net_pkt *pkt,
+				 enum net_ip_protocol proto,
+				 struct sockaddr *addr,
+				 socklen_t addrlen)
+{
+	int ret = 0;
+	struct net_pkt_cursor backup;
+	u16_t *port;
+
+	if (!addr || !pkt) {
+		return -EINVAL;
+	}
+
+	net_pkt_cursor_backup(pkt, &backup);
+	net_pkt_cursor_init(pkt);
+
+	addr->sa_family = net_pkt_family(pkt);
+
+	if (IS_ENABLED(CONFIG_NET_IPV4) &&
+	    net_pkt_family(pkt) == AF_INET) {
+		NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ipv4_access,
+						      struct net_ipv4_hdr);
+		struct sockaddr_in *addr4 = net_sin(addr);
+		struct net_ipv4_hdr *ipv4_hdr;
+
+		if (addrlen < sizeof(struct sockaddr_in)) {
+			ret = -EINVAL;
+			goto error;
+		}
+
+		ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data_new(pkt,
+								&ipv4_access);
+		if (!ipv4_hdr || net_pkt_acknowledge_data(pkt, &ipv4_access)) {
+			ret = -ENOBUFS;
+			goto error;
+		}
+
+		net_ipaddr_copy(&addr4->sin_addr, &ipv4_hdr->src);
+		port = &addr4->sin_port;
+	} else if (IS_ENABLED(CONFIG_NET_IPV6) &&
+		   net_pkt_family(pkt) == AF_INET6) {
+		NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ipv6_access,
+						      struct net_ipv6_hdr);
+		struct sockaddr_in6 *addr6 = net_sin6(addr);
+		struct net_ipv6_hdr *ipv6_hdr;
+
+		if (addrlen < sizeof(struct sockaddr_in6)) {
+			ret = -EINVAL;
+			goto error;
+		}
+
+		ipv6_hdr = (struct net_ipv6_hdr *)net_pkt_get_data_new(pkt,
+								&ipv6_access);
+		if (!ipv6_hdr ||
+		    net_pkt_acknowledge_data(pkt, &ipv6_access) ||
+		    net_pkt_skip(pkt, net_pkt_ipv6_ext_len(pkt))) {
+			ret = -ENOBUFS;
+			goto error;
+		}
+
+		net_ipaddr_copy(&addr6->sin6_addr, &ipv6_hdr->src);
+		port = &addr6->sin6_port;
+	} else {
+		ret = -ENOTSUP;
+		goto error;
+	}
+
+	if (IS_ENABLED(CONFIG_NET_UDP) && proto == IPPROTO_UDP) {
+		NET_PKT_DATA_ACCESS_DEFINE(udp_access, struct net_udp_hdr);
+		struct net_udp_hdr *udp_hdr;
+
+		udp_hdr = (struct net_udp_hdr *)net_pkt_get_data_new(pkt,
+								&udp_access);
+		if (!udp_hdr) {
+			ret = -ENOBUFS;
+			goto error;
+		}
+
+		*port = udp_hdr->src_port;
+	} else if (IS_ENABLED(CONFIG_NET_TCP) && proto == IPPROTO_TCP) {
+		NET_PKT_DATA_ACCESS_DEFINE(tcp_access, struct net_tcp_hdr);
+		struct net_tcp_hdr *tcp_hdr;
+
+		tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt,
+								&tcp_access);
+		if (!tcp_hdr) {
+			ret = -ENOBUFS;
+			goto error;
+		}
+
+		*port = tcp_hdr->src_port;
+	} else {
+		ret = -ENOTSUP;
+	}
+
+error:
+	net_pkt_cursor_restore(pkt, &backup);
+
+	return ret;
+}
+
 static inline ssize_t zsock_recv_dgram(struct net_context *ctx,
 				       void *buf,
 				       size_t max_len,
@@ -478,9 +593,9 @@ static inline ssize_t zsock_recv_dgram(struct net_context *ctx,
 				       struct sockaddr *src_addr,
 				       socklen_t *addrlen)
 {
-	size_t recv_len = 0;
 	s32_t timeout = K_FOREVER;
-	unsigned int header_len;
+	size_t recv_len = 0;
+	struct net_pkt_cursor backup;
 	struct net_pkt *pkt;
 
 	if ((flags & ZSOCK_MSG_DONTWAIT) || sock_is_nonblock(ctx)) {
@@ -507,12 +622,15 @@ static inline ssize_t zsock_recv_dgram(struct net_context *ctx,
 		return -1;
 	}
 
+	net_pkt_cursor_backup(pkt, &backup);
+
 	if (src_addr && addrlen) {
 		int rv;
 
-		rv = net_pkt_get_src_addr(pkt, src_addr, *addrlen);
+		rv = sock_get_pkt_src_addr(pkt, net_context_get_ip_proto(ctx),
+					   src_addr, *addrlen);
 		if (rv < 0) {
-			errno = rv;
+			errno = -rv;
 			return -1;
 		}
 
@@ -529,24 +647,20 @@ static inline ssize_t zsock_recv_dgram(struct net_context *ctx,
 		}
 	}
 
-	/* Set starting point behind packet header since we've
-	 * handled src addr and port.
-	 */
-	header_len = net_pkt_appdata(pkt) - pkt->frags->data;
-
-	recv_len = net_pkt_appdatalen(pkt);
+	recv_len = net_pkt_remaining_data(pkt);
 	if (recv_len > max_len) {
 		recv_len = max_len;
 	}
 
-	/* Length passed as arguments are all based on packet data size
-	 * and output buffer size, so return value is invariantly == recv_len,
-	 * and we just ignore it.
-	 */
-	(void)net_frag_linearize(buf, recv_len, pkt, header_len, recv_len);
+	if (net_pkt_read_new(pkt, buf, recv_len)) {
+		errno = ENOBUFS;
+		return -1;
+	}
 
 	if (!(flags & ZSOCK_MSG_PEEK)) {
 		net_pkt_unref(pkt);
+	} else {
+		net_pkt_cursor_restore(pkt, &backup);
 	}
 
 	return recv_len;
@@ -557,8 +671,9 @@ static inline ssize_t zsock_recv_stream(struct net_context *ctx,
 					size_t max_len,
 					int flags)
 {
-	size_t recv_len = 0;
 	s32_t timeout = K_FOREVER;
+	size_t recv_len = 0;
+	struct net_pkt_cursor backup;
 	int res;
 
 	if ((flags & ZSOCK_MSG_DONTWAIT) || sock_is_nonblock(ctx)) {
@@ -567,8 +682,7 @@ static inline ssize_t zsock_recv_stream(struct net_context *ctx,
 
 	do {
 		struct net_pkt *pkt;
-		struct net_buf *frag;
-		u32_t frag_len;
+		size_t data_len;
 
 		if (sock_is_eof(ctx)) {
 			return 0;
@@ -595,39 +709,34 @@ static inline ssize_t zsock_recv_stream(struct net_context *ctx,
 			}
 		}
 
-		frag = pkt->frags;
-		if (!frag) {
-			NET_ERR("net_pkt has empty fragments on start!");
-			errno = EAGAIN;
-			return -1;
-		}
+		net_pkt_cursor_backup(pkt, &backup);
 
-		frag_len = frag->len;
-		recv_len = frag_len;
+		data_len = net_pkt_remaining_data(pkt);
+		recv_len = data_len;
 		if (recv_len > max_len) {
 			recv_len = max_len;
 		}
 
 		/* Actually copy data to application buffer */
-		memcpy(buf, frag->data, recv_len);
+		if (net_pkt_read_new(pkt, buf, recv_len)) {
+			errno = ENOBUFS;
+			return -1;
+		}
 
 		if (!(flags & ZSOCK_MSG_PEEK)) {
-			if (recv_len != frag_len) {
-				net_buf_pull(frag, recv_len);
-			} else {
-				frag = net_pkt_frag_del(pkt, NULL, frag);
-				if (!frag) {
-					/* Finished processing head pkt in
-					 * the fifo. Drop it from there.
-					 */
-					k_fifo_get(&ctx->recv_q, K_NO_WAIT);
-					if (net_pkt_eof(pkt)) {
-						sock_set_eof(ctx);
-					}
-
-					net_pkt_unref(pkt);
+			if (recv_len == data_len) {
+				/* Finished processing head pkt in
+				 * the fifo. Drop it from there.
+				 */
+				k_fifo_get(&ctx->recv_q, K_NO_WAIT);
+				if (net_pkt_eof(pkt)) {
+					sock_set_eof(ctx);
 				}
+
+				net_pkt_unref(pkt);
 			}
+		} else {
+			net_pkt_cursor_restore(pkt, &backup);
 		}
 	} while (recv_len == 0);
 
@@ -735,6 +844,14 @@ static int zsock_poll_prepare_ctx(struct net_context *ctx,
 		(*pev)++;
 	}
 
+	/* If socket is already in EOF, it can be reported
+	 * immediately, so we tell poll() to short-circuit wait.
+	 */
+	if (sock_is_eof(ctx)) {
+		errno = EALREADY;
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -750,7 +867,7 @@ static int zsock_poll_update_ctx(struct net_context *ctx,
 	}
 
 	if (pfd->events & ZSOCK_POLLIN) {
-		if ((*pev)->state != K_POLL_STATE_NOT_READY) {
+		if ((*pev)->state != K_POLL_STATE_NOT_READY || sock_is_eof(ctx)) {
 			pfd->revents |= ZSOCK_POLLIN;
 		}
 		(*pev)++;
@@ -799,6 +916,13 @@ int _impl_zsock_poll(struct zsock_pollfd *fds, int nfds, int timeout)
 
 		if (z_fdtable_call_ioctl(vtable, ctx, ZFD_IOCTL_POLL_PREPARE,
 					 pfd, &pev, pev_end) < 0) {
+			/* If POLL_PREPARE returned with EALREADY, it means
+			 * it already detected that some socket is ready. In
+			 * this case, we still perform a k_poll to pick up
+			 * as many events as possible, but without any wait.
+			 * TODO: optimize, use ret value, instead of setting
+			 * errno.
+			 */
 			if (errno == EALREADY) {
 				timeout = K_NO_WAIT;
 				continue;

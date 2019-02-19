@@ -117,9 +117,11 @@ SECTIONS
 
 #include <linker/kobject-text.ld>
 
+	MMU_PAGE_ALIGN
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
 	_image_text_end = .;
+	_image_text_size = _image_text_end - _image_text_start;
 	_image_rodata_start = .;
 
 #include <linker/common-rom.ld>
@@ -162,19 +164,21 @@ SECTIONS
 #include <linker/kobject-rom.ld>
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
-	_image_rodata_end = .;
 	MMU_PAGE_ALIGN
+	/* ROM ends here, position counter will now be in RAM areas */
 #ifdef CONFIG_XIP
-	/* Kernel ROM extends to the end of flash. Need to do this to program
-	 * the MMU
+	/* For XIP systems, the kernel object tables are kept at the end
+	 * of ROM and are unpredictable in size; the true size of the ROM
+	 * region isn't know when the MMU tables are generated.
+	 * Just set the rom region to extend to the end of flash.
 	 */
 	_image_rom_end = _image_rom_start + KB(DT_ROM_SIZE);
 #else
-	/* ROM ends here, position counter will now be in RAM areas */
 	_image_rom_end = .;
 #endif
 	_image_rom_size = _image_rom_end - _image_rom_start;
-
+	_image_rodata_end = _image_rom_end;
+	_image_rodata_size = _image_rodata_end - _image_rodata_start;
 	GROUP_END(ROMABLE_REGION)
 	/*
 	 * Needed for dynamic linking which we do not have, do discard
@@ -274,14 +278,6 @@ SECTIONS
 	*(".kernel.*")
 
 #ifdef CONFIG_DYNAMIC_INTERRUPTS
-	. = ALIGN(8);
-	_idt_base_address = .;
-#ifdef LINKER_PASS2
-	KEEP(*(staticIdt))
-#else
-	. += CONFIG_IDT_NUM_VECTORS * 8;
-#endif /* LINKER_PASS2 */
-
 #ifndef CONFIG_X86_FIXED_IRQ_MAPPING
 	. = ALIGN(4);
 	_irq_to_interrupt_vector = .;
@@ -300,7 +296,6 @@ SECTIONS
 #endif /* LINKER_PASS2 */
 #endif /* CONFIG_DYNAMIC_INTERRUPTS */
 
-
 #ifdef CONFIG_SOC_RWDATA_LD
 #include <soc-rwdata.ld>
 #endif
@@ -309,6 +304,27 @@ SECTIONS
 /* Located in project source directory */
 #include <custom-rwdata.ld>
 #endif
+
+#ifdef CONFIG_X86_KPTI
+	MMU_PAGE_ALIGN
+	z_shared_kernel_page_start = .;
+	/* Special page containing supervisor data that is still mapped in
+	 * user mode page tables. IDT, GDT, TSSes, trampoline stack, and
+	 * any LDT must go here as they always must live in a page that is
+	 * marked 'present'. Still not directly user accessible, but
+	 * no sensitive data should be here as Meltdown exploits may read it.
+	 */
+#endif /* CONFIG_X86_KPTI */
+
+#ifdef CONFIG_DYNAMIC_INTERRUPTS
+	. = ALIGN(8);
+	_idt_base_address = .;
+#ifdef LINKER_PASS2
+	KEEP(*(staticIdt))
+#else
+	. += CONFIG_IDT_NUM_VECTORS * 8;
+#endif /* LINKER_PASS2 */
+#endif /* CONFIG_DYNAMIC_INTERRUPTS */
 
 #ifdef CONFIG_GDT_DYNAMIC
 	KEEP(*(.tss))
@@ -328,6 +344,18 @@ SECTIONS
 	. += GDT_NUM_ENTRIES * 8;
 #endif /* LINKER_PASS2 */
 #endif /* CONFIG_GDT_DYNAMIC */
+
+#ifdef CONFIG_X86_KPTI
+	z_trampoline_stack_start = .;
+	MMU_PAGE_ALIGN
+	z_trampoline_stack_end = .;
+	z_shared_kernel_page_end = .;
+
+	ASSERT(z_trampoline_stack_end - z_trampoline_stack_start >= 40,
+		"trampoline stack too small");
+	ASSERT(z_shared_kernel_page_end - z_shared_kernel_page_start == 4096,
+	       "shared kernel area is not one memory page");
+#endif /* CONFIG_X86_KPTI */
 
 	. = ALIGN(4);
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
@@ -349,7 +377,12 @@ SECTIONS
 	/* Page Tables are located here if MMU is enabled.*/
 	MMU_PAGE_ALIGN
 	__mmu_tables_start = .;
+	z_x86_kernel_pdpt = .;
 	KEEP(*(.mmu_data));
+#ifdef CONFIG_X86_KPTI
+	z_x86_user_pdpt = .;
+	KEEP(*(.user_mmu_data));
+#endif /* CONFIG_X86_KPTI */
 	__mmu_tables_end = .;
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 #endif

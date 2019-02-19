@@ -41,7 +41,18 @@
 #include <soc.h>
 #include "hal/debug.h"
 
-static int _init_reset(void);
+/* Macro to return PDU time */
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+#define PKT_US(octets, phy) \
+	(((phy) & BIT(2)) ? \
+	 (80 + 256 + 16 + 24 + ((((2 + (octets) + 4) * 8) + 24 + 3) * 8)) : \
+	 (((octets) + 14) * 8 / BIT(((phy) & 0x03) >> 1)))
+#else /* !CONFIG_BT_CTLR_PHY_CODED */
+#define PKT_US(octets, phy) \
+	(((octets) + 14) * 8 / BIT(((phy) & 0x03) >> 1))
+#endif /* !CONFIG_BT_CTLR_PHY_CODED */
+
+static int init_reset(void);
 static void ticker_op_update_cb(u32_t status, void *param);
 static inline void disable(u16_t handle);
 static void conn_cleanup(struct ll_conn *conn);
@@ -85,8 +96,8 @@ static inline void event_phy_upd_ind_prep(struct ll_conn *conn,
 
 static inline void ctrl_tx_ack(struct ll_conn *conn, struct node_tx **tx,
 			       struct pdu_data *pdu_tx);
-static inline u8_t ctrl_rx(memq_link_t *link, struct node_rx_pdu **rx,
-			   struct pdu_data *pdu_rx, struct ll_conn *conn);
+static inline int ctrl_rx(memq_link_t *link, struct node_rx_pdu **rx,
+			  struct pdu_data *pdu_rx, struct ll_conn *conn);
 static void ticker_op_cb(u32_t status, void *params);
 
 #define CONN_TX_BUF_SIZE MROUND(offsetof(struct node_tx, pdu) + \
@@ -168,6 +179,22 @@ struct ll_conn *ll_connected_get(u16_t handle)
 	return conn;
 }
 
+u8_t ull_conn_allowed_check(void *conn)
+{
+	struct ll_conn * const conn_hdr = conn;
+	if (conn_hdr->llcp_req != conn_hdr->llcp_ack) {
+		return BT_HCI_ERR_CMD_DISALLOWED;
+	}
+
+	conn_hdr->llcp_req++;
+	if (((conn_hdr->llcp_req - conn_hdr->llcp_ack) & 0x03) != 1) {
+		conn_hdr->llcp_req--;
+		return BT_HCI_ERR_CMD_DISALLOWED;
+	}
+
+	return 0;
+}
+
 void *ll_tx_mem_acquire(void)
 {
 	return mem_acquire(&mem_conn_tx.free);
@@ -206,6 +233,7 @@ u8_t ll_conn_update(u16_t handle, u8_t cmd, u8_t status, u16_t interval_min,
 		    u16_t interval_max, u16_t latency, u16_t timeout)
 {
 	struct ll_conn *conn;
+	u8_t ret;
 
 	conn = ll_connected_get(handle);
 	if (!conn) {
@@ -230,14 +258,10 @@ u8_t ll_conn_update(u16_t handle, u8_t cmd, u8_t status, u16_t interval_min,
 	}
 
 	if (!cmd) {
-		if (conn->llcp_req != conn->llcp_ack) {
-			return BT_HCI_ERR_CMD_DISALLOWED;
-		}
 
-		conn->llcp_req++;
-		if (((conn->llcp_req - conn->llcp_ack) & 0x03) != 1) {
-			conn->llcp_req--;
-			return BT_HCI_ERR_CMD_DISALLOWED;
+		ret = ull_conn_allowed_check(conn);
+		if (ret) {
+			return ret;
 		}
 
 		conn->llcp.conn_upd.win_size = 1;
@@ -331,16 +355,16 @@ u8_t ll_terminate_ind_send(u16_t handle, u8_t reason)
 u8_t ll_feature_req_send(u16_t handle)
 {
 	struct ll_conn *conn;
+	u8_t ret;
 
 	conn = ll_connected_get(handle);
-	if (!conn || (conn->llcp_req != conn->llcp_ack)) {
+	if (!conn) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
 
-	conn->llcp_req++;
-	if (((conn->llcp_req - conn->llcp_ack) & 0x03) != 1) {
-		conn->llcp_req--;
-		return BT_HCI_ERR_CMD_DISALLOWED;
+	ret = ull_conn_allowed_check(conn);
+	if (ret) {
+		return ret;
 	}
 
 	conn->llcp_type = LLCP_FEATURE_EXCHANGE;
@@ -352,16 +376,16 @@ u8_t ll_feature_req_send(u16_t handle)
 u8_t ll_version_ind_send(u16_t handle)
 {
 	struct ll_conn *conn;
+	u8_t ret;
 
 	conn = ll_connected_get(handle);
-	if (!conn || (conn->llcp_req != conn->llcp_ack)) {
+	if (!conn) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
 
-	conn->llcp_req++;
-	if (((conn->llcp_req - conn->llcp_ack) & 0x03) != 1) {
-		conn->llcp_req--;
-		return BT_HCI_ERR_CMD_DISALLOWED;
+	ret = ull_conn_allowed_check(conn);
+	if (ret) {
+		return ret;
 	}
 
 	conn->llcp_type = LLCP_VERSION_EXCHANGE;
@@ -478,7 +502,7 @@ int ull_conn_init(void)
 		return -ENODEV;
 	}
 
-	err = _init_reset();
+	err = init_reset();
 	if (err) {
 		return err;
 	}
@@ -509,7 +533,7 @@ int ull_conn_reset(void)
 	/* Reset the current conn update conn context pointer */
 	conn_upd_curr = NULL;
 
-	err = _init_reset();
+	err = init_reset();
 	if (err) {
 		return err;
 	}
@@ -1102,7 +1126,7 @@ void ull_conn_tx_demux(u8_t count)
 			struct pdu_data *p = (void *)tx->pdu;
 
 			p->ll_id = PDU_DATA_LLID_RESV;
-			ull_tx_ack_put(0xFFFF, tx);
+			ll_tx_ack_put(0xFFFF, tx);
 		}
 
 		MFIFO_DEQUEUE(conn_tx);
@@ -1115,9 +1139,9 @@ void ull_conn_tx_lll_enqueue(struct ll_conn *conn, u8_t count)
 
 	tx = conn->tx_head;
 #if defined(CONFIG_BT_CTLR_LE_ENC)
-	while (tx && ((tx == conn->tx_ctrl) || !conn->pause_tx) && count--) {
+	while (tx && (!conn->pause_tx || (tx == conn->tx_ctrl)) && count--) {
 #else /* !CONFIG_BT_CTLR_LE_ENC */
-	while (tx && (tx == conn->tx_ctrl) && count--) {
+	while (tx && count--) {
 #endif /* !CONFIG_BT_CTLR_LE_ENC */
 		struct node_tx *tx_lll;
 		memq_link_t *link;
@@ -1174,10 +1198,10 @@ void ull_conn_tx_ack(struct ll_conn *conn, memq_link_t *link,
 		}
 	}
 
-	ull_tx_ack_put(conn->lll.handle, tx);
+	ll_tx_ack_put(conn->lll.handle, tx);
 }
 
-static int _init_reset(void)
+static int init_reset(void)
 {
 	/* Initialize conn pool. */
 	mem_init(conn_pool, sizeof(struct ll_conn),
@@ -1229,15 +1253,15 @@ static void ticker_op_update_cb(u32_t status, void *param)
 
 static void ticker_op_stop_cb(u32_t status, void *param)
 {
-	static memq_link_t _link;
-	static struct mayfly _mfy = {0, 0, &_link, NULL, lll_conn_tx_flush};
+	static memq_link_t link;
+	static struct mayfly mfy = {0, 0, &link, NULL, lll_conn_tx_flush};
 
 	LL_ASSERT(status == TICKER_STATUS_SUCCESS);
 
-	_mfy.param = param;
+	mfy.param = param;
 
 	/* Flush pending tx PDUs in LLL (using a mayfly) */
-	mayfly_enqueue(TICKER_USER_ID_ULL_LOW, TICKER_USER_ID_LLL, 1, &_mfy);
+	mayfly_enqueue(TICKER_USER_ID_ULL_LOW, TICKER_USER_ID_LLL, 1, &mfy);
 }
 
 static inline void disable(u16_t handle)
@@ -1428,7 +1452,7 @@ static inline void event_conn_upd_init(struct ll_conn *conn,
 #if defined(CONFIG_BT_CTLR_XTAL_ADVANCED)
 		if (conn->evt.ticks_xtal_to_start & XON_BITMASK) {
 			u32_t ticks_prepare_to_start =
-				max(conn->evt.ticks_active_to_start,
+				MAX(conn->evt.ticks_active_to_start,
 				    conn->evt.ticks_preempt_to_start);
 
 			conn->llcp.conn_upd.ticks_anchor -=
@@ -1596,7 +1620,7 @@ static inline int event_conn_upd_prep(struct ll_conn *conn,
 		/* restore to normal prepare */
 		if (conn->evt.ticks_xtal_to_start & XON_BITMASK) {
 			u32_t ticks_prepare_to_start =
-				max(conn->evt.ticks_active_to_start,
+				MAX(conn->evt.ticks_active_to_start,
 				    conn->evt.ticks_preempt_to_start);
 
 			conn->evt.ticks_xtal_to_start &= ~XON_BITMASK;
@@ -1621,7 +1645,7 @@ static inline int event_conn_upd_prep(struct ll_conn *conn,
 		lll->latency_prepare -= (instant_latency - latency);
 
 		/* calculate the offset, window widening and interval */
-		ticks_slot_offset = max(conn->evt.ticks_active_to_start,
+		ticks_slot_offset = MAX(conn->evt.ticks_active_to_start,
 					conn->evt.ticks_xtal_to_start);
 		conn_interval_us = conn->llcp.conn_upd.interval * 1250;
 		periodic_us = conn_interval_us;
@@ -2138,7 +2162,7 @@ static inline void event_conn_param_req(struct ll_conn *conn,
 #if defined(CONFIG_BT_CTLR_XTAL_ADVANCED)
 		if (conn->evt.ticks_xtal_to_start & XON_BITMASK) {
 			u32_t ticks_prepare_to_start =
-				max(conn->evt.ticks_active_to_start,
+				MAX(conn->evt.ticks_active_to_start,
 				    conn->evt.ticks_preempt_to_start);
 
 			conn->llcp_conn_param.ticks_ref -=
@@ -3874,10 +3898,10 @@ static inline bool pdu_len_cmp(u8_t opcode, u8_t len)
 	return ctrl_len_lut[opcode] == len;
 }
 
-static inline u8_t ctrl_rx(memq_link_t *link, struct node_rx_pdu **rx,
-			   struct pdu_data *pdu_rx, struct ll_conn *conn)
+static inline int ctrl_rx(memq_link_t *link, struct node_rx_pdu **rx,
+			  struct pdu_data *pdu_rx, struct ll_conn *conn)
 {
-	u8_t nack = 0;
+	int nack = 0;
 	u8_t opcode;
 
 	opcode = pdu_rx->llctrl.opcode;

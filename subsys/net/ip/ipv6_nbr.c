@@ -23,7 +23,6 @@ LOG_MODULE_DECLARE(net_ipv6, CONFIG_NET_IPV6_LOG_LEVEL);
 #include <net/net_stats.h>
 #include <net/net_context.h>
 #include <net/net_mgmt.h>
-#include <net/tcp.h>
 #include "net_private.h"
 #include "connection.h"
 #include "icmpv6.h"
@@ -970,7 +969,7 @@ int net_ipv6_send_na(struct net_if *iface, const struct in6_addr *src,
 	}
 
 	net_pkt_cursor_init(pkt);
-	net_ipv6_finalize_new(pkt, IPPROTO_ICMPV6);
+	net_ipv6_finalize(pkt, IPPROTO_ICMPV6);
 
 	dbg_addr_sent_tgt("Neighbor Advertisement", src, dst, &na_hdr->tgt);
 
@@ -1774,7 +1773,7 @@ int net_ipv6_send_ns(struct net_if *iface,
 	}
 
 	net_pkt_cursor_init(pkt);
-	net_ipv6_finalize_new(pkt, IPPROTO_ICMPV6);
+	net_ipv6_finalize(pkt, IPPROTO_ICMPV6);
 
 	nbr = nbr_lookup(&net_neighbor.table, iface, &ns_hdr->tgt);
 	if (!nbr) {
@@ -1883,7 +1882,7 @@ int net_ipv6_send_rs(struct net_if *iface)
 	}
 
 	net_pkt_cursor_init(pkt);
-	net_ipv6_finalize_new(pkt, IPPROTO_ICMPV6);
+	net_ipv6_finalize(pkt, IPPROTO_ICMPV6);
 
 	dbg_addr_sent("Router Solicitation", src, &dst);
 

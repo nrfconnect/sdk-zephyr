@@ -26,7 +26,7 @@ extern "C" {
 enum power_states {
 	SYS_POWER_STATE_AUTO	= (-2),
 	SYS_POWER_STATE_ACTIVE	= (-1),
-#ifdef CONFIG_SYS_POWER_LOW_POWER_STATE
+#ifdef CONFIG_SYS_POWER_LOW_POWER_STATES
 # ifdef CONFIG_SYS_POWER_STATE_CPU_LPS_SUPPORTED
 	SYS_POWER_STATE_CPU_LPS,
 # endif
@@ -36,9 +36,9 @@ enum power_states {
 # ifdef CONFIG_SYS_POWER_STATE_CPU_LPS_2_SUPPORTED
 	SYS_POWER_STATE_CPU_LPS_2,
 # endif
-#endif /* CONFIG_SYS_POWER_LOW_POWER_STATE */
+#endif /* CONFIG_SYS_POWER_LOW_POWER_STATES */
 
-#ifdef CONFIG_SYS_POWER_DEEP_SLEEP
+#ifdef CONFIG_SYS_POWER_DEEP_SLEEP_STATES
 # ifdef CONFIG_SYS_POWER_STATE_DEEP_SLEEP_SUPPORTED
 	SYS_POWER_STATE_DEEP_SLEEP,
 # endif
@@ -48,7 +48,7 @@ enum power_states {
 # ifdef CONFIG_SYS_POWER_STATE_DEEP_SLEEP_2_SUPPORTED
 	SYS_POWER_STATE_DEEP_SLEEP_2,
 # endif
-#endif /* CONFIG_SYS_POWER_DEEP_SLEEP */
+#endif /* CONFIG_SYS_POWER_DEEP_SLEEP_STATES */
 	SYS_POWER_STATE_MAX
 };
 
@@ -72,7 +72,7 @@ extern unsigned char sys_pm_idle_exit_notify;
 static inline bool sys_pm_is_low_power_state(enum power_states state)
 {
 	switch (state) {
-#ifdef CONFIG_SYS_POWER_LOW_POWER_STATE
+#ifdef CONFIG_SYS_POWER_LOW_POWER_STATES
 # ifdef CONFIG_SYS_POWER_STATE_CPU_LPS_SUPPORTED
 	case SYS_POWER_STATE_CPU_LPS:
 		/* FALLTHROUGH */
@@ -86,7 +86,7 @@ static inline bool sys_pm_is_low_power_state(enum power_states state)
 		/* FALLTHROUGH */
 # endif
 		return true;
-#endif /* CONFIG_SYS_POWER_LOW_POWER_STATE */
+#endif /* CONFIG_SYS_POWER_LOW_POWER_STATES */
 
 	default:
 		return false;
@@ -101,7 +101,7 @@ static inline bool sys_pm_is_low_power_state(enum power_states state)
 static inline bool sys_pm_is_deep_sleep_state(enum power_states state)
 {
 	switch (state) {
-#ifdef CONFIG_SYS_POWER_DEEP_SLEEP
+#ifdef CONFIG_SYS_POWER_DEEP_SLEEP_STATES
 # ifdef CONFIG_SYS_POWER_STATE_DEEP_SLEEP_SUPPORTED
 	case SYS_POWER_STATE_DEEP_SLEEP:
 		/* FALLTHROUGH */
@@ -115,7 +115,7 @@ static inline bool sys_pm_is_deep_sleep_state(enum power_states state)
 		/* FALLTHROUGH */
 # endif
 		return true;
-#endif /* CONFIG_SYS_POWER_DEEP_SLEEP */
+#endif /* CONFIG_SYS_POWER_DEEP_SLEEP_STATES */
 
 	default:
 		return false;
@@ -140,7 +140,7 @@ static inline void sys_pm_idle_exit_notification_disable(void)
  * @brief Force usage of given power state.
  *
  * This function overrides decision made by PM policy
- * forcing usage of given power state in all subseqent
+ * forcing usage of given power state in all subsequent
  * suspend operations. Forcing the SYS_POWER_STATE_AUTO
  * state restores normal operation.
  *

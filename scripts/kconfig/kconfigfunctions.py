@@ -10,13 +10,13 @@ import os
 # 'string', 'int', 'hex', 'bool'
 
 doc_mode = os.environ.get('KCONFIG_DOC_MODE') == "1"
-bin_dir = os.environ.get('PROJECT_BINARY_DIR')
-conf_file = os.path.join(bin_dir, 'include', 'generated',
-                         'generated_dts_board.conf') if bin_dir else None
+
+# The env var 'GENERATED_DTS_BOARD_CONF' must be set
+GENERATED_DTS_BOARD_CONF = os.environ['GENERATED_DTS_BOARD_CONF']
 
 dt_defines = {}
-if (not doc_mode) and conf_file and os.path.isfile(conf_file):
-    with open(conf_file, 'r', encoding='utf-8') as fd:
+if (not doc_mode) and os.path.isfile(GENERATED_DTS_BOARD_CONF):
+    with open(GENERATED_DTS_BOARD_CONF, 'r', encoding='utf-8') as fd:
         for line in fd:
             if '=' in line:
                 define, val = line.split('=')
@@ -35,6 +35,7 @@ def _dt_units_to_scale(unit):
 def dt_int_val(kconf, _, name, unit=None):
     """
     This function looks up 'name' in the DTS generated "conf" style database
+    (generated_dts_board.conf in <build_dir>/zephyr/include/generated/)
     and if it's found it will return the value as an decimal integer.  The
     function will divide the value based on 'unit':
         None        No division
@@ -57,6 +58,7 @@ def dt_int_val(kconf, _, name, unit=None):
 def dt_hex_val(kconf, _, name, unit=None):
     """
     This function looks up 'name' in the DTS generated "conf" style database
+    (generated_dts_board.conf in <build_dir>/zephyr/include/generated/)
     and if it's found it will return the value as an hex integer.  The
     function will divide the value based on 'unit':
         None        No division
@@ -79,6 +81,7 @@ def dt_hex_val(kconf, _, name, unit=None):
 def dt_str_val(kconf, _, name):
     """
     This function looks up 'name' in the DTS generated "conf" style database
+    (generated_dts_board.conf in <build_dir>/zephyr/include/generated/)
     and if it's found it will return the value as string.  If it's not found we
     return an empty string.
     """

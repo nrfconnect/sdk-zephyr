@@ -24,7 +24,6 @@ LOG_MODULE_REGISTER(net_tcp, CONFIG_NET_TCP_LOG_LEVEL);
 #include <net/net_pkt.h>
 #include <net/net_ip.h>
 #include <net/net_context.h>
-#include <net/tcp.h>
 #include <misc/byteorder.h>
 
 #include "connection.h"
@@ -283,7 +282,7 @@ struct net_tcp *net_tcp_alloc(struct net_context *context)
 	tcp_context[i].context = context;
 
 	tcp_context[i].send_seq = tcp_init_isn();
-	tcp_context[i].recv_wnd = min(NET_TCP_MAX_WIN, NET_TCP_BUF_MAX_LEN);
+	tcp_context[i].recv_wnd = MIN(NET_TCP_MAX_WIN, NET_TCP_BUF_MAX_LEN);
 	tcp_context[i].send_mss = NET_TCP_DEFAULT_MSS;
 
 	tcp_context[i].accept_cb = NULL;
@@ -355,10 +354,10 @@ static int finalize_segment(struct net_pkt *pkt)
 
 	if (IS_ENABLED(CONFIG_NET_IPV4) &&
 	    net_pkt_family(pkt) == AF_INET) {
-		return net_ipv4_finalize_new(pkt, IPPROTO_TCP);
+		return net_ipv4_finalize(pkt, IPPROTO_TCP);
 	} else if (IS_ENABLED(CONFIG_NET_IPV6) &&
 		   net_pkt_family(pkt) == AF_INET6) {
-		return net_ipv6_finalize_new(pkt, IPPROTO_TCP);
+		return net_ipv6_finalize(pkt, IPPROTO_TCP);
 	}
 
 	return -EINVAL;
@@ -950,7 +949,7 @@ int net_tcp_send_pkt(struct net_pkt *pkt)
 		}
 
 		if (pkt_in_slist) {
-			new_pkt = net_pkt_clone_new(pkt, ALLOC_TIMEOUT);
+			new_pkt = net_pkt_clone(pkt, ALLOC_TIMEOUT);
 			if (!new_pkt) {
 				return -ENOMEM;
 			}
@@ -1266,72 +1265,6 @@ bool net_tcp_validate_seq(struct net_tcp *tcp, struct net_tcp_hdr *tcp_hdr)
 					+ net_tcp_get_recv_wnd(tcp)) < 0);
 }
 
-struct net_tcp_hdr *net_tcp_get_hdr(struct net_pkt *pkt,
-				    struct net_tcp_hdr *hdr)
-{
-	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(tcp_access, struct net_tcp_hdr);
-	struct net_pkt_cursor backup;
-	struct net_tcp_hdr *tcp_hdr;
-	bool overwrite;
-
-	tcp_access.data = hdr;
-
-	overwrite = net_pkt_is_being_overwritten(pkt);
-	net_pkt_set_overwrite(pkt, true);
-
-	net_pkt_cursor_backup(pkt, &backup);
-	net_pkt_cursor_init(pkt);
-
-	if (net_pkt_skip(pkt, net_pkt_ip_hdr_len(pkt) +
-			 net_pkt_ipv6_ext_len(pkt))) {
-		tcp_hdr = NULL;
-		goto out;
-	}
-
-	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, &tcp_access);
-
-out:
-	net_pkt_cursor_restore(pkt, &backup);
-	net_pkt_set_overwrite(pkt, overwrite);
-
-	return tcp_hdr;
-}
-
-struct net_tcp_hdr *net_tcp_set_hdr(struct net_pkt *pkt,
-				    struct net_tcp_hdr *hdr)
-{
-	NET_PKT_DATA_ACCESS_DEFINE(tcp_access, struct net_tcp_hdr);
-	struct net_pkt_cursor backup;
-	struct net_tcp_hdr *tcp_hdr;
-	bool overwrite;
-
-	overwrite = net_pkt_is_being_overwritten(pkt);
-	net_pkt_set_overwrite(pkt, true);
-
-	net_pkt_cursor_backup(pkt, &backup);
-	net_pkt_cursor_init(pkt);
-
-	if (net_pkt_skip(pkt, net_pkt_ip_hdr_len(pkt) +
-			 net_pkt_ipv6_ext_len(pkt))) {
-		tcp_hdr = NULL;
-		goto out;
-	}
-
-	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, &tcp_access);
-	if (!tcp_hdr) {
-		goto out;
-	}
-
-	memcpy(tcp_hdr, hdr, sizeof(struct net_tcp_hdr));
-
-	net_pkt_set_data(pkt, &tcp_access);
-out:
-	net_pkt_cursor_restore(pkt, &backup);
-	net_pkt_set_overwrite(pkt, overwrite);
-
-	return tcp_hdr == NULL ? NULL : hdr;
-}
-
 int net_tcp_finalize(struct net_pkt *pkt)
 {
 	NET_PKT_DATA_ACCESS_DEFINE(tcp_access, struct net_tcp_hdr);
@@ -1346,39 +1279,6 @@ int net_tcp_finalize(struct net_pkt *pkt)
 	tcp_hdr->chksum = net_calc_chksum_tcp(pkt);
 
 	return net_pkt_set_data(pkt, &tcp_access);
-}
-
-struct net_buf *net_tcp_set_chksum(struct net_pkt *pkt, struct net_buf *frag)
-{
-	struct net_tcp_hdr *hdr;
-	u16_t chksum = 0U;
-	u16_t pos;
-
-	hdr = net_pkt_tcp_data(pkt);
-	if (net_tcp_header_fits(pkt, hdr)) {
-		hdr->chksum = 0;
-		hdr->chksum = net_calc_chksum_tcp(pkt);
-
-		return frag;
-	}
-
-	/* We need to set the checksum to 0 first before the calc */
-	frag = net_pkt_write(pkt, frag,
-			     net_pkt_ip_hdr_len(pkt) +
-			     net_pkt_ipv6_ext_len(pkt) +
-			     2 + 2 + 4 + 4 + /* src + dst + seq + ack */
-			     1 + 1 + 2 /* offset + flags + wnd */,
-			     &pos, sizeof(chksum), (u8_t *)&chksum,
-			     ALLOC_TIMEOUT);
-
-	chksum = net_calc_chksum_tcp(pkt);
-
-	frag = net_pkt_write(pkt, frag, pos - 2, &pos, sizeof(chksum),
-			     (u8_t *)&chksum, ALLOC_TIMEOUT);
-
-	NET_ASSERT(frag);
-
-	return frag;
 }
 
 int net_tcp_parse_opts(struct net_pkt *pkt, int opt_totlen,
@@ -1452,26 +1352,6 @@ int net_tcp_parse_opts(struct net_pkt *pkt, int opt_totlen,
 error:
 	NET_ERR("Invalid TCP opt: %d len: %d", opt, optlen);
 	return -EINVAL;
-}
-
-int tcp_hdr_len(struct net_pkt *pkt)
-{
-	NET_PKT_DATA_ACCESS_DEFINE(tcp_access, struct net_tcp_hdr);
-	struct net_tcp_hdr *tcp_hdr;
-
-	net_pkt_cursor_init(pkt);
-
-	if (net_pkt_skip(pkt, net_pkt_ip_hdr_len(pkt) +
-			 net_pkt_ipv6_ext_len(pkt))) {
-		return 0;
-	}
-
-	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, &tcp_access);
-	if (tcp_hdr) {
-		return NET_TCP_HDR_LEN(tcp_hdr);
-	}
-
-	return 0;
 }
 
 int net_tcp_recv(struct net_context *context, net_context_recv_cb_t cb,
@@ -2142,7 +2022,12 @@ resend_ack:
 		context->tcp->fin_rcvd = 1;
 	}
 
-	net_pkt_set_appdata_values(pkt, IPPROTO_TCP);
+	net_pkt_set_appdatalen(pkt, net_pkt_get_len(pkt) -
+			       net_pkt_ip_hdr_len(pkt) -
+			       net_pkt_ipv6_ext_len(pkt) -
+			       NET_TCP_HDR_LEN(tcp_hdr));
+
+	net_pkt_set_appdata(pkt, net_pkt_cursor_get_pos(pkt));
 
 	data_len = net_pkt_appdatalen(pkt);
 	if (data_len > net_tcp_get_recv_wnd(context->tcp)) {

@@ -437,11 +437,11 @@ the following configuration flags.
 
    This flag enables the tickless idle power saving feature.
 
-:option:`CONFIG_SYS_POWER_LOW_POWER_STATE`
+:option:`CONFIG_SYS_POWER_LOW_POWER_STATES`
 
    This flag enables support for the Low Power states.
 
-:option:`CONFIG_SYS_POWER_DEEP_SLEEP`
+:option:`CONFIG_SYS_POWER_DEEP_SLEEP_STATES`
 
    This flag enables support for the Deep Sleep states.
 

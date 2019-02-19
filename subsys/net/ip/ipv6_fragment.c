@@ -17,7 +17,6 @@ LOG_MODULE_DECLARE(net_ipv6, CONFIG_NET_IPV6_LOG_LEVEL);
 #include <net/net_stats.h>
 #include <net/net_context.h>
 #include <net/net_mgmt.h>
-#include <net/tcp.h>
 #include "net_private.h"
 #include "connection.h"
 #include "icmpv6.h"
@@ -268,7 +267,7 @@ static void reassemble_packet(struct net_ipv6_reassembly *reass)
 		NET_DBG("Removing %d bytes from start of pkt %p",
 			removed_len, pkt->buffer);
 
-		if (net_pkt_pull_new(pkt, removed_len)) {
+		if (net_pkt_pull(pkt, removed_len)) {
 			NET_ERR("Failed to pull headers");
 			reassembly_cancel(reass->id, &reass->src, &reass->dst);
 			return;
@@ -306,7 +305,7 @@ static void reassemble_packet(struct net_ipv6_reassembly *reass)
 
 	next_hdr = ipv6.frag_hdr->nexthdr;
 
-	if (net_pkt_pull_new(pkt, sizeof(struct net_ipv6_frag_hdr))) {
+	if (net_pkt_pull(pkt, sizeof(struct net_ipv6_frag_hdr))) {
 		NET_ERR("Failed to remove fragment header");
 		goto error;
 	}
@@ -596,11 +595,11 @@ static int send_ipv6_fragment(struct net_pkt *pkt,
 	/* We copy original headers back to the fragment packet
 	 * Note that we insert the right next header to point to fragment header
 	 */
-	if (net_pkt_copy_new(frag_pkt, pkt, next_hdr_off) ||
+	if (net_pkt_copy(frag_pkt, pkt, next_hdr_off) ||
 	    net_pkt_write_u8_new(frag_pkt, NET_IPV6_NEXTHDR_FRAG) ||
 	    net_pkt_skip(pkt, 1) ||
-	    net_pkt_copy_new(frag_pkt, pkt, net_pkt_ip_hdr_len(pkt) +
-			     net_pkt_ipv6_ext_len(pkt) - next_hdr_off - 1)) {
+	    net_pkt_copy(frag_pkt, pkt, net_pkt_ip_hdr_len(pkt) +
+			 net_pkt_ipv6_ext_len(pkt) - next_hdr_off - 1)) {
 		goto fail;
 	}
 
@@ -628,13 +627,13 @@ static int send_ipv6_fragment(struct net_pkt *pkt,
 	 * the original packet
 	 */
 	if (net_pkt_skip(pkt, frag_offset) ||
-	    net_pkt_copy_new(frag_pkt, pkt, fit_len)) {
+	    net_pkt_copy(frag_pkt, pkt, fit_len)) {
 		goto fail;
 	}
 
 	net_pkt_cursor_init(frag_pkt);
 
-	if (net_ipv6_finalize_new(frag_pkt, 0) < 0) {
+	if (net_ipv6_finalize(frag_pkt, 0) < 0) {
 		goto fail;
 	}
 

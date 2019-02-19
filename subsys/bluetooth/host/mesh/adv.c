@@ -45,14 +45,7 @@
 #define ADV_INT_DEFAULT_MS 100
 #define ADV_INT_FAST_MS    20
 
-/* TinyCrypt PRNG consumes a lot of stack space, so we need to have
- * an increased call stack whenever it's used.
- */
-#if defined(CONFIG_BT_HOST_CRYPTO)
 #define ADV_STACK_SIZE 768
-#else
-#define ADV_STACK_SIZE 512
-#endif
 
 static K_FIFO_DEFINE(adv_queue);
 static struct k_thread adv_thread_data;
@@ -103,7 +96,7 @@ static inline void adv_send(struct net_buf *buf)
 	struct bt_data ad;
 	int err;
 
-	adv_int = max(adv_int_min,
+	adv_int = MAX(adv_int_min,
 		      BT_MESH_TRANSMIT_INT(BT_MESH_ADV(buf)->xmit));
 	duration = (MESH_SCAN_WINDOW_MS +
 		    ((BT_MESH_TRANSMIT_COUNT(BT_MESH_ADV(buf)->xmit) + 1) *

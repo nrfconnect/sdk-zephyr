@@ -26,7 +26,6 @@ LOG_MODULE_REGISTER(net_core, CONFIG_NET_CORE_LOG_LEVEL);
 #include <net/net_pkt.h>
 #include <net/net_core.h>
 #include <net/dns_resolve.h>
-#include <net/tcp.h>
 #include <net/gptp.h>
 #include <net/lldp.h>
 
@@ -310,6 +309,7 @@ int net_send_data(struct net_pkt *pkt)
 	}
 #endif
 
+	net_pkt_trim_buffer(pkt);
 	net_pkt_cursor_init(pkt);
 
 	status = check_ip_addr(pkt);

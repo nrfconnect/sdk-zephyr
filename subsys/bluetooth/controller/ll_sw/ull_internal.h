@@ -9,6 +9,11 @@ static inline u8_t ull_ref_inc(struct ull_hdr *hdr)
 	return ++hdr->ref;
 }
 
+static inline u8_t ull_ref_dec(struct ull_hdr *hdr)
+{
+	return hdr->ref--;
+}
+
 static inline void ull_hdr_init(struct ull_hdr *hdr)
 {
 	hdr->disabled_cb = hdr->disabled_param = NULL;
@@ -22,7 +27,7 @@ void *ll_pdu_rx_alloc_peek(u8_t count);
 void *ll_pdu_rx_alloc(void);
 void ll_rx_put(memq_link_t *link, void *rx);
 void ll_rx_sched(void);
-void ull_tx_ack_put(u16_t handle, struct node_tx *node_tx);
+void ll_tx_ack_put(u16_t handle, struct node_tx *node_tx);
 void ull_ticker_status_give(u32_t status, void *param);
 u32_t ull_ticker_status_take(u32_t ret, u32_t volatile *ret_cb);
 void *ull_disable_mark(void *param);

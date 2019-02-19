@@ -278,6 +278,7 @@ u8_t ll_connect_disable(void **rx)
 u8_t ll_chm_update(u8_t *chm)
 {
 	u16_t handle;
+	u8_t ret;
 
 	ull_conn_chan_map_set(chm);
 
@@ -290,14 +291,9 @@ u8_t ll_chm_update(u8_t *chm)
 			continue;
 		}
 
-		if (conn->llcp_req != conn->llcp_ack) {
-			return BT_HCI_ERR_CMD_DISALLOWED;
-		}
-
-		conn->llcp_req++;
-		if (((conn->llcp_req - conn->llcp_ack) & 0x03) != 1) {
-			conn->llcp_req--;
-			return BT_HCI_ERR_CMD_DISALLOWED;
+		ret = ull_conn_allowed_check(conn);
+		if (ret) {
+			return ret;
 		}
 
 		memcpy(conn->llcp.chan_map.chm, chm,
@@ -317,20 +313,16 @@ u8_t ll_enc_req_send(u16_t handle, u8_t *rand, u8_t *ediv, u8_t *ltk)
 {
 	struct ll_conn *conn;
 	struct node_tx *tx;
+	u8_t ret;
 
 	conn = ll_connected_get(handle);
 	if (!conn) {
 		return BT_HCI_ERR_UNKNOWN_CONN_ID;
 	}
 
-	if (conn->llcp_req != conn->llcp_ack) {
-		return BT_HCI_ERR_CMD_DISALLOWED;
-	}
-
-	conn->llcp_req++;
-	if (((conn->llcp_req - conn->llcp_ack) & 0x03) != 1) {
-		conn->llcp_req--;
-		return BT_HCI_ERR_CMD_DISALLOWED;
+	ret = ull_conn_allowed_check(conn);
+	if (ret) {
+		return ret;
 	}
 
 	tx = ll_tx_mem_acquire();
@@ -481,7 +473,7 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 				       ftr->us_radio_rdy + 328 + TIFS_US +
 				       328);
 
-	ticks_slot_offset = max(conn->evt.ticks_active_to_start,
+	ticks_slot_offset = MAX(conn->evt.ticks_active_to_start,
 				conn->evt.ticks_xtal_to_start);
 
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
@@ -638,7 +630,7 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 		conn->hdr.ticks_preempt_to_start = HAL_TICKER_US_TO_TICKS(
 			EVENT_OVERHEAD_PREEMPT_MIN_US);
 		conn->hdr.ticks_slot = _radio.scanner.ticks_conn_slot;
-		ticks_slot_offset = max(conn->hdr.ticks_active_to_start,
+		ticks_slot_offset = MAX(conn->hdr.ticks_active_to_start,
 					conn->hdr.ticks_xtal_to_start);
 
 		/* Stop Scanner */
@@ -679,8 +671,8 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 void ull_master_ticker_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 			  void *param)
 {
-	static memq_link_t _link;
-	static struct mayfly _mfy = {0, 0, &_link, NULL, lll_master_prepare};
+	static memq_link_t link;
+	static struct mayfly mfy = {0, 0, &link, NULL, lll_master_prepare};
 	static struct lll_prepare_param p;
 	struct ll_conn *conn = param;
 	u32_t err;
@@ -710,11 +702,11 @@ void ull_master_ticker_cb(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 	p.remainder = remainder;
 	p.lazy = lazy;
 	p.param = &conn->lll;
-	_mfy.param = &p;
+	mfy.param = &p;
 
 	/* Kick LLL prepare */
 	err = mayfly_enqueue(TICKER_USER_ID_ULL_HIGH, TICKER_USER_ID_LLL,
-			     0, &_mfy);
+			     0, &mfy);
 	LL_ASSERT(!err);
 
 	/* De-mux remaining tx nodes from FIFO */

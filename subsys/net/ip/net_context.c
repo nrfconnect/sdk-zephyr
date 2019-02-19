@@ -22,7 +22,6 @@ LOG_MODULE_REGISTER(net_ctx, CONFIG_NET_CONTEXT_LOG_LEVEL);
 #include <net/net_ip.h>
 #include <net/net_context.h>
 #include <net/net_offload.h>
-#include <net/tcp.h>
 #include <net/ethernet.h>
 #include <net/socket_can.h>
 
@@ -147,12 +146,12 @@ int net_context_get(sa_family_t family,
 			if (family != AF_PACKET && family != AF_CAN) {
 				return -EINVAL;
 			}
-		} else if (IS_ENABLED(CONFIG_NET_SOCKETS_RAW) &&
+		} else if (IS_ENABLED(CONFIG_NET_SOCKETS_PACKET) &&
 			   !IS_ENABLED(CONFIG_NET_SOCKETS_CAN)) {
 			if (family != AF_PACKET) {
 				return -EINVAL;
 			}
-		} else if (!IS_ENABLED(CONFIG_NET_SOCKETS_RAW) &&
+		} else if (!IS_ENABLED(CONFIG_NET_SOCKETS_PACKET) &&
 			   IS_ENABLED(CONFIG_NET_SOCKETS_CAN)) {
 			if (family != AF_CAN) {
 				return -EINVAL;
@@ -1198,6 +1197,9 @@ static int create_udp_packet(struct net_context *context,
 
 		pkt = tmp;
 
+		net_pkt_compact(pkt);
+		net_pkt_cursor_init(pkt);
+
 		r = net_ipv6_finalize(pkt, net_context_get_ip_proto(context));
 	} else
 #endif /* CONFIG_NET_IPV6 */
@@ -1221,7 +1223,10 @@ static int create_udp_packet(struct net_context *context,
 
 		pkt = tmp;
 
-		net_ipv4_finalize(pkt, net_context_get_ip_proto(context));
+		net_pkt_compact(pkt);
+		net_pkt_cursor_init(pkt);
+
+		r = net_ipv4_finalize(pkt, net_context_get_ip_proto(context));
 	} else
 #endif /* CONFIG_NET_IPV4 */
 	{
@@ -1462,7 +1467,6 @@ static int context_setup_udp_packet(struct net_context *context,
 {
 	int ret = -EINVAL;
 	u16_t dst_port = 0;
-	size_t written;
 
 	if (IS_ENABLED(CONFIG_NET_IPV4) &&
 	    net_context_get_family(context) == AF_INET) {
@@ -1499,17 +1503,12 @@ static int context_setup_udp_packet(struct net_context *context,
 		return ret;
 	}
 
-	written = net_pkt_available_buffer(pkt);
-	if (written > len) {
-		written = len;
-	}
-
-	ret = net_pkt_write_new(pkt, buf, written);
+	ret = net_pkt_write_new(pkt, buf, len);
 	if (ret) {
 		return ret;
 	}
 
-	return written;
+	return 0;
 }
 
 static void context_finalize_packet(struct net_context *context,
@@ -1523,12 +1522,10 @@ static void context_finalize_packet(struct net_context *context,
 
 	if (IS_ENABLED(CONFIG_NET_IPV4) &&
 	    net_context_get_family(context) == AF_INET) {
-		net_ipv4_finalize_new(pkt,
-				      net_context_get_ip_proto(context));
+		net_ipv4_finalize(pkt, net_context_get_ip_proto(context));
 	} else if (IS_ENABLED(CONFIG_NET_IPV6) &&
 		   net_context_get_family(context) == AF_INET6) {
-		net_ipv6_finalize_new(pkt,
-				      net_context_get_ip_proto(context));
+		net_ipv6_finalize(pkt, net_context_get_ip_proto(context));
 	}
 }
 
@@ -1542,8 +1539,8 @@ static int context_sendto_new(struct net_context *context,
 			      void *token,
 			      void *user_data)
 {
-	int sent = 0;
 	struct net_pkt *pkt;
+	size_t tmp_len;
 	int ret;
 
 	NET_ASSERT(PART_OF_ARRAY(contexts, context));
@@ -1638,6 +1635,12 @@ static int context_sendto_new(struct net_context *context,
 		return -ENOMEM;
 	}
 
+	tmp_len = net_pkt_available_payload_buffer(
+				pkt, net_context_get_ip_proto(context));
+	if (tmp_len < len) {
+		len = tmp_len;
+	}
+
 	net_pkt_set_context(pkt, context);
 	context->send_cb = cb;
 	context->user_data = user_data;
@@ -1653,7 +1656,6 @@ static int context_sendto_new(struct net_context *context,
 
 		context_finalize_packet(context, pkt);
 
-		sent = ret;
 		ret = net_send_data(pkt);
 	} else if (IS_ENABLED(CONFIG_NET_TCP) &&
 		   net_context_get_ip_proto(context) == IPPROTO_TCP) {
@@ -1661,8 +1663,6 @@ static int context_sendto_new(struct net_context *context,
 		if (ret < 0) {
 			goto fail;
 		}
-
-		sent = len;
 
 		net_pkt_cursor_init(pkt);
 		ret = net_tcp_queue_data(context, pkt);
@@ -1673,8 +1673,6 @@ static int context_sendto_new(struct net_context *context,
 		ret = net_tcp_send_data(context, cb, token, user_data);
 	} else if (IS_ENABLED(CONFIG_NET_SOCKETS_PACKET) &&
 		   net_context_get_family(context) == AF_PACKET) {
-
-		net_pkt_set_family(pkt, AF_PACKET);
 		ret = net_pkt_write_new(pkt, buf, len);
 		if (ret < 0) {
 			goto fail;
@@ -1683,13 +1681,9 @@ static int context_sendto_new(struct net_context *context,
 		net_pkt_cursor_init(pkt);
 
 		net_if_queue_tx(net_pkt_iface(pkt), pkt);
-		sent = len;
 	} else if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
 		   net_context_get_family(context) == AF_CAN &&
 		   net_context_get_ip_proto(context) == CAN_RAW) {
-
-		net_pkt_set_family(pkt, AF_CAN);
-
 		ret = net_pkt_write_new(pkt, buf, len);
 		if (ret < 0) {
 			goto fail;
@@ -1698,7 +1692,6 @@ static int context_sendto_new(struct net_context *context,
 		net_pkt_cursor_init(pkt);
 
 		ret = net_send_data(pkt);
-		sent = len;
 	} else {
 		NET_DBG("Unknown protocol while sending packet: %d",
 		net_context_get_ip_proto(context));
@@ -1709,7 +1702,7 @@ static int context_sendto_new(struct net_context *context,
 		goto fail;
 	}
 
-	return sent;
+	return len;
 fail:
 	net_pkt_unref(pkt);
 
@@ -1810,14 +1803,7 @@ enum net_verdict net_context_packet_received(struct net_conn *conn,
 	if (net_context_get_ip_proto(context) == IPPROTO_TCP) {
 		net_stats_update_tcp_recv(net_pkt_iface(pkt),
 					  net_pkt_appdatalen(pkt));
-	} else if (net_context_get_ip_proto(context) == IPPROTO_UDP) {
-		/* TCP packets get appdata earlier in tcp_established(). */
-		net_pkt_set_appdata_values(pkt, IPPROTO_UDP);
 	}
-
-	NET_DBG("Set appdata %p to len %u (total %zu)",
-		net_pkt_appdata(pkt), net_pkt_appdatalen(pkt),
-		net_pkt_get_len(pkt));
 
 	context->recv_cb(context, pkt, ip_hdr, proto_hdr, 0, user_data);
 

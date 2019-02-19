@@ -99,13 +99,13 @@
 				   FLASH_TICKER_USER_APP_OPS)
 
 /* Memory for ticker nodes/instances */
-static u8_t MALIGN(4) _ticker_nodes[TICKER_NODES][TICKER_NODE_T_SIZE];
+static u8_t MALIGN(4) ticker_nodes[TICKER_NODES][TICKER_NODE_T_SIZE];
 
 /* Memory for users/contexts operating on ticker module */
-static u8_t MALIGN(4) _ticker_users[MAYFLY_CALLER_COUNT][TICKER_USER_T_SIZE];
+static u8_t MALIGN(4) ticker_users[MAYFLY_CALLER_COUNT][TICKER_USER_T_SIZE];
 
 /* Memory for user/context simultaneous API operations */
-static u8_t MALIGN(4) _ticker_user_ops[TICKER_USER_OPS][TICKER_USER_OP_T_SIZE];
+static u8_t MALIGN(4) ticker_user_ops[TICKER_USER_OPS][TICKER_USER_OP_T_SIZE];
 
 /* Semaphire to wakeup thread on ticker API callback */
 static struct k_sem sem_ticker_api_cb;
@@ -116,10 +116,17 @@ static struct k_sem *sem_recv;
 /* Entropy device */
 static struct device *dev_entropy;
 
-/* prepare and done event FIFOs */
+/* Declare prepare-event FIFO: mfifo_prep: Queue of struct node_rx_event_done */
 static MFIFO_DEFINE(prep, sizeof(struct lll_event), EVENT_PIPELINE_MAX);
-static MFIFO_DEFINE(done, sizeof(void *), EVENT_PIPELINE_MAX);
 
+/* Declare done-event FIFO: mfifo_done.
+ * Queue of pointers to struct node_rx_event_done.
+ * The actual backing behind these pointers is mem_done
+ */
+static MFIFO_DEFINE(done, sizeof(struct node_rx_event_done *),
+							EVENT_PIPELINE_MAX);
+
+/* Backing storage for elements in mfifo_done */
 static struct {
 	void *free;
 	u8_t pool[sizeof(struct node_rx_event_done) * EVENT_PIPELINE_MAX];
@@ -137,39 +144,42 @@ static struct {
 static MFIFO_DEFINE(pdu_rx_free, sizeof(void *), PDU_RX_CNT);
 static MFIFO_DEFINE(ll_pdu_rx_free, sizeof(void *), LL_PDU_RX_CNT);
 
-#define PDU_RX_SIZE_MIN MROUND(offsetof(struct node_rx_pdu, pdu) + \
-			       sizeof(struct node_rx_ftr) + \
-			       (PDU_AC_SIZE_MAX + PDU_AC_SIZE_EXTRA))
-
 #if defined(CONFIG_BT_RX_BUF_LEN)
 #define PDU_RX_OCTETS_MAX (CONFIG_BT_RX_BUF_LEN - 11)
 #else
 #define PDU_RX_OCTETS_MAX 0
 #endif
 
-#define PDU_RX_POOL_SIZE (MROUND(offsetof(struct node_rx_pdu, pdu) + \
-				 sizeof(struct node_rx_ftr) + \
-				 max((PDU_AC_SIZE_MAX + PDU_AC_SIZE_EXTRA), \
-				     (offsetof(struct pdu_data, lldata) + \
-				      PDU_RX_OCTETS_MAX))) * RX_CNT)
+#define NODE_RX_HEADER_SIZE      (offsetof(struct node_rx_pdu, pdu))
+#define NODE_RX_FOOTER_SIZE      (sizeof(struct node_rx_ftr))
+#define NODE_RX_STRUCT_OVERHEAD  (NODE_RX_HEADER_SIZE + NODE_RX_FOOTER_SIZE)
+
+#define PDU_ADVERTIZE_SIZE       (PDU_AC_SIZE_MAX + PDU_AC_SIZE_EXTRA)
+#define PDU_DATA_SIZE            (PDU_DC_LL_HEADER_SIZE  + PDU_RX_OCTETS_MAX)
+
+#define PDU_RX_NODE_POOL_ELEMENT_SIZE                      \
+	MROUND(                                            \
+		NODE_RX_STRUCT_OVERHEAD                    \
+		+ MAX(PDU_ADVERTIZE_SIZE, PDU_DATA_SIZE)   \
+	)
+
+#define PDU_RX_POOL_SIZE (PDU_RX_NODE_POOL_ELEMENT_SIZE * (RX_CNT + 1))
 
 static struct {
-	u8_t size; /* Runtime (re)sized info */
-
 	void *free;
 	u8_t pool[PDU_RX_POOL_SIZE];
 } mem_pdu_rx;
 
 #if defined(CONFIG_BT_MAX_CONN)
-#define CONFIG_BT_CTLR_MAX_CONN CONFIG_BT_MAX_CONN
+#define BT_CTLR_MAX_CONN CONFIG_BT_MAX_CONN
 #else
-#define CONFIG_BT_CTLR_MAX_CONN 0
+#define BT_CTLR_MAX_CONN 0
 #endif
 
 #define LINK_RX_POOL_SIZE (sizeof(memq_link_t) * (RX_CNT + 2 + \
-						  CONFIG_BT_CTLR_MAX_CONN))
+						  BT_CTLR_MAX_CONN))
 static struct {
-	u8_t quota_pdu;
+	u8_t quota_pdu; /* Number of un-utilized buffers */
 
 	void *free;
 	u8_t pool[LINK_RX_POOL_SIZE];
@@ -185,14 +195,14 @@ static MFIFO_DEFINE(tx_ack, sizeof(struct lll_tx),
 
 static void *mark;
 
-static inline int _init_reset(void);
-static inline void _done_alloc(void);
-static inline void _rx_alloc(u8_t max);
-static void _rx_demux(void *param);
-static inline void _rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx);
-static inline void _rx_demux_event_done(memq_link_t *link,
-					struct node_rx_hdr *rx);
-static void _disabled_cb(void *param);
+static inline int init_reset(void);
+static inline void done_alloc(void);
+static inline void rx_alloc(u8_t max);
+static void rx_demux(void *param);
+static inline void rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx);
+static inline void rx_demux_event_done(memq_link_t *link,
+				       struct node_rx_hdr *rx);
+static void disabled_cb(void *param);
 
 #if defined(CONFIG_BT_CONN)
 static u8_t tx_cmplt_get(u16_t *handle, u8_t *first, u8_t last);
@@ -218,15 +228,15 @@ int ll_init(struct k_sem *sem_rx)
 	mayfly_init();
 
 	/* Initialize Ticker */
-	_ticker_users[MAYFLY_CALL_ID_0][0] = TICKER_USER_LLL_OPS;
-	_ticker_users[MAYFLY_CALL_ID_1][0] = TICKER_USER_ULL_HIGH_OPS;
-	_ticker_users[MAYFLY_CALL_ID_2][0] = TICKER_USER_ULL_LOW_OPS;
-	_ticker_users[MAYFLY_CALL_ID_PROGRAM][0] = TICKER_USER_APP_OPS;
+	ticker_users[MAYFLY_CALL_ID_0][0] = TICKER_USER_LLL_OPS;
+	ticker_users[MAYFLY_CALL_ID_1][0] = TICKER_USER_ULL_HIGH_OPS;
+	ticker_users[MAYFLY_CALL_ID_2][0] = TICKER_USER_ULL_LOW_OPS;
+	ticker_users[MAYFLY_CALL_ID_PROGRAM][0] = TICKER_USER_APP_OPS;
 
 	err = ticker_init(TICKER_INSTANCE_ID_CTLR,
-			  TICKER_NODES, &_ticker_nodes[0],
-			  MAYFLY_CALLER_COUNT, &_ticker_users[0],
-			  TICKER_USER_OPS, &_ticker_user_ops[0],
+			  TICKER_NODES, &ticker_nodes[0],
+			  MAYFLY_CALLER_COUNT, &ticker_users[0],
+			  TICKER_USER_OPS, &ticker_user_ops[0],
 			  hal_ticker_instance0_caller_id_get,
 			  hal_ticker_instance0_sched,
 			  hal_ticker_instance0_trigger_set);
@@ -245,7 +255,7 @@ int ll_init(struct k_sem *sem_rx)
 	/* TODO: globals? */
 
 	/* Common to init and reset */
-	err = _init_reset();
+	err = init_reset();
 	if (err) {
 		return err;
 	}
@@ -348,10 +358,16 @@ void ll_reset(void)
 	MFIFO_INIT(ll_pdu_rx_free);
 
 	/* Common to init and reset */
-	err = _init_reset();
+	err = init_reset();
 	LL_ASSERT(!err);
 }
 
+/**
+ * @brief Peek the next node_rx to send up to Host
+ * @details Tightly coupled with prio_recv_thread()
+ *   Execution context: Controller thread
+ * @return TX completed
+ */
 u8_t ll_rx_get(void **node_rx, u16_t *handle)
 {
 	struct node_rx_hdr *rx;
@@ -379,6 +395,9 @@ ll_rx_get_again:
 			} while ((cmplt_prev != 0) ||
 				 (cmplt_prev != cmplt_curr));
 
+			/* Do not send up buffers to Host thread that are
+			 * marked for release
+			 */
 			if (rx->type == NODE_RX_TYPE_DC_PDU_RELEASE) {
 				(void)memq_dequeue(memq_ll_rx.tail,
 						   &memq_ll_rx.head, NULL);
@@ -389,7 +408,7 @@ ll_rx_get_again:
 
 				mem_release(rx, &mem_pdu_rx.free);
 
-				_rx_alloc(1);
+				rx_alloc(1);
 
 				goto ll_rx_get_again;
 			}
@@ -411,6 +430,10 @@ ll_rx_get_again:
 	return cmplt;
 }
 
+/**
+ * @brief Commit the dequeue from memq_ll_rx, where ll_rx_get() did the peek
+ * @details Execution context: Controller thread
+ */
 void ll_rx_dequeue(void)
 {
 	struct node_rx_hdr *rx = NULL;
@@ -498,6 +521,13 @@ void ll_rx_dequeue(void)
 	case NODE_RX_TYPE_MESH_REPORT:
 #endif /* CONFIG_BT_HCI_MESH_EXT */
 
+		/*
+		 * We have just dequeued from memq_ll_rx; that frees up some
+		 * quota for Link Layer. Note that we threw away the rx node
+		 * we have just dequeued from memq_ll_rx. But, this is OK,
+		 * since prio_recv_thread() peeked in memq_ll_rx via
+		 * ll_rx_get() before.
+		 */
 		LL_ASSERT(mem_link_rx.quota_pdu < RX_CNT);
 
 		mem_link_rx.quota_pdu++;
@@ -611,21 +641,21 @@ void ll_rx_dequeue(void)
 
 void ll_rx_mem_release(void **node_rx)
 {
-	struct node_rx_hdr *_node_rx;
+	struct node_rx_hdr *rx;
 
-	_node_rx = *node_rx;
-	while (_node_rx) {
-		struct node_rx_hdr *_node_rx_free;
+	rx = *node_rx;
+	while (rx) {
+		struct node_rx_hdr *rx_free;
 
-		_node_rx_free = _node_rx;
-		_node_rx = _node_rx->next;
+		rx_free = rx;
+		rx = rx->next;
 
-		switch (_node_rx_free->type) {
+		switch (rx_free->type) {
 #if defined(CONFIG_BT_CONN)
 		case NODE_RX_TYPE_CONNECTION:
 #if defined(CONFIG_BT_CENTRAL)
 		{
-			struct node_rx_pdu *rx = (void *)_node_rx_free;
+			struct node_rx_pdu *rx = (void *)rx_free;
 
 			if (*((u8_t *)rx->pdu) ==
 			    BT_HCI_ERR_UNKNOWN_CONN_ID) {
@@ -718,7 +748,7 @@ void ll_rx_mem_release(void **node_rx)
 		case NODE_RX_TYPE_MESH_REPORT:
 #endif /* CONFIG_BT_HCI_MESH_EXT */
 
-			mem_release(_node_rx_free, &mem_pdu_rx.free);
+			mem_release(rx_free, &mem_pdu_rx.free);
 			break;
 
 #if defined(CONFIG_BT_CONN)
@@ -727,7 +757,7 @@ void ll_rx_mem_release(void **node_rx)
 			struct ll_conn *conn;
 			memq_link_t *link;
 
-			conn = ll_conn_get(_node_rx_free->handle);
+			conn = ll_conn_get(rx_free->handle);
 
 			LL_ASSERT(!conn->lll.link_tx_free);
 			link = memq_deinit(&conn->lll.memq_tx.head,
@@ -748,9 +778,9 @@ void ll_rx_mem_release(void **node_rx)
 		}
 	}
 
-	*node_rx = _node_rx;
+	*node_rx = rx;
 
-	_rx_alloc(UINT8_MAX);
+	rx_alloc(UINT8_MAX);
 }
 
 void *ll_rx_link_alloc(void)
@@ -804,10 +834,33 @@ void ll_rx_put(memq_link_t *link, void *rx)
 	memq_enqueue(link, rx, &memq_ll_rx.tail);
 }
 
+/**
+ * @brief Permit another loop in the controller thread (prio_recv_thread)
+ * @details Execution context: ULL mayfly
+ */
 void ll_rx_sched(void)
 {
+	/* sem_recv references the same semaphore (sem_prio_recv)
+	 * in prio_recv_thread
+	 */
 	k_sem_give(sem_recv);
 }
+
+#if defined(CONFIG_BT_CONN)
+void ll_tx_ack_put(u16_t handle, struct node_tx *node_tx)
+{
+	struct lll_tx *tx;
+	u8_t idx;
+
+	idx = MFIFO_ENQUEUE_GET(tx_ack, (void **)&tx);
+	LL_ASSERT(tx);
+
+	tx->handle = handle;
+	tx->node = node_tx;
+
+	MFIFO_ENQUEUE(tx_ack, idx);
+}
+#endif /* CONFIG_BT_CONN */
 
 void ll_timeslice_ticker_id_get(u8_t * const instance_index,
 				u8_t * const user_id)
@@ -818,12 +871,12 @@ void ll_timeslice_ticker_id_get(u8_t * const instance_index,
 
 void ll_radio_state_abort(void)
 {
-	static memq_link_t _link;
-	static struct mayfly _mfy = {0, 0, &_link, NULL, lll_disable};
+	static memq_link_t link;
+	static struct mayfly mfy = {0, 0, &link, NULL, lll_disable};
 	u32_t ret;
 
 	ret = mayfly_enqueue(TICKER_USER_ID_THREAD, TICKER_USER_ID_LLL, 0,
-			     &_mfy);
+			     &mfy);
 	LL_ASSERT(!ret);
 }
 
@@ -875,8 +928,8 @@ void *ull_disable_mark_get(void)
 
 int ull_disable(void *lll)
 {
-	static memq_link_t _link;
-	static struct mayfly _mfy = {0, 0, &_link, NULL, lll_disable};
+	static memq_link_t link;
+	static struct mayfly mfy = {0, 0, &link, NULL, lll_disable};
 	struct ull_hdr *hdr;
 	struct k_sem sem;
 	u32_t ret;
@@ -888,11 +941,11 @@ int ull_disable(void *lll)
 
 	k_sem_init(&sem, 0, 1);
 	hdr->disabled_param = &sem;
-	hdr->disabled_cb = _disabled_cb;
+	hdr->disabled_cb = disabled_cb;
 
-	_mfy.param = lll;
+	mfy.param = lll;
 	ret = mayfly_enqueue(TICKER_USER_ID_THREAD, TICKER_USER_ID_LLL, 0,
-			     &_mfy);
+			     &mfy);
 	LL_ASSERT(!ret);
 
 	return k_sem_take(&sem, K_FOREVER);
@@ -936,28 +989,12 @@ void ull_rx_put(memq_link_t *link, void *rx)
 
 void ull_rx_sched(void)
 {
-	static memq_link_t _link;
-	static struct mayfly _mfy = {0, 0, &_link, NULL, _rx_demux};
+	static memq_link_t link;
+	static struct mayfly mfy = {0, 0, &link, NULL, rx_demux};
 
 	/* Kick the ULL (using the mayfly, tailchain it) */
-	mayfly_enqueue(TICKER_USER_ID_LLL, TICKER_USER_ID_ULL_HIGH, 1, &_mfy);
+	mayfly_enqueue(TICKER_USER_ID_LLL, TICKER_USER_ID_ULL_HIGH, 1, &mfy);
 }
-
-#if defined(CONFIG_BT_CONN)
-void ull_tx_ack_put(u16_t handle, struct node_tx *node_tx)
-{
-	struct lll_tx *tx;
-	u8_t idx;
-
-	idx = MFIFO_ENQUEUE_GET(tx_ack, (void **)&tx);
-	LL_ASSERT(tx);
-
-	tx->handle = handle;
-	tx->node = node_tx;
-
-	MFIFO_ENQUEUE(tx_ack, idx);
-}
-#endif /* CONFIG_BT_CONN */
 
 int ull_prepare_enqueue(lll_is_abort_cb_t is_abort_cb,
 			lll_abort_cb_t abort_cb,
@@ -1010,24 +1047,33 @@ void *ull_event_done_extra_get(void)
 
 void *ull_event_done(void *param)
 {
-	struct node_rx_event_done *done;
+	struct node_rx_event_done *evdone;
 	memq_link_t *link;
 
-	done = MFIFO_DEQUEUE(done);
-	if (!done) {
+	/* Obtain new node that signals "Done of an RX-event".
+	 * Obtain this by dequeuing from the global 'mfifo_done' queue.
+	 * Note that 'mfifo_done' is a queue of pointers, not of
+	 * struct node_rx_event_done
+	 */
+	evdone = MFIFO_DEQUEUE(done);
+	if (!evdone) {
+		/* Not fatal if we can not obtain node, though
+		 * we will loose the packets in software stack.
+		 * If this happens during Conn Upd, this could cause LSTO
+		 */
 		return NULL;
 	}
 
-	link = done->hdr.link;
-	done->hdr.link = NULL;
+	link = evdone->hdr.link;
+	evdone->hdr.link = NULL;
 
-	done->hdr.type = NODE_RX_TYPE_EVENT_DONE;
-	done->param = param;
+	evdone->hdr.type = NODE_RX_TYPE_EVENT_DONE;
+	evdone->param = param;
 
-	ull_rx_put(link, done);
+	ull_rx_put(link, evdone);
 	ull_rx_sched();
 
-	return done;
+	return evdone;
 }
 
 u8_t ull_entropy_get(u8_t len, u8_t *rand)
@@ -1035,7 +1081,7 @@ u8_t ull_entropy_get(u8_t len, u8_t *rand)
 	return entropy_get_entropy_isr(dev_entropy, rand, len, 0);
 }
 
-static inline int _init_reset(void)
+static inline int init_reset(void)
 {
 	memq_link_t *link;
 
@@ -1048,12 +1094,11 @@ static inline int _init_reset(void)
 		 &mem_link_done.free);
 
 	/* Allocate done buffers */
-	_done_alloc();
+	done_alloc();
 
 	/* Initialize rx pool. */
-	mem_pdu_rx.size = PDU_RX_SIZE_MIN;
-	mem_init(mem_pdu_rx.pool, mem_pdu_rx.size,
-		 sizeof(mem_pdu_rx.pool) / mem_pdu_rx.size,
+	mem_init(mem_pdu_rx.pool, (PDU_RX_NODE_POOL_ELEMENT_SIZE),
+		 sizeof(mem_pdu_rx.pool) / (PDU_RX_NODE_POOL_ELEMENT_SIZE),
 		 &mem_pdu_rx.free);
 
 	/* Initialize rx link pool. */
@@ -1077,15 +1122,19 @@ static inline int _init_reset(void)
 
 	/* Allocate rx free buffers */
 	mem_link_rx.quota_pdu = RX_CNT;
-	_rx_alloc(UINT8_MAX);
+	rx_alloc(UINT8_MAX);
 
 	return 0;
 }
 
-static inline void _done_alloc(void)
+/**
+ * @brief Allocate buffers for done events
+ */
+static inline void done_alloc(void)
 {
 	u8_t idx;
 
+	/* mfifo_done is a queue of pointers */
 	while (MFIFO_ENQUEUE_IDX_GET(done, &idx)) {
 		memq_link_t *link;
 		struct node_rx_hdr *rx;
@@ -1107,8 +1156,8 @@ static inline void _done_alloc(void)
 	}
 }
 
-static inline void *_done_release(memq_link_t *link,
-				  struct node_rx_event_done *done)
+static inline void *done_release(memq_link_t *link,
+				 struct node_rx_event_done *done)
 {
 	u8_t idx;
 
@@ -1123,7 +1172,7 @@ static inline void *_done_release(memq_link_t *link,
 	return done;
 }
 
-static inline void _rx_alloc(u8_t max)
+static inline void rx_alloc(u8_t max)
 {
 	u8_t idx;
 
@@ -1222,9 +1271,9 @@ static u8_t tx_cmplt_get(u16_t *handle, u8_t *first, u8_t last)
 	return cmplt;
 }
 
-static inline void _rx_demux_conn_tx_ack(u8_t ack_last, u16_t handle,
-					 memq_link_t *link,
-					 struct node_tx *node_tx)
+static inline void rx_demux_conn_tx_ack(u8_t ack_last, u16_t handle,
+					memq_link_t *link,
+					struct node_tx *node_tx)
 {
 	do {
 		/* Dequeue node */
@@ -1249,7 +1298,7 @@ static inline void _rx_demux_conn_tx_ack(u8_t ack_last, u16_t handle,
 			ull_conn_tx_lll_enqueue(conn, 1);
 		} else {
 			/* Pass through Tx ack */
-			ull_tx_ack_put(0xFFFF, node_tx);
+			ll_tx_ack_put(0xFFFF, node_tx);
 
 			/* Release link mem */
 			ull_conn_link_tx_release(link);
@@ -1266,7 +1315,7 @@ static inline void _rx_demux_conn_tx_ack(u8_t ack_last, u16_t handle,
 }
 #endif /* CONFIG_BT_CONN */
 
-static void _rx_demux(void *param)
+static void rx_demux(void *param)
 {
 	memq_link_t *link;
 
@@ -1279,7 +1328,7 @@ static void _rx_demux(void *param)
 #if defined(CONFIG_BT_CONN)
 			struct node_tx *node_tx;
 			memq_link_t *link_tx;
-			u16_t handle;
+			u16_t handle; /* Handle to Ack TX */
 #endif /* CONFIG_BT_CONN */
 
 			LL_ASSERT(rx);
@@ -1288,12 +1337,12 @@ static void _rx_demux(void *param)
 			link_tx = lll_conn_ack_by_last_peek(rx->ack_last,
 							    &handle, &node_tx);
 			if (link_tx) {
-				_rx_demux_conn_tx_ack(rx->ack_last, handle,
-						      link_tx, node_tx);
+				rx_demux_conn_tx_ack(rx->ack_last, handle,
+						     link_tx, node_tx);
 			} else
 #endif
 			{
-				_rx_demux_rx(link, rx);
+				rx_demux_rx(link, rx);
 			}
 #if defined(CONFIG_BT_CONN)
 		} else {
@@ -1303,7 +1352,7 @@ static void _rx_demux(void *param)
 
 			link = lll_conn_ack_peek(&ack_last, &handle, &node_tx);
 			if (link) {
-				_rx_demux_conn_tx_ack(ack_last, handle,
+				rx_demux_conn_tx_ack(ack_last, handle,
 						      link, node_tx);
 			}
 #endif
@@ -1311,14 +1360,19 @@ static void _rx_demux(void *param)
 	} while (link);
 }
 
-static inline void _rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
+/**
+ * @brief Dispatch rx objects
+ * @details Rx objects are only peeked, not dequeued yet.
+ *   Execution context: ULL high priority Mayfly
+ */
+static inline void rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 {
 	/* Demux Rx objects */
 	switch (rx->type) {
 	case NODE_RX_TYPE_EVENT_DONE:
 	{
 		memq_dequeue(memq_ull_rx.tail, &memq_ull_rx.head, NULL);
-		_rx_demux_event_done(link, rx);
+		rx_demux_event_done(link, rx);
 	}
 	break;
 
@@ -1399,8 +1453,8 @@ static inline void _rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 	}
 }
 
-static inline void _rx_demux_event_done(memq_link_t *link,
-					struct node_rx_hdr *rx)
+static inline void rx_demux_event_done(memq_link_t *link,
+				       struct node_rx_hdr *rx)
 {
 	struct node_rx_event_done *done = (void *)rx;
 	struct ull_hdr *ull_hdr;
@@ -1427,7 +1481,7 @@ static inline void _rx_demux_event_done(memq_link_t *link,
 
 	/* release done */
 	done->extra.type = 0;
-	_done_release(link, done);
+	done_release(link, done);
 
 	/* dequeue prepare pipeline */
 	next = ull_prepare_dequeue_get();
@@ -1435,14 +1489,14 @@ static inline void _rx_demux_event_done(memq_link_t *link,
 		u8_t is_resume = next->is_resume;
 
 		if (!next->is_aborted) {
-			static memq_link_t _link;
-			static struct mayfly _mfy = {0, 0, &_link, NULL,
-						     lll_resume};
+			static memq_link_t link;
+			static struct mayfly mfy = {0, 0, &link, NULL,
+						    lll_resume};
 			u32_t ret;
 
-			_mfy.param = next;
+			mfy.param = next;
 			ret = mayfly_enqueue(TICKER_USER_ID_ULL_HIGH,
-					     TICKER_USER_ID_LLL, 0, &_mfy);
+					     TICKER_USER_ID_LLL, 0, &mfy);
 			LL_ASSERT(!ret);
 		}
 
@@ -1462,7 +1516,7 @@ static inline void _rx_demux_event_done(memq_link_t *link,
 
 	/* Decrement prepare reference */
 	LL_ASSERT(ull_hdr->ref);
-	ull_hdr->ref--;
+	ull_ref_dec(ull_hdr);
 
 	/* If disable initiated, signal the semaphore */
 	if (!ull_hdr->ref && ull_hdr->disabled_cb) {
@@ -1470,7 +1524,7 @@ static inline void _rx_demux_event_done(memq_link_t *link,
 	}
 }
 
-static void _disabled_cb(void *param)
+static void disabled_cb(void *param)
 {
 	k_sem_give(param);
 }

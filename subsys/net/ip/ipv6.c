@@ -23,7 +23,6 @@ LOG_MODULE_REGISTER(net_ipv6, CONFIG_NET_IPV6_LOG_LEVEL);
 #include <net/net_stats.h>
 #include <net/net_context.h>
 #include <net/net_mgmt.h>
-#include <net/tcp.h>
 #include "net_private.h"
 #include "connection.h"
 #include "icmpv6.h"
@@ -99,42 +98,6 @@ struct net_pkt *net_ipv6_create(struct net_pkt *pkt,
 	return pkt;
 }
 
-int net_ipv6_finalize(struct net_pkt *pkt, u8_t next_header_proto)
-{
-	/* Set the length of the IPv6 header */
-	size_t total_len;
-	int ret;
-
-	net_pkt_compact(pkt);
-
-	total_len = net_pkt_get_len(pkt) - sizeof(struct net_ipv6_hdr);
-
-	NET_IPV6_HDR(pkt)->len = htons(total_len);
-
-#if defined(CONFIG_NET_UDP)
-	if (next_header_proto == IPPROTO_UDP &&
-	    net_if_need_calc_tx_checksum(net_pkt_iface(pkt))) {
-		net_udp_set_chksum(pkt, pkt->frags);
-	} else
-#endif
-
-#if defined(CONFIG_NET_TCP)
-	if (next_header_proto == IPPROTO_TCP &&
-	    net_if_need_calc_tx_checksum(net_pkt_iface(pkt))) {
-		net_tcp_set_chksum(pkt, pkt->frags);
-	} else
-#endif
-
-	if (next_header_proto == IPPROTO_ICMPV6) {
-		ret = net_icmpv6_set_chksum(pkt);
-		if (ret < 0) {
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
 int net_ipv6_create_new(struct net_pkt *pkt,
 			const struct in6_addr *src,
 			const struct in6_addr *dst)
@@ -170,7 +133,7 @@ int net_ipv6_create_new(struct net_pkt *pkt,
 	return net_pkt_set_data(pkt, &ipv6_access);
 }
 
-int net_ipv6_finalize_new(struct net_pkt *pkt, u8_t next_header_proto)
+int net_ipv6_finalize(struct net_pkt *pkt, u8_t next_header_proto)
 {
 	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ipv6_access, struct net_ipv6_hdr);
 	struct net_ipv6_hdr *ipv6_hdr;
@@ -203,10 +166,10 @@ int net_ipv6_finalize_new(struct net_pkt *pkt, u8_t next_header_proto)
 	    next_header_proto == IPPROTO_ICMPV6) {
 		if (IS_ENABLED(CONFIG_NET_UDP) &&
 		    next_header_proto == IPPROTO_UDP) {
-			net_udp_finalize(pkt);
+			return net_udp_finalize(pkt);
 		} else if (IS_ENABLED(CONFIG_NET_TCP) &&
 			   next_header_proto == IPPROTO_TCP) {
-			net_tcp_finalize(pkt);
+			return net_tcp_finalize(pkt);
 		} else if (next_header_proto == IPPROTO_ICMPV6) {
 			return net_icmpv6_finalize(pkt);
 		}
@@ -593,7 +556,6 @@ enum net_verdict net_ipv6_input(struct net_pkt *pkt, bool is_loopback)
 	}
 
 	net_pkt_set_ipv6_ext_len(pkt, ext_len);
-	net_pkt_set_transport_proto(pkt, nexthdr);
 	net_pkt_set_family(pkt, PF_INET6);
 
 	switch (nexthdr) {

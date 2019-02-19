@@ -613,7 +613,7 @@ extern struct task_state_segment _main_tss;
 
 #define _ARCH_THREAD_STACK_LEN(size) \
 		(ROUND_UP((size), \
-			  max(_STACK_BASE_ALIGN, _STACK_SIZE_ALIGN)) + \
+			  MAX(_STACK_BASE_ALIGN, _STACK_SIZE_ALIGN)) + \
 		_STACK_GUARD_SIZE)
 
 #define _ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
@@ -647,23 +647,26 @@ extern struct task_state_segment _main_tss;
 extern const NANO_ESF _default_esf;
 
 #ifdef CONFIG_X86_MMU
-/* Linker variable. It is needed to access the start of the Page directory */
-
-extern u64_t __mmu_tables_start;
-#define X86_MMU_PDPT ((struct x86_mmu_pdpt *)\
-		      (u32_t *)(void *)&__mmu_tables_start)
-
+/* kernel's page table */
+extern struct x86_mmu_pdpt z_x86_kernel_pdpt;
+#ifdef CONFIG_X86_KPTI
+extern struct x86_mmu_pdpt z_x86_user_pdpt;
+#define USER_PDPT	z_x86_user_pdpt
+#else
+#define USER_PDPT	z_x86_kernel_pdpt
+#endif
 /**
  * @brief Fetch page table flags for a particular page
  *
  * Given a memory address, return the flags for the containing page's
  * PDE and PTE entries. Intended for debugging.
  *
+ * @param pdpt Which page table to use
  * @param addr Memory address to example
  * @param pde_flags Output parameter for page directory entry flags
  * @param pte_flags Output parameter for page table entry flags
  */
-void _x86_mmu_get_flags(void *addr,
+void _x86_mmu_get_flags(struct x86_mmu_pdpt *pdpt, void *addr,
 			x86_page_entry_data_t *pde_flags,
 			x86_page_entry_data_t *pte_flags);
 
@@ -674,17 +677,19 @@ void _x86_mmu_get_flags(void *addr,
  * Modify bits in the existing page tables for a particular memory
  * range, which must be page-aligned
  *
+ * @param pdpt Which page table to use
  * @param ptr Starting memory address which must be page-aligned
  * @param size Size of the region, must be page size multiple
  * @param flags Value of bits to set in the page table entries
  * @param mask Mask indicating which particular bits in the page table entries to
  *	 modify
  */
-
-void _x86_mmu_set_flags(void *ptr,
+void _x86_mmu_set_flags(struct x86_mmu_pdpt *pdpt, void *ptr,
 			size_t size,
 			x86_page_entry_data_t flags,
 			x86_page_entry_data_t mask);
+
+void z_x86_reset_pages(void *start, size_t size);
 
 #endif /* CONFIG_X86_MMU */
 
