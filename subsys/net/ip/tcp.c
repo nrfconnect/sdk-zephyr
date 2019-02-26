@@ -1383,11 +1383,6 @@ static void queue_fin(struct net_context *ctx)
 	}
 
 	net_tcp_queue_pkt(ctx, pkt);
-
-	ret = net_tcp_send_pkt(pkt);
-	if (ret < 0) {
-		net_pkt_unref(pkt);
-	}
 }
 
 int net_tcp_put(struct net_context *context)
@@ -2465,6 +2460,14 @@ int net_tcp_accept(struct net_context *context,
 		NET_DBG("Context %p in wrong state %d, should be %d",
 			context, context->tcp->state, NET_TCP_LISTEN);
 		return -EINVAL;
+	}
+
+	if (cb == NULL) {
+		/* The context is being shut down */
+		if (net_context_get_ip_proto(context) == IPPROTO_TCP) {
+			context->tcp->accept_cb = NULL;
+			return 0;
+		}
 	}
 
 	local_addr.sa_family = net_context_get_family(context);

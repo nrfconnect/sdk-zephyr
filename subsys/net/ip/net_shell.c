@@ -691,33 +691,33 @@ static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 		PR("=================\n");
 	}
 
-#if defined(CONFIG_NET_IPV6)
+#if defined(CONFIG_NET_STATISTICS_IPV6)
 	PR("IPv6 recv      %d\tsent\t%d\tdrop\t%d\tforwarded\t%d\n",
 	   GET_STAT(iface, ipv6.recv),
 	   GET_STAT(iface, ipv6.sent),
 	   GET_STAT(iface, ipv6.drop),
 	   GET_STAT(iface, ipv6.forwarded));
-#if defined(CONFIG_NET_IPV6_ND)
+#if defined(CONFIG_NET_STATISTICS_IPV6_ND)
 	PR("IPv6 ND recv   %d\tsent\t%d\tdrop\t%d\n",
 	   GET_STAT(iface, ipv6_nd.recv),
 	   GET_STAT(iface, ipv6_nd.sent),
 	   GET_STAT(iface, ipv6_nd.drop));
-#endif /* CONFIG_NET_IPV6_ND */
+#endif /* CONFIG_NET_STATISTICS_IPV6_ND */
 #if defined(CONFIG_NET_STATISTICS_MLD)
 	PR("IPv6 MLD recv  %d\tsent\t%d\tdrop\t%d\n",
 	   GET_STAT(iface, ipv6_mld.recv),
 	   GET_STAT(iface, ipv6_mld.sent),
 	   GET_STAT(iface, ipv6_mld.drop));
 #endif /* CONFIG_NET_STATISTICS_MLD */
-#endif /* CONFIG_NET_IPV6 */
+#endif /* CONFIG_NET_STATISTICS_IPV6 */
 
-#if defined(CONFIG_NET_IPV4)
+#if defined(CONFIG_NET_STATISTICS_IPV4)
 	PR("IPv4 recv      %d\tsent\t%d\tdrop\t%d\tforwarded\t%d\n",
 	   GET_STAT(iface, ipv4.recv),
 	   GET_STAT(iface, ipv4.sent),
 	   GET_STAT(iface, ipv4.drop),
 	   GET_STAT(iface, ipv4.forwarded));
-#endif /* CONFIG_NET_IPV4 */
+#endif /* CONFIG_NET_STATISTICS_IPV4 */
 
 	PR("IP vhlerr      %d\thblener\t%d\tlblener\t%d\n",
 	   GET_STAT(iface, ip_errors.vhlerr),
@@ -728,7 +728,7 @@ static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 	   GET_STAT(iface, ip_errors.chkerr),
 	   GET_STAT(iface, ip_errors.protoerr));
 
-#if defined(CONFIG_NET_ICMPV4) || defined(CONFIG_NET_ICMPV6)
+#if defined(CONFIG_NET_STATISTICS_ICMP)
 	PR("ICMP recv      %d\tsent\t%d\tdrop\t%d\n",
 	   GET_STAT(iface, icmp.recv),
 	   GET_STAT(iface, icmp.sent),
@@ -738,7 +738,7 @@ static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 	   GET_STAT(iface, icmp.chkerr));
 #endif
 
-#if defined(CONFIG_NET_UDP)
+#if defined(CONFIG_NET_STATISTICS_UDP)
 	PR("UDP recv       %d\tsent\t%d\tdrop\t%d\n",
 	   GET_STAT(iface, udp.recv),
 	   GET_STAT(iface, udp.sent),
@@ -3290,10 +3290,7 @@ static int cmd_net_tcp_send(const struct shell *shell, size_t argc,
 	int arg = 0;
 	int ret;
 	struct net_shell_user_data user_data;
-	struct net_pkt *pkt;
-#endif
 
-#if defined(CONFIG_NET_TCP)
 	/* tcp send <data> */
 	if (!tcp_ctx || !net_context_is_used(tcp_ctx)) {
 		PR_WARNING("Not connected\n");
@@ -3305,27 +3302,13 @@ static int cmd_net_tcp_send(const struct shell *shell, size_t argc,
 		return -ENOEXEC;
 	}
 
-	pkt = net_pkt_get_tx(tcp_ctx, TCP_TIMEOUT);
-	if (!pkt) {
-		PR_WARNING("Out of pkts, msg cannot be sent.\n");
-		return -ENOEXEC;
-	}
-
-	ret = net_pkt_append_all(pkt, strlen(argv[arg]), (u8_t *)argv[arg],
-				 TCP_TIMEOUT);
-	if (!ret) {
-		PR_WARNING("Cannot build msg (out of pkts)\n");
-		net_pkt_unref(pkt);
-		return -ENOEXEC;
-	}
-
 	user_data.shell = shell;
 
-	ret = net_context_send(pkt, tcp_sent_cb, TCP_TIMEOUT, NULL,
-			       &user_data);
+	ret = net_context_send_new(tcp_ctx, (u8_t *)argv[arg],
+				   strlen(argv[arg]), tcp_sent_cb,
+				   TCP_TIMEOUT, NULL, &user_data);
 	if (ret < 0) {
 		PR_WARNING("Cannot send msg (%d)\n", ret);
-		net_pkt_unref(pkt);
 		return -ENOEXEC;
 	}
 
@@ -3570,15 +3553,13 @@ usage:
 	return 0;
 }
 
-SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_arp)
-{
+SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_arp,
 	SHELL_CMD(flush, NULL, "Remove all entries from ARP cache.",
 		  cmd_net_arp_flush),
 	SHELL_SUBCMD_SET_END
-};
+);
 
-SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_dns)
-{
+SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_dns,
 	SHELL_CMD(cancel, NULL, "Cancel all pending requests.",
 		  cmd_net_dns_cancel),
 	SHELL_CMD(query, NULL,
@@ -3586,16 +3567,15 @@ SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_dns)
 		  "(default) or IPv6 address for a host name.",
 		  cmd_net_dns_query),
 	SHELL_SUBCMD_SET_END
-};
+);
 
-SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_gptp)
-{
+SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_gptp,
 	SHELL_CMD(port, NULL,
 		  "'net gptp [<port>]' prints detailed information about "
 		  "gPTP port.",
 		  cmd_net_gptp_port),
 	SHELL_SUBCMD_SET_END
-};
+);
 
 #if !defined(NET_VLAN_MAX_COUNT)
 #define MAX_IFACE_COUNT NET_IF_MAX_CONFIGS
@@ -3640,7 +3620,7 @@ static char *set_iface_index_help(size_t idx)
 
 static void iface_index_get(size_t idx, struct shell_static_entry *entry);
 
-SHELL_CREATE_DYNAMIC_CMD(iface_index, iface_index_get);
+SHELL_DYNAMIC_CMD_CREATE(iface_index, iface_index_get);
 
 static void iface_index_get(size_t idx, struct shell_static_entry *entry)
 {
@@ -3655,8 +3635,7 @@ static void iface_index_get(size_t idx, struct shell_static_entry *entry)
 #define IFACE_DYN_CMD NULL
 #endif /* CONFIG_NET_SHELL_DYN_CMD_COMPLETION */
 
-SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_iface)
-{
+SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_iface,
 	SHELL_CMD(up, IFACE_DYN_CMD,
 		  "'net iface up <index>' takes network interface up.",
 		  cmd_net_iface_up),
@@ -3669,7 +3648,7 @@ SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_iface)
 		  "information.",
 		  cmd_net_iface),
 	SHELL_SUBCMD_SET_END
-};
+);
 
 #if defined(CONFIG_NET_IPV6) && defined(CONFIG_NET_SHELL_DYN_CMD_COMPLETION)
 static
@@ -3716,7 +3695,7 @@ static char *set_nbr_address(size_t idx)
 
 static void nbr_address_get(size_t idx, struct shell_static_entry *entry);
 
-SHELL_CREATE_DYNAMIC_CMD(nbr_address, nbr_address_get);
+SHELL_DYNAMIC_CMD_CREATE(nbr_address, nbr_address_get);
 
 #define NBR_ADDRESS_CMD &nbr_address
 
@@ -3732,13 +3711,12 @@ static void nbr_address_get(size_t idx, struct shell_static_entry *entry)
 #define NBR_ADDRESS_CMD NULL
 #endif /* CONFIG_NET_IPV6 && CONFIG_NET_SHELL_DYN_CMD_COMPLETION */
 
-SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_nbr)
-{
+SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_nbr,
 	SHELL_CMD(rm, NBR_ADDRESS_CMD,
 		  "'net nbr rm <address>' removes neighbor from cache.",
 		  cmd_net_nbr_rm),
 	SHELL_SUBCMD_SET_END
-};
+);
 
 #if defined(CONFIG_NET_STATISTICS) && \
 	defined(CONFIG_NET_STATISTICS_PER_INTERFACE) && \
@@ -3750,8 +3728,7 @@ SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_nbr)
 	* CONFIG_NET_SHELL_DYN_CMD_COMPLETION
 	*/
 
-SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_stats)
-{
+SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_stats,
 	SHELL_CMD(all, NULL,
 		  "Show network statistics for all network interfaces.",
 		  cmd_net_stats_all),
@@ -3760,10 +3737,9 @@ SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_stats)
 		  "one specific network interface.",
 		  cmd_net_stats_iface),
 	SHELL_SUBCMD_SET_END
-};
+);
 
-SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_tcp)
-{
+SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_tcp,
 	SHELL_CMD(connect, NULL,
 		  "'net tcp connect <address> <port>' connects to TCP peer.",
 		  cmd_net_tcp_connect),
@@ -3773,10 +3749,9 @@ SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_tcp)
 	SHELL_CMD(close, NULL,
 		  "'net tcp close' closes TCP connection.", cmd_net_tcp_close),
 	SHELL_SUBCMD_SET_END
-};
+);
 
-SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_vlan)
-{
+SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_vlan,
 	SHELL_CMD(add, NULL,
 		  "'net vlan add <tag> <index>' adds VLAN tag to the "
 		  "network interface.",
@@ -3786,11 +3761,9 @@ SHELL_CREATE_STATIC_SUBCMD_SET(net_cmd_vlan)
 		  "interface.",
 		  cmd_net_vlan_del),
 	SHELL_SUBCMD_SET_END
-};
+);
 
-SHELL_CREATE_STATIC_SUBCMD_SET(net_commands)
-{
-	/* Alphabetically sorted. */
+SHELL_STATIC_SUBCMD_SET_CREATE(net_commands,
 	SHELL_CMD(allocs, NULL, "Print network memory allocations.",
 		  cmd_net_allocs),
 	SHELL_CMD(arp, &net_cmd_arp, "Print information about IPv4 ARP cache.",
@@ -3822,7 +3795,7 @@ SHELL_CREATE_STATIC_SUBCMD_SET(net_commands)
 		  cmd_net_tcp),
 	SHELL_CMD(vlan, &net_cmd_vlan, "Show VLAN information.", cmd_net_vlan),
 	SHELL_SUBCMD_SET_END
-};
+);
 
 SHELL_CMD_REGISTER(net, &net_commands, "Networking commands", NULL);
 

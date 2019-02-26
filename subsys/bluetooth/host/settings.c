@@ -40,7 +40,7 @@ void bt_settings_encode_key(char *path, size_t path_size, const char *subsys,
 			 addr->type);
 	}
 
-	BT_DBG("Encoded path %s", path);
+	BT_DBG("Encoded path %s", log_strdup(path));
 }
 
 int bt_settings_decode_key(char *key, bt_addr_le_t *addr)
@@ -81,7 +81,7 @@ int bt_settings_decode_key(char *key, bt_addr_le_t *addr)
 		}
 	}
 
-	BT_DBG("Decoded %s as %s", key, bt_addr_le_str(addr));
+	BT_DBG("Decoded %s as %s", log_strdup(key), bt_addr_le_str(addr));
 
 	return 0;
 }

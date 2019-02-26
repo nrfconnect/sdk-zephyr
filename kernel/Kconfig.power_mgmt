@@ -15,32 +15,10 @@ menuconfig SYS_POWER_MANAGEMENT
 	  timer is due to expire.
 
 if SYS_POWER_MANAGEMENT
-choice POWER_MANAGEMENT_CONTROL
-	prompt "Power Management Control"
-	default PM_CONTROL_APP
-	help
-	  Select the Application managed or OS managed power saving
-	  mechanism.
-
-config PM_CONTROL_APP
-	bool
-	prompt "Handled at Application level"
-	help
-	  This option enables the Application to handle all the Power
-	  Management flows for the platform.
-
-config PM_CONTROL_OS
-	bool
-	prompt "Handle at OS level"
-	help
-	  This option allows the OS to handle all the Power
-	  Management flows for the platform.
-
-endchoice # POWER_MANAGEMENT_CONTROL
-
 config SYS_POWER_LOW_POWER_STATES
 	bool "Low Power states"
-	depends on SYS_POWER_LOW_POWER_STATES_SUPPORTED
+	depends on HAS_STATE_LOW_POWER_1 || HAS_STATE_LOW_POWER_2 || \
+	           HAS_STATE_LOW_POWER_3
 	help
 	  This option enables the kernel to interface with a power manager
 	  application.  This permits the system to enter a custom CPU low power
@@ -50,7 +28,8 @@ config SYS_POWER_LOW_POWER_STATES
 
 config SYS_POWER_DEEP_SLEEP_STATES
 	bool "Deep Sleep states"
-	depends on SYS_POWER_DEEP_SLEEP_STATES_SUPPORTED
+	depends on HAS_STATE_DEEP_SLEEP_1 || HAS_STATE_DEEP_SLEEP_2 || \
+	           HAS_STATE_DEEP_SLEEP_3
 	help
 	  This option enables the kernel to interface with a power manager
 	  application. This permits the system to enter a Deep sleep state
@@ -59,6 +38,8 @@ config SYS_POWER_DEEP_SLEEP_STATES
 	  extended periods and would have a high wake latency.  Resume would be
 	  from the reset vector same as cold boot. The interface allows
 	  restoration of states that were saved at the time of suspend.
+
+source "subsys/power/Kconfig"
 
 endif # SYS_POWER_MANAGEMENT
 

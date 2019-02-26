@@ -239,6 +239,19 @@ extern char _nocache_ram_end[];
 extern char _nocache_ram_size[];
 #endif /* CONFIG_NOCACHE_MEMORY */
 
+/* Memory owned by the kernel. Start and end will be aligned for memory
+ * management/protection hardware for the target architecture.
+ *
+ * All the functions with '__ramfunc' keyword will be placed into this
+ * section, stored in RAM instead of FLASH.
+ */
+#ifdef CONFIG_ARCH_HAS_RAMFUNC_SUPPORT
+extern char _ramfunc_ram_start[];
+extern char _ramfunc_ram_end[];
+extern char _ramfunc_ram_size[];
+extern char _ramfunc_rom_start[];
+#endif /* CONFIG_ARCH_HAS_RAMFUNC_SUPPORT */
+
 #endif /* ! _ASMLANGUAGE */
 
 #endif /* ZEPHYR_INCLUDE_LINKER_LINKER_DEFS_H_ */

@@ -82,8 +82,8 @@ struct tls_context {
 	/** Information whether TLS context was initialized. */
 	bool is_initialized;
 
-	/** Information whether TLS handshake is complete or not */
-	bool tls_established;
+	/** Information whether TLS handshake is complete or not. */
+	struct k_sem tls_established;
 
 	/** TLS specific option values. */
 	struct {
@@ -294,6 +294,11 @@ static int tls_init(struct device *unused)
 
 SYS_INIT(tls_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
 
+static inline bool is_handshake_complete(struct net_context *ctx)
+{
+	return k_sem_count_get(&ctx->tls->tls_established) != 0;
+}
+
 /* Allocate TLS context. */
 static struct tls_context *tls_alloc(void)
 {
@@ -317,6 +322,8 @@ static struct tls_context *tls_alloc(void)
 	k_mutex_unlock(&context_lock);
 
 	if (tls) {
+		k_sem_init(&tls->tls_established, 0, 1);
+
 		mbedtls_ssl_init(&tls->ssl);
 		mbedtls_ssl_config_init(&tls->config);
 #if defined(CONFIG_NET_SOCKETS_ENABLE_DTLS)
@@ -755,7 +762,8 @@ static int tls_mbedtls_reset(struct net_context *context)
 		return ret;
 	}
 
-	context->tls->tls_established = false;
+	k_sem_init(&context->tls->tls_established, 0, 1);
+
 #if defined(CONFIG_NET_SOCKETS_ENABLE_DTLS)
 	(void)memset(&context->tls->dtls_peer_addr, 0,
 		     sizeof(context->tls->dtls_peer_addr));
@@ -796,7 +804,7 @@ static int tls_mbedtls_handshake(struct net_context *context, bool block)
 	}
 
 	if (ret == 0) {
-		context->tls->tls_established = true;
+		k_sem_give(&context->tls->tls_established);
 	}
 
 	return ret;
@@ -1376,7 +1384,7 @@ static ssize_t sendto_dtls_client(struct net_context *ctx, const void *buf,
 		}
 	}
 
-	if (!ctx->tls->tls_established) {
+	if (!is_handshake_complete(ctx)) {
 		/* TODO For simplicity, TLS handshake blocks the socket even for
 		 * non-blocking socket.
 		 */
@@ -1401,7 +1409,7 @@ static ssize_t sendto_dtls_server(struct net_context *ctx, const void *buf,
 	/* For DTLS server, require to have established DTLS connection
 	 * in order to send data.
 	 */
-	if (!ctx->tls->tls_established) {
+	if (!is_handshake_complete(ctx)) {
 		errno = ENOTCONN;
 		return -1;
 	}
@@ -1488,7 +1496,7 @@ static ssize_t recvfrom_dtls_client(struct net_context *ctx, void *buf,
 {
 	int ret;
 
-	if (!ctx->tls->tls_established) {
+	if (!is_handshake_complete(ctx)) {
 		ret = -ENOTCONN;
 		goto error;
 	}
@@ -1549,7 +1557,7 @@ static ssize_t recvfrom_dtls_server(struct net_context *ctx, void *buf,
 	do {
 		repeat = false;
 
-		if (!ctx->tls->tls_established) {
+		if (!is_handshake_complete(ctx)) {
 			ret = tls_mbedtls_handshake(ctx, is_block);
 			if (ret < 0) {
 				/* In case of EAGAIN, just exit. */
@@ -1658,27 +1666,47 @@ static int ztls_poll_prepare_ctx(struct net_context *ctx,
 	}
 
 	if (pfd->events & ZSOCK_POLLIN) {
-		if (!IS_LISTENING(ctx)) {
-			/* If there already is mbedTLS data to read, there is no
-			 * need to set the k_poll_event object. Return EALREADY
-			 * so we won't block in the k_poll.
-			 */
-			if (mbedtls_ssl_get_bytes_avail(&ctx->tls->ssl) > 0) {
-				errno = EALREADY;
-				return -1;
-			}
-		}
-
 		if (*pev == pev_end) {
 			errno = ENOMEM;
 			return -1;
 		}
 
-		(*pev)->obj = &ctx->recv_q;
-		(*pev)->type = K_POLL_TYPE_FIFO_DATA_AVAILABLE;
+		/* DTLS client should wait for the handshake to complete before
+		 * it actually starts to poll for data.
+		 */
+		if (net_context_get_type(ctx) == SOCK_DGRAM &&
+		    ctx->tls->options.role == MBEDTLS_SSL_IS_CLIENT &&
+		    !is_handshake_complete(ctx)) {
+			(*pev)->obj = &ctx->tls->tls_established;
+			(*pev)->type = K_POLL_TYPE_SEM_AVAILABLE;
+		} else {
+			/* Otherwise, monitor fifo for data/connections. */
+			(*pev)->obj = &ctx->recv_q;
+			(*pev)->type = K_POLL_TYPE_FIFO_DATA_AVAILABLE;
+		}
+
 		(*pev)->mode = K_POLL_MODE_NOTIFY_ONLY;
 		(*pev)->state = K_POLL_STATE_NOT_READY;
 		(*pev)++;
+
+		/* If socket is already in EOF, it can be reported
+		 * immediately, so we tell poll() to short-circuit wait.
+		 */
+		if (sock_is_eof(ctx)) {
+			errno = EALREADY;
+			return -1;
+		}
+
+		/* If there already is mbedTLS data to read, there is no
+		 * need to set the k_poll_event object. Return EALREADY
+		 * so we won't block in the k_poll.
+		 */
+		if (!IS_LISTENING(ctx)) {
+			if (mbedtls_ssl_get_bytes_avail(&ctx->tls->ssl) > 0) {
+				errno = EALREADY;
+				return -1;
+			}
+		}
 	}
 
 	return 0;
@@ -1699,19 +1727,39 @@ static int ztls_poll_update_ctx(struct net_context *ctx,
 	}
 
 	if (pfd->events & ZSOCK_POLLIN) {
+		/* Check if socket was waiting for the handshake to complete. */
+		if ((*pev)->obj == &ctx->tls->tls_established) {
+			if ((*pev)->state == K_POLL_STATE_NOT_READY) {
+				goto next;
+			}
+
+			/* Reconfigure the poll event to wait for data now. */
+			(*pev)->obj = &ctx->recv_q;
+			(*pev)->type = K_POLL_TYPE_FIFO_DATA_AVAILABLE;
+			(*pev)->mode = K_POLL_MODE_NOTIFY_ONLY;
+			(*pev)->state = K_POLL_STATE_NOT_READY;
+
+			goto again;
+		}
+
+		if (sock_is_eof(ctx)) {
+			pfd->revents |= ZSOCK_POLLIN;
+			goto next;
+		}
+
 		if (!IS_LISTENING(ctx)) {
 			/* Already had TLS data to read on socket. */
 			if (mbedtls_ssl_get_bytes_avail(&ctx->tls->ssl) > 0) {
 				pfd->revents |= ZSOCK_POLLIN;
-				return 0;
+				goto next;
 			}
 		}
 
 		/* Some encrypted data received on the socket. */
-		if (((*pev)++)->state != K_POLL_STATE_NOT_READY) {
+		if ((*pev)->state != K_POLL_STATE_NOT_READY) {
 			if (IS_LISTENING(ctx)) {
 				pfd->revents |= ZSOCK_POLLIN;
-				return 0;
+				goto next;
 			}
 
 			/* EAGAIN might happen during or just after
@@ -1720,25 +1768,37 @@ static int ztls_poll_update_ctx(struct net_context *ctx,
 			if (recv(pfd->fd, NULL, 0, ZSOCK_MSG_DONTWAIT) < 0 &&
 			    errno != EAGAIN) {
 				pfd->revents |= ZSOCK_POLLERR;
-				return 0;
+				goto next;
 			}
 
 			if (mbedtls_ssl_get_bytes_avail(&ctx->tls->ssl) > 0 ||
 			    sock_is_eof(ctx)) {
 				pfd->revents |= ZSOCK_POLLIN;
-				return 0;
+				goto next;
 			}
 
 			/* Received encrypted data, but still not enough
 			 * to decrypt it and return data through socket,
 			 * ask for retry.
 			 */
-			errno = EAGAIN;
-			return -1;
+
+			(*pev)->state = K_POLL_STATE_NOT_READY;
+			goto again;
 		}
+
+		goto next;
 	}
 
 	return 0;
+
+next:
+	(*pev)++;
+	return 0;
+
+again:
+	(*pev)++;
+	errno = EAGAIN;
+	return -1;
 }
 
 int ztls_getsockopt_ctx(struct net_context *ctx, int level, int optname,

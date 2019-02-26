@@ -33,6 +33,7 @@ extern "C" {
 #define CAN_STD_ID_MASK CAN_MAX_STD_ID
 #define CAN_EXT_ID_MASK (0x1FFFFFFF)
 #define CAN_MAX_DLC    (8)
+#define CAN_MAX_DLEN    8
 
 /* CAN_TX_* are the error flags from tx_callback and send.*/
 /** send successfully */
@@ -60,7 +61,8 @@ extern "C" {
  * @param name Name of the message queue.
  * @param size Number of can messages.
  */
-#define CAN_DEFINE_MSGQ(name, size) K_MSGQ_DEFINE(name, sizeof(struct can_msg), size, 4)
+#define CAN_DEFINE_MSGQ(name, size) \
+	K_MSGQ_DEFINE(name, sizeof(struct zcan_frame), size, 4)
 
 /**
  * @brief can_ide enum
@@ -96,14 +98,55 @@ enum can_mode {
 	CAN_SILENT_LOOPBACK_MODE
 };
 
+/*
+ * Controller Area Network Identifier structure for Linux compatibility.
+ *
+ * The fields in this type are:
+ *
+ * bit 0-28	: CAN identifier (11/29 bit)
+ * bit 29	: error message frame flag (0 = data frame, 1 = error message)
+ * bit 30	: remote transmission request flag (1 = rtr frame)
+ * bit 31	: frame format flag (0 = standard 11 bit, 1 = extended 29 bit)
+ */
+typedef u32_t canid_t;
+
 /**
- * @brief can message structure
+ * @brief CAN frame structure that is compatible with Linux. This is mainly
+ * used by Socket CAN code.
+ *
+ * @details Used to pass CAN messages from userspace to the socket CAN and vice
+ * versa.
+ */
+struct can_frame {
+	/** 32 bit CAN_ID + EFF/RTR/ERR flags */
+	canid_t can_id;
+
+	/** The length of the message */
+	u8_t can_dlc;
+
+	/** The message data */
+	u8_t data[CAN_MAX_DLEN];
+};
+
+/**
+ * @brief CAN filter that is compatible with Linux. This is mainly used by
+ * Socket CAN code.
+ *
+ * @details A filter matches, when "received_can_id & mask == can_id & mask"
+ */
+struct can_filter {
+	canid_t can_id;
+	canid_t can_mask;
+};
+
+/**
+ * @brief CAN message structure
  *
  * Used to pass can messages from userspace to the driver and
  * from driver to userspace
  *
  */
-struct can_msg {
+struct zcan_frame {
 	/** Indicates the identifier type (standard or extended)
 	 * use can_ide enum for assignment
 	 */
@@ -127,7 +170,7 @@ struct can_msg {
 } __packed;
 
 /**
- * @brief can filter structure
+ * @brief CAN filter structure
  *
  * Used to pass can identifier filter information to the driver.
  * rtr_mask and *_id_mask are used to mask bits of the rtr and id fields.
@@ -135,7 +178,7 @@ struct can_msg {
  * field don't care for the filter matching.
  *
  */
-struct can_filter {
+struct zcan_filter {
 	/** Indicates the identifier type (standard or extended)
 	 * use can_ide enum for assignment
 	 */
@@ -171,7 +214,7 @@ typedef void (*can_tx_callback_t)(u32_t error_flags);
  *
  * @param received message
  */
-typedef void (*can_rx_callback_t)(struct can_msg *msg);
+typedef void (*can_rx_callback_t)(struct zcan_frame *msg);
 
 /**
  * @brief Configure operation of a host controller.
@@ -202,7 +245,7 @@ typedef int (*can_configure_t)(struct device *dev, enum can_mode mode,
  * @retval 0 If successful.
  * @retval CAN_TX_* on failure.
  */
-typedef int (*can_send_t)(struct device *dev, struct can_msg *msg,
+typedef int (*can_send_t)(struct device *dev, struct zcan_frame *msg,
 			  s32_t timeout, can_tx_callback_t callback_isr);
 
 
@@ -218,13 +261,14 @@ typedef int (*can_send_t)(struct device *dev, struct can_msg *msg,
  * *
  * @param dev    Pointer to the device structure for the driver instance.
  * @param msgq   Pointer to the already initialized message queue.
- * @param filter Pointer to a can_filter structure defining the id filtering.
+ * @param filter Pointer to a zcan_filter structure defining the id
+ *               filtering.
  *
  * @retval filter id on success.
  * @retval CAN_NO_FREE_FILTER if there is no filter left.
  */
 typedef int (*can_attach_msgq_t)(struct device *dev, struct k_msgq *msg_q,
-				 const struct can_filter *filter);
+				 const struct zcan_filter *filter);
 
 /**
  * @brief Attach an isr callback function to a single or group of identifiers.
@@ -238,13 +282,14 @@ typedef int (*can_attach_msgq_t)(struct device *dev, struct k_msgq *msg_q,
  * *
  * @param dev    Pointer to the device structure for the driver instance.
  * @param isr    Callback function pointer.
- * @param filter Pointer to a can_filter structure defining the id filtering.
+ * @param filter Pointer to a zcan_filter structure defining the id
+ *               filtering.
  *
  * @retval filter id on success.
  * @retval CAN_NO_FREE_FILTER if there is no filter left.
  */
 typedef int (*can_attach_isr_t)(struct device *dev, can_rx_callback_t isr,
-				const struct can_filter *filter);
+				const struct zcan_filter *filter);
 
 /**
  * @brief Detach an isr or message queue from the identifier filtering.
@@ -268,10 +313,10 @@ struct can_driver_api {
 };
 
 
-__syscall int can_send(struct device *dev, struct can_msg *msg,
+__syscall int can_send(struct device *dev, struct zcan_frame *msg,
 		       s32_t timeout, can_tx_callback_t callback_isr);
 
-static inline int _impl_can_send(struct device *dev, struct can_msg *msg,
+static inline int _impl_can_send(struct device *dev, struct zcan_frame *msg,
 				 s32_t timeout, can_tx_callback_t callback_isr)
 {
 	const struct can_driver_api *api = dev->driver_api;
@@ -302,7 +347,7 @@ static inline int _impl_can_send(struct device *dev, struct can_msg *msg,
 static inline int can_write(struct device *dev, u8_t *data, u8_t length,
 			    u32_t id, enum can_rtr rtr, s32_t timeout)
 {
-	struct can_msg msg;
+	struct zcan_frame msg;
 
 	if (length > 8) {
 		return -EINVAL;
@@ -325,11 +370,11 @@ static inline int can_write(struct device *dev, u8_t *data, u8_t length,
 
 
 __syscall int can_attach_msgq(struct device *dev, struct k_msgq *msg_q,
-			      const struct can_filter *filter);
+			      const struct zcan_filter *filter);
 
 static inline int _impl_can_attach_msgq(struct device *dev,
 					struct k_msgq *msg_q,
-					const struct can_filter *filter)
+					const struct zcan_filter *filter)
 {
 	const struct can_driver_api *api = dev->driver_api;
 
@@ -338,10 +383,10 @@ static inline int _impl_can_attach_msgq(struct device *dev,
 
 
 __syscall int can_attach_isr(struct device *dev, can_rx_callback_t isr,
-			     const struct can_filter *filter);
+			     const struct zcan_filter *filter);
 static inline int _impl_can_attach_isr(struct device *dev,
 				       can_rx_callback_t isr,
-				       const struct can_filter *filter)
+				       const struct zcan_filter *filter)
 {
 	const struct can_driver_api *api = dev->driver_api;
 
@@ -368,6 +413,72 @@ static inline int _impl_can_configure(struct device *dev, enum can_mode mode,
 	const struct can_driver_api *api = dev->driver_api;
 
 	return api->configure(dev, mode, bitrate);
+}
+
+/**
+ * @brief Converter that translates betwen can_frame and zcan_frame structs.
+ *
+ * @param frame Pointer to can_frame struct.
+ * @param zframe Pointer to zcan_frame struct.
+ */
+static inline void can_copy_frame_to_zframe(struct can_frame *frame,
+					    struct zcan_frame *zframe)
+{
+	zframe->id_type = (frame->can_id & BIT(31)) >> 31;
+	zframe->rtr = (frame->can_id & BIT(30)) >> 30;
+	zframe->ext_id = frame->can_id & BIT_MASK(29);
+	zframe->dlc = frame->can_dlc;
+	memcpy(zframe->data, frame->data, sizeof(zframe->data));
+}
+
+/**
+ * @brief Converter that translates betwen zcan_frame and can_frame structs.
+ *
+ * @param zframe Pointer to zcan_frame struct.
+ * @param frame Pointer to can_frame struct.
+ */
+static inline void can_copy_zframe_to_frame(struct zcan_frame *zframe,
+					    struct can_frame *frame)
+{
+	frame->can_id = (zframe->id_type << 31) | (zframe->rtr << 30) |
+		zframe->ext_id;
+	frame->can_dlc = zframe->dlc;
+	memcpy(frame->data, zframe->data, sizeof(frame->data));
+}
+
+/**
+ * @brief Converter that translates betwen can_filter and zcan_frame_filter
+ * structs.
+ *
+ * @param filter Pointer to can_filter struct.
+ * @param zfilter Pointer to zcan_frame_filter struct.
+ */
+static inline
+void can_copy_filter_to_zfilter(struct can_filter *filter,
+				struct zcan_filter *zfilter)
+{
+	zfilter->id_type = (filter->can_id & BIT(31)) >> 31;
+	zfilter->rtr = (filter->can_id & BIT(30)) >> 30;
+	zfilter->ext_id = filter->can_id & BIT_MASK(29);
+	zfilter->rtr_mask = (filter->can_mask & BIT(30)) >> 30;
+	zfilter->ext_id_mask = filter->can_mask & BIT_MASK(29);
+}
+
+/**
+ * @brief Converter that translates betwen zcan_filter and can_filter
+ * structs.
+ *
+ * @param zfilter Pointer to zcan_filter struct.
+ * @param filter Pointer to can_filter struct.
+ */
+static inline
+void can_copy_zfilter_to_filter(struct zcan_filter *zfilter,
+				struct can_filter *filter)
+{
+	filter->can_id = (zfilter->id_type << 31) |
+		(zfilter->rtr << 30) | zfilter->ext_id;
+	filter->can_mask = (zfilter->rtr_mask << 30) |
+		(zfilter->id_type << 31) | zfilter->ext_id_mask;
 }
 
 #ifdef __cplusplus

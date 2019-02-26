@@ -37,11 +37,11 @@ LOG_MODULE_REGISTER(mpu);
 /* Convenience macros to denote the start address and the size of the system
  * memory area, where dynamic memory regions may be programmed at run-time.
  */
-#if defined(CONFIG_APP_SHARED_MEM)
+#if defined(CONFIG_USERSPACE)
 #define _MPU_DYNAMIC_REGIONS_AREA_START ((u32_t)&_app_smem_start)
 #else
 #define _MPU_DYNAMIC_REGIONS_AREA_START ((u32_t)&__kernel_ram_start)
-#endif /* CONFIG_APP_SHARED_MEM */
+#endif /* CONFIG_USERSPACE */
 #define _MPU_DYNAMIC_REGIONS_AREA_SIZE ((u32_t)&__kernel_ram_end - \
 		_MPU_DYNAMIC_REGIONS_AREA_START)
 
@@ -68,7 +68,7 @@ void _arch_configure_static_mpu_regions(void)
 #if defined(CONFIG_COVERAGE_GCOV) && defined(CONFIG_USERSPACE)
 		{
 		.start = (u32_t)&__gcov_bss_start,
-		.size = (u32_t)&__gcov_bss_size
+		.size = (u32_t)&__gcov_bss_size,
 		.attr = K_MEM_PARTITION_P_RW_U_RW,
 		},
 #endif /* CONFIG_COVERAGE_GCOV && CONFIG_USERSPACE */
@@ -77,8 +77,15 @@ void _arch_configure_static_mpu_regions(void)
 		.start = (u32_t)&_nocache_ram_start,
 		.size = (u32_t)&_nocache_ram_size,
 		.attr = K_MEM_PARTITION_P_RW_U_NA_NOCACHE,
-		}
+		},
 #endif /* CONFIG_NOCACHE_MEMORY */
+#if defined(CONFIG_ARCH_HAS_RAMFUNC_SUPPORT)
+		{
+		.start = (u32_t)&_ramfunc_ram_start,
+		.size = (u32_t)&_ramfunc_ram_size,
+		.attr = K_MEM_PARTITION_P_RX_U_RX,
+		}
+#endif /* CONFIG_ARCH_HAS_RAMFUNC_SUPPORT */
 	};
 
 	/* Configure the static MPU regions within firmware SRAM boundaries.
@@ -189,13 +196,22 @@ void _arch_configure_dynamic_mpu_regions(struct k_thread *thread)
 
 #if defined(CONFIG_MPU_STACK_GUARD)
 	/* Privileged stack guard */
+	u32_t guard_start;
 #if defined(CONFIG_USERSPACE)
-	u32_t guard_start = thread->arch.priv_stack_start ?
-	    (u32_t)thread->arch.priv_stack_start :
-	    (u32_t)thread->stack_obj;
+	if (thread->arch.priv_stack_start) {
+		guard_start = thread->arch.priv_stack_start;
+	} else {
+		guard_start = thread->stack_info.start -
+			MPU_GUARD_ALIGN_AND_SIZE;
+		__ASSERT((u32_t)thread->stack_obj == guard_start,
+		"Guard start (0x%x) not beginning at stack object (0x%x)\n",
+		guard_start, (u32_t)thread->stack_obj);
+	}
 #else
-	u32_t guard_start = thread->stack_info.start;
-#endif
+	guard_start = thread->stack_info.start -
+		MPU_GUARD_ALIGN_AND_SIZE;
+#endif /* CONFIG_USERSPACE */
+
 	__ASSERT(region_num < _MAX_DYNAMIC_MPU_REGIONS_NUM,
 		"Out-of-bounds error for dynamic region map.");
 	dynamic_regions[region_num] = (const struct k_mem_partition)

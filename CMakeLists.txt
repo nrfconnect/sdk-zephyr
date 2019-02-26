@@ -134,27 +134,61 @@ endif()
 # Apply the final optimization flag(s)
 zephyr_compile_options(${OPTIMIZATION_FLAG})
 
-# Dialects of C++, corresponding to the multiple published ISO standards.
-# Which standard it implements can be selected using the -std= command-line option.
-set_ifndef(DIALECT_STD_CPP98 "c++98")
-set_ifndef(DIALECT_STD_CPP11 "c++11")
-set_ifndef(DIALECT_STD_CPP14 "c++14")
-set_ifndef(DIALECT_STD_CPP17 "c++17")
-set_ifndef(DIALECT_STD_CPP2A "c++2a")
+# @Intent: Obtain compiler specific flags related to C++ that are not influenced by kconfig
+toolchain_cc_cpp_base_flags(CPP_BASE_FLAGS)
+foreach(flag ${CPP_BASE_FLAGS})
+  zephyr_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:${flag}>
+  )
+endforeach()
 
+# @Intent: Obtain compiler specific flags for compiling under different ISO standards of C++
+toolchain_cc_cpp_dialect_std_98_flags(CPP_DIALECT_STD_98_FLAGS)
+toolchain_cc_cpp_dialect_std_11_flags(CPP_DIALECT_STD_11_FLAGS)
+toolchain_cc_cpp_dialect_std_14_flags(CPP_DIALECT_STD_14_FLAGS)
+toolchain_cc_cpp_dialect_std_17_flags(CPP_DIALECT_STD_17_FLAGS)
+toolchain_cc_cpp_dialect_std_2a_flags(CPP_DIALECT_STD_2A_FLAGS)
+
+# From kconfig choice, pick a single dialect.
+# Kconfig choice ensures only one of these CONFIG_STD_CPP* is set.
 if(CONFIG_STD_CPP98)
-  set(STD_CPP_DIALECT ${DIALECT_STD_CPP98})
+  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_98_FLAGS})
 elseif(CONFIG_STD_CPP11)
-  set(STD_CPP_DIALECT ${DIALECT_STD_CPP11}) # Default
+  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_11_FLAGS}) # Default in kconfig
 elseif(CONFIG_STD_CPP14)
-  set(STD_CPP_DIALECT ${DIALECT_STD_CPP14})
+  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_14_FLAGS})
 elseif(CONFIG_STD_CPP17)
-  set(STD_CPP_DIALECT ${DIALECT_STD_CPP17})
+  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_17_FLAGS})
 elseif(CONFIG_STD_CPP2A)
-  set(STD_CPP_DIALECT ${DIALECT_STD_CPP2A})
+  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_2A_FLAGS})
 else()
   assert(0 "Unreachable code. Expected C++ standard to have been chosen. See Kconfig.zephyr.")
 endif()
+
+foreach(flag ${STD_CPP_DIALECT_FLAGS})
+  zephyr_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:${flag}>
+  )
+endforeach()
+
+if(NOT CONFIG_EXCEPTIONS)
+  # @Intent: Obtain compiler specific flags related to C++ Exceptions
+  toolchain_cc_cpp_no_exceptions_flag(CPP_NO_EXCEPTIONS_FLAG)
+  zephyr_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:${CPP_NO_EXCEPTIONS_FLAG}>
+  )
+endif()
+
+if(NOT CONFIG_RTTI)
+  # @Intent: Obtain compiler specific flags related to C++ Run Time Type Information
+  toolchain_cc_cpp_no_rtti_flag(CPP_NO_RTTI_FLAG)
+  zephyr_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:${CPP_NO_RTTI_FLAG}>
+  )
+endif()
+
+# @Intent: Obtain compiler specific flags for standard C includes
+toolchain_cc_nostdinc()
 
 zephyr_compile_options(
   -g # TODO: build configuration enough?
@@ -166,31 +200,19 @@ zephyr_compile_options(
   -ffreestanding
   -Wno-main
   -fno-common
-  ${NOSTDINC_F}
   ${TOOLCHAIN_C_FLAGS}
 )
 
+# @Intent: Obtain compiler specific flags related to assembly
+toolchain_cc_asm_base_flags(ASM_BASE_FLAG)
 zephyr_compile_options(
-  $<$<COMPILE_LANGUAGE:CXX>:-std=${STD_CPP_DIALECT}>
-  $<$<COMPILE_LANGUAGE:CXX>:-fcheck-new>
-  $<$<COMPILE_LANGUAGE:CXX>:-ffunction-sections>
-  $<$<COMPILE_LANGUAGE:CXX>:-fdata-sections>
+  $<$<COMPILE_LANGUAGE:ASM>:${ASM_BASE_FLAG}>
+)
 
-  $<$<COMPILE_LANGUAGE:ASM>:-xassembler-with-cpp>
+# Common toolchain-agnostic assembly flags
+zephyr_compile_options(
   $<$<COMPILE_LANGUAGE:ASM>:-D_ASMLANGUAGE>
 )
-
-if(NOT CONFIG_RTTI)
-zephyr_compile_options(
-  $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
-)
-endif()
-
-if(NOT CONFIG_EXCEPTIONS)
-zephyr_compile_options(
-  $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
-)
-endif()
 
 zephyr_ld_options(
   ${TOOLCHAIN_LD_FLAGS}
@@ -266,11 +288,6 @@ if(W MATCHES "3")
     )
 endif()
 
-if(NOT CONFIG_STD_CPP98) # "register" keyword was deprecated since C++11.
-  zephyr_compile_options(
-    $<$<COMPILE_LANGUAGE:CXX>:-Wno-register>
-    )
-endif()
 
 # Allow the user to inject options when calling cmake, e.g.
 # 'cmake -DEXTRA_CFLAGS="-Werror -Wno-deprecated-declarations" ..'
@@ -343,9 +360,7 @@ zephyr_cc_option(-Wpointer-arith)
 # Declare MPU userspace dependencies before the linker scripts to make
 # sure the order of dependencies are met
 if(CONFIG_USERSPACE)
-  if(CONFIG_APP_SHARED_MEM)
-    set(APP_SMEM_DEP app_smem_linker)
-  endif()
+  set(APP_SMEM_DEP app_smem_linker)
   if(CONFIG_ARM)
     set(PRIV_STACK_DEP priv_stacks_prebuilt)
   endif()
@@ -364,10 +379,6 @@ zephyr_ld_options(
   ${LINKERFLAGPREFIX},--gc-sections
   ${LINKERFLAGPREFIX},--build-id=none
   )
-
-if(NOT CONFIG_NATIVE_APPLICATION)
-  set(NOSTDINC_F -nostdinc)
-endif()
 
 get_property(TOPT GLOBAL PROPERTY TOPT)
 set_ifndef(  TOPT -T)
@@ -465,7 +476,6 @@ function(construct_add_custom_command_for_linker_pass linker_output_name output_
     ${linker_script_dep}
     COMMAND ${CMAKE_C_COMPILER}
     -x assembler-with-cpp
-    ${NOSTDINC_F}
     ${NOSYSDEF_CFLAG}
     -MD -MF ${linker_cmd_file_name}.dep -MT ${base_name}/${linker_cmd_file_name}
     ${current_includes}
@@ -555,7 +565,6 @@ if(EXISTS ${NRF_DIR})
 	add_subdirectory(${NRF_DIR} ${PROJECT_BINARY_DIR}/nrf)
 endif()
 add_subdirectory(drivers)
-add_subdirectory(tests)
 
 # Add all zephyr modules subdirectories.
 message("Including module(s): ${ZEPHYR_MODULES_NAME}")
@@ -1142,7 +1151,7 @@ configure_file(
      $ENV{ZEPHYR_BASE}/include/arch/arm/cortex_m/scripts/app_smem.ld
      ${PROJECT_BINARY_DIR}/include/generated/app_smem.ld)
 
-if(CONFIG_APP_SHARED_MEM AND CONFIG_USERSPACE)
+if(CONFIG_USERSPACE)
   set(APP_SMEM_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem.ld")
   set(OBJ_FILE_DIR "${PROJECT_BINARY_DIR}/../")
 
@@ -1153,7 +1162,7 @@ if(CONFIG_APP_SHARED_MEM AND CONFIG_USERSPACE)
     )
 
   if(CONFIG_NEWLIB_LIBC)
-    set(NEWLIB_PART -l libc.a z_newlib_partition)
+    set(NEWLIB_PART -l libc.a z_libc_partition)
   endif()
   add_custom_command(
     OUTPUT ${APP_SMEM_LD}

@@ -9,7 +9,7 @@
 
 #include <kernel.h>
 #include <posix/time.h>
-#include "sys/types.h"
+#include "posix_types.h"
 #include "sys/stat.h"
 
 #ifdef __cplusplus
@@ -17,7 +17,6 @@ extern "C" {
 #endif
 
 typedef void *mqd_t;
-typedef unsigned int mode_t;
 
 typedef struct mq_attr {
 	long mq_flags;

@@ -15,7 +15,6 @@ import yaml
 import argparse
 from collections import defaultdict
 from collections.abc import Mapping
-from copy import deepcopy
 
 from devicetree import parse_file
 from extract.globals import *
@@ -30,116 +29,92 @@ from extract.pinctrl import pinctrl
 from extract.default import default
 
 
-def extract_bus_name(node_address, def_label):
+def extract_bus_name(node_path, def_label):
     label = def_label + '_BUS_NAME'
     prop_alias = {}
 
-    add_compat_alias(node_address, 'BUS_NAME', label, prop_alias)
+    add_compat_alias(node_path, 'BUS_NAME', label, prop_alias)
 
     # Generate defines for node aliases
-    if node_address in aliases:
+    if node_path in aliases:
         add_prop_aliases(
-            node_address,
+            node_path,
             lambda alias: str_to_label(alias) + '_BUS_NAME',
             label,
             prop_alias)
 
-    insert_defs(node_address,
-                {label: '"' + find_parent_prop(node_address, 'label') + '"'},
+    insert_defs(node_path,
+                {label: '"' + find_parent_prop(node_path, 'label') + '"'},
                 prop_alias)
 
 
-def extract_string_prop(node_address, key, label):
-    if node_address not in defs:
+def extract_string_prop(node_path, key, label):
+    if node_path not in defs:
         # Make all defs have the special 'aliases' key, to remove existence
         # checks elsewhere
-        defs[node_address] = {'aliases': {}}
+        defs[node_path] = {'aliases': {}}
 
-    defs[node_address][label] = '"' + reduced[node_address]['props'][key] + '"'
+    defs[node_path][label] = '"' + reduced[node_path]['props'][key] + '"'
 
 
-def extract_property(node_compat, node_address, prop, prop_val, names):
-    node = reduced[node_address]
-    yaml_node_compat = get_binding(node_address)
-    def_label = get_node_label(node_address)
+def generate_prop_defines(node_path, prop):
+    # Generates #defines (and .conf file values) from the prop
+    # named 'prop' on the device tree node at 'node_path'
 
-    if 'parent' in yaml_node_compat and 'bus' in yaml_node_compat['parent']:
-        # Get parent label
-        parent_address = get_parent_address(node_address)
+    binding = get_binding(node_path)
+    if 'parent' in binding and 'bus' in binding['parent']:
+        # If the binding specifies a parent for the node, then include the
+        # parent in the #define's generated for the properties
+        parent_path = get_parent_path(node_path)
+        def_label = 'DT_' + get_node_label(parent_path) + '_' \
+                          + get_node_label(node_path)
+    else:
+        def_label = 'DT_' + get_node_label(node_path)
 
-        # Check that parent has matching child bus value
-        try:
-            parent_yaml = get_binding(parent_address)
-            parent_bus = parent_yaml['child']['bus']
-        except (KeyError, TypeError) as e:
-            raise Exception("{0} defines parent {1} as bus master, but {1} is "
-                            "not configured as bus master in binding"
-                            .format(node_address, parent_address))
-
-        if parent_bus != yaml_node_compat['parent']['bus']:
-            raise Exception("{0} defines parent {1} as {2} bus master, but "
-                            "{1} is configured as {3} bus master"
-                            .format(node_address, parent_address,
-                                    yaml_node_compat['parent']['bus'],
-                                    parent_bus))
-
-        # Generate alias definition if parent has any alias
-        if parent_address in aliases:
-            for i in aliases[parent_address]:
-                # Build an alias name that respects device tree specs
-                node_name = node_compat + '-' + node_address.split('@')[-1]
-                node_strip = node_name.replace('@','-').replace(',','-')
-                node_alias = i + '-' + node_strip
-                if node_alias not in aliases[node_address]:
-                    # Need to generate alias name for this node:
-                    aliases[node_address].append(node_alias)
-
-        # Build the name from the parent node's label
-        def_label = get_node_label(parent_address) + '_' + def_label
-
-        # Generate *_BUS_NAME #define
-        extract_bus_name(node_address, 'DT_' + def_label)
-
-    def_label = 'DT_' + def_label
+    names = prop_names(reduced[node_path], prop)
 
     if prop == 'reg':
-        reg.extract(node_address, names, def_label, 1)
+        reg.extract(node_path, names, def_label, 1)
     elif prop == 'interrupts' or prop == 'interrupts-extended':
-        interrupts.extract(node_address, prop, names, def_label)
+        interrupts.extract(node_path, prop, names, def_label)
     elif prop == 'compatible':
-        compatible.extract(node_address, prop, def_label)
+        compatible.extract(node_path, prop, def_label)
     elif 'pinctrl-' in prop:
-        pinctrl.extract(node_address, prop, def_label)
+        pinctrl.extract(node_path, prop, def_label)
     elif 'clocks' in prop:
-        clocks.extract(node_address, prop, def_label)
+        clocks.extract(node_path, prop, def_label)
     elif 'pwms' in prop or 'gpios' in prop:
-        prop_values = reduced[node_address]['props'][prop]
+        prop_values = reduced[node_path]['props'][prop]
         generic = prop[:-1]  # Drop the 's' from the prop
 
-        extract_controller(node_address, prop, prop_values, 0,
+        extract_controller(node_path, prop, prop_values, 0,
                            def_label, generic)
-        extract_cells(node_address, prop, prop_values,
+        extract_cells(node_path, prop, prop_values,
                       names, 0, def_label, generic)
     else:
-        default.extract(node_address, prop, prop_val['type'], def_label)
+        default.extract(node_path, prop,
+                        binding['properties'][prop]['type'],
+                        def_label)
 
 
 def generate_node_defines(node_path):
-    node = reduced[node_path]
-    node_compat = get_compat(node_path)
+    # Generates #defines (and .conf file values) from the device
+    # tree node at 'node_path'
 
-    if node_compat not in get_binding_compats():
+    if get_compat(node_path) not in get_binding_compats():
         return
 
-    for k, v in get_binding(node_path)['properties'].items():
-        if 'generation' not in v:
-            continue
+    # We extract a few different #defines for a flash partition, so it's easier
+    # to handle it in one step
+    if 'partition@' in node_path:
+        flash.extract_partition(node_path)
+        return
 
-        # Handle any per node extraction first.  For example we
-        # extract a few different defines for a flash partition so its
-        # easier to handle the partition node in one step
-        if 'partition@' in node_path:
-            flash.extract_partition(node_path)
+    generate_bus_defines(node_path)
+
+    # Generate per-property ('foo = <1 2 3>', etc.) #defines
+    for yaml_prop, yaml_val in get_binding(node_path)['properties'].items():
+        if 'generation' not in yaml_val:
             continue
 
         match = False
@@ -147,30 +122,84 @@ def generate_node_defines(node_path):
         # Handle each property individually, this ends up handling common
         # patterns for things like reg, interrupts, etc that we don't need
         # any special case handling at a node level
-        for c in node['props']:
-            if c in {'interrupt-names', 'reg-names', 'phandle',
-                     'linux,phandle'}:
+        for prop in reduced[node_path]['props']:
+            if prop in {'interrupt-names', 'reg-names', 'phandle',
+                        'linux,phandle'}:
                 continue
 
-            if re.fullmatch(k, c):
+            if re.fullmatch(yaml_prop, prop):
                 match = True
-
-                if 'pinctrl-' in c:
-                    names = deepcopy(node['props'].get('pinctrl-names', []))
-                elif not c.endswith('-names'):
-                    names = deepcopy(node['props'].get(c[:-1] + '-names', []))
-                    if not names:
-                        names = deepcopy(node['props'].get(c + '-names', []))
-
-                if not isinstance(names, list):
-                    names = [names]
-
-                extract_property(node_compat, node_path, c, v, names)
+                generate_prop_defines(node_path, prop)
 
         # Handle the case that we have a boolean property, but its not
         # in the dts
-        if not match and v['type'] == 'boolean':
-            extract_property(node_compat, node_path, k, v, None)
+        if not match and yaml_val['type'] == 'boolean':
+            generate_prop_defines(node_path, yaml_prop)
+
+
+def generate_bus_defines(node_path):
+    # Generates any node-level #defines related to
+    #
+    # parent:
+    #   bus: ...
+
+    binding = get_binding(node_path)
+    if not ('parent' in binding and 'bus' in binding['parent']):
+        return
+
+    parent_path = get_parent_path(node_path)
+
+    # Check that parent has matching child bus value
+    try:
+        parent_binding = get_binding(parent_path)
+        parent_bus = parent_binding['child']['bus']
+    except (KeyError, TypeError) as e:
+        raise Exception("{0} defines parent {1} as bus master, but {1} is not "
+                        "configured as bus master in binding"
+                        .format(node_path, parent_path))
+
+    if parent_bus != binding['parent']['bus']:
+        raise Exception("{0} defines parent {1} as {2} bus master, but {1} is "
+                        "configured as {3} bus master"
+                        .format(node_path, parent_path,
+                                binding['parent']['bus'], parent_bus))
+
+    # Generate alias definition if parent has any alias
+    if parent_path in aliases:
+        for i in aliases[parent_path]:
+            # Build an alias name that respects device tree specs
+            node_name = get_compat(node_path) + '-' + node_path.split('@')[-1]
+            node_strip = node_name.replace('@','-').replace(',','-')
+            node_alias = i + '-' + node_strip
+            if node_alias not in aliases[node_path]:
+                # Need to generate alias name for this node:
+                aliases[node_path].append(node_alias)
+
+    # Generate *_BUS_NAME #define
+    extract_bus_name(
+        node_path,
+        'DT_' + get_node_label(parent_path) + '_' + get_node_label(node_path))
+
+
+def prop_names(node, prop_name):
+    # Returns a list with the *-names for the property (reg-names,
+    # interrupt-names, etc.) The list is copied so that it can be modified
+    # in-place later without stomping on the device tree data.
+
+    if prop_name.startswith('pinctrl-'):
+        names = node['props'].get('pinctrl-names', [])
+    else:
+        # The first case turns 'interrupts' into 'interrupt-names'
+        names = node['props'].get(prop_name[:-1] + '-names', []) or \
+                node['props'].get(prop_name + '-names', [])
+
+    if isinstance(names, list):
+        # Allow the list of names to be modified in-place without
+        # stomping on the property
+        return names.copy()
+
+    return [names]
+
 
 def merge_properties(parent, fname, to_dict, from_dict):
     # Recursively merges the 'from_dict' dictionary into 'to_dict', to
@@ -414,9 +443,10 @@ def yaml_inc_error(msg):
 
 
 def generate_defines():
+    # Generates #defines (and .conf file values) from DTS
+
     for node_path in reduced.keys():
-        if get_compat(node_path) in get_binding_compats():
-            generate_node_defines(node_path)
+        generate_node_defines(node_path)
 
     if not defs:
         raise Exception("No information parsed from dts file.")
@@ -429,10 +459,10 @@ def generate_defines():
         if k in chosen:
             extract_string_prop(chosen[k], "label", v)
 
-    node_address = chosen.get('zephyr,flash', 'dummy-flash')
-    flash.extract(node_address, 'zephyr,flash', 'DT_FLASH')
-    node_address = chosen.get('zephyr,code-partition', node_address)
-    flash.extract(node_address, 'zephyr,code-partition', None)
+    node_path = chosen.get('zephyr,flash', 'dummy-flash')
+    flash.extract(node_path, 'zephyr,flash', 'DT_FLASH')
+    node_path = chosen.get('zephyr,code-partition', node_path)
+    flash.extract(node_path, 'zephyr,code-partition', None)
 
     # Add DT_CHOSEN_<X> defines
     for c in sorted(chosen):

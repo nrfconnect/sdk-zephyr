@@ -27,13 +27,6 @@ __syscall int _zephyr_read(char *buf, int nbytes);
 
 __syscall int _zephyr_write(const void *buf, int nbytes);
 
-#ifdef CONFIG_APP_SHARED_MEM
-/* Memory partition containing newlib's globals. This includes all the globals
- * within libc.a and the supporting zephyr hooks, but not the malloc arena.
- */
-extern struct k_mem_partition z_newlib_partition;
-#endif /* CONFIG_APP_SHARED_MEM */
-
 #else
 /* Minimal libc */
 
@@ -43,9 +36,12 @@ __syscall size_t _zephyr_fwrite(const void *_MLIBC_RESTRICT ptr, size_t size,
 				size_t nitems, FILE *_MLIBC_RESTRICT stream);
 #endif /* CONFIG_NEWLIB_LIBC */
 
-#ifdef CONFIG_APP_SHARED_MEM
+#ifdef CONFIG_USERSPACE
 /* Memory partition containing the libc malloc arena */
 extern struct k_mem_partition z_malloc_partition;
+
+/* C library globals, except the malloc arena */
+extern struct k_mem_partition z_libc_partition;
 #endif
 
 #include <syscalls/libc-hooks.h>

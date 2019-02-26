@@ -13,9 +13,8 @@
 #include <crc.h>
 #include "nvs_priv.h"
 
-#define LOG_LEVEL CONFIG_NVS_LOG_LEVEL
 #include <logging/log.h>
-LOG_MODULE_REGISTER(fs_nvs);
+LOG_MODULE_REGISTER(fs_nvs, CONFIG_NVS_LOG_LEVEL);
 
 
 /* basic routines */
@@ -314,10 +313,6 @@ static int _nvs_flash_wrt_entry(struct nvs_fs *fs, u16_t id, const void *data,
 		return rc;
 	}
 
-	if (len != 0) {
-		fs->free_space -= _nvs_al_size(fs, len);
-		fs->free_space -= ate_size;
-	}
 	return 0;
 }
 /* end of flash routines */
@@ -532,73 +527,7 @@ static int _nvs_gc(struct nvs_fs *fs)
 	return 0;
 }
 
-static int _nvs_update_free_space(struct nvs_fs *fs)
-{
-
-	int rc;
-	struct nvs_ate step_ate, wlk_ate;
-	u32_t step_addr, wlk_addr;
-	size_t ate_size;
-
-	ate_size = _nvs_al_size(fs, sizeof(struct nvs_ate));
-
-	fs->free_space = 0;
-	for (u16_t i = 1; i < fs->sector_count; i++) {
-		fs->free_space += (fs->sector_size - ate_size);
-	}
-
-	step_addr = fs->ate_wra;
-
-	while (1) {
-		rc = _nvs_prev_ate(fs, &step_addr, &step_ate);
-		if (rc) {
-			return rc;
-		}
-
-		wlk_addr = fs->ate_wra;
-
-		while (1) {
-			rc = _nvs_prev_ate(fs, &wlk_addr, &wlk_ate);
-			if (rc) {
-				return rc;
-			}
-			if ((wlk_ate.id == step_ate.id) ||
-			    (wlk_addr == fs->ate_wra)) {
-				break;
-			}
-		}
-
-		if ((wlk_addr == step_addr) && step_ate.len &&
-		    (!_nvs_ate_crc8_check(&step_ate))) {
-			/* count needed */
-			fs->free_space -= _nvs_al_size(fs, step_ate.len);
-			fs->free_space -= ate_size;
-		}
-
-		if (step_addr == fs->ate_wra) {
-			break;
-		}
-
-	}
-	return 0;
-}
-
-int nvs_clear(struct nvs_fs *fs)
-{
-	int rc;
-	off_t addr;
-
-	for (u16_t i = 0; i < fs->sector_count; i++) {
-		addr = i << ADDR_SECT_SHIFT;
-		rc = _nvs_flash_erase_sector(fs, addr);
-		if (rc) {
-			return rc;
-		}
-	}
-	return 0;
-}
-
-int nvs_reinit(struct nvs_fs *fs)
+static int _nvs_startup(struct nvs_fs *fs)
 {
 	int rc;
 	struct nvs_ate last_ate;
@@ -607,7 +536,7 @@ int nvs_reinit(struct nvs_fs *fs)
 	 * should never happen as this is verified in nvs_init() but both
 	 * Coverity and GCC believe the contrary.
 	 */
-	u32_t addr = 0;
+	u32_t addr = 0U;
 
 
 	k_mutex_lock(&fs->nvs_lock, K_FOREVER);
@@ -705,16 +634,36 @@ int nvs_reinit(struct nvs_fs *fs)
 		}
 	}
 
-	rc = _nvs_update_free_space(fs);
 end:
 	k_mutex_unlock(&fs->nvs_lock);
 	return rc;
+}
+
+int nvs_clear(struct nvs_fs *fs)
+{
+	int rc;
+	off_t addr;
+
+	if (!fs->ready) {
+		LOG_ERR("NVS not initialized");
+		return -EACCES;
+	}
+
+	for (u16_t i = 0; i < fs->sector_count; i++) {
+		addr = i << ADDR_SECT_SHIFT;
+		rc = _nvs_flash_erase_sector(fs, addr);
+		if (rc) {
+			return rc;
+		}
+	}
+	return 0;
 }
 
 int nvs_init(struct nvs_fs *fs, const char *dev_name)
 {
 
 	int rc;
+	struct flash_pages_info info;
 
 	k_mutex_init(&fs->nvs_lock);
 
@@ -732,17 +681,30 @@ int nvs_init(struct nvs_fs *fs, const char *dev_name)
 		return -EINVAL;
 	}
 
+	/* check that sector size is a multiple of pagesize */
+	rc = flash_get_page_info_by_offs(fs->flash_device, fs->offset, &info);
+	if (rc) {
+		LOG_ERR("Unable to get page info");
+		return -EINVAL;
+	}
+	if (fs->sector_size % info.size) {
+		LOG_ERR("Invalid sector size");
+		return -EINVAL;
+	}
+
 	/* check the number of sectors, it should be at least 2 */
 	if (fs->sector_count < 2) {
 		LOG_ERR("Configuration error - sector count");
 		return -EINVAL;
 	}
 
-	fs->locked = false;
-	rc = nvs_reinit(fs);
+	rc = _nvs_startup(fs);
 	if (rc) {
 		return rc;
 	}
+
+	/* nvs is ready for use */
+	fs->ready = true;
 
 	LOG_INF("%d Sectors of %d bytes", fs->sector_count, fs->sector_size);
 	LOG_INF("alloc wra: %d, %x",
@@ -751,7 +713,6 @@ int nvs_init(struct nvs_fs *fs, const char *dev_name)
 	LOG_INF("data wra: %d, %x",
 		(fs->data_wra >> ADDR_SECT_SHIFT),
 		(fs->data_wra & ADDR_OFFS_MASK));
-	LOG_INF("Free space: %d", fs->free_space);
 
 	return 0;
 }
@@ -761,26 +722,29 @@ ssize_t nvs_write(struct nvs_fs *fs, u16_t id, const void *data, size_t len)
 	int rc, gc_count;
 	size_t ate_size, data_size;
 	struct nvs_ate wlk_ate;
-	u32_t wlk_addr, rd_addr, freed_space;
+	u32_t wlk_addr, rd_addr;
 	u16_t sector_freespace;
+
+	if (!fs->ready) {
+		LOG_ERR("NVS not initialized");
+		return -EACCES;
+	}
 
 	ate_size = _nvs_al_size(fs, sizeof(struct nvs_ate));
 	data_size = _nvs_al_size(fs, len);
 
-
-	if ((len > (fs->sector_size - 2 * ate_size)) ||
+	/* The maximum data size is sector size - 3 ate
+	 * where: 1 ate for data, 1 ate for sector close
+	 * and 1 ate to always allow a delete.
+	 */
+	if ((len > (fs->sector_size - 3 * ate_size)) ||
 	    ((len > 0) && (data == NULL))) {
 		return -EINVAL;
-	}
-
-	if (fs->locked) {
-		return -EROFS;
 	}
 
 	/* find latest entry with same id */
 	wlk_addr = fs->ate_wra;
 	rd_addr = wlk_addr;
-	freed_space = 0U;
 
 	while (1) {
 		rd_addr = wlk_addr;
@@ -813,27 +777,25 @@ ssize_t nvs_write(struct nvs_fs *fs, u16_t id, const void *data, size_t len)
 				return rc;
 			}
 		}
-		/* data different, calculate freed space */
-		freed_space = _nvs_al_size(fs, wlk_ate.len);
-		freed_space += ate_size;
 	}
 
 	k_mutex_lock(&fs->nvs_lock, K_FOREVER);
 
-	fs->free_space += freed_space;
-	if (fs->free_space < (data_size + ate_size)) {
-		rc = -ENOSPC;
-		goto end;
-	}
-
 	gc_count = 0;
 	while (1) {
 		if (gc_count == fs->sector_count) {
-			rc = -EROFS;
+			/* gc'ed all sectors, no extra space will be created
+			 * by extra gc.
+			 */
+			rc = -ENOSPC;
 			goto end;
 		}
+
 		sector_freespace = fs->ate_wra - fs->data_wra;
+
+		/* Leave space for delete ate */
 		if (sector_freespace >= data_size + ate_size) {
+
 			rc = _nvs_flash_wrt_entry(fs, id, data, len);
 			if (rc) {
 				goto end;
@@ -855,12 +817,6 @@ ssize_t nvs_write(struct nvs_fs *fs, u16_t id, const void *data, size_t len)
 	rc = len;
 end:
 	k_mutex_unlock(&fs->nvs_lock);
-	if (rc < 0) {
-		fs->free_space -= freed_space;
-	}
-	if (rc == -EROFS) {
-		fs->locked = true;
-	}
 	return rc;
 }
 
@@ -877,6 +833,11 @@ ssize_t nvs_read_hist(struct nvs_fs *fs, u16_t id, void *data, size_t len,
 	u16_t cnt_his;
 	struct nvs_ate wlk_ate;
 	size_t ate_size;
+
+	if (!fs->ready) {
+		LOG_ERR("NVS not initialized");
+		return -EACCES;
+	}
 
 	ate_size = _nvs_al_size(fs, sizeof(struct nvs_ate));
 
@@ -927,4 +888,60 @@ ssize_t nvs_read(struct nvs_fs *fs, u16_t id, void *data, size_t len)
 
 	rc = nvs_read_hist(fs, id, data, len, 0);
 	return rc;
+}
+
+ssize_t nvs_calc_free_space(struct nvs_fs *fs)
+{
+
+	int rc;
+	struct nvs_ate step_ate, wlk_ate;
+	u32_t step_addr, wlk_addr;
+	size_t ate_size, free_space;
+
+	if (!fs->ready) {
+		LOG_ERR("NVS not initialized");
+		return -EACCES;
+	}
+
+	ate_size = _nvs_al_size(fs, sizeof(struct nvs_ate));
+
+	free_space = 0;
+	for (u16_t i = 1; i < fs->sector_count; i++) {
+		free_space += (fs->sector_size - ate_size);
+	}
+
+	step_addr = fs->ate_wra;
+
+	while (1) {
+		rc = _nvs_prev_ate(fs, &step_addr, &step_ate);
+		if (rc) {
+			return rc;
+		}
+
+		wlk_addr = fs->ate_wra;
+
+		while (1) {
+			rc = _nvs_prev_ate(fs, &wlk_addr, &wlk_ate);
+			if (rc) {
+				return rc;
+			}
+			if ((wlk_ate.id == step_ate.id) ||
+			    (wlk_addr == fs->ate_wra)) {
+				break;
+			}
+		}
+
+		if ((wlk_addr == step_addr) && step_ate.len &&
+		    (!_nvs_ate_crc8_check(&step_ate))) {
+			/* count needed */
+			free_space -= _nvs_al_size(fs, step_ate.len);
+			free_space -= ate_size;
+		}
+
+		if (step_addr == fs->ate_wra) {
+			break;
+		}
+
+	}
+	return free_space;
 }

@@ -77,12 +77,12 @@ def create_aliases(root):
         if 'alt_name' in reduced[k]:
             aliases[k].append(reduced[k]['alt_name'])
 
-def get_node_compats(node_address):
+def get_node_compats(node_path):
     compat = None
 
     try:
-        if 'props' in reduced[node_address]:
-            compat = reduced[node_address]['props'].get('compatible')
+        if 'props' in reduced[node_path]:
+            compat = reduced[node_path]['props'].get('compatible')
 
         if not isinstance(compat, list):
             compat = [compat, ]
@@ -92,15 +92,15 @@ def get_node_compats(node_address):
 
     return compat
 
-def get_compat(node_address):
+def get_compat(node_path):
     compat = None
 
     try:
-        if 'props' in reduced[node_address]:
-            compat = reduced[node_address]['props'].get('compatible')
+        if 'props' in reduced[node_path]:
+            compat = reduced[node_path]['props'].get('compatible')
 
         if compat == None:
-            compat = find_parent_prop(node_address, 'compatible')
+            compat = find_parent_prop(node_path, 'compatible')
 
         if isinstance(compat, list):
             compat = compat[0]
@@ -132,116 +132,104 @@ def create_phandles(root, name):
         create_phandles(child_node, name + child_name)
 
 
-def insert_defs(node_address, new_defs, new_aliases):
+def insert_defs(node_path, new_defs, new_aliases):
 
     for key in new_defs:
         if key.startswith('DT_COMPAT_'):
-            node_address = 'compatibles'
+            node_path = 'compatibles'
 
     remove = [k for k in new_aliases if k in new_defs]
     for k in remove: del new_aliases[k]
 
-    if node_address in defs:
-        remove = [k for k in new_aliases if k in defs[node_address]]
+    if node_path in defs:
+        remove = [k for k in new_aliases if k in defs[node_path]]
         for k in remove: del new_aliases[k]
-        if 'aliases' in defs[node_address]:
-            defs[node_address]['aliases'].update(new_aliases)
+        if 'aliases' in defs[node_path]:
+            defs[node_path]['aliases'].update(new_aliases)
         else:
-            defs[node_address]['aliases'] = new_aliases
+            defs[node_path]['aliases'] = new_aliases
 
-        defs[node_address].update(new_defs)
+        defs[node_path].update(new_defs)
     else:
         new_defs['aliases'] = new_aliases
-        defs[node_address] = new_defs
+        defs[node_path] = new_defs
 
 
-def find_node_by_path(nodes, path):
-    d = nodes
-    for k in path[1:].split('/'):
-        d = d['children'][k]
-
-    return d
+# Dictionary where all keys default to 0. Used by create_reduced().
+last_used_id = defaultdict(int)
 
 
-def create_reduced(nodes, path):
-    # compress nodes list to nodes w/ paths, add interrupt parent
-    if 'last_used_id' not in create_reduced.__dict__:
-        create_reduced.last_used_id = {}
+def create_reduced(node, path):
+    # Compress nodes list to nodes w/ paths, add interrupt parent
 
-    if 'props' in nodes:
-        status = nodes['props'].get('status')
+    if node['props'].get('status') == 'disabled':
+        return
 
-        if status == "disabled":
-            return
+    reduced[path] = node.copy()
+    reduced[path].pop('children', None)
 
-    if isinstance(nodes, dict):
-        reduced[path] = dict(nodes)
+    # Assign an instance ID for each compat
+    compat = node['props'].get('compatible')
+    if compat:
+        if type(compat) is not list:
+            compat = [compat]
 
-        # assign an instance ID for each compat
-        compat = nodes['props'].get('compatible')
-        if compat:
-            if type(compat) is not list: compat = [ compat, ]
-            reduced[path]['instance_id'] = {}
-            for k in compat:
-                if k not in create_reduced.last_used_id:
-                    create_reduced.last_used_id[k] = 0
-                else:
-                    create_reduced.last_used_id[k] += 1
-                reduced[path]['instance_id'][k] = create_reduced.last_used_id[k]
+        reduced[path]['instance_id'] = {}
+        for comp in compat:
+            reduced[path]['instance_id'][comp] = last_used_id[comp]
+            last_used_id[comp] += 1
 
-        # Newer versions of dtc might have the properties that look like
-        # reg = <1 2>, <3 4>;
-        # So we need to flatten the list in that case to be:
-        # reg = <1 2 3 4>
-        for p in nodes['props']:
-            prop_val = nodes['props'][p]
-            if isinstance(prop_val, list) and isinstance(prop_val[0], list):
-                nodes['props'][p] = [item for sublist in prop_val for item in sublist]
+    # Flatten 'prop = <1 2>, <3 4>' (which turns into nested lists) to
+    # 'prop = <1 2 3 4>'
+    for val in node['props'].values():
+        if isinstance(val, list) and isinstance(val[0], list):
+            # In-place modification
+            val[:] = [item for sublist in val for item in sublist]
 
-        reduced[path].pop('children', None)
+    if node['children']:
         if path != '/':
             path += '/'
-        if nodes['children']:
-            for k, v in sorted(nodes['children'].items()):
-                create_reduced(v, path + k)
+
+        for child_name, child_node in sorted(node['children'].items()):
+            create_reduced(child_node, path + child_name)
 
 
-def get_node_label(node_address):
-    node_compat = get_compat(node_address)
+def get_node_label(node_path):
+    node_compat = get_compat(node_path)
     def_label = str_to_label(node_compat)
-    if '@' in node_address:
+    if '@' in node_path:
         # See if we have number we can convert
         try:
-            unit_addr = int(node_address.split('@')[-1], 16)
-            (nr_addr_cells, nr_size_cells) = get_addr_size_cells(node_address)
-            unit_addr += translate_addr(unit_addr, node_address,
+            unit_addr = int(node_path.split('@')[-1], 16)
+            (nr_addr_cells, nr_size_cells) = get_addr_size_cells(node_path)
+            unit_addr += translate_addr(unit_addr, node_path,
                          nr_addr_cells, nr_size_cells)
             unit_addr = "%x" % unit_addr
         except:
-            unit_addr = node_address.split('@')[-1]
+            unit_addr = node_path.split('@')[-1]
         def_label += '_' + str_to_label(unit_addr)
     else:
-        def_label += '_' + str_to_label(node_address.split('/')[-1])
+        def_label += '_' + str_to_label(node_path.split('/')[-1])
     return def_label
 
 
-def get_parent_address(node_address):
-    return '/'.join(node_address.split('/')[:-1])
+def get_parent_path(node_path):
+    return '/'.join(node_path.split('/')[:-1])
 
 
-def find_parent_prop(node_address, prop):
-    parent_address = get_parent_address(node_address)
+def find_parent_prop(node_path, prop):
+    parent_path = get_parent_path(node_path)
 
-    if prop not in reduced[parent_address]['props']:
-        raise Exception("Parent of node " + node_address +
+    if prop not in reduced[parent_path]['props']:
+        raise Exception("Parent of node " + node_path +
                         " has no " + prop + " property")
 
-    return reduced[parent_address]['props'][prop]
+    return reduced[parent_path]['props'][prop]
 
 
 # Get the #{address,size}-cells for a given node
-def get_addr_size_cells(node_address):
-    parent_addr = get_parent_address(node_address)
+def get_addr_size_cells(node_path):
+    parent_addr = get_parent_path(node_path)
     if parent_addr == '':
         parent_addr = '/'
 
@@ -252,17 +240,17 @@ def get_addr_size_cells(node_address):
 
     return (nr_addr, nr_size)
 
-def translate_addr(addr, node_address, nr_addr_cells, nr_size_cells):
+def translate_addr(addr, node_path, nr_addr_cells, nr_size_cells):
 
     try:
-        ranges = deepcopy(find_parent_prop(node_address, 'ranges'))
+        ranges = deepcopy(find_parent_prop(node_path, 'ranges'))
         if type(ranges) is not list: ranges = [ ]
     except:
         return 0
 
-    parent_address = get_parent_address(node_address)
+    parent_path = get_parent_path(node_path)
 
-    (nr_p_addr_cells, nr_p_size_cells) = get_addr_size_cells(parent_address)
+    (nr_p_addr_cells, nr_p_size_cells) = get_addr_size_cells(parent_path)
 
     range_offset = 0
     while ranges:
@@ -283,7 +271,7 @@ def translate_addr(addr, node_address, nr_addr_cells, nr_size_cells):
             break
 
     parent_range_offset = translate_addr(addr + range_offset,
-            parent_address, nr_p_addr_cells, nr_p_size_cells)
+            parent_path, nr_p_addr_cells, nr_p_size_cells)
     range_offset += parent_range_offset
 
     return range_offset
@@ -292,20 +280,20 @@ def enable_old_alias_names(enable):
     global old_alias_names
     old_alias_names = enable
 
-def add_compat_alias(node_address, label_postfix, label, prop_aliases):
-    if 'instance_id' in reduced[node_address]:
-        instance = reduced[node_address]['instance_id']
+def add_compat_alias(node_path, label_postfix, label, prop_aliases):
+    if 'instance_id' in reduced[node_path]:
+        instance = reduced[node_path]['instance_id']
         for k in instance:
             i = instance[k]
             b = 'DT_' + str_to_label(k) + '_' + str(i) + '_' + label_postfix
             prop_aliases[b] = label
 
-def add_prop_aliases(node_address,
+def add_prop_aliases(node_path,
                      alias_label_function, prop_label, prop_aliases):
-    node_compat = get_compat(node_address)
+    node_compat = get_compat(node_path)
     new_alias_prefix = 'DT_' + str_to_label(node_compat)
 
-    for alias in aliases[node_address]:
+    for alias in aliases[node_path]:
         old_alias_label = alias_label_function(alias)
         new_alias_label = new_alias_prefix + '_' + old_alias_label
 
@@ -314,8 +302,8 @@ def add_prop_aliases(node_address,
         if old_alias_names and old_alias_label != prop_label:
             prop_aliases[old_alias_label] = prop_label
 
-def get_binding(node_address):
-    compat = get_compat(node_address)
+def get_binding(node_path):
+    compat = get_compat(node_path)
 
     # For just look for the binding in the main dict
     # if we find it here, return it, otherwise it best
@@ -323,8 +311,8 @@ def get_binding(node_address):
     if compat in bindings:
         return bindings[compat]
 
-    parent_addr = get_parent_address(node_address)
-    parent_compat = get_compat(parent_addr)
+    parent_path = get_parent_path(node_path)
+    parent_compat = get_compat(parent_path)
 
     parent_binding = bindings[parent_compat]
 
@@ -362,7 +350,7 @@ def build_cell_array(prop_array):
     return ret_array
 
 
-def extract_controller(node_address, prop, prop_values, index,
+def extract_controller(node_path, prop, prop_values, index,
                        def_label, generic, handle_single=False):
 
     prop_def = {}
@@ -396,7 +384,7 @@ def extract_controller(node_address, prop, prop_values, index,
 
         # Check node generation requirements
         try:
-            generation = get_binding(node_address)['properties'
+            generation = get_binding(node_path)['properties'
                     ][prop]['generation']
         except:
             generation = ''
@@ -408,21 +396,21 @@ def extract_controller(node_address, prop, prop_values, index,
 
         label = l_base + [l_cellname] + l_idx
 
-        add_compat_alias(node_address, '_'.join(label[1:]), '_'.join(label), prop_alias)
+        add_compat_alias(node_path, '_'.join(label[1:]), '_'.join(label), prop_alias)
         prop_def['_'.join(label)] = "\"" + l_cell + "\""
 
         #generate defs also if node is referenced as an alias in dts
-        if node_address in aliases:
+        if node_path in aliases:
             add_prop_aliases(
-                node_address,
+                node_path,
                 lambda alias: '_'.join([str_to_label(alias)] + label[1:]),
                 '_'.join(label),
                 prop_alias)
 
-        insert_defs(node_address, prop_def, prop_alias)
+        insert_defs(node_path, prop_def, prop_alias)
 
 
-def extract_cells(node_address, prop, prop_values, names, index,
+def extract_cells(node_path, prop, prop_values, names, index,
                   def_label, generic, handle_single=False):
 
     prop_array = build_cell_array(prop_values)
@@ -458,7 +446,7 @@ def extract_cells(node_address, prop, prop_values, names, index,
                 else:
                     cell_yaml_names = '#cells'
         try:
-            generation = get_binding(node_address)['properties'][prop
+            generation = get_binding(node_path)['properties'][prop
                     ]['generation']
         except:
             generation = ''
@@ -488,17 +476,17 @@ def extract_cells(node_address, prop, prop_values, names, index,
             else:
                 label = l_base + l_cell + l_cellname + l_idx
             label_name = l_base + [name] + l_cellname
-            add_compat_alias(node_address, '_'.join(label[1:]), '_'.join(label), prop_alias)
+            add_compat_alias(node_path, '_'.join(label[1:]), '_'.join(label), prop_alias)
             prop_def['_'.join(label)] = elem[j+1]
             if name:
                 prop_alias['_'.join(label_name)] = '_'.join(label)
 
             # generate defs for node aliases
-            if node_address in aliases:
+            if node_path in aliases:
                 add_prop_aliases(
-                    node_address,
+                    node_path,
                     lambda alias: '_'.join([str_to_label(alias)] + label[1:]),
                     '_'.join(label),
                     prop_alias)
 
-            insert_defs(node_address, prop_def, prop_alias)
+            insert_defs(node_path, prop_def, prop_alias)

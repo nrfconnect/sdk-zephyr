@@ -13,6 +13,4 @@ operation of the stacks and how they were implemented.
    overview.rst
    ip-stack-architecture.rst
    networking-api-usage.rst
-   qemu_setup.rst
-   native_posix_setup.rst
-   usbnet_setup.rst
+   networking_with_host.rst

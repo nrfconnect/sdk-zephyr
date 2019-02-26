@@ -17,13 +17,13 @@ LOG_MODULE_REGISTER(ssd1306);
 #include "ssd1306_regs.h"
 #include <display/cfb.h>
 
-#if DT_SOLOMON_SSD1306FB_0_PANEL_SEGMENT_REMAP == 1
+#if DT_SOLOMON_SSD1306FB_0_SEGMENT_REMAP == 1
 #define SSD1306_PANEL_SEGMENT_REMAP	true
 #else
 #define SSD1306_PANEL_SEGMENT_REMAP	false
 #endif
 
-#if DT_SOLOMON_SSD1306FB_0_PANEL_COM_INVDIR == 1
+#if DT_SOLOMON_SSD1306FB_0_COM_INVDIR == 1
 #define SSD1306_PANEL_COM_INVDIR	true
 #else
 #define SSD1306_PANEL_COM_INVDIR	false
@@ -47,6 +47,7 @@ LOG_MODULE_REGISTER(ssd1306);
 #endif
 
 struct ssd1306_data {
+	struct device *reset;
 	struct device *i2c;
 	u8_t contrast;
 	u8_t scan_mode;
@@ -366,6 +367,14 @@ static int ssd1306_init_device(struct device *dev)
 		SSD1306_SET_NORMAL_DISPLAY,
 	};
 
+#ifdef DT_SOLOMON_SSD1306FB_0_RESET_GPIOS_CONTROLLER
+	gpio_pin_write(driver->reset, DT_SOLOMON_SSD1306FB_0_RESET_GPIOS_PIN, 1);
+	k_sleep(SSD1306_RESET_DELAY);
+	gpio_pin_write(driver->reset, DT_SOLOMON_SSD1306FB_0_RESET_GPIOS_PIN, 0);
+	k_sleep(SSD1306_RESET_DELAY);
+	gpio_pin_write(driver->reset, DT_SOLOMON_SSD1306FB_0_RESET_GPIOS_PIN, 1);
+#endif
+
 	/* Turn display off */
 	if (ssd1306_reg_write(driver, SSD1306_CONTROL_LAST_BYTE_CMD,
 			      SSD1306_DISPLAY_OFF)) {
@@ -415,6 +424,18 @@ static int ssd1306_init(struct device *dev)
 		return -EINVAL;
 	}
 
+#ifdef DT_SOLOMON_SSD1306FB_0_RESET_GPIOS_CONTROLLER
+	driver->reset = device_get_binding(DT_SOLOMON_SSD1306FB_0_RESET_GPIOS_CONTROLLER);
+	if (driver->reset == NULL) {
+		LOG_ERR("Failed to get pointer to %s device!",
+			    DT_SOLOMON_SSD1306FB_0_RESET_GPIOS_CONTROLLER);
+		return -EINVAL;
+	}
+
+	gpio_pin_configure(driver->reset, DT_SOLOMON_SSD1306FB_0_RESET_GPIOS_PIN,
+			   GPIO_DIR_OUT);
+#endif
+
 	if (ssd1306_init_device(dev)) {
 		LOG_ERR("Failed to initialize device!");
 		return -EIO;
@@ -426,8 +447,8 @@ static int ssd1306_init(struct device *dev)
 static struct ssd1306_data ssd1306_driver;
 
 static struct display_driver_api ssd1306_driver_api = {
-	.blanking_on = ssd1306_resume,
-	.blanking_off = ssd1306_suspend,
+	.blanking_on = ssd1306_suspend,
+	.blanking_off = ssd1306_resume,
 	.write = ssd1306_write,
 	.read = ssd1306_read,
 	.get_framebuffer = ssd1306_get_framebuffer,

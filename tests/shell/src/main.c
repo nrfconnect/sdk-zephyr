@@ -223,13 +223,12 @@ static int cmd_wildcard(const struct shell *shell, size_t argc, char **argv)
 	return valid_arguments;
 }
 
-SHELL_CREATE_STATIC_SUBCMD_SET(m_sub_test_shell_cmdl)
-{
+SHELL_STATIC_SUBCMD_SET_CREATE(m_sub_test_shell_cmdl,
 	SHELL_CMD(argument_1, NULL, NULL, NULL),
 	SHELL_CMD(argument_2, NULL, NULL, NULL),
 	SHELL_CMD(dummy, NULL, NULL, NULL),
 	SHELL_SUBCMD_SET_END
-};
+);
 SHELL_CMD_REGISTER(test_wildcard, &m_sub_test_shell_cmdl, NULL, cmd_wildcard);
 
 
@@ -269,7 +268,7 @@ static void dynamic_cmd_get(size_t idx, struct shell_static_entry *entry)
 	}
 }
 
-SHELL_CREATE_DYNAMIC_CMD(m_sub_test_dynamic, dynamic_cmd_get);
+SHELL_DYNAMIC_CMD_CREATE(m_sub_test_dynamic, dynamic_cmd_get);
 SHELL_CMD_REGISTER(test_dynamic, &m_sub_test_dynamic, NULL, cmd_dynamic);
 
 

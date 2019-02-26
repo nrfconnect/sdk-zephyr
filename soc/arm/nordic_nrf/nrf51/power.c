@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <zephyr.h>
-#include <soc_power.h>
+#include <power.h>
 #include <nrf_power.h>
 
 #include <logging/log.h>
@@ -15,8 +15,8 @@ void sys_set_power_state(enum power_states state)
 {
 	switch (state) {
 #ifdef CONFIG_SYS_POWER_DEEP_SLEEP_STATES
- #ifdef CONFIG_SYS_POWER_STATE_DEEP_SLEEP_SUPPORTED
-	case SYS_POWER_STATE_DEEP_SLEEP:
+ #ifdef CONFIG_HAS_STATE_DEEP_SLEEP_1
+	case SYS_POWER_STATE_DEEP_SLEEP_1:
 		nrf_power_system_off();
 		break;
  #endif
@@ -32,8 +32,8 @@ void sys_power_state_post_ops(enum power_states state)
 {
 	switch (state) {
 #ifdef CONFIG_SYS_POWER_DEEP_SLEEP_STATES
- #ifdef CONFIG_SYS_POWER_STATE_DEEP_SLEEP_SUPPORTED
-	case SYS_POWER_STATE_DEEP_SLEEP:
+ #ifdef CONFIG_HAS_STATE_DEEP_SLEEP_1
+	case SYS_POWER_STATE_DEEP_SLEEP_1:
 		/* Nothing to do. */
 		break;
  #endif

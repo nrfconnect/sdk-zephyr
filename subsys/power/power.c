@@ -8,10 +8,10 @@
 #include <kernel.h>
 #include <init.h>
 #include <string.h>
-#include <soc.h>
+#include <power.h>
 #include "policy/pm_policy.h"
 
-#define LOG_LEVEL CONFIG_PM_LOG_LEVEL
+#define LOG_LEVEL CONFIG_SYS_PM_LOG_LEVEL
 #include <logging/log.h>
 LOG_MODULE_REGISTER(power);
 
@@ -19,7 +19,7 @@ static int post_ops_done = 1;
 static enum power_states forced_pm_state = SYS_POWER_STATE_AUTO;
 static enum power_states pm_state;
 
-#ifdef CONFIG_PM_CONTROL_OS_DEBUG
+#ifdef CONFIG_SYS_PM_DEBUG
 
 struct pm_debug_info {
 	u32_t count;
@@ -95,12 +95,14 @@ enum power_states sys_suspend(s32_t ticks)
 		return pm_state;
 	}
 
-	deep_sleep = sys_pm_is_deep_sleep_state(pm_state);
-	post_ops_done = 0;
+	deep_sleep = IS_ENABLED(CONFIG_SYS_POWER_DEEP_SLEEP_STATES) ?
+		     sys_pm_is_deep_sleep_state(pm_state) : 0;
 
+	post_ops_done = 0;
 	sys_pm_notify_lps_entry(pm_state);
 
 	if (deep_sleep) {
+#if CONFIG_DEVICE_POWER_MANAGEMENT
 		/* Suspend peripherals. */
 		if (sys_pm_suspend_devices()) {
 			LOG_ERR("System level device suspend failed!");
@@ -108,7 +110,7 @@ enum power_states sys_suspend(s32_t ticks)
 			pm_state = SYS_POWER_STATE_ACTIVE;
 			return pm_state;
 		}
-
+#endif
 		/*
 		 * Disable idle exit notification as it is not needed
 		 * in deep sleep mode.
@@ -121,11 +123,12 @@ enum power_states sys_suspend(s32_t ticks)
 	sys_set_power_state(pm_state);
 	sys_pm_debug_stop_timer();
 
+#if CONFIG_DEVICE_POWER_MANAGEMENT
 	if (deep_sleep) {
 		/* Turn on peripherals and restore device states as necessary */
 		sys_pm_resume_devices();
 	}
-
+#endif
 	sys_pm_log_debug_info(pm_state);
 
 	if (!post_ops_done) {
@@ -161,6 +164,7 @@ void sys_resume(void)
 	}
 }
 
+#if CONFIG_DEVICE_POWER_MANAGEMENT
 static int sys_pm_init(struct device *dev)
 {
 	ARG_UNUSED(dev);
@@ -170,3 +174,4 @@ static int sys_pm_init(struct device *dev)
 }
 
 SYS_INIT(sys_pm_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+#endif /* CONFIG_DEVICE_POWER_MANAGEMENT */

@@ -39,7 +39,7 @@ else()
   set(GENIDT_EXTRA_ARGS "")
 endif()
 
-set(GENIDT ${ZEPHYR_BASE}/scripts/gen_idt.py)
+set(GENIDT ${ZEPHYR_BASE}/arch/x86/gen_idt.py)
 
 define_property(GLOBAL PROPERTY PROPERTY_OUTPUT_ARCH BRIEF_DOCS " " FULL_DOCS " ")
 
@@ -75,138 +75,63 @@ add_subdirectory(core)
 get_property(OUTPUT_ARCH   GLOBAL PROPERTY PROPERTY_OUTPUT_ARCH)
 get_property(OUTPUT_FORMAT GLOBAL PROPERTY PROPERTY_OUTPUT_FORMAT)
 
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/irq_int_vector_map.o
-  COMMAND
-  ${CMAKE_OBJCOPY}
-  -I binary
-  -B ${OUTPUT_ARCH}
-  -O ${OUTPUT_FORMAT}
-  --rename-section .data=irq_int_vector_map
-  irq_int_vector_map.bin
-  irq_int_vector_map.o
-  DEPENDS gen_idt_output irq_int_vector_map.bin
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/staticIdt.o
-  COMMAND
-  ${CMAKE_OBJCOPY}
-  -I binary
-  -B ${OUTPUT_ARCH}
-  -O ${OUTPUT_FORMAT}
-  --rename-section .data=staticIdt
-  staticIdt.bin
-  staticIdt.o
-  DEPENDS gen_idt_output staticIdt.bin
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/irq_vectors_alloc.o
-  COMMAND
-  ${CMAKE_OBJCOPY}
-  -I binary
-  -B ${OUTPUT_ARCH}
-  -O ${OUTPUT_FORMAT}
-  --rename-section .data=irq_vectors_alloc_data
-  irq_vectors_alloc.bin
-  irq_vectors_alloc.o
-  DEPENDS gen_idt_output irq_vectors_alloc.bin
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
-
-add_custom_target(irq_int_vector_map_o DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/irq_int_vector_map.o)
-add_custom_target(staticIdt_o          DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/staticIdt.o)
-add_custom_target(irq_vectors_alloc_o  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/irq_vectors_alloc.o)
-
-add_library(irq_int_vector_map STATIC IMPORTED GLOBAL)
-add_library(staticIdt          STATIC IMPORTED GLOBAL)
-add_library(irq_vectors_alloc  STATIC IMPORTED GLOBAL)
-
-set_property(TARGET irq_int_vector_map PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/irq_int_vector_map.o)
-set_property(TARGET staticIdt          PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/staticIdt.o)
-set_property(TARGET irq_vectors_alloc  PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/irq_vectors_alloc.o)
-
-add_dependencies(irq_int_vector_map irq_int_vector_map_o)
-add_dependencies(staticIdt          staticIdt_o)
-add_dependencies(irq_vectors_alloc  irq_vectors_alloc_o)
-
-set_property(GLOBAL APPEND PROPERTY GENERATED_KERNEL_OBJECT_FILES irq_int_vector_map)
-set_property(GLOBAL APPEND PROPERTY GENERATED_KERNEL_OBJECT_FILES staticIdt)
-set_property(GLOBAL APPEND PROPERTY GENERATED_KERNEL_OBJECT_FILES irq_vectors_alloc)
-
-if(CONFIG_X86_MMU)
-  # Use gen_mmu.py and objcopy to generate mmu_tables.o from from the
-  # elf file ${ZEPHYR_PREBUILT_EXECUTABLE}, creating the temp files mmu_tables.bin
-  # and mmulist.bin along the way.
-  #
-  # ${ZEPHYR_PREBUILT_EXECUTABLE}.elf -> mmulist.bin -> mmu_tables.bin -> mmu_tables.o
+# Convert the .bin file argument to a .o file, create a wrapper
+# library for the .o file, and register the library as a generated
+# file that is to be linked in after the first link.
+function(add_bin_file_to_the_next_link target_dependency bin)
   add_custom_command(
-    OUTPUT mmulist.bin
-    COMMAND
-    ${CMAKE_OBJCOPY}
-    -I ${OUTPUT_FORMAT}
-    -O binary
-    -j mmulist
-    $<TARGET_FILE:${ZEPHYR_PREBUILT_EXECUTABLE}>
-    mmulist.bin
-    DEPENDS ${ZEPHYR_PREBUILT_EXECUTABLE}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    )
-  add_custom_command(
-    OUTPUT mmu_tables.bin user_mmu_tables.bin
-    COMMAND
-    ${PYTHON_EXECUTABLE}
-    ${ZEPHYR_BASE}/scripts/gen_mmu_x86.py
-    -i mmulist.bin
-    -k $<TARGET_FILE:${ZEPHYR_PREBUILT_EXECUTABLE}>
-    -o mmu_tables.bin
-    -u user_mmu_tables.bin
-    $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:-v>
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    DEPENDS mmulist.bin
-    DEPENDS ${ZEPHYR_PREBUILT_EXECUTABLE}
-    )
-  add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mmu_tables.o
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${bin}.o
     COMMAND
     ${CMAKE_OBJCOPY}
     -I binary
     -B ${OUTPUT_ARCH}
     -O ${OUTPUT_FORMAT}
-    --rename-section .data=.mmu_data
-    mmu_tables.bin
-    mmu_tables.o
+    --rename-section .data=${bin}
+    ${bin}.bin
+    ${bin}.o
+    DEPENDS ${target_dependency} ${bin}.bin
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    DEPENDS mmu_tables.bin
     )
+  add_custom_target(${bin}_o DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${bin}.o)
+  add_library(${bin} STATIC IMPORTED GLOBAL)
+  set_property(TARGET ${bin} PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/${bin}.o)
+  add_dependencies(${bin} ${bin}_o)
+  set_property(GLOBAL APPEND PROPERTY GENERATED_KERNEL_OBJECT_FILES ${bin})
+endfunction()
 
-  add_custom_target(  mmu_tables_o DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mmu_tables.o)
-  add_library(        mmu_tables STATIC IMPORTED GLOBAL)
-  set_property(TARGET mmu_tables PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/mmu_tables.o)
-  add_dependencies(   mmu_tables mmu_tables_o)
-  set_property(GLOBAL APPEND PROPERTY GENERATED_KERNEL_OBJECT_FILES mmu_tables)
+add_bin_file_to_the_next_link(gen_idt_output staticIdt)
+add_bin_file_to_the_next_link(gen_idt_output irq_int_vector_map)
+add_bin_file_to_the_next_link(gen_idt_output irq_vectors_alloc)
 
+if(CONFIG_X86_MMU)
   if(CONFIG_X86_KPTI)
-    add_custom_command(
-      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/user_mmu_tables.o
-      COMMAND
-      ${CMAKE_OBJCOPY}
-      -I binary
-      -B ${OUTPUT_ARCH}
-      -O ${OUTPUT_FORMAT}
-      --rename-section .data=.user_mmu_data
-      user_mmu_tables.bin
-      user_mmu_tables.o
-      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-      DEPENDS user_mmu_tables.bin
+    set(user_mmu_tables_bin user_mmu_tables.bin)
+  endif()
+
+  add_custom_target(
+    mmu_tables_bin_target
+    DEPENDS
+    mmu_tables.bin
+    ${user_mmu_tables_bin}
+  )
+  add_custom_command(
+    OUTPUT
+    mmu_tables.bin
+    ${user_mmu_tables_bin}
+    COMMAND
+    ${PYTHON_EXECUTABLE}
+    ${ZEPHYR_BASE}/arch/x86/gen_mmu_x86.py
+    -k $<TARGET_FILE:${ZEPHYR_PREBUILT_EXECUTABLE}>
+    -o mmu_tables.bin
+    -u user_mmu_tables.bin
+    $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:-v>
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    DEPENDS ${ZEPHYR_PREBUILT_EXECUTABLE}
     )
 
-    add_custom_target(  user_mmu_tables_o DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/user_mmu_tables.o)
-    add_library(        user_mmu_tables STATIC IMPORTED GLOBAL)
-    set_property(TARGET user_mmu_tables PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/user_mmu_tables.o)
-    add_dependencies(   user_mmu_tables user_mmu_tables_o)
-    set_property(GLOBAL APPEND PROPERTY GENERATED_KERNEL_OBJECT_FILES user_mmu_tables)
+  add_bin_file_to_the_next_link(  mmu_tables_bin_target      mmu_tables)
+  if(CONFIG_X86_KPTI)
+    add_bin_file_to_the_next_link(mmu_tables_bin_target user_mmu_tables)
   endif()
 endif()
 
@@ -216,34 +141,22 @@ if(CONFIG_GDT_DYNAMIC)
   # way.
   #
   # ${ZEPHYR_PREBUILT_EXECUTABLE}.elf -> gdt.bin -> gdt.o
+  add_custom_target(
+    gdt_bin_target
+    DEPENDS
+    gdt.bin
+  )
   add_custom_command(
     OUTPUT gdt.bin
     COMMAND
     ${PYTHON_EXECUTABLE}
-    ${ZEPHYR_BASE}/scripts/gen_gdt.py
+    ${ZEPHYR_BASE}/arch/x86/gen_gdt.py
     --kernel $<TARGET_FILE:${ZEPHYR_PREBUILT_EXECUTABLE}>
     --output-gdt gdt.bin
     $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:--verbose>
     DEPENDS ${ZEPHYR_PREBUILT_EXECUTABLE}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
-  add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gdt.o
-    COMMAND
-    ${CMAKE_OBJCOPY}
-    -I binary
-    -B ${OUTPUT_ARCH}
-    -O ${OUTPUT_FORMAT}
-    --rename-section .data=gdt_ram_data
-    gdt.bin
-    gdt.o
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    DEPENDS gdt.bin
-    )
 
-  add_custom_target(  gdt_o DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/gdt.o)
-  add_library(        gdt STATIC IMPORTED GLOBAL)
-  set_property(TARGET gdt PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/gdt.o)
-  add_dependencies(   gdt gdt_o)
-  set_property(GLOBAL APPEND PROPERTY GENERATED_KERNEL_OBJECT_FILES gdt)
+  add_bin_file_to_the_next_link(gdt_bin_target gdt)
 endif()

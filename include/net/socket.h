@@ -202,6 +202,12 @@ int zsock_setsockopt(int sock, int level, int optname,
 
 int zsock_gethostname(char *buf, size_t len);
 
+static inline char *zsock_inet_ntop(sa_family_t family, const void *src,
+				    char *dst, size_t size)
+{
+	return net_addr_ntop(family, src, dst, size);
+}
+
 __syscall int zsock_inet_pton(sa_family_t family, const char *src, void *dst);
 
 __syscall int z_zsock_getaddrinfo_internal(const char *host,
@@ -217,6 +223,16 @@ static inline void zsock_freeaddrinfo(struct zsock_addrinfo *ai)
 {
 	free(ai);
 }
+
+#define NI_NUMERICHOST 1
+#define NI_NUMERICSERV 2
+#define NI_NOFQDN 4
+#define NI_NAMEREQD 8
+#define NI_DGRAM 16
+
+int zsock_getnameinfo(const struct sockaddr *addr, socklen_t addrlen,
+		      char *host, socklen_t hostlen,
+		      char *serv, socklen_t servlen, int flags);
 
 #if defined(CONFIG_NET_SOCKETS_POSIX_NAMES)
 
@@ -344,6 +360,14 @@ static inline void freeaddrinfo(struct zsock_addrinfo *ai)
 	zsock_freeaddrinfo(ai);
 }
 
+static inline int getnameinfo(const struct sockaddr *addr, socklen_t addrlen,
+			      char *host, socklen_t hostlen,
+			      char *serv, socklen_t servlen, int flags)
+{
+	return zsock_getnameinfo(addr, addrlen, host, hostlen,
+				 serv, servlen, flags);
+}
+
 #define addrinfo zsock_addrinfo
 
 static inline int gethostname(char *buf, size_t len)
@@ -407,7 +431,7 @@ static inline int inet_pton(sa_family_t family, const char *src, void *dst)
 static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 			      size_t size)
 {
-	return net_addr_ntop(family, src, dst, size);
+	return zsock_inet_ntop(family, src, dst, size);
 }
 
 #define EAI_BADFLAGS DNS_EAI_BADFLAGS

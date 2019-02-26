@@ -76,8 +76,8 @@ set(CONTENT_OUTPUTS ${CMAKE_CURRENT_BINARY_DIR}/extracted-content.txt)
 configure_file(${DOXYFILE_IN} ${DOXYFILE_OUT} @ONLY)
 file(TOUCH ${CMAKE_CURRENT_BINARY_DIR}/Kconfig.modules)
 
-# This command is used to copy all documentation source files into the build
-# directory,
+# This command is used to copy all documentation source files from the
+# ZEPHYR_BASE/ environment variable into the build directory,
 #
 # We need to make copies because Sphinx requires a single
 # documentation root directory, but Zephyr's documentation is
@@ -109,12 +109,28 @@ add_custom_target(
   # Copy all files in doc/ to the rst folder
   COMMAND ${EXTRACT_CONTENT_COMMAND}
   WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+  COMMENT "Copying files to ${RST_OUT}"
 )
 
-set(ARGS ${DOXYFILE_OUT})
+# For incremental builds not to miss any source change this MUST be kept
+# a superset of INPUT= and FILE_PATTERNS= in zephyr.doxyfile.in
+file(GLOB_RECURSE  DOXY_SOURCES
+  ${ZEPHYR_BASE}/include/*.[c,h,S]
+  ${ZEPHYR_BASE}/lib/libc/*.[c,h,S]
+  ${ZEPHYR_BASE}/tests/*.[h,c,S]
+  )
+# For debug. Also find generated list in doc/_build/(build.ninja|CMakeFiles/)
+# message("DOXY_SOURCES= " ${DOXY_SOURCES})
 
-add_custom_target(
-  doxy
+set(ARGS ${DOXYFILE_OUT})
+set(DOXY_RUN_TSTAMP ${CMAKE_CURRENT_BINARY_DIR}/last_doxy_run_tstamp)
+
+
+# Create timestamp first so we re-run if source files are edited while
+# doxygen is running
+add_custom_command(
+  OUTPUT ${DOXY_RUN_TSTAMP}
+  COMMAND cmake -E touch ${DOXY_RUN_TSTAMP}
   COMMAND ${CMAKE_COMMAND}
     -DCOMMAND=${DOXYGEN_EXECUTABLE}
     -DARGS="${ARGS}"
@@ -122,6 +138,8 @@ add_custom_target(
     -DERROR_FILE=${DOXY_LOG}
     -DWORKING_DIRECTORY=${CMAKE_CURRENT_LIST_DIR}
     -P ${ZEPHYR_BASE}/cmake/util/execute_process.cmake
+  DEPENDS ${DOXY_SOURCES}
+  COMMENT "Running ${DOXYGEN_EXECUTABLE}"
 )
 
 # Doxygen doesn't support incremental builds.
@@ -134,11 +152,11 @@ add_custom_target(
   doxy_real_modified_times
   COMMAND ${CMAKE_COMMAND} -E env
     ${PYTHON_EXECUTABLE} scripts/restore_modification_times.py
-    --loglevel ERROR  ${DOXY_OUT}/xml
+    --loglevel  WARN  ${DOXY_OUT}/xml
   WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+  DEPENDS ${DOXY_RUN_TSTAMP}
+  COMMENT "Fixing modification times of ${DOXY_OUT}/xml/ output"
 )
-
-add_dependencies(doxy_real_modified_times doxy)
 
 add_custom_target(
   pristine
@@ -164,11 +182,11 @@ add_custom_target(
   SOC_DIR=soc/
   SRCARCH=x86
   PROJECT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
-  GENERATED_DTS_BOARD_CONF=not_applicable
   KCONFIG_TURBO_MODE=${KCONFIG_TURBO_MODE}
   KCONFIG_DOC_MODE=1
   ${PYTHON_EXECUTABLE} scripts/genrest.py Kconfig ${RST_OUT}/doc/reference/kconfig/
   WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+  COMMENT "Running genrest.py Kconfig ${RST_OUT}/doc/reference/kconfig/"
 )
 
 set(KI_SCRIPT ${ZEPHYR_BASE}/scripts/filter-known-issues.py)
@@ -196,6 +214,12 @@ add_custom_target(
   USES_TERMINAL
 )
 
+# "breathe", the sphinx plugin that parses XML output from doxygen, has
+# an "everything on everything" dependency issue reported at:
+# https://github.com/michaeljones/breathe/issues/420 In other words
+# changing 1 source file costs the same build time than changing all
+# source files. breathe is fortunately smart enough not to run at all
+# when *nothing* has changed.
 add_custom_target(
   html
   COMMAND ${SPHINX_BUILD_HTML_COMMAND}
@@ -203,7 +227,7 @@ add_custom_target(
   COMMAND ${CMAKE_COMMAND} -P ${ZEPHYR_BASE}/cmake/util/fmerge.cmake ${DOC_LOG} ${DOXY_LOG} ${SPHINX_LOG}
   COMMAND ${PYTHON_EXECUTABLE} ${KI_SCRIPT} --config-dir ${CONFIG_DIR} --errors ${DOC_WARN} --warnings ${DOC_WARN} ${DOC_LOG}
   WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-  COMMENT "Generating HTML documentation"
+  COMMENT "Generating HTML documentation with ${SPHINXBUILD} ${SPHINXOPTS}"
   ${SPHINX_USES_TERMINAL}
 )
 
