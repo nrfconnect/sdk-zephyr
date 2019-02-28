@@ -172,6 +172,11 @@ SECTIONS
 	KEEP(*(".kinetis_flash_config.*"))
 
 	_vector_end = .;
+	/* This is used for Secure Boot */
+	#if defined(CONFIG_SECURE_BOOT)
+	. = CONFIG_SB_FIRMWARE_INFO_OFFSET;
+	KEEP(*(.firmware_info))
+	#endif
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
 #ifdef CONFIG_CODE_DATA_RELOCATION
