@@ -188,6 +188,11 @@ SECTIONS
 #endif
 
 	_vector_end = .;
+	/* This is used for Secure Boot */
+	#if defined(CONFIG_FW_INFO)
+	. = CONFIG_FW_INFO_OFFSET;
+	KEEP(*(.firmware_info))
+	#endif
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
 #ifdef CONFIG_CODE_DATA_RELOCATION
