@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Find out if we are optimizing for size
-get_target_property(zephyr_COMPILE_OPTIONS zephyr_interface INTERFACE_COMPILE_OPTIONS)
+get_target_property(zephyr_COMPILE_OPTIONS ${IMAGE}zephyr_interface INTERFACE_COMPILE_OPTIONS)
 if ("-Os" IN_LIST zephyr_COMPILE_OPTIONS)
   zephyr_cc_option(-mpreferred-stack-boundary=2)
 else()
@@ -10,7 +10,7 @@ else()
 endif()
 
 if(CONFIG_X86_IAMCU)
-  set_property(GLOBAL APPEND PROPERTY PROPERTY_LINKER_SCRIPT_DEFINES -D__IAMCU)
+  set_property(GLOBAL APPEND PROPERTY ${IMAGE}PROPERTY_LINKER_SCRIPT_DEFINES -D__IAMCU)
   set_property(GLOBAL        PROPERTY PROPERTY_OUTPUT_FORMAT         "elf32-iamcu")
   set_property(GLOBAL        PROPERTY PROPERTY_OUTPUT_ARCH           "iamcu:intel")
 else()
@@ -52,8 +52,9 @@ set(gen_idt_output_files
   ${CMAKE_CURRENT_BINARY_DIR}/staticIdt.bin
   ${CMAKE_CURRENT_BINARY_DIR}/irq_vectors_alloc.bin
   )
+set(gen_idt_output_target ${IMAGE}gen_idt_output)
 add_custom_target(
-  gen_idt_output
+  ${gen_idt_output_target}
   DEPENDS
   ${gen_idt_output_files}
   )
@@ -94,24 +95,25 @@ function(add_bin_file_to_the_next_link target_dependency bin)
     DEPENDS ${target_dependency} ${bin}.bin
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
-  add_custom_target(${bin}_o DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${bin}.o)
-  add_library(${bin} STATIC IMPORTED GLOBAL)
-  set_property(TARGET ${bin} PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/${bin}.o)
-  add_dependencies(${bin} ${bin}_o)
-  set_property(GLOBAL APPEND PROPERTY GENERATED_KERNEL_OBJECT_FILES ${bin})
+  add_custom_target(${IMAGE}${bin}_o DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${bin}.o)
+  add_library(${IMAGE}${bin} STATIC IMPORTED GLOBAL)
+  set_property(TARGET ${IMAGE}${bin} PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/${bin}.o)
+  add_dependencies(${IMAGE}${bin} ${IMAGE}${bin}_o)
+  set_property(GLOBAL APPEND PROPERTY ${IMAGE}GENERATED_KERNEL_OBJECT_FILES ${IMAGE}${bin})
 endfunction()
 
-add_bin_file_to_the_next_link(gen_idt_output staticIdt)
-add_bin_file_to_the_next_link(gen_idt_output irq_int_vector_map)
-add_bin_file_to_the_next_link(gen_idt_output irq_vectors_alloc)
+add_bin_file_to_the_next_link(${gen_idt_output_target} staticIdt)
+add_bin_file_to_the_next_link(${gen_idt_output_target} irq_int_vector_map)
+add_bin_file_to_the_next_link(${gen_idt_output_target} irq_vectors_alloc)
 
 if(CONFIG_X86_MMU)
   if(CONFIG_X86_KPTI)
     set(user_mmu_tables_bin user_mmu_tables.bin)
   endif()
 
+  set(mmu_tables_bin_target ${IMAGE}mmu_tables_bin)
   add_custom_target(
-    mmu_tables_bin_target
+    ${mmu_tables_bin_target}
     DEPENDS
     mmu_tables.bin
     ${user_mmu_tables_bin}
@@ -131,9 +133,9 @@ if(CONFIG_X86_MMU)
     DEPENDS ${ZEPHYR_PREBUILT_EXECUTABLE}
     )
 
-  add_bin_file_to_the_next_link(  mmu_tables_bin_target      mmu_tables)
+  add_bin_file_to_the_next_link(  ${mmu_tables_bin_target}      mmu_tables)
   if(CONFIG_X86_KPTI)
-    add_bin_file_to_the_next_link(mmu_tables_bin_target user_mmu_tables)
+    add_bin_file_to_the_next_link(${mmu_tables_bin_target} user_mmu_tables)
   endif()
 endif()
 

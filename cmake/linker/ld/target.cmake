@@ -27,8 +27,8 @@ macro(configure_linker_script linker_script_gen linker_pass_define)
   endif()
 
   zephyr_get_include_directories_for_lang(C current_includes)
-  get_filename_component(base_name ${CMAKE_CURRENT_BINARY_DIR} NAME)
-  get_property(current_defines GLOBAL PROPERTY PROPERTY_LINKER_SCRIPT_DEFINES)
+  file(RELATIVE_PATH base_name "${CMAKE_BINARY_DIR}" "${PROJECT_BINARY_DIR}")
+  get_property(current_defines GLOBAL PROPERTY ${IMAGE}PROPERTY_LINKER_SCRIPT_DEFINES)
 
   add_custom_command(
     OUTPUT ${linker_script_gen}
@@ -90,11 +90,11 @@ function(toolchain_ld_link_elf)
     ${LINKERFLAGPREFIX},--whole-archive
     ${ZEPHYR_LIBS_PROPERTY}
     ${LINKERFLAGPREFIX},--no-whole-archive
-    kernel
+    ${KERNEL_LIBRARY}
     $<TARGET_OBJECTS:${OFFSETS_LIB}>
-    ${LIB_INCLUDE_DIR}
+    ${${IMAGE}LIB_INCLUDE_DIR}
     -L${PROJECT_BINARY_DIR}
-    ${TOOLCHAIN_LIBS}
+    ${${IMAGE}TOOLCHAIN_LIBS}
 
     ${TOOLCHAIN_LD_LINK_ELF_DEPENDENCIES}
   )
