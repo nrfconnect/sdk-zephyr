@@ -1,0 +1,13 @@
+sample:
+  name: mcuboot
+tests:
+  boards.mcuboot:
+    tags: mcuboot
+    # All platforms supported by MCUBoot out-of-the-box are
+    # supported. nRF52 is known to be supported.
+    platform_whitelist: nrf52840_pca10056 nrf52_pca10040
+    harness: console
+    harness_config:
+      type: one_line
+      regex:
+        - "Hello World! (.*)"

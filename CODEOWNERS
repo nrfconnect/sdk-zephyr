@@ -223,6 +223,7 @@
 /samples/display/                         @vanwinkeljan
 /samples/drivers/CAN/                     @alexanderwachter
 /samples/gui/                             @vanwinkeljan
+/samples/mcuboot/                         @SebastianBoe
 /samples/net/                             @jukkar @tbursztyka @pfalcon
 /samples/net/dns_resolve/                 @jukkar @tbursztyka @pfalcon
 /samples/net/lwm2m_client/                @mike-scott
