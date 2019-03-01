@@ -1531,7 +1531,7 @@ changes to the build scripts are necessary.
 As mentioned earlier, each target needs a prefix to disambiguate. This
 includes the library target 'app', so any references to 'app' would
 need to be changed to '${IMAGE}app'. Or, even better, one would use
-the zephyr_library_ API instead of the target_* API to indirectly
+the zephyr_library_* API instead of the target_* API to indirectly
 modify '${IMAGE}app'.
 
 After the application build scripts have been ported we can write some
