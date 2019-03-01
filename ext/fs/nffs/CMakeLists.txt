@@ -22,4 +22,4 @@ zephyr_library_sources(
     src/nffs_write.c
     )
 zephyr_library_link_libraries(NFFS)
-target_link_libraries(NFFS INTERFACE zephyr_interface)
+target_link_libraries(NFFS INTERFACE ${IMAGE}zephyr_interface)

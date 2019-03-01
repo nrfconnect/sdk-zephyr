@@ -1446,6 +1446,156 @@ After running the preprocessor, the final device tree used in the
 build is created by running the device tree compiler, ``dtc``, on the
 preprocessor output.
 
+Building and Configuring multiple images
+****************************************
+
+When firmware update and bootloaders are involved in an embedded
+application the final firmware that is flashed onto the device will
+usually need to consist of not one executable, but multiple
+executables that chain-load, or boot, each other. This section
+describes how to build and configure such a Zephyr application.
+
+When and why to use multiple images
+===================================
+
+First off, it's necessary to have a basic understanding of what
+exactly an executable is and why one would want to have more than one
+of them. An executable goes by other names depending on context, like
+program, image, or elf file. From now on we will be using the name
+image. From these names, you probably already know what an image is,
+but in case not; An image consists of pieces of code and data that
+goes by image-unique names recorded in a single symbol table. The
+symbol table exists as metadata in an .elf or .exe file and is not
+included when converted to a hex file for device flashing. Object
+files also consist of symbols, code, and data, but object files are
+not images, because unlike object files, images have had their code
+and data placed at addresses by a linker. In the end it is the linker
+that creates images. If confused, and you want to determine if you
+have zero, one, or more images, count the number of times the linker
+has been run.
+
+From this definition it follows that using two images can give you two
+opportunities. Firstly, it allows you to run the linker multiple
+times, and in this process parition the final firmware into several
+regions, as is often desired by bootloaders. And secondly, since there
+will be multiple symbol tables, it allows the same symbol name to
+exist multiple times in the final firmware. This again is useful for
+bootloader images, as they often need to have their own fixed copies
+of the same libraries that the application image is using.
+
+Enabling and configuring multiple images
+========================================
+
+Images are organized in a tree of parent-child relationships. Meaning,
+a parent image needs and enables through Kconfig one or more child
+images. Usually, this tree is branchless, a linked list of images
+where each image enables the child image that boots it. The simplest
+and most common organization is a single application image that
+enables a single bootloader image.
+
+When a parent image enables a child image through Kconfig, both images will be
+configured when CMake is run. During the building of the parent image,
+depending on the configuration of the parent image, the child image will either
+be built from source, merged in as a prebuilt hex file, or ignored. If the
+configuration states that the child image should be included as a hex file or
+built from source, the build system will merge the hex files of the parent and
+child image together so that they can be easily flashed onto the device through
+the "ninja flash" target.  Meaning, for the simplest scenario one can
+enable and integrate an additional image without even realizing it with the
+same workflow as is used for additional libraries, enablement through Kconfig.
+
+Configuring child images is done with the same mechanisms as for the
+parent images. Through CMake variables, Kconfig input fragments, and
+modifying the .config file in the build directory. For instance, to
+one could run ``cmake -Dmcuboot_CONF_FILE=prj_a.conf
+-DCONF_FILE=app_prj.conf``. To change the CONF_FILE for the mcuboot
+image and the parent image. As seen in CONF_FILE, all CMake Cache
+variables that are image-specific are given a prefix to disambiguate
+them. To simplify configuation of single-image builds the toplevel
+image has the empty string as it's prefix.
+
+The same prefix convention is used to disambiguate targets. This means
+that for instance to run menuconfig one would invoke the
+``menuconfig`` target to configure the toplevel image and
+``mcuboot_menuconfig`` to configure the MCUBoot child image.
+
+Defining new child images
+=========================
+
+This section describes how to take an existing parent image and turn
+it into a child image that can be enabled. A parent image typically
+consists of source code, Kconfig fragments, and build script code. The
+source code and Kconfig fragments can be re-used as-is, but several
+changes to the build scripts are necessary.
+
+As mentioned earlier, each target needs a prefix to disambiguate. This
+includes the library target 'app', so any references to 'app' would
+need to be changed to '${IMAGE}app'. Or, even better, one would use
+the zephyr_library_ API instead of the target_* API to indirectly
+modify '${IMAGE}app'.
+
+After the application build scripts have been ported we can write some
+build scripts as shown below to connect the build scripts of the
+parent and child. This code should be placed somewhere in-tree that is
+conditional on a Kconfig option for having the parent image use the
+child image.
+
+.. code-block:: cmake
+
+  set(child_image_name mcuboot)
+  zephyr_add_executable(${child_image_name} require_build)
+
+  set(build_directory ${CMAKE_CURRENT_BINARY_DIR}/mcuboot
+  set(child_image_application_directory ${MCUBOOT_BASE}/boot/zephyr)
+
+  if(${require_build})
+    add_subdirectory(${child_image_application_directory} ${build_directory})
+  endif()
+
+In the above code 'zephyr_add_executable' registers the child image as
+present in the build, and 'add_subdirectory' actually executes the
+child's build scripts. Note that in addition the child image's
+application build scripts being executed, most of the core build
+scripts are executed for a second time as well, but now with a
+different Kconfig'uration and possibly DeviceTree settings.
+
+Some Kconfig options must be added to allow the parent image to choose how to
+include the child image. The three options are (1) build from source, (2)
+include as hex file, or (3) skip building entirely. Option (1) will result in
+the child image being built from source alongside the parent image. Option (2)
+will require a prebuilt hex file to be specified in Kconfig, which will be
+merged with the parent image hex file. Option (3) will cause the child image to
+not be built. These options are shown below for MCUBoot.
+
+..code-block:: Kconfig
+  choice
+  	prompt "MCUBoot build strategy"
+  	default MCUBOOT_BUILD_STRATEGY_FROM_SOURCE
+
+  config MCUBOOT_BUILD_STRATEGY_USE_HEX_FILE
+  	# Mandatory option when being built through 'zephyr_add_executable'
+  	bool "Use hex file instead of building MCUBoot"
+
+  if MCUBOOT_BUILD_STRATEGY_USE_HEX_FILE
+
+  config MCUBOOT_HEX_FILE
+  	# Mandatory option when being built through 'zephyr_add_executable'
+  	string "MCUBoot hex file"
+
+  endif # MCUBOOT_USE_HEX_FILE
+
+  config MCUBOOT_BUILD_STRATEGY_SKIP_BUILD
+  	# Mandatory option when being built through 'zephyr_add_executable'
+  	bool "Skip building MCUBoot"
+
+  config MCUBOOT_BUILD_STRATEGY_FROM_SOURCE
+  	# Mandatory option when being built through 'zephyr_add_executable'
+  	bool "Build from source"
+
+  endchoice
+
+
+
 Application-Specific Code
 *************************
 
