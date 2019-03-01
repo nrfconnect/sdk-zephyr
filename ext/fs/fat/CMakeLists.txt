@@ -8,4 +8,4 @@ zephyr_library_sources(
     zfs_diskio.c
     )
 zephyr_library_link_libraries(ELMFAT)
-target_link_libraries(ELMFAT INTERFACE zephyr_interface)
+target_link_libraries(ELMFAT INTERFACE ${IMAGE}zephyr_interface)
