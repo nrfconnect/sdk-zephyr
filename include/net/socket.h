@@ -438,12 +438,21 @@ static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 /* Socket options for SOL_SOCKET level */
 #define SO_REUSEADDR 2
 #define SO_ERROR 4
+#define SO_RCVTIMEO 20
+#define SO_BINDTODEVICE 25
 
 /* Socket options for IPPROTO_TCP level */
 #define TCP_NODELAY 1
 
 /* Socket options for IPPROTO_IPV6 level */
 #define IPV6_V6ONLY 26
+
+/* Interface description structure */
+#define IFNAMSIZ 64
+
+struct ifreq {
+    char ifr_name[IFNAMSIZ]; /* Interface name */
+};
 
 #ifdef __cplusplus
 }
