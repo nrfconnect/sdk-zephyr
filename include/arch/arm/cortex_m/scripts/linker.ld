@@ -389,6 +389,10 @@ SECTIONS
 	_ramfunc_rom_start = LOADADDR(.ramfunc);
 #endif /* CONFIG_ARCH_HAS_RAMFUNC_SUPPORT */
 
+/* Located in generated directory. This file is populated by the
+ * add_named_section() Cmake function. */
+#include <generated-sections-ram.ld>
+
 #if defined(CONFIG_USERSPACE)
 #define APP_SHARED_ALIGN . = ALIGN(_region_min_align);
 #define SMEM_PARTITION_ALIGN MPU_ALIGN
@@ -519,6 +523,10 @@ SECTIONS
 /* Located in project source directory */
 #include <custom-sections.ld>
 #endif
+
+/* Located in generated directory. This file is populated by the
+ * add_named_section() Cmake function. */
+#include <generated-sections.ld>
 
 #ifdef CONFIG_GEN_ISR_TABLES
 #include <linker/intlist.ld>

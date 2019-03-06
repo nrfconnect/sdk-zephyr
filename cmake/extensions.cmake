@@ -689,6 +689,248 @@ function(zephyr_check_compiler_flag lang option check)
   endif()
 endfunction()
 
+
+# add_named_section(section_name [parameters])
+#
+# This function creates a linker section with the given name placed in the given
+# region, and creates symbols for the start, end, and size of the section.
+#
+# See also add_named_ro_section() and add_named_rw_section() to avoid specifying
+# the region.
+#
+# This function will give an error if the same section name is added multiple
+# times, since code will often expect only its own data to be present in the
+# section.
+#
+# Parameters:
+# No-argument parameters:
+# NOLOAD: Make the section NOLOAD, i.e. not initialized.
+# OPTIONAL: Make the section OPTIONAL.
+# MPU_ALIGN: The special MPU_ALIGN macro will be used for aligning the "start"
+#            and end of the section. This alignment happens within the section.
+#
+# Single-argument parameters:
+# REGION: The region to place the section in. The region must be specified in
+#         the linker script. Default: RAMABLE_REGION
+# LOAD_REGION: The region to load from. Using this parameter also adds a symbol
+#              e.g. _foo_rom_start that has the start of the load source.
+# GROUP_START: The name of the group that starts with this section. This
+#              parameter must be given exactly once per group.
+# GROUP_END: The name of the group that ends with this section. This parameter
+#            must be given exactly once per group. When GROUP_START and
+#            GROUP_END has been given for a group, the sections in between as
+#            well as the once in which GROUP_START and GROUP_END were specified
+#            are considered inside this group. There are symbols for the start,
+#            end, and size of the group.
+# ALIGN: The alignment of the start of the section. This cannot be used together
+#        with LOAD_REGION because with LOAD_REGION, ALIGN_WITH_INPUT is used
+#        instead. Default: 4 (without LOAD_REGION)
+# SUBALIGN: The alignment of each input section within this section.
+#
+# Multi-argument parameters:
+# INPUT_SECTIONS: A list of input sections to be put into this section.
+#                 Default: KEEP(*(<section_name>))
+#                          KEEP(*("<section_name>.*"))
+#
+# Example 1:
+# add_named_section(".foo")
+# creates a section named .foo in RAM, and the symbols __foo_start, __foo_end, and
+# __foo_size. Notice that the '.' is converted to a '_'
+#
+# To access the symbols from code:
+#   extern const mytype_t __foo_start;
+#   extern const u32_t __foo_size;
+#   ...
+#   do_something_with_foo(&__foo_start, (u32_t)&__foo_size);
+#
+# To add c variables to the section:
+#   const mytype_t var_placed_in_foo _GENERIC_SECTION(.foo) __attribute__((used)) = something;
+#
+# Example 2:
+# add_named_section("bar" REGION ROMABLE_REGION)
+# creates a section named bar in flash, and the symbols _bar_start, _bar_end,
+# and _bar_size.
+#
+function(add_named_section section_name)
+  # First check if this section has been added before.
+  get_property(sections GLOBAL PROPERTY generated_sections_flash)
+  if(${section_name} IN_LIST sections)
+    message(FATAL_ERROR "The generated section \"${section_name}\" was added multiple times (as section or group).")
+  else()
+    set(generated_sections_base "${PROJECT_BINARY_DIR}/include/generated")
+    set(generated_sections "${generated_sections_base}/generated-sections.ld")
+    set(generated_sections_ram "${generated_sections_base}/generated-sections-ram.ld")
+    if ("${sections}" STREQUAL "")
+      # Clear files.
+      file(WRITE ${generated_sections} "")
+      file(WRITE ${generated_sections_ram} "")
+    endif()
+
+    # Parse arguments
+    cmake_parse_arguments(PARSE_ARGV 0 M "NOLOAD;OPTIONAL;MPU_ALIGN" "REGION;LOAD_REGION;GROUP_START;GROUP_END;ALIGN;SUBALIGN" "INPUT_SECTIONS")
+
+    # Prepare symbol name bases
+    string(REPLACE "." "_" symbol_name ${section_name})
+    string(TOLOWER ${symbol_name} symbol_name)
+    string(REPLACE "." "_" load_symbol_name ${section_name})
+    string(TOLOWER ${load_symbol_name} load_symbol_name)
+
+    # Create symbol names
+    set (start_sym _${symbol_name}_start)
+    set (end_sym _${symbol_name}_end)
+    set (size_sym _${symbol_name}_size)
+    set (rom_start_sym _${load_symbol_name}_rom_start)
+    set (section_start_sym _${symbol_name}_section_start)
+
+    # Set default region.
+    if ("${M_REGION}" STREQUAL "")
+      set (M_REGION "ROMABLE_REGION")
+    endif()
+
+    # Create group start and end strings.
+    if (DEFINED M_GROUP_START)
+      set (group_name ${M_GROUP_START})
+      string(REPLACE "." "_" group_symbol_name ${M_GROUP_START})
+      string(TOLOWER ${group_symbol_name} group_symbol_name)
+      set(group_start_sym _${group_symbol_name}_start)
+      set(group_start "GROUP_START(${M_GROUP_START})\n")
+      set(group_start_assign "\t_${group_start_sym} = .\;\n")
+    endif()
+    if (DEFINED "${M_GROUP_END}")
+      set (group_name ${M_GROUP_END})
+      string(REPLACE "." "_" group_symbol_name ${M_GROUP_END})
+      string(TOLOWER ${group_symbol_name} group_symbol_name)
+      set(group_start_sym _${group_symbol_name}_start)
+      set(group_end_sym _${group_symbol_name}_end)
+      set(group_size_sym _${group_symbol_name}_size)
+      set(group_end "GROUP_END($(M_GROUP_END))\n")
+      set(group_end_assign "\t${group_end_sym} = .\;\n"
+                           "\t${group_size_sym} = ABSOLUTE(${group_end_sym} - ${group_start_sym})\;\n")
+    endif()
+
+    # Check that group name hasn't been added before
+    if("${group_name}" IN_LIST sections)
+      message(FATAL_ERROR "The generated section group \"${group_name}\" was added multiple times (as section or group).")
+    endif()
+
+    # Create load address symbol string.
+    string(REGEX MATCH "AT ?\>" atexpr ${M_REGION})
+    if (NOT "${atexpr}" STREQUAL "")
+      message (FATAL_ERROR "Don't use AT> in REGION, use LOAD_REGION instead.")
+    endif()
+
+    # Choose target file, i.e. position in the linker script.
+    if ("${M_REGION}" STREQUAL "RAMABLE_REGION")
+      set(generated_sections_filename "${generated_sections_ram}")
+    else()
+      set(generated_sections_filename "${generated_sections}")
+    endif()
+
+    # Set default input sections.
+    if("${M_INPUT_SECTIONS}" STREQUAL "")
+      set (M_INPUT_SECTIONS "KEEP(*(${section_name}))" "KEEP(*(\"${section_name}.*\"))")
+    endif()
+
+    # Create input section linker strings.
+    foreach(input_section ${M_INPUT_SECTIONS})
+      string(APPEND input_sections_code "\t${input_section}\n")
+    endforeach()
+
+    # Add NOLOAD option
+    if (${M_NOLOAD})
+      string(APPEND options "(NOLOAD)")
+    endif()
+
+    # Add OPTIONAL option
+    if (${M_OPTIONAL})
+      string(APPEND options "(OPTIONAL)")
+    endif()
+
+    # Set default alignment for non-loaded sections. Loaded sections cannot
+    # have alignment since they must have ALIGN_WITH_INPUT.
+    if ((NOT DEFINED M_ALIGN) AND (NOT DEFINED M_LOAD_REGION))
+      set(M_ALIGN 4)
+    endif()
+
+    # Create ALIGN linker string
+    if (DEFINED M_ALIGN)
+      if (DEFINED M_LOAD_REGION)
+        # Loaded sections cannot
+        # have alignment since they must have ALIGN_WITH_INPUT.
+        message(FATAL_ERROR "Cannot have section alignment when specifying a load region.")
+      endif()
+      set(align " ALIGN(${M_ALIGN})")
+    endif()
+
+    # Create/append SUBALIGN linker string.
+    if (DEFINED M_SUBALIGN)
+      string(APPEND align " SUBALIGN(${M_SUBALIGN})")
+    endif()
+
+    # Create MPU_ALIGN linker string to be used before and after input sections.
+    if (${M_MPU_ALIGN})
+      set(mpu_align "\tMPU_ALIGN(${size_sym})\;\n")
+    endif()
+
+    # Create section start and end strings (different depending on whether or
+    # not the section is loaded)
+    if (DEFINED M_LOAD_REGION)
+      # Create the special symbol for the start of the load source (LMA).
+      # This symbol is shifted if the section is MPU aligned, since MPU
+      # aligning must happen inside the section. This ensure it corresponds
+      # correctly with the *_start symbol.
+      set(load_assign "\t${rom_start_sym} = ABSOLUTE(ABSOLUTE(LOADADDR(${section_name})) + ABSOLUTE(${start_sym} - ${section_start_sym}))\;\n")
+      set(section_prologue SECTION_DATA_PROLOGUE)
+      set(section_end "GROUP_DATA_LINK_IN(${M_REGION}, ${M_LOAD_REGION})")
+    else()
+      set(section_prologue SECTION_PROLOGUE)
+      set(section_end "GROUP_LINK_IN(${M_REGION})")
+    endif()
+
+
+    # Create linker code using strings created above.
+    set(linker_code "\n"
+                    "${group_start}"
+                    "${section_prologue}(${section_name},${options},${align})\n"
+                    "{\n"
+                      "${group_start_assign}"
+                      "\tHIDDEN(${section_start_sym} = .)\;\n"
+                      "${mpu_align}"
+                      "\t${start_sym} = .\;\n"
+                      "${input_sections_code}"
+                      "${mpu_align}"
+                      "\t${end_sym} = .\;\n"
+                      "\t${size_sym} = ABSOLUTE(${end_sym} - ${start_sym})\;\n"
+                      "${load_assign}"
+                      "${group_end_assign}"
+                    "} ${section_end}\n"
+                    "${group_end}\n"
+    )
+
+    # Save the section name so it can later be checked for collisions.
+    set_property(GLOBAL APPEND PROPERTY generated_sections_flash ${section_name})
+
+    # Append the linker string to the relevant file.
+    file(APPEND ${generated_sections_filename} ${linker_code})
+  endif()
+endfunction(add_named_section)
+
+# add_named_ro_section(section_name)
+#
+# Creates a section with the given name in a read-only area (flash).
+# See add_named_section() for more info.
+function(add_named_ro_section section_name)
+  add_named_section(${section_name} REGION ROMABLE_REGION)
+endfunction(add_named_ro_section)
+
+# add_named_rw_section(section_name)
+#
+# Creates a section with the given name in a writeable area (RAM).
+# See add_named_section() for more info.
+function(add_named_rw_section section_name)
+  add_named_section(${section_name} REGION RAMABLE_REGION)
+endfunction(add_named_rw_section)
+
 # Helper function for CONFIG_CODE_DATA_RELOCATION
 # Call this function with 2 arguments file and then memory location
 function(zephyr_code_relocate file location)
