@@ -757,6 +757,8 @@ static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 #define SO_REUSEADDR 2
 /** sockopt: Async error (ignored, for compatibility) */
 #define SO_ERROR 4
+#define SO_RCVTIMEO 20
+#define SO_BINDTODEVICE 25
 
 /** sockopt: Timestamp TX packets */
 #define SO_TIMESTAMPING 37
@@ -779,6 +781,13 @@ static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 /* Socket options for SOCKS5 proxy */
 /** sockopt: Enable SOCKS5 for Socket */
 #define SO_SOCKS5 60
+
+/* Interface description structure */
+#define IFNAMSIZ 64
+
+struct ifreq {
+    char ifr_name[IFNAMSIZ]; /* Interface name */
+};
 
 /** @cond INTERNAL_HIDDEN */
 /**
