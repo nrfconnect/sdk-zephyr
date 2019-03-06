@@ -112,6 +112,9 @@ add_custom_target(
   # Equivalent to rm -rf build/*
   )
 
+# Dummy add to generate files.
+add_linker_snippet(SECTIONS "")
+
 # The BOARD can be set by 3 sources. Through environment variables,
 # through the cmake CLI, and through CMakeLists.txt.
 #

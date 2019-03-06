@@ -689,6 +689,45 @@ function(zephyr_check_compiler_flag lang option check)
   endif()
 endfunction()
 
+function(add_linker_snippet location snippet)
+  set(snippet_base      "${__build_dir}/include/generated")
+  set(sections_path     "${snippet_base}/snippets-sections.ld")
+  set(ram_sections_path "${snippet_base}/snippets-ram-sections.ld")
+  set(noinit_path       "${snippet_base}/snippets-noinit.ld")
+  set(rwdata_path       "${snippet_base}/snippets-rwdata.ld")
+  set(rodata_path       "${snippet_base}/snippets-rodata.ld")
+
+  # Clear files.
+  get_property(cleared GLOBAL PROPERTY snippet_files_cleared)
+  if (NOT DEFINED cleared)
+    file(WRITE ${sections_path} "")
+    file(WRITE ${ram_sections_path} "")
+    file(WRITE ${noinit_path} "")
+    file(WRITE ${rwdata_path} "")
+    file(WRITE ${rodata_path} "")
+    set_property(GLOBAL PROPERTY snippet_files_cleared true)
+  endif()
+
+  # Choose target file, i.e. position in the linker script.
+  if ("${location}" STREQUAL "SECTIONS")
+    set(snippet_path "${sections_path}")
+  elseif("${location}" STREQUAL "RAM_SECTIONS")
+    set(snippet_path "${ram_sections_path}")
+  elseif("${location}" STREQUAL "NOINIT")
+    set(snippet_path "${noinit_path}")
+  elseif("${location}" STREQUAL "RWDATA")
+    set(snippet_path "${rwdata_path}")
+  elseif("${location}" STREQUAL "RODATA")
+    set(snippet_path "${rodata_path}")
+  else()
+    message(fatal_error "Must choose valid location for linker snippet.")
+  endif()
+
+  # Append the linker string to the relevant file.
+  file(APPEND ${snippet_path} "\n\n" "${snippet}")
+endfunction(add_linker_snippet)
+
+
 # Helper function for CONFIG_CODE_DATA_RELOCATION
 # Call this function with 2 arguments file and then memory location
 function(zephyr_code_relocate file location)
@@ -959,6 +998,12 @@ endfunction()
 function(zephyr_library_link_libraries_ifdef feature_toggle item)
   if(${${feature_toggle}})
      zephyr_library_link_libraries(${item})
+  endif()
+endfunction()
+
+function(add_linker_snippet_ifdef feature_toggle location snippet)
+  if(${${feature_toggle}})
+     add_linker_snippet("${location}" "${snippet}")
   endif()
 endfunction()
 
