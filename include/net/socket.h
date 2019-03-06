@@ -66,13 +66,6 @@ typedef struct zsock_fd_set {
 #define ZSOCK_SHUT_WR 1
 #define ZSOCK_SHUT_RDWR 2
 
-/** Protocol level for socket. */
-#define SOL_SOCKET 0xffff
-
-#define ZSOCK_SO_ERROR 4
-#define ZSOCK_SO_RCVTIMEO 20
-#define ZSOCK_SO_BINDTODEVICE 25
-
 /** Protocol level for TLS.
  *  Here, the same socket protocol level for TLS as in Linux was used.
  */
@@ -423,10 +416,6 @@ static inline int inet_pton(sa_family_t family, const char *src, void *dst)
 #define SHUT_RD ZSOCK_SHUT_RD
 #define SHUT_WR ZSOCK_SHUT_WR
 #define SHUT_RDWR ZSOCK_SHUT_RDWR
-
-#define SO_ERROR ZSOCK_SO_ERROR
-#define SO_RCVTIMEO ZSOCK_SO_RCVTIMEO
-#define SO_BINDTODEVICE ZSOCK_SO_BINDTODEVICE
 
 static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 			      size_t size)
