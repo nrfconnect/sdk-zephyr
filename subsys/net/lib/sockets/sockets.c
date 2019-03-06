@@ -111,6 +111,8 @@ int zsock_socket_internal(int family, int type, int proto)
 
 	z_finalize_fd(fd, ctx, (const struct fd_op_vtable *)&sock_fd_op_vtable);
 
+	NET_DBG("socket: ctx=%p, fd=%d", ctx, fd);
+
 	return fd;
 }
 
@@ -181,6 +183,8 @@ int _impl_zsock_close(int sock)
 	}
 
 	z_free_fd(sock);
+
+	NET_DBG("close: ctx=%p, fd=%d", ctx, sock);
 
 	return z_fdtable_call_ioctl(vtable, ctx, ZFD_IOCTL_CLOSE);
 }
@@ -385,6 +389,8 @@ int zsock_accept_ctx(struct net_context *parent, struct sockaddr *addr,
 			return -1;
 		}
 	}
+
+	NET_DBG("accept: ctx=%p, fd=%d", ctx, fd);
 
 	z_finalize_fd(fd, ctx, (const struct fd_op_vtable *)&sock_fd_op_vtable);
 
@@ -1082,6 +1088,28 @@ int zsock_getsockopt(int sock, int level, int optname,
 int zsock_setsockopt_ctx(struct net_context *ctx, int level, int optname,
 			 const void *optval, socklen_t optlen)
 {
+	switch (level) {
+	case SOL_SOCKET:
+		switch (optname) {
+		case SO_REUSEADDR:
+			/* Ignore for now. Provided to let port
+			 * existing apps.
+			 */
+			return 0;
+		}
+		break;
+
+	case IPPROTO_TCP:
+		switch (optname) {
+		case TCP_NODELAY:
+			/* Ignore for now. Provided to let port
+			 * existing apps.
+			 */
+			return 0;
+		}
+		break;
+	}
+
 	errno = ENOPROTOOPT;
 	return -1;
 }

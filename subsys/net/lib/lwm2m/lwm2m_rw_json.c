@@ -391,7 +391,7 @@ static size_t put_json_postfix(struct lwm2m_output_context *out)
 		return 0;
 	}
 
-	if (put_char(out, '}') < 0) {
+	if (put_char(out, '}') < 1) {
 		/* TODO: Generate error? */
 		return 0;
 	}
@@ -540,9 +540,9 @@ static size_t read_number(struct lwm2m_input_context *in,
 	char c;
 
 	/* initialize values to 0 */
-	value1 = 0;
+	*value1 = 0;
 	if (value2) {
-		value2 = 0;
+		*value2 = 0;
 	}
 
 	fd = engine_get_in_user_data(in);

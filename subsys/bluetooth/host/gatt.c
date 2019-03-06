@@ -958,25 +958,38 @@ struct bt_gatt_attr *bt_gatt_attr_next(const struct bt_gatt_attr *attr)
 	return next;
 }
 
+static struct bt_gatt_ccc_cfg *find_ccc_cfg(struct bt_conn *conn,
+					    struct _bt_gatt_ccc *ccc)
+{
+	size_t i;
+
+	for (i = 0; i < ccc->cfg_len; i++) {
+		if (conn) {
+			if (conn->id == ccc->cfg[i].id &&
+			    !bt_conn_addr_le_cmp(conn, &ccc->cfg[i].peer)) {
+				return &ccc->cfg[i];
+			}
+		} else if (!bt_addr_le_cmp(&ccc->cfg[i].peer, BT_ADDR_LE_ANY)) {
+			return &ccc->cfg[i];
+		}
+	}
+
+	return NULL;
+}
+
 ssize_t bt_gatt_attr_read_ccc(struct bt_conn *conn,
 			      const struct bt_gatt_attr *attr, void *buf,
 			      u16_t len, u16_t offset)
 {
 	struct _bt_gatt_ccc *ccc = attr->user_data;
+	struct bt_gatt_ccc_cfg *cfg;
 	u16_t value;
-	size_t i;
 
-	for (i = 0; i < ccc->cfg_len; i++) {
-		if (bt_conn_addr_le_cmp(conn, &ccc->cfg[i].peer)) {
-			continue;
-		}
-
-		value = sys_cpu_to_le16(ccc->cfg[i].value);
-		break;
-	}
-
-	/* Default to disable if there is no cfg for the peer */
-	if (i == ccc->cfg_len) {
+	cfg = find_ccc_cfg(conn, ccc);
+	if (cfg) {
+		value = sys_cpu_to_le16(cfg->value);
+	} else {
+		/* Default to disable if there is no cfg for the peer */
 		value = 0x0000;
 	}
 
@@ -1011,8 +1024,8 @@ ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
 			       u16_t len, u16_t offset, u8_t flags)
 {
 	struct _bt_gatt_ccc *ccc = attr->user_data;
+	struct bt_gatt_ccc_cfg *cfg;
 	u16_t value;
-	size_t i;
 
 	if (offset > sizeof(u16_t)) {
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
@@ -1024,14 +1037,8 @@ ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
 
 	value = sys_get_le16(buf);
 
-	for (i = 0; i < ccc->cfg_len; i++) {
-		/* Check for existing configuration */
-		if (!bt_conn_addr_le_cmp(conn, &ccc->cfg[i].peer)) {
-			break;
-		}
-	}
-
-	if (i == ccc->cfg_len) {
+	cfg = find_ccc_cfg(conn, ccc);
+	if (!cfg) {
 		/* If there's no existing entry, but the new value is zero,
 		 * we don't need to do anything, since a disabled CCC is
 		 * behavioraly the same as no written CCC.
@@ -1040,28 +1047,26 @@ ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
 			return len;
 		}
 
-		for (i = 0; i < ccc->cfg_len; i++) {
-			/* Check for unused configuration */
-			if (bt_addr_le_cmp(&ccc->cfg[i].peer, BT_ADDR_LE_ANY)) {
-				continue;
-			}
-
-			bt_addr_le_copy(&ccc->cfg[i].peer, &conn->le.dst);
-			break;
-		}
-
-		if (i == ccc->cfg_len) {
+		cfg = find_ccc_cfg(NULL, ccc);
+		if (!cfg) {
 			BT_WARN("No space to store CCC cfg");
 			return BT_GATT_ERR(BT_ATT_ERR_INSUFFICIENT_RESOURCES);
 		}
+
+		bt_addr_le_copy(&cfg->peer, &conn->le.dst);
 	}
 
-	ccc->cfg[i].value = value;
+	/* Confirm write if cfg is managed by application */
+	if (ccc->cfg_write && !ccc->cfg_write(conn, attr, value)) {
+		return BT_GATT_ERR(BT_ATT_ERR_WRITE_NOT_PERMITTED);
+	}
 
-	BT_DBG("handle 0x%04x value %u", attr->handle, ccc->cfg[i].value);
+	cfg->value = value;
+
+	BT_DBG("handle 0x%04x value %u", attr->handle, cfg->value);
 
 	/* Update cfg if don't match */
-	if (ccc->cfg[i].value != ccc->value) {
+	if (cfg->value != ccc->value) {
 		gatt_ccc_changed(attr, ccc);
 
 #if defined(CONFIG_BT_SETTINGS_CCC_STORE_ON_WRITE)
@@ -1080,8 +1085,8 @@ ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
 
 	/* Disabled CCC is the same as no configured CCC, so clear the entry */
 	if (!value) {
-		bt_addr_le_copy(&ccc->cfg[i].peer, BT_ADDR_LE_ANY);
-		ccc->cfg[i].value = 0;
+		bt_addr_le_copy(&cfg->peer, BT_ADDR_LE_ANY);
+		cfg->value = 0;
 	}
 
 	return len;
@@ -1325,6 +1330,11 @@ static u8_t notify_cb(const struct bt_gatt_attr *attr, void *user_data)
 			continue;
 		}
 
+		/* Confirm match if cfg is managed by application */
+		if (ccc->cfg_match && !ccc->cfg_match(conn, attr)) {
+			continue;
+		}
+
 		if (data->type == BT_GATT_CCC_INDICATE) {
 			err = gatt_indicate(conn, data->params);
 		} else {
@@ -1460,6 +1470,7 @@ static u8_t disconnected_cb(const struct bt_gatt_attr *attr, void *user_data)
 {
 	struct bt_conn *conn = user_data;
 	struct _bt_gatt_ccc *ccc;
+	bool value_used;
 	size_t i;
 
 	/* Check attribute user_data must be of type struct _bt_gatt_ccc */
@@ -1473,6 +1484,9 @@ static u8_t disconnected_cb(const struct bt_gatt_attr *attr, void *user_data)
 	if (!ccc->value) {
 		return BT_GATT_ITER_CONTINUE;
 	}
+
+	/* Checking if all values are disabled */
+	value_used = false;
 
 	for (i = 0; i < ccc->cfg_len; i++) {
 		struct bt_gatt_ccc_cfg *cfg = &ccc->cfg[i];
@@ -1490,8 +1504,7 @@ static u8_t disconnected_cb(const struct bt_gatt_attr *attr, void *user_data)
 			tmp = bt_conn_lookup_addr_le(cfg->id, &cfg->peer);
 			if (tmp) {
 				if (tmp->state == BT_CONN_CONNECTED) {
-					bt_conn_unref(tmp);
-					return BT_GATT_ITER_CONTINUE;
+					value_used = true;
 				}
 
 				bt_conn_unref(tmp);
@@ -1508,13 +1521,15 @@ static u8_t disconnected_cb(const struct bt_gatt_attr *attr, void *user_data)
 		}
 	}
 
-	/* Reset value while disconnected */
-	(void)memset(&ccc->value, 0, sizeof(ccc->value));
-	if (ccc->cfg_changed) {
-		ccc->cfg_changed(attr, ccc->value);
-	}
+	/* If all values are now disabled, reset value while disconnected */
+	if (!value_used) {
+		ccc->value = 0;
+		if (ccc->cfg_changed) {
+			ccc->cfg_changed(attr, ccc->value);
+		}
 
-	BT_DBG("ccc %p reseted", ccc);
+		BT_DBG("ccc %p reseted", ccc);
+	}
 
 	return BT_GATT_ITER_CONTINUE;
 }
@@ -2995,17 +3010,15 @@ int bt_gatt_store_ccc(u8_t id, const bt_addr_le_t *addr)
 				       (bt_addr_le_t *)addr, NULL);
 	}
 
-	if (!save.count) {
-		/* No entries to encode just clear */
+	if (save.count) {
+		str = (char *)save.store;
+		len = save.count * sizeof(*save.store);
+	} else {
+		/* No entries to encode, just clear */
 		str = NULL;
 		len = 0;
-		goto save;
 	}
 
-	str = (char *)save.store;
-	len = save.count * sizeof(*save.store);
-
-save:
 	err = settings_save_one(key, str, len);
 	if (err) {
 		BT_ERR("Failed to store CCCs (err %d)", err);

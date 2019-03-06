@@ -169,7 +169,7 @@ extern "C" {
 			_LOG_INTERNAL_X(_LOG_NARGS_POSTFIX(__VA_ARGS__), \
 						_src_level, __VA_ARGS__);\
 		}							 \
-	} while (0)
+	} while (false)
 
 #define _LOG_INTERNAL_0(_src_level, _str) \
 	log_0(_str, _src_level)
@@ -539,6 +539,10 @@ bool log_is_strdup(void *buf);
  * @param buf Buffer.
  */
 void log_free(void *buf);
+
+/** @brief Indicate to the log core that one log message has been dropped.
+ */
+void log_dropped(void);
 
 #ifdef __cplusplus
 }

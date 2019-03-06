@@ -39,19 +39,19 @@ extern "C" {
 /** send successfully */
 #define CAN_TX_OK       (0)
 /** general send error */
-#define CAN_TX_ERR      (1)
+#define CAN_TX_ERR      (-2)
 /** bus arbitration lost during sending */
-#define CAN_TX_ARB_LOST (2)
+#define CAN_TX_ARB_LOST (-3)
 /** controller is in bus off state */
-#define CAN_TX_BUS_OFF  (3)
+#define CAN_TX_BUS_OFF  (-4)
 /** unexpected error */
-#define CAN_TX_UNKNOWN  (4)
+#define CAN_TX_UNKNOWN  (-5)
 
 /** attach_* failed because there is no unused filter left*/
 #define CAN_NO_FREE_FILTER (-1)
 
 /** operation timed out*/
-#define CAN_TIMEOUT (1)
+#define CAN_TIMEOUT (-1)
 
 /**
  * @brief Statically define and initialize a can message queue.
@@ -245,7 +245,7 @@ typedef int (*can_configure_t)(struct device *dev, enum can_mode mode,
  * @retval 0 If successful.
  * @retval CAN_TX_* on failure.
  */
-typedef int (*can_send_t)(struct device *dev, struct zcan_frame *msg,
+typedef int (*can_send_t)(struct device *dev, const struct zcan_frame *msg,
 			  s32_t timeout, can_tx_callback_t callback_isr);
 
 
@@ -313,10 +313,11 @@ struct can_driver_api {
 };
 
 
-__syscall int can_send(struct device *dev, struct zcan_frame *msg,
+__syscall int can_send(struct device *dev, const struct zcan_frame *msg,
 		       s32_t timeout, can_tx_callback_t callback_isr);
 
-static inline int _impl_can_send(struct device *dev, struct zcan_frame *msg,
+static inline int _impl_can_send(struct device *dev,
+				 const struct zcan_frame *msg,
 				 s32_t timeout, can_tx_callback_t callback_isr)
 {
 	const struct can_driver_api *api = dev->driver_api;
@@ -344,7 +345,7 @@ static inline int _impl_can_send(struct device *dev, struct zcan_frame *msg,
  * @retval -EIO General input / output error.
  * @retval -EINVAL if length > 8.
  */
-static inline int can_write(struct device *dev, u8_t *data, u8_t length,
+static inline int can_write(struct device *dev, const u8_t *data, u8_t length,
 			    u32_t id, enum can_rtr rtr, s32_t timeout)
 {
 	struct zcan_frame msg;
@@ -416,7 +417,7 @@ static inline int _impl_can_configure(struct device *dev, enum can_mode mode,
 }
 
 /**
- * @brief Converter that translates betwen can_frame and zcan_frame structs.
+ * @brief Converter that translates between can_frame and zcan_frame structs.
  *
  * @param frame Pointer to can_frame struct.
  * @param zframe Pointer to zcan_frame struct.
@@ -432,7 +433,7 @@ static inline void can_copy_frame_to_zframe(struct can_frame *frame,
 }
 
 /**
- * @brief Converter that translates betwen zcan_frame and can_frame structs.
+ * @brief Converter that translates between zcan_frame and can_frame structs.
  *
  * @param zframe Pointer to zcan_frame struct.
  * @param frame Pointer to can_frame struct.
@@ -447,7 +448,7 @@ static inline void can_copy_zframe_to_frame(struct zcan_frame *zframe,
 }
 
 /**
- * @brief Converter that translates betwen can_filter and zcan_frame_filter
+ * @brief Converter that translates between can_filter and zcan_frame_filter
  * structs.
  *
  * @param filter Pointer to can_filter struct.
@@ -465,7 +466,7 @@ void can_copy_filter_to_zfilter(struct can_filter *filter,
 }
 
 /**
- * @brief Converter that translates betwen zcan_filter and can_filter
+ * @brief Converter that translates between zcan_filter and can_filter
  * structs.
  *
  * @param zfilter Pointer to zcan_filter struct.

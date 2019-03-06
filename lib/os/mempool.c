@@ -10,6 +10,12 @@
 #include <misc/mempool_base.h>
 #include <misc/mempool.h>
 
+#ifdef CONFIG_MISRA_SANE
+#define LVL_ARRAY_SZ(n) (8 * sizeof(void *) / 2)
+#else
+#define LVL_ARRAY_SZ(n) (n)
+#endif
+
 static bool level_empty(struct sys_mem_pool_base *p, int l)
 {
 	return sys_dlist_is_empty(&p->levels[l].free_list);
@@ -156,35 +162,40 @@ static void *block_alloc(struct sys_mem_pool_base *p, int l, size_t lsz)
 static unsigned int bfree_recombine(struct sys_mem_pool_base *p, int level,
 				    size_t *lsizes, int bn, unsigned int key)
 {
-	int i, lsz = lsizes[level];
-	void *block = block_ptr(p, lsz, bn);
+	while (level >= 0) {
+		int i, lsz = lsizes[level];
+		void *block = block_ptr(p, lsz, bn);
 
-	__ASSERT(block_fits(p, block, lsz), "");
+		__ASSERT(block_fits(p, block, lsz), "");
 
-	/* Put it back */
-	set_free_bit(p, level, bn);
-	sys_dlist_append(&p->levels[level].free_list, block);
+		/* Put it back */
+		set_free_bit(p, level, bn);
+		sys_dlist_append(&p->levels[level].free_list, block);
 
-	/* Relax the lock (might result in it being taken, which is OK!) */
-	pool_irq_unlock(p, key);
-	key = pool_irq_lock(p);
+		/* Relax the lock (might result in it being taken, which is OK!) */
+		pool_irq_unlock(p, key);
+		key = pool_irq_lock(p);
 
-	/* Check if we can recombine its superblock, and repeat */
-	if (level == 0 || partner_bits(p, level, bn) != 0xf) {
-		return key;
-	}
-
-	for (i = 0; i < 4; i++) {
-		int b = (bn & ~3) + i;
-
-		if (block_fits(p, block_ptr(p, lsz, b), lsz)) {
-			clear_free_bit(p, level, b);
-			sys_dlist_remove(block_ptr(p, lsz, b));
+		/* Check if we can recombine its superblock, and repeat */
+		if (level == 0 || partner_bits(p, level, bn) != 0xf) {
+			return key;
 		}
-	}
 
-	/* Free the larger block (tail recursion!) */
-	return bfree_recombine(p, level - 1, lsizes, bn / 4, key);
+		for (i = 0; i < 4; i++) {
+			int b = (bn & ~3) + i;
+
+			if (block_fits(p, block_ptr(p, lsz, b), lsz)) {
+				clear_free_bit(p, level, b);
+				sys_dlist_remove(block_ptr(p, lsz, b));
+			}
+		}
+
+		/* Free the larger block */
+		level = level - 1;
+		bn = bn / 4;
+	}
+	__ASSERT(0, "out of levels");
+	return -1;
 }
 
 static void block_free(struct sys_mem_pool_base *p, int level,
@@ -228,7 +239,7 @@ int _sys_mem_pool_block_alloc(struct sys_mem_pool_base *p, size_t size,
 	int i, from_l, alloc_l = -1, free_l = -1;
 	unsigned int key;
 	void *data = NULL;
-	size_t lsizes[p->n_levels];
+	size_t lsizes[LVL_ARRAY_SZ(p->n_levels)];
 
 	/* Walk down through levels, finding the one from which we
 	 * want to allocate and the smallest one with a free entry
@@ -298,7 +309,7 @@ int _sys_mem_pool_block_alloc(struct sys_mem_pool_base *p, size_t size,
 void _sys_mem_pool_block_free(struct sys_mem_pool_base *p, u32_t level,
 			      u32_t block)
 {
-	size_t lsizes[p->n_levels];
+	size_t lsizes[LVL_ARRAY_SZ(p->n_levels)];
 	int i;
 
 	/* As in _sys_mem_pool_block_alloc(), we build a table of level sizes

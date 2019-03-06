@@ -53,6 +53,7 @@ config BT_HCI_TX_STACK_SIZE
 	default 512 if BT_H5
 	default 416 if BT_SPI
 	default 940 if BT_CTLR && NO_OPTIMIZATIONS
+	default 1024 if BT_CTLR && BT_CENTRAL
 	default 640 if BT_CTLR
 	default 512 if BT_USERCHAN
 	# Even if no driver is selected the following default is still
@@ -157,7 +158,6 @@ config BT_SETTINGS
 if BT_SETTINGS
 config BT_SETTINGS_CCC_STORE_ON_WRITE
 	bool "Store CCC value immediately after it has been written"
-	default n
 	help
 	  Store Client Configuration Characteristic value right after it has
 	  been updated.
@@ -371,7 +371,6 @@ config BT_GATT_CACHING
 
 config BT_GATT_ENFORCE_CHANGE_UNAWARE
 	bool "GATT Enforce change-unaware state"
-	default n
 	depends on BT_GATT_CACHING
 	help
 	 When enable this option blocks notification and indications to client

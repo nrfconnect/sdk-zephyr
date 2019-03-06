@@ -19,7 +19,11 @@
 
 #include <net/net_ip.h>
 #include <net/net_pkt.h>
+
+#if defined(CONFIG_NET_LLDP)
 #include <net/lldp.h>
+#endif
+
 #include <misc/util.h>
 #include <net/net_if.h>
 #include <net/ethernet_vlan.h>
@@ -389,6 +393,20 @@ static inline bool net_eth_is_addr_broadcast(struct net_eth_addr *addr)
 	    addr->addr[3] == 0xff &&
 	    addr->addr[4] == 0xff &&
 	    addr->addr[5] == 0xff) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool net_eth_is_addr_unspecified(struct net_eth_addr *addr)
+{
+	if (addr->addr[0] == 0x00 &&
+	    addr->addr[1] == 0x00 &&
+	    addr->addr[2] == 0x00 &&
+	    addr->addr[3] == 0x00 &&
+	    addr->addr[4] == 0x00 &&
+	    addr->addr[5] == 0x00) {
 		return true;
 	}
 

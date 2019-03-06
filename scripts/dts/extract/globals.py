@@ -6,7 +6,6 @@
 #
 
 from collections import defaultdict
-from copy import deepcopy
 
 # globals
 phandles = {}
@@ -14,10 +13,9 @@ aliases = defaultdict(list)
 chosen = {}
 reduced = {}
 defs = {}
-structs = {}
 bindings = {}
 bus_bindings = {}
-bindings_compat = []
+binding_compats = []
 old_alias_names = False
 
 regs_config = {
@@ -67,55 +65,35 @@ def all_compats(node):
 
 
 def create_aliases(root):
-    if 'children' in root:
-        if 'aliases' in root['children']:
-            for k, v in root['children']['aliases']['props'].items():
-                aliases[v].append(k)
+    if 'aliases' in root['children']:
+        for name, node_path in root['children']['aliases']['props'].items():
+            aliases[node_path].append(name)
 
     # Treat alternate names as aliases
-    for k in reduced:
-        if 'alt_name' in reduced[k]:
-            aliases[k].append(reduced[k]['alt_name'])
+    for node_path, node in reduced.items():
+        if 'alt_name' in node:
+            aliases[node_path].append(node['alt_name'])
 
-def get_node_compats(node_path):
-    compat = None
-
-    try:
-        if 'props' in reduced[node_path]:
-            compat = reduced[node_path]['props'].get('compatible')
-
-        if not isinstance(compat, list):
-            compat = [compat, ]
-
-    except:
-        pass
-
-    return compat
 
 def get_compat(node_path):
-    compat = None
+    # Returns the value of the 'compatible' property for the node at
+    # 'node_path'. Also checks the node's parent.
+    #
+    # Returns None if neither the node nor its parent has a 'compatible'
+    # property.
 
-    try:
-        if 'props' in reduced[node_path]:
-            compat = reduced[node_path]['props'].get('compatible')
+    compat = reduced[node_path]['props'].get('compatible') or \
+             reduced[get_parent_path(node_path)]['props'].get('compatible')
 
-        if compat == None:
-            compat = find_parent_prop(node_path, 'compatible')
-
-        if isinstance(compat, list):
-            compat = compat[0]
-
-    except:
-        pass
+    if isinstance(compat, list):
+        return compat[0]
 
     return compat
 
 
 def create_chosen(root):
-    if 'children' in root:
-        if 'chosen' in root['children']:
-            for k, v in root['children']['chosen']['props'].items():
-                chosen[k] = v
+    if 'chosen' in root['children']:
+        chosen.update(root['children']['chosen']['props'])
 
 
 def create_phandles(root, name):
@@ -133,7 +111,6 @@ def create_phandles(root, name):
 
 
 def insert_defs(node_path, new_defs, new_aliases):
-
     for key in new_defs:
         if key.startswith('DT_COMPAT_'):
             node_path = 'compatibles'
@@ -144,11 +121,7 @@ def insert_defs(node_path, new_defs, new_aliases):
     if node_path in defs:
         remove = [k for k in new_aliases if k in defs[node_path]]
         for k in remove: del new_aliases[k]
-        if 'aliases' in defs[node_path]:
-            defs[node_path]['aliases'].update(new_aliases)
-        else:
-            defs[node_path]['aliases'] = new_aliases
-
+        defs[node_path]['aliases'].update(new_aliases)
         defs[node_path].update(new_defs)
     else:
         new_defs['aliases'] = new_aliases
@@ -214,7 +187,9 @@ def get_node_label(node_path):
 
 
 def get_parent_path(node_path):
-    return '/'.join(node_path.split('/')[:-1])
+    # Turns /foo/bar into /foo
+
+    return '/'.join(node_path.split('/')[:-1]) or '/'
 
 
 def find_parent_prop(node_path, prop):
@@ -230,8 +205,6 @@ def find_parent_prop(node_path, prop):
 # Get the #{address,size}-cells for a given node
 def get_addr_size_cells(node_path):
     parent_addr = get_parent_path(node_path)
-    if parent_addr == '':
-        parent_addr = '/'
 
     # The DT spec says that if #address-cells is missing default to 2
     # if #size-cells is missing default to 1
@@ -241,16 +214,20 @@ def get_addr_size_cells(node_path):
     return (nr_addr, nr_size)
 
 def translate_addr(addr, node_path, nr_addr_cells, nr_size_cells):
-
-    try:
-        ranges = deepcopy(find_parent_prop(node_path, 'ranges'))
-        if type(ranges) is not list: ranges = [ ]
-    except:
-        return 0
-
     parent_path = get_parent_path(node_path)
 
-    (nr_p_addr_cells, nr_p_size_cells) = get_addr_size_cells(parent_path)
+    ranges = reduced[parent_path]['props'].get('ranges')
+    if not ranges:
+        return 0
+
+    if isinstance(ranges, list):
+        ranges = ranges.copy()  # Modified in-place below
+    else:
+        # Empty value ('ranges;'), meaning the parent and child address spaces
+        # are the same
+        ranges = []
+
+    nr_p_addr_cells, nr_p_size_cells = get_addr_size_cells(parent_path)
 
     range_offset = 0
     while ranges:
@@ -322,7 +299,7 @@ def get_binding(node_path):
     return binding
 
 def get_binding_compats():
-    return bindings_compat
+    return binding_compats
 
 def build_cell_array(prop_array):
     index = 0

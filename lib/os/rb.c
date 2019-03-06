@@ -223,7 +223,11 @@ void rb_insert(struct rbtree *tree, struct rbnode *node)
 		return;
 	}
 
+#ifdef CONFIG_MISRA_SANE
+	struct rbnode **stack = &tree->iter_stack[0];
+#else
 	struct rbnode *stack[tree->max_depth + 1];
+#endif
 
 	int stacksz = find_and_stack(tree, node, stack);
 
@@ -357,7 +361,12 @@ static void fix_missing_black(struct rbnode **stack, int stacksz,
 
 void rb_remove(struct rbtree *tree, struct rbnode *node)
 {
-	struct rbnode *stack[tree->max_depth + 1], *tmp;
+	struct rbnode *tmp;
+#ifdef CONFIG_MISRA_SANE
+	struct rbnode **stack = &tree->iter_stack[0];
+#else
+	struct rbnode *stack[tree->max_depth + 1];
+#endif
 
 	int stacksz = find_and_stack(tree, node, stack);
 
@@ -481,6 +490,7 @@ void rb_remove(struct rbtree *tree, struct rbnode *node)
 	tree->root = stack[0];
 }
 
+#ifndef CONFIG_MISRA_SANE
 void _rb_walk(struct rbnode *node, rb_visit_t visit_fn, void *cookie)
 {
 	if (node != NULL) {
@@ -489,6 +499,7 @@ void _rb_walk(struct rbnode *node, rb_visit_t visit_fn, void *cookie)
 		_rb_walk(get_child(node, 1), visit_fn, cookie);
 	}
 }
+#endif
 
 struct rbnode *_rb_child(struct rbnode *node, int side)
 {

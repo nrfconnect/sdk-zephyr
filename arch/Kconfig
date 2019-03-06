@@ -112,7 +112,7 @@ config FLASH_BASE_ADDRESS
 	hex "Flash Base Address"
 	default $(dt_hex_val,DT_FLASH_BASE_ADDRESS) if (XIP && ARM) || !ARM
 	help
-	  This option specifies the base address of the flash on the board.  It is
+	  This option specifies the base address of the flash on the board. It is
 	  normally set by the board's defconfig file and the user should generally
 	  avoid modifying it via the menu configuration.
 
@@ -260,7 +260,6 @@ menu "Interrupt Configuration"
 #
 config DYNAMIC_INTERRUPTS
 	bool "Enable installation of IRQs at runtime"
-	default n
 	help
 	  Enable installation of interrupts at runtime, which will move some
 	  interrupt-related data structures to RAM instead of ROM, and

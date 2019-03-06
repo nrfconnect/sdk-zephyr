@@ -156,6 +156,7 @@ ssize_t read(int fd, void *buf, size_t sz)
 
 	return fdtable[fd].vtable->read(fdtable[fd].obj, buf, sz);
 }
+FUNC_ALIAS(read, _read, ssize_t);
 
 ssize_t write(int fd, const void *buf, size_t sz)
 {
@@ -165,6 +166,7 @@ ssize_t write(int fd, const void *buf, size_t sz)
 
 	return fdtable[fd].vtable->write(fdtable[fd].obj, buf, sz);
 }
+FUNC_ALIAS(write, _write, ssize_t);
 
 int close(int fd)
 {
@@ -179,6 +181,7 @@ int close(int fd)
 
 	return res;
 }
+FUNC_ALIAS(close, _close, int);
 
 int fsync(int fd)
 {
@@ -198,6 +201,7 @@ off_t lseek(int fd, off_t offset, int whence)
 	return z_fdtable_call_ioctl(fdtable[fd].vtable, fdtable[fd].obj, ZFD_IOCTL_LSEEK,
 			  offset, whence);
 }
+FUNC_ALIAS(lseek, _lseek, off_t);
 
 int ioctl(int fd, unsigned long request, ...)
 {
@@ -244,7 +248,7 @@ int fcntl(int fd, int cmd, ...)
  * fd operations for stdio/stdout/stderr
  */
 
-int _impl__zephyr_write(const char *buf, int nbytes);
+int _impl__zephyr_write_stdout(const char *buf, int nbytes);
 
 static ssize_t stdinout_read_vmeth(void *obj, void *buffer, size_t count)
 {
@@ -256,7 +260,7 @@ static ssize_t stdinout_write_vmeth(void *obj, const void *buffer, size_t count)
 #if defined(CONFIG_BOARD_NATIVE_POSIX)
 	return write(1, buffer, count);
 #elif defined(CONFIG_NEWLIB_LIBC)
-	return _impl__zephyr_write(buffer, count);
+	return _impl__zephyr_write_stdout(buffer, count);
 #else
 	return 0;
 #endif

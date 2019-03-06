@@ -28,7 +28,7 @@ following devices:
 * :abbr:`IDAU (Implementation Defined Attribution Unit)`
 
 .. figure:: img/nrf9160_pca10090.png
-     :width: 442px
+     :width: 711px
      :align: center
      :alt: nRF9160 PCA10090 DK
 
@@ -169,7 +169,7 @@ Then build and flash the application in the usual way.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world
-   :board: nrf9160_pca10040
+   :board: nrf9160_pca10090
    :goals: build flash
 
 Debugging
@@ -201,4 +201,3 @@ References
    https://developer.arm.com/products/architecture/cpu-architecture/m-profile/docs/100690/latest/attribution-units-sau-and-idau
 .. _nRF91 DK website: https://www.nordicsemi.com/Software-and-Tools/Development-Kits/nRF9160-DK
 .. _Nordic Semiconductor Documentation library: https://www.nordicsemi.com/DocLib
-

@@ -54,11 +54,13 @@ extern "C" {
 #define AF_CAN          PF_CAN     /**< Controller Area Network.      */
 #define AF_LTE		PF_LTE
 
-/** Protocol numbers from IANA */
+/** Protocol numbers from IANA/BSD */
 enum net_ip_protocol {
+	IPPROTO_IP = 0,            /**< IP protocol (pseudo-val for setsockopt() */
 	IPPROTO_ICMP = 1,          /**< ICMP protocol   */
 	IPPROTO_TCP = 6,           /**< TCP protocol    */
 	IPPROTO_UDP = 17,          /**< UDP protocol    */
+	IPPROTO_IPV6 = 41,         /**< IPv6 protocol   */
 	IPPROTO_ICMPV6 = 58,       /**< ICMPv6 protocol */
 };
 

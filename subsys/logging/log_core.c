@@ -439,8 +439,6 @@ static void msg_process(struct log_msg *msg, bool bypass)
 				log_backend_put(backend, msg);
 			}
 		}
-	} else {
-		atomic_inc(&dropped_cnt);
 	}
 
 	log_msg_put(msg);
@@ -486,6 +484,11 @@ bool log_process(bool bypass)
 u32_t log_buffered_cnt(void)
 {
 	return buffered_cnt;
+}
+
+void log_dropped(void)
+{
+	atomic_inc(&dropped_cnt);
 }
 
 u32_t log_src_cnt_get(u32_t domain_id)
@@ -665,6 +668,8 @@ void log_free(void *str)
 
 static void log_process_thread_func(void *dummy1, void *dummy2, void *dummy3)
 {
+	__ASSERT_NO_MSG(log_backend_count_get() > 0);
+
 	log_init();
 	thread_set(k_current_get());
 

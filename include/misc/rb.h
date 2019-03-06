@@ -49,6 +49,15 @@ struct rbnode {
 	struct rbnode *children[2];
 };
 
+/* Theoretical maximum depth of tree based on pointer size. If memory
+ * is filled with 2-pointer nodes, and the tree can be twice as a
+ * packed binary tree, plus root...  Works out to 59 entries for 32
+ * bit pointers and 121 at 64 bits.
+ */
+#define Z_TBITS(t) ((sizeof(t)) < 8 ? 2 : 3)
+#define Z_PBITS(t) (8 * sizeof(t))
+#define Z_MAX_RBTREE_DEPTH (2 * (Z_PBITS(int *) - Z_TBITS(int *) - 1) + 1)
+
 /**
  * @typedef rb_lessthan_t
  * @brief Red/black tree comparison predicate
@@ -68,13 +77,19 @@ struct rbtree {
 	struct rbnode *root;
 	rb_lessthan_t lessthan_fn;
 	int max_depth;
+#ifdef CONFIG_MISRA_SANE
+	struct rbnode *iter_stack[Z_MAX_RBTREE_DEPTH];
+	unsigned char iter_left[Z_MAX_RBTREE_DEPTH];
+#endif
 };
 
 typedef void (*rb_visit_t)(struct rbnode *node, void *cookie);
 
 struct rbnode *_rb_child(struct rbnode *node, int side);
 int _rb_is_black(struct rbnode *node);
+#ifndef CONFIG_MISRA_SANE
 void _rb_walk(struct rbnode *node, rb_visit_t visit_fn, void *cookie);
+#endif
 struct rbnode *_rb_get_minmax(struct rbtree *tree, int side);
 
 /**
@@ -114,6 +129,7 @@ static inline struct rbnode *rb_get_max(struct rbtree *tree)
  */
 bool rb_contains(struct rbtree *tree, struct rbnode *node);
 
+#ifndef CONFIG_MISRA_SANE
 /**
  * @brief Walk/enumerate a rbtree
  *
@@ -127,6 +143,7 @@ static inline void rb_walk(struct rbtree *tree, rb_visit_t visit_fn,
 {
 	_rb_walk(tree->root, visit_fn, cookie);
 }
+#endif
 
 struct _rb_foreach {
 	struct rbnode **stack;
@@ -134,11 +151,19 @@ struct _rb_foreach {
 	int top;
 };
 
+#ifdef CONFIG_MISRA_SANE
+#define _RB_FOREACH_INIT(tree, node) {					\
+	.stack   = &(tree)->iter_stack[0],				\
+	.is_left = &(tree)->iter_left[0],				\
+	.top     = -1							\
+}
+#else
 #define _RB_FOREACH_INIT(tree, node) {					\
 	.stack   = alloca((tree)->max_depth * sizeof(struct rbnode *)), \
 	.is_left = alloca((tree)->max_depth * sizeof(char)),		\
 	.top     = -1							\
 }
+#endif
 
 struct rbnode *_rb_foreach_next(struct rbtree *tree, struct _rb_foreach *f);
 

@@ -15,7 +15,7 @@
 # -r  the remote to rebase on
 #
 # The script can be run locally using for exmaple:
-# ./scripts/ci/run_ci.sh -b master -r upstream  -l
+# ./scripts/ci/run_ci.sh -b master -r origin  -l -R <commit range>
 
 set -xe
 
@@ -30,7 +30,7 @@ WEST_COMMANDS_RESULTS_FILE="./pytest_out/west_commands.xml"
 MATRIX_BUILDS=1
 MATRIX=1
 
-while getopts ":p:m:b:r:M:cfsl" opt; do
+while getopts ":p:m:b:r:M:cfslR:" opt; do
 	case $opt in
 		c)
 			echo "Execute CI" >&2
@@ -69,6 +69,10 @@ while getopts ":p:m:b:r:M:cfsl" opt; do
 			echo "Remote: $OPTARG" >&2
 			REMOTE=$OPTARG
 			;;
+		R)
+			echo "Range: $OPTARG" >&2
+			RANGE=$OPTARG
+			;;
 		\?)
 			echo "Invalid option: -$OPTARG" >&2
 			;;
@@ -89,16 +93,28 @@ if [ -n "$MAIN_CI" ]; then
 
 	if [ -z "$BRANCH" ]; then
 		echo "No base branch given"
-		exit
+		exit 1
 	else
 		COMMIT_RANGE=$REMOTE/${BRANCH}..HEAD
 		echo "Commit range:" ${COMMIT_RANGE}
 	fi
+	if [ -n "$RANGE" ]; then
+		COMMIT_RANGE=$RANGE
+	fi
 	source zephyr-env.sh
 	SANITYCHECK="${ZEPHYR_BASE}/scripts/sanitycheck"
+
+	# Possibly the only record of what exact version is being tested:
+	short_git_log='git log -n 5 --oneline --decorate --abbrev=12 '
+
 	if [ -n "$PULL_REQUEST_NR" ]; then
+		$short_git_log $REMOTE/${BRANCH}
+		# Now let's pray this script is being run from a
+		# different location
+# https://stackoverflow.com/questions/3398258/edit-shell-script-while-its-running
 		git rebase $REMOTE/${BRANCH};
 	fi
+	$short_git_log
 fi
 
 function handle_coverage() {
@@ -245,9 +261,10 @@ if [ -n "$MAIN_CI" ]; then
 		# builder 1.  For now, this is just done for the west
 		# extension commands, but additional directories which
 		# run pytest could go here too.
+		PYTEST=$(type -p pytest-3 || echo "pytest")
 		mkdir -p $(dirname ${WEST_COMMANDS_RESULTS_FILE})
 		WEST_SRC=$(west list --format='{abspath}' west)/src
-		PYTHONPATH=./scripts/west_commands:$WEST_SRC pytest \
+		PYTHONPATH=./scripts/west_commands:$WEST_SRC "${PYTEST}" \
 			  --junitxml=${WEST_COMMANDS_RESULTS_FILE} \
 			  ./scripts/west_commands/tests
 	else

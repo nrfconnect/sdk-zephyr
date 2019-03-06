@@ -59,6 +59,13 @@ static const scg_lpfll_config_t rv32m1_lpfll_cfg = {
 	.trimConfig = NULL,
 };
 
+void sys_arch_reboot(int type)
+{
+	ARG_UNUSED(type);
+
+	EVENT_UNIT->SLPCTRL |= EVENT_SLPCTRL_SYSRSTREQST_MASK;
+}
+
 void _arch_irq_enable(unsigned int irq)
 {
 	if (IS_ENABLED(CONFIG_MULTI_LEVEL_INTERRUPTS)) {
@@ -139,7 +146,7 @@ void soc_interrupt_init(void)
 	(void)(EVENT_UNIT->EVTPENDCLEAR); /* Ensures write has finished. */
 
 	if (IS_ENABLED(CONFIG_MULTI_LEVEL_INTERRUPTS)) {
-		dev_intmux = device_get_binding(INTMUX_LABEL);
+		dev_intmux = device_get_binding(DT_OPENISA_RV32M1_INTMUX_INTMUX_LABEL);
 		__ASSERT(dev_intmux, "no INTMUX device found");
 	}
 }
