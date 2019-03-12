@@ -38,8 +38,6 @@ source "subsys/Kconfig"
 
 source "ext/Kconfig"
 
-orsource "../nrf/Kconfig.nrf"
-
 source "$(PROJECT_BINARY_DIR)/Kconfig.modules"
 
 menu "Build and Link Features"
