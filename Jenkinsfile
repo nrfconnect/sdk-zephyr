@@ -1,13 +1,12 @@
 def IMAGE_TAG = "ncs-toolchain:1.07"
 def REPO_CI_TOOLS = "https://github.com/zephyrproject-rtos/ci-tools.git"
-def REPO_NRFXLIB = "https://github.com/NordicPlayground/nrfxlib.git"
-def REPO_NRF = "https://github.com/NordicPlayground/fw-nrfconnect-nrf.git"
 
 pipeline {
   agent {
     docker {
       image "$IMAGE_TAG"
       label "docker && ncs"
+      args '-e PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/.local/bin'
     }
   }
   options {
@@ -27,7 +26,6 @@ pipeline {
       // ENVs for sanitycheck
       ARCH = "-a arm"
       SANITYCHECK_OPTIONS_ALL = "--inline-logs --enable-coverage -N"
-      SANITYCHECK_OPTIONS_NRF = "--board-root $WORKSPACE/nrf/boards --testcase-root $WORKSPACE/nrf/samples --build-only --disable-unrecognized-section-test -t ci_build --inline-logs --enable-coverage -N"
 
       // ENVs for building (triggered by sanitycheck)
       ZEPHYR_TOOLCHAIN_VARIANT = 'gnuarmemb'
@@ -40,12 +38,13 @@ pipeline {
         dir("ci-tools") {
           git branch: "master", url: "$REPO_CI_TOOLS"
         }
-        dir("nrfxlib") {
-          git branch: "master", url: "$REPO_NRFXLIB", credentialsId: 'github'
-        }
-        dir("nrf") {
-          git branch: "master", url: "$REPO_NRF", credentialsId: 'github'
-        }
+
+	// Install and initialize west
+        sh "pip3 install --user west==0.5.4"
+        sh "west init -l zephyr/"
+
+        // Checkout
+        sh "west update"
       }
     }
 
@@ -58,7 +57,7 @@ pipeline {
                 // If we're a pull request, compare the target branch against the current HEAD (the PR)
                 if (env.CHANGE_TARGET) {
                   COMMIT_RANGE = "origin/${env.CHANGE_TARGET}..HEAD"
-                  COMPLIANCE_ARGS = "$COMPLIANCE_ARGS $COMPLIANCE_REPORT_ARGS"
+		  COMPLIANCE_ARGS = "$COMPLIANCE_ARGS $COMPLIANCE_REPORT_ARGS"
                 }
                 // If not a PR, it's a non-PR-branch or master build. Compare against the origin.
                 else {
@@ -66,7 +65,7 @@ pipeline {
                 }
                 // Run the compliance check
                 try {
-                  sh "source zephyr-env.sh && ../ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE"
+                  sh "(source zephyr-env.sh && ../ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE)"
                 }
                 finally {
                   junit 'compliance.xml'
@@ -81,14 +80,6 @@ pipeline {
           steps {
             dir('zephyr') {
               sh "source zephyr-env.sh && ./scripts/sanitycheck $SANITYCHECK_OPTIONS_ALL $ARCH"
-            }
-          }
-        }
-
-        stage('Build nrf samples') {
-          steps {
-            dir('zephyr') {
-              sh "source zephyr-env.sh && ./scripts/sanitycheck $SANITYCHECK_OPTIONS_NRF"
             }
           }
         }
