@@ -565,10 +565,6 @@ endif()
 add_subdirectory(boards)
 add_subdirectory(ext)
 add_subdirectory(subsys)
-set(NRF_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../nrf)
-if(EXISTS ${NRF_DIR})
-	add_subdirectory(${NRF_DIR} ${PROJECT_BINARY_DIR}/nrf)
-endif()
 add_subdirectory(drivers)
 
 # Add all zephyr modules subdirectories.
