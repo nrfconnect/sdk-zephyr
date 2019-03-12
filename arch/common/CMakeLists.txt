@@ -12,3 +12,19 @@ zephyr_sources_ifdef(
   CONFIG_EXECUTION_BENCHMARKING
   timing_info_bench.c
   )
+
+
+add_linker_snippet_ifdef(CONFIG_ARCH_HAS_RAMFUNC_SUPPORT
+  RAM_SECTIONS
+  "SECTION_DATA_PROLOGUE(.ramfunc,,)
+  {
+          MPU_ALIGN(_ramfunc_ram_size);
+          _ramfunc_ram_start = .;
+          *(.ramfunc)
+          *(\".ramfunc.*\")
+          MPU_ALIGN(_ramfunc_ram_size);
+          _ramfunc_ram_end = .;
+  } GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
+  _ramfunc_ram_size = _ramfunc_ram_end - _ramfunc_ram_start;
+  _ramfunc_rom_start = LOADADDR(.ramfunc);"
+)
