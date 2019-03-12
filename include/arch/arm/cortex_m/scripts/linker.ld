@@ -286,14 +286,6 @@ SECTIONS
 
     GROUP_END(ROMABLE_REGION)
 
-/* Some TI SoCs have a special configuration footer, at the end of flash. */
-#ifdef CONFIG_TI_CCFG_PRESENT
-    SECTION_PROLOGUE(.ti_ccfg,,)
-    {
-    KEEP(*(TI_CCFG))
-    } > FLASH_CCFG
-#endif
-
     /*
      * These are here according to 'arm-zephyr-elf-ld --verbose',
      * before data section.
