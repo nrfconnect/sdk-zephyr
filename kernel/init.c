@@ -178,8 +178,8 @@ void z_data_copy(void)
 	(void)memcpy(&__data_ram_start, &__data_rom_start,
 		 ((u32_t) &__data_ram_end - (u32_t) &__data_ram_start));
 #ifdef CONFIG_ARCH_HAS_RAMFUNC_SUPPORT
-	(void)memcpy(&_ramfunc_ram_start, &_ramfunc_rom_start,
-		 ((u32_t) &_ramfunc_ram_size));
+	(void)memcpy(&__ramfunc_start, &__ramfunc_rom_start,
+		 ((u32_t) &__ramfunc_size));
 #endif /* CONFIG_ARCH_HAS_RAMFUNC_SUPPORT */
 #ifdef DT_CCM_BASE_ADDRESS
 	(void)memcpy(&__ccm_data_start, &__ccm_data_rom_start,

@@ -12,3 +12,16 @@ zephyr_sources_ifdef(
   CONFIG_EXECUTION_BENCHMARKING
   timing_info_bench.c
   )
+
+if (DEFINED CONFIG_ARCH_HAS_RAMFUNC_SUPPORT)
+  add_named_section(
+    ".ramfunc"
+    REGION
+    "RAMABLE_REGION"
+    LOAD_REGION
+    "ROMABLE_REGION"
+    MPU_ALIGN
+    INPUT_SECTIONS
+    "*(.ramfunc)"
+    "*(\".ramfunc.*\")")
+endif()

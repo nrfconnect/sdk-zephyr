@@ -79,8 +79,8 @@ void z_arch_configure_static_mpu_regions(void)
 #if defined(CONFIG_ARCH_HAS_RAMFUNC_SUPPORT)
 		const struct k_mem_partition ramfunc_region =
 		{
-		.start = (u32_t)&_ramfunc_ram_start,
-		.size = (u32_t)&_ramfunc_ram_size,
+		.start = (u32_t)&__ramfunc_start,
+		.size = (u32_t)&__ramfunc_size,
 		.attr = K_MEM_PARTITION_P_RX_U_RX,
 		};
 #endif /* CONFIG_ARCH_HAS_RAMFUNC_SUPPORT */
