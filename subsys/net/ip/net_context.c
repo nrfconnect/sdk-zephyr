@@ -1461,6 +1461,38 @@ int net_context_sendto(struct net_pkt *pkt,
 	return ret;
 }
 
+static int get_context_priority(struct net_context *context,
+				void *value, size_t *len)
+{
+#if defined(CONFIG_NET_CONTEXT_PRIORITY)
+	*((u8_t *)value) = context->options.priority;
+
+	if (len) {
+		*len = sizeof(u8_t);
+	}
+
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
+}
+
+static int get_context_timepstamp(struct net_context *context,
+				  void *value, size_t *len)
+{
+#if defined(CONFIG_NET_CONTEXT_TIMESTAMP)
+	*((bool *)value) = context->options.timestamp;
+
+	if (len) {
+		*len = sizeof(bool);
+	}
+
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
+}
+
 static int context_setup_udp_packet(struct net_context *context,
 				    struct net_pkt *pkt,
 				    const void *buf,
@@ -1531,6 +1563,43 @@ static void context_finalize_packet(struct net_context *context,
 		net_ipv6_finalize(pkt, net_context_get_ip_proto(context));
 	}
 }
+
+static struct net_pkt *context_alloc_pkt(struct net_context *context,
+					 size_t len, s32_t timeout)
+{
+	struct net_pkt *pkt;
+
+#if defined(CONFIG_NET_CONTEXT_NET_PKT_POOL)
+	if (context->tx_slab) {
+		pkt = net_pkt_alloc_from_slab(context->tx_slab(), timeout);
+		if (!pkt) {
+			return NULL;
+		}
+
+		net_pkt_set_iface(pkt, net_context_get_iface(context));
+		net_pkt_set_family(pkt, net_context_get_family(context));
+		net_pkt_set_context(pkt, context);
+
+		if (net_pkt_alloc_buffer(pkt, len,
+					 net_context_get_ip_proto(context),
+					 timeout)) {
+			net_pkt_unref(pkt);
+			return NULL;
+		}
+
+		return pkt;
+	}
+#endif
+	pkt = net_pkt_alloc_with_buffer(net_context_get_iface(context), len,
+					net_context_get_family(context),
+					net_context_get_ip_proto(context),
+					timeout);
+
+	net_pkt_set_context(pkt, context);
+
+	return pkt;
+}
+
 
 static int context_sendto_new(struct net_context *context,
 			      const void *buf,
@@ -1630,10 +1699,7 @@ static int context_sendto_new(struct net_context *context,
 		return -EINVAL;
 	}
 
-	pkt = net_pkt_alloc_with_buffer(net_context_get_iface(context), len,
-					net_context_get_family(context),
-					net_context_get_ip_proto(context),
-					PKT_WAIT_TIME);
+	pkt = context_alloc_pkt(context, len, PKT_WAIT_TIME);
 	if (!pkt) {
 		return -ENOMEM;
 	}
@@ -1644,10 +1710,29 @@ static int context_sendto_new(struct net_context *context,
 		len = tmp_len;
 	}
 
-	net_pkt_set_context(pkt, context);
 	context->send_cb = cb;
 	context->user_data = user_data;
 	net_pkt_set_token(pkt, token);
+
+	if (IS_ENABLED(CONFIG_NET_CONTEXT_PRIORITY)) {
+		u8_t priority;
+
+		get_context_priority(context, &priority, NULL);
+		net_pkt_set_priority(pkt, priority);
+	}
+
+	if (IS_ENABLED(CONFIG_NET_CONTEXT_TIMESTAMP)) {
+		bool timestamp;
+
+		get_context_timepstamp(context, &timestamp, NULL);
+		if (timestamp) {
+			struct net_ptp_time tp = {
+				.second = k_cycle_get_32(),
+			};
+
+			net_pkt_set_timestamp(pkt, &tp);
+		}
+	}
 
 	if (IS_ENABLED(CONFIG_NET_UDP) &&
 	    net_context_get_ip_proto(context) == IPPROTO_UDP) {
@@ -2069,15 +2154,15 @@ static int set_context_priority(struct net_context *context,
 #endif
 }
 
-static int get_context_priority(struct net_context *context,
-				void *value, size_t *len)
+static int set_context_timestamp(struct net_context *context,
+				 const void *value, size_t len)
 {
-#if defined(CONFIG_NET_CONTEXT_PRIORITY)
-	*((u8_t *)value) = context->options.priority;
-
-	if (len) {
-		*len = sizeof(u8_t);
+#if defined(CONFIG_NET_CONTEXT_TIMESTAMP)
+	if (len > sizeof(bool)) {
+		return -EINVAL;
 	}
+
+	context->options.timestamp = *((bool *)value);
 
 	return 0;
 #else
@@ -2103,6 +2188,9 @@ int net_context_set_option(struct net_context *context,
 	case NET_OPT_PRIORITY:
 		ret = set_context_priority(context, value, len);
 		break;
+	case NET_OPT_TIMESTAMP:
+		ret = set_context_timestamp(context, value, len);
+		break;
 	}
 
 	k_mutex_unlock(&context->lock);
@@ -2127,6 +2215,9 @@ int net_context_get_option(struct net_context *context,
 	switch (option) {
 	case NET_OPT_PRIORITY:
 		ret = get_context_priority(context, value, len);
+		break;
+	case NET_OPT_TIMESTAMP:
+		ret = get_context_timepstamp(context, value, len);
 		break;
 	}
 

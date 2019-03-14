@@ -6,8 +6,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-if USB_DEVICE_STACK
-
 config USB_CDC_ACM
 	bool "USB CDC ACM Device Class Driver"
 	select SERIAL_HAS_DRIVER
@@ -126,9 +124,17 @@ source "subsys/usb/class/hid/Kconfig"
 config USB_DFU_CLASS
 	bool "USB DFU Class Driver"
 	select MPU_ALLOW_FLASH_WRITE
+	select POLL
 	depends on IMG_MANAGER
 	help
 	  USB DFU class driver
+
+config USB_DFU_WAIT_DELAY_MS
+	int
+	depends on USB_DFU_CLASS
+	default 12000
+	help
+	  A thread can wait for a prescribed time (in ms) for DFU to begin
 
 config USB_DFU_MAX_XFER_SIZE
 	int
@@ -139,5 +145,3 @@ config USB_DFU_DETACH_TIMEOUT
 	int
 	depends on USB_DFU_CLASS
 	default 1000
-
-endif # CONFIG_USB_DEVICE_STACK

@@ -362,6 +362,34 @@ it to contain:
     set -e exec
     exec git diff --cached | ${ZEPHYR_BASE}/scripts/checkpatch.pl -
 
+Instead of running checkpatch at each commit, you may prefer to run it only
+before pushing on zephyr repo. To do this, make the file
+*$ZEPHYR_BASE/.git/hooks/pre-push* executable and edit it to contain:
+
+.. code-block:: bash
+
+    #!/bin/sh
+    remote="$1"
+    url="$2"
+
+    z40=0000000000000000000000000000000000000000
+
+    echo "Run push hook"
+
+    while read local_ref local_sha remote_ref remote_sha
+    do
+        args="$remote $url $local_ref $local_sha $remote_ref $remote_sha"
+        exec ${ZEPHYR_BASE}/series-push-hook.sh $args
+    done
+
+    exit 0
+
+If you want to override checkpatch verdict and push you branch despite reported
+issues, you can add option --no-verify to the git push command.
+
+A more complete alternative to this is using check_compliance.py script from
+ci-tools repo.
+
 .. _Contribution workflow:
 
 Contribution Workflow
@@ -512,6 +540,15 @@ workflow here:
    By force pushing your update, your original pull request will be updated
    with your changes so you won't need to resubmit the pull request.
 
+   .. note:: While amending commits and force pushing is a common review model
+      outside GitHub, and the one recommended by Zephyr, it's not the main
+      model supported by GitHub. Forced pushes can cause unexpected behavior,
+      such as not being able to use "View Changes" buttons except for the last
+      one - GitHub complains it can't find older commits. You're also not
+      always able to compare the latest reviewed version with the latest
+      submitted version. When rewriting history GitHub only guarantees access
+      to the latest version.
+
 #. If the CI run fails, you will need to make changes to your code in order
    to fix the issues and amend your commits by rebasing as described above.
    Additional information about the CI system can be found in
@@ -551,7 +588,7 @@ does and why it's needed. A change summary of ``"Fixes stuff"`` will be rejected
 
 .. warning::
    An empty change summary body is not permitted. Even for trivial changes, please
-   include a summary body in the commmit message.
+   include a summary body in the commit message.
 
 The description body of the commit message must include:
 
@@ -680,7 +717,7 @@ these additional steps must be followed:
 
 #. Complete a README for your code component and add it to your source
    code pull request (PR).  A recommended README template can be found in
-   :file:`doc/contribute/code_component_README` (and included
+   :zephyr_file:`doc/contribute/code_component_README` (and included
    `below`_ for reference)
 
 #. The Zephyr Technical Steering Committee (TSC) will evaluate the code

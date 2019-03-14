@@ -19,7 +19,9 @@ LOG_MODULE_REGISTER(usb_eem);
 #include <class/usb_cdc.h>
 #include "netusb.h"
 
-static u8_t tx_buf[NETUSB_MTU], rx_buf[NETUSB_MTU];
+#define EEM_FRAME_SIZE 1522
+
+static u8_t tx_buf[EEM_FRAME_SIZE], rx_buf[EEM_FRAME_SIZE];
 
 struct usb_cdc_eem_config {
 	struct usb_if_descriptor if0;
@@ -101,7 +103,6 @@ static int eem_send(struct net_pkt *pkt)
 {
 	u8_t sentinel[4] = { 0xde, 0xad, 0xbe, 0xef };
 	u16_t *hdr = (u16_t *)&tx_buf[0];
-	struct net_buf *frag;
 	int ret, len, b_idx = 0;
 
 	/* With EEM, it's possible to send multiple ethernet packets in one
@@ -113,11 +114,11 @@ static int eem_send(struct net_pkt *pkt)
 	*hdr = sys_cpu_to_le16(0x3FFF & len);
 	b_idx += sizeof(u16_t);
 
-	/* generate transfer buffer */
-	for (frag = pkt->frags; frag; frag = frag->frags) {
-		memcpy(&tx_buf[b_idx], frag->data, frag->len);
-		b_idx += frag->len;
+	if (net_pkt_read_new(pkt, &tx_buf[b_idx], net_pkt_get_len(pkt))) {
+		return -ENOBUFS;
 	}
+
+	b_idx += len - sizeof(sentinel);
 
 	/* Add crc-sentinel */
 	memcpy(&tx_buf[b_idx], sentinel, sizeof(sentinel));
@@ -142,13 +143,12 @@ static void eem_read_cb(u8_t ep, int size, void *priv)
 	do {
 		u16_t eem_hdr, eem_size;
 		struct net_pkt *pkt;
-		struct net_buf *frag;
 
 		if (size < sizeof(u16_t)) {
 			break;
 		}
 
-		eem_hdr = sys_le16_to_cpu(*(u16_t *)ptr);
+		eem_hdr = sys_get_le16(ptr);
 		eem_size = eem_pkt_size(eem_hdr);
 
 		if (eem_size + sizeof(u16_t) > size) {
@@ -173,24 +173,17 @@ static void eem_read_cb(u8_t ep, int size, void *priv)
 			break;
 		}
 
-		pkt = net_pkt_get_reserve_rx(K_FOREVER);
+		pkt = net_pkt_alloc_with_buffer(netusb_net_iface(),
+						eem_size - 4, AF_UNSPEC, 0,
+						K_FOREVER);
 		if (!pkt) {
 			LOG_ERR("Unable to alloc pkt\n");
 			break;
 		}
 
-		frag = net_pkt_get_frag(pkt, K_FOREVER);
-		if (!frag) {
-			LOG_ERR("Unable to alloc fragment");
-			net_pkt_unref(pkt);
-			break;
-		}
-
-		net_pkt_frag_insert(pkt, frag);
-
 		/* copy payload and discard 32-bit sentinel */
-		if (!net_pkt_append_all(pkt, eem_size - 4, ptr, K_FOREVER)) {
-			LOG_ERR("Unable to append pkt\n");
+		if (net_pkt_write_new(pkt, ptr, eem_size - 4)) {
+			LOG_ERR("Unable to write into pkt\n");
 			net_pkt_unref(pkt);
 			break;
 		}

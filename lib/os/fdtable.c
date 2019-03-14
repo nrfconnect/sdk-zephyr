@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <kernel.h>
 #include <misc/fdtable.h>
+#include <misc/speculation.h>
 
 struct fd_entry {
 	void *obj;
@@ -64,7 +65,14 @@ static int _find_fd_entry(void)
 
 static int _check_fd(int fd)
 {
-	if (fd < 0 || fd >= ARRAY_SIZE(fdtable) || fdtable[fd].obj == NULL) {
+	if (fd < 0 || fd >= ARRAY_SIZE(fdtable)) {
+		errno = EBADF;
+		return -1;
+	}
+
+	fd = k_array_index_sanitize(fd, ARRAY_SIZE(fdtable));
+
+	if (fdtable[fd].obj == NULL) {
 		errno = EBADF;
 		return -1;
 	}
@@ -248,7 +256,7 @@ int fcntl(int fd, int cmd, ...)
  * fd operations for stdio/stdout/stderr
  */
 
-int _impl__zephyr_write_stdout(const char *buf, int nbytes);
+int z_impl_zephyr_write_stdout(const char *buf, int nbytes);
 
 static ssize_t stdinout_read_vmeth(void *obj, void *buffer, size_t count)
 {
@@ -260,7 +268,7 @@ static ssize_t stdinout_write_vmeth(void *obj, const void *buffer, size_t count)
 #if defined(CONFIG_BOARD_NATIVE_POSIX)
 	return write(1, buffer, count);
 #elif defined(CONFIG_NEWLIB_LIBC)
-	return _impl__zephyr_write_stdout(buffer, count);
+	return z_impl_zephyr_write_stdout(buffer, count);
 #else
 	return 0;
 #endif

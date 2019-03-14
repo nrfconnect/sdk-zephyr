@@ -24,6 +24,9 @@
 extern "C" {
 #endif
 
+#define LLDP_TLV_GET_LENGTH(type_length)	(type_length & BIT_MASK(9))
+#define LLDP_TLV_GET_TYPE(type_length)		((u8_t)(type_length >> 9))
+
 /* LLDP Definitions */
 
 /* According to the spec, End of LLDPDU TLV value is constant. */
@@ -138,11 +141,6 @@ struct net_lldpdu {
 	struct net_lldp_chassis_tlv chassis_id;	/* Mandatory TLV */
 	struct net_lldp_port_tlv port_id;	/* Mandatory TLV */
 	struct net_lldp_time_to_live_tlv ttl;	/* Mandatory TLV */
-
-#if defined(CONFIG_NET_LLDP_END_LLDPDU_TLV_ENABLED)
-	/** Optional End of LLDPDU TLV. Must be set to 0x0000 always. */
-	const uint16_t end_lldpdu_tlv;
-#endif /* CONFIG_NET_LLDP_END_LLDPDU_TLV_ENABLED */
 } __packed;
 
 /**
@@ -154,6 +152,17 @@ struct net_lldpdu {
  * @return 0 if ok, <0 if error
  */
 int net_lldp_config(struct net_if *iface, const struct net_lldpdu *lldpdu);
+
+/**
+ * @brief Set the Optional LLDP TLVs for a network interface.
+ *
+ * @param iface Network interface
+ * @param tlv LLDP optional TLVs following mandatory part
+ * @param len Length of the optional TLVs
+ *
+ * @return 0 if ok, <0 if error
+ */
+int net_lldp_config_optional(struct net_if *iface, const u8_t *tlv, size_t len);
 
 /**
  * @brief Initialize LLDP engine.
@@ -195,6 +204,30 @@ int net_lldp_register_callback(struct net_if *iface, net_lldp_recv_cb_t cb);
  * @return Return the policy for network buffer
  */
 enum net_verdict net_lldp_recv(struct net_if *iface, struct net_pkt *pkt);
+
+#if defined(CONFIG_NET_LLDP)
+/**
+ * @brief Set LLDP protocol data unit (LLDPDU) for the network interface.
+ *
+ * @param iface Network interface
+ *
+ * @return <0 if error, index in lldp array if iface is found there
+ */
+int net_lldp_set_lldpdu(struct net_if *iface);
+#else
+#define net_lldp_set_lldpdu(iface)
+#endif
+
+#if defined(CONFIG_NET_LLDP)
+/**
+ * @brief Unset LLDP protocol data unit (LLDPDU) for the network interface.
+ *
+ * @param iface Network interface
+ */
+void net_lldp_unset_lldpdu(struct net_if *iface);
+#else
+#define net_lldp_unset_lldpdu(iface)
+#endif
 
 #ifdef __cplusplus
 }

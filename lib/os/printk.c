@@ -128,7 +128,16 @@ void _vprintk(out_func_t out, void *ctx, const char *fmt, va_list ap)
 					goto still_might_format;
 				}
 				/* Fall through */
-			case '1' ... '9':
+			case '1':
+			case '2':
+			case '3':
+			case '4':
+			case '5':
+			case '6':
+			case '7':
+			case '8':
+				/* Fall through */
+			case '9':
 				if (min_width < 0) {
 					min_width = *fmt - '0';
 				} else {
@@ -327,7 +336,7 @@ void vprintk(const char *fmt, va_list ap)
 }
 #endif
 
-void _impl_k_str_out(char *c, size_t n)
+void z_impl_k_str_out(char *c, size_t n)
 {
 	int i;
 
@@ -340,7 +349,7 @@ void _impl_k_str_out(char *c, size_t n)
 Z_SYSCALL_HANDLER(k_str_out, c, n)
 {
 	Z_OOPS(Z_SYSCALL_MEMORY_READ(c, n));
-	_impl_k_str_out((char *)c, n);
+	z_impl_k_str_out((char *)c, n);
 
 	return 0;
 }

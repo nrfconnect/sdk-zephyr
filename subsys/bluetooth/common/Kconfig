@@ -6,10 +6,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-if BT_HCI
+config BT_HAS_HCI_VS
+	bool
+	help
+	  This option is set by the Bluetooth controller to indicate support
+	  for the Zephyr HCI Vendor-Specific Commands and Event.
 
 config BT_HCI_VS
 	bool "Zephyr HCI Vendor-Specific Commands"
+	depends on BT_HAS_HCI_VS
 	default y
 	help
 	  Enable support for the Zephyr HCI Vendor-Specific Commands in the
@@ -53,7 +58,6 @@ config BT_DEBUG
 
 choice
 	prompt "Bluetooth debug type"
-	depends on BT
 	default BT_DEBUG_NONE
 
 config BT_DEBUG_NONE
@@ -101,7 +105,6 @@ config BT_MONITOR_ON_DEV_NAME
 
 config BT_DEBUG_HCI_DRIVER
 	bool "Bluetooth HCI driver debug"
-	depends on BT_DEBUG
 	help
 	  This option enables debug support for the active
 	  Bluetooth HCI driver, including the Controller-side HCI layer
@@ -114,5 +117,4 @@ config BT_DEBUG_RPA
 	  This option enables debug support for the Bluetooth
 	  Resolvable Private Address (RPA) generation and resolution.
 
-endif #BT_DEBUG
-endif # BT_HCI
+endif # BT_DEBUG

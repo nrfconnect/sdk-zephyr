@@ -38,49 +38,80 @@ extern u8_t *_k_priv_stack_find(void *obj);
  *
  * <options> is currently unused.
  *
- * @param pStackMem the aligned stack memory
- * @param stackSize stack size in bytes
+ * @param stack      pointer to the aligned stack memory
+ * @param stackSize  size of the available stack memory in bytes
  * @param pEntry the entry point
  * @param parameter1 entry point to the first param
  * @param parameter2 entry point to the second param
  * @param parameter3 entry point to the third param
- * @param priority thread priority
- * @param options thread options: K_ESSENTIAL, K_FP_REGS
+ * @param priority   thread priority
+ * @param options    thread options: K_ESSENTIAL, K_FP_REGS
  *
  * @return N/A
  */
 
-void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
+void z_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 		 size_t stackSize, k_thread_entry_t pEntry,
 		 void *parameter1, void *parameter2, void *parameter3,
 		 int priority, unsigned int options)
 {
 	char *pStackMem = K_THREAD_STACK_BUFFER(stack);
+	char *stackEnd;
+	/* Offset between the top of stack and the high end of stack area. */
+	u32_t top_of_stack_offset = 0;
 
-	_ASSERT_VALID_PRIO(priority, pEntry);
+	Z_ASSERT_VALID_PRIO(priority, pEntry);
+
+#if defined(CONFIG_USERSPACE)
+	/* Truncate the stack size to align with the MPU region granularity.
+	 * This is done proactively to account for the case when the thread
+	 * switches to user mode (thus, its stack area will need to be MPU-
+	 * programmed to be assigned unprivileged RW access permission).
+	 */
+	stackSize &= ~(CONFIG_ARM_MPU_REGION_MIN_ALIGN_AND_SIZE - 1);
+
+#ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
+	/* Reserve space on top of stack for local data. */
+	u32_t p_local_data = STACK_ROUND_DOWN(pStackMem + stackSize
+		- sizeof(*thread->userspace_local_data));
+
+	thread->userspace_local_data =
+		(struct _thread_userspace_local_data *)(p_local_data);
+
+	/* Top of actual stack must be moved below the user local data. */
+	top_of_stack_offset = (u32_t)
+		(pStackMem + stackSize - ((char *)p_local_data));
+
+#endif /* CONFIG_THREAD_USERSPACE_LOCAL_DATA */
+#endif /* CONFIG_USERSPACE */
 
 #if CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT && CONFIG_USERSPACE
-	char *stackEnd = pStackMem + stackSize - MPU_GUARD_ALIGN_AND_SIZE;
+	/* This is required to work-around the case where the thread
+	 * is created without using K_THREAD_STACK_SIZEOF() macro in
+	 * k_thread_create(). If K_THREAD_STACK_SIZEOF() is used, the
+	 * Guard size has already been take out of stackSize.
+	 */
+	stackEnd = pStackMem + stackSize - MPU_GUARD_ALIGN_AND_SIZE;
 #else
-	char *stackEnd = pStackMem + stackSize;
+	stackEnd = pStackMem + stackSize;
 #endif
 	struct __esf *pInitCtx;
 
-	_new_thread_init(thread, pStackMem, stackEnd - pStackMem, priority,
+	_new_thread_init(thread, pStackMem, stackSize, priority,
 			 options);
 
 	/* carve the thread entry struct from the "base" of the stack */
 	pInitCtx = (struct __esf *)(STACK_ROUND_DOWN(stackEnd -
-						     sizeof(struct __esf)));
+		(char *)top_of_stack_offset - sizeof(struct __esf)));
 
 #if CONFIG_USERSPACE
 	if ((options & K_USER) != 0) {
-		pInitCtx->pc = (u32_t)_arch_user_mode_enter;
+		pInitCtx->pc = (u32_t)z_arch_user_mode_enter;
 	} else {
-		pInitCtx->pc = (u32_t)_thread_entry;
+		pInitCtx->pc = (u32_t)z_thread_entry;
 	}
 #else
-	pInitCtx->pc = (u32_t)_thread_entry;
+	pInitCtx->pc = (u32_t)z_thread_entry;
 #endif
 
 	/* force ARM mode by clearing LSB of address */
@@ -111,17 +142,13 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 
 #ifdef CONFIG_USERSPACE
 
-FUNC_NORETURN void _arch_user_mode_enter(k_thread_entry_t user_entry,
+FUNC_NORETURN void z_arch_user_mode_enter(k_thread_entry_t user_entry,
 	void *p1, void *p2, void *p3)
 {
 
 	/* Set up privileged stack before entering user mode */
 	_current->arch.priv_stack_start =
 		(u32_t)_k_priv_stack_find(_current->stack_obj);
-
-	/* Truncate the stack size with the MPU region granularity. */
-	_current->stack_info.size &=
-		~(CONFIG_ARM_MPU_REGION_MIN_ALIGN_AND_SIZE - 1);
 
 	_arm_userspace_enter(user_entry, p1, p2, p3,
 			     (u32_t)_current->stack_info.start,
@@ -155,6 +182,10 @@ void configure_builtin_stack_guard(struct k_thread *thread)
 	u32_t guard_start = thread->arch.priv_stack_start ?
 			    (u32_t)thread->arch.priv_stack_start :
 			    (u32_t)thread->stack_obj;
+
+	__ASSERT(thread->stack_info.start == ((u32_t)thread->stack_obj),
+		"stack_info.start does not point to the start of the"
+		"thread allocated area.");
 #else
 	u32_t guard_start = thread->stack_info.start;
 #endif

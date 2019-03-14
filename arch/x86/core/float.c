@@ -17,6 +17,10 @@
  * safely by one or more cooperative threads OR by a single preemptive thread,
  * but not by both.
  *
+ * This code is not necessary for systems with CONFIG_EAGER_FP_SHARING, as
+ * the floating point context is unconditionally saved/restored with every
+ * context switch.
+ *
  * The floating point register sharing mechanism is designed for minimal
  * intrusiveness.  Floating point state saving is only performed for threads
  * that explicitly indicate they are using FPU registers, to avoid impacting
@@ -42,10 +46,6 @@
 #include <kernel_structs.h>
 #include <toolchain.h>
 #include <asm_inline.h>
-
-/* the entire library vanishes without the FP_SHARING option enabled */
-
-#ifdef CONFIG_FP_SHARING
 
 /* SSE control/status register default value (used by assembler code) */
 extern u32_t _sse_mxcsr_default_value;
@@ -88,7 +88,7 @@ static inline void _FpCtxInit(struct k_thread *thread)
  * Enable preservation of floating point context information.
  *
  * The transition from "non-FP supporting" to "FP supporting" must be done
- * atomically to avoid confusing the floating point logic used by _Swap(), so
+ * atomically to avoid confusing the floating point logic used by z_swap(), so
  * this routine locks interrupts to ensure that a context switch does not occur.
  * The locking isn't really needed when the routine is called by a cooperative
  * thread (since context switching can't occur), but it is harmless.
@@ -167,7 +167,7 @@ void k_float_enable(struct k_thread *thread, unsigned int options)
 			 *
 			 * The saved FP context is needed in case the thread
 			 * we enabled FP support for is currently pre-empted,
-			 * since _Swap() uses it to restore FP context when
+			 * since z_swap() uses it to restore FP context when
 			 * the thread re-activates.
 			 *
 			 * Saving the FP context reinits the FPU, and thus
@@ -187,7 +187,7 @@ void k_float_enable(struct k_thread *thread, unsigned int options)
  * Disable preservation of floating point context information.
  *
  * The transition from "FP supporting" to "non-FP supporting" must be done
- * atomically to avoid confusing the floating point logic used by _Swap(), so
+ * atomically to avoid confusing the floating point logic used by z_swap(), so
  * this routine locks interrupts to ensure that a context switch does not occur.
  * The locking isn't really needed when the routine is called by a cooperative
  * thread (since context switching can't occur), but it is harmless.
@@ -244,5 +244,3 @@ void _FpNotAvailableExcHandler(NANO_ESF *pEsf)
 	k_float_enable(_current, _FP_USER_MASK);
 }
 _EXCEPTION_CONNECT_NOCODE(_FpNotAvailableExcHandler, IV_DEVICE_NOT_AVAILABLE);
-
-#endif /* CONFIG_FP_SHARING */

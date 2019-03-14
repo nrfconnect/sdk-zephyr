@@ -348,8 +348,6 @@ endif()
 
 zephyr_cc_option_ifdef(CONFIG_STACK_USAGE            -fstack-usage)
 
-zephyr_system_include_directories(${NOSTDINC})
-
 # Force an error when things like SYS_INIT(foo, ...) occur with a missing header.
 zephyr_cc_option(-Werror=implicit-int)
 
@@ -365,7 +363,8 @@ zephyr_cc_option(-Wpointer-arith)
 # Declare MPU userspace dependencies before the linker scripts to make
 # sure the order of dependencies are met
 if(CONFIG_USERSPACE)
-  set(APP_SMEM_DEP app_smem_linker)
+  set(APP_SMEM_ALIGNED_DEP app_smem_aligned_linker)
+  set(APP_SMEM_UNALIGNED_DEP app_smem_unaligned_linker)
   if(CONFIG_ARM)
     set(PRIV_STACK_DEP priv_stacks_prebuilt)
   endif()
@@ -383,6 +382,13 @@ endif()
 zephyr_ld_options(
   ${LINKERFLAGPREFIX},--gc-sections
   ${LINKERFLAGPREFIX},--build-id=none
+  )
+
+# Sort the common symbols and each input section by alignment
+# in descending order to minimize padding between these symbols.
+zephyr_ld_options(
+  ${LINKERFLAGPREFIX},--sort-common=descending
+  ${LINKERFLAGPREFIX},--sort-section=alignment
   )
 
 get_property(TOPT GLOBAL PROPERTY TOPT)
@@ -448,6 +454,8 @@ function(construct_add_custom_command_for_linker_pass linker_output_name output_
 
   if (${linker_output_name} MATCHES "^linker_pass_final$")
     set(linker_pass_define -DLINKER_PASS2)
+  elseif (${linker_output_name} MATCHES "^linker_app_smem_unaligned$")
+    set(linker_pass_define -DLINKER_APP_SMEM_UNALIGNED)
   else()
     set(linker_pass_define "")
   endif()
@@ -763,7 +771,7 @@ construct_add_custom_command_for_linker_pass(
   custom_command
   ${ALIGN_SIZING_DEP}
   ${PRIV_STACK_DEP}
-  ${APP_SMEM_DEP}
+  ${APP_SMEM_ALIGNED_DEP}
   ${CODE_RELOCATION_DEP}
   ${OFFSETS_H_TARGET}
   )
@@ -1133,17 +1141,32 @@ configure_file(
      ${PROJECT_BINARY_DIR}/include/generated/app_data_alignment.ld)
 
 configure_file(
-     $ENV{ZEPHYR_BASE}/include/arch/arm/cortex_m/scripts/app_smem.ld
+     $ENV{ZEPHYR_BASE}/include/linker/app_smem.ld
      ${PROJECT_BINARY_DIR}/include/generated/app_smem.ld)
 
+configure_file(
+     $ENV{ZEPHYR_BASE}/include/linker/app_smem_aligned.ld
+     ${PROJECT_BINARY_DIR}/include/generated/app_smem_aligned.ld)
+
+configure_file(
+     $ENV{ZEPHYR_BASE}/include/linker/app_smem_unaligned.ld
+     ${PROJECT_BINARY_DIR}/include/generated/app_smem_unaligned.ld)
+
 if(CONFIG_USERSPACE)
-  set(APP_SMEM_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem.ld")
+  set(APP_SMEM_ALIGNED_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem_aligned.ld")
+  set(APP_SMEM_UNALIGNED_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem_unaligned.ld")
   set(OBJ_FILE_DIR "${PROJECT_BINARY_DIR}/../")
 
   add_custom_target(
-    ${APP_SMEM_DEP}
+    ${APP_SMEM_ALIGNED_DEP}
     DEPENDS
-    ${APP_SMEM_LD}
+    ${APP_SMEM_ALIGNED_LD}
+    )
+
+  add_custom_target(
+    ${APP_SMEM_UNALIGNED_DEP}
+    DEPENDS
+    ${APP_SMEM_UNALIGNED_LD}
     )
 
   if(CONFIG_NEWLIB_LIBC)
@@ -1154,18 +1177,65 @@ if(CONFIG_USERSPACE)
   endif()
 
   add_custom_command(
-    OUTPUT ${APP_SMEM_LD}
+    OUTPUT ${APP_SMEM_UNALIGNED_LD}
     COMMAND ${PYTHON_EXECUTABLE}
     ${ZEPHYR_BASE}/scripts/gen_app_partitions.py
     -d ${OBJ_FILE_DIR}
-    -o ${APP_SMEM_LD}
+    -o ${APP_SMEM_UNALIGNED_LD}
     ${NEWLIB_PART} ${MBEDTLS_PART}
     $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:--verbose>
     DEPENDS
     kernel
     ${ZEPHYR_LIBS_PROPERTY}
     WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/
-    COMMENT "Generating app_smem linker section"
+    COMMENT "Generating app_smem_unaligned linker section"
+    )
+
+  construct_add_custom_command_for_linker_pass(
+    linker_app_smem_unaligned
+    custom_command
+    ${ALIGN_SIZING_DEP}
+    ${CODE_RELOCATION_DEP}
+    ${APP_SMEM_UNALIGNED_DEP}
+    ${APP_SMEM_UNALIGNED_LD}
+    ${OFFSETS_H_TARGET}
+    )
+  add_custom_command(
+    ${custom_command}
+    )
+
+  add_custom_target(
+    linker_app_smem_unaligned_script
+    DEPENDS
+    linker_app_smem_unaligned.cmd
+    )
+
+  set_property(TARGET
+    linker_app_smem_unaligned_script
+    PROPERTY INCLUDE_DIRECTORIES
+    ${ZEPHYR_INCLUDE_DIRS}
+    )
+
+  set(APP_SMEM_UNALIGNED_LIB app_smem_unaligned_output_obj_renamed_lib)
+  add_executable(       app_smem_unaligned_prebuilt misc/empty_file.c)
+  target_link_libraries(app_smem_unaligned_prebuilt ${TOPT} ${PROJECT_BINARY_DIR}/linker_app_smem_unaligned.cmd ${zephyr_lnk} ${CODE_RELOCATION_DEP})
+  set_property(TARGET   app_smem_unaligned_prebuilt PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker_app_smem_unaligned.cmd)
+  add_dependencies(     app_smem_unaligned_prebuilt ${ALIGN_SIZING_DEP} linker_app_smem_unaligned_script ${OFFSETS_LIB})
+
+  add_custom_command(
+    OUTPUT ${APP_SMEM_ALIGNED_LD}
+    COMMAND ${PYTHON_EXECUTABLE}
+    ${ZEPHYR_BASE}/scripts/gen_app_partitions.py
+    -e $<TARGET_FILE:app_smem_unaligned_prebuilt>
+    -o ${APP_SMEM_ALIGNED_LD}
+    ${NEWLIB_PART} ${MBEDTLS_PART}
+    $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:--verbose>
+    DEPENDS
+    kernel
+    ${ZEPHYR_LIBS_PROPERTY}
+    app_smem_unaligned_prebuilt
+    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/
+    COMMENT "Generating app_smem_aligned linker section"
     )
 endif()
 
@@ -1175,8 +1245,8 @@ if(CONFIG_USERSPACE AND CONFIG_ARM)
     custom_command
     ${ALIGN_SIZING_DEP}
     ${CODE_RELOCATION_DEP}
-    ${APP_SMEM_DEP}
-    ${APP_SMEM_LD}
+    ${APP_SMEM_ALIGNED_DEP}
+    ${APP_SMEM_ALIGNED_LD}
     ${OFFSETS_H_TARGET}
     )
   add_custom_command(

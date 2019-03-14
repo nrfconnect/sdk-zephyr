@@ -7,13 +7,14 @@
 menuconfig CLOCK_CONTROL_NRF
 	bool "NRF Clock controller support"
 	depends on SOC_COMPATIBLE_NRF
+	default y
 	help
 	  Enable support for the Nordic Semiconductor nRFxx series SoC clock
 	  driver.
 
 if CLOCK_CONTROL_NRF
 
-choice
+choice CLOCK_CONTROL_NRF_SOURCE
 	prompt "32KHz clock source"
 	default CLOCK_CONTROL_NRF_K32SRC_XTAL
 
@@ -34,7 +35,7 @@ config CLOCK_CONTROL_NRF_K32SRC_BLOCKING
 	  initially start running and automatically switch to crystal when
 	  ready.
 
-choice
+choice CLOCK_CONTROL_NRF_ACCURACY
 	prompt "32KHz clock accuracy"
 	default CLOCK_CONTROL_NRF_K32SRC_500PPM if CLOCK_CONTROL_NRF_K32SRC_RC
 	default CLOCK_CONTROL_NRF_K32SRC_20PPM

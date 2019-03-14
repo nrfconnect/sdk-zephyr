@@ -142,11 +142,11 @@ extern "C" {
  */
 #if defined(CONFIG_USERSPACE) && \
 	defined(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT)
-#define _ARCH_THREAD_STACK_DEFINE(sym, size) \
+#define Z_ARCH_THREAD_STACK_DEFINE(sym, size) \
 	struct _k_thread_stack_element __noinit \
 		__aligned(POW2_CEIL(size)) sym[POW2_CEIL(size)]
 #else
-#define _ARCH_THREAD_STACK_DEFINE(sym, size) \
+#define Z_ARCH_THREAD_STACK_DEFINE(sym, size) \
 	struct _k_thread_stack_element __noinit __aligned(STACK_ALIGN) \
 		sym[size+MPU_GUARD_ALIGN_AND_SIZE]
 #endif
@@ -163,9 +163,9 @@ extern "C" {
  */
 #if defined(CONFIG_USERSPACE) && \
 	defined(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT)
-#define _ARCH_THREAD_STACK_LEN(size) (POW2_CEIL(size))
+#define Z_ARCH_THREAD_STACK_LEN(size) (POW2_CEIL(size))
 #else
-#define _ARCH_THREAD_STACK_LEN(size) ((size)+MPU_GUARD_ALIGN_AND_SIZE)
+#define Z_ARCH_THREAD_STACK_LEN(size) ((size)+MPU_GUARD_ALIGN_AND_SIZE)
 #endif
 
 /**
@@ -183,15 +183,15 @@ extern "C" {
  */
 #if defined(CONFIG_USERSPACE) && \
 	defined(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT)
-#define _ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
+#define Z_ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
 	struct _k_thread_stack_element __noinit \
 		__aligned(POW2_CEIL(size)) \
-		sym[nmemb][_ARCH_THREAD_STACK_LEN(size)]
+		sym[nmemb][Z_ARCH_THREAD_STACK_LEN(size)]
 #else
-#define _ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
+#define Z_ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
 	struct _k_thread_stack_element __noinit \
 		__aligned(STACK_ALIGN) \
-		sym[nmemb][_ARCH_THREAD_STACK_LEN(size)]
+		sym[nmemb][Z_ARCH_THREAD_STACK_LEN(size)]
 #endif
 
 /**
@@ -208,11 +208,11 @@ extern "C" {
  */
 #if defined(CONFIG_USERSPACE) && \
 	defined(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT)
-#define _ARCH_THREAD_STACK_MEMBER(sym, size) \
+#define Z_ARCH_THREAD_STACK_MEMBER(sym, size) \
 	struct _k_thread_stack_element __aligned(POW2_CEIL(size)) \
 		sym[POW2_CEIL(size)]
 #else
-#define _ARCH_THREAD_STACK_MEMBER(sym, size) \
+#define Z_ARCH_THREAD_STACK_MEMBER(sym, size) \
 	struct _k_thread_stack_element __aligned(STACK_ALIGN) \
 		sym[size+MPU_GUARD_ALIGN_AND_SIZE]
 #endif
@@ -224,19 +224,23 @@ extern "C" {
  * since the underlying implementation may actually create something larger
  * (for instance a guard area).
  *
+ * The value returned here is guaranteed to match the size of the stack that
+ * is available for the thread, i.e. excluding the size of areas that are not
+ * to be used (for instance the guard area).
+ *
  * The value returned here is NOT guaranteed to match the 'size' parameter
  * passed to K_THREAD_STACK_DEFINE and related macros.
  *
  * In the case of CONFIG_USERSPACE=y and
- * CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT, the size will be larger than the
- * requested size.
+ * CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT=y, the returned size will be
+ * smaller than the requested 'size'.
  *
  * In all other configurations, the size will be correct.
  *
  * @param sym Stack memory symbol
- * @return Size of the stack
+ * @return Actual size of the stack available for the thread
  */
-#define _ARCH_THREAD_STACK_SIZEOF(sym) (sizeof(sym) - MPU_GUARD_ALIGN_AND_SIZE)
+#define Z_ARCH_THREAD_STACK_SIZEOF(sym) (sizeof(sym) - MPU_GUARD_ALIGN_AND_SIZE)
 
 /**
  * @brief Get a pointer to the physical stack buffer
@@ -249,7 +253,7 @@ extern "C" {
  * @param sym Declared stack symbol name
  * @return The buffer itself, a char *
  */
-#define _ARCH_THREAD_STACK_BUFFER(sym) \
+#define Z_ARCH_THREAD_STACK_BUFFER(sym) \
 		((char *)(sym) + MPU_GUARD_ALIGN_AND_SIZE)
 
 #ifdef CONFIG_ARM_MPU

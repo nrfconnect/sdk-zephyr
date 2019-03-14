@@ -260,8 +260,10 @@ static inline void net_pkt_set_iface(struct net_pkt *pkt, struct net_if *iface)
 	 * the network address that is stored in pkt. This is done here so
 	 * that the address type is properly set and is not forgotten.
 	 */
-	pkt->lladdr_src.type = net_if_get_link_addr(iface)->type;
-	pkt->lladdr_dst.type = net_if_get_link_addr(iface)->type;
+	if (iface) {
+		pkt->lladdr_src.type = net_if_get_link_addr(iface)->type;
+		pkt->lladdr_dst.type = net_if_get_link_addr(iface)->type;
+	}
 }
 
 static inline struct net_if *net_pkt_orig_iface(struct net_pkt *pkt)
@@ -2018,6 +2020,12 @@ struct net_pkt *net_pkt_alloc_debug(s32_t timeout,
 #define net_pkt_alloc(_timeout)					\
 	net_pkt_alloc_debug(_timeout, __func__, __LINE__)
 
+struct net_pkt *net_pkt_alloc_from_slab_debug(struct k_mem_slab *slab,
+					      s32_t timeout,
+					      const char *caller, int line);
+#define net_pkt_alloc_from_slab(_slab, _timeout)			\
+	net_pkt_alloc_from_slab_debug(_slab, _timeout, __func__, __LINE__)
+
 struct net_pkt *net_pkt_rx_alloc_debug(s32_t timeout,
 				       const char *caller, int line);
 #define net_pkt_rx_alloc(_timeout)				\
@@ -2036,7 +2044,7 @@ struct net_pkt *net_pkt_rx_alloc_on_iface_debug(struct net_if *iface,
 						int line);
 #define net_pkt_rx_alloc_on_iface(_iface, _timeout)			\
 	net_pkt_rx_alloc_on_iface_debug(_iface, _timeout,		\
-					   __func__, __LINE__)
+					__func__, __LINE__)
 
 int net_pkt_alloc_buffer_debug(struct net_pkt *pkt,
 			       size_t size,
@@ -2045,7 +2053,7 @@ int net_pkt_alloc_buffer_debug(struct net_pkt *pkt,
 			       const char *caller, int line);
 #define net_pkt_alloc_buffer(_pkt, _size, _proto, _timeout)		\
 	net_pkt_alloc_buffer_debug(_pkt, _size, _proto, _timeout,	\
-				      __func__, __LINE__)
+				   __func__, __LINE__)
 
 struct net_pkt *net_pkt_alloc_with_buffer_debug(struct net_if *iface,
 						size_t size,
@@ -2056,9 +2064,9 @@ struct net_pkt *net_pkt_alloc_with_buffer_debug(struct net_if *iface,
 						int line);
 #define net_pkt_alloc_with_buffer(_iface, _size, _family,		\
 				  _proto, _timeout)			\
-	net_pkt_alloc_with_buffer_debug(_iface, _size, _family,	\
-					   _proto, _timeout,		\
-					   __func__, __LINE__)
+	net_pkt_alloc_with_buffer_debug(_iface, _size, _family,		\
+					_proto, _timeout,		\
+					__func__, __LINE__)
 
 struct net_pkt *net_pkt_rx_alloc_with_buffer_debug(struct net_if *iface,
 						   size_t size,
@@ -2070,9 +2078,9 @@ struct net_pkt *net_pkt_rx_alloc_with_buffer_debug(struct net_if *iface,
 #define net_pkt_rx_alloc_with_buffer(_iface, _size, _family,		\
 				     _proto, _timeout)			\
 	net_pkt_rx_alloc_with_buffer_debug(_iface, _size, _family,	\
-					      _proto, _timeout,		\
-					      __func__, __LINE__)
-#endif
+					   _proto, _timeout,		\
+					   __func__, __LINE__)
+#endif /* NET_PKT_DEBUG_ENABLED */
 /** @endcond */
 
 /**
@@ -2087,6 +2095,25 @@ struct net_pkt *net_pkt_rx_alloc_with_buffer_debug(struct net_if *iface,
  */
 #if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_pkt *net_pkt_alloc(s32_t timeout);
+#endif
+
+/**
+ * @brief Allocate an initialized net_pkt from a specific slab
+ *
+ * @details unlike net_pkt_alloc() which uses core slabs, this one will use
+ *          an external slab (see NET_PKT_SLAB_DEFINE()).
+ *          Do _not_ use it unless you know what you are doing. Basically, only
+ *          net_context should be using this, in order to allocate packet and
+ *          then buffer on its local slab/pool (if any).
+ *
+ * @param slab    The slab to use for allocating the packet
+ * @param timeout Maximum time in milliseconds to wait for an allocation.
+ *
+ * @return a pointer to a newly allocated net_pkt on success, NULL otherwise.
+ */
+#if !defined(NET_PKT_DEBUG_ENABLED)
+struct net_pkt *net_pkt_alloc_from_slab(struct k_mem_slab *slab,
+					s32_t timeout);
 #endif
 
 /**
@@ -2164,7 +2191,6 @@ struct net_pkt *net_pkt_rx_alloc_with_buffer(struct net_if *iface,
 					     sa_family_t family,
 					     enum net_ip_protocol proto,
 					     s32_t timeout);
-
 #endif
 
 /**

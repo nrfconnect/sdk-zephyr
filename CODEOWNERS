@@ -76,6 +76,7 @@
 /boards/nios2/altera_max10/               @ramakrishnapallala
 /boards/posix/                            @aescolar
 /boards/riscv32/                          @kgugala @pgielda @nategraff-sifive
+/boards/shields/                          @erwango
 /boards/x86/                              @andrewboie @nashif
 /boards/x86/arduino_101/                  @nashif
 /boards/x86/galileo/                      @nashif
@@ -134,9 +135,13 @@
 /drivers/wifi/eswifi/                     @loicpoulain
 /dts/arm/st/                              @erwango
 /dts/arm/nordic/                          @ioannisg @carlescufi
+/dts/arm/nxp/                             @MaureenHelm
 /dts/bindings/can/                        @alexanderwachter
+/dts/bindings/*/nordic*                   @anangl
+/dts/bindings/*/nxp*                      @MaureenHelm
 /ext/fs/                                  @nashif @ramakrishnapallala
 /ext/hal/cmsis/                           @MaureenHelm @galak
+/ext/hal/libmetal/                        @galak
 /ext/hal/nordic/                          @carlescufi @anangl
 /ext/hal/nxp/                             @MaureenHelm
 /ext/hal/qmsi/                            @nashif
@@ -181,6 +186,7 @@
 /include/kernel_version.h                 @andrewboie @andyross
 /include/led.h                            @Mani-Sadhasivam
 /include/led_strip.h                      @mbolivar
+/include/linker/app_smem*.ld              @andrewboie
 /include/linker/linker-defs.h             @andrewboie @andyross
 /include/linker/linker-tool-gcc.h         @andrewboie @andyross
 /include/linker/linker-tool.h             @andrewboie @andyross
@@ -207,6 +213,7 @@
 /lib/posix/                               @pfalcon
 /kernel/device.c                          @andrewboie @andyross @nashif
 /kernel/idle.c                            @andrewboie @andyross @nashif
+/samples/basic/servo_motor/*microbit*     @jhe
 /samples/bluetooth/                       @sjanc @jhedberg @Vudentz
 /samples/boards/intel_s1000_crb/          @sathishkuttan @rgundi @nashif
 /samples/display/                         @vanwinkeljan
@@ -236,6 +243,7 @@
 /scripts/process_gperf.py                 @andrewboie
 /scripts/sanity_chk/                      @andrewboie @nashif
 /scripts/sanitycheck                      @andrewboie @nashif
+/scripts/series-push-hook.sh              @erwango
 /scripts/west_commands/                   @mbolivar
 /scripts/west-commands.yml                @mbolivar
 /subsys/bluetooth/                        @sjanc @jhedberg @Vudentz

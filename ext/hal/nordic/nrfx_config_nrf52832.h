@@ -1469,41 +1469,25 @@
 #ifdef CONFIG_NRFX_RTC
 #define NRFX_RTC_ENABLED 1
 #endif
+// <q> NRFX_RTC0_ENABLED  - Enable RTC0 instance
+
 
 #ifdef CONFIG_NRFX_RTC0
 #define NRFX_RTC0_ENABLED 1
 #endif
 
-#ifdef CONFIG_NRFX_RTC1
-#define NRFX_RTC1_ENABLED 1
-#endif
-
-#ifdef CONFIG_NRFX_RTC2
-#define NRFX_RTC2_ENABLED 1
-#endif
-
-#ifndef NRFX_RTC_ENABLED
-#define NRFX_RTC_ENABLED 0
-#endif
-// <q> NRFX_RTC0_ENABLED  - Enable RTC0 instance
-
-
-#ifndef NRFX_RTC0_ENABLED
-#define NRFX_RTC0_ENABLED 0
-#endif
-
 // <q> NRFX_RTC1_ENABLED  - Enable RTC1 instance
 
 
-#ifndef NRFX_RTC1_ENABLED
-#define NRFX_RTC1_ENABLED 0
+#ifdef CONFIG_NRFX_RTC1
+#define NRFX_RTC1_ENABLED 1
 #endif
 
 // <q> NRFX_RTC2_ENABLED  - Enable RTC2 instance
 
 
-#ifndef NRFX_RTC2_ENABLED
-#define NRFX_RTC2_ENABLED 0
+#ifdef CONFIG_NRFX_RTC2
+#define NRFX_RTC2_ENABLED 1
 #endif
 
 // <o> NRFX_RTC_MAXIMUM_LATENCY_US - Maximum possible time[us] in highest priority interrupt
@@ -2678,12 +2662,12 @@
 
 // <e> NRFX_UARTE_ENABLED - nrfx_uarte - UARTE peripheral driver
 //==========================================================
-#ifndef NRFX_UARTE_ENABLED
-#define NRFX_UARTE_ENABLED 0
+#ifdef CONFIG_NRFX_UARTE
+#define NRFX_UARTE_ENABLED 1
 #endif
 // <o> NRFX_UARTE0_ENABLED - Enable UARTE0 instance
-#ifndef NRFX_UARTE0_ENABLED
-#define NRFX_UARTE0_ENABLED 0
+#ifdef CONFIG_NRFX_UARTE0
+#define NRFX_UARTE0_ENABLED 1
 #endif
 
 // <o> NRFX_UARTE_DEFAULT_CONFIG_HWFC  - Hardware Flow Control
@@ -2799,11 +2783,11 @@
 
 // <e> NRFX_UART_ENABLED - nrfx_uart - UART peripheral driver
 //==========================================================
-#ifndef NRFX_UART_ENABLED
+#ifdef CONFIG_NRFX_UART
 #define NRFX_UART_ENABLED 0
 #endif
 // <o> NRFX_UART0_ENABLED - Enable UART0 instance
-#ifndef NRFX_UART0_ENABLED
+#ifdef CONFIG_NRFX_UART
 #define NRFX_UART0_ENABLED 0
 #endif
 

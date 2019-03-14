@@ -30,11 +30,7 @@ LOG_MODULE_REGISTER(LOG_DOMAIN);
 #include "ipv4.h"
 #endif
 #if defined(CONFIG_NET_UDP)
-#include <net/udp.h>
 #include "udp_internal.h"
-#endif
-#if defined(CONFIG_NET_TCP)
-#include <net/tcp.h>
 #endif
 
 #include <drivers/modem/modem_receiver.h>
@@ -789,7 +785,7 @@ static void on_cmd_sockread(struct net_buf **buf, u16_t len)
 	i = 0;
 	value_size = sizeof(value);
 	(void)memset(value, 0, value_size);
-	while (*buf && i < value_size) {
+	while (*buf && i < value_size - 1) {
 		value[i++] = net_buf_pull_u8(*buf);
 		len--;
 		if (!(*buf)->len) {
@@ -1182,13 +1178,17 @@ static void wncm14a2a_rx(void)
 						break;
 					}
 
-					/* locate next cr/lf */
-					len = net_buf_findcrlf(rx_buf,
+					/*
+					 * We've handled the current line
+					 * and need to exit the "search for
+					 * handler loop".  Let's skip any
+					 * "extra" data and look for the next
+					 * CR/LF, leaving us ready for the
+					 * next handler search.  Ignore the
+					 * length returned.
+					 */
+					(void)net_buf_findcrlf(rx_buf,
 							       &frag, &offset);
-					if (!frag) {
-						break;
-					}
-
 					break;
 				}
 			}
@@ -1577,9 +1577,13 @@ static int offload_connect(struct net_context *context,
 			   void *user_data)
 {
 	int ret, dst_port = -1;
-	s32_t timeout_sec = timeout / MSEC_PER_SEC;
+	s32_t timeout_sec = -1; /* if not changed, this will be min timeout */
 	char buf[sizeof("AT@SOCKCONN=#,###.###.###.###,#####,#####\r")];
 	struct wncm14a2a_socket *sock;
+
+	if (timeout > 0) {
+		timeout_sec = timeout / MSEC_PER_SEC;
+	}
 
 	if (!context || !addr) {
 		return -EINVAL;
@@ -1624,10 +1628,11 @@ static int offload_connect(struct net_context *context,
 		return -EINVAL;
 	}
 
-	/* minimum timeout in seconds is 30 */
-	if (timeout_sec < 30) {
-		timeout_sec = 30;
-	}
+	/*
+	 * AT@SOCKCONN timeout param has minimum value of 30 seconds and
+	 * maximum value of 360 seconds, otherwise an error is generated
+	 */
+	timeout_sec = MIN(360, MAX(timeout_sec, 30));
 
 	snprintk(buf, sizeof(buf), "AT@SOCKCONN=%d,\"%s\",%d,%d",
 		 sock->socket_id, wncm14a2a_sprint_ip_addr(addr),

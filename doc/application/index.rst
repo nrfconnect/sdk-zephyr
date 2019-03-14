@@ -428,6 +428,8 @@ Run an Application
 
 An application image can be run on a real board or emulated hardware.
 
+.. _application_run_board:
+
 Running on a Board
 ==================
 
@@ -466,6 +468,7 @@ for additional information on how to flash your board.
           consult your board's documentation to see if this is
           necessary.
 
+.. _application_run_qemu:
 
 Running in an Emulator
 ======================
@@ -1469,7 +1472,7 @@ be useful for glue code to have access to Zephyr kernel header files.
 To make it easier to integrate third-party components, the Zephyr
 build system has defined CMake functions that give application build
 scripts access to the zephyr compiler options. The functions are
-documented and defined in :file:`$ZEPHYR_BASE/cmake/extensions.cmake`
+documented and defined in :zephyr_file:`cmake/extensions.cmake`
 and follow the naming convention ``zephyr_get_<type>_<format>``.
 
 The following variables will often need to be exported to the
@@ -1480,7 +1483,7 @@ third-party build system.
 * ``ARCH`` and ``BOARD``, together with several variables that identify the
   Zephyr kernel version.
 
-:file:`samples/application_development/external_lib` is a sample
+:zephyr_file:`samples/application_development/external_lib` is a sample
 project that demonstrates some of these features.
 
 .. _Eclipse IDE for C/C++ Developers: https://www.eclipse.org/downloads/packages/eclipse-ide-cc-developers/oxygen2

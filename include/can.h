@@ -124,6 +124,12 @@ struct can_frame {
 	/** The length of the message */
 	u8_t can_dlc;
 
+	/** @cond INTERNAL_HIDDEN */
+	u8_t pad;   /* padding */
+	u8_t res0;  /* reserved / padding */
+	u8_t res1;  /* reserved / padding */
+	/** @endcond */
+
 	/** The message data */
 	u8_t data[CAN_MAX_DLEN];
 };
@@ -216,18 +222,28 @@ typedef void (*can_tx_callback_t)(u32_t error_flags);
  */
 typedef void (*can_rx_callback_t)(struct zcan_frame *msg);
 
-/**
- * @brief Configure operation of a host controller.
- *
- * @param dev Pointer to the device structure for the driver instance.
- * @param mode Operation mode
- * @param bitrate bus-speed in Baud/s
- *
- * @retval 0 If successful.
- * @retval -EIO General input / output error, failed to configure device.
- */
 typedef int (*can_configure_t)(struct device *dev, enum can_mode mode,
 				u32_t bitrate);
+
+typedef int (*can_send_t)(struct device *dev, const struct zcan_frame *msg,
+			  s32_t timeout, can_tx_callback_t callback_isr);
+
+
+typedef int (*can_attach_msgq_t)(struct device *dev, struct k_msgq *msg_q,
+				 const struct zcan_filter *filter);
+
+typedef int (*can_attach_isr_t)(struct device *dev, can_rx_callback_t isr,
+				const struct zcan_filter *filter);
+
+typedef void (*can_detach_t)(struct device *dev, int filter_id);
+
+struct can_driver_api {
+	can_configure_t configure;
+	can_send_t send;
+	can_attach_isr_t attach_isr;
+	can_attach_msgq_t attach_msgq;
+	can_detach_t detach;
+};
 
 /**
  * @brief Perform data transfer to CAN bus.
@@ -239,84 +255,17 @@ typedef int (*can_configure_t)(struct device *dev, enum can_mode mode,
  * @param msg          Message to transfer.
  * @param timeout      Waiting for empty tx mailbox timeout in ms or K_FOREVER.
  * @param callback_isr Is called when message was sent or a transmission error
- *                     occurred. If null, this function is blocking until
- *                     message is sent.
+ *                     occurred. If NULL, this function is blocking until
+ *                     message is sent. This must be NULL if called from user
+ *                     mode.
  *
  * @retval 0 If successful.
  * @retval CAN_TX_* on failure.
  */
-typedef int (*can_send_t)(struct device *dev, const struct zcan_frame *msg,
-			  s32_t timeout, can_tx_callback_t callback_isr);
-
-
-/**
- * @brief Attach a message queue to a single or group of identifiers.
- *
- * This routine attaches a message queue to identifiers specified by
- * a filter. Whenever the filter matches, the message is pushed to the queue
- * If a message passes more than one filter the priority of the match
- * is hardware dependent.
- * A message queue can be attached to more than one filter.
- * The message queue must me initialized before.
- * *
- * @param dev    Pointer to the device structure for the driver instance.
- * @param msgq   Pointer to the already initialized message queue.
- * @param filter Pointer to a zcan_filter structure defining the id
- *               filtering.
- *
- * @retval filter id on success.
- * @retval CAN_NO_FREE_FILTER if there is no filter left.
- */
-typedef int (*can_attach_msgq_t)(struct device *dev, struct k_msgq *msg_q,
-				 const struct zcan_filter *filter);
-
-/**
- * @brief Attach an isr callback function to a single or group of identifiers.
- *
- * This routine attaches an isr callback to identifiers specified by
- * a filter. Whenever the filter matches, the callback function is called
- * with isr context.
- * If a message passes more than one filter the priority of the match
- * is hardware dependent.
- * A callback function can be attached to more than one filter.
- * *
- * @param dev    Pointer to the device structure for the driver instance.
- * @param isr    Callback function pointer.
- * @param filter Pointer to a zcan_filter structure defining the id
- *               filtering.
- *
- * @retval filter id on success.
- * @retval CAN_NO_FREE_FILTER if there is no filter left.
- */
-typedef int (*can_attach_isr_t)(struct device *dev, can_rx_callback_t isr,
-				const struct zcan_filter *filter);
-
-/**
- * @brief Detach an isr or message queue from the identifier filtering.
- *
- * This routine detaches an isr callback  or message queue from the identifier
- * filtering.
- * *
- * @param dev       Pointer to the device structure for the driver instance.
- * @param filter_id filter id returned by can_attach_isr or can_attach_msgq.
- *
- * @retval none
- */
-typedef void (*can_detach_t)(struct device *dev, int filter_id);
-
-struct can_driver_api {
-	can_configure_t configure;
-	can_send_t send;
-	can_attach_isr_t attach_isr;
-	can_attach_msgq_t attach_msgq;
-	can_detach_t detach;
-};
-
-
 __syscall int can_send(struct device *dev, const struct zcan_frame *msg,
 		       s32_t timeout, can_tx_callback_t callback_isr);
 
-static inline int _impl_can_send(struct device *dev,
+static inline int z_impl_can_send(struct device *dev,
 				 const struct zcan_frame *msg,
 				 s32_t timeout, can_tx_callback_t callback_isr)
 {
@@ -369,11 +318,29 @@ static inline int can_write(struct device *dev, const u8_t *data, u8_t length,
 	return can_send(dev, &msg, timeout, NULL);
 }
 
-
+/**
+ * @brief Attach a message queue to a single or group of identifiers.
+ *
+ * This routine attaches a message queue to identifiers specified by
+ * a filter. Whenever the filter matches, the message is pushed to the queue
+ * If a message passes more than one filter the priority of the match
+ * is hardware dependent.
+ * A message queue can be attached to more than one filter.
+ * The message queue must me initialized before, and the caller must have
+ * appropriate permissions on it.
+ *
+ * @param dev    Pointer to the device structure for the driver instance.
+ * @param msg_q  Pointer to the already initialized message queue.
+ * @param filter Pointer to a zcan_filter structure defining the id
+ *               filtering.
+ *
+ * @retval filter id on success.
+ * @retval CAN_NO_FREE_FILTER if there is no filter left.
+ */
 __syscall int can_attach_msgq(struct device *dev, struct k_msgq *msg_q,
 			      const struct zcan_filter *filter);
 
-static inline int _impl_can_attach_msgq(struct device *dev,
+static inline int z_impl_can_attach_msgq(struct device *dev,
 					struct k_msgq *msg_q,
 					const struct zcan_filter *filter)
 {
@@ -382,10 +349,25 @@ static inline int _impl_can_attach_msgq(struct device *dev,
 	return api->attach_msgq(dev, msg_q, filter);
 }
 
-
-__syscall int can_attach_isr(struct device *dev, can_rx_callback_t isr,
-			     const struct zcan_filter *filter);
-static inline int _impl_can_attach_isr(struct device *dev,
+/**
+ * @brief Attach an isr callback function to a single or group of identifiers.
+ *
+ * This routine attaches an isr callback to identifiers specified by
+ * a filter. Whenever the filter matches, the callback function is called
+ * with isr context.
+ * If a message passes more than one filter the priority of the match
+ * is hardware dependent.
+ * A callback function can be attached to more than one filter.
+ * *
+ * @param dev    Pointer to the device structure for the driver instance.
+ * @param isr    Callback function pointer.
+ * @param filter Pointer to a zcan_filter structure defining the id
+ *               filtering.
+ *
+ * @retval filter id on success.
+ * @retval CAN_NO_FREE_FILTER if there is no filter left.
+ */
+static inline int can_attach_isr(struct device *dev,
 				       can_rx_callback_t isr,
 				       const struct zcan_filter *filter)
 {
@@ -394,21 +376,40 @@ static inline int _impl_can_attach_isr(struct device *dev,
 	return api->attach_isr(dev, isr, filter);
 }
 
-
+/**
+ * @brief Detach an isr or message queue from the identifier filtering.
+ *
+ * This routine detaches an isr callback  or message queue from the identifier
+ * filtering.
+ * *
+ * @param dev       Pointer to the device structure for the driver instance.
+ * @param filter_id filter id returned by can_attach_isr or can_attach_msgq.
+ *
+ * @retval none
+ */
 __syscall void can_detach(struct device *dev, int filter_id);
 
-static inline void _impl_can_detach(struct device *dev, int filter_id)
+static inline void z_impl_can_detach(struct device *dev, int filter_id)
 {
 	const struct can_driver_api *api = dev->driver_api;
 
 	return api->detach(dev, filter_id);
 }
 
-
+/**
+ * @brief Configure operation of a host controller.
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ * @param mode Operation mode
+ * @param bitrate bus-speed in Baud/s
+ *
+ * @retval 0 If successful.
+ * @retval -EIO General input / output error, failed to configure device.
+ */
 __syscall int can_configure(struct device *dev, enum can_mode mode,
 			    u32_t bitrate);
 
-static inline int _impl_can_configure(struct device *dev, enum can_mode mode,
+static inline int z_impl_can_configure(struct device *dev, enum can_mode mode,
 				      u32_t bitrate)
 {
 	const struct can_driver_api *api = dev->driver_api;
@@ -422,7 +423,7 @@ static inline int _impl_can_configure(struct device *dev, enum can_mode mode,
  * @param frame Pointer to can_frame struct.
  * @param zframe Pointer to zcan_frame struct.
  */
-static inline void can_copy_frame_to_zframe(struct can_frame *frame,
+static inline void can_copy_frame_to_zframe(const struct can_frame *frame,
 					    struct zcan_frame *zframe)
 {
 	zframe->id_type = (frame->can_id & BIT(31)) >> 31;
@@ -438,7 +439,7 @@ static inline void can_copy_frame_to_zframe(struct can_frame *frame,
  * @param zframe Pointer to zcan_frame struct.
  * @param frame Pointer to can_frame struct.
  */
-static inline void can_copy_zframe_to_frame(struct zcan_frame *zframe,
+static inline void can_copy_zframe_to_frame(const struct zcan_frame *zframe,
 					    struct can_frame *frame)
 {
 	frame->can_id = (zframe->id_type << 31) | (zframe->rtr << 30) |
@@ -455,7 +456,7 @@ static inline void can_copy_zframe_to_frame(struct zcan_frame *zframe,
  * @param zfilter Pointer to zcan_frame_filter struct.
  */
 static inline
-void can_copy_filter_to_zfilter(struct can_filter *filter,
+void can_copy_filter_to_zfilter(const struct can_filter *filter,
 				struct zcan_filter *zfilter)
 {
 	zfilter->id_type = (filter->can_id & BIT(31)) >> 31;
@@ -473,7 +474,7 @@ void can_copy_filter_to_zfilter(struct can_filter *filter,
  * @param filter Pointer to can_filter struct.
  */
 static inline
-void can_copy_zfilter_to_filter(struct zcan_filter *zfilter,
+void can_copy_zfilter_to_filter(const struct zcan_filter *zfilter,
 				struct can_filter *filter)
 {
 	filter->can_id = (zfilter->id_type << 31) |

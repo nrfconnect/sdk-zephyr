@@ -46,7 +46,7 @@ struct init_stack_frame {
  * needed anymore.
  *
  * The initial context is a basic stack frame that contains arguments for
- * _thread_entry() return address, that points at _thread_entry()
+ * z_thread_entry() return address, that points at z_thread_entry()
  * and status register.
  *
  * <options> is currently unused.
@@ -62,26 +62,34 @@ struct init_stack_frame {
  *
  * @return N/A
  */
-void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
+void z_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 		 size_t stackSize, k_thread_entry_t pEntry,
 		 void *parameter1, void *parameter2, void *parameter3,
 		 int priority, unsigned int options)
 {
 	char *pStackMem = K_THREAD_STACK_BUFFER(stack);
-	_ASSERT_VALID_PRIO(priority, pEntry);
+	Z_ASSERT_VALID_PRIO(priority, pEntry);
 
 	char *stackEnd;
 	char *stackAdjEnd;
 	struct init_stack_frame *pInitCtx;
 
 #if CONFIG_USERSPACE
+
+	size_t stackAdjSize;
+	size_t offset = 0;
+
 /* adjust stack and stack size */
 #if CONFIG_ARC_MPU_VER == 2
-	stackSize = POW2_CEIL(STACK_SIZE_ALIGN(stackSize));
+	stackAdjSize = POW2_CEIL(STACK_SIZE_ALIGN(stackSize));
 #elif CONFIG_ARC_MPU_VER == 3
-	stackSize = ROUND_UP(stackSize, STACK_ALIGN);
+	stackAdjSize = ROUND_UP(stackSize, STACK_ALIGN);
 #endif
-	stackEnd = pStackMem + stackSize;
+	stackEnd = pStackMem + stackAdjSize;
+
+#if CONFIG_STACK_POINTER_RANDOM
+	offset = stackAdjSize - stackSize;
+#endif
 
 	if (options & K_USER) {
 		thread->arch.priv_stack_start =
@@ -92,13 +100,15 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 
 		/* reserve 4 bytes for the start of user sp */
 		stackAdjEnd -= 4;
-		(*(u32_t *)stackAdjEnd) = (u32_t)stackEnd;
+		(*(u32_t *)stackAdjEnd) = STACK_ROUND_DOWN(
+			(u32_t)stackEnd - offset);
 
 #ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
 		/* reserve stack space for the userspace local data struct */
 		thread->userspace_local_data =
 			(struct _thread_userspace_local_data *)
-			STACK_ROUND_DOWN(stackEnd - sizeof(*thread->userspace_local_data));
+			STACK_ROUND_DOWN(stackEnd -
+			sizeof(*thread->userspace_local_data) - offset);
 		/* update the start of user sp */
 		(*(u32_t *)stackAdjEnd) = (u32_t) thread->userspace_local_data;
 #endif
@@ -115,7 +125,7 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	 * ---------------------------------------------
 	 */
 		pStackMem += STACK_GUARD_SIZE;
-		stackSize = stackSize + CONFIG_PRIVILEGED_STACK_SIZE;
+		stackAdjSize = stackAdjSize + CONFIG_PRIVILEGED_STACK_SIZE;
 		stackEnd += CONFIG_PRIVILEGED_STACK_SIZE + STACK_GUARD_SIZE;
 
 		thread->arch.priv_stack_start = 0;
@@ -123,15 +133,15 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 #ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
 		/* reserve stack space for the userspace local data struct */
 		stackAdjEnd = (char *)STACK_ROUND_DOWN(stackEnd
-			- sizeof(*thread->userspace_local_data));
+			- sizeof(*thread->userspace_local_data) - offset);
 		thread->userspace_local_data =
 			(struct _thread_userspace_local_data *)stackAdjEnd;
 #else
-		stackAdjEnd = (char *)STACK_ROUND_DOWN(stackEnd);
+		stackAdjEnd = (char *)STACK_ROUND_DOWN(stackEnd - offset);
 #endif
 	}
 
-	_new_thread_init(thread, pStackMem, stackSize, priority, options);
+	_new_thread_init(thread, pStackMem, stackAdjSize, priority, options);
 
 
 	/* carve the thread entry struct from the "base" of
@@ -171,7 +181,7 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 #endif
 
 #ifdef CONFIG_ARC_HAS_SECURE
-	pInitCtx->sec_stat = _arc_v2_aux_reg_read(_ARC_V2_SEC_STAT);
+	pInitCtx->sec_stat = z_arc_v2_aux_reg_read(_ARC_V2_SEC_STAT);
 #endif
 
 	pInitCtx->r0 = (u32_t)pEntry;
@@ -206,7 +216,7 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 #endif
 #endif
 	/*
-	 * seti instruction in the end of the _Swap() will
+	 * seti instruction in the end of the z_swap() will
 	 * enable the interrupts based on intlock_key
 	 * value.
 	 *
@@ -226,7 +236,7 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 
 #ifdef CONFIG_USERSPACE
 
-FUNC_NORETURN void _arch_user_mode_enter(k_thread_entry_t user_entry,
+FUNC_NORETURN void z_arch_user_mode_enter(k_thread_entry_t user_entry,
 	void *p1, void *p2, void *p3)
 {
 
