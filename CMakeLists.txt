@@ -573,7 +573,7 @@ endif()
 add_subdirectory(boards)
 add_subdirectory(ext)
 add_subdirectory(subsys)
-add_subdirectory(drivers)
+add_subdirectory_ifdef(CONFIG_KERNEL drivers)
 
 # Add all zephyr modules subdirectories.
 if(ZEPHYR_MODULES_NAME)
