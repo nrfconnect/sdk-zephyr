@@ -244,9 +244,6 @@ SECTIONS
  * add_linker_snippet() Cmake function.
  */
 #include <snippets-rodata.ld>
-#ifdef CONFIG_SOC_RODATA_LD
-#include <soc-rodata.ld>
-#endif
 
 #include <linker/priv_stacks-rom.ld>
 #include <linker/kobject-rom.ld>
@@ -425,9 +422,6 @@ SECTIONS
  * add_linker_snippet() Cmake function.
  */
 #include <snippets-noinit.ld>
-#ifdef CONFIG_SOC_NOINIT_LD
-#include <soc-noinit.ld>
-#endif
 
         } GROUP_LINK_IN(RAMABLE_REGION)
 
@@ -442,9 +436,6 @@ SECTIONS
  * add_linker_snippet() Cmake function.
  */
 #include <snippets-rwdata.ld>
-#ifdef CONFIG_SOC_RWDATA_LD
-#include <soc-rwdata.ld>
-#endif
 
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 

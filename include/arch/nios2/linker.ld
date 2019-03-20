@@ -151,9 +151,6 @@ SECTIONS
  * add_linker_snippet() Cmake function.
  */
 #include <snippets-rodata.ld>
-#ifdef CONFIG_SOC_RODATA_LD
-#include <soc-rodata.ld>
-#endif
 
         . = ALIGN(4);
         } GROUP_LINK_IN(ROMABLE_REGION)
@@ -198,9 +195,6 @@ SECTIONS
  * add_linker_snippet() Cmake function.
  */
 #include <snippets-rwdata.ld>
-#ifdef CONFIG_SOC_RWDATA_LD
-#include <soc-rwdata.ld>
-#endif
 
         /* the Nios2 architecture only has 16-bit signed immediate offsets in
          * the instructions, so accessing a general address requires typically
@@ -260,9 +254,6 @@ SECTIONS
         *(.noinit)
         *(".noinit.*")
 
-#ifdef CONFIG_SOC_NOINIT_LD
-#include <soc-noinit.ld>
-#endif
 /* Located in generated directory. This file is populated by the
  * add_linker_snippet() Cmake function.
  */

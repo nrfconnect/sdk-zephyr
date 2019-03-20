@@ -156,9 +156,6 @@ SECTIONS
  * add_linker_snippet() Cmake function.
  */
 #include <snippets-rodata.ld>
-#ifdef CONFIG_SOC_RODATA_LD
-#include <soc-rodata.ld>
-#endif
 
 #include <linker/kobject-rom.ld>
 	} GROUP_LINK_IN(ROMABLE_REGION)
@@ -268,9 +265,6 @@ SECTIONS
  * add_linker_snippet() Cmake function.
  */
 #include <snippets-noinit.ld>
-#ifdef CONFIG_SOC_NOINIT_LD
-#include <soc-noinit.ld>
-#endif
 
 	MMU_PAGE_ALIGN
 
@@ -308,9 +302,6 @@ SECTIONS
  * add_linker_snippet() Cmake function.
  */
 #include <snippets-rwdata.ld>
-#ifdef CONFIG_SOC_RWDATA_LD
-#include <soc-rwdata.ld>
-#endif
 
 #ifdef CONFIG_X86_KPTI
 	MMU_PAGE_ALIGN
