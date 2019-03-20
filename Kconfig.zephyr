@@ -50,6 +50,10 @@ menu "Build and Link Features"
 
 menu "Linker Options"
 
+config KERNEL
+	bool "Include Zephyr kernel"
+	default y
+
 choice
 	prompt "Linker Orphan Section Handling"
 	default LINKER_ORPHAN_SECTION_WARN
