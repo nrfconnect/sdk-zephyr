@@ -16,3 +16,10 @@ zephyr_code_relocate(src/test_file3.c SRAM_DATA)
 zephyr_code_relocate(src/test_file3.c SRAM2_BSS)
 
 zephyr_code_relocate(../../../kernel/sem.c SRAM)
+
+add_linker_snippet(SECTIONS
+  "SECTION_DATA_PROLOGUE(_CUSTOM_SECTION_NAME2,,)
+  {
+          KEEP(*(\".custom_section.*\"));
+  } GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)"
+)

@@ -160,11 +160,6 @@ SECTIONS
 #include <soc-rodata.ld>
 #endif
 
-#ifdef CONFIG_CUSTOM_RODATA_LD
-/* Located in project source directory */
-#include <custom-rodata.ld>
-#endif
-
 #include <linker/kobject-rom.ld>
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
@@ -317,11 +312,6 @@ SECTIONS
 #include <soc-rwdata.ld>
 #endif
 
-#ifdef CONFIG_CUSTOM_RWDATA_LD
-/* Located in project source directory */
-#include <custom-rwdata.ld>
-#endif
-
 #ifdef CONFIG_X86_KPTI
 	MMU_PAGE_ALIGN
 	z_shared_kernel_page_start = .;
@@ -457,12 +447,6 @@ SECTIONS
 	}
 #endif
 
-
-
-#ifdef CONFIG_CUSTOM_SECTIONS_LD
-/* Located in project source directory */
-#include <custom-sections.ld>
-#endif
 /* Located in generated directory. This file is populated by the
  * add_linker_snippet() Cmake function.
  */

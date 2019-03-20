@@ -143,24 +143,6 @@ config CUSTOM_LINKER_SCRIPT
 	  linker script and avoid having to change the script provided by
 	  Zephyr.
 
-config CUSTOM_RODATA_LD
-	bool "Include custom-rodata.ld"
-	help
-	  Include a customized linker script fragment for inserting additional
-	  data and linker directives into the rodata section.
-
-config CUSTOM_RWDATA_LD
-	bool "Include custom-rwdata.ld"
-	help
-	  Include a customized linker script fragment for inserting additional
-	  data and linker directives into the data section.
-
-config CUSTOM_SECTIONS_LD
-	bool "Include custom-sections.ld"
-	help
-	  Include a customized linker script fragment for inserting additional
-	  arbitrary sections.
-
 config LINK_WHOLE_ARCHIVE
 	bool "Allow linking with --whole-archive"
 	help

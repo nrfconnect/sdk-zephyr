@@ -204,10 +204,6 @@ SECTIONS
 
      GROUP_END(RAM)
 
-#ifdef CONFIG_CUSTOM_SECTIONS_LD
-/* Located in project source directory */
-#include <custom-sections.ld>
-#endif
 /* Located in generated directory. This file is populated by the
  * add_linker_snippet() Cmake function.
  */

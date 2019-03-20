@@ -439,13 +439,6 @@ if(NOT EXISTS ${LINKER_SCRIPT})
   message(FATAL_ERROR "Could not find linker script: '${LINKER_SCRIPT}'. Corrupted configuration?")
 endif()
 
-# Custom section support in linker scripts requires that the application source
-# directory is in the preprocessor search path, in order to find the custom
-# linker script fragments.
-if(CONFIG_CUSTOM_RODATA_LD OR CONFIG_CUSTOM_RWDATA_LD OR CONFIG_CUSTOM_SECTIONS_LD)
-  zephyr_include_directories(${APPLICATION_SOURCE_DIR})
-endif()
-
 configure_file(version.h.in ${PROJECT_BINARY_DIR}/include/generated/version.h)
 
 function(construct_add_custom_command_for_linker_pass linker_output_name output_variable)

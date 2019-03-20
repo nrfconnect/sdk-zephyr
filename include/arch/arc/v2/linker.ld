@@ -122,11 +122,6 @@ SECTIONS {
 #include <soc-rodata.ld>
 #endif
 
-#ifdef CONFIG_CUSTOM_RODATA_LD
-/* Located in project source directory */
-#include <custom-rodata.ld>
-#endif
-
 #include <linker/kobject-rom.ld>
 
 	} GROUP_LINK_IN(ROMABLE_REGION)
@@ -215,11 +210,6 @@ SECTIONS {
 #include <soc-rwdata.ld>
 #endif
 
-#ifdef CONFIG_CUSTOM_RWDATA_LD
-/* Located in project source directory */
-#include <custom-rwdata.ld>
-#endif
-
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 
 	__data_rom_start = LOADADDR(_DATA_SECTION_NAME);
@@ -240,10 +230,6 @@ SECTIONS {
 
 	GROUP_END(RAMABLE_REGION)
 
-#ifdef CONFIG_CUSTOM_SECTIONS_LD
-/* Located in project source directory */
-#include <custom-sections.ld>
-#endif
 /* Located in generated directory. This file is populated by the
  * add_linker_snippet() Cmake function.
  */
