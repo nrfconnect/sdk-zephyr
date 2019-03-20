@@ -226,10 +226,6 @@ SECTIONS {
  */
 #include <snippets-sections.ld>
 
-#ifdef CONFIG_GEN_ISR_TABLES
-#include <linker/intlist.ld>
-#endif
-
 #include <linker/debug-sections.ld>
 
 
