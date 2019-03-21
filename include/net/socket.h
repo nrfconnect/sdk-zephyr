@@ -409,6 +409,24 @@ struct ifreq {
     char ifr_name[IFNAMSIZ]; /* Interface name */
 };
 
+/* Protocol level for PDN. */
+#define SOL_PDN 514
+
+/* Socket options for SOL_PDN level */
+#define SO_PDN_AF 1
+
+/* Protocol level for DFU. */
+#define SOL_DFU 515
+
+/* Socket options for SOL_DFU level */
+#define SO_DFU_FW_VERSION 1
+#define SO_DFU_RESOURCE 2
+#define SO_DFU_TIMEO 3
+#define SO_DFU_APPLY 4
+#define SO_DFU_REVERT 5
+#define SO_DFU_BACKUP_DELETE 6
+#define SO_DFU_OFFSET 7
+
 #ifdef __cplusplus
 }
 #endif

@@ -44,7 +44,8 @@ extern "C" {
 #define PF_INET6        2          /**< IP protocol family version 6. */
 #define PF_PACKET       3          /**< Packet family.                */
 #define PF_CAN          4          /**< Controller Area Network.      */
-#define PF_LTE		102
+#define PF_LTE          102        /**< Specific to LTE.              */
+#define PF_LOCAL        103        /**< Local to host.                */
 
 /* Address families. */
 #define AF_UNSPEC       PF_UNSPEC  /**< Unspecified address family.   */
@@ -52,7 +53,8 @@ extern "C" {
 #define AF_INET6        PF_INET6   /**< IP protocol family version 6. */
 #define AF_PACKET       PF_PACKET  /**< Packet family.                */
 #define AF_CAN          PF_CAN     /**< Controller Area Network.      */
-#define AF_LTE		PF_LTE
+#define AF_LTE          PF_LTE     /**< Specific to LTE.              */
+#define AF_LOCAL        PF_LOCAL   /**< Local to host.                */
 
 /** Protocol numbers from IANA/BSD */
 enum net_ip_protocol {
@@ -76,13 +78,20 @@ enum net_ip_protocol_secure {
 /* Protocol numbers for LTE protocols */
 enum net_lte_protocol {
 	NPROTO_AT = 513,
+	NPROTO_PDN = 514
+};
+
+/* Protocol numbers for LOCAL protocols */
+enum net_local_protocol {
+	NPROTO_DFU = 515
 };
 
 /** Socket type */
 enum net_sock_type {
-	SOCK_STREAM = 1,           /**< Stream socket type   */
-	SOCK_DGRAM,                /**< Datagram socket type */
-	SOCK_RAW                   /**< RAW socket type      */
+	SOCK_STREAM = 1,           /**< Stream socket type     */
+	SOCK_DGRAM,                /**< Datagram socket type   */
+	SOCK_RAW,                  /**< RAW socket type        */
+	SOCK_MGMT                  /**< Management socket type */
 };
 
 /** @brief Convert 16-bit value from network to host byte order.
