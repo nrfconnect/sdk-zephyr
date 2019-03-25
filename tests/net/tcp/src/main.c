@@ -145,7 +145,7 @@ struct net_tcp_hdr *net_tcp_get_hdr(struct net_pkt *pkt,
 		goto out;
 	}
 
-	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, &tcp_access);
+	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data(pkt, &tcp_access);
 
 out:
 	net_pkt_cursor_restore(pkt, &backup);
@@ -174,7 +174,7 @@ struct net_tcp_hdr *net_tcp_set_hdr(struct net_pkt *pkt,
 		goto out;
 	}
 
-	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, &tcp_access);
+	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data(pkt, &tcp_access);
 	if (!tcp_hdr) {
 		goto out;
 	}
@@ -353,13 +353,13 @@ static struct net_pkt *setup_ipv6_tcp(struct net_if *iface,
 		return NULL;
 	}
 
-	net_ipv6_create_new(pkt, remote_addr, local_addr);
+	net_ipv6_create(pkt, remote_addr, local_addr);
 
 	tcp_hdr.src_port = htons(remote_port);
 	tcp_hdr.dst_port = htons(local_port);
 
-	net_pkt_write_new(pkt, &tcp_hdr, sizeof(struct net_tcp_hdr));
-	net_pkt_write_new(pkt, data, sizeof(data));
+	net_pkt_write(pkt, &tcp_hdr, sizeof(struct net_tcp_hdr));
+	net_pkt_write(pkt, data, sizeof(data));
 
 	net_pkt_cursor_init(pkt);
 	net_ipv6_finalize(pkt, IPPROTO_TCP);
@@ -382,13 +382,13 @@ static struct net_pkt *setup_ipv4_tcp(struct net_if *iface,
 		return NULL;
 	}
 
-	net_ipv4_create_new(pkt, remote_addr, local_addr);
+	net_ipv4_create(pkt, remote_addr, local_addr);
 
 	tcp_hdr.src_port = htons(remote_port);
 	tcp_hdr.dst_port = htons(local_port);
 
-	net_pkt_write_new(pkt, &tcp_hdr, sizeof(struct net_tcp_hdr));
-	net_pkt_write_new(pkt, data, sizeof(data));
+	net_pkt_write(pkt, &tcp_hdr, sizeof(struct net_tcp_hdr));
+	net_pkt_write(pkt, data, sizeof(data));
 
 	net_pkt_cursor_init(pkt);
 	net_ipv4_finalize(pkt, IPPROTO_TCP);
@@ -440,18 +440,18 @@ static struct net_pkt *setup_ipv6_tcp_long(struct net_if *iface,
 	}
 
 	net_pkt_set_ipv6_hop_limit(pkt, 255);
-	net_ipv6_create_new(pkt, remote_addr, local_addr);
+	net_ipv6_create(pkt, remote_addr, local_addr);
 
-	net_pkt_write_new(pkt, ipv6_hop_by_hop_ext_hdr,
-			  sizeof(ipv6_hop_by_hop_ext_hdr));
+	net_pkt_write(pkt, ipv6_hop_by_hop_ext_hdr,
+		      sizeof(ipv6_hop_by_hop_ext_hdr));
 
 	net_pkt_set_ipv6_ext_len(pkt, sizeof(ipv6_hop_by_hop_ext_hdr));
 
 	tcp_hdr.src_port = htons(remote_port);
 	tcp_hdr.dst_port = htons(local_port);
 
-	net_pkt_write_new(pkt, &tcp_hdr, sizeof(struct net_tcp_hdr));
-	net_pkt_write_new(pkt, data, sizeof(data));
+	net_pkt_write(pkt, &tcp_hdr, sizeof(struct net_tcp_hdr));
+	net_pkt_write(pkt, data, sizeof(data));
 
 	net_pkt_set_ipv6_next_hdr(pkt, 0); /* hop-by-hop option */
 

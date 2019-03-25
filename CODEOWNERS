@@ -9,6 +9,8 @@
 /.known-issues/                           @inakypg @nashif
 /arch/arc/                                @vonhust @ruuddw
 /arch/arm/                                @MaureenHelm @galak
+/arch/arm/core/cortex_m/cmse/             @ioannisg
+/arch/arm/include/cortex_m/cmse/          @ioannisg
 /soc/arm/                                 @MaureenHelm @galak
 /soc/arm/arm/mps2/                        @fvincenzo
 /soc/arm/atmel_sam/sam4s/                 @fallrisk
@@ -228,6 +230,7 @@
 /samples/net/sockets/                     @jukkar @tbursztyka @pfalcon
 /samples/sensor/                          @bogdan-davidoaia
 /samples/subsys/usb/                      @jfischer-phytec-iot @finikorg
+/samples/subsys/power/                    @ramakrishnapallala @pizi-nordic
 /scripts/coccicheck                       @himanshujha199640 @JuliaLawall
 /scripts/coccinelle/                      @himanshujha199640 @JuliaLawall
 /scripts/elf_helper.py                    @andrewboie
@@ -261,6 +264,7 @@
 /subsys/net/lib/mqtt/                     @jukkar @tbursztyka
 /subsys/net/lib/coap/                     @rveerama1
 /subsys/net/lib/sockets/                  @jukkar @tbursztyka @pfalcon
+/subsys/power/                            @ramakrishnapallala @pizi-nordic
 /subsys/settings/                         @nvlsianpu
 /subsys/shell/                            @jarz-nordic @nordic-krch
 /subsys/storage/                          @nvlsianpu

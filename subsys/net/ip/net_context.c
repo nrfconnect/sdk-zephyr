@@ -382,11 +382,15 @@ int net_context_put(struct net_context *context)
 	context->recv_cb = NULL;
 	context->send_cb = NULL;
 
-	if (net_tcp_put(context) >= 0) {
-		goto unlock;
-	}
-
+	/* Decrement refcount on user app's behalf */
 	net_context_unref(context);
+
+	/* net_tcp_put() will handle decrementing refcount on stack's behalf */
+	net_tcp_put(context);
+	/* Assume it's better to have goto to immediate label than ugly
+	 * not indented #ifdef (if only they were intended!).
+	 */
+	goto unlock;
 
 unlock:
 	k_mutex_unlock(&context->lock);
@@ -824,35 +828,6 @@ int net_context_listen(struct net_context *context, int backlog)
 }
 
 #if defined(CONFIG_NET_IPV4)
-struct net_pkt *net_context_create_ipv4(struct net_context *context,
-					struct net_pkt *pkt,
-					const struct in_addr *src,
-					const struct in_addr *dst)
-{
-	NET_ASSERT(((struct sockaddr_in_ptr *)&context->local)->sin_addr);
-
-	if (!src) {
-		src = ((struct sockaddr_in_ptr *)&context->local)->sin_addr;
-	}
-
-	if (net_ipv4_is_addr_unspecified(src)
-	    || net_ipv4_is_addr_mcast(src)) {
-		src = net_if_ipv4_select_src_addr(net_pkt_iface(pkt),
-						  (struct in_addr *)dst);
-		/* If src address is still unspecified, do not create pkt */
-		if (net_ipv4_is_addr_unspecified(src)) {
-			NET_DBG("DROP: src addr is unspecified");
-			return NULL;
-		}
-	}
-
-	return net_ipv4_create(pkt,
-			       src,
-			       dst,
-			       net_context_get_iface(context),
-			       net_context_get_ip_proto(context));
-}
-
 int net_context_create_ipv4_new(struct net_context *context,
 				struct net_pkt *pkt,
 				const struct in_addr *src,
@@ -877,35 +852,11 @@ int net_context_create_ipv4_new(struct net_context *context,
 
 	net_pkt_set_ipv4_ttl(pkt, net_context_get_ipv4_ttl(context));
 
-	return net_ipv4_create_new(pkt, src, dst);
+	return net_ipv4_create(pkt, src, dst);
 }
 #endif /* CONFIG_NET_IPV4 */
 
 #if defined(CONFIG_NET_IPV6)
-struct net_pkt *net_context_create_ipv6(struct net_context *context,
-					struct net_pkt *pkt,
-					const struct in6_addr *src,
-					const struct in6_addr *dst)
-{
-	NET_ASSERT(((struct sockaddr_in6_ptr *)&context->local)->sin6_addr);
-
-	if (!src) {
-		src = ((struct sockaddr_in6_ptr *)&context->local)->sin6_addr;
-	}
-
-	if (net_ipv6_is_addr_unspecified(src)
-	    || net_ipv6_is_addr_mcast(src)) {
-		src = net_if_ipv6_select_src_addr(net_pkt_iface(pkt),
-						  (struct in6_addr *)dst);
-	}
-
-	return net_ipv6_create(pkt,
-			       src,
-			       dst,
-			       net_context_get_iface(context),
-			       net_context_get_ip_proto(context));
-}
-
 int net_context_create_ipv6_new(struct net_context *context,
 				struct net_pkt *pkt,
 				const struct in6_addr *src,
@@ -926,7 +877,7 @@ int net_context_create_ipv6_new(struct net_context *context,
 	net_pkt_set_ipv6_hop_limit(pkt,
 				   net_context_get_ipv6_hop_limit(context));
 
-	return net_ipv6_create_new(pkt, src, dst);
+	return net_ipv6_create(pkt, src, dst);
 }
 #endif /* CONFIG_NET_IPV6 */
 
@@ -968,20 +919,6 @@ int net_context_connect(struct net_context *context,
 	    addr->sa_family == AF_PACKET) {
 		return -EOPNOTSUPP;
 	}
-
-#if defined(CONFIG_NET_OFFLOAD)
-	if (net_if_is_ip_offloaded(net_context_get_iface(context))) {
-		ret = net_offload_connect(
-			net_context_get_iface(context),
-			context,
-			addr,
-			addrlen,
-			cb,
-			timeout,
-			user_data);
-		goto unlock;
-	}
-#endif /* CONFIG_NET_OFFLOAD */
 
 	if (net_context_get_state(context) == NET_CONTEXT_LISTENING) {
 		ret = -EOPNOTSUPP;
@@ -1095,6 +1032,20 @@ int net_context_connect(struct net_context *context,
 		goto unlock;
 	}
 
+#if defined(CONFIG_NET_OFFLOAD)
+	if (net_if_is_ip_offloaded(net_context_get_iface(context))) {
+		ret = net_offload_connect(
+			net_context_get_iface(context),
+			context,
+			addr,
+			addrlen,
+			cb,
+			timeout,
+			user_data);
+		goto unlock;
+	}
+#endif /* CONFIG_NET_OFFLOAD */
+
 	switch (net_context_get_type(context)) {
 #if defined(CONFIG_NET_UDP)
 	case SOCK_DGRAM:
@@ -1170,296 +1121,6 @@ unlock:
 	return ret;
 }
 
-#if defined(CONFIG_NET_UDP)
-static int create_udp_packet(struct net_context *context,
-			     struct net_pkt *pkt,
-			     const struct sockaddr *dst_addr,
-			     struct net_pkt **out_pkt)
-{
-	int r = 0;
-	struct net_pkt *tmp;
-
-#if defined(CONFIG_NET_IPV6)
-	if (net_pkt_family(pkt) == AF_INET6) {
-		struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)dst_addr;
-
-		if (!net_context_create_ipv6(context, pkt,
-					     NULL, &addr6->sin6_addr)) {
-			return -ENOMEM;
-		}
-
-		tmp = net_udp_insert(pkt,
-				     net_pkt_ip_hdr_len(pkt) +
-				     net_pkt_ipv6_ext_len(pkt),
-				     net_sin((struct sockaddr *)
-					     &context->local)->sin_port,
-				     addr6->sin6_port);
-		if (!tmp) {
-			return -ENOMEM;
-		}
-
-		pkt = tmp;
-
-		net_pkt_compact(pkt);
-		net_pkt_cursor_init(pkt);
-
-		r = net_ipv6_finalize(pkt, net_context_get_ip_proto(context));
-	} else
-#endif /* CONFIG_NET_IPV6 */
-
-#if defined(CONFIG_NET_IPV4)
-	if (net_pkt_family(pkt) == AF_INET) {
-		struct sockaddr_in *addr4 = (struct sockaddr_in *)dst_addr;
-
-		if (!net_context_create_ipv4(context, pkt,
-					     NULL, &addr4->sin_addr)) {
-			return -ENOMEM;
-		}
-
-		tmp = net_udp_insert(pkt, net_pkt_ip_hdr_len(pkt),
-				     net_sin((struct sockaddr *)
-					     &context->local)->sin_port,
-				     addr4->sin_port);
-		if (!tmp) {
-			return -ENOMEM;
-		}
-
-		pkt = tmp;
-
-		net_pkt_compact(pkt);
-		net_pkt_cursor_init(pkt);
-
-		r = net_ipv4_finalize(pkt, net_context_get_ip_proto(context));
-	} else
-#endif /* CONFIG_NET_IPV4 */
-	{
-		return -EPROTONOSUPPORT;
-	}
-
-	*out_pkt = pkt;
-
-	return r;
-}
-#endif /* CONFIG_NET_UDP */
-
-static int sendto(struct net_pkt *pkt,
-		  const struct sockaddr *dst_addr,
-		  socklen_t addrlen,
-		  net_context_send_cb_t cb,
-		  s32_t timeout,
-		  void *token,
-		  void *user_data)
-{
-	struct net_context *context = net_pkt_context(pkt);
-	int ret = 0;
-
-	if (!net_context_is_used(context)) {
-		return -EBADF;
-	}
-
-	if (!dst_addr &&
-	    !(IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
-	      net_context_get_ip_proto(context) == CAN_RAW)) {
-		return -EDESTADDRREQ;
-	}
-
-#if defined(CONFIG_NET_IPV6)
-	if (net_pkt_family(pkt) == AF_INET6) {
-		struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)dst_addr;
-
-		if (addrlen < sizeof(struct sockaddr_in6)) {
-			return -EINVAL;
-		}
-
-		if (net_ipv6_is_addr_unspecified(&addr6->sin6_addr)) {
-			return -EDESTADDRREQ;
-		}
-	} else
-#endif /* CONFIG_NET_IPV6 */
-
-#if defined(CONFIG_NET_IPV4)
-	if (net_pkt_family(pkt) == AF_INET) {
-		struct sockaddr_in *addr4 = (struct sockaddr_in *)dst_addr;
-
-		if (addrlen < sizeof(struct sockaddr_in)) {
-			return -EINVAL;
-		}
-
-		if (!addr4->sin_addr.s_addr) {
-			return -EDESTADDRREQ;
-		}
-	} else
-#endif /* CONFIG_NET_IPV4 */
-
-	if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
-	    net_pkt_family(pkt) == AF_CAN) {
-		;
-	} else {
-		NET_DBG("Invalid protocol family %d", net_pkt_family(pkt));
-		return -EINVAL;
-	}
-
-#if defined(CONFIG_NET_OFFLOAD)
-	if (net_if_is_ip_offloaded(net_pkt_iface(pkt))) {
-		return net_offload_sendto(
-			net_pkt_iface(pkt),
-			pkt, dst_addr, addrlen,
-			cb, timeout, token, user_data);
-	}
-#endif /* CONFIG_NET_OFFLOAD */
-
-	switch (net_context_get_ip_proto(context)) {
-	case IPPROTO_UDP:
-#if defined(CONFIG_NET_UDP)
-		/* Bind default address and port only if UDP */
-		ret = bind_default(context);
-		if (ret) {
-			return ret;
-		}
-
-		ret = create_udp_packet(context, pkt, dst_addr, &pkt);
-#endif /* CONFIG_NET_UDP */
-		break;
-
-	case IPPROTO_TCP:
-		ret = net_tcp_queue_data(context, pkt);
-		break;
-
-	default:
-		if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
-		    net_context_get_family(context) == AF_CAN &&
-		    net_context_get_ip_proto(context) == CAN_RAW) {
-			break;
-		}
-
-		ret = -EPROTONOSUPPORT;
-	}
-
-	if (ret < 0) {
-		if (ret == -EPROTONOSUPPORT) {
-			NET_DBG("Unknown protocol while sending packet: %d",
-				net_context_get_ip_proto(context));
-		} else {
-			NET_DBG("Could not create network packet to send (%d)",
-				ret);
-		}
-
-		return ret;
-	}
-
-	context->send_cb = cb;
-	context->user_data = user_data;
-	net_pkt_set_token(pkt, token);
-
-	switch (net_context_get_ip_proto(context)) {
-	case IPPROTO_UDP:
-		return net_send_data(pkt);
-
-	case IPPROTO_TCP:
-		return net_tcp_send_data(context, cb, token, user_data);
-
-#if defined(CONFIG_NET_SOCKETS_CAN)
-	case CAN_RAW:
-		return net_send_data(pkt);
-#endif
-
-	default:
-		return -EPROTONOSUPPORT;
-	}
-}
-
-int net_context_send(struct net_pkt *pkt,
-		     net_context_send_cb_t cb,
-		     s32_t timeout,
-		     void *token,
-		     void *user_data)
-{
-	struct net_context *context = net_pkt_context(pkt);
-	socklen_t addrlen;
-	int ret = 0;
-
-	NET_ASSERT(PART_OF_ARRAY(contexts, context));
-
-	k_mutex_lock(&context->lock, K_FOREVER);
-
-	if (IS_ENABLED(CONFIG_NET_SOCKETS_PACKET) &&
-	    net_context_get_family(context) == AF_PACKET) {
-		/* Only sendto is supported for AF_PACKET */
-		ret = -EOPNOTSUPP;
-		goto unlock;
-	}
-
-#if defined(CONFIG_NET_OFFLOAD)
-	if (net_if_is_ip_offloaded(net_pkt_iface(pkt))) {
-		ret = net_offload_send(
-			net_pkt_iface(pkt),
-			pkt, cb, timeout,
-			token, user_data);
-		goto unlock;
-	}
-#endif /* CONFIG_NET_OFFLOAD */
-
-	if (!(context->flags & NET_CONTEXT_REMOTE_ADDR_SET) ||
-	    !net_sin(&context->remote)->sin_port) {
-		if (!(IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
-		      net_context_get_ip_proto(context) == CAN_RAW &&
-		      net_context_get_family(context) == AF_CAN)) {
-			ret = -EDESTADDRREQ;
-			goto unlock;
-		}
-	}
-
-#if defined(CONFIG_NET_IPV6)
-	if (net_pkt_family(pkt) == AF_INET6) {
-		addrlen = sizeof(struct sockaddr_in6);
-	} else
-#endif /* CONFIG_NET_IPV6 */
-
-#if defined(CONFIG_NET_IPV4)
-	if (net_pkt_family(pkt) == AF_INET) {
-		addrlen = sizeof(struct sockaddr_in);
-	} else
-#endif /* CONFIG_NET_IPV4 */
-	{
-		addrlen = 0;
-	}
-
-	ret = sendto(pkt, &context->remote, addrlen, cb, timeout, token,
-		     user_data);
-
-unlock:
-	k_mutex_unlock(&context->lock);
-
-	return ret;
-}
-
-int net_context_sendto(struct net_pkt *pkt,
-		       const struct sockaddr *dst_addr,
-		       socklen_t addrlen,
-		       net_context_send_cb_t cb,
-		       s32_t timeout,
-		       void *token,
-		       void *user_data)
-{
-	struct net_context *context = net_pkt_context(pkt);
-	int ret;
-
-	NET_ASSERT(PART_OF_ARRAY(contexts, context));
-
-	k_mutex_lock(&context->lock, K_FOREVER);
-
-	if (net_context_get_ip_proto(context) == IPPROTO_TCP) {
-		/* Match POSIX behavior and ignore dst_address and addrlen */
-		ret = net_context_send(pkt, cb, timeout, token, user_data);
-	} else {
-		ret = sendto(pkt, dst_addr, addrlen, cb, timeout, token,
-			     user_data);
-	}
-
-	k_mutex_unlock(&context->lock);
-
-	return ret;
-}
 
 static int get_context_priority(struct net_context *context,
 				void *value, size_t *len)
@@ -1538,7 +1199,7 @@ static int context_setup_udp_packet(struct net_context *context,
 		return ret;
 	}
 
-	ret = net_pkt_write_new(pkt, buf, len);
+	ret = net_pkt_write(pkt, buf, len);
 	if (ret) {
 		return ret;
 	}
@@ -1594,22 +1255,23 @@ static struct net_pkt *context_alloc_pkt(struct net_context *context,
 					net_context_get_family(context),
 					net_context_get_ip_proto(context),
 					timeout);
-
-	net_pkt_set_context(pkt, context);
+	if (pkt) {
+		net_pkt_set_context(pkt, context);
+	}
 
 	return pkt;
 }
 
 
-static int context_sendto_new(struct net_context *context,
-			      const void *buf,
-			      size_t len,
-			      const struct sockaddr *dst_addr,
-			      socklen_t addrlen,
-			      net_context_send_cb_t cb,
-			      s32_t timeout,
-			      void *token,
-			      void *user_data)
+static int context_sendto(struct net_context *context,
+			  const void *buf,
+			  size_t len,
+			  const struct sockaddr *dst_addr,
+			  socklen_t addrlen,
+			  net_context_send_cb_t cb,
+			  s32_t timeout,
+			  void *user_data,
+			  bool sendto)
 {
 	struct net_pkt *pkt;
 	size_t tmp_len;
@@ -1712,7 +1374,6 @@ static int context_sendto_new(struct net_context *context,
 
 	context->send_cb = cb;
 	context->user_data = user_data;
-	net_pkt_set_token(pkt, token);
 
 	if (IS_ENABLED(CONFIG_NET_CONTEXT_PRIORITY)) {
 		u8_t priority;
@@ -1734,7 +1395,24 @@ static int context_sendto_new(struct net_context *context,
 		}
 	}
 
-	if (IS_ENABLED(CONFIG_NET_UDP) &&
+	if (IS_ENABLED(CONFIG_NET_OFFLOAD) &&
+	    net_if_is_ip_offloaded(net_context_get_iface(context))) {
+		ret = net_pkt_write(pkt, buf, len);
+		if (ret < 0) {
+			goto fail;
+		}
+
+		net_pkt_cursor_init(pkt);
+
+		if (sendto) {
+			ret = net_offload_sendto(net_context_get_iface(context),
+						 pkt, dst_addr, addrlen, cb,
+						 timeout, user_data);
+		} else {
+			ret = net_offload_send(net_context_get_iface(context),
+					       pkt, cb, timeout, user_data);
+		}
+	} else if (IS_ENABLED(CONFIG_NET_UDP) &&
 	    net_context_get_ip_proto(context) == IPPROTO_UDP) {
 		ret = context_setup_udp_packet(context, pkt, buf, len,
 					       dst_addr, addrlen);
@@ -1747,7 +1425,7 @@ static int context_sendto_new(struct net_context *context,
 		ret = net_send_data(pkt);
 	} else if (IS_ENABLED(CONFIG_NET_TCP) &&
 		   net_context_get_ip_proto(context) == IPPROTO_TCP) {
-		ret = net_pkt_write_new(pkt, buf, len);
+		ret = net_pkt_write(pkt, buf, len);
 		if (ret < 0) {
 			goto fail;
 		}
@@ -1758,10 +1436,10 @@ static int context_sendto_new(struct net_context *context,
 			goto fail;
 		}
 
-		ret = net_tcp_send_data(context, cb, token, user_data);
+		ret = net_tcp_send_data(context, cb, user_data);
 	} else if (IS_ENABLED(CONFIG_NET_SOCKETS_PACKET) &&
 		   net_context_get_family(context) == AF_PACKET) {
-		ret = net_pkt_write_new(pkt, buf, len);
+		ret = net_pkt_write(pkt, buf, len);
 		if (ret < 0) {
 			goto fail;
 		}
@@ -1772,7 +1450,7 @@ static int context_sendto_new(struct net_context *context,
 	} else if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
 		   net_context_get_family(context) == AF_CAN &&
 		   net_context_get_ip_proto(context) == CAN_RAW) {
-		ret = net_pkt_write_new(pkt, buf, len);
+		ret = net_pkt_write(pkt, buf, len);
 		if (ret < 0) {
 			goto fail;
 		}
@@ -1797,13 +1475,12 @@ fail:
 	return ret;
 }
 
-int net_context_send_new(struct net_context *context,
-			 const void *buf,
-			 size_t len,
-			 net_context_send_cb_t cb,
-			 s32_t timeout,
-			 void *token,
-			 void *user_data)
+int net_context_send(struct net_context *context,
+		     const void *buf,
+		     size_t len,
+		     net_context_send_cb_t cb,
+		     s32_t timeout,
+		     void *user_data)
 {
 	socklen_t addrlen;
 	int ret = 0;
@@ -1833,8 +1510,8 @@ int net_context_send_new(struct net_context *context,
 		addrlen = 0;
 	}
 
-	ret = context_sendto_new(context, buf, len, &context->remote,
-				 addrlen, cb, timeout, token, user_data);
+	ret = context_sendto(context, buf, len, &context->remote,
+			     addrlen, cb, timeout, user_data, false);
 unlock:
 	k_mutex_unlock(&context->lock);
 
@@ -1842,22 +1519,21 @@ unlock:
 }
 
 
-int net_context_sendto_new(struct net_context *context,
-			   const void *buf,
-			   size_t len,
-			   const struct sockaddr *dst_addr,
-			   socklen_t addrlen,
-			   net_context_send_cb_t cb,
-			   s32_t timeout,
-			   void *token,
-			   void *user_data)
+int net_context_sendto(struct net_context *context,
+		       const void *buf,
+		       size_t len,
+		       const struct sockaddr *dst_addr,
+		       socklen_t addrlen,
+		       net_context_send_cb_t cb,
+		       s32_t timeout,
+		       void *user_data)
 {
 	int ret;
 
 	k_mutex_lock(&context->lock, K_FOREVER);
 
-	ret = context_sendto_new(context, buf, len, dst_addr, addrlen,
-				 cb, timeout, token, user_data);
+	ret = context_sendto(context, buf, len, dst_addr, addrlen,
+			     cb, timeout, user_data, true);
 
 	k_mutex_unlock(&context->lock);
 
@@ -1890,7 +1566,7 @@ enum net_verdict net_context_packet_received(struct net_conn *conn,
 
 	if (net_context_get_ip_proto(context) == IPPROTO_TCP) {
 		net_stats_update_tcp_recv(net_pkt_iface(pkt),
-					  net_pkt_appdatalen(pkt));
+					  net_pkt_remaining_data(pkt));
 	}
 
 	context->recv_cb(context, pkt, ip_hdr, proto_hdr, 0, user_data);

@@ -258,7 +258,8 @@ static int eth_fake_init(struct device *dev)
 }
 
 ETH_NET_DEVICE_INIT(eth_fake, "eth_fake", eth_fake_init, &eth_fake_data,
-		    NULL, CONFIG_ETH_INIT_PRIORITY, &eth_fake_api_funcs, 1500);
+		    NULL, CONFIG_ETH_INIT_PRIORITY, &eth_fake_api_funcs,
+		    NET_ETH_MTU);
 
 #if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 static const char *iface2str(struct net_if *iface)
@@ -422,8 +423,12 @@ static bool send_iface(struct net_if *iface, int val, bool expect_fail)
 
 	pkt = net_pkt_alloc_with_buffer(iface, sizeof(data),
 					AF_UNSPEC, 0, K_FOREVER);
+	if (!pkt) {
+		DBG("Cannot allocate pkt\n");
+		return false;
+	}
 
-	net_pkt_write_new(pkt, data, sizeof(data));
+	net_pkt_write(pkt, data, sizeof(data));
 	net_pkt_cursor_init(pkt);
 
 	ret = net_send_data(pkt);

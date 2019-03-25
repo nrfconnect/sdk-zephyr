@@ -879,8 +879,6 @@ if(CONFIG_USERSPACE)
 
   get_property(compile_definitions_interface TARGET zephyr_interface
     PROPERTY INTERFACE_COMPILE_DEFINITIONS)
-
-  set(complete_include_dirs ${include_dir_in_interface} ${sys_include_dir_in_interface})
 endif()
 
 
@@ -951,10 +949,9 @@ if(CONFIG_ARM AND CONFIG_USERSPACE)
   set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${PRIV_STACKS_OUTPUT_SRC}
     PROPERTIES COMPILE_DEFINITIONS "${compile_definitions_interface}")
 
-  # always compile priv_stacks_hash.c at optimization -Os
   set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${PRIV_STACKS_OUTPUT_SRC}
     PROPERTIES COMPILE_FLAGS
-    "${NO_COVERAGE_FLAGS} -Os -fno-function-sections -fno-data-sections ")
+    "${NO_COVERAGE_FLAGS} -fno-function-sections -fno-data-sections ")
 
   # We need precise control of where generated text/data ends up in the final
   # kernel image. Disable function/data sections and use objcopy to move
@@ -967,8 +964,12 @@ if(CONFIG_ARM AND CONFIG_USERSPACE)
   # NB: Using a library instead of target_compile_options(priv_stacks_output_lib
   # [...]) because a library's options have precedence
   add_library(priv_stacks_output_lib_interface INTERFACE)
-  foreach(incl ${complete_include_dirs})
+  foreach(incl ${include_dir_in_interface})
     target_include_directories(priv_stacks_output_lib_interface INTERFACE ${incl})
+  endforeach()
+
+  foreach(incl ${sys_include_dir_in_interface})
+    target_include_directories(priv_stacks_output_lib_interface SYSTEM INTERFACE ${incl})
   endforeach()
 
   target_link_libraries(priv_stacks_output_lib priv_stacks_output_lib_interface)
@@ -1075,9 +1076,8 @@ if(CONFIG_USERSPACE)
     ${CMAKE_CURRENT_BINARY_DIR}/${OUTPUT_SRC}
     )
 
-  # always compile kobject_hash.c at optimization -Os
   set_source_files_properties(${OUTPUT_SRC} PROPERTIES COMPILE_FLAGS
-    "${NO_COVERAGE_FLAGS} -Os -fno-function-sections -fno-data-sections")
+    "${NO_COVERAGE_FLAGS} -fno-function-sections -fno-data-sections")
 
   set_source_files_properties(${OUTPUT_SRC}
     PROPERTIES COMPILE_DEFINITIONS "${compile_definitions_interface}")
@@ -1089,10 +1089,13 @@ if(CONFIG_USERSPACE)
 
   target_link_libraries(output_lib output_lib_interface)
 
-  foreach(incl ${complete_include_dirs})
+  foreach(incl ${include_dir_in_interface})
     target_include_directories(output_lib_interface INTERFACE ${incl})
   endforeach()
 
+  foreach(incl ${sys_include_dir_in_interface})
+    target_include_directories(output_lib_interface SYSTEM INTERFACE ${incl})
+  endforeach()
 
   set(OUTPUT_OBJ_PATH ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/output_lib.dir/${OUTPUT_OBJ})
 

@@ -472,7 +472,7 @@ static int smsc_write_tx_fifo(const u8_t *buf, u32_t len, bool is_last)
 static int eth_tx(struct device *dev, struct net_pkt *pkt)
 {
 	u16_t total_len = net_pkt_get_len(pkt);
-	static u8_t tx_buf[1514] __aligned(4);
+	static u8_t tx_buf[NET_ETH_MAX_FRAME_SIZE] __aligned(4);
 	u32_t txcmd_a, txcmd_b;
 	u32_t tx_stat;
 	int res;
@@ -484,7 +484,7 @@ static int eth_tx(struct device *dev, struct net_pkt *pkt)
 	SMSC9220->TX_DATA_PORT = txcmd_a;
 	SMSC9220->TX_DATA_PORT = txcmd_b;
 
-	if (net_pkt_read_new(pkt, tx_buf, total_len)) {
+	if (net_pkt_read(pkt, tx_buf, total_len)) {
 		goto error;
 	}
 
@@ -543,7 +543,7 @@ static int smsc_read_rx_fifo(struct net_pkt *pkt, u32_t len)
 	do {
 		buf32 = SMSC9220->RX_DATA_PORT;
 
-		if (net_pkt_write_new(pkt, &buf32, sizeof(u32_t))) {
+		if (net_pkt_write(pkt, &buf32, sizeof(u32_t))) {
 			return -1;
 		}
 	} while (--len);
@@ -679,5 +679,5 @@ static struct eth_context eth_0_context;
 
 ETH_NET_DEVICE_INIT(eth_smsc911x_0, "smsc911x_0",
 		eth_init, &eth_0_context,
-		NULL/*&eth_config_0*/, CONFIG_ETH_INIT_PRIORITY, &api_funcs,
-		1500/*MTU*/);
+		NULL /*&eth_config_0*/, CONFIG_ETH_INIT_PRIORITY, &api_funcs,
+		NET_ETH_MTU /*MTU*/);

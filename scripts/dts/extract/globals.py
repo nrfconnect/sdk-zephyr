@@ -5,6 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+import sys
+
 from collections import defaultdict
 
 # globals
@@ -167,7 +169,7 @@ def create_reduced(node, path):
             create_reduced(child_node, path + child_name)
 
 
-def get_node_label(node_path):
+def node_label(node_path):
     node_compat = get_compat(node_path)
     def_label = str_to_label(node_compat)
     if '@' in node_path:
@@ -187,7 +189,10 @@ def get_node_label(node_path):
 
 
 def get_parent_path(node_path):
-    # Turns /foo/bar into /foo
+    # Turns /foo/bar into /foo. Returns None for /.
+
+    if node_path == '/':
+        return None
 
     return '/'.join(node_path.split('/')[:-1]) or '/'
 
@@ -350,7 +355,7 @@ def extract_controller(node_path, prop, prop_values, index,
         if l_cell is None:
             continue
 
-        l_base = def_label.split('/')
+        l_base = [def_label]
 
         # Check is defined should be indexed (_0, _1)
         if handle_single or i == 0 and len(prop_array) == 1:
@@ -433,7 +438,7 @@ def extract_cells(node_path, prop, prop_values, names, index,
         else:
             l_cell = [str_to_label(str(generic))]
 
-        l_base = def_label.split('/')
+        l_base = [def_label]
         # Check if #define should be indexed (_0, _1, ...)
         if handle_single or i == 0 and len(prop_array) == 1:
             # Less than 2 elements in prop_values
@@ -467,3 +472,10 @@ def extract_cells(node_path, prop, prop_values, names, index,
                     prop_alias)
 
             insert_defs(node_path, prop_def, prop_alias)
+
+
+def err(msg):
+    # General error reporting helper. Prints a message to stderr and exits with
+    # status 1.
+
+    sys.exit("error: " + msg)

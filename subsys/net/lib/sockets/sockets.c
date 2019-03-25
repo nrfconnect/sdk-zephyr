@@ -109,6 +109,17 @@ int zsock_socket_internal(int family, int type, int proto)
 	z_object_recycle(ctx);
 #endif
 
+	/* TCP context is effectively owned by both application
+	 * and the stack: stack may detect that peer closed/aborted
+	 * connection, but it must not dispose of the context behind
+	 * the application back. Likewise, when application "closes"
+	 * context, it's not disposed of immediately - there's yet
+	 * closing handshake for stack to perform.
+	 */
+	if (proto == IPPROTO_TCP) {
+		net_context_ref(ctx);
+	}
+
 	z_finalize_fd(fd, ctx, (const struct fd_op_vtable *)&sock_fd_op_vtable);
 
 	NET_DBG("socket: ctx=%p, fd=%d", ctx, fd);
@@ -390,6 +401,15 @@ int zsock_accept_ctx(struct net_context *parent, struct sockaddr *addr,
 		}
 	}
 
+	/* TCP context is effectively owned by both application
+	 * and the stack: stack may detect that peer closed/aborted
+	 * connection, but it must not dispose of the context behind
+	 * the application back. Likewise, when application "closes"
+	 * context, it's not disposed of immediately - there's yet
+	 * closing handshake for stack to perform.
+	 */
+	net_context_ref(ctx);
+
 	NET_DBG("accept: ctx=%p, fd=%d", ctx, fd);
 
 	z_finalize_fd(fd, ctx, (const struct fd_op_vtable *)&sock_fd_op_vtable);
@@ -451,12 +471,12 @@ ssize_t zsock_sendto_ctx(struct net_context *ctx, const void *buf, size_t len,
 	}
 
 	if (dest_addr) {
-		status = net_context_sendto_new(ctx, buf, len, dest_addr,
-						addrlen, NULL, timeout,
-						NULL, ctx->user_data);
+		status = net_context_sendto(ctx, buf, len, dest_addr,
+					    addrlen, NULL, timeout,
+					    ctx->user_data);
 	} else {
-		status = net_context_send_new(ctx, buf, len, NULL, timeout,
-					      NULL, ctx->user_data);
+		status = net_context_send(ctx, buf, len, NULL, timeout,
+					  ctx->user_data);
 	}
 
 	if (status < 0) {
@@ -521,8 +541,8 @@ static int sock_get_pkt_src_addr(struct net_pkt *pkt,
 			goto error;
 		}
 
-		ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data_new(pkt,
-								&ipv4_access);
+		ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data(
+							pkt, &ipv4_access);
 		if (!ipv4_hdr || net_pkt_acknowledge_data(pkt, &ipv4_access)) {
 			ret = -ENOBUFS;
 			goto error;
@@ -542,8 +562,8 @@ static int sock_get_pkt_src_addr(struct net_pkt *pkt,
 			goto error;
 		}
 
-		ipv6_hdr = (struct net_ipv6_hdr *)net_pkt_get_data_new(pkt,
-								&ipv6_access);
+		ipv6_hdr = (struct net_ipv6_hdr *)net_pkt_get_data(
+							pkt, &ipv6_access);
 		if (!ipv6_hdr ||
 		    net_pkt_acknowledge_data(pkt, &ipv6_access) ||
 		    net_pkt_skip(pkt, net_pkt_ipv6_ext_len(pkt))) {
@@ -562,8 +582,8 @@ static int sock_get_pkt_src_addr(struct net_pkt *pkt,
 		NET_PKT_DATA_ACCESS_DEFINE(udp_access, struct net_udp_hdr);
 		struct net_udp_hdr *udp_hdr;
 
-		udp_hdr = (struct net_udp_hdr *)net_pkt_get_data_new(pkt,
-								&udp_access);
+		udp_hdr = (struct net_udp_hdr *)net_pkt_get_data(pkt,
+								 &udp_access);
 		if (!udp_hdr) {
 			ret = -ENOBUFS;
 			goto error;
@@ -574,8 +594,8 @@ static int sock_get_pkt_src_addr(struct net_pkt *pkt,
 		NET_PKT_DATA_ACCESS_DEFINE(tcp_access, struct net_tcp_hdr);
 		struct net_tcp_hdr *tcp_hdr;
 
-		tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt,
-								&tcp_access);
+		tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data(pkt,
+								 &tcp_access);
 		if (!tcp_hdr) {
 			ret = -ENOBUFS;
 			goto error;
@@ -658,7 +678,7 @@ static inline ssize_t zsock_recv_dgram(struct net_context *ctx,
 		recv_len = max_len;
 	}
 
-	if (net_pkt_read_new(pkt, buf, recv_len)) {
+	if (net_pkt_read(pkt, buf, recv_len)) {
 		errno = ENOBUFS;
 		return -1;
 	}
@@ -681,6 +701,11 @@ static inline ssize_t zsock_recv_stream(struct net_context *ctx,
 	size_t recv_len = 0;
 	struct net_pkt_cursor backup;
 	int res;
+
+	if (!net_context_is_used(ctx)) {
+		errno = EBADF;
+		return -1;
+	}
 
 	if ((flags & ZSOCK_MSG_DONTWAIT) || sock_is_nonblock(ctx)) {
 		timeout = K_NO_WAIT;
@@ -724,7 +749,7 @@ static inline ssize_t zsock_recv_stream(struct net_context *ctx,
 		}
 
 		/* Actually copy data to application buffer */
-		if (net_pkt_read_new(pkt, buf, recv_len)) {
+		if (net_pkt_read(pkt, buf, recv_len)) {
 			errno = ENOBUFS;
 			return -1;
 		}

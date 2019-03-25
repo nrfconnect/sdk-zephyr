@@ -153,10 +153,12 @@ static int eth_init(struct device *dev)
 }
 
 ETH_NET_DEVICE_INIT(eth_test, "eth_test", eth_init, &eth_context,
-		    NULL, CONFIG_ETH_INIT_PRIORITY, &api_funcs, 1500);
+		    NULL, CONFIG_ETH_INIT_PRIORITY, &api_funcs,
+		    NET_ETH_MTU);
 
 ETH_NET_DEVICE_INIT(eth_test2, "eth_test2", eth_init, &eth_context2,
-		    NULL, CONFIG_ETH_INIT_PRIORITY, &api_funcs, 1500);
+		    NULL, CONFIG_ETH_INIT_PRIORITY, &api_funcs,
+		    NET_ETH_MTU);
 
 static void timestamp_callback(struct net_pkt *pkt)
 {
@@ -452,10 +454,10 @@ static void send_some_data(struct net_if *iface)
 	net_context_set_option(udp_v6_ctx, NET_OPT_TIMESTAMP,
 			       &timestamp, sizeof(timestamp));
 
-	ret = net_context_sendto_new(udp_v6_ctx, test_data, strlen(test_data),
-				     (struct sockaddr *)&dst_addr6,
-				     sizeof(struct sockaddr_in6),
-				     NULL, K_NO_WAIT, NULL, NULL);
+	ret = net_context_sendto(udp_v6_ctx, test_data, strlen(test_data),
+				 (struct sockaddr *)&dst_addr6,
+				 sizeof(struct sockaddr_in6),
+				 NULL, K_NO_WAIT, NULL);
 	zassert_true(ret > 0, "Send UDP pkt failed\n");
 
 	net_context_unref(udp_v6_ctx);

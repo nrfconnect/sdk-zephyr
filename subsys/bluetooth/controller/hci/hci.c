@@ -425,6 +425,7 @@ static void write_auth_payload_timeout(struct net_buf *buf,
 }
 #endif /* CONFIG_BT_CTLR_LE_PING */
 
+#if defined(CONFIG_BT_CONN)
 static void read_tx_power_level(struct net_buf *buf, struct net_buf **evt)
 {
 	struct bt_hci_cp_read_tx_power_level *cmd = (void *)buf->data;
@@ -443,6 +444,7 @@ static void read_tx_power_level(struct net_buf *buf, struct net_buf **evt)
 	rp->status = status;
 	rp->handle = sys_cpu_to_le16(handle);
 }
+#endif /* CONFIG_BT_CONN */
 
 static int ctrl_bb_cmd_handle(u16_t  ocf, struct net_buf *cmd,
 			      struct net_buf **evt)
@@ -460,9 +462,11 @@ static int ctrl_bb_cmd_handle(u16_t  ocf, struct net_buf *cmd,
 		set_event_mask_page_2(cmd, evt);
 		break;
 
+#if defined(CONFIG_BT_CONN)
 	case BT_OCF(BT_HCI_OP_READ_TX_POWER_LEVEL):
 		read_tx_power_level(cmd, evt);
 		break;
+#endif /* CONFIG_BT_CONN */
 
 #if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
 	case BT_OCF(BT_HCI_OP_SET_CTL_TO_HOST_FLOW):
@@ -2592,8 +2596,8 @@ static void le_adv_ext_report(struct pdu_data *pdu_data, u8_t *b,
 	rssi = -b[offsetof(struct node_rx_pdu, pdu) +
 		  offsetof(struct pdu_adv, payload) + adv->len];
 
-	BT_WARN("phy= 0x%x, type= 0x%x, len= %u, tat= %u, rat= %u, rssi=%d dB",
-		phy, adv->type, adv->len, adv->tx_addr, adv->rx_addr, rssi);
+	BT_DBG("phy= 0x%x, type= 0x%x, len= %u, tat= %u, rat= %u, rssi=%d dB",
+	       phy, adv->type, adv->len, adv->tx_addr, adv->rx_addr, rssi);
 
 	if ((adv->type == PDU_ADV_TYPE_EXT_IND) && adv->len) {
 		struct pdu_adv_com_ext_adv *p;
@@ -2604,8 +2608,8 @@ static void le_adv_ext_report(struct pdu_data *pdu_data, u8_t *b,
 		h = (void *)p->ext_hdr_adi_adv_data;
 		ptr = (u8_t *)h + sizeof(*h);
 
-		BT_WARN("Ext. adv mode= 0x%x, hdr len= %u", p->adv_mode,
-			p->ext_hdr_len);
+		BT_DBG("Ext. adv mode= 0x%x, hdr len= %u", p->adv_mode,
+		       p->ext_hdr_len);
 
 		if (!p->ext_hdr_len) {
 			goto no_ext_hdr;
@@ -2621,7 +2625,7 @@ static void le_adv_ext_report(struct pdu_data *pdu_data, u8_t *b,
 
 			bt_addr_le_to_str(&addr, addr_str, sizeof(addr_str));
 
-			BT_WARN("AdvA: %s", addr_str);
+			BT_DBG("AdvA: %s", addr_str);
 
 		}
 
@@ -2631,7 +2635,7 @@ static void le_adv_ext_report(struct pdu_data *pdu_data, u8_t *b,
 			tx_pwr = *(s8_t *)ptr;
 			ptr++;
 
-			BT_WARN("Tx pwr= %d dB", tx_pwr);
+			BT_DBG("Tx pwr= %d dB", tx_pwr);
 		}
 
 		/* TODO: length check? */
@@ -2681,8 +2685,8 @@ static void le_scan_req_received(struct pdu_data *pdu_data, u8_t *b,
 
 		bt_addr_le_to_str(&addr, addr_str, sizeof(addr_str));
 
-		BT_WARN("handle: %d, addr: %s, rssi: %d dB.",
-			handle, addr_str, rssi);
+		BT_DBG("handle: %d, addr: %s, rssi: %d dB.",
+		       handle, addr_str, rssi);
 
 		return;
 	}
@@ -2882,7 +2886,7 @@ static void le_chan_sel_algo(struct pdu_data *pdu_data, u16_t handle,
 
 	if (!(event_mask & BT_EVT_MASK_LE_META_EVENT) ||
 	    !(le_event_mask & BT_EVT_MASK_LE_CHAN_SEL_ALGO)) {
-		BT_WARN("handle: 0x%04x, CSA: %x.", handle, cs->csa);
+		BT_DBG("handle: 0x%04x, CSA: %x.", handle, cs->csa);
 		return;
 	}
 

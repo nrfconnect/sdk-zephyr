@@ -433,9 +433,9 @@ static int adxl362_sample_fetch(struct device *dev, enum sensor_channel chan)
 
 	z = (buf[1] << 8) + buf[0];
 
-	data->acc_x = (s32_t)x * (adxl362_data.selected_range / 2);
-	data->acc_y = (s32_t)y * (adxl362_data.selected_range / 2);
-	data->acc_z = (s32_t)z * (adxl362_data.selected_range / 2);
+	data->acc_x = (s32_t)x * (adxl362_data.selected_range);
+	data->acc_y = (s32_t)y * (adxl362_data.selected_range);
+	data->acc_z = (s32_t)z * (adxl362_data.selected_range);
 
 	ret = adxl362_read_temperature(dev, &data->temp);
 	if (ret) {
@@ -443,6 +443,14 @@ static int adxl362_sample_fetch(struct device *dev, enum sensor_channel chan)
 	}
 
 	return 0;
+}
+
+static void adxl362_accel_convert(struct sensor_value *val, s16_t value)
+{
+	s32_t micro_ms2 = value * (SENSOR_G / (16 * 1000));
+
+	val->val1 = micro_ms2 / 100000;
+	val->val2 = micro_ms2 % 100000;
 }
 
 static int adxl362_channel_get(struct device *dev,
@@ -453,16 +461,13 @@ static int adxl362_channel_get(struct device *dev,
 
 	switch (chan) {
 	case SENSOR_CHAN_ACCEL_X: /* Acceleration on the X axis, in m/s^2. */
-		val->val1 = data->acc_x / 1000;
-		val->val2 = (data->acc_x % 1000) * 1000;
+		adxl362_accel_convert(val, data->acc_x);
 		break;
 	case SENSOR_CHAN_ACCEL_Y: /* Acceleration on the Y axis, in m/s^2. */
-		val->val1 = data->acc_y / 1000;
-		val->val2 = (data->acc_y % 1000) * 1000;
+		adxl362_accel_convert(val, data->acc_y);
 		break;
 	case SENSOR_CHAN_ACCEL_Z: /* Acceleration on the Z axis, in m/s^2. */
-		val->val1 = data->acc_z / 1000;
-		val->val2 = (data->acc_z % 1000) * 1000;
+		adxl362_accel_convert(val, data->acc_z);
 		break;
 	case SENSOR_CHAN_DIE_TEMP: /* Temperature in degrees Celsius. */
 		val->val1 = data->temp / 1000;
@@ -574,6 +579,7 @@ static int adxl362_init(struct device *dev)
 	const struct adxl362_config *config = dev->config->config_info;
 	struct adxl362_data *data = dev->driver_data;
 	u8_t value;
+	int err;
 
 	data->spi = device_get_binding(config->spi_name);
 	if (!data->spi) {
@@ -581,15 +587,36 @@ static int adxl362_init(struct device *dev)
 		return -EINVAL;
 	}
 
-	data->spi_cfg.operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB |
-		SPI_MODE_CPOL | SPI_MODE_CPHA;
+	data->spi_cfg.operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB;
 	data->spi_cfg.frequency = config->spi_max_frequency;
 	data->spi_cfg.slave = config->spi_slave;
 
-	adxl362_software_reset(dev);
+#if defined(DT_ADI_ADXL362_0_CS_GPIO_CONTROLLER)
+	data->adxl362_cs_ctrl.gpio_dev =
+				device_get_binding(config->gpio_cs_port);
+	if (!data->adxl362_cs_ctrl.gpio_dev) {
+		LOG_ERR("Unable to get GPIO SPI CS device");
+		return -ENODEV;
+	}
+
+	data->adxl362_cs_ctrl.gpio_pin = config->cs_gpio;
+	data->adxl362_cs_ctrl.delay = 0;
+
+	data->spi_cfg.cs = &data->adxl362_cs_ctrl;
+#endif
+
+	err = adxl362_software_reset(dev);
+
+	if (err) {
+		LOG_ERR("adxl362_software_reset failed, error %d\n", err);
+		return -ENODEV;
+	}
+
+	k_sleep(5);
 
 	adxl362_get_reg(dev, &value, ADXL362_REG_PARTID, 1);
 	if (value != ADXL362_PART_ID) {
+		LOG_ERR("Failed: %d\n", value);
 		return -ENODEV;
 	}
 
@@ -601,11 +628,15 @@ static int adxl362_init(struct device *dev)
 }
 
 static const struct adxl362_config adxl362_config = {
-	.spi_name = DT_ADXL362_SPI_DEV_NAME,
-	.spi_slave = DT_ADXL362_SPI_DEV_SLAVE,
-	.spi_max_frequency = DT_ADXL362_SPI_MAX_FREQUENCY,
+	.spi_name = DT_ADI_ADXL362_0_BUS_NAME,
+	.spi_slave = DT_ADI_ADXL362_0_BASE_ADDRESS,
+	.spi_max_frequency = DT_ADI_ADXL362_0_SPI_MAX_FREQUENCY,
+#if defined(DT_ADI_ADXL362_0_CS_GPIO_CONTROLLER)
+	.gpio_cs_port = DT_ADI_ADXL362_0_CS_GPIO_CONTROLLER,
+	.cs_gpio = DT_ADI_ADXL362_0_CS_GPIO_PIN,
+#endif
 };
 
-DEVICE_AND_API_INIT(adxl362, DT_ADXL362_DEV_NAME, adxl362_init,
+DEVICE_AND_API_INIT(adxl362, DT_ADI_ADXL362_0_LABEL, adxl362_init,
 		    &adxl362_data, &adxl362_config, POST_KERNEL,
 		    CONFIG_SENSOR_INIT_PRIORITY, &adxl362_api_funcs);

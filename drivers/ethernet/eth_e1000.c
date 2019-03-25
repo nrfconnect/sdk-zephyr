@@ -72,7 +72,7 @@ static int e1000_send(struct device *device, struct net_pkt *pkt)
 	struct e1000_dev *dev = device->driver_data;
 	size_t len = net_pkt_get_len(pkt);
 
-	if (net_pkt_read_new(pkt, dev->txb, len)) {
+	if (net_pkt_read(pkt, dev->txb, len)) {
 		return -EIO;
 	}
 
@@ -97,8 +97,8 @@ static struct net_pkt *e1000_rx(struct e1000_dev *dev)
 		goto out;
 	}
 
-	if (net_pkt_write_new(pkt, INT_TO_POINTER((u32_t) dev->rx.addr),
-			      dev->rx.len - 4)) {
+	if (net_pkt_write(pkt, INT_TO_POINTER((u32_t) dev->rx.addr),
+			  dev->rx.len - 4)) {
 		LOG_ERR("Out of memory for received frame");
 		net_pkt_unref(pkt);
 		pkt = NULL;
@@ -233,4 +233,4 @@ NET_DEVICE_INIT(eth_e1000,
 		&e1000_api,
 		ETHERNET_L2,
 		NET_L2_GET_CTX_TYPE(ETHERNET_L2),
-		E1000_MTU);
+		NET_ETH_MTU);

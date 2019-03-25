@@ -187,8 +187,8 @@ static void prepare_ra_message(struct net_pkt *pkt)
 
 	net_pkt_set_overwrite(pkt, false);
 
-	net_pkt_write_new(pkt, &hdr, sizeof(struct net_eth_hdr));
-	net_pkt_write_new(pkt, icmpv6_ra, sizeof(icmpv6_ra));
+	net_pkt_write(pkt, &hdr, sizeof(struct net_eth_hdr));
+	net_pkt_write(pkt, icmpv6_ra, sizeof(icmpv6_ra));
 
 	net_pkt_cursor_init(pkt);
 }
@@ -212,7 +212,7 @@ static struct net_icmp_hdr *get_icmp_hdr(struct net_pkt *pkt)
 		goto out;
 	}
 
-	hdr = (struct net_icmp_hdr *)net_pkt_get_data_new(pkt, &icmp_access);
+	hdr = (struct net_icmp_hdr *)net_pkt_get_data(pkt, &icmp_access);
 
 out:
 	pkt->buffer = bak;
@@ -455,7 +455,7 @@ static void test_send_ns_extra_options(void)
 
 	NET_ASSERT_INFO(pkt, "Out of TX packets");
 
-	net_pkt_write_new(pkt, icmpv6_ns_invalid, sizeof(icmpv6_ns_invalid));
+	net_pkt_write(pkt, icmpv6_ns_invalid, sizeof(icmpv6_ns_invalid));
 	net_pkt_lladdr_clear(pkt);
 
 	zassert_false((net_recv_data(iface, pkt) < 0),
@@ -478,7 +478,7 @@ static void test_send_ns_no_options(void)
 
 	NET_ASSERT_INFO(pkt, "Out of TX packets");
 
-	net_pkt_write_new(pkt, icmpv6_ns_no_sllao, sizeof(icmpv6_ns_no_sllao));
+	net_pkt_write(pkt, icmpv6_ns_no_sllao, sizeof(icmpv6_ns_no_sllao));
 	net_pkt_lladdr_clear(pkt);
 
 	zassert_false((net_recv_data(iface, pkt) < 0),
@@ -594,7 +594,7 @@ static void test_hbho_message(void)
 
 	NET_ASSERT_INFO(pkt, "Out of TX packets");
 
-	net_pkt_write_new(pkt, ipv6_hbho, sizeof(ipv6_hbho));
+	net_pkt_write(pkt, ipv6_hbho, sizeof(ipv6_hbho));
 	net_pkt_lladdr_clear(pkt);
 
 	zassert_false(net_recv_data(iface, pkt) < 0,
@@ -645,7 +645,7 @@ static void test_hbho_message_1(void)
 
 	NET_ASSERT_INFO(pkt, "Out of TX packets");
 
-	net_pkt_write_new(pkt, ipv6_hbho_1, sizeof(ipv6_hbho_1));
+	net_pkt_write(pkt, ipv6_hbho_1, sizeof(ipv6_hbho_1));
 
 	net_pkt_lladdr_clear(pkt);
 
@@ -706,7 +706,7 @@ static void test_hbho_message_2(void)
 	NET_ASSERT_INFO(pkt, "Out of TX packets");
 
 
-	net_pkt_write_new(pkt, ipv6_hbho_2, sizeof(ipv6_hbho_2));
+	net_pkt_write(pkt, ipv6_hbho_2, sizeof(ipv6_hbho_2));
 	net_pkt_lladdr_clear(pkt);
 
 	zassert_false(net_recv_data(iface, pkt) < 0,
@@ -868,7 +868,7 @@ static void test_hbho_message_3(void)
 
 	NET_ASSERT_INFO(pkt, "Out of TX packets");
 
-	net_pkt_write_new(pkt, ipv6_hbho_3, sizeof(ipv6_hbho_3));
+	net_pkt_write(pkt, ipv6_hbho_3, sizeof(ipv6_hbho_3));
 	net_pkt_lladdr_clear(pkt);
 
 	zassert_false(net_recv_data(iface, pkt) < 0,

@@ -207,7 +207,7 @@ static void telnet_send_prematurely(struct k_timer *timer)
 }
 
 static void telnet_sent_cb(struct net_context *client,
-			   int status, void *token, void *user_data)
+			   int status, void *user_data)
 {
 	if (status) {
 		telnet_end_client_connection();
@@ -220,10 +220,10 @@ static inline bool telnet_send(void)
 	struct line_buf *lb = telnet_rb_get_line_out();
 
 	if (lb) {
-		if (net_context_send_new(client_cnx,
-					 (u8_t *)lb->buf, lb->len,
-					 telnet_sent_cb,
-					 K_FOREVER, NULL, NULL)) {
+		if (net_context_send(client_cnx,
+				     (u8_t *)lb->buf, lb->len,
+				     telnet_sent_cb,
+				     K_FOREVER, NULL)) {
 			return false;
 		}
 
@@ -243,8 +243,8 @@ static int telnet_console_out_nothing(int c)
 
 static inline void telnet_command_send_reply(u8_t *msg, u16_t len)
 {
-	net_context_send_new(client_cnx, msg, len,
-			     telnet_sent_cb, K_FOREVER, NULL, NULL);
+	net_context_send(client_cnx, msg, len,
+			 telnet_sent_cb, K_FOREVER, NULL);
 }
 
 static inline void telnet_reply_ay_command(void)
@@ -312,8 +312,8 @@ static inline bool telnet_handle_command(struct net_pkt *pkt)
 					      struct telnet_simple_command);
 	struct telnet_simple_command *cmd;
 
-	cmd = (struct telnet_simple_command *)net_pkt_get_data_new(pkt,
-								   &cmd_access);
+	cmd = (struct telnet_simple_command *)net_pkt_get_data(pkt,
+							       &cmd_access);
 	if (!cmd || cmd->iac != NVT_CMD_IAC) {
 		return false;
 	}
@@ -356,7 +356,7 @@ static inline void telnet_handle_input(struct net_pkt *pkt)
 	}
 
 	len = MIN(len, CONSOLE_MAX_LINE_LEN);
-	if (net_pkt_read_new(pkt, (u8_t *)input->line, len)) {
+	if (net_pkt_read(pkt, (u8_t *)input->line, len)) {
 		return;
 	}
 

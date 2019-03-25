@@ -9,21 +9,16 @@
 LOG_MODULE_REGISTER(usb_rndis);
 
 /* Enable verbose debug printing extra hexdumps */
-#define VERBOSE_DEBUG	0
+#define VERBOSE_DEBUG		0
 
-#include <net_private.h>
-
-#include <zephyr.h>
 #include <init.h>
 
-#include <usb_device.h>
-#include <usb_common.h>
-
 #include <net/ethernet.h>
-#include <net/net_pkt.h>
+#include <net_private.h>
 
-#include <class/usb_cdc.h>
-
+#include <usb/usb_device.h>
+#include <usb/usb_common.h>
+#include <usb/class/usb_cdc.h>
 #include <os_desc.h>
 
 #include "netusb.h"
@@ -218,7 +213,8 @@ static struct __rndis {
 static u8_t manufacturer[] = CONFIG_USB_DEVICE_MANUFACTURER;
 static u32_t drv_version = 1U;
 
-static u8_t tx_buf[NETUSB_MTU + sizeof(struct rndis_payload_packet)];
+static u8_t tx_buf[NET_ETH_MAX_FRAME_SIZE +
+				sizeof(struct rndis_payload_packet)];
 
 static u32_t object_id_supported[] = {
 	RNDIS_OBJECT_ID_GEN_SUPP_LIST,
@@ -408,8 +404,8 @@ static void rndis_bulk_out(u8_t ep, enum usb_dc_ep_cb_status_code ep_status)
 		rndis.in_pkt = pkt;
 	}
 
-	if (net_pkt_write_new(rndis.in_pkt,
-			      buffer + hdr_offset, len - hdr_offset)) {
+	if (net_pkt_write(rndis.in_pkt,
+			  buffer + hdr_offset, len - hdr_offset)) {
 		LOG_ERR("Error writing data to pkt: %p", rndis.in_pkt);
 		rndis_clean();
 		rndis.rx_err++;
@@ -448,16 +444,7 @@ static void rndis_notify_cb(u8_t ep, int size, void *priv)
 
 static void rndis_queue_rsp(struct net_buf *rsp)
 {
-
 	if (!k_fifo_is_empty(&rndis_tx_queue)) {
-#if CLEAN_TX_QUEUE
-		struct net_buf *buf;
-
-		while ((buf = net_buf_get(&rndis_tx_queue, K_NO_WAIT))) {
-			LOG_ERR("Drop buffer %p", buf);
-			net_buf_unref(buf);
-		}
-#endif
 		LOG_WRN("Transmit response queue is not empty");
 	}
 
@@ -616,12 +603,6 @@ static int rndis_query_handle(u8_t *data, u32_t len)
 		break;
 
 		/* Statistics stuff */
-#if STATISTICS_ENABLED
-	case RNDIS_OBJECT_ID_GEN_TRANSMIT_OK:
-		LOG_DBG("RNDIS_OBJECT_ID_GEN_TRANSMIT_OK");
-		net_buf_add_le32(rndis.tx_pkts - rndis.tx_err);
-		break;
-#endif
 	case RNDIS_OBJECT_ID_GEN_TRANSMIT_ERROR:
 		LOG_DBG("RNDIS_OBJECT_ID_GEN_TRANSMIT_ERROR: %u", rndis.tx_err);
 		net_buf_add_le32(buf, rndis.tx_err);
@@ -884,42 +865,6 @@ static int handle_encapsulated_cmd(u8_t *data, u32_t len)
 	return 0;
 }
 
-#if SEND_MEDIA_STATUS
-static int rndis_send_media_status(u32_t media_status)
-{
-	struct rndis_media_status_indicate *ind;
-	struct net_buf *buf;
-
-	LOG_DBG("status %u", media_status);
-
-	buf = net_buf_alloc(&rndis_tx_pool, K_NO_WAIT);
-	if (!buf) {
-		LOG_ERR("Cannot get free buffer");
-		return -ENOMEM;
-	}
-
-	ind = net_buf_add(buf, sizeof(*ind));
-	ind->type = sys_cpu_to_le32(RNDIS_CMD_INDICATE);
-	ind->len = sys_cpu_to_le32(sizeof(*ind));
-
-	if (media_status) {
-		ind->status = sys_cpu_to_le32(RNDIS_STATUS_CONNECT_MEDIA);
-	} else {
-		ind->status = sys_cpu_to_le32(RNDIS_STATUS_DISCONNECT_MEDIA);
-	}
-
-	ind->buf_len = 0U;
-	ind->buf_offset = 0U;
-
-	rndis_queue_rsp(buf);
-
-	/* Nofity about ready reply */
-	rndis_notify_rsp();
-
-	return 0;
-}
-#endif /* SEND_MEDIA_STATUS */
-
 static int handle_encapsulated_rsp(u8_t **data, u32_t *len)
 {
 	struct net_buf *buf;
@@ -1032,11 +977,16 @@ static int rndis_send(struct net_pkt *pkt)
 		net_pkt_hexdump(pkt, "<");
 	}
 
+	if (len + sizeof(struct rndis_payload_packet) > sizeof(tx_buf)) {
+		LOG_WRN("Trying to send too large packet, drop");
+		return -ENOMEM;
+	}
+
 	rndis_hdr_add(tx_buf, len);
 
-	ret = net_pkt_read_new(pkt,
-			       tx_buf + sizeof(struct rndis_payload_packet),
-			       len);
+	ret = net_pkt_read(pkt,
+			   tx_buf + sizeof(struct rndis_payload_packet),
+			   len);
 	if (ret < 0) {
 		return ret;
 	}
@@ -1155,11 +1105,7 @@ static int rndis_connect_media(bool status)
 		rndis.media_status = RNDIS_OBJECT_ID_MEDIA_DISCONNECTED;
 	}
 
-#if SEND_MEDIA_STATUS
-	return rndis_send_media_status(status);
-#else
 	return 0;
-#endif
 }
 
 static struct netusb_function rndis_function = {

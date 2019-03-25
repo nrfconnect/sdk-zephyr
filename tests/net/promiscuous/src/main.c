@@ -143,10 +143,12 @@ static int eth_fake_init(struct device *dev)
 }
 
 ETH_NET_DEVICE_INIT(eth_fake1, "eth_fake1", eth_fake_init, &eth_fake_data1,
-		    NULL, CONFIG_ETH_INIT_PRIORITY, &eth_fake_api_funcs, 1500);
+		    NULL, CONFIG_ETH_INIT_PRIORITY, &eth_fake_api_funcs,
+		    NET_ETH_MTU);
 
 ETH_NET_DEVICE_INIT(eth_fake2, "eth_fake2", eth_fake_init, &eth_fake_data2,
-		    NULL, CONFIG_ETH_INIT_PRIORITY, &eth_fake_api_funcs, 1500);
+		    NULL, CONFIG_ETH_INIT_PRIORITY, &eth_fake_api_funcs,
+		    NET_ETH_MTU);
 
 #if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 static const char *iface2str(struct net_if *iface)
@@ -348,7 +350,7 @@ static void _recv_data(struct net_if *iface, struct net_pkt **pkt)
 	*pkt = net_pkt_rx_alloc_with_buffer(iface, sizeof(data),
 					    AF_UNSPEC, 0, K_FOREVER);
 
-	net_pkt_write_new(*pkt, data, sizeof(data));
+	net_pkt_write(*pkt, data, sizeof(data));
 
 	ret = net_recv_data(iface, *pkt);
 	zassert_equal(ret, 0, "Data receive failure");

@@ -439,7 +439,7 @@ static int prepare_segment(struct net_tcp *tcp,
 		goto fail;
 	}
 
-	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, &tcp_access);
+	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data(pkt, &tcp_access);
 	if (!tcp_hdr) {
 		status = -ENOBUFS;
 		goto fail;
@@ -470,8 +470,7 @@ static int prepare_segment(struct net_tcp *tcp,
 
 	net_pkt_set_data(pkt, &tcp_access);
 
-	if (optlen &&
-	    net_pkt_write_new(pkt, segment->options, segment->optlen)) {
+	if (optlen && net_pkt_write(pkt, segment->options, segment->optlen)) {
 		goto fail;
 	}
 
@@ -818,8 +817,6 @@ int net_tcp_queue_data(struct net_context *context, struct net_pkt *pkt)
 		return -ESHUTDOWN;
 	}
 
-	net_pkt_set_appdatalen(pkt, net_pkt_get_len(pkt));
-
 	/* Set PSH on all packets, our window is so small that there's
 	 * no point in the remote side trying to finesse things and
 	 * coalesce packets.
@@ -876,7 +873,7 @@ int net_tcp_send_pkt(struct net_pkt *pkt)
 		return -EMSGSIZE;
 	}
 
-	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, &tcp_access);
+	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data(pkt, &tcp_access);
 	if (!tcp_hdr) {
 		NET_ERR("Packet %p does not contain TCP header", pkt);
 		return -EMSGSIZE;
@@ -994,7 +991,7 @@ static void restart_timer(struct net_tcp *tcp)
 }
 
 int net_tcp_send_data(struct net_context *context, net_context_send_cb_t cb,
-		      void *token, void *user_data)
+		      void *user_data)
 {
 	struct net_pkt *pkt;
 
@@ -1030,10 +1027,10 @@ int net_tcp_send_data(struct net_context *context, net_context_send_cb_t cb,
 	 * go over the wire.  In theory it would be nice to track
 	 * specific ACK locations in the stream and make the
 	 * callback at that time, but there's nowhere to store the
-	 * potentially-separate token/user_data values right now.
+	 * user_data value right now.
 	 */
 	if (cb) {
-		cb(context, 0, token, user_data);
+		cb(context, 0, user_data);
 	}
 
 	return 0;
@@ -1076,8 +1073,8 @@ bool net_tcp_ack_received(struct net_context *ctx, u32_t ack)
 			continue;
 		}
 
-		tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(
-							pkt, &tcp_access);
+		tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data(pkt,
+								 &tcp_access);
 		if (!tcp_hdr) {
 			/* The pkt does not contain TCP header, this should
 			 * not happen.
@@ -1088,7 +1085,8 @@ bool net_tcp_ack_received(struct net_context *ctx, u32_t ack)
 			continue;
 		}
 
-		seq_len = net_pkt_appdatalen(pkt);
+		net_pkt_acknowledge_data(pkt, &tcp_access);
+		seq_len = net_pkt_remaining_data(pkt);
 
 		/* Each of SYN and FIN flags are counted
 		 * as one sequence number.
@@ -1270,13 +1268,16 @@ int net_tcp_finalize(struct net_pkt *pkt)
 	NET_PKT_DATA_ACCESS_DEFINE(tcp_access, struct net_tcp_hdr);
 	struct net_tcp_hdr *tcp_hdr;
 
-	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, &tcp_access);
+	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data(pkt, &tcp_access);
 	if (!tcp_hdr) {
 		return -ENOBUFS;
 	}
 
 	tcp_hdr->chksum = 0;
-	tcp_hdr->chksum = net_calc_chksum_tcp(pkt);
+
+	if (net_if_need_calc_tx_checksum(net_pkt_iface(pkt))) {
+		tcp_hdr->chksum = net_calc_chksum_tcp(pkt);
+	}
 
 	return net_pkt_set_data(pkt, &tcp_access);
 }
@@ -1287,7 +1288,7 @@ int net_tcp_parse_opts(struct net_pkt *pkt, int opt_totlen,
 	u8_t opt, optlen;
 
 	while (opt_totlen) {
-		if (net_pkt_read_u8_new(pkt, &opt)) {
+		if (net_pkt_read_u8(pkt, &opt)) {
 			optlen = 0U;
 			goto error;
 		}
@@ -1311,7 +1312,7 @@ int net_tcp_parse_opts(struct net_pkt *pkt, int opt_totlen,
 			goto error;
 		}
 
-		if (net_pkt_read_u8_new(pkt, &optlen) || optlen < 2) {
+		if (net_pkt_read_u8(pkt, &optlen) || optlen < 2) {
 			goto error;
 		}
 
@@ -1331,7 +1332,7 @@ int net_tcp_parse_opts(struct net_pkt *pkt, int opt_totlen,
 				goto error;
 			}
 
-			if (net_pkt_read_be16_new(pkt, &opts->mss)) {
+			if (net_pkt_read_be16(pkt, &opts->mss)) {
 				goto error;
 			}
 
@@ -2017,14 +2018,7 @@ resend_ack:
 		context->tcp->fin_rcvd = 1;
 	}
 
-	net_pkt_set_appdatalen(pkt, net_pkt_get_len(pkt) -
-			       net_pkt_ip_hdr_len(pkt) -
-			       net_pkt_ipv6_ext_len(pkt) -
-			       NET_TCP_HDR_LEN(tcp_hdr));
-
-	net_pkt_set_appdata(pkt, net_pkt_cursor_get_pos(pkt));
-
-	data_len = net_pkt_appdatalen(pkt);
+	data_len = net_pkt_remaining_data(pkt);
 	if (data_len > net_tcp_get_recv_wnd(context->tcp)) {
 		/* In case we have zero window, we should still accept
 		 * Zero Window Probes from peer, which per convention
@@ -2045,7 +2039,7 @@ resend_ack:
 		goto unlock;
 	}
 
-	/* If the pkt has appdata, notify the recv callback which should
+	/* If the pkt has data, notify the recv callback which should
 	 * release the pkt. Otherwise, release the pkt immediately.
 	 */
 	if (data_len > 0) {
@@ -2582,7 +2576,7 @@ struct net_tcp_hdr *net_tcp_input(struct net_pkt *pkt,
 		goto drop;
 	}
 
-	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt, tcp_access);
+	tcp_hdr = (struct net_tcp_hdr *)net_pkt_get_data(pkt, tcp_access);
 	if (tcp_hdr && !net_pkt_set_data(pkt, tcp_access)) {
 		return tcp_hdr;
 	}

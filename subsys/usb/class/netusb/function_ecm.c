@@ -11,23 +11,16 @@ LOG_MODULE_REGISTER(usb_ecm);
 /* Enable verbose debug printing extra hexdumps */
 #define VERBOSE_DEBUG	0
 
-/* This enables basic hexdumps */
-#define NET_LOG_ENABLED	0
-#include <net_private.h>
-
-#include <zephyr.h>
-
-#include <usb_device.h>
-#include <usb_common.h>
-
 #include <net/net_pkt.h>
 #include <net/ethernet.h>
+#include <net_private.h>
 
+#include <usb/usb_device.h>
+#include <usb/usb_common.h>
+#include <usb/class/usb_cdc.h>
 #include <usb_descriptor.h>
-#include <class/usb_cdc.h>
-#include "netusb.h"
 
-#define ECM_FRAME_SIZE 1522
+#include "netusb.h"
 
 #define USB_CDC_ECM_REQ_TYPE		0x21
 #define USB_CDC_SET_ETH_PKT_FILTER	0x43
@@ -35,6 +28,9 @@ LOG_MODULE_REGISTER(usb_ecm);
 #define ECM_INT_EP_IDX			0
 #define ECM_OUT_EP_IDX			1
 #define ECM_IN_EP_IDX			2
+
+
+static u8_t tx_buf[NET_ETH_MAX_FRAME_SIZE], rx_buf[NET_ETH_MAX_FRAME_SIZE];
 
 struct usb_cdc_ecm_config {
 #ifdef CONFIG_USB_COMPOSITE_DEVICE
@@ -101,7 +97,7 @@ USBD_CLASS_DESCR_DEFINE(primary, 0) struct usb_cdc_ecm_config cdc_ecm_cfg = {
 		.bDescriptorSubtype = ETHERNET_FUNC_DESC,
 		.iMACAddress = 4,
 		.bmEthernetStatistics = sys_cpu_to_le32(0), /* None */
-		.wMaxSegmentSize = sys_cpu_to_le16(ECM_FRAME_SIZE),
+		.wMaxSegmentSize = sys_cpu_to_le16(NET_ETH_MAX_FRAME_SIZE),
 		.wNumberMCFilters = sys_cpu_to_le16(0), /* None */
 		.bNumberPowerFilters = 0, /* No wake up */
 	},
@@ -196,8 +192,6 @@ static struct usb_ep_cfg_data ecm_ep_data[] = {
 	},
 };
 
-static u8_t tx_buf[ECM_FRAME_SIZE], rx_buf[ECM_FRAME_SIZE];
-
 static int ecm_class_handler(struct usb_setup_packet *setup, s32_t *len,
 			     u8_t **data)
 {
@@ -259,9 +253,16 @@ static int ecm_send(struct net_pkt *pkt)
 	size_t len = net_pkt_get_len(pkt);
 	int ret;
 
-	net_pkt_hexdump(pkt, "<");
+	if (IS_ENABLED(VERBOSE_DEBUG)) {
+		net_pkt_hexdump(pkt, "<");
+	}
 
-	if (net_pkt_read_new(pkt, tx_buf, len)) {
+	if (len > sizeof(tx_buf)) {
+		LOG_WRN("Trying to send too large packet, drop");
+		return -ENOMEM;
+	}
+
+	if (net_pkt_read(pkt, tx_buf, len)) {
 		return -ENOBUFS;
 	}
 
@@ -303,10 +304,14 @@ static void ecm_read_cb(u8_t ep, int size, void *priv)
 		goto done;
 	}
 
-	if (net_pkt_write_new(pkt, rx_buf, size)) {
+	if (net_pkt_write(pkt, rx_buf, size)) {
 		LOG_ERR("Unable to write into pkt\n");
 		net_pkt_unref(pkt);
 		goto done;
+	}
+
+	if (IS_ENABLED(VERBOSE_DEBUG)) {
+		net_pkt_hexdump(pkt, ">");
 	}
 
 	netusb_recv(pkt);

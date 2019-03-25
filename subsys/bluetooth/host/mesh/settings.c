@@ -439,7 +439,6 @@ static int hb_pub_set(int argc, char **argv, void *val_ctx)
 	}
 
 	if (settings_val_get_len_cb(val_ctx) == 0) {
-		BT_DBG("val (null)");
 		pub->dst = BT_MESH_ADDR_UNASSIGNED;
 		pub->count = 0;
 		pub->ttl = 0;
@@ -483,7 +482,6 @@ static int cfg_set(int argc, char **argv, void *val_ctx)
 	}
 
 	if (settings_val_get_len_cb(val_ctx) == 0) {
-		BT_DBG("val (null)");
 		stored_cfg.valid = false;
 		BT_DBG("Cleared configuration state");
 		return 0;
@@ -512,7 +510,6 @@ static int mod_set_bind(struct bt_mesh_model *mod, void *val_ctx)
 	}
 
 	if (settings_val_get_len_cb(val_ctx) == 0) {
-		BT_DBG("val (null)");
 		BT_DBG("Cleared bindings for model");
 		return 0;
 	}
@@ -536,7 +533,6 @@ static int mod_set_sub(struct bt_mesh_model *mod, void *val_ctx)
 	(void)memset(mod->groups, 0, sizeof(mod->groups));
 
 	if (settings_val_get_len_cb(val_ctx) == 0) {
-		BT_DBG("val (null)");
 		BT_DBG("Cleared subscriptions for model");
 		return 0;
 	}
@@ -563,7 +559,6 @@ static int mod_set_pub(struct bt_mesh_model *mod, void *val_ctx)
 	}
 
 	if (settings_val_get_len_cb(val_ctx) == 0) {
-		BT_DBG("val (null)");
 		mod->pub->addr = BT_MESH_ADDR_UNASSIGNED;
 		mod->pub->key = 0;
 		mod->pub->cred = 0;
@@ -1190,6 +1185,8 @@ static void store_pending_mod_bind(struct bt_mesh_model *mod, bool vnd)
 	u16_t keys[CONFIG_BT_MESH_MODEL_KEY_COUNT];
 	char path[20];
 	int i, count, err;
+	size_t len;
+	void *val;
 
 	for (i = 0, count = 0; i < ARRAY_SIZE(mod->keys); i++) {
 		if (mod->keys[i] != BT_MESH_KEY_UNUSED) {
@@ -1198,9 +1195,17 @@ static void store_pending_mod_bind(struct bt_mesh_model *mod, bool vnd)
 		}
 	}
 
+	if (count) {
+		val = keys;
+		len = count * sizeof(keys[0]);
+	} else {
+		val = NULL;
+		len = 0;
+	}
+
 	encode_mod_path(mod, vnd, "bind", path, sizeof(path));
 
-	err = settings_save_one(path, keys, count * sizeof(keys[0]));
+	err = settings_save_one(path, val, len);
 	if (err) {
 		BT_ERR("Failed to store %s value", log_strdup(path));
 	} else {
@@ -1213,6 +1218,8 @@ static void store_pending_mod_sub(struct bt_mesh_model *mod, bool vnd)
 	u16_t groups[CONFIG_BT_MESH_MODEL_GROUP_COUNT];
 	char path[20];
 	int i, count, err;
+	size_t len;
+	void *val;
 
 	for (i = 0, count = 0; i < ARRAY_SIZE(mod->groups); i++) {
 		if (mod->groups[i] != BT_MESH_ADDR_UNASSIGNED) {
@@ -1220,9 +1227,17 @@ static void store_pending_mod_sub(struct bt_mesh_model *mod, bool vnd)
 		}
 	}
 
+	if (count) {
+		val = groups;
+		len = count * sizeof(groups[0]);
+	} else {
+		val = NULL;
+		len = 0;
+	}
+
 	encode_mod_path(mod, vnd, "sub", path, sizeof(path));
 
-	err = settings_save_one(path, groups, count * sizeof(groups[0]));
+	err = settings_save_one(path, val, len);
 	if (err) {
 		BT_ERR("Failed to store %s value", log_strdup(path));
 	} else {

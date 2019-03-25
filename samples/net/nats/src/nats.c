@@ -108,8 +108,7 @@ static int transmitv(struct net_context *conn, int iovcnt,
 		memcpy(&buf[pos], iov[i].base, iov[i].len);
 	}
 
-	return net_context_send_new(conn, buf, pos, NULL,
-				    K_NO_WAIT, NULL, NULL);
+	return net_context_send(conn, buf, pos, NULL, K_NO_WAIT, NULL);
 }
 
 static inline int transmit(struct net_context *conn, const char buffer[],
@@ -567,7 +566,7 @@ static void receive_cb(struct net_context *ctx,
 			break;
 		}
 
-		if (net_pkt_read_new(pkt, (u8_t *)(cmd_buf + cmd_len), len)) {
+		if (net_pkt_read(pkt, (u8_t *)(cmd_buf + cmd_len), len)) {
 			break;
 		}
 
@@ -577,7 +576,7 @@ static void receive_cb(struct net_context *ctx,
 			u8_t dummy;
 			int ret;
 
-			if (net_pkt_read_u8_new(pkt, &dummy)) {
+			if (net_pkt_read_u8(pkt, &dummy)) {
 				break;
 			}
 

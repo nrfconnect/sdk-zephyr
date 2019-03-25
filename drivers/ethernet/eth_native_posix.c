@@ -36,10 +36,6 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include "eth_native_posix_priv.h"
 
-#if defined(CONFIG_NET_L2_ETHERNET)
-#define _ETH_MTU 1500
-#endif
-
 #define NET_BUF_TIMEOUT K_MSEC(100)
 
 #if defined(CONFIG_NET_VLAN)
@@ -49,8 +45,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #endif
 
 struct eth_context {
-	u8_t recv[_ETH_MTU + ETH_HDR_LEN];
-	u8_t send[_ETH_MTU + ETH_HDR_LEN];
+	u8_t recv[NET_ETH_MTU + ETH_HDR_LEN];
+	u8_t send[NET_ETH_MTU + ETH_HDR_LEN];
 	u8_t mac_addr[6];
 	struct net_linkaddr ll_addr;
 	struct net_if *iface;
@@ -185,7 +181,7 @@ static int eth_send(struct device *dev, struct net_pkt *pkt)
 	int count = net_pkt_get_len(pkt);
 	int ret;
 
-	ret = net_pkt_read_new(pkt, ctx->send, count);
+	ret = net_pkt_read(pkt, ctx->send, count);
 	if (ret) {
 		return ret;
 	}
@@ -253,7 +249,7 @@ static int read_data(struct eth_context *ctx, int fd)
 		return -ENOMEM;
 	}
 
-	if (net_pkt_write_new(pkt, ctx->recv, count)) {
+	if (net_pkt_write(pkt, ctx->recv, count)) {
 		return -ENOBUFS;
 	}
 
@@ -509,7 +505,7 @@ static const struct ethernet_api eth_if_api = {
 ETH_NET_DEVICE_INIT(eth_native_posix, ETH_NATIVE_POSIX_DRV_NAME,
 		    eth_init, &eth_context_data, NULL,
 		    CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &eth_if_api,
-		    _ETH_MTU);
+		    NET_ETH_MTU);
 
 #if defined(CONFIG_ETH_NATIVE_POSIX_PTP_CLOCK)
 struct ptp_context {

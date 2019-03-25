@@ -1024,8 +1024,6 @@ cleanup:
 
 int lwm2m_send_message(struct lwm2m_message *msg)
 {
-	int ret;
-
 	if (!msg || !msg->ctx) {
 		LOG_ERR("LwM2M message is invalid.");
 		return -EINVAL;
@@ -1037,13 +1035,12 @@ int lwm2m_send_message(struct lwm2m_message *msg)
 
 	msg->send_attempts++;
 
-	ret = send(msg->ctx->sock_fd, msg->cpkt.data, msg->cpkt.offset, 0);
-	if (ret < 0) {
+	if (send(msg->ctx->sock_fd, msg->cpkt.data, msg->cpkt.offset, 0) < 0) {
 		if (msg->type == COAP_TYPE_CON) {
 			coap_pending_clear(msg->pending);
 		}
 
-		return ret;
+		return -errno;
 	}
 
 	if (msg->type == COAP_TYPE_CON) {
@@ -1058,7 +1055,7 @@ int lwm2m_send_message(struct lwm2m_message *msg)
 		lwm2m_reset_message(msg, true);
 	}
 
-	return ret;
+	return 0;
 }
 
 u16_t lwm2m_get_rd_data(u8_t *client_data, u16_t size)
@@ -2241,13 +2238,13 @@ int lwm2m_write_handler(struct lwm2m_engine_obj_inst *obj_inst,
 		case LWM2M_RES_TYPE_FLOAT32:
 			engine_get_float32fix(&msg->in,
 					      (float32_value_t *)data_ptr);
-			len = 4;
+			len = sizeof(float32_value_t);
 			break;
 
 		case LWM2M_RES_TYPE_FLOAT64:
 			engine_get_float64fix(&msg->in,
 					      (float64_value_t *)data_ptr);
-			len = 8;
+			len = sizeof(float64_value_t);
 			break;
 
 		default:
@@ -3560,7 +3557,6 @@ static void retransmit_request(struct k_work *work)
 	struct lwm2m_ctx *client_ctx;
 	struct lwm2m_message *msg;
 	struct coap_pending *pending;
-	int r;
 
 	client_ctx = CONTAINER_OF(work, struct lwm2m_ctx, retransmit_work);
 	pending = coap_pending_next_to_expire(client_ctx->pendings,
@@ -3589,11 +3585,10 @@ static void retransmit_request(struct k_work *work)
 		return;
 	}
 
-	LOG_DBG("Resending message: %p", msg);
+	LOG_INF("Resending message: %p", msg);
 	msg->send_attempts++;
-	r = send(msg->ctx->sock_fd, msg->cpkt.data, msg->cpkt.offset, 0);
-	if (r < 0) {
-		LOG_ERR("Error sending lwm2m message: %d", r);
+	if (send(msg->ctx->sock_fd, msg->cpkt.data, msg->cpkt.offset, 0) < 0) {
+		LOG_ERR("Error sending lwm2m message: %d", -errno);
 		/* don't error here, retry until timeout */
 	}
 
@@ -3829,9 +3824,22 @@ static void lwm2m_engine_service(struct k_work *work)
 
 int lwm2m_engine_context_close(struct lwm2m_ctx *client_ctx)
 {
+	struct observe_node *obs, *tmp;
+	sys_snode_t *prev_node = NULL;
 	int sock_fd = client_ctx->sock_fd;
 
-	k_delayed_work_cancel(&client_ctx->retransmit_work);
+	/* Remove observes for this context */
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&engine_observer_list,
+					  obs, tmp, node) {
+		if (obs->ctx == client_ctx) {
+			sys_slist_remove(&engine_observer_list, prev_node,
+					 &obs->node);
+			(void)memset(obs, 0, sizeof(*obs));
+		} else {
+			prev_node = &obs->node;
+		}
+	}
+
 	lwm2m_socket_del(client_ctx);
 	client_ctx->sock_fd = -1;
 	if (sock_fd >= 0) {
@@ -4179,6 +4187,8 @@ int lwm2m_engine_start(struct lwm2m_ctx *client_ctx)
 
 static int lwm2m_engine_init(struct device *dev)
 {
+	int ret;
+
 	(void)memset(block1_contexts, 0,
 		     sizeof(struct block_context) * NUM_BLOCK1_CONTEXT);
 
@@ -4195,9 +4205,13 @@ static int lwm2m_engine_init(struct device *dev)
 	LOG_DBG("LWM2M engine socket receive thread started");
 
 	k_delayed_work_init(&periodic_work, lwm2m_engine_service);
-	k_delayed_work_submit(&periodic_work, K_MSEC(2000));
-	LOG_DBG("LWM2M engine periodic work started");
+	ret = k_delayed_work_submit(&periodic_work, K_MSEC(2000));
+	if (ret < 0) {
+		LOG_ERR("Error starting periodic work: %d", ret);
+		return ret;
+	}
 
+	LOG_DBG("LWM2M engine periodic work started");
 	return 0;
 }
 

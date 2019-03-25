@@ -27,55 +27,14 @@ LOG_MODULE_REGISTER(net_ipv4, CONFIG_NET_IPV4_LOG_LEVEL);
 /* Timeout for various buffer allocations in this file. */
 #define NET_BUF_TIMEOUT K_MSEC(50)
 
-struct net_pkt *net_ipv4_create(struct net_pkt *pkt,
-				const struct in_addr *src,
-				const struct in_addr *dst,
-				struct net_if *iface,
-				u8_t next_header_proto)
-{
-	struct net_buf *header;
-
-	header = net_pkt_get_frag(pkt, NET_BUF_TIMEOUT);
-	if (!header) {
-		return NULL;
-	}
-
-	net_pkt_frag_insert(pkt, header);
-
-	NET_IPV4_HDR(pkt)->vhl = 0x45;
-	NET_IPV4_HDR(pkt)->tos = 0x00;
-	NET_IPV4_HDR(pkt)->proto = next_header_proto;
-	NET_IPV4_HDR(pkt)->chksum = 0;
-
-	/* User can tweak the default TTL if needed */
-	NET_IPV4_HDR(pkt)->ttl = net_pkt_ipv4_ttl(pkt);
-	if (NET_IPV4_HDR(pkt)->ttl == 0) {
-		NET_IPV4_HDR(pkt)->ttl = net_if_ipv4_get_ttl(iface);
-	}
-
-	NET_IPV4_HDR(pkt)->offset[0] = NET_IPV4_HDR(pkt)->offset[1] = 0;
-	NET_IPV4_HDR(pkt)->id[0] = NET_IPV4_HDR(pkt)->id[1] = 0;
-
-	net_ipaddr_copy(&NET_IPV4_HDR(pkt)->dst, dst);
-	net_ipaddr_copy(&NET_IPV4_HDR(pkt)->src, src);
-
-	net_pkt_set_ip_hdr_len(pkt, sizeof(struct net_ipv4_hdr));
-	net_pkt_set_family(pkt, AF_INET);
-
-	net_buf_add(header, sizeof(struct net_ipv4_hdr));
-
-	return pkt;
-}
-
-int net_ipv4_create_new(struct net_pkt *pkt,
-			const struct in_addr *src,
-			const struct in_addr *dst)
+int net_ipv4_create(struct net_pkt *pkt,
+		    const struct in_addr *src,
+		    const struct in_addr *dst)
 {
 	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ipv4_access, struct net_ipv4_hdr);
 	struct net_ipv4_hdr *ipv4_hdr;
 
-	ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data_new(pkt,
-							       &ipv4_access);
+	ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data(pkt, &ipv4_access);
 	if (!ipv4_hdr) {
 		return -ENOBUFS;
 	}
@@ -111,8 +70,7 @@ int net_ipv4_finalize(struct net_pkt *pkt, u8_t next_header_proto)
 
 	net_pkt_set_overwrite(pkt, true);
 
-	ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data_new(pkt,
-							       &ipv4_access);
+	ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data(pkt, &ipv4_access);
 	if (!ipv4_hdr) {
 		return -ENOBUFS;
 	}
@@ -120,24 +78,23 @@ int net_ipv4_finalize(struct net_pkt *pkt, u8_t next_header_proto)
 	ipv4_hdr->len   = htons(net_pkt_get_len(pkt));
 	ipv4_hdr->proto = next_header_proto;
 
-	if (net_if_need_calc_tx_checksum(net_pkt_iface(pkt)) ||
-	    next_header_proto == IPPROTO_ICMP) {
+	if (net_if_need_calc_tx_checksum(net_pkt_iface(pkt))) {
 		ipv4_hdr->chksum = net_calc_chksum_ipv4(pkt);
-
-		net_pkt_set_data(pkt, &ipv4_access);
-
-		if (IS_ENABLED(CONFIG_NET_UDP) &&
-		    next_header_proto == IPPROTO_UDP) {
-			return net_udp_finalize(pkt);
-		} else if (IS_ENABLED(CONFIG_NET_TCP) &&
-			   next_header_proto == IPPROTO_TCP) {
-			return net_tcp_finalize(pkt);
-		} else if (next_header_proto == IPPROTO_ICMP) {
-			return net_icmpv4_finalize(pkt);
-		}
 	}
 
-	return net_pkt_set_data(pkt, &ipv4_access);
+	net_pkt_set_data(pkt, &ipv4_access);
+
+	if (IS_ENABLED(CONFIG_NET_UDP) &&
+	    next_header_proto == IPPROTO_UDP) {
+		return net_udp_finalize(pkt);
+	} else if (IS_ENABLED(CONFIG_NET_TCP) &&
+		   next_header_proto == IPPROTO_TCP) {
+		return net_tcp_finalize(pkt);
+	} else if (next_header_proto == IPPROTO_ICMP) {
+		return net_icmpv4_finalize(pkt);
+	}
+
+	return 0;
 }
 
 const struct in_addr *net_ipv4_unspecified_address(void)
@@ -169,7 +126,7 @@ enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 
 	net_stats_update_ipv4_recv(net_pkt_iface(pkt));
 
-	hdr = (struct net_ipv4_hdr *)net_pkt_get_data_new(pkt, &ipv4_access);
+	hdr = (struct net_ipv4_hdr *)net_pkt_get_data(pkt, &ipv4_access);
 	if (!hdr) {
 		NET_DBG("DROP: no buffer");
 		goto drop;
@@ -208,8 +165,8 @@ enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 		goto drop;
 	}
 
-	if (!net_ipv4_is_my_addr(&hdr->dst) &&
-	    !net_ipv4_is_addr_mcast(&hdr->dst) &&
+	if ((!net_ipv4_is_my_addr(&hdr->dst) &&
+	    !net_ipv4_is_addr_mcast(&hdr->dst)) ||
 	    ((hdr->proto == IPPROTO_UDP &&
 	      net_ipv4_addr_cmp(&hdr->dst, net_ipv4_broadcast_address()) &&
 	      !IS_ENABLED(CONFIG_NET_DHCPV4)) ||

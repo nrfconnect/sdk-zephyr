@@ -61,6 +61,7 @@ SECTION_FUNC(TEXT, __pendsv)
 #elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
     movs.n r0, #_EXC_IRQ_DEFAULT_PRIO
     msr BASEPRI, r0
+    isb /* Make the effect of disabling interrupts be realized immediately */
 #else
 #error Unknown ARM architecture
 #endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
@@ -110,7 +111,7 @@ SECTION_FUNC(TEXT, __pendsv)
     /* _kernel is still in r1 */
 
     /* fetch the thread to run from the ready queue cache */
-    ldr r2, [r1, _kernel_offset_to_ready_q_cache]
+    ldr r2, [r1, #_kernel_offset_to_ready_q_cache]
 
     str r2, [r1, #_kernel_offset_to_current]
 
@@ -226,7 +227,7 @@ _thread_irq_disabled:
     /* r2 contains k_thread */
     add r0, r2, #0
     push {r2, lr}
-    blx configure_builtin_stack_guard
+    bl configure_builtin_stack_guard
     pop {r2, lr}
 #endif /* CONFIG_BUILTIN_STACK_GUARD */
 
@@ -302,7 +303,7 @@ _stack_frame_endif:
 
 #if CONFIG_IRQ_OFFLOAD
     push {r0, lr}
-    blx _irq_do_offload  /* call C routine which executes the offload */
+    bl _irq_do_offload  /* call C routine which executes the offload */
     pop {r0, r1}
     mov lr, r1
 #endif /* CONFIG_IRQ_OFFLOAD */
@@ -312,7 +313,7 @@ _stack_frame_endif:
 
 _oops:
     push {r0, lr}
-    blx _do_kernel_oops
+    bl _do_kernel_oops
     pop {r0, pc}
 
 #elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
@@ -368,7 +369,7 @@ SECTION_FUNC(TEXT, __svc)
 
 #if CONFIG_IRQ_OFFLOAD
     push {r0, lr}
-    blx _irq_do_offload  /* call C routine which executes the offload */
+    bl _irq_do_offload  /* call C routine which executes the offload */
     pop {r0, lr}
 
     /* exception return is done in _IntExit() */
@@ -377,7 +378,7 @@ SECTION_FUNC(TEXT, __svc)
 
 _oops:
     push {r0, lr}
-    blx _do_kernel_oops
+    bl _do_kernel_oops
     pop {r0, pc}
 
 #if CONFIG_USERSPACE

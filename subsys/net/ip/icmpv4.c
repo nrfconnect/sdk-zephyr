@@ -25,54 +25,13 @@ LOG_MODULE_REGISTER(net_icmpv4, CONFIG_NET_ICMPV4_LOG_LEVEL);
 
 static sys_slist_t handlers;
 
-int net_icmpv4_set_chksum(struct net_pkt *pkt)
-{
-	u16_t chksum = 0U;
-	struct net_buf *frag;
-	struct net_buf *temp_frag;
-	u16_t temp_pos;
-	u16_t pos;
-
-	frag = net_frag_skip(pkt->frags, 0, &pos,
-			     net_pkt_ip_hdr_len(pkt) +
-			     1 + 1 /* type + code */);
-	if (pos > 0 && !frag) {
-		return -EINVAL;
-	}
-
-	/* Cache checksum fragment and postion, to be safe side first
-	 * write 0's in checksum position and calculate checksum and
-	 * write checksum in the packet.
-	 */
-	temp_frag = frag;
-	temp_pos = pos;
-
-	frag = net_pkt_write(pkt, frag, pos, &pos, sizeof(chksum),
-			     (u8_t *)&chksum, PKT_WAIT_TIME);
-	if (pos > 0 && !frag) {
-		return -EINVAL;
-	}
-
-	chksum = net_calc_chksum_icmpv4(pkt);
-
-	temp_frag = net_pkt_write(pkt, temp_frag, temp_pos, &temp_pos,
-				  sizeof(chksum), (u8_t *)&chksum,
-				  PKT_WAIT_TIME);
-	if (temp_pos > 0 && !temp_frag) {
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 static int icmpv4_create(struct net_pkt *pkt, u8_t icmp_type, u8_t icmp_code)
 {
 	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(icmpv4_access,
 					      struct net_icmp_hdr);
 	struct net_icmp_hdr *icmp_hdr;
 
-	icmp_hdr = (struct net_icmp_hdr *)net_pkt_get_data_new(pkt,
-							       &icmpv4_access);
+	icmp_hdr = (struct net_icmp_hdr *)net_pkt_get_data(pkt, &icmpv4_access);
 	if (!icmp_hdr) {
 		return -ENOBUFS;
 	}
@@ -90,8 +49,7 @@ int net_icmpv4_finalize(struct net_pkt *pkt)
 					      struct net_icmp_hdr);
 	struct net_icmp_hdr *icmp_hdr;
 
-	icmp_hdr = (struct net_icmp_hdr *)net_pkt_get_data_new(pkt,
-							       &icmpv4_access);
+	icmp_hdr = (struct net_icmp_hdr *)net_pkt_get_data(pkt, &icmpv4_access);
 	if (!icmp_hdr) {
 		return -ENOBUFS;
 	}
@@ -134,7 +92,7 @@ static enum net_verdict icmpv4_handle_echo_request(struct net_pkt *pkt,
 		goto drop;
 	}
 
-	if (net_ipv4_create_new(reply, &ip_hdr->dst, &ip_hdr->src) ||
+	if (net_ipv4_create(reply, &ip_hdr->dst, &ip_hdr->src) ||
 	    icmpv4_create(reply, NET_ICMPV4_ECHO_REPLY, 0) ||
 	    net_pkt_copy(reply, pkt, payload_len)) {
 		NET_DBG("DROP: wrong buffer");
@@ -194,12 +152,12 @@ int net_icmpv4_send_echo_request(struct net_if *iface,
 		return -ENOMEM;
 	}
 
-	if (net_ipv4_create_new(pkt, src, dst) ||
+	if (net_ipv4_create(pkt, src, dst) ||
 	    icmpv4_create(pkt, NET_ICMPV4_ECHO_REQUEST, 0)) {
 		goto drop;
 	}
 
-	echo_req = (struct net_icmpv4_echo_req *)net_pkt_get_data_new(
+	echo_req = (struct net_icmpv4_echo_req *)net_pkt_get_data(
 							pkt, &icmpv4_access);
 	if (!echo_req) {
 		goto drop;
@@ -244,8 +202,7 @@ int net_icmpv4_send_error(struct net_pkt *orig, u8_t type, u8_t code)
 
 	net_pkt_cursor_init(orig);
 
-	ip_hdr = (struct net_ipv4_hdr *)net_pkt_get_data_new(orig,
-							     &ipv4_access);
+	ip_hdr = (struct net_ipv4_hdr *)net_pkt_get_data(orig, &ipv4_access);
 	if (!ip_hdr) {
 		goto drop_no_pkt;
 	}
@@ -255,7 +212,7 @@ int net_icmpv4_send_error(struct net_pkt *orig, u8_t type, u8_t code)
 						      struct net_icmp_hdr);
 		struct net_icmp_hdr *icmp_hdr;
 
-		icmp_hdr = (struct net_icmp_hdr *)net_pkt_get_data_new(
+		icmp_hdr = (struct net_icmp_hdr *)net_pkt_get_data(
 							orig, &icmpv4_access);
 		if (!icmp_hdr || icmp_hdr->code < 8) {
 			/* We must not send ICMP errors back */
@@ -283,7 +240,7 @@ int net_icmpv4_send_error(struct net_pkt *orig, u8_t type, u8_t code)
 		goto drop_no_pkt;
 	}
 
-	if (net_ipv4_create_new(pkt, &ip_hdr->dst, &ip_hdr->src) ||
+	if (net_ipv4_create(pkt, &ip_hdr->dst, &ip_hdr->src) ||
 	    icmpv4_create(pkt, type, code) ||
 	    net_pkt_memset(pkt, 0, NET_ICMPV4_UNUSED_LEN) ||
 	    net_pkt_copy(pkt, orig, copy_len)) {
@@ -334,8 +291,7 @@ enum net_verdict net_icmpv4_input(struct net_pkt *pkt,
 	struct net_icmp_hdr *icmp_hdr;
 	struct net_icmpv4_handler *cb;
 
-	icmp_hdr = (struct net_icmp_hdr *)net_pkt_get_data_new(pkt,
-							       &icmp_access);
+	icmp_hdr = (struct net_icmp_hdr *)net_pkt_get_data(pkt, &icmp_access);
 	if (!icmp_hdr) {
 		NET_DBG("DROP: NULL ICMPv4 header");
 		return NET_DROP;

@@ -166,7 +166,7 @@ static int build_reply(const char *name,
 
 	LOG_DBG("%s received %d bytes", name, reply_len);
 
-	net_pkt_read_new(pkt, buf, reply_len);
+	net_pkt_read(pkt, buf, reply_len);
 
 	LOG_DBG("Received %d bytes, sending %d bytes", reply_len, reply_len);
 
@@ -175,7 +175,6 @@ static int build_reply(const char *name,
 
 static inline void pkt_sent(struct net_context *context,
 			    int status,
-			    void *token,
 			    void *user_data)
 {
 	if (status >= 0) {
@@ -216,11 +215,11 @@ static void udp_received(struct net_context *context,
 
 	net_pkt_unref(pkt);
 
-	ret = net_context_sendto_new(context, buf_tx, ret, &dst_addr,
-				     family == AF_INET6 ?
-				     sizeof(struct sockaddr_in6) :
-				     sizeof(struct sockaddr_in),
-				     pkt_sent, 0, NULL, user_data);
+	ret = net_context_sendto(context, buf_tx, ret, &dst_addr,
+				 family == AF_INET6 ?
+				 sizeof(struct sockaddr_in6) :
+				 sizeof(struct sockaddr_in),
+				 pkt_sent, K_NO_WAIT, user_data);
 	if (ret < 0) {
 		LOG_ERR("Cannot send data to peer (%d)", ret);
 	}
@@ -261,8 +260,8 @@ static void tcp_received(struct net_context *context,
 
 	net_pkt_unref(pkt);
 
-	ret = net_context_send_new(context, buf_tx, ret, pkt_sent,
-				   K_NO_WAIT, NULL, NULL);
+	ret = net_context_send(context, buf_tx, ret, pkt_sent,
+			       K_NO_WAIT, NULL);
 	if (ret < 0) {
 		LOG_ERR("Cannot send data to peer (%d)", ret);
 		quit();

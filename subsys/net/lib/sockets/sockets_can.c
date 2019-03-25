@@ -183,9 +183,9 @@ ssize_t zcan_sendto_ctx(struct net_context *ctx, const void *buf, size_t len,
 
 	can_copy_frame_to_zframe((struct can_frame *)buf, &zframe);
 
-	ret = net_context_sendto_new(ctx, (void *)&zframe, sizeof(zframe),
-				     dest_addr, addrlen, NULL, timeout, NULL,
-				     ctx->user_data);
+	ret = net_context_sendto(ctx, (void *)&zframe, sizeof(zframe),
+				 dest_addr, addrlen, NULL, timeout,
+				 ctx->user_data);
 	if (ret < 0) {
 		errno = -ret;
 		return -1;
@@ -236,7 +236,7 @@ static ssize_t zcan_recvfrom_ctx(struct net_context *ctx, void *buf,
 		recv_len = max_len;
 	}
 
-	if (net_pkt_read_new(pkt, (void *)&zframe, sizeof(zframe))) {
+	if (net_pkt_read(pkt, (void *)&zframe, sizeof(zframe))) {
 		errno = EIO;
 		return -1;
 	}

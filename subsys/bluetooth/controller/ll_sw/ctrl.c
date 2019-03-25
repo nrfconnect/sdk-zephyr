@@ -74,6 +74,13 @@
 #define RADIO_TIFS    150 /* BT Spec. defined */
 /* Inter Event Space */
 #define RADIO_TIES_US 625 /* Implementation defined */
+/* Range Delay
+ * Refer to BT Spec v5.1 Vol.6, Part B, Section 4.2.3 Range Delay
+ * "4 / 1000" is an approximation of the propagation time in us of the
+ * signal to travel 1 meter.
+ */
+#define RADIO_RANGE_DISTANCE 1000 /* meters */
+#define RADIO_RANGE_DELAY_US (2 * RADIO_RANGE_DISTANCE * 4 / 1000)
 
 /* Implementation defines */
 #define RADIO_TICKER_JITTER_US           16
@@ -671,8 +678,8 @@ static inline void isr_radio_state_tx(void)
 
 	_radio.state = STATE_RX;
 
-	hcto = radio_tmr_tifs_base_get()
-		+ RADIO_TIFS + 4 + 1; /* 1us, end jitter */
+	hcto = radio_tmr_tifs_base_get() + RADIO_TIFS + 4 +
+	       RADIO_RANGE_DELAY_US + 1; /* 1us, end jitter */
 
 	radio_tmr_tifs_set(RADIO_TIFS);
 
@@ -7460,11 +7467,11 @@ static inline void event_enc_prep(struct connection *conn)
 
 #if !defined(CONFIG_BT_CTLR_FAST_ENC)
 	} else {
-		start_enc_rsp_send(_radio.conn_curr, pdu_ctrl_tx);
+		start_enc_rsp_send(conn, pdu_ctrl_tx);
 
 		/* resume data packet rx and tx */
-		_radio.conn_curr->pause_rx = 0;
-		_radio.conn_curr->pause_tx = 0;
+		conn->pause_rx = 0;
+		conn->pause_tx = 0;
 #endif /* !CONFIG_BT_CTLR_FAST_ENC */
 
 	}
@@ -7927,7 +7934,7 @@ static inline void event_ping_prep(struct connection *conn)
 #endif /* CONFIG_BT_CTLR_LE_PING */
 
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
-static inline void event_len_prep(struct connection *conn)
+static inline int event_len_prep(struct connection *conn)
 {
 	switch (conn->llcp_length.state) {
 	case LLCP_LENGTH_STATE_REQ:
@@ -7942,12 +7949,12 @@ static inline void event_len_prep(struct connection *conn)
 		LL_ASSERT(free_count_rx <= 0xFF);
 
 		if (_radio.packet_rx_data_count != free_count_rx) {
-			break;
+			return 0;
 		}
 
 		node_tx = mem_acquire(&_radio.pkt_tx_ctrl_free);
 		if (!node_tx) {
-			break;
+			return 0;
 		}
 
 		/* wait for resp before completing the procedure */
@@ -8007,10 +8014,12 @@ static inline void event_len_prep(struct connection *conn)
 		LL_ASSERT(free_count_rx <= 0xFF);
 
 		if (_radio.packet_rx_data_count != free_count_rx) {
-			/** TODO another role instance has obtained
-			 * memory from rx pool.
+			/* NOTE: Another role instance has obtained
+			 * memory from rx pool, skip this event and
+			 * check in the next event if resize can be
+			 * done.
 			 */
-			LL_ASSERT(0);
+			return -EAGAIN;
 		}
 
 		/* Procedure complete */
@@ -8144,6 +8153,8 @@ static inline void event_len_prep(struct connection *conn)
 		LL_ASSERT(0);
 		break;
 	}
+
+	return 0;
 }
 #endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 
@@ -8525,7 +8536,12 @@ static void event_connection_prepare(u32_t ticks_at_expire,
 		event_stop(0, 0, 0, (void *)STATE_ABORT);
 
 		/* handle DLU state machine */
-		event_len_prep(conn);
+		if (event_len_prep(conn)) {
+			/* NOTE: rx pool could not be resized, lets skip this
+			 *       event and try in the next event.
+			 */
+			return;
+		}
 	}
 #endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 
@@ -9945,10 +9961,10 @@ static u8_t feature_rsp_send(struct connection *conn,
 
 	/* AND the feature set to get Feature USED */
 	req = &pdu_data_rx->llctrl.feature_req;
-	_radio.conn_curr->llcp_features &= feat_get(&req->features[0]);
+	conn->llcp_features &= feat_get(&req->features[0]);
 
 	/* features exchanged */
-	_radio.conn_curr->common.fex_valid = 1U;
+	conn->common.fex_valid = 1U;
 
 	/* Enqueue feature response */
 	pdu_ctrl_tx = (void *)node_tx->pdu_data;
@@ -11330,7 +11346,12 @@ u8_t ll_enc_req_send(u16_t handle, u8_t *rand, u8_t *ediv, u8_t *ltk)
 		return BT_HCI_ERR_UNKNOWN_CONN_ID;
 	}
 
+#if defined(CONFIG_BT_CTLR_PHY)
+	if ((conn->llcp_req != conn->llcp_ack) ||
+	    (conn->llcp_phy.req != conn->llcp_phy.ack)) {
+#else /* CONFIG_BT_CTLR_PHY */
 	if (conn->llcp_req != conn->llcp_ack) {
+#endif /* CONFIG_BT_CTLR_PHY */
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
 
@@ -11513,8 +11534,10 @@ u8_t ll_tx_pwr_lvl_get(u16_t handle, u8_t type, s8_t *tx_pwr_lvl)
 
 	/*TODO: check type here for current or maximum */
 
-	/* TODO: Support TX Power Level other than 0dBm */
-	*tx_pwr_lvl = 0;
+	/* TODO: Support TX Power Level other than default when dynamic
+	 *       updates is implemented.
+	 */
+	*tx_pwr_lvl = RADIO_TXP_DEFAULT;
 
 	return 0;
 }

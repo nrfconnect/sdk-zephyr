@@ -18,7 +18,7 @@
  *        is allowed.
  */
 struct dynamic_region_info {
-	u8_t index;
+	int index;
 	struct arm_mpu_region region_conf;
 };
 
@@ -203,6 +203,31 @@ static inline void _get_region_attr_from_k_mem_partition_info(
 
 #if defined(CONFIG_USERSPACE)
 
+/**
+ * This internal function returns the minimum HW MPU region index
+ * that may hold the configuration of a dynamic memory region.
+ *
+ * Browse through the memory areas marked for dynamic MPU programming,
+ * pick the one with the minimum MPU region index. Return that index.
+ *
+ * The function is optimized for the (most common) use-case of a single
+ * marked area for dynamic memory regions.
+ */
+static inline int _get_dyn_region_min_index(void)
+{
+	int dyn_reg_min_index = dyn_reg_info[0].index;
+#if MPU_DYNAMIC_REGION_AREAS_NUM > 1
+	for (int i = 1; i < MPU_DYNAMIC_REGION_AREAS_NUM; i++) {
+		if ((dyn_reg_info[i].index != -EINVAL) &&
+			(dyn_reg_info[i].index < dyn_reg_min_index)
+		) {
+			dyn_reg_min_index = dyn_reg_info[i].index;
+		}
+	}
+#endif
+	return dyn_reg_min_index;
+}
+
 static inline u32_t _mpu_region_get_size(u32_t index)
 {
 	return _mpu_region_get_last_addr(index) + 1
@@ -225,6 +250,25 @@ static inline int _is_enabled_region(u32_t index)
 /**
  * This internal function validates whether a given memory buffer
  * is user accessible or not.
+ *
+ * Note: [Doc. number: ARM-ECM-0359818]
+ * "Some SAU, IDAU, and MPU configurations block the efficient implementation
+ * of an address range check. The CMSE intrinsic operates under the assumption
+ * that the configuration of the SAU, IDAU, and MPU is constrained as follows:
+ * - An object is allocated in a single MPU/SAU/IDAU region.
+ * - A stack is allocated in a single region.
+ *
+ * These points imply that the memory buffer does not span across multiple MPU,
+ * SAU, or IDAU regions."
+ *
+ * MPU regions are configurable, however, some platforms might have fixed-size
+ * SAU or IDAU regions. So, even if a buffer is allocated inside a single MPU
+ * region, it might span across multiple SAU/IDAU regions, which will make the
+ * TT-based address range check fail.
+ *
+ * Therefore, the function performs a second check, which is based on MPU only,
+ * in case the fast address range check fails.
+ *
  */
 static inline int _mpu_buffer_validate(void *addr, size_t size, int write)
 {
@@ -241,6 +285,27 @@ static inline int _mpu_buffer_validate(void *addr, size_t size, int write)
 		}
 	}
 
+#if defined(CONFIG_CPU_HAS_TEE)
+	/*
+	 * Validation failure may be due to SAU/IDAU presence.
+	 * We re-check user accessibility based on MPU only.
+	 */
+	s32_t r_index_base = arm_cmse_mpu_region_get(_addr);
+	s32_t r_index_last = arm_cmse_mpu_region_get(_addr + _size - 1);
+
+	if ((r_index_base != -EINVAL) && (r_index_base == r_index_last)) {
+		/* Valid MPU region, check permissions on base address only. */
+		if (write) {
+			if (arm_cmse_addr_readwrite_ok(_addr, 1)) {
+				return 0;
+			}
+		} else {
+			if (arm_cmse_addr_read_ok(_addr, 1)) {
+				return 0;
+			}
+		}
+	}
+#endif /* CONFIG_CPU_HAS_TEE */
 	return -EPERM;
 }
 

@@ -75,7 +75,8 @@ static const struct dummy_api fake_dev_api = {
 NET_DEVICE_INIT(fake_dev, "fake_dev",
 		fake_dev_init, NULL, NULL,
 		CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
-		&fake_dev_api, _ETH_L2_LAYER, _ETH_L2_CTX_TYPE, 1500);
+		&fake_dev_api, _ETH_L2_LAYER, _ETH_L2_CTX_TYPE,
+		NET_ETH_MTU);
 
 /*********************\
  * UTILITY FUNCTIONS *
@@ -226,19 +227,19 @@ static void test_net_pkt_basics_of_rw(void)
 	/* Let's subsequently write 1 byte, then 2 bytes and 4 bytes
 	 * We write values made of 0s
 	 */
-	ret = net_pkt_write_u8_new(pkt, 0);
+	ret = net_pkt_write_u8(pkt, 0);
 	zassert_true(ret == 0, "Pkt write failed");
 
 	/* Length should be 1 now */
 	zassert_true(net_pkt_get_len(pkt) == 1, "Pkt length mismatch");
 
-	ret = net_pkt_write_be16_new(pkt, 0);
+	ret = net_pkt_write_be16(pkt, 0);
 	zassert_true(ret == 0, "Pkt write failed");
 
 	/* Length should be 3 now */
 	zassert_true(net_pkt_get_len(pkt) == 3, "Pkt length mismatch");
 
-	ret = net_pkt_write_be32_new(pkt, 0);
+	ret = net_pkt_write_be32(pkt, 0);
 	zassert_true(ret == 0, "Pkt write failed");
 
 	/* Length should be 7 now */
@@ -247,7 +248,7 @@ static void test_net_pkt_basics_of_rw(void)
 	/* All these writing functions use net_ptk_write(), which works
 	 * this way:
 	 */
-	ret = net_pkt_write_new(pkt, small_buffer, 9);
+	ret = net_pkt_write(pkt, small_buffer, 9);
 	zassert_true(ret == 0, "Pkt write failed");
 
 	/* Length should be 16 now */
@@ -314,7 +315,7 @@ static void test_net_pkt_basics_of_rw(void)
 	zassert_true(net_pkt_get_len(pkt) == 40, "Pkt length mismatch");
 
 	/* And you can write stuff */
-	ret = net_pkt_write_le32_new(pkt, 0);
+	ret = net_pkt_write_le32(pkt, 0);
 	zassert_true(ret == 0, "Pkt write failed");
 
 	/* Again, length should _still_ be 40 */
@@ -333,7 +334,7 @@ static void test_net_pkt_basics_of_rw(void)
 	 * This is completely nominal, as being set, overwrite allows r/w only
 	 * on existing data in the buffer:
 	 */
-	ret = net_pkt_write_be32_new(pkt, 0);
+	ret = net_pkt_write_be32(pkt, 0);
 	zassert_true(ret != 0, "Pkt write succeeded where it shouldn't have");
 
 	/* Logically, in order to be able to add new data in the buffer,
@@ -342,7 +343,7 @@ static void test_net_pkt_basics_of_rw(void)
 	net_pkt_set_overwrite(pkt, false);
 
 	/* But it will fail: */
-	ret = net_pkt_write_le32_new(pkt, 0);
+	ret = net_pkt_write_le32(pkt, 0);
 	zassert_true(ret != 0, "Pkt write succeeded?");
 
 	/* Why is that?
@@ -379,7 +380,7 @@ void test_net_pkt_advanced_basics(void)
 	 * and back again to your previous position?
 	 * You could certainly do:
 	 */
-	ret = net_pkt_write_new(pkt, small_buffer, 20);
+	ret = net_pkt_write(pkt, small_buffer, 20);
 	zassert_true(ret == 0, "Pkt write failed");
 
 	pkt_print_cursor(pkt);
@@ -482,7 +483,7 @@ void test_net_pkt_easier_rw_usage(void)
 		struct net_ipv4_hdr *ip_hdr;
 
 		ip_hdr = (struct net_ipv4_hdr *)
-			net_pkt_get_data_new(pkt, &ip_access);
+			net_pkt_get_data(pkt, &ip_access);
 		zassert_not_null(ip_hdr, "Accessor failed");
 
 		ip_hdr->tos = 0x00;

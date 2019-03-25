@@ -241,7 +241,7 @@ static bool send_ipv6_udp_msg(struct net_if *iface,
 					IPPROTO_UDP, K_SECONDS(1));
 	zassert_not_null(pkt, "Out of mem");
 
-	if (net_ipv6_create_new(pkt, src, dst) ||
+	if (net_ipv6_create(pkt, src, dst) ||
 	    net_udp_create(pkt, htons(src_port), htons(dst_port))) {
 		printk("Cannot create IPv6 UDP pkt %p", pkt);
 		zassert_true(0, "exiting");
@@ -292,12 +292,12 @@ static bool send_ipv6_udp_long_msg(struct net_if *iface,
 					IPPROTO_UDP, K_SECONDS(1));
 	zassert_not_null(pkt, "Out of mem");
 
-	if (net_ipv6_create_new(pkt, src, dst)) {
+	if (net_ipv6_create(pkt, src, dst)) {
 		printk("Cannot create IPv6  pkt %p", pkt);
 		zassert_true(0, "exiting");
 	}
 
-	if (net_pkt_write_new(pkt, (u8_t *)ipv6_hop_by_hop_ext_hdr,
+	if (net_pkt_write(pkt, (u8_t *)ipv6_hop_by_hop_ext_hdr,
 			      sizeof(ipv6_hop_by_hop_ext_hdr))) {
 		printk("Cannot write IPv6 ext header pkt %p", pkt);
 		zassert_true(0, "exiting");
@@ -308,7 +308,7 @@ static bool send_ipv6_udp_long_msg(struct net_if *iface,
 		zassert_true(0, "exiting");
 	}
 
-	if (net_pkt_write_new(pkt, (u8_t *)payload, sizeof(payload))) {
+	if (net_pkt_write(pkt, (u8_t *)payload, sizeof(payload))) {
 		printk("Cannot write IPv6 ext header pkt %p", pkt);
 		zassert_true(0, "exiting");
 	}
@@ -355,7 +355,7 @@ static bool send_ipv4_udp_msg(struct net_if *iface,
 					IPPROTO_UDP, K_SECONDS(1));
 	zassert_not_null(pkt, "Out of mem");
 
-	if (net_ipv4_create_new(pkt, src, dst) ||
+	if (net_ipv4_create(pkt, src, dst) ||
 	    net_udp_create(pkt, htons(src_port), htons(dst_port))) {
 		printk("Cannot create IPv4 UDP pkt %p", pkt);
 		zassert_true(0, "exiting");

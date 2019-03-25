@@ -464,10 +464,10 @@ static int pkt_setup_ip_data(struct net_pkt *pkt,
 
 #if defined(CONFIG_NET_IPV6)
 	if (net_pkt_family(pkt) == AF_INET6) {
-		if (net_ipv6_create_new(
+		if (net_ipv6_create(
 			    pkt,
-			    &((struct sockaddr_in6 *)&sock->src)->sin6_addr,
-			    &((struct sockaddr_in6 *)&sock->dst)->sin6_addr)) {
+			    &((struct sockaddr_in6 *)&sock->dst)->sin6_addr,
+			    &((struct sockaddr_in6 *)&sock->src)->sin6_addr)) {
 			return -1;
 		}
 
@@ -476,7 +476,7 @@ static int pkt_setup_ip_data(struct net_pkt *pkt,
 #endif
 #if defined(CONFIG_NET_IPV4)
 	if (net_pkt_family(pkt) == AF_INET) {
-		if (net_ipv4_create_new(
+		if (net_ipv4_create(
 			    pkt,
 			    &((struct sockaddr_in *)&sock->dst)->sin_addr,
 			    &((struct sockaddr_in *)&sock->src)->sin_addr)) {
@@ -504,8 +504,7 @@ static int pkt_setup_ip_data(struct net_pkt *pkt,
 		NET_PKT_DATA_ACCESS_DEFINE(tcp_access, struct net_tcp_hdr);
 		struct net_tcp_hdr *tcp;
 
-		tcp = (struct net_tcp_hdr *)net_pkt_get_data_new(pkt,
-								 &tcp_access);
+		tcp = (struct net_tcp_hdr *)net_pkt_get_data(pkt, &tcp_access);
 		if (!tcp) {
 			return -1;
 		}
@@ -858,7 +857,7 @@ static void on_cmd_sockread(struct net_buf **buf, u16_t len)
 		}
 
 		if (i % 2) {
-			if (net_pkt_write_u8_new(sock->recv_pkt, c)) {
+			if (net_pkt_write_u8(sock->recv_pkt, c)) {
 				LOG_ERR("Unable to add data! Aborting!");
 				net_pkt_unref(sock->recv_pkt);
 				sock->recv_pkt = NULL;
@@ -1298,7 +1297,6 @@ static void wncm14a2a_rssi_query_work(struct k_work *work)
 	ret = send_at_cmd(NULL, "AT%MEAS=\"23\"", MDM_CMD_TIMEOUT);
 	if (ret < 0) {
 		LOG_ERR("AT%%MEAS ret:%d", ret);
-		return;
 	}
 
 	/* re-start RSSI query work */
@@ -1663,7 +1661,6 @@ static int offload_sendto(struct net_pkt *pkt,
 			  socklen_t addrlen,
 			  net_context_send_cb_t cb,
 			  s32_t timeout,
-			  void *token,
 			  void *user_data)
 {
 	struct net_context *context = net_pkt_context(pkt);
@@ -1687,7 +1684,7 @@ static int offload_sendto(struct net_pkt *pkt,
 
 	net_pkt_unref(pkt);
 	if (cb) {
-		cb(context, ret, token, user_data);
+		cb(context, ret, user_data);
 	}
 
 	return ret;
@@ -1696,7 +1693,6 @@ static int offload_sendto(struct net_pkt *pkt,
 static int offload_send(struct net_pkt *pkt,
 			net_context_send_cb_t cb,
 			s32_t timeout,
-			void *token,
 			void *user_data)
 {
 	struct net_context *context = net_pkt_context(pkt);
@@ -1718,7 +1714,7 @@ static int offload_send(struct net_pkt *pkt,
 	}
 
 	return offload_sendto(pkt, &context->remote, addrlen, cb,
-			      timeout, token, user_data);
+			      timeout, user_data);
 }
 
 static int offload_recv(struct net_context *context,

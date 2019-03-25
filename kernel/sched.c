@@ -283,7 +283,6 @@ void z_time_slice(int ticks)
 {
 #ifdef CONFIG_SWAP_NONATOMIC
 	if (pending_current == _current) {
-		pending_current = NULL;
 		reset_time_slice();
 		return;
 	}
@@ -430,11 +429,21 @@ void z_thread_timeout(struct _timeout *to)
 
 int z_pend_curr_irqlock(u32_t key, _wait_q_t *wait_q, s32_t timeout)
 {
+	pend(_current, wait_q, timeout);
+
 #if defined(CONFIG_TIMESLICING) && defined(CONFIG_SWAP_NONATOMIC)
 	pending_current = _current;
-#endif
-	pend(_current, wait_q, timeout);
+
+	int ret = z_swap_irqlock(key);
+	LOCKED(&sched_spinlock) {
+		if (pending_current == _current) {
+			pending_current = NULL;
+		}
+	}
+	return ret;
+#else
 	return z_swap_irqlock(key);
+#endif
 }
 
 int z_pend_curr(struct k_spinlock *lock, k_spinlock_key_t key,
@@ -1021,7 +1030,7 @@ void z_sched_abort(struct k_thread *thread)
 	while ((thread->base.thread_state & _THREAD_DEAD) == 0) {
 		LOCKED(&sched_spinlock) {
 			if (z_is_thread_queued(thread)) {
-				_current->base.thread_state |= _THREAD_DEAD;
+				thread->base.thread_state |= _THREAD_DEAD;
 				_priq_run_remove(&_kernel.ready_q.runq, thread);
 				z_mark_thread_as_not_queued(thread);
 			}

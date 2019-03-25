@@ -60,7 +60,7 @@ int net_ipv6_find_last_ext_hdr(struct net_pkt *pkt, u16_t *next_hdr_off,
 
 	net_pkt_cursor_init(pkt);
 
-	hdr = (struct net_ipv6_hdr *)net_pkt_get_data_new(pkt, &ipv6_access);
+	hdr = (struct net_ipv6_hdr *)net_pkt_get_data(pkt, &ipv6_access);
 	if (!hdr) {
 		return -ENOBUFS;
 	}
@@ -75,7 +75,7 @@ int net_ipv6_find_last_ext_hdr(struct net_pkt *pkt, u16_t *next_hdr_off,
 
 	nexthdr = hdr->nexthdr;
 	while (!net_ipv6_is_nexthdr_upper_layer(nexthdr)) {
-		if (net_pkt_read_u8_new(pkt, &next_nexthdr)) {
+		if (net_pkt_read_u8(pkt, &next_nexthdr)) {
 			goto fail;
 		}
 
@@ -84,7 +84,7 @@ int net_ipv6_find_last_ext_hdr(struct net_pkt *pkt, u16_t *next_hdr_off,
 		case NET_IPV6_NEXTHDR_DESTO:
 			length = 0U;
 
-			if (net_pkt_read_u8_new(pkt, (u8_t *)&length)) {
+			if (net_pkt_read_u8(pkt, (u8_t *)&length)) {
 				goto fail;
 			}
 
@@ -296,7 +296,7 @@ static void reassemble_packet(struct net_ipv6_reassembly *reass)
 		goto error;
 	}
 
-	ipv6.frag_hdr = (struct net_ipv6_frag_hdr *)net_pkt_get_data_new(
+	ipv6.frag_hdr = (struct net_ipv6_frag_hdr *)net_pkt_get_data(
 							pkt, &frag_access);
 	if (!ipv6.frag_hdr) {
 		NET_ERR("Failed to get fragment header");
@@ -314,14 +314,13 @@ static void reassemble_packet(struct net_ipv6_reassembly *reass)
 
 	/* This one updates the previous header's nexthdr value */
 	if (net_pkt_skip(pkt, net_pkt_ipv6_hdr_prev(pkt)) ||
-	    net_pkt_write_u8_new(pkt, next_hdr)) {
+	    net_pkt_write_u8(pkt, next_hdr)) {
 		goto error;
 	}
 
 	net_pkt_cursor_init(pkt);
 
-	ipv6.hdr = (struct net_ipv6_hdr *)net_pkt_get_data_new(pkt,
-							       &ipv6_access);
+	ipv6.hdr = (struct net_ipv6_hdr *)net_pkt_get_data(pkt, &ipv6_access);
 	if (!ipv6.hdr) {
 		goto error;
 	}
@@ -457,12 +456,12 @@ enum net_verdict net_ipv6_handle_fragment_hdr(struct net_pkt *pkt,
 
 	/* Each fragment has a fragment header, however since we already
 	 * read the nexthdr part of it, we are not going to use
-	 * net_pkt_get_data_new() and access the header directly: the cursor
+	 * net_pkt_get_data() and access the header directly: the cursor
 	 * being 1 byte too far, let's just read the next relevant pieces.
 	 */
 	if (net_pkt_skip(pkt, 1) || /* reserved */
-	    net_pkt_read_be16_new(pkt, &flag) ||
-	    net_pkt_read_be32_new(pkt, &id)) {
+	    net_pkt_read_be16(pkt, &flag) ||
+	    net_pkt_read_be32(pkt, &id)) {
 		goto drop;
 	}
 
@@ -596,7 +595,7 @@ static int send_ipv6_fragment(struct net_pkt *pkt,
 	 * Note that we insert the right next header to point to fragment header
 	 */
 	if (net_pkt_copy(frag_pkt, pkt, next_hdr_off) ||
-	    net_pkt_write_u8_new(frag_pkt, NET_IPV6_NEXTHDR_FRAG) ||
+	    net_pkt_write_u8(frag_pkt, NET_IPV6_NEXTHDR_FRAG) ||
 	    net_pkt_skip(pkt, 1) ||
 	    net_pkt_copy(frag_pkt, pkt, net_pkt_ip_hdr_len(pkt) +
 			 net_pkt_ipv6_ext_len(pkt) - next_hdr_off - 1)) {
@@ -604,8 +603,8 @@ static int send_ipv6_fragment(struct net_pkt *pkt,
 	}
 
 	/* And we append the fragmentation header */
-	frag_hdr = (struct net_ipv6_frag_hdr *)net_pkt_get_data_new(
-						frag_pkt, &frag_access);
+	frag_hdr = (struct net_ipv6_frag_hdr *)net_pkt_get_data(frag_pkt,
+								&frag_access);
 	if (!frag_hdr) {
 		goto fail;
 	}
@@ -679,9 +678,9 @@ int net_ipv6_send_fragmented_pkt(struct net_if *iface, struct net_pkt *pkt,
 	net_pkt_cursor_init(pkt);
 
 	if (net_pkt_skip(pkt, next_hdr_off) ||
-	    net_pkt_read_u8_new(pkt, &next_hdr) ||
+	    net_pkt_read_u8(pkt, &next_hdr) ||
 	    net_pkt_skip(pkt, last_hdr_off) ||
-	    net_pkt_read_u8_new(pkt, &last_hdr)) {
+	    net_pkt_read_u8(pkt, &last_hdr)) {
 		return -ENOBUFS;
 	}
 

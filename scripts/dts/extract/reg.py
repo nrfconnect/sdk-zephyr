@@ -13,10 +13,6 @@ from extract.directive import DTDirective
 # @brief Manage reg directive.
 #
 class DTReg(DTDirective):
-
-    def __init__(self):
-        pass
-
     ##
     # @brief Extract reg directive info
     #
@@ -27,7 +23,6 @@ class DTReg(DTDirective):
     #                  compatible definition.
     #
     def extract(self, node_path, names, def_label, div):
-
         node = reduced[node_path]
         node_compat = get_compat(node_path)
         binding = get_binding(node_path)
@@ -52,7 +47,7 @@ class DTReg(DTDirective):
                     extract_cells(node_path, "cs-gpios", cs_gpios, None, reg[0], def_label, "cs-gpio", True)
 
         # generate defines
-        l_base = def_label.split('/')
+        l_base = [def_label]
         l_addr = [str_to_label("BASE_ADDRESS")]
         l_size = ["SIZE"]
 

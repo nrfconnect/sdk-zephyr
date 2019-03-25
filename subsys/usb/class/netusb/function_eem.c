@@ -8,18 +8,20 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(usb_eem);
 
-#include <net_private.h>
-#include <zephyr.h>
-#include <usb_device.h>
-#include <usb_common.h>
-
 #include <net/net_pkt.h>
+#include <net/ethernet.h>
+#include <net_private.h>
 
-#include <usb_descriptor.h>
-#include <class/usb_cdc.h>
+#include <usb/usb_device.h>
+#include <usb/usb_common.h>
+#include <usb/class/usb_cdc.h>
+
 #include "netusb.h"
 
-#define EEM_FRAME_SIZE 1522
+static u8_t sentinel[] = { 0xde, 0xad, 0xbe, 0xef };
+
+#define EEM_FRAME_SIZE (NET_ETH_MAX_FRAME_SIZE + sizeof(sentinel) + \
+			sizeof(u16_t)) /* EEM header */
 
 static u8_t tx_buf[EEM_FRAME_SIZE], rx_buf[EEM_FRAME_SIZE];
 
@@ -51,8 +53,7 @@ USBD_CLASS_DESCR_DEFINE(primary, 0) struct usb_cdc_eem_config cdc_eem_cfg = {
 		.bEndpointAddress = CDC_EEM_IN_EP_ADDR,
 		.bmAttributes = USB_DC_EP_BULK,
 		.wMaxPacketSize =
-			sys_cpu_to_le16(
-			CONFIG_CDC_EEM_BULK_EP_MPS),
+			sys_cpu_to_le16(CONFIG_CDC_EEM_BULK_EP_MPS),
 		.bInterval = 0x00,
 	},
 
@@ -63,8 +64,7 @@ USBD_CLASS_DESCR_DEFINE(primary, 0) struct usb_cdc_eem_config cdc_eem_cfg = {
 		.bEndpointAddress = CDC_EEM_OUT_EP_ADDR,
 		.bmAttributes = USB_DC_EP_BULK,
 		.wMaxPacketSize =
-			sys_cpu_to_le16(
-			CONFIG_CDC_EEM_BULK_EP_MPS),
+			sys_cpu_to_le16(CONFIG_CDC_EEM_BULK_EP_MPS),
 		.bInterval = 0x00,
 	},
 };
@@ -101,7 +101,6 @@ static inline u16_t eem_pkt_size(u16_t hdr)
 
 static int eem_send(struct net_pkt *pkt)
 {
-	u8_t sentinel[4] = { 0xde, 0xad, 0xbe, 0xef };
 	u16_t *hdr = (u16_t *)&tx_buf[0];
 	int ret, len, b_idx = 0;
 
@@ -110,11 +109,16 @@ static int eem_send(struct net_pkt *pkt)
 	 */
 	len = net_pkt_get_len(pkt) + sizeof(sentinel);
 
+	if (len + sizeof(u16_t) > sizeof(tx_buf)) {
+		LOG_WRN("Trying to send too large packet, drop");
+		return -ENOMEM;
+	}
+
 	/* Add EEM header */
 	*hdr = sys_cpu_to_le16(0x3FFF & len);
 	b_idx += sizeof(u16_t);
 
-	if (net_pkt_read_new(pkt, &tx_buf[b_idx], net_pkt_get_len(pkt))) {
+	if (net_pkt_read(pkt, &tx_buf[b_idx], net_pkt_get_len(pkt))) {
 		return -ENOBUFS;
 	}
 
@@ -174,15 +178,15 @@ static void eem_read_cb(u8_t ep, int size, void *priv)
 		}
 
 		pkt = net_pkt_alloc_with_buffer(netusb_net_iface(),
-						eem_size - 4, AF_UNSPEC, 0,
-						K_FOREVER);
+						eem_size - sizeof(sentinel),
+						AF_UNSPEC, 0, K_FOREVER);
 		if (!pkt) {
 			LOG_ERR("Unable to alloc pkt\n");
 			break;
 		}
 
 		/* copy payload and discard 32-bit sentinel */
-		if (net_pkt_write_new(pkt, ptr, eem_size - 4)) {
+		if (net_pkt_write(pkt, ptr, eem_size - sizeof(sentinel))) {
 			LOG_ERR("Unable to write into pkt\n");
 			net_pkt_unref(pkt);
 			break;
