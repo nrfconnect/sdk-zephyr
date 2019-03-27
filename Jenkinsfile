@@ -1,4 +1,4 @@
-def IMAGE_TAG = "ncs-toolchain:1.07"
+def IMAGE_TAG = "ncs-toolchain:1.08"
 def REPO_CI_TOOLS = "https://github.com/zephyrproject-rtos/ci-tools.git"
 
 pipeline {
@@ -39,8 +39,7 @@ pipeline {
           git branch: "master", url: "$REPO_CI_TOOLS"
         }
 
-	// Install and initialize west
-        sh "pip3 install --user west==0.5.4"
+        // Initialize west
         sh "west init -l zephyr/"
 
         // Checkout
