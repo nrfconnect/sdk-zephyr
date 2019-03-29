@@ -74,7 +74,7 @@ set(DOC_WARN ${CMAKE_CURRENT_BINARY_DIR}/doc.warnings)
 set(CONTENT_OUTPUTS ${CMAKE_CURRENT_BINARY_DIR}/extracted-content.txt)
 
 configure_file(${DOXYFILE_IN} ${DOXYFILE_OUT} @ONLY)
-file(TOUCH ${CMAKE_CURRENT_BINARY_DIR}/Kconfig.modules)
+file(TOUCH ${CMAKE_BINARY_DIR}/Kconfig.modules)
 
 # This command is used to copy all documentation source files from the
 # ZEPHYR_BASE/ environment variable into the build directory,
