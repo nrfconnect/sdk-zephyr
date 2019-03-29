@@ -63,21 +63,21 @@ static int spi_sam0_configure(struct device *dev,
 
 	ctrla.bit.MODE = SERCOM_SPI_CTRLA_MODE_SPI_MASTER_Val;
 
-	if ((config->operation & SPI_TRANSFER_LSB) != 0) {
+	if ((config->operation & SPI_TRANSFER_LSB) != 0U) {
 		ctrla.bit.DORD = 1;
 	}
 
-	if ((config->operation & SPI_MODE_CPOL) != 0) {
+	if ((config->operation & SPI_MODE_CPOL) != 0U) {
 		ctrla.bit.CPOL = 1;
 	}
 
-	if ((config->operation & SPI_MODE_CPHA) != 0) {
+	if ((config->operation & SPI_MODE_CPHA) != 0U) {
 		ctrla.bit.CPHA = 1;
 	}
 
 	ctrla.reg |= cfg->pads;
 
-	if ((config->operation & SPI_MODE_LOOP) != 0) {
+	if ((config->operation & SPI_MODE_LOOP) != 0U) {
 		/* Put MISO and MOSI on the same pad */
 		ctrla.bit.DOPO = 0;
 		ctrla.bit.DIPO = 0;
@@ -94,7 +94,7 @@ static int spi_sam0_configure(struct device *dev,
 	ctrlb.bit.CHSIZE = 0;
 
 	/* Use the requested or next higest possible frequency */
-	div = (SOC_ATMEL_SAM0_GCLK0_FREQ_HZ / config->frequency) / 2 - 1;
+	div = (SOC_ATMEL_SAM0_GCLK0_FREQ_HZ / config->frequency) / 2U - 1;
 	div = MAX(0, MIN(UINT8_MAX, div));
 
 	/* Update the configuration only if it has changed */
@@ -111,9 +111,8 @@ static int spi_sam0_configure(struct device *dev,
 		wait_synchronization(regs);
 	}
 
-	spi_context_cs_configure(&data->ctx);
-
 	data->ctx.config = config;
+	spi_context_cs_configure(&data->ctx);
 
 	return 0;
 }
@@ -408,9 +407,6 @@ static int spi_sam0_transceive_sync(struct device *dev,
 				    const struct spi_buf_set *tx_bufs,
 				    const struct spi_buf_set *rx_bufs)
 {
-	struct spi_sam0_data *data = dev->driver_data;
-
-	spi_context_lock(&data->ctx, false, NULL);
 	return spi_sam0_transceive(dev, config, tx_bufs, rx_bufs);
 }
 
@@ -421,10 +417,8 @@ static int spi_sam0_transceive_async(struct device *dev,
 				     const struct spi_buf_set *rx_bufs,
 				     struct k_poll_signal *async)
 {
-	struct spi_sam0_data *data = dev->driver_data;
-
-	spi_context_lock(&data->ctx, true, async);
-	return spi_sam0_transceive(dev, config, tx_bufs, rx_bufs);
+	/* TODO: implement asyc transceive */
+	return -ENOTSUP;
 }
 #endif /* CONFIG_SPI_ASYNC */
 

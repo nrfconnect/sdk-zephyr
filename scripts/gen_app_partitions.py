@@ -36,13 +36,9 @@ import sys
 import argparse
 import os
 import re
-import string
-import subprocess
 from collections import OrderedDict
-from elf_helper import ElfHelper
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
-from operator import itemgetter
 
 SZ = 'size'
 SRC = 'sources'
@@ -103,9 +99,8 @@ elf_part_size_regex = re.compile(r'z_data_smem_(.*)_part_size')
 def find_obj_file_partitions(filename, partitions):
     with open(filename, 'rb') as f:
         full_lib = ELFFile( f)
-        if (not full_lib):
-            print("Error parsing file: ",filename)
-            os.exit(1)
+        if not full_lib:
+            sys.exit("Error parsing file: " + filename)
 
         sections = [x for x in full_lib.iter_sections()]
         for section in sections:
@@ -129,9 +124,9 @@ def find_obj_file_partitions(filename, partitions):
 
 def parse_obj_files(partitions):
     # Iterate over all object files to find partitions
-    for dirpath, dirs, files in os.walk(args.directory):
+    for dirpath, _, files in os.walk(args.directory):
         for filename in files:
-            if re.match(".*\.obj$",filename):
+            if re.match(r".*\.obj$",filename):
                 fullname = os.path.join(dirpath, filename)
                 find_obj_file_partitions(fullname, partitions)
 
@@ -144,7 +139,7 @@ def parse_elf_file(partitions):
                        if isinstance(s, SymbolTableSection)]
 
         for section in symbol_tbls:
-            for nsym, symbol in enumerate(section.iter_symbols()):
+            for symbol in section.iter_symbols():
                 if symbol['st_shndx'] != "SHN_ABS":
                     continue
 
@@ -207,7 +202,6 @@ def parse_args():
 
 def main():
     parse_args()
-    linker_file = args.output
     partitions = {}
 
     if args.directory is not None:

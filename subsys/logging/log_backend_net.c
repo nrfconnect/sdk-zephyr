@@ -87,13 +87,13 @@ static int do_net_init(void)
 	if (IS_ENABLED(CONFIG_NET_IPV4) && server_addr.sa_family == AF_INET) {
 		local_addr = (struct sockaddr *)&local_addr4;
 		server_addr_len = sizeof(struct sockaddr_in);
-		local_addr4.sin_port = 0;
+		local_addr4.sin_port = 0U;
 	}
 
 	if (IS_ENABLED(CONFIG_NET_IPV6) && server_addr.sa_family == AF_INET6) {
 		local_addr = (struct sockaddr *)&local_addr6;
 		server_addr_len = sizeof(struct sockaddr_in6);
-		local_addr6.sin6_port = 0;
+		local_addr6.sin6_port = 0U;
 	}
 
 	if (local_addr == NULL) {
@@ -236,7 +236,7 @@ const struct log_backend_api log_backend_net_api = {
 	.put_sync_string = IS_ENABLED(CONFIG_LOG_IMMEDIATE) ?
 							sync_string : NULL,
 	/* Currently we do not send hexdumps over network to remote server
-	 * in CONFIG_LOG_IMMEDIATE_MODE. This is just to save resources,
+	 * in CONFIG_LOG_IMMEDIATE mode. This is just to save resources,
 	 * this can be revisited if needed.
 	 */
 	.put_sync_hexdump = NULL,

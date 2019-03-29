@@ -3,9 +3,7 @@
 # A script to generate a list of boards that have changed or added and create an
 # arguemnts file for sanitycheck to allow running more tests for those boards.
 
-import sys
 import re, os
-from email.utils import parseaddr
 import sh
 import logging
 import argparse
@@ -62,7 +60,7 @@ def main():
     for f in files:
         if f.endswith(".rst") or f.endswith(".png") or f.endswith(".jpg"):
             continue
-        p = re.match("^boards\/[^/]+\/([^/]+)\/", f)
+        p = re.match(r"^boards\/[^/]+\/([^/]+)\/", f)
         if p and p.groups():
             boards.add(p.group(1))
 
@@ -73,4 +71,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -144,12 +144,12 @@ building and running a sample:
      :zephyr-app: samples/bluetooth/<sample>
      :host-os: unix
      :board: native_posix
-     :goals: run
+     :goals: build
      :compact:
 
   And then run it with::
 
-     $ zephyr/zephyr.exe --bt-dev=hci0
+     $ sudo zephyr/zephyr.exe --bt-dev=hci0
 
 Using a Zephyr-based BLE Controller
 ===================================
@@ -161,6 +161,18 @@ transports when building a single-mode, Zephyr-based BLE Controller:
   the instructions in :ref:`bluetooth-hci-uart-qemu-posix`.
 * USB: Use the :ref:`hci_usb <bluetooth-hci-usb-sample>` sample and then
   treat it as a Host System Bluetooth Controller (see previous section)
+
+HCI Tracing
+===========
+
+When running the Host on a computer connected to an external Controller, it
+is very useful to be able to see the full log of exchanges between the two,
+in the format of a :ref:`bluetooth-hci` log.
+In order to see those logs, you can use the built-in ``btmon`` tool from BlueZ:
+
+.. code-block:: console
+
+   $ btmon
 
 .. _bluetooth_ctlr_bluez:
 

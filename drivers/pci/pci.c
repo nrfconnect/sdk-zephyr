@@ -79,10 +79,6 @@
 
 #include <soc.h>
 
-#define LOG_LEVEL CONFIG_PCI_LOG_LEVEL
-#include <logging/log.h>
-LOG_MODULE_REGISTER(pci);
-
 #include <pci/pci_mgr.h>
 #include <pci/pci.h>
 
@@ -146,7 +142,7 @@ static int pci_bar_config_get(union pci_addr_reg pci_ctrl_addr, u32_t *config)
 		  sizeof(old_value), old_value);
 
 	/* check if this BAR is implemented */
-	if (*config != 0xffffffff && *config != 0) {
+	if (*config != 0xffffffff && *config != 0U) {
 		return 0;
 	}
 
@@ -205,7 +201,7 @@ static int pci_bar_params_get(union pci_addr_reg pci_ctrl_addr,
 	dev_info->addr = bar_value & mask;
 
 	addr = bar_config & mask;
-	if (addr != 0) {
+	if (addr != 0U) {
 		/* calculate the size of the BAR memory required */
 		dev_info->size = 1 << (find_lsb_set(addr) - 1);
 	}
@@ -260,7 +256,6 @@ static int pci_dev_scan(union pci_addr_reg pci_ctrl_addr,
 
 		/* Skip single function device */
 		if (lookup.func != 0 && !multi_function) {
-			LOG_DBG("Skip single function device");
 			break;
 		}
 
@@ -399,7 +394,6 @@ int pci_bus_scan(struct pci_dev_info *dev_info)
 	for (; lookup.bus < lookup.buses; lookup.bus++) {
 		for (; lookup.dev < LSPCI_MAX_DEV; lookup.dev++) {
 			if (lookup.bus == 0 && lookup.dev == 0) {
-				LOG_DBG("Skip Host Bridge");
 				continue;
 			}
 
@@ -433,8 +427,6 @@ static void pci_set_command_bits(struct pci_dev_info *dev_info, u32_t bits)
 	pci_ctrl_addr.field.bus = dev_info->bus;
 	pci_ctrl_addr.field.device = dev_info->dev;
 	pci_ctrl_addr.field.reg = 1;
-
-	LOG_DBG("bits 0x%x", bits);
 
 	pci_read(DEFAULT_PCI_CONTROLLER, pci_ctrl_addr,
 		 sizeof(u16_t), &pci_data);

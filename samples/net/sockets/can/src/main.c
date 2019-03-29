@@ -23,11 +23,11 @@ static struct k_thread tx_data;
 static void tx(int *can_fd)
 {
 	int fd = POINTER_TO_INT(can_fd);
-	struct zcan_frame msg;
-	struct can_frame frame;
+	struct zcan_frame msg = {0};
+	struct can_frame frame = {0};
 	int ret, i;
 
-	msg.dlc = 8;
+	msg.dlc = 8U;
 	msg.id_type = CAN_STANDARD_IDENTIFIER;
 	msg.std_id = 0x1;
 	msg.rtr = CAN_DATAFRAME;

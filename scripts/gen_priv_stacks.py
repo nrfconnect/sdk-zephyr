@@ -73,20 +73,20 @@ u8_t *_k_priv_stack_find(void *obj)
 """
 
 
-def write_gperf_table(fp, eh, objs, static_begin, static_end):
+def write_gperf_table(fp, eh, objs):
     fp.write(header)
 
     # priv stack declarations
     fp.write("%{\n")
     fp.write(includes)
-    for obj_addr, ko in objs.items():
+    for obj_addr in objs:
         fp.write(priv_stack_decl_temp % (obj_addr))
     fp.write("%}\n")
 
     # structure declaration
     fp.write(structure)
 
-    for obj_addr, ko in objs.items():
+    for obj_addr in objs:
         byte_str = struct.pack("<I" if eh.little_endian else ">I", obj_addr)
         fp.write("\"")
         for byte in byte_str:
@@ -134,8 +134,7 @@ def main():
         sys.exit(1)
 
     with open(args.output, "w") as fp:
-        write_gperf_table(fp, eh, objs, syms["_static_kernel_objects_begin"],
-                          syms["_static_kernel_objects_end"])
+        write_gperf_table(fp, eh, objs)
 
 
 if __name__ == "__main__":

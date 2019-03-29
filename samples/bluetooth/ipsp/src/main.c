@@ -163,14 +163,19 @@ static int build_reply(const char *name,
 		       u8_t *buf)
 {
 	int reply_len = net_pkt_remaining_data(pkt);
+	int ret;
 
 	LOG_DBG("%s received %d bytes", name, reply_len);
 
-	net_pkt_read(pkt, buf, reply_len);
+	ret = net_pkt_read(pkt, buf, reply_len);
+	if (ret < 0) {
+		LOG_ERR("cannot read packet: %d", ret);
+		return ret;
+	}
 
-	LOG_DBG("Received %d bytes, sending %d bytes", reply_len, reply_len);
+	LOG_DBG("sending %d bytes", ret);
 
-	return reply_len;
+	return ret;
 }
 
 static inline void pkt_sent(struct net_context *context,
@@ -212,6 +217,10 @@ static void udp_received(struct net_context *context,
 	set_dst_addr(family, pkt, ip_hdr->ipv6, proto_hdr->udp, &dst_addr);
 
 	ret = build_reply(dbg, pkt, buf_tx);
+	if (ret < 0) {
+		LOG_ERR("Cannot send data to peer (%d)", ret);
+		return;
+	}
 
 	net_pkt_unref(pkt);
 
@@ -257,6 +266,10 @@ static void tcp_received(struct net_context *context,
 		 family == AF_INET6 ? '6' : '4');
 
 	ret = build_reply(dbg, pkt, buf_tx);
+	if (ret < 0) {
+		LOG_ERR("Cannot send data to peer (%d)", ret);
+		return;
+	}
 
 	net_pkt_unref(pkt);
 

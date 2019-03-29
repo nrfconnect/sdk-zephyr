@@ -73,9 +73,9 @@ static inline int is_metairq(struct k_thread *thread)
 }
 
 #if CONFIG_ASSERT
-static inline int is_thread_dummy(struct k_thread *thread)
+static inline bool is_thread_dummy(struct k_thread *thread)
 {
-	return !!(thread->base.thread_state & _THREAD_DUMMY);
+	return (thread->base.thread_state & _THREAD_DUMMY) != 0U;
 }
 #endif
 
@@ -423,6 +423,7 @@ void z_thread_timeout(struct _timeout *to)
 		z_unpend_thread_no_timeout(th);
 	}
 	z_mark_thread_as_started(th);
+	z_mark_thread_as_not_suspended(th);
 	z_ready_thread(th);
 }
 #endif
@@ -743,7 +744,7 @@ ALWAYS_INLINE void z_priq_mq_add(struct _priq_mq *pq, struct k_thread *thread)
 	int priority_bit = thread->base.prio - K_HIGHEST_THREAD_PRIO;
 
 	sys_dlist_append(&pq->queues[priority_bit], &thread->base.qnode_dlist);
-	pq->bitmask |= (1 << priority_bit);
+	pq->bitmask |= BIT(priority_bit);
 }
 
 ALWAYS_INLINE void z_priq_mq_remove(struct _priq_mq *pq, struct k_thread *thread)
@@ -758,7 +759,7 @@ ALWAYS_INLINE void z_priq_mq_remove(struct _priq_mq *pq, struct k_thread *thread
 
 	sys_dlist_remove(&thread->base.qnode_dlist);
 	if (sys_dlist_is_empty(&pq->queues[priority_bit])) {
-		pq->bitmask &= ~(1 << priority_bit);
+		pq->bitmask &= ~BIT(priority_bit);
 	}
 }
 
@@ -944,8 +945,11 @@ s32_t z_impl_k_sleep(s32_t duration)
 #endif
 	z_remove_thread_from_ready_q(_current);
 	z_add_thread_timeout(_current, ticks);
+	z_mark_thread_as_suspended(_current);
 
 	(void)z_swap(&local_lock, key);
+
+	__ASSERT(!z_is_thread_state_set(_current, _THREAD_SUSPENDED), "");
 
 	ticks = expected_wakeup_time - z_tick_get_32();
 	if (ticks > 0) {
@@ -979,6 +983,7 @@ void z_impl_k_wakeup(k_tid_t thread)
 		return;
 	}
 
+	z_mark_thread_as_not_suspended(thread);
 	z_ready_thread(thread);
 
 	if (!z_is_in_isr()) {
@@ -1027,7 +1032,7 @@ void z_sched_abort(struct k_thread *thread)
 	/* Wait for it to be flagged dead either by the CPU it was
 	 * running on or because we caught it idle in the queue
 	 */
-	while ((thread->base.thread_state & _THREAD_DEAD) == 0) {
+	while ((thread->base.thread_state & _THREAD_DEAD) == 0U) {
 		LOCKED(&sched_spinlock) {
 			if (z_is_thread_queued(thread)) {
 				thread->base.thread_state |= _THREAD_DEAD;

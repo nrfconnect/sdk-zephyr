@@ -12,13 +12,16 @@
 #include <tracing.h>
 #include <stdbool.h>
 
+BUILD_ASSERT(K_LOWEST_APPLICATION_THREAD_PRIO
+	     >= K_HIGHEST_APPLICATION_THREAD_PRIO);
+
 #ifdef CONFIG_MULTITHREADING
-#define Z_VALID_PRIO(prio, entry_point) \
+#define Z_VALID_PRIO(prio, entry_point)				     \
 	(((prio) == K_IDLE_PRIO && z_is_idle_thread(entry_point)) || \
-		 (z_is_prio_higher_or_equal((prio), \
-			K_LOWEST_APPLICATION_THREAD_PRIO) && \
-		  z_is_prio_lower_or_equal((prio), \
-			K_HIGHEST_APPLICATION_THREAD_PRIO)))
+	 ((K_LOWEST_APPLICATION_THREAD_PRIO			     \
+	   >= K_HIGHEST_APPLICATION_THREAD_PRIO)		     \
+	  && (prio) >= K_HIGHEST_APPLICATION_THREAD_PRIO	     \
+	  && (prio) <= K_LOWEST_APPLICATION_THREAD_PRIO))
 
 #define Z_ASSERT_VALID_PRIO(prio, entry_point) do { \
 	__ASSERT(Z_VALID_PRIO((prio), (entry_point)), \
@@ -84,15 +87,15 @@ static inline bool z_is_idle_thread(void *entry_point)
 
 static inline bool z_is_thread_pending(struct k_thread *thread)
 {
-	return !!(thread->base.thread_state & _THREAD_PENDING);
+	return (thread->base.thread_state & _THREAD_PENDING) != 0U;
 }
 
-static inline int z_is_thread_prevented_from_running(struct k_thread *thread)
+static inline bool z_is_thread_prevented_from_running(struct k_thread *thread)
 {
 	u8_t state = thread->base.thread_state;
 
-	return state & (_THREAD_PENDING | _THREAD_PRESTART | _THREAD_DEAD |
-			_THREAD_DUMMY | _THREAD_SUSPENDED);
+	return (state & (_THREAD_PENDING | _THREAD_PRESTART | _THREAD_DEAD |
+			 _THREAD_DUMMY | _THREAD_SUSPENDED)) != 0U;
 
 }
 
@@ -109,12 +112,12 @@ static inline bool z_is_thread_ready(struct k_thread *thread)
 
 static inline bool z_has_thread_started(struct k_thread *thread)
 {
-	return (thread->base.thread_state & _THREAD_PRESTART) == 0;
+	return (thread->base.thread_state & _THREAD_PRESTART) == 0U;
 }
 
 static inline bool z_is_thread_state_set(struct k_thread *thread, u32_t state)
 {
-	return !!(thread->base.thread_state & state);
+	return (thread->base.thread_state & state) != 0U;
 }
 
 static inline bool z_is_thread_queued(struct k_thread *thread)

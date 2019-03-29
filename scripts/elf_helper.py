@@ -95,7 +95,7 @@ class ArrayType:
         self.offset = offset
 
     def __repr__(self):
-        return "<array of %d, size %d>" % (self.member_type, self.num_members)
+        return "<array of %d>" % self.member_type
 
     def has_kobject(self):
         if self.member_type not in type_env:
@@ -148,11 +148,12 @@ class AggregateTypeMember:
             if member_offset[0] == 0x23:
                 self.member_offset = member_offset[1] & 0x7f
                 for i in range(1, len(member_offset)-1):
-                    if (member_offset[i] & 0x80):
+                    if member_offset[i] & 0x80:
                         self.member_offset += (
                             member_offset[i+1] & 0x7f) << i*7
             else:
-                self.debug_die("not yet supported location operation")
+                raise Exception("not yet supported location operation (%s:%d:%d)" %
+                        (self.member_name, self.member_type, member_offset[0]))
         else:
             self.member_offset = member_offset
 
@@ -385,7 +386,7 @@ class ElfHelper:
 
         # Step 1: collect all type information.
         for CU in di.iter_CUs():
-            for idx, die in enumerate(CU.iter_DIEs()):
+            for die in CU.iter_DIEs():
                 # Unions are disregarded, kernel objects should never be union
                 # members since the memory is not dedicated to that object and
                 # could be something else
@@ -508,10 +509,10 @@ class ElfHelper:
             if apiaddr not in all_objs:
                 if apiaddr == 0:
                     self.debug("device instance at 0x%x has no associated subsystem"
-                            % addr);
+                            % addr)
                 else:
                     self.debug("device instance at 0x%x has unknown API 0x%x"
-                            % (addr, apiaddr));
+                            % (addr, apiaddr))
                 # API struct does not correspond to a known subsystem, skip it
                 continue
 
@@ -532,8 +533,8 @@ class ElfHelper:
     def get_symbols(self):
         for section in self.elf.iter_sections():
             if isinstance(section, SymbolTableSection):
-                return {self.sym.name: self.sym.entry.st_value
-                        for self.sym in section.iter_symbols()}
+                return {sym.name: sym.entry.st_value
+                        for sym in section.iter_symbols()}
 
         raise LookupError("Could not find symbol table")
 

@@ -210,19 +210,24 @@ int can_stm32_runtime_configure(struct device *dev, enum can_mode mode,
 	u32_t bs1;
 	u32_t bs2;
 	u32_t sjw;
+	int ret;
 
 	clock = device_get_binding(STM32_CLOCK_CONTROL_NAME);
 	__ASSERT_NO_MSG(clock);
 	hcan.Instance = can;
+	ret = clock_control_get_rate(clock, (clock_control_subsys_t *) &cfg->pclken,
+				     &clock_rate);
+	if (ret != 0) {
+		LOG_ERR("Failed call clock_control_get_rate: return [%d]", ret);
+		return -EIO;
+	}
 
-	clock_control_get_rate(clock, (clock_control_subsys_t *) &cfg->pclken,
-			       &clock_rate);
 	if (!bitrate) {
 		bitrate = cfg->bus_speed;
 	}
 
 	prescaler = clock_rate / (BIT_SEG_LENGTH(cfg) * bitrate);
-	if (prescaler == 0 || prescaler > 1024) {
+	if (prescaler == 0U || prescaler > 1024) {
 		LOG_ERR("HAL_CAN_Init failed: prescaler > max (%d > 1024)",
 					prescaler);
 		return -EINVAL;
@@ -341,7 +346,7 @@ int can_stm32_send(struct device *dev, const struct zcan_frame *msg,
 		    "standard" : "extended"
 		    , msg->rtr == CAN_DATAFRAME ? "no" : "yes");
 
-	__ASSERT(msg->dlc == 0 || msg->data != NULL, "Dataptr is null");
+	__ASSERT(msg->dlc == 0U || msg->data != NULL, "Dataptr is null");
 	__ASSERT(msg->dlc <= CAN_MAX_DLC, "DLC > 8");
 
 	if (can->ESR & CAN_ESR_BOFF) {

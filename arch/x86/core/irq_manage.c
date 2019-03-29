@@ -83,7 +83,7 @@ void z_arch_isr_direct_footer(int swap)
 	 * 2) We are not in a nested interrupt
 	 * 3) Next thread to run in the ready queue is not this thread
 	 */
-	if (swap && !_kernel.nested &&
+	if (swap != 0 && _kernel.nested == 0 &&
 	    _kernel.ready_q.cache != _current) {
 		unsigned int flags;
 
@@ -163,7 +163,7 @@ static unsigned int priority_to_free_vector(unsigned int requested_priority)
 	unsigned int vector_block;
 	unsigned int vector;
 
-	static unsigned int mask[2] = {0x0000ffff, 0xffff0000};
+	static unsigned int mask[2] = {0x0000ffffU, 0xffff0000U};
 
 	vector_block = requested_priority + 2;
 
@@ -198,7 +198,7 @@ static unsigned int priority_to_free_vector(unsigned int requested_priority)
 			z_interrupt_vectors_allocated[entry];
 	fsb = find_lsb_set(search_set);
 
-	__ASSERT(fsb != 0, "No remaning vectors for priority level %d",
+	__ASSERT(fsb != 0U, "No remaning vectors for priority level %d",
 		 requested_priority);
 
 	/*
@@ -206,7 +206,7 @@ static unsigned int priority_to_free_vector(unsigned int requested_priority)
 	 * Mark it as allocated by clearing the bit.
 	 */
 	--fsb;
-	z_interrupt_vectors_allocated[entry] &= ~(1 << fsb);
+	z_interrupt_vectors_allocated[entry] &= ~BIT(fsb);
 
 	/* compute vector given allocated bit within the priority level */
 	vector = (entry << 5) + fsb;
@@ -314,7 +314,7 @@ int z_arch_irq_connect_dynamic(unsigned int irq, unsigned int priority,
 #else
 	vector = priority_to_free_vector(priority);
 	/* 0 indicates not used, vectors for interrupts start at 32 */
-	__ASSERT(_irq_to_interrupt_vector[irq] == 0,
+	__ASSERT(_irq_to_interrupt_vector[irq] == 0U,
 		 "IRQ %d already configured", irq);
 	_irq_to_interrupt_vector[irq] = vector;
 #endif

@@ -16,7 +16,7 @@ static void top_handler(struct device *dev, void *user_data);
 void *exp_user_data = (void *)199;
 
 #if defined(CONFIG_COUNTER_MCUX_RTC) || defined(CONFIG_COUNTER_RTC_STM32)
-#define COUNTER_PERIOD_US (2*USEC_PER_SEC)
+#define COUNTER_PERIOD_US (USEC_PER_SEC * 2U)
 #else
 #define COUNTER_PERIOD_US 20000
 #endif
@@ -81,7 +81,7 @@ typedef void (*counter_test_func_t)(const char *dev_name);
 
 static void counter_setup_instance(const char *dev_name)
 {
-	alarm_cnt = 0;
+	alarm_cnt = 0U;
 }
 
 static void counter_tear_down_instance(const char *dev_name)
@@ -123,7 +123,7 @@ void test_set_top_value_with_alarm_instance(const char *dev_name)
 	u32_t ticks;
 	u32_t tmp_top_cnt;
 
-	top_cnt = 0;
+	top_cnt = 0U;
 
 	dev = device_get_binding(dev_name);
 	ticks = counter_us_to_ticks(dev, COUNTER_PERIOD_US);
@@ -143,7 +143,7 @@ void test_set_top_value_with_alarm_instance(const char *dev_name)
 	k_busy_wait(5.2*COUNTER_PERIOD_US);
 
 	tmp_top_cnt = top_cnt; /* to avoid passing volatile to the macro */
-	zassert_true(tmp_top_cnt == 5,
+	zassert_true(tmp_top_cnt == 5U,
 			"Unexpected number of turnarounds (%d) (dev: %s).\n",
 			tmp_top_cnt, dev_name);
 }
@@ -180,7 +180,7 @@ void test_single_shot_alarm_instance(const char *dev_name, bool set_top)
 	alarm_cfg.callback = alarm_handler;
 	alarm_cfg.user_data = &alarm_cfg;
 
-	alarm_cnt = 0;
+	alarm_cnt = 0U;
 
 	if (counter_get_num_of_channels(dev) < 1U) {
 		/* Counter does not support any alarm */
@@ -286,7 +286,7 @@ void test_multiple_alarms_instance(const char *dev_name)
 	alarm_cfg2.callback = alarm_handler2;
 	alarm_cfg2.user_data = &alarm_cfg2;
 
-	alarm_cnt = 0;
+	alarm_cnt = 0U;
 
 	if (counter_get_num_of_channels(dev) < 2U) {
 		/* Counter does not support two alarms */
@@ -307,7 +307,7 @@ void test_multiple_alarms_instance(const char *dev_name)
 	err = counter_set_channel_alarm(dev, 1, &alarm_cfg2);
 	zassert_equal(0, err, "Counter set alarm failed\n");
 
-	k_busy_wait(1.2*counter_ticks_to_us(dev, 2*ticks));
+	k_busy_wait(1.2*counter_ticks_to_us(dev, ticks * 2U));
 	tmp_alarm_cnt = alarm_cnt; /* to avoid passing volatile to the macro */
 	zassert_equal(2, tmp_alarm_cnt, "Counter set alarm failed\n");
 	zassert_equal(&alarm_cfg2, clbk_data[0],

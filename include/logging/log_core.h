@@ -10,6 +10,7 @@
 #include <logging/log_instance.h>
 #include <misc/util.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,10 +27,13 @@ extern "C" {
 #endif
 
 #define LOG_FUNCTION_PREFIX_MASK \
-	((IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_ERR) << LOG_LEVEL_ERR) | \
-	 (IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_WRN) << LOG_LEVEL_WRN) | \
-	 (IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_INF) << LOG_LEVEL_INF) | \
-	 (IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_DBG) << LOG_LEVEL_DBG))
+	(((u32_t)IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_ERR) << \
+	  LOG_LEVEL_ERR) | \
+	 ((u32_t)IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_WRN) << \
+	  LOG_LEVEL_WRN) | \
+	 ((u32_t)IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_INF) << \
+	  LOG_LEVEL_INF) | \
+	 ((u32_t)IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_DBG) << LOG_LEVEL_DBG))
 
 /** @brief Macro for returning local level value if defined or default.
  *
@@ -98,7 +102,7 @@ extern "C" {
  * @def LOG_CURRENT_MODULE_ID
  * @brief Macro for getting ID of current module.
  */
-#define LOG_CURRENT_MODULE_ID() (__log_level ? \
+#define LOG_CURRENT_MODULE_ID() (__log_level != 0 ? \
 	log_const_source_id(__log_current_const_data) : 0)
 
 /**
@@ -200,7 +204,7 @@ extern "C" {
 	(IS_ENABLED(CONFIG_LOG) &&					    \
 	(Z_LOG_LEVEL_CHECK(_level, CONFIG_LOG_OVERRIDE_LEVEL, LOG_LEVEL_NONE) \
 	||								    \
-	(!IS_ENABLED(CONFIG_LOG_OVERRIDE_LEVEL) &&			    \
+	((IS_ENABLED(CONFIG_LOG_OVERRIDE_LEVEL) == false) &&		    \
 	(_level <= __log_level) &&					    \
 	(_level <= CONFIG_LOG_MAX_LEVEL)				    \
 	)								    \
@@ -219,13 +223,13 @@ extern "C" {
 				.source_id = _id			    \
 			};						    \
 									    \
-			if ((1 << _level) & LOG_FUNCTION_PREFIX_MASK) {	    \
+			if ((BIT(_level) & LOG_FUNCTION_PREFIX_MASK) != 0U) {\
 				__LOG_INTERNAL(src_level,		    \
 						Z_LOG_STR(__VA_ARGS__));	    \
 			} else {					    \
 				__LOG_INTERNAL(src_level, __VA_ARGS__);	    \
 			}						    \
-		} else if (0) {						    \
+		} else if (false) {					    \
 			/* Arguments checker present but never evaluated.*/ \
 			/* Placed here to ensure that __VA_ARGS__ are*/     \
 			/* evaluated once when log is enabled.*/	    \
@@ -300,7 +304,7 @@ extern "C" {
 #define LOG_FILTERS_NUM_OF_SLOTS (32 / LOG_FILTER_SLOT_SIZE)
 
 /** @brief Slot mask. */
-#define LOG_FILTER_SLOT_MASK ((1 << LOG_FILTER_SLOT_SIZE) - 1)
+#define LOG_FILTER_SLOT_MASK (BIT(LOG_FILTER_SLOT_SIZE) - 1)
 
 /** @brief Bit offset of a slot.
  *

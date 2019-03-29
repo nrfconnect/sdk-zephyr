@@ -106,7 +106,7 @@ void *init_page_tables(void)
 
 		/* Each PDE filled with 2M supervisor pages */
 		for (int i = 0; i < 512; i++) {
-			if (!(gb == 0 && i == 0)) {
+			if (!(gb == 0U && i == 0)) {
 				pde[i].addr = (gb << 30) | (i << 21);
 				pde[i].present = 1;
 				pde[i].writable = 1;
@@ -200,7 +200,7 @@ void cstart(unsigned int magic, unsigned int arg)
 	if (magic == BOOT_MAGIC_STUB16) {
 		cpu_id = _shared.num_active_cpus++;
 		init_stack = _shared.smpinit_stack;
-		_shared.smpinit_stack = 0;
+		_shared.smpinit_stack = 0U;
 		__asm__ volatile("movl $0, (%0)" : : "m"(_shared.smpinit_lock));
 	}
 

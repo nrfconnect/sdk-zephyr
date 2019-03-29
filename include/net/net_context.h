@@ -97,9 +97,8 @@ typedef void (*net_context_recv_cb_t)(struct net_context *context,
  * blocked while handling packets.
  *
  * @param context The context to use.
- * @param status Value is set to 0 if all data was sent ok, <0 if
- * there was an error sending data. >0 amount of data that was
- * sent when not all data was sent ok.
+ * @param status Value is set to >= 0: amount of data that was sent,
+ * < 0 there was an error sending data.
  * @param user_data The user data given in net_send() call.
  */
 typedef void (*net_context_send_cb_t)(struct net_context *context,
@@ -378,7 +377,7 @@ static inline sa_family_t net_context_get_family(struct net_context *context)
 static inline void net_context_set_family(struct net_context *context,
 					  sa_family_t family)
 {
-	u8_t flag = 0;
+	u8_t flag = 0U;
 
 	NET_ASSERT(context);
 
@@ -421,7 +420,7 @@ enum net_sock_type net_context_get_type(struct net_context *context)
 static inline void net_context_set_type(struct net_context *context,
 					enum net_sock_type type)
 {
-	u16_t flag = 0;
+	u16_t flag = 0U;
 
 	NET_ASSERT(context);
 
