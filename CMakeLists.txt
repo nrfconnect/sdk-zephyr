@@ -1456,6 +1456,8 @@ if(FIRST_BOILERPLATE_EXECUTION)
     # Merge in out-of-tree hex files.
     set(MERGED_HEX_NAME merged.hex)
 
+    list(REMOVE_DUPLICATES HEX_FILES_TO_MERGE)
+
     add_custom_command(
       OUTPUT ${MERGED_HEX_NAME}
       COMMAND
