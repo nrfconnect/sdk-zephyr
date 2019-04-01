@@ -258,7 +258,23 @@ else() # NOT FIRST_BOILERPLATE_EXECUTION
 
   # Have the child image select the same BOARD that was selected by
   # the parent.
-  set(BOARD ${CACHED_BOARD})
+  # Unless parent was "ns" in which case we assume that the child images are
+  # all secure, and should be build using the secure version of the board.
+  # It is assumed that only the root app will be built as non-secure.
+  # This is not a valid assumption as there might be multiple non-secure
+  # images defined. With this technique, it is not possible to have multiple
+  # images defined as non-secure.
+  # TODO: Allow multiple non-secure images by using Kconfig to set the
+  # secure/non-secure property rather than using a separate board definition.
+  if(${BOARD} STREQUAL nrf9160_pca10090ns)
+    set(BOARD nrf9160_pca10090)
+    message("Changed board to secure nrf9160_pca10090 (NOT NS)")
+  endif()
+
+  if(${BOARD} STREQUAL nrf9160_pca20035ns)
+    set(BOARD nrf9160_pca20035)
+    message("Changed board to secure nrf9160_pca20035 (NOT NS)")
+  endif()
 
   unset(${IMAGE}DTC_OVERLAY_FILE)
   if(EXISTS              ${APPLICATION_SOURCE_DIR}/${BOARD}.overlay)
