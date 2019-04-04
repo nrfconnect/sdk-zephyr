@@ -214,6 +214,7 @@
 /include/zephyr.h                         @andrewboie @andyross
 /kernel/                                  @andrewboie @andyross
 /lib/gui/                                 @vanwinkeljan
+/lib/os/                                  @andrewboie @andyross
 /lib/posix/                               @pfalcon
 /kernel/device.c                          @andrewboie @andyross @nashif
 /kernel/idle.c                            @andrewboie @andyross @nashif
@@ -254,6 +255,7 @@
 /scripts/series-push-hook.sh              @erwango
 /scripts/west_commands/                   @mbolivar
 /scripts/west-commands.yml                @mbolivar
+/scripts/zephyr_module.py                 @tejlmand
 /subsys/bluetooth/                        @sjanc @jhedberg @Vudentz
 /subsys/bluetooth/controller/             @carlescufi @cvinayak @thoh-ot
 /subsys/fs/                               @nashif

@@ -576,7 +576,7 @@ struct k_thread {
 	/** z_swap() return value */
 	int swap_retval;
 
-	/** Context handle returned via _arch_switch() */
+	/** Context handle returned via z_arch_switch() */
 	void *switch_handle;
 #endif
 	/** resource pool */
@@ -1387,7 +1387,7 @@ struct k_timer {
 	_OBJECT_TRACING_NEXT_PTR(k_timer)
 };
 
-#define _K_TIMER_INITIALIZER(obj, expiry, stop) \
+#define Z_TIMER_INITIALIZER(obj, expiry, stop) \
 	{ \
 	.timeout = { \
 		.node = {},\
@@ -1403,7 +1403,7 @@ struct k_timer {
 	_OBJECT_TRACING_INIT \
 	}
 
-#define K_TIMER_INITIALIZER DEPRECATED_MACRO _K_TIMER_INITIALIZER
+#define K_TIMER_INITIALIZER DEPRECATED_MACRO Z_TIMER_INITIALIZER
 
 /**
  * INTERNAL_HIDDEN @endcond
@@ -1458,7 +1458,7 @@ typedef void (*k_timer_stop_t)(struct k_timer *timer);
 #define K_TIMER_DEFINE(name, expiry_fn, stop_fn) \
 	struct k_timer name \
 		__in_section(_k_timer, static, name) = \
-		_K_TIMER_INITIALIZER(name, expiry_fn, stop_fn)
+		Z_TIMER_INITIALIZER(name, expiry_fn, stop_fn)
 
 /**
  * @brief Initialize a timer.
@@ -1812,9 +1812,10 @@ extern void k_queue_append(struct k_queue *queue, void *data);
 /**
  * @brief Append an element to a queue.
  *
- * This routine appends a data item to @a queue. There is an implicit
- * memory allocation from the calling thread's resource pool, which is
- * automatically freed when the item is removed from the queue.
+ * This routine appends a data item to @a queue. There is an implicit memory
+ * allocation to create an additional temporary bookkeeping data structure from
+ * the calling thread's resource pool, which is automatically freed when the
+ * item is removed. The data itself is not copied.
  *
  * @note Can be called by ISRs.
  *
@@ -1845,9 +1846,10 @@ extern void k_queue_prepend(struct k_queue *queue, void *data);
 /**
  * @brief Prepend an element to a queue.
  *
- * This routine prepends a data item to @a queue. There is an implicit
- * memory allocation from the calling thread's resource pool, which is
- * automatically freed when the item is removed from the queue.
+ * This routine prepends a data item to @a queue. There is an implicit memory
+ * allocation to create an additional temporary bookkeeping data structure from
+ * the calling thread's resource pool, which is automatically freed when the
+ * item is removed. The data itself is not copied.
  *
  * @note Can be called by ISRs.
  *
@@ -2049,12 +2051,12 @@ struct k_fifo {
 /**
  * @cond INTERNAL_HIDDEN
  */
-#define _K_FIFO_INITIALIZER(obj) \
+#define Z_FIFO_INITIALIZER(obj) \
 	{ \
 	._queue = _K_QUEUE_INITIALIZER(obj._queue) \
 	}
 
-#define K_FIFO_INITIALIZER DEPRECATED_MACRO _K_FIFO_INITIALIZER
+#define K_FIFO_INITIALIZER DEPRECATED_MACRO Z_FIFO_INITIALIZER
 
 /**
  * INTERNAL_HIDDEN @endcond
@@ -2117,9 +2119,10 @@ struct k_fifo {
 /**
  * @brief Add an element to a FIFO queue.
  *
- * This routine adds a data item to @a fifo. There is an implicit
- * memory allocation from the calling thread's resource pool, which is
- * automatically freed when the item is removed.
+ * This routine adds a data item to @a fifo. There is an implicit memory
+ * allocation to create an additional temporary bookkeeping data structure from
+ * the calling thread's resource pool, which is automatically freed when the
+ * item is removed. The data itself is not copied.
  *
  * @note Can be called by ISRs.
  *
@@ -2253,7 +2256,7 @@ struct k_fifo {
 #define K_FIFO_DEFINE(name) \
 	struct k_fifo name \
 		__in_section(_k_queue, static, name) = \
-		_K_FIFO_INITIALIZER(name)
+		Z_FIFO_INITIALIZER(name)
 
 /** @} */
 
@@ -2316,9 +2319,10 @@ struct k_lifo {
 /**
  * @brief Add an element to a LIFO queue.
  *
- * This routine adds a data item to @a lifo. There is an implicit
- * memory allocation from the calling thread's resource pool, which is
- * automatically freed when the item is removed.
+ * This routine adds a data item to @a lifo. There is an implicit memory
+ * allocation to create an additional temporary bookkeeping data structure from
+ * the calling thread's resource pool, which is automatically freed when the
+ * item is removed. The data itself is not copied.
  *
  * @note Can be called by ISRs.
  *
@@ -3006,7 +3010,7 @@ struct k_sem {
 	_OBJECT_TRACING_NEXT_PTR(k_sem)
 };
 
-#define _K_SEM_INITIALIZER(obj, initial_count, count_limit) \
+#define Z_SEM_INITIALIZER(obj, initial_count, count_limit) \
 	{ \
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
 	.count = initial_count, \
@@ -3015,7 +3019,7 @@ struct k_sem {
 	_OBJECT_TRACING_INIT \
 	}
 
-#define K_SEM_INITIALIZER DEPRECATED_MACRO _K_SEM_INITIALIZER
+#define K_SEM_INITIALIZER DEPRECATED_MACRO Z_SEM_INITIALIZER
 
 /**
  * INTERNAL_HIDDEN @endcond
@@ -3136,7 +3140,7 @@ static inline unsigned int z_impl_k_sem_count_get(struct k_sem *sem)
 #define K_SEM_DEFINE(name, initial_count, count_limit) \
 	struct k_sem name \
 		__in_section(_k_sem, static, name) = \
-		_K_SEM_INITIALIZER(name, initial_count, count_limit); \
+		Z_SEM_INITIALIZER(name, initial_count, count_limit); \
 	BUILD_ASSERT(((count_limit) != 0) && \
 		     ((initial_count) <= (count_limit)));
 

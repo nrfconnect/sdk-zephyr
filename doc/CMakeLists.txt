@@ -1,11 +1,23 @@
 cmake_minimum_required(VERSION 3.13.1)
 project(Zephyr-Kernel-Doc LANGUAGES)
 
+# Find west to (optionally) process modules for Kconfig
+find_program(
+  WEST
+  west
+  )
+if(${WEST} STREQUAL WEST-NOTFOUND)
+  unset(WEST)
+endif()
+
 set(ZEPHYR_BASE $ENV{ZEPHYR_BASE})
 
 message(STATUS "Zephyr base: ${ZEPHYR_BASE}")
 
 include(${ZEPHYR_BASE}/cmake/version.cmake)
+
+# Process modules
+include(${ZEPHYR_BASE}/cmake/zephyr_module.cmake)
 
 find_package(PythonInterp 3.4)
 set(DOXYGEN_SKIP_DOT True)
@@ -74,7 +86,6 @@ set(DOC_WARN ${CMAKE_CURRENT_BINARY_DIR}/doc.warnings)
 set(CONTENT_OUTPUTS ${CMAKE_CURRENT_BINARY_DIR}/extracted-content.txt)
 
 configure_file(${DOXYFILE_IN} ${DOXYFILE_OUT} @ONLY)
-file(TOUCH ${CMAKE_CURRENT_BINARY_DIR}/Kconfig.modules)
 
 # This command is used to copy all documentation source files from the
 # ZEPHYR_BASE/ environment variable into the build directory,
@@ -182,6 +193,7 @@ add_custom_target(
   SOC_DIR=soc/
   SRCARCH=x86
   CMAKE_BINARY_DIR=${CMAKE_BINARY_DIR}
+  KCONFIG_WARN_UNDEF=y
   KCONFIG_TURBO_MODE=${KCONFIG_TURBO_MODE}
   KCONFIG_DOC_MODE=1
   ${PYTHON_EXECUTABLE} scripts/genrest.py Kconfig ${RST_OUT}/doc/reference/kconfig/

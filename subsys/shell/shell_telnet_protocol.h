@@ -13,8 +13,8 @@
  * (NVT: Network Virtual Terminal, see rfc854)
  */
 
-#ifndef ZEPHYR_DRIVERS_CONSOLE_TELNET_PROTOCOL_H_
-#define ZEPHYR_DRIVERS_CONSOLE_TELNET_PROTOCOL_H_
+#ifndef SHELL_TELNET_PROTOCOL_H__
+#define SHELL_TELNET_PROTOCOL_H__
 
 /** Printer/Keyboard codes */
 
@@ -122,4 +122,4 @@ static inline void telnet_command_cpy(struct telnet_simple_command *dst,
 	dst->opt = src->opt;
 }
 
-#endif /* ZEPHYR_DRIVERS_CONSOLE_TELNET_PROTOCOL_H_ */
+#endif /* SHELL_TELNET_PROTOCOL_H__ */

@@ -126,7 +126,7 @@
 #endif
 
 #define BUFFER_SIZE  6
-static s16_t m_sample_buffer[BUFFER_SIZE];
+static ZTEST_BMEM s16_t m_sample_buffer[BUFFER_SIZE];
 
 static const struct adc_channel_cfg m_1st_channel_cfg = {
 	.gain             = ADC_GAIN,
@@ -148,6 +148,11 @@ static const struct adc_channel_cfg m_2nd_channel_cfg = {
 #endif
 };
 #endif /* defined(ADC_2ND_CHANNEL_ID) */
+
+struct device *get_adc_device(void)
+{
+	return device_get_binding(ADC_DEVICE_NAME);
+}
 
 static struct device *init_adc(void)
 {
@@ -268,6 +273,8 @@ void test_adc_sample_two_channels(void)
  * test_adc_asynchronous_call
  */
 #if defined(CONFIG_ADC_ASYNC)
+struct k_poll_signal async_sig;
+
 static int test_task_asynchronous_call(void)
 {
 	int ret;
@@ -283,12 +290,10 @@ static int test_task_asynchronous_call(void)
 		.buffer_size = sizeof(m_sample_buffer),
 		.resolution  = ADC_RESOLUTION,
 	};
-	struct k_poll_signal async_sig = K_POLL_SIGNAL_INITIALIZER(async_sig);
 	struct k_poll_event  async_evt =
 		K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_SIGNAL,
 					 K_POLL_MODE_NOTIFY_ONLY,
 					 &async_sig);
-
 	struct device *adc_dev = init_adc();
 
 	if (!adc_dev) {
@@ -299,7 +304,7 @@ static int test_task_asynchronous_call(void)
 	zassert_equal(ret, 0, "adc_read_async() failed with code %d", ret);
 
 	ret = k_poll(&async_evt, 1, K_MSEC(1000));
-	zassert_equal(ret, 0, "async signal not received as expected");
+	zassert_equal(ret, 0, "k_poll failed with error %d", ret);
 
 	check_samples(1 + options.extra_samplings);
 
@@ -459,9 +464,6 @@ static int test_task_invalid_request(void)
 		.buffer_size = sizeof(m_sample_buffer),
 		.resolution  = 0, /* intentionally invalid value */
 	};
-#if defined(CONFIG_ADC_ASYNC)
-	struct k_poll_signal async_sig = K_POLL_SIGNAL_INITIALIZER(async_sig);
-#endif
 
 	struct device *adc_dev = init_adc();
 
