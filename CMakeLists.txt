@@ -591,7 +591,7 @@ if(EXISTS ${CMAKE_BINARY_DIR}/zephyr_modules.txt)
     string(REGEX REPLACE "\"(.*)\":\".*\"" "\\1" module_name ${module})
     string(REGEX REPLACE "\".*\":\"(.*)\"" "\\1" module_path ${module})
     message("Including module: ${module_name} in path: ${module_path}")
-    add_subdirectory(${module_path} ${CMAKE_BINARY_DIR}/${module_name})
+    add_subdirectory(${module_path} ${CMAKE_CURRENT_BINARY_DIR}/${module_name})
   endforeach()
 endif()
 
