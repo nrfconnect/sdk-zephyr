@@ -211,6 +211,27 @@ void nrfx_nvmc_bytes_write(uint32_t address, void const * src, uint32_t num_byte
 void nrfx_nvmc_words_write(uint32_t address, void const * src, uint32_t num_words);
 
 /**
+ * @brief Function for getting the total flash size in bytes.
+ *
+ * @return Flash total size in bytes.
+ */
+uint32_t nrfx_nvmc_flash_size_get(void);
+
+/**
+ * @brief Function for getting the flash page size in bytes.
+ *
+ * @return Flash page size in bytes.
+ */
+uint32_t nrfx_nvmc_flash_page_size_get(void);
+
+/**
+ * @brief Function for getting the flash page count.
+ *
+ * @return Flash page count.
+ */
+uint32_t nrfx_nvmc_flash_page_count_get(void);
+
+/**
  * @brief Function for checking if the last flash write has been completed.
  *
  * @retval true  Last write completed successfully.
