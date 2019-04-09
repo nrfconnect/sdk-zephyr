@@ -38,6 +38,10 @@ def remove_irrelevant_requirements(reqs):
             [remove_item_not_in_list(reqs[x]['inside'], reqs.keys())]
             if not reqs[x]['inside']:
                 del reqs[x]['inside']
+        if 'share_size' in reqs[x].keys():
+            [remove_item_not_in_list(reqs[x]['share_size'], reqs.keys())]
+            if not reqs[x]['share_size']:
+                del reqs[x]['share_size']
 
 
 def get_images_which_need_resolving(reqs, sub_partitions):
@@ -152,12 +156,48 @@ def resolve(reqs):
     return solution, sub_partitions
 
 
+def shared_size(reqs, share_with, total_size):
+    sharer_count = reqs[share_with]['sharers']
+    size = sizeof(reqs, share_with, total_size)
+    if share_with == 'app' or ('span' in reqs[share_with].keys() and 'app' in reqs[share_with]['span']):
+        size /= (sharer_count + 1)
+    return int(size)
+
+
+def get_size_source(reqs, sharer):
+    size_source = sharer
+    while 'share_size' in reqs[size_source].keys():
+        # Find "original" source.
+        size_source = reqs[size_source]['share_size'][0]
+    return size_source
+
+
+def set_shared_size(reqs, sub_partitions, total_size):
+    all_reqs = dict(reqs, **sub_partitions)
+    for req in all_reqs.keys():
+        if 'share_size' in all_reqs[req].keys():
+            size_source = get_size_source(all_reqs, req)
+            if 'sharers' not in all_reqs[size_source].keys():
+                all_reqs[size_source]['sharers'] = 0
+            all_reqs[size_source]['sharers'] += 1
+            all_reqs[req]['share_size'] = [size_source]
+    new_sizes = dict()
+    for req in all_reqs.keys():
+        if 'share_size' in all_reqs[req].keys():
+            new_sizes[req] = shared_size(all_reqs, all_reqs[req]['share_size'][0], total_size)
+    # Update all sizes after-the-fact or else the calculation will be messed up.
+    for key, value in new_sizes.items():
+        all_reqs[key]['size'] = value
+
+
 def app_size(reqs, total_size):
     size = total_size - sum([req['size'] for name, req in reqs.items() if 'size' in req.keys() and name is not 'app'])
     return size
 
 
-def set_addresses(reqs, solution, flash_size):
+def set_addresses(reqs, sub_partitions, solution, flash_size):
+    set_shared_size(reqs, sub_partitions, flash_size)
+
     reqs['app']['size'] = app_size(reqs, flash_size)
 
     # First image starts at 0
@@ -179,16 +219,9 @@ def set_sub_partition_address_and_size(reqs, sub_partitions):
         if size == 0:
             raise RuntimeError("No compatible parent partition found for %s" % sp_name)
         address = min([reqs[part]['address'] for part in sp_value['span']])
-        if 'sub_partitions' in sp_value.keys():
-            size = size // len(sp_value['sub_partitions'])
-            for sub_partition in sp_value['sub_partitions']:
-                sp_key_name = "%s_%s" % (sp_name, sub_partition)
-                reqs[sp_key_name] = dict()
-                set_size_addr(reqs[sp_key_name], size, address)
-                address += size
-        else:
-            reqs[sp_name] = sp_value
-            set_size_addr(reqs[sp_name], size, address)
+
+        reqs[sp_name] = sp_value
+        set_size_addr(reqs[sp_name], size, address)
 
 
 def sizeof(reqs, req, total_size):
@@ -217,7 +250,6 @@ def get_list_of_autoconf_files(reqs):
 
 def get_config(reqs, config):
     config_file = get_list_of_autoconf_files(reqs)[0]
-
     with open(config_file, "r") as cf:
         for line in cf.readlines():
             match = re.match(r'#define %s (\d*)' % config, line)
@@ -235,7 +267,7 @@ def get_pm_config(input_config):
     load_reqs(reqs, input_config)
     flash_size = get_flash_size(input_config)
     solution, sub_partitions = resolve(reqs)
-    set_addresses(reqs, solution, flash_size)
+    set_addresses(reqs, sub_partitions, solution, flash_size)
     set_sub_partition_address_and_size(reqs, sub_partitions)
     return reqs
 
@@ -375,45 +407,52 @@ def expect_addr_size(td, name, expected_address, expected_size):
 def test():
     td = {'spm': {'placement': {'before': ['app']}, 'size': 100},
           'mcuboot': {'placement': {'before': ['spm', 'app']}, 'size': 200},
-          'mcuboot_partitions': {'span': ['spm', 'app'], 'sub_partitions': ['primary', 'secondary']},
           'app': {}}
     s, sub_partitions = resolve(td)
-    set_addresses(td, s, 1000)
+    set_addresses(td, sub_partitions, s, 1000)
     set_sub_partition_address_and_size(td, sub_partitions)
     expect_addr_size(td, 'mcuboot', 0, None)
     expect_addr_size(td, 'spm', 200, None)
     expect_addr_size(td, 'app', 300, 700)
-    expect_addr_size(td, 'mcuboot_partitions_primary', 200, 400)
-    expect_addr_size(td, 'mcuboot_partitions_secondary', 600, 400)
-
-    td = {'mcuboot': {'placement': {'before': ['app']}, 'size': 200},
-          'mcuboot_partitions': {'span': ['spm', 'app'], 'sub_partitions': ['primary', 'secondary']},
-          'app': {}}
-    s, sub_partitions = resolve(td)
-    set_addresses(td, s, 1000)
-    set_sub_partition_address_and_size(td, sub_partitions)
-    expect_addr_size(td, 'mcuboot', 0, None)
-    expect_addr_size(td, 'app', 200, 800)
-    expect_addr_size(td, 'mcuboot_partitions_primary', 200, 400)
-    expect_addr_size(td, 'mcuboot_partitions_secondary', 600, 400)
 
     td = {'spm': {'placement': {'before': ['app']}, 'size': 100, 'inside': ['mcuboot_slot0']},
           'mcuboot': {'placement': {'before': ['spm', 'app']}, 'size': 200},
           'mcuboot_slot0': {'span': ['app']},
           'app': {}}
     s, sub_partitions = resolve(td)
-    set_addresses(td, s, 1000)
+    set_addresses(td, sub_partitions, s, 1000)
     set_sub_partition_address_and_size(td, sub_partitions)
     expect_addr_size(td, 'mcuboot', 0, None)
     expect_addr_size(td, 'spm', 200, 100)
     expect_addr_size(td, 'app', 300, 700)
     expect_addr_size(td, 'mcuboot_slot0', 200, 800)
 
+    td = {'spm': {'placement': {'before': ['app']}, 'size': 100, 'inside': ['mcuboot_slot0']},
+          'mcuboot': {'placement': {'before': ['app']}, 'size': 200},
+          'mcuboot_pad': {'placement': {'after': ['mcuboot']}, 'inside': ['mcuboot_slot0'], 'size': 10},
+          'app_partition': {'span': ['spm', 'app'], 'inside': ['mcuboot_slot0']},
+          'mcuboot_slot0': {'span': ['app', 'foo']},
+          'mcuboot_data': {'placement': {'after': ['mcuboot_slot0']}, 'size': 200},
+          'mcuboot_slot1': {'share_size': ['mcuboot_slot0'], 'placement': {'after': ['mcuboot_data']}},
+          'mcuboot_slot2': {'share_size': ['mcuboot_slot1'], 'placement': {'after': ['mcuboot_slot1']}},
+          'app': {}}
+    s, sub_partitions = resolve(td)
+    set_addresses(td, sub_partitions, s, 1000)
+    set_sub_partition_address_and_size(td, sub_partitions)
+    expect_addr_size(td, 'mcuboot', 0, None)
+    expect_addr_size(td, 'spm', 210, None)
+    expect_addr_size(td, 'mcuboot_slot0', 200, 200)
+    expect_addr_size(td, 'mcuboot_slot1', 600, 200)
+    expect_addr_size(td, 'mcuboot_slot2', 800, 200)
+    expect_addr_size(td, 'app', 310, 90)
+    expect_addr_size(td, 'mcuboot_pad', 200, 10)
+    expect_addr_size(td, 'mcuboot_data', 400, 200)
+
     td = {
         'e': {'placement': {'before': ['app']}, 'size': 100},
         'a': {'placement': {'before': ['b']}, 'size': 100},
         'd': {'placement': {'before': ['e']}, 'size': 100},
-        'c': {'placement': {'before': ['d']}, 'size': 100},
+        'c': {'placement': {'before': ['d']}, 'share_size': ['z', 'a', 'g']},
         'j': {'placement': {'before': ['end']}, 'inside': ['k'], 'size': 20},
         'i': {'placement': {'before': ['j']}, 'inside': ['k'], 'size': 20},
         'h': {'placement': {'before': ['i']}, 'size': 20},
@@ -423,7 +462,7 @@ def test():
         'k': {'span': []},
         'app': {}}
     s, sub_partitions = resolve(td)
-    set_addresses(td, s, 1000)
+    set_addresses(td, {}, s, 1000)
     set_sub_partition_address_and_size(td, sub_partitions)
     expect_addr_size(td, 'a', 0, None)
     expect_addr_size(td, 'b', 100, None)
@@ -442,14 +481,14 @@ def test():
           'b0': {'placement': {'before': ['mcuboot', 'app']}, 'size': 100},
           'app': {}}
     s, _ = resolve(td)
-    set_addresses(td, s, 1000)
+    set_addresses(td, {}, s, 1000)
     expect_addr_size(td, 'b0', 0, None)
     expect_addr_size(td, 'mcuboot', 100, None)
     expect_addr_size(td, 'app', 300, 700)
 
     td = {'b0': {'placement': {'before': ['mcuboot', 'app']}, 'size': 100}, 'app': {}}
     s, _ = resolve(td)
-    set_addresses(td, s, 1000)
+    set_addresses(td, {}, s, 1000)
     expect_addr_size(td, 'b0', 0, None)
     expect_addr_size(td, 'app', 100, 900)
 
@@ -457,7 +496,7 @@ def test():
           'mcuboot': {'placement': {'before': ['spu', 'app']}, 'size': 200},
           'app': {}}
     s, _ = resolve(td)
-    set_addresses(td, s, 1000)
+    set_addresses(td, {}, s, 1000)
     expect_addr_size(td, 'mcuboot', 0, None)
     expect_addr_size(td, 'spu', 200, None)
     expect_addr_size(td, 'app', 300, 700)
@@ -468,7 +507,7 @@ def test():
           'spu': {'placement': {'before': ['app']}, 'size': 100},
           'app': {}}
     s, _ = resolve(td)
-    set_addresses(td, s, 1000)
+    set_addresses(td, {}, s, 1000)
     expect_addr_size(td, 'b0', 0, None)
     expect_addr_size(td, 'mcuboot', 50, None)
     expect_addr_size(td, 'spu', 150, None)
