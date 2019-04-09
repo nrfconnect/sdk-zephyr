@@ -39,7 +39,7 @@ if(FIRST_BOILERPLATE_EXECUTION)
     set_property(
       TARGET partition_manager
       PROPERTY MCUBOOT_SLOT_SIZE
-      ${PM_MCUBOOT_PARTITIONS_PRIMARY_SIZE}
+      ${PM_MCUBOOT_PRIMARY_SIZE}
       )
     set_property(
       TARGET partition_manager
@@ -49,7 +49,7 @@ if(FIRST_BOILERPLATE_EXECUTION)
     set_property(
       TARGET partition_manager
       PROPERTY MCUBOOT_SECONDARY_ADDRESS
-      ${PM_MCUBOOT_PARTITIONS_SECONDARY_ADDRESS}
+      ${PM_MCUBOOT_SECONDARY_ADDRESS}
       )
 
     get_property(
