@@ -34,6 +34,10 @@ def remove_irrelevant_requirements(reqs):
                     del reqs[x]['placement'][before_after]
         if 'span' in reqs[x].keys():
             [remove_item_not_in_list(reqs[x]['span'], reqs.keys())]
+        if 'inside' in reqs[x].keys():
+            [remove_item_not_in_list(reqs[x]['inside'], reqs.keys())]
+            if not reqs[x]['inside']:
+                del reqs[x]['inside']
 
 
 def get_images_which_need_resolving(reqs, sub_partitions):
@@ -99,6 +103,8 @@ def extract_sub_partitions(reqs):
     keys_to_delete = list()
 
     for key, value in reqs.items():
+        if 'inside' in value.keys():
+            reqs[value['inside'][0]]['span'].append(key)
         if 'span' in value.keys():
             sub_partitions[key] = value
             keys_to_delete.append(key)
@@ -391,21 +397,34 @@ def test():
     expect_addr_size(td, 'mcuboot_partitions_primary', 200, 400)
     expect_addr_size(td, 'mcuboot_partitions_secondary', 600, 400)
 
+    td = {'spm': {'placement': {'before': ['app']}, 'size': 100, 'inside': ['mcuboot_slot0']},
+          'mcuboot': {'placement': {'before': ['spm', 'app']}, 'size': 200},
+          'mcuboot_slot0': {'span': ['app']},
+          'app': {}}
+    s, sub_partitions = resolve(td)
+    set_addresses(td, s, 1000)
+    set_sub_partition_address_and_size(td, sub_partitions)
+    expect_addr_size(td, 'mcuboot', 0, None)
+    expect_addr_size(td, 'spm', 200, 100)
+    expect_addr_size(td, 'app', 300, 700)
+    expect_addr_size(td, 'mcuboot_slot0', 200, 800)
 
     td = {
         'e': {'placement': {'before': ['app']}, 'size': 100},
         'a': {'placement': {'before': ['b']}, 'size': 100},
         'd': {'placement': {'before': ['e']}, 'size': 100},
         'c': {'placement': {'before': ['d']}, 'size': 100},
-        'j': {'placement': {'before': ['end']}, 'size': 20},
-        'i': {'placement': {'before': ['j']}, 'size': 20},
+        'j': {'placement': {'before': ['end']}, 'inside': ['k'], 'size': 20},
+        'i': {'placement': {'before': ['j']}, 'inside': ['k'], 'size': 20},
         'h': {'placement': {'before': ['i']}, 'size': 20},
         'f': {'placement': {'after': ['app']}, 'size': 20},
         'g': {'placement': {'after': ['f']}, 'size': 20},
         'b': {'placement': {'before': ['c']}, 'size': 20},
+        'k': {'span': []},
         'app': {}}
-    s, _ = resolve(td)
+    s, sub_partitions = resolve(td)
     set_addresses(td, s, 1000)
+    set_sub_partition_address_and_size(td, sub_partitions)
     expect_addr_size(td, 'a', 0, None)
     expect_addr_size(td, 'b', 100, None)
     expect_addr_size(td, 'c', 120, None)
@@ -417,6 +436,7 @@ def test():
     expect_addr_size(td, 'h', 940, None)
     expect_addr_size(td, 'i', 960, None)
     expect_addr_size(td, 'j', 980, None)
+    expect_addr_size(td, 'k', 960, 40)
 
     td = {'mcuboot': {'placement': {'before': ['app', 'spu']}, 'size': 200},
           'b0': {'placement': {'before': ['mcuboot', 'app']}, 'size': 100},
