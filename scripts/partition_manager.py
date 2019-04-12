@@ -261,7 +261,7 @@ def write_pm_config(adr_map, app_output_dir):
         area_props['pm_config'].append("#define PM_SIZE 0x%x" % area_props['size'])
         area_props['pm_config'].insert(0, get_header_guard_start(pm_config_file))
         area_props['pm_config'].append(get_header_guard_end(pm_config_file))
-        
+
     # Store complete size/address configuration to all input paths
     for area_name, area_props in adr_map.items():
         if 'out_dir' in area_props.keys():
@@ -329,7 +329,7 @@ def main():
     if args.input is not None:
         input_config = dict()
         for i in args.input:
-            split = i.split(':')
+            split = i.split('|')
             input_config[split[0]] = dict()
             input_config[split[0]]['pm.yml'] = split[1]
             input_config[split[0]]['build_dir'] = split[2]
