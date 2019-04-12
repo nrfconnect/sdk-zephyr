@@ -90,6 +90,7 @@ struct mcuboot_v1_raw_header {
 #define FLASH_AREA_IMAGE_SECONDARY DT_FLASH_AREA_IMAGE_1_ID
 #define FLASH_AREA_IMAGE_SCRATCH DT_FLASH_AREA_IMAGE_SCRATCH_ID
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
+#endif /* USE_PARTITION_MANAGER */
 
 #define COPY_DONE_OFFS(bank_area) ((bank_area)->fa_size -\
 				   BOOT_MAGIC_SZ - BOOT_MAX_ALIGN * 2)
