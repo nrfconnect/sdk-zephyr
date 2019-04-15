@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # vim: set syntax=python ts=4 :
+# SPDX-License-Identifier: Apache-2.0
 """Zephyr Sanity Tests
 
 This script scans for the set of unit test applications in the git
@@ -2132,6 +2133,7 @@ class TestSuite:
         info("Building testcase defconfigs...")
         results = mg.execute(defconfig_cb)
 
+        info("Filtering test cases...")
         for name, goal in results.items():
             try:
                 if goal.failed:

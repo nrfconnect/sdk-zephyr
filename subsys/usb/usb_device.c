@@ -549,18 +549,29 @@ static bool usb_set_configuration(u8_t config_index, u8_t alt_setting)
 static bool usb_set_interface(u8_t iface, u8_t alt_setting)
 {
 	const u8_t *p = usb_dev.descriptors;
-	u8_t cur_iface = 0xFF;
+	const u8_t *if_desc = NULL;
 	u8_t cur_alt_setting = 0xFF;
-	struct usb_dc_ep_cfg_data ep_cfg;
+	u8_t cur_iface = 0xFF;
+	bool found = false;
 
 	LOG_DBG("iface %u alt_setting %u", iface, alt_setting);
 
 	while (p[DESC_bLength] != 0U) {
+		struct usb_dc_ep_cfg_data ep_cfg;
+
 		switch (p[DESC_bDescriptorType]) {
 		case DESC_INTERFACE:
 			/* remember current alternate setting */
 			cur_alt_setting = p[INTF_DESC_bAlternateSetting];
 			cur_iface = p[INTF_DESC_bInterfaceNumber];
+
+			if (cur_iface == iface &&
+			    cur_alt_setting == alt_setting) {
+				if_desc = (void *)p;
+			}
+
+			LOG_DBG("iface_num %u alt_set %u",
+				cur_iface, cur_alt_setting);
 			break;
 		case DESC_ENDPOINT:
 			if ((cur_iface != iface) ||
@@ -578,6 +589,7 @@ static bool usb_set_interface(u8_t iface, u8_t alt_setting)
 			usb_dc_ep_configure(&ep_cfg);
 			usb_dc_ep_enable(ep_cfg.ep_addr);
 
+			found = true;
 			LOG_DBG("Found: ep_addr 0x%x", ep_cfg.ep_addr);
 			break;
 		default:
@@ -586,14 +598,13 @@ static bool usb_set_interface(u8_t iface, u8_t alt_setting)
 
 		/* skip to next descriptor */
 		p += p[DESC_bLength];
-		LOG_DBG("p %p", p);
 	}
 
 	if (usb_dev.status_callback) {
-		usb_dev.status_callback(USB_DC_INTERFACE, &iface);
+		usb_dev.status_callback(USB_DC_INTERFACE, if_desc);
 	}
 
-	return true;
+	return found;
 }
 
 /*
@@ -909,6 +920,19 @@ static void usb_register_status_callback(usb_dc_status_callback cb)
 	usb_dev.status_callback = cb;
 }
 
+static void forward_status_cb(enum usb_dc_status_code status, const u8_t *param)
+{
+	size_t size = (__usb_data_end - __usb_data_start);
+
+	for (size_t i = 0; i < size; i++) {
+		struct usb_cfg_data *cfg = &__usb_data_start[i];
+
+		if (cfg->cb_usb_status) {
+			cfg->cb_usb_status(cfg, status, param);
+		}
+	}
+}
+
 /**
  * @brief turn on/off USB VBUS voltage
  *
@@ -983,11 +1007,6 @@ int usb_set_config(struct usb_cfg_data *config)
 		    config->interface.custom_handler);
 	}
 
-	/* register status callback */
-	if (config->cb_usb_status != NULL) {
-		usb_register_status_callback(config->cb_usb_status);
-	}
-
 	return 0;
 }
 
@@ -1029,16 +1048,18 @@ int usb_enable(struct usb_cfg_data *config)
 	if (ret < 0)
 		return ret;
 
-	ret = usb_dc_set_status_callback(config->cb_usb_status);
-	if (ret < 0)
+	usb_register_status_callback(forward_status_cb);
+	ret = usb_dc_set_status_callback(forward_status_cb);
+	if (ret < 0) {
 		return ret;
+	}
 
 	ret = usb_dc_attach();
 	if (ret < 0)
 		return ret;
 
 	/* Configure control EP */
-	ep0_cfg.ep_mps = MAX_PACKET_SIZE0;
+	ep0_cfg.ep_mps = USB_MAX_CTRL_MPS;
 	ep0_cfg.ep_type = USB_DC_EP_CONTROL;
 
 	ep0_cfg.ep_addr = USB_CONTROL_OUT_EP0;
@@ -1403,19 +1424,6 @@ int usb_wakeup_request(void)
 
 static u8_t iface_data_buf[CONFIG_USB_COMPOSITE_BUFFER_SIZE];
 
-static void forward_status_cb(enum usb_dc_status_code status, const u8_t *param)
-{
-	size_t size = (__usb_data_end - __usb_data_start);
-
-	for (size_t i = 0; i < size; i++) {
-		struct usb_cfg_data *cfg = &__usb_data_start[i];
-
-		if (cfg->cb_usb_status_composite) {
-			cfg->cb_usb_status_composite(cfg, status, param);
-		}
-	}
-}
-
 /*
  * The functions class_handler(), custom_handler() and vendor_handler()
  * go through the interfaces one after the other and compare the
@@ -1579,7 +1587,7 @@ static int usb_composite_init(struct device *dev)
 	}
 
 	/* Configure control EP */
-	ep0_cfg.ep_mps = MAX_PACKET_SIZE0;
+	ep0_cfg.ep_mps = USB_MAX_CTRL_MPS;
 	ep0_cfg.ep_type = USB_DC_EP_CONTROL;
 
 	ep0_cfg.ep_addr = USB_CONTROL_OUT_EP0;

@@ -268,7 +268,7 @@ such as :zephyr_file:`samples/bluetooth/peripheral_hr`.
 Central role
 ============
 
-Central role may not be as common for Zephyr-based devices as peripheral
+Central role may not be as common for Zephyr-based devices as peripheral
 role, but it is still a plausible one and equally well supported in
 Zephyr. Rather than accepting connections from other devices a central
 role device will scan for available peripheral device and choose one to
@@ -305,26 +305,8 @@ non-connectable, i.e. other device will not be able to connect to it.
 Connections
 ===========
 
-The Zephyr Bluetooth stack uses an abstraction called :c:type:`bt_conn`
-to represent connections to other devices. The internals of this struct
-are not exposed to the application, but a limited amount of information
-(such as the remote address) can be acquired using the
-:cpp:func:`bt_conn_get_info` API. Connection objects are reference
-counted, and the application is expected to use the
-:cpp:func:`bt_conn_ref` API whenever storing a connection pointer for a
-longer period of time, since this ensures that the object remains valid
-(even if the connection would get disconnected). Similarly the
-:cpp:func:`bt_conn_unref` API is to be used when releasing a reference
-to a connection.
-
-An application may track connections by registering a
-:c:type:`bt_conn_cb` struct using the :cpp:func:`bt_conn_cb_register`
-API.  This struct lets the application define callbacks for connection &
-disconnection events, as well as other events related to a connection
-such as a change in the security level or the connection parameters.
-When acting as a central the application will also get hold of the
-connection object through the return value of the
-:cpp:func:`bt_conn_create_le` API.
+Connection handling and the related APIs can be found in the
+:ref:`Connection Management <bluetooth_connection_mgmt>` section.
 
 Security
 ========
@@ -372,128 +354,19 @@ there are four possible security levels that can be reached:
 L2CAP
 =====
 
-L2CAP layer enables connection-oriented channels which can be enable with the
-configuration option: :option:`CONFIG_BT_L2CAP_DYNAMIC_CHANNEL`. This channels
-support segmentation and reassembly transparently, they also support credit
-based flow control making it suitable for data streams.
-
-Channels instances are represented by the :cpp:class:`bt_l2cap_chan` struct which
-contains the callbacks in the :cpp:class:`bt_l2cap_chan_ops` struct to inform
-when the channel has been connected, disconnected or when the encryption has
-changed.
-In addition to that it also contains the ``recv`` callback which is called
-whenever an incoming data has been received. Data received this way can be
-marked as processed by returning 0 or using
-:cpp:func:`bt_l2cap_chan_recv_complete` API if processing is asynchronous.
-
-.. note::
-  The ``recv`` callback is called directly from RX Thread thus it is not
-  allowed to block.
-
-For sending data the :cpp:func:`bt_l2cap_chan_send` API can be used noting that
-it may block if no credits are available, and resuming as soon as more credits
-are available.
-
-Servers can be registered using :cpp:func:`bt_l2cap_server_register` API passing
-the :cpp:class:`bt_l2cap_server` struct which informs what ``psm`` it should
-listen to, the required security level ``sec_level``, and the callback
-``accept`` which is called to authorize incoming connection requests and
-allocate channel instances.
-
-Client channels can be initiated with use of :cpp:func:`bt_l2cap_chan_connect`
-API and can be disconnected with the :cpp:func:`bt_l2cap_chan_disconnect` API.
-Note that the later can also disconnect channel instances created by servers.
+L2CAP stands for the Logical Link Control and Adaptation Protocol. It is
+a common layer for all communication over Bluetooth connections, however
+an application comes in direct contact with it only when using it in the
+so-called Connection-oriented Channels (CoC) mode. More information on
+this can be found in the :ref:`L2CAP API section <bt_l2cap>`.
 
 GATT
 ====
 
-GATT layer manages the service database providing APIs for service registration
-and attribute declaration.
-
-Services can be registered using :cpp:func:`bt_gatt_service_register` API
-which takes the :cpp:class:`bt_gatt_service` struct that provides the list of
-attributes the service contains. The helper macro :cpp:func:`BT_GATT_SERVICE`
-can be used to declare a service.
-
-Attributes can be declared using the :cpp:class:`bt_gatt_attr` struct or using
-one of the helper macros:
-
-    :cpp:func:`BT_GATT_PRIMARY_SERVICE`
-        Declares a Primary Service.
-
-    :cpp:func:`BT_GATT_SECONDARY_SERVICE`
-        Declares a Secondary Service.
-
-    :cpp:func:`BT_GATT_INCLUDE_SERVICE`
-        Declares a Include Service.
-
-    :cpp:func:`BT_GATT_CHARACTERISTIC`
-        Declares a Characteristic.
-
-    :cpp:func:`BT_GATT_DESCRIPTOR`
-        Declares a Descriptor.
-
-    :cpp:func:`BT_GATT_ATTRIBUTE`
-        Declares an Attribute.
-
-    :cpp:func:`BT_GATT_CCC`
-        Declares a Client Characteristic Configuration.
-
-    :cpp:func:`BT_GATT_CEP`
-        Declares a Characteristic Extended Properties.
-
-    :cpp:func:`BT_GATT_CUD`
-        Declares a Characteristic User Format.
-
-Each attribute contain a ``uuid``, which describes their type, a ``read``
-callback, a ``write`` callback and a set of permission. Both read and write
-callbacks can be set to NULL if the attribute permission don't allow their
-respective operations.
-
-.. note::
-  Attribute ``read`` and ``write`` callbacks are called directly from RX Thread
-  thus they are not allowed to block.
-
-Attribute value changes can be notified using :cpp:func:`bt_gatt_notify` API,
-alternatively there is :cpp:func:`bt_gatt_notify_cb` where is is possible to
-pass a callback to be called when it is necessary to know the exact instant when
-the data has been transmitted over the air. Indications are supported by
-:cpp:func:`bt_gatt_indicate` API.
-
-Client procedures can be enabled with the configuration option:
-:option:`CONFIG_BT_GATT_CLIENT`
-
-Discover procedures can be initiated with the use of
-:cpp:func:`bt_gatt_discover` API which takes the
-:cpp:class:`bt_gatt_dicover_params` struct which describes the type of
-discovery. The parameters also serves as a filter when setting the ``uuid``
-field only attributes which matches will be discovered, in contrast setting it
-to NULL allows all attributes to be discovered.
-
-.. note::
-  Caching discovered attributes is not supported.
-
-Read procedures are supported by :cpp:func:`bt_gatt_read` API which takes the
-:cpp:class:`bt_gatt_read_params` struct as parameters. In the parameters one or
-more attributes can be set, though setting multiple handles requires the option:
-:option:`CONFIG_BT_GATT_READ_MULTIPLE`
-
-Write procedures are supported by :cpp:func:`bt_gatt_write` API and takes
-:cpp:class:`bt_gatt_write_params` struct as parameters. In case the write
-operation don't require a response :cpp:func:`bt_gatt_write_without_response`
-or :cpp:func:`bt_gatt_write_without_response_cb` APIs can be used, with the
-later working similarly to ``bt_gatt_notify_cb``.
-
-Subscriptions to notification and indication can be initiated with use of
-:cpp:func`bt_gatt_subscribe` API which takes
-:cpp:class:`bt_gatt_subscribe_params` as parameters. Multiple subscriptions to
-the same attribute are supported so there could be multiple ``notify`` callback
-being triggered for the same attribute. Subscriptions can be removed with use of
-:cpp:func:`bt_gatt_unsubscribe()` API.
-
-.. note::
-  When subscriptions are removed ``notify`` callback is called with the data
-  set to NULL.
+The Generic Attribute Profile is the most common means of communication
+over LE connections. A more detailed description of this layer and the
+API reference can be found in the
+:ref:`GATT API reference section <bt_gatt>`.
 
 Mesh
 ====
@@ -502,6 +375,9 @@ Mesh is a little bit special when it comes to the needed GAP roles. By
 default, mesh requires both observer and broadcaster role to be enabled.
 If the optional GATT Proxy feature is desired, then peripheral role
 should also be enabled.
+
+The API reference for Mesh can be found in the
+:ref:`Mesh API reference section <bluetooth_mesh>`.
 
 Persistent storage
 ==================

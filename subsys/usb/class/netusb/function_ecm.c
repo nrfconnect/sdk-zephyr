@@ -339,20 +339,29 @@ static struct netusb_function ecm_function = {
 	.send_pkt = ecm_send,
 };
 
-static inline void ecm_status_interface(const u8_t *iface)
+static inline void ecm_status_interface(const u8_t *desc)
 {
-	LOG_DBG("iface %u", *iface);
+	const struct usb_if_descriptor *if_desc = (void *)desc;
+	u8_t iface_num = if_desc->bInterfaceNumber;
+	u8_t alt_set = if_desc->bAlternateSetting;
+
+	LOG_DBG("iface %u alt_set %u", iface_num, if_desc->bAlternateSetting);
 
 	/* First interface is CDC Comm interface */
-	if (*iface != ecm_get_first_iface_number() + 1) {
+	if (iface_num != ecm_get_first_iface_number() + 1 || !alt_set) {
+		LOG_DBG("Skip iface_num %u alt_set %u", iface_num, alt_set);
 		return;
 	}
 
 	netusb_enable(&ecm_function);
 }
 
-static void ecm_do_cb(enum usb_dc_status_code status, const u8_t *param)
+static void ecm_status_cb(struct usb_cfg_data *cfg,
+			  enum usb_dc_status_code status,
+			  const u8_t *param)
 {
+	ARG_UNUSED(cfg);
+
 	/* Check the USB status and do needed action if required */
 	switch (status) {
 	case USB_DC_DISCONNECTED:
@@ -383,21 +392,6 @@ static void ecm_do_cb(enum usb_dc_status_code status, const u8_t *param)
 		break;
 	}
 }
-
-#ifdef CONFIG_USB_COMPOSITE_DEVICE
-static void ecm_status_composite_cb(struct usb_cfg_data *cfg,
-				    enum usb_dc_status_code status,
-				    const u8_t *param)
-{
-	ARG_UNUSED(cfg);
-	ecm_do_cb(status, param);
-}
-#else
-static void ecm_status_cb(enum usb_dc_status_code status, const u8_t *param)
-{
-	ecm_do_cb(status, param);
-}
-#endif
 
 struct usb_cdc_ecm_mac_descr {
 	u8_t bLength;
@@ -438,11 +432,7 @@ USBD_CFG_DATA_DEFINE(netusb) struct usb_cfg_data netusb_config = {
 	.usb_device_description = NULL,
 	.interface_config = ecm_interface_config,
 	.interface_descriptor = &cdc_ecm_cfg.if0,
-#ifdef CONFIG_USB_COMPOSITE_DEVICE
-	.cb_usb_status_composite = ecm_status_composite_cb,
-#else
 	.cb_usb_status = ecm_status_cb,
-#endif
 	.interface = {
 		.class_handler = ecm_class_handler,
 		.custom_handler = NULL,

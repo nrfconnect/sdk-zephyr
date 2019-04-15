@@ -143,7 +143,7 @@ struct dev_dfu_mode_descriptor dfu_mode_desc = {
 		.bDeviceClass = 0,
 		.bDeviceSubClass = 0,
 		.bDeviceProtocol = 0,
-		.bMaxPacketSize0 = MAX_PACKET_SIZE0,
+		.bMaxPacketSize0 = USB_MAX_CTRL_MPS,
 		.idVendor = sys_cpu_to_le16((u16_t)CONFIG_USB_DEVICE_VID),
 		.idProduct = sys_cpu_to_le16((u16_t)CONFIG_USB_DEVICE_PID),
 		.bcdDevice = sys_cpu_to_le16(BCDDEVICE_RELNUM),
@@ -592,9 +592,12 @@ static int dfu_class_handle_req(struct usb_setup_packet *pSetup,
  *
  * @return  N/A.
  */
-static void dfu_status_cb(enum usb_dc_status_code status, const u8_t *param)
+static void dfu_status_cb(struct usb_cfg_data *cfg,
+			  enum usb_dc_status_code status,
+			  const u8_t *param)
 {
 	ARG_UNUSED(param);
+	ARG_UNUSED(cfg);
 
 	/* Check the USB status and do needed action if required */
 	switch (status) {
