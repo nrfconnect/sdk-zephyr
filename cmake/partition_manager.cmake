@@ -78,6 +78,10 @@ if(FIRST_BOILERPLATE_EXECUTION)
         )
       add_custom_target(pm_mergehex ALL DEPENDS ${merged_hex})
 
+      if(TARGET flash)
+        add_dependencies(flash pm_mergehex)
+      endif()
+
       set(ZEPHYR_RUNNER_CONFIG_KERNEL_HEX "${merged_hex}"
         CACHE STRING "Path to merged image in Intel Hex format" FORCE)
 
