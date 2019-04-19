@@ -15,6 +15,18 @@
 #include "settings/settings_file.h"
 #include <zephyr.h>
 
+#if USE_PARTITION_MANAGER
+
+#include <pm_config.h>
+#define FLASH_AREA_STORAGE_ID       PM_MCUBOOT_STORAGE_ID
+
+#else
+
+#include <generated_dts_board.h>
+#define FLASH_AREA_STORAGE_ID       DT_FLASH_AREA_STORAGE_ID
+
+#endif /* USE_PARTITION_MANAGER */
+
 void settings_init(void);
 
 #ifdef CONFIG_SETTINGS_FS
@@ -59,7 +71,7 @@ static void settings_init_fcb(void)
 	int rc;
 	const struct flash_area *fap;
 
-	rc = flash_area_get_sectors(DT_FLASH_AREA_STORAGE_ID, &cnt,
+	rc = flash_area_get_sectors(FLASH_AREA_STORAGE_ID, &cnt,
 				    settings_fcb_area);
 	if (rc != 0 && rc != -ENOMEM) {
 		k_panic();
@@ -70,7 +82,7 @@ static void settings_init_fcb(void)
 	rc = settings_fcb_src(&config_init_settings_fcb);
 
 	if (rc != 0) {
-		rc = flash_area_open(DT_FLASH_AREA_STORAGE_ID, &fap);
+		rc = flash_area_open(FLASH_AREA_STORAGE_ID, &fap);
 
 		if (rc == 0) {
 			rc = flash_area_erase(fap, 0, fap->fa_size);
