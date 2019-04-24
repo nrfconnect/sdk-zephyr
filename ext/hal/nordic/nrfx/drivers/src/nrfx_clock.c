@@ -58,31 +58,15 @@ extern bool nrfx_power_irq_enabled;
     #endif
 #endif
 
-#if !defined(USE_WORKAROUND_FOR_ANOMALY_132) && \
-    (defined(NRF52832_XXAA) || defined(NRF52832_XXAB))
-    // ANOMALY 132 - LFCLK needs to avoid frame from 66us to 138us after LFCLK stop. This solution
-    //               applies delay of 138us before starting LFCLK.
-    #define USE_WORKAROUND_FOR_ANOMALY_132 1
+#if defined(NRF52810_XXAA) || \
+    defined(NRF52832_XXAA) || defined(NRF52832_XXAB) || \
+    defined(NRF52840_XXAA)
+// Enable workaround for nRF52 anomaly 192 (LFRC oscillator frequency is wrong
+// after calibration, exceeding 500 ppm).
+#define USE_WORKAROUND_FOR_ANOMALY_192
 
-    // Convert time to cycles (nRF52832 is clocked with 64 MHz, use delay of 138 us).
-    #define ANOMALY_132_DELAY_CYCLES (64UL * 138)
-#endif
-
-#if !defined(USE_WORKAROUND_FOR_ANOMALY_192) && \
-    (defined(NRF52810_XXAA) || \
-     defined(NRF52832_XXAA) || defined(NRF52832_XXAB) || \
-     defined(NRF52840_XXAA))
-    // Enable workaround for nRF52 anomaly 192 (LFRC oscillator frequency is wrong
-    // after calibration, exceeding 500 ppm).
-    #define USE_WORKAROUND_FOR_ANOMALY_192 1
-#endif
-
-#if !defined(USE_WORKAROUND_FOR_ANOMALY_201) && \
-    (defined(NRF52810_XXAA) || \
-     defined(NRF52832_XXAA) || defined(NRF52832_XXAB) || \
-     defined(NRF52840_XXAA))
-    // Enable workaround for nRF52 anomaly 201 (EVENTS_HFCLKSTARTED might be generated twice).
-    #define USE_WORKAROUND_FOR_ANOMALY_201 1
+// Enable workaround for nRF52 anomaly 201 (EVENTS_HFCLKSTARTED might be generated twice).
+#define USE_WORKAROUND_FOR_ANOMALY_201
 #endif
 
 #if NRFX_CHECK(NRFX_CLOCK_CONFIG_LF_CAL_ENABLED)
@@ -98,7 +82,7 @@ typedef struct
 {
     nrfx_clock_event_handler_t      event_handler;
     bool                            module_initialized; /*< Indicate the state of module */
-#if NRFX_CHECK(USE_WORKAROUND_FOR_ANOMALY_201)
+#if defined(USE_WORKAROUND_FOR_ANOMALY_201)
     bool                            hfclk_started;      /*< Anomaly 201 workaround. */
 #endif
 
@@ -117,7 +101,18 @@ static nrfx_clock_cb_t m_clock_cb;
 bool nrfx_clock_irq_enabled;
 #endif
 
-#if NRFX_CHECK(USE_WORKAROUND_FOR_ANOMALY_132)
+#if defined(NRF52832_XXAA) || defined(NRF52832_XXAB)
+
+// ANOMALY 132 - LFCLK needs to avoid frame from 66us to 138us after LFCLK stop. This solution
+//               applies delay of 138us before starting LFCLK.
+#define ANOMALY_132_REQ_DELAY_US 138UL
+
+// nRF52832 is clocked with 64MHz.
+#define ANOMALY_132_NRF52832_FREQ_MHZ 64UL
+
+// Convert time to cycles.
+#define ANOMALY_132_DELAY_CYCLES (ANOMALY_132_REQ_DELAY_US * ANOMALY_132_NRF52832_FREQ_MHZ)
+
 /**
  * @brief Function for applying delay of 138us before starting LFCLK.
  */
@@ -148,7 +143,8 @@ static void nrfx_clock_anomaly_132(void)
     DWT->CTRL = dwt_ctrl;
     CoreDebug->DEMCR = core_debug;
 }
-#endif // NRFX_CHECK(USE_WORKAROUND_FOR_ANOMALY_132)
+
+#endif // defined(NRF52832_XXAA) || defined(NRF52832_XXAB)
 
 nrfx_err_t nrfx_clock_init(nrfx_clock_event_handler_t event_handler)
 {
@@ -166,7 +162,7 @@ nrfx_err_t nrfx_clock_init(nrfx_clock_event_handler_t event_handler)
 #endif
         m_clock_cb.event_handler = event_handler;
         m_clock_cb.module_initialized = true;
-#if NRFX_CHECK(USE_WORKAROUND_FOR_ANOMALY_201)
+#if defined(USE_WORKAROUND_FOR_ANOMALY_201)
         m_clock_cb.hfclk_started = false;
 #endif
     }
@@ -226,7 +222,7 @@ void nrfx_clock_lfclk_start(void)
     nrf_clock_event_clear(NRF_CLOCK_EVENT_LFCLKSTARTED);
     nrf_clock_int_enable(NRF_CLOCK_INT_LF_STARTED_MASK);
 
-#if NRFX_CHECK(USE_WORKAROUND_FOR_ANOMALY_132)
+#if defined(NRF52832_XXAA) || defined(NRF52832_XXAB)
     nrfx_clock_anomaly_132();
 #endif
 
@@ -255,7 +251,7 @@ void nrfx_clock_hfclk_stop(void)
     nrf_clock_task_trigger(NRF_CLOCK_TASK_HFCLKSTOP);
     while (nrf_clock_hf_is_running(NRF_CLOCK_HFCLK_HIGH_ACCURACY))
     {}
-#if NRFX_CHECK(USE_WORKAROUND_FOR_ANOMALY_201)
+#if defined(USE_WORKAROUND_FOR_ANOMALY_201)
     m_clock_cb.hfclk_started = false;
 #endif
 }
@@ -280,7 +276,7 @@ nrfx_err_t nrfx_clock_calibration_start(void)
         nrf_clock_event_clear(NRF_CLOCK_EVENT_DONE);
         nrf_clock_int_enable(NRF_CLOCK_INT_DONE_MASK);
         m_clock_cb.cal_state = CAL_STATE_CAL;
-#if NRFX_CHECK(USE_WORKAROUND_FOR_ANOMALY_192)
+#if defined(USE_WORKAROUND_FOR_ANOMALY_192)
         *(volatile uint32_t *)0x40000C34 = 0x00000002;
 #endif
         nrf_clock_task_trigger(NRF_CLOCK_TASK_CAL);
@@ -334,7 +330,7 @@ void nrfx_clock_irq_handler(void)
         NRFX_LOG_DEBUG("Event: %s.", EVT_TO_STR(NRF_CLOCK_EVENT_HFCLKSTARTED));
         nrf_clock_int_disable(NRF_CLOCK_INT_HF_STARTED_MASK);
 
-#if NRFX_CHECK(USE_WORKAROUND_FOR_ANOMALY_201)
+#if defined(USE_WORKAROUND_FOR_ANOMALY_201)
         if (!m_clock_cb.hfclk_started)
         {
             m_clock_cb.hfclk_started = true;
@@ -365,7 +361,7 @@ void nrfx_clock_irq_handler(void)
 
     if (nrf_clock_event_check(NRF_CLOCK_EVENT_DONE))
     {
-#if NRFX_CHECK(USE_WORKAROUND_FOR_ANOMALY_192)
+#if defined(USE_WORKAROUND_FOR_ANOMALY_192)
         *(volatile uint32_t *)0x40000C34 = 0x00000000;
 #endif
         nrf_clock_event_clear(NRF_CLOCK_EVENT_DONE);

@@ -46,42 +46,44 @@ extern "C" {
  */
 
 /** @brief Macro for getting the number of compare channels available in a given RTC instance. */
-#define NRF_RTC_CC_CHANNEL_COUNT(id)  NRFX_CONCAT_3(RTC, id, _CC_NUM)
+#define NRF_RTC_CC_CHANNEL_COUNT(id)    NRFX_CONCAT_3(RTC, id, _CC_NUM)
 
-/** @brief Input frequency of the RTC instance. */
-#define RTC_INPUT_FREQ 32768
+#define RTC_INPUT_FREQ 32768 /**< Input frequency of the RTC instance. */
 
 /** @brief Macro for converting expected frequency to prescaler setting. */
 #define RTC_FREQ_TO_PRESCALER(FREQ) (uint16_t)(((RTC_INPUT_FREQ) / (FREQ)) - 1)
 
-/** @brief Macro for trimming values to the RTC bit width. */
+/**< Macro for wrapping values to RTC capacity. */
 #define RTC_WRAP(val) ((val) & RTC_COUNTER_COUNTER_Msk)
 
-/** @brief Macro for creating the interrupt bitmask for the specified compare channel. */
-#define RTC_CHANNEL_INT_MASK(ch)    ((uint32_t)(NRF_RTC_INT_COMPARE0_MASK) << (ch))
+#define RTC_CHANNEL_INT_MASK(ch) \
+    ((uint32_t)(NRF_RTC_INT_COMPARE0_MASK) << (ch))
 
-/** @brief Macro for obtaining the compare event for the specified channel. */
-#define RTC_CHANNEL_EVENT_ADDR(ch)  (nrf_rtc_event_t)((NRF_RTC_EVENT_COMPARE_0) + (ch) * sizeof(uint32_t))
-
+#define RTC_CHANNEL_EVENT_ADDR(ch) \
+    (nrf_rtc_event_t)((NRF_RTC_EVENT_COMPARE_0) + (ch) * sizeof(uint32_t))
 
 /** @brief RTC tasks. */
 typedef enum
 {
+    /*lint -save -e30*/
     NRF_RTC_TASK_START            = offsetof(NRF_RTC_Type,TASKS_START),     /**< Start. */
     NRF_RTC_TASK_STOP             = offsetof(NRF_RTC_Type,TASKS_STOP),      /**< Stop. */
     NRF_RTC_TASK_CLEAR            = offsetof(NRF_RTC_Type,TASKS_CLEAR),     /**< Clear. */
     NRF_RTC_TASK_TRIGGER_OVERFLOW = offsetof(NRF_RTC_Type,TASKS_TRIGOVRFLW),/**< Trigger overflow. */
+    /*lint -restore*/
 } nrf_rtc_task_t;
 
 /** @brief RTC events. */
 typedef enum
 {
+    /*lint -save -e30*/
     NRF_RTC_EVENT_TICK        = offsetof(NRF_RTC_Type,EVENTS_TICK),       /**< Tick event. */
     NRF_RTC_EVENT_OVERFLOW    = offsetof(NRF_RTC_Type,EVENTS_OVRFLW),     /**< Overflow event. */
     NRF_RTC_EVENT_COMPARE_0   = offsetof(NRF_RTC_Type,EVENTS_COMPARE[0]), /**< Compare 0 event. */
     NRF_RTC_EVENT_COMPARE_1   = offsetof(NRF_RTC_Type,EVENTS_COMPARE[1]), /**< Compare 1 event. */
     NRF_RTC_EVENT_COMPARE_2   = offsetof(NRF_RTC_Type,EVENTS_COMPARE[2]), /**< Compare 2 event. */
     NRF_RTC_EVENT_COMPARE_3   = offsetof(NRF_RTC_Type,EVENTS_COMPARE[3])  /**< Compare 3 event. */
+    /*lint -restore*/
 } nrf_rtc_event_t;
 
 /** @brief RTC interrupts. */
@@ -95,13 +97,12 @@ typedef enum
     NRF_RTC_INT_COMPARE3_MASK = RTC_INTENSET_COMPARE3_Msk  /**< RTC interrupt from compare event on channel 3. */
 } nrf_rtc_int_t;
 
-
 /**
  * @brief Function for setting a compare value for a channel.
  *
  * @param[in] p_reg  Pointer to the structure of registers of the peripheral.
  * @param[in] ch     Channel.
- * @param[in] cc_val Compare value to be set.
+ * @param[in] cc_val Compare value to set.
  */
 __STATIC_INLINE  void nrf_rtc_cc_set(NRF_RTC_Type * p_reg, uint32_t ch, uint32_t cc_val);
 
@@ -135,7 +136,7 @@ __STATIC_INLINE void nrf_rtc_int_disable(NRF_RTC_Type * p_reg, uint32_t mask);
  * @brief Function for checking if interrupts are enabled.
  *
  * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] mask  Mask of interrupt flags to be checked.
+ * @param[in] mask  Mask of interrupt flags to check.
  *
  * @return Mask with enabled interrupts.
  */
@@ -210,7 +211,7 @@ __STATIC_INLINE uint32_t nrf_rtc_event_pending(NRF_RTC_Type * p_reg, nrf_rtc_eve
  * @brief Function for clearing an event.
  *
  * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] event Event to be cleared.
+ * @param[in] event Event to clear.
  */
 __STATIC_INLINE void nrf_rtc_event_clear(NRF_RTC_Type * p_reg, nrf_rtc_event_t event);
 
@@ -263,7 +264,7 @@ __STATIC_INLINE void nrf_rtc_task_trigger(NRF_RTC_Type * p_reg, nrf_rtc_task_t t
  * @brief Function for enabling events.
  *
  * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] mask  Mask of event flags to be enabled.
+ * @param[in] mask  Mask of event flags to enable.
  */
 __STATIC_INLINE void nrf_rtc_event_enable(NRF_RTC_Type * p_reg, uint32_t mask);
 

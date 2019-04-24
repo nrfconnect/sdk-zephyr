@@ -29,6 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+//lint -e438
+
 #include <nrfx.h>
 #include "nrf_ecb.h"
 #include <string.h>

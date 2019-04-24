@@ -45,26 +45,38 @@ extern "C" {
  * @brief   Hardware access layer for managing the Watchdog Timer (WDT) peripheral.
  */
 
-/** @brief Number of WDT channels. */
 #define NRF_WDT_CHANNEL_NUMBER 0x8UL
+#define NRF_WDT_RR_VALUE       0x6E524635UL /* Fixed value, shouldn't be modified.*/
 
-/** @brief WDT register reload value. */
-#define NRF_WDT_RR_VALUE       0x6E524635UL /* Fixed value; should not be modified. */
+#define NRF_WDT_TASK_SET       1UL
+#define NRF_WDT_EVENT_CLEAR    0UL
 
-
-/** @brief WDT tasks. */
+/**
+ * @enum nrf_wdt_task_t
+ * @brief WDT tasks.
+ */
 typedef enum
 {
+    /*lint -save -e30 -esym(628,__INTADDR__)*/
     NRF_WDT_TASK_START = offsetof(NRF_WDT_Type, TASKS_START), /**< Task for starting WDT. */
+    /*lint -restore*/
 } nrf_wdt_task_t;
 
-/** @brief WDT events. */
+/**
+ * @enum nrf_wdt_event_t
+ * @brief WDT events.
+ */
 typedef enum
 {
+    /*lint -save -e30*/
     NRF_WDT_EVENT_TIMEOUT = offsetof(NRF_WDT_Type, EVENTS_TIMEOUT), /**< Event from WDT time-out. */
+    /*lint -restore*/
 } nrf_wdt_event_t;
 
-/** @brief WDT behavior in the SLEEP or HALT CPU modes. */
+/**
+ * @enum nrf_wdt_behaviour_t
+ * @brief WDT behavior in CPU SLEEP or HALT mode.
+ */
 typedef enum
 {
     NRF_WDT_BEHAVIOUR_RUN_SLEEP        = WDT_CONFIG_SLEEP_Msk,                       /**< WDT will run when CPU is in SLEEP mode. */
@@ -73,7 +85,10 @@ typedef enum
     NRF_WDT_BEHAVIOUR_PAUSE_SLEEP_HALT = 0,                                          /**< WDT will be paused when CPU is in SLEEP or HALT mode. */
 } nrf_wdt_behaviour_t;
 
-/** @brief WDT reload request registers. */
+/**
+ * @enum nrf_wdt_rr_register_t
+ * @brief WDT reload request registers.
+ */
 typedef enum
 {
     NRF_WDT_RR0 = 0, /**< Reload request register 0. */
@@ -86,12 +101,14 @@ typedef enum
     NRF_WDT_RR7      /**< Reload request register 7. */
 } nrf_wdt_rr_register_t;
 
-/** @brief WDT interrupts. */
+/**
+ * @enum nrf_wdt_int_mask_t
+ * @brief WDT interrupts.
+ */
 typedef enum
 {
     NRF_WDT_INT_TIMEOUT_MASK = WDT_INTENSET_TIMEOUT_Msk, /**< WDT interrupt from time-out event. */
 } nrf_wdt_int_mask_t;
-
 
 /**
  * @brief Function for configuring the watchdog behavior when the CPU is sleeping or halted.
@@ -103,48 +120,48 @@ __STATIC_INLINE void nrf_wdt_behaviour_set(nrf_wdt_behaviour_t behaviour);
 /**
  * @brief Function for starting the WDT task.
  *
- * @param[in] task Task.
+ * @param[in]  task       Task.
  */
 __STATIC_INLINE void nrf_wdt_task_trigger(nrf_wdt_task_t task);
 
 /**
- * @brief Function for clearing the WDT event register.
+ * @brief Function for clearing the WDT event.
  *
- * @param[in] event Event.
+ * @param[in]  event       Event.
  */
 __STATIC_INLINE void nrf_wdt_event_clear(nrf_wdt_event_t event);
 
 /**
  * @brief Function for retrieving the state of the WDT event.
  *
- * @param[in] event Event to be checked.
+ * @param[in]  event       Event.
  *
- * @retval true  The event has been generated.
- * @retval false The event has not been generated.
+ * @retval     true              If the event is set.
+ * @retval     false             If the event is not set.
  */
 __STATIC_INLINE bool nrf_wdt_event_check(nrf_wdt_event_t event);
 
 /**
- * @brief Function for enabling the specified interrupt.
+ * @brief Function for enabling a specific interrupt.
  *
- * @param[in] int_mask Interrupt.
+ * @param[in]  int_mask         Interrupt.
  */
 __STATIC_INLINE void nrf_wdt_int_enable(uint32_t int_mask);
 
 /**
  * @brief Function for retrieving the state of given interrupt.
  *
- * @param[in] int_mask Interrupt.
+ * @param[in]  int_mask         Interrupt.
  *
- * @retval true  Interrupt is enabled.
- * @retval false Interrupt is not enabled.
+ * @retval     true                   Interrupt is enabled.
+ * @retval     false                  Interrupt is not enabled.
  */
 __STATIC_INLINE bool nrf_wdt_int_enable_check(uint32_t int_mask);
 
 /**
  * @brief Function for disabling a specific interrupt.
  *
- * @param[in] int_mask Interrupt.
+ * @param[in]  int_mask         Interrupt.
  */
 __STATIC_INLINE void nrf_wdt_int_disable(uint32_t int_mask);
 
@@ -189,72 +206,72 @@ __STATIC_INLINE void nrf_wdt_publish_clear(nrf_wdt_event_t event);
 /**
  * @brief Function for returning the address of a specific WDT task register.
  *
- * @param[in] task Task.
+ * @param[in]  task             Task.
  */
 __STATIC_INLINE uint32_t nrf_wdt_task_address_get(nrf_wdt_task_t task);
 
 /**
  * @brief Function for returning the address of a specific WDT event register.
  *
- * @param[in] event Event.
+ * @param[in]  event       Event.
  *
- * @return Address of requested event register
+ * @retval     address of requested event register
  */
 __STATIC_INLINE uint32_t nrf_wdt_event_address_get(nrf_wdt_event_t event);
 
 /**
  * @brief Function for retrieving the watchdog status.
  *
- * @retval true  The watchdog is started.
- * @retval false The watchdog is not started.
+ * @retval     true             If the watchdog is started.
+ * @retval     false            If the watchdog is not started.
  */
 __STATIC_INLINE bool nrf_wdt_started(void);
 
 /**
  * @brief Function for retrieving the watchdog reload request status.
  *
- * @param[in] rr_register Reload request register to be checked.
+ * @param[in]  rr_register      Reload request register to check.
  *
- * @retval true  Reload request is running.
- * @retval false No reload requests are running.
+ * @retval     true             If a reload request is running.
+ * @retval     false            If no reload request is running.
  */
 __STATIC_INLINE bool nrf_wdt_request_status(nrf_wdt_rr_register_t rr_register);
 
 /**
  * @brief Function for setting the watchdog reload value.
  *
- * @param[in] reload_value Watchdog counter initial value.
+ * @param[in]  reload_value     Watchdog counter initial value.
  */
 __STATIC_INLINE void nrf_wdt_reload_value_set(uint32_t reload_value);
 
 /**
  * @brief Function for retrieving the watchdog reload value.
  *
- * @return Reload value.
+ * @retval                      Reload value.
  */
 __STATIC_INLINE uint32_t nrf_wdt_reload_value_get(void);
 
 /**
  * @brief Function for enabling a specific reload request register.
  *
- * @param[in] rr_register Reload request register to be enabled.
+ * @param[in]  rr_register       Reload request register to enable.
  */
 __STATIC_INLINE void nrf_wdt_reload_request_enable(nrf_wdt_rr_register_t rr_register);
 
 /**
  * @brief Function for disabling a specific reload request register.
  *
- * @param[in] rr_register Reload request register to be disabled.
+ * @param[in]  rr_register       Reload request register to disable.
  */
 __STATIC_INLINE void nrf_wdt_reload_request_disable(nrf_wdt_rr_register_t rr_register);
 
 /**
  * @brief Function for retrieving the status of a specific reload request register.
  *
- * @param[in] rr_register Reload request register to be checked.
+ * @param[in]  rr_register       Reload request register to check.
  *
- * @retval true  The reload request register is enabled.
- * @retval false The reload request register is not enabled.
+ * @retval     true              If the reload request register is enabled.
+ * @retval     false             If the reload request register is not enabled.
  */
 __STATIC_INLINE bool nrf_wdt_reload_request_is_enabled(nrf_wdt_rr_register_t rr_register);
 
@@ -274,12 +291,12 @@ __STATIC_INLINE void nrf_wdt_behaviour_set(nrf_wdt_behaviour_t behaviour)
 
 __STATIC_INLINE void nrf_wdt_task_trigger(nrf_wdt_task_t task)
 {
-    *((volatile uint32_t *)((uint8_t *)NRF_WDT + (uint32_t)task)) = 0x01UL;
+    *((volatile uint32_t *)((uint8_t *)NRF_WDT + task)) = NRF_WDT_TASK_SET;
 }
 
 __STATIC_INLINE void nrf_wdt_event_clear(nrf_wdt_event_t event)
 {
-    *((volatile uint32_t *)((uint8_t *)NRF_WDT + (uint32_t)event)) = 0x0UL;
+    *((volatile uint32_t *)((uint8_t *)NRF_WDT + (uint32_t)event)) = NRF_WDT_EVENT_CLEAR;
 #if __CORTEX_M == 0x04
     volatile uint32_t dummy = *((volatile uint32_t *)((uint8_t *)NRF_WDT + (uint32_t)event));
     (void)dummy;
@@ -288,7 +305,7 @@ __STATIC_INLINE void nrf_wdt_event_clear(nrf_wdt_event_t event)
 
 __STATIC_INLINE bool nrf_wdt_event_check(nrf_wdt_event_t event)
 {
-    return (bool)*((volatile uint32_t *)((uint8_t *)NRF_WDT + (uint32_t)event));
+    return (bool)*((volatile uint32_t *)((uint8_t *)NRF_WDT + event));
 }
 
 __STATIC_INLINE void nrf_wdt_int_enable(uint32_t int_mask)
@@ -334,12 +351,12 @@ __STATIC_INLINE void nrf_wdt_publish_clear(nrf_wdt_event_t event)
 
 __STATIC_INLINE uint32_t nrf_wdt_task_address_get(nrf_wdt_task_t task)
 {
-    return ((uint32_t)NRF_WDT + (uint32_t)task);
+    return ((uint32_t)NRF_WDT + task);
 }
 
 __STATIC_INLINE uint32_t nrf_wdt_event_address_get(nrf_wdt_event_t event)
 {
-    return ((uint32_t)NRF_WDT + (uint32_t)event);
+    return ((uint32_t)NRF_WDT + event);
 }
 
 __STATIC_INLINE bool nrf_wdt_started(void)

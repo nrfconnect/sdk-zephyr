@@ -46,21 +46,24 @@ extern "C" {
  * @brief   Pulse Width Modulation (PWM) peripheral driver.
  */
 
-/** @brief PWM driver instance data structure. */
+/**
+ * @brief PWM driver instance data structure.
+ */
 typedef struct
 {
     NRF_PWM_Type * p_registers;  ///< Pointer to the structure with PWM peripheral instance registers.
-    uint8_t        drv_inst_idx; ///< Index of the driver instance. For internal use only.
+    uint8_t        drv_inst_idx; ///< Driver instance index.
 } nrfx_pwm_t;
 
-/** @brief Macro for creating a PWM driver instance. */
+/**
+ * @brief Macro for creating a PWM driver instance.
+ */
 #define NRFX_PWM_INSTANCE(id)                               \
 {                                                           \
     .p_registers  = NRFX_CONCAT_2(NRF_PWM, id),             \
     .drv_inst_idx = NRFX_CONCAT_3(NRFX_PWM, id, _INST_IDX), \
 }
 
-#ifndef __NRFX_DOXYGEN__
 enum {
 #if NRFX_CHECK(NRFX_PWM0_ENABLED)
     NRFX_PWM0_INST_IDX,
@@ -76,7 +79,6 @@ enum {
 #endif
     NRFX_PWM_ENABLED_COUNT
 };
-#endif
 
 /**
  * @brief This value can be provided instead of a pin number for any channel
@@ -85,10 +87,15 @@ enum {
  */
 #define NRFX_PWM_PIN_NOT_USED    0xFF
 
-/** @brief This value can be added to a pin number to invert its polarity (set idle state = 1). */
+/**
+ * @brief This value can be added to a pin number to inverse its polarity
+ *        (set idle state = 1).
+ */
 #define NRFX_PWM_PIN_INVERTED    0x80
 
-/** @brief PWM driver configuration structure. */
+/**
+ * @brief PWM driver configuration structure.
+ */
 typedef struct
 {
     uint8_t output_pins[NRF_PWM_CHANNEL_COUNT]; ///< Pin numbers for individual output channels (optional).
@@ -102,7 +109,9 @@ typedef struct
     nrf_pwm_dec_step_t step_mode;    ///< Mode of advancing the active sequence.
 } nrfx_pwm_config_t;
 
-/** @brief PWM driver default configuration. */
+/**
+ * @brief PWM driver default configuration.
+ */
 #define NRFX_PWM_DEFAULT_CONFIG                                            \
 {                                                                          \
     .output_pins  = { NRFX_PWM_DEFAULT_CONFIG_OUT0_PIN,                    \
@@ -117,11 +126,14 @@ typedef struct
     .step_mode    = (nrf_pwm_dec_step_t)NRFX_PWM_DEFAULT_CONFIG_STEP_MODE, \
 }
 
-/** @brief PWM flags that provide additional playback options. */
+
+/**
+ * @brief PWM flags providing additional playback options.
+ */
 typedef enum
 {
     NRFX_PWM_FLAG_STOP = 0x01, /**< When the requested playback is finished,
-                                    the peripheral will be stopped.
+                                    the peripheral should be stopped.
                                     @note The STOP task is triggered when
                                     the last value of the final sequence is
                                     loaded from RAM, and the peripheral stops
@@ -131,7 +143,7 @@ typedef enum
                                     less than the requested number of repeats
                                     of the last value. */
     NRFX_PWM_FLAG_LOOP = 0x02, /**< When the requested playback is finished,
-                                    it will be started from the beginning.
+                                    it should be started from the beginning.
                                     This flag is ignored if used together
                                     with @ref NRFX_PWM_FLAG_STOP.
                                     @note The playback restart is done via a
@@ -145,25 +157,28 @@ typedef enum
                                     the playback restart will occur right
                                     after switching to the final value (this
                                     final value will be played only once). */
-    NRFX_PWM_FLAG_SIGNAL_END_SEQ0 = 0x04, /**< The event handler is to be
+    NRFX_PWM_FLAG_SIGNAL_END_SEQ0 = 0x04, /**< The event handler should be
                                                called when the last value
                                                from sequence 0 is loaded. */
-    NRFX_PWM_FLAG_SIGNAL_END_SEQ1 = 0x08, /**< The event handler is to be
+    NRFX_PWM_FLAG_SIGNAL_END_SEQ1 = 0x08, /**< The event handler should be
                                                called when the last value
                                                from sequence 1 is loaded. */
     NRFX_PWM_FLAG_NO_EVT_FINISHED = 0x10, /**< The playback finished event
-                                               (enabled by default) is to be
+                                               (enabled by default) should be
                                                suppressed. */
-    NRFX_PWM_FLAG_START_VIA_TASK = 0x80, /**< The playback must not be
+    NRFX_PWM_FLAG_START_VIA_TASK = 0x80, /**< The playback should not be
                                               started directly by the called
                                               function. Instead, the function
-                                              must only prepare it and
+                                              should only prepare it and
                                               return the address of the task
                                               to be triggered to start the
                                               playback. */
 } nrfx_pwm_flag_t;
 
-/** @brief PWM driver event type. */
+
+/**
+ * @brief PWM driver event type.
+ */
 typedef enum
 {
     NRFX_PWM_EVT_FINISHED, ///< Sequence playback finished.
@@ -174,20 +189,24 @@ typedef enum
     NRFX_PWM_EVT_STOPPED,  ///< The PWM peripheral has been stopped.
 } nrfx_pwm_evt_type_t;
 
-/** @brief PWM driver event handler type. */
+/**
+ * @brief PWM driver event handler type.
+ */
 typedef void (* nrfx_pwm_handler_t)(nrfx_pwm_evt_type_t event_type);
+
 
 /**
  * @brief Function for initializing the PWM driver.
  *
  * @param[in] p_instance Pointer to the driver instance structure.
- * @param[in] p_config   Pointer to the structure with the initial configuration.
+ * @param[in] p_config   Pointer to the structure with initial configuration.
+ *
  * @param[in] handler    Event handler provided by the user. If NULL is passed
  *                       instead, event notifications are not done and PWM
  *                       interrupts are disabled.
  *
- * @retval NRFX_SUCCESS             Initialization was successful.
- * @retval NRFX_ERROR_INVALID_STATE The driver was already initialized.
+ * @retval NRFX_SUCCESS             If initialization was successful.
+ * @retval NRFX_ERROR_INVALID_STATE If the driver was already initialized.
  */
 nrfx_err_t nrfx_pwm_init(nrfx_pwm_t const * const  p_instance,
                          nrfx_pwm_config_t const * p_config,
@@ -208,20 +227,20 @@ void nrfx_pwm_uninit(nrfx_pwm_t const * const p_instance);
  * To take advantage of the looping mechanism in the PWM peripheral, both
  * sequences must be used (single sequence can be played back only once by
  * the peripheral). Therefore, the provided sequence is internally set and
- * played back as both sequence 0 and sequence 1. Consequently, if the end of
- * sequence notifications are required, events for both sequences must be
- * used (that is, both the @ref NRFX_PWM_FLAG_SIGNAL_END_SEQ0 flag
- * and the @ref NRFX_PWM_FLAG_SIGNAL_END_SEQ1 flag must be specified, and
+ * played back as both sequence 0 and sequence 1. Consequently, if end of
+ * sequence notifications are required, events for both sequences should be
+ * used (that means that both the @ref NRFX_PWM_FLAG_SIGNAL_END_SEQ0 flag
+ * and the @ref NRFX_PWM_FLAG_SIGNAL_END_SEQ1 flag should be specified and
  * the @ref NRFX_PWM_EVT_END_SEQ0 event and the @ref NRFX_PWM_EVT_END_SEQ1
- * event must be handled in the same way).
+ * event should be handled in the same way).
  *
  * Use the @ref NRFX_PWM_FLAG_START_VIA_TASK flag if you want the playback
  * to be only prepared by this function, and you want to start it later by
- * triggering a task (for example, by using PPI). The function will then return
+ * triggering a task (using PPI for instance). The function will then return
  * the address of the task to be triggered.
  *
  * @note The array containing the duty cycle values for the specified sequence
- *       must be in RAM and cannot be allocated on the stack.
+ *       must be in RAM and cannot be allocated on stack.
  *       For detailed information, see @ref nrf_pwm_sequence_t.
  *
  * @param[in] p_instance     Pointer to the driver instance structure.
@@ -248,7 +267,7 @@ uint32_t nrfx_pwm_simple_playback(nrfx_pwm_t const * const   p_instance,
  * the address of the task to be triggered.
  *
  * @note The array containing the duty cycle values for the specified sequence
- *       must be in RAM and cannot be allocated on the stack.
+ *       must be in RAM and cannot be allocated on stack.
  *       For detailed information, see @ref nrf_pwm_sequence_t.
  *
  * @param[in] p_instance     Pointer to the driver instance structure.
@@ -286,7 +305,7 @@ __STATIC_INLINE void nrfx_pwm_step(nrfx_pwm_t const * const p_instance);
  * might appear on the output less times than requested.
  *
  * @note This function can be instructed to wait until the playback is stopped
- *       (by setting @p wait_until_stopped to true). Depending on
+ *       (by setting @p wait_until_stopped to true). Note that, depending on
  *       the length of the PMW period, this might take a significant amount of
  *       time. Alternatively, the @ref nrfx_pwm_is_stopped function can be
  *       used to poll the status, or the @ref NRFX_PWM_EVT_STOPPED event can
@@ -297,18 +316,19 @@ __STATIC_INLINE void nrfx_pwm_step(nrfx_pwm_t const * const p_instance);
  * @param[in] wait_until_stopped If true, the function will not return until
  *                               the playback is stopped.
  *
- * @retval true  The PWM peripheral is stopped.
- * @retval false The PWM peripheral is not stopped.
+ * @retval true  If the PWM peripheral is stopped.
+ * @retval false If the PWM peripheral is not stopped.
  */
-bool nrfx_pwm_stop(nrfx_pwm_t const * const p_instance, bool wait_until_stopped);
+bool nrfx_pwm_stop(nrfx_pwm_t const * const p_instance,
+                   bool wait_until_stopped);
 
 /**
  * @brief Function for checking the status of the PWM peripheral.
  *
  * @param[in] p_instance Pointer to the driver instance structure.
  *
- * @retval true  The PWM peripheral is stopped.
- * @retval false The PWM peripheral is not stopped.
+ * @retval true  If the PWM peripheral is stopped.
+ * @retval false If the PWM peripheral is not stopped.
  */
 bool nrfx_pwm_is_stopped(nrfx_pwm_t const * const p_instance);
 
@@ -319,9 +339,10 @@ bool nrfx_pwm_is_stopped(nrfx_pwm_t const * const p_instance);
  * @param[in] seq_id     Identifier of the sequence (0 or 1).
  * @param[in] p_sequence Pointer to the new sequence definition.
  */
-__STATIC_INLINE void nrfx_pwm_sequence_update(nrfx_pwm_t const * const   p_instance,
-                                              uint8_t                    seq_id,
-                                              nrf_pwm_sequence_t const * p_sequence);
+__STATIC_INLINE void nrfx_pwm_sequence_update(
+                                        nrfx_pwm_t const * const   p_instance,
+                                        uint8_t                    seq_id,
+                                        nrf_pwm_sequence_t const * p_sequence);
 
 /**
  * @brief Function for updating the pointer to the duty cycle values
@@ -349,7 +370,7 @@ __STATIC_INLINE void nrfx_pwm_sequence_length_update(nrfx_pwm_t const * const p_
 
 /**
  * @brief Function for updating the number of repeats for duty cycle values
- *        in the specified sequence during playback.
+ *        in specified sequence during playback.
  *
  * @param[in] p_instance Pointer to the driver instance structure.
  * @param[in] seq_id     Identifier of the sequence (0 or 1).
@@ -383,17 +404,17 @@ __STATIC_INLINE void nrfx_pwm_sequence_end_delay_update(nrfx_pwm_t const * const
 __STATIC_INLINE uint32_t nrfx_pwm_task_address_get(nrfx_pwm_t const * const p_instance,
                                                    nrf_pwm_task_t           task);
 
-/**
- * @brief Function for returning the address of a specified PWM event that can
+/**@brief Function for returning the address of a specified PWM event that can
  *        be used in PPI module.
  *
- * @param[in] p_instance  Pointer to the driver instance structure.
- * @param[in] event       Requested event.
+ * @param[in] p_instance Pointer to the driver instance structure.
+ * @param[in] event      Requested event.
  *
  * @return Event address.
  */
 __STATIC_INLINE uint32_t nrfx_pwm_event_address_get(nrfx_pwm_t const * const p_instance,
                                                     nrf_pwm_event_t          event);
+
 
 #ifndef SUPPRESS_INLINE_IMPLEMENTATION
 
@@ -451,14 +472,14 @@ __STATIC_INLINE uint32_t nrfx_pwm_event_address_get(nrfx_pwm_t const * const p_i
 
 #endif // SUPPRESS_INLINE_IMPLEMENTATION
 
-/** @} */
-
 
 void nrfx_pwm_0_irq_handler(void);
 void nrfx_pwm_1_irq_handler(void);
 void nrfx_pwm_2_irq_handler(void);
 void nrfx_pwm_3_irq_handler(void);
 
+
+/** @} */
 
 #ifdef __cplusplus
 }

@@ -133,7 +133,6 @@ nrfx_err_t nrfx_prs_acquire(void       const * p_base_addr,
  */
 void nrfx_prs_release(void const * p_base_addr);
 
-/** @} */
 
 void nrfx_prs_box_0_irq_handler(void);
 void nrfx_prs_box_1_irq_handler(void);
@@ -141,6 +140,7 @@ void nrfx_prs_box_2_irq_handler(void);
 void nrfx_prs_box_3_irq_handler(void);
 void nrfx_prs_box_4_irq_handler(void);
 
+/** @} */
 
 #ifdef __cplusplus
 }

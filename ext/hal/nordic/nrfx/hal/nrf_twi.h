@@ -45,28 +45,38 @@ extern "C" {
  * @brief   Hardware access layer for managing the TWI peripheral.
  */
 
-/** @brief TWI tasks. */
+/**
+ * @brief TWI tasks.
+ */
 typedef enum
 {
+    /*lint -save -e30*/
     NRF_TWI_TASK_STARTRX = offsetof(NRF_TWI_Type, TASKS_STARTRX), ///< Start TWI receive sequence.
     NRF_TWI_TASK_STARTTX = offsetof(NRF_TWI_Type, TASKS_STARTTX), ///< Start TWI transmit sequence.
     NRF_TWI_TASK_STOP    = offsetof(NRF_TWI_Type, TASKS_STOP),    ///< Stop TWI transaction.
     NRF_TWI_TASK_SUSPEND = offsetof(NRF_TWI_Type, TASKS_SUSPEND), ///< Suspend TWI transaction.
     NRF_TWI_TASK_RESUME  = offsetof(NRF_TWI_Type, TASKS_RESUME)   ///< Resume TWI transaction.
+    /*lint -restore*/
 } nrf_twi_task_t;
 
-/** @brief TWI events. */
+/**
+ * @brief TWI events.
+ */
 typedef enum
 {
+    /*lint -save -e30*/
     NRF_TWI_EVENT_STOPPED   = offsetof(NRF_TWI_Type, EVENTS_STOPPED),  ///< TWI stopped.
     NRF_TWI_EVENT_RXDREADY  = offsetof(NRF_TWI_Type, EVENTS_RXDREADY), ///< TWI RXD byte received.
     NRF_TWI_EVENT_TXDSENT   = offsetof(NRF_TWI_Type, EVENTS_TXDSENT),  ///< TWI TXD byte sent.
     NRF_TWI_EVENT_ERROR     = offsetof(NRF_TWI_Type, EVENTS_ERROR),    ///< TWI error.
     NRF_TWI_EVENT_BB        = offsetof(NRF_TWI_Type, EVENTS_BB),       ///< TWI byte boundary, generated before each byte that is sent or received.
     NRF_TWI_EVENT_SUSPENDED = offsetof(NRF_TWI_Type, EVENTS_SUSPENDED) ///< TWI entered the suspended state.
+    /*lint -restore*/
 } nrf_twi_event_t;
 
-/** @brief TWI shortcuts. */
+/**
+ * @brief TWI shortcuts.
+ */
 typedef enum
 {
     NRF_TWI_SHORT_BB_SUSPEND_MASK = TWI_SHORTS_BB_SUSPEND_Msk,  ///< Shortcut between BB event and SUSPEND task.
@@ -75,7 +85,9 @@ typedef enum
                                     TWI_SHORTS_BB_STOP_Msk      ///< All TWI shortcuts.
 } nrf_twi_short_mask_t;
 
-/** @brief TWI interrupts. */
+/**
+ * @brief TWI interrupts.
+ */
 typedef enum
 {
     NRF_TWI_INT_STOPPED_MASK    = TWI_INTENSET_STOPPED_Msk,    ///< Interrupt on STOPPED event.
@@ -92,7 +104,9 @@ typedef enum
                                   TWI_INTENSET_SUSPENDED_Msk   ///< All TWI interrupts.
 } nrf_twi_int_mask_t;
 
-/** @brief TWI error source. */
+/**
+ * @brief TWI error source.
+ */
 typedef enum
 {
     NRF_TWI_ERROR_ADDRESS_NACK = TWI_ERRORSRC_ANACK_Msk,  ///< NACK received after sending the address.
@@ -102,7 +116,9 @@ typedef enum
                                                            *   from the RXD register (previous data is lost). */
 } nrf_twi_error_t;
 
-/** @brief TWI master clock frequency. */
+/**
+ * @brief TWI master clock frequency.
+ */
 typedef enum
 {
     NRF_TWI_FREQ_100K = TWI_FREQUENCY_FREQUENCY_K100, ///< 100 kbps.
@@ -112,19 +128,19 @@ typedef enum
 
 
 /**
- * @brief Function for activating the specified TWI task.
+ * @brief Function for activating a specific TWI task.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] task  Task to be activated.
+ * @param[in] p_reg Pointer to the peripheral registers structure.
+ * @param[in] task  Task to activate.
  */
 __STATIC_INLINE void nrf_twi_task_trigger(NRF_TWI_Type * p_reg,
                                           nrf_twi_task_t task);
 
 /**
- * @brief Function for getting the address of the specified TWI task register.
+ * @brief Function for getting the address of a specific TWI task register.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] task  The specified task.
+ * @param[in] p_reg Pointer to the peripheral registers structure.
+ * @param[in] task  Requested task.
  *
  * @return Address of the specified task register.
  */
@@ -132,31 +148,31 @@ __STATIC_INLINE uint32_t * nrf_twi_task_address_get(NRF_TWI_Type * p_reg,
                                                     nrf_twi_task_t task);
 
 /**
- * @brief Function for clearing the specified TWI event.
+ * @brief Function for clearing a specific TWI event.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg Pointer to the peripheral registers structure.
  * @param[in] event Event to clear.
  */
-__STATIC_INLINE void nrf_twi_event_clear(NRF_TWI_Type *  p_reg,
+__STATIC_INLINE void nrf_twi_event_clear(NRF_TWI_Type * p_reg,
                                          nrf_twi_event_t event);
 
 /**
- * @brief Function for retrieving the state of the TWI event.
+ * @brief Function for checking the state of a specific event.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] event Event to be checked.
+ * @param[in] p_reg Pointer to the peripheral registers structure.
+ * @param[in] event Event to check.
  *
- * @retval true  The event has been generated.
- * @retval false The event has not been generated.
+ * @retval true If the event is set.
+ * @retval false If the event is not set.
  */
 __STATIC_INLINE bool nrf_twi_event_check(NRF_TWI_Type  * p_reg,
                                          nrf_twi_event_t event);
 
 /**
- * @brief Function for getting the address of the specified TWI event register.
+ * @brief Function for getting the address of a specific TWI event register.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] event The specified event.
+ * @param[in] p_reg Pointer to the peripheral registers structure.
+ * @param[in] event Requested event.
  *
  * @return Address of the specified event register.
  */
@@ -164,71 +180,71 @@ __STATIC_INLINE uint32_t * nrf_twi_event_address_get(NRF_TWI_Type  * p_reg,
                                                      nrf_twi_event_t event);
 
 /**
- * @brief Function for enabling the specified shortcuts.
+ * @brief Function for enabling specified shortcuts.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] mask  Shortcuts to be enabled.
+ * @param[in] p_reg       Pointer to the peripheral registers structure.
+ * @param[in] shorts_mask Shortcuts to enable.
  */
 __STATIC_INLINE void nrf_twi_shorts_enable(NRF_TWI_Type * p_reg,
-                                           uint32_t       mask);
+                                           uint32_t       shorts_mask);
 
 /**
- * @brief Function for disabling the specified shortcuts.
+ * @brief Function for disabling specified shortcuts.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] mask  Shortcuts to be disabled.
+ * @param[in] p_reg       Pointer to the peripheral registers structure.
+ * @param[in] shorts_mask Shortcuts to disable.
  */
 __STATIC_INLINE void nrf_twi_shorts_disable(NRF_TWI_Type * p_reg,
-                                            uint32_t       mask);
+                                            uint32_t       shorts_mask);
 
 /**
- * @brief Function for enabling the specified interrupts.
+ * @brief Function for enabling specified interrupts.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] mask  Mask of interrupts to be enabled.
+ * @param[in] p_reg    Pointer to the peripheral registers structure.
+ * @param[in] int_mask Interrupts to enable.
  */
 __STATIC_INLINE void nrf_twi_int_enable(NRF_TWI_Type * p_reg,
-                                        uint32_t       mask);
+                                        uint32_t       int_mask);
 
 /**
- * @brief Function for disabling the specified interrupts.
+ * @brief Function for disabling specified interrupts.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] mask  Mask of interrupts to be disabled.
+ * @param[in] p_reg    Pointer to the peripheral registers structure.
+ * @param[in] int_mask Interrupts to disable.
  */
 __STATIC_INLINE void nrf_twi_int_disable(NRF_TWI_Type * p_reg,
-                                         uint32_t       mask);
+                                         uint32_t       int_mask);
 
 /**
  * @brief Function for retrieving the state of a given interrupt.
  *
- * @param[in] p_reg   Pointer to the structure of registers of the peripheral.
- * @param[in] twi_int Interrupt to be checked.
+ * @param[in] p_reg    Pointer to the peripheral registers structure.
+ * @param[in] int_mask Interrupt to check.
  *
- * @retval true  The interrupt is enabled.
- * @retval false The interrupt is not enabled.
+ * @retval true  If the interrupt is enabled.
+ * @retval false If the interrupt is not enabled.
  */
 __STATIC_INLINE bool nrf_twi_int_enable_check(NRF_TWI_Type *     p_reg,
-                                              nrf_twi_int_mask_t twi_int);
+                                              nrf_twi_int_mask_t int_mask);
 
 /**
  * @brief Function for enabling the TWI peripheral.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg Pointer to the peripheral registers structure.
  */
 __STATIC_INLINE void nrf_twi_enable(NRF_TWI_Type * p_reg);
 
 /**
  * @brief Function for disabling the TWI peripheral.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg Pointer to the peripheral registers structure.
  */
 __STATIC_INLINE void nrf_twi_disable(NRF_TWI_Type * p_reg);
 
 /**
  * @brief Function for configuring TWI pins.
  *
- * @param[in] p_reg   Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg   Pointer to the peripheral registers structure.
  * @param[in] scl_pin SCL pin number.
  * @param[in] sda_pin SDA pin number.
  */
@@ -239,25 +255,25 @@ __STATIC_INLINE void nrf_twi_pins_set(NRF_TWI_Type * p_reg,
 /**
  * @brief Function for retrieving the SCL pin number.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg Pointer to the peripheral registers structure
  *
- * @return SCL pin number.
+ * @retval pin SCL pin number.
  */
 __STATIC_INLINE uint32_t nrf_twi_scl_pin_get(NRF_TWI_Type * p_reg);
 
 /**
  * @brief Function for retrieving the SDA pin number.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg Pointer to the peripheral registers structure
  *
- * @return SDA pin number.
+ * @retval pin SDA pin number.
  */
 __STATIC_INLINE uint32_t nrf_twi_sda_pin_get(NRF_TWI_Type * p_reg);
 
 /**
  * @brief Function for setting the TWI master clock frequency.
  *
- * @param[in] p_reg     Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg     Pointer to the peripheral registers structure.
  * @param[in] frequency TWI frequency.
  */
 __STATIC_INLINE void nrf_twi_frequency_set(NRF_TWI_Type *      p_reg,
@@ -268,7 +284,7 @@ __STATIC_INLINE void nrf_twi_frequency_set(NRF_TWI_Type *      p_reg,
  *
  * The error flags are cleared after reading.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg Pointer to the peripheral registers structure.
  *
  * @return Mask with error source flags.
  */
@@ -277,7 +293,7 @@ __STATIC_INLINE uint32_t nrf_twi_errorsrc_get_and_clear(NRF_TWI_Type * p_reg);
 /**
  * @brief Function for setting the address to be used in TWI transfers.
  *
- * @param[in] p_reg   Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg   Pointer to the peripheral registers structure.
  * @param[in] address Address to be used in transfers.
  */
 __STATIC_INLINE void nrf_twi_address_set(NRF_TWI_Type * p_reg, uint8_t address);
@@ -285,7 +301,7 @@ __STATIC_INLINE void nrf_twi_address_set(NRF_TWI_Type * p_reg, uint8_t address);
 /**
  * @brief Function for reading data received by TWI.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg Pointer to the peripheral registers structure.
  *
  * @return Received data.
  */
@@ -294,19 +310,13 @@ __STATIC_INLINE uint8_t nrf_twi_rxd_get(NRF_TWI_Type * p_reg);
 /**
  * @brief Function for writing data to be transmitted by TWI.
  *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
+ * @param[in] p_reg Pointer to the peripheral registers structure.
  * @param[in] data  Data to be transmitted.
  */
 __STATIC_INLINE void nrf_twi_txd_set(NRF_TWI_Type * p_reg, uint8_t data);
 
-/**
- * @brief Function for setting the specified shortcuts.
- *
- * @param[in] p_reg Pointer to the structure of registers of the peripheral.
- * @param[in] mask  Shortcuts to be set.
- */
 __STATIC_INLINE void nrf_twi_shorts_set(NRF_TWI_Type * p_reg,
-                                        uint32_t       mask);
+                                        uint32_t       shorts_mask);
 
 #ifndef SUPPRESS_INLINE_IMPLEMENTATION
 
@@ -345,33 +355,33 @@ __STATIC_INLINE uint32_t * nrf_twi_event_address_get(NRF_TWI_Type  * p_reg,
 }
 
 __STATIC_INLINE void nrf_twi_shorts_enable(NRF_TWI_Type * p_reg,
-                                           uint32_t       mask)
+                                           uint32_t       shorts_mask)
 {
-    p_reg->SHORTS |= mask;
+    p_reg->SHORTS |= shorts_mask;
 }
 
 __STATIC_INLINE void nrf_twi_shorts_disable(NRF_TWI_Type * p_reg,
-                                            uint32_t       mask)
+                                            uint32_t       shorts_mask)
 {
-    p_reg->SHORTS &= ~(mask);
+    p_reg->SHORTS &= ~(shorts_mask);
 }
 
 __STATIC_INLINE void nrf_twi_int_enable(NRF_TWI_Type * p_reg,
-                                        uint32_t       mask)
+                                        uint32_t       int_mask)
 {
-    p_reg->INTENSET = mask;
+    p_reg->INTENSET = int_mask;
 }
 
 __STATIC_INLINE void nrf_twi_int_disable(NRF_TWI_Type * p_reg,
-                                         uint32_t       mask)
+                                         uint32_t       int_mask)
 {
-    p_reg->INTENCLR = mask;
+    p_reg->INTENCLR = int_mask;
 }
 
 __STATIC_INLINE bool nrf_twi_int_enable_check(NRF_TWI_Type *     p_reg,
-                                              nrf_twi_int_mask_t twi_int)
+                                              nrf_twi_int_mask_t int_mask)
 {
-    return (bool)(p_reg->INTENSET & twi_int);
+    return (bool)(p_reg->INTENSET & int_mask);
 }
 
 __STATIC_INLINE void nrf_twi_enable(NRF_TWI_Type * p_reg)
@@ -451,9 +461,9 @@ __STATIC_INLINE void nrf_twi_txd_set(NRF_TWI_Type * p_reg, uint8_t data)
 }
 
 __STATIC_INLINE void nrf_twi_shorts_set(NRF_TWI_Type * p_reg,
-                                        uint32_t       mask)
+                                        uint32_t       shorts_mask)
 {
-    p_reg->SHORTS = mask;
+    p_reg->SHORTS = shorts_mask;
 }
 
 #endif // SUPPRESS_INLINE_IMPLEMENTATION
