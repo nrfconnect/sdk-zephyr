@@ -391,8 +391,8 @@
 
 // <e> NRFX_NVMC_ENABLED - nrfx_nvmc - NVMC peripheral driver
 //==========================================================
-#ifdef CONFIG_NRFX_NVMC
-#define NRFX_NVMC_ENABLED 1
+#ifndef NRFX_NVMC_ENABLED
+#define NRFX_NVMC_ENABLED 0
 #endif
 
 // </e>
