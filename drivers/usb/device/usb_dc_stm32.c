@@ -427,7 +427,7 @@ int usb_dc_attach(void)
 	 * For STM32F0 series SoCs on QFN28 and TSSOP20 packages enable PIN
 	 * pair PA11/12 mapped instead of PA9/10 (e.g. stm32f070x6)
 	 */
-#if defined(CONFIG_SOC_SERIES_STM32F0X) && defined(SYSCFG_CFGR1_PA11_PA12_RMP)
+#if defined(DT_USB_ENABLE_PIN_REMAP)
 	if (LL_APB1_GRP2_IsEnabledClock(LL_APB1_GRP2_PERIPH_SYSCFG)) {
 		LL_SYSCFG_EnablePinRemap();
 	} else {
@@ -854,6 +854,17 @@ int usb_dc_ep_read(const u8_t ep, u8_t *const data, const u32_t max_data_len,
 	return 0;
 }
 
+int usb_dc_ep_halt(const u8_t ep)
+{
+	return usb_dc_ep_set_stall(ep);
+}
+
+int usb_dc_ep_flush(const u8_t ep)
+{
+	LOG_ERR("Not implemented");
+
+	return 0;
+}
 
 int usb_dc_ep_mps(const u8_t ep)
 {
@@ -880,11 +891,20 @@ int usb_dc_reset(void)
 
 void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
 {
+	int i;
+
 	LOG_DBG("");
 
 	HAL_PCD_EP_Open(&usb_dc_stm32_state.pcd, EP0_IN, EP0_MPS, EP_TYPE_CTRL);
 	HAL_PCD_EP_Open(&usb_dc_stm32_state.pcd, EP0_OUT, EP0_MPS,
 			EP_TYPE_CTRL);
+
+	/* The DataInCallback will never be called at this point for any pending
+	 * transactions. Reset the IN semaphores to prevent perpetual locked state.
+	 * */
+	for (i = 0; i < DT_USB_NUM_BIDIR_ENDPOINTS; i++) {
+		k_sem_give(&usb_dc_stm32_state.in_ep_state[i].write_sem);
+	}
 
 	if (usb_dc_stm32_state.status_cb) {
 		usb_dc_stm32_state.status_cb(USB_DC_RESET, NULL);

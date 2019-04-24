@@ -361,6 +361,14 @@ zephyr_cc_option(-Werror=implicit-int)
 # Prohibit void pointer arithmetic. Illegal in C99
 zephyr_cc_option(-Wpointer-arith)
 
+# If the compiler supports it, strip the ${ZEPHYR_BASE} prefix from the
+# __FILE__ macro used in __ASSERT*, in the
+# .noinit."/home/joe/zephyr/fu/bar.c" section names and in any
+# application code. This saves some memory, stops leaking user locations
+# in binaries, makes failure logs more deterministic and most
+# importantly makes builds more deterministic
+zephyr_cc_option(-fmacro-prefix-map=${ZEPHYR_BASE}=.)
+
 # Prohibit date/time macros, which would make the build non-deterministic
 # cc-option(-Werror=date-time)
 
@@ -724,6 +732,7 @@ add_custom_command(
   ${ZEPHYR_BASE}/scripts/gen_kobject_list.py
   --validation-output ${DRV_VALIDATION}
   $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:--verbose>
+  DEPENDS ${ZEPHYR_BASE}/scripts/gen_kobject_list.py
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
 add_custom_target(${DRIVER_VALIDATION_H_TARGET} DEPENDS ${DRV_VALIDATION})

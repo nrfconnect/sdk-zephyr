@@ -13,6 +13,7 @@
 /arch/arm/include/cortex_m/cmse/          @ioannisg
 /soc/arm/                                 @MaureenHelm @galak
 /soc/arm/arm/mps2/                        @fvincenzo
+/soc/arm/atmel_sam/sam3x/                 @ioannisg
 /soc/arm/atmel_sam/sam4s/                 @fallrisk
 /soc/arm/nxp*/                            @MaureenHelm
 /soc/arm/nordic_nrf/                      @ioannisg
@@ -29,6 +30,7 @@
 /arch/x86/                                @andrewboie @ramakrishnapallala
 /arch/x86/core/                           @andrewboie
 /arch/x86/core/crt0.S                     @ramakrishnapallala @nashif
+/arch/x86/core/pcie.c                     @gnuless
 /soc/x86/                                 @andrewboie @ramakrishnapallala
 /soc/x86/intel_quark/quark_d2000/         @nashif
 /soc/x86/intel_quark/quark_se/            @nashif
@@ -45,6 +47,7 @@
 /boards/arm/96b_nitrogen/                 @idlethread
 /boards/arm/96b_neonkey/                  @Mani-Sadhasivam
 /boards/arm/96b_stm32_sensor_mez/         @Mani-Sadhasivam
+/boards/arm/arduino_due/                  @ioannisg
 /boards/arm/cc3220sf_launchxl/            @vanti
 /boards/arm/curie_ble/                    @jhedberg
 /boards/arm/disco_l475_iot1/              @erwango
@@ -104,6 +107,7 @@
 /drivers/adc/                             @anangl
 /drivers/bluetooth/                       @sjanc @jhedberg @Vudentz
 /drivers/can/                             @alexanderwachter
+/drivers/can/*mcp2515*                    @karstenkoenig
 /drivers/clock_control/*stm32f4*          @rsalveti @idlethread
 /drivers/counter/                         @nordic-krch
 /drivers/display/                         @vanwinkeljan
@@ -119,13 +123,17 @@
 /drivers/led_strip/                       @mbolivar
 /drivers/modem/                           @mike-scott
 /drivers/pci/                             @gnuless
+/drivers/pcie/                            @gnuless
 /drivers/pinmux/stm32/                    @rsalveti @idlethread
 /drivers/sensor/                          @bogdan-davidoaia @MaureenHelm
+/drivers/sensor/ams_iAQcore/              @alexanderwachter
+/drivers/sensor/ens210/                   @alexanderwachter
 /drivers/sensor/hts*/                     @avisconti
 /drivers/sensor/lis*/                     @avisconti
 /drivers/sensor/lps*/                     @avisconti
 /drivers/sensor/lsm*/                     @avisconti
 /drivers/serial/uart_altera_jtag_hal.c    @ramakrishnapallala
+/drivers/serial/*ns16550*                 @gnuless
 /drivers/net/slip.c                       @jukkar @tbursztyka
 /drivers/spi/                             @tbursztyka
 /drivers/spi/spi_ll_stm32.*               @superna9999
@@ -135,6 +143,7 @@
 /drivers/usb/                             @jfischer-phytec-iot @finikorg
 /drivers/usb/device/usb_dc_stm32.c        @ydamigos @loicpoulain
 /drivers/i2c/i2c_ll_stm32*                @ldts @ydamigos
+/drivers/i2c/i2c_rv32m1_lpi2c*            @henrikbrixandersen
 /drivers/wifi/                            @jukkar @tbursztyka @pfalcon
 /drivers/wifi/eswifi/                     @loicpoulain
 /dts/arm/st/                              @erwango
@@ -142,8 +151,11 @@
 /dts/arm/nxp/                             @MaureenHelm
 /dts/bindings/                            @galak
 /dts/bindings/can/                        @alexanderwachter
+/dts/bindings/serial/ns16550.yaml         @gnuless
 /dts/bindings/*/nordic*                   @anangl
 /dts/bindings/*/nxp*                      @MaureenHelm
+/dts/bindings/sensor/ams,ens210.yaml      @alexanderwachter
+/dts/bindings/sensor/ams,iaqcore.yaml     @alexanderwachter
 /ext/fs/                                  @nashif @ramakrishnapallala
 /ext/hal/cmsis/                           @MaureenHelm @galak
 /ext/hal/libmetal/                        @galak
@@ -181,6 +193,9 @@
 /include/drivers/ioapic.h                 @andrewboie
 /include/drivers/loapic.h                 @andrewboie
 /include/drivers/mvic.h                   @andrewboie
+/include/drivers/pcie/                    @gnuless
+/include/drivers/serial/uart_ns16550.h    @gnuless
+/include/dt-bindings/pcie/                @gnuless
 /include/fs.h                             @nashif @ramakrishnapallala
 /include/fs/                              @nashif @ramakrishnapallala
 /include/hwinfo.h                         @alexanderwachter
