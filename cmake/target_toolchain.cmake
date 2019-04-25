@@ -38,9 +38,12 @@ endif()
 
 # The 'generic' compiler and the 'target' compiler might be different,
 # so we unset the 'generic' one and thereby force the 'target' to
-# re-set it.
-unset(CMAKE_C_COMPILER)
-unset(CMAKE_C_COMPILER CACHE)
+# re-set it. This is only needed for the first boilerplate execution as
+# the remaining boilerplate executions will use the same C compiler.
+if (NOT FIRST_BOILERPLATE_EXECUTION)
+  unset(CMAKE_C_COMPILER)
+  unset(CMAKE_C_COMPILER CACHE)
+endif()
 
 # Configure the toolchain based on what toolchain technology is used
 # (gcc, host-gcc etc.)
