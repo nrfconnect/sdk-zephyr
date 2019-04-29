@@ -40,7 +40,7 @@ endif()
 # so we unset the 'generic' one and thereby force the 'target' to
 # re-set it. This is only needed for the first boilerplate execution as
 # the remaining boilerplate executions will use the same C compiler.
-if (NOT FIRST_BOILERPLATE_EXECUTION)
+if (FIRST_BOILERPLATE_EXECUTION)
   unset(CMAKE_C_COMPILER)
   unset(CMAKE_C_COMPILER CACHE)
 endif()
