@@ -21,7 +21,13 @@ if(FIRST_BOILERPLATE_EXECUTION)
       ${ZEPHYR_BASE}/scripts/partition_manager.py
       --input ${partition_manager_config_files}
       --app-pm-config-dir ${PROJECT_BINARY_DIR}/include/generated
+      --app-build-dir ${PROJECT_BINARY_DIR}
+      RESULT_VARIABLE ret
       )
+
+    if(ret EQUAL "1")
+      message( FATAL_ERROR "Partition Manager failed, aborting.")
+    endif()
 
     # Make Partition Manager configuration available in CMake
     import_kconfig(PM_ ${PROJECT_BINARY_DIR}/include/generated/pm.config)

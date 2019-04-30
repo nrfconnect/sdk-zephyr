@@ -8,6 +8,8 @@ import argparse
 import yaml
 import re
 from os import path
+import sys
+from pprint import pformat
 
 
 def remove_item_not_in_list(list_to_remove_from, list_to_check):
@@ -18,65 +20,102 @@ def remove_item_not_in_list(list_to_remove_from, list_to_check):
 
 def item_is_placed(d, item, after_or_before):
     assert(after_or_before in ['after', 'before'])
-    return type(d['placement']) == dict and after_or_before in d['placement'].keys() and \
+    return after_or_before in d['placement'].keys() and \
            d['placement'][after_or_before][0] == item
 
 
 def remove_irrelevant_requirements(reqs):
     # Remove items dependencies to partitions which are not present
-    [[remove_item_not_in_list(reqs[x]['placement'][before_after], reqs.keys())
-      for x in reqs.keys() if 'placement' in reqs[x] and type(reqs[x]['placement']) == dict
-      and before_after in reqs[x]['placement'].keys()]
-     for before_after in ['before', 'after']]
+    for x in reqs.keys():
+        for before_after in ['before', 'after']:
+            if 'placement' in reqs[x].keys() and before_after in reqs[x]['placement'].keys():
+                [remove_item_not_in_list(reqs[x]['placement'][before_after], [*reqs.keys(), 'start', 'end'])]
+                if not reqs[x]['placement'][before_after]:
+                    del reqs[x]['placement'][before_after]
+        if 'span' in reqs[x].keys():
+            [remove_item_not_in_list(reqs[x]['span'], reqs.keys())]
 
 
-def get_images_which_needs_resolving(reqs):
-    return [x for x in reqs.keys() if type(reqs[x]['placement']) == dict and ('before' in reqs[x]['placement'].keys() or
-            'after' in reqs[x]['placement'].keys())]
+def get_images_which_need_resolving(reqs, sub_partitions):
+    # Get candidates which have placement specs.
+    unsorted = {x for x in reqs.keys() if 'placement' in reqs[x].keys()
+                 and ('before' in reqs[x]['placement'].keys() or 'after' in reqs[x]['placement'].keys())}
+
+    # Sort sub_partitions by whether they are inside other sub_partitions. Innermost first.
+    sorted_subs = sorted(sub_partitions.values(), key=lambda x: len(x['span']))
+
+    # Sort candidates by whether they are part of a sub_partitions.
+    # sub_partition parts come last in the result list so they are more likely
+    # to end up being placed next to each other, since they are inserted last.
+    result = []
+    for sub in sorted_subs:
+        result = [part for part in sub['span'] if part in unsorted and part not in result] + result
+
+    # Lastly, place non-partitioned parts at the front.
+    result = [part for part in unsorted if part not in result] + result
+
+    return result
 
 
-def solve_direction(reqs, unsolved, solution, ab):
+def solve_direction(reqs, sub_partitions, unsolved, solution, ab):
     assert(ab in ['after', 'before'])
-    current = 'app'
-    cont = len(unsolved) > 0
-    while cont:
-        depends = [x for x in reqs.keys() if item_is_placed(reqs[x], current, ab)]
+    current_index = 0
+    pool = solution + list(sub_partitions.keys())
+    current = pool[current_index]
+    while current:
+        depends = [x for x in unsolved if item_is_placed(reqs[x], current, ab)]
         if depends:
-            assert(len(depends) == 1)
+            # Place based on current, or based on the first/last element in the span of current.
             if ab == 'before':
-                solution.insert(solution.index(current), depends[0])
+                anchor = current if current in solution else next(solved for solved in solution
+                                                                  if solved in sub_partitions[current]['span'])
+                solution.insert(solution.index(anchor), depends[0])
             else:
-                solution.insert(solution.index(current) + 1, depends[0])
+                anchor = current if current in solution else next(solved for solved in reversed(solution)
+                                                                  if solved in sub_partitions[current]['span'])
+                solution.insert(solution.index(anchor) + 1, depends[0])
+            unsolved.remove(depends[0])
             current = depends[0]
-            unsolved.remove(current)
         else:
-            cont = False
+            current_index += 1
+            if current_index >= len(pool):
+                break
+            current = pool[current_index]
 
 
-def solve_from_last(reqs, unsolved, solution):
-    last = [x for x in reqs.keys() if type(reqs[x]['placement']) == str and reqs[x]['placement'] == 'last']
-    if last:
-        assert(len(last) == 1)
-        solution.append(last[0])
-        current = last[0]
-        cont = True
-        while cont:
-            depends = [x for x in reqs.keys() if item_is_placed(reqs[x], current, after_or_before='before')]
-            if depends:
-                solution.insert(solution.index(current), depends[0])
-                current = depends[0]
-                unsolved.remove(current)
-            else:
-                cont = False
+def solve_first_last(reqs, unsolved, solution):
+    for fl in [('after', 'start', 0), ('before', 'end', len(solution))]:
+        first_or_last = [x for x in reqs.keys() if 'placement' in reqs[x]
+                         and fl[0] in reqs[x]['placement'].keys()
+                         and fl[1] in reqs[x]['placement'][fl[0]]]
+        if first_or_last:
+            solution.insert(fl[2], first_or_last[0])
+            if first_or_last[0] in unsolved:
+                unsolved.remove(first_or_last[0])
 
 
 def extract_sub_partitions(reqs):
     sub_partitions = dict()
     keys_to_delete = list()
-    for key, values in reqs.items():
-        if 'span' in values.keys():
-            sub_partitions[key] = values
+
+    for key, value in reqs.items():
+        if 'span' in value.keys():
+            sub_partitions[key] = value
             keys_to_delete.append(key)
+
+    # "Flatten" by changing all span lists to contain the innermost partitions.
+    done = False
+    while not done:
+        done = True
+        for name, req in reqs.items():
+            if 'span' in req.keys():
+                assert len(req['span']) > 0, "partition %s is empty" % name
+                for part in req['span']:
+                    if 'span' in reqs[part].keys():
+                        req['span'].extend(reqs[part]['span'])
+                        req['span'].remove(part)
+                        req['span'] = list(set(req['span']))  # remove duplicates
+                        done = False
 
     for key in keys_to_delete:
         del reqs[key]
@@ -88,125 +127,111 @@ def resolve(reqs):
     solution = list(['app'])
     remove_irrelevant_requirements(reqs)
     sub_partitions = extract_sub_partitions(reqs)
-    unsolved = get_images_which_needs_resolving(reqs)
+    unsolved = get_images_which_need_resolving(reqs, sub_partitions)
 
-    solve_from_last(reqs, unsolved, solution)
-    solve_direction(reqs, unsolved, solution, 'before')
-    solve_direction(reqs, unsolved, solution, 'after')
+    solve_first_last(reqs, unsolved, solution)
+    while unsolved:
+        solve_direction(reqs, sub_partitions, unsolved, solution, 'before')
+        solve_direction(reqs, sub_partitions, unsolved, solution, 'after')
+
+    # Validate partition spanning.
+    for sub in sub_partitions.keys():
+        indices = [solution.index(part) for part in sub_partitions[sub]['span']]
+        assert ((not indices) or (max(indices) - min(indices) + 1 == len(indices))), \
+            "partition %s (%s) does not span over consecutive parts. Solution: %s" % \
+            (sub, str(sub_partitions[sub]['span']), str(solution))
+        assert all(part in solution for part in sub_partitions[sub]['span']), \
+            "Some or all parts of partition %s have not been placed."
 
     return solution, sub_partitions
 
 
-def find_partition_size_from_autoconf_h(configs):
-    result = dict()
-    for config in configs:
-        with open(config, 'r') as cf:
-            for line in cf.readlines():
-                match = re.match(r'#define CONFIG_PM_PARTITION_SIZE_(\w*) (0x[0-9a-fA-F]*)', line)
-                if match:
-                    if int(match.group(2), 16) != 0:
-                        result[match.group(1).lower()] = int(match.group(2), 16)
-
-    return result
-
-
-def get_list_of_autoconf_files(adr_map):
-    return [path.join(props['out_dir'], 'autoconf.h') for props in adr_map.values() if 'out_dir' in props.keys()]
-
-
-def load_size_config(adr_map):
-    configs = get_list_of_autoconf_files(adr_map)
-    size_configs = find_partition_size_from_autoconf_h(configs)
-
-    for k, v in adr_map.items():
-        if 'size' not in v.keys() and 'span' not in v.keys() and k != 'app':
-            adr_map[k]['size'] = size_configs[k]
-
-
-def load_adr_map(adr_map, input_files):
-    for f in input_files:
-        img_conf = yaml.safe_load(f)
-
-        adr_map.update(img_conf)
-    adr_map['app'] = dict()
-    adr_map['app']['placement'] = ''
+def app_size(reqs, total_size):
+    size = total_size - sum([req['size'] for name, req in reqs.items() if 'size' in req.keys() and name is not 'app'])
+    return size
 
 
 def set_addresses(reqs, solution, flash_size):
+    reqs['app']['size'] = app_size(reqs, flash_size)
+
     # First image starts at 0
     reqs[solution[0]]['address'] = 0
-    for i in range(1, solution.index('app') + 1):
+    for i in range(1, len(solution)):
         current = solution[i]
         previous = solution[i - 1]
         reqs[current]['address'] = reqs[previous]['address'] + reqs[previous]['size']
 
-    has_image_after_app = len(solution) > solution.index('app') + 1
-    if has_image_after_app:
-        reqs[solution[-1]]['address'] = flash_size - reqs[solution[-1]]['size']
-        for i in range(len(solution) - 2, solution.index('app'), -1):
-            current = solution[i]
-            previous = solution[i + 1]
-            reqs[current]['address'] = reqs[previous]['address'] - reqs[current]['size']
-        reqs['app']['size'] = reqs[solution[solution.index('app') + 1]]['address'] - reqs['app']['address']
-    else:
-        reqs['app']['size'] = flash_size - reqs['app']['address']
+
+def set_size_addr(entry, size, address):
+    entry['size'] = size
+    entry['address'] = address
 
 
 def set_sub_partition_address_and_size(reqs, sub_partitions):
-    first_parent_partition = None
-    for sp_name, sp_values in sub_partitions.items():
-        size = 0
-        for parent_partition in sp_values['span']:
-            if parent_partition in reqs:
-                if not first_parent_partition:
-                    first_parent_partition = parent_partition
-                size += reqs[parent_partition]['size']
+    for sp_name, sp_value in sub_partitions.items():
+        size = sum([reqs[part]['size'] for part in sp_value['span']])
         if size == 0:
             raise RuntimeError("No compatible parent partition found for %s" % sp_name)
-        size = size // len(sp_values['sub_partitions'])
-        address = reqs[first_parent_partition]['address']
-        for sub_partition in sp_values['sub_partitions']:
-            sp_key_name = "%s_%s" % (sp_name, sub_partition)
-            reqs[sp_key_name] = dict()
-            reqs[sp_key_name]['size'] = size
-            reqs[sp_key_name]['address'] = address
-            address += size
+        address = min([reqs[part]['address'] for part in sp_value['span']])
+        if 'sub_partitions' in sp_value.keys():
+            size = size // len(sp_value['sub_partitions'])
+            for sub_partition in sp_value['sub_partitions']:
+                sp_key_name = "%s_%s" % (sp_name, sub_partition)
+                reqs[sp_key_name] = dict()
+                set_size_addr(reqs[sp_key_name], size, address)
+                address += size
+        else:
+            reqs[sp_name] = sp_value
+            set_size_addr(reqs[sp_name], size, address)
 
 
-def get_flash_size(adr_map):
-    config = get_list_of_autoconf_files(adr_map)[0]
-    with open(config, "r") as cf:
+def sizeof(reqs, req, total_size):
+    if req == 'app':
+        size = app_size(reqs, total_size)
+    elif 'span' not in reqs[req].keys():
+        size = reqs[req]['size'] if 'size' in reqs[req].keys() else 0
+    else:
+        size = sum([sizeof(reqs, part, total_size) for part in reqs[req]['span']])
+
+    return size
+
+
+def load_reqs(reqs, input_config):
+    for dirs in input_config.values():
+        if 'pm.yml' in dirs.keys():
+            with open(dirs['pm.yml'], 'r') as f:
+                reqs.update(yaml.safe_load(f))
+
+    reqs['app'] = dict()
+
+
+def get_list_of_autoconf_files(reqs):
+    return [path.join(props['out_dir'], 'autoconf.h') for props in reqs.values() if 'out_dir' in props.keys()]
+
+
+def get_config(reqs, config):
+    config_file = get_list_of_autoconf_files(reqs)[0]
+
+    with open(config_file, "r") as cf:
         for line in cf.readlines():
-            match = re.match(r'#define CONFIG_FLASH_SIZE (\d*)', line)
+            match = re.match(r'#define %s (\d*)' % config, line)
             if match:
                 return int(match.group(1)) * 1024
-        raise RuntimeError("Unable to find 'CONFIG_FLASH_SIZE' in any of: %s" % config)
+        raise RuntimeError("Unable to find '%s' in any of: %s" % (config, config_file))
 
 
-def get_input_files(input_config):
-    input_files = list()
-    for k, v in input_config.items():
-        input_files.append(open(v['pm.yml'], 'r'))
-    return input_files
-
-
-def add_configurations(adr_map, input_config):
-    for k, v in input_config.items():
-        adr_map[k]['out_dir'] = v['out_dir']
-        adr_map[k]['build_dir'] = v['build_dir']
+def get_flash_size(reqs):
+    return get_config(reqs, "CONFIG_FLASH_SIZE")
 
 
 def get_pm_config(input_config):
-    adr_map = dict()
-    input_files = get_input_files(input_config)
-    load_adr_map(adr_map, input_files)
-    add_configurations(adr_map, input_config)
-    load_size_config(adr_map)
-    flash_size = get_flash_size(adr_map)
-    solution, sub_partitions = resolve(adr_map)
-    set_addresses(adr_map, solution, flash_size)
-    set_sub_partition_address_and_size(adr_map, sub_partitions)
-    return adr_map
+    reqs = dict()
+    load_reqs(reqs, input_config)
+    flash_size = get_flash_size(input_config)
+    solution, sub_partitions = resolve(reqs)
+    set_addresses(reqs, solution, flash_size)
+    set_sub_partition_address_and_size(reqs, sub_partitions)
+    return reqs
 
 
 def get_header_guard_start(filename):
@@ -220,84 +245,66 @@ def get_header_guard_end(filename):
     return "#endif /* %s_H__ */" % filename.split('.h')[0].upper()
 
 
-def get_config_lines(adr_map, head, split):
-    lines = list()
+def get_config_lines(pm_config, head, split):
+    config_lines = list()
 
-    def fn(a, b):
-        return lines.append(head + "PM_" + a + split + b)
+    def add_line(a, b):
+        return config_lines.append(head + "PM_" + a + split + b)
 
-    for area_name, area_props in sorted(adr_map.items(), key=lambda key_value: key_value[1]['address']):
-        fn("%s_ADDRESS" % area_name.upper(), "0x%x" % area_props['address'])
-        fn("%s_SIZE" % area_name.upper(), "0x%x" % area_props['size'])
-        fn("%s_DEV_NAME" % area_name.upper(), "\"NRF_FLASH_DRV_NAME\"")
+    partition_id = 0
+    for name, partition in sorted(pm_config.items(), key=lambda key_value_tuple: key_value_tuple[1]['address']):
+        add_line("%s_ADDRESS" % name.upper(), "0x%x" % partition['address'])
+        add_line("%s_SIZE" % name.upper(), "0x%x" % partition['size'])
+        add_line("%s_DEV_NAME" % name.upper(), "\"NRF_FLASH_DRV_NAME\"")
+        add_line("%s_ID" % name.upper(), "%d" % partition_id)
+        add_line("%d_LABEL" % partition_id, "%s" % name.upper())
 
-    flash_area_id = 0
-    for area_name, area_props in sorted(adr_map.items(), key=lambda key_value: key_value[1]['address']):
-        fn("%d_LABEL" % flash_area_id, "%s" % area_name.upper())
-        adr_map[area_name]['flash_area_id'] = flash_area_id
-        flash_area_id += 1
+        pm_config[name]['partition_id'] = partition_id
+        partition_id += 1
+    add_line("NUM", "%d" % partition_id)
 
-    for area_name, area_props in sorted(adr_map.items(), key=lambda key_value: key_value[1]['flash_area_id']):
-        fn("%s_ID" % area_name.upper(), "%d" % area_props['flash_area_id'])
-    fn("NUM", "%d" % flash_area_id)
-
-    return lines
+    return config_lines
 
 
-def only_sub_image_is_being_built(adr_map, app_output_dir):
-    if len(adr_map) == 2:
-        non_app_key = [non_app_key for non_app_key in adr_map.keys() if non_app_key != 'app'][0]
-        return app_output_dir == adr_map[non_app_key]['out_dir']
-    return False
-
-
-def write_pm_config(adr_map, app_output_dir):
-    pm_config_file = "pm_config.h"
-    config_lines = get_config_lines(adr_map, "#define ", " ")
-
-    for area_name, area_props in adr_map.items():
-        area_props['pm_config'] = list.copy(config_lines)
-        area_props['pm_config'].append("#define PM_ADDRESS 0x%x" % area_props['address'])
-        area_props['pm_config'].append("#define PM_SIZE 0x%x" % area_props['size'])
-        area_props['pm_config'].insert(0, get_header_guard_start(pm_config_file))
-        area_props['pm_config'].append(get_header_guard_end(pm_config_file))
-
-    # Store complete size/address configuration to all input paths
-    for area_name, area_props in adr_map.items():
-        if 'out_dir' in area_props.keys():
-            write_pm_config_to_file(path.join(area_props['out_dir'], pm_config_file), area_props['pm_config'])
-
-    # Store to root app, but
-    if not only_sub_image_is_being_built(adr_map, app_output_dir):
-        write_pm_config_to_file(path.join(app_output_dir, pm_config_file), adr_map['app']['pm_config'])
-
-
-def write_pm_config_to_file(pm_config_file_path, pm_config):
+def write_config_lines_to_file(pm_config_file_path, config_lines):
     with open(pm_config_file_path, 'w') as out_file:
-        out_file.write('\n'.join(pm_config))
+        out_file.write('\n'.join(config_lines))
 
 
-def write_kconfig_file(adr_map, app_output_dir):
+def write_pm_config(pm_config, input_config):
+    pm_config_file = "pm_config.h"
+    config_lines = get_config_lines(pm_config, "#define ", " ")
+
+    for image_name, dirs in input_config.items():
+        image_config_lines = list.copy(config_lines)
+        image_config_lines.append("#define PM_ADDRESS 0x%x" % pm_config[image_name]['address'])
+        image_config_lines.append("#define PM_SIZE 0x%x" % pm_config[image_name]['size'])
+        image_config_lines.insert(0, get_header_guard_start(pm_config_file))
+        image_config_lines.append(get_header_guard_end(pm_config_file))
+        write_config_lines_to_file(path.join(dirs['out_dir'], pm_config_file), image_config_lines)
+
+
+def write_kconfig_file(pm_config, input_config):
     pm_kconfig_file = "pm.config"
-    config_lines = get_config_lines(adr_map, "", "=")
+    config_lines = get_config_lines(pm_config, "", "=")
 
     # Store out dir and build dir
-    for area_name, area_props in adr_map.items():
-        if 'out_dir' in area_props.keys():
-            config_lines.append('PM_%s_OUT_DIR="%s"' % (area_name.upper(), area_props['out_dir']))
-            config_lines.append('PM_%s_BUILD_DIR="%s"' % (area_name.upper(), area_props['build_dir']))
-
-    # Store output dir to app
-    config_lines.append('PM_APP_OUT_DIR "%s"' % app_output_dir)
+    for image_name, dirs in input_config.items():
+        config_lines.append('PM_%s_OUT_DIR="%s"' % (image_name.upper(), dirs['out_dir']))
+        config_lines.append('PM_%s_BUILD_DIR="%s"' % (image_name.upper(), dirs['build_dir']))
 
     # Store complete size/address configuration to all input paths
-    for area_name, area_props in adr_map.items():
-        if 'out_dir' in area_props.keys():
-            write_pm_config_to_file(path.join(area_props['out_dir'], pm_kconfig_file), config_lines)
+    for dirs in input_config.values():
+        write_config_lines_to_file(path.join(dirs['out_dir'], pm_kconfig_file), config_lines)
 
-    # Store to root app
-    if not only_sub_image_is_being_built(adr_map, app_output_dir):
-        write_pm_config_to_file(path.join(app_output_dir, pm_kconfig_file), config_lines)
+
+def write_yaml_out_file(pm_config, input_config, filename):
+    def hexint_presenter(dumper, data):
+        return dumper.represent_int(hex(data))
+    yaml.add_representer(int, hexint_presenter)
+    yamldump = yaml.dump(pm_config)
+    for dirs in input_config.values():
+        write_config_lines_to_file(path.join(dirs['out_dir'], filename), [yamldump])
 
 
 def parse_args():
@@ -318,85 +325,137 @@ This file contains all addresses and sizes of all partitions.
                              "image-name:pm.yml-path:build_dir:out_dir")
     parser.add_argument("--app-pm-config-dir", required=True,
                         help="Where to store the 'pm_config.h' of the root app.")
+    parser.add_argument("--app-build-dir", required=True,
+                        help="Path to of the root app's build directory.")
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    return args
+
+def get_input_config(args):
+    input_config = dict()
+    for i in args.input:
+        split = i.split('|')
+        input_config[split[0]] = dict()
+        input_config[split[0]]['pm.yml'] = split[1]
+        input_config[split[0]]['build_dir'] = split[2]
+        input_config[split[0]]['out_dir'] = split[3]
+    input_config['app'] = {'out_dir': args.app_pm_config_dir, 'build_dir': args.app_build_dir}
+    return input_config
 
 
 def main():
-    args = parse_args()
-    if args.input is not None:
-        input_config = dict()
-        for i in args.input:
-            split = i.split('|')
-            input_config[split[0]] = dict()
-            input_config[split[0]]['pm.yml'] = split[1]
-            input_config[split[0]]['build_dir'] = split[2]
-            input_config[split[0]]['out_dir'] = split[3]
+    print("Running Partition Manager...")
+    if len(sys.argv) > 1:
+        args = parse_args()
+        input_config = get_input_config(args)
         pm_config = get_pm_config(input_config)
-        write_pm_config(pm_config, args.app_pm_config_dir)
-        write_kconfig_file(pm_config, args.app_pm_config_dir)
+        write_pm_config(pm_config, input_config)
+        write_kconfig_file(pm_config, input_config)
+        write_yaml_out_file(pm_config, input_config, "partitions.yml")
     else:
         print("No input, running tests.")
         test()
+
+
+def expect_addr_size(td, name, expected_address, expected_size):
+    if expected_size:
+        assert td[name]['size'] == expected_size, "Size of %s was %d, expected %d.\ntd:%s" % \
+                                                  (name, td[name]['size'], expected_size, pformat(td))
+    if expected_address:
+        assert td[name]['address'] == expected_address, "Address of %s was %d, expected %d.\ntd:%s" % \
+                                                        (name, td[name]['address'], expected_address, pformat(td))
 
 
 def test():
     td = {'spm': {'placement': {'before': ['app']}, 'size': 100},
           'mcuboot': {'placement': {'before': ['spm', 'app']}, 'size': 200},
           'mcuboot_partitions': {'span': ['spm', 'app'], 'sub_partitions': ['primary', 'secondary']},
-          'app': {'placement': ''}}
+          'app': {}}
     s, sub_partitions = resolve(td)
     set_addresses(td, s, 1000)
     set_sub_partition_address_and_size(td, sub_partitions)
+    expect_addr_size(td, 'mcuboot', 0, None)
+    expect_addr_size(td, 'spm', 200, None)
+    expect_addr_size(td, 'app', 300, 700)
+    expect_addr_size(td, 'mcuboot_partitions_primary', 200, 400)
+    expect_addr_size(td, 'mcuboot_partitions_secondary', 600, 400)
 
     td = {'mcuboot': {'placement': {'before': ['app']}, 'size': 200},
           'mcuboot_partitions': {'span': ['spm', 'app'], 'sub_partitions': ['primary', 'secondary']},
-          'app': {'placement': ''}}
+          'app': {}}
     s, sub_partitions = resolve(td)
     set_addresses(td, s, 1000)
     set_sub_partition_address_and_size(td, sub_partitions)
+    expect_addr_size(td, 'mcuboot', 0, None)
+    expect_addr_size(td, 'app', 200, 800)
+    expect_addr_size(td, 'mcuboot_partitions_primary', 200, 400)
+    expect_addr_size(td, 'mcuboot_partitions_secondary', 600, 400)
+
 
     td = {
         'e': {'placement': {'before': ['app']}, 'size': 100},
         'a': {'placement': {'before': ['b']}, 'size': 100},
         'd': {'placement': {'before': ['e']}, 'size': 100},
         'c': {'placement': {'before': ['d']}, 'size': 100},
-        'j': {'placement': 'last', 'size': 20},
+        'j': {'placement': {'before': ['end']}, 'size': 20},
         'i': {'placement': {'before': ['j']}, 'size': 20},
         'h': {'placement': {'before': ['i']}, 'size': 20},
         'f': {'placement': {'after': ['app']}, 'size': 20},
         'g': {'placement': {'after': ['f']}, 'size': 20},
         'b': {'placement': {'before': ['c']}, 'size': 20},
-        'app': {'placement': ''}}
+        'app': {}}
     s, _ = resolve(td)
     set_addresses(td, s, 1000)
+    expect_addr_size(td, 'a', 0, None)
+    expect_addr_size(td, 'b', 100, None)
+    expect_addr_size(td, 'c', 120, None)
+    expect_addr_size(td, 'd', 220, None)
+    expect_addr_size(td, 'e', 320, None)
+    expect_addr_size(td, 'app', 420, 480)
+    expect_addr_size(td, 'f', 900, None)
+    expect_addr_size(td, 'g', 920, None)
+    expect_addr_size(td, 'h', 940, None)
+    expect_addr_size(td, 'i', 960, None)
+    expect_addr_size(td, 'j', 980, None)
 
     td = {'mcuboot': {'placement': {'before': ['app', 'spu']}, 'size': 200},
           'b0': {'placement': {'before': ['mcuboot', 'app']}, 'size': 100},
-          'app': {'placement': ''}}
+          'app': {}}
     s, _ = resolve(td)
     set_addresses(td, s, 1000)
+    expect_addr_size(td, 'b0', 0, None)
+    expect_addr_size(td, 'mcuboot', 100, None)
+    expect_addr_size(td, 'app', 300, 700)
 
-    td = {'b0': {'placement': {'before': ['mcuboot', 'app']}, 'size': 100}, 'app': {'placement': ''}}
+    td = {'b0': {'placement': {'before': ['mcuboot', 'app']}, 'size': 100}, 'app': {}}
     s, _ = resolve(td)
     set_addresses(td, s, 1000)
+    expect_addr_size(td, 'b0', 0, None)
+    expect_addr_size(td, 'app', 100, 900)
 
     td = {'spu': {'placement': {'before': ['app']}, 'size': 100},
           'mcuboot': {'placement': {'before': ['spu', 'app']}, 'size': 200},
-          'app': {'placement': ''}}
+          'app': {}}
     s, _ = resolve(td)
     set_addresses(td, s, 1000)
+    expect_addr_size(td, 'mcuboot', 0, None)
+    expect_addr_size(td, 'spu', 200, None)
+    expect_addr_size(td, 'app', 300, 700)
 
-    td = {'provision': {'placement': 'last', 'size': 100},
+    td = {'provision': {'placement': {'before': ['end']}, 'size': 100},
           'mcuboot': {'placement': {'before': ['spu', 'app']}, 'size': 100},
           'b0': {'placement': {'before': ['mcuboot', 'app']}, 'size': 50},
           'spu': {'placement': {'before': ['app']}, 'size': 100},
-          'app': {'placement': ''}}
+          'app': {}}
     s, _ = resolve(td)
     set_addresses(td, s, 1000)
-    pass
+    expect_addr_size(td, 'b0', 0, None)
+    expect_addr_size(td, 'mcuboot', 50, None)
+    expect_addr_size(td, 'spu', 150, None)
+    expect_addr_size(td, 'app', 250, 650)
+    expect_addr_size(td, 'provision', 900, None)
+
+    print("All tests passed!")
 
 
 if __name__ == "__main__":
