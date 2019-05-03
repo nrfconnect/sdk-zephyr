@@ -523,6 +523,12 @@ set(KERNEL_EXE_NAME   ${KERNEL_NAME}.exe)
 set(KERNEL_STAT_NAME  ${KERNEL_NAME}.stat)
 set(KERNEL_STRIP_NAME ${KERNEL_NAME}.strip)
 
+define_property(GLOBAL PROPERTY ${IMAGE}KERNEL_NAME
+  BRIEF_DOCS "Name (KERNEL_NAME) for the ${IMAGE} image."
+  FULL_DOCS "To be used to access e.g. this image's hex file."
+  )
+set_property(GLOBAL PROPERTY ${IMAGE}KERNEL_NAME ${KERNEL_NAME})
+
 include(${BOARD_DIR}/board.cmake OPTIONAL)
 
 # If we are using a suitable ethernet driver inside qemu, then these options
