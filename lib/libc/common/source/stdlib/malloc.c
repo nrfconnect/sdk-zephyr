@@ -25,6 +25,16 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
+#if USE_PARTITION_MANAGER
+#include <pm_config.h>
+
+#define RAM_SIZE PM_SRAM_SIZE
+#define RAM_ADDR PM_SRAM_ADDRESS
+#else /* ! USE_PARTITION_MANAGER */
+#define RAM_ADDR DT_CHOSEN_SRAM_ADDR
+#define RAM_SIZE DT_CHOSEN_SRAM_SIZE
+#endif /* USE_PARTITION_MANAGER */
+
 #ifdef CONFIG_COMMON_LIBC_MALLOC
 
 #if (CONFIG_COMMON_LIBC_MALLOC_ARENA_SIZE != 0)
@@ -106,8 +116,8 @@ static POOL_SECTION unsigned char __aligned(HEAP_ALIGN) malloc_arena[HEAP_SIZE];
 extern char _heap_sentry[];
 #    define HEAP_SIZE  ROUND_DOWN((POINTER_TO_UINT(_heap_sentry) - HEAP_BASE), HEAP_ALIGN)
 #   else
-#    define HEAP_SIZE	ROUND_DOWN((size_t) DT_CHOSEN_SRAM_SIZE -	\
-		((size_t) HEAP_BASE - (size_t) DT_CHOSEN_SRAM_ADDR), HEAP_ALIGN)
+#    define HEAP_SIZE	ROUND_DOWN((size_t) RAM_SIZE -	\
+		((size_t) HEAP_BASE - (size_t) RAM_ADDR), HEAP_ALIGN)
 #   endif /* else CONFIG_XTENSA */
 
 #  endif /* else CONFIG_COMMON_LIBC_MALLOC_ARENA_SIZE > 0 */
