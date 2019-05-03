@@ -19,6 +19,18 @@
 
 #define NFFS_MAX_FILE_NAME 256
 
+#if USE_PARTITION_MANAGER
+#include <pm_config.h>
+#define NFFS_FLASH_AREA_STORAGE_OFFSET PM_MCUBOOT_STORAGE_ADDRESS
+#define NFFS_FLASH_AREA_STORAGE_SIZE PM_MCUBOOT_STORAGE_SIZE
+
+#else
+#include <generated_dts_board.h>
+#define NFFS_FLASH_AREA_STORAGE_OFFSET DT_FLASH_AREA_STORAGE_OFFSET
+#define NFFS_FLASH_AREA_STORAGE_SIZE DT_FLASH_AREA_STORAGE_SIZE
+
+#endif /* USE_PARTITION_MANAGER */
+
 /*
  * NFFS code keeps fs state in RAM but access to these structures is not
  * thread-safe - we need global lock for each fs operation to guarantee two
@@ -540,8 +552,8 @@ static int nffs_mount(struct fs_mount_t *mountp)
 	/* Set flash descriptor fields */
 	flash_desc->id = 0;
 	flash_desc->sector_count = flash_get_page_count(flash_dev);
-	flash_desc->area_offset = DT_FLASH_AREA_STORAGE_OFFSET;
-	flash_desc->area_size = DT_FLASH_AREA_STORAGE_SIZE;
+	flash_desc->area_offset = NFFS_FLASH_AREA_STORAGE_OFFSET;
+	flash_desc->area_size = NFFS_FLASH_AREA_STORAGE_SIZE;
 
 	rc = nffs_misc_reset();
 	if (rc) {
