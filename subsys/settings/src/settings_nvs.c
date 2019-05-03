@@ -13,6 +13,18 @@
 #include "settings_priv.h"
 #include <storage/flash_map.h>
 
+#if USE_PARTITION_MANAGER
+
+#include <pm_config.h>
+#define FLASH_AREA_STORAGE_ID       PM_SETTINGS_STORAGE_ID
+
+#else
+
+#include <devicetree.h>
+#define FLASH_AREA_STORAGE_ID       DT_FLASH_AREA_STORAGE_ID
+
+#endif /* USE_PARTITION_MANAGER */
+
 #include <logging/log.h>
 LOG_MODULE_DECLARE(settings, CONFIG_SETTINGS_LOG_LEVEL);
 
@@ -269,12 +281,12 @@ int settings_backend_init(void)
 	struct flash_sector hw_flash_sector;
 	u32_t sector_cnt = 1;
 
-	rc = flash_area_open(DT_FLASH_AREA_STORAGE_ID, &fa);
+	rc = flash_area_open(FLASH_AREA_STORAGE_ID, &fa);
 	if (rc) {
 		return rc;
 	}
 
-	rc = flash_area_get_sectors(DT_FLASH_AREA_STORAGE_ID, &sector_cnt,
+	rc = flash_area_get_sectors(FLASH_AREA_STORAGE_ID, &sector_cnt,
 				    &hw_flash_sector);
 	if (rc == -ENODEV) {
 		return rc;
