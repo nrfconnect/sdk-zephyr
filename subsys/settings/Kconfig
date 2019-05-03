@@ -13,6 +13,14 @@ if SETTINGS
 module = SETTINGS
 module-str = settings
 source "subsys/logging/Kconfig.template.log_config"
+
+# This config must be compatible with
+# nrf/subsys/partition_manager/Kconfig.template.partition_size
+config PM_PARTITION_SIZE_SETTINGS_STORAGE
+	hex "Flash space reserved for settings storage partition"
+	default 0x2000
+	help
+	  Flash space set aside for the settings storage partition.
 endif
 
 config SETTINGS_RUNTIME
