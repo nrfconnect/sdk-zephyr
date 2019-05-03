@@ -16,6 +16,13 @@
 #include <string.h>
 #include <nrfx_nvmc.h>
 
+#if CONFIG_ARM_NONSECURE_FIRMWARE && CONFIG_SPM
+#include <secure_services.h>
+#if USE_PARTITION_MANAGER
+#include <pm_config.h>
+#endif /* USE_PARTITION_MANAGER */
+#endif /* CONFIG_ARM_NONSECURE_FIRMWARE  && CONFIG_SPM */
+
 #if defined(CONFIG_SOC_FLASH_NRF_RADIO_SYNC)
 #include <sys/__assert.h>
 #include <bluetooth/hci.h>
@@ -136,6 +143,12 @@ static int flash_nrf_read(struct device *dev, off_t addr,
 	if (!len) {
 		return 0;
 	}
+
+#if CONFIG_ARM_NONSECURE_FIRMWARE && CONFIG_SPM && USE_PARTITION_MANAGER
+	if (addr < PM_APP_ADDRESS) {
+		return spm_request_read(data, addr, len);
+	}
+#endif
 
 	memcpy(data, (void *)addr, len);
 
