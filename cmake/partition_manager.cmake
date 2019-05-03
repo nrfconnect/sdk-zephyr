@@ -4,33 +4,80 @@
 # SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
 #
 
+define_property(GLOBAL PROPERTY PM_IMAGES
+  BRIEF_DOCS "A list of all images (${IMAGE} instances) that should be processed by the Partition Manager."
+  FULL_DOCS "A list of all images (${IMAGE} instances) that should be processed by the Partition Manager.
+Each image's directory will be searched for a pm.yml, and will receive a pm_config.h header file with the result.
+Also, the each image's hex file will be automatically associated with its partition.")
+
 if(FIRST_BOILERPLATE_EXECUTION)
-  get_property(
-    partition_manager_config_files
-    GLOBAL PROPERTY
-    PARTITION_MANAGER_CONFIG_FILES
-    )
+  get_property(PM_IMAGES GLOBAL PROPERTY PM_IMAGES)
 
-  if(partition_manager_config_files)
-    # Partition manager is enabled because we have populated config
-    # files.
+  if(PM_IMAGES)
+    # Partition manager is enabled because we have populated PM_IMAGES.
 
-    execute_process(
-      COMMAND
+    set(generated_path include/generated)
+
+    # Add the "app" as an image partition.
+    set_property(GLOBAL PROPERTY app_PROJECT_BINARY_DIR ${PROJECT_BINARY_DIR})
+    set_property(GLOBAL PROPERTY app_PM_HEX_FILE ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME})
+    set_property(GLOBAL PROPERTY app_PM_TARGET ${logical_target_for_zephyr_elf})
+    list(APPEND PM_IMAGES app_)
+
+    # Prepare the input_files, header_files, and images lists
+    foreach (IMAGE ${PM_IMAGES})
+      get_image_name(${IMAGE} image_name) # Removes the trailing '_'
+      list(APPEND images ${image_name})
+      get_property(${IMAGE}PROJECT_BINARY_DIR GLOBAL PROPERTY ${IMAGE}PROJECT_BINARY_DIR)
+      list(APPEND input_files ${${IMAGE}PROJECT_BINARY_DIR}/${generated_path}/pm.yml)
+      list(APPEND header_files ${${IMAGE}PROJECT_BINARY_DIR}/${generated_path}/pm_config.h)
+    endforeach()
+
+    math(EXPR flash_size "${CONFIG_FLASH_SIZE} * 1024")
+
+    set(pm_cmd
       ${PYTHON_EXECUTABLE}
       ${ZEPHYR_BASE}/scripts/partition_manager.py
-      --input ${partition_manager_config_files}
-      --app-pm-config-dir ${PROJECT_BINARY_DIR}/include/generated
-      --app-build-dir ${PROJECT_BINARY_DIR}
+      --input-names ${images}
+      --input-files ${input_files}
+      --flash-size ${flash_size}
+      --output ${CMAKE_BINARY_DIR}/partitions.yml
+      )
+
+    set(pm_output_cmd
+      ${PYTHON_EXECUTABLE}
+      ${ZEPHYR_BASE}/scripts/partition_manager_output.py
+      --input ${CMAKE_BINARY_DIR}/partitions.yml
+      --config-file ${CMAKE_BINARY_DIR}/pm.config
+      --input-names ${images}
+      --header-files
+      ${header_files}
+      )
+
+    # Run the partition manager algorithm.
+    execute_process(
+      COMMAND
+      ${pm_cmd}
       RESULT_VARIABLE ret
       )
 
-    if(ret EQUAL "1")
-      message( FATAL_ERROR "Partition Manager failed, aborting.")
+    if(NOT ${ret} EQUAL "0")
+      message(FATAL_ERROR "Partition Manager failed, aborting. Command: ${pm_cmd}")
+    endif()
+
+    # Produce header files and config file.
+    execute_process(
+      COMMAND
+      ${pm_output_cmd}
+      RESULT_VARIABLE ret
+      )
+
+    if(NOT ${ret} EQUAL "0")
+      message(FATAL_ERROR "Partition Manager output generation failed, aborting. Command: ${pm_output_cmd}")
     endif()
 
     # Make Partition Manager configuration available in CMake
-    import_kconfig(PM_ ${PROJECT_BINARY_DIR}/include/generated/pm.config)
+    import_kconfig(PM_ ${CMAKE_BINARY_DIR}/pm.config)
 
     # Create a dummy target that we can add properties to for
     # extraction in generator expressions.
@@ -100,7 +147,7 @@ if(FIRST_BOILERPLATE_EXECUTION)
         ${PYTHON_EXECUTABLE}
         ${ZEPHYR_BASE}/scripts/mergehex.py
         -o ${merged_to_sign_hex}
-        ${PM_SPM_BUILD_DIR}/zephyr.hex
+        ${spm_PROJECT_BINARY_DIR}/zephyr.hex
         ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}
         DEPENDS
         spm_zephyr_final
