@@ -13,6 +13,18 @@
 #include "settings/settings_fcb.h"
 #include "settings_priv.h"
 
+#if USE_PARTITION_MANAGER
+
+#include <pm_config.h>
+#define FLASH_AREA_STORAGE_ID       PM_MCUBOOT_STORAGE_ID
+
+#else
+
+#include <generated_dts_board.h>
+#define FLASH_AREA_STORAGE_ID       DT_FLASH_AREA_STORAGE_ID
+
+#endif /* USE_PARTITION_MANAGER */
+
 #include <logging/log.h>
 LOG_MODULE_DECLARE(settings, CONFIG_SETTINGS_LOG_LEVEL);
 
@@ -40,7 +52,7 @@ int settings_fcb_src(struct settings_fcb *cf)
 	cf->cf_fcb.f_scratch_cnt = 1;
 
 	while (1) {
-		rc = fcb_init(DT_FLASH_AREA_STORAGE_ID, &cf->cf_fcb);
+		rc = fcb_init(FLASH_AREA_STORAGE_ID, &cf->cf_fcb);
 		if (rc) {
 			return -EINVAL;
 		}
