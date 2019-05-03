@@ -1470,30 +1470,6 @@ add_custom_command(
   # NB: COMMENT only works for some CMake-Generators
   )
 
-# To populate with hex files to merge, do the following:
-#  set_property(GLOBAL APPEND PROPERTY HEX_FILES_TO_MERGE ${my_local_list})
-# Note that the zephyr.hex file will not be included automatically.
-get_property(HEX_FILES_TO_MERGE GLOBAL PROPERTY HEX_FILES_TO_MERGE)
-if(HEX_FILES_TO_MERGE)
-  # Merge in out-of-tree hex files.
-  set(MERGED_HEX_NAME merged.hex)
-
-  add_custom_command(
-    OUTPUT ${MERGED_HEX_NAME}
-    COMMAND
-    ${PYTHON_EXECUTABLE}
-    ${ZEPHYR_BASE}/scripts/mergehex.py
-    -o ${MERGED_HEX_NAME}
-    ${HEX_FILES_TO_MERGE}
-    DEPENDS ${HEX_FILES_TO_MERGE} ${logical_target_for_zephyr_elf}
-    )
-
-  add_custom_target(mergehex ALL DEPENDS ${MERGED_HEX_NAME})
-  list(APPEND FLASH_DEPS mergehex)
-
-  message(VERBOSE "Merging hex files: ${HEX_FILES_TO_MERGE}")
-endif()
-
 if(EMU_PLATFORM)
   include(${ZEPHYR_BASE}/cmake/emu/${EMU_PLATFORM}.cmake)
 else()

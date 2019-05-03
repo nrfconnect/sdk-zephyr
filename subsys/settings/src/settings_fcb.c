@@ -15,6 +15,18 @@
 #include "settings/settings_fcb.h"
 #include "settings_priv.h"
 
+#if USE_PARTITION_MANAGER
+
+#include <pm_config.h>
+#define FLASH_AREA_STORAGE_ID       PM_SETTINGS_STORAGE_ID
+
+#else
+
+#include <devicetree.h>
+#define FLASH_AREA_STORAGE_ID       DT_FLASH_AREA_STORAGE_ID
+
+#endif /* USE_PARTITION_MANAGER */
+
 #include <logging/log.h>
 LOG_MODULE_DECLARE(settings, CONFIG_SETTINGS_LOG_LEVEL);
 
@@ -41,7 +53,7 @@ int settings_fcb_src(struct settings_fcb *cf)
 	cf->cf_fcb.f_scratch_cnt = 1;
 
 	while (1) {
-		rc = fcb_init(DT_FLASH_AREA_STORAGE_ID, &cf->cf_fcb);
+		rc = fcb_init(FLASH_AREA_STORAGE_ID, &cf->cf_fcb);
 		if (rc) {
 			return -EINVAL;
 		}
@@ -386,7 +398,7 @@ int settings_backend_init(void)
 	int rc;
 	const struct flash_area *fap;
 
-	rc = flash_area_get_sectors(DT_FLASH_AREA_STORAGE_ID, &cnt,
+	rc = flash_area_get_sectors(FLASH_AREA_STORAGE_ID, &cnt,
 				    settings_fcb_area);
 	if (rc == -ENODEV) {
 		return rc;
@@ -399,7 +411,7 @@ int settings_backend_init(void)
 	rc = settings_fcb_src(&config_init_settings_fcb);
 
 	if (rc != 0) {
-		rc = flash_area_open(DT_FLASH_AREA_STORAGE_ID, &fap);
+		rc = flash_area_open(FLASH_AREA_STORAGE_ID, &fap);
 
 		if (rc == 0) {
 			rc = flash_area_erase(fap, 0, fap->fa_size);

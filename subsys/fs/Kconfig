@@ -35,6 +35,14 @@ config FILE_SYSTEM_LITTLEFS
 	help
 	  Enables LittleFS file system support.
 
+# This config must be compatible with
+# nrf/subsys/partition_manager/Kconfig.template.partition_size
+config PM_PARTITION_SIZE_LITTLEFS
+	hex "Flash space reserved for LittleFS storage partition"
+	default 0x6000
+	help
+	  Flash space set aside for the LittleFS storage partition.
+
 config FILE_SYSTEM_SHELL
 	bool "Enable file system shell"
 	depends on SHELL

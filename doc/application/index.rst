@@ -1150,19 +1150,6 @@ Below is a simple example :file:`CMakeList.txt`:
 
    target_sources(app PRIVATE src/main.c)
 
-The Cmake property ``HEX_FILES_TO_MERGE``
-leverages the application configuration provided by
-Kconfig and CMake to let you merge externally built hex files
-with the hex file generated when building the Zephyr application.
-For example:
-
-.. code-block:: cmake
-
-  set_property(GLOBAL APPEND PROPERTY HEX_FILES_TO_MERGE
-      ${app_bootloader_hex}
-      ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}
-      ${app_provision_hex})
-
 CMakeCache.txt
 ==============
 

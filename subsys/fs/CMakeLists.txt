@@ -14,6 +14,8 @@ if(CONFIG_FILE_SYSTEM)
 
   target_link_libraries_ifdef(CONFIG_FAT_FILESYSTEM_ELM   FS INTERFACE ELMFAT)
   target_link_libraries_ifdef(CONFIG_FILE_SYSTEM_LITTLEFS FS INTERFACE LITTLEFS)
+
+  add_partition_manager_config(pm.yml)
 endif()
 
 add_subdirectory_ifdef(CONFIG_FCB  ./fcb)
