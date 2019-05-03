@@ -89,7 +89,7 @@ if(FIRST_BOILERPLATE_EXECUTION)
       # Special handling needed to merge before signing.
       set(merged_to_sign_hex ${PROJECT_BINARY_DIR}/merged_to_sign.hex)
       add_custom_command(
-        OUTPUT ${PROJECT_BINARY_DIR}/merged_to_sign.hex
+        OUTPUT ${merged_to_sign_hex}
         COMMAND
         ${PYTHON_EXECUTABLE}
         ${ZEPHYR_BASE}/scripts/mergehex.py
@@ -111,6 +111,7 @@ if(FIRST_BOILERPLATE_EXECUTION)
         TARGET partition_manager
         PROPERTY MCUBOOT_TO_SIGN_DEPENDS
         merged_to_sign_target
+        ${merged_to_sign_hex}
         )
     endif()
   endif()
