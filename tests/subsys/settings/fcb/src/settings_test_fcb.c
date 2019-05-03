@@ -11,6 +11,18 @@
 #include "settings_priv.h"
 #include <storage/flash_map.h>
 
+#if USE_PARTITION_MANAGER
+
+#include <pm_config.h>
+#define FLASH_AREA_STORAGE_ID       PM_SETTINGS_STORAGE_ID
+
+#else
+
+#include <devicetree.h>
+#define FLASH_AREA_STORAGE_ID       DT_FLASH_AREA_STORAGE_ID
+
+#endif /* USE_PARTITION_MANAGER */
+
 u8_t val8;
 u8_t val8_un;
 u32_t val32;
@@ -187,7 +199,7 @@ void config_wipe_fcb(struct flash_sector *fs, int cnt)
 	int rc;
 	int i;
 
-	rc = flash_area_open(DT_FLASH_AREA_STORAGE_ID, &fap);
+	rc = flash_area_open(FLASH_AREA_STORAGE_ID, &fap);
 
 	for (i = 0; i < cnt; i++) {
 		rc = flash_area_erase(fap, fs[i].fs_off, fs[i].fs_size);
