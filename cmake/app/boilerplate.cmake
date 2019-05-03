@@ -595,6 +595,10 @@ set_property(TARGET ${IMAGE}app PROPERTY ARCHIVE_OUTPUT_DIRECTORY ${IMAGE}app)
 
 add_subdirectory(${ZEPHYR_BASE} ${__build_dir})
 
+include(${ZEPHYR_BASE}/../nrf/cmake/partition_manager.cmake
+  OPTIONAL
+  )
+
 # Link 'app' with the Zephyr interface libraries.
 #
 # NB: This must be done in boilerplate.cmake because 'app' can only be
