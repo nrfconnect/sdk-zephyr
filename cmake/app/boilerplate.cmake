@@ -87,6 +87,12 @@ set(__build_dir ${CMAKE_CURRENT_BINARY_DIR}/zephyr)
 
 set(PROJECT_BINARY_DIR ${__build_dir})
 
+define_property(GLOBAL PROPERTY ${IMAGE}PROJECT_BINARY_DIR
+  BRIEF_DOCS "Build directory (PROJECT_BINARY_DIR) for the ${IMAGE} image."
+  FULL_DOCS "To be used to access e.g. this image's hex file."
+  )
+set_property(GLOBAL PROPERTY ${IMAGE}PROJECT_BINARY_DIR ${PROJECT_BINARY_DIR})
+
 add_custom_target(${IMAGE}code_data_relocation_target)
 
 # CMake's 'project' concept has proven to not be very useful for Zephyr
@@ -542,6 +548,12 @@ set(KERNEL_S19_NAME   ${KERNEL_NAME}.s19)
 set(KERNEL_EXE_NAME   ${KERNEL_NAME}.exe)
 set(KERNEL_STAT_NAME  ${KERNEL_NAME}.stat)
 set(KERNEL_STRIP_NAME ${KERNEL_NAME}.strip)
+
+define_property(GLOBAL PROPERTY ${IMAGE}KERNEL_NAME
+  BRIEF_DOCS "Name (KERNEL_NAME) for the ${IMAGE} image."
+  FULL_DOCS "To be used to access e.g. this image's hex file."
+  )
+set_property(GLOBAL PROPERTY ${IMAGE}KERNEL_NAME ${KERNEL_NAME})
 
 include(${BOARD_DIR}/board.cmake OPTIONAL)
 

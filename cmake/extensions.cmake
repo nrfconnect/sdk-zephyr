@@ -1064,6 +1064,13 @@ function(import_kconfig prefix kconfig_fragment)
   endforeach()
 endfunction()
 
+function(get_image_name image out_var)
+  string(LENGTH ${image} len)
+  MATH(EXPR len "${len}-1")
+  string(SUBSTRING ${image} 0 ${len} ${out_var})
+  set(${out_var} ${${out_var}} PARENT_SCOPE)
+endfunction()
+
 ########################################################
 # 3. CMake-generic extensions
 ########################################################
