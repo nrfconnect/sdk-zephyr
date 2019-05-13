@@ -119,12 +119,10 @@ def main():
                              'list`')
     parser.add_argument('-x', '--extra-modules', nargs='+',
                         help='List of extra modules to parse')
-    parser.add_argument('-w', '--west-path', default='west',
-                        help='Path to west executable')
     args = parser.parse_args()
 
     if args.modules is None:
-        p = subprocess.Popen([args.west_path, 'list', '--format={posixpath}'],
+        p = subprocess.Popen(['west', 'list', '--format={posixpath}'],
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE)
         out, err = p.communicate()
