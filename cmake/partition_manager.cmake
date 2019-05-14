@@ -13,8 +13,14 @@ Also, the each image's hex file will be automatically associated with its partit
 if(FIRST_BOILERPLATE_EXECUTION)
   get_property(PM_IMAGES GLOBAL PROPERTY PM_IMAGES)
 
-  if(PM_IMAGES)
-    # Partition manager is enabled because we have populated PM_IMAGES.
+  set(static_configuration_file ${APPLICATION_SOURCE_DIR}/pm_static.yml)
+
+  if(PM_IMAGES OR (EXISTS ${static_configuration_file}))
+    # Partition manager is enabled because we have populated PM_IMAGES,
+    # or because the application has specified a static configuration.
+    if (EXISTS ${static_configuration_file})
+      set(static_configuration --static-config ${static_configuration_file})
+    endif()
 
     set(generated_path include/generated)
 
@@ -42,6 +48,7 @@ if(FIRST_BOILERPLATE_EXECUTION)
       --input-files ${input_files}
       --flash-size ${flash_size}
       --output ${CMAKE_BINARY_DIR}/partitions.yml
+      ${static_configuration}
       )
 
     set(pm_output_cmd
