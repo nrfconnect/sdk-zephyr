@@ -196,13 +196,13 @@ def app_size(reqs, total_size):
     return size
 
 
-def set_addresses(reqs, sub_partitions, solution, flash_size):
-    set_shared_size(reqs, sub_partitions, flash_size)
+def set_addresses(reqs, sub_partitions, solution, size, start=0):
+    set_shared_size(reqs, sub_partitions, size)
 
-    reqs['app']['size'] = app_size(reqs, flash_size)
+    reqs['app']['size'] = app_size(reqs, size)
 
-    # First image starts at 0
-    reqs[solution[0]]['address'] = 0
+    # First image starts at 0, or at start of dynamic area if static configuration is given.
+    reqs[solution[0]]['address'] = start
     for i in range(1, len(solution)):
         current = solution[i]
         previous = solution[i - 1]
@@ -246,13 +246,44 @@ def load_reqs(reqs, input_config):
     reqs['app'] = dict()
 
 
-def get_pm_config(input_config, flash_size):
-    reqs = dict()
-    load_reqs(reqs, input_config)
-    solution, sub_partitions = resolve(reqs)
-    set_addresses(reqs, sub_partitions, solution, flash_size)
-    set_sub_partition_address_and_size(reqs, sub_partitions)
-    return reqs
+def get_dynamic_area_start_and_size(static_config, flash_size):
+    # Remove app from this dict to simplify the case where partitions before and after are removed.
+    proper_partitions = [config for name, config in static_config.items()
+                         if 'span' not in config.keys() and name != 'app']
+
+    starts = {flash_size} | {config['address'] for config in proper_partitions}
+    ends = {0} | {config['address'] + config['size'] for config in proper_partitions}
+    gaps = list(zip(sorted(ends - starts), sorted(starts - ends)))
+
+    assert len(gaps) == 1, "Incorrect amount of gaps found"
+
+    start, end = gaps[0]
+    return start, end - start
+
+
+def get_pm_config(input_config, flash_size, static_config):
+    to_resolve = dict()
+    start = 0
+
+    load_reqs(to_resolve, input_config)
+    free_size = flash_size
+
+    if static_config:
+        start, free_size = get_dynamic_area_start_and_size(static_config, free_size)
+        to_resolve = {name: config for name, config in to_resolve.items()
+                      if name not in static_config.keys() or name == 'app'}
+        # If nothing is unresolved (only app remaining), simply return the pre defined config
+        if len(to_resolve) == 1:
+            return static_config
+
+    solution, sub_partitions = resolve(to_resolve)
+    set_addresses(to_resolve, sub_partitions, solution, free_size, start)
+    set_sub_partition_address_and_size(to_resolve, sub_partitions)
+
+    if static_config:
+        # Merge the results, take the new 'app' as that has the correct size.
+        to_resolve.update({name: config for name, config in static_config.items() if name != 'app'})
+    return to_resolve
 
 
 def write_yaml_out_file(pm_config, out_path):
@@ -290,14 +321,21 @@ This file contains all addresses and sizes of all partitions.
     parser.add_argument("--output", required=True, type=str,
                         help="Path to output file.")
 
+    parser.add_argument("-s", "--static-config", required=False, type=argparse.FileType(mode='r'),
+                        help="Path static configuration.")
+
     return parser.parse_args()
 
 
 def main():
     print("Running Partition Manager...")
     if len(sys.argv) > 1:
+        static_config = None
         args = parse_args()
-        pm_config = get_pm_config(dict(zip(args.input_names, args.input_files)), args.flash_size)
+        if args.static_config:
+            print("Partition Manager using static configuration at " + args.static_config.name)
+            static_config = yaml.safe_load(args.static_config)
+        pm_config = get_pm_config(dict(zip(args.input_names, args.input_files)), args.flash_size, static_config)
         write_yaml_out_file(pm_config, args.output)
     else:
         print("No input, running tests.")
@@ -314,6 +352,43 @@ def expect_addr_size(td, name, expected_address, expected_size):
 
 
 def test():
+    test_config = {
+        'first': {'address': 0,    'size': 10},
+        # Gap from deleted partition.
+        'app':   {'address': 20, 'size': 10},
+        # Gap from deleted partition.
+        'fourth': {'address': 40, 'size': 60}}
+    start, size = get_dynamic_area_start_and_size(test_config, 100)
+    assert(start == 10)
+    assert(size == 40-10)
+
+    test_config = {
+        'first':  {'address': 0,    'size': 10},
+        'second': {'address': 10, 'size': 10},
+        'app':    {'address': 20, 'size': 80}
+        # Gap from deleted partition.
+    }
+
+    start, size = get_dynamic_area_start_and_size(test_config, 100)
+    assert(start == 20)
+    assert(size == 80)
+
+    test_config = {
+        'app':    {'address': 0,    'size': 10},
+        # Gap from deleted partition.
+        'second': {'address': 40, 'size': 60}}
+    start, size = get_dynamic_area_start_and_size(test_config, 100)
+    assert(start == 0)
+    assert(size == 40)
+
+    test_config = {
+        'first': {'address': 0,    'size': 10},
+        # Gap from deleted partition.
+        'app':   {'address': 20, 'size': 10}}
+    start, size = get_dynamic_area_start_and_size(test_config, 100)
+    assert (start == 10)
+    assert (size == 100 - 10)
+
     td = {'spm': {'placement': {'before': ['app']}, 'size': 100},
           'mcuboot': {'placement': {'before': ['spm', 'app']}, 'size': 200},
           'app': {}}
