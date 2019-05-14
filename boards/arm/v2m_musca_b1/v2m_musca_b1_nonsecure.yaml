@@ -7,5 +7,4 @@ toolchain:
   - gnuarmemb
   - xtools
 ram: 64
-flash: 32
-sanitycheck: false
+flash: 32575

@@ -321,6 +321,15 @@ static bool tab_prepare(const struct shell *shell,
 	return true;
 }
 
+/* Empty command is identified by null handler and subcommand but contrary
+ * to array termination null command, it has non-null syntax address.
+ */
+static inline bool is_empty_cmd(const struct shell_static_entry *entry)
+{
+	return entry->syntax &&
+		(entry->handler == NULL) && (entry->subcmd == NULL);
+}
+
 static inline bool is_completion_candidate(const char *candidate,
 					   const char *str, size_t len)
 {
@@ -342,6 +351,9 @@ static void find_completion_candidates(const struct shell_static_entry *cmd,
 	*cnt = 0;
 
 	while (true) {
+		bool is_empty;
+		bool is_candidate;
+
 		shell_cmd_get(cmd ? cmd->subcmd : NULL, cmd ? 1 : 0,
 			      idx, &candidate, &dynamic_entry);
 
@@ -349,8 +361,10 @@ static void find_completion_candidates(const struct shell_static_entry *cmd,
 			break;
 		}
 
-		if (is_completion_candidate(candidate->syntax, incompl_cmd,
-				incompl_cmd_len)) {
+		is_empty = is_empty_cmd(candidate);
+		is_candidate = is_completion_candidate(candidate->syntax,
+						incompl_cmd, incompl_cmd_len);
+		if (!is_empty && is_candidate) {
 			size_t slen = strlen(candidate->syntax);
 
 			*longest = (slen > *longest) ? slen : *longest;
@@ -438,15 +452,17 @@ static void tab_options_print(const struct shell *shell,
 	tab_item_print(shell, SHELL_INIT_OPTION_PRINTER, longest);
 
 	while (cnt) {
+		bool is_empty;
+
 		/* shell->ctx->active_cmd can be safely used outside of command
 		 * context to save stack
 		 */
 		shell_cmd_get(cmd ? cmd->subcmd : NULL, cmd ? 1 : 0,
 			      idx, &match, &shell->ctx->active_cmd);
 		idx++;
-
-		if (str && match->syntax &&
-		    !is_completion_candidate(match->syntax, str, str_len)) {
+		is_empty = is_empty_cmd(match);
+		if (is_empty || (str && match->syntax &&
+		    !is_completion_candidate(match->syntax, str, str_len))) {
 			continue;
 		}
 
@@ -1086,6 +1102,14 @@ static int instance_init(const struct shell *shell, const void *p_config,
 
 	k_mutex_init(&shell->ctx->wr_mtx);
 
+	for (int i = 0; i < SHELL_SIGNALS; i++) {
+		k_poll_signal_init(&shell->ctx->signals[i]);
+		k_poll_event_init(&shell->ctx->events[i],
+				  K_POLL_TYPE_SIGNAL,
+				  K_POLL_MODE_NOTIFY_ONLY,
+				  &shell->ctx->signals[i]);
+	}
+
 	if (IS_ENABLED(CONFIG_SHELL_STATS)) {
 		shell->stats->log_lost_cnt = 0;
 	}
@@ -1162,14 +1186,6 @@ void shell_thread(void *shell_handle, void *arg_log_backend,
 	bool log_backend = (bool)arg_log_backend;
 	u32_t log_level = (u32_t)arg_log_level;
 	int err;
-
-	for (int i = 0; i < SHELL_SIGNALS; i++) {
-		k_poll_signal_init(&shell->ctx->signals[i]);
-		k_poll_event_init(&shell->ctx->events[i],
-				  K_POLL_TYPE_SIGNAL,
-				  K_POLL_MODE_NOTIFY_ONLY,
-				  &shell->ctx->signals[i]);
-	}
 
 	err = shell->iface->api->enable(shell->iface, false);
 	if (err != 0) {

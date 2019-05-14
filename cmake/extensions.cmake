@@ -491,10 +491,20 @@ endfunction()
 # Add the existing CMake library 'library' to the global list of
 # Zephyr CMake libraries. This is done automatically by the
 # constructor but must called explicitly on CMake libraries that do
-# not use a zephyr library constructor, but have source files that
-# need to be included in the build.
+# not use a zephyr library constructor.
 function(zephyr_append_cmake_library library)
   set_property(GLOBAL APPEND PROPERTY ${IMAGE}ZEPHYR_LIBS ${library})
+endfunction()
+
+# Add the imported library 'library_name', located at 'library_path' to the
+# global list of Zephyr CMake libraries.
+function(zephyr_library_import library_name library_path)
+  add_library(${library_name} STATIC IMPORTED GLOBAL)
+  set_target_properties(${library_name}
+    PROPERTIES IMPORTED_LOCATION
+    ${library_path}
+    )
+  zephyr_append_cmake_library(${library_name})
 endfunction()
 
 # 1.2.1 zephyr_interface_library_*

@@ -58,6 +58,7 @@ static void show_bars(const struct shell *shell, pcie_bdf_t bdf)
 static void show(const struct shell *shell, pcie_bdf_t bdf)
 {
 	u32_t data;
+	unsigned int irq;
 
 	data = pcie_conf_read(bdf, PCIE_CONF_ID);
 
@@ -88,6 +89,11 @@ static void show(const struct shell *shell, pcie_bdf_t bdf)
 		shell_fprintf(shell, SHELL_NORMAL, "\n");
 		show_bars(shell, bdf);
 		show_msi(shell, bdf);
+		irq = pcie_wired_irq(bdf);
+		if (irq != PCIE_CONF_INTR_IRQ_NONE) {
+			shell_fprintf(shell, SHELL_NORMAL,
+				      "    wired interrupt on IRQ %d\n", irq);
+		}
 	}
 }
 

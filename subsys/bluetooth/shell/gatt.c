@@ -277,6 +277,45 @@ static int cmd_mread(const struct shell *shell, size_t argc, char *argv[])
 	return err;
 }
 
+static int cmd_read_uuid(const struct shell *shell, size_t argc, char *argv[])
+{
+	int err;
+
+	if (!default_conn) {
+		shell_error(shell, "Not connected");
+		return -ENOEXEC;
+	}
+
+	read_params.func = read_func;
+	read_params.handle_count = 0;
+	read_params.by_uuid.start_handle = 0x0001;
+	read_params.by_uuid.end_handle = 0xffff;
+
+	if (argc > 1) {
+		uuid.val = strtoul(argv[1], NULL, 16);
+		if (uuid.val) {
+			read_params.by_uuid.uuid = &uuid.uuid;
+		}
+	}
+
+	if (argc > 2) {
+		read_params.by_uuid.start_handle = strtoul(argv[2], NULL, 16);
+		if (argc > 3) {
+			read_params.by_uuid.end_handle = strtoul(argv[3],
+								 NULL, 16);
+		}
+	}
+
+	err = bt_gatt_read(default_conn, &read_params);
+	if (err) {
+		shell_error(shell, "Read failed (err %d)", err);
+	} else {
+		shell_print(shell, "Read pending");
+	}
+
+	return err;
+}
+
 static struct bt_gatt_write_params write_params;
 static u8_t gatt_write_buf[CHAR_SIZE_MAX];
 
@@ -564,6 +603,7 @@ static int cmd_show_db(const struct shell *shell, size_t argc, char *argv[])
 	return 0;
 }
 
+#if defined(CONFIG_BT_GATT_DYNAMIC_DB)
 /* Custom Service Variables */
 static struct bt_uuid_128 vnd_uuid = BT_UUID_INIT_128(
 	0xf0, 0xde, 0xbc, 0x9a, 0x78, 0x56, 0x34, 0x12,
@@ -833,6 +873,7 @@ static int cmd_metrics(const struct shell *shell, size_t argc, char *argv[])
 
 	return err;
 }
+#endif /* CONFIG_BT_GATT_DYNAMIC_DB */
 
 static u8_t get_cb(const struct bt_gatt_attr *attr, void *user_data)
 {
@@ -860,11 +901,15 @@ static u8_t get_cb(const struct bt_gatt_attr *attr, void *user_data)
 
 static int cmd_get(const struct shell *shell, size_t argc, char *argv[])
 {
-	u16_t handle;
+	u16_t start, end;
 
-	handle = strtoul(argv[1], NULL, 16);
+	start = strtoul(argv[1], NULL, 16);
+	end = start;
 
-	bt_gatt_foreach_attr(handle, handle, get_cb, (void *)shell);
+	if (argc > 2)
+		end = strtoul(argv[2], NULL, 16);
+
+	bt_gatt_foreach_attr(start, end, get_cb, (void *)shell);
 
 	return 0;
 }
@@ -942,6 +987,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(gatt_cmds,
 		      "[UUID] [start handle] [end handle]", cmd_discover, 1, 3),
 	SHELL_CMD_ARG(exchange-mtu, NULL, HELP_NONE, cmd_exchange_mtu, 1, 0),
 	SHELL_CMD_ARG(read, NULL, "<handle> [offset]", cmd_read, 2, 1),
+	SHELL_CMD_ARG(read-uuid, NULL, "<UUID> [start handle] [end handle]",
+		      cmd_read_uuid, 2, 2),
 	SHELL_CMD_ARG(read-multiple, NULL, "<handle 1> <handle 2> ...",
 		      cmd_mread, 2, -1),
 	SHELL_CMD_ARG(signed-write, NULL, "<handle> <data> [length] [repeat]",
@@ -958,18 +1005,24 @@ SHELL_STATIC_SUBCMD_SET_CREATE(gatt_cmds,
 		      cmd_write_without_rsp, 3, 2),
 	SHELL_CMD_ARG(unsubscribe, NULL, HELP_NONE, cmd_unsubscribe, 1, 0),
 #endif /* CONFIG_BT_GATT_CLIENT */
+	SHELL_CMD_ARG(get, NULL, "<start handle> [end handle]", cmd_get, 2, 1),
+	SHELL_CMD_ARG(set, NULL, "<handle> [data...]", cmd_set, 2, 255),
+	SHELL_CMD_ARG(show-db, NULL, "[uuid]", cmd_show_db, 1, 1),
+#if defined(CONFIG_BT_GATT_DYNAMIC_DB)
 	SHELL_CMD_ARG(metrics, NULL,
 		      "register vendr char and measure rx <value: on, off>",
 		      cmd_metrics, 2, 0),
 	SHELL_CMD_ARG(register, NULL,
 		      "register pre-predefined test service",
 		      cmd_register_test_svc, 1, 0),
-	SHELL_CMD_ARG(show-db, NULL, "[uuid]", cmd_show_db, 1, 1),
 	SHELL_CMD_ARG(unregister, NULL,
 		      "unregister pre-predefined test service",
 		      cmd_unregister_test_svc, 1, 0),
-	SHELL_CMD_ARG(get, NULL, "<handle>", cmd_get, 2, 0),
-	SHELL_CMD_ARG(set, NULL, "<handle> [data...]", cmd_set, 2, 255),
+
+	SHELL_CMD_ARG(unregister, NULL,
+		      "unregister pre-predefined test service",
+		      cmd_unregister_test_svc, 1, 0),
+#endif /* CONFIG_BT_GATT_DYNAMIC_DB */
 	SHELL_SUBCMD_SET_END
 );
 

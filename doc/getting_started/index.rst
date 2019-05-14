@@ -52,8 +52,9 @@ First, install the ``west`` binary and bootstrapper:
    pip3 install west
 
 .. note::
-   See :ref:`gs_python_deps` for additional clarfication on using the
-   ``--user`` switch.
+   See :ref:`west-install` for additional details on installing west.
+
+.. _clone-zephyr:
 
 Clone the Zephyr Repositories
 =============================
@@ -156,7 +157,8 @@ Set Up a Toolchain
    In some specific configurations like non-MCU x86 targets on Linux,
    you may be able to re-use the native development tools provided by
    your operating system instead of an SDK by setting
-   ``ZEPHYR_TOOLCHAIN_VARIANT=host``.
+   ``ZEPHYR_TOOLCHAIN_VARIANT=host`` for gcc or
+   ``ZEPHYR_TOOLCHAIN_VARIANT=llvm`` for clang.
 
    If you want, you can use the SDK host tools (such as OpenOCD) with a
    different toolchain by keeping the :envvar:`ZEPHYR_SDK_INSTALL_DIR`

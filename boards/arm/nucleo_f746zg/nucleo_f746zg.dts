@@ -93,7 +93,7 @@ arduino_spi: &spi1 {};
 	status = "ok";
 };
 
-&idwg {
+&iwdg {
 	status = "ok";
 };
 
@@ -106,5 +106,9 @@ arduino_spi: &spi1 {};
 	sjw = <1>;
 	prop_seg_phase_seg1 = <6>;
 	phase_seg2 = <5>;
+	status = "ok";
+};
+
+&adc1 {
 	status = "ok";
 };

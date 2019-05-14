@@ -91,7 +91,8 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 		(((lll_conn_ppm_local_get() +
 		   lll_conn_ppm_get(lll->slave.sca)) *
 		  conn_interval_us) + (1000000 - 1)) / 1000000U;
-	lll->slave.window_widening_max_us = (conn_interval_us >> 1) - TIFS_US;
+	lll->slave.window_widening_max_us = (conn_interval_us >> 1) -
+					    EVENT_IFS_US;
 	lll->slave.window_size_event_us = pdu_adv->connect_ind.win_size * 1250U;
 
 	/* procedure timeouts */
@@ -270,7 +271,7 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
 	conn->evt.ticks_slot =
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US +
-				       ftr->us_radio_rdy + 328 + TIFS_US +
+				       ftr->us_radio_rdy + 328 + EVENT_IFS_US +
 				       328);
 
 	ticks_slot_offset = MAX(conn->evt.ticks_active_to_start,
@@ -345,6 +346,13 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 #endif
 }
 
+/**
+ * @brief Extract timing from completed event
+ *
+ * @param node_rx_event_done[in] Done event containing fresh timing information
+ * @param ticks_drift_plus[out]  Positive part of drift uncertainty window
+ * @param ticks_drift_minus[out] Negative part of drift uncertainty window
+ */
 void ull_slave_done(struct node_rx_event_done *done, u32_t *ticks_drift_plus,
 		    u32_t *ticks_drift_minus)
 {
@@ -439,7 +447,7 @@ u8_t ll_start_enc_req_send(u16_t handle, u8_t error_code,
 
 	if (error_code) {
 		if (conn->refresh == 0U) {
-			ret = ull_conn_allowed_check(conn);
+			ret = ull_conn_llcp_req(conn);
 			if (ret) {
 				return ret;
 			}
@@ -463,7 +471,7 @@ u8_t ll_start_enc_req_send(u16_t handle, u8_t error_code,
 		memcpy(&conn->llcp.encryption.ltk[0], ltk,
 		       sizeof(conn->llcp.encryption.ltk));
 
-		ret = ull_conn_allowed_check(conn);
+		ret = ull_conn_llcp_req(conn);
 		if (ret) {
 			return ret;
 		}

@@ -45,20 +45,20 @@ if (FIRST_BOILERPLATE_EXECUTION)
   unset(CMAKE_C_COMPILER CACHE)
 endif()
 
-# Configure the toolchain based on what toolchain technology is used
-# (gcc, host-gcc etc.)
+# A toolchain consist of a compiler and a linker.
+# In Zephyr, toolchains require a port under cmake/toolchain/.
+# Each toolchain port must set COMPILER and LINKER.
+# E.g. toolchain/llvm may pick {clang, ld} or {clang, lld}.
 include(${ZEPHYR_BASE}/cmake/compiler/${COMPILER}/target.cmake OPTIONAL)
+include(${ZEPHYR_BASE}/cmake/linker/${LINKER}/target.cmake OPTIONAL)
 
 # Uniquely identify the toolchain wrt. it's capabilities.
 #
 # What we are looking for, is a signature definition that is defined
 # like this:
-
-# Toolchains with the same signature will always support the same set
-# of flags.
-
+#  * Toolchains with the same signature will always support the same set
+#    of flags.
 # It is not clear how this signature should be constructed. The
 # strategy chosen is to md5sum the CC binary.
-
 file(MD5 ${CMAKE_C_COMPILER} CMAKE_C_COMPILER_MD5_SUM)
 set(TOOLCHAIN_SIGNATURE ${CMAKE_C_COMPILER_MD5_SUM})

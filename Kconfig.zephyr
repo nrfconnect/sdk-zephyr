@@ -188,6 +188,14 @@ config CHECK_LINK_MAP
 	  Run a linker address generation validity checker at the end of the
 	  build.
 
+config LINKER_SORT_BY_ALIGNMENT
+	bool "Sort input sections by alignment"
+	default y
+	help
+	  This turns on the linker flag to sort sections by alignment
+	  in decreasing size of symbols. This helps to minimize
+	  padding between symbols.
+
 endmenu
 
 menu "Compiler Options"
@@ -385,15 +393,6 @@ config BOOTLOADER_KEXEC
 	help
 	  This option signifies that Linux boots the kernel using kexec system call
 	  and utility. This method is used to boot the kernel over the network.
-
-config BOOTLOADER_UNKNOWN
-	bool "Generic boot loader support"
-	depends on X86
-	help
-	  This option signifies that the target has a generic bootloader
-	  or that it supports multiple ways of booting and it isn't clear
-	  at build time which method is to be used. When this option is enabled
-	  the board may have to do extra work to ensure a proper startup.
 
 config BOOTLOADER_CONTEXT_RESTORE
 	bool "Boot loader has context restore support"

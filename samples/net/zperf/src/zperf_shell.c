@@ -561,7 +561,7 @@ static int execute_upload(const struct shell *shell,
 		 * some time and start the test after that.
 		 */
 		net_icmpv6_send_echo_request(net_if_get_default(),
-					     &ipv6->sin6_addr, 0, 0);
+					     &ipv6->sin6_addr, 0, 0, NULL, 0);
 
 		k_sleep(K_SECONDS(1));
 	}
@@ -1203,7 +1203,3 @@ SHELL_STATIC_SUBCMD_SET_CREATE(zperf_commands,
 );
 
 SHELL_CMD_REGISTER(zperf, &zperf_commands, "Zperf commands", NULL);
-
-void main(void)
-{
-}

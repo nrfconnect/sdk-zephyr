@@ -480,13 +480,11 @@ int usb_dc_ep_set_callback(const u8_t ep, const usb_dc_ep_callback cb)
 	return 0;
 }
 
-int usb_dc_set_status_callback(const usb_dc_status_callback cb)
+void usb_dc_set_status_callback(const usb_dc_status_callback cb)
 {
 	LOG_DBG("");
 
 	usb_dc_stm32_state.status_cb = cb;
-
-	return 0;
 }
 
 int usb_dc_set_address(const u8_t addr)
@@ -739,8 +737,8 @@ int usb_dc_ep_write(const u8_t ep, const u8_t *const data,
 
 	ret = k_sem_take(&ep_state->write_sem, K_NO_WAIT);
 	if (ret) {
-		LOG_ERR("Unable to write ep 0x%02x (%d)", ep, ret);
-		return ret;
+		LOG_ERR("Unable to get write lock (%d)", ret);
+		return -EAGAIN;
 	}
 
 	if (!k_is_in_isr()) {

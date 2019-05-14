@@ -20,6 +20,9 @@ LOG_MODULE_REGISTER(net_sock, CONFIG_NET_SOCKETS_LOG_LEVEL);
 
 #include "sockets_internal.h"
 
+extern struct net_socket_register __net_socket_register_start[];
+extern struct net_socket_register __net_socket_register_end[];
+
 #define SET_ERRNO(x) \
 	{ int _err = x; if (_err < 0) { errno = -_err; return -1; } }
 
@@ -129,24 +132,24 @@ int zsock_socket_internal(int family, int type, int proto)
 
 int z_impl_zsock_socket(int family, int type, int proto)
 {
-#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-	if (((proto >= IPPROTO_TLS_1_0) && (proto <= IPPROTO_TLS_1_2)) ||
-	    (proto >= IPPROTO_DTLS_1_0 && proto <= IPPROTO_DTLS_1_2)) {
-		return ztls_socket(family, type, proto);
-	}
-#endif
+	struct net_socket_register *sock_family;
 
-#if defined(CONFIG_NET_SOCKETS_PACKET)
-	if (family == AF_PACKET) {
-		return zpacket_socket(family, type, proto);
-	}
-#endif
+	for (sock_family = __net_socket_register_start;
+	     sock_family != __net_socket_register_end;
+	     sock_family++) {
+		if (sock_family->family != family &&
+		    sock_family->family != AF_UNSPEC) {
+			continue;
+		}
 
-#if defined(CONFIG_NET_SOCKETS_CAN)
-	if (family == AF_CAN) {
-		return zcan_socket(family, type, proto);
+		NET_ASSERT(sock_family->is_supported);
+
+		if (!sock_family->is_supported(family, type, proto)) {
+			continue;
+		}
+
+		return sock_family->handler(family, type, proto);
 	}
-#endif
 
 	return zsock_socket_internal(family, type, proto);
 }

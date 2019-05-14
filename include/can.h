@@ -210,38 +210,63 @@ struct zcan_filter {
  * @brief Define the application callback handler function signature
  *
  * @param error_flags status of the performed send operation
+ * @param arg argument that was passed when the message was sent
  */
-typedef void (*can_tx_callback_t)(u32_t error_flags);
+typedef void (*can_tx_callback_t)(u32_t error_flags, void *arg);
 
 /**
  * @typedef can_rx_callback_t
  * @brief Define the application callback handler function signature
  *        for receiving.
  *
- * @param received message
+ * @param msg received message
+ * @param arg argument that was passed when the filter was attached
  */
-typedef void (*can_rx_callback_t)(struct zcan_frame *msg);
+typedef void (*can_rx_callback_t)(struct zcan_frame *msg, void *arg);
 
 typedef int (*can_configure_t)(struct device *dev, enum can_mode mode,
 				u32_t bitrate);
 
 typedef int (*can_send_t)(struct device *dev, const struct zcan_frame *msg,
-			  s32_t timeout, can_tx_callback_t callback_isr);
+			  s32_t timeout, can_tx_callback_t callback_isr,
+			  void *callback_arg);
 
 
 typedef int (*can_attach_msgq_t)(struct device *dev, struct k_msgq *msg_q,
 				 const struct zcan_filter *filter);
 
 typedef int (*can_attach_isr_t)(struct device *dev, can_rx_callback_t isr,
+				void *callback_arg,
 				const struct zcan_filter *filter);
 
 typedef void (*can_detach_t)(struct device *dev, int filter_id);
+
+#ifndef CONFIG_CAN_WORKQ_FRAMES_BUF_CNT
+#define CONFIG_CAN_WORKQ_FRAMES_BUF_CNT 4
+#endif
+struct can_frame_buffer {
+	struct zcan_frame buf[CONFIG_CAN_WORKQ_FRAMES_BUF_CNT];
+	u16_t head;
+	u16_t tail;
+};
+
+/**
+ * @brief CAN work structure
+ *
+ * Used to attach a work queue to a filter.
+ */
+struct zcan_work {
+	struct k_work work_item;
+	struct k_work_q *work_queue;
+	struct can_frame_buffer buf;
+	can_rx_callback_t cb;
+	void *cb_arg;
+};
 
 struct can_driver_api {
 	can_configure_t configure;
 	can_send_t send;
 	can_attach_isr_t attach_isr;
-	can_attach_msgq_t attach_msgq;
 	can_detach_t detach;
 };
 
@@ -258,20 +283,24 @@ struct can_driver_api {
  *                     occurred. If NULL, this function is blocking until
  *                     message is sent. This must be NULL if called from user
  *                     mode.
+ * @param callback_arg This will be passed whenever the isr is called.
  *
  * @retval 0 If successful.
  * @retval CAN_TX_* on failure.
  */
 __syscall int can_send(struct device *dev, const struct zcan_frame *msg,
-		       s32_t timeout, can_tx_callback_t callback_isr);
+		       s32_t timeout, can_tx_callback_t callback_isr,
+		       void *callback_arg);
 
 static inline int z_impl_can_send(struct device *dev,
 				 const struct zcan_frame *msg,
-				 s32_t timeout, can_tx_callback_t callback_isr)
+				 s32_t timeout, can_tx_callback_t callback_isr,
+				 void *callback_arg)
 {
-	const struct can_driver_api *api = dev->driver_api;
+	const struct can_driver_api *api =
+		(const struct can_driver_api *)dev->driver_api;
 
-	return api->send(dev, msg, timeout, callback_isr);
+	return api->send(dev, msg, timeout, callback_isr, callback_arg);
 }
 
 /*
@@ -315,8 +344,36 @@ static inline int can_write(struct device *dev, const u8_t *data, u8_t length,
 	msg.rtr = rtr;
 	memcpy(msg.data, data, length);
 
-	return can_send(dev, &msg, timeout, NULL);
+	return can_send(dev, &msg, timeout, NULL, NULL);
 }
+
+/**
+ * @brief Attach a CAN work queue to a single or group of identifiers.
+ *
+ * This routine attaches a work queue to identifiers specified by a filter.
+ * Whenever the filter matches, the message is pushed to the buffer
+ * of the zcan_work structure and the work element is put to the workqueue.
+ * If a message passes more than one filter the priority of the match
+ * is hardware dependent.
+ * A CAN work queue can be attached to more than one filter.
+ * The work queue must be initialized before and the caller must have
+ * appropriate permissions on it.
+ *
+ * @param dev          Pointer to the device structure for the driver instance.
+ * @param work_q       Pointer to the already initialized work queue.
+ * @param work         Pointer to a zcan_work. The work will be initialized.
+ * @param callback     This function is called by workq whenever a message arrives.
+ * @param callback_arg Is passed to the callback when called.
+ * @param filter       Pointer to a zcan_filter structure defining the id
+ *                     filtering.
+ *
+ * @retval filter id on success.
+ * @retval CAN_NO_FREE_FILTER if there is no filter left.
+ */
+int can_attach_workq(struct device *dev, struct k_work_q  *work_q,
+		     struct zcan_work *work,
+		     can_rx_callback_t callback, void *callback_arg,
+		     const struct zcan_filter *filter);
 
 /**
  * @brief Attach a message queue to a single or group of identifiers.
@@ -340,15 +397,6 @@ static inline int can_write(struct device *dev, const u8_t *data, u8_t length,
 __syscall int can_attach_msgq(struct device *dev, struct k_msgq *msg_q,
 			      const struct zcan_filter *filter);
 
-static inline int z_impl_can_attach_msgq(struct device *dev,
-					struct k_msgq *msg_q,
-					const struct zcan_filter *filter)
-{
-	const struct can_driver_api *api = dev->driver_api;
-
-	return api->attach_msgq(dev, msg_q, filter);
-}
-
 /**
  * @brief Attach an isr callback function to a single or group of identifiers.
  *
@@ -359,21 +407,24 @@ static inline int z_impl_can_attach_msgq(struct device *dev,
  * is hardware dependent.
  * A callback function can be attached to more than one filter.
  * *
- * @param dev    Pointer to the device structure for the driver instance.
- * @param isr    Callback function pointer.
- * @param filter Pointer to a zcan_filter structure defining the id
- *               filtering.
+ * @param dev          Pointer to the device structure for the driver instance.
+ * @param isr          Callback function pointer.
+ * @param callback_arg This will be passed whenever the isr is called.
+ * @param filter       Pointer to a zcan_filter structure defining the id
+ *                     filtering.
  *
  * @retval filter id on success.
  * @retval CAN_NO_FREE_FILTER if there is no filter left.
  */
 static inline int can_attach_isr(struct device *dev,
 				       can_rx_callback_t isr,
+				       void *callback_arg,
 				       const struct zcan_filter *filter)
 {
-	const struct can_driver_api *api = dev->driver_api;
+	const struct can_driver_api *api =
+		(const struct can_driver_api *)dev->driver_api;
 
-	return api->attach_isr(dev, isr, filter);
+	return api->attach_isr(dev, isr, callback_arg, filter);
 }
 
 /**
@@ -391,7 +442,8 @@ __syscall void can_detach(struct device *dev, int filter_id);
 
 static inline void z_impl_can_detach(struct device *dev, int filter_id)
 {
-	const struct can_driver_api *api = dev->driver_api;
+	const struct can_driver_api *api =
+		(const struct can_driver_api *)dev->driver_api;
 
 	return api->detach(dev, filter_id);
 }
@@ -412,7 +464,8 @@ __syscall int can_configure(struct device *dev, enum can_mode mode,
 static inline int z_impl_can_configure(struct device *dev, enum can_mode mode,
 				      u32_t bitrate)
 {
-	const struct can_driver_api *api = dev->driver_api;
+	const struct can_driver_api *api =
+		(const struct can_driver_api *)dev->driver_api;
 
 	return api->configure(dev, mode, bitrate);
 }

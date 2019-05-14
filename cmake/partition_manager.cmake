@@ -80,7 +80,7 @@ if(FIRST_BOILERPLATE_EXECUTION)
         ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}
         DEPENDS
         ${hex_files_to_merge_targets}
-        kernel_elf
+        zephyr_final
         )
       add_custom_target(pm_mergehex ALL DEPENDS ${merged_hex})
 
@@ -103,8 +103,8 @@ if(FIRST_BOILERPLATE_EXECUTION)
         ${PM_SPM_BUILD_DIR}/zephyr.hex
         ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}
         DEPENDS
-        spm_kernel_elf
-        kernel_elf
+        spm_zephyr_final
+        zephyr_final
         )
       add_custom_target(merged_to_sign_target DEPENDS ${merged_to_sign_hex})
 

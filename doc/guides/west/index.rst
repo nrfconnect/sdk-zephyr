@@ -33,11 +33,13 @@ context about the tool.
 .. toctree::
    :maxdepth: 1
 
+   install.rst
    repo-tool.rst
    manifest.rst
    config.rst
    extensions.rst
    build-flash-debug.rst
+   zephyr-cmds.rst
    sign.rst
    why.rst
    without-west.rst

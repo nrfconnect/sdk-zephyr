@@ -498,6 +498,13 @@ const char *zsock_gai_strerror(int errcode);
 /** zsock_getnameinfo(): Dummy option for compatibility */
 #define NI_DGRAM 16
 
+/* POSIX extensions */
+
+/** zsock_getnameinfo(): Max supported hostname length */
+#ifndef NI_MAXHOST
+#define NI_MAXHOST 64
+#endif
+
 /**
  * @brief Resolve a network address to a domain name or ASCII address
  *
@@ -738,6 +745,32 @@ struct ifreq {
 #define SO_DFU_REVERT 5
 #define SO_DFU_BACKUP_DELETE 6
 #define SO_DFU_OFFSET 7
+
+/** @cond INTERNAL_HIDDEN */
+/**
+ * @brief Registration information for a given BSD socket family.
+ */
+struct net_socket_register {
+	int family;
+	bool (*is_supported)(int family, int type, int proto);
+	int (*handler)(int family, int type, int proto);
+};
+
+#define NET_SOCKET_GET_NAME(socket_name)	\
+	(__net_socket_register_##socket_name)
+
+#define NET_SOCKET_REGISTER(socket_name, _family, _is_supported, _handler) \
+	static const struct net_socket_register				\
+			(NET_SOCKET_GET_NAME(socket_name)) __used	\
+	__attribute__((__section__(".net_socket_register.init"))) = {	\
+		.family = _family,					\
+		.is_supported = _is_supported,				\
+		.handler = _handler,					\
+	}
+
+/** @endcond */
+
+
 
 #ifdef __cplusplus
 }

@@ -29,8 +29,8 @@ LOG_MODULE_REGISTER(native_posix);
 /* convert from hardware endpoint index and direction to endpoint address */
 #define USBIP_EP_IDX2ADDR(idx, dir)    ((idx) | ((dir) & USB_EP_DIR_MASK))
 
-#define USBIP_IN_EP_NUM		4
-#define USBIP_OUT_EP_NUM	4
+#define USBIP_IN_EP_NUM		8
+#define USBIP_OUT_EP_NUM	8
 
 #define USBIP_MAX_PACKET_SIZE	64
 
@@ -473,11 +473,9 @@ int usb_dc_ep_set_callback(const u8_t ep, const usb_dc_ep_callback cb)
 	return 0;
 }
 
-int usb_dc_set_status_callback(const usb_dc_status_callback cb)
+void usb_dc_set_status_callback(const usb_dc_status_callback cb)
 {
 	usbip_ctrl.status_cb = cb;
-
-	return 0;
 }
 
 int usb_dc_ep_mps(const u8_t ep)
