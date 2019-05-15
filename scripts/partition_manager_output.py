@@ -30,6 +30,9 @@ def get_config_lines(pm_config, head, split, dest):
     def add_line(a, b):
         config_lines.append(head + "PM_" + a + split + b)
 
+    def string_of_strings(mlist):
+        return '"%s"' % " ".join(["%s" % elem for elem in mlist])
+
     partition_id = 0
     for name, partition in sorted(pm_config.items(), key=lambda key_value_tuple: key_value_tuple[1]['address']):
         add_line("%s_ADDRESS" % name.upper(), "0x%x" % partition['address'])
@@ -39,10 +42,23 @@ def get_config_lines(pm_config, head, split, dest):
         add_line("%d_LABEL" % partition_id, "%s" % name.upper())
         if dest is DEST_HEADER:
             add_line("%s_DEV_NAME" % name.upper(), "\"NRF_FLASH_DRV_NAME\"")
+        elif dest is DEST_KCONFIG:
+            if 'span' in partition.keys():
+                add_line("%s_SPAN" % name.upper(), string_of_strings(partition['span']))
 
         pm_config[name]['partition_id'] = partition_id
         partition_id += 1
     add_line("NUM", "%d" % partition_id)
+
+    def find_depth(key, depth = 0):
+        if 'span' in pm_config[key].keys():
+            return find_depth(pm_config[key]['span'][0], depth + 1)
+        return depth
+
+    all_by_size = list(pm_config.keys())
+    all_by_size = sorted(all_by_size, key=lambda key: find_depth(key))
+    all_by_size = sorted(all_by_size, key=lambda key: pm_config[key]['size'])
+    add_line("ALL_BY_SIZE", string_of_strings(all_by_size))
 
     return config_lines
 

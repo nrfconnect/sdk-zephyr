@@ -99,73 +99,79 @@ if(FIRST_BOILERPLATE_EXECUTION)
       ${PM_MCUBOOT_SECONDARY_ADDRESS}
       )
 
-    get_property(
-      hex_files_to_merge
-      GLOBAL PROPERTY
-      PM_HEX_FILES_TO_MERGE
-      )
-    if (hex_files_to_merge AND NOT PM_MCUBOOT_ADDRESS)
-      # Unfortunately, we can not re-use the merging functionality of the
-      # zephyr build system when using the partition manager. This because it
-      # is not known until all sub-images has been included whether or not
-      # some special handling is required (e.g. with mcuboot).
+    # Turn the space-separated list into a Cmake list.
+    string(REPLACE " " ";" PM_ALL_BY_SIZE ${PM_ALL_BY_SIZE})
 
-      get_property(
-        hex_files_to_merge_targets
-        GLOBAL PROPERTY
-        PM_HEX_FILES_TO_MERGE_TARGETS
-        )
+    # Iterate over every partition, from smallest to largest.
+    foreach(part ${PM_ALL_BY_SIZE})
+      string(TOUPPER ${part} PART)
+      get_property(${part}_PM_HEX_FILE GLOBAL PROPERTY ${part}_PM_HEX_FILE)
 
-      set(merged_hex ${PROJECT_BINARY_DIR}/merged.hex)
-      add_custom_command(
-        OUTPUT ${merged_hex}
-        COMMAND
-        ${PYTHON_EXECUTABLE}
-        ${ZEPHYR_BASE}/scripts/mergehex.py
-        -o ${PROJECT_BINARY_DIR}/merged.hex
-        ${hex_files_to_merge}
-        ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}
-        DEPENDS
-        ${hex_files_to_merge_targets}
-        zephyr_final
-        )
-      add_custom_target(pm_mergehex ALL DEPENDS ${merged_hex})
-
-      if(TARGET flash)
-        add_dependencies(flash pm_mergehex)
+      # Process phony partitions (if it has a SPAN list it is a phony partition).
+      if(DEFINED PM_${PART}_SPAN)
+        string(REPLACE " " ";" PM_${PART}_SPAN ${PM_${PART}_SPAN})
+        list(APPEND phonies ${part})
       endif()
 
-      set(ZEPHYR_RUNNER_CONFIG_KERNEL_HEX "${merged_hex}"
-        CACHE STRING "Path to merged image in Intel Hex format" FORCE)
+      # Include the partition in the merge operation if it has a hex file.
+      if(DEFINED ${part}_PM_HEX_FILE)
+        get_property(${part}_PM_TARGET GLOBAL PROPERTY ${part}_PM_TARGET)
+        list(APPEND explicitly_assigned ${part})
+      else()
+        if(${part} IN_LIST images)
+          get_property(${part}_KERNEL_NAME GLOBAL PROPERTY ${part}_KERNEL_NAME)
+          set(${part}_PM_HEX_FILE ${${part}_PROJECT_BINARY_DIR}/${${part}_KERNEL_NAME}.hex)
+          set(${part}_PM_TARGET ${part}_zephyr_final)
+        elseif(${part} IN_LIST phonies)
+          set(${part}_PM_HEX_FILE ${PROJECT_BINARY_DIR}/${part}.hex)
+          set(${part}_PM_TARGET ${part}_hex)
+        endif()
+        list(APPEND implicitly_assigned ${part})
+      endif()
+    endforeach()
 
-    elseif (PM_SPM_ADDRESS AND PM_MCUBOOT_ADDRESS)
-      # Special handling needed to merge before signing.
-      set(merged_to_sign_hex ${PROJECT_BINARY_DIR}/merged_to_sign.hex)
+    set(PM_MERGED_SPAN ${implicitly_assigned} ${explicitly_assigned})
+    set(merged_overlap TRUE) # Enable overlapping for the merged hex file.
+
+    # Iterate over all phony partitions, plus the "fake" merged paritition.
+    # The loop will create a hex file for each iteration.
+    foreach(phony ${phonies} merged)
+      string(TOUPPER ${phony} PHONY)
+
+      # Prepare the list of hex files and list of dependencies for the merge command.
+      foreach(part ${PM_${PHONY}_SPAN})
+        string(TOUPPER ${part} PART)
+        list(APPEND ${phony}hex_files ${${part}_PM_HEX_FILE})
+        list(APPEND ${phony}targets ${${part}_PM_TARGET})
+      endforeach()
+
+      # If overlapping is enabled, add the appropriate argument.
+      if(${${phony}_overlap})
+        set(${phony}overlap_arg --overlap=replace)
+      endif()
+
+      # Add command to merge files.
       add_custom_command(
-        OUTPUT ${merged_to_sign_hex}
+        OUTPUT ${PROJECT_BINARY_DIR}/${phony}.hex
         COMMAND
         ${PYTHON_EXECUTABLE}
         ${ZEPHYR_BASE}/scripts/mergehex.py
-        -o ${merged_to_sign_hex}
-        ${spm_PROJECT_BINARY_DIR}/zephyr.hex
-        ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}
+        -o ${PROJECT_BINARY_DIR}/${phony}.hex
+        ${${phony}overlap_arg}
+        ${${phony}hex_files}
         DEPENDS
-        spm_zephyr_final
-        zephyr_final
+        ${${phony}targets}
         )
-      add_custom_target(merged_to_sign_target DEPENDS ${merged_to_sign_hex})
 
-      set_property(
-        TARGET partition_manager
-        PROPERTY MCUBOOT_TO_SIGN
-        ${merged_to_sign_hex}
-        )
-      set_property(
-        TARGET partition_manager
-        PROPERTY MCUBOOT_TO_SIGN_DEPENDS
-        merged_to_sign_target
-        ${merged_to_sign_hex}
-        )
+      # Wrapper target for the merge command.
+      add_custom_target(${phony}_hex ALL DEPENDS ${PROJECT_BINARY_DIR}/${phony}.hex)
+    endforeach()
+
+    # Add merged.hex as the representative hex file for flashing this app.
+    if(TARGET flash)
+      add_dependencies(flash merged_hex)
     endif()
+    set(ZEPHYR_RUNNER_CONFIG_KERNEL_HEX "${PROJECT_BINARY_DIR}/merged.hex"
+      CACHE STRING "Path to merged image in Intel Hex format" FORCE)
   endif()
 endif()

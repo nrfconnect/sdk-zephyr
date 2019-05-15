@@ -1364,45 +1364,7 @@ add_custom_command(
   # NB: COMMENT only works for some CMake-Generators
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
-if(FIRST_BOILERPLATE_EXECUTION)
 
-  # To populate with hex files to merge, do the following:
-  #  set_property(GLOBAL APPEND PROPERTY HEX_FILES_TO_MERGE ${my_local_list})
-  # Note that the zephyr.hex file will not be included automatically.
-  get_property(
-    HEX_FILES_TO_MERGE
-    GLOBAL PROPERTY
-    HEX_FILES_TO_MERGE
-    )
-  get_property(
-    HEX_FILES_TO_MERGE_TARGET
-    GLOBAL PROPERTY
-    HEX_FILES_TO_MERGE_TARGET
-    )
-
-  if(HEX_FILES_TO_MERGE)
-    # Merge in out-of-tree hex files.
-    set(MERGED_HEX_NAME merged.hex)
-
-    list(REMOVE_DUPLICATES HEX_FILES_TO_MERGE)
-
-    add_custom_command(
-      OUTPUT ${MERGED_HEX_NAME}
-      COMMAND
-      ${PYTHON_EXECUTABLE}
-      ${ZEPHYR_BASE}/scripts/mergehex.py
-      -o ${MERGED_HEX_NAME}
-      ${HEX_FILES_TO_MERGE}
-      DEPENDS
-      ${HEX_FILES_TO_MERGE_TARGET}
-      ${logical_target_for_zephyr_elf}
-      )
-
-    add_custom_target(mergehex ALL DEPENDS ${MERGED_HEX_NAME})
-    list(APPEND FLASH_DEPS mergehex)
-  endif()
-
-endif(FIRST_BOILERPLATE_EXECUTION)
 
 if(CONFIG_OUTPUT_PRINT_MEMORY_USAGE)
   # Use --print-memory-usage with the first link.
