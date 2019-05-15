@@ -111,6 +111,7 @@ def extract_sub_partitions(reqs):
             reqs[value['inside'][0]]['span'].append(key)
         if 'span' in value.keys():
             sub_partitions[key] = value
+            sub_partitions[key]['orig_span'] = sub_partitions[key]['span'].copy() # Take a "backup" of the span.
             keys_to_delete.append(key)
 
     # "Flatten" by changing all span lists to contain the innermost partitions.
@@ -221,6 +222,7 @@ def set_sub_partition_address_and_size(reqs, sub_partitions):
         address = min([reqs[part]['address'] for part in sp_value['span']])
 
         reqs[sp_name] = sp_value
+        reqs[sp_name]['span'] = reqs[sp_name]['orig_span'] # Restore "backup".
         set_size_addr(reqs[sp_name], size, address)
 
 
