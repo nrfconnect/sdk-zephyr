@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 assert_not(FLASH_SCRIPT "FLASH_SCRIPT has been removed; use BOARD_FLASH_RUNNER")
 assert_not(DEBUG_SCRIPT "DEBUG_SCRIPT has been removed; use BOARD_DEBUG_RUNNER")
 
@@ -125,7 +127,7 @@ foreach(target flash debug debugserver attach)
       WORKING_DIRECTORY ${APPLICATION_BINARY_DIR}
       )
 
-    add_custom_target(${target}
+    add_custom_target(${IMAGE}${target}
       COMMAND
       ${cmd}
       COMMENT
@@ -133,14 +135,14 @@ foreach(target flash debug debugserver attach)
       USES_TERMINAL
       )
   elseif(WEST)
-    add_custom_target(${target}
+    add_custom_target(${IMAGE}${target}
       COMMAND ${CMAKE_COMMAND} -E echo \"West version found in path does not support
           '${CMAKE_MAKE_PROGRAM} ${target}', ensure west is installed and not only
           the bootstrapper. run 'west init' to fetch west.\"
       USES_TERMINAL
       )
   else()
-    add_custom_target(${target}
+    add_custom_target(${IMAGE}${target}
       COMMAND ${CMAKE_COMMAND} -E echo \"West was not found in path. To support
           '${CMAKE_MAKE_PROGRAM} ${target}', please install west bootstrapper with:
           'pip install west --user', and thereafter 'west init'.\"

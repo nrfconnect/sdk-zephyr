@@ -47,7 +47,7 @@ LINKER_SECTION_SEQ = """
 
 /* Linker section for memory region {2} for  {3} section  */
 
-	SECTION_PROLOGUE(_{2}_{3}_SECTION_NAME, (OPTIONAL),)
+	SECTION_PROLOGUE(_{2}_{3}_SECTION_NAME,,)
         {{
                 . = ALIGN(4);
                 {4}
@@ -292,7 +292,7 @@ def get_obj_filename(searchpath, filename):
     # get the object file name which is almost always pended with .obj
     obj_filename = filename.split("/")[-1] + ".obj"
 
-    for dirpath, dirs, files in os.walk(searchpath):
+    for dirpath, _, files in os.walk(searchpath):
         for filename1 in files:
             if filename1 == obj_filename:
                 if filename.split("/")[-2] in dirpath.split("/")[-1]:

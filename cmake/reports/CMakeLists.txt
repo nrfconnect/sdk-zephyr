@@ -1,9 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+
 set(flag_for_ram_report -r)
 set(flag_for_rom_report -F)
 
 foreach(report ram_report rom_report)
   add_custom_target(
-    ${report}
+    ${IMAGE}${report}
     ${PYTHON_EXECUTABLE}
     ${ZEPHYR_BASE}/scripts/footprint/size_report
     ${flag_for_${report}}
@@ -14,3 +16,13 @@ foreach(report ram_report rom_report)
     DEPENDS ${logical_target_for_zephyr_elf}
     )
 endforeach()
+
+add_custom_command(
+  TARGET ${IMAGE}rom_report
+  POST_BUILD
+  COMMAND
+  ${PYTHON_EXECUTABLE}
+  ${ZEPHYR_BASE}/scripts/partition_manager_report.py
+  --input ${PROJECT_BINARY_DIR}/include/generated/partitions.yml
+  "$<$<NOT:$<TARGET_EXISTS:partition_manager>>:--quiet>"
+  )

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Lots of duplications here.
 # FIXME: maintain this only in one place.
 
@@ -15,7 +17,7 @@ if(NOT ZEPHYR_SDK_INSTALL_DIR)
   return()
 endif()
 
-set(REQUIRED_SDK_VER 0.9.5)
+set(REQUIRED_SDK_VER 0.10.0)
 set(TOOLCHAIN_VENDOR zephyr)
 set(TOOLCHAIN_ARCH x86_64)
 
@@ -37,7 +39,7 @@ if(${REQUIRED_SDK_VER} VERSION_GREATER ${SDK_VERSION})
 You need at least SDK version ${REQUIRED_SDK_VER}.
 You have version ${SDK_VERSION} (${ZEPHYR_SDK_INSTALL_DIR}).
 The new version of the SDK can be downloaded from:
-https://github.com/zephyrproject-rtos/meta-zephyr-sdk/releases/download/${REQUIRED_SDK_VER}/zephyr-sdk-${REQUIRED_SDK_VER}-setup.run
+https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${REQUIRED_SDK_VER}/zephyr-sdk-${REQUIRED_SDK_VER}-setup.run
 ")
 endif()
 

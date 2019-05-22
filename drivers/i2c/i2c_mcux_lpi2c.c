@@ -116,6 +116,14 @@ static int mcux_lpi2c_transfer(struct device *dev, struct i2c_msg *msgs,
 
 		/* Initialize the transfer descriptor */
 		transfer.flags = mcux_lpi2c_convert_flags(msgs->flags);
+
+		/* Prevent the controller to send a start condition between
+		 * messages, except if explicitely requested.
+		 */
+		if (i != 0 && !(msgs->flags & I2C_MSG_RESTART)) {
+			transfer.flags |= kLPI2C_TransferNoStartFlag;
+		}
+
 		transfer.slaveAddress = addr;
 		transfer.direction = (msgs->flags & I2C_MSG_READ)
 			? kLPI2C_Read : kLPI2C_Write;
@@ -189,7 +197,7 @@ static int mcux_lpi2c_init(struct device *dev)
 	LPI2C_MasterTransferCreateHandle(base, &data->handle,
 			mcux_lpi2c_master_transfer_callback, dev);
 
-	bitrate_cfg = _i2c_map_dt_bitrate(config->bitrate);
+	bitrate_cfg = i2c_map_dt_bitrate(config->bitrate);
 
 	error = mcux_lpi2c_configure(dev, I2C_MODE_MASTER | bitrate_cfg);
 	if (error) {

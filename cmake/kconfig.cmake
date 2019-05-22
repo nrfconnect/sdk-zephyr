@@ -1,9 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Folders needed for conf/mconf files (kconfig has no method of redirecting all output files).
 # conf/mconf needs to be run from a different directory because of: GH-3408
 file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/kconfig/include/generated)
 file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/kconfig/include/config)
 
-if(KCONFIG_ROOT)
+if(${IMAGE}KCONFIG_ROOT)
   # KCONFIG_ROOT has either been specified as a CMake variable or is
   # already in the CMakeCache.txt. This has precedence.
 elseif(EXISTS   ${APPLICATION_SOURCE_DIR}/Kconfig)
@@ -13,10 +15,11 @@ else()
 endif()
 
 set(BOARD_DEFCONFIG ${BOARD_DIR}/${BOARD}_defconfig)
-set(DOTCONFIG       ${PROJECT_BINARY_DIR}/.config)
+set(DOTCONFIG                  ${PROJECT_BINARY_DIR}/.config)
+set(PARSED_KCONFIG_SOURCES_TXT ${PROJECT_BINARY_DIR}/kconfig/sources.txt)
 
-if(CONF_FILE)
-string(REPLACE " " ";" CONF_FILE_AS_LIST "${CONF_FILE}")
+if(${IMAGE}CONF_FILE)
+string(REPLACE " " ";" ${IMAGE}CONF_FILE_AS_LIST "${${IMAGE}CONF_FILE}")
 endif()
 
 if(OVERLAY_CONFIG)
@@ -33,28 +36,49 @@ set(ENV{PYTHON_EXECUTABLE} ${PYTHON_EXECUTABLE})
 set(ENV{ARCH}      ${ARCH})
 set(ENV{BOARD_DIR} ${BOARD_DIR})
 set(ENV{SOC_DIR}   ${SOC_DIR})
-set(ENV{PROJECT_BINARY_DIR} ${PROJECT_BINARY_DIR})
+set(ENV{CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR})
 set(ENV{ARCH_DIR}   ${ARCH_DIR})
 set(ENV{GENERATED_DTS_BOARD_CONF} ${GENERATED_DTS_BOARD_CONF})
 
-add_custom_target(
-  menuconfig
-  ${CMAKE_COMMAND} -E env
-  PYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}
-  srctree=${ZEPHYR_BASE}
-  KERNELVERSION=${KERNELVERSION}
-  KCONFIG_CONFIG=${DOTCONFIG}
-  ARCH=$ENV{ARCH}
-  BOARD_DIR=$ENV{BOARD_DIR}
-  SOC_DIR=$ENV{SOC_DIR}
-  PROJECT_BINARY_DIR=$ENV{PROJECT_BINARY_DIR}
-  ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT}
-  ARCH_DIR=$ENV{ARCH_DIR}
-  GENERATED_DTS_BOARD_CONF=$ENV{GENERATED_DTS_BOARD_CONF}
-  ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/kconfig/menuconfig.py ${KCONFIG_ROOT}
-  WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/kconfig
-  USES_TERMINAL
+# Allow out-of-tree users to add their own Kconfig python frontend
+# targets by appending targets to the CMake list
+# 'EXTRA_KCONFIG_TARGETS' and setting variables named
+# 'EXTRA_KCONFIG_TARGET_COMMAND_FOR_<target>'
+#
+# e.g.
+# cmake -DEXTRA_KCONFIG_TARGETS=cli
+# -DEXTRA_KCONFIG_TARGET_COMMAND_FOR_cli=cli_kconfig_frontend.py
+
+set(EXTRA_KCONFIG_TARGET_COMMAND_FOR_menuconfig
+  ${ZEPHYR_BASE}/scripts/kconfig/menuconfig.py
   )
+
+foreach(kconfig_target
+    menuconfig
+    ${EXTRA_KCONFIG_TARGETS}
+    )
+  add_custom_target(
+    ${IMAGE}${kconfig_target}
+    ${CMAKE_COMMAND} -E env
+    PYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}
+    srctree=${ZEPHYR_BASE}
+    KERNELVERSION=${KERNELVERSION}
+    ZEPHYR_BASE=${ZEPHYR_BASE}
+    KCONFIG_CONFIG=${DOTCONFIG}
+    ARCH=$ENV{ARCH}
+    BOARD_DIR=$ENV{BOARD_DIR}
+    SOC_DIR=$ENV{SOC_DIR}
+    CMAKE_BINARY_DIR=$ENV{CMAKE_BINARY_DIR}
+    ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT}
+    ARCH_DIR=$ENV{ARCH_DIR}
+    GENERATED_DTS_BOARD_CONF=${GENERATED_DTS_BOARD_CONF}
+    ${PYTHON_EXECUTABLE}
+    ${EXTRA_KCONFIG_TARGET_COMMAND_FOR_${kconfig_target}}
+    ${KCONFIG_ROOT}
+    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/kconfig
+    USES_TERMINAL
+    )
+endforeach()
 
 # Support assigning Kconfig symbols on the command-line with CMake
 # cache variables prefixed with 'CONFIG_'. This feature is
@@ -87,7 +111,7 @@ list(SORT config_files)
 set(
   merge_config_files
   ${BOARD_DEFCONFIG}
-  ${CONF_FILE_AS_LIST}
+  ${${IMAGE}CONF_FILE_AS_LIST}
   ${OVERLAY_CONFIG_AS_LIST}
   ${EXTRA_KCONFIG_OPTIONS_FILE}
   ${config_files}
@@ -159,22 +183,30 @@ execute_process(
   ${KCONFIG_ROOT}
   ${DOTCONFIG}
   ${AUTOCONF_H}
+  ${PARSED_KCONFIG_SOURCES_TXT}
   ${merge_fragments}
   WORKING_DIRECTORY ${APPLICATION_SOURCE_DIR}
   # The working directory is set to the app dir such that the user
-  # can use relative paths in CONF_FILE, e.g. CONF_FILE=nrf5.conf
+  # can use relative paths in ${IMAGE}CONF_FILE, e.g. CONF_FILE=nrf5.conf
   RESULT_VARIABLE ret
   )
 if(NOT "${ret}" STREQUAL "0")
   message(FATAL_ERROR "command failed with return code: ${ret}")
 endif()
 
-# Force CMAKE configure when the configuration files changes.
-foreach(merge_config_input ${merge_config_files} ${DOTCONFIG})
-  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${merge_config_input})
+# Read out the list of 'Kconfig' sources that were used by the engine.
+file(STRINGS ${PARSED_KCONFIG_SOURCES_TXT} PARSED_KCONFIG_SOURCES_LIST)
+
+# Force CMAKE configure when the Kconfig sources or configuration files changes.
+foreach(kconfig_input
+    ${merge_config_files}
+    ${DOTCONFIG}
+    ${PARSED_KCONFIG_SOURCES_LIST}
+    )
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${kconfig_input})
 endforeach()
 
-add_custom_target(config-sanitycheck DEPENDS ${DOTCONFIG})
+add_custom_target(${IMAGE}config-sanitycheck DEPENDS ${DOTCONFIG})
 
 # Remove the CLI Kconfig symbols from the namespace and
 # CMakeCache.txt. If the symbols end up in DOTCONFIG they will be

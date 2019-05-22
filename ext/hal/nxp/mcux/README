@@ -15,6 +15,7 @@ Status:
 
    SoC		Version (Release Date)		Tag
    ----------------------------------------------------------------------------
+   MIMXRT1015	SDK 2.5.0 (2019-03-11)		REL_2.5.0_RT1015_RFP
    LPC54114	SDK 2.5.0 (2018-12-17)		REL_2.5.0_REL9_RFP_RC3_7_1
    MIMXRT1051	SDK 2.5.0 (2018-12-17)		REL_2.5.0_REL9_RFP_RC3_7_1
    MIMXRT1052	SDK 2.5.0 (2018-12-17)		REL_2.5.0_REL9_RFP_RC3_7_1
@@ -84,3 +85,5 @@ Patch List:
 
    * Automatically enable ENET_ENHANCEDBUFFERDESCRIPTOR_MODE in HAL if gPTP
      support is enabled.
+
+   * Add USB device controller drivers, the drivers are based on MCUXpresso SDK release tag REL_2.5.0_REL9_RFP_RC3_7_1.

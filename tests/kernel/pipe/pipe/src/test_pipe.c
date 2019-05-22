@@ -51,7 +51,7 @@ struct pipe_sequence {
 	int return_value;
 };
 
-static struct pipe_sequence single_elements[] = {
+static const struct pipe_sequence single_elements[] = {
 	{ 0, ALL_BYTES, 0, 0 },
 	{ 1, ALL_BYTES, 1, RETURN_SUCCESS },
 	{ PIPE_SIZE - 1, ALL_BYTES, PIPE_SIZE - 1, RETURN_SUCCESS },
@@ -71,7 +71,7 @@ static struct pipe_sequence single_elements[] = {
 	{ PIPE_SIZE + 1, NO_CONSTRAINT, PIPE_SIZE, RETURN_SUCCESS }
 };
 
-static struct pipe_sequence multiple_elements[] = {
+static const struct pipe_sequence multiple_elements[] = {
 	{ PIPE_SIZE / 3, ALL_BYTES, PIPE_SIZE / 3, RETURN_SUCCESS, },
 	{ PIPE_SIZE / 3, ALL_BYTES, PIPE_SIZE / 3, RETURN_SUCCESS, },
 	{ PIPE_SIZE / 3, ALL_BYTES, PIPE_SIZE / 3, RETURN_SUCCESS, },
@@ -90,7 +90,7 @@ static struct pipe_sequence multiple_elements[] = {
 	{ PIPE_SIZE / 3, NO_CONSTRAINT, 0, RETURN_SUCCESS }
 };
 
-static struct pipe_sequence wait_elements[] = {
+static const struct pipe_sequence wait_elements[] = {
 	{            1, ALL_BYTES,             1, RETURN_SUCCESS },
 	{ PIPE_SIZE - 1, ALL_BYTES, PIPE_SIZE - 1, RETURN_SUCCESS },
 	{    PIPE_SIZE, ALL_BYTES,     PIPE_SIZE, RETURN_SUCCESS },
@@ -101,7 +101,7 @@ static struct pipe_sequence wait_elements[] = {
 	{ PIPE_SIZE + 1, ATLEAST_1, PIPE_SIZE + 1, RETURN_SUCCESS }
 };
 
-static struct pipe_sequence timeout_elements[] = {
+static const struct pipe_sequence timeout_elements[] = {
 	{            0, ALL_BYTES, 0, 0 },
 	{            1, ALL_BYTES, 0, -EAGAIN },
 	{ PIPE_SIZE - 1, ALL_BYTES, 0, -EAGAIN },
@@ -675,7 +675,7 @@ void pipe_put_get_timeout(void)
 
 /******************************************************************************/
 ZTEST_BMEM bool valid_fault;
-void _SysFatalErrorHandler(unsigned int reason, const NANO_ESF *pEsf)
+void z_SysFatalErrorHandler(unsigned int reason, const NANO_ESF *pEsf)
 {
 	printk("Caught system error -- reason %d\n", reason);
 	if (valid_fault) {

@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2019 Intel Corporation
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 #ifndef ZEPHYR_INCLUDE_APP_MEMORY_APP_MEMDOMAIN_H_
 #define ZEPHYR_INCLUDE_APP_MEMORY_APP_MEMDOMAIN_H_
 
@@ -45,7 +50,7 @@
  *
  * @param id Name of the memory partition to associate this data
  */
-#define K_APP_DMEM(id) _GENERIC_SECTION(K_APP_DMEM_SECTION(id))
+#define K_APP_DMEM(id) Z_GENERIC_SECTION(K_APP_DMEM_SECTION(id))
 
 /**
  * @brief Place data in a partition's bss section
@@ -55,7 +60,7 @@
  *
  * @param id Name of the memory partition to associate this data
  */
-#define K_APP_BMEM(id) _GENERIC_SECTION(K_APP_BMEM_SECTION(id))
+#define K_APP_BMEM(id) Z_GENERIC_SECTION(K_APP_BMEM_SECTION(id))
 
 struct z_app_region {
 	void *bss_start;
@@ -120,7 +125,7 @@ struct z_app_region {
 	}; \
 	extern char Z_APP_BSS_START(name)[]; \
 	extern char Z_APP_BSS_SIZE(name)[]; \
-	_GENERIC_SECTION(.app_regions.name) \
+	Z_GENERIC_SECTION(.app_regions.name) \
 	struct z_app_region name##_region = { \
 		.bss_start = &Z_APP_BSS_START(name), \
 		.bss_size = (size_t) &Z_APP_BSS_SIZE(name) \

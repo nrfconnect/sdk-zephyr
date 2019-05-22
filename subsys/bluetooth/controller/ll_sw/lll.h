@@ -245,7 +245,7 @@ static inline void lll_hdr_init(void *lll, void *parent)
 	struct lll_hdr *hdr = lll;
 
 	hdr->parent = parent;
-	hdr->is_stop = 0;
+	hdr->is_stop = 0U;
 }
 
 static inline int lll_stop(void *lll)
@@ -253,7 +253,7 @@ static inline int lll_stop(void *lll)
 	struct lll_hdr *hdr = lll;
 	int ret = !!hdr->is_stop;
 
-	hdr->is_stop = 1;
+	hdr->is_stop = 1U;
 
 	return ret;
 }
@@ -271,6 +271,7 @@ int lll_prepare(lll_is_abort_cb_t is_abort_cb, lll_abort_cb_t abort_cb,
 		struct lll_prepare_param *prepare_param);
 void lll_resume(void *param);
 void lll_disable(void *param);
+u32_t lll_radio_is_idle(void);
 
 int ull_prepare_enqueue(lll_is_abort_cb_t is_abort_cb,
 			       lll_abort_cb_t abort_cb,

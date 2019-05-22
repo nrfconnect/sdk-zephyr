@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/include/generated)
 
 # Zephyr code can configure itself based on a KConfig'uration with the
@@ -10,31 +12,42 @@ file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/include/generated)
 # CMake configure-time.
 #
 # See ~/zephyr/doc/dts
-set(GENERATED_DTS_BOARD_UNFIXED_H    ${PROJECT_BINARY_DIR}/include/generated/generated_dts_board_unfixed.h)
-set(GENERATED_DTS_BOARD_CONF ${PROJECT_BINARY_DIR}/include/generated/generated_dts_board.conf)
-set_ifndef(DTS_SOURCE ${BOARD_DIR}/${BOARD}.dts)
-set_ifndef(DTS_COMMON_OVERLAYS ${ZEPHYR_BASE}/dts/common/common.dts)
-set_ifndef(DTS_APP_BINDINGS ${APPLICATION_SOURCE_DIR}/dts/bindings)
-set_ifndef(DTS_APP_INCLUDE ${APPLICATION_SOURCE_DIR}/dts)
+set(GENERATED_DTS_BOARD_UNFIXED_H ${PROJECT_BINARY_DIR}/include/generated/generated_dts_board_unfixed.h)
+set(GENERATED_DTS_BOARD_CONF      ${PROJECT_BINARY_DIR}/include/generated/generated_dts_board.conf)
+
+set_ifndef(${IMAGE}DTS_SOURCE ${BOARD_DIR}/${BOARD}.dts)
+set_ifndef(${IMAGE}DTS_COMMON_OVERLAYS ${ZEPHYR_BASE}/dts/common/common.dts)
+
+# 'DTS_ROOT' is a list of directories where a directory tree with DT
+# files may be found. It always includes the application directory and
+# ${ZEPHYR_BASE}.
+list(APPEND
+  DTS_ROOT
+  ${APPLICATION_SOURCE_DIR}
+  ${ZEPHYR_BASE}
+  )
+list(REMOVE_DUPLICATES
+  DTS_ROOT
+  )
 
 set(dts_files
-  ${DTS_SOURCE}
+  ${${IMAGE}DTS_SOURCE}
   ${DTS_COMMON_OVERLAYS}
   ${shield_dts_files}
   )
 
 # TODO: What to do about non-posix platforms where NOT CONFIG_HAS_DTS (xtensa)?
 # Drop support for NOT CONFIG_HAS_DTS perhaps?
-if(EXISTS ${DTS_SOURCE})
+if(EXISTS ${${IMAGE}DTS_SOURCE})
   set(SUPPORTS_DTS 1)
 else()
   set(SUPPORTS_DTS 0)
 endif()
 
 if(SUPPORTS_DTS)
-  if(DTC_OVERLAY_FILE)
+  if(${IMAGE}DTC_OVERLAY_FILE)
     # Convert from space-separated files into file list
-    string(REPLACE " " ";" DTC_OVERLAY_FILE_AS_LIST ${DTC_OVERLAY_FILE})
+    string(REPLACE " " ";" DTC_OVERLAY_FILE_AS_LIST ${${IMAGE}DTC_OVERLAY_FILE})
     list(APPEND
       dts_files
       ${DTC_OVERLAY_FILE_AS_LIST}
@@ -62,6 +75,35 @@ if(SUPPORTS_DTS)
     math(EXPR i "${i}+1")
   endforeach()
 
+  unset(DTS_ROOT_SYSTEM_INCLUDE_DIRS)
+  foreach(dts_root ${DTS_ROOT})
+    foreach(dts_root_path
+        include
+        dts/common
+        dts/${ARCH}
+        dts
+        )
+      set(full_path ${dts_root}/${dts_root_path})
+      if(EXISTS ${full_path})
+        list(APPEND
+          DTS_ROOT_SYSTEM_INCLUDE_DIRS
+          -isystem ${full_path}
+          )
+      endif()
+    endforeach()
+  endforeach()
+
+  unset(DTS_ROOT_BINDINGS)
+  foreach(dts_root ${DTS_ROOT})
+    set(full_path ${dts_root}/dts/bindings)
+    if(EXISTS ${full_path})
+      list(APPEND
+        DTS_ROOT_BINDINGS
+        ${full_path}
+        )
+    endif()
+  endforeach()
+
   # TODO: Cut down on CMake configuration time by avoiding
   # regeneration of generated_dts_board_unfixed.h on every configure. How
   # challenging is this? What are the dts dependencies? We run the
@@ -75,12 +117,8 @@ if(SUPPORTS_DTS)
     COMMAND ${CMAKE_C_COMPILER}
     -x assembler-with-cpp
     -nostdinc
-    -isystem ${DTS_APP_INCLUDE}
-    -isystem ${ZEPHYR_BASE}/include
-    -isystem ${ZEPHYR_BASE}/dts/${ARCH}
-    -isystem ${ZEPHYR_BASE}/dts
+    ${DTS_ROOT_SYSTEM_INCLUDE_DIRS}
     ${DTC_INCLUDE_FLAG_FOR_DTS}  # include the DTS source and overlays
-    -I${ZEPHYR_BASE}/dts/common
     ${NOSYSDEF_CFLAG}
     -D__DTS__
     -P
@@ -122,13 +160,9 @@ if(SUPPORTS_DTS)
     message(FATAL_ERROR "command failed with return code: ${ret}")
   endif()
 
-  if(NOT EXISTS ${DTS_APP_BINDINGS})
-    set(DTS_APP_BINDINGS)
-  endif()
-
   set(CMD_EXTRACT_DTS_INCLUDES ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/dts/extract_dts_includes.py
     --dts ${BOARD}.dts_compiled
-    --yaml ${ZEPHYR_BASE}/dts/bindings ${DTS_APP_BINDINGS}
+    --yaml ${DTS_ROOT_BINDINGS}
     --keyvalue ${GENERATED_DTS_BOARD_CONF}
     --include ${GENERATED_DTS_BOARD_UNFIXED_H}
     --old-alias-names

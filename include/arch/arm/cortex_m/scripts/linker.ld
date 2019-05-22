@@ -40,6 +40,11 @@
   #define SKIP_TO_KINETIS_FLASH_CONFIG
 #endif
 
+#if USE_PARTITION_MANAGER
+#include <pm_config.h>
+#define ROM_ADDR PM_ADDRESS
+#define ROM_SIZE PM_SIZE
+#else
 #define ROM_ADDR (CONFIG_FLASH_BASE_ADDRESS + CONFIG_FLASH_LOAD_OFFSET)
 #ifdef CONFIG_TI_CCFG_PRESENT
   #define CCFG_SIZE 88
@@ -51,8 +56,9 @@
   #define ROM_SIZE CONFIG_FLASH_LOAD_SIZE
 #else
   #define ROM_SIZE (CONFIG_FLASH_SIZE*1K - CONFIG_FLASH_LOAD_OFFSET)
-#endif
-#endif
+#endif /* CONFIG_FLASH_LOAD_SIZE > 0 */
+#endif /* CONFIG_TI_CCFG_PRESENT */
+#endif /* USE_PARTITION_MANAGER */
 
 #if defined(CONFIG_XIP)
 	#if defined(CONFIG_IS_BOOTLOADER)
@@ -252,6 +258,11 @@ SECTIONS
 #include <linker/priv_stacks-rom.ld>
 #include <linker/kobject-rom.ld>
 
+	. = ALIGN(4);
+	_ext_abis_start = .;
+	KEEP(*(.ext_abis))
+	_ext_abis_size = ABSOLUTE((. - _ext_abis_start) / 4);
+
 	/*
 	 * For XIP images, in order to avoid the situation when __data_rom_start
 	 * is 32-bit aligned, but the actual data is placed right after rodata
@@ -282,6 +293,7 @@ SECTIONS
 #endif /* CONFIG_ARM_FIRMWARE_HAS_SECURE_ENTRY_FUNCS */
 
 	_image_rodata_end = .;
+	MPU_ALIGN(_image_rodata_end -_image_rom_start);
 	_image_rom_end = .;
 
     GROUP_END(ROMABLE_REGION)
@@ -480,7 +492,7 @@ SECTIONS
 
     GROUP_START(CCM)
 
-	SECTION_PROLOGUE(_CCM_BSS_SECTION_NAME, (NOLOAD OPTIONAL),SUBALIGN(4))
+	SECTION_PROLOGUE(_CCM_BSS_SECTION_NAME, (NOLOAD),SUBALIGN(4))
 	{
 		__ccm_start = .;
 		__ccm_bss_start = .;
@@ -490,7 +502,7 @@ SECTIONS
 
 	__ccm_bss_end = .;
 
-	SECTION_PROLOGUE(_CCM_NOINIT_SECTION_NAME, (NOLOAD OPTIONAL),SUBALIGN(4))
+	SECTION_PROLOGUE(_CCM_NOINIT_SECTION_NAME, (NOLOAD),SUBALIGN(4))
 	{
 		__ccm_noinit_start = .;
 		*(.ccm_noinit)
@@ -499,7 +511,7 @@ SECTIONS
 
 	__ccm_noinit_end = .;
 
-	SECTION_PROLOGUE(_CCM_DATA_SECTION_NAME, (OPTIONAL),SUBALIGN(4))
+	SECTION_PROLOGUE(_CCM_DATA_SECTION_NAME,,SUBALIGN(4))
 	{
 		__ccm_data_start = .;
 		*(.ccm_data)

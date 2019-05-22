@@ -16,6 +16,7 @@ Samples and Demos
    bluetooth/bluetooth.rst
    sensor/*
    boards/*
+   mcuboot/*
    mpu/*
    drivers/drivers.rst
    application_development/*
@@ -26,4 +27,4 @@ Samples and Demos
 
 .. comment
    To add a new sample document, please use the template available under
-   :file:`doc/templates/sample.tmpl`
+   ``doc/templates/sample.tmpl``

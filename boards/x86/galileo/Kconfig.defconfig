@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 
 if BOARD_GALILEO
 
@@ -20,9 +21,6 @@ config SPI
 	default y
 
 config SHARED_IRQ
-	default y
-
-config PCI_ENUMERATION
 	default y
 
 if GPIO && I2C

@@ -1,11 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+
 cmake_minimum_required(VERSION 3.13.1)
 project(Zephyr-Kernel-Doc LANGUAGES)
+
+# Find west to (optionally) process modules for Kconfig
+find_program(
+  WEST
+  west
+  )
+if(${WEST} STREQUAL WEST-NOTFOUND)
+  unset(WEST)
+endif()
 
 set(ZEPHYR_BASE $ENV{ZEPHYR_BASE})
 
 message(STATUS "Zephyr base: ${ZEPHYR_BASE}")
 
 include(${ZEPHYR_BASE}/cmake/version.cmake)
+
+# Process modules
+include(${ZEPHYR_BASE}/cmake/zephyr_module.cmake)
 
 find_package(PythonInterp 3.4)
 set(DOXYGEN_SKIP_DOT True)
@@ -74,7 +88,6 @@ set(DOC_WARN ${CMAKE_CURRENT_BINARY_DIR}/doc.warnings)
 set(CONTENT_OUTPUTS ${CMAKE_CURRENT_BINARY_DIR}/extracted-content.txt)
 
 configure_file(${DOXYFILE_IN} ${DOXYFILE_OUT} @ONLY)
-file(TOUCH ${CMAKE_CURRENT_BINARY_DIR}/Kconfig.modules)
 
 # This command is used to copy all documentation source files from the
 # ZEPHYR_BASE/ environment variable into the build directory,
@@ -86,6 +99,7 @@ file(TOUCH ${CMAKE_CURRENT_BINARY_DIR}/Kconfig.modules)
 # workaround for this limitation.
 set(EXTRACT_CONTENT_COMMAND
   ${CMAKE_COMMAND} -E env
+  ZEPHYR_BASE=${ZEPHYR_BASE}
   ${PYTHON_EXECUTABLE} scripts/extract_content.py
   # Ignore any files in the output directory.
   --ignore ${CMAKE_CURRENT_BINARY_DIR}
@@ -174,6 +188,7 @@ add_custom_target(
   COMMAND ${CMAKE_COMMAND} -E make_directory ${RST_OUT}/doc/reference/kconfig
   COMMAND ${CMAKE_COMMAND} -E env
   PYTHONPATH="${ZEPHYR_BASE}/scripts/kconfig${SEP}$ENV{PYTHONPATH}"
+  ZEPHYR_BASE=${ZEPHYR_BASE}
   srctree=${ZEPHYR_BASE}
   KERNELVERSION=${KERNELVERSION}
   BOARD_DIR=boards/*/*/
@@ -181,7 +196,8 @@ add_custom_target(
   ARCH_DIR=arch/
   SOC_DIR=soc/
   SRCARCH=x86
-  PROJECT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+  CMAKE_BINARY_DIR=${CMAKE_BINARY_DIR}
+  KCONFIG_WARN_UNDEF=y
   KCONFIG_TURBO_MODE=${KCONFIG_TURBO_MODE}
   KCONFIG_DOC_MODE=1
   ${PYTHON_EXECUTABLE} scripts/genrest.py Kconfig ${RST_OUT}/doc/reference/kconfig/
@@ -198,6 +214,7 @@ set(CONF_DIR ${ZEPHYR_BASE}/.known-issues/doc)
 #
 set(SPHINX_BUILD_HTML_COMMAND
   ${CMAKE_COMMAND} -E env
+  ZEPHYR_BASE=${ZEPHYR_BASE}
   ZEPHYR_BUILD=${CMAKE_CURRENT_BINARY_DIR}
   ${SPHINXBUILD} -w ${SPHINX_LOG} -N -t ${DOC_TAG} -b html ${ALLSPHINXOPTS} ${RST_OUT}/doc ${SPHINX_OUTPUT_DIR_HTML})
 

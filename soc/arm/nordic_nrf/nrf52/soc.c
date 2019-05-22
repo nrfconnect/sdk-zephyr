@@ -21,8 +21,8 @@
 #include <logging/log.h>
 
 #ifdef CONFIG_RUNTIME_NMI
-extern void _NmiInit(void);
-#define NMI_INIT() _NmiInit()
+extern void z_NmiInit(void);
+#define NMI_INIT() z_NmiInit()
 #else
 #define NMI_INIT()
 #endif
@@ -69,7 +69,7 @@ static int nordicsemi_nrf52_init(struct device *arg)
 	nrf_power_dcdcen_set(true);
 #endif
 
-	_ClearFaults();
+	z_clearfaults();
 
 	/* Install default handler that simply resets the CPU
 	* if configured in the kernel, NOP otherwise

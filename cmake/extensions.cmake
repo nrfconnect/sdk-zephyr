@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 ########################################################
 # Table of contents
 ########################################################
@@ -40,6 +42,25 @@
 #   ${CMAKE_CURRENT_SOURCE_DIR}/random_esp32.c
 #   ${CMAKE_CURRENT_SOURCE_DIR}/utils.c
 # )
+#
+# As a very high-level introduction here are two call graphs that are
+# purposely minimalistic and incomplete.
+#
+#  zephyr_library_cc_option()
+#           |
+#           v
+#  zephyr_library_compile_options()  -->  target_compile_options()
+#
+#
+#  zephyr_cc_option()           --->  target_cc_option()
+#                                          |
+#                                          v
+#  zephyr_cc_option_fallback()  --->  target_cc_option_fallback()
+#                                          |
+#                                          v
+#  zephyr_compile_options()     --->  target_compile_options()
+#
+
 
 # https://cmake.org/cmake/help/latest/command/target_sources.html
 function(zephyr_sources)
@@ -54,7 +75,7 @@ function(zephyr_sources)
       message(FATAL_ERROR "zephyr_sources() was called on a directory")
     endif()
 
-    target_sources(zephyr PRIVATE ${path})
+    target_sources(${IMAGE}zephyr PRIVATE ${path})
   endforeach()
 endfunction()
 
@@ -66,7 +87,7 @@ function(zephyr_include_directories)
     else()
       set(path ${CMAKE_CURRENT_SOURCE_DIR}/${arg})
     endif()
-    target_include_directories(zephyr_interface INTERFACE ${path})
+    target_include_directories(${IMAGE}zephyr_interface INTERFACE ${path})
   endforeach()
 endfunction()
 
@@ -78,42 +99,87 @@ function(zephyr_system_include_directories)
     else()
       set(path ${CMAKE_CURRENT_SOURCE_DIR}/${arg})
     endif()
-    target_include_directories(zephyr_interface SYSTEM INTERFACE ${path})
+    target_include_directories(${IMAGE}zephyr_interface SYSTEM INTERFACE ${path})
   endforeach()
 endfunction()
 
 # https://cmake.org/cmake/help/latest/command/target_compile_definitions.html
 function(zephyr_compile_definitions)
-  target_compile_definitions(zephyr_interface INTERFACE ${ARGV})
+  target_compile_definitions(${IMAGE}zephyr_interface INTERFACE ${ARGV})
 endfunction()
 
 # https://cmake.org/cmake/help/latest/command/target_compile_options.html
 function(zephyr_compile_options)
-  target_compile_options(zephyr_interface INTERFACE ${ARGV})
+  target_compile_options(${IMAGE}zephyr_interface INTERFACE ${ARGV})
 endfunction()
 
 # https://cmake.org/cmake/help/latest/command/target_link_libraries.html
 function(zephyr_link_libraries)
-  target_link_libraries(zephyr_interface INTERFACE ${ARGV})
+  target_link_libraries(${IMAGE}zephyr_interface INTERFACE ${ARGV})
 endfunction()
 
 # See this file section 3.1. target_cc_option
 function(zephyr_cc_option)
   foreach(arg ${ARGV})
-    target_cc_option(zephyr_interface INTERFACE ${arg})
+    target_cc_option(${IMAGE}zephyr_interface INTERFACE ${arg})
   endforeach()
 endfunction()
 
+# Add new executable which is built using a separate configuration.  This is
+# needed when a component needs to be built as an independent hex file, or with
+# different configuration.  Examples of use include bootloaders, and
+# secure/non-secure partitions in a TrustZone environment.
+#
+# This function creates a new 'app' context, equivalent to the one defined by
+# the 'origin' context.  The CMakeLists.txt file pointed to by the users
+# 'cmake' command defines the 'origin' context.  All targets defined by the new
+# context is prefixed with the name provided in the 'name' argument.  As
+# a result of this, in order to execute the 'menuconfig' target to perform
+# configuration 'name_menuconfig' must be used instead.  Note the targets
+# defined by the 'origin' context is not prefixed in any way.
+#
+# Only a small set of configurations is shared between the 'origin' context and
+# the new context, notably CMake properties.  The new context defines its own
+# set of: - CMake variables (note: not properties) - DTS configuration -
+# KConfig configuration
+#
+# When multiple contexts are defined, a new merge target is defined which
+# merges the resulting hex files. The 'flash' target is updated to use this
+# merged hex file instead of the 'zephyr.hex' file from the origin context.
+#
+function(zephyr_add_executable name output_variable)
+  set(${output_variable} 0 PARENT_SCOPE)
+  string(TOUPPER ${name} UPNAME)
+
+  if (CONFIG_${UPNAME}_BUILD_STRATEGY_USE_HEX_FILE)
+    assert_exists(CONFIG_${UPNAME}_HEX_FILE)
+    message("Using ${CONFIG_${UPNAME}_HEX_FILE} instead of building ${name}")
+    set_property(GLOBAL APPEND PROPERTY
+      HEX_FILES_TO_MERGE
+      ${CONFIG_${UPNAME}_HEX_FILE}
+      ${APPLICATION_BINARY_DIR}/zephyr/${KERNEL_HEX_NAME}
+      )
+  elseif (CONFIG_${UPNAME}_BUILD_STRATEGY_SKIP_BUILD)
+    message("Skipping building of ${name}")
+  else()
+    # Build normally
+    set_property(GLOBAL PROPERTY IMAGE ${name}_)
+    set(${output_variable} 1 PARENT_SCOPE)
+  endif()
+
+endfunction()
+
+
 function(zephyr_cc_option_fallback option1 option2)
-    target_cc_option_fallback(zephyr_interface INTERFACE ${option1} ${option2})
+    target_cc_option_fallback(${IMAGE}zephyr_interface INTERFACE ${option1} ${option2})
 endfunction()
 
 function(zephyr_ld_options)
-    target_ld_options(zephyr_interface INTERFACE ${ARGV})
+    target_ld_options(${IMAGE}zephyr_interface INTERFACE ${ARGV})
 endfunction()
 
 # Getter functions for extracting build information from
-# zephyr_interface. Returning lists, and strings is supported, as is
+# ${IMAGE}zephyr_interface. Returning lists, and strings is supported, as is
 # requesting specific categories of build information (defines,
 # includes, options).
 #
@@ -181,7 +247,7 @@ function(zephyr_get_compile_options_for_lang_as_string lang i)
 endfunction()
 
 function(zephyr_get_include_directories_for_lang lang i)
-  get_property_and_add_prefix(flags zephyr_interface INTERFACE_INCLUDE_DIRECTORIES
+  get_property_and_add_prefix(flags ${IMAGE}zephyr_interface INTERFACE_INCLUDE_DIRECTORIES
     "-I"
     ${ARGN}
     )
@@ -192,7 +258,7 @@ function(zephyr_get_include_directories_for_lang lang i)
 endfunction()
 
 function(zephyr_get_system_include_directories_for_lang lang i)
-  get_property_and_add_prefix(flags zephyr_interface INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
+  get_property_and_add_prefix(flags ${IMAGE}zephyr_interface INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
     "-isystem"
     ${ARGN}
     )
@@ -203,7 +269,7 @@ function(zephyr_get_system_include_directories_for_lang lang i)
 endfunction()
 
 function(zephyr_get_compile_definitions_for_lang lang i)
-  get_property_and_add_prefix(flags zephyr_interface INTERFACE_COMPILE_DEFINITIONS
+  get_property_and_add_prefix(flags ${IMAGE}zephyr_interface INTERFACE_COMPILE_DEFINITIONS
     "-D"
     ${ARGN}
     )
@@ -214,7 +280,7 @@ function(zephyr_get_compile_definitions_for_lang lang i)
 endfunction()
 
 function(zephyr_get_compile_options_for_lang lang i)
-  get_property(flags TARGET zephyr_interface PROPERTY INTERFACE_COMPILE_OPTIONS)
+  get_property(flags TARGET ${IMAGE}zephyr_interface PROPERTY INTERFACE_COMPILE_OPTIONS)
 
   process_flags(${lang} flags output_list)
 
@@ -353,17 +419,17 @@ endmacro()
 macro(zephyr_library_named name)
   # This is a macro because we need add_library() to be executed
   # within the scope of the caller.
-  set(ZEPHYR_CURRENT_LIBRARY ${name})
-  add_library(${name} STATIC "")
+  set(ZEPHYR_CURRENT_LIBRARY ${IMAGE}${name})
+  add_library(${ZEPHYR_CURRENT_LIBRARY} STATIC "")
 
-  zephyr_append_cmake_library(${name})
+  zephyr_append_cmake_library(${ZEPHYR_CURRENT_LIBRARY})
 
-  target_link_libraries(${name} PUBLIC zephyr_interface)
+  target_link_libraries(${ZEPHYR_CURRENT_LIBRARY} PUBLIC ${IMAGE}zephyr_interface)
 endmacro()
 
 
 function(zephyr_link_interface interface)
-  target_link_libraries(${interface} INTERFACE zephyr_interface)
+  target_link_libraries(${interface} INTERFACE ${IMAGE}zephyr_interface)
 endfunction()
 
 #
@@ -393,12 +459,17 @@ function(zephyr_library_compile_options item)
   # library and link with it to obtain the flags.
   #
   # Linking with a dummy interface library will place flags later on
-  # the command line than the the flags from zephyr_interface because
-  # zephyr_interface will be the first interface library that flags
+  # the command line than the the flags from ${IMAGE}zephyr_interface because
+  # ${IMAGE}zephyr_interface will be the first interface library that flags
   # are taken from.
 
-  string(RANDOM random)
-  set(lib_name options_interface_lib_${random})
+  string(MD5 uniqueness ${item})
+  set(lib_name options_interface_lib_${uniqueness})
+
+  if (TARGET ${lib_name})
+    # ${item} already added, ignoring duplicate just like CMake does
+    return()
+  endif()
 
   add_library(           ${lib_name} INTERFACE)
   target_compile_options(${lib_name} INTERFACE ${item} ${ARGN})
@@ -420,10 +491,20 @@ endfunction()
 # Add the existing CMake library 'library' to the global list of
 # Zephyr CMake libraries. This is done automatically by the
 # constructor but must called explicitly on CMake libraries that do
-# not use a zephyr library constructor, but have source files that
-# need to be included in the build.
+# not use a zephyr library constructor.
 function(zephyr_append_cmake_library library)
-  set_property(GLOBAL APPEND PROPERTY ZEPHYR_LIBS ${library})
+  set_property(GLOBAL APPEND PROPERTY ${IMAGE}ZEPHYR_LIBS ${library})
+endfunction()
+
+# Add the imported library 'library_name', located at 'library_path' to the
+# global list of Zephyr CMake libraries.
+function(zephyr_library_import library_name library_path)
+  add_library(${library_name} STATIC IMPORTED GLOBAL)
+  set_target_properties(${library_name}
+    PROPERTIES IMPORTED_LOCATION
+    ${library_path}
+    )
+  zephyr_append_cmake_library(${library_name})
 endfunction()
 
 # 1.2.1 zephyr_interface_library_*
@@ -452,8 +533,10 @@ endfunction()
 # This API has a constructor like the zephyr_library API has, but it
 # does not have wrappers over the other cmake target functions.
 macro(zephyr_interface_library_named name)
-  add_library(${name} INTERFACE)
-  set_property(GLOBAL APPEND PROPERTY ZEPHYR_INTERFACE_LIBS ${name})
+  add_library(${IMAGE}${name} INTERFACE)
+  set_property(GLOBAL APPEND PROPERTY
+    ${IMAGE}ZEPHYR_INTERFACE_LIBS
+    ${IMAGE}${name})
 endmacro()
 
 # 1.3 generate_inc_*
@@ -672,10 +755,30 @@ function(zephyr_check_compiler_flag lang option check)
 
   # Populate the cache
   if(NOT (EXISTS ${key_path}))
+
+    # This is racy. As often with race conditions, this one can easily be
+    # made worse and demonstrated with a simple delay:
+    #    execute_process(COMMAND "sleep" "5")
+    # Delete the cache, add the sleep above and run sanitycheck with a
+    # large number of JOBS. Once it's done look at the log.txt file
+    # below and you will see that concurrent cmake processes created the
+    # same files multiple times.
+
+    # While there are a number of reasons why this race seems both very
+    # unlikely and harmless, let's play it safe anyway and write to a
+    # private, temporary file first. All modern filesystems seem to
+    # support at least one atomic rename API and cmake's file(RENAME
+    # ...) officially leverages that.
+    string(RANDOM LENGTH 8 tempsuffix)
+
     file(
       WRITE
-      ${key_path}
+      "${key_path}_tmp_${tempsuffix}"
       ${inner_check}
+      )
+    file(
+      RENAME
+      "${key_path}_tmp_${tempsuffix}" "${key_path}"
       )
 
     # Populate a metadata file (only intended for trouble shooting)
@@ -692,7 +795,7 @@ endfunction()
 # Helper function for CONFIG_CODE_DATA_RELOCATION
 # Call this function with 2 arguments file and then memory location
 function(zephyr_code_relocate file location)
-  set_property(TARGET code_data_relocation_target
+  set_property(TARGET ${IMAGE}code_data_relocation_target
     APPEND PROPERTY COMPILE_DEFINITIONS
     "${location}:${CMAKE_CURRENT_SOURCE_DIR}/${file}")
 endfunction()
@@ -794,6 +897,12 @@ function(import_kconfig prefix kconfig_fragment)
 
     set("${CONF_VARIABLE_NAME}" "${CONF_VARIABLE_VALUE}" PARENT_SCOPE)
   endforeach()
+endfunction()
+
+function(get_image_name image out_var)
+  string(LENGTH ${image} len)
+  MATH(EXPR len "${len}-1")
+  string(SUBSTRING ${image} 0 ${len} ${out_var})
 endfunction()
 
 ########################################################
@@ -952,7 +1061,7 @@ endfunction()
 
 function(zephyr_link_interface_ifdef feature_toggle interface)
   if(${${feature_toggle}})
-    target_link_libraries(${interface} INTERFACE zephyr_interface)
+    target_link_libraries(${interface} INTERFACE ${IMAGE}zephyr_interface)
   endif()
 endfunction()
 
@@ -1219,7 +1328,7 @@ function(generate_unique_target_name_from_filename filename target_name)
   string(REPLACE "." "_" x ${basename})
   string(REPLACE "@" "_" x ${x})
 
-  string(RANDOM LENGTH 8 random_chars)
+  string(MD5 unique_chars ${filename})
 
-  set(${target_name} gen_${x}_${random_chars} PARENT_SCOPE)
+  set(${target_name} gen_${x}_${unique_chars} PARENT_SCOPE)
 endfunction()

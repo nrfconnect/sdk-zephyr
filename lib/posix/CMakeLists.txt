@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 
 add_library(PTHREAD INTERFACE)
 
@@ -20,4 +22,4 @@ zephyr_library_sources_ifdef(CONFIG_POSIX_MQUEUE mqueue.c)
 zephyr_library_sources_ifdef(CONFIG_POSIX_FS fs.c)
 
 zephyr_library_link_libraries(PTHREAD)
-target_link_libraries(PTHREAD INTERFACE zephyr_interface)
+target_link_libraries(PTHREAD INTERFACE ${IMAGE}zephyr_interface)

@@ -23,7 +23,7 @@ struct unit_test {
 	u32_t thread_options;
 };
 
-void _ztest_run_test_suite(const char *name, struct unit_test *suite);
+void z_ztest_run_test_suite(const char *name, struct unit_test *suite);
 
 /**
  * @defgroup ztest_test Ztest testing macros
@@ -48,7 +48,7 @@ void ztest_test_fail(void);
  *
  * Normally a test passes just by returning without an assertion failure.
  * However, if the success case for your test involves a fatal fault,
- * you can call this function from _SysFatalErrorHandler to indicate that
+ * you can call this function from z_SysFatalErrorHandler to indicate that
  * the test passed before aborting the thread.
  */
 void ztest_test_pass(void);
@@ -164,7 +164,7 @@ extern struct k_mem_domain ztest_mem_domain;
  * @param suite Test suite to run.
  */
 #define ztest_run_test_suite(suite) \
-	_ztest_run_test_suite(#suite, _##suite)
+	z_ztest_run_test_suite(#suite, _##suite)
 
 /**
  * @}

@@ -38,7 +38,7 @@ LOG_MODULE_REGISTER(i2c_dw);
 
 #include "i2c-priv.h"
 
-static inline void _i2c_dw_data_ask(struct device *dev)
+static inline void i2c_dw_data_ask(struct device *dev)
 {
 	struct i2c_dw_dev_config * const dw = dev->driver_data;
 	u32_t data;
@@ -50,7 +50,7 @@ static inline void _i2c_dw_data_ask(struct device *dev)
 		(struct i2c_dw_registers *)dw->base_address;
 
 	/* No more bytes to request, so command queue is no longer needed */
-	if (dw->request_bytes == 0) {
+	if (dw->request_bytes == 0U) {
 		regs->ic_intr_mask.bits.tx_empty = 0U;
 		return;
 	}
@@ -84,7 +84,7 @@ static inline void _i2c_dw_data_ask(struct device *dev)
 
 		/* After receiving the last byte, send STOP if needed */
 		if ((dw->xfr_flags & I2C_MSG_STOP)
-		    && (dw->request_bytes == 1)) {
+		    && (dw->request_bytes == 1U)) {
 			data |= IC_DATA_CMD_STOP;
 		}
 
@@ -96,7 +96,7 @@ static inline void _i2c_dw_data_ask(struct device *dev)
 	}
 }
 
-static void _i2c_dw_data_read(struct device *dev)
+static void i2c_dw_data_read(struct device *dev)
 {
 	struct i2c_dw_dev_config * const dw = dev->driver_data;
 
@@ -110,20 +110,20 @@ static void _i2c_dw_data_read(struct device *dev)
 		dw->xfr_len--;
 		dw->rx_pending--;
 
-		if (dw->xfr_len == 0) {
+		if (dw->xfr_len == 0U) {
 			break;
 		}
 	}
 
 	/* Nothing to receive anymore */
-	if (dw->xfr_len == 0) {
+	if (dw->xfr_len == 0U) {
 		dw->state &= ~I2C_DW_CMD_RECV;
 		return;
 	}
 }
 
 
-static int _i2c_dw_data_send(struct device *dev)
+static int i2c_dw_data_send(struct device *dev)
 {
 	struct i2c_dw_dev_config * const dw = dev->driver_data;
 	u32_t data = 0U;
@@ -132,7 +132,7 @@ static int _i2c_dw_data_send(struct device *dev)
 		(struct i2c_dw_registers *)dw->base_address;
 
 	/* Nothing to send anymore, mask the interrupt */
-	if (dw->xfr_len == 0) {
+	if (dw->xfr_len == 0U) {
 		regs->ic_intr_mask.bits.tx_empty = 0U;
 
 		dw->state &= ~I2C_DW_CMD_SEND;
@@ -151,7 +151,7 @@ static int _i2c_dw_data_send(struct device *dev)
 		}
 
 		/* Send STOP if needed */
-		if ((dw->xfr_len == 1) && (dw->xfr_flags & I2C_MSG_STOP)) {
+		if ((dw->xfr_len == 1U) && (dw->xfr_flags & I2C_MSG_STOP)) {
 			data |= IC_DATA_CMD_STOP;
 		}
 
@@ -168,7 +168,7 @@ static int _i2c_dw_data_send(struct device *dev)
 	return 0;
 }
 
-static inline void _i2c_dw_transfer_complete(struct device *dev)
+static inline void i2c_dw_transfer_complete(struct device *dev)
 {
 	struct i2c_dw_dev_config * const dw = dev->driver_data;
 	u32_t value;
@@ -235,7 +235,7 @@ static void i2c_dw_isr(void *arg)
 
 		/* Check if the RX FIFO reached threshold */
 		if (intr_stat.bits.rx_full) {
-			_i2c_dw_data_read(port);
+			i2c_dw_data_read(port);
 		}
 
 		/* Check if the TX FIFO is ready for commands.
@@ -245,15 +245,15 @@ static void i2c_dw_isr(void *arg)
 		if (intr_stat.bits.tx_empty) {
 			if ((dw->xfr_flags & I2C_MSG_RW_MASK)
 			    == I2C_MSG_WRITE) {
-				ret = _i2c_dw_data_send(port);
+				ret = i2c_dw_data_send(port);
 			} else {
-				_i2c_dw_data_ask(port);
+				i2c_dw_data_ask(port);
 			}
 
 			/* If STOP is not expected, finish processing this
 			 * message if there is nothing left to do anymore.
 			 */
-			if (((dw->xfr_len == 0)
+			if (((dw->xfr_len == 0U)
 			     && !(dw->xfr_flags & I2C_MSG_STOP))
 			    || (ret != 0)) {
 				goto done;
@@ -270,11 +270,11 @@ static void i2c_dw_isr(void *arg)
 	return;
 
 done:
-	_i2c_dw_transfer_complete(port);
+	i2c_dw_transfer_complete(port);
 }
 
 
-static int _i2c_dw_setup(struct device *dev, u16_t slave_address)
+static int i2c_dw_setup(struct device *dev, u16_t slave_address)
 {
 	struct i2c_dw_dev_config * const dw = dev->driver_data;
 	u32_t value;
@@ -422,7 +422,7 @@ static int i2c_dw_transfer(struct device *dev,
 
 	dw->state |= I2C_DW_BUSY;
 
-	ret = _i2c_dw_setup(dev, slave_address);
+	ret = i2c_dw_setup(dev, slave_address);
 	if (ret) {
 		dw->state = I2C_DW_STATE_READY;
 		return ret;
@@ -461,7 +461,7 @@ static int i2c_dw_transfer(struct device *dev,
 		}
 
 		/* Send STOP if this is the last message */
-		if (msg_left == 1) {
+		if (msg_left == 1U) {
 			dw->xfr_flags |= I2C_MSG_STOP;
 		}
 
@@ -684,7 +684,7 @@ static int i2c_dw_initialize(struct device *dev)
 
 	rom->config_func(dev);
 
-	dw->app_config = I2C_MODE_MASTER | _i2c_map_dt_bitrate(rom->bitrate);
+	dw->app_config = I2C_MODE_MASTER | i2c_map_dt_bitrate(rom->bitrate);
 
 	if (i2c_dw_runtime_configure(dev, dw->app_config) != 0) {
 		LOG_DBG("I2C: Cannot set default configuration");
