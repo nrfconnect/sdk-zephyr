@@ -23,6 +23,6 @@ add_custom_command(
   COMMAND
   ${PYTHON_EXECUTABLE}
   ${ZEPHYR_BASE}/scripts/partition_manager_report.py
-  --input ${PROJECT_BINARY_DIR}/include/generated/partitions.yml
+  --input ${CMAKE_BINARY_DIR}/partitions.yml
   "$<$<NOT:$<TARGET_EXISTS:partition_manager>>:--quiet>"
   )
