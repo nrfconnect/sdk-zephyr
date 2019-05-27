@@ -22,7 +22,7 @@ add_custom_command(
   POST_BUILD
   COMMAND
   ${PYTHON_EXECUTABLE}
-  ${ZEPHYR_BASE}/scripts/partition_manager_report.py
+  ${ZEPHYR_BASE}/../nrf/scripts/partition_manager_report.py
   --input ${CMAKE_BINARY_DIR}/partitions.yml
   "$<$<NOT:$<TARGET_EXISTS:partition_manager>>:--quiet>"
   )
