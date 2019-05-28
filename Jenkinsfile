@@ -6,7 +6,7 @@ pipeline {
   agent {
     docker {
       image "$IMAGE_TAG"
-      label "docker && build-node && ncs"
+      label "docker && build-node && ncs && linux"
       args '-e PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/.local/bin'
     }
   }
@@ -43,9 +43,9 @@ pipeline {
           git branch: "master", url: "$REPO_CI_TOOLS"
           sh "git checkout ${REPO_CI_TOOLS_SHA}"
         }
-	dir('zephyr') {
+        dir('zephyr') {
           sh "git rev-parse HEAD"
-	}
+        }
 
         // Initialize west
         sh "west init -l zephyr/"
@@ -94,7 +94,7 @@ pipeline {
               sh "echo variant: $ZEPHYR_TOOLCHAIN_VARIANT"
               sh "echo SDK dir: $ZEPHYR_SDK_INSTALL_DIR"
               sh "cat /opt/zephyr-sdk/sdk_version"
-	      sh "source zephyr-env.sh && \
+              sh "source zephyr-env.sh && \
                   (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH || \
                   (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS $SANITYCHECK_RETRY) || \
                   (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS $SANITYCHECK_RETRY_2))"
