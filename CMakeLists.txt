@@ -1284,14 +1284,14 @@ list(APPEND
   ${extra_post_build_commands}
   )
 
-get_property(extra_post_build_byproducts
+get_property(${IMAGE}extra_post_build_byproducts
   GLOBAL PROPERTY
-  extra_post_build_byproducts
+  ${IMAGE}extra_post_build_byproducts
   )
 
 list(APPEND
   post_build_byproducts
-  ${extra_post_build_byproducts}
+  ${${IMAGE}extra_post_build_byproducts}
   )
 
 # Add post_build_commands to post-process the final .elf file produced by
