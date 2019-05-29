@@ -163,12 +163,6 @@ Most everyday users will run with no arguments.
 """
 
 import os
-
-if os.name == 'nt':
-    print("Running sanitycheck on Windows is not supported yet.")
-    print("https://github.com/zephyrproject-rtos/zephyr/issues/2664")
-    exit(1)
-
 import contextlib
 import string
 import mmap
@@ -1386,7 +1380,7 @@ class MakeGenerator:
                         goal.fail("unknown_error")
 
                 else:
-                    goal = self.goals[name]
+                    goal = self.goals[name.strip()]
                     goal.make_state = state
 
                     if state == "finished":
@@ -1753,11 +1747,10 @@ class TestCase:
         achtung_regex = re.compile(
             br"(#ifdef|#endif)",
             re.MULTILINE)
-        warnings = None
 
         with open(inf_name) as inf:
-            with contextlib.closing(mmap.mmap(inf.fileno(), 0, mmap.MAP_PRIVATE,
-                                              mmap.PROT_READ, 0)) as main_c:
+            def mmap_worker(main_c):
+                warnings = None
                 suite_regex_match = suite_regex.search(main_c)
                 if not suite_regex_match:
                     # can't find ztest_test_suite, maybe a client, because
@@ -1781,6 +1774,15 @@ class TestCase:
                     main_c[suite_regex_match.end():suite_run_match.start()])
                 matches = [ match.decode().replace("test_", "") for match in _matches ]
                 return matches, warnings
+
+            if os.name == 'nt':
+                with contextlib.closing(mmap.mmap(inf.fileno(), 0, access=mmap.ACCESS_READ)) as main_c:
+                    return mmap_worker(main_c)
+            else:
+                with contextlib.closing(mmap.mmap(inf.fileno(), 0, mmap.MAP_PRIVATE,
+                                                  mmap.PROT_READ, 0)) as main_c:
+                    return mmap_worker(main_c)
+
 
     def scan_path(self, path):
         subcases = []
@@ -2174,6 +2176,7 @@ class TestSuite:
         for k, out_config in defconfig_list.items():
             test, plat, name = k
             defconfig = {}
+            os.makedirs(os.path.dirname(out_config), exist_ok=True)
             with open(out_config, "r") as fp:
                 for line in fp.readlines():
                     m = TestSuite.config_re.match(line)
@@ -2388,6 +2391,7 @@ class TestSuite:
         mg = MakeGenerator(self.outdir)
         for i in self.instances.values():
             mg.add_test_instance(i, options.extra_args)
+        
         self.goals = mg.execute(cb, cb_context)
 
         if not options.disable_size_report:
@@ -3172,6 +3176,12 @@ def main():
     global options
     global run_individual_tests
     options = parse_arguments()
+
+    if (os.name == 'nt'):
+        print("Running sanitycheck on Windows is not supported yet.")
+        print("https://github.com/zephyrproject-rtos/zephyr/issues/2664")
+        if (not options.build_only):
+            sys.exit(-1)
 
     if options.coverage:
         options.enable_coverage = True
