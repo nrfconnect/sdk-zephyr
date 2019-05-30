@@ -38,6 +38,24 @@ manifest:
     - name: tinycbor
       path: modules/lib/tinycbor
       revision: 111f7a215cc4efa49fd03a7835719adca83b4388
+    - name: hal_qmsi
+      revision: 3179a8e44912a5a05b1cb467870b7e91aedff8d6
+      path: modules/hal/qmsi
+    - name: esp-idf
+      revision: 6835bfc741bf15e98fb7971293913f770df6081f
+      path: modules/hal/esp-idf
+    - name: fatfs
+      revision: df96914dd989907f3a5de4cb95b116c2f305820d
+      path: modules/fs/fatfs
+    - name: mcumgr
+      revision: a69793cdb4817896b647a3305725b6c2fa699ccb
+      path: modules/lib/mcumgr
+    - name: nffs
+      revision: bc62a2fa9d98ddb5d633c932ea199bc68e10f194
+      path: modules/fs/nffs
+    - name: segger
+      revision: 6fcf61606d6012d2c44129edc033f59331e268bc
+      path: modules/debug/segger
 
   self:
     path: zephyr

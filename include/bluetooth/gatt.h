@@ -744,7 +744,7 @@ ssize_t bt_gatt_attr_read_cpf(struct bt_conn *conn,
  *
  *  @param conn Connection object.
  */
-typedef void (*bt_gatt_complete_func_t) (struct bt_conn *conn);
+typedef void (*bt_gatt_complete_func_t) (struct bt_conn *conn, void *user_data);
 
 /** @brief Notify attribute value change with callback.
  *
@@ -757,10 +757,13 @@ typedef void (*bt_gatt_complete_func_t) (struct bt_conn *conn);
  *  @param data Pointer to Attribute data.
  *  @param len Attribute value length.
  *  @param func Notification value callback.
+ *  @param user_data User data to be passed back to the callback.
+ *
+ *  @return 0 in case of success or negative value in case of error.
  */
 int bt_gatt_notify_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 		      const void *data, u16_t len,
-		      bt_gatt_complete_func_t func);
+		      bt_gatt_complete_func_t func, void *user_data);
 
 /** @brief Notify attribute value change.
  *
@@ -778,12 +781,14 @@ int bt_gatt_notify_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
  *  @param attr Characteristic or Characteristic Value attribute.
  *  @param data Pointer to Attribute data.
  *  @param len Attribute value length.
+ *
+ *  @return 0 in case of success or negative value in case of error.
  */
 static inline int bt_gatt_notify(struct bt_conn *conn,
 				 const struct bt_gatt_attr *attr,
 				 const void *data, u16_t len)
 {
-	return bt_gatt_notify_cb(conn, attr, data, len, NULL);
+	return bt_gatt_notify_cb(conn, attr, data, len, NULL, NULL);
 }
 
 /** @typedef bt_gatt_indicate_func_t
@@ -1029,6 +1034,14 @@ struct bt_gatt_read_params {
  *
  *  This procedure read the attribute value and return it to the callback.
  *
+ *  When reading attributes by UUID the callback can be called multiple times
+ *  depending on how many instances of given the UUID exists with the
+ *  start_handle being updated for each instance.
+ *
+ *  If an instance does contain a long value which cannot be read entirely the
+ *  caller will need to read the remaining data separately using the handle and
+ *  offset.
+ *
  *  Note: This procedure is asynchronous therefore the parameters need to
  *  remains valid while it is active.
  *
@@ -1098,12 +1111,14 @@ int bt_gatt_write(struct bt_conn *conn, struct bt_gatt_write_params *params);
  * @param length Data length.
  * @param sign Whether to sign data
  * @param func Transmission complete callback.
+ * @param user_data User data to be passed back to callback.
  *
  * @return 0 in case of success or negative value in case of error.
  */
 int bt_gatt_write_without_response_cb(struct bt_conn *conn, u16_t handle,
 				      const void *data, u16_t length,
-				      bool sign, bt_gatt_complete_func_t func);
+				      bool sign, bt_gatt_complete_func_t func,
+				      void *user_data);
 
 /** @brief Write Attribute Value by handle without response
  *
@@ -1123,7 +1138,7 @@ static inline int bt_gatt_write_without_response(struct bt_conn *conn,
 						 u16_t length, bool sign)
 {
 	return bt_gatt_write_without_response_cb(conn, handle, data, length,
-						 sign, NULL);
+						 sign, NULL, NULL);
 }
 
 struct bt_gatt_subscribe_params;

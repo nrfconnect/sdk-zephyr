@@ -159,19 +159,6 @@ struct usb_interface_cfg_data {
 	 * handler.
 	 */
 	usb_request_handler custom_handler;
-	/**
-	 * This data area, allocated by the application, is used to store
-	 * Class specific command data and must be large enough to store the
-	 * largest payload associated with the largest supported Class'
-	 * command set. This data area may be used for USB IN or OUT
-	 * communications.
-	 */
-	u8_t *payload_data;
-	/**
-	 * This data area, allocated by the application, is used to store
-	 * Vendor specific payload.
-	 */
-	u8_t *vendor_data;
 };
 
 /**
@@ -214,11 +201,11 @@ struct usb_cfg_data {
  * Function to configure USB controller.
  * Configuration parameters must be valid or an error is returned
  *
- * @param[in] config Pointer to configuration structure
+ * @param[in] usb_descriptor USB descriptor table
  *
  * @return 0 on success, negative errno code on fail
  */
-int usb_set_config(struct usb_cfg_data *config);
+int usb_set_config(const u8_t *usb_descriptor);
 
 /**
  * @brief Deconfigure USB controller
@@ -237,11 +224,9 @@ int usb_deconfig(void);
  * it is now capable of transmitting and receiving on the USB bus and
  * of generating interrupts.
  *
- * @param[in] config Pointer to configuration structure
- *
  * @return 0 on success, negative errno code on fail.
  */
-int usb_enable(struct usb_cfg_data *config);
+int usb_enable(void);
 
 /**
  * @brief Disable the USB device
@@ -417,6 +402,11 @@ int usb_transfer_sync(u8_t ep, u8_t *data, size_t dlen, unsigned int flags);
  * @return 0 on success, negative errno code on fail.
  */
 void usb_cancel_transfer(u8_t ep);
+
+/**
+ * @brief Cancel all ongoing transfers
+ */
+void usb_cancel_transfers(void);
 
 /**
  * @brief Check that transfer is ongoing for the endpoint

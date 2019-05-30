@@ -26,11 +26,6 @@ static struct __netusb {
 	const struct netusb_function *func;
 } netusb;
 
-#if !defined(CONFIG_USB_COMPOSITE_DEVICE)
-/* TODO: FIXME: correct buffer size */
-static u8_t interface_data[300];
-#endif
-
 static int netusb_send(struct device *dev, struct net_pkt *pkt)
 {
 	int ret;
@@ -141,35 +136,6 @@ static void netusb_init(struct net_if *iface)
 	net_if_set_link_addr(iface, mac, sizeof(mac), NET_LINK_ETHERNET);
 
 	net_if_down(iface);
-
-#ifndef CONFIG_USB_COMPOSITE_DEVICE
-	/* Linker-defined symbols bound the USB descriptor structs */
-	extern struct usb_cfg_data __usb_data_start[];
-	extern struct usb_cfg_data __usb_data_end[];
-	size_t size = (__usb_data_end - __usb_data_start);
-
-	for (size_t i = 0; i < size; i++) {
-		struct usb_cfg_data *cfg = &(__usb_data_start[i]);
-		int ret;
-
-		LOG_DBG("Registering function %u", i);
-
-		cfg->interface.payload_data = interface_data;
-		cfg->usb_device_description = usb_get_device_descriptor();
-
-		ret = usb_set_config(cfg);
-		if (ret < 0) {
-			LOG_ERR("Failed to configure USB device");
-			return;
-		}
-
-		ret = usb_enable(cfg);
-		if (ret < 0) {
-			LOG_ERR("Failed to enable USB");
-			return;
-		}
-	}
-#endif /* CONFIG_USB_COMPOSITE_DEVICE */
 
 	LOG_INF("netusb initialized");
 }

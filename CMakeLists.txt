@@ -155,27 +155,29 @@ toolchain_cc_cpp_dialect_std_14_flags(CPP_DIALECT_STD_14_FLAGS)
 toolchain_cc_cpp_dialect_std_17_flags(CPP_DIALECT_STD_17_FLAGS)
 toolchain_cc_cpp_dialect_std_2a_flags(CPP_DIALECT_STD_2A_FLAGS)
 
-# From kconfig choice, pick a single dialect.
-# Kconfig choice ensures only one of these CONFIG_STD_CPP* is set.
-if(CONFIG_STD_CPP98)
-  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_98_FLAGS})
-elseif(CONFIG_STD_CPP11)
-  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_11_FLAGS}) # Default in kconfig
-elseif(CONFIG_STD_CPP14)
-  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_14_FLAGS})
-elseif(CONFIG_STD_CPP17)
-  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_17_FLAGS})
-elseif(CONFIG_STD_CPP2A)
-  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_2A_FLAGS})
-else()
-  assert(0 "Unreachable code. Expected C++ standard to have been chosen. See Kconfig.zephyr.")
-endif()
+if(CONFIG_CPLUSPLUS)
+  # From kconfig choice, pick a single dialect.
+  # Kconfig choice ensures only one of these CONFIG_STD_CPP* is set.
+  if(CONFIG_STD_CPP98)
+    set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_98_FLAGS})
+  elseif(CONFIG_STD_CPP11)
+    set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_11_FLAGS}) # Default in kconfig
+  elseif(CONFIG_STD_CPP14)
+    set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_14_FLAGS})
+  elseif(CONFIG_STD_CPP17)
+    set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_17_FLAGS})
+  elseif(CONFIG_STD_CPP2A)
+    set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_2A_FLAGS})
+  else()
+    assert(0 "Unreachable code. Expected C++ standard to have been chosen. See Kconfig.zephyr.")
+  endif()
 
-foreach(flag ${STD_CPP_DIALECT_FLAGS})
-  zephyr_compile_options(
-    $<$<COMPILE_LANGUAGE:CXX>:${flag}>
-  )
-endforeach()
+  foreach(flag ${STD_CPP_DIALECT_FLAGS})
+    zephyr_compile_options(
+      $<$<COMPILE_LANGUAGE:CXX>:${flag}>
+    )
+  endforeach()
+endif()
 
 if(NOT CONFIG_EXCEPTIONS)
   # @Intent: Obtain compiler specific flags related to C++ Exceptions
@@ -194,8 +196,11 @@ if(NOT CONFIG_RTTI)
 endif()
 
 if(CONFIG_MISRA_SANE)
-  zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:-Werror=vla>)
-  zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+  # @Intent: Obtain toolchain compiler flags relating to MISRA.
+  toolchain_cc_warning_error_misra_sane(CC_MISRA_SANE_FLAG)
+  toolchain_cc_cpp_warning_error_misra_sane(CPP_MISRA_SANE_FLAG)
+  zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:${CC_MISRA_SANE_FLAG}>)
+  zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:${CPP_MISRA_SANE_FLAG}>)
 endif()
 
 # @Intent: Set compiler specific flags for standard C includes
@@ -203,13 +208,8 @@ toolchain_cc_nostdinc()
 
 zephyr_compile_options(
   -g # TODO: build configuration enough?
-  -Wall
-  -Wformat
-  -Wformat-security
-  -Wno-format-zero-length
   -imacros ${AUTOCONF_H}
   -ffreestanding
-  -Wno-main
   -fno-common
   ${TOOLCHAIN_C_FLAGS}
 )
@@ -238,6 +238,9 @@ if(CONFIG_LIB_CPLUSPLUS)
   toolchain_ld_cpp()
 endif()
 
+# @Intent: Add the basic toolchain warning flags
+toolchain_cc_warning_base()
+
 # ==========================================================================
 #
 # cmake -DW=... settings
@@ -246,54 +249,24 @@ endif()
 # W=2 - warnings that occur quite often but may still be relevant
 # W=3 - the more obscure warnings, can most likely be ignored
 # ==========================================================================
+# @Intent: Add cmake -DW toolchain supported warnings, if any
 if(W MATCHES "1")
-  zephyr_compile_options(
-    -Wextra
-    -Wunused
-    -Wno-unused-parameter
-    -Wmissing-declarations
-    -Wmissing-format-attribute
-    -Wold-style-definition
-    )
-  zephyr_cc_option(
-    -Wmissing-prototypes
-    -Wmissing-include-dirs
-    -Wunused-but-set-variable
-    -Wno-missing-field-initializers
-    )
+  toolchain_cc_warning_dw_1()
 endif()
 
 if(W MATCHES "2")
-  zephyr_compile_options(
-    -Waggregate-return
-    -Wcast-align
-    -Wdisabled-optimization
-    -Wnested-externs
-    -Wshadow
-    )
-  zephyr_cc_option(
-    -Wlogical-op
-    -Wmissing-field-initializers
-    )
+  toolchain_cc_warning_dw_2()
 endif()
 
 if(W MATCHES "3")
-  zephyr_compile_options(
-    -Wbad-function-cast
-    -Wcast-qual
-    -Wconversion
-    -Wpacked
-    -Wpadded
-    -Wpointer-arith
-    -Wredundant-decls
-    -Wswitch-default
-    )
-  zephyr_cc_option(
-    -Wpacked-bitfield-compat
-    -Wvla
-    )
+  toolchain_cc_warning_dw_3()
 endif()
 
+# @Intent: Add extended, more specific, toolchain warning flags
+toolchain_cc_warning_extended()
+
+# @Intent: Trigger an error when a declaration does not specify a type
+toolchain_cc_warning_error_implicit_int()
 
 # Allow the user to inject options when calling cmake, e.g.
 # 'cmake -DEXTRA_CFLAGS="-Werror -Wno-deprecated-declarations" ..'
@@ -303,7 +276,6 @@ zephyr_cc_option(-fno-asynchronous-unwind-tables)
 zephyr_cc_option(-fno-pie)
 zephyr_cc_option(-fno-pic)
 zephyr_cc_option(-fno-strict-overflow)
-zephyr_cc_option(-Wno-pointer-sign)
 
 if(CONFIG_OVERRIDE_FRAME_POINTER_DEFAULT)
   if(CONFIG_OMIT_FRAME_POINTER)
@@ -318,29 +290,9 @@ zephyr_compile_options(${COMPILER_OPT_AS_LIST})
 
 # TODO: Include arch compiler options at this point.
 
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-  zephyr_cc_option(
-    #FIXME: need to fix all of those
-    -Wno-sometimes-uninitialized
-    -Wno-shift-overflow
-    -Wno-missing-braces
-    -Wno-self-assign
-    -Wno-address-of-packed-member
-    -Wno-unused-function
-    -Wno-initializer-overrides
-    -Wno-section
-    -Wno-unknown-warning-option
-    -Wno-unused-variable
-    -Wno-format-invalid-specifier
-    -Wno-gnu
-    # comparison of unsigned expression < 0 is always false
-    -Wno-tautological-compare
-    )
-else() # GCC assumed
-  zephyr_cc_option(
-    -Wno-unused-but-set-variable
-    -fno-reorder-functions
-    )
+if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
+  # GCC assumed
+  zephyr_cc_option(-fno-reorder-functions)
 
   if(NOT ${ZEPHYR_TOOLCHAIN_VARIANT} STREQUAL "xcc")
     zephyr_cc_option(-fno-defer-pop)
@@ -349,12 +301,6 @@ endif()
 
 zephyr_cc_option_ifdef(CONFIG_STACK_USAGE            -fstack-usage)
 
-# Force an error when things like SYS_INIT(foo, ...) occur with a missing header.
-zephyr_cc_option(-Werror=implicit-int)
-
-# Prohibit void pointer arithmetic. Illegal in C99
-zephyr_cc_option(-Wpointer-arith)
-
 # If the compiler supports it, strip the ${ZEPHYR_BASE} prefix from the
 # __FILE__ macro used in __ASSERT*, in the
 # .noinit."/home/joe/zephyr/fu/bar.c" section names and in any
@@ -362,9 +308,6 @@ zephyr_cc_option(-Wpointer-arith)
 # in binaries, makes failure logs more deterministic and most
 # importantly makes builds more deterministic
 zephyr_cc_option(-fmacro-prefix-map=${ZEPHYR_BASE}=.)
-
-# Prohibit date/time macros, which would make the build non-deterministic
-# cc-option(-Werror=date-time)
 
 # TODO: Archiver arguments
 # ar_option(D)
@@ -493,7 +436,7 @@ if(EXISTS ${CMAKE_BINARY_DIR}/zephyr_modules.txt)
     string(REGEX REPLACE "\"(.*)\":\".*\"" "\\1" module_name ${module})
     string(REGEX REPLACE "\".*\":\"(.*)\"" "\\1" module_path ${module})
     message("Including module: ${module_name} in path: ${module_path}")
-    add_subdirectory(${module_path} ${CMAKE_CURRENT_BINARY_DIR}/${module_name})
+    add_subdirectory(${module_path} ${CMAKE_CURRENT_BINARY_DIR}/modules/${module_name})
   endforeach()
 endif()
 

@@ -68,6 +68,15 @@ typedef enum bt_l2cap_chan_state {
 	BT_L2CAP_DISCONNECT,
 } __packed bt_l2cap_chan_state_t;
 
+/** @brief Status of L2CAP channel. */
+typedef enum bt_l2cap_chan_status {
+	/** Channel output status */
+	BT_L2CAP_STATUS_OUT,
+
+	/* Total number of status - must be at the end of the enum */
+	BT_L2CAP_NUM_STATUS,
+} __packed bt_l2cap_chan_status_t;
+
 /** @brief L2CAP Channel structure. */
 struct bt_l2cap_chan {
 	/** Channel connection reference */
@@ -78,6 +87,7 @@ struct bt_l2cap_chan {
 	bt_l2cap_chan_destroy_t		destroy;
 	/* Response Timeout eXpired (RTX) timer */
 	struct k_delayed_work		rtx_work;
+	ATOMIC_DEFINE(status, BT_L2CAP_NUM_STATUS);
 #if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
 	bt_l2cap_chan_state_t		state;
 	/** Remote PSM to be connected */
@@ -211,6 +221,25 @@ struct bt_l2cap_chan_ops {
 	 *  number of segments/credits used by the packet.
 	 */
 	int (*recv)(struct bt_l2cap_chan *chan, struct net_buf *buf);
+
+	/*  Channel sent callback
+	 *
+	 *  If this callback is provided it will be called whenever a SDU has
+	 *  been completely sent.
+	 *
+	 *  @param chan The channel which has sent data.
+	 */
+	void (*sent)(struct bt_l2cap_chan *chan);
+
+	/*  Channel status callback
+	 *
+	 *  If this callback is provided it will be called whenever the
+	 *  channel status changes.
+	 *
+	 *  @param chan The channel which status changed
+	 *  @param status The channel status
+	 */
+	void (*status)(struct bt_l2cap_chan *chan, atomic_t *status);
 };
 
 /** @def BT_L2CAP_CHAN_SEND_RESERVE

@@ -19,13 +19,6 @@
 			compatible = "quark_x1000";
 			reg = <0>;
 		};
-
-		intc: ioapic@fec00000  {
-			compatible = "intel,ioapic";
-			reg = <0xfec00000 0x100000>;
-			interrupt-controller;
-			#interrupt-cells = <3>;
-		};
 	};
 
 	flash0: flash@100000{
@@ -39,6 +32,12 @@
 		reg = <0x00400000 DT_SRAM_SIZE>;
 	};
 
+	intc: ioapic@fec00000  {
+		compatible = "intel,ioapic";
+		reg = <0xfec00000 0x1000>;
+		interrupt-controller;
+		#interrupt-cells = <3>;
+	};
 
 	soc {
 		#address-cells = <1>;
@@ -69,13 +68,14 @@
 			status = "disabled";
 		};
 
-		i2c0: i2c@90007000 {
+		i2c0: i2c@0 {
 			compatible = "snps,designware-i2c";
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			reg = <0x90007000 0x400>;
-			interrupts = <18 IRQ_TYPE_LEVEL_LOW 2>;
+			pcie;
+			reg = <PCIE_BDF(0,21,2) PCIE_ID(0x8086,0x0934)>;
+			interrupts = <25 IRQ_TYPE_LEVEL_LOW 2>;
 			interrupt-parent = <&intc>;
 			label = "I2C_0";
 

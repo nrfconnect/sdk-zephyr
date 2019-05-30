@@ -958,31 +958,6 @@ static inline void net_if_addr_init(struct net_if_addr *ifaddr,
 	}
 }
 
-static inline struct in6_addr *check_global_addr(struct net_if *iface)
-{
-	struct net_if_ipv6 *ipv6 = iface->config.ip.ipv6;
-	int i;
-
-	if (!ipv6) {
-		return NULL;
-	}
-
-	for (i = 0; i < NET_IF_MAX_IPV6_ADDR; i++) {
-		if (!ipv6->unicast[i].is_used ||
-		    (ipv6->unicast[i].addr_state != NET_ADDR_TENTATIVE &&
-		     ipv6->unicast[i].addr_state != NET_ADDR_PREFERRED) ||
-		    ipv6->unicast[i].address.family != AF_INET6) {
-			continue;
-		}
-
-		if (!net_ipv6_is_ll_addr(&ipv6->unicast[i].address.in6_addr)) {
-			return &ipv6->unicast[i].address.in6_addr;
-		}
-	}
-
-	return NULL;
-}
-
 static void join_mcast_nodes(struct net_if *iface, struct in6_addr *addr)
 {
 	enum net_l2_flags flags = 0;
@@ -1890,7 +1865,35 @@ struct in6_addr *net_if_ipv6_get_ll_addr(enum net_addr_state state,
 	return NULL;
 }
 
-struct in6_addr *net_if_ipv6_get_global_addr(struct net_if **iface)
+#if defined(CONFIG_NET_IPV6)
+static inline struct in6_addr *check_global_addr(struct net_if *iface,
+						 enum net_addr_state state)
+{
+	struct net_if_ipv6 *ipv6 = iface->config.ip.ipv6;
+	int i;
+
+	if (!ipv6) {
+		return NULL;
+	}
+
+	for (i = 0; i < NET_IF_MAX_IPV6_ADDR; i++) {
+		if (!ipv6->unicast[i].is_used ||
+		    (ipv6->unicast[i].addr_state != state) ||
+		    ipv6->unicast[i].address.family != AF_INET6) {
+			continue;
+		}
+
+		if (!net_ipv6_is_ll_addr(&ipv6->unicast[i].address.in6_addr)) {
+			return &ipv6->unicast[i].address.in6_addr;
+		}
+	}
+
+	return NULL;
+}
+#endif
+
+struct in6_addr *net_if_ipv6_get_global_addr(enum net_addr_state state,
+					     struct net_if **iface)
 {
 #if defined(CONFIG_NET_IPV6)
 	struct net_if *tmp;
@@ -1902,7 +1905,7 @@ struct in6_addr *net_if_ipv6_get_global_addr(struct net_if **iface)
 			continue;
 		}
 
-		addr = check_global_addr(tmp);
+		addr = check_global_addr(tmp, state);
 		if (addr) {
 			if (iface) {
 				*iface = tmp;
@@ -2329,10 +2332,10 @@ static struct in_addr *net_if_ipv4_get_best_match(struct net_if *iface,
 }
 #endif /* CONFIG_NET_IPV4 */
 
-struct in_addr *net_if_ipv4_get_ll(struct net_if *iface,
-				   enum net_addr_state addr_state)
-{
 #if defined(CONFIG_NET_IPV4)
+static struct in_addr *if_ipv4_get_addr(struct net_if *iface,
+					enum net_addr_state addr_state, bool ll)
+{
 	struct net_if_ipv4 *ipv4 = iface->config.ip.ipv4;
 	int i;
 
@@ -2349,12 +2352,34 @@ struct in_addr *net_if_ipv4_get_ll(struct net_if *iface,
 		}
 
 		if (net_ipv4_is_ll_addr(&ipv4->unicast[i].address.in_addr)) {
-			return &ipv4->unicast[i].address.in_addr;
+			if (!ll) {
+				continue;
+			}
+		} else {
+			if (ll) {
+				continue;
+			}
 		}
+
+		return &ipv4->unicast[i].address.in_addr;
 	}
-#endif
 
 	return NULL;
+}
+#else
+#define if_ipv4_get_addr(...) NULL
+#endif
+
+struct in_addr *net_if_ipv4_get_ll(struct net_if *iface,
+				   enum net_addr_state addr_state)
+{
+	return if_ipv4_get_addr(iface, addr_state, true);
+}
+
+struct in_addr *net_if_ipv4_get_global_addr(struct net_if *iface,
+					    enum net_addr_state addr_state)
+{
+	return if_ipv4_get_addr(iface, addr_state, false);
 }
 
 const struct in_addr *net_if_ipv4_select_src_addr(struct net_if *dst_iface,
@@ -2404,6 +2429,12 @@ const struct in_addr *net_if_ipv4_select_src_addr(struct net_if *dst_iface,
 	}
 
 	if (!src) {
+		src = net_if_ipv4_get_global_addr(dst_iface,
+						  NET_ADDR_PREFERRED);
+		if (src) {
+			return src;
+		}
+
 		return net_ipv4_unspecified_address();
 	}
 

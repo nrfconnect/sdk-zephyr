@@ -85,7 +85,8 @@ void z_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 #endif /* CONFIG_THREAD_USERSPACE_LOCAL_DATA */
 #endif /* CONFIG_USERSPACE */
 
-#if CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT && CONFIG_USERSPACE
+#if defined(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT) \
+	&& defined(CONFIG_USERSPACE)
 	/* This is required to work-around the case where the thread
 	 * is created without using K_THREAD_STACK_SIZEOF() macro in
 	 * k_thread_create(). If K_THREAD_STACK_SIZEOF() is used, the
@@ -100,11 +101,16 @@ void z_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	z_new_thread_init(thread, pStackMem, stackSize, priority,
 			 options);
 
-	/* carve the thread entry struct from the "base" of the stack */
+	/* Carve the thread entry struct from the "base" of the stack
+	 *
+	 * The initial carved stack frame only needs to contain the basic
+	 * stack frame (state context), because no FP operations have been
+	 * performed yet for this thread.
+	 */
 	pInitCtx = (struct __esf *)(STACK_ROUND_DOWN(stackEnd -
-		(char *)top_of_stack_offset - sizeof(struct __esf)));
+		(char *)top_of_stack_offset - sizeof(struct __basic_sf)));
 
-#if CONFIG_USERSPACE
+#if defined(CONFIG_USERSPACE)
 	if ((options & K_USER) != 0) {
 		pInitCtx->basic.pc = (u32_t)z_arch_user_mode_enter;
 	} else {
@@ -123,16 +129,15 @@ void z_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	pInitCtx->basic.a4 = (u32_t)parameter3;
 	pInitCtx->basic.xpsr =
 		0x01000000UL; /* clear all, thumb bit is 1, even if RO */
-#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
-	pInitCtx->fpscr = (u32_t)0; /* clears FPU status/control register*/
-#endif
 
 	thread->callee_saved.psp = (u32_t)pInitCtx;
 	thread->arch.basepri = 0;
 
-#if CONFIG_USERSPACE
+#if defined(CONFIG_USERSPACE) || defined(CONFIG_FP_SHARING)
 	thread->arch.mode = 0;
+#if defined(CONFIG_USERSPACE)
 	thread->arch.priv_stack_start = 0;
+#endif
 #endif
 
 	/* swap_return_value can contain garbage */

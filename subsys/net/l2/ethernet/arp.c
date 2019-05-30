@@ -168,7 +168,7 @@ static void arp_entry_register_pending(struct arp_entry *entry)
 
 	sys_slist_append(&arp_pending_entries, &entry->node);
 
-	entry->req_start = k_uptime_get();
+	entry->req_start = k_uptime_get_32();
 
 	/* Let's start the timer if necessary */
 	if (!k_delayed_work_remaining_get(&arp_request_timer)) {
@@ -179,14 +179,15 @@ static void arp_entry_register_pending(struct arp_entry *entry)
 
 static void arp_request_timeout(struct k_work *work)
 {
-	s64_t current = k_uptime_get();
+	u32_t current = k_uptime_get_32();
 	struct arp_entry *entry, *next;
 
 	ARG_UNUSED(work);
 
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&arp_pending_entries,
 					  entry, next, node) {
-		if ((entry->req_start + ARP_REQUEST_TIMEOUT - current) > 0) {
+		if ((s32_t)(entry->req_start +
+			    ARP_REQUEST_TIMEOUT - current) > 0) {
 			break;
 		}
 
@@ -440,6 +441,23 @@ static void arp_update(struct net_if *iface,
 			if (entry) {
 				memcpy(&entry->eth, hwaddr,
 				       sizeof(struct net_eth_addr));
+			} else {
+				/* Add new entry as it was not found and force
+				 * was set.
+				 */
+				entry = arp_entry_get_free();
+				if (!entry) {
+					/* Then let's take one from table? */
+					entry = arp_entry_get_last_from_table();
+				}
+
+				if (entry) {
+					entry->req_start = k_uptime_get_32();
+					entry->iface = iface;
+					net_ipaddr_copy(&entry->ip, src);
+					memcpy(&entry->eth, hwaddr, sizeof(entry->eth));
+					sys_slist_prepend(&arp_table, &entry->node);
+				}
 			}
 		}
 
@@ -468,7 +486,8 @@ static void arp_update(struct net_if *iface,
 
 static inline struct net_pkt *arp_prepare_reply(struct net_if *iface,
 						struct net_pkt *req,
-						struct net_eth_hdr *eth_query)
+						struct net_eth_hdr *eth_query,
+						struct net_eth_addr *dst_addr)
 {
 	struct net_arp_hdr *hdr, *query;
 	struct net_pkt *pkt;
@@ -492,7 +511,7 @@ static inline struct net_pkt *arp_prepare_reply(struct net_if *iface,
 	hdr->protolen = sizeof(struct in_addr);
 	hdr->opcode = htons(NET_ARP_REPLY);
 
-	memcpy(&hdr->dst_hwaddr.addr, &eth_query->src.addr,
+	memcpy(&hdr->dst_hwaddr.addr, &dst_addr->addr,
 	       sizeof(struct net_eth_addr));
 	memcpy(&hdr->src_hwaddr.addr, net_if_get_link_addr(iface)->addr,
 	       sizeof(struct net_eth_addr));
@@ -526,6 +545,7 @@ static bool arp_hdr_check(struct net_arp_hdr *arp_hdr)
 enum net_verdict net_arp_input(struct net_pkt *pkt,
 			       struct net_eth_hdr *eth_hdr)
 {
+	struct net_eth_addr *dst_hw_addr;
 	struct net_arp_hdr *arp_hdr;
 	struct net_pkt *reply;
 	struct in_addr *addr;
@@ -545,6 +565,15 @@ enum net_verdict net_arp_input(struct net_pkt *pkt,
 
 	switch (ntohs(arp_hdr->opcode)) {
 	case NET_ARP_REQUEST:
+		/* If ARP request sender hw address is our address,
+		 * we must drop the packet.
+		 */
+		if (memcmp(&arp_hdr->src_hwaddr,
+			   net_if_get_link_addr(net_pkt_iface(pkt))->addr,
+			   sizeof(struct net_eth_addr)) == 0) {
+			return NET_DROP;
+		}
+
 		if (IS_ENABLED(CONFIG_NET_ARP_GRATUITOUS)) {
 			if (memcmp(&eth_hdr->dst,
 				   net_eth_broadcast_addr(),
@@ -594,9 +623,7 @@ enum net_verdict net_arp_input(struct net_pkt *pkt,
 		 * changed. In this case the target MAC address is all zeros
 		 * and the target IP address is our address.
 		 */
-		if (memcmp(&eth_hdr->src, &arp_hdr->src_hwaddr,
-			   sizeof(struct net_eth_addr)) == 0 &&
-		    net_eth_is_addr_unspecified(&arp_hdr->dst_hwaddr)) {
+		if (net_eth_is_addr_unspecified(&arp_hdr->dst_hwaddr)) {
 			NET_DBG("Updating ARP cache for %s [%s]",
 				log_strdup(net_sprint_ipv4_addr(
 						 &arp_hdr->src_ipaddr)),
@@ -608,10 +635,15 @@ enum net_verdict net_arp_input(struct net_pkt *pkt,
 				   &arp_hdr->src_ipaddr,
 				   &arp_hdr->src_hwaddr,
 				   false, true);
+
+			dst_hw_addr = &arp_hdr->src_hwaddr;
+		} else {
+			dst_hw_addr = &eth_hdr->src;
 		}
 
 		/* Send reply */
-		reply = arp_prepare_reply(net_pkt_iface(pkt), pkt, eth_hdr);
+		reply = arp_prepare_reply(net_pkt_iface(pkt), pkt, eth_hdr,
+					  dst_hw_addr);
 		if (reply) {
 			net_if_queue_tx(net_pkt_iface(reply), reply);
 		} else {

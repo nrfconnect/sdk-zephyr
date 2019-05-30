@@ -14,3 +14,18 @@ zephyr_sources_ifdef(
   CONFIG_EXECUTION_BENCHMARKING
   timing_info_bench.c
   )
+
+zephyr_linker_sources_ifdef(CONFIG_GEN_ISR_TABLES
+  SECTIONS
+  isr_tables.ld
+)
+
+zephyr_linker_sources_ifdef(CONFIG_ARCH_HAS_RAMFUNC_SUPPORT
+  RAM_SECTIONS
+  ramfunc.ld
+)
+
+zephyr_linker_sources_ifdef(CONFIG_NOCACHE_MEMORY
+  RAM_SECTIONS
+  nocache.ld
+)

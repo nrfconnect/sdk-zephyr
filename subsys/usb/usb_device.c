@@ -146,20 +146,19 @@ static struct usb_dev_priv {
 	s32_t data_buf_len;
 	/** Installed custom request handler */
 	usb_request_handler custom_req_handler;
-	/** Installed vendor request handler */
-	usb_request_handler vendor_req_handler;
 	/** USB stack status clalback */
 	usb_dc_status_callback status_callback;
 	/** Pointer to registered descriptors */
 	const u8_t *descriptors;
 	/** Array of installed request handler callbacks */
 	usb_request_handler req_handlers[MAX_NUM_REQ_HANDLERS];
-	/** Array of installed request data pointers */
-	u8_t *data_store[MAX_NUM_REQ_HANDLERS];
-	/* Buffer used for storing standard usb request data */
-	u8_t std_req_data[MAX_STD_REQ_MSG_SIZE];
+	/* Buffer used for storing standard, class and vendor request data */
+	u8_t req_data[CONFIG_USB_REQUEST_BUFFER_SIZE];
+
 	/** Variable to check whether the usb has been enabled */
 	bool enabled;
+	/** Variable to check whether the usb has been configured */
+	bool configured;
 	/** Currently selected configuration */
 	u8_t configuration;
 	/** Remote wakeup feature status */
@@ -269,7 +268,6 @@ static void usb_handle_control_transfer(u8_t ep,
 					enum usb_dc_ep_cb_status_code ep_status)
 {
 	u32_t chunk = 0U;
-	u32_t type = 0U;
 	struct usb_setup_packet *setup = &usb_dev.setup;
 
 	LOG_DBG("ep %x, status %x", ep, ep_status);
@@ -290,16 +288,7 @@ static void usb_handle_control_transfer(u8_t ep,
 
 		length = sys_le16_to_cpu(setup->wLength);
 
-		/* Defaults for data pointer and residue */
-		type = REQTYPE_GET_TYPE(setup->bmRequestType);
-		usb_dev.data_buf = usb_dev.data_store[type];
-		if (!usb_dev.data_buf) {
-			LOG_DBG("buffer not available");
-			usb_dc_ep_set_stall(USB_CONTROL_OUT_EP0);
-			usb_dc_ep_set_stall(USB_CONTROL_IN_EP0);
-			return;
-		}
-
+		usb_dev.data_buf = usb_dev.req_data;
 		usb_dev.data_buf_residue = length;
 		usb_dev.data_buf_len = length;
 
@@ -347,8 +336,7 @@ static void usb_handle_control_transfer(u8_t ep,
 		usb_dev.data_buf_residue -= chunk;
 		if (usb_dev.data_buf_residue == 0) {
 			/* Received all, send data to handler */
-			type = REQTYPE_GET_TYPE(setup->bmRequestType);
-			usb_dev.data_buf = usb_dev.data_store[type];
+			usb_dev.data_buf = usb_dev.req_data;
 			if (!usb_handle_request(setup,
 						&usb_dev.data_buf_len,
 						&usb_dev.data_buf)) {
@@ -376,16 +364,13 @@ static void usb_handle_control_transfer(u8_t ep,
  *
  * @param [in] type       Type of request, e.g. REQTYPE_TYPE_STANDARD
  * @param [in] handler    Callback function pointer
- * @param [in] data_store Data storage area for this type of request
  *
  * @return N/A
  */
 static void usb_register_request_handler(s32_t type,
-					 usb_request_handler handler,
-					 u8_t *data_store)
+					 usb_request_handler handler)
 {
 	usb_dev.req_handlers[type] = handler;
-	usb_dev.data_store[type] = data_store;
 }
 
 /*
@@ -492,12 +477,14 @@ static bool set_endpoint(const struct usb_ep_descriptor *ep_desc)
 		ep_cfg.ep_addr, ep_cfg.ep_type, ep_cfg.ep_mps);
 
 	if (usb_dc_ep_configure(&ep_cfg) < 0) {
-		return false;
+		LOG_WRN("Failed to configure endpoint %x", ep_cfg.ep_addr);
 	}
 
 	if (usb_dc_ep_enable(ep_cfg.ep_addr) < 0) {
-		return false;
+		LOG_WRN("Failed to enable endpoint %x", ep_cfg.ep_addr);
 	}
+
+	usb_dev.configured = true;
 
 	return true;
 }
@@ -888,24 +875,6 @@ static int usb_handle_standard_request(struct usb_setup_packet *setup,
 	return rc;
 }
 
-static int usb_handle_vendor_request(struct usb_setup_packet *setup,
-				     s32_t *len, u8_t **data_buf)
-{
-	LOG_DBG("");
-
-	if (usb_os_desc_enabled()) {
-		if (!usb_handle_os_desc_feature(setup, len, data_buf)) {
-			return 0;
-		}
-	}
-
-	if (usb_dev.vendor_req_handler) {
-		return usb_dev.vendor_req_handler(setup, len, data_buf);
-	}
-
-	return -ENOTSUP;
-}
-
 /*
  * @brief Registers a callback for custom device requests
  *
@@ -937,9 +906,43 @@ static void usb_register_status_callback(usb_dc_status_callback cb)
 	usb_dev.status_callback = cb;
 }
 
+static int foreach_ep(int (* endpoint_callback)(const struct usb_ep_cfg_data *))
+{
+	size_t size = (__usb_data_end - __usb_data_start);
+
+	for (size_t i = 0; i < size; i++) {
+		struct usb_cfg_data *cfg = &__usb_data_start[i];
+		struct usb_ep_cfg_data *ep_data = cfg->endpoint;
+
+		for (u8_t n = 0; n < cfg->num_endpoints; n++) {
+			int ret;
+
+			ret = endpoint_callback(&ep_data[n]);
+			if (ret < 0) {
+				return ret;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int disable_interface_ep(const struct usb_ep_cfg_data *ep_data)
+{
+	return usb_dc_ep_disable(ep_data->ep_addr);
+}
+
 static void forward_status_cb(enum usb_dc_status_code status, const u8_t *param)
 {
 	size_t size = (__usb_data_end - __usb_data_start);
+
+	if (status == USB_DC_DISCONNECTED || status == USB_DC_SUSPEND) {
+		if (usb_dev.configured) {
+			usb_cancel_transfers();
+			foreach_ep(disable_interface_ep);
+			usb_dev.configured = false;
+		}
+	}
 
 	for (size_t i = 0; i < size; i++) {
 		struct usb_cfg_data *cfg = &__usb_data_start[i];
@@ -987,58 +990,16 @@ static int usb_vbus_set(bool on)
 	return 0;
 }
 
-int usb_set_config(struct usb_cfg_data *config)
-{
-	if (!config) {
-		return -EINVAL;
-	}
-
-	/* register descriptors */
-	usb_register_descriptors(config->usb_device_description);
-
-	/* register standard request handler */
-	usb_register_request_handler(REQTYPE_TYPE_STANDARD,
-				     usb_handle_standard_request,
-				     usb_dev.std_req_data);
-
-	/* register class request handlers for each interface*/
-	if (config->interface.class_handler != NULL) {
-		usb_register_request_handler(REQTYPE_TYPE_CLASS,
-					     config->interface.class_handler,
-					     config->interface.payload_data);
-	}
-
-	/* register vendor request handler */
-	if (config->interface.vendor_handler || usb_os_desc_enabled()) {
-		usb_register_request_handler(REQTYPE_TYPE_VENDOR,
-					     usb_handle_vendor_request,
-					     config->interface.vendor_data);
-
-		if (config->interface.vendor_handler) {
-			usb_dev.vendor_req_handler =
-				config->interface.vendor_handler;
-		}
-	}
-
-	/* register class request handlers for each interface*/
-	if (config->interface.custom_handler != NULL) {
-		usb_register_custom_req_handler(
-			config->interface.custom_handler);
-	}
-
-	return 0;
-}
-
 int usb_deconfig(void)
 {
 	/* unregister descriptors */
 	usb_register_descriptors(NULL);
 
 	/* unegister standard request handler */
-	usb_register_request_handler(REQTYPE_TYPE_STANDARD, NULL, NULL);
+	usb_register_request_handler(REQTYPE_TYPE_STANDARD, NULL);
 
 	/* unregister class request handlers for each interface*/
-	usb_register_request_handler(REQTYPE_TYPE_CLASS, NULL, NULL);
+	usb_register_request_handler(REQTYPE_TYPE_CLASS, NULL);
 
 	/* unregister class request handlers for each interface*/
 	usb_register_custom_req_handler(NULL);
@@ -1048,90 +1009,6 @@ int usb_deconfig(void)
 
 	/* Reset USB controller */
 	usb_dc_reset();
-
-	return 0;
-}
-
-int usb_enable(struct usb_cfg_data *config)
-{
-	int ret;
-	u32_t i;
-	struct usb_dc_ep_cfg_data ep0_cfg;
-
-	if (usb_dev.enabled == true) {
-		return 0;
-	}
-
-	/* Enable VBUS if needed */
-	ret = usb_vbus_set(true);
-	if (ret < 0) {
-		return ret;
-	}
-
-	usb_register_status_callback(forward_status_cb);
-	usb_dc_set_status_callback(forward_status_cb);
-
-	ret = usb_dc_attach();
-	if (ret < 0) {
-		return ret;
-	}
-
-	/* Configure control EP */
-	ep0_cfg.ep_mps = USB_MAX_CTRL_MPS;
-	ep0_cfg.ep_type = USB_DC_EP_CONTROL;
-
-	ep0_cfg.ep_addr = USB_CONTROL_OUT_EP0;
-	ret = usb_dc_ep_configure(&ep0_cfg);
-	if (ret < 0) {
-		return ret;
-	}
-
-	ep0_cfg.ep_addr = USB_CONTROL_IN_EP0;
-	ret = usb_dc_ep_configure(&ep0_cfg);
-	if (ret < 0) {
-		return ret;
-	}
-
-	/* Register endpoint 0 handlers*/
-	ret = usb_dc_ep_set_callback(USB_CONTROL_OUT_EP0,
-				     usb_handle_control_transfer);
-	if (ret < 0) {
-		return ret;
-	}
-
-	ret = usb_dc_ep_set_callback(USB_CONTROL_IN_EP0,
-				     usb_handle_control_transfer);
-	if (ret < 0) {
-		return ret;
-	}
-
-	/* Register endpoint handlers*/
-	for (i = 0U; i < config->num_endpoints; i++) {
-		ret = usb_dc_ep_set_callback(config->endpoint[i].ep_addr,
-					     config->endpoint[i].ep_cb);
-		if (ret < 0) {
-			return ret;
-		}
-	}
-
-	/* Init transfer slots */
-	for (i = 0U; i < MAX_NUM_TRANSFERS; i++) {
-		k_work_init(&usb_dev.transfer[i].work, usb_transfer_work);
-		k_sem_init(&usb_dev.transfer[i].sem, 1, 1);
-	}
-
-	/* Enable control EP */
-	ret = usb_dc_ep_enable(USB_CONTROL_OUT_EP0);
-	if (ret < 0) {
-		return ret;
-	}
-
-	ret = usb_dc_ep_enable(USB_CONTROL_IN_EP0);
-	if (ret < 0) {
-		return ret;
-	}
-
-	usb_dev.enabled = true;
 
 	return 0;
 }
@@ -1297,7 +1174,9 @@ done:
 		k_sem_give(&trans->sem);
 
 		/* Transfer completion callback */
-		cb(ep, tsize, priv);
+		if (trans->status != -ECANCELED) {
+			cb(ep, tsize, priv);
+		}
 	}
 }
 
@@ -1419,6 +1298,24 @@ done:
 	irq_unlock(key);
 }
 
+void usb_cancel_transfers(void)
+{
+	for (int i = 0; i < ARRAY_SIZE(usb_dev.transfer); i++) {
+		struct usb_transfer_data *trans = &usb_dev.transfer[i];
+		unsigned int key;
+
+		key = irq_lock();
+
+		if (trans->status == -EBUSY) {
+			trans->status = -ECANCELED;
+			k_work_submit(&trans->work);
+			LOG_DBG("Cancel transfer");
+		}
+
+		irq_unlock(key);
+	}
+}
+
 struct usb_transfer_sync_priv {
 	int tsize;
 	struct k_sem sem;
@@ -1462,10 +1359,6 @@ int usb_wakeup_request(void)
 	}
 }
 
-#ifdef CONFIG_USB_COMPOSITE_DEVICE
-
-static u8_t iface_data_buf[CONFIG_USB_COMPOSITE_BUFFER_SIZE];
-
 /*
  * The functions class_handler(), custom_handler() and vendor_handler()
  * go through the interfaces one after the other and compare the
@@ -1491,6 +1384,14 @@ static int class_handler(struct usb_setup_packet *pSetup,
 	for (size_t i = 0; i < size; i++) {
 		iface = &(__usb_data_start[i].interface);
 		if_descr = __usb_data_start[i].interface_descriptor;
+		/*
+		 * Wind forward until it is within the range
+		 * of the current descriptor.
+		 */
+		if ((u8_t *)if_descr < usb_dev.descriptors) {
+			continue;
+		}
+
 		if ((iface->class_handler) &&
 		    (if_descr->bInterfaceNumber ==
 		     sys_le16_to_cpu(pSetup->wIndex))) {
@@ -1514,6 +1415,14 @@ static int custom_handler(struct usb_setup_packet *pSetup,
 	for (size_t i = 0; i < size; i++) {
 		iface = &(__usb_data_start[i].interface);
 		if_descr = __usb_data_start[i].interface_descriptor;
+		/*
+		 * Wind forward until it is within the range
+		 * of the current descriptor.
+		 */
+		if ((u8_t *)if_descr < usb_dev.descriptors) {
+			continue;
+		}
+
 		if ((iface->custom_handler) &&
 		    (if_descr->bInterfaceNumber ==
 		     sys_le16_to_cpu(pSetup->wIndex))) {
@@ -1570,55 +1479,45 @@ static int composite_setup_ep_cb(void)
 	return 0;
 }
 
-/*
- * This function configures the USB device stack based on USB descriptor and
- * usb_cfg_data.
- */
-static int usb_composite_init(struct device *dev)
+int usb_set_config(const u8_t *device_descriptor)
 {
-	int ret;
-	struct usb_dc_ep_cfg_data ep0_cfg;
-	u8_t *device_descriptor;
-
-	if (usb_dev.enabled == true) {
-		return 0;
-	}
-
-	/* register device descriptor */
-	device_descriptor = usb_get_device_descriptor();
-	if (!device_descriptor) {
-		LOG_ERR("Failed to configure USB device stack");
-		return -1;
-	}
-
+	/* register descriptors */
 	usb_register_descriptors(device_descriptor);
 
 	/* register standard request handler */
 	usb_register_request_handler(REQTYPE_TYPE_STANDARD,
-				     &(usb_handle_standard_request),
-				     usb_dev.std_req_data);
+				     usb_handle_standard_request);
 
 	/* register class request handlers for each interface*/
-	usb_register_request_handler(REQTYPE_TYPE_CLASS,
-				     class_handler,
-				     iface_data_buf);
+	usb_register_request_handler(REQTYPE_TYPE_CLASS, class_handler);
 
-	/* register vendor request handlers */
-	usb_register_request_handler(REQTYPE_TYPE_VENDOR,
-				     vendor_handler,
-				     iface_data_buf);
+	/* register vendor request handler */
+	usb_register_request_handler(REQTYPE_TYPE_VENDOR, vendor_handler);
 
 	/* register class request handlers for each interface*/
 	usb_register_custom_req_handler(custom_handler);
 
-	usb_register_status_callback(forward_status_cb);
-	usb_dc_set_status_callback(forward_status_cb);
+	return 0;
+}
+
+int usb_enable(void)
+{
+	int ret;
+	u32_t i;
+	struct usb_dc_ep_cfg_data ep0_cfg;
+
+	if (usb_dev.enabled == true) {
+		return 0;
+	}
 
 	/* Enable VBUS if needed */
 	ret = usb_vbus_set(true);
 	if (ret < 0) {
 		return ret;
 	}
+
+	usb_register_status_callback(forward_status_cb);
+	usb_dc_set_status_callback(forward_status_cb);
 
 	ret = usb_dc_attach();
 	if (ret < 0) {
@@ -1641,7 +1540,7 @@ static int usb_composite_init(struct device *dev)
 		return ret;
 	}
 
-	/*register endpoint 0 handlers*/
+	/* Register endpoint 0 handlers*/
 	ret = usb_dc_ep_set_callback(USB_CONTROL_OUT_EP0,
 				     usb_handle_control_transfer);
 	if (ret < 0) {
@@ -1654,17 +1553,19 @@ static int usb_composite_init(struct device *dev)
 		return ret;
 	}
 
-	if (composite_setup_ep_cb()) {
-		return -1;
+	/* Register endpoint handlers*/
+	ret = composite_setup_ep_cb();
+	if (ret < 0) {
+		return ret;
 	}
 
-	/* init transfer slots */
-	for (int i = 0; i < MAX_NUM_TRANSFERS; i++) {
+	/* Init transfer slots */
+	for (i = 0U; i < MAX_NUM_TRANSFERS; i++) {
 		k_work_init(&usb_dev.transfer[i].work, usb_transfer_work);
 		k_sem_init(&usb_dev.transfer[i].sem, 1, 1);
 	}
 
-	/* enable control EP */
+	/* Enable control EP */
 	ret = usb_dc_ep_enable(USB_CONTROL_OUT_EP0);
 	if (ret < 0) {
 		return ret;
@@ -1680,5 +1581,30 @@ static int usb_composite_init(struct device *dev)
 	return 0;
 }
 
-SYS_INIT(usb_composite_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
-#endif /* CONFIG_USB_COMPOSITE_DEVICE */
+/*
+ * This function configures the USB device stack based on USB descriptor and
+ * usb_cfg_data.
+ */
+static int usb_device_init(struct device *dev)
+{
+	u8_t *device_descriptor;
+
+	if (usb_dev.enabled == true) {
+		return 0;
+	}
+
+	/* register device descriptor */
+	device_descriptor = usb_get_device_descriptor();
+	if (!device_descriptor) {
+		LOG_ERR("Failed to configure USB device stack");
+		return -1;
+	}
+
+	usb_set_config(device_descriptor);
+
+	usb_enable();
+
+	return 0;
+}
+
+SYS_INIT(usb_device_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);

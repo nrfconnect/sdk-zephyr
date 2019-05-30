@@ -13,6 +13,9 @@
 #include <init.h>
 #include <assert.h>
 #include <atomic.h>
+#include <ctype.h>
+
+LOG_MODULE_REGISTER(log);
 
 #ifndef CONFIG_LOG_PRINTK_MAX_STRING_LENGTH
 #define CONFIG_LOG_PRINTK_MAX_STRING_LENGTH 1
@@ -58,13 +61,124 @@ static bool backend_attached;
 static atomic_t buffered_cnt;
 static atomic_t dropped_cnt;
 static k_tid_t proc_tid;
+static u32_t log_strdup_in_use;
+static u32_t log_strdup_max;
+static u32_t log_strdup_longest;
 
 static u32_t dummy_timestamp(void);
 static timestamp_get_t timestamp_func = dummy_timestamp;
 
+
+bool log_is_strdup(const void *buf);
+
 static u32_t dummy_timestamp(void)
 {
 	return 0;
+}
+
+/**
+ * @brief Count number of string format specifiers (%s).
+ *
+ * Result is stored as the mask (argument n is n'th bit). Bit is set if %s was
+ * found.
+ *
+ * @note Algorithm does not take into account complex format specifiers as they
+ *	 hardly used in log messages and including them would significantly
+ *	 extended this function which is called on every log message is feature
+ *	 is enabled.
+ *
+ * @param str String.
+ * @param nargs Number of arguments in the string.
+ *
+ * @return Mask with %s format specifiers found.
+ */
+static u32_t count_s(const char *str, u32_t nargs)
+{
+	char curr;
+	bool arm = false;
+	u32_t arg = 0;
+	u32_t mask = 0;
+
+	__ASSERT_NO_MSG(nargs <= 8*sizeof(mask));
+
+	while ((curr = *str++) && arg < nargs) {
+		if (curr == '%') {
+			arm = !arm;
+		} else if (arm && isalpha(curr)) {
+			if (curr == 's') {
+				mask |= BIT(arg);
+			}
+			arm = false;
+			arg++;
+		}
+	}
+
+	return mask;
+}
+
+/**
+ * @brief Check if address is in read only section.
+ *
+ * @param addr Address.
+ *
+ * @return True if address identified within read only section.
+ */
+static bool is_rodata(const void *addr)
+{
+#if defined(CONFIG_ARM) || defined(CONFIG_ARC) || defined(CONIFG_RISCV32) || \
+	defined(CONFIG_X86)
+	extern const char *_image_rodata_start[];
+	extern const char *_image_rodata_end[];
+	#define RO_START _image_rodata_start
+	#define RO_END _image_rodata_end
+#elif defined(CONFIG_NIOS2)
+	extern const char *_image_rom_start[];
+	extern const char *_image_rom_end[];
+	#define RO_START _image_rom_start
+	#define RO_END _image_rom_end
+#elif defined(CONFIG_XTENSA)
+	extern const char *_rodata_start[];
+	extern const char *_rodata_end[];
+	#define RO_START _rodata_start
+	#define RO_END _rodata_end
+#else
+	#define RO_START 0
+	#define RO_END 0
+#endif
+
+	return (((const char *)addr >= (const char *)RO_START) &&
+		((const char *)addr < (const char *)RO_END));
+}
+
+/**
+ * @brief Scan string arguments and report evert address which is not in read
+ *	  only memory and not yet duplicated.
+ *
+ * @param msg Log message.
+ */
+static void detect_missed_strdup(struct log_msg *msg)
+{
+#define ERR_MSG	"argument %d in log message \"%s\" missing log_strdup()."
+	u32_t idx;
+	const char *str;
+	const char *msg_str = log_msg_str_get(msg);
+	u32_t mask = count_s(msg_str, log_msg_nargs_get(msg));
+
+	while (mask) {
+		idx = 31 - __builtin_clz(mask);
+		str = (const char *)log_msg_arg_get(msg, idx);
+		if (!is_rodata(str) && !log_is_strdup(str) &&
+			(str != log_strdup_fail_msg)) {
+			if (IS_ENABLED(CONFIG_ASSERT)) {
+				__ASSERT(0, ERR_MSG, idx, msg_str);
+			} else {
+				LOG_ERR(ERR_MSG, idx, msg_str);
+			}
+		}
+
+		mask &= ~BIT(idx);
+	}
+#undef ERR_MSG
 }
 
 static inline void msg_finalize(struct log_msg *msg,
@@ -441,6 +555,11 @@ static void msg_process(struct log_msg *msg, bool bypass)
 	struct log_backend const *backend;
 
 	if (!bypass) {
+		if (IS_ENABLED(CONFIG_LOG_DETECT_MISSED_STRDUP) &&
+		    !panic_mode) {
+			detect_missed_strdup(msg);
+		}
+
 		for (int i = 0; i < log_backend_count_get(); i++) {
 			backend = log_backend_get(i);
 
@@ -644,6 +763,18 @@ char *log_strdup(const char *str)
 		return (char *)log_strdup_fail_msg;
 	}
 
+	if (IS_ENABLED(CONFIG_LOG_STRDUP_POOL_PROFILING)) {
+		size_t slen = strlen(str);
+		struct k_spinlock lock;
+		k_spinlock_key_t key;
+
+		key = k_spin_lock(&lock);
+		log_strdup_in_use++;
+		log_strdup_max = MAX(log_strdup_in_use, log_strdup_max);
+		log_strdup_longest = MAX(slen, log_strdup_longest);
+		k_spin_unlock(&lock, key);
+	}
+
 	/* Set 'allocated' flag. */
 	(void)atomic_set(&dup->refcount, 1);
 
@@ -654,15 +785,21 @@ char *log_strdup(const char *str)
 	return dup->buf;
 }
 
-bool log_is_strdup(void *buf)
+u32_t log_get_strdup_pool_utilization(void)
 {
-	struct log_strdup_buf *pool_first, *pool_last;
+	return IS_ENABLED(CONFIG_LOG_STRDUP_POOL_PROFILING) ?
+			log_strdup_max : 0;
+}
 
-	pool_first = (struct log_strdup_buf *)log_strdup_pool_buf;
-	pool_last = pool_first + CONFIG_LOG_STRDUP_BUF_COUNT - 1;
+u32_t log_get_strdup_longest_string(void)
+{
+	return IS_ENABLED(CONFIG_LOG_STRDUP_POOL_PROFILING) ?
+			log_strdup_longest : 0;
+}
 
-	return ((char *)buf >= pool_first->buf) &&
-	       ((char *)buf <= pool_last->buf);
+bool log_is_strdup(const void *buf)
+{
+	return PART_OF_ARRAY(log_strdup_pool_buf, (u8_t *)buf);
 
 }
 
@@ -673,6 +810,9 @@ void log_free(void *str)
 
 	if (atomic_dec(&dup->refcount) == 1) {
 		k_mem_slab_free(&log_strdup_pool, (void **)&dup);
+		if (IS_ENABLED(CONFIG_LOG_STRDUP_POOL_PROFILING)) {
+			atomic_dec((atomic_t *)&log_strdup_in_use);
+		}
 	}
 }
 

@@ -33,17 +33,22 @@
 #include "ll.h"
 #include "ll_feat.h"
 #include "lll.h"
-#include "lll_filter.h"
 #include "lll_adv.h"
 #include "lll_scan.h"
 #include "lll_conn.h"
 #include "ull_adv_types.h"
 #include "ull_scan_types.h"
 #include "ull_conn_types.h"
+#include "ull_filter.h"
+
 #include "ull_internal.h"
 #include "ull_adv_internal.h"
 #include "ull_scan_internal.h"
 #include "ull_conn_internal.h"
+
+#if defined(CONFIG_BT_CTLR_USER_EXT)
+#include "ull_vendor.h"
+#endif /* CONFIG_BT_CTLR_USER_EXT */
 
 #define LOG_MODULE_NAME bt_ctlr_llsw_ull
 #include "common/log.h"
@@ -146,8 +151,7 @@ static MFIFO_DEFINE(pdu_rx_free, sizeof(void *), PDU_RX_CNT);
 static MFIFO_DEFINE(ll_pdu_rx_free, sizeof(void *), LL_PDU_RX_CNT);
 
 #define NODE_RX_HEADER_SIZE      (offsetof(struct node_rx_pdu, pdu))
-#define NODE_RX_FOOTER_SIZE      (sizeof(struct node_rx_ftr))
-#define NODE_RX_STRUCT_OVERHEAD  (NODE_RX_HEADER_SIZE + NODE_RX_FOOTER_SIZE)
+#define NODE_RX_STRUCT_OVERHEAD  (NODE_RX_HEADER_SIZE)
 
 #define PDU_ADVERTIZE_SIZE (PDU_AC_SIZE_MAX + PDU_AC_SIZE_EXTRA)
 #define PDU_DATA_SIZE      (PDU_DC_LL_HEADER_SIZE + LL_LENGTH_OCTETS_RX_MAX)
@@ -291,6 +295,11 @@ int ll_init(struct k_sem *sem_rx)
 	}
 #endif /* CONFIG_BT_CONN */
 
+	/* reset whitelist, resolving list and initialise RPA timeout*/
+	if (IS_ENABLED(CONFIG_BT_CTLR_FILTER)) {
+		ull_filter_reset(true);
+	}
+
 	return  0;
 }
 
@@ -337,6 +346,11 @@ void ll_reset(void)
 
 	MFIFO_INIT(tx_ack);
 #endif /* CONFIG_BT_CONN */
+
+	/* reset whitelist and resolving list */
+	if (IS_ENABLED(CONFIG_BT_CTLR_FILTER)) {
+		ull_filter_reset(false);
+	}
 
 	/* Re-initialize ULL internals */
 
@@ -517,6 +531,9 @@ void ll_rx_dequeue(void)
 	case NODE_RX_TYPE_MESH_REPORT:
 #endif /* CONFIG_BT_HCI_MESH_EXT */
 
+#if defined(CONFIG_BT_CTLR_USER_EXT)
+	case NODE_RX_TYPE_USER_START ... NODE_RX_TYPE_USER_END:
+#endif /* CONFIG_BT_CTLR_USER_EXT */
 		/*
 		 * We have just dequeued from memq_ll_rx; that frees up some
 		 * quota for Link Layer. Note that we threw away the rx node
@@ -553,9 +570,7 @@ void ll_rx_dequeue(void)
 	} else if (rx->type == NODE_RX_TYPE_CONNECTION) {
 		struct node_rx_ftr *ftr;
 
-		ftr = (void *)((u8_t *)((struct node_rx_pdu *)rx)->pdu +
-			       (offsetof(struct pdu_adv, connect_ind) +
-			       sizeof(struct pdu_adv_connect_ind)));
+		ftr = &(rx->rx_ftr);
 
 		if (0) {
 #if defined(CONFIG_BT_PERIPHERAL)
@@ -607,11 +622,13 @@ void ll_rx_dequeue(void)
 		if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY)) {
 			u8_t bm;
 
-			bm = (ull_scan_is_enabled(0) << 1) |
-			     ull_adv_is_enabled(0);
+			bm = (IS_ENABLED(CONFIG_BT_OBSERVER) &&
+			      ull_scan_is_enabled(0) << 1) |
+			     (IS_ENABLED(CONFIG_BT_BROADCASTER) &&
+			      ull_adv_is_enabled(0));
 
 			if (!bm) {
-				ll_adv_scan_state_cb(0);
+				ull_filter_adv_scan_state_cb(0);
 			}
 		}
 #endif /* CONFIG_BT_CONN */
@@ -684,7 +701,7 @@ void ll_rx_mem_release(void **node_rx)
 				if (!ull_adv_is_enabled_get(0))
 #endif
 				{
-					ll_adv_scan_state_cb(0);
+					ull_filter_adv_scan_state_cb(0);
 				}
 #endif
 				break;
@@ -743,6 +760,10 @@ void ll_rx_mem_release(void **node_rx)
 		case NODE_RX_TYPE_MESH_ADV_CPLT:
 		case NODE_RX_TYPE_MESH_REPORT:
 #endif /* CONFIG_BT_HCI_MESH_EXT */
+
+#if defined(CONFIG_BT_CTLR_USER_EXT)
+		case NODE_RX_TYPE_USER_START ... NODE_RX_TYPE_USER_END:
+#endif /* CONFIG_BT_CTLR_USER_EXT */
 
 			mem_release(rx_free, &mem_pdu_rx.free);
 			break;
@@ -1476,7 +1497,13 @@ static inline int rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 
 	default:
 	{
+#if defined(CONFIG_BT_CTLR_USER_EXT)
+		/* Try proprietary demuxing */
+		rx_demux_rx_proprietary(link, rx, memq_ull_rx.tail,
+					&memq_ull_rx.head);
+#else
 		LL_ASSERT(0);
+#endif /* CONFIG_BT_CTLR_USER_EXT */
 	}
 	break;
 	}
@@ -1501,6 +1528,14 @@ static inline void rx_demux_event_done(memq_link_t *link,
 		ull_conn_done(done);
 		break;
 #endif /* CONFIG_BT_CONN */
+
+#if defined(CONFIG_BT_CTLR_USER_EXT)
+	case EVENT_DONE_EXTRA_TYPE_USER_START
+		... EVENT_DONE_EXTRA_TYPE_USER_END:
+		ull_proprietary_done(done);
+		break;
+#endif /* CONFIG_BT_CTLR_USER_EXT */
+
 	case EVENT_DONE_EXTRA_TYPE_NONE:
 		/* ignore */
 		break;

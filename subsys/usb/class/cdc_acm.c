@@ -62,13 +62,10 @@ LOG_MODULE_REGISTER(usb_cdc_acm);
 	((struct cdc_acm_dev_data_t * const)(dev)->driver_data)
 
 /* 115200bps, no parity, 1 stop bit, 8bit char */
-#define CDC_ACM_DEFAUL_BAUDRATE {sys_cpu_to_le32(115200), 0, 0, 8}
+#define CDC_ACM_DEFAULT_BAUDRATE {sys_cpu_to_le32(115200), 0, 0, 8}
 
 /* Size of the internal buffer used for storing received data */
 #define CDC_ACM_BUFFER_SIZE (CONFIG_CDC_ACM_BULK_EP_MPS)
-
-/* Max CDC ACM class request max data size */
-#define CDC_CLASS_REQ_MAX_DATA_SIZE	8
 
 /* Serial state notification timeout */
 #define CDC_CONTROL_SERIAL_STATE_TIMEOUT_US 100000
@@ -189,9 +186,6 @@ struct cdc_acm_dev_data_t {
 	struct ring_buf *rx_ringbuf;
 	struct ring_buf *tx_ringbuf;
 	/* Interface data buffer */
-#ifndef CONFIG_USB_COMPOSITE_DEVICE
-	u8_t interface_data[CDC_CLASS_REQ_MAX_DATA_SIZE];
-#endif
 	/* CDC ACM line coding properties. LE order */
 	struct cdc_acm_line_coding line_coding;
 	/* CDC ACM line state bitmap, DTE side */
@@ -370,6 +364,20 @@ static void cdc_acm_int_in(u8_t ep, enum usb_dc_ep_cb_status_code ep_status)
 	LOG_DBG("CDC_IntIN EP[%x]\r", ep);
 }
 
+static void cdc_acm_reset_port(struct cdc_acm_dev_data_t *dev_data)
+{
+	k_sem_give(&poll_wait_sem);
+	dev_data->rx_ready = false;
+	dev_data->tx_ready = false;
+	dev_data->tx_irq_ena = false;
+	dev_data->rx_irq_ena = false;
+	dev_data->line_coding = (struct cdc_acm_line_coding)
+				CDC_ACM_DEFAULT_BAUDRATE;
+	dev_data->serial_state = 0;
+	dev_data->line_state = 0;
+	memset(&dev_data->rx_buf, 0, CDC_ACM_BUFFER_SIZE);
+}
+
 static void cdc_acm_do_cb(struct cdc_acm_dev_data_t *dev_data,
 			  enum usb_dc_status_code status,
 			  const u8_t *param)
@@ -389,6 +397,7 @@ static void cdc_acm_do_cb(struct cdc_acm_dev_data_t *dev_data,
 		break;
 	case USB_DC_RESET:
 		LOG_DBG("USB device reset detected");
+		cdc_acm_reset_port(dev_data);
 		break;
 	case USB_DC_CONNECTED:
 		LOG_DBG("USB device connected");
@@ -397,10 +406,13 @@ static void cdc_acm_do_cb(struct cdc_acm_dev_data_t *dev_data,
 		cdc_acm_read_cb(cfg->endpoint[ACM_OUT_EP_IDX].ep_addr, 0,
 				dev_data);
 		dev_data->tx_ready = true;
+		dev_data->tx_irq_ena = true;
+		dev_data->rx_irq_ena = true;
 		LOG_DBG("USB device configured");
 		break;
 	case USB_DC_DISCONNECTED:
 		LOG_DBG("USB device disconnected");
+		cdc_acm_reset_port(dev_data);
 		break;
 	case USB_DC_SUSPEND:
 		LOG_DBG("USB device suspended");
@@ -510,26 +522,6 @@ static int cdc_acm_init(struct device *dev)
 	LOG_DBG("Device dev %p dev_data %p cfg %p added to devlist %p",
 		dev, dev_data, dev->config->config_info, &cdc_acm_data_devlist);
 
-#ifndef CONFIG_USB_COMPOSITE_DEVICE
-	struct usb_cfg_data *cfg = (void *)dev->config->config_info;
-
-	cfg->interface.payload_data = dev_data->interface_data;
-	cfg->usb_device_description = usb_get_device_descriptor();
-
-	/* Initialize the USB driver with the right configuration */
-	ret = usb_set_config(cfg);
-	if (ret < 0) {
-		LOG_ERR("Failed to config USB");
-		return ret;
-	}
-
-	/* Enable USB driver */
-	ret = usb_enable(cfg);
-	if (ret < 0) {
-		LOG_ERR("Failed to enable USB");
-		return ret;
-	}
-#endif
 	k_sem_init(&poll_wait_sem, 0, UINT_MAX);
 	k_work_init(&dev_data->cb_work, cdc_acm_irq_callback_work_handler);
 	k_work_init(&dev_data->tx_work, tx_work_handler);
@@ -983,7 +975,6 @@ static const struct uart_driver_api cdc_acm_driver_api = {
 		.interface = {						\
 			.class_handler = cdc_acm_class_handle_req,	\
 			.custom_handler = NULL,				\
-			.payload_data = NULL,				\
 		},							\
 		.num_endpoints = ARRAY_SIZE(cdc_acm_ep_data_##x),	\
 		.endpoint = cdc_acm_ep_data_##x,			\
@@ -1047,7 +1038,7 @@ static const struct uart_driver_api cdc_acm_driver_api = {
 			 CONFIG_USB_CDC_ACM_RINGBUF_SIZE);		\
 	static struct cdc_acm_dev_data_t cdc_acm_dev_data_##x = {	\
 		.usb_status = USB_DC_UNKNOWN,				\
-		.line_coding = CDC_ACM_DEFAUL_BAUDRATE,			\
+		.line_coding = CDC_ACM_DEFAULT_BAUDRATE,		\
 		.rx_ringbuf = &rx_ringbuf_##x,				\
 		.tx_ringbuf = &tx_ringbuf_##x,				\
 	};

@@ -262,7 +262,7 @@ config BT_CTLR_LE_PING
 
 config BT_CTLR_PRIVACY
 	bool "LE Controller-based Privacy"
-	depends on !SOC_SERIES_NRF51X && BT_LL_SW
+	depends on !SOC_SERIES_NRF51X
 	default y
 	select BT_CTLR_FILTER
 	select BT_RPA
@@ -685,35 +685,6 @@ config BT_CTLR_PA_LNA_GPIOTE_CHAN
 	help
 	  Select the nRF5 GPIOTE channel to use for PA/LNA GPIO feature.
 
-if BT_LL_SW_SPLIT
-config BT_TMP
-	bool "Temporary Role"
-	depends on BT_SHELL
-	default y
-	help
-	  Temporary role to manual test ULL/LLL split architecture.
-
-if BT_TMP
-config BT_TMP_MAX
-	int "Temporary Role Max. Instances"
-	default 3
-	help
-	  Maximum supported Temporary role instances.
-
-config BT_TMP_TX_SIZE_MAX
-	int "Temporary Role Max. Tx buffer size"
-	default 10
-	help
-	  Temporary role's maximum transmit buffer size in bytes.
-
-config BT_TMP_TX_COUNT_MAX
-	int "Temporary Role Max. Tx buffers"
-	default 1
-	help
-	  Temporary role's maximum transmit buffer count.
-endif # BT_TMP
-endif # BT_LL_SW_SPLIT
-
 comment "BLE Controller debug configuration"
 
 config BT_CTLR_ASSERT_HANDLER
@@ -749,5 +720,20 @@ config BT_MAYFLY_YIELD_AFTER_CALL
 	  Only process one mayfly callback per invocation (legacy behavior).
 	  If set to 'n', all pending mayflies for callee are executed before
 	  yielding
+
+config BT_CTLR_USER_EXT
+	prompt "Enable proprietary extensions in Controller"
+	bool
+	help
+	  Catch-all for enabling proprietary event types in Controller behavior.
+
+config BT_CTLR_USER_EVT_RANGE
+	int "Range of event contants reserved for proprietary event types"
+	depends on BT_CTLR_USER_EXT
+	default 5
+	range 0 10
+	help
+	  Number of event types reserved for proprietary use. The range
+	  is typically used when BT_CTLR_USER_EXT is in use.
 
 endif # BT_CTLR

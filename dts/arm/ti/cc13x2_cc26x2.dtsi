@@ -5,6 +5,7 @@
  */
 
 #include <arm/armv7-m.dtsi>
+#include <dt-bindings/i2c/i2c.h>
 #include <dt-bindings/gpio/gpio.h>
 
 / {
@@ -52,6 +53,14 @@
 			#gpio-cells = <2>;
 		};
 
+		trng: random@40028000 {
+			compatible = "ti,cc13xx-cc26xx-trng";
+			reg = <0x40028000 0x2000>;
+			interrupts = <33 0>;
+			status = "disabled";
+			label = "TRNG";
+		};
+
 		uart0: uart@40001000 {
 			compatible = "ti,cc13xx-cc26xx-uart";
 			reg = <0x40001000 0x1000>;
@@ -66,6 +75,37 @@
 			interrupts = <36 0>;
 			status = "disabled";
 			label = "UART_1";
+		};
+
+		i2c0: i2c@40002000 {
+			compatible = "ti,cc13xx-cc26xx-i2c";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x40002000 0x1000>;
+			interrupts = <1 0>;
+			clock-frequency = <I2C_BITRATE_STANDARD>;
+			status = "disabled";
+			label = "I2C_0";
+		};
+
+		spi0: spi@40000000 {
+			compatible = "ti,cc13xx-cc26xx-spi";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x40000000 0x1000>;
+			interrupts = <7 0>;
+			status = "disabled";
+			label = "SPI_0";
+		};
+
+		spi1: spi@40008000 {
+			compatible = "ti,cc13xx-cc26xx-spi";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x40008000 0x1000>;
+			interrupts = <8 0>;
+			status = "disabled";
+			label = "SPI_1";
 		};
 	};
 };

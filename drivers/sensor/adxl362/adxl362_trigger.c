@@ -20,30 +20,27 @@ static void adxl362_thread_cb(void *arg)
 {
 	struct device *dev = arg;
 	struct adxl362_data *drv_data = dev->driver_data;
-	const struct adxl362_config *cfg = dev->config->config_info;
 	u8_t status_buf;
-	int ret;
+
+	/* Clears activity and inactivity interrupt */
+	if (adxl362_get_status(dev, &status_buf)) {
+		LOG_ERR("Unable to get status.");
+		return;
+	}
 
 	k_mutex_lock(&drv_data->trigger_mutex, K_FOREVER);
 	if (drv_data->th_handler != NULL) {
-		ret = adxl362_get_status(dev, &status_buf);
-
-		if (ret) {
-			LOG_ERR("Unable to get status from ADXL362.\n");
-		}
-
 		if (ADXL362_STATUS_CHECK_INACT(status_buf) ||
 		    ADXL362_STATUS_CHECK_ACTIVITY(status_buf)) {
 			drv_data->th_handler(dev, &drv_data->th_trigger);
 		}
 	}
 
-	if (drv_data->drdy_handler != NULL) {
+	if (drv_data->drdy_handler != NULL &&
+	    ADXL362_STATUS_CHECK_DATA_READY(status_buf)) {
 		drv_data->drdy_handler(dev, &drv_data->drdy_trigger);
 	}
 	k_mutex_unlock(&drv_data->trigger_mutex);
-
-	gpio_pin_enable_callback(drv_data->gpio, cfg->int_gpio);
 }
 
 static void adxl362_gpio_callback(struct device *dev,
@@ -51,9 +48,6 @@ static void adxl362_gpio_callback(struct device *dev,
 {
 	struct adxl362_data *drv_data =
 		CONTAINER_OF(cb, struct adxl362_data, gpio_cb);
-	const struct adxl362_config *cfg = dev->config->config_info;
-
-	gpio_pin_disable_callback(dev, cfg->int_gpio);
 
 #if defined(CONFIG_ADXL362_TRIGGER_OWN_THREAD)
 	k_sem_give(&drv_data->gpio_sem);
@@ -90,11 +84,7 @@ int adxl362_trigger_set(struct device *dev,
 			sensor_trigger_handler_t handler)
 {
 	struct adxl362_data *drv_data = dev->driver_data;
-	const struct adxl362_config *cfg = dev->config->config_info;
 	u8_t int_mask, int_en, status_buf;
-	int ret;
-
-	gpio_pin_disable_callback(drv_data->gpio, cfg->int_gpio);
 
 	switch (trig->type) {
 	case SENSOR_TRIG_THRESHOLD:
@@ -104,6 +94,8 @@ int adxl362_trigger_set(struct device *dev,
 		k_mutex_unlock(&drv_data->trigger_mutex);
 		int_mask = ADXL362_INTMAP1_ACT |
 			   ADXL362_INTMAP1_INACT;
+		/* Clear activity and inactivity interrupts */
+		adxl362_get_status(dev, &status_buf);
 		break;
 	case SENSOR_TRIG_DATA_READY:
 		k_mutex_lock(&drv_data->trigger_mutex, K_FOREVER);
@@ -111,11 +103,11 @@ int adxl362_trigger_set(struct device *dev,
 		drv_data->drdy_trigger = *trig;
 		k_mutex_unlock(&drv_data->trigger_mutex);
 		int_mask = ADXL362_INTMAP1_DATA_READY;
+		adxl362_clear_data_ready(dev);
 		break;
 	default:
 		LOG_ERR("Unsupported sensor trigger");
-		ret = -ENOTSUP;
-		goto out;
+		return -ENOTSUP;
 	}
 
 	if (handler) {
@@ -124,19 +116,7 @@ int adxl362_trigger_set(struct device *dev,
 		int_en = 0U;
 	}
 
-	ret = adxl362_reg_write_mask(dev, ADXL362_REG_INTMAP1,
-				     int_mask, int_en);
-
-	if (ret) {
-		return -EFAULT;
-	}
-
-	ret = adxl362_get_status(dev, &status_buf);
-
-out:
-	gpio_pin_enable_callback(drv_data->gpio, cfg->int_gpio);
-
-	return ret;
+	return adxl362_reg_write_mask(dev, ADXL362_REG_INTMAP1, int_mask, int_en);
 }
 
 int adxl362_init_interrupt(struct device *dev)
@@ -185,6 +165,8 @@ int adxl362_init_interrupt(struct device *dev)
 	drv_data->work.handler = adxl362_work_cb;
 	drv_data->dev = dev;
 #endif
+
+	gpio_pin_enable_callback(drv_data->gpio, cfg->int_gpio);
 
 	return 0;
 }

@@ -202,11 +202,14 @@ struct bt_l2cap_le_credits {
 struct bt_l2cap_fixed_chan {
 	u16_t		cid;
 	int (*accept)(struct bt_conn *conn, struct bt_l2cap_chan **chan);
-	sys_snode_t	node;
 };
 
-/* Register a fixed L2CAP channel for L2CAP */
-void bt_l2cap_le_fixed_chan_register(struct bt_l2cap_fixed_chan *chan);
+#define BT_L2CAP_CHANNEL_DEFINE(_name, _cid, _accept)		\
+	const struct bt_l2cap_fixed_chan _name __aligned(4)	\
+			__in_section(_bt_channels, static, _name) = { \
+				.cid = _cid,			\
+				.accept = _accept,		\
+			}
 
 /* Notify L2CAP channels of a new connection */
 void bt_l2cap_connected(struct bt_conn *conn);
@@ -251,12 +254,12 @@ struct net_buf *bt_l2cap_create_rsp(struct net_buf *buf, size_t reserve);
 
 /* Send L2CAP PDU over a connection */
 void bt_l2cap_send_cb(struct bt_conn *conn, u16_t cid, struct net_buf *buf,
-		      bt_conn_tx_cb_t cb);
+		      bt_conn_tx_cb_t cb, void *user_data);
 
 static inline void bt_l2cap_send(struct bt_conn *conn, u16_t cid,
 				 struct net_buf *buf)
 {
-	bt_l2cap_send_cb(conn, cid, buf, NULL);
+	bt_l2cap_send_cb(conn, cid, buf, NULL, NULL);
 }
 
 /* Receive a new L2CAP PDU from a connection */

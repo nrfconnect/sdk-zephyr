@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+.. SPDX-License-Identifier: Apache-2.0
 
 .. _kconfig_tips_and_tricks:
 
@@ -326,6 +326,108 @@ error-prone, since it can be hard to spot that the same dependency is added
 twice.
 
 
+``depends on`` and ``string``/``int``/``hex`` symbols
+*****************************************************
+
+``depends on`` works not just for ``bool`` symbols, but also for ``string``,
+``int``, and ``hex`` symbols (and for choices).
+
+The Kconfig definitions below will hide the ``FOO_DEVICE_FREQUENCY`` symbol and
+disable any configuration output for it when ``FOO_DEVICE`` is disabled.
+
+.. code-block:: none
+
+   config FOO_DEVICE
+   	bool "Foo device"
+
+   config FOO_DEVICE_FREQUENCY
+   	int "Foo device frequency"
+   	depends on FOO_DEVICE
+
+In general, it's a good idea to check that only relevant symbols are ever shown
+in the ``menuconfig`` interface. Having ``FOO_DEVICE_FREQUENCY`` show up when
+``FOO_DEVICE`` is disabled (and possibly hidden) makes the relationship between
+the symbols harder to understand, even if code never looks at
+``FOO_DEVICE_FREQUENCY`` when ``FOO_DEVICE`` is disabled.
+
+
+``menuconfig`` symbols
+**********************
+
+If the definition of a symbol ``FOO`` is immediately followed by other symbols
+that depend on ``FOO``, then those symbols become children of ``FOO``. If
+``FOO`` is defined with ``config FOO``, then the children are shown indented
+relative to ``FOO``. Defining ``FOO`` with ``menuconfig FOO`` instead puts the
+children in a separate menu rooted at ``FOO``.
+
+``menuconfig`` has no effect on evaluation. It's just a display option.
+
+``menuconfig`` can cut down on the number of menus and make the menu structure
+easier to navigate. For example, say you have the following definitions:
+
+.. code-block:: none
+
+   menu "Foo subsystem"
+
+   config FOO_SUBSYSTEM
+   	bool "Foo subsystem"
+
+   if FOO_SUBSYSTEM
+
+   config FOO_FEATURE_1
+   	bool "Foo feature 1"
+
+   config FOO_FEATURE_2
+   	bool "Foo feature 2"
+
+   config FOO_FREQUENCY
+   	int "Foo frequency"
+
+   ... lots of other FOO-related symbols
+
+   endif # FOO_SUBSYSTEM
+
+   endmenu
+
+In this case, it's probably better to get rid of the ``menu`` and turn
+``FOO_SUBSYSTEM`` into a ``menuconfig`` symbol:
+
+.. code-block:: none
+
+   menuconfig FOO_SUBSYSTEM
+   	bool "Foo subsystem"
+
+   if FOO_SUBSYSTEM
+
+   config FOO_FEATURE_1
+   	bool "Foo feature 1"
+
+   config FOO_FEATURE_2
+   	bool "Foo feature 2"
+
+   config FOO_FREQUENCY
+   	int "Foo frequency"
+
+   ... lots of other FOO-related symbols
+
+   endif # FOO_SUBSYSTEM
+
+In the ``menuconfig`` interface, this will be displayed as follows:
+
+.. code-block:: none
+
+   [*] Foo subsystem  --->
+
+Note that making a symbol without children a ``menuconfig`` is meaningless. It
+should be avoided, because it looks identical to a symbol with all children
+invisible:
+
+.. code-block:: none
+
+   [*] I have no children  ----
+   [*] All my children are invisible  ----
+
+
 Checking changes in ``menuconfig``
 **********************************
 
@@ -522,6 +624,15 @@ without prompts, and somewhat obscure.
    definitions easier to discover and remove.
 
 
+Prompt strings
+==============
+
+For a Kconfig symbol that enables a driver/subsystem FOO, consider having just
+"Foo" as the prompt, instead of "Enable Foo support" or the like. It will
+usually be clear in the context of an option that can be toggled on/off, and
+makes things consistent.
+
+
 Lesser-known/used Kconfig features
 **********************************
 
@@ -601,7 +712,7 @@ toggled off to select none of the symbols:
    endchoice
 
 In the menuconfig interface, this will be displayed e.g. as ``[*] Use legacy
-protocol (LEGACY_PROTOCOL_1) --->``, where the choice can be toggled off to
+protocol (Legacy protocol 1) --->``, where the choice can be toggled off to
 enable neither of the symbols.
 
 

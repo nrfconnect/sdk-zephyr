@@ -6,6 +6,8 @@
 
 /dts-v1/;
 #include <st/l4/stm32l475Xg.dtsi>
+#include "arduino_r3_connector.dtsi"
+
 
 / {
 	model = "STMicroelectronics B-L475E-IOT01Ax board";
@@ -46,10 +48,6 @@
 		eswifi0 = &wifi0;
 	};
 };
-
-arduino_i2c: &i2c1 {};
-arduino_spi: &spi1 {};
-arduino_serial: &uart4 {};
 
 &usart1 {
 	current-speed = <115200>;

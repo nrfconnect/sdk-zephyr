@@ -690,9 +690,7 @@ static void endrx_isr(struct device *dev)
 		data->async->rx_buf = data->async->rx_next_buf;
 		data->async->rx_next_buf = NULL;
 
-		data->async->rx_total_byte_cnt += rx_len;
-		data->async->rx_total_user_byte_cnt =
-			data->async->rx_total_byte_cnt;
+		data->async->rx_total_user_byte_cnt += rx_len;
 		data->async->rx_offset = 0;
 	} else {
 		data->async->rx_buf = NULL;
@@ -1189,6 +1187,21 @@ static void uarte_nrfx_set_power_state(struct device *dev, u32_t new_state)
 		assert(new_state == DEVICE_PM_LOW_POWER_STATE ||
 		       new_state == DEVICE_PM_SUSPEND_STATE ||
 		       new_state == DEVICE_PM_OFF_STATE);
+
+		/* Disabling UART requires stopping RX, but stop RX event is
+		 * only sent after each RX if async UART API is used.
+		 */
+#ifdef CONFIG_UART_ASYNC_API
+		if (get_dev_data(dev)->async) {
+			nrf_uarte_disable(uarte);
+			return;
+		}
+#endif
+		nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STOPRX);
+		while (!nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_RXTO)) {
+			/* Busy wait for event to register */
+		}
+		nrf_uarte_event_clear(uarte, NRF_UARTE_EVENT_RXTO);
 		nrf_uarte_disable(uarte);
 	}
 }

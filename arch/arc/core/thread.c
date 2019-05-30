@@ -74,7 +74,7 @@ void z_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	char *stackAdjEnd;
 	struct init_stack_frame *pInitCtx;
 
-#if CONFIG_USERSPACE
+#ifdef CONFIG_USERSPACE
 
 	size_t stackAdjSize;
 	size_t offset = 0;
@@ -87,7 +87,7 @@ void z_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 #endif
 	stackEnd = pStackMem + stackAdjSize;
 
-#if CONFIG_STACK_POINTER_RANDOM
+#ifdef CONFIG_STACK_POINTER_RANDOM
 	offset = stackAdjSize - stackSize;
 #endif
 

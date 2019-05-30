@@ -1244,13 +1244,14 @@ struct notify_data {
 	u16_t type;
 	const struct bt_gatt_attr *attr;
 	bt_gatt_complete_func_t func;
+	void *user_data;
 	const void *data;
 	u16_t len;
 	struct bt_gatt_indicate_params *params;
 };
 
 static int gatt_notify(struct bt_conn *conn, u16_t handle, const void *data,
-		       size_t len, bt_gatt_complete_func_t cb)
+		       size_t len, bt_gatt_complete_func_t cb, void *user_data)
 {
 	struct net_buf *buf;
 	struct bt_att_notify *nfy;
@@ -1280,7 +1281,7 @@ static int gatt_notify(struct bt_conn *conn, u16_t handle, const void *data,
 	net_buf_add(buf, len);
 	memcpy(nfy->value, data, len);
 
-	return bt_att_send(conn, buf, cb);
+	return bt_att_send(conn, buf, cb, user_data);
 }
 
 static void gatt_indicate_rsp(struct bt_conn *conn, u8_t err,
@@ -1306,7 +1307,7 @@ static int gatt_send(struct bt_conn *conn, struct net_buf *buf,
 
 		err = bt_att_req_send(conn, req);
 	} else {
-		err = bt_att_send(conn, buf, NULL);
+		err = bt_att_send(conn, buf, NULL, NULL);
 	}
 
 	if (err) {
@@ -1458,7 +1459,8 @@ static u8_t notify_cb(const struct bt_gatt_attr *attr, void *user_data)
 					    data->params);
 		} else {
 			err = gatt_notify(conn, attr->handle - 1, data->data,
-					  data->len, data->func);
+					  data->len, data->func,
+					  data->user_data);
 		}
 
 		bt_conn_unref(conn);
@@ -1475,7 +1477,7 @@ static u8_t notify_cb(const struct bt_gatt_attr *attr, void *user_data)
 
 int bt_gatt_notify_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 		      const void *data, u16_t len,
-		      bt_gatt_complete_func_t func)
+		      bt_gatt_complete_func_t func, void *user_data)
 {
 	struct notify_data nfy;
 	u16_t handle;
@@ -1499,12 +1501,13 @@ int bt_gatt_notify_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 	}
 
 	if (conn) {
-		return gatt_notify(conn, handle, data, len, func);
+		return gatt_notify(conn, handle, data, len, func, user_data);
 	}
 
 	nfy.err = -ENOTCONN;
 	nfy.attr = attr;
 	nfy.func = func;
+	nfy.user_data = user_data;
 	nfy.type = BT_GATT_CCC_NOTIFY;
 	nfy.data = data;
 	nfy.len = len;
@@ -1536,7 +1539,7 @@ int bt_gatt_indicate(struct bt_conn *conn,
 	nfy.type = BT_GATT_CCC_INDICATE;
 	nfy.params = params;
 
-	bt_gatt_foreach_attr(params->attr->handle, 0xffff, notify_cb, &nfy);
+	bt_gatt_foreach_attr(handle, 0xffff, notify_cb, &nfy);
 
 	return nfy.err;
 }
@@ -2490,6 +2493,51 @@ int bt_gatt_discover(struct bt_conn *conn,
 	return -EINVAL;
 }
 
+static void parse_read_by_uuid(struct bt_conn *conn,
+			       struct bt_gatt_read_params *params,
+			       const void *pdu, u16_t length)
+{
+	const struct bt_att_read_type_rsp *rsp = pdu;
+
+	/* Parse values found */
+	for (length--, pdu = rsp->data; length;
+	     length -= rsp->len, pdu = (const u8_t *)pdu + rsp->len) {
+		const struct bt_att_data *data = pdu;
+		u16_t handle;
+		u8_t len;
+
+		handle = sys_le16_to_cpu(data->handle);
+
+		/* Handle 0 is invalid */
+		if (!handle) {
+			BT_ERR("Invalid handle");
+			return;
+		}
+
+		len = rsp->len > length ? length - 2 : rsp->len - 2;
+
+		BT_DBG("handle 0x%04x len %u value %u", handle, rsp->len, len);
+
+		/* Update start_handle */
+		params->by_uuid.start_handle = handle;
+
+		if (params->func(conn, 0, params, data->value, len) ==
+		    BT_GATT_ITER_STOP) {
+			return;
+		}
+
+		/* Check if long attribute */
+		if (rsp->len > length) {
+			break;
+		}
+	}
+
+	/* Continue reading the attributes */
+	if (bt_gatt_read(conn, params) < 0) {
+		params->func(conn, BT_ATT_ERR_UNLIKELY, params, NULL, 0);
+	}
+}
+
 static void gatt_read_rsp(struct bt_conn *conn, u8_t err, const void *pdu,
 			  u16_t length, void *user_data)
 {
@@ -2499,6 +2547,11 @@ static void gatt_read_rsp(struct bt_conn *conn, u8_t err, const void *pdu,
 
 	if (err || !length) {
 		params->func(conn, err, params, NULL, 0);
+		return;
+	}
+
+	if (!params->handle_count) {
+		parse_read_by_uuid(conn, params, pdu, length);
 		return;
 	}
 
@@ -2669,7 +2722,8 @@ static void gatt_write_rsp(struct bt_conn *conn, u8_t err, const void *pdu,
 
 int bt_gatt_write_without_response_cb(struct bt_conn *conn, u16_t handle,
 				      const void *data, u16_t length, bool sign,
-				      bt_gatt_complete_func_t func)
+				      bt_gatt_complete_func_t func,
+				      void *user_data)
 {
 	struct net_buf *buf;
 	struct bt_att_write_cmd *cmd;
@@ -2706,7 +2760,7 @@ int bt_gatt_write_without_response_cb(struct bt_conn *conn, u16_t handle,
 
 	BT_DBG("handle 0x%04x length %u", handle, length);
 
-	return bt_att_send(conn, buf, func);
+	return bt_att_send(conn, buf, func, user_data);
 }
 
 static int gatt_exec_write(struct bt_conn *conn,

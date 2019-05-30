@@ -101,8 +101,6 @@ struct usb_test_config {
 		.class_handler = NULL,				\
 		.custom_handler = NULL,				\
 		.vendor_handler = NULL,				\
-		.vendor_data = NULL,				\
-		.payload_data = NULL,				\
 	},							\
 	.num_endpoints = ARRAY_SIZE(ep_cfg_##x),		\
 	.endpoint = ep_cfg_##x,					\
@@ -174,8 +172,10 @@ static void check_endpoint_allocation(struct usb_desc_header *head)
 			LOG_DBG("iface %u", if_descr->bInterfaceNumber);
 
 			/* Check that interfaces get correct numbers */
-			zassert_equal(if_descr->bInterfaceNumber, interfaces++,
+			zassert_equal(if_descr->bInterfaceNumber, interfaces,
 				      "Interfaces numbering failed");
+
+			interfaces++;
 
 			cfg_data = usb_get_cfg_data(if_descr);
 			zassert_not_null(cfg_data, "Check available cfg data");
@@ -189,8 +189,9 @@ static void check_endpoint_allocation(struct usb_desc_header *head)
 			zassert_not_null(cfg_data, "Check available cfg data");
 
 			zassert_true(find_cfg_data_ep(ep_descr, cfg_data,
-						      ep_count++),
+						      ep_count),
 				     "Check endpoint config in cfg_data");
+			ep_count++;
 		}
 
 		head = (struct usb_desc_header *)((u8_t *)head + head->bLength);
@@ -223,7 +224,7 @@ static void test_desc_sections(void)
 			(int)__usb_data_end - (int)__usb_data_start,
 			"USB Configuratio structures section");
 
-	head = (struct usb_desc_header *)usb_get_device_descriptor();
+	head = (struct usb_desc_header *)__usb_descriptor_start;
 	zassert_not_null(head, NULL);
 
 	zassert_equal((int)__usb_descriptor_end - (int)__usb_descriptor_start,

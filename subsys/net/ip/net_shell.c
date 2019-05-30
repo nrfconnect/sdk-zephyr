@@ -2657,15 +2657,16 @@ static inline void remove_ipv6_ping_handler(void)
 }
 
 static enum net_verdict handle_ipv6_echo_reply(struct net_pkt *pkt,
-						struct net_ipv6_hdr *ip_hdr,
-						struct net_icmp_hdr *icmp_hdr)
+					       struct net_ipv6_hdr *ip_hdr,
+					       struct net_icmp_hdr *icmp_hdr)
 {
 	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(icmp_access,
 					      struct net_icmpv6_echo_req);
-	u32_t cycles;
 	struct net_icmpv6_echo_req *icmp_echo;
+	u32_t cycles;
 
-	icmp_echo = (struct net_icmpv6_echo_req *)net_pkt_get_data(pkt, &icmp_access);
+	icmp_echo = (struct net_icmpv6_echo_req *)net_pkt_get_data(pkt,
+								&icmp_access);
 	if (icmp_echo == NULL) {
 		return -NET_DROP;
 	}
@@ -2686,7 +2687,8 @@ static enum net_verdict handle_ipv6_echo_reply(struct net_pkt *pkt,
 #else
 		 "time=%d ms\n",
 #endif
-		 ntohs(ip_hdr->len) - net_pkt_ipv6_ext_len(pkt) - NET_ICMPH_LEN,
+		 ntohs(ip_hdr->len) - net_pkt_ipv6_ext_len(pkt) -
+								NET_ICMPH_LEN,
 		 net_sprint_ipv6_addr(&ip_hdr->src),
 		 net_sprint_ipv6_addr(&ip_hdr->dst),
 		 ntohs(icmp_echo->sequence),
@@ -2706,14 +2708,14 @@ static enum net_verdict handle_ipv6_echo_reply(struct net_pkt *pkt,
 }
 
 static int ping_ipv6(const struct shell *shell,
-			char *host,
-			unsigned int count,
-			unsigned int interval)
+		     char *host,
+		     unsigned int count,
+		     unsigned int interval)
 {
-	struct in6_addr ipv6_target;
 	struct net_if *iface = net_if_get_default();
-	struct net_nbr *nbr;
 	int ret = 0;
+	struct in6_addr ipv6_target;
+	struct net_nbr *nbr;
 
 #if defined(CONFIG_NET_ROUTE)
 	struct net_route_entry *route;
@@ -2767,8 +2769,8 @@ static int ping_ipv6(const struct shell *shell,
 #if defined(CONFIG_NET_IPV4)
 
 static enum net_verdict handle_ipv4_echo_reply(struct net_pkt *pkt,
-						struct net_ipv4_hdr *ip_hdr,
-						struct net_icmp_hdr *icmp_hdr);
+					       struct net_ipv4_hdr *ip_hdr,
+					       struct net_icmp_hdr *icmp_hdr);
 
 static struct net_icmpv4_handler ping4_handler = {
 	.type = NET_ICMPV4_ECHO_REPLY,
@@ -2782,15 +2784,16 @@ static inline void remove_ipv4_ping_handler(void)
 }
 
 static enum net_verdict handle_ipv4_echo_reply(struct net_pkt *pkt,
-						struct net_ipv4_hdr *ip_hdr,
-						struct net_icmp_hdr *icmp_hdr)
+					       struct net_ipv4_hdr *ip_hdr,
+					       struct net_icmp_hdr *icmp_hdr)
 {
 	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(icmp_access,
 					      struct net_icmpv4_echo_req);
 	u32_t cycles;
 	struct net_icmpv4_echo_req *icmp_echo;
 
-	icmp_echo = (struct net_icmpv4_echo_req *)net_pkt_get_data(pkt, &icmp_access);
+	icmp_echo = (struct net_icmpv4_echo_req *)net_pkt_get_data(pkt,
+								&icmp_access);
 	if (icmp_echo == NULL) {
 		return -NET_DROP;
 	}
@@ -2808,7 +2811,8 @@ static enum net_verdict handle_ipv4_echo_reply(struct net_pkt *pkt,
 #else
 		 "time=%d ms\n",
 #endif
-		 ntohs(ip_hdr->len) - net_pkt_ipv6_ext_len(pkt) - NET_ICMPH_LEN,
+		 ntohs(ip_hdr->len) - net_pkt_ipv6_ext_len(pkt) -
+								NET_ICMPH_LEN,
 		 net_sprint_ipv4_addr(&ip_hdr->src),
 		 net_sprint_ipv4_addr(&ip_hdr->dst),
 		 ntohs(icmp_echo->sequence),
@@ -2825,9 +2829,9 @@ static enum net_verdict handle_ipv4_echo_reply(struct net_pkt *pkt,
 }
 
 static int ping_ipv4(const struct shell *shell,
-	char *host,
-	unsigned int count,
-	unsigned int interval)
+		     char *host,
+		     unsigned int count,
+		     unsigned int interval)
 {
 	struct in_addr ipv4_target;
 	int ret = 0;
@@ -2867,7 +2871,7 @@ static int ping_ipv4(const struct shell *shell,
 #define remove_ipv4_ping_handler()
 #endif /* CONFIG_NET_IPV4 */
 
-static int _parse_arg(size_t *i, size_t argc, char *argv[])
+static int parse_arg(size_t *i, size_t argc, char *argv[])
 {
 	int res = -1;
 	const char *str = argv[*i] + 2;
@@ -2916,7 +2920,7 @@ static int cmd_net_ping(const struct shell *shell, size_t argc, char *argv[])
 
 		switch (argv[i][1]) {
 		case 'c':
-			count = _parse_arg(&i, argc, argv);
+			count = parse_arg(&i, argc, argv);
 			if (count < 0) {
 				PR_WARNING("Parse error: %s\n", argv[i]);
 				return -ENOEXEC;
@@ -2925,7 +2929,7 @@ static int cmd_net_ping(const struct shell *shell, size_t argc, char *argv[])
 
 			break;
 		case 'i':
-			interval = _parse_arg(&i, argc, argv);
+			interval = parse_arg(&i, argc, argv);
 			if (interval < 0) {
 				PR_WARNING("Parse error: %s\n", argv[i]);
 				return -ENOEXEC;
@@ -3907,6 +3911,14 @@ SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_vlan,
 	SHELL_SUBCMD_SET_END
 );
 
+SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_ping,
+	SHELL_CMD(--help, NULL,
+		  "'net ping [-c count] [-i interval ms] <host>' "
+		  "Send ICMPv4 or ICMPv6 Echo-Request to a network host.",
+		  cmd_net_ping),
+	SHELL_SUBCMD_SET_END
+);
+
 SHELL_STATIC_SUBCMD_SET_CREATE(net_commands,
 	SHELL_CMD(allocs, NULL, "Print network memory allocations.",
 		  cmd_net_allocs),
@@ -3929,7 +3941,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(net_commands,
 		  cmd_net_mem),
 	SHELL_CMD(nbr, &net_cmd_nbr, "Print neighbor information.",
 		  cmd_net_nbr),
-	SHELL_CMD(ping, NULL, "'net ping [-c count] [-i interval ms] <host>' ping a network host.", cmd_net_ping),
+	SHELL_CMD(ping, &net_cmd_ping, "Ping a network host.", cmd_net_ping),
 	SHELL_CMD(route, NULL, "Show network route.", cmd_net_route),
 	SHELL_CMD(stacks, NULL, "Show network stacks information.",
 		  cmd_net_stacks),

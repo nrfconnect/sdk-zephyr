@@ -17,28 +17,6 @@
 		};
 	};
 
-	flash-controller@4001E000 {
-			compatible = "nordic,nrf51-flash-controller";
-			reg = <0x4001E000 0x1000>;
-
-			#address-cells = <1>;
-			#size-cells = <1>;
-
-			label="NRF_FLASH_DRV_NAME";
-
-			flash0: flash@0 {
-				compatible = "soc-nv-flash";
-				label = "NRF_FLASH";
-				erase-block-size = <1024>;
-				write-block-size = <4>;
-			};
-	};
-
-	sram0: memory@20000000 {
-		device_type = "memory";
-		compatible = "mmio-sram";
-	};
-
 	aliases {
 		i2c-0 = &i2c0;
 		i2c-1 = &i2c1;
@@ -58,6 +36,29 @@
 	};
 
 	soc {
+
+		flash-controller@4001e000 {
+			compatible = "nordic,nrf51-flash-controller";
+			reg = <0x4001e000 0x1000>;
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			label="NRF_FLASH_DRV_NAME";
+
+			flash0: flash@0 {
+				compatible = "soc-nv-flash";
+				label = "NRF_FLASH";
+				erase-block-size = <1024>;
+				write-block-size = <4>;
+			};
+		};
+
+		sram0: memory@20000000 {
+			device_type = "memory";
+			compatible = "mmio-sram";
+		};
+
 		adc: adc@40007000 {
 			compatible = "nordic,nrf-adc";
 			reg = <0x40007000 0x1000>;
@@ -154,6 +155,8 @@
 			reg = <0x4000b000 0x1000>;
 			interrupts = <11 1>;
 			status = "ok";
+			clock-frequency = <32768>;
+			prescaler = <1>;
 			label = "RTC_0";
 		};
 
@@ -162,6 +165,8 @@
 			reg = <0x40011000 0x1000>;
 			interrupts = <17 1>;
 			status = "ok";
+			clock-frequency = <32768>;
+			prescaler = <1>;
 			label = "RTC_1";
 		};
 
@@ -170,6 +175,7 @@
 			status = "ok";
 			reg = <0x40008000 0x1000>;
 			interrupts = <8 1>;
+			prescaler = <0>;
 			label = "TIMER_0";
 		};
 
@@ -178,6 +184,7 @@
 			status = "ok";
 			reg = <0x40009000 0x1000>;
 			interrupts = <9 1>;
+			prescaler = <0>;
 			label = "TIMER_1";
 		};
 
@@ -186,6 +193,7 @@
 			status = "ok";
 			reg = <0x4000a000 0x1000>;
 			interrupts = <10 1>;
+			prescaler = <0>;
 			label = "TIMER_2";
 		};
 
@@ -210,6 +218,9 @@
 &nvic {
 	arm,num-irq-priority-bits = <2>;
 };
+
+/delete-node/ &systick;
+
 
 &sw_pwm {
 	timer-instance = <1>;

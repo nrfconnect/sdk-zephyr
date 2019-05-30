@@ -500,7 +500,7 @@ struct shell_stats {
 	u32_t log_lost_cnt; /*!< Lost log counter.*/
 };
 
-#if CONFIG_SHELL_STATS
+#ifdef CONFIG_SHELL_STATS
 #define SHELL_STATS_DEFINE(_name) static struct shell_stats _name##_stats
 #define SHELL_STATS_PTR(_name) (&(_name##_stats))
 #else
@@ -554,6 +554,9 @@ struct shell_ctx {
 
 	/*!< Currently executed command.*/
 	struct shell_static_entry active_cmd;
+
+	/* New root command. If NULL shell uses default root commands. */
+	const struct shell_static_entry *selected_cmd;
 
 	/*!< VT100 color and cursor position, terminal width.*/
 	struct shell_vt100_ctx vt100_ctx;

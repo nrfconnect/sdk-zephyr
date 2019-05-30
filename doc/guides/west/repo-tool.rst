@@ -3,7 +3,7 @@
 Multiple Repository Management
 ##############################
 
-This page introduces basic concepts related to West and its multiple repository
+This page introduces basic concepts related to west and its multiple repository
 management features, and gives an overview of the associated commands. See
 :ref:`west-history` and `Zephyr issue #6770`_ for additional discussion,
 rationale, and motivation.
@@ -78,6 +78,74 @@ Finally, any repository managed by a west installation can contain
 :ref:`extension commands <west-extensions>`, which are extra west commands
 provided by that project. This includes the manifest repository and any project
 repository.
+
+Topologies supported
+********************
+
+The following three source code topologies supported by west:
+
+* **T1**: Star topology with zephyr as the manifest repository:
+
+  - The zephyr repository acts as the central repository and includes a
+    complete list of projects used upstream
+  - Default (upstream) configuration
+  - Analogy with existing mechanisms: Git sub-modules with zephyr as the
+    super-project
+  - See :ref:`west-installation` for how mainline Zephyr is an example
+    of this topology
+
+* **T2**: Star topology with an application repository as the manifest
+  repository:
+
+  - A repository containing a Zephyr application acts as the central repository
+    and includes a complete list of other projects, including the zephyr
+    repository, required to build it
+  - Useful for those focused on a single application
+  - Analogy with existing mechanisms: Git sub-modules with the application as
+    the super-project, zephyr and other projects as sub-modules
+  - An installation using this topology could look like this:
+
+    .. code-block:: none
+
+       app-manifest-installation
+       ├── application
+       │   ├── CMakeLists.txt
+       │   ├── prj.conf
+       │   ├── src
+       │   │   └── main.c
+       │   └── west.yml
+       ├── modules
+       │   └── lib
+       │       └── tinycbor
+       └── zephyr
+
+* **T3**: Forest topology:
+
+  - A dedicated manifest repository which contains no Zephyr source code,
+    and specifies a list of projects all at the same "level"
+  - Useful for downstream distributions with no "central" repository
+  - Analogy with existing mechanisms: Google repo-based source distribution
+  - An installation using this topology could look like this:
+
+    .. code-block:: none
+
+       forest
+       ├── app1
+       │   ├── CMakeLists.txt
+       │   ├── prj.conf
+       │   └── src
+       │       └── main.c
+       ├── app2
+       │   ├── CMakeLists.txt
+       │   ├── prj.conf
+       │   └── src
+       │       └── main.c
+       ├── manifest-repo
+       │   └── west.yml
+       ├── modules
+       │   └── lib
+       │       └── tinycbor
+       └── zephyr
 
 .. _west-struct:
 
@@ -173,14 +241,14 @@ functionality. Some commands loosely mimic the corresponding Git command, but
 in a multi-repo context (e.g. ``west diff`` shows local changes on all
 repositories).
 
-Project arguments can be the names of projects in the manifest, or their paths
-within the installation. Passing no project arguments to commands that accept a
-list of projects usually means to use all projects in the manifest.
+Project arguments can be the names of projects in the manifest, or (as
+fallback) paths to them. Omitting project arguments to commands which accept a
+list of projects (such as ``west list``, ``west forall``, etc.) usually
+defaults to using all projects in the manifest file plus the manifest
+repository itself.
 
-.. note::
-
-   For detailed help, see each command's ``--help`` output (e.g.  ``west diff
-   --help``).
+For help on individual commands, run ``west <command> -h`` (e.g. ``west diff
+-h``).
 
 Main Commands
 =============
@@ -206,10 +274,10 @@ important to understand.
      https://github.com/zephyrproject-rtos/zephyr --mr v1.15.0`` would clone
      the upstream official zephyr repository at the tagged release v1.15.0
      (``-m`` defaults to https://github.com/zephyrproject-rtos/zephyr, and
-     ``--mr`` defaults to ``master``).
+     the ``-mr`` default is overridden to ``v1.15.0``).
 
 - ``west update [--rebase] [--keep-descendants] [--exclude-west] [PROJECT
-  ...]``: clone and update the specified projects (default: all projects) based
+  ...]``: clone and update the specified projects based
   on the current :term:`west manifest`.
 
   This command parses the manifest, clones any project repositories that are

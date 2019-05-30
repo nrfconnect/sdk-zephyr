@@ -392,10 +392,10 @@ void lll_conn_isr_tx(void *param)
 	radio_tmr_hcto_configure(hcto);
 
 #if defined(CONFIG_BT_CENTRAL) && defined(CONFIG_BT_CTLR_CONN_RSSI)
-	if (!lll->role) {
+	if (!trx_cnt && !lll->role) {
 		radio_rssi_measure();
 	}
-#endif /* iCONFIG_BT_CENTRAL && CONFIG_BT_CTLR_CONN_RSSI */
+#endif /* CONFIG_BT_CENTRAL && CONFIG_BT_CTLR_CONN_RSSI */
 
 #if defined(CONFIG_BT_CTLR_PROFILE_ISR) || \
 	defined(CONFIG_BT_CTLR_GPIO_PA_PIN)
@@ -690,6 +690,13 @@ static void isr_race(void *param)
 	radio_status_reset();
 }
 
+static inline bool ctrl_pdu_len_check(u8_t len)
+{
+	return len <= (offsetof(struct pdu_data, llctrl) +
+		       sizeof(struct pdu_data_llctrl));
+
+}
+
 static int isr_rx_pdu(struct lll_conn *lll, struct pdu_data *pdu_data_rx,
 		      struct node_tx **tx_release, u8_t *is_rx_enqueue)
 {
@@ -766,7 +773,33 @@ static int isr_rx_pdu(struct lll_conn *lll, struct pdu_data *pdu_data_rx,
 				done = radio_ccm_is_done();
 				LL_ASSERT(done);
 
-				if (!radio_ccm_mic_is_valid()) {
+				bool mic_failure = !radio_ccm_mic_is_valid();
+
+				if (mic_failure &&
+				    lll->ccm_rx.counter == 0 &&
+				    (pdu_data_rx->ll_id ==
+				     PDU_DATA_LLID_CTRL)) {
+					/* Received an LL control packet in the
+					 * middle of the LL encryption procedure
+					 * with MIC failure.
+					 * This could be an unencrypted packet
+					 */
+					struct pdu_data *scratch_pkt =
+						radio_pkt_scratch_get();
+
+					if (ctrl_pdu_len_check(
+						scratch_pkt->len)) {
+						memcpy(pdu_data_rx,
+						       scratch_pkt,
+						       scratch_pkt->len +
+						       offsetof(struct pdu_data,
+							llctrl));
+						mic_failure = false;
+						lll->ccm_rx.counter--;
+					}
+				}
+
+				if (mic_failure) {
 					/* Record MIC invalid */
 					mic_state = LLL_CONN_MIC_FAIL;
 

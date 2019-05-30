@@ -45,7 +45,13 @@
 #define ROM_ADDR PM_ADDRESS
 #define ROM_SIZE PM_SIZE
 #else
+
+#if !defined(CONFIG_XIP) && (CONFIG_FLASH_SIZE == 0)
+#define ROM_ADDR RAM_ADDR
+#else
 #define ROM_ADDR (CONFIG_FLASH_BASE_ADDRESS + CONFIG_FLASH_LOAD_OFFSET)
+#endif
+
 #ifdef CONFIG_TI_CCFG_PRESENT
   #define CCFG_SIZE 88
   #define ROM_SIZE (CONFIG_FLASH_SIZE*1K - CONFIG_FLASH_LOAD_OFFSET - \
@@ -246,6 +252,10 @@ SECTIONS
 	*(".rodata.*")
 	*(.gnu.linkonce.r.*)
 
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-rodata.ld>
 #ifdef CONFIG_SOC_RODATA_LD
 #include <soc-rodata.ld>
 #endif
@@ -275,22 +285,6 @@ SECTIONS
 	 */
 	. = ALIGN(4);
 	} GROUP_LINK_IN(ROMABLE_REGION)
-
-#if defined CONFIG_ARM_FIRMWARE_HAS_SECURE_ENTRY_FUNCS
-#if CONFIG_ARM_NSC_REGION_BASE_ADDRESS != 0
-       SECTION_PROLOGUE(.gnu.sgstubs,CONFIG_ARM_NSC_REGION_BASE_ADDRESS,)
-#else
-       SECTION_PROLOGUE(.gnu.sgstubs,,)
-#endif /* CONFIG_ARM_NSC_REGION_BASE_ADDRESS != 0 */
-       {
-       . = ALIGN(4);
-       __sg_start = .;
-       *(.gnu*)
-       . = ALIGN(4);
-       __sg_end = .;
-       __sg_size = __sg_end - __sg_start;
-       } GROUP_LINK_IN(ROMABLE_REGION)
-#endif /* CONFIG_ARM_FIRMWARE_HAS_SECURE_ENTRY_FUNCS */
 
 	_image_rodata_end = .;
 	MPU_ALIGN(_image_rodata_end -_image_rom_start);
@@ -336,70 +330,10 @@ SECTIONS
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
 #endif
 
-#if defined(CONFIG_SW_VECTOR_RELAY)
-	/* Reserved 4 bytes to save vector table base address */
-	SECTION_PROLOGUE(.vt_pointer,(NOLOAD),)
-	{
-		*(.vt_pointer_section)
-		*(".vt_pointer_section.*")
-	}
-#endif
-
-#ifdef CONFIG_COVERAGE_GCOV
-    SECTION_DATA_PROLOGUE(_GCOV_BSS_SECTION_NAME,(NOLOAD),)
-	{
-
-#ifdef CONFIG_USERSPACE
-       MPU_ALIGN(__gcov_bss_end - __gcov_bss_start );
-#else  /* CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT && CONFIG_USERSPACE */
-       . = ALIGN(_region_min_align);
-#endif /* CONFIG_USERSPACE */
-
-       __gcov_bss_start = .;
-       KEEP(*(".bss.__gcov0.*"));
-
-#ifdef CONFIG_USERSPACE
-       MPU_ALIGN(__gcov_bss_end - __gcov_bss_start );
-#else  /* CONFIG_USERSPACE */
-       . = ALIGN(_region_min_align);
-#endif /* CONFIG_USERSPACE */
-
-       __gcov_bss_end = .;
-
-	} GROUP_LINK_IN(RAMABLE_REGION)
-
-       __gcov_bss_num_words = ((__gcov_bss_end - __gcov_bss_start) >> 2);
-       __gcov_bss_size = __gcov_bss_end - __gcov_bss_start;
-
-#endif /* CONFIG_COVERAGE_GCOV */
-
-#if defined(CONFIG_NOCACHE_MEMORY)
-	/* Non-cached region of RAM */
-	SECTION_PROLOGUE(_NOCACHE_SECTION_NAME,(NOLOAD),)
-	{
-		MPU_ALIGN(_nocache_ram_size);
-		_nocache_ram_start = .;
-		*(.nocache)
-		*(".nocache.*")
-		MPU_ALIGN(_nocache_ram_size);
-		_nocache_ram_end = .;
-	} GROUP_LINK_IN(RAMABLE_REGION)
-	_nocache_ram_size = _nocache_ram_end - _nocache_ram_start;
-#endif /* CONFIG_NOCACHE_MEMORY */
-
-#if defined(CONFIG_ARCH_HAS_RAMFUNC_SUPPORT)
-	SECTION_DATA_PROLOGUE(.ramfunc,,)
-	{
-		MPU_ALIGN(_ramfunc_ram_size);
-		_ramfunc_ram_start = .;
-		*(.ramfunc)
-		*(".ramfunc.*")
-		MPU_ALIGN(_ramfunc_ram_size);
-		_ramfunc_ram_end = .;
-	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
-	_ramfunc_ram_size = _ramfunc_ram_end - _ramfunc_ram_start;
-	_ramfunc_rom_start = LOADADDR(.ramfunc);
-#endif /* CONFIG_ARCH_HAS_RAMFUNC_SUPPORT */
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-ram-sections.ld>
 
 #if defined(CONFIG_USERSPACE)
 #define APP_SHARED_ALIGN . = ALIGN(_region_min_align);
@@ -426,6 +360,10 @@ SECTIONS
 	*(COMMON)
 	*(".kernel_bss.*")
 
+#ifdef CONFIG_CODE_DATA_RELOCATION
+#include <linker_sram_bss_relocate.ld>
+#endif
+
         /*
          * As memory is cleared in words only, it is simpler to ensure the BSS
          * section ends on a 4 byte boundary. This wastes a maximum of 3 bytes.
@@ -443,6 +381,10 @@ SECTIONS
         *(".noinit.*")
 	*(".kernel_noinit.*")
 
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-noinit.ld>
 #ifdef CONFIG_SOC_NOINIT_LD
 #include <soc-noinit.ld>
 #endif
@@ -456,6 +398,10 @@ SECTIONS
 	*(".data.*")
 	*(".kernel.*")
 
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-rwdata.ld>
 #ifdef CONFIG_SOC_RWDATA_LD
 #include <soc-rwdata.ld>
 #endif
@@ -463,6 +409,10 @@ SECTIONS
 #ifdef CONFIG_CUSTOM_RWDATA_LD
 /* Located in project source directory */
 #include <custom-rwdata.ld>
+#endif
+
+#ifdef CONFIG_CODE_DATA_RELOCATION
+#include <linker_sram_data_relocate.ld>
 #endif
 
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
@@ -488,53 +438,15 @@ SECTIONS
 
     GROUP_END(RAMABLE_REGION)
 
-#ifdef DT_CCM_BASE_ADDRESS
-
-    GROUP_START(CCM)
-
-	SECTION_PROLOGUE(_CCM_BSS_SECTION_NAME, (NOLOAD),SUBALIGN(4))
-	{
-		__ccm_start = .;
-		__ccm_bss_start = .;
-		*(.ccm_bss)
-		*(".ccm_bss.*")
-	} GROUP_LINK_IN(CCM)
-
-	__ccm_bss_end = .;
-
-	SECTION_PROLOGUE(_CCM_NOINIT_SECTION_NAME, (NOLOAD),SUBALIGN(4))
-	{
-		__ccm_noinit_start = .;
-		*(.ccm_noinit)
-		*(".ccm_noinit.*")
-	} GROUP_LINK_IN(CCM)
-
-	__ccm_noinit_end = .;
-
-	SECTION_PROLOGUE(_CCM_DATA_SECTION_NAME,,SUBALIGN(4))
-	{
-		__ccm_data_start = .;
-		*(.ccm_data)
-		*(".ccm_data.*")
-	} GROUP_LINK_IN(CCM AT> ROMABLE_REGION)
-
-	__ccm_data_end = .;
-	__ccm_end = .;
-
-	__ccm_data_rom_start = LOADADDR(_CCM_DATA_SECTION_NAME);
-
-    GROUP_END(CCM)
-
-#endif /* DT_CCM_BASE_ADDRESS */
-
 #ifdef CONFIG_CUSTOM_SECTIONS_LD
 /* Located in project source directory */
 #include <custom-sections.ld>
 #endif
 
-#ifdef CONFIG_GEN_ISR_TABLES
-#include <linker/intlist.ld>
-#endif
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-sections.ld>
 
 #include <linker/debug-sections.ld>
 
@@ -543,6 +455,44 @@ SECTIONS
 	KEEP(*(.ARM.attributes))
 	KEEP(*(.gnu.attributes))
 	}
+
+#if defined(CONFIG_ARM_FIRMWARE_HAS_SECURE_ENTRY_FUNCS)
+#if CONFIG_ARM_NSC_REGION_BASE_ADDRESS != 0
+	#define NSC_ALIGN . = ABSOLUTE(CONFIG_ARM_NSC_REGION_BASE_ADDRESS)
+#elif defined(CONFIG_CPU_HAS_NRF_IDAU)
+	/* The nRF9160 needs the NSC region to be at the end of a 32 kB region. */
+	#define NSC_ALIGN . = ALIGN(0x8000) - (1 << LOG2CEIL(__sg_size))
+#else
+	#define NSC_ALIGN . = ALIGN(4)
+#endif
+
+#ifdef CONFIG_CPU_HAS_NRF_IDAU
+	#define NSC_ALIGN_END . = ALIGN(0x8000)
+#else
+	#define NSC_ALIGN_END . = ALIGN(4)
+#endif
+
+SECTION_PROLOGUE(.gnu.sgstubs,,)
+{
+	NSC_ALIGN;
+	__sg_start = .;
+	/* No input section necessary, since the Secure Entry Veneers are
+	   automatically placed after the .gnu.sgstubs output section. */
+} GROUP_LINK_IN(ROMABLE_REGION)
+__sg_end = .;
+__sg_size = __sg_end - __sg_start;
+NSC_ALIGN_END;
+__nsc_size = . - __sg_start;
+
+#ifdef CONFIG_CPU_HAS_NRF_IDAU
+	ASSERT(1 << LOG2CEIL(0x8000 - (__sg_start % 0x8000))
+			 == (0x8000 - (__sg_start % 0x8000))
+		&& (0x8000 - (__sg_start % 0x8000)) >= 32
+		&& (0x8000 - (__sg_start % 0x8000)) <= 4096,
+		"The Non-Secure Callable region size must be a power of 2 \
+between 32 and 4096 bytes.")
+#endif
+#endif /* CONFIG_ARM_FIRMWARE_HAS_SECURE_ENTRY_FUNCS */
 
 /* Must be last in romable region */
 SECTION_PROLOGUE(.last_section,(NOLOAD),)

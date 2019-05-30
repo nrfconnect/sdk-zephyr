@@ -31,12 +31,21 @@ extern int _sys_clock_always_on;
 extern void z_enable_sys_clock(void);
 #endif
 
-static inline int sys_clock_hw_cycles_per_sec(void)
-{
 #if defined(CONFIG_TIMER_READS_ITS_FREQUENCY_AT_RUNTIME)
+__syscall int z_clock_hw_cycles_per_sec_runtime_get(void);
+
+static inline int z_impl_z_clock_hw_cycles_per_sec_runtime_get(void)
+{
 	extern int z_clock_hw_cycles_per_sec;
 
 	return z_clock_hw_cycles_per_sec;
+}
+#endif /* CONFIG_TIMER_READS_ITS_FREQUENCY_AT_RUNTIME */
+
+static inline int sys_clock_hw_cycles_per_sec(void)
+{
+#if defined(CONFIG_TIMER_READS_ITS_FREQUENCY_AT_RUNTIME)
+	return z_clock_hw_cycles_per_sec_runtime_get();
 #else
 	return CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC;
 #endif
@@ -100,11 +109,11 @@ static ALWAYS_INLINE s32_t z_ms_to_ticks(s32_t ms)
 #ifdef CONFIG_SYS_CLOCK_EXISTS
 
 #ifdef _NEED_PRECISE_TICK_MS_CONVERSION
+	int cyc = sys_clock_hw_cycles_per_sec();
+
 	/* use 64-bit math to keep precision */
-	return (s32_t)ceiling_fraction(
-		(s64_t)ms * sys_clock_hw_cycles_per_sec(),
-		((s64_t)MSEC_PER_SEC * sys_clock_hw_cycles_per_sec()) /
-		CONFIG_SYS_CLOCK_TICKS_PER_SEC);
+	return (s32_t)ceiling_fraction((s64_t)ms * cyc,
+		((s64_t)MSEC_PER_SEC * cyc) / CONFIG_SYS_CLOCK_TICKS_PER_SEC);
 #else
 	/* simple division keeps precision */
 	s32_t ms_per_tick = MSEC_PER_SEC / CONFIG_SYS_CLOCK_TICKS_PER_SEC;
@@ -126,6 +135,37 @@ static inline u64_t __ticks_to_ms(s64_t ticks)
 #else
 	__ASSERT(ticks == 0, "ticks not zero");
 	return 0ULL;
+#endif
+}
+
+/*
+ * These are only currently used by k_usleep(), but they are
+ * defined here for parity with their ms analogs above. Note:
+ * we don't bother trying the 32-bit intermediate shortcuts
+ * possible with ms, because of the magnitudes involved.
+ */
+
+static inline s32_t z_us_to_ticks(s32_t us)
+{
+#ifdef CONFIG_SYS_CLOCK_EXISTS
+	return (s32_t) ceiling_fraction(
+		(s64_t)us * sys_clock_hw_cycles_per_sec(),
+		((s64_t)USEC_PER_SEC * sys_clock_hw_cycles_per_sec()) /
+		CONFIG_SYS_CLOCK_TICKS_PER_SEC);
+#else
+	__ASSERT(us == 0, "us not zero");
+	return 0;
+#endif
+}
+
+static inline s32_t __ticks_to_us(s32_t ticks)
+{
+#ifdef CONFIG_SYS_CLOCK_EXISTS
+	return (s32_t) ((s64_t)ticks * USEC_PER_SEC /
+	       (s64_t)CONFIG_SYS_CLOCK_TICKS_PER_SEC);
+#else
+	__ASSERT(ticks == 0, "ticks not zero");
+	return 0;
 #endif
 }
 
@@ -202,5 +242,7 @@ struct _timeout {
 #ifdef __cplusplus
 }
 #endif
+
+#include <syscalls/sys_clock.h>
 
 #endif /* ZEPHYR_INCLUDE_SYS_CLOCK_H_ */

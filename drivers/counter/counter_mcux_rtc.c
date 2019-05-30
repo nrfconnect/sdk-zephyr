@@ -181,13 +181,17 @@ static void mcux_rtc_isr(void *arg)
 	const struct mcux_rtc_config *config =
 		CONTAINER_OF(info, struct mcux_rtc_config, info);
 	struct mcux_rtc_data *data = dev->driver_data;
+	counter_alarm_callback_t cb;
 	u32_t current = mcux_rtc_read(dev);
+
 
 	LOG_DBG("Current time is %d ticks", current);
 
 	if ((RTC_GetStatusFlags(config->base) & RTC_SR_TAF_MASK) &&
 	    (data->alarm_callback)) {
-		data->alarm_callback(dev, 0, current, data->alarm_user_data);
+		cb = data->alarm_callback;
+		data->alarm_callback = NULL;
+		cb(dev, 0, current, data->alarm_user_data);
 	}
 
 	if ((RTC_GetStatusFlags(config->base) & RTC_SR_TOF_MASK) &&
@@ -254,7 +258,7 @@ static struct mcux_rtc_config mcux_rtc_config_0 = {
 		.max_top_value = UINT32_MAX,
 		.freq = DT_NXP_KINETIS_RTC_0_CLOCK_FREQUENCY /
 				DT_NXP_KINETIS_RTC_0_PRESCALER,
-		.count_up = true,
+		.flags = COUNTER_CONFIG_INFO_COUNT_UP,
 		.channels = 1,
 	},
 };

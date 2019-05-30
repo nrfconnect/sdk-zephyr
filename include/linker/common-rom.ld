@@ -77,6 +77,22 @@
 	} GROUP_LINK_IN(ROMABLE_REGION)
 #endif
 
+	SECTION_DATA_PROLOGUE(_bt_channels_area,,SUBALIGN(4))
+	{
+		_bt_channels_start = .;
+		KEEP(*(SORT_BY_NAME("._bt_channels.static.*")))
+		_bt_channels_end = .;
+	} GROUP_LINK_IN(ROMABLE_REGION)
+
+#if defined(CONFIG_BT_BREDR)
+	SECTION_DATA_PROLOGUE(_bt_br_channels_area,,SUBALIGN(4))
+	{
+		_bt_br_channels_start = .;
+		KEEP(*(SORT_BY_NAME("._bt_br_channels.static.*")))
+		_bt_br_channels_end = .;
+	} GROUP_LINK_IN(ROMABLE_REGION)
+#endif
+
 	SECTION_DATA_PROLOGUE(_bt_services_area,,SUBALIGN(4))
 	{
 		_bt_services_start = .;
@@ -120,14 +136,3 @@
 		KEEP(*(SORT_BY_NAME(".font_entry.*")))
 		__font_entry_end = .;
 	} GROUP_LINK_IN(ROMABLE_REGION)
-
-#ifdef CONFIG_COVERAGE_GCOV
-	/* Section needed by gcov when coverage is turned on.*/
-	SECTION_PROLOGUE (gcov,,)
-	{
-		PROVIDE_HIDDEN (__init_array_start = .);
-		KEEP (*(SORT(.init_array.*)))
-		KEEP (*(.init_array*))
-		PROVIDE_HIDDEN (__init_array_end = .);
-	} GROUP_LINK_IN(ROMABLE_REGION)
-#endif  /* CONFIG_COVERAGE_GCOV */

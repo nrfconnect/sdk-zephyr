@@ -39,11 +39,32 @@ config GPIO_CC13XX_CC26XX
 
 endif # GPIO
 
+if ENTROPY_GENERATOR
+
+config ENTROPY_CC13XX_CC26XX_RNG
+	default y
+
+endif # ENTROPY_GENERATOR
+
 if SERIAL
 
 config UART_CC13XX_CC26XX
 	default y
 
 endif # SERIAL
+
+if I2C
+
+config I2C_CC13XX_CC26XX
+	default y
+
+endif # I2C
+
+if SPI
+
+config SPI_CC13XX_CC26XX
+	default y
+
+endif # SPI
 
 endif # SOC_SERIES_CC13X2_CC26X2

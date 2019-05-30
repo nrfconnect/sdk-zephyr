@@ -33,6 +33,8 @@
 #include "ull_adv_types.h"
 #include "ull_scan_types.h"
 #include "ull_conn_types.h"
+#include "ull_filter.h"
+
 #include "ull_adv_internal.h"
 #include "ull_scan_internal.h"
 #include "ull_conn_internal.h"
@@ -472,21 +474,21 @@ u8_t ll_adv_enable(u8_t enable)
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 		/* Prepare whitelist and optionally resolving list */
-		ll_filters_adv_update(lll->filter_policy);
+		ull_filter_adv_update(lll->filter_policy);
 
 		if (adv->own_addr_type == BT_ADDR_LE_PUBLIC_ID ||
 		    adv->own_addr_type == BT_ADDR_LE_RANDOM_ID) {
 			/* Look up the resolving list */
-			rl_idx = ll_rl_find(adv->id_addr_type, adv->id_addr,
-					    NULL);
+			rl_idx = ull_filter_rl_find(adv->id_addr_type,
+						    adv->id_addr, NULL);
 
 			if (rl_idx != FILTER_IDX_NONE) {
 				/* Generate RPAs if required */
-				ll_rl_rpa_update(false);
+				ull_filter_rpa_update(false);
 			}
 
-			ll_rl_pdu_adv_update(adv, rl_idx, pdu_adv);
-			ll_rl_pdu_adv_update(adv, rl_idx, pdu_scan);
+			ull_filter_adv_pdu_update(adv, rl_idx, pdu_adv);
+			ull_filter_adv_pdu_update(adv, rl_idx, pdu_scan);
 			priv = true;
 		}
 #endif /* !CONFIG_BT_CTLR_PRIVACY */
@@ -669,7 +671,7 @@ u8_t ll_adv_enable(u8_t enable)
 #endif /* CONFIG_BT_PERIPHERAL */
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
-	_radio.advertiser.rl_idx = rl_idx;
+	adv->rl_idx = rl_idx;
 #else
 	ARG_UNUSED(rl_idx);
 #endif /* CONFIG_BT_CTLR_PRIVACY */
@@ -859,11 +861,11 @@ u8_t ll_adv_enable(u8_t enable)
 	if (_radio.advertiser.is_mesh) {
 		_radio.scanner.is_enabled = 1;
 
-		ll_adv_scan_state_cb(BIT(0) | BIT(1));
+		ull_filter_adv_scan_state_cb(BIT(0) | BIT(1));
 	}
 #else /* !CONFIG_BT_HCI_MESH_EXT */
-	if (!ull_scan_is_enabled_get(0)) {
-		ll_adv_scan_state_cb(BIT(0));
+	if (IS_ENABLED(CONFIG_BT_OBSERVER) && !ull_scan_is_enabled_get(0)) {
+		ull_filter_adv_scan_state_cb(BIT(0));
 	}
 #endif /* !CONFIG_BT_HCI_MESH_EXT */
 #endif /* CONFIG_BT_CTLR_PRIVACY */
@@ -1140,10 +1142,7 @@ static void disabled_cb(void *param)
 	memset(cc, 0x00, sizeof(struct node_rx_cc));
 	cc->status = 0x3c;
 
-	ftr = (void *)((u8_t *)rx->pdu +
-		       (offsetof(struct pdu_adv, connect_ind) +
-		       sizeof(struct pdu_adv_connect_ind)));
-
+	ftr = &(rx->hdr.rx_ftr);
 	ftr->param = param;
 
 	ll_rx_put(link, rx);
@@ -1203,8 +1202,8 @@ static inline u8_t disable(u16_t handle)
 	adv->is_enabled = 0U;
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
-	if (!ull_scan_is_enabled_get(0)) {
-		ll_adv_scan_state_cb(0);
+	if (IS_ENABLED(CONFIG_BT_OBSERVER) && !ull_scan_is_enabled_get(0)) {
+		ull_filter_adv_scan_state_cb(0);
 	}
 #endif /* CONFIG_BT_CTLR_PRIVACY */
 

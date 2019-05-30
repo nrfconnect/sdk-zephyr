@@ -629,9 +629,7 @@ void ull_conn_setup(memq_link_t *link, struct node_rx_hdr *rx)
 	struct node_rx_ftr *ftr;
 	struct lll_conn *lll;
 
-	ftr = (void *)((u8_t *)((struct node_rx_pdu *)rx)->pdu +
-		       (offsetof(struct pdu_adv, connect_ind) +
-		       sizeof(struct pdu_adv_connect_ind)));
+	ftr = &(rx->rx_ftr);
 
 	lll = *((struct lll_conn **)((u8_t *)ftr->param +
 				     sizeof(struct lll_hdr)));
@@ -3236,12 +3234,6 @@ static inline bool ctrl_is_unexpected(struct ll_conn *conn, u8_t opcode)
 		  (opcode != PDU_DATA_LLCTRL_TYPE_REJECT_EXT_IND)))) ||
 	       (conn->lll.role &&
 		((!conn->refresh &&
-		  /* As a workaround to IOP with some old peer controllers that
-		   * respond with Unknown Rsp PDU to our local Slave Initiated
-		   * Feature request during Encryption Setup initiated by the
-		   * peer, we accept this Unknown Rsp PDU during the Encryption
-		   * setup procedure in progress.
-		   */
 		  (opcode != PDU_DATA_LLCTRL_TYPE_UNKNOWN_RSP) &&
 		  (opcode != PDU_DATA_LLCTRL_TYPE_TERMINATE_IND) &&
 		  (opcode != PDU_DATA_LLCTRL_TYPE_START_ENC_RSP) &&
