@@ -184,7 +184,6 @@
 /ext/hal/atmel/asf/sam/include/same70*/   @aurel32
 /ext/hal/atmel/asf/sam0/include/samr21/   @benpicco
 /ext/hal/cmsis/                           @MaureenHelm @galak
-/ext/hal/libmetal/                        @galak
 /ext/hal/microchip/                       @franciscomunoz @albertofloyd @scottwcpg
 /ext/hal/nordic/                          @carlescufi @anangl
 /ext/hal/nxp/                             @MaureenHelm
@@ -262,6 +261,7 @@
 /lib/cmsis_rtos_v2/                       @nashif
 /lib/cmsis_rtos_v1/                       @nashif
 /lib/libc/                                @nashif @andrewboie
+/modules/                                 @nashif
 /kernel/device.c                          @andrewboie @andyross @nashif
 /kernel/idle.c                            @andrewboie @andyross @nashif
 /samples/                                 @nashif
@@ -287,6 +287,7 @@
 /samples/subsys/power/                    @wentongwu @pizi-nordic
 /scripts/coccicheck                       @himanshujha199640 @JuliaLawall
 /scripts/coccinelle/                      @himanshujha199640 @JuliaLawall
+/scripts/kconfig/                         @ulfalizer
 /scripts/elf_helper.py                    @andrewboie
 /scripts/sanity_chk/expr_parser.py        @nashif
 /scripts/gen_app_partitions.py            @andrewboie
@@ -353,6 +354,6 @@
 /tests/net/socket/                        @jukkar @tbursztyka @pfalcon
 /tests/subsys/fs/                         @nashif @wentongwu
 /tests/subsys/settings/                   @nvlsianpu
-
+/tests/subsys/shell/                      @jarz-nordic @nordic-krch
 # Get all docs reviewed
 *.rst                                     @dbkinder

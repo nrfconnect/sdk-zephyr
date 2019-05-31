@@ -16,10 +16,6 @@ source "ext/hal/altera/Kconfig"
 
 source "ext/hal/cmsis/Kconfig"
 
-source "ext/hal/cypress/Kconfig"
-
-source "ext/hal/libmetal/Kconfig"
-
 source "ext/hal/microchip/Kconfig"
 
 source "ext/hal/nordic/Kconfig"
@@ -29,8 +25,6 @@ source "ext/hal/nxp/mcux/Kconfig"
 source "ext/hal/nxp/imx/Kconfig"
 
 source "ext/hal/openisa/vega_sdk_riscv/Kconfig"
-
-source "ext/hal/silabs/gecko/Kconfig"
 
 source "ext/hal/st/stm32cube/Kconfig"
 

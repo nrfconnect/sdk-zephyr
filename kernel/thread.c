@@ -437,7 +437,8 @@ k_tid_t z_impl_k_thread_create(struct k_thread *new_thread,
 	/* Special case, only for unit tests */
 #if defined(CONFIG_TEST) && defined(CONFIG_ARCH_HAS_USERSPACE) && !defined(CONFIG_USERSPACE)
 	__ASSERT((options & K_USER) == 0,
-		 "Platform is capable of user mode, and test thread created with K_USER option, but CONFIG_TEST_USERSPACE or CONFIG_USERSPACE is not set\n");
+		 "Platform is capable of user mode, and test thread created with K_USER option,"
+		 " but neither CONFIG_TEST_USERSPACE nor CONFIG_USERSPACE is set\n");
 #endif
 
 	z_setup_new_thread(new_thread, stack, stack_size, entry, p1, p2, p3,
@@ -726,7 +727,7 @@ bool z_spin_lock_valid(struct k_spinlock *l)
 
 bool z_spin_unlock_valid(struct k_spinlock *l)
 {
-	if (l->thread_cpu != (_current_cpu->id | (u32_t)_current)) {
+	if (l->thread_cpu != (_current_cpu->id | (uintptr_t)_current)) {
 		return false;
 	}
 	l->thread_cpu = 0;
@@ -735,7 +736,7 @@ bool z_spin_unlock_valid(struct k_spinlock *l)
 
 void z_spin_lock_set_owner(struct k_spinlock *l)
 {
-	l->thread_cpu = _current_cpu->id | (u32_t)_current;
+	l->thread_cpu = _current_cpu->id | (uintptr_t)_current;
 }
 
 #endif
