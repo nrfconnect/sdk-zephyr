@@ -1,6 +1,6 @@
 def IMAGE_TAG = "ncs-toolchain:1.08"
 def REPO_CI_TOOLS = "https://github.com/zephyrproject-rtos/ci-tools.git"
-def REPO_CI_TOOLS_SHA = "c25e74823823ae48a06bce258017f9416f57970c"
+def REPO_CI_TOOLS_SHA = "bfe635f102271a4ad71c1a14824f9d5e64734e57"
 
 pipeline {
   agent {
