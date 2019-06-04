@@ -19,7 +19,7 @@ pipeline {
       // ENVs for check-compliance
       GH_TOKEN = credentials('nordicbuilder-compliance-token') // This token is used to by check_compliance to comment on PRs and use checks
       GH_USERNAME = "NordicBuilder"
-      COMPLIANCE_ARGS = "-r NordicPlayground/fw-nrfconnect-zephyr"
+      COMPLIANCE_ARGS = "-r NordicPlayground/fw-nrfconnect-zephyr --exclude-module Kconfig"
       COMPLIANCE_REPORT_ARGS = "-p $CHANGE_ID -S $GIT_COMMIT -g"
 
       LC_ALL = "C.UTF-8"
