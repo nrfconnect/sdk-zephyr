@@ -62,18 +62,31 @@ pipeline {
             dir('zephyr') {
               script {
                 // If we're a pull request, compare the target branch against the current HEAD (the PR)
+                println "CHANGE_TARGET = ${env.CHANGE_TARGET}"
+                println "BRANCH_NAME = ${env.BRANCH_NAME}"
+                println "TAG_NAME = ${env.TAG_NAME}"
+
                 if (env.CHANGE_TARGET) {
-                  COMMIT_RANGE = "origin/$CHANGE_TARGET..HEAD"
+                  COMMIT_RANGE = "origin/${env.CHANGE_TARGET}..HEAD"
                   COMPLIANCE_ARGS = "$COMPLIANCE_ARGS $COMPLIANCE_REPORT_ARGS"
                   sh "echo change id: $CHANGE_ID"
                   sh "echo git commit: $GIT_COMMIT"
                   sh "echo commit range: $COMMIT_RANGE"
                   sh "git rev-parse origin/$CHANGE_TARGET"
                   sh "git rev-parse HEAD"
+                  println "Building a PR: ${COMMIT_RANGE}"
+                }
+                else if (env.TAG_NAME) {
+                  COMMIT_RANGE = "tags/${env.BRANCH_NAME}..tags/${env.BRANCH_NAME}"
+                  println "Building a Tag: ${COMMIT_RANGE}"
                 }
                 // If not a PR, it's a non-PR-branch or master build. Compare against the origin.
-                else {
+                else if (env.BRANCH_NAME) {
                   COMMIT_RANGE = "origin/${env.BRANCH_NAME}..HEAD"
+                  println "Building a Branch: ${COMMIT_RANGE}"
+                }
+                else {
+                    assert condition : "Build fails because it is not a PR/Tag/Branch"
                 }
                 // Run the compliance check
                 try {
