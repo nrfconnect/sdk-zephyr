@@ -12,8 +12,10 @@
  */
 
 #include <arch/x86/asm.h>
+#include <arch/x86/msr.h>
 #include <kernel_arch_data.h>
 #include <arch/cpu.h>
+#include <arch/x86/multiboot.h>
 
 	/* exports (private APIs) */
 
@@ -46,8 +48,6 @@
 
 #define RM_CODE_SEG             0x8
 #define RM_DATA_SEG             0x18
-#define MSR_MTRR_DEF_TYPE       0x000002ff
-#define MTRR_ENABLE             0x00000800
 #define X86_CR0_PE              0x00000001
 #define X86_CR0_WP              0x00010000
 #define X86_CR4_PSE             0x00000010
@@ -81,9 +81,9 @@ start32:
 	mov $(X86_CR0_WP | X86_CR0_PE),%eax
 	mov %eax,%cr0
 
-	movl $MSR_MTRR_DEF_TYPE,%ecx
+	movl $X86_MTRR_DEF_TYPE_MSR,%ecx
 	rdmsr
-	or $MTRR_ENABLE,%eax
+	or $X86_MTRR_DEF_TYPE_MSR_ENABLE,%eax
 	wrmsr
 
 	mov $RM_DATA_SEG,%eax
@@ -139,6 +139,28 @@ gdt_ptr:
 	.balign 16,0x90
 
 SECTION_FUNC(TEXT_START, __start)
+
+#ifdef CONFIG_X86_MULTIBOOT_INFO
+	/*
+	 * If we were loaded by a multiboot-compliant loader, then EAX
+	 * contains X86_MULTIBOOT_EAX_MAGIC and EBX points to a 'struct
+	 * x86_multiboot_info' somewhere in memory that the kernel load
+	 * image doesn't claim. Since the kernel will consider such memory
+	 * "free", we must copy the contents of the struct before the kernel
+	 * decides to use that RAM for something else. However, we can't
+	 * effect the copy until after the BSS is initialized.
+	 *
+	 * EBX isn't touched until the copy is made; even function calls will
+	 * preserve it (it's callee-save in the SysV ABI). But EAX will be
+	 * clobbered, so we check for the magic now and leave a sentinel in
+	 * EBX (0) if the multiboot data isn't valid.
+	 */
+
+	cmpl $X86_MULTIBOOT_EAX_MAGIC, %eax
+	je 1f
+	xorl %ebx, %ebx
+1:
+#endif
 
 #ifdef CONFIG_BOOT_TIME_MEASUREMENT
 	/*
@@ -375,6 +397,34 @@ __csSet:
 #endif
 	lidt	z_x86_idt		/* load 32-bit operand size IDT */
 
+#if defined(CONFIG_X86_MULTIBOOT_INFO)
+	/*
+	 * If EBX isn't 0, then it points to a valid boot information
+	 * struct. Copy it to x86_multiboot_info before it's overwritten.
+	 */
+
+	testl	%ebx, %ebx
+	jz	1f
+	movl	$__X86_MULTIBOOT_INFO_SIZEOF, %ecx
+	movl	%ebx, %esi
+	movl	$x86_multiboot_info, %edi
+	cld	/* to be safe. should still be 0 from BSS clear, though */
+	rep
+	movsb
+1:
+#endif
+
+#if defined(CONFIG_PIC_DISABLE)
+	/*
+	 * "Disable" legacy i8259 interrupt controllers. Note that we
+	 * can't actually disable them, but we mask all their interrupt
+	 * sources which is effectively the same thing (almost).
+	 */
+	movb $0xff, %al		/* all bits set = mask all interrupts */
+	outb %al, $0x21		/* set i8259 master mask (IRQs 0-7) */
+	outb %al, $0xA1		/* set i8259 slave mask (IRQs 8-15) */
+#endif
+
 	/* Jump to C portion of kernel initialization and never return */
 
 	jmp	z_cstart
@@ -467,34 +517,26 @@ z_x86_idt:
 
 
 #ifdef CONFIG_X86_MULTIBOOT
-	/* Multiboot header definition is needed for some bootloaders */
-
 	/*
 	 * The multiboot header must be in the first 8 Kb of the kernel image
 	 * (not including the ELF section header(s)) and be aligned on a
-	 * 4 byte boundary.
+	 * 4 byte boundary. See include/arch/x86/multiboot.h for more info.
 	 */
 
 	.balign 4,0x90
 
-	.long	0x1BADB002	/* multiboot magic number */
+	.long	X86_MULTIBOOT_HEADER_MAGIC
+	.long	X86_MULTIBOOT_HEADER_FLAGS
+	.long	-(X86_MULTIBOOT_HEADER_MAGIC + X86_MULTIBOOT_HEADER_FLAGS)
 
-	/*
-	 * Flags = no bits are being set, specifically bit 16 is not being
-	 * set since the supplied kernel image is an ELF file, and the
-	 * multiboot loader shall use the information from the program and
-	 * section header to load and boot the kernel image.
-	 */
+#ifdef CONFIG_X86_MULTIBOOT_FRAMEBUF
+	.fill	5,4,0				/* (unused exec layout) */
+	.long	0				/* linear graphics mode */
+	.long	CONFIG_X86_MULTIBOOT_FRAMEBUF_X	/* width */
+	.long	CONFIG_X86_MULTIBOOT_FRAMEBUF_Y	/* height */
+	.long	32				/* depth */
+#endif /* CONFIG_X86_MULTIBOOT_FRAMEBUF */
 
-	.long	0x00000000
-
-	/*
-	 * checksum = 32-bit unsigned value which, when added to the other
-	 * magic fields (i.e. "magic" and "flags"), must have a 32-bit
-	 * unsigned sum of zero.
-	 */
-
-	.long	-(0x1BADB002 + 0)
 #endif /* CONFIG_X86_MULTIBOOT */
 
 #ifdef CONFIG_SET_GDT

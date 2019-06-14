@@ -24,11 +24,33 @@ config LPUART_1
 
 endif # SERIAL
 
+if I2C
+
+config I2C_1
+	default y
+
+config I2C_3
+	default y
+
+config I2C_STM32_INTERRUPT
+	default y
+
+endif # I2C
+
 if BT_DEBUG_MONITOR
 
 config LPUART_1
 	default y
 
 endif # BT_DEBUG_MONITOR
+
+if BT
+
+choice BT_HCI_BUS_TYPE
+	default BT_STM32_IPM
+
+endchoice
+
+endif # BT
 
 endif # BOARD_NUCLEO_WB55RG

@@ -16,8 +16,11 @@
 
 #include <system.h>
 #include <arch/nios2/asm_inline.h>
+#include <arch/common/addr_types.h>
 #include <generated_dts_board.h>
 #include "nios2.h"
+#include <arch/common/sys_io.h>
+#include <arch/common/ffs.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,9 +40,6 @@ extern "C" {
 #include <irq.h>
 #include <sw_isr_table.h>
 
-/* physical/virtual address types required by the kernel */
-typedef unsigned int paddr_t;
-typedef unsigned int vaddr_t;
 
 /**
  * Configure a static interrupt.
@@ -122,6 +122,15 @@ static ALWAYS_INLINE void z_arch_irq_unlock(unsigned int key)
 	    : : [key] "r" (key)
 	    : "memory");
 #endif
+}
+
+/**
+ * Returns true if interrupts were unlocked prior to the
+ * z_arch_irq_lock() call that produced the key argument.
+ */
+static ALWAYS_INLINE bool z_arch_irq_unlocked(unsigned int key)
+{
+	return key & 1;
 }
 
 void z_arch_irq_enable(unsigned int irq);

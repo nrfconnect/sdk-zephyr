@@ -13,3 +13,5 @@ supported:
   - counter
   - i2c
   - hwinfo
+  - spi
+  - adc

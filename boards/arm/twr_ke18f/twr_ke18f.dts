@@ -133,6 +133,19 @@
 	status = "ok";
 };
 
+&spi0 {
+	status = "ok";
+};
+
+&spi1 {
+	status = "ok";
+};
+
+&adc0 {
+	status = "ok";
+	sample-time = <12>;
+};
+
 &flash0 {
 	/*
 	 * For more information, see:

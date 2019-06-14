@@ -37,9 +37,6 @@ struct k_pipe_async {
 	struct k_pipe_desc  desc;     /* Pipe message descriptor */
 };
 
-extern struct k_pipe _k_pipe_list_start[];
-extern struct k_pipe _k_pipe_list_end[];
-
 #ifdef CONFIG_OBJECT_TRACING
 struct k_pipe *_trace_list_k_pipe;
 #endif	/* CONFIG_OBJECT_TRACING */
@@ -52,13 +49,13 @@ K_STACK_DEFINE(pipe_async_msgs, CONFIG_NUM_PIPE_ASYNC_MSGS);
 /* Allocate an asynchronous message descriptor */
 static void pipe_async_alloc(struct k_pipe_async **async)
 {
-	(void)k_stack_pop(&pipe_async_msgs, (u32_t *)async, K_FOREVER);
+	(void)k_stack_pop(&pipe_async_msgs, (stack_data_t *)async, K_FOREVER);
 }
 
 /* Free an asynchronous message descriptor */
 static void pipe_async_free(struct k_pipe_async *async)
 {
-	k_stack_push(&pipe_async_msgs, (u32_t)async);
+	k_stack_push(&pipe_async_msgs, (stack_data_t)async);
 }
 
 /* Finish an asynchronous operation */
@@ -111,16 +108,14 @@ static int init_pipes_module(struct device *dev)
 
 		z_init_thread_timeout(&async_msg[i].thread);
 
-		k_stack_push(&pipe_async_msgs, (u32_t)&async_msg[i]);
+		k_stack_push(&pipe_async_msgs, (stack_data_t)&async_msg[i]);
 	}
 #endif /* CONFIG_NUM_PIPE_ASYNC_MSGS > 0 */
 
 	/* Complete initialization of statically defined mailboxes. */
 
 #ifdef CONFIG_OBJECT_TRACING
-	struct k_pipe *pipe;
-
-	for (pipe = _k_pipe_list_start; pipe < _k_pipe_list_end; pipe++) {
+	Z_STRUCT_SECTION_FOREACH(k_pipe, pipe) {
 		SYS_TRACING_OBJ_INIT(k_pipe, pipe);
 	}
 #endif /* CONFIG_OBJECT_TRACING */

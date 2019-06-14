@@ -44,6 +44,13 @@
 #define DT_BOSCH_BME280_BUS_I2C 1
 #endif
 
+#ifndef DT_BOSCH_BME680_0_LABEL
+#define DT_BOSCH_BME680_0_LABEL ""
+#define DT_BOSCH_BME680_0_BASE_ADDRESS 0
+#define DT_BOSCH_BME680_0_BUS_NAME ""
+#define DT_BOSCH_BME680_BUS_I2C 1
+#endif
+
 #ifndef DT_AMS_CCS811_0_LABEL
 #define DT_AMS_CCS811_0_LABEL ""
 #define DT_AMS_CCS811_0_BUS_NAME ""
@@ -200,6 +207,12 @@
 #define DT_AMS_ENS210_0_LABEL         ""
 #define DT_AMS_ENS210_0_BUS_NAME      ""
 #define DT_AMS_ENS210_0_BASE_ADDRESS  0x00
+#endif
+
+#ifndef DT_TI_HDC_0_LABEL
+#define DT_TI_HDC_0_LABEL ""
+#define DT_TI_HDC_0_BUS_NAME ""
+#define DT_TI_HDC_0_BASE_ADDRESS 0
 #endif
 
 #endif /* CONFIG_HAS_DTS_I2C */

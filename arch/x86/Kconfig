@@ -20,6 +20,38 @@ config X86_MULTIBOOT
 	  to leave this option on if you're not sure. It only expands the
 	  text segment by 12-16 bytes and is typically ignored if not needed.
 
+config X86_MULTIBOOT_INFO
+	bool "Preserve multiboot information structure"
+	depends on X86_MULTIBOOT
+	default n
+	help
+	  Multiboot passes a pointer to an information structure to the
+	  kernel entry point. Some drivers (e.g., the multiboot framebuffer
+	  display driver) need to refer to information in this structure,
+	  and so set this option to preserve the data in a permanent location.
+
+if X86_MULTIBOOT
+
+config X86_MULTIBOOT_FRAMEBUF
+	bool "Multiboot framebuffer support"
+	default n
+	select DISPLAY
+	select FRAMEBUF_DISPLAY
+	select X86_MULTIBOOT_INFO
+
+if X86_MULTIBOOT_FRAMEBUF
+
+config X86_MULTIBOOT_FRAMEBUF_X
+	int "Multiboot framebuffer X pixels"
+	default 640
+
+config X86_MULTIBOOT_FRAMEBUF_Y
+	int "Multiboot framebuffer Y pixels"
+	default 480
+
+endif # X86_MULTIBOOT_FRAMEBUF
+
+endif # X86_MULTIBOOT
 
 source "arch/x86/core/Kconfig"
 
@@ -30,7 +62,6 @@ source "arch/x86/core/Kconfig"
 config CPU_ATOM
 	# Hidden
 	bool
-	select CMOV
 	select CPU_HAS_FPU
 	select ARCH_HAS_STACK_PROTECTION if X86_MMU
 	select ARCH_HAS_USERSPACE if X86_MMU
@@ -48,7 +79,6 @@ config CPU_MINUTEIA
 config CPU_APOLLO_LAKE
 	# Hidden
 	bool
-	select CMOV
 	select CPU_HAS_FPU
 	select ARCH_HAS_STACK_PROTECTION if X86_MMU
 	select ARCH_HAS_USERSPACE if X86_MMU
@@ -232,27 +262,6 @@ config REBOOT_RST_CNT
 	  Reboot via the RST_CNT register, going back to BIOS.
 
 endchoice
-
-
-config ISA_IA32
-	bool
-	default y
-	help
-	  This option signifies the use of a CPU based on the Intel IA-32
-	  instruction set architecture.
-
-config IA32_LEGACY_IO_PORTS
-	bool "Support IA32 legacy IO ports"
-	depends on ISA_IA32
-	help
-	  This option enables IA32 legacy IO ports. Note these are much slower
-	  than memory access, so they should be used in last resort.
-
-config CMOV
-	bool
-	help
-	  This option signifies the use of an Intel CPU that supports
-	  the CMOV instruction.
 
 config CACHE_LINE_SIZE_DETECT
 	bool "Detect cache line size at runtime"

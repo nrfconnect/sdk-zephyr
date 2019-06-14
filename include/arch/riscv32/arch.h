@@ -16,7 +16,8 @@
 #define ZEPHYR_INCLUDE_ARCH_RISCV32_ARCH_H_
 
 #include "exp.h"
-#include "sys_io.h"
+#include <arch/common/sys_io.h>
+#include <arch/common/ffs.h>
 
 #include <irq.h>
 #include <sw_isr_table.h>
@@ -113,6 +114,22 @@ static ALWAYS_INLINE void z_arch_irq_unlock(unsigned int key)
 			  : "=r" (mstatus)
 			  : "r" (key & SOC_MSTATUS_IEN)
 			  : "memory");
+}
+
+/**
+ * Returns true if interrupts were unlocked prior to the
+ * z_arch_irq_lock() call that produced the key argument.
+ */
+static ALWAYS_INLINE bool z_arch_irq_unlocked(unsigned int key)
+{
+	/* FIXME: looking at z_arch_irq_lock, this should be reducable
+	 * to just testing that key is nonzero (because it should only
+	 * have the single bit set).  But there is a mask applied to
+	 * the argument in z_arch_irq_unlock() that has me worried
+	 * that something elseswhere might try to set a bit?  Do it
+	 * the safe way for now.
+	 */
+	return (key & SOC_MSTATUS_IEN) == SOC_MSTATUS_IEN;
 }
 
 /**

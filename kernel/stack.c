@@ -20,9 +20,6 @@
 #include <syscall_handler.h>
 #include <kernel_internal.h>
 
-extern struct k_stack _k_stack_list_start[];
-extern struct k_stack _k_stack_list_end[];
-
 #ifdef CONFIG_OBJECT_TRACING
 
 struct k_stack *_trace_list_k_stack;
@@ -34,9 +31,7 @@ static int init_stack_module(struct device *dev)
 {
 	ARG_UNUSED(dev);
 
-	struct k_stack *stack;
-
-	for (stack = _k_stack_list_start; stack < _k_stack_list_end; stack++) {
+	Z_STRUCT_SECTION_FOREACH(k_stack, stack) {
 		SYS_TRACING_OBJ_INIT(k_stack, stack);
 	}
 	return 0;
@@ -46,7 +41,7 @@ SYS_INIT(init_stack_module, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_OBJECTS);
 
 #endif /* CONFIG_OBJECT_TRACING */
 
-void k_stack_init(struct k_stack *stack, u32_t *buffer,
+void k_stack_init(struct k_stack *stack, stack_data_t *buffer,
 		  u32_t num_entries)
 {
 	z_waitq_init(&stack->wait_q);
@@ -63,7 +58,7 @@ s32_t z_impl_k_stack_alloc_init(struct k_stack *stack, u32_t num_entries)
 	void *buffer;
 	s32_t ret;
 
-	buffer = z_thread_malloc(num_entries * sizeof(u32_t));
+	buffer = z_thread_malloc(num_entries * sizeof(stack_data_t));
 	if (buffer != NULL) {
 		k_stack_init(stack, buffer, num_entries);
 		stack->flags = K_STACK_FLAG_ALLOC;
@@ -96,7 +91,7 @@ void k_stack_cleanup(struct k_stack *stack)
 	}
 }
 
-void z_impl_k_stack_push(struct k_stack *stack, u32_t data)
+void z_impl_k_stack_push(struct k_stack *stack, stack_data_t data)
 {
 	struct k_thread *first_pending_thread;
 	k_spinlock_key_t key;
@@ -136,7 +131,7 @@ Z_SYSCALL_HANDLER(k_stack_push, stack_p, data)
 }
 #endif
 
-int z_impl_k_stack_pop(struct k_stack *stack, u32_t *data, s32_t timeout)
+int z_impl_k_stack_pop(struct k_stack *stack, stack_data_t *data, s32_t timeout)
 {
 	k_spinlock_key_t key;
 	int result;
@@ -160,7 +155,7 @@ int z_impl_k_stack_pop(struct k_stack *stack, u32_t *data, s32_t timeout)
 		return -EAGAIN;
 	}
 
-	*data = (u32_t)_current->base.swap_data;
+	*data = (stack_data_t)_current->base.swap_data;
 	return 0;
 }
 
@@ -168,9 +163,9 @@ int z_impl_k_stack_pop(struct k_stack *stack, u32_t *data, s32_t timeout)
 Z_SYSCALL_HANDLER(k_stack_pop, stack, data, timeout)
 {
 	Z_OOPS(Z_SYSCALL_OBJ(stack, K_OBJ_STACK));
-	Z_OOPS(Z_SYSCALL_MEMORY_WRITE(data, sizeof(u32_t)));
+	Z_OOPS(Z_SYSCALL_MEMORY_WRITE(data, sizeof(stack_data_t)));
 
-	return z_impl_k_stack_pop((struct k_stack *)stack, (u32_t *)data,
+	return z_impl_k_stack_pop((struct k_stack *)stack, (stack_data_t *)data,
 				 timeout);
 }
 #endif

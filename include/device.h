@@ -107,7 +107,7 @@ extern "C" {
 		.name = drv_name, .init = (init_fn),			  \
 		.config_info = (cfg_info)				  \
 	};								  \
-	static struct device _CONCAT(__device_, dev_name) __used	  \
+	static Z_DECL_ALIGN(struct device) _CONCAT(__device_, dev_name) __used \
 	__attribute__((__section__(".init_" #level STRINGIFY(prio)))) = { \
 		.config = &_CONCAT(__config_, dev_name),		  \
 		.driver_api = api,					  \
@@ -164,7 +164,7 @@ extern "C" {
 		.pm  = &_CONCAT(__pm_, dev_name),                         \
 		.config_info = (cfg_info)				  \
 	};								  \
-	static struct device _CONCAT(__device_, dev_name) __used	  \
+	static Z_DECL_ALIGN(struct device) _CONCAT(__device_, dev_name) __used \
 	__attribute__((__section__(".init_" #level STRINGIFY(prio)))) = { \
 		.config = &_CONCAT(__config_, dev_name),		  \
 		.driver_api = api,					  \
@@ -276,14 +276,6 @@ struct device {
 	struct device_config *config;
 	const void *driver_api;
 	void *driver_data;
-#if defined(__x86_64) && __SIZEOF_POINTER__ == 4
-	/* The x32 ABI hits an edge case.  This is a 12 byte struct,
-	 * but the x86_64 linker will pack them only in units of 8
-	 * bytes, leading to alignment problems when iterating over
-	 * the link-time array.
-	 */
-	void *padding;
-#endif
 };
 
 void z_sys_device_do_config_level(s32_t level);

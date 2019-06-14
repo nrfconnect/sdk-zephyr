@@ -27,7 +27,8 @@
 #include <arch/arc/v2/aux_regs.h>
 #include <arch/arc/v2/arcv2_irq_unit.h>
 #include <arch/arc/v2/asm_inline.h>
-#include <arch/arc/v2/addr_types.h>
+#include <arch/common/addr_types.h>
+#include "v2/sys_io.h"
 #endif
 
 #ifdef __cplusplus
@@ -113,7 +114,7 @@ extern "C" {
 /*
  * MPUv3, no-mpu and no USERSPACE share the same macro definitions.
  * For MPU STACK_GUARD  kernel stacks do not need a MPU region to protect,
- * only guard needs to be protected and aligned. For MPUv3,MPU_STACK_GUARD
+ * only guard needs to be protected and aligned. For MPUv3, MPU_STACK_GUARD
  * requires start 32 bytes aligned, also for size which is decided by stack
  * array and USERSPACE; For MPUv2, MPU_STACK_GUARD requires
  * start 2048 bytes aligned, also for size which is decided by stack array.

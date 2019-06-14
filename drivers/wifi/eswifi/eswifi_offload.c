@@ -97,6 +97,7 @@ static void eswifi_off_read_work(struct k_work *work)
 		LOG_WRN("Incomplete buffer copy");
 	}
 
+	net_pkt_cursor_init(pkt);
 	socket->recv_cb(socket->context, pkt,
 			NULL, NULL, 0, socket->user_data);
 	k_sem_give(&socket->read_sem);
@@ -452,8 +453,9 @@ static int eswifi_off_recv(struct net_context *context,
 	k_sem_reset(&socket->read_sem);
 	eswifi_unlock(eswifi);
 
-	if (timeout == K_NO_WAIT)
+	if (timeout == K_NO_WAIT) {
 		return 0;
+	}
 
 	err = k_sem_take(&socket->read_sem, timeout);
 

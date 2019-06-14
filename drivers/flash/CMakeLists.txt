@@ -15,6 +15,7 @@ zephyr_library_sources_ifdef(CONFIG_SOC_FLASH_SAM flash_sam.c)
 zephyr_library_sources_ifdef(CONFIG_SOC_FLASH_NIOS2_QSPI soc_flash_nios2_qspi.c)
 zephyr_library_sources_ifdef(CONFIG_SOC_FLASH_GECKO flash_gecko.c)
 zephyr_library_sources_ifdef(CONFIG_FLASH_NATIVE_POSIX flash_native_posix.c)
+zephyr_library_sources_ifdef(CONFIG_SOC_FLASH_RV32M1 soc_flash_rv32m1.c)
 
 if(CONFIG_CLOCK_CONTROL_STM32_CUBE)
   zephyr_sources(flash_stm32.c)
@@ -24,6 +25,7 @@ if(CONFIG_CLOCK_CONTROL_STM32_CUBE)
   zephyr_sources_ifdef(CONFIG_SOC_SERIES_STM32F4X flash_stm32f4x.c)
   zephyr_sources_ifdef(CONFIG_SOC_SERIES_STM32F7X flash_stm32f7x.c)
   zephyr_sources_ifdef(CONFIG_SOC_SERIES_STM32L4X flash_stm32l4x.c)
+  zephyr_sources_ifdef(CONFIG_SOC_SERIES_STM32WBX flash_stm32wbx.c)
 endif()
 
 zephyr_include_directories_ifdef(

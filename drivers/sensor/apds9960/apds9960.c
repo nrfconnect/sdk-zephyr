@@ -43,7 +43,7 @@ static int apds9960_sample_fetch(struct device *dev, enum sensor_channel chan)
 {
 	const struct apds9960_config *config = dev->config->config_info;
 	struct apds9960_data *data = dev->driver_data;
-	u8_t status;
+	u8_t tmp;
 
 	if (chan != SENSOR_CHAN_ALL) {
 		LOG_ERR("Unsupported sensor channel");
@@ -53,10 +53,13 @@ static int apds9960_sample_fetch(struct device *dev, enum sensor_channel chan)
 #ifndef CONFIG_APDS9960_TRIGGER
 	gpio_pin_enable_callback(data->gpio, config->gpio_pin);
 
+#ifdef CONFIG_APDS9960_ENABLE_ALS
+	tmp = APDS9960_ENABLE_PON | APDS9960_ENABLE_AIEN;
+#else
+	tmp = APDS9960_ENABLE_PON | APDS9960_ENABLE_PIEN;
+#endif
 	if (i2c_reg_update_byte(data->i2c, config->i2c_address,
-				APDS9960_ENABLE_REG,
-				APDS9960_ENABLE_PON | APDS9960_ENABLE_AIEN,
-				APDS9960_ENABLE_PON | APDS9960_ENABLE_AIEN)) {
+				APDS9960_ENABLE_REG, tmp, tmp)) {
 		LOG_ERR("Power on bit not set.");
 		return -EIO;
 	}
@@ -65,19 +68,19 @@ static int apds9960_sample_fetch(struct device *dev, enum sensor_channel chan)
 #endif
 
 	if (i2c_reg_read_byte(data->i2c, config->i2c_address,
-			      APDS9960_STATUS_REG, &status)) {
+			      APDS9960_STATUS_REG, &tmp)) {
 		return -EIO;
 	}
 
-	LOG_DBG("status: 0x%x", status);
-	if (status & APDS9960_STATUS_PINT) {
+	LOG_DBG("status: 0x%x", tmp);
+	if (tmp & APDS9960_STATUS_PINT) {
 		if (i2c_reg_read_byte(data->i2c, config->i2c_address,
 				      APDS9960_PDATA_REG, &data->pdata)) {
 			return -EIO;
 		}
 	}
 
-	if (status & APDS9960_STATUS_AINT) {
+	if (tmp & APDS9960_STATUS_AINT) {
 		if (i2c_burst_read(data->i2c, config->i2c_address,
 				   APDS9960_CDATAL_REG,
 				   (u8_t *)&data->sample_crgb,
@@ -111,6 +114,7 @@ static int apds9960_channel_get(struct device *dev,
 	struct apds9960_data *data = dev->driver_data;
 
 	switch (chan) {
+#ifdef CONFIG_APDS9960_ENABLE_ALS
 	case SENSOR_CHAN_LIGHT:
 		val->val1 = sys_le16_to_cpu(data->sample_crgb[0]);
 		val->val2 = 0;
@@ -127,6 +131,7 @@ static int apds9960_channel_get(struct device *dev,
 		val->val1 = sys_le16_to_cpu(data->sample_crgb[3]);
 		val->val2 = 0;
 		break;
+#endif
 	case SENSOR_CHAN_PROX:
 		val->val1 = data->pdata;
 		val->val2 = 0;
@@ -138,7 +143,7 @@ static int apds9960_channel_get(struct device *dev,
 	return 0;
 }
 
-static int apds9960_proxy_setup(struct device *dev, int gain)
+static int apds9960_proxy_setup(struct device *dev)
 {
 	const struct apds9960_config *config = dev->config->config_info;
 	struct apds9960_data *data = dev->driver_data;
@@ -159,7 +164,7 @@ static int apds9960_proxy_setup(struct device *dev, int gain)
 
 	if (i2c_reg_write_byte(data->i2c, config->i2c_address,
 			       APDS9960_PPULSE_REG,
-			       APDS9960_DEFAULT_PROX_PPULSE)) {
+			       config->ppcount)) {
 		LOG_ERR("Default pulse count not set ");
 		return -EIO;
 	}
@@ -173,8 +178,16 @@ static int apds9960_proxy_setup(struct device *dev, int gain)
 	}
 
 	if (i2c_reg_update_byte(data->i2c, config->i2c_address,
+				APDS9960_CONFIG2_REG,
+				APDS9960_PLED_BOOST_300,
+				config->pled_boost)) {
+		LOG_ERR("LED Drive Strength not set");
+		return -EIO;
+	}
+
+	if (i2c_reg_update_byte(data->i2c, config->i2c_address,
 				APDS9960_CONTROL_REG, APDS9960_CONTROL_PGAIN,
-				(gain & APDS9960_PGAIN_8X))) {
+				(config->pgain & APDS9960_PGAIN_8X))) {
 		LOG_ERR("Gain is not set");
 		return -EIO;
 	}
@@ -201,7 +214,8 @@ static int apds9960_proxy_setup(struct device *dev, int gain)
 	return 0;
 }
 
-static int apds9960_ambient_setup(struct device *dev, int gain)
+#ifdef CONFIG_APDS9960_ENABLE_ALS
+static int apds9960_ambient_setup(struct device *dev)
 {
 	const struct apds9960_config *config = dev->config->config_info;
 	struct apds9960_data *data = dev->driver_data;
@@ -218,7 +232,7 @@ static int apds9960_ambient_setup(struct device *dev, int gain)
 	if (i2c_reg_update_byte(data->i2c, config->i2c_address,
 				APDS9960_CONTROL_REG,
 				APDS9960_CONTROL_AGAIN,
-				(gain & APDS9960_AGAIN_64X))) {
+				(config->again & APDS9960_AGAIN_64X))) {
 		LOG_ERR("Ambient Gain is not set");
 		return -EIO;
 	}
@@ -249,6 +263,7 @@ static int apds9960_ambient_setup(struct device *dev, int gain)
 
 	return 0;
 }
+#endif
 
 static int apds9960_sensor_setup(struct device *dev)
 {
@@ -320,15 +335,17 @@ static int apds9960_sensor_setup(struct device *dev)
 		return -EIO;
 	}
 
-	if (apds9960_proxy_setup(dev, APDS9960_DEFAULT_PGAIN)) {
+	if (apds9960_proxy_setup(dev)) {
 		LOG_ERR("Failed to setup proximity functionality");
 		return -EIO;
 	}
 
-	if (apds9960_ambient_setup(dev, APDS9960_DEFAULT_AGAIN)) {
+#ifdef CONFIG_APDS9960_ENABLE_ALS
+	if (apds9960_ambient_setup(dev)) {
 		LOG_ERR("Failed to setup ambient light functionality");
 		return -EIO;
 	}
+#endif
 
 	return 0;
 }
@@ -469,6 +486,46 @@ static const struct apds9960_config apds9960_config = {
 	.i2c_address = DT_AVAGO_APDS9960_0_BASE_ADDRESS,
 	.gpio_name = DT_AVAGO_APDS9960_0_INT_GPIOS_CONTROLLER,
 	.gpio_pin = DT_AVAGO_APDS9960_0_INT_GPIOS_PIN,
+#if CONFIG_APDS9960_PGAIN_8X
+	.pgain = APDS9960_PGAIN_8X,
+#elif CONFIG_APDS9960_PGAIN_4X
+	.pgain = APDS9960_PGAIN_4X,
+#elif CONFIG_APDS9960_PGAIN_2X
+	.pgain = APDS9960_PGAIN_2X,
+#else
+	.pgain = APDS9960_PGAIN_1X,
+#endif
+#if CONFIG_APDS9960_AGAIN_64X
+	.again = APDS9960_AGAIN_64X,
+#elif CONFIG_APDS9960_AGAIN_16X
+	.again = APDS9960_AGAIN_16X,
+#elif CONFIG_APDS9960_AGAIN_4X
+	.again = APDS9960_AGAIN_4X,
+#else
+	.again = APDS9960_AGAIN_1X,
+#endif
+#if CONFIG_APDS9960_PPULSE_LENGTH_32US
+	.ppcount = APDS9960_PPULSE_LENGTH_32US |
+		   (CONFIG_APDS9960_PPULSE_COUNT - 1),
+#elif CONFIG_APDS9960_PPULSE_LENGTH_16US
+	.ppcount = APDS9960_PPULSE_LENGTH_16US |
+		   (CONFIG_APDS9960_PPULSE_COUNT - 1),
+#elif CONFIG_APDS9960_PPULSE_LENGTH_8US
+	.ppcount = APDS9960_PPULSE_LENGTH_8US |
+		   (CONFIG_APDS9960_PPULSE_COUNT - 1),
+#else
+	.ppcount = APDS9960_PPULSE_LENGTH_4US |
+		   (CONFIG_APDS9960_PPULSE_COUNT - 1),
+#endif
+#if CONFIG_APDS9960_PLED_BOOST_300PCT
+	.pled_boost = APDS9960_PLED_BOOST_300,
+#elif CONFIG_APDS9960_PLED_BOOST_200PCT
+	.pled_boost = APDS9960_PLED_BOOST_200,
+#elif CONFIG_APDS9960_PLED_BOOST_150PCT
+	.pled_boost = APDS9960_PLED_BOOST_150,
+#else
+	.pled_boost = APDS9960_PLED_BOOST_100,
+#endif
 };
 
 static struct apds9960_data apds9960_data;

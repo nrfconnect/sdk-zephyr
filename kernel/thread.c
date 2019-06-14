@@ -32,16 +32,10 @@
 #include <tracing.h>
 #include <stdbool.h>
 
-extern struct _static_thread_data _static_thread_data_list_start[];
-extern struct _static_thread_data _static_thread_data_list_end[];
-
 static struct k_spinlock lock;
 
 #define _FOREACH_STATIC_THREAD(thread_data)              \
-	for (struct _static_thread_data *thread_data =   \
-	     _static_thread_data_list_start;             \
-	     thread_data < _static_thread_data_list_end; \
-	     thread_data++)
+	Z_STRUCT_SECTION_FOREACH(_static_thread_data, thread_data)
 
 void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data)
 {
@@ -614,16 +608,10 @@ void z_thread_single_abort(struct k_thread *thread)
 
 #ifdef CONFIG_MULTITHREADING
 #ifdef CONFIG_USERSPACE
-extern char __object_access_start[];
-extern char __object_access_end[];
 
 static void grant_static_access(void)
 {
-	struct _k_object_assignment *pos;
-
-	for (pos = (struct _k_object_assignment *)__object_access_start;
-	     pos < (struct _k_object_assignment *)__object_access_end;
-	     pos++) {
+	Z_STRUCT_SECTION_FOREACH(_k_object_assignment, pos) {
 		for (int i = 0; pos->objects[i] != NULL; i++) {
 			k_object_access_grant(pos->objects[i],
 					      pos->thread);
@@ -738,5 +726,25 @@ void z_spin_lock_set_owner(struct k_spinlock *l)
 {
 	l->thread_cpu = _current_cpu->id | (uintptr_t)_current;
 }
+
+int z_impl_k_float_disable(struct k_thread *thread)
+{
+#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+	return z_arch_float_disable(thread);
+#else
+	return -ENOSYS;
+#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
+}
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_float_disable, thread_p)
+{
+	struct k_thread *thread = (struct k_thread *)thread_p;
+
+	Z_OOPS(Z_SYSCALL_OBJ(thread, K_OBJ_THREAD));
+
+	return z_impl_k_float_disable((struct k_thread *)thread_p);
+}
+#endif /* CONFIG_USERSPACE */
 
 #endif

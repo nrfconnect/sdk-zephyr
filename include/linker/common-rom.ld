@@ -38,9 +38,9 @@
 	 */
 	SECTION_PROLOGUE(object_access,,)
 	{
-		__object_access_start = .;
-		KEEP(*(".object_access.*"))
-		__object_access_end = .;
+		__k_object_assignment_list_start = .;
+		KEEP(*(".__k_object_assignment.*"))
+		__k_object_assignment_list_end = .;
 	} GROUP_LINK_IN(ROMABLE_REGION)
 #endif
 
@@ -104,7 +104,7 @@
 	SECTION_DATA_PROLOGUE(_bt_settings_area,,SUBALIGN(4))
 	{
 		_bt_settings_start = .;
-		KEEP(*(SORT_BY_NAME("._bt_settings.static.*")))
+		KEEP(*(SORT_BY_NAME("._bt_settings_handler.static.*")))
 		_bt_settings_end = .;
 	} GROUP_LINK_IN(ROMABLE_REGION)
 #endif

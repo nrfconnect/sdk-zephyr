@@ -23,7 +23,6 @@ from extract.compatible import compatible
 from extract.interrupts import interrupts
 from extract.reg import reg
 from extract.flash import flash
-from extract.pinctrl import pinctrl
 from extract.default import default
 
 
@@ -77,8 +76,6 @@ def generate_prop_defines(node_path, prop):
         interrupts.extract(node_path, prop, names, def_label)
     elif prop == 'compatible':
         compatible.extract(node_path, prop, def_label)
-    elif 'pinctrl-' in prop:
-        pinctrl.extract(node_path, prop, def_label)
     elif 'clocks' in prop:
         clocks.extract(node_path, prop, def_label)
     elif 'pwms' in prop or 'gpios' in prop:
@@ -169,12 +166,9 @@ def prop_names(node, prop_name):
     # interrupt-names, etc.) The list is copied so that it can be modified
     # in-place later without stomping on the device tree data.
 
-    if prop_name.startswith('pinctrl-'):
-        names = node['props'].get('pinctrl-names', [])
-    else:
-        # The first case turns 'interrupts' into 'interrupt-names'
-        names = node['props'].get(prop_name[:-1] + '-names', []) or \
-                node['props'].get(prop_name + '-names', [])
+    # The first case turns 'interrupts' into 'interrupt-names'
+    names = node['props'].get(prop_name[:-1] + '-names', []) or \
+            node['props'].get(prop_name + '-names', [])
 
     if isinstance(names, list):
         # Allow the list of names to be modified in-place without
@@ -483,6 +477,28 @@ def main():
     create_phandles(root, '/')
     create_aliases(root)
     create_chosen(root)
+
+    # Re-sort instance_id by reg addr
+    #
+    # Note: this is a short term fix and should be removed when
+    # generate defines for instance with a prefix like 'DT_INST'
+    #
+    # Build a dict of dicts, first level is index by compat
+    # second level is index by reg addr
+    compat_reg_dict = defaultdict(dict)
+    for node in reduced.values():
+        instance = node.get('instance_id')
+        if instance and node['addr'] is not None:
+            for compat in instance:
+                reg = node['addr']
+                compat_reg_dict[compat][reg] = node
+
+    # Walk the reg addr in sorted order to re-index 'instance_id'
+    for compat in compat_reg_dict:
+        # only update if we have more than one instance
+        if len(compat_reg_dict[compat]) > 1:
+            for idx, reg_addr in enumerate(sorted(compat_reg_dict[compat])):
+                compat_reg_dict[compat][reg_addr]['instance_id'][compat] = idx
 
     # Load any bindings (.yaml files) that match 'compatible' values from the
     # DTS

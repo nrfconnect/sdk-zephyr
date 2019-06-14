@@ -83,6 +83,15 @@ config BIG_ENDIAN
          is used to select linker script OUTPUT_FORMAT and command
          line option for gen_isr_tables.py.
 
+config 64BIT
+	bool
+	help
+	  This option tells the build system that the target system is
+	  using a 64-bit address space, meaning that pointer and long types
+	  are 64 bits wide. This option is selected by arch/$ARCH/Kconfig,
+	  soc/**/Kconfig, or boards/**/Kconfig and the user should generally
+	  avoid modifying it.
+
 if ARC || ARM || NIOS2 || X86
 
 config SRAM_SIZE
@@ -445,6 +454,7 @@ config MPU_REQUIRES_NON_OVERLAPPING_REGIONS
 menuconfig FLOAT
 	bool "Floating point"
 	depends on CPU_HAS_FPU
+	depends on ARM || X86
 	help
 	  This option allows threads to use the floating point registers.
 	  By default, only a single thread may use the registers.

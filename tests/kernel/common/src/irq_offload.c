@@ -22,7 +22,7 @@ volatile u32_t sentinel;
 
 static void offload_function(void *param)
 {
-	u32_t x = (u32_t)param;
+	u32_t x = POINTER_TO_INT(param);
 
 	/* Make sure we're in IRQ context */
 	zassert_true(z_is_in_isr(), "Not in IRQ context!");
@@ -40,6 +40,20 @@ static void offload_function(void *param)
  */
 void test_irq_offload(void)
 {
+	/* Simple validation of nested locking. */
+	unsigned int key1, key2;
+
+	key1 = z_arch_irq_lock();
+	zassert_true(z_arch_irq_unlocked(key1),
+		     "IRQs should have been unlocked, but key is 0x%x\n",
+		     key1);
+	key2 = z_arch_irq_lock();
+	zassert_false(z_arch_irq_unlocked(key2),
+		      "IRQs should have been locked, but key is 0x%x\n",
+		      key2);
+	z_arch_irq_unlock(key2);
+	z_arch_irq_unlock(key1);
+
 	/**TESTPOINT: Offload to IRQ context*/
 	irq_offload(offload_function, (void *)SENTINEL_VALUE);
 

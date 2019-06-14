@@ -35,46 +35,6 @@ extern "C" {
 
 /**
  *
- * @brief find most significant bit set in a 32-bit word
- *
- * This routine finds the first bit set starting from the most significant bit
- * in the argument passed in and returns the index of that bit.  Bits are
- * numbered starting at 1 from the least significant bit.  A return value of
- * zero indicates that the value passed is zero.
- *
- * @return most significant bit set, 0 if @a op is 0
- */
-
-static ALWAYS_INLINE unsigned int find_msb_set(u32_t op)
-{
-	if (!op) {
-		return 0;
-	}
-
-	return 32 - __builtin_clz(op);
-}
-
-
-/**
- *
- * @brief find least significant bit set in a 32-bit word
- *
- * This routine finds the first bit set starting from the least significant bit
- * in the argument passed in and returns the index of that bit.  Bits are
- * numbered starting at 1 from the least significant bit.  A return value of
- * zero indicates that the value passed is zero.
- *
- * @return least significant bit set, 0 if @a op is 0
- */
-
-static ALWAYS_INLINE unsigned int find_lsb_set(u32_t op)
-{
-	return __builtin_ffs(op);
-}
-
-
-/**
- *
  * @brief Disable all interrupts on the CPU
  *
  * This routine disables interrupts.  It can be called from either interrupt or
@@ -184,6 +144,15 @@ static ALWAYS_INLINE void z_arch_irq_unlock(unsigned int key)
 #endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
 }
 
+/**
+ * Returns true if interrupts were unlocked prior to the
+ * z_arch_irq_lock() call that produced the key argument.
+ */
+static ALWAYS_INLINE bool z_arch_irq_unlocked(unsigned int key)
+{
+	/* This convention works for both PRIMASK and BASEPRI */
+	return key == 0;
+}
 
 #endif /* _ASMLANGUAGE */
 

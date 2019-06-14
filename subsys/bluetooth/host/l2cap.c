@@ -27,6 +27,7 @@
 #include "l2cap_internal.h"
 
 #define LE_CHAN_RTX(_w) CONTAINER_OF(_w, struct bt_l2cap_le_chan, chan.rtx_work)
+#define CHAN_RX(_w) CONTAINER_OF(_w, struct bt_l2cap_chan, rx_work)
 
 #define L2CAP_LE_MIN_MTU		23
 
@@ -224,6 +225,8 @@ void bt_l2cap_chan_set_state(struct bt_l2cap_chan *chan,
 
 void bt_l2cap_chan_del(struct bt_l2cap_chan *chan)
 {
+	struct net_buf *buf;
+
 	BT_DBG("conn %p chan %p", chan->conn, chan);
 
 	if (!chan->conn) {
@@ -243,6 +246,11 @@ destroy:
 	chan->psm = 0U;
 #endif
 
+	/* Remove buffers on the RX queue */
+	while ((buf = net_buf_get(&chan->rx_queue, K_NO_WAIT))) {
+		net_buf_unref(buf);
+	}
+
 	if (chan->destroy) {
 		chan->destroy(chan);
 	}
@@ -256,6 +264,20 @@ static void l2cap_rtx_timeout(struct k_work *work)
 
 	bt_l2cap_chan_remove(chan->chan.conn, &chan->chan);
 	bt_l2cap_chan_del(&chan->chan);
+}
+
+static void l2cap_chan_recv(struct bt_l2cap_chan *chan, struct net_buf *buf);
+
+static void l2cap_rx_process(struct k_work *work)
+{
+	struct bt_l2cap_chan *chan = CHAN_RX(work);
+	struct net_buf *buf;
+
+	while ((buf = net_buf_get(&chan->rx_queue, K_NO_WAIT))) {
+		BT_DBG("chan %p buf %p", chan, buf);
+		l2cap_chan_recv(chan, buf);
+		net_buf_unref(buf);
+	}
 }
 
 void bt_l2cap_chan_add(struct bt_conn *conn, struct bt_l2cap_chan *chan,
@@ -286,6 +308,8 @@ static bool l2cap_chan_add(struct bt_conn *conn, struct bt_l2cap_chan *chan,
 	}
 
 	k_delayed_work_init(&chan->rtx_work, l2cap_rtx_timeout);
+	k_work_init(&chan->rx_work, l2cap_rx_process);
+	k_fifo_init(&chan->rx_queue);
 
 	bt_l2cap_chan_add(conn, chan, destroy);
 
@@ -859,7 +883,7 @@ rsp:
 	bt_l2cap_send(conn, BT_L2CAP_CID_LE_SIG, buf);
 }
 
-static struct bt_l2cap_le_chan *l2cap_remove_tx_cid(struct bt_conn *conn,
+static struct bt_l2cap_le_chan *l2cap_remove_rx_cid(struct bt_conn *conn,
 						    u16_t cid)
 {
 	struct bt_l2cap_chan *chan;
@@ -889,18 +913,18 @@ static void le_disconn_req(struct bt_l2cap *l2cap, u8_t ident,
 	struct bt_l2cap_le_chan *chan;
 	struct bt_l2cap_disconn_req *req = (void *)buf->data;
 	struct bt_l2cap_disconn_rsp *rsp;
-	u16_t scid;
+	u16_t dcid;
 
 	if (buf->len < sizeof(*req)) {
 		BT_ERR("Too small LE conn req packet size");
 		return;
 	}
 
-	scid = sys_le16_to_cpu(req->scid);
+	dcid = sys_le16_to_cpu(req->dcid);
 
-	BT_DBG("scid 0x%04x dcid 0x%04x", scid, sys_le16_to_cpu(req->dcid));
+	BT_DBG("dcid 0x%04x scid 0x%04x", dcid, sys_le16_to_cpu(req->scid));
 
-	chan = l2cap_remove_tx_cid(conn, scid);
+	chan = l2cap_remove_rx_cid(conn, dcid);
 	if (!chan) {
 		struct bt_l2cap_cmd_reject_cid_data data;
 
@@ -1029,18 +1053,18 @@ static void le_disconn_rsp(struct bt_l2cap *l2cap, u8_t ident,
 	struct bt_conn *conn = l2cap->chan.chan.conn;
 	struct bt_l2cap_le_chan *chan;
 	struct bt_l2cap_disconn_rsp *rsp = (void *)buf->data;
-	u16_t dcid;
+	u16_t scid;
 
 	if (buf->len < sizeof(*rsp)) {
 		BT_ERR("Too small LE disconn rsp packet size");
 		return;
 	}
 
-	dcid = sys_le16_to_cpu(rsp->dcid);
+	scid = sys_le16_to_cpu(rsp->scid);
 
-	BT_DBG("dcid 0x%04x scid 0x%04x", dcid, sys_le16_to_cpu(rsp->scid));
+	BT_DBG("dcid 0x%04x scid 0x%04x", sys_le16_to_cpu(rsp->dcid), scid);
 
-	chan = l2cap_remove_tx_cid(conn, dcid);
+	chan = l2cap_remove_rx_cid(conn, scid);
 	if (!chan) {
 		return;
 	}
@@ -1616,6 +1640,13 @@ static void l2cap_chan_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 	chan->ops->recv(chan, buf);
 }
 
+static void l2cap_chan_recv_queue(struct bt_l2cap_chan *chan,
+				  struct net_buf *buf)
+{
+	net_buf_put(&chan->rx_queue, buf);
+	k_work_submit(&chan->rx_work);
+}
+
 void bt_l2cap_recv(struct bt_conn *conn, struct net_buf *buf)
 {
 	struct bt_l2cap_hdr *hdr;
@@ -1646,8 +1677,7 @@ void bt_l2cap_recv(struct bt_conn *conn, struct net_buf *buf)
 		return;
 	}
 
-	l2cap_chan_recv(chan, buf);
-	net_buf_unref(buf);
+	l2cap_chan_recv_queue(chan, buf);
 }
 
 int bt_l2cap_update_conn_param(struct bt_conn *conn,
@@ -1794,8 +1824,8 @@ int bt_l2cap_chan_disconnect(struct bt_l2cap_chan *chan)
 				      ch->chan.ident, sizeof(*req));
 
 	req = net_buf_add(buf, sizeof(*req));
-	req->dcid = sys_cpu_to_le16(ch->tx.cid);
-	req->scid = sys_cpu_to_le16(ch->rx.cid);
+	req->dcid = sys_cpu_to_le16(ch->rx.cid);
+	req->scid = sys_cpu_to_le16(ch->tx.cid);
 
 	l2cap_chan_send_req(ch, buf, L2CAP_DISC_TIMEOUT);
 	bt_l2cap_chan_set_state(chan, BT_L2CAP_DISCONNECT);

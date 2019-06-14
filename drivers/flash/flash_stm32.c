@@ -29,7 +29,12 @@
 /* STM32L4: maximum erase time of 24.47ms for a 2K sector */
 #elif defined(CONFIG_SOC_SERIES_STM32L4X)
 #define STM32_FLASH_TIMEOUT	(K_MSEC(25))
+/* STM32WB: maximum erase time of 24.5ms for a 4K sector */
+#elif defined(CONFIG_SOC_SERIES_STM32WBX)
+#define STM32_FLASH_TIMEOUT	(K_MSEC(25))
 #endif
+
+#define CFG_HW_FLASH_SEMID	2
 
 /*
  * This is named flash_stm32_sem_take instead of flash_stm32_lock (and
@@ -38,14 +43,27 @@
  */
 static inline void flash_stm32_sem_take(struct device *dev)
 {
+
+#ifdef CONFIG_SOC_SERIES_STM32WBX
+	while (LL_HSEM_1StepLock(HSEM, CFG_HW_FLASH_SEMID)) {
+	}
+#endif /* CONFIG_SOC_SERIES_STM32WBX */
+
 	k_sem_take(&FLASH_STM32_PRIV(dev)->sem, K_FOREVER);
 }
 
 static inline void flash_stm32_sem_give(struct device *dev)
 {
+
 	k_sem_give(&FLASH_STM32_PRIV(dev)->sem);
+
+#ifdef CONFIG_SOC_SERIES_STM32WBX
+	LL_HSEM_ReleaseLock(HSEM, CFG_HW_FLASH_SEMID, 0);
+#endif /* CONFIG_SOC_SERIES_STM32WBX */
+
 }
 
+#if !defined(CONFIG_SOC_SERIES_STM32WBX)
 static int flash_stm32_check_status(struct device *dev)
 {
 	u32_t const error =
@@ -75,6 +93,7 @@ static int flash_stm32_check_status(struct device *dev)
 
 	return 0;
 }
+#endif /* CONFIG_SOC_SERIES_STM32WBX */
 
 int flash_stm32_wait_flash_idle(struct device *dev)
 {
@@ -102,13 +121,17 @@ static void flash_stm32_flush_caches(struct device *dev,
 	ARG_UNUSED(dev);
 	ARG_UNUSED(offset);
 	ARG_UNUSED(len);
-#elif defined(CONFIG_SOC_SERIES_STM32F4X) || defined(CONFIG_SOC_SERIES_STM32L4X)
+#elif defined(CONFIG_SOC_SERIES_STM32F4X) || \
+	defined(CONFIG_SOC_SERIES_STM32L4X) || \
+	defined(CONFIG_SOC_SERIES_STM32WBX)
 	ARG_UNUSED(offset);
 	ARG_UNUSED(len);
 #if defined(CONFIG_SOC_SERIES_STM32F4X)
 	struct stm32f4x_flash *regs = FLASH_STM32_REGS(dev);
 #elif defined(CONFIG_SOC_SERIES_STM32L4X)
 	struct stm32l4x_flash *regs = FLASH_STM32_REGS(dev);
+#elif defined(CONFIG_SOC_SERIES_STM32WBX)
+	struct stm32wbx_flash *regs = FLASH_STM32_REGS(dev);
 #endif
 	if (regs->acr.val & FLASH_ACR_DCEN) {
 		regs->acr.val &= ~FLASH_ACR_DCEN;
@@ -195,6 +218,8 @@ static int flash_stm32_write_protection(struct device *dev, bool enable)
 	struct stm32f3x_flash *regs = FLASH_STM32_REGS(dev);
 #elif defined(CONFIG_SOC_SERIES_STM32L4X)
 	struct stm32l4x_flash *regs = FLASH_STM32_REGS(dev);
+#elif defined(CONFIG_SOC_SERIES_STM32WBX)
+	struct stm32wbx_flash *regs = FLASH_STM32_REGS(dev);
 #endif
 	int rc = 0;
 
@@ -236,6 +261,8 @@ static struct flash_stm32_priv flash_data = {
 	.regs = (struct stm32l4x_flash *) DT_FLASH_DEV_BASE_ADDRESS,
 	.pclken = { .bus = STM32_CLOCK_BUS_AHB1,
 		    .enr = LL_AHB1_GRP1_PERIPH_FLASH },
+#elif defined(CONFIG_SOC_SERIES_STM32WBX)
+	.regs = (struct stm32wbx_flash *) DT_FLASH_DEV_BASE_ADDRESS,
 #endif
 };
 
@@ -280,6 +307,10 @@ static int stm32_flash_init(struct device *dev)
 		return -EIO;
 	}
 #endif
+
+#ifdef CONFIG_SOC_SERIES_STM32WBX
+	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_HSEM);
+#endif /* CONFIG_SOC_SERIES_STM32WBX */
 
 	k_sem_init(&p->sem, 1, 1);
 

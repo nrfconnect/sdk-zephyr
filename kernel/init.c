@@ -38,7 +38,7 @@
 #define IDLE_THREAD_NAME	"idle"
 #define LOG_LEVEL CONFIG_KERNEL_LOG_LEVEL
 #include <logging/log.h>
-LOG_MODULE_REGISTER(kernel);
+LOG_MODULE_REGISTER(os);
 
 /* boot banner items */
 #if defined(CONFIG_MULTITHREADING) && defined(CONFIG_BOOT_DELAY) \
@@ -263,7 +263,7 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 	z_init_static_threads();
 
 #ifdef CONFIG_SMP
-	smp_init();
+	z_smp_init();
 #endif
 
 #ifdef CONFIG_BOOT_TIME_MEASUREMENT
@@ -322,13 +322,6 @@ static void prepare_multithreading(struct k_thread *dummy_thread)
 #ifdef CONFIG_ARCH_HAS_CUSTOM_SWAP_TO_MAIN
 	ARG_UNUSED(dummy_thread);
 #else
-
-#ifdef CONFIG_TRACING
-	sys_trace_thread_switched_out();
-#endif
-#ifdef CONFIG_TRACING
-	sys_trace_thread_switched_in();
-#endif
 
 	/*
 	 * Initialize the current execution thread to permit a level of

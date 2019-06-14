@@ -287,14 +287,34 @@ u32_t z_check_thread_stack_fail(const u32_t fault_addr, const u32_t psp)
 		}
 	}
 #else /* CONFIG_USERSPACE */
-	if (IS_MPU_GUARD_VIOLATION(thread->stack_info.start,
+	if (IS_MPU_GUARD_VIOLATION(thread->stack_info.start -
+			MPU_GUARD_ALIGN_AND_SIZE,
 			fault_addr, psp)) {
 		/* Thread stack corruption */
-		return thread->stack_info.start +
-			MPU_GUARD_ALIGN_AND_SIZE;
+		return thread->stack_info.start;
 	}
 #endif /* CONFIG_USERSPACE */
 
 	return 0;
 }
 #endif /* CONFIG_MPU_STACK_GUARD || CONFIG_USERSPACE */
+
+#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+int z_arch_float_disable(struct k_thread *thread)
+{
+	if (thread != _current) {
+		return -EINVAL;
+	}
+
+	if (z_is_in_isr()) {
+		return -EINVAL;
+	}
+
+	/* Disable all floating point capabilities for the thread */
+
+	thread->base.user_options &= ~K_FP_REGS;
+
+	__set_CONTROL(__get_CONTROL() & (~CONTROL_FPCA_Msk));
+	return 0;
+}
+#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
