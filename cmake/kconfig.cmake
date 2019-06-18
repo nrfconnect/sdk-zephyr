@@ -22,8 +22,8 @@ if(${IMAGE}CONF_FILE)
 string(REPLACE " " ";" ${IMAGE}CONF_FILE_AS_LIST "${${IMAGE}CONF_FILE}")
 endif()
 
-if(OVERLAY_CONFIG)
-  string(REPLACE " " ";" OVERLAY_CONFIG_AS_LIST "${OVERLAY_CONFIG}")
+if(${IMAGE}OVERLAY_CONFIG)
+  string(REPLACE " " ";" ${IMAGE}OVERLAY_CONFIG_AS_LIST "${${IMAGE}OVERLAY_CONFIG}")
 endif()
 
 set(ENV{srctree}            ${ZEPHYR_BASE})
@@ -118,7 +118,7 @@ set(
   ${BOARD_DEFCONFIG}
   ${${IMAGE}CONF_FILE_AS_LIST}
   ${shield_conf_files}
-  ${OVERLAY_CONFIG_AS_LIST}
+  ${${IMAGE}OVERLAY_CONFIG_AS_LIST}
   ${EXTRA_KCONFIG_OPTIONS_FILE}
   ${config_files}
 )
