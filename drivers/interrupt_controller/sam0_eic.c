@@ -316,10 +316,10 @@ u32_t sam0_eic_interrupt_pending(int port)
 
 #define SAM0_EIC_IRQ_CONNECT(n)						\
 	do {								\
-		IRQ_CONNECT(DT_ATMEL_SAM0_EIC_0_IRQ_ ## n,		\
-			    DT_ATMEL_SAM0_EIC_0_IRQ_ ## n ## _PRIORITY,	\
+		IRQ_CONNECT(DT_INST_0_ATMEL_SAM0_EIC_IRQ_ ## n,		\
+			    DT_INST_0_ATMEL_SAM0_EIC_IRQ_ ## n ## _PRIORITY,	\
 			    sam0_eic_isr, DEVICE_GET(sam0_eic), 0);	\
-		irq_enable(DT_ATMEL_SAM0_EIC_0_IRQ_ ## n);		\
+		irq_enable(DT_INST_0_ATMEL_SAM0_EIC_IRQ_ ## n);		\
 	} while (0)
 
 static int sam0_eic_init(struct device *dev)
@@ -333,52 +333,52 @@ static int sam0_eic_init(struct device *dev)
 	GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID_EIC | GCLK_CLKCTRL_GEN_GCLK0 |
 			    GCLK_CLKCTRL_CLKEN;
 
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_0
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_0
 	SAM0_EIC_IRQ_CONNECT(0);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_1
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_1
 	SAM0_EIC_IRQ_CONNECT(1);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_2
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_2
 	SAM0_EIC_IRQ_CONNECT(2);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_3
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_3
 	SAM0_EIC_IRQ_CONNECT(3);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_4
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_4
 	SAM0_EIC_IRQ_CONNECT(4);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_5
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_5
 	SAM0_EIC_IRQ_CONNECT(5);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_6
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_6
 	SAM0_EIC_IRQ_CONNECT(6);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_7
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_7
 	SAM0_EIC_IRQ_CONNECT(7);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_8
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_8
 	SAM0_EIC_IRQ_CONNECT(8);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_9
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_9
 	SAM0_EIC_IRQ_CONNECT(9);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_10
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_10
 	SAM0_EIC_IRQ_CONNECT(10);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_11
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_11
 	SAM0_EIC_IRQ_CONNECT(11);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_12
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_12
 	SAM0_EIC_IRQ_CONNECT(12);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_13
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_13
 	SAM0_EIC_IRQ_CONNECT(13);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_14
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_14
 	SAM0_EIC_IRQ_CONNECT(14);
 #endif
-#ifdef DT_ATMEL_SAM0_EIC_0_IRQ_15
+#ifdef DT_INST_0_ATMEL_SAM0_EIC_IRQ_15
 	SAM0_EIC_IRQ_CONNECT(15);
 #endif
 
@@ -389,6 +389,6 @@ static int sam0_eic_init(struct device *dev)
 }
 
 static struct sam0_eic_data eic_data;
-DEVICE_INIT(sam0_eic, DT_ATMEL_SAM0_EIC_0_LABEL, sam0_eic_init,
+DEVICE_INIT(sam0_eic, DT_INST_0_ATMEL_SAM0_EIC_LABEL, sam0_eic_init,
 	    &eic_data, NULL,
 	    PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);

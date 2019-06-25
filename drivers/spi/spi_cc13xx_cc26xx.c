@@ -209,7 +209,7 @@ static int spi_cc13xx_cc26xx_init_0(struct device *dev)
 
 	/* Enable SSI0 peripherals */
 	PRCMPeripheralRunEnable(PRCM_PERIPH_SSI0);
-	/* Enable in sleep mode until proper power managment is added */
+	/* Enable in sleep mode until proper power management is added */
 	PRCMPeripheralSleepEnable(PRCM_PERIPH_SSI0);
 	PRCMPeripheralDeepSleepEnable(PRCM_PERIPH_SSI0);
 
@@ -239,7 +239,7 @@ static const struct spi_cc13xx_cc26xx_config spi_cc13xx_cc26xx_config_0 = {
 	.cs_pin = DT_TI_CC13XX_CC26XX_SPI_40000000_CS_PIN,
 #else
 	.cs_pin = IOID_UNUSED,
-#endif /* DT_TI_CC13XX_CC26XX_SPI_0_CS_PIN */
+#endif /* DT_INST_0_TI_CC13XX_CC26XX_SPI_CS_PIN */
 };
 
 static struct spi_cc13xx_cc26xx_data spi_cc13xx_cc26xx_data_0 = {
@@ -261,7 +261,7 @@ static int spi_cc13xx_cc26xx_init_1(struct device *dev)
 
 	/* Enable SSI1 peripherals */
 	PRCMPeripheralRunEnable(PRCM_PERIPH_SSI1);
-	/* Enable in sleep mode until proper power managment is added */
+	/* Enable in sleep mode until proper power management is added */
 	PRCMPeripheralSleepEnable(PRCM_PERIPH_SSI1);
 	PRCMPeripheralDeepSleepEnable(PRCM_PERIPH_SSI1);
 

@@ -114,12 +114,12 @@
 };
 
 &uart0 {
-	status = "ok";
+	status = "okay";
 	current-speed = <115200>;
 };
 
 &i2c0 {
-	status = "ok";
+	status = "okay";
 
 	fxos8700: fxos8700@1d {
 		compatible = "nxp,fxos8700";
@@ -130,20 +130,25 @@
 };
 
 &i2c1 {
-	status = "ok";
+	status = "okay";
 };
 
 &spi0 {
-	status = "ok";
+	status = "okay";
 };
 
 &spi1 {
-	status = "ok";
+	status = "okay";
 };
 
 &adc0 {
-	status = "ok";
+	status = "okay";
 	sample-time = <12>;
+};
+
+&can0 {
+	status = "ok";
+	bus-speed = <125000>;
 };
 
 &flash0 {

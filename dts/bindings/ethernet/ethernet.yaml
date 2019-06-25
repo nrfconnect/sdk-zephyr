@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
----
+
 title: Ethernet Base Structure
 version: 0.1
 
@@ -14,10 +14,9 @@ inherits:
     !include base.yaml
 properties:
     local-mac-address:
-      type: array
+      type: uint8-array
       category: optional
       description: mac address
       generation: define
     label:
       category: required
-...

@@ -38,9 +38,9 @@
 LOG_MODULE_REGISTER(lp5562);
 
 #ifdef CONFIG_HAS_DTS_I2C
-#define CONFIG_LP5562_DEV_NAME            DT_TI_LP5562_0_LABEL
-#define CONFIG_LP5562_I2C_ADDRESS         DT_TI_LP5562_0_BASE_ADDRESS
-#define CONFIG_LP5562_I2C_MASTER_DEV_NAME DT_TI_LP5562_0_BUS_NAME
+#define CONFIG_LP5562_DEV_NAME            DT_INST_0_TI_LP5562_LABEL
+#define CONFIG_LP5562_I2C_ADDRESS         DT_INST_0_TI_LP5562_BASE_ADDRESS
+#define CONFIG_LP5562_I2C_MASTER_DEV_NAME DT_INST_0_TI_LP5562_BUS_NAME
 #endif
 
 #include "led_context.h"
@@ -481,7 +481,17 @@ static inline int lp5562_set_engine_exec_state(struct device *dev,
 					enum lp5562_led_sources engine,
 					enum lp5562_engine_exec_states state)
 {
-	return lp5562_set_engine_reg(dev, engine, LP5562_ENABLE, state);
+	int ret;
+
+	ret = lp5562_set_engine_reg(dev, engine, LP5562_ENABLE, state);
+
+	/*
+	 * Delay between consecutive I2C writes to
+	 * ENABLE register (00h) need to be longer than 488μs (typ.).
+	 */
+	k_sleep(1);
+
+	return ret;
 }
 
 /*
@@ -502,7 +512,6 @@ static inline int lp5562_start_program_exec(struct device *dev,
 
 	return lp5562_set_engine_exec_state(dev, engine,
 					    LP5562_ENGINE_MODE_RUN);
-
 }
 
 /*

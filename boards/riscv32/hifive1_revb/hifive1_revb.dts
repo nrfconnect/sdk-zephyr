@@ -39,27 +39,25 @@
 };
 
 &gpio0 {
-	status = "ok";
+	status = "okay";
 };
 
 &uart0 {
-	status = "ok";
+	status = "okay";
 	current-speed = <115200>;
 	clock-frequency = <16000000>;
 };
 
 &uart1 {
-	status = "ok";
+	status = "okay";
 	current-speed = <115200>;
 	clock-frequency = <16000000>;
 };
 
 &spi0 {
-	status = "ok";
+	status = "okay";
 	clock-frequency = <16000000>;
 
-	#address-cells = <1>;
-	#size-cells = <0>;
 	reg = <0x10014000 0x1000 0x20010000 0x3c0900>;
 	flash0: flash@0 {
 		compatible = "issi,is25lp128", "jedec,spi-nor";
@@ -69,32 +67,32 @@
 };
 
 &spi1 {
-	status = "ok";
+	status = "okay";
 	clock-frequency = <16000000>;
 };
 
 &spi2 {
-	status = "ok";
+	status = "okay";
 	clock-frequency = <16000000>;
 };
 
 &pwm0 {
-	status = "ok";
+	status = "okay";
 	clock-frequency = <16000000>;
 };
 
 &pwm1 {
-	status = "ok";
+	status = "okay";
 	clock-frequency = <16000000>;
 };
 
 &pwm2 {
-	status = "ok";
+	status = "okay";
 	clock-frequency = <16000000>;
 };
 
 &i2c0 {
-	status = "ok";
+	status = "okay";
 	input-frequency = <16000000>;
 	clock-frequency = <100000>;
 };

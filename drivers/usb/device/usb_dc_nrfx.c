@@ -537,7 +537,7 @@ static int hf_clock_enable(bool on, bool blocking)
 	struct device *clock;
 	static bool clock_requested;
 
-	clock = device_get_binding(DT_NORDIC_NRF_CLOCK_0_LABEL "_16M");
+	clock = device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_16M");
 	if (!clock) {
 		LOG_ERR("NRF HF Clock device not found!");
 		return ret;
@@ -1306,8 +1306,8 @@ int usb_dc_attach(void)
 	k_work_init(&ctx->usb_work, usbd_work_handler);
 	k_mutex_init(&ctx->drv_lock);
 
-	IRQ_CONNECT(DT_NORDIC_NRF_USBD_USBD_0_IRQ,
-		    DT_NORDIC_NRF_USBD_USBD_0_IRQ_PRIORITY,
+	IRQ_CONNECT(DT_NORDIC_NRF_USBD_USBD_0_IRQ_0,
+		    DT_NORDIC_NRF_USBD_USBD_0_IRQ_0_PRIORITY,
 		    nrfx_isr, nrfx_usbd_irq_handler, 0);
 
 	err = nrfx_usbd_init(usbd_event_handler);

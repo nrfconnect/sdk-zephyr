@@ -963,6 +963,8 @@ void HAL_PCD_SetupStageCallback(PCD_HandleTypeDef *hpcd)
 	LOG_DBG("");
 
 	ep_state = usb_dc_stm32_get_ep_state(EP0_OUT); /* can't fail for ep0 */
+	__ASSERT(ep_state, "No corresponding ep_state for EP0");
+
 	ep_state->read_count = SETUP_SIZE;
 	ep_state->read_offset = 0U;
 	memcpy(&usb_dc_stm32_state.ep_buf[EP0_IDX],
@@ -1009,6 +1011,8 @@ void HAL_PCD_DataInStageCallback(PCD_HandleTypeDef *hpcd, u8_t epnum)
 
 	LOG_DBG("epnum 0x%02x", epnum);
 
+	__ASSERT(ep_state, "No corresponding ep_state for ep");
+
 	k_sem_give(&ep_state->write_sem);
 
 	if (ep_state->cb) {
@@ -1022,18 +1026,18 @@ void HAL_PCDEx_SetConnectionState(PCD_HandleTypeDef *hpcd, uint8_t state)
 	struct device *usb_disconnect;
 
 	usb_disconnect = device_get_binding(
-				DT_ST_STM32_USB_0_DISCONNECT_GPIOS_CONTROLLER);
+				DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_CONTROLLER);
 	gpio_pin_configure(usb_disconnect,
-			   DT_ST_STM32_USB_0_DISCONNECT_GPIOS_PIN, GPIO_DIR_OUT);
+			   DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_PIN, GPIO_DIR_OUT);
 
 	if (state) {
 		gpio_pin_write(usb_disconnect,
-			       DT_ST_STM32_USB_0_DISCONNECT_GPIOS_PIN,
-			       DT_ST_STM32_USB_0_DISCONNECT_GPIOS_FLAGS);
+			       DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_PIN,
+			       DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_FLAGS);
 	} else {
 		gpio_pin_write(usb_disconnect,
-			       DT_ST_STM32_USB_0_DISCONNECT_GPIOS_PIN,
-			       !DT_ST_STM32_USB_0_DISCONNECT_GPIOS_FLAGS);
+			       DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_PIN,
+			       !DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_FLAGS);
 	}
 }
 #endif /* USB && CONFIG_USB_DC_STM32_DISCONN_ENABLE */

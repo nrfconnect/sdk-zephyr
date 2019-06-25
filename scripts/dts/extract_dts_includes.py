@@ -105,6 +105,9 @@ def generate_node_defines(node_path):
         flash.extract_partition(node_path)
         return
 
+    if get_binding(node_path) is None:
+        return
+
     generate_bus_defines(node_path)
 
     # Generate per-property ('foo = <1 2 3>', etc.) #defines
@@ -193,7 +196,7 @@ def merge_properties(parent, fname, to_dict, from_dict):
             # Warn when overriding a property and changing its value...
             if (k in to_dict and to_dict[k] != from_dict[k] and
                 # ...unless it's the 'title', 'description', or 'version'
-                # property. These are overriden deliberately.
+                # property. These are overridden deliberately.
                 not k in {'title', 'version', 'description'} and
                 # Also allow the category to be changed from 'optional' to
                 # 'required' without a warning
@@ -301,6 +304,8 @@ def write_header(f):
             # Mark any non-DT_ prefixed define as deprecated except
             # for now we special case LED, SW, and *PWM_LED*
             if not alias.startswith(('DT_', 'LED', 'SW')) and not 'PWM_LED' in alias:
+                deprecated_warn = True
+            if alias in deprecated:
                 deprecated_warn = True
             f.write(define_str(alias, alias_target, value_tabs, deprecated_warn))
 

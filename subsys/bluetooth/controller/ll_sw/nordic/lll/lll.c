@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <zephyr/types.h>
 #include <device.h>
+#include <entropy.h>
 #include <clock_control.h>
 #include <drivers/clock_control/nrf_clock_control.h>
 
@@ -39,6 +40,9 @@ static struct {
 static struct {
 	struct device *clk_hf;
 } lll;
+
+/* Entropy device */
+static struct device *dev_entropy;
 
 static int init_reset(void);
 static int prepare(lll_is_abort_cb_t is_abort_cb, lll_abort_cb_t abort_cb,
@@ -108,11 +112,17 @@ int lll_init(void)
 	struct device *clk_k32;
 	int err;
 
+	/* Get reference to entropy device */
+	dev_entropy = device_get_binding(CONFIG_ENTROPY_NAME);
+	if (!dev_entropy) {
+		return -ENODEV;
+	}
+
 	/* Initialise LLL internals */
 	event.curr.abort_cb = NULL;
 
 	/* Initialize LF CLK */
-	clk_k32 = device_get_binding(DT_NORDIC_NRF_CLOCK_0_LABEL "_32K");
+	clk_k32 = device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_32K");
 	if (!clk_k32) {
 		return -ENODEV;
 	}
@@ -121,7 +131,7 @@ int lll_init(void)
 
 	/* Initialize HF CLK */
 	lll.clk_hf =
-		device_get_binding(DT_NORDIC_NRF_CLOCK_0_LABEL "_16M");
+		device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_16M");
 	if (!lll.clk_hf) {
 		return -ENODEV;
 	}
@@ -148,6 +158,11 @@ int lll_init(void)
 	irq_enable(NRF5_IRQ_SWI5_IRQn);
 
 	return 0;
+}
+
+u8_t lll_entropy_get(u8_t len, void *rand)
+{
+	return entropy_get_entropy_isr(dev_entropy, rand, len, 0);
 }
 
 int lll_reset(void)

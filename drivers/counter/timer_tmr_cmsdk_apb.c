@@ -69,25 +69,28 @@ static u32_t tmr_cmsdk_apb_read(struct device *dev)
 }
 
 static int tmr_cmsdk_apb_set_top_value(struct device *dev,
-					      u32_t ticks,
-					      counter_top_callback_t callback,
-					      void *user_data)
+				       const struct counter_top_cfg *top_cfg)
 {
 	const struct tmr_cmsdk_apb_cfg * const cfg =
 						dev->config->config_info;
 	struct tmr_cmsdk_apb_dev_data *data = dev->driver_data;
 
-	data->top_callback = callback;
-	data->top_user_data = user_data;
+	/* Counter is always reset when top value is updated. */
+	if (top_cfg->flags & COUNTER_TOP_CFG_DONT_RESET) {
+		return -ENOTSUP;
+	}
+
+	data->top_callback = top_cfg->callback;
+	data->top_user_data = top_cfg->user_data;
 
 	/* Store the reload value */
-	data->load = ticks;
+	data->load = top_cfg->ticks;
 
 	/* Set value register to count */
-	cfg->timer->value = ticks;
+	cfg->timer->value = top_cfg->ticks;
 
 	/* Set the timer reload to count */
-	cfg->timer->reload = ticks;
+	cfg->timer->reload = top_cfg->ticks;
 
 	/* Enable IRQ */
 	cfg->timer->ctrl |= TIMER_CTRL_IRQ_EN;
@@ -167,14 +170,14 @@ static const struct tmr_cmsdk_apb_cfg tmr_cmsdk_apb_cfg_0 = {
 			.flags = 0,
 			.channels = 0U,
 	},
-	.timer = ((volatile struct timer_cmsdk_apb *)DT_ARM_CMSDK_TIMER_0_BASE_ADDRESS),
+	.timer = ((volatile struct timer_cmsdk_apb *)DT_INST_0_ARM_CMSDK_TIMER_BASE_ADDRESS),
 	.timer_config_func = timer_cmsdk_apb_config_0,
 	.timer_cc_as = {.bus = CMSDK_APB, .state = SOC_ACTIVE,
-			.device = DT_ARM_CMSDK_TIMER_0_BASE_ADDRESS,},
+			.device = DT_INST_0_ARM_CMSDK_TIMER_BASE_ADDRESS,},
 	.timer_cc_ss = {.bus = CMSDK_APB, .state = SOC_SLEEP,
-			.device = DT_ARM_CMSDK_TIMER_0_BASE_ADDRESS,},
+			.device = DT_INST_0_ARM_CMSDK_TIMER_BASE_ADDRESS,},
 	.timer_cc_dss = {.bus = CMSDK_APB, .state = SOC_DEEPSLEEP,
-			 .device = DT_ARM_CMSDK_TIMER_0_BASE_ADDRESS,},
+			 .device = DT_INST_0_ARM_CMSDK_TIMER_BASE_ADDRESS,},
 };
 
 static struct tmr_cmsdk_apb_dev_data tmr_cmsdk_apb_dev_data_0 = {
@@ -182,7 +185,7 @@ static struct tmr_cmsdk_apb_dev_data tmr_cmsdk_apb_dev_data_0 = {
 };
 
 DEVICE_AND_API_INIT(tmr_cmsdk_apb_0,
-		    DT_ARM_CMSDK_TIMER_0_LABEL,
+		    DT_INST_0_ARM_CMSDK_TIMER_LABEL,
 		    tmr_cmsdk_apb_init, &tmr_cmsdk_apb_dev_data_0,
 		    &tmr_cmsdk_apb_cfg_0, POST_KERNEL,
 		    CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
@@ -190,10 +193,10 @@ DEVICE_AND_API_INIT(tmr_cmsdk_apb_0,
 
 static void timer_cmsdk_apb_config_0(struct device *dev)
 {
-	IRQ_CONNECT(DT_ARM_CMSDK_TIMER_0_IRQ_0, DT_ARM_CMSDK_TIMER_0_IRQ_0_PRIORITY,
+	IRQ_CONNECT(DT_INST_0_ARM_CMSDK_TIMER_IRQ_0, DT_INST_0_ARM_CMSDK_TIMER_IRQ_0_PRIORITY,
 		    tmr_cmsdk_apb_isr,
 		    DEVICE_GET(tmr_cmsdk_apb_0), 0);
-	irq_enable(DT_ARM_CMSDK_TIMER_0_IRQ_0);
+	irq_enable(DT_INST_0_ARM_CMSDK_TIMER_IRQ_0);
 }
 #endif /* DT_ARM_CMSDK_TIMER_0 */
 
@@ -208,14 +211,14 @@ static const struct tmr_cmsdk_apb_cfg tmr_cmsdk_apb_cfg_1 = {
 			.flags = 0,
 			.channels = 0U,
 	},
-	.timer = ((volatile struct timer_cmsdk_apb *)DT_ARM_CMSDK_TIMER_1_BASE_ADDRESS),
+	.timer = ((volatile struct timer_cmsdk_apb *)DT_INST_1_ARM_CMSDK_TIMER_BASE_ADDRESS),
 	.timer_config_func = timer_cmsdk_apb_config_1,
 	.timer_cc_as = {.bus = CMSDK_APB, .state = SOC_ACTIVE,
-			.device = DT_ARM_CMSDK_TIMER_1_BASE_ADDRESS,},
+			.device = DT_INST_1_ARM_CMSDK_TIMER_BASE_ADDRESS,},
 	.timer_cc_ss = {.bus = CMSDK_APB, .state = SOC_SLEEP,
-			.device = DT_ARM_CMSDK_TIMER_1_BASE_ADDRESS,},
+			.device = DT_INST_1_ARM_CMSDK_TIMER_BASE_ADDRESS,},
 	.timer_cc_dss = {.bus = CMSDK_APB, .state = SOC_DEEPSLEEP,
-			 .device = DT_ARM_CMSDK_TIMER_1_BASE_ADDRESS,},
+			 .device = DT_INST_1_ARM_CMSDK_TIMER_BASE_ADDRESS,},
 };
 
 static struct tmr_cmsdk_apb_dev_data tmr_cmsdk_apb_dev_data_1 = {
@@ -223,7 +226,7 @@ static struct tmr_cmsdk_apb_dev_data tmr_cmsdk_apb_dev_data_1 = {
 };
 
 DEVICE_AND_API_INIT(tmr_cmsdk_apb_1,
-		    DT_ARM_CMSDK_TIMER_1_LABEL,
+		    DT_INST_1_ARM_CMSDK_TIMER_LABEL,
 		    tmr_cmsdk_apb_init, &tmr_cmsdk_apb_dev_data_1,
 		    &tmr_cmsdk_apb_cfg_1, POST_KERNEL,
 		    CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
@@ -231,9 +234,9 @@ DEVICE_AND_API_INIT(tmr_cmsdk_apb_1,
 
 static void timer_cmsdk_apb_config_1(struct device *dev)
 {
-	IRQ_CONNECT(DT_ARM_CMSDK_TIMER_1_IRQ_0, DT_ARM_CMSDK_TIMER_1_IRQ_0_PRIORITY,
+	IRQ_CONNECT(DT_INST_1_ARM_CMSDK_TIMER_IRQ_0, DT_INST_1_ARM_CMSDK_TIMER_IRQ_0_PRIORITY,
 		    tmr_cmsdk_apb_isr,
 		    DEVICE_GET(tmr_cmsdk_apb_1), 0);
-	irq_enable(DT_ARM_CMSDK_TIMER_1_IRQ_0);
+	irq_enable(DT_INST_1_ARM_CMSDK_TIMER_IRQ_0);
 }
 #endif /* DT_ARM_CMSDK_TIMER_1 */

@@ -18,6 +18,7 @@ defs = {}
 bindings = {}
 bus_bindings = {}
 binding_compats = []
+deprecated = []
 old_alias_names = False
 
 regs_config = {
@@ -256,42 +257,63 @@ def enable_old_alias_names(enable):
     global old_alias_names
     old_alias_names = enable
 
-def add_compat_alias(node_path, label_postfix, label, prop_aliases):
+def add_compat_alias(node_path, label_postfix, label, prop_aliases, deprecate=False):
     if 'instance_id' in reduced[node_path]:
         instance = reduced[node_path]['instance_id']
         for k in instance:
             i = instance[k]
             b = 'DT_' + str_to_label(k) + '_' + str(i) + '_' + label_postfix
+            deprecated.append(b)
             prop_aliases[b] = label
+            b = "DT_INST_{}_{}_{}".format(str(i), str_to_label(k), label_postfix)
+            prop_aliases[b] = label
+            if deprecate:
+                deprecated.append(b)
 
 def add_prop_aliases(node_path,
-                     alias_label_function, prop_label, prop_aliases):
+                     alias_label_function, prop_label, prop_aliases, deprecate=False):
     node_compat = get_compat(node_path)
-    new_alias_prefix = 'DT_' + str_to_label(node_compat)
+    new_alias_prefix = 'DT_'
 
     for alias in aliases[node_path]:
         old_alias_label = alias_label_function(alias)
-        new_alias_label = new_alias_prefix + '_' + old_alias_label
+        new_alias_label = new_alias_prefix + 'ALIAS_' + old_alias_label
+        new_alias_compat_label = new_alias_prefix + str_to_label(node_compat) + '_' + old_alias_label
 
         if new_alias_label != prop_label:
             prop_aliases[new_alias_label] = prop_label
+            if deprecate:
+                deprecated.append(new_alias_label)
+        if new_alias_compat_label != prop_label:
+            prop_aliases[new_alias_compat_label] = prop_label
+            if deprecate:
+                deprecated.append(new_alias_compat_label)
         if old_alias_names and old_alias_label != prop_label:
             prop_aliases[old_alias_label] = prop_label
 
 def get_binding(node_path):
-    compat = get_compat(node_path)
+    compat = reduced[node_path]['props'].get('compatible')
+    if isinstance(compat, list):
+        compat = compat[0]
 
-    # First look for a bus-specific binding
     parent_path = get_parent_path(node_path)
     parent_compat = get_compat(parent_path)
+
     if parent_compat in bindings:
         parent_binding = bindings[parent_compat]
+        # see if we're a sub-node
+        if compat is None and 'sub-node' in parent_binding:
+            return parent_binding['sub-node']
+
+        # look for a bus-specific binding
         if 'child' in parent_binding and 'bus' in parent_binding['child']:
             bus = parent_binding['child']['bus']
             return bus_bindings[bus][compat]
 
     # No bus-specific binding found, look in the main dict.
-    return bindings[compat]
+    if compat:
+        return bindings[compat]
+    return None
 
 def get_binding_compats():
     return binding_compats

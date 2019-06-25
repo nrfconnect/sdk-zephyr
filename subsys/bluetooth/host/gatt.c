@@ -1517,12 +1517,15 @@ static u8_t match_uuid(const struct bt_gatt_attr *attr, void *user_data)
 	return BT_GATT_ITER_STOP;
 }
 
-static int gatt_notify_params(struct bt_conn *conn,
-			      struct bt_gatt_notify_params *params)
+int bt_gatt_notify_cb(struct bt_conn *conn,
+		      struct bt_gatt_notify_params *params)
 {
 	struct notify_data data;
 	const struct bt_gatt_attr *attr;
 	u16_t handle;
+
+	__ASSERT(params, "invalid parameters\n");
+	__ASSERT(params->attr, "invalid parameters\n");
 
 	attr = params->attr;
 
@@ -1570,25 +1573,6 @@ static int gatt_notify_params(struct bt_conn *conn,
 				  notify_cb, &data);
 
 	return data.err;
-}
-
-int bt_gatt_notify_cb(struct bt_conn *conn, u16_t num_params,
-		      struct bt_gatt_notify_params *params)
-{
-	int i, ret;
-
-	__ASSERT(params, "invalid parameters\n");
-	__ASSERT(num_params, "invalid parameters\n");
-	__ASSERT(params->attr, "invalid parameters\n");
-
-	for (i = 0; i < num_params; i++) {
-		ret = gatt_notify_params(conn, &params[i]);
-		if (ret < 0) {
-			return ret;
-		}
-	}
-
-	return 0;
 }
 
 int bt_gatt_indicate(struct bt_conn *conn,
@@ -2426,6 +2410,8 @@ static void gatt_find_info_rsp(struct bt_conn *conn, u8_t err,
 		struct bt_uuid_16 u16;
 		struct bt_uuid_128 u128;
 	} u;
+	int i;
+	bool skip = false;
 
 	BT_DBG("err 0x%02x", err);
 
@@ -2449,12 +2435,17 @@ static void gatt_find_info_rsp(struct bt_conn *conn, u8_t err,
 	}
 
 	/* Parse descriptors found */
-	for (length--, pdu = rsp->info; length >= len;
-	     length -= len, pdu = (const u8_t *)pdu + len) {
+	for (i = (length - 1) / len, pdu = rsp->info; i != 0;
+	     i--, pdu = (const u8_t *)pdu + len) {
 		struct bt_gatt_attr *attr;
 
 		info.i16 = pdu;
 		handle = sys_le16_to_cpu(info.i16->handle);
+
+		if (skip) {
+			skip = false;
+			continue;
+		}
 
 		switch (u.uuid.type) {
 		case BT_UUID_TYPE_16:
@@ -2486,10 +2477,7 @@ static void gatt_find_info_rsp(struct bt_conn *conn, u8_t err,
 			 * entry must be its value.
 			 */
 			if (!bt_uuid_cmp(&u.uuid, BT_UUID_GATT_CHRC)) {
-				if (length >= len) {
-					pdu = (const u8_t *)pdu + len;
-					length -= len;
-				}
+				skip = true;
 				continue;
 			}
 		}
@@ -2504,7 +2492,7 @@ static void gatt_find_info_rsp(struct bt_conn *conn, u8_t err,
 	}
 
 	/* Stop if could not parse the whole PDU */
-	if (length > 0) {
+	if (i) {
 		goto done;
 	}
 
@@ -3566,26 +3554,29 @@ next:
 	return load->count ? BT_GATT_ITER_CONTINUE : BT_GATT_ITER_STOP;
 }
 
-static int ccc_set(int argc, char **argv, size_t len_rd,
-		   settings_read_cb read_cb, void *cb_arg)
+static int ccc_set(const char *name, size_t len_rd, settings_read_cb read_cb,
+		   void *cb_arg)
 {
 	struct ccc_store ccc_store[CCC_STORE_MAX];
 	struct ccc_load load;
 	bt_addr_le_t addr;
 	int len, err;
+	const char *next;
 
-	if (argc < 1) {
+	settings_name_next(name, &next);
+
+	if (!name) {
 		BT_ERR("Insufficient number of arguments");
 		return -EINVAL;
-	} else if (argc == 1) {
+	} else if (!next) {
 		load.addr_with_id.id = BT_ID_DEFAULT;
 	} else {
-		load.addr_with_id.id = strtol(argv[1], NULL, 10);
+		load.addr_with_id.id = strtol(next, NULL, 10);
 	}
 
-	err = bt_settings_decode_key(argv[0], &addr);
+	err = bt_settings_decode_key(name, &addr);
 	if (err) {
-		BT_ERR("Unable to decode address %s", argv[0]);
+		BT_ERR("Unable to decode address %s", name);
 		return -EINVAL;
 	}
 
@@ -3622,21 +3613,21 @@ static int ccc_set(int argc, char **argv, size_t len_rd,
 BT_SETTINGS_DEFINE(ccc, ccc_set, NULL, NULL);
 
 #if defined(CONFIG_BT_GATT_CACHING)
-static int cf_set(int argc, char **argv, size_t len_rd,
-		  settings_read_cb read_cb, void *cb_arg)
+static int cf_set(const char *name, size_t len_rd, settings_read_cb read_cb,
+		  void *cb_arg)
 {
 	struct gatt_cf_cfg *cfg;
 	bt_addr_le_t addr;
 	int len, err;
 
-	if (argc < 1) {
+	if (!name) {
 		BT_ERR("Insufficient number of arguments");
 		return -EINVAL;
 	}
 
-	err = bt_settings_decode_key(argv[0], &addr);
+	err = bt_settings_decode_key(name, &addr);
 	if (err) {
-		BT_ERR("Unable to decode address %s", argv[0]);
+		BT_ERR("Unable to decode address %s", name);
 		return -EINVAL;
 	}
 
@@ -3670,7 +3661,7 @@ BT_SETTINGS_DEFINE(cf, cf_set, NULL, NULL);
 
 static u8_t stored_hash[16];
 
-static int db_hash_set(int argc, char **argv, size_t len_rd,
+static int db_hash_set(const char *name, size_t len_rd,
 		       settings_read_cb read_cb, void *cb_arg)
 {
 	int len;

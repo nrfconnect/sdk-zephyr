@@ -15,12 +15,12 @@
 # -b  base branch
 # -r  the remote to rebase on
 #
-# The script can be run locally using for exmaple:
+# The script can be run locally using for example:
 # ./scripts/ci/run_ci.sh -b master -r origin  -l -R <commit range>
 
 set -xe
 
-SANITYCHECK_OPTIONS=" --inline-logs --enable-coverage -N"
+SANITYCHECK_OPTIONS=" --inline-logs -N"
 SANITYCHECK_OPTIONS_RETRY="${SANITYCHECK_OPTIONS} --only-failed --outdir=out-2nd-pass"
 SANITYCHECK_OPTIONS_RETRY_2="${SANITYCHECK_OPTIONS} --only-failed --outdir=out-3nd-pass"
 export BSIM_OUT_PATH="${BSIM_OUT_PATH:-/opt/bsim/}"
@@ -199,8 +199,8 @@ function on_complete() {
 	fi;
 
 	if [ "$MATRIX" = "1" ]; then
-		echo "Handle coverage data..."
-		handle_coverage
+		echo "Skip handling coverage data..."
+		#handle_coverage
 	else
 		rm -rf sanity-out out-2nd-pass;
 	fi;
@@ -290,8 +290,8 @@ if [ -n "$MAIN_CI" ]; then
 	# Run a subset of tests based on matrix size
 	${SANITYCHECK} ${SANITYCHECK_OPTIONS} --load-tests test_file.txt \
 		--subset ${MATRIX}/${MATRIX_BUILDS} || \
-		( sleep 10; ${SANITYCHECK} ${SANITYCHECK_OPTIONS_RETRY} ) || \
-		( sleep 10; ${SANITYCHECK} ${SANITYCHECK_OPTIONS_RETRY_2}; )
+		( sleep 30; ${SANITYCHECK} ${SANITYCHECK_OPTIONS_RETRY} ) || \
+		( sleep 90; ${SANITYCHECK} ${SANITYCHECK_OPTIONS_RETRY_2}; )
 		# sleep 10 to let the host settle down
 
 	# cleanup
