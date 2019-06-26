@@ -185,8 +185,8 @@ SECTIONS
 
 	_vector_end = .;
 	/* This is used for Secure Boot */
-	#if defined(CONFIG_SECURE_BOOT)
-	. = CONFIG_SB_FIRMWARE_INFO_OFFSET;
+	#if defined(CONFIG_FW_METADATA)
+	. = CONFIG_FW_FIRMWARE_INFO_OFFSET;
 	KEEP(*(.firmware_info))
 	#endif
 	} GROUP_LINK_IN(ROMABLE_REGION)
