@@ -231,26 +231,15 @@ endforeach()
 
 add_custom_target(${IMAGE}config-sanitycheck DEPENDS ${DOTCONFIG})
 
-# Remove the CLI Kconfig symbols from the namespace and
-# CMakeCache.txt. If the symbols end up in DOTCONFIG they will be
-# re-introduced to the namespace through 'import_kconfig'.
-foreach (name ${cache_variable_names})
-  if("${name}" MATCHES "^${KCONFIG_CACHE_IMAGE_PREFIX}CONFIG_")
-    string(REPLACE "${KCONFIG_CACHE_IMAGE_PREFIX}" "" config_name ${name})
-    unset(${config_name})
-    unset(${name} CACHE)
-  endif()
-endforeach()
-
 # Parse the lines prefixed with CONFIG_ in the .config file from Kconfig
 import_kconfig(CONFIG_ ${DOTCONFIG})
 
-# Re-introduce the CLI Kconfig symbols that survived
+# Clear CLI Kconfig symbols that were not set.
 foreach (name ${cache_variable_names})
   if("${name}" MATCHES "^${KCONFIG_CACHE_IMAGE_PREFIX}CONFIG_")
     string(REPLACE "${KCONFIG_CACHE_IMAGE_PREFIX}" "" config_name ${name})
-    if(DEFINED ${config_name})
-      set(${name} ${${config_name}} CACHE STRING "")
+    if(NOT DEFINED ${config_name})
+      unset(${name} CACHE)
     endif()
   endif()
 endforeach()
