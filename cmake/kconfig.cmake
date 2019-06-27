@@ -91,16 +91,33 @@ endforeach()
 # user-testing.
 unset(EXTRA_KCONFIG_OPTIONS)
 get_cmake_property(cache_variable_names CACHE_VARIABLES)
+
+if ("${IMAGE}" STREQUAL "")
+  foreach (name ${cache_variable_names})
+    if("${name}" MATCHES "^CONFIG_")
+      set(app_${name} ${${name}} CACHE STRING "")
+      unset(${name} CACHE)
+    endif()
+  endforeach()
+  set(KCONFIG_CACHE_IMAGE_PREFIX app_)
+else()
+  set(KCONFIG_CACHE_IMAGE_PREFIX ${IMAGE})
+endif()
+
+get_cmake_property(cache_variable_names CACHE_VARIABLES)
+
 foreach (name ${cache_variable_names})
-  if("${name}" MATCHES "^CONFIG_")
-    # When a cache variable starts with 'CONFIG_', it is assumed to be
+  if("${name}" MATCHES "^${KCONFIG_CACHE_IMAGE_PREFIX}CONFIG_")
+    # When a cache variable starts with '<image_name_>CONFIG_', it is assumed to be
     # a Kconfig symbol assignment from the CMake command line.
+    string(REPLACE "${KCONFIG_CACHE_IMAGE_PREFIX}" "" config_name ${name})
     set(EXTRA_KCONFIG_OPTIONS
-      "${EXTRA_KCONFIG_OPTIONS}\n${name}=${${name}}"
+      "${EXTRA_KCONFIG_OPTIONS}\n${config_name}=${${name}}"
       )
   endif()
 endforeach()
 
+unset(EXTRA_KCONFIG_OPTIONS_FILE)
 if(EXTRA_KCONFIG_OPTIONS)
   set(EXTRA_KCONFIG_OPTIONS_FILE ${PROJECT_BINARY_DIR}/misc/generated/extra_kconfig_options.conf)
   file(WRITE
@@ -218,8 +235,9 @@ add_custom_target(${IMAGE}config-sanitycheck DEPENDS ${DOTCONFIG})
 # CMakeCache.txt. If the symbols end up in DOTCONFIG they will be
 # re-introduced to the namespace through 'import_kconfig'.
 foreach (name ${cache_variable_names})
-  if("${name}" MATCHES "^CONFIG_")
-    unset(${name})
+  if("${name}" MATCHES "^${KCONFIG_CACHE_IMAGE_PREFIX}CONFIG_")
+    string(REPLACE "${KCONFIG_CACHE_IMAGE_PREFIX}" "" config_name ${name})
+    unset(${config_name})
     unset(${name} CACHE)
   endif()
 endforeach()
@@ -229,9 +247,10 @@ import_kconfig(CONFIG_ ${DOTCONFIG})
 
 # Re-introduce the CLI Kconfig symbols that survived
 foreach (name ${cache_variable_names})
-  if("${name}" MATCHES "^CONFIG_")
-    if(DEFINED ${name})
-      set(${name} ${${name}} CACHE STRING "")
+  if("${name}" MATCHES "^${KCONFIG_CACHE_IMAGE_PREFIX}CONFIG_")
+    string(REPLACE "${KCONFIG_CACHE_IMAGE_PREFIX}" "" config_name ${name})
+    if(DEFINED ${config_name})
+      set(${name} ${${config_name}} CACHE STRING "")
     endif()
   endif()
 endforeach()
