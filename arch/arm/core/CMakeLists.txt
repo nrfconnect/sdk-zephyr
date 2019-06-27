@@ -23,6 +23,10 @@ zephyr_library_sources(
   thread_abort.c
 )
 
+if (NOT DEFINED CONFIG_DRIVERS)
+  zephyr_library_sources(zephyr_dummy_interrupt_handlers.c)
+endif()
+
 zephyr_library_sources_ifdef(CONFIG_GEN_SW_ISR_TABLE isr_wrapper.S)
 zephyr_library_sources_ifdef(CONFIG_CPLUSPLUS __aeabi_atexit.c)
 zephyr_library_sources_ifdef(CONFIG_IRQ_OFFLOAD irq_offload.c)

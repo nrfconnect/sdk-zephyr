@@ -23,6 +23,16 @@ static struct k_spinlock timeout_lock;
 
 static bool can_wait_forever;
 
+__weak u32_t z_clock_elapsed(void)
+{
+	k_oops();
+}
+
+__weak void z_clock_set_timeout(s32_t ticks, bool idle)
+{
+	k_oops();
+}
+
 /* Cycles left to process in the currently-executing z_clock_announce() */
 static int announce_remaining;
 
