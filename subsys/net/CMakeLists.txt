@@ -9,6 +9,7 @@ if(CONFIG_NETWORKING)
 
   if(CONFIG_NET_RAW_MODE)
     zephyr_library_sources(ip/net_pkt.c)
+    zephyr_library_sources(ip/utils.c)
   else()
     add_subdirectory(ip)
   endif()
