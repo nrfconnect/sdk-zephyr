@@ -28,6 +28,9 @@ list(APPEND
   ${BOARD_DIR}
   ${ZEPHYR_BASE}
   )
+list(REMOVE_DUPLICATES
+  DTS_ROOT
+  )
 
 set(dts_files
   ${DTS_SOURCE}
@@ -74,6 +77,7 @@ if(SUPPORTS_DTS)
     math(EXPR i "${i}+1")
   endforeach()
 
+  unset(DTS_ROOT_SYSTEM_INCLUDE_DIRS)
   foreach(dts_root ${DTS_ROOT})
     foreach(dts_root_path
         include
@@ -91,6 +95,7 @@ if(SUPPORTS_DTS)
     endforeach()
   endforeach()
 
+  unset(DTS_ROOT_BINDINGS)
   foreach(dts_root ${DTS_ROOT})
     set(full_path ${dts_root}/dts/bindings)
     if(EXISTS ${full_path})
