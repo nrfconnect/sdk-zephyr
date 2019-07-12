@@ -794,6 +794,8 @@ struct net_socket_register {
 
 /** @endcond */
 
+
+
 #ifdef __cplusplus
 }
 #endif
