@@ -13,6 +13,7 @@ pipeline {
    booleanParam(name: 'RUN_DOWNSTREAM', description: 'if false skip downstream jobs', defaultValue: true)
    booleanParam(name: 'RUN_TESTS', description: 'if false skip testing', defaultValue: true)
    booleanParam(name: 'RUN_BUILD', description: 'if false skip building', defaultValue: true)
+   string(name: 'PLATFORMS', description: 'Default Platforms to test', defaultValue: 'nrf9160_pca10090 nrf52_pca10040 nrf52840_pca10056')
    string(name: 'jsonstr_CI_STATE', description: 'Default State if no upstream job',
               defaultValue: INPUT_STATE)
   }
@@ -105,9 +106,25 @@ pipeline {
         }
       }
     }
+    stage('Sanitycheck (nRF)') {
+      when { expression { CI_STATE.ZEPHYR.RUN_BUILD  && (CI_STATE.ORIGIN.BUILD_TYPE == 'PR') } }
+      steps { script {
+        dir('zephyr') {
+          sh "ls -alh "
+          sh "echo variant: $ZEPHYR_TOOLCHAIN_VARIANT"
+          sh "echo SDK dir: $ZEPHYR_SDK_INSTALL_DIR"
+          sh "cat /opt/zephyr-sdk/sdk_version"
+          def PLATFORM_ARGS = lib_Main.getPlatformArgs(CI_STATE.ZEPHYR.PLATFORMS)
+          sh "source zephyr-env.sh && \
+              (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH $PLATFORM_ARGS || \
+              (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS $SANITYCHECK_RETRY) || \
+              (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS $SANITYCHECK_RETRY_2))"
+        }
+      }}
+    }
     stage('Sanitycheck (all)') {
-      when { expression { CI_STATE.ZEPHYR.RUN_BUILD } }
-      steps {
+      when { expression { CI_STATE.ZEPHYR.RUN_BUILD  && (CI_STATE.ORIGIN.BUILD_TYPE != 'PR') } }
+      steps { script {
         dir('zephyr') {
           sh "ls -alh "
           sh "echo variant: $ZEPHYR_TOOLCHAIN_VARIANT"
@@ -118,7 +135,7 @@ pipeline {
               (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS $SANITYCHECK_RETRY) || \
               (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS $SANITYCHECK_RETRY_2))"
         }
-      }
+      } }
     }
 
     stage('Trigger testing build') {
