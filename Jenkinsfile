@@ -42,8 +42,10 @@ pipeline {
       // ENVs for sanitycheck
       ARCH = "-a arm"
       SANITYCHECK_OPTIONS = "--inline-logs --enable-coverage -N"
-      SANITYCHECK_RETRY = "--only-failed --outdir=out-2nd-pass"
-      SANITYCHECK_RETRY_2 = "--only-failed --outdir=out-3rd-pass"
+      SANITYCHECK_RETRY_CMDS = """
+          (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS --only-failed --outdir=out-2nd-pass) ||
+          (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS --only-failed --outdir=out-3rd-pass))
+          """
 
       // ENVs for building (triggered by sanitycheck)
       ZEPHYR_TOOLCHAIN_VARIANT = 'zephyr'
@@ -106,36 +108,29 @@ pipeline {
         }
       }
     }
-    stage('Sanitycheck (nRF)') {
-      when { expression { CI_STATE.ZEPHYR.RUN_BUILD  && (CI_STATE.ORIGIN.BUILD_TYPE == 'PR') } }
-      steps { script {
-        dir('zephyr') {
-          sh "ls -alh "
-          sh "echo variant: $ZEPHYR_TOOLCHAIN_VARIANT"
-          sh "echo SDK dir: $ZEPHYR_SDK_INSTALL_DIR"
-          sh "cat /opt/zephyr-sdk/sdk_version"
-          def PLATFORM_ARGS = lib_Main.getPlatformArgs(CI_STATE.ZEPHYR.PLATFORMS)
-          sh "source zephyr-env.sh && \
-              (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH $PLATFORM_ARGS || \
-              (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS $SANITYCHECK_RETRY) || \
-              (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS $SANITYCHECK_RETRY_2))"
+    stage('Sanitycheck') {
+      when { expression { CI_STATE.ZEPHYR.RUN_BUILD } }
+      parallel {
+        stage('nRF Platforms') {
+          when { expression { CI_STATE.ORIGIN.BUILD_TYPE == 'PR' } }
+          steps { script {
+            dir('zephyr') {
+              def PLATFORM_ARGS = lib_Main.getPlatformArgs(CI_STATE.ZEPHYR.PLATFORMS)
+              sh "source zephyr-env.sh && \
+                  (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH $PLATFORM_ARGS || $SANITYCHECK_RETRY_CMDS"
+            }
+          }}
         }
-      }}
-    }
-    stage('Sanitycheck (all)') {
-      when { expression { CI_STATE.ZEPHYR.RUN_BUILD  && (CI_STATE.ORIGIN.BUILD_TYPE != 'PR') } }
-      steps { script {
-        dir('zephyr') {
-          sh "ls -alh "
-          sh "echo variant: $ZEPHYR_TOOLCHAIN_VARIANT"
-          sh "echo SDK dir: $ZEPHYR_SDK_INSTALL_DIR"
-          sh "cat /opt/zephyr-sdk/sdk_version"
-          sh "source zephyr-env.sh && \
-              (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH || \
-              (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS $SANITYCHECK_RETRY) || \
-              (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS $SANITYCHECK_RETRY_2))"
-        }
-      } }
+        stage('All Platforms') {
+          when { expression { CI_STATE.ORIGIN.BUILD_TYPE != 'PR' } }
+          steps { script {
+            dir('zephyr') {
+              sh "source zephyr-env.sh && \
+                  (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH || $SANITYCHECK_RETRY_CMDS"
+            }
+          }
+        }}
+      }
     }
 
     stage('Trigger testing build') {
