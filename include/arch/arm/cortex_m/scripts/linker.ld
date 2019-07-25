@@ -188,7 +188,7 @@ SECTIONS
 
 	_vector_end = .;
 	/* This is used for Secure Boot */
-	#if defined(CONFIG_FW_METADATA)
+	#if defined(CONFIG_FW_METADATA
 	. = CONFIG_FW_FIRMWARE_INFO_OFFSET;
 	KEEP(*(.firmware_info))
 	#endif

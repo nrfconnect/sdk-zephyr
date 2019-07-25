@@ -86,17 +86,20 @@ foreach(kconfig_target
 endforeach()
 
 # Support assigning Kconfig symbols on the command-line with CMake
-# cache variables prefixed with 'CONFIG_'. This feature is
+# cache variables prefixed with 'CONFIG_', and image specific
+# cache varliables prefixed with ${IMAGE}CONFIG. This feature is
 # experimental and undocumented until it has undergone more
 # user-testing.
 unset(EXTRA_KCONFIG_OPTIONS)
 get_cmake_property(cache_variable_names CACHE_VARIABLES)
 foreach (name ${cache_variable_names})
-  if("${name}" MATCHES "^CONFIG_")
+  if("${name}" MATCHES "^(${IMAGE})?CONFIG_")
+    # Remove IMAGE part to make it a valid for kconfig.
+    string(REGEX REPLACE "^${IMAGE}CONFIG" "CONFIG" clean_name ${name})
     # When a cache variable starts with 'CONFIG_', it is assumed to be
     # a CLI Kconfig symbol assignment.
     set(EXTRA_KCONFIG_OPTIONS
-      "${EXTRA_KCONFIG_OPTIONS}\n${name}=${${name}}"
+      "${EXTRA_KCONFIG_OPTIONS}\n${clean_name}=${${name}}"
       )
   endif()
 endforeach()
