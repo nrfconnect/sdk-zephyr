@@ -7,13 +7,13 @@
 #include <errno.h>
 
 #include <device.h>
-#include <drivers/ioapic.h>
-#include <counter.h>
+#include <drivers/interrupt_controller/ioapic.h>
+#include <drivers/counter.h>
 #include <init.h>
 #include <kernel.h>
-#include <power.h>
+#include <power/power.h>
 #include <soc.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 #include "qm_isr.h"
 #include "qm_rtc.h"
@@ -173,7 +173,7 @@ static int rtc_qmsi_init(struct device *dev)
 		k_sem_init(RP_GET(dev), 1, UINT_MAX);
 	}
 
-	IRQ_CONNECT(DT_RTC_0_IRQ, CONFIG_RTC_0_IRQ_PRI,
+	IRQ_CONNECT(DT_RTC_0_IRQ, DT_RTC_0_IRQ_PRI,
 		    qm_rtc_0_isr, NULL, DT_RTC_0_IRQ_FLAGS);
 
 	/* Unmask RTC interrupt */

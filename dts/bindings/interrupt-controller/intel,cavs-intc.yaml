@@ -1,6 +1,4 @@
-
 title: CAVS Interrupt Controller
-version: 0.1
 
 description: >
     This binding describes CAVS Interrupt controller
@@ -15,16 +13,8 @@ properties:
   reg:
       category: required
 
-  intel,num-irq-priority-bits:
-      category: required
-      type: int
-      description: number of bits of IRQ priorities
-      generation: define
-
   interrupts:
       category: required
-
-cell_string: IRQ
 
 "#cells":
   - irq

@@ -5,7 +5,6 @@
 #
 
 title: MCP2515 CAN
-version: 0.1
 
 description: >
     This binding gives a base representation of the MCP2515 SPI CAN controller
@@ -19,4 +18,3 @@ properties:
     int-gpios:
       type: compound
       category: required
-      generation: define, use-prop-name

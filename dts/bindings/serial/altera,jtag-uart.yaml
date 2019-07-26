@@ -1,6 +1,4 @@
-
 title: Altera JTAG UART
-version: 0.1
 
 description: >
     This binding gives a base representation of the Altera Jtag UART
@@ -13,7 +11,4 @@ properties:
       constraint: "altera,jtag-uart"
 
     reg:
-      category: required
-
-    interrupts:
       category: required

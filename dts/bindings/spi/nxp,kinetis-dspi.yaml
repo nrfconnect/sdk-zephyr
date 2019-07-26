@@ -5,7 +5,6 @@
 #
 
 title: NXP DSPI
-version: 0.1
 
 description: >
     This binding gives a base representation of the NXP Kinetis DSPI controller
@@ -24,7 +23,4 @@ properties:
       category: required
 
     clocks:
-      type: array
       category: required
-      description: Clock gate information
-      generation: define

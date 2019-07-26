@@ -17,13 +17,13 @@
 #include <kernel.h>
 #include <arch/cpu.h>
 #include <arch/arm/cortex_m/cmsis.h>
-#include <misc/__assert.h>
+#include <sys/__assert.h>
 #include <toolchain.h>
 #include <linker/sections.h>
 #include <sw_isr_table.h>
 #include <irq.h>
 #include <kernel_structs.h>
-#include <tracing.h>
+#include <debug/tracing.h>
 
 extern void __reserved(void);
 

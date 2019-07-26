@@ -11,10 +11,10 @@
 #include <device.h>
 #include <init.h>
 
-#include <pinmux.h>
-#include <i2c.h>
-#include <gpio.h>
-#include <pwm.h>
+#include <drivers/pinmux.h>
+#include <drivers/i2c.h>
+#include <drivers/gpio.h>
+#include <drivers/pwm.h>
 
 #include <pinmux/pinmux.h>
 

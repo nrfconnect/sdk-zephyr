@@ -5,7 +5,6 @@
 #
 
 title: Nordic nRF Family SPIS (SPI Slave)
-version: 0.1
 
 description: >
     This is a representation of the Nordic nRF SPIS node
@@ -27,25 +26,21 @@ properties:
       type: int
       category: required
       description: SCK pin
-      generation: define
 
     mosi-pin:
       type: int
       category: required
       description: MOSI pin
-      generation: define
 
     miso-pin:
       type: int
       category: required
       description: MISO pin
-      generation: define
 
     csn-pin:
       type: int
       category: required
       description: CSN pin
-      generation: define
 
     def-char:
       type: int
@@ -53,4 +48,3 @@ properties:
       description: >
           Default character. Character clocked out when the slave was not
           provided with buffers and is ignoring the transaction.
-      generation: define

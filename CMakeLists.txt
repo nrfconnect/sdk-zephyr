@@ -237,6 +237,10 @@ zephyr_compile_options(
   $<$<COMPILE_LANGUAGE:ASM>:${ASM_BASE_FLAG}>
 )
 
+# @Intent: Enforce standard integer type correspondance to match Zephyr usage.
+# (must be after compiler specific flags)
+toolchain_cc_imacros(${ZEPHYR_BASE}/include/toolchain/zephyr_stdint.h)
+
 # Common toolchain-agnostic assembly flags
 zephyr_compile_options(
   $<$<COMPILE_LANGUAGE:ASM>:-D_ASMLANGUAGE>
@@ -455,7 +459,8 @@ add_subdirectory_ifdef(CONFIG_KERNEL drivers)
 
 # Include zephyr modules generated CMake file.
 if(EXISTS ${CMAKE_BINARY_DIR}/zephyr_modules.txt)
-  file(STRINGS ${CMAKE_BINARY_DIR}/zephyr_modules.txt ZEPHYR_MODULES_TXT)
+	file(STRINGS ${CMAKE_BINARY_DIR}/zephyr_modules.txt ZEPHYR_MODULES_TXT
+		ENCODING UTF-8)
 
   foreach(module ${ZEPHYR_MODULES_TXT})
     # Match "<name>":"<path>" for each line of file, each corresponding to
@@ -513,7 +518,7 @@ execute_process(
   --trigger          ${syscalls_subdirs_trigger} # Trigger file that is used for json generation
   ${syscalls_links}                              # If defined, create symlinks for dependencies
 )
-file(STRINGS ${syscalls_subdirs_txt} PARSE_SYSCALLS_PATHS_DEPENDS)
+file(STRINGS ${syscalls_subdirs_txt} PARSE_SYSCALLS_PATHS_DEPENDS ENCODING UTF-8)
 
 if(${CMAKE_HOST_SYSTEM_NAME} STREQUAL Windows)
   # On windows only adding/removing files or folders will be reflected in depends.
@@ -1210,18 +1215,6 @@ list(APPEND
 if(NOT CONFIG_BUILD_NO_GAP_FILL)
   # Use ';' as separator to get proper space in resulting command.
   set(GAP_FILL "--gap-fill;0xff")
-endif()
-
-if(CONFIG_CHECK_LINK_MAP)
-  list(APPEND
-    post_build_commands
-    COMMAND
-    ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/check_link_map.py ${KERNEL_MAP_NAME}
-    )
-  list(APPEND
-    post_build_byproducts
-    ${KERNEL_MAP_NAME}
-    )
 endif()
 
 if(CONFIG_BUILD_OUTPUT_HEX)

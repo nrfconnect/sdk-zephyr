@@ -56,7 +56,6 @@ MPU_RO_REGION_START = """
 
 MPU_RO_REGION_END = """
 
-    MPU_ALIGN(_{0}_mpu_ro_region_end - _{0}_mpu_ro_region_start);
     _{0}_mpu_ro_region_end = .;
 
 """
@@ -75,6 +74,20 @@ LINKER_SECTION_SEQ = """
         __{0}_{1}_end = .;
         __{0}_{1}_start = ADDR(_{2}_{3}_SECTION_NAME);
         __{0}_{1}_size = SIZEOF(_{2}_{3}_SECTION_NAME);
+"""
+
+LINKER_SECTION_SEQ_MPU = """
+
+/* Linker section for memory region {2} for {3} section  */
+
+	SECTION_PROLOGUE(_{2}_{3}_SECTION_NAME,,)
+        {{
+                __{0}_{1}_start = .;
+                {4}
+                MPU_ALIGN(__{0}_{1}_size);
+                __{0}_{1}_end = .;
+	}} {5}
+        __{0}_{1}_size = __{0}_{1}_end - __{0}_{1}_start;
 """
 
 SOURCE_CODE_INCLUDES = """
@@ -197,7 +210,7 @@ def assign_to_correct_mem_region(memory_type,
 
 def print_linker_sections(list_sections):
     print_string = ''
-    for section in list_sections:
+    for section in sorted(list_sections):
         print_string += PRINT_TEMPLATE.format(section)
     return print_string
 
@@ -215,7 +228,12 @@ def string_create_helper(region, memory_type,
         if memory_type == 'SRAM' and (region == 'data' or region == 'bss'):
             linker_string += tmp
         else:
-            linker_string += LINKER_SECTION_SEQ.format(memory_type.lower(), region,
+            if memory_type != 'SRAM' and region == 'rodata':
+                linker_string += LINKER_SECTION_SEQ_MPU.format(memory_type.lower(),
+                                                        region, memory_type.upper(),
+                                            region.upper(), tmp, load_address_string)
+            else:
+                linker_string += LINKER_SECTION_SEQ.format(memory_type.lower(), region,
                                                    memory_type.upper(), region.upper(),
                                                    tmp, load_address_string)
 
@@ -233,7 +251,9 @@ def generate_linker_script(linker_file, sram_data_linker_file,
     gen_string = ''
     gen_string_sram_data = ''
     gen_string_sram_bss = ''
-    for memory_type, full_list_of_sections in complete_list_of_sections.items():
+
+    for memory_type, full_list_of_sections in \
+            sorted(complete_list_of_sections.items()):
 
         if memory_type != "SRAM":
             gen_string += MPU_RO_REGION_START.format(memory_type.lower(),
@@ -393,7 +413,6 @@ def main():
     # Create/or trucate file contents if it already exists
     # raw = open(linker_file, "w")
 
-    code_generation = {"copy_code": '', "zero_code":'', "extern":''}
     #for each memory_type, create text/rodata/data/bss sections for all obj files
     for  memory_type, files in rel_dict.items():
         full_list_of_sections = {"text":[], "rodata":[], "data":[], "bss":[]}
@@ -413,7 +432,10 @@ def main():
 
     generate_linker_script(linker_file, sram_data_linker_file,
                        sram_bss_linker_file, complete_list_of_sections)
-    for mem_type, list_of_sections in complete_list_of_sections.items():
+
+    code_generation = {"copy_code": '', "zero_code":'', "extern":''}
+    for mem_type, list_of_sections in \
+        sorted(complete_list_of_sections.items()):
         code_generation = generate_memcpy_code(mem_type,
                                                list_of_sections, code_generation)
 

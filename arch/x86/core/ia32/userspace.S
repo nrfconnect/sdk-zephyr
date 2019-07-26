@@ -5,7 +5,7 @@
  */
 
 #include <kernel_structs.h>
-#include <arch/x86/asm.h>
+#include <arch/x86/ia32/asm.h>
 #include <arch/cpu.h>
 #include <offsets_short.h>
 #include <syscall.h>
@@ -199,7 +199,7 @@ SECTION_FUNC(TEXT, z_x86_syscall_entry_stub)
 	jae	_bad_syscall
 
 _id_ok:
-#ifdef CONFIG_BOUNDS_CHECK_BYPASS_MITIGATION
+#ifdef CONFIG_X86_BOUNDS_CHECK_BYPASS_MITIGATION
 	/* Prevent speculation with bogus system call IDs */
 	lfence
 #endif

@@ -15,7 +15,7 @@
 #ifndef __SOC_H_
 #define __SOC_H_
 
-#include <misc/util.h>
+#include <sys/util.h>
 
 #ifndef _ASMLANGUAGE
 #include <device.h>
@@ -23,7 +23,7 @@
 #endif
 
 #ifdef CONFIG_IOAPIC
-#include <drivers/ioapic.h>
+#include <drivers/interrupt_controller/ioapic.h>
 #endif
 
 /*

@@ -1,6 +1,4 @@
-
 title: Kinetis UART
-version: 0.1
 
 description: >
     This binding gives a base representation of the Kinetis UART
@@ -22,10 +20,6 @@ properties:
       type: boolean
       category: optional
       description: use hw flow control
-      generation: define
 
     clocks:
-      type: array
       category: required
-      description: Clock gate information
-      generation: define

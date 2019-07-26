@@ -5,12 +5,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <shell/shell.h>
 #include <init.h>
 #include <debug/object_tracing.h>
-#include <misc/reboot.h>
-#include <misc/stack.h>
+#include <power/reboot.h>
+#include <debug/stack.h>
 #include <string.h>
 #include <device.h>
 

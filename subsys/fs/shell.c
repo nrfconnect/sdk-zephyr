@@ -9,7 +9,7 @@
 #include <string.h>
 #include <shell/shell.h>
 #include <init.h>
-#include <fs.h>
+#include <fs/fs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -319,6 +319,27 @@ static int cmd_read(const struct shell *shell, size_t argc, char **argv)
 	return 0;
 }
 
+static int cmd_statvfs(const struct shell *shell, size_t argc, char **argv)
+{
+	int err;
+	char path[MAX_PATH_LEN];
+	struct fs_statvfs stat;
+
+	create_abs_path(argv[1], path, sizeof(path));
+
+	err = fs_statvfs(path, &stat);
+	if (err < 0) {
+		shell_error(shell, "Failed to statvfs %s (%d)", path, err);
+		return -ENOEXEC;
+	}
+
+	shell_fprintf(shell, SHELL_NORMAL,
+		      "bsize %lu, frsize %lu, blocks %lu, bfree %lu\n",
+		      stat.f_bsize, stat.f_frsize, stat.f_blocks, stat.f_bfree);
+
+	return 0;
+}
+
 static int cmd_write(const struct shell *shell, size_t argc, char **argv)
 {
 	char path[MAX_PATH_LEN];
@@ -442,16 +463,15 @@ static int cmd_mount_nffs(const struct shell *shell, size_t argc, char **argv)
 	nffs_mnt.mnt_point = (const char *)mntpt;
 	flash_dev = device_get_binding(CONFIG_FS_NFFS_FLASH_DEV_NAME);
 	if (!flash_dev) {
-		shell_error(shell,
-			"Error in device_get_binding, while mounting nffs fs");
+		shell_error(shell, "nffs device %s not found",
+			    CONFIG_FS_NFFS_FLASH_DEV_NAME);
 		return -ENOEXEC;
 	}
 
 	nffs_mnt.storage_dev = flash_dev;
 	res = fs_mount(&nffs_mnt);
 	if (res != 0) {
-		shell_error(shell,
-			      "Error mounting fat fs.Error Code [%d]", res);
+		shell_error(shell, "Error mounting nffs: %d", res);
 		return -ENOEXEC;
 	}
 
@@ -490,6 +510,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_fs,
 	SHELL_CMD(pwd, NULL, "Print current working directory", cmd_pwd),
 	SHELL_CMD_ARG(read, NULL, "Read from file", cmd_read, 2, 255),
 	SHELL_CMD_ARG(rm, NULL, "Remove file", cmd_rm, 2, 0),
+	SHELL_CMD_ARG(statvfs, NULL, "Show file system state", cmd_statvfs, 2, 0),
 	SHELL_CMD_ARG(trunc, NULL, "Truncate file", cmd_trunc, 2, 255),
 	SHELL_CMD_ARG(write, NULL, "Write file", cmd_write, 3, 255),
 	SHELL_SUBCMD_SET_END

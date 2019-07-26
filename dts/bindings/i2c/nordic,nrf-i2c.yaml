@@ -6,7 +6,6 @@
 #
 
 title: Nordic nRF Family I2C Master node
-version: 0.1
 
 description: >
     This is a representation of the Nordic nRF I2C node
@@ -27,11 +26,9 @@ properties:
     sda-pin:
       type: int
       description: SDA pin
-      generation: define
       category: required
 
     scl-pin:
       type: int
       description: SCL pin
-      generation: define
       category: required

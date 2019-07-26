@@ -5,7 +5,6 @@
 #
 
 title: STM32 RTC
-version: 0.1
 
 description: >
     This binding gives a base representation of the STM32 RTC
@@ -19,9 +18,3 @@ properties:
 
     reg:
       category: required
-
-    clocks:
-      type: array
-      category: optional
-      description: Clock gate information
-      generation: define

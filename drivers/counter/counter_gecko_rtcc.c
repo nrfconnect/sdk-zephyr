@@ -12,7 +12,7 @@
 #include <soc.h>
 #include <em_cmu.h>
 #include <em_rtcc.h>
-#include <counter.h>
+#include <drivers/counter.h>
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(counter_gecko, CONFIG_COUNTER_LOG_LEVEL);
@@ -172,7 +172,7 @@ static int counter_gecko_set_alarm(struct device *dev, u8_t chan_id,
 		return -EBUSY;
 	}
 
-	if (alarm_cfg->absolute) {
+	if ((alarm_cfg->flags & COUNTER_ALARM_CFG_ABSOLUTE) != 0) {
 		ccv = alarm_cfg->ticks;
 	} else {
 		if (top_value == 0) {

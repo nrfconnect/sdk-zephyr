@@ -1,6 +1,4 @@
-
 title: OpenISA GPIO
-version: 0.1
 
 description: >
     This is a representation of the OpenISA GPIO nodes
@@ -20,12 +18,6 @@ properties:
 
     label:
       category: required
-
-    clocks:
-      type: array
-      category: optional
-      description: Clock gate control information
-      generation: define
 
 "#cells":
   - pin

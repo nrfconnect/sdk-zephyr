@@ -5,7 +5,6 @@
 #
 
 title: Atmel SAM0 SERCOM SPI driver
-version: 0.1
 
 description: >
     This binding gives a base representation of the Atmel SAM0 SERCOM SPI controller
@@ -24,22 +23,18 @@ properties:
       type: int
       category: required
       description: Data In Pinout
-      generation: define
 
     dopo:
       type: int
       category: required
       description: Data Out Pinout
-      generation: define
 
     rxdma:
       type: int
       category: optional
       description: Receive DMA channel
-      generation: define
 
     txdma:
       type: int
       category: optional
       description: Transmit DMA channel
-      generation: define

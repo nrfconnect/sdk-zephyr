@@ -5,9 +5,9 @@
  */
 
 #include <errno.h>
-#include <i2c.h>
+#include <drivers/i2c.h>
 #include <soc.h>
-#include <misc/util.h>
+#include <sys/util.h>
 #include <altera_common.h>
 #include "altera_avalon_i2c.h"
 

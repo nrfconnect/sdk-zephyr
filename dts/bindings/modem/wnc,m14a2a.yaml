@@ -5,7 +5,6 @@
 #
 
 title: WNC-M14A2A LTE-M Modem
-version: 0.1
 
 description: >
     This is a representation of the WNC-M14A2A LTE-M modem.
@@ -23,30 +22,24 @@ properties:
     mdm-boot-mode-sel-gpios:
       type: compound
       category: required
-      generation: define, use-prop-name
 
     mdm-power-gpios:
       type: compound
       category: required
-      generation: define, use-prop-name
 
     mdm-keep-awake-gpios:
       type: compound
       category: required
-      generation: define, use-prop-name
 
     mdm-reset-gpios:
       type: compound
       category: required
-      generation: define, use-prop-name
 
     mdm-shld-trans-ena-gpios:
       type: compound
       category: required
-      generation: define, use-prop-name
 
     mdm-send-ok-gpios:
       type: compound
       category: optional
       description: UART RTS pin if no HW flow control (set to always enabled)
-      generation: define, use-prop-name

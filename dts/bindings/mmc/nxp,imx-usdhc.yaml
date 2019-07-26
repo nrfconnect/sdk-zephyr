@@ -1,0 +1,33 @@
+#
+# Copyright (c) 2019, NXP
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+title: NXP i.MXRT USDHC module
+
+description: >
+    This binding specifies the NXP i.MXRT USDHC module.
+
+inherits:
+    !include mmc.yaml
+
+properties:
+    compatible:
+      constraint: "nxp,imx-usdhc"
+
+    clocks:
+      category: required
+
+    pwr-gpios:
+      type: compound
+      category: optional
+      description: Power pin
+
+    cd-gpios:
+      type: compound
+      category: optional
+      description: Detect pin
+
+    label:
+      category: required

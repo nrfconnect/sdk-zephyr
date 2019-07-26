@@ -16,8 +16,8 @@
 #ifndef ZEPHYR_INCLUDE_SYS_CLOCK_H_
 #define ZEPHYR_INCLUDE_SYS_CLOCK_H_
 
-#include <misc/util.h>
-#include <misc/dlist.h>
+#include <sys/util.h>
+#include <sys/dlist.h>
 
 #ifdef __cplusplus
 extern "C" {

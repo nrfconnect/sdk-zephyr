@@ -5,7 +5,6 @@
 #
 
 title: Atmel SAM SPI driver
-version: 0.1
 
 description: >
     This binding gives a base representation of the Atmel SAM SPI controller
@@ -26,5 +25,4 @@ properties:
     peripheral-id:
       type: int
       description: peripheral ID
-      generation: define
       category: required

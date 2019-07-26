@@ -9,8 +9,8 @@
 #include <soc.h>
 #include <device.h>
 #include <init.h>
-#include <pinmux.h>
-#include <sys_io.h>
+#include <drivers/pinmux.h>
+#include <sys/sys_io.h>
 #include "pinmux/pinmux.h"
 
 #include "pinmux_quark_mcu.h"

@@ -9,13 +9,13 @@
 #include <stddef.h>
 #include <errno.h>
 #include <string.h>
-#include <flash.h>
-#include <flash_map.h>
+#include <drivers/flash.h>
+#include <storage/flash_map.h>
 #include <zephyr.h>
 #include <init.h>
 
-#include <misc/__assert.h>
-#include <misc/byteorder.h>
+#include <sys/__assert.h>
+#include <sys/byteorder.h>
 #include <dfu/mcuboot.h>
 
 /*

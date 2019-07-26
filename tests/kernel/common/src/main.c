@@ -7,6 +7,7 @@
 
 #include <ztest.h>
 #include <kernel_version.h>
+#include <misc/speculation.h>
 #include "version.h"
 
 extern void test_byteorder_memcpy_swap(void);
@@ -15,6 +16,7 @@ extern void test_atomic(void);
 extern void test_intmath(void);
 extern void test_printk(void);
 extern void test_slist(void);
+extern void test_sflist(void);
 extern void test_dlist(void);
 extern void test_timeout_order(void);
 extern void test_clock_cycle(void);
@@ -68,6 +70,24 @@ static void test_version(void)
 
 }
 
+static void test_bounds_check_mitigation(void)
+{
+	/* Very hard to test against speculation attacks, but we can
+	 * at least assert that logically this function does
+	 * what it says it does.
+	 */
+
+	int index = 17;
+
+	index = k_array_index_sanitize(index, 24);
+	zassert_equal(index, 17, "bad index");
+
+#ifdef CONFIG_USERSPACE
+	index = k_array_index_sanitize(index, 5);
+	zassert_equal(index, 0, "bad index");
+#endif
+}
+
 void test_main(void)
 {
 	ztest_test_suite(common,
@@ -79,14 +99,16 @@ void test_main(void)
 			 ztest_unit_test(test_bitfield),
 			 ztest_unit_test(test_printk),
 			 ztest_unit_test(test_slist),
+			 ztest_unit_test(test_sflist),
 			 ztest_unit_test(test_dlist),
 			 ztest_unit_test(test_intmath),
 			 ztest_unit_test(test_timeout_order),
-			 ztest_unit_test(test_clock_uptime),
+			 ztest_user_unit_test(test_clock_uptime),
 			 ztest_unit_test(test_clock_cycle),
 			 ztest_unit_test(test_version),
 			 ztest_unit_test(test_multilib),
-			 ztest_unit_test(test_thread_context)
+			 ztest_unit_test(test_thread_context),
+			 ztest_unit_test(test_bounds_check_mitigation)
 			 );
 
 	ztest_run_test_suite(common);

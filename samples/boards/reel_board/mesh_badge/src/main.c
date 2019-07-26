@@ -5,7 +5,7 @@
  */
 
 #include <zephyr.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 
 #include <string.h>
 
@@ -13,7 +13,7 @@
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/gatt.h>
-#include <sensor.h>
+#include <drivers/sensor.h>
 
 #include "mesh.h"
 #include "board.h"

@@ -29,10 +29,10 @@
 #include <init.h>
 #include <toolchain.h>
 #include <linker/sections.h>
-#include <uart.h>
-#include <sys_io.h>
+#include <drivers/uart.h>
+#include <sys/sys_io.h>
 
-#include <drivers/serial/uart_ns16550.h>
+#include "uart_ns16550.h"
 
 /*
  * If PCP is set for any of the ports, enable support.

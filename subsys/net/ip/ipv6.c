@@ -356,7 +356,7 @@ enum net_verdict net_ipv6_input(struct net_pkt *pkt, bool is_loopback)
 	int real_len = net_pkt_get_len(pkt);
 	u8_t ext_bitmap = 0U;
 	u16_t ext_len = 0U;
-	u8_t nexthdr, next_nexthdr;
+	u8_t nexthdr, next_nexthdr, prev_hdr_offset;
 	union net_proto_header proto_hdr;
 	struct net_ipv6_hdr *hdr;
 	union net_ip_header ip;
@@ -382,6 +382,11 @@ enum net_verdict net_ipv6_input(struct net_pkt *pkt, bool is_loopback)
 	NET_DBG("IPv6 packet len %d received from %s to %s", pkt_len,
 		log_strdup(net_sprint_ipv6_addr(&hdr->src)),
 		log_strdup(net_sprint_ipv6_addr(&hdr->dst)));
+
+	if (net_ipv6_is_addr_unspecified(&hdr->src)) {
+		NET_DBG("DROP: src addr is %s", "unspecified");
+		goto drop;
+	}
 
 	if (net_ipv6_is_addr_mcast(&hdr->src) ||
 	    net_ipv6_is_addr_mcast_scope(&hdr->dst, 0)) {
@@ -438,6 +443,8 @@ enum net_verdict net_ipv6_input(struct net_pkt *pkt, bool is_loopback)
 	net_pkt_acknowledge_data(pkt, &ipv6_access);
 
 	nexthdr = hdr->nexthdr;
+	prev_hdr_offset = (u8_t *)&hdr->nexthdr - (u8_t *)hdr;
+
 	while (!net_ipv6_is_nexthdr_upper_layer(nexthdr)) {
 		int exthdr_len;
 
@@ -479,8 +486,11 @@ enum net_verdict net_ipv6_input(struct net_pkt *pkt, bool is_loopback)
 
 		case NET_IPV6_NEXTHDR_FRAG:
 			if (IS_ENABLED(CONFIG_NET_IPV6_FRAGMENT)) {
+				net_pkt_set_ipv6_hdr_prev(pkt,
+							  prev_hdr_offset);
 				net_pkt_set_ipv6_fragment_start(
-					pkt, net_pkt_get_current_offset(pkt));
+					pkt,
+					net_pkt_get_current_offset(pkt) - 1);
 				return net_ipv6_handle_fragment_hdr(pkt, hdr,
 								    nexthdr);
 			}

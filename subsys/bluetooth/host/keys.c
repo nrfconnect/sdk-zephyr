@@ -9,8 +9,8 @@
 #include <zephyr.h>
 #include <string.h>
 #include <stdlib.h>
-#include <atomic.h>
-#include <misc/util.h>
+#include <sys/atomic.h>
+#include <sys/util.h>
 
 #include <settings/settings.h>
 
@@ -365,5 +365,7 @@ static int keys_commit(void)
 	return 0;
 }
 
-BT_SETTINGS_DEFINE(keys, keys_set, keys_commit, NULL);
+SETTINGS_STATIC_HANDLER_DEFINE(bt_keys, "bt/keys", NULL, keys_set, keys_commit,
+			       NULL);
+
 #endif /* CONFIG_BT_SETTINGS */

@@ -6,8 +6,8 @@
 
 #include <zephyr.h>
 #include <device.h>
-#include <console.h>
-#include <tty.h>
+#include <console/console.h>
+#include <console/tty.h>
 
 static struct tty_serial console_serial;
 

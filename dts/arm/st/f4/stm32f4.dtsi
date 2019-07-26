@@ -47,7 +47,6 @@
 
 		rcc: rcc@40023800 {
 			compatible = "st,stm32-rcc";
-			clocks-controller;
 			#clock-cells = <2>;
 			reg = <0x40023800 0x400>;
 			label = "STM32_CLK_RCC";
@@ -218,6 +217,7 @@
 			ram-size = <1280>;
 			maximum-speed = "full-speed";
 			phys = <&otgfs_phy>;
+			clocks = <&rcc STM32_CLOCK_BUS_AHB2 0x00000080>;
 			status = "disabled";
 			label= "OTGFS";
 		};

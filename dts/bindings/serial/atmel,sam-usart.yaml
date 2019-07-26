@@ -1,6 +1,4 @@
-
 title: Atmel SAM Family USART
-version: 0.1
 
 description: >
     This binding gives a base representation of the Atmel SAM USART
@@ -21,5 +19,4 @@ properties:
     peripheral-id:
       type: int
       description: peripheral ID
-      generation: define
       category: required

@@ -12,14 +12,14 @@
 #include <arch/cpu.h>
 #include <zephyr/types.h>
 #include <string.h>
-#include <misc/__assert.h>
+#include <sys/__assert.h>
 #include <arch/x86/msr.h>
 
 #include <toolchain.h>
 #include <linker/sections.h>
-#include <drivers/loapic.h> /* public API declarations */
+#include <drivers/interrupt_controller/loapic.h> /* public API declarations */
 #include <init.h>
-#include <drivers/sysapic.h>
+#include <drivers/interrupt_controller/sysapic.h>
 
 /* Local APIC Version Register Bits */
 
@@ -60,7 +60,7 @@
 #define LOPIC_SSPND_BITS_PER_IRQ  1  /* Just the one for enable disable*/
 #define LOPIC_SUSPEND_BITS_REQD (ROUND_UP((LOAPIC_IRQ_COUNT * LOPIC_SSPND_BITS_PER_IRQ), 32))
 #ifdef CONFIG_DEVICE_POWER_MANAGEMENT
-#include <power.h>
+#include <power/power.h>
 u32_t loapic_suspend_buf[LOPIC_SUSPEND_BITS_REQD / 32] = {0};
 static u32_t loapic_device_power_state = DEVICE_PM_ACTIVE_STATE;
 #endif
@@ -295,7 +295,7 @@ void z_loapic_irq_disable(unsigned int irq)
  * @return The vector of the interrupt that is currently being processed, or -1
  * if no IRQ is being serviced.
  */
-int __irq_controller_isr_vector_get(void)
+int z_irq_controller_isr_vector_get(void)
 {
 	int pReg, block;
 

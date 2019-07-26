@@ -15,9 +15,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <device.h>
-#include <uart.h>
+#include <drivers/uart.h>
 #include <zephyr.h>
-#include <ring_buffer.h>
+#include <sys/ring_buffer.h>
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(cdc_acm_echo, LOG_LEVEL_DBG);

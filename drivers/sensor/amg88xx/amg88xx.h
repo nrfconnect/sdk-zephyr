@@ -8,8 +8,8 @@
 #define ZEPHYR_DRIVERS_SENSOR_AMG88XX_AMG88XX_H_
 
 #include <device.h>
-#include <gpio.h>
-#include <misc/util.h>
+#include <drivers/gpio.h>
+#include <sys/util.h>
 
 #define AMG88XX_I2C_ADDRESS	CONFIG_AMG88XX_I2C_ADDR
 

@@ -5,7 +5,6 @@
 #
 
 title: STM32 USB
-version: 0.1
 
 description: >
     This binding gives a base representation of the STM32 USB controller
@@ -28,19 +27,16 @@ properties:
       category: required
       description: Size of USB dedicated RAM. STM32 SOC's reference
                    manual defines USB packet SRAM size.
-      generation: define
 
     disconnect-gpios:
       type: compound
       category: optional
       description: Some boards use a USB DISCONNECT pin to enable
                    the pull-up resistor on USB Data Positive signal.
-      generation: define, use-prop-name
 
     phys:
       type: array
       category: optional
-      generation: define
       description: PHY provider specifier
 
     enable-pin-remap:
@@ -48,4 +44,6 @@ properties:
       category: optional
       description: For STM32F0 series SoCs on QFN28 and TSSOP20 packages
                    enable PIN pair PA11/12 mapped instead of PA9/10 (e.g. stm32f070x6)
-      generation: define, use-prop-name
+
+    clocks:
+      category: required

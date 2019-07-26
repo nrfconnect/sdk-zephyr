@@ -1,0 +1,13 @@
+#
+# Copyright (c) 2019, NXP
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+title: MMC/SDHC module
+
+description: >
+    This binding specifies the MMC/SDHC module.
+
+inherits:
+    !include base.yaml

@@ -3,12 +3,60 @@
 #
 # Copyright (c) 2014-2015 Wind River Systems, Inc.
 # Copyright (c) 2016 Cadence Design Systems, Inc.
+# Copyright (c) 2019 Intel Corp.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
 
 menu "Timer Drivers"
+
+menuconfig APIC_TIMER
+	bool "New local APIC timer"
+	depends on X86
+	depends on LOAPIC
+	select TICKLESS_CAPABLE
+	help
+	  Use the "new" local APIC timer driver for the system timer.
+	  This is a replacement for the legacy local APIC timer driver
+	  which supports tickless operation, but not the Quark MVIC.
+
+if APIC_TIMER
+
+config APIC_TIMER_IRQ
+	int "Local APIC timer IRQ"
+	default 24
+	help
+	  This option specifies the IRQ used by the local APIC timer.
+
+config APIC_TIMER_IRQ_PRIORITY
+	int "Local APIC timer IRQ priority"
+	default 4
+	help
+	  This option specifies the IRQ priority used by the local APIC timer.
+
+config APIC_TIMER_TSC
+	bool "Use invariant TSC for z_timer_cycle_get_32()"
+	default n
+	help
+	  If your CPU supports invariant TSC, and you know the ratio of the
+	  TSC frequency to CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC (the local APIC
+	  timer frequency), then enable this for a much faster and more
+	  accurate z_timer_cycle_get_32().
+
+if APIC_TIMER_TSC
+
+config APIC_TIMER_TSC_N
+	int "TSC to local APIC timer frequency multiplier (N)"
+	default 1
+
+config APIC_TIMER_TSC_M
+	int "TSC to local APIC timer frequency divisor (M)"
+	default 1
+
+endif # APIC_TIMER_TSC
+
+endif # APIC_TIMER
 
 menuconfig HPET_TIMER
 	bool "HPET timer"
@@ -44,7 +92,7 @@ endif #HPET_TIMER
 
 menuconfig LOAPIC_TIMER
 	bool "LOAPIC timer"
-	depends on (LOAPIC || MVIC) && X86
+	depends on LOAPIC && X86
 	help
 	  This option selects LOAPIC timer as a system timer.
 
@@ -148,6 +196,7 @@ config NATIVE_POSIX_TIMER
 	bool "(POSIX) native_posix timer driver"
 	default y
 	depends on BOARD_NATIVE_POSIX
+	select TICKLESS_CAPABLE
 	help
 	  This module implements a kernel device driver for the native_posix HW timer
 	  model
@@ -183,6 +232,15 @@ config SAM0_RTC_TIMER
 	  series Real Time Counter and provides the standard "system clock
 	  driver" interfaces.
 
+config MCHP_XEC_RTOS_TIMER
+	bool "Microchip XEC series RTOS timer"
+	depends on SOC_FAMILY_MEC
+	select TICKLESS_CAPABLE
+	help
+	  This module implements a kernel device driver for the Microchip
+	  XEC series RTOS timer and provides the standard "system clock
+	  driver" interfaces.
+
 config SYSTEM_CLOCK_DISABLE
 	bool "API to disable system clock"
 	help
@@ -195,6 +253,15 @@ config TIMER_READS_ITS_FREQUENCY_AT_RUNTIME
 	help
 	  The drivers select this option automatically when needed. Do not modify
 	  this unless you have a very good reason for it.
+
+config SYSTEM_CLOCK_SLOPPY_IDLE
+	bool "Timer allowed to skew uptime clock during idle"
+	help
+	  When true, the timer driver is not required to maintain a
+	  correct system uptime count when the system enters idle.
+	  Some platforms may take advantage of this to reduce the
+	  overhead from regular interrupts required to handle counter
+	  wraparound conditions.
 
 config SYSTEM_CLOCK_INIT_PRIORITY
 	int "System clock driver initialization priority"

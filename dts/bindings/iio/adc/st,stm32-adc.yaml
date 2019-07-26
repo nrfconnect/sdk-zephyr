@@ -6,7 +6,6 @@
 #
 
 title: ST STM32 family ADC
-version: 0.1
 
 description: >
     This binding gives a base representation of the ST STM32 ADC
@@ -22,10 +21,7 @@ properties:
       category: required
 
     clocks:
-      type: array
       category: required
-      description: Clock gate control information
-      generation: define
 
     interrupts:
       category: required

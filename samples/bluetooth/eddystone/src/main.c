@@ -10,9 +10,9 @@
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
-#include <misc/printk.h>
-#include <misc/util.h>
-#include <misc/byteorder.h>
+#include <sys/printk.h>
+#include <sys/util.h>
+#include <sys/byteorder.h>
 #include <zephyr.h>
 
 #include <bluetooth/bluetooth.h>

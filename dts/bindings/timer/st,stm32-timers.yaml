@@ -1,6 +1,4 @@
-
 title: STM32 TIMERS
-version: 0.1
 
 description: >
     This binding gives a base representation of the STM32 TIMERS
@@ -28,7 +26,4 @@ properties:
       category: required
 
     clocks:
-      type: array
       category: required
-      description: Clock gate information
-      generation: define

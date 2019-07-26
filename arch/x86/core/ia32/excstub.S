@@ -15,8 +15,8 @@
  */
 
 #include <kernel_structs.h>
-#include <arch/x86/asm.h>
-#include <arch/x86/arch.h> /* For MK_ISR_NAME */
+#include <arch/x86/ia32/asm.h>
+#include <arch/x86/ia32/arch.h> /* For MK_ISR_NAME */
 #include <offsets_short.h>
 
 
@@ -156,15 +156,15 @@ SECTION_FUNC(TEXT, _exception_enter)
 
 	/* ESP is still pointing to the ESF at this point */
 
-	testl	$0x200, __NANO_ESF_eflags_OFFSET(%esp)
+	testl	$0x200, __z_arch_esf_t_eflags_OFFSET(%esp)
 	je	allDone
 	sti
 
 allDone:
 #if CONFIG_X86_IAMCU
-	movl	%esp, %eax		/* NANO_ESF * parameter */
+	movl	%esp, %eax		/* z_arch_esf_t * parameter */
 #else
-	pushl	%esp			/* push NANO_ESF * parameter */
+	pushl	%esp			/* push z_arch_esf_t * parameter */
 #endif
 	INDIRECT_CALL(%ecx)		/* call exception handler */
 

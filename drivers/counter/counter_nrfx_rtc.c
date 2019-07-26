@@ -3,8 +3,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include <counter.h>
-#include <clock_control.h>
+#include <drivers/counter.h>
+#include <drivers/clock_control.h>
 #include <drivers/clock_control/nrf_clock_control.h>
 #include <nrfx_rtc.h>
 #ifdef DPPI_PRESENT
@@ -101,7 +101,7 @@ static int counter_nrfx_set_alarm(struct device *dev, u8_t chan_id,
 		return -EBUSY;
 	}
 
-	if (alarm_cfg->absolute) {
+	if ((alarm_cfg->flags & COUNTER_ALARM_CFG_ABSOLUTE) != 0) {
 		cc_val = alarm_cfg->ticks;
 	} else {
 		/* As RTC is 24 bit there is no risk of overflow. */

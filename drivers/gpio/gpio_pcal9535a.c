@@ -13,9 +13,9 @@
 #include <kernel.h>
 #include <device.h>
 #include <init.h>
-#include <misc/util.h>
-#include <gpio.h>
-#include <i2c.h>
+#include <sys/util.h>
+#include <drivers/gpio.h>
+#include <drivers/i2c.h>
 
 #include "gpio_pcal9535a.h"
 

@@ -39,10 +39,10 @@
 
 #include <kernel.h>
 #include <init.h>
-#include <uart.h>
+#include <drivers/uart.h>
 #include <string.h>
-#include <ring_buffer.h>
-#include <misc/byteorder.h>
+#include <sys/ring_buffer.h>
+#include <sys/byteorder.h>
 #include <usb/class/usb_cdc.h>
 #include <usb/usb_device.h>
 #include <usb/usb_common.h>
@@ -966,7 +966,7 @@ static const struct uart_driver_api cdc_acm_driver_api = {
 	}
 
 #define DEFINE_CDC_ACM_CFG_DATA(x, _)					\
-	USBD_CFG_DATA_DEFINE(cdc_acm)					\
+	USBD_CFG_DATA_DEFINE(primary, cdc_acm)				\
 	struct usb_cfg_data cdc_acm_config_##x = {			\
 		.usb_device_description = NULL,				\
 		.interface_config = cdc_interface_config,		\

@@ -5,7 +5,6 @@
 #
 
 title: Nordic nRF Real Time Counter
-version: 0.1
 
 description: >
     This is a representation of the Nordic nRF RTC node
@@ -27,5 +26,4 @@ properties:
     ppi-wrap:
       type: boolean
       description: Enable wrapping with PPI
-      generation: define
       category: required

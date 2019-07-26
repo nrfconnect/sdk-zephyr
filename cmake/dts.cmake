@@ -19,11 +19,12 @@ set_ifndef(DTS_SOURCE ${BOARD_DIR}/${BOARD}.dts)
 set_ifndef(DTS_COMMON_OVERLAYS ${ZEPHYR_BASE}/dts/common/common.dts)
 
 # 'DTS_ROOT' is a list of directories where a directory tree with DT
-# files may be found. It always includes the application directory and
-# ${ZEPHYR_BASE}.
+# files may be found. It always includes the application directory,
+# the board directory, and ${ZEPHYR_BASE}.
 list(APPEND
   DTS_ROOT
   ${APPLICATION_SOURCE_DIR}
+  ${BOARD_DIR}
   ${ZEPHYR_BASE}
   )
 list(REMOVE_DUPLICATES
@@ -179,7 +180,6 @@ if(SUPPORTS_DTS)
     message(FATAL_ERROR "command failed with return code: ${ret}")
   endif()
 
-  import_kconfig(CONFIG_ ${GENERATED_DTS_BOARD_CONF})
   import_kconfig(DT_     ${GENERATED_DTS_BOARD_CONF})
 
 else()

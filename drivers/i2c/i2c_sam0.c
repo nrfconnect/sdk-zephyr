@@ -9,8 +9,8 @@
 #include <device.h>
 #include <init.h>
 #include <soc.h>
-#include <i2c.h>
-#include <dma.h>
+#include <drivers/i2c.h>
+#include <drivers/dma.h>
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(i2c_sam0, CONFIG_I2C_LOG_LEVEL);

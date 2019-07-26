@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <clock_control.h>
+#include <drivers/clock_control.h>
 #include <kernel.h>
 #include <soc.h>
 #include <errno.h>
-#include <i2c.h>
+#include <drivers/i2c.h>
 
 #define SPEED_100KHZ_BUS    0
 #define SPEED_400KHZ_BUS    1

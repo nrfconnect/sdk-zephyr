@@ -19,6 +19,8 @@ LOG_MODULE_REGISTER(net_ethernet, CONFIG_NET_L2_ETHERNET_LOG_LEVEL);
 #include <net/lldp.h>
 #endif
 
+#include <syscall_handler.h>
+
 #include "arp.h"
 #include "eth_stats.h"
 #include "net_private.h"
@@ -266,26 +268,24 @@ static enum net_verdict ethernet_recv(struct net_if *iface,
 
 	ethernet_update_rx_stats(iface, pkt, net_pkt_get_len(pkt) + hdr_len);
 
-#ifdef CONFIG_NET_ARP
-	if (family == AF_INET && type == NET_ETH_PTYPE_ARP) {
+	if (IS_ENABLED(CONFIG_NET_ARP) &&
+	    family == AF_INET && type == NET_ETH_PTYPE_ARP) {
 		NET_DBG("ARP packet from %s received",
 			log_strdup(net_sprint_ll_addr(
 					   (u8_t *)hdr->src.addr,
 					   sizeof(struct net_eth_addr))));
-#ifdef CONFIG_NET_IPV4_AUTO
-		if (net_ipv4_autoconf_input(iface, pkt) == NET_DROP) {
+
+		if (IS_ENABLED(CONFIG_NET_IPV4_AUTO) &&
+		    net_ipv4_autoconf_input(iface, pkt) == NET_DROP) {
 			return NET_DROP;
 		}
-#endif
+
 		return net_arp_input(pkt, hdr);
 	}
-#endif
 
-#if defined(CONFIG_NET_GPTP)
-	if (type == NET_ETH_PTYPE_PTP) {
+	if (IS_ENABLED(CONFIG_NET_GPTP) && type == NET_ETH_PTYPE_PTP) {
 		return net_gptp_recv(iface, pkt);
 	}
-#endif
 
 	ethernet_update_length(iface, pkt);
 
@@ -529,6 +529,8 @@ static void ethernet_update_tx_stats(struct net_if *iface, struct net_pkt *pkt)
 		eth_stats_update_broadcast_tx(iface);
 	}
 }
+#else
+#define ethernet_update_tx_stats(...)
 #endif /* CONFIG_NET_STATISTICS_ETHERNET */
 
 static void ethernet_remove_l2_header(struct net_pkt *pkt)
@@ -632,9 +634,9 @@ send:
 		ethernet_remove_l2_header(pkt);
 		goto error;
 	}
-#if defined(CONFIG_NET_STATISTICS_ETHERNET)
+
 	ethernet_update_tx_stats(iface, pkt);
-#endif
+
 	ret = net_pkt_get_len(pkt);
 	ethernet_remove_l2_header(pkt);
 
@@ -909,7 +911,7 @@ int net_eth_vlan_disable(struct net_if *iface, u16_t tag)
 
 	return 0;
 }
-#endif
+#endif /* CONFIG_NET_VLAN */
 
 NET_L2_INIT(ETHERNET_L2, ethernet_recv, ethernet_send, ethernet_enable,
 	    ethernet_flags);
@@ -965,9 +967,9 @@ void net_eth_carrier_off(struct net_if *iface)
 	handle_carrier(ctx, iface, carrier_off);
 }
 
+#if defined(CONFIG_PTP_CLOCK)
 struct device *net_eth_get_ptp_clock(struct net_if *iface)
 {
-#if defined(CONFIG_PTP_CLOCK)
 	struct device *dev = net_if_get_device(iface);
 	const struct ethernet_api *api = dev->driver_api;
 
@@ -984,10 +986,36 @@ struct device *net_eth_get_ptp_clock(struct net_if *iface)
 	}
 
 	return api->get_ptp_clock(net_if_get_device(iface));
-#else
-	return NULL;
-#endif
 }
+#endif /* CONFIG_PTP_CLOCK */
+
+#if defined(CONFIG_PTP_CLOCK)
+struct device *z_impl_net_eth_get_ptp_clock_by_index(int index)
+{
+	struct net_if *iface;
+
+	iface = net_if_get_by_index(index);
+	if (!iface) {
+		return NULL;
+	}
+
+	return net_eth_get_ptp_clock(iface);
+}
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(net_eth_get_ptp_clock_by_index, index)
+{
+	return (u32_t)z_impl_net_eth_get_ptp_clock_by_index(index);
+}
+#endif /* CONFIG_USERSPACE */
+#else /* CONFIG_PTP_CLOCK */
+struct device *z_impl_net_eth_get_ptp_clock_by_index(int index)
+{
+	ARG_UNUSED(index);
+
+	return NULL;
+}
+#endif /* CONFIG_PTP_CLOCK */
 
 #if defined(CONFIG_NET_GPTP)
 int net_eth_get_ptp_port(struct net_if *iface)

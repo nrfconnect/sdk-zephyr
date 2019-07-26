@@ -8,15 +8,15 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(spi_ll_stm32);
 
-#include <misc/util.h>
+#include <sys/util.h>
 #include <kernel.h>
 #include <soc.h>
 #include <errno.h>
-#include <spi.h>
+#include <drivers/spi.h>
 #include <toolchain.h>
 
 #include <clock_control/stm32_clock_control.h>
-#include <clock_control.h>
+#include <drivers/clock_control.h>
 
 #include "spi_ll_stm32.h"
 

@@ -19,10 +19,10 @@
 #include <string.h>
 #include <ztest.h>
 
-#include "flash.h"
-#include "flash_map.h"
-#include "stats.h"
-#include "nvs/nvs.h"
+#include <drivers/flash.h>
+#include <storage/flash_map.h>
+#include <stats/stats.h>
+#include <fs/nvs.h>
 #include "nvs_priv.h"
 
 #define TEST_FLASH_AREA_STORAGE_OFFSET	DT_FLASH_AREA_STORAGE_OFFSET

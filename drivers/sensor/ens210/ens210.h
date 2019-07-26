@@ -8,8 +8,8 @@
 #define ZEPHYR_DRIVERS_SENSOR_CCS8ZEPHYR_DRIVERS_SENSOR_ENS210_ENS210_H_11_CCS811_H_
 
 #include <device.h>
-#include <gpio.h>
-#include <misc/util.h>
+#include <drivers/gpio.h>
+#include <sys/util.h>
 
 /* Registers */
 #define ENS210_REG_PART_ID    0x00

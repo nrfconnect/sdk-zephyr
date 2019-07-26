@@ -7,10 +7,10 @@
 
 #include <soc.h>
 #include <errno.h>
-#include <atomic.h>
+#include <sys/atomic.h>
 #include <device.h>
-#include <clock_control.h>
-#include <misc/__assert.h>
+#include <drivers/clock_control.h>
+#include <sys/__assert.h>
 #include <nrf_clock.h>
 #if defined(CONFIG_USB) && defined(CONFIG_SOC_NRF52840)
 #include <nrf_power.h>

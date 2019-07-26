@@ -16,13 +16,10 @@ LOG_MODULE_REGISTER(net_sock, CONFIG_NET_SOCKETS_LOG_LEVEL);
 #include <net/net_pkt.h>
 #include <net/socket.h>
 #include <syscall_handler.h>
-#include <misc/fdtable.h>
-#include <misc/math_extras.h>
+#include <sys/fdtable.h>
+#include <sys/math_extras.h>
 
 #include "sockets_internal.h"
-
-extern struct net_socket_register __net_socket_register_start[];
-extern struct net_socket_register __net_socket_register_end[];
 
 #define SET_ERRNO(x) \
 	{ int _err = x; if (_err < 0) { errno = -_err; return -1; } }
@@ -133,11 +130,7 @@ int zsock_socket_internal(int family, int type, int proto)
 
 int z_impl_zsock_socket(int family, int type, int proto)
 {
-	struct net_socket_register *sock_family;
-
-	for (sock_family = __net_socket_register_start;
-	     sock_family != __net_socket_register_end;
-	     sock_family++) {
+	Z_STRUCT_SECTION_FOREACH(net_socket_register, sock_family) {
 		if (sock_family->family != family &&
 		    sock_family->family != AF_UNSPEC) {
 			continue;
@@ -325,8 +318,9 @@ Z_SYSCALL_HANDLER(zsock_bind, sock, addr, addrlen)
 int zsock_connect_ctx(struct net_context *ctx, const struct sockaddr *addr,
 		      socklen_t addrlen)
 {
-	SET_ERRNO(net_context_connect(ctx, addr, addrlen, NULL, K_FOREVER,
-				      NULL));
+	SET_ERRNO(net_context_connect(ctx, addr, addrlen, NULL,
+			      K_MSEC(CONFIG_NET_SOCKETS_CONNECT_TIMEOUT),
+			      NULL));
 	SET_ERRNO(net_context_recv(ctx, zsock_received_cb, K_NO_WAIT,
 				   ctx->user_data));
 
@@ -512,6 +506,39 @@ Z_SYSCALL_HANDLER(zsock_sendto, sock, buf, len, flags, dest_addr, addrlen)
 	return z_impl_zsock_sendto(sock, (const void *)buf, len, flags,
 			dest_addr ? (struct sockaddr *)&dest_addr_copy : NULL,
 			addrlen);
+}
+#endif /* CONFIG_USERSPACE */
+
+ssize_t zsock_sendmsg_ctx(struct net_context *ctx, const struct msghdr *msg,
+			  int flags)
+{
+	s32_t timeout = K_FOREVER;
+	int status;
+
+	if ((flags & ZSOCK_MSG_DONTWAIT) || sock_is_nonblock(ctx)) {
+		timeout = K_NO_WAIT;
+	}
+
+	status = net_context_sendmsg(ctx, msg, flags, NULL, timeout, NULL);
+	if (status < 0) {
+		errno = -status;
+		return -1;
+	}
+
+	return status;
+}
+
+ssize_t z_impl_zsock_sendmsg(int sock, const struct msghdr *msg, int flags)
+{
+	VTABLE_CALL(sendmsg, sock, msg, flags);
+}
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(zsock_sendmsg, sock, msg, flags)
+{
+	/* TODO: Create a copy of msg_buf and copy the data there */
+
+	return z_impl_zsock_sendmsg(sock, (const struct msghdr *)msg, flags);
 }
 #endif /* CONFIG_USERSPACE */
 
@@ -1103,15 +1130,66 @@ Z_SYSCALL_HANDLER(zsock_inet_pton, family, src, dst)
 int zsock_getsockopt_ctx(struct net_context *ctx, int level, int optname,
 			 void *optval, socklen_t *optlen)
 {
+	int ret;
+
+	switch (level) {
+	case SOL_SOCKET:
+		switch (optname) {
+		case SO_TXTIME:
+			if (IS_ENABLED(CONFIG_NET_CONTEXT_TXTIME)) {
+				ret = net_context_get_option(ctx,
+							     NET_OPT_TXTIME,
+							     optval, optlen);
+				if (ret < 0) {
+					errno = -ret;
+					return -1;
+				}
+
+				return 0;
+			}
+		}
+
+		break;
+	}
+
 	errno = ENOPROTOOPT;
 	return -1;
 }
 
-int zsock_getsockopt(int sock, int level, int optname,
-		     void *optval, socklen_t *optlen)
+int z_impl_zsock_getsockopt(int sock, int level, int optname,
+			    void *optval, socklen_t *optlen)
 {
 	VTABLE_CALL(getsockopt, sock, level, optname, optval, optlen);
 }
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(zsock_getsockopt, sock, level, optname, optval, optlen)
+{
+	socklen_t kernel_optlen = *(socklen_t *)optlen;
+	void *kernel_optval;
+	int ret;
+
+	if (Z_SYSCALL_MEMORY_WRITE(optval, kernel_optlen)) {
+		errno = -EPERM;
+		return -1;
+	}
+
+	kernel_optval = z_user_alloc_from_copy((const void *)optval,
+					       kernel_optlen);
+	Z_OOPS(!kernel_optval);
+
+	ret = z_impl_zsock_getsockopt(sock, level, optname,
+				      kernel_optval, &kernel_optlen);
+
+	Z_OOPS(z_user_to_copy((void *)optval, kernel_optval, kernel_optlen));
+	Z_OOPS(z_user_to_copy((void *)optlen, &kernel_optlen,
+			      sizeof(socklen_t)));
+
+	k_free(kernel_optval);
+
+	return ret;
+}
+#endif /* CONFIG_USERSPACE */
 
 int zsock_setsockopt_ctx(struct net_context *ctx, int level, int optname,
 			 const void *optval, socklen_t optlen)
@@ -1139,6 +1217,39 @@ int zsock_setsockopt_ctx(struct net_context *ctx, int level, int optname,
 
 				return 0;
 			}
+
+			break;
+
+		case SO_TIMESTAMPING:
+			/* Calculate TX network packet timings */
+			if (IS_ENABLED(CONFIG_NET_CONTEXT_TIMESTAMP)) {
+				ret = net_context_set_option(ctx,
+							     NET_OPT_TIMESTAMP,
+							     optval, optlen);
+				if (ret < 0) {
+					errno = -ret;
+					return -1;
+				}
+
+				return 0;
+			}
+
+			break;
+
+		case SO_TXTIME:
+			if (IS_ENABLED(CONFIG_NET_CONTEXT_TXTIME)) {
+				ret = net_context_set_option(ctx,
+							     NET_OPT_TXTIME,
+							     optval, optlen);
+				if (ret < 0) {
+					errno = -ret;
+					return -1;
+				}
+
+				return 0;
+			}
+
+			break;
 		}
 
 		break;
@@ -1168,11 +1279,29 @@ int zsock_setsockopt_ctx(struct net_context *ctx, int level, int optname,
 	return -1;
 }
 
-int zsock_setsockopt(int sock, int level, int optname,
-		     const void *optval, socklen_t optlen)
+int z_impl_zsock_setsockopt(int sock, int level, int optname,
+			    const void *optval, socklen_t optlen)
 {
 	VTABLE_CALL(setsockopt, sock, level, optname, optval, optlen);
 }
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(zsock_setsockopt, sock, level, optname, optval, optlen)
+{
+	void *kernel_optval;
+	int ret;
+
+	kernel_optval = z_user_alloc_from_copy((const void *)optval, optlen);
+	Z_OOPS(!kernel_optval);
+
+	ret = z_impl_zsock_setsockopt(sock, level, optname,
+				      kernel_optval, optlen);
+
+	k_free(kernel_optval);
+
+	return ret;
+}
+#endif /* CONFIG_USERSPACE */
 
 int zsock_getsockname_ctx(struct net_context *ctx, struct sockaddr *addr,
 			  socklen_t *addrlen)
@@ -1185,7 +1314,7 @@ int zsock_getsockname_ctx(struct net_context *ctx, struct sockaddr *addr,
 	}
 
 	if (IS_ENABLED(CONFIG_NET_IPV4) && ctx->local.family == AF_INET) {
-		struct sockaddr_in addr4;
+		struct sockaddr_in addr4 = { 0 };
 
 		addr4.sin_family = AF_INET;
 		addr4.sin_port = net_sin_ptr(&ctx->local)->sin_port;
@@ -1196,7 +1325,7 @@ int zsock_getsockname_ctx(struct net_context *ctx, struct sockaddr *addr,
 		memcpy(addr, &addr4, MIN(*addrlen, newlen));
 	} else if (IS_ENABLED(CONFIG_NET_IPV6) &&
 		   ctx->local.family == AF_INET6) {
-		struct sockaddr_in6 addr6;
+		struct sockaddr_in6 addr6 = { 0 };
 
 		addr6.sin6_family = AF_INET6;
 		addr6.sin6_port = net_sin6_ptr(&ctx->local)->sin6_port;
@@ -1365,6 +1494,12 @@ static ssize_t sock_sendto_vmeth(void *obj, const void *buf, size_t len,
 	return zsock_sendto_ctx(obj, buf, len, flags, dest_addr, addrlen);
 }
 
+static ssize_t sock_sendmsg_vmeth(void *obj, const struct msghdr *msg,
+				  int flags)
+{
+	return zsock_sendmsg_ctx(obj, msg, flags);
+}
+
 static ssize_t sock_recvfrom_vmeth(void *obj, void *buf, size_t max_len,
 				   int flags, struct sockaddr *src_addr,
 				   socklen_t *addrlen)
@@ -1397,6 +1532,7 @@ const struct socket_op_vtable sock_fd_op_vtable = {
 	.listen = sock_listen_vmeth,
 	.accept = sock_accept_vmeth,
 	.sendto = sock_sendto_vmeth,
+	.sendmsg = sock_sendmsg_vmeth,
 	.recvfrom = sock_recvfrom_vmeth,
 	.getsockopt = sock_getsockopt_vmeth,
 	.setsockopt = sock_setsockopt_vmeth,

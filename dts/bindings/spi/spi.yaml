@@ -5,7 +5,6 @@
 #
 
 title: SPI Base Structure
-version: 0.1
 
 description: >
     This binding gives the base structures for all SPI devices
@@ -21,7 +20,6 @@ properties:
       type: int
       category: optional
       description: Clock frequency the SPI peripheral is being driven at
-      generation: define
     "#address-cells":
       type: int
       category: required
@@ -32,12 +30,6 @@ properties:
       description: should be 0.
     label:
       category: required
-    clocks:
-      type: array
-      category: optional
-      description: Clock gate information
-      generation: define
     cs-gpios:
       type: compound
       category: optional
-      generation: define, use-prop-name

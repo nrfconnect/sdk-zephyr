@@ -7,11 +7,11 @@
 
 #include <kernel.h>
 #include <string.h>
-#include <misc/math_extras.h>
-#include <misc/printk.h>
-#include <misc/rb.h>
+#include <sys/math_extras.h>
+#include <sys/printk.h>
+#include <sys/rb.h>
 #include <kernel_structs.h>
-#include <sys_io.h>
+#include <sys/sys_io.h>
 #include <ksched.h>
 #include <syscall.h>
 #include <syscall_handler.h>
@@ -19,8 +19,8 @@
 #include <init.h>
 #include <stdbool.h>
 #include <app_memory/app_memdomain.h>
-#include <misc/libc-hooks.h>
-#include <misc/mutex.h>
+#include <sys/libc-hooks.h>
+#include <sys/mutex.h>
 
 #ifdef Z_LIBC_PARTITION_EXISTS
 K_APPMEM_PARTITION_DEFINE(z_libc_partition);
@@ -762,7 +762,7 @@ static u32_t handler_bad_syscall(u32_t bad_id, u32_t arg2, u32_t arg3,
 {
 	printk("Bad system call id %u invoked\n", bad_id);
 	z_arch_syscall_oops(ssf);
-	CODE_UNREACHABLE;
+	CODE_UNREACHABLE; /* LCOV_EXCL_LINE */
 }
 
 static u32_t handler_no_syscall(u32_t arg1, u32_t arg2, u32_t arg3,
@@ -770,7 +770,7 @@ static u32_t handler_no_syscall(u32_t arg1, u32_t arg2, u32_t arg3,
 {
 	printk("Unimplemented system call\n");
 	z_arch_syscall_oops(ssf);
-	CODE_UNREACHABLE;
+	CODE_UNREACHABLE; /* LCOV_EXCL_LINE */
 }
 
 #include <syscall_dispatch.c>

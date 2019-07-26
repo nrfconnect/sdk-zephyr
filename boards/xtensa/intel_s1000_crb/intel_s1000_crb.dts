@@ -2,7 +2,7 @@
 
 /dts-v1/;
 
-#include "intel_s1000.dtsi"
+#include <intel/intel_s1000.dtsi>
 
 / {
 	model = "intel_s1000_crb";
@@ -18,6 +18,14 @@
 		zephyr,shell-uart = &uart0;
 		zephyr,flash = &flash0;
 	};
+};
+
+&cpu0 {
+	clock-frequency = <400000000>;
+};
+
+&cpu1 {
+	clock-frequency = <400000000>;
 };
 
 &uart0 {
@@ -45,10 +53,8 @@
 		reg = <0>;
 		spi-max-frequency = <2000000>;
 		label = "MX25UM512";
-		jedec-id = <0xc2 0x80 0x3a>;
+		jedec-id = [c2 80 3a];
 		size = <0x2000000>;
-		erase-block-size = <0x10000>;
-		write-block-size = <1>;
 	};
 };
 

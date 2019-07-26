@@ -27,7 +27,7 @@
 #include <zephyr.h>
 #include <zephyr/types.h>
 #include <net/tls_credentials.h>
-#include <misc/mutex.h>
+#include <sys/mutex.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -476,6 +476,11 @@ struct mqtt_client {
 	/** Size of transmit buffer. */
 	u32_t tx_buf_size;
 
+	/** Keepalive interval for this client in seconds.
+	 *  Default is CONFIG_MQTT_KEEPALIVE.
+	 */
+	u16_t keepalive;
+
 	/** MQTT protocol version. */
 	u8_t protocol_version;
 
@@ -515,10 +520,10 @@ void mqtt_client_init(struct mqtt_client *client);
  * @note Default protocol revision used for connection request is 3.1.1. Please
  *       set client.protocol_version = MQTT_VERSION_3_1_0 to use protocol 3.1.0.
  * @note
- *       @rststar
+ *       @rst
  *          Please modify :option:`CONFIG_MQTT_KEEPALIVE` time to override
  *          default of 1 minute.
- *       @endrststar
+ *       @endrst
  */
 int mqtt_connect(struct mqtt_client *client);
 

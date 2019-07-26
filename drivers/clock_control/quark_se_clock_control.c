@@ -9,14 +9,14 @@
 #include <kernel.h>
 #include <arch/cpu.h>
 
-#include <misc/__assert.h>
+#include <sys/__assert.h>
 #include <soc.h>
 #include <device.h>
 #include <init.h>
 
-#include <sys_io.h>
+#include <sys/sys_io.h>
 
-#include <clock_control.h>
+#include <drivers/clock_control.h>
 #include <clock_control/quark_se_clock_control.h>
 
 #define LOG_LEVEL CONFIG_CLOCK_CONTROL_LOG_LEVEL

@@ -6,17 +6,17 @@
 
 #include <errno.h>
 
-#include <pwm.h>
+#include <drivers/pwm.h>
 #include <device.h>
 #include <kernel.h>
 #include <init.h>
-#include <power.h>
-#include <misc/util.h>
+#include <power/power.h>
+#include <sys/util.h>
 
 #include "qm_pwm.h"
 #include "clk.h"
 
-#define HW_CLOCK_CYCLES_PER_USEC  (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC / \
+#define HW_CLOCK_CYCLES_PER_USEC  (sys_clock_hw_cycles_per_sec() / \
 				   USEC_PER_SEC)
 
 /* pwm uses 32 bits counter to control low and high period */

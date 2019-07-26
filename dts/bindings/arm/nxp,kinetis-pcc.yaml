@@ -5,7 +5,6 @@
 #
 
 title: NXP Kinetis PCC (Peripheral Clock Controller)
-version: 0.1
 
 description: >
     This is a representation of the NXP Kinetis PCC IP node
@@ -23,6 +22,10 @@ properties:
     label:
       category: required
 
+    "#clock-cells":
+      type: int
+      category: required
+      description: should be 1.
+
 "#cells":
   - name
-  - offset

@@ -5,7 +5,6 @@
 #
 
 title: Nordic nRF Family SPI Master node
-version: 0.1
 
 description: >
     This is a representation of the Nordic nRF SPI node
@@ -27,16 +26,13 @@ properties:
       type: int
       category: required
       description: SCK pin
-      generation: define
 
     mosi-pin:
       type: int
       category: required
       description: MOSI pin
-      generation: define
 
     miso-pin:
       type: int
       category: required
       description: MISO pin
-      generation: define

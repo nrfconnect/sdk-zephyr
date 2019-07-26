@@ -7,7 +7,7 @@
 #ifndef _SOCKETS_INTERNAL_H_
 #define _SOCKETS_INTERNAL_H_
 
-#include <misc/fdtable.h>
+#include <sys/fdtable.h>
 
 #define SOCK_EOF 1
 #define SOCK_NONBLOCK 2
@@ -45,6 +45,7 @@ struct socket_op_vtable {
 			  void *optval, socklen_t *optlen);
 	int (*setsockopt)(void *obj, int level, int optname,
 			  const void *optval, socklen_t optlen);
+	ssize_t (*sendmsg)(void *obj, const struct msghdr *msg, int flags);
 };
 
 #endif /* _SOCKETS_INTERNAL_H_ */

@@ -7,27 +7,27 @@
 #include <errno.h>
 
 #include <kernel.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include "gpio_dw.h"
 #include "gpio_utils.h"
 
 #include <soc.h>
-#include <sys_io.h>
+#include <sys/sys_io.h>
 #include <init.h>
-#include <misc/util.h>
-#include <misc/__assert.h>
-#include <clock_control.h>
+#include <sys/util.h>
+#include <sys/__assert.h>
+#include <drivers/clock_control.h>
 
 #ifdef CONFIG_SHARED_IRQ
 #include <shared_irq.h>
 #endif
 
 #ifdef CONFIG_IOAPIC
-#include <drivers/ioapic.h>
+#include <drivers/interrupt_controller/ioapic.h>
 #endif
 
 #ifdef CONFIG_DEVICE_POWER_MANAGEMENT
-#include <power.h>
+#include <power/power.h>
 #endif
 
 /*
@@ -387,7 +387,7 @@ static int gpio_dw_device_ctrl(struct device *port, u32_t ctrl_command,
 #define gpio_dw_set_power_state(...)
 #endif
 
-#if defined(CONFIG_SOC_QUARK_SE_C1000) || defined(CONFIG_SOC_QUARK_D2000)
+#if defined(CONFIG_SOC_QUARK_SE_C1000)
 static inline void gpio_dw_unmask_int(u32_t mask_addr)
 {
 	sys_write32(sys_read32(mask_addr) & INT_UNMASK_IA, mask_addr);

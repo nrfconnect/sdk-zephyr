@@ -30,7 +30,7 @@ manifest:
   # Please add items below based on alphabetical order
   projects:
     - name: ci-tools
-      revision: 672cb7623b89a41370f95881290a97cccdc35cb0
+      revision: d56f2dd3510e20fa8cf4aad442495c08a658113f
       path: tools/ci-tools
     - name: esp-idf
       revision: 6835bfc741bf15e98fb7971293913f770df6081f
@@ -48,14 +48,17 @@ manifest:
       revision: 9151e614c23997074acd1096a3e8a9e5c255d5b9
       path: modules/hal/silabs
     - name: hal_st
-      revision: b6c9262eed68000e69c92bef6e820cdbd5b0a32b
+      revision: 0ec40aed8087f26bd9ac1b70fb5a6c326a6451aa
       path: modules/hal/st
     - name: hal_stm32
-      revision: b454ad819f4f10cb82ce5eb1d7f709a680bc61c5
+      revision: 686c93da4186eb9c48b83ee235fc0454693f6e5c
       path: modules/hal/stm32
     - name: libmetal
       revision: 45e630d6152824f807d3f919958605c4626cbdff
       path: modules/hal/libmetal
+    - name: lvgl
+      revision: c43a2bbe52cc803d12bc12888b38105cf1e179d0
+      path: modules/lib/gui/lvgl
     - name: mbedtls
       revision: ca32746072ce3381f1c9ae46ba6cd34c69f8c0ee
       path: modules/crypto/mbedtls
@@ -71,6 +74,9 @@ manifest:
     - name: open-amp
       revision: 9b591b289e1f37339bd038b5a1f0e6c8ad39c63a
       path: modules/lib/open-amp
+    - name: openthread
+      revision: 0dbecf508e7a79aae8ed9631f1a63fc65478b213
+      path: modules/lib/openthread
     - name: segger
       revision: 6fcf61606d6012d2c44129edc033f59331e268bc
       path: modules/debug/segger

@@ -6,7 +6,7 @@
 
 #include <zephyr.h>
 #include <string.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <logging/log_ctrl.h>
 #include "sample_instance.h"
 #include "sample_module.h"
@@ -46,7 +46,7 @@ static u32_t timestamp_freq(void)
 #ifdef CONFIG_SOC_FAMILY_NRF
 	return 32768 / (NRF_RTC1->PRESCALER + 1);
 #else
-	return CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC;
+	return sys_clock_hw_cycles_per_sec();
 #endif
 }
 

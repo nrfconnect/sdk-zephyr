@@ -5,7 +5,6 @@
 #
 
 title: ADXL362 Three Axis SPI accelerometer
-version: 0.1
 
 description: >
     This is a representation of the ADXL362 Three Axis SPI accelerometer
@@ -20,4 +19,3 @@ properties:
     int1-gpios:
       type: compound
       category: optional
-      generation: define, use-prop-name

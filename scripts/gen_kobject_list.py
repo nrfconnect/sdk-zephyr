@@ -112,6 +112,7 @@ subsystems = [
     "spi_driver_api",
     "uart_driver_api",
     "can_driver_api",
+    "ptp_clock_driver_api",
 ]
 
 
@@ -195,6 +196,7 @@ def write_gperf_table(fp, eh, objs, static_begin, static_end):
         # either completely initialized at build time, or done automatically
         # at boot during some PRE_KERNEL_* phase
         initialized = obj_addr >= static_begin and obj_addr < static_end
+        is_driver = obj_type.startswith("K_OBJ_DRIVER_")
 
         byte_str = struct.pack("<I" if eh.little_endian else ">I", obj_addr)
         fp.write("\"")
@@ -202,11 +204,13 @@ def write_gperf_table(fp, eh, objs, static_begin, static_end):
             val = "\\x%02x" % byte
             fp.write(val)
 
-        fp.write(
-            "\",{},%s,%s,%s\n" %
-            (obj_type,
-             "K_OBJ_FLAG_INITIALIZED" if initialized else "0",
-             str(ko.data)))
+        flags = "0"
+        if (initialized):
+            flags += " | K_OBJ_FLAG_INITIALIZED"
+        if (is_driver):
+            flags += " | K_OBJ_FLAG_DRIVER"
+
+        fp.write("\", {}, %s, %s, %s\n" % (obj_type, flags, str(ko.data)))
 
         if obj_type == "K_OBJ_THREAD":
             idx = math.floor(ko.data / 8)

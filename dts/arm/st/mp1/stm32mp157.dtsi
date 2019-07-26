@@ -37,7 +37,6 @@
 		rcc: rcc@50000000 {
 			compatible = "st,stm32-rcc";
 			reg = <0x50000000 0x1000>;
-			clocks-controller;
 			#clock-cells = <2>;
 			label = "STM32_CLK_RCC";
 		};
@@ -210,6 +209,17 @@
 			status = "disabled";
 			label = "UART_8";
 		};
+
+		mailbox: mailbox@4c001000 {
+			compatible = "st,stm32-ipcc-mailbox";
+			reg = <0x4c001000 0x400>;
+			clocks = <&rcc STM32_CLOCK_BUS_AHB3 0x00001000>;
+			interrupts = <103 0>, <104 0>;
+			interrupt-names = "rxo", "txf";
+			status = "disabled";
+			label = "MAILBOX_0";
+		};
+
 	};
 };
 

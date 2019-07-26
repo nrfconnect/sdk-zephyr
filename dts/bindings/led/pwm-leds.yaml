@@ -5,7 +5,6 @@
 #
 
 title: PWM LED
-version: 0.1
 
 description: >
     This is a representation of the PWM GPIO nodes
@@ -16,17 +15,14 @@ properties:
       type: string-array
       category: required
       description: compatible strings
-      generation: define
 
 sub-node:
     properties:
         pwms:
           type: compound
           category: required
-          generation: define
 
         label:
-          category: required
+          category: optional
           type: string
           description: Human readable string describing the device (used by Zephyr for API name)
-          generation: define

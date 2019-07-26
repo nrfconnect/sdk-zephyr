@@ -1,6 +1,4 @@
-
 title: Kinetis Pinmux
-version: 0.1
 
 description: >
     This is a representation of the Kinetis Pinmux node
@@ -16,9 +14,6 @@ properties:
       category: required
 
     clocks:
-      type: array
-      description: clock gate information
-      generation: define
       category: required
 
 "#cells":

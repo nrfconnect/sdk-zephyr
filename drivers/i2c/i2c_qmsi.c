@@ -7,9 +7,9 @@
 #include <errno.h>
 
 #include <device.h>
-#include <i2c.h>
-#include <ioapic.h>
-#include <power.h>
+#include <drivers/i2c.h>
+#include <drivers/interrupt_controller/ioapic.h>
+#include <power/power.h>
 
 #include "qm_i2c.h"
 #include "qm_isr.h"

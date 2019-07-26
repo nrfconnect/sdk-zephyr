@@ -18,13 +18,13 @@
 #include <kernel.h>
 #include <init.h>
 #include <device.h>
-#include <misc/printk.h>
-#include <misc/__assert.h>
+#include <sys/printk.h>
+#include <sys/__assert.h>
 #include "soc.h"
-#include <uart.h>
+#include <drivers/uart.h>
 #include <drivers/pci/pci.h>
 #include <drivers/pci/pci_mgr.h>
-#include <drivers/ioapic.h>
+#include <drivers/interrupt_controller/ioapic.h>
 
 
 #ifdef CONFIG_PCI_LEGACY_BRIDGE

@@ -6,7 +6,7 @@
 
 #include <ctype.h>
 #include <stdlib.h>
-#include <atomic.h>
+#include <sys/atomic.h>
 #include <shell/shell.h>
 #include <shell/shell_dummy.h>
 #include "shell_ops.h"
@@ -1409,7 +1409,7 @@ int shell_execute_cmd(const struct shell *shell, const char *cmd)
 	}
 
 	if (shell == NULL) {
-#if CONFIG_SHELL_BACKEND_DUMMY
+#if defined(CONFIG_SHELL_BACKEND_DUMMY)
 		shell = shell_backend_dummy_get_ptr();
 #else
 		return -EINVAL;

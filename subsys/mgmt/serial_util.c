@@ -8,10 +8,10 @@
 #include <string.h>
 #include <stdbool.h>
 #include <errno.h>
-#include <crc.h>
-#include <misc/byteorder.h>
+#include <sys/crc.h>
+#include <sys/byteorder.h>
 #include <net/buf.h>
-#include <base64.h>
+#include <sys/base64.h>
 #include <mgmt/buf.h>
 #include <mgmt/serial.h>
 

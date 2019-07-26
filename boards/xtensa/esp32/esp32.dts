@@ -5,11 +5,11 @@
  */
 /dts-v1/;
 
-#include "esp32.dtsi"
+#include <espressif/esp32.dtsi>
 
 / {
 	model = "esp32";
-	compatible = "xtensa,esp32";
+	compatible = "espressif,esp32";
 
 	aliases {
 		uart-0 = &uart0;
@@ -19,6 +19,14 @@
 		zephyr,sram = &sram0;
 		zephyr,console = &uart0;
 	};
+};
+
+&cpu0 {
+	clock-frequency = <40000000>;
+};
+
+&cpu1 {
+	clock-frequency = <40000000>;
 };
 
 &uart0 {

@@ -5,7 +5,6 @@
 #
 
 title: u-blox SARA-R4 modem
-version: 0.1
 
 description: >
     This is a representation of the u-blox SARA-R4 modem.
@@ -23,9 +22,7 @@ properties:
     mdm-power-gpios:
       type: compound
       category: required
-      generation: define, use-prop-name
 
     mdm-reset-gpios:
       type: compound
       category: required
-      generation: define, use-prop-name

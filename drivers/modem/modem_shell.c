@@ -18,9 +18,9 @@
 #include <device.h>
 #include <shell/shell.h>
 
-#include <misc/printk.h>
+#include <sys/printk.h>
 
-#include <drivers/modem/modem_receiver.h>
+#include "modem_receiver.h"
 
 static int cmd_modem_list(const struct shell *shell, size_t argc,
 			  char *argv[])

@@ -14,10 +14,10 @@
 
 #include <kernel.h>
 #include "soc.h"
-#include <uart.h>
+#include <drivers/uart.h>
 #include <device.h>
 #include <init.h>
-#include <mmustructs.h>
+#include <ia32/mmustructs.h>
 #include <linker/linker-defs.h>
 
 #ifdef CONFIG_X86_MMU

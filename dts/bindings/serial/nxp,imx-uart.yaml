@@ -5,7 +5,6 @@
 #
 
 title: iMX Uart
-version: 0.1
 
 description: >
     This binding gives a base representation of the iMX UART
@@ -23,20 +22,12 @@ properties:
     interrupts:
       category: required
 
-    clocks:
-      type: array
-      category: required
-      description: Clock gate information
-      generation: define
-
     modem-mode:
      type: int
      category: required
      description: Set the UART Port to modem mode 0 (dce) 64 (dte)
-     generation: define
 
     rdc:
      type: int
      category: required
      description: Set the RDC permission for this peripheral
-     generation: define

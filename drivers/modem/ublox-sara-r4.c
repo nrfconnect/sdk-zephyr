@@ -15,7 +15,7 @@ LOG_MODULE_REGISTER(LOG_DOMAIN);
 #include <ctype.h>
 #include <errno.h>
 #include <zephyr.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <device.h>
 #include <init.h>
 
@@ -33,7 +33,7 @@ LOG_MODULE_REGISTER(LOG_DOMAIN);
 #include "udp_internal.h"
 #endif
 
-#include <drivers/modem/modem_receiver.h>
+#include "modem_receiver.h"
 
 #if !defined(CONFIG_MODEM_UBLOX_SARA_R4_MANUAL_MCCMNO)
 #define CONFIG_MODEM_UBLOX_SARA_R4_MANUAL_MCCMNO ""

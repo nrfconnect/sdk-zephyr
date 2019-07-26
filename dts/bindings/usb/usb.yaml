@@ -5,7 +5,6 @@
 #
 
 title: USB Base Structure
-version: 0.1
 
 description: >
     This binding gives the base structures for all USB devices
@@ -22,7 +21,6 @@ properties:
                    "full-speed" and "low-speed". If this is not passed
                    via DT, USB controllers should use their maximum
                    hardware capability.
-      generation: define
       enum:
          - "low-speed"
          - "full-speed"

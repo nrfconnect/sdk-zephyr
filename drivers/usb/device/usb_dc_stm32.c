@@ -48,8 +48,8 @@
 #include <string.h>
 #include <usb/usb_device.h>
 #include <clock_control/stm32_clock_control.h>
-#include <misc/util.h>
-#include <gpio.h>
+#include <sys/util.h>
+#include <drivers/gpio.h>
 
 #define LOG_LEVEL CONFIG_USB_DRIVER_LOG_LEVEL
 #include <logging/log.h>
@@ -196,29 +196,8 @@ static int usb_dc_stm32_clock_enable(void)
 {
 	struct device *clk = device_get_binding(STM32_CLOCK_CONTROL_NAME);
 	struct stm32_pclken pclken = {
-
-#ifdef DT_USB_HS_BASE_ADDRESS
-		.bus = STM32_CLOCK_BUS_AHB1,
-		.enr = LL_AHB1_GRP1_PERIPH_OTGHS
-#else /* DT_USB_HS_BASE_ADDRESS */
-
-#ifdef USB
-		.bus = STM32_CLOCK_BUS_APB1,
-		.enr = LL_APB1_GRP1_PERIPH_USB,
-
-#else /* USB_OTG_FS */
-
-#ifdef CONFIG_SOC_SERIES_STM32F1X
-		.bus = STM32_CLOCK_BUS_AHB1,
-		.enr = LL_AHB1_GRP1_PERIPH_OTGFS,
-#else
-		.bus = STM32_CLOCK_BUS_AHB2,
-		.enr = LL_AHB2_GRP1_PERIPH_OTGFS,
-#endif /* CONFIG_SOC_SERIES_STM32F1X */
-
-#endif /* USB */
-
-#endif /* DT_USB_HS_BASE_ADDRESS */
+		.bus = DT_USB_CLOCK_BUS,
+		.enr = DT_USB_CLOCK_BITS,
 	};
 
 	/*
@@ -322,8 +301,6 @@ static u32_t usb_dc_stm32_get_maximum_speed(void)
 #else
 		speed = USB_OTG_SPEED_FULL;
 #endif /* DT_COMPAT_ST_STM32_USBPHYC && DT_USB_HS_BASE_ADDRESS */
-	} else if (!strncmp(DT_USB_MAXIMUM_SPEED, "low-speed", 9)) {
-		speed = USB_OTG_SPEED_LOW;
 	} else {
 		LOG_DBG("Unsupported maximum speed defined in device tree. "
 			"USB controller will default to its maximum HW "
@@ -769,7 +746,7 @@ int usb_dc_ep_write(const u8_t ep, const u8_t *const data,
 		irq_enable(DT_USB_IRQ);
 	}
 
-	if (ret_bytes) {
+	if (!ret && ret_bytes) {
 		*ret_bytes = len;
 	}
 

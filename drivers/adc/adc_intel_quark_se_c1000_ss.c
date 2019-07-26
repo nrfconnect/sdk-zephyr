@@ -19,9 +19,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <soc.h>
-#include <adc.h>
+#include <drivers/adc.h>
 #include <arch/cpu.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 #define ADC_CONTEXT_USES_KERNEL_TIMER
 #include "adc_context.h"

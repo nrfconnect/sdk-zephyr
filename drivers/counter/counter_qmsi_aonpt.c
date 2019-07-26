@@ -8,11 +8,11 @@
 
 #include <device.h>
 #include <init.h>
-#include <drivers/ioapic.h>
-#include <counter.h>
-#include <power.h>
+#include <drivers/interrupt_controller/ioapic.h>
+#include <drivers/counter.h>
+#include <power/power.h>
 #include <soc.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 #include "qm_aon_counters.h"
 #include "qm_isr.h"

@@ -31,13 +31,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <net/openthread.h>
 #endif
 
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 #include <string.h>
 #include <random/rand32.h>
 
 #include <net/ieee802154_radio.h>
 
-#include "nrf52840.h"
 #include "ieee802154_nrf5.h"
 #include "nrf_802154.h"
 

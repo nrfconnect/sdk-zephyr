@@ -7,9 +7,9 @@
  */
 
 #include <init.h>
-#include <misc/__assert.h>
-#include <misc/byteorder.h>
-#include <sensor.h>
+#include <sys/__assert.h>
+#include <sys/byteorder.h>
+#include <drivers/sensor.h>
 #include <string.h>
 
 #include "lis2mdl.h"

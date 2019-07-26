@@ -50,8 +50,8 @@
 #include <kernel.h>
 
 #include <net/net_ip.h>
-#include <misc/printk.h>
-#include <misc/util.h>
+#include <sys/printk.h>
+#include <sys/util.h>
 
 #include <net/coap.h>
 #include <net/lwm2m.h>

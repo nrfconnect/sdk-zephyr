@@ -1,6 +1,4 @@
-
 title: Xtensa Core Interrupt Controller
-version: 0.1
 
 description: >
     This binding describes Xtensa Core Interrupt controller
@@ -19,9 +17,6 @@ properties:
       category: required
       type: int
       description: number of bits of IRQ priorities
-      generation: define
-
-cell_string: IRQ
 
 "#cells":
   - irq

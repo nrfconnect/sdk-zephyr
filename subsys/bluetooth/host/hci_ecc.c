@@ -10,9 +10,9 @@
  */
 
 #include <zephyr.h>
-#include <atomic.h>
-#include <misc/stack.h>
-#include <misc/byteorder.h>
+#include <sys/atomic.h>
+#include <debug/stack.h>
+#include <sys/byteorder.h>
 #include <tinycrypt/constants.h>
 #include <tinycrypt/utils.h>
 #include <tinycrypt/ecc.h>
@@ -84,7 +84,7 @@ static void send_cmd_status(u16_t opcode, u8_t status)
 
 	BT_DBG("opcode %x status %x", opcode, status);
 
-	buf = bt_buf_get_cmd_complete(K_FOREVER);
+	buf = bt_buf_get_evt(BT_HCI_EVT_CMD_STATUS, false, K_FOREVER);
 	bt_buf_set_type(buf, BT_BUF_EVT);
 
 	hdr = net_buf_add(buf, sizeof(*hdr));

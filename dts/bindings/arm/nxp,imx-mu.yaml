@@ -5,7 +5,6 @@
 #
 
 title: IMX MESSAGING UNIT
-version: 0.1
 
 description: >
     This binding gives a base representation of the i.MX Messaging Unit
@@ -30,4 +29,3 @@ properties:
      type: int
      category: required
      description: Set the RDC permission for this peripheral
-     generation: define

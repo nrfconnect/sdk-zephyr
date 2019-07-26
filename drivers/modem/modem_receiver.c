@@ -13,13 +13,13 @@
 
 #include <kernel.h>
 #include <init.h>
-#include <uart.h>
+#include <drivers/uart.h>
 
 #include <logging/log.h>
 
 LOG_MODULE_REGISTER(mdm_receiver, CONFIG_MODEM_LOG_LEVEL);
 
-#include <drivers/modem/modem_receiver.h>
+#include "modem_receiver.h"
 
 #define MAX_MDM_CTX	CONFIG_MODEM_RECEIVER_MAX_CONTEXTS
 #define MAX_READ_SIZE	128

@@ -5,12 +5,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <flash.h>
+#include <drivers/flash.h>
 #include <string.h>
 #include <errno.h>
 #include <inttypes.h>
-#include <nvs/nvs.h>
-#include <crc.h>
+#include <fs/nvs.h>
+#include <sys/crc.h>
 #include "nvs_priv.h"
 
 #include <logging/log.h>

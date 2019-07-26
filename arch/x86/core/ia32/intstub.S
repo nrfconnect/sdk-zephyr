@@ -15,10 +15,10 @@
  */
 
 #include <kernel_structs.h>
-#include <arch/x86/asm.h>
+#include <arch/x86/ia32/asm.h>
 #include <offsets_short.h>
-#include <arch/cpu.h>	/* _NANO_ERR_SPURIOUS_INT */
-#include <arch/x86/irq_controller.h>
+#include <arch/cpu.h>
+#include <drivers/interrupt_controller/sysapic.h>
 
 	/* exports (internal APIs) */
 
@@ -210,8 +210,14 @@ alreadyOnIntStack:
 	cli			/* disable interrupts again */
 #endif
 
-	/* irq_controller.h interface */
-	_irq_controller_eoi_macro
+#if defined(CONFIG_EOI_FORWARDING_BUG)
+	call	z_lakemont_eoi
+#elif defined(CONFIG_X2APIC)
+	call	z_x2apic_eoi
+#else /* xAPIC EOI */
+	xorl	%eax, %eax
+	movl	%eax, (CONFIG_LOAPIC_BASE_ADDRESS + LOAPIC_EOI)
+#endif
 
 	/* determine whether exiting from a nested interrupt */
 	movl	$_kernel, %ecx
@@ -364,11 +370,9 @@ handle_idle:
  * error code onto the stack (or kernel stack) in addition to the EFLAGS/CS/EIP
  * records.
  *
- * A spurious interrupt is considered a fatal condition, thus this routine
- * merely sets up the 'reason' and 'pEsf' parameters to the routine
- *  _SysFatalHwErrorHandler().  In other words, there is no provision to return
- * to the interrupted execution context and thus the volatile registers are not
- * saved.
+ * A spurious interrupt is considered a fatal condition; there is no provision
+ * to return to the interrupted execution context and thus the volatile
+ * registers are not saved.
  *
  * @return Never returns
  *
@@ -410,20 +414,14 @@ SECTION_FUNC(TEXT, z_SpuriousIntHandler)
 #ifndef CONFIG_X86_IAMCU
 	pushl	%esp			/* push cur stack pointer: pEsf arg */
 #else
-	mov	%esp, %edx
+	mov	%esp, %eax
 #endif
 
 	/* re-enable interrupts */
 	sti
 
-	/* push the 'unsigned int reason' parameter */
-#ifndef CONFIG_X86_IAMCU
-	pushl	$_NANO_ERR_SPURIOUS_INT
-#else
-	movl	$_NANO_ERR_SPURIOUS_INT, %eax
-#endif
 	/* call the fatal error handler */
-	call	z_NanoFatalErrorHandler
+	call	z_x86_spurious_irq
 
 	/* handler doesn't  return */
 
@@ -443,9 +441,9 @@ z_dynamic_irq_stub_common:
 
 /* Create all the dynamic IRQ stubs
  *
- * NOTE: Please update DYN_STUB_SIZE in include/arch/x86/arch.h if you change
- * how large the generated stubs are, otherwise _get_dynamic_stub() will
- * be unable to correctly determine the offset
+ * NOTE: Please update DYN_STUB_SIZE in include/arch/x86/ia32/arch.h if you
+ * change how large the generated stubs are, otherwise _get_dynamic_stub()
+ * will be unable to correctly determine the offset
  */
 
 /*

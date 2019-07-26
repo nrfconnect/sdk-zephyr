@@ -11,8 +11,8 @@
 #include <zephyr.h>
 #include <device.h>
 #include <init.h>
-#include <misc/util.h>
-#include <misc/__assert.h>
+#include <sys/util.h>
+#include <sys/__assert.h>
 
 #include <inc/hw_types.h>
 #include <inc/hw_ints.h>

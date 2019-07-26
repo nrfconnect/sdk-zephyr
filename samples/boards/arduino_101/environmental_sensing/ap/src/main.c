@@ -9,11 +9,11 @@
 #include <bluetooth/uuid.h>
 #include <bluetooth/gatt.h>
 #include <device.h>
-#include <ipm.h>
+#include <drivers/ipm.h>
 #include <ipm/ipm_quark_se.h>
-#include <misc/byteorder.h>
-#include <misc/printk.h>
-#include <sensor.h>
+#include <sys/byteorder.h>
+#include <sys/printk.h>
+#include <drivers/sensor.h>
 #include <zephyr.h>
 
 #define TEMPERATURE_CUD			"Temperature"

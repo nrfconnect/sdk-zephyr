@@ -5,7 +5,6 @@
 #
 
 title: SPI Device Base Structure
-version: 0.1
 
 description: >
     This binding gives the base structures for all spi devices
@@ -23,6 +22,5 @@ properties:
       type: int
       category: required
       description: Maximum clock frequency of device's SPI interface in Hz
-      generation: define
     label:
       category: required

@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <drivers/system_timer.h>
+#include <drivers/timer/system_timer.h>
 #include <sys_clock.h>
 #include <spinlock.h>
 #include <arch/arc/v2/aux_regs.h>
@@ -25,7 +25,7 @@
 #define MIN_DELAY 512
 #define COUNTER_MAX 0xffffffff
 #define TIMER_STOPPED 0x0
-#define CYC_PER_TICK (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC	\
+#define CYC_PER_TICK (sys_clock_hw_cycles_per_sec()	\
 		      / CONFIG_SYS_CLOCK_TICKS_PER_SEC)
 
 #define MAX_TICKS ((COUNTER_MAX / CYC_PER_TICK) - 1)

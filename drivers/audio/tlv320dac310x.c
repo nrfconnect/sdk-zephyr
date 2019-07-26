@@ -6,11 +6,11 @@
 
 #include <errno.h>
 
-#include <misc/util.h>
+#include <sys/util.h>
 
 #include <device.h>
-#include <i2c.h>
-#include <gpio.h>
+#include <drivers/i2c.h>
+#include <drivers/gpio.h>
 
 #include <audio/codec.h>
 #include "tlv320dac310x.h"

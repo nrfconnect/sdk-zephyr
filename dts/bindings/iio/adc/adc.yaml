@@ -5,7 +5,6 @@
 #
 
 title: ADC Base Structure
-version: 0.1
 
 description: >
     This binding gives the base structures for all ADC devices
@@ -14,11 +13,5 @@ inherits:
     !include base.yaml
 
 properties:
-    clocks:
-      type: array
-      category: required
-      description: Clock gate information
-      generation: define
-
     label:
       category: required

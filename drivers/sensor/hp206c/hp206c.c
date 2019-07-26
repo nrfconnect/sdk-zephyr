@@ -9,11 +9,11 @@
  */
 
 #include <init.h>
-#include <sensor.h>
-#include <i2c.h>
-#include <misc/byteorder.h>
+#include <drivers/sensor.h>
+#include <drivers/i2c.h>
+#include <sys/byteorder.h>
 #include <kernel.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <logging/log.h>
 
 #include "hp206c.h"

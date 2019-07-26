@@ -16,18 +16,18 @@ LOG_MODULE_REGISTER(spi_intel);
 #include <kernel.h>
 #include <arch/cpu.h>
 
-#include <misc/__assert.h>
+#include <sys/__assert.h>
 #include <soc.h>
 #include <init.h>
 
-#include <sys_io.h>
-#include <power.h>
+#include <sys/sys_io.h>
+#include <power/power.h>
 
-#include <spi.h>
+#include <drivers/spi.h>
 #include "spi_intel.h"
 
 #ifdef CONFIG_IOAPIC
-#include <drivers/ioapic.h>
+#include <drivers/interrupt_controller/ioapic.h>
 #endif
 
 static void completed(struct device *dev, u32_t error)

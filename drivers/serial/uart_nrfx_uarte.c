@@ -8,11 +8,11 @@
  * @brief Driver for Nordic Semiconductor nRF UARTE
  */
 
-#include <uart.h>
+#include <drivers/uart.h>
 #include <hal/nrf_gpio.h>
 #include <hal/nrf_uarte.h>
 #include <nrfx_timer.h>
-#include <misc/util.h>
+#include <sys/util.h>
 #include <kernel.h>
 #include <logging/log.h>
 LOG_MODULE_REGISTER(uart_nrfx_uarte, LOG_LEVEL_ERR);

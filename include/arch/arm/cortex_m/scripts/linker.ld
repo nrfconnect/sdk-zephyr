@@ -101,6 +101,9 @@ MEMORY
 #ifdef DT_CCM_BASE_ADDRESS
     CCM                   (rw) : ORIGIN = DT_CCM_BASE_ADDRESS, LENGTH = DT_CCM_SIZE * 1K
 #endif
+#ifdef DT_DTCM_BASE_ADDRESS
+    DTCM                  (rw) : ORIGIN = DT_DTCM_BASE_ADDRESS, LENGTH = DT_DTCM_SIZE * 1K
+#endif
     SRAM                  (wx) : ORIGIN = RAM_ADDR, LENGTH = RAM_SIZE
 #ifdef CONFIG_BT_STM32_IPM
     SRAM1                 (rw) : ORIGIN = RAM1_ADDR, LENGTH = RAM1_SIZE
@@ -196,6 +199,10 @@ SECTIONS
     SECTION_PROLOGUE(_TEXT_SECTION_NAME_2,,)
 	{
 	_image_text_start = .;
+
+#include <linker/priv_stacks-text.ld>
+#include <linker/kobject-text.ld>
+
 	*(.text)
 	*(".text.*")
 	*(.gnu.linkonce.t.*)
@@ -205,9 +212,6 @@ SECTIONS
 	 * after .gnu.linkonce.t.*
 	 */
 	*(.glue_7t) *(.glue_7) *(.vfp11_veneer) *(.v4_bx)
-
-#include <linker/priv_stacks-text.ld>
-#include <linker/kobject-text.ld>
 
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
@@ -434,6 +438,42 @@ SECTIONS
 
     GROUP_END(RAMABLE_REGION)
 
+#ifdef DT_DTCM_BASE_ADDRESS
+GROUP_START(DTCM)
+
+	SECTION_PROLOGUE(_DTCM_BSS_SECTION_NAME, (NOLOAD),SUBALIGN(4))
+	{
+		__dtcm_start = .;
+		__dtcm_bss_start = .;
+		*(.dtcm_bss)
+		*(".dtcm_bss.*")
+	} GROUP_LINK_IN(DTCM)
+
+	__dtcm_bss_end = .;
+
+	SECTION_PROLOGUE(_DTCM_NOINIT_SECTION_NAME, (NOLOAD),SUBALIGN(4))
+	{
+		__dtcm_noinit_start = .;
+		*(.dtcm_noinit)
+		*(".dtcm_noinit.*")
+	} GROUP_LINK_IN(DTCM)
+
+	__dtcm_noinit_end = .;
+
+	SECTION_PROLOGUE(_DTCM_DATA_SECTION_NAME,,SUBALIGN(4))
+	{
+		__dtcm_data_start = .;
+		*(.dtcm_data)
+		*(".dtcm_data.*")
+	} GROUP_LINK_IN(DTCM AT> ROMABLE_REGION)
+
+	__dtcm_data_end = .;
+	__dtcm_end = .;
+
+	__dtcm_data_rom_start = LOADADDR(_DTCM_DATA_SECTION_NAME);
+
+GROUP_END(DTCM)
+#endif /* DT_DTCM_BASE_ADDRESS */
 #ifdef CONFIG_CUSTOM_SECTIONS_LD
 /* Located in project source directory */
 #include <custom-sections.ld>

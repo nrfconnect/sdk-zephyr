@@ -5,7 +5,6 @@
 #
 
 title: NXP FlexCAN
-version: 0.1
 
 description: >
     This binding gives a base representation of the NXP FlexCAN controller
@@ -24,13 +23,9 @@ properties:
       category: required
 
     clocks:
-      type: array
       category: required
-      description: clock gate information
-      generation: define
 
     clk-source:
       type: int
       category: required
       description: CAN engine clock source
-      generation: define

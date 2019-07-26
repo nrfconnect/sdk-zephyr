@@ -1,6 +1,4 @@
-
 title: Kinetis GPIO
-version: 0.1
 
 description: >
     This is a representation of the Kinetis GPIO nodes
@@ -13,9 +11,6 @@ properties:
       constraint: "nxp,kinetis-gpio"
 
     reg:
-      category: required
-
-    interrupts:
       category: required
 
     label:

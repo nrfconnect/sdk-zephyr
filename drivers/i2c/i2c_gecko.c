@@ -5,8 +5,8 @@
  */
 
 #include <errno.h>
-#include <i2c.h>
-#include <misc/util.h>
+#include <drivers/i2c.h>
+#include <sys/util.h>
 #include <em_cmu.h>
 #include <em_i2c.h>
 #include <em_gpio.h>

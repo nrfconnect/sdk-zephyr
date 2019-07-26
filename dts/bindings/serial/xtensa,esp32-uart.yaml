@@ -1,6 +1,4 @@
-
 title: ESP32 Uart
-version: 0.1
 
 description: >
     This binding gives a base representation of the ESP32 UART
@@ -19,7 +17,4 @@ properties:
       category: required
 
     clocks:
-      type: array
       category: required
-      description: Clock gate control information
-      generation: structures

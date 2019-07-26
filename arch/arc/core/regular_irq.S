@@ -181,7 +181,23 @@ _rirq_common_interrupt_swap:
 	pop_s r2
 #endif
 
-	ld_s r3, [r2, _thread_offset_to_relinquish_cause]
+#if defined(CONFIG_USERSPACE)
+/*
+ * when USERSPACE is enabled, according to ARCv2 ISA, SP will be switched
+ * if interrupt comes out in user mode, and will be recorded in bit 31
+ * (U bit) of IRQ_ACT. when interrupt exits, SP will be switched back
+ * according to U bit.
+ *
+ * For the case that context switches in interrupt, the target sp must be
+ * thread's kernel stack, no need to do hardware sp switch. so, U bit should
+ * be cleared.
+ */
+	lr r0, [_ARC_V2_AUX_IRQ_ACT]
+	bclr r0, r0, 31
+	sr r0, [_ARC_V2_AUX_IRQ_ACT]
+#endif
+
+	ld r3, [r2, _thread_offset_to_relinquish_cause]
 
 	breq r3, _CAUSE_RIRQ, _rirq_return_from_rirq
 	nop
@@ -193,27 +209,9 @@ _rirq_common_interrupt_swap:
 .balign 4
 _rirq_return_from_coop:
 
-	/*
-	 * status32, sec_stat (when CONFIG_ARC_HAS_SECURE is enabled) and pc
-	 * (blink) are already on the stack in the right order
-	 */
-	ld_s r0, [sp, ___isf_t_status32_OFFSET - ___isf_t_pc_OFFSET]
-
-	/* update status32.ie (explanation in firq_exit:_firq_return_from_coop) */
-
-	ld_s r3, [r2, _thread_offset_to_intlock_key]
-	st  0, [r2, _thread_offset_to_intlock_key]
-	cmp r3, 0
-	or.ne r0, r0, _ARC_V2_STATUS32_IE
-
-	st_s r0, [sp, ___isf_t_status32_OFFSET - ___isf_t_pc_OFFSET]
-
 	/* carve fake stack */
 	sub sp, sp, ___isf_t_pc_OFFSET
 
-	/* update return value on stack */
-	ld_s r0, [r2, _thread_offset_to_return_value]
-	st_s r0, [sp, ___isf_t_r0_OFFSET]
 
 	/* reset zero-overhead loops */
 	st 0, [sp, ___isf_t_lp_end_OFFSET]

@@ -12,11 +12,11 @@
 #include <kernel.h>
 #include <device.h>
 #include <string.h>
-#include <flash.h>
+#include <drivers/flash.h>
 #include <errno.h>
 #include <init.h>
 #include <soc.h>
-#include <misc/util.h>
+#include <sys/util.h>
 #include "flash_priv.h"
 #include "altera_generic_quad_spi_controller2_regs.h"
 #include "altera_generic_quad_spi_controller2.h"

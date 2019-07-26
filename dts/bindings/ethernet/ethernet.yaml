@@ -5,7 +5,6 @@
 #
 
 title: Ethernet Base Structure
-version: 0.1
 
 description: >
     This binding gives a base structures for all Ethernet devices
@@ -17,6 +16,5 @@ properties:
       type: uint8-array
       category: optional
       description: mac address
-      generation: define
     label:
       category: required

@@ -5,7 +5,6 @@
 #
 
 title: Kinetis System Integration Module (SIM)
-version: 0.1
 
 description: >
     This is a representation of the Kinetis SIM IP node
@@ -27,13 +26,16 @@ properties:
       type: int
       category: optional
       description: clkout clock source
-      generation: define
 
     clkout-divider:
       type: int
       category: optional
       description: clkout divider
-      generation: define
+
+    "#clock-cells":
+      type: int
+      category: required
+      description: should be 3.
 
 "#cells":
   - name

@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <kernel.h>
-#include <mmustructs.h>
+#include <ia32/mmustructs.h>
 #include <linker/linker-defs.h>
 #include <kernel_internal.h>
 #include <init.h>
@@ -162,7 +162,7 @@ int z_arch_buffer_validate(void *addr, size_t size, int write)
 	}
 	ret = 0;
 out:
-#ifdef CONFIG_BOUNDS_CHECK_BYPASS_MITIGATION
+#ifdef CONFIG_X86_BOUNDS_CHECK_BYPASS_MITIGATION
 	__asm__ volatile ("lfence" : : : "memory");
 #endif
 

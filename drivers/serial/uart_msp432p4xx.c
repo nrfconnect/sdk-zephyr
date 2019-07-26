@@ -10,7 +10,7 @@
  * that the definition of BIT is not overridden */
 #include <driverlib/gpio.h>
 
-#include <uart.h>
+#include <drivers/uart.h>
 
 /* Driverlib includes */
 #include <driverlib/rom.h>
@@ -39,7 +39,7 @@ static void uart_msp432p4xx_isr(void *arg);
 
 static const struct uart_device_config uart_msp432p4xx_dev_cfg_0 = {
 	.base = (void *)DT_UART_MSP432P4XX_BASE_ADDRESS,
-	.sys_clk_freq = CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC,
+	.sys_clk_freq = DT_UART_MSP432P4XX_CLOCK_FREQUENCY,
 };
 
 static struct uart_msp432p4xx_dev_data_t uart_msp432p4xx_dev_data_0 = {

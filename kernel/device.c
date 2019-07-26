@@ -7,8 +7,8 @@
 #include <errno.h>
 #include <string.h>
 #include <device.h>
-#include <misc/util.h>
-#include <atomic.h>
+#include <sys/util.h>
+#include <sys/atomic.h>
 #include <syscall_handler.h>
 
 extern struct device __device_init_start[];

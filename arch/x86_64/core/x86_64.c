@@ -5,7 +5,7 @@
  */
 #include <kernel_internal.h>
 #include <kernel_structs.h>
-#include <tracing.h>
+#include <debug/tracing.h>
 #include <ksched.h>
 #include <irq_offload.h>
 #include "xuk.h"
@@ -18,7 +18,7 @@
 
 struct device;
 
-struct NANO_ESF {
+struct z_arch_esf_t {
 };
 
 void z_new_thread(struct k_thread *t, k_thread_stack_t *stack,
@@ -51,15 +51,16 @@ void z_unhandled_vector(int vector, int err, struct xuk_entry_frame *f)
 	/* Yes, there are five regsiters missing.  See notes on
 	 * xuk_entry_frame/xuk_stack_frame.
 	 */
-	printk("*** FATAL ERROR vector %d code %d\n", vector, err);
-	printk("***  RIP %d:0x%llx RSP %d:0x%llx RFLAGS 0x%llx\n",
-	       (int)f->cs, f->rip, (int)f->ss, f->rsp, f->rflags);
-	printk("***  RAX 0x%llx RCX 0x%llx RDX 0x%llx RSI 0x%llx RDI 0x%llx\n",
-	       f->rax, f->rcx, f->rdx, f->rsi, f->rdi);
-	printk("***  R8 0x%llx R9 0x%llx R10 0x%llx R11 0x%llx\n",
-	       f->r8, f->r9, f->r10, f->r11);
+	z_fatal_print("*** FATAL ERROR vector %d code %d", vector, err);
+	z_fatal_print("***  RIP %d:0x%llx RSP %d:0x%llx RFLAGS 0x%llx",
+		      (int)f->cs, f->rip, (int)f->ss, f->rsp, f->rflags);
+	z_fatal_print("***  RAX 0x%llx RCX 0x%llx RDX 0x%llx RSI 0x%llx RDI 0x%llx",
+		      f->rax, f->rcx, f->rdx, f->rsi, f->rdi);
+	z_fatal_print("***  R8 0x%llx R9 0x%llx R10 0x%llx R11 0x%llx",
+		      f->r8, f->r9, f->r10, f->r11);
 
-	z_NanoFatalErrorHandler(x86_64_except_reason, NULL);
+	/* FIXME: Why isn't xuk_entry_frame a z_arch_esf_t? */
+	z_fatal_error(x86_64_except_reason, NULL);
 }
 
 void z_isr_entry(void)
@@ -211,19 +212,4 @@ void x86_apic_set_timeout(u32_t cyc_from_now)
 	_apic.INIT_COUNT = cyc_from_now;
 }
 
-const NANO_ESF _default_esf;
-
 int x86_64_except_reason;
-
-void z_NanoFatalErrorHandler(unsigned int reason, const NANO_ESF *esf)
-{
-	z_SysFatalErrorHandler(reason, esf);
-}
-
-/* App-overridable handler.  Does nothing here */
-void __weak z_SysFatalErrorHandler(unsigned int reason, const NANO_ESF *esf)
-{
-	ARG_UNUSED(reason);
-	ARG_UNUSED(esf);
-	k_thread_abort(_current);
-}

@@ -1,6 +1,4 @@
-
 title: ARM CMSDK WATCHDOG
-version: 0.1
 
 description: >
     This binding gives a base representation of the ARM CMSDK WATCHDOG
@@ -13,4 +11,7 @@ properties:
       constraint: "arm,cmsdk-watchdog"
 
     reg:
+      category: required
+
+    clocks:
       category: required

@@ -1,6 +1,4 @@
-
 title: EFR32XG1 GPIO
-version: 0.1
 
 description: >
     This is a representation of the EFR32XG1 GPIO nodes
@@ -25,4 +23,3 @@ properties:
       type: int
       category: optional
       description: Serial Wire Output (SWO) PIN location
-      generation: define

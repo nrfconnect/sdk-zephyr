@@ -5,7 +5,6 @@
 #
 
 title: Atmel SAM PWM
-version: 0.1
 
 description: >
     This binding gives a base representation of the Atmel SAM PWM
@@ -26,20 +25,17 @@ properties:
     peripheral-id:
       type: int
       description: peripheral ID
-      generation: define
       category: required
 
     prescaler:
       type: int
       category: required
       description: Clock prescaler at the input of the PWM (0 to 10)
-      generation: define
 
     divider:
       type: int
       category: required
       description: Clock divider at the input of the PWM (1 to 255)
-      generation: define
 
 "#cells":
   - channel

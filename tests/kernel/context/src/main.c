@@ -49,13 +49,10 @@
  */
 #if defined(CONFIG_HPET_TIMER)
 #define TICK_IRQ CONFIG_HPET_TIMER_IRQ
+#elif defined(CONFIG_APIC_TIMER)
+#define TICK_IRQ CONFIG_APIC_TIMER_IRQ
 #elif defined(CONFIG_LOAPIC_TIMER)
-#if defined(CONFIG_LOAPIC)
 #define TICK_IRQ CONFIG_LOAPIC_TIMER_IRQ
-#else
-/* MVIC case */
-#define TICK_IRQ CONFIG_MVIC_TIMER_IRQ
-#endif
 #elif defined(CONFIG_XTENSA)
 #define TICK_IRQ UTIL_CAT(XCHAL_TIMER,		\
 			  UTIL_CAT(CONFIG_XTENSA_TIMER_ID, _INTERRUPT))
@@ -700,7 +697,9 @@ static void thread_sleep(void *delta, void *arg2, void *arg3)
 	timestamp = k_uptime_get() - timestamp;
 	TC_PRINT(" thread back from sleep\n");
 
-	if (timestamp < timeout || timestamp > timeout + __ticks_to_ms(2)) {
+	int slop = MAX(__ticks_to_ms(2), 1);
+
+	if (timestamp < timeout || timestamp > timeout + slop) {
 		TC_ERROR("timestamp out of range, got %d\n", (int)timestamp);
 		return;
 	}

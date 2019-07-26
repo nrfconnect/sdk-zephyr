@@ -92,7 +92,7 @@ config 64BIT
 	  soc/**/Kconfig, or boards/**/Kconfig and the user should generally
 	  avoid modifying it.
 
-if ARC || ARM || NIOS2 || X86
+if ARC || ARM || NIOS2 || X86 || X86_64
 
 config SRAM_SIZE
 	int "SRAM Size in kB"
@@ -126,7 +126,7 @@ config FLASH_BASE_ADDRESS
 	  normally set by the board's defconfig file and the user should generally
 	  avoid modifying it via the menu configuration.
 
-endif # ARM || ARC || NIOS2 || X86
+endif # ARM || ARC || NIOS2 || X86 || X86_64
 
 if ARCH_HAS_TRUSTED_EXECUTION
 
@@ -241,15 +241,6 @@ config DYNAMIC_OBJECTS
 	API call, or when the number of references to that object drops to
 	zero.
 
-config SIMPLE_FATAL_ERROR_HANDLER
-	bool "Simple system fatal error handler"
-	default y if !MULTITHREADING
-	help
-	  Provides an implementation of _SysFatalErrorHandler() that hard hangs
-	  instead of aborting the faulting thread, and does not print anything,
-	  for footprint-concerned systems. Only enable this option if you do not
-	  want debug capabilities in case of system fatal error.
-
 if ARCH_HAS_NOCACHE_MEMORY_SUPPORT
 
 config NOCACHE_MEMORY
@@ -301,6 +292,16 @@ config GEN_SW_ISR_TABLE
 	  needs a software ISR table table created. This is an array of struct
 	  _isr_table_entry containing the interrupt service routine and supplied
 	  parameter.
+
+config ARCH_SW_ISR_TABLE_ALIGN
+	int "Alignment size of a software ISR table"
+	default 0
+	depends on GEN_SW_ISR_TABLE
+	help
+	  This option controls alignment size of generated
+	  _sw_isr_table.  Some architecture needs a software ISR table
+	  to be aligned to architecture specific size.  The default
+	  size is 0 for no alignment.
 
 config GEN_IRQ_START_VECTOR
 	int

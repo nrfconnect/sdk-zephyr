@@ -5,7 +5,6 @@
 #
 
 title: Skyworks SKY13351 GaAs FET I/C switch
-version: 0.1
 
 description: >
     This binding allows control of the output selectors of the SKY13351
@@ -21,9 +20,7 @@ properties:
         type: compound
         category: required
         description: VCTL1 pin
-        generation: define, use-prop-name
     vctl2-gpios:
         type: compound
         category: required
         description: VCTL2 pin
-        generation: define, use-prop-name

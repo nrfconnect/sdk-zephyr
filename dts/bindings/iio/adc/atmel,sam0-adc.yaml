@@ -5,7 +5,6 @@
 #
 
 title: Atmel SAM0 Family ADC
-version: 0.1
 
 description: >
     This binding gives a base representation of the Atmel SAM0 ADC
@@ -27,10 +26,8 @@ properties:
       type: int
       category: required
       description: generic clock generator source
-      generation: define
 
     prescaler:
       type: int
       category: required
       description: clock prescaler divisor applied to the generic clock
-      generation: define

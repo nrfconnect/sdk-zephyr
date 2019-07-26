@@ -14,11 +14,11 @@
 #define __SOC_H_
 
 #include <zephyr/types.h>
-#include <misc/util.h>
-#include <uart.h>
+#include <sys/util.h>
+#include <drivers/uart.h>
 
 #ifdef CONFIG_IOAPIC
-#include <drivers/ioapic.h>
+#include <drivers/interrupt_controller/ioapic.h>
 #endif
 
 #define INT_VEC_IRQ0  0x20	/* Vector number for IRQ0 */

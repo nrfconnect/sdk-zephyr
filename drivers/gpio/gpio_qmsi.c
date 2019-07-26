@@ -7,18 +7,18 @@
 #include <errno.h>
 
 #include <device.h>
-#include <drivers/ioapic.h>
-#include <gpio.h>
+#include <drivers/interrupt_controller/ioapic.h>
+#include <drivers/gpio.h>
 #include <init.h>
-#include <sys_io.h>
-#include <misc/util.h>
+#include <sys/sys_io.h>
+#include <sys/util.h>
 
 #include "qm_gpio.h"
 #include "gpio_utils.h"
 #include "qm_isr.h"
 #include "clk.h"
 #include "soc.h"
-#include <power.h>
+#include <power/power.h>
 
 struct gpio_qmsi_config {
 	qm_gpio_t gpio;
@@ -386,7 +386,7 @@ static int gpio_qmsi_init(struct device *port)
 				  CLK_PERIPH_GPIO_DB |
 				  CLK_PERIPH_CLK);
 		IRQ_CONNECT(DT_GPIO_QMSI_0_IRQ,
-			    CONFIG_GPIO_QMSI_0_IRQ_PRI, qm_gpio_0_isr, 0,
+			    DT_GPIO_QMSI_0_IRQ_PRI, qm_gpio_0_isr, 0,
 			    DT_GPIO_QMSI_0_IRQ_FLAGS);
 		irq_enable(DT_GPIO_QMSI_0_IRQ);
 		QM_IR_UNMASK_INTERRUPTS(QM_INTERRUPT_ROUTER->gpio_0_int_mask);

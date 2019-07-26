@@ -11,10 +11,10 @@
 #include <string.h>
 #include <device.h>
 #include <init.h>
-#include <ipm.h>
+#include <drivers/ipm.h>
 #include <arch/cpu.h>
-#include <misc/printk.h>
-#include <misc/__assert.h>
+#include <sys/printk.h>
+#include <sys/__assert.h>
 #include <errno.h>
 #include "ipm_quark_se.h"
 

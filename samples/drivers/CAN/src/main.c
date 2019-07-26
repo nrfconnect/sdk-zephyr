@@ -6,10 +6,10 @@
 
 #include <zephyr.h>
 #include <kernel.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <device.h>
-#include <can.h>
-#include <gpio.h>
+#include <drivers/can.h>
+#include <drivers/gpio.h>
 
 #define TX_THREAD_STACK_SIZE 512
 #define LED_THREAD_STACK_SIZE 512

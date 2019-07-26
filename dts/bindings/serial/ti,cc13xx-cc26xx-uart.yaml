@@ -5,7 +5,6 @@
 #
 
 title: TI SimpleLink CC13xx / CC26xx UART
-version: 0.1
 
 description: >
     This is a representation of the TI SimpleLink CC13xx / CC26xx UART node
@@ -27,10 +26,8 @@ properties:
       type: int
       category: required
       description: TX pin
-      generation: define
 
     rx-pin:
       type: int
       category: required
       description: RX pin
-      generation: define

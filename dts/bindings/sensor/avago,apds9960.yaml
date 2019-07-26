@@ -5,7 +5,6 @@
 #
 
 title: APDS9960 Digital Proximity, Ambient Light, RGB and Gesture Sensor
-version: 0.1
 
 description: >
     This is a representation of the APDS9960 sensor
@@ -20,4 +19,3 @@ properties:
     int-gpios:
       type: compound
       category: required
-      generation: define, use-prop-name

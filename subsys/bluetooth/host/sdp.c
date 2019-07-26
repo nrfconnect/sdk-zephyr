@@ -10,8 +10,8 @@
 
 #include <errno.h>
 #include <sys/types.h>
-#include <misc/byteorder.h>
-#include <misc/__assert.h>
+#include <sys/byteorder.h>
+#include <sys/__assert.h>
 
 #include <bluetooth/sdp.h>
 

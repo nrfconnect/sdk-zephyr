@@ -5,56 +5,41 @@
 #
 
 title: SPI NOR flash devices (JEDEC CFI interface)
-version: 0.1
 
 description: >
   Any SPI NOR flash that supports the JEDEC CFI interface.
 
 inherits:
-  !include [spi-device.yaml]
+  !include spi-device.yaml
 
 properties:
   compatible:
     constraint: "jedec,spi-nor"
 
   jedec-id:
-    type: array
+    type: uint8-array
     category: required
     description: JEDEC ID as manufacturer ID, memory type, memory density
-    generation: define
 
-  erase-block-size:
-   type: int
-   description: address alignment required by flash erase operations
-   generation: define
-   category: optional
-   label: alignment
-
-  write-block-size:
-   type: int
-   description: address alignment required by flash write operations
-   generation: define
-   category: optional
-   label: alignment
+  has-be32k:
+    type: boolean
+    category: optional
+    description: Indicates the device supports the BE32K command
 
   size:
     type: int
     category: optional
     description: flash capacity in bits
-    generation: define, use-prop-name
 
   wp-gpios:
     type: compound
     category: optional
     description: WPn pin
-    generation: define, use-prop-name
   hold-gpios:
     type: compound
     category: optional
     description: HOLDn pin
-    generation: define, use-prop-name
   reset-gpios:
     type: compound
     category: optional
     description: RESETn pin
-    generation: define, use-prop-name

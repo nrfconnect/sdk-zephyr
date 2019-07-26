@@ -162,6 +162,10 @@ The Zephyr nucleo_wb55rg board configuration supports the following hardware fea
 +-----------+------------+-------------------------------------+
 | I2C       | on-chip    | i2c                                 |
 +-----------+------------+-------------------------------------+
+| SPI       | on-chip    | spi                                 |
++-----------+------------+-------------------------------------+
+| PWM       | on-chip    | pwm                                 |
++-----------+------------+-------------------------------------+
 
 Other hardware features are not yet supported on this Zephyr port.
 
@@ -190,6 +194,11 @@ Default Zephyr Peripheral Mapping:
 - LD1 : PB5
 - LD2 : PB0
 - LD3 : PB1
+- SPI_1_NSS : PA4 (arduino_spi)
+- SPI_1_SCK : PA5 (arduino_spi)
+- SPI_1_MISO : PA6 (arduino_spi)
+- SPI_1_MOSI : PA7 (arduino_spi)
+- PWM_2 CH 1 : PA0
 
 System Clock
 ------------

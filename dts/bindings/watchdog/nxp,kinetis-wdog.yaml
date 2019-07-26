@@ -5,7 +5,6 @@
 #
 
 title: NXP Kinetis watchdog driver
-version: 0.1
 
 description: >
     This is a representation of the Kinetis watchdog
@@ -27,7 +26,4 @@ properties:
       category: required
 
     clocks:
-      type: array
       category: required
-      description: Clock gate control information
-      generation: structures

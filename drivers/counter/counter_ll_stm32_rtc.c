@@ -12,11 +12,11 @@
 #include <time.h>
 
 #include <clock_control/stm32_clock_control.h>
-#include <clock_control.h>
-#include <misc/util.h>
+#include <drivers/clock_control.h>
+#include <sys/util.h>
 #include <kernel.h>
 #include <soc.h>
-#include <counter.h>
+#include <drivers/counter.h>
 
 #include <logging/log.h>
 
@@ -28,7 +28,8 @@ LOG_MODULE_REGISTER(counter_rtc_stm32, CONFIG_COUNTER_LOG_LEVEL);
 #define RTC_EXTI_LINE	LL_EXTI_LINE_18
 #elif defined(CONFIG_SOC_SERIES_STM32F4X) \
 	|| defined(CONFIG_SOC_SERIES_STM32F3X)	\
-	|| defined(CONFIG_SOC_SERIES_STM32F7X)
+	|| defined(CONFIG_SOC_SERIES_STM32F7X) \
+	|| defined(CONFIG_SOC_SERIES_STM32WBX)
 #define RTC_EXTI_LINE	LL_EXTI_LINE_17
 #endif
 
@@ -42,7 +43,6 @@ struct rtc_stm32_data {
 	counter_alarm_callback_t callback;
 	u32_t ticks;
 	void *user_data;
-	bool absolute;
 };
 
 
@@ -129,9 +129,8 @@ static int rtc_stm32_set_alarm(struct device *dev, u8_t chan_id,
 
 	data->callback = alarm_cfg->callback;
 	data->user_data = alarm_cfg->user_data;
-	data->absolute = alarm_cfg->absolute;
 
-	if (!alarm_cfg->absolute) {
+	if ((alarm_cfg->flags & COUNTER_ALARM_CFG_ABSOLUTE) == 0) {
 		ticks += now;
 	}
 
@@ -264,9 +263,15 @@ static int rtc_stm32_init(struct device *dev)
 
 #if defined(CONFIG_COUNTER_RTC_STM32_CLOCK_LSI)
 
+#if defined(CONFIG_SOC_SERIES_STM32WBX)
+	LL_RCC_LSI1_Enable();
+	while (LL_RCC_LSI1_IsReady() != 1) {
+	}
+#else
 	LL_RCC_LSI_Enable();
 	while (LL_RCC_LSI_IsReady() != 1) {
 	}
+#endif /* CONFIG_SOC_SERIES_STM32WBX */
 
 	LL_RCC_SetRTCClockSource(LL_RCC_RTC_CLKSOURCE_LSI);
 

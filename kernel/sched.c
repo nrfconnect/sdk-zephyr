@@ -11,7 +11,7 @@
 #include <kswap.h>
 #include <kernel_arch_func.h>
 #include <syscall_handler.h>
-#include <drivers/system_timer.h>
+#include <drivers/timer/system_timer.h>
 #include <stdbool.h>
 
 #if defined(CONFIG_SCHED_DUMB)
@@ -255,9 +255,10 @@ static void reset_time_slice(void)
 	 * slice count, as we'll see those "expired" ticks arrive in a
 	 * FUTURE z_time_slice() call.
 	 */
-	_current_cpu->slice_ticks = slice_time + z_clock_elapsed();
-
-	z_set_timeout_expiry(slice_time, false);
+	if (slice_time != 0) {
+		_current_cpu->slice_ticks = slice_time + z_clock_elapsed();
+		z_set_timeout_expiry(slice_time, false);
+	}
 }
 
 void k_sched_time_slice_set(s32_t slice, int prio)
@@ -296,6 +297,8 @@ void z_time_slice(int ticks)
 		} else {
 			_current_cpu->slice_ticks -= ticks;
 		}
+	} else {
+		_current_cpu->slice_ticks = 0;
 	}
 }
 #else
@@ -482,9 +485,14 @@ void z_thread_priority_set(struct k_thread *thread, int prio)
 		need_sched = z_is_thread_ready(thread);
 
 		if (need_sched) {
-			_priq_run_remove(&_kernel.ready_q.runq, thread);
-			thread->base.prio = prio;
-			_priq_run_add(&_kernel.ready_q.runq, thread);
+			/* Don't requeue on SMP if it's the running thread */
+			if (!IS_ENABLED(CONFIG_SMP) || z_is_thread_queued(thread)) {
+				_priq_run_remove(&_kernel.ready_q.runq, thread);
+				thread->base.prio = prio;
+				_priq_run_add(&_kernel.ready_q.runq, thread);
+			} else {
+				thread->base.prio = prio;
+			}
 			update_cache(1);
 		} else {
 			thread->base.prio = prio;

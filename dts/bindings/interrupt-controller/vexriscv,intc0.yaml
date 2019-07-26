@@ -5,7 +5,6 @@
 #
 
 title: LiteX VexRiscV Interrupt Controller
-version: 0.1
 
 description: >
     This binding describes LiteX VexRiscV Interrupt Controller
@@ -24,7 +23,6 @@ properties:
       type: int
       description: maximum interrupt priority
       category: required
-      generation: define
 
 "#cells":
   - irq

@@ -7,8 +7,8 @@
 #include <zephyr.h>
 #include <stdio.h>
 #include <device.h>
-#include <sensor.h>
-#include <misc/printk.h>
+#include <drivers/sensor.h>
+#include <sys/printk.h>
 
 #define MAX_TEST_TIME	15000
 #define SLEEPTIME	300

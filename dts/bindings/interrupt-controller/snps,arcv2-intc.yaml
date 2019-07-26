@@ -5,7 +5,6 @@
 #
 
 title: ARCV2 Interrupt Controller
-version: 0.1
 
 description: >
     This binding describes the ARCV2 IRQ controller
@@ -16,15 +15,6 @@ inherits:
 properties:
     compatible:
       constraint: "snps,arcv2-intc"
-
-    reg:
-      category: required
-
-    arc,num-irq-priority-bits:
-      category: required
-      type: int
-      description: number of bits of IRQ priorities
-      generation: define
 
 "#cells":
   - irq

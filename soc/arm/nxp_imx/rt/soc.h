@@ -7,7 +7,7 @@
 #ifndef _SOC__H_
 #define _SOC__H_
 
-#include <misc/util.h>
+#include <sys/util.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,6 +23,18 @@ extern "C" {
  */
 #include <kernel_includes.h>
 
+#if defined(CONFIG_DISK_ACCESS_USDHC1) ||	\
+	defined(CONFIG_DISK_ACCESS_USDHC2)
+
+typedef void (*usdhc_pin_cfg_cb)(u16_t nusdhc, bool init,
+	u32_t speed, u32_t strength);
+
+void imxrt_usdhc_pinmux(u16_t nusdhc,
+	bool init, u32_t speed, u32_t strength);
+
+void imxrt_usdhc_pinmux_cb_register(usdhc_pin_cfg_cb cb);
+
+#endif
 
 #endif /* !_ASMLANGUAGE */
 

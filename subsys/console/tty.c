@@ -5,9 +5,9 @@
  */
 
 #include <zephyr.h>
-#include <uart.h>
-#include <misc/printk.h>
-#include <tty.h>
+#include <drivers/uart.h>
+#include <sys/printk.h>
+#include <console/tty.h>
 
 static int tty_irq_input_hook(struct tty_serial *tty, u8_t c);
 static int tty_putchar(struct tty_serial *tty, u8_t c);

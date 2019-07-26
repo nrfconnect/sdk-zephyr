@@ -8,7 +8,7 @@
 #include <ztest.h>
 #include <tc_util.h>
 
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 #include <usb/usb_device.h>
 #include <usb/usb_common.h>
 
@@ -196,7 +196,7 @@ static void test_usb_bos_macros(void)
 	const struct usb_bos_descriptor *hdr = usb_bos_get_header();
 	size_t len = usb_bos_get_length();
 
-	TC_PRINT("length %u\n", len);
+	TC_PRINT("length %zu\n", len);
 
 	usb_bos_register_cap((void *)&cap_webusb);
 	usb_bos_register_cap((void *)&cap_msosv2);
