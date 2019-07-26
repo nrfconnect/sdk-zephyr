@@ -16,7 +16,6 @@ Samples and Demos
    bluetooth/bluetooth.rst
    sensor/*
    boards/*
-   mcuboot/*
    mpu/*
    drivers/drivers.rst
    application_development/*
