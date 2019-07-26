@@ -731,8 +731,6 @@ static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 #define SO_REUSEADDR 2
 /** sockopt: Async error (ignored, for compatibility) */
 #define SO_ERROR 4
-#define SO_RCVTIMEO 20
-#define SO_BINDTODEVICE 25
 
 /* Socket options for IPPROTO_TCP level */
 /** sockopt: Disable TCP buffering (ignored, for compatibility) */
@@ -744,13 +742,6 @@ static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 
 /** sockopt: Socket priority */
 #define SO_PRIORITY 12
-
-/* Interface description structure */
-#define IFNAMSIZ 64
-
-struct ifreq {
-    char ifr_name[IFNAMSIZ]; /* Interface name */
-};
 
 /** @cond INTERNAL_HIDDEN */
 /**
