@@ -271,11 +271,6 @@ else() # NOT FIRST_BOILERPLATE_EXECUTION
     message("Changed board to secure nrf9160_pca10090 (NOT NS)")
   endif()
 
-  if(${BOARD} STREQUAL nrf9160_pca20035ns)
-    set(BOARD nrf9160_pca20035)
-    message("Changed board to secure nrf9160_pca20035 (NOT NS)")
-  endif()
-
   unset(${IMAGE}DTC_OVERLAY_FILE)
   if(EXISTS              ${APPLICATION_SOURCE_DIR}/${BOARD}.overlay)
     set(${IMAGE}DTC_OVERLAY_FILE ${APPLICATION_SOURCE_DIR}/${BOARD}.overlay)
