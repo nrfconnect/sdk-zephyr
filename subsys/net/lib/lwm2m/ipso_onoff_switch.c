@@ -27,8 +27,10 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define SWITCH_ON_TIME_ID		5852
 #define SWITCH_OFF_TIME_ID		5854
 #define SWITCH_APPLICATION_TYPE_ID	5750
+/* This field is not in spec but can be used to record switch event time */
+#define SWITCH_TIMESTAMP_ID		5518
 
-#define SWITCH_MAX_ID			5
+#define SWITCH_MAX_ID			6
 
 #define MAX_INSTANCE_COUNT	CONFIG_LWM2M_IPSO_ONOFF_SWITCH_INSTANCE_COUNT
 
@@ -58,6 +60,7 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(SWITCH_ON_TIME_ID, RW_OPT, U64),
 	OBJ_FIELD_DATA(SWITCH_OFF_TIME_ID, RW_OPT, U64),
 	OBJ_FIELD_DATA(SWITCH_APPLICATION_TYPE_ID, RW_OPT, STRING),
+	OBJ_FIELD_DATA(SWITCH_TIMESTAMP_ID, RW_OPT, TIME),
 };
 
 static struct lwm2m_engine_obj_inst inst[MAX_INSTANCE_COUNT];
@@ -212,6 +215,8 @@ static struct lwm2m_engine_obj_inst *switch_create(u16_t obj_inst_id)
 		     res_inst[avail], j, 1, true,
 		     off_time_read_cb, NULL, time_post_write_cb, NULL);
 	INIT_OBJ_RES_OPTDATA(SWITCH_APPLICATION_TYPE_ID, res[avail], i,
+			     res_inst[avail], j);
+	INIT_OBJ_RES_OPTDATA(SWITCH_TIMESTAMP_ID, res[avail], i,
 			     res_inst[avail], j);
 
 	inst[avail].resources = res[avail];

@@ -31,8 +31,10 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define TEMP_MIN_RANGE_VALUE_ID			5603
 #define TEMP_MAX_RANGE_VALUE_ID			5604
 #define TEMP_RESET_MIN_MAX_MEASURED_VALUES_ID	5605
+/* This field is not in spec but can be used to record temp recording time */
+#define TEMP_TIMESTAMP_ID			5518
 
-#define TEMP_MAX_ID		7
+#define TEMP_MAX_ID		8
 
 #define MAX_INSTANCE_COUNT	CONFIG_LWM2M_IPSO_TEMP_SENSOR_INSTANCE_COUNT
 
@@ -62,6 +64,7 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(TEMP_MIN_RANGE_VALUE_ID, R_OPT, FLOAT32),
 	OBJ_FIELD_DATA(TEMP_MAX_RANGE_VALUE_ID, R_OPT, FLOAT32),
 	OBJ_FIELD_EXECUTE_OPT(TEMP_RESET_MIN_MAX_MEASURED_VALUES_ID),
+	OBJ_FIELD_DATA(TEMP_TIMESTAMP_ID, RW_OPT, TIME),
 };
 
 static struct lwm2m_engine_obj_inst inst[MAX_INSTANCE_COUNT];
@@ -207,6 +210,8 @@ static struct lwm2m_engine_obj_inst *temp_sensor_create(u16_t obj_inst_id)
 			  sizeof(*max_range_value));
 	INIT_OBJ_RES_EXECUTE(TEMP_RESET_MIN_MAX_MEASURED_VALUES_ID,
 			     res[index], i, reset_min_max_measured_values_cb);
+	INIT_OBJ_RES_OPTDATA(TEMP_TIMESTAMP_ID, res[index], i,
+			     res_inst[index], j);
 
 	inst[index].resources = res[index];
 	inst[index].resource_count = i;
