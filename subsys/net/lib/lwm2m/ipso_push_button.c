@@ -25,8 +25,10 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define BUTTON_DIGITAL_STATE_ID		5500
 #define BUTTON_DIGITAL_INPUT_COUNTER_ID	5501
 #define BUTTON_APPLICATION_TYPE_ID	5750
+/* This field is not in spec but can be used to record button event time */
+#define BUTTON_TIMESTAMP_ID		5518
 
-#define BUTTON_MAX_ID			3
+#define BUTTON_MAX_ID			4
 
 #define MAX_INSTANCE_COUNT	CONFIG_LWM2M_IPSO_PUSH_BUTTON_INSTANCE_COUNT
 
@@ -51,6 +53,7 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(BUTTON_DIGITAL_STATE_ID, R, BOOL),
 	OBJ_FIELD_DATA(BUTTON_DIGITAL_INPUT_COUNTER_ID, R_OPT, U64),
 	OBJ_FIELD_DATA(BUTTON_APPLICATION_TYPE_ID, RW_OPT, STRING),
+	OBJ_FIELD_DATA(BUTTON_TIMESTAMP_ID, RW_OPT, TIME),
 };
 
 static struct lwm2m_engine_obj_inst inst[MAX_INSTANCE_COUNT];
@@ -138,6 +141,8 @@ static struct lwm2m_engine_obj_inst *button_create(u16_t obj_inst_id)
 			  &button_data[avail].counter,
 			  sizeof(button_data[avail].counter));
 	INIT_OBJ_RES_OPTDATA(BUTTON_APPLICATION_TYPE_ID, res[avail], i,
+			     res_inst[avail], j);
+	INIT_OBJ_RES_OPTDATA(BUTTON_TIMESTAMP_ID, res[avail], i,
 			     res_inst[avail], j);
 
 	inst[avail].resources = res[avail];
