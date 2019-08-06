@@ -476,13 +476,21 @@ union x86_mmu_pte {
 	};
 };
 
+#define Z_X86_NUM_PDPT_ENTRIES	4
+#define Z_X86_NUM_PD_ENTRIES	512
+#define Z_X86_NUM_PT_ENTRIES	512
+
+/* Memory range covered by an instance of various table types */
+#define Z_X86_PT_AREA	(MMU_PAGE_SIZE * Z_X86_NUM_PT_ENTRIES)
+#define Z_X86_PD_AREA	(Z_X86_PT_AREA * Z_X86_NUM_PD_ENTRIES)
+#define Z_X86_PDPT_AREA (Z_X86_PD_AREA * Z_X86_NUM_PDPT_ENTRIES)
 
 typedef u64_t x86_page_entry_data_t;
 
 typedef x86_page_entry_data_t k_mem_partition_attr_t;
 
 struct x86_mmu_pdpt {
-	union x86_mmu_pdpte entry[4];
+	union x86_mmu_pdpte entry[Z_X86_NUM_PDPT_ENTRIES];
 };
 
 union x86_mmu_pde {
@@ -491,13 +499,41 @@ union x86_mmu_pde {
 };
 
 struct x86_mmu_pd {
-	union x86_mmu_pde entry[512];
+	union x86_mmu_pde entry[Z_X86_NUM_PD_ENTRIES];
 };
 
 struct x86_mmu_pt {
-	union x86_mmu_pte entry[512];
+	union x86_mmu_pte entry[Z_X86_NUM_PT_ENTRIES];
 };
 
+/**
+ * Debug function for dumping out page tables
+ *
+ * Iterates through the entire linked set of page table structures,
+ * dumping out codes for the configuration of each table entry.
+ *
+ * Entry codes:
+ *
+ *   . - not present
+ *   w - present, writable, not executable
+ *   a - present, writable, executable
+ *   r - present, read-only, not executable
+ *   x - present, read-only, executable
+ *
+ * Entry codes in uppercase indicate that user mode may access.
+ *
+ * @param pdpt Top-level pointer to the page tables, as programmed in CR3
+ */
+void z_x86_dump_page_tables(struct x86_mmu_pdpt *pdpt);
+
+static inline struct x86_mmu_pdpt *z_x86_page_tables_get(void)
+{
+	struct x86_mmu_pdpt *ret;
+
+	__asm__ volatile("movl %%cr3, %0\n\t" : "=r" (ret));
+
+	return ret;
+}
 #endif /* _ASMLANGUAGE */
 
 #endif /* ZEPHYR_ARCH_X86_INCLUDE_IA32_MMUSTRUCTS_H_ */

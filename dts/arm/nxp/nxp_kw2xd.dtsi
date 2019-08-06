@@ -18,7 +18,6 @@
 	};
 
 	sram0: memory@20000000 {
-		device_type = "memory";
 		compatible = "mmio-sram";
 		reg = <0x20000000 0x8000>;
 	};
@@ -48,10 +47,6 @@
 			compatible = "nxp,kinetis-sim";
 			reg = <0x40047000 0x1060>;
 			label = "SIM";
-
-			clk-divider-core = <1>;
-			clk-divider-bus = <1>;
-			clk-divider-flash = <2>;
 
 			#clock-cells = <3>;
 		};
@@ -274,10 +269,6 @@
 			interrupts = <22 0>;
 			clocks = <&sim KINETIS_SIM_LPO_CLK 0 0>;
 			label = "WDT_0";
-			clock-source = <0>;	/* LPO 1kHz or other source */
-			reload-counter = <40000>;
-			start-on-boot;
-			prescaler = <2>;
 		};
 
 		pwm0: pwm@40038000{

@@ -12,17 +12,25 @@ menu "ARC Options"
 config ARCH
 	default "arc"
 
-menu "ARC processor options"
+choice
+	prompt "ARC core family"
+	default CPU_ARCEM
 
 config	CPU_ARCEM
-	bool
-	default y
+	bool "ARC EM cores"
 	select CPU_ARCV2
 	select ATOMIC_OPERATIONS_C
 	help
 	  This option signifies the use of an ARC EM CPU
 
-endmenu
+config	CPU_ARCHS
+	bool "ARC HS cores"
+	select CPU_ARCV2
+	select ATOMIC_OPERATIONS_BUILTIN
+	help
+	  This option signifies the use of an ARC HS CPU
+
+endchoice
 
 menu "ARCv2 Family Options"
 
@@ -116,6 +124,16 @@ config	ARC_STACK_PROTECTION
 	  selection of the ARC stack checking is
 	  prioritized over the MPU-based stack guard.
 
+config	ARC_USE_UNALIGNED_MEM_ACCESS
+	bool "Enable unaligned access in HW"
+	default n if CPU_ARCEM
+	default y if CPU_ARCHS
+	depends on (CPU_ARCEM && !ARC_HAS_SECURE) || CPU_ARCHS
+	help
+	  ARC EM cores w/o secure shield 2+2 mode support might be configured
+	  to support unaligned memory access which is then disabled by default.
+	  Enable unaligned access in hardware and make software to use it.
+
 config	FAULT_DUMP
 	int "Fault dump level"
 	default 2
@@ -156,6 +174,14 @@ config ARC_HAS_SECURE
 	#  a hidden option
 	help
 	  This option is enabled when ARC core supports secure mode
+
+config ARC_HAS_ACCL_REGS
+	bool "Reg Pair ACCL:ACCH (FPU and/or MPY > 6)"
+	default y if FLOAT
+	help
+	  Depending on the configuration, CPU can contain accumulator reg-pair
+	  (also referred to as r58:r59). These can also be used by gcc as GPR so
+	  kernel needs to save/restore per process
 
 menu "ARC MPU Options"
 depends on CPU_HAS_MPU

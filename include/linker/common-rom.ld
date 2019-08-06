@@ -17,17 +17,26 @@
 	{
 		/*
 		 * The compiler fills the constructor pointers table below,
-		 * hence symbol __CTOR_LIST__ must be aligned on 4 byte
+		 * hence symbol __CTOR_LIST__ must be aligned on word
 		 * boundary.  To align with the C++ standard, the first elment
 		 * of the array contains the number of actual constructors. The
 		 * last element is NULL.
 		 */
+#ifdef CONFIG_64BIT
+		. = ALIGN(8);
+		__CTOR_LIST__ = .;
+		QUAD((__CTOR_END__ - __CTOR_LIST__) / 8 - 2)
+		KEEP(*(SORT_BY_NAME(".ctors*")))
+		QUAD(0)
+		__CTOR_END__ = .;
+#else
 		. = ALIGN(4);
 		__CTOR_LIST__ = .;
 		LONG((__CTOR_END__ - __CTOR_LIST__) / 4 - 2)
 		KEEP(*(SORT_BY_NAME(".ctors*")))
 		LONG(0)
 		__CTOR_END__ = .;
+#endif
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
 	SECTION_PROLOGUE(init_array,,)
@@ -82,6 +91,16 @@
 	} GROUP_LINK_IN(ROMABLE_REGION)
 #endif
 
+#if defined(CONFIG_NET_L2_PPP)
+	SECTION_PROLOGUE(net_ppp_proto,,)
+	{
+		__net_ppp_proto_start = .;
+		*(".net_ppp_proto.*")
+		KEEP(*(SORT_BY_NAME(".net_ppp_proto.*")))
+		__net_ppp_proto_end = .;
+	} GROUP_LINK_IN(ROMABLE_REGION)
+#endif
+
 	SECTION_DATA_PROLOGUE(_bt_channels_area,,SUBALIGN(4))
 	{
 		_bt_l2cap_fixed_chan_list_start = .;
@@ -124,7 +143,7 @@
 	SECTION_DATA_PROLOGUE(log_backends_sections,,)
 	{
 		__log_backends_start = .;
-		KEEP(*(".log_backends"));
+		KEEP(*("._log_backend.*"));
 		__log_backends_end = .;
 	} GROUP_LINK_IN(ROMABLE_REGION)
 

@@ -316,23 +316,22 @@ const struct lwm2m_reader plain_text_reader = {
 	.get_opaque = get_opaque,
 };
 
-int do_read_op_plain_text(struct lwm2m_engine_obj *obj,
-			  struct lwm2m_message *msg, int content_format)
+int do_read_op_plain_text(struct lwm2m_message *msg, int content_format)
 {
 	/* Plain text can only return single resource */
 	if (msg->path.level != 3U) {
 		return -EPERM; /* NOT_ALLOWED */
 	}
 
-	return lwm2m_perform_read_op(obj, msg, content_format);
+	return lwm2m_perform_read_op(msg, content_format);
 }
 
-int do_write_op_plain_text(struct lwm2m_engine_obj *obj,
-			   struct lwm2m_message *msg)
+int do_write_op_plain_text(struct lwm2m_message *msg)
 {
 	struct lwm2m_engine_obj_inst *obj_inst = NULL;
 	struct lwm2m_engine_obj_field *obj_field;
-	struct lwm2m_engine_res_inst *res = NULL;
+	struct lwm2m_engine_res *res = NULL;
+	struct lwm2m_engine_res_inst *res_inst = NULL;
 	int ret, i;
 	u8_t created = 0U;
 
@@ -341,7 +340,7 @@ int do_write_op_plain_text(struct lwm2m_engine_obj *obj,
 		return ret;
 	}
 
-	obj_field = lwm2m_get_engine_obj_field(obj, msg->path.res_id);
+	obj_field = lwm2m_get_engine_obj_field(obj_inst->obj, msg->path.res_id);
 	if (!obj_field) {
 		return -ENOENT;
 	}
@@ -365,6 +364,21 @@ int do_write_op_plain_text(struct lwm2m_engine_obj *obj,
 		return -ENOENT;
 	}
 
-	msg->path.level = 3U;
-	return lwm2m_write_handler(obj_inst, res, obj_field, msg);
+	for (i = 0; i < res->res_inst_count; i++) {
+		if (res->res_instances[i].res_inst_id ==
+		    msg->path.res_inst_id) {
+			res_inst = &res->res_instances[i];
+			break;
+		}
+	}
+
+	if (!res_inst) {
+		return -ENOENT;
+	}
+
+	if (msg->path.level < 3) {
+		msg->path.level = 3U;
+	}
+
+	return lwm2m_write_handler(obj_inst, res, res_inst, obj_field, msg);
 }

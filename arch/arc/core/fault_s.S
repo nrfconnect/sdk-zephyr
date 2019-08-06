@@ -38,9 +38,6 @@ GTEXT(__ev_maligned)
 GTEXT(z_irq_do_offload);
 #endif
 
-GDATA(exc_nest_count)
-GDATA(arc_exc_saved_sWWp)
-
 /* the necessary stack size for exception handling */
 #define EXCEPTION_STACK_SIZE 384
 
@@ -62,7 +59,7 @@ SECTION_SUBSEC_FUNC(TEXT,__fault,__ev_dc_error)
 SECTION_SUBSEC_FUNC(TEXT,__fault,__ev_maligned)
 
 _exc_entry:
-	st sp, [arc_exc_saved_sp]
+	mov_s ilink, sp
 	/*
 	 * re-use the top part of interrupt stack as exception
 	 * stack. If this top part is used by interrupt handling,
@@ -94,6 +91,8 @@ _exc_entry:
 
 	/* sp is parameter of _Fault */
 	mov r0, sp
+	/* ilink is the thread's original sp */
+	mov r1, ilink
 	jl _Fault
 
 _exc_return:
@@ -142,7 +141,7 @@ _exc_return_from_exc:
 	sr r0, [_ARC_V2_ERET]
 
 	_pop_irq_stack_frame
-	ld sp, [arc_exc_saved_sp]
+	mov sp, ilink
 	rtie
 
 
@@ -202,12 +201,11 @@ _do_non_syscall_trap:
 	lr r0,[_ARC_V2_ERET]
 	st_s r0, [sp, ___isf_t_pc_OFFSET] /* eret into pc */
 
-	ld r1, [exc_nest_count]
-	add r0, r1, 1
-	st r0, [exc_nest_count]
-	cmp r1, 0
 
-	bgt.d  exc_nest_handle
+	lr r0, [_ARC_V2_AUX_IRQ_ACT]
+	and r0, r0, 0xffff
+	cmp r0, 0
+	bne.d exc_nest_handle
 	mov r0, sp
 
 	mov r1, _kernel
@@ -219,12 +217,10 @@ exc_nest_handle:
 
 	pop sp
 
-	mov	r1, exc_nest_count
-	ld	r0, [r1]
-	sub	r0, r0, 1
-	cmp	r0, 0
-	bne.d	_exc_return_from_exc
-	st 	r0, [r1]
+	lr  r0, [_ARC_V2_AUX_IRQ_ACT]
+	and r0, r0, 0xffff
+	cmp r0, 0
+	bne _exc_return_from_exc
 
 #ifdef CONFIG_PREEMPT_ENABLED
 	mov_s r1, _kernel

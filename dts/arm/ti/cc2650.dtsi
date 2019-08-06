@@ -19,7 +19,6 @@
 	};
 
 	sram0: memory@20000000 {
-		device_type = "memory";
 		compatible = "mmio-sram";
 		reg = <0x20000000 0x5000>;
 	};
@@ -40,7 +39,6 @@
 			compatible = "ti,cc2650-gpio";
 			reg = <0x40022000 0xE4>;
 			interrupts = <0 0>;
-			zephyr,irq-prio = <0>;
 			status = "disabled";
 
 			gpio-controller;

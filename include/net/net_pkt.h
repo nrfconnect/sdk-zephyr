@@ -158,6 +158,7 @@ struct net_pkt {
 					     * Note: family needs to be
 					     * AF_UNSPEC.
 					     */
+		u8_t ppp_msg           : 1; /* This is a PPP message */
 	};
 
 	union {
@@ -847,6 +848,33 @@ static inline void net_pkt_set_lldp(struct net_pkt *pkt, bool is_lldp)
 	ARG_UNUSED(is_lldp);
 }
 #endif /* CONFIG_NET_LLDP */
+
+#if defined(CONFIG_NET_PPP)
+static inline bool net_pkt_is_ppp(struct net_pkt *pkt)
+{
+	return pkt->ppp_msg;
+}
+
+static inline void net_pkt_set_ppp(struct net_pkt *pkt,
+				   bool is_ppp_msg)
+{
+	pkt->ppp_msg = is_ppp_msg;
+}
+#else /* CONFIG_NET_PPP */
+static inline bool net_pkt_is_ppp(struct net_pkt *pkt)
+{
+	ARG_UNUSED(pkt);
+
+	return false;
+}
+
+static inline void net_pkt_set_ppp(struct net_pkt *pkt,
+				   bool is_ppp_msg)
+{
+	ARG_UNUSED(pkt);
+	ARG_UNUSED(is_ppp_msg);
+}
+#endif /* CONFIG_NET_PPP */
 
 #define NET_IPV6_HDR(pkt) ((struct net_ipv6_hdr *)net_pkt_ip_data(pkt))
 #define NET_IPV4_HDR(pkt) ((struct net_ipv4_hdr *)net_pkt_ip_data(pkt))
@@ -1553,6 +1581,20 @@ static inline int net_pkt_read_u8(struct net_pkt *pkt, u8_t *data)
 int net_pkt_read_be16(struct net_pkt *pkt, u16_t *data);
 
 /**
+ * @brief Read u16_t little endian data from a net_pkt
+ *
+ * @details net_pkt's cursor should be properly initialized and,
+ *          if needed, positioned using net_pkt_skip.
+ *          Cursor position will be updated after the operation.
+ *
+ * @param pkt  The network packet from where to read
+ * @param data The destination u16_t where to copy the data
+ *
+ * @return 0 on success, negative errno code otherwise.
+ */
+int net_pkt_read_le16(struct net_pkt *pkt, u16_t *data);
+
+/**
  * @brief Read u32_t big endian data from a net_pkt
  *
  * @details net_pkt's cursor should be properly initialized and,
@@ -1609,6 +1651,14 @@ static inline int net_pkt_write_le32(struct net_pkt *pkt, u32_t data)
 	u32_t data_le32 = sys_cpu_to_le32(data);
 
 	return net_pkt_write(pkt, &data_le32, sizeof(u32_t));
+}
+
+/* Write u16_t little endian data into a net_pkt. */
+static inline int net_pkt_write_le16(struct net_pkt *pkt, u16_t data)
+{
+	u16_t data_le16 = sys_cpu_to_le16(data);
+
+	return net_pkt_write(pkt, &data_le16, sizeof(u16_t));
 }
 
 /**

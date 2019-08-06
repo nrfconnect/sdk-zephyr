@@ -702,8 +702,7 @@ const struct lwm2m_reader json_reader = {
 	.get_opaque = get_opaque,
 };
 
-int do_read_op_json(struct lwm2m_engine_obj *obj, struct lwm2m_message *msg,
-		    int content_format)
+int do_read_op_json(struct lwm2m_message *msg, int content_format)
 {
 	struct json_out_formatter_data fd;
 	int ret;
@@ -712,7 +711,7 @@ int do_read_op_json(struct lwm2m_engine_obj *obj, struct lwm2m_message *msg,
 	engine_set_out_user_data(&msg->out, &fd);
 	/* save the level for output processing */
 	fd.path_level = msg->path.level;
-	ret = lwm2m_perform_read_op(obj, msg, content_format);
+	ret = lwm2m_perform_read_op(msg, content_format);
 	engine_clear_out_user_data(&msg->out);
 
 	return ret;
@@ -748,6 +747,8 @@ static int parse_path(const u8_t *buf, u16_t buflen,
 				path->obj_inst_id = val;
 			} else if (ret == 2) {
 				path->res_id = val;
+			} else if (ret == 3) {
+				path->res_inst_id = val;
 			}
 
 			ret++;
@@ -762,11 +763,12 @@ static int parse_path(const u8_t *buf, u16_t buflen,
 	return ret;
 }
 
-int do_write_op_json(struct lwm2m_engine_obj *obj, struct lwm2m_message *msg)
+int do_write_op_json(struct lwm2m_message *msg)
 {
-	struct lwm2m_engine_obj_field *obj_field;
+	struct lwm2m_engine_obj_field *obj_field = NULL;
 	struct lwm2m_engine_obj_inst *obj_inst = NULL;
-	struct lwm2m_engine_res_inst *res = NULL;
+	struct lwm2m_engine_res *res = NULL;
+	struct lwm2m_engine_res_inst *res_inst = NULL;
 	struct lwm2m_obj_path orig_path;
 	struct json_in_formatter_data fd;
 	int ret = 0, index;
@@ -842,7 +844,8 @@ int do_write_op_json(struct lwm2m_engine_obj *obj, struct lwm2m_message *msg)
 			}
 
 			obj_field = lwm2m_get_engine_obj_field(
-							obj, msg->path.res_id);
+							obj_inst->obj,
+							msg->path.res_id);
 			/*
 			 * if obj_field is not found,
 			 * treat as an optional resource
@@ -881,11 +884,24 @@ int do_write_op_json(struct lwm2m_engine_obj *obj, struct lwm2m_message *msg)
 				ret = -ENOENT;
 				break;
 			}
-		} else if (res) {
+
+			for (index = 0; index < res->res_inst_count; index++) {
+				if (res->res_instances[index].res_inst_id ==
+				    msg->path.res_inst_id) {
+					res_inst = &res->res_instances[index];
+					break;
+				}
+			}
+
+			if (!res_inst) {
+				ret = -ENOENT;
+				break;
+			}
+		} else if (res && res_inst) {
 			/* handle value assignment */
-			ret = lwm2m_write_handler(obj_inst, res, obj_field,
-						  msg);
-			if (orig_path.level == 3U && ret < 0) {
+			ret = lwm2m_write_handler(obj_inst, res, res_inst,
+						  obj_field, msg);
+			if (orig_path.level >= 3U && ret < 0) {
 				/* return errors on a single write */
 				break;
 			}

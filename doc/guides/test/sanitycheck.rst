@@ -292,7 +292,7 @@ explained in this document.
         tests:
           test:
             build_only: true
-            platform_whitelist: qemu_cortex_m3 qemu_x86 arduino_101
+            platform_whitelist: qemu_cortex_m3 qemu_x86
             tags: bluetooth
           test_br:
             build_only: true
@@ -519,9 +519,9 @@ filter: <expression>
 
     The ':' operator compiles the string argument as a regular expression,
     and then returns a true value only if the symbol's value in the environment
-    matches. For example, if CONFIG_SOC="quark_se" then
+    matches. For example, if CONFIG_SOC="stm32f107xc" then
 
-        filter = CONFIG_SOC : "quark.*"
+        filter = CONFIG_SOC : "stm.*"
 
     Would match it.
 

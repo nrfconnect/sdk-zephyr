@@ -2,14 +2,7 @@
 
 # Configures CMake for using GCC
 
-find_program(CMAKE_C_COMPILER   gcc    )
-find_program(CMAKE_OBJCOPY      objcopy)
-find_program(CMAKE_OBJDUMP      objdump)
-#find_program(CMAKE_LINKER      ld     ) # Not in use yet
-find_program(CMAKE_AR           ar     )
-find_program(CMAKE_RANLILB      ranlib )
-find_program(CMAKE_READELF      readelf)
-find_program(CMAKE_GDB          gdb    )
+find_program(CMAKE_C_COMPILER gcc)
 
 # -march={pentium,lakemont,...} do not automagically imply -m32, so
 # adding it here.
@@ -67,11 +60,12 @@ if(NOT DEFINED NOSYSDEF_CFLAG)
   set(NOSYSDEF_CFLAG -undef)
 endif()
 
-foreach(file_name include)
+foreach(file_name include/stddef.h)
   execute_process(
     COMMAND ${CMAKE_C_COMPILER} --print-file-name=${file_name}
     OUTPUT_VARIABLE _OUTPUT
     )
+  get_filename_component(_OUTPUT "${_OUTPUT}" DIRECTORY)
   string(REGEX REPLACE "\n" "" _OUTPUT "${_OUTPUT}")
 
   list(APPEND NOSTDINC ${_OUTPUT})

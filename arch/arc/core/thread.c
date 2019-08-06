@@ -16,9 +16,6 @@
 #include <kernel_structs.h>
 #include <offsets_short.h>
 #include <wait_q.h>
-#ifdef CONFIG_INIT_STACKS
-#include <string.h>
-#endif /* CONFIG_INIT_STACKS */
 
 #ifdef CONFIG_USERSPACE
 #include <arch/arc/v2/mpu/arc_core_mpu.h>
@@ -216,6 +213,10 @@ void z_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 #endif
 #endif
 
+#ifdef CONFIG_ARC_USE_UNALIGNED_MEM_ACCESS
+	pInitCtx->status32 |= _ARC_V2_STATUS32_AD;
+#endif
+
 	thread->switch_handle = thread;
 	thread->arch.relinquish_cause = _CAUSE_COOP;
 	thread->callee_saved.sp =
@@ -268,3 +269,38 @@ FUNC_NORETURN void z_arch_user_mode_enter(k_thread_entry_t user_entry,
 }
 
 #endif
+
+#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+int z_arch_float_disable(struct k_thread *thread)
+{
+	unsigned int key;
+
+	/* Ensure a preemptive context switch does not occur */
+
+	key = irq_lock();
+
+	/* Disable all floating point capabilities for the thread */
+	thread->base.user_options &= ~K_FP_REGS;
+
+	irq_unlock(key);
+
+	return 0;
+}
+
+
+int z_arch_float_enable(struct k_thread *thread)
+{
+	unsigned int key;
+
+	/* Ensure a preemptive context switch does not occur */
+
+	key = irq_lock();
+
+	/* Enable all floating point capabilities for the thread */
+	thread->base.user_options |= K_FP_REGS;
+
+	irq_unlock(key);
+
+	return 0;
+}
+#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */

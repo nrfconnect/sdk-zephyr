@@ -18,7 +18,6 @@
 	};
 
 	sram0: memory@1FFFF000 {
-		device_type = "memory";
 		compatible = "mmio-sram";
 		reg = <0x1FFFF000 0x4000>;
 	};
@@ -70,11 +69,6 @@
 			compatible = "nxp,kinetis-sim";
 			reg = <0x40047000 0x1060>;
 			label = "SIM";
-
-			clk-divider-core = <1>;
-			clk-divider-bus = <2>;
-			clk-divider-flexbus = <3>;
-			clk-divider-flash = <5>;
 
 			#clock-cells = <3>;
 		};

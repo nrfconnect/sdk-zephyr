@@ -55,9 +55,15 @@ extern "C" {
 #endif
 	st r30, [sp, ___callee_saved_stack_t_r30_OFFSET]
 
-#ifdef CONFIG_FP_SHARING
+#ifdef CONFIG_ARC_HAS_ACCL_REGS
 	st r58, [sp, ___callee_saved_stack_t_r58_OFFSET]
 	st r59, [sp, ___callee_saved_stack_t_r59_OFFSET]
+#endif
+
+#ifdef CONFIG_FP_SHARING
+	ld r13, [r2, ___thread_base_t_user_options_OFFSET]
+	/* K_FP_REGS is bit 1 */
+	bbit0 r13, 1, 1f
 	lr r13, [_ARC_V2_FPU_STATUS]
 	st_s r13, [sp, ___callee_saved_stack_t_fpu_status_OFFSET]
 	lr r13, [_ARC_V2_FPU_CTRL]
@@ -73,7 +79,7 @@ extern "C" {
 	lr r13, [_ARC_V2_FPU_DPFP2H]
 	st_s r13, [sp, ___callee_saved_stack_t_dpfp2h_OFFSET]
 #endif
-
+1 :
 #endif
 
 	/* save stack pointer in struct k_thread */
@@ -85,9 +91,15 @@ extern "C" {
 	/* restore stack pointer from struct k_thread */
 	ld sp, [r2, _thread_offset_to_sp]
 
-#ifdef CONFIG_FP_SHARING
+#ifdef CONFIG_ARC_HAS_ACCL_REGS
 	ld r58, [sp, ___callee_saved_stack_t_r58_OFFSET]
 	ld r59, [sp, ___callee_saved_stack_t_r59_OFFSET]
+#endif
+
+#ifdef CONFIG_FP_SHARING
+	ld r13, [r2, ___thread_base_t_user_options_OFFSET]
+	/* K_FP_REGS is bit 1 */
+	bbit0 r13, 1, 2f
 
 	ld_s r13, [sp, ___callee_saved_stack_t_fpu_status_OFFSET]
 	sr r13, [_ARC_V2_FPU_STATUS]
@@ -104,7 +116,7 @@ extern "C" {
 	ld_s r13, [sp, ___callee_saved_stack_t_dpfp2h_OFFSET]
 	sr r13, [_ARC_V2_FPU_DPFP2H]
 #endif
-
+2 :
 #endif
 
 #ifdef CONFIG_USERSPACE
@@ -270,6 +282,17 @@ extern "C" {
 	sr r3, [_ARC_V2_USTACK_TOP]
 #endif
 #endif /* CONFIG_ARC_HAS_SECURE */
+.endm
+
+/* If multi bits in IRQ_ACT are set, i.e. last bit != fist bit, it's
+ * in nest interrupt. The result will be EQ bit of status32
+ */
+.macro _check_nest_int_by_irq_act  reg1, reg2
+	lr \reg1, [_ARC_V2_AUX_IRQ_ACT]
+	and \reg1, \reg1, 0xffff
+	ffs \reg2, \reg1
+	fls \reg1, \reg1
+	cmp \reg1, \reg2
 .endm
 
 #endif /* _ASMLANGUAGE */

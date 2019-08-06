@@ -22,7 +22,6 @@
 	};
 
 	sram0: memory@20000000 {
-		device_type = "memory";
 		compatible = "mmio-sram";
 	};
 
@@ -251,6 +250,15 @@
 				label = "PWM_17";
 				#pwm-cells = <2>;
 			};
+		};
+
+		adc1: adc@50040000 {
+			compatible = "st,stm32-adc";
+			reg = <0x50040000 0x400>;
+			clocks = <&rcc STM32_CLOCK_BUS_AHB2 0x00002000>;
+			interrupts = <18 0>;
+			status = "disabled";
+			label = "ADC_1";
 		};
 	};
 };

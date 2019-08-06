@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <kernel.h>
 
 #include "settings/settings.h"
 #include "settings_priv.h"
@@ -21,7 +22,7 @@ LOG_MODULE_REGISTER(settings, CONFIG_SETTINGS_LOG_LEVEL);
 sys_slist_t settings_handlers;
 #endif /* CONFIG_SETTINGS_DYNAMIC_HANDLERS */
 
-struct k_mutex settings_lock;
+K_MUTEX_DEFINE(settings_lock);
 
 
 void settings_store_init(void);

@@ -32,22 +32,10 @@ sys.path.insert(0, os.path.join(ZEPHYR_BASE, 'doc', 'extensions'))
 # for autodoc directives on runners.xyz.
 sys.path.insert(0, os.path.join(ZEPHYR_BASE, 'scripts', 'west_commands'))
 
-west_found = False
-
 try:
-    desc = check_output(['west', 'list', '-f{abspath}', 'west'],
-			stderr=DEVNULL,
-			cwd=os.path.dirname(__file__))
-    west_path = desc.decode(sys.getdefaultencoding()).strip()
-    # Add west, to be able to pull in its API docs.
-    sys.path.append(os.path.join(west_path, 'src'))
-    west_found = True
-except FileNotFoundError as e:
-    # west not installed
-    pass
-except CalledProcessError as e:
-    # west not able to list itself
-    pass
+    import west as west_found
+except ImportError:
+    west_found = False
 
 # -- General configuration ------------------------------------------------
 
@@ -312,7 +300,6 @@ html_redirect_pages = [
         ('api/api', 'reference/index'),
         ('subsystems/subsystems', 'reference/index'),
         ('kernel/kernel', 'reference/kernel/index'),
-		('boards/arc/arduino_101_sss/doc/board', 'boards/arc/arduino_101_sss/doc/index'),
 		('boards/arc/em_starterkit/doc/board', 'boards/arc/em_starterkit/doc/index'),
 		('boards/arc/nsim_em/doc/board', 'boards/arc/nsim_em/doc/index'),
 		('boards/arm/96b_argonkey/doc/96b_argonkey', 'boards/arm/96b_argonkey/doc/index'),
@@ -329,7 +316,6 @@ html_redirect_pages = [
 		('boards/arm/cc2650_sensortag/doc/cc2650_sensortag', 'boards/arm/cc2650_sensortag/doc/index'),
 		('boards/arm/cc3220sf_launchxl/doc/cc3220sf_launchxl', 'boards/arm/cc3220sf_launchxl/doc/index'),
 		('boards/arm/colibri_imx7d_m4/doc/colibri_imx7d_m4', 'boards/arm/colibri_imx7d_m4/doc/index'),
-		('boards/arm/curie_ble/doc/board', 'boards/arm/curie_ble/doc/index'),
 		('boards/arm/disco_l475_iot1/doc/disco_l475_iot1', 'boards/arm/disco_l475_iot1/doc/index'),
 		('boards/arm/dragino_lsn50/doc/dragino_lsn50', 'boards/arm/dragino_lsn50/doc/index'),
 		('boards/arm/efm32wg_stk3800/doc/efm32wg_stk3800', 'boards/arm/efm32wg_stk3800/doc/index'),
@@ -404,10 +390,16 @@ html_redirect_pages = [
 		('boards/nios2/altera_max10/doc/board', 'boards/nios2/altera_max10/doc/index'),
 		('boards/nios2/qemu_nios2/doc/board', 'boards/nios2/qemu_nios2/doc/index'),
 		('boards/posix/native_posix/doc/board', 'boards/posix/native_posix/doc/index'),
-		('boards/riscv32/hifive1/doc/hifive1', 'boards/riscv32/hifive1/doc/index'),
-		('boards/riscv32/m2gl025_miv/doc/m2g1025_miv', 'boards/riscv32/m2gl025_miv/doc/index'),
-		('boards/riscv32/qemu_riscv32/doc/board', 'boards/riscv32/qemu_riscv32/doc/index'),
-		('boards/riscv32/zedboard_pulpino/doc/zedboard_pulpino', 'boards/riscv32/zedboard_pulpino/doc/index'),
+		('boards/riscv32/hifive1/doc/hifive1', 'boards/riscv/hifive1/doc/index'),
+		('boards/riscv32/m2gl025_miv/doc/m2g1025_miv', 'boards/riscv/m2gl025_miv/doc/index'),
+		('boards/riscv32/qemu_riscv32/doc/board', 'boards/riscv/qemu_riscv32/doc/index'),
+		('boards/riscv32/zedboard_pulpino/doc/zedboard_pulpino', 'boards/riscv/zedboard_pulpino/doc/index'),
+                ('boards/riscv32/hifive1/doc/index', 'boards/riscv/hifive1/doc/index'),
+                ('boards/riscv32/hifive1_revb/doc/index', 'boards/riscv/hifive1_revb/doc/index'),
+                ('boards/riscv32/litex_vexriscv/doc/litex_vexriscv', 'boards/riscv/litex_vexriscv/doc/litex_vexriscv'),
+                ('boards/riscv32/m2gl025_miv/doc/index', 'boards/riscv/m2gl025_miv/doc/index'),
+                ('boards/riscv32/qemu_riscv32/doc/index', 'boards/riscv/qemu_riscv32/doc/index'),
+                ('boards/riscv32/rv32m1_vega/doc/index', 'boards/riscv/rv32m1_vega/doc/index'),
 		('boards/x86/arduino_101/doc/board', 'boards/x86/arduino_101/doc/index'),
 		('boards/x86/galileo/doc/galileo', 'boards/x86/galileo/doc/index'),
 		('boards/x86/minnowboard/doc/minnowboard', 'boards/x86/minnowboard/doc/index'),

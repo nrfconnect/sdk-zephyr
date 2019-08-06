@@ -22,13 +22,6 @@
 GTEXT(_firq_enter)
 GTEXT(_firq_exit)
 
-GDATA(exc_nest_count)
-#if CONFIG_RGF_NUM_BANKS == 1
-GDATA(saved_r0)
-#else
-GDATA(saved_sp)
-#endif
-
 /**
  *
  * @brief Work to be done before handing control to a FIRQ ISR
@@ -85,12 +78,9 @@ SECTION_FUNC(TEXT, _firq_enter)
 	lr r25, [_ARC_V2_LP_END]
 #endif
 
-	ld r1, [exc_nest_count]
-	add r0, r1, 1
-	st r0, [exc_nest_count]
-	cmp r1, 0
+	_check_nest_int_by_irq_act r0, r1
 
-	bgt.d  firq_nest
+	bne.d firq_nest
 	mov r0, sp
 
 	mov r1, _kernel
@@ -98,19 +88,35 @@ SECTION_FUNC(TEXT, _firq_enter)
 #if CONFIG_RGF_NUM_BANKS != 1
 	b firq_nest_1
 firq_nest:
-	mov r1, ilink
-	lr r0, [_ARC_V2_STATUS32]
-	and r0, r0, ~_ARC_V2_STATUS32_RB(7)
-	kflag r0
+	/*
+	 * because firq and rirq share the same interrupt stack,
+	 * switch back to original register bank to get correct sp.
+	 * to get better firq latency, an approach is to prepare
+	 * separate interrupt stack for firq and do not do thread
+	 * switch in firq.
+	 */
+	lr r1, [_ARC_V2_STATUS32]
+	and r1, r1, ~_ARC_V2_STATUS32_RB(7)
+	kflag r1
 
-	st sp, [saved_sp]
+	/* here use _ARC_V2_USER_SP and ilink to exchange sp
+	 * save original value of _ARC_V2_USER_SP and ilink into
+	 * the stack of interrupted context first, then restore them later
+	 */
+	st ilink, [sp]
+	lr ilink, [_ARC_V2_USER_SP]
+	st ilink, [sp, -4]
+	/* sp here is the sp of interrupted context */
+	sr sp, [_ARC_V2_USER_SP]
 
+	/* switch back to banked reg, only ilink can be used */
 	lr ilink, [_ARC_V2_STATUS32]
 	or ilink, ilink, _ARC_V2_STATUS32_RB(1)
 	kflag ilink
-	mov r0, sp
-	ld sp, [saved_sp]
-	mov ilink, r1
+	lr sp, [_ARC_V2_USER_SP]
+	ld ilink, [sp, -4]
+	sr ilink, [_ARC_V2_USER_SP]
+	ld ilink, [sp]
 firq_nest_1:
 #else
 firq_nest:
@@ -135,19 +141,10 @@ SECTION_FUNC(TEXT, _firq_exit)
 	sr r24, [_ARC_V2_LP_START]
 	sr r25, [_ARC_V2_LP_END]
 #endif
-	/* check if we're a nested interrupt: if so, let the interrupted
-	 * interrupt handle the reschedule */
-	mov	r1, exc_nest_count
-	ld	r0, [r1]
-	sub	r0, r0, 1
-	st	r0, [r1]
-/* see comments in _rirq_exit */
-	lr 	r0, [_ARC_V2_AUX_IRQ_ACT]
-	and 	r0, r0, 0xffff
-	ffs	r1, r0
-	fls	r2, r0
-	cmp 	r1, r2
-	jne	_firq_no_reschedule
+
+	_check_nest_int_by_irq_act r0, r1
+
+	jne _firq_no_reschedule
 
 #ifdef CONFIG_STACK_SENTINEL
 	bl z_check_stack_sentinel
@@ -176,8 +173,8 @@ _firq_no_reschedule:
 	 */
 #if CONFIG_RGF_NUM_BANKS == 1
 	_pop_irq_stack_frame
-	ld r0,[saved_r0]
 #endif
+	lr ilink, [_ARC_V2_ERET]
 	rtie
 
 #ifdef CONFIG_PREEMPT_ENABLED

@@ -24,7 +24,6 @@ config ARC
 
 config ARM
 	bool "ARM architecture"
-	select ARCH_HAS_THREAD_ABORT
 	select HAS_DTS
 
 config X86
@@ -42,8 +41,8 @@ config NIOS2
 	select ATOMIC_OPERATIONS_C
 	select HAS_DTS
 
-config RISCV32
-	bool "RISCV32 architecture"
+config RISCV
+	bool "RISCV architecture"
 	select HAS_DTS
 
 config XTENSA
@@ -455,7 +454,7 @@ config MPU_REQUIRES_NON_OVERLAPPING_REGIONS
 menuconfig FLOAT
 	bool "Floating point"
 	depends on CPU_HAS_FPU
-	depends on ARM || X86
+	depends on ARM || X86 || ARC
 	help
 	  This option allows threads to use the floating point registers.
 	  By default, only a single thread may use the registers.

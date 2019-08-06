@@ -5,6 +5,12 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# NOTE: This file is part of the old device tree scripts, which will be removed
+# later. They are kept to generate some legacy #defines via the
+# --deprecated-only flag.
+#
+# The new scripts are gen_defines.py, edtlib.py, and dtlib.py.
+
 # vim: ai:ts=4:sw=4
 
 import sys
@@ -202,7 +208,7 @@ def parse_file(fd, ignore_dts_version=False):
 
         if line.startswith('/include/ '):
             _, filename = line.split()
-            with open(filename.strip()[1:-1], "r") as new_fd:
+            with open(filename.strip()[1:-1], encoding="utf-8") as new_fd:
                 nodes.update(parse_file(new_fd, True))
         elif line == '/dts-v1/;':
             has_v1_tag = True
@@ -294,7 +300,7 @@ def main(args):
     else:
         formatter = lambda nodes: pprint.pprint(nodes, indent=2)
 
-    with open(args[1], "r") as fd:
+    with open(args[1], encoding="utf-8") as fd:
         formatter(parse_file(fd))
 
     return 0

@@ -226,8 +226,10 @@ toolchain_cc_freestanding()
 # @Intent: Set compiler specific flag for tentative definitions, no-common
 toolchain_cc_nocommon()
 
+# @Intent: Set compiler specific flag for production of debug information
+toolchain_cc_produce_debug_info()
+
 zephyr_compile_options(
-  -g # TODO: build configuration enough?
   ${TOOLCHAIN_C_FLAGS}
 )
 
@@ -698,14 +700,18 @@ if(CONFIG_GEN_ISR_TABLES)
 
   # isr_tables.c is generated from ${ZEPHYR_PREBUILT_EXECUTABLE} by
   # gen_isr_tables.py
+  set(obj_copy_cmd "")
+  bintools_objcopy(
+    RESULT_CMD_LIST obj_copy_cmd
+    TARGET_INPUT    ${OUTPUT_FORMAT}
+    TARGET_OUTPUT   "binary"
+    SECTION_ONLY    ".intList"
+    FILE_INPUT      $<TARGET_FILE:${ZEPHYR_PREBUILT_EXECUTABLE}>
+    FILE_OUTPUT     "isrList.bin"
+    )
   add_custom_command(
     OUTPUT isr_tables.c
-    COMMAND ${CMAKE_OBJCOPY}
-    -I ${OUTPUT_FORMAT}
-    -O binary
-    --only-section=.intList
-    $<TARGET_FILE:${ZEPHYR_PREBUILT_EXECUTABLE}>
-    isrList.bin
+    ${obj_copy_cmd}
     COMMAND ${PYTHON_EXECUTABLE}
     ${ZEPHYR_BASE}/arch/common/gen_isr_tables.py
     --output-source isr_tables.c
@@ -837,16 +843,22 @@ if(CONFIG_ARM AND CONFIG_USERSPACE)
 
   set(PRIV_STACKS_OUTPUT_OBJ_PATH ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/priv_stacks_output_lib.dir/${PRIV_STACKS_OUTPUT_OBJ})
 
+  set(obj_copy_cmd "")
+  set(obj_copy_sections_rename
+    .bss=.priv_stacks.noinit
+    .data=.priv_stacks.data
+    .text=.priv_stacks.text
+    .rodata=.priv_stacks.rodata
+    )
+  bintools_objcopy(
+    RESULT_CMD_LIST obj_copy_cmd
+    SECTION_RENAME  ${obj_copy_sections_rename}
+    FILE_INPUT      ${PRIV_STACKS_OUTPUT_OBJ_PATH}
+    FILE_OUTPUT     ${PRIV_STACKS_OUTPUT_OBJ_RENAMED}
+    )
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${PRIV_STACKS_OUTPUT_OBJ_RENAMED}
-    COMMAND
-    ${CMAKE_OBJCOPY}
-    --rename-section   .bss=.priv_stacks.noinit
-    --rename-section   .data=.priv_stacks.data
-    --rename-section   .text=.priv_stacks.text
-    --rename-section .rodata=.priv_stacks.rodata
-    ${PRIV_STACKS_OUTPUT_OBJ_PATH}
-    ${PRIV_STACKS_OUTPUT_OBJ_RENAMED}
+    ${obj_copy_cmd}
     DEPENDS priv_stacks_output_lib
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
@@ -962,15 +974,21 @@ if(CONFIG_USERSPACE)
 
   set(OUTPUT_OBJ_PATH ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/output_lib.dir/${OUTPUT_OBJ})
 
+  set(obj_copy_cmd "")
+  set(obj_copy_sections_rename
+    .data=.kobject_data.data
+    .text=.kobject_data.text
+    .rodata=.kobject_data.rodata
+    )
+  bintools_objcopy(
+    RESULT_CMD_LIST obj_copy_cmd
+    SECTION_RENAME  ${obj_copy_sections_rename}
+    FILE_INPUT      ${OUTPUT_OBJ_PATH}
+    FILE_OUTPUT     ${OUTPUT_OBJ_RENAMED}
+    )
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${OUTPUT_OBJ_RENAMED}
-    COMMAND
-    ${CMAKE_OBJCOPY}
-    --rename-section   .data=.kobject_data.data
-    --rename-section   .text=.kobject_data.text
-    --rename-section .rodata=.kobject_data.rodata
-    ${OUTPUT_OBJ_PATH}
-    ${OUTPUT_OBJ_RENAMED}
+    ${obj_copy_cmd}
     DEPENDS output_lib
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
@@ -1214,78 +1232,168 @@ list(APPEND
 
 if(NOT CONFIG_BUILD_NO_GAP_FILL)
   # Use ';' as separator to get proper space in resulting command.
-  set(GAP_FILL "--gap-fill;0xff")
+  set(GAP_FILL "0xff")
+endif()
+
+if(CONFIG_OUTPUT_PRINT_MEMORY_USAGE)
+  # @Intent: Use the toolchain bintools method for printing memory usage
+  set(memUsageCmd    "")
+  set(memUsageByProd "")
+  bintools_print_mem_usage(
+    RESULT_CMD_LIST    memUsageCmd
+    RESULT_BYPROD_LIST memUsageByProd
+  )
+  list(APPEND
+    post_build_commands
+    ${memUsageCmd}
+    )
+  list(APPEND
+    post_build_byproducts
+    ${memUsageByProd}
+    )
 endif()
 
 if(CONFIG_BUILD_OUTPUT_HEX)
+  set(out_hex_cmd    "")
+  set(out_hex_byprod "")
+  set(out_hex_sections_remove
+    .comment
+    COMMON
+    .eh_frame
+    )
+  bintools_objcopy(
+    RESULT_CMD_LIST    out_hex_cmd
+    RESULT_BYPROD_LIST out_hex_byprod
+    STRIP_ALL
+    GAP_FILL           ${GAP_FILL}
+    TARGET_OUTPUT      "ihex"
+    SECTION_REMOVE     ${out_hex_sections_remove}
+    FILE_INPUT         ${KERNEL_ELF_NAME}
+    FILE_OUTPUT        ${KERNEL_HEX_NAME}
+    )
   list(APPEND
     post_build_commands
-    COMMAND
-    ${CMAKE_OBJCOPY} -S -Oihex ${GAP_FILL}  -R .comment -R COMMON -R .eh_frame  ${KERNEL_ELF_NAME} ${KERNEL_HEX_NAME}
+    ${out_hex_cmd}
     )
   list(APPEND
     post_build_byproducts
     ${KERNEL_HEX_NAME}
+    ${out_hex_byprod}
     )
 endif()
 
 if(CONFIG_BUILD_OUTPUT_BIN)
+  set(out_bin_cmd    "")
+  set(out_bin_byprod "")
+  set(out_bin_sections_remove
+    .comment
+    COMMON
+    .eh_frame
+    )
+  bintools_objcopy(
+    RESULT_CMD_LIST    out_bin_cmd
+    RESULT_BYPROD_LIST out_bin_byprod
+    STRIP_ALL
+    GAP_FILL           ${GAP_FILL}
+    TARGET_OUTPUT      "binary"
+    SECTION_REMOVE     ${out_bin_sections_remove}
+    FILE_INPUT         ${KERNEL_ELF_NAME}
+    FILE_OUTPUT        ${KERNEL_BIN_NAME}
+    )
   list(APPEND
     post_build_commands
-    COMMAND
-    ${CMAKE_OBJCOPY} -S -Obinary ${GAP_FILL} -R .comment -R COMMON -R .eh_frame  ${KERNEL_ELF_NAME} ${KERNEL_BIN_NAME}
+    ${out_bin_cmd}
     )
   list(APPEND
     post_build_byproducts
     ${KERNEL_BIN_NAME}
+    ${out_bin_byprod}
     )
 endif()
 
 if(CONFIG_BUILD_OUTPUT_S19)
+  set(out_S19_cmd    "")
+  set(out_S19_byprod "")
+  bintools_objcopy(
+    RESULT_CMD_LIST    out_S19_cmd
+    RESULT_BYPROD_LIST out_S19_byprod
+    GAP_FILL           ${GAP_FILL}
+    TARGET_OUTPUT      "srec"
+    SREC_LEN           1
+    FILE_INPUT         ${KERNEL_ELF_NAME}
+    FILE_OUTPUT        ${KERNEL_S19_NAME}
+    )
   list(APPEND
     post_build_commands
-    COMMAND
-    ${CMAKE_OBJCOPY} ${GAP_FILL} --srec-len 1 --output-target=srec ${KERNEL_ELF_NAME} ${KERNEL_S19_NAME}
+    ${out_S19_cmd}
     )
   list(APPEND
     post_build_byproducts
     ${KERNEL_S19_NAME}
+    ${out_S19_byprod}
     )
 endif()
 
 if(CONFIG_OUTPUT_DISASSEMBLY)
+  set(out_disassembly_cmd    "")
+  set(out_disassembly_byprod "")
+  bintools_objdump(
+    RESULT_CMD_LIST    out_disassembly_cmd
+    RESULT_BYPROD_LIST out_disassembly_byprod
+    DISASSEMBLE_SOURCE
+    FILE_INPUT         ${KERNEL_ELF_NAME}
+    FILE_OUTPUT        ${KERNEL_LST_NAME}
+    )
   list(APPEND
     post_build_commands
-    COMMAND
-    ${CMAKE_OBJDUMP} -S ${KERNEL_ELF_NAME} > ${KERNEL_LST_NAME}
+    ${out_disassembly_cmd}
     )
   list(APPEND
     post_build_byproducts
     ${KERNEL_LST_NAME}
+    ${out_disassembly_byprod}
     )
 endif()
 
 if(CONFIG_OUTPUT_STAT)
+  set(out_stat_cmd    "")
+  set(out_stat_byprod "")
+  bintools_readelf(
+    RESULT_CMD_LIST    out_stat_cmd
+    RESULT_BYPROD_LIST out_stat_byprod
+    HEADERS
+    FILE_INPUT         ${KERNEL_ELF_NAME}
+    FILE_OUTPUT        ${KERNEL_STAT_NAME}
+    )
   list(APPEND
     post_build_commands
-    COMMAND
-    ${CMAKE_READELF} -e ${KERNEL_ELF_NAME} > ${KERNEL_STAT_NAME}
+    ${out_stat_cmd}
     )
   list(APPEND
     post_build_byproducts
     ${KERNEL_STAT_NAME}
+    ${out_stat_byprod}
     )
 endif()
 
 if(CONFIG_BUILD_OUTPUT_STRIPPED)
+  set(out_stripped_cmd    "")
+  set(out_stripped_byprod "")
+  bintools_strip(
+    RESULT_CMD_LIST    out_stripped_cmd
+    RESULT_BYPROD_LIST out_stripped_byprod
+    STRIP_ALL
+    FILE_INPUT         ${KERNEL_ELF_NAME}
+    FILE_OUTPUT        ${KERNEL_STRIP_NAME}
+    )
   list(APPEND
     post_build_commands
-    COMMAND
-    ${CMAKE_STRIP} --strip-all ${KERNEL_ELF_NAME} -o ${KERNEL_STRIP_NAME}
+    ${out_stripped_cmd}
     )
   list(APPEND
     post_build_byproducts
     ${KERNEL_STRIP_NAME}
+    ${out_stripped_byprod}
     )
 endif()
 
@@ -1354,23 +1462,6 @@ if(HEX_FILES_TO_MERGE)
 
   add_custom_target(mergehex ALL DEPENDS ${MERGED_HEX_NAME})
   list(APPEND FLASH_DEPS mergehex)
-endif()
-
-if(CONFIG_OUTPUT_PRINT_MEMORY_USAGE)
-  # Use --print-memory-usage with the first link.
-  #
-  # Don't use this option with the second link because seeing it twice
-  # could confuse users and using it on the second link would suppress
-  # it when the first link has a ram/flash-usage issue.
-  set(option ${LINKERFLAGPREFIX},--print-memory-usage)
-  string(MAKE_C_IDENTIFIER check${option} check)
-
-  set(SAVED_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
-  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${option}")
-  zephyr_check_compiler_flag(C "" ${check})
-  set(CMAKE_REQUIRED_FLAGS ${SAVED_CMAKE_REQUIRED_FLAGS})
-
-  target_link_libraries_ifdef(${check} ${ZEPHYR_PREBUILT_EXECUTABLE} ${option})
 endif()
 
 if(EMU_PLATFORM)
