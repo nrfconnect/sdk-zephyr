@@ -466,7 +466,7 @@ endif()
 add_subdirectory(boards)
 add_subdirectory(ext)
 add_subdirectory(subsys)
-add_subdirectory_ifdef(CONFIG_KERNEL drivers)
+add_subdirectory(drivers)
 
 # Include zephyr modules generated CMake file.
 if(EXISTS ${CMAKE_BINARY_DIR}/zephyr_modules.txt)
