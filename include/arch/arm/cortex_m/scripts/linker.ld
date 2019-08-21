@@ -42,7 +42,11 @@
 
 #if USE_PARTITION_MANAGER
 #include <pm_config.h>
+#ifdef PM_ADDRESS_LOAD_OFFSET
+#define ROM_ADDR PM_ADDRESS + PM_ADDRESS_LOAD_OFFSET
+#else
 #define ROM_ADDR PM_ADDRESS
+#endif
 #define ROM_SIZE PM_SIZE
 #else
 
