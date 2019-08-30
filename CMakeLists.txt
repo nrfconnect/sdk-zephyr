@@ -1291,6 +1291,7 @@ if (IMAGE STREQUAL mcuboot_ AND CONFIG_MCUBOOT_BUILD_S1_VARIANT)
 
   set(s1_hex_cmd "")
   set(s1_hex_byprod "")
+  set(output ${PROJECT_BINARY_DIR}/../../zephyr/${MCUBOOT_S1_EXECUTABLE}.hex)
 
   # Rule to generate hex file of .elf
   bintools_objcopy(
@@ -1301,17 +1302,17 @@ if (IMAGE STREQUAL mcuboot_ AND CONFIG_MCUBOOT_BUILD_S1_VARIANT)
     TARGET_OUTPUT      "ihex"
     SECTION_REMOVE     ${out_hex_sections_remove}
     FILE_INPUT         ${MCUBOOT_S1_EXECUTABLE}.elf
-    FILE_OUTPUT        ${PROJECT_BINARY_DIR}/../../zephyr/${MCUBOOT_S1_EXECUTABLE}.hex
+    FILE_OUTPUT        ${output}
     )
 
   add_custom_command(${s1_hex_cmd}
     DEPENDS ${MCUBOOT_S1_EXECUTABLE}
-    OUTPUT ${MCUBOOT_S1_EXECUTABLE}.hex)
+    OUTPUT ${output})
 
   add_custom_target(
     s1_image_hex
     DEPENDS
-    ${MCUBOOT_S1_EXECUTABLE}.hex
+    ${output}
     )
 endif()
 
