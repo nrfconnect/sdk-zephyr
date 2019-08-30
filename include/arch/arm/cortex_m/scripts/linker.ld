@@ -39,10 +39,18 @@
 #if USE_PARTITION_MANAGER
 #include <pm_config.h>
 #ifdef PM_ADDRESS_LOAD_OFFSET
+/* We are linking mcuboot against S1, S0 is Image 1 primary */
+_image_1_primary_slot_id = PM_S0_ID;
+
 #define ROM_ADDR PM_ADDRESS + PM_ADDRESS_LOAD_OFFSET
 #else
+#ifdef PM_S1_ID
+/* We are linking mcuboot against S0, S1 is Image 1 primary */
+_image_1_primary_slot_id = PM_S1_ID;
+#endif /* PM_S1_ID */
+
 #define ROM_ADDR PM_ADDRESS
-#endif
+#endif /* PM_ADDRESS_LOAD_OFFSET */
 #define ROM_SIZE PM_SIZE
 #else
 
