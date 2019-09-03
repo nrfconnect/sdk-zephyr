@@ -139,4 +139,6 @@ source "drivers/sensor/tmp112/Kconfig"
 
 source "drivers/sensor/vl53l0x/Kconfig"
 
+source "drivers/sensor/si7060/Kconfig"
+
 endif # SENSOR
