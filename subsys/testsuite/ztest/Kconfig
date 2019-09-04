@@ -41,6 +41,13 @@ config ZTEST_MOCKING
 	  Enable mocking support for Ztest. This allows the test to set
 	  return values and expected parameters to functions.
 
+config ZTEST_TC_UTIL_USER_OVERRIDE
+       bool "Override tc_util.h"
+       depends on ZTEST
+       help
+               Enable overriding some defines in tc_util.h.
+               If True the user should provide tc_util_user_override.h.
+
 config ZTEST_PARAMETER_COUNT
 	int "Count of parameters or return values reserved"
 	depends on ZTEST_MOCKING

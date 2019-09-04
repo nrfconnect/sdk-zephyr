@@ -15,7 +15,13 @@
 #include <shell/shell.h>
 #include <sys/printk.h>
 
+#if defined CONFIG_ZTEST_TC_UTIL_USER_OVERRIDE
+#include "tc_util_user_override.h"
+#endif
+
+#ifndef PRINT_DATA
 #define PRINT_DATA(fmt, ...) printk(fmt, ##__VA_ARGS__)
+#endif
 
 #if defined CONFIG_ARCH_POSIX
 #include "posix_board_if.h"
@@ -44,10 +50,12 @@
 #define TC_PRINT_RUNID do {} while (0)
 #endif
 
+#ifndef PRINT_LINE
 #define PRINT_LINE                          \
 	PRINT_DATA(                                                        \
 		"============================================================" \
 		"=======\n")
+#endif
 
 /* stack size and priority for test suite task */
 #define TASK_STACK_SIZE (1024 * 2)
@@ -62,34 +70,61 @@ static inline const char *TC_RESULT_TO_STR(int result)
 {
 	switch (result) {
 	case TC_PASS:
+		#ifndef TC_PASS_STR
 		return "PASS";
+		#else
+		return TC_PASS_STR;
+		#endif
 	case TC_FAIL:
+		#ifndef TC_FAIL_STR
 		return "FAIL";
+		#else
+		return TC_FAIL_STR;
+		#endif
 	case TC_SKIP:
+		#ifndef TC_SKIP_STR
 		return "SKIP";
+		#else
+		return TC_SKIP_STR;
+		#endif
 	default:
 		return "?";
 	}
 }
 
+#ifndef TC_ERROR
 #define TC_ERROR(fmt, ...)                               \
 	do {                                                 \
 		PRINT_DATA(FMT_ERROR, "FAIL", __func__, __LINE__); \
 		PRINT_DATA(fmt, ##__VA_ARGS__);                  \
 	} while (0)
+#endif
 
+#ifndef TC_PRINT
 #define TC_PRINT(fmt, ...) PRINT_DATA(fmt, ##__VA_ARGS__)
-#define TC_START(name) PRINT_DATA("starting test - %s\n", name)
-#define TC_END(result, fmt, ...) PRINT_DATA(fmt, ##__VA_ARGS__)
+#endif
 
+#ifndef TC_START
+#define TC_START(name) PRINT_DATA("starting test - %s\n", name)
+#endif
+
+#ifndef TC_END
+#define TC_END(result, fmt, ...) PRINT_DATA(fmt, ##__VA_ARGS__)
+#endif
+
+#ifndef Z_TC_END_RESULT
 /* prints result and the function name */
 #define Z_TC_END_RESULT(result, func)					\
 	do {								\
 		TC_END(result, "%s - %s\n", TC_RESULT_TO_STR(result), func); \
 		PRINT_LINE;						\
 	} while (0)
+#endif
+
+#ifndef TC_END_RESULT
 #define TC_END_RESULT(result)                           \
 	Z_TC_END_RESULT((result), __func__)
+#endif
 
 #if defined(CONFIG_ARCH_POSIX)
 #define TC_END_POST(result) posix_exit(result)
@@ -97,6 +132,7 @@ static inline const char *TC_RESULT_TO_STR(int result)
 #define TC_END_POST(result)
 #endif /* CONFIG_ARCH_POSIX */
 
+#ifndef TC_END_REPORT
 #define TC_END_REPORT(result)                               \
 	do {                                                    \
 		PRINT_LINE;                                         \
@@ -106,6 +142,7 @@ static inline const char *TC_RESULT_TO_STR(int result)
 		       (result) == TC_PASS ? "SUCCESSFUL" : "FAILED");	\
 		TC_END_POST(result);                                    \
 	} while (0)
+#endif
 
 #if defined(CONFIG_SHELL)
 #define TC_CMD_DEFINE(name)						\
