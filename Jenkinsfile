@@ -112,7 +112,6 @@ pipeline {
       when { expression { CI_STATE.ZEPHYR.RUN_BUILD } }
       parallel {
         stage('nRF Platforms') {
-          when { expression { CI_STATE.ORIGIN.BUILD_TYPE == 'PR' } }
           steps { script {
             dir('zephyr') {
               def PLATFORM_ARGS = lib_Main.getPlatformArgs(CI_STATE.ZEPHYR.PLATFORMS)
