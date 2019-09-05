@@ -16,7 +16,7 @@
 #include <sys/printk.h>
 
 #if defined CONFIG_ZTEST_TC_UTIL_USER_OVERRIDE
-#include "tc_util_user_override.h"
+#include <tc_util_user_override.h>
 #endif
 
 #ifndef PRINT_DATA
@@ -66,27 +66,25 @@
 #define TC_FAIL 1
 #define TC_SKIP 2
 
+#ifndef  TC_PASS_STR
+#define TC_PASS_STR "PASS"
+#endif
+#ifndef  TC_FAIL_STR
+#define TC_FAIL_STR "FAIL"
+#endif
+#ifndef  TC_SKIP_STR
+#define TC_SKIP_STR "SKIP"
+#endif
+
 static inline const char *TC_RESULT_TO_STR(int result)
 {
 	switch (result) {
 	case TC_PASS:
-		#ifndef TC_PASS_STR
-		return "PASS";
-		#else
 		return TC_PASS_STR;
-		#endif
 	case TC_FAIL:
-		#ifndef TC_FAIL_STR
-		return "FAIL";
-		#else
 		return TC_FAIL_STR;
-		#endif
 	case TC_SKIP:
-		#ifndef TC_SKIP_STR
-		return "SKIP";
-		#else
 		return TC_SKIP_STR;
-		#endif
 	default:
 		return "?";
 	}
