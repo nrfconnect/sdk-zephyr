@@ -20,4 +20,3 @@ Pillow
 intelhex
 pytest
 gcovr
-resource
