@@ -114,8 +114,7 @@ static int flash_progressive_erase(struct flash_img_context *ctx, off_t off)
 	} else {
 		if (ctx->off_last != sector.fs_off) {
 			ctx->off_last = sector.fs_off;
-			LOG_INF("Erasing sector at offset 0x%x",
-				(u32_t)sector.fs_off);
+			LOG_INF("Erasing sector at offset 0x%x", sector.fs_off);
 			rc = flash_area_erase(ctx->flash_area, sector.fs_off,
 					      sector.fs_size);
 			if (rc) {
