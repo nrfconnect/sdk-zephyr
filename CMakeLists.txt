@@ -354,9 +354,6 @@ zephyr_cc_option(-fmacro-prefix-map=${ZEPHYR_BASE}=ZEPHYR_BASE)
 
 # Declare MPU userspace dependencies before the linker scripts to make
 # sure the order of dependencies are met
-unset(APP_SMEM_ALIGNED_DEP)
-unset(APP_SMEM_UNALIGNED_DEP)
-unset(PRIV_STACK_DEP)
 if(CONFIG_USERSPACE)
   set(APP_SMEM_ALIGNED_DEP ${IMAGE}app_smem_aligned_linker)
   set(APP_SMEM_UNALIGNED_DEP ${IMAGE}app_smem_unaligned_linker)
@@ -663,7 +660,6 @@ endforeach()
 
 get_property(OUTPUT_FORMAT        GLOBAL PROPERTY PROPERTY_OUTPUT_FORMAT)
 
-unset(CODE_RELOCATION_DEP)
 if (CONFIG_CODE_DATA_RELOCATION)
   set(CODE_RELOCATION_DEP ${IMAGE}code_relocation_source_lib)
 endif() # CONFIG_CODE_DATA_RELOCATION
