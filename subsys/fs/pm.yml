@@ -1,0 +1,7 @@
+#include <autoconf.h>
+
+#ifdef CONFIG_FILE_SYSTEM_NFFS
+nffs_storage:
+  placement: {after: [mcuboot_storage, app]}
+  size: CONFIG_PM_PARTITION_SIZE_NFFS_STORAGE
+#endif
