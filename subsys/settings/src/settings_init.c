@@ -18,7 +18,7 @@
 #if USE_PARTITION_MANAGER
 
 #include <pm_config.h>
-#define FLASH_AREA_STORAGE_ID       PM_MCUBOOT_STORAGE_ID
+#define FLASH_AREA_STORAGE_ID       PM_SETTINGS_STORAGE_ID
 
 #else
 
@@ -147,7 +147,7 @@ int settings_backend_init(void)
 	struct flash_sector hw_flash_sector;
 	u32_t sector_cnt = 1;
 
-	rc = flash_area_open(DT_FLASH_AREA_STORAGE_ID, &fa);
+	rc = flash_area_open(FLASH_AREA_STORAGE_ID, &fa);
 	if (rc) {
 		return rc;
 	}

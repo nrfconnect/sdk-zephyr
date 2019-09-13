@@ -14,7 +14,7 @@
 #if USE_PARTITION_MANAGER
 
 #include <pm_config.h>
-#define FLASH_AREA_STORAGE_ID       PM_MCUBOOT_STORAGE_ID
+#define FLASH_AREA_STORAGE_ID       PM_SETTINGS_STORAGE_ID
 
 #else
 
