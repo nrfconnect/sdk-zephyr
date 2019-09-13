@@ -18,7 +18,7 @@
 #if USE_PARTITION_MANAGER
 
 #include <pm_config.h>
-#define FLASH_AREA_STORAGE_ID       PM_MCUBOOT_STORAGE_ID
+#define FLASH_AREA_STORAGE_ID       PM_SETTINGS_STORAGE_ID
 
 #else
 
@@ -145,7 +145,7 @@ int settings_backend_init(void)
 	size_t nvs_sector_size, nvs_size = 0;
 	const struct flash_area *fa;
 
-	rc = flash_area_open(DT_FLASH_AREA_STORAGE_ID, &fa);
+	rc = flash_area_open(FLASH_AREA_STORAGE_ID, &fa);
 	if (rc) {
 		return rc;
 	}
