@@ -4,3 +4,5 @@ add_subdirectory(src)
 zephyr_include_directories(
   include
   )
+
+add_partition_manager_config(pm.yml)
