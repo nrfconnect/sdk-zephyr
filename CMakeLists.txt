@@ -1259,7 +1259,7 @@ if (IMAGE STREQUAL mcuboot_ AND CONFIG_MCUBOOT_BUILD_S1_VARIANT)
 
   # Create linker script which has an offset from S0 to S1.
   configure_linker_script(
-    ${PROJECT_BINARY_DIR}/linker_mcuboot_s1.cmd
+    linker_mcuboot_s1.cmd
     "-DPM_ADDRESS_LOAD_OFFSET=($<TARGET_PROPERTY:partition_manager,PM_S1_ADDRESS>-$<TARGET_PROPERTY:partition_manager,PM_S0_ADDRESS>);-DLINKER_PASS2"
     ${PRIV_STACK_DEP}
     ${CODE_RELOCATION_DEP}
