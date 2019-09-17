@@ -6,6 +6,68 @@ def IMAGE_TAG    = lib_Main.getDockerImage(JOB_NAME)
 def TIMEOUT      = lib_Main.getTimeout(JOB_NAME)
 def INPUT_STATE  = lib_Main.getInputState(JOB_NAME)
 def CI_STATE = new HashMap()
+def TestExecutionList = [:]
+
+
+def generateParallelStageNRF(subset, compiler, AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE) {
+  return {
+    node (AGENT_LABELS) {
+      stage('Sanity Check - Zephyr'){
+        docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
+          lib_Main.cloneCItools(JOB_NAME)
+          dir('zephyr') {
+            checkout scm
+            CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
+                  CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
+            lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
+                  CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
+          }
+          lib_West.InitUpdate('zephyr')
+          lib_West.ApplyManifestUpdates(CI_STATE)
+          dir('zephyr') {
+            def PLATFORM_ARGS = lib_Main.getPlatformArgs(CI_STATE.ZEPHYR.PLATFORMS)
+            println "$compiler SANITY NRF PLATFORMS_ARGS = $PLATFORM_ARGS"
+            sh """
+                export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
+                source zephyr-env.sh && \
+                (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH $PLATFORM_ARGS --subset $subset || $SANITYCHECK_RETRY_CMDS
+               """
+          }
+        }
+        cleanWs()
+      }
+    }
+  }
+}
+
+def generateParallelStageALL(subset, compiler, AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE) {
+  return {
+    node (AGENT_LABELS) {
+      stage('Sanity Check - Zephyr'){
+        docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
+          lib_Main.cloneCItools(JOB_NAME)
+          dir('zephyr') {
+            checkout scm
+            CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
+                  CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
+            lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
+                  CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
+          }
+          lib_West.InitUpdate('zephyr')
+          lib_West.ApplyManifestUpdates(CI_STATE)
+          dir('zephyr') {
+            sh """
+                export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
+                source zephyr-env.sh && \
+                (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH --subset $subset || $SANITYCHECK_RETRY_CMDS
+               """
+          }
+        }
+      }
+    }
+  }
+}
+
 
 pipeline {
 
@@ -13,21 +75,16 @@ pipeline {
    booleanParam(name: 'RUN_DOWNSTREAM', description: 'if false skip downstream jobs', defaultValue: true)
    booleanParam(name: 'RUN_TESTS', description: 'if false skip testing', defaultValue: true)
    booleanParam(name: 'RUN_BUILD', description: 'if false skip building', defaultValue: true)
-   string(name: 'PLATFORMS', description: 'Default Platforms to test', defaultValue: 'nrf9160_pca10090 nrf52_pca10040 nrf52840_pca10056')
+   string(name: 'PLATFORMS', description: 'Default Platforms to test', defaultValue: 'nrf9160_pca10090 nrf9160_pca10090ns nrf52_pca10040 nrf52840_pca10056')
    string(name: 'jsonstr_CI_STATE', description: 'Default State if no upstream job',
               defaultValue: INPUT_STATE)
   }
+  agent { label AGENT_LABELS }
 
-  agent {
-    docker {
-      image IMAGE_TAG
-      label AGENT_LABELS
-      args '-e PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/.local/bin'
-    }
-  }
   options {
     // Checkout the repository to this folder instead of root
     checkoutToSubdirectory('zephyr')
+    parallelsAlwaysFailFast()
     timeout(time: TIMEOUT.time, unit: TIMEOUT.unit)
   }
 
@@ -46,91 +103,98 @@ pipeline {
           (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS --only-failed --outdir=out-2nd-pass) ||
           (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS --only-failed --outdir=out-3rd-pass))
           """
-
-      // ENVs for building (triggered by sanitycheck)
-      ZEPHYR_TOOLCHAIN_VARIANT = 'zephyr'
-      GNUARMEMB_TOOLCHAIN_PATH = '/workdir/gcc-arm-none-eabi-7-2018-q2-update'
-      ZEPHYR_SDK_INSTALL_DIR = '/opt/zephyr-sdk'
   }
 
   stages {
     stage('Load') { steps { script { CI_STATE = lib_Stage.load('ZEPHYR') }}}
-    stage('Checkout') {
-      steps { script {
-        lib_Main.cloneCItools(JOB_NAME)
-        dir('zephyr') {
-          CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
-          lib_West.AddManifestUpdate("ZEPHYR", 'zephyr', CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
-        }
-      }}
-    }
-    stage('Get nRF && Apply Parent Manifest Updates') {
-      when { expression { CI_STATE.ZEPHYR.RUN_TESTS || CI_STATE.ZEPHYR.RUN_BUILD } }
-      steps { script {
-        lib_Status.set("PENDING", 'ZEPHYR', CI_STATE);
-        lib_West.InitUpdate('zephyr')
-        lib_West.ApplyManifestUpdates(CI_STATE)
-      }}
-    }
-    stage('Run compliance check') {
-      when { expression { CI_STATE.ZEPHYR.RUN_TESTS } }
-      steps {
-        dir('zephyr') {
-          script {
-            def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.ZEPHYR)
-            if (BUILD_TYPE == "PR") {
-              COMMIT_RANGE = "$CI_STATE.ZEPHYR.MERGE_BASE..$CI_STATE.ZEPHYR.REPORT_SHA"
-              COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.ZEPHYR.REPORT_SHA -g"
-              println "Building a PR [$CHANGE_ID]: $COMMIT_RANGE"
-            }
-            else if (BUILD_TYPE == "TAG") {
-              COMMIT_RANGE = "tags/${env.BRANCH_NAME}..tags/${env.BRANCH_NAME}"
-              println "Building a Tag: " + COMMIT_RANGE
-            }
-            // If not a PR, it's a non-PR-branch or master build. Compare against the origin.
-            else if (BUILD_TYPE == "BRANCH") {
-              COMMIT_RANGE = "origin/${env.BRANCH_NAME}..HEAD"
-              println "Building a Branch: " + COMMIT_RANGE
-            }
-            else {
-                assert condition : "Build fails because it is not a PR/Tag/Branch"
-            }
+    stage('Specification') { steps { script {
 
-            // Run the compliance check
-            try {
-              sh "(source ../zephyr/zephyr-env.sh && ../ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE)"
-            }
-            finally {
-              junit 'compliance.xml'
-              archiveArtifacts artifacts: 'compliance.xml'
+      def TestStages = [:]
+
+      TestStages["compliance"] = {
+        node (AGENT_LABELS) {
+          stage('Compliance Test'){
+            docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
+              lib_Main.cloneCItools(JOB_NAME)
+              dir('zephyr') {
+                checkout scm
+                CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
+                      CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
+                lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
+                      CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
+              }
+              lib_West.InitUpdate('zephyr')
+              lib_West.ApplyManifestUpdates(CI_STATE)
+
+              dir('zephyr') {
+                def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.ZEPHYR)
+                if (BUILD_TYPE == "PR") {
+                  COMMIT_RANGE = "$CI_STATE.ZEPHYR.MERGE_BASE..$CI_STATE.ZEPHYR.REPORT_SHA"
+                  COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.ZEPHYR.REPORT_SHA -g"
+                  println "Building a PR [$CHANGE_ID]: $COMMIT_RANGE"
+                }
+                else if (BUILD_TYPE == "TAG") {
+                  COMMIT_RANGE = "tags/${env.BRANCH_NAME}..tags/${env.BRANCH_NAME}"
+                  println "Building a Tag: " + COMMIT_RANGE
+                }
+                // If not a PR, it's a non-PR-branch or master build. Compare against the origin.
+                else if (BUILD_TYPE == "BRANCH") {
+                  COMMIT_RANGE = "origin/${env.BRANCH_NAME}..HEAD"
+                  println "Building a Branch: " + COMMIT_RANGE
+                }
+                else {
+                    assert condition : "Build fails because it is not a PR/Tag/Branch"
+                }
+
+                // Run the compliance check
+                try {
+                  sh "(source ../zephyr/zephyr-env.sh && ../ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE)"
+                }
+                finally {
+                  junit 'compliance.xml'
+                  archiveArtifacts artifacts: 'compliance.xml'
+                }
+              }
             }
           }
         }
       }
-    }
-    stage('Sanitycheck') {
-      when { expression { CI_STATE.ZEPHYR.RUN_BUILD } }
-      parallel {
-        stage('nRF Platforms') {
-          steps { script {
-            dir('zephyr') {
-              def PLATFORM_ARGS = lib_Main.getPlatformArgs(CI_STATE.ZEPHYR.PLATFORMS)
-              sh "source zephyr-env.sh && \
-                  (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH $PLATFORM_ARGS || $SANITYCHECK_RETRY_CMDS"
-            }
-          }}
-        }
-        stage('All Platforms') {
-          when { expression { CI_STATE.ORIGIN.BUILD_TYPE != 'PR' } }
-          steps { script {
-            dir('zephyr') {
-              sh "source zephyr-env.sh && \
-                  (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH || $SANITYCHECK_RETRY_CMDS"
-            }
-          }
-        }}
+
+      if (CI_STATE.ZEPHYR.RUN_TESTS) {
+        TestExecutionList['compliance'] = TestStages["compliance"]
       }
-    }
+
+      if (CI_STATE.ZEPHYR.RUN_BUILD) {
+        def SUBSET_LIST = ['1/4', '2/4', '3/4', '4/4' ]
+        def COMPILER_LIST = ['gnuarmemb'] // 'zephyr',
+        def INPUT_MAP = [set : SUBSET_LIST, compiler : COMPILER_LIST ]
+
+        def OUTPUT_MAP = INPUT_MAP.values().combinations { args ->
+            [INPUT_MAP.keySet().toList(), args].transpose().collectEntries { [(it[0]): it[1]]}
+        }
+
+        def sanityCheckNRFStages = OUTPUT_MAP.collectEntries {
+            ["SanityCheckNRF\n${it.compiler}\n${it.set}" : generateParallelStageNRF(it.set, it.compiler,
+                  AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE)]
+        }
+        TestExecutionList = TestExecutionList.plus(sanityCheckNRFStages)
+
+        if (lib_Main.getBuildType(CI_STATE.ZEPHYR) != 'PR') {
+          def sanityCheckALLStages = OUTPUT_MAP.collectEntries {
+              ["SanityCheckALL\n${it.compiler}\n${it.set}" : generateParallelStageALL(it.set, it.compiler,
+                    AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE)]
+          }
+          TestExecutionList = TestExecutionList.plus(sanityCheckALLStages)
+        }
+      }
+
+      println "TestExecutionList = $TestExecutionList"
+
+    }}}
+
+    stage('Exectuion') { steps { script {
+      parallel TestExecutionList
+    }}}
 
     stage('Trigger testing build') {
       when { expression { CI_STATE.ZEPHYR.RUN_DOWNSTREAM } }
