@@ -61,8 +61,10 @@ def main():
 
             write_regs(dev)
             write_irqs(dev)
-            write_gpios(dev)
-            write_pwms(dev)
+            for gpios in dev.gpios.values():
+                write_phandle_val_list(dev, gpios, "GPIO")
+            write_phandle_val_list(dev, dev.pwms, "PWM")
+            write_phandle_val_list(dev, dev.iochannels, "IO_CHANNEL")
             write_clocks(dev)
             write_spi_dev(dev)
             write_props(dev)
@@ -153,9 +155,15 @@ def write_props(dev):
         if prop.name[0] == "#" or prop.name.endswith("-map"):
             continue
 
+        # Skip phandles
+        if prop.type in {"phandle", "phandles"}:
+            continue
+
         # Skip properties that we handle elsewhere
-        if prop.name in {"reg", "interrupts", "pwms", "clocks", "compatible"} or \
-           prop.name.endswith("gpios"):
+        if prop.name in {
+            "reg", "compatible", "status", "interrupts",
+            "interrupt-controller", "gpio-controller"
+        }:
             continue
 
         if prop.description is not None:
@@ -163,17 +171,19 @@ def write_props(dev):
 
         ident = str2ident(prop.name)
 
-        if isinstance(prop.val, bool):
+        if prop.type == "boolean":
             out_dev(dev, ident, 1 if prop.val else 0)
-        elif isinstance(prop.val, str):
+        elif prop.type == "string":
             out_dev_s(dev, ident, prop.val)
-        elif isinstance(prop.val, int):
+        elif prop.type == "int":
             out_dev(dev, ident, prop.val)
-        elif isinstance(prop.val, list):
-            for i, elm in enumerate(prop.val):
-                out_fn = out_dev_s if isinstance(elm, str) else out_dev
-                out_fn(dev, "{}_{}".format(ident, i), elm)
-        elif isinstance(prop.val, bytes):
+        elif prop.type == "array":
+            for i, val in enumerate(prop.val):
+                out_dev(dev, "{}_{}".format(ident, i), val)
+        elif prop.type == "string-array":
+            for i, val in enumerate(prop.val):
+                out_dev_s(dev, "{}_{}".format(ident, i), val)
+        elif prop.type == "uint8-array":
             out_dev(dev, ident,
                     "{ " + ", ".join("0x{:02x}".format(b) for b in prop.val) + " }")
 
@@ -189,7 +199,7 @@ def write_bus(dev):
         return
 
     if dev.parent.label is None:
-        _err("missing 'label' property on {!r}".format(dev.parent))
+        err("missing 'label' property on {!r}".format(dev.parent))
 
     # #define DT_<DEV-IDENT>_BUS_NAME <BUS-LABEL>
     out_dev_s(dev, "BUS_NAME", str2ident(dev.parent.label))
@@ -447,54 +457,67 @@ def write_irqs(dev):
                     name_alias=irq_name_alias(irq, cell_name))
 
 
-def write_gpios(dev):
-    # Writes GPIO controller data for the gpios in dev's 'gpios' property
-
-    for gpios in dev.gpios.values():
-        for gpio_i, gpio in enumerate(gpios):
-            write_gpio(dev, gpio, gpio_i if len(gpios) > 1 else None)
-
-
-def write_gpio(dev, gpio, index=None):
-    # Writes GPIO controller & data for the GPIO object 'gpio'. If 'index' is
-    # not None, it is added as a suffix to identifiers.
-
-    ctrl_ident = "GPIOS_CONTROLLER"
-    if gpio.name:
-        ctrl_ident = str2ident(gpio.name) + "_" + ctrl_ident
-    if index is not None:
-        ctrl_ident += "_{}".format(index)
-
-    out_dev_s(dev, ctrl_ident, gpio.controller.label)
-
-    for cell, val in gpio.specifier.items():
-        cell_ident = "GPIOS_" + str2ident(cell)
-        if gpio.name:
-            cell_ident = str2ident(gpio.name) + "_" + cell_ident
-        if index is not None:
-            cell_ident += "_{}".format(index)
-
-        out_dev(dev, cell_ident, val)
-
-
 def write_spi_dev(dev):
     # Writes SPI device GPIO chip select data if there is any
 
     cs_gpio = edtlib.spi_dev_cs_gpio(dev)
     if cs_gpio is not None:
-        write_gpio(dev, cs_gpio)
+        write_phandle_val_list_entry(dev, cs_gpio, None, "GPIO")
 
 
-def write_pwms(dev):
-    # Writes PWM controller and specifier info for the PWMs in dev's 'pwms'
-    # property
+def write_phandle_val_list(dev, entries, ident):
+    # Writes output for a phandle/value list, e.g.
+    #
+    #    pwms = <&pwm-ctrl-1 10 20
+    #            &pwm-ctrl-2 30 40>;
+    #
+    # dev:
+    #   Device used to generate device prefixes (see 'ident' below)
+    #
+    # entries:
+    #   List of entries (two for 'pwms' above). This might be a list of
+    #   edtlib.PWM instances, for example.
+    #
+    # ident:
+    #   Base identifier. For example, "PWM" generates output like this:
+    #
+    #     #define <device prefix>_PWMS_CONTROLLER_0 "PWM_0"  (name taken from 'label = ...')
+    #     #define <device prefix>_PWMS_CHANNEL_0 123         (name taken from #cells in binding)
+    #     #define <device prefix>_PWMS_CONTROLLER_1 "PWM_1"
+    #     #define <device prefix>_PWMS_CHANNEL_1 456
+    #     ...
+    #
+    #   Note: Do not add an "S" to 'ident'. It's added automatically, which
+    #   forces consistency.
 
-    for pwm in dev.pwms:
-        if pwm.controller.label is not None:
-            out_dev_s(dev, "PWMS_CONTROLLER", pwm.controller.label)
+    for i, entry in enumerate(entries):
+        write_phandle_val_list_entry(
+            dev, entry, i if len(entries) > 1 else None, ident)
 
-        for spec, val in pwm.specifier.items():
-            out_dev(dev, "PWMS_" + str2ident(spec), val)
+
+def write_phandle_val_list_entry(dev, entry, i, ident):
+    # write_phandle_val_list() helper. We could get rid of it if it wasn't for
+    # write_spi_dev(). Adds 'i' as an index to identifiers unless it's None.
+
+    if entry.controller.label is not None:
+        ctrl_ident = ident + "S_CONTROLLER"  # e.g. PWMS_CONTROLLER
+        if entry.name:
+            ctrl_ident = str2ident(entry.name) + "_" + ctrl_ident
+        # Ugly backwards compatibility hack. Only add the index if there's
+        # more than one entry.
+        if i is not None:
+            ctrl_ident += "_{}".format(i)
+        out_dev_s(dev, ctrl_ident, entry.controller.label)
+
+    for cell, val in entry.specifier.items():
+        cell_ident = ident + "S_" + str2ident(cell)  # e.g. PWMS_CHANNEL
+        if entry.name:
+            # From e.g. 'pwm-names = ...'
+            cell_ident = str2ident(entry.name) + "_" + cell_ident
+        # Backwards compatibility (see above)
+        if i is not None:
+            cell_ident += "_{}".format(i)
+        out_dev(dev, cell_ident, val)
 
 
 def write_clocks(dev):

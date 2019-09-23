@@ -29,6 +29,7 @@ enum {
 	BT_CONN_SLAVE_PARAM_UPDATE,	/* If slave param update timer fired */
 	BT_CONN_SLAVE_PARAM_SET,	/* If slave param were set from app */
 	BT_CONN_SLAVE_PARAM_L2CAP,	/* If should force L2CAP for CPUP */
+	BT_CONN_FORCE_PAIR,             /* Pairing even with existing keys. */
 
 	/* Total number of flags - must be at the end of the enum */
 	BT_CONN_NUM_FLAGS,
@@ -173,6 +174,7 @@ void bt_conn_pin_code_req(struct bt_conn *conn);
 u8_t bt_conn_get_io_capa(void);
 u8_t bt_conn_ssp_get_auth(const struct bt_conn *conn);
 void bt_conn_ssp_auth(struct bt_conn *conn, u32_t passkey);
+void bt_conn_ssp_auth_complete(struct bt_conn *conn, u8_t status);
 
 void bt_conn_disconnect_all(u8_t id);
 
@@ -217,11 +219,15 @@ void bt_conn_identity_resolved(struct bt_conn *conn);
 
 #if defined(CONFIG_BT_SMP) || defined(CONFIG_BT_BREDR)
 /* Notify higher layers that connection security changed */
-void bt_conn_security_changed(struct bt_conn *conn);
+void bt_conn_security_changed(struct bt_conn *conn, enum bt_security_err err);
 #endif /* CONFIG_BT_SMP || CONFIG_BT_BREDR */
 
 /* Prepare a PDU to be sent over a connection */
-struct net_buf *bt_conn_create_pdu(struct net_buf_pool *pool, size_t reserve);
+struct net_buf *bt_conn_create_pdu_timeout(struct net_buf_pool *pool,
+					   size_t reserve, s32_t timeout);
+
+#define bt_conn_create_pdu(_pool, _reserve) \
+	bt_conn_create_pdu_timeout(_pool, _reserve, K_FOREVER)
 
 /* Initialize connection management */
 int bt_conn_init(void);

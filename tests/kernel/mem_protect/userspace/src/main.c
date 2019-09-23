@@ -66,37 +66,27 @@ K_APP_BMEM(part0) static volatile unsigned int expected_reason;
  */
 #define BARRIER() k_sem_give(&expect_fault_sem)
 
-/* ARM is a special case, in that k_thread_abort() does indeed return
- * instead of calling z_swap() directly. The PendSV exception is queued
- * and immediately fires upon completing the exception path; the faulting
- * thread is never run again.
- */
-#if !(defined(CONFIG_ARM) || defined(CONFIG_ARC))
-FUNC_NORETURN
-#endif
 void k_sys_fatal_error_handler(unsigned int reason, const z_arch_esf_t *pEsf)
 {
 	INFO("Caught system error -- reason %d\n", reason);
-	/*
-	 * If there is a user thread waiting for notification to exit,
-	 * give it that notification.
-	 */
-	if (give_uthread_end_sem) {
-		give_uthread_end_sem = false;
-		k_sem_give(&uthread_end_sem);
-	}
 
 	if (expect_fault && expected_reason == reason) {
+		/*
+		 * If there is a user thread waiting for notification to exit,
+		 * give it that notification.
+		 */
+		if (give_uthread_end_sem) {
+			give_uthread_end_sem = false;
+			k_sem_give(&uthread_end_sem);
+		}
 		expect_fault = false;
 		expected_reason = 0;
 		BARRIER();
 		ztest_test_pass();
 	} else {
-		zassert_unreachable("Unexpected fault during test");
+		printk("Unexpected fault during test");
+		k_fatal_halt(reason);
 	}
-#if !(defined(CONFIG_ARM) || defined(CONFIG_ARC))
-	CODE_UNREACHABLE;
-#endif
 }
 
 /**
@@ -1127,47 +1117,27 @@ void test_object_recycle(void)
 
 void test_oops_panic(void)
 {
-#if !defined(CONFIG_ARC)
 	test_oops(K_ERR_KERNEL_PANIC, K_ERR_KERNEL_OOPS);
-#else
-	ztest_test_skip(); /* FIXME: #17590 */
-#endif
 }
 
 void test_oops_oops(void)
 {
-#if !defined(CONFIG_ARC)
 	test_oops(K_ERR_KERNEL_OOPS, K_ERR_KERNEL_OOPS);
-#else
-	ztest_test_skip(); /* FIXME: #17590 */
-#endif
 }
 
 void test_oops_exception(void)
 {
-#if !defined(CONFIG_ARC)
 	test_oops(K_ERR_CPU_EXCEPTION, K_ERR_KERNEL_OOPS);
-#else
-	ztest_test_skip(); /* FIXME: #17590 */
-#endif
 }
 
 void test_oops_maxint(void)
 {
-#if !defined(CONFIG_ARC)
 	test_oops(INT_MAX, K_ERR_KERNEL_OOPS);
-#else
-	ztest_test_skip(); /* FIXME: #17590 */
-#endif
 }
 
 void test_oops_stackcheck(void)
 {
-#if !defined(CONFIG_ARC)
 	test_oops(K_ERR_STACK_CHK_FAIL, K_ERR_STACK_CHK_FAIL);
-#else
-	ztest_test_skip(); /* FIXME: #17590 */
-#endif
 }
 
 void test_main(void)

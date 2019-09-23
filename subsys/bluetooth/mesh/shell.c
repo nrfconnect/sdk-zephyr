@@ -215,6 +215,11 @@ static void prov_complete(u16_t net_idx, u16_t addr)
 	net.dst = addr;
 }
 
+static void prov_input_complete(void)
+{
+	shell_print(ctx_shell, "Input complete");
+}
+
 static void prov_reset(void)
 {
 	shell_print(ctx_shell, "The local node has been reset and needs "
@@ -357,6 +362,7 @@ static struct bt_mesh_prov prov = {
 	.input_size = 6,
 	.input_actions = (BT_MESH_ENTER_NUMBER | BT_MESH_ENTER_STRING),
 	.input = input,
+	.input_complete = prov_input_complete,
 };
 
 static int cmd_static_oob(const struct shell *shell, size_t argc, char *argv[])
@@ -710,6 +716,7 @@ static int cmd_net_send(const struct shell *shell, size_t argc, char *argv[])
 	return 0;
 }
 
+#if defined(CONFIG_BT_MESH_IV_UPDATE_TEST)
 static int cmd_iv_update(const struct shell *shell, size_t argc, char *argv[])
 {
 	if (bt_mesh_iv_update()) {
@@ -744,6 +751,7 @@ static int cmd_iv_update_test(const struct shell *shell, size_t argc,
 
 	return 0;
 }
+#endif /* CONFIG_BT_MESH_IV_UPDATE_TEST */
 
 static int cmd_rpl_clear(const struct shell *shell, size_t argc, char *argv[])
 {
@@ -1936,9 +1944,11 @@ SHELL_STATIC_SUBCMD_SET_CREATE(mesh_cmds,
 
 	/* Commands which access internal APIs, for testing only */
 	SHELL_CMD_ARG(net-send, NULL, "<hex string>", cmd_net_send, 2, 0),
+#if defined(CONFIG_BT_MESH_IV_UPDATE_TEST)
 	SHELL_CMD_ARG(iv-update, NULL, NULL, cmd_iv_update, 1, 0),
 	SHELL_CMD_ARG(iv-update-test, NULL, "<value: off, on>",
 		      cmd_iv_update_test, 2, 0),
+#endif
 	SHELL_CMD_ARG(rpl-clear, NULL, NULL, cmd_rpl_clear, 1, 0),
 
 	/* Configuration Client Model operations */

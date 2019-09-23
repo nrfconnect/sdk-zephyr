@@ -32,10 +32,18 @@ static struct settings_store_itf settings_nvs_itf = {
 static ssize_t settings_nvs_read_fn(void *back_end, void *data, size_t len)
 {
 	struct settings_nvs_read_fn_arg *rd_fn_arg;
+	ssize_t rc;
 
 	rd_fn_arg = (struct settings_nvs_read_fn_arg *)back_end;
 
-	return nvs_read(rd_fn_arg->fs, rd_fn_arg->id, data, len);
+	rc = nvs_read(rd_fn_arg->fs, rd_fn_arg->id, data, len);
+	if (rc > len) {
+		/* nvs_read signals that not all bytes were read
+		 * align read len to what was requested
+		 */
+		rc = len;
+	}
+	return rc;
 }
 
 int settings_nvs_src(struct settings_nvs *cf)
@@ -58,7 +66,7 @@ static int settings_nvs_load(struct settings_store *cs, const char *subtree)
 {
 	struct settings_nvs *cf = (struct settings_nvs *)cs;
 	struct settings_nvs_read_fn_arg read_fn_arg;
-	struct settings_handler *ch;
+	struct settings_handler_static *ch;
 	char name[SETTINGS_MAX_NAME_LEN + SETTINGS_EXTRA_LEN + 1];
 	char buf;
 	const char *name_argv;

@@ -1155,8 +1155,17 @@ static void disabled_cb(void *param)
 
 static inline void conn_release(struct ll_adv_set *adv)
 {
-	ll_conn_release(adv->lll.conn->hdr.parent);
+	struct lll_conn *lll = adv->lll.conn;
+	memq_link_t *link;
+
+	LL_ASSERT(!lll->link_tx_free);
+	link = memq_deinit(&lll->memq_tx.head, &lll->memq_tx.tail);
+	LL_ASSERT(link);
+	lll->link_tx_free = link;
+
+	ll_conn_release(lll->hdr.parent);
 	adv->lll.conn = NULL;
+
 	ll_rx_release(adv->node_rx_cc_free);
 	adv->node_rx_cc_free = NULL;
 	ll_rx_link_release(adv->link_cc_free);
@@ -1178,6 +1187,22 @@ static inline u8_t disable(u16_t handle)
 
 	mark = ull_disable_mark(adv);
 	LL_ASSERT(mark == adv);
+
+#if defined(CONFIG_BT_PERIPHERAL)
+	if (adv->lll.is_hdcd) {
+		ret = ticker_stop(TICKER_INSTANCE_ID_CTLR,
+				  TICKER_USER_ID_THREAD, TICKER_ID_ADV_STOP,
+				  ull_ticker_status_give, (void *)&ret_cb);
+		ret = ull_ticker_status_take(ret, &ret_cb);
+		if (ret) {
+			mark = ull_disable_mark(adv);
+			LL_ASSERT(mark == adv);
+
+			return BT_HCI_ERR_CMD_DISALLOWED;
+		}
+		ret_cb = TICKER_STATUS_BUSY;
+	}
+#endif
 
 	ret = ticker_stop(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_THREAD,
 			  TICKER_ID_ADV_BASE + handle,

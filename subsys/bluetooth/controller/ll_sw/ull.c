@@ -128,18 +128,17 @@ static MFIFO_DEFINE(prep, sizeof(struct lll_event), EVENT_PIPELINE_MAX);
  * Queue of pointers to struct node_rx_event_done.
  * The actual backing behind these pointers is mem_done
  */
-static MFIFO_DEFINE(done, sizeof(struct node_rx_event_done *),
-							EVENT_PIPELINE_MAX);
+static MFIFO_DEFINE(done, sizeof(struct node_rx_event_done *), EVENT_DONE_MAX);
 
 /* Backing storage for elements in mfifo_done */
 static struct {
 	void *free;
-	u8_t pool[sizeof(struct node_rx_event_done) * EVENT_PIPELINE_MAX];
+	u8_t pool[sizeof(struct node_rx_event_done) * EVENT_DONE_MAX];
 } mem_done;
 
 static struct {
 	void *free;
-	u8_t pool[sizeof(memq_link_t) * EVENT_PIPELINE_MAX];
+	u8_t pool[sizeof(memq_link_t) * EVENT_DONE_MAX];
 } mem_link_done;
 
 #define PDU_RX_CNT    (CONFIG_BT_CTLR_RX_BUFFERS + 3)
@@ -212,6 +211,7 @@ static void rx_demux(void *param);
 static inline int rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx);
 static inline void rx_demux_event_done(memq_link_t *link,
 				       struct node_rx_hdr *rx);
+static inline void ll_rx_link_inc_quota(int8_t delta);
 static void disabled_cb(void *param);
 
 #if defined(CONFIG_BT_CONN)
@@ -432,8 +432,7 @@ ll_rx_get_again:
 						   &memq_ll_rx.head, NULL);
 				mem_release(link, &mem_link_rx.free);
 
-				LL_ASSERT(mem_link_rx.quota_pdu < RX_CNT);
-				mem_link_rx.quota_pdu++;
+				ll_rx_link_inc_quota(1);
 
 				mem_release(rx, &mem_pdu_rx.free);
 
@@ -557,9 +556,7 @@ void ll_rx_dequeue(void)
 		 * since prio_recv_thread() peeked in memq_ll_rx via
 		 * ll_rx_get() before.
 		 */
-		LL_ASSERT(mem_link_rx.quota_pdu < RX_CNT);
-
-		mem_link_rx.quota_pdu++;
+		ll_rx_link_inc_quota(1);
 		break;
 #endif /* CONFIG_BT_OBSERVER ||
 	* CONFIG_BT_CTLR_SCAN_REQ_NOTIFY ||
@@ -782,6 +779,11 @@ void ll_rx_mem_release(void **node_rx)
 		case NODE_RX_TYPE_USER_START ... NODE_RX_TYPE_USER_END:
 #endif /* CONFIG_BT_CTLR_USER_EXT */
 
+		/* Ensure that at least one 'case' statement is present for this
+		 * code block.
+		 */
+		case NODE_RX_TYPE_NONE:
+			LL_ASSERT(rx_free->type != NODE_RX_TYPE_NONE);
 			mem_release(rx_free, &mem_pdu_rx.free);
 			break;
 
@@ -804,7 +806,6 @@ void ll_rx_mem_release(void **node_rx)
 		break;
 #endif /* CONFIG_BT_CONN */
 
-		case NODE_RX_TYPE_NONE:
 		case NODE_RX_TYPE_EVENT_DONE:
 		default:
 			LL_ASSERT(0);
@@ -815,6 +816,12 @@ void ll_rx_mem_release(void **node_rx)
 	*node_rx = rx;
 
 	rx_alloc(UINT8_MAX);
+}
+
+static inline void ll_rx_link_inc_quota(int8_t delta)
+{
+	LL_ASSERT(delta <= 0 || mem_link_rx.quota_pdu < RX_CNT);
+	mem_link_rx.quota_pdu += delta;
 }
 
 void *ll_rx_link_alloc(void)
@@ -1125,10 +1132,10 @@ static inline int init_reset(void)
 
 	/* Initialize done pool. */
 	mem_init(mem_done.pool, sizeof(struct node_rx_event_done),
-		 EVENT_PIPELINE_MAX, &mem_done.free);
+		 EVENT_DONE_MAX, &mem_done.free);
 
 	/* Initialize done link pool. */
-	mem_init(mem_link_done.pool, sizeof(memq_link_t), EVENT_PIPELINE_MAX,
+	mem_init(mem_link_done.pool, sizeof(memq_link_t), EVENT_DONE_MAX,
 		 &mem_link_done.free);
 
 	/* Allocate done buffers */
@@ -1224,11 +1231,11 @@ static inline void *done_release(memq_link_t *link,
 {
 	u8_t idx;
 
-	done->hdr.link = link;
-
 	if (!MFIFO_ENQUEUE_IDX_GET(done, &idx)) {
 		return NULL;
 	}
+
+	done->hdr.link = link;
 
 	MFIFO_BY_IDX_ENQUEUE(done, idx, done);
 
@@ -1260,7 +1267,7 @@ static inline void rx_alloc(u8_t max)
 
 		MFIFO_BY_IDX_ENQUEUE(ll_pdu_rx_free, idx, rx);
 
-		mem_link_rx.quota_pdu--;
+		ll_rx_link_inc_quota(-1);
 	}
 #endif /* CONFIG_BT_CONN */
 
@@ -1287,7 +1294,7 @@ static inline void rx_alloc(u8_t max)
 
 		MFIFO_BY_IDX_ENQUEUE(pdu_rx_free, idx, rx);
 
-		mem_link_rx.quota_pdu--;
+		ll_rx_link_inc_quota(-1);
 	}
 }
 

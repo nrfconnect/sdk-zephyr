@@ -196,6 +196,22 @@
 	};
 
 	//
+	// IO channels
+	//
+
+	// Lots of common code with PWMs and clocks, so just test the basics
+	io-channel-test {
+		io-channel {
+			compatible = "io-channel";
+			#io-channel-cells = <1>;
+		};
+		node {
+			io-channels = <&{/io-channel-test/io-channel} 1>;
+			io-channel-names = "io-channel";
+		};
+	};
+
+	//
 	// 'reg'
 	//
 
@@ -258,7 +274,7 @@
 	};
 
 	//
-	// !include in bindings
+	// For testing 'include:'
 	//
 
 	binding-include {
@@ -266,6 +282,7 @@
 		foo = <0>;
 		bar = <1>;
 		baz = <2>;
+		qaz = <3>;
 	};
 
 	//
@@ -274,14 +291,34 @@
 
 	props {
 		compatible = "props";
+		existent-boolean;
 		int = <1>;
 		array = <1 2 3>;
 		uint8-array = [ 12 34 ];
 		string = "foo";
 		string-array = "foo", "bar", "baz";
+		phandle-ref = < &{/props/node} >;
+		phandle-refs = < &{/props/node} &{/props/node2} >;
+		phandle-refs-and-vals = < &{/props/node} 1 &{/props/node2} 2 >;
 		// Does not appear in the binding, so won't create an entry in
 		// Device.props
 		not-speced = <0>;
+
+		node {
+		};
+
+		node2 {
+		};
+	};
+
+	//
+	// For testing Device.props with 'default:' values in binding
+	//
+
+	defaults {
+		compatible = "defaults";
+		// Should override the 'default:' in the binding
+		default-not-used = <234>;
 	};
 
 	//
@@ -295,5 +332,15 @@
 			bar = <2>;
 			not-speced = <0>;
 		};
+	};
+
+	//
+	// For testing deprecated features
+	//
+
+	deprecated {
+		compatible = "deprecated";
+		required = <1>;
+		required-2 = <2>;
 	};
 };

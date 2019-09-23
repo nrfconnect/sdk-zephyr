@@ -20,9 +20,10 @@
 	/* exports (private APIs) */
 
 	GTEXT(__start)
+	GTEXT(z_x86_enable_paging)
 
 	/* externs */
-	GTEXT(z_cstart)
+	GTEXT(z_x86_prep_c)
 
 	GDATA(_idt_base_address)
 	GDATA(_interrupt_stack)
@@ -273,30 +274,6 @@ __csSet:
 	lgdt	%ds:_gdt
 #endif
 
-#ifdef CONFIG_X86_MMU
-
-	/* load the page directory address into the registers*/
-	movl $z_x86_kernel_pdpt, %eax
-	movl %eax, %cr3
-
-	/* Enable PAE */
-	movl %cr4, %eax
-	orl $CR4_PAE_ENABLE, %eax
-	movl %eax, %cr4
-
-	/* IA32_EFER NXE bit set */
-	movl $0xC0000080, %ecx
-	rdmsr
-	orl $0x800, %eax
-	wrmsr
-
-	/* Enable paging (CR0.PG, bit 31) / write protect (CR0.WP, bit 16) */
-	movl %cr0, %eax
-	orl $CR0_PG_WP_ENABLE, %eax
-	movl %eax, %cr0
-
-#endif /* CONFIG_X86_MMU */
-
 #if defined(CONFIG_X86_ENABLE_TSS)
 	mov $MAIN_TSS, %ax
 	ltr %ax
@@ -331,10 +308,8 @@ __csSet:
 	outb %al, $0xA1		/* set i8259 slave mask (IRQs 8-15) */
 #endif
 
-	/* Jump to C portion of kernel initialization and never return */
-
-	jmp	z_cstart
-
+	/* call C portion of kernel initialization and never return */
+	call	z_x86_prep_c
 
 _x86_bss_zero:
 	/* ECX = size, EDI = starting address */
@@ -398,6 +373,31 @@ dataWords:
 	movsl				/* copy data 4 bytes at a time */
 	ret
 #endif /* CONFIG_XIP */
+
+#ifdef CONFIG_X86_MMU
+z_x86_enable_paging:
+	/* load the page directory address into the registers*/
+	movl $z_x86_kernel_pdpt, %eax
+	movl %eax, %cr3
+
+	/* Enable PAE */
+	movl %cr4, %eax
+	orl $CR4_PAE_ENABLE, %eax
+	movl %eax, %cr4
+
+	/* IA32_EFER NXE bit set */
+	movl $0xC0000080, %ecx
+	rdmsr
+	orl $0x800, %eax
+	wrmsr
+
+	/* Enable paging (CR0.PG, bit 31) / write protect (CR0.WP, bit 16) */
+	movl %cr0, %eax
+	orl $CR0_PG_WP_ENABLE, %eax
+	movl %eax, %cr0
+
+	ret
+#endif /* CONFIG_X86_MMU */
 
 #if defined(CONFIG_SSE)
 

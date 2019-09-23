@@ -416,6 +416,12 @@ This node would get mapped to a binding with this in it:
 
 .. code-block:: yaml
 
+   compatible: "foo-company,bar-device"
+
+You might also run across this legacy syntax, which works the same way:
+
+.. code-block:: yaml
+
    ...
 
    properties:
@@ -438,9 +444,9 @@ into account when mapping nodes to bindings. See the description of ``parent``
 and ``child`` in the template below.
 
 Below is a template that shows the format of binding files, stored in
-:zephyr_file:`dts/bindings/binding-template.yaml`.
+:zephyr_file:`dts/binding-template.yaml`.
 
-.. literalinclude:: ../../../dts/bindings/binding-template.yaml
+.. literalinclude:: ../../../dts/binding-template.yaml
    :language: yaml
 
 

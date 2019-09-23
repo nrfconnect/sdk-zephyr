@@ -11,10 +11,6 @@
 #ifndef ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_ASM_INLINE_GCC_H_
 #define ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_ASM_INLINE_GCC_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /*
  * The file must not be included directly
  * Include arch/cpu.h instead
@@ -25,6 +21,10 @@ extern "C" {
 #include <zephyr/types.h>
 #include <arch/arm/exc.h>
 #include <irq.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  *
@@ -90,6 +90,12 @@ static ALWAYS_INLINE unsigned int z_arch_irq_lock(void)
 		: "=r"(key), "=r"(tmp)
 		: "i"(_EXC_IRQ_DEFAULT_PRIO)
 		: "memory");
+#elif defined(CONFIG_ARMV7_R)
+	__asm__ volatile("mrs %0, cpsr;"
+		"cpsid i"
+		: "=r" (key)
+		:
+		: "memory", "cc");
 #else
 #error Unknown ARM architecture
 #endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
@@ -132,6 +138,11 @@ static ALWAYS_INLINE void z_arch_irq_unlock(unsigned int key)
 		"msr BASEPRI, %0;"
 		"isb;"
 		:  : "r"(key) : "memory");
+#elif defined(CONFIG_ARMV7_R)
+	__asm__ volatile("msr cpsr_c, %0"
+			:
+			: "r" (key)
+			: "memory", "cc");
 #else
 #error Unknown ARM architecture
 #endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
@@ -147,10 +158,10 @@ static ALWAYS_INLINE bool z_arch_irq_unlocked(unsigned int key)
 	return key == 0;
 }
 
-#endif /* _ASMLANGUAGE */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* _ASMLANGUAGE */
 
 #endif /* ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_ASM_INLINE_GCC_H_ */

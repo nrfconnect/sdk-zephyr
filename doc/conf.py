@@ -14,7 +14,6 @@
 
 import sys
 import os
-from subprocess import CalledProcessError, check_output, DEVNULL
 
 if "ZEPHYR_BASE" not in os.environ:
     sys.exit("$ZEPHYR_BASE environment variable undefined.")
@@ -56,7 +55,7 @@ extensions = [
 ]
 
 # Only use SVG converter when it is really needed, e.g. LaTeX.
-if tags.has("svgconvert"):
+if tags.has("svgconvert"):  # pylint: disable=undefined-variable
     extensions.append('sphinxcontrib.rsvgconverter')
 
 # Add any paths that contain templates here, relative to this directory.
@@ -97,7 +96,7 @@ try:
             extraversion = val
         if version_major and version_minor and patchlevel and extraversion:
             break
-except:
+except Exception:
     pass
 finally:
     if version_major and version_minor and patchlevel and extraversion is not None:
@@ -178,8 +177,11 @@ rst_epilog = """
 import sphinx_rtd_theme
 html_theme = "sphinx_rtd_theme"
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+html_theme_options = {
+    'prev_next_buttons_location': None
+}
 
-if tags.has('release'):
+if tags.has('release'):  # pylint: disable=undefined-variable
     is_release = True
     docs_title = 'Docs / %s' %(version)
 else:
@@ -521,12 +523,12 @@ html_context = {
     'is_release': is_release,
     'theme_logo_only': False,
     'current_version': version,
-    'versions': ( ("latest", "/"),
+    'versions': (("latest", "/"),
+                 ("2.0.0", "/2.0.0/"),
                  ("1.14.0", "/1.14.0/"),
                  ("1.13.0", "/1.13.0/"),
                  ("1.12.0", "/1.12.0/"),
                  ("1.11.0", "/1.11.0/"),
-                 ("1.10.0", "/1.10.0/"),
                 )
 }
 

@@ -147,7 +147,24 @@ static void publish_sent(int err, void *user_data)
 	}
 }
 
+static void publish_start(u16_t duration, int err, void *user_data)
+{
+	struct bt_mesh_model *mod = user_data;
+	struct bt_mesh_model_pub *pub = mod->pub;
+
+	if (err) {
+		BT_ERR("Failed to publish: err %d", err);
+		return;
+	}
+
+	/* Initialize the timestamp for the beginning of a new period */
+	if (pub->count == BT_MESH_PUB_TRANSMIT_COUNT(pub->retransmit)) {
+		pub->period_start = k_uptime_get_32();
+	}
+}
+
 static const struct bt_mesh_send_cb pub_sent_cb = {
+	.start = publish_start,
 	.end = publish_sent,
 };
 
@@ -219,8 +236,6 @@ static void mod_publish(struct k_work *work)
 
 	__ASSERT_NO_MSG(pub->update != NULL);
 
-	pub->period_start = k_uptime_get_32();
-
 	err = pub->update(pub->mod);
 	if (err) {
 		BT_ERR("Failed to update publication message");
@@ -230,11 +245,6 @@ static void mod_publish(struct k_work *work)
 	err = bt_mesh_model_publish(pub->mod);
 	if (err) {
 		BT_ERR("Publishing failed (err %d)", err);
-	}
-
-	if (pub->count) {
-		/* Retransmissions also control the timer */
-		k_delayed_work_cancel(&pub->timer);
 	}
 }
 
@@ -392,17 +402,21 @@ static struct bt_mesh_model *bt_mesh_elem_find_group(struct bt_mesh_elem *elem,
 
 struct bt_mesh_elem *bt_mesh_elem_find(u16_t addr)
 {
-	int i;
+	u16_t index;
 
-	for (i = 0; i < dev_comp->elem_count; i++) {
-		struct bt_mesh_elem *elem = &dev_comp->elem[i];
+	if (BT_MESH_ADDR_IS_UNICAST(addr)) {
+		index = (addr - dev_comp->elem[0].addr);
+		if (index < dev_comp->elem_count) {
+			return &dev_comp->elem[index];
+		} else {
+			return NULL;
+		}
+	}
 
-		if (BT_MESH_ADDR_IS_GROUP(addr) ||
-		    BT_MESH_ADDR_IS_VIRTUAL(addr)) {
-			if (bt_mesh_elem_find_group(elem, addr)) {
-				return elem;
-			}
-		} else if (elem->addr == addr) {
+	for (index = 0; index < dev_comp->elem_count; index++) {
+		struct bt_mesh_elem *elem = &dev_comp->elem[index];
+
+		if (bt_mesh_elem_find_group(elem, addr)) {
 			return elem;
 		}
 	}
@@ -503,8 +517,7 @@ bool bt_mesh_fixed_group_match(u16_t addr)
 	case BT_MESH_ADDR_ALL_NODES:
 		return true;
 	case BT_MESH_ADDR_PROXIES:
-		/* TODO: Proxy not yet supported */
-		return false;
+		return (bt_mesh_gatt_proxy_get() == BT_MESH_GATT_PROXY_ENABLED);
 	case BT_MESH_ADDR_FRIENDS:
 		return (bt_mesh_friend_get() == BT_MESH_FRIEND_ENABLED);
 	case BT_MESH_ADDR_RELAYS:
@@ -720,7 +733,7 @@ int bt_mesh_model_publish(struct bt_mesh_model *model)
 	return 0;
 }
 
-struct bt_mesh_model *bt_mesh_model_find_vnd(struct bt_mesh_elem *elem,
+struct bt_mesh_model *bt_mesh_model_find_vnd(const struct bt_mesh_elem *elem,
 					     u16_t company, u16_t id)
 {
 	u8_t i;
@@ -735,7 +748,7 @@ struct bt_mesh_model *bt_mesh_model_find_vnd(struct bt_mesh_elem *elem,
 	return NULL;
 }
 
-struct bt_mesh_model *bt_mesh_model_find(struct bt_mesh_elem *elem,
+struct bt_mesh_model *bt_mesh_model_find(const struct bt_mesh_elem *elem,
 					 u16_t id)
 {
 	u8_t i;

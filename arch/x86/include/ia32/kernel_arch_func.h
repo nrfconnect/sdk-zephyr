@@ -12,6 +12,8 @@
 
 #ifndef _ASMLANGUAGE
 
+#include <stddef.h> /* For size_t */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,6 +30,9 @@ extern K_THREAD_STACK_DEFINE(_interrupt_stack, CONFIG_ISR_STACK_SIZE);
 void z_x86_early_serial_init(void);
 #endif
 
+/* Create all page tables with boot configuration and enable paging */
+void z_x86_paging_init(void);
+
 /**
  *
  * @brief Performs architecture-specific initialization
@@ -40,17 +45,7 @@ void z_x86_early_serial_init(void);
  */
 static inline void kernel_arch_init(void)
 {
-	_kernel.nested = 0;
-	_kernel.irq_stack = Z_THREAD_STACK_BUFFER(_interrupt_stack) +
-				CONFIG_ISR_STACK_SIZE;
-
-#ifdef CONFIG_X86_VERY_EARLY_CONSOLE
-	z_x86_early_serial_init();
-#endif
-#if CONFIG_X86_STACK_PROTECTION
-	z_x86_mmu_set_flags(&z_x86_kernel_pdpt, _interrupt_stack, MMU_PAGE_SIZE,
-			    MMU_ENTRY_READ, MMU_PTE_RW_MASK, true);
-#endif
+	/* No-op on this arch */
 }
 
 /**
@@ -95,7 +90,9 @@ static inline struct x86_mmu_pdpt *z_x86_pdpt_get(struct k_thread *thread)
 	return &header->kernel_data.pdpt;
 }
 #endif /* CONFIG_USERSPACE */
-#include <stddef.h> /* For size_t */
+
+/* ASM code to fiddle with registers to enable the MMU with PAE paging */
+void z_x86_enable_paging(void);
 
 #ifdef __cplusplus
 }

@@ -255,7 +255,7 @@ static inline void k_object_access_all_grant(void *object)
 #endif /* !CONFIG_USERSPACE */
 
 /**
- * grant a thread access to a kernel object
+ * Grant a thread access to a kernel object
  *
  * The thread will be granted access to the object if the caller is from
  * supervisor mode, or the caller is from user mode AND has permissions
@@ -267,7 +267,7 @@ static inline void k_object_access_all_grant(void *object)
 __syscall void k_object_access_grant(void *object, struct k_thread *thread);
 
 /**
- * grant a thread access to a kernel object
+ * Revoke a thread's access to a kernel object
  *
  * The thread will lose access to the object if the caller is from
  * supervisor mode, or the caller is from user mode AND has permissions
@@ -282,7 +282,7 @@ void k_object_access_revoke(void *object, struct k_thread *thread);
 __syscall void k_object_release(void *object);
 
 /**
- * grant all present and future threads access to an object
+ * Grant all present and future threads access to an object
  *
  * If the caller is from supervisor mode, or the caller is from user mode and
  * have sufficient permissions on the object, then that object will have
@@ -1339,6 +1339,16 @@ __syscall int k_thread_name_copy(k_tid_t thread_id, char *buf,
 				 size_t size);
 
 /**
+ * @brief Get thread state string
+ *
+ * Get the human friendly thread state string
+ *
+ * @param thread_id Thread ID
+ * @retval Thread state string, empty if no state flag is set
+ */
+const char *k_thread_state_str(k_tid_t thread_id);
+
+/**
  * @}
  */
 
@@ -1729,13 +1739,14 @@ __deprecated static inline void k_disable_sys_clock_always_on(void)
 /**
  * @brief Get system uptime (32-bit version).
  *
- * This routine returns the lower 32-bits of the elapsed time since the system
- * booted, in milliseconds.
+ * This routine returns the lower 32 bits of the system uptime in
+ * milliseconds.
  *
- * This routine can be more efficient than k_uptime_get(), as it reduces the
- * need for interrupt locking and 64-bit math. However, the 32-bit result
- * cannot hold a system uptime time larger than approximately 50 days, so the
- * caller must handle possible rollovers.
+ * Because correct conversion requires full precision of the system
+ * clock there is no benefit to using this over k_uptime_get() unless
+ * you know the application will never run long enough for the system
+ * clock to approach 2^32 ticks.  Calls to this function may involve
+ * interrupt blocking and 64-bit math.
  *
  * @note
  *    @rst
@@ -1744,9 +1755,12 @@ __deprecated static inline void k_disable_sys_clock_always_on(void)
  *    :option:`CONFIG_SYS_CLOCK_TICKS_PER_SEC` config option
  *    @endrst
  *
- * @return Current uptime in milliseconds.
+ * @return The low 32 bits of the current uptime, in milliseconds.
  */
-__syscall u32_t k_uptime_get_32(void);
+static inline u32_t k_uptime_get_32(void)
+{
+	return (u32_t)k_uptime_get();
+}
 
 /**
  * @brief Get elapsed time.

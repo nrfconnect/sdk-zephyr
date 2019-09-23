@@ -56,6 +56,8 @@ enum net_link_type {
 	/** Dummy link address. Used in testing apps and loopback support. */
 	NET_LINK_DUMMY,
 	/** CANBUS link address. */
+	NET_LINK_CANBUS_RAW,
+	/** 6loCAN link address. */
 	NET_LINK_CANBUS,
 } __packed;
 

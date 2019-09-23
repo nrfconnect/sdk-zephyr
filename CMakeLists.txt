@@ -40,7 +40,7 @@ enable_language(C CXX ASM)
 
 # Verify that the toolchain can compile a dummy file, if it is not we
 # won't be able to test for compatibility with certain C flags.
-check_c_compiler_flag("" toolchain_is_ok)
+zephyr_check_compiler_flag(C "" toolchain_is_ok)
 assert(toolchain_is_ok "The toolchain is unable to build a dummy C file. See CMakeError.log.")
 
 # In some cases the "final" things are not used at all and "_prebuilt"
@@ -213,9 +213,6 @@ if(CONFIG_MISRA_SANE)
   zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:${CC_MISRA_SANE_FLAG}>)
   zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:${CPP_MISRA_SANE_FLAG}>)
 endif()
-
-# @Intent: Set compiler specific flags for standard C includes
-toolchain_cc_nostdinc()
 
 # @Intent: Set compiler specific macro inclusion of AUTOCONF_H
 toolchain_cc_imacros(${AUTOCONF_H})
@@ -470,7 +467,6 @@ if(EXISTS ${CMAKE_BINARY_DIR}/zephyr_modules.txt)
     # lazy regexes (it supports greedy only).
     string(REGEX REPLACE "\"(.*)\":\".*\"" "\\1" module_name ${module})
     string(REGEX REPLACE "\".*\":\"(.*)\"" "\\1" module_path ${module})
-    message("Including module: ${module_name} in path: ${module_path}")
     # Note the second, binary_dir parameter requires the added
     # subdirectory to have its own, local cmake target(s). If not then
     # this binary_dir is created but stays empty. Object files land in
@@ -637,7 +633,9 @@ add_custom_command(
   COMMAND ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/gen_offset_header.py
   -i $<TARGET_OBJECTS:${OFFSETS_LIB}>
   -o ${OFFSETS_H_PATH}
-  DEPENDS ${OFFSETS_LIB}
+  DEPENDS
+  ${OFFSETS_LIB}
+  $<TARGET_OBJECTS:${OFFSETS_LIB}>
 )
 add_custom_target(${OFFSETS_H_TARGET} DEPENDS ${OFFSETS_H_PATH})
 
@@ -1253,7 +1251,7 @@ if(CONFIG_OUTPUT_PRINT_MEMORY_USAGE)
     )
 endif()
 
-if(CONFIG_BUILD_OUTPUT_HEX)
+if(CONFIG_BUILD_OUTPUT_HEX OR BOARD_FLASH_RUNNER STREQUAL openocd)
   set(out_hex_cmd    "")
   set(out_hex_byprod "")
   set(out_hex_sections_remove
@@ -1497,3 +1495,8 @@ if(CONFIG_BOARD_DEPRECATED)
       removed in version ${CONFIG_BOARD_DEPRECATED}"
   )
 endif()
+
+# @Intent: Set compiler specific flags for standard C includes
+# Done at the very end, so any other system includes which may
+# be added by Zephyr components were first in list.
+toolchain_cc_nostdinc()

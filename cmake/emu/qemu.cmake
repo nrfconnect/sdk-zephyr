@@ -2,6 +2,8 @@
 
 if("${ARCH}" STREQUAL "x86")
   set_ifndef(QEMU_binary_suffix i386)
+elseif(DEFINED QEMU_ARCH)
+  set_ifndef(QEMU_binary_suffix ${QEMU_ARCH})
 else()
   set_ifndef(QEMU_binary_suffix ${ARCH})
 endif()
@@ -230,15 +232,6 @@ elseif(QEMU_NET_STACK)
       )
   endif()
 endif(QEMU_PIPE_STACK)
-
-if(CONFIG_X86_IAMCU)
-  list(APPEND PRE_QEMU_COMMANDS
-    COMMAND
-    ${PYTHON_EXECUTABLE}
-    ${ZEPHYR_BASE}/scripts/qemu-machine-hack.py
-    $<TARGET_FILE:${logical_target_for_zephyr_elf}>
-    )
-endif()
 
 if(CONFIG_X86_64)
   set(QEMU_KERNEL_FILE "${CMAKE_BINARY_DIR}/zephyr-qemu.elf")

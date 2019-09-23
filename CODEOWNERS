@@ -18,6 +18,7 @@
 /arch/arm/                                @MaureenHelm @galak @ioannisg
 /arch/arm/core/cortex_m/cmse/             @ioannisg
 /arch/arm/include/cortex_m/cmse.h         @ioannisg
+/arch/arm/core/cortex_r/                  @MaureenHelm @galak @ioannisg @bbolen
 /arch/common/                             @andrewboie @ioannisg @andyross
 /arch/x86_64/                             @andyross
 /soc/arc/snps_*/                          @vonhust @ruuddw
@@ -136,7 +137,6 @@
 /drivers/led/                             @Mani-Sadhasivam
 /drivers/led_strip/                       @mbolivar
 /drivers/modem/                           @mike-scott
-/drivers/pci/                             @gnuless
 /drivers/pcie/                            @gnuless
 /drivers/pinmux/stm32/                    @rsalveti @idlethread
 /drivers/sensor/                          @MaureenHelm
@@ -153,6 +153,8 @@
 /drivers/serial/uart_liteuart.c           @mateusz-holenko @kgugala @pgielda
 /drivers/serial/Kconfig.rtt               @carlescufi @pkral78
 /drivers/serial/uart_rtt.c                @carlescufi @pkral78
+/drivers/serial/Kconfig.xlnx              @wjliang
+/drivers/serial/uart_xlnx_ps.c            @wjliang
 /drivers/net/                             @jukkar @tbursztyka
 /drivers/ptp_clock/                       @jukkar
 /drivers/spi/                             @tbursztyka
@@ -162,6 +164,7 @@
 /drivers/timer/altera_avalon_timer_hal.c  @wentongwu
 /drivers/timer/riscv_machine_timer.c      @nategraff-sifive @kgugala @pgielda
 /drivers/timer/litex_timer.c              @mateusz-holenko @kgugala @pgielda
+/drivers/timer/xlnx_psttc_timer.c         @wjliang
 /drivers/usb/                             @jfischer-phytec-iot @finikorg
 /drivers/usb/device/usb_dc_stm32.c        @ydamigos @loicpoulain
 /drivers/i2c/i2c_ll_stm32*                @ldts @ydamigos
@@ -171,6 +174,7 @@
 /drivers/*/*xec*                          @franciscomunoz @albertofloyd @scottwcpg
 /drivers/wifi/                            @jukkar @tbursztyka @pfalcon
 /drivers/wifi/eswifi/                     @loicpoulain
+/dts/arc/                                 @vonhust @ruuddw @iriszzw
 /dts/arm/atmel/samr21.dtsi                @benpicco
 /dts/arm/st/                              @erwango
 /dts/arm/ti/cc13?2*                       @bwitherspoon
@@ -182,6 +186,8 @@
 /dts/riscv/rv32m1*                        @MaureenHelm
 /dts/riscv/riscv32-fe310.dtsi             @nategraff-sifive
 /dts/riscv/riscv32-litex-vexriscv.dtsi    @mateusz-holenko @kgugala @pgielda
+/dts/arm/armv7-r.dtsi                     @bbolen
+/dts/arm/xilinx/                          @bbolen
 /dts/xtensa/xtensa.dtsi                   @ydamigos
 /dts/bindings/                            @galak
 /dts/bindings/can/                        @alexanderwachter
@@ -196,15 +202,9 @@
 /dts/bindings/*/litex*                    @mateusz-holenko @kgugala @pgielda
 /dts/bindings/*/vexriscv*                 @mateusz-holenko @kgugala @pgielda
 /dts/posix/                               @aescolar @vanwinkeljan
-/ext/hal/atmel/asf/sam/include/same70*/   @aurel32
-/ext/hal/atmel/asf/sam0/include/samr21/   @benpicco
 /dts/bindings/sensor/*bme680*             @BoschSensortec
 /dts/bindings/sensor/st*                  @avisconti
 /ext/hal/cmsis/                           @MaureenHelm @galak
-/ext/hal/microchip/                       @franciscomunoz @albertofloyd @scottwcpg
-/ext/hal/nordic/                          @carlescufi @anangl
-/ext/hal/nxp/                             @MaureenHelm
-/ext/hal/ti/simplelink/                   @vanti
 /ext/lib/crypto/tinycrypt/                @ceolin
 /include/                                 @nashif @carlescufi @galak @MaureenHelm
 /include/drivers/adc.h                    @anangl
@@ -241,6 +241,7 @@
 /include/device.h                         @wentongwu @nashif
 /include/display/                         @vanwinkeljan
 /include/display/framebuf.h               @gnuless
+/include/dt-bindings/clock/kinetis_mcg.h  @henrikbrixandersen
 /include/dt-bindings/clock/kinetis_scg.h  @henrikbrixandersen
 /include/dt-bindings/pcie/                @gnuless
 /include/dt-bindings/usb/usb.h            @galak @finikorg
@@ -316,7 +317,6 @@
 /arch/x86/gen_gdt.py                      @andrewboie
 /arch/x86/gen_idt.py                      @andrewboie
 /scripts/gen_kobject_list.py              @andrewboie
-/arch/x86/gen_mmu_x86.py                  @andrewboie
 /scripts/gen_priv_stacks.py               @andrewboie @agross-oss @ioannisg
 /scripts/gen_syscall_header.py            @andrewboie
 /scripts/gen_syscalls.py                  @andrewboie
@@ -330,6 +330,7 @@
 /scripts/zephyr_module.py                 @tejlmand
 /subsys/bluetooth/                        @joerchan @jhedberg @Vudentz
 /subsys/bluetooth/controller/             @carlescufi @cvinayak @thoh-ot
+/subsys/bluetooth/mesh/                   @jhedberg @trond-snekvik @joerchan @Vudentz
 /subsys/debug/                            @nashif
 /subsys/disk/disk_access_spi_sdhc.c       @JunYangNXP
 /subsys/disk/disk_access_sdhc.h           @JunYangNXP
@@ -354,6 +355,7 @@
 /subsys/net/lib/sockets/                  @jukkar @tbursztyka @pfalcon
 /subsys/net/lib/tls_credentials/          @rlubos
 /subsys/net/l2/                           @jukkar @tbursztyka
+/subsys/net/l2/canbus/                    @alexanderwachter @jukkar
 /subsys/power/                            @wentongwu @pizi-nordic
 /subsys/settings/                         @nvlsianpu
 /subsys/shell/                            @jakub-uC @nordic-krch
@@ -361,6 +363,7 @@
 /subsys/testsuite/                        @nashif
 /subsys/usb/                              @jfischer-phytec-iot @finikorg
 /tests/                                   @nashif
+/tests/application_development/libcxx/    @pabigot
 /tests/arch/arm/                          @ioannisg
 /tests/boards/native_posix/               @aescolar
 /tests/boards/intel_s1000_crb/            @dcpleung @sathishkuttan

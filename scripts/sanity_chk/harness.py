@@ -31,7 +31,7 @@ class Harness:
 
         if config:
             self.type = config.get('type', None)
-            self.regex = config.get('regex', [] )
+            self.regex = config.get('regex', [])
             self.repeat = config.get('repeat', 1)
             self.ordered = config.get('ordered', True)
 
@@ -62,7 +62,7 @@ class Console(Harness):
                 if pattern.search(line) and not r in self.matches:
                     self.matches[r] = line
             if len(self.matches) == len(self.regex):
-                    self.state = "passed"
+                self.state = "passed"
 
         if self.fail_on_fault:
             if self.FAULT in line:

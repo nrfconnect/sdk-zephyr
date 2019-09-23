@@ -709,13 +709,6 @@ function(zephyr_check_compiler_flag lang option check)
     ZEPHYR_TOOLCHAIN_CAPABILITY_CACHE_DIR
     ${USER_CACHE_DIR}/ToolchainCapabilityDatabase
     )
-  if(DEFINED ZEPHYR_TOOLCHAIN_CAPABILITY_CACHE)
-    assert(0
-      "The deprecated ZEPHYR_TOOLCHAIN_CAPABILITY_CACHE is now a directory"
-      "and is named ZEPHYR_TOOLCHAIN_CAPABILITY_CACHE_DIR"
-      )
-    # Remove this deprecation warning in version 1.14.
-  endif()
 
   # The toolchain capability database/cache is maintained as a
   # directory of files. The filenames in the directory are keys, and
@@ -754,8 +747,17 @@ function(zephyr_check_compiler_flag lang option check)
     return()
   endif()
 
-  # Test the flag
-  check_compiler_flag(${lang} "${option}" inner_check)
+  # Flags that start with -Wno-<warning> can not be tested by
+  # check_compiler_flag, they will always pass, but -W<warning> can be
+  # tested, so to test -Wno-<warning> flags we test -W<warning>
+  # instead.
+  if("${option}" MATCHES "-Wno-(.*)")
+    set(possibly_translated_option -W${CMAKE_MATCH_1})
+  else()
+    set(possibly_translated_option ${option})
+  endif()
+
+  check_compiler_flag(${lang} "${possibly_translated_option}" inner_check)
 
   set(${check} ${inner_check} PARENT_SCOPE)
 

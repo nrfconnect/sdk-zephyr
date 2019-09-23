@@ -73,6 +73,13 @@ def run():
                  "[<PWM, name: zero-cell, target: <Device /pwm-test/pwm-0 in 'test.dts', binding test-bindings/pwm-0-cell.yaml>, specifier: {}>, <PWM, name: one-cell, target: <Device /pwm-test/pwm-1 in 'test.dts', binding test-bindings/pwm-1-cell.yaml>, specifier: {'one': 1}>]")
 
     #
+    # Test IO channels
+    #
+
+    verify_streq(edt.get_dev("/io-channel-test/node").iochannels,
+                 "[<IOChannel, name: io-channel, target: <Device /io-channel-test/io-channel in 'test.dts', binding test-bindings/io-channel.yaml>, specifier: {'one': 1}>]")
+
+    #
     # Test 'reg'
     #
 
@@ -89,14 +96,14 @@ def run():
                  "[<Register, addr: 0x30000000200000001, size: 0x1>]")
 
     #
-    # Test !include in bindings
+    # Test 'include:' and the legacy 'inherits: !include ...'
     #
 
     verify_streq(edt.get_dev("/binding-include").description,
                  "Parent binding")
 
     verify_streq(edt.get_dev("/binding-include").props,
-                 "{'compatible': <Property, name: compatible, value: ['binding-include-test']>, 'foo': <Property, name: foo, value: 0>, 'bar': <Property, name: bar, value: 1>, 'baz': <Property, name: baz, value: 2>}")
+                 "{'foo': <Property, name: foo, type: int, value: 0>, 'bar': <Property, name: bar, type: int, value: 1>, 'baz': <Property, name: baz, type: int, value: 2>, 'qaz': <Property, name: qaz, type: int, value: 3>}")
 
     #
     # Test 'sub-node:' in binding
@@ -106,14 +113,21 @@ def run():
                  "Sub-node test")
 
     verify_streq(edt.get_dev("/parent-with-sub-node/node").props,
-                 "{'foo': <Property, name: foo, value: 1>, 'bar': <Property, name: bar, value: 2>}")
+                             "{'foo': <Property, name: foo, type: int, value: 1>, 'bar': <Property, name: bar, type: int, value: 2>}")
 
     #
     # Test Device.property (derived from DT and 'properties:' in the binding)
     #
 
     verify_streq(edt.get_dev("/props").props,
-                 r"{'compatible': <Property, name: compatible, value: ['props']>, 'int': <Property, name: int, value: 1>, 'array': <Property, name: array, value: [1, 2, 3]>, 'uint8-array': <Property, name: uint8-array, value: b'\x124'>, 'string': <Property, name: string, value: 'foo'>, 'string-array': <Property, name: string-array, value: ['foo', 'bar', 'baz']>}")
+                 r"{'nonexistent-boolean': <Property, name: nonexistent-boolean, type: boolean, value: False>, 'existent-boolean': <Property, name: existent-boolean, type: boolean, value: True>, 'int': <Property, name: int, type: int, value: 1>, 'array': <Property, name: array, type: array, value: [1, 2, 3]>, 'uint8-array': <Property, name: uint8-array, type: uint8-array, value: b'\x124'>, 'string': <Property, name: string, type: string, value: 'foo'>, 'string-array': <Property, name: string-array, type: string-array, value: ['foo', 'bar', 'baz']>, 'phandle-ref': <Property, name: phandle-ref, type: phandle, value: <Device /props/node in 'test.dts', no binding>>, 'phandle-refs': <Property, name: phandle-refs, type: phandles, value: [<Device /props/node in 'test.dts', no binding>, <Device /props/node2 in 'test.dts', no binding>]>}")
+
+    #
+    # Test property default values given in bindings
+    #
+
+    verify_streq(edt.get_dev("/defaults").props,
+                 r"{'int': <Property, name: int, type: int, value: 123>, 'array': <Property, name: array, type: array, value: [1, 2, 3]>, 'uint8-array': <Property, name: uint8-array, type: uint8-array, value: b'\x89\xab\xcd'>, 'string': <Property, name: string, type: string, value: 'hello'>, 'string-array': <Property, name: string-array, type: string-array, value: ['hello', 'there']>, 'default-not-used': <Property, name: default-not-used, type: int, value: 234>}")
 
     #
     # Test having multiple directories with bindings, with a different .dts file

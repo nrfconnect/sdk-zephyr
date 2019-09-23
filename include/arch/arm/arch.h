@@ -26,7 +26,6 @@
 #include <arch/arm/irq.h>
 #include <arch/arm/error.h>
 #include <arch/arm/misc.h>
-#include <arch/common/sys_io.h>
 #include <arch/common/addr_types.h>
 #include <arch/common/ffs.h>
 #include <arch/arm/nmi.h>
@@ -35,6 +34,10 @@
 #ifdef CONFIG_CPU_CORTEX_M
 #include <arch/arm/cortex_m/cpu.h>
 #include <arch/arm/cortex_m/memory_map.h>
+#include <arch/common/sys_io.h>
+#elif defined(CONFIG_CPU_CORTEX_R)
+#include <arch/arm/cortex_r/cpu.h>
+#include <arch/arm/cortex_r/sys_io.h>
 #endif
 
 #ifdef __cplusplus
@@ -237,6 +240,7 @@ extern "C" {
 #define Z_ARCH_THREAD_STACK_BUFFER(sym) \
 		((char *)(sym) + MPU_GUARD_ALIGN_AND_SIZE)
 
+/* Legacy case: retain containing extern "C" with C++ */
 #ifdef CONFIG_ARM_MPU
 #ifdef CONFIG_CPU_HAS_ARM_MPU
 #include <arch/arm/cortex_m/mpu/arm_mpu.h>

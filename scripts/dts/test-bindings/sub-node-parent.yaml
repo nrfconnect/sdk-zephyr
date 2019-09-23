@@ -1,14 +1,9 @@
-#
 # SPDX-License-Identifier: BSD-3-Clause
-#
 
 title: Sub-node test
 description: Sub-node test
 
-properties:
-    compatible:
-        constraint: "parent-with-sub-node"
-        type: string-array
+compatible: "parent-with-sub-node"
 
 sub-node:
     properties:
@@ -17,5 +12,5 @@ sub-node:
             type: int
 
         bar:
-            required: True
+            required: true
             type: int

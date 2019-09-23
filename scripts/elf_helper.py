@@ -16,8 +16,7 @@ from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 
 if LooseVersion(elftools.__version__) < LooseVersion('0.24'):
-    sys.stderr.write("pyelftools is out of date, need version 0.24 or later\n")
-    sys.exit(1)
+    sys.exit("pyelftools is out of date, need version 0.24 or later")
 
 
 def subsystem_to_enum(subsys):
@@ -331,9 +330,23 @@ def analyze_die_array(die):
         elements.append(ub.value + 1)
 
     if not elements:
+        if type_offset in type_env.keys():
+            mt = type_env[type_offset]
+            if mt.has_kobject():
+                if isinstance(mt, KobjectType) and mt.name == STACK_TYPE:
+                    elements.append(1)
+                    type_env[die.offset] = ArrayType(die.offset, elements, type_offset)
+    else:
+        type_env[die.offset] = ArrayType(die.offset, elements, type_offset)
+
+
+def analyze_typedef(die):
+    type_offset = die_get_type_offset(die)
+
+    if type_offset not in type_env.keys():
         return
 
-    type_env[die.offset] = ArrayType(die.offset, elements, type_offset)
+    type_env[die.offset] = type_env[type_offset]
 
 
 def addr_deref(elf, addr):
@@ -382,8 +395,7 @@ class ElfHelper:
 
     def find_kobjects(self, syms):
         if not self.elf.has_dwarf_info():
-            sys.stderr.write("ELF file has no DWARF information\n")
-            sys.exit(1)
+            sys.exit("ELF file has no DWARF information")
 
         app_smem_start = syms["_app_smem_start"]
         app_smem_end = syms["_app_smem_end"]
@@ -404,6 +416,8 @@ class ElfHelper:
                     analyze_die_const(die)
                 elif die.tag == "DW_TAG_array_type":
                     analyze_die_array(die)
+                elif die.tag == "DW_TAG_typedef":
+                    analyze_typedef(die)
                 elif die.tag == "DW_TAG_variable":
                     variables.append(die)
 
@@ -553,8 +567,7 @@ class ElfHelper:
         sys.stdout.write(scr + ": " + text + "\n")
 
     def error(self, text):
-        sys.stderr.write("%s ERROR: %s\n" % (scr, text))
-        sys.exit(1)
+        sys.exit("%s ERROR: %s\n" % (scr, text))
 
     def debug_die(self, die, text):
         fn, ln = get_filename_lineno(die)

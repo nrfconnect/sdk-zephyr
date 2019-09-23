@@ -3,18 +3,19 @@ title: CAVS Interrupt Controller
 description: >
     This binding describes CAVS Interrupt controller
 
-inherits:
-    !include base.yaml
+compatible: "intel,cavs-intc"
+
+include: base.yaml
 
 properties:
-  compatible:
-      constraint: "intel,cavs-intc"
-
   reg:
-      category: required
+      required: true
 
   interrupts:
-      category: required
+      required: true
+
+  "#interrupt-cells":
+      const: 3
 
 "#cells":
   - irq

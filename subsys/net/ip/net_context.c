@@ -446,11 +446,11 @@ static int bind_default(struct net_context *context)
 		if (context->iface >= 0) {
 			return 0;
 		} else {
-#if defined(CONFIG_NET_L2_CANBUS)
+#if defined(CONFIG_NET_L2_CANBUS_RAW)
 			struct net_if *iface;
 
 			iface = net_if_get_first_by_type(
-						&NET_L2_GET_NAME(CANBUS));
+						&NET_L2_GET_NAME(CANBUS_RAW));
 			if (!iface) {
 				return -ENOENT;
 			}
@@ -1365,7 +1365,8 @@ static int context_sendto(struct net_context *context,
 			addrlen = msghdr->msg_namelen;
 
 			if (!addr6) {
-				return -EINVAL;
+				addr6 = net_sin6(&context->remote);
+				addrlen = sizeof(struct sockaddr_in6);
 			}
 
 			/* For sendmsg(), the dst_addr is NULL so set it here.
@@ -1390,7 +1391,8 @@ static int context_sendto(struct net_context *context,
 			addrlen = msghdr->msg_namelen;
 
 			if (!addr4) {
-				return -EINVAL;
+				addr4 = net_sin(&context->remote);
+				addrlen = sizeof(struct sockaddr_in);
 			}
 
 			/* For sendmsg(), the dst_addr is NULL so set it here.

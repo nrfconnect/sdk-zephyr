@@ -41,6 +41,8 @@ extern "C" {
  */
 
 struct net_context;
+struct canbus_net_isotp_tx_ctx;
+struct canbus_net_isotp_rx_ctx;
 
 
 /* buffer cursor used in net_pkt */
@@ -208,6 +210,12 @@ struct net_pkt {
 #if defined(CONFIG_IEEE802154)
 	u8_t ieee802154_rssi; /* Received Signal Strength Indication */
 	u8_t ieee802154_lqi;  /* Link Quality Indicator */
+#endif
+#if defined(CONFIG_NET_L2_CANBUS)
+	union {
+		struct canbus_isotp_tx_ctx *canbus_tx_ctx;
+		struct canbus_isotp_rx_ctx *canbus_rx_ctx;
+	};
 #endif
 	/* @endcond */
 };
@@ -1544,6 +1552,16 @@ int net_pkt_copy(struct net_pkt *pkt_dst,
  * @return NULL if error, cloned packet otherwise.
  */
 struct net_pkt *net_pkt_clone(struct net_pkt *pkt, s32_t timeout);
+
+/**
+ * @brief Clone pkt and increase the refcount of its buffer.
+ *
+ * @param pkt Original pkt to be shallow cloned
+ * @param timeout Timeout to wait for free packet
+ *
+ * @return NULL if error, cloned packet otherwise.
+ */
+struct net_pkt *net_pkt_shallow_clone(struct net_pkt *pkt, s32_t timeout);
 
 /**
  * @brief Read some data from a net_pkt

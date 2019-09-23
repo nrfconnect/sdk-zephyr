@@ -137,7 +137,8 @@ static bool msg_cache_match(struct bt_mesh_net_rx *rx,
 	}
 
 	/* Add to the cache */
-	msg_cache[msg_cache_next++] = hash;
+	rx->msg_cache_idx = msg_cache_next++;
+	msg_cache[rx->msg_cache_idx] = hash;
 	msg_cache_next %= ARRAY_SIZE(msg_cache);
 
 	return false;
@@ -722,6 +723,14 @@ u32_t bt_mesh_next_seq(void)
 		bt_mesh_store_seq();
 	}
 
+	if (!atomic_test_bit(bt_mesh.flags, BT_MESH_IVU_IN_PROGRESS) &&
+	    bt_mesh.seq > IV_UPDATE_SEQ_LIMIT &&
+	    bt_mesh_subnet_get(BT_MESH_KEY_PRIMARY)) {
+		bt_mesh_beacon_ivu_initiator(true);
+		bt_mesh_net_iv_update(bt_mesh.iv_index + 1, true);
+		bt_mesh_net_sec_update(NULL);
+	}
+
 	return seq;
 }
 
@@ -731,6 +740,7 @@ int bt_mesh_net_resend(struct bt_mesh_subnet *sub, struct net_buf *buf,
 {
 	const u8_t *enc, *priv;
 	u32_t seq;
+	u16_t dst;
 	int err;
 
 	BT_DBG("net_idx 0x%04x new_key %u len %u", sub->net_idx, new_key,
@@ -757,6 +767,9 @@ int bt_mesh_net_resend(struct bt_mesh_subnet *sub, struct net_buf *buf,
 	buf->data[3] = seq >> 8;
 	buf->data[4] = seq;
 
+	/* Get destination, in case it's a proxy client */
+	dst = DST(buf->data);
+
 	err = bt_mesh_net_encrypt(enc, &buf->b, BT_MESH_NET_IVI_TX, false);
 	if (err) {
 		BT_ERR("encrypt failed (err %d)", err);
@@ -769,13 +782,11 @@ int bt_mesh_net_resend(struct bt_mesh_subnet *sub, struct net_buf *buf,
 		return err;
 	}
 
-	bt_mesh_adv_send(buf, cb, cb_data);
-
-	if (!atomic_test_bit(bt_mesh.flags, BT_MESH_IVU_IN_PROGRESS) &&
-	    bt_mesh.seq > IV_UPDATE_SEQ_LIMIT) {
-		bt_mesh_beacon_ivu_initiator(true);
-		bt_mesh_net_iv_update(bt_mesh.iv_index + 1, true);
-		bt_mesh_net_sec_update(NULL);
+	if (IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY) &&
+	    bt_mesh_proxy_relay(&buf->b, dst)) {
+		send_cb_finalize(cb, cb_data);
+	} else {
+		bt_mesh_adv_send(buf, cb, cb_data);
 	}
 
 	return 0;
@@ -887,15 +898,7 @@ int bt_mesh_net_send(struct bt_mesh_net_tx *tx, struct net_buf *buf,
 			/* Notify completion if this only went
 			 * through the Mesh Proxy.
 			 */
-			if (cb) {
-				if (cb->start) {
-					cb->start(0, 0, cb_data);
-				}
-
-				if (cb->end) {
-					cb->end(0, cb_data);
-				}
-			}
+			send_cb_finalize(cb, cb_data);
 
 			err = 0;
 			goto done;
@@ -1321,7 +1324,19 @@ void bt_mesh_net_recv(struct net_buf_simple *data, s8_t rssi,
 	rx.local_match = (bt_mesh_fixed_group_match(rx.ctx.recv_dst) ||
 			  bt_mesh_elem_find(rx.ctx.recv_dst));
 
-	bt_mesh_trans_recv(&buf, &rx);
+	/* The transport layer has indicated that it has rejected the message,
+	 * but would like to see it again if it is received in the future.
+	 * This can happen if a message is received when the device is in
+	 * Low Power mode, but the message was not encrypted with the friend
+	 * credentials. Remove it from the message cache so that we accept
+	 * it again in the future.
+	 */
+	if (bt_mesh_trans_recv(&buf, &rx) == -EAGAIN) {
+		BT_WARN("Removing rejected message from Network Message Cache");
+		msg_cache[rx.msg_cache_idx] = 0ULL;
+		/* Rewind the next index now that we're not using this entry */
+		msg_cache_next = rx.msg_cache_idx;
+	}
 
 	/* Relay if this was a group/virtual address, or if the destination
 	 * was neither a local element nor an LPN we're Friends for.

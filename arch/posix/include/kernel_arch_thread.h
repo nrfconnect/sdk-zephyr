@@ -23,6 +23,10 @@
 #ifndef _ASMLANGUAGE
 #include <zephyr/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct _callee_saved {
 	/* IRQ status before irq_lock() and call to z_swap() */
 	u32_t key;
@@ -37,9 +41,14 @@ struct _callee_saved {
 
 struct _thread_arch {
 	/* nothing for now */
+	int dummy;
 };
 
 typedef struct _thread_arch _thread_arch_t;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _ASMLANGUAGE */
 

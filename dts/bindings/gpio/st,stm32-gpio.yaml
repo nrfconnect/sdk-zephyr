@@ -1,29 +1,27 @@
-#
 # Copyright (c) 2018, Linaro Limited
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 title: STM32 GPIO
 
 description: >
     This is a representation of the STM32 GPIO nodes
 
-inherits:
-    !include base.yaml
+compatible: "st,stm32-gpio"
+
+include: [gpio-controller.yaml, base.yaml]
 
 properties:
-    compatible:
-      constraint: "st,stm32-gpio"
-
     reg:
-      category: required
+      required: true
 
     label:
-      category: required
+      required: true
 
     clocks:
-      category: required
+      required: true
+
+    "#gpio-cells":
+      const: 2
 
 "#cells":
   - pin

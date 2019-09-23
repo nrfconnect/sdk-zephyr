@@ -315,14 +315,24 @@ int settings_line_val_read(off_t val_off, off_t off, char *out, size_t len_req,
 		enc_buf[read_size] = 0; /* breaking guaranteed */
 		read_size = strlen(enc_buf);
 
-		if (read_size == 0 || read_size % 4) {
-			/* unexpected use case - a NULL value or an encoding */
-			/* problem */
+		if (read_size == 0) {
+			/* a NULL value (deleted entry) */
+			*len_read = 0;
+			return 0;
+		}
+
+		if (read_size % 4) {
+			/* unexpected use case - an encoding problem */
 			return -EINVAL;
 		}
 
 		rc = base64_decode(dec_buf, sizeof(dec_buf), &olen, enc_buf,
 				   read_size);
+
+		if (rc) {
+			return rc;
+		}
+
 		dec_buf[olen] = 0;
 
 		clen = MIN(olen + off_begin - off, rem_size);

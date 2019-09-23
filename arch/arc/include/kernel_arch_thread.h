@@ -20,8 +20,7 @@
 #define ZEPHYR_ARCH_ARC_INCLUDE_KERNEL_ARCH_THREAD_H_
 
 /*
- * Reason a thread has relinquished control: threads can only be in the NONE
- * or COOP state, threads can be one in the four.
+ * Reason a thread has relinquished control.
  */
 #define _CAUSE_NONE 0
 #define _CAUSE_COOP 1
@@ -30,6 +29,10 @@
 
 #ifndef _ASMLANGUAGE
 #include <zephyr/types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct _callee_saved {
 	u32_t sp; /* r28 */
@@ -60,6 +63,11 @@ struct _thread_arch {
 
 typedef struct _thread_arch _thread_arch_t;
 
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _ASMLANGUAGE */
+
 
 #endif /* ZEPHYR_ARCH_ARC_INCLUDE_KERNEL_ARCH_THREAD_H_ */

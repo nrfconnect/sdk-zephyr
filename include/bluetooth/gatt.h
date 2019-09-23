@@ -17,16 +17,16 @@
  * @{
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include <sys/types.h>
 #include <sys/util.h>
 #include <bluetooth/conn.h>
 #include <bluetooth/uuid.h>
 #include <bluetooth/att.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* GATT attribute permission bit field values */
 enum {
@@ -568,8 +568,7 @@ struct bt_gatt_ccc_cfg {
 
 /* Internal representation of CCC value */
 struct _bt_gatt_ccc {
-	struct bt_gatt_ccc_cfg	*cfg;
-	size_t			cfg_len;
+	struct bt_gatt_ccc_cfg	cfg[BT_GATT_CCC_MAX];
 	u16_t			value;
 	void			(*cfg_changed)(const struct bt_gatt_attr *attr,
 					       u16_t value);
@@ -623,31 +622,29 @@ ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
  *
  *  Helper macro to declare a Managed CCC attribute.
  *
- *  @param _cfg Initial configuration.
  *  @param _changed Configuration changed callback.
  *  @param _write Configuration write callback.
  *  @param _match Configuration match callback.
  */
-#define BT_GATT_CCC_MANAGED(_cfg, _changed, _write, _match)		\
+#define BT_GATT_CCC_MANAGED(_changed, _write, _match)			\
 	BT_GATT_ATTRIBUTE(BT_UUID_GATT_CCC,				\
 			BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,		\
 			bt_gatt_attr_read_ccc, bt_gatt_attr_write_ccc,	\
-			(&(struct _bt_gatt_ccc) { .cfg = _cfg,		\
-					       .cfg_len = ARRAY_SIZE(_cfg), \
-					       .cfg_changed = _changed, \
-					       .cfg_write = _write, \
-					       .cfg_match = _match }))
+			(&(struct _bt_gatt_ccc) {			\
+				.cfg = {},				\
+				.cfg_changed = _changed,		\
+				.cfg_write = _write,			\
+				.cfg_match = _match }))
 
 /** @def BT_GATT_CCC
  *  @brief Client Characteristic Configuration Declaration Macro.
  *
  *  Helper macro to declare a CCC attribute.
  *
- *  @param _cfg Initial configuration.
  *  @param _cfg_changed Configuration changed callback.
  */
-#define BT_GATT_CCC(_cfg, _cfg_changed)					\
-	BT_GATT_CCC_MANAGED(_cfg, _cfg_changed, NULL, NULL)
+#define BT_GATT_CCC(_cfg_changed)					\
+	BT_GATT_CCC_MANAGED(_cfg_changed, NULL, NULL)
 
 /** @brief Read Characteristic Extended Properties Attribute helper
  *
@@ -805,7 +802,7 @@ struct bt_gatt_notify_params {
  *  The callback is run from System Workqueue context.
  *
  *  Alternatively it is possible to notify by UUID by setting it on the
- *  parameters, when using this method the attribute given when be used as the
+ *  parameters, when using this method the attribute given is used as the
  *  start range when looking up for possible matches.
  *
  *  @param conn Connection object.
@@ -866,6 +863,8 @@ typedef void (*bt_gatt_indicate_func_t)(struct bt_conn *conn,
 /** @brief GATT Indicate Value parameters */
 struct bt_gatt_indicate_params {
 	struct bt_att_req _req;
+	/** Notification Attribute UUID type */
+	const struct bt_uuid *uuid;
 	/** Indicate Attribute object*/
 	const struct bt_gatt_attr *attr;
 	/** Indicate Value callback */
@@ -878,9 +877,21 @@ struct bt_gatt_indicate_params {
 
 /** @brief Indicate attribute value change.
  *
- *  Send an indication of attribute value change.
- *  Note: This function should only be called if CCC is declared with
- *  BT_GATT_CCC otherwise it cannot find a valid peer configuration.
+ *  Send an indication of attribute value change. if connection is NULL
+ *  indicate all peer that have notification enabled via CCC otherwise do a
+ *  direct indication only the given connection.
+ *
+ *  The attribute object on the parameters can be the so called Characteristic
+ *  Declaration, which is usually declared with BT_GATT_CHARACTERISTIC followed
+ *  by BT_GATT_CCC, or the Characteristic Value Declaration which is
+ *  automatically created after the Characteristic Declaration when using
+ *  BT_GATT_CHARACTERISTIC.
+ *
+ *  The callback is run from System Workqueue context.
+ *
+ *  Alternatively it is possible to indicate by UUID by setting it on the
+ *  parameters, when using this method the attribute given is used as the
+ *  start range when looking up for possible matches.
  *
  *  Note: This procedure is asynchronous therefore the parameters need to
  *  remains valid while it is active.

@@ -4,21 +4,22 @@ title: TI Stellaris GPIO
 description: >
     This is a representation of the TI Stellaris GPIO node
 
-inherits:
-    !include base.yaml
+compatible: "ti,stellaris-gpio"
+
+include: [gpio-controller.yaml, base.yaml]
 
 properties:
-    compatible:
-      constraint: "ti,stellaris-gpio"
-
     reg:
-      category: required
+      required: true
 
     label:
-      category: required
+      required: true
 
     interrupts:
-      category: required
+      required: true
+
+    "#gpio-cells":
+      const: 2
 
 "#cells":
   - pin

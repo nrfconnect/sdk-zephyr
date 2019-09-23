@@ -16,10 +16,6 @@
 
 #include <arch/cpu.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifdef _ASMLANGUAGE
 
 /* nothing */
@@ -29,6 +25,10 @@ extern "C" {
 #include <arch/arm/cortex_m/cmsis.h>
 #include <arch/arm/exc.h>
 #include <irq_offload.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifdef CONFIG_IRQ_OFFLOAD
 extern volatile irq_offload_routine_t offload_routine;
@@ -112,7 +112,8 @@ static ALWAYS_INLINE void z_ExcSetup(void)
 #endif /* CONFIG_ARM_SECURE_FIRMWARE */
 #endif /* CONFIG_CPU_CORTEX_M_HAS_PROGRAMMABLE_FAULT_PRIOS */
 
-#if defined(CONFIG_ARM_SECURE_FIRMWARE)
+#if defined(CONFIG_ARM_SECURE_FIRMWARE) && \
+	!defined(CONFIG_ARM_SECURE_BUSFAULT_HARDFAULT_NMI)
 	/* Set NMI, Hard, and Bus Faults as Non-Secure.
 	 * NMI and Bus Faults targeting the Secure state will
 	 * escalate to a SecureFault or SecureHardFault.
@@ -126,7 +127,7 @@ static ALWAYS_INLINE void z_ExcSetup(void)
 	 * in a PE with the Main Extension instead generate a
 	 * SecureHardFault in a PE without the Main Extension.
 	 */
-#endif /* CONFIG_ARM_SECURE_FIRMWARE */
+#endif /* ARM_SECURE_FIRMWARE && !ARM_SECURE_BUSFAULT_HARDFAULT_NMI */
 }
 
 /**
@@ -152,11 +153,10 @@ static ALWAYS_INLINE void z_clearfaults(void)
 #endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
 }
 
-#endif /* _ASMLANGUAGE */
-
 #ifdef __cplusplus
 }
 #endif
 
+#endif /* _ASMLANGUAGE */
 
 #endif /* ZEPHYR_ARCH_ARM_INCLUDE_CORTEX_M_EXC_H_ */

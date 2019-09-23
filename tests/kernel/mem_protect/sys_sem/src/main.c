@@ -21,7 +21,7 @@ ZTEST_BMEM struct sys_sem simple_sem;
 ZTEST_BMEM struct sys_sem low_prio_sem;
 ZTEST_BMEM struct sys_sem mid_prio_sem;
 ZTEST_DMEM struct sys_sem high_prio_sem;
-ZTEST_DMEM struct sys_sem multiple_thread_sem;
+ZTEST_DMEM SYS_SEM_DEFINE(multiple_thread_sem, SEM_INIT_VAL, SEM_MAX_VAL);
 
 K_THREAD_STACK_DEFINE(stack_1, STACK_SIZE);
 K_THREAD_STACK_DEFINE(stack_2, STACK_SIZE);
@@ -116,8 +116,12 @@ void sem_take_multiple_high_prio_helper(void *p1, void *p2, void *p3)
 
 void sem_multiple_threads_wait_helper(void *p1, void *p2, void *p3)
 {
+	int ret_value;
+
 	/* get blocked until the test thread gives the semaphore */
-	sys_sem_take(&multiple_thread_sem, K_FOREVER);
+	ret_value = sys_sem_take(&multiple_thread_sem, K_FOREVER);
+	zassert_true(ret_value == 0,
+		     "sys_sem_take failed when its shouldn't have\n");
 
 	/* Inform the test thread that this thread has got multiple_thread_sem*/
 	sys_sem_give(&simple_sem);
@@ -344,7 +348,6 @@ void test_sem_take_multiple(void)
 	sys_sem_init(&high_prio_sem, SEM_INIT_VAL, SEM_MAX_VAL);
 	sys_sem_init(&mid_prio_sem, SEM_INIT_VAL, SEM_MAX_VAL);
 	sys_sem_init(&low_prio_sem, SEM_INIT_VAL, SEM_MAX_VAL);
-	sys_sem_init(&multiple_thread_sem, SEM_INIT_VAL, SEM_MAX_VAL);
 
 	k_thread_create(&sem_tid, stack_1, STACK_SIZE,
 			sem_take_multiple_low_prio_helper,
@@ -512,7 +515,6 @@ void test_sem_multiple_threads_wait(void)
 #endif
 
 	sys_sem_init(&simple_sem, SEM_INIT_VAL, SEM_MAX_VAL);
-	sys_sem_init(&multiple_thread_sem, SEM_INIT_VAL, SEM_MAX_VAL);
 
 	do {
 		for (int i = 0; i < TOTAL_THREADS_WAITING; i++) {

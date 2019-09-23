@@ -1,5 +1,4 @@
 # Copyright (c) 2019 Intel Corporation
-#
 # SPDX-License-Identifier: Apache-2.0
 
 title: MICROCHIP ESPI
@@ -7,43 +6,41 @@ title: MICROCHIP ESPI
 description: >
     This binding gives a base representation of ESPI controller for Microchip
 
-inherits:
-    !include espi.yaml
+compatible: "microchip,xec-espi"
+
+include: espi-controller.yaml
 
 properties:
-    compatible:
-      constraint: "microchip,xec-espi"
-
     reg:
       description: mmio register space
-      category: required
+      required: true
 
     agg_io_irq:
       type: int
       description: soc aggregated nvic irq for eSPI block
-      category: required
+      required: true
 
     agg_vw_irq:
       type: int
       description: soc aggregated nvic irq for eSPI virtual wires channel
-      category: required
+      required: true
 
     agg_pc_irq:
       type: int
       description: soc aggregated nvic irq for eSPI peripheral channel
-      category: required
+      required: true
 
     io_girq:
       type: int
       description: soc group irq for eSPI I/O
-      category: required
+      required: true
 
     vw_girq:
       type: int
       description: soc group irq for eSPI virtual wires channel
-      category: required
+      required: true
 
     pc_girq:
       type: int
       description: soc group irq for eSPI peripheral channel
-      category: required
+      required: true

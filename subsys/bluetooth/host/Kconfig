@@ -26,7 +26,7 @@ config BT_HCI_CMD_COUNT
 config BT_RX_BUF_COUNT
 	int "Number of HCI RX buffers"
 	default 3 if BT_RECV_IS_RX_THREAD
-	default 20 if (BT_MESH && !BT_DISCARDABLE_BUF_COUNT)
+	default 20 if (BT_MESH && !(BT_DISCARDABLE_BUF_COUNT > 0))
 	default 10
 	range 2 255
 	help
@@ -63,9 +63,9 @@ config BT_DISCARDABLE_BUF_COUNT
 	  block and may even eliminate deadlocks in some cases.
 
 config BT_HCI_TX_STACK_SIZE
-	# NOTE: This value is derived from other symbols and should not be
-	# user-configurable. Do not give it a prompt.
-	int
+	# NOTE: This value is derived from other symbols and should only be
+	# changed if required by architecture
+	int "HCI Tx thread stack size"
 	default 512 if BT_H4
 	default 512 if BT_H5
 	default 416 if BT_SPI
@@ -79,7 +79,18 @@ config BT_HCI_TX_STACK_SIZE
 	# the worst-case stack size if an out-of-tree controller is used.
 	default 1024
 	help
-	  Stack size needed for executing bt_send with specified driver
+	  Stack size needed for executing bt_send with specified driver.
+	  NOTE: This is an advanced setting and should not be changed unless
+	  absolutely necessary
+
+config BT_HCI_ECC_STACK_SIZE
+	# NOTE: This value is derived from other symbols and should only be
+	# changed if required by architecture
+	int "HCI ECC thread stack size"
+	default 1100
+	help
+	  NOTE: This is an advanced setting and should not be changed unless
+	  absolutely necessary
 
 config BT_HCI_TX_PRIO
 	# Hidden option for Co-Operative Tx thread priority
@@ -176,6 +187,24 @@ config BT_SETTINGS_CCC_STORE_ON_WRITE
 	  that expect to be reset suddenly. However, it requires additional
 	  workqueue stack space.
 endif # BT_SETTINGS
+
+config BT_WHITELIST
+	bool "Enable whitelist support"
+	help
+	  This option enables the whitelist API. This takes advantage of the
+	  whitelisting feature of a BLE controller.
+	  The whitelist is a global list and the same whitelist is used
+	  by both scanner and advertiser. The whitelist cannot be modified while
+	  it is in use.
+
+	  An Advertiser can whitelist which peers can connect or request scan
+	  response data.
+	  A scanner can whitelist advertiser for which it will generate
+	  advertising reports.
+	  Connections can be established automatically for whitelisted peers.
+
+	  This options deprecates the bt_le_set_auto_conn API in favor of the
+	  bt_conn_create_aute_le API.
 
 if BT_CONN
 
@@ -287,6 +316,13 @@ config BT_BONDABLE
 	  Bonding flag in AuthReq of SMP Pairing Request/Response will be set
 	  indicating the support for this mode.
 
+config BT_STORE_DEBUG_KEYS
+	bool "Store Debug Mode bonds"
+	help
+	  This option enables support for storing bonds where either of devices
+	  has the Security Manager in Debug mode. This option should
+	  only be enabled for debugging and should never be used in production.
+
 config BT_SMP_ENFORCE_MITM
 	bool "Enforce MITM protection"
 	default y
@@ -322,6 +358,7 @@ config BT_CREATE_CONN_TIMEOUT
         int "Timeout for pending LE Create Connection command in seconds"
         default 3
         range 1 65535
+
 endif # BT_CONN
 
 if BT_OBSERVER
