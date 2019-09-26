@@ -407,7 +407,7 @@ config BT_CTLR_PHY_2M
 
 config BT_CTLR_PHY_CODED
 	bool "Coded PHY Support"
-	depends on (BT_CTLR_PHY || BT_CTLR_ADV_EXT) && SOC_NRF52840
+	depends on (BT_CTLR_PHY || BT_CTLR_ADV_EXT) && HAS_HW_NRF_RADIO_BLE_CODED
 	default y
 	help
 	  Enable support for Bluetooth 5.0 Coded PHY in the Controller.
@@ -653,7 +653,7 @@ config BT_MAYFLY_YIELD_AFTER_CALL
 
 config BT_TICKER_COMPATIBILITY_MODE
 	bool "Ticker compatibility mode"
-	default y if SOC_SERIES_NRF51X
+	default y if SOC_SERIES_NRF51X || BT_LL_SW_LEGACY
 	help
 	  This option enables legacy ticker scheduling which defers overlapping
 	  ticker node timeouts and thereby prevents ticker interrupts during
@@ -768,7 +768,7 @@ config BT_CTLR_ASSERT_HANDLER
 	help
 	  This option enables an application-defined sink for the
 	  controller assertion mechanism. This must be defined in
-	  application code as void \"bt_controller_assert_handle(char \*, int)\"
+	  application code as void \"bt_ctlr_assert_handle(char \*, int)\"
 	  and will be invoked whenever the controller code encounters
 	  an unrecoverable error.
 

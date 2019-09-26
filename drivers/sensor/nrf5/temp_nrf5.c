@@ -9,11 +9,9 @@
 #include <drivers/sensor.h>
 #include <drivers/clock_control.h>
 #include <logging/log.h>
-#include <nrf_temp.h>
+#include <hal/nrf_temp.h>
 
 LOG_MODULE_REGISTER(temp_nrf5, CONFIG_SENSOR_LOG_LEVEL);
-
-#include "nrf.h"
 
 
 /* The nRF5 temperature device returns measurements in 0.25C

@@ -227,6 +227,59 @@ int settings_load(void);
 int settings_load_subtree(const char *subtree);
 
 /**
+ * Callback function used for direct loading.
+ * Used by @ref settings_load_subtree_direct function.
+ *
+ * @param[in]     key     the name with skipped part that was used as name in
+ *                        handler registration
+ * @param[in]     len     the size of the data found in the backend.
+ * @param[in]     read_cb function provided to read the data from the backend.
+ * @param[in,out] cb_arg  arguments for the read function provided by the
+ *                        backend.
+ * @param[in,out] param   parameter given to the
+ *                        @ref settings_load_subtree_direct function.
+ *
+ *  - key[in] the name with skipped part that was used as name in
+ *    handler registration
+ *  - len[in] the size of the data found in the backend.
+ *  - read_cb[in] function provided to read the data from the backend.
+ *  - cb_arg[in] arguments for the read function provided by the
+ *    backend.
+ *
+ * @return When nonzero value is returned, further subtree searching is stopped.
+ *         Use with care as some settings backends would iterate through old
+ *         values, and the current value is returned last.
+ */
+typedef int (*settings_load_direct_cb)(
+	const char      *key,
+	size_t           len,
+	settings_read_cb read_cb,
+	void            *cb_arg,
+	void            *param);
+
+/**
+ * Load limited set of serialized items using given callback.
+ *
+ * This function bypasses the normal data workflow in settings module.
+ * All the settings values that are found are passed to the given callback.
+ *
+ * @note
+ * This function does not call commit function.
+ * It works as a blocking function, so it is up to the user to call
+ * any kind of commit function when this operation ends.
+ *
+ * @param[in]     subtree subtree name of the subtree to be loaded.
+ * @param[in]     cb      pointer to the callback function.
+ * @param[in,out] param   parameter to be passed when callback
+ *                        function is called.
+ * @return 0 on success, non-zero on failure.
+ */
+int settings_load_subtree_direct(
+	const char             *subtree,
+	settings_load_direct_cb cb,
+	void                   *param);
+
+/**
  * Save currently running serialized items. All serialized items which are
  * different from currently persisted values will be saved.
  *
@@ -289,7 +342,6 @@ int settings_commit_subtree(const char *subtree);
 struct settings_store_itf;
 
 /**
- * @struct settings_store
  * Backend handler node for storage handling.
  */
 struct settings_store {
@@ -301,18 +353,43 @@ struct settings_store {
 };
 
 /**
- * @struct settings_store_itf
+ * Arguments for data loading.
+ * Holds all parameters that changes the way data should be loaded from backend.
+ */
+struct settings_load_arg {
+	/**
+	 * @brief Name of the subtree to be loaded
+	 *
+	 * If NULL, all values would be loaded.
+	 */
+	const char *subtree;
+	/**
+	 * @brief Pointer to the callback function.
+	 *
+	 * If NULL then matching registered function would be used.
+	 */
+	settings_load_direct_cb cb;
+	/**
+	 * @brief Parameter for callback function
+	 *
+	 * Parameter to be passed to the callback function.
+	 */
+	void *param;
+};
+
+/**
  * Backend handler functions.
  * Sources are registered using a call to @ref settings_src_register.
  * Destinations are registered using a call to @ref settings_dst_register.
  */
 struct settings_store_itf {
-	int (*csi_load)(struct settings_store *cs, const char *subtree);
-	/**< Loads values from storage limited to subtree defined by subtree. If
-	 * subtree = NULL loads all values.
+	int (*csi_load)(struct settings_store *cs,
+			const struct settings_load_arg *arg);
+	/**< Loads values from storage limited to subtree defined by subtree.
 	 *
 	 * Parameters:
-	 *  - cs - Corresponding backend handler node
+	 *  - cs - Corresponding backend handler node,
+	 *  - arg - Structure that holds additional data for data loading.
 	 */
 
 	int (*csi_save_start)(struct settings_store *cs);
@@ -371,9 +448,26 @@ void settings_dst_register(struct settings_store *cs);
  * @return settings_handler_static on success, NULL on failure.
  */
 struct settings_handler_static *settings_parse_and_lookup(const char *name,
-							const char **next);
+							  const char **next);
 
-
+/**
+ * Calls settings handler.
+ *
+ * @param[in]     name        The name of the data found in the backend.
+ * @param[in]     len         The size of the data found in the backend.
+ * @param[in]     read_cb     Function provided to read the data from
+ *                            the backend.
+ * @param[in,out] read_cb_arg Arguments for the read function provided by
+ *                            the backend.
+ * @param[in,out] load_arg    Arguments for data loading.
+ *
+ * @return 0 or negative error code
+ */
+int settings_call_set_handler(const char *name,
+			      size_t len,
+			      settings_read_cb read_cb,
+			      void *read_cb_arg,
+			      const struct settings_load_arg *load_arg);
 /*
  * API for const name processing
  */

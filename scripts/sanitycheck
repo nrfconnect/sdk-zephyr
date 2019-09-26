@@ -674,14 +674,16 @@ class DeviceHandler(Handler):
             if options.west_runner is not None:
                 command.append("--runner")
                 command.append(options.west_runner)
-            # There are two ways this option is used.
+            # There are three ways this option is used.
             # 1) bare: --west-flash
             #    This results in options.west_flash == []
             # 2) with a value: --west-flash="--board-id=42"
             #    This results in options.west_flash == "--board-id=42"
+            # 3) Multiple values: --west-flash="--board-id=42,--erase"
+            #    This results in options.west_flash == "--board-id=42 --erase"
             if options.west_flash != []:
                 command.append('--')
-                command.append(options.west_flash)
+                command.extend(options.west_flash.split(','))
         else:
             if options.ninja:
                 generator_cmd = "ninja"
@@ -1278,8 +1280,6 @@ class MakeGenerator:
             handler = BinaryHandler(instance, "native")
             # defined by __build_dir in cmake/boilerplate.cmake
             handler.binary = os.path.join(outdir, "zephyr", "zephyr.exe")
-            if options.enable_coverage:
-                args += ["EXTRA_LDFLAGS=--coverage"]
         elif type == "nsim":
             handler = BinaryHandler(instance, "nsim")
             handler.call_make_run = True
@@ -1609,7 +1609,14 @@ class SanityConfigParser:
 
             if k in d:
                 if isinstance(d[k], str):
-                    d[k] += " " + v
+                    # By default, we just concatenate string values of keys
+                    # which appear both in "common" and per-test sections,
+                    # but some keys are handled in adhoc way based on their
+                    # semantics.
+                    if k == "filter":
+                        d[k] = "(%s) and (%s)" % (d[k], v)
+                    else:
+                        d[k] += " " + v
             else:
                 d[k] = v
 
@@ -3050,11 +3057,11 @@ Artificially long but functional example:
     parser.add_argument(
         "--west-flash", nargs='?', const=[],
         help="""Uses west instead of ninja or make to flash when running with
-             --device-testing.
+             --device-testing. Supports comma-separated argument list.
 
         E.g "sanitycheck --device-testing --device-serial /dev/ttyACM0
-                         --west-flash="--board-id=foobar"
-        will translate to "west flash -- --board-id=foobar"
+                         --west-flash="--board-id=foobar,--erase"
+        will translate to "west flash -- --board-id=foobar --erase"
 
         NOTE: device-testing must be enabled to use this option.
         """
@@ -3602,14 +3609,14 @@ def main():
 
     if options.coverage:
         if options.gcov_tool == None:
-            using_posix = False
+            use_system_gcov = False
 
             for plat in options.coverage_platform:
                 ts_plat = ts.get_platform(plat)
-                if ts_plat and ts_plat.type == "native":
-                    using_posix = True
+                if ts_plat and (ts_plat.type in {"native", "unit"}):
+                    use_system_gcov = True
 
-            if using_posix or "ZEPHYR_SDK_INSTALL_DIR" not in os.environ:
+            if use_system_gcov or "ZEPHYR_SDK_INSTALL_DIR" not in os.environ:
                 options.gcov_tool = "gcov"
             else:
                 options.gcov_tool = os.path.join(os.environ["ZEPHYR_SDK_INSTALL_DIR"],

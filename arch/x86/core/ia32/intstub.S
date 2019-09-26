@@ -137,7 +137,7 @@ SECTION_FUNC(TEXT, _interrupt_enter)
 	pushl	%eax
 	pushl	%edx
 
-	call	z_sys_trace_isr_enter
+	call	sys_trace_isr_enter
 
 	popl	%edx
 	popl	%eax
@@ -204,10 +204,12 @@ alreadyOnIntStack:
 	cli			/* disable interrupts again */
 #endif
 
-#if defined(CONFIG_X2APIC)
-	call	z_x2apic_eoi
-#else /* xAPIC EOI */
 	xorl	%eax, %eax
+#if defined(CONFIG_X2APIC)
+	xorl	%edx, %edx
+	movl	$(X86_X2APIC_BASE_MSR + (LOAPIC_EOI >> 4)), %ecx
+	wrmsr
+#else /* xAPIC */
 	movl	%eax, (CONFIG_LOAPIC_BASE_ADDRESS + LOAPIC_EOI)
 #endif
 
@@ -225,14 +227,14 @@ alreadyOnIntStack:
 	je	noReschedule
 
 	/*
-	 * Set the _INT_ACTIVE bit in the k_thread to allow the upcoming call to
-	 * __swap() to determine whether non-floating registers need to be
+	 * Set X86_THREAD_FLAG_INT bit in k_thread to allow the upcoming call
+	 * to __swap() to determine whether non-floating registers need to be
 	 * preserved using the lazy save/restore algorithm, or to indicate to
 	 * debug tools that a preemptive context switch has occurred.
 	 */
 
 #if defined(CONFIG_LAZY_FP_SHARING)
-	orb	$_INT_ACTIVE, _thread_offset_to_thread_state(%edx)
+	orb	$X86_THREAD_FLAG_INT, _thread_offset_to_flags(%edx)
 #endif
 
 	/*
@@ -263,12 +265,12 @@ alreadyOnIntStack:
 #if defined(CONFIG_LAZY_FP_SHARING)
 	/*
 	 * __swap() has restored the floating point registers, if needed.
-	 * Clear the _INT_ACTIVE bit in the interrupted thread's state
+	 * Clear X86_THREAD_FLAG_INT in the interrupted thread's state
 	 * since it has served its purpose.
 	 */
 
 	movl	_kernel + _kernel_offset_to_current, %eax
-	andb	$~_INT_ACTIVE, _thread_offset_to_thread_state(%eax)
+	andb	$~X86_THREAD_FLAG_INT, _thread_offset_to_flags(%eax)
 #endif /* CONFIG_LAZY_FP_SHARING */
 
 	/* Restore volatile registers and return to the interrupted thread */

@@ -14,11 +14,9 @@
 #ifndef ZEPHYR_INCLUDE_ARCH_X86_IA32_ARCH_H_
 #define ZEPHYR_INCLUDE_ARCH_X86_IA32_ARCH_H_
 
-#include <irq.h>
 #include "sys_io.h"
 #include <drivers/interrupt_controller/sysapic.h>
 #include <kernel_arch_thread.h>
-#include <generated_dts_board.h>
 #include <ia32/mmustructs.h>
 #include <stdbool.h>
 #include <arch/common/ffs.h>
@@ -244,15 +242,6 @@ typedef struct s_isrList {
 })
 
 
-/**
- * @brief Convert a statically connected IRQ to its interrupt vector number
- *
- * @param irq IRQ number
- */
-extern unsigned char _irq_to_interrupt_vector[];
-#define Z_IRQ_TO_INTERRUPT_VECTOR(irq)                       \
-			((unsigned int) _irq_to_interrupt_vector[irq])
-
 #ifdef CONFIG_SYS_POWER_MANAGEMENT
 extern void z_arch_irq_direct_pm(void);
 #define Z_ARCH_ISR_DIRECT_PM() z_arch_irq_direct_pm()
@@ -319,106 +308,6 @@ struct _x86_syscall_stack_frame {
 };
 
 /**
- *
- * @internal
- *
- * @brief Disable all interrupts on the CPU
- *
- * GCC assembly internals of irq_lock(). See irq_lock() for a complete
- * description.
- *
- * @return An architecture-dependent lock-out key representing the
- * "interrupt disable state" prior to the call.
- */
-
-static ALWAYS_INLINE unsigned int _do_irq_lock(void)
-{
-	unsigned int key;
-
-	__asm__ volatile (
-		"pushfl;\n\t"
-		"cli;\n\t"
-		"popl %0;\n\t"
-		: "=g" (key)
-		:
-		: "memory"
-		);
-
-	return key;
-}
-
-
-/**
- *
- * @internal
- *
- * @brief Enable all interrupts on the CPU (inline)
- *
- * GCC assembly internals of irq_lock_unlock(). See irq_lock_unlock() for a
- * complete description.
- *
- * @return N/A
- */
-
-static ALWAYS_INLINE void z_do_irq_unlock(void)
-{
-	__asm__ volatile (
-		"sti;\n\t"
-		: : : "memory"
-		);
-}
-
-
-/**
- *  @brief read timestamp register ensuring serialization
- */
-
-static inline u64_t z_tsc_read(void)
-{
-	union {
-		struct  {
-			u32_t lo;
-			u32_t hi;
-		};
-		u64_t  value;
-	}  rv;
-
-	/* rdtsc & cpuid clobbers eax, ebx, ecx and edx registers */
-	__asm__ volatile (/* serialize */
-		"xorl %%eax,%%eax;\n\t"
-		"cpuid;\n\t"
-		:
-		:
-		: "%eax", "%ebx", "%ecx", "%edx"
-		);
-	/*
-	 * We cannot use "=A", since this would use %rax on x86_64 and
-	 * return only the lower 32bits of the TSC
-	 */
-	__asm__ volatile ("rdtsc" : "=a" (rv.lo), "=d" (rv.hi));
-
-
-	return rv.value;
-}
-
-/**
- *
- * @brief Get a 32 bit CPU timestamp counter
- *
- * @return a 32-bit number
- */
-
-static ALWAYS_INLINE
-	u32_t z_do_read_cpu_timestamp32(void)
-{
-	u32_t rv;
-
-	__asm__ volatile("rdtsc" : "=a"(rv) :  : "%edx");
-
-	return rv;
-}
-
-/**
  * @brief Disable all interrupts on the CPU (inline)
  *
  * This routine disables interrupts.  It can be called from either interrupt
@@ -452,50 +341,11 @@ static ALWAYS_INLINE
 
 static ALWAYS_INLINE unsigned int z_arch_irq_lock(void)
 {
-	unsigned int key = _do_irq_lock();
+	unsigned int key;
+
+	__asm__ volatile ("pushfl; cli; popl %0" : "=g" (key) :: "memory");
 
 	return key;
-}
-
-
-/**
- *
- * @brief Enable all interrupts on the CPU (inline)
- *
- * This routine re-enables interrupts on the CPU.  The @a key parameter
- * is an architecture-dependent lock-out key that is returned by a previous
- * invocation of irq_lock().
- *
- * This routine can be called from either interrupt or thread level.
- *
- * @return N/A
- *
- */
-
-static ALWAYS_INLINE void z_arch_irq_unlock(unsigned int key)
-{
-	if ((key & 0x200U) == 0U) {
-		return;
-	}
-
-	z_do_irq_unlock();
-}
-
-/**
- * Returns true if interrupts were unlocked prior to the
- * z_arch_irq_lock() call that produced the key argument.
- */
-static ALWAYS_INLINE bool z_arch_irq_unlocked(unsigned int key)
-{
-	return (key & 0x200) != 0;
-}
-
-/**
- * @brief Explicitly nop operation.
- */
-static ALWAYS_INLINE void arch_nop(void)
-{
-	__asm__ volatile("nop");
 }
 
 
@@ -505,17 +355,6 @@ static ALWAYS_INLINE void arch_nop(void)
  * correspond to any IRQ line (such as spurious vector or SW IRQ)
  */
 #define NANO_SOFT_IRQ	((unsigned int) (-1))
-
-/**
- * @brief Enable a specific IRQ
- * @param irq IRQ
- */
-extern void	z_arch_irq_enable(unsigned int irq);
-/**
- * @brief Disable a specific IRQ
- * @param irq IRQ
- */
-extern void	z_arch_irq_disable(unsigned int irq);
 
 /**
  * @defgroup float_apis Floating Point APIs
@@ -561,9 +400,6 @@ extern void k_float_enable(struct k_thread *thread, unsigned int options);
  */
 
 extern void	k_cpu_idle(void);
-
-extern u32_t z_timer_cycle_get_32(void);
-#define z_arch_k_cycle_get_32()	z_timer_cycle_get_32()
 
 #ifdef CONFIG_X86_ENABLE_TSS
 extern struct task_state_segment _main_tss;

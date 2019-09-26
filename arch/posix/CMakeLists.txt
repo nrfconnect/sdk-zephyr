@@ -10,8 +10,6 @@ else ()
 endif ()
 
 zephyr_compile_options(
-  -MMD
-  -MP
   ${ARCH_FLAG}
   -include ${ZEPHYR_BASE}/arch/posix/include/posix_cheats.h
   )
@@ -21,14 +19,9 @@ toolchain_cc_no_freestanding_options()
 
 zephyr_include_directories(${BOARD_DIR})
 
-zephyr_compile_options_ifdef(CONFIG_COVERAGE
-  -fprofile-arcs
-  -ftest-coverage
-  -fno-inline
-)
-zephyr_link_libraries_ifdef(CONFIG_COVERAGE
-	-lgcov
-	)
+if (CONFIG_COVERAGE)
+  toolchain_cc_coverage()
+endif ()
 
 if (CONFIG_ASAN)
 	zephyr_compile_options(-fsanitize=address)

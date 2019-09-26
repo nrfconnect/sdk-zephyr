@@ -2,8 +2,7 @@
 
 include: base.yaml
 
-child:
-    bus: uart
+child-bus: uart
 
 properties:
     clock-frequency:
@@ -16,3 +15,7 @@ properties:
       description: Initial baud rate setting for UART
     label:
       required: true
+    hw-flow-control:
+      type: boolean
+      required: false
+      description: Set to enable RTS/CTS flow control at boot time

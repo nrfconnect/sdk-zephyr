@@ -32,6 +32,8 @@ synchronization.
 
    threads/index.rst
    scheduling/index.rst
+   threads/system_threads.rst
+   threads/workqueue.rst
    other/interrupts.rst
    other/polling.rst
    synchronization/semaphores.rst
@@ -115,3 +117,4 @@ These pages cover other kernel services.
    other/ring_buffers.rst
    other/cxx_support.rst
    other/version.rst
+   other/fatal.rst

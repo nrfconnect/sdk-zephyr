@@ -17,15 +17,14 @@
 #ifndef _STM32WBX_SOC_H_
 #define _STM32WBX_SOC_H_
 
+#include <sys/util.h>
+
 #ifndef _ASMLANGUAGE
 
 #include <stm32wbxx.h>
 
-/* ARM CMSIS definitions must be included before kernel_includes.h.
- * Therefore, it is essential to include kernel_includes.h after including
- * core SOC-specific headers.
- */
-#include <kernel_includes.h>
+/* Add include for DTS generated information */
+#include <generated_dts_board.h>
 
 #ifdef CONFIG_GPIO_STM32
 #include <stm32wbxx_ll_gpio.h>
@@ -55,7 +54,7 @@
 #endif /* CONFIG_FLASH */
 #ifdef CONFIG_I2C
 #include <stm32wbxx_ll_i2c.h>
-#endif
+#endif /* CONFIG_I2C */
 
 #ifdef CONFIG_SPI_STM32
 #include <stm32wbxx_ll_spi.h>
@@ -63,6 +62,14 @@
 
 #ifdef CONFIG_ADC_STM32
 #include <stm32wbxx_ll_adc.h>
+#endif /* CONFIG_ADC_STM32 */
+
+#ifdef CONFIG_IWDG_STM32
+#include <stm32wbxx_ll_iwdg.h>
+#endif /* CONFIG_IWDG_STM32 */
+
+#ifdef CONFIG_WWDG_STM32
+#include <stm32wbxx_ll_wwdg.h>
 #endif
 
 #endif /* !_ASMLANGUAGE */

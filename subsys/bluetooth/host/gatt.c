@@ -181,8 +181,6 @@ BT_GATT_SERVICE_DEFINE(_2_gap_svc,
 );
 
 #if defined(CONFIG_BT_GATT_DYNAMIC_DB)
-static struct bt_gatt_ccc_cfg sc_ccc_cfg[BT_GATT_CCC_MAX] = {};
-
 static void sc_ccc_cfg_changed(const struct bt_gatt_attr *attr,
 			       u16_t value)
 {
@@ -507,7 +505,7 @@ BT_GATT_SERVICE_DEFINE(_1_gatt_svc,
 	 */
 	BT_GATT_CHARACTERISTIC(BT_UUID_GATT_SC, BT_GATT_CHRC_INDICATE,
 			       BT_GATT_PERM_NONE, NULL, NULL, NULL),
-	BT_GATT_CCC(sc_ccc_cfg_changed),
+	BT_GATT_CCC(sc_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 #if defined(CONFIG_BT_GATT_CACHING)
 	BT_GATT_CHARACTERISTIC(BT_UUID_GATT_CLIENT_FEATURES,
 			       BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
@@ -1530,7 +1528,7 @@ static u8_t notify_cb(const struct bt_gatt_attr *attr, void *user_data)
 		conn = bt_conn_lookup_addr_le(cfg->id, &cfg->peer);
 		if (!conn) {
 #if defined(CONFIG_BT_GATT_DYNAMIC_DB)
-			if (ccc->cfg == sc_ccc_cfg) {
+			if (ccc->cfg_changed == sc_ccc_cfg_changed) {
 				sc_save(cfg, data->ind_params);
 			}
 #endif /* CONFIG_BT_GATT_DYNAMIC_DB */
@@ -1697,6 +1695,43 @@ u16_t bt_gatt_get_mtu(struct bt_conn *conn)
 	return bt_att_get_mtu(conn);
 }
 
+u8_t bt_gatt_check_perm(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+			u8_t mask)
+{
+	if ((mask & BT_GATT_PERM_READ) &&
+	    (!(attr->perm & BT_GATT_PERM_READ_MASK) || !attr->read)) {
+		return BT_ATT_ERR_READ_NOT_PERMITTED;
+	}
+
+	if ((mask & BT_GATT_PERM_WRITE) &&
+	    (!(attr->perm & BT_GATT_PERM_WRITE_MASK) || !attr->write)) {
+		return BT_ATT_ERR_WRITE_NOT_PERMITTED;
+	}
+
+	mask &= attr->perm;
+	if (mask & BT_GATT_PERM_AUTHEN_MASK) {
+#if defined(CONFIG_BT_SMP)
+		if (conn->sec_level < BT_SECURITY_L3) {
+			return BT_ATT_ERR_AUTHENTICATION;
+		}
+#else
+		return BT_ATT_ERR_AUTHENTICATION;
+#endif /* CONFIG_BT_SMP */
+	}
+
+	if ((mask & BT_GATT_PERM_ENCRYPT_MASK)) {
+#if defined(CONFIG_BT_SMP)
+		if (!conn->encrypt) {
+			return BT_ATT_ERR_INSUFFICIENT_ENCRYPTION;
+		}
+#else
+		return BT_ATT_ERR_INSUFFICIENT_ENCRYPTION;
+#endif /* CONFIG_BT_SMP */
+	}
+
+	return 0;
+}
+
 #if defined(CONFIG_BT_GATT_DYNAMIC_DB)
 static void sc_restore(struct bt_gatt_ccc_cfg *cfg)
 {
@@ -1716,11 +1751,18 @@ static void sc_restore(struct bt_gatt_ccc_cfg *cfg)
 }
 #endif /* CONFIG_BT_GATT_DYNAMIC_DB */
 
-static u8_t connected_cb(const struct bt_gatt_attr *attr, void *user_data)
+struct conn_data {
+	struct bt_conn *conn;
+	bt_security_t sec;
+};
+
+static u8_t update_ccc(const struct bt_gatt_attr *attr, void *user_data)
 {
-	struct bt_conn *conn = user_data;
+	struct conn_data *data = user_data;
+	struct bt_conn *conn = data->conn;
 	struct _bt_gatt_ccc *ccc;
 	size_t i;
+	u8_t err;
 
 	/* Check attribute user_data must be of type struct _bt_gatt_ccc */
 	if (attr->write != bt_gatt_attr_write_ccc) {
@@ -1735,10 +1777,36 @@ static u8_t connected_cb(const struct bt_gatt_attr *attr, void *user_data)
 			continue;
 		}
 
+		/* Check if attribute requires encryption/authentication */
+		err = bt_gatt_check_perm(conn, attr, BT_GATT_PERM_WRITE_MASK);
+		if (err) {
+			bt_security_t sec;
+
+			if (err == BT_ATT_ERR_WRITE_NOT_PERMITTED) {
+				BT_WARN("CCC %p not writable", attr);
+				continue;
+			}
+
+			sec = BT_SECURITY_L2;
+
+			if (err == BT_ATT_ERR_AUTHENTICATION) {
+				sec = BT_SECURITY_L3;
+			}
+
+			/* Check if current security is enough */
+			if (IS_ENABLED(CONFIG_BT_SMP) &&
+			    bt_conn_get_security(conn) < sec) {
+				if (data->sec < sec) {
+					data->sec = sec;
+				}
+				continue;
+			}
+		}
+
 		if (ccc->cfg[i].value) {
 			gatt_ccc_changed(attr, ccc);
 #if defined(CONFIG_BT_GATT_DYNAMIC_DB)
-			if (ccc->cfg == sc_ccc_cfg) {
+			if (ccc->cfg_changed == sc_ccc_cfg_changed) {
 				sc_restore(&ccc->cfg[i]);
 			}
 #endif /* CONFIG_BT_GATT_DYNAMIC_DB */
@@ -3231,11 +3299,51 @@ static void add_subscriptions(struct bt_conn *conn)
 
 void bt_gatt_connected(struct bt_conn *conn)
 {
+	struct conn_data data;
+
 	BT_DBG("conn %p", conn);
-	bt_gatt_foreach_attr(0x0001, 0xffff, connected_cb, conn);
+
+	data.conn = conn;
+	data.sec = BT_SECURITY_L1;
+
+	bt_gatt_foreach_attr(0x0001, 0xffff, update_ccc, &data);
+
+	/* BLUETOOTH CORE SPECIFICATION Version 5.1 | Vol 3, Part C page 2192:
+	 *
+	 * 10.3.1.1 Handling of GATT indications and notifications
+	 *
+	 * A client “requests” a server to send indications and notifications
+	 * by appropriately configuring the server via a Client Characteristic
+	 * Configuration Descriptor. Since the configuration is persistent
+	 * across a disconnection and reconnection, security requirements must
+	 * be checked against the configuration upon a reconnection before
+	 * sending indications or notifications. When a server reconnects to a
+	 * client to send an indication or notification for which security is
+	 * required, the server shall initiate or request encryption with the
+	 * client prior to sending an indication or notification. If the client
+	 * does not have an LTK indicating that the client has lost the bond,
+	 * enabling encryption will fail.
+	 */
+	if (IS_ENABLED(CONFIG_BT_SMP) &&
+	    bt_conn_get_security(conn) < data.sec) {
+		bt_conn_set_security(conn, data.sec);
+	}
+
 #if defined(CONFIG_BT_GATT_CLIENT)
 	add_subscriptions(conn);
 #endif /* CONFIG_BT_GATT_CLIENT */
+}
+
+void bt_gatt_encrypt_change(struct bt_conn *conn)
+{
+	struct conn_data data;
+
+	BT_DBG("conn %p", conn);
+
+	data.conn = conn;
+	data.sec = BT_SECURITY_L1;
+
+	bt_gatt_foreach_attr(0x0001, 0xffff, update_ccc, &data);
 }
 
 bool bt_gatt_change_aware(struct bt_conn *conn, bool req)
@@ -3304,7 +3412,7 @@ static int bt_gatt_store_cf(struct bt_conn *conn)
 		if (conn->id) {
 			char id_str[4];
 
-			snprintk(id_str, sizeof(id_str), "%u", conn->id);
+			u8_to_dec(id_str, sizeof(id_str), conn->id);
 			bt_settings_encode_key(key, sizeof(key), "cf",
 					       &conn->le.dst, id_str);
 		}
@@ -3430,7 +3538,7 @@ int bt_gatt_store_ccc(u8_t id, const bt_addr_le_t *addr)
 	if (id) {
 		char id_str[4];
 
-		snprintk(id_str, sizeof(id_str), "%u", id);
+		u8_to_dec(id_str, sizeof(id_str), id);
 		bt_settings_encode_key(key, sizeof(key), "ccc",
 				       (bt_addr_le_t *)addr, id_str);
 	} else {
@@ -3501,7 +3609,7 @@ static int bt_gatt_clear_ccc(u8_t id, const bt_addr_le_t *addr)
 	if (id) {
 		char id_str[4];
 
-		snprintk(id_str, sizeof(id_str), "%u", id);
+		u8_to_dec(id_str, sizeof(id_str), id);
 		bt_settings_encode_key(key, sizeof(key), "ccc",
 				       (bt_addr_le_t *)addr, id_str);
 	} else {
@@ -3539,7 +3647,7 @@ static int bt_gatt_clear_cf(u8_t id, const bt_addr_le_t *addr)
 	if (id) {
 		char id_str[4];
 
-		snprintk(id_str, sizeof(id_str), "%u", id);
+		u8_to_dec(id_str, sizeof(id_str), id);
 		bt_settings_encode_key(key, sizeof(key), "cf",
 				       (bt_addr_le_t *)addr, id_str);
 	} else {

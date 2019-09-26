@@ -90,7 +90,8 @@ class KobjectType:
     def __repr__(self):
         return "<kobject %s>" % self.name
 
-    def has_kobject(self):
+    @staticmethod
+    def has_kobject():
         return True
 
     def get_kobjects(self, addr):
@@ -294,9 +295,12 @@ def analyze_die_struct(die):
         for child in die.iter_children():
             if child.tag != "DW_TAG_member":
                 continue
+            data_member_location = child.attributes.get("DW_AT_data_member_location")
+            if not data_member_location:
+                continue
+
             child_type = die_get_type_offset(child)
-            member_offset = \
-                child.attributes["DW_AT_data_member_location"].value
+            member_offset = data_member_location.value
             cname = die_get_name(child) or "<anon>"
             m = AggregateTypeMember(child.offset, cname, child_type,
                                     member_offset)
@@ -354,7 +358,7 @@ def addr_deref(elf, addr):
         start = section['sh_addr']
         end = start + section['sh_size']
 
-        if addr >= start and addr < end:
+        if start <= addr < end:
             data = section.data()
             offset = addr - start
             return struct.unpack("<I" if elf.little_endian else ">I",
@@ -512,9 +516,7 @@ class ElfHelper:
                 continue
 
             _, user_ram_allowed = kobjects[ko.type_obj.name]
-            if (not user_ram_allowed and
-                    (addr >= app_smem_start and addr < app_smem_end)):
-
+            if not user_ram_allowed and app_smem_start <= addr < app_smem_end:
                 self.debug_die(die,
                                "object '%s' found in invalid location %s"
                                % (name, hex(addr)))
@@ -566,8 +568,9 @@ class ElfHelper:
             return
         sys.stdout.write(scr + ": " + text + "\n")
 
-    def error(self, text):
-        sys.exit("%s ERROR: %s\n" % (scr, text))
+    @staticmethod
+    def error(text):
+        sys.exit("%s ERROR: %s" % (scr, text))
 
     def debug_die(self, die, text):
         fn, ln = get_filename_lineno(die)
@@ -576,11 +579,14 @@ class ElfHelper:
         self.debug("File '%s', line %d:" % (fn, ln))
         self.debug("    %s" % text)
 
-    def get_thread_counter(self):
+    @staticmethod
+    def get_thread_counter():
         return thread_counter
 
-    def get_sys_mutex_counter(self):
+    @staticmethod
+    def get_sys_mutex_counter():
         return sys_mutex_counter
 
-    def get_futex_counter(self):
+    @staticmethod
+    def get_futex_counter():
         return futex_counter

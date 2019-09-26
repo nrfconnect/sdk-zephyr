@@ -276,7 +276,8 @@ char *z_impl_net_addr_ntop(sa_family_t family, const void *src,
 }
 
 #if defined(CONFIG_USERSPACE)
-Z_SYSCALL_HANDLER(net_addr_ntop, family, src, dst, size)
+char *z_vrfy_net_addr_ntop(sa_family_t family, const void *src,
+			   char *dst, size_t size)
 {
 	char str[INET6_ADDRSTRLEN];
 	struct in6_addr addr6;
@@ -305,8 +306,9 @@ Z_SYSCALL_HANDLER(net_addr_ntop, family, src, dst, size)
 
 	Z_OOPS(z_user_to_copy((void *)dst, str, MIN(size, sizeof(str))));
 
-	return (int)dst;
+	return dst;
 }
+#include <syscalls/net_addr_ntop_mrsh.c>
 #endif /* CONFIG_USERSPACE */
 
 int z_impl_net_addr_pton(sa_family_t family, const char *src,
@@ -443,7 +445,8 @@ int z_impl_net_addr_pton(sa_family_t family, const char *src,
 }
 
 #if defined(CONFIG_USERSPACE)
-Z_SYSCALL_HANDLER(net_addr_pton, family, src, dst)
+int z_vrfy_net_addr_pton(sa_family_t family, const char *src,
+			 void *dst)
 {
 	char str[INET6_ADDRSTRLEN];
 	struct in6_addr addr6;
@@ -483,6 +486,7 @@ Z_SYSCALL_HANDLER(net_addr_pton, family, src, dst)
 
 	return 0;
 }
+#include <syscalls/net_addr_pton_mrsh.c>
 #endif /* CONFIG_USERSPACE */
 
 static u16_t calc_chksum(u16_t sum, const u8_t *data, size_t len)
@@ -880,4 +884,27 @@ const char *net_family2str(sa_family_t family)
 	}
 
 	return NULL;
+}
+
+const struct in_addr *net_ipv4_unspecified_address(void)
+{
+	static const struct in_addr addr;
+
+	return &addr;
+}
+
+const struct in_addr *net_ipv4_broadcast_address(void)
+{
+	static const struct in_addr addr = { { { 255, 255, 255, 255 } } };
+
+	return &addr;
+}
+
+/* IPv6 wildcard and loopback address defined by RFC2553 */
+const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
+const struct in6_addr in6addr_loopback = IN6ADDR_LOOPBACK_INIT;
+
+const struct in6_addr *net_ipv6_unspecified_address(void)
+{
+	return &in6addr_any;
 }

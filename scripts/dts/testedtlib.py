@@ -3,15 +3,17 @@
 # Copyright (c) 2019 Nordic Semiconductor ASA
 # SPDX-License-Identifier: BSD-3-Clause
 
+import sys
+
 import edtlib
 
-# Test suite for edtlib.py. Mostly uses string comparisons via the various
-# __repr__() methods. Can be run directly as an executable.
+# Test suite for edtlib.py. Run it directly as an executable, in this
+# directory:
 #
-# This script expects to be run from the directory its in. This simplifies
-# things, as paths in the output can be assumed below.
+#   $ ./testedtlib.py
 #
-# test.dts is the test file, and test-bindings/ has bindings.
+# test.dts is the test file. test-bindings/ has bindings. The tests mostly use
+# string comparisons via the various __repr__() methods.
 
 
 def run():
@@ -21,14 +23,16 @@ def run():
     """
 
     def fail(msg):
-        raise Exception("test failed: " + msg)
+        sys.exit("test failed: " + msg)
 
-    def verify_streq(actual, expected):
-        actual = str(actual)
+    def verify_eq(actual, expected):
         if actual != expected:
             # Put values on separate lines to make it easy to spot differences
             fail("not equal (expected value last):\n'{}'\n'{}'"
                  .format(actual, expected))
+
+    def verify_streq(actual, expected):
+        verify_eq(str(actual), expected)
 
     edt = edtlib.EDT("test.dts", ["test-bindings"])
 
@@ -96,6 +100,23 @@ def run():
                  "[<Register, addr: 0x30000000200000001, size: 0x1>]")
 
     #
+    # Test Device.parent and Device.children
+    #
+
+    verify_eq(edt.get_dev("/").parent, None)
+
+    verify_streq(edt.get_dev("/parent/child-1").parent,
+                 "<Device /parent in 'test.dts', no binding>")
+
+    verify_streq(edt.get_dev("/parent/child-2/grandchild").parent,
+                 "<Device /parent/child-2 in 'test.dts', no binding>")
+
+    verify_streq(edt.get_dev("/parent").children,
+                 "{'child-1': <Device /parent/child-1 in 'test.dts', no binding>, 'child-2': <Device /parent/child-2 in 'test.dts', no binding>}")
+
+    verify_eq(edt.get_dev("/parent/child-1").children, {})
+
+    #
     # Test 'include:' and the legacy 'inherits: !include ...'
     #
 
@@ -106,14 +127,41 @@ def run():
                  "{'foo': <Property, name: foo, type: int, value: 0>, 'bar': <Property, name: bar, type: int, value: 1>, 'baz': <Property, name: baz, type: int, value: 2>, 'qaz': <Property, name: qaz, type: int, value: 3>}")
 
     #
-    # Test 'sub-node:' in binding
+    # Test 'child/parent-bus:'
     #
 
-    verify_streq(edt.get_dev("/parent-with-sub-node/node").description,
-                 "Sub-node test")
+    verify_streq(edt.get_dev("/buses/foo-bus/node").binding_path,
+                 "test-bindings/device-on-foo-bus.yaml")
 
-    verify_streq(edt.get_dev("/parent-with-sub-node/node").props,
-                             "{'foo': <Property, name: foo, type: int, value: 1>, 'bar': <Property, name: bar, type: int, value: 2>}")
+    verify_streq(edt.get_dev("/buses/bar-bus/node").binding_path,
+                 "test-bindings/device-on-bar-bus.yaml")
+
+    #
+    # Test 'child-binding:'
+    #
+
+    child1 = edt.get_dev("/child-binding/child-1")
+    child2 = edt.get_dev("/child-binding/child-2")
+    grandchild = edt.get_dev("/child-binding/child-1/grandchild")
+
+    verify_streq(child1.binding_path, "test-bindings/child-binding.yaml")
+    verify_streq(child1.description, "child node")
+    verify_streq(child1.props, "{'child-prop': <Property, name: child-prop, type: int, value: 1>}")
+
+    verify_streq(child2.binding_path, "test-bindings/child-binding.yaml")
+    verify_streq(child2.description, "child node")
+    verify_streq(child2.props, "{'child-prop': <Property, name: child-prop, type: int, value: 3>}")
+
+    verify_streq(grandchild.binding_path, "test-bindings/child-binding.yaml")
+    verify_streq(grandchild.description, "grandchild node")
+    verify_streq(grandchild.props, "{'grandchild-prop': <Property, name: grandchild-prop, type: int, value: 2>}")
+
+    #
+    # Test deprecated 'sub-node:' key (replaced with 'child-binding:')
+    #
+
+    verify_streq(edt.get_dev("/deprecated/sub-node").props,
+                 "{'child-prop': <Property, name: child-prop, type: int, value: 3>}")
 
     #
     # Test Device.property (derived from DT and 'properties:' in the binding)

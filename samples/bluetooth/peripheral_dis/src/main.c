@@ -46,7 +46,7 @@ static struct bt_conn_cb conn_callbacks = {
 };
 
 static int zephyr_settings_fw_load(struct settings_store *cs,
-				   const char *subtree);
+				   const struct settings_load_arg *arg);
 
 static const struct settings_store_itf zephyr_settings_fw_itf = {
 	.csi_load = zephyr_settings_fw_load,
@@ -57,9 +57,11 @@ static struct settings_store zephyr_settings_fw_store = {
 };
 
 static int zephyr_settings_fw_load(struct settings_store *cs,
-				   const char *subtree)
+				   const struct settings_load_arg *arg)
 {
-
+	/* Ignore subtree and direct loading */
+	if (arg && (arg->subtree || arg->cb))
+		return 0;
 #if defined(CONFIG_BT_GATT_DIS_SETTINGS)
 	settings_runtime_set("bt/dis/model",
 			     "Zephyr Model",

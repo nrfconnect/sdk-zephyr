@@ -127,7 +127,7 @@ def update_irq_vec_map(irq_vec_map, irq, vector, max_irq):
     # This table will never have values less than 32 since those are for
     # exceptions; 0 means unconfigured
     if irq_vec_map[irq] != 0:
-        error("multiple vector assignments for interrupt line %d", irq)
+        error("multiple vector assignments for interrupt line %d" % irq)
 
     debug("assign IRQ %d to vector %d" % (irq, vector))
     irq_vec_map[irq] = vector
@@ -274,9 +274,8 @@ def create_irq_vectors_allocated(vectors, spur_code, spur_nocode, filename):
     # interrupt handlers installed, they are free for runtime installation
     # of interrupts
     num_chars = (len(vectors) + 7) // 8
-    vbits = [0 for i in range(num_chars)]
-    for i in range(len(vectors)):
-        handler, _, _ = vectors[i]
+    vbits = num_chars*[0]
+    for i, (handler, _, _) in enumerate(vectors):
         if handler not in (spur_code, spur_nocode):
             continue
 

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <xtensa/xtensa.dtsi>
+#include <dt-bindings/gpio/gpio.h>
 
 / {
 	cpus {
@@ -31,13 +32,44 @@
 	};
 
 	soc {
-		uart0: uart@40008fd0 {
+		uart0: uart@3ff40000 {
 			compatible = "espressif,esp32-uart";
-			reg = <0x40008fd0 0x400>;
-			label = "ROMUART";
-
+			reg = <0x3ff40000 0x400>;
+			/* interrupts = <12>; - FIXME: Enable interrupts when interrupt-controller got supported in device tree */
+			label = "UART_0";
 			status = "disabled";
 		};
 
+		uart1: uart@3ff50000 {
+			compatible = "espressif,esp32-uart";
+			reg = <0x3ff50000 0x400>;
+			/* interrupts = <17>; - FIXME: Enable interrupts when interrupt-controller got supported in device tree */
+			label = "UART_1";
+			status = "disabled";
+		};
+
+		uart2: uart@3ff6e000 {
+			compatible = "espressif,esp32-uart";
+			reg = <0x3ff6E000 0x400>;
+			/* interrupts = <18>; - FIXME: Enable interrupts when interrupt-controller got supported in device tree */
+			label = "UART_2";
+			status = "disabled";
+		};
+
+		gpio0: gpio@3ff44000 {
+			compatible = "espressif,esp32-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			reg = <0x3ff44000 0x800>;
+			label = "GPIO_0";
+		};
+
+		gpio1: gpio@3ff44800 {
+			compatible = "espressif,esp32-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			reg = <0x3ff44800 0x800>;
+			label = "GPIO_1";
+		};
 	};
 };

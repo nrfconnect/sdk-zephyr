@@ -28,6 +28,13 @@ endif # PINMUX
 config GPIO
 	default y
 
+if ADC
+
+config ADC_XEC
+	default y
+
+endif # ADC
+
 if GPIO
 
 config GPIO_XEC
@@ -41,5 +48,26 @@ config I2C_XEC
 	def_bool y
 
 endif # I2C
+
+if COUNTER
+
+config COUNTER_XEC
+	def_bool y
+
+endif # COUNTER
+
+if PS2
+
+config PS2_XEC
+	default y
+
+endif # PS2
+
+if PWM
+
+config PWM_XEC
+	def_bool y
+
+endif # PWM
 
 endif # SOC_MEC1501_HSZ

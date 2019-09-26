@@ -83,18 +83,6 @@ def main():
     write_addr_size(edt, "zephyr,ccm", "CCM")
     write_addr_size(edt, "zephyr,dtcm", "DTCM")
 
-    # NOTE: These defines aren't used by the code and just used by
-    # the kconfig build system, we can remove them in the future
-    # if we provide a function in kconfigfunctions.py to get
-    # the same info
-    write_required_label("UART_CONSOLE_ON_DEV_NAME", edt.chosen_dev("zephyr,console"))
-    write_required_label("UART_SHELL_ON_DEV_NAME",   edt.chosen_dev("zephyr,shell-uart"))
-    write_required_label("BT_UART_ON_DEV_NAME",      edt.chosen_dev("zephyr,bt-uart"))
-    write_required_label("UART_PIPE_ON_DEV_NAME",    edt.chosen_dev("zephyr,uart-pipe"))
-    write_required_label("BT_MONITOR_ON_DEV_NAME",   edt.chosen_dev("zephyr,bt-mon-uart"))
-    write_required_label("UART_MCUMGR_ON_DEV_NAME",  edt.chosen_dev("zephyr,uart-mcumgr"))
-    write_required_label("BT_C2H_UART_ON_DEV_NAME",  edt.chosen_dev("zephyr,bt-c2h-uart"))
-
     write_flash(edt.chosen_dev("zephyr,flash"))
     write_code_partition(edt.chosen_dev("zephyr,code-partition"))
 
@@ -418,22 +406,6 @@ def write_flash_partition_prefix(prefix, partition_dev, index):
         out_s("{}_DEV".format(prefix), controller.label)
 
 
-def write_required_label(ident, dev):
-    # Helper function. Writes '#define <ident> "<label>"', where <label>
-    # is the value of the 'label' property from 'dev'. Does nothing if
-    # 'dev' is None.
-    #
-    # Errors out if 'dev' exists but has no label.
-
-    if not dev:
-        return
-
-    if dev.label is None:
-        err("missing 'label' property on {!r}".format(dev))
-
-    out_s(ident, dev.label)
-
-
 def write_irqs(dev):
     # Writes IRQ num and data for the interrupts in dev's 'interrupt' property
 
@@ -446,11 +418,27 @@ def write_irqs(dev):
             alias += "_" + str2ident(cell_name)
         return alias
 
+    def encode_zephyr_multi_level_irq(irq, irq_num):
+        # See doc/reference/kernel/other/interrupts.rst for details
+        # on how this encoding works
+
+        irq_ctrl = irq.controller
+        # Look for interrupt controller parent until we have none
+        while irq_ctrl.interrupts:
+            irq_num = (irq_num + 1) << 8
+            if "irq" not in irq_ctrl.interrupts[0].specifier:
+                err("Expected binding for {!r} to have 'irq' "
+                    "in '#cells'".format(irq_ctrl))
+            irq_num |= irq_ctrl.interrupts[0].specifier["irq"]
+            irq_ctrl = irq_ctrl.interrupts[0].controller
+        return irq_num
+
     for irq_i, irq in enumerate(dev.interrupts):
-        # We ignore the controller for now
         for cell_name, cell_value in irq.specifier.items():
             ident = "IRQ_{}".format(irq_i)
-            if cell_name != "irq":
+            if cell_name == "irq":
+                cell_value = encode_zephyr_multi_level_irq(irq, cell_value)
+            else:
                 ident += "_" + str2ident(cell_name)
 
             out_dev(dev, ident, cell_value,
@@ -476,29 +464,43 @@ def write_phandle_val_list(dev, entries, ident):
     #
     # entries:
     #   List of entries (two for 'pwms' above). This might be a list of
-    #   edtlib.PWM instances, for example.
+    #   edtlib.PWM instances, for example.  If only one entry is given it
+    #   does not have a suffix '_0', and the '_COUNT' and group initializer
+    #   are not emitted.
     #
     # ident:
     #   Base identifier. For example, "PWM" generates output like this:
     #
     #     #define <device prefix>_PWMS_CONTROLLER_0 "PWM_0"  (name taken from 'label = ...')
     #     #define <device prefix>_PWMS_CHANNEL_0 123         (name taken from #cells in binding)
+    #     #define <device prefix>_PWMS_0 {"PWM_0", 123}
     #     #define <device prefix>_PWMS_CONTROLLER_1 "PWM_1"
     #     #define <device prefix>_PWMS_CHANNEL_1 456
+    #     #define <device prefix>_PWMS_1 {"PWM_1", 456}
+    #     #define <device prefix>_PWMS_COUNT 2
+    #     #define <device prefix>_PWMS {<device prefix>_PWMS_0, <device prefix>_PWMS_1}
     #     ...
     #
     #   Note: Do not add an "S" to 'ident'. It's added automatically, which
     #   forces consistency.
 
+    initializer_vals = []
     for i, entry in enumerate(entries):
-        write_phandle_val_list_entry(
-            dev, entry, i if len(entries) > 1 else None, ident)
+        initializer_vals.append(write_phandle_val_list_entry(
+            dev, entry, i if len(entries) > 1 else None, ident))
+    if len(entries) > 1:
+        out_dev(dev, ident + "S_COUNT", len(initializer_vals))
+        out_dev(dev, ident + "S", "{" + ", ".join(initializer_vals) + "}")
 
 
 def write_phandle_val_list_entry(dev, entry, i, ident):
     # write_phandle_val_list() helper. We could get rid of it if it wasn't for
     # write_spi_dev(). Adds 'i' as an index to identifiers unless it's None.
+    #
+    # Returns the identifier for the macro that provides the
+    # initializer for the entire entry.
 
+    initializer_vals = []
     if entry.controller.label is not None:
         ctrl_ident = ident + "S_CONTROLLER"  # e.g. PWMS_CONTROLLER
         if entry.name:
@@ -507,6 +509,7 @@ def write_phandle_val_list_entry(dev, entry, i, ident):
         # more than one entry.
         if i is not None:
             ctrl_ident += "_{}".format(i)
+        initializer_vals.append(quote_str(entry.controller.label))
         out_dev_s(dev, ctrl_ident, entry.controller.label)
 
     for cell, val in entry.specifier.items():
@@ -518,6 +521,16 @@ def write_phandle_val_list_entry(dev, entry, i, ident):
         if i is not None:
             cell_ident += "_{}".format(i)
         out_dev(dev, cell_ident, val)
+
+    initializer_vals += entry.specifier.values()
+
+    initializer_ident = ident + "S"
+    if entry.name:
+        initializer_ident += "_" + str2ident(entry.name)
+    if i is not None:
+        initializer_ident += "_{}".format(i)
+    return out_dev(dev, initializer_ident,
+                   "{" + ", ".join(map(str, initializer_vals)) + "}")
 
 
 def write_clocks(dev):
@@ -569,6 +582,9 @@ def out_dev(dev, ident, val, name_alias=None):
     #   <device alias>_<name alias> (for each device alias)
     #
     # 'name_alias' is used for reg-names and the like.
+    #
+    # Returns the identifier used for the macro that provides the value
+    # for 'ident' within 'dev', e.g. DT_MFG_MODEL_CTL_GPIOS_PIN.
 
     dev_prefix = dev_ident(dev)
 
@@ -577,22 +593,24 @@ def out_dev(dev, ident, val, name_alias=None):
         aliases.append(dev_prefix + "_" + name_alias)
         aliases += [alias + "_" + name_alias for alias in dev_aliases(dev)]
 
-    out(dev_prefix + "_" + ident, val, aliases)
+    return out(dev_prefix + "_" + ident, val, aliases)
 
 
 def out_dev_s(dev, ident, s):
-    # Like out_dev(), but puts quotes around 's' and escapes any double quotes
-    # and backslashes within it
+    # Like out_dev(), but emits 's' as a string literal
+    #
+    # Returns the generated macro name for 'ident'.
 
-    # \ must be escaped before " to avoid double escaping
-    out_dev(dev, ident, '"{}"'.format(escape(s)))
+    return out_dev(dev, ident, quote_str(s))
 
 
 def out_s(ident, val):
-    # Like out(), but puts quotes around 's' and escapes any double quotes and
-    # backslashes within it
+    # Like out(), but puts quotes around 'val' and escapes any double
+    # quotes and backslashes within it
+    #
+    # Returns the generated macro name for 'ident'.
 
-    out(ident, '"{}"'.format(escape(val)))
+    return out(ident, quote_str(val))
 
 
 def out(ident, val, aliases=()):
@@ -602,17 +620,30 @@ def out(ident, val, aliases=()):
     # Also writes any aliases listed in 'aliases' (an iterable). For the
     # header, these look like '#define <alias> <ident>'. For the configuration
     # file, the value is just repeated as '<alias>=<val>' for each alias.
+    #
+    # Returns the generated macro name for 'ident'.
 
     print("#define DT_{:40} {}".format(ident, val), file=header_file)
-    print("DT_{}={}".format(ident, val), file=conf_file)
+    primary_ident = "DT_{}".format(ident)
+
+    # Exclude things that aren't single token values from .conf.  At
+    # the moment the only such items are unquoted string
+    # representations of initializer lists, which begin with a curly
+    # brace.
+    output_to_conf = not (isinstance(val, str) and val.startswith("{"))
+    if output_to_conf:
+        print("{}={}".format(primary_ident, val), file=conf_file)
 
     for alias in aliases:
         if alias != ident:
             print("#define DT_{:40} DT_{}".format(alias, ident),
                   file=header_file)
-            # For the configuration file, the value is just repeated for all
-            # the aliases
-            print("DT_{}={}".format(alias, val), file=conf_file)
+            if output_to_conf:
+                # For the configuration file, the value is just repeated for all
+                # the aliases
+                print("DT_{}={}".format(alias, val), file=conf_file)
+
+    return primary_ident
 
 
 def out_comment(s, blank_before=True):
@@ -634,6 +665,13 @@ def escape(s):
 
     # \ must be escaped before " to avoid double escaping
     return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def quote_str(s):
+    # Puts quotes around 's' and escapes any double quotes and
+    # backslashes within it
+
+    return '"{}"'.format(escape(s))
 
 
 def err(s):

@@ -14,6 +14,41 @@
  * Macros to abstract compiler capabilities for GCC toolchain.
  */
 
+/*
+ * Older versions of GCC do not define __BYTE_ORDER__, so it must be manually
+ * detected and defined using arch-specific definitions.
+ */
+
+#ifndef _LINKER
+
+#ifndef __ORDER_BIG_ENDIAN__
+#define __ORDER_BIG_ENDIAN__            (1)
+#endif
+
+#ifndef __ORDER_LITTLE_ENDIAN__
+#define __ORDER_LITTLE_ENDIAN__         (2)
+#endif
+
+#ifndef __BYTE_ORDER__
+#if defined(__BIG_ENDIAN__) || defined(__ARMEB__) || \
+    defined(__THUMBEB__) || defined(__AARCH64EB__) || \
+    defined(__MIPSEB__) || defined(__TC32EB__)
+
+#define __BYTE_ORDER__                  __ORDER_BIG_ENDIAN__
+
+#elif defined(__LITTLE_ENDIAN__) || defined(__ARMEL__) || \
+      defined(__THUMBEL__) || defined(__AARCH64EL__) || \
+      defined(__MIPSEL__) || defined(__TC32EL__)
+
+#define __BYTE_ORDER__                  __ORDER_LITTLE_ENDIAN__
+
+#else
+#error "__BYTE_ORDER__ is not defined and cannot be automatically resolved"
+#endif
+#endif
+
+#endif /* !_LINKER */
+
 /* C++11 has static_assert built in */
 #ifdef __cplusplus
 #define BUILD_ASSERT(EXPR) static_assert(EXPR, "")
@@ -379,5 +414,33 @@ do {                                                                    \
 #define compiler_barrier() do { \
 	__asm__ __volatile__ ("" ::: "memory"); \
 } while (false)
+
+/** @brief Return larger value of two provided expressions.
+ *
+ * Macro ensures that expressions are evaluated only once.
+ *
+ * @note Macro has limited usage compared to the standard macro as it cannot be
+ *	 used:
+ *	 - to generate constant integer, e.g. __aligned(Z_MAX(4,5))
+ *	 - static variable, e.g. array like static u8_t array[Z_MAX(...)];
+ */
+#define Z_MAX(a, b) ({ \
+		/* random suffix to avoid naming conflict */ \
+		__typeof__(a) _value_a_ = (a); \
+		__typeof__(b) _value_b_ = (b); \
+		_value_a_ > _value_b_ ? _value_a_ : _value_b_; \
+	})
+
+/** @brief Return smaller value of two provided expressions.
+ *
+ * Macro ensures that expressions are evaluated only once. See @ref Z_MAX for
+ * macro limitations.
+ */
+#define Z_MIN(a, b) ({ \
+		/* random suffix to avoid naming conflict */ \
+		__typeof__(a) _value_a_ = (a); \
+		__typeof__(b) _value_b_ = (b); \
+		_value_a_ < _value_b_ ? _value_a_ : _value_b_; \
+	})
 
 #endif /* ZEPHYR_INCLUDE_TOOLCHAIN_GCC_H_ */

@@ -32,6 +32,7 @@ bool volatile switch_flag;
 struct k_thread *p_ztest_thread;
 
 _callee_saved_t ztest_thread_callee_saved_regs_container;
+int ztest_swap_return_val;
 
 /* Arbitrary values for the callee-saved registers,
  * enforced in the beginning of the test.
@@ -431,6 +432,16 @@ void test_arm_thread_swap(void)
 		: "memory"
 	);
 
+#if !defined(CONFIG_NO_OPTIMIZATIONS)
+	__asm__ volatile (
+		"stm %0, {%1};\n\t"
+		:
+		: "r" (&ztest_swap_return_val), "r" (swap_return_val)
+		: "memory"
+	);
+#endif
+
+
 	/* After swap-back, verify that the callee-saved registers loaded,
 	 * look exactly as what is located in the respective callee-saved
 	 * container of the thread.
@@ -465,10 +476,12 @@ void test_arm_thread_swap(void)
 
 #if !defined(CONFIG_NO_OPTIMIZATIONS)
 	/* The thread is now swapped-back in. */
-	zassert_true(_current->arch.swap_return_value = SWAP_RETVAL,
-		"Swap value not set as expected\n");
-	zassert_true(_current->arch.swap_return_value = swap_return_val,
-			"Swap value not returned as expected\n");
+	zassert_equal(_current->arch.swap_return_value, SWAP_RETVAL,
+		"Swap value not set as expected: 0x%x (0x%x)\n",
+		_current->arch.swap_return_value, SWAP_RETVAL);
+	zassert_equal(_current->arch.swap_return_value, ztest_swap_return_val,
+		"Swap value not returned as expected 0x%x (0x%x)\n",
+		_current->arch.swap_return_value, ztest_swap_return_val);
 #endif
 
 #if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)

@@ -23,8 +23,6 @@ extern "C" {
 #define STACK_ROUND_UP(x) ROUND_UP(x, STACK_ALIGN_SIZE)
 #define STACK_ROUND_DOWN(x) ROUND_DOWN(x, STACK_ALIGN_SIZE)
 
-extern K_THREAD_STACK_DEFINE(_interrupt_stack, CONFIG_ISR_STACK_SIZE);
-
 #ifdef CONFIG_X86_VERY_EARLY_CONSOLE
 /* Setup ultra-minimal serial driver for printk() */
 void z_x86_early_serial_init(void);
@@ -97,8 +95,6 @@ void z_x86_enable_paging(void);
 #ifdef __cplusplus
 }
 #endif
-
-#define z_is_in_isr() (_kernel.nested != 0U)
 
 #endif /* _ASMLANGUAGE */
 

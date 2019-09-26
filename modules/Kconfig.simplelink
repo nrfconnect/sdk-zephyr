@@ -1,4 +1,4 @@
-# Kconfig - CC3220 SDK HAL configuration
+# Kconfig - CC3220/CC32XX SDK HAL configuration
 
 config HAS_CC3220SDK
 	bool
@@ -13,8 +13,8 @@ config SIMPLELINK_HOST_DRIVER
 	depends on MULTITHREADING
 	select NEWLIB_LIBC
 	select ERRNO
-	select POSIX_API
 	select PTHREAD_IPC
+	select POSIX_CLOCK
 	help
 	  Build the SimpleLink host driver
 

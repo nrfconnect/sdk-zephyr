@@ -274,6 +274,19 @@
 	};
 
 	//
+	// For testing Device.parent and Device.children
+	//
+
+	parent {
+		child-1 {
+		};
+		child-2 {
+			grandchild {
+			};
+		};
+	};
+
+	//
 	// For testing 'include:'
 	//
 
@@ -300,9 +313,6 @@
 		phandle-ref = < &{/props/node} >;
 		phandle-refs = < &{/props/node} &{/props/node2} >;
 		phandle-refs-and-vals = < &{/props/node} 1 &{/props/node2} 2 >;
-		// Does not appear in the binding, so won't create an entry in
-		// Device.props
-		not-speced = <0>;
 
 		node {
 		};
@@ -322,15 +332,58 @@
 	};
 
 	//
-	// Parent with 'sub-node:' in binding
+	// For testing 'child-bus:' and 'parent-bus:'
 	//
 
-	parent-with-sub-node {
-		compatible = "parent-with-sub-node";
-		node {
+	buses {
+		// The nodes below will map to different bindings since they
+		// appear on different buses
+		foo-bus {
+			compatible = "foo-bus";
+			node {
+				compatible = "on-bus";
+			};
+		};
+		bar-bus {
+			compatible = "bar-bus";
+			node {
+				compatible = "on-bus";
+			};
+		};
+	};
+
+	//
+	// Node with 'child-binding:' in binding (along with a recursive
+	// 'child-binding:')
+	//
+
+	child-binding {
+		compatible = "child-binding";
+		child-1 {
+			child-prop = <1>;
+			grandchild {
+				grandchild-prop = <2>;
+			};
+		};
+		child-2 {
+			child-prop = <3>;
+		};
+	};
+
+	//
+	// For testing that neither 'include: [foo.yaml, bar.yaml]' nor
+	// 'include: [bar.yaml, foo.yaml]' causes errors when one of the files
+	// has 'required: true' and the other 'required: false'
+	//
+
+	include-order {
+		node-1 {
+			compatible = "order-1";
 			foo = <1>;
-			bar = <2>;
-			not-speced = <0>;
+		};
+		node-2 {
+			compatible = "order-2";
+			foo = <2>;
 		};
 	};
 
@@ -342,5 +395,8 @@
 		compatible = "deprecated";
 		required = <1>;
 		required-2 = <2>;
+		sub-node {
+			child-prop = <3>;
+		};
 	};
 };

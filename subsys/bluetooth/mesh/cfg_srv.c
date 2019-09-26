@@ -3233,9 +3233,14 @@ static bool conf_is_valid(struct bt_mesh_cfg_srv *cfg)
 	return true;
 }
 
-int bt_mesh_cfg_srv_init(struct bt_mesh_model *model, bool primary)
+static int cfg_srv_init(struct bt_mesh_model *model)
 {
 	struct bt_mesh_cfg_srv *cfg = model->user_data;
+
+	if (!bt_mesh_model_in_primary(model)) {
+		BT_ERR("Configuration Server only allowed in primary element");
+		return -EINVAL;
+	}
 
 	if (!cfg) {
 		BT_ERR("No Configuration Server context provided");
@@ -3273,6 +3278,10 @@ int bt_mesh_cfg_srv_init(struct bt_mesh_model *model, bool primary)
 	return 0;
 }
 
+const struct bt_mesh_model_cb bt_mesh_cfg_srv_cb = {
+	.init = cfg_srv_init,
+};
+
 static void mod_reset(struct bt_mesh_model *mod, struct bt_mesh_elem *elem,
 		      bool vnd, bool primary, void *user_data)
 {
@@ -3280,14 +3289,22 @@ static void mod_reset(struct bt_mesh_model *mod, struct bt_mesh_elem *elem,
 
 	/* Clear model state that isn't otherwise cleared. E.g. AppKey
 	 * binding and model publication is cleared as a consequence
-	 * of removing all app keys, however model subscription clearing
-	 * must be taken care of here.
+	 * of removing all app keys, however model subscription and user data
+	 * clearing must be taken care of here.
 	 */
 
 	clear_count = mod_sub_list_clear(mod);
 
-	if (IS_ENABLED(CONFIG_BT_SETTINGS) && clear_count) {
-		bt_mesh_store_mod_sub(mod);
+	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+		if (clear_count) {
+			bt_mesh_store_mod_sub(mod);
+		}
+
+		bt_mesh_model_data_store(mod, vnd, NULL, 0);
+	}
+
+	if (mod->cb && mod->cb->reset) {
+		mod->cb->reset(mod);
 	}
 }
 
