@@ -3,8 +3,10 @@
 
 zephyr_interface_library_named(posix_subsys)
 
+set(posix_subsys ${IMAGE}posix_subsys)
+
 if(CONFIG_POSIX_API)
-  target_include_directories(posix_subsys INTERFACE ${ZEPHYR_BASE}/include/posix)
+  target_include_directories(${posix_subsys} INTERFACE ${ZEPHYR_BASE}/include/posix)
 endif()
 
 zephyr_library()
@@ -28,4 +30,4 @@ zephyr_library_include_directories(
   ${ZEPHYR_BASE}/arch/${ARCH}/include
 )
 
-zephyr_library_link_libraries(posix_subsys)
+zephyr_library_link_libraries(${posix_subsys})
