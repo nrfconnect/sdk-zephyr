@@ -40,12 +40,6 @@
   #define SKIP_TO_KINETIS_FLASH_CONFIG
 #endif
 
-#if USE_PARTITION_MANAGER
-#include <pm_config.h>
-#define ROM_ADDR PM_ADDRESS
-#define ROM_SIZE PM_SIZE
-#else
-
 #if !defined(CONFIG_XIP) && (CONFIG_FLASH_SIZE == 0)
 #define ROM_ADDR RAM_ADDR
 #else
@@ -62,9 +56,8 @@
   #define ROM_SIZE CONFIG_FLASH_LOAD_SIZE
 #else
   #define ROM_SIZE (CONFIG_FLASH_SIZE*1K - CONFIG_FLASH_LOAD_OFFSET)
-#endif /* CONFIG_FLASH_LOAD_SIZE > 0 */
-#endif /* CONFIG_TI_CCFG_PRESENT */
-#endif /* USE_PARTITION_MANAGER */
+#endif
+#endif
 
 #if defined(CONFIG_XIP)
 	#if defined(CONFIG_IS_BOOTLOADER)
