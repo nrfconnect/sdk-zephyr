@@ -808,6 +808,7 @@ struct ifreq {
 #define SO_DFU_REVERT 5
 #define SO_DFU_BACKUP_DELETE 6
 #define SO_DFU_OFFSET 7
+#define SO_DFU_ERROR 20
 
 /** @cond INTERNAL_HIDDEN */
 /**
