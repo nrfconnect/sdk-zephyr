@@ -795,6 +795,7 @@ struct ifreq {
 /* Socket options for SOL_PDN level */
 #define SO_PDN_AF 1
 #define SO_PDN_CONTEXT_ID 2
+#define SO_PDN_STATE 3
 
 /* Protocol level for DFU. */
 #define SOL_DFU 515
