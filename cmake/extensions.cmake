@@ -1494,3 +1494,13 @@ function(generate_unique_target_name_from_filename filename target_name)
 
   set(${target_name} gen_${x}_${unique_chars} PARENT_SCOPE)
 endfunction()
+
+function(add_overlay_config conf_path image_name)
+    # Inject this configuration from parent image to mcuboot.
+    string(FIND "${${image_name}_OVERLAY_CONFIG}" ${conf_path} out)
+    if (${out} EQUAL -1)
+      set(${image_name}_OVERLAY_CONFIG
+        "${${image_name}_OVERLAY_CONFIG} ${conf_path}"
+        CACHE STRING "" FORCE)
+    endif()
+endfunction()
