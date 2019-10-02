@@ -802,7 +802,7 @@ struct ifreq {
 
 /* Socket options for SOL_DFU level */
 #define SO_DFU_FW_VERSION 1
-#define SO_DFU_RESOURCE 2
+#define SO_DFU_RESOURCES 2
 #define SO_DFU_TIMEO 3
 #define SO_DFU_APPLY 4
 #define SO_DFU_REVERT 5
