@@ -179,13 +179,11 @@ pipeline {
         }
         TestExecutionList = TestExecutionList.plus(sanityCheckNRFStages)
 
-        if (lib_Main.getBuildType(CI_STATE.ZEPHYR) != 'PR') {
-          def sanityCheckALLStages = OUTPUT_MAP.collectEntries {
-              ["SanityCheckALL\n${it.compiler}\n${it.set}" : generateParallelStageALL(it.set, it.compiler,
-                    AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE)]
-          }
-          TestExecutionList = TestExecutionList.plus(sanityCheckALLStages)
+        def sanityCheckALLStages = OUTPUT_MAP.collectEntries {
+            ["SanityCheckALL\nzephyr\n${it.set}" : generateParallelStageALL(it.set, 'zephyr',
+                  AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE)]
         }
+        TestExecutionList = TestExecutionList.plus(sanityCheckALLStages)
       }
 
       println "TestExecutionList = $TestExecutionList"
