@@ -3,11 +3,13 @@
 API Reference
 #############
 
+.. nRF-specific: There's a shared Kconfig documentation set, so
+   no kconfig/index.rst below
+
 .. toctree::
    :maxdepth: 1
 
    bluetooth/index.rst
-   kconfig/index.rst
    drivers/index.rst
    display/index.rst
    file_system/index.rst
