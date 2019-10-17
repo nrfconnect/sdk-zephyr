@@ -14,8 +14,7 @@
 #include <logging/log.h>
 #include "ens210.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_REGISTER(ENS210);
+LOG_MODULE_REGISTER(ENS210, CONFIG_SENSOR_LOG_LEVEL);
 
 #ifdef ENS210_CRC_CHECK
 u32_t ens210_crc7(u32_t bitstream)
@@ -162,7 +161,7 @@ static int ens210_wait_boot(struct device *i2c_dev)
 					 (u8_t *)&sys_stat);
 
 		if (ret < 0) {
-			k_sleep(1);
+			k_sleep(K_MSEC(1));
 			continue;
 		}
 
@@ -176,7 +175,7 @@ static int ens210_wait_boot(struct device *i2c_dev)
 
 		ens210_sys_enable(i2c_dev);
 
-		k_sleep(2);
+		k_sleep(K_MSEC(2));
 	}
 
 	if (ret < 0) {

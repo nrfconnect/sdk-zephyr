@@ -14,6 +14,7 @@
 LOG_MODULE_REGISTER(net_shell, LOG_LEVEL_DBG);
 
 #include <zephyr.h>
+#include <kernel_internal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <shell/shell.h>
@@ -64,6 +65,9 @@ LOG_MODULE_REGISTER(net_shell, LOG_LEVEL_DBG);
 
 #include "net_shell.h"
 #include "net_stats.h"
+
+#include <sys/fdtable.h>
+#include "websocket/websocket_internal.h"
 
 #define PR(fmt, ...)						\
 	shell_fprintf(shell, SHELL_NORMAL, fmt, ##__VA_ARGS__)
@@ -733,12 +737,13 @@ static void print_tc_tx_stats(const struct shell *shell, struct net_if *iface)
 
 	PR("TX traffic class statistics:\n");
 
-#if defined(CONFIG_NET_CONTEXT_TIMESTAMP)
+#if defined(CONFIG_NET_CONTEXT_TIMESTAMP) || \
+				defined(CONFIG_NET_PKT_TXTIME_STATS)
 	PR("TC  Priority\tSent pkts\tbytes\ttime\n");
 
 	for (i = 0; i < NET_TC_TX_COUNT; i++) {
 		net_stats_t count = GET_STAT(iface,
-					     tc.sent[i].tx_time.time_count);
+					     tc.sent[i].tx_time.count);
 		if (count == 0) {
 			PR("[%d] %s (%d)\t%d\t\t%d\t-\n", i,
 			   priority2str(GET_STAT(iface, tc.sent[i].priority)),
@@ -752,7 +757,7 @@ static void print_tc_tx_stats(const struct shell *shell, struct net_if *iface)
 			   GET_STAT(iface, tc.sent[i].pkts),
 			   GET_STAT(iface, tc.sent[i].bytes),
 			   (u32_t)(GET_STAT(iface,
-					    tc.sent[i].tx_time.time_sum) /
+					    tc.sent[i].tx_time.sum) /
 				   (u64_t)count));
 		}
 	}
@@ -769,7 +774,17 @@ static void print_tc_tx_stats(const struct shell *shell, struct net_if *iface)
 #endif /* CONFIG_NET_CONTEXT_TIMESTAMP */
 #else
 	ARG_UNUSED(shell);
+
+#if defined(CONFIG_NET_PKT_TXTIME_STATS)
+	net_stats_t count = GET_STAT(iface, tx_time.count);
+
+	if (count != 0) {
+		PR("Avg %s net_pkt (%u) time %lu us\n", "TX", count,
+		   (u32_t)(GET_STAT(iface, tx_time.sum) / (u64_t)count));
+	}
+#else
 	ARG_UNUSED(iface);
+#endif /* CONFIG_NET_PKT_TXTIME_STATS */
 #endif /* NET_TC_TX_COUNT > 1 */
 }
 
@@ -779,6 +794,31 @@ static void print_tc_rx_stats(const struct shell *shell, struct net_if *iface)
 	int i;
 
 	PR("RX traffic class statistics:\n");
+
+#if defined(CONFIG_NET_PKT_RXTIME_STATS)
+	PR("TC  Priority\tRecv pkts\tbytes\ttime\n");
+
+	for (i = 0; i < NET_TC_RX_COUNT; i++) {
+		net_stats_t count = GET_STAT(iface,
+					     tc.recv[i].rx_time.count);
+		if (count == 0) {
+			PR("[%d] %s (%d)\t%d\t\t%d\t-\n", i,
+			   priority2str(GET_STAT(iface, tc.recv[i].priority)),
+			   GET_STAT(iface, tc.recv[i].priority),
+			   GET_STAT(iface, tc.recv[i].pkts),
+			   GET_STAT(iface, tc.recv[i].bytes));
+		} else {
+			PR("[%d] %s (%d)\t%d\t\t%d\t%lu us\n", i,
+			   priority2str(GET_STAT(iface, tc.recv[i].priority)),
+			   GET_STAT(iface, tc.recv[i].priority),
+			   GET_STAT(iface, tc.recv[i].pkts),
+			   GET_STAT(iface, tc.recv[i].bytes),
+			   (u32_t)(GET_STAT(iface,
+					    tc.recv[i].rx_time.sum) /
+				   (u64_t)count));
+		}
+	}
+#else
 	PR("TC  Priority\tRecv pkts\tbytes\n");
 
 	for (i = 0; i < NET_TC_RX_COUNT; i++) {
@@ -788,9 +828,21 @@ static void print_tc_rx_stats(const struct shell *shell, struct net_if *iface)
 		   GET_STAT(iface, tc.recv[i].pkts),
 		   GET_STAT(iface, tc.recv[i].bytes));
 	}
+#endif /* CONFIG_NET_PKT_RXTIME_STATS */
 #else
 	ARG_UNUSED(shell);
+
+#if defined(CONFIG_NET_PKT_RXTIME_STATS)
+	net_stats_t count = GET_STAT(iface, rx_time.count);
+
+	if (count != 0) {
+		PR("Avg %s net_pkt (%u) time %lu us\n", "RX", count,
+		   (u32_t)(GET_STAT(iface, rx_time.sum) / (u64_t)count));
+	}
+#else
 	ARG_UNUSED(iface);
+#endif /* CONFIG_NET_PKT_RXTIME_STATS */
+
 #endif /* NET_TC_RX_COUNT > 1 */
 }
 
@@ -888,10 +940,10 @@ static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 #endif
 
 #if defined(CONFIG_NET_CONTEXT_TIMESTAMP) && defined(CONFIG_NET_NATIVE)
-	if (GET_STAT(iface, tx_time.time_count) > 0) {
+	if (GET_STAT(iface, tx_time.count) > 0) {
 		PR("Network pkt TX time %lu us\n",
-		   (u32_t)(GET_STAT(iface, tx_time.time_sum) /
-			   (u64_t)GET_STAT(iface, tx_time.time_count)));
+		   (u32_t)(GET_STAT(iface, tx_time.sum) /
+			   (u64_t)GET_STAT(iface, tx_time.count)));
 	}
 #endif
 
@@ -2860,9 +2912,12 @@ static int ping_ipv6(const struct shell *shell,
 
 	net_icmpv6_register_handler(&ping6_handler);
 
-	nbr = net_ipv6_nbr_lookup(NULL, &ipv6_target);
-	if (nbr) {
-		iface = nbr->iface;
+	iface = net_if_ipv6_select_src_iface(&ipv6_target);
+	if (!iface) {
+		nbr = net_ipv6_nbr_lookup(NULL, &ipv6_target);
+		if (nbr) {
+			iface = nbr->iface;
+		}
 	}
 
 #if defined(CONFIG_NET_ROUTE)
@@ -3248,7 +3303,6 @@ static int cmd_net_route(const struct shell *shell, size_t argc, char *argv[])
 }
 
 #if defined(CONFIG_INIT_STACKS)
-extern K_THREAD_STACK_DEFINE(_main_stack, CONFIG_MAIN_STACK_SIZE);
 extern K_THREAD_STACK_DEFINE(_interrupt_stack, CONFIG_ISR_STACK_SIZE);
 extern K_THREAD_STACK_DEFINE(sys_work_q_stack,
 			     CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE);
@@ -3294,11 +3348,11 @@ static int cmd_net_stacks(const struct shell *shell, size_t argc,
 	}
 
 #if defined(CONFIG_INIT_STACKS)
-	net_analyze_stack_get_values(Z_THREAD_STACK_BUFFER(_main_stack),
-				     K_THREAD_STACK_SIZEOF(_main_stack),
+	net_analyze_stack_get_values(Z_THREAD_STACK_BUFFER(z_main_stack),
+				     K_THREAD_STACK_SIZEOF(z_main_stack),
 				     &pcnt, &unused);
 	PR("%s [%s] stack size %d/%d bytes unused %u usage %d/%d (%u %%)\n",
-	   "main", "_main_stack", CONFIG_MAIN_STACK_SIZE,
+	   "main", "z_main_stack", CONFIG_MAIN_STACK_SIZE,
 	   CONFIG_MAIN_STACK_SIZE, unused,
 	   CONFIG_MAIN_STACK_SIZE - unused, CONFIG_MAIN_STACK_SIZE, pcnt);
 
@@ -3408,7 +3462,11 @@ static int cmd_net_stats(const struct shell *shell, size_t argc, char *argv[])
 		return 0;
 	}
 
-	cmd_net_stats_iface(shell, argc, argv);
+	if (strcmp(argv[1], "reset") == 0) {
+		net_stats_reset(NULL);
+	} else {
+		cmd_net_stats_iface(shell, argc, argv);
+	}
 #else
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
@@ -3934,6 +3992,72 @@ usage:
 	return 0;
 }
 
+#if defined(CONFIG_WEBSOCKET_CLIENT)
+static void websocket_context_cb(struct websocket_context *context,
+				 void *user_data)
+{
+#if defined(CONFIG_NET_IPV6) && !defined(CONFIG_NET_IPV4)
+#define ADDR_LEN NET_IPV6_ADDR_LEN
+#elif defined(CONFIG_NET_IPV4) && !defined(CONFIG_NET_IPV6)
+#define ADDR_LEN NET_IPV4_ADDR_LEN
+#else
+#define ADDR_LEN NET_IPV6_ADDR_LEN
+#endif
+	struct net_shell_user_data *data = user_data;
+	const struct shell *shell = data->shell;
+	struct net_context *net_ctx;
+	int *count = data->user_data;
+	/* +7 for []:port */
+	char addr_local[ADDR_LEN + 7];
+	char addr_remote[ADDR_LEN + 7] = "";
+
+	net_ctx = z_get_fd_obj(context->real_sock, NULL, 0);
+	if (net_ctx == NULL) {
+		PR_ERROR("Invalid fd %d");
+		return;
+	}
+
+	get_addresses(net_ctx, addr_local, sizeof(addr_local),
+		      addr_remote, sizeof(addr_remote));
+
+	PR("[%2d] %p/%p\t%p   %16s\t%16s\n",
+	   (*count) + 1, context, net_ctx,
+	   net_context_get_iface(net_ctx),
+	   addr_local, addr_remote);
+
+	(*count)++;
+}
+#endif /* CONFIG_WEBSOCKET_CLIENT */
+
+static int cmd_net_websocket(const struct shell *shell, size_t argc,
+			     char *argv[])
+{
+#if defined(CONFIG_WEBSOCKET_CLIENT)
+	struct net_shell_user_data user_data;
+	int count = 0;
+
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	PR("     websocket/net_ctx\tIface         "
+	   "Local              \tRemote\n");
+
+	user_data.shell = shell;
+	user_data.user_data = &count;
+
+	websocket_context_foreach(websocket_context_cb, &user_data);
+
+	if (count == 0) {
+		PR("No connections\n");
+	}
+#else
+	PR_INFO("Set CONFIG_WEBSOCKET_CLIENT to enable Websocket client "
+		"support.\n");
+#endif /* CONFIG_WEBSOCKET_CLIENT */
+
+	return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_arp,
 	SHELL_CMD(flush, NULL, "Remove all entries from ARP cache.",
 		  cmd_net_arp_flush),
@@ -4249,6 +4373,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(net_commands,
 	SHELL_CMD(tcp, &net_cmd_tcp, "Connect/send/close TCP connection.",
 		  cmd_net_tcp),
 	SHELL_CMD(vlan, &net_cmd_vlan, "Show VLAN information.", cmd_net_vlan),
+	SHELL_CMD(websocket, NULL, "Print information about WebSocket "
+								"connections.",
+		  cmd_net_websocket),
 	SHELL_SUBCMD_SET_END
 );
 

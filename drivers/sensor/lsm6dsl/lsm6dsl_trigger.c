@@ -10,12 +10,10 @@
 #include <sys/util.h>
 #include <kernel.h>
 #include <drivers/sensor.h>
-
+#include <logging/log.h>
 #include "lsm6dsl.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-#include <logging/log.h>
-LOG_MODULE_DECLARE(LSM6DSL);
+LOG_MODULE_DECLARE(LSM6DSL, CONFIG_SENSOR_LOG_LEVEL);
 
 int lsm6dsl_trigger_set(struct device *dev,
 			const struct sensor_trigger *trig,
@@ -137,7 +135,7 @@ int lsm6dsl_init_interrupt(struct device *dev)
 			CONFIG_LSM6DSL_THREAD_STACK_SIZE,
 			(k_thread_entry_t)lsm6dsl_thread, dev,
 			0, NULL, K_PRIO_COOP(CONFIG_LSM6DSL_THREAD_PRIORITY),
-			0, 0);
+			0, K_NO_WAIT);
 #elif defined(CONFIG_LSM6DSL_TRIGGER_GLOBAL_THREAD)
 	drv_data->work.handler = lsm6dsl_work_cb;
 	drv_data->dev = dev;

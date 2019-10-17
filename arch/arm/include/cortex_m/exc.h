@@ -38,18 +38,12 @@ extern volatile irq_offload_routine_t offload_routine;
  * to the Vector Key field, otherwise the writes are ignored.
  */
 #define AIRCR_VECT_KEY_PERMIT_WRITE 0x05FAUL
-/**
- *
- * @brief Find out if running in an ISR context
- *
- * The current executing vector is found in the IPSR register. We consider the
+/* The current executing vector is found in the IPSR register. We consider the
  * IRQs (exception 16 and up), and the PendSV and SYSTICK exceptions to be
  * interrupts. Taking a fault within an exception is also considered in
  * interrupt context.
- *
- * @return 1 if in ISR, 0 if not.
  */
-static ALWAYS_INLINE bool z_IsInIsr(void)
+static ALWAYS_INLINE bool z_arch_is_in_isr(void)
 {
 	u32_t vector = __get_IPSR();
 
@@ -85,7 +79,7 @@ static ALWAYS_INLINE bool z_IsInIsr(void)
  *
  * @return N/A
  */
-static ALWAYS_INLINE void z_ExcSetup(void)
+static ALWAYS_INLINE void z_arm_exc_setup(void)
 {
 	NVIC_SetPriority(PendSV_IRQn, 0xff);
 
@@ -137,7 +131,7 @@ static ALWAYS_INLINE void z_ExcSetup(void)
  *
  * @return N/A
  */
-static ALWAYS_INLINE void z_clearfaults(void)
+static ALWAYS_INLINE void z_arm_clear_faults(void)
 {
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
 #elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)

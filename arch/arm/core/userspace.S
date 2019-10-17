@@ -7,11 +7,9 @@
  *
  */
 
-#include <offsets_short.h>
 #include <toolchain.h>
 #include <linker/sections.h>
-#include <kernel_structs.h>
-#include <arch/cpu.h>
+#include <offsets_short.h>
 #include <syscall.h>
 
 _ASM_FILE_PROLOGUE
@@ -35,6 +33,9 @@ GDATA(_k_syscall_table)
  * The conversion is one way, and threads which transition to user mode do
  * not transition back later, unless they are doing system calls.
  *
+ * The function is invoked as:
+ * z_arm_userspace_enter(user_entry, p1, p2, p3,
+ *                        stack_info.start, stack_info.size);
  */
 SECTION_FUNC(TEXT,z_arm_userspace_enter)
     /* move user_entry to lr */
@@ -46,14 +47,20 @@ SECTION_FUNC(TEXT,z_arm_userspace_enter)
     msr PSPLIM, r0
 #endif
 
-    /* set stack to privileged stack */
+    /* prepare to set stack to privileged stack */
     ldr r0, =_kernel
     ldr r0, [r0, #_kernel_offset_to_current]
     ldr r0, [r0, #_thread_offset_to_priv_stack_start]    /* priv stack ptr */
     ldr ip, =CONFIG_PRIVILEGED_STACK_SIZE
     add r0, r0, ip
 
+    /* store current stack pointer to ip
+     * the current stack pointer is needed to retrieve
+     * stack_info.start and stack_info.size
+     */
     mov ip, sp
+
+    /* set stack to privileged stack */
     msr PSP, r0
 
 #if defined(CONFIG_BUILTIN_STACK_GUARD)
@@ -64,11 +71,14 @@ SECTION_FUNC(TEXT,z_arm_userspace_enter)
     msr PSPLIM, r0
 #endif
 
-#if defined (CONFIG_ARM_MPU)
+    /* push args to stack */
+    push {r1,r2,r3,lr}
+    push {r0,ip}
+
     /* Re-program dynamic memory map.
      *
      * Important note:
-     * z_arch_configure_dynamic_mpu_regions() may re-program the MPU Stack Guard
+     * z_arm_configure_dynamic_mpu_regions() may re-program the MPU Stack Guard
      * to guard the privilege stack for overflows (if building with option
      * CONFIG_MPU_STACK_GUARD). There is a risk of actually overflowing the
      * stack while doing the re-programming. We minimize the risk by placing
@@ -79,20 +89,17 @@ SECTION_FUNC(TEXT,z_arm_userspace_enter)
      * stack, since we do not control how much stack is actually left, when
      * user invokes z_arm_userspace_enter().
      */
-    push {r0,r1,r2,r3,ip,lr}
     ldr r0, =_kernel
     ldr r0, [r0, #_kernel_offset_to_current]
-    bl z_arch_configure_dynamic_mpu_regions
-    pop {r0,r1,r2,r3,ip,lr}
-#endif
+    bl z_arm_configure_dynamic_mpu_regions
+
+    pop {r0,ip}
 
     /* load up stack info from user stack */
     ldr r0, [ip]
     ldr ip, [ip, #4]
 
-
-    /* push args to stack */
-    push {r0,r1,r2,r3,ip,lr}
+    push {r0,ip}
 
     /* clear the user stack area to clean out privileged data */
     /* from right past the guard right up to the end */
@@ -104,18 +111,18 @@ SECTION_FUNC(TEXT,z_arm_userspace_enter)
 #endif
     bl memset
 
-    pop {r0,r1,r2,r3,ip,lr}
+    pop {r0,ip}
 
     /* r0 contains user stack start, ip contains user stack size */
     add r0, r0, ip   /* calculate top of stack */
 
 #if defined(CONFIG_BUILTIN_STACK_GUARD)
     /* clear stack limit (stack protection not required in user mode) */
-    push {r3}
     mov r3, #0
     msr PSPLIM, r3
-    pop {r3}
 #endif
+    /* pop remaining arguments from stack before switching stacks */
+    pop {r1,r2,r3,lr}
 
     /* set stack to user stack */
     msr PSP, r0

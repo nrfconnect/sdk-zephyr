@@ -211,12 +211,12 @@ extern void z_arch_irq_enable(unsigned int irq);
 extern void z_arch_irq_disable(unsigned int irq);
 
 extern u32_t z_timer_cycle_get_32(void);
-#define z_arch_k_cycle_get_32() z_timer_cycle_get_32()
 
-/**
- * Returns true if interrupts were unlocked prior to the
- * z_arch_irq_lock() call that produced the key argument.
- */
+static inline u32_t z_arch_k_cycle_get_32(void)
+{
+	return z_timer_cycle_get_32();
+}
+
 static ALWAYS_INLINE bool z_arch_irq_unlocked(unsigned int key)
 {
 	return (key & 0x200) != 0;
@@ -266,7 +266,7 @@ static inline u64_t z_tsc_read(void)
 	return rv.value;
 }
 
-static ALWAYS_INLINE void arch_nop(void)
+static ALWAYS_INLINE void z_arch_nop(void)
 {
 	__asm__ volatile("nop");
 }

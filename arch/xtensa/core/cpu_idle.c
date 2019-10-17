@@ -5,26 +5,12 @@
 
 #include <debug/tracing.h>
 
-/*
- * @brief Put the CPU in low-power mode
- *
- * This function always exits with interrupts unlocked.
- *
- * void k_cpu_idle(void)
- */
-void k_cpu_idle(void)
+void z_arch_cpu_idle(void)
 {
 	sys_trace_idle();
 	__asm__ volatile ("waiti 0");
 }
-/*
- * @brief Put the CPU in low-power mode, entered with IRQs locked
- *
- * This function exits with interrupts restored to <key>.
- *
- * void k_cpu_atomic_idle(unsigned int key)
- */
-void k_cpu_atomic_idle(unsigned int key)
+void z_arch_cpu_atomic_idle(unsigned int key)
 {
 	sys_trace_idle();
 	__asm__ volatile ("waiti 0\n\t"

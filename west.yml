@@ -44,7 +44,7 @@ manifest:
       revision: a12d92816a53a521d79cefcf5c38b9dc8a4fed6e
       path: modules/hal/cypress
     - name: hal_nordic
-      revision: db6277a1266cbcbd5588959bbacc1cd5670aed0e
+      revision: 1b14177ff2176a1d17f3dd5e7e217f44337255db
       path: modules/hal/nordic
     - name: hal_openisa
       revision: be5c01f86c96500def5079bcc58d2baefdffb6c8
@@ -59,7 +59,7 @@ manifest:
       revision: 0ec40aed8087f26bd9ac1b70fb5a6c326a6451aa
       path: modules/hal/st
     - name: hal_stm32
-      revision: 272281a1990ec7097f1844778955ed60fe28662a
+      revision: 886636e6db209abe6a05a95be5ec7b85a3dd7237
       path: modules/hal/stm32
     - name: hal_ti
       revision: 7a82e93e14766ef6e42df9915ea2ab8e3b952a8b
@@ -83,7 +83,7 @@ manifest:
       revision: bc62a2fa9d98ddb5d633c932ea199bc68e10f194
       path: modules/fs/nffs
     - name: hal_nxp
-      revision: 48a59fb436931d44d7595ec6deb42be41ff2f22b
+      revision: 97265a5396edc6a9de5f2fb643d505f37064e606
       path: modules/hal/nxp
     - name: open-amp
       revision: 9b591b289e1f37339bd038b5a1f0e6c8ad39c63a
@@ -96,7 +96,7 @@ manifest:
       path: modules/debug/segger
     - name: tinycbor
       path: modules/lib/tinycbor
-      revision: 31ae89e4b768612722620cb6cb173a0de4a19cc9
+      revision: 6966f6140cb870b792330a5186020eb1f4151f3e
     - name: littlefs
       path: modules/fs/littlefs
       revision: fe9572dd5a9fcf93a249daa4233012692bd2881d
