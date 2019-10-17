@@ -276,11 +276,6 @@ else() # NOT FIRST_BOILERPLATE_EXECUTION
     message("Changed board to secure nrf9160_pca20035 (NOT NS)")
   endif()
 
-  if(${BOARD} STREQUAL actinius_icarus_ns)
-    set(BOARD actinius_icarus)
-    message("Changed board to secure actinius_icarus (NOT NS)")
-  endif()
-
   unset(${IMAGE}DTC_OVERLAY_FILE)
   if(EXISTS              ${APPLICATION_SOURCE_DIR}/${BOARD}.overlay)
     set(${IMAGE}DTC_OVERLAY_FILE ${APPLICATION_SOURCE_DIR}/${BOARD}.overlay)
