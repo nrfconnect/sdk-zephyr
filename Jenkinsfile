@@ -72,9 +72,9 @@ def generateParallelStageALL(subset, compiler, AGENT_LABELS, DOCKER_REG, IMAGE_T
 pipeline {
 
   parameters {
-   booleanParam(name: 'RUN_DOWNSTREAM', description: 'if false skip downstream jobs', defaultValue: true)
+   booleanParam(name: 'RUN_DOWNSTREAM', description: 'if false skip downstream jobs', defaultValue: false)
    booleanParam(name: 'RUN_TESTS', description: 'if false skip testing', defaultValue: true)
-   booleanParam(name: 'RUN_BUILD', description: 'if false skip building', defaultValue: true)
+   booleanParam(name: 'RUN_BUILD', description: 'if false skip building', defaultValue: false)
    string(name: 'PLATFORMS', description: 'Default Platforms to test', defaultValue: 'nrf9160_pca10090 nrf9160_pca10090ns nrf52_pca10040 nrf52840_pca10056')
    string(name: 'jsonstr_CI_STATE', description: 'Default State if no upstream job',
               defaultValue: INPUT_STATE)
@@ -129,7 +129,14 @@ pipeline {
               dir('zephyr') {
                 def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.ZEPHYR)
                 if (BUILD_TYPE == "PR") {
-                  COMMIT_RANGE = "$CI_STATE.ZEPHYR.MERGE_BASE..$CI_STATE.ZEPHYR.REPORT_SHA"
+                  if (CI_STATE.ZEPHYR.IS_MERGEUP) {
+                    println 'This is a MERGE-UP PR.   CI_STATE.ZEPHYR.IS_MERGEUP=' + CI_STATE.ZEPHYR.IS_MERGEUP
+                    CI_STATE.ZEPHYR.MERGEUP_BASE = sh( script: "git log --oneline --grep='\\[nrf mergeup\\].*' -i -n 1 --pretty=format:'%h' | tr -d '\\n'" , returnStdout: true)
+                    println "CI_STATE.ZEPHYR.MERGEUP_BASE = $CI_STATE.ZEPHYR.MERGEUP_BASE"
+                    COMMIT_RANGE = "$CI_STATE.ZEPHYR.MERGEUP_BASE..$CI_STATE.ZEPHYR.REPORT_SHA"
+                  } else {
+                    COMMIT_RANGE = "$CI_STATE.ZEPHYR.MERGE_BASE..$CI_STATE.ZEPHYR.REPORT_SHA"
+                  }
                   COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.ZEPHYR.REPORT_SHA -g"
                   println "Building a PR [$CHANGE_ID]: $COMMIT_RANGE"
                 }
@@ -160,6 +167,13 @@ pipeline {
         }
       }
 
+      CI_STATE.ZEPHYR.IS_MERGEUP = false
+      if (((CI_STATE.ZEPHYR.CHANGE_TITLE.toLowerCase().contains('mergeup')  ) || (CI_STATE.ZEPHYR.CHANGE_TITLE.toLowerCase().contains('upmerge')  )) &&
+          ((CI_STATE.ZEPHYR.CHANGE_BRANCH.toLowerCase().contains('mergeup') ) || (CI_STATE.ZEPHYR.CHANGE_BRANCH.toLowerCase().contains('upmerge') ))) {
+        CI_STATE.ZEPHYR.IS_MERGEUP = true
+        println 'This is a MERGE-UP PR.   CI_STATE.ZEPHYR.IS_MERGEUP=' + CI_STATE.ZEPHYR.IS_MERGEUP
+      }
+
       if (CI_STATE.ZEPHYR.RUN_TESTS) {
         TestExecutionList['compliance'] = TestStages["compliance"]
       }
@@ -186,11 +200,13 @@ pipeline {
         TestExecutionList = TestExecutionList.plus(sanityCheckALLStages)
       }
 
+
+
       println "TestExecutionList = $TestExecutionList"
 
     }}}
 
-    stage('Exectuion') { steps { script {
+    stage('Execution') { steps { script {
       parallel TestExecutionList
     }}}
 
