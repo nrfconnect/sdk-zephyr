@@ -246,6 +246,7 @@ pipeline {
     }
     unstable {
       echo "unstable"
+      script { lib_Status.set("FAILURE", 'ZEPHYR', CI_STATE) }
     }
     failure {
       echo "failure"
