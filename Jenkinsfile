@@ -8,73 +8,14 @@ def INPUT_STATE  = lib_Main.getInputState(JOB_NAME)
 def CI_STATE = new HashMap()
 def TestExecutionList = [:]
 
-
-def generateParallelStageNRF(subset, compiler, AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE) {
-  return {
-    node (AGENT_LABELS) {
-      stage('Sanity Check - Zephyr'){
-        docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
-          lib_Main.cloneCItools(JOB_NAME)
-          dir('zephyr') {
-            checkout scm
-            CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
-                  CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
-            lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
-                  CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
-          }
-          lib_West.InitUpdate('zephyr')
-          lib_West.ApplyManifestUpdates(CI_STATE)
-          dir('zephyr') {
-            def PLATFORM_ARGS = lib_Main.getPlatformArgs(CI_STATE.ZEPHYR.PLATFORMS)
-            println "$compiler SANITY NRF PLATFORMS_ARGS = $PLATFORM_ARGS"
-            sh """
-                export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
-                source zephyr-env.sh && \
-                (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH $PLATFORM_ARGS --subset $subset || $SANITYCHECK_RETRY_CMDS
-               """
-          }
-        }
-        cleanWs()
-      }
-    }
-  }
-}
-
-def generateParallelStageALL(subset, compiler, AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE) {
-  return {
-    node (AGENT_LABELS) {
-      stage('Sanity Check - Zephyr'){
-        docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
-          lib_Main.cloneCItools(JOB_NAME)
-          dir('zephyr') {
-            checkout scm
-            CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
-                  CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
-            lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
-                  CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
-          }
-          lib_West.InitUpdate('zephyr')
-          lib_West.ApplyManifestUpdates(CI_STATE)
-          dir('zephyr') {
-            sh """
-                export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
-                source zephyr-env.sh && \
-                (./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH --subset $subset || $SANITYCHECK_RETRY_CMDS
-               """
-          }
-        }
-      }
-    }
-  }
-}
-
-
 pipeline {
 
   parameters {
    booleanParam(name: 'RUN_DOWNSTREAM', description: 'if false skip downstream jobs', defaultValue: false)
    booleanParam(name: 'RUN_TESTS', description: 'if false skip testing', defaultValue: true)
-   booleanParam(name: 'RUN_BUILD', description: 'if false skip building', defaultValue: false)
+   booleanParam(name: 'RUN_BUILD', description: 'if false skip building', defaultValue: true)
+   booleanParam(name: 'RUN_BUILD_UPSTREAM', description: 'if false skip building', defaultValue: true)
+   string(name: 'SANITYCHECK_RETRY_NUM', description: 'Default number of sanitycheck retries', defaultValue: '7')
    string(name: 'PLATFORMS', description: 'Default Platforms to test', defaultValue: 'nrf9160_pca10090 nrf9160_pca10090ns nrf52_pca10040 nrf52840_pca10056')
    string(name: 'jsonstr_CI_STATE', description: 'Default State if no upstream job',
               defaultValue: INPUT_STATE)
@@ -98,11 +39,8 @@ pipeline {
 
       // ENVs for sanitycheck
       ARCH = "-a arm"
-      SANITYCHECK_OPTIONS = "--inline-logs --enable-coverage -N"
-      SANITYCHECK_RETRY_CMDS = """
-          (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS --only-failed --outdir=out-2nd-pass) ||
-          (sleep 10; ./scripts/sanitycheck $SANITYCHECK_OPTIONS --only-failed --outdir=out-3rd-pass))
-          """
+      SANITYCHECK_OPTIONS = "--inline-logs --enable-coverage -N" // DEFAULT: --testcase-root tests
+      SANITYCHECK_RETRY_CMDS = '' // initialized so that it is shared to parrallel stages
   }
 
   stages {
@@ -114,12 +52,13 @@ pipeline {
       TestStages["compliance"] = {
         node (AGENT_LABELS) {
           stage('Compliance Test'){
+            println "Using Node:$NODE_NAME"
             docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
-              lib_Main.cloneCItools(JOB_NAME)
               dir('zephyr') {
                 checkout scm
                 CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
                       CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
+                lib_Status.set("PENDING", 'ZEPHYR', CI_STATE);
                 lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
                       CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
               }
@@ -155,7 +94,7 @@ pipeline {
 
                 // Run the compliance check
                 try {
-                  sh "(source ../zephyr/zephyr-env.sh && ../ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE)"
+                  sh "(source ../zephyr/zephyr-env.sh && ../tools/ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE)"
                 }
                 finally {
                   junit 'compliance.xml'
@@ -187,20 +126,26 @@ pipeline {
             [INPUT_MAP.keySet().toList(), args].transpose().collectEntries { [(it[0]): it[1]]}
         }
 
+        SANITYCHECK_RETRY_CMDS_LIST = []
+        for (i=1; i <= SANITYCHECK_RETRY_NUM.toInteger(); i++) {
+          SANITYCHECK_RETRY_CMDS_LIST.add("(sleep 30; ./scripts/sanitycheck $SANITYCHECK_OPTIONS --only-failed)")
+        }
+        SANITYCHECK_RETRY_CMDS = SANITYCHECK_RETRY_CMDS_LIST.join(' || \n')
+
         def sanityCheckNRFStages = OUTPUT_MAP.collectEntries {
             ["SanityCheckNRF\n${it.compiler}\n${it.set}" : generateParallelStageNRF(it.set, it.compiler,
                   AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE)]
         }
         TestExecutionList = TestExecutionList.plus(sanityCheckNRFStages)
 
-        def sanityCheckALLStages = OUTPUT_MAP.collectEntries {
-            ["SanityCheckALL\nzephyr\n${it.set}" : generateParallelStageALL(it.set, 'zephyr',
-                  AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE)]
+        if (CI_STATE.ZEPHYR.RUN_BUILD_UPSTREAM) {
+          def sanityCheckALLStages = OUTPUT_MAP.collectEntries {
+              ["SanityCheckALL\nzephyr\n${it.set}" : generateParallelStageALL(it.set, 'zephyr',
+                    AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE)]
+          }
+          TestExecutionList = TestExecutionList.plus(sanityCheckALLStages)
         }
-        TestExecutionList = TestExecutionList.plus(sanityCheckALLStages)
       }
-
-
 
       println "TestExecutionList = $TestExecutionList"
 
@@ -255,6 +200,65 @@ pipeline {
     cleanup {
         echo "cleanup"
         cleanWs()
+    }
+  }
+}
+
+def generateParallelStageNRF(subset, compiler, AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE) {
+  return {
+    node (AGENT_LABELS) {
+      stage('Sanity Check - Zephyr'){
+        println "Using Node:$NODE_NAME"
+        docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
+          dir('zephyr') {
+            checkout scm
+            CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
+                  CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
+            lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
+                  CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
+          }
+          lib_West.InitUpdate('zephyr')
+          lib_West.ApplyManifestUpdates(CI_STATE)
+          dir('zephyr') {
+            def PLATFORM_ARGS = lib_Main.getPlatformArgs(CI_STATE.ZEPHYR.PLATFORMS)
+            println "$compiler SANITY NRF PLATFORMS_ARGS = $PLATFORM_ARGS"
+            sh """
+                export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
+                source zephyr-env.sh && \
+                ./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH $PLATFORM_ARGS --subset $subset || $SANITYCHECK_RETRY_CMDS
+               """
+          }
+        }
+        cleanWs()
+      }
+    }
+  }
+}
+
+def generateParallelStageALL(subset, compiler, AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE) {
+  return {
+    node (AGENT_LABELS) {
+      stage('Sanity Check - Zephyr'){
+        println "Using Node:$NODE_NAME"
+        docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
+          dir('zephyr') {
+            checkout scm
+            CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
+                  CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
+            lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
+                  CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
+          }
+          lib_West.InitUpdate('zephyr')
+          lib_West.ApplyManifestUpdates(CI_STATE)
+          dir('zephyr') {
+            sh """
+                export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
+                source zephyr-env.sh && \
+                ./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH --subset $subset || $SANITYCHECK_RETRY_CMDS
+               """
+          }
+        }
+      }
     }
   }
 }
