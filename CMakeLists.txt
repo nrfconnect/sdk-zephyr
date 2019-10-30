@@ -474,12 +474,18 @@ if(EXISTS ${CMAKE_BINARY_DIR}/zephyr_modules.txt)
     # lazy regexes (it supports greedy only).
     string(REGEX REPLACE "\"(.*)\":\".*\"" "\\1" module_name ${module})
     string(REGEX REPLACE "\".*\":\"(.*)\"" "\\1" module_path ${module})
+
+    # Paths used in zephyr_modules.txt might be windows style, i.e. \ separator.
+    # As zephyr module requires a CMakeLists.txt to be present
+    # the find_path command can be used to convert to CMake style path.
+    find_path(cmake_module_path "CMakeLists.txt" PATH ${module_path})
+    set(ZEPHYR_CURRENT_MODULE_DIR ${cmake_module_path})
+
     # Note the second, binary_dir parameter requires the added
     # subdirectory to have its own, local cmake target(s). If not then
     # this binary_dir is created but stays empty. Object files land in
     # the main binary dir instead.
     # https://cmake.org/pipermail/cmake/2019-June/069547.html
-    set(ZEPHYR_CURRENT_MODULE_DIR ${module_path})
     add_subdirectory(${module_path} ${CMAKE_CURRENT_BINARY_DIR}/modules/${module_name})
   endforeach()
   # Done processing modules, clear ZEPHYR_CURRENT_MODULE_DIR.
