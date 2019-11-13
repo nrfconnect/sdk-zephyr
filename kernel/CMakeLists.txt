@@ -53,7 +53,7 @@ target_sources_ifdef(
   userspace.c
   )
 
-target_include_directories(kernel PRIVATE
+target_include_directories(${KERNEL_LIBRARY} PRIVATE
   ${ZEPHYR_BASE}/kernel/include
   ${ZEPHYR_BASE}/arch/${ARCH}/include
   )
