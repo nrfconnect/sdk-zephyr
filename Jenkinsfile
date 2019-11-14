@@ -127,7 +127,7 @@ pipeline {
         }
 
         SANITYCHECK_RETRY_CMDS_LIST = []
-        for (i=1; i <= SANITYCHECK_RETRY_NUM.toInteger(); i++) {
+        for (i=1; i <= CI_STATE.ZEPHYR.SANITYCHECK_RETRY_NUM.toInteger(); i++) {
           SANITYCHECK_RETRY_CMDS_LIST.add("(sleep 30; ./scripts/sanitycheck $SANITYCHECK_OPTIONS --only-failed)")
         }
         SANITYCHECK_RETRY_CMDS = SANITYCHECK_RETRY_CMDS_LIST.join(' || \n')
