@@ -1496,7 +1496,7 @@ function(add_partition_manager_config config_file)
   get_filename_component(pm_path ${config_file} REALPATH)
   set_property(
     GLOBAL APPEND PROPERTY
-    ${IMAGE}PM_SUBSYS
+    PM_SUBSYS
     ${pm_path}
     )
 endfunction()
