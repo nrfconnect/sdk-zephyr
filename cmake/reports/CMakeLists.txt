@@ -18,7 +18,7 @@ foreach(report ram_report rom_report)
 endforeach()
 
 add_custom_command(
-  TARGET ${IMAGE}rom_report
+  TARGET rom_report
   POST_BUILD
   COMMAND
   ${PYTHON_EXECUTABLE}
