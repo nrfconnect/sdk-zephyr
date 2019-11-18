@@ -441,7 +441,7 @@ macro(zephyr_library_amend)
 
   zephyr_library_get_current_dir_lib_name(${ZEPHYR_CURRENT_MODULE_DIR} lib_name)
 
-  set(ZEPHYR_CURRENT_LIBRARY ${IMAGE}${lib_name})
+  set(ZEPHYR_CURRENT_LIBRARY ${lib_name})
 endmacro()
 
 function(zephyr_link_interface interface)
