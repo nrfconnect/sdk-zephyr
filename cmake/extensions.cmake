@@ -531,7 +531,7 @@ endfunction()
 # Note: Ensure the given partition has been define using
 #       K_APPMEM_PARTITION_DEFINE in source code.
 function(zephyr_library_app_memory partition)
-  set_property(TARGET ${IMAGE}zephyr_property_target
+  set_property(TARGET zephyr_property_target
                APPEND PROPERTY COMPILE_OPTIONS
                "-l" $<TARGET_FILE_NAME:${ZEPHYR_CURRENT_LIBRARY}> "${partition}")
 endfunction()

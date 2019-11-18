@@ -1086,7 +1086,7 @@ if(CONFIG_USERSPACE)
     -d ${OBJ_FILE_DIR}
     -o ${APP_SMEM_UNALIGNED_LD}
     ${NEWLIB_PART} ${MBEDTLS_PART}
-    $<TARGET_PROPERTY:${IMAGE}zephyr_property_target,COMPILE_OPTIONS>
+    $<TARGET_PROPERTY:zephyr_property_target,COMPILE_OPTIONS>
     $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:--verbose>
     DEPENDS
     kernel
@@ -1137,7 +1137,7 @@ if(CONFIG_USERSPACE)
     -e $<TARGET_FILE:app_smem_unaligned_prebuilt>
     -o ${APP_SMEM_ALIGNED_LD}
     ${NEWLIB_PART} ${MBEDTLS_PART}
-    $<TARGET_PROPERTY:${IMAGE}zephyr_property_target,COMPILE_OPTIONS>
+    $<TARGET_PROPERTY:zephyr_property_target,COMPILE_OPTIONS>
     $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:--verbose>
     DEPENDS
     ${KERNEL_LIBRARY}
