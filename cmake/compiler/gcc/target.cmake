@@ -70,9 +70,8 @@ if(NOT no_libgcc)
 
   assert_exists(LIBGCC_DIR)
 
-  #TODO multi_image add ${IMAGE} prefix to other toolchains.
-  LIST(APPEND ${IMAGE}LIB_INCLUDE_DIR "-L\"${LIBGCC_DIR}\"")
-  LIST(APPEND ${IMAGE}TOOLCHAIN_LIBS gcc)
+  LIST(APPEND LIB_INCLUDE_DIR "-L\"${LIBGCC_DIR}\"")
+  LIST(APPEND TOOLCHAIN_LIBS gcc)
 endif()
 
 if(SYSROOT_DIR)
