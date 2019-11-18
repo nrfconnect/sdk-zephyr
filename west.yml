@@ -26,10 +26,10 @@ manifest:
   # Please add items below based on alphabetical order
   projects:
     - name: hal_atmel
-      revision: 04ff67a0826a51041e51034faf8fc4d3eeacd846
+      revision: 5690f5b84495c8b657ff204c5c827df1ab9e12e3
       path: modules/hal/atmel
     - name: ci-tools
-      revision: e01f3bce2a94847253369efb9a081f5c0e9ec882
+      revision: 20aa511fbd302ba8429a9ab04ee96c201b547743
       path: tools/ci-tools
     - name: civetweb
       revision: 99129c5efc907ea613c4b73ccff07581feb58a7a
@@ -44,10 +44,10 @@ manifest:
       revision: a12d92816a53a521d79cefcf5c38b9dc8a4fed6e
       path: modules/hal/cypress
     - name: hal_nordic
-      revision: 1b14177ff2176a1d17f3dd5e7e217f44337255db
+      revision: 080d1dff4a07b5798ab979fde40dde8da452b854
       path: modules/hal/nordic
     - name: hal_openisa
-      revision: be5c01f86c96500def5079bcc58d2baefdffb6c8
+      revision: 6416140c00f7e663752bd420ba89e3caefc1d70e
       path: modules/hal/openisa
     - name: hal_microchip
       revision: 85302959c0c659311cf90ac51d133e5ce19c9288
@@ -56,10 +56,10 @@ manifest:
       revision: 9151e614c23997074acd1096a3e8a9e5c255d5b9
       path: modules/hal/silabs
     - name: hal_st
-      revision: 0ec40aed8087f26bd9ac1b70fb5a6c326a6451aa
+      revision: fa481784b3c49780f18d50bafe00390ccb62b2ec
       path: modules/hal/st
     - name: hal_stm32
-      revision: 886636e6db209abe6a05a95be5ec7b85a3dd7237
+      revision: 20776221282b6447c6330a041bc27758c8f593f3
       path: modules/hal/stm32
     - name: hal_ti
       revision: 7a82e93e14766ef6e42df9915ea2ab8e3b952a8b
@@ -71,7 +71,7 @@ manifest:
       revision: d4708d0a432e95f51bdc712591ba5295b751140c
       path: modules/lib/gui/lvgl
     - name: mbedtls
-      revision: bbcb1b14285ac1b694d8c7e47c2f139c80b7fc4c
+      revision: 4f1e8f5a78dc08aa42a47cc1ad059cce558c26c3
       path: modules/crypto/mbedtls
     - name: mcumgr
       revision: 84934959d2d1722a23b7e7e200191ae4a6f96168
@@ -83,23 +83,26 @@ manifest:
       revision: bc62a2fa9d98ddb5d633c932ea199bc68e10f194
       path: modules/fs/nffs
     - name: hal_nxp
-      revision: 97265a5396edc6a9de5f2fb643d505f37064e606
+      revision: c6ce9b7e8ddb501ca6d54e927e1602cb5f7a7183
       path: modules/hal/nxp
     - name: open-amp
       revision: 9b591b289e1f37339bd038b5a1f0e6c8ad39c63a
       path: modules/lib/open-amp
     - name: openthread
-      revision: 3c32244f098f8daf8741efe0a2ad839b67f8567f
+      revision: 882e7074b5986027b85cb4f3ba1dc563a11ca013
       path: modules/lib/openthread
     - name: segger
       revision: 6fcf61606d6012d2c44129edc033f59331e268bc
       path: modules/debug/segger
     - name: tinycbor
       path: modules/lib/tinycbor
-      revision: 6966f6140cb870b792330a5186020eb1f4151f3e
+      revision: 0fc68fceacd1efc1ce809c5880c380f3d98b7b6e
     - name: littlefs
       path: modules/fs/littlefs
       revision: fe9572dd5a9fcf93a249daa4233012692bd2881d
+    - name: mipi-sys-t
+      path: modules/debug/mipi-sys-t
+      revision: baf51863f19f009b92e762115ba5572a5b996b92
 
   self:
     path: zephyr

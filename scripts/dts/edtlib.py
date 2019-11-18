@@ -27,9 +27,16 @@ import re
 import sys
 
 import yaml
+try:
+    # Use the C LibYAML parser if available, rather than the Python parser.
+    # This makes e.g. gen_defines.py more than twice as fast.
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
 
 from dtlib import DT, DTError, to_num, to_nums, TYPE_EMPTY, TYPE_NUMS, \
                   TYPE_PHANDLE, TYPE_PHANDLES_AND_NUMS
+from grutils import Graph
 
 # NOTE: testedtlib.py is the test suite for this library. It can be run
 # directly as a script:
@@ -121,6 +128,8 @@ class EDT:
         self._init_compat2binding(bindings_dirs)
         self._init_nodes()
 
+        self._define_order()
+
     def get_node(self, path):
         """
         Returns the Node at the DT path or alias 'path'. Raises EDTError if the
@@ -152,6 +161,56 @@ class EDT:
         return "<EDT for '{}', binding directories '{}'>".format(
             self.dts_path, self.bindings_dirs)
 
+    def scc_order(self):
+        """
+        Returns a list of lists of Nodes where all elements of each list
+        depend on each other, and the Nodes in any list do not depend
+        on any Node in a subsequent list.  Each list defines a Strongly
+        Connected Component (SCC) of the graph.
+
+        For an acyclic graph each list will be a singleton.  Cycles
+        will be represented by lists with multiple nodes.  Cycles are
+        not expected to be present in devicetree graphs.
+        """
+        try:
+            return self._graph.scc_order()
+        except Exception as e:
+            raise EDTError(e)
+
+    def _define_order(self):
+        # Constructs a graph of dependencies between Node instances,
+        # then calculates a partial order over the dependencies.  The
+        # algorithm supports detecting dependency loops.
+
+        self._graph = Graph()
+
+        for node in self.nodes:
+            # A Node always depends on its parent.
+            for child in node.children.values():
+                self._graph.add_edge(child, node)
+
+            # A Node depends on any Nodes present in 'phandle',
+            # 'phandles', or 'phandle-array' property values.
+            for prop in node.props.values():
+                if prop.type == 'phandle':
+                    self._graph.add_edge(node, prop.val)
+                elif prop.type == 'phandles':
+                    for phandle_node in prop.val:
+                        self._graph.add_edge(node, phandle_node)
+                elif prop.type == 'phandle-array':
+                    for cd in prop.val:
+                        self._graph.add_edge(node, cd.controller)
+
+            # A Node depends on whatever supports the interrupts it
+            # generates.
+            for intr in node.interrupts:
+                self._graph.add_edge(node, intr.controller)
+
+        # Calculate an order that ensures no node is before any node
+        # it depends on.  This sets the dep_ordinal field in each
+        # Node.
+        self.scc_order()
+
     def _init_compat2binding(self, bindings_dirs):
         # Creates self._compat2binding. This is a dictionary that maps
         # (<compatible>, <bus>) tuples (both strings) to (<binding>, <path>)
@@ -168,10 +227,10 @@ class EDT:
         # Only bindings for 'compatible' strings that appear in the devicetree
         # are loaded.
 
-        # Add legacy '!include foo.yaml' handling. Do
-        # yaml.Loader.add_constructor() instead of yaml.add_constructor() to be
-        # compatible with both version 3.13 and version 5.1 of PyYAML.
-        yaml.Loader.add_constructor("!include", _binding_include)
+        # Add legacy '!include foo.yaml' handling. Do Loader.add_constructor()
+        # instead of yaml.add_constructor() to be compatible with both version
+        # 3.13 and version 5.1 of PyYAML.
+        Loader.add_constructor("!include", _binding_include)
 
         dt_compats = _dt_compats(self._dt)
         # Searches for any 'compatible' string mentioned in the devicetree
@@ -188,9 +247,7 @@ class EDT:
                 contents = f.read()
 
             # As an optimization, skip parsing files that don't contain any of
-            # the .dts 'compatible' strings, which should be reasonably safe.
-            # This optimization shaves 5+ seconds off 'cmake' configuration
-            # time on my system. Using yaml.CParser would probably help too.
+            # the .dts 'compatible' strings, which should be reasonably safe
             if not dt_compats_search(contents):
                 continue
 
@@ -201,7 +258,7 @@ class EDT:
             try:
                 # Parsed PyYAML output (Python lists/dictionaries/strings/etc.,
                 # representing the file)
-                binding = yaml.load(contents, Loader=yaml.Loader)
+                binding = yaml.load(contents, Loader=Loader)
             except yaml.YAMLError as e:
                 self._warn("'{}' appears in binding directories but isn't "
                            "valid YAML: {}".format(binding_path, e))
@@ -367,7 +424,7 @@ class EDT:
 
         with open(paths[0], encoding="utf-8") as f:
             return self._merge_included_bindings(
-                yaml.load(f, Loader=yaml.Loader),
+                yaml.load(f, Loader=Loader),
                 paths[0])
 
     def _init_nodes(self):
@@ -393,12 +450,12 @@ class EDT:
             self._node2enode[dt_node] = node
 
         for node in self.nodes:
-            # Node._init_props() depends on all Node objects having been
-            # created, due to 'type: phandle/phandles/phandle-array', so we run
-            # it separately. Property.val includes the pointed-to Node
-            # instance(s) for phandles, so the Node objects must exist.
+            # These depend on all Node objects having been created, because
+            # they (either always or sometimes) reference other nodes, so we
+            # run them separately
             node._init_props()
             node._init_interrupts()
+            node._init_pinctrls()
 
     def _check_binding(self, binding, binding_path):
         # Does sanity checking on 'binding'. Only takes 'self' for the sake of
@@ -561,7 +618,8 @@ class Node:
 
     description:
       The description string from the binding for the node, or None if the node
-      has no binding. Trailing whitespace (including newlines) is removed.
+      has no binding. Leading and trailing whitespace (including newlines) is
+      removed.
 
     path:
       The devicetree path of the node
@@ -577,6 +635,19 @@ class Node:
     children:
       A dictionary with the Node instances for the devicetree children of the
       node, indexed by name
+
+    dep_ordinal:
+      A non-negative integer value such that the value for a Node is
+      less than the value for all Nodes that depend on it.
+
+      The ordinal is defined for all Nodes including those that are not
+      'enabled', and is unique among nodes in its EDT 'nodes' list.
+
+    required_by:
+      A list with the nodes that directly depend on the node
+
+    depends_on:
+      A list with the nodes that the node directly depends on
 
     enabled:
       True unless the node has 'status = "disabled"'
@@ -619,7 +690,12 @@ class Node:
 
     interrupts:
       A list of ControllerAndData objects for the interrupts generated by the
-      node
+      node. The list is empty if the node does not generate interrupts.
+
+    pinctrls:
+      A list of PinCtrl objects for the pinctrl-<index> properties on the
+      node, sorted by index. The list is empty if the node does not have any
+      pinctrl-<index> properties.
 
     bus:
       The bus for the node as specified in its binding, e.g. "i2c" or "spi".
@@ -660,7 +736,7 @@ class Node:
     def description(self):
         "See the class docstring."
         if self._binding and "description" in self._binding:
-            return self._binding["description"].rstrip()
+            return self._binding["description"].strip()
         return None
 
     @property
@@ -688,6 +764,16 @@ class Node:
         # would need to be kept in mind.
         return {name: self.edt._node2enode[node]
                 for name, node in self._node.nodes.items()}
+
+    @property
+    def required_by(self):
+        "See the class docstring"
+        return self.edt._graph.required_by(self)
+
+    @property
+    def depends_on(self):
+        "See the class docstring"
+        return self.edt._graph.depends_on(self)
 
     @property
     def enabled(self):
@@ -880,7 +966,7 @@ class Node:
         prop.name = name
         prop.description = options.get("description")
         if prop.description:
-            prop.description = prop.description.rstrip()
+            prop.description = prop.description.strip()
         prop.val = val
         prop.type = prop_type
         prop.enum_index = None if enum is None else enum.index(val)
@@ -1021,6 +1107,34 @@ class Node:
             self.regs.append(reg)
 
         _add_names(node, "reg", self.regs)
+
+    def _init_pinctrls(self):
+        # Initializes self.pinctrls from any pinctrl-<index> properties
+
+        node = self._node
+
+        # pinctrl-<index> properties
+        pinctrl_props = [prop for name, prop in node.props.items()
+                         if re.match("pinctrl-[0-9]+", name)]
+        # Sort by index
+        pinctrl_props.sort(key=lambda prop: prop.name)
+
+        # Check indices
+        for i, prop in enumerate(pinctrl_props):
+            if prop.name != "pinctrl-" + str(i):
+                _err("missing 'pinctrl-{}' property on {!r} - indices should "
+                     "be contiguous and start from zero".format(i, node))
+
+        self.pinctrls = []
+        for prop in pinctrl_props:
+            pinctrl = PinCtrl()
+            pinctrl.node = self
+            pinctrl.conf_nodes = [
+                self.edt._node2enode[node] for node in prop.to_nodes()
+            ]
+            self.pinctrls.append(pinctrl)
+
+        _add_names(node, "pinctrl", self.pinctrls)
 
     def _init_interrupts(self):
         # Initializes self.interrupts
@@ -1201,6 +1315,37 @@ class ControllerAndData:
         return "<ControllerAndData, {}>".format(", ".join(fields))
 
 
+class PinCtrl:
+    """
+    Represents a pin control configuration for a set of pins on a device,
+    e.g. pinctrl-0 or pinctrl-1.
+
+    These attributes are available on PinCtrl objects:
+
+    node:
+      The Node instance the pinctrl-* property is on
+
+    name:
+      The name of the configuration, as given in pinctrl-names, or None if
+      there is no pinctrl-names property
+
+    conf_nodes:
+      A list of Node instances for the pin configuration nodes, e.g.
+      the nodes pointed at by &state_1 and &state_2 in
+
+          pinctrl-0 = <&state_1 &state_2>;
+    """
+    def __repr__(self):
+        fields = []
+
+        if self.name is not None:
+            fields.append("name: " + self.name)
+
+        fields.append("configuration nodes: " + str(self.conf_nodes))
+
+        return "<PinCtrl, {}>".format(", ".join(fields))
+
+
 class Property:
     """
     Represents a property on a Node, as set in its DT node and with
@@ -1220,7 +1365,8 @@ class Property:
 
     description:
       The description string from the property as given in the binding, or None
-      if missing. Trailing whitespace (including newlines) is removed.
+      if missing. Leading and trailing whitespace (including newlines) is
+      removed.
 
     type:
       A string with the type of the property, as given in the binding.
@@ -1562,8 +1708,9 @@ def _add_names(node, names_ident, objs):
     if full_names_ident in node.props:
         names = node.props[full_names_ident].to_strings()
         if len(names) != len(objs):
-            _err("{} property in {} has {} strings, expected {} strings"
-                 .format(full_names_ident, node.name, len(names), len(objs)))
+            _err("{} property in {} in {} has {} strings, expected {} strings"
+                 .format(full_names_ident, node.path, node.dt.filename,
+                         len(names), len(objs)))
 
         for obj, name in zip(objs, names):
             obj.name = name

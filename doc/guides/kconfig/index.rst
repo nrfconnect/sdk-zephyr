@@ -464,6 +464,25 @@ Here are some things to check:
   they come from.
 
 
+Checking changes with :file:`scripts/kconfig/lint.py`
+*****************************************************
+
+After you make Kconfig changes, you can use the
+:zephyr_file:`scripts/kconfig/lint.py` script to check for some potential
+issues, like unused symbols and symbols that are impossible to enable. Use
+``--help`` to see available options.
+
+Some checks are necessarily a bit heuristic, so a symbol being flagged by a
+check does not necessarily mean there's a problem. If a check returns a false
+positive e.g. due to token pasting in C (``CONFIG_FOO_##index##_BAR``), just
+ignore it.
+
+When investigating an unknown symbol ``FOO_BAR``, it is a good idea to run
+``git grep FOO_BAR`` to look for references. It is also a good idea to search
+for some components of the symbol name with e.g. ``git grep FOO`` and
+``git grep BAR``, as it can help uncover token pasting.
+
+
 Style recommendations and shorthands
 ************************************
 
@@ -631,6 +650,27 @@ For a Kconfig symbol that enables a driver/subsystem FOO, consider having just
 "Foo" as the prompt, instead of "Enable Foo support" or the like. It will
 usually be clear in the context of an option that can be toggled on/off, and
 makes things consistent.
+
+
+Header comments and other nits
+==============================
+
+A few formatting nits, to help keep things consistent:
+
+- Use this format for any header comments at the top of ``Kconfig`` files:
+
+  .. code-block:: none
+
+     # <Overview of symbols defined in the file, preferably in plain English>
+     (Blank line)
+     # Copyright (c) 2019 ...
+     # SPDX-License-Identifier: <License>
+     (Blank line)
+     (Kconfig definitions)
+
+- Format comments as ``# Comment`` rather than ``#Comment``
+
+- Put a blank line before/after each top-level ``if`` and ``endif``
 
 
 Lesser-known/used Kconfig features
@@ -816,21 +856,28 @@ Devicetree Related Functions
 ============================
 
 See the Python docstrings in ``scripts/kconfig/kconfigfunctions.py`` for more
-details on the functions.
+details on the functions.  The ``*_int`` version of each function returns the
+value as a decimal integer, while the ``*_hex`` version returns a hexadecimal
+value starting with ``0x``.
 
 .. code-block:: none
 
-  dt_chosen_reg_addr(kconf, _, chosen, index=0, unit=None):
-  dt_chosen_reg_size(kconf, _, chosen, index=0, unit=None):
-  dt_node_reg_addr(kconf, _, path, index=0, unit=None):
-  dt_node_reg_size(kconf, _, path, index=0, unit=None):
+  dt_chosen_reg_addr_int(kconf, _, chosen, index=0, unit=None):
+  dt_chosen_reg_addr_hex(kconf, _, chosen, index=0, unit=None):
+  dt_chosen_reg_size_int(kconf, _, chosen, index=0, unit=None):
+  dt_chosen_reg_size_hex(kconf, _, chosen, index=0, unit=None):
+  dt_node_reg_addr_int(kconf, _, path, index=0, unit=None):
+  dt_node_reg_addr_hex(kconf, _, path, index=0, unit=None):
+  dt_node_reg_size_int(kconf, _, path, index=0, unit=None):
+  dt_node_reg_size_hex(kconf, _, path, index=0, unit=None):
   dt_compat_enabled(kconf, _, compat):
+  dt_chosen_enabled(kconf, _, chosen):
   dt_node_has_bool_prop(kconf, _, path, prop):
 
 Example Usage
 -------------
 
-The following example shows the usage of the ``dt_node_reg_addr`` function.
+The following example shows the usage of the ``dt_node_reg_addr_hex`` function.
 This function will take a path to a devicetree node and register the register
 address of that node:
 
@@ -839,7 +886,7 @@ address of that node:
    boards/riscv/hifive1_revb/Kconfig.defconfig
 
    config FLASH_BASE_ADDRESS
-      default $(dt_node_reg_addr,/soc/spi@10014000,1)
+      default $(dt_node_reg_addr_hex,/soc/spi@10014000,1)
 
 In this example if we examine the dts file for the board:
 
@@ -852,7 +899,7 @@ In this example if we examine the dts file for the board:
       ...
    };
 
-The ``dt_node_reg_addr`` will search the dts file for a node at the path
+The ``dt_node_reg_addr_hex`` will search the dts file for a node at the path
 ``/soc/spi@10014000``.  The function than will extract the register address
 at the index 1.  This effective gets the value of ``0x20010000`` and causes
 the above to look like:

@@ -605,7 +605,6 @@ u8_t ll_adv_enable(u8_t enable)
 		conn_lll->latency_prepare = 0;
 		conn_lll->latency_event = 0;
 		conn_lll->slave.latency_enabled = 0;
-		conn_lll->slave.latency_cancel = 0;
 		conn_lll->slave.window_widening_prepare_us = 0;
 		conn_lll->slave.window_widening_event_us = 0;
 		conn_lll->slave.window_size_prepare_us = 0;
@@ -619,10 +618,14 @@ u8_t ll_adv_enable(u8_t enable)
 		conn->procedure_expire = 0;
 
 		conn->common.fex_valid = 0;
+		conn->slave.latency_cancel = 0;
 
 		conn->llcp_req = conn->llcp_ack = conn->llcp_type = 0;
 		conn->llcp_rx = NULL;
-		conn->llcp_features = LL_FEAT;
+		conn->llcp_cu.req = conn->llcp_cu.ack = 0;
+		conn->llcp_feature.req = conn->llcp_feature.ack = 0;
+		conn->llcp_feature.features = LL_FEAT;
+		conn->llcp_version.req = conn->llcp_version.ack = 0;
 		conn->llcp_version.tx = conn->llcp_version.rx = 0;
 		conn->llcp_terminate.reason_peer = 0;
 		/* NOTE: use allocated link for generating dedicated
@@ -645,7 +648,7 @@ u8_t ll_adv_enable(u8_t enable)
 
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
 		conn->llcp_length.req = conn->llcp_length.ack = 0U;
-		conn->llcp_length.pause_tx = 0U;
+		conn->llcp_length.cache.tx_octets = 0U;
 		conn->default_tx_octets = ull_conn_default_tx_octets_get();
 
 #if defined(CONFIG_BT_CTLR_PHY)

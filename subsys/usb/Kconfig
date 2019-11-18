@@ -1,10 +1,7 @@
-# Kconfig - USB device stack configuration options
+# USB device stack configuration options
 
-#
 # Copyright (c) 2016 Wind River Systems, Inc.
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 menuconfig USB_DEVICE_STACK
 	bool "USB device stack"
@@ -83,7 +80,7 @@ config USB_DEVICE_DISABLE_ZLP_EPIN_HANDLING
 	bool
 	help
 	  Stack should not handle ZLP for Variable-length Data Stage
-	  bacause it is taken over by the hardware.
+	  because it is taken over by the hardware.
 
 config USB_DEVICE_BOS
 	bool "Enable USB Binary Device Object Store (BOS)"

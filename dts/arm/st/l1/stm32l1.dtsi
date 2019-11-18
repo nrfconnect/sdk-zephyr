@@ -5,7 +5,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <st/l1/stm32l1-pinctrl.dtsi>
 #include <arm/armv7-m.dtsi>
 #include <dt-bindings/clock/stm32_clock.h>
 #include <dt-bindings/gpio/gpio.h>
@@ -28,6 +27,16 @@
 	};
 
 	soc {
+		rtc: rtc@40002800 {
+			compatible = "st,stm32-rtc";
+			reg = <0x40002800 0x400>;
+			interrupts = <41 0>;
+			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x10000000>;
+			prescaler = <32768>;
+			status = "disabled";
+			label = "RTC_0";
+		};
+
 		usart2: serial@40004400 {
 			compatible = "st,stm32-usart", "st,stm32-uart";
 			reg = <0x40004400 0x400>;

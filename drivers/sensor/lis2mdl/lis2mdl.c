@@ -56,7 +56,7 @@ static int lis2mdl_set_hard_iron(struct device *dev, enum sensor_channel chan,
 {
 	struct lis2mdl_data *lis2mdl = dev->driver_data;
 	u8_t i;
-	axis3bit16_t offset;
+	union axis3bit16_t offset;
 
 	for (i = 0U; i < 3; i++) {
 		offset.i16bit[i] = sys_cpu_to_le16(val->val1);
@@ -172,7 +172,7 @@ static int lis2mdl_attr_set(struct device *dev,
 static int lis2mdl_sample_fetch_mag(struct device *dev)
 {
 	struct lis2mdl_data *lis2mdl = dev->driver_data;
-	axis3bit16_t raw_mag;
+	union axis3bit16_t raw_mag;
 
 	/* fetch raw data sample */
 	if (lis2mdl_magnetic_raw_get(lis2mdl->ctx, raw_mag.u8bit) < 0) {
@@ -190,7 +190,7 @@ static int lis2mdl_sample_fetch_mag(struct device *dev)
 static int lis2mdl_sample_fetch_temp(struct device *dev)
 {
 	struct lis2mdl_data *lis2mdl = dev->driver_data;
-	axis1bit16_t raw_temp;
+	union axis1bit16_t raw_temp;
 	s32_t temp;
 
 	/* fetch raw temperature sample */
@@ -309,6 +309,13 @@ static int lis2mdl_init(struct device *dev)
 	}
 
 	k_busy_wait(100);
+
+#if CONFIG_LIS2MDL_SPI_FULL_DUPLEX
+	/* After s/w reset set SPI 4wires again if the case */
+	if (lis2mdl_spi_mode_set(lis2mdl->ctx, LIS2MDL_SPI_4_WIRE) < 0) {
+		return -EIO;
+	}
+#endif
 
 	/* enable BDU */
 	if (lis2mdl_block_data_update_set(lis2mdl->ctx, PROPERTY_ENABLE) < 0) {

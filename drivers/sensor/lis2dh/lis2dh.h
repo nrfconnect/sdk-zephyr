@@ -36,6 +36,10 @@
 
 #define LIS2DH_AUTOINCREMENT_ADDR	BIT(7)
 
+#define LIS2DH_REG_CTRL0		0x1e
+#define LIS2DH_SDO_PU_DISC_SHIFT	7
+#define LIS2DH_SDO_PU_DISC_MASK		BIT(LIS2DH_SDO_PU_DISC_SHIFT)
+
 #define LIS2DH_REG_CTRL1		0x20
 #define LIS2DH_ACCEL_XYZ_SHIFT		0
 #define LIS2DH_ACCEL_X_EN_BIT		BIT(0)
@@ -268,8 +272,10 @@ static inline int lis2dh_burst_read(struct device *dev, u8_t start_addr,
 
 	return lis2dh_spi_access(lis2dh, start_addr, buf, num_bytes);
 #elif defined(DT_ST_LIS2DH_BUS_I2C)
-	return i2c_burst_read(lis2dh->bus, LIS2DH_BUS_ADDRESS,
-			      start_addr | LIS2DH_AUTOINCREMENT_ADDR,
+	u8_t addr = start_addr | LIS2DH_AUTOINCREMENT_ADDR;
+
+	return i2c_write_read(lis2dh->bus, LIS2DH_BUS_ADDRESS,
+			      &addr, sizeof(addr),
 			      buf, num_bytes);
 #else
 	return -ENODEV;
@@ -303,6 +309,23 @@ static inline int lis2dh_burst_write(struct device *dev, u8_t start_addr,
 
 	return lis2dh_spi_access(lis2dh, start_addr, buf, num_bytes);
 #elif defined(DT_ST_LIS2DH_BUS_I2C)
+	/* NRF TWIM is default and does not support burst write.  We
+	 * can't detect whether the I2C master uses TWI or TWIM, so
+	 * use a substitute implementation unconditionally on Nordic.
+	 *
+	 * See Zephyr issue #20154.
+	 */
+	if (IS_ENABLED(CONFIG_I2C_NRFX)) {
+		u8_t buffer[8];
+
+		/* Largest num_bytes used is 6 */
+		__ASSERT((1U + num_bytes) <= sizeof(buffer),
+			 "burst buffer too small");
+		buffer[0] = start_addr | LIS2DH_AUTOINCREMENT_ADDR;
+		memmove(buffer + 1, buf, num_bytes);
+		return i2c_write(lis2dh->bus, buffer, 1 + num_bytes,
+				 LIS2DH_BUS_ADDRESS);
+	}
 	return i2c_burst_write(lis2dh->bus, LIS2DH_BUS_ADDRESS,
 			       start_addr | LIS2DH_AUTOINCREMENT_ADDR,
 			       buf, num_bytes);
@@ -330,15 +353,15 @@ static inline int lis2dh_reg_write_byte(struct device *dev, u8_t reg_addr,
 #endif
 }
 
+int lis2dh_reg_field_update(struct device *dev, u8_t reg_addr,
+			    u8_t pos, u8_t mask, u8_t val);
+
 #ifdef CONFIG_LIS2DH_TRIGGER
 int lis2dh_trigger_set(struct device *dev,
 		       const struct sensor_trigger *trig,
 		       sensor_trigger_handler_t handler);
 
 int lis2dh_init_interrupt(struct device *dev);
-
-int lis2dh_reg_field_update(struct device *dev, u8_t reg_addr,
-			    u8_t pos, u8_t mask, u8_t val);
 
 int lis2dh_acc_slope_config(struct device *dev, enum sensor_attribute attr,
 			    const struct sensor_value *val);

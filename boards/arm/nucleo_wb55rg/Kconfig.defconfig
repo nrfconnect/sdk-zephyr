@@ -1,14 +1,15 @@
-# Kconfig - STM32LWB55RG Nucleo board configuration
-#
+# STM32LWB55RG Nucleo board configuration
+
 # Copyright (c) 2019 Linaro Limited
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 if BOARD_NUCLEO_WB55RG
 
 config BOARD
 	default "nucleo_wb55rg"
+
+config CLOCK_STM32_LSE
+	default y
 
 if UART_CONSOLE
 

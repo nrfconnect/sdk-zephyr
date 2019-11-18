@@ -3,16 +3,19 @@
 
 title: STM32 I2S
 
-description: >
+description: |
     This binding gives a base representation of the STM32 I2S controller
 
 compatible: "st,stm32-i2s"
 
-include: i2s-controller.yaml
+include: [i2s-controller.yaml, dma.yaml]
 
 properties:
     reg:
       required: true
 
     interrupts:
+      required: true
+
+    dma-names:
       required: true

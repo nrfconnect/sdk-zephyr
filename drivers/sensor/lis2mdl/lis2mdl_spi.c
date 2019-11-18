@@ -99,8 +99,8 @@ int lis2mdl_spi_init(struct device *dev)
 {
 	struct lis2mdl_data *data = dev->driver_data;
 
-	data->ctx_spi.read_reg = (lis2mdl_read_ptr) lis2mdl_spi_read;
-	data->ctx_spi.write_reg = (lis2mdl_write_ptr) lis2mdl_spi_write;
+	data->ctx_spi.read_reg = (stmdev_read_ptr) lis2mdl_spi_read;
+	data->ctx_spi.write_reg = (stmdev_write_ptr) lis2mdl_spi_write;
 
 	data->ctx = &data->ctx_spi;
 	data->ctx->handle = dev;
@@ -120,6 +120,13 @@ int lis2mdl_spi_init(struct device *dev)
 
 	LOG_DBG("SPI GPIO CS configured on %s:%u",
 		cfg->gpio_cs_port, cfg->cs_gpio);
+#endif
+
+#if CONFIG_LIS2MDL_SPI_FULL_DUPLEX
+	/* Set SPI 4wires */
+	if (lis2mdl_spi_mode_set(data->ctx, LIS2MDL_SPI_4_WIRE) < 0) {
+		return -EIO;
+	}
 #endif
 
 	return 0;

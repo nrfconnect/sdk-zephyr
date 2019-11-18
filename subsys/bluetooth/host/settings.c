@@ -19,7 +19,7 @@
 #include "hci_core.h"
 #include "settings.h"
 
-#if defined(BT_SETTINGS_USE_PRINTK)
+#if defined(CONFIG_BT_SETTINGS_USE_PRINTK)
 void bt_settings_encode_key(char *path, size_t path_size, const char *subsys,
 			    bt_addr_le_t *addr, const char *key)
 {
@@ -168,7 +168,7 @@ static int set(const char *name, size_t len_rd, settings_read_cb read_cb,
 		} else {
 			bt_dev.name[len] = '\0';
 
-			BT_DBG("Name set to %s", bt_dev.name);
+			BT_DBG("Name set to %s", log_strdup(bt_dev.name));
 		}
 		return 0;
 	}

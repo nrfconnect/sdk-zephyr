@@ -257,7 +257,7 @@ void k_sched_time_slice_set(s32_t slice, int prio)
 {
 	LOCKED(&sched_spinlock) {
 		_current_cpu->slice_ticks = 0;
-		slice_time = z_ms_to_ticks(slice);
+		slice_time = k_ms_to_ticks_ceil32(slice);
 		slice_max_prio = prio;
 		z_reset_time_slice();
 	}
@@ -329,7 +329,7 @@ void z_add_thread_to_ready_q(struct k_thread *thread)
 		z_mark_thread_as_queued(thread);
 		update_cache(0);
 #if defined(CONFIG_SMP) &&  defined(CONFIG_SCHED_IPI_SUPPORTED)
-		z_arch_sched_ipi();
+		arch_sched_ipi();
 #endif
 	}
 }
@@ -368,7 +368,16 @@ static void pend(struct k_thread *thread, _wait_q_t *wait_q, s32_t timeout)
 	}
 
 	if (timeout != K_FOREVER) {
-		s32_t ticks = _TICK_ALIGN + z_ms_to_ticks(timeout);
+		s32_t ticks;
+
+		__ASSERT(timeout >= 0,
+			"Only non-negative values are accepted.");
+
+		if (timeout < 0) {
+			timeout = 0;
+		}
+
+		ticks = _TICK_ALIGN + k_ms_to_ticks_ceil32(timeout);
 
 		z_add_thread_timeout(thread, ticks);
 	}
@@ -523,7 +532,7 @@ static inline int resched(u32_t key)
 	_current_cpu->swap_ok = 0;
 #endif
 
-	return z_arch_irq_unlocked(key) && !z_arch_is_in_isr();
+	return arch_irq_unlocked(key) && !arch_is_in_isr();
 }
 
 void z_reschedule(struct k_spinlock *lock, k_spinlock_key_t key)
@@ -555,7 +564,7 @@ void k_sched_unlock(void)
 {
 #ifdef CONFIG_PREEMPT_ENABLED
 	__ASSERT(_current->base.sched_locked != 0, "");
-	__ASSERT(!z_arch_is_in_isr(), "");
+	__ASSERT(!arch_is_in_isr(), "");
 
 	LOCKED(&sched_spinlock) {
 		++_current->base.sched_locked;
@@ -847,7 +856,7 @@ void z_impl_k_thread_priority_set(k_tid_t tid, int prio)
 	 * keep track of it) and idle cannot change its priority.
 	 */
 	Z_ASSERT_VALID_PRIO(prio, NULL);
-	__ASSERT(!z_arch_is_in_isr(), "");
+	__ASSERT(!arch_is_in_isr(), "");
 
 	struct k_thread *thread = (struct k_thread *)tid;
 
@@ -901,7 +910,7 @@ static inline void z_vrfy_k_thread_deadline_set(k_tid_t tid, int deadline)
 
 void z_impl_k_yield(void)
 {
-	__ASSERT(!z_arch_is_in_isr(), "");
+	__ASSERT(!arch_is_in_isr(), "");
 
 	if (!z_is_idle_thread_object(_current)) {
 		LOCKED(&sched_spinlock) {
@@ -931,7 +940,7 @@ static s32_t z_tick_sleep(s32_t ticks)
 #ifdef CONFIG_MULTITHREADING
 	u32_t expected_wakeup_time;
 
-	__ASSERT(!z_arch_is_in_isr(), "");
+	__ASSERT(!arch_is_in_isr(), "");
 
 	K_DEBUG("thread %p for %d ticks\n", _current, ticks);
 
@@ -975,9 +984,14 @@ s32_t z_impl_k_sleep(int ms)
 {
 	s32_t ticks;
 
-	ticks = z_ms_to_ticks(ms);
+	if (ms == K_FOREVER) {
+		k_thread_suspend(_current);
+		return K_FOREVER;
+	}
+
+	ticks = k_ms_to_ticks_ceil32(ms);
 	ticks = z_tick_sleep(ticks);
-	return __ticks_to_ms(ticks);
+	return k_ticks_to_ms_floor64(ticks);
 }
 
 #ifdef CONFIG_USERSPACE
@@ -992,9 +1006,9 @@ s32_t z_impl_k_usleep(int us)
 {
 	s32_t ticks;
 
-	ticks = z_us_to_ticks(us);
+	ticks = k_us_to_ticks_ceil64(us);
 	ticks = z_tick_sleep(ticks);
-	return __ticks_to_us(ticks);
+	return k_ticks_to_us_floor64(ticks);
 }
 
 #ifdef CONFIG_USERSPACE
@@ -1012,13 +1026,16 @@ void z_impl_k_wakeup(k_tid_t thread)
 	}
 
 	if (z_abort_thread_timeout(thread) < 0) {
-		return;
+		/* Might have just been sleeping forever */
+		if (thread->base.thread_state != _THREAD_SUSPENDED) {
+			return;
+		}
 	}
 
 	z_mark_thread_as_not_suspended(thread);
 	z_ready_thread(thread);
 
-	if (!z_arch_is_in_isr()) {
+	if (!arch_is_in_isr()) {
 		z_reschedule_unlocked();
 	}
 
@@ -1047,6 +1064,8 @@ void z_sched_ipi(void)
 
 void z_sched_abort(struct k_thread *thread)
 {
+	k_spinlock_key_t key;
+
 	if (thread == _current) {
 		z_remove_thread_from_ready_q(thread);
 		return;
@@ -1058,24 +1077,26 @@ void z_sched_abort(struct k_thread *thread)
 	 */
 	thread->base.thread_state |= _THREAD_ABORTING;
 #ifdef CONFIG_SCHED_IPI_SUPPORTED
-	z_arch_sched_ipi();
+	arch_sched_ipi();
 #endif
 
 	/* Wait for it to be flagged dead either by the CPU it was
 	 * running on or because we caught it idle in the queue
 	 */
 	while ((thread->base.thread_state & _THREAD_DEAD) == 0U) {
-		LOCKED(&sched_spinlock) {
-			if (z_is_thread_prevented_from_running(thread)) {
-				__ASSERT(!z_is_thread_queued(thread), "");
-				thread->base.thread_state |= _THREAD_DEAD;
-			} else if (z_is_thread_queued(thread)) {
-				_priq_run_remove(&_kernel.ready_q.runq, thread);
-				z_mark_thread_as_not_queued(thread);
-				thread->base.thread_state |= _THREAD_DEAD;
-			} else {
-				k_busy_wait(100);
-			}
+		key = k_spin_lock(&sched_spinlock);
+		if (z_is_thread_prevented_from_running(thread)) {
+			__ASSERT(!z_is_thread_queued(thread), "");
+			thread->base.thread_state |= _THREAD_DEAD;
+			k_spin_unlock(&sched_spinlock, key);
+		} else if (z_is_thread_queued(thread)) {
+			_priq_run_remove(&_kernel.ready_q.runq, thread);
+			z_mark_thread_as_not_queued(thread);
+			thread->base.thread_state |= _THREAD_DEAD;
+			k_spin_unlock(&sched_spinlock, key);
+		} else {
+			k_spin_unlock(&sched_spinlock, key);
+			k_busy_wait(100);
 		}
 	}
 }
@@ -1105,7 +1126,7 @@ static inline k_tid_t z_vrfy_k_current_get(void)
 
 int z_impl_k_is_preempt_thread(void)
 {
-	return !z_arch_is_in_isr() && is_preempt(_current);
+	return !arch_is_in_isr() && is_preempt(_current);
 }
 
 #ifdef CONFIG_USERSPACE

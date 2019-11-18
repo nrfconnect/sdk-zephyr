@@ -84,6 +84,13 @@ warning: "#cells:" in test-bindings/deprecated.yaml is deprecated and will be re
                  "[<Register, addr: 0x30000000200000001, size: 0x1>]")
 
     #
+    # Test 'pinctrl-<index>'
+    #
+
+    verify_streq(edt.get_node("/pinctrl/dev").pinctrls,
+                 "[<PinCtrl, name: zero, configuration nodes: []>, <PinCtrl, name: one, configuration nodes: [<Node /pinctrl/pincontroller/state-1 in 'test.dts', no binding>]>, <PinCtrl, name: two, configuration nodes: [<Node /pinctrl/pincontroller/state-1 in 'test.dts', no binding>, <Node /pinctrl/pincontroller/state-2 in 'test.dts', no binding>]>]")
+
+    #
     # Test Node.parent and Node.children
     #
 
@@ -211,6 +218,17 @@ warning: "#cells:" in test-bindings/deprecated.yaml is deprecated and will be re
     verify_streq(edt.get_node("/in-dir-2").binding_path,
                  "test-bindings-2/multidir.yaml")
 
+
+    #
+    # Test dependency relations
+    #
+
+    verify_eq(edt.get_node("/").dep_ordinal, 0)
+    verify_eq(edt.get_node("/in-dir-1").dep_ordinal, 1)
+    if edt.get_node("/") not in edt.get_node("/in-dir-1").depends_on:
+        fail("/ should be a direct dependency of /in-dir-1")
+    if edt.get_node("/in-dir-1") not in edt.get_node("/").required_by:
+        fail("/in-dir-1 should directly depend on /")
 
     print("all tests passed")
 

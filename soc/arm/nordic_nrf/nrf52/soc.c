@@ -14,7 +14,7 @@
 
 #include <kernel.h>
 #include <init.h>
-#include <cortex_m/exc.h>
+#include <arch/arm/cortex_m/cmsis.h>
 #include <hal/nrf_power.h>
 #include <soc/nrfx_coredep.h>
 #include <logging/log.h>
@@ -45,7 +45,7 @@ LOG_MODULE_REGISTER(soc);
    Set general purpose retention register and reboot */
 void sys_arch_reboot(int type)
 {
-	nrf_power_gpregret_set((uint8_t)type);
+	nrf_power_gpregret_set(NRF_POWER, (uint8_t)type);
 	NVIC_SystemReset();
 }
 
@@ -63,7 +63,7 @@ static int nordicsemi_nrf52_init(struct device *arg)
 #endif
 
 #if defined(CONFIG_SOC_DCDC_NRF52X)
-	nrf_power_dcdcen_set(true);
+	nrf_power_dcdcen_set(NRF_POWER, true);
 #endif
 
 	/* Install default handler that simply resets the CPU
@@ -76,7 +76,7 @@ static int nordicsemi_nrf52_init(struct device *arg)
 	return 0;
 }
 
-void z_arch_busy_wait(u32_t time_us)
+void arch_busy_wait(u32_t time_us)
 {
 	nrfx_coredep_delay_us(time_us);
 }

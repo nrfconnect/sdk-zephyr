@@ -1,16 +1,13 @@
-# Kconfig - Bluetooth LE stack configuration options
+# Bluetooth LE stack configuration options
 
-#
 # Copyright (c) 2016-2017 Nordic Semiconductor ASA
 # Copyright (c) 2015-2016 Intel Corporation
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 comment "Host Stack Configuration"
 
 config BT_HCI_HOST
-	# Virtual/hidden option to make the conditions more intuitive
+	# Hidden option to make the conditions more intuitive
 	bool
 	default y
 	depends on !BT_HCI_RAW
@@ -176,6 +173,15 @@ config BT_SETTINGS
 	  instead of each subsystem doing it independently.
 
 if BT_SETTINGS
+config BT_SETTINGS_CCC_LAZY_LOADING
+	bool "Load CCC values from settings when peer connects"
+	default y
+	help
+	  Load Client Configuration Characteristic setting right after a bonded
+	  device connects.
+	  Disabling this option will increase memory usage as CCC values for all
+	  bonded devices will be loaded when calling settings_load.
+
 config BT_SETTINGS_CCC_STORE_ON_WRITE
 	bool "Store CCC value immediately after it has been written"
 	help
@@ -301,6 +307,17 @@ config BT_SMP_SC_ONLY
 	  Security Mode 1 Level 4 stands for authenticated LE Secure Connections
 	  pairing with encryption. Enabling this option disables legacy pairing.
 
+config BT_SMP_ALLOW_UNAUTH_OVERWRITE
+	bool "Allow unauthenticated pairing for paired device"
+	help
+	  This option allows all unauthenticated pairing attempts made by the
+	  peer where an unauthenticated bond already exists.
+	  This would enable cases where an attacker could copy the peer device
+	  address to connect and start an unauthenticated pairing procedure
+	  to replace the existing bond. When this option is disabled in order
+	  to create a new bond the old bond has to be explicitly deleted with
+	  bt_unpair.
+
 config BT_FIXED_PASSKEY
 	bool "Use a fixed passkey for pairing"
 	help
@@ -350,6 +367,21 @@ config BT_OOB_DATA_FIXED
 	  pairing with OOB data that consists of fixed random number and confirm
 	  value. This option should only be enabled for debugging and should
 	  never be used in production.
+
+config BT_KEYS_OVERWRITE_OLDEST
+	bool "Overwrite oldest keys with new ones if key storage is full"
+	help
+	  With this option enabled, if a pairing attempt occurs and the key storage
+	  is full, then the oldest keys in storage will be removed to free space
+	  for the new pairing keys.
+
+config BT_KEYS_SAVE_AGING_COUNTER_ON_PAIRING
+	bool "Store aging counter every time a successful paring occurs"
+	depends on BT_SETTINGS && BT_KEYS_OVERWRITE_OLDEST
+	help
+	  With this option enabled, aging counter will be stored in settings every
+	  time a successful pairing occurs. This increases flash wear out but offers
+	  a more correct finding of the oldest unused pairing info.
 
 endif # BT_SMP
 

@@ -87,10 +87,10 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	conn_interval_us = interval * 1250U;
 
 	/* calculate the window widening */
-	lll->slave.sca = pdu_adv->connect_ind.sca;
+	conn->slave.sca = pdu_adv->connect_ind.sca;
 	lll->slave.window_widening_periodic_us =
 		(((lll_conn_ppm_local_get() +
-		   lll_conn_ppm_get(lll->slave.sca)) *
+		   lll_conn_ppm_get(conn->slave.sca)) *
 		  conn_interval_us) + (1000000 - 1)) / 1000000U;
 	lll->slave.window_widening_max_us = (conn_interval_us >> 1) -
 					    EVENT_IFS_US;
@@ -162,7 +162,7 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	cc->interval = lll->interval;
 	cc->latency = lll->latency;
 	cc->timeout = timeout;
-	cc->sca = lll->slave.sca;
+	cc->sca = conn->slave.sca;
 
 	lll->handle = ll_conn_handle_get(conn);
 	rx->handle = lll->handle;
@@ -232,7 +232,7 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	conn_offset_us = ftr->us_radio_end;
 	conn_offset_us += ((u64_t)win_offset + 1) * 1250U;
 	conn_offset_us -= EVENT_OVERHEAD_START_US;
-	conn_offset_us -= EVENT_JITTER_US << 1;
+	conn_offset_us -= EVENT_TICKER_RES_MARGIN_US;
 	conn_offset_us -= EVENT_JITTER_US;
 	conn_offset_us -= ftr->us_radio_rdy;
 
@@ -317,7 +317,7 @@ void ull_slave_done(struct node_rx_event_done *done, u32_t *ticks_drift_plus,
 		done->extra.slave.preamble_to_addr_us;
 
 	start_to_address_expected_us = EVENT_JITTER_US +
-				       (EVENT_JITTER_US << 1) +
+				       EVENT_TICKER_RES_MARGIN_US +
 				       window_widening_event_us +
 				       preamble_to_addr_us;
 
@@ -332,7 +332,7 @@ void ull_slave_done(struct node_rx_event_done *done, u32_t *ticks_drift_plus,
 			HAL_TICKER_US_TO_TICKS(start_to_address_actual_us);
 		*ticks_drift_minus =
 			HAL_TICKER_US_TO_TICKS(EVENT_JITTER_US +
-					       (EVENT_JITTER_US << 1) +
+					       EVENT_TICKER_RES_MARGIN_US +
 					       preamble_to_addr_us);
 	}
 }
@@ -386,7 +386,6 @@ u8_t ll_start_enc_req_send(u16_t handle, u8_t error_code,
 			    u8_t const *const ltk)
 {
 	struct ll_conn *conn;
-	u8_t ret;
 
 	conn = ll_connected_get(handle);
 	if (!conn) {
@@ -395,16 +394,13 @@ u8_t ll_start_enc_req_send(u16_t handle, u8_t error_code,
 
 	if (error_code) {
 		if (conn->llcp_enc.refresh == 0U) {
-			ret = ull_conn_llcp_req(conn);
-			if (ret) {
-				return ret;
+			if ((conn->llcp_req == conn->llcp_ack) ||
+			     (conn->llcp_type != LLCP_ENCRYPTION)) {
+				return BT_HCI_ERR_CMD_DISALLOWED;
 			}
 
 			conn->llcp.encryption.error_code = error_code;
-			conn->llcp.encryption.initiate = 0U;
-
-			conn->llcp_type = LLCP_ENCRYPTION;
-			conn->llcp_req++;
+			conn->llcp.encryption.state = LLCP_ENC_STATE_INPROG;
 		} else {
 			if (conn->llcp_terminate.ack !=
 			    conn->llcp_terminate.req) {
@@ -416,18 +412,16 @@ u8_t ll_start_enc_req_send(u16_t handle, u8_t error_code,
 			conn->llcp_terminate.req++;
 		}
 	} else {
-		ret = ull_conn_llcp_req(conn);
-		if (ret) {
-			return ret;
+		if ((conn->llcp_req == conn->llcp_ack) ||
+		     (conn->llcp_type != LLCP_ENCRYPTION)) {
+			return BT_HCI_ERR_CMD_DISALLOWED;
 		}
 
-		memcpy(&conn->llcp_enc.ltk[0], ltk, sizeof(conn->llcp_enc.ltk));
+		memcpy(&conn->llcp_enc.ltk[0], ltk,
+		       sizeof(conn->llcp_enc.ltk));
 
 		conn->llcp.encryption.error_code = 0U;
-		conn->llcp.encryption.initiate = 0U;
-
-		conn->llcp_type = LLCP_ENCRYPTION;
-		conn->llcp_req++;
+		conn->llcp.encryption.state = LLCP_ENC_STATE_INPROG;
 	}
 
 	return 0;

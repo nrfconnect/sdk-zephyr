@@ -13,8 +13,7 @@
  */
 
 #include <kernel.h>
-#include <toolchain.h>
-#include <kernel_structs.h>
+#include <ksched.h>
 #include <wait_q.h>
 
 #ifdef CONFIG_USERSPACE
@@ -33,10 +32,10 @@ extern u8_t *z_priv_stack_find(void *obj);
  * addresses, we have to unset it manually before storing it in the 'pc' field
  * of the ESF.
  */
-void z_arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
-		       size_t stackSize, k_thread_entry_t pEntry,
-		       void *parameter1, void *parameter2, void *parameter3,
-		       int priority, unsigned int options)
+void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
+		     size_t stackSize, k_thread_entry_t pEntry,
+		     void *parameter1, void *parameter2, void *parameter3,
+		     int priority, unsigned int options)
 {
 	char *pStackMem = Z_THREAD_STACK_BUFFER(stack);
 	char *stackEnd;
@@ -113,7 +112,7 @@ void z_arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 
 #if defined(CONFIG_USERSPACE)
 	if ((options & K_USER) != 0) {
-		pInitCtx->basic.pc = (u32_t)z_arch_user_mode_enter;
+		pInitCtx->basic.pc = (u32_t)arch_user_mode_enter;
 	} else {
 		pInitCtx->basic.pc = (u32_t)z_thread_entry;
 	}
@@ -158,8 +157,8 @@ void z_arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 
 #ifdef CONFIG_USERSPACE
 
-FUNC_NORETURN void z_arch_user_mode_enter(k_thread_entry_t user_entry,
-	void *p1, void *p2, void *p3)
+FUNC_NORETURN void arch_user_mode_enter(k_thread_entry_t user_entry,
+					void *p1, void *p2, void *p3)
 {
 
 	/* Set up privileged stack before entering user mode */
@@ -329,13 +328,13 @@ u32_t z_check_thread_stack_fail(const u32_t fault_addr, const u32_t psp)
 #endif /* CONFIG_MPU_STACK_GUARD || CONFIG_USERSPACE */
 
 #if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
-int z_arch_float_disable(struct k_thread *thread)
+int arch_float_disable(struct k_thread *thread)
 {
 	if (thread != _current) {
 		return -EINVAL;
 	}
 
-	if (z_arch_is_in_isr()) {
+	if (arch_is_in_isr()) {
 		return -EINVAL;
 	}
 
@@ -346,26 +345,26 @@ int z_arch_float_disable(struct k_thread *thread)
 	 * fault to take an outdated thread user_options flag into
 	 * account.
 	 */
-	int key = z_arch_irq_lock();
+	int key = arch_irq_lock();
 
 	thread->base.user_options &= ~K_FP_REGS;
 
 	__set_CONTROL(__get_CONTROL() & (~CONTROL_FPCA_Msk));
 
 	/* No need to add an ISB barrier after setting the CONTROL
-	 * register; z_arch_irq_unlock() already adds one.
+	 * register; arch_irq_unlock() already adds one.
 	 */
 
-	z_arch_irq_unlock(key);
+	arch_irq_unlock(key);
 
 	return 0;
 }
 #endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
 
-void z_arch_switch_to_main_thread(struct k_thread *main_thread,
-				  k_thread_stack_t *main_stack,
-				  size_t main_stack_size,
-				  k_thread_entry_t _main)
+void arch_switch_to_main_thread(struct k_thread *main_thread,
+				k_thread_stack_t *main_stack,
+				size_t main_stack_size,
+				k_thread_entry_t _main)
 {
 #if defined(CONFIG_FLOAT)
 	/* Initialize the Floating Point Status and Control Register when in
@@ -432,23 +431,23 @@ void z_arch_switch_to_main_thread(struct k_thread *main_thread,
 	"msr   PSP, %1\n\t"	/* __set_PSP(start_of_main_stack) */
 #endif
 
+	"movs r1, #0\n\t"
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE) \
 			|| defined(CONFIG_ARMV7_R)
 	"cpsie i\n\t"		/* __enable_irq() */
 #elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
 	"cpsie if\n\t"		/* __enable_irq(); __enable_fault_irq() */
-	"mov   r1,  #0\n\t"
 	"msr   BASEPRI, r1\n\t"	/* __set_BASEPRI(0) */
 #else
 #error Unknown ARM architecture
 #endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
 	"isb\n\t"
-	"movs r1, #0\n\t"
 	"movs r2, #0\n\t"
 	"movs r3, #0\n\t"
 	"bl z_thread_entry\n\t"	/* z_thread_entry(_main, 0, 0, 0); */
 	:
 	: "r" (_main), "r" (start_of_main_stack)
+	: "r0" /* not to be overwritten by msr PSP, %1 */
 	);
 
 	CODE_UNREACHABLE;

@@ -135,6 +135,7 @@ add_custom_target(
 # a superset of INPUT= and FILE_PATTERNS= in zephyr.doxyfile.in
 file(GLOB_RECURSE  DOXY_SOURCES
   ${ZEPHYR_BASE}/include/*.[c,h,S]
+  ${ZEPHYR_BASE}/kernel/include/kernel_arch_interface.h
   ${ZEPHYR_BASE}/lib/libc/*.[c,h,S]
   ${ZEPHYR_BASE}/subsys/testsuite/ztest/include/*.[h,c,S]
   ${ZEPHYR_BASE}/tests/*.[h,c,S]
@@ -196,10 +197,10 @@ add_custom_target(
   PYTHONPATH="${ZEPHYR_BASE}/scripts/kconfig${SEP}$ENV{PYTHONPATH}"
   ZEPHYR_BASE=${ZEPHYR_BASE}
   srctree=${ZEPHYR_BASE}
-  BOARD_DIR=boards/*/*/
+  BOARD_DIR=boards/*/*
   ARCH=*
-  ARCH_DIR=arch/
-  SOC_DIR=soc/
+  ARCH_DIR=arch
+  SOC_DIR=soc
   CMAKE_BINARY_DIR=${CMAKE_BINARY_DIR}
   KCONFIG_WARN_UNDEF=y
   KCONFIG_TURBO_MODE=${KCONFIG_TURBO_MODE}

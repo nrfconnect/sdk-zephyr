@@ -1,11 +1,11 @@
-# Kconfig - IMX M4 Core SDK
-#
+# IMX M4 Core SDK
+
 # Copyright (c) 2018, NXP
 # SPDX-License-Identifier: Apache-2.0
 
 config HAS_IMX_HAL
 	bool
-	select HAS_CMSIS
+	select HAS_CMSIS_CORE
 	depends on SOC_FAMILY_IMX
 
 if HAS_IMX_HAL

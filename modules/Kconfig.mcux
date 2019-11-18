@@ -1,11 +1,11 @@
-# Kconfig - MCUXpresso SDK
-#
+# MCUXpresso SDK
+
 # Copyright (c) 2016, Freescale Semiconductor, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 config HAS_MCUX
 	bool
-	select HAS_CMSIS
+	select HAS_CMSIS_CORE
 	depends on SOC_FAMILY_KINETIS || SOC_FAMILY_IMX || SOC_FAMILY_LPC
 
 if HAS_MCUX
@@ -151,5 +151,10 @@ config HAS_MCUX_SMC
 	bool
 	help
 	  Set if the SMC  module is present in the SoC.
+
+config HAS_MCUX_CSI
+	bool
+	help
+	  Set if the CMOS Sensor Interface module is present in the SoC.
 
 endif # HAS_MCUX
