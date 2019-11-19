@@ -635,7 +635,7 @@ endif()
 #
 # Currently used properties:
 # - COMPILES_OPTIONS: Used by application memory partition feature
-add_custom_target(${IMAGE}zephyr_property_target)
+add_custom_target(zephyr_property_target)
 
 # "app" is a CMake library containing all the application code and is
 # modified by the entry point ${APPLICATION_SOURCE_DIR}/CMakeLists.txt
