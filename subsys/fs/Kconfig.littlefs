@@ -5,6 +5,14 @@
 menu "LittleFS Settings"
 	visible if FILE_SYSTEM_LITTLEFS
 
+# This config must be compatible with
+# nrf/subsys/partition_manager/Kconfig.template.partition_size
+config PM_PARTITION_SIZE_LITTLEFS
+	hex "Flash space reserved for littlefs storage partition"
+	default 0x10000
+	help
+	  Flash space set aside for the littlefs storage partition.
+
 config FS_LITTLEFS_NUM_FILES
 	int "Maximum number of opened files"
 	default 4

@@ -5,3 +5,9 @@ littlefs_storage:
   placement: {after: [mcuboot_storage, app]}
   size: CONFIG_PM_PARTITION_SIZE_LITTLEFS
 #endif
+
+#ifdef CONFIG_FILE_SYSTEM_LITTLEFS
+littlefs:
+  placement: {after: [mcuboot_storage, app]}
+  size: CONFIG_PM_PARTITION_SIZE_LITTLEFS
+#endif
