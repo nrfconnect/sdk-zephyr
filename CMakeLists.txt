@@ -1268,7 +1268,7 @@ set(logical_target_for_zephyr_elf ${logical_target_for_zephyr_elf} PARENT_SCOPE)
 # 2. it can be defined in Kconfig
 set_target_properties(${logical_target_for_zephyr_elf} PROPERTIES OUTPUT_NAME ${KERNEL_NAME})
 
-if (IMAGE STREQUAL mcuboot_ AND CONFIG_MCUBOOT_BUILD_S1_VARIANT)
+if (CONFIG_MCUBOOT AND CONFIG_MCUBOOT_BUILD_S1_VARIANT)
 # Create second MCUBoot executable for the second slot of the second stage
 # bootloader. This is done inside this file since it is non-trivial to add
 # executable targets outside the root CMakeLists.txt. The problem is that
