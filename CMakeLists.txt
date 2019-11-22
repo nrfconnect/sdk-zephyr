@@ -1283,7 +1283,6 @@ if (IMAGE STREQUAL mcuboot_ AND CONFIG_MCUBOOT_BUILD_S1_VARIANT)
     ${CODE_RELOCATION_DEP}
     ${ZEPHYR_PREBUILT_EXECUTABLE}
     ${OFFSETS_H_TARGET}
-    ${mcuboot_logical_target} # See partition_manager.cmake
     )
 
   add_custom_target(
