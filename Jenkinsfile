@@ -47,65 +47,6 @@ pipeline {
     stage('Load') { steps { script { CI_STATE = lib_Stage.load('ZEPHYR') }}}
     stage('Specification') { steps { script {
 
-      def TestStages = [:]
-
-      TestStages["compliance"] = {
-        node (AGENT_LABELS) {
-          stage('Compliance Test'){
-            println "Using Node:$NODE_NAME"
-            docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
-              dir('zephyr') {
-                checkout scm
-                CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
-                      CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
-                lib_Status.set("PENDING", 'ZEPHYR', CI_STATE);
-                lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
-                      CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
-              }
-              lib_West.InitUpdate('zephyr')
-              lib_West.ApplyManifestUpdates(CI_STATE)
-
-              dir('zephyr') {
-                def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.ZEPHYR)
-                if (BUILD_TYPE == "PR") {
-                  if (CI_STATE.ZEPHYR.IS_MERGEUP) {
-                    println 'This is a MERGE-UP PR.   CI_STATE.ZEPHYR.IS_MERGEUP=' + CI_STATE.ZEPHYR.IS_MERGEUP
-                    CI_STATE.ZEPHYR.MERGEUP_BASE = sh( script: "git log --oneline --grep='\\[nrf mergeup\\].*' -i -n 1 --pretty=format:'%h' | tr -d '\\n'" , returnStdout: true)
-                    println "CI_STATE.ZEPHYR.MERGEUP_BASE = $CI_STATE.ZEPHYR.MERGEUP_BASE"
-                    COMMIT_RANGE = "$CI_STATE.ZEPHYR.MERGEUP_BASE..$CI_STATE.ZEPHYR.REPORT_SHA"
-                  } else {
-                    COMMIT_RANGE = "$CI_STATE.ZEPHYR.MERGE_BASE..$CI_STATE.ZEPHYR.REPORT_SHA"
-                  }
-                  COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.ZEPHYR.REPORT_SHA -g"
-                  println "Building a PR [$CHANGE_ID]: $COMMIT_RANGE"
-                }
-                else if (BUILD_TYPE == "TAG") {
-                  COMMIT_RANGE = "tags/${env.BRANCH_NAME}..tags/${env.BRANCH_NAME}"
-                  println "Building a Tag: " + COMMIT_RANGE
-                }
-                // If not a PR, it's a non-PR-branch or master build. Compare against the origin.
-                else if (BUILD_TYPE == "BRANCH") {
-                  COMMIT_RANGE = "origin/${env.BRANCH_NAME}..HEAD"
-                  println "Building a Branch: " + COMMIT_RANGE
-                }
-                else {
-                    assert condition : "Build fails because it is not a PR/Tag/Branch"
-                }
-
-                // Run the compliance check
-                try {
-                  sh "(source ../zephyr/zephyr-env.sh && ../tools/ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE)"
-                }
-                finally {
-                  junit 'compliance.xml'
-                  archiveArtifacts artifacts: 'compliance.xml'
-                }
-              }
-            }
-          }
-        }
-      }
-
       CI_STATE.ZEPHYR.IS_MERGEUP = false
       if (((CI_STATE.ZEPHYR.CHANGE_TITLE.toLowerCase().contains('mergeup')  ) || (CI_STATE.ZEPHYR.CHANGE_TITLE.toLowerCase().contains('upmerge')  )) &&
           ((CI_STATE.ZEPHYR.CHANGE_BRANCH.toLowerCase().contains('mergeup') ) || (CI_STATE.ZEPHYR.CHANGE_BRANCH.toLowerCase().contains('upmerge') ))) {
@@ -114,11 +55,11 @@ pipeline {
       }
 
       if (CI_STATE.ZEPHYR.RUN_TESTS) {
-        TestExecutionList['compliance'] = TestStages["compliance"]
+        TestExecutionList['compliance'] = generateComplianceStage(AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE)
       }
 
       if (CI_STATE.ZEPHYR.RUN_BUILD) {
-        def SUBSET_LIST = ['1/4', '2/4', '3/4', '4/4' ]
+        def SUBSET_LIST = ['1/4' , '2/4', '3/4', '4/4' ]
         def COMPILER_LIST = ['gnuarmemb'] // 'zephyr',
         def INPUT_MAP = [set : SUBSET_LIST, compiler : COMPILER_LIST ]
 
@@ -207,29 +148,32 @@ pipeline {
 def generateParallelStageNRF(subset, compiler, AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE) {
   return {
     node (AGENT_LABELS) {
-      stage('Sanity Check - Zephyr'){
-        println "Using Node:$NODE_NAME"
-        docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
-          dir('zephyr') {
-            checkout scm
-            CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
-                  CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
-            lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
-                  CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
-          }
-          lib_West.InitUpdate('zephyr')
-          lib_West.ApplyManifestUpdates(CI_STATE)
-          dir('zephyr') {
-            def PLATFORM_ARGS = lib_Main.getPlatformArgs(CI_STATE.ZEPHYR.PLATFORMS)
-            println "$compiler SANITY NRF PLATFORMS_ARGS = $PLATFORM_ARGS"
-            sh """
-                export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
-                source zephyr-env.sh && \
-                ./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH $PLATFORM_ARGS --subset $subset || $SANITYCHECK_RETRY_CMDS
-               """
+      try {
+        stage('Sanity Check - Zephyr'){
+          println "Using Node:$NODE_NAME"
+          docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
+            dir('zephyr') {
+              checkout scm
+              CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
+                    CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
+              lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
+                    CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
+            }
+            lib_West.InitUpdate('zephyr')
+            lib_West.ApplyManifestUpdates(CI_STATE)
+            dir('zephyr') {
+              def PLATFORM_ARGS = lib_Main.getPlatformArgs(CI_STATE.ZEPHYR.PLATFORMS)
+              println "$compiler SANITY NRF PLATFORMS_ARGS = $PLATFORM_ARGS"
+              sh """
+                  export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
+                  source zephyr-env.sh && \
+                  ./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH $PLATFORM_ARGS --subset $subset || $SANITYCHECK_RETRY_CMDS
+                 """
+            }
           }
         }
-        cleanWs()
+      } finally {
+        cleanWs(); echo "Run: cleanWs()"
       }
     }
   }
@@ -238,26 +182,93 @@ def generateParallelStageNRF(subset, compiler, AGENT_LABELS, DOCKER_REG, IMAGE_T
 def generateParallelStageALL(subset, compiler, AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE) {
   return {
     node (AGENT_LABELS) {
-      stage('Sanity Check - Zephyr'){
-        println "Using Node:$NODE_NAME"
-        docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
-          dir('zephyr') {
-            checkout scm
-            CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
-                  CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
-            lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
-                  CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
-          }
-          lib_West.InitUpdate('zephyr')
-          lib_West.ApplyManifestUpdates(CI_STATE)
-          dir('zephyr') {
-            sh """
-                export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
-                source zephyr-env.sh && \
-                ./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH --subset $subset || $SANITYCHECK_RETRY_CMDS
-               """
+      try {
+        stage('Sanity Check - Zephyr'){
+          println "Using Node:$NODE_NAME"
+          docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
+            dir('zephyr') {
+              checkout scm
+              CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
+                    CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
+              lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
+                    CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
+            }
+            lib_West.InitUpdate('zephyr')
+            lib_West.ApplyManifestUpdates(CI_STATE)
+            dir('zephyr') {
+              sh """
+                  export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
+                  source zephyr-env.sh && \
+                  ./scripts/sanitycheck $SANITYCHECK_OPTIONS $ARCH --subset $subset || $SANITYCHECK_RETRY_CMDS
+                 """
+            }
           }
         }
+      } finally {
+        cleanWs(); echo "Ran: cleanWs()"
+      }
+    }
+  }
+}
+
+def generateComplianceStage(AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_STATE) {
+  return {
+    node (AGENT_LABELS) {
+      try {
+        stage('Compliance Test'){
+          println "Using Node:$NODE_NAME"
+          docker.image("$DOCKER_REG/$IMAGE_TAG").inside {
+            dir('zephyr') {
+              checkout scm
+              CI_STATE.ZEPHYR.REPORT_SHA = lib_Main.checkoutRepo(
+                    CI_STATE.ZEPHYR.GIT_URL, "ZEPHYR", CI_STATE.ZEPHYR, false)
+              lib_Status.set("PENDING", 'ZEPHYR', CI_STATE);
+              lib_West.AddManifestUpdate("ZEPHYR", 'zephyr',
+                    CI_STATE.ZEPHYR.GIT_URL, CI_STATE.ZEPHYR.GIT_REF, CI_STATE)
+            }
+            lib_West.InitUpdate('zephyr')
+            lib_West.ApplyManifestUpdates(CI_STATE)
+
+            dir('zephyr') {
+              def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.ZEPHYR)
+              if (BUILD_TYPE == "PR") {
+                if (CI_STATE.ZEPHYR.IS_MERGEUP) {
+                  println 'This is a MERGE-UP PR.   CI_STATE.ZEPHYR.IS_MERGEUP=' + CI_STATE.ZEPHYR.IS_MERGEUP
+                  CI_STATE.ZEPHYR.MERGEUP_BASE = sh( script: "git log --oneline --grep='\\[nrf mergeup\\].*' -i -n 1 --pretty=format:'%h' | tr -d '\\n'" , returnStdout: true)
+                  println "CI_STATE.ZEPHYR.MERGEUP_BASE = $CI_STATE.ZEPHYR.MERGEUP_BASE"
+                  COMMIT_RANGE = "$CI_STATE.ZEPHYR.MERGEUP_BASE..$CI_STATE.ZEPHYR.REPORT_SHA"
+                } else {
+                  COMMIT_RANGE = "$CI_STATE.ZEPHYR.MERGE_BASE..$CI_STATE.ZEPHYR.REPORT_SHA"
+                }
+                COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.ZEPHYR.REPORT_SHA -g"
+                println "Building a PR [$CHANGE_ID]: $COMMIT_RANGE"
+              }
+              else if (BUILD_TYPE == "TAG") {
+                COMMIT_RANGE = "tags/${env.BRANCH_NAME}..tags/${env.BRANCH_NAME}"
+                println "Building a Tag: " + COMMIT_RANGE
+              }
+              // If not a PR, it's a non-PR-branch or master build. Compare against the origin.
+              else if (BUILD_TYPE == "BRANCH") {
+                COMMIT_RANGE = "origin/${env.BRANCH_NAME}..HEAD"
+                println "Building a Branch: " + COMMIT_RANGE
+              }
+              else {
+                  assert condition : "Build fails because it is not a PR/Tag/Branch"
+              }
+
+              // Run the compliance check
+              try {
+                sh "(source ../zephyr/zephyr-env.sh && ../tools/ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE)"
+              }
+              finally {
+                junit 'compliance.xml'
+                archiveArtifacts artifacts: 'compliance.xml'
+              }
+            }
+          }
+        }
+      } finally {
+        cleanWs(); echo "Ran: cleanWs()"
       }
     }
   }
