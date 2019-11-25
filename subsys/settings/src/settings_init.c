@@ -152,7 +152,7 @@ int settings_backend_init(void)
 		return rc;
 	}
 
-	rc = flash_area_get_sectors(DT_FLASH_AREA_STORAGE_ID, &sector_cnt,
+	rc = flash_area_get_sectors(FLASH_AREA_STORAGE_ID, &sector_cnt,
 				    &hw_flash_sector);
 	if (rc == -ENODEV) {
 		return rc;
