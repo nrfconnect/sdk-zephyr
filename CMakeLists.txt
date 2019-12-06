@@ -1299,6 +1299,17 @@ if (CONFIG_MCUBOOT AND CONFIG_MCUBOOT_BUILD_S1_VARIANT)
     DEPENDS
     ${output}
     )
+
+  # Register in the parent image that this child image will have
+  # s1_image.hex as a byproduct, this allows the parent image to know
+  # where the hex file comes from and create custom commands that
+  # depend on it.
+  set_property(
+    TARGET         zephyr_property_target
+    APPEND_STRING
+    PROPERTY       shared_vars
+    "list(APPEND ${IMAGE}BUILD_BYPRODUCTS ${output})\n"
+    )
 endif()
 
 set(post_build_commands "")
