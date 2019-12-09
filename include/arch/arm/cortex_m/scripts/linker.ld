@@ -203,7 +203,9 @@ SECTIONS
 	/* This is used for Secure Boot */
 	#if defined(CONFIG_FW_INFO)
 	. = CONFIG_FW_INFO_OFFSET;
-	KEEP(*(.firmware_info))
+	_fw_info_start = .;
+	KEEP(*(SORT_BY_NAME(.firmware_info*)))
+	_fw_info_size = ABSOLUTE(. - _fw_info_start);
 	#endif
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
