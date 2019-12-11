@@ -1308,7 +1308,7 @@ if (CONFIG_MCUBOOT AND CONFIG_MCUBOOT_BUILD_S1_VARIANT)
     TARGET         zephyr_property_target
     APPEND_STRING
     PROPERTY       shared_vars
-    "list(APPEND ${IMAGE}BUILD_BYPRODUCTS ${output})\n"
+    "list(APPEND ${IMAGE_NAME}BUILD_BYPRODUCTS ${output})\n"
     )
 endif()
 
