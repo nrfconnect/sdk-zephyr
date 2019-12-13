@@ -54,7 +54,6 @@ struct net_buf *bt_buf_get_rx(enum bt_buf_type type, s32_t timeout)
 	buf = net_buf_alloc(&hci_rx_pool, timeout);
 
 	if (buf) {
-		net_buf_reserve(buf, CONFIG_BT_HCI_RESERVE);
 		bt_buf_set_type(buf, type);
 	}
 
@@ -63,12 +62,26 @@ struct net_buf *bt_buf_get_rx(enum bt_buf_type type, s32_t timeout)
 
 struct net_buf *bt_buf_get_cmd_complete(s32_t timeout)
 {
-	return bt_buf_get_rx(BT_BUF_EVT, timeout);
+	struct net_buf *buf;
+
+	buf = net_buf_alloc(&hci_rx_pool, timeout);
+	if (buf) {
+		bt_buf_set_type(buf, BT_BUF_EVT);
+	}
+
+	return buf;
 }
 
 struct net_buf *bt_buf_get_evt(u8_t evt, bool discardable, s32_t timeout)
 {
-	return bt_buf_get_rx(BT_BUF_EVT, timeout);
+	struct net_buf *buf;
+
+	buf = net_buf_alloc(&hci_rx_pool, timeout);
+	if (buf) {
+		bt_buf_set_type(buf, BT_BUF_EVT);
+	}
+
+	return buf;
 }
 
 int bt_recv(struct net_buf *buf)
