@@ -47,16 +47,26 @@ static int nordicsemi_nrf53_init(struct device *arg)
 #ifdef CONFIG_NRF_ENABLE_CACHE
 #ifdef CONFIG_SOC_NRF5340_CPUAPP
 	/* Enable the instruction & data cache */
-	NRF_CACHE_S->ENABLE = CACHE_ENABLE_ENABLE_Msk;
+	NRF_CACHE->ENABLE = CACHE_ENABLE_ENABLE_Msk;
 #endif /* CONFIG_SOC_NRF5340_CPUAPP */
 #ifdef CONFIG_SOC_NRF5340_CPUNET
-	NRF_NVMC_NS->ICACHECNF |= NVMC_ICACHECNF_CACHEEN_Enabled;
+	NRF_NVMC->ICACHECNF |= NVMC_ICACHECNF_CACHEEN_Enabled;
 #endif /* CONFIG_SOC_NRF5340_CPUNET */
 #endif
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP) && \
 	!defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	*((u32_t *)0x500046D0) = 0x1;
+#endif
+
+#if defined(CONFIG_SOC_DCDC_NRF53X_APP)
+	NRF_REGULATORS->VREGMAIN.DCDCEN = 1;
+#endif
+#if defined(CONFIG_SOC_DCDC_NRF53X_NET)
+	NRF_REGULATORS->VREGRADIO.DCDCEN = 1;
+#endif
+#if defined(CONFIG_SOC_DCDC_NRF53X_HV)
+	NRF_REGULATORS->VREGH.DCDCEN = 1;
 #endif
 
 	/* Install default handler that simply resets the CPU

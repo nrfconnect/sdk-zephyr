@@ -22,22 +22,6 @@ The top-level entry point of the library is the EDT class. EDT.__init__() takes
 a .dts file to parse and a list of paths to directories containing bindings.
 """
 
-import os
-import re
-import sys
-
-import yaml
-try:
-    # Use the C LibYAML parser if available, rather than the Python parser.
-    # This makes e.g. gen_defines.py more than twice as fast.
-    from yaml import CLoader as Loader
-except ImportError:
-    from yaml import Loader
-
-from dtlib import DT, DTError, to_num, to_nums, TYPE_EMPTY, TYPE_NUMS, \
-                  TYPE_PHANDLE, TYPE_PHANDLES_AND_NUMS
-from grutils import Graph
-
 # NOTE: testedtlib.py is the test suite for this library. It can be run
 # directly as a script:
 #
@@ -80,6 +64,23 @@ from grutils import Graph
 #
 # - Please use ""-quoted strings instead of ''-quoted strings, just to make
 #   things consistent (''-quoting is more common otherwise in Python)
+
+from collections import OrderedDict
+import os
+import re
+import sys
+
+import yaml
+try:
+    # Use the C LibYAML parser if available, rather than the Python parser.
+    # This makes e.g. gen_defines.py more than twice as fast.
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
+
+from dtlib import DT, DTError, to_num, to_nums, TYPE_EMPTY, TYPE_NUMS, \
+                  TYPE_PHANDLE, TYPE_PHANDLES_AND_NUMS
+from grutils import Graph
 
 #
 # Public classes
@@ -227,11 +228,6 @@ class EDT:
         # Only bindings for 'compatible' strings that appear in the devicetree
         # are loaded.
 
-        # Add legacy '!include foo.yaml' handling. Do Loader.add_constructor()
-        # instead of yaml.add_constructor() to be compatible with both version
-        # 3.13 and version 5.1 of PyYAML.
-        Loader.add_constructor("!include", _binding_include)
-
         dt_compats = _dt_compats(self._dt)
         # Searches for any 'compatible' string mentioned in the devicetree
         # files, with a regex
@@ -258,7 +254,7 @@ class EDT:
             try:
                 # Parsed PyYAML output (Python lists/dictionaries/strings/etc.,
                 # representing the file)
-                binding = yaml.load(contents, Loader=Loader)
+                binding = yaml.load(contents, Loader=_BindingLoader)
             except yaml.YAMLError as e:
                 self._warn("'{}' appears in binding directories but isn't "
                            "valid YAML: {}".format(binding_path, e))
@@ -314,8 +310,10 @@ class EDT:
 
             compatible = binding["compatible"]
             if not isinstance(compatible, str):
-                _err("malformed 'compatible:' field in {} - should be a string"
-                     .format(binding_path))
+                _err("malformed 'compatible: {}' field in {} - "
+                     "should be a string, not {}"
+                     .format(compatible, binding_path,
+                             type(compatible).__name__))
 
             return compatible
 
@@ -424,7 +422,7 @@ class EDT:
 
         with open(paths[0], encoding="utf-8") as f:
             return self._merge_included_bindings(
-                yaml.load(f, Loader=Loader),
+                yaml.load(f, Loader=_BindingLoader),
                 paths[0])
 
     def _init_nodes(self):
@@ -681,9 +679,9 @@ class Node:
       A list of Register objects for the node's registers
 
     props:
-      A dictionary that maps property names to Property objects. Property
-      objects are created for all devicetree properties on the node that are
-      mentioned in 'properties:' in the binding.
+      A collections.OrderedDict that maps property names to Property objects.
+      Property objects are created for all devicetree properties on the node
+      that are mentioned in 'properties:' in the binding.
 
     aliases:
       A list of aliases for the node. This is fetched from the /aliases node.
@@ -762,8 +760,8 @@ class Node:
         # Could be initialized statically too to preserve identity, but not
         # sure if needed. Parent nodes being initialized before their children
         # would need to be kept in mind.
-        return {name: self.edt._node2enode[node]
-                for name, node in self._node.nodes.items()}
+        return OrderedDict((name, self.edt._node2enode[node])
+                           for name, node in self._node.nodes.items())
 
     @property
     def required_by(self):
@@ -913,7 +911,7 @@ class Node:
         # Creates self.props. See the class docstring. Also checks that all
         # properties on the node are declared in its binding.
 
-        self.props = {}
+        self.props = OrderedDict()
 
         if not self._binding:
             return
@@ -1230,7 +1228,7 @@ class Node:
                  .format(basename, controller._node, len(cell_names),
                          len(data_list)))
 
-        return dict(zip(cell_names, data_list))
+        return OrderedDict(zip(cell_names, data_list))
 
     def _set_instance_no(self):
         # Initializes self.instance_no
@@ -2088,3 +2086,25 @@ def _check_dt(dt):
 
 def _err(msg):
     raise EDTError(msg)
+
+
+# Custom PyYAML binding loader class to avoid modifying yaml.Loader directly,
+# which could interfere with YAML loading in clients
+class _BindingLoader(Loader):
+    pass
+
+
+# Add legacy '!include foo.yaml' handling
+_BindingLoader.add_constructor("!include", _binding_include)
+
+# Use OrderedDict instead of plain dict for YAML mappings, to preserve
+# insertion order on Python 3.5 and earlier (plain dicts only preserve
+# insertion order on Python 3.6+). This makes testing easier and avoids
+# surprises.
+#
+# Adapted from
+# https://stackoverflow.com/questions/5121931/in-python-how-can-you-load-yaml-mappings-as-ordereddicts.
+# Hopefully this API stays stable.
+_BindingLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    lambda loader, node: OrderedDict(loader.construct_pairs(node)))

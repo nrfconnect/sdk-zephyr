@@ -403,9 +403,9 @@ static inline size_t adjust_stack_size(size_t stack_size)
 	size_t random_val;
 
 	if (!z_stack_adjust_initialized) {
-		random_val = z_early_boot_rand32_get();
+		z_early_boot_rand_get((u8_t *)&random_val, sizeof(random_val));
 	} else {
-		random_val = sys_rand32_get();
+		sys_rand_get((u8_t *)&random_val, sizeof(random_val));
 	}
 
 	/* Don't need to worry about alignment of the size here,
@@ -658,7 +658,13 @@ void z_thread_single_suspend(struct k_thread *thread)
 		z_remove_thread_from_ready_q(thread);
 	}
 
+	(void)z_abort_thread_timeout(thread);
+
 	z_mark_thread_as_suspended(thread);
+
+	if (thread == _current) {
+		z_reschedule_unlocked();
+	}
 }
 
 void z_impl_k_thread_suspend(struct k_thread *thread)

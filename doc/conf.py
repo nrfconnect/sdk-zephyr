@@ -51,7 +51,8 @@ extensions = [
     'zephyr.application',
     'zephyr.html_redirects',
     'only.eager_only',
-    'zephyr.link-roles'
+    'zephyr.link-roles',
+    'sphinx_tabs.tabs'
 ]
 
 # Only use SVG converter when it is really needed, e.g. LaTeX.
@@ -296,7 +297,7 @@ html_redirect_pages = [
         ('boards/boards', 'boards/index'),
         ('samples/samples', 'samples/index'),
         ('releases/release-notes', 'releases/index'),
-        ('getting_started/getting_starting', 'getting_started/index'),
+        ('getting_started/getting_started', 'getting_started/index'),
         ('introduction/introducing_zephyr', 'introduction/index'),
         ('api/index', 'reference/index'),
         ('api/api', 'reference/index'),
@@ -329,7 +330,10 @@ html_redirect_pages = [
 		('boards/arm/hexiwear_kw40z/doc/hexiwear_kw40z', 'boards/arm/hexiwear_kw40z/doc/index'),
 		('boards/arm/lpcxpresso54114_m0/doc/lpcxpresso54114_m0', 'boards/arm/lpcxpresso54114_m0/doc/index'),
 		('boards/arm/lpcxpresso54114_m4/doc/lpcxpresso54114', 'boards/arm/lpcxpresso54114_m4/doc/index'),
+		('boards/arm/mimxrt1020_evk/doc/mimxrt1020_evk', 'boards/arm/mimxrt1020_evk/doc/index'),
 		('boards/arm/mimxrt1050_evk/doc/mimxrt1050_evk', 'boards/arm/mimxrt1050_evk/doc/index'),
+		('boards/arm/mimxrt1060_evk/doc/mimxrt1060_evk', 'boards/arm/mimxrt1060_evk/doc/index'),
+		('boards/arm/mimxrt1064_evk/doc/mimxrt1064_evk', 'boards/arm/mimxrt1064_evk/doc/index'),
 		('boards/arm/mps2_an385/doc/mps2_an385', 'boards/arm/mps2_an385/doc/index'),
 		('boards/arm/msp_exp432p401r_launchxl/doc/msp_exp432p401r_launchxl', 'boards/arm/msp_exp432p401r_launchxl/doc/index'),
 		('boards/arm/nrf51_ble400/doc/nrf51_ble400', 'boards/arm/nrf51_ble400/doc/index'),
@@ -524,6 +528,7 @@ html_context = {
     'theme_logo_only': False,
     'current_version': version,
     'versions': (("latest", "/"),
+                 ("2.1.0", "/2.1.0/"),
                  ("2.0.0", "/2.0.0/"),
                  ("1.14.1", "/1.14.1/"),
                  ("1.13.0", "/1.13.0/"),

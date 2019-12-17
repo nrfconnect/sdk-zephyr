@@ -48,6 +48,14 @@ config BT_HCI_RAW
 	  This option allows to access Bluetooth controller
 	  from the application with the RAW HCI protocol.
 
+config BT_HCI_RAW_RESERVE
+	int "Buffer headroom needed for HCI transport"
+	depends on BT_HCI_RAW
+	default 0
+	help
+	  This option is used by the HCI raw transport implementation to
+	  declare how much headroom it needs for any HCI transport headers.
+
 config BT_PERIPHERAL
 	bool "Peripheral Role support"
 	select BT_BROADCASTER
@@ -124,14 +132,12 @@ config BT_REMOTE_VERSION
 
 config BT_PHY_UPDATE
 	bool "PHY Update"
-	depends on BT_CTLR_PHY_UPDATE_SUPPORT
 	default y
 	help
 	  Enable support for Bluetooth 5.0 PHY Update Procedure.
 
 config BT_DATA_LEN_UPDATE
 	bool "Data Length Update"
-	depends on BT_CTLR_DATA_LEN_UPDATE_SUPPORT
 	default y
 	help
 	  Enable support for Bluetooth v4.2 LE Data Length Update procedure.

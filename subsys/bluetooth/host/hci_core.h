@@ -22,7 +22,6 @@
 /* k_poll event tags */
 enum {
 	BT_EVENT_CMD_TX,
-	BT_EVENT_CONN_TX_NOTIFY,
 	BT_EVENT_CONN_TX_QUEUE,
 };
 
@@ -195,6 +194,7 @@ bool bt_le_conn_params_valid(const struct bt_le_conn_param *param);
 int bt_le_scan_update(bool fast_scan);
 
 int bt_le_auto_conn(const struct bt_le_conn_param *conn_param);
+int bt_le_auto_conn_cancel(void);
 
 bool bt_addr_le_is_bonded(u8_t id, const bt_addr_le_t *addr);
 const bt_addr_le_t *bt_lookup_id_addr(u8_t id, const bt_addr_le_t *addr);

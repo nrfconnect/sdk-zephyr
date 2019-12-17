@@ -98,10 +98,14 @@ typedef struct {
 
 #ifdef CONFIG_OBJECT_TRACING
 #define _OBJECT_TRACING_NEXT_PTR(type) struct type *__next;
-#define _OBJECT_TRACING_INIT .__next = NULL,
+#define _OBJECT_TRACING_LINKED_FLAG u8_t __linked;
+#define _OBJECT_TRACING_INIT \
+	.__next = NULL,	     \
+	.__linked = 0,
 #else
 #define _OBJECT_TRACING_INIT
 #define _OBJECT_TRACING_NEXT_PTR(type)
+#define _OBJECT_TRACING_LINKED_FLAG
 #endif
 
 #ifdef CONFIG_POLL
@@ -364,7 +368,13 @@ static inline void k_obj_free(void *obj)
 struct __packed _k_thread_stack_element {
 	char data;
 };
-typedef struct _k_thread_stack_element k_thread_stack_t;
+
+/**
+ * @typedef k_thread_stack_t
+ * @brief Typedef of struct _k_thread_stack_element
+ *
+ * @see _k_thread_stack_element
+ */
 
 /**
  * @typedef k_thread_entry_t
@@ -384,7 +394,6 @@ typedef struct _k_thread_stack_element k_thread_stack_t;
  *
  * @return N/A
  */
-typedef void (*k_thread_entry_t)(void *p1, void *p2, void *p3);
 
 #ifdef CONFIG_THREAD_MONITOR
 struct __thread_entry {
@@ -1136,10 +1145,13 @@ int k_thread_cpu_mask_disable(k_tid_t thread, int cpu);
 /**
  * @brief Suspend a thread.
  *
- * This routine prevents the kernel scheduler from making @a thread the
- * current thread. All other internal operations on @a thread are still
- * performed; for example, any timeout it is waiting on keeps ticking,
- * kernel objects it is waiting on are still handed to it, etc.
+ * This routine prevents the kernel scheduler from making @a thread
+ * the current thread. All other internal operations on @a thread are
+ * still performed; for example, kernel objects it is waiting on are
+ * still handed to it.  Note that any existing timeouts
+ * (e.g. k_sleep(), or a timeout argument to k_sem_take() et. al.)
+ * will be canceled.  On resume, the thread will begin running
+ * immediately and return from the blocked call.
  *
  * If @a thread is already suspended, the routine has no effect.
  *
@@ -1461,6 +1473,7 @@ struct k_timer {
 	void *user_data;
 
 	_OBJECT_TRACING_NEXT_PTR(k_timer)
+	_OBJECT_TRACING_LINKED_FLAG
 };
 
 #define Z_TIMER_INITIALIZER(obj, expiry, stop) \
@@ -1837,6 +1850,7 @@ struct k_queue {
 	};
 
 	_OBJECT_TRACING_NEXT_PTR(k_queue)
+	_OBJECT_TRACING_LINKED_FLAG
 };
 
 #define _K_QUEUE_INITIALIZER(obj) \
@@ -2559,6 +2573,7 @@ struct k_stack {
 	stack_data_t *base, *next, *top;
 
 	_OBJECT_TRACING_NEXT_PTR(k_stack)
+	_OBJECT_TRACING_LINKED_FLAG
 	u8_t flags;
 };
 
@@ -3214,6 +3229,7 @@ struct k_mutex {
 	int owner_orig_prio;
 
 	_OBJECT_TRACING_NEXT_PTR(k_mutex)
+	_OBJECT_TRACING_LINKED_FLAG
 };
 
 /**
@@ -3316,6 +3332,7 @@ struct k_sem {
 	_POLL_EVENT;
 
 	_OBJECT_TRACING_NEXT_PTR(k_sem)
+	_OBJECT_TRACING_LINKED_FLAG
 };
 
 #define Z_SEM_INITIALIZER(obj, initial_count, count_limit) \
@@ -3365,12 +3382,6 @@ __syscall void k_sem_init(struct k_sem *sem, unsigned int initial_count,
  * @param timeout Non-negative waiting period to take the semaphore (in
  *                milliseconds), or one of the special values K_NO_WAIT and
  *                K_FOREVER.
- *
- * @note When porting code from the nanokernel legacy API to the new API, be
- * careful with the return value of this function. The return value is the
- * reverse of the one of nano_sem_take family of APIs: 0 means success, and
- * non-zero means failure, while the nano_sem_take family returns 1 for success
- * and 0 for failure.
  *
  * @retval 0 Semaphore taken.
  * @retval -EBUSY Returned without waiting.
@@ -3475,6 +3486,7 @@ struct k_msgq {
 	u32_t used_msgs;
 
 	_OBJECT_TRACING_NEXT_PTR(k_msgq)
+	_OBJECT_TRACING_LINKED_FLAG
 	u8_t flags;
 };
 /**
@@ -3772,6 +3784,7 @@ struct k_mbox {
 	struct k_spinlock lock;
 
 	_OBJECT_TRACING_NEXT_PTR(k_mbox)
+	_OBJECT_TRACING_LINKED_FLAG
 };
 /**
  * @cond INTERNAL_HIDDEN
@@ -3956,6 +3969,7 @@ struct k_pipe {
 	} wait_q;
 
 	_OBJECT_TRACING_NEXT_PTR(k_pipe)
+	_OBJECT_TRACING_LINKED_FLAG
 	u8_t	       flags;		/**< Flags */
 };
 
@@ -4133,6 +4147,7 @@ struct k_mem_slab {
 	u32_t num_used;
 
 	_OBJECT_TRACING_NEXT_PTR(k_mem_slab)
+	_OBJECT_TRACING_LINKED_FLAG
 };
 
 #define _K_MEM_SLAB_INITIALIZER(obj, slab_buffer, slab_block_size, \

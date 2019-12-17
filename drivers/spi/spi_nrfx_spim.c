@@ -59,7 +59,7 @@ static inline nrf_spim_frequency_t get_nrf_spim_frequency(u32_t frequency)
 		return NRF_SPIM_FREQ_2M;
 	} else if (frequency < 8000000) {
 		return NRF_SPIM_FREQ_4M;
-#ifdef CONFIG_SOC_NRF52840
+#if defined(CONFIG_SOC_NRF52833) || defined(CONFIG_SOC_NRF52840)
 	} else if (frequency < 16000000) {
 		return NRF_SPIM_FREQ_8M;
 	} else if (frequency < 32000000) {
@@ -360,12 +360,12 @@ static int spim_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 }
 #endif /* CONFIG_DEVICE_POWER_MANAGEMENT */
 
-#if NRFX_CHECK(NRFX_SPIM_EXTENDED_ENABLED)
-#define SPI_NRFX_SPIM_EXTENDED_CONFIG(idx) \
-	.rx_delay = CONFIG_SPI_##idx##_NRF_RX_DELAY,
-#else
-#define SPI_NRFX_SPIM_EXTENDED_CONFIG(idx)
-#endif
+#define SPI_NRFX_SPIM_EXTENDED_CONFIG(idx)				\
+	COND_CODE_1(IS_ENABLED(NRFX_SPIM_EXTENDED_ENABLED),		\
+		(COND_CODE_1(SPIM##idx##_FEATURE_RXDELAY_PRESENT,	\
+			(.rx_delay = CONFIG_SPI_##idx##_NRF_RX_DELAY,),	\
+			())),						\
+		())
 
 #define SPI_NRFX_SPIM_DEVICE(idx)					       \
 	static int spi_##idx##_init(struct device *dev)			       \

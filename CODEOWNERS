@@ -131,6 +131,7 @@
 /drivers/flash/*nrf*                      @nvlsianpu
 /drivers/flash/*spi_nor*                  @pabigot
 /drivers/flash/*stm32*                    @superna9999
+/drivers/gpio/                            @mnkp @pabigot
 /drivers/gpio/*ht16k33*                   @henrikbrixandersen
 /drivers/gpio/*stm32*                     @rsalveti @idlethread
 /drivers/hwinfo/                          @alexanderwachter
@@ -138,6 +139,10 @@
 /drivers/ieee802154/                      @jukkar @tbursztyka
 /drivers/interrupt_controller/            @andrewboie
 /drivers/ipm/ipm_mhu*                     @karl-zh
+/drivers/ipm/Kconfig.nrfx                 @masz-nordic @ioannisg
+/drivers/ipm/Kconfig.nrfx_ipc_channel     @masz-nordic @ioannisg
+/drivers/ipm/ipm_nrfx_ipc.c               @masz-nordic @ioannisg
+/drivers/ipm/ipm_nrfx_ipc.h               @masz-nordic @ioannisg
 /drivers/ipm/ipm_stm32_ipcc.c             @arnop2
 /drivers/*/vexriscv_litex.c               @mateusz-holenko @kgugala @pgielda
 /drivers/led/                             @Mani-Sadhasivam
@@ -283,7 +288,6 @@
 /include/zephyr.h                         @andrewboie @andyross
 /kernel/                                  @andrewboie @andyross
 /lib/gui/                                 @vanwinkeljan
-/lib/libc/                                @nashif
 /lib/os/                                  @andrewboie @andyross
 /lib/posix/                               @pfalcon
 /lib/cmsis_rtos_v2/                       @nashif
@@ -295,9 +299,8 @@
 /samples/                                 @nashif
 /samples/basic/minimal/                   @carlescufi
 /samples/basic/servo_motor/*microbit*     @jhe
-/samples/bluetooth/                       @joerchan @jhedberg @Vudentz
 /lib/updatehub/                           @chtavares592 @otavio
-/samples/bluetooth/                       @sjanc @jhedberg @Vudentz
+/samples/bluetooth/                       @jhedberg @Vudentz @joerchan
 /samples/boards/intel_s1000_crb/          @sathishkuttan @dcpleung @nashif
 /samples/display/                         @vanwinkeljan
 /samples/drivers/CAN/                     @alexanderwachter
@@ -310,14 +313,13 @@
 /samples/net/mqtt_publisher/              @jukkar @tbursztyka
 /samples/net/sockets/coap_*/              @rveerama1
 /samples/net/sockets/                     @jukkar @tbursztyka @pfalcon
-/samples/sensor/                          @MaureenHelm
 /samples/net/updatehub/                   @chtavares592 @otavio
-/samples/sensor/                          @bogdan-davidoaia
+/samples/sensor/                          @MaureenHelm
 /samples/shields/                         @avisconti
 /samples/subsys/logging/                  @nordic-krch @jakub-uC
 /samples/subsys/shell/                    @jakub-uC @nordic-krch
 /samples/subsys/usb/                      @jfischer-phytec-iot @finikorg
-/samples/subsys/power/                    @wentongwu @pizi-nordic
+/samples/subsys/power/                    @wentongwu @pabigot
 /scripts/coccicheck                       @himanshujha199640 @JuliaLawall
 /scripts/coccinelle/                      @himanshujha199640 @JuliaLawall
 /scripts/kconfig/                         @ulfalizer
@@ -372,7 +374,7 @@
 /subsys/net/lib/tls_credentials/          @rlubos
 /subsys/net/l2/                           @jukkar @tbursztyka
 /subsys/net/l2/canbus/                    @alexanderwachter @jukkar
-/subsys/power/                            @wentongwu @pizi-nordic
+/subsys/power/                            @wentongwu @pabigot
 /subsys/random/                           @dleach02
 /subsys/settings/                         @nvlsianpu
 /subsys/shell/                            @jakub-uC @nordic-krch
