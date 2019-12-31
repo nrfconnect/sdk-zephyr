@@ -293,8 +293,8 @@ class Build(Forceable):
         if not self.cmake_cache:
             return          # That's all we can check without a cache.
 
-        cached_app = self.cmake_cache.get('CMAKE_HOME_DIRECTORY')
-        log.dbg('CMAKE_HOME_DIRECTORY:', cached_app,
+        cached_app = self.cmake_cache.get('APPLICATION_SOURCE_DIR')
+        log.dbg('APPLICATION_SOURCE_DIR:', cached_app,
                 level=log.VERBOSE_EXTREME)
         source_abs = (os.path.abspath(self.args.source_dir)
                       if self.args.source_dir else None)
