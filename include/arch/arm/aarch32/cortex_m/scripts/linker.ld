@@ -34,6 +34,7 @@
 #endif
 
 #if USE_PARTITION_MANAGER
+
 #include <pm_config.h>
 #ifdef LINK_MCUBOOT_INTO_S1
 /* We are linking mcuboot against S1, S0 is Image 1 primary */
@@ -49,7 +50,11 @@ _image_1_primary_slot_id = PM_S1_ID;
 #define ROM_ADDR PM_ADDRESS
 #endif /* LINK_MCUBOOT_INTO_S1 */
 #define ROM_SIZE PM_SIZE
-#else
+
+#define RAM_SIZE PM_RAM_SIZE
+#define RAM_ADDR PM_RAM_ADDRESS
+
+#else /* ! USE_PARTITION_MANAGER */
 
 #if !defined(CONFIG_XIP) && (CONFIG_FLASH_SIZE == 0)
 #define ROM_ADDR RAM_ADDR
@@ -69,7 +74,6 @@ _image_1_primary_slot_id = PM_S1_ID;
 #define ROM_SIZE (CONFIG_FLASH_SIZE*1K - CONFIG_FLASH_LOAD_OFFSET)
 #endif /* CONFIG_FLASH_LOAD_SIZE > 0 */
 #endif /* CONFIG_HAS_TI_CCFG */
-#endif /* USE_PARTITION_MANAGER */
 
 #if defined(CONFIG_XIP)
 #if defined(CONFIG_IS_BOOTLOADER)
@@ -84,6 +88,8 @@ _image_1_primary_slot_id = PM_S1_ID;
 #define RAM_SIZE (CONFIG_SRAM_SIZE * 1K - CONFIG_BOOTLOADER_SRAM_SIZE * 1K)
 #define RAM_ADDR CONFIG_SRAM_BASE_ADDRESS
 #endif
+
+#endif /* USE_PARTITION_MANAGER */
 
 #if defined(CONFIG_CUSTOM_SECTION_ALIGN)
 _region_min_align = CONFIG_CUSTOM_SECTION_MIN_ALIGN_SIZE;
