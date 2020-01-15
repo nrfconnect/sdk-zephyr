@@ -1696,11 +1696,7 @@ class TestInstance:
             if self.testcase.extra_configs:
                 content = "\n".join(self.testcase.extra_configs)
 
-            # It has been observed in NCS CI that
-            # options.coverage_platform is None. It is not yet
-            # understood how this can happen. To deal, we null-check
-            # it.
-            if options.enable_coverage and options.coverage_platform:
+            if options.enable_coverage:
                 if platform.name in options.coverage_platform:
                     content = content + "\nCONFIG_COVERAGE=y"
 
