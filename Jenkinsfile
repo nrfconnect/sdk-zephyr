@@ -52,7 +52,7 @@ pipeline {
 
       // ENVs for sanitycheck
       ARCH = "-a arm"
-      SANITYCHECK_OPTIONS = "--inline-logs --enable-coverage -N" // DEFAULT: --testcase-root tests
+      SANITYCHECK_OPTIONS = "--inline-logs --enable-coverage --coverage-platform arm -N" // DEFAULT: --testcase-root tests
       SANITYCHECK_RETRY_CMDS = '' // initialized so that it is shared to parrallel stages
   }
 
