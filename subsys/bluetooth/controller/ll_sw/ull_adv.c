@@ -12,6 +12,7 @@
 
 #include "hal/ccm.h"
 #include "hal/ticker.h"
+#include "hal/radio.h"
 
 #include "util/util.h"
 #include "util/mem.h"
@@ -446,14 +447,11 @@ u8_t ll_adv_enable(u8_t enable)
 	}
 
 	lll = &adv->lll;
+#if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
+	lll->tx_pwr_lvl = RADIO_TXP_DEFAULT;
+#endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
 
 	pdu_adv = lll_adv_data_peek(lll);
-	if (pdu_adv->tx_addr) {
-		if (!mem_nz(ll_addr_get(1, NULL), BDADDR_SIZE)) {
-			return BT_HCI_ERR_INVALID_PARAM;
-		}
-	}
-
 	pdu_scan = lll_adv_scan_rsp_peek(lll);
 
 	if (0) {
@@ -470,8 +468,14 @@ u8_t ll_adv_enable(u8_t enable)
 
 		/* AdvA, fill here at enable */
 		if (h->adv_addr) {
-			memcpy(ptr, ll_addr_get(pdu_adv->tx_addr, NULL),
-			       BDADDR_SIZE);
+			u8_t *tx_addr = ll_addr_get(pdu_adv->tx_addr, NULL);
+
+			/* TODO: Privacy check */
+			if (pdu_adv->tx_addr && !mem_nz(tx_addr, BDADDR_SIZE)) {
+				return BT_HCI_ERR_INVALID_PARAM;
+			}
+
+			memcpy(ptr, tx_addr, BDADDR_SIZE);
 		}
 
 		/* TODO: TargetA, fill here at enable */
@@ -496,17 +500,27 @@ u8_t ll_adv_enable(u8_t enable)
 
 			ull_filter_adv_pdu_update(adv, rl_idx, pdu_adv);
 			ull_filter_adv_pdu_update(adv, rl_idx, pdu_scan);
+
 			priv = true;
 		}
 #endif /* !CONFIG_BT_CTLR_PRIVACY */
 
 		if (!priv) {
-			memcpy(&pdu_adv->adv_ind.addr[0],
-			       ll_addr_get(pdu_adv->tx_addr, NULL),
+			u8_t *tx_addr = ll_addr_get(pdu_adv->tx_addr, NULL);
+
+			memcpy(&pdu_adv->adv_ind.addr[0], tx_addr,
 			       BDADDR_SIZE);
-			memcpy(&pdu_scan->scan_rsp.addr[0],
-			       ll_addr_get(pdu_adv->tx_addr, NULL),
+			memcpy(&pdu_scan->scan_rsp.addr[0], tx_addr,
 			       BDADDR_SIZE);
+		}
+
+		/* In case the local IRK was not set or no match was
+		 * found the fallback address was used instead, check
+		 * that a valid address has been set.
+		 */
+		if (pdu_adv->tx_addr &&
+		    !mem_nz(pdu_adv->adv_ind.addr, BDADDR_SIZE)) {
+			return BT_HCI_ERR_INVALID_PARAM;
 		}
 	}
 
@@ -596,6 +610,10 @@ u8_t ll_adv_enable(u8_t enable)
 		conn_lll->rssi_reported = 0x7F;
 		conn_lll->rssi_sample_count = 0;
 #endif /* CONFIG_BT_CTLR_CONN_RSSI */
+
+#if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
+		conn_lll->tx_pwr_lvl = RADIO_TXP_DEFAULT;
+#endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
 
 		/* FIXME: BEGIN: Move to ULL? */
 		conn_lll->role = 1;
@@ -1166,7 +1184,7 @@ static void disabled_cb(void *param)
 
 	cc = (void *)rx->pdu;
 	memset(cc, 0x00, sizeof(struct node_rx_cc));
-	cc->status = 0x3c;
+	cc->status = BT_HCI_ERR_ADV_TIMEOUT;
 
 	ftr = &(rx->hdr.rx_ftr);
 	ftr->param = param;

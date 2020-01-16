@@ -546,9 +546,9 @@ ssize_t bt_gatt_attr_read_chrc(struct bt_conn *conn,
 #define BT_GATT_CHARACTERISTIC(_uuid, _props, _perm, _read, _write, _value) \
 	BT_GATT_ATTRIBUTE(BT_UUID_GATT_CHRC, BT_GATT_PERM_READ,		\
 			  bt_gatt_attr_read_chrc, NULL,			\
-			  (&(struct bt_gatt_chrc) { .uuid = _uuid,	\
-						    .value_handle = 0U, \
-						    .properties = _props, })), \
+			  ((struct bt_gatt_chrc[]) { { .uuid = _uuid,	\
+						       .value_handle = 0U, \
+						       .properties = _props, } })), \
 	BT_GATT_ATTRIBUTE(_uuid, _perm, _read, _write, _value)
 
 #if IS_ENABLED(CONFIG_BT_SETTINGS_CCC_LAZY_LOADING)
@@ -571,15 +571,43 @@ struct bt_gatt_ccc_cfg {
 
 /* Internal representation of CCC value */
 struct _bt_gatt_ccc {
-	struct bt_gatt_ccc_cfg	cfg[BT_GATT_CCC_MAX];
-	u16_t			value;
-	void			(*cfg_changed)(const struct bt_gatt_attr *attr,
-					       u16_t value);
-	bool			(*cfg_write)(struct bt_conn *conn,
-					     const struct bt_gatt_attr *attr,
-					     u16_t value);
-	bool			(*cfg_match)(struct bt_conn *conn,
-					     const struct bt_gatt_attr *attr);
+	/** Configuration for each connection */
+	struct bt_gatt_ccc_cfg cfg[BT_GATT_CCC_MAX];
+
+	/** Highest value of all connected peer's subscriptions */
+	u16_t value;
+
+	/** CCC attribute changed callback
+	 *
+	 *  @param attr   The attribute that's changed value
+	 *  @param value  New value
+	 */
+	void (*cfg_changed)(const struct bt_gatt_attr *attr, u16_t value);
+
+	/** CCC attribute write validation callback
+	 *
+	 *  @param conn   The connection that is requesting to write
+	 *  @param attr   The attribute that's being written
+	 *  @param value  CCC value to write
+	 *
+	 *  @return Number of bytes to write, or in case of an error
+	 *          BT_GATT_ERR() with a specific error code.
+	 */
+	ssize_t (*cfg_write)(struct bt_conn *conn,
+			     const struct bt_gatt_attr *attr, u16_t value);
+
+	/** CCC attribute match handler
+	 * Indicate if it is OK to send a notification or indication
+	 * to the subscriber.
+	 *
+	 *  @param conn   The connection that is being checked
+	 *  @param attr   The attribute that's being checked
+	 *
+	 *  @return true  if application has approved notification/indication,
+	 *          false if application does not approve.
+	 */
+	bool (*cfg_match)(struct bt_conn *conn,
+			  const struct bt_gatt_attr *attr);
 };
 
 /** @brief Read Client Characteristic Configuration Attribute helper.
@@ -660,8 +688,8 @@ ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
  *  @param _perm CCC access permissions.
  */
 #define BT_GATT_CCC(_changed, _perm)				\
-	BT_GATT_CCC_MANAGED((&(struct _bt_gatt_ccc)			\
-		BT_GATT_CCC_INITIALIZER(_changed, NULL, NULL)), _perm)
+	BT_GATT_CCC_MANAGED(((struct _bt_gatt_ccc[])			\
+		{BT_GATT_CCC_INITIALIZER(_changed, NULL, NULL)}), _perm)
 
 /** @brief Read Characteristic Extended Properties Attribute helper
  *
@@ -879,7 +907,6 @@ typedef void (*bt_gatt_indicate_func_t)(struct bt_conn *conn,
 
 /** @brief GATT Indicate Value parameters */
 struct bt_gatt_indicate_params {
-	struct bt_att_req _req;
 	/** Notification Attribute UUID type */
 	const struct bt_uuid *uuid;
 	/** Indicate Attribute object*/
@@ -963,7 +990,6 @@ u16_t bt_gatt_get_mtu(struct bt_conn *conn);
 
 /** @brief GATT Exchange MTU parameters */
 struct bt_gatt_exchange_params {
-	struct bt_att_req _req;
 	/** Response callback */
 	void (*func)(struct bt_conn *conn, u8_t err,
 		     struct bt_gatt_exchange_params *params);
@@ -1040,7 +1066,6 @@ enum {
 
 /** @brief GATT Discover Attributes parameters */
 struct bt_gatt_discover_params {
-	struct bt_att_req _req;
 	/** Discover UUID type */
 	struct bt_uuid *uuid;
 	/** Discover attribute callback */
@@ -1121,7 +1146,6 @@ typedef u8_t (*bt_gatt_read_func_t)(struct bt_conn *conn, u8_t err,
  *  @param uuid 2 or 16 octet UUID
  */
 struct bt_gatt_read_params {
-	struct bt_att_req _req;
 	bt_gatt_read_func_t func;
 	size_t handle_count;
 	union {
@@ -1174,7 +1198,6 @@ typedef void (*bt_gatt_write_func_t)(struct bt_conn *conn, u8_t err,
 
 /** @brief GATT Write parameters */
 struct bt_gatt_write_params {
-	struct bt_att_req _req;
 	/** Response callback */
 	bt_gatt_write_func_t func;
 	/** Attribute handle */
@@ -1261,6 +1284,9 @@ struct bt_gatt_subscribe_params;
  *  @param params Subscription parameters.
  *  @param data Attribute value data. If NULL then subscription was removed.
  *  @param length Attribute value length.
+ *
+ *  @return BT_GATT_ITER_CONTINUE to continue receiving value notifications.
+ *          BT_GATT_ITER_STOP to unsubscribe from value notifications.
  */
 typedef u8_t (*bt_gatt_notify_func_t)(struct bt_conn *conn,
 				      struct bt_gatt_subscribe_params *params,
@@ -1279,6 +1305,20 @@ enum {
 	 */
 	BT_GATT_SUBSCRIBE_FLAG_VOLATILE,
 
+	/** No resubscribe flag
+	 *
+	 * By default when BT_GATT_SUBSCRIBE_FLAG_VOLATILE is unset, the
+	 * subscription will be automatically renewed when the client
+	 * reconnects, as a workaround for GATT servers that do not persist
+	 * subscriptions.
+	 *
+	 * This flag will disable the automatic resubscription. It is useful
+	 * if the application layer knows that the GATT server remembers
+	 * subscriptions from previous connections and wants to avoid renewing
+	 * the subscriptions.
+	 */
+	BT_GATT_SUBSCRIBE_FLAG_NO_RESUB,
+
 	/** Write pending flag
 	 *
 	 * If set, indicates write operation is pending waiting remote end to
@@ -1291,8 +1331,6 @@ enum {
 
 /** @brief GATT Subscribe parameters */
 struct bt_gatt_subscribe_params {
-	struct bt_att_req _req;
-	bt_addr_le_t _peer;
 	/** Notification value callback */
 	bt_gatt_notify_func_t notify;
 	/** Subscribe value handle */

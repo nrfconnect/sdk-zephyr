@@ -1,7 +1,5 @@
-title: Short description of the node
-
 description: |
-    Longer free-form description of the node. Can have multiple
+    Free-form description of the device/node. Can have multiple
     lines/paragraphs.
 
     See https://yaml-multiline.info/ for formatting help.
@@ -64,19 +62,16 @@ compatible: "manufacturer,device"
 # 'required: true' is always respected.
 include: other.yaml # or [other1.yaml, other2.yaml]
 
-# If the node describes a bus, then the bus type should be given, like below.
-# The name has "child" in it since it describes the bus children of the node
-# appear on.
-child-bus: <string describing bus type, e.g. "i2c">
+# If the node describes a bus, then the bus type should be given, like below
+bus: <string describing bus type, e.g. "i2c">
 
 # If the node appears on a bus, then the bus type should be given, like below.
 #
 # When looking for a binding for a node, the code checks if the binding for the
-# parent node contains 'child-bus: <bus type>'. If it does, then only bindings
-# with a matching 'parent-bus: <bus type>' are considered. This allows the same
-# type of device to have different bindings depending on what bus it appears
-# on.
-parent-bus: <string describing bus type, e.g. "i2c">
+# parent node contains 'bus: <bus type>'. If it does, then only bindings with a
+# matching 'on-bus: <bus type>' are considered. This allows the same type of
+# device to have different bindings depending on what bus it appears on.
+on-bus: <string describing bus type, e.g. "i2c">
 
 # 'properties' describes properties on the node, e.g.
 #
@@ -187,9 +182,19 @@ parent-bus: <string describing bus type, e.g. "i2c">
 #     All phandle-array properties support mapping through *-map properties,
 #     e.g. gpio-map. See the devicetree spec.
 #
+#   - 'type: path' is for properties that are assigned a path. Usually, this
+#     would be done with a path reference:
+#
+#         foo = &label;
+#
+#     Plain strings are accepted too, and are verified to be a path to an
+#     existing node:
+#
+#         foo = "/path/to/some/node";
+#
 #   - 'type: compound' is a catch-all for more complex types, e.g.
 #
-#         foo = <&label1>, [01 02];
+#         foo = <&label>, [01 02];
 #
 # 'type: array' and the other array types also allow splitting the value into
 # several <> blocks, e.g. like this:

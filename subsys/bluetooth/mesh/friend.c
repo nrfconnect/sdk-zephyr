@@ -190,6 +190,8 @@ void bt_mesh_friend_clear_net_idx(u16_t net_idx)
 	}
 }
 
+static void enqueue_update(struct bt_mesh_friend *frnd, u8_t md);
+
 void bt_mesh_friend_sec_update(u16_t net_idx)
 {
 	int i;
@@ -204,7 +206,7 @@ void bt_mesh_friend_sec_update(u16_t net_idx)
 		}
 
 		if (net_idx == BT_MESH_KEY_ANY || frnd->net_idx == net_idx) {
-			frnd->sec_update = 1U;
+			enqueue_update(frnd, 0x00);
 		}
 	}
 }
@@ -459,9 +461,7 @@ static int encrypt_friend_pdu(struct bt_mesh_friend *frnd, struct net_buf *buf,
 		}
 
 		seq = bt_mesh_next_seq();
-		buf->data[2] = seq >> 16;
-		buf->data[3] = seq >> 8;
-		buf->data[4] = seq;
+		sys_put_be24(seq, &buf->data[2]);
 
 		iv_index = BT_MESH_NET_IVI_TX;
 		FRIEND_ADV(buf)->app_idx = BT_MESH_KEY_UNUSED;
@@ -653,7 +653,6 @@ static void enqueue_update(struct bt_mesh_friend *frnd, u8_t md)
 		return;
 	}
 
-	frnd->sec_update = 0U;
 	enqueue_buf(frnd, buf);
 }
 
@@ -749,7 +748,7 @@ static void send_friend_clear(struct bt_mesh_friend *frnd)
 		.send_ttl = BT_MESH_TTL_MAX,
 	};
 	struct bt_mesh_net_tx tx = {
-		.sub  = &bt_mesh.sub[0],
+		.sub  = bt_mesh_subnet_get(frnd->net_idx),
 		.ctx  = &ctx,
 		.src  = bt_mesh_primary_addr(),
 		.xmit = bt_mesh_net_transmit_get(),
@@ -920,9 +919,7 @@ int bt_mesh_friend_req(struct bt_mesh_net_rx *rx, struct net_buf_simple *buf)
 		return -EINVAL;
 	}
 
-	poll_to = (((u32_t)msg->poll_to[0] << 16) |
-		   ((u32_t)msg->poll_to[1] << 8) |
-		   ((u32_t)msg->poll_to[2]));
+	poll_to = sys_get_be24(msg->poll_to);
 
 	if (poll_to <= 0x000009 || poll_to >= 0x34bc00) {
 		BT_WARN("Prohibited PollTimeout (0x%06x)", poll_to);
@@ -1057,10 +1054,6 @@ static void enqueue_friend_pdu(struct bt_mesh_friend *frnd,
 	BT_DBG("type %u", type);
 
 	if (type == BT_MESH_FRIEND_PDU_SINGLE) {
-		if (frnd->sec_update) {
-			enqueue_update(frnd, 1);
-		}
-
 		enqueue_buf(frnd, buf);
 		return;
 	}
@@ -1077,10 +1070,6 @@ static void enqueue_friend_pdu(struct bt_mesh_friend *frnd,
 	net_buf_slist_put(&seg->queue, buf);
 
 	if (type == BT_MESH_FRIEND_PDU_COMPLETE) {
-		if (frnd->sec_update) {
-			enqueue_update(frnd, 1);
-		}
-
 		sys_slist_merge_slist(&frnd->queue, &seg->queue);
 
 		frnd->queue_size += seg->seg_count;
@@ -1127,6 +1116,38 @@ static void buf_send_end(int err, void *user_data)
 	}
 }
 
+static void update_overwrite(struct net_buf *buf, u8_t md)
+{
+	struct net_buf_simple_state state;
+	struct bt_mesh_ctl_friend_update *upd;
+
+	if (buf->len != 16) {
+		return;
+	}
+
+	net_buf_simple_save(&buf->b, &state);
+
+	net_buf_skip(buf, 1); /* skip IVI, NID */
+
+	if (!(net_buf_pull_u8(buf) >> 7)) {
+		goto end;
+	}
+
+	net_buf_skip(buf, 7); /* skip seqnum src dec*/
+
+	if (TRANS_CTL_OP((u8_t *) net_buf_pull_mem(buf, 1))
+			!= TRANS_CTL_OP_FRIEND_UPDATE) {
+		goto end;
+	}
+
+	upd = net_buf_pull_mem(buf, sizeof(*upd));
+	BT_DBG("Update Previous Friend Update MD 0x%02x -> 0x%02x", upd->md, md);
+	upd->md = md;
+
+end:
+	net_buf_simple_restore(&buf->b, &state);
+}
+
 static void friend_timeout(struct k_work *work)
 {
 	struct bt_mesh_friend *frnd = CONTAINER_OF(work, struct bt_mesh_friend,
@@ -1135,6 +1156,8 @@ static void friend_timeout(struct k_work *work)
 		.start = buf_send_start,
 		.end = buf_send_end,
 	};
+
+	u8_t md;
 
 	__ASSERT_NO_MSG(frnd->pending_buf == 0U);
 
@@ -1160,6 +1183,10 @@ static void friend_timeout(struct k_work *work)
 		friend_clear(frnd);
 		return;
 	}
+
+	md = (u8_t)(sys_slist_peek_head(&frnd->queue) != NULL);
+
+	update_overwrite(frnd->last, md);
 
 	if (encrypt_friend_pdu(frnd, frnd->last, false)) {
 		return;
@@ -1297,9 +1324,7 @@ static void friend_lpn_enqueue_rx(struct bt_mesh_friend *frnd,
 
 	info.ctl = rx->ctl;
 
-	info.seq[0] = (rx->seq >> 16);
-	info.seq[1] = (rx->seq >> 8);
-	info.seq[2] = rx->seq;
+	sys_put_be24(rx->seq, info.seq);
 
 	info.iv_index = BT_MESH_NET_IVI_RX(rx);
 
@@ -1336,9 +1361,7 @@ static void friend_lpn_enqueue_tx(struct bt_mesh_friend *frnd,
 	info.ttl = tx->ctx->send_ttl;
 	info.ctl = (tx->ctx->app_idx == BT_MESH_KEY_UNUSED);
 
-	info.seq[0] = (bt_mesh.seq >> 16);
-	info.seq[1] = (bt_mesh.seq >> 8);
-	info.seq[2] = bt_mesh.seq;
+	sys_put_be24(bt_mesh.seq, info.seq);
 
 	info.iv_index = BT_MESH_NET_IVI_TX;
 

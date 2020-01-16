@@ -41,7 +41,6 @@ x86_ap_start:
 	movw %ax, %es
 	movw %ax, %ss
 	movw %ax, %fs
-	movw %ax, %gs
 
 	/*
 	 * Now, reverse-map our local APIC ID to our logical CPU ID
@@ -116,9 +115,9 @@ go64:	movl %cr4, %eax			/* enable PAE and SSE */
 #endif
 	movl %eax, %cr3
 
-	movl $X86_EFER_MSR, %ecx	/* enable long mode and no-execute */
+	movl $X86_EFER_MSR, %ecx  /* enable long mode, no-execute, syscall */
 	rdmsr
-	orl $(X86_EFER_MSR_LME | X86_EFER_MSR_NXE), %eax
+	orl $(X86_EFER_MSR_LME | X86_EFER_MSR_NXE | X86_EFER_MSR_SCE), %eax
 	wrmsr
 
 	movl %cr0, %eax			/* enable paging */
@@ -135,16 +134,24 @@ go64:	movl %cr4, %eax			/* enable PAE and SSE */
 
 	movw __x86_cpuboot_t_tr_OFFSET(%rbp), %ax
 	ltr %ax
-	movw __x86_cpuboot_t_gs_OFFSET(%rbp), %ax
-	movw %ax, %gs
+
+	/* Set up MSRs for GS / KERNEL_GS base */
+	movq __x86_cpuboot_t_gs_base_OFFSET(%rbp), %rax
+	movq %rax, %rdx
+	shrq $32, %rdx
+	/* X86_KERNEL_GS_BASE and X86_GS_BASE are swapped by the 'swapgs'
+	 * instruction.
+	 */
+	movl $X86_KERNEL_GS_BASE, %ecx
+	wrmsr
+	/* X86_GS_BASE shadows base fields of %gs, effectively setting %gs */
+	movl $X86_GS_BASE, %ecx
+	wrmsr
 
 	movq __x86_cpuboot_t_sp_OFFSET(%rbp), %rsp
 	movq %rsp, %gs:__x86_tss64_t_ist1_OFFSET
 
-	/*
-	 * finally, complete environment for the C runtime and go.
-	 */
-
+	/* finally, complete environment for the C runtime and go. */
 	cld	/* GCC presumes a clear direction flag */
 
 #ifdef CONFIG_INIT_STACKS
@@ -155,18 +162,9 @@ go64:	movl %cr4, %eax			/* enable PAE and SSE */
 	rep stosq
 #endif
 
-	xorl %edi, %edi
-	call x86_sse_init
-
-#ifdef CONFIG_LOAPIC
-	call z_loapic_enable
-#endif
-
-	/* don't replace CALL with JMP; honor the ABI stack alignment! */
-
-	incl __x86_cpuboot_t_ready_OFFSET(%rbp)
-	movq __x86_cpuboot_t_arg_OFFSET(%rbp), %rsi
-	call *__x86_cpuboot_t_fn_OFFSET(%rbp) /* enter kernel; never return */
+	/* Enter C domain now that we have a stack set up, never to return */
+	movq %rbp, %rdi
+	call z_x86_cpu_init
 
 /*
  * void x86_sse_init(struct k_thread *thread);
@@ -215,7 +213,13 @@ z_x86_switch:
 	movq %r13, _thread_offset_to_r13(%rsi)
 	movq %r14, _thread_offset_to_r14(%rsi)
 	movq %r15, _thread_offset_to_r15(%rsi)
-
+#ifdef CONFIG_USERSPACE
+	/* We're always in supervisor mode if we get here, the other case
+	 * is when __resume is invoked from irq_dispatch
+	 */
+	movq $X86_KERNEL_CS, _thread_offset_to_cs(%rsi)
+	movq $X86_KERNEL_DS, _thread_offset_to_ss(%rsi)
+#endif
 	movq %gs:__x86_tss64_t_ist1_OFFSET, %rsp
 
 	/* fall through to __resume */
@@ -227,10 +231,23 @@ z_x86_switch:
  */
 
 __resume:
+#ifdef CONFIG_USERSPACE
+	pushq %rdi	/* Caller-saved, stash it */
+	call z_x86_swap_update_page_tables
+	popq %rdi
+
+	/* Set up exception return stack frame */
+	pushq _thread_offset_to_ss(%rdi)	/* SS */
+#else
 	pushq $X86_KERNEL_DS			/* SS */
+#endif
 	pushq _thread_offset_to_rsp(%rdi)	/* RSP */
 	pushq _thread_offset_to_rflags(%rdi)	/* RFLAGS */
+#ifdef CONFIG_USERSPACE
+	pushq _thread_offset_to_cs(%rdi)	/* CS */
+#else
 	pushq $X86_KERNEL_CS			/* CS */
+#endif
 	pushq _thread_offset_to_rip(%rdi)	/* RIP */
 
 	movq _thread_offset_to_rbx(%rdi), %rbx
@@ -254,7 +271,18 @@ __resume:
 	movq _thread_offset_to_r11(%rdi), %r11
 	movq _thread_offset_to_rdi(%rdi), %rdi  /* do last :-) */
 
-1:	iretq
+#ifdef CONFIG_USERSPACE
+	/* Swap GS register values if we are returning to user mode */
+	testb $0x3, 8(%rsp)
+	jz 1f
+	swapgs
+#endif /* CONFIG_USERSPACE */
+1:
+#ifdef CONFIG_X86_BOUNDS_CHECK_BYPASS_MITIGATION
+	/* swapgs variant of Spectre V1. Disable speculation past this point */
+	lfence
+#endif /* CONFIG_X86_BOUNDS_CHECK_BYPASS_MITIGATION */
+	iretq
 
 
 
@@ -266,8 +294,20 @@ except: /*
 	 * finish struct NANO_ESF on stack. 'vector' .. 'ss' are
 	 * already there from hardware trap and EXCEPT_*() stub.
 	 */
-
+#ifdef CONFIG_USERSPACE
+	/* Swap GS register values if we came in from user mode */
+	testb $0x3, 24(%rsp)
+	jz 1f
+	swapgs
+1:
+#ifdef CONFIG_X86_BOUNDS_CHECK_BYPASS_MITIGATION
+	/* swapgs variant of Spectre V1. Disable speculation past this point */
+	lfence
+#endif /* CONFIG_X86_BOUNDS_CHECK_BYPASS_MITIGATION */
+#endif /* CONFIG_USERSPACE */
 	pushq %r15
+	subq $X86_FXSAVE_SIZE, %rsp
+	fxsave (%rsp)
 	pushq %r14
 	pushq %r13
 	pushq %r12
@@ -284,9 +324,46 @@ except: /*
 	pushq %rax
 
 	movq %rsp, %rdi
+
+	/* TODO we don't need to push so many registers if we are not
+	 * dumping out exception info since RBX, RBP, R12-R15 are callee-saved
+	 */
 	call z_x86_exception
 
-	hlt /* should not return, but just in case .. */
+	/* If we returned, the exception was handled successfully and the
+	 * thread may resume (the pushed RIP may have been modified)
+	 */
+	popq %rax
+	popq %rbx
+	popq %rcx
+	popq %rdx
+	popq %rbp
+	popq %rsi
+	popq %rdi
+	popq %r8
+	popq %r9
+	popq %r10
+	popq %r11
+	popq %r12
+	popq %r13
+	popq %r14
+	fxrstor (%rsp)
+	addq $X86_FXSAVE_SIZE, %rsp
+	popq %r15
+
+	/* Drop the vector/err code pushed by the HW or EXCEPT_*() stub */
+	add $16, %rsp
+
+#ifdef CONFIG_USERSPACE
+	/* Swap GS register values if we are returning to user mode */
+	testb $0x3, 8(%rsp)
+	jz 1f
+	cli
+	swapgs
+1:
+#endif /* CONFIG_USERSPACE */
+
+	iretq
 
 EXCEPT      ( 0); EXCEPT      ( 1); EXCEPT      ( 2); EXCEPT      ( 3)
 EXCEPT      ( 4); EXCEPT      ( 5); EXCEPT      ( 6); EXCEPT      ( 7)
@@ -296,6 +373,11 @@ EXCEPT      (16); EXCEPT_CODE (17); EXCEPT      (18); EXCEPT      (19)
 EXCEPT      (20); EXCEPT      (21); EXCEPT      (22); EXCEPT      (23)
 EXCEPT      (24); EXCEPT      (25); EXCEPT      (26); EXCEPT      (27)
 EXCEPT      (28); EXCEPT      (29); EXCEPT      (30); EXCEPT      (31)
+
+/* Vector reserved for handling a kernel oops; treat as an exception
+ * and not an interrupt
+ */
+EXCEPT(Z_X86_OOPS_VECTOR);
 
 /*
  * When we arrive at 'irq' from one of the IRQ(X) stubs,
@@ -314,6 +396,17 @@ EXCEPT      (28); EXCEPT      (29); EXCEPT      (30); EXCEPT      (31)
 .globl x86_irq_args	/* .. for these definitions */
 
 irq:
+#ifdef CONFIG_USERSPACE
+	/* Swap GS register values if we came in from user mode */
+	testb $0x3, 16(%rsp)
+	jz 1f
+	swapgs
+1:
+#ifdef CONFIG_X86_BOUNDS_CHECK_BYPASS_MITIGATION
+	/* swapgs variant of Spectre V1. Disable speculation past this point */
+	lfence
+#endif /* CONFIG_X86_BOUNDS_CHECK_BYPASS_MITIGATION */
+#endif /* CONFIG_USERSPACE */
 	pushq %rsi
 	movq %gs:__x86_tss64_t_cpu_OFFSET, %rsi
 
@@ -380,12 +473,18 @@ irq_enter_unnested: /* Not nested: dump state to thread struct for __resume */
 	popq %rcx /* vector number */
 	popq %rax /* RIP */
 	movq %rax, _thread_offset_to_rip(%rsi)
-	popq %rax /* CS: discard */
+	popq %rax /* CS */
+#ifdef CONFIG_USERSPACE
+	movq %rax, _thread_offset_to_cs(%rsi)
+#endif
 	popq %rax /* RFLAGS */
 	movq %rax, _thread_offset_to_rflags(%rsi)
 	popq %rax /* RSP */
 	movq %rax, _thread_offset_to_rsp(%rsi)
-	popq %rax /* SS: discard */
+	popq %rax /* SS */
+#ifdef CONFIG_USERSPACE
+	movq %rax, _thread_offset_to_ss(%rsi)
+#endif
 
 irq_dispatch:
 	movq x86_irq_funcs(,%rcx,8), %rbx
@@ -430,7 +529,7 @@ irq_exit_nested:
 
 #define IRQ(nr) vector_ ## nr: pushq $(nr - IV_IRQS); jmp irq
 
-IRQ( 32); IRQ( 33); IRQ( 34); IRQ( 35); IRQ( 36); IRQ( 37); IRQ( 38); IRQ( 39)
+IRQ( 33); IRQ( 34); IRQ( 35); IRQ( 36); IRQ( 37); IRQ( 38); IRQ( 39)
 IRQ( 40); IRQ( 41); IRQ( 42); IRQ( 43); IRQ( 44); IRQ( 45); IRQ( 46); IRQ( 47)
 IRQ( 48); IRQ( 49); IRQ( 50); IRQ( 51); IRQ( 52); IRQ( 53); IRQ( 54); IRQ( 55)
 IRQ( 56); IRQ( 57); IRQ( 58); IRQ( 59); IRQ( 60); IRQ( 61); IRQ( 62); IRQ( 63)
@@ -467,6 +566,7 @@ IRQ(248); IRQ(249); IRQ(250); IRQ(251); IRQ(252); IRQ(253); IRQ(254); IRQ(255)
 
 #define TRAP 0x8f
 #define INTR 0x8e
+#define USER_INTR 0xee
 
 #define IDT(nr, type, ist) \
 	.word vector_ ## nr, X86_KERNEL_CS; \
@@ -484,7 +584,9 @@ idt:
     IDT( 24, TRAP, 7); IDT( 25, TRAP, 7); IDT( 26, TRAP, 7); IDT( 27, TRAP, 7)
     IDT( 28, TRAP, 7); IDT( 29, TRAP, 7); IDT( 30, TRAP, 7); IDT( 31, TRAP, 7)
 
-    IDT( 32, INTR, 1); IDT( 33, INTR, 1); IDT( 34, INTR, 1); IDT( 35, INTR, 1)
+    /* Oops vector can be invoked from Ring 3 and runs on exception stack */
+    IDT(Z_X86_OOPS_VECTOR, USER_INTR, 7);
+    IDT( 33, INTR, 1); IDT( 34, INTR, 1); IDT( 35, INTR, 1)
     IDT( 36, INTR, 1); IDT( 37, INTR, 1); IDT( 38, INTR, 1); IDT( 39, INTR, 1)
     IDT( 40, INTR, 1); IDT( 41, INTR, 1); IDT( 42, INTR, 1); IDT( 43, INTR, 1)
     IDT( 44, INTR, 1); IDT( 45, INTR, 1); IDT( 46, INTR, 1); IDT( 47, INTR, 1)
@@ -572,30 +674,28 @@ pdp:	.long 0x00000083		/* 0x83 = 1GB, R/W, P */
 
 /*
  * GDT - a single GDT is shared by all threads (and, eventually, all CPUs).
- * This layout must agree with the selectors in intel64/kernel_arch_data.h.
+ * This layout must agree with the selectors in
+ * include/arch/x86/intel64/thread.h.
+ *
+ * The 64-bit kernel code and data segment descriptors must be in sequence as
+ * required by 'syscall'
+ *
+ * The 32-bit user code, 64-bit user code, and 64-bit user data segment
+ * descriptors must be in sequence as required by 'sysret'
  */
-
 .align 8
 
 gdt:
-	.word 0, 0, 0, 0		/* 0x00: null descriptor */
+	.word 0,      0, 0,      0	/* 0x00: null descriptor */
 	.word 0xFFFF, 0, 0x9A00, 0x00CF	/* 0x08: 32-bit kernel code */
 	.word 0xFFFF, 0, 0x9200, 0x00CF	/* 0x10: 32-bit kernel data */
-	.word 0, 0, 0x9800, 0x0020	/* 0x18: 64-bit kernel code */
-	.word 0, 0, 0x9200, 0x0000	/* 0x20: 64-bit kernel data */
+	.word 0,      0, 0x9800, 0x0020	/* 0x18: 64-bit kernel code */
+	.word 0,      0, 0x9200, 0x0000	/* 0x20: 64-bit kernel data */
+	.word 0xFFFF, 0, 0xFA00, 0x00CF /* 0x28: 32-bit user code (unused) */
+	.word 0,      0, 0xF200, 0x0000	/* 0x30: 64-bit user data */
+	.word 0,      0, 0xF800, 0x0020	/* 0x38: 64-bit user code */
 
-	.word 0, 0, 0, 0		/* 0x28: unused */
-
-	/*
-	 * CPU 0 task state segment descriptors
-	 */
-
-	.word 0				/* 0x30: 64-bit TSS data (for GS) */
-	.word tss0
-	.word 0x9200
-	.word 0
-
-	.word 0, 0, 0, 0		/* 0x38: unused */
+	/* Remaining entries are TSS for each enabled CPU */
 
 	.word __X86_TSS64_SIZEOF-1	/* 0x40: 64-bit TSS (16-byte entry) */
 	.word tss0
@@ -603,54 +703,21 @@ gdt:
 	.word 0, 0, 0, 0, 0
 
 #if CONFIG_MP_NUM_CPUS > 1
-	/*
-	 * CPU 1 task state segment descriptors
-	 */
-
-	.word 0				/* 0x50: 64-bit TSS data (for GS) */
-	.word tss1
-	.word 0x9200
-	.word 0
-
-	.word 0, 0, 0, 0		/* 0x58: unused */
-
-	.word __X86_TSS64_SIZEOF-1	/* 0x60: 64-bit TSS (16-byte entry) */
+	.word __X86_TSS64_SIZEOF-1	/* 0x50: 64-bit TSS (16-byte entry) */
 	.word tss1
 	.word 0x8900
 	.word 0, 0, 0, 0, 0
 #endif
 
 #if CONFIG_MP_NUM_CPUS > 2
-	/*
-	 * CPU 2 task state segment descriptors
-	 */
-
-	.word 0				/* 0x70: 64-bit TSS data (for GS) */
-	.word tss2
-	.word 0x9200
-	.word 0
-
-	.word 0, 0, 0, 0		/* 0x78: unused */
-
-	.word __X86_TSS64_SIZEOF-1	/* 0x80: 64-bit TSS (16-byte entry) */
+	.word __X86_TSS64_SIZEOF-1	/* 0x60: 64-bit TSS (16-byte entry) */
 	.word tss2
 	.word 0x8900
 	.word 0, 0, 0, 0, 0
 #endif
 
 #if CONFIG_MP_NUM_CPUS > 3
-	/*
-	 * CPU 3 task state segment descriptors
-	 */
-
-	.word 0				/* 0x90: 64-bit TSS data (for GS) */
-	.word tss3
-	.word 0x9200
-	.word 0
-
-	.word 0, 0, 0, 0		/* 0x98: unused */
-
-	.word __X86_TSS64_SIZEOF-1	/* 0xA0: 64-bit TSS (16-byte entry) */
+	.word __X86_TSS64_SIZEOF-1	/* 0x70: 64-bit TSS (16-byte entry) */
 	.word tss3
 	.word 0x8900
 	.word 0, 0, 0, 0, 0

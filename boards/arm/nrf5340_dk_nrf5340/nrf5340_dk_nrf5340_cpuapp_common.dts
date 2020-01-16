@@ -13,6 +13,8 @@
 		zephyr,console = &uart0;
 		zephyr,shell-uart = &uart0;
 		zephyr,uart-mcumgr = &uart0;
+		zephyr,bt-mon-uart = &uart0;
+		zephyr,bt-c2h-uart = &uart0;
 	};
 
 	leds {
@@ -161,16 +163,24 @@
 	};
 };
 
-/ {
-	/* SRAM allocated to the Non-Secure image */
-	sram0_ns: memory@20020000 {
-		device_type = "memory";
-		compatible = "mmio-sram";
+&sram0 {
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/* SRAM allocated to the Secure image */
+		sram0_s: memory@20000000 {
+			label = "secure_sram_partition";
+		};
+
+		/* SRAM allocated to the Non-Secure image */
+		sram0_ns: memory@20010000 {
+			label = "non_secure_sram_partition";
+		};
 	};
 };
 
 /* Include partition configuration file */
 #include "nrf5340_dk_nrf5340_cpuapp_partition_conf.dts"
-
-/* Include shared RAM configuration file */
-#include "nrf5340_dk_nrf5340_shared_sram_planning_conf.dts"

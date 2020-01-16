@@ -8,7 +8,7 @@ file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/include/generated)
 # encoded in DTS.
 #
 # Here we call on dtc, the gcc preprocessor, and
-# scripts/dts/extract_dts_includes.py to generate this header file at
+# scripts/dts/gen_defines.py to generate this header file at
 # CMake configure-time.
 #
 # See ~/zephyr/doc/dts
@@ -31,6 +31,9 @@ list(APPEND
   ${APPLICATION_SOURCE_DIR}
   ${BOARD_DIR}
   ${ZEPHYR_BASE}
+  )
+list(REMOVE_DUPLICATES
+  DTS_ROOT
   )
 
 list(REMOVE_DUPLICATES DTS_ROOT)
@@ -73,6 +76,7 @@ if(SUPPORTS_DTS)
     math(EXPR i "${i}+1")
   endforeach()
 
+  unset(DTS_ROOT_SYSTEM_INCLUDE_DIRS)
   foreach(dts_root ${DTS_ROOT})
     foreach(dts_root_path
         include
@@ -90,6 +94,7 @@ if(SUPPORTS_DTS)
     endforeach()
   endforeach()
 
+  unset(DTS_ROOT_BINDINGS)
   foreach(dts_root ${DTS_ROOT})
     set(full_path ${dts_root}/dts/bindings)
     if(EXISTS ${full_path})
@@ -126,10 +131,10 @@ if(SUPPORTS_DTS)
     -P
     -E   # Stop after preprocessing
     -MD  # Generate a dependency file as a side-effect
-    -MF ${BOARD}.dts.pre.d
-    -o ${BOARD}.dts.pre.tmp
+    -MF ${PROJECT_BINARY_DIR}/${BOARD}.dts.pre.d
+    -o  ${PROJECT_BINARY_DIR}/${BOARD}.dts.pre.tmp
     ${ZEPHYR_BASE}/misc/empty_file.c
-    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+    WORKING_DIRECTORY ${APPLICATION_SOURCE_DIR}
     RESULT_VARIABLE ret
     )
   if(NOT "${ret}" STREQUAL "0")
@@ -149,7 +154,11 @@ if(SUPPORTS_DTS)
     ${include_files}
     )
 
-  # Run the DTC on *.dts.pre.tmp to create the intermediary file *.dts_compiled
+  #
+  # Run the C devicetree compiler on *.dts.pre.tmp, just to catch any
+  # warnings/errors from it. dtlib and edtlib parse the devicetree files
+  # themselves, so we don't rely on the C compiler otherwise.
+  #
 
   set(DTC_WARN_UNIT_ADDR_IF_ENABLED "")
   check_dtc_flag("-Wunique_unit_address_if_enabled" check)
@@ -164,13 +173,14 @@ if(SUPPORTS_DTS)
   execute_process(
     COMMAND ${DTC}
     -O dts
-    -o ${BOARD}.dts_compiled
+    -o - # Write output to stdout, which we discard below
     -b 0
     -E unit_address_vs_reg
     ${DTC_NO_WARN_UNIT_ADDR}
     ${DTC_WARN_UNIT_ADDR_IF_ENABLED}
     ${EXTRA_DTC_FLAGS} # User settable
     ${BOARD}.dts.pre.tmp
+    OUTPUT_QUIET # Discard stdout
     WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
     RESULT_VARIABLE ret
     )
@@ -198,29 +208,6 @@ if(SUPPORTS_DTS)
     message(FATAL_ERROR "new extractor failed with return code: ${ret}")
   endif()
 
-  #
-  # Run extract_dts_includes.py (the older DT/binding parser) to generate some
-  # legacy identifiers (via --deprecated-only). This will go away later.
-  #
-
-  set(CMD_EXTRACT_DTS_INCLUDES ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/dts/extract_dts_includes.py
-    --deprecated-only
-    --dts ${BOARD}.dts_compiled
-    --yaml ${DTS_ROOT_BINDINGS}
-    --include ${GENERATED_DTS_BOARD_UNFIXED_H}.deprecated
-    --old-alias-names
-    )
-
-  execute_process(
-    COMMAND ${CMD_EXTRACT_DTS_INCLUDES}
-    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-    RESULT_VARIABLE ret
-    )
-  if(NOT "${ret}" STREQUAL "0")
-    message(FATAL_ERROR "command failed with return code: ${ret}")
-  endif()
-
 else()
   file(WRITE ${GENERATED_DTS_BOARD_UNFIXED_H} "/* WARNING. THIS FILE IS AUTO-GENERATED. DO NOT MODIFY! */")
-  file(WRITE ${GENERATED_DTS_BOARD_UNFIXED_H}.deprecated "/* WARNING. THIS FILE IS AUTO-GENERATED. DO NOT MODIFY! */")
 endif(SUPPORTS_DTS)

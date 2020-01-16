@@ -36,8 +36,6 @@
 
 #define ATT_CMD_MASK				0x40
 
-#define ATT_TIMEOUT				K_SECONDS(30)
-
 typedef enum __packed {
 		ATT_COMMAND,
 		ATT_REQUEST,
@@ -60,6 +58,9 @@ struct bt_attr_data {
 NET_BUF_POOL_DEFINE(prep_pool, CONFIG_BT_ATT_PREPARE_COUNT, BT_ATT_MTU,
 		    sizeof(struct bt_attr_data), NULL);
 #endif /* CONFIG_BT_ATT_PREPARE_COUNT */
+
+K_MEM_SLAB_DEFINE(req_slab, sizeof(struct bt_att_req),
+		  CONFIG_BT_ATT_TX_MAX, 16);
 
 enum {
 	ATT_PENDING_RSP,
@@ -85,7 +86,8 @@ struct bt_att {
 #endif
 };
 
-static struct bt_att bt_req_pool[CONFIG_BT_MAX_CONN];
+K_MEM_SLAB_DEFINE(att_slab, sizeof(struct bt_att),
+		  CONFIG_BT_MAX_CONN, 16);
 static struct bt_att_req cancel;
 
 static void att_req_destroy(struct bt_att_req *req)
@@ -100,7 +102,7 @@ static void att_req_destroy(struct bt_att_req *req)
 		req->destroy(req);
 	}
 
-	(void)memset(req, 0, sizeof(*req));
+	bt_att_req_free(req);
 }
 
 static struct bt_att *att_get(struct bt_conn *conn)
@@ -197,7 +199,7 @@ void att_req_sent(struct bt_conn *conn, void *user_data)
 
 	/* Start timeout work */
 	if (att->req) {
-		k_delayed_work_submit(&att->timeout_work, ATT_TIMEOUT);
+		k_delayed_work_submit(&att->timeout_work, BT_ATT_TIMEOUT);
 	}
 
 	att_pdu_sent(conn, user_data);
@@ -343,6 +345,7 @@ static void att_process(struct bt_att *att)
 static u8_t att_handle_rsp(struct bt_att *att, void *pdu, u16_t len, u8_t err)
 {
 	bt_att_func_t func;
+	void *params;
 
 	BT_DBG("err 0x%02x len %u: %s", err, len, bt_hex(pdu, len));
 
@@ -369,15 +372,13 @@ static u8_t att_handle_rsp(struct bt_att *att, void *pdu, u16_t len, u8_t err)
 	/* Reset func so it can be reused by the callback */
 	func = att->req->func;
 	att->req->func = NULL;
+	params = att->req->user_data;
 
-	func(att->chan.chan.conn, err, pdu, len, att->req);
-
-	/* Don't destroy if callback had reused the request */
-	if (!att->req->func) {
-		att_req_destroy(att->req);
-	}
-
+	/* free allocated request so its memory can be reused */
+	att_req_destroy(att->req);
 	att->req = NULL;
+
+	func(att->chan.chan.conn, err, pdu, len, params);
 
 process:
 	/* Process pending requests */
@@ -2045,7 +2046,7 @@ struct net_buf *bt_att_create_pdu(struct bt_conn *conn, u8_t op, size_t len)
 	case ATT_RESPONSE:
 	case ATT_CONFIRMATION:
 		/* Use a timeout only when responding/confirming */
-		buf = bt_l2cap_create_pdu_timeout(NULL, 0, ATT_TIMEOUT);
+		buf = bt_l2cap_create_pdu_timeout(NULL, 0, BT_ATT_TIMEOUT);
 		break;
 	default:
 		buf = bt_l2cap_create_pdu(NULL, 0);
@@ -2126,6 +2127,8 @@ static void att_timeout(struct k_work *work)
 	/* Consider the channel disconnected */
 	bt_gatt_disconnected(ch->chan.conn);
 	ch->chan.conn = NULL;
+
+	k_mem_slab_free(&att_slab, (void **)&att);
 }
 
 static void bt_att_connected(struct bt_l2cap_chan *chan)
@@ -2157,6 +2160,8 @@ static void bt_att_disconnected(struct bt_l2cap_chan *chan)
 	att_reset(att);
 
 	bt_gatt_disconnected(ch->chan.conn);
+
+	k_mem_slab_free(&att_slab, (void **)&att);
 }
 
 #if defined(CONFIG_BT_SMP)
@@ -2207,8 +2212,7 @@ static void bt_att_encrypt_change(struct bt_l2cap_chan *chan,
 
 static int bt_att_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)
 {
-	int i;
-	static struct bt_l2cap_chan_ops ops = {
+	static const struct bt_l2cap_chan_ops ops = {
 		.connected = bt_att_connected,
 		.disconnected = bt_att_disconnected,
 		.recv = bt_att_recv,
@@ -2216,29 +2220,21 @@ static int bt_att_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)
 		.encrypt_change = bt_att_encrypt_change,
 #endif /* CONFIG_BT_SMP */
 	};
+	struct bt_att *att;
 
 	BT_DBG("conn %p handle %u", conn, conn->handle);
 
-	for (i = 0; i < ARRAY_SIZE(bt_req_pool); i++) {
-		struct bt_att *att = &bt_req_pool[i];
-
-		if (att->chan.chan.conn) {
-			continue;
-		}
-
-		(void)memset(att, 0, sizeof(*att));
-		att->chan.chan.ops = &ops;
-		k_sem_init(&att->tx_sem, CONFIG_BT_ATT_TX_MAX,
-			   CONFIG_BT_ATT_TX_MAX);
-
-		*chan = &att->chan.chan;
-
-		return 0;
+	if (k_mem_slab_alloc(&att_slab, (void **)&att, K_NO_WAIT)) {
+		BT_ERR("No available ATT context for conn %p", conn);
+		return -ENOMEM;
 	}
 
-	BT_ERR("No available ATT context for conn %p", conn);
+	(void)memset(att, 0, sizeof(*att));
+	att->chan.chan.ops = &ops;
+	k_sem_init(&att->tx_sem, CONFIG_BT_ATT_TX_MAX, CONFIG_BT_ATT_TX_MAX);
+	*chan = &att->chan.chan;
 
-	return -ENOMEM;
+	return 0;
 }
 
 BT_L2CAP_CHANNEL_DEFINE(att_fixed_chan, BT_L2CAP_CID_ATT, bt_att_accept);
@@ -2259,6 +2255,31 @@ u16_t bt_att_get_mtu(struct bt_conn *conn)
 
 	/* tx and rx MTU shall be symmetric */
 	return att->chan.tx.mtu;
+}
+
+struct bt_att_req *bt_att_req_alloc(s32_t timeout)
+{
+	struct bt_att_req *req = NULL;
+
+	/* Reserve space for request */
+	if (k_mem_slab_alloc(&req_slab, (void **)&req, timeout)) {
+		return NULL;
+	}
+
+	BT_DBG("req %p", req);
+
+	req->func = NULL;
+	req->destroy = NULL;
+	req->user_data = NULL;
+
+	return req;
+}
+
+void bt_att_req_free(struct bt_att_req *req)
+{
+	BT_DBG("req %p", req);
+
+	k_mem_slab_free(&req_slab, (void **)&req);
 }
 
 int bt_att_send(struct bt_conn *conn, struct net_buf *buf, bt_conn_tx_cb_t cb,

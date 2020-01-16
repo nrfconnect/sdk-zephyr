@@ -105,7 +105,7 @@ static s32_t next_period(struct bt_mesh_model *mod)
 
 	BT_DBG("Publishing took %ums", elapsed);
 
-	if (elapsed > period) {
+	if (elapsed >= period) {
 		BT_WARN("Publication sending took longer than the period");
 		/* Return smallest positive number since 0 means disabled */
 		return K_MSEC(1);
@@ -187,6 +187,14 @@ static int publish_retransmit(struct bt_mesh_model *mod)
 	return bt_mesh_trans_send(&tx, &sdu, &pub_sent_cb, mod);
 }
 
+static void publish_retransmit_end(int err, struct bt_mesh_model_pub *pub)
+{
+	/* Cancel all retransmits for this publish attempt */
+	pub->count = 0U;
+	/* Make sure the publish timer gets reset */
+	publish_sent(err, pub->mod);
+}
+
 static void mod_publish(struct k_work *work)
 {
 	struct bt_mesh_model_pub *pub = CONTAINER_OF(work,
@@ -224,7 +232,10 @@ static void mod_publish(struct k_work *work)
 
 	err = pub->update(pub->mod);
 	if (err) {
-		BT_ERR("Failed to update publication message");
+		/* Cancel this publish attempt. */
+		BT_DBG("Update failed, skipping publish (err: %d)", err);
+		pub->period_start = k_uptime_get_32();
+		publish_retransmit_end(err, pub);
 		return;
 	}
 
@@ -523,6 +534,10 @@ static int get_opcode(struct net_buf_simple *buf, u32_t *opcode)
 		}
 
 		*opcode = net_buf_simple_pull_u8(buf) << 16;
+		/* Using LE for the CID since the model layer is defined as
+		 * little-endian in the mesh spec and using BT_MESH_MODEL_OP_3
+		 * will declare the opcode in this way.
+		 */
 		*opcode |= net_buf_simple_pull_le16(buf);
 		return 0;
 	}
@@ -624,6 +639,10 @@ void bt_mesh_model_msg_init(struct net_buf_simple *msg, u32_t opcode)
 		break;
 	case 3:
 		net_buf_simple_add_u8(msg, ((opcode >> 16) & 0xff));
+		/* Using LE for the CID since the model layer is defined as
+		 * little-endian in the mesh spec and using BT_MESH_MODEL_OP_3
+		 * will declare the opcode in this way.
+		 */
 		net_buf_simple_add_le16(msg, opcode & 0xffff);
 		break;
 	default:
@@ -736,10 +755,7 @@ int bt_mesh_model_publish(struct bt_mesh_model *model)
 
 	err = model_send(model, &tx, true, &sdu, &pub_sent_cb, model);
 	if (err) {
-		/* Don't try retransmissions for this publish attempt */
-		pub->count = 0U;
-		/* Make sure the publish timer gets reset */
-		publish_sent(err, model);
+		publish_retransmit_end(err, pub);
 		return err;
 	}
 

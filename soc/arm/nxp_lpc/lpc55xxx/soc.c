@@ -19,7 +19,7 @@
 #include <drivers/uart.h>
 #include <linker/sections.h>
 #include <arch/cpu.h>
-#include <cortex_m/exc.h>
+#include <aarch32/cortex_m/exc.h>
 #include <fsl_power.h>
 #include <fsl_clock.h>
 #include <fsl_common.h>
@@ -60,6 +60,15 @@ static ALWAYS_INLINE void clock_init(void)
 
 	/* Enables the clock for the I/O controller.: Enable Clock. */
     CLOCK_EnableClock(kCLOCK_Iocon);
+
+#ifdef CONFIG_SPI_8
+	/* Attach 12 MHz clock to FLEXCOMM8 */
+	CLOCK_AttachClk(kFRO12M_to_HSLSPI);
+
+	/* reset FLEXCOMM for SPI */
+	RESET_PeripheralReset(kHSLSPI_RST_SHIFT_RSTn);
+#endif /* CONFIG_SPI_8 */
+
 #endif /* CONFIG_SOC_LPC55S69_CPU0 */
 }
 

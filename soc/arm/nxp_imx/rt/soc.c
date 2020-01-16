@@ -11,7 +11,7 @@
 #include <linker/sections.h>
 #include <fsl_clock.h>
 #include <arch/cpu.h>
-#include <arch/arm/cortex_m/cmsis.h>
+#include <arch/arm/aarch32/cortex_m/cmsis.h>
 #include <fsl_flexspi_nor_boot.h>
 #if CONFIG_USB_DC_NXP_EHCI
 #include "usb_phy.h"
@@ -49,7 +49,7 @@ const clock_usb_pll_config_t usb1PllConfig = {
 #ifdef CONFIG_INIT_ENET_PLL
 /* ENET PLL configuration for RUN mode */
 const clock_enet_pll_config_t ethPllConfig = {
-#if defined(CONFIG_SOC_MIMXRT1021) || defined(CONFIG_SOC_MIMXRT1015)
+#if defined(CONFIG_SOC_MIMXRT1021) || defined(CONFIG_SOC_MIMXRT1015) || defined(CONFIG_SOC_MIMXRT1011)
 	.enableClkOutput500M = true,
 #endif
 #ifdef CONFIG_ETH_MCUX
@@ -145,7 +145,9 @@ static ALWAYS_INLINE void clock_init(void)
 	CLOCK_InitVideoPll(&videoPllConfig);
 #endif
 
+#ifdef CONFIG_HAS_ARM_DIV
 	CLOCK_SetDiv(kCLOCK_ArmDiv, CONFIG_ARM_DIV); /* Set ARM PODF */
+#endif
 	CLOCK_SetDiv(kCLOCK_AhbDiv, CONFIG_AHB_DIV); /* Set AHB PODF */
 	CLOCK_SetDiv(kCLOCK_IpgDiv, CONFIG_IPG_DIV); /* Set IPG PODF */
 
