@@ -9,10 +9,6 @@
 #include <kernel.h>
 #include <logging/log.h>
 LOG_MODULE_REGISTER(test);
-#ifdef CONFIG_SOC_FAMILY_NRF
-#include <drivers/clock_control/nrf_clock_control.h>
-#include <clock_control.h>
-#endif
 
 static volatile u32_t top_cnt;
 static volatile u32_t alarm_cnt;
@@ -82,16 +78,6 @@ typedef bool (*counter_capability_func_t)(const char *dev_name);
 
 static void counter_setup_instance(const char *dev_name)
 {
-#ifdef CONFIG_SOC_FAMILY_NRF
-	struct device *clock =
-		device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_32K");
-
-	__ASSERT_NO_MSG(clock);
-
-	while (clock_control_on(clock, (void *)CLOCK_CONTROL_NRF_K32SRC) != 0) {
-		/* empty */
-	}
-#endif
 	alarm_cnt = 0U;
 }
 
