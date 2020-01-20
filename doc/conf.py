@@ -277,7 +277,7 @@ sourcelink_suffix = '.txt'
 
 # The name of a javascript file (relative to the configuration directory) that
 # implements a search results scorer. If empty, the default will be used.
-#html_search_scorer = 'scorer.js'
+html_search_scorer = 'scorer.js'
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'zephyrdoc'
@@ -516,7 +516,7 @@ breathe_default_project = "Zephyr"
 # Error when parsing function declaration and more.  This is a list
 # of strings that the parser additionally should accept as
 # attributes.
-cpp_id_attributes = ['__syscall', '__syscall_inline', '__deprecated',
+cpp_id_attributes = ['__syscall', '__deprecated',
     '__may_alias', '__used', '__unused', '__weak',
     '__DEPRECATED_MACRO', 'FUNC_NORETURN']
 

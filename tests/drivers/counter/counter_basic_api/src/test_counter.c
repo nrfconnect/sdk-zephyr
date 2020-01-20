@@ -61,9 +61,6 @@ const char *devices[] = {
 #ifdef CONFIG_COUNTER_IMX_EPIT_2
 	DT_COUNTER_IMX_EPIT_2_LABEL,
 #endif
-#ifdef DT_RTC_MCUX_0_NAME
-	DT_RTC_MCUX_0_NAME,
-#endif
 #ifdef DT_INST_0_ARM_CMSDK_TIMER_LABEL
 	DT_INST_0_ARM_CMSDK_TIMER_LABEL,
 #endif
@@ -87,11 +84,11 @@ static void counter_setup_instance(const char *dev_name)
 {
 #ifdef CONFIG_SOC_FAMILY_NRF
 	struct device *clock =
-		device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_32K");
+		device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL);
 
 	__ASSERT_NO_MSG(clock);
 
-	while (clock_control_on(clock, (void *)CLOCK_CONTROL_NRF_K32SRC) != 0) {
+	while (clock_control_on(clock, CLOCK_CONTROL_NRF_SUBSYS_LF) != 0) {
 		/* empty */
 	}
 #endif
@@ -189,7 +186,13 @@ void test_set_top_value_with_alarm_instance(const char *dev_name)
 	k_busy_wait(5000);
 
 	cnt = counter_read(dev);
-	zassert_true(cnt > 0, "%s: Counter should progress", dev_name);
+	if (counter_is_counting_up(dev)) {
+		err = (cnt > 0) ? 0 : 1;
+	} else {
+		tmp_top_cnt = counter_get_top_value(dev);
+		err = (cnt < tmp_top_cnt) ? 0 : 1;
+	}
+	zassert_true(err == 0, "%s: Counter should progress", dev_name);
 
 	err = counter_set_top_value(dev, &top_cfg);
 	zassert_equal(0, err, "%s: Counter failed to set top value (err: %d)",
@@ -214,9 +217,15 @@ static void alarm_handler(struct device *dev, u8_t chan_id, u32_t counter,
 {
 	u32_t now = counter_read(dev);
 
-	zassert_true(now >= counter,
-			"%s: Alarm (%d) too early now:%d.",
+	if (counter_is_counting_up(dev)) {
+		zassert_true(now >= counter,
+			"%s: Alarm (%d) too early now: %d (counting up).",
 			dev->config->name, counter, now);
+	} else {
+		zassert_true(now <= counter,
+			"%s: Alarm (%d) too early now: %d (counting down).",
+			dev->config->name, counter, now);
+	}
 
 	if (user_data) {
 		zassert_true(&alarm_cfg == user_data,

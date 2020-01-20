@@ -74,6 +74,13 @@ typedef enum bt_l2cap_chan_status {
 	/** Channel output status */
 	BT_L2CAP_STATUS_OUT,
 
+	/** Channel shutdown status
+	 *
+	 * Once this status is notified it means the channel will no longer be
+	 * able to transmit or receive data.
+	 */
+	BT_L2CAP_STATUS_SHUTDOWN,
+
 	/* Total number of status - must be at the end of the enum */
 	BT_L2CAP_NUM_STATUS,
 } __packed bt_l2cap_chan_status_t;
@@ -83,7 +90,7 @@ struct bt_l2cap_chan {
 	/** Channel connection reference */
 	struct bt_conn			*conn;
 	/** Channel operations reference */
-	struct bt_l2cap_chan_ops	*ops;
+	const struct bt_l2cap_chan_ops	*ops;
 	sys_snode_t			node;
 	bt_l2cap_chan_destroy_t		destroy;
 	/* Response Timeout eXpired (RTX) timer */
@@ -111,7 +118,7 @@ struct bt_l2cap_le_endpoint {
 	/** Endpoint initial credits */
 	u16_t				init_credits;
 	/** Endpoint credits */
-	struct k_sem			credits;
+	atomic_t			credits;
 };
 
 /** @brief LE L2CAP Channel structure. */
@@ -126,6 +133,8 @@ struct bt_l2cap_le_chan {
 	struct k_fifo                   tx_queue;
 	/** Channel Pending Transmission buffer  */
 	struct net_buf                  *tx_buf;
+	/** Channel Transmission work  */
+	struct k_work			tx_work;
 	/** Segment SDU packet from upper layer */
 	struct net_buf			*_sdu;
 	u16_t				_sdu_len;

@@ -644,7 +644,9 @@ static int sock_get_pkt_src_addr(struct net_pkt *pkt,
 
 		ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data(
 							pkt, &ipv4_access);
-		if (!ipv4_hdr || net_pkt_acknowledge_data(pkt, &ipv4_access)) {
+		if (!ipv4_hdr ||
+		    net_pkt_acknowledge_data(pkt, &ipv4_access) ||
+		    net_pkt_skip(pkt, net_pkt_ipv4_opts_len(pkt))) {
 			ret = -ENOBUFS;
 			goto error;
 		}
@@ -978,6 +980,8 @@ static int zsock_poll_prepare_ctx(struct net_context *ctx,
 				  struct k_poll_event **pev,
 				  struct k_poll_event *pev_end)
 {
+	int ret = 0;
+
 	if (pfd->events & ZSOCK_POLLIN) {
 		if (*pev == pev_end) {
 			errno = ENOMEM;
@@ -991,6 +995,11 @@ static int zsock_poll_prepare_ctx(struct net_context *ctx,
 		(*pev)++;
 	}
 
+	if (pfd->events & ZSOCK_POLLOUT) {
+		errno = EALREADY;
+		ret = -1;
+	}
+
 	/* If socket is already in EOF, it can be reported
 	 * immediately, so we tell poll() to short-circuit wait.
 	 */
@@ -999,7 +1008,7 @@ static int zsock_poll_prepare_ctx(struct net_context *ctx,
 		return -1;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int zsock_poll_update_ctx(struct net_context *ctx,

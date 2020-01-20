@@ -212,6 +212,8 @@ void z_data_copy(void)
 
 /* LCOV_EXCL_STOP */
 
+bool z_sys_post_kernel;
+
 /**
  *
  * @brief Mainline for kernel's background thread
@@ -232,6 +234,8 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 #else
 	static const unsigned int boot_delay;
 #endif
+
+	z_sys_post_kernel = true;
 
 	z_sys_device_do_config_level(_SYS_INIT_LEVEL_POST_KERNEL);
 #if CONFIG_STACK_POINTER_RANDOM
@@ -296,15 +300,15 @@ void __weak main(void)
 /* LCOV_EXCL_STOP */
 
 #if defined(CONFIG_MULTITHREADING)
-static void init_idle_thread(struct k_thread *thr, k_thread_stack_t *stack)
+static void init_idle_thread(struct k_thread *thread, k_thread_stack_t *stack)
 {
-	z_setup_new_thread(thr, stack,
+	z_setup_new_thread(thread, stack,
 			  CONFIG_IDLE_STACK_SIZE, idle, NULL, NULL, NULL,
 			  K_LOWEST_THREAD_PRIO, K_ESSENTIAL, IDLE_THREAD_NAME);
-	z_mark_thread_as_started(thr);
+	z_mark_thread_as_started(thread);
 
 #ifdef CONFIG_SMP
-	thr->base.is_idle = 1U;
+	thread->base.is_idle = 1U;
 #endif
 }
 #endif /* CONFIG_MULTITHREADING */
@@ -366,14 +370,11 @@ static void prepare_multithreading(struct k_thread *dummy_thread)
 			   CONFIG_MAIN_STACK_SIZE, bg_thread_main,
 			   NULL, NULL, NULL,
 			   CONFIG_MAIN_THREAD_PRIORITY, K_ESSENTIAL, "main");
-	sys_trace_thread_create(&z_main_thread);
-
 	z_mark_thread_as_started(&z_main_thread);
 	z_ready_thread(&z_main_thread);
 
 	init_idle_thread(&z_idle_thread, z_idle_stack);
 	_kernel.cpus[0].idle_thread = &z_idle_thread;
-	sys_trace_thread_create(&z_idle_thread);
 
 #if defined(CONFIG_SMP) && CONFIG_MP_NUM_CPUS > 1
 	init_idle_thread(_idle_thread1, _idle_stack1);

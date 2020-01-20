@@ -1049,7 +1049,7 @@ static struct bt_l2cap_br_chan *l2cap_br_remove_tx_cid(struct bt_conn *conn,
 	}
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&conn->channels, chan, node) {
-		if (BR_CHAN(chan)->rx.cid == cid) {
+		if (BR_CHAN(chan)->tx.cid == cid) {
 			sys_slist_remove(&conn->channels, prev, &chan->node);
 			return BR_CHAN(chan);
 		}
@@ -1515,7 +1515,7 @@ void bt_l2cap_br_recv(struct bt_conn *conn, struct net_buf *buf)
 static int l2cap_br_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)
 {
 	int i;
-	static struct bt_l2cap_chan_ops ops = {
+	static const struct bt_l2cap_chan_ops ops = {
 		.connected = l2cap_br_connected,
 		.disconnected = l2cap_br_disconnected,
 		.recv = l2cap_br_recv,

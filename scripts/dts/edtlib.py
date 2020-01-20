@@ -275,19 +275,19 @@ class EDT:
             binding = self._merge_included_bindings(binding, binding_path)
             self._check_binding(binding, binding_path)
 
-            bus = _binding_bus(binding)
+            on_bus = _on_bus_from_binding(binding)
 
             # Do not allow two different bindings to have the same
-            # 'compatible:'/'parent-bus:' combo
-            old_binding = self._compat2binding.get((binding_compat, bus))
+            # 'compatible:'/'on-bus:' combo
+            old_binding = self._compat2binding.get((binding_compat, on_bus))
             if old_binding:
                 msg = "both {} and {} have 'compatible: {}'".format(
                     old_binding[1], binding_path, binding_compat)
-                if bus is not None:
-                    msg += " and 'parent-bus: {}'".format(bus)
+                if on_bus is not None:
+                    msg += " and 'on-bus: {}'".format(on_bus)
                 _err(msg)
 
-            self._compat2binding[binding_compat, bus] = (binding, binding_path)
+            self._compat2binding[binding_compat, on_bus] = (binding, binding_path)
 
     def _binding_compat(self, binding, binding_path):
         # Returns the string listed in 'compatible:' in 'binding', or None if
@@ -440,6 +440,7 @@ class EDT:
             node = Node()
             node.edt = self
             node._node = dt_node
+            node.bus_node = node._bus_node()
             node._init_binding()
             node._init_regs()
             node._set_instance_no()
@@ -459,16 +460,32 @@ class EDT:
         # Does sanity checking on 'binding'. Only takes 'self' for the sake of
         # self._warn().
 
-        for prop in "title", "description":
-            if prop not in binding:
-                _err("missing '{}' property in {}".format(prop, binding_path))
+        if "title" in binding:
+            # This message is the message that people copy-pasting the old
+            # format will see in practice
+            self._warn("'title:' in {} is deprecated and will be removed (and "
+                       "was never used). Just put a 'description:' that "
+                       "describes the device instead. Use other bindings as "
+                       "a reference, and note that all bindings were updated "
+                       "recently. Think about what information would be "
+                       "useful to other people (e.g. explanations of "
+                       "acronyms, or datasheet links), and put that in as "
+                       "well. The description text shows up as a comment "
+                       "in the generated header. See yaml-multiline.info for "
+                       "how to deal with multiple lines. You probably want "
+                       "'description: |'.".format(binding_path))
 
-            if not isinstance(binding[prop], str) or not binding[prop]:
-                _err("missing, malformed, or empty '{}' in {}"
+        if "description" not in binding:
+            _err("missing 'description' property in " + binding_path)
+
+        for prop in "title", "description":
+            if prop in binding and (not isinstance(binding[prop], str) or
+                                    not binding[prop]):
+                _err("malformed or empty '{}' in {}"
                      .format(prop, binding_path))
 
         ok_top = {"title", "description", "compatible", "properties", "#cells",
-                  "parent-bus", "child-bus", "parent", "child",
+                  "bus", "on-bus", "parent-bus", "child-bus", "parent", "child",
                   "child-binding", "sub-node"}
 
         for prop in binding:
@@ -476,20 +493,39 @@ class EDT:
                 _err("unknown key '{}' in {}, expected one of {}, or *-cells"
                      .format(prop, binding_path, ", ".join(ok_top)))
 
-        for pc in "parent", "child":
-            # 'parent/child-bus:'
-            bus_key = pc + "-bus"
+        for bus_key in "bus", "on-bus":
             if bus_key in binding and \
                not isinstance(binding[bus_key], str):
-                self._warn("malformed '{}:' value in {}, expected string"
-                           .format(bus_key, binding_path))
+                _err("malformed '{}:' value in {}, expected string"
+                     .format(bus_key, binding_path))
+
+        # There are two legacy syntaxes for 'bus:' and 'on-bus:':
+        #
+        #     child/parent-bus: foo
+        #     child/parent: bus: foo
+        #
+        # We support both, with deprecation warnings.
+        for pc in "parent", "child":
+            # Legacy 'parent/child-bus:' keys
+            bus_key = pc + "-bus"
+            if bus_key in binding:
+                self._warn("'{}:' in {} is deprecated and will be removed - "
+                           "please use a top-level '{}:' key instead (see "
+                           "binding-template.yaml)"
+                           .format(bus_key, binding_path,
+                                   "bus" if bus_key == "child-bus" else "on-bus"))
+
+                if not isinstance(binding[bus_key], str):
+                    _err("malformed '{}:' value in {}, expected string"
+                         .format(bus_key, binding_path))
 
             # Legacy 'child/parent: bus: ...' keys
             if pc in binding:
-                self._warn("'{0}: bus: ...' in {1} is deprecated and will be "
-                           "removed - please use a top-level '{0}-bus:' key "
-                           "instead (see binding-template.yaml)"
-                           .format(pc, binding_path))
+                self._warn("'{}: bus: ...' in {} is deprecated and will be "
+                           "removed - please use a top-level '{}' key instead "
+                           "(see binding-template.yaml)"
+                           .format(pc, binding_path,
+                                   "bus" if pc == "child" else "on-bus:"))
 
                 # Just 'bus:' is expected
                 if binding[pc].keys() != {"bus"}:
@@ -696,8 +732,19 @@ class Node:
       pinctrl-<index> properties.
 
     bus:
-      The bus for the node as specified in its binding, e.g. "i2c" or "spi".
-      None if the binding doesn't specify a bus.
+      If the node is a bus node (has a 'bus:' key in its binding), then this
+      attribute holds the bus type, e.g. "i2c" or "spi". If the node is not a
+      bus node, then this attribute is None.
+
+    on_bus:
+      The bus the node appears on, e.g. "i2c" or "spi". The bus is determined
+      by searching upwards for a parent node whose binding has a 'bus:' key,
+      returning the value of the first 'bus:' key found. If none of the node's
+      parents has a 'bus:' key, this attribute is None.
+
+    bus_node:
+      Like on_bus, but contains the Node for the bus controller, or None if the
+      node is not on a bus.
 
     flash_controller:
       The flash controller for the node. Only meaningful for nodes representing
@@ -793,7 +840,29 @@ class Node:
     @property
     def bus(self):
         "See the class docstring"
-        return _binding_bus(self._binding)
+        binding = self._binding
+        if not binding:
+            return None
+
+        if "bus" in binding:
+            return binding["bus"]
+
+        # Legacy key
+        if "child-bus" in binding:
+            return binding["child-bus"]
+
+        # Legacy key
+        if "child" in binding:
+            # _check_binding() has checked that the "bus" key exists
+            return binding["child"]["bus"]
+
+        return None
+
+    @property
+    def on_bus(self):
+        "See the class docstring"
+        bus_node = self.bus_node
+        return bus_node.bus if bus_node else None
 
     @property
     def flash_controller(self):
@@ -835,14 +904,14 @@ class Node:
 
         if "compatible" in self._node.props:
             self.compats = self._node.props["compatible"].to_strings()
-            bus = self._bus_from_parent_binding()
+            on_bus = self.on_bus
 
             for compat in self.compats:
-                if (compat, bus) in self.edt._compat2binding:
+                if (compat, on_bus) in self.edt._compat2binding:
                     # Binding found
                     self.matching_compat = compat
                     self._binding, self.binding_path = \
-                        self.edt._compat2binding[compat, bus]
+                        self.edt._compat2binding[compat, on_bus]
 
                     return
         else:
@@ -885,27 +954,20 @@ class Node:
 
         return None
 
-    def _bus_from_parent_binding(self):
-        # _init_binding() helper. Returns the bus specified by 'child-bus: ...'
-        # in the parent binding (or the legacy 'child: bus: ...'), or None if
-        # missing.
+    def _bus_node(self):
+        # Returns the value for self.bus_node. Relies on parent nodes being
+        # initialized before their children.
 
         if not self.parent:
+            # This is the root node
             return None
 
-        binding = self.parent._binding
-        if not binding:
-            return None
+        if self.parent.bus:
+            # The parent node is a bus node
+            return self.parent
 
-        if "child-bus" in binding:
-            return binding["child-bus"]
-
-        # Legacy key
-        if "child" in binding:
-            # _check_binding() has checked that the "bus" key exists
-            return binding["child"]["bus"]
-
-        return None
+        # Same bus node as parent (possibly None)
+        return self.parent.bus_node
 
     def _init_props(self):
         # Creates self.props. See the class docstring. Also checks that all
@@ -1047,6 +1109,9 @@ class Node:
 
             return self._standard_phandle_val_list(prop)
 
+        if prop_type == "path":
+            return self.edt._node2enode[prop.to_path()]
+
         # prop_type == "compound". We have already checked that the 'type:'
         # value is valid, in _check_binding().
         #
@@ -1092,7 +1157,9 @@ class Node:
         address_cells = _address_cells(node)
         size_cells = _size_cells(node)
 
-        for raw_reg in _slice(node, "reg", 4*(address_cells + size_cells)):
+        for raw_reg in _slice(node, "reg", 4*(address_cells + size_cells),
+                              "4*(<#address-cells> (= {}) + <#size-cells> (= {}))"
+                              .format(address_cells, size_cells)):
             reg = Register()
             reg.node = self
             reg.addr = _translate(to_num(raw_reg[:4*address_cells]), node)
@@ -1376,7 +1443,8 @@ class Property:
         - For 'type: int/array/string/string-array', 'val' is what you'd expect
           (a Python integer or string, or a list of them)
 
-        - For 'type: phandle', 'val' is the pointed-to Node instance
+        - For 'type: phandle' and 'type: path', 'val' is the pointed-to Node
+          instance
 
         - For 'type: phandles', 'val' is a list of the pointed-to Node
           instances
@@ -1414,22 +1482,21 @@ def spi_dev_cs_gpio(node):
     # ControllerAndData instance, and None otherwise. See
     # Documentation/devicetree/bindings/spi/spi-bus.txt in the Linux kernel.
 
-    if not (node.bus == "spi" and node.parent and
-            "cs-gpios" in node.parent.props):
+    if not (node.on_bus == "spi" and "cs-gpios" in node.bus_node.props):
         return None
 
     if not node.regs:
         _err("{!r} needs a 'reg' property, to look up the chip select index "
              "for SPI".format(node))
 
-    parent_cs_lst = node.parent.props["cs-gpios"].val
+    parent_cs_lst = node.bus_node.props["cs-gpios"].val
 
     # cs-gpios is indexed by the unit address
     cs_index = node.regs[0].addr
     if cs_index >= len(parent_cs_lst):
         _err("index from 'regs' in {!r} ({}) is >= number of cs-gpios "
              "in {!r} ({})".format(
-                 node, cs_index, node.parent, len(parent_cs_lst)))
+                 node, cs_index, node.bus_node, len(parent_cs_lst)))
 
     return parent_cs_lst[cs_index]
 
@@ -1464,13 +1531,17 @@ def _binding_paths(bindings_dirs):
     return binding_paths
 
 
-def _binding_bus(binding):
-    # Returns the bus specified by 'parent-bus: ...' in the binding (or the
-    # legacy 'parent: bus: ...'), or None if missing
+def _on_bus_from_binding(binding):
+    # Returns the bus specified by 'on-bus:' in the binding (or the
+    # legacy 'parent-bus:' and 'parent: bus:'), or None if missing
 
     if not binding:
         return None
 
+    if "on-bus" in binding:
+        return binding["on-bus"]
+
+    # Legacy key
     if "parent-bus" in binding:
         return binding["parent-bus"]
 
@@ -1586,7 +1657,7 @@ def _check_prop_type_and_default(prop_name, prop_type, required, default,
 
     ok_types = {"boolean", "int", "array", "uint8-array", "string",
                 "string-array", "phandle", "phandles", "phandle-array",
-                "compound"}
+                "path", "compound"}
 
     if prop_type not in ok_types:
         _err("'{}' in 'properties:' in {} has unknown type '{}', expected one "
@@ -1604,13 +1675,8 @@ def _check_prop_type_and_default(prop_name, prop_type, required, default,
     if default is None:
         return
 
-    if required:
-        _err("'default:' for '{}' in 'properties:' in {} is meaningless in "
-             "combination with 'required: true'"
-             .format(prop_name, binding_path))
-
     if prop_type in {"boolean", "compound", "phandle", "phandles",
-                     "phandle-array"}:
+                     "phandle-array", "path"}:
         _err("'default:' can't be combined with 'type: {}' for '{}' in "
              "'properties:' in {}".format(prop_type, prop_name, binding_path))
 
@@ -1671,7 +1737,12 @@ def _translate(addr, node):
     # Number of cells for one translation 3-tuple in 'ranges'
     entry_cells = child_address_cells + parent_address_cells + child_size_cells
 
-    for raw_range in _slice(node.parent, "ranges", 4*entry_cells):
+    for raw_range in _slice(node.parent, "ranges", 4*entry_cells,
+                            "4*(<#address-cells> (= {}) + "
+                            "<#address-cells for parent> (= {}) + "
+                            "<#size-cells> (= {}))"
+                            .format(child_address_cells, parent_address_cells,
+                                    child_size_cells)):
         child_addr = to_num(raw_range[:4*child_address_cells])
         raw_range = raw_range[4*child_address_cells:]
 
@@ -1751,7 +1822,8 @@ def _interrupts(node):
         interrupt_cells = _interrupt_cells(iparent)
 
         return [_map_interrupt(node, iparent, raw)
-                for raw in _slice(node, "interrupts", 4*interrupt_cells)]
+                for raw in _slice(node, "interrupts", 4*interrupt_cells,
+                                  "4*<#interrupt-cells>")]
 
     return []
 
@@ -2040,15 +2112,19 @@ def _interrupt_cells(node):
     return node.props["#interrupt-cells"].to_num()
 
 
-def _slice(node, prop_name, size):
+def _slice(node, prop_name, size, size_hint):
     # Splits node.props[prop_name].value into 'size'-sized chunks, returning a
     # list of chunks. Raises EDTError if the length of the property is not
-    # evenly divisible by 'size'.
+    # evenly divisible by 'size'. 'size_hint' is a string shown on errors that
+    # gives a hint on how 'size' was calculated.
 
     raw = node.props[prop_name].value
     if len(raw) % size:
         _err("'{}' property in {!r} has length {}, which is not evenly "
-             "divisible by {}".format(prop_name, node, len(raw), size))
+             "divisible by {} (= {}). Note that #*-cells "
+             "properties come either from the parent node or from the "
+             "controller (in the case of 'interrupts')."
+             .format(prop_name, node, len(raw), size, size_hint))
 
     return [raw[i:i + size] for i in range(0, len(raw), size)]
 
@@ -2060,7 +2136,8 @@ def _check_dt(dt):
 
     # Check that 'status' has one of the values given in the devicetree spec.
 
-    ok_status = {"okay", "disabled", "reserved", "fail", "fail-sss"}
+    # Accept "ok" for backwards compatibility
+    ok_status = {"ok", "okay", "disabled", "reserved", "fail", "fail-sss"}
 
     for node in dt.node_iter():
         if "status" in node.props:

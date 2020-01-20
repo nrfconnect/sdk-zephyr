@@ -120,7 +120,7 @@ static int init_reset(void)
 static int prepare_cb(struct lll_prepare_param *prepare_param)
 {
 	struct lll_adv *lll = prepare_param->param;
-	u32_t aa = sys_cpu_to_le32(0x8e89bed6);
+	u32_t aa = sys_cpu_to_le32(PDU_AC_ACCESS_ADDR);
 	u32_t ticks_at_event, ticks_at_start;
 	struct evt_hdr *evt;
 	u32_t remainder_us;
@@ -144,8 +144,11 @@ static int prepare_cb(struct lll_prepare_param *prepare_param)
 	}
 
 	radio_reset();
-	/* TODO: other Tx Power settings */
+#if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
+	radio_tx_power_set(lll->tx_pwr_lvl);
+#else
 	radio_tx_power_set(RADIO_TXP_DEFAULT);
+#endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 	/* TODO: if coded we use S8? */
@@ -316,7 +319,6 @@ static void isr_tx(void *param)
 	u32_t hcto;
 
 	/* TODO: MOVE to a common interface, isr_lll_radio_status? */
-
 	if (IS_ENABLED(CONFIG_BT_CTLR_PROFILE_ISR)) {
 		lll_prof_latency_capture();
 	}
@@ -331,17 +333,19 @@ static void isr_tx(void *param)
 	}
 	/* TODO: MOVE ^^ */
 
-	radio_isr_set(isr_rx, param);
+	/* setup tIFS switching */
 	radio_tmr_tifs_set(EVENT_IFS_US);
 	radio_switch_complete_and_tx(0, 0, 0, 0);
-	radio_pkt_rx_set(radio_pkt_scratch_get());
 
+	radio_pkt_rx_set(radio_pkt_scratch_get());
 	/* assert if radio packet ptr is not set and radio started rx */
 	LL_ASSERT(!radio_is_ready());
 
 	if (IS_ENABLED(CONFIG_BT_CTLR_PROFILE_ISR)) {
 		lll_prof_cputime_capture();
 	}
+
+	radio_isr_set(isr_rx, param);
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	if (ull_filter_lll_rl_enabled()) {
@@ -593,6 +597,7 @@ static void chan_prepare(struct lll_adv *lll)
 
 	pdu = lll_adv_data_latest_get(lll, &upd);
 	scan_pdu = lll_adv_scan_rsp_latest_get(lll, &upd);
+
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	if (upd) {
 		/* Copy the address from the adv packet we will send into the

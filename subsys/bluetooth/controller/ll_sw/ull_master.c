@@ -14,6 +14,8 @@
 
 #include "hal/ticker.h"
 #include "hal/ccm.h"
+#include "hal/radio.h"
+
 #include "ticker/ticker.h"
 
 #include "pdu.h"
@@ -141,6 +143,10 @@ u8_t ll_create_connection(u16_t scan_interval, u16_t scan_window,
 	conn_lll->rssi_reported = 0x7F;
 	conn_lll->rssi_sample_count = 0;
 #endif /* CONFIG_BT_CTLR_CONN_RSSI */
+
+#if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
+	conn_lll->tx_pwr_lvl = RADIO_TXP_DEFAULT;
+#endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
 
 	/* FIXME: BEGIN: Move to ULL? */
 	conn_lll->latency_prepare = 0;
@@ -286,6 +292,7 @@ u8_t ll_connect_disable(void **rx)
 	status = ull_scan_disable(0, scan);
 	if (!status) {
 		struct ll_conn *conn = (void *)HDR_LLL2EVT(conn_lll);
+		struct node_rx_ftr *ftr;
 		struct node_rx_pdu *cc;
 		memq_link_t *link;
 
@@ -299,6 +306,10 @@ u8_t ll_connect_disable(void **rx)
 		cc->hdr.type = NODE_RX_TYPE_CONNECTION;
 		cc->hdr.handle = 0xffff;
 		*((u8_t *)cc->pdu) = BT_HCI_ERR_UNKNOWN_CONN_ID;
+
+		ftr = &(cc->hdr.rx_ftr);
+		ftr->param = &scan->lll;
+
 		*rx = cc;
 	}
 
@@ -417,12 +428,14 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 {
 	u32_t conn_offset_us, conn_interval_us;
 	u8_t ticker_id_scan, ticker_id_conn;
+	u8_t peer_addr[BDADDR_SIZE];
 	u32_t ticks_slot_overhead;
 	u32_t ticks_slot_offset;
 	struct ll_scan_set *scan;
 	struct node_rx_cc *cc;
 	struct ll_conn *conn;
 	struct pdu_adv *pdu_tx;
+	u8_t peer_addr_type;
 	u32_t ticker_status;
 	u8_t chan_sel;
 
@@ -436,12 +449,12 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	u8_t own_addr_type = pdu_tx->tx_addr;
 	u8_t own_addr[BDADDR_SIZE];
-	u8_t peer_addr[BDADDR_SIZE];
 	u8_t rl_idx = ftr->rl_idx;
 
 	memcpy(own_addr, &pdu_tx->connect_ind.init_addr[0], BDADDR_SIZE);
-	memcpy(peer_addr, &pdu_tx->connect_ind.adv_addr[0], BDADDR_SIZE);
 #endif
+	peer_addr_type = pdu_tx->rx_addr;
+	memcpy(peer_addr, &pdu_tx->connect_ind.adv_addr[0], BDADDR_SIZE);
 
 	/* This is the chan sel bit from the received adv pdu */
 	chan_sel = pdu_tx->chan_sel;
@@ -469,8 +482,8 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 #else
 	if (1) {
 #endif /* CONFIG_BT_CTLR_PRIVACY */
-		cc->peer_addr_type = scan->lll.adv_addr_type;
-		memcpy(cc->peer_addr, scan->lll.adv_addr, BDADDR_SIZE);
+		cc->peer_addr_type = peer_addr_type;
+		memcpy(cc->peer_addr, &peer_addr[0], BDADDR_SIZE);
 	}
 
 	cc->interval = lll->interval;
@@ -480,6 +493,10 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 
 	lll->handle = ll_conn_handle_get(conn);
 	rx->handle = lll->handle;
+
+#if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
+	lll->tx_pwr_lvl = RADIO_TXP_DEFAULT;
+#endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
 
 	/* Use Channel Selection Algorithm #2 if peer too supports it */
 	if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2)) {
@@ -809,7 +826,7 @@ again:
 	 * It shall not be a sequence that differs from the advertising channel
 	 * packets Access Address by only one bit.
 	 */
-	adv_aa_check = aa ^ 0x8e89bed6;
+	adv_aa_check = aa ^ PDU_AC_ACCESS_ADDR;
 	if (util_ones_count_get((u8_t *)&adv_aa_check,
 				sizeof(adv_aa_check)) <= 1) {
 		goto again;

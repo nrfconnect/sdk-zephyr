@@ -42,6 +42,7 @@ set(ENV{PYTHON_EXECUTABLE} ${PYTHON_EXECUTABLE})
 set(ENV{ARCH}      ${ARCH})
 set(ENV{BOARD_DIR} ${BOARD_DIR})
 set(ENV{SOC_DIR}   ${SOC_DIR})
+set(ENV{SHIELD_AS_LIST} "${SHIELD_AS_LIST}")
 set(ENV{CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR})
 set(ENV{ARCH_DIR}   ${ARCH_DIR})
 set(ENV{GENERATED_DTS_BOARD_CONF} ${GENERATED_DTS_BOARD_CONF})
@@ -65,9 +66,14 @@ set(EXTRA_KCONFIG_TARGET_COMMAND_FOR_guiconfig
   ${ZEPHYR_BASE}/scripts/kconfig/guiconfig.py
   )
 
+set(EXTRA_KCONFIG_TARGET_COMMAND_FOR_hardenconfig
+  ${ZEPHYR_BASE}/scripts/kconfig/hardenconfig.py
+  )
+
 foreach(kconfig_target
     menuconfig
     guiconfig
+    hardenconfig
     ${EXTRA_KCONFIG_TARGETS}
     )
   add_custom_target(
@@ -81,6 +87,7 @@ foreach(kconfig_target
     ARCH=$ENV{ARCH}
     BOARD_DIR=$ENV{BOARD_DIR}
     SOC_DIR=$ENV{SOC_DIR}
+    SHIELD_AS_LIST=$ENV{SHIELD_AS_LIST}
     CMAKE_BINARY_DIR=$ENV{CMAKE_BINARY_DIR}
     ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT}
     ARCH_DIR=$ENV{ARCH_DIR}

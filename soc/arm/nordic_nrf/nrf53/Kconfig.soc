@@ -9,6 +9,7 @@ config SOC_NRF5340_CPUAPP
 	select CPU_HAS_NRF_IDAU
 	select CPU_HAS_FPU
 	select ARMV8_M_DSP
+	select HAS_SYS_POWER_STATE_DEEP_SLEEP_1
 	select HAS_HW_NRF_CC312
 	select HAS_HW_NRF_CLOCK
 	select HAS_HW_NRF_DPPIC
@@ -23,6 +24,7 @@ config SOC_NRF5340_CPUAPP
 	select HAS_HW_NRF_GPIOTE
 	select HAS_HW_NRF_I2S
 	select HAS_HW_NRF_IPC
+	select HAS_HW_NRF_NFCT
 	select HAS_HW_NRF_PDM
 	select HAS_HW_NRF_POWER
 	select HAS_HW_NRF_PWM0
@@ -51,6 +53,7 @@ config SOC_NRF5340_CPUAPP
 config SOC_NRF5340_CPUNET
 	depends on SOC_SERIES_NRF53X
 	bool
+	select HAS_HW_NRF_ACL
 	select HAS_HW_NRF_CLOCK
 	select HAS_HW_NRF_DPPIC
 	select HAS_HW_NRF_EGU0

@@ -15,7 +15,7 @@
 
 #if USE_PARTITION_MANAGER
 #include <pm_config.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 #define FLASH_MAP_OFFSET(i) UTIL_CAT(PM_, UTIL_CAT(PM_##i##_LABEL, _ADDRESS))
 #define FLASH_MAP_DEV(i)    UTIL_CAT(PM_, UTIL_CAT(PM_##i##_LABEL, _DEV_NAME))

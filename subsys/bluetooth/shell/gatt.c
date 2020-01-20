@@ -115,7 +115,7 @@ static u8_t discover_func(struct bt_conn *conn,
 	struct bt_gatt_service_val *gatt_service;
 	struct bt_gatt_chrc *gatt_chrc;
 	struct bt_gatt_include *gatt_include;
-	char str[37];
+	char str[BT_UUID_STR_LEN];
 
 	if (!attr) {
 		shell_print(ctx_shell, "Discover complete");
@@ -511,6 +511,7 @@ static int cmd_subscribe(const struct shell *shell, size_t argc, char *argv[])
 
 	err = bt_gatt_subscribe(default_conn, &subscribe_params);
 	if (err) {
+		subscribe_params.value_handle = 0U;
 		shell_error(shell, "Subscribe failed (err %d)", err);
 	} else {
 		shell_print(shell, "Subscribed");
@@ -555,6 +556,7 @@ static struct db_stats {
 static u8_t print_attr(const struct bt_gatt_attr *attr, void *user_data)
 {
 	const struct shell *shell = user_data;
+	char str[BT_UUID_STR_LEN];
 
 	stats.attr_count++;
 
@@ -572,8 +574,9 @@ static u8_t print_attr(const struct bt_gatt_attr *attr, void *user_data)
 		stats.ccc_count++;
 	}
 
+	bt_uuid_to_str(attr->uuid, str, sizeof(str));
 	shell_print(shell, "attr %p handle 0x%04x uuid %s perm 0x%02x",
-		    attr, attr->handle, bt_uuid_str(attr->uuid), attr->perm);
+		    attr, attr->handle, str, attr->perm);
 
 	return BT_GATT_ITER_CONTINUE;
 }
@@ -926,9 +929,11 @@ static u8_t get_cb(const struct bt_gatt_attr *attr, void *user_data)
 	struct shell *shell = user_data;
 	u8_t buf[256];
 	ssize_t ret;
+	char str[BT_UUID_STR_LEN];
 
-	shell_print(shell, "attr %p uuid %s perm 0x%02x", attr,
-		    bt_uuid_str(attr->uuid), attr->perm);
+	bt_uuid_to_str(attr->uuid, str, sizeof(str));
+	shell_print(shell, "attr %p uuid %s perm 0x%02x", attr, str,
+		    attr->perm);
 
 	if (!attr->read) {
 		return BT_GATT_ITER_CONTINUE;

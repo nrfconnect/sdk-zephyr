@@ -4,6 +4,7 @@
 
 import argparse
 import os
+import shlex
 
 from west import log
 from west.configuration import config
@@ -93,7 +94,8 @@ class Build(Forceable):
                             " Otherwise the default build directory is " +
                             "created and used.")
         parser.add_argument('-t', '--target',
-                            help='''Build system target to run''')
+                            help='''Build system target ("usage"
+                            for more info; and "help" for a list)''')
         parser.add_argument('-p', '--pristine', choices=['auto', 'always',
                             'never'], action=AlwaysIfMissing, nargs='?',
                             help='''Control whether the build folder is made
@@ -293,8 +295,8 @@ class Build(Forceable):
         if not self.cmake_cache:
             return          # That's all we can check without a cache.
 
-        cached_app = self.cmake_cache.get('CMAKE_HOME_DIRECTORY')
-        log.dbg('CMAKE_HOME_DIRECTORY:', cached_app,
+        cached_app = self.cmake_cache.get('APPLICATION_SOURCE_DIR')
+        log.dbg('APPLICATION_SOURCE_DIR:', cached_app,
                 level=log.VERBOSE_EXTREME)
         source_abs = (os.path.abspath(self.args.source_dir)
                       if self.args.source_dir else None)
@@ -384,6 +386,10 @@ class Build(Forceable):
             cmake_opts = []
         if self.args.cmake_opts:
             cmake_opts.extend(self.args.cmake_opts)
+
+        user_args = config_get('cmake-args', None)
+        if user_args:
+            cmake_opts.extend(shlex.split(user_args))
 
         # Invoke CMake from the current working directory using the
         # -S and -B options (officially introduced in CMake 3.13.0).

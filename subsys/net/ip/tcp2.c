@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(net_tcp, CONFIG_NET_TCP_LOG_LEVEL);
 #include "net_private.h"
 #include "tcp2_priv.h"
 
-static int tcp_rto = 500; /* Retransmission timeout, msec */
+static int tcp_rto = CONFIG_NET_TCP_INIT_RETRANSMISSION_TIMEOUT;
 static int tcp_retries = 3;
 static int tcp_window = NET_IPV6_MTU;
 static bool tcp_echo;
@@ -28,11 +28,54 @@ static sys_slist_t tcp_conns = SYS_SLIST_STATIC_INIT(&tcp_conns);
 static K_MEM_SLAB_DEFINE(tcp_conns_slab, sizeof(struct tcp),
 				CONFIG_NET_MAX_CONTEXTS, 4);
 
-NET_BUF_POOL_DEFINE(tcp_nbufs, 64/*count*/, 128/*size*/, 0, NULL);
+NET_BUF_POOL_DEFINE(tcp_nbufs, 64/*count*/, CONFIG_NET_BUF_DATA_SIZE, 0, NULL);
 
 static void tcp_in(struct tcp *conn, struct net_pkt *pkt);
 
 int (*tcp_send_cb)(struct net_pkt *pkt) = NULL;
+
+/* TODO: Add mutex/irq lock */
+static bool tcp_nbufs_reserve(struct tcp *conn, size_t len)
+{
+	size_t rsv_bytes = 0, rsv_bytes_old = conn->rsv_bytes;
+	bool result = false;
+	struct net_buf *buf;
+
+	while (rsv_bytes < len) {
+
+		buf = tcp_nbuf_alloc(conn, CONFIG_NET_BUF_DATA_SIZE);
+
+		NET_ASSERT(buf);
+
+		sys_slist_append(&conn->rsv_bufs, &buf->node);
+
+		rsv_bytes += buf->size;
+	}
+
+	if (rsv_bytes >= len) {
+		result = true;
+	}
+
+	conn->rsv_bytes += rsv_bytes;
+
+	NET_DBG("%zu->%zu", rsv_bytes_old, conn->rsv_bytes);
+
+	return result;
+}
+
+static void tcp_nbufs_unreserve(struct tcp *conn)
+{
+	size_t rsv_bytes_old = conn->rsv_bytes;
+	struct net_buf *buf;
+
+	while ((buf = tcp_slist(&conn->rsv_bufs, get, struct net_buf, node))) {
+		conn->rsv_bytes -= buf->size;
+		buf->frags = NULL;
+		tcp_nbuf_unref(buf);
+	}
+
+	NET_DBG("%zu->%zu", rsv_bytes_old, conn->rsv_bytes);
+}
 
 /* TODO: IPv4 options may enlarge the IPv4 header */
 static struct tcphdr *th_get(struct net_pkt *pkt)
@@ -123,11 +166,11 @@ static char *tcp_endpoint_to_string(union tcp_endpoint *ep)
 
 	switch (af) {
 	case 0:
-		snprintf(s, BUF_SIZE, ":%hu", ntohs(ep->sin.sin_port));
+		snprintk(s, BUF_SIZE, ":%hu", ntohs(ep->sin.sin_port));
 		break;
 	case AF_INET: case AF_INET6:
 		net_addr_ntop(af, &ep->sin.sin_addr, addr, sizeof(addr));
-		snprintf(s, BUF_SIZE, "%s:%hu", addr, ntohs(ep->sin.sin_port));
+		snprintk(s, BUF_SIZE, "%s:%hu", addr, ntohs(ep->sin.sin_port));
 		break;
 	default:
 		s = NULL;
@@ -148,27 +191,27 @@ static const char *tcp_flags(u8_t fl)
 
 	if (fl) {
 		if (fl & SYN) {
-			s += snprintf(s, buf_size, "SYN,");
+			s += snprintk(s, buf_size, "SYN,");
 			buf_size -= s - buf;
 		}
 		if (fl & FIN) {
-			s += snprintf(s, buf_size, "FIN,");
+			s += snprintk(s, buf_size, "FIN,");
 			buf_size -= s - buf;
 		}
 		if (fl & ACK) {
-			s += snprintf(s, buf_size, "ACK,");
+			s += snprintk(s, buf_size, "ACK,");
 			buf_size -= s - buf;
 		}
 		if (fl & PSH) {
-			s += snprintf(s, buf_size, "PSH,");
+			s += snprintk(s, buf_size, "PSH,");
 			buf_size -= s - buf;
 		}
 		if (fl & RST) {
-			s += snprintf(s, buf_size, "RST,");
+			s += snprintk(s, buf_size, "RST,");
 			buf_size -= s - buf;
 		}
 		if (fl & URG) {
-			s += snprintf(s, buf_size, "URG,");
+			s += snprintk(s, buf_size, "URG,");
 			buf_size -= s - buf;
 		}
 		s[strlen(s) - 1] = '\0';
@@ -192,34 +235,35 @@ static const char *tcp_th(struct net_pkt *pkt)
 	*s = '\0';
 
 	if (th->th_off < 5) {
-		s += snprintf(s, buf_size, "Bogus th_off: %hu", th->th_off);
+		s += snprintk(s, buf_size, "Bogus th_off: %hu",
+				(u16_t)th->th_off);
 		buf_size -= s - buf;
 		goto end;
 	}
 
 	if (fl) {
 		if (fl & SYN) {
-			s += snprintf(s, buf_size, "SYN=%u,", th_seq(th));
+			s += snprintk(s, buf_size, "SYN=%u,", th_seq(th));
 			buf_size -= s - buf;
 		}
 		if (fl & FIN) {
-			s += snprintf(s, buf_size, "FIN=%u,", th_seq(th));
+			s += snprintk(s, buf_size, "FIN=%u,", th_seq(th));
 			buf_size -= s - buf;
 		}
 		if (fl & ACK) {
-			s += snprintf(s, buf_size, "ACK=%u,", th_ack(th));
+			s += snprintk(s, buf_size, "ACK=%u,", th_ack(th));
 			buf_size -= s - buf;
 		}
 		if (fl & PSH) {
-			s += snprintf(s, buf_size, "PSH,");
+			s += snprintk(s, buf_size, "PSH,");
 			buf_size -= s - buf;
 		}
 		if (fl & RST) {
-			s += snprintf(s, buf_size, "RST,");
+			s += snprintk(s, buf_size, "RST,");
 			buf_size -= s - buf;
 		}
 		if (fl & URG) {
-			s += snprintf(s, buf_size, "URG,");
+			s += snprintk(s, buf_size, "URG,");
 			buf_size -= s - buf;
 		}
 		s[strlen(s) - 1] = '\0';
@@ -227,7 +271,7 @@ static const char *tcp_th(struct net_pkt *pkt)
 	}
 
 	if (data_len) {
-		s += snprintf(s, buf_size, ", len=%zd", data_len);
+		s += snprintk(s, buf_size, ", len=%ld", (long int)data_len);
 		buf_size -= s - buf;
 	}
 
@@ -315,6 +359,8 @@ static int tcp_conn_unref(struct tcp *conn)
 
 	net_context_unref(conn->context);
 
+	tcp_nbufs_unreserve(conn);
+
 	tcp_send_queue_flush(conn);
 
 	tcp_win_free(conn->snd, "SND");
@@ -387,8 +433,7 @@ static void tcp_send_process(struct k_timer *timer)
 
 static void tcp_send_timer_cancel(struct tcp *conn)
 {
-	NET_ASSERT_INFO(conn->in_retransmission == true,
-			"Not in retransmission");
+	NET_ASSERT(conn->in_retransmission == true, "Not in retransmission");
 
 	k_timer_stop(&conn->send_timer);
 
@@ -434,53 +479,65 @@ static const char *tcp_state_to_str(enum tcp_state state, bool prefix)
 	_(TCP_CLOSED);
 	}
 #undef _
-	NET_ASSERT_INFO(s, "Invalid TCP state: %u", state);
+	NET_ASSERT(s, "Invalid TCP state: %u", state);
 out:
 	return prefix ? s : (s + 4);
 }
 
-static void tcp_win_append(struct tcp_win *w, const char *name,
-				const void *data, size_t len)
+static void tcp_win_append(struct tcp *conn, struct tcp_win *w,
+				const char *name, const void *data,
+				size_t data_len)
 {
-	struct net_buf *buf = tcp_nbuf_alloc(&tcp_nbufs, len);
-	size_t prev_len = w->len;
+	size_t total = data_len, prev_len = w->len, len;
+	struct net_buf *buf;
 
-	NET_ASSERT_INFO(len, "Zero length data");
+	NET_ASSERT(data_len, "Zero length data");
 
-	memcpy(net_buf_add(buf, len), data, len);
+	while (total) {
+		len = (total <= CONFIG_NET_BUF_DATA_SIZE) ?
+			total : CONFIG_NET_BUF_DATA_SIZE;
 
-	sys_slist_append(&w->bufs, (void *)&buf->user_data);
+		buf = tcp_nbuf_alloc(conn, len);
 
-	w->len += len;
+		memcpy(net_buf_add(buf, len), data, len);
+
+		sys_slist_append(&w->bufs, (void *)&buf->user_data);
+
+		total -= len;
+		w->len += len;
+	}
 
 	NET_DBG("%s %p %zu->%zu byte(s)", name, buf, prev_len, w->len);
 }
 
-static struct net_buf *tcp_win_peek(struct tcp_win *w, const char *name,
-					size_t len)
+static struct net_buf *tcp_win_peek(struct tcp *conn, struct tcp_win *w,
+					const char *name, size_t len)
 {
-	struct net_buf *out = tcp_nbuf_alloc(&tcp_nbufs, len);
-	struct net_buf *buf = tcp_slist(&w->bufs, peek_head, struct net_buf,
-					user_data);
-	while (buf) {
+	size_t total = len;
+	struct net_buf *in, *out;
+	sys_slist_t list;
 
-		if (len <= 0) {
-			break;
-		}
+	sys_slist_init(&list);
 
-		memcpy(net_buf_add(out, buf->len), buf->data, buf->len);
+	in = tcp_slist(&w->bufs, peek_head, struct net_buf, user_data);
 
-		len -= buf->len;
+	while (in && total > 0) {
 
-		buf = tcp_slist((sys_snode_t *)&buf->user_data, peek_next,
+		out = tcp_nbuf_clone(in);
+
+		sys_slist_append(&list, (void *)out);
+
+		total -= out->len;
+
+		NET_DBG("total: %zd, out->len: %hu", total, out->len);
+
+		in = tcp_slist((sys_snode_t *)&in->user_data, peek_next,
 				struct net_buf, user_data);
 	}
 
-	NET_ASSERT_INFO(len == 0, "Unfulfilled request, len: %zu", len);
+	NET_ASSERT(total == 0);
 
-	NET_DBG("%s len=%zu", name, net_buf_frags_len(out));
-
-	return out;
+	return (void *)sys_slist_peek_head(&list);
 }
 
 static const char *tcp_conn_state(struct tcp *conn, struct net_pkt *pkt)
@@ -488,7 +545,7 @@ static const char *tcp_conn_state(struct tcp *conn, struct net_pkt *pkt)
 #define BUF_SIZE 64
 	static char buf[BUF_SIZE];
 
-	snprintf(buf, BUF_SIZE, "%s %s %u/%u", pkt ? tcp_th(pkt) : "",
+	snprintk(buf, BUF_SIZE, "%s %s %u/%u", pkt ? tcp_th(pkt) : "",
 			tcp_state_to_str(conn->state, false),
 			conn->seq, conn->ack);
 #undef BUF_SIZE
@@ -506,7 +563,7 @@ static bool tcp_options_check(void *buf, ssize_t len)
 		opt = options[0];
 		opt_len = options[1];
 
-		NET_DBG("opt: %hu, opt_len: %hu", opt, opt_len);
+		NET_DBG("opt: %hu, opt_len: %hu", (u16_t)opt, (u16_t)opt_len);
 
 		if (opt == TCPOPT_PAD) {
 			break;
@@ -563,16 +620,23 @@ static size_t tcp_data_get(struct tcp *conn, struct net_pkt *pkt)
 	ssize_t len = tcp_data_len(pkt);
 
 	if (len > 0) {
-		void *buf = tcp_malloc(len);
+		void *buf;
+
+		if (tcp_nbufs_reserve(conn, len) == false) {
+			len = 0;
+			goto out;
+		}
+
+		buf = tcp_malloc(len);
 
 		net_pkt_skip(pkt, sizeof(*ip) + th->th_off * 4);
 
 		net_pkt_read(pkt, buf, len);
 
-		tcp_win_append(conn->rcv, "RCV", buf, len);
+		tcp_win_append(conn, conn->rcv, "RCV", buf, len);
 
 		if (tcp_echo) {
-			tcp_win_append(conn->snd, "SND", buf, len);
+			tcp_win_append(conn, conn->snd, "SND", buf, len);
 		}
 
 		tcp_free(buf);
@@ -589,7 +653,7 @@ static size_t tcp_data_get(struct tcp *conn, struct net_pkt *pkt)
 				up, NULL, NULL, conn->recv_user_data);
 		}
 	}
-
+out:
 	return len;
 }
 
@@ -658,9 +722,12 @@ static uint16_t cs(int32_t s)
 static void tcp_csum(struct net_pkt *pkt)
 {
 	struct net_ipv4_hdr *ip = ip_get(pkt);
-	struct tcphdr *th = (void *) (ip + 1);
-	u16_t len = ntohs(ip->len) - 20;
+	struct tcphdr *th = (void *)(ip + 1);
+	struct net_buf *buf = pkt->frags;
+	size_t hlen = sizeof(struct net_ipv4_hdr);
+	u16_t len = ntohs(ip->len) - hlen;
 	u32_t s;
+	int i, j = 0;
 
 	ip->chksum = cs(sum(ip, sizeof(*ip)));
 
@@ -668,27 +735,18 @@ static void tcp_csum(struct net_pkt *pkt)
 	s += ntohs(ip->proto + len);
 
 	th->th_sum = 0;
-	s += sum(th, len);
 
-	th->th_sum = cs(s);
-}
+	s += sum(th, buf->len - hlen);
 
-static struct net_pkt *tcp_pkt_linearize(struct net_pkt *pkt)
-{
-	struct net_pkt *new = tcp_pkt_alloc(0);
-	struct net_buf *tmp, *buf = net_pkt_get_frag(new, K_NO_WAIT);
+	SYS_SLIST_FOR_EACH_CONTAINER((sys_slist_t *)&buf->node, buf, node) {
 
-	for (tmp = pkt->frags; tmp; tmp = tmp->frags) {
-		memcpy(net_buf_add(buf, tmp->len), tmp->data, tmp->len);
+		for (i = 0; i < buf->len; i++, j++) {
+
+			s += (j % 2) ? buf->data[i] << 8 : buf->data[i];
+		}
 	}
 
-	net_pkt_frag_add(new, buf);
-
-	new->iface = pkt->iface;
-
-	tcp_pkt_unref(pkt);
-
-	return new;
+	th->th_sum = cs(s);
 }
 
 static void tcp_chain_free(struct net_buf *head)
@@ -719,7 +777,7 @@ static void tcp_out(struct tcp *conn, u8_t flags, ...)
 
 	if (PSH & flags) {
 		size_t len = conn->snd->len;
-		struct net_buf *buf = tcp_win_peek(conn->snd, "SND", len);
+		struct net_buf *buf = tcp_win_peek(conn, conn->snd, "SND", len);
 
 		{
 			va_list ap;
@@ -737,8 +795,6 @@ static void tcp_out(struct tcp *conn, u8_t flags, ...)
 
 		tcp_adj(pkt, len);
 	}
-
-	pkt = tcp_pkt_linearize(pkt);
 
 	tcp_csum(pkt);
 
@@ -783,6 +839,8 @@ static struct tcp *tcp_conn_alloc(void)
 	conn->snd = tcp_win_new();
 
 	sys_slist_init(&conn->send_queue);
+
+	sys_slist_init(&conn->rsv_bufs);
 
 	k_timer_init(&conn->send_timer, tcp_send_process, NULL);
 	k_timer_user_data_set(&conn->send_timer, conn);
@@ -901,7 +959,8 @@ static enum net_verdict tcp_pkt_received(struct net_conn *net_conn,
 	ARG_UNUSED(proto);
 
 	if (vhl != 0x45) {
-		NET_ERR("conn: %p, Unsupported IP version: 0x%hx", conn, vhl);
+		NET_ERR("conn: %p, Unsupported IP version: 0x%hx", conn,
+			(u16_t)vhl);
 		goto out;
 	}
 
@@ -1104,8 +1163,8 @@ next_state:
 	case TCP_FIN_WAIT1:
 	case TCP_FIN_WAIT2:
 	default:
-		NET_ASSERT_INFO(false, "%s is unimplemented",
-				tcp_state_to_str(conn->state, true));
+		NET_ASSERT(false, "%s is unimplemented",
+			   tcp_state_to_str(conn->state, true));
 	}
 
 	if (fl) {
@@ -1131,7 +1190,7 @@ next_state:
 static ssize_t _tcp_send(struct tcp *conn, const void *buf, size_t len,
 				int flags)
 {
-	tcp_win_append(conn->snd, "SND", buf, len);
+	tcp_win_append(conn, conn->snd, "SND", buf, len);
 
 	tcp_in(conn, NULL);
 
@@ -1412,10 +1471,10 @@ static struct net_buf *tcp_win_pop(struct tcp_win *w, const char *name,
 {
 	struct net_buf *buf, *out = NULL;
 
-	NET_ASSERT_INFO(len, "Invalid request, len: %zu", len);
+	NET_ASSERT(len, "Invalid request, len: %zu", len);
 
-	NET_ASSERT_INFO(len <= w->len, "Insufficient window length, "
-			"len: %zu, req: %zu", w->len, len);
+	NET_ASSERT(len <= w->len, "Insufficient window length, "
+		   "len: %zu, req: %zu", w->len, len);
 	while (len) {
 
 		buf = tcp_slist(&w->bufs, get, struct net_buf, user_data);
@@ -1427,7 +1486,7 @@ static struct net_buf *tcp_win_pop(struct tcp_win *w, const char *name,
 		len -= buf->len;
 	}
 
-	NET_ASSERT_INFO(len == 0, "Unfulfilled request, len: %zu", len);
+	NET_ASSERT(len == 0, "Unfulfilled request, len: %zu", len);
 
 	NET_DBG("%s len=%zu", name, net_buf_frags_len(out));
 
@@ -1440,7 +1499,7 @@ static ssize_t tcp_recv(int fd, void *buf, size_t len, int flags)
 	ssize_t bytes_received = conn->rcv->len;
 	struct net_buf *data = tcp_win_pop(conn->rcv, "RCV", bytes_received);
 
-	NET_ASSERT_INFO(bytes_received <= len, "Unimplemented");
+	NET_ASSERT(bytes_received <= len, "Unimplemented");
 
 	net_buf_linearize(buf, len, data, 0, net_buf_frags_len(data));
 
@@ -1532,7 +1591,7 @@ bool tp_input(struct net_pkt *pkt)
 	switch (type) {
 	case TP_COMMAND:
 		if (is("CONNECT", tp->op)) {
-			u8_t data_to_send[128];
+			u8_t data_to_send[CONFIG_NET_BUF_DATA_SIZE];
 			size_t len = tp_str_to_hex(data_to_send,
 						sizeof(data_to_send), tp->data);
 			tp_output(pkt->iface, buf, 1);
@@ -1550,8 +1609,8 @@ bool tp_input(struct net_pkt *pkt)
 			}
 			conn->seq = tp->seq;
 			if (len > 0) {
-				tcp_win_append(conn->snd, "SND", data_to_send,
-						len);
+				tcp_win_append(conn, conn->snd, "SND",
+						data_to_send, len);
 			}
 			tcp_in(conn, NULL);
 		}
@@ -1620,7 +1679,7 @@ bool tp_input(struct net_pkt *pkt)
 		tcp_step();
 		break;
 	default:
-		NET_ASSERT_INFO(false, "Unimplemented tp command: %s", tp->msg);
+		NET_ASSERT(false, "Unimplemented tp command: %s", tp->msg);
 	}
 
 	if (json_len) {

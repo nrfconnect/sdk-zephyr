@@ -100,6 +100,10 @@
 	status = "okay";
 };
 
+&spi4 {
+	status = "okay";
+};
+
 &timers3 {
 	status = "okay";
 
@@ -130,6 +134,11 @@
 };
 
 &usart2 {
+	current-speed = <115200>;
+	status = "okay";
+};
+
+&usart3 {
 	current-speed = <115200>;
 	status = "okay";
 };

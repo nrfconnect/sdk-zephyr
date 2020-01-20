@@ -71,10 +71,20 @@ endif # I2C
 
 if SPI
 
+config SPI_0
+	default y
+
 config SPI_1
 	default y
 
 endif # SPI
+
+if PWM
+
+config PWM_2
+	default y
+
+endif # PWM
 
 if BT
 

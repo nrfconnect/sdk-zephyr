@@ -117,6 +117,10 @@ static inline const char *state2str(bt_conn_state_t state)
 		return "connect-scan";
 	case BT_CONN_CONNECT_DIR_ADV:
 		return "connect-dir-adv";
+	case BT_CONN_CONNECT_ADV:
+		return "connect-adv";
+	case BT_CONN_CONNECT_AUTO:
+		return "connect-auto";
 	case BT_CONN_CONNECT:
 		return "connect";
 	case BT_CONN_CONNECTED:
@@ -153,6 +157,27 @@ static void notify_disconnected(struct bt_conn *conn)
 		}
 	}
 }
+
+#if defined(CONFIG_BT_REMOTE_INFO)
+void notify_remote_info(struct bt_conn *conn)
+{
+	struct bt_conn_remote_info remote_info;
+	struct bt_conn_cb *cb;
+	int err;
+
+	err = bt_conn_get_remote_info(conn, &remote_info);
+	if (err) {
+		BT_DBG("Notify remote info failed %d", err);
+		return;
+	}
+
+	for (cb = callback_list; cb; cb = cb->_next) {
+		if (cb->remote_info_available) {
+			cb->remote_info_available(conn, &remote_info);
+		}
+	}
+}
+#endif /* defined(CONFIG_BT_REMOTE_INFO) */
 
 void notify_le_param_updated(struct bt_conn *conn)
 {
@@ -213,6 +238,11 @@ static int send_conn_le_param_update(struct bt_conn *conn,
 	BT_DBG("conn %p features 0x%02x params (%d-%d %d %d)", conn,
 	       conn->le.features[0], param->interval_min,
 	       param->interval_max, param->latency, param->timeout);
+
+	/* Proceed only if connection parameters contains valid values*/
+	if (!bt_le_conn_params_valid(param)) {
+		return -EINVAL;
+	}
 
 	/* Use LE connection parameter request if both local and remote support
 	 * it; or if local role is master then use LE connection update.
@@ -309,6 +339,16 @@ static void conn_update_timeout(struct k_work *work)
 		 * state transition.
 		 */
 		bt_conn_unref(conn);
+
+		/* A new reference likely to have been released here,
+		 * Resume advertising.
+		 */
+		if (IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
+		    atomic_test_bit(bt_dev.flags, BT_DEV_KEEP_ADVERTISING) &&
+		    !atomic_test_bit(bt_dev.flags, BT_DEV_ADVERTISING)) {
+			bt_le_adv_resume();
+		}
+
 		return;
 	}
 
@@ -326,34 +366,38 @@ static void conn_update_timeout(struct k_work *work)
 		return;
 	}
 
-#if defined (CONFIG_BT_GAP_PERIPHERAL_PREF_PARAMS)
-	/* if application set own params use those, otherwise use defaults */
-	if (atomic_test_and_clear_bit(conn->flags, BT_CONN_SLAVE_PARAM_SET)) {
-		param = BT_LE_CONN_PARAM(conn->le.interval_min,
-					 conn->le.interval_max,
-					 conn->le.pending_latency,
-					 conn->le.pending_timeout);
-
-		send_conn_le_param_update(conn, param);
-	} else {
-		param = BT_LE_CONN_PARAM(CONFIG_BT_PERIPHERAL_PREF_MIN_INT,
-					 CONFIG_BT_PERIPHERAL_PREF_MAX_INT,
-					 CONFIG_BT_PERIPHERAL_PREF_SLAVE_LATENCY,
-					 CONFIG_BT_PERIPHERAL_PREF_TIMEOUT);
-
-		send_conn_le_param_update(conn, param);
-	}
+	if (IS_ENABLED(CONFIG_BT_GAP_AUTO_UPDATE_CONN_PARAMS)) {
+#if defined(CONFIG_BT_GAP_PERIPHERAL_PREF_PARAMS)
+		/* if application set own params use those, otherwise
+		 * use defaults
+		 */
+		if (atomic_test_and_clear_bit(conn->flags,
+					      BT_CONN_SLAVE_PARAM_SET)) {
+			param = BT_LE_CONN_PARAM(conn->le.interval_min,
+						conn->le.interval_max,
+						conn->le.pending_latency,
+						conn->le.pending_timeout);
+			send_conn_le_param_update(conn, param);
+		} else {
+			param = BT_LE_CONN_PARAM(
+					CONFIG_BT_PERIPHERAL_PREF_MIN_INT,
+					CONFIG_BT_PERIPHERAL_PREF_MAX_INT,
+					CONFIG_BT_PERIPHERAL_PREF_SLAVE_LATENCY,
+					CONFIG_BT_PERIPHERAL_PREF_TIMEOUT);
+			send_conn_le_param_update(conn, param);
+		}
 #else
-	/* update only if application set own params */
-	if (atomic_test_and_clear_bit(conn->flags, BT_CONN_SLAVE_PARAM_SET)) {
-		param = BT_LE_CONN_PARAM(conn->le.interval_min,
-					 conn->le.interval_max,
-					 conn->le.latency,
-					 conn->le.timeout);
-
-		send_conn_le_param_update(conn, param);
-	}
+		/* update only if application set own params */
+		if (atomic_test_and_clear_bit(conn->flags,
+					      BT_CONN_SLAVE_PARAM_SET)) {
+			param = BT_LE_CONN_PARAM(conn->le.interval_min,
+						conn->le.interval_max,
+						conn->le.latency,
+						conn->le.timeout);
+			send_conn_le_param_update(conn, param);
+		}
 #endif
+	}
 
 	atomic_set_bit(conn->flags, BT_CONN_SLAVE_PARAM_UPDATE);
 }
@@ -1197,6 +1241,10 @@ void bt_conn_recv(struct bt_conn *conn, struct net_buf *buf, u8_t flags)
 
 		break;
 	default:
+		/* BT_ACL_START_NO_FLUSH and BT_ACL_COMPLETE are not allowed on
+		 * LE-U from Controller to Host.
+		 * Only BT_ACL_POINT_TO_POINT is supported.
+		 */
 		BT_ERR("Unexpected ACL flags (0x%02x)", flags);
 		bt_conn_reset_rx_state(conn);
 		net_buf_unref(buf);
@@ -1372,11 +1420,7 @@ static struct net_buf *create_frag(struct bt_conn *conn, struct net_buf *buf)
 	struct net_buf *frag;
 	u16_t frag_len;
 
-#if CONFIG_BT_L2CAP_TX_FRAG_COUNT > 0
-	frag = bt_conn_create_pdu(&frag_pool, 0);
-#else
-	frag = bt_conn_create_pdu(NULL, 0);
-#endif
+	frag = bt_conn_create_frag(0);
 
 	if (conn->state != BT_CONN_CONNECTED) {
 		net_buf_unref(frag);
@@ -1629,6 +1673,7 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 			bt_conn_unref(conn);
 			break;
 		}
+
 		/* Notify disconnection and queue a dummy buffer to wake
 		 * up and stop the tx thread for states where it was
 		 * running.
@@ -1651,7 +1696,11 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 			notify_connected(conn);
 			bt_conn_unref(conn);
 		} else if (old_state == BT_CONN_CONNECT_SCAN) {
-			/* this indicate LE Create Connection failed */
+			/* this indicate LE Create Connection with peer address
+			 * has been stopped. This could either be triggered by
+			 * the application through bt_conn_disconnect or by
+			 * timeout set by CONFIG_BT_CREATE_CONN_TIMEOUT.
+			 */
 			if (conn->err) {
 				notify_connected(conn);
 			}
@@ -1664,8 +1713,22 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 			}
 
 			bt_conn_unref(conn);
+		} else if (old_state == BT_CONN_CONNECT_AUTO) {
+			/* this indicates LE Create Connection with filter
+			 * policy has been stopped. This can only be triggered
+			 * by the application, so don't notify.
+			 */
+			bt_conn_unref(conn);
+		} else if (old_state == BT_CONN_CONNECT_ADV) {
+			/* This can only happen when application stops the
+			 * advertiser, conn->err is never set in this case.
+			 */
+			bt_conn_unref(conn);
 		}
-
+		break;
+	case BT_CONN_CONNECT_AUTO:
+		break;
+	case BT_CONN_CONNECT_ADV:
 		break;
 	case BT_CONN_CONNECT_SCAN:
 		break;
@@ -1827,20 +1890,6 @@ void bt_conn_foreach(int type, void (*func)(struct bt_conn *conn, void *data),
 #endif /* defined(CONFIG_BT_BREDR) */
 }
 
-static void disconnect_all(struct bt_conn *conn, void *data)
-{
-	u8_t *id = (u8_t *)data;
-
-	if (conn->id == *id && conn->state == BT_CONN_CONNECTED) {
-		bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-	}
-}
-
-void bt_conn_disconnect_all(u8_t id)
-{
-	bt_conn_foreach(BT_CONN_TYPE_ALL, disconnect_all, &id);
-}
-
 struct bt_conn *bt_conn_ref(struct bt_conn *conn)
 {
 	atomic_inc(&conn->ref);
@@ -1891,6 +1940,42 @@ int bt_conn_get_info(const struct bt_conn *conn, struct bt_conn_info *info)
 	}
 
 	return -EINVAL;
+}
+
+int bt_conn_get_remote_info(struct bt_conn *conn,
+			    struct bt_conn_remote_info *remote_info)
+{
+	if (!atomic_test_bit(conn->flags, BT_CONN_AUTO_FEATURE_EXCH) ||
+	    (IS_ENABLED(CONFIG_BT_REMOTE_VERSION) &&
+	     !atomic_test_bit(conn->flags, BT_CONN_AUTO_VERSION_INFO))) {
+		return -EBUSY;
+	}
+
+	remote_info->type = conn->type;
+#if defined(CONFIG_BT_REMOTE_VERSION)
+	/* The conn->rv values will be just zeroes if the operation failed */
+	remote_info->version = conn->rv.version;
+	remote_info->manufacturer = conn->rv.manufacturer;
+	remote_info->subversion = conn->rv.subversion;
+#else
+	remote_info->version = 0;
+	remote_info->manufacturer = 0;
+	remote_info->subversion = 0;
+#endif
+
+	switch (conn->type) {
+	case BT_CONN_TYPE_LE:
+		remote_info->le.features = conn->le.features;
+		return 0;
+#if defined(CONFIG_BT_BREDR)
+	case BT_CONN_TYPE_BR:
+		/* TODO: Make sure the HCI commands to read br features and
+		*  extended features has finished. */
+		return -ENOTSUP;
+#endif
+	default:
+		return -EINVAL;
+	}
 }
 
 static int bt_hci_disconnect(struct bt_conn *conn, u8_t reason)
@@ -2029,7 +2114,7 @@ int bt_conn_create_auto_le(const struct bt_le_conn_param *param)
 	int err;
 
 	if (!atomic_test_bit(bt_dev.flags, BT_DEV_READY)) {
-		return -EINVAL;
+		return -EAGAIN;
 	}
 
 	if (!bt_le_conn_params_valid(param)) {
@@ -2042,10 +2127,6 @@ int bt_conn_create_auto_le(const struct bt_le_conn_param *param)
 
 	if (atomic_test_bit(bt_dev.flags, BT_DEV_AUTO_CONN)) {
 		return -EALREADY;
-	}
-
-	if (!bt_dev.le.wl_entries) {
-		return -EINVAL;
 	}
 
 	/* Don't start initiator if we have general discovery procedure. */
@@ -2062,17 +2143,32 @@ int bt_conn_create_auto_le(const struct bt_le_conn_param *param)
 		return -EINVAL;
 	}
 
+	conn = bt_conn_add_le(BT_ID_DEFAULT, BT_ADDR_LE_NONE);
+	if (!conn) {
+		return -ENOMEM;
+	}
+
+	bt_conn_set_state(conn, BT_CONN_CONNECT_AUTO);
+
 	err = bt_le_auto_conn(param);
 	if (err) {
 		BT_ERR("Failed to start whitelist scan");
+
+		bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
+		bt_conn_unref(conn);
 		return err;
 	}
 
+	/* Since we don't give the application a reference to manage in
+	 * this case, we need to release this reference here.
+	 */
+	bt_conn_unref(conn);
 	return 0;
 }
 
 int bt_conn_create_auto_stop(void)
 {
+	struct bt_conn *conn;
 	int err;
 
 	if (!atomic_test_bit(bt_dev.flags, BT_DEV_READY)) {
@@ -2081,6 +2177,12 @@ int bt_conn_create_auto_stop(void)
 
 	if (!atomic_test_bit(bt_dev.flags, BT_DEV_AUTO_CONN)) {
 		return -EINVAL;
+	}
+
+	conn = bt_conn_lookup_state_le(BT_ADDR_LE_NONE, BT_CONN_CONNECT_AUTO);
+	if (conn) {
+		bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
+		bt_conn_unref(conn);
 	}
 
 	err = bt_le_auto_conn_cancel();
@@ -2118,20 +2220,18 @@ struct bt_conn *bt_conn_create_le(const bt_addr_le_t *peer,
 
 	conn = bt_conn_lookup_addr_le(BT_ID_DEFAULT, peer);
 	if (conn) {
-		switch (conn->state) {
-		case BT_CONN_CONNECT_SCAN:
-			bt_conn_set_param_le(conn, param);
-			return conn;
-		case BT_CONN_CONNECT:
-		case BT_CONN_CONNECTED:
-			return conn;
-		case BT_CONN_DISCONNECTED:
-			BT_WARN("Found valid but disconnected conn object");
-			goto start_scan;
-		default:
-			bt_conn_unref(conn);
-			return NULL;
-		}
+		/* Connection object already exists.
+		 * If the connection state is "connect" or "connected" then
+		 * this connection object was created using this API but has not
+		 * yet been disconnected.
+		 * If the connection state is "disconnected" then the connection
+		 * still has valid references. The last reference of the stack
+		 * is released after the disconnected callback.
+		 */
+		BT_WARN("Found valid connection in %s state",
+			state2str(conn->state));
+		bt_conn_unref(conn);
+		return NULL;
 	}
 
 	if (peer->type == BT_ADDR_LE_PUBLIC_ID ||
@@ -2148,12 +2248,26 @@ struct bt_conn *bt_conn_create_le(const bt_addr_le_t *peer,
 		return NULL;
 	}
 
-start_scan:
 	bt_conn_set_param_le(conn, param);
 
-	bt_conn_set_state(conn, BT_CONN_CONNECT_SCAN);
+#if defined(CONFIG_BT_SMP)
+	if (!bt_dev.le.rl_size || bt_dev.le.rl_entries > bt_dev.le.rl_size) {
+		bt_conn_set_state(conn, BT_CONN_CONNECT_SCAN);
 
-	bt_le_scan_update(true);
+		bt_le_scan_update(true);
+
+		return conn;
+	}
+#endif
+	if (bt_le_direct_conn(conn)) {
+		bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
+		bt_conn_unref(conn);
+
+		bt_le_scan_update(false);
+		return NULL;
+	}
+
+	bt_conn_set_state(conn, BT_CONN_CONNECT);
 
 	return conn;
 }
@@ -2163,6 +2277,10 @@ int bt_le_set_auto_conn(const bt_addr_le_t *addr,
 			const struct bt_le_conn_param *param)
 {
 	struct bt_conn *conn;
+
+	if (!atomic_test_bit(bt_dev.flags, BT_DEV_READY)) {
+		return -EAGAIN;
+	}
 
 	if (param && !bt_le_conn_params_valid(param)) {
 		return -EINVAL;
@@ -2223,30 +2341,18 @@ struct bt_conn *bt_conn_create_slave_le(const bt_addr_le_t *peer,
 
 	conn = bt_conn_lookup_addr_le(param->id, peer);
 	if (conn) {
-		switch (conn->state) {
-		case BT_CONN_CONNECT_DIR_ADV:
-			/* Handle the case when advertising is stopped with
-			 * bt_le_adv_stop function
-			 */
-			err = bt_le_adv_start_internal(&param_int, NULL, 0,
-						       NULL, 0, peer);
-			if (err && (err != -EALREADY)) {
-				BT_WARN("Directed advertising could not be"
-					" started: %d", err);
-				bt_conn_unref(conn);
-				return NULL;
-			}
-
-		case BT_CONN_CONNECT:
-		case BT_CONN_CONNECTED:
-			return conn;
-		case BT_CONN_DISCONNECTED:
-			BT_WARN("Found valid but disconnected conn object");
-			goto start_adv;
-		default:
-			bt_conn_unref(conn);
-			return NULL;
-		}
+		/* Connection object already exists.
+		 * If the connection state is "connect-dir-adv" or "connected"
+		 * then this connection object was created using this API but
+		 * has not yet been disconnected.
+		 * If the connection state is "disconnected" then the connection
+		 * still has valid references. The last reference of the stack
+		 * is released after the disconnected callback.
+		 */
+		BT_WARN("Found valid connection in %s state",
+			state2str(conn->state));
+		bt_conn_unref(conn);
+		return NULL;
 	}
 
 	conn = bt_conn_add_le(param->id, peer);
@@ -2254,7 +2360,6 @@ struct bt_conn *bt_conn_create_slave_le(const bt_addr_le_t *peer,
 		return NULL;
 	}
 
-start_adv:
 	bt_conn_set_state(conn, BT_CONN_CONNECT_DIR_ADV);
 
 	err = bt_le_adv_start_internal(&param_int, NULL, 0, NULL, 0, peer);
@@ -2292,8 +2397,35 @@ int bt_conn_le_conn_update(struct bt_conn *conn,
 	return bt_hci_cmd_send_sync(BT_HCI_OP_LE_CONN_UPDATE, buf, NULL);
 }
 
+#if defined(CONFIG_NET_BUF_LOG)
+struct net_buf *bt_conn_create_frag_timeout_debug(size_t reserve, s32_t timeout,
+						  const char *func, int line)
+#else
+struct net_buf *bt_conn_create_frag_timeout(size_t reserve, s32_t timeout)
+#endif
+{
+	struct net_buf_pool *pool = NULL;
+
+#if CONFIG_BT_L2CAP_TX_FRAG_COUNT > 0
+	pool = &frag_pool;
+#endif
+
+#if defined(CONFIG_NET_BUF_LOG)
+	return bt_conn_create_pdu_timeout_debug(pool, reserve, timeout,
+						func, line);
+#else
+	return bt_conn_create_pdu_timeout(pool, reserve, timeout);
+#endif /* CONFIG_NET_BUF_LOG */
+}
+
+#if defined(CONFIG_NET_BUF_LOG)
+struct net_buf *bt_conn_create_pdu_timeout_debug(struct net_buf_pool *pool,
+						 size_t reserve, s32_t timeout,
+						 const char *func, int line)
+#else
 struct net_buf *bt_conn_create_pdu_timeout(struct net_buf_pool *pool,
 					   size_t reserve, s32_t timeout)
+#endif
 {
 	struct net_buf *buf;
 
@@ -2308,13 +2440,27 @@ struct net_buf *bt_conn_create_pdu_timeout(struct net_buf_pool *pool,
 	}
 
 	if (IS_ENABLED(CONFIG_BT_DEBUG_CONN)) {
+#if defined(CONFIG_NET_BUF_LOG)
+		buf = net_buf_alloc_fixed_debug(pool, K_NO_WAIT, func, line);
+#else
 		buf = net_buf_alloc(pool, K_NO_WAIT);
+#endif
 		if (!buf) {
 			BT_WARN("Unable to allocate buffer with K_NO_WAIT");
+#if defined(CONFIG_NET_BUF_LOG)
+			buf = net_buf_alloc_fixed_debug(pool, timeout, func,
+							line);
+#else
 			buf = net_buf_alloc(pool, timeout);
+#endif
 		}
 	} else {
+#if defined(CONFIG_NET_BUF_LOG)
+		buf = net_buf_alloc_fixed_debug(pool, timeout, func,
+							line);
+#else
 		buf = net_buf_alloc(pool, timeout);
+#endif
 	}
 
 	if (!buf) {
