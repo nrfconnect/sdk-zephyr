@@ -314,8 +314,8 @@ static inline char z_log_minimal_level_to_char(int level)
 				   (_level <= LOG_RUNTIME_FILTER(_filter))) {  \
 				struct log_msg_ids src_level = {	       \
 					.level = _level,		       \
-					.source_id = _id,		       \
-					.domain_id = CONFIG_LOG_DOMAIN_ID      \
+					.domain_id = CONFIG_LOG_DOMAIN_ID,      \
+					.source_id = _id		       \
 				};					       \
 									       \
 				if (is_user_context) {			       \
