@@ -301,35 +301,35 @@ static inline char z_log_minimal_level_to_char(int level)
 /******************************************************************************/
 /****************** Macros for hexdump logging ********************************/
 /******************************************************************************/
-#define __LOG_HEXDUMP(_level, _id, _filter, _data, _length, _str)	       \
-	do {								       \
-		bool is_user_context = _is_user_context();		       \
-									       \
-		if (Z_LOG_CONST_LEVEL_CHECK(_level)) {			       \
-			if (IS_ENABLED(CONFIG_LOG_MINIMAL)) {		       \
-				Z_LOG_TO_PRINTK(_level, "%s", _str);	       \
-				log_minimal_hexdump_print(_level, _data,       \
-							  _length);	       \
-			} else if (is_user_context ||			       \
-				   (_level <= LOG_RUNTIME_FILTER(_filter))) {  \
-				struct log_msg_ids src_level = {	       \
-					.level = _level,		       \
-					.domain_id = CONFIG_LOG_DOMAIN_ID,      \
-					.source_id = _id		       \
-				};					       \
-									       \
-				if (is_user_context) {			       \
-					log_hexdump_from_user(src_level, _str, \
-							      _data, _length); \
-				} else if (IS_ENABLED(CONFIG_LOG_IMMEDIATE)) { \
-					log_hexdump_sync(src_level, _str,      \
-							 _data, _length);      \
-				} else {				       \
-					log_hexdump(_str, _data, _length,      \
-						    src_level);		       \
-				}					       \
-			}						       \
-		}							       \
+#define __LOG_HEXDUMP(_level, _id, _filter, _data, _length, _str)				\
+	do {											\
+		bool is_user_context = _is_user_context();					\
+												\
+		if (Z_LOG_CONST_LEVEL_CHECK(_level)) {						\
+			if (IS_ENABLED(CONFIG_LOG_MINIMAL)) {					\
+				Z_LOG_TO_PRINTK(_level, "%s", _str);				\
+				log_minimal_hexdump_print(_level, (const char *)_data,		\
+							  _length);				\
+			} else if (is_user_context ||						\
+				   (_level <= LOG_RUNTIME_FILTER(_filter))) {			\
+				struct log_msg_ids src_level = {				\
+					.level = _level,					\
+					.domain_id = CONFIG_LOG_DOMAIN_ID,			\
+					.source_id = _id					\
+				};								\
+												\
+				if (is_user_context) {						\
+					log_hexdump_from_user(src_level, _str,			\
+							      (const u8_t *)_data, _length);	\
+				} else if (IS_ENABLED(CONFIG_LOG_IMMEDIATE)) {			\
+					log_hexdump_sync(src_level, _str,			\
+							 (const u8_t *)_data, _length);		\
+				} else {							\
+					log_hexdump(_str, (const u8_t *)_data, _length,		\
+						    src_level);					\
+				}								\
+			}									\
+		}										\
 	} while (false)
 
 #define Z_LOG_HEXDUMP(_level, _data, _length, _str)	       \
