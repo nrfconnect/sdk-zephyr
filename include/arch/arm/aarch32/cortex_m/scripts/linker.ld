@@ -35,7 +35,7 @@
 
 #if USE_PARTITION_MANAGER
 #include <pm_config.h>
-#ifdef LINK_MCUBOOT_INTO_S1
+#ifdef LINK_INTO_S1
 /* We are linking mcuboot against S1, S0 is Image 1 primary */
 _image_1_primary_slot_id = PM_S0_ID;
 
@@ -47,7 +47,7 @@ _image_1_primary_slot_id = PM_S1_ID;
 #endif /* PM_S1_ID */
 
 #define ROM_ADDR PM_ADDRESS
-#endif /* LINK_MCUBOOT_INTO_S1 */
+#endif /* LINK_INTO_S1 */
 #define ROM_SIZE PM_SIZE
 #else
 
