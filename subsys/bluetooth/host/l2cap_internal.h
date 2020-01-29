@@ -202,14 +202,12 @@ struct bt_l2cap_le_credits {
 struct bt_l2cap_fixed_chan {
 	u16_t		cid;
 	int (*accept)(struct bt_conn *conn, struct bt_l2cap_chan **chan);
-	bt_l2cap_chan_destroy_t destroy;
 };
 
-#define BT_L2CAP_CHANNEL_DEFINE(_name, _cid, _accept, _destroy)         \
+#define BT_L2CAP_CHANNEL_DEFINE(_name, _cid, _accept)		\
 	const Z_STRUCT_SECTION_ITERABLE(bt_l2cap_fixed_chan, _name) = { \
-				.cid = _cid,                            \
-				.accept = _accept,                      \
-				.destroy = _destroy,                    \
+				.cid = _cid,			\
+				.accept = _accept,		\
 			}
 
 /* Need a name different than bt_l2cap_fixed_chan for a different section */
