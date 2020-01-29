@@ -344,7 +344,7 @@ static void att_process(struct bt_att *att)
 
 static u8_t att_handle_rsp(struct bt_att *att, void *pdu, u16_t len, u8_t err)
 {
-	bt_att_func_t func = NULL;
+	bt_att_func_t func;
 	void *params;
 
 	BT_DBG("err 0x%02x len %u: %s", err, len, bt_hex(pdu, len));
@@ -378,12 +378,11 @@ static u8_t att_handle_rsp(struct bt_att *att, void *pdu, u16_t len, u8_t err)
 	att_req_destroy(att->req);
 	att->req = NULL;
 
+	func(att->chan.chan.conn, err, pdu, len, params);
+
 process:
 	/* Process pending requests */
 	att_process(att);
-	if (func) {
-		func(att->chan.chan.conn, err, pdu, len, params);
-	}
 
 	return 0;
 }
