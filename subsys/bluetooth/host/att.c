@@ -18,7 +18,7 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/uuid.h>
 #include <bluetooth/gatt.h>
-#include <bluetooth/hci_driver.h>
+#include <drivers/bluetooth/hci_driver.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_ATT)
 #define LOG_MODULE_NAME bt_att
@@ -344,7 +344,7 @@ static void att_process(struct bt_att *att)
 
 static u8_t att_handle_rsp(struct bt_att *att, void *pdu, u16_t len, u8_t err)
 {
-	bt_att_func_t func;
+	bt_att_func_t func = NULL;
 	void *params;
 
 	BT_DBG("err 0x%02x len %u: %s", err, len, bt_hex(pdu, len));
@@ -378,11 +378,12 @@ static u8_t att_handle_rsp(struct bt_att *att, void *pdu, u16_t len, u8_t err)
 	att_req_destroy(att->req);
 	att->req = NULL;
 
-	func(att->chan.chan.conn, err, pdu, len, params);
-
 process:
 	/* Process pending requests */
 	att_process(att);
+	if (func) {
+		func(att->chan.chan.conn, err, pdu, len, params);
+	}
 
 	return 0;
 }
@@ -2127,8 +2128,6 @@ static void att_timeout(struct k_work *work)
 	/* Consider the channel disconnected */
 	bt_gatt_disconnected(ch->chan.conn);
 	ch->chan.conn = NULL;
-
-	k_mem_slab_free(&att_slab, (void **)&att);
 }
 
 static void bt_att_connected(struct bt_l2cap_chan *chan)
@@ -2160,8 +2159,6 @@ static void bt_att_disconnected(struct bt_l2cap_chan *chan)
 	att_reset(att);
 
 	bt_gatt_disconnected(ch->chan.conn);
-
-	k_mem_slab_free(&att_slab, (void **)&att);
 }
 
 #if defined(CONFIG_BT_SMP)
@@ -2237,7 +2234,17 @@ static int bt_att_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)
 	return 0;
 }
 
-BT_L2CAP_CHANNEL_DEFINE(att_fixed_chan, BT_L2CAP_CID_ATT, bt_att_accept);
+void bt_att_destroy(struct bt_l2cap_chan *chan)
+{
+	struct bt_att *att = ATT_CHAN(chan);
+
+	BT_DBG("chan %p", chan);
+
+	k_mem_slab_free(&att_slab, (void **)&att);
+}
+
+BT_L2CAP_CHANNEL_DEFINE(att_fixed_chan, BT_L2CAP_CID_ATT, bt_att_accept,
+			bt_att_destroy);
 
 void bt_att_init(void)
 {
@@ -2268,9 +2275,7 @@ struct bt_att_req *bt_att_req_alloc(s32_t timeout)
 
 	BT_DBG("req %p", req);
 
-	req->func = NULL;
-	req->destroy = NULL;
-	req->user_data = NULL;
+	memset(req, 0, sizeof(*req));
 
 	return req;
 }

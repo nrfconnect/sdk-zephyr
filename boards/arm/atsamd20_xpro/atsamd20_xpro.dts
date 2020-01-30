@@ -48,9 +48,10 @@
 	status = "okay";
 	compatible = "atmel,sam0-spi";
 	dipo = <0>;
-	dopo = <2>;
+	dopo = <1>;
 	#address-cells = <1>;
 	#size-cells = <0>;
+	cs-gpios = <&porta 5 0>;
 };
 
 &sercom3 {
@@ -76,8 +77,9 @@
 		#size-cells = <1>;
 
 		/*
-		 * The final 16 KiB is reserved for the application
-		 * and is used by NFFS if enabled.
+		 * The final 16 KiB is reserved for the application.
+		 * Storage partition will be used by FCB/LittleFS/NVS
+		 * if enabled.
 		 */
 		storage_partition: partition@3c000 {
 			label = "storage";

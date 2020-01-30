@@ -1998,6 +1998,7 @@ class ProjectBuilder(FilterBuilder):
         self.extra_args = kwargs.get('extra_args', [])
         self.device_testing = kwargs.get('device_testing', False)
         self.cmake_only = kwargs.get('cmake_only', False)
+        self.cleanup = kwargs.get('cleanup', False)
         self.coverage = kwargs.get('coverage', False)
         self.inline_logs = kwargs.get('inline_logs', False)
 
@@ -2123,6 +2124,38 @@ class ProjectBuilder(FilterBuilder):
         elif op == "report":
             with report_lock:
                 self.report_out()
+
+            if self.cleanup and self.instance.status == "passed":
+                pipeline.put({
+                    "op": "cleanup",
+                    "test": self.instance
+                })
+
+        elif op == "cleanup":
+            self.cleanup_artifacts()
+
+    def cleanup_artifacts(self):
+        logger.debug("Cleaning up {}".format(self.instance.build_dir))
+        whitelist = [
+            'zephyr/.config',
+            'handler.log',
+            'build.log',
+            'device.log',
+            ]
+        whitelist = [os.path.join(self.instance.build_dir, file) for file in whitelist]
+
+        for dirpath, dirnames, filenames in os.walk(self.instance.build_dir, topdown=False):
+            for name in filenames:
+                path = os.path.join(dirpath, name)
+                if path not in whitelist:
+                    os.remove(path)
+            # Remove empty directories and symbolic links to directories
+            for dir in dirnames:
+                path = os.path.join(dirpath, dir)
+                if os.path.islink(path):
+                    os.remove(path)
+                elif not os.listdir(path):
+                    os.rmdir(path)
 
     def report_out(self):
         total_tests_width = len(str(self.suite.total_tests))
@@ -2279,6 +2312,7 @@ class TestSuite:
         self.coverage_platform = []
         self.build_only = False
         self.cmake_only = False
+        self.cleanup = False
         self.enable_slow = False
         self.device_testing = False
         self.fixture = []
@@ -2659,6 +2693,7 @@ class TestSuite:
 
         discards = {}
         platform_filter = kwargs.get('platform')
+        exclude_platform = kwargs.get('exclude_platform')
         testcase_filter = kwargs.get('run_individual_tests')
         arch_filter = kwargs.get('arch')
         tag_filter = kwargs.get('tag')
@@ -2700,6 +2735,9 @@ class TestSuite:
                     self.device_testing,
                     self.fixture
                 )
+                if plat.name in exclude_platform:
+                    discards[instance] = "Platform is excluded on command line."
+                    continue
 
                 if (plat.arch == "unit") != (tc.type == "unit"):
                     # Discard silently
@@ -2886,6 +2924,7 @@ class TestSuite:
                                         extra_args=self.extra_args,
                                         device_testing=self.device_testing,
                                         cmake_only=self.cmake_only,
+                                        cleanup=self.cleanup,
                                         valgrind=self.enable_valgrind,
                                         inline_logs=self.inline_logs
                                         )
@@ -2987,15 +3026,13 @@ class TestSuite:
                         classname="%s:%s" % (instance.platform.name, os.path.basename(instance.testcase.name)),
                         name="%s" % (k), time="%f" % handler_time)
                     if instance.results[k] in ['FAIL', 'BLOCK']:
-                        el = None
-
                         if instance.results[k] == 'FAIL':
                             el = ET.SubElement(
                                 eleTestcase,
                                 'failure',
                                 type="failure",
                                 message="failed")
-                        elif instance.results[k] == 'BLOCK':
+                        else:
                             el = ET.SubElement(
                                 eleTestcase,
                                 'error',
@@ -3031,7 +3068,7 @@ class TestSuite:
         for instance in self.instances.values():
             handler_time = instance.metrics.get('handler_time', 0)
             duration += handler_time
-            if instance.status == "failed":
+            if instance.status in ["failed", "timeout"]:
                 if instance.reason in ['build_error', 'handler_crash']:
                     errors += 1
                 else:
@@ -3079,7 +3116,7 @@ class TestSuite:
                 name="%s" % (instance.testcase.name),
                 time="%f" % handler_time)
 
-            if instance.status == "failed":
+            if instance.status in ["failed", "timeout"]:
                 failure = ET.SubElement(
                     eleTestcase,
                     'failure',
@@ -3115,7 +3152,7 @@ class TestSuite:
                           "rom_size"]
             cw = csv.DictWriter(csvfile, fieldnames, lineterminator=os.linesep)
             cw.writeheader()
-            for instance in sorted(self.instances.values()):
+            for instance in self.instances.values():
                 rowdict = {"test": instance.testcase.name,
                            "arch": instance.platform.arch,
                            "platform": instance.platform.name,
@@ -3173,6 +3210,13 @@ Artificially long but functional example:
              "specified. If this option is not used, then platforms marked "
              "as default in the platform metadata file will be chosen "
              "to build and test. ")
+
+    parser.add_argument("-P", "--exclude-platform", action="append", default=[],
+        help="""Exclude platforms and do not build or run any tests
+        on those platforms. This option can be called multiple times.
+        """
+        )
+
     parser.add_argument(
         "-a", "--arch", action="append",
         help="Arch filter for testing. Takes precedence over --platform. "
@@ -3344,6 +3388,10 @@ Artificially long but functional example:
     parser.add_argument(
         "--cmake-only", action="store_true",
         help="Only run cmake, do not build or run.")
+
+    parser.add_argument(
+        "-M", "--runtime-artifact-cleanup", action="store_true",
+        help="Delete artifacts of passing tests.")
 
     parser.add_argument(
         "-j", "--jobs", type=int,
@@ -3762,23 +3810,6 @@ def export_tests(filename, tests):
                 logger.info("{} can't be exported".format(test))
 
 
-def native_and_unit_first(a, b):
-    if a[0].startswith('unit_testing'):
-        return -1
-    if b[0].startswith('unit_testing'):
-        return 1
-    if a[0].startswith('native_posix'):
-        return -1
-    if b[0].startswith('native_posix'):
-        return 1
-    if a[0].split("/", 1)[0].endswith("_bsim"):
-        return -1
-    if b[0].split("/", 1)[0].endswith("_bsim"):
-        return 1
-
-    return (a > b) - (a < b)
-
-
 class HardwareMap:
 
     schema_path = os.path.join(ZEPHYR_BASE, "scripts", "sanity_chk", "hwmap-schema.yaml")
@@ -4031,6 +4062,7 @@ def main():
     # Set testsuite options from command line.
     suite.build_only = options.build_only
     suite.cmake_only = options.cmake_only
+    suite.cleanup = options.runtime_artifact_cleanup
     suite.test_only = options.test_only
     suite.enable_slow = options.enable_slow
     suite.device_testing = options.device_testing
@@ -4185,6 +4217,7 @@ def main():
             build_only=options.build_only,
             enable_slow=options.enable_slow,
             platform=options.platform,
+            exclude_platform=options.exclude_platform,
             arch=options.arch,
             tag=options.tag,
             exclude_tag=options.exclude_tag,
@@ -4226,8 +4259,9 @@ def main():
         return
 
     if options.subset:
-        # suite.instances = OrderedDict(sorted(suite.instances.items(),
-        #                    key=cmp_to_key(native_and_unit_first)))
+        suite.instances = OrderedDict(sorted(suite.instances.items(),
+                            key=lambda x: x[0][x[0].find("/") + 1:]))
+
         subset, sets = options.subset.split("/")
         total = len(suite.instances)
         per_set = round(total / int(sets))
@@ -4331,4 +4365,5 @@ if __name__ == "__main__":
     try:
         main()
     finally:
-        os.system("stty sane")
+        if os.isatty(1): # stdout is interactive
+            os.system("stty sane")

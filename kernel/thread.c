@@ -280,7 +280,7 @@ const char *k_thread_state_str(k_tid_t thread_id)
 		return "pending";
 		break;
 	case _THREAD_PRESTART:
-		return "restart";
+		return "prestart";
 		break;
 	case _THREAD_DEAD:
 		return "dead";
@@ -524,6 +524,11 @@ void z_setup_new_thread(struct k_thread *new_thread,
 
 	arch_new_thread(new_thread, stack, stack_size, entry, p1, p2, p3,
 			  prio, options);
+
+#ifdef CONFIG_SMP
+	/* switch handle must be non-null except when inside z_swap() */
+	new_thread->switch_handle = new_thread;
+#endif
 
 #ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
 #ifndef CONFIG_THREAD_USERSPACE_LOCAL_DATA_ARCH_DEFER_SETUP

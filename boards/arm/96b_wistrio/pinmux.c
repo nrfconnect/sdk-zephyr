@@ -5,10 +5,10 @@
  */
 
 #include <device.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <init.h>
 #include <kernel.h>
-#include <pinmux.h>
+#include <drivers/pinmux.h>
 #include <sys/sys_io.h>
 
 #include <pinmux/stm32/pinmux_stm32.h>

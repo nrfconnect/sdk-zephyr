@@ -1713,6 +1713,12 @@ static void conn_cleanup(struct ll_conn *conn, u8_t reason)
 				    ticker_op_stop_cb, (void *)lll);
 	LL_ASSERT((ticker_status == TICKER_STATUS_SUCCESS) ||
 		  (ticker_status == TICKER_STATUS_BUSY));
+
+	/* Invalidate the connection context */
+	lll->handle = 0xFFFF;
+
+	/* Demux and flush Tx PDUs that remain enqueued in thread context */
+	ull_conn_tx_demux(UINT8_MAX);
 }
 
 static void tx_ull_flush(struct ll_conn *conn)
@@ -1733,12 +1739,13 @@ static void tx_ull_flush(struct ll_conn *conn)
 static void tx_lll_flush(void *param)
 {
 	struct ll_conn *conn = (void *)HDR_LLL2EVT(param);
+	u16_t handle = ll_conn_handle_get(conn);
 	struct lll_conn *lll = param;
 	struct node_rx_pdu *rx;
 	struct node_tx *tx;
 	memq_link_t *link;
 
-	lll_conn_flush(lll);
+	lll_conn_flush(handle, lll);
 
 	link = memq_dequeue(lll->memq_tx.tail, &lll->memq_tx.head,
 			    (void **)&tx);
@@ -3187,7 +3194,8 @@ static inline void event_len_prep(struct ll_conn *conn)
 		    (!feature_coded_phy && !feature_phy_2m)) {
 			rx_time = PKT_US(LL_LENGTH_OCTETS_RX_MAX, 0);
 #if defined(CONFIG_BT_CTLR_PHY)
-			tx_time = conn->default_tx_time;
+			tx_time = MIN(PKT_US(LL_LENGTH_OCTETS_RX_MAX, 0),
+				      conn->default_tx_time);
 #else /* !CONFIG_BT_CTLR_PHY */
 			tx_time = PKT_US(conn->default_tx_octets, 0);
 #endif /* !CONFIG_BT_CTLR_PHY */

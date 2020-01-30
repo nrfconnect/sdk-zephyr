@@ -5,8 +5,8 @@
 # Order is important; for each modified file, the last matching
 # pattern takes the most precedence.
 # That is, with the last pattern being
-# *.rst                                     @dbkinder
-# if only .rst files are being modified, only dbkinder is
+# *.rst                                     @nashif
+# if only .rst files are being modified, only nashif is
 # automatically requested for review, but you can manually
 # add others as needed.
 
@@ -27,6 +27,7 @@
 /soc/arm/arm/mps2/                        @fvincenzo
 /soc/arm/atmel_sam/sam3x/                 @ioannisg
 /soc/arm/atmel_sam/sam4s/                 @fallrisk
+/soc/arm/bcm*/                            @sbranden
 /soc/arm/nxp*/                            @MaureenHelm
 /soc/arm/nordic_nrf/                      @ioannisg
 /soc/arm/st_stm32/                        @erwango
@@ -100,12 +101,13 @@
 # All cmake related files
 /cmake/                                   @SebastianBoe @nashif
 /CMakeLists.txt                           @SebastianBoe @nashif
-# /doc/                                     @dbkinder
+/doc/                                     @dbkinder
 /doc/guides/coccinelle.rst                @himanshujha199640 @JuliaLawall
 /doc/CMakeLists.txt                       @carlescufi
 /doc/scripts/                             @carlescufi
 /doc/guides/bluetooth/                    @joerchan @jhedberg @Vudentz
 /doc/reference/bluetooth/                 @joerchan @jhedberg @Vudentz
+/doc/reference/kernel/other/resource_mgmt.rst @pabigot
 /drivers/*/*cc13xx_cc26xx*                @bwitherspoon
 /drivers/*/*mcux*                         @MaureenHelm
 /drivers/*/*stm32*                        @erwango
@@ -120,6 +122,7 @@
 /drivers/counter/counter_cmos.c           @andrewboie
 /drivers/display/                         @vanwinkeljan
 /drivers/display/display_framebuf.c       @andrewboie
+/drivers/dma/*dw*                         @tbursztyka
 /drivers/dma/*sam0*                       @Sizurka
 /drivers/dma/dma_stm32*                   @cybertale
 /drivers/eeprom/                          @henrikbrixandersen
@@ -204,6 +207,7 @@
 /dts/arc/                                 @vonhust @ruuddw @iriszzw
 /dts/arm/atmel/samr21.dtsi                @benpicco
 /dts/arm/atmel/sam*5*.dtsi                @benpicco
+/dts/arm/broadcom/                        @sbranden
 /dts/arm/st/                              @erwango
 /dts/arm/ti/cc13?2*                       @bwitherspoon
 /dts/arm/ti/cc26?2*                       @bwitherspoon
@@ -211,6 +215,10 @@
 /dts/arm/nordic/                          @ioannisg @carlescufi
 /dts/arm/nxp/                             @MaureenHelm
 /dts/arm/microchip/                       @franciscomunoz @albertofloyd @scottwcpg
+/dts/arm/silabs/efm32gg11b*               @oanerer
+/dts/arm/silabs/efm32_jg_pg*              @chrta
+/dts/arm/silabs/efm32jg12b*               @chrta
+/dts/arm/silabs/efm32pg12b*               @chrta
 /dts/riscv/microsemi-miv.dtsi             @galak
 /dts/riscv/rv32m1*                        @MaureenHelm
 /dts/riscv/riscv32-fe310.dtsi             @nategraff-sifive
@@ -268,6 +276,7 @@
 /include/sys/atomic.h                     @andrewboie @andyross
 /include/bluetooth/                       @joerchan @jhedberg @Vudentz
 /include/cache.h                          @andrewboie @andyross
+/include/canbus/                          @alexanderwachter
 /include/device.h                         @wentongwu @nashif
 /include/display/                         @vanwinkeljan
 /include/dt-bindings/clock/kinetis_mcg.h  @henrikbrixandersen
@@ -319,7 +328,6 @@
 /samples/drivers/display/                 @vanwinkeljan
 /samples/drivers/ht16k33/                 @henrikbrixandersen
 /samples/drivers/lora/                    @Mani-Sadhasivam
-/samples/gui/                             @vanwinkeljan
 /samples/net/                             @jukkar @tbursztyka @pfalcon
 /samples/net/dns_resolve/                 @jukkar @tbursztyka @pfalcon
 /samples/net/lwm2m_client/                @mike-scott
@@ -333,6 +341,7 @@
 /samples/subsys/shell/                    @jakub-uC @nordic-krch
 /samples/subsys/usb/                      @jfischer-phytec-iot @finikorg
 /samples/subsys/power/                    @wentongwu @pabigot
+/samples/userspace/                       @andrewboie
 /scripts/coccicheck                       @himanshujha199640 @JuliaLawall
 /scripts/coccinelle/                      @himanshujha199640 @JuliaLawall
 /scripts/kconfig/                         @ulfalizer
@@ -358,6 +367,7 @@
 /subsys/bluetooth/                        @joerchan @jhedberg @Vudentz
 /subsys/bluetooth/controller/             @carlescufi @cvinayak @thoh-ot
 /subsys/bluetooth/mesh/                   @jhedberg @trond-snekvik @joerchan @Vudentz
+/subsys/canbus/                           @alexanderwachter
 /subsys/cpp/                              @pabigot @vanwinkeljan
 /subsys/debug/                            @nashif
 /subsys/debug/asan_hacks.c                @vanwinkeljan @aescolar
@@ -421,5 +431,5 @@
 /tests/subsys/settings/                   @nvlsianpu
 /tests/subsys/shell/                      @jakub-uC @nordic-krch
 # Get all docs reviewed
-# *.rst                                     @dbkinder
+*.rst                                     @nashif
 *posix*.rst                               @aescolar

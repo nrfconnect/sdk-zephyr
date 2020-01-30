@@ -9,7 +9,7 @@ We are pleased to announce the release of Zephyr kernel version 2.2.0.
 
 Major enhancements with this release include:
 
-* <TBD>
+* CANopen protocol support through 3rd party CANopenNode stack
 
 The following sections provide detailed lists of changes by component.
 
@@ -53,6 +53,14 @@ Stable API changes in this release
     which can be set by the application to a callback to receive status events
     from the USB stack. The parameter can also be set to NULL if no callback is required.
 
+* nRF flash driver
+
+  * The nRF Flash driver has changed its default write block size to 32-bit
+    aligned. Previous emulation of 8-bit write block size can be selected using
+    the CONFIG_SOC_FLASH_NRF_EMULATE_ONE_BYTE_WRITE_ACCESS Kconfig option.
+    Usage of 8-bit write block size emulation is only recommended for
+    compatibility with older storage contents.
+
 Removed APIs in this release
 ============================
 
@@ -61,6 +69,10 @@ Removed APIs in this release
   * SHELL_CREATE_STATIC_SUBCMD_SET (deprecated), replaced by
     SHELL_STATIC_SUBCMD_SET_CREATE
   * SHELL_CREATE_DYNAMIC_CMD (deprecated), replaced by SHELL_DYNAMIC_CMD_CREATE
+
+* Newtron Flash File System (NFFS) was removed. NFFS was removed since it has
+    serious issues, not fixed since a long time. Where it was possible
+    NFFS usage was replaced by LittleFS usage as the better substitute.
 
 Kernel
 ******
@@ -76,7 +88,7 @@ Architectures
 
 * ARM:
 
-  * <TBD>
+  * Removed support for CC2650
 
 * POSIX:
 
@@ -136,7 +148,9 @@ Drivers and Sensors
 
 * Counter
 
-  * <TBD>
+  * The counter_read() API function is deprecated in favor of
+    counter_get_value(). The new API function adds a return value for
+    indicating whether the counter was read successfully.
 
 * Display
 
@@ -271,6 +285,10 @@ Build and Infrastructure
 
 * The minimum Python version supported by Zephyr's build system and tools is
   now 3.6.
+* Renamed :file:`generated_dts_board.h` and :file:`generated_dts_board.conf` to
+  :file:`devicetree.h` and :file:`devicetree.conf`, along with various related
+  identifiers. Including :file:`generated_dts_board.h` now generates a warning
+  saying to include :file:`devicetree.h` instead.
 * <Other items TBD>
 
 Libraries / Subsystems
