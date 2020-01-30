@@ -12,8 +12,7 @@
 #include <device.h>
 #include <fs/fs.h>
 #include <fs/littlefs.h>
-#include <storage/flash_map.h>
-
+#include <pm_config.h>
 /* Matches LFS_NAME_MAX */
 #define MAX_PATH_LEN 255
 
@@ -21,7 +20,7 @@ FS_LITTLEFS_DECLARE_DEFAULT_CONFIG(storage);
 static struct fs_mount_t lfs_storage_mnt = {
 	.type = FS_LITTLEFS,
 	.fs_data = &storage,
-	.storage_dev = (void *)DT_FLASH_AREA_STORAGE_ID,
+	.storage_dev = (void *)PM_LITTLEFS_ID,
 	.mnt_point = "/lfs",
 };
 

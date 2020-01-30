@@ -235,6 +235,7 @@ void test_lfs_perf(void)
 	zassert_equal(small_8_1K_cust(), TC_PASS,
 		      "failed");
 
+#if !USE_PARTITION_MANAGER
 	k_sleep(K_MSEC(100));   /* flush log messages */
 	zassert_equal(write_read("medium 32x2K dflt",
 				 &testfs_medium_mnt,
@@ -248,4 +249,5 @@ void test_lfs_perf(void)
 				 4096, 64),
 		      TC_PASS,
 		      "failed");
+#endif
 }

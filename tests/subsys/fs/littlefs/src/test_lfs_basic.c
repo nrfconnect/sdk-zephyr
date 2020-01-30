@@ -522,10 +522,12 @@ void test_lfs_basic(void)
 	zassert_equal(fs_unmount(mp), 0,
 		      "unmount2 small failed");
 
+#if !USE_PARTITION_MANAGER
 	zassert_equal(check_medium(), TC_PASS,
 		      "check medium failed");
 
 	zassert_equal(check_large(), TC_PASS,
 		      "check large failed");
+#endif
 
 }

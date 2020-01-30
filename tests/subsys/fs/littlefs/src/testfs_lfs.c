@@ -9,14 +9,22 @@
 #include <storage/flash_map.h>
 #include "testfs_lfs.h"
 
+#if USE_PARTITION_MANAGER
+#include <pm_config.h>
+#define FLASH_AREA_SMALL_ID PM_LITTLEFS_ID
+#else
+#define FLASH_AREA_SMALL_ID DT_FLASH_AREA_SMALL_ID
+#endif
+
 FS_LITTLEFS_DECLARE_DEFAULT_CONFIG(small);
 struct fs_mount_t testfs_small_mnt = {
 	.type = FS_LITTLEFS,
 	.fs_data = &small,
-	.storage_dev = (void *)DT_FLASH_AREA_SMALL_ID,
+	.storage_dev = (void *)FLASH_AREA_SMALL_ID,
 	.mnt_point = TESTFS_MNT_POINT_SMALL,
 };
 
+#if !USE_PARTITION_MANAGER
 FS_LITTLEFS_DECLARE_CUSTOM_CONFIG(medium, MEDIUM_IO_SIZE, MEDIUM_IO_SIZE,
 				  MEDIUM_CACHE_SIZE, MEDIUM_LOOKAHEAD_SIZE);
 struct fs_mount_t testfs_medium_mnt = {
@@ -47,6 +55,7 @@ struct fs_mount_t testfs_large_mnt = {
 	.storage_dev = (void *)DT_FLASH_AREA_LARGE_ID,
 	.mnt_point = TESTFS_MNT_POINT_LARGE,
 };
+#endif
 
 int testfs_lfs_wipe_partition(const struct fs_mount_t *mp)
 {
