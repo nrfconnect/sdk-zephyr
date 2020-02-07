@@ -333,7 +333,9 @@ def generateComplianceStage(AGENT_LABELS, DOCKER_REG, IMAGE_TAG, JOB_NAME, CI_ST
 
               // Run the compliance check
               try {
-                sh "(source ../zephyr/zephyr-env.sh && ../tools/ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE)"
+                sh "source ../zephyr/zephyr-env.sh &&  \
+                    pip install --user -r ../tools/ci-tools/requirements.txt && \
+                    ../tools/ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE"
               }
               finally {
                 junit 'compliance.xml'
