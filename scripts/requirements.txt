@@ -1,27 +1,27 @@
 Pillow
-PyYAML>=5.1
+PyYAML==5.3
 anytree
-breathe>=4.9.1
+breathe==4.14.1
 colorama
-docutils>=0.14
+docutils==0.16
 gcovr
-git-spindle>=2.0
+git-spindle==3.4.4
 gitlint
 intelhex
 junit2html
 packaging
 ply>=3.10
-pyelftools>=0.24
+pyelftools==0.26
 pykwalify
-pyocd>=0.24.0
+pyocd==0.24.1
 pyserial
 pytest
-sphinx>=1.7.5
+sphinx==2.3.0
 sphinx_rtd_theme
 sphinx-tabs
 sphinxcontrib-svg2pdfconverter
 tabulate
-west>=0.6.2
-wheel>=0.30.0
+west==0.6.2
+wheel==0.34.2
 # "win32" is used for 64-bit Windows as well
 windows-curses; sys_platform == "win32"
