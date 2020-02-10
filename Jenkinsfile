@@ -120,10 +120,12 @@ pipeline {
       }
 
       CI_STATE.SELF.IS_MERGEUP = false
-      if (((CI_STATE.SELF.CHANGE_TITLE.toLowerCase().contains('mergeup')  ) || (CI_STATE.SELF.CHANGE_TITLE.toLowerCase().contains('upmerge')  )) &&
-          ((CI_STATE.SELF.CHANGE_BRANCH.toLowerCase().contains('mergeup') ) || (CI_STATE.SELF.CHANGE_BRANCH.toLowerCase().contains('upmerge') ))) {
-        CI_STATE.SELF.IS_MERGEUP = true
-        println 'This is a MERGE-UP PR.   CI_STATE.SELF.IS_MERGEUP=' + CI_STATE.SELF.IS_MERGEUP
+      if (CI_STATE.SELF.containsKey('CHANGE_TITLE')) {
+        if (((CI_STATE.SELF.CHANGE_TITLE.toLowerCase().contains('mergeup')  ) || (CI_STATE.SELF.CHANGE_TITLE.toLowerCase().contains('upmerge')  )) &&
+            ((CI_STATE.SELF.CHANGE_BRANCH.toLowerCase().contains('mergeup') ) || (CI_STATE.SELF.CHANGE_BRANCH.toLowerCase().contains('upmerge') ))) {
+          CI_STATE.SELF.IS_MERGEUP = true
+          println 'This is a MERGE-UP PR.   CI_STATE.SELF.IS_MERGEUP=' + CI_STATE.SELF.IS_MERGEUP
+        }
       }
 
       if (CI_STATE.SELF.CRON == 'COMMIT') {
