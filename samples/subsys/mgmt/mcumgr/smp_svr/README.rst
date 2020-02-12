@@ -47,6 +47,14 @@ Bluetooth Low Energy (BLE) and do not have a built-in or pluggable BLE radio,
 you can build one and use it following the instructions in
 :ref:`bluetooth-hci-uart-bluez`.
 
+Building and Running using NCS
+******************************
+Building the sammple as a part off nRF Connect SDK is simplified in comparasion
+to the vanilla zephyr sample.
+
+.. include:: /includes/build_and_run.txt
+
+
 Building and Running
 ********************
 
