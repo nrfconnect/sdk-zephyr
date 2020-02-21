@@ -10,3 +10,13 @@ properties:
 
     interrupts:
       required: true
+
+    ram-regions:
+      type: array
+      description: number of lockable ram regions and granularity
+      required: true
+
+    flash-regions:
+      type: array
+      description: number of lockable flash regions and granularity
+      required: true
