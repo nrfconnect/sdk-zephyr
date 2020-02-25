@@ -5,7 +5,7 @@ zephyr_include_directories(
   include
   )
 
-if (CONFIG_SETTINGS_FCB OR CONFIG_SETTINGS_NVS)
+if (ZEPHYR_NRF_MODULE_DIR AND (CONFIG_SETTINGS_FCB OR CONFIG_SETTINGS_NVS))
   # These settings backends require a partition in flash
   add_partition_manager_config(pm.yml)
 endif()
