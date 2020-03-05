@@ -10,3 +10,4 @@ Storage
    disk/sdhc.rst
    flash_map/flash_map.rst
    fcb/fcb.rst
+   stream/stream_flash.rst
