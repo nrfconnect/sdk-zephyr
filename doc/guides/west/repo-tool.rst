@@ -266,7 +266,9 @@ discussed here. Run ``west <command> -h`` for detailed help.
   manifest file, such as URL, revision, path, etc. The printed information can
   be controlled using the ``-f`` option.
 
-- ``west manifest``: Manipulates manifest files. See :ref:`west-manifest-cmd`.
+- ``west manifest --freeze [-o outfile]``: Save a "frozen" representation of
+  the current manifest; all ``revision`` fields are converted to SHAs based on
+  the current ``manifest-rev`` branches.
 
 - ``west manifest --validate``: Ensure the current manifest file is
   well-formed. Print information about what's wrong and fail the process in
