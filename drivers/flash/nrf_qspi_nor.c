@@ -502,11 +502,16 @@ static int qspi_nor_read(struct device *dev, off_t addr, void *dest,
 		return -EINVAL;
 	}
 
+	u8_t buffer[size] __attribute__ ((aligned (32)));
+
 	qspi_lock(dev);
 
-	int ret = nrfx_qspi_read(dest, size, addr);
+	int ret = nrfx_qspi_read(buffer, size, addr);
 
 	qspi_wait_for_completion(dev);
+
+	memcpy(dest, buffer, size);
+
 	return qspi_get_zephyr_ret_code(ret);
 }
 
