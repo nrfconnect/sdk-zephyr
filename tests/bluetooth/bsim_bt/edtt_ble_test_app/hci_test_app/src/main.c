@@ -26,6 +26,15 @@
 #include "bs_tracing.h"
 #include "commands.h"
 
+#if IS_ENABLED(CONFIG_BT_DEBUG_HCI_CORE)
+#define LOG_LEVEL LOG_LEVEL_DBG
+#else
+#define LOG_LEVEL CONFIG_BT_LOG_LEVEL
+#endif
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(hci_test_app);
+
 static u16_t waiting_opcode;
 static enum commands_t waiting_response;
 static u8_t m_events;
@@ -39,7 +48,7 @@ static void read_excess_bytes(u16_t size)
 		u8_t buffer[size];
 
 		edtt_read((u8_t *)buffer, size, EDTTT_BLOCK);
-		printk("command size wrong! (%u extra bytes removed)", size);
+		LOG_ERR("command size wrong! (%u extra bytes removed)", size);
 	}
 }
 
@@ -64,10 +73,10 @@ static void error_response(int error)
 #else
 #define BT_BUF_ACL_SIZE BT_L2CAP_BUF_SIZE(60)
 #endif
-NET_BUF_POOL_DEFINE(hci_cmd_pool, CONFIG_BT_HCI_CMD_COUNT,
-		    BT_BUF_RX_SIZE, BT_BUF_USER_DATA_MIN, NULL);
-NET_BUF_POOL_DEFINE(hci_data_pool, CONFIG_BT_CTLR_TX_BUFFERS+4,
-		    BT_BUF_ACL_SIZE, BT_BUF_USER_DATA_MIN, NULL);
+NET_BUF_POOL_FIXED_DEFINE(hci_cmd_pool, CONFIG_BT_HCI_CMD_COUNT,
+			  BT_BUF_RX_SIZE, NULL);
+NET_BUF_POOL_FIXED_DEFINE(hci_data_pool, CONFIG_BT_CTLR_TX_BUFFERS + 4,
+			  BT_BUF_ACL_SIZE, NULL);
 
 /**
  * @brief Allocate buffer for HCI command and fill in opCode for the command
@@ -129,12 +138,13 @@ static int send_hci_command(u16_t opcode, u8_t param_len, u16_t response)
 		}
 		err = bt_send(buf);
 		if (err) {
-			printk("Failed to send HCI command %d (err %d)\n",
+			LOG_ERR("Failed to send HCI command %d (err %d)",
 				opcode, err);
 			error_response(err);
 		}
 	} else {
-		printk("Failed to create buffer for HCI command %u\n", opcode);
+		LOG_ERR("Failed to create buffer for HCI command 0x%04x",
+			opcode);
 		error_response(-1);
 	}
 	return err;
@@ -159,12 +169,11 @@ static void echo(u16_t size)
 	}
 }
 
-NET_BUF_POOL_DEFINE(event_pool, 32, BT_BUF_RX_SIZE + 4,
-		    BT_BUF_USER_DATA_MIN, NULL);
+NET_BUF_POOL_FIXED_DEFINE(event_pool, 32, BT_BUF_RX_SIZE + 4, NULL);
 static K_FIFO_DEFINE(event_queue);
 static K_FIFO_DEFINE(rx_queue);
-NET_BUF_POOL_DEFINE(data_pool, CONFIG_BT_CTLR_RX_BUFFERS + 14,
-		    BT_BUF_ACL_SIZE + 4, BT_BUF_USER_DATA_MIN, NULL);
+NET_BUF_POOL_FIXED_DEFINE(data_pool, CONFIG_BT_CTLR_RX_BUFFERS + 14,
+			  BT_BUF_ACL_SIZE + 4, NULL);
 static K_FIFO_DEFINE(data_queue);
 
 /**
@@ -175,16 +184,27 @@ static void command_complete(struct net_buf *buf)
 	struct bt_hci_evt_cmd_complete *evt = (void *)buf->data;
 	u16_t opcode = sys_le16_to_cpu(evt->opcode);
 	u16_t response = sys_cpu_to_le16(waiting_response);
+	struct net_buf_simple_state state;
+	u16_t size;
+
+	net_buf_simple_save(&buf->b, &state);
 
 	net_buf_pull(buf, sizeof(*evt));
-	u16_t size = sys_cpu_to_le16(buf->len);
+	size = sys_cpu_to_le16(buf->len);
 
 	if (opcode == waiting_opcode) {
+		LOG_DBG("Command complete for 0x%04x", waiting_opcode);
+
 		edtt_write((u8_t *)&response, sizeof(response), EDTTT_BLOCK);
 		edtt_write((u8_t *)&size, sizeof(size), EDTTT_BLOCK);
 		edtt_write((u8_t *)buf->data, buf->len, EDTTT_BLOCK);
 		waiting_opcode = 0;
+	} else {
+		LOG_WRN("Not waiting for 0x(%04x) command status,"
+			" expected 0x(%04x)", opcode, waiting_opcode);
 	}
+
+	net_buf_simple_restore(&buf->b, &state);
 }
 
 /**
@@ -195,14 +215,29 @@ static void command_status(struct net_buf *buf)
 	struct bt_hci_evt_cmd_status *evt = (void *)buf->data;
 	u16_t opcode = sys_le16_to_cpu(evt->opcode);
 	u16_t response = sys_cpu_to_le16(waiting_response);
-	u16_t size = sys_cpu_to_le16(buf->len);
+	struct net_buf_simple_state state;
+	u8_t status = evt->status;
+	u16_t size;
+
+	net_buf_simple_save(&buf->b, &state);
+
+	net_buf_pull(buf, sizeof(*evt));
+	size = sys_cpu_to_le16(buf->len) + 1;
 
 	if (opcode == waiting_opcode) {
+		LOG_DBG("Command status for 0x%04x", waiting_opcode);
+
 		edtt_write((u8_t *)&response, sizeof(response), EDTTT_BLOCK);
 		edtt_write((u8_t *)&size, sizeof(size), EDTTT_BLOCK);
+		edtt_write((u8_t *)&status, sizeof(status), EDTTT_BLOCK);
 		edtt_write((u8_t *)buf->data, buf->len, EDTTT_BLOCK);
 		waiting_opcode = 0;
+	} else {
+		LOG_WRN("Not waiting for 0x(%04x) command status,"
+			" expected 0x(%04x)", opcode, waiting_opcode);
 	}
+
+	net_buf_simple_restore(&buf->b, &state);
 }
 
 /**
@@ -250,6 +285,7 @@ static void service_events(void *p1, void *p2, void *p3)
 				bs_trace_raw_time(4,
 						  "Failed to allocated buffer "
 						  "for event!\n");
+				LOG_WRN("No event in queue");
 			}
 
 			struct bt_hci_evt_hdr *hdr = (void *)buf->data;
@@ -480,12 +516,12 @@ static void le_data_write(u16_t size)
 			}
 			err = bt_send(buf);
 			if (err) {
-				printk("Failed to send ACL Data (err %d)\n",
+				LOG_ERR("Failed to send ACL Data (err %d)",
 					err);
 			}
 		} else {
 			err = -2; /* Failed to allocate data buffer */
-			printk("Failed to create buffer for ACL Data.\n");
+			LOG_ERR("Failed to create buffer for ACL Data.");
 		}
 	} else {
 		/* Size too small for header (handle and data length) */
@@ -521,7 +557,7 @@ void main(void)
 	 */
 	err = bt_enable_raw(&rx_queue);
 	if (err) {
-		printk("Bluetooth initialization failed (err %d)\n", err);
+		LOG_ERR("Bluetooth initialization failed (err %d)", err);
 		return;
 	}
 	/**
@@ -591,7 +627,7 @@ void main(void)
 				edtt_read((u8_t *)&opcode, sizeof(opcode),
 					  EDTTT_BLOCK);
 				send_hci_command(sys_le16_to_cpu(opcode),
-						 size-2, command+1);
+						 size - 2, command + 1);
 			}
 		}
 	}

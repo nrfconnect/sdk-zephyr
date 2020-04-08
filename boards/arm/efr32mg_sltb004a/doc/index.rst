@@ -11,7 +11,6 @@ Sense 2) contains a MCU from the EFR32MG family built on ARM® Cortex®-M4F
 processor with low power capabilities.
 
 .. image:: ./efr32mg_sltb004a.jpg
-   :width: 640px
    :align: center
    :alt: EFR32MG-SLTB004A
 
@@ -77,6 +76,8 @@ The efr32mg_sltb004a board configuration supports the following hardware feature
 | I2C       | on-chip    | i2c port-polling                    |
 +-----------+------------+-------------------------------------+
 | SPI(M)    | on-chip    | spi port-polling                    |
++-----------+------------+-------------------------------------+
+| WATCHDOG  | on-chip    | watchdog                            |
 +-----------+------------+-------------------------------------+
 
 The default configuration can be found in the defconfig file:

@@ -6,6 +6,7 @@ Build Overview
 The Zephyr build process can be divided into two main phases: a configuration
 phase (driven by CMake) and a build phase (driven by Make or Ninja).
 
+.. _build_configuration_phase:
 
 Configuration Phase
 *******************
@@ -50,7 +51,7 @@ Devicetree
    from ``dtc`` is unused otherwise.
 
    The above is just a brief overview. For more information on devicetree, see
-   :ref:`the devicetree section of the manual <device-tree>`.
+   :ref:`devicetree`.
 
 Devicetree fixups
    Files named :file:`dts_fixup.h` from the target’s architecture, SoC, board,

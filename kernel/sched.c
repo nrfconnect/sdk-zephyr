@@ -197,6 +197,16 @@ static ALWAYS_INLINE struct k_thread *next_up(void)
 	}
 #endif
 
+	/* If the current thread is marked aborting, mark it
+	 * dead so it will not be scheduled again.
+	 */
+	if (_current->base.thread_state & _THREAD_ABORTING) {
+		_current->base.thread_state |= _THREAD_DEAD;
+#ifdef CONFIG_SMP
+		_current_cpu->swap_ok = true;
+#endif
+	}
+
 #ifndef CONFIG_SMP
 	/* In uniprocessor mode, we can leave the current thread in
 	 * the queue (actually we have to, otherwise the assembly
@@ -366,15 +376,23 @@ static void update_cache(int preempt_ok)
 #endif
 }
 
-void z_add_thread_to_ready_q(struct k_thread *thread)
+static void ready_thread(struct k_thread *thread)
 {
-	LOCKED(&sched_spinlock) {
+	if (z_is_thread_ready(thread)) {
+		sys_trace_thread_ready(thread);
 		_priq_run_add(&_kernel.ready_q.runq, thread);
 		z_mark_thread_as_queued(thread);
 		update_cache(0);
 #if defined(CONFIG_SMP) &&  defined(CONFIG_SCHED_IPI_SUPPORTED)
 		arch_sched_ipi();
 #endif
+	}
+}
+
+void z_ready_thread(struct k_thread *thread)
+{
+	LOCKED(&sched_spinlock) {
+		ready_thread(thread);
 	}
 }
 
@@ -388,6 +406,20 @@ void z_move_thread_to_end_of_prio_q(struct k_thread *thread)
 		z_mark_thread_as_queued(thread);
 		update_cache(thread == _current);
 	}
+}
+
+void z_sched_start(struct k_thread *thread)
+{
+	k_spinlock_key_t key = k_spin_lock(&sched_spinlock);
+
+	if (z_has_thread_started(thread)) {
+		k_spin_unlock(&sched_spinlock, key);
+		return;
+	}
+
+	z_mark_thread_as_started(thread);
+	ready_thread(thread);
+	z_reschedule(&sched_spinlock, key);
 }
 
 void z_thread_single_suspend(struct k_thread *thread)
@@ -473,33 +505,37 @@ void z_thread_single_abort(struct k_thread *thread)
 #endif
 }
 
+static void unready_thread(struct k_thread *thread)
+{
+	if (z_is_thread_queued(thread)) {
+		_priq_run_remove(&_kernel.ready_q.runq, thread);
+		z_mark_thread_as_not_queued(thread);
+	}
+	update_cache(thread == _current);
+}
+
 void z_remove_thread_from_ready_q(struct k_thread *thread)
 {
 	LOCKED(&sched_spinlock) {
-		if (z_is_thread_queued(thread)) {
-			_priq_run_remove(&_kernel.ready_q.runq, thread);
-			z_mark_thread_as_not_queued(thread);
-		}
-		update_cache(thread == _current);
+		unready_thread(thread);
 	}
 }
 
 static void pend(struct k_thread *thread, _wait_q_t *wait_q, s32_t timeout)
 {
-	z_remove_thread_from_ready_q(thread);
-	z_mark_thread_as_pending(thread);
-	sys_trace_thread_pend(thread);
+	LOCKED(&sched_spinlock) {
+		unready_thread(thread);
+		z_mark_thread_as_pending(thread);
+		sys_trace_thread_pend(thread);
 
-	if (wait_q != NULL) {
-		thread->base.pended_on = wait_q;
-		z_priq_wait_add(&wait_q->waitq, thread);
+		if (wait_q != NULL) {
+			thread->base.pended_on = wait_q;
+			z_priq_wait_add(&wait_q->waitq, thread);
+		}
 	}
 
 	if (timeout != K_FOREVER) {
 		s32_t ticks;
-
-		__ASSERT(timeout >= 0,
-			"Only non-negative values are accepted.");
 
 		if (timeout < 0) {
 			timeout = 0;
@@ -536,9 +572,8 @@ ALWAYS_INLINE void z_unpend_thread_no_timeout(struct k_thread *thread)
 	LOCKED(&sched_spinlock) {
 		_priq_wait_remove(&pended_on(thread)->waitq, thread);
 		z_mark_thread_as_not_pending(thread);
+		thread->base.pended_on = NULL;
 	}
-
-	thread->base.pended_on = NULL;
 }
 
 #ifdef CONFIG_SYS_CLOCK_EXISTS
@@ -682,10 +717,10 @@ void k_sched_lock(void)
 void k_sched_unlock(void)
 {
 #ifdef CONFIG_PREEMPT_ENABLED
-	__ASSERT(_current->base.sched_locked != 0, "");
-	__ASSERT(!arch_is_in_isr(), "");
-
 	LOCKED(&sched_spinlock) {
+		__ASSERT(_current->base.sched_locked != 0, "");
+		__ASSERT(!arch_is_in_isr(), "");
+
 		++_current->base.sched_locked;
 		update_cache(0);
 	}
@@ -713,7 +748,7 @@ struct k_thread *z_get_next_ready_thread(void)
 /* Just a wrapper around _current = xxx with tracing */
 static inline void set_current(struct k_thread *new_thread)
 {
-	_current = new_thread;
+	_current_cpu->current = new_thread;
 }
 
 #ifdef CONFIG_USE_SWITCH
@@ -748,15 +783,6 @@ void *z_get_next_switch_handle(void *interrupted)
 #else
 	set_current(z_get_next_ready_thread());
 #endif
-
-	/* Some architectures don't have a working IPI, so the best we
-	 * can do there is check the abort status of the current
-	 * thread here on ISR exit
-	 */
-	if (IS_ENABLED(CONFIG_SMP) &&
-	    !IS_ENABLED(CONFIG_SCHED_IPI_SUPPORTED)) {
-		z_sched_ipi();
-	}
 
 	wait_for_switch(_current);
 	return _current->switch_handle;
@@ -1161,30 +1187,21 @@ void z_impl_k_wakeup(k_tid_t thread)
 	z_mark_thread_as_not_suspended(thread);
 	z_ready_thread(thread);
 
-	if (!arch_is_in_isr()) {
-		z_reschedule_unlocked();
-	}
-
 #if defined(CONFIG_SMP) && defined(CONFIG_SCHED_IPI_SUPPORTED)
 	arch_sched_ipi();
 #endif
+
+	if (!arch_is_in_isr()) {
+		z_reschedule_unlocked();
+	}
 }
 
 #ifdef CONFIG_SMP
-/* Called out of the scheduler interprocessor interrupt.  All it does
- * is flag the current thread as dead if it needs to abort, so the ISR
- * return into something else and the other thread which called
- * k_thread_abort() can finish its work knowing the thing won't be
- * rescheduled.
- */
 void z_sched_ipi(void)
 {
-	LOCKED(&sched_spinlock) {
-		if (_current->base.thread_state & _THREAD_ABORTING) {
-			_current->base.thread_state |= _THREAD_DEAD;
-			_current_cpu->swap_ok = true;
-		}
-	}
+	/* NOTE: When adding code to this, make sure this is called
+	 * at appropriate location when !CONFIG_SCHED_IPI_SUPPORTED.
+	 */
 }
 
 void z_sched_abort(struct k_thread *thread)
@@ -1250,7 +1267,20 @@ static inline void z_vrfy_k_wakeup(k_tid_t thread)
 
 k_tid_t z_impl_k_current_get(void)
 {
-	return _current;
+#ifdef CONFIG_SMP
+	/* In SMP, _current is a field read from _current_cpu, which
+	 * can race with preemption before it is read.  We must lock
+	 * local interrupts when reading it.
+	 */
+	unsigned int k = arch_irq_lock();
+#endif
+
+	k_tid_t ret = _current_cpu->current;
+
+#ifdef CONFIG_SMP
+	arch_irq_unlock(k);
+#endif
+	return ret;
 }
 
 #ifdef CONFIG_USERSPACE

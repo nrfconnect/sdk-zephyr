@@ -310,6 +310,12 @@ struct bt_gatt_cpf {
  *  macros such as BT_GATT_PRIMARY_SERVICE, BT_GATT_CHARACTERISTIC,
  *  BT_GATT_DESCRIPTOR, etc.
  *
+ *  When using :option:`CONFIG_BT_GATT_CACHING` and :option:`CONFIG_BT_SETTINGS`
+ *  then all services that should be included in the GATT Database Hash
+ *  calculation should be added before calling @ref settings_load.
+ *  All services registered after settings_load will trigger a new database hash
+ *  calculation and a new hash stored.
+ *
  *  @param svc Service containing the available attributes
  *
  *  @return 0 in case of success or negative value in case of error.
@@ -811,10 +817,11 @@ ssize_t bt_gatt_attr_read_cpf(struct bt_conn *conn,
 #define BT_GATT_ATTRIBUTE(_uuid, _perm, _read, _write, _value)		\
 {									\
 	.uuid = _uuid,							\
-	.perm = _perm,							\
 	.read = _read,							\
 	.write = _write,						\
 	.user_data = _value,						\
+	.handle = 0,							\
+	.perm = _perm,							\
 }
 
 /** @brief Notification complete result callback.

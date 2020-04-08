@@ -142,6 +142,13 @@ else()
   assert(0 "Unreachable code. Expected optimization level to have been chosen. See Kconfig.zephyr")
 endif()
 
+if(NOT CONFIG_ARCH_IS_SET)
+  message(WARNING "\
+None of the CONFIG_<arch> (e.g. CONFIG_X86) symbols are set. \
+Select one of them from the SOC_SERIES_* symbol or, lacking that, from the \
+SOC_* symbol.")
+endif()
+
 # Apply the final optimization flag(s)
 zephyr_compile_options(${OPTIMIZATION_FLAG})
 
@@ -804,6 +811,10 @@ if(CONFIG_ARM AND CONFIG_USERSPACE)
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
   add_custom_target(priv_stacks DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${PRIV_STACKS})
+
+  if(${GPERF} STREQUAL GPERF-NOTFOUND)
+    message(FATAL_ERROR "Unable to find gperf")
+  endif()
 
   # Use gperf to generate C code (PRIV_STACKS_OUTPUT_SRC_PRE) which implements a
   # perfect hashtable based on PRIV_STACKS

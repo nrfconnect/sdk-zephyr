@@ -33,7 +33,7 @@
 	leds {
 		compatible = "gpio-leds";
 		green_led: led-1 {
-			gpios = <&gpio1 9 GPIO_INT_ACTIVE_LOW>;
+			gpios = <&gpio1 9 GPIO_ACTIVE_LOW>;
 			label = "User LD1";
 		};
 	};
@@ -50,7 +50,7 @@
 		compatible = "gpio-keys";
 		user_button: button-1 {
 			label = "User SW8";
-			gpios = <&gpio5 0 GPIO_INT_ACTIVE_LOW>;
+			gpios = <&gpio5 0 GPIO_ACTIVE_LOW>;
 		};
 	};
 
@@ -118,6 +118,13 @@ arduino_i2c: &i2c1 {};
 				remote-endpoint = <&csi_ep_in>;
 			};
 		};
+	};
+
+	ft5336@38 {
+		compatible = "focaltech,ft5336";
+		reg = <0x38>;
+		label = "FT5336";
+		int-gpios = <&gpio1 11 0>;
 	};
 };
 

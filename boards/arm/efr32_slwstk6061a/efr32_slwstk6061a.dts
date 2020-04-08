@@ -25,6 +25,7 @@
 		led1 = &led1;
 		sw0 = &button0;
 		sw1 = &button1;
+		watchdog0 = &wdog0;
 	};
 
 	leds {
@@ -43,12 +44,12 @@
 		compatible = "gpio-keys";
 		button0: button_0 {
 			/* gpio flags need validation */
-			gpios = <&gpiof 6 GPIO_INT_ACTIVE_LOW>;
+			gpios = <&gpiof 6 GPIO_ACTIVE_LOW>;
 			label = "User Push Button 0";
 		};
 		button1: button_1 {
 			/* gpio flags need validation */
-			gpios = <&gpiof 7 GPIO_INT_ACTIVE_LOW>;
+			gpios = <&gpiof 7 GPIO_ACTIVE_LOW>;
 			label = "User Push Button 1";
 		};
 	};
@@ -101,13 +102,12 @@
 	status = "okay";
 };
 
+&wdog0 {
+	status = "okay";
+};
+
 &flash0 {
 	/*
-	 * If the chosen node has no zephyr,code-partition property, the
-	 * application image link uses the entire flash device. If a
-	 * zephyr,code-partition property is defined, the application link
-	 * will be restricted to that partition.
-	 *
 	 * For more information, see:
 	 * http://docs.zephyrproject.org/latest/guides/dts/index.html#flash-partitions
 	 */

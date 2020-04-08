@@ -138,7 +138,7 @@ struct acl_data {
 	u8_t  type;
 
 	/* Index into the bt_conn storage array */
-	u8_t  id;
+	u8_t  index;
 
 	/** ACL connection handle */
 	u16_t handle;
@@ -234,9 +234,10 @@ static void report_completed_packet(struct net_buf *buf)
 		return;
 	}
 
-	conn = bt_conn_lookup_id(acl(buf)->id);
+	conn = bt_conn_lookup_index(acl(buf)->index);
 	if (!conn) {
-		BT_WARN("Unable to look up conn with id 0x%02x", acl(buf)->id);
+		BT_WARN("Unable to look up conn with index 0x%02x",
+			acl(buf)->index);
 		return;
 	}
 
@@ -572,7 +573,7 @@ static void le_update_private_addr(void)
 	/* If both advertiser and scanner is running then the advertiser ID must
 	 * be BT_ID_DEFAULT, this will update the RPA address for both roles.
 	 */
-	err = le_set_private_addr(bt_dev.adv_id);
+	err = le_set_private_addr(adv_enabled ? bt_dev.adv_id : BT_ID_DEFAULT);
 	if (err) {
 		BT_WARN("Failed to update RPA address (%d)", err);
 		return;
@@ -595,7 +596,8 @@ static void rpa_timeout(struct k_work *work)
 
 	if (IS_ENABLED(CONFIG_BT_CENTRAL)) {
 		struct bt_conn *conn =
-			bt_conn_lookup_state_le(NULL, BT_CONN_CONNECT_SCAN);
+			bt_conn_lookup_state_le(BT_ID_DEFAULT, NULL,
+						BT_CONN_CONNECT_SCAN);
 
 		if (conn) {
 			bt_conn_unref(conn);
@@ -669,15 +671,10 @@ bool bt_le_scan_random_addr_check(void)
 
 static bool bt_le_adv_random_addr_check(const struct bt_le_adv_param *param)
 {
-	/* If scanner roles are not enabled or not active there is no issue.
-	 * Passive scanner does not have an active address, unless it is a
-	 * passive scanner that will start the initiator.
-	 */
-	if (IS_ENABLED(CONFIG_BT_OBSERVER) ||
+	/* If scanner roles are not enabled or not active there is no issue. */
+	if (!IS_ENABLED(CONFIG_BT_OBSERVER) ||
 	    !(atomic_test_bit(bt_dev.flags, BT_DEV_INITIATING) ||
-	      (atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING) &&
-	       (!atomic_test_bit(bt_dev.flags, BT_DEV_EXPLICIT_SCAN) ||
-		atomic_test_bit(bt_dev.flags, BT_DEV_ACTIVE_SCAN))))) {
+	      atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING))) {
 		return true;
 	}
 
@@ -693,6 +690,28 @@ static bool bt_le_adv_random_addr_check(const struct bt_le_adv_param *param)
 		if (((param->options & BT_LE_ADV_OPT_USE_IDENTITY) &&
 		     bt_dev.id_addr[param->id].type == BT_ADDR_LE_RANDOM) ||
 		    param->id != BT_ID_DEFAULT) {
+			return false;
+		}
+	} else if (IS_ENABLED(CONFIG_BT_SCAN_WITH_IDENTITY) &&
+		   atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING) &&
+		   bt_dev.id_addr[BT_ID_DEFAULT].type == BT_ADDR_LE_RANDOM) {
+		/* Scanning with random static identity. Stop the advertiser
+		 * from overwriting the passive scanner identity address.
+		 * In this case the LE Set Random Address command does not
+		 * protect us in the case of a passive scanner.
+		 * Explicitly stop it here.
+		 */
+
+		if (!(param->options & BT_LE_ADV_OPT_CONNECTABLE) &&
+		     (param->options & BT_LE_ADV_OPT_USE_IDENTITY)) {
+			/* Attempt to set non-connectable NRPA */
+			return false;
+		} else if (bt_dev.id_addr[param->id].type ==
+			   BT_ADDR_LE_RANDOM &&
+			   param->id != BT_ID_DEFAULT) {
+			/* Attempt to set connectable, or non-connectable with
+			 * identity different than scanner.
+			 */
 			return false;
 		}
 	}
@@ -761,7 +780,7 @@ static void hci_acl(struct net_buf *buf)
 	flags = bt_acl_flags(handle);
 
 	acl(buf)->handle = bt_acl_handle(handle);
-	acl(buf)->id = BT_CONN_ID_INVALID;
+	acl(buf)->index = BT_CONN_INDEX_INVALID;
 
 	BT_DBG("handle %u len %u flags %u", acl(buf)->handle, len, flags);
 
@@ -778,7 +797,7 @@ static void hci_acl(struct net_buf *buf)
 		return;
 	}
 
-	acl(buf)->id = bt_conn_index(conn);
+	acl(buf)->index = bt_conn_index(conn);
 
 	bt_conn_recv(conn, buf, flags);
 	bt_conn_unref(conn);
@@ -856,6 +875,17 @@ static void hci_num_completed_packets(struct net_buf *buf)
 	}
 }
 
+static inline bool rpa_timeout_valid_check(void)
+{
+#if defined(CONFIG_BT_PRIVACY)
+	/* Check if create conn timeout will happen before RPA timeout. */
+	return k_delayed_work_remaining_get(&bt_dev.rpa_update) >
+	       K_SECONDS(CONFIG_BT_CREATE_CONN_TIMEOUT);
+#else
+	return true;
+#endif
+}
+
 #if defined(CONFIG_BT_CENTRAL)
 int bt_le_create_conn(const struct bt_conn *conn)
 {
@@ -871,8 +901,8 @@ int bt_le_create_conn(const struct bt_conn *conn)
 	}
 
 	if (IS_ENABLED(CONFIG_BT_PRIVACY)) {
-		if (use_filter) {
-			err = le_set_private_addr(bt_dev.adv_id);
+		if (use_filter || rpa_timeout_valid_check()) {
+			err = le_set_private_addr(BT_ID_DEFAULT);
 			if (err) {
 				return err;
 			}
@@ -914,6 +944,7 @@ int bt_le_create_conn(const struct bt_conn *conn)
 	}
 
 	cp = net_buf_add(buf, sizeof(*cp));
+	memset(cp, 0, sizeof(*cp));
 	cp->own_addr_type = own_addr_type;
 
 	if (use_filter) {
@@ -1004,9 +1035,9 @@ static void hci_disconn_complete(struct net_buf *buf)
 
 	/* Check stacks usage */
 #if !defined(CONFIG_BT_RECV_IS_RX_THREAD)
-	STACK_ANALYZE("rx stack", rx_thread_stack);
+	log_stack_usage(&rx_thread_data);
 #endif
-	STACK_ANALYZE("tx stack", tx_thread_stack);
+	log_stack_usage(&tx_thread_data);
 
 	bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
 	conn->handle = 0U;
@@ -1196,9 +1227,11 @@ static struct bt_conn *find_pending_connect(u8_t role, bt_addr_le_t *peer_addr)
 	 * CONNECT or DIR_ADV state associated with passed peer LE address.
 	 */
 	if (IS_ENABLED(CONFIG_BT_CENTRAL) && role == BT_HCI_ROLE_MASTER) {
-		conn = bt_conn_lookup_state_le(peer_addr, BT_CONN_CONNECT);
+		conn = bt_conn_lookup_state_le(BT_ID_DEFAULT, peer_addr,
+					       BT_CONN_CONNECT);
 		if (IS_ENABLED(CONFIG_BT_WHITELIST) && !conn) {
-			conn = bt_conn_lookup_state_le(BT_ADDR_LE_NONE,
+			conn = bt_conn_lookup_state_le(BT_ID_DEFAULT,
+						       BT_ADDR_LE_NONE,
 						       BT_CONN_CONNECT_AUTO);
 		}
 
@@ -1206,10 +1239,11 @@ static struct bt_conn *find_pending_connect(u8_t role, bt_addr_le_t *peer_addr)
 	}
 
 	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) && role == BT_HCI_ROLE_SLAVE) {
-		conn = bt_conn_lookup_state_le(peer_addr,
+		conn = bt_conn_lookup_state_le(bt_dev.adv_id, peer_addr,
 					       BT_CONN_CONNECT_DIR_ADV);
 		if (!conn) {
-			conn = bt_conn_lookup_state_le(BT_ADDR_LE_NONE,
+			conn = bt_conn_lookup_state_le(bt_dev.adv_id,
+						       BT_ADDR_LE_NONE,
 						       BT_CONN_CONNECT_ADV);
 		}
 
@@ -1311,40 +1345,55 @@ static void enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 
 	if (evt->status) {
 		/*
-		 * If there was an error we are only interested in pending
-		 * connection. There is no need to check ID address as
-		 * only one connection can be in that state.
-		 *
-		 * Depending on error code address might not be valid anyway.
+		 * Here we are only interested in pending connection.
 		 */
-		conn = find_pending_connect(evt->role, NULL);
-		if (!conn) {
-			return;
-		}
-
-		conn->err = evt->status;
 
 		if (IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
-		    conn->err == BT_HCI_ERR_ADV_TIMEOUT) {
+		    evt->status == BT_HCI_ERR_ADV_TIMEOUT) {
 			/*
-			 * Handle advertising timeout after high duty directed
-			 * advertising.
+			 * Handle advertising timeout after high duty cycle
+			 * directed advertising.
 			 */
 
 			atomic_clear_bit(bt_dev.flags, BT_DEV_ADVERTISING);
+
+			/*
+			 * There is no need to check ID address as only one
+			 * connection in slave role can be in pending state.
+			 */
+			conn = find_pending_connect(BT_HCI_ROLE_SLAVE, NULL);
+			if (!conn) {
+				BT_ERR("No pending slave connection");
+				return;
+			}
+
+			conn->err = evt->status;
+
 			bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
 			goto done;
 		}
 
 		if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
-		    conn->err == BT_HCI_ERR_UNKNOWN_CONN_ID) {
+		    evt->status == BT_HCI_ERR_UNKNOWN_CONN_ID) {
+			/*
+			 * Handle create connection cancel.
+			 *
+			 * There is no need to check ID address as only one
+			 * connection in master role can be in pending state.
+			 */
+			conn = find_pending_connect(BT_HCI_ROLE_MASTER, NULL);
+			if (!conn) {
+				BT_ERR("No pending master connection");
+				return;
+			}
+
+			conn->err = evt->status;
+
 			le_conn_cancel_complete(conn);
 			goto done;
 		}
 
 		BT_WARN("Unexpected status 0x%02x", evt->status);
-
-		bt_conn_unref(conn);
 
 		return;
 	}
@@ -1727,7 +1776,8 @@ static void check_pending_conn(const bt_addr_le_t *id_addr,
 		return;
 	}
 
-	conn = bt_conn_lookup_state_le(id_addr, BT_CONN_CONNECT_SCAN);
+	conn = bt_conn_lookup_state_le(BT_ID_DEFAULT, id_addr,
+				       BT_CONN_CONNECT_SCAN);
 	if (!conn) {
 		return;
 	}
@@ -1829,9 +1879,7 @@ static void unpair(u8_t id, const bt_addr_le_t *addr)
 		}
 	}
 
-	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		bt_gatt_clear(id, addr);
-	}
+	bt_gatt_clear(id, addr);
 }
 
 static void unpair_remote(const struct bt_bond_info *info, void *data)
@@ -3051,7 +3099,7 @@ void bt_id_add(struct bt_keys *keys)
 		return;
 	}
 
-	conn = bt_conn_lookup_state_le(NULL, BT_CONN_CONNECT);
+	conn = bt_conn_lookup_state_le(BT_ID_DEFAULT, NULL, BT_CONN_CONNECT);
 	if (conn) {
 		atomic_set_bit(bt_dev.flags, BT_DEV_ID_PENDING);
 		keys->flags |= BT_KEYS_ID_PENDING_ADD;
@@ -3158,7 +3206,7 @@ void bt_id_del(struct bt_keys *keys)
 		return;
 	}
 
-	conn = bt_conn_lookup_state_le(NULL, BT_CONN_CONNECT);
+	conn = bt_conn_lookup_state_le(BT_ID_DEFAULT, NULL, BT_CONN_CONNECT);
 	if (conn) {
 		atomic_set_bit(bt_dev.flags, BT_DEV_ID_PENDING);
 		keys->flags |= BT_KEYS_ID_PENDING_DEL;
@@ -3643,7 +3691,6 @@ static int start_le_scan(u8_t scan_type, u16_t interval, u16_t window)
 		 * (through Kconfig), or if there is no advertising ongoing.
 		 */
 		if (!IS_ENABLED(CONFIG_BT_SCAN_WITH_IDENTITY) &&
-		    scan_type == BT_HCI_LE_SCAN_ACTIVE &&
 		    !atomic_test_bit(bt_dev.flags, BT_DEV_ADVERTISING)) {
 			err = le_set_private_addr(BT_ID_DEFAULT);
 			if (err) {
@@ -3651,7 +3698,13 @@ static int start_le_scan(u8_t scan_type, u16_t interval, u16_t window)
 			}
 
 			set_param.addr_type = BT_ADDR_LE_RANDOM;
-		} else if (set_param.addr_type == BT_ADDR_LE_RANDOM) {
+		} else if (IS_ENABLED(CONFIG_BT_SCAN_WITH_IDENTITY) &&
+			   set_param.addr_type == BT_ADDR_LE_RANDOM) {
+			/* If scanning with Identity Address we must set the
+			 * random identity address for both active and passive
+			 * scanner in order to receive adv reports that are
+			 * directed towards this identity.
+			 */
 			err = set_random_address(&bt_dev.id_addr[0].a);
 			if (err) {
 				return err;
@@ -3699,13 +3752,15 @@ int bt_le_scan_update(bool fast_scan)
 		struct bt_conn *conn;
 
 		/* don't restart scan if we have pending connection */
-		conn = bt_conn_lookup_state_le(NULL, BT_CONN_CONNECT);
+		conn = bt_conn_lookup_state_le(BT_ID_DEFAULT, NULL,
+					       BT_CONN_CONNECT);
 		if (conn) {
 			bt_conn_unref(conn);
 			return 0;
 		}
 
-		conn = bt_conn_lookup_state_le(NULL, BT_CONN_CONNECT_SCAN);
+		conn = bt_conn_lookup_state_le(BT_ID_DEFAULT, NULL,
+					       BT_CONN_CONNECT_SCAN);
 		if (!conn) {
 			return 0;
 		}
@@ -3769,7 +3824,7 @@ static void le_adv_report(struct net_buf *buf)
 	while (num_reports--) {
 		struct bt_le_scan_cb *cb;
 		struct net_buf_simple_state state;
-		struct bt_le_adv_info adv_info;
+		struct bt_le_scan_recv_info adv_info;
 		bt_addr_le_t id_addr;
 		s8_t rssi;
 
@@ -3781,6 +3836,14 @@ static void le_adv_report(struct net_buf *buf)
 		info = net_buf_pull_mem(buf, sizeof(*info));
 		rssi = info->data[info->length];
 
+		if (!IS_ENABLED(CONFIG_BT_PRIVACY) &&
+		    !IS_ENABLED(CONFIG_BT_SCAN_WITH_IDENTITY) &&
+		    atomic_test_bit(bt_dev.flags, BT_DEV_EXPLICIT_SCAN) &&
+		    info->evt_type == BT_LE_ADV_DIRECT_IND) {
+			BT_DBG("Dropped direct adv report");
+			continue;
+		}
+
 		BT_DBG("%s event %u, len %u, rssi %d dBm",
 		       bt_addr_le_str(&info->addr),
 		       info->evt_type, info->length, rssi);
@@ -3791,7 +3854,7 @@ static void le_adv_report(struct net_buf *buf)
 			id_addr.type -= BT_ADDR_LE_PUBLIC_ID;
 		} else {
 			bt_addr_le_copy(&id_addr,
-					bt_lookup_id_addr(bt_dev.adv_id,
+					bt_lookup_id_addr(BT_ID_DEFAULT,
 							  &info->addr));
 		}
 
@@ -4834,7 +4897,7 @@ static const char *ver_str(u8_t ver)
 {
 	const char * const str[] = {
 		"1.0b", "1.1", "1.2", "2.0", "2.1", "3.0", "4.0", "4.1", "4.2",
-		"5.0", "5.1",
+		"5.0", "5.1", "5.2"
 	};
 
 	if (ver < ARRAY_SIZE(str)) {
@@ -4976,7 +5039,7 @@ static void hci_vs_init(void)
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_VS_READ_SUPPORTED_COMMANDS,
 				   NULL, &rsp);
 	if (err) {
-		BT_WARN("Failed to read supported vendor features");
+		BT_WARN("Failed to read supported vendor commands");
 		return;
 	}
 
@@ -4994,7 +5057,7 @@ static void hci_vs_init(void)
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_VS_READ_SUPPORTED_FEATURES,
 				   NULL, &rsp);
 	if (err) {
-		BT_WARN("Failed to read supported vendor commands");
+		BT_WARN("Failed to read supported vendor features");
 		return;
 	}
 
@@ -5055,6 +5118,17 @@ static int hci_init(void)
 		err = bt_setup_random_id_addr();
 		if (err) {
 			BT_ERR("Unable to set identity address");
+			return err;
+		}
+
+		/* The passive scanner just sends a dummy address type in the
+		 * command. If the first activity does this, and the dummy type
+		 * is a random address, it needs a valid value, even though it's
+		 * not actually used.
+		 */
+		err = set_random_address(&bt_dev.id_addr[0].a);
+		if (err) {
+			BT_ERR("Unable to set random address");
 			return err;
 		}
 	}
@@ -5749,7 +5823,7 @@ int bt_setup_random_id_addr(void)
 				id_create(i, &addr, irk);
 			}
 
-			return set_random_address(&bt_dev.id_addr[0].a);
+			return 0;
 		}
 	}
 #endif /* defined(CONFIG_BT_HCI_VS_EXT) || defined(CONFIG_BT_CTLR) */
@@ -6011,8 +6085,26 @@ int bt_le_adv_start_internal(const struct bt_le_adv_param *param,
 
 			set_param.own_addr_type = id_addr->type;
 		} else {
+#if defined(CONFIG_BT_OBSERVER)
+			bool scan_enabled = false;
+
+			/* If active scan with NRPA is ongoing refresh NRPA */
+			if (!IS_ENABLED(CONFIG_BT_PRIVACY) &&
+			    !IS_ENABLED(CONFIG_BT_SCAN_WITH_IDENTITY) &&
+			    atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING) &&
+			    atomic_test_bit(bt_dev.flags, BT_DEV_ACTIVE_SCAN)) {
+				scan_enabled = true;
+				set_le_scan_enable(false);
+			}
+#endif /* defined(CONFIG_BT_OBSERVER) */
 			err = le_set_private_addr(param->id);
 			set_param.own_addr_type = BT_ADDR_LE_RANDOM;
+
+#if defined(CONFIG_BT_OBSERVER)
+			if (scan_enabled) {
+				set_le_scan_enable(true);
+			}
+#endif /* defined(CONFIG_BT_OBSERVER) */
 		}
 
 		if (err) {
@@ -6118,14 +6210,15 @@ int bt_le_adv_stop(void)
 	if (IS_ENABLED(CONFIG_BT_PERIPHERAL)) {
 		struct bt_conn *conn;
 
-		conn = bt_conn_lookup_state_le(BT_ADDR_LE_NONE,
+		conn = bt_conn_lookup_state_le(bt_dev.adv_id, BT_ADDR_LE_NONE,
 					       BT_CONN_CONNECT_ADV);
 		if (conn) {
 			bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
 			bt_conn_unref(conn);
 		}
 
-		conn = bt_conn_lookup_state_le(NULL, BT_CONN_CONNECT_DIR_ADV);
+		conn = bt_conn_lookup_state_le(bt_dev.adv_id, NULL,
+					       BT_CONN_CONNECT_DIR_ADV);
 		if (conn) {
 			bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
 			bt_conn_unref(conn);
@@ -6137,13 +6230,17 @@ int bt_le_adv_stop(void)
 		return err;
 	}
 
-	if (!IS_ENABLED(CONFIG_BT_PRIVACY)) {
-		/* If active scan is ongoing set NRPA */
-		if (atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING) &&
-		    atomic_test_bit(bt_dev.flags, BT_DEV_ACTIVE_SCAN)) {
+#if defined(CONFIG_BT_OBSERVER)
+	if (!IS_ENABLED(CONFIG_BT_PRIVACY) &&
+	    !IS_ENABLED(CONFIG_BT_SCAN_WITH_IDENTITY)) {
+		/* If scan is ongoing set back NRPA */
+		if (atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING)) {
+			set_le_scan_enable(BT_HCI_LE_SCAN_DISABLE);
 			le_set_private_addr(bt_dev.adv_id);
+			set_le_scan_enable(BT_HCI_LE_SCAN_ENABLE);
 		}
 	}
+#endif /* defined(CONFIG_BT_OBSERVER) */
 
 	return 0;
 }

@@ -31,7 +31,7 @@
 #include <kswap.h>
 #include <drivers/entropy.h>
 #include <logging/log_ctrl.h>
-#include <debug/tracing.h>
+#include <tracing/tracing.h>
 #include <stdbool.h>
 #include <debug/gcov.h>
 
@@ -285,8 +285,10 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 	/* Mark nonessenrial since main() has no more work to do */
 	z_main_thread.base.user_options &= ~K_ESSENTIAL;
 
+#ifdef CONFIG_COVERAGE_DUMP
 	/* Dump coverage data once the main() has exited. */
 	gcov_coverage_dump();
+#endif
 } /* LCOV_EXCL_LINE ... because we just dumped final coverage data */
 
 /* LCOV_EXCL_START */
@@ -510,7 +512,7 @@ FUNC_NORETURN void z_cstart(void)
 # endif
 	};
 
-	_current = &dummy_thread;
+	_current_cpu->current = &dummy_thread;
 #endif
 
 #ifdef CONFIG_USERSPACE

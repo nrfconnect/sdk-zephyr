@@ -13,6 +13,8 @@
 		zephyr,shell-uart = &usart0;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
+		watchdog0 = &wdog0;
+		watchdog1 = &wdog1;
 	};
 
 	/* These aliases are provided for compatibility with samples */
@@ -39,12 +41,12 @@
 		compatible = "gpio-keys";
 		button0: button_0 {
 			/* gpio flags need validation */
-			gpios = <&gpiof 6 GPIO_INT_ACTIVE_LOW>;
+			gpios = <&gpiof 6 GPIO_ACTIVE_LOW>;
 			label = "User Push Button 0";
 		};
 		button1: button_1 {
 			/* gpio flags need validation */
-			gpios = <&gpiof 7 GPIO_INT_ACTIVE_LOW>;
+			gpios = <&gpiof 7 GPIO_ACTIVE_LOW>;
 			label = "User Push Button 1";
 		};
 	};
@@ -83,6 +85,15 @@
 	location-swo = <0>;
 	status = "okay";
 };
+
+&wdog0 {
+	status = "okay";
+};
+
+&wdog1 {
+	status = "okay";
+};
+
 
 &flash0 {
 	/*

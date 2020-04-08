@@ -29,6 +29,7 @@ import edtlib
 def main():
     global conf_file
     global header_file
+    global flash_area_num
 
     args = parse_args()
 
@@ -43,17 +44,22 @@ def main():
 
     conf_file = open(args.conf_out, "w", encoding="utf-8")
     header_file = open(args.header_out, "w", encoding="utf-8")
+    flash_area_num = 0
+    edtlib.dtc_flags = args.dtc_flags
 
     write_top_comment(edt)
 
-    for node in edt.nodes:
-        if node.enabled and node.matching_compat:
-            # Skip 'fixed-partitions' devices since they are handled by
-            # write_flash() and would generate extra spurious #defines
-            if node.matching_compat == "fixed-partitions":
-                continue
+    for node in sorted(edt.nodes, key=lambda node: node.dep_ordinal):
+        write_node_comment(node)
 
-            write_node_comment(node)
+        # Flash partition nodes are handled as a special case. It
+        # would be nicer if we had bindings that would let us
+        # avoid that, but this will do for now.
+        if node.name.startswith("partition@"):
+            write_flash_partition(node, flash_area_num)
+            flash_area_num += 1
+
+        if node.enabled and node.matching_compat:
             write_regs(node)
             write_irqs(node)
             write_props(node)
@@ -67,23 +73,24 @@ def main():
         #define DT_COMPAT_<COMPAT> 1
         out(f"COMPAT_{str2ident(compat)}", 1)
 
-    # Derived from /chosen
+    # Definitions derived from /chosen nodes
     write_addr_size(edt, "zephyr,ccm", "CCM")
     write_addr_size(edt, "zephyr,dtcm", "DTCM")
     write_addr_size(edt, "zephyr,ipc_shm", "IPC_SHM")
-
     write_flash(edt)
-
-    print("Devicetree configuration written to " + args.conf_out)
 
     conf_file.close()
     header_file.close()
+
+    print(f"Devicetree header saved to '{args.header_out}'")
+
 
 def parse_args():
     # Returns parsed command-line arguments
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dts", required=True, help="DTS file")
+    parser.add_argument("--dtc-flags", help="extra device tree parameters")
     parser.add_argument("--bindings-dirs", nargs='+', required=True,
                         help="directory with bindings in YAML format, "
                         "we allow multiple")
@@ -120,6 +127,12 @@ Nodes in dependency order (ordinal and path):
                 + ", ".join(node.path for node in scc))
         s += f"  {scc[0].dep_ordinal:<3} {scc[0].path}\n"
 
+    s += """
+Definitions derived from these nodes in dependency order are next,
+followed by tree-wide information (active compatibles, chosen nodes,
+etc.).
+"""
+
     out_comment(s, blank_before=False)
 
 
@@ -129,12 +142,16 @@ def write_node_comment(node):
     s = f"""\
 Devicetree node:
   {node.path}
-
+"""
+    if node.matching_compat:
+        s += f"""
 Binding (compatible = {node.matching_compat}):
   {relativize(node.binding_path)}
-
-Dependency Ordinal: {node.dep_ordinal}
 """
+    else:
+        s += "\nNo matching binding.\n"
+
+    s += f"\nDependency Ordinal: {node.dep_ordinal}\n"
 
     if node.depends_on:
         s += "\nRequires:\n"
@@ -146,9 +163,15 @@ Dependency Ordinal: {node.dep_ordinal}
         for req in node.required_by:
             s += f"  {req.dep_ordinal:<3} {req.path}\n"
 
-    # Indent description by two spaces
-    s += "\nDescription:\n" + \
-         "\n".join("  " + line for line in node.description.splitlines())
+    if node.description:
+        # Indent description by two spaces
+        s += "\nDescription:\n" + \
+            "\n".join("  " + line for line in
+                      node.description.splitlines()) + \
+            "\n"
+
+    if not node.enabled:
+        s += "\nNode is disabled.\n"
 
     out_comment(s)
 
@@ -366,20 +389,14 @@ def write_addr_size(edt, prop_name, prefix):
 
 
 def write_flash(edt):
-    # Writes flash-related output
+    # Writes chosen and tree-wide flash-related output
 
     write_flash_node(edt)
     write_code_partition(edt)
 
-    flash_index = 0
-    for node in edt.nodes:
-        if node.name.startswith("partition@"):
-            write_flash_partition(node, flash_index)
-            flash_index += 1
-
-    if flash_index != 0:
+    if flash_area_num != 0:
         out_comment("Number of flash partitions")
-        out("FLASH_AREA_NUM", flash_index)
+        out("FLASH_AREA_NUM", flash_area_num)
 
 
 def write_flash_node(edt):
@@ -438,8 +455,6 @@ def write_code_partition(edt):
 
 
 def write_flash_partition(partition_node, index):
-    out_comment("Flash partition at " + partition_node.path)
-
     if partition_node.label is None:
         err(f"missing 'label' property on {partition_node!r}")
 
@@ -672,7 +687,7 @@ def str2ident(s):
             .upper()
 
 
-def out_node(node, ident, val, name_alias=None):
+def out_node(node, ident, val, name_alias=None, deprecation_msg=None):
     # Writes a
     #
     #   <node prefix>_<ident> = <val>
@@ -689,6 +704,9 @@ def out_node(node, ident, val, name_alias=None):
     #
     # 'name_alias' is used for reg-names and the like.
     #
+    # If a 'deprecation_msg' string is passed, the generated identifiers will
+    # generate a warning if used, via __WARN(<deprecation_msg>)).
+    #
     # Returns the identifier used for the macro that provides the value
     # for 'ident' within 'node', e.g. DT_MFG_MODEL_CTL_GPIOS_PIN.
 
@@ -699,25 +717,25 @@ def out_node(node, ident, val, name_alias=None):
         aliases.append(f"{node_prefix}_{name_alias}")
         aliases += [f"{alias}_{name_alias}" for alias in node_aliases(node)]
 
-    return out(f"{node_prefix}_{ident}", val, aliases)
+    return out(f"{node_prefix}_{ident}", val, aliases, deprecation_msg)
 
 
-def out_node_s(node, ident, s, name_alias=None):
+def out_node_s(node, ident, s, name_alias=None, deprecation_msg=None):
     # Like out_node(), but emits 's' as a string literal
     #
     # Returns the generated macro name for 'ident'.
 
-    return out_node(node, ident, quote_str(s), name_alias)
+    return out_node(node, ident, quote_str(s), name_alias, deprecation_msg)
 
 
-def out_node_init(node, ident, elms, name_alias=None):
+def out_node_init(node, ident, elms, name_alias=None, deprecation_msg=None):
     # Like out_node(), but generates an {e1, e2, ...} initializer with the
     # elements in the iterable 'elms'.
     #
     # Returns the generated macro name for 'ident'.
 
     return out_node(node, ident, "{" + ", ".join(map(str, elms)) + "}",
-                    name_alias)
+                    name_alias, deprecation_msg)
 
 
 def out_s(ident, val):
@@ -729,7 +747,7 @@ def out_s(ident, val):
     return out(ident, quote_str(val))
 
 
-def out(ident, val, aliases=()):
+def out(ident, val, aliases=(), deprecation_msg=None):
     # Writes '#define <ident> <val>' to the header and '<ident>=<val>' to the
     # the configuration file.
     #
@@ -737,9 +755,11 @@ def out(ident, val, aliases=()):
     # header, these look like '#define <alias> <ident>'. For the configuration
     # file, the value is just repeated as '<alias>=<val>' for each alias.
     #
+    # See out_node() for the meaning of 'deprecation_msg'.
+    #
     # Returns the generated macro name for 'ident'.
 
-    print(f"#define DT_{ident:40} {val}", file=header_file)
+    out_define(ident, val, deprecation_msg, header_file)
     primary_ident = f"DT_{ident}"
 
     # Exclude things that aren't single token values from .conf.  At
@@ -752,13 +772,24 @@ def out(ident, val, aliases=()):
 
     for alias in aliases:
         if alias != ident:
-            print(f"#define DT_{alias:40} DT_{ident}", file=header_file)
+            out_define(alias, "DT_" + ident, deprecation_msg, header_file)
             if output_to_conf:
                 # For the configuration file, the value is just repeated for all
                 # the aliases
                 print(f"DT_{alias}={val}", file=conf_file)
 
     return primary_ident
+
+
+def out_define(ident, val, deprecation_msg, out_file):
+    # out() helper for writing a #define. See out_node() for the meaning of
+    # 'deprecation_msg'.
+
+    s = f"#define DT_{ident:40}"
+    if deprecation_msg:
+        s += fr' __WARN("{deprecation_msg}")'
+    s += f" {val}"
+    print(s, file=out_file)
 
 
 def out_comment(s, blank_before=True):
@@ -792,7 +823,8 @@ def out_comment(s, blank_before=True):
         #   /* foo bar */
         print("/* " + s + " */", file=header_file)
 
-    print("\n".join("# " + line for line in s.splitlines()), file=conf_file)
+    print("\n".join("# " + line if line.strip() else "#"
+                    for line in s.splitlines()), file=conf_file)
 
 
 def escape(s):

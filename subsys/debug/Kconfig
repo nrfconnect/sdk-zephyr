@@ -3,6 +3,7 @@
 # Copyright (c) 2015 Wind River Systems, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+
 menu "System Monitoring Options"
 
 config BOOT_TIME_MEASUREMENT
@@ -37,12 +38,6 @@ config DEBUG
 	  only disables optimization, more debugging variants can be selected
 	  from here to allow more debugging.
 
-config TRACING
-	bool "Enabling Tracing"
-	help
-	  Enable system tracing. This requires a backend such as SEGGER
-	  Systemview to be enabled as well.
-
 config ASAN
 	bool "Build with address sanitizer"
 	depends on ARCH_POSIX
@@ -57,10 +52,10 @@ config ASAN
 	  This behavior can be changes by adding leak_check_at_exit=1 to the
 	  environment variable ASAN_OPTIONS.
 
-if ASAN
 config ASAN_NOP_DLCLOSE
 	bool "Override host OS dlclose() with a NOP"
 	default y if HAS_SDL
+	depends on ASAN
 	help
 	  Override host OS dlclose() with a NOP.
 
@@ -69,7 +64,6 @@ config ASAN_NOP_DLCLOSE
 	  check, "<unknown module>" is reported in the stack traces during the leak
 	  check and these can not be suppressed, see
 	  https://github.com/google/sanitizers/issues/89 for more info.
-endif # ASAN
 
 config UBSAN
 	bool "Build with undefined behavior sanitizer"
@@ -285,49 +279,5 @@ config OPENOCD_SUPPORT
 	  This option exports an array of offsets to kernel structs, used by
 	  OpenOCD to determine the state of running threads.  (This option
 	  selects CONFIG_THREAD_MONITOR, so all of its caveats are implied.)
-
-config TRACING_CPU_STATS
-	bool "Enable CPU usage tracing"
-	select THREAD_MONITOR
-	select THREAD_STACK_INFO
-	select TRACING
-	help
-	  Module provides information about percent of CPU usage based on
-	  tracing hooks for threads switching in and out, interrupts enters
-	  and exits (only distinguishes between idle thread, non idle thread
-	  and scheduler). Use provided API or enable automatic logging to
-	  get values.
-
-config TRACING_CPU_STATS_LOG
-	bool "Enable current CPU usage logging"
-	depends on TRACING_CPU_STATS
-	help
-	  Periodically displays information about CPU usage.
-
-config TRACING_CPU_STATS_INTERVAL
-	int "Logging interval for CPU measurements [ms]"
-	default 2000
-	depends on TRACING_CPU_STATS_LOG
-	help
-	  Time period of displaying information about CPU usage.
-
-config TRACING_CTF
-	bool "Tracing via Common Trace Format support"
-	select THREAD_MONITOR
-	select TRACING
-	help
-	  Enable tracing to a Common Trace Format stream. In order to use it a
-	  CTF bottom layer should be selected, such as TRACING_CTF_BOTTOM_POSIX.
-
-config TRACING_CTF_BOTTOM_POSIX
-	bool "CTF backend for the native_posix port, using a file in the host filesystem"
-	depends on TRACING_CTF
-	depends on ARCH_POSIX
-	help
-	  Enable POSIX backend for CTF tracing. It will output the CTF stream to a
-	  file using fwrite.
-
-
-source "subsys/debug/Kconfig.segger"
 
 endmenu

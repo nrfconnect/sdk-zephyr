@@ -578,6 +578,8 @@ void arch_mem_domain_destroy(struct k_mem_domain *domain);
  * if the supplied memory buffer spans multiple enabled memory management
  * regions (even if all such regions permit user access).
  *
+ * @warning 0 size buffer has undefined behavior.
+ *
  * @param addr start address of the buffer
  * @param size the size of the buffer
  * @param write If nonzero, additionally check if the area is writable.
@@ -638,6 +640,27 @@ FUNC_NORETURN void arch_syscall_oops(void *ssf);
  */
 size_t arch_user_string_nlen(const char *s, size_t maxsize, int *err);
 #endif /* CONFIG_USERSPACE */
+
+/** @} */
+
+/**
+ * @defgroup arch-benchmarking Architecture-specific benchmarking globals
+ * @ingroup arch-interface
+ * @{
+ */
+
+#ifdef CONFIG_EXECUTION_BENCHMARKING
+extern u64_t arch_timing_swap_start;
+extern u64_t arch_timing_swap_end;
+extern u64_t arch_timing_irq_start;
+extern u64_t arch_timing_irq_end;
+extern u64_t arch_timing_tick_start;
+extern u64_t arch_timing_tick_end;
+extern u64_t arch_timing_user_mode_end;
+extern u32_t arch_timing_value_swap_end;
+extern u64_t arch_timing_value_swap_common;
+extern u64_t arch_timing_value_swap_temp;
+#endif /* CONFIG_EXECUTION_BENCHMARKING */
 
 /** @} */
 

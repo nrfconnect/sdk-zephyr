@@ -185,7 +185,6 @@ import time
 import csv
 import yaml
 import glob
-import serial
 import concurrent
 import xml.etree.ElementTree as ET
 import logging
@@ -194,6 +193,11 @@ from collections import OrderedDict
 from itertools import islice
 from pathlib import Path
 from distutils.spawn import find_executable
+
+try:
+    import serial
+except ImportError:
+    print("Install pyserial python module with pip to use --device-testing option.")
 
 try:
     from anytree import Node, RenderTree, find
@@ -1071,7 +1075,6 @@ class SizeCalculator:
         'log_const_sections',
         "font_entry_sections",
         "priv_stacks_noinit",
-        "_TEXT_SECTION_NAME_2",
         "_GCOV_BSS_SECTION_NAME",
         "gcov",
         "nocache"
@@ -1079,6 +1082,7 @@ class SizeCalculator:
 
     # These get copied into RAM only on non-XIP
     ro_sections = [
+        "rom_start",
         "text",
         "ctors",
         "init_array",
@@ -1744,6 +1748,7 @@ class TestInstance:
             if enable_coverage:
                 if platform.name in coverage_platform:
                     content = content + "\nCONFIG_COVERAGE=y"
+                    content = content + "\nCONFIG_COVERAGE_DUMP=y"
 
             if enable_asan:
                 if platform.type == "native":
@@ -2125,7 +2130,7 @@ class ProjectBuilder(FilterBuilder):
             with report_lock:
                 self.report_out()
 
-            if self.cleanup and self.instance.status == "passed":
+            if self.cleanup and not self.coverage and self.instance.status == "passed":
                 pipeline.put({
                     "op": "cleanup",
                     "test": self.instance
@@ -2230,20 +2235,29 @@ class ProjectBuilder(FilterBuilder):
             args += instance.handler.args
 
         # merge overlay files into one variable
-        overlays = ""
-        idx = 0
-        for arg in args:
-            match = re.search('OVERLAY_CONFIG="(.*)"', arg)
-            if match:
-                overlays += match.group(1)
-                del args[idx]
-                idx += 1
+        def extract_overlays(args):
+            re_overlay = re.compile('OVERLAY_CONFIG=(.*)')
+            other_args = []
+            overlays = []
+            for arg in args:
+                match = re_overlay.search(arg)
+                if match:
+                    overlays.append(match.group(1).strip('\'"'))
+                else:
+                    other_args.append(arg)
+
+            args[:] = other_args
+            return overlays
+
+        overlays = extract_overlays(args)
 
         if (self.testcase.extra_configs or self.coverage or
                 self.asan):
-            args.append("OVERLAY_CONFIG=\"%s %s\"" % (overlays,
-                                                      os.path.join(instance.build_dir,
-                                                                   "sanitycheck", "testcase_extra.conf")))
+            overlays.append(os.path.join(instance.build_dir,
+                                         "sanitycheck", "testcase_extra.conf"))
+
+        if overlays:
+            args.append("OVERLAY_CONFIG=\"%s\"" % (" ".join(overlays)))
 
         results = self.run_cmake(args)
         return results
@@ -2905,8 +2919,7 @@ class TestSuite:
 
             while future_to_test:
                 # check for status of the futures which are currently working
-                done, _ = concurrent.futures.wait(
-                    future_to_test, timeout=0.25,
+                done, pending = concurrent.futures.wait(future_to_test, timeout=1,
                     return_when=concurrent.futures.FIRST_COMPLETED)
 
                 # if there is incoming work, start a new future
@@ -2915,7 +2928,6 @@ class TestSuite:
                     message = pipeline.get()
                     test = message['test']
 
-                    # Start the load operation and mark the future with its URL
                     pb = ProjectBuilder(self,
                                         test,
                                         lsan=self.enable_lsan,
@@ -2945,6 +2957,18 @@ class TestSuite:
 
                     # remove the now completed future
                     del future_to_test[future]
+
+                for future in pending:
+                    test = future_to_test[future]
+
+                    try:
+                        future.result(timeout=180)
+                    except concurrent.futures.TimeoutError:
+                        logger.warning("{} stuck?".format(test))
+
+
+
+
 
         if self.enable_size_report and not self.cmake_only:
             # Parallelize size calculation
@@ -4263,12 +4287,21 @@ def main():
                             key=lambda x: x[0][x[0].find("/") + 1:]))
 
         subset, sets = options.subset.split("/")
+        subset = int(subset)
+        sets = int(sets)
         total = len(suite.instances)
-        per_set = round(total / int(sets))
-        start = (int(subset) - 1) * per_set
-        if subset == sets:
-            end = total
+        per_set = int(total / sets)
+        num_extra_sets = total - (per_set * sets)
+
+        # Try and be more fair for rounding error with integer division
+        # so the last subset doesn't get overloaded, we add 1 extra to
+        # subsets 1..num_extra_sets.
+        if subset <= num_extra_sets:
+            start = (subset - 1) * (per_set + 1)
+            end = start + per_set + 1
         else:
+            base = num_extra_sets * (per_set + 1)
+            start = ((subset - num_extra_sets - 1) * per_set) + base
             end = start + per_set
 
         sliced_instances = islice(suite.instances.items(), start, end)
@@ -4332,7 +4365,7 @@ def main():
                 options.gcov_tool = "gcov"
             else:
                 options.gcov_tool = os.path.join(os.environ["ZEPHYR_SDK_INSTALL_DIR"],
-                                                 "i586-zephyr-elf/bin/i586-zephyr-elf-gcov")
+                                                 "x86_64-zephyr-elf/bin/x86_64-zephyr-elf-gcov")
 
         logger.info("Generating coverage files...")
         coverage_tool = CoverageTool.factory(options.coverage_tool)

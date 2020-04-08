@@ -322,6 +322,7 @@ struct bt_le_adv_param {
   */
 #define BT_LE_ADV_PARAM(_options, _int_min, _int_max) \
 		((struct bt_le_adv_param[]) { { \
+			.id = BT_ID_DEFAULT, \
 			.options = (_options), \
 			.interval_min = (_int_min), \
 			.interval_max = (_int_max), \
@@ -447,7 +448,7 @@ struct bt_le_scan_param {
 };
 
 /** LE advertisement packet information */
-struct bt_le_adv_info {
+struct bt_le_scan_recv_info {
 	/** Advertiser LE address and type */
 	const bt_addr_le_t *addr;
 
@@ -466,7 +467,7 @@ struct bt_le_scan_cb {
 	 *  @param info Advertiser packet information.
 	 *  @param buf  Buffer containing advertiser data.
 	 */
-	void (*recv)(const struct bt_le_adv_info *info,
+	void (*recv)(const struct bt_le_scan_recv_info *info,
 		     struct net_buf_simple *buf);
 
 	sys_snode_t node;
@@ -508,6 +509,13 @@ struct bt_le_scan_cb {
  *
  *  Start LE scanning with given parameters and provide results through
  *  the specified callback.
+ *
+ *  Note: The LE scanner by default does not use the Identity Address of the
+ *        local device when :option:`CONFIG_BT_PRIVACY` is disabled. This is to
+ *        prevent the active scanner from disclosing the identity information
+ *        when requesting additional information from advertisers.
+ *        In order to enable directed advertiser reports then
+ *        :option:`CONFIG_BT_SCAN_WITH_IDENTITY` must be enabled.
  *
  *  @param param Scan parameters.
  *  @param cb Callback to notify scan results. May be NULL if callback

@@ -139,6 +139,10 @@ config BT_LLL_VENDOR_NORDIC
 	select BT_CTLR_SCHED_ADVANCED_SUPPORT
 	select BT_CTLR_TIFS_HW_SUPPORT
 
+	# Until ticker resolve collision is fixed for skipped ticker catch-up
+	# issue, use the old compatibility mode
+	select BT_TICKER_COMPATIBILITY_MODE
+
 	default y
 	help
 	  Use Nordic Lower Link Layer implementation.
@@ -147,6 +151,7 @@ config BT_LLL_VENDOR_OPENISA
 	bool "Use OpenISA LLL"
 	depends on BT_LL_SW_SPLIT && SOC_OPENISA_RV32M1_RISCV32
 	select BT_HAS_HCI_VS
+	select BT_CTLR_LE_ENC_SUPPORT if !BT_CTLR_DATA_LENGTH_CLEAR
 	default y
 	help
 	  Use OpenISA Lower Link Layer implementation.
@@ -314,7 +319,7 @@ config BT_CTLR_TX_PWR_DYNAMIC_CONTROL
 
 config BT_CTLR_SETTINGS
 	bool "Settings System"
-	depends on BT_SETTINGS
+	depends on SETTINGS
 	help
 	  Enable use of settings system in controller.
 
@@ -406,21 +411,6 @@ config BT_CTLR_RL_SIZE
 	help
 	  Set the size of the Resolving List for LE Controller-based Privacy.
 	  On nRF5x-based controllers, the hardware imposes a limit of 8 devices.
-
-config BT_CTLR_SW_DEFERRED_PRIVACY
-	bool "LE Controller-based Software Privacy"
-	depends on BT_CTLR_PRIVACY
-	help
-	  Enable support for software based deferred privacy calculations.
-
-config BT_CTLR_RPA_CACHE_SIZE
-	int "LE Controller-based Software Privacy Resolving List size"
-	depends on BT_CTLR_SW_DEFERRED_PRIVACY
-	default 8
-	range 1 64
-	help
-	  Set the size of the Known Unknown Resolving List for LE
-	  Controller-based Software deferred Privacy.
 
 config BT_CTLR_EXT_SCAN_FP
 	bool "LE Extended Scanner Filter Policies"
@@ -533,6 +523,21 @@ config BT_CTLR_FILTER
 	help
 	  Enable support for controller device whitelist feature
 
+config BT_CTLR_SW_DEFERRED_PRIVACY
+	bool "LE Controller-based Software Privacy"
+	depends on BT_CTLR_PRIVACY
+	help
+	  Enable support for software based deferred privacy calculations.
+
+config BT_CTLR_RPA_CACHE_SIZE
+	int "LE Controller-based Software Privacy Resolving List size"
+	depends on BT_CTLR_SW_DEFERRED_PRIVACY
+	default 8
+	range 1 64
+	help
+	  Set the size of the Known Unknown Resolving List for LE
+	  Controller-based Software deferred Privacy.
+
 config BT_CTLR_DATA_LENGTH_CLEAR
 	bool "Data Length Support (Cleartext only)"
 	depends on SOC_SERIES_NRF51X
@@ -571,6 +576,12 @@ config BT_CTLR_ZLI
 	  Enable support for use of Zero Latency IRQ feature. Note, applications
 	  shall not use Zero Latency IRQ themselves when this option is selected,
 	  else will impact controller stability.
+
+config BT_CTLR_OPTIMIZE_FOR_SPEED
+	bool "Optimize for Speed"
+	default y if BT_CTLR_LE_ENC
+	help
+	  Optimize compilation of controller for execution speed.
 
 if BT_LL_SW_LEGACY
 
@@ -842,7 +853,8 @@ config BT_TICKER_COMPATIBILITY_MODE
 
 config BT_TICKER_EXT
 	bool "Ticker extensions"
-	default y if !BT_TICKER_COMPATIBILITY_MODE
+	depends on !BT_TICKER_COMPATIBILITY_MODE
+	default y
 	help
 	  This option enables ticker extensions such as re-scheduling of
 	  ticker nodes with slot_window set to non-zero. Ticker extensions

@@ -38,7 +38,7 @@ else()
   # even after output is one line.
   message(STATUS "Found west: ${WEST} (found suitable version \"${west_version}\", minimum required is \"${MIN_WEST_VERSION}\")")
 
-  if (${west_version} VERSION_GREATER_EQUAL "0.7.0")
+  if (${west_version} VERSION_GREATER_EQUAL "0.7.1")
     execute_process(
       COMMAND ${WEST}  topdir
       OUTPUT_VARIABLE  WEST_TOPDIR
@@ -75,13 +75,11 @@ if(${CMAKE_MATCH_1} VERSION_LESS ${MIN_DTC_VERSION})
 endif()
 endif(DTC)
 
+# gperf is an optional dependency
 find_program(
   GPERF
   gperf
   )
-if(${GPERF} STREQUAL GPERF-NOTFOUND)
-  message(FATAL_ERROR "Unable to find gperf")
-endif()
 
 # openocd is an optional dependency
 find_program(
