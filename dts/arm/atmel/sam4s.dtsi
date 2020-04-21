@@ -9,9 +9,11 @@
 #include <dt-bindings/i2c/i2c.h>
 #include <dt-bindings/gpio/gpio.h>
 
+#include "sam4s-pinctrl.dtsi"
+
 / {
 	aliases {
-		watchdog0 = &wdog;
+		watchdog0 = &wdt;
 	};
 
 	cpus {
@@ -25,18 +27,13 @@
 		};
 	};
 
-	sram0: memory@20100000 {
-		compatible = "mmio-sram";
-	};
-
-	flash0: flash@400000 {
-		compatible = "soc-nv-flash";
-		label = "FLASH_0";
-	};
-
 	soc {
+		sram0: memory@20100000 {
+			compatible = "mmio-sram";
+		};
+
 		/* Only used for HWINFO device ID */
-		flash-controller@400e0a00 {
+		eefc: flash-controller@400e0a00 {
 			compatible = "atmel,sam-flash-controller";
 			label = "FLASH_CTRL";
 			reg = <0x400e0a00 0x200>;
@@ -44,9 +41,14 @@
 
 			#address-cells = <1>;
 			#size-cells = <1>;
+
+			flash0: flash@400000 {
+				compatible = "soc-nv-flash";
+				label = "FLASH_0";
+			};
 		};
 
-		wdog: watchdog@400e1450 {
+		wdt: watchdog@400e1450 {
 			compatible = "atmel,sam-watchdog";
 			reg = <0x400e1450 0xc>;
 			interrupts = <4 0>;
@@ -54,7 +56,8 @@
 			label = "WATCHDOG_0";
 			status = "disabled";
 		};
-		i2c0: i2c@40018000 {
+
+		twi0: i2c@40018000 {
 			compatible = "atmel,sam-i2c-twi";
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			reg = <0x40018000 0x128>;
@@ -66,7 +69,7 @@
 			#size-cells = <0>;
 		};
 
-		i2c1: i2c@4001c000 {
+		twi1: i2c@4001c000 {
 			compatible = "atmel,sam-i2c-twi";
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			reg = <0x4001c000 0x128>;
@@ -96,6 +99,7 @@
 			peripheral-id = <8>;
 			status = "disabled";
 			label = "UART_0";
+			pinctrl-0 = <&pa9a_uart0_urxd0 &pa10a_uart0_utxd0>;
 		};
 
 		uart1: uart@400e0800 {
@@ -105,6 +109,7 @@
 			peripheral-id = <9>;
 			status = "disabled";
 			label = "UART_1";
+			pinctrl-0 = <&pb2a_uart1_urxd1 &pb3a_uart1_utxd1>;
 		};
 
 		usart0: usart@40024000 {
@@ -125,34 +130,44 @@
 			label = "USART_1";
 		};
 
-		porta: gpio@400e0e00 {
-			compatible = "atmel,sam-gpio";
-			reg = <0x400e0e00 0x190>;
-			interrupts = <11 1>;
-			peripheral-id = <11>;
-			label = "PORTA";
-			gpio-controller;
-			#gpio-cells = <2>;
-		};
+		pinctrl@400e0e00 {
+			compatible = "atmel,sam-pinctrl";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0x400e0e00 0x400e0e00 0x600>;
 
-		portb: gpio@400e1000 {
-			compatible = "atmel,sam-gpio";
-			reg = <0x400e1000 0x190>;
-			interrupts = <12 1>;
-			peripheral-id = <12>;
-			label = "PORTB";
-			gpio-controller;
-			#gpio-cells = <2>;
-		};
+			pioa: gpio@400e0e00 {
+				compatible = "atmel,sam-gpio";
+				reg = <0x400e0e00 0x190>;
+				interrupts = <11 1>;
+				peripheral-id = <11>;
+				label = "PORTA";
+				gpio-controller;
+				#gpio-cells = <2>;
+				#atmel,pin-cells = <2>;
+			};
 
-		portc: gpio@400e1200 {
-			compatible = "atmel,sam-gpio";
-			reg = <0x400e1200 0x190>;
-			interrupts = <13 1>;
-			peripheral-id = <13>;
-			label = "PORTC";
-			gpio-controller;
-			#gpio-cells = <2>;
+			piob: gpio@400e1000 {
+				compatible = "atmel,sam-gpio";
+				reg = <0x400e1000 0x190>;
+				interrupts = <12 1>;
+				peripheral-id = <12>;
+				label = "PORTB";
+				gpio-controller;
+				#gpio-cells = <2>;
+				#atmel,pin-cells = <2>;
+			};
+
+			pioc: gpio@400e1200 {
+				compatible = "atmel,sam-gpio";
+				reg = <0x400e1200 0x190>;
+				interrupts = <13 1>;
+				peripheral-id = <13>;
+				label = "PORTC";
+				gpio-controller;
+				#gpio-cells = <2>;
+				#atmel,pin-cells = <2>;
+			};
 		};
 	};
 };

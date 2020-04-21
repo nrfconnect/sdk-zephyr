@@ -123,6 +123,11 @@ int bt_mesh_provision(const u8_t net_key[16], u16_t net_idx,
 
 	memcpy(bt_mesh.dev_key, dev_key, 16);
 
+	if (IS_ENABLED(CONFIG_BT_MESH_LOW_POWER) &&
+	    IS_ENABLED(CONFIG_BT_MESH_LPN_SUB_ALL_NODES_ADDR)) {
+		bt_mesh_lpn_group_add(BT_MESH_ADDR_ALL_NODES);
+	}
+
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
 		BT_DBG("Storing network information persistently");
 		bt_mesh_store_net();
@@ -174,6 +179,12 @@ void bt_mesh_reset(void)
 	bt_mesh_tx_reset();
 
 	if (IS_ENABLED(CONFIG_BT_MESH_LOW_POWER)) {
+		if (IS_ENABLED(CONFIG_BT_MESH_LPN_SUB_ALL_NODES_ADDR)) {
+			u16_t group = BT_MESH_ADDR_ALL_NODES;
+
+			bt_mesh_lpn_group_del(&group, 1);
+		}
+
 		bt_mesh_lpn_disable(true);
 	}
 
@@ -204,57 +215,6 @@ void bt_mesh_reset(void)
 bool bt_mesh_is_provisioned(void)
 {
 	return atomic_test_bit(bt_mesh.flags, BT_MESH_VALID);
-}
-
-int bt_mesh_prov_enable(bt_mesh_prov_bearer_t bearers)
-{
-	if (bt_mesh_is_provisioned()) {
-		return -EALREADY;
-	}
-
-	if (IS_ENABLED(CONFIG_BT_DEBUG)) {
-		const struct bt_mesh_prov *prov = bt_mesh_prov_get();
-		struct bt_uuid_128 uuid = { .uuid = { BT_UUID_TYPE_128 } };
-
-		memcpy(uuid.val, prov->uuid, 16);
-		BT_INFO("Device UUID: %s", bt_uuid_str(&uuid.uuid));
-	}
-
-	if (IS_ENABLED(CONFIG_BT_MESH_PB_ADV) &&
-	    (bearers & BT_MESH_PROV_ADV)) {
-		/* Make sure we're scanning for provisioning inviations */
-		bt_mesh_scan_enable();
-		/* Enable unprovisioned beacon sending */
-		bt_mesh_beacon_enable();
-	}
-
-	if (IS_ENABLED(CONFIG_BT_MESH_PB_GATT) &&
-	    (bearers & BT_MESH_PROV_GATT)) {
-		bt_mesh_proxy_prov_enable();
-		bt_mesh_adv_update();
-	}
-
-	return 0;
-}
-
-int bt_mesh_prov_disable(bt_mesh_prov_bearer_t bearers)
-{
-	if (bt_mesh_is_provisioned()) {
-		return -EALREADY;
-	}
-
-	if (IS_ENABLED(CONFIG_BT_MESH_PB_ADV) &&
-	    (bearers & BT_MESH_PROV_ADV)) {
-		bt_mesh_beacon_disable();
-		bt_mesh_scan_disable();
-	}
-
-	if (IS_ENABLED(CONFIG_BT_MESH_PB_GATT) &&
-	    (bearers & BT_MESH_PROV_GATT)) {
-		bt_mesh_proxy_prov_disable(true);
-	}
-
-	return 0;
 }
 
 static void model_suspend(struct bt_mesh_model *mod, struct bt_mesh_elem *elem,

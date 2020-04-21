@@ -6,6 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT st_stm32_adc
+
 #include <errno.h>
 
 #include <drivers/adc.h>
@@ -160,6 +162,18 @@ static const u32_t table_samp_time[] = {
 	SMP_TIME(92,  S_5),
 	SMP_TIME(247, S_5),
 	SMP_TIME(640, S_5),
+};
+#elif defined(CONFIG_SOC_SERIES_STM32L1X)
+static const u16_t acq_time_tbl[8] = {5, 10, 17, 25, 49, 97, 193, 385};
+static const u32_t table_samp_time[] = {
+	SMP_TIME(4,   S),
+	SMP_TIME(9,   S),
+	SMP_TIME(16,  S),
+	SMP_TIME(24,  S),
+	SMP_TIME(48,  S),
+	SMP_TIME(96,  S),
+	SMP_TIME(192, S),
+	SMP_TIME(384, S),
 };
 #endif
 
@@ -456,7 +470,8 @@ static int adc_stm32_channel_setup(struct device *dev,
 #if !defined(CONFIG_SOC_SERIES_STM32F2X) && \
 	!defined(CONFIG_SOC_SERIES_STM32F4X) && \
 	!defined(CONFIG_SOC_SERIES_STM32F7X) && \
-	!defined(CONFIG_SOC_SERIES_STM32F1X)
+	!defined(CONFIG_SOC_SERIES_STM32F1X) && \
+	!defined(CONFIG_SOC_SERIES_STM32L1X)
 static void adc_stm32_calib(struct device *dev)
 {
 	struct adc_stm32_cfg *config =
@@ -534,12 +549,16 @@ static int adc_stm32_init(struct device *dev)
 	defined(CONFIG_SOC_SERIES_STM32G4X)
 	LL_ADC_SetCommonClock(__LL_ADC_COMMON_INSTANCE(adc),
 			LL_ADC_CLOCK_SYNC_PCLK_DIV4);
+#elif defined(CONFIG_SOC_SERIES_STM32L1X)
+	LL_ADC_SetCommonClock(__LL_ADC_COMMON_INSTANCE(adc),
+			LL_ADC_CLOCK_ASYNC_DIV4);
 #endif
 
 #if !defined(CONFIG_SOC_SERIES_STM32F2X) && \
 	!defined(CONFIG_SOC_SERIES_STM32F4X) && \
 	!defined(CONFIG_SOC_SERIES_STM32F7X) && \
-	!defined(CONFIG_SOC_SERIES_STM32F1X)
+	!defined(CONFIG_SOC_SERIES_STM32F1X) && \
+	!defined(CONFIG_SOC_SERIES_STM32L1X)
 	/*
 	 * Calibration of F1 series has to be started after ADC Module is
 	 * enabled.
@@ -549,6 +568,7 @@ static int adc_stm32_init(struct device *dev)
 
 #if defined(CONFIG_SOC_SERIES_STM32F0X) || \
 	defined(CONFIG_SOC_SERIES_STM32L0X) || \
+	defined(CONFIG_SOC_SERIES_STM32L4X) || \
 	defined(CONFIG_SOC_SERIES_STM32WBX) || \
 	defined(CONFIG_SOC_SERIES_STM32G4X)
 	if (LL_ADC_IsActiveFlag_ADRDY(adc)) {
@@ -635,11 +655,11 @@ static const struct adc_driver_api api_stm32_driver_api = {
 static void adc_stm32_cfg_func_##index(void);				\
 									\
 static const struct adc_stm32_cfg adc_stm32_cfg_##index = {		\
-	.base = (ADC_TypeDef *)DT_ADC_##index##_BASE_ADDRESS,		\
+	.base = (ADC_TypeDef *)DT_INST_REG_ADDR(index),\
 	.irq_cfg_func = adc_stm32_cfg_func_##index,			\
 	.pclken = {							\
-		.enr = DT_ADC_##index##_CLOCK_BITS,			\
-		.bus = DT_ADC_##index##_CLOCK_BUS,			\
+		.enr = DT_INST_CLOCKS_CELL(index, bits),	\
+		.bus = DT_INST_CLOCKS_CELL(index, bus),	\
 	},								\
 };									\
 static struct adc_stm32_data adc_stm32_data_##index = {			\
@@ -648,18 +668,20 @@ static struct adc_stm32_data adc_stm32_data_##index = {			\
 	ADC_CONTEXT_INIT_SYNC(adc_stm32_data_##index, ctx),		\
 };									\
 									\
-DEVICE_AND_API_INIT(adc_##index, DT_ADC_##index##_NAME, &adc_stm32_init,\
+DEVICE_AND_API_INIT(adc_##index, DT_INST_LABEL(index),	\
+		    &adc_stm32_init,					\
 		    &adc_stm32_data_##index, &adc_stm32_cfg_##index,	\
 		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,	\
 		    &api_stm32_driver_api);				\
 									\
 static void adc_stm32_cfg_func_##index(void)				\
 {									\
-	IRQ_CONNECT(DT_ADC_##index##_IRQ, DT_ADC_##index##_IRQ_PRI,	\
+	IRQ_CONNECT(DT_INST_IRQN(index),		\
+		    DT_INST_IRQ(index, priority),	\
 		    adc_stm32_isr, DEVICE_GET(adc_##index), 0);		\
-	irq_enable(DT_ADC_##index##_IRQ);				\
+	irq_enable(DT_INST_IRQN(index));		\
 }
 
-#ifdef CONFIG_ADC_1
-STM32_ADC_INIT(1)
-#endif /* CONFIG_ADC_1 */
+#if DT_HAS_DRV_INST(0)
+STM32_ADC_INIT(0);
+#endif /* DT_HAS_DRV_INST(0) */

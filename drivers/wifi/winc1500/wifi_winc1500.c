@@ -12,6 +12,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <zephyr.h>
 #include <kernel.h>
+#include <debug/stack.h>
 #include <device.h>
 #include <string.h>
 #include <errno.h>
@@ -162,9 +163,7 @@ static struct winc1500_data w1500_data;
 
 static void stack_stats(void)
 {
-	net_analyze_stack("WINC1500 stack",
-			  Z_THREAD_STACK_BUFFER(winc1500_stack),
-			  K_THREAD_STACK_SIZEOF(winc1500_stack));
+	log_stack_usage(&winc1500_thread_data);
 }
 
 static char *socket_error_string(s8_t err)
@@ -1106,6 +1105,7 @@ static int winc1500_init(struct device *dev)
 			(k_thread_entry_t)winc1500_thread, NULL, NULL, NULL,
 			K_PRIO_COOP(CONFIG_WIFI_WINC1500_THREAD_PRIO),
 			0, K_NO_WAIT);
+	k_thread_name_set(&winc1500_thread_data, "WINC1500");
 
 	LOG_DBG("WINC1500 driver Initialized");
 
@@ -1113,6 +1113,6 @@ static int winc1500_init(struct device *dev)
 }
 
 NET_DEVICE_OFFLOAD_INIT(winc1500, CONFIG_WIFI_WINC1500_NAME,
-			winc1500_init, &w1500_data, NULL,
+			winc1500_init, device_pm_control_nop, &w1500_data, NULL,
 			CONFIG_WIFI_INIT_PRIORITY, &winc1500_api,
 			CONFIG_WIFI_WINC1500_MAX_PACKET_SIZE);

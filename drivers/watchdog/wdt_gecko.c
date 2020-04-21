@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT silabs_gecko_wdog
+
 #include <soc.h>
 #include <drivers/watchdog.h>
 #include <em_wdog.h>
@@ -135,7 +137,7 @@ static int wdt_gecko_install_timeout(struct device *dev,
 				     const struct wdt_timeout_cfg *cfg)
 {
 	struct wdt_gecko_data *data = DEV_DATA(dev);
-	WDOG_Init_TypeDef init_defaults = WDOG_INIT_DEFAULT;
+	data->wdog_config = (WDOG_Init_TypeDef)WDOG_INIT_DEFAULT;
 	u32_t installed_timeout;
 
 	if (data->timeout_installed) {
@@ -150,7 +152,9 @@ static int wdt_gecko_install_timeout(struct device *dev,
 		return -EINVAL;
 	}
 
-	data->wdog_config = init_defaults;
+#if defined(_WDOG_CTRL_CLKSEL_MASK)
+	data->wdog_config.clkSel = wdogClkSelULFRCO;
+#endif
 
 	data->wdog_config.perSel = (WDOG_PeriodSel_TypeDef)
 		wdt_gecko_get_persel_from_timeout(cfg->window.max);
@@ -271,13 +275,13 @@ static const struct wdt_driver_api wdt_gecko_driver_api = {
 									\
 	static const struct wdt_gecko_cfg wdt_gecko_cfg_##index = {	\
 		.base = (WDOG_TypeDef *)				\
-			DT_INST_##index##_SILABS_GECKO_WDOG_BASE_ADDRESS,\
+			DT_INST_REG_ADDR(index),\
 		.irq_cfg_func = wdt_gecko_cfg_func_##index,		\
 	};								\
 	static struct wdt_gecko_data wdt_gecko_data_##index;		\
 									\
 	DEVICE_AND_API_INIT(wdt_##index,				\
-				DT_INST_##index##_SILABS_GECKO_WDOG_LABEL,\
+				DT_INST_LABEL(index),\
 				&wdt_gecko_init, &wdt_gecko_data_##index,\
 				&wdt_gecko_cfg_##index, POST_KERNEL,	\
 				CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,	\
@@ -285,16 +289,16 @@ static const struct wdt_driver_api wdt_gecko_driver_api = {
 									\
 	static void wdt_gecko_cfg_func_##index(void)			\
 	{								\
-		IRQ_CONNECT(DT_INST_##index##_SILABS_GECKO_WDOG_IRQ_0,	\
-			DT_INST_##index##_SILABS_GECKO_WDOG_IRQ_0_PRIORITY,\
+		IRQ_CONNECT(DT_INST_IRQN(index),	\
+			DT_INST_IRQ(index, priority),\
 			wdt_gecko_isr, DEVICE_GET(wdt_##index), 0);	\
-		irq_enable(DT_INST_##index##_SILABS_GECKO_WDOG_IRQ_0);	\
+		irq_enable(DT_INST_IRQN(index));	\
 	}
 
-#ifdef DT_INST_0_SILABS_GECKO_WDOG
+#if DT_HAS_DRV_INST(0)
 GECKO_WDT_INIT(0)
-#endif /* DT_INST_0_SILABS_GECKO_WDOG */
+#endif /* DT_HAS_DRV_INST(0) */
 
-#ifdef DT_INST_1_SILABS_GECKO_WDOG
+#if DT_HAS_DRV_INST(1)
 GECKO_WDT_INIT(1)
-#endif /* DT_INST_1_SILABS_GECKO_WDOG */
+#endif /* DT_HAS_DRV_INST(1) */

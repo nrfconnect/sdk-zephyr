@@ -757,7 +757,7 @@ static struct net_linkaddr server_link_addr = {
 #define MY_IPV6_ADDR "2001:db8:100::1"
 #define PEER_IPV6_ADDR "2001:db8:100::2"
 #define TEST_TXTIME 0xff112233445566ff
-#define WAIT_TIME 250
+#define WAIT_TIME K_MSEC(250)
 
 static void eth_fake_iface_init(struct net_if *iface)
 {
@@ -808,9 +808,9 @@ static int eth_fake_init(struct device *dev)
 	return 0;
 }
 
-ETH_NET_DEVICE_INIT(eth_fake, "eth_fake", eth_fake_init, &eth_fake_data,
-		    NULL, CONFIG_ETH_INIT_PRIORITY, &eth_fake_api_funcs,
-		    NET_ETH_MTU);
+ETH_NET_DEVICE_INIT(eth_fake, "eth_fake", eth_fake_init, device_pm_control_nop,
+		    &eth_fake_data, NULL, CONFIG_ETH_INIT_PRIORITY,
+		    &eth_fake_api_funcs, NET_ETH_MTU);
 
 static void setup_eth(void)
 {

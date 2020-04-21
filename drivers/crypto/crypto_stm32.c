@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT st_stm32_cryp
+
 #include <init.h>
 #include <kernel.h>
 #include <device.h>
@@ -19,7 +21,8 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(crypto_stm32);
 
-#define CRYP_SUPPORT (CAP_RAW_KEY | CAP_SEPARATE_IO_BUFS | CAP_SYNC_OPS)
+#define CRYP_SUPPORT (CAP_RAW_KEY | CAP_SEPARATE_IO_BUFS | CAP_SYNC_OPS | \
+		      CAP_NO_IV_PREFIX)
 #define BLOCK_LEN_BYTES 16
 #define BLOCK_LEN_WORDS (BLOCK_LEN_BYTES / sizeof(u32_t))
 #define CRYPTO_MAX_SESSION CONFIG_CRYPTO_STM32_MAX_SESSION
@@ -147,18 +150,23 @@ static int crypto_stm32_cbc_encrypt(struct cipher_ctx *ctx,
 {
 	int ret;
 	u32_t vec[BLOCK_LEN_WORDS];
+	int out_offset = 0;
 
 	struct crypto_stm32_session *session = CRYPTO_STM32_SESSN(ctx);
 
 	copy_reverse_words((u8_t *)vec, sizeof(vec), iv, BLOCK_LEN_BYTES);
 	session->config.pInitVect = vec;
 
-	/* Prefix IV to ciphertext */
-	memcpy(pkt->out_buf, iv, 16);
+	if ((ctx->flags & CAP_NO_IV_PREFIX) == 0U) {
+		/* Prefix IV to ciphertext unless CAP_NO_IV_PREFIX is set. */
+		memcpy(pkt->out_buf, iv, 16);
+		out_offset = 16;
+	}
 
-	ret = do_encrypt(ctx, pkt->in_buf, pkt->in_len, pkt->out_buf + 16);
+	ret = do_encrypt(ctx, pkt->in_buf, pkt->in_len,
+			 pkt->out_buf + out_offset);
 	if (ret == 0) {
-		pkt->out_len = pkt->in_len + 16;
+		pkt->out_len = pkt->in_len + out_offset;
 	}
 
 	return ret;
@@ -169,15 +177,21 @@ static int crypto_stm32_cbc_decrypt(struct cipher_ctx *ctx,
 {
 	int ret;
 	u32_t vec[BLOCK_LEN_WORDS];
+	int in_offset = 0;
 
 	struct crypto_stm32_session *session = CRYPTO_STM32_SESSN(ctx);
 
 	copy_reverse_words((u8_t *)vec, sizeof(vec), iv, BLOCK_LEN_BYTES);
 	session->config.pInitVect = vec;
 
-	ret = do_decrypt(ctx, pkt->in_buf + 16, pkt->in_len, pkt->out_buf);
+	if ((ctx->flags & CAP_NO_IV_PREFIX) == 0U) {
+		in_offset = 16;
+	}
+
+	ret = do_decrypt(ctx, pkt->in_buf + in_offset, pkt->in_len,
+			 pkt->out_buf);
 	if (ret == 0) {
-		pkt->out_len = pkt->in_len - 16;
+		pkt->out_len = pkt->in_len - in_offset;
 	}
 
 	return ret;
@@ -443,12 +457,12 @@ static struct crypto_stm32_data crypto_stm32_dev_data = {
 
 static struct crypto_stm32_config crypto_stm32_dev_config = {
 	.pclken = {
-		.enr = DT_INST_0_ST_STM32_CRYP_CLOCK_BITS,
-		.bus = DT_INST_0_ST_STM32_CRYP_CLOCK_BUS
+		.enr = DT_INST_CLOCKS_CELL(0, bits),
+		.bus = DT_INST_CLOCKS_CELL(0, bus)
 	}
 };
 
-DEVICE_AND_API_INIT(crypto_stm32, DT_INST_0_ST_STM32_CRYP_LABEL,
+DEVICE_AND_API_INIT(crypto_stm32, DT_INST_LABEL(0),
 		    crypto_stm32_init, &crypto_stm32_dev_data,
 		    &crypto_stm32_dev_config, POST_KERNEL,
 		    CONFIG_CRYPTO_INIT_PRIORITY, (void *)&crypto_enc_funcs);

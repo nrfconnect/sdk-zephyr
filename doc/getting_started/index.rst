@@ -246,6 +246,36 @@ directory using west:
          cd zephyrproject
          west update
 
+.. rst-class:: numbered-step
+
+Export Zephyr CMake package
+***************************
+
+Exporting Zephyr as a :ref:`cmake_pkg` makes it possible for CMake to automatically find and load
+boilerplate code for building a Zephyr application.
+
+Zephyr CMake package is exported with the following command
+
+.. tabs::
+
+   .. group-tab:: Ubuntu
+
+      .. code-block:: bash
+
+         west zephyr-export
+
+   .. group-tab:: macOS
+
+      .. code-block:: bash
+
+         west zephyr-export
+
+   .. group-tab:: Windows
+
+      .. code-block:: bat
+
+         west zephyr-export
+
 .. _install_py_requirements:
 
 .. rst-class:: numbered-step
@@ -301,7 +331,9 @@ including: compiler, assembler, linker, and their dependencies.
 
       |p|
 
-      #. Download the latest SDK as a self-extracting installation binary:
+      #. Download the `latest SDK
+	 <https://github.com/zephyrproject-rtos/sdk-ng/releases>`_ as a
+	 self-extracting installation binary:
 
          .. code-block:: bash
 
@@ -366,31 +398,6 @@ are properly set up for Zephyr development.
       <blinky-sample-requirements>` for more information. If this sample is not
       compatible with your board, a good alternative to try is the
       :ref:`Hello World sample <hello_world>`.
-
-#. Set build environment variables:
-
-   .. tabs::
-
-      .. group-tab:: Ubuntu
-
-         .. code-block:: bash
-
-            cd ~/zephyrproject/zephyr
-            source zephyr-env.sh
-
-      .. group-tab:: macOS
-
-         .. code-block:: bash
-
-            cd ~/zephyrproject/zephyr
-            source zephyr-env.sh
-
-      .. group-tab:: Windows
-
-         .. code-block:: bat
-
-            cd %HOMEPATH%/zephyrproject/zephyr
-            zephyr-env.cmd
 
 #. Build the blinky sample. Specify **your board name**
    (see :ref:`boards`) in the command below:

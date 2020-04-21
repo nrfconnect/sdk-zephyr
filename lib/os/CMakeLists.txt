@@ -11,6 +11,7 @@ zephyr_sources(
   fdtable.c
   hex.c
   mempool.c
+  notify.c
   printk.c
   onoff.c
   rb.c
@@ -18,6 +19,8 @@ zephyr_sources(
   thread_entry.c
   timeutil.c
   work_q.c
+  heap.c
+  heap-validate.c
   )
 
 zephyr_sources_ifdef(CONFIG_JSON_LIBRARY json.c)

@@ -19,7 +19,7 @@ LOG_MODULE_DECLARE(net_l2_ppp, CONFIG_NET_L2_PPP_LOG_LEVEL);
 #define BUF_ALLOC_TIMEOUT K_MSEC(100)
 
 /* This timeout is in milliseconds */
-#define FSM_TIMEOUT CONFIG_NET_L2_PPP_TIMEOUT
+#define FSM_TIMEOUT K_MSEC(CONFIG_NET_L2_PPP_TIMEOUT)
 
 #define MAX_NACK_LOOPS CONFIG_NET_L2_PPP_MAX_NACK_LOOPS
 
@@ -118,8 +118,7 @@ static void ppp_fsm_timeout(struct k_work *work)
 
 			fsm->retransmits--;
 
-			(void)k_delayed_work_submit(&fsm->timer,
-						    FSM_TIMEOUT);
+			(void)k_delayed_work_submit(&fsm->timer, FSM_TIMEOUT);
 		}
 
 		break;
@@ -359,14 +358,14 @@ int ppp_send_pkt(struct ppp_fsm *fsm, struct net_if *iface,
 	if (!iface) {
 		struct ppp_context *ctx;
 
-		if (fsm->protocol == PPP_LCP) {
+		if (fsm && fsm->protocol == PPP_LCP) {
 			ctx = CONTAINER_OF(fsm, struct ppp_context, lcp.fsm);
 #if defined(CONFIG_NET_IPV4)
-		} else if (fsm->protocol == PPP_IPCP) {
+		} else if (fsm && fsm->protocol == PPP_IPCP) {
 			ctx = CONTAINER_OF(fsm, struct ppp_context, ipcp.fsm);
 #endif
 #if defined(CONFIG_NET_IPV6)
-		} else if (fsm->protocol == PPP_IPV6CP) {
+		} else if (fsm && fsm->protocol == PPP_IPV6CP) {
 			ctx = CONTAINER_OF(fsm, struct ppp_context,
 					   ipv6cp.fsm);
 #endif
@@ -517,7 +516,7 @@ int ppp_send_pkt(struct ppp_fsm *fsm, struct net_if *iface,
 		 * in that case.
 		 */
 		(void)k_delayed_work_submit(&fsm->sender.work,
-				IS_ENABLED(CONFIG_NET_TEST) ? K_MSEC(1) : 0);
+			  IS_ENABLED(CONFIG_NET_TEST) ? K_MSEC(1) : K_NO_WAIT);
 	} else {
 		ret = net_send_data(pkt);
 		if (ret < 0) {

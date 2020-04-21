@@ -20,16 +20,6 @@ config MCG_VDIV0
 config MCG_FCRDIV
 	default 1
 
-if UART_MCUX
-
-config UART_MCUX_0
-	default y if UART_CONSOLE
-
-config UART_MCUX_3
-	default y if BT_UART
-
-endif # UART_MCUX
-
 if PINMUX_MCUX
 
 config PINMUX_MCUX_PORTA
@@ -42,7 +32,7 @@ config PINMUX_MCUX_PORTC
 	default y
 
 config PINMUX_MCUX_PORTD
-	default y if SPI_0 || UART_MCUX_2
+	default y if "$(dt_nodelabel_enabled,spi0)" || "$(dt_nodelabel_enabled,uart2)"
 
 config PINMUX_MCUX_PORTE
 	default y
@@ -77,7 +67,7 @@ config ADC_1
 	depends on ADC
 
 config TEMP_KINETIS
-	default y
+	default y if ADC_1
 	depends on SENSOR
 
 config PWM_3

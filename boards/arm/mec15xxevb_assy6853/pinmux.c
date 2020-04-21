@@ -158,7 +158,7 @@ static int board_pinmux_init(struct device *dev)
 	pinmux_pin_set(portf, MCHP_GPIO_250, MCHP_GPIO_CTRL_MUX_F0);
 
 	/* See table 2-4 from the data sheet for pin multiplexing*/
-#ifdef CONFIG_UART_NS16550_PORT_2
+#ifdef DT_NS16550_400F2C00_BASE_ADDRESS
 	/* Set muxing, for UART 2 TX/RX and power up */
 	mchp_pcr_periph_slp_ctrl(PCR_UART2, MCHP_PCR_SLEEP_DIS);
 
@@ -191,24 +191,24 @@ static int board_pinmux_init(struct device *dev)
 
 #ifdef CONFIG_I2C_XEC
 
-#ifdef DT_INST_0_MICROCHIP_XEC_I2C
-	i2c_pinmux(&pinmux_ports, DT_INST_0_MICROCHIP_XEC_I2C_PORT_SEL);
+#if DT_HAS_NODE(DT_INST(0, microchip_xec_i2c))
+	i2c_pinmux(&pinmux_ports, DT_PROP(DT_INST(0, microchip_xec_i2c), port_sel));
 #endif
 
-#ifdef DT_INST_1_MICROCHIP_XEC_I2C
-	i2c_pinmux(&pinmux_ports, DT_INST_1_MICROCHIP_XEC_I2C_PORT_SEL);
+#if DT_HAS_NODE(DT_INST(1, microchip_xec_i2c))
+	i2c_pinmux(&pinmux_ports, DT_PROP(DT_INST(1, microchip_xec_i2c), port_sel));
 #endif
 
-#ifdef DT_INST_2_MICROCHIP_XEC_I2C
-	i2c_pinmux(&pinmux_ports, DT_INST_2_MICROCHIP_XEC_I2C_PORT_SEL);
+#if DT_HAS_NODE(DT_INST(2, microchip_xec_i2c))
+	i2c_pinmux(&pinmux_ports, DT_PROP(DT_INST(2, microchip_xec_i2c), port_sel));
 #endif
 
-#ifdef DT_INST_3_MICROCHIP_XEC_I2C
-	i2c_pinmux(&pinmux_ports, DT_INST_3_MICROCHIP_XEC_I2C_PORT_SEL);
+#if DT_HAS_NODE(DT_INST(3, microchip_xec_i2c))
+	i2c_pinmux(&pinmux_ports, DT_PROP(DT_INST(3, microchip_xec_i2c), port_sel));
 #endif
 
-#ifdef DT_INST_4_MICROCHIP_XEC_I2C
-	i2c_pinmux(&pinmux_ports, DT_INST_4_MICROCHIP_XEC_I2C_PORT_SEL);
+#if DT_HAS_NODE(DT_INST(4, microchip_xec_i2c))
+	i2c_pinmux(&pinmux_ports, DT_PROP(DT_INST(4, microchip_xec_i2c), port_sel));
 #endif
 
 #endif /* CONFIG_I2C_XEC */
@@ -249,47 +249,47 @@ static int board_pinmux_init(struct device *dev)
 #endif
 
 #ifdef CONFIG_PWM_XEC
-#if defined(DT_INST_0_MICROCHIP_XEC_PWM)
+#if DT_HAS_NODE(DT_INST(0, microchip_xec_pwm))
 	mchp_pcr_periph_slp_ctrl(PCR_PWM0, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(portb, MCHP_GPIO_053, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if defined(DT_INST_1_MICROCHIP_XEC_PWM)
+#if DT_HAS_NODE(DT_INST(1, microchip_xec_pwm))
 	mchp_pcr_periph_slp_ctrl(PCR_PWM1, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(portb, MCHP_GPIO_054, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if defined(DT_INST_2_MICROCHIP_XEC_PWM)
+#if DT_HAS_NODE(DT_INST(2, microchip_xec_pwm))
 	mchp_pcr_periph_slp_ctrl(PCR_PWM2, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(portb, MCHP_GPIO_055, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if defined(DT_INST_3_MICROCHIP_XEC_PWM)
+#if DT_HAS_NODE(DT_INST(3, microchip_xec_pwm))
 	mchp_pcr_periph_slp_ctrl(PCR_PWM3, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(portb, MCHP_GPIO_056, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if defined(DT_INST_4_MICROCHIP_XEC_PWM)
+#if DT_HAS_NODE(DT_INST(4, microchip_xec_pwm))
 	mchp_pcr_periph_slp_ctrl(PCR_PWM4, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(porta, MCHP_GPIO_011, MCHP_GPIO_CTRL_MUX_F2);
 #endif
 
-#if defined(DT_INST_5_MICROCHIP_XEC_PWM)
+#if DT_HAS_NODE(DT_INST(5, microchip_xec_pwm))
 	mchp_pcr_periph_slp_ctrl(PCR_PWM5, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(porta, MCHP_GPIO_002, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if defined(DT_INST_6_MICROCHIP_XEC_PWM)
+#if DT_HAS_NODE(DT_INST(6, microchip_xec_pwm))
 	mchp_pcr_periph_slp_ctrl(PCR_PWM6, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(porta, MCHP_GPIO_014, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if defined(DT_INST_7_MICROCHIP_XEC_PWM)
+#if DT_HAS_NODE(DT_INST(7, microchip_xec_pwm))
 	mchp_pcr_periph_slp_ctrl(PCR_PWM7, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(porta, MCHP_GPIO_015, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if defined(DT_INST_8_MICROCHIP_XEC_PWM)
+#if DT_HAS_NODE(DT_INST(8, microchip_xec_pwm))
 	mchp_pcr_periph_slp_ctrl(PCR_PWM8, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(porta, MCHP_GPIO_035, MCHP_GPIO_CTRL_MUX_F1);
 #endif
@@ -371,8 +371,15 @@ static int board_pinmux_init(struct device *dev)
 		       MCHP_GPIO_CTRL_MUX_F1 | MCHP_GPIO_CTRL_BUFT_OPENDRAIN);
 #endif /* CONFIG_KSCAN_XEC */
 
+#ifdef CONFIG_PECI_XEC
+	ECS_REGS->PECI_DIS = 0x00u;
+	mchp_pcr_periph_slp_ctrl(PCR_PECI, MCHP_PCR_SLEEP_DIS);
+	pinmux_pin_set(portb, MCHP_GPIO_042, MCHP_GPIO_CTRL_MUX_F1);
+	pinmux_pin_set(portb, MCHP_GPIO_044, MCHP_GPIO_CTRL_MUX_F1);
+#endif
+
 #ifdef CONFIG_SPI_XEC_QMSPI
-#if defined(DT_INST_0_MICROCHIP_XEC_QMSPI)
+#if DT_HAS_NODE(DT_INST(0, microchip_xec_qmspi))
 	mchp_pcr_periph_slp_ctrl(PCR_QMSPI, MCHP_PCR_SLEEP_DIS);
 
 #if DT_SPI_XEC_QMSPI_0_PORT_SEL == 0
@@ -402,7 +409,7 @@ static int board_pinmux_init(struct device *dev)
 #endif
 #endif /* DT_SPI_XEC_QMSPI_0_PORT_SEL == 0 */
 
-#endif /* DT_INST_0_MICROCHIP_XEC_QMSPI */
+#endif /* DT_HAS_NODE(DT_INST(0, microchip_xec_qmspi)) */
 #endif /* CONFIG_SPI_XEC_QMSPI */
 
 #ifdef CONFIG_SYS_PM_DEBUG
@@ -411,6 +418,14 @@ static int board_pinmux_init(struct device *dev)
 	 * TEST_CLK_OUT is the PLL 48MHz conditioned output.
 	 */
 	pinmux_pin_set(portb, MCHP_GPIO_060, MCHP_GPIO_CTRL_MUX_F2);
+#endif
+
+#ifdef CONFIG_TACH_XEC
+
+#if DT_HAS_NODE(DT_INST(0, microchip_xec_tach))
+	pinmux_pin_set(portb, MCHP_GPIO_050, MCHP_GPIO_CTRL_MUX_F1);
+#endif /* CONFIG_TACH_XEC */
+
 #endif
 
 	return 0;

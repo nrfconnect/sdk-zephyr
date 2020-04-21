@@ -139,17 +139,17 @@ extern "C" {
 
 
 #define ARCH_THREAD_STACK_DEFINE(sym, size) \
-		struct _k_thread_stack_element __noinit \
+		struct z_thread_stack_element __noinit \
 		__aligned(Z_ARC_THREAD_STACK_ALIGN(size)) \
 		sym[ARCH_THREAD_STACK_LEN(size)]
 
 #define ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
-		struct _k_thread_stack_element __noinit \
+		struct z_thread_stack_element __noinit \
 		__aligned(Z_ARC_THREAD_STACK_ALIGN(size)) \
 		sym[nmemb][Z_ARC_THREAD_STACK_ARRAY_LEN(size)]
 
 #define ARCH_THREAD_STACK_MEMBER(sym, size) \
-		struct _k_thread_stack_element \
+		struct z_thread_stack_element \
 		__aligned(Z_ARC_THREAD_STACK_ALIGN(size)) \
 		sym[ARCH_THREAD_STACK_LEN(size)]
 
@@ -188,8 +188,7 @@ extern "C" {
 #define K_MEM_PARTITION_IS_WRITABLE(attr) \
 	({ \
 		int __is_writable__; \
-		attr &= (AUX_MPU_ATTR_UW | AUX_MPU_ATTR_KW); \
-		switch (attr) { \
+		switch (attr & (AUX_MPU_ATTR_UW | AUX_MPU_ATTR_KW)) { \
 		case (AUX_MPU_ATTR_UW | AUX_MPU_ATTR_KW): \
 		case AUX_MPU_ATTR_UW: \
 		case AUX_MPU_ATTR_KW: \
@@ -208,14 +207,14 @@ extern "C" {
 
 #if CONFIG_ARC_MPU_VER == 2
 #define _ARCH_MEM_PARTITION_ALIGN_CHECK(start, size) \
-	BUILD_ASSERT_MSG(!(((size) & ((size) - 1))) && (size) >= STACK_ALIGN \
+	BUILD_ASSERT(!(((size) & ((size) - 1))) && (size) >= STACK_ALIGN \
 		 && !((u32_t)(start) & ((size) - 1)), \
 		"the size of the partition must be power of 2" \
 		" and greater than or equal to the mpu adddress alignment." \
 		"start address of the partition must align with size.")
 #elif CONFIG_ARC_MPU_VER == 3
 #define _ARCH_MEM_PARTITION_ALIGN_CHECK(start, size) \
-	BUILD_ASSERT_MSG((size) % STACK_ALIGN == 0 && (size) >= STACK_ALIGN \
+	BUILD_ASSERT((size) % STACK_ALIGN == 0 && (size) >= STACK_ALIGN \
 		 && (u32_t)(start) % STACK_ALIGN == 0, \
 		"the size of the partition must align with 32" \
 		" and greater than or equal to 32." \

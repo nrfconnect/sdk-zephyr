@@ -46,7 +46,8 @@ bool ll_settings_smi_tx(void)
 static int ctlr_set(const char *name, size_t len_rd,
 		    settings_read_cb read_cb, void *store)
 {
-	int len, nlen;
+	ssize_t len;
+	int nlen;
 	const char *next;
 
 	nlen = settings_name_next(name, &next);
@@ -56,7 +57,7 @@ static int ctlr_set(const char *name, size_t len_rd,
 		len = read_cb(store, &company_id, sizeof(company_id));
 		if (len < 0) {
 			BT_ERR("Failed to read Company Id from storage"
-			       " (err %d)", len);
+			       " (err %zd)", len);
 		} else {
 			BT_DBG("Company Id set to %04x", company_id);
 		}
@@ -66,7 +67,7 @@ static int ctlr_set(const char *name, size_t len_rd,
 		len = read_cb(store, &subversion, sizeof(subversion));
 		if (len < 0) {
 			BT_ERR("Failed to read Subversion from storage"
-			       " (err %d)", len);
+			       " (err %zd)", len);
 		} else {
 			BT_DBG("Subversion set to %04x", subversion);
 		}
@@ -79,7 +80,7 @@ static int ctlr_set(const char *name, size_t len_rd,
 		len = read_cb(store, &smi_tx, sizeof(smi_tx));
 		if (len < 0) {
 			BT_ERR("Failed to read SMI TX flag from storage"
-			       " (err %d)", len);
+			       " (err %zd)", len);
 		} else {
 			BT_DBG("SMI TX flag set to %04x", smi_tx);
 		}

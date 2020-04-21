@@ -50,16 +50,17 @@
 
 /* C++11 has static_assert built in */
 #ifdef __cplusplus
-#define BUILD_ASSERT(EXPR) static_assert(EXPR, "")
-#define BUILD_ASSERT_MSG(EXPR, MSG) static_assert(EXPR, MSG)
+#define BUILD_ASSERT(EXPR, MSG...) static_assert(EXPR, "" MSG)
+#define BUILD_ASSERT_MSG(EXPR, MSG) __DEPRECATED_MACRO BUILD_ASSERT(EXPR, MSG)
+
 /*
  * GCC 4.6 and higher have the C11 _Static_assert built in, and its
  * output is easier to understand than the common BUILD_ASSERT macros.
  */
 #elif (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)) || \
 	(__STDC_VERSION__) >= 201100
-#define BUILD_ASSERT(EXPR) _Static_assert(EXPR, "")
-#define BUILD_ASSERT_MSG(EXPR, MSG) _Static_assert(EXPR, MSG)
+#define BUILD_ASSERT(EXPR, MSG...) _Static_assert(EXPR, "" MSG)
+#define BUILD_ASSERT_MSG(EXPR, MSG) __DEPRECATED_MACRO BUILD_ASSERT(EXPR, MSG)
 #endif
 
 #include <toolchain/common.h>
@@ -232,28 +233,24 @@ do {                                                                    \
 
 #if defined(CONFIG_ARM) && !defined(CONFIG_ARM64)
 
-#if defined(CONFIG_ISA_THUMB2)
+#if defined(CONFIG_ASSEMBLER_ISA_THUMB2)
 
 #define FUNC_CODE() .thumb;
 #define FUNC_INSTR(a)
 
-#elif defined(CONFIG_ISA_ARM)
+#else
 
 #define FUNC_CODE() .code 32
 #define FUNC_INSTR(a)
 
-#else
-
-#error unknown instruction set
-
-#endif /* ISA */
+#endif /* CONFIG_ASSEMBLER_ISA_THUMB2 */
 
 #else
 
 #define FUNC_CODE()
 #define FUNC_INSTR(a)
 
-#endif /* !CONFIG_ARM */
+#endif /* CONFIG_ARM && !CONFIG_ARM64 */
 
 #endif /* _ASMLANGUAGE */
 
@@ -359,14 +356,18 @@ do {                                                                    \
 
 #endif /* _ASMLANGUAGE */
 
-#if defined(CONFIG_ARM) && defined(_ASMLANGUAGE)
-#if defined(CONFIG_ISA_THUMB2)
+#if defined(_ASMLANGUAGE)
+#if defined(CONFIG_ARM) && !defined(CONFIG_ARM64)
+#if defined(CONFIG_ASSEMBLER_ISA_THUMB2)
 /* '.syntax unified' is a gcc-ism used in thumb-2 asm files */
 #define _ASM_FILE_PROLOGUE .text; .syntax unified; .thumb
 #else
 #define _ASM_FILE_PROLOGUE .text; .code 32
-#endif
-#endif
+#endif /* CONFIG_ASSEMBLER_ISA_THUMB2 */
+#elif defined(CONFIG_ARM64)
+#define _ASM_FILE_PROLOGUE .text
+#endif /* CONFIG_ARM64 || (CONFIG_ARM && !CONFIG_ARM64)*/
+#endif /* _ASMLANGUAGE */
 
 /*
  * These macros generate absolute symbols for GCC

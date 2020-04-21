@@ -638,8 +638,7 @@ static int execute(const struct shell *shell)
 						       SHELL_MSG_CMD_NOT_FOUND);
 				return -ENOEXEC;
 			}
-			if (IS_ENABLED(CONFIG_SHELL_CMDS_SELECT) &&
-			    shell_in_select_mode(shell)		 &&
+			if (shell_in_select_mode(shell)		 &&
 			    shell->ctx->selected_cmd->handler != NULL) {
 				p_static_entry = shell->ctx->selected_cmd;
 				shell->ctx->active_cmd = *p_static_entry;
@@ -1186,13 +1185,13 @@ void shell_thread(void *shell_handle, void *arg_log_backend,
 		err = k_poll(shell->ctx->events, SHELL_SIGNAL_TXDONE,
 			     K_FOREVER);
 
-		k_mutex_lock(&shell->ctx->wr_mtx, K_FOREVER);
-
 		if (err != 0) {
 			shell_internal_fprintf(shell, SHELL_ERROR,
 					       "Shell thread error: %d", err);
 			return;
 		}
+
+		k_mutex_lock(&shell->ctx->wr_mtx, K_FOREVER);
 
 		if (shell->iface->api->update) {
 			shell->iface->api->update(shell->iface);

@@ -194,7 +194,7 @@ static void *temperature_get_buf(u16_t obj_inst_id, u16_t res_id,
 	struct device *dev = NULL;
 
 #if defined(CONFIG_FXOS8700_TEMP)
-	dev = device_get_binding(DT_INST_0_NXP_FXOS8700_LABEL);
+	dev = device_get_binding(DT_LABEL(DT_INST(0, nxp_fxos8700)));
 #endif
 
 	if (dev != NULL) {
@@ -414,6 +414,9 @@ static void rd_client_event(struct lwm2m_ctx *client,
 		LOG_DBG("Disconnected");
 		break;
 
+	case LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF:
+		LOG_DBG("Queue mode RX window closed");
+		break;
 	}
 }
 

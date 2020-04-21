@@ -357,7 +357,7 @@ int net_config_init(const char *app_info, u32_t flags, s32_t timeout)
 				break;
 			}
 
-			if (k_sem_take(&waiter, loop)) {
+			if (k_sem_take(&waiter, K_MSEC(loop))) {
 				if (!k_sem_count_get(&counter)) {
 					break;
 				}
@@ -374,6 +374,14 @@ int net_config_init(const char *app_info, u32_t flags, s32_t timeout)
 #if defined(CONFIG_NET_NATIVE)
 		net_mgmt_del_event_callback(&mgmt_iface_cb);
 #endif
+	}
+
+	if (count == 0) {
+		/* Network interface did not come up. We will not try
+		 * to setup things in that case.
+		 */
+		NET_ERR("Timeout while waiting network %s", "interface");
+		return -ENETDOWN;
 	}
 
 	if (flags & NET_CONFIG_NEED_IPV6) {
@@ -394,7 +402,7 @@ int net_config_init(const char *app_info, u32_t flags, s32_t timeout)
 	 * to wait multiple events, sleep smaller amounts of data.
 	 */
 	while (count--) {
-		if (k_sem_take(&waiter, loop)) {
+		if (k_sem_take(&waiter, K_MSEC(loop))) {
 			if (!k_sem_count_get(&counter)) {
 				break;
 			}
@@ -402,7 +410,7 @@ int net_config_init(const char *app_info, u32_t flags, s32_t timeout)
 	}
 
 	if (!count && timeout) {
-		NET_ERR("Timeout while waiting setup");
+		NET_ERR("Timeout while waiting network %s", "setup");
 		return -ETIMEDOUT;
 	}
 
@@ -444,7 +452,7 @@ static int init_app(struct device *device)
 
 	/* Initialize the application automatically if needed */
 	ret = net_config_init("Initializing network", flags,
-			      K_SECONDS(CONFIG_NET_CONFIG_INIT_TIMEOUT));
+			      CONFIG_NET_CONFIG_INIT_TIMEOUT * MSEC_PER_SEC);
 	if (ret < 0) {
 		NET_ERR("Network initialization failed (%d)", ret);
 	}

@@ -22,6 +22,7 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci_err.h>
 #include <bluetooth/addr.h>
+#include <bluetooth/gap.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,12 +40,12 @@ struct bt_le_conn_param {
 };
 
 /** Helper to declare connection parameters inline
-  *
-  * @param int_min  Minimum Connection Interval (N * 1.25 ms)
-  * @param int_max  Maximum Connection Interval (N * 1.25 ms)
-  * @param lat      Connection Latency
-  * @param to       Supervision Timeout (N * 10 ms)
-  */
+ *
+ *  @param int_min  Minimum Connection Interval (N * 1.25 ms)
+ *  @param int_max  Maximum Connection Interval (N * 1.25 ms)
+ *  @param lat      Connection Latency
+ *  @param to       Supervision Timeout (N * 10 ms)
+ */
 #define BT_LE_CONN_PARAM(int_min, int_max, lat, to) \
 	((struct bt_le_conn_param[]) { { \
 		.interval_min = (int_min), \
@@ -54,10 +55,10 @@ struct bt_le_conn_param {
 	 } })
 
 /** Default LE connection parameters:
-  *   Connection Interval: 30-50 ms
-  *   Latency: 0
-  *   Timeout: 4 s
-  */
+ *    Connection Interval: 30-50 ms
+ *    Latency: 0
+ *    Timeout: 4 s
+ */
 #define BT_LE_CONN_PARAM_DEFAULT BT_LE_CONN_PARAM(BT_GAP_INIT_CONN_INT_MIN, \
 						  BT_GAP_INIT_CONN_INT_MAX, \
 						  0, 400)
@@ -119,7 +120,7 @@ const bt_addr_le_t *bt_conn_get_dst(const struct bt_conn *conn);
  *  @param conn Connection object.
  *
  *  @return Index of the connection object.
- *  The range of the returned value is 0..CONFIG_BT_MAX_CONN-1
+ *          The range of the returned value is 0..CONFIG_BT_MAX_CONN-1
  */
 u8_t bt_conn_index(struct bt_conn *conn);
 
@@ -208,23 +209,23 @@ struct bt_conn_br_remote_info {
  *        valid data if :option:`CONFIG_BT_REMOTE_VERSION` is enabled.
  */
 struct bt_conn_remote_info {
-	/* Connection Type */
+	/** Connection Type */
 	u8_t  type;
 
-	/* Remote Link Layer version */
+	/** Remote Link Layer version */
 	u8_t  version;
 
-	/* Remote manufacturer identifier */
+	/** Remote manufacturer identifier */
 	u16_t manufacturer;
 
-	/* Per-manufacturer unique revision */
+	/** Per-manufacturer unique revision */
 	u16_t subversion;
 
 	union {
-		/* LE connection remote info */
+		/** LE connection remote info */
 		struct bt_conn_le_remote_info le;
 
-		/* BR/EDR connection remote info */
+		/** BR/EDR connection remote info */
 		struct bt_conn_br_remote_info br;
 	};
 };
@@ -278,6 +279,99 @@ int bt_conn_le_param_update(struct bt_conn *conn,
  */
 int bt_conn_disconnect(struct bt_conn *conn, u8_t reason);
 
+enum {
+	/** Convenience value when no options are specified. */
+	BT_LE_CONN_OPT_NONE = 0,
+
+	/** Enable LE Coded PHY.
+	 *
+	 *  Enable scanning on the LE Coded PHY.
+	 *  Enable connection initiation on the LE Coded PHY.
+	 */
+	BT_LE_CONN_OPT_CODED = BIT(0),
+
+	/** Enable LE 2M PHY.
+	 *
+	 *  Enable connection initiaton on the LE 2M PHY.
+	 */
+	BT_LE_CONN_OPT_2M = BIT(1),
+
+	/** Disable LE 1M PHY.
+	 *
+	 *  Disable scanning on the LE 1M PHY.
+	 *  Disable connection initiation on the LE 1M PHY.
+	 *
+	 *  @note Requires @ref BT_LE_CONN_OPT_CODED.
+	 */
+	BT_LE_CONN_OPT_NO_1M = BIT(2),
+};
+
+struct bt_conn_le_create_param {
+
+	/** Bit-field of create connection options. */
+	u32_t options;
+
+	/** Scan interval (N * 0.625 ms) */
+	u16_t interval;
+
+	/** Scan window (N * 0.625 ms) */
+	u16_t window;
+
+	/** Scan interval LE Coded PHY (N * 0.625 MS)
+	 *
+	 *  Set zero to use same as LE 1M PHY scan interval
+	 */
+	u16_t interval_coded;
+
+	/** Scan window LE Coded PHY (N * 0.625 MS)
+	 *
+	 *  Set zero to use same as LE 1M PHY scan window.
+	 */
+	u16_t window_coded;
+
+	/** Connection initiation timeout (N * 10 MS)
+	 *
+	 *  Set zero to use the default :option:`CONFIG_BT_CREATE_CONN_TIMEOUT`
+	 *  timeout.
+	 *
+	 *  @note Unused in @ref bt_conn_create_auto_le
+	 */
+	u16_t timeout;
+};
+
+/** Helper to declare create connection parameters inline
+ *
+ *  @param _options  Create connection options.
+ *  @param _interval Create connection scan interval (N * 0.625 ms).
+ *  @param _window   Create connection scan window (N * 0.625 ms).
+ */
+#define BT_CONN_LE_CREATE_PARAM(_options, _interval, _window) \
+	((struct bt_conn_le_create_param[]) { { \
+		.options = (_options), \
+		.interval = (_interval), \
+		.window = (_window), \
+		.interval_coded = 0, \
+		.window_coded = 0, \
+		.timeout = 0, \
+	 } })
+
+/** Default LE create connection parameters.
+ *  Scan continuously by setting scan interval equal to scan window.
+ */
+#define BT_CONN_LE_CREATE_CONN \
+	BT_CONN_LE_CREATE_PARAM(BT_LE_CONN_OPT_NONE, \
+				BT_GAP_SCAN_FAST_INTERVAL, \
+				BT_GAP_SCAN_FAST_INTERVAL)
+
+/** Default LE create connection using whitelist parameters.
+ *  Scan window:   30 ms.
+ *  Scan interval: 60 ms.
+ */
+#define BT_CONN_LE_CREATE_CONN_AUTO \
+	BT_CONN_LE_CREATE_PARAM(BT_LE_CONN_OPT_NONE, \
+				BT_GAP_SCAN_FAST_INTERVAL, \
+				BT_GAP_SCAN_FAST_WINDOW)
+
 /** @brief Initiate an LE connection to a remote device.
  *
  *  Allows initiate new LE link to remote peer using its address.
@@ -287,13 +381,31 @@ int bt_conn_disconnect(struct bt_conn *conn, u8_t reason);
  *
  *  This uses the General Connection Establishment procedure.
  *
- *  @param peer  Remote address.
- *  @param param Initial connection parameters.
+ *  @param[in]  peer         Remote address.
+ *  @param[in]  create_param Create connection parameters.
+ *  @param[in]  conn_param   Initial connection parameters.
+ *  @param[out] conn         Valid connection object on success.
  *
- *  @return Valid connection object on success or NULL otherwise.
+ *  @return Zero on success or (negative) error code on failure.
  */
+int bt_conn_le_create(const bt_addr_le_t *peer,
+		      const struct bt_conn_le_create_param *create_param,
+		      const struct bt_le_conn_param *conn_param,
+		      struct bt_conn **conn);
+
+__deprecated static inline
 struct bt_conn *bt_conn_create_le(const bt_addr_le_t *peer,
-				  const struct bt_le_conn_param *param);
+				  const struct bt_le_conn_param *conn_param)
+{
+	struct bt_conn *conn;
+
+	if (bt_conn_le_create(peer, BT_CONN_LE_CREATE_CONN, conn_param,
+			      &conn)) {
+		return NULL;
+	}
+
+	return conn;
+}
 
 /** @brief Automatically connect to remote devices in whitelist.
  *
@@ -304,12 +416,20 @@ struct bt_conn *bt_conn_create_le(const bt_addr_le_t *peer,
  *  should be started again in the connected callback after a new connection has
  *  been established.
  *
- *  @param param Initial connection parameters.
+ *  @param create_param Create connection parameters
+ *  @param conn_param   Initial connection parameters.
  *
  *  @return Zero on success or (negative) error code on failure.
  *  @return -ENOMEM No free connection object available.
  */
-int bt_conn_create_auto_le(const struct bt_le_conn_param *param);
+int bt_conn_le_create_auto(const struct bt_conn_le_create_param *create_param,
+			   const struct bt_le_conn_param *conn_param);
+
+__deprecated static inline
+int bt_conn_create_auto_le(const struct bt_le_conn_param *conn_param)
+{
+	return bt_conn_le_create_auto(BT_CONN_LE_CREATE_CONN_AUTO, conn_param);
+}
 
 /** @brief Stop automatic connect creation.
  *
@@ -323,7 +443,7 @@ int bt_conn_create_auto_stop(void);
  *  Every time the device loses the connection with peer, this connection
  *  will be re-established if connectable advertisement from peer is received.
  *
- *  Note: Auto connect is disabled during explicit scanning.
+ *  @note Auto connect is disabled during explicit scanning.
  *
  *  @param addr Remote Bluetooth address.
  *  @param param If non-NULL, auto connect is enabled with the given
@@ -356,8 +476,22 @@ int bt_le_set_auto_conn(const bt_addr_le_t *addr,
  *
  *  @return Valid connection object on success or NULL otherwise.
  */
+__deprecated static inline
 struct bt_conn *bt_conn_create_slave_le(const bt_addr_le_t *peer,
-					const struct bt_le_adv_param *param);
+					const struct bt_le_adv_param *param)
+{
+	struct bt_le_adv_param adv_param = *param;
+
+	adv_param.options |= (BT_LE_ADV_OPT_CONNECTABLE |
+			      BT_LE_ADV_OPT_ONE_TIME);
+	adv_param.peer = peer;
+
+	if (!bt_le_adv_start(&adv_param, NULL, 0, NULL, 0)) {
+		return NULL;
+	}
+
+	return bt_conn_lookup_addr_le(param->id, peer);
+}
 
 /** Security level. */
 typedef enum __packed {
@@ -485,10 +619,11 @@ struct bt_conn_cb {
 	 *  - @ref BT_HCI_ERR_UNKNOWN_CONN_ID Creating the connection started by
 	 *    @ref bt_conn_create_le was canceled either by the user through
 	 *    @ref bt_conn_disconnect or by the timeout in the host through
-	 *    :option:`CONFIG_BT_CREATE_CONN_TIMEOUT`.
-	 *  - @p BT_HCI_ERR_ADV_TIMEOUT Directed advertiser started by @ref
-	 *    bt_conn_create_slave_le with high duty cycle timed out after 1.28
-	 *    seconds.
+	 *    @ref bt_conn_le_create_param timeout parameter, which defaults to
+	 *    :option:`CONFIG_BT_CREATE_CONN_TIMEOUT` seconds.
+	 *  - @p BT_HCI_ERR_ADV_TIMEOUT High duty cycle directed connectable
+	 *    advertiser started by @ref bt_le_adv_start failed to be connected
+	 *    within the timeout.
 	 */
 	void (*connected)(struct bt_conn *conn, u8_t err);
 
@@ -618,44 +753,55 @@ void bt_set_bondable(bool enable);
  */
 void bt_set_oob_data_flag(bool enable);
 
-/**
- * @brief Set OOB data during LE SC pairing procedure
+/** @brief Set OOB Temporary Key to be used for pairing
  *
- * This function allows to set OOB data during the LE SC pairing procedure. The
- * function should only be called in response to the oob_data_request() callback
- * provided that LE SC method is used for pairing.
+ *  This function allows to set OOB data for the LE legacy pairing procedure.
+ *  The function should only be called in response to the oob_data_request()
+ *  callback provided that the legacy method is user pairing.
  *
- * The user should submit OOB data according to the information received in the
- * callback. This may yield three different configurations: with only local OOB
- * data present, with only remote OOB data present or with both local and
- * remote OOB data present.
+ *  @param conn Connection object
+ *  @param tk Pointer to 16 byte long TK array
  *
- * @param conn Connection object
- * @param oobd_local Local OOB data or NULL if not present
- * @param oobd_remote Remote OOB data or NULL if not present
+ *  @return Zero on success or -EINVAL if NULL
+ */
+int bt_le_oob_set_legacy_tk(struct bt_conn *conn, const u8_t *tk);
+
+/** @brief Set OOB data during LE Secure Connections (SC) pairing procedure
  *
- *  @return Zero on success or error code otherwise, positive in case
- *  of protocol error or negative (POSIX) in case of stack internal error
+ *  This function allows to set OOB data during the LE SC pairing procedure.
+ *  The function should only be called in response to the oob_data_request()
+ *  callback provided that LE SC method is used for pairing.
+ *
+ *  The user should submit OOB data according to the information received in the
+ *  callback. This may yield three different configurations: with only local OOB
+ *  data present, with only remote OOB data present or with both local and
+ *  remote OOB data present.
+ *
+ *  @param conn Connection object
+ *  @param oobd_local Local OOB data or NULL if not present
+ *  @param oobd_remote Remote OOB data or NULL if not present
+ *
+ *  @return Zero on success or error code otherwise, positive in case of
+ *          protocol error or negative (POSIX) in case of stack internal error.
  */
 int bt_le_oob_set_sc_data(struct bt_conn *conn,
 			  const struct bt_le_oob_sc_data *oobd_local,
 			  const struct bt_le_oob_sc_data *oobd_remote);
 
-/**
- * @brief Get OOB data used for LE SC pairing procedure
+/** @brief Get OOB data used for LE Secure Connections (SC) pairing procedure
  *
- * This function allows to get OOB data during the LE SC pairing procedure that
- * were set by the bt_le_oob_set_sc_data() API.
+ *  This function allows to get OOB data during the LE SC pairing procedure that
+ *  were set by the bt_le_oob_set_sc_data() API.
  *
- *  Note: The OOB data will only be available as long as the connection object
+ *  @note The OOB data will only be available as long as the connection object
  *  associated with it is valid.
  *
- * @param conn Connection object
- * @param oobd_local Local OOB data or NULL if not set
- * @param oobd_remote Remote OOB data or NULL if not set
+ *  @param conn Connection object
+ *  @param oobd_local Local OOB data or NULL if not set
+ *  @param oobd_remote Remote OOB data or NULL if not set
  *
- *  @return Zero on success or error code otherwise, positive in case
- *  of protocol error or negative (POSIX) in case of stack internal error
+ *  @return Zero on success or error code otherwise, positive in case of
+ *          protocol error or negative (POSIX) in case of stack internal error.
  */
 int bt_le_oob_get_sc_data(struct bt_conn *conn,
 			  const struct bt_le_oob_sc_data **oobd_local,
@@ -695,7 +841,7 @@ struct bt_conn_oob_info {
 	} type;
 
 	union {
-		/** LESC OOB pairing parameters */
+		/** LE Secure Connections OOB pairing parameters */
 		struct {
 			/** OOB data configuration */
 			enum {
@@ -844,14 +990,15 @@ struct bt_conn_auth_cb {
 	 */
 	void (*passkey_confirm)(struct bt_conn *conn, unsigned int passkey);
 
-	/** @brief Request the user to provide OOB data.
+	/** @brief Request the user to provide Out of Band (OOB) data.
 	 *
 	 *  When called the user is expected to provide OOB data. The required
 	 *  data are indicated by the information structure.
 	 *
-	 *  For LESC OOB pairing method, the user should provide local OOB data,
-	 *  remote OOB data or both depending on their availability. Their value
-	 *  should be given to the stack using the bt_le_oob_set_sc_data() API.
+	 *  For LE Secure Connections OOB pairing, the user should provide
+	 *  local OOB data, remote OOB data or both depending on their
+	 *  availability. Their value should be given to the stack using the
+	 *  bt_le_oob_set_sc_data() API.
 	 *
 	 *  This callback must be set to non-NULL in order to support OOB
 	 *  pairing.
@@ -920,18 +1067,18 @@ struct bt_conn_auth_cb {
 
 	/** @brief notify that pairing process was complete.
 	 *
-	 * This callback notifies the application that the pairing process
-	 * has been completed.
+	 *  This callback notifies the application that the pairing process
+	 *  has been completed.
 	 *
-	 * @param conn Connection object.
-	 * @param bonded pairing is bonded or not.
+	 *  @param conn Connection object.
+	 *  @param bonded pairing is bonded or not.
 	 */
 	void (*pairing_complete)(struct bt_conn *conn, bool bonded);
 
 	/** @brief notify that pairing process has failed.
 	 *
-	 * @param conn Connection object.
-	 * @param reason Pairing failed reason
+	 *  @param conn Connection object.
+	 *  @param reason Pairing failed reason
 	 */
 	void (*pairing_failed)(struct bt_conn *conn,
 			       enum bt_security_err reason);
@@ -1019,8 +1166,8 @@ struct bt_br_conn_param {
 	 } })
 
 /** Default BR/EDR connection parameters:
-  *   Role switch allowed
-  */
+ *    Role switch allowed
+ */
 #define BT_BR_CONN_PARAM_DEFAULT BT_BR_CONN_PARAM(true)
 
 

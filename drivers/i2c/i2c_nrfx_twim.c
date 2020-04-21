@@ -9,10 +9,8 @@
 #include <dt-bindings/i2c/i2c.h>
 #include <nrfx_twim.h>
 
-#define LOG_DOMAIN "i2c_nrfx_twim"
-#define LOG_LEVEL CONFIG_I2C_LOG_LEVEL
 #include <logging/log.h>
-LOG_MODULE_REGISTER(i2c_nrfx_twim);
+LOG_MODULE_REGISTER(i2c_nrfx_twim, CONFIG_I2C_LOG_LEVEL);
 
 struct i2c_nrfx_twim_data {
 	struct k_sem transfer_sync;
@@ -167,11 +165,12 @@ static int twim_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 				void *context, device_pm_cb cb, void *arg)
 {
 	int ret = 0;
+	u32_t pm_current_state = get_dev_data(dev)->pm_state;
 
 	if (ctrl_command == DEVICE_PM_SET_POWER_STATE) {
 		u32_t new_state = *((const u32_t *)context);
 
-		if (new_state != get_dev_data(dev)->pm_state) {
+		if (new_state != pm_current_state) {
 			switch (new_state) {
 			case DEVICE_PM_ACTIVE_STATE:
 				init_twim(dev);
@@ -185,6 +184,9 @@ static int twim_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 			case DEVICE_PM_LOW_POWER_STATE:
 			case DEVICE_PM_SUSPEND_STATE:
 			case DEVICE_PM_OFF_STATE:
+				if (pm_current_state != DEVICE_PM_ACTIVE_STATE) {
+					break;
+				}
 				nrfx_twim_uninit(&get_dev_config(dev)->twim);
 				break;
 
@@ -196,7 +198,7 @@ static int twim_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 			}
 		}
 	} else {
-		assert(ctrl_command == DEVICE_PM_GET_POWER_STATE);
+		__ASSERT_NO_MSG(ctrl_command == DEVICE_PM_GET_POWER_STATE);
 		*((u32_t *)context) = get_dev_data(dev)->pm_state;
 	}
 
@@ -216,7 +218,7 @@ static int twim_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 					  : I2C_NRFX_TWIM_INVALID_FREQUENCY)
 
 #define I2C_NRFX_TWIM_DEVICE(idx)					       \
-	BUILD_ASSERT_MSG(						       \
+	BUILD_ASSERT(						       \
 		I2C_NRFX_TWIM_FREQUENCY(				       \
 			DT_NORDIC_NRF_TWIM_I2C_##idx##_CLOCK_FREQUENCY)	       \
 		!= I2C_NRFX_TWIM_INVALID_FREQUENCY,			       \

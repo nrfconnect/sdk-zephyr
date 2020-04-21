@@ -25,9 +25,11 @@ User and Developer Guides
    kconfig/index
    modules.rst
    networking/index
+   platformio/index.rst
    portability/index.rst
    porting/index
    test/index
    tracing/index
    west/index
    optimizations/index
+   zephyr_cmake_package.rst

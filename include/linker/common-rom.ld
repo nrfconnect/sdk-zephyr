@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-#if defined(CONFIG_GEN_ISR_TABLES) && !defined(CONFIG_DYNAMIC_INTERRUPTS)
+#if defined(CONFIG_GEN_SW_ISR_TABLE) && !defined(CONFIG_DYNAMIC_INTERRUPTS)
 	SECTION_PROLOGUE(sw_isr_table,,)
 	{
 		/*
@@ -53,9 +53,9 @@
 	 */
 	SECTION_PROLOGUE(object_access,,)
 	{
-		__k_object_assignment_list_start = .;
-		KEEP(*(".__k_object_assignment.*"))
-		__k_object_assignment_list_end = .;
+		_z_object_assignment_list_start = .;
+		KEEP(*("._z_object_assignment.*"))
+		_z_object_assignment_list_end = .;
 	} GROUP_LINK_IN(ROMABLE_REGION)
 #endif
 
@@ -145,6 +145,13 @@
 		__log_backends_start = .;
 		KEEP(*("._log_backend.*"));
 		__log_backends_end = .;
+	} GROUP_LINK_IN(ROMABLE_REGION)
+
+	SECTION_DATA_PROLOGUE(shell_sections,,)
+	{
+		_shell_list_start = .;
+		KEEP(*(SORT(._shell.static.*)));
+		_shell_list_end = .;
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
 	SECTION_DATA_PROLOGUE(shell_root_cmds_sections,,)

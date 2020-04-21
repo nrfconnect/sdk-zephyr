@@ -12,18 +12,6 @@ if GPIO
 config GPIO_CMSDK_AHB
 	default y
 
-config GPIO_CMSDK_AHB_PORT0
-	default y
-
-config GPIO_CMSDK_AHB_PORT1
-	default y
-
-config GPIO_CMSDK_AHB_PORT2
-	default y
-
-config GPIO_CMSDK_AHB_PORT3
-	default y
-
 endif # GPIO
 
 if SERIAL
@@ -43,5 +31,12 @@ config WDOG_CMSDK_APB
 config I2C_SBCON
 	default y
 	depends on I2C
+
+if IPM
+
+config IPM_MHU
+	default y
+
+endif # IPM
 
 endif

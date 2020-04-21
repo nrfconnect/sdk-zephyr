@@ -5,6 +5,7 @@
 
 menuconfig GPIO
 	bool "GPIO Drivers"
+	select HAS_DTS_GPIO
 	help
 	  Include GPIO drivers in system config
 
@@ -22,6 +23,8 @@ config GPIO_SHELL
 source "drivers/gpio/Kconfig.dw"
 
 source "drivers/gpio/Kconfig.pca95xx"
+
+source "drivers/gpio/Kconfig.mcp23s17"
 
 source "drivers/gpio/Kconfig.mcux"
 

@@ -41,7 +41,7 @@ extern "C" {
 struct k_thread;
 struct k_mem_domain;
 
-typedef struct _k_thread_stack_element k_thread_stack_t;
+typedef struct z_thread_stack_element k_thread_stack_t;
 
 typedef void (*k_thread_entry_t)(void *p1, void *p2, void *p3);
 
@@ -126,6 +126,10 @@ static inline u32_t arch_k_cycle_get_32(void);
  * Architectures that do not implement power management instructions may
  * immediately return, otherwise a power-saving instruction should be
  * issued to wait for an interrupt.
+ *
+ * @note The function is expected to return after the interrupt that has
+ * caused the CPU to exit power-saving mode has been serviced, although
+ * this is not a firm requirement.
  *
  * @see k_cpu_idle()
  */

@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT silabs_gecko_ethernet
+
 /* Silicon Labs EFM32 Giant Gecko 11 Ethernet driver.
  * Limitations:
  * - no link monitoring through PHY interrupt
@@ -58,6 +60,29 @@ static void link_configure(ETH_TypeDef *eth, u32_t flags)
 
 	/* Enable transmitter and receiver */
 	eth->NETWORKCTRL |= (ETH_NETWORKCTRL_ENBTX | ETH_NETWORKCTRL_ENBRX);
+}
+
+static void eth_gecko_setup_mac(struct device *dev)
+{
+	const struct eth_gecko_dev_cfg *const cfg = DEV_CFG(dev);
+	ETH_TypeDef *eth = cfg->regs;
+	u32_t link_status;
+	int result;
+
+	/* PHY auto-negotiate link parameters */
+	result = phy_gecko_auto_negotiate(&cfg->phy, &link_status);
+	if (result < 0) {
+		LOG_ERR("ETH PHY auto-negotiate sequence failed");
+		return;
+	}
+
+	LOG_INF("Speed %s Mb",
+		link_status & ETH_NETWORKCFG_SPEED ? "100" : "10");
+	LOG_INF("%s duplex",
+		link_status & ETH_NETWORKCFG_FULLDUPLEX ? "Full" : "Half");
+
+	/* Set up link parameters and enable receiver/transmitter */
+	link_configure(eth, link_status);
 }
 
 static void eth_init_tx_buf_desc(void)
@@ -315,6 +340,8 @@ static void rx_thread(void *arg1, void *unused1, void *unused2)
 		if (res == 0) {
 			if (dev_data->link_up != true) {
 				dev_data->link_up = true;
+				LOG_INF("Link up");
+				eth_gecko_setup_mac(dev);
 				net_eth_carrier_on(dev_data->iface);
 			}
 
@@ -324,11 +351,14 @@ static void rx_thread(void *arg1, void *unused1, void *unused2)
 			if (phy_gecko_is_linked(&cfg->phy)) {
 				if (dev_data->link_up != true) {
 					dev_data->link_up = true;
+					LOG_INF("Link up");
+					eth_gecko_setup_mac(dev);
 					net_eth_carrier_on(dev_data->iface);
 				}
 			} else   {
 				if (dev_data->link_up != false) {
 					dev_data->link_up = false;
+					LOG_INF("Link down");
 					net_eth_carrier_off(dev_data->iface);
 				}
 			}
@@ -410,20 +440,20 @@ static void eth_init_pins(struct device *dev)
 	eth->ROUTELOC1 = 0;
 	eth->ROUTEPEN = 0;
 
-#if defined(DT_INST_0_SILABS_GECKO_ETHERNET_LOCATION_RMII)
+#if DT_INST_NODE_HAS_PROP(0, location_rmii)
 	for (idx = 0; idx < ARRAY_SIZE(cfg->pin_list->rmii); idx++)
 		soc_gpio_configure(&cfg->pin_list->rmii[idx]);
 
-	eth->ROUTELOC1 |= (DT_INST_0_SILABS_GECKO_ETHERNET_LOCATION_RMII <<
+	eth->ROUTELOC1 |= (DT_INST_PROP(0, location_rmii) <<
 			   _ETH_ROUTELOC1_RMIILOC_SHIFT);
 	eth->ROUTEPEN |= ETH_ROUTEPEN_RMIIPEN;
 #endif
 
-#if defined(DT_INST_0_SILABS_GECKO_ETHERNET_LOCATION_MDIO)
+#if DT_INST_NODE_HAS_PROP(0, location_mdio)
 	for (idx = 0; idx < ARRAY_SIZE(cfg->pin_list->mdio); idx++)
 		soc_gpio_configure(&cfg->pin_list->mdio[idx]);
 
-	eth->ROUTELOC1 |= (DT_INST_0_SILABS_GECKO_ETHERNET_LOCATION_MDIO <<
+	eth->ROUTELOC1 |= (DT_INST_PROP(0, location_mdio) <<
 			   _ETH_ROUTELOC1_MDIOLOC_SHIFT);
 	eth->ROUTEPEN |= ETH_ROUTEPEN_MDIOPEN;
 #endif
@@ -444,7 +474,7 @@ static int eth_init(struct device *dev)
 	/* Connect pins to peripheral */
 	eth_init_pins(dev);
 
-#if defined(DT_INST_0_SILABS_GECKO_ETHERNET_LOCATION_RMII)
+#if DT_INST_NODE_HAS_PROP(0, location_rmii)
 	/* Enable global clock and RMII operation */
 	eth->CTRL = ETH_CTRL_GBLCLKEN | ETH_CTRL_MIISEL_RMII;
 #endif
@@ -491,7 +521,6 @@ static void eth_iface_init(struct net_if *iface)
 	struct eth_gecko_dev_data *const dev_data = DEV_DATA(dev);
 	const struct eth_gecko_dev_cfg *const cfg = DEV_CFG(dev);
 	ETH_TypeDef *eth = cfg->regs;
-	u32_t link_status;
 	int result;
 
 	__ASSERT_NO_MSG(iface != NULL);
@@ -596,13 +625,6 @@ static void eth_iface_init(struct net_if *iface)
 		return;
 	}
 
-	/* PHY auto-negotiate link parameters */
-	result = phy_gecko_auto_negotiate(&cfg->phy, &link_status);
-	if (result < 0) {
-		LOG_ERR("ETH PHY auto-negotiate sequence failed");
-		return;
-	}
-
 	/* Initialise TX/RX semaphores */
 	k_sem_init(&dev_data->tx_sem, 1, ETH_TX_BUF_COUNT);
 	k_sem_init(&dev_data->rx_sem, 0, UINT_MAX);
@@ -613,16 +635,14 @@ static void eth_iface_init(struct net_if *iface)
 			rx_thread, (void *) dev, NULL, NULL,
 			K_PRIO_COOP(CONFIG_ETH_GECKO_RX_THREAD_PRIO),
 			0, K_NO_WAIT);
-
-	/* Set up link parameters and enable receiver/transmitter */
-	link_configure(eth, link_status);
 }
 
 static enum ethernet_hw_caps eth_gecko_get_capabilities(struct device *dev)
 {
 	ARG_UNUSED(dev);
 
-	return ETHERNET_LINK_10BASE_T | ETHERNET_LINK_100BASE_T;
+	return (ETHERNET_AUTO_NEGOTIATION_SET | ETHERNET_LINK_10BASE_T |
+			ETHERNET_LINK_100BASE_T | ETHERNET_DUPLEX_SET);
 }
 
 static const struct ethernet_api eth_api = {
@@ -635,10 +655,10 @@ static struct device DEVICE_NAME_GET(eth_gecko);
 
 static void eth0_irq_config(void)
 {
-	IRQ_CONNECT(DT_INST_0_SILABS_GECKO_ETHERNET_IRQ_0,
-		    DT_INST_0_SILABS_GECKO_ETHERNET_IRQ_0_PRIORITY, eth_isr,
+	IRQ_CONNECT(DT_INST_IRQN(0),
+		    DT_INST_IRQ(0, priority), eth_isr,
 		    DEVICE_GET(eth_gecko), 0);
-	irq_enable(DT_INST_0_SILABS_GECKO_ETHERNET_IRQ_0);
+	irq_enable(DT_INST_IRQN(0));
 }
 
 static const struct eth_gecko_pin_list pins_eth0 = {
@@ -648,14 +668,14 @@ static const struct eth_gecko_pin_list pins_eth0 = {
 
 static const struct eth_gecko_dev_cfg eth0_config = {
 	.regs = (ETH_TypeDef *)
-		DT_INST_0_SILABS_GECKO_ETHERNET_BASE_ADDRESS,
+		DT_INST_REG_ADDR(0),
 	.pin_list = &pins_eth0,
 	.pin_list_size = ARRAY_SIZE(pins_eth0.mdio) +
 			 ARRAY_SIZE(pins_eth0.rmii),
 	.config_func = eth0_irq_config,
 	.phy = { (ETH_TypeDef *)
-		 DT_INST_0_SILABS_GECKO_ETHERNET_BASE_ADDRESS,
-		 DT_INST_0_SILABS_GECKO_ETHERNET_PHY_ADDRESS },
+		 DT_INST_REG_ADDR(0),
+		 DT_INST_PROP(0, phy_address) },
 };
 
 static struct eth_gecko_dev_data eth0_data = {
@@ -672,5 +692,5 @@ static struct eth_gecko_dev_data eth0_data = {
 };
 
 ETH_NET_DEVICE_INIT(eth_gecko, CONFIG_ETH_GECKO_NAME, eth_init,
-		    &eth0_data, &eth0_config, CONFIG_ETH_INIT_PRIORITY,
-		    &eth_api, ETH_GECKO_MTU);
+		    device_pm_control_nop, &eth0_data, &eth0_config,
+		    CONFIG_ETH_INIT_PRIORITY, &eth_api, ETH_GECKO_MTU);

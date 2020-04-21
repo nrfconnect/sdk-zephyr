@@ -28,7 +28,7 @@
 
 	soc {
 		flash-controller@58004000 {
-			compatible = "st,stm32wb-flash-controller";
+			compatible = "st,stm32-flash-controller", "st,stm32wb-flash-controller";
 			label = "FLASH_CTRL";
 			reg = <0x58004000 0x400>;
 			interrupts = <4 0>;
@@ -168,7 +168,7 @@
 		};
 
 		spi1: spi@40013000 {
-			compatible = "st,stm32-spi-fifo";
+			compatible = "st,stm32-spi-fifo", "st,stm32-spi";
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x40013000 0x400>;
@@ -179,7 +179,7 @@
 		};
 
 		spi2: spi@40003800 {
-			compatible = "st,stm32-spi-fifo";
+			compatible = "st,stm32-spi-fifo", "st,stm32-spi";
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x40003800 0x400>;

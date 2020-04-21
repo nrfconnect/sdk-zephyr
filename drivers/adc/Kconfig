@@ -17,6 +17,7 @@ if ADC
 
 config ADC_SHELL
 	bool "Enable ADC Shell"
+	depends on SHELL
 	help
 	  Enable ADC Shell for testing.
 
@@ -58,5 +59,7 @@ source "drivers/adc/Kconfig.stm32"
 source "drivers/adc/Kconfig.xec"
 
 source "drivers/adc/Kconfig.lmp90xxx"
+
+source "drivers/adc/Kconfig.mcp320x"
 
 endif # ADC

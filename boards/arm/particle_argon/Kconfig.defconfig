@@ -8,18 +8,6 @@ if BOARD_PARTICLE_ARGON
 config BOARD
 	default "particle_argon"
 
-config ADC_0
-	default y
-	depends on ADC
-
-config I2C_0
-	default y
-	depends on I2C
-
-config SPI_2
-	default y
-	depends on SPI
-
 if USB
 
 config USB_NRFX

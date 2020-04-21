@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT st_stm32_spi
+
 #define LOG_LEVEL CONFIG_SPI_LOG_LEVEL
 #include <logging/log.h>
 LOG_MODULE_REGISTER(spi_ll_stm32);
@@ -195,7 +197,7 @@ static void spi_stm32_complete(struct spi_stm32_data *data, SPI_TypeDef *spi,
 
 	spi_context_cs_control(&data->ctx, false);
 
-#if defined(CONFIG_SPI_STM32_HAS_FIFO)
+#if defined(DT_COMPAT_ST_STM32_SPI_FIFO)
 	/* Flush RX buffer */
 	while (ll_func_rx_is_not_empty(spi)) {
 		(void) LL_SPI_ReceiveData8(spi);
@@ -342,7 +344,7 @@ static int spi_stm32_configure(struct device *dev,
 		LL_SPI_SetDataWidth(spi, LL_SPI_DATAWIDTH_16BIT);
 	}
 
-#if defined(CONFIG_SPI_STM32_HAS_FIFO)
+#if defined(DT_COMPAT_ST_STM32_SPI_FIFO)
 	ll_func_set_fifo_threshold_8bit(spi);
 #endif
 
@@ -407,7 +409,7 @@ static int transceive(struct device *dev,
 	/* Set buffers info */
 	spi_context_buffers_setup(&data->ctx, tx_bufs, rx_bufs, 1);
 
-#if defined(CONFIG_SPI_STM32_HAS_FIFO)
+#if defined(DT_COMPAT_ST_STM32_SPI_FIFO)
 	/* Flush RX buffer */
 	while (ll_func_rx_is_not_empty(spi)) {
 		(void) LL_SPI_ReceiveData8(spi);
@@ -506,9 +508,10 @@ static int spi_stm32_init(struct device *dev)
 #define STM32_SPI_IRQ_HANDLER(id)					\
 static void spi_stm32_irq_config_func_##id(struct device *dev)		\
 {									\
-	IRQ_CONNECT(DT_SPI_##id##_IRQ, DT_SPI_##id##_IRQ_PRI,		\
+	IRQ_CONNECT(DT_INST_IRQN(id),			\
+		    DT_INST_IRQ(id, priority),		\
 		    spi_stm32_isr, DEVICE_GET(spi_stm32_##id), 0);	\
-	irq_enable(DT_SPI_##id##_IRQ);					\
+	irq_enable(DT_INST_IRQN(id));			\
 }
 #else
 #define STM32_SPI_IRQ_HANDLER_DECL(id)
@@ -520,10 +523,10 @@ static void spi_stm32_irq_config_func_##id(struct device *dev)		\
 STM32_SPI_IRQ_HANDLER_DECL(id);						\
 									\
 static const struct spi_stm32_config spi_stm32_cfg_##id = {		\
-	.spi = (SPI_TypeDef *) DT_SPI_##id##_BASE_ADDRESS,		\
+	.spi = (SPI_TypeDef *) DT_INST_REG_ADDR(id),\
 	.pclken = {							\
-		.enr = DT_SPI_##id##_CLOCK_BITS,			\
-		.bus = DT_SPI_##id##_CLOCK_BUS				\
+		.enr = DT_INST_CLOCKS_CELL(id, bits),		\
+		.bus = DT_INST_CLOCKS_CELL(id, bus)		\
 	},								\
 	STM32_SPI_IRQ_HANDLER_FUNC(id)					\
 };									\
@@ -533,33 +536,34 @@ static struct spi_stm32_data spi_stm32_dev_data_##id = {		\
 	SPI_CONTEXT_INIT_SYNC(spi_stm32_dev_data_##id, ctx),		\
 };									\
 									\
-DEVICE_AND_API_INIT(spi_stm32_##id, DT_SPI_##id##_NAME, &spi_stm32_init, \
+DEVICE_AND_API_INIT(spi_stm32_##id, DT_INST_LABEL(id),	\
+		    &spi_stm32_init,					\
 		    &spi_stm32_dev_data_##id, &spi_stm32_cfg_##id,	\
 		    POST_KERNEL, CONFIG_SPI_INIT_PRIORITY,		\
 		    &api_funcs);					\
 									\
 STM32_SPI_IRQ_HANDLER(id)
 
-#ifdef CONFIG_SPI_1
+#if DT_HAS_DRV_INST(0)
+STM32_SPI_INIT(0)
+#endif /* DT_HAS_DRV_INST(0) */
+
+#if DT_HAS_DRV_INST(1)
 STM32_SPI_INIT(1)
-#endif
+#endif /* DT_HAS_DRV_INST(1) */
 
-#ifdef CONFIG_SPI_2
+#if DT_HAS_DRV_INST(2)
 STM32_SPI_INIT(2)
-#endif
+#endif /* DT_HAS_DRV_INST(2) */
 
-#ifdef CONFIG_SPI_3
+#if DT_HAS_DRV_INST(3)
 STM32_SPI_INIT(3)
-#endif
+#endif /* DT_HAS_DRV_INST(3) */
 
-#ifdef CONFIG_SPI_4
+#if DT_HAS_DRV_INST(4)
 STM32_SPI_INIT(4)
-#endif
+#endif /* DT_HAS_DRV_INST(4) */
 
-#ifdef CONFIG_SPI_5
+#if DT_HAS_DRV_INST(5)
 STM32_SPI_INIT(5)
-#endif
-
-#ifdef CONFIG_SPI_6
-STM32_SPI_INIT(6)
-#endif
+#endif /* DT_HAS_DRV_INST(5) */

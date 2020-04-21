@@ -140,9 +140,9 @@ static void i2s_audio_init(void)
 		return;
 	}
 
-	codec_device = device_get_binding(DT_INST_0_TI_TLV320DAC_LABEL);
+	codec_device = device_get_binding(DT_LABEL(DT_INST(0, ti_tlv320dac)));
 	if (!codec_device) {
-		LOG_ERR("unable to find " DT_INST_0_TI_TLV320DAC_LABEL " device");
+		LOG_ERR("unable to find " DT_LABEL(DT_INST(0, ti_tlv320dac)) " device");
 		return;
 	}
 
@@ -327,4 +327,4 @@ static void i2s_audio_sample_app(void *p1, void *p2, void *p3)
 }
 
 K_THREAD_DEFINE(i2s_sample, 1024, i2s_audio_sample_app, NULL, NULL, NULL,
-		10, 0, K_NO_WAIT);
+		10, 0, 0);

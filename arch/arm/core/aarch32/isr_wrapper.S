@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Wind River Systems, Inc.
+ * Copyright (c) 2020 Stephanos Ioannidis <root@stephanos.io>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -45,20 +46,39 @@ SECTION_FUNC(TEXT, _isr_wrapper)
 	push {r0,lr}		/* r0, lr are now the first items on the stack */
 #elif defined(CONFIG_CPU_CORTEX_R)
 	/*
-	 * Save away r0-r3 from previous context to the process stack since
-	 * they are clobbered here.  Also, save away lr since we may swap
-	 * processes and return to a different thread.
+	 * Save away r0-r3, r12 and lr_irq for the previous context to the
+	 * process stack since they are clobbered here.  Also, save away lr
+	 * and spsr_irq since we may swap processes and return to a different
+	 * thread.
 	 */
-	push {r4, r5}
-	mov r4, r12
-	sub r5, lr, #4
-
+	sub lr, lr, #4
+	srsdb #MODE_SYS!
 	cps #MODE_SYS
-	stmdb sp!, {r0-r5}
-	cps #MODE_IRQ
+	push {r0-r3, r12, lr}
 
-	pop {r4, r5}
-#endif
+	/*
+	 * Use SVC mode stack for predictable interrupt behaviour; running ISRs
+	 * in the SYS/USR mode stack (i.e. interrupted thread stack) leaves the
+	 * ISR stack usage at the mercy of the interrupted thread and this can
+	 * be prone to stack overflows if any of the ISRs and/or preemptible
+	 * threads have high stack usage.
+	 *
+	 * When userspace is enabled, this also prevents leaking privileged
+	 * information to the user mode.
+	 */
+	cps #MODE_SVC
+
+	/* Align stack at double-word boundary */
+	and r3, sp, #4
+	sub sp, sp, r3
+	push {r2, r3}
+
+	/* Increment interrupt nesting count */
+	ldr r2, =_kernel
+	ldr r0, [r2, #_kernel_offset_to_nested]
+	add r0, r0, #1
+	str r0, [r2, #_kernel_offset_to_nested]
+#endif /* CONFIG_CPU_CORTEX_M */
 
 #ifdef CONFIG_EXECUTION_BENCHMARKING
 	bl read_timer_start_of_isr
@@ -78,12 +98,13 @@ SECTION_FUNC(TEXT, _isr_wrapper)
 	 * is called with interrupts disabled.
 	 */
 
-     /*
-      * FIXME: Remove the Cortex-M conditional compilation checks for `cpsid i`
-      *        and `cpsie i` after the Cortex-R port is updated to support
-      *        interrupt nesting.  For more details, refer to the issue #21758.
-      */
 #if defined(CONFIG_CPU_CORTEX_M)
+	/*
+	 * Disable interrupts to prevent nesting while exiting idle state. This
+	 * is only necessary for the Cortex-M because it is the only ARM
+	 * architecture variant that automatically enables interrupts when
+	 * entering an ISR.
+	 */
 	cpsid i  /* PRIMASK = 1 */
 #endif
 
@@ -126,7 +147,6 @@ _idle_state_cleared:
 
 #if defined(CONFIG_CPU_CORTEX_M)
 	mrs r0, IPSR	/* get exception number */
-#endif
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
 	ldr r1, =16
 	subs r0, r1	/* get IRQ number */
@@ -134,33 +154,55 @@ _idle_state_cleared:
 #elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
 	sub r0, r0, #16	/* get IRQ number */
 	lsl r0, r0, #3	/* table is 8-byte wide */
-#elif defined(CONFIG_ARMV7_R)
-	/*
-	 * Cortex-R only has one IRQ line so the main handler will be at
-	 * offset 0 of the table.
-	 */
-	mov r0, #0
+#endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
+#elif defined(CONFIG_CPU_CORTEX_R)
+	/* Get active IRQ number from the interrupt controller */
+#if !defined(CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER)
+	bl arm_gic_get_active
+#else
+	bl z_soc_irq_get_active
+#endif /* !CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER */
+	push {r0, r1}
+	lsl r0, r0, #3	/* table is 8-byte wide */
 #else
 #error Unknown ARM architecture
-#endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
+#endif /* CONFIG_CPU_CORTEX_M */
+
+#if !defined(CONFIG_CPU_CORTEX_M)
+	/*
+	 * Enable interrupts to allow nesting.
+	 *
+	 * Note that interrupts are disabled up to this point on the ARM
+	 * architecture variants other than the Cortex-M. It is also important
+	 * to note that that most interrupt controllers require that the nested
+	 * interrupts are handled after the active interrupt is acknowledged;
+	 * this is be done through the `get_active` interrupt controller
+	 * interface function.
+	 */
+	cpsie i
+#endif /* !CONFIG_CPU_CORTEX_M */
+
 	ldr r1, =_sw_isr_table
 	add r1, r1, r0	/* table entry: ISRs must have their MSB set to stay
 			 * in thumb mode */
 
 	ldm r1!,{r0,r3}	/* arg in r0, ISR in r3 */
 #ifdef CONFIG_EXECUTION_BENCHMARKING
-	stm sp!,{r0-r3} /* Save r0 to r3 into stack */
-	push {r0, lr}
+	push {r0, r3}	/* Save r0 and r3 into stack */
 	bl read_timer_end_of_isr
-#if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
-	pop {r0, r3}
-	mov lr,r3
-#else
-	pop {r0, lr}
-#endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
-	ldm sp!,{r0-r3} /* Restore r0 to r3 regs */
+	pop {r0, r3}	/* Restore r0 and r3 regs */
 #endif /* CONFIG_EXECUTION_BENCHMARKING */
 	blx r3		/* call ISR */
+
+#if defined(CONFIG_CPU_CORTEX_R)
+	/* Signal end-of-interrupt */
+	pop {r0, r1}
+#if !defined(CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER)
+	bl arm_gic_eoi
+#else
+	bl z_soc_irq_eoi
+#endif /* !CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER */
+#endif /* CONFIG_CPU_CORTEX_R */
 
 #ifdef CONFIG_TRACING_ISR
 	bl sys_trace_isr_exit
@@ -173,7 +215,7 @@ _idle_state_cleared:
 	pop {r0, lr}
 #elif defined(CONFIG_ARMV7_R)
 	/*
-	 * r0,lr were saved on the process stack since a swap could
+	 * r0 and lr_irq were saved on the process stack since a swap could
 	 * happen.  exc_exit will handle getting those values back
 	 * from the process stack to return to the correct location
 	 * so there is no need to do anything here.
@@ -181,10 +223,6 @@ _idle_state_cleared:
 #else
 #error Unknown ARM architecture
 #endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
-
-#if defined(CONFIG_CPU_CORTEX_R)
-	mov r0, #RET_FROM_IRQ
-#endif
 
 	/* Use 'bx' instead of 'b' because 'bx' can jump further, and use
 	 * 'bx' instead of 'blx' because exception return is done in

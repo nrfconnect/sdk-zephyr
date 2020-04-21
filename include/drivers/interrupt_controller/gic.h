@@ -4,17 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @file
+ * @brief Driver for ARM Generic Interrupt Controller
+ *
+ * The Generic Interrupt Controller (GIC) is the default interrupt controller
+ * for the ARM A and R profile cores.  This driver is used by the ARM arch
+ * implementation to handle interrupts.
+ */
+
 #ifndef ZEPHYR_INCLUDE_DRIVERS_GIC_H_
 #define ZEPHYR_INCLUDE_DRIVERS_GIC_H_
 
-#include <arch/cpu.h>
+#include <zephyr/types.h>
+#include <device.h>
 
 /*
  * GIC Register Interface Base Addresses
  */
 
-#define GIC_DIST_BASE	DT_INST_0_ARM_GIC_BASE_ADDRESS_0
-#define GIC_CPU_BASE	DT_INST_0_ARM_GIC_BASE_ADDRESS_1
+#define GIC_DIST_BASE	DT_REG_ADDR_BY_IDX(DT_INST(0, arm_gic), 0)
+#define GIC_CPU_BASE	DT_REG_ADDR_BY_IDX(DT_INST(0, arm_gic), 1)
 
 /*
  * GIC Distributor Interface
@@ -190,10 +200,84 @@
 /* GICC_IAR */
 #define	GICC_IAR_SPURIOUS	1023
 
-/* GICC_ICFGR */
-#define GICC_ICFGR_MASK		BIT_MASK(2)
-#define GICC_ICFGR_TYPE		BIT(1)
+/* GICD_ICFGR */
+#define GICD_ICFGR_MASK		BIT_MASK(2)
+#define GICD_ICFGR_TYPE		BIT(1)
+
+/* GICD_SGIR */
+#define GICD_SGIR_TGTFILT(x)		(x << 24)
+#define GICD_SGIR_TGTFILT_CPULIST	GICD_SGIR_TGTFILT(0b00)
+#define GICD_SGIR_TGTFILT_ALLBUTREQ	GICD_SGIR_TGTFILT(0b01)
+#define GICD_SGIR_TGTFILT_REQONLY	GICD_SGIR_TGTFILT(0b10)
+
+#define GICD_SGIR_CPULIST(x)		(x << 16)
+#define GICD_SGIR_CPULIST_CPU(n)	GICD_SGIR_CPULIST(BIT(n))
+
+#define GICD_SGIR_NSATT			BIT(15)
+
+#define GICD_SGIR_SGIINTID(x)		(x)
 
 #endif /* CONFIG_GIC_VER <= 2 */
+
+#ifndef _ASMLANGUAGE
+
+/*
+ * GIC Driver Interface Functions
+ */
+
+/**
+ * @brief Initialise ARM GIC driver
+ *
+ * @return 0 if successful
+ */
+int arm_gic_init(void);
+
+/**
+ * @brief Enable interrupt
+ *
+ * @param irq interrupt ID
+ */
+void arm_gic_irq_enable(unsigned int irq);
+
+/**
+ * @brief Disable interrupt
+ *
+ * @param irq interrupt ID
+ */
+void arm_gic_irq_disable(unsigned int irq);
+
+/**
+ * @brief Check if an interrupt is enabled
+ *
+ * @param irq interrupt ID
+ * @return Returns true if interrupt is enabled, false otherwise
+ */
+bool arm_gic_irq_is_enabled(unsigned int irq);
+
+/**
+ * @brief Set interrupt priority
+ *
+ * @param irq interrupt ID
+ * @param prio interrupt priority
+ * @param flags interrupt flags
+ */
+void arm_gic_irq_set_priority(
+	unsigned int irq, unsigned int prio, unsigned int flags);
+
+/**
+ * @brief Get active interrupt ID
+ *
+ * @return Returns the ID of an active interrupt
+ */
+unsigned int arm_gic_get_active(void);
+
+/**
+ * @brief Signal end-of-interrupt
+ *
+ * @param irq interrupt ID
+ */
+void arm_gic_eoi(unsigned int irq);
+
+#endif /* !_ASMLANGUAGE */
 
 #endif /* ZEPHYR_INCLUDE_DRIVERS_GIC_H_ */

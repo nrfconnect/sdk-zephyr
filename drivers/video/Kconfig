@@ -8,10 +8,17 @@
 #
 menuconfig VIDEO
 	bool "VIDEO hardware support"
+	select LEGACY_TIMEOUT_API
 	help
 	  Enable support for the VIDEO.
 
 if VIDEO
+
+config VIDEO_INIT_PRIORITY
+	int "Video initialization priority"
+	default 90
+	help
+	  System initialization priority for video drivers.
 
 config VIDEO_BUFFER_POOL_SZ_MAX
 	int "Size of the largest buffer in the video pool"

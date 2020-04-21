@@ -24,12 +24,21 @@ LOG_MODULE_DECLARE(power);
  */
 #if defined(CONFIG_SOC_FAMILY_NRF)
 #define MAX_PM_DEVICES	15
-#define MAX_DEV_NAME_LEN	16
-static const char core_devices[][MAX_DEV_NAME_LEN] = {
-	"CLOCK_32K",
-	"CLOCK_16M",
+static const char *const core_devices[] = {
+	"CLOCK",
 	"sys_clock",
 	"UART_0",
+};
+#elif defined(CONFIG_SOC_SERIES_CC13X2_CC26X2)
+#define MAX_PM_DEVICES	15
+static const char *const core_devices[] = {
+	"sys_clock",
+	"UART_0",
+};
+#elif defined(CONFIG_SOC_SERIES_KINETIS_K6X)
+#define MAX_PM_DEVICES		1
+static const char *const core_devices[] = {
+	DT_ETH_MCUX_0_NAME,
 };
 #else
 #error "Add SoC's core devices list for PM"
@@ -136,7 +145,7 @@ void sys_pm_create_device_list(void)
 		     j < ARRAY_SIZE(core_devices);
 		     j++) {
 			if (!strcmp(pm_device_list[i].config->name,
-						&core_devices[j][0])) {
+						core_devices[j])) {
 				is_core_dev = true;
 				break;
 			}

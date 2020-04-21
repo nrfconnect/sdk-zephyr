@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT microchip_xec_espi
+
 #include <kernel.h>
 #include <soc.h>
 #include <errno.h>
@@ -191,6 +193,7 @@ static u32_t slave_tx_mem[MAX_OOB_BUFFER_SIZE];
 static int espi_xec_configure(struct device *dev, struct espi_cfg *cfg)
 {
 	u8_t iomode = 0;
+	u8_t cap0 = ESPI_CAP_REGS->GLB_CAP0;
 	u8_t cap1 = ESPI_CAP_REGS->GLB_CAP1;
 	u8_t cur_iomode = (cap1 & MCHP_ESPI_GBL_CAP1_IO_MODE_MASK) >>
 			   MCHP_ESPI_GBL_CAP1_IO_MODE_POS;
@@ -230,6 +233,41 @@ static int espi_xec_configure(struct device *dev, struct espi_cfg *cfg)
 		cap1 |= (iomode << MCHP_ESPI_GBL_CAP1_IO_MODE_POS);
 	}
 
+	/* Validdate and translate eSPI API channels to MEC capabilities */
+	cap0 &= ~MCHP_ESPI_GBL_CAP0_MASK;
+	if (cfg->channel_caps & ESPI_CHANNEL_PERIPHERAL) {
+		if (IS_ENABLED(CONFIG_ESPI_PERIPHERAL_CHANNEL)) {
+			cap0 |= MCHP_ESPI_GBL_CAP0_PC_SUPP;
+		} else {
+			return -EINVAL;
+		}
+	}
+
+	if (cfg->channel_caps & ESPI_CHANNEL_VWIRE) {
+		if (IS_ENABLED(CONFIG_ESPI_VWIRE_CHANNEL)) {
+			cap0 |= MCHP_ESPI_GBL_CAP0_VW_SUPP;
+		} else {
+			return -EINVAL;
+		}
+	}
+
+	if (cfg->channel_caps & ESPI_CHANNEL_OOB) {
+		if (IS_ENABLED(CONFIG_ESPI_OOB_CHANNEL)) {
+			cap0 |= MCHP_ESPI_GBL_CAP0_OOB_SUPP;
+		} else {
+			return -EINVAL;
+		}
+	}
+
+	if (cfg->channel_caps & ESPI_CHANNEL_FLASH) {
+		if (IS_ENABLED(CONFIG_ESPI_FLASH_CHANNEL)) {
+			cap0 |= MCHP_ESPI_GBL_CAP0_FC_SUPP;
+		} else {
+			return -EINVAL;
+		}
+	}
+
+	ESPI_CAP_REGS->GLB_CAP0 = cap0;
 	ESPI_CAP_REGS->GLB_CAP1 = cap1;
 
 	/* Activate the eSPI block *.
@@ -406,7 +444,7 @@ static int espi_xec_receive_vwire(struct device *dev,
 	return 0;
 }
 
-static int espi_xec_send_oob(struct device *dev, struct espi_oob_packet pckt)
+static int espi_xec_send_oob(struct device *dev, struct espi_oob_packet *pckt)
 {
 	int ret;
 	struct espi_xec_data *data = (struct espi_xec_data *)(dev->driver_data);
@@ -417,27 +455,28 @@ static int espi_xec_send_oob(struct device *dev, struct espi_oob_packet pckt)
 	LOG_DBG("%s\n", __func__);
 
 	if (!(ESPI_OOB_REGS->TX_STS & MCHP_ESPI_OOB_TX_STS_CHEN)) {
-		LOG_WRN("OOB channel is disabled\n");
+		LOG_ERR("OOB channel is disabled");
 		return -EIO;
 	}
 
 	if (ESPI_OOB_REGS->TX_STS & MCHP_ESPI_OOB_TX_STS_BUSY) {
-		LOG_WRN("OOB channel is busy\n");
+		LOG_ERR("OOB channel is busy");
 		return -EBUSY;
 	}
 
-	if (pckt.len > MAX_OOB_BUFFER_SIZE) {
+	if (pckt->len > MAX_OOB_BUFFER_SIZE) {
+		LOG_ERR("insufficient space");
 		return -EINVAL;
 	}
 
-	memcpy(slave_tx_mem, pckt.buf, pckt.len);
+	memcpy(slave_tx_mem, pckt->buf, pckt->len);
 
-	ESPI_OOB_REGS->TX_LEN = pckt.len;
+	ESPI_OOB_REGS->TX_LEN = pckt->len;
 	ESPI_OOB_REGS->TX_CTRL = MCHP_ESPI_OOB_TX_CTRL_START;
-	LOG_DBG("%s %d\n", __func__, ESPI_OOB_REGS->TX_LEN);
+	LOG_DBG("%s %d", __func__, ESPI_OOB_REGS->TX_LEN);
 
 	/* Wait until ISR or timeout */
-	ret = k_sem_take(&data->tx_lock, MAX_OOB_TIMEOUT);
+	ret = k_sem_take(&data->tx_lock, K_MSEC(MAX_OOB_TIMEOUT));
 	if (ret == -EAGAIN) {
 		return -ETIMEDOUT;
 	}
@@ -450,33 +489,33 @@ static int espi_xec_send_oob(struct device *dev, struct espi_oob_packet pckt)
 }
 
 static int espi_xec_receive_oob(struct device *dev,
-				struct espi_oob_packet pckt)
+				struct espi_oob_packet *pckt)
 {
 	int ret;
 	u8_t err_mask = MCHP_ESPI_OOB_RX_STS_IBERR |
 			MCHP_ESPI_OOB_RX_STS_OVRUN;
 	struct espi_xec_data *data = (struct espi_xec_data *)(dev->driver_data);
 
-	LOG_DBG("%s\n", __func__);
-
-
 	if (ESPI_OOB_REGS->TX_STS & err_mask) {
 		return -EIO;
 	}
 
 	/* Wait until ISR or timeout */
-	ret = k_sem_take(&data->rx_lock, MAX_OOB_TIMEOUT);
+	ret = k_sem_take(&data->rx_lock, K_MSEC(MAX_OOB_TIMEOUT));
 	if (ret == -EAGAIN) {
 		return -ETIMEDOUT;
 	}
 
-	/* Check if buffer passed to driver can fit the received packet */
-	if (ESPI_OOB_REGS->RX_LEN > pckt.len) {
+	/* Check if buffer passed to driver can fit the received buffer */
+	u32_t rcvd_len = ESPI_OOB_REGS->RX_LEN & ESPI_XEC_OOB_RX_LEN_MASK;
+
+	if (rcvd_len > pckt->len) {
+		LOG_ERR("space rcvd %d vs %d", rcvd_len, pckt->len);
 		return -EIO;
 	}
 
-	pckt.len = ESPI_OOB_REGS->RX_LEN;
-	memcpy(pckt.buf, slave_rx_mem, pckt.len);
+	pckt->len = rcvd_len;
+	memcpy(pckt->buf, slave_rx_mem, pckt->len);
 
 	return 0;
 }
@@ -770,6 +809,43 @@ static void notify_system_state(struct device *dev,
 	espi_send_callbacks(&data->callbacks, dev, evt);
 }
 
+static void notify_host_warning(struct device *dev,
+				enum espi_vwire_signal signal)
+{
+	u8_t status;
+
+	espi_xec_receive_vwire(dev, signal, &status);
+
+	if (!IS_ENABLED(CONFIG_ESPI_AUTOMATIC_WARNING_ACKNOWLEDGE)) {
+		struct espi_xec_data *data =
+			(struct espi_xec_data *)(dev->driver_data);
+		struct espi_event evt = {ESPI_BUS_EVENT_VWIRE_RECEIVED, 0, 0 };
+
+		evt.evt_details = signal;
+		evt.evt_data = status;
+		espi_send_callbacks(&data->callbacks, dev, evt);
+	} else {
+		k_busy_wait(ESPI_XEC_VWIRE_ACK_DELAY);
+		switch (signal) {
+		case ESPI_VWIRE_SIGNAL_HOST_RST_WARN:
+			espi_xec_send_vwire(dev,
+					    ESPI_VWIRE_SIGNAL_HOST_RST_ACK,
+					    status);
+			break;
+		case ESPI_VWIRE_SIGNAL_SUS_WARN:
+			espi_xec_send_vwire(dev, ESPI_VWIRE_SIGNAL_SUS_ACK,
+					    status);
+			break;
+		case ESPI_VWIRE_SIGNAL_OOB_RST_WARN:
+			espi_xec_send_vwire(dev, ESPI_VWIRE_SIGNAL_OOB_RST_ACK,
+					    status);
+			break;
+		default:
+			break;
+		}
+	}
+}
+
 static void vw_slp3_isr(struct device *dev)
 {
 	notify_system_state(dev, ESPI_VWIRE_SIGNAL_SLP_S3);
@@ -787,45 +863,22 @@ static void vw_slp5_isr(struct device *dev)
 
 static void vw_host_rst_warn_isr(struct device *dev)
 {
-	u8_t status;
-
-#ifndef CONFIG_ESPI_AUTOMATIC_WARNING_ACKNOWLEDGE
-	struct espi_xec_data *data = (struct espi_xec_data *)(dev->driver_data);
-	struct espi_event evt = { ESPI_BUS_EVENT_VWIRE_RECEIVED, 0, 0 };
-#endif
-
-	espi_xec_receive_vwire(dev, ESPI_VWIRE_SIGNAL_HOST_RST_WARN, &status);
-
-#ifndef CONFIG_ESPI_AUTOMATIC_WARNING_ACKNOWLEDGE
-	evt.evt_details = ESPI_VWIRE_SIGNAL_HOST_RST_WARN;
-	evt.evt_details = ESPI_BUS_EVENT_VWIRE_RECEIVED;
-	espi_send_callbacks(&data->callbacks, dev, evt);
-#else
-
-	k_busy_wait(ESPI_XEC_VWIRE_ACK_DELAY);
-	espi_xec_send_vwire(dev, ESPI_VWIRE_SIGNAL_HOST_RST_ACK, status);
-#endif
+	notify_host_warning(dev, ESPI_VWIRE_SIGNAL_HOST_RST_WARN);
 }
 
 static void vw_sus_warn_isr(struct device *dev)
 {
-	u8_t status;
+	notify_host_warning(dev, ESPI_VWIRE_SIGNAL_SUS_WARN);
+}
 
-#ifndef CONFIG_ESPI_AUTOMATIC_WARNING_ACKNOWLEDGE
-	struct espi_xec_data *data = (struct espi_xec_data *)(dev->driver_data);
-	struct espi_event evt = { ESPI_BUS_EVENT_VWIRE_RECEIVED, 0, 0 };
-#endif
+static void vw_oob_rst_isr(struct device *dev)
+{
+	notify_host_warning(dev, ESPI_VWIRE_SIGNAL_OOB_RST_WARN);
+}
 
-	espi_xec_receive_vwire(dev, ESPI_VWIRE_SIGNAL_SUS_WARN, &status);
-
-#ifndef CONFIG_ESPI_AUTOMATIC_WARNING_ACKNOWLEDGE
-	evt.evt_details = ESPI_BUS_EVENT_VWIRE_RECEIVED;
-	evt.evt_data = status;
-	espi_send_callbacks(&data->callbacks, dev, evt);
-#else
-	k_busy_wait(ESPI_XEC_VWIRE_ACK_DELAY);
-	espi_xec_send_vwire(dev, ESPI_VWIRE_SIGNAL_SUS_ACK, status);
-#endif
+static void vw_sus_slp_a_isr(struct device *dev)
+{
+	notify_system_state(dev, ESPI_VWIRE_SIGNAL_SLP_A);
 }
 
 static void ibf_isr(struct device *dev)
@@ -896,13 +949,26 @@ const struct espi_isr espi_bus_isr[] = {
 	{MCHP_ESPI_VW_EN_GIRQ_VAL, espi_vwire_chanel_isr},
 };
 
+u8_t vw_wires_int_en[] = {
+	ESPI_VWIRE_SIGNAL_SLP_S3,
+	ESPI_VWIRE_SIGNAL_SLP_S4,
+	ESPI_VWIRE_SIGNAL_SLP_S5,
+	ESPI_VWIRE_SIGNAL_PLTRST,
+	ESPI_VWIRE_SIGNAL_OOB_RST_WARN,
+	ESPI_VWIRE_SIGNAL_HOST_RST_WARN,
+	ESPI_VWIRE_SIGNAL_SUS_WARN,
+	ESPI_VWIRE_SIGNAL_SUS_PWRDN_ACK,
+};
+
 const struct espi_isr m2s_vwires_isr[] = {
 	{MEC_ESPI_MSVW00_SRC0_VAL, vw_slp3_isr},
 	{MEC_ESPI_MSVW00_SRC1_VAL, vw_slp4_isr},
 	{MEC_ESPI_MSVW00_SRC2_VAL, vw_slp5_isr},
 	{MEC_ESPI_MSVW01_SRC1_VAL, vw_pltrst_isr},
+	{MEC_ESPI_MSVW01_SRC2_VAL, vw_oob_rst_isr},
 	{MEC_ESPI_MSVW02_SRC0_VAL, vw_host_rst_warn_isr},
 	{MEC_ESPI_MSVW03_SRC0_VAL, vw_sus_warn_isr},
+	{MEC_ESPI_MSVW03_SRC3_VAL, vw_sus_slp_a_isr},
 };
 
 const struct espi_isr peripherals_isr[] = {
@@ -997,13 +1063,13 @@ static const struct espi_driver_api espi_xec_driver_api = {
 static struct espi_xec_data espi_xec_data;
 
 static const struct espi_xec_config espi_xec_config = {
-	.base_addr = DT_INST_0_MICROCHIP_XEC_ESPI_BASE_ADDRESS,
-	.bus_girq_id = DT_INST_0_MICROCHIP_XEC_ESPI_IO_GIRQ,
-	.vw_girq_id = DT_INST_0_MICROCHIP_XEC_ESPI_VW_GIRQ,
-	.pc_girq_id = DT_INST_0_MICROCHIP_XEC_ESPI_PC_GIRQ,
+	.base_addr = DT_INST_REG_ADDR(0),
+	.bus_girq_id = DT_INST_PROP(0, io_girq),
+	.vw_girq_id = DT_INST_PROP(0, vw_girq),
+	.pc_girq_id = DT_INST_PROP(0, pc_girq),
 };
 
-DEVICE_AND_API_INIT(espi_xec_0, DT_INST_0_MICROCHIP_XEC_ESPI_LABEL,
+DEVICE_AND_API_INIT(espi_xec_0, DT_INST_LABEL(0),
 		    &espi_xec_init, &espi_xec_data, &espi_xec_config,
 		    PRE_KERNEL_2, CONFIG_ESPI_INIT_PRIORITY,
 		    &espi_xec_driver_api);
@@ -1053,26 +1119,15 @@ static int espi_xec_init(struct device *dev)
 	ESPI_PC_REGS->PC_IEN |= MCHP_ESPI_PC_IEN_EN_CHG;
 
 	/* Enable VWires interrupts */
-	mec_espi_msvw_irq_sel_set(&ESPI_M2S_VW_REGS->MSVW00,
-				  ESPI_VWIRE_SRC_ID0, MSVW_IRQ_SEL_EDGE_BOTH);
-	mec_espi_msvw_irq_sel_set(&ESPI_M2S_VW_REGS->MSVW00,
-				  ESPI_VWIRE_SRC_ID1, MSVW_IRQ_SEL_EDGE_BOTH);
-	mec_espi_msvw_irq_sel_set(&ESPI_M2S_VW_REGS->MSVW00,
-				  ESPI_VWIRE_SRC_ID2, MSVW_IRQ_SEL_EDGE_BOTH);
-	mec_espi_msvw_irq_sel_set(&ESPI_M2S_VW_REGS->MSVW01,
-				  ESPI_VWIRE_SRC_ID0, MSVW_IRQ_SEL_EDGE_BOTH);
-	mec_espi_msvw_irq_sel_set(&ESPI_M2S_VW_REGS->MSVW01,
-				  ESPI_VWIRE_SRC_ID1, MSVW_IRQ_SEL_EDGE_BOTH);
-	mec_espi_msvw_irq_sel_set(&ESPI_M2S_VW_REGS->MSVW01,
-				  ESPI_VWIRE_SRC_ID2, MSVW_IRQ_SEL_EDGE_BOTH);
-	mec_espi_msvw_irq_sel_set(&ESPI_M2S_VW_REGS->MSVW02,
-				  ESPI_VWIRE_SRC_ID0, MSVW_IRQ_SEL_EDGE_BOTH);
-	mec_espi_msvw_irq_sel_set(&ESPI_M2S_VW_REGS->MSVW03,
-				  ESPI_VWIRE_SRC_ID0, MSVW_IRQ_SEL_EDGE_BOTH);
-	mec_espi_msvw_irq_sel_set(&ESPI_M2S_VW_REGS->MSVW03,
-				  ESPI_VWIRE_SRC_ID1, MSVW_IRQ_SEL_EDGE_BOTH);
-	mec_espi_msvw_irq_sel_set(&ESPI_M2S_VW_REGS->MSVW03,
-				  ESPI_VWIRE_SRC_ID3, MSVW_IRQ_SEL_EDGE_BOTH);
+	for (int i = 0; i < sizeof(vw_wires_int_en); i++) {
+		u8_t signal = vw_wires_int_en[i];
+		struct xec_signal signal_info = vw_tbl[signal];
+		u8_t xec_id = signal_info.xec_reg_idx;
+		ESPI_MSVW_REG *reg = &(ESPI_M2S_VW_REGS->MSVW00) + xec_id;
+
+		mec_espi_msvw_irq_sel_set(reg, signal_info.bit,
+					  MSVW_IRQ_SEL_EDGE_BOTH);
+	}
 
 	/* Enable interrupts for each logical channel enable assertion */
 	MCHP_GIRQ_ENSET(config->bus_girq_id) = MCHP_ESPI_ESPI_RST_GIRQ_VAL |
@@ -1099,24 +1154,27 @@ static int espi_xec_init(struct device *dev)
 #endif
 	/* Enable aggregated interrupt block for eSPI bus events */
 	MCHP_GIRQ_BLK_SETEN(config->bus_girq_id);
-	IRQ_CONNECT(DT_INST_0_MICROCHIP_XEC_ESPI_IRQ_0,
-		    DT_ESPI_MCHP_XEC_0_IRQ_PRIORITY, espi_xec_bus_isr,
+	IRQ_CONNECT(DT_INST_IRQN(0),
+		    DT_INST_IRQ(0, priority),
+		    espi_xec_bus_isr,
 		    DEVICE_GET(espi_xec_0), 0);
-	irq_enable(DT_INST_0_MICROCHIP_XEC_ESPI_IRQ_0);
+	irq_enable(DT_INST_IRQN(0));
 
 	/* Enable aggregated interrupt block for eSPI VWire events */
 	MCHP_GIRQ_BLK_SETEN(config->vw_girq_id);
-	IRQ_CONNECT(DT_INST_0_MICROCHIP_XEC_ESPI_IRQ_1,
-		    DT_ESPI_MCHP_XEC_1_IRQ_PRIORITY, espi_xec_vw_isr,
+	IRQ_CONNECT(DT_INST_IRQ_BY_IDX(0, 1, irq),
+		    DT_INST_IRQ_BY_IDX(0, 1, priority),
+		    espi_xec_vw_isr,
 		    DEVICE_GET(espi_xec_0), 0);
-	irq_enable(DT_INST_0_MICROCHIP_XEC_ESPI_IRQ_1);
+	irq_enable(DT_INST_IRQ_BY_IDX(0, 1, irq));
 
 	/* Enable aggregated interrupt block for eSPI peripheral channel */
 	MCHP_GIRQ_BLK_SETEN(config->pc_girq_id);
-	IRQ_CONNECT(DT_INST_0_MICROCHIP_XEC_ESPI_IRQ_2,
-		    DT_ESPI_MCHP_XEC_2_IRQ_PRIORITY, espi_xec_periph_isr,
+	IRQ_CONNECT(DT_INST_IRQ_BY_IDX(0, 2, irq),
+		    DT_INST_IRQ_BY_IDX(0, 2, priority),
+		    espi_xec_periph_isr,
 		    DEVICE_GET(espi_xec_0), 0);
-	irq_enable(DT_INST_0_MICROCHIP_XEC_ESPI_IRQ_2);
+	irq_enable(DT_INST_IRQ_BY_IDX(0, 2, irq));
 
 	return 0;
 }

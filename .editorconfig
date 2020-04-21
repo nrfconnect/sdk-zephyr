@@ -11,6 +11,11 @@ insert_final_newline = true
 trim_trailing_whitespace = true
 max_line_length = 80
 
+# Assembly
+[*.S]
+indent_style = tab
+indent_size = 8
+
 # C
 [*.{c,h}]
 indent_style = tab
@@ -27,7 +32,7 @@ indent_style = tab
 indent_size = 8
 
 # YAML
-[*.yml]
+[*.{yml,yaml}]
 indent_style = space
 indent_size = 2
 

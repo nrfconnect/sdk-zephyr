@@ -118,7 +118,6 @@ config BT_LLL_VENDOR_NORDIC
 	select BT_HAS_HCI_VS
 	select ENTROPY_NRF5_RNG
 	select ENTROPY_NRF5_BIAS_CORRECTION
-
 	select BT_CTLR_LE_ENC_SUPPORT if !BT_CTLR_DATA_LENGTH_CLEAR && \
 					 !BT_CTLR_PHY_2M_NRF
 	select BT_CTLR_CONN_PARAM_REQ_SUPPORT
@@ -138,11 +137,6 @@ config BT_LLL_VENDOR_NORDIC
 	select BT_CTLR_XTAL_ADVANCED_SUPPORT
 	select BT_CTLR_SCHED_ADVANCED_SUPPORT
 	select BT_CTLR_TIFS_HW_SUPPORT
-
-	# Until ticker resolve collision is fixed for skipped ticker catch-up
-	# issue, use the old compatibility mode
-	select BT_TICKER_COMPATIBILITY_MODE
-
 	default y
 	help
 	  Use Nordic Lower Link Layer implementation.
@@ -150,8 +144,11 @@ config BT_LLL_VENDOR_NORDIC
 config BT_LLL_VENDOR_OPENISA
 	bool "Use OpenISA LLL"
 	depends on BT_LL_SW_SPLIT && SOC_OPENISA_RV32M1_RISCV32
+	select BT_CTLR_PHY_UPDATE_SUPPORT
+	select BT_CTLR_EXT_REJ_IND_SUPPORT
 	select BT_HAS_HCI_VS
 	select BT_CTLR_LE_ENC_SUPPORT if !BT_CTLR_DATA_LENGTH_CLEAR
+	select BT_CTLR_PRIVACY_SUPPORT
 	default y
 	help
 	  Use OpenISA Lower Link Layer implementation.
@@ -408,9 +405,11 @@ config BT_CTLR_RL_SIZE
 	depends on BT_CTLR_PRIVACY
 	default 8
 	range 1 8 if SOC_COMPATIBLE_NRF
+	range 1 8 if SOC_OPENISA_RV32M1_RISCV32
 	help
 	  Set the size of the Resolving List for LE Controller-based Privacy.
 	  On nRF5x-based controllers, the hardware imposes a limit of 8 devices.
+	  On OpenISA-based controllers, the hardware imposes a limit of 8 devices.
 
 config BT_CTLR_EXT_SCAN_FP
 	bool "LE Extended Scanner Filter Policies"
@@ -442,6 +441,20 @@ config BT_CTLR_PHY
 	depends on BT_PHY_UPDATE && BT_CTLR_PHY_UPDATE_SUPPORT
 	select BT_CTLR_EXT_REJ_IND
 	default y
+
+config BT_CTLR_PHY_2M
+	bool "2Mbps PHY Support"
+	depends on BT_CTLR_PHY && (!SOC_SERIES_NRF51X || BT_CTLR_PHY_2M_NRF)
+	default y
+	help
+	  Enable support for Bluetooth 5.0 2Mbps PHY in the Controller.
+
+config BT_CTLR_PHY_CODED
+	bool "Coded PHY Support"
+	depends on BT_CTLR_PHY && HAS_HW_NRF_RADIO_BLE_CODED
+	default y
+	help
+	  Enable support for Bluetooth 5.0 Coded PHY in the Controller.
 
 config BT_CTLR_MIN_USED_CHAN
 	bool "Minimum Number of Used Channels"
@@ -555,20 +568,6 @@ config BT_CTLR_PHY_2M_NRF
 	  Enable support for Nordic Semiconductor proprietary 2Mbps PHY in the
 	  Controller. Encrypted connections are not supported.
 
-config BT_CTLR_PHY_2M
-	bool "2Mbps PHY Support"
-	depends on BT_CTLR_PHY && (!SOC_SERIES_NRF51X || BT_CTLR_PHY_2M_NRF)
-	default y
-	help
-	  Enable support for Bluetooth 5.0 2Mbps PHY in the Controller.
-
-config BT_CTLR_PHY_CODED
-	bool "Coded PHY Support"
-	depends on (BT_CTLR_PHY || BT_CTLR_ADV_EXT) && HAS_HW_NRF_RADIO_BLE_CODED
-	default y
-	help
-	  Enable support for Bluetooth 5.0 Coded PHY in the Controller.
-
 config BT_CTLR_ZLI
 	bool "Use Zero Latency IRQs"
 	depends on ZERO_LATENCY_IRQS && BT_LL_SW_SPLIT
@@ -578,7 +577,8 @@ config BT_CTLR_ZLI
 	  else will impact controller stability.
 
 config BT_CTLR_OPTIMIZE_FOR_SPEED
-	bool "Optimize for Speed"
+	prompt "Optimize for Speed" if !(SOC_SERIES_NRF51X && BT_CTLR_LE_ENC)
+	bool
 	default y if BT_CTLR_LE_ENC
 	help
 	  Optimize compilation of controller for execution speed.
@@ -974,7 +974,7 @@ config BT_CTLR_PROFILE_ISR
 
 config BT_CTLR_DEBUG_PINS
 	bool "Bluetooth Controller Debug Pins"
-	depends on BOARD_NRF51_PCA10028 || BOARD_NRF52_PCA10040 || BOARD_NRF52810_PCA10040 || BOARD_NRF52840_PCA10056 || BOARD_RV32M1_VEGA
+	depends on BOARD_NRF51DK_NRF51422 || BOARD_NRF52DK_NRF52832 || BOARD_NRF52DK_NRF52810 || BOARD_NRF52840DK_NRF52840 || BOARD_RV32M1_VEGA
 	help
 	  Turn on debug GPIO toggling for the BLE Controller. This is useful
 	  when debugging with a logic analyzer or profiling certain sections of

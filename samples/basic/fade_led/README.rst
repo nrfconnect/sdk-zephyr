@@ -30,23 +30,28 @@ Nucleo_L496ZG
 No special board setup is necessary because there are three on-board LEDs (red,
 green, blue) connected to the Nucleo's PWM.
 
+Nucleo_H743ZI
+=============
+No special board setup is necessary because the on-board red LED is connected
+to PWM output 12 (channel 1).
+
 Hexiwear K64
 ============
 No special board setup is necessary because there is an on-board RGB LED
 connected to the K64 PWM.
 
-nrf52840_pca10056
-=================
+nrf52840dk_nrf52840
+===================
 No special board setup is necessary because there is an on-board LED connected.
 
 Building and Running
 ********************
 
 This sample can be built for multiple boards, in this example we will build it
-for the nrf52840_pca10056 board:
+for the nrf52840dk_nrf52840 board:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/basic/fade_led
-   :board: nrf52840_pca10056
+   :board: nrf52840dk_nrf52840
    :goals: build flash
    :compact:

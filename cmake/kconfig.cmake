@@ -45,10 +45,10 @@ set(ENV{SOC_DIR}   ${SOC_DIR})
 set(ENV{SHIELD_AS_LIST} "${SHIELD_AS_LIST}")
 set(ENV{CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR})
 set(ENV{ARCH_DIR}   ${ARCH_DIR})
-set(ENV{DEVICETREE_CONF} ${DEVICETREE_CONF})
 set(ENV{DTS_POST_CPP} ${DTS_POST_CPP})
 set(ENV{DTS_ROOT_BINDINGS} "${DTS_ROOT_BINDINGS}")
 set(ENV{TOOLCHAIN_KCONFIG_DIR} "${TOOLCHAIN_KCONFIG_DIR}")
+set(ENV{EXTRA_DTC_FLAGS} ${EXTRA_DTC_FLAGS})
 
 # Allow out-of-tree users to add their own Kconfig python frontend
 # targets by appending targets to the CMake list
@@ -93,7 +93,7 @@ foreach(kconfig_target
     ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT}
     TOOLCHAIN_KCONFIG_DIR=${TOOLCHAIN_KCONFIG_DIR}
     ARCH_DIR=$ENV{ARCH_DIR}
-    DEVICETREE_CONF=${DEVICETREE_CONF}
+    EXTRA_DTC_FLAGS=${EXTRA_DTC_FLAGS}
     DTS_POST_CPP=${DTS_POST_CPP}
     DTS_ROOT_BINDINGS=${DTS_ROOT_BINDINGS}
     ${PYTHON_EXECUTABLE}
@@ -201,6 +201,7 @@ execute_process(
   COMMAND
   ${PYTHON_EXECUTABLE}
   ${ZEPHYR_BASE}/scripts/kconfig/kconfig.py
+  --zephyr-base=${ZEPHYR_BASE}
   ${input_configs_are_handwritten}
   ${KCONFIG_ROOT}
   ${DOTCONFIG}

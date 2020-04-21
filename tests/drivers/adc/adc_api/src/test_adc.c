@@ -17,7 +17,16 @@
 #include <zephyr.h>
 #include <ztest.h>
 
-#if defined(CONFIG_BOARD_NRF51_PCA10028)
+#if defined(CONFIG_SHIELD_MIKROE_ADC_CLICK)
+#define ADC_DEVICE_NAME		DT_LABEL(DT_INST(0, microchip_mcp3204))
+#define ADC_RESOLUTION		12
+#define ADC_GAIN		ADC_GAIN_1
+#define ADC_REFERENCE		ADC_REF_EXTERNAL0
+#define ADC_ACQUISITION_TIME	ADC_ACQ_TIME_DEFAULT
+#define ADC_1ST_CHANNEL_ID	0
+#define ADC_2ND_CHANNEL_ID	1
+
+#elif defined(CONFIG_BOARD_NRF51DK_NRF51422)
 
 #include <hal/nrf_adc.h>
 #define ADC_DEVICE_NAME		DT_ADC_0_NAME
@@ -30,14 +39,16 @@
 #define ADC_2ND_CHANNEL_ID	2
 #define ADC_2ND_CHANNEL_INPUT	NRF_ADC_CONFIG_INPUT_3
 
-#elif defined(CONFIG_BOARD_NRF52_PCA10040) || \
-      defined(CONFIG_BOARD_NRF52840_PCA10056) || \
-      defined(CONFIG_BOARD_NRF52840_BLIP) || \
-      defined(CONFIG_BOARD_NRF52840_PAPYR) || \
-      defined(CONFIG_BOARD_NRF52833_PCA10100) || \
-      defined(CONFIG_BOARD_BL652_DVK) || \
-      defined(CONFIG_BOARD_BL654_DVK) || \
-      defined(CONFIG_BOARD_DEGU_EVK)
+#elif defined(CONFIG_BOARD_NRF52DK_NRF52832) || \
+	defined(CONFIG_BOARD_NRF52840DK_NRF52840) || \
+	defined(CONFIG_BOARD_NRF52840DONGLE_NRF52840) || \
+	defined(CONFIG_BOARD_NRF52840_BLIP) || \
+	defined(CONFIG_BOARD_NRF52840_PAPYR) || \
+	defined(CONFIG_BOARD_NRF52833DK_NRF52833) || \
+	defined(CONFIG_BOARD_BL652_DVK) || \
+	defined(CONFIG_BOARD_BL654_DVK) || \
+	defined(CONFIG_BOARD_DEGU_EVK) || \
+	defined(CONFIG_BOARD_ADAFRUIT_FEATHER_NRF52840)
 
 #include <hal/nrf_saadc.h>
 #define ADC_DEVICE_NAME		DT_ADC_0_NAME
@@ -117,7 +128,7 @@
 
 #elif defined(CONFIG_SOC_FAMILY_SAM0)
 #include <soc.h>
-#define ADC_DEVICE_NAME         DT_INST_0_ATMEL_SAM0_ADC_LABEL
+#define ADC_DEVICE_NAME         DT_LABEL(DT_INST(0, atmel_sam0_adc))
 #define ADC_RESOLUTION          12
 #define ADC_GAIN                ADC_GAIN_1
 #define ADC_REFERENCE           ADC_REF_INTERNAL
@@ -131,7 +142,8 @@
 	defined(CONFIG_BOARD_NUCLEO_F401RE) || \
 	defined(CONFIG_BOARD_NUCLEO_F746ZG) || \
 	defined(CONFIG_BOARD_NUCLEO_L073RZ) || \
-	defined(CONFIG_BOARD_NUCLEO_WB55RG)
+	defined(CONFIG_BOARD_NUCLEO_WB55RG) || \
+	defined(CONFIG_BOARD_NUCLEO_L152RE)
 #define ADC_DEVICE_NAME		DT_ADC_1_NAME
 #define ADC_RESOLUTION		12
 #define ADC_GAIN		ADC_GAIN_1

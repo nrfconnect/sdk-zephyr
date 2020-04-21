@@ -29,6 +29,12 @@
 		};
 	};
 
+	uartclk: apb-pclk {
+		compatible = "fixed-clock";
+		clock-frequency = <24000000>;
+		#clock-cells = <0>;
+	};
+
 	soc {
 		interrupt-parent = <&gic>;
 
@@ -48,21 +54,18 @@
 			status = "disabled";
 			interrupts = <GIC_SPI 1 0 IRQ_TYPE_LEVEL>;
 			interrupt-names = "irq_0";
+			clocks = <&uartclk>;
 			label = "UART_0";
 		};
 
-		sharedirq0: sharedirq0 {
-			compatible = "shared-irq";
-			label = "SHARED_IRQ";
-			interrupts = <GIC_SPI 1 0 IRQ_TYPE_LEVEL>;
-			interrupt-controller;
-			#interrupt-cells = <0>;
-			status = "okay";
-		};
-
 		flash0: flash@0 {
-			compatible = "soc-nv-flash";
-			reg = <0x0 DT_SIZE_K(64)>;
+			compatible = "cfi-flash";
+			bank-width = <4>;
+			/* As this is pointed to by zephyr,flash we can only handle
+			 * one value in the reg property, so we comment out the
+			 * second flash bank for now
+			 */
+			reg = <0x0 DT_SIZE_M(64) /* 0x4000000 DT_SIZE_M(64) */>;
 		};
 
 		arch_timer: timer {

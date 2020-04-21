@@ -1,0 +1,20 @@
+identifier: nrf51dk_nrf51422
+name: nRF51-DK-NRF51422
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+  - xtools
+ram: 32
+supported:
+  - adc
+  - ble
+  - nvs
+  - pwm
+  - spi
+  - watchdog
+  - counter
+testing:
+  ignore_tags:
+    - net

@@ -115,7 +115,8 @@ int lll_init(void)
 	ARG_UNUSED(clk_k32);
 
 	/* Get reference to entropy device */
-	dev_entropy = device_get_binding(CONFIG_ENTROPY_NAME);
+	dev_entropy =
+		device_get_binding(DT_LABEL(DT_INST(0, openisa_rv32m1_trng)));
 	if (!dev_entropy) {
 		dev_entropy = NULL;
 		/* return -ENODEV; */
@@ -293,17 +294,44 @@ bool lll_is_done(void *param)
 
 int lll_clk_on(void)
 {
-	return 0;
+	int err;
+
+	/* turn on radio clock in non-blocking mode. */
+	err = radio_wake();
+	if (!err) {
+		DEBUG_RADIO_XTAL(1);
+	}
+
+	return err;
 }
 
 int lll_clk_on_wait(void)
 {
-	return 0;
+	int err;
+
+	/* turn on radio clock in blocking mode. */
+	err = radio_wake();
+
+	while (radio_is_off()) {
+		k_cpu_idle();
+	}
+
+	DEBUG_RADIO_XTAL(1);
+
+	return err;
 }
 
 int lll_clk_off(void)
 {
-	return 0;
+	int err;
+
+	/* turn off radio clock in non-blocking mode. */
+	err = radio_sleep();
+	if (!err) {
+		DEBUG_RADIO_XTAL(0);
+	}
+
+	return err;
 }
 
 u32_t lll_evt_offset_get(struct evt_hdr *evt)

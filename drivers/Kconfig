@@ -45,6 +45,8 @@ source "drivers/pinmux/Kconfig"
 
 source "drivers/adc/Kconfig"
 
+source "drivers/dac/Kconfig"
+
 source "drivers/watchdog/Kconfig"
 
 source "drivers/clock_control/Kconfig"
@@ -92,5 +94,7 @@ source "drivers/kscan/Kconfig"
 source "drivers/video/Kconfig"
 
 source "drivers/eeprom/Kconfig"
+
+source "drivers/peci/Kconfig"
 
 endmenu

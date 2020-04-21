@@ -3,6 +3,9 @@
 cmake_minimum_required(VERSION 3.13.1)
 project(Zephyr-Kernel-Doc LANGUAGES)
 
+set(NO_BOILERPLATE TRUE)
+find_package(Zephyr HINTS $ENV{ZEPHYR_BASE} ..)
+
 # Find west to (optionally) process modules for Kconfig
 find_program(
   WEST
@@ -12,7 +15,7 @@ if(${WEST} STREQUAL WEST-NOTFOUND)
   unset(WEST)
 endif()
 
-file(TO_CMAKE_PATH "$ENV{ZEPHYR_BASE}" ZEPHYR_BASE)
+file(TO_CMAKE_PATH "${ZEPHYR_BASE}" ZEPHYR_BASE)
 
 message(STATUS "Zephyr base: ${ZEPHYR_BASE}")
 if(DEFINED WEST)
@@ -23,7 +26,7 @@ else()
   message(STATUS "West: not found")
 endif()
 
-find_package(PythonInterp 3.4)
+find_package(PythonInterp 3.6 REQUIRED)
 set(DOXYGEN_SKIP_DOT True)
 find_package(Doxygen REQUIRED)
 find_package(LATEX)
@@ -343,6 +346,12 @@ add_custom_target(
   htmldocs
 )
 add_dependencies(htmldocs html)
+
+
+add_custom_target(
+  doxygen
+)
+add_dependencies(doxygen doxy_real_modified_times)
 
 add_dependencies(latex content doxy_real_modified_times kconfig)
 

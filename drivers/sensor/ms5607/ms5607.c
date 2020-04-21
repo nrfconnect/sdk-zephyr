@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT meas_ms5607
+
 #include <init.h>
 #include <kernel.h>
 #include <sys/byteorder.h>
@@ -97,7 +99,7 @@ static int ms5607_get_measurement(const struct ms5607_data *data,
 		return err;
 	}
 
-	k_sleep(delay);
+	k_msleep(delay);
 
 	err = data->tf->read_adc(data, val);
 	if (err < 0) {
@@ -221,7 +223,7 @@ static int ms5607_attr_set(struct device *dev, enum sensor_channel chan,
 }
 
 static const struct ms5607_config ms5607_config = {
-	.ms5607_device_name = DT_INST_0_MEAS_MS5607_BUS_NAME,
+	.ms5607_device_name = DT_INST_BUS_LABEL(0),
 };
 
 static int ms5607_init(struct device *dev)
@@ -237,10 +239,10 @@ static int ms5607_init(struct device *dev)
 		return -EINVAL;
 	}
 
-#ifdef DT_MEAS_MS5607_BUS_SPI
+#if DT_ANY_INST_ON_BUS(spi)
 	ms5607_spi_init(dev);
 #else
-	BUILD_ASSERT_MSG(1, "I2c interface not implemented yet");
+	BUILD_ASSERT(1, "I2c interface not implemented yet");
 #endif
 
 	data->pressure = 0;
@@ -325,7 +327,7 @@ static const struct sensor_driver_api ms5607_api_funcs = {
 static struct ms5607_data ms5607_data;
 
 DEVICE_AND_API_INIT(ms5607,
-		    DT_INST_0_MEAS_MS5607_LABEL,
+		    DT_INST_LABEL(0),
 		    ms5607_init,
 		    &ms5607_data,
 		    &ms5607_config,

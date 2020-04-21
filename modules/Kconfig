@@ -3,9 +3,11 @@
 
 comment "Optional modules. Make sure they're installed, via the project manifest."
 
+source "modules/Kconfig.altera"
 source "modules/Kconfig.atmel"
 source "modules/Kconfig.canopennode"
 source "modules/Kconfig.civetweb"
+source "modules/Kconfig.cmsis"
 source "modules/Kconfig.cypress"
 source "modules/Kconfig.imx"
 source "modules/Kconfig.libmetal"
@@ -21,5 +23,6 @@ source "modules/Kconfig.st"
 source "modules/Kconfig.stm32"
 source "modules/Kconfig.syst"
 source "modules/Kconfig.tinycbor"
+source "modules/Kconfig.tinycrypt"
 source "modules/Kconfig.vega"
 source "modules/Kconfig.xtensa"

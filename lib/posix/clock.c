@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <posix/time.h>
 #include <posix/sys/time.h>
+#include <syscall_handler.h>
 
 /*
  * `k_uptime_get` returns a timestamp based on an always increasing
@@ -22,7 +23,7 @@ static struct timespec rt_clock_base;
  *
  * See IEEE 1003.1
  */
-int clock_gettime(clockid_t clock_id, struct timespec *ts)
+int z_impl_clock_gettime(clockid_t clock_id, struct timespec *ts)
 {
 	u64_t elapsed_msecs;
 	struct timespec base;
@@ -56,6 +57,15 @@ int clock_gettime(clockid_t clock_id, struct timespec *ts)
 
 	return 0;
 }
+
+#ifdef CONFIG_USERSPACE
+int z_vrfy_clock_gettime(clockid_t clock_id, struct timespec *ts)
+{
+	Z_OOPS(Z_SYSCALL_MEMORY_WRITE(ts, sizeof(*ts)));
+	return z_impl_clock_gettime(clock_id, ts);
+}
+#include <syscalls/clock_gettime_mrsh.c>
+#endif
 
 /**
  * @brief Set the time of the specified clock.
@@ -98,7 +108,7 @@ int gettimeofday(struct timeval *tv, const void *tz)
 
 	/* As per POSIX, "if tzp is not a null pointer, the behavior
 	 * is unspecified."  "tzp" is the "tz" parameter above. */
-	ARG_UNUSED(tv);
+	ARG_UNUSED(tz);
 
 	res = clock_gettime(CLOCK_REALTIME, &ts);
 	tv->tv_sec = ts.tv_sec;

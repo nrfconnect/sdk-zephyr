@@ -20,6 +20,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Helper to pass a int as a pointer or vice-versa. */
 #define POINTER_TO_UINT(x) ((uintptr_t) (x))
 #define UINT_TO_POINTER(x) ((void *) (uintptr_t) (x))
@@ -49,12 +53,13 @@
 					      __typeof__(&(array)[0])))
 
 #if defined(__cplusplus)
+extern "C++" {
 template < class T, size_t N >
 #if __cplusplus >= 201103L
 constexpr
 #endif /* >= C++11 */
 size_t ARRAY_SIZE(T(&)[N]) { return N; }
-
+}
 #else
 /* Evaluates to number of elements in an array; compile error if not
  * an array (e.g. pointer)
@@ -711,6 +716,21 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
 
 #define UTIL_IF(c) UTIL_IIF(UTIL_BOOL(c))
 
+/*
+ * These are like || and &&, but they do evaluation and
+ * short-circuiting at preprocessor time instead of runtime.
+ *
+ * UTIL_OR(foo, bar) is sometimes a replacement for (foo || bar)
+ * when "bar" is an expression that would cause a build
+ * error when "foo" is true.
+ *
+ * UTIL_AND(foo, bar) is sometimes a replacement for (foo && bar)
+ * when "bar" is an expression that would cause a build
+ * error when "foo" is false.
+ */
+#define UTIL_OR(a, b) COND_CODE_1(UTIL_BOOL(a), (a), (b))
+#define UTIL_AND(a, b) COND_CODE_1(UTIL_BOOL(a), (b), (0))
+
 #define UTIL_EAT(...)
 #define UTIL_EXPAND(...) __VA_ARGS__
 #define UTIL_WHEN(c) UTIL_IF(c)(UTIL_EXPAND, UTIL_EAT)
@@ -738,10 +758,10 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  * @arg LEN: The length of the sequence. Must be defined and less than
  * 20.
  *
- * @arg F(i, F_ARG): A macro function that accepts two arguments.
- *  F is called repeatedly, the first argument
- *  is the index in the sequence, and the second argument is the third
- *  argument given to UTIL_LISTIFY.
+ * @arg F(i, ...): A macro function that accepts at least two arguments.
+ *  F is called repeatedly, the first argument is the index in the sequence,
+ *  the variable list of arguments passed to UTIL_LISTIFY are passed through
+ *  to F.
  *
  * Example:
  *
@@ -753,7 +773,7 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  * @note Calling UTIL_LISTIFY with undefined arguments has undefined
  * behavior.
  */
-#define UTIL_LISTIFY(LEN, F, F_ARG) UTIL_EVAL(UTIL_REPEAT(LEN, F, F_ARG))
+#define UTIL_LISTIFY(LEN, F, ...) UTIL_EVAL(UTIL_REPEAT(LEN, F, __VA_ARGS__))
 
 /**@brief Implementation details for NUM_VAR_ARGS */
 #define NUM_VA_ARGS_LESS_1_IMPL(				\
@@ -830,6 +850,64 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
 #define MACRO_MAP_13(macro, a, ...) macro(a)MACRO_MAP_12(macro, __VA_ARGS__,)
 #define MACRO_MAP_14(macro, a, ...) macro(a)MACRO_MAP_13(macro, __VA_ARGS__,)
 #define MACRO_MAP_15(macro, a, ...) macro(a)MACRO_MAP_14(macro, __VA_ARGS__,)
+
+/**
+ * @brief Mapping macro that pastes results together
+ *
+ * Like @ref MACRO_MAP(), but pastes the results together into a
+ * single token by repeated application of @ref UTIL_CAT().
+ *
+ * For example, with this macro FOO:
+ *
+ *     #define FOO(x) item_##x##_
+ *
+ * MACRO_MAP_CAT(FOO, a, b, c) expands to the token:
+ *
+ *     item_a_item_b_item_c_
+ *
+ * @param ... Macro to expand on each argument, followed by its
+ *            arguments. (The macro should take exactly one argument.)
+ * @return The results of expanding the macro on each argument, all pasted
+ *         together
+ */
+#define MACRO_MAP_CAT(...) MACRO_MAP_CAT_(__VA_ARGS__)
+#define MACRO_MAP_CAT_(...)						\
+	/* To make sure it works also for 2 arguments in total */	\
+	MACRO_MAP_CAT_N(NUM_VA_ARGS_LESS_1(__VA_ARGS__), __VA_ARGS__)
+
+/**
+ * @brief Mapping macro that pastes a fixed number of results together
+ *
+ * Similar to @ref MACRO_MAP_CAT(), but expects a fixed number of
+ * arguments. If more arguments are given than are expected, the rest
+ * are ignored.
+ *
+ * @param N   Number of arguments to map
+ * @param ... Macro to expand on each argument, followed by its
+ *            arguments. (The macro should take exactly one argument.)
+ * @return The results of expanding the macro on each argument, all pasted
+ *         together
+ */
+#define MACRO_MAP_CAT_N(N, ...) MACRO_MAP_CAT_N_(N, __VA_ARGS__)
+#define MACRO_MAP_CAT_N_(N, ...) UTIL_CAT(MACRO_MC_, N)(__VA_ARGS__,)
+
+#define MACRO_MC_0(...)
+#define MACRO_MC_1(m, a, ...)  m(a)
+#define MACRO_MC_2(m, a, ...)  UTIL_CAT(m(a), MACRO_MC_1(m, __VA_ARGS__,))
+#define MACRO_MC_3(m, a, ...)  UTIL_CAT(m(a), MACRO_MC_2(m, __VA_ARGS__,))
+#define MACRO_MC_4(m, a, ...)  UTIL_CAT(m(a), MACRO_MC_3(m, __VA_ARGS__,))
+#define MACRO_MC_5(m, a, ...)  UTIL_CAT(m(a), MACRO_MC_4(m, __VA_ARGS__,))
+#define MACRO_MC_6(m, a, ...)  UTIL_CAT(m(a), MACRO_MC_5(m, __VA_ARGS__,))
+#define MACRO_MC_7(m, a, ...)  UTIL_CAT(m(a), MACRO_MC_6(m, __VA_ARGS__,))
+#define MACRO_MC_8(m, a, ...)  UTIL_CAT(m(a), MACRO_MC_7(m, __VA_ARGS__,))
+#define MACRO_MC_9(m, a, ...)  UTIL_CAT(m(a), MACRO_MC_8(m, __VA_ARGS__,))
+#define MACRO_MC_10(m, a, ...) UTIL_CAT(m(a), MACRO_MC_9(m, __VA_ARGS__,))
+#define MACRO_MC_11(m, a, ...) UTIL_CAT(m(a), MACRO_MC_10(m, __VA_ARGS__,))
+#define MACRO_MC_12(m, a, ...) UTIL_CAT(m(a), MACRO_MC_11(m, __VA_ARGS__,))
+#define MACRO_MC_13(m, a, ...) UTIL_CAT(m(a), MACRO_MC_12(m, __VA_ARGS__,))
+#define MACRO_MC_14(m, a, ...) UTIL_CAT(m(a), MACRO_MC_13(m, __VA_ARGS__,))
+#define MACRO_MC_15(m, a, ...) UTIL_CAT(m(a), MACRO_MC_14(m, __VA_ARGS__,))
+
 /*
  * The following provides variadic preprocessor macro support to
  * help eliminate multiple, repetitive function/macro calls.  This
@@ -894,5 +972,9 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
 		     z_rep_10, z_rep_9, z_rep_8, z_rep_7, z_rep_6,	\
 		     z_rep_5, z_rep_4, z_rep_3, z_rep_2, z_rep_1, z_rep_0) \
 	 (fixed_arg, x, ##__VA_ARGS__)}
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ZEPHYR_INCLUDE_SYS_UTIL_H_ */

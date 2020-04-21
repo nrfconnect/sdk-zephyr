@@ -13,6 +13,13 @@
 #ifndef ZEPHYR_INCLUDE_DRIVERS_HWINFO_H_
 #define ZEPHYR_INCLUDE_DRIVERS_HWINFO_H_
 
+/**
+ * @brief Hardware Information Interface
+ * @defgroup hwinfo_interface Hardware Info Interface
+ * @ingroup io_interfaces
+ * @{
+ */
+
 #include <zephyr/types.h>
 #include <sys/types.h>
 #include <stddef.h>
@@ -24,17 +31,17 @@ extern "C" {
 #endif
 
 /**
- * @brief Device ID
- * @{
- */
-
-
-/**
  * @brief Copy the device id to a buffer
  *
  * This routine copies "length" number of bytes of the device ID to the buffer.
  * If the device ID is smaller then length, the rest of the buffer is left unchanged.
  * The ID depends on the hardware and is not guaranteed unique.
+ *
+ * Drivers are responsible for ensuring that the ID data structure is a
+ * sequence of bytes.  The returned ID value is not supposed to be interpreted
+ * based on vendor-specific assumptions of byte order. It should express the
+ * identifier as a raw byte sequence, doing any endian conversion necessary so
+ * that a hex representation of the bytes produces the intended serial number.
  *
  * @param buffer  Buffer to write the ID to.
  * @param length  Max length of the buffer.

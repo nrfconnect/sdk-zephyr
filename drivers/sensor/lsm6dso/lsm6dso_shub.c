@@ -8,6 +8,8 @@
  * https://www.st.com/resource/en/datasheet/lsm6dso.pdf
  */
 
+#define DT_DRV_COMPAT st_lsm6dso
+
 #include <device.h>
 #include <drivers/i2c.h>
 #include <sys/byteorder.h>
@@ -420,7 +422,7 @@ static inline void lsm6dso_shub_wait_completed(struct lsm6dso_data *data)
 	u16_t freq;
 
 	freq = (data->accel_freq == 0) ? 26 : data->accel_freq;
-	k_sleep((2000U / freq) + 1);
+	k_msleep((2000U / freq) + 1);
 }
 
 static inline void lsm6dso_shub_embedded_en(struct lsm6dso_data *data, bool on)

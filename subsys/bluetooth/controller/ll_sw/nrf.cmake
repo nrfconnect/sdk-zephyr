@@ -38,6 +38,7 @@ endif()
 if(CONFIG_BT_LL_SW_SPLIT)
   zephyr_library_sources(
     ll_sw/nordic/lll/lll.c
+    ll_sw/nordic/lll/lll_clock.c
     )
   if(CONFIG_BT_BROADCASTER)
     zephyr_library_sources(
@@ -51,7 +52,6 @@ if(CONFIG_BT_LL_SW_SPLIT)
   endif()
   if(CONFIG_BT_CONN)
     zephyr_library_sources(
-      ll_sw/nordic/lll/lll_clock.c
       ll_sw/nordic/lll/lll_conn.c
       )
     zephyr_library_sources_ifdef(
@@ -82,6 +82,11 @@ zephyr_library_sources(
   ll_sw/nordic/hal/nrf5/radio/radio.c
   ll_sw/nordic/hal/nrf5/mayfly.c
   ll_sw/nordic/hal/nrf5/ticker.c
+  )
+
+zephyr_library_sources_ifdef(
+  CONFIG_SOC_FAMILY_NRF
+  hci/nordic/hci_vendor.c
   )
 
 zephyr_library_include_directories(

@@ -34,6 +34,7 @@ config BT_RX_BUF_COUNT
 config BT_RX_BUF_LEN
 	int "Maximum supported HCI RX buffer length"
 	default 264 if BT_BREDR
+	default 258 if BT_EXT_ADV
 	default 77 if BT_MESH_PROXY
 	default 76
 	range 73 2000
@@ -63,7 +64,7 @@ config BT_DISCARDABLE_BUF_COUNT
 config BT_DISCARDABLE_BUF_SIZE
 	int "Size of discardable event buffers"
 	range 45 257
-	default 257 if BT_BREDR
+	default 257 if BT_BREDR || BT_EXT_ADV
 	default 45
 	help
 	  Size of buffers in the separate discardable event buffer pool.
@@ -293,7 +294,6 @@ config BT_SMP
 	select TINYCRYPT_AES
 	select TINYCRYPT_AES_CMAC
 	select BT_RPA
-	select BT_ECC
 	help
 	  This option enables support for the Security Manager Protocol
 	  (SMP), making it possible to pair devices over LE.
@@ -348,6 +348,20 @@ config BT_SMP_SC_ONLY
 	  for services that only require Security Mode 1 Level 1 (no security).
 	  Security Mode 1 Level 4 stands for authenticated LE Secure Connections
 	  pairing with encryption. Enabling this option disables legacy pairing.
+
+config BT_SMP_OOB_LEGACY_PAIR_ONLY
+	bool "Force Out Of Band Legacy pairing"
+	depends on !(BT_SMP_SC_PAIR_ONLY || BT_SMP_SC_ONLY)
+	help
+	  This option disables Legacy and LE SC pairing and forces legacy OOB.
+
+config BT_SMP_DISABLE_LEGACY_JW_PASSKEY
+	bool "Forbid usage of insecure legacy pairing methods"
+	depends on !(BT_SMP_SC_PAIR_ONLY || BT_SMP_SC_ONLY || \
+		     BT_SMP_OOB_LEGACY_PAIR_ONLY)
+	help
+	  This option disables Just Works and Passkey legacy pairing methods to
+	  increase security.
 
 config BT_SMP_ALLOW_UNAUTH_OVERWRITE
 	bool "Allow unauthenticated pairing for paired device"
@@ -463,8 +477,8 @@ config BT_MAX_PAIRED
 config BT_CREATE_CONN_TIMEOUT
 	int "Timeout for pending LE Create Connection command in seconds"
 	default 3
-	range 1 BT_RPA_TIMEOUT if BT_PRIVACY
-	range 1 65535
+	range 1 BT_RPA_TIMEOUT if BT_PRIVACY && (BT_RPA_TIMEOUT < 655)
+	range 1 655
 
 config BT_CONN_PARAM_UPDATE_TIMEOUT
 	int "Peripheral connection parameter update timeout in milliseconds"
@@ -545,6 +559,7 @@ endif # BT_HCI_HOST
 
 config BT_ECC
 	bool "Enable ECDH key generation support"
+	default y if BT_MESH_PROV || (BT_SMP && !BT_SMP_OOB_LEGACY_PAIR_ONLY)
 	help
 	  This option adds support for ECDH HCI commands.
 

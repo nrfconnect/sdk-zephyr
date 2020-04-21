@@ -51,20 +51,20 @@ static const char * const devices[] = {
 #ifdef CONFIG_COUNTER_RTC2
 	DT_NORDIC_NRF_RTC_RTC_2_LABEL,
 #endif
-#ifdef CONFIG_COUNTER_IMX_EPIT_1
-	DT_COUNTER_IMX_EPIT_1_LABEL,
+#if DT_HAS_NODE(DT_INST(0, nxp_imx_epit))
+	DT_LABEL(DT_INST(0, nxp_imx_epit)),
 #endif
-#ifdef CONFIG_COUNTER_IMX_EPIT_2
-	DT_COUNTER_IMX_EPIT_2_LABEL,
+#if DT_HAS_NODE(DT_INST(1, nxp_imx_epit))
+	DT_LABEL(DT_INST(1, nxp_imx_epit)),
 #endif
-#ifdef DT_INST_0_ARM_CMSDK_TIMER_LABEL
-	DT_INST_0_ARM_CMSDK_TIMER_LABEL,
+#if DT_HAS_NODE(DT_INST(0, arm_cmsdk_timer))
+	DT_LABEL(DT_INST(0, arm_cmsdk_timer)),
 #endif
-#ifdef DT_INST_1_ARM_CMSDK_TIMER_LABEL
-	DT_INST_1_ARM_CMSDK_TIMER_LABEL,
+#if DT_HAS_NODE(DT_INST(1, arm_cmsdk_timer))
+	DT_LABEL(DT_INST(1, arm_cmsdk_timer)),
 #endif
-#ifdef DT_INST_0_ARM_CMSDK_DTIMER_LABEL
-	DT_INST_0_ARM_CMSDK_DTIMER_LABEL,
+#if DT_HAS_NODE(DT_INST(0, arm_cmsdk_dtimer))
+	DT_LABEL(DT_INST(0, arm_cmsdk_dtimer)),
 #endif
 #ifdef DT_RTC_0_NAME
 	DT_RTC_0_NAME,

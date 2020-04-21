@@ -403,7 +403,7 @@ static void cdc_acm_do_cb(struct cdc_acm_dev_data_t *dev_data,
 	struct usb_cfg_data *cfg = (void *)dev->config->config_info;
 
 	/* Store the new status */
-	if (status != USB_DC_SOF) {
+	if (!(status == USB_DC_SOF || status == USB_DC_INTERFACE)) {
 		dev_data->usb_status = status;
 	}
 
@@ -439,6 +439,7 @@ static void cdc_acm_do_cb(struct cdc_acm_dev_data_t *dev_data,
 		LOG_INF("USB device resumed");
 		break;
 	case USB_DC_SOF:
+	case USB_DC_INTERFACE:
 		break;
 	case USB_DC_UNKNOWN:
 	default:
@@ -1067,7 +1068,7 @@ static const struct uart_driver_api cdc_acm_driver_api = {
 			    CONFIG_USB_CDC_ACM_DEVICE_NAME "_" #x,	\
 			    &cdc_acm_init, &cdc_acm_dev_data_##x,	\
 			    &cdc_acm_config_##x,			\
-			    APPLICATION,				\
+			    POST_KERNEL,				\
 			    CONFIG_KERNEL_INIT_PRIORITY_DEVICE,		\
 			    &cdc_acm_driver_api);
 

@@ -162,10 +162,10 @@ struct shell_static_entry {
 					mandatory, optional) \
 		), \
 		(\
-		static shell_cmd_handler dummy_##syntax##_handler \
-			__attribute__((unused)) = handler;\
+		static shell_cmd_handler dummy_##syntax##_handler __unused = \
+								handler;\
 		static const struct shell_cmd_entry *dummy_subcmd_##syntax \
-			__attribute__((unused)) = subcmd\
+			__unused = subcmd\
 		)\
 	)
 /**
@@ -475,7 +475,7 @@ struct shell_transport {
  * @brief Shell statistics structure.
  */
 struct shell_stats {
-	u32_t log_lost_cnt; /*!< Lost log counter.*/
+	atomic_t log_lost_cnt; /*!< Lost log counter.*/
 };
 
 #ifdef CONFIG_SHELL_STATS
@@ -501,8 +501,8 @@ struct shell_flags {
 	u32_t last_nl     :8; /*!< Last received new line character */
 };
 
-BUILD_ASSERT_MSG((sizeof(struct shell_flags) == sizeof(u32_t)),
-		 "Structure must fit in 4 bytes");
+BUILD_ASSERT((sizeof(struct shell_flags) == sizeof(u32_t)),
+	     "Structure must fit in 4 bytes");
 
 
 /**
@@ -629,7 +629,7 @@ extern void shell_print_stream(const void *user_ctx, const char *data,
 	SHELL_STATS_DEFINE(_name);					      \
 	static K_THREAD_STACK_DEFINE(_name##_stack, CONFIG_SHELL_STACK_SIZE); \
 	static struct k_thread _name##_thread;				      \
-	static const struct shell _name = {				      \
+	static const Z_STRUCT_SECTION_ITERABLE(shell, _name) = {	      \
 		.default_prompt = _prompt,				      \
 		.iface = _transport_iface,				      \
 		.ctx = &UTIL_CAT(_name, _ctx),				      \
@@ -836,6 +836,19 @@ void shell_help(const struct shell *shell);
  * @returns		Result of the execution
  */
 int shell_execute_cmd(const struct shell *shell, const char *cmd);
+
+/** @brief Set root command for all shell instances.
+ *
+ * It allows setting from the code the root command. It is an equivalent of
+ * calling select command with one of the root commands as the argument
+ * (e.g "select log") except it sets command for all shell instances.
+ *
+ * @param cmd String with one of the root commands or null pointer to reset.
+ *
+ * @retval 0 if root command is set.
+ * @retval -EINVAL if invalid root command is provided.
+ */
+int shell_set_root_cmd(const char *cmd);
 
 /**
  * @}

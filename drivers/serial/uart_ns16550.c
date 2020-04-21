@@ -1,5 +1,7 @@
 /* ns16550.c - NS16550D serial driver */
 
+#define DT_DRV_COMPAT ns16550
+
 /*
  * Copyright (c) 2010, 2012-2015 Wind River Systems, Inc.
  * Copyright (c) 2020 Intel Corp.
@@ -40,25 +42,25 @@
  * Ditto for DLF and PCI(e).
  */
 
-#if defined(DT_UART_NS16550_PORT_0_PCP) || \
-	defined(DT_UART_NS16550_PORT_1_PCP) || \
-	defined(DT_UART_NS16550_PORT_2_PCP) || \
-	defined(DT_UART_NS16550_PORT_3_PCP)
+#if DT_INST_NODE_HAS_PROP(0, pcp) || \
+	DT_INST_NODE_HAS_PROP(1, pcp) || \
+	DT_INST_NODE_HAS_PROP(2, pcp) || \
+	DT_INST_NODE_HAS_PROP(3, pcp)
 #define UART_NS16550_PCP_ENABLED
 #endif
 
-#if defined(DT_UART_NS16550_PORT_0_DLF) || \
-	defined(DT_UART_NS16550_PORT_1_DLF) || \
-	defined(DT_UART_NS16550_PORT_2_DLF) || \
-	defined(DT_UART_NS16550_PORT_3_DLF)
+#if DT_INST_NODE_HAS_PROP(0, dlf) || \
+	DT_INST_NODE_HAS_PROP(1, dlf) || \
+	DT_INST_NODE_HAS_PROP(2, dlf) || \
+	DT_INST_NODE_HAS_PROP(3, dlf)
 #define UART_NS16550_DLF_ENABLED
 #endif
 
-#if DT_UART_NS16550_PORT_0_PCIE || \
-	DT_UART_NS16550_PORT_1_PCIE || \
-	DT_UART_NS16550_PORT_2_PCIE || \
-	DT_UART_NS16550_PORT_3_PCIE
-BUILD_ASSERT_MSG(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
+#if DT_INST_PROP(0, pcie) || \
+	DT_INST_PROP(1, pcie) || \
+	DT_INST_PROP(2, pcie) || \
+	DT_INST_PROP(3, pcie)
+BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 #define UART_NS16550_PCIE_ENABLED
 #include <drivers/pcie/pcie.h>
 #endif
@@ -222,8 +224,8 @@ BUILD_ASSERT_MSG(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 
 #define IIRC(dev) (DEV_DATA(dev)->iir_cache)
 
-#ifdef DT_NS16550_REG_SHIFT
-#define UART_REG_ADDR_INTERVAL (1<<DT_NS16550_REG_SHIFT)
+#if DT_INST_NODE_HAS_PROP(0, reg_shift)
+#define UART_REG_ADDR_INTERVAL (1<<DT_INST_PROP(0, reg_shift))
 #endif
 
 #ifdef UART_NS16550_ACCESS_IOPORT
@@ -268,7 +270,6 @@ struct uart_ns16550_device_config {
 /** Device data structure */
 struct uart_ns16550_dev_data_t {
 	struct uart_config uart_config;
-	u8_t options;	/**< Serial port options */
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	u8_t iir_cache;	/**< cache of IIR since it clears when read */
@@ -320,6 +321,7 @@ static int uart_ns16550_configure(struct device *dev,
 	unsigned int old_level;     /* old interrupt lock level */
 	u8_t mdc = 0U;
 
+	ARG_UNUSED(dev_data);
 	ARG_UNUSED(dev_cfg);
 
 #ifdef UART_NS16550_PCIE_ENABLED
@@ -397,14 +399,18 @@ static int uart_ns16550_configure(struct device *dev,
 		return -ENOTSUP;
 	}
 
+	dev_data->uart_config = *cfg;
+
 	/* data bits, stop bits, parity, clear DLAB */
 	OUTBYTE(LCR(dev),
 		uart_cfg.data_bits | uart_cfg.stop_bits | uart_cfg.parity);
 
 	mdc = MCR_OUT2 | MCR_RTS | MCR_DTR;
-	if ((dev_data->options & UART_OPTION_AFCE) == UART_OPTION_AFCE) {
+#ifdef CONFIG_UART_NS16750
+	if (cfg->flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
 		mdc |= MCR_AFCE;
 	}
+#endif
 
 	OUTBYTE(MDC(dev), mdc);
 
@@ -842,18 +848,7 @@ static const struct uart_driver_api uart_ns16550_driver_api = {
 #endif
 };
 
-#ifdef CONFIG_UART_NS16550_PORT_0
 #include <uart_ns16550_port_0.h>
-#endif
-
-#ifdef CONFIG_UART_NS16550_PORT_1
 #include <uart_ns16550_port_1.h>
-#endif
-
-#ifdef CONFIG_UART_NS16550_PORT_2
 #include <uart_ns16550_port_2.h>
-#endif
-
-#ifdef CONFIG_UART_NS16550_PORT_3
 #include <uart_ns16550_port_3.h>
-#endif

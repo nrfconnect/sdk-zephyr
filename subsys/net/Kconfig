@@ -68,10 +68,18 @@ config NETWORKING
 	select NET_BUF
 	select POLL
 	select ENTROPY_GENERATOR
+	select LEGACY_TIMEOUT_API
 	help
 	  This option enabled generic link layer and IP networking support.
 
 if NETWORKING
+
+# Such option should not be configured manually but by device drivers
+# which supports PM properly.
+config NET_POWER_MANAGEMENT
+	bool
+	default n
+	depends on DEVICE_POWER_MANAGEMENT
 
 source "subsys/net/Kconfig.hostname"
 

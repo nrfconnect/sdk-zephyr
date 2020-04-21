@@ -20,25 +20,6 @@ config DISK_ACCESS_USDHC1
 	default y
 	depends on DISK_ACCESS_USDHC
 
-if GPIO_MCUX_IGPIO
-
-config GPIO_MCUX_IGPIO_1
-	default y
-
-config GPIO_MCUX_IGPIO_2
-	default y if DISK_ACCESS_USDHC1
-
-config GPIO_MCUX_IGPIO_3
-	default n
-
-config GPIO_MCUX_IGPIO_4
-	default n
-
-config GPIO_MCUX_IGPIO_5
-	default y
-
-endif # GPIO_MCUX_IGPIO
-
 config I2C
 	default y if LVGL
 
@@ -49,16 +30,6 @@ config I2C_1
 config SPI_3
 	default y
 	depends on SPI_MCUX_LPSPI
-
-if UART_MCUX_LPUART
-
-config UART_MCUX_LPUART_1
-	default y
-
-config UART_MCUX_LPUART_3
-	default y if BT_UART
-
-endif # UART_MCUX_LPUART
 
 config KSCAN
 	default y if LVGL

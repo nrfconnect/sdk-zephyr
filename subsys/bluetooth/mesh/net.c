@@ -67,7 +67,10 @@
 
 static struct friend_cred friend_cred[FRIEND_CRED_COUNT];
 
-static u64_t msg_cache[CONFIG_BT_MESH_MSG_CACHE_SIZE];
+static struct {
+	u32_t src : 15, /* MSb of source is always 0 */
+	      seq : 17;
+} msg_cache[CONFIG_BT_MESH_MSG_CACHE_SIZE];
 static u16_t msg_cache_next;
 
 /* Singleton network context (the implementation only supports one) */
@@ -108,37 +111,27 @@ static bool check_dup(struct net_buf_simple *data)
 	return false;
 }
 
-static u64_t msg_hash(struct bt_mesh_net_rx *rx, struct net_buf_simple *pdu)
-{
-	u32_t hash1, hash2;
-
-	/* Three least significant bytes of IVI + first byte of SEQ */
-	hash1 = (BT_MESH_NET_IVI_RX(rx) << 8) | pdu->data[2];
-
-	/* Two last bytes of SEQ + SRC */
-	memcpy(&hash2, &pdu->data[3], 4);
-
-	return (u64_t)hash1 << 32 | (u64_t)hash2;
-}
-
 static bool msg_cache_match(struct bt_mesh_net_rx *rx,
 			    struct net_buf_simple *pdu)
 {
-	u64_t hash = msg_hash(rx, pdu);
 	u16_t i;
 
 	for (i = 0U; i < ARRAY_SIZE(msg_cache); i++) {
-		if (msg_cache[i] == hash) {
+		if (msg_cache[i].src == SRC(pdu->data) &&
+		    msg_cache[i].seq == (SEQ(pdu->data) & BIT_MASK(17))) {
 			return true;
 		}
 	}
 
-	/* Add to the cache */
-	rx->msg_cache_idx = msg_cache_next++;
-	msg_cache[rx->msg_cache_idx] = hash;
-	msg_cache_next %= ARRAY_SIZE(msg_cache);
-
 	return false;
+}
+
+static void msg_cache_add(struct bt_mesh_net_rx *rx)
+{
+	rx->msg_cache_idx = msg_cache_next++;
+	msg_cache[rx->msg_cache_idx].src = rx->ctx.addr;
+	msg_cache[rx->msg_cache_idx].seq = rx->seq;
+	msg_cache_next %= ARRAY_SIZE(msg_cache);
 }
 
 struct bt_mesh_subnet *bt_mesh_subnet_get(u16_t net_idx)
@@ -488,6 +481,10 @@ void bt_mesh_net_revoke_keys(struct bt_mesh_subnet *sub)
 	BT_DBG("idx 0x%04x", sub->net_idx);
 
 	memcpy(&sub->keys[0], &sub->keys[1], sizeof(sub->keys[0]));
+	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+		BT_DBG("Storing Updated NetKey persistently");
+		bt_mesh_store_subnet(sub);
+	}
 
 	for (i = 0; i < ARRAY_SIZE(bt_mesh.app_keys); i++) {
 		struct bt_mesh_app_key *key = &bt_mesh.app_keys[i];
@@ -498,6 +495,10 @@ void bt_mesh_net_revoke_keys(struct bt_mesh_subnet *sub)
 
 		memcpy(&key->keys[0], &key->keys[1], sizeof(key->keys[0]));
 		key->updated = false;
+		if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+			BT_DBG("Storing Updated AppKey persistently");
+			bt_mesh_store_app_key(key);
+		}
 	}
 }
 
@@ -726,63 +727,6 @@ u32_t bt_mesh_next_seq(void)
 	return seq;
 }
 
-int bt_mesh_net_resend(struct bt_mesh_subnet *sub, struct net_buf *buf,
-		       bool new_key, const struct bt_mesh_send_cb *cb,
-		       void *cb_data)
-{
-	const u8_t *enc, *priv;
-	u32_t seq;
-	u16_t dst;
-	int err;
-
-	BT_DBG("net_idx 0x%04x new_key %u len %u", sub->net_idx, new_key,
-	       buf->len);
-
-	enc = sub->keys[new_key].enc;
-	priv = sub->keys[new_key].privacy;
-
-	err = bt_mesh_net_obfuscate(buf->data, BT_MESH_NET_IVI_TX, priv);
-	if (err) {
-		BT_ERR("deobfuscate failed (err %d)", err);
-		return err;
-	}
-
-	err = bt_mesh_net_decrypt(enc, &buf->b, BT_MESH_NET_IVI_TX, false);
-	if (err) {
-		BT_ERR("decrypt failed (err %d)", err);
-		return err;
-	}
-
-	/* Update with a new sequence number */
-	seq = bt_mesh_next_seq();
-	sys_put_be24(seq, &buf->data[2]);
-
-	/* Get destination, in case it's a proxy client */
-	dst = DST(buf->data);
-
-	err = bt_mesh_net_encrypt(enc, &buf->b, BT_MESH_NET_IVI_TX, false);
-	if (err) {
-		BT_ERR("encrypt failed (err %d)", err);
-		return err;
-	}
-
-	err = bt_mesh_net_obfuscate(buf->data, BT_MESH_NET_IVI_TX, priv);
-	if (err) {
-		BT_ERR("obfuscate failed (err %d)", err);
-		return err;
-	}
-
-	if (IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY) &&
-	    bt_mesh_proxy_relay(&buf->b, dst) &&
-	    BT_MESH_ADDR_IS_UNICAST(dst)) {
-		send_cb_finalize(cb, cb_data);
-	} else {
-		bt_mesh_adv_send(buf, cb, cb_data);
-	}
-
-	return 0;
-}
-
 static void bt_mesh_net_local(struct k_work *work)
 {
 	struct net_buf *buf;
@@ -984,15 +928,15 @@ static int net_decrypt(struct bt_mesh_subnet *sub, const u8_t *enc,
 		return -ENOENT;
 	}
 
-	if (rx->net_if == BT_MESH_NET_IF_ADV && msg_cache_match(rx, buf)) {
-		BT_WARN("Duplicate found in Network Message Cache");
-		return -EALREADY;
-	}
-
 	rx->ctx.addr = SRC(buf->data);
 	if (!BT_MESH_ADDR_IS_UNICAST(rx->ctx.addr)) {
-		BT_WARN("Ignoring non-unicast src addr 0x%04x", rx->ctx.addr);
+		BT_DBG("Ignoring non-unicast src addr 0x%04x", rx->ctx.addr);
 		return -EINVAL;
+	}
+
+	if (rx->net_if == BT_MESH_NET_IF_ADV && msg_cache_match(rx, buf)) {
+		BT_DBG("Duplicate found in Network Message Cache");
+		return -EALREADY;
 	}
 
 	BT_DBG("src 0x%04x", rx->ctx.addr);
@@ -1284,6 +1228,8 @@ int bt_mesh_net_decode(struct net_buf_simple *data, enum bt_mesh_net_if net_if,
 	       rx->ctx.recv_ttl);
 	BT_DBG("PDU: %s", bt_hex(buf->data, buf->len));
 
+	msg_cache_add(rx);
+
 	return 0;
 }
 
@@ -1330,7 +1276,7 @@ void bt_mesh_net_recv(struct net_buf_simple *data, s8_t rssi,
 	 */
 	if (bt_mesh_trans_recv(&buf, &rx) == -EAGAIN) {
 		BT_WARN("Removing rejected message from Network Message Cache");
-		msg_cache[rx.msg_cache_idx] = 0ULL;
+		msg_cache[rx.msg_cache_idx].src = BT_MESH_ADDR_UNASSIGNED;
 		/* Rewind the next index now that we're not using this entry */
 		msg_cache_next = rx.msg_cache_idx;
 	}

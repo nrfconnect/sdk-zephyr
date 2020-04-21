@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT atmel_sam_gpio
+
 #include <errno.h>
 #include <kernel.h>
 #include <device.h>
@@ -54,7 +56,10 @@ static int gpio_sam_port_configure(struct device *dev, u32_t mask,
 		pio->PIO_IDR = mask;
 		/* Disable pull-up. */
 		pio->PIO_PUDR = mask;
-#if defined(CONFIG_SOC_SERIES_SAM4S) || defined(CONFIG_SOC_SERIES_SAME70)
+#if defined(CONFIG_SOC_SERIES_SAM4S) || \
+	defined(CONFIG_SOC_SERIES_SAM4E) || \
+	defined(CONFIG_SOC_SERIES_SAME70) || \
+	defined(CONFIG_SOC_SERIES_SAMV71)
 		/* Disable pull-down. */
 		pio->PIO_PPDDR = mask;
 #endif
@@ -93,7 +98,10 @@ static int gpio_sam_port_configure(struct device *dev, u32_t mask,
 	 * Clear both pulls, then enable the one we need.
 	 */
 	pio->PIO_PUDR = mask;
-#if defined(CONFIG_SOC_SERIES_SAM4S) || defined(CONFIG_SOC_SERIES_SAME70)
+#if defined(CONFIG_SOC_SERIES_SAM4S) || \
+	defined(CONFIG_SOC_SERIES_SAM4E) || \
+	defined(CONFIG_SOC_SERIES_SAME70) || \
+	defined(CONFIG_SOC_SERIES_SAMV71)
 	pio->PIO_PPDDR = mask;
 #endif
 	if (flags & GPIO_PULL_UP) {
@@ -327,7 +335,7 @@ static void port_a_sam_config_func(struct device *dev);
 
 static const struct gpio_sam_config port_a_sam_config = {
 	.common = {
-		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_NGPIOS(DT_INST_0_ATMEL_SAM_GPIO_NGPIOS),
+		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(0),
 	},
 	.regs = (Pio *)DT_GPIO_SAM_PORTA_BASE_ADDRESS,
 	.periph_id = DT_GPIO_SAM_PORTA_PERIPHERAL_ID,
@@ -355,7 +363,7 @@ static void port_b_sam_config_func(struct device *dev);
 
 static const struct gpio_sam_config port_b_sam_config = {
 	.common = {
-		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_NGPIOS(DT_INST_1_ATMEL_SAM_GPIO_NGPIOS),
+		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(1),
 	},
 	.regs = (Pio *)DT_GPIO_SAM_PORTB_BASE_ADDRESS,
 	.periph_id = DT_GPIO_SAM_PORTB_PERIPHERAL_ID,
@@ -383,7 +391,7 @@ static void port_c_sam_config_func(struct device *dev);
 
 static const struct gpio_sam_config port_c_sam_config = {
 	.common = {
-		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_NGPIOS(DT_INST_2_ATMEL_SAM_GPIO_NGPIOS),
+		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(2),
 	},
 	.regs = (Pio *)DT_GPIO_SAM_PORTC_BASE_ADDRESS,
 	.periph_id = DT_GPIO_SAM_PORTC_PERIPHERAL_ID,
@@ -411,7 +419,7 @@ static void port_d_sam_config_func(struct device *dev);
 
 static const struct gpio_sam_config port_d_sam_config = {
 	.common = {
-		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_NGPIOS(DT_INST_3_ATMEL_SAM_GPIO_NGPIOS),
+		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(3),
 	},
 	.regs = (Pio *)DT_GPIO_SAM_PORTD_BASE_ADDRESS,
 	.periph_id = DT_GPIO_SAM_PORTD_PERIPHERAL_ID,
@@ -439,7 +447,7 @@ static void port_e_sam_config_func(struct device *dev);
 
 static const struct gpio_sam_config port_e_sam_config = {
 	.common = {
-		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_NGPIOS(DT_INST_4_ATMEL_SAM_GPIO_NGPIOS),
+		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(4),
 	},
 	.regs = (Pio *)DT_GPIO_SAM_PORTE_BASE_ADDRESS,
 	.periph_id = DT_GPIO_SAM_PORTE_PERIPHERAL_ID,

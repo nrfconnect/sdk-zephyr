@@ -134,6 +134,34 @@ enum sensor_channel {
 	/** Position change on the Z axis, in points. */
 	SENSOR_CHAN_POS_DZ,
 
+	/** Revolutions per minute, in RPM. */
+	SENSOR_CHAN_RPM,
+
+	/** Voltage, in volts **/
+	SENSOR_CHAN_GAUGE_VOLTAGE,
+	/** Average current, in amps **/
+	SENSOR_CHAN_GAUGE_AVG_CURRENT,
+	/** Standy current, in amps **/
+	SENSOR_CHAN_GAUGE_STDBY_CURRENT,
+	/** Max load current, in amps **/
+	SENSOR_CHAN_GAUGE_MAX_LOAD_CURRENT,
+	/** Gauge temperature  **/
+	SENSOR_CHAN_GAUGE_TEMP,
+	/** State of charge measurement in % **/
+	SENSOR_CHAN_GAUGE_STATE_OF_CHARGE,
+	/** Full Charge Capacity in mAh **/
+	SENSOR_CHAN_GAUGE_FULL_CHARGE_CAPACITY,
+	/** Remaining Charge Capacity in mAh **/
+	SENSOR_CHAN_GAUGE_REMAINING_CHARGE_CAPACITY,
+	/** Nominal Available Capacity in mAh **/
+	SENSOR_CHAN_GAUGE_NOM_AVAIL_CAPACITY,
+	/** Full Available Capacity in mAh **/
+	SENSOR_CHAN_GAUGE_FULL_AVAIL_CAPACITY,
+	/** Average power in mW **/
+	SENSOR_CHAN_GAUGE_AVG_POWER,
+	/** State of health measurement in % **/
+	SENSOR_CHAN_GAUGE_STATE_OF_HEALTH,
+
 	/** All channels. */
 	SENSOR_CHAN_ALL,
 
@@ -189,6 +217,9 @@ enum sensor_trigger_type {
 
 	/** Trigger fires when a double tap is detected. */
 	SENSOR_TRIG_DOUBLE_TAP,
+
+	/** Trigger fires when a free fall is detected. */
+	SENSOR_TRIG_FREEFALL,
 
 	/**
 	 * Number of all common sensor triggers.
@@ -316,7 +347,7 @@ typedef int (*sensor_channel_get_t)(struct device *dev,
 				    enum sensor_channel chan,
 				    struct sensor_value *val);
 
-struct sensor_driver_api {
+__subsystem struct sensor_driver_api {
 	sensor_attr_set_t attr_set;
 	sensor_trigger_set_t trigger_set;
 	sensor_sample_fetch_t sample_fetch;

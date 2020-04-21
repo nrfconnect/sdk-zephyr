@@ -46,16 +46,19 @@
 
 #define POLL_RETRY_TIMEOUT        K_MSEC(100)
 
-#define REQ_RETRY_DURATION(lpn)  (4 * (LPN_RECV_DELAY + (lpn)->adv_duration + \
-				       (lpn)->recv_win + POLL_RETRY_TIMEOUT))
+#define REQ_RETRY_DURATION(lpn)   (LPN_RECV_DELAY + (lpn)->adv_duration + \
+				      (lpn)->recv_win + POLL_RETRY_TIMEOUT)
 
-#define POLL_TIMEOUT_INIT     (CONFIG_BT_MESH_LPN_INIT_POLL_TIMEOUT * 100)
-#define POLL_TIMEOUT_MAX(lpn) ((CONFIG_BT_MESH_LPN_POLL_TIMEOUT * 100) - \
-			       REQ_RETRY_DURATION(lpn))
+#define POLL_TIMEOUT_INIT         (CONFIG_BT_MESH_LPN_INIT_POLL_TIMEOUT * 100)
 
-#define REQ_ATTEMPTS(lpn)     (POLL_TIMEOUT_MAX(lpn) < K_SECONDS(3) ? 2 : 4)
+#define REQ_ATTEMPTS_MAX          6
+#define REQ_ATTEMPTS(lpn)         MIN(REQ_ATTEMPTS_MAX, \
+			  POLL_TIMEOUT_INIT / REQ_RETRY_DURATION(lpn))
 
-#define CLEAR_ATTEMPTS        2
+#define POLL_TIMEOUT_MAX(lpn)     (POLL_TIMEOUT_INIT - \
+			  (REQ_ATTEMPTS(lpn) * REQ_RETRY_DURATION(lpn)))
+
+#define CLEAR_ATTEMPTS            3
 
 #define LPN_CRITERIA ((CONFIG_BT_MESH_LPN_MIN_QUEUE_SIZE) | \
 		      (CONFIG_BT_MESH_LPN_RSSI_FACTOR << 3) | \
@@ -150,10 +153,7 @@ static void friend_clear_sent(int err, void *user_data)
 {
 	struct bt_mesh_lpn *lpn = &bt_mesh.lpn;
 
-	/* We're switching away from Low Power behavior, so permanently
-	 * enable scanning.
-	 */
-	bt_mesh_scan_enable();
+	/* Scanning will enable if lpn state still enabled  */
 
 	lpn->req_attempts++;
 
@@ -194,7 +194,7 @@ static int send_friend_clear(void)
 	BT_DBG("");
 
 	return bt_mesh_ctl_send(&tx, TRANS_CTL_OP_FRIEND_CLEAR, &req,
-				sizeof(req), NULL, &clear_sent_cb, NULL);
+				sizeof(req), &clear_sent_cb, NULL);
 }
 
 static void clear_friendship(bool force, bool disable)
@@ -312,7 +312,7 @@ static int send_friend_req(struct bt_mesh_lpn *lpn)
 	BT_DBG("");
 
 	return bt_mesh_ctl_send(&tx, TRANS_CTL_OP_FRIEND_REQ, &req,
-				sizeof(req), NULL, &friend_req_sent_cb, NULL);
+				sizeof(req), &friend_req_sent_cb, NULL);
 }
 
 static void req_sent(u16_t duration, int err, void *user_data)
@@ -382,7 +382,7 @@ static int send_friend_poll(void)
 	}
 
 	err = bt_mesh_ctl_send(&tx, TRANS_CTL_OP_FRIEND_POLL, &fsn, 1,
-			       NULL, &req_sent_cb, NULL);
+			       &req_sent_cb, NULL);
 	if (err == 0) {
 		lpn->pending_poll = 0U;
 		lpn->sent_req = TRANS_CTL_OP_FRIEND_POLL;
@@ -693,7 +693,7 @@ static bool sub_update(u8_t op)
 
 	req.xact = lpn->xact_next++;
 
-	if (bt_mesh_ctl_send(&tx, op, &req, 1 + g * 2, NULL,
+	if (bt_mesh_ctl_send(&tx, op, &req, 1 + g * 2,
 			     &req_sent_cb, NULL) < 0) {
 		group_zero(lpn->pending);
 		return false;
@@ -716,7 +716,7 @@ static void update_timeout(struct bt_mesh_lpn *lpn)
 			bt_mesh_scan_disable();
 		}
 
-		if (lpn->req_attempts < 6) {
+		if (lpn->req_attempts < REQ_ATTEMPTS(lpn)) {
 			BT_WARN("Retrying first Friend Poll");
 			lpn->sent_req = 0U;
 			if (send_friend_poll() == 0) {

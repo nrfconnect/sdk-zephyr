@@ -8,6 +8,15 @@
 #include <irq_offload.h>
 #include <sys/mutex.h>
 
+
+/**
+ * @brief Tests for Kernel Futex objects
+ * @defgroup kernel_futex_tests Futex
+ * @ingroup all_tests
+ * @{
+ * @}
+ */
+
 /* Macro declarations */
 #define TOTAL_THREADS_WAITING (3)
 #define PRIO_WAIT (CONFIG_ZTEST_THREAD_PRIORITY - 1)
@@ -55,7 +64,8 @@ void futex_wait_task(void *p1, void *p2, void *p3)
 	s32_t ret_value;
 	int time_val = *(int *)p1;
 
-	zassert_true(time_val >= K_FOREVER, "invalid timeout parameter");
+	zassert_true(time_val >= (int)K_TICKS_FOREVER,
+		     "invalid timeout parameter");
 
 	ret_value = k_futex_wait(&simple_futex,
 			atomic_get(&simple_futex.val), time_val);
@@ -96,7 +106,7 @@ void futex_wait_wake_task(void *p1, void *p2, void *p3)
 	s32_t ret_value;
 	int time_val = *(int *)p1;
 
-	zassert_true(time_val >= K_FOREVER, "invalid timeout parameter");
+	zassert_true(time_val >= (int)K_FOREVER, "invalid timeout parameter");
 
 	ret_value = k_futex_wait(&simple_futex,
 			atomic_get(&simple_futex.val), time_val);
@@ -139,7 +149,7 @@ void futex_multiple_wait_wake_task(void *p1, void *p2, void *p3)
 	int time_val = *(int *)p1;
 	int idx = *(int *)p2;
 
-	zassert_true(time_val == K_FOREVER, "invalid timeout parameter");
+	zassert_true(time_val == (int)K_FOREVER, "invalid timeout parameter");
 
 	ret_value = k_futex_wait(&multiple_futex[idx],
 		atomic_get(&(multiple_futex[idx].val)), time_val);
@@ -150,7 +160,7 @@ void futex_multiple_wait_wake_task(void *p1, void *p2, void *p3)
 }
 
 /**
- * @ingroup futex_tests
+ * @ingroup kernel_futex_tests
  * @{
  */
 
@@ -458,3 +468,7 @@ void test_main(void)
 			 ztest_unit_test(test_futex_wait_nowait));
 	ztest_run_test_suite(test_futex);
 }
+
+/**
+ * @}
+ */

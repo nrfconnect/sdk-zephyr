@@ -1,4 +1,4 @@
-.. _kernel:
+.. _kernel_api:
 
 Kernel Services
 ###############
@@ -116,7 +116,6 @@ These pages cover other kernel services.
    other/atomic.rst
    other/float.rst
    other/ring_buffers.rst
-   other/resource_mgmt.rst
    other/cxx_support.rst
    other/version.rst
    other/fatal.rst

@@ -2,6 +2,7 @@
  * Copyright (c) 2019 Philippe Retornaz <philippe@shapescale.com>
  * Copyright (c) 2019 ST Microelectronics
  * Copyright (c) 2019 Centaur Analytics, Inc
+ * Copyright (C) 2020 Framework Computer LLC <ktl@frame.work>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -29,7 +30,7 @@
 
 	soc {
 		flash-controller@40022000 {
-			compatible = "st,stm32g0-flash-controller";
+			compatible = "st,stm32-flash-controller", "st,stm32g0-flash-controller";
 			label = "FLASH_CTRL";
 			reg = <0x40022000 0x400>;
 			interrupts = <3 0>;
@@ -105,6 +106,13 @@
 			};
 		};
 
+		iwdg: watchdog@40003000 {
+			compatible = "st,stm32-watchdog";
+			reg = <0x40003000 0x400>;
+			label = "IWDG";
+			status = "disabled";
+		};
+
 		wwdg: watchdog@40002c00 {
 			compatible = "st,stm32-window-watchdog";
 			reg = <0x40002C00 0x400>;
@@ -112,6 +120,16 @@
 			label = "WWDG";
 			interrupts = <0 7>;
 			status = "disabled";
+		};
+
+		lpuart1: serial@40008000 {
+			compatible = "st,stm32-lpuart", "st,stm32-uart";
+			reg = <0x40008000 0x400>;
+			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00100000>;
+			interrupts = <29 3>;
+			interrupt-names = "combined";
+			status = "disabled";
+			label = "LPUART_1";
 		};
 
 		usart1: serial@40013800 {

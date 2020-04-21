@@ -47,6 +47,15 @@ void arm_isr_handler(void *args)
 		/* Intentional ASSERT */
 		expected_reason = K_ERR_KERNEL_PANIC;
 		__ASSERT(0, "Intentional assert\n");
+	} else if (test_flag == 4) {
+#if defined(CONFIG_CPU_CORTEX_M_HAS_SYSTICK)
+#if !defined(CONFIG_SYS_CLOCK_EXISTS) || !defined(CONFIG_CORTEX_M_SYSTICK)
+		expected_reason = K_ERR_CPU_EXCEPTION;
+		SCB->ICSR |= SCB_ICSR_PENDSTSET_Msk;
+		__DSB();
+		__ISB();
+#endif
+#endif
 	}
 }
 
@@ -54,7 +63,7 @@ void test_arm_interrupt(void)
 {
 	/* Determine an NVIC IRQ line that is not currently in use. */
 	int i;
-	int init_flag, post_flag;
+	int init_flag, post_flag, reason;
 
 	init_flag = test_flag;
 
@@ -87,6 +96,25 @@ void test_arm_interrupt(void)
 
 	TC_PRINT("Available IRQ line: %u\n", i);
 
+	/* Verify that triggering an interrupt in an IRQ line,
+	 * on which an ISR has not yet been installed, leads
+	 * to a fault of type K_ERR_SPURIOUS_IRQ.
+	 */
+	expected_reason = K_ERR_SPURIOUS_IRQ;
+	NVIC_ClearPendingIRQ(i);
+	NVIC_EnableIRQ(i);
+	NVIC_SetPendingIRQ(i);
+	__DSB();
+	__ISB();
+
+	/* Verify that the spurious ISR has led to the fault and the
+	 * expected reason variable is reset.
+	 */
+	reason = expected_reason;
+	zassert_equal(reason, -1,
+		"expected_reason has not been reset (%d)\n", reason);
+	NVIC_DisableIRQ(i);
+
 	arch_irq_connect_dynamic(i, 0 /* highest priority */,
 		arm_isr_handler,
 		NULL,
@@ -113,6 +141,30 @@ void test_arm_interrupt(void)
 		post_flag = test_flag;
 		zassert_true(post_flag == j, "Test flag not set by ISR\n");
 	}
+
+#if defined(CONFIG_CPU_CORTEX_M_HAS_SYSTICK)
+#if !defined(CONFIG_SYS_CLOCK_EXISTS) || !defined(CONFIG_CORTEX_M_SYSTICK)
+	/* Verify that triggering a Cortex-M exception (accidentally) that has
+	 * not been installed in the vector table, leads to the reserved
+	 * exception been called and a resulting CPU fault. We test this using
+	 * the SysTick exception in platforms that are not expecting to use the
+	 * SysTick timer for system timing.
+	 */
+
+	/* The ISR will manually set the SysTick exception to pending state. */
+	NVIC_SetPendingIRQ(i);
+	__DSB();
+	__ISB();
+
+	/* Verify that the spurious exception has led to the fault and the
+	 * expected reason variable is reset.
+	 */
+	reason = expected_reason;
+	zassert_equal(reason, -1,
+		"expected_reason has not been reset (%d)\n", reason);
+#endif
+#endif
+
 }
 
 #if defined(CONFIG_USERSPACE)

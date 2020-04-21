@@ -262,9 +262,9 @@ static int eth_fake_init(struct device *dev)
 	return 0;
 }
 
-ETH_NET_DEVICE_INIT(eth_fake, "eth_fake", eth_fake_init, &eth_fake_data,
-		    NULL, CONFIG_ETH_INIT_PRIORITY, &eth_fake_api_funcs,
-		    NET_ETH_MTU);
+ETH_NET_DEVICE_INIT(eth_fake, "eth_fake", eth_fake_init, device_pm_control_nop,
+		    &eth_fake_data, NULL, CONFIG_ETH_INIT_PRIORITY,
+		    &eth_fake_api_funcs, NET_ETH_MTU);
 
 /* A test thread that spits out events that we can catch and show to user */
 static void trigger_events(void)
@@ -327,7 +327,7 @@ static void trigger_events(void)
 
 K_THREAD_DEFINE(trigger_events_thread_id, STACK_SIZE,
 		trigger_events, NULL, NULL, NULL,
-		THREAD_PRIORITY, 0, K_FOREVER);
+		THREAD_PRIORITY, 0, -1);
 
 static char *get_ip_addr(char *ipaddr, size_t len, sa_family_t family,
 			 struct net_mgmt_msghdr *hdr)

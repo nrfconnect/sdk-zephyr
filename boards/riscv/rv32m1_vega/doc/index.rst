@@ -149,14 +149,9 @@ with this board:
 
    BLE Software Link Layer limitations:
 
-   - **no 2 Mbps PHY**
    - no 512/256 Kbps PHY
-   - **no LL Privacy**
-   - **no power-save**
    - no TX power adjustment
 
-   Limitations marked **bold** above are planned to be addressed on this
-   platform.
 
 Connections and IOs
 ===================

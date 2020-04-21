@@ -285,34 +285,38 @@ static int spi_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 				void *context, device_pm_cb cb, void *arg)
 {
 	int ret = 0;
+	struct spi_nrfx_data *data = get_dev_data(dev);
+	const struct spi_nrfx_config *config = get_dev_config(dev);
 
 	if (ctrl_command == DEVICE_PM_SET_POWER_STATE) {
 		u32_t new_state = *((const u32_t *)context);
 
-		if (new_state != get_dev_data(dev)->pm_state) {
+		if (new_state != data->pm_state) {
 			switch (new_state) {
 			case DEVICE_PM_ACTIVE_STATE:
-				init_spi(dev);
+				ret = init_spi(dev);
 				/* Force reconfiguration before next transfer */
-				get_dev_data(dev)->ctx.config = NULL;
+				data->ctx.config = NULL;
 				break;
 
 			case DEVICE_PM_LOW_POWER_STATE:
 			case DEVICE_PM_SUSPEND_STATE:
 			case DEVICE_PM_OFF_STATE:
-				nrfx_spi_uninit(&get_dev_config(dev)->spi);
+				if (data->pm_state == DEVICE_PM_ACTIVE_STATE) {
+					nrfx_spi_uninit(&config->spi);
+				}
 				break;
 
 			default:
 				ret = -ENOTSUP;
 			}
 			if (!ret) {
-				get_dev_data(dev)->pm_state = new_state;
+				data->pm_state = new_state;
 			}
 		}
 	} else {
-		assert(ctrl_command == DEVICE_PM_GET_POWER_STATE);
-		*((u32_t *)context) = get_dev_data(dev)->pm_state;
+		__ASSERT_NO_MSG(ctrl_command == DEVICE_PM_GET_POWER_STATE);
+		*((u32_t *)context) = data->pm_state;
 	}
 
 	if (cb) {
@@ -323,30 +327,34 @@ static int spi_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 }
 #endif /* CONFIG_DEVICE_POWER_MANAGEMENT */
 
-#define SPI_NRFX_MISO_PULL_DOWN(idx) \
-	IS_ENABLED(DT_NORDIC_NRF_SPI_SPI_##idx##_MISO_PULL_DOWN)
+/*
+ * Current factors requiring use of DT_NODELABEL:
+ *
+ * - NRFX_SPI_INSTANCE() requires an SoC instance number
+ * - soc-instance-numbered kconfig enables
+ * - ORC is a SoC-instance-numbered kconfig option instead of a DT property
+ */
 
-#define SPI_NRFX_MISO_PULL_UP(idx) \
-	IS_ENABLED(DT_NORDIC_NRF_SPI_SPI_##idx##_MISO_PULL_UP)
+#define SPI(idx)			DT_NODELABEL(spi##idx)
+#define SPI_PROP(idx, prop)		DT_PROP(SPI(idx), prop)
 
 #define SPI_NRFX_MISO_PULL(idx)				\
-	(SPI_NRFX_MISO_PULL_UP(idx)			\
-		? SPI_NRFX_MISO_PULL_DOWN(idx)		\
+	(SPI_PROP(idx, miso_pull_up)			\
+		? SPI_PROP(idx, miso_pull_down)		\
 			? -1 /* invalid configuration */\
 			: NRF_GPIO_PIN_PULLUP		\
-		: SPI_NRFX_MISO_PULL_DOWN(idx)		\
+		: SPI_PROP(idx, miso_pull_down)		\
 			? NRF_GPIO_PIN_PULLDOWN		\
 			: NRF_GPIO_PIN_NOPULL)
 
 #define SPI_NRFX_SPI_DEVICE(idx)					       \
-	BUILD_ASSERT_MSG(						       \
-		!SPI_NRFX_MISO_PULL_UP(idx) || !SPI_NRFX_MISO_PULL_DOWN(idx),  \
+	BUILD_ASSERT(							       \
+		!SPI_PROP(idx, miso_pull_up) || !SPI_PROP(idx, miso_pull_down),\
 		"SPI"#idx						       \
 		": cannot enable both pull-up and pull-down on MISO line");    \
 	static int spi_##idx##_init(struct device *dev)			       \
 	{								       \
-		IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_SPI##idx),		       \
-			    DT_NORDIC_NRF_SPI_SPI_##idx##_IRQ_0_PRIORITY,      \
+		IRQ_CONNECT(DT_IRQN(SPI(idx)), DT_IRQ(SPI(idx), priority),     \
 			    nrfx_isr, nrfx_spi_##idx##_irq_handler, 0);	       \
 		return init_spi(dev);					       \
 	}								       \
@@ -358,9 +366,9 @@ static int spi_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 	static const struct spi_nrfx_config spi_##idx##z_config = {	       \
 		.spi = NRFX_SPI_INSTANCE(idx),				       \
 		.config = {						       \
-			.sck_pin   = DT_NORDIC_NRF_SPI_SPI_##idx##_SCK_PIN,    \
-			.mosi_pin  = DT_NORDIC_NRF_SPI_SPI_##idx##_MOSI_PIN,   \
-			.miso_pin  = DT_NORDIC_NRF_SPI_SPI_##idx##_MISO_PIN,   \
+			.sck_pin   = SPI_PROP(idx, sck_pin),		       \
+			.mosi_pin  = SPI_PROP(idx, mosi_pin),		       \
+			.miso_pin  = SPI_PROP(idx, miso_pin),		       \
 			.ss_pin    = NRFX_SPI_PIN_NOT_USED,		       \
 			.orc       = CONFIG_SPI_##idx##_NRF_ORC,	       \
 			.frequency = NRF_SPI_FREQ_4M,			       \
@@ -369,7 +377,7 @@ static int spi_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 			.miso_pull = SPI_NRFX_MISO_PULL(idx),		       \
 		}							       \
 	};								       \
-	DEVICE_DEFINE(spi_##idx, DT_NORDIC_NRF_SPI_SPI_##idx##_LABEL,	       \
+	DEVICE_DEFINE(spi_##idx, DT_LABEL(SPI(idx)),			       \
 		      spi_##idx##_init,					       \
 		      spi_nrfx_pm_control,				       \
 		      &spi_##idx##_data,				       \

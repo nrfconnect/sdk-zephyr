@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Nordic Semiconductor ASA
+// Copyright (c) 2019-2020 Nordic Semiconductor ASA
 // SPDX-License-Identifer: Apache-2.0
 
 // Replace integer constant timeouts with K_MSEC variants
@@ -7,6 +7,9 @@
 // integer milliseconds, when they were intended to be timeout values
 // produced by specific constants and macros.  Convert the integer
 // literals to the desired equivalent.
+//
+// A few expressions that are clearly integer values are also
+// converted.
 //
 // Options: --include-headers
 
@@ -88,53 +91,136 @@ C << r_last_timeout_const_report.C;
 msg = "WARNING: replace constant {} with timeout in {}".format(C, fn)
 coccilib.report.print_report(p[0], msg);
 
-// ** Convert integer delays in K_THREAD_DEFINE to the appropriate macro
+// ** Handle call sites where a timeout is specified by an expression
+// ** scaled by MSEC_PER_SEC and replace with the corresponding
+// ** K_SECONDS() expression.
 
-// Identify declarers where an identifier is used for the delay
-@r_thread_decl_id@
-declarer name K_THREAD_DEFINE;
-identifier C;
+@r_last_timeout_scaled_patch
+ extends r_last_timeout
+ depends on patch
+@
+// identifier K_MSEC =~ "^K_MSEC$";
+symbol K_MSEC;
+identifier MSEC_PER_SEC =~ "^MSEC_PER_SEC$";
+expression V;
 position p;
 @@
-K_THREAD_DEFINE@p(..., C);
+last_timeout@p(...,
+(
+- MSEC_PER_SEC
++ K_SECONDS(1)
+|
+- V * MSEC_PER_SEC
++ K_SECONDS(V)
+|
+- K_MSEC(MSEC_PER_SEC)
++ K_SECONDS(1)
+|
+- K_MSEC(V * MSEC_PER_SEC)
++ K_SECONDS(V)
+)
+ )
 
-// Select declarers with constant literal delay and replace with
-// appropriate macro
-@depends on patch@
+@r_last_timeout_scaled_report_req
+ extends r_last_timeout
+ depends on report
+@
+identifier MSEC_PER_SEC =~ "^MSEC_PER_SEC$";
+expression V;
+position p;
+@@
+last_timeout@p(...,
+(
+  MSEC_PER_SEC
+| V * MSEC_PER_SEC
+)
+ )
+
+@r_last_timeout_scaled_report_opt
+ extends r_last_timeout
+ depends on report
+@
+identifier MSEC_PER_SEC =~ "^MSEC_PER_SEC$";
+expression V;
+position p;
+@@
+last_timeout@p(...,
+(
+  K_MSEC(MSEC_PER_SEC)
+| K_MSEC(V * MSEC_PER_SEC)
+)
+ )
+
+@script:python
+ depends on report
+@
+fn << r_last_timeout.last_timeout;
+p << r_last_timeout_scaled_report_req.p;
+@@
+msg = "WARNING: use K_SECONDS() for timeout in {}".format(fn)
+coccilib.report.print_report(p[0], msg);
+
+@script:python
+ depends on report
+@
+fn << r_last_timeout.last_timeout;
+p << r_last_timeout_scaled_report_opt.p;
+@@
+msg = "NOTE: use K_SECONDS() for timeout in {}".format(fn)
+coccilib.report.print_report(p[0], msg);
+
+// ** Convert timeout-valued delays in K_THREAD_DEFINE with durations
+// ** in milliseconds
+
+// Select declarers where the startup delay is a timeout expression
+// and replace with the corresponding millisecond duration.
+@r_thread_decl_patch
+ depends on patch@
 declarer name K_THREAD_DEFINE;
-constant C;
-position p != r_thread_decl_id.p;
+identifier K_NO_WAIT =~ "^K_NO_WAIT$";
+identifier K_FOREVER =~ "^K_FOREVER$";
+expression E;
+position p;
 @@
 K_THREAD_DEFINE@p(...,
 (
-- 0
-+ K_NO_WAIT
+- K_NO_WAIT
++ 0
 |
-- -1
-+ K_FOREVER
+- K_FOREVER
++ -1
 |
-- C
-+ K_MSEC(C)
+- K_MSEC(E)
++ E
 )
  );
 
-// Identify declarers where an identifier is used for the delay
-@r_thread_decl_const
+//
+@r_thread_decl_report
  depends on report@
 declarer name K_THREAD_DEFINE;
-constant C;
-position p != r_thread_decl_id.p;
+identifier K_NO_WAIT =~ "^K_NO_WAIT$";
+identifier K_FOREVER =~ "^K_FOREVER$";
+expression V;
+position p;
 @@
-K_THREAD_DEFINE@p(..., C);
+K_THREAD_DEFINE@p(...,
+(
+ K_NO_WAIT
+|
+ K_FOREVER
+|
+ K_MSEC(V)
+)
+ );
 
 
 @script:python
  depends on report
 @
-C << r_thread_decl_const.C;
-p << r_thread_decl_const.p;
+p << r_thread_decl_report.p;
 @@
-msg = "WARNING: replace constant {} with timeout in K_THREAD_DEFINE".format(C)
+msg = "WARNING: replace timeout-valued delay with millisecond duration".format()
 coccilib.report.print_report(p[0], msg);
 
 // ** Handle k_timer_start where the second (not last) argument is a

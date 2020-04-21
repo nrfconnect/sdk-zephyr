@@ -16,6 +16,20 @@
 #include <string.h>
 #include <nrfx_nvmc.h>
 
+#if DT_HAS_NODE(DT_INST(0, nordic_nrf51_flash_controller))
+#define DT_DRV_COMPAT nordic_nrf51_flash_controller
+#elif DT_HAS_NODE(DT_INST(0, nordic_nrf52_flash_controller))
+#define DT_DRV_COMPAT nordic_nrf52_flash_controller
+#elif DT_HAS_NODE(DT_INST(0, nordic_nrf53_flash_controller))
+#define DT_DRV_COMPAT nordic_nrf53_flash_controller
+#elif DT_HAS_NODE(DT_INST(0, nordic_nrf91_flash_controller))
+#define DT_DRV_COMPAT nordic_nrf91_flash_controller
+#else
+#error No matching compatible for soc_flash_nrf.c
+#endif
+
+#define SOC_NV_FLASH_NODE DT_INST(0, soc_nv_flash)
+
 #if defined(CONFIG_SOC_FLASH_NRF_RADIO_SYNC)
 #include <sys/__assert.h>
 #include <bluetooth/hci.h>
@@ -23,14 +37,36 @@
 #include "controller/ticker/ticker.h"
 #include "controller/include/ll.h"
 
-#define FLASH_SLOT_ERASE     FLASH_PAGE_ERASE_MAX_TIME_US
-#define FLASH_INTERVAL_ERASE FLASH_SLOT_ERASE
-#define FLASH_SLOT_WRITE     7500
-#define FLASH_INTERVAL_WRITE FLASH_SLOT_WRITE
+#define FLASH_RADIO_ABORT_DELAY_US 1500
+#define FLASH_RADIO_WORK_DELAY_US  200
 
-#define FLASH_RADIO_ABORT_DELAY_US 500
-#define FLASH_TIMEOUT_MS ((FLASH_PAGE_ERASE_MAX_TIME_US)\
-			* (FLASH_PAGE_MAX_CNT) / 1000)
+
+#define FLASH_INTERVAL_ERASE (FLASH_RADIO_ABORT_DELAY_US + \
+			      FLASH_RADIO_WORK_DELAY_US + \
+			      FLASH_SLOT_ERASE)
+
+#define FLASH_SLOT_WRITE     (FLASH_INTERVAL_WRITE - \
+			      FLASH_RADIO_ABORT_DELAY_US - \
+			      FLASH_RADIO_WORK_DELAY_US)
+#define FLASH_INTERVAL_WRITE 7500
+
+#if defined(CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE)
+
+/* The timeout is multiplied by 1.5 because switching tasks may take
+ * significant portion of time.
+ */
+#define FLASH_TIMEOUT_MS ((FLASH_PAGE_ERASE_MAX_TIME_US) * \
+			  (FLASH_PAGE_MAX_CNT) / 1000 * 15 / 10)
+#define FLASH_SLOT_ERASE (MAX(CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE_MS * 1000, \
+			      7500))
+#else
+
+#define FLASH_TIMEOUT_MS ((FLASH_PAGE_ERASE_MAX_TIME_US) * \
+			  (FLASH_PAGE_MAX_CNT) / 1000)
+#define FLASH_SLOT_ERASE FLASH_PAGE_ERASE_MAX_TIME_US
+
+#endif /* CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE */
+
 #endif /* CONFIG_SOC_FLASH_NRF_RADIO_SYNC */
 
 #define FLASH_OP_DONE    (0) /* 0 for compliance with the driver API. */
@@ -45,6 +81,9 @@ struct flash_context {
 	u32_t interval;   /* timeslot interval. */
 	u32_t slot;       /* timeslot length. */
 #endif /* CONFIG_SOC_FLASH_NRF_RADIO_SYNC */
+#if defined(CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE)
+	u32_t flash_addr_next;
+#endif /* CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE */
 }; /*< Context type for f. @ref write_op @ref erase_op */
 
 #if defined(CONFIG_SOC_FLASH_NRF_RADIO_SYNC)
@@ -128,7 +167,7 @@ static int flash_nrf_read(struct device *dev, off_t addr,
 			    void *data, size_t len)
 {
 	if (is_regular_addr_valid(addr, len)) {
-		addr += DT_FLASH_BASE_ADDRESS;
+		addr += DT_REG_ADDR(SOC_NV_FLASH_NODE);
 	} else if (!is_uicr_addr_valid(addr, len)) {
 		return -EINVAL;
 	}
@@ -148,7 +187,7 @@ static int flash_nrf_write(struct device *dev, off_t addr,
 	int ret;
 
 	if (is_regular_addr_valid(addr, len)) {
-		addr += DT_FLASH_BASE_ADDRESS;
+		addr += DT_REG_ADDR(SOC_NV_FLASH_NODE);
 	} else if (!is_uicr_addr_valid(addr, len)) {
 		return -EINVAL;
 	}
@@ -195,7 +234,7 @@ static int flash_nrf_erase(struct device *dev, off_t addr, size_t size)
 			return 0;
 		}
 
-		addr += DT_FLASH_BASE_ADDRESS;
+		addr += DT_REG_ADDR(SOC_NV_FLASH_NODE);
 #ifdef CONFIG_SOC_FLASH_NRF_UICR
 	} else if (addr != (off_t)NRF_UICR || size != sizeof(*NRF_UICR)) {
 		return -EINVAL;
@@ -270,11 +309,23 @@ static int nrf_flash_init(struct device *dev)
 	return 0;
 }
 
-DEVICE_AND_API_INIT(nrf_flash, DT_FLASH_DEV_NAME, nrf_flash_init,
+DEVICE_AND_API_INIT(nrf_flash, DT_INST_LABEL(0), nrf_flash_init,
 		NULL, NULL, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 		&flash_nrf_api);
 
 #if defined(CONFIG_SOC_FLASH_NRF_RADIO_SYNC)
+
+static inline int _ticker_stop(u8_t inst_idx, u8_t u_id, u8_t tic_id)
+{
+	int ret = ticker_stop(inst_idx, u_id, tic_id, NULL, NULL);
+
+	if (ret != TICKER_STATUS_SUCCESS &&
+	    ret != TICKER_STATUS_BUSY) {
+		__ASSERT(0, "Failed to stop ticker.\n");
+	}
+
+	return ret;
+}
 
 static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder,
 				    u16_t lazy, void *context)
@@ -282,7 +333,6 @@ static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder,
 	struct flash_op_desc *op_desc;
 	u8_t instance_index;
 	u8_t ticker_id;
-	int result;
 
 	__ASSERT(ll_radio_state_is_idle(),
 		 "Radio is on during flash operation.\n");
@@ -292,16 +342,7 @@ static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder,
 		ll_timeslice_ticker_id_get(&instance_index, &ticker_id);
 
 		/* Stop the time slot ticker */
-		result = ticker_stop(instance_index,
-				     0,
-				     ticker_id,
-				     NULL,
-				     NULL);
-
-		if (result != TICKER_STATUS_SUCCESS &&
-		    result != TICKER_STATUS_BUSY) {
-			__ASSERT(0, "Failed to stop ticker.\n");
-		}
+		_ticker_stop(instance_index, 0, ticker_id);
 
 		((struct flash_op_desc *)context)->result = 0;
 
@@ -310,31 +351,30 @@ static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder,
 	}
 }
 
-static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder,
-		u16_t lazy, void *context)
+static void time_slot_delay(u32_t ticks_at_expire, u32_t ticks_delay,
+			    ticker_timeout_func callback, void *context)
 {
 	u8_t instance_index;
 	u8_t ticker_id;
 	int err;
 
-	ll_radio_state_abort();
-
 	ll_timeslice_ticker_id_get(&instance_index, &ticker_id);
 
-	/* start a secondary one-shot ticker after ~ 500 us, */
-	/* this will let any radio role to gracefully release the Radio h/w */
-
+	/* start a secondary one-shot ticker after ticks_delay,
+	 * this will let any radio role to gracefully abort and release the
+	 * Radio h/w.
+	 */
 	err = ticker_start(instance_index, /* Radio instance ticker */
 			   0, /* user_id */
 			   0, /* ticker_id */
 			   ticks_at_expire, /* current tick */
-			   HAL_TICKER_US_TO_TICKS(FLASH_RADIO_ABORT_DELAY_US),
-			   0, /* periodic (on-shot) */
-			   0, /* per. remaind. (on-shot) */
+			   ticks_delay, /* one-shot delayed timeout */
+			   0, /* periodic timeout  */
+			   0, /* periodic remainder */
 			   0, /* lazy, voluntary skips */
 			   0,
-			   time_slot_callback_work, /* handler for executing */
-						    /* the flash operation */
+			   callback, /* handler for executing radio abort or */
+				     /* flash work */
 			   context, /* the context for the flash operation */
 			   NULL, /* no op callback */
 			   NULL);
@@ -343,15 +383,30 @@ static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder,
 		((struct flash_op_desc *)context)->result = -ECANCELED;
 
 		/* abort flash timeslots */
-		err = ticker_stop(instance_index, 0, ticker_id, NULL, NULL);
-		if (err != TICKER_STATUS_SUCCESS &&
-		    err != TICKER_STATUS_BUSY) {
-			__ASSERT(0, "Failed to stop ticker.\n");
-		}
+		_ticker_stop(instance_index, 0, ticker_id);
 
 		/* notify thread that data is available */
 		k_sem_give(&sem_sync);
 	}
+}
+
+static void time_slot_callback_abort(u32_t ticks_at_expire, u32_t remainder,
+				     u16_t lazy, void *context)
+{
+	ll_radio_state_abort();
+	time_slot_delay(ticks_at_expire,
+			HAL_TICKER_US_TO_TICKS(FLASH_RADIO_WORK_DELAY_US),
+			time_slot_callback_work,
+			context);
+}
+
+static void time_slot_callback_prepare(u32_t ticks_at_expire, u32_t remainder,
+				       u16_t lazy, void *context)
+{
+	time_slot_delay(ticks_at_expire,
+			HAL_TICKER_US_TO_TICKS(FLASH_RADIO_ABORT_DELAY_US),
+			time_slot_callback_abort,
+			context);
 }
 
 static int work_in_time_slice(struct flash_op_desc *p_flash_op_desc)
@@ -376,7 +431,7 @@ static int work_in_time_slice(struct flash_op_desc *p_flash_op_desc)
 			   HAL_TICKER_REMAINDER(context->interval),
 			   0, /* lazy, voluntary skips */
 			   HAL_TICKER_US_TO_TICKS(context->slot),
-			   time_slot_callback_helper,
+			   time_slot_callback_prepare,
 			   p_flash_op_desc,
 			   NULL, /* no op callback */
 			   NULL);
@@ -384,6 +439,9 @@ static int work_in_time_slice(struct flash_op_desc *p_flash_op_desc)
 	if (err != TICKER_STATUS_SUCCESS && err != TICKER_STATUS_BUSY) {
 		result = -ECANCELED;
 	} else if (k_sem_take(&sem_sync, K_MSEC(FLASH_TIMEOUT_MS)) != 0) {
+		/* Stop any scheduled jobs */
+		_ticker_stop(instance_index, 3, ticker_id);
+
 		/* wait for operation's complete overrun*/
 		result = -ETIMEDOUT;
 	} else {
@@ -400,7 +458,10 @@ static int erase_in_timeslice(u32_t addr, u32_t size)
 		.len = size,
 		.enable_time_limit = 1, /* enable time limit */
 		.interval = FLASH_INTERVAL_ERASE,
-		.slot = FLASH_SLOT_ERASE
+		.slot = FLASH_SLOT_ERASE,
+#if defined(CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE)
+		.flash_addr_next = addr
+#endif
 	};
 
 	struct flash_op_desc flash_op_desc = {
@@ -455,10 +516,23 @@ static int erase_op(void *context)
 #endif
 
 	do {
-		(void)nrfx_nvmc_page_erase(e_ctx->flash_addr);
 
+#if defined(CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE)
+		if (e_ctx->flash_addr == e_ctx->flash_addr_next) {
+			nrfx_nvmc_page_partial_erase_init(e_ctx->flash_addr,
+				CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE_MS);
+			e_ctx->flash_addr_next += pg_size;
+		}
+
+		if (nrfx_nvmc_page_partial_erase_continue()) {
+			e_ctx->len -= pg_size;
+			e_ctx->flash_addr += pg_size;
+		}
+#else
+		(void)nrfx_nvmc_page_erase(e_ctx->flash_addr);
 		e_ctx->len -= pg_size;
 		e_ctx->flash_addr += pg_size;
+#endif /* CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE */
 
 #if defined(CONFIG_SOC_FLASH_NRF_RADIO_SYNC)
 		i++;
@@ -571,8 +645,11 @@ static int erase(u32_t addr, u32_t size)
 		.flash_addr = addr,
 		.len = size,
 #if defined(CONFIG_SOC_FLASH_NRF_RADIO_SYNC)
-		.enable_time_limit = 0 /* disable time limit */
+		.enable_time_limit = 0, /* disable time limit */
 #endif /* CONFIG_SOC_FLASH_NRF_RADIO_SYNC */
+#if defined(CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE)
+		.flash_addr_next = addr
+#endif
 	};
 
 	return	erase_op(&context);

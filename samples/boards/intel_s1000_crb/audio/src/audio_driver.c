@@ -63,7 +63,7 @@ static bool audio_io_started;
 
 K_THREAD_DEFINE(audio_drv_thread_id, AUDIO_DRIVER_THREAD_STACKSIZE,
 		audio_drv_thread, NULL, NULL, NULL,
-		AUDIO_DRIVER_THREAD_PRIORITY, 0, K_NO_WAIT);
+		AUDIO_DRIVER_THREAD_PRIORITY, 0, 0);
 
 static void audio_driver_process_audio_input(void)
 {
@@ -304,9 +304,9 @@ static void audio_driver_config_periph_streams(void)
 		return;
 	}
 
-	codec_dev = device_get_binding(DT_INST_0_TI_TLV320DAC_LABEL);
+	codec_dev = device_get_binding(DT_LABEL(DT_INST(0, ti_tlv320dac)));
 	if (!codec_dev) {
-		LOG_ERR("unable to find device %s", DT_INST_0_TI_TLV320DAC_LABEL);
+		LOG_ERR("unable to find device %s", DT_LABEL(DT_INST(0, ti_tlv320dac)));
 		return;
 	}
 

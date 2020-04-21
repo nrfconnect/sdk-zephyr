@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT ams_ccs811
+
 #include <drivers/sensor.h>
 #include "ccs811.h"
 
@@ -11,7 +13,7 @@
 #include <logging/log.h>
 LOG_MODULE_DECLARE(CCS811);
 
-#define IRQ_PIN DT_INST_0_AMS_CCS811_IRQ_GPIOS_PIN
+#define IRQ_PIN DT_INST_GPIO_PIN(0, irq_gpios)
 
 int ccs811_attr_set(struct device *dev,
 		    enum sensor_channel chan,
@@ -173,7 +175,7 @@ int ccs811_init_interrupt(struct device *dev)
 	drv_data->dev = dev;
 
 	gpio_pin_configure(drv_data->irq_gpio, IRQ_PIN,
-			   GPIO_INPUT | DT_INST_0_AMS_CCS811_IRQ_GPIOS_FLAGS);
+			   GPIO_INPUT | DT_INST_GPIO_FLAGS(0, irq_gpios));
 
 	gpio_init_callback(&drv_data->gpio_cb, gpio_callback, BIT(IRQ_PIN));
 
@@ -189,7 +191,7 @@ int ccs811_init_interrupt(struct device *dev)
 			CONFIG_CCS811_THREAD_STACK_SIZE,
 			(k_thread_entry_t)irq_thread, dev,
 			0, NULL, K_PRIO_COOP(CONFIG_CCS811_THREAD_PRIORITY),
-			0, 0);
+			0, K_NO_WAIT);
 #elif defined(CONFIG_CCS811_TRIGGER_GLOBAL_THREAD)
 	drv_data->work.handler = work_cb;
 #else

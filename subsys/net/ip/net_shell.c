@@ -91,10 +91,6 @@ struct net_shell_user_data {
 	void *user_data;
 };
 
-/* net_stack dedicated section limiters */
-extern struct net_stack_info __net_stack_start[];
-extern struct net_stack_info __net_stack_end[];
-
 static inline const char *addrtype2str(enum net_addr_type addr_type)
 {
 	switch (addr_type) {
@@ -309,6 +305,12 @@ static void iface_cb(struct net_if *iface, void *user_data)
 		PR_INFO("Interface is down.\n");
 		return;
 	}
+
+#ifdef CONFIG_NET_POWER_MANAGEMENT
+	if (net_if_is_suspended(iface)) {
+		PR_INFO("Interface is suspended, thus not able to tx/rx.\n");
+	}
+#endif
 
 	if (net_if_get_link_addr(iface) &&
 	    net_if_get_link_addr(iface)->addr) {
@@ -846,6 +848,25 @@ static void print_tc_rx_stats(const struct shell *shell, struct net_if *iface)
 #endif /* NET_TC_RX_COUNT > 1 */
 }
 
+static void print_net_pm_stats(const struct shell *shell, struct net_if *iface)
+{
+#if defined(CONFIG_NET_STATISTICS_POWER_MANAGEMENT)
+	PR("PM suspend stats:\n");
+	PR("\tLast time     : %u ms\n",
+	   GET_STAT(iface, pm.last_suspend_time));
+	PR("\tAverage time  : %u ms\n",
+	   (u32_t)(GET_STAT(iface, pm.overall_suspend_time) /
+		   GET_STAT(iface, pm.suspend_count)));
+	PR("\tTotal time    : %llu ms\n",
+	   GET_STAT(iface, pm.overall_suspend_time));
+	PR("\tHow many times: %u\n",
+	   GET_STAT(iface, pm.suspend_count));
+#else
+	ARG_UNUSED(shell);
+	ARG_UNUSED(iface);
+#endif
+}
+
 static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 {
 	struct net_shell_user_data *data = user_data;
@@ -981,6 +1002,8 @@ static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 		}
 	}
 #endif /* CONFIG_NET_STATISTICS_PPP && CONFIG_NET_STATISTICS_USER_API */
+
+	print_net_pm_stats(shell, iface);
 }
 #endif /* CONFIG_NET_STATISTICS */
 
@@ -1622,7 +1645,7 @@ static int cmd_net_dns_query(const struct shell *shell, size_t argc,
 {
 
 #if defined(CONFIG_DNS_RESOLVER)
-#define DNS_TIMEOUT K_MSEC(2000) /* ms */
+#define DNS_TIMEOUT (MSEC_PER_SEC * 2) /* ms */
 	enum dns_query_type qtype = DNS_QUERY_TYPE_A;
 	char *host, *type = NULL;
 	int ret, arg = 1;
@@ -2947,7 +2970,7 @@ static int ping_ipv6(const struct shell *shell,
 			break;
 		}
 
-		k_sleep(interval);
+		k_msleep(interval);
 	}
 
 	remove_ipv6_ping_handler();
@@ -3052,7 +3075,7 @@ static int ping_ipv4(const struct shell *shell,
 			break;
 		}
 
-		k_sleep(interval);
+		k_msleep(interval);
 	}
 
 	remove_ipv4_ping_handler();
@@ -3155,7 +3178,7 @@ static int cmd_net_ping(const struct shell *shell, size_t argc, char *argv[])
 	if (IS_ENABLED(CONFIG_NET_IPV4)) {
 		ret = ping_ipv4(shell, host, count, interval);
 		if (ret) {
-			if (ret == -EIO) {
+			if (ret == -EIO || ret == -ENETUNREACH) {
 				PR_WARNING("Cannot send IPv4 ping\n");
 			} else if (ret == -EINVAL) {
 				PR_WARNING("Invalid IP address\n");
@@ -3190,7 +3213,7 @@ static int cmd_net_ppp_ping(const struct shell *shell, size_t argc,
 			return -ENOEXEC;
 		}
 
-		ret = net_ppp_ping(idx, K_SECONDS(1));
+		ret = net_ppp_ping(idx, MSEC_PER_SEC * 1);
 		if (ret < 0) {
 			if (ret == -EAGAIN) {
 				PR_INFO("PPP Echo-Req timeout.\n");
@@ -3307,82 +3330,14 @@ static int cmd_net_route(const struct shell *shell, size_t argc, char *argv[])
 	return 0;
 }
 
-#if defined(CONFIG_INIT_STACKS)
-extern K_THREAD_STACK_DEFINE(_interrupt_stack, CONFIG_ISR_STACK_SIZE);
-extern K_THREAD_STACK_DEFINE(sys_work_q_stack,
-			     CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE);
-#endif
-
 static int cmd_net_stacks(const struct shell *shell, size_t argc,
 			  char *argv[])
 {
-#if defined(CONFIG_INIT_STACKS)
-	unsigned int pcnt, unused;
-#endif
-	struct net_stack_info *info;
-
-	ARG_UNUSED(argc);
-	ARG_UNUSED(argv);
-
-	for (info = __net_stack_start; info != __net_stack_end; info++) {
-		net_analyze_stack_get_values(Z_THREAD_STACK_BUFFER(info->stack),
-					     info->size, &pcnt, &unused);
-
-#if defined(CONFIG_INIT_STACKS)
-		/* If the index is <0, then this stack is not part of stack
-		 * array so do not print the index value in this case.
-		 */
-		if (info->idx >= 0) {
-			PR("%s-%d [%s-%d] stack size %zu/%zu bytes "
-			   "unused %u usage %zu/%zu (%u %%)\n",
-			   info->pretty_name, info->prio, info->name,
-			   info->idx, info->orig_size,
-			   info->size, unused,
-			   info->size - unused, info->size, pcnt);
-		} else {
-			PR("%s [%s] stack size %zu/%zu bytes unused %u "
-			   "usage %zu/%zu (%u %%)\n",
-			   info->pretty_name, info->name, info->orig_size,
-			   info->size, unused,
-			   info->size - unused, info->size, pcnt);
-		}
+#if !defined(CONFIG_KERNEL_SHELL)
+	PR("Enable CONFIG_KERNEL_SHELL and type \"kernel stacks\" to see stack information.\n");
 #else
-		PR("%s [%s] stack size %zu usage not available\n",
-		   info->pretty_name, info->name, info->orig_size);
+	PR("Type \"kernel stacks\" to see stack information.\n");
 #endif
-	}
-
-#if defined(CONFIG_INIT_STACKS)
-	net_analyze_stack_get_values(Z_THREAD_STACK_BUFFER(z_main_stack),
-				     K_THREAD_STACK_SIZEOF(z_main_stack),
-				     &pcnt, &unused);
-	PR("%s [%s] stack size %d/%d bytes unused %u usage %d/%d (%u %%)\n",
-	   "main", "z_main_stack", CONFIG_MAIN_STACK_SIZE,
-	   CONFIG_MAIN_STACK_SIZE, unused,
-	   CONFIG_MAIN_STACK_SIZE - unused, CONFIG_MAIN_STACK_SIZE, pcnt);
-
-	net_analyze_stack_get_values(Z_THREAD_STACK_BUFFER(_interrupt_stack),
-				     K_THREAD_STACK_SIZEOF(_interrupt_stack),
-				     &pcnt, &unused);
-	PR("%s [%s] stack size %d/%d bytes unused %u usage %d/%d (%u %%)\n",
-	   "ISR", "_interrupt_stack", CONFIG_ISR_STACK_SIZE,
-	   CONFIG_ISR_STACK_SIZE, unused,
-	   CONFIG_ISR_STACK_SIZE - unused, CONFIG_ISR_STACK_SIZE, pcnt);
-
-	net_analyze_stack_get_values(Z_THREAD_STACK_BUFFER(sys_work_q_stack),
-				     K_THREAD_STACK_SIZEOF(sys_work_q_stack),
-				     &pcnt, &unused);
-	PR("%s [%s] stack size %d/%d bytes unused %u usage %d/%d (%u %%)\n",
-	   "WORKQ", "system workqueue",
-	   CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE,
-	   CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE, unused,
-	   CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE - unused,
-	   CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE, pcnt);
-#else
-	PR_INFO("Set %s to enable %s support.\n", "CONFIG_INIT_STACKS",
-		"stack information");
-#endif
-
 	return 0;
 }
 
@@ -3998,6 +3953,91 @@ usage:
 	return 0;
 }
 
+static int cmd_net_suspend(const struct shell *shell, size_t argc,
+			   char *argv[])
+{
+#if defined(CONFIG_NET_POWER_MANAGEMENT)
+	if (argv[1]) {
+		struct net_if *iface = NULL;
+		struct device *dev;
+		int idx;
+		int ret;
+
+		idx = get_iface_idx(shell, argv[1]);
+		if (idx < 0) {
+			return -ENOEXEC;
+		}
+
+		iface = net_if_get_by_index(idx);
+		if (!iface) {
+			PR_WARNING("No such interface in index %d\n", idx);
+			return -ENOEXEC;
+		}
+
+		dev = net_if_get_device(iface);
+
+		ret = device_set_power_state(dev, DEVICE_PM_SUSPEND_STATE,
+					     NULL, NULL);
+		if (ret != 0) {
+			PR_INFO("Iface could not be suspended: ");
+
+			if (ret == -EBUSY) {
+				PR_INFO("device is busy\n");
+			} else if (ret == -EALREADY) {
+				PR_INFO("dehive is already suspended\n");
+			}
+		}
+	} else {
+		PR("Usage:\n");
+		PR("\tsuspend <iface index>\n");
+	}
+#else
+	PR_INFO("You need a network driver supporting Power Management.\n");
+#endif /* CONFIG_NET_POWER_MANAGEMENT */
+
+	return 0;
+}
+
+static int cmd_net_resume(const struct shell *shell, size_t argc,
+			  char *argv[])
+{
+#if defined(CONFIG_NET_POWER_MANAGEMENT)
+	if (argv[1]) {
+		struct net_if *iface = NULL;
+		struct device *dev;
+		int idx;
+		int ret;
+
+		idx = get_iface_idx(shell, argv[1]);
+		if (idx < 0) {
+			return -ENOEXEC;
+		}
+
+		iface = net_if_get_by_index(idx);
+		if (!iface) {
+			PR_WARNING("No such interface in index %d\n", idx);
+			return -ENOEXEC;
+		}
+
+		dev = net_if_get_device(iface);
+
+		ret = device_set_power_state(dev, DEVICE_PM_ACTIVE_STATE,
+					     NULL, NULL);
+		if (ret != 0) {
+			PR_INFO("Iface could not be resumed\n");
+		}
+
+	} else {
+		PR("Usage:\n");
+		PR("\tresume <iface index>\n");
+	}
+#else
+	PR_INFO("You need a network driver supporting Power Management.\n");
+#endif /* CONFIG_NET_POWER_MANAGEMENT */
+
+	return 0;
+}
+
 #if defined(CONFIG_WEBSOCKET_CLIENT)
 static void websocket_context_cb(struct websocket_context *context,
 				 void *user_data)
@@ -4371,11 +4411,14 @@ SHELL_STATIC_SUBCMD_SET_CREATE(net_commands,
 		  cmd_net_nbr),
 	SHELL_CMD(ping, &net_cmd_ping, "Ping a network host.", cmd_net_ping),
 	SHELL_CMD(ppp, &net_cmd_ppp, "PPP information.", cmd_net_ppp_status),
+	SHELL_CMD(resume, NULL, "Resume a network interface", cmd_net_resume),
 	SHELL_CMD(route, NULL, "Show network route.", cmd_net_route),
 	SHELL_CMD(stacks, NULL, "Show network stacks information.",
 		  cmd_net_stacks),
 	SHELL_CMD(stats, &net_cmd_stats, "Show network statistics.",
 		  cmd_net_stats),
+	SHELL_CMD(suspend, NULL, "Suspend a network interface",
+		  cmd_net_suspend),
 	SHELL_CMD(tcp, &net_cmd_tcp, "Connect/send/close TCP connection.",
 		  cmd_net_tcp),
 	SHELL_CMD(vlan, &net_cmd_vlan, "Show VLAN information.", cmd_net_vlan),

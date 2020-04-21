@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019 Peter Bigot Consulting, LLC
+ * Copyright (c) 2020 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,13 +10,14 @@
 
 #include <kernel.h>
 #include <zephyr/types.h>
+#include <sys/notify.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * @defgroup resource_mgmt_apis Resource Management APIs
+ * @defgroup resource_mgmt_onoff_apis On-Off Service APIs
  * @ingroup kernel_apis
  * @{
  */
@@ -23,58 +25,64 @@ extern "C" {
 /**
  * @brief Flag fields used to specify on-off service behavior.
  */
-enum onoff_service_flags {
+enum onoff_manager_flags {
 	/**
-	 * @brief Flag passed to onoff_service_init().
+	 * @brief Flag used in struct onoff_manager_transitions.
 	 *
 	 * When provided this indicates the start transition function
 	 * may cause the calling thread to wait.  This blocks attempts
 	 * to initiate a transition from a non-thread context.
 	 */
-	ONOFF_SERVICE_START_SLEEPS      = BIT(0),
+	ONOFF_START_SLEEPS      = BIT(0),
 
 	/**
-	 * @brief Flag passed to onoff_service_init().
+	 * @brief Flag used in struct onoff_manager_transitions.
 	 *
-	 * As with @ref ONOFF_SERVICE_START_SLEEPS but describing the
-	 * stop transition function.
+	 * As with @ref ONOFF_START_SLEEPS but describing the stop
+	 * transition function.
 	 */
-	ONOFF_SERVICE_STOP_SLEEPS       = BIT(1),
+	ONOFF_STOP_SLEEPS       = BIT(1),
 
 	/**
-	 * @brief Flag passed to onoff_service_init().
+	 * @brief Flag used in struct onoff_manager_transitions.
 	 *
-	 * As with @ref ONOFF_SERVICE_START_SLEEPS but describing the
-	 * reset transition function.
+	 * As with @ref ONOFF_START_SLEEPS but describing the reset
+	 * transition function.
 	 */
-	ONOFF_SERVICE_RESET_SLEEPS      = BIT(2),
+	ONOFF_RESET_SLEEPS      = BIT(2),
 
 	/* Internal use. */
-	ONOFF_SERVICE_HAS_ERROR         = BIT(3),
+	ONOFF_HAS_ERROR         = BIT(3),
 
 	/* This and higher bits reserved for internal use. */
-	ONOFF_SERVICE_INTERNAL_BASE     = BIT(4),
+	ONOFF_INTERNAL_BASE     = BIT(4),
 };
 
+#define ONOFF_SERVICE_START_SLEEPS __DEPRECATED_MACRO ONOFF_START_SLEEPS
+#define ONOFF_SERVICE_STOP_SLEEPS __DEPRECATED_MACRO ONOFF_STOP_SLEEPS
+#define ONOFF_SERVICE_RESET_SLEEPS __DEPRECATED_MACRO ONOFF_RESET_SLEEPS
+#define ONOFF_SERVICE_HAS_ERROR __DEPRECATED_MACRO ONOFF_HAS_ERROR
+#define ONOFF_SERVICE_INTERNAL_BASE __DEPRECATED_MACRO ONOFF_INTERNAL_BASE
+
 /* Forward declaration */
-struct onoff_service;
+struct onoff_manager;
 
 /**
- * @brief Signature used to notify an on-off service that a transition
+ * @brief Signature used to notify an on-off manager that a transition
  * has completed.
  *
  * Functions of this type are passed to service-specific transition
  * functions to be used to report the completion of the operation.
  * The functions may be invoked from any context.
  *
- * @param srv the service for which transition was requested.
+ * @param mgr the manager for which transition was requested.
  *
  * @param res the result of the transition.  This shall be
  * non-negative on success, or a negative error code.  If an error is
  * indicated the service shall enter an error state.
  */
-typedef void (*onoff_service_notify_fn)(struct onoff_service *srv,
-					int res);
+typedef void (*onoff_notify_fn)(struct onoff_manager *mgr,
+				int res);
 
 /**
  * @brief Signature used by service implementations to effect a
@@ -88,10 +96,10 @@ typedef void (*onoff_service_notify_fn)(struct onoff_service *srv,
  *
  * The stop function will be called only from the on state.
  *
- * The reset function may be called only when
- * onoff_service_has_error() returns true.
+ * The reset function may be called only when onoff_has_error()
+ * returns true.
  *
- * @param srv the service for which transition was requested.
+ * @param mgr the manager for which transition was requested.
  *
  * @param notify the function to be invoked when the transition has
  * completed.  The callee shall capture this parameter to notify on
@@ -99,34 +107,40 @@ typedef void (*onoff_service_notify_fn)(struct onoff_service *srv,
  * asynchronous, notify shall be invoked before the transition
  * function returns.
  */
-typedef void (*onoff_service_transition_fn)(struct onoff_service *srv,
-					    onoff_service_notify_fn notify);
+typedef void (*onoff_transition_fn)(struct onoff_manager *mgr,
+				    onoff_notify_fn notify);
+
+/** @brief On-off service transition functions. */
+struct onoff_transitions {
+	/* Function to invoke to transition the service to on. */
+	onoff_transition_fn start;
+
+	/* Function to invoke to transition the service to off. */
+	onoff_transition_fn stop;
+
+	/* Function to force the service state to reset, where supported. */
+	onoff_transition_fn reset;
+
+	/* Flags identifying transition function capabilities. */
+	u8_t flags;
+};
 
 /**
- * @brief State associated with an on-off service.
+ * @brief State associated with an on-off manager.
  *
  * No fields in this structure are intended for use by service
  * providers or clients.  The state is to be initialized once, using
- * onoff_service_init(), when the service provider is initialized.
- * In case of error it may be reset through the
- * onoff_service_reset() API.
+ * onoff_manager_init(), when the service provider is initialized.  In
+ * case of error it may be reset through the onoff_reset() API.
  */
-struct onoff_service {
+struct onoff_manager {
 	/* List of clients waiting for completion of reset or
 	 * transition to on.
 	 */
 	sys_slist_t clients;
 
-	/* Function to invoke to transition the service to on. */
-	onoff_service_transition_fn start;
-
-	/* Function to invoke to transition the service to off. */
-	onoff_service_transition_fn stop;
-
-	/* Function to force the service state to reset, where
-	 * supported.
-	 */
-	onoff_service_transition_fn reset;
+	/* Transition functions. */
+	const struct onoff_transitions *transitions;
 
 	/* Mutex protection for flags, clients, releaser, and refs. */
 	struct k_spinlock lock;
@@ -141,13 +155,38 @@ struct onoff_service {
 	u16_t refs;
 };
 
-/** @internal */
-#define ONOFF_SERVICE_INITIALIZER(_start, _stop, _reset, _flags) { \
-		.start = _start,				   \
-		.stop = _stop,					   \
-		.reset = _reset,				   \
-		.flags = _flags,				   \
+/** @brief Initializer for a onoff_transitions object.
+ *
+ * @param _start a function used to transition from off to on state.
+ *
+ * @param _stop a function used to transition from on to off state.
+ *
+ * @param _reset a function used to clear errors and force the service to an off
+ * state. Can be null.
+ *
+ * @param _flags any or all of the flags from enum onoff_manager_flags.
+ */
+#define ONOFF_TRANSITIONS_INITIALIZER(_start, _stop, _reset, _flags) { \
+		.start = _start,				       \
+		.stop = _stop,					       \
+		.reset = _reset,				       \
+		.flags = _flags,				       \
 }
+
+#define ONOFF_SERVICE_TRANSITIONS_INITIALIZER(_start, _stop, _reset, _flags) \
+	__DEPRECATED_MACRO						     \
+	ONOFF_TRANSISTIONS_INITIALIZER(_start, _stop, _reset, _flags)
+
+
+/** @internal */
+#define ONOFF_MANAGER_INITIALIZER(_transitions) { \
+		.transitions = _transitions,	  \
+		.flags = (_transitions)->flags,	  \
+}
+
+#define ONOFF_SERVICE_INITIALIZER(_transitions)	\
+	__DEPRECATED_MACRO			\
+	ONOFF_MANAGER_INITIALIZER(_transitions)
 
 /**
  * @brief Initialize an on-off service to off state.
@@ -158,72 +197,16 @@ struct onoff_service {
  *
  * This function should never be invoked by clients of an on-off service.
  *
- * @param srv the service definition object to be initialized.
+ * @param mgr the manager definition object to be initialized.
  *
- * @param start the function used to (initiate a) transition from off
- * to on.  This must not be null.  Include @ref ONOFF_SERVICE_START_SLEEPS as
- * appropriate in flags.
- *
- * @param stop the function used to (initiate a) transition from on to
- * off.  This must not be null.  Include @ref ONOFF_SERVICE_STOP_SLEEPS
- * as appropriate in flags.
- *
- * @param reset the function used to clear errors and force the
- * service to an off state.  Pass null if the service cannot or need
- * not be reset.  (Services where a transition operation can complete
- * with an error notification should support the reset operation.)
- * Include @ref ONOFF_SERVICE_RESET_SLEEPS as appropriate in flags.
- *
- * @param flags any or all of the flags mentioned above,
- * e.g. @ref ONOFF_SERVICE_START_SLEEPS.  Use of other flags produces an
- * error.
+ * @param transitions A structure with transition functions. Structure must be
+ * persistent as it is used by the service.
  *
  * @retval 0 on success
  * @retval -EINVAL if start, stop, or flags are invalid
  */
-int onoff_service_init(struct onoff_service *srv,
-		       onoff_service_transition_fn start,
-		       onoff_service_transition_fn stop,
-		       onoff_service_transition_fn reset,
-		       u32_t flags);
-
-/** @internal
- *
- * Flag fields used to specify on-off client behavior.
- *
- * These flags control whether calls to onoff_service_request() and
- * onoff_service_release() are synchronous or asynchronous, and for
- * asynchronous operations how the operation result is communicated to
- * the client.
- */
-enum onoff_client_flags {
-	/* Known-invalid field, used in validation */
-	ONOFF_CLIENT_NOTIFY_INVALID     = 0,
-
-	/*
-	 * Indicates that no notification will be provided.
-	 *
-	 * Callers must check for completions using
-	 * onoff_client_fetch_result().
-	 *
-	 * See onoff_client_init_spinwait().
-	 */
-	ONOFF_CLIENT_NOTIFY_SPINWAIT    = 1,
-
-	/*
-	 * Select notification through @ref k_poll signal
-	 *
-	 * See onoff_client_init_signal().
-	 */
-	ONOFF_CLIENT_NOTIFY_SIGNAL      = 2,
-
-	/**
-	 * Select notification through a user-provided callback.
-	 *
-	 * See onoff_client_init_callback().
-	 */
-	ONOFF_CLIENT_NOTIFY_CALLBACK    = 3,
-};
+int onoff_manager_init(struct onoff_manager *mgr,
+		       const struct onoff_transitions *transitions);
 
 /* Forward declaration */
 struct onoff_client;
@@ -236,7 +219,7 @@ struct onoff_client;
  * pre-kernel, ISR, or cooperative or pre-emptible threads.
  * Compatible functions must be isr-callable and non-suspendable.
  *
- * @param srv the service for which the operation was initiated.
+ * @param mgr the manager for which the operation was initiated.
  *
  * @param cli the client structure passed to the function that
  * initiated the operation.
@@ -248,7 +231,7 @@ struct onoff_client;
  * service-specific, but the value shall be non-negative if the
  * operation succeeded, and negative if the operation failed.
  */
-typedef void (*onoff_client_callback)(struct onoff_service *srv,
+typedef void (*onoff_client_callback)(struct onoff_manager *mgr,
 				      struct onoff_client *cli,
 				      void *user_data,
 				      int res);
@@ -264,11 +247,7 @@ typedef void (*onoff_client_callback)(struct onoff_service *srv,
  * when a pointer to the object is passed to any on-off service
  * function.  While the service provider controls the object the
  * client must not change any object fields.  Control reverts to the
- * client:
- * * if the call to the service API returns an error;
- * * if the call to the service API succeeds for a no-wait operation;
- * * when operation completion is posted (signalled or callback
- *   invoked).
+ * client concurrent with release of the owned sys_notify structure.
  *
  * After control has reverted to the client the state object must be
  * reinitialized for the next operation.
@@ -281,32 +260,11 @@ struct onoff_client {
 	/* Links the client into the set of waiting service users. */
 	sys_snode_t node;
 
-	union async {
-		/* Pointer to signal used to notify client.
-		 *
-		 * The signal value corresponds to the res parameter
-		 * of onoff_client_callback.
-		 */
-		struct k_poll_signal *signal;
+	/* Notification configuration. */
+	struct sys_notify notify;
 
-		/* Handler and argument for callback notification. */
-		struct callback {
-			onoff_client_callback handler;
-			void *user_data;
-		} callback;
-	} async;
-
-	/*
-	 * The result of the operation.
-	 *
-	 * This is the value that was (or would be) passed to the
-	 * async infrastructure.  This field is the sole record of
-	 * success or failure for no-wait synchronous operations.
-	 */
-	int volatile result;
-
-	/* Flags recording client state. */
-	u32_t volatile flags;
+	/* User data for callback-based notification. */
+	void *user_data;
 };
 
 /**
@@ -325,15 +283,8 @@ static inline int onoff_client_fetch_result(const struct onoff_client *op,
 					    int *result)
 {
 	__ASSERT_NO_MSG(op != NULL);
-	__ASSERT_NO_MSG(result != NULL);
 
-	int rv = -EAGAIN;
-
-	if (op->flags == 0U) {
-		rv = 0;
-		*result = op->result;
-	}
-	return rv;
+	return sys_notify_fetch_result(&op->notify, result);
 }
 
 /**
@@ -353,9 +304,8 @@ static inline void onoff_client_init_spinwait(struct onoff_client *cli)
 {
 	__ASSERT_NO_MSG(cli != NULL);
 
-	*cli = (struct onoff_client){
-		.flags = ONOFF_CLIENT_NOTIFY_SPINWAIT,
-	};
+	*cli = (struct onoff_client){};
+	sys_notify_init_spinwait(&cli->notify);
 }
 
 /**
@@ -385,16 +335,9 @@ static inline void onoff_client_init_signal(struct onoff_client *cli,
 					    struct k_poll_signal *sigp)
 {
 	__ASSERT_NO_MSG(cli != NULL);
-	__ASSERT_NO_MSG(sigp != NULL);
 
-	*cli = (struct onoff_client){
-#ifdef CONFIG_POLL
-		.async = {
-			.signal = sigp,
-		},
-#endif /* CONFIG_POLL */
-		.flags = ONOFF_CLIENT_NOTIFY_SIGNAL,
-	};
+	*cli = (struct onoff_client){};
+	sys_notify_init_signal(&cli->notify, sigp);
 }
 
 /**
@@ -425,14 +368,9 @@ static inline void onoff_client_init_callback(struct onoff_client *cli,
 	__ASSERT_NO_MSG(handler != NULL);
 
 	*cli = (struct onoff_client){
-		.async = {
-			.callback = {
-				.handler = handler,
-				.user_data = user_data,
-			},
-		},
-		.flags = ONOFF_CLIENT_NOTIFY_CALLBACK,
+		.user_data = user_data,
 	};
+	sys_notify_init_callback(&cli->notify, handler);
 }
 
 /**
@@ -456,7 +394,7 @@ static inline void onoff_client_init_callback(struct onoff_client *cli,
  * transition to on can sleep, the transition cannot be started and
  * the request will fail with `-EWOULDBLOCK`.
  *
- * @param srv the service that will be used.
+ * @param mgr the manager that will be used.
  *
  * @param cli a non-null pointer to client state providing
  * instructions on synchronous expectations and how to notify the
@@ -472,7 +410,7 @@ static inline void onoff_client_init_callback(struct onoff_client *cli,
  * context and successful initiation could result in an attempt to
  * make the calling thread sleep.
  */
-int onoff_request(struct onoff_service *srv,
+int onoff_request(struct onoff_manager *mgr,
 		  struct onoff_client *cli);
 
 /**
@@ -488,7 +426,7 @@ int onoff_request(struct onoff_service *srv,
  * actual release fails.  Always check the operation completion
  * result.
  *
- * @param srv the service that will be used.
+ * @param mgr the manager that will be used.
  *
  * @param cli a non-null pointer to client state providing
  * instructions on how to notify the client when release completes.
@@ -504,7 +442,7 @@ int onoff_request(struct onoff_service *srv,
  *         to off
  * @retval -EBUSY if the service is transitioning to on
  */
-int onoff_release(struct onoff_service *srv,
+int onoff_release(struct onoff_manager *mgr,
 		  struct onoff_client *cli);
 
 /**
@@ -512,13 +450,17 @@ int onoff_release(struct onoff_service *srv,
  *
  * This function can be used to determine whether the service has
  * recorded an error.  Errors may be cleared by invoking
- * onoff_service_reset().
+ * onoff_reset().
+ *
+ * This is an unlocked convenience function suitable for use only when
+ * it is known that no other process might invoke an operation that
+ * transitions the service between an error and non-error state.
  *
  * @return true if and only if the service has an uncleared error.
  */
-static inline bool onoff_service_has_error(const struct onoff_service *srv)
+static inline bool onoff_has_error(const struct onoff_manager *mgr)
 {
-	return (srv->flags & ONOFF_SERVICE_HAS_ERROR) != 0;
+	return (mgr->flags & ONOFF_HAS_ERROR) != 0;
 }
 
 /**
@@ -526,7 +468,7 @@ static inline bool onoff_service_has_error(const struct onoff_service *srv)
  * state.
  *
  * A service can only be reset when it is in an error state as
- * indicated by onoff_service_has_error().
+ * indicated by onoff_has_error().
  *
  * The return value indicates the success or failure of an attempt to
  * initiate an operation to reset the resource.  If initiation of the
@@ -538,15 +480,12 @@ static inline bool onoff_service_has_error(const struct onoff_service *srv)
  * Note that the call to this function may succeed in a case where the
  * actual reset fails.  Always check the operation completion result.
  *
- * This function is blocking if the reset transition is blocking,
- * unless client notification specifies no-wait.
- *
  * @note Due to the conditions on state transition all incomplete
  * asynchronous operations will have been informed of the error when
  * it occurred.  There need be no concern about dangling requests left
  * after a reset completes.
  *
- * @param srv the service to be reset.
+ * @param mgr the manager to be reset.
  *
  * @param cli pointer to client state, including instructions on how
  * to notify the client when reset completes.  Behavior is undefined
@@ -554,12 +493,12 @@ static inline bool onoff_service_has_error(const struct onoff_service *srv)
  * operation.
  *
  * @retval 0 on success
- * @retval -ENOTSUP if reset is not supported
- * @retval -EINVAL if the parameters are invalid, or if the service
- * @retval -EALREADY if the service does not have a recorded error
+ * @retval -ENOTSUP if reset is not supported by the service.
+ * @retval -EINVAL if the parameters are invalid.
+ * @retval -EALREADY if the service does not have a recorded error.
  */
-int onoff_service_reset(struct onoff_service *srv,
-			struct onoff_client *cli);
+int onoff_reset(struct onoff_manager *mgr,
+		struct onoff_client *cli);
 
 /**
  * @brief Attempt to cancel an in-progress client operation.
@@ -584,7 +523,7 @@ int onoff_service_reset(struct onoff_service *srv,
  * If the cancellation fails the service retains control of the client
  * object, and the client must wait for operation completion.
  *
- * @param srv the service for which an operation is to be cancelled.
+ * @param mgr the manager for which an operation is to be cancelled.
  *
  * @param cli a pointer to the same client state that was provided
  * when the operation to be cancelled was issued.  If the cancellation
@@ -603,7 +542,7 @@ int onoff_service_reset(struct onoff_service *srv,
  * likely indicates that the operation and client notification had
  * already completed.
  */
-int onoff_cancel(struct onoff_service *srv,
+int onoff_cancel(struct onoff_manager *mgr,
 		 struct onoff_client *cli);
 
 /** @} */

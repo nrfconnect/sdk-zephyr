@@ -12,7 +12,7 @@ if(${WEST} STREQUAL WEST-NOTFOUND)
 else()
   # If west is found, make sure its version matches the minimum
   # required one.
-  set(MIN_WEST_VERSION 0.6.0)
+  set(MIN_WEST_VERSION 0.7.1)
   execute_process(
     COMMAND
     ${PYTHON_EXECUTABLE}
@@ -38,13 +38,12 @@ else()
   # even after output is one line.
   message(STATUS "Found west: ${WEST} (found suitable version \"${west_version}\", minimum required is \"${MIN_WEST_VERSION}\")")
 
-  if (${west_version} VERSION_GREATER_EQUAL "0.7.1")
     execute_process(
       COMMAND ${WEST}  topdir
       OUTPUT_VARIABLE  WEST_TOPDIR
       OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${ZEPHYR_BASE}
       )
-  endif()
 endif()
 
 # dtc is an optional dependency. Search for it on PATH and in

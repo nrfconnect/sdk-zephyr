@@ -7,9 +7,10 @@
 
 /**
  * @file
- * @brief Cortex-M public interrupt handling
+ * @brief ARM AArch32 public interrupt handling
  *
- * ARM-specific kernel interrupt handling interface. Included by arm/arch.h.
+ * ARM AArch32-specific kernel interrupt handling interface. Included by
+ * arm/arch.h.
  */
 
 #ifndef ZEPHYR_INCLUDE_ARCH_ARM_AARCH32_IRQ_H_
@@ -28,20 +29,52 @@ GTEXT(z_arm_int_exit);
 GTEXT(arch_irq_enable)
 GTEXT(arch_irq_disable)
 GTEXT(arch_irq_is_enabled)
+#if defined(CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER)
+GTEXT(z_soc_irq_get_active)
+GTEXT(z_soc_irq_eoi)
+#endif /* CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER */
 #else
+
+#if !defined(CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER)
+
 extern void arch_irq_enable(unsigned int irq);
 extern void arch_irq_disable(unsigned int irq);
 extern int arch_irq_is_enabled(unsigned int irq);
 
+/* internal routine documented in C file, needed by IRQ_CONNECT() macro */
+extern void z_arm_irq_priority_set(unsigned int irq, unsigned int prio,
+				   u32_t flags);
+
+#else
+
+/*
+ * When a custom interrupt controller is specified, map the architecture
+ * interrupt control functions to the SoC layer interrupt control functions.
+ */
+
+void z_soc_irq_init(void);
+void z_soc_irq_enable(unsigned int irq);
+void z_soc_irq_disable(unsigned int irq);
+int z_soc_irq_is_enabled(unsigned int irq);
+
+void z_soc_irq_priority_set(
+	unsigned int irq, unsigned int prio, unsigned int flags);
+
+unsigned int z_soc_irq_get_active(void);
+void z_soc_irq_eoi(unsigned int irq);
+
+#define arch_irq_enable(irq)		z_soc_irq_enable(irq)
+#define arch_irq_disable(irq)		z_soc_irq_disable(irq)
+#define arch_irq_is_enabled(irq)	z_soc_irq_is_enabled(irq)
+
+#define z_arm_irq_priority_set(irq, prio, flags)	\
+	z_soc_irq_priority_set(irq, prio, flags)
+
+#endif /* !CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER */
+
 extern void z_arm_int_exit(void);
 
-#if defined(CONFIG_ARMV7_R)
-static ALWAYS_INLINE void z_arm_int_lib_init(void)
-{
-}
-#else
-extern void z_arm_int_lib_init(void);
-#endif
+extern void z_arm_interrupt_init(void);
 
 /* macros convert value of it's argument to a string */
 #define DO_TOSTR(s) #s
@@ -50,11 +83,6 @@ extern void z_arm_int_lib_init(void);
 /* concatenate the values of the arguments into one */
 #define DO_CONCAT(x, y) x ## y
 #define CONCAT(x, y) DO_CONCAT(x, y)
-
-/* internal routine documented in C file, needed by IRQ_CONNECT() macro */
-extern void z_arm_irq_priority_set(unsigned int irq, unsigned int prio,
-				   u32_t flags);
-
 
 /* Flags for use with IRQ_CONNECT() */
 #ifdef CONFIG_ZERO_LATENCY_IRQS
@@ -78,18 +106,16 @@ extern void z_arm_irq_priority_set(unsigned int irq, unsigned int prio,
  * runtime.
  */
 #define ARCH_IRQ_CONNECT(irq_p, priority_p, isr_p, isr_param_p, flags_p) \
-({ \
+{ \
 	Z_ISR_DECLARE(irq_p, 0, isr_p, isr_param_p); \
 	z_arm_irq_priority_set(irq_p, priority_p, flags_p); \
-	irq_p; \
-})
+}
 
 #define ARCH_IRQ_DIRECT_CONNECT(irq_p, priority_p, isr_p, flags_p) \
-({ \
+{ \
 	Z_ISR_DECLARE(irq_p, ISR_FLAG_DIRECT, isr_p, NULL); \
 	z_arm_irq_priority_set(irq_p, priority_p, flags_p); \
-	irq_p; \
-})
+}
 
 #ifdef CONFIG_SYS_POWER_MANAGEMENT
 extern void _arch_isr_direct_pm(void);
