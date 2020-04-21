@@ -1586,14 +1586,9 @@ endfunction()
 # manager configurations.
 function(add_partition_manager_config config_file)
   get_filename_component(pm_path ${config_file} REALPATH)
-
   set_property(
     GLOBAL APPEND PROPERTY
-    PM_SUBSYS_PATH ${pm_path}
-    )
-
-  set_property(
-    GLOBAL APPEND PROPERTY
-    PM_SUBSYS_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR}
+    PM_SUBSYS
+    ${pm_path}
     )
 endfunction()
