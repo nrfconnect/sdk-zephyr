@@ -7,6 +7,12 @@ set(QEMU_KERNEL_OPTION "-device;loader,file=${CMAKE_BINARY_DIR}/tfm_qemu.hex")
 
 find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 
+if (NOT TFM_TARGET_PLATFORM)
+  set(TFM_TARGET_PLATFORM ${BOARD})
+endif()
+
+print(TFM_TARGET_PLATFORM)
+
 # Add "tfm" as an external project via the TF-M module's cmake file
 trusted_firmware_build(BINARY_DIR ${CMAKE_BINARY_DIR}/tfm
                        BOARD ${TFM_TARGET_PLATFORM}
