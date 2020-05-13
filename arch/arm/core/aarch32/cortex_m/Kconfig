@@ -268,7 +268,6 @@ config DYNAMIC_DIRECT_INTERRUPTS
 config SW_VECTOR_RELAY
 	bool "Enable Software Vector Relay"
 	default y if BOOTLOADER_MCUBOOT
-	depends on ARMV6_M_ARMV8_M_BASELINE && !(CPU_CORTEX_M0_HAS_VECTOR_TABLE_REMAP || CPU_CORTEX_M_HAS_VTOR)
 	help
 	  Add Vector Table relay handler and relay vector table, to
 	  relay interrupts based on a vector table pointer. This is only

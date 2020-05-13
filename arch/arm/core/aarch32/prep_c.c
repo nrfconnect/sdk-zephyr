@@ -37,7 +37,7 @@
 
 #include <string.h>
 
-#ifdef CONFIG_CPU_CORTEX_M_HAS_VTOR
+#if defined(CONFIG_CPU_CORTEX_M_HAS_VTOR) && !defined(CONFIG_SW_VECTOR_RELAY)
 
 #ifdef CONFIG_XIP
 #define VECTOR_ADDRESS ((uintptr_t)_vector_start)

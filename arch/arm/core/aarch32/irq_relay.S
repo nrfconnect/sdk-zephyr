@@ -104,5 +104,87 @@ SECTION_FUNC(vector_relay_table, __vector_relay_table)
 	.word __vector_relay_handler
 	.word __vector_relay_handler
 	.word __vector_relay_handler
+#ifdef CONFIG_ARMV7_M_ARMV8_M_MAINLINE
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+	.word __vector_relay_handler
+#endif
 
 #endif
