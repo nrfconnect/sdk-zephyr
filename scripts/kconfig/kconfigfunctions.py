@@ -89,9 +89,11 @@ def dt_nodelabel_enabled(kconf, _, label):
     if doc_mode or edt is None:
         return "n"
 
-    node = edt.label2node.get(label)
+    for node in edt.nodes:
+        if label in node.labels and node.enabled:
+            return "y"
 
-    return "y" if node and node.enabled else "n"
+    return "n"
 
 
 def dt_alias_enabled(kconf, _, alias):
@@ -329,7 +331,11 @@ def dt_compat_enabled(kconf, _, compat):
     if doc_mode or edt is None:
         return "n"
 
-    return "y" if compat in edt.compat2enabled else "n"
+    for node in edt.nodes:
+        if compat in node.compats and node.enabled:
+            return "y"
+
+    return "n"
 
 
 def dt_compat_on_bus(kconf, _, compat, bus):
