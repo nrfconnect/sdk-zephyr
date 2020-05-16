@@ -1584,22 +1584,3 @@ function(generate_unique_target_name_from_filename filename target_name)
 
   set(${target_name} gen_${x}_${unique_chars} PARENT_SCOPE)
 endfunction()
-
-# Usage:
-#   add_partition_manager_config(pm.yml)
-#
-# Will add all configurations defined in pm.yml to the global list of partition
-# manager configurations.
-function(add_partition_manager_config config_file)
-  get_filename_component(pm_path ${config_file} REALPATH)
-
-  set_property(
-    GLOBAL APPEND PROPERTY
-    PM_SUBSYS_PATH ${pm_path}
-    )
-
-  set_property(
-    GLOBAL APPEND PROPERTY
-    PM_SUBSYS_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR}
-    )
-endfunction()
