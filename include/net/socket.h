@@ -119,6 +119,11 @@ struct zsock_pollfd {
  *    - 1 - server
  */
 #define TLS_DTLS_ROLE 6
+/** Socket option to control TLS session caching. Accepted values:
+ *  - 0 - Disabled.
+ *  - 1 - Enabled.
+ */
+#define TLS_SESSION_CACHE 7
 
 /** @} */
 
@@ -130,6 +135,10 @@ struct zsock_pollfd {
 /* Valid values for TLS_DTLS_ROLE option */
 #define TLS_DTLS_ROLE_CLIENT 0 /**< Client role in a DTLS session. */
 #define TLS_DTLS_ROLE_SERVER 1 /**< Server role in a DTLS session. */
+
+/* Valid values for TLS_SESSION_CACHE option */
+#define TLS_SESSION_CACHE_DISABLED 0 /**< Disable TLS session caching. */
+#define TLS_SESSION_CACHE_ENABLED 1 /**< Enable TLS session caching. */
 
 struct zsock_addrinfo {
 	struct zsock_addrinfo *ai_next;
