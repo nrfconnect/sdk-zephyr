@@ -491,8 +491,8 @@ def addr_deref(elf, addr):
 
 
 def device_get_api_addr(elf, addr):
-    # Read device->driver API
-    offset = 4 if elf.elfclass == 32 else 8
+    # See include/device.h for a description of struct device
+    offset = 8 if elf.elfclass == 32 else 16
     return addr_deref(elf, addr + offset)
 
 
@@ -543,7 +543,7 @@ def find_kobjects(elf, syms):
         if not name:
             continue
 
-        if name.startswith("__device_sys_init"):
+        if name.startswith("__init_sys_init"):
             # Boot-time initialization function; not an actual device
             continue
 
@@ -710,7 +710,7 @@ def write_gperf_table(fp, syms, objs, little_endian, static_begin, static_end):
         fp.write("static struct k_mutex kernel_mutexes[%d] = {\n"
                  % sys_mutex_counter)
         for i in range(sys_mutex_counter):
-            fp.write("_K_MUTEX_INITIALIZER(kernel_mutexes[%d])" % i)
+            fp.write("Z_MUTEX_INITIALIZER(kernel_mutexes[%d])" % i)
             if i != sys_mutex_counter - 1:
                 fp.write(", ")
         fp.write("};\n")

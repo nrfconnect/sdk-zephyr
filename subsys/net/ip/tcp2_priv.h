@@ -33,10 +33,27 @@
 #endif
 
 #if IS_ENABLED(CONFIG_NET_TEST_PROTOCOL)
-#define tp_pkt_alloc(_pkt) tp_pkt_alloc(_pkt, tp_basename(__FILE__), __LINE__)
+#define tcp_pkt_alloc(_conn, _len)					\
+({									\
+	sa_family_t _family = net_context_get_family((_conn)->context);	\
+	struct net_pkt *_pkt = net_pkt_alloc_with_buffer((_conn)->iface,\
+							 (_len),	\
+							 _family,	\
+							 IPPROTO_TCP,	\
+							 K_NO_WAIT);	\
+									\
+	tp_pkt_alloc(_pkt, tp_basename(__FILE__), __LINE__);		\
+									\
+	_pkt;								\
+})
 #define tcp_pkt_clone(_pkt) tp_pkt_clone(_pkt, tp_basename(__FILE__), __LINE__)
 #define tcp_pkt_unref(_pkt) tp_pkt_unref(_pkt, tp_basename(__FILE__), __LINE__)
 #else
+#define tcp_pkt_alloc(_conn, _len)					\
+	net_pkt_alloc_with_buffer((_conn)->iface, (_len),		\
+				  net_context_get_family((_conn)->context), \
+				  IPPROTO_TCP, K_NO_WAIT)
+
 #define tcp_pkt_clone(_pkt) net_pkt_clone(_pkt, K_NO_WAIT)
 #define tcp_pkt_unref(_pkt) net_pkt_unref(_pkt)
 #endif
@@ -120,6 +137,13 @@ union tcp_endpoint {
 	struct sockaddr_in6 sin6;
 };
 
+struct tcp_options {
+	u16_t mss;
+	u16_t window;
+	bool mss_found : 1;
+	bool wnd_found : 1;
+};
+
 struct tcp { /* TCP connection */
 	sys_snode_t next;
 	struct net_context *context;
@@ -128,9 +152,10 @@ struct tcp { /* TCP connection */
 	enum tcp_state state;
 	u32_t seq;
 	u32_t ack;
-	union tcp_endpoint *src;
-	union tcp_endpoint *dst;
+	union tcp_endpoint src;
+	union tcp_endpoint dst;
 	u16_t win;
+	struct tcp_options recv_options;
 	struct k_delayed_work send_timer;
 	sys_slist_t send_queue;
 	bool in_retransmission;

@@ -57,7 +57,7 @@ void bt_mesh_model_foreach(void (*func)(struct bt_mesh_model *mod,
 
 s32_t bt_mesh_model_pub_period_get(struct bt_mesh_model *mod)
 {
-	int period;
+	s32_t period;
 
 	if (!mod->pub) {
 		return 0;
@@ -66,19 +66,19 @@ s32_t bt_mesh_model_pub_period_get(struct bt_mesh_model *mod)
 	switch (mod->pub->period >> 6) {
 	case 0x00:
 		/* 1 step is 100 ms */
-		period = K_MSEC((mod->pub->period & BIT_MASK(6)) * 100U);
+		period = (mod->pub->period & BIT_MASK(6)) * 100U;
 		break;
 	case 0x01:
 		/* 1 step is 1 second */
-		period = K_SECONDS(mod->pub->period & BIT_MASK(6));
+		period = (mod->pub->period & BIT_MASK(6)) * MSEC_PER_SEC;
 		break;
 	case 0x02:
 		/* 1 step is 10 seconds */
-		period = K_SECONDS((mod->pub->period & BIT_MASK(6)) * 10U);
+		period = (mod->pub->period & BIT_MASK(6)) * 10U * MSEC_PER_SEC;
 		break;
 	case 0x03:
 		/* 1 step is 10 minutes */
-		period = K_MINUTES((mod->pub->period & BIT_MASK(6)) * 10U);
+		period = (mod->pub->period & BIT_MASK(6)) * 600U * MSEC_PER_SEC;
 		break;
 	default:
 		CODE_UNREACHABLE;
@@ -108,7 +108,7 @@ static s32_t next_period(struct bt_mesh_model *mod)
 	if (elapsed >= period) {
 		BT_WARN("Publication sending took longer than the period");
 		/* Return smallest positive number since 0 means disabled */
-		return K_MSEC(1);
+		return 1;
 	}
 
 	return period - elapsed;
@@ -129,7 +129,7 @@ static void publish_sent(int err, void *user_data)
 
 	if (delay) {
 		BT_DBG("Publishing next time in %dms", delay);
-		k_delayed_work_submit(&mod->pub->timer, delay);
+		k_delayed_work_submit(&mod->pub->timer, K_MSEC(delay));
 	}
 }
 
@@ -217,7 +217,8 @@ static void mod_publish(struct k_work *work)
 
 			/* Continue with normal publication */
 			if (period_ms) {
-				k_delayed_work_submit(&pub->timer, period_ms);
+				k_delayed_work_submit(&pub->timer,
+						      K_MSEC(period_ms));
 			}
 		}
 
@@ -688,6 +689,18 @@ int bt_mesh_model_send(struct bt_mesh_model *model,
 		       struct net_buf_simple *msg,
 		       const struct bt_mesh_send_cb *cb, void *cb_data)
 {
+	struct bt_mesh_app_key *app_key;
+
+	if (!BT_MESH_IS_DEV_KEY(ctx->app_idx)) {
+		app_key = bt_mesh_app_key_find(ctx->app_idx);
+		if (!app_key) {
+			BT_ERR("Unknown app_idx 0x%04x", ctx->app_idx);
+			return -EINVAL;
+		}
+
+		ctx->net_idx = app_key->net_idx;
+	}
+
 	struct bt_mesh_net_tx tx = {
 		.sub = bt_mesh_subnet_get(ctx->net_idx),
 		.ctx = ctx,

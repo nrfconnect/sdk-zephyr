@@ -71,9 +71,9 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 
 	stackEnd = pStackMem + stackSize;
 
-	z_new_thread_init(thread, pStackMem, stackSize, priority, options);
+	z_new_thread_init(thread, pStackMem, stackSize);
 
-	pInitCtx = (struct init_stack_frame *)(STACK_ROUND_DOWN(stackEnd -
+	pInitCtx = (struct init_stack_frame *)(Z_STACK_PTR_ALIGN(stackEnd -
 				    sizeof(struct init_stack_frame)));
 
 	pInitCtx->entry_point = (u64_t)pEntry;

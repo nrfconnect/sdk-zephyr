@@ -21,6 +21,10 @@ LOG_MODULE_REGISTER(modem_ublox_sara_r4, CONFIG_MODEM_LOG_LEVEL);
 #include <net/net_offload.h>
 #include <net/socket_offload.h>
 
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_APN)
+#include <stdio.h>
+#endif
+
 #include "modem_context.h"
 #include "modem_socket.h"
 #include "modem_cmd_handler.h"
@@ -64,16 +68,13 @@ static struct modem_pin modem_pins[] = {
 #define MDM_POWER_DISABLE		0
 #define MDM_RESET_NOT_ASSERTED		1
 #define MDM_RESET_ASSERTED		0
-#if DT_INST_NODE_HAS_PROP(0, mdm_vint_gpios)
-#define MDM_VINT_ENABLE			1
-#define MDM_VINT_DISABLE		0
-#endif
 
 #define MDM_CMD_TIMEOUT			K_SECONDS(10)
 #define MDM_DNS_TIMEOUT			K_SECONDS(70)
 #define MDM_CMD_CONN_TIMEOUT		K_SECONDS(120)
 #define MDM_REGISTRATION_TIMEOUT	K_SECONDS(180)
 #define MDM_PROMPT_CMD_DELAY		K_MSEC(75)
+#define MDM_SENDMSG_SLEEP       K_MSEC(1)
 
 #define MDM_MAX_DATA_LENGTH		1024
 #define MDM_RECV_MAX_BUF		30
@@ -92,8 +93,15 @@ static struct modem_pin modem_pins[] = {
 #define MDM_MODEL_LENGTH		16
 #define MDM_REVISION_LENGTH		64
 #define MDM_IMEI_LENGTH			16
+#define MDM_IMSI_LENGTH			16
+#define MDM_APN_LENGTH			32
 
 #define RSSI_TIMEOUT_SECS		30
+
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_VARIANT)
+#define MDM_VARIANT_UBLOX_R4 4
+#define MDM_VARIANT_UBLOX_U2 2
+#endif
 
 NET_BUF_POOL_DEFINE(mdm_recv_pool, MDM_RECV_MAX_BUF, MDM_RECV_BUF_SIZE,
 		    0, NULL);
@@ -143,6 +151,16 @@ struct modem_data {
 	char mdm_model[MDM_MODEL_LENGTH];
 	char mdm_revision[MDM_REVISION_LENGTH];
 	char mdm_imei[MDM_IMEI_LENGTH];
+	char mdm_imsi[MDM_IMSI_LENGTH];
+
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_VARIANT)
+	/* modem variant */
+	int mdm_variant;
+#endif
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_APN)
+	/* APN */
+	char mdm_apn[MDM_APN_LENGTH];
+#endif
 
 	/* modem state */
 	int ev_creg;
@@ -191,6 +209,90 @@ static int modem_atoi(const char *s, const int err_value,
 
 	return ret;
 }
+
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_APN)
+
+/* the list of SIM profiles. Global scope, so the app can change it */
+const char *modem_sim_profiles =
+	CONFIG_MODEM_UBLOX_SARA_AUTODETECT_APN_PROFILES;
+
+int find_apn(char *apn, int apnlen, const char *profiles, const char *imsi)
+{
+	int rc = -1;
+
+	/* try to find a match */
+	char *s = strstr(profiles, imsi);
+
+	if (s) {
+		char *eos;
+
+		/* find the assignment operator preceding the match */
+		while (s >= profiles && !strchr("=", *s)) {
+			s--;
+		}
+		/* find the apn preceding the assignment operator */
+		while (s >= profiles && strchr(" =", *s)) {
+			s--;
+		}
+
+		/* mark end of apn string */
+		eos = s+1;
+
+		/* find first character of the apn */
+		while (s >= profiles && !strchr(" ,", *s)) {
+			s--;
+		}
+		s++;
+
+		/* copy the key */
+		if (s >= profiles) {
+			int len = eos - s;
+
+			if (len < apnlen) {
+				memcpy(apn, s, len);
+				apn[len] = '\0';
+				rc = 0;
+			} else {
+				LOG_ERR("buffer overflow");
+			}
+		}
+	}
+
+	return rc;
+}
+
+/* try to detect APN automatically, based on IMSI */
+int modem_detect_apn(const char *imsi)
+{
+	int rc = -1;
+
+	if (imsi != NULL && strlen(imsi) >= 5) {
+
+		/* extract MMC and MNC from IMSI */
+		char mmcmnc[6];
+		*mmcmnc = 0;
+		strncat(mmcmnc, imsi, sizeof(mmcmnc)-1);
+
+		/* try to find a matching IMSI, and assign the APN */
+		rc = find_apn(mdata.mdm_apn,
+			sizeof(mdata.mdm_apn),
+			modem_sim_profiles,
+			mmcmnc);
+		if (rc < 0) {
+			rc = find_apn(mdata.mdm_apn,
+				sizeof(mdata.mdm_apn),
+				modem_sim_profiles,
+				"*");
+		}
+	}
+
+	if (rc == 0) {
+		LOG_INF("Assign APN: \"%s\"", log_strdup(mdata.mdm_apn));
+	}
+
+	return rc;
+}
+#endif
 
 /* send binary data via the +USO[ST/WR] commands */
 static ssize_t send_socket_data(struct modem_socket *sock,
@@ -255,7 +357,7 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 	}
 
 	k_sem_reset(&mdata.sem_response);
-	ret = k_sem_take(&mdata.sem_response, timeout);
+	ret = k_sem_take(&mdata.sem_response, K_MSEC(timeout));
 
 	if (ret == 0) {
 		ret = modem_cmd_handler_get_error(&mdata.cmd_handler_data);
@@ -332,6 +434,19 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_model)
 				    data->rx_buf, 0, len);
 	mdata.mdm_model[out_len] = '\0';
 	LOG_INF("Model: %s", log_strdup(mdata.mdm_model));
+
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_VARIANT)
+	/* Set modem type */
+	if (strstr(mdata.mdm_model, "R4")) {
+		mdata.mdm_variant = MDM_VARIANT_UBLOX_R4;
+	} else {
+		if (strstr(mdata.mdm_model, "U2")) {
+			mdata.mdm_variant = MDM_VARIANT_UBLOX_U2;
+		}
+	}
+	LOG_INF("Variant: %d", mdata.mdm_variant);
+#endif
+
 	return 0;
 }
 
@@ -360,6 +475,24 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imei)
 	return 0;
 }
 
+/* Handler: <IMSI> */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imsi)
+{
+	size_t out_len;
+
+	out_len = net_buf_linearize(mdata.mdm_imsi, sizeof(mdata.mdm_imsi) - 1,
+				    data->rx_buf, 0, len);
+	mdata.mdm_imsi[out_len] = '\0';
+	LOG_INF("IMSI: %s", log_strdup(mdata.mdm_imsi));
+
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_APN)
+	/* set the APN automatically */
+	modem_detect_apn(mdata.mdm_imsi);
+#endif
+
+	return 0;
+}
+
 #if !defined(CONFIG_MODEM_UBLOX_SARA_U2)
 /*
  * Handler: +CESQ: <rxlev>[0],<ber>[1],<rscp>[2],<ecn0>[3],<rsrq>[4],<rsrp>[5]
@@ -385,13 +518,14 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_cesq)
 }
 #endif
 
-#if defined(CONFIG_MODEM_UBLOX_SARA_U2)
+#if defined(CONFIG_MODEM_UBLOX_SARA_U2) \
+	|| defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_VARIANT)
 /* Handler: +CSQ: <signal_power>[0],<qual>[1] */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 {
 	int rssi;
 
-	rssi = ATOI(argv[1], 0, "qual");
+	rssi = ATOI(argv[0], 0, "signal_power");
 	if (rssi == 31) {
 		mctx.data_rssi = -46;
 	} else if (rssi >= 0 && rssi <= 31) {
@@ -401,7 +535,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 		mctx.data_rssi = -1000;
 	}
 
-	LOG_INF("QUAL: %d", mctx.data_rssi);
+	LOG_INF("RSSI: %d", mctx.data_rssi);
 	return 0;
 }
 #endif
@@ -642,7 +776,7 @@ static int pin_init(void)
 #if DT_INST_NODE_HAS_PROP(0, mdm_vint_gpios)
 	LOG_DBG("Waiting for MDM_VINT_PIN = 0");
 
-	while (modem_pin_read(&mctx, MDM_VINT) != MDM_VINT_DISABLE) {
+	while (modem_pin_read(&mctx, MDM_VINT) > 0) {
 #if defined(CONFIG_MODEM_UBLOX_SARA_U2)
 		/* try to power off again */
 		LOG_DBG("MDM_POWER_PIN -> DISABLE");
@@ -677,7 +811,7 @@ static int pin_init(void)
 	LOG_DBG("Waiting for MDM_VINT_PIN = 1");
 	do {
 		k_sleep(K_MSEC(100));
-	} while (modem_pin_read(&mctx, MDM_VINT) != MDM_VINT_ENABLE);
+	} while (modem_pin_read(&mctx, MDM_VINT) == 0);
 #else
 	k_sleep(K_SECONDS(10));
 #endif
@@ -689,6 +823,42 @@ static int pin_init(void)
 	return 0;
 }
 
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_VARIANT)
+static void modem_rssi_query_work(struct k_work *work)
+{
+	struct modem_cmd cmds[] = {
+		  MODEM_CMD("+CSQ: ", on_cmd_atcmdinfo_rssi_csq, 2U, ","),
+		  MODEM_CMD("+CESQ: ", on_cmd_atcmdinfo_rssi_cesq, 6U, ","),
+	};
+	const char *send_cmd_u2 = "AT+CSQ";
+	const char *send_cmd_r4 = "AT+CESQ";
+	int ret;
+
+	/* choose cmd according to variant */
+	const char *send_cmd = send_cmd_r4;
+
+	if (mdata.mdm_variant == MDM_VARIANT_UBLOX_U2) {
+		send_cmd = send_cmd_u2;
+	}
+
+	/* query modem RSSI */
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+		cmds, ARRAY_SIZE(cmds),
+		send_cmd,
+		&mdata.sem_response,
+		MDM_CMD_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("AT+C[E]SQ ret:%d", ret);
+	}
+
+	/* re-start RSSI query work */
+	if (work) {
+		k_delayed_work_submit_to_queue(&modem_workq,
+			&mdata.rssi_query_work,
+			K_SECONDS(RSSI_TIMEOUT_SECS));
+	}
+}
+#else
 static void modem_rssi_query_work(struct k_work *work)
 {
 	struct modem_cmd cmd =
@@ -716,6 +886,7 @@ static void modem_rssi_query_work(struct k_work *work)
 					       K_SECONDS(RSSI_TIMEOUT_SECS));
 	}
 }
+#endif
 
 static void modem_reset(void)
 {
@@ -744,12 +915,29 @@ static void modem_reset(void)
 		SETUP_CMD("AT+CGMM", "", on_cmd_atcmdinfo_model, 0U, ""),
 		SETUP_CMD("AT+CGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
 		SETUP_CMD("AT+CGSN", "", on_cmd_atcmdinfo_imei, 0U, ""),
+		SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
+#if !defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_APN)
 		/* setup PDP context definition */
 		SETUP_CMD_NOHANDLE("AT+CGDCONT=1,\"IP\",\""
 					CONFIG_MODEM_UBLOX_SARA_R4_APN "\""),
 		/* start functionality */
 		SETUP_CMD_NOHANDLE("AT+CFUN=1"),
+#endif
 	};
+
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_VARIANT)
+	static struct setup_cmd post_setup_cmds_u2[] = {
+#if !defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_APN)
+		/* set the APN */
+		SETUP_CMD_NOHANDLE("AT+UPSD=0,1,\""
+				CONFIG_MODEM_UBLOX_SARA_R4_APN "\""),
+#endif
+		/* set dynamic IP */
+		SETUP_CMD_NOHANDLE("AT+UPSD=0,7,\"0.0.0.0\""),
+		/* activate the GPRS connection */
+		SETUP_CMD_NOHANDLE("AT+UPSDA=0,3"),
+	};
+#endif
 
 	static struct setup_cmd post_setup_cmds[] = {
 #if defined(CONFIG_MODEM_UBLOX_SARA_U2)
@@ -767,6 +955,14 @@ static void modem_reset(void)
 	};
 
 restart:
+
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_APN)
+	mdata.mdm_apn[0] = '\0';
+	strncat(mdata.mdm_apn,
+		CONFIG_MODEM_UBLOX_SARA_R4_APN,
+		sizeof(mdata.mdm_apn)-1);
+#endif
+
 	/* stop RSSI delay work */
 	k_delayed_work_cancel(&mdata.rssi_query_work);
 
@@ -801,6 +997,25 @@ restart:
 		goto error;
 	}
 
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_APN)
+	/* autodetect APN from IMSI */
+	char cmd[sizeof("AT+CGDCONT=1,\"IP\",\"\"")+MDM_APN_LENGTH];
+
+	snprintf(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"", mdata.mdm_apn);
+
+	/* setup PDP context definition */
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+		NULL, 0,
+		(const char *)cmd,
+		&mdata.sem_response,
+		MDM_REGISTRATION_TIMEOUT);
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+		NULL, 0,
+		"AT+CFUN=1",
+		&mdata.sem_response,
+		MDM_REGISTRATION_TIMEOUT);
+#endif
 
 	if (strlen(CONFIG_MODEM_UBLOX_SARA_R4_MANUAL_MCCMNO) > 0) {
 		/* use manual MCC/MNO entry */
@@ -878,11 +1093,37 @@ restart:
 		goto restart;
 	}
 
-	ret = modem_cmd_handler_setup_cmds(&mctx.iface, &mctx.cmd_handler,
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_VARIANT)
+	if (mdata.mdm_variant == MDM_VARIANT_UBLOX_U2) {
+
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_APN)
+		/* setup PDP context definition */
+		char cmd[sizeof("AT+UPSD=0,1,\"%s\"")+MDM_APN_LENGTH];
+
+		snprintf(cmd, sizeof(cmd), "AT+UPSD=0,1,\"%s\"", mdata.mdm_apn);
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			NULL, 0,
+			(const char *)cmd,
+			&mdata.sem_response,
+			MDM_REGISTRATION_TIMEOUT);
+#endif
+		ret = modem_cmd_handler_setup_cmds(&mctx.iface,
+			&mctx.cmd_handler,
+			post_setup_cmds_u2,
+			ARRAY_SIZE(post_setup_cmds_u2),
+			&mdata.sem_response,
+			MDM_REGISTRATION_TIMEOUT);
+	} else {
+#endif
+		ret = modem_cmd_handler_setup_cmds(&mctx.iface,
+					   &mctx.cmd_handler,
 					   post_setup_cmds,
 					   ARRAY_SIZE(post_setup_cmds),
 					   &mdata.sem_response,
 					   MDM_REGISTRATION_TIMEOUT);
+#if defined(CONFIG_MODEM_UBLOX_SARA_AUTODETECT_VARIANT)
+	}
+#endif
 	if (ret < 0) {
 		goto error;
 	}
@@ -973,7 +1214,7 @@ static int offload_close(struct modem_socket *sock)
 		return 0;
 	}
 
-	if (sock->is_connected) {
+	if (sock->is_connected || sock->ip_proto == IPPROTO_UDP) {
 		snprintk(buf, sizeof(buf), "AT+USOCL=%d", sock->id);
 
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
@@ -1252,6 +1493,40 @@ static ssize_t offload_write(void *obj, const void *buffer, size_t count)
 	return offload_sendto(obj, buffer, count, 0, NULL, 0);
 }
 
+static ssize_t offload_sendmsg(void *obj, const struct msghdr *msg, int flags)
+{
+	ssize_t sent = 0;
+	int rc;
+
+	LOG_DBG("msg_iovlen:%d flags:%d", msg->msg_iovlen, flags);
+
+	for (int i = 0; i < msg->msg_iovlen; i++) {
+
+		const char *buf = msg->msg_iov[i].iov_base;
+		size_t len = msg->msg_iov[i].iov_len;
+
+		while (len > 0) {
+			rc = offload_sendto(obj, buf, len, flags,
+							msg->msg_name,
+							msg->msg_namelen);
+			if (rc < 0) {
+				if (rc == -EAGAIN) {
+					k_sleep(MDM_SENDMSG_SLEEP);
+				} else {
+					sent = rc;
+					break;
+				}
+			} else {
+				sent += rc;
+				buf += rc;
+				len -= rc;
+			}
+		}
+	}
+
+	return (ssize_t)sent;
+}
+
 static const struct socket_op_vtable offload_socket_fd_op_vtable = {
 	.fd_vtable = {
 		.read = offload_read,
@@ -1264,7 +1539,7 @@ static const struct socket_op_vtable offload_socket_fd_op_vtable = {
 	.recvfrom = offload_recvfrom,
 	.listen = NULL,
 	.accept = NULL,
-	.sendmsg = NULL,
+	.sendmsg = offload_sendmsg,
 	.getsockopt = NULL,
 	.setsockopt = NULL,
 };

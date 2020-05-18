@@ -109,6 +109,8 @@ arduino_spi: &spi0 {
 
 &ftm3 {
 	status = "okay";
+	compatible = "nxp,kinetis-ftm-pwm";
+	#pwm-cells = <3>;
 };
 
 &uart1 {
@@ -120,6 +122,26 @@ arduino_spi: &spi0 {
 	compatible = "nxp,kinetis-usbd";
 	status = "okay";
 	num-bidir-endpoints = <8>;
+};
+
+&gpioa {
+	status = "okay";
+};
+
+&gpiob {
+	status = "okay";
+};
+
+&gpioc {
+	status = "okay";
+};
+
+&gpiod {
+	status = "okay";
+};
+
+&gpioe {
+	status = "okay";
 };
 
 &flash0 {

@@ -25,6 +25,7 @@
 #include <arch/arm/aarch64/misc.h>
 #include <arch/arm/aarch64/asm_inline.h>
 #include <arch/arm/aarch64/cpu.h>
+#include <arch/arm/aarch64/macro.inc>
 #include <arch/arm/aarch64/sys_io.h>
 #include <arch/arm/aarch64/timer.h>
 #include <arch/common/addr_types.h>
@@ -35,14 +36,13 @@ extern "C" {
 #endif
 
 /**
- * @brief Declare the STACK_ALIGN_SIZE
+ * @brief Declare the ARCH_STACK_PTR_ALIGN
  *
  * Denotes the required alignment of the stack pointer on public API
  * boundaries
  *
  */
-#define STACK_ALIGN		16
-#define STACK_ALIGN_SIZE	STACK_ALIGN
+#define ARCH_STACK_PTR_ALIGN	16
 
 #ifdef __cplusplus
 }

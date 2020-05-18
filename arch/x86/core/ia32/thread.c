@@ -15,6 +15,7 @@
 #include <kernel.h>
 #include <ksched.h>
 #include <arch/x86/mmustructs.h>
+#include <kswap.h>
 
 /* forward declaration */
 
@@ -45,19 +46,19 @@ extern void z_x86_syscall_entry_stub(void);
 NANO_CPU_INT_REGISTER(z_x86_syscall_entry_stub, -1, -1, 0x80, 3);
 #endif /* CONFIG_X86_USERSPACE */
 
-#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+#if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING)
 
 extern int z_float_disable(struct k_thread *thread);
 
 int arch_float_disable(struct k_thread *thread)
 {
-#if defined(CONFIG_LAZY_FP_SHARING)
+#if defined(CONFIG_LAZY_FPU_SHARING)
 	return z_float_disable(thread);
 #else
 	return -ENOSYS;
-#endif /* CONFIG_LAZY_FP_SHARING */
+#endif /* CONFIG_LAZY_FPU_SHARING */
 }
-#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
+#endif /* CONFIG_FPU && CONFIG_FPU_SHARING */
 
 void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 		     size_t stack_size, k_thread_entry_t entry,
@@ -69,9 +70,8 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	void *swap_entry;
 	struct _x86_initial_frame *initial_frame;
 
-	Z_ASSERT_VALID_PRIO(priority, entry);
 	stack_buf = Z_THREAD_STACK_BUFFER(stack);
-	z_new_thread_init(thread, stack_buf, stack_size, priority, options);
+	z_new_thread_init(thread, stack_buf, stack_size);
 
 #if CONFIG_X86_STACK_PROTECTION
 	struct z_x86_thread_stack_header *header =
@@ -89,7 +89,7 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	swap_entry = z_thread_entry;
 #endif
 
-	stack_high = (char *)STACK_ROUND_DOWN(stack_buf + stack_size);
+	stack_high = (char *)Z_STACK_PTR_ALIGN(stack_buf + stack_size);
 
 	/* Create an initial context on the stack expected by z_swap() */
 	initial_frame = (struct _x86_initial_frame *)
@@ -111,8 +111,34 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	 * doesn't care about their state when execution begins
 	 */
 	thread->callee_saved.esp = (unsigned long)initial_frame;
-#if defined(CONFIG_LAZY_FP_SHARING)
+#if defined(CONFIG_LAZY_FPU_SHARING)
 	thread->arch.excNestCount = 0;
-#endif /* CONFIG_LAZY_FP_SHARING */
+#endif /* CONFIG_LAZY_FPU_SHARING */
 	thread->arch.flags = 0;
+}
+
+/* The core kernel code puts the dummy thread on the stack, which unfortunately
+ * doesn't work for 32-bit x86 as k_thread objects must be aligned due to the
+ * buffer within them fed to fxsave/fxrstor.
+ *
+ * Use some sufficiently aligned bytes in the lower memory of the interrupt
+ * stack instead, otherwise the logic is more or less the same.
+ */
+void arch_switch_to_main_thread(struct k_thread *main_thread,
+				k_thread_stack_t *main_stack,
+				size_t main_stack_size,
+				k_thread_entry_t _main)
+{
+	struct k_thread *dummy_thread = (struct k_thread *)
+		ROUND_UP(Z_THREAD_STACK_BUFFER(z_interrupt_stacks[0]),
+			 FP_REG_SET_ALIGN);
+
+	__ASSERT(((uintptr_t)(&dummy_thread->arch.preempFloatReg) %
+		  FP_REG_SET_ALIGN) == 0,
+		 "unaligned dummy thread %p float member %p",
+		 dummy_thread, &dummy_thread->arch.preempFloatReg);
+
+	z_dummy_thread_init(dummy_thread);
+	z_swap_unlocked();
+	CODE_UNREACHABLE;
 }

@@ -144,7 +144,7 @@ static void gen_onoff_set_unack(struct bt_mesh_model *model,
 
 	now = k_uptime_get();
 	if (state->last_tid == tid && state->last_tx_addr == ctx->addr &&
-	    (now - state->last_msg_timestamp <= K_SECONDS(6))) {
+	    (now - state->last_msg_timestamp <= (6 * MSEC_PER_SEC))) {
 		printk("Already received message\n");
 	}
 
@@ -438,7 +438,6 @@ static void send_hello(struct k_work *work)
 {
 	NET_BUF_SIMPLE_DEFINE(msg, 3 + HELLO_MAX + 4);
 	struct bt_mesh_msg_ctx ctx = {
-		.net_idx = NET_IDX,
 		.app_idx = APP_IDX,
 		.addr = GROUP_ADDR,
 		.send_ttl = DEFAULT_TTL,
@@ -466,7 +465,6 @@ static void send_baduser(struct k_work *work)
 {
 	NET_BUF_SIMPLE_DEFINE(msg, 3 + HELLO_MAX + 4);
 	struct bt_mesh_msg_ctx ctx = {
-		.net_idx = NET_IDX,
 		.app_idx = APP_IDX,
 		.addr = GROUP_ADDR,
 		.send_ttl = DEFAULT_TTL,

@@ -26,6 +26,10 @@
 /* instance 0 flash size in bytes */
 #define INST_0_BYTES (DT_INST_PROP(0, size) / 8)
 
+/* for accessing devicetree properties of the bus node */
+#define QSPI_NODE DT_BUS(DT_DRV_INST(0))
+#define QSPI_PROP_AT(prop, idx) DT_PROP_BY_IDX(QSPI_NODE, prop, idx)
+
 LOG_MODULE_REGISTER(qspi_nor, CONFIG_FLASH_LOG_LEVEL);
 
 /**
@@ -316,7 +320,7 @@ static int qspi_erase(struct device *dev, u32_t addr, u32_t size)
 	}
 
 	int rv = -EIO;
-	const struct qspi_nor_config *params = dev->config->config_info;
+	const struct qspi_nor_config *params = dev->config_info;
 
 	while (size) {
 		nrfx_err_t res = !NRFX_SUCCESS;
@@ -369,12 +373,12 @@ static inline void qspi_fill_init_struct(nrfx_qspi_config_t *initstruct)
 	initstruct->xip_offset = 0;
 
 	/* Configure pins */
-	initstruct->pins.sck_pin = DT_NORDIC_NRF_QSPI_QSPI_0_SCK_PIN;
-	initstruct->pins.csn_pin = DT_NORDIC_NRF_QSPI_QSPI_0_CSN_PINS_0;
-	initstruct->pins.io0_pin = DT_NORDIC_NRF_QSPI_QSPI_0_IO_PINS_0;
-	initstruct->pins.io1_pin = DT_NORDIC_NRF_QSPI_QSPI_0_IO_PINS_1;
-	initstruct->pins.io2_pin = DT_NORDIC_NRF_QSPI_QSPI_0_IO_PINS_2;
-	initstruct->pins.io3_pin = DT_NORDIC_NRF_QSPI_QSPI_0_IO_PINS_3;
+	initstruct->pins.sck_pin = DT_PROP(QSPI_NODE, sck_pin);
+	initstruct->pins.csn_pin = QSPI_PROP_AT(csn_pins, 0);
+	initstruct->pins.io0_pin = QSPI_PROP_AT(io_pins, 0);
+	initstruct->pins.io1_pin = QSPI_PROP_AT(io_pins, 1);
+	initstruct->pins.io2_pin = QSPI_PROP_AT(io_pins, 2);
+	initstruct->pins.io3_pin = QSPI_PROP_AT(io_pins, 3);
 
 	/* Configure Protocol interface */
 #if DT_INST_NODE_HAS_PROP(0, readoc_enum)
@@ -500,7 +504,7 @@ static int qspi_nor_read(struct device *dev, off_t addr, void *dest,
 		return -EINVAL;
 	}
 
-	const struct qspi_nor_config *params = dev->config->config_info;
+	const struct qspi_nor_config *params = dev->config_info;
 
 	/* should be between 0 and flash size */
 	if (addr >= params->size ||
@@ -539,7 +543,7 @@ static int qspi_nor_write(struct device *dev, off_t addr, const void *src,
 	}
 
 	struct qspi_nor_data *const driver_data = dev->driver_data;
-	const struct qspi_nor_config *params = dev->config->config_info;
+	const struct qspi_nor_config *params = dev->config_info;
 
 	if (driver_data->write_protection) {
 		return -EACCES;
@@ -568,7 +572,7 @@ static int qspi_nor_write(struct device *dev, off_t addr, const void *src,
 static int qspi_nor_erase(struct device *dev, off_t addr, size_t size)
 {
 	struct qspi_nor_data *const driver_data = dev->driver_data;
-	const struct qspi_nor_config *params = dev->config->config_info;
+	const struct qspi_nor_config *params = dev->config_info;
 
 	if (driver_data->write_protection) {
 		return -EACCES;
@@ -618,7 +622,7 @@ static int qspi_nor_write_protection_set(struct device *dev,
  */
 static int qspi_nor_configure(struct device *dev)
 {
-	const struct qspi_nor_config *params = dev->config->config_info;
+	const struct qspi_nor_config *params = dev->config_info;
 
 	int ret = qspi_nrfx_configure(dev);
 
@@ -642,8 +646,7 @@ static int qspi_nor_configure(struct device *dev)
  */
 static int qspi_nor_init(struct device *dev)
 {
-	IRQ_CONNECT(DT_NORDIC_NRF_QSPI_QSPI_0_IRQ_0,
-		    DT_NORDIC_NRF_QSPI_QSPI_0_IRQ_0_PRIORITY,
+	IRQ_CONNECT(DT_IRQN(QSPI_NODE), DT_IRQ(QSPI_NODE, priority),
 		    nrfx_isr, nrfx_qspi_irq_handler, 0);
 	return qspi_nor_configure(dev);
 }

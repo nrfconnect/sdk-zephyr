@@ -49,7 +49,7 @@ config BT_SPI
 config BT_STM32_IPM
 	bool "IPM HCI"
 	select USE_STM32_HAL_CORTEX
-	select HAS_STLIB
+	select HAS_STM32LIB
 	help
 	  TODO
 
@@ -98,6 +98,11 @@ config BT_SPI_BLUENRG
 	  Stack. Current driver supports: ST BLUENRG-MS.
 
 endif # BT_SPI
+
+config BT_STM32_IPM_RX_STACK_SIZE
+	int "STM32 IPM stack size for RX thread"
+	depends on BT_STM32_IPM
+	default 256
 
 config BT_RPMSG_NRF53
 	bool "nRF53 configuration of RPMsg"

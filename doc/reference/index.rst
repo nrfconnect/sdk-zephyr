@@ -22,6 +22,7 @@ API Reference
    kernel/index.rst
    logging/index.rst
    misc/index
+   misc/data_structures.rst
    networking/index.rst
    peripherals/index.rst
    power_management/index.rst

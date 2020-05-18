@@ -67,6 +67,7 @@
 
 &spi0 {
 	status = "okay";
+	pinctrl-0 = <&pc26c_spi1_miso &pc27c_spi1_mosi &pc24c_spi1_spck &pd27b_spi0_npcs3>;
 };
 
 &usart1 {
@@ -124,4 +125,13 @@
 			reg = <0x001e0000 0x00020000>;
 		};
 	};
+};
+
+&ssc {
+	status = "okay";
+	label = "I2S_0";
+	dma-names = "rx", "tx";
+	dmas = <&xdmac 22 DMA_PERID_SSC_RX>, <&xdmac 23 DMA_PERID_SSC_TX>;
+	pinctrl-0 = <&pd24b_ssc_rf &pa22a_ssc_rk &pa10c_ssc_rd
+		     &pb0d_ssc_tf &pb1d_ssc_tk &pb5d_ssc_td>;
 };

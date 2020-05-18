@@ -9,11 +9,6 @@
 / {
 	aliases {
 		adc-0 = &adc0;
-		gpio-a = &gpioa;
-		gpio-b = &gpiob;
-		gpio-c = &gpioc;
-		gpio-d = &gpiod;
-		gpio-e = &gpioe;
 		i2c-0 = &i2c0;
 		i2c-1 = &i2c1;
 		pinmux-a = &pinmux_a;
@@ -21,9 +16,6 @@
 		pinmux-c = &pinmux_c;
 		pinmux-d = &pinmux_d;
 		pinmux-e = &pinmux_e;
-		pwm-0 = &pwm0;
-		pwm-1 = &pwm1;
-		pwm-2 = &pwm2;
 		spi-0 = &spi0;
 		spi-1 = &spi1;
 		uart-0 = &uart0;
@@ -35,6 +27,7 @@
 
 	chosen {
 		zephyr,entropy = &rnga;
+		zephyr,flash-controller = &ftfl;
 	};
 
 	cpus {
@@ -83,7 +76,7 @@
 			#clock-cells = <3>;
 		};
 
-		flash-controller@40020000 {
+		ftfl: flash-controller@40020000 {
 			compatible = "nxp,kinetis-ftfl";
 			label = "FLASH_CTRL";
 			reg = <0x40020000 0x18>;
@@ -191,6 +184,7 @@
 
 		gpioa: gpio@400ff000 {
 			compatible = "nxp,kinetis-gpio";
+			status = "disabled";
 			reg = <0x400ff000 0x40>;
 			interrupts = <59 2>;
 			label = "GPIO_0";
@@ -201,6 +195,7 @@
 
 		gpiob: gpio@400ff040 {
 			compatible = "nxp,kinetis-gpio";
+			status = "disabled";
 			reg = <0x400ff040 0x40>;
 			interrupts = <60 2>;
 			label = "GPIO_1";
@@ -211,6 +206,7 @@
 
 		gpioc: gpio@400ff080 {
 			compatible = "nxp,kinetis-gpio";
+			status = "disabled";
 			reg = <0x400ff080 0x40>;
 			interrupts = <61 2>;
 			label = "GPIO_2";
@@ -221,6 +217,7 @@
 
 		gpiod: gpio@400ff0c0 {
 			compatible = "nxp,kinetis-gpio";
+			status = "disabled";
 			reg = <0x400ff0c0 0x40>;
 			interrupts = <62 2>;
 			label = "GPIO_3";
@@ -231,6 +228,7 @@
 
 		gpioe: gpio@400ff100 {
 			compatible = "nxp,kinetis-gpio";
+			status = "disabled";
 			reg = <0x400ff100 0x40>;
 			interrupts = <63 2>;
 			label = "GPIO_4";
@@ -279,34 +277,31 @@
 			label = "WDT_0";
 		};
 
-		pwm0: pwm@40038000{
+		ftm0: ftm@40038000{
 			compatible = "nxp,kinetis-ftm";
 			reg = <0x40038000 0x98>;
 			interrupts = <42 0>;
 			clocks = <&mcg KINETIS_MCG_FIXED_FREQ_CLK>;
-			label = "PWM_0";
+			label = "FTM_0";
 			status = "disabled";
-			#pwm-cells = <3>;
 		};
 
-		pwm1: pwm@40039000{
+		ftm1: ftm@40039000{
 			compatible = "nxp,kinetis-ftm";
 			reg = <0x40039000 0x98>;
 			interrupts = <43 0>;
 			clocks = <&mcg KINETIS_MCG_FIXED_FREQ_CLK>;
-			label = "PWM_1";
+			label = "FTM_1";
 			status = "disabled";
-			#pwm-cells = <3>;
 		};
 
-		pwm2: pwm@4003a000{
+		ftm2: ftm@4003a000{
 			compatible = "nxp,kinetis-ftm";
 			reg = <0x4003a000 0x98>;
 			interrupts = <44 0>;
 			clocks = <&mcg KINETIS_MCG_FIXED_FREQ_CLK>;
-			label = "PWM_2";
+			label = "FTM_2";
 			status = "disabled";
-			#pwm-cells = <3>;
 		};
 
 		adc0: adc@4003b000{

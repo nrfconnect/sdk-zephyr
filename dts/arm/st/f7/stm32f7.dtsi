@@ -13,6 +13,7 @@
 / {
 	chosen {
 		zephyr,entropy = &rng;
+		zephyr,flash-controller = &flash;
 	};
 
 	cpus {
@@ -35,7 +36,7 @@
 	};
 
 	soc {
-		flash-controller@40023c00 {
+		flash: flash-controller@40023c00 {
 			compatible = "st,stm32-flash-controller", "st,stm32f7-flash-controller";
 			label = "FLASH_CTRL";
 			reg = <0x40023c00 0x400>;
@@ -639,6 +640,14 @@
 			clocks = <&rcc STM32_CLOCK_BUS_AHB2 0x00000040>;
 			status = "disabled";
 			label = "RNG";
+		};
+
+		sdmmc1: sdmmc@40012c00 {
+			compatible = "st,stm32-sdmmc";
+			reg = <0x40012c00 0x400>;
+			clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00000800>;
+			status = "disabled";
+			label = "SDMMC_1";
 		};
 	};
 

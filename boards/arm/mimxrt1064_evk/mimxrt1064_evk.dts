@@ -16,6 +16,7 @@
 		led0 = &green_led;
 		pwm-led0 = &green_pwm_led;
 		sw0 = &user_button;
+		kscan0 = &touch_controller;
 	};
 
 	chosen {
@@ -91,8 +92,6 @@
 			};
 		};
 	};
-
-	/delete-node/ eth1;
 };
 
 arduino_i2c: &lpi2c1 {};
@@ -122,11 +121,11 @@ arduino_i2c: &lpi2c1 {};
 		};
 	};
 
-	ft5336@38 {
+	touch_controller: ft5336@38 {
 		compatible = "focaltech,ft5336";
 		reg = <0x38>;
 		label = "FT5336";
-		int-gpios = <&gpio1 11 0>;
+		int-gpios = <&gpio1 11 GPIO_ACTIVE_LOW>;
 	};
 };
 
@@ -159,4 +158,10 @@ arduino_i2c: &lpi2c1 {};
 
 &flexpwm2_pwm3 {
 	status = "okay";
+};
+
+&usdhc1 {
+	status = "okay";
+	pwr-gpios = <&gpio1 5 GPIO_ACTIVE_HIGH>;
+	cd-gpios = <&gpio2 28 GPIO_ACTIVE_LOW>;
 };

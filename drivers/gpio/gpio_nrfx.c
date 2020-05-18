@@ -44,7 +44,7 @@ static inline struct gpio_nrfx_data *get_port_data(struct device *port)
 
 static inline const struct gpio_nrfx_cfg *get_port_cfg(struct device *port)
 {
-	return port->config->config_info;
+	return port->config_info;
 }
 
 static int gpiote_channel_alloc(u32_t abs_pin, nrf_gpiote_polarity_t polarity)
@@ -421,7 +421,7 @@ static inline void fire_callbacks(struct device *port, u32_t pins)
 		 */
 		if ((cb->pin_mask & pins) & data->int_en) {
 			__ASSERT(cb->handler, "No callback handler!");
-			cb->handler(port, cb, pins);
+			cb->handler(port, cb, cb->pin_mask & pins);
 		}
 	}
 }

@@ -17,6 +17,7 @@ LOG_MODULE_REGISTER(wpan_serial, CONFIG_USB_DEVICE_LOG_LEVEL);
 
 #include <drivers/uart.h>
 #include <zephyr.h>
+#include <usb/usb_device.h>
 
 #include <net/buf.h>
 #include <net_private.h>
@@ -524,12 +525,21 @@ void main(void)
 		return;
 	}
 
+	ret = usb_enable(NULL);
+	if (ret != 0) {
+		LOG_ERR("Failed to enable USB");
+		return;
+	}
+
 	LOG_DBG("Wait for DTR");
 
 	while (1) {
 		uart_line_ctrl_get(dev, UART_LINE_CTRL_DTR, &dtr);
 		if (dtr) {
 			break;
+		} else {
+			/* Give CPU resources to low priority threads. */
+			k_sleep(K_MSEC(100));
 		}
 	}
 

@@ -2895,7 +2895,7 @@ static enum net_verdict handle_ipv6_echo_reply(struct net_pkt *pkt,
 #ifdef CONFIG_IEEE802154
 		 "rssi=%d "
 #endif
-#ifdef CONFIG_FLOAT
+#ifdef CONFIG_FPU
 		 "time=%.2f ms\n",
 #else
 		 "time=%d ms\n",
@@ -2909,7 +2909,7 @@ static enum net_verdict handle_ipv6_echo_reply(struct net_pkt *pkt,
 #ifdef CONFIG_IEEE802154
 		 net_pkt_ieee802154_rssi(pkt),
 #endif
-#ifdef CONFIG_FLOAT
+#ifdef CONFIG_FPU
 		 ((u32_t)k_cyc_to_ns_floor64(cycles) / 1000000.f));
 #else
 		 ((u32_t)k_cyc_to_ns_floor64(cycles) / 1000000));
@@ -3022,7 +3022,7 @@ static enum net_verdict handle_ipv4_echo_reply(struct net_pkt *pkt,
 	cycles = k_cycle_get_32() - cycles;
 
 	PR_SHELL(shell_for_ping, "%d bytes from %s to %s: icmp_seq=%d ttl=%d "
-#ifdef CONFIG_FLOAT
+#ifdef CONFIG_FPU
 		 "time=%.2f ms\n",
 #else
 		 "time=%d ms\n",
@@ -3033,7 +3033,7 @@ static enum net_verdict handle_ipv4_echo_reply(struct net_pkt *pkt,
 		 net_sprint_ipv4_addr(&ip_hdr->dst),
 		 ntohs(icmp_echo->sequence),
 		 ip_hdr->ttl,
-#ifdef CONFIG_FLOAT
+#ifdef CONFIG_FPU
 		 ((u32_t)k_cyc_to_ns_floor64(cycles) / 1000000.f));
 #else
 		 ((u32_t)k_cyc_to_ns_floor64(cycles) / 1000000));
@@ -3200,6 +3200,95 @@ wait_reply:
 
 	return 0;
 #endif
+}
+
+static struct net_pkt *get_net_pkt(const char *ptr_str)
+{
+	u8_t buf[sizeof(intptr_t)];
+	intptr_t ptr = 0;
+	size_t len;
+	int i;
+
+	if (ptr_str[0] == '0' && ptr_str[1] == 'x') {
+		ptr_str += 2;
+	}
+
+	len = hex2bin(ptr_str, strlen(ptr_str), buf, sizeof(buf));
+	if (!len) {
+		return NULL;
+	}
+
+	for (i = len - 1; i >= 0; i--) {
+		ptr |= buf[i] << 8 * (len - 1 - i);
+	}
+
+	return (struct net_pkt *)ptr;
+}
+
+static void net_pkt_buffer_info(const struct shell *shell, struct net_pkt *pkt)
+{
+	struct net_buf *buf = pkt->buffer;
+
+	PR("net_pkt %p buffer chain:\n", pkt);
+	PR("%p[%d]", pkt, atomic_get(&pkt->atomic_ref));
+
+	if (buf) {
+		PR("->");
+	}
+
+	while (buf) {
+		PR("%p[%d/%u (%u)]",
+		   buf, atomic_get(&pkt->atomic_ref), buf->len, buf->size);
+
+		buf = buf->frags;
+		if (buf) {
+			PR("->");
+		}
+	}
+
+	PR("\n");
+}
+
+static void net_pkt_buffer_hexdump(const struct shell *shell,
+				   struct net_pkt *pkt)
+{
+	struct net_buf *buf = pkt->buffer;
+	int i = 0;
+
+	if (!buf || buf->ref == 0) {
+		return;
+	}
+
+	PR("net_pkt %p buffer chain hexdump:\n", pkt);
+
+	while (buf) {
+		PR("net_buf[%d] %p\n", i++, buf);
+		shell_hexdump(shell, buf->data, buf->len);
+		buf = buf->frags;
+	}
+}
+
+static int cmd_net_pkt(const struct shell *shell, size_t argc, char *argv[])
+{
+	if (argv[1]) {
+		struct net_pkt *pkt;
+
+		pkt = get_net_pkt(argv[1]);
+		if (!pkt) {
+			PR_ERROR("Invalid ptr value (%s). "
+				 "Example: 0x01020304\n", argv[1]);
+			return -ENOEXEC;
+		}
+
+		net_pkt_buffer_info(shell, pkt);
+		PR("\n");
+		net_pkt_buffer_hexdump(shell, pkt);
+	} else {
+		PR_INFO("Pointer value must be given.\n");
+		return -ENOEXEC;
+	}
+
+	return 0;
 }
 
 static int cmd_net_ppp_ping(const struct shell *shell, size_t argc,
@@ -4387,6 +4476,14 @@ SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_ping,
 	SHELL_SUBCMD_SET_END
 );
 
+SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_pkt,
+	SHELL_CMD(--help, NULL,
+		  "'net pkt [ptr in hex]' "
+		  "Print information about given net_pkt",
+		  cmd_net_pkt),
+	SHELL_SUBCMD_SET_END
+);
+
 SHELL_STATIC_SUBCMD_SET_CREATE(net_commands,
 	SHELL_CMD(allocs, NULL, "Print network memory allocations.",
 		  cmd_net_allocs),
@@ -4410,6 +4507,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(net_commands,
 	SHELL_CMD(nbr, &net_cmd_nbr, "Print neighbor information.",
 		  cmd_net_nbr),
 	SHELL_CMD(ping, &net_cmd_ping, "Ping a network host.", cmd_net_ping),
+	SHELL_CMD(pkt, &net_cmd_pkt, "net_pkt information.", cmd_net_pkt),
 	SHELL_CMD(ppp, &net_cmd_ppp, "PPP information.", cmd_net_ppp_status),
 	SHELL_CMD(resume, NULL, "Resume a network interface", cmd_net_resume),
 	SHELL_CMD(route, NULL, "Show network route.", cmd_net_route),

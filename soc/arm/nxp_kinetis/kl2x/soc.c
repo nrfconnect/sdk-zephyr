@@ -63,12 +63,12 @@ static ALWAYS_INLINE void clock_init(void)
 	CLOCK_SetInternalRefClkConfig(kMCG_IrclkEnable, kMCG_IrcSlow, 0);
 	CLOCK_SetSimConfig(&simConfig);
 
-#ifdef CONFIG_UART_MCUX_LPSCI_0
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), okay)
 	CLOCK_SetLpsci0Clock(LPSCI0SRC_MCGFLLCLK);
 #endif
 #if CONFIG_USB_KINETIS
 	CLOCK_EnableUsbfs0Clock(kCLOCK_UsbSrcPll0,
-				DT_ARM_CORTEX_M0PLUS_0_CLOCK_FREQUENCY);
+				DT_PROP(DT_PATH(cpus, cpu_0), clock_frequency));
 #endif
 }
 

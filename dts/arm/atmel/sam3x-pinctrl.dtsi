@@ -10,6 +10,26 @@
 	soc {
 		pinctrl@400e0e00 {
 			/* instance, signal, pio, pin, peripheral */
+			DT_ATMEL_PIN(spi0, miso, a, 25, a);
+			DT_ATMEL_PIN(spi0, mosi, a, 26, a);
+			DT_ATMEL_PIN(spi0, npcs0, a, 28, a);
+			DT_ATMEL_PIN(spi0, npcs1, a, 29, a);
+			DT_ATMEL_PIN(spi0, npcs1, b, 20, b);
+			DT_ATMEL_PIN(spi0, npcs2, a, 30, a);
+			DT_ATMEL_PIN(spi0, npcs2, b, 21, b);
+			DT_ATMEL_PIN(spi0, npcs3, a, 31, a);
+			DT_ATMEL_PIN(spi0, npcs3, b, 23, b);
+			DT_ATMEL_PIN(spi0, spck, a, 27, a);
+			DT_ATMEL_PIN(ssc, rd, b, 18, a);
+			DT_ATMEL_PIN(ssc, rf, b, 17, a);
+			DT_ATMEL_PIN(ssc, rk, b, 19, a);
+			DT_ATMEL_PIN(ssc, td, a, 16, b);
+			DT_ATMEL_PIN(ssc, tf, a, 15, b);
+			DT_ATMEL_PIN(ssc, tk, a, 14, b);
+			DT_ATMEL_PIN(twi0, twck0, a, 18, a);
+			DT_ATMEL_PIN(twi0, twd0, a, 17, a);
+			DT_ATMEL_PIN(twi1, twck1, b, 13, a);
+			DT_ATMEL_PIN(twi1, twd1, b, 12, a);
 			DT_ATMEL_PIN(uart, urxd, a, 8, a);
 			DT_ATMEL_PIN(uart, utxd, a, 9, a);
 			DT_ATMEL_PIN(usart0, cts0, b, 26, a);

@@ -62,7 +62,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define LWM2M_RD_CLIENT_URI "rd"
 
 #define SECONDS_TO_UPDATE_EARLY	6
-#define STATE_MACHINE_UPDATE_INTERVAL K_MSEC(500)
+#define STATE_MACHINE_UPDATE_INTERVAL_MS 500
 
 /* Leave room for 32 hexadeciaml digits (UUID) + NULL */
 #define CLIENT_EP_LEN		33
@@ -191,6 +191,18 @@ static void sm_handle_timeout_state(struct lwm2m_message *msg,
 	if (event > LWM2M_RD_CLIENT_EVENT_NONE && client.event_cb) {
 		client.event_cb(client.ctx, event);
 	}
+}
+
+/* force state machine restart */
+void engine_trigger_restart(void)
+{
+	lwm2m_engine_context_close(client.ctx);
+
+	/* Jump directly to the registration phase. In case there is no valid
+	 * security object for the LWM2M server, it will fall back to the
+	 * bootstrap procedure.
+	 */
+	set_sm_state(ENGINE_DO_REGISTRATION);
 }
 
 /* force re-update with remote peer */
@@ -891,6 +903,7 @@ void lwm2m_rd_client_start(struct lwm2m_ctx *client_ctx, const char *ep_name,
 			   lwm2m_ctx_event_cb_t event_cb)
 {
 	client.ctx = client_ctx;
+	client.ctx->sock_fd = -1;
 	client.event_cb = event_cb;
 
 	set_sm_state(ENGINE_INIT);
@@ -911,7 +924,7 @@ void lwm2m_rd_client_stop(struct lwm2m_ctx *client_ctx,
 static int lwm2m_rd_client_init(struct device *dev)
 {
 	return lwm2m_engine_add_service(lwm2m_rd_client_service,
-					STATE_MACHINE_UPDATE_INTERVAL);
+					STATE_MACHINE_UPDATE_INTERVAL_MS);
 }
 
 SYS_INIT(lwm2m_rd_client_init, APPLICATION,

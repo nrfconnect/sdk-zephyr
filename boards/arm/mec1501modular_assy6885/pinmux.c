@@ -12,22 +12,22 @@
 #include "soc.h"
 
 struct pinmux_ports_t {
-#ifdef CONFIG_PINMUX_XEC_GPIO000_036
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_000_036), okay)
 	struct device *porta;
 #endif
-#ifdef CONFIG_PINMUX_XEC_GPIO040_076
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_040_076), okay)
 	struct device *portb;
 #endif
-#ifdef CONFIG_PINMUX_XEC_GPIO100_136
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_100_136), okay)
 	struct device *portc;
 #endif
-#ifdef CONFIG_PINMUX_XEC_GPIO140_176
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_140_176), okay)
 	struct device *portd;
 #endif
-#ifdef CONFIG_PINMUX_XEC_GPIO200_236
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_200_236), okay)
 	struct device *porte;
 #endif
-#ifdef CONFIG_PINMUX_XEC_GPIO240_276
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_240_276), okay)
 	struct device *portf;
 #endif
 };
@@ -35,50 +35,50 @@ struct pinmux_ports_t {
 static void i2c_pinmux(struct pinmux_ports_t *p, uint8_t port_sel)
 {
 	switch (port_sel) {
-#ifdef CONFIG_PINMUX_XEC_GPIO000_036
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_000_036), okay)
 	case 0:
 		pinmux_pin_set(p->porta, MCHP_GPIO_003, MCHP_GPIO_CTRL_MUX_F1);
 		pinmux_pin_set(p->porta, MCHP_GPIO_004, MCHP_GPIO_CTRL_MUX_F1);
 		break;
 #endif
 
-#ifdef CONFIG_PINMUX_XEC_GPIO100_136
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_100_136), okay)
 	case 1:
 		pinmux_pin_set(p->portc, MCHP_GPIO_130, MCHP_GPIO_CTRL_MUX_F1);
 		pinmux_pin_set(p->portc, MCHP_GPIO_131, MCHP_GPIO_CTRL_MUX_F1);
 		break;
 #endif
 
-#ifdef CONFIG_PINMUX_XEC_GPIO140_176
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_140_176), okay)
 	case 2:
 		pinmux_pin_set(p->portd, MCHP_GPIO_154, MCHP_GPIO_CTRL_MUX_F1);
 		pinmux_pin_set(p->portd, MCHP_GPIO_155, MCHP_GPIO_CTRL_MUX_F1);
 		break;
 #endif
 
-#ifdef CONFIG_PINMUX_XEC_GPIO000_036
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_000_036), okay)
 	case 3:
 		pinmux_pin_set(p->porta, MCHP_GPIO_007, MCHP_GPIO_CTRL_MUX_F1);
 		pinmux_pin_set(p->porta, MCHP_GPIO_010, MCHP_GPIO_CTRL_MUX_F1);
 		break;
 #endif
 
-#ifdef CONFIG_PINMUX_XEC_GPIO140_176
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_140_176), okay)
 	case 4:
 		pinmux_pin_set(p->portd, MCHP_GPIO_143, MCHP_GPIO_CTRL_MUX_F1);
 		pinmux_pin_set(p->portd, MCHP_GPIO_144, MCHP_GPIO_CTRL_MUX_F1);
 		break;
 #endif
 
-#ifdef CONFIG_PINMUX_XEC_GPIO140_176
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_140_176), okay)
 	case 5:
 		pinmux_pin_set(p->portd, MCHP_GPIO_141, MCHP_GPIO_CTRL_MUX_F1);
 		pinmux_pin_set(p->portd, MCHP_GPIO_142, MCHP_GPIO_CTRL_MUX_F1);
 		break;
 #endif
 
-#ifdef CONFIG_PINMUX_XEC_GPIO100_136
-#ifdef CONFIG_PINMUX_XEC_GPIO140_176
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_100_136), okay)
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_140_176), okay)
 	case 6:
 		pinmux_pin_set(p->portc, MCHP_GPIO_132, MCHP_GPIO_CTRL_MUX_F1);
 		pinmux_pin_set(p->portd, MCHP_GPIO_140, MCHP_GPIO_CTRL_MUX_F1);
@@ -86,7 +86,7 @@ static void i2c_pinmux(struct pinmux_ports_t *p, uint8_t port_sel)
 #endif
 #endif
 
-#ifdef CONFIG_PINMUX_XEC_GPIO000_036
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_000_036), okay)
 	case 7:
 		pinmux_pin_set(p->porta, MCHP_GPIO_012, MCHP_GPIO_CTRL_MUX_F1);
 		pinmux_pin_set(p->porta, MCHP_GPIO_013, MCHP_GPIO_CTRL_MUX_F1);
@@ -103,34 +103,34 @@ static int board_pinmux_init(struct device *dev)
 	ARG_UNUSED(dev);
 	struct pinmux_ports_t pinmux_ports;
 
-#ifdef CONFIG_PINMUX_XEC_GPIO000_036
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_000_036), okay)
 	struct device *porta =
-		device_get_binding(CONFIG_PINMUX_XEC_GPIO000_036_NAME);
+		device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_000_036)));
 	pinmux_ports.porta = porta;
 #endif
-#ifdef CONFIG_PINMUX_XEC_GPIO040_076
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_040_076), okay)
 	struct device *portb =
-		device_get_binding(CONFIG_PINMUX_XEC_GPIO040_076_NAME);
+		device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_040_076)));
 	pinmux_ports.portb = portb;
 #endif
-#ifdef CONFIG_PINMUX_XEC_GPIO100_136
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_100_136), okay)
 	struct device *portc =
-		device_get_binding(CONFIG_PINMUX_XEC_GPIO100_136_NAME);
+		device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_100_136)));
 	pinmux_ports.portc = portc;
 #endif
-#ifdef CONFIG_PINMUX_XEC_GPIO140_176
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_140_176), okay)
 	struct device *portd =
-		device_get_binding(CONFIG_PINMUX_XEC_GPIO140_176_NAME);
+		device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_140_176)));
 	pinmux_ports.portd = portd;
 #endif
-#ifdef CONFIG_PINMUX_XEC_GPIO200_236
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_200_236), okay)
 	struct device *porte =
-		device_get_binding(CONFIG_PINMUX_XEC_GPIO200_236_NAME);
+		device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_200_236)));
 	pinmux_ports.porte = porte;
 #endif
-#ifdef CONFIG_PINMUX_XEC_GPIO240_276
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pinmux_240_276), okay)
 	struct device *portf =
-		device_get_binding(CONFIG_PINMUX_XEC_GPIO240_276_NAME);
+		device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_240_276)));
 	pinmux_ports.portf = portf;
 #endif
 
@@ -158,7 +158,7 @@ static int board_pinmux_init(struct device *dev)
 	pinmux_pin_set(portf, MCHP_GPIO_250, MCHP_GPIO_CTRL_MUX_F0);
 
 	/* See table 2-4 from the data sheet for pin multiplexing*/
-#ifdef DT_NS16550_400F2800_BASE_ADDRESS
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart1), okay)
 	/* Set muxing, for UART 1 TX/RX and power up */
 	mchp_pcr_periph_slp_ctrl(PCR_UART1, MCHP_PCR_SLEEP_DIS);
 
@@ -191,23 +191,23 @@ static int board_pinmux_init(struct device *dev)
 
 #ifdef CONFIG_I2C_XEC
 
-#if DT_HAS_NODE(DT_INST(0, microchip_xec_i2c))
+#if DT_NODE_HAS_STATUS(DT_INST(0, microchip_xec_i2c), okay)
 	i2c_pinmux(&pinmux_ports, DT_PROP(DT_INST(0, microchip_xec_i2c), port_sel));
 #endif
 
-#if DT_HAS_NODE(DT_INST(1, microchip_xec_i2c))
+#if DT_NODE_HAS_STATUS(DT_INST(1, microchip_xec_i2c), okay)
 	i2c_pinmux(&pinmux_ports, DT_PROP(DT_INST(1, microchip_xec_i2c), port_sel));
 #endif
 
-#if DT_HAS_NODE(DT_INST(2, microchip_xec_i2c))
+#if DT_NODE_HAS_STATUS(DT_INST(2, microchip_xec_i2c), okay)
 	i2c_pinmux(&pinmux_ports, DT_PROP(DT_INST(2, microchip_xec_i2c), port_sel));
 #endif
 
-#if DT_HAS_NODE(DT_INST(3, microchip_xec_i2c))
+#if DT_NODE_HAS_STATUS(DT_INST(3, microchip_xec_i2c), okay)
 	i2c_pinmux(&pinmux_ports, DT_PROP(DT_INST(3, microchip_xec_i2c), port_sel));
 #endif
 
-#if DT_HAS_NODE(DT_INST(4, microchip_xec_i2c))
+#if DT_NODE_HAS_STATUS(DT_INST(4, microchip_xec_i2c), okay)
 	i2c_pinmux(&pinmux_ports, DT_PROP(DT_INST(4, microchip_xec_i2c), port_sel));
 #endif
 
@@ -249,47 +249,47 @@ static int board_pinmux_init(struct device *dev)
 #endif
 
 #ifdef CONFIG_PWM_XEC
-#if DT_HAS_NODE(DT_INST(0, microchip_xec_pwm))
+#if DT_NODE_HAS_STATUS(DT_INST(0, microchip_xec_pwm), okay)
 	mchp_pcr_periph_slp_ctrl(PCR_PWM0, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(portb, MCHP_GPIO_053, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if DT_HAS_NODE(DT_INST(1, microchip_xec_pwm))
+#if DT_NODE_HAS_STATUS(DT_INST(1, microchip_xec_pwm), okay)
 	mchp_pcr_periph_slp_ctrl(PCR_PWM1, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(portb, MCHP_GPIO_054, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if DT_HAS_NODE(DT_INST(2, microchip_xec_pwm))
+#if DT_NODE_HAS_STATUS(DT_INST(2, microchip_xec_pwm), okay)
 	mchp_pcr_periph_slp_ctrl(PCR_PWM2, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(portb, MCHP_GPIO_055, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if DT_HAS_NODE(DT_INST(3, microchip_xec_pwm))
+#if DT_NODE_HAS_STATUS(DT_INST(3, microchip_xec_pwm), okay)
 	mchp_pcr_periph_slp_ctrl(PCR_PWM3, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(portb, MCHP_GPIO_056, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if DT_HAS_NODE(DT_INST(4, microchip_xec_pwm))
+#if DT_NODE_HAS_STATUS(DT_INST(4, microchip_xec_pwm), okay)
 	mchp_pcr_periph_slp_ctrl(PCR_PWM4, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(porta, MCHP_GPIO_011, MCHP_GPIO_CTRL_MUX_F2);
 #endif
 
-#if DT_HAS_NODE(DT_INST(5, microchip_xec_pwm))
+#if DT_NODE_HAS_STATUS(DT_INST(5, microchip_xec_pwm), okay)
 	mchp_pcr_periph_slp_ctrl(PCR_PWM5, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(porta, MCHP_GPIO_002, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if DT_HAS_NODE(DT_INST(6, microchip_xec_pwm))
+#if DT_NODE_HAS_STATUS(DT_INST(6, microchip_xec_pwm), okay)
 	mchp_pcr_periph_slp_ctrl(PCR_PWM6, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(porta, MCHP_GPIO_014, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if DT_HAS_NODE(DT_INST(7, microchip_xec_pwm))
+#if DT_NODE_HAS_STATUS(DT_INST(7, microchip_xec_pwm), okay)
 	mchp_pcr_periph_slp_ctrl(PCR_PWM7, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(porta, MCHP_GPIO_015, MCHP_GPIO_CTRL_MUX_F1);
 #endif
 
-#if DT_HAS_NODE(DT_INST(8, microchip_xec_pwm))
+#if DT_NODE_HAS_STATUS(DT_INST(8, microchip_xec_pwm), okay)
 	mchp_pcr_periph_slp_ctrl(PCR_PWM8, MCHP_PCR_SLEEP_DIS);
 	pinmux_pin_set(porta, MCHP_GPIO_035, MCHP_GPIO_CTRL_MUX_F1);
 #endif
@@ -379,12 +379,12 @@ static int board_pinmux_init(struct device *dev)
 #endif
 
 #ifdef CONFIG_SPI_XEC_QMSPI
-#if DT_HAS_NODE(DT_INST(0, microchip_xec_qmspi))
+#if DT_NODE_HAS_STATUS(DT_INST(0, microchip_xec_qmspi), okay)
 	mchp_pcr_periph_slp_ctrl(PCR_QMSPI, MCHP_PCR_SLEEP_DIS);
 
-#if DT_SPI_XEC_QMSPI_0_PORT_SEL == 0
+#if DT_PROP(DT_INST(0, microchip_xec_qmspi), port_sel) == 0
 	/* Port 0: Shared SPI pins. Shared has two chip selects */
-#if DT_SPI_XEC_QMSPI_0_CHIP_SELECT == 0
+#if DT_PROP(DT_INST(0, microchip_xec_qmspi), chip_select) == 0
 	pinmux_pin_set(portb, MCHP_GPIO_055, MCHP_GPIO_CTRL_MUX_F2);
 #else
 	pinmux_pin_set(porta, MCHP_GPIO_002, MCHP_GPIO_CTRL_MUX_F2);
@@ -392,7 +392,7 @@ static int board_pinmux_init(struct device *dev)
 	pinmux_pin_set(portb, MCHP_GPIO_056, MCHP_GPIO_CTRL_MUX_F2);
 	pinmux_pin_set(porte, MCHP_GPIO_223, MCHP_GPIO_CTRL_MUX_F1);
 	pinmux_pin_set(porte, MCHP_GPIO_224, MCHP_GPIO_CTRL_MUX_F2);
-#if DT_SPI_XEC_QMSPI_0_LINES == 4
+#if DT_PROP(DT_INST(0, microchip_xec_qmspi), lines) == 4
 	pinmux_pin_set(porte, MCHP_GPIO_227, MCHP_GPIO_CTRL_MUX_F1);
 	pinmux_pin_set(porta, MCHP_GPIO_016, MCHP_GPIO_CTRL_MUX_F2);
 #endif
@@ -403,13 +403,13 @@ static int board_pinmux_init(struct device *dev)
 	pinmux_pin_set(portc, MCHP_GPIO_125, MCHP_GPIO_CTRL_MUX_F1);
 	pinmux_pin_set(portc, MCHP_GPIO_121, MCHP_GPIO_CTRL_MUX_F1);
 	pinmux_pin_set(portc, MCHP_GPIO_122, MCHP_GPIO_CTRL_MUX_F1);
-#if DT_SPI_XEC_QMSPI_0_LINES == 4
+#if DT_PROP(DT_INST(0, microchip_xec_qmspi), lines) == 4
 	pinmux_pin_set(portc, MCHP_GPIO_123, MCHP_GPIO_CTRL_MUX_F1);
 	pinmux_pin_set(portc, MCHP_GPIO_126, MCHP_GPIO_CTRL_MUX_F1);
 #endif
-#endif /* DT_SPI_XEC_QMSPI_0_PORT_SEL == 0 */
+#endif /* DT_PROP(DT_INST(0, microchip_xec_qmspi), port_sel) == 0 */
 
-#endif /* DT_HAS_NODE(DT_INST(0, microchip_xec_qmspi)) */
+#endif /* DT_NODE_HAS_STATUS(DT_INST(0, microchip_xec_qmspi), okay) */
 #endif /* CONFIG_SPI_XEC_QMSPI */
 
 #ifdef CONFIG_SYS_PM_DEBUG
@@ -422,7 +422,7 @@ static int board_pinmux_init(struct device *dev)
 
 #ifdef CONFIG_TACH_XEC
 
-#if DT_HAS_NODE(DT_INST(0, microchip_xec_tach))
+#if DT_NODE_HAS_STATUS(DT_INST(0, microchip_xec_tach), okay)
 	pinmux_pin_set(portb, MCHP_GPIO_050, MCHP_GPIO_CTRL_MUX_F1);
 #endif /* CONFIG_TACH_XEC */
 

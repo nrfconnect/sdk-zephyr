@@ -34,29 +34,6 @@ config FXOS8700_DRDY_INT1
 	default y
 	depends on FXOS8700
 
-if GPIO_MCUX
-
-config GPIO_MCUX_PORTA
-	default y
-
-config GPIO_MCUX_PORTB
-	default y
-
-config GPIO_MCUX_PORTC
-	default y
-
-config GPIO_MCUX_PORTD
-	default y
-
-config GPIO_MCUX_PORTE
-	default y
-
-endif # GPIO_MCUX
-
-config I2C_3
-	default y
-	depends on I2C
-
 if PINMUX_MCUX
 
 config PINMUX_MCUX_PORTA
@@ -75,10 +52,6 @@ config PINMUX_MCUX_PORTE
 	default y
 
 endif # PINMUX_MCUX
-
-config PWM_3
-	default y
-	depends on PWM_MCUX_FTM
 
 config SPI_1
 	default y

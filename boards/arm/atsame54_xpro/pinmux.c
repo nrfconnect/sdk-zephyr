@@ -6,6 +6,7 @@
 
 #include <init.h>
 #include <drivers/pinmux.h>
+#include <soc.h>
 
 static int board_pinmux_init(struct device *dev)
 {
@@ -20,83 +21,86 @@ static int board_pinmux_init(struct device *dev)
 	ARG_UNUSED(muxc);
 	ARG_UNUSED(muxd);
 
-#if DT_ATMEL_SAM0_UART_SERCOM_0_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(0, atmel_sam0_uart)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_UART_SERCOM_1_BASE_ADDRESS
-#warning Pin mapping may not be configured
+#if ATMEL_SAM0_DT_SERCOM_CHECK(1, atmel_sam0_uart)
+	/* NOTE: SERCOM1 UART is used by the UART driver tests */
+	/* SERCOM1 ON RX=PC22, TX=PC23 */
+	pinmux_pin_set(muxc, 22, PINMUX_FUNC_C);
+	pinmux_pin_set(muxc, 23, PINMUX_FUNC_C);
 #endif
-#if DT_ATMEL_SAM0_UART_SERCOM_2_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(2, atmel_sam0_uart)
 	/* SERCOM2 ON RX=PB24, TX=PB25 */
 	pinmux_pin_set(muxb, 24, PINMUX_FUNC_D);
 	pinmux_pin_set(muxb, 25, PINMUX_FUNC_D);
 #endif
-#if DT_ATMEL_SAM0_UART_SERCOM_3_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(3, atmel_sam0_uart)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_UART_SERCOM_4_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(4, atmel_sam0_uart)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_UART_SERCOM_5_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(5, atmel_sam0_uart)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_UART_SERCOM_6_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(6, atmel_sam0_uart)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_UART_SERCOM_7_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(7, atmel_sam0_uart)
 #warning Pin mapping may not be configured
 #endif
 
-#if DT_ATMEL_SAM0_SPI_SERCOM_0_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(0, atmel_sam0_spi)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_SPI_SERCOM_1_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(1, atmel_sam0_spi)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_SPI_SERCOM_2_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(2, atmel_sam0_spi)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_SPI_SERCOM_3_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(3, atmel_sam0_spi)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_SPI_SERCOM_4_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(4, atmel_sam0_spi)
 	/* SERCOM4 ON MOSI=PB27, MISO=PB29, SCK=PB26 */
 	pinmux_pin_set(muxb, 26, PINMUX_FUNC_D);
 	pinmux_pin_set(muxb, 27, PINMUX_FUNC_D);
 	pinmux_pin_set(muxb, 29, PINMUX_FUNC_D);
 #endif
-#if DT_ATMEL_SAM0_SPI_SERCOM_5_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(5, atmel_sam0_spi)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_SPI_SERCOM_6_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(6, atmel_sam0_spi)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_SPI_SERCOM_7_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(7, atmel_sam0_spi)
 #warning Pin mapping may not be configured
 #endif
 
-#if DT_ATMEL_SAM0_I2C_SERCOM_0_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(0, atmel_sam0_i2c)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_I2C_SERCOM_1_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(1, atmel_sam0_i2c)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_I2C_SERCOM_2_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(2, atmel_sam0_i2c)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_I2C_SERCOM_3_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(3, atmel_sam0_i2c)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_I2C_SERCOM_4_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(4, atmel_sam0_i2c)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_I2C_SERCOM_5_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(5, atmel_sam0_i2c)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_I2C_SERCOM_6_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(6, atmel_sam0_i2c)
 #warning Pin mapping may not be configured
 #endif
-#if DT_ATMEL_SAM0_I2C_SERCOM_7_BASE_ADDRESS
+#if ATMEL_SAM0_DT_SERCOM_CHECK(7, atmel_sam0_i2c)
 	pinmux_pin_set(muxd, 8, PINMUX_FUNC_C);
 	pinmux_pin_set(muxd, 9, PINMUX_FUNC_C);
 #endif
@@ -107,7 +111,7 @@ static int board_pinmux_init(struct device *dev)
 	pinmux_pin_set(muxa, 24, PINMUX_FUNC_H);
 #endif
 
-#if DT_HAS_NODE(DT_NODELABEL(gmac))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(gmac), okay)
 	pinmux_pin_set(muxa, 14, PINMUX_FUNC_L);	/* PA14 = GTXCK */
 	pinmux_pin_set(muxa, 17, PINMUX_FUNC_L);	/* PA17 = GTXEN */
 	pinmux_pin_set(muxa, 18, PINMUX_FUNC_L);	/* PA18 = GTX0 */

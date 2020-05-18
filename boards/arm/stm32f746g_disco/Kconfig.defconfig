@@ -18,9 +18,17 @@ config ETH_STM32_HAL
 
 endif # NETWORKING
 
+config I2C
+	default y if KSCAN
 
-config PWM_STM32_1
+if KSCAN
+
+config KSCAN_FT5336
 	default y
-	depends on PWM
+
+config KSCAN_INIT_PRIORITY
+	default 65
+
+endif # KSCAN
 
 endif # BOARD_STM32F746G_DISCO

@@ -55,15 +55,9 @@ void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data)
 	 * k_thread_abort from user_cb.
 	 */
 	key = k_spin_lock(&z_thread_monitor_lock);
-
-	_FOREACH_STATIC_THREAD(thread_data) {
-		user_cb(thread_data->init_thread, user_data);
-	}
-
 	for (thread = _kernel.threads; thread; thread = thread->next_thread) {
 		user_cb(thread, user_data);
 	}
-
 	k_spin_unlock(&z_thread_monitor_lock, key);
 #endif
 }
@@ -77,19 +71,11 @@ void k_thread_foreach_unlocked(k_thread_user_cb_t user_cb, void *user_data)
 	__ASSERT(user_cb != NULL, "user_cb can not be NULL");
 
 	key = k_spin_lock(&z_thread_monitor_lock);
-
-	_FOREACH_STATIC_THREAD(thread_data) {
-		k_spin_unlock(&z_thread_monitor_lock, key);
-		user_cb(thread_data->init_thread, user_data);
-		key = k_spin_lock(&z_thread_monitor_lock);
-	}
-
 	for (thread = _kernel.threads; thread; thread = thread->next_thread) {
 		k_spin_unlock(&z_thread_monitor_lock, key);
 		user_cb(thread, user_data);
 		key = k_spin_lock(&z_thread_monitor_lock);
 	}
-
 	k_spin_unlock(&z_thread_monitor_lock, key);
 #endif
 }
@@ -462,51 +448,6 @@ static inline size_t adjust_stack_size(size_t stack_size)
 
 #endif /* CONFIG_STACK_POINTER_RANDOM */
 
-void z_new_thread_init(struct k_thread *thread,
-					    char *pStack, size_t stackSize,
-					    int prio, unsigned int options)
-{
-#if !defined(CONFIG_INIT_STACKS) && !defined(CONFIG_THREAD_STACK_INFO)
-	ARG_UNUSED(pStack);
-	ARG_UNUSED(stackSize);
-#endif
-
-#ifdef CONFIG_INIT_STACKS
-	memset(pStack, 0xaa, stackSize);
-#endif
-#ifdef CONFIG_STACK_SENTINEL
-	/* Put the stack sentinel at the lowest 4 bytes of the stack area.
-	 * We periodically check that it's still present and kill the thread
-	 * if it isn't.
-	 */
-	*((u32_t *)pStack) = STACK_SENTINEL;
-#endif /* CONFIG_STACK_SENTINEL */
-	/* Initialize various struct k_thread members */
-	z_init_thread_base(&thread->base, prio, _THREAD_PRESTART, options);
-
-	/* static threads overwrite it afterwards with real value */
-	thread->init_data = NULL;
-	thread->fn_abort = NULL;
-
-#ifdef CONFIG_THREAD_CUSTOM_DATA
-	/* Initialize custom data field (value is opaque to kernel) */
-	thread->custom_data = NULL;
-#endif
-
-#ifdef CONFIG_THREAD_NAME
-	thread->name[0] = '\0';
-#endif
-
-#if defined(CONFIG_USERSPACE)
-	thread->mem_domain_info.mem_domain = NULL;
-#endif /* CONFIG_USERSPACE */
-
-#if defined(CONFIG_THREAD_STACK_INFO)
-	thread->stack_info.start = (uintptr_t)pStack;
-	thread->stack_info.size = (u32_t)stackSize;
-#endif /* CONFIG_THREAD_STACK_INFO */
-}
-
 /*
  * Note:
  * The caller must guarantee that the stack_size passed here corresponds
@@ -518,10 +459,13 @@ void z_setup_new_thread(struct k_thread *new_thread,
 		       void *p1, void *p2, void *p3,
 		       int prio, u32_t options, const char *name)
 {
+	Z_ASSERT_VALID_PRIO(prio, entry);
+
 #ifdef CONFIG_USERSPACE
 	z_object_init(new_thread);
 	z_object_init(stack);
 	new_thread->stack_obj = stack;
+	new_thread->mem_domain_info.mem_domain = NULL;
 
 	/* Any given thread has access to itself */
 	k_object_access_grant(new_thread, new_thread);
@@ -533,13 +477,18 @@ void z_setup_new_thread(struct k_thread *new_thread,
 #ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
 #ifndef CONFIG_THREAD_USERSPACE_LOCAL_DATA_ARCH_DEFER_SETUP
 	/* reserve space on top of stack for local data */
-	stack_size = STACK_ROUND_DOWN(stack_size
+	stack_size = Z_STACK_PTR_ALIGN(stack_size
 			- sizeof(*new_thread->userspace_local_data));
 #endif
 #endif
+	/* Initialize various struct k_thread members */
+	z_init_thread_base(&new_thread->base, prio, _THREAD_PRESTART, options);
 
 	arch_new_thread(new_thread, stack, stack_size, entry, p1, p2, p3,
 			  prio, options);
+	/* static threads overwrite it afterwards with real value */
+	new_thread->init_data = NULL;
+	new_thread->fn_abort = NULL;
 
 #ifdef CONFIG_USE_SWITCH
 	/* switch_handle must be non-null except when inside z_swap()
@@ -549,7 +498,13 @@ void z_setup_new_thread(struct k_thread *new_thread,
 	__ASSERT(new_thread->switch_handle != NULL,
 		 "arch layer failed to initialize switch_handle");
 #endif
-
+#ifdef CONFIG_STACK_SENTINEL
+	/* Put the stack sentinel at the lowest 4 bytes of the stack area.
+	 * We periodically check that it's still present and kill the thread
+	 * if it isn't.
+	 */
+	*((u32_t *)new_thread->stack_info.start) = STACK_SENTINEL;
+#endif /* CONFIG_STACK_SENTINEL */
 #ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
 #ifndef CONFIG_THREAD_USERSPACE_LOCAL_DATA_ARCH_DEFER_SETUP
 	/* don't set again if the arch's own code in arch_new_thread() has
@@ -560,7 +515,10 @@ void z_setup_new_thread(struct k_thread *new_thread,
 		(Z_THREAD_STACK_BUFFER(stack) + stack_size);
 #endif
 #endif
-
+#ifdef CONFIG_THREAD_CUSTOM_DATA
+	/* Initialize custom data field (value is opaque to kernel) */
+	new_thread->custom_data = NULL;
+#endif
 #ifdef CONFIG_THREAD_MONITOR
 	new_thread->entry.pEntry = entry;
 	new_thread->entry.parameter1 = p1;
@@ -579,6 +537,8 @@ void z_setup_new_thread(struct k_thread *new_thread,
 			CONFIG_THREAD_MAX_NAME_LEN - 1);
 		/* Ensure NULL termination, truncate if longer */
 		new_thread->name[CONFIG_THREAD_MAX_NAME_LEN - 1] = '\0';
+	} else {
+		new_thread->name[0] = '\0';
 	}
 #endif
 #ifdef CONFIG_SCHED_CPU_MASK
@@ -791,6 +751,8 @@ FUNC_NORETURN void k_thread_user_mode_enter(k_thread_entry_t entry,
 	_current->entry.parameter3 = p3;
 #endif
 #ifdef CONFIG_USERSPACE
+	memset(_current->userspace_local_data, 0,
+	       sizeof(struct _thread_userspace_local_data));
 	arch_user_mode_enter(entry, p1, p2, p3);
 #else
 	/* XXX In this case we do not reset the stack */
@@ -831,11 +793,11 @@ void z_spin_lock_set_owner(struct k_spinlock *l)
 
 int z_impl_k_float_disable(struct k_thread *thread)
 {
-#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+#if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING)
 	return arch_float_disable(thread);
 #else
 	return -ENOSYS;
-#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
+#endif /* CONFIG_FPU && CONFIG_FPU_SHARING */
 }
 
 #ifdef CONFIG_USERSPACE

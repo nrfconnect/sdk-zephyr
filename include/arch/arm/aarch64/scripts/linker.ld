@@ -77,9 +77,6 @@
 MEMORY
 {
     FLASH     (rx) : ORIGIN = ROM_ADDR, LENGTH = ROM_SIZE
-#ifdef DT_CCM_BASE_ADDRESS
-    CCM       (rw) : ORIGIN = DT_CCM_BASE_ADDRESS, LENGTH = DT_CCM_SIZE * 1K
-#endif
     SRAM      (wx) : ORIGIN = RAM_ADDR, LENGTH = RAM_SIZE
     /* Used by and documented in include/linker/intlist.ld */
     IDT_LIST  (wx) : ORIGIN = (RAM_ADDR + RAM_SIZE), LENGTH = 2K
@@ -171,7 +168,7 @@ SECTIONS
 
     SECTION_PROLOGUE(_RODATA_SECTION_NAME,,)
     {
-        KEEP(*(IRQ_VECTOR_TABLE))
+        KEEP(*(_IRQ_VECTOR_TABLE_SECTION_NAME))
 
         KEEP(*(.openocd_dbg))
         KEEP(*(".openocd_dbg.*"))

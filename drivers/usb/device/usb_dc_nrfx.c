@@ -29,6 +29,9 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(usb_nrfx);
 
+/* USB device controller access from devicetree */
+#define DT_DRV_COMPAT nordic_nrf_usbd
+
 /**
  * @brief nRF USBD peripheral states
  */
@@ -71,14 +74,14 @@ enum usbd_event_type {
  * @param max_sz  Max packet size supported by endpoint.
  * @param en      Enable/Disable flag.
  * @param addr    Endpoint address.
- * @param type    Endpoint type.
+ * @param type    Endpoint transfer type.
  */
 struct nrf_usbd_ep_cfg {
 	usb_dc_ep_callback cb;
 	u32_t max_sz;
 	bool en;
 	u8_t addr;
-	enum usb_dc_ep_type type;
+	enum usb_dc_ep_transfer_type type;
 
 };
 
@@ -184,18 +187,18 @@ K_MEM_POOL_DEFINE(fifo_elem_pool, FIFO_ELEM_MIN_SZ, FIFO_ELEM_MAX_SZ,
  */
 
 /** Number of IN Endpoints configured (including control) */
-#define CFG_EPIN_CNT (DT_NORDIC_NRF_USBD_USBD_0_NUM_IN_ENDPOINTS + \
-		      DT_NORDIC_NRF_USBD_USBD_0_NUM_BIDIR_ENDPOINTS)
+#define CFG_EPIN_CNT (DT_INST_PROP(0, num_in_endpoints) +	\
+		      DT_INST_PROP(0, num_bidir_endpoints))
 
 /** Number of OUT Endpoints configured (including control) */
-#define CFG_EPOUT_CNT (DT_NORDIC_NRF_USBD_USBD_0_NUM_OUT_ENDPOINTS + \
-		       DT_NORDIC_NRF_USBD_USBD_0_NUM_BIDIR_ENDPOINTS)
+#define CFG_EPOUT_CNT (DT_INST_PROP(0, num_out_endpoints) +	\
+		       DT_INST_PROP(0, num_bidir_endpoints))
 
 /** Number of ISO IN Endpoints */
-#define CFG_EP_ISOIN_CNT DT_NORDIC_NRF_USBD_USBD_0_NUM_ISOIN_ENDPOINTS
+#define CFG_EP_ISOIN_CNT DT_INST_PROP(0, num_isoin_endpoints)
 
 /** Number of ISO OUT Endpoints */
-#define CFG_EP_ISOOUT_CNT DT_NORDIC_NRF_USBD_USBD_0_NUM_ISOOUT_ENDPOINTS
+#define CFG_EP_ISOOUT_CNT DT_INST_PROP(0, num_isoout_endpoints)
 
 /** ISO endpoint index */
 #define EP_ISOIN_INDEX CFG_EPIN_CNT
@@ -634,6 +637,11 @@ static void ep_ctx_reset(struct nrf_usbd_ep_ctx *ep_ctx)
 	ep_ctx->buf.curr = ep_ctx->buf.data;
 	ep_ctx->buf.len  = 0U;
 
+	/* Abort ongoing write operation. */
+	if (ep_ctx->write_in_progress) {
+		nrfx_usbd_ep_abort(ep_addr_to_nrfx(ep_ctx->cfg.addr));
+	}
+
 	ep_ctx->read_complete = true;
 	ep_ctx->read_pending = false;
 	ep_ctx->write_in_progress = false;
@@ -1053,6 +1061,12 @@ static void usbd_event_transfer_data(nrfx_usbd_evt_t const *const p_event)
 		}
 		break;
 
+		case NRFX_USBD_EP_ABORTED: {
+			LOG_DBG("Endpoint 0x%02x write aborted",
+				p_event->data.eptransfer.ep);
+		}
+		break;
+
 		default: {
 			LOG_ERR("Unexpected event (nrfx_usbd): %d, ep 0x%02x",
 				p_event->data.eptransfer.status,
@@ -1232,6 +1246,45 @@ static inline void usbd_reinit(void)
 	}
 }
 
+/**
+ * @brief funciton to generate fake receive request for
+ * ISO OUT EP.
+ *
+ * ISO OUT endpoint does not generate irq by itself and reading
+ * from ISO OUT ep is sunchronized with SOF frame. For more details
+ * refer to Nordic usbd specification.
+ */
+static void usbd_sof_trigger_iso_read(void)
+{
+	struct usbd_event *ev;
+	struct nrf_usbd_ep_ctx *ep_ctx;
+
+	ep_ctx = endpoint_ctx(NRFX_USBD_EPOUT8);
+	if (!ep_ctx) {
+		LOG_ERR("There is no ISO ep");
+		return;
+	}
+
+	if (ep_ctx->cfg.en) {
+		/* Dissect receive request
+		 * if the iso OUT ep is enabled
+		 */
+		ep_ctx->read_pending = true;
+		ep_ctx->read_complete = true;
+		ev = usbd_evt_alloc();
+		if (!ev) {
+			LOG_ERR("Failed to alloc evt");
+			return;
+		}
+		ev->evt_type = USBD_EVT_EP;
+		ev->evt.ep_evt.evt_type = EP_EVT_RECV_REQ;
+		ev->evt.ep_evt.ep = ep_ctx;
+		usbd_evt_put(ev);
+		usbd_work_schedule();
+	} else {
+		LOG_DBG("Endpoint is not enabled");
+	}
+}
 
 /* Work handler */
 static void usbd_work_handler(struct k_work *item)
@@ -1270,6 +1323,8 @@ static void usbd_work_handler(struct k_work *item)
 			}
 			break;
 		case USBD_EVT_SOF:
+			usbd_sof_trigger_iso_read();
+
 			if (ctx->status_cb) {
 				ctx->status_cb(USB_DC_SOF, NULL);
 			}
@@ -1309,8 +1364,7 @@ int usb_dc_attach(void)
 	k_work_init(&ctx->usb_work, usbd_work_handler);
 	k_mutex_init(&ctx->drv_lock);
 
-	IRQ_CONNECT(DT_NORDIC_NRF_USBD_USBD_0_IRQ_0,
-		    DT_NORDIC_NRF_USBD_USBD_0_IRQ_0_PRIORITY,
+	IRQ_CONNECT(DT_INST_IRQN(0), DT_INST_IRQ(0, priority),
 		    nrfx_isr, nrfx_usbd_irq_handler, 0);
 
 	err = nrfx_usbd_init(usbd_event_handler);
@@ -1468,10 +1522,13 @@ int usb_dc_ep_configure(const struct usb_dc_ep_cfg_data *const ep_cfg)
 	ep_ctx->cfg.type = ep_cfg->ep_type;
 	ep_ctx->cfg.max_sz = ep_cfg->ep_mps;
 
-	if ((ep_cfg->ep_mps & (ep_cfg->ep_mps - 1)) != 0U) {
-		LOG_ERR("EP max packet size must be a power of 2");
-		return -EINVAL;
+	if (!NRF_USBD_EPISO_CHECK(ep_cfg->ep_addr)) {
+		if ((ep_cfg->ep_mps & (ep_cfg->ep_mps - 1)) != 0U) {
+			LOG_ERR("EP max packet size must be a power of 2");
+			return -EINVAL;
+		}
 	}
+
 	nrfx_usbd_ep_max_packet_size_set(ep_addr_to_nrfx(ep_cfg->ep_addr),
 					 ep_cfg->ep_mps);
 

@@ -81,6 +81,19 @@ def dt_chosen_enabled(kconf, _, chosen):
     return "y" if node and node.enabled else "n"
 
 
+def dt_chosen_path(kconf, _, chosen):
+    """
+    This function takes a /chosen node property and returns the path
+    to the node in the property value, or the empty string.
+    """
+    if doc_mode or edt is None:
+        return "n"
+
+    node = edt.chosen_node(chosen)
+
+    return node.path if node else ""
+
+
 def dt_nodelabel_enabled(kconf, _, label):
     """
     This function takes a 'label' and returns "y" if we find an "enabled"
@@ -89,11 +102,9 @@ def dt_nodelabel_enabled(kconf, _, label):
     if doc_mode or edt is None:
         return "n"
 
-    for node in edt.nodes:
-        if label in node.labels and node.enabled:
-            return "y"
+    node = edt.label2node.get(label)
 
-    return "n"
+    return "y" if node and node.enabled else "n"
 
 
 def dt_alias_enabled(kconf, _, alias):
@@ -331,11 +342,7 @@ def dt_compat_enabled(kconf, _, compat):
     if doc_mode or edt is None:
         return "n"
 
-    for node in edt.nodes:
-        if compat in node.compats and node.enabled:
-            return "y"
-
-    return "n"
+    return "y" if compat in edt.compat2enabled else "n"
 
 
 def dt_compat_on_bus(kconf, _, compat, bus):
@@ -369,6 +376,20 @@ def dt_nodelabel_has_compat(kconf, _, label, compat):
     return "n"
 
 
+def dt_nodelabel_path(kconf, _, label):
+    """
+    This function takes a node label (not a label property) and
+    returns the path to the node which has that label, or an empty
+    string if there is no such node.
+    """
+    if doc_mode or edt is None:
+        return ""
+
+    node = edt.label2node.get(label)
+
+    return node.path if node else ""
+
+
 def shields_list_contains(kconf, _, shield):
     """
     Return "n" if cmake environment variable 'SHIELD_AS_LIST' doesn't exist.
@@ -388,6 +409,7 @@ functions = {
         "dt_compat_on_bus": (dt_compat_on_bus, 2, 2),
         "dt_chosen_label": (dt_chosen_label, 1, 1),
         "dt_chosen_enabled": (dt_chosen_enabled, 1, 1),
+        "dt_chosen_path": (dt_chosen_path, 1, 1),
         "dt_nodelabel_enabled": (dt_nodelabel_enabled, 1, 1),
         "dt_alias_enabled": (dt_alias_enabled, 1, 1),
         "dt_chosen_reg_addr_int": (dt_chosen_reg, 1, 3),
@@ -402,5 +424,6 @@ functions = {
         "dt_node_int_prop_int": (dt_node_int_prop, 2, 2),
         "dt_node_int_prop_hex": (dt_node_int_prop, 2, 2),
         "dt_nodelabel_has_compat": (dt_nodelabel_has_compat, 2, 2),
+        "dt_nodelabel_path": (dt_nodelabel_path, 1, 1),
         "shields_list_contains": (shields_list_contains, 1, 1),
 }

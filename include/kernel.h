@@ -384,31 +384,6 @@ static inline void k_obj_free(void *obj)
 
 /** @} */
 
-/* Using typedef deliberately here, this is quite intended to be an opaque
- * type.
- *
- * The purpose of this data type is to clearly distinguish between the
- * declared symbol for a stack (of type k_thread_stack_t) and the underlying
- * buffer which composes the stack data actually used by the underlying
- * thread; they cannot be used interchangeably as some arches precede the
- * stack buffer region with guard areas that trigger a MPU or MMU fault
- * if written to.
- *
- * APIs that want to work with the buffer inside should continue to use
- * char *.
- *
- * Stacks should always be created with K_THREAD_STACK_DEFINE().
- */
-struct __packed z_thread_stack_element {
-	char data;
-};
-
-/**
- * @typedef k_thread_stack_t
- * @brief Typedef of struct z_thread_stack_element
- *
- * @see z_thread_stack_element
- */
 
 /**
  * @typedef k_thread_entry_t
@@ -723,7 +698,7 @@ extern void k_thread_foreach_unlocked(
  * */
 #define K_ESSENTIAL (BIT(0))
 
-#if defined(CONFIG_FP_SHARING)
+#if defined(CONFIG_FPU_SHARING)
 /**
  * @brief thread uses floating point registers
  */
@@ -751,7 +726,7 @@ extern void k_thread_foreach_unlocked(
 #ifdef CONFIG_X86
 /* x86 Bitmask definitions for threads user options */
 
-#if defined(CONFIG_FP_SHARING) && defined(CONFIG_SSE)
+#if defined(CONFIG_FPU_SHARING) && defined(CONFIG_SSE)
 /* thread uses SSEx (and also FP) registers */
 #define K_SSE_REGS (BIT(7))
 #endif
@@ -838,9 +813,9 @@ extern FUNC_NORETURN void k_thread_user_mode_enter(k_thread_entry_t entry,
  * Changing a thread's resource pool will not migrate allocations from the
  * previous pool.
  *
- * @param thread Target thread to assign a memory pool for resource requests,
- *               or NULL if the thread should no longer have a memory pool.
- * @param pool Memory pool to use for resources.
+ * @param thread Target thread to assign a memory pool for resource requests.
+ * @param pool Memory pool to use for resources,
+ *             or NULL if the thread should no longer have a memory pool.
  */
 static inline void k_thread_resource_pool_assign(struct k_thread *thread,
 						 struct k_mem_pool *pool)
@@ -1081,7 +1056,7 @@ struct _static_thread_data {
 	const char *init_name;
 };
 
-#define _THREAD_INITIALIZER(thread, stack, stack_size,           \
+#define Z_THREAD_INITIALIZER(thread, stack, stack_size,           \
 			    entry, p1, p2, p3,                   \
 			    prio, options, delay, abort, tname)  \
 	{                                                        \
@@ -1124,7 +1099,7 @@ struct _static_thread_data {
  * @param p3 3rd entry point parameter.
  * @param prio Thread priority.
  * @param options Thread options.
- * @param delay Scheduling delay (in milliseconds), or K_NO_WAIT (for no delay).
+ * @param delay Scheduling delay (in milliseconds), zero for no delay.
  *
  *
  * @internal It has been observed that the x86 compiler by default aligns
@@ -1138,7 +1113,7 @@ struct _static_thread_data {
 	K_THREAD_STACK_DEFINE(_k_thread_stack_##name, stack_size);	 \
 	struct k_thread _k_thread_obj_##name;				 \
 	Z_STRUCT_SECTION_ITERABLE(_static_thread_data, _k_thread_data_##name) =\
-		_THREAD_INITIALIZER(&_k_thread_obj_##name,		 \
+		Z_THREAD_INITIALIZER(&_k_thread_obj_##name,		 \
 				    _k_thread_stack_##name, stack_size,  \
 				entry, p1, p2, p3, prio, options, delay, \
 				NULL, name);				 	 \
@@ -2184,7 +2159,7 @@ struct k_queue {
 	_OBJECT_TRACING_LINKED_FLAG
 };
 
-#define _K_QUEUE_INITIALIZER(obj) \
+#define Z_QUEUE_INITIALIZER(obj) \
 	{ \
 	.data_q = SYS_SLIST_STATIC_INIT(&obj.data_q), \
 	.lock = { }, \
@@ -2195,7 +2170,7 @@ struct k_queue {
 	_OBJECT_TRACING_INIT \
 	}
 
-#define K_QUEUE_INITIALIZER __DEPRECATED_MACRO _K_QUEUE_INITIALIZER
+#define K_QUEUE_INITIALIZER __DEPRECATED_MACRO Z_QUEUE_INITIALIZER
 
 extern void *z_queue_node_peek(sys_sfnode_t *node, bool needs_free);
 
@@ -2487,7 +2462,7 @@ static inline void *z_impl_k_queue_peek_tail(struct k_queue *queue)
  */
 #define K_QUEUE_DEFINE(name) \
 	Z_STRUCT_SECTION_ITERABLE(k_queue, name) = \
-		_K_QUEUE_INITIALIZER(name)
+		Z_QUEUE_INITIALIZER(name)
 
 /** @} */
 
@@ -2578,7 +2553,7 @@ struct k_fifo {
  */
 #define Z_FIFO_INITIALIZER(obj) \
 	{ \
-	._queue = _K_QUEUE_INITIALIZER(obj._queue) \
+	._queue = Z_QUEUE_INITIALIZER(obj._queue) \
 	}
 
 #define K_FIFO_INITIALIZER __DEPRECATED_MACRO Z_FIFO_INITIALIZER
@@ -2781,12 +2756,12 @@ struct k_lifo {
  * @cond INTERNAL_HIDDEN
  */
 
-#define _K_LIFO_INITIALIZER(obj) \
+#define Z_LIFO_INITIALIZER(obj) \
 	{ \
-	._queue = _K_QUEUE_INITIALIZER(obj._queue) \
+	._queue = Z_QUEUE_INITIALIZER(obj._queue) \
 	}
 
-#define K_LIFO_INITIALIZER __DEPRECATED_MACRO _K_LIFO_INITIALIZER
+#define K_LIFO_INITIALIZER __DEPRECATED_MACRO Z_LIFO_INITIALIZER
 
 /**
  * INTERNAL_HIDDEN @endcond
@@ -2875,7 +2850,7 @@ struct k_lifo {
  */
 #define K_LIFO_DEFINE(name) \
 	Z_STRUCT_SECTION_ITERABLE(k_lifo, name) = \
-		_K_LIFO_INITIALIZER(name)
+		Z_LIFO_INITIALIZER(name)
 
 /** @} */
 
@@ -2896,7 +2871,7 @@ struct k_stack {
 	u8_t flags;
 };
 
-#define _K_STACK_INITIALIZER(obj, stack_buffer, stack_num_entries) \
+#define Z_STACK_INITIALIZER(obj, stack_buffer, stack_num_entries) \
 	{ \
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q),	\
 	.base = stack_buffer, \
@@ -2905,7 +2880,7 @@ struct k_stack {
 	_OBJECT_TRACING_INIT \
 	}
 
-#define K_STACK_INITIALIZER __DEPRECATED_MACRO _K_STACK_INITIALIZER
+#define K_STACK_INITIALIZER __DEPRECATED_MACRO Z_STACK_INITIALIZER
 
 /**
  * INTERNAL_HIDDEN @endcond
@@ -3012,7 +2987,7 @@ __syscall int k_stack_pop(struct k_stack *stack, stack_data_t *data,
 	stack_data_t __noinit                                  \
 		_k_stack_buf_##name[stack_num_entries];        \
 	Z_STRUCT_SECTION_ITERABLE(k_stack, name) = \
-		_K_STACK_INITIALIZER(name, _k_stack_buf_##name, \
+		Z_STACK_INITIALIZER(name, _k_stack_buf_##name, \
 				    stack_num_entries)
 
 /** @} */
@@ -3576,7 +3551,7 @@ struct k_mutex {
 /**
  * @cond INTERNAL_HIDDEN
  */
-#define _K_MUTEX_INITIALIZER(obj) \
+#define Z_MUTEX_INITIALIZER(obj) \
 	{ \
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
 	.owner = NULL, \
@@ -3585,7 +3560,7 @@ struct k_mutex {
 	_OBJECT_TRACING_INIT \
 	}
 
-#define K_MUTEX_INITIALIZER __DEPRECATED_MACRO _K_MUTEX_INITIALIZER
+#define K_MUTEX_INITIALIZER __DEPRECATED_MACRO Z_MUTEX_INITIALIZER
 
 /**
  * INTERNAL_HIDDEN @endcond
@@ -3602,7 +3577,7 @@ struct k_mutex {
  */
 #define K_MUTEX_DEFINE(name) \
 	Z_STRUCT_SECTION_ITERABLE(k_mutex, name) = \
-		_K_MUTEX_INITIALIZER(name)
+		Z_MUTEX_INITIALIZER(name)
 
 /**
  * @brief Initialize a mutex.
@@ -3842,7 +3817,7 @@ struct k_msgq {
  */
 
 
-#define _K_MSGQ_INITIALIZER(obj, q_buffer, q_msg_size, q_max_msgs) \
+#define Z_MSGQ_INITIALIZER(obj, q_buffer, q_msg_size, q_max_msgs) \
 	{ \
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
 	.msg_size = q_msg_size, \
@@ -3854,7 +3829,7 @@ struct k_msgq {
 	.used_msgs = 0, \
 	_OBJECT_TRACING_INIT \
 	}
-#define K_MSGQ_INITIALIZER __DEPRECATED_MACRO _K_MSGQ_INITIALIZER
+#define K_MSGQ_INITIALIZER __DEPRECATED_MACRO Z_MSGQ_INITIALIZER
 /**
  * INTERNAL_HIDDEN @endcond
  */
@@ -3899,7 +3874,7 @@ struct k_msgq_attrs {
 	static char __noinit __aligned(q_align)				\
 		_k_fifo_buf_##q_name[(q_max_msgs) * (q_msg_size)];	\
 	Z_STRUCT_SECTION_ITERABLE(k_msgq, q_name) =			\
-	       _K_MSGQ_INITIALIZER(q_name, _k_fifo_buf_##q_name,	\
+	       Z_MSGQ_INITIALIZER(q_name, _k_fifo_buf_##q_name,	\
 				  q_msg_size, q_max_msgs)
 
 /**
@@ -4126,14 +4101,14 @@ struct k_mbox {
  * @cond INTERNAL_HIDDEN
  */
 
-#define _K_MBOX_INITIALIZER(obj) \
+#define Z_MBOX_INITIALIZER(obj) \
 	{ \
 	.tx_msg_queue = Z_WAIT_Q_INIT(&obj.tx_msg_queue), \
 	.rx_msg_queue = Z_WAIT_Q_INIT(&obj.rx_msg_queue), \
 	_OBJECT_TRACING_INIT \
 	}
 
-#define K_MBOX_INITIALIZER __DEPRECATED_MACRO _K_MBOX_INITIALIZER
+#define K_MBOX_INITIALIZER __DEPRECATED_MACRO Z_MBOX_INITIALIZER
 
 /**
  * INTERNAL_HIDDEN @endcond
@@ -4150,7 +4125,7 @@ struct k_mbox {
  */
 #define K_MBOX_DEFINE(name) \
 	Z_STRUCT_SECTION_ITERABLE(k_mbox, name) = \
-		_K_MBOX_INITIALIZER(name) \
+		Z_MBOX_INITIALIZER(name) \
 
 /**
  * @brief Initialize a mailbox.
@@ -4307,7 +4282,7 @@ struct k_pipe {
  */
 #define K_PIPE_FLAG_ALLOC	BIT(0)	/** Buffer was allocated */
 
-#define _K_PIPE_INITIALIZER(obj, pipe_buffer, pipe_buffer_size)     \
+#define Z_PIPE_INITIALIZER(obj, pipe_buffer, pipe_buffer_size)     \
 	{                                                           \
 	.buffer = pipe_buffer,                                      \
 	.size = pipe_buffer_size,                                   \
@@ -4323,7 +4298,7 @@ struct k_pipe {
 	.flags = 0                                                  \
 	}
 
-#define K_PIPE_INITIALIZER __DEPRECATED_MACRO _K_PIPE_INITIALIZER
+#define K_PIPE_INITIALIZER __DEPRECATED_MACRO Z_PIPE_INITIALIZER
 
 /**
  * INTERNAL_HIDDEN @endcond
@@ -4346,7 +4321,7 @@ struct k_pipe {
 	static unsigned char __noinit __aligned(pipe_align)	\
 		_k_pipe_buf_##name[pipe_buffer_size];			\
 	Z_STRUCT_SECTION_ITERABLE(k_pipe, name) = \
-		_K_PIPE_INITIALIZER(name, _k_pipe_buf_##name, pipe_buffer_size)
+		Z_PIPE_INITIALIZER(name, _k_pipe_buf_##name, pipe_buffer_size)
 
 /**
  * @brief Initialize a pipe.
@@ -4455,6 +4430,26 @@ __syscall int k_pipe_get(struct k_pipe *pipe, void *data,
 extern void k_pipe_block_put(struct k_pipe *pipe, struct k_mem_block *block,
 			     size_t size, struct k_sem *sem);
 
+/**
+ * @brief Query the number of bytes that may be read from @a pipe.
+ *
+ * @param pipe Address of the pipe.
+ *
+ * @retval a number n such that 0 <= n <= @ref k_pipe.size; the
+ *         result is zero for unbuffered pipes.
+ */
+__syscall size_t k_pipe_read_avail(struct k_pipe *pipe);
+
+/**
+ * @brief Query the number of bytes that may be written to @a pipe
+ *
+ * @param pipe Address of the pipe.
+ *
+ * @retval a number n such that 0 <= n <= @ref k_pipe.size; the
+ *         result is zero for unbuffered pipes.
+ */
+__syscall size_t k_pipe_write_avail(struct k_pipe *pipe);
+
 /** @} */
 
 /**
@@ -4473,7 +4468,7 @@ struct k_mem_slab {
 	_OBJECT_TRACING_LINKED_FLAG
 };
 
-#define _K_MEM_SLAB_INITIALIZER(obj, slab_buffer, slab_block_size, \
+#define Z_MEM_SLAB_INITIALIZER(obj, slab_buffer, slab_block_size, \
 			       slab_num_blocks) \
 	{ \
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
@@ -4485,7 +4480,7 @@ struct k_mem_slab {
 	_OBJECT_TRACING_INIT \
 	}
 
-#define K_MEM_SLAB_INITIALIZER __DEPRECATED_MACRO _K_MEM_SLAB_INITIALIZER
+#define K_MEM_SLAB_INITIALIZER __DEPRECATED_MACRO Z_MEM_SLAB_INITIALIZER
 
 
 /**
@@ -4521,7 +4516,7 @@ struct k_mem_slab {
 	char __noinit __aligned(WB_UP(slab_align)) \
 	   _k_mem_slab_buf_##name[(slab_num_blocks) * WB_UP(slab_block_size)]; \
 	Z_STRUCT_SECTION_ITERABLE(k_mem_slab, name) = \
-		_K_MEM_SLAB_INITIALIZER(name, _k_mem_slab_buf_##name, \
+		Z_MEM_SLAB_INITIALIZER(name, _k_mem_slab_buf_##name, \
 					WB_UP(slab_block_size), slab_num_blocks)
 
 /**
@@ -4973,7 +4968,7 @@ struct k_poll_event {
 	.state = K_POLL_STATE_NOT_READY, \
 	.mode = event_mode, \
 	.unused = 0, \
-	{ .obj = event_obj }, \
+	.obj = event_obj, \
 	}
 
 #define K_POLL_EVENT_STATIC_INITIALIZER(event_type, event_mode, event_obj, \
@@ -4984,7 +4979,7 @@ struct k_poll_event {
 	.state = K_POLL_STATE_NOT_READY, \
 	.mode = event_mode, \
 	.unused = 0, \
-	{ .obj = event_obj }, \
+	.obj = event_obj, \
 	}
 
 /**
@@ -5251,150 +5246,6 @@ extern bool z_is_thread_essential(void);
  * @internal
  */
 extern void z_timer_expiration_handler(struct _timeout *t);
-
-/* arch/cpu.h may declare an architecture or platform-specific macro
- * for properly declaring stacks, compatible with MMU/MPU constraints if
- * enabled
- */
-
-/**
- * @brief Obtain an extern reference to a stack
- *
- * This macro properly brings the symbol of a thread stack declared
- * elsewhere into scope.
- *
- * @param sym Thread stack symbol name
- */
-#define K_THREAD_STACK_EXTERN(sym) extern k_thread_stack_t sym[]
-
-#ifdef ARCH_THREAD_STACK_DEFINE
-#define K_THREAD_STACK_DEFINE(sym, size) ARCH_THREAD_STACK_DEFINE(sym, size)
-#define K_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
-		ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size)
-#define K_THREAD_STACK_LEN(size) ARCH_THREAD_STACK_LEN(size)
-#define K_THREAD_STACK_MEMBER(sym, size) ARCH_THREAD_STACK_MEMBER(sym, size)
-#define K_THREAD_STACK_SIZEOF(sym) ARCH_THREAD_STACK_SIZEOF(sym)
-#define K_THREAD_STACK_RESERVED ((size_t)ARCH_THREAD_STACK_RESERVED)
-static inline char *Z_THREAD_STACK_BUFFER(k_thread_stack_t *sym)
-{
-	return ARCH_THREAD_STACK_BUFFER(sym);
-}
-#else
-/**
- * @brief Declare a toplevel thread stack memory region
- *
- * This declares a region of memory suitable for use as a thread's stack.
- *
- * This is the generic, historical definition. Align to STACK_ALIGN and put in
- * 'noinit' section so that it isn't zeroed at boot
- *
- * The declared symbol will always be a k_thread_stack_t which can be passed to
- * k_thread_create(), but should otherwise not be manipulated. If the buffer
- * inside needs to be examined, examine thread->stack_info for the associated
- * thread object to obtain the boundaries.
- *
- * It is legal to precede this definition with the 'static' keyword.
- *
- * It is NOT legal to take the sizeof(sym) and pass that to the stackSize
- * parameter of k_thread_create(), it may not be the same as the
- * 'size' parameter. Use K_THREAD_STACK_SIZEOF() instead.
- *
- * Some arches may round the size of the usable stack region up to satisfy
- * alignment constraints. K_THREAD_STACK_SIZEOF() will return the aligned
- * size.
- *
- * @param sym Thread stack symbol name
- * @param size Size of the stack memory region
- */
-#define K_THREAD_STACK_DEFINE(sym, size) \
-	struct z_thread_stack_element __noinit __aligned(STACK_ALIGN) sym[size]
-
-/**
- * @brief Calculate size of stacks to be allocated in a stack array
- *
- * This macro calculates the size to be allocated for the stacks
- * inside a stack array. It accepts the indicated "size" as a parameter
- * and if required, pads some extra bytes (e.g. for MPU scenarios). Refer
- * K_THREAD_STACK_ARRAY_DEFINE definition to see how this is used.
- *
- * @param size Size of the stack memory region
- */
-#define K_THREAD_STACK_LEN(size) (size)
-
-/**
- * @brief Declare a toplevel array of thread stack memory regions
- *
- * Create an array of equally sized stacks. See K_THREAD_STACK_DEFINE
- * definition for additional details and constraints.
- *
- * This is the generic, historical definition. Align to STACK_ALIGN and put in
- * 'noinit' section so that it isn't zeroed at boot
- *
- * @param sym Thread stack symbol name
- * @param nmemb Number of stacks to declare
- * @param size Size of the stack memory region
- */
-#define K_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
-	struct z_thread_stack_element __noinit \
-		__aligned(STACK_ALIGN) sym[nmemb][K_THREAD_STACK_LEN(size)]
-
-/**
- * @brief Declare an embedded stack memory region
- *
- * Used for stacks embedded within other data structures. Use is highly
- * discouraged but in some cases necessary. For memory protection scenarios,
- * it is very important that any RAM preceding this member not be writable
- * by threads else a stack overflow will lead to silent corruption. In other
- * words, the containing data structure should live in RAM owned by the kernel.
- *
- * @param sym Thread stack symbol name
- * @param size Size of the stack memory region
- */
-#define K_THREAD_STACK_MEMBER(sym, size) \
-	struct z_thread_stack_element __aligned(STACK_ALIGN) sym[size]
-
-/**
- * @brief Return the size in bytes of a stack memory region
- *
- * Convenience macro for passing the desired stack size to k_thread_create()
- * since the underlying implementation may actually create something larger
- * (for instance a guard area).
- *
- * The value returned here is not guaranteed to match the 'size' parameter
- * passed to K_THREAD_STACK_DEFINE and may be larger.
- *
- * @param sym Stack memory symbol
- * @return Size of the stack
- */
-#define K_THREAD_STACK_SIZEOF(sym) sizeof(sym)
-
-
-/**
- * @brief Indicate how much additional memory is reserved for stack objects
- *
- * Any given stack declaration may have additional memory in it for guard
- * areas or supervisor mode stacks. This macro indicates how much space
- * is reserved for this. The memory reserved may not be contiguous within
- * the stack object, and does not account for additional space used due to
- * enforce alignment.
- */
-#define K_THREAD_STACK_RESERVED		((size_t)0U)
-
-/**
- * @brief Get a pointer to the physical stack buffer
- *
- * This macro is deprecated. If a stack buffer needs to be examined, the
- * bounds should be obtained from the associated thread's stack_info struct.
- *
- * @param sym Declared stack symbol name
- * @return The buffer itself, a char *
- */
-static inline char *Z_THREAD_STACK_BUFFER(k_thread_stack_t *sym)
-{
-	return (char *)sym;
-}
-
-#endif /* _ARCH_DECLARE_STACK */
 
 /**
  * @defgroup mem_domain_apis Memory domain APIs

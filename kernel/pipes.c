@@ -529,7 +529,20 @@ int z_pipe_put_internal(struct k_pipe *pipe, struct k_pipe_async *async_desc,
 		return 0;
 	}
 
-	/* Not all data was copied. */
+	if (!K_TIMEOUT_EQ(timeout, K_NO_WAIT)
+	    && num_bytes_written >= min_xfer
+	    && min_xfer > 0) {
+		*bytes_written = num_bytes_written;
+#if (CONFIG_NUM_PIPE_ASYNC_MSGS > 0)
+		if (async_desc != NULL) {
+			pipe_async_finish(async_desc);
+		}
+#endif
+		k_sched_unlock();
+		return 0;
+	}
+
+	/* Not all data was copied */
 
 #if (CONFIG_NUM_PIPE_ASYNC_MSGS > 0)
 	if (async_desc != NULL) {
@@ -695,7 +708,17 @@ int z_impl_k_pipe_get(struct k_pipe *pipe, void *data, size_t bytes_to_read,
 		return 0;
 	}
 
-	/* Not all data was read. */
+	if (!K_TIMEOUT_EQ(timeout, K_NO_WAIT)
+	    && num_bytes_read >= min_xfer
+	    && min_xfer > 0) {
+		k_sched_unlock();
+
+		*bytes_read = num_bytes_read;
+
+		return 0;
+	}
+
+	/* Not all data was read */
 
 	struct k_pipe_desc  pipe_desc;
 
@@ -781,4 +804,78 @@ void k_pipe_block_put(struct k_pipe *pipe, struct k_mem_block *block,
 				    bytes_to_write, &dummy_bytes_written,
 				    bytes_to_write, K_FOREVER);
 }
+#endif
+
+size_t z_impl_k_pipe_read_avail(struct k_pipe *pipe)
+{
+	size_t res;
+	k_spinlock_key_t key;
+
+	/* Buffer and size are fixed. No need to spin. */
+	if (pipe->buffer == NULL || pipe->size == 0) {
+		res = 0;
+		goto out;
+	}
+
+	key = k_spin_lock(&pipe->lock);
+
+	if (pipe->read_index == pipe->write_index) {
+		res = pipe->bytes_used;
+	} else if (pipe->read_index < pipe->write_index) {
+		res = pipe->write_index - pipe->read_index;
+	} else {
+		res = pipe->size - (pipe->read_index - pipe->write_index);
+	}
+
+	k_spin_unlock(&pipe->lock, key);
+
+out:
+	return res;
+}
+
+#ifdef CONFIG_USERSPACE
+size_t z_vrfy_k_pipe_read_avail(struct k_pipe *pipe)
+{
+	Z_OOPS(Z_SYSCALL_OBJ(pipe, K_OBJ_PIPE));
+
+	return z_impl_k_pipe_read_avail(pipe);
+}
+#include <syscalls/k_pipe_read_avail_mrsh.c>
+#endif
+
+size_t z_impl_k_pipe_write_avail(struct k_pipe *pipe)
+{
+	size_t res;
+	k_spinlock_key_t key;
+
+	/* Buffer and size are fixed. No need to spin. */
+	if (pipe->buffer == NULL || pipe->size == 0) {
+		res = 0;
+		goto out;
+	}
+
+	key = k_spin_lock(&pipe->lock);
+
+	if (pipe->write_index == pipe->read_index) {
+		res = pipe->size - pipe->bytes_used;
+	} else if (pipe->write_index < pipe->read_index) {
+		res = pipe->read_index - pipe->write_index;
+	} else {
+		res = pipe->size - (pipe->write_index - pipe->read_index);
+	}
+
+	k_spin_unlock(&pipe->lock, key);
+
+out:
+	return res;
+}
+
+#ifdef CONFIG_USERSPACE
+size_t z_vrfy_k_pipe_write_avail(struct k_pipe *pipe)
+{
+	Z_OOPS(Z_SYSCALL_OBJ(pipe, K_OBJ_PIPE));
+
+	return z_impl_k_pipe_write_avail(pipe);
+}
+#include <syscalls/k_pipe_write_avail_mrsh.c>
 #endif

@@ -39,6 +39,10 @@
 		timer-2 = &timer2;
 	};
 
+	chosen {
+		zephyr,flash-controller = &flash_controller;
+	};
+
 	soc {
 
 		flash_controller: flash-controller@4001e000 {
@@ -222,7 +226,7 @@
 			label = "TEMP_0";
 		};
 
-		wdt: watchdog@40010000 {
+		wdt: wdt0: watchdog@40010000 {
 			compatible = "nordic,nrf-watchdog";
 			reg = <0x40010000 0x1000>;
 			interrupts = <16 1>;

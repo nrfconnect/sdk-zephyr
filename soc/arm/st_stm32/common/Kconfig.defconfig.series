@@ -49,6 +49,10 @@ config SPI_STM32
 	default y
 	depends on SPI
 
+config I2S_STM32
+	default y
+	depends on I2S
+
 config USB_DC_STM32
 	default y
 	depends on USB
@@ -56,10 +60,6 @@ config USB_DC_STM32
 config COUNTER_RTC_STM32
 	default y
 	depends on COUNTER
-
-config CAN_STM32
-	default y
-	depends on CAN
 
 config ADC_STM32
 	default y

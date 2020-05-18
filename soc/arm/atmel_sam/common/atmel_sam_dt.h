@@ -11,6 +11,8 @@
 #ifndef _ATMEL_SAM_DT_H_
 #define _ATMEL_SAM_DT_H_
 
+#include <devicetree.h>
+
 /* Devicetree related macros to construct pin mux config data */
 
 /* Get a node id from a pinctrl-0 prop at index 'i' */
@@ -42,5 +44,22 @@
 		ATMEL_SAM_PIN_2_PIO_PERIPH_ID(inst, idx),	\
 		ATMEL_SAM_PIN_PERIPH(inst, idx) << 16		\
 	}
+
+/* Get the number of pins for pinctrl-0 */
+#define ATMEL_SAM_DT_NUM_PINS(inst) DT_INST_PROP_LEN(inst, pinctrl_0)
+
+/* internal macro to structure things for use with UTIL_LISTIFY */
+#define ATMEL_SAM_DT_PIN_ELEM(idx, inst) ATMEL_SAM_DT_PIN(inst, idx),
+
+/* Construct an array intializer for soc_gpio_pin for a device instance */
+#define ATMEL_SAM_DT_PINS(inst)					\
+	{ UTIL_LISTIFY(ATMEL_SAM_DT_NUM_PINS(inst),		\
+		       ATMEL_SAM_DT_PIN_ELEM, inst)		\
+	}
+
+/* Devicetree macros related to clock */
+
+#define ATMEL_SAM_DT_CPU_CLK_FREQ_HZ \
+		DT_PROP(DT_PATH(cpus, cpu_0), clock_frequency)
 
 #endif /* _ATMEL_SAM_SOC_DT_H_ */

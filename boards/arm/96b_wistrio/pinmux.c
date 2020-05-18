@@ -14,19 +14,19 @@
 #include <pinmux/stm32/pinmux_stm32.h>
 
 static const struct pin_config pinconf[] = {
-#if DT_HAS_NODE(DT_NODELABEL(usart1))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usart1), okay)
 	{STM32_PIN_PA9,  STM32L1X_PINMUX_FUNC_PA9_USART1_TX},
 	{STM32_PIN_PA10, STM32L1X_PINMUX_FUNC_PA10_USART1_RX},
 #endif
-#if DT_HAS_NODE(DT_NODELABEL(usart2))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usart2), okay)
 	{STM32_PIN_PA2, STM32L1X_PINMUX_FUNC_PA2_USART2_TX},
 	{STM32_PIN_PA15, STM32L1X_PINMUX_FUNC_PA15_USART2_RX},
 #endif
-#if DT_HAS_NODE(DT_NODELABEL(i2c1))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(i2c1), okay)
 	{STM32_PIN_PB8, STM32L1X_PINMUX_FUNC_PB8_I2C1_SCL},
 	{STM32_PIN_PB9, STM32L1X_PINMUX_FUNC_PB9_I2C1_SDA},
 #endif
-#if DT_HAS_NODE(DT_NODELABEL(spi1))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi1), okay)
 	{STM32_PIN_PA5, STM32L1X_PINMUX_FUNC_PA5_SPI1_SCK |
 			STM32_OSPEEDR_VERY_HIGH_SPEED},
 	{STM32_PIN_PA6, STM32L1X_PINMUX_FUNC_PA6_SPI1_MISO},
@@ -47,17 +47,17 @@ static int pinmux_stm32_init(struct device *port)
 
 	stm32_setup_pins(pinconf, ARRAY_SIZE(pinconf));
 
-	gpioa = device_get_binding(DT_ST_STM32_GPIO_40020000_LABEL);
+	gpioa = device_get_binding(DT_LABEL(DT_NODELABEL(gpioa)));
 	if (!gpioa) {
 		return -ENODEV;
 	}
 
-	gpiob = device_get_binding(DT_ST_STM32_GPIO_40020400_LABEL);
+	gpiob = device_get_binding(DT_LABEL(DT_NODELABEL(gpiob)));
 	if (!gpiob) {
 		return -ENODEV;
 	}
 
-	gpioh = device_get_binding(DT_ST_STM32_GPIO_40021400_LABEL);
+	gpioh = device_get_binding(DT_LABEL(DT_NODELABEL(gpioh)));
 	if (!gpioh) {
 		return -ENODEV;
 	}

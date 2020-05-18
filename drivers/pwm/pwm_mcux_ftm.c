@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define DT_DRV_COMPAT nxp_kinetis_ftm
+#define DT_DRV_COMPAT nxp_kinetis_ftm_pwm
 
 #include <drivers/clock_control.h>
 #include <errno.h>
@@ -39,7 +39,7 @@ static int mcux_ftm_pin_set(struct device *dev, u32_t pwm,
 			    u32_t period_cycles, u32_t pulse_cycles,
 			    pwm_flags_t flags)
 {
-	const struct mcux_ftm_config *config = dev->config->config_info;
+	const struct mcux_ftm_config *config = dev->config_info;
 	struct mcux_ftm_data *data = dev->driver_data;
 	status_t status;
 
@@ -71,7 +71,7 @@ static int mcux_ftm_pin_set(struct device *dev, u32_t pwm,
 			LOG_WRN("Changing period cycles from %d to %d"
 				" affects all %d channels in %s",
 				data->period_cycles, period_cycles,
-				config->channel_count, dev->config->name);
+				config->channel_count, dev->name);
 		}
 
 		data->period_cycles = period_cycles;
@@ -98,7 +98,7 @@ static int mcux_ftm_pin_set(struct device *dev, u32_t pwm,
 static int mcux_ftm_get_cycles_per_sec(struct device *dev, u32_t pwm,
 				       u64_t *cycles)
 {
-	const struct mcux_ftm_config *config = dev->config->config_info;
+	const struct mcux_ftm_config *config = dev->config_info;
 	struct mcux_ftm_data *data = dev->driver_data;
 
 	*cycles = data->clock_freq >> config->prescale;
@@ -108,7 +108,7 @@ static int mcux_ftm_get_cycles_per_sec(struct device *dev, u32_t pwm,
 
 static int mcux_ftm_init(struct device *dev)
 {
-	const struct mcux_ftm_config *config = dev->config->config_info;
+	const struct mcux_ftm_config *config = dev->config_info;
 	struct mcux_ftm_data *data = dev->driver_data;
 	ftm_chnl_pwm_config_param_t *channel = data->channel;
 	struct device *clock_dev;
@@ -170,20 +170,6 @@ static const struct pwm_driver_api mcux_ftm_driver_api = {
 			    &mcux_ftm_init, &mcux_ftm_data_##n, \
 			    &mcux_ftm_config_##n, \
 			    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, \
-			    &mcux_ftm_driver_api)
+			    &mcux_ftm_driver_api);
 
-#if DT_HAS_DRV_INST(0)
-FTM_DEVICE(0);
-#endif /* DT_HAS_DRV_INST(0) */
-
-#if DT_HAS_DRV_INST(1)
-FTM_DEVICE(1);
-#endif /* DT_HAS_DRV_INST(1) */
-
-#if DT_HAS_DRV_INST(2)
-FTM_DEVICE(2);
-#endif /* DT_HAS_DRV_INST(2) */
-
-#if DT_HAS_DRV_INST(3)
-FTM_DEVICE(3);
-#endif /* DT_HAS_DRV_INST(3) */
+DT_INST_FOREACH_STATUS_OKAY(FTM_DEVICE)

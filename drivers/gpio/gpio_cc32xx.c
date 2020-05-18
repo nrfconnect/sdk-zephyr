@@ -48,8 +48,6 @@ struct gpio_cc32xx_config {
 	struct gpio_driver_config common;
 	/* base address of GPIO port */
 	unsigned long port_base;
-	/* GPIO IRQ number */
-	unsigned long irq_num;
 	/* GPIO port number */
 	u8_t port_num;
 };
@@ -64,7 +62,7 @@ struct gpio_cc32xx_data {
 };
 
 #define DEV_CFG(dev) \
-	((const struct gpio_cc32xx_config *)(dev)->config->config_info)
+	((const struct gpio_cc32xx_config *)(dev)->config_info)
 #define DEV_DATA(dev) \
 	((struct gpio_cc32xx_data *)(dev)->driver_data)
 
@@ -276,138 +274,42 @@ static const struct gpio_driver_api api_funcs = {
 
 };
 
-#ifdef CONFIG_GPIO_CC32XX_A0
-static const struct gpio_cc32xx_config gpio_cc32xx_a0_config = {
-	.common = {
-		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(0),
-	},
-	.port_base = DT_GPIO_CC32XX_A0_BASE_ADDRESS,
-	.irq_num = DT_GPIO_CC32XX_A0_IRQ+16,
-	.port_num = 0
-};
+#define GPIO_CC32XX_INIT_FUNC(n)					     \
+	static int gpio_cc32xx_a##n##_init(struct device *dev)		     \
+	{								     \
+		ARG_UNUSED(dev);					     \
+									     \
+		IRQ_CONNECT(DT_INST_IRQN(n), DT_INST_IRQ(n, priority),	     \
+			gpio_cc32xx_port_isr, DEVICE_GET(gpio_cc32xx_a##n),  \
+			0);						     \
+									     \
+		MAP_IntPendClear(DT_INST_IRQN(n) + 16);			     \
+		irq_enable(DT_INST_IRQN(n));				     \
+									     \
+		return 0;						     \
+	}
 
-static struct device DEVICE_NAME_GET(gpio_cc32xx_a0);
-static struct gpio_cc32xx_data gpio_cc32xx_a0_data;
+#define GPIO_CC32XX_DEVICE_INIT(n)					     \
+	DEVICE_AND_API_INIT(gpio_cc32xx_a##n, DT_INST_LABEL(n),		     \
+			&gpio_cc32xx_a##n##_init, &gpio_cc32xx_a##n##_data,  \
+			&gpio_cc32xx_a##n##_config,			     \
+			POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,     \
+			&api_funcs)
 
-static int gpio_cc32xx_a0_init(struct device *dev)
-{
-	ARG_UNUSED(dev);
+#define GPIO_CC32XX_INIT(n)						     \
+	static const struct gpio_cc32xx_config gpio_cc32xx_a##n##_config = { \
+		.common = {						     \
+			.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(n), \
+		},							     \
+		.port_base = DT_INST_REG_ADDR(n),			     \
+		.port_num = n						     \
+	};								     \
+									     \
+	static struct device DEVICE_NAME_GET(gpio_cc32xx_a##n);		     \
+	static struct gpio_cc32xx_data gpio_cc32xx_a##n##_data;		     \
+									     \
+	GPIO_CC32XX_INIT_FUNC(n)					     \
+									     \
+	GPIO_CC32XX_DEVICE_INIT(n);
 
-	IRQ_CONNECT(DT_GPIO_CC32XX_A0_IRQ, DT_GPIO_CC32XX_A0_IRQ_PRI,
-		    gpio_cc32xx_port_isr, DEVICE_GET(gpio_cc32xx_a0), 0);
-
-	MAP_IntPendClear(DT_GPIO_CC32XX_A0_IRQ+16);
-	irq_enable(DT_GPIO_CC32XX_A0_IRQ);
-
-	return 0;
-}
-
-DEVICE_AND_API_INIT(gpio_cc32xx_a0, DT_GPIO_CC32XX_A0_NAME,
-		    &gpio_cc32xx_a0_init, &gpio_cc32xx_a0_data,
-		    &gpio_cc32xx_a0_config,
-		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
-		    &api_funcs);
-
-#endif
-
-#ifdef CONFIG_GPIO_CC32XX_A1
-static const struct gpio_cc32xx_config gpio_cc32xx_a1_config = {
-	.common = {
-		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(1),
-	},
-	.port_base = DT_GPIO_CC32XX_A1_BASE_ADDRESS,
-	.irq_num = DT_GPIO_CC32XX_A1_IRQ+16,
-	.port_num = 1
-};
-
-static struct device DEVICE_NAME_GET(gpio_cc32xx_a1);
-static struct gpio_cc32xx_data gpio_cc32xx_a1_data;
-
-static int gpio_cc32xx_a1_init(struct device *dev)
-{
-	ARG_UNUSED(dev);
-
-	IRQ_CONNECT(DT_GPIO_CC32XX_A1_IRQ, DT_GPIO_CC32XX_A1_IRQ_PRI,
-		    gpio_cc32xx_port_isr, DEVICE_GET(gpio_cc32xx_a1), 0);
-
-	MAP_IntPendClear(DT_GPIO_CC32XX_A1_IRQ+16);
-	irq_enable(DT_GPIO_CC32XX_A1_IRQ);
-
-	return 0;
-}
-
-DEVICE_AND_API_INIT(gpio_cc32xx_a1, DT_GPIO_CC32XX_A1_NAME,
-		    &gpio_cc32xx_a1_init, &gpio_cc32xx_a1_data,
-		    &gpio_cc32xx_a1_config,
-		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
-		    &api_funcs);
-
-#endif /* CONFIG_GPIO_CC32XX_A1 */
-
-#ifdef CONFIG_GPIO_CC32XX_A2
-static const struct gpio_cc32xx_config gpio_cc32xx_a2_config = {
-	.common = {
-		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(2),
-	},
-	.port_base = DT_GPIO_CC32XX_A2_BASE_ADDRESS,
-	.irq_num = DT_GPIO_CC32XX_A2_IRQ+16,
-	.port_num = 2
-};
-
-static struct device DEVICE_NAME_GET(gpio_cc32xx_a2);
-static struct gpio_cc32xx_data gpio_cc32xx_a2_data;
-
-static int gpio_cc32xx_a2_init(struct device *dev)
-{
-	ARG_UNUSED(dev);
-
-	IRQ_CONNECT(DT_GPIO_CC32XX_A2_IRQ, DT_GPIO_CC32XX_A2_IRQ_PRI,
-		    gpio_cc32xx_port_isr, DEVICE_GET(gpio_cc32xx_a2), 0);
-
-	MAP_IntPendClear(DT_GPIO_CC32XX_A2_IRQ+16);
-	irq_enable(DT_GPIO_CC32XX_A2_IRQ);
-
-	return 0;
-}
-
-DEVICE_AND_API_INIT(gpio_cc32xx_a2, DT_GPIO_CC32XX_A2_NAME,
-		    &gpio_cc32xx_a2_init, &gpio_cc32xx_a2_data,
-		    &gpio_cc32xx_a2_config,
-		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
-		    &api_funcs);
-
-#endif
-
-#ifdef CONFIG_GPIO_CC32XX_A3
-static const struct gpio_cc32xx_config gpio_cc32xx_a3_config = {
-	.common = {
-		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(3),
-	},
-	.port_base = DT_GPIO_CC32XX_A3_BASE_ADDRESS,
-	.irq_num = DT_GPIO_CC32XX_A3_IRQ+16,
-	.port_num = 3
-};
-
-static struct device DEVICE_NAME_GET(gpio_cc32xx_a3);
-static struct gpio_cc32xx_data gpio_cc32xx_a3_data;
-
-static int gpio_cc32xx_a3_init(struct device *dev)
-{
-	ARG_UNUSED(dev);
-
-	IRQ_CONNECT(DT_GPIO_CC32XX_A3_IRQ, DT_GPIO_CC32XX_A3_IRQ_PRI,
-		    gpio_cc32xx_port_isr, DEVICE_GET(gpio_cc32xx_a3), 0);
-
-	MAP_IntPendClear(DT_GPIO_CC32XX_A3_IRQ+16);
-	irq_enable(DT_GPIO_CC32XX_A3_IRQ);
-
-	return 0;
-}
-
-DEVICE_AND_API_INIT(gpio_cc32xx_a3, DT_GPIO_CC32XX_A3_NAME,
-		    &gpio_cc32xx_a3_init, &gpio_cc32xx_a3_data,
-		    &gpio_cc32xx_a3_config,
-		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
-		    &api_funcs);
-
-#endif
+DT_INST_FOREACH_STATUS_OKAY(GPIO_CC32XX_INIT)

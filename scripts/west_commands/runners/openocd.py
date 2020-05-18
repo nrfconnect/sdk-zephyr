@@ -5,7 +5,11 @@
 '''Runner for openocd.'''
 
 from os import path
-from elftools.elf.elffile import ELFFile
+
+try:
+    from elftools.elf.elffile import ELFFile
+except ImportError:
+    ELFFile = None
 
 from runners.core import ZephyrBinaryRunner
 
@@ -106,6 +110,9 @@ class OpenOcdBinaryRunner(ZephyrBinaryRunner):
 
     def do_run(self, command, **kwargs):
         self.require(self.openocd_cmd[0])
+        if ELFFile is None:
+            raise RuntimeError(
+                'elftools missing; please "pip3 install elftools"')
 
         self.cfg_cmd = []
         if self.openocd_config is not None:
@@ -178,7 +185,7 @@ class OpenOcdBinaryRunner(ZephyrBinaryRunner):
         cmd = (self.openocd_cmd + self.serial + self.cfg_cmd +
                       pre_init_cmd + ['-c', 'init',
                                        '-c', 'targets',
-                                       '-c', 'halt',
+                                       '-c', 'reset halt',
                                        '-c', 'load_image ' + self.elf_name,
                                        '-c', 'resume ' + ep_addr,
                                        '-c', 'shutdown'])

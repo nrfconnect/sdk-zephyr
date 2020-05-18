@@ -143,8 +143,10 @@ u8_t ll_create_connection(u16_t scan_interval, u16_t scan_window,
 
 #if defined(CONFIG_BT_CTLR_CONN_RSSI)
 	conn_lll->rssi_latest = 0x7F;
+#if defined(CONFIG_BT_CTLR_CONN_RSSI_EVENT)
 	conn_lll->rssi_reported = 0x7F;
 	conn_lll->rssi_sample_count = 0;
+#endif /* CONFIG_BT_CTLR_CONN_RSSI_EVENT */
 #endif /* CONFIG_BT_CTLR_CONN_RSSI */
 
 #if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
@@ -456,13 +458,6 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 
 	pdu_tx = (void *)((struct node_rx_pdu *)rx)->pdu;
 
-#if defined(CONFIG_BT_CTLR_PRIVACY)
-	u8_t own_addr_type = pdu_tx->tx_addr;
-	u8_t own_addr[BDADDR_SIZE];
-	u8_t rl_idx = ftr->rl_idx;
-
-	memcpy(own_addr, &pdu_tx->connect_ind.init_addr[0], BDADDR_SIZE);
-#endif
 	peer_addr_type = pdu_tx->rx_addr;
 	memcpy(peer_addr, &pdu_tx->connect_ind.adv_addr[0], BDADDR_SIZE);
 
@@ -474,11 +469,16 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	cc->role = 0U;
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
-	cc->own_addr_type = own_addr_type;
-	memcpy(&cc->own_addr[0], &own_addr[0], BDADDR_SIZE);
+	u8_t rl_idx = ftr->rl_idx;
+
+	if (ftr->lrpa_used) {
+		memcpy(&cc->local_rpa[0], &pdu_tx->connect_ind.init_addr[0],
+		       BDADDR_SIZE);
+	} else {
+		memset(&cc->local_rpa[0], 0x0, BDADDR_SIZE);
+	}
 
 	if (rl_idx != FILTER_IDX_NONE) {
-		/* TODO: store rl_idx instead if safe */
 		/* Store identity address */
 		ll_rl_id_addr_get(rl_idx, &cc->peer_addr_type,
 				  &cc->peer_addr[0]);

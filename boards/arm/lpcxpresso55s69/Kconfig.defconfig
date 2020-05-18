@@ -9,10 +9,6 @@ config BOARD
 	default "lpcxpresso55S69_cpu0" if BOARD_LPCXPRESSO55S69_CPU0
 	default "lpcxpresso55S69_cpu1" if BOARD_LPCXPRESSO55S69_CPU1
 
-config UART_MCUX_FLEXCOMM_0
-	default y if UART_CONSOLE
-	depends on UART_MCUX_FLEXCOMM
-
 if PINMUX_MCUX_LPC
 
 config PINMUX_MCUX_LPC_PORT0
@@ -32,10 +28,6 @@ config GPIO_MCUX_LPC_PORT1
 	default y
 
 endif # GPIO_MCUX_LPC
-
-config I2C_4
-	default y
-	depends on I2C
 
 config SPI_8
 	default y

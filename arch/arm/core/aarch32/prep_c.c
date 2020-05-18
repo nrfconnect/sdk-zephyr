@@ -86,7 +86,7 @@ static inline void z_arm_floating_point_init(void)
 	 */
 	SCB->CPACR &= (~(CPACR_CP10_Msk | CPACR_CP11_Msk));
 
-#if defined(CONFIG_FLOAT)
+#if defined(CONFIG_FPU)
 	/*
 	 * Enable CP10 and CP11 Co-Processors to enable access to floating
 	 * point registers.
@@ -102,7 +102,7 @@ static inline void z_arm_floating_point_init(void)
 	 * Upon reset, the FPU Context Control Register is 0xC0000000
 	 * (both Automatic and Lazy state preservation is enabled).
 	 */
-#if !defined(CONFIG_FP_SHARING)
+#if !defined(CONFIG_FPU_SHARING)
 	/* Default mode is Unshared FP registers mode. We disable the
 	 * automatic stacking of FP registers (automatic setting of
 	 * FPCA bit in the CONTROL register), upon exception entries,
@@ -125,7 +125,7 @@ static inline void z_arm_floating_point_init(void)
 	 * out during context-switch.
 	 */
 	FPU->FPCCR = FPU_FPCCR_ASPEN_Msk | FPU_FPCCR_LSPEN_Msk;
-#endif /* CONFIG_FP_SHARING */
+#endif /* CONFIG_FPU_SHARING */
 
 	/* Make the side-effects of modifying the FPCCR be realized
 	 * immediately.
@@ -143,7 +143,7 @@ static inline void z_arm_floating_point_init(void)
 	 * of floating point instructions.
 	 */
 
-#endif /* CONFIG_FLOAT */
+#endif /* CONFIG_FPU */
 
 	/*
 	 * Upon reset, the CONTROL.FPCA bit is, normally, cleared. However,
@@ -154,7 +154,7 @@ static inline void z_arm_floating_point_init(void)
 	 * In Sharing FP Registers mode CONTROL.FPCA is cleared before switching
 	 * to main, so it may be skipped here (saving few boot cycles).
 	 */
-#if !defined(CONFIG_FLOAT) || !defined(CONFIG_FP_SHARING)
+#if !defined(CONFIG_FPU) || !defined(CONFIG_FPU_SHARING)
 	__set_CONTROL(__get_CONTROL() & (~(CONTROL_FPCA_Msk)));
 #endif
 }

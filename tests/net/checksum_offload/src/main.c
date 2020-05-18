@@ -39,7 +39,7 @@ LOG_MODULE_REGISTER(net_test, NET_LOG_LEVEL);
 #define DBG(fmt, ...)
 #endif
 
-#define PORT 9999
+#define TEST_PORT 9999
 
 static char *test_data = "Test data to be sent";
 
@@ -357,7 +357,7 @@ static void iface_cb(struct net_if *iface, void *user_data)
 	ud->total_if_count++;
 }
 
-static void eth_setup(void)
+static void test_eth_setup(void)
 {
 	struct user_data ud = { 0 };
 
@@ -370,7 +370,7 @@ static void eth_setup(void)
 		      sizeof(eth_interfaces) / sizeof(void *));
 }
 
-static void address_setup(void)
+static void test_address_setup(void)
 {
 	struct net_if_addr *ifaddr;
 	struct net_if *iface1, *iface2;
@@ -458,14 +458,14 @@ static bool add_neighbor(struct net_if *iface, struct in6_addr *addr)
 	return true;
 }
 
-static void tx_chksum_offload_disabled_test_v6(void)
+static void test_tx_chksum_offload_disabled_test_v6(void)
 {
 	struct eth_context *ctx; /* This is interface context */
 	struct net_if *iface;
 	int ret, len;
 	struct sockaddr_in6 dst_addr6 = {
 		.sin6_family = AF_INET6,
-		.sin6_port = htons(PORT),
+		.sin6_port = htons(TEST_PORT),
 	};
 	struct sockaddr_in6 src_addr6 = {
 		.sin6_family = AF_INET6,
@@ -509,14 +509,14 @@ static void tx_chksum_offload_disabled_test_v6(void)
 	net_context_unref(udp_v6_ctx_1);
 }
 
-static void tx_chksum_offload_disabled_test_v4(void)
+static void test_tx_chksum_offload_disabled_test_v4(void)
 {
 	struct eth_context *ctx; /* This is interface context */
 	struct net_if *iface;
 	int ret, len;
 	struct sockaddr_in dst_addr4 = {
 		.sin_family = AF_INET,
-		.sin_port = htons(PORT),
+		.sin_port = htons(TEST_PORT),
 	};
 	struct sockaddr_in src_addr4 = {
 		.sin_family = AF_INET,
@@ -560,14 +560,14 @@ static void tx_chksum_offload_disabled_test_v4(void)
 	net_context_unref(udp_v4_ctx_1);
 }
 
-static void tx_chksum_offload_enabled_test_v6(void)
+static void test_tx_chksum_offload_enabled_test_v6(void)
 {
 	struct eth_context *ctx; /* This is interface context */
 	struct net_if *iface;
 	int ret, len;
 	struct sockaddr_in6 dst_addr6 = {
 		.sin6_family = AF_INET6,
-		.sin6_port = htons(PORT),
+		.sin6_port = htons(TEST_PORT),
 	};
 	struct sockaddr_in6 src_addr6 = {
 		.sin6_family = AF_INET6,
@@ -611,14 +611,14 @@ static void tx_chksum_offload_enabled_test_v6(void)
 	net_context_unref(udp_v6_ctx_2);
 }
 
-static void tx_chksum_offload_enabled_test_v4(void)
+static void test_tx_chksum_offload_enabled_test_v4(void)
 {
 	struct eth_context *ctx; /* This is interface context */
 	struct net_if *iface;
 	int ret, len;
 	struct sockaddr_in dst_addr4 = {
 		.sin_family = AF_INET,
-		.sin_port = htons(PORT),
+		.sin_port = htons(TEST_PORT),
 	};
 	struct sockaddr_in src_addr4 = {
 		.sin_family = AF_INET,
@@ -705,14 +705,14 @@ static void recv_cb_offload_enabled(struct net_context *context,
 	net_pkt_unref(pkt);
 }
 
-static void rx_chksum_offload_disabled_test_v6(void)
+static void test_rx_chksum_offload_disabled_test_v6(void)
 {
 	struct eth_context *ctx; /* This is interface context */
 	struct net_if *iface;
 	int ret, len;
 	struct sockaddr_in6 dst_addr6 = {
 		.sin6_family = AF_INET6,
-		.sin6_port = htons(PORT),
+		.sin6_port = htons(TEST_PORT),
 	};
 	struct sockaddr_in6 src_addr6 = {
 		.sin6_family = AF_INET6,
@@ -761,14 +761,14 @@ static void rx_chksum_offload_disabled_test_v6(void)
 	k_sleep(K_MSEC(10));
 }
 
-static void rx_chksum_offload_disabled_test_v4(void)
+static void test_rx_chksum_offload_disabled_test_v4(void)
 {
 	struct eth_context *ctx; /* This is interface context */
 	struct net_if *iface;
 	int ret, len;
 	struct sockaddr_in dst_addr4 = {
 		.sin_family = AF_INET,
-		.sin_port = htons(PORT),
+		.sin_port = htons(TEST_PORT),
 	};
 	struct sockaddr_in src_addr4 = {
 		.sin_family = AF_INET,
@@ -817,14 +817,14 @@ static void rx_chksum_offload_disabled_test_v4(void)
 	k_sleep(K_MSEC(10));
 }
 
-static void rx_chksum_offload_enabled_test_v6(void)
+static void test_rx_chksum_offload_enabled_test_v6(void)
 {
 	struct eth_context *ctx; /* This is interface context */
 	struct net_if *iface;
 	int ret, len;
 	struct sockaddr_in6 dst_addr6 = {
 		.sin6_family = AF_INET6,
-		.sin6_port = htons(PORT),
+		.sin6_port = htons(TEST_PORT),
 	};
 	struct sockaddr_in6 src_addr6 = {
 		.sin6_family = AF_INET6,
@@ -871,14 +871,14 @@ static void rx_chksum_offload_enabled_test_v6(void)
 	k_sleep(K_MSEC(10));
 }
 
-static void rx_chksum_offload_enabled_test_v4(void)
+static void test_rx_chksum_offload_enabled_test_v4(void)
 {
 	struct eth_context *ctx; /* This is interface context */
 	struct net_if *iface;
 	int ret, len;
 	struct sockaddr_in dst_addr4 = {
 		.sin_family = AF_INET,
-		.sin_port = htons(PORT),
+		.sin_port = htons(TEST_PORT),
 	};
 	struct sockaddr_in src_addr4 = {
 		.sin_family = AF_INET,
@@ -928,16 +928,16 @@ static void rx_chksum_offload_enabled_test_v4(void)
 void test_main(void)
 {
 	ztest_test_suite(net_chksum_offload_test,
-			 ztest_unit_test(eth_setup),
-			 ztest_unit_test(address_setup),
-			 ztest_unit_test(tx_chksum_offload_disabled_test_v6),
-			 ztest_unit_test(tx_chksum_offload_disabled_test_v4),
-			 ztest_unit_test(tx_chksum_offload_enabled_test_v6),
-			 ztest_unit_test(tx_chksum_offload_enabled_test_v4),
-			 ztest_unit_test(rx_chksum_offload_disabled_test_v6),
-			 ztest_unit_test(rx_chksum_offload_disabled_test_v4),
-			 ztest_unit_test(rx_chksum_offload_enabled_test_v6),
-			 ztest_unit_test(rx_chksum_offload_enabled_test_v4)
+			 ztest_unit_test(test_eth_setup),
+			 ztest_unit_test(test_address_setup),
+			 ztest_unit_test(test_tx_chksum_offload_disabled_test_v6),
+			 ztest_unit_test(test_tx_chksum_offload_disabled_test_v4),
+			 ztest_unit_test(test_tx_chksum_offload_enabled_test_v6),
+			 ztest_unit_test(test_tx_chksum_offload_enabled_test_v4),
+			 ztest_unit_test(test_rx_chksum_offload_disabled_test_v6),
+			 ztest_unit_test(test_rx_chksum_offload_disabled_test_v4),
+			 ztest_unit_test(test_rx_chksum_offload_enabled_test_v6),
+			 ztest_unit_test(test_rx_chksum_offload_enabled_test_v4)
 			 );
 
 	ztest_run_test_suite(net_chksum_offload_test);

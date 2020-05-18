@@ -9,9 +9,13 @@
 #include <arm/armv7-m.dtsi>
 #include <dt-bindings/clock/stm32_clock.h>
 #include <dt-bindings/gpio/gpio.h>
- #include <dt-bindings/i2c/i2c.h>
+#include <dt-bindings/i2c/i2c.h>
 
 / {
+	chosen {
+		zephyr,flash-controller = &flash;
+	};
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -32,7 +36,7 @@
 	};
 
 	soc {
-		flash-controller@52002000 {
+		flash: flash-controller@52002000 {
 			compatible = "st,stm32-flash-controller", "st,stm32h7-flash-controller";
 			label = "FLASH_CTRL";
 			reg = <0x52002000 0x400>;
@@ -541,6 +545,26 @@
 				label = "PWM_17";
 				#pwm-cells = <2>;
 			};
+		};
+
+		adc1_2: adc@40022000 {
+			compatible = "st,stm32-adc";
+			reg = <0x40022000 0x400>;
+			clocks = <&rcc STM32_CLOCK_BUS_AHB1 0x00000020>;
+			interrupts = <18 0>;
+			status = "disabled";
+			label = "ADC_1_2";
+			#io-channel-cells = <1>;
+		};
+
+		adc3: adc@58026000 {
+			compatible = "st,stm32-adc";
+			reg = <0x58026000 0x400>;
+			clocks = <&rcc STM32_CLOCK_BUS_AHB4 0x01000000>;
+			interrupts = <127 0>;
+			status = "disabled";
+			label = "ADC_3";
+			#io-channel-cells = <1>;
 		};
 	};
 };
