@@ -250,6 +250,8 @@ def generateParallelStageNRF(subset, compiler, JOB_NAME, CI_STATE) {
           }
         }
       } finally {
+        junit 'sanitycheck.xml'
+        archiveArtifacts artifacts: 'sanitycheck.xml'
         cleanWs(); echo "Run: cleanWs()"
       }
     }
@@ -282,6 +284,8 @@ def generateParallelStageALL(subset, compiler, JOB_NAME, CI_STATE) {
           }
         }
       } finally {
+        junit 'sanitycheck.xml'
+        archiveArtifacts artifacts: 'sanitycheck.xml'
         cleanWs(); echo "Ran: cleanWs()"
       }
     }
