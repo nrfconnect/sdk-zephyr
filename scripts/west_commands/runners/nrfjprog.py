@@ -8,8 +8,26 @@
 import os
 import shlex
 import sys
+import re
 
 from runners.core import ZephyrBinaryRunner, RunnerCaps
+
+# Helper function for inspecting hex files.
+# has_region returns True if hex file has any contents in a specific region
+# region_filter is a callable that takes an address as argument and
+# returns True if that address is in the region in question
+def has_region(region_filter, hex_file):
+    with open (hex_file, 'r') as f:
+        offset = 0
+        for line in f:
+            offset_re = re.match(r":02[0-9a-fA-F]{4}(02|04)([0-9a-fA-F]{4})", line)
+            data_re = re.match(r":([0-9a-fA-F]{2})([0-9a-fA-F]{4})00", line)
+            if offset_re:
+                offset = {'02': 0x10, '04': 0x10000}[offset_re.group(1)] * int(offset_re.group(2), 16)
+            elif data_re:
+                if region_filter(int(data_re.group(2), 16) + offset):
+                    return True
+    return False
 
 
 class NrfJprogBinaryRunner(ZephyrBinaryRunner):
@@ -132,10 +150,21 @@ class NrfJprogBinaryRunner(ZephyrBinaryRunner):
                 program_cmd
             ])
         else:
-            if self.family == 'NRF52':
+            if self.family == 'NRF51':
+                commands.append(program_cmd + ['--sectorerase'])
+            elif self.family == 'NRF52':
                 commands.append(program_cmd + ['--sectoranduicrerase'])
             else:
-                commands.append(program_cmd + ['--sectorerase'])
+                is_uicr = {
+                    'NRF53': lambda addr: (0x00FF8000 <= addr < 0x00FF9000) or (0x01FF8000 <= addr < 0x01FF8800),
+                    'NRF91': lambda addr: (0x00FF8000 <= addr < 0x00FF9000),
+                }[self.family]
+
+                if has_region(is_uicr, self.hex_):
+                    # Hex file has UICR contents.
+                    commands.append(program_cmd + ['--chiperase'])
+                else:
+                    commands.append(program_cmd + ['--sectorerase'])
 
         if self.family == 'NRF52' and not self.softreset:
             commands.extend([
