@@ -1945,6 +1945,17 @@ static int l2cap_le_connect(struct bt_conn *conn, struct bt_l2cap_le_chan *ch,
 
 	ch->chan.psm = psm;
 
+	if (conn->sec_level < ch->chan.required_sec_level) {
+		int err;
+
+		err = bt_conn_set_security(conn, ch->chan.required_sec_level);
+		if (err) {
+			return err;
+		}
+
+		return 0;
+	}
+
 	return l2cap_le_conn_req(ch);
 }
 
