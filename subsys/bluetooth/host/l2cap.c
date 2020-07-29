@@ -1030,20 +1030,24 @@ static void le_disconn_req(struct bt_l2cap *l2cap, u8_t ident,
 
 static int l2cap_change_security(struct bt_l2cap_le_chan *chan, u16_t err)
 {
+	struct bt_conn *conn = chan->chan.conn;
+	bt_security_t sec;
+
 	switch (err) {
 	case BT_L2CAP_LE_ERR_ENCRYPTION:
-		if (chan->chan.required_sec_level >= BT_SECURITY_L2) {
+		if (conn->sec_level >= BT_SECURITY_L2) {
 			return -EALREADY;
 		}
-		chan->chan.required_sec_level = BT_SECURITY_L2;
+
+		sec = BT_SECURITY_L2;
 		break;
 	case BT_L2CAP_LE_ERR_AUTHENTICATION:
-		if (chan->chan.required_sec_level < BT_SECURITY_L2) {
-			chan->chan.required_sec_level = BT_SECURITY_L2;
-		} else if (chan->chan.required_sec_level < BT_SECURITY_L3) {
-			chan->chan.required_sec_level = BT_SECURITY_L3;
-		} else if (chan->chan.required_sec_level < BT_SECURITY_L4) {
-			chan->chan.required_sec_level = BT_SECURITY_L4;
+		if (conn->sec_level < BT_SECURITY_L2) {
+			sec = BT_SECURITY_L2;
+		} else if (conn->sec_level < BT_SECURITY_L3) {
+			sec = BT_SECURITY_L3;
+		} else if (conn->sec_level < BT_SECURITY_L4) {
+			sec = BT_SECURITY_L4;
 		} else {
 			return -EALREADY;
 		}
@@ -1052,8 +1056,7 @@ static int l2cap_change_security(struct bt_l2cap_le_chan *chan, u16_t err)
 		return -EINVAL;
 	}
 
-	return bt_conn_set_security(chan->chan.conn,
-				    chan->chan.required_sec_level);
+	return bt_conn_set_security(chan->chan.conn, sec);
 }
 
 static void le_conn_rsp(struct bt_l2cap *l2cap, u8_t ident,
