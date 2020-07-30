@@ -454,19 +454,27 @@ static int l2cap_le_conn_req(struct bt_l2cap_le_chan *ch)
 
 static void l2cap_le_encrypt_change(struct bt_l2cap_chan *chan, u8_t status)
 {
+	int err;
+
 	/* Skip channels already connected or with a pending request */
 	if (chan->state != BT_L2CAP_CONNECT || chan->ident) {
 		return;
 	}
 
 	if (status) {
-		bt_l2cap_chan_remove(chan->conn, chan);
-		bt_l2cap_chan_del(chan);
-		return;
+		goto fail;
 	}
 
 	/* Retry to connect */
-	l2cap_le_conn_req(BT_L2CAP_LE_CHAN(chan));
+	err = l2cap_le_conn_req(BT_L2CAP_LE_CHAN(chan));
+	if (err) {
+		goto fail;
+	}
+
+	return;
+fail:
+	bt_l2cap_chan_remove(chan->conn, chan);
+	bt_l2cap_chan_del(chan);
 }
 #endif /* CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */
 
@@ -1932,6 +1940,8 @@ void bt_l2cap_init(void)
 static int l2cap_le_connect(struct bt_conn *conn, struct bt_l2cap_le_chan *ch,
 			    u16_t psm)
 {
+	int err;
+
 	if (psm < L2CAP_LE_PSM_FIXED_START || psm > L2CAP_LE_PSM_DYN_END) {
 		return -EINVAL;
 	}
@@ -1946,17 +1956,25 @@ static int l2cap_le_connect(struct bt_conn *conn, struct bt_l2cap_le_chan *ch,
 	ch->chan.psm = psm;
 
 	if (conn->sec_level < ch->chan.required_sec_level) {
-		int err;
-
 		err = bt_conn_set_security(conn, ch->chan.required_sec_level);
 		if (err) {
-			return err;
+			goto fail;
 		}
 
 		return 0;
 	}
 
-	return l2cap_le_conn_req(ch);
+	err = l2cap_le_conn_req(ch);
+	if (err) {
+		goto fail;
+	}
+
+	return 0;
+
+fail:
+	bt_l2cap_chan_remove(conn, &ch->chan);
+	bt_l2cap_chan_del(&ch->chan);
+	return err;
 }
 
 int bt_l2cap_chan_connect(struct bt_conn *conn, struct bt_l2cap_chan *chan,
