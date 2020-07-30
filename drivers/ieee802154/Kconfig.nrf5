@@ -43,3 +43,9 @@ config IEEE802154_NRF5_EXT_IRQ_MGMT
 	  a radio arbiter used in dynamic multiprotocol applications.
 
 endif
+
+config OT_RCP_NRF53
+	bool
+	default y if SOC_NRF5340_CPUAPP
+	help
+	  Enable OT_RCP configuration for nRF53.
