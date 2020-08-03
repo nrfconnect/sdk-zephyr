@@ -688,6 +688,9 @@ typedef enum __packed {
  *  This function may return error if the pairing procedure has already been
  *  initiated by the local device or the peer device.
  *
+ *  @note When :option:`CONFIG_BT_SMP_SC_ONLY` is enabled then the security
+ *        level will always be level 4.
+ *
  *  @param conn Connection object.
  *  @param sec Requested security level.
  *
