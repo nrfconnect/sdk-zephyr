@@ -188,9 +188,9 @@ def main():
         # West is imported here, as it is optional (and thus maybe not installed)
         # if user is providing a specific modules list.
         from west.manifest import Manifest
-        from west.util import WestNotFound
+        from west.util import WestNotFound, west_topdir
         try:
-            manifest = Manifest.from_file()
+            manifest = Manifest.from_file(topdir=west_topdir())
             projects = [p.posixpath for p in manifest.get_projects([])]
         except WestNotFound:
             # Only accept WestNotFound, meaning we are not in a west
