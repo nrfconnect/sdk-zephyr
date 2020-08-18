@@ -18,6 +18,7 @@
 #define BTP_SERVICE_ID_GATT	2
 #define BTP_SERVICE_ID_L2CAP	3
 #define BTP_SERVICE_ID_MESH	4
+#define BTP_SERVICE_ID_MMDL	5
 
 #define BTP_STATUS_SUCCESS	0x00
 #define BTP_STATUS_FAILED	0x01
@@ -1004,6 +1005,344 @@ struct mesh_lpn_polled_ev {
 	uint8_t retry;
 } __packed;
 
+/* MMDL Service */
+struct mesh_model_transition {
+	uint8_t time;
+	uint8_t delay;
+} __packed;
+
+/* commands */
+#define MMDL_READ_SUPPORTED_COMMANDS	0x01
+struct mmdl_read_supported_commands_rp {
+	uint8_t data[0];
+} __packed;
+
+#define MMDL_GEN_ONOFF_GET	0x02
+
+#define MMDL_GEN_ONOFF_SET	0x03
+struct mesh_gen_onoff_set {
+	uint8_t ack;
+	uint8_t onoff;
+	struct mesh_model_transition transition[0];
+} __packed;
+
+#define MMDL_GEN_LVL_GET	0x04
+
+#define MMDL_GEN_LVL_SET	0x05
+struct mesh_gen_lvl_set {
+	uint8_t ack;
+	int16_t lvl;
+	struct mesh_model_transition transition[0];
+} __packed;
+
+#define MMDL_GEN_LVL_DELTA_SET	0x06
+struct mesh_gen_lvl_delta_set {
+	uint8_t ack;
+	int32_t delta;
+	struct mesh_model_transition transition[0];
+} __packed;
+
+#define MMDL_GEN_LVL_MOVE_SET	0x07
+struct mesh_gen_lvl_move_set {
+	uint8_t ack;
+	int16_t delta;
+	struct mesh_model_transition transition[0];
+} __packed;
+
+#define MMDL_GEN_DTT_GET	0x08
+
+#define MMDL_GEN_DTT_SET	0x09
+struct mesh_gen_dtt_set {
+	uint8_t ack;
+	uint8_t transition_time;
+} __packed;
+
+#define MMDL_GEN_PONOFF_GET	0x0a
+
+#define MMDL_GEN_PONOFF_SET	0x0b
+struct mesh_gen_ponoff_set {
+	uint8_t ack;
+	uint8_t on_power_up;
+} __packed;
+
+#define MMDL_GEN_PLVL_GET	0x0c
+
+#define MMDL_GEN_PLVL_SET	0x0d
+struct mesh_gen_plvl_set {
+	uint8_t ack;
+	uint16_t power_lvl;
+	struct mesh_model_transition transition[0];
+} __packed;
+
+#define MMDL_GEN_PLVL_LAST_GET	0x0e
+
+#define MMDL_GEN_PLVL_DFLT_GET	0x0f
+
+#define MMDL_GEN_PLVL_DFLT_SET	0x10
+struct mesh_gen_plvl_dflt_set {
+	uint8_t ack;
+	uint16_t power_dflt;
+} __packed;
+
+#define MMDL_GEN_PLVL_RANGE_GET	0x11
+
+#define MMDL_GEN_PLVL_RANGE_SET	0x12
+struct mesh_gen_plvl_range_set {
+	uint8_t ack;
+	uint16_t range_min;
+	uint16_t range_max;
+} __packed;
+
+#define MMDL_GEN_BATTERY_GET	0x13
+
+#define MMDL_GEN_LOC_GLOBAL_GET	0x14
+
+#define MMDL_GEN_LOC_LOCAL_GET	0x15
+
+#define MMDL_GEN_LOC_GLOBAL_SET	0x16
+struct mesh_gen_loc_global_set {
+	uint8_t ack;
+	uint32_t latitude;
+	uint32_t longitude;
+	uint16_t altitude;
+} __packed;
+
+#define MMDL_GEN_LOC_LOCAL_SET	0x17
+struct mesh_gen_loc_local_set {
+	uint8_t ack;
+	uint16_t north;
+	uint16_t east;
+	uint16_t altitude;
+	uint8_t floor;
+	uint16_t loc_uncertainty;
+} __packed;
+
+#define MMDL_GEN_PROPS_GET	0x18
+struct mesh_gen_props_get {
+	uint8_t kind;
+	uint16_t id;
+} __packed;
+
+#define MMDL_GEN_PROP_GET	0x19
+struct mesh_gen_prop_get {
+	uint8_t kind;
+	uint16_t id;
+} __packed;
+
+#define MMDL_GEN_PROP_SET	0x1a
+struct mesh_gen_prop_set {
+	uint8_t ack;
+	uint8_t kind;
+	uint16_t id;
+	uint8_t access;
+	uint8_t len;
+	uint8_t data[0];
+} __packed;
+
+#define MMDL_SENSOR_DESC_GET	0x1b
+struct mesh_sensor_desc_get {
+	uint16_t id;
+} __packed;
+
+#define MMDL_SENSOR_GET	0x1c
+struct mesh_sensor_get {
+	uint16_t id;
+} __packed;
+
+#define MMDL_SENSOR_COLUMN_GET	0x1d
+struct mesh_sensor_column_get {
+	uint16_t id;
+	uint8_t len;
+	uint8_t data[0];
+} __packed;
+
+#define MMDL_SENSOR_SERIES_GET	0x1e
+struct mesh_sensor_series_get {
+	uint16_t id;
+	uint8_t len;
+	uint8_t data[0];
+} __packed;
+
+#define MMDL_SENSOR_CADENCE_GET	0x1f
+struct mesh_sensor_cadence_get {
+	uint16_t id;
+} __packed;
+
+#define MMDL_SENSOR_CADENCE_SET	0x20
+struct mesh_sensor_cadence_set {
+	uint8_t ack;
+	uint16_t id;
+	uint16_t len;
+	uint8_t data[0];
+} __packed;
+
+#define MMDL_SENSOR_SETTINGS_GET	0x21
+struct mesh_sensor_settings_get {
+	uint16_t id;
+} __packed;
+
+#define MMDL_SENSOR_SETTING_GET	0x22
+struct mesh_sensor_setting_get {
+	uint16_t id;
+	uint16_t setting_id;
+} __packed;
+
+#define MMDL_SENSOR_SETTING_SET	0x23
+struct mesh_sensor_setting_set {
+	uint8_t ack;
+	uint16_t id;
+	uint16_t setting_id;
+	uint8_t len;
+	uint8_t data[0];
+} __packed;
+
+#define MMDL_TIME_GET	0x24
+#define MMDL_TIME_SET	0x25
+struct mesh_time_set {
+	uint8_t tai[5];
+	uint8_t subsecond;
+	uint8_t uncertainty;
+	uint16_t tai_utc_delta;
+	uint8_t time_zone_offset;
+} __packed;
+
+#define MMDL_TIME_ROLE_GET	0x26
+#define MMDL_TIME_ROLE_SET	0x27
+struct mesh_time_role_set {
+	uint8_t role;
+} __packed;
+
+#define MMDL_TIME_ZONE_GET	0x28
+#define MMDL_TIME_ZONE_SET	0x29
+struct mesh_time_zone_set {
+	int16_t new_offset;
+	uint64_t timestamp;
+} __packed;
+
+#define MMDL_TIME_TAI_UTC_DELTA_GET	0x2a
+#define MMDL_TIME_TAI_UTC_DELTA_SET	0x2b
+struct mesh_time_tai_utc_delta_set {
+	int16_t delta_new;
+	uint64_t timestamp;
+} __packed;
+
+#define MMDL_LIGHT_LIGHTNESS_GET	0x2c
+#define MMDL_LIGHT_LIGHTNESS_SET	0x2d
+struct mesh_light_lightness_set {
+	uint8_t ack;
+	uint16_t lightness;
+	struct mesh_model_transition transition[0];
+} __packed;
+
+#define MMDL_LIGHT_LIGHTNESS_LINEAR_GET	0x2e
+#define MMDL_LIGHT_LIGHTNESS_LINEAR_SET	0x2f
+
+#define MMDL_LIGHT_LIGHTNESS_LAST_GET	0x30
+#define MMDL_LIGHT_LIGHTNESS_DEFAULT_GET	0x31
+#define MMDL_LIGHT_LIGHTNESS_DEFAULT_SET	0x32
+struct mesh_light_lightness_default_set {
+	uint8_t ack;
+	uint16_t dflt;
+} __packed;
+
+#define MMDL_LIGHT_LIGHTNESS_RANGE_GET	0x33
+#define MMDL_LIGHT_LIGHTNESS_RANGE_SET	0x34
+struct mesh_light_lightness_range_set {
+	uint8_t ack;
+	uint16_t min;
+	uint16_t max;
+} __packed;
+
+#define MMDL_LIGHT_LC_MODE_GET	0x35
+#define MMDL_LIGHT_LC_MODE_SET	0x36
+struct mesh_light_lc_mode_set {
+	uint8_t ack;
+	uint8_t enabled;
+} __packed;
+
+#define MMDL_LIGHT_LC_OCCUPANCY_MODE_GET	0x37
+#define MMDL_LIGHT_LC_OCCUPANCY_MODE_SET	0x38
+struct mesh_light_lc_occupancy_mode_set {
+	uint8_t ack;
+	uint8_t enabled;
+} __packed;
+
+#define MMDL_LIGHT_LC_LIGHT_ONOFF_MODE_GET	0x39
+#define MMDL_LIGHT_LC_LIGHT_ONOFF_MODE_SET	0x3a
+struct mesh_light_lc_light_onoff_mode_set {
+	uint8_t ack;
+	uint8_t onoff;
+	struct mesh_model_transition transition[0];
+} __packed;
+
+#define MMDL_LIGHT_LC_PROPERTY_GET	0x3b
+struct mesh_light_lc_property_get {
+	uint16_t id;
+} __packed;
+
+#define MMDL_LIGHT_LC_PROPERTY_SET	0x3c
+struct mesh_light_lc_property_set {
+	uint8_t ack;
+	uint16_t id;
+	uint16_t val;
+} __packed;
+
+#define MMDL_SENSOR_DATA_SET	0x3d
+struct mesh_sensor_data_set_cmd {
+	uint16_t prop_id;
+	uint8_t len;
+	uint8_t data[];
+} __packed;
+
+#define MMDL_LIGHT_CTL_STATES_GET	0x3e
+#define MMDL_LIGHT_CTL_STATES_SET	0x3f
+struct mesh_light_ctl_states_set {
+	uint8_t ack;
+	uint16_t light;
+	uint16_t temp;
+	int16_t delta_uv;
+	struct mesh_model_transition transition[0];
+} __packed;
+
+#define MMDL_LIGHT_CTL_TEMPERATURE_GET	0x40
+#define MMDL_LIGHT_CTL_TEMPERATURE_SET	0x41
+struct mesh_light_ctl_temperature_set {
+	uint8_t ack;
+	uint16_t temp;
+	int16_t delta_uv;
+	struct mesh_model_transition transition[0];
+} __packed;
+
+#define MMDL_LIGHT_CTL_DEFAULT_GET	0x42
+#define MMDL_LIGHT_CTL_DEFAULT_SET	0x43
+struct mesh_light_ctl_default_set {
+	uint8_t ack;
+	uint16_t light;
+	uint16_t temp;
+	int16_t delta_uv;
+} __packed;
+#define MMDL_LIGHT_CTL_TEMPERATURE_RANGE_GET	0x44
+#define MMDL_LIGHT_CTL_TEMPERATURE_RANGE_SET	0x45
+struct mesh_light_ctl_temp_range_set {
+	uint8_t ack;
+	uint16_t min;
+	uint16_t max;
+} __packed;
+
+#define MMDL_SCENE_GET	0x46
+#define MMDL_SCENE_REGISTER_GET	0x47
+#define MMDL_SCENE_STORE_PROCEDURE	0x48
+struct mesh_scene_ctl_store_procedure {
+	uint8_t ack;
+	uint16_t scene;
+} __packed;
+#define MMDL_SCENE_RECALL	0x49
+struct mesh_scene_ctl_recall {
+	uint8_t ack;
+	uint16_t scene;
+	struct mesh_model_transition transition[0];
+} __packed;
+
 void tester_init(void);
 void tester_rsp(uint8_t service, uint8_t opcode, uint8_t index, uint8_t status);
 void tester_send(uint8_t service, uint8_t opcode, uint8_t index, uint8_t *data,
@@ -1028,5 +1367,10 @@ void tester_handle_l2cap(uint8_t opcode, uint8_t index, uint8_t *data,
 #if defined(CONFIG_BT_MESH)
 uint8_t tester_init_mesh(void);
 uint8_t tester_unregister_mesh(void);
-void tester_handle_mesh(uint8_t opcode, uint8_t index, uint8_t *data, uint16_t len);
+void tester_handle_mesh(uint8_t opcode, uint8_t index, uint8_t *data,
+			uint16_t len);
+uint8_t tester_init_mmdl(void);
+uint8_t tester_unregister_mmdl(void);
+void tester_handle_mmdl(uint8_t opcode, uint8_t index, uint8_t *data,
+			uint16_t len);
 #endif /* CONFIG_BT_MESH */

@@ -71,6 +71,7 @@ static void supported_services(uint8_t *data, uint16_t len)
 #endif /* CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */
 #if defined(CONFIG_BT_MESH)
 	tester_set_bit(buf, BTP_SERVICE_ID_MESH);
+	tester_set_bit(buf, BTP_SERVICE_ID_MMDL);
 #endif /* CONFIG_BT_MESH */
 
 	tester_send(BTP_SERVICE_ID_CORE, CORE_READ_SUPPORTED_SERVICES,
@@ -101,6 +102,9 @@ static void register_service(uint8_t *data, uint16_t len)
 #if defined(CONFIG_BT_MESH)
 	case BTP_SERVICE_ID_MESH:
 		status = tester_init_mesh();
+		break;
+	case BTP_SERVICE_ID_MMDL:
+		status = tester_init_mmdl();
 		break;
 #endif /* CONFIG_BT_MESH */
 	default:
@@ -134,6 +138,9 @@ static void unregister_service(uint8_t *data, uint16_t len)
 #if defined(CONFIG_BT_MESH)
 	case BTP_SERVICE_ID_MESH:
 		status = tester_unregister_mesh();
+		break;
+	case BTP_SERVICE_ID_MMDL:
+		status = tester_unregister_mmdl();
 		break;
 #endif /* CONFIG_BT_MESH */
 	default:
@@ -212,6 +219,10 @@ static void cmd_handler(void *p1, void *p2, void *p3)
 #if defined(CONFIG_BT_MESH)
 		case BTP_SERVICE_ID_MESH:
 			tester_handle_mesh(cmd->hdr.opcode, cmd->hdr.index,
+					   cmd->hdr.data, len);
+			break;
+		case BTP_SERVICE_ID_MMDL:
+			tester_handle_mmdl(cmd->hdr.opcode, cmd->hdr.index,
 					   cmd->hdr.data, len);
 			break;
 #endif /* CONFIG_BT_MESH */

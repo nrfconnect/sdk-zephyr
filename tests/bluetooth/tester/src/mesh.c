@@ -16,21 +16,19 @@
 #include <sys/byteorder.h>
 #include <app_keys.h>
 
-#include <logging/log.h>
+#define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_MESH_DEBUG)
 #define LOG_MODULE_NAME bttester_mesh
-LOG_MODULE_REGISTER(LOG_MODULE_NAME);
+#include "common/log.h"
 
+#include "model_handler.h"
 #include "bttester.h"
 
 #define CONTROLLER_INDEX 0
-#define CID_LOCAL 0x05F1
 
 /* Health server data */
-#define CUR_FAULTS_MAX 4
-#define HEALTH_TEST_ID 0x00
-
-static uint8_t cur_faults[CUR_FAULTS_MAX];
-static uint8_t reg_faults[CUR_FAULTS_MAX * 2];
+extern uint8_t cur_faults[CUR_FAULTS_MAX];
+extern uint8_t reg_faults[CUR_FAULTS_MAX * 2];
+extern struct bt_mesh_model vnd_models[1];
 
 /* Provision node data */
 static uint8_t net_key[16];
@@ -46,24 +44,13 @@ static uint8_t dev_uuid[16];
 static uint8_t static_auth[16];
 
 /* Vendor Model data */
-#define VND_MODEL_ID_1 0x1234
 static uint8_t vnd_app_key[16];
 static uint16_t vnd_app_key_idx = 0x000f;
 
 /* Model send data */
-#define MODEL_BOUNDS_MAX 2
+struct model_data model_bound[MODEL_BOUNDS_MAX];
 
-static struct model_data {
-	struct bt_mesh_model *model;
-	uint16_t addr;
-	uint16_t appkey_idx;
-} model_bound[MODEL_BOUNDS_MAX];
-
-static struct {
-	uint16_t local;
-	uint16_t dst;
-	uint16_t net_idx;
-} net = {
+struct net_ctx net = {
 	.local = BT_MESH_ADDR_UNASSIGNED,
 	.dst = BT_MESH_ADDR_UNASSIGNED,
 };
@@ -104,134 +91,6 @@ static void supported_commands(uint8_t *data, uint16_t len)
 	tester_send(BTP_SERVICE_ID_MESH, MESH_READ_SUPPORTED_COMMANDS,
 		    CONTROLLER_INDEX, buf->data, buf->len);
 }
-
-static void get_faults(uint8_t *faults, uint8_t faults_size, uint8_t *dst, uint8_t *count)
-{
-	uint8_t i, limit = *count;
-
-	for (i = 0U, *count = 0U; i < faults_size && *count < limit; i++) {
-		if (faults[i]) {
-			*dst++ = faults[i];
-			(*count)++;
-		}
-	}
-}
-
-static int fault_get_cur(struct bt_mesh_model *model, uint8_t *test_id,
-			 uint16_t *company_id, uint8_t *faults, uint8_t *fault_count)
-{
-	LOG_DBG("");
-
-	*test_id = HEALTH_TEST_ID;
-	*company_id = CID_LOCAL;
-
-	get_faults(cur_faults, sizeof(cur_faults), faults, fault_count);
-
-	return 0;
-}
-
-static int fault_get_reg(struct bt_mesh_model *model, uint16_t company_id,
-			 uint8_t *test_id, uint8_t *faults, uint8_t *fault_count)
-{
-	LOG_DBG("company_id 0x%04x", company_id);
-
-	if (company_id != CID_LOCAL) {
-		return -EINVAL;
-	}
-
-	*test_id = HEALTH_TEST_ID;
-
-	get_faults(reg_faults, sizeof(reg_faults), faults, fault_count);
-
-	return 0;
-}
-
-static int fault_clear(struct bt_mesh_model *model, uint16_t company_id)
-{
-	LOG_DBG("company_id 0x%04x", company_id);
-
-	if (company_id != CID_LOCAL) {
-		return -EINVAL;
-	}
-
-	(void)memset(reg_faults, 0, sizeof(reg_faults));
-
-	return 0;
-}
-
-static int fault_test(struct bt_mesh_model *model, uint8_t test_id,
-		      uint16_t company_id)
-{
-	LOG_DBG("test_id 0x%02x company_id 0x%04x", test_id, company_id);
-
-	if (company_id != CID_LOCAL || test_id != HEALTH_TEST_ID) {
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-static const struct bt_mesh_health_srv_cb health_srv_cb = {
-	.fault_get_cur = fault_get_cur,
-	.fault_get_reg = fault_get_reg,
-	.fault_clear = fault_clear,
-	.fault_test = fault_test,
-};
-
-static struct bt_mesh_health_srv health_srv = {
-	.cb = &health_srv_cb,
-};
-
-BT_MESH_HEALTH_PUB_DEFINE(health_pub, CUR_FAULTS_MAX);
-
-static struct bt_mesh_cfg_cli cfg_cli = {
-};
-
-void show_faults(uint8_t test_id, uint16_t cid, uint8_t *faults, size_t fault_count)
-{
-	size_t i;
-
-	if (!fault_count) {
-		LOG_DBG("Health Test ID 0x%02x Company ID 0x%04x: no faults",
-			test_id, cid);
-		return;
-	}
-
-	LOG_DBG("Health Test ID 0x%02x Company ID 0x%04x Fault Count %zu: ",
-		test_id, cid, fault_count);
-
-	for (i = 0; i < fault_count; i++) {
-		LOG_DBG("0x%02x", faults[i]);
-	}
-}
-
-static void health_current_status(struct bt_mesh_health_cli *cli, uint16_t addr,
-				  uint8_t test_id, uint16_t cid, uint8_t *faults,
-				  size_t fault_count)
-{
-	LOG_DBG("Health Current Status from 0x%04x", addr);
-	show_faults(test_id, cid, faults, fault_count);
-}
-
-static struct bt_mesh_health_cli health_cli = {
-	.current_status = health_current_status,
-};
-
-static struct bt_mesh_model root_models[] = {
-	BT_MESH_MODEL_CFG_SRV,
-	BT_MESH_MODEL_CFG_CLI(&cfg_cli),
-	BT_MESH_MODEL_HEALTH_SRV(&health_srv, &health_pub),
-	BT_MESH_MODEL_HEALTH_CLI(&health_cli),
-};
-
-static struct bt_mesh_model vnd_models[] = {
-	BT_MESH_MODEL_VND(CID_LOCAL, VND_MODEL_ID_1, BT_MESH_MODEL_NO_OPS, NULL,
-			  NULL),
-};
-
-static struct bt_mesh_elem elements[] = {
-	BT_MESH_ELEM(0, root_models, vnd_models),
-};
 
 static void link_open(bt_mesh_prov_bearer_t bearer)
 {
@@ -350,11 +209,7 @@ static void prov_reset(void)
 	bt_mesh_prov_enable(BT_MESH_PROV_ADV | BT_MESH_PROV_GATT);
 }
 
-static const struct bt_mesh_comp comp = {
-	.cid = CID_LOCAL,
-	.elem = elements,
-	.elem_count = ARRAY_SIZE(elements),
-};
+static const struct bt_mesh_comp *comp;
 
 static struct bt_mesh_prov prov = {
 	.uuid = dev_uuid,
@@ -412,22 +267,28 @@ static void init(uint8_t *data, uint16_t len)
 
 	LOG_DBG("");
 
-	err = bt_mesh_init(&prov, &comp);
+	comp = model_handler_init();
+	err = bt_mesh_init(&prov, comp);
 	if (err) {
 		status = BTP_STATUS_FAILED;
 
 		goto rsp;
 	}
 
+	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+		printk("Loading stored settings\n");
+		settings_load();
+	}
+
 	if (addr) {
 		err = bt_mesh_provision(net_key, net_key_idx, flags, iv_index,
 					addr, dev_key);
-		if (err) {
+		if (err && err != -EALREADY) {
 			status = BTP_STATUS_FAILED;
 		}
 	} else {
 		err = bt_mesh_prov_enable(BT_MESH_PROV_ADV | BT_MESH_PROV_GATT);
-		if (err) {
+		if (err && err != -EALREADY) {
 			status = BTP_STATUS_FAILED;
 		}
 	}
@@ -610,7 +471,7 @@ static void health_generate_faults(uint8_t *data, uint16_t len)
 	net_buf_simple_add_mem(&buf, reg_faults, reg_faults_count);
 	rp->reg_faults_count = reg_faults_count;
 
-	bt_mesh_fault_update(&elements[0]);
+	bt_mesh_fault_update(&comp->elem[0]);
 
 	tester_send(BTP_SERVICE_ID_MESH, MESH_HEALTH_GENERATE_FAULTS,
 		    CONTROLLER_INDEX, buf.data, buf.len);
@@ -623,7 +484,7 @@ static void health_clear_faults(uint8_t *data, uint16_t len)
 	(void)memset(cur_faults, 0, sizeof(cur_faults));
 	(void)memset(reg_faults, 0, sizeof(reg_faults));
 
-	bt_mesh_fault_update(&elements[0]);
+	bt_mesh_fault_update(&comp->elem[0]);
 
 	tester_rsp(BTP_SERVICE_ID_MESH, MESH_HEALTH_CLEAR_FAULTS,
 		   CONTROLLER_INDEX, BTP_STATUS_SUCCESS);
