@@ -42,6 +42,12 @@
  */
 _image_1_primary_slot_id = PM_S0_ID;
 
+/* This symbol is used by SPM to point to the app. Depending on whether
+ * SPM and app are stored in S0 or S1, the value will differ. Here, SPM and
+ * app are stored to S1, hence the app address needs to be in S1.
+ */
+_app_address = PM_S1_ADDRESS + PM_SPM_SIZE;
+
 #define ROM_ADDR PM_ADDRESS + PM_S1_ADDRESS - PM_S0_ADDRESS
 
 #else /* ! LINK_INTO_s1 */
@@ -51,6 +57,13 @@ _image_1_primary_slot_id = PM_S0_ID;
  * This is used when writing code operating on the "other" slot.
  */
 _image_1_primary_slot_id = PM_S1_ID;
+
+/* This symbol is used by SPM to point to the app. Depending on whether
+ * SPM and app are stored in S0 or S1, the value will differ. Here, SPM and
+ * app are stored to S0, hence the app address is the one from S0.
+ */
+_app_address = PM_APP_ADDRESS;
+
 #endif /* PM_S1_ID */
 
 #define ROM_ADDR PM_ADDRESS
