@@ -141,6 +141,15 @@ set(
   ${config_files}
 )
 
+foreach(f ${merge_config_files})
+  file(STRINGS ${f} OVERLAYS REGEX "^#include ")
+  foreach(overlay ${OVERLAYS})
+    string(REGEX REPLACE "^#include[ ]*\"([^\"]*)\".*" "\\1" overlay_file ${overlay})
+    string(CONFIGURE ${overlay_file} overlay_file)
+    list(APPEND merge_config_files ${overlay_file})
+  endforeach()
+endforeach()
+
 # Create a list of absolute paths to the .config sources from
 # merge_config_files, which is a mix of absolute and relative paths.
 set(merge_config_files_with_absolute_paths "")
