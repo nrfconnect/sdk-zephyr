@@ -502,7 +502,7 @@ some defaults are assumed:
   :c:macro:`ARCH_STACK_PTR_ALIGN`
 - :c:macro:`ARCH_THREAD_STACK_OBJ_ALIGN`: default align to
   :c:macro:`ARCH_STACK_PTR_ALIGN`
-- :c:macro:`ARCH_THREAD_STACK_SIZE_ALIGN(size)`: default round up to
+- :c:macro:`ARCH_THREAD_STACK_SIZE_ALIGN`: default round up to
   :c:macro:`ARCH_STACK_PTR_ALIGN`
 
 All stack creation macros are defined in terms of these.
