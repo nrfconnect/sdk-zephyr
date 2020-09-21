@@ -493,7 +493,7 @@ static inline struct usbd_event *usbd_evt_alloc(void)
 	return ev;
 }
 
-static void usb_dc_power_event_handler(nrfx_power_usb_evt_t event)
+void usb_dc_power_event_handler(nrfx_power_usb_evt_t event)
 {
 	enum usbd_periph_state new_state;
 
