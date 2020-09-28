@@ -52,6 +52,7 @@ static struct nrf5_802154_data nrf5_data;
 #define ACK_REQUEST_BIT (1 << 5)
 #define FRAME_PENDING_BYTE 1
 #define FRAME_PENDING_BIT (1 << 4)
+#define TXTIME_OFFSET_US  (5 * USEC_PER_MSEC)
 
 /* Convenience defines for RADIO */
 #define NRF5_802154_DATA(dev) \
@@ -380,6 +381,8 @@ static int nrf5_tx(const struct device *dev,
 	nrf5_radio->tx_psdu[0] = payload_len + NRF5_FCS_LENGTH;
 	memcpy(nrf5_radio->tx_psdu + 1, payload, payload_len);
 
+	k_sem_reset(&nrf5_radio->tx_started);
+
 	/* Reset semaphore in case ACK was received after timeout */
 	k_sem_reset(&nrf5_radio->tx_wait);
 
@@ -394,7 +397,22 @@ static int nrf5_tx(const struct device *dev,
 		nrf_802154_transmit_csma_ca_raw(nrf5_radio->tx_psdu);
 		break;
 	case IEEE802154_TX_MODE_TXTIME:
-	case IEEE802154_TX_MODE_TXTIME_CCA:
+	case IEEE802154_TX_MODE_TXTIME_CCA: {
+		bool cca = (mode == IEEE802154_TX_MODE_TXTIME_CCA);
+		uint32_t tx_at;
+
+		__ASSERT_NO_MSG(pkt);
+		__ASSERT(IS_ENABLED(CONFIG_NET_PKT_TIMESTAMP),
+			 "Timestamp is required");
+		tx_at = net_pkt_timestamp(pkt)->second * USEC_PER_SEC
+			+ net_pkt_timestamp(pkt)->nanosecond / NSEC_PER_USEC;
+		ret = nrf_802154_transmit_raw_at(nrf5_radio->tx_psdu,
+						 cca,
+						 tx_at - TXTIME_OFFSET_US,
+						 TXTIME_OFFSET_US,
+						 nrf_802154_channel_get());
+		break;
+	}
 	default:
 		NET_ERR("TX mode %d not supported", mode);
 		return -ENOTSUP;
@@ -405,6 +423,7 @@ static int nrf5_tx(const struct device *dev,
 		return -EIO;
 	}
 
+	k_sem_take(&nrf5_radio->tx_started, K_FOREVER);
 	nrf5_tx_started(dev, pkt, frag);
 
 	LOG_DBG("Sending frame (ch:%d, txpower:%d)",
@@ -494,6 +513,7 @@ static int nrf5_init(const struct device *dev)
 	struct nrf5_802154_data *nrf5_radio = NRF5_802154_DATA(dev);
 
 	k_fifo_init(&nrf5_radio->rx_fifo);
+	k_sem_init(&nrf5_radio->tx_started, 0, 1);
 	k_sem_init(&nrf5_radio->tx_wait, 0, 1);
 	k_sem_init(&nrf5_radio->cca_wait, 0, 1);
 
@@ -632,6 +652,13 @@ void nrf_802154_received_timestamp_raw(uint8_t *data, int8_t power, uint8_t lqi,
 void nrf_802154_receive_failed(nrf_802154_rx_error_t error)
 {
 	nrf5_data.last_frame_ack_fpb = false;
+}
+
+void nrf_802154_tx_started(const uint8_t *frame)
+{
+	ARG_UNUSED(frame);
+
+	k_sem_give(&nrf5_data.tx_started);
 }
 
 void nrf_802154_tx_ack_started(const uint8_t *data)
