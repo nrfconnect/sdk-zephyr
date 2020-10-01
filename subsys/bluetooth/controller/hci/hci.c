@@ -2920,6 +2920,7 @@ void hci_disconn_complete_encode(struct pdu_data *pdu_data, u16_t handle,
 
 	ep->status = 0x00;
 	ep->handle = sys_cpu_to_le16(handle);
+	ep->reason = *((u8_t *)pdu_data);
 }
 
 void hci_disconn_complete_process(u16_t handle)
