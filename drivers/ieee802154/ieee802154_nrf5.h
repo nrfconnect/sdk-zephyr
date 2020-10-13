@@ -53,9 +53,6 @@ struct nrf5_802154_data {
 	/* CCA result. Holds information whether channel is free or not. */
 	bool channel_free;
 
-	/* TX synchronization semaphore. Unlocked when transmission starts. */
-	struct k_sem tx_started;
-
 	/* TX synchronization semaphore. Unlocked when frame has been
 	 * sent or send procedure failed.
 	 */
