@@ -205,8 +205,6 @@ static void prov_complete(uint16_t net_idx, uint16_t addr)
 static void prov_reset(void)
 {
 	LOG_DBG("");
-
-	bt_mesh_prov_enable(BT_MESH_PROV_ADV | BT_MESH_PROV_GATT);
 }
 
 static const struct bt_mesh_comp *comp;
@@ -283,11 +281,6 @@ static void init(uint8_t *data, uint16_t len)
 	if (addr) {
 		err = bt_mesh_provision(net_key, net_key_idx, flags, iv_index,
 					addr, dev_key);
-		if (err && err != -EALREADY) {
-			status = BTP_STATUS_FAILED;
-		}
-	} else {
-		err = bt_mesh_prov_enable(BT_MESH_PROV_ADV | BT_MESH_PROV_GATT);
 		if (err && err != -EALREADY) {
 			status = BTP_STATUS_FAILED;
 		}
@@ -602,6 +595,22 @@ static void proxy_identity_enable(uint8_t *data, uint16_t len)
 		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
+static void prov_enable(uint8_t *data, uint16_t len)
+{
+	int err;
+	int status = BTP_STATUS_SUCCESS;
+
+	LOG_DBG("");
+
+	err = bt_mesh_prov_enable(BT_MESH_PROV_ADV | BT_MESH_PROV_GATT);
+	if (err && err != -EALREADY) {
+		status = BTP_STATUS_FAILED;
+	}
+
+	tester_rsp(BTP_SERVICE_ID_MESH, MESH_PROV_ENABLE, CONTROLLER_INDEX,
+		   status);
+}
+
 void tester_handle_mesh(uint8_t opcode, uint8_t index, uint8_t *data, uint16_t len)
 {
 	switch (opcode) {
@@ -663,6 +672,9 @@ void tester_handle_mesh(uint8_t opcode, uint8_t index, uint8_t *data, uint16_t l
 #endif /* CONFIG_BT_TESTING */
 	case MESH_PROXY_IDENTITY:
 		proxy_identity_enable(data, len);
+		break;
+	case MESH_PROV_ENABLE:
+		prov_enable(data, len);
 		break;
 	default:
 		tester_rsp(BTP_SERVICE_ID_MESH, opcode, index,
