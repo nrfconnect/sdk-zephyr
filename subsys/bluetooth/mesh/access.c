@@ -305,6 +305,11 @@ static void mod_init(struct bt_mesh_model *mod, struct bt_mesh_elem *elem,
 		mod->mod_idx = mod - elem->models;
 	}
 
+#ifdef CONFIG_BT_MESH_MODEL_EXTENSIONS
+	mod->next = NULL;
+	mod->extends = NULL;
+#endif
+
 	if (mod->cb && mod->cb->init) {
 		*err = mod->cb->init(mod);
 	}
