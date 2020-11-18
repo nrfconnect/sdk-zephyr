@@ -56,8 +56,6 @@ struct zsock_pollfd {
 #define ZSOCK_MSG_PEEK 0x02
 /** zsock_recv: Control received data truncation */
 #define ZSOCK_MSG_TRUNC 0x10
-/** zsock_recv: Request a blocking operation until the request is satisfied. */
-#define ZSOCK_MSG_WAITALL 0x20
 /** zsock_recv/zsock_send: Override operation to non-blocking */
 #define ZSOCK_MSG_DONTWAIT 0x40
 
@@ -778,7 +776,6 @@ static inline char *inet_ntop(sa_family_t family, const void *src, char *dst,
 
 #define MSG_PEEK ZSOCK_MSG_PEEK
 #define MSG_TRUNC ZSOCK_MSG_TRUNC
-#define MSG_WAITALL ZSOCK_MSG_WAITALL
 #define MSG_DONTWAIT ZSOCK_MSG_DONTWAIT
 
 #define SHUT_RD ZSOCK_SHUT_RD
