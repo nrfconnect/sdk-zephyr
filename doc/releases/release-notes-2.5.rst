@@ -29,10 +29,6 @@ interface and listing all issues with the `bug label
 API Changes
 ***********
 
-* The :c:func:`lwm2m_rd_client_start` function now accepts an additional
-  ``flags`` parameter, which allows to configure current LwM2M client session,
-  for instance enable bootstrap procedure in the curent session.
-
 Deprecated in this release
 ==========================
 
