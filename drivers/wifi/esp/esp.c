@@ -19,6 +19,7 @@ LOG_MODULE_REGISTER(wifi_esp);
 #include <stdlib.h>
 
 #include <drivers/gpio.h>
+#include <drivers/uart.h>
 
 #include <net/net_if.h>
 #include <net/net_offload.h>
@@ -26,19 +27,30 @@ LOG_MODULE_REGISTER(wifi_esp);
 
 #include "esp.h"
 
+#define RX_NET_PKT_ALLOC_TIMEOUT				\
+	K_MSEC(CONFIG_WIFI_ESP_RX_NET_PKT_ALLOC_TIMEOUT)
+
 /* pin settings */
 enum modem_control_pins {
-#if DT_INST_NODE_HAS_PROP(0, wifi_reset_gpios)
-	WIFI_RESET,
+#if DT_INST_NODE_HAS_PROP(0, power_gpios)
+	ESP_POWER,
+#endif
+#if DT_INST_NODE_HAS_PROP(0, reset_gpios)
+	ESP_RESET,
 #endif
 	NUM_PINS,
 };
 
 static struct modem_pin modem_pins[] = {
-#if DT_INST_NODE_HAS_PROP(0, wifi_reset_gpios)
-	MODEM_PIN(DT_INST_GPIO_LABEL(0, wifi_reset_gpios),
-		  DT_INST_GPIO_PIN(0, wifi_reset_gpios),
-		  DT_INST_GPIO_FLAGS(0, wifi_reset_gpios) | GPIO_OUTPUT),
+#if DT_INST_NODE_HAS_PROP(0, power_gpios)
+	MODEM_PIN(DT_INST_GPIO_LABEL(0, power_gpios),
+		  DT_INST_GPIO_PIN(0, power_gpios),
+		  DT_INST_GPIO_FLAGS(0, power_gpios) | GPIO_OUTPUT_INACTIVE),
+#endif
+#if DT_INST_NODE_HAS_PROP(0, reset_gpios)
+	MODEM_PIN(DT_INST_GPIO_LABEL(0, reset_gpios),
+		  DT_INST_GPIO_PIN(0, reset_gpios),
+		  DT_INST_GPIO_FLAGS(0, reset_gpios) | GPIO_OUTPUT_INACTIVE),
 #endif
 };
 
@@ -248,7 +260,11 @@ static void esp_ip_addr_work(struct k_work *work)
 	/* update interface addresses */
 	net_if_ipv4_set_gw(dev->net_iface, &dev->gw);
 	net_if_ipv4_set_netmask(dev->net_iface, &dev->nm);
+#if defined(CONFIG_WIFI_ESP_IP_STATIC)
+	net_if_ipv4_addr_add(dev->net_iface, &dev->ip, NET_ADDR_MANUAL, 0);
+#else
 	net_if_ipv4_addr_add(dev->net_iface, &dev->ip, NET_ADDR_DHCP, 0);
+#endif
 }
 
 MODEM_CMD_DEFINE(on_cmd_got_ip)
@@ -313,7 +329,7 @@ struct net_pkt *esp_prepare_pkt(struct esp_data *dev, struct net_buf *src,
 	size_t to_copy;
 
 	pkt = net_pkt_rx_alloc_with_buffer(dev->net_iface, len, AF_UNSPEC,
-					   0, K_MSEC(100));
+					   0, RX_NET_PKT_ALLOC_TIMEOUT);
 	if (!pkt) {
 		return NULL;
 	}
@@ -437,14 +453,24 @@ MODEM_CMD_DIRECT_DEFINE(on_cmd_ipd)
 
 	ret = data_offset + data_len; /* Skip */
 
-	pkt = esp_prepare_pkt(dev, data->rx_buf, data_offset, data_len);
-	if (!pkt) {
-		/* FIXME: Should probably terminate connection */
-		LOG_ERR("Failed to get net_pkt: len %d", data_len);
+	if ((sock->flags & (ESP_SOCK_CONNECTED | ESP_SOCK_CLOSE_PENDING)) !=
+							ESP_SOCK_CONNECTED) {
+		LOG_DBG("Received data on closed link %d", link_id);
 		goto out;
 	}
 
+	pkt = esp_prepare_pkt(dev, data->rx_buf, data_offset, data_len);
+	if (!pkt) {
+		LOG_ERR("Failed to get net_pkt: len %d", data_len);
+		if (sock->type == SOCK_STREAM) {
+			sock->flags |= ESP_SOCK_CLOSE_PENDING;
+		}
+		goto submit_work;
+	}
+
 	k_fifo_put(&sock->fifo_rx_pkt, pkt);
+
+submit_work:
 	k_work_submit_to_queue(&dev->workq, &sock->recv_work);
 
 out:
@@ -696,6 +722,22 @@ static int esp_mgmt_ap_disable(const struct device *dev)
 	return ret;
 }
 
+static void esp_configure_hostname(struct esp_data *data)
+{
+#if defined(CONFIG_NET_HOSTNAME_ENABLE)
+	char cmd[sizeof("AT+CWHOSTNAME=\"\"") + NET_HOSTNAME_MAX_LEN];
+
+	snprintk(cmd, sizeof(cmd), "AT+CWHOSTNAME=\"%s\"", net_hostname_get());
+	cmd[sizeof(cmd) - 1] = '\0';
+
+	modem_cmd_send(&data->mctx.iface, &data->mctx.cmd_handler,
+		       NULL, 0, cmd, &data->sem_response,
+		       ESP_CMD_TIMEOUT);
+#else
+	ARG_UNUSED(data);
+#endif
+}
+
 static void esp_init_work(struct k_work *work)
 {
 	struct esp_data *dev;
@@ -705,7 +747,22 @@ static void esp_init_work(struct k_work *work)
 		/* turn off echo */
 		SETUP_CMD_NOHANDLE("ATE0"),
 		SETUP_CMD_NOHANDLE("AT+UART_CUR="_UART_CUR),
+#if DT_INST_NODE_HAS_PROP(0, target_speed)
+	};
+	static struct setup_cmd setup_cmds_target_baudrate[] = {
+		SETUP_CMD_NOHANDLE("AT"),
+#endif
 		SETUP_CMD_NOHANDLE("AT+"_CWMODE"=1"),
+#if defined(CONFIG_WIFI_ESP_IP_STATIC)
+		/* enable Static IP Config */
+		SETUP_CMD_NOHANDLE(ESP_CMD_DHCP_ENABLE(STATION, 0)),
+		SETUP_CMD_NOHANDLE(ESP_CMD_SET_IP(CONFIG_WIFI_ESP_IP_ADDRESS,
+						  CONFIG_WIFI_ESP_IP_GATEWAY,
+						  CONFIG_WIFI_ESP_IP_MASK)),
+#else
+		/* enable DHCP */
+		SETUP_CMD_NOHANDLE(ESP_CMD_DHCP_ENABLE(STATION, 1)),
+#endif
 		/* enable multiple socket support */
 		SETUP_CMD_NOHANDLE("AT+CIPMUX=1"),
 		/* only need ecn,ssid,rssi,channel */
@@ -732,8 +789,42 @@ static void esp_init_work(struct k_work *work)
 		return;
 	}
 
+#if DT_INST_NODE_HAS_PROP(0, target_speed)
+	static const struct uart_config uart_config = {
+		.baudrate = DT_INST_PROP(0, target_speed),
+		.parity = UART_CFG_PARITY_NONE,
+		.stop_bits = UART_CFG_STOP_BITS_1,
+		.data_bits = UART_CFG_DATA_BITS_8,
+		.flow_ctrl = DT_PROP(ESP_BUS, hw_flow_control) ?
+			UART_CFG_FLOW_CTRL_RTS_CTS : UART_CFG_FLOW_CTRL_NONE,
+	};
+
+	ret = uart_configure(device_get_binding(DT_INST_BUS_LABEL(0)),
+			     &uart_config);
+	if (ret < 0) {
+		LOG_ERR("Baudrate change failed %d", ret);
+		return;
+	}
+
+	/* arbitrary sleep period to give ESP enough time to reconfigure */
+	k_sleep(K_MSEC(100));
+
+	ret = modem_cmd_handler_setup_cmds(&dev->mctx.iface,
+				&dev->mctx.cmd_handler,
+				setup_cmds_target_baudrate,
+				ARRAY_SIZE(setup_cmds_target_baudrate),
+				&dev->sem_response,
+				ESP_INIT_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("Init failed %d", ret);
+		return;
+	}
+#endif
+
 	net_if_set_link_addr(dev->net_iface, dev->mac_addr,
 			     sizeof(dev->mac_addr), NET_LINK_ETHERNET);
+
+	esp_configure_hostname(dev);
 
 	LOG_INF("ESP Wi-Fi ready");
 
@@ -750,10 +841,14 @@ static void esp_reset(struct esp_data *dev)
 		net_if_down(dev->net_iface);
 	}
 
-#if DT_INST_NODE_HAS_PROP(0, wifi_reset_gpios)
-	modem_pin_write(&dev->mctx, WIFI_RESET, 1);
+#if DT_INST_NODE_HAS_PROP(0, power_gpios)
+	modem_pin_write(&dev->mctx, ESP_POWER, 0);
 	k_sleep(K_MSEC(100));
-	modem_pin_write(&dev->mctx, WIFI_RESET, 0);
+	modem_pin_write(&dev->mctx, ESP_POWER, 1);
+#elif DT_INST_NODE_HAS_PROP(0, reset_gpios)
+	modem_pin_write(&dev->mctx, ESP_RESET, 1);
+	k_sleep(K_MSEC(100));
+	modem_pin_write(&dev->mctx, ESP_RESET, 0);
 #else
 	int retries = 3;
 
@@ -828,12 +923,10 @@ static int esp_init(const struct device *dev)
 	data->cmd_handler_data.cmds_len[CMD_RESP] = ARRAY_SIZE(response_cmds);
 	data->cmd_handler_data.cmds[CMD_UNSOL] = unsol_cmds;
 	data->cmd_handler_data.cmds_len[CMD_UNSOL] = ARRAY_SIZE(unsol_cmds);
-	data->cmd_handler_data.read_buf = &data->cmd_read_buf[0];
-	data->cmd_handler_data.read_buf_len = sizeof(data->cmd_read_buf);
 	data->cmd_handler_data.match_buf = &data->cmd_match_buf[0];
 	data->cmd_handler_data.match_buf_len = sizeof(data->cmd_match_buf);
 	data->cmd_handler_data.buf_pool = &mdm_recv_pool;
-	data->cmd_handler_data.alloc_timeout = CMD_BUF_ALLOC_TIMEOUT;
+	data->cmd_handler_data.alloc_timeout = K_NO_WAIT;
 	data->cmd_handler_data.eol = "\r\n";
 	ret = modem_cmd_handler_init(&data->mctx.cmd_handler,
 				       &data->cmd_handler_data);
@@ -842,8 +935,7 @@ static int esp_init(const struct device *dev)
 	}
 
 	/* modem interface */
-	data->iface_data.isr_buf = &data->iface_isr_buf[0];
-	data->iface_data.isr_buf_len = sizeof(data->iface_isr_buf);
+	data->iface_data.hw_flow_control = DT_PROP(ESP_BUS, hw_flow_control);
 	data->iface_data.rx_rb_buf = &data->iface_rb_buf[0];
 	data->iface_data.rx_rb_buf_len = sizeof(data->iface_rb_buf);
 	ret = modem_iface_uart_init(&data->mctx.iface, &data->iface_data,

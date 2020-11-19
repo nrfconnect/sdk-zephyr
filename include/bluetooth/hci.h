@@ -151,8 +151,8 @@ struct bt_hci_cmd_hdr {
 #define BT_LE_FEAT_BIT_ANT_SWITCH_TX_AOD        21
 #define BT_LE_FEAT_BIT_ANT_SWITCH_RX_AOA        22
 #define BT_LE_FEAT_BIT_RX_CTE                   23
-#define BT_LE_FEAT_BIT_PERIODIC_SYNC_XFER_SEND  24
-#define BT_LE_FEAT_BIT_PERIODIC_SYNC_XFER_RECV  25
+#define BT_LE_FEAT_BIT_PAST_SEND                24
+#define BT_LE_FEAT_BIT_PAST_RECV                25
 #define BT_LE_FEAT_BIT_SCA_UPDATE               26
 #define BT_LE_FEAT_BIT_REMOTE_PUB_KEY_VALIDATE  27
 #define BT_LE_FEAT_BIT_CIS_MASTER               28
@@ -185,6 +185,10 @@ struct bt_hci_cmd_hdr {
 						BT_LE_FEAT_BIT_EXT_ADV)
 #define BT_FEAT_LE_EXT_PER_ADV(feat)            BT_LE_FEAT_TEST(feat, \
 						BT_LE_FEAT_BIT_PER_ADV)
+#define BT_FEAT_LE_PAST_SEND(feat)              BT_LE_FEAT_TEST(feat, \
+						BT_LE_FEAT_BIT_PAST_SEND)
+#define BT_FEAT_LE_PAST_RECV(feat)              BT_LE_FEAT_TEST(feat, \
+						BT_LE_FEAT_BIT_PAST_RECV)
 #define BT_FEAT_LE_CIS_MASTER(feat)             BT_LE_FEAT_TEST(feat, \
 						BT_LE_FEAT_BIT_CIS_MASTER)
 #define BT_FEAT_LE_CIS_SLAVE(feat)              BT_LE_FEAT_TEST(feat, \
@@ -1335,6 +1339,72 @@ struct bt_hci_cp_le_set_privacy_mode {
 	uint8_t         mode;
 } __packed;
 
+#define BT_HCI_OP_LE_SET_PER_ADV_RECV_ENABLE     BT_OP(BT_OGF_LE, 0x0059)
+struct bt_hci_cp_le_set_per_adv_recv_enable {
+	uint16_t handle;
+	uint8_t  enable;
+} __packed;
+
+#define BT_HCI_OP_LE_PER_ADV_SYNC_TRANSFER      BT_OP(BT_OGF_LE, 0x005a)
+struct bt_hci_cp_le_per_adv_sync_transfer {
+	uint16_t conn_handle;
+	uint16_t service_data;
+	uint16_t sync_handle;
+} __packed;
+
+struct bt_hci_rp_le_per_adv_sync_transfer {
+	uint8_t  status;
+	uint16_t conn_handle;
+} __packed;
+
+#define BT_HCI_OP_LE_PER_ADV_SET_INFO_TRANSFER  BT_OP(BT_OGF_LE, 0x005b)
+struct bt_hci_cp_le_per_adv_set_info_transfer {
+	uint16_t conn_handle;
+	uint16_t service_data;
+	uint8_t  adv_handle;
+} __packed;
+
+struct bt_hci_rp_le_per_adv_set_info_transfer {
+	uint8_t  status;
+	uint16_t conn_handle;
+} __packed;
+
+#define BT_HCI_LE_PAST_MODE_NO_SYNC              0x00
+#define BT_HCI_LE_PAST_MODE_NO_REPORTS           0x01
+#define BT_HCI_LE_PAST_MODE_SYNC                 0x02
+
+#define BT_HCI_LE_PAST_CTE_TYPE_NO_AOA           BIT(0)
+#define BT_HCI_LE_PAST_CTE_TYPE_NO_AOD_1US       BIT(1)
+#define BT_HCI_LE_PAST_CTE_TYPE_NO_AOD_2US       BIT(2)
+#define BT_HCI_LE_PAST_CTE_TYPE_NO_CTE           BIT(3)
+#define BT_HCI_LE_PAST_CTE_TYPE_ONLY_CTE         BIT(4)
+
+#define BT_HCI_OP_LE_PAST_PARAM                 BT_OP(BT_OGF_LE, 0x005c)
+struct bt_hci_cp_le_past_param {
+	uint16_t conn_handle;
+	uint8_t  mode;
+	uint16_t skip;
+	uint16_t timeout;
+	uint8_t  cte_type;
+} __packed;
+
+struct bt_hci_rp_le_past_param {
+	uint8_t  status;
+	uint16_t conn_handle;
+} __packed;
+
+#define BT_HCI_OP_LE_DEFAULT_PAST_PARAM         BT_OP(BT_OGF_LE, 0x005d)
+struct bt_hci_cp_le_default_past_param {
+	uint8_t  mode;
+	uint16_t skip;
+	uint16_t timeout;
+	uint8_t  cte_type;
+} __packed;
+
+struct bt_hci_rp_le_default_past_param {
+	uint8_t  status;
+} __packed;
+
 #define BT_HCI_OP_LE_READ_BUFFER_SIZE_V2        BT_OP(BT_OGF_LE, 0x0060)
 struct bt_hci_rp_le_read_buffer_size_v2 {
 	uint8_t  status;
@@ -1444,6 +1514,24 @@ struct bt_hci_cp_le_create_big {
 } __packed;
 
 #define BT_HCI_OP_LE_CREATE_BIG_TEST            BT_OP(BT_OGF_LE, 0x0069)
+struct bt_hci_cp_le_create_big_test {
+	uint8_t  big_handle;
+	uint8_t  adv_handle;
+	uint8_t  num_bis;
+	uint8_t  sdu_interval[3];
+	uint16_t iso_interval;
+	uint8_t  nse;
+	uint16_t max_sdu;
+	uint16_t max_pdu;
+	uint8_t  phy;
+	uint8_t  packing;
+	uint8_t  framing;
+	uint8_t  bn;
+	uint8_t  irc;
+	uint8_t  pto;
+	uint8_t  encryption;
+	uint8_t  bcode[16];
+} __packed;
 
 #define BT_HCI_OP_LE_TERMINATE_BIG              BT_OP(BT_OGF_LE, 0x006a)
 struct bt_hci_cp_le_terminate_big {
@@ -1976,6 +2064,19 @@ struct bt_hci_evt_le_chan_sel_algo {
 	uint8_t  chan_sel_algo;
 } __packed;
 
+#define BT_HCI_EVT_LE_PAST_RECEIVED                0x18
+struct bt_hci_evt_le_past_received {
+	uint8_t      status;
+	uint16_t     conn_handle;
+	uint16_t     service_data;
+	uint16_t     sync_handle;
+	uint8_t      adv_sid;
+	bt_addr_le_t addr;
+	uint8_t      phy;
+	uint16_t     interval;
+	uint8_t      clock_accuracy;
+} __packed;
+
 #define BT_HCI_EVT_LE_CIS_ESTABLISHED           0x19
 struct bt_hci_evt_le_cis_established {
 	uint8_t  status;
@@ -2051,6 +2152,23 @@ struct bt_hci_evt_le_req_peer_sca_complete {
 	uint8_t  status;
 	uint16_t handle;
 	uint8_t  sca;
+} __packed;
+
+#define BT_HCI_EVT_LE_BIGINFO_ADV_REPORT        0x22
+struct bt_hci_evt_le_biginfo_adv_report {
+	uint16_t sync_handle;
+	uint8_t  num_bis;
+	uint8_t  nse;
+	uint16_t iso_interval;
+	uint8_t  bn;
+	uint8_t  pto;
+	uint8_t  irc;
+	uint16_t max_pdu;
+	uint8_t  sdu_interval[3];
+	uint16_t max_sdu;
+	uint8_t  phy;
+	uint8_t  framing;
+	uint8_t  encryption;
 } __packed;
 
 /* Event mask bits */
@@ -2132,11 +2250,17 @@ struct bt_hci_evt_le_req_peer_sca_complete {
 #define BT_EVT_MASK_LE_ADV_SET_TERMINATED        BT_EVT_BIT(17)
 #define BT_EVT_MASK_LE_SCAN_REQ_RECEIVED         BT_EVT_BIT(18)
 #define BT_EVT_MASK_LE_CHAN_SEL_ALGO             BT_EVT_BIT(19)
+#define BT_EVT_MASK_LE_PAST_RECEIVED             BT_EVT_BIT(23)
 #define BT_EVT_MASK_LE_CIS_ESTABLISHED           BT_EVT_BIT(24)
 #define BT_EVT_MASK_LE_CIS_REQ                   BT_EVT_BIT(25)
 #define BT_EVT_MASK_LE_BIG_COMPLETE              BT_EVT_BIT(26)
-#define BT_EVT_MASK_LE_BIG_SYNC_LOST             BT_EVT_BIT(27)
-#define BT_EVT_MASK_LE_REQ_PEER_SCA_COMPLETE     BT_EVT_BIT(28)
+#define BT_EVT_MASK_LE_BIG_TERMINATED            BT_EVT_BIT(27)
+#define BT_EVT_MASK_LE_BIG_SYNC_ESTABLISHED      BT_EVT_BIT(28)
+#define BT_EVT_MASK_LE_BIG_SYNC_LOST             BT_EVT_BIT(29)
+#define BT_EVT_MASK_LE_REQ_PEER_SCA_COMPLETE     BT_EVT_BIT(30)
+#define BT_EVT_MASK_LE_PATH_LOSS_THRESHOLD       BT_EVT_BIT(31)
+#define BT_EVT_MASK_LE_TRANSMIT_POWER_REPORTING  BT_EVT_BIT(32)
+#define BT_EVT_MASK_LE_BIGINFO_ADV_REPORT        BT_EVT_BIT(33)
 
 /** Allocate a HCI command buffer.
   *

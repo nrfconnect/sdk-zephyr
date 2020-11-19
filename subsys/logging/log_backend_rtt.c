@@ -8,7 +8,7 @@
 #include <logging/log_core.h>
 #include <logging/log_msg.h>
 #include <logging/log_output.h>
-#include "log_backend_std.h"
+#include <logging/log_backend_std.h>
 #include <SEGGER_RTT.h>
 
 #ifndef CONFIG_LOG_BACKEND_RTT_BUFFER_SIZE
@@ -222,6 +222,7 @@ static int data_out_block_mode(uint8_t *data, size_t length, void *ctx)
 		} else if (host_present) {
 			retry_cnt--;
 			on_failed_write(retry_cnt);
+		} else {
 		}
 	} while ((ret == 0) && host_present);
 

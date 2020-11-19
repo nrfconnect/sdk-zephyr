@@ -15,6 +15,10 @@
 #include <zephyr/types.h>
 #include <device.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum lora_signal_bandwidth {
 	BW_125_KHZ = 0,
 	BW_250_KHZ,
@@ -103,7 +107,8 @@ struct lora_driver_api {
 static inline int lora_config(const struct device *dev,
 			      struct lora_modem_config *config)
 {
-	const struct lora_driver_api *api = dev->api;
+	const struct lora_driver_api *api =
+		(const struct lora_driver_api *)dev->api;
 
 	return api->config(dev, config);
 }
@@ -121,7 +126,8 @@ static inline int lora_config(const struct device *dev,
 static inline int lora_send(const struct device *dev,
 			    uint8_t *data, uint32_t data_len)
 {
-	const struct lora_driver_api *api = dev->api;
+	const struct lora_driver_api *api =
+		(const struct lora_driver_api *)dev->api;
 
 	return api->send(dev, data, data_len);
 }
@@ -146,7 +152,8 @@ static inline int lora_recv(const struct device *dev, uint8_t *data,
 			    uint8_t size,
 			    k_timeout_t timeout, int16_t *rssi, int8_t *snr)
 {
-	const struct lora_driver_api *api = dev->api;
+	const struct lora_driver_api *api =
+		(const struct lora_driver_api *)dev->api;
 
 	return api->recv(dev, data, size, timeout, rssi, snr);
 }
@@ -166,7 +173,8 @@ static inline int lora_recv(const struct device *dev, uint8_t *data,
 static inline int lora_test_cw(const struct device *dev, uint32_t frequency,
 			       int8_t tx_power, uint16_t duration)
 {
-	const struct lora_driver_api *api = dev->api;
+	const struct lora_driver_api *api =
+		(const struct lora_driver_api *)dev->api;
 
 	if (!api->test_cw) {
 		return -ENOTSUP;
@@ -174,5 +182,9 @@ static inline int lora_test_cw(const struct device *dev, uint32_t frequency,
 
 	return api->test_cw(dev, frequency, tx_power, duration);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif	/* ZEPHYR_INCLUDE_DRIVERS_LORA_H_ */

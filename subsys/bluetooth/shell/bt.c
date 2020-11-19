@@ -110,7 +110,7 @@ static void scan_recv(const struct bt_le_scan_recv_info *info,
 	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
 	shell_print(ctx_shell, "[DEVICE]: %s, AD evt type %u, RSSI %i %s "
 		    "C:%u S:%u D:%d SR:%u E:%u Prim: %s, Secn: %s, "
-		    "Interval: %u",
+		    "Interval: 0x%04x (%u ms), SID: 0x%x",
 		    le_addr, info->adv_type, info->rssi, name,
 		    (info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE) != 0,
 		    (info->adv_props & BT_GAP_ADV_PROP_SCANNABLE) != 0,
@@ -118,7 +118,7 @@ static void scan_recv(const struct bt_le_scan_recv_info *info,
 		    (info->adv_props & BT_GAP_ADV_PROP_SCAN_RESPONSE) != 0,
 		    (info->adv_props & BT_GAP_ADV_PROP_EXT_ADV) != 0,
 		    phy2str(info->primary_phy), phy2str(info->secondary_phy),
-		    info->interval);
+		    info->interval, info->interval * 5 / 4, info->sid);
 }
 
 static void scan_timeout(void)
@@ -426,6 +426,79 @@ static struct bt_le_ext_adv_cb adv_callbacks = {
 #endif /* CONFIG_BT_BROADCASTER */
 #endif /* CONFIG_BT_EXT_ADV */
 
+
+#if defined(CONFIG_BT_PER_ADV_SYNC)
+static struct bt_le_per_adv_sync *per_adv_syncs[CONFIG_BT_PER_ADV_SYNC_MAX];
+
+static void per_adv_sync_sync_cb(struct bt_le_per_adv_sync *sync,
+				 struct bt_le_per_adv_sync_synced_info *info)
+{
+	char le_addr[BT_ADDR_LE_STR_LEN];
+	char past_peer[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
+
+	if (info->conn) {
+		conn_addr_str(info->conn, past_peer, sizeof(past_peer));
+	} else {
+		memset(past_peer, 0, sizeof(past_peer));
+	}
+
+	shell_print(ctx_shell, "PER_ADV_SYNC[%u]: [DEVICE]: %s synced, "
+		    "Interval 0x%04x (%u ms), PHY %s, SD 0x%04X, PAST peer %s",
+		    bt_le_per_adv_sync_get_index(sync), le_addr,
+		    info->interval, info->interval * 5 / 4, phy2str(info->phy),
+		    info->service_data, past_peer);
+
+	if (info->conn) { /* if from PAST */
+		for (int i = 0; i < ARRAY_SIZE(per_adv_syncs); i++) {
+			if (!per_adv_syncs[i]) {
+				per_adv_syncs[i] = sync;
+				break;
+			}
+		}
+	}
+}
+
+static void per_adv_sync_terminated_cb(
+	struct bt_le_per_adv_sync *sync,
+	const struct bt_le_per_adv_sync_term_info *info)
+{
+	char le_addr[BT_ADDR_LE_STR_LEN];
+
+	for (int i = 0; i < ARRAY_SIZE(per_adv_syncs); i++) {
+		if (per_adv_syncs[i] == sync) {
+			per_adv_syncs[i] = NULL;
+			break;
+		}
+	}
+
+	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
+	shell_print(ctx_shell, "PER_ADV_SYNC[%u]: [DEVICE]: %s sync terminated",
+		    bt_le_per_adv_sync_get_index(sync), le_addr);
+}
+
+static void per_adv_sync_recv_cb(
+	struct bt_le_per_adv_sync *sync,
+	const struct bt_le_per_adv_sync_recv_info *info,
+	struct net_buf_simple *buf)
+{
+	char le_addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
+	shell_print(ctx_shell, "PER_ADV_SYNC[%u]: [DEVICE]: %s, tx_power %i, "
+		    "RSSI %i, CTE %u, data length %u",
+		    bt_le_per_adv_sync_get_index(sync), le_addr, info->tx_power,
+		    info->rssi, info->cte_type, buf->len);
+}
+
+static struct bt_le_per_adv_sync_cb per_adv_sync_cb = {
+	.synced = per_adv_sync_sync_cb,
+	.term = per_adv_sync_terminated_cb,
+	.recv = per_adv_sync_recv_cb
+};
+#endif /* CONFIG_BT_PER_ADV_SYNC */
+
 static void bt_ready(int err)
 {
 	if (err) {
@@ -452,6 +525,10 @@ static void bt_ready(int err)
 
 	bt_conn_cb_register(&conn_callbacks);
 #endif /* CONFIG_BT_CONN */
+
+#if defined(CONFIG_BT_PER_ADV_SYNC)
+	bt_le_per_adv_sync_cb_register(&per_adv_sync_cb);
+#endif /* CONFIG_BT_PER_ADV_SYNC */
 }
 
 static int cmd_init(const struct shell *shell, size_t argc, char *argv[])
@@ -665,7 +742,7 @@ static int cmd_active_scan_on(const struct shell *shell, uint32_t options,
 	int err;
 	struct bt_le_scan_param param = {
 			.type       = BT_LE_SCAN_TYPE_ACTIVE,
-			.options    = BT_LE_SCAN_OPT_FILTER_DUPLICATE,
+			.options    = BT_LE_SCAN_OPT_NONE,
 			.interval   = BT_GAP_SCAN_FAST_INTERVAL,
 			.window     = BT_GAP_SCAN_FAST_WINDOW,
 			.timeout    = timeout, };
@@ -835,6 +912,12 @@ static int cmd_advertise(const struct shell *shell, size_t argc, char *argv[])
 			param.options &= ~BT_LE_ADV_OPT_USE_NAME;
 		} else if (!strcmp(arg, "one-time")) {
 			param.options |= BT_LE_ADV_OPT_ONE_TIME;
+		} else if (!strcmp(arg, "disable-37")) {
+			param.options |= BT_LE_ADV_OPT_DISABLE_CHAN_37;
+		} else if (!strcmp(arg, "disable-38")) {
+			param.options |= BT_LE_ADV_OPT_DISABLE_CHAN_38;
+		} else if (!strcmp(arg, "disable-39")) {
+			param.options |= BT_LE_ADV_OPT_DISABLE_CHAN_39;
 		} else {
 			goto fail;
 		}
@@ -882,6 +965,12 @@ static int cmd_directed_adv(const struct shell *shell,
 			param.options |= BT_LE_ADV_OPT_USE_IDENTITY;
 		} else if (!strcmp(arg, "dir-rpa")) {
 			param.options |= BT_LE_ADV_OPT_DIR_ADDR_RPA;
+		} else if (!strcmp(arg, "disable-37")) {
+			param.options |= BT_LE_ADV_OPT_DISABLE_CHAN_37;
+		} else if (!strcmp(arg, "disable-38")) {
+			param.options |= BT_LE_ADV_OPT_DISABLE_CHAN_38;
+		} else if (!strcmp(arg, "disable-39")) {
+			param.options |= BT_LE_ADV_OPT_DISABLE_CHAN_39;
 		} else {
 			shell_help(shell);
 			return -ENOEXEC;
@@ -948,6 +1037,12 @@ static bool adv_param_parse(size_t argc, char *argv[],
 			param->options |= BT_LE_ADV_OPT_USE_NAME;
 		} else if (!strcmp(arg, "low")) {
 			param->options |= BT_LE_ADV_OPT_DIR_MODE_LOW_DUTY;
+		} else if (!strcmp(arg, "disable-37")) {
+			param->options |= BT_LE_ADV_OPT_DISABLE_CHAN_37;
+		} else if (!strcmp(arg, "disable-38")) {
+			param->options |= BT_LE_ADV_OPT_DISABLE_CHAN_38;
+		} else if (!strcmp(arg, "disable-39")) {
+			param->options |= BT_LE_ADV_OPT_DISABLE_CHAN_39;
 		} else if (!strcmp(arg, "directed")) {
 			static bt_addr_le_t addr;
 
@@ -1377,59 +1472,10 @@ static int cmd_per_adv_data(const struct shell *shell, size_t argc,
 	return 0;
 }
 #endif /* CONFIG_BT_PER_ADV */
+#endif /* CONFIG_BT_EXT_ADV */
+#endif /* CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_PER_ADV_SYNC)
-static struct bt_le_per_adv_sync *per_adv_syncs[CONFIG_BT_PER_ADV_SYNC_MAX];
-
-static void per_adv_sync_sync_cb(struct bt_le_per_adv_sync *sync,
-				 struct bt_le_per_adv_sync_synced_info *info)
-{
-	char le_addr[BT_ADDR_LE_STR_LEN];
-
-	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
-	shell_print(ctx_shell, "PER_ADV_SYNC[%u]: [DEVICE]: %s synced, "
-		    "Interval 0x%04x (%u ms), PHY %s",
-		    bt_le_per_adv_sync_get_index(sync), le_addr,
-		    info->interval, info->interval * 5 / 4, phy2str(info->phy));
-}
-
-static void per_adv_sync_terminated_cb(
-	struct bt_le_per_adv_sync *sync,
-	const struct bt_le_per_adv_sync_term_info *info)
-{
-	char le_addr[BT_ADDR_LE_STR_LEN];
-
-	for (int i = 0; i < ARRAY_SIZE(per_adv_syncs); i++) {
-		if (per_adv_syncs[i] == sync) {
-			per_adv_syncs[i] = NULL;
-			break;
-		}
-	}
-
-	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
-	shell_print(ctx_shell, "PER_ADV_SYNC[%u]: [DEVICE]: %s sync terminated",
-		    bt_le_per_adv_sync_get_index(sync), le_addr);
-}
-
-static void per_adv_sync_recv_cb(
-	struct bt_le_per_adv_sync *sync,
-	const struct bt_le_per_adv_sync_recv_info *info,
-	struct net_buf_simple *buf)
-{
-	char le_addr[BT_ADDR_LE_STR_LEN];
-
-	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
-	shell_print(ctx_shell, "PER_ADV_SYNC[%u]: [DEVICE]: %s, tx_power %i, "
-		    "RSSI %i, CTE %u, data length %u",
-		    bt_le_per_adv_sync_get_index(sync), le_addr, info->tx_power,
-		    info->rssi, info->cte_type, buf->len);
-}
-
-static struct bt_le_per_adv_sync_cb per_adv_sync_cb = {
-	.synced = per_adv_sync_sync_cb,
-	.term = per_adv_sync_terminated_cb,
-	.recv = per_adv_sync_recv_cb
-};
 
 static int cmd_per_adv_sync_create(const struct shell *shell, size_t argc,
 				   char *argv[])
@@ -1498,8 +1544,7 @@ static int cmd_per_adv_sync_create(const struct shell *shell, size_t argc,
 
 	create_params.options = options;
 
-	err = bt_le_per_adv_sync_create(&create_params, &per_adv_sync_cb,
-					free_per_adv_sync);
+	err = bt_le_per_adv_sync_create(&create_params, free_per_adv_sync);
 	if (err) {
 		shell_error(shell, "Per adv sync failed (%d)", err);
 	} else {
@@ -1537,9 +1582,108 @@ static int cmd_per_adv_sync_delete(const struct shell *shell, size_t argc,
 
 	return 0;
 }
+
+static int cmd_past_subscribe(const struct shell *shell, size_t argc,
+			      char *argv[])
+{
+	struct bt_le_per_adv_sync_transfer_param param;
+	int err;
+	int i = 0;
+	bool global = true;
+
+	if (i == ARRAY_SIZE(per_adv_syncs)) {
+		shell_error(shell, "Cannot create more per adv syncs");
+		return -ENOEXEC;
+	}
+
+	/* Default values */
+	param.options = 0;
+	param.timeout = 1000; /* 10 seconds */
+	param.skip = 10;
+
+	for (int i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "aoa")) {
+			param.options |=
+				BT_LE_PER_ADV_SYNC_TRANSFER_OPT_SYNC_NO_AOA;
+		} else if (!strcmp(argv[i], "aod_1us")) {
+			param.options |=
+				BT_LE_PER_ADV_SYNC_TRANSFER_OPT_SYNC_NO_AOD_1US;
+		} else if (!strcmp(argv[i], "aod_2us")) {
+			param.options |=
+				BT_LE_PER_ADV_SYNC_TRANSFER_OPT_SYNC_NO_AOD_2US;
+		} else if (!strcmp(argv[i], "only_cte")) {
+			param.options |=
+				BT_LE_PER_ADV_SYNC_TRANSFER_OPT_SYNC_ONLY_CTE;
+		} else if (!strcmp(argv[i], "timeout")) {
+			if (++i == argc) {
+				shell_help(shell);
+				return SHELL_CMD_HELP_PRINTED;
+			}
+
+			param.timeout = strtoul(argv[i], NULL, 16);
+		} else if (!strcmp(argv[i], "skip")) {
+			if (++i == argc) {
+				shell_help(shell);
+				return SHELL_CMD_HELP_PRINTED;
+			}
+
+			param.skip = strtoul(argv[i], NULL, 16);
+		} else if (!strcmp(argv[i], "conn")) {
+			if (!default_conn) {
+				shell_print(shell, "Not connected");
+				return -EINVAL;
+			}
+			global = false;
+		} else {
+			shell_help(shell);
+			return SHELL_CMD_HELP_PRINTED;
+		}
+	}
+
+	bt_le_per_adv_sync_cb_register(&per_adv_sync_cb);
+
+	err = bt_le_per_adv_sync_transfer_subscribe(
+		global ? NULL : default_conn, &param);
+
+	if (err) {
+		shell_error(shell, "PAST subscribe failed (%d)", err);
+	} else {
+		shell_print(shell, "Subscribed to PAST");
+	}
+
+	return 0;
+}
+
+static int cmd_past_unsubscribe(const struct shell *shell, size_t argc,
+				char *argv[])
+{
+	int err;
+
+	if (argc > 1) {
+		if (!strcmp(argv[1], "conn")) {
+			if (default_conn) {
+				err =
+					bt_le_per_adv_sync_transfer_unsubscribe(
+						default_conn);
+			} else {
+				shell_print(shell, "Not connected");
+				return -EINVAL;
+			}
+		} else {
+			shell_help(shell);
+			return SHELL_CMD_HELP_PRINTED;
+		}
+	} else {
+		err = bt_le_per_adv_sync_transfer_unsubscribe(NULL);
+	}
+
+	if (err) {
+		shell_error(shell, "PAST unsubscribe failed (%d)", err);
+	}
+
+	return err;
+}
 #endif /* CONFIG_BT_PER_ADV_SYNC */
-#endif /* CONFIG_BT_EXT_ADV */
-#endif /* CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_CENTRAL)
@@ -2726,7 +2870,8 @@ static int cmd_auth_oob_tk(const struct shell *shell, size_t argc, char *argv[])
 #define EXT_ADV_PARAM "<type: conn-scan conn-nscan, nconn-scan nconn-nscan> " \
 		      "[ext-adv] [no-2m] [coded] "                            \
 		      "[whitelist: wl, wl-scan, wl-conn] [identity] [name] "  \
-		      "[directed "HELP_ADDR_LE"] [mode: low]"
+		      "[directed "HELP_ADDR_LE"] [mode: low]"                 \
+		      "[disable-37] [disable-38] [disable-39]"
 #else
 #define EXT_ADV_SCAN_OPT ""
 #endif /* defined(CONFIG_BT_EXT_ADV) */
@@ -2752,16 +2897,16 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 	SHELL_CMD_ARG(advertise, NULL,
 		      "<type: off, on, scan, nconn> [mode: discov, non_discov] "
 		      "[whitelist: wl, wl-scan, wl-conn] [identity] [no-name] "
-		      "[one-time]",
-		      cmd_advertise, 2, 5),
+		      "[one-time] [disable-37] [disable-38] [disable-39]",
+		      cmd_advertise, 2, 8),
 #if defined(CONFIG_BT_PERIPHERAL)
 	SHELL_CMD_ARG(directed-adv, NULL, HELP_ADDR_LE " [mode: low] "
 		      "[identity] [dir-rpa]",
-		      cmd_directed_adv, 3, 3),
+		      cmd_directed_adv, 3, 6),
 #endif /* CONFIG_BT_PERIPHERAL */
 #if defined(CONFIG_BT_EXT_ADV)
-	SHELL_CMD_ARG(adv-create, NULL, EXT_ADV_PARAM, cmd_adv_create, 2, 8),
-	SHELL_CMD_ARG(adv-param, NULL, EXT_ADV_PARAM, cmd_adv_param, 2, 8),
+	SHELL_CMD_ARG(adv-create, NULL, EXT_ADV_PARAM, cmd_adv_create, 2, 11),
+	SHELL_CMD_ARG(adv-param, NULL, EXT_ADV_PARAM, cmd_adv_param, 2, 11),
 	SHELL_CMD_ARG(adv-data, NULL, "<data> [scan-response <data>] "
 				      "<type: discov, name, hex>", cmd_adv_data,
 		      1, 16),
@@ -2781,7 +2926,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 		      "[<interval-min> [<interval-max> [tx_power]]]",
 		      cmd_per_adv_param, 1, 3),
 	SHELL_CMD_ARG(per-adv-data, NULL, "<data>", cmd_per_adv_data, 2, 0),
-#endif
+#endif /* CONFIG_BT_PER_ADV */
+#endif /* CONFIG_BT_EXT_ADV */
+#endif /* CONFIG_BT_BROADCASTER */
 #if defined(CONFIG_BT_PER_ADV_SYNC)
 	SHELL_CMD_ARG(per-adv-sync-create, NULL,
 		      HELP_ADDR_LE " <sid> [skip <count>] [timeout <ms>] [aoa] "
@@ -2789,9 +2936,12 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 		      cmd_per_adv_sync_create, 4, 6),
 	SHELL_CMD_ARG(per-adv-sync-delete, NULL, "[<index>]",
 		      cmd_per_adv_sync_delete, 1, 1),
+	SHELL_CMD_ARG(past-subscribe, NULL, "[conn] [skip <count>] "
+		      "[timeout <ms>] [aoa] [aod_1us] [aod_2us] [cte_only]",
+		      cmd_past_subscribe, 1, 7),
+	SHELL_CMD_ARG(past-unsubscribe, NULL, "[conn]",
+		      cmd_past_unsubscribe, 1, 1),
 #endif /* defined(CONFIG_BT_PER_ADV_SYNC) */
-#endif
-#endif /* CONFIG_BT_BROADCASTER */
 #if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_CENTRAL)
 	SHELL_CMD_ARG(connect, NULL, HELP_ADDR_LE EXT_ADV_SCAN_OPT,
@@ -2863,6 +3013,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 #if defined(CONFIG_BT_HCI_MESH_EXT)
 	SHELL_CMD(mesh_adv, NULL, "<on, off>", cmd_mesh_adv),
 #endif /* CONFIG_BT_HCI_MESH_EXT */
+
+#if defined(CONFIG_BT_LL_SW_SPLIT)
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 #if defined(CONFIG_BT_BROADCASTER)
 	SHELL_CMD_ARG(advx, NULL,
@@ -2881,6 +3033,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 		      4, 0),
 	SHELL_CMD_ARG(test_end, NULL, HELP_NONE, cmd_test_end, 1, 0),
 #endif /* CONFIG_BT_CTLR_DTM */
+#endif /* CONFIG_BT_LL_SW_SPLIT */
+
 	SHELL_SUBCMD_SET_END
 );
 

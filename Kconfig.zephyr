@@ -20,7 +20,7 @@ endmenu
 # precedence over SoC defaults, so include them in that order.
 #
 # $ARCH and $BOARD_DIR will be glob patterns when building documentation.
-source "boards/shields/*/Kconfig.defconfig"
+source "$(KCONFIG_BINARY_DIR)/Kconfig.shield.defconfig"
 source "$(BOARD_DIR)/Kconfig.defconfig"
 source "$(KCONFIG_BINARY_DIR)/Kconfig.soc.defconfig"
 
@@ -295,6 +295,12 @@ config OUTPUT_PRINT_MEMORY_USAGE
 	  ram_report and
 	  https://sourceware.org/binutils/docs/ld/MEMORY.html
 
+config CLEANUP_INTERMEDIATE_FILES
+	bool "Remove all intermediate files"
+	help
+	  Delete intermediate files to save space and cleanup clutter resulting
+	  from the build process.
+
 config BUILD_NO_GAP_FILL
 	bool "Don't fill gaps in generated hex/bin/s19 files."
 
@@ -342,13 +348,6 @@ config MAKEFILE_EXPORTS
 	  Generates a file with build information that can be read by
 	  third party Makefile-based build systems.
 
-config LEGACY_DEVICETREE_MACROS
-	bool "Allow use of legacy devicetree macros"
-	help
-	  Allows use of legacy devicetree macros which were used in
-	  Zephyr 2.2 and previous versions, rather than the devicetree.h
-	  API introduced during the Zephyr 2.3 development cycle.
-
 config DEPRECATED_ZEPHYR_INT_TYPES
 	bool "Allow the use of the deprecated zephyr integer types"
 	help
@@ -385,6 +384,7 @@ config BOOTLOADER_SRAM_SIZE
 config BOOTLOADER_MCUBOOT
 	bool "MCUboot bootloader support"
 	select USE_DT_CODE_PARTITION
+	imply INIT_ARCH_HW_AT_BOOT if ARCH_SUPPORTS_ARCH_HW_INIT
 	help
 	  This option signifies that the target uses MCUboot as a bootloader,
 	  or in other words that the image is to be chain-loaded by MCUboot.
@@ -397,6 +397,11 @@ config BOOTLOADER_MCUBOOT
 	    * Activating SW_VECTOR_RELAY_CLIENT on Cortex-M0
 	      (or Armv8-M baseline) targets with no built-in vector relocation
 	      mechanisms
+
+	  By default, this option instructs Zephyr to initialize the core
+	  architecture HW registers during boot, when this is supported by
+	  the application. This removes the need by MCUboot to reset
+	  the core registers' state itself.
 
 if BOOTLOADER_MCUBOOT
 
@@ -489,13 +494,6 @@ config BOOTLOADER_BOSSA_ADAFRUIT_UF2
 	  0xf01669ef as the magic value to enter the bootloader.
 
 endchoice
-
-config BOOTLOADER_KEXEC
-	bool "Boot using Linux kexec() system call"
-	depends on X86
-	help
-	  This option signifies that Linux boots the kernel using kexec system call
-	  and utility. This method is used to boot the kernel over the network.
 
 config BOOTLOADER_CONTEXT_RESTORE
 	bool "Boot loader has context restore support"

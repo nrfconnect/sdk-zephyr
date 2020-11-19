@@ -396,6 +396,10 @@ int bt_conn_get_remote_info(struct bt_conn *conn,
 
 /** @brief Update the connection parameters.
  *
+ *  If the local device is in the peripheral role then updating the connection
+ *  parameters will be delayed. This delay can be configured by through the
+ *  @option{CONFIG_BT_CONN_PARAM_UPDATE_TIMEOUT} option.
+ *
  *  @param conn Connection object.
  *  @param param Updated connection parameters.
  *
@@ -692,14 +696,15 @@ typedef enum __packed {
 
 /** @brief Set security level for a connection.
  *
- *  This function enable security (encryption) for a connection. If device is
- *  already paired with sufficiently strong key encryption will be enabled. If
- *  link is already encrypted with sufficiently strong key this function does
- *  nothing.
+ *  This function enable security (encryption) for a connection. If the device
+ *  has bond information for the peer with sufficiently strong key encryption
+ *  will be enabled. If the connection is already encrypted with sufficiently
+ *  strong key this function does nothing.
  *
- *  If device is not paired pairing will be initiated. If device is paired and
- *  keys are too weak but input output capabilities allow for strong enough keys
- *  pairing will be initiated.
+ *  If the device has no bond information for the peer and is not already paired
+ *  then the pairing procedure will be initiated. If the device has bond
+ *  information or is already paired and the keys are too weak then the pairing
+ *  procedure will be initiated.
  *
  *  This function may return error if required level of security is not possible
  *  to achieve due to local or remote device limitation (e.g., input output
@@ -877,8 +882,15 @@ struct bt_conn_cb {
 #if defined(CONFIG_BT_SMP) || defined(CONFIG_BT_BREDR)
 	/** @brief The security level of a connection has changed.
 	 *
-	 *  This callback notifies the application that the security level
-	 *  of a connection has changed.
+	 *  This callback notifies the application that the security of a
+	 *  connection has changed.
+	 *
+	 *  The security level of the connection can either have been increased
+	 *  or remain unchanged. An increased security level means that the
+	 *  pairing procedure has been performed or the bond information from
+	 *  a previous connection has been applied. If the security level
+	 *  remains unchanged this means that the encryption key has been
+	 *  refreshed for the connection.
 	 *
 	 *  @param conn Connection object.
 	 *  @param level New security level of the connection.
@@ -934,7 +946,7 @@ struct bt_conn_cb {
  *
  *  Register callbacks to monitor the state of connections.
  *
- *  @param cb Callback struct.
+ *  @param cb Callback struct. Must point to memory that remains valid.
  */
 void bt_conn_cb_register(struct bt_conn_cb *cb);
 
@@ -1272,13 +1284,14 @@ struct bt_conn_auth_cb {
 	void (*pincode_entry)(struct bt_conn *conn, bool highsec);
 #endif
 
-	/** @brief notify that pairing process was complete.
+	/** @brief notify that pairing procedure was complete.
 	 *
-	 *  This callback notifies the application that the pairing process
+	 *  This callback notifies the application that the pairing procedure
 	 *  has been completed.
 	 *
 	 *  @param conn Connection object.
-	 *  @param bonded pairing is bonded or not.
+	 *  @param bonded Bond information has been distributed during the
+	 *                pairing procedure.
 	 */
 	void (*pairing_complete)(struct bt_conn *conn, bool bonded);
 

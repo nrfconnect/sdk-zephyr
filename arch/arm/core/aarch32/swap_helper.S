@@ -30,6 +30,10 @@ GDATA(_k_neg_eagain)
 
 GDATA(_kernel)
 
+#if defined(CONFIG_THREAD_LOCAL_STORAGE) && defined(CONFIG_CPU_CORTEX_M)
+GDATA(z_arm_tls_ptr)
+#endif
+
 /**
  *
  * @brief PendSV exception handler, handling context switches
@@ -51,10 +55,10 @@ GDATA(_kernel)
 
 SECTION_FUNC(TEXT, z_arm_pendsv)
 
-#ifdef CONFIG_TRACING
+#ifdef CONFIG_INSTRUMENT_THREAD_SWITCHING
     /* Register the context switch */
     push {r0, lr}
-    bl sys_trace_thread_switched_out
+    bl z_thread_mark_switched_out
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
     pop {r0, r1}
     mov lr, r1
@@ -165,6 +169,31 @@ out_fp_endif:
     /* _SCS_ICSR is still in v4 and _SCS_ICSR_UNPENDSV in v3 */
 #if defined(CONFIG_CPU_CORTEX_M)
     str v3, [v4, #0]
+#endif
+
+#if defined(CONFIG_THREAD_LOCAL_STORAGE)
+    /* Grab the TLS pointer */
+    ldr r4, =_thread_offset_to_tls
+    adds r4, r2, r4
+    ldr r0, [r4]
+
+#if defined(CONFIG_CPU_CORTEX_R)
+    /* Store TLS pointer in the "Process ID" register.
+     * This register is used as a base pointer to all
+     * thread variables with offsets added by toolchain.
+     */
+    mcr 15, 0, r0, cr13, cr0, 3
+#endif
+
+#if defined(CONFIG_CPU_CORTEX_M)
+    /* For Cortex-M, store TLS pointer in a global variable,
+     * as it lacks the process ID or thread ID register
+     * to be used by toolchain to access thread data.
+     */
+    ldr r4, =z_arm_tls_ptr
+    str r0, [r4]
+#endif
+
 #endif
 
     /* Restore previous interrupt disable state (irq_lock key)
@@ -337,10 +366,10 @@ _thread_irq_disabled:
     pop {r2, lr}
 #endif /* CONFIG_BUILTIN_STACK_GUARD */
 
-#ifdef CONFIG_TRACING
+#ifdef CONFIG_INSTRUMENT_THREAD_SWITCHING
     /* Register the context switch */
     push {r0, lr}
-    bl sys_trace_thread_switched_in
+    bl z_thread_mark_switched_in
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
     pop {r0, r1}
     mov lr, r1

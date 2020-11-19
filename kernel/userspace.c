@@ -289,6 +289,13 @@ void *z_impl_k_object_alloc(enum k_objects otype)
 
 	switch (otype) {
 	case K_OBJ_THREAD:
+		/* aligned allocator required for X86 and X86_64 */
+		if (IS_ENABLED(CONFIG_X86) || IS_ENABLED(CONFIG_X86_64)) {
+			LOG_ERR("object type '%s' forbidden on x86 and x86_64",
+				otype_to_str(otype));
+			return NULL;
+		}
+
 		if (!thread_idx_alloc(&tidx)) {
 			LOG_ERR("out of free thread indexes");
 			return NULL;
@@ -508,7 +515,7 @@ void z_thread_perms_all_clear(struct k_thread *thread)
 {
 	uintptr_t index = thread_index_get(thread);
 
-	if (index != -1) {
+	if ((int)index != -1) {
 		z_object_wordlist_foreach(clear_perms_cb, (void *)index);
 	}
 }

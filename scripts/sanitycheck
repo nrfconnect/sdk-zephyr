@@ -470,9 +470,19 @@ Artificially long but functional example:
         "--test-only", action="store_true",
         help="""Only run device tests with current artifacts, do not build
              the code""")
+
     parser.add_argument(
         "--cmake-only", action="store_true",
         help="Only run cmake, do not build or run.")
+
+    parser.add_argument(
+        "--filter", choices=['buildable', 'runnable'],
+        default='buildable',
+        help="""Filter tests to be built and executed. By default everything is
+        built and if a test is runnable (emulation or a connected device), it
+        is run. This option allows for example to only build tests that can
+        actually be run. Runnable is a subset of buildable.""")
+
 
     parser.add_argument(
         "-M", "--runtime-artifact-cleanup", action="store_true",
@@ -702,6 +712,9 @@ structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
     parser.add_argument("--coverage-tool", choices=['lcov', 'gcovr'], default='lcov',
                         help="Tool to use to generate coverage report.")
 
+    parser.add_argument("--coverage-basedir", default=ZEPHYR_BASE,
+                        help="Base source directory for coverage report.")
+
     return parser.parse_args()
 
 
@@ -785,7 +798,7 @@ def main():
         hwm.dump(hwmap=hwm.connected_hardware, connected_only=True)
         return
 
-    if options.west_runner and not options.west_flash:
+    if options.west_runner and options.west_flash is None:
         logger.error("west-runner requires west-flash to be enabled")
         sys.exit(1)
 
@@ -820,6 +833,9 @@ def main():
         options.enable_size_report = True
 
     suite = TestSuite(options.board_root, options.testcase_root, options.outdir)
+
+    # Check version of zephyr repo
+    suite.check_zephyr_version()
 
     # Set testsuite options from command line.
     suite.build_only = options.build_only
@@ -1004,7 +1020,6 @@ def main():
         suite.selected_platforms = set(p.platform.name for p in suite.instances.values())
     else:
         discards = suite.apply_filters(
-            build_only=options.build_only,
             enable_slow=options.enable_slow,
             platform=options.platform,
             exclude_platform=options.exclude_platform,
@@ -1015,7 +1030,7 @@ def main():
             all=options.all,
             emulation_only=options.emulation_only,
             run_individual_tests=run_individual_tests,
-            device_testing=options.device_testing,
+            runnable=(options.device_testing or options.filter == 'runnable'),
             force_platform=options.force_platform
 
         )
@@ -1104,7 +1119,7 @@ def main():
     logger.info("%d test configurations selected, %d configurations discarded due to filters." %
                 (len(suite.instances), len(discards)))
 
-    if options.device_testing:
+    if options.device_testing and not options.build_only:
         print("\nDevice testing on:")
         hwm.dump(suite.connected_hardware, suite.selected_platforms)
         print("")
@@ -1173,13 +1188,13 @@ def main():
         logger.info("Generating coverage files...")
         coverage_tool = CoverageTool.factory(options.coverage_tool)
         coverage_tool.gcov_tool = options.gcov_tool
-        coverage_tool.base_dir = ZEPHYR_BASE
+        coverage_tool.base_dir = os.path.abspath(options.coverage_basedir)
         coverage_tool.add_ignore_file('generated')
         coverage_tool.add_ignore_directory('tests')
         coverage_tool.add_ignore_directory('samples')
         coverage_tool.generate(options.outdir)
 
-    if options.device_testing:
+    if options.device_testing and not options.build_only:
         print("\nHardware distribution summary:\n")
         table = []
         header = ['Board', 'ID', 'Counter']

@@ -336,6 +336,7 @@ class BinaryHandler(Handler):
         super().__init__(instance, type_str)
 
         self.terminated = False
+        self.call_west_flash = False
 
         # Tool options
         self.valgrind = False
@@ -394,6 +395,8 @@ class BinaryHandler(Handler):
 
         if self.call_make_run:
             command = [self.generator_cmd, "run"]
+        elif self.call_west_flash:
+            command = ["west", "flash", "--skip-rebuild", "-d", self.build_dir]
         else:
             command = [self.binary]
 
@@ -1612,7 +1615,6 @@ class TestInstance(DisablePyTestCollectionMixin):
         self.name = os.path.join(platform.name, testcase.name)
         self.build_dir = os.path.join(outdir, platform.name, testcase.name)
 
-        self.build_only = True
         self.run = False
 
         self.results = {}
@@ -1620,70 +1622,68 @@ class TestInstance(DisablePyTestCollectionMixin):
     def __lt__(self, other):
         return self.name < other.name
 
+
+    @staticmethod
+    def testcase_runnable(testcase, fixtures):
+        can_run = False
+        # console harness allows us to run the test and capture data.
+        if testcase.harness in [ 'console', 'ztest']:
+            can_run = True
+            # if we have a fixture that is also being supplied on the
+            # command-line, then we need to run the test, not just build it.
+            fixture = testcase.harness_config.get('fixture')
+            if fixture:
+                can_run = (fixture in fixtures)
+
+        elif testcase.harness:
+            can_run = False
+        else:
+            can_run = True
+
+        return can_run
+
+
     # Global testsuite parameters
-    def check_build_or_run(self, build_only=False, enable_slow=False, device_testing=False, fixtures=[]):
+    def check_runnable(self, enable_slow=False, filter='buildable', fixtures=[]):
 
         # right now we only support building on windows. running is still work
         # in progress.
         if os.name == 'nt':
-            self.build_only = True
-            self.run = False
-            return
-
-        _build_only = True
+            return False
 
         # we asked for build-only on the command line
-        if build_only or self.testcase.build_only:
-            self.build_only = True
-            self.run = False
-            return
+        if self.testcase.build_only:
+            return False
 
         # Do not run slow tests:
         skip_slow = self.testcase.slow and not enable_slow
         if skip_slow:
-            self.build_only = True
-            self.run = False
-            return
+            return False
 
-        runnable = bool(self.testcase.type == "unit" or \
+        target_ready = bool(self.testcase.type == "unit" or \
                         self.platform.type == "native" or \
-                        self.platform.simulation in ["mdb", "nsim", "renode", "qemu"] or \
-                        device_testing)
+                        self.platform.simulation in ["mdb-nsim", "nsim", "renode", "qemu", "tsim"] or \
+                        filter == 'runnable')
 
         if self.platform.simulation == "nsim":
             if not find_executable("nsimdrv"):
-                runnable = False
+                target_ready = False
 
-        if self.platform.simulation == "mdb":
+        if self.platform.simulation == "mdb-nsim":
             if not find_executable("mdb"):
-                runnable = False
+                target_ready = False
 
         if self.platform.simulation == "renode":
             if not find_executable("renode"):
-                runnable = False
+                target_ready = False
 
-        # console harness allows us to run the test and capture data.
-        if self.testcase.harness in [ 'console', 'ztest']:
+        if self.platform.simulation == "tsim":
+            if not find_executable("tsim-leon3"):
+                target_ready = False
 
-            # if we have a fixture that is also being supplied on the
-            # command-line, then we need to run the test, not just build it.
-            fixture = self.testcase.harness_config.get('fixture')
-            if fixture:
-                if fixture in fixtures:
-                    _build_only = False
-                else:
-                    _build_only = True
-            else:
-                _build_only = False
+        testcase_runnable = self.testcase_runnable(self.testcase, fixtures)
 
-        elif self.testcase.harness:
-            _build_only = True
-        else:
-            _build_only = False
-
-        self.build_only = not (not _build_only and runnable)
-        self.run = not self.build_only
-        return
+        return testcase_runnable and target_ready
 
     def create_overlay(self, platform, enable_asan=False, enable_ubsan=False, enable_coverage=False, coverage_platform=[]):
         # Create this in a "sanitycheck/" subdirectory otherwise this
@@ -1691,30 +1691,32 @@ class TestInstance(DisablePyTestCollectionMixin):
         # will silently give that second time precedence over any
         # --extra-args=CONFIG_*
         subdir = os.path.join(self.build_dir, "sanitycheck")
-        os.makedirs(subdir, exist_ok=True)
-        file = os.path.join(subdir, "testcase_extra.conf")
 
-        with open(file, "w") as f:
-            content = ""
+        content = ""
 
-            if self.testcase.extra_configs:
-                content = "\n".join(self.testcase.extra_configs)
+        if self.testcase.extra_configs:
+            content = "\n".join(self.testcase.extra_configs)
 
-            if enable_coverage:
-                if platform.name in coverage_platform:
-                    content = content + "\nCONFIG_COVERAGE=y"
-                    content = content + "\nCONFIG_COVERAGE_DUMP=y"
+        if enable_coverage:
+            if platform.name in coverage_platform:
+                content = content + "\nCONFIG_COVERAGE=y"
+                content = content + "\nCONFIG_COVERAGE_DUMP=y"
 
-            if enable_asan:
-                if platform.type == "native":
-                    content = content + "\nCONFIG_ASAN=y"
+        if enable_asan:
+            if platform.type == "native":
+                content = content + "\nCONFIG_ASAN=y"
 
-            if enable_ubsan:
-                if platform.type == "native":
-                    content = content + "\nCONFIG_UBSAN=y"
+        if enable_ubsan:
+            if platform.type == "native":
+                content = content + "\nCONFIG_UBSAN=y"
 
-            f.write(content)
-            return content
+        if content:
+            os.makedirs(subdir, exist_ok=True)
+            file = os.path.join(subdir, "testcase_extra.conf")
+            with open(file, "w") as f:
+                f.write(content)
+
+        return content
 
     def calculate_sizes(self):
         """Get the RAM/ROM sizes of a test case.
@@ -1816,6 +1818,7 @@ class CMake():
                 return None
         else:
             # A real error occurred, raise an exception
+            log_msg = ""
             if out:
                 log_msg = out.decode(sys.getdefaultencoding())
                 with open(os.path.join(self.build_dir, self.log), "a") as log:
@@ -1827,6 +1830,7 @@ class CMake():
                     logger.debug("Test skipped due to {} Overflow".format(res[0]))
                     self.instance.status = "skipped"
                     self.instance.reason = "{} overflow".format(res[0])
+                    self.suite.build_filtered_tests += 1
                 else:
                     self.instance.status = "error"
                     self.instance.reason = "Build failure"
@@ -2058,17 +2062,25 @@ class ProjectBuilder(FilterBuilder):
 
             handler.binary = os.path.join(instance.build_dir, "zephyr", "zephyr.exe")
             instance.handler = handler
-        elif instance.platform.simulation == "nsim":
-            if find_executable("nsimdrv"):
-                instance.handler = BinaryHandler(instance, "nsim")
-                instance.handler.call_make_run = True
         elif instance.platform.simulation == "renode":
             if find_executable("renode"):
                 instance.handler = BinaryHandler(instance, "renode")
                 instance.handler.pid_fn = os.path.join(instance.build_dir, "renode.pid")
                 instance.handler.call_make_run = True
+        elif instance.platform.simulation == "tsim":
+            instance.handler = BinaryHandler(instance, "tsim")
+            instance.handler.call_make_run = True
         elif self.device_testing:
             instance.handler = DeviceHandler(instance, "device")
+        elif instance.platform.simulation == "nsim":
+            if find_executable("nsimdrv"):
+                instance.handler = BinaryHandler(instance, "nsim")
+                instance.handler.call_make_run = True
+        elif instance.platform.simulation == "mdb-nsim":
+            if find_executable("mdb"):
+                instance.handler = BinaryHandler(instance, "nsim")
+                instance.handler.pid_fn = os.path.join(instance.build_dir, "mdb.pid")
+                instance.handler.call_west_flash = True
 
         if instance.handler:
             instance.handler.args = args
@@ -2087,6 +2099,8 @@ class ProjectBuilder(FilterBuilder):
             if self.instance.status in ["failed", "error"]:
                 pipeline.put({"op": "report", "test": self.instance})
             elif self.cmake_only:
+                if self.instance.status is None:
+                    self.instance.status = "passed"
                 pipeline.put({"op": "report", "test": self.instance})
             else:
                 if self.instance.name in results['filter'] and results['filter'][self.instance.name]:
@@ -2112,7 +2126,7 @@ class ProjectBuilder(FilterBuilder):
                 if results.get('returncode', 1) > 0:
                     pipeline.put({"op": "report", "test": self.instance})
                 else:
-                    if self.instance.run:
+                    if self.instance.run and self.instance.handler:
                         pipeline.put({"op": "run", "test": self.instance})
                     else:
                         pipeline.put({"op": "report", "test": self.instance})
@@ -2142,9 +2156,12 @@ class ProjectBuilder(FilterBuilder):
                 })
 
         elif op == "cleanup":
-            self.cleanup_artifacts()
+            if self.device_testing:
+                self.cleanup_device_testing_artifacts()
+            else:
+                self.cleanup_artifacts()
 
-    def cleanup_artifacts(self):
+    def cleanup_artifacts(self, additional_keep=[]):
         logger.debug("Cleaning up {}".format(self.instance.build_dir))
         allow = [
             'zephyr/.config',
@@ -2153,6 +2170,9 @@ class ProjectBuilder(FilterBuilder):
             'device.log',
             'recording.csv',
             ]
+
+        allow += additional_keep
+
         allow = [os.path.join(self.instance.build_dir, file) for file in allow]
 
         for dirpath, dirnames, filenames in os.walk(self.instance.build_dir, topdown=False):
@@ -2167,6 +2187,34 @@ class ProjectBuilder(FilterBuilder):
                     os.remove(path)
                 elif not os.listdir(path):
                     os.rmdir(path)
+
+    def cleanup_device_testing_artifacts(self):
+        logger.debug("Cleaning up for Device Testing {}".format(self.instance.build_dir))
+
+        sanitizelist = [
+            'CMakeCache.txt',
+            'zephyr/runners.yaml',
+        ]
+        keep = [
+            'zephyr/zephyr.hex',
+            'zephyr/zephyr.bin',
+            'zephyr/zephyr.elf',
+            ]
+
+        keep += sanitizelist
+
+        self.cleanup_artifacts(keep)
+
+        # sanitize paths so files are relocatable
+        for file in sanitizelist:
+            file = os.path.join(self.instance.build_dir, file)
+
+            with open(file, "rt") as fin:
+                data = fin.read()
+                data = data.replace(canonical_zephyr_base+"/", "")
+
+            with open(file, "wt") as fin:
+                fin.write(data)
 
     def report_out(self):
         total_tests_width = len(str(self.suite.total_to_do))
@@ -2219,12 +2267,16 @@ class ProjectBuilder(FilterBuilder):
             if instance.status in ["error", "failed", "timeout"]:
                 self.log_info_file(self.inline_logs)
         else:
+            completed_perc = 0
+            if self.suite.total_to_do > 0:
+                completed_perc = int((float(self.suite.total_done) / self.suite.total_to_do) * 100)
+
             sys.stdout.write("\rINFO    - Total complete: %s%4d/%4d%s  %2d%%  skipped: %s%4d%s, failed: %s%4d%s" % (
                 Fore.GREEN,
                 self.suite.total_done,
                 self.suite.total_to_do,
                 Fore.RESET,
-                int((float(self.suite.total_done) / self.suite.total_to_do) * 100),
+                completed_perc,
                 Fore.YELLOW if self.suite.build_filtered_tests > 0 else Fore.RESET,
                 self.suite.build_filtered_tests,
                 Fore.RESET,
@@ -2280,10 +2332,11 @@ class ProjectBuilder(FilterBuilder):
 
         instance = self.instance
 
-        if instance.handler.type_str == "device":
-            instance.handler.suite = self.suite
+        if instance.handler:
+            if instance.handler.type_str == "device":
+                instance.handler.suite = self.suite
 
-        instance.handler.handle()
+            instance.handler.handle()
 
         sys.stdout.flush()
 
@@ -2415,6 +2468,20 @@ class TestSuite(DisablePyTestCollectionMixin):
         # run integration tests only
         self.integration = False
 
+        self.version = "NA"
+
+    def check_zephyr_version(self):
+        try:
+            subproc = subprocess.run(["git", "describe"],
+                                     stdout=subprocess.PIPE,
+                                     universal_newlines=True,
+                                     cwd=ZEPHYR_BASE)
+            if subproc.returncode == 0:
+                self.version = subproc.stdout.strip()
+                logger.info(f"Zephyr version: {self.version}")
+        except OSError:
+            logger.info("Cannot read zephyr version.")
+
     def get_platform_instances(self, platform):
         filtered_dict = {k:v for k,v in self.instances.items() if k.startswith(platform + "/")}
         return filtered_dict
@@ -2445,7 +2512,6 @@ class TestSuite(DisablePyTestCollectionMixin):
                     if res == 'SKIP':
                         self.total_skipped_cases += 1
         self.total_to_do = self.total_tests - self.total_skipped
-
 
     def compare_metrics(self, filename):
         # name, datatype, lower results better
@@ -2584,8 +2650,10 @@ class TestSuite(DisablePyTestCollectionMixin):
             filename = "{}_{}".format(filename, suffix)
 
         if not no_update:
-            self.xunit_report(filename + ".xml", full_report=False, append=only_failed)
-            self.xunit_report(filename + "_report.xml", full_report=True, append=only_failed)
+            self.xunit_report(filename + ".xml", full_report=False,
+                              append=only_failed, version=self.version)
+            self.xunit_report(filename + "_report.xml", full_report=True,
+                              append=only_failed, version=self.version)
             self.csv_report(filename + ".csv")
 
             self.target_report(outdir, suffix, append=only_failed)
@@ -2740,10 +2808,13 @@ class TestSuite(DisablePyTestCollectionMixin):
 
                     platform = self.get_platform(row["platform"])
                     instance = TestInstance(self.testcases[test], platform, self.outdir)
-                    instance.check_build_or_run(
-                        self.build_only,
+                    if self.device_testing:
+                        tfilter = 'runnable'
+                    else:
+                        tfilter = 'buildable'
+                    instance.run = instance.check_runnable(
                         self.enable_slow,
-                        self.device_testing,
+                        tfilter,
                         self.fixtures
                     )
                     instance.create_overlay(platform, self.enable_asan, self.enable_ubsan, self.enable_coverage, self.coverage_platform)
@@ -2770,7 +2841,7 @@ class TestSuite(DisablePyTestCollectionMixin):
         tag_filter = kwargs.get('tag')
         exclude_tag = kwargs.get('exclude_tag')
         all_filter = kwargs.get('all')
-        device_testing_filter = kwargs.get('device_testing')
+        runnable = kwargs.get('runnable')
         force_toolchain = kwargs.get('force_toolchain')
         force_platform = kwargs.get('force_platform')
         emu_filter = kwargs.get('emulation_only')
@@ -2808,20 +2879,23 @@ class TestSuite(DisablePyTestCollectionMixin):
             instance_list = []
             for plat in platforms:
                 instance = TestInstance(tc, plat, self.outdir)
-                instance.check_build_or_run(
-                    self.build_only,
+                if runnable:
+                    tfilter = 'runnable'
+                else:
+                    tfilter = 'buildable'
+
+                instance.run = instance.check_runnable(
                     self.enable_slow,
-                    self.device_testing,
+                    tfilter,
                     self.fixtures
                 )
                 for t in tc.cases:
                     instance.results[t] = None
 
-                if device_testing_filter:
+                if runnable and self.connected_hardware:
                     for h in self.connected_hardware:
                         if h['platform'] == plat.name:
                             if tc.harness_config.get('fixture') in h.get('fixtures', []):
-                                instance.build_only = False
                                 instance.run = True
 
                 if not force_platform and plat.name in exclude_platform:
@@ -2831,7 +2905,7 @@ class TestSuite(DisablePyTestCollectionMixin):
                     # Discard silently
                     continue
 
-                if device_testing_filter and instance.build_only:
+                if runnable and not instance.run:
                     discards[instance] = discards.get(instance, "Not runnable on device")
 
                 if self.integration and tc.integration_platforms and plat.name not in tc.integration_platforms:
@@ -2925,15 +2999,18 @@ class TestSuite(DisablePyTestCollectionMixin):
                         self.add_instances(instance_list[:1])
                 else:
                     instances = list(filter(lambda tc: tc.platform.default, instance_list))
+                    if self.integration:
+                        instances += list(filter(lambda item: item.platform.name in tc.integration_platforms, \
+                                         instance_list))
                     self.add_instances(instances)
 
-                for instance in list(filter(lambda inst: not inst.platform.default, instance_list)):
+                for instance in list(filter(lambda inst: not inst.platform.default and \
+                        not inst.platform.name in tc.integration_platforms, instance_list)):
                     discards[instance] = discards.get(instance, "Not a default test platform")
             elif emulation_platforms:
                 self.add_instances(instance_list)
                 for instance in list(filter(lambda inst: not inst.platform.simulation != 'na', instance_list)):
                     discards[instance] = discards.get(instance, "Not an emulated platform")
-
             else:
                 self.add_instances(instance_list)
 
@@ -2954,8 +3031,11 @@ class TestSuite(DisablePyTestCollectionMixin):
         for instance in instance_list:
             self.instances[instance.name] = instance
 
-    def add_tasks_to_queue(self, test_only=False):
+    def add_tasks_to_queue(self, build_only=False, test_only=False):
         for instance in self.instances.values():
+            if build_only:
+                instance.run = False
+
             if test_only:
                 if instance.run:
                     pipeline.put({"op": "run", "test": instance, "status": "built"})
@@ -2988,7 +3068,7 @@ class TestSuite(DisablePyTestCollectionMixin):
 
             # start a future for a thread which sends work in through the queue
             future_to_test = {
-                executor.submit(self.add_tasks_to_queue, self.test_only): 'FEEDER DONE'}
+                executor.submit(self.add_tasks_to_queue, self.build_only, self.test_only): 'FEEDER DONE'}
 
             while future_to_test:
                 # check for status of the futures which are currently working
@@ -3086,7 +3166,8 @@ class TestSuite(DisablePyTestCollectionMixin):
                 filename = os.path.join(outdir,"{}_{}.xml".format(platform, suffix))
             else:
                 filename = os.path.join(outdir,"{}.xml".format(platform))
-            self.xunit_report(filename, platform, full_report=True, append=append)
+            self.xunit_report(filename, platform, full_report=True,
+                              append=append, version=self.version)
 
 
     @staticmethod
@@ -3100,7 +3181,7 @@ class TestSuite(DisablePyTestCollectionMixin):
         return filtered_string
 
 
-    def xunit_report(self, filename, platform=None, full_report=False, append=False):
+    def xunit_report(self, filename, platform=None, full_report=False, append=False, version="NA"):
         total = 0
         if platform:
             selected = [platform]
@@ -3124,13 +3205,13 @@ class TestSuite(DisablePyTestCollectionMixin):
             for _, instance in inst.items():
                 handler_time = instance.metrics.get('handler_time', 0)
                 duration += handler_time
-                if full_report and not instance.build_only:
+                if full_report and instance.run:
                     for k in instance.results.keys():
                         if instance.results[k] == 'PASS':
                             passes += 1
                         elif instance.results[k] == 'BLOCK':
                             errors += 1
-                        elif instance.results[k] == 'SKIP':
+                        elif instance.results[k] == 'SKIP' or instance.status in ['skipped']:
                             skips += 1
                         else:
                             fails += 1
@@ -3171,6 +3252,10 @@ class TestSuite(DisablePyTestCollectionMixin):
                                 tests="%d" % (total),
                                 failures="%d" % fails,
                                 errors="%d" % (errors), skipped="%s" % (skips))
+                    eleTSPropetries = ET.SubElement(eleTestsuite, 'properties')
+                    # Multiple 'property' can be added to 'properties'
+                    # differing by name and value
+                    ET.SubElement(eleTSPropetries, 'property', name="version", value=version)
 
             else:
                 eleTestsuite = ET.SubElement(eleTestsuites, 'testsuite',
@@ -3178,6 +3263,10 @@ class TestSuite(DisablePyTestCollectionMixin):
                                              tests="%d" % (total),
                                              failures="%d" % fails,
                                              errors="%d" % (errors), skipped="%s" % (skips))
+                eleTSPropetries = ET.SubElement(eleTestsuite, 'properties')
+                # Multiple 'property' can be added to 'properties'
+                # differing by name and value
+                ET.SubElement(eleTSPropetries, 'property', name="version", value=version)
 
             for _, instance in inst.items():
                 if full_report:
@@ -3201,7 +3290,7 @@ class TestSuite(DisablePyTestCollectionMixin):
                             name="%s" % (k), time="%f" % handler_time)
 
                         if instance.results[k] in ['FAIL', 'BLOCK'] or \
-                            (instance.build_only and instance.status in ["error", "failed", "timeout"]):
+                            (not instance.run and instance.status in ["error", "failed", "timeout"]):
                             if instance.results[k] == 'FAIL':
                                 el = ET.SubElement(
                                     eleTestcase,
@@ -3219,10 +3308,9 @@ class TestSuite(DisablePyTestCollectionMixin):
                             el.text = self.process_log(log_file)
 
                         elif instance.results[k] == 'PASS' \
-                            or (instance.build_only and instance.status in ["passed"]):
+                            or (not instance.run and instance.status in ["passed"]):
                             pass
-                        elif instance.results[k] == 'SKIP' \
-                            or (instance.build_only and instance.status in ["skipped"]):
+                        elif instance.results[k] == 'SKIP' or (instance.status in ["skipped"]):
                             el = ET.SubElement(eleTestcase, 'skipped', type="skipped", message=instance.reason)
                         else:
                             el = ET.SubElement(
@@ -3404,7 +3492,7 @@ class Lcov(CoverageTool):
         self.ignores.append('*' + pattern + '*')
 
     def add_ignore_directory(self, pattern):
-        self.ignores.append(pattern + '/*')
+        self.ignores.append('*/' + pattern + '/*')
 
     def _generate(self, outdir, coveragelog):
         coveragefile = os.path.join(outdir, "coverage.info")
@@ -3457,7 +3545,7 @@ class Gcovr(CoverageTool):
         self.ignores.append('.*' + pattern + '.*')
 
     def add_ignore_directory(self, pattern):
-        self.ignores.append(pattern + '/.*')
+        self.ignores.append(".*/" + pattern + '/.*')
 
     @staticmethod
     def _interleave_list(prefix, list):

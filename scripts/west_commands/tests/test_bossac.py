@@ -16,27 +16,39 @@ if platform.system() != 'Linux':
     pytest.skip("skipping Linux-only bossac tests", allow_module_level=True)
 
 TEST_BOSSAC_PORT = 'test-bossac-serial'
+TEST_BOSSAC_SPEED = '1200'
 TEST_OFFSET = 1234
 TEST_FLASH_ADDRESS = 5678
 
 EXPECTED_COMMANDS = [
-    ['stty', '-F', TEST_BOSSAC_PORT, 'raw', 'ispeed', '1200', 'ospeed', '1200',
-     'cs8', '-cstopb', 'ignpar', 'eol', '255', 'eof', '255'],
+    ['stty', '-F', TEST_BOSSAC_PORT, 'raw', 'ispeed', '115200',
+     'ospeed', '115200', 'cs8', '-cstopb', 'ignpar', 'eol', '255',
+     'eof', '255'],
+    ['bossac', '-p', TEST_BOSSAC_PORT, '-R', '-e', '-w', '-v',
+     '-b', RC_KERNEL_BIN],
+]
+
+EXPECTED_COMMANDS_WITH_SPEED = [
+    ['stty', '-F', TEST_BOSSAC_PORT, 'raw', 'ispeed', TEST_BOSSAC_SPEED,
+     'ospeed', TEST_BOSSAC_SPEED, 'cs8', '-cstopb', 'ignpar', 'eol', '255',
+     'eof', '255'],
     ['bossac', '-p', TEST_BOSSAC_PORT, '-R', '-e', '-w', '-v',
      '-b', RC_KERNEL_BIN],
 ]
 
 EXPECTED_COMMANDS_WITH_OFFSET = [
-    ['stty', '-F', TEST_BOSSAC_PORT, 'raw', 'ispeed', '1200', 'ospeed', '1200',
-     'cs8', '-cstopb', 'ignpar', 'eol', '255', 'eof', '255'],
+    ['stty', '-F', TEST_BOSSAC_PORT, 'raw', 'ispeed', '115200',
+     'ospeed', '115200', 'cs8', '-cstopb', 'ignpar', 'eol', '255',
+     'eof', '255'],
     ['bossac', '-p', TEST_BOSSAC_PORT, '-R', '-e', '-w', '-v',
      '-b', RC_KERNEL_BIN, '-o', str(TEST_OFFSET)],
 ]
 
 EXPECTED_COMMANDS_WITH_FLASH_ADDRESS = [
     [
-        'stty', '-F', TEST_BOSSAC_PORT, 'raw', 'ispeed', '1200', 'ospeed',
-        '1200', 'cs8', '-cstopb', 'ignpar', 'eol', '255', 'eof', '255'
+        'stty', '-F', TEST_BOSSAC_PORT, 'raw', 'ispeed', '115200',
+        'ospeed', '115200', 'cs8', '-cstopb', 'ignpar', 'eol', '255',
+        'eof', '255'
     ],
     [
         'bossac',
@@ -67,9 +79,10 @@ def test_bossac_init(cc, req, supports, runner_config):
     runner.run('flash')
     assert cc.call_args_list == [call(x) for x in EXPECTED_COMMANDS_WITH_OFFSET]
 
+
 @patch('runners.bossac.BossacBinaryRunner.supports', return_value=True)
 @patch('runners.core.BuildConfiguration._init')
-@patch('runners.core.ZephyrBinaryRunner.get_flash_address',
+@patch('runners.bossac.BossacBinaryRunner.get_flash_offset',
        return_value=None)
 @patch('runners.core.ZephyrBinaryRunner.require', side_effect=require_patch)
 @patch('runners.core.ZephyrBinaryRunner.check_call')
@@ -86,7 +99,26 @@ def test_bossac_create(cc, req, gfa, bcfg, supports, runner_config):
 
 @patch('runners.bossac.BossacBinaryRunner.supports', return_value=True)
 @patch('runners.core.BuildConfiguration._init')
-@patch('runners.core.ZephyrBinaryRunner.get_flash_address',
+@patch('runners.bossac.BossacBinaryRunner.get_flash_offset',
+       return_value=None)
+@patch('runners.core.ZephyrBinaryRunner.require', side_effect=require_patch)
+@patch('runners.core.ZephyrBinaryRunner.check_call')
+def test_bossac_create_with_speed(cc, req, gfa, bcfg, supports,
+                                  runner_config):
+    '''Test commands using a runner created from command line parameters.'''
+    args = ['--bossac-port', str(TEST_BOSSAC_PORT),
+            '--speed', str(TEST_BOSSAC_SPEED)]
+    parser = argparse.ArgumentParser()
+    BossacBinaryRunner.add_parser(parser)
+    arg_namespace = parser.parse_args(args)
+    runner = BossacBinaryRunner.create(runner_config, arg_namespace)
+    runner.run('flash')
+    assert cc.call_args_list == [call(x) for x in EXPECTED_COMMANDS_WITH_SPEED]
+
+
+@patch('runners.bossac.BossacBinaryRunner.supports', return_value=True)
+@patch('runners.core.BuildConfiguration._init')
+@patch('runners.bossac.BossacBinaryRunner.get_flash_offset',
        return_value=TEST_FLASH_ADDRESS)
 @patch('runners.core.ZephyrBinaryRunner.require', side_effect=require_patch)
 @patch('runners.core.ZephyrBinaryRunner.check_call')
@@ -105,7 +137,7 @@ def test_bossac_create_with_offset(cc, req, gfa, bcfg, supports,
 
 @patch('runners.bossac.BossacBinaryRunner.supports', return_value=True)
 @patch('runners.core.BuildConfiguration._init')
-@patch('runners.core.ZephyrBinaryRunner.get_flash_address',
+@patch('runners.bossac.BossacBinaryRunner.get_flash_offset',
        return_value=TEST_FLASH_ADDRESS)
 @patch('runners.core.ZephyrBinaryRunner.require', side_effect=require_patch)
 @patch('runners.core.ZephyrBinaryRunner.check_call')

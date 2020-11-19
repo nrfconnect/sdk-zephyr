@@ -46,10 +46,10 @@
  *
  */
 
-#include <assert.h>
 #include <device.h>
 #include <kernel.h>
 #include <soc.h>
+#include <sys/__assert.h>
 #include <irq_nextlevel.h>
 #include <drivers/gpio.h>
 
@@ -105,7 +105,7 @@ static void intc_miwu_dispatch_gpio_isr(uint8_t wui_table,
 			 * Execute GPIO callback and the other callback might
 			 * match the same wui item.
 			 */
-			cb->handler(soc_get_gpio_dev(cb->params.gpio_port),
+			cb->handler(npcx_get_gpio_dev(cb->params.gpio_port),
 					(struct gpio_callback *)cb,
 					cb->params.pin_mask);
 		}
@@ -135,7 +135,7 @@ static void intc_miwu_dispatch_generic_isr(uint8_t wui_table,
 static void intc_miwu_isr_pri(int wui_table, int wui_group)
 {
 	int wui_bit;
-	uint32_t base = DRV_CONFIG(miwu_devs[wui_table])->base;
+	const uint32_t base = DRV_CONFIG(miwu_devs[wui_table])->base;
 	uint8_t mask = NPCX_WKPND(base, wui_group) & NPCX_WKEN(base, wui_group);
 
 	/* Clear pending bits before dispatch ISR */
@@ -155,24 +155,24 @@ static void intc_miwu_isr_pri(int wui_table, int wui_group)
 	}
 }
 
-/* Soc specific MIWU functions */
-void soc_miwu_irq_enable(const struct npcx_wui *wui)
+/* Platform specific MIWU functions */
+void npcx_miwu_irq_enable(const struct npcx_wui *wui)
 {
-	uint32_t base = DRV_CONFIG(miwu_devs[wui->table])->base;
+	const uint32_t base = DRV_CONFIG(miwu_devs[wui->table])->base;
 
 	NPCX_WKEN(base, wui->group) |= BIT(wui->bit);
 }
 
-void soc_miwu_irq_disable(const struct npcx_wui *wui)
+void npcx_miwu_irq_disable(const struct npcx_wui *wui)
 {
-	uint32_t base = DRV_CONFIG(miwu_devs[wui->table])->base;
+	const uint32_t base = DRV_CONFIG(miwu_devs[wui->table])->base;
 
 	NPCX_WKEN(base, wui->group) &= ~BIT(wui->bit);
 }
 
-unsigned int soc_miwu_irq_get_state(const struct npcx_wui *wui)
+unsigned int npcx_miwu_irq_get_state(const struct npcx_wui *wui)
 {
-	uint32_t base = DRV_CONFIG(miwu_devs[wui->table])->base;
+	const uint32_t base = DRV_CONFIG(miwu_devs[wui->table])->base;
 
 	if (IS_BIT_SET(NPCX_WKEN(base, wui->group), wui->bit))
 		return 1;
@@ -180,10 +180,10 @@ unsigned int soc_miwu_irq_get_state(const struct npcx_wui *wui)
 		return 0;
 }
 
-int soc_miwu_interrupt_configure(const struct npcx_wui *wui,
+int npcx_miwu_interrupt_configure(const struct npcx_wui *wui,
 		enum miwu_int_mode mode, enum miwu_int_trig trig)
 {
-	uint32_t base = DRV_CONFIG(miwu_devs[wui->table])->base;
+	const uint32_t base = DRV_CONFIG(miwu_devs[wui->table])->base;
 	uint8_t pmask = BIT(wui->bit);
 
 	if (mode == NPCX_MIWU_MODE_DISABLED) {
@@ -244,7 +244,7 @@ int soc_miwu_interrupt_configure(const struct npcx_wui *wui,
 	return 0;
 }
 
-void soc_miwu_init_gpio_callback(struct miwu_io_callback *callback,
+void npcx_miwu_init_gpio_callback(struct miwu_io_callback *callback,
 				const struct npcx_wui *io_wui, int port)
 {
 	/* Initialize WUI and GPIO settings in unused bits field */
@@ -254,7 +254,7 @@ void soc_miwu_init_gpio_callback(struct miwu_io_callback *callback,
 	callback->params.gpio_port = port;
 }
 
-void soc_miwu_init_dev_callback(struct miwu_dev_callback *callback,
+void npcx_miwu_init_dev_callback(struct miwu_dev_callback *callback,
 				const struct npcx_wui *dev_wui,
 				miwu_dev_callback_handler_t handler,
 				const struct device *source)
@@ -267,7 +267,7 @@ void soc_miwu_init_dev_callback(struct miwu_dev_callback *callback,
 	callback->source = source;
 }
 
-int soc_miwu_manage_gpio_callback(struct miwu_io_callback *cb, bool set)
+int npcx_miwu_manage_gpio_callback(struct miwu_io_callback *cb, bool set)
 {
 	if (!sys_slist_is_empty(&cb_list_gpio)) {
 		if (!sys_slist_find_and_remove(&cb_list_gpio, &cb->node)) {
@@ -284,7 +284,7 @@ int soc_miwu_manage_gpio_callback(struct miwu_io_callback *cb, bool set)
 	return 0;
 }
 
-int soc_miwu_manage_dev_callback(struct miwu_dev_callback *cb, bool set)
+int npcx_miwu_manage_dev_callback(struct miwu_dev_callback *cb, bool set)
 {
 	if (!sys_slist_is_empty(&cb_list_generic)) {
 		if (!sys_slist_find_and_remove(&cb_list_generic, &cb->node)) {
@@ -329,7 +329,7 @@ int soc_miwu_manage_dev_callback(struct miwu_dev_callback *cb, bool set)
 	static int intc_miwu_init##inst(const struct device *dev)              \
 	{                                                                      \
 		int i;                                                         \
-		uint32_t base = DRV_CONFIG(dev)->base;                         \
+		const uint32_t base = DRV_CONFIG(dev)->base;                   \
 									       \
 		/* Clear all MIWUs' pending and enable bits of MIWU device */  \
 		for (i = 0; i < NPCX_MIWU_GROUP_COUNT; i++) {                  \

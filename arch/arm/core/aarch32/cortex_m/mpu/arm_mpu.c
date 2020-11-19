@@ -80,7 +80,7 @@ static int region_allocate_and_init(const uint8_t index,
 	const struct arm_mpu_region *region_conf)
 {
 	/* Attempt to allocate new region index. */
-	if (index > (get_num_regions() - 1)) {
+	if (index > (get_num_regions() - 1U)) {
 
 		/* No available MPU region index. */
 		LOG_ERR("Failed to allocate new MPU region %u\n", index);
@@ -324,8 +324,13 @@ static int arm_mpu_init(const struct device *arg)
 	arm_core_mpu_disable();
 
 #if defined(CONFIG_NOCACHE_MEMORY)
+	/* Clean and invalidate data cache if
+	 * that was not already done at boot
+	 */
+#if !defined(CONFIG_INIT_ARCH_HW_AT_BOOT)
 	SCB_CleanInvalidateDCache();
 #endif
+#endif /* CONFIG_NOCACHE_MEMORY */
 
 	/* Architecture-specific configuration */
 	mpu_init();

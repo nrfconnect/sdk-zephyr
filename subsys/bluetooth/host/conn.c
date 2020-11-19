@@ -37,6 +37,9 @@
 #include "gatt_internal.h"
 #include "audio/iso_internal.h"
 
+/* Peripheral timeout to initialize Connection Parameter Update procedure */
+#define CONN_UPDATE_TIMEOUT  K_MSEC(CONFIG_BT_CONN_PARAM_UPDATE_TIMEOUT)
+
 struct tx_meta {
 	struct bt_conn_tx *tx;
 };
@@ -341,9 +344,9 @@ static void tx_complete_work(struct k_work *work)
 	tx_notify(conn);
 }
 
-static void conn_update_timeout(struct k_work *work)
+static void deferred_work(struct k_work *work)
 {
-	struct bt_conn *conn = CONTAINER_OF(work, struct bt_conn, update_work);
+	struct bt_conn *conn = CONTAINER_OF(work, struct bt_conn, deferred_work);
 	const struct bt_le_conn_param *param;
 
 	BT_DBG("conn %p", conn);
@@ -373,27 +376,23 @@ static void conn_update_timeout(struct k_work *work)
 		return;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_GAP_AUTO_UPDATE_CONN_PARAMS)) {
-		/* if application set own params use those, otherwise
-		 * use defaults.
-		 */
-		if (atomic_test_and_clear_bit(conn->flags,
-					      BT_CONN_SLAVE_PARAM_SET)) {
-			param = BT_LE_CONN_PARAM(conn->le.interval_min,
-						conn->le.interval_max,
-						conn->le.pending_latency,
-						conn->le.pending_timeout);
-			send_conn_le_param_update(conn, param);
-		} else {
+	/* if application set own params use those, otherwise use defaults. */
+	if (atomic_test_and_clear_bit(conn->flags,
+				      BT_CONN_SLAVE_PARAM_SET)) {
+		param = BT_LE_CONN_PARAM(conn->le.interval_min,
+					 conn->le.interval_max,
+					 conn->le.pending_latency,
+					 conn->le.pending_timeout);
+		send_conn_le_param_update(conn, param);
+	} else if (IS_ENABLED(CONFIG_BT_GAP_AUTO_UPDATE_CONN_PARAMS)) {
 #if defined(CONFIG_BT_GAP_PERIPHERAL_PREF_PARAMS)
-			param = BT_LE_CONN_PARAM(
-					CONFIG_BT_PERIPHERAL_PREF_MIN_INT,
-					CONFIG_BT_PERIPHERAL_PREF_MAX_INT,
-					CONFIG_BT_PERIPHERAL_PREF_SLAVE_LATENCY,
-					CONFIG_BT_PERIPHERAL_PREF_TIMEOUT);
-			send_conn_le_param_update(conn, param);
+		param = BT_LE_CONN_PARAM(
+				CONFIG_BT_PERIPHERAL_PREF_MIN_INT,
+				CONFIG_BT_PERIPHERAL_PREF_MAX_INT,
+				CONFIG_BT_PERIPHERAL_PREF_SLAVE_LATENCY,
+				CONFIG_BT_PERIPHERAL_PREF_TIMEOUT);
+		send_conn_le_param_update(conn, param);
 #endif
-		}
 	}
 
 	atomic_set_bit(conn->flags, BT_CONN_SLAVE_PARAM_UPDATE);
@@ -431,7 +430,7 @@ static struct bt_conn *acl_conn_new(void)
 		return conn;
 	}
 
-	k_delayed_work_init(&conn->update_work, conn_update_timeout);
+	k_delayed_work_init(&conn->deferred_work, deferred_work);
 
 	k_work_init(&conn->tx_complete_work, tx_complete_work);
 
@@ -1285,7 +1284,7 @@ static void conn_cleanup(struct bt_conn *conn)
 
 	bt_conn_reset_rx_state(conn);
 
-	k_delayed_work_submit(&conn->update_work, K_NO_WAIT);
+	k_delayed_work_submit(&conn->deferred_work, K_NO_WAIT);
 }
 
 static int conn_prepare_events(struct bt_conn *conn,
@@ -1522,7 +1521,7 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 	case BT_CONN_CONNECT:
 		if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
 		    conn->type == BT_CONN_TYPE_LE) {
-			k_delayed_work_cancel(&conn->update_work);
+			k_delayed_work_cancel(&conn->deferred_work);
 		}
 		break;
 	default:
@@ -1549,6 +1548,13 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 
 		bt_l2cap_connected(conn);
 		notify_connected(conn);
+
+		if (IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
+		    conn->role == BT_CONN_ROLE_SLAVE) {
+			k_delayed_work_submit(&conn->deferred_work,
+					      CONN_UPDATE_TIMEOUT);
+		}
+
 		break;
 	case BT_CONN_DISCONNECTED:
 		if (conn->type == BT_CONN_TYPE_SCO) {
@@ -1565,7 +1571,11 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 				bt_iso_disconnected(iso);
 				bt_iso_cleanup(iso);
 				bt_conn_unref(iso);
-				break;
+
+				/* Stop if only ISO was Disconnected */
+				if (iso == conn) {
+					break;
+				}
 			}
 		}
 
@@ -1579,7 +1589,7 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 
 			/* Cancel Connection Update if it is pending */
 			if (conn->type == BT_CONN_TYPE_LE) {
-				k_delayed_work_cancel(&conn->update_work);
+				k_delayed_work_cancel(&conn->deferred_work);
 			}
 
 			atomic_set_bit(conn->flags, BT_CONN_CLEANUP);
@@ -1656,7 +1666,8 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 		 */
 		if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
 		    conn->type == BT_CONN_TYPE_LE) {
-			k_delayed_work_submit(&conn->update_work,
+			k_delayed_work_submit(
+				&conn->deferred_work,
 				K_MSEC(10 * bt_dev.create_param.timeout));
 		}
 
@@ -2055,7 +2066,7 @@ int bt_conn_disconnect(struct bt_conn *conn, uint8_t reason)
 #endif /* CONFIG_BT_BREDR */
 
 		if (IS_ENABLED(CONFIG_BT_CENTRAL)) {
-			k_delayed_work_cancel(&conn->update_work);
+			k_delayed_work_cancel(&conn->deferred_work);
 			return bt_le_create_conn_cancel();
 		}
 

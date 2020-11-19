@@ -9,15 +9,10 @@
 /* Bitmask value returned by ull_adv_is_enabled() */
 #define ULL_ADV_ENABLED_BITMASK_ENABLED  BIT(0)
 
-#if defined(CONFIG_BT_CTLR_ADV_SET)
-#define BT_CTLR_ADV_SET CONFIG_BT_CTLR_ADV_SET
-#else /* CONFIG_BT_CTLR_ADV_SET */
-#define BT_CTLR_ADV_SET 1
-#endif /* CONFIG_BT_CTLR_ADV_SET */
-
 /* Helper functions to initialise and reset ull_adv module */
 int ull_adv_init(void);
 int ull_adv_reset(void);
+int ull_adv_reset_finalize(void);
 
 /* Return ll_adv_set context (unconditional) */
 struct ll_adv_set *ull_adv_set_get(uint8_t handle);
@@ -68,8 +63,7 @@ uint32_t ull_adv_aux_evt_init(struct ll_adv_aux_set *aux);
 
 /* helper function to start auxiliary advertising */
 uint32_t ull_adv_aux_start(struct ll_adv_aux_set *aux, uint32_t ticks_anchor,
-			   uint32_t ticks_slot_overhead,
-			   uint32_t volatile *ret_cb);
+			   uint32_t ticks_slot_overhead);
 
 /* helper function to stop auxiliary advertising */
 uint8_t ull_adv_aux_stop(struct ll_adv_aux_set *aux);
@@ -87,19 +81,27 @@ void ull_adv_aux_offset_get(struct ll_adv_set *adv);
 uint8_t ull_adv_aux_hdr_set_clear(struct ll_adv_set *adv,
 				  uint16_t sec_hdr_add_fields,
 				  uint16_t sec_hdr_rem_fields,
-				  void *value, struct pdu_adv_adi *adi);
+				  void *value,
+				  struct pdu_adv_adi *adi,
+				  uint8_t *pri_idx);
 
-/* helper function to calculate common ext adv payload header length */
+/* helper function to calculate common ext adv payload header length and
+ * adjust the data pointer.
+ * NOTE: This function reverts the header data pointer if there is no
+ *       header fields flags set, and hence no header fields have been
+ *       populated.
+ */
 static inline uint8_t
-ull_adv_aux_hdr_len_get(struct pdu_adv_com_ext_adv *com_hdr, uint8_t *dptr)
+ull_adv_aux_hdr_len_calc(struct pdu_adv_com_ext_adv *com_hdr, uint8_t **dptr)
 {
 	uint8_t len;
 
-	len = dptr - (uint8_t *)com_hdr;
+	len = *dptr - (uint8_t *)com_hdr;
 	if (len <= (offsetof(struct pdu_adv_com_ext_adv, ext_hdr_adi_adv_data) +
 		    sizeof(struct pdu_adv_hdr))) {
 		len = offsetof(struct pdu_adv_com_ext_adv,
 			       ext_hdr_adi_adv_data);
+		*dptr = (uint8_t *)com_hdr + len;
 	}
 
 	return len;
@@ -122,8 +124,8 @@ int ull_adv_sync_init(void);
 int ull_adv_sync_reset(void);
 
 /* helper function to start periodic advertising */
-uint32_t ull_adv_sync_start(struct ll_adv_sync_set *sync, uint32_t ticks_anchor,
-			 uint32_t volatile *ret_cb);
+uint32_t ull_adv_sync_start(struct ll_adv_sync_set *sync,
+			    uint32_t ticks_anchor);
 
 /* helper function to schedule a mayfly to get sync offset */
 void ull_adv_sync_offset_get(struct ll_adv_set *adv);

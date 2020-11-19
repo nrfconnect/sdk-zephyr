@@ -8,10 +8,10 @@
 #include <logging/log_core.h>
 #include <logging/log_msg.h>
 #include <logging/log_output.h>
-#include "log_backend_std.h"
+#include <logging/log_backend_std.h>
 #include <device.h>
 #include <drivers/uart.h>
-#include <assert.h>
+#include <sys/__assert.h>
 
 static const struct device *uart_dev;
 
@@ -42,7 +42,7 @@ static void put(const struct log_backend *const backend,
 static void log_backend_uart_init(void)
 {
 	uart_dev = device_get_binding(CONFIG_UART_CONSOLE_ON_DEV_NAME);
-	assert((void *)uart_dev);
+	__ASSERT_NO_MSG((void *)uart_dev);
 }
 
 static void panic(struct log_backend const *const backend)

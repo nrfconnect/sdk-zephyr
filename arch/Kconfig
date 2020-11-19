@@ -21,6 +21,7 @@ config ARC
 	select ARCH_IS_SET
 	select HAS_DTS
 	imply XIP
+	select ARCH_HAS_THREAD_LOCAL_STORAGE
 	help
 	  ARC architecture
 
@@ -32,8 +33,21 @@ config ARM
 	# FIXME: current state of the code for all ARM requires this, but
 	# is really only necessary for Cortex-M with ARM MPU!
 	select GEN_PRIV_STACKS
+	select ARCH_HAS_THREAD_LOCAL_STORAGE if ARM64 || CPU_CORTEX_R || CPU_CORTEX_M
 	help
 	  ARM architecture
+
+config SPARC
+	bool
+	select ARCH_IS_SET
+	select USE_SWITCH
+	select USE_SWITCH_SUPPORTED
+	select BIG_ENDIAN
+	select ATOMIC_OPERATIONS_BUILTIN if SPARC_CASA
+	select ATOMIC_OPERATIONS_C if !SPARC_CASA
+	select ARCH_HAS_THREAD_LOCAL_STORAGE
+	help
+	  SPARC architecture
 
 config X86
 	bool
@@ -43,9 +57,11 @@ config X86
 	select ARCH_HAS_CUSTOM_SWAP_TO_MAIN if !X86_64
 	select ARCH_SUPPORTS_COREDUMP
 	select CPU_HAS_MMU
+	select ARCH_MEM_DOMAIN_DATA if USERSPACE && !X86_COMMON_PAGE_TABLE
 	select ARCH_MEM_DOMAIN_SYNCHRONOUS_API if USERSPACE
 	select ARCH_HAS_GDBSTUB if !X86_64
 	select ARCH_HAS_TIMING_FUNCTIONS
+	select ARCH_HAS_THREAD_LOCAL_STORAGE
 	help
 	  x86 architecture
 
@@ -63,6 +79,7 @@ config RISCV
 	bool
 	select ARCH_IS_SET
 	select HAS_DTS
+	select ARCH_HAS_THREAD_LOCAL_STORAGE
 	imply XIP
 	help
 	  RISCV architecture
@@ -213,6 +230,7 @@ config USERSPACE
 	depends on ARCH_HAS_USERSPACE
 	depends on RUNTIME_ERROR_CHECKS
 	select SRAM_REGION_PERMISSIONS if MMU
+	select THREAD_STACK_INFO
 	help
 	  When enabled, threads may be created or dropped down to user mode,
 	  which has significantly restricted permissions and must interact
@@ -240,6 +258,7 @@ config KOBJECT_TEXT_AREA
 	int "Size if kobject text area"
 	default 512 if COVERAGE_GCOV
 	default 512 if NO_OPTIMIZATIONS
+	default 512 if STACK_CANARIES && RISCV
 	default 256
 	depends on ARCH_HAS_USERSPACE
 	help
@@ -381,6 +400,24 @@ config EXTRA_EXCEPTION_INFO
 
 endmenu # Interrupt configuration
 
+config INIT_ARCH_HW_AT_BOOT
+	bool "Initialize internal architecture state at boot"
+	depends on ARCH_SUPPORTS_ARCH_HW_INIT
+	help
+	  This option instructs Zephyr to force the initialization
+	  of the internal architectural state (for example ARCH-level
+	  HW registers and system control blocks) during boot to
+	  the reset values as specified by the corresponding
+	  architecture manual. The option is useful when the Zephyr
+	  firmware image is chain-loaded, for example, by a debugger
+	  or a bootloader, and we need to guarantee that the internal
+	  states of the architecture core blocks are restored to the
+	  reset values (as specified by the architecture).
+
+	  Note: the functionality is architecture-specific. For the
+	  implementation details refer to each architecture where
+	  this feature is supported.
+
 endmenu
 
 #
@@ -414,10 +451,23 @@ config ARCH_HAS_NESTED_EXCEPTION_DETECTION
 config ARCH_SUPPORTS_COREDUMP
 	bool
 
+config ARCH_SUPPORTS_ARCH_HW_INIT
+	bool
+
 config ARCH_HAS_EXTRA_EXCEPTION_INFO
 	bool
 
 config ARCH_HAS_GDBSTUB
+	bool
+
+config ARCH_HAS_COHERENCE
+	bool
+	help
+	  When selected, the architecture supports the
+	  arch_mem_coherent() API and can link into incoherent/cached
+	  memory using the ".cached" linker section.
+
+config ARCH_HAS_THREAD_LOCAL_STORAGE
 	bool
 
 #
@@ -539,6 +589,51 @@ config SRAM_REGION_PERMISSIONS
 	  If not enabled, all SRAM mappings will allow supervisor mode to
 	  read, write, and execute. User mode support requires this.
 
+config KERNEL_VM_BASE
+	hex "Base virtual address to link the kernel"
+	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_SRAM))
+	help
+	  Define the base virtual memory address for the core kernel.
+
+	  The kernel expects a mappings for all physical RAM regions starting at
+	  this virtual address, with any unused space up to the size denoted by
+	  KERNEL_VM_SIZE available for memory mappings. This base address denotes
+	  the start of the RAM mapping and may not be the base address of the
+	  kernel itself, but the offset of the kernel here will be the same as the
+	  offset from the beginning of physical memory where it was loaded.
+
+	  If there are multiple physical RAM regions which are discontinuous in
+	  the physical memory map, they should all be mapped in a continuous
+	  virtual region, with bounds defined by KERNEL_RAM_SIZE.
+
+	  By default, this is the same as the DT_CHOSEN_Z_SRAM physical base SRAM
+	  address from DTS, in which case RAM will be identity-mapped. Some
+	  architectures may require RAM to be mapped in this way; they may have
+	  just one RAM region and doing this makes linking much simpler, as
+	  at least when the kernel boots all virtual RAM addresses are the same
+	  as their physical address (demand paging at runtime may later modify
+	  this for some subset of non-pinned pages).
+
+	  Otherwise, if RAM isn't identity-mapped:
+	  1. It is the architecture's responsibility to transition the
+	  instruction pointer to virtual addresses at early boot before
+	  entering the kernel at z_cstart().
+	  2. The underlying architecture may impose constraints on the bounds of
+	  the kernel's address space, such as not overlapping physical RAM
+	  regions if RAM is not identity-mapped, or the virtual and physical
+	  base addresses being aligned to some common value (which allows
+	  double-linking of paging structures to make the instruction pointer
+	  transition simpler).
+
+config KERNEL_RAM_SIZE
+	hex "Total size of RAM mappings in bytes"
+	default $(dt_chosen_reg_size_hex,$(DT_CHOSEN_Z_SRAM))
+	help
+	  Indicates to the kernel the total size of RAM that is mapped. The
+	  kernel expects that all physical RAM has a memory mapping in the virtual
+	  address space, and that these RAM mappings are all within the virtual
+	  region [KERNEL_VM_BASE..KERNEL_VM_BASE + KERNEL_RAM_SIZE).
+
 config KERNEL_VM_SIZE
 	hex "Size of kernel address space in bytes"
 	default 0xC0000000
@@ -546,10 +641,17 @@ config KERNEL_VM_SIZE
 	  Size of the kernel's address space. Constraining this helps control
 	  how much total memory can be used for page tables.
 
-	  The area defined by SRAM_BASE_ADDRESS to SRAM_BASE_ADDRESS +
-	  KERNEL_VM_SIZE must have enough room to map system RAM, plus any driver
-	  mappings. Further mappings may be made at runtime depending on
-	  configuration options (such as memory-mapping stacks, VDSO pages, etc).
+	  The difference between KERNEL_RAM_SIZE and KERNEL_VM_SIZE indicates the
+	  size of the virtual region for runtime memory mappings. This is needed
+	  for mapping driver MMIO regions, as well as special RAM mapping use-cases
+	  such as VSDO pages, memory mapped thread stacks, and anonymous memory
+	  mappings.
+
+	  The system currently assumes all RAM can be mapped in the virtual address
+	  space. Systems with very large amounts of memory (such as 512M or more)
+	  will want to use a 64-bit build of Zephyr, there are no plans to
+	  implement a notion of "high" memory in Zephyr to work around physical
+	  RAM which can't have a boot-time mapping due to a too-small address space.
 
 endif   # MMU
 

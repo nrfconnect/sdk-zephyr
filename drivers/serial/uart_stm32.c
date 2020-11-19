@@ -20,6 +20,8 @@
 #include <soc.h>
 #include <init.h>
 #include <drivers/uart.h>
+#include <drivers/pinmux.h>
+#include <pinmux/stm32/pinmux_stm32.h>
 #include <drivers/clock_control.h>
 
 #include <linker/sections.h>
@@ -668,12 +670,21 @@ static int uart_stm32_init(const struct device *dev)
 	USART_TypeDef *UartInstance = UART_STRUCT(dev);
 	uint32_t ll_parity;
 	uint32_t ll_datawidth;
+	int err;
 
 	__uart_stm32_get_clock(dev);
 	/* enable clock */
 	if (clock_control_on(data->clock,
 			(clock_control_subsys_t *)&config->pclken) != 0) {
 		return -EIO;
+	}
+
+	/* Configure dt provided device signals when available */
+	err = stm32_dt_pinctrl_configure(config->pinctrl_list,
+					 config->pinctrl_list_size,
+					 (uint32_t)UART_STRUCT(dev));
+	if (err < 0) {
+		return err;
 	}
 
 	LL_USART_Disable(UartInstance);
@@ -745,11 +756,11 @@ static int uart_stm32_init(const struct device *dev)
 #define STM32_UART_IRQ_HANDLER(index)					\
 static void uart_stm32_irq_config_func_##index(const struct device *dev)	\
 {									\
-	IRQ_CONNECT(DT_INST_IRQN(index),		\
-		DT_INST_IRQ(index, priority),		\
+	IRQ_CONNECT(DT_INST_IRQN(index),				\
+		DT_INST_IRQ(index, priority),				\
 		uart_stm32_isr, DEVICE_GET(uart_stm32_##index),		\
 		0);							\
-	irq_enable(DT_INST_IRQN(index));		\
+	irq_enable(DT_INST_IRQN(index));				\
 }
 #else
 #define STM32_UART_IRQ_HANDLER_DECL(index)
@@ -760,23 +771,28 @@ static void uart_stm32_irq_config_func_##index(const struct device *dev)	\
 #define STM32_UART_INIT(index)						\
 STM32_UART_IRQ_HANDLER_DECL(index);					\
 									\
+static const struct soc_gpio_pinctrl uart_pins_##index[] =		\
+				ST_STM32_DT_INST_PINCTRL(index, 0);	\
+									\
 static const struct uart_stm32_config uart_stm32_cfg_##index = {	\
 	.uconf = {							\
-		.base = (uint8_t *)DT_INST_REG_ADDR(index),\
+		.base = (uint8_t *)DT_INST_REG_ADDR(index),		\
 		STM32_UART_IRQ_HANDLER_FUNC(index)			\
 	},								\
-	.pclken = { .bus = DT_INST_CLOCKS_CELL(index, bus),	\
-		    .enr = DT_INST_CLOCKS_CELL(index, bits)	\
+	.pclken = { .bus = DT_INST_CLOCKS_CELL(index, bus),		\
+		    .enr = DT_INST_CLOCKS_CELL(index, bits)		\
 	},								\
-	.hw_flow_control = DT_INST_PROP(index, hw_flow_control),\
-	.parity = DT_INST_PROP(index, parity)\
+	.hw_flow_control = DT_INST_PROP(index, hw_flow_control),	\
+	.parity = DT_INST_PROP_OR(index, parity, UART_CFG_PARITY_NONE),	\
+	.pinctrl_list = uart_pins_##index,				\
+	.pinctrl_list_size = ARRAY_SIZE(uart_pins_##index),		\
 };									\
 									\
 static struct uart_stm32_data uart_stm32_data_##index = {		\
-	.baud_rate = DT_INST_PROP(index, current_speed)	\
+	.baud_rate = DT_INST_PROP(index, current_speed),		\
 };									\
 									\
-DEVICE_AND_API_INIT(uart_stm32_##index, DT_INST_LABEL(index),\
+DEVICE_AND_API_INIT(uart_stm32_##index, DT_INST_LABEL(index),		\
 		    &uart_stm32_init,					\
 		    &uart_stm32_data_##index, &uart_stm32_cfg_##index,	\
 		    PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,	\

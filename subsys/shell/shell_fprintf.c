@@ -6,8 +6,7 @@
 
 #include <shell/shell_fprintf.h>
 #include <shell/shell.h>
-
-extern int z_prf(int (*func)(), void *dest, char *format, va_list vargs);
+#include <sys/cbprintf.h>
 
 static int out_func(int c, void *ctx)
 {
@@ -34,7 +33,7 @@ static int out_func(int c, void *ctx)
 void shell_fprintf_fmt(const struct shell_fprintf *sh_fprintf,
 		       const char *fmt, va_list args)
 {
-	(void)z_prf(out_func, (void *)sh_fprintf, (char *)fmt, args);
+	(void)cbvprintf(out_func, (void *)sh_fprintf, fmt, args);
 
 	if (sh_fprintf->ctrl_blk->autoflush) {
 		shell_fprintf_buffer_flush(sh_fprintf);

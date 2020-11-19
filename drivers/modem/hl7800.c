@@ -257,8 +257,6 @@ static const struct mdm_control_pinconfig pinconfig[] = {
 #define MDM_MTU 1500
 #define MDM_MAX_RESP_SIZE 128
 
-#define MDM_RECV_MAX_BUF 30
-#define MDM_RECV_BUF_SIZE 128
 #define MDM_HANDLER_MATCH_MAX_LEN 100
 
 #define MDM_MAX_SOCKETS 6
@@ -379,8 +377,8 @@ static const char TIME_STRING_FORMAT[] = "\"yy/MM/dd,hh:mm:ss?zz\"";
 		}                                                              \
 	} while (0)
 
-NET_BUF_POOL_DEFINE(mdm_recv_pool, MDM_RECV_MAX_BUF, MDM_RECV_BUF_SIZE, 0,
-		    NULL);
+NET_BUF_POOL_DEFINE(mdm_recv_pool, CONFIG_MODEM_HL7800_RECV_BUF_CNT,
+		    CONFIG_MODEM_HL7800_RECV_BUF_SIZE, 0, NULL);
 
 static uint8_t mdm_recv_buf[MDM_MAX_DATA_LENGTH];
 
@@ -1486,7 +1484,7 @@ done:
 
 static void dns_work_cb(struct k_work *work)
 {
-#ifdef CONFIG_DNS_RESOLVER
+#if defined(CONFIG_DNS_RESOLVER) && !defined(CONFIG_DNS_SERVER_IP_ADDRESSES)
 	int ret;
 	struct dns_resolve_context *dnsCtx;
 	const char *dns_servers_str[] = { ictx.dns_string };
@@ -3117,7 +3115,7 @@ static inline struct net_buf *read_rx_allocator(k_timeout_t timeout,
 
 static size_t hl7800_read_rx(struct net_buf **buf)
 {
-	uint8_t uart_buffer[MDM_RECV_BUF_SIZE];
+	uint8_t uart_buffer[CONFIG_MODEM_HL7800_RECV_BUF_SIZE];
 	size_t bytes_read, total_read;
 	int ret;
 	uint16_t rx_len;
@@ -4549,7 +4547,6 @@ static int offload_put(struct net_context *context)
 	struct hl7800_socket *sock;
 	char cmd1[sizeof("AT+KTCPCLOSE=##")];
 	char cmd2[sizeof("AT+KTCPDEL=##")];
-	int ret;
 
 	if (!context) {
 		return -EINVAL;
@@ -4566,15 +4563,6 @@ static int offload_put(struct net_context *context)
 
 	hl7800_lock();
 
-	/* if IP connection needs to be reconfigured,
-	 * we dont need to issue the close command,
-	 * just need to cleanup
-	 */
-	if (ictx.reconfig_IP_connection || !net_if_is_up(ictx.iface)) {
-		LOG_DBG("Skip issuing close socket cmd");
-		goto cleanup;
-	}
-
 	/* close connection */
 	if (sock->type == SOCK_STREAM) {
 		snprintk(cmd1, sizeof(cmd1), "AT+KTCPCLOSE=%d",
@@ -4587,22 +4575,14 @@ static int offload_put(struct net_context *context)
 
 	wakeup_hl7800();
 
-	if (sock->state != SOCK_SERVER_CLOSED) {
-		ret = send_at_cmd(sock, cmd1, MDM_CMD_SEND_TIMEOUT, 0, false);
-		if (ret < 0) {
-			LOG_ERR("AT+K**PCLOSE ret:%d", ret);
-		}
-	}
+	send_at_cmd(sock, cmd1, MDM_CMD_SEND_TIMEOUT, 0, false);
 
 	if (sock->type == SOCK_STREAM) {
 		/* delete session */
-		ret = send_at_cmd(sock, cmd2, MDM_CMD_SEND_TIMEOUT, 0, false);
-		if (ret < 0) {
-			LOG_ERR("AT+K**PDEL ret:%d", ret);
-		}
+		send_at_cmd(sock, cmd2, MDM_CMD_SEND_TIMEOUT, 0, false);
 	}
 	allow_sleep(true);
-cleanup:
+
 	sock->context->connect_cb = NULL;
 	sock->context->recv_cb = NULL;
 	sock->context->send_cb = NULL;
@@ -4670,7 +4650,7 @@ int32_t mdm_hl7800_update_fw(char *file_path)
 		goto err;
 	}
 
-	ret = fs_open(&ictx.fw_update_file, file_path);
+	ret = fs_open(&ictx.fw_update_file, file_path, FS_O_READ);
 	if (ret < 0) {
 		LOG_ERR("%s open err: %d", log_strdup(file_path), ret);
 		goto err;

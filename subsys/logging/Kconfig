@@ -211,6 +211,7 @@ config LOG_PROCESS_THREAD_STACK_SIZE
 	default 1024 if XTENSA
 	default 4096 if (X86 && X86_64)
 	default 4096 if ARM64
+	default 4096 if SPARC
 	default 768
 	help
 	  Set the internal stack size for log processing thread.
@@ -452,7 +453,7 @@ config LOG_BACKEND_NATIVE_POSIX
 
 config LOG_BACKEND_XTENSA_SIM
 	bool "Enable xtensa simulator backend"
-	depends on SOC_XTENSA_SAMPLE_CONTROLLER || SOC_INTEL_APL_ADSP
+	depends on SOC_XTENSA_SAMPLE_CONTROLLER || SOC_FAMILY_INTEL_ADSP
 	help
 	  Enable backend in xtensa simulator
 
@@ -527,33 +528,12 @@ config LOG_BACKEND_NET_AUTOSTART
 
 endif # LOG_BACKEND_NET
 
-config LOG_BACKEND_RB
-	bool "Enable memory ring buffer backend"
-	select RING_BUFFER
+config LOG_BACKEND_ADSP
+	bool "Enable Intel ADSP buffer backend"
+	depends on SOC_FAMILY_INTEL_ADSP
 	help
-	  Enable backend in memory using ring buffer to keep messages.
-
-if LOG_BACKEND_RB
-
-config LOG_BACKEND_RB_MEM_BASE
-	hex "Ring buffer memory base address"
-	help
-	  Address of the ring buffer in the memory.
-
-config LOG_BACKEND_RB_MEM_SIZE
-	int "Size of the ring buffer"
-	help
-	  Size of the ring buffer. Must be multiply of the message slot
-	  size.
-
-config LOG_BACKEND_RB_SLOT_SIZE
-	int "Size of the message slot"
-	default 64
-	help
-	  Size of the message slot inside ring buffer. All log messages
-	  are split to similar sized logging slots.
-
-endif # LOG_BACKEND_RB
+	  Enable backend for the host trace protocol of the Intel ADSP
+	  family of audio processors
 
 config LOG_BACKEND_SHOW_COLOR
 	bool "Enable colors in the backend"

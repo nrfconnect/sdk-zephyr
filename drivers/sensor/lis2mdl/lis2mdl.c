@@ -60,14 +60,14 @@ static int lis2mdl_set_hard_iron(const struct device *dev,
 {
 	struct lis2mdl_data *lis2mdl = dev->data;
 	uint8_t i;
-	union axis3bit16_t offset;
+	int16_t offset[3];
 
 	for (i = 0U; i < 3; i++) {
-		offset.i16bit[i] = sys_cpu_to_le16(val->val1);
+		offset[i] = sys_cpu_to_le16(val->val1);
 		val++;
 	}
 
-	return lis2mdl_mag_user_offset_set(lis2mdl->ctx, offset.u8bit);
+	return lis2mdl_mag_user_offset_set(lis2mdl->ctx, offset);
 }
 
 static void lis2mdl_channel_get_mag(const struct device *dev,
@@ -177,17 +177,17 @@ static int lis2mdl_attr_set(const struct device *dev,
 static int lis2mdl_sample_fetch_mag(const struct device *dev)
 {
 	struct lis2mdl_data *lis2mdl = dev->data;
-	union axis3bit16_t raw_mag;
+	int16_t raw_mag[3];
 
 	/* fetch raw data sample */
-	if (lis2mdl_magnetic_raw_get(lis2mdl->ctx, raw_mag.u8bit) < 0) {
+	if (lis2mdl_magnetic_raw_get(lis2mdl->ctx, raw_mag) < 0) {
 		LOG_DBG("Failed to read sample");
 		return -EIO;
 	}
 
-	lis2mdl->mag[0] = sys_le16_to_cpu(raw_mag.i16bit[0]);
-	lis2mdl->mag[1] = sys_le16_to_cpu(raw_mag.i16bit[1]);
-	lis2mdl->mag[2] = sys_le16_to_cpu(raw_mag.i16bit[2]);
+	lis2mdl->mag[0] = sys_le16_to_cpu(raw_mag[0]);
+	lis2mdl->mag[1] = sys_le16_to_cpu(raw_mag[1]);
+	lis2mdl->mag[2] = sys_le16_to_cpu(raw_mag[2]);
 
 	return 0;
 }
@@ -195,17 +195,17 @@ static int lis2mdl_sample_fetch_mag(const struct device *dev)
 static int lis2mdl_sample_fetch_temp(const struct device *dev)
 {
 	struct lis2mdl_data *lis2mdl = dev->data;
-	union axis1bit16_t raw_temp;
+	int16_t raw_temp;
 	int32_t temp;
 
 	/* fetch raw temperature sample */
-	if (lis2mdl_temperature_raw_get(lis2mdl->ctx, raw_temp.u8bit) < 0) {
+	if (lis2mdl_temperature_raw_get(lis2mdl->ctx, &raw_temp) < 0) {
 		LOG_DBG("Failed to read sample");
 		return -EIO;
 	}
 
 	/* formula is temp = 25 + (temp / 8) C */
-	temp = (sys_le16_to_cpu(raw_temp.i16bit) & 0x8FFF);
+	temp = (sys_le16_to_cpu(raw_temp) & 0x8FFF);
 	lis2mdl->temp_sample = 2500 + (temp * 100) / 8;
 
 	return 0;
@@ -357,6 +357,10 @@ static int lis2mdl_init(const struct device *dev)
 		return -EIO;
 	}
 
+#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+	lis2mdl->power_state = DEVICE_PM_ACTIVE_STATE;
+#endif
+
 #ifdef CONFIG_LIS2MDL_TRIGGER
 	if (lis2mdl_init_interrupt(dev) < 0) {
 		LOG_DBG("Failed to initialize interrupts");
@@ -367,6 +371,67 @@ static int lis2mdl_init(const struct device *dev)
 	return 0;
 }
 
-DEVICE_AND_API_INIT(lis2mdl, DT_INST_LABEL(0), lis2mdl_init,
-		     &lis2mdl_data, &lis2mdl_dev_config, POST_KERNEL,
-		     CONFIG_SENSOR_INIT_PRIORITY, &lis2mdl_driver_api);
+#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+static int lis2mdl_set_power_state(struct lis2mdl_data *lis2mdl,
+		uint32_t new_state)
+{
+	int status = 0;
+
+	if (new_state == DEVICE_PM_ACTIVE_STATE) {
+		status = lis2mdl_operating_mode_set(lis2mdl->ctx,
+				LIS2MDL_CONTINUOUS_MODE);
+		if (status) {
+			LOG_ERR("Power up failed");
+		}
+		lis2mdl->power_state = DEVICE_PM_ACTIVE_STATE;
+		LOG_DBG("State changed to active");
+	} else {
+		__ASSERT_NO_MSG(new_state == DEVICE_PM_LOW_POWER_STATE ||
+				new_state == DEVICE_PM_SUSPEND_STATE ||
+				new_state == DEVICE_PM_OFF_STATE);
+		status = lis2mdl_operating_mode_set(lis2mdl->ctx,
+				LIS2MDL_POWER_DOWN);
+		if (status) {
+			LOG_ERR("Power down failed");
+		}
+		lis2mdl->power_state = new_state;
+		LOG_DBG("State changed to inactive");
+	}
+
+	return status;
+}
+
+static int lis2mdl_pm_control(struct device *dev, uint32_t ctrl_command,
+				void *context, device_pm_cb cb, void *arg)
+{
+	struct lis2mdl_data *lis2mdl = dev->driver_data;
+	uint32_t current_state = lis2mdl->power_state;
+	int status = 0;
+	uint32_t new_state;
+
+	switch (ctrl_command) {
+	case DEVICE_PM_SET_POWER_STATE:
+		new_state = *((const uint32_t *)context);
+		if (new_state != current_state) {
+			status = lis2mdl_set_power_state(lis2mdl, new_state);
+		}
+		break;
+	case DEVICE_PM_GET_POWER_STATE:
+		*((uint32_t *)context) = current_state;
+		break;
+	default:
+		LOG_ERR("Got unknown power management control command");
+		status = -EINVAL;
+	}
+
+	if (cb) {
+		cb(dev, status, context, arg);
+	}
+
+	return status;
+}
+#endif /* CONFIG_DEVICE_POWER_MANAGEMENT */
+
+DEVICE_DEFINE(lis2mdl, DT_INST_LABEL(0), lis2mdl_init,
+		lis2mdl_pm_control, &lis2mdl_data, &lis2mdl_dev_config,
+		POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY, &lis2mdl_driver_api);

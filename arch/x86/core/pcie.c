@@ -35,7 +35,7 @@ static void pcie_mm_init(void)
 	struct acpi_mcfg *m = z_acpi_find_table(ACPI_MCFG_SIGNATURE);
 
 	if (m != NULL) {
-		int n = (m->sdt.len - sizeof(*m)) / sizeof(m->pci_segs[0]);
+		int n = (m->sdt.length - sizeof(*m)) / sizeof(m->pci_segs[0]);
 
 		for (int i = 0; i < n && i < MAX_PCI_BUS_SEGMENTS; i++) {
 			size_t size;
@@ -70,7 +70,7 @@ static inline void pcie_mm_conf(pcie_bdf_t bdf, unsigned int reg,
 				       PCIE_BDF_TO_FUNC(bdf));
 
 			volatile uint32_t *regs
-				= (void *)&bus_segs[0].mmio[bdf << 4];
+				= (void *)&bus_segs[i].mmio[bdf << 4];
 
 			if (write) {
 				regs[reg] = *data;

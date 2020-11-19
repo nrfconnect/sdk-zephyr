@@ -41,13 +41,13 @@ manifest:
       revision: da9a2df574094f52d87a03f6393928bdc7dce17c
       path: tools/ci-tools
     - name: civetweb
-      revision: 99129c5efc907ea613c4b73ccff07581feb58a7a
+      revision: e6903b80c09d17cd1a8bb32e40080005558aad29
       path: modules/lib/civetweb
     - name: esp-idf
       revision: 6835bfc741bf15e98fb7971293913f770df6081f
       path: modules/hal/esp-idf
     - name: fatfs
-      revision: 13697783bf653dfdf17c57129ce8e181634e5970
+      revision: 1d1fcc725aa1cb3c32f366e0c53d7490d0fe1109
       path: modules/fs/fatfs
     - name: hal_cypress
       revision: a12d92816a53a521d79cefcf5c38b9dc8a4fed6e
@@ -56,7 +56,7 @@ manifest:
       revision: f1fa8241f8786198ba41155413243de36ed878a5
       path: modules/hal/infineon
     - name: hal_nordic
-      revision: d8a6ea9695ddf792bb18bb6035c13b1daac5d79c
+      revision: d7b3b6e3cea622ecc93fcacd3f2cfddf83746aff
       path: modules/hal/nordic
     - name: hal_openisa
       revision: 40d049f69c50b58ea20473bee14cf93f518bf262
@@ -71,41 +71,41 @@ manifest:
       revision: 69c3e1e6e167767cb75aa2b468df4ade05988cdb
       path: modules/hal/silabs
     - name: hal_st
-      revision: 5b3ec3e182d4310e8943cc34c6c70ae57d9711da
+      revision: b52fdbf4b62439be9fab9bb4bae9690a42d2fb14
       path: modules/hal/st
     - name: hal_stm32
-      revision: cea57f86d3ade46c0b99dab32b2ac63435ed0693
+      revision: fadf64171cb1eb947b2de4a53c903ca2350e5ea2
       path: modules/hal/stm32
     - name: hal_ti
-      revision: 405dfc8faba13e01c1cb9e29e70b31b50f71d117
+      revision: 277d70a65ab14d46bf1ec0935cf9bb28bbaa8ab9
       path: modules/hal/ti
     - name: libmetal
-      revision: 0b23894a041bd00a0d3a2288bb34751bbbef790d
+      revision: 9d4ee2c3cfd5f49861939447990f3b7d7bf9bf94
       path: modules/hal/libmetal
     - name: hal_quicklogic
       repo-path: hal_quicklogic
       revision: 7deb3aab1cc430a7650143f9833cfc8ddad76eb5
       path: modules/hal/quicklogic
     - name: lvgl
-      revision: 928b61c7c8ef5f770f10e6fd36d4fea0cf375b5e
+      revision: 31acbaa36e9e74ab88ac81e3d21e7f1d00a71136
       path: modules/lib/gui/lvgl
     - name: mbedtls
-      revision: aef137b1af8aa7a0f43345c82459254b8832262e
+      revision: 13cf2e52024a144ecee9f37680681760a85febab
       path: modules/crypto/mbedtls
     - name: mcuboot
-      revision: a5d79cf8ccb2c71e68ef32a71d6a2716e831d12e
+      revision: c71d2186077f9fd5f6d1aa53ee3f09dc41ce78f6
       path: bootloader/mcuboot
     - name: mcumgr
-      revision: 5051f9d900bbb194a23d4ce80f3c6dc6d6780cc2
+      revision: f28a637db12c4b12fb2b18bddc6b2a0deaa95251
       path: modules/lib/mcumgr
     - name: net-tools
-      revision: 1c4fdba512b268033a4cf926bddd323866c3261a
+      revision: c72fbf3300264a8a4bb48be314ca93765c863a19
       path: tools/net-tools
     - name: hal_nxp
-      revision: 68bbdbdec1153355b14386d8f095058a496f66f4
+      revision: 56915d2942a3af7205b3c4991a8b87e915de7f59
       path: modules/hal/nxp
     - name: open-amp
-      revision: 724f7e2a4519d7e1d40ef330042682dea950c991
+      revision: de1b85a13032a2de1d8b6695ae5f800b613e739d
       path: modules/lib/open-amp
     - name: loramac-node
       revision: 3f545d76a2e6d1db83a470ccdb5bebd1f484e137
@@ -127,19 +127,19 @@ manifest:
       revision: 9e4498d1c73009acd84bb36036ee5e2869112a6c
     - name: mipi-sys-t
       path: modules/debug/mipi-sys-t
-      revision: 957d46bc3ce0d5f628f0d525196bb4db207672ee
+      revision: 75e671550ac1acb502f315fe4952514dc73f7bfb
     - name: nrf_hw_models
       path: modules/bsim_hw_models/nrf_hw_models
-      revision: f86079a7333968f0ba71fe1266e241295a4e9943
+      revision: 71a8a9ef086d57ff5f3974138b0951f24c2017ad
     - name: hal_xtensa
-      revision: e7a57d0c252f9c5f3cab9d5ceadda8753cacee5b
+      revision: 2f04b615cd5ad3a1b8abef33f9bdd10cc1990ed6
       path: modules/hal/xtensa
     - name: edtt
       path: tools/edtt
       revision: c39888ff74acf421eeff9a7514fa9b172c3373f7
     - name: trusted-firmware-m
       path: modules/tee/tfm
-      revision: 143df675557305b61f7930a50459a53a8d2bb097
+      revision: 6edaaaaaa1a227cb1ccc9ef698a9d2e258a9bbd5
 
   self:
     path: zephyr

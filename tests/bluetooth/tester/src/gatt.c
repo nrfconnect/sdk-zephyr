@@ -9,7 +9,6 @@
 #include <zephyr/types.h>
 #include <string.h>
 #include <errno.h>
-#include <assert.h>
 
 #include <toolchain.h>
 #include <bluetooth/bluetooth.h>
@@ -18,6 +17,7 @@
 #include <bluetooth/uuid.h>
 #include <sys/byteorder.h>
 #include <sys/printk.h>
+#include <sys/__assert.h>
 #include <net/buf.h>
 
 #include <logging/log.h>
@@ -357,7 +357,7 @@ static ssize_t write_value(struct bt_conn *conn,
 	memcpy(value->data + offset, buf, len);
 
 	/* Maximum attribute value size is 512 bytes */
-	assert(value->len < 512);
+	__ASSERT_NO_MSG(value->len < 512);
 
 	attr_value_changed_ev(attr->handle, value->data, value->len);
 
@@ -734,8 +734,8 @@ struct set_value {
 
 struct bt_gatt_indicate_params indicate_params;
 
-static void indicate_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-			uint8_t err)
+static void indicate_cb(struct bt_conn *conn,
+			struct bt_gatt_indicate_params *params, uint8_t err)
 {
 	if (err != 0U) {
 		LOG_ERR("Indication fail");
@@ -781,6 +781,7 @@ static uint8_t alloc_value(struct bt_gatt_attr *attr, struct set_value *data)
 			indicate_params.data = value->data;
 			indicate_params.len = value->len;
 			indicate_params.func = indicate_cb;
+			indicate_params.destroy = NULL;
 
 			bt_gatt_indicate(NULL, &indicate_params);
 		}

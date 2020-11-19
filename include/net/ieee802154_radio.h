@@ -26,6 +26,24 @@ extern "C" {
  * @{
  */
 
+/**
+ * @brief IEEE 802.15.4 Channel assignments
+ *
+ * Channel numbering for 868 MHz, 915 MHz, and 2450 MHz bands.
+ *
+ * - Channel 0 is for 868.3 MHz.
+ * - Channels 1-10 are for 906 to 924 MHz with 2 MHz channel spacing.
+ * - Channels 11-26 are for 2405 to 2530 MHz with 5 MHz channel spacing.
+ *
+ * For more information, please refer to 802.15.4-2015 Section 10.1.2.2.
+ */
+enum ieee802154_channel {
+	IEEE802154_SUB_GHZ_CHANNEL_MIN = 0,
+	IEEE802154_SUB_GHZ_CHANNEL_MAX = 10,
+	IEEE802154_2_4_GHZ_CHANNEL_MIN = 11,
+	IEEE802154_2_4_GHZ_CHANNEL_MAX = 26,
+};
+
 enum ieee802154_hw_caps {
 	IEEE802154_HW_FCS	  = BIT(0), /* Frame Check-Sum supported */
 	IEEE802154_HW_PROMISC	  = BIT(1), /* Promiscuous mode supported */
@@ -48,7 +66,15 @@ enum ieee802154_filter_type {
 };
 
 enum ieee802154_event {
-	IEEE802154_EVENT_TX_STARTED /* Data transmission started */
+	IEEE802154_EVENT_TX_STARTED, /* Data transmission started */
+	IEEE802154_EVENT_RX_FAILED   /* Data reception failed */
+};
+
+enum ieee802154_rx_fail_reason {
+	IEEE802154_RX_FAIL_NOT_RECEIVED,  /* Nothing received */
+	IEEE802154_RX_FAIL_INVALID_FCS,   /* Frame had invalid checksum */
+	IEEE802154_RX_FAIL_ADDR_FILTERED, /* Address did not match */
+	IEEE802154_RX_FAIL_OTHER	  /* General reason */
 };
 
 typedef void (*energy_scan_done_cb_t)(const struct device *dev,
@@ -201,10 +227,8 @@ struct ieee802154_radio_api {
 			 enum ieee802154_config_type type,
 			 const struct ieee802154_config *config);
 
-#ifdef CONFIG_NET_L2_IEEE802154_SUB_GHZ
 	/** Get the available amount of Sub-GHz channels */
 	uint16_t (*get_subg_channel_count)(const struct device *dev);
-#endif /* CONFIG_NET_L2_IEEE802154_SUB_GHZ */
 
 	/** Run an energy detection scan.
 	 *  Note: channel must be set prior to request this function.

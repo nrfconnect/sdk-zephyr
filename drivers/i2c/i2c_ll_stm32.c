@@ -12,6 +12,8 @@
 #include <soc.h>
 #include <errno.h>
 #include <drivers/i2c.h>
+#include <drivers/pinmux.h>
+#include <pinmux/stm32/pinmux_stm32.h>
 #include "i2c_ll_stm32.h"
 
 #define LOG_LEVEL CONFIG_I2C_LOG_LEVEL
@@ -186,6 +188,15 @@ static int i2c_stm32_init(const struct device *dev)
 	cfg->irq_config_func(dev);
 #endif
 
+	/* Configure dt provided device signals when available */
+	ret = stm32_dt_pinctrl_configure(cfg->pinctrl_list,
+					 cfg->pinctrl_list_size,
+					 (uint32_t)cfg->i2c);
+	if (ret < 0) {
+		LOG_ERR("I2C pinctrl setup failed (%d)", ret);
+		return ret;
+	}
+
 	/*
 	 * initialize mutex used when multiple transfers
 	 * are taking place to guarantee that each one is
@@ -228,6 +239,18 @@ static int i2c_stm32_init(const struct device *dev)
 #endif
 	}
 #endif /* CONFIG_SOC_SERIES_STM32F3X) || CONFIG_SOC_SERIES_STM32F0X */
+
+#if defined(CONFIG_SOC_STM32F103X8) || defined(CONFIG_SOC_STM32F103XB)
+	/*
+	 * Force i2c reset for STM32 (F101X8/B, F102X8/B), F103X8/B.
+	 * So that they can enter master mode properly.
+	 * Issue described in ES096 2.14.7
+	 */
+	I2C_TypeDef * i2c = cfg->i2c;
+
+	LL_I2C_EnableReset(i2c);
+	LL_I2C_DisableReset(i2c);
+#endif
 
 	bitrate_cfg = i2c_map_dt_bitrate(cfg->bitrate);
 
@@ -306,6 +329,9 @@ STM32_I2C_IRQ_HANDLER_DECL(name);					\
 									\
 DEFINE_TIMINGS(name)							\
 									\
+static const struct soc_gpio_pinctrl i2c_pins_##name[] =		\
+					ST_STM32_DT_PINCTRL(name, 0);	\
+									\
 static const struct i2c_stm32_config i2c_stm32_cfg_##name = {		\
 	.i2c = (I2C_TypeDef *)DT_REG_ADDR(DT_NODELABEL(name)),		\
 	.pclken = {							\
@@ -314,6 +340,8 @@ static const struct i2c_stm32_config i2c_stm32_cfg_##name = {		\
 	},								\
 	STM32_I2C_IRQ_HANDLER_FUNCTION(name)				\
 	.bitrate = DT_PROP(DT_NODELABEL(name), clock_frequency),	\
+	.pinctrl_list = i2c_pins_##name,				\
+	.pinctrl_list_size = ARRAY_SIZE(i2c_pins_##name),		\
 	USE_TIMINGS(name)						\
 };									\
 									\

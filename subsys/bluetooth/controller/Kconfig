@@ -45,6 +45,24 @@ config BT_CTLR_ADV_PERIODIC_SUPPORT
 	depends on BT_CTLR_ADV_EXT_SUPPORT
 	bool
 
+config BT_CTLR_SYNC_PERIODIC_SUPPORT
+	depends on BT_CTLR_ADV_EXT_SUPPORT
+	bool
+
+config BT_CTLR_ADV_ISO_SUPPORT
+	depends on BT_CTLR_ADV_PERIODIC_SUPPORT
+	bool
+
+config BT_CTLR_SYNC_ISO_SUPPORT
+	depends on BT_CTLR_SYNC_PERIODIC_SUPPORT
+	bool
+
+config BT_CTLR_CENTRAL_ISO_SUPPORT
+	bool
+
+config BT_CTLR_PERIPHERAL_ISO_SUPPORT
+	bool
+
 config BT_CTLR_CHAN_SEL_2_SUPPORT
 	bool
 
@@ -58,6 +76,9 @@ config BT_CTLR_SMI_SUPPORT
 	bool
 
 config BT_CTLR_CONN_RSSI_SUPPORT
+	bool
+
+config BT_CTLR_ECDH_SUPPORT
 	bool
 
 config BT_CTLR
@@ -181,19 +202,19 @@ choice BT_CTLR_TX_PWR
 
 config BT_CTLR_TX_PWR_PLUS_8
 	bool "+8 dBm"
-	depends on SOC_NRF52840
+	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH
 
 config BT_CTLR_TX_PWR_PLUS_7
 	bool "+7 dBm"
-	depends on SOC_NRF52840
+	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH
 
 config BT_CTLR_TX_PWR_PLUS_6
 	bool "+6 dBm"
-	depends on SOC_NRF52840
+	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH
 
 config BT_CTLR_TX_PWR_PLUS_5
 	bool "+5 dBm"
-	depends on SOC_NRF52840
+	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH
 
 config BT_CTLR_TX_PWR_PLUS_4
 	bool "+4 dBm"
@@ -205,7 +226,7 @@ config BT_CTLR_TX_PWR_PLUS_3
 
 config BT_CTLR_TX_PWR_PLUS_2
 	bool "+2 dBm"
-	depends on SOC_NRF52840
+	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH
 
 config BT_CTLR_TX_PWR_0
 	bool "0 dBm"
@@ -255,6 +276,14 @@ config BT_CTLR_LE_ENC
 	  Enable support for Bluetooth v4.0 LE Encryption feature in the
 	  Controller.
 
+config BT_CTLR_ECDH
+	bool "Elliptic Curve Diffie-Hellman (ECDH)"
+	depends on BT_CTLR_ECDH_SUPPORT
+	default y
+	help
+	  Enable support for Bluetoooth v4.2 Elliptic Curve Diffie-Hellman
+	  feature in the controller.
+
 config BT_CTLR_CONN_PARAM_REQ
 	bool "Connection Parameter Request"
 	depends on BT_CTLR_CONN_PARAM_REQ_SUPPORT
@@ -286,35 +315,6 @@ config BT_CTLR_LE_PING
 	default y
 	help
 	  Enable support for Bluetooth v4.1 LE Ping feature in the Controller.
-
-config BT_CTLR_PRIVACY
-	bool "LE Controller-based Privacy"
-	depends on BT_CTLR_PRIVACY_SUPPORT
-	default y
-	select BT_CTLR_FILTER if BT_LL_SW_SPLIT
-	select BT_RPA
-	help
-	  Enable support for Bluetooth v4.2 LE Controller-based Privacy feature
-	  in the Controller.
-
-config BT_CTLR_RL_SIZE
-	int "LE Controller-based Privacy Resolving List size"
-	depends on BT_CTLR_PRIVACY
-	default 8
-	range 1 8 if SOC_COMPATIBLE_NRF
-	range 1 8 if SOC_OPENISA_RV32M1_RISCV32
-	help
-	  Set the size of the Resolving List for LE Controller-based Privacy.
-	  On nRF5x-based controllers, the hardware imposes a limit of 8 devices.
-	  On OpenISA-based controllers, the hardware imposes a limit of 8 devices.
-
-config BT_CTLR_EXT_SCAN_FP
-	bool "LE Extended Scanner Filter Policies"
-	depends on BT_OBSERVER && BT_CTLR_EXT_SCAN_FP_SUPPORT
-	default y
-	help
-	  Enable support for Bluetooth v4.2 LE Extended Scanner Filter Policies
-	  in the Controller.
 
 config BT_CTLR_DATA_LENGTH
 	# Hidden option to enable support for Bluetooth v4.2 LE Data Length
@@ -356,6 +356,52 @@ config BT_CTLR_CONN_RSSI
 
 endif # BT_CONN
 
+config BT_CTLR_FILTER
+	bool "Device Whitelist Support"
+	default y
+	help
+	  Enable support for controller device whitelist feature
+
+config BT_CTLR_PRIVACY
+	bool "LE Controller-based Privacy"
+	depends on BT_CTLR_PRIVACY_SUPPORT
+	default y
+	select BT_CTLR_FILTER if BT_LL_SW_SPLIT
+	select BT_RPA
+	help
+	  Enable support for Bluetooth v4.2 LE Controller-based Privacy feature
+	  in the Controller.
+
+config BT_CTLR_WL_SIZE
+	int "LE Controller-based Privacy White List size"
+	depends on BT_CTLR_FILTER
+	default 8
+	range 1 8  if  (SOC_COMPATIBLE_NRF || SOC_OPENISA_RV32M1_RISCV32)
+	range 1 16 if !(SOC_COMPATIBLE_NRF || SOC_OPENISA_RV32M1_RISCV32)
+	help
+	  Set the size of the White List for LE Controller-based Privacy.
+	  On nRF5x-based controllers, the hardware imposes a limit of 8 devices.
+	  On OpenISA-based controllers, the hardware imposes a limit of 8 devices.
+
+config BT_CTLR_RL_SIZE
+	int "LE Controller-based Privacy Resolving List size"
+	depends on BT_CTLR_PRIVACY
+	default 8
+	range 1 8 if SOC_COMPATIBLE_NRF
+	range 1 8 if SOC_OPENISA_RV32M1_RISCV32
+	help
+	  Set the size of the Resolving List for LE Controller-based Privacy.
+	  On nRF5x-based controllers, the hardware imposes a limit of 8 devices.
+	  On OpenISA-based controllers, the hardware imposes a limit of 8 devices.
+
+config BT_CTLR_EXT_SCAN_FP
+	bool "LE Extended Scanner Filter Policies"
+	depends on BT_OBSERVER && BT_CTLR_EXT_SCAN_FP_SUPPORT
+	default y
+	help
+	  Enable support for Bluetooth v4.2 LE Extended Scanner Filter Policies
+	  in the Controller.
+
 config BT_CTLR_PHY_2M
 	bool "2Mbps PHY Support"
 	depends on (BT_CTLR_PHY || BT_CTLR_ADV_EXT) && BT_CTLR_PHY_2M_SUPPORT
@@ -372,7 +418,7 @@ config BT_CTLR_PHY_CODED
 
 config BT_CTLR_CHAN_SEL_2
 	bool "Channel Selection Algorithm #2"
-	depends on (BT_CONN || BT_CTLR_ADV_PERIODIC) && BT_CTLR_CHAN_SEL_2_SUPPORT
+	depends on (BT_CONN || BT_CTLR_ADV_PERIODIC || BT_CTLR_SYNC_PERIODIC) && BT_CTLR_CHAN_SEL_2_SUPPORT
 	default y
 	help
 	  Enable support for Bluetooth 5.0 LE Channel Selection Algorithm #2 in
@@ -402,12 +448,50 @@ config BT_CTLR_ADV_SET
 	  Maximum supported advertising sets.
 
 config BT_CTLR_ADV_PERIODIC
-	bool "LE Periodic Advertising"
+	bool "LE Periodic Advertising in Advertising State" if !BT_LL_SW_SPLIT
 	depends on BT_BROADCASTER && BT_CTLR_ADV_PERIODIC_SUPPORT
 	select BT_CTLR_CHAN_SEL_2
+	default y if BT_PER_ADV
 	help
 	  Enable support for Bluetooth 5.0 LE Periodic Advertising in the
 	  Controller.
+
+config BT_CTLR_ADV_PERIODIC
+	bool "LE Periodic Advertising in Advertising State [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+
+config BT_CTLR_SYNC_PERIODIC
+	bool "LE Periodic Advertising in Synchronization State" if !BT_LL_SW_SPLIT
+	depends on BT_OBSERVER && BT_CTLR_SYNC_PERIODIC_SUPPORT
+	select BT_CTLR_CHAN_SEL_2
+	default y if BT_PER_ADV_SYNC
+	help
+	  Enable support for Bluetooth 5.0 LE Periodic Advertising in
+	  Synchronization state in the Controller.
+
+config BT_CTLR_SYNC_PERIODIC
+	bool "LE Periodic Advertising in Synchronization State [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+
+config BT_CTLR_ADV_ISO
+	bool "LE Broadcast Isochronous Channel advertising" if !BT_LL_SW_SPLIT
+	depends on BT_BROADCASTER && BT_CTLR_ADV_ISO_SUPPORT
+	select BT_CTLR_ADV_PERIODIC
+	help
+	  Enable support for Bluetooth 5.2 LE Isochronous Advertising in the
+	  Controller.
+
+config BT_CTLR_ADV_ISO
+	bool "LE Broadcast Isochronous Channel advertising [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+
+config BT_CTLR_SYNC_ISO
+	bool "LE Broadcast Isochronous Channel advertising sync" if !BT_LL_SW_SPLIT
+	depends on BT_BROADCASTER && BT_CTLR_ADV_ISO_SUPPORT
+	select BT_CTLR_SYNC_PERIODIC
+	help
+	  Enable support for Bluetooth 5.2 LE Isochronous Advertising sync in
+	  the Controller.
+
+config BT_CTLR_SYNC_ISO
+	bool "LE Broadcast Isochronous Channel advertising sync [EXPERIMENTAL]" if BT_LL_SW_SPLIT
 
 config BT_CTLR_ADV_DATA_LEN_MAX
 	int "Maximum Advertising Data Length"
@@ -416,6 +500,26 @@ config BT_CTLR_ADV_DATA_LEN_MAX
 	  Maximum Extended Advertising Data Length.
 
 endif # BT_CTLR_ADV_EXT
+
+config BT_CTLR_CENTRAL_ISO
+	bool "LE Connected Isochronous Stream Central" if !BT_LL_SW_SPLIT
+	depends on BT_CTLR_CENTRAL_ISO_SUPPORT && BT_CENTRAL
+	help
+	  Enable support for Bluetooth 5.2 LE Connected Isochronous Stream
+	  Central role in the Controller.
+
+config BT_CTLR_CENTRAL_ISO
+	bool "LE Connected Isochronous Stream Central [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+
+config BT_CTLR_PERIPHERAL_ISO
+	bool "LE Connected Isochronous Stream Peripheral" if !BT_LL_SW_SPLIT
+	depends on BT_CTLR_PERIPHERAL_ISO_SUPPORT && BT_PERIPHERAL
+	help
+	  Enable support for Bluetooth 5.2 LE Connected Isochronous Stream
+	  Peripheral role in the Controller.
+
+config BT_CTLR_PERIPHERAL_ISO
+	bool "LE Connected Isochronous Stream Peripheral [EXPERIMENTAL]" if BT_LL_SW_SPLIT
 
 config BT_CTLR_DTM
 	bool

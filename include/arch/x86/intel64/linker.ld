@@ -29,7 +29,7 @@ SECTIONS
 	 * ... there is no 16-bit code yet, but there will be when we add SMP.
 	 */
 
-	.locore 0x8000 : ALIGN(16)
+	.locore : ALIGN(16)
 	{
 	_locore_start = .;
 	*(.locore)
@@ -72,7 +72,7 @@ SECTIONS
 
 	MMU_PAGE_ALIGN
 	_lodata_end = .;
-	}
+	} > LOCORE
 
 	_locore_size = _lorodata_start - _locore_start;
 	_lorodata_size = _lodata_start - _lorodata_start;
@@ -100,6 +100,7 @@ SECTIONS
 	_image_rodata_start = .;
 
 	#include <linker/common-rom.ld>
+	#include <linker/thread-local-storage.ld>
 
 	SECTION_PROLOGUE(_RODATA_SECTION_NAME,,ALIGN(16))
 	{

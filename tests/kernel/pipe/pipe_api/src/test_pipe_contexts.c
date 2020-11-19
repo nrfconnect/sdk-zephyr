@@ -69,6 +69,8 @@ static void tpipe_block_put(struct k_pipe *ppipe, struct k_sem *sema,
 		k_pipe_block_put(ppipe, &block, BYTES_TO_WRITE, sema);
 		if (sema) {
 			k_sem_take(sema, K_FOREVER);
+			zassert_not_equal(memcmp(block.data, &data[i], BYTES_TO_WRITE), 0,
+					"block should be freed after k_pipe_block_put.");
 		}
 	}
 }
@@ -174,8 +176,48 @@ static void thread_for_block_put(void *p1, void *p2, void *p3)
 
 /**
  * @brief Test pipe data passing between threads
+ *
+ * @ingroup kernel_pipe_tests
+ *
+ * @details
+ * Test Objective:
+ * - Verify data passing with "pipe put/get" APIs between
+ * threads
+ *
+ * Testing techniques:
+ * - function and block box testing,Interface testing,
+ * Dynamic analysis and testing.
+ *
+ * Prerequisite Conditions:
+ * - CONFIG_TEST_USERSPACE.
+ *
+ * Input Specifications:
+ * - N/A
+ *
+ * Test Procedure:
+ * -# Initialize a pipe, which is defined at run time.
+ * -# Create a thread (A).
+ * -# In A thread, check if it can get data, which is sent
+ * by main thread via the pipe.
+ * -# In A thread, send data to main thread via the pipe.
+ * -# In main thread, send data to A thread  via the pipe.
+ * -# In main thread, check if it can get data, which is sent
+ * by A thread.
+ * -# Do the same testing with a pipe, which is defined at compile
+ * time
+ *
+ * Expected Test Result:
+ * - Data can be sent/received between threads.
+ *
+ * Pass/Fail Criteria:
+ * - Successful if check points in test procedure are all passed, otherwise failure.
+ *
+ * Assumptions and Constraints:
+ * - N/A
+ *
  * @see k_pipe_init(), k_pipe_put(), #K_PIPE_DEFINE(x)
  */
+
 void test_pipe_thread2thread(void)
 {
 	/**TESTPOINT: test k_pipe_init pipe*/
@@ -232,6 +274,40 @@ void test_pipe_block_put(void)
 
 /**
  * @brief Test pipe block put with semaphore
+ *
+ * @ingroup kernel_pipe_tests
+ *
+ * @details
+ * Test Objective:
+ * - Check if kernel support sending a kernel
+ * memory block into a pipe.
+ *
+ * Testing techniques:
+ * - function and block box testing,Interface testing,
+ * Dynamic analysis and testing.
+ *
+ * Prerequisite Conditions:
+ * - CONFIG_TEST_USERSPACE.
+ *
+ * Input Specifications:
+ * - N/A
+ *
+ * Test Procedure:
+ * -# Create a sub thread to put blcok data to pipe.
+ * and check the return of k_mem_pool_alloc.
+ * -# Check if the block be freed after pip put.
+ * -# Get the pipe data and check if the data equals the
+ * put data.
+ *
+ * Expected Test Result:
+ * - Pipe can send a memory block into a pipe.
+ *
+ * Pass/Fail Criteria:
+ * - Successful if check points in test procedure are all passed, otherwise failure.
+ *
+ * Assumptions and Constraints:
+ * - N/A
+ *
  * @see k_pipe_block_put()
  */
 void test_pipe_block_put_sema(void)

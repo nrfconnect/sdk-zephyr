@@ -51,7 +51,7 @@ static void free_list_add_bidx(struct z_heap *h, chunkid_t c, int bidx)
 {
 	struct z_heap_bucket *b = &h->buckets[bidx];
 
-	if (b->next == 0) {
+	if (b->next == 0U) {
 		CHECK((h->avail_buckets & (1 << bidx)) == 0);
 
 		/* Empty list, first item */
@@ -208,7 +208,7 @@ static chunkid_t alloc_chunk(struct z_heap *h, size_t sz)
 	 */
 	size_t bmask = h->avail_buckets & ~((1 << (bi + 1)) - 1);
 
-	if ((bmask & h->avail_buckets) != 0) {
+	if ((bmask & h->avail_buckets) != 0U) {
 		int minbucket = __builtin_ctz(bmask & h->avail_buckets);
 		chunkid_t c = h->buckets[minbucket].next;
 
@@ -222,14 +222,14 @@ static chunkid_t alloc_chunk(struct z_heap *h, size_t sz)
 
 void *sys_heap_alloc(struct sys_heap *heap, size_t bytes)
 {
-	if (bytes == 0) {
+	if (bytes == 0U) {
 		return NULL;
 	}
 
 	struct z_heap *h = heap->heap;
 	size_t chunk_sz = bytes_to_chunksz(h, bytes);
 	chunkid_t c = alloc_chunk(h, chunk_sz);
-	if (c == 0) {
+	if (c == 0U) {
 		return NULL;
 	}
 
@@ -261,7 +261,6 @@ void *sys_heap_aligned_alloc(struct sys_heap *heap, size_t align, size_t bytes)
 	 * We over-allocate to account for alignment and then free
 	 * the extra allocations afterwards.
 	 */
-	size_t alloc_sz = bytes_to_chunksz(h, bytes);
 	size_t padded_sz = bytes_to_chunksz(h, bytes + align - 1);
 	chunkid_t c0 = alloc_chunk(h, padded_sz);
 
@@ -270,12 +269,13 @@ void *sys_heap_aligned_alloc(struct sys_heap *heap, size_t align, size_t bytes)
 	}
 
 	/* Align allocated memory */
-	void *mem = chunk_mem(h, c0);
-	mem = (void *) ROUND_UP(mem, align);
+	uint8_t *mem = (uint8_t *) ROUND_UP(chunk_mem(h, c0), align);
+	chunk_unit_t *end = (chunk_unit_t *) ROUND_UP(mem + bytes, CHUNK_UNIT);
 
-	/* Get corresponding chunk */
+	/* Get corresponding chunks */
 	chunkid_t c = mem_to_chunkid(h, mem);
-	CHECK(c >= c0 && c  < c0 + padded_sz);
+	chunkid_t c_end = end - chunk_buf(h);
+	CHECK(c >= c0 && c  < c_end && c_end <= c0 + padded_sz);
 
 	/* Split and free unused prefix */
 	if (c > c0) {
@@ -284,9 +284,9 @@ void *sys_heap_aligned_alloc(struct sys_heap *heap, size_t align, size_t bytes)
 	}
 
 	/* Split and free unused suffix */
-	if (chunk_size(h, c) > alloc_sz) {
-		split_chunks(h, c, c + alloc_sz);
-		free_list_add(h, c + alloc_sz);
+	if (right_chunk(h, c) > c_end) {
+		split_chunks(h, c, c_end);
+		free_list_add(h, c_end);
 	}
 
 	set_chunk_used(h, c, true);

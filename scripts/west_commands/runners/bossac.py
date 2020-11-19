@@ -11,18 +11,19 @@ import platform
 from runners.core import ZephyrBinaryRunner, RunnerCaps, BuildConfiguration
 
 DEFAULT_BOSSAC_PORT = '/dev/ttyACM0'
+DEFAULT_BOSSAC_SPEED = '115200'
 
 
 class BossacBinaryRunner(ZephyrBinaryRunner):
     '''Runner front-end for bossac.'''
 
     def __init__(self, cfg, bossac='bossac', port=DEFAULT_BOSSAC_PORT,
-                 offset=None, flash_address=None):
+                 speed=DEFAULT_BOSSAC_SPEED, offset=None):
         super().__init__(cfg)
         self.bossac = bossac
         self.port = port
+        self.speed = speed
         self.offset = offset
-        self.flash_address = flash_address
 
     @classmethod
     def name(cls):
@@ -40,28 +41,43 @@ class BossacBinaryRunner(ZephyrBinaryRunner):
                             help='start erase/write/read/verify operation '
                                  'at flash OFFSET; OFFSET must be aligned '
                                  ' to a flash page boundary')
-        parser.add_argument('--bossac-port', default='/dev/ttyACM0',
-                            help='serial port to use, default is /dev/ttyACM0')
+        parser.add_argument('--bossac-port', default=DEFAULT_BOSSAC_PORT,
+                            help='serial port to use, default is ' +
+                            DEFAULT_BOSSAC_PORT)
+        parser.add_argument('--speed', default=DEFAULT_BOSSAC_SPEED,
+                            help='serial port speed to use, default is ' +
+                            DEFAULT_BOSSAC_SPEED)
+
+    @classmethod
+    def get_flash_offset(cls, cfg):
+        # Pull the bootloader size from the config
+        build_conf = BuildConfiguration(cfg.build_dir)
+        if build_conf['CONFIG_HAS_FLASH_LOAD_OFFSET']:
+            return build_conf['CONFIG_FLASH_LOAD_OFFSET']
+
+        return None
 
     @classmethod
     def do_create(cls, cfg, args):
-        # BOSSA means there's a bootloader so always fetch the flash address
-        args.dt_flash = True
-        build_conf = BuildConfiguration(cfg.build_dir)
-        flash_address = cls.get_flash_address(args, build_conf, None)
+        offset = args.offset
 
+        if offset is None:
+            offset = cls.get_flash_offset(cfg)
         return BossacBinaryRunner(cfg, bossac=args.bossac,
-                                  port=args.bossac_port, offset=args.offset,
-                                  flash_address=flash_address)
+                                  port=args.bossac_port, speed=args.speed,
+                                  offset=offset)
 
     def read_help(self):
         """Run bossac --help and return the output as a list of lines"""
         self.require(self.bossac)
         try:
-            self.check_output([self.bossac, '--help'])
-            return []
+            # BOSSA > 1.9.1 returns OK
+            out = self.check_output([self.bossac, '--help']).decode()
         except subprocess.CalledProcessError as ex:
-            return ex.output.decode().split('\n')
+            # BOSSA <= 1.9.1 returns an error
+            out = ex.output.decode()
+
+        return out.split('\n')
 
     def supports(self, flag):
         """Check if bossac supports a flag by searching the help"""
@@ -75,8 +91,6 @@ class BossacBinaryRunner(ZephyrBinaryRunner):
         if supports_offset:
             if self.offset is not None:
                 return self.offset
-            if self.flash_address is not None:
-                return self.flash_address
 
             self.logger.warning(
                 'This version of BOSSA supports the --offset flag but' +
@@ -103,9 +117,9 @@ class BossacBinaryRunner(ZephyrBinaryRunner):
 
         if platform.system() == 'Linux':
             self.require('stty')
-            cmd_stty = ['stty', '-F', self.port, 'raw', 'ispeed', '1200',
-                        'ospeed', '1200', 'cs8', '-cstopb', 'ignpar', 'eol', '255',
-                        'eof', '255']
+            cmd_stty = ['stty', '-F', self.port, 'raw', 'ispeed', self.speed,
+                        'ospeed', self.speed, 'cs8', '-cstopb', 'ignpar',
+                        'eol', '255', 'eof', '255']
             self.check_call(cmd_stty)
 
         cmd_flash = [self.bossac, '-p', self.port, '-R', '-e', '-w', '-v',
@@ -113,7 +127,7 @@ class BossacBinaryRunner(ZephyrBinaryRunner):
 
         offset = self.get_offset(self.supports('--offset'))
 
-        if offset is not None:
+        if offset:
             cmd_flash += ['-o', '%s' % offset]
 
         self.check_call(cmd_flash)

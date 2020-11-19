@@ -325,7 +325,7 @@ z_x86_switch:
 
 __resume:
 #if (!defined(CONFIG_X86_KPTI) && defined(CONFIG_USERSPACE)) \
-		|| defined(CONFIG_TRACING)
+		|| defined(CONFIG_INSTRUMENT_THREAD_SWITCHING)
 	pushq %rdi	/* Caller-saved, stash it */
 #if !defined(CONFIG_X86_KPTI) && defined(CONFIG_USERSPACE)
 	/* If KPTI is enabled we're always on the kernel's page tables in
@@ -334,11 +334,12 @@ __resume:
 	 */
 	call z_x86_swap_update_page_tables
 #endif
-#ifdef CONFIG_TRACING
-	call sys_trace_thread_switched_in
+#ifdef CONFIG_INSTRUMENT_THREAD_SWITCHING
+	call z_thread_mark_switched_in
 #endif
 	popq %rdi
-#endif /* (!CONFIG_X86_KPTI && CONFIG_USERSPACE) || CONFIG_TRACING */
+#endif /* (!CONFIG_X86_KPTI && CONFIG_USERSPACE) || \
+	   CONFIG_INSTRUMENT_THREAD_SWITCHING */
 
 #ifdef CONFIG_USERSPACE
 	/* Set up exception return stack frame */
@@ -363,6 +364,23 @@ __resume:
 	 * on during routine testing.
 	 */
 	movq $0xB9, _thread_offset_to_rip(%rdi)
+#endif
+
+#ifdef CONFIG_THREAD_LOCAL_STORAGE
+	/*
+	 * Write the TLS base pointer to FS_BASE MSR,
+	 * where GCC emits code to access TLS data via
+	 * offset to FS.
+	 * Since wrmsr write EDX:EAX to MSR indicated by
+	 * ECX, the high 32-bit needs to be loaded into
+	 * RDX and right shifted by 32 bits so EDX has
+	 * the higher 32-bit value.
+	 */
+	movl $X86_FS_BASE, %ecx
+	movq _thread_offset_to_tls(%rdi), %rax
+	movq _thread_offset_to_tls(%rdi), %rdx
+	shrq $32, %rdx
+	wrmsr
 #endif
 
 	movq _thread_offset_to_rbx(%rdi), %rbx
@@ -690,9 +708,9 @@ irq_enter_unnested: /* Not nested: dump state to thread struct for __resume */
 #endif
 
 irq_dispatch:
-	movq x86_irq_funcs(,%rcx,8), %rbx
+	movq x86_irq_funcs(,%rcx,8), %rax
 	movq x86_irq_args(,%rcx,8), %rdi
-	call *%rbx
+	call *%rax
 
 	xorq %rax, %rax
 #ifdef CONFIG_X2APIC
@@ -1022,27 +1040,27 @@ gdt80:  /* LGDT descriptor for long mode */
 .global _exception_stack
 .align 16
 _exception_stack:
-	.fill CONFIG_EXCEPTION_STACK_SIZE, 1, 0xAA
+	.fill CONFIG_X86_EXCEPTION_STACK_SIZE, 1, 0xAA
 
 #if CONFIG_MP_NUM_CPUS > 1
 .global _exception_stack1
 .align 16
 _exception_stack1:
-	.fill CONFIG_EXCEPTION_STACK_SIZE, 1, 0xAA
+	.fill CONFIG_X86_EXCEPTION_STACK_SIZE, 1, 0xAA
 #endif
 
 #if CONFIG_MP_NUM_CPUS > 2
 .global _exception_stack2
 .align 16
 _exception_stack2:
-	.fill CONFIG_EXCEPTION_STACK_SIZE, 1, 0xAA
+	.fill CONFIG_X86_EXCEPTION_STACK_SIZE, 1, 0xAA
 #endif
 
 #if CONFIG_MP_NUM_CPUS > 3
 .global _exception_stack3
 .align 16
 _exception_stack3:
-	.fill CONFIG_EXCEPTION_STACK_SIZE, 1, 0xAA
+	.fill CONFIG_X86_EXCEPTION_STACK_SIZE, 1, 0xAA
 #endif
 
 #ifdef CONFIG_X86_KPTI

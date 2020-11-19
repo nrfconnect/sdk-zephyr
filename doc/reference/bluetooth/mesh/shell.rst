@@ -128,10 +128,11 @@ General configuration
 	Initialize the mesh. This command must be run before any other mesh command.
 
 
-``mesh reset``
---------------
+``mesh reset <addr>``
+---------------------
 
-	Reset the mesh node to its initial unprovisioned state.
+	reset the local mesh node to its initial unprovisioned state or reset a remote node and remove it from the network.
+	* ``addr``: address of the node to reset.
 
 
 ``mesh lpn <value: off, on>``
@@ -370,6 +371,15 @@ The Configuration Client uses the general messages parameters set by ``mesh dst`
 
 	* ``count``: Sets the new relay retransmit count if ``val`` is ``on``. Ignored if ``val`` is ``off``. Defaults to ``2`` if omitted.
 	* ``interval``: Sets the new relay retransmit interval in milliseconds if ``val`` is ``on``. Ignored if ``val`` is ``off``. Defaults to ``20`` if omitted.
+
+
+``mesh net-transmit-param [<count: 0-7> <interval: 10-320>]``
+-------------------------------------------------------------
+
+	Get or set the network transmit parameters.
+
+	* ``count``: Sets the number of additional network transmits for every sent message.
+	* ``interval``: Sets the new network retransmit interval in milliseconds.
 
 
 ``mesh net-key-add <NetKeyIndex> [val]``

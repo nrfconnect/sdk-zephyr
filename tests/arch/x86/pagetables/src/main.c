@@ -16,8 +16,8 @@
 #include <x86_mmu.h>
 #include <linker/linker-defs.h>
 
-#define VM_BASE		((uint8_t *)CONFIG_SRAM_BASE_ADDRESS)
-#define VM_LIMIT	(VM_BASE + KB((size_t)CONFIG_SRAM_SIZE))
+#define VM_BASE		((uint8_t *)CONFIG_KERNEL_VM_BASE)
+#define VM_LIMIT	(VM_BASE + CONFIG_KERNEL_RAM_SIZE)
 
 #ifdef CONFIG_X86_64
 #define PT_LEVEL	3
@@ -100,6 +100,22 @@ void test_ram_perms(void)
 				expected = MMU_P | MMU_XD;
 			}
 #endif /* CONFIG_X86_64 */
+#if !defined(CONFIG_X86_KPTI) && !defined(CONFIG_X86_COMMON_PAGE_TABLE)
+		} else if (IN_REGION(_app_smem, pos)) {
+			/* If KPTI is not enabled, then the default memory
+			 * domain affects our page tables even though we are
+			 * in supervisor mode. We'd expect everything in
+			 * the _app_smem region to have US set since all the
+			 * partitions within it would be active in
+			 * k_mem_domain_default (ztest_partition and any libc
+			 * partitions)
+			 *
+			 * If we have a common page table, no thread has
+			 * entered user mode yet and no domain regions
+			 * will be programmed.
+			 */
+			expected = MMU_P | MMU_US | MMU_RW | MMU_XD;
+#endif /* CONFIG_X86_KPTI */
 		} else {
 			/* We forced CONFIG_HW_STACK_PROTECTION off otherwise
 			 * guard pages will have RW cleared. We can relax this
@@ -109,8 +125,8 @@ void test_ram_perms(void)
 		}
 
 		zassert_equal(flags, expected,
-				"bad flags " PRI_ENTRY " at %p",
-				flags, pos);
+			      "bad flags " PRI_ENTRY " at %p, expected "
+			      PRI_ENTRY, flags, pos, expected);
 	}
 
 }
