@@ -137,7 +137,9 @@ choice BT_LL_CHOICE
 	  and set as the default Bluetooth Controller.
 
 config BT_LL_SW_SPLIT
-	bool "Software-based BLE Link Layer"
+	bool "Software-based BLE Link Layer [EXPERIMENTAL]"
+	select EXPERIMENTAL
+	select ENTROPY_GENERATOR
 	help
 	  Use Zephyr software BLE Link Layer ULL LLL split implementation.
 
