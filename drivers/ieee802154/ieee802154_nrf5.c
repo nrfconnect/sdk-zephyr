@@ -195,6 +195,7 @@ static enum ieee802154_hw_caps nrf5_get_capabilities(const struct device *dev)
 #if !defined(CONFIG_NRF_802154_SL_OPENSOURCE) && \
     !defined(CONFIG_NRF_802154_SER_HOST)
 	       IEEE802154_HW_CSMA |
+	       IEEE802154_HW_TXTIME |
 #endif
 	       IEEE802154_HW_2_4_GHZ |
 	       IEEE802154_HW_TX_RX_ACK |
@@ -412,6 +413,8 @@ static int nrf5_tx(const struct device *dev,
 	case IEEE802154_TX_MODE_CCA:
 		ret = nrf_802154_transmit_raw(nrf5_radio->tx_psdu, true);
 		break;
+#if !defined(CONFIG_NRF_802154_SL_OPENSOURCE) && \
+    !defined(CONFIG_NRF_802154_SER_HOST)
 	case IEEE802154_TX_MODE_CSMA_CA:
 		nrf_802154_transmit_csma_ca_raw(nrf5_radio->tx_psdu);
 		break;
@@ -435,6 +438,7 @@ static int nrf5_tx(const struct device *dev,
 		}
 		break;
 	}
+#endif
 	default:
 		NET_ERR("TX mode %d not supported", mode);
 		return -ENOTSUP;
