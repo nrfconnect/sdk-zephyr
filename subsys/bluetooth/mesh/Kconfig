@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 menuconfig BT_MESH
-	bool "Bluetooth Mesh support"
+	bool "Bluetooth Mesh support [EXPERIMENTAL]"
 	select TINYCRYPT
 	select TINYCRYPT_AES
 	select TINYCRYPT_AES_CMAC
