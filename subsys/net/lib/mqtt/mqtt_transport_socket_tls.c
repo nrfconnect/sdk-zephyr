@@ -79,10 +79,10 @@ int mqtt_client_tls_connect(struct mqtt_client *client)
 	}
 
 	if (tls_config->session_cache == TLS_SESSION_CACHE_ENABLED) {
-		ret = setsockopt(client->transport.tls.sock, SOL_TLS,
-				 TLS_SESSION_CACHE,
-				 &tls_config->session_cache,
-				 sizeof(tls_config->session_cache));
+		ret = zsock_setsockopt(client->transport.tls.sock, SOL_TLS,
+				       TLS_SESSION_CACHE,
+				       &tls_config->session_cache,
+				       sizeof(tls_config->session_cache));
 		if (ret < 0) {
 			goto error;
 		}
