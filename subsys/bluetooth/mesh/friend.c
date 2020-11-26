@@ -1255,6 +1255,7 @@ static void subnet_evt(struct bt_mesh_subnet *sub, enum bt_mesh_key_evt evt)
 			}
 			break;
 		case BT_MESH_KEY_SWAPPED:
+			BT_DBG("Use new keys for 0x%04x", frnd->lpn);
 			enqueue_update(frnd, 0);
 			break;
 		case BT_MESH_KEY_REVOKED:
