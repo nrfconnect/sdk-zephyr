@@ -1040,7 +1040,12 @@ static int uarte_nrfx_poll_in(const struct device *dev, unsigned char *c)
  */
 static void uarte_nrfx_poll_out(const struct device *dev, unsigned char c)
 {
+
+
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
+#if defined(CONFIG_UART_NRFX_LP_TX_ONLY)
+	nrf_uarte_enable(uarte);
+#endif
 	struct uarte_nrfx_data *data = get_dev_data(dev);
 	atomic_t *lock;
 
@@ -1102,6 +1107,9 @@ static void uarte_nrfx_poll_out(const struct device *dev, unsigned char c)
 
 	/* Release the lock. */
 	*lock = 0;
+#if defined(CONFIG_UART_NRFX_LP_TX_ONLY)
+	nrf_uarte_disable(uarte);
+#endif
 }
 #ifdef UARTE_INTERRUPT_DRIVEN
 /** Interrupt driven FIFO fill function */

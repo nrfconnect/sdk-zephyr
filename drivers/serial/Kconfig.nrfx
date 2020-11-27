@@ -21,6 +21,14 @@ if UART_NRFX
 DT_COMPAT_NORDIC_NRF_UART  := nordic,nrf-uart
 DT_COMPAT_NORDIC_NRF_UARTE := nordic,nrf-uarte
 
+config UART_NRFX_LP_TX_ONLY
+	bool "LP TX only modes"
+	default n
+	help
+	  Enable low power mode that disables the peripheral after
+	  each transmission. To be used in modes where only TX
+	  is used. I.e logging.
+
 # ----------------- port 0 -----------------
 config UART_0_NRF_UART
 	def_bool $(dt_nodelabel_has_compat,uart0,$(DT_COMPAT_NORDIC_NRF_UART))
