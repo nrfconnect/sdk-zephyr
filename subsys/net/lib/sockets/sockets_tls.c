@@ -1734,7 +1734,7 @@ static int ztls_poll_update_pollin(int fd, struct tls_context *ctx,
 
 	ret = zsock_recv(fd, NULL, 0, ZSOCK_MSG_DONTWAIT);
 	if (ret == 0 && ctx->type == SOCK_STREAM) {
-		pfd->revents |= ZSOCK_POLLHUP;
+		//pfd->revents |= ZSOCK_POLLHUP;
 		goto next;
 	/* EAGAIN might happen during or just after DTLS  handshake. */
 	} else if (ret < 0 && errno != EAGAIN) {
