@@ -1,0 +1,63 @@
+name: Compliance NCS
+
+on: pull_request
+
+jobs:
+  compliance_job:
+    runs-on: ubuntu-latest
+    name: Run compliance checks on patch series (PR)
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v2
+        with:
+          path: ncs/zephyr
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: cache-pip
+        uses: actions/cache@v1
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-doc-pip
+
+      - name: Run Compliance Tests
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        working-directory: ncs
+        run: |
+          pip3 install -U pip
+          pip3 install -U setuptools
+          export PATH="$HOME/.local/bin:$PATH"
+          pip3 install -U west
+          west init -m https://github.com/nrfconnect/sdk-nrf
+          west update -k
+          pip3 install -U gitlint
+          pip3 install -r zephyr/scripts/requirements-compliance.txt
+          cd zephyr
+          source zephyr-env.sh
+          ./scripts/ci/check_compliance.py -m Codeowners -m Gitlint -m Identity -m Nits -m pylint -m checkpatch -m Kconfig -c origin/${BASE_REF}.. || true
+
+      - name: Upload Results
+        uses: actions/upload-artifact@master
+        continue-on-error: True
+        with:
+          name: compliance.xml
+          path: ncs/zephyr/compliance.xml
+
+      - name: Check Warnings
+        run: |
+          for file in Codeowners.txt Gitlint.txt Identity.txt Nits.txt pylint.txt checkpatch.txt Kconfig.txt; do
+            path="ncs/zephyr/${file}"
+            if [[ -s $path ]]; then
+              errors=$(cat $path)
+              errors="${errors//'%'/'%25'}"
+              errors="${errors//$'\n'/'%0A'}"
+              errors="${errors//$'\r'/'%0D'}"
+              echo "::error file=${file}::$errors"
+              exit=1
+            fi
+          done
+
+          if [[ $exit == 1 ]]; then
+            exit 1
+          fi
