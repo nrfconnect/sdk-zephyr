@@ -138,7 +138,7 @@ endif # BT_RPMSG_NRF53
 config BT_DRIVER_QUIRK_NO_AUTO_DLE
 	bool "Host auto-initiated Data Length Update quirk"
 	depends on BT_AUTO_DATA_LEN_UPDATE
-	default y if BT_RPMSG_NRF53
+	default y if BT_LL_SW_SPLIT
 	help
 	  Enable the quirk wherein BT Host stack will auto-initiate Data Length
 	  Update procedure for new connections for controllers that do not
