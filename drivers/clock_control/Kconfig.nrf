@@ -13,8 +13,7 @@ config CLOCK_CONTROL_NRF_FORCE_ALT
 menuconfig CLOCK_CONTROL_NRF
 	bool "NRF Clock controller support"
 	depends on SOC_COMPATIBLE_NRF
-	depends on !CLOCK_CONTROL_NRF_FORCE_ALT
-	select NRFX_CLOCK
+	select NRFX_CLOCK if !CLOCK_CONTROL_NRF_FORCE_ALT
 	default y
 	help
 	  Enable support for the Nordic Semiconductor nRFxx series SoC clock
@@ -114,8 +113,8 @@ config CLOCK_CONTROL_NRF_USES_TEMP_SENSOR
 	depends on HAS_HW_NRF_TEMP
 	default y if CLOCK_CONTROL_NRF_CALIBRATION_MAX_SKIP > 0 && \
 		CLOCK_CONTROL_NRF_CALIBRATION_TEMP_DIFF > 0
-	select TEMP_NRF5 if !CLOCK_CONTROL_NRF_FORCE_ALT
-	select SENSOR if !CLOCK_CONTROL_NRF_FORCE_ALT
+	select TEMP_NRF5
+	select SENSOR
 
 endif # CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION
 
