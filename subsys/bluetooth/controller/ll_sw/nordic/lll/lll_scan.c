@@ -160,12 +160,12 @@ static int prepare_cb(struct lll_prepare_param *p)
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 	/* TODO: if coded we use S8? */
 	radio_phy_set(lll->phy, 1);
-	radio_pkt_configure(8, PDU_AC_PAYLOAD_SIZE_MAX, (lll->phy << 1));
+	radio_pkt_configure(8, PDU_AC_LEG_PAYLOAD_SIZE_MAX, (lll->phy << 1));
 
 	lll->is_adv_ind = 0U;
 #else /* !CONFIG_BT_CTLR_ADV_EXT */
 	radio_phy_set(0, 0);
-	radio_pkt_configure(8, PDU_AC_PAYLOAD_SIZE_MAX, 0);
+	radio_pkt_configure(8, PDU_AC_LEG_PAYLOAD_SIZE_MAX, 0);
 #endif /* !CONFIG_BT_CTLR_ADV_EXT */
 
 	node_rx = ull_pdu_rx_alloc_peek(1);
@@ -611,6 +611,24 @@ static void isr_window(void *param)
 	}
 	lll_chan_set(37 + lll->chan);
 
+#if defined(CONFIG_BT_CENTRAL)
+	bool is_sched_advanced = IS_ENABLED(CONFIG_BT_CTLR_SCHED_ADVANCED) &&
+				 lll->conn && lll->conn_win_offset_us;
+	uint32_t ticks_anchor_prev;
+
+	if (is_sched_advanced) {
+		/* Get the ticks_anchor when the offset to free time space for
+		 * a new central event was last calculated at the start of the
+		 * initiator window. This can be either the previous full window
+		 * start or remainder resume start of the continuous initiator
+		 * after it was preempted.
+		 */
+		ticks_anchor_prev = radio_tmr_start_get();
+	} else {
+		ticks_anchor_prev = 0U;
+	}
+#endif /* CONFIG_BT_CENTRAL */
+
 	ticks_at_start = ticker_ticks_now_get() +
 			 HAL_TICKER_CNTR_CMP_OFFSET_MIN;
 	remainder_us = radio_tmr_start_tick(0, ticks_at_start);
@@ -628,6 +646,27 @@ static void isr_window(void *param)
 #else /* !CONFIG_BT_CTLR_GPIO_LNA_PIN */
 	ARG_UNUSED(remainder_us);
 #endif /* !CONFIG_BT_CTLR_GPIO_LNA_PIN */
+
+#if defined(CONFIG_BT_CENTRAL)
+	if (is_sched_advanced) {
+		uint32_t ticks_anchor_new, ticks_delta, ticks_delta_us;
+
+		/* Calculation to reduce the conn_win_offset_us, as a new
+		 * window is started here and the reference ticks_anchor is
+		 * now at the start of this new window.
+		 */
+		ticks_anchor_new = radio_tmr_start_get();
+		ticks_delta = ticker_ticks_diff_get(ticks_anchor_new,
+						    ticks_anchor_prev);
+		ticks_delta_us = HAL_TICKER_TICKS_TO_US(ticks_delta);
+
+		/* Underflow is accepted, as it will be corrected at the time of
+		 * connection establishment by incrementing it in connection
+		 * interval units until it is in the future.
+		 */
+		lll->conn_win_offset_us -= ticks_delta_us;
+	}
+#endif /* CONFIG_BT_CENTRAL */
 }
 
 static void isr_abort(void *param)
@@ -1197,9 +1236,8 @@ static int isr_rx_scan_report(struct lll_scan *lll, uint8_t rssi_ready,
 		node_rx->hdr.type = NODE_RX_TYPE_REPORT;
 	}
 
-	node_rx->hdr.rx_ftr.rssi = (rssi_ready) ?
-				   (radio_rssi_get() & 0x7f)
-				   : 0x7f;
+	node_rx->hdr.rx_ftr.rssi = (rssi_ready) ? radio_rssi_get() :
+						  BT_HCI_LE_RSSI_NOT_AVAILABLE;
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	/* save the resolving list index. */
 	node_rx->hdr.rx_ftr.rl_idx = rl_idx;

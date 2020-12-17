@@ -124,6 +124,9 @@ config HAS_HW_NRF_RADIO_BLE_CODED
 config HAS_HW_NRF_RADIO_IEEE802154
 	bool
 
+config HAS_HW_NRF_RADIO_BLE_DF
+	bool
+
 config HAS_HW_NRF_RNG
 	bool
 
@@ -272,4 +275,29 @@ config HAS_HW_NRF_WDT0
 	bool
 
 config HAS_HW_NRF_WDT1
+	bool
+
+# Reserved HW peripherals
+config NRF_HW_TIMER0_RESERVED
+	bool
+
+config NRF_HW_TIMER1_RESERVED
+	bool
+
+config NRF_HW_TIMER2_RESERVED
+	bool
+
+config NRF_HW_TIMER3_RESERVED
+	bool
+
+config NRF_HW_TIMER4_RESERVED
+	bool
+
+config NRF_HW_RTC0_RESERVED
+	bool
+
+config NRF_HW_RTC1_RESERVED
+	bool
+
+config NRF_HW_RTC2_RESERVED
 	bool

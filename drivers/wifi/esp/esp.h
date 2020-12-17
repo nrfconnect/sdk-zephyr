@@ -95,6 +95,14 @@ extern "C" {
 #define ESP_CONNECT_TIMEOUT	K_SECONDS(20)
 #define ESP_INIT_TIMEOUT	K_SECONDS(10)
 
+#define ESP_MODE_NONE		0
+#define ESP_MODE_STA		1
+#define ESP_MODE_AP		2
+#define ESP_MODE_STA_AP		3
+
+#define ESP_CMD_CWMODE(mode) \
+	"AT+"_CWMODE"="STRINGIFY(_CONCAT(ESP_MODE_, mode))
+
 #define ESP_CWDHCP_MODE_STATION		"1"
 #if defined(CONFIG_WIFI_ESP_AT_VERSION_1_7)
 #define ESP_CWDHCP_MODE_SOFTAP		"0"
@@ -168,7 +176,9 @@ struct esp_socket {
 
 enum esp_data_flag {
 	EDF_STA_CONNECTING = BIT(1),
-	EDF_STA_CONNECTED  = BIT(2)
+	EDF_STA_CONNECTED  = BIT(2),
+	EDF_STA_LOCK       = BIT(3),
+	EDF_AP_ENABLED     = BIT(4),
 };
 
 /* driver data */
@@ -176,6 +186,7 @@ struct esp_data {
 	struct net_if *net_iface;
 
 	uint8_t flags;
+	uint8_t mode;
 
 	char conn_cmd[CONN_CMD_MAX_LEN];
 
@@ -206,6 +217,7 @@ struct esp_data {
 	struct k_delayed_work ip_addr_work;
 	struct k_work scan_work;
 	struct k_work connect_work;
+	struct k_work mode_switch_work;
 
 	scan_result_cb_t scan_cb;
 
@@ -247,22 +259,29 @@ static inline bool esp_socket_close_pending(struct esp_socket *sock)
 	return (sock->flags & ESP_SOCK_CLOSE_PENDING) != 0;
 }
 
-static inline void esp_flag_set(struct esp_data *dev,
-				enum esp_data_flag flag)
+static inline void esp_flags_set(struct esp_data *dev, uint8_t flags)
 {
-	dev->flags |= flag;
+	dev->flags |= flags;
 }
 
-static inline void esp_flag_clear(struct esp_data *dev,
-				  enum esp_data_flag flag)
+static inline void esp_flags_clear(struct esp_data *dev, uint8_t flags)
 {
-	dev->flags &= (~flag);
+	dev->flags &= (~flags);
 }
 
-static inline bool esp_flag_is_set(struct esp_data *dev,
-				   enum esp_data_flag flag)
+static inline bool esp_flags_are_set(struct esp_data *dev, uint8_t flags)
 {
-	return (dev->flags & flag) != 0;
+	return (dev->flags & flags) != 0;
+}
+
+static inline int esp_cmd_send(struct esp_data *data,
+			       const struct modem_cmd *handlers,
+			       size_t handlers_len, const char *buf,
+			       k_timeout_t timeout)
+{
+	return modem_cmd_send(&data->mctx.iface, &data->mctx.cmd_handler,
+			      handlers, handlers_len, buf, &data->sem_response,
+			      timeout);
 }
 
 #ifdef __cplusplus

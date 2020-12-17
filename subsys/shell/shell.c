@@ -102,6 +102,16 @@ static inline enum shell_state state_get(const struct shell *shell)
 	return shell->ctx->state;
 }
 
+static inline const struct shell_static_entry *
+selected_cmd_get(const struct shell *shell)
+{
+	if (IS_ENABLED(CONFIG_SHELL_CMDS_SELECT)) {
+	       return shell->ctx->selected_cmd;
+	}
+
+	return NULL;
+}
+
 static void tab_item_print(const struct shell *shell, const char *option,
 			   uint16_t longest_option)
 {
@@ -272,13 +282,13 @@ static bool tab_prepare(const struct shell *shell,
 	/* root command completion */
 	if ((*argc == 0) || ((space == 0) && (*argc == 1))) {
 		*complete_arg_idx = SHELL_CMD_ROOT_LVL;
-		*cmd = shell->ctx->selected_cmd;
+		*cmd = selected_cmd_get(shell);
 		return true;
 	}
 
 	search_argc = space ? *argc : *argc - 1;
 
-	*cmd = shell_get_last_command(shell->ctx->selected_cmd, search_argc,
+	*cmd = shell_get_last_command(selected_cmd_get(shell), search_argc,
 				      *argv, complete_arg_idx,	d_entry, false);
 
 	/* if search_argc == 0 (empty command line) shell_get_last_command will
@@ -303,11 +313,12 @@ static void find_completion_candidates(const struct shell *shell,
 				       size_t *first_idx, size_t *cnt,
 				       uint16_t *longest)
 {
-	size_t incompl_cmd_len = shell_strlen(incompl_cmd);
 	const struct shell_static_entry *candidate;
 	struct shell_static_entry dloc;
+	size_t incompl_cmd_len;
 	size_t idx = 0;
 
+	incompl_cmd_len = shell_strlen(incompl_cmd);
 	*longest = 0U;
 	*cnt = 0;
 
@@ -342,6 +353,16 @@ static void autocomplete(const struct shell *shell,
 	match = shell_cmd_get(cmd, subcmd_idx, &shell->ctx->active_cmd);
 	__ASSERT_NO_MSG(match != NULL);
 	cmd_len = shell_strlen(match->syntax);
+
+	if (!IS_ENABLED(CONFIG_SHELL_TAB_AUTOCOMPLETION)) {
+		/* Add a space if the Tab button is pressed when command is
+		 * complete.
+		 */
+		if (cmd_len == arg_len) {
+			shell_op_char_insert(shell, ' ');
+		}
+		return;
+	}
 
 	/* no exact match found */
 	if (cmd_len != arg_len) {
@@ -468,6 +489,10 @@ static void partial_autocomplete(const struct shell *shell,
 	uint16_t common = common_beginning_find(shell, cmd, &completion, first,
 					     cnt, arg_len);
 
+	if (!IS_ENABLED(CONFIG_SHELL_TAB_AUTOCOMPLETION)) {
+		return;
+	}
+
 	if (common) {
 		shell_op_completion_insert(shell, &completion[arg_len],
 					   common - arg_len);
@@ -580,7 +605,7 @@ static int execute(const struct shell *shell)
 {
 	struct shell_static_entry dloc; /* Memory for dynamic commands. */
 	const char *argv[CONFIG_SHELL_ARGC_MAX + 1]; /* +1 reserved for NULL */
-	const struct shell_static_entry *parent = shell->ctx->selected_cmd;
+	const struct shell_static_entry *parent = selected_cmd_get(shell);
 	const struct shell_static_entry *entry = NULL;
 	struct shell_static_entry help_entry;
 	size_t cmd_lvl = 0;
@@ -599,10 +624,11 @@ static int execute(const struct shell *shell)
 
 	memset(&shell->ctx->active_cmd, 0, sizeof(shell->ctx->active_cmd));
 
-	shell_cmd_trim(shell);
-
-	history_put(shell, shell->ctx->cmd_buff,
-		    shell->ctx->cmd_buff_len);
+	if (IS_ENABLED(CONFIG_SHELL_HISTORY)) {
+		shell_cmd_trim(shell);
+		history_put(shell, shell->ctx->cmd_buff,
+			    shell->ctx->cmd_buff_len);
+	}
 
 	if (IS_ENABLED(CONFIG_SHELL_WILDCARD)) {
 		shell_wildcard_prepare(shell);
@@ -729,11 +755,11 @@ static int execute(const struct shell *shell)
 		 * be called again.
 		 */
 		(void)shell_make_argv(&cmd_lvl,
-				      &argv[shell->ctx->selected_cmd ? 1 : 0],
+				      &argv[selected_cmd_get(shell) ? 1 : 0],
 				      shell->ctx->cmd_buff,
 				      CONFIG_SHELL_ARGC_MAX);
 
-		if (shell->ctx->selected_cmd) {
+		if (selected_cmd_get(shell)) {
 			/* Apart from what is in the command buffer, there is
 			 * a selected command.
 			 */
@@ -793,7 +819,7 @@ static void alt_metakeys_handle(const struct shell *shell, char data)
 		shell_op_cursor_word_move(shell, 1);
 	} else if (data == SHELL_VT100_ASCII_ALT_R &&
 		   IS_ENABLED(CONFIG_SHELL_CMDS_SELECT)) {
-		if (shell->ctx->selected_cmd != NULL) {
+		if (selected_cmd_get(shell) != NULL) {
 			shell_cmd_line_erase(shell);
 			shell_internal_fprintf(shell, SHELL_WARNING,
 					"Restored default root commands\n");
@@ -940,7 +966,8 @@ static void state_collect(const struct shell *shell)
 				break;
 
 			case '\t': /* TAB */
-				if (flag_echo_get(shell)) {
+				if (flag_echo_get(shell) &&
+				    IS_ENABLED(CONFIG_SHELL_TAB)) {
 					/* If the Tab key is pressed, "history
 					 * mode" must be terminated because
 					 * tab and history handlers are sharing
@@ -1528,3 +1555,51 @@ int shell_execute_cmd(const struct shell *shell, const char *cmd)
 
 	return ret_val;
 }
+
+static int cmd_help(const struct shell *shell, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+#if defined(CONFIG_SHELL_TAB)
+	shell_print(shell, "Please press the <Tab> button to see all available "
+			   "commands.");
+#endif
+
+#if defined(CONFIG_SHELL_TAB_AUTOCOMPLETION)
+	shell_print(shell,
+		"You can also use the <Tab> button to prompt or auto-complete"
+		" all commands or its subcommands.");
+#endif
+
+#if defined(CONFIG_SHELL_HELP)
+	shell_print(shell,
+		"You can try to call commands with <-h> or <--help> parameter"
+		" for more information.");
+#endif
+
+#if defined(CONFIG_SHELL_METAKEYS)
+	shell_print(shell,
+		"\nShell supports following meta-keys:\n"
+		"  Ctrl + (a key from: abcdefklnpuw)\n"
+		"  Alt  + (a key from: bf)\n"
+		"Please refer to shell documentation for more details.");
+#endif
+
+	if (IS_ENABLED(CONFIG_SHELL_HELP)) {
+		/* For NULL argument function will print all root commands */
+		shell_help_subcmd_print(shell, NULL, "\nAvailable commands:\n");
+	} else {
+		const struct shell_static_entry *entry;
+		size_t idx = 0;
+
+		shell_print(shell, "\nAvailable commands:");
+		while ((entry = shell_cmd_get(NULL, idx++, NULL)) != NULL) {
+			shell_print(shell, "  %s", entry->syntax);
+		}
+	}
+
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(help, NULL, "Prints the help message.", cmd_help, 1, 0);

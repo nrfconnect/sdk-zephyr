@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import io
+from logging import WARNING
 import os
 from pathlib import Path
 
@@ -25,17 +26,22 @@ def hpath(filename):
     '''Convert 'filename' to the host path syntax.'''
     return os.fspath(Path(filename))
 
-def test_warnings():
+def test_warnings(caplog):
     '''Tests for situations that should cause warnings.'''
-    warnings = io.StringIO()
-    edtlib.EDT("test.dts", ["test-bindings"], warnings)
 
-    assert warnings.getvalue() == f"""\
-warning: 'oldprop' is marked as deprecated in 'properties:' in {hpath('test-bindings/deprecated.yaml')} for node /test-deprecated.
-warning: unit address and first address in 'reg' (0x1) don't match for /reg-zero-size-cells/node
-warning: unit address and first address in 'reg' (0x5) don't match for /reg-ranges/parent/node
-warning: unit address and first address in 'reg' (0x30000000200000001) don't match for /reg-nested-ranges/grandparent/parent/node
-"""
+    edtlib.EDT("test.dts", ["test-bindings"])
+
+    enums_hpath = hpath('test-bindings/enums.yaml')
+    expected_warnings = [
+        f"'oldprop' is marked as deprecated in 'properties:' in {hpath('test-bindings/deprecated.yaml')} for node /test-deprecated.",
+        "unit address and first address in 'reg' (0x1) don't match for /reg-zero-size-cells/node",
+        "unit address and first address in 'reg' (0x5) don't match for /reg-ranges/parent/node",
+        "unit address and first address in 'reg' (0x30000000200000001) don't match for /reg-nested-ranges/grandparent/parent/node",
+        f"compatible 'enums' in binding '{enums_hpath}' has non-tokenizable enum for property 'string-enum': 'foo bar', 'foo_bar'",
+        f"compatible 'enums' in binding '{enums_hpath}' has enum for property 'tokenizable-lower-enum' that is only tokenizable in lowercase: 'bar', 'BAR'",
+    ]
+    assert caplog.record_tuples == [('edtlib', WARNING, warning_message)
+                                    for warning_message in expected_warnings]
 
 def test_interrupts():
     '''Tests for the interrupts property.'''
@@ -231,6 +237,43 @@ def test_prop_defaults():
 
     assert str(edt.get_node("/defaults").props) == \
         r"OrderedDict([('int', <Property, name: int, type: int, value: 123>), ('array', <Property, name: array, type: array, value: [1, 2, 3]>), ('uint8-array', <Property, name: uint8-array, type: uint8-array, value: b'\x89\xab\xcd'>), ('string', <Property, name: string, type: string, value: 'hello'>), ('string-array', <Property, name: string-array, type: string-array, value: ['hello', 'there']>), ('default-not-used', <Property, name: default-not-used, type: int, value: 234>)])"
+
+def test_prop_enums():
+    '''test properties with enum: in the binding'''
+
+    edt = edtlib.EDT("test.dts", ["test-bindings"])
+    props = edt.get_node('/enums').props
+    int_enum = props['int-enum']
+    string_enum = props['string-enum']
+    tokenizable_enum = props['tokenizable-enum']
+    tokenizable_lower_enum = props['tokenizable-lower-enum']
+    no_enum = props['no-enum']
+
+    assert int_enum.val == 1
+    assert int_enum.enum_index == 0
+    assert not int_enum.spec.enum_tokenizable
+    assert not int_enum.spec.enum_upper_tokenizable
+
+    assert string_enum.val == 'foo_bar'
+    assert string_enum.enum_index == 1
+    assert not string_enum.spec.enum_tokenizable
+    assert not string_enum.spec.enum_upper_tokenizable
+
+    assert tokenizable_enum.val == '123 is ok'
+    assert tokenizable_enum.val_as_token == '123_is_ok'
+    assert tokenizable_enum.enum_index == 2
+    assert tokenizable_enum.spec.enum_tokenizable
+    assert tokenizable_enum.spec.enum_upper_tokenizable
+
+    assert tokenizable_lower_enum.val == 'bar'
+    assert tokenizable_lower_enum.val_as_token == 'bar'
+    assert tokenizable_lower_enum.enum_index == 0
+    assert tokenizable_lower_enum.spec.enum_tokenizable
+    assert not tokenizable_lower_enum.spec.enum_upper_tokenizable
+
+    assert no_enum.enum_index is None
+    assert not no_enum.spec.enum_tokenizable
+    assert not no_enum.spec.enum_upper_tokenizable
 
 def test_binding_inference():
     '''Test inferred bindings for special zephyr-specific nodes.'''

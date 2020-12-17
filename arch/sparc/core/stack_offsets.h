@@ -41,25 +41,24 @@
 
 
 /* Interrupt stack frame */
-#define ISF_PSR_OFFSET  (STACK_FRAME_SIZE + 0x00)
-#define ISF_PC_OFFSET   (STACK_FRAME_SIZE + 0x04)
-#define ISF_NPC_OFFSET  (STACK_FRAME_SIZE + 0x08)
-#define ISF_G1_OFFSET   (STACK_FRAME_SIZE + 0x0c)
-#define ISF_G2_OFFSET   (STACK_FRAME_SIZE + 0x10)
-#define ISF_G3_OFFSET   (STACK_FRAME_SIZE + 0x14)
-#define ISF_G4_OFFSET   (STACK_FRAME_SIZE + 0x18)
-#define ISF_G5_OFFSET   (STACK_FRAME_SIZE + 0x1c)
-#define ISF_G7_OFFSET   (STACK_FRAME_SIZE + 0x24)
-#define ISF_I0_OFFSET   (STACK_FRAME_SIZE + 0x28)
-#define ISF_I1_OFFSET   (STACK_FRAME_SIZE + 0x2c)
-#define ISF_I2_OFFSET   (STACK_FRAME_SIZE + 0x30)
-#define ISF_I3_OFFSET   (STACK_FRAME_SIZE + 0x34)
-#define ISF_I4_OFFSET   (STACK_FRAME_SIZE + 0x38)
-#define ISF_I5_OFFSET   (STACK_FRAME_SIZE + 0x3c)
-#define ISF_I6_OFFSET   (STACK_FRAME_SIZE + 0x40)
-#define ISF_I7_OFFSET   (STACK_FRAME_SIZE + 0x44)
-#define ISF_Y_OFFSET    (STACK_FRAME_SIZE + 0x48)
+#define ISF_PSR_OFFSET  (0x40 + 0x00)
+#define ISF_PC_OFFSET   (0x40 + 0x04)
+#define ISF_NPC_OFFSET  (0x40 + 0x08)
+#define ISF_G1_OFFSET   (0x40 + 0x0c)
+#define ISF_G2_OFFSET   (0x40 + 0x10)
+#define ISF_G3_OFFSET   (0x40 + 0x14)
+#define ISF_G4_OFFSET   (0x40 + 0x18)
+#define ISF_Y_OFFSET    (0x40 + 0x1c)
 
-#define ISF_SIZE        (STACK_FRAME_SIZE + 0x50)
+#if !defined(_FLAT)
+ #define ISF_SIZE       (0x20)
+#else
+/*
+ * The flat ABI stores and loads "local" and "in" registers in the save area as
+ * part of function prologue and epilogue. So we allocate space for a new save
+ * area (0x40 byte) as part of the interrupt stack frame.
+ */
+ #define ISF_SIZE       (0x40 + 0x20)
+#endif
 
 #endif /* ZEPHYR_ARCH_SPARC_CORE_STACK_H_ */

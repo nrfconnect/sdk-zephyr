@@ -192,21 +192,10 @@ image for the application core. The Secure image can be built using either
 Zephyr or `Trusted Firmware M`_ (TF-M). Non-Secure firmware
 images are always built using Zephyr. The two alternatives are described below.
 
-Building the Secure firmware using Zephyr
------------------------------------------
+.. note::
 
-The process to build the Secure and the Non-Secure firmware images
-using Zephyr requires the following steps:
-
-1. Build the Secure Zephyr application for the application core
-   using ``-DBOARD=nrf5340dk_nrf5340_cpuapp`` and
-   ``CONFIG_TRUSTED_EXECUTION_SECURE=y`` in the application
-   project configuration file.
-2. Build the Non-Secure Zephyr application for the application core
-   using ``-DBOARD=nrf5340dk_nrf5340_cpuappns``.
-3. Merge the two binaries together.
-4. Build the application firmware for the network core using
-   ``-DBOARD=nrf5340dk_nrf5340_cpunet``.
+   By default the the Secure image for nRF5340 application core is built
+   using TF-M.
 
 
 Building the Secure firmware with TF-M
@@ -216,13 +205,15 @@ The process to build the Secure firmware image using TF-M and the Non-Secure
 firmware image using Zephyr requires the following steps:
 
 1. Build the Non-Secure Zephyr application
-   for the application core using ``-DBOARD=nrf5340dk_nrf5340_cpuappns`` and
-   ``CONFIG_BUILD_WITH_TFM=y`` in the application project configuration file.
+   for the application core using ``-DBOARD=nrf5340dk_nrf5340_cpuappns``.
+   To invoke the building of TF-M the Zephyr build system requires the
+   Kconfig option ``BUILD_WITH_TFM`` to be enabled, which is done by
+   default when building Zephyr as a Non-Secure application.
    The Zephyr build system will perform the following steps automatically:
 
       * Build the Non-Secure firmware image as a regular Zephyr application
       * Build a TF-M (secure) firmware image
-      * Merge the output binaries together
+      * Merge the output image binaries together
       * Optionally build a bootloader image (MCUboot)
 
 .. note::
@@ -232,6 +223,23 @@ firmware image using Zephyr requires the following steps:
    and sizes.
 
 2. Build the application firmware for the network core using
+   ``-DBOARD=nrf5340dk_nrf5340_cpunet``.
+
+
+Building the Secure firmware using Zephyr
+-----------------------------------------
+
+The process to build the Secure and the Non-Secure firmware images
+using Zephyr requires the following steps:
+
+1. Build the Secure Zephyr application for the application core
+   using ``-DBOARD=nrf5340dk_nrf5340_cpuapp`` and
+   ``CONFIG_TRUSTED_EXECUTION_SECURE=y`` and ``CONFIG_BUILD_WITH_TFM=n``
+   in the application project configuration file.
+2. Build the Non-Secure Zephyr application for the application core
+   using ``-DBOARD=nrf5340dk_nrf5340_cpuappns``.
+3. Merge the two binaries together.
+4. Build the application firmware for the network core using
    ``-DBOARD=nrf5340dk_nrf5340_cpunet``.
 
 
@@ -255,9 +263,27 @@ Flashing
 
 Follow the instructions in the :ref:`nordic_segger` page to install
 and configure all the necessary software. Further information can be
-found in :ref:`nordic_segger_flashing`. Then build and flash
-applications as usual (see :ref:`build_an_application` and
+found in :ref:`nordic_segger_flashing`. Then you can build and flash
+applications as usual (:ref:`build_an_application` and
 :ref:`application_run` for more details).
+
+.. warning::
+
+   The nRF5340 has a flash read-back protection feature. When flash read-back
+   protection is active, you will need to recover the chip before reflashing.
+   If you are flashing with :ref:`west <west-build-flash-debug>`, run
+   this command for more details on the related ``--recover`` option:
+
+   .. code-block:: console
+
+      west flash -H -r nrfjprog --skip-rebuild
+
+.. note::
+
+   Flashing and debugging applications on the nRF5340 DK requires
+   upgrading the nRF Command Line Tools to version 10.12.0. Further
+   information on how to install the nRF Command Line Tools can be
+   found in :ref:`nordic_segger_flashing`.
 
 Here is an example for the :ref:`hello_world` application running on the
 nRF5340 application core.

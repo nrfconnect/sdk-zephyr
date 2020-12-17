@@ -19,7 +19,6 @@
 
 #include <stdbool.h>
 #include <string.h>
-#include <sys/printk.h>
 #include <sys/util.h>
 #include <net/buf.h>
 #include <bluetooth/gap.h>
@@ -636,6 +635,75 @@ struct bt_le_per_adv_param {
 						 BT_GAP_ADV_FAST_INT_MIN_2, \
 						 BT_GAP_ADV_FAST_INT_MAX_2, \
 						 NULL)
+
+/** Non-connectable extended advertising with private address */
+#define BT_LE_EXT_ADV_NCONN BT_LE_ADV_PARAM(BT_LE_ADV_OPT_EXT_ADV, \
+					    BT_GAP_ADV_FAST_INT_MIN_2, \
+					    BT_GAP_ADV_FAST_INT_MAX_2, NULL)
+
+/** Non-connectable extended advertising with @ref BT_LE_ADV_OPT_USE_NAME */
+#define BT_LE_EXT_ADV_NCONN_NAME BT_LE_ADV_PARAM(BT_LE_ADV_OPT_EXT_ADV | \
+						 BT_LE_ADV_OPT_USE_NAME, \
+						 BT_GAP_ADV_FAST_INT_MIN_2, \
+						 BT_GAP_ADV_FAST_INT_MAX_2, \
+						 NULL)
+
+/** Non-connectable extended advertising with @ref BT_LE_ADV_OPT_USE_IDENTITY */
+#define BT_LE_EXT_ADV_NCONN_IDENTITY \
+		BT_LE_ADV_PARAM(BT_LE_ADV_OPT_EXT_ADV | \
+				BT_LE_ADV_OPT_USE_IDENTITY, \
+				BT_GAP_ADV_FAST_INT_MIN_2, \
+				BT_GAP_ADV_FAST_INT_MAX_2, NULL)
+
+/** Non-connectable extended advertising on coded PHY with private address */
+#define BT_LE_EXT_ADV_CODED_NCONN BT_LE_ADV_PARAM(BT_LE_ADV_OPT_EXT_ADV | \
+						  BT_LE_ADV_OPT_CODED, \
+						  BT_GAP_ADV_FAST_INT_MIN_2, \
+						  BT_GAP_ADV_FAST_INT_MAX_2, \
+						  NULL)
+
+/** Non-connectable extended advertising on coded PHY with
+ *  @ref BT_LE_ADV_OPT_USE_NAME
+ */
+#define BT_LE_EXT_ADV_CODED_NCONN_NAME \
+		BT_LE_ADV_PARAM(BT_LE_ADV_OPT_EXT_ADV | BT_LE_ADV_OPT_CODED | \
+				BT_LE_ADV_OPT_USE_NAME, \
+				BT_GAP_ADV_FAST_INT_MIN_2, \
+				BT_GAP_ADV_FAST_INT_MAX_2, NULL)
+
+/** Non-connectable extended advertising on coded PHY with
+ *  @ref BT_LE_ADV_OPT_USE_IDENTITY
+ */
+#define BT_LE_EXT_ADV_CODED_NCONN_IDENTITY \
+		BT_LE_ADV_PARAM(BT_LE_ADV_OPT_EXT_ADV | BT_LE_ADV_OPT_CODED | \
+				BT_LE_ADV_OPT_USE_IDENTITY, \
+				BT_GAP_ADV_FAST_INT_MIN_2, \
+				BT_GAP_ADV_FAST_INT_MAX_2, NULL)
+
+/**
+ * Helper to initialize extended advertising start parameters inline
+ *
+ * @param _timeout Advertiser timeout
+ * @param _n_evts  Number of advertising events
+ */
+#define BT_LE_EXT_ADV_START_PARAM_INIT(_timeout, _n_evts) \
+{ \
+	.timeout = (_timeout), \
+	.num_events = (_n_evts), \
+}
+
+/**
+ * Helper to declare extended advertising start parameters inline
+ *
+ * @param _timeout Advertiser timeout
+ * @param _n_evts  Number of advertising events
+ */
+#define BT_LE_EXT_ADV_START_PARAM(_timeout, _n_evts) \
+	((struct bt_le_ext_adv_start_param[]) { \
+		BT_LE_EXT_ADV_START_PARAM_INIT((_timeout), (_n_evts)) \
+	})
+
+#define BT_LE_EXT_ADV_START_DEFAULT BT_LE_EXT_ADV_START_PARAM(0, 0)
 
 /**
  * Helper to declare periodic advertising parameters inline
@@ -1557,7 +1625,9 @@ struct bt_le_scan_cb {
 		BT_LE_SCAN_PARAM_INIT(_type, _options, _interval, _window) \
 	 })
 
-/** Helper macro to enable active scanning to discover new devices. */
+/**
+ * @brief Helper macro to enable active scanning to discover new devices.
+ */
 #define BT_LE_SCAN_ACTIVE BT_LE_SCAN_PARAM(BT_LE_SCAN_TYPE_ACTIVE, \
 					   BT_LE_SCAN_OPT_FILTER_DUPLICATE, \
 					   BT_GAP_SCAN_FAST_INTERVAL, \
@@ -1573,6 +1643,31 @@ struct bt_le_scan_cb {
 					    BT_LE_SCAN_OPT_FILTER_DUPLICATE, \
 					    BT_GAP_SCAN_FAST_INTERVAL, \
 					    BT_GAP_SCAN_FAST_WINDOW)
+
+/**
+ * @brief Helper macro to enable active scanning to discover new devices.
+ * Include scanning on Coded PHY in addition to 1M PHY.
+ */
+#define BT_LE_SCAN_CODED_ACTIVE \
+		BT_LE_SCAN_PARAM(BT_LE_SCAN_TYPE_ACTIVE, \
+				 BT_LE_SCAN_OPT_CODED | \
+				 BT_LE_SCAN_OPT_FILTER_DUPLICATE, \
+				 BT_GAP_SCAN_FAST_INTERVAL, \
+				 BT_GAP_SCAN_FAST_WINDOW)
+
+/**
+ * @brief Helper macro to enable passive scanning to discover new devices.
+ * Include scanning on Coded PHY in addition to 1M PHY.
+ *
+ * This macro should be used if information required for device identification
+ * (e.g., UUID) are known to be placed in Advertising Data.
+ */
+#define BT_LE_SCAN_CODED_PASSIVE \
+		BT_LE_SCAN_PARAM(BT_LE_SCAN_TYPE_PASSIVE, \
+				 BT_LE_SCAN_OPT_CODED | \
+				 BT_LE_SCAN_OPT_FILTER_DUPLICATE, \
+				 BT_GAP_SCAN_FAST_INTERVAL, \
+				 BT_GAP_SCAN_FAST_WINDOW)
 
 /**
  * @brief Start (LE) scanning
@@ -1861,106 +1956,6 @@ struct bt_br_oob {
  */
 int bt_br_oob_get_local(struct bt_br_oob *oob);
 
-/**
- * @def BT_ADDR_STR_LEN
- *
- * @brief Recommended length of user string buffer for Bluetooth address
- *
- * @details The recommended length guarantee the output of address
- * conversion will not lose valuable information about address being
- * processed.
- */
-#define BT_ADDR_STR_LEN 18
-
-/**
- * @def BT_ADDR_LE_STR_LEN
- *
- * @brief Recommended length of user string buffer for Bluetooth LE address
- *
- * @details The recommended length guarantee the output of address
- * conversion will not lose valuable information about address being
- * processed.
- */
-#define BT_ADDR_LE_STR_LEN 30
-
-/**
- * @brief Converts binary Bluetooth address to string.
- *
- * @param addr Address of buffer containing binary Bluetooth address.
- * @param str Address of user buffer with enough room to store formatted
- * string containing binary address.
- * @param len Length of data to be copied to user string buffer. Refer to
- * BT_ADDR_STR_LEN about recommended value.
- *
- * @return Number of successfully formatted bytes from binary address.
- */
-static inline int bt_addr_to_str(const bt_addr_t *addr, char *str, size_t len)
-{
-	return snprintk(str, len, "%02X:%02X:%02X:%02X:%02X:%02X",
-			addr->val[5], addr->val[4], addr->val[3],
-			addr->val[2], addr->val[1], addr->val[0]);
-}
-
-/**
- * @brief Converts binary LE Bluetooth address to string.
- *
- * @param addr Address of buffer containing binary LE Bluetooth address.
- * @param str Address of user buffer with enough room to store
- * formatted string containing binary LE address.
- * @param len Length of data to be copied to user string buffer. Refer to
- * BT_ADDR_LE_STR_LEN about recommended value.
- *
- * @return Number of successfully formatted bytes from binary address.
- */
-static inline int bt_addr_le_to_str(const bt_addr_le_t *addr, char *str,
-				    size_t len)
-{
-	char type[10];
-
-	switch (addr->type) {
-	case BT_ADDR_LE_PUBLIC:
-		strcpy(type, "public");
-		break;
-	case BT_ADDR_LE_RANDOM:
-		strcpy(type, "random");
-		break;
-	case BT_ADDR_LE_PUBLIC_ID:
-		strcpy(type, "public-id");
-		break;
-	case BT_ADDR_LE_RANDOM_ID:
-		strcpy(type, "random-id");
-		break;
-	default:
-		snprintk(type, sizeof(type), "0x%02x", addr->type);
-		break;
-	}
-
-	return snprintk(str, len, "%02X:%02X:%02X:%02X:%02X:%02X (%s)",
-			addr->a.val[5], addr->a.val[4], addr->a.val[3],
-			addr->a.val[2], addr->a.val[1], addr->a.val[0], type);
-}
-
-/**
- * @brief Convert Bluetooth address from string to binary.
- *
- * @param[in]  str   The string representation of a Bluetooth address.
- * @param[out] addr  Address of buffer to store the Bluetooth address
- *
- * @return Zero on success or (negative) error code otherwise.
- */
-int bt_addr_from_str(const char *str, bt_addr_t *addr);
-
-/**
- * @brief Convert LE Bluetooth address from string to binary.
- *
- * @param[in]  str   The string representation of an LE Bluetooth address.
- * @param[in]  type  The string representation of the LE Bluetooth address
- *                   type.
- * @param[out] addr  Address of buffer to store the LE Bluetooth address
- *
- * @return Zero on success or (negative) error code otherwise.
- */
-int bt_addr_le_from_str(const char *str, const char *type, bt_addr_le_t *addr);
 
 /**
  * @brief Enable/disable set controller in discoverable state.

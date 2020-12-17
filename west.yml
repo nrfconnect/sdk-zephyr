@@ -56,7 +56,7 @@ manifest:
       revision: f1fa8241f8786198ba41155413243de36ed878a5
       path: modules/hal/infineon
     - name: hal_nordic
-      revision: d7b3b6e3cea622ecc93fcacd3f2cfddf83746aff
+      revision: 8e132fee9794fcc8b809f3d7479b17031c156317
       path: modules/hal/nordic
     - name: hal_openisa
       revision: 40d049f69c50b58ea20473bee14cf93f518bf262
@@ -74,7 +74,7 @@ manifest:
       revision: b52fdbf4b62439be9fab9bb4bae9690a42d2fb14
       path: modules/hal/st
     - name: hal_stm32
-      revision: fadf64171cb1eb947b2de4a53c903ca2350e5ea2
+      revision: 5a10f27be1b21c597ec5dc0bd8b90d2abe9fca69
       path: modules/hal/stm32
     - name: hal_ti
       revision: 277d70a65ab14d46bf1ec0935cf9bb28bbaa8ab9
@@ -84,7 +84,7 @@ manifest:
       path: modules/hal/libmetal
     - name: hal_quicklogic
       repo-path: hal_quicklogic
-      revision: 7deb3aab1cc430a7650143f9833cfc8ddad76eb5
+      revision: b3a66fe6d04d87fd1533a5c8de51d0599fcd08d0
       path: modules/hal/quicklogic
     - name: lvgl
       revision: 31acbaa36e9e74ab88ac81e3d21e7f1d00a71136
@@ -96,10 +96,10 @@ manifest:
       revision: c71d2186077f9fd5f6d1aa53ee3f09dc41ce78f6
       path: bootloader/mcuboot
     - name: mcumgr
-      revision: f28a637db12c4b12fb2b18bddc6b2a0deaa95251
+      revision: 697e145d5ee5e4b400e9d7bceaec79f6ac29df7c
       path: modules/lib/mcumgr
     - name: net-tools
-      revision: c72fbf3300264a8a4bb48be314ca93765c863a19
+      revision: 41132e9220f8bc1223084975350c5e5f3b492afe
       path: tools/net-tools
     - name: hal_nxp
       revision: 56915d2942a3af7205b3c4991a8b87e915de7f59
@@ -111,10 +111,10 @@ manifest:
       revision: 3f545d76a2e6d1db83a470ccdb5bebd1f484e137
       path: modules/lib/loramac-node
     - name: openthread
-      revision: 07f430dac6c400abdd358ba1173c0f94b94a5a80
+      revision: c3362bc8e24f7e1ec21242c03611595e2d8ec2f0
       path: modules/lib/openthread
     - name: segger
-      revision: 874d9e9696b00c09f9eeefe839028dc25fe44983
+      revision: 38c79a447e4a47d413b4e8d34448316a5cece77c
       path: modules/debug/segger
     - name: tinycbor
       path: modules/lib/tinycbor
@@ -130,16 +130,20 @@ manifest:
       revision: 75e671550ac1acb502f315fe4952514dc73f7bfb
     - name: nrf_hw_models
       path: modules/bsim_hw_models/nrf_hw_models
-      revision: 71a8a9ef086d57ff5f3974138b0951f24c2017ad
+      revision: a47e326ca772ddd14cc3b9d4ca30a9ab44ecca16
     - name: hal_xtensa
       revision: 2f04b615cd5ad3a1b8abef33f9bdd10cc1990ed6
       path: modules/hal/xtensa
     - name: edtt
       path: tools/edtt
-      revision: c39888ff74acf421eeff9a7514fa9b172c3373f7
+      revision: b209a60ba3ad8887a7f35f67c0372c84a28b9b9b
     - name: trusted-firmware-m
       path: modules/tee/tfm
-      revision: 6edaaaaaa1a227cb1ccc9ef698a9d2e258a9bbd5
+      revision: dcfa70e66e91d9bf31fd6f083e2fba19b4305f4e
+    - name: tfm-mcuboot # This is used by the trusted-firmware-m module.
+      repo-path: mcuboot
+      path: modules/tee/tfm-mcuboot
+      revision: 1.7.0-rc1
 
   self:
     path: zephyr

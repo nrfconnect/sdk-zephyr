@@ -21,7 +21,7 @@ LOG_MODULE_REGISTER(pwrmgmt_test);
 #define TASK_STACK_SIZE           1024ul
 #define PRIORITY                  K_PRIO_COOP(5)
 
-/* Sleep time should be lower than CONFIG_SYS_PM_MIN_RESIDENCY_SLEEP_1 */
+/* Sleep time should be lower than CONFIG_PM_MIN_RESIDENCY_SLEEP_1 */
 #define THREAD_A_SLEEP_TIME       100ul
 #define THREAD_B_SLEEP_TIME       1000ul
 
@@ -69,30 +69,30 @@ static void pm_latency_check(void)
 }
 
 /* Hooks to count entry/exit */
-void sys_pm_notify_power_state_entry(enum power_states state)
+void pm_notify_power_state_entry(enum power_states state)
 {
 	if (!checks_enabled) {
 		return;
 	}
 
-	if (sys_pm_is_sleep_state(state)) {
+	if (pm_is_sleep_state(state)) {
 		pm_counters[0].entry_cnt++;
 		pm_latency_check();
-	} else if (sys_pm_is_deep_sleep_state(state)) {
+	} else if (pm_is_deep_sleep_state(state)) {
 		pm_counters[1].entry_cnt++;
 		pm_latency_check();
 	}
 }
 
-void sys_pm_notify_power_state_exit(enum power_states state)
+void pm_notify_power_state_exit(enum power_states state)
 {
 	if (!checks_enabled) {
 		return;
 	}
 
-	if (sys_pm_is_sleep_state(state)) {
+	if (pm_is_sleep_state(state)) {
 		pm_counters[0].exit_cnt++;
-	} else if (sys_pm_is_deep_sleep_state(state)) {
+	} else if (pm_is_deep_sleep_state(state)) {
 		pm_counters[1].exit_cnt++;
 	}
 }
@@ -230,7 +230,7 @@ int test_pwr_mgmt_multithread(uint8_t cycles)
 		suspend_all_tasks();
 		LOG_INF("About to enter light sleep");
 		pm_trigger_marker();
-		k_msleep(CONFIG_SYS_PM_MIN_RESIDENCY_SLEEP_1 +
+		k_msleep(CONFIG_PM_MIN_RESIDENCY_SLEEP_1 +
 			 LT_EXTRA_SLP_TIME);
 
 		LOG_INF("Wake from Light Sleep");
@@ -247,7 +247,7 @@ int test_pwr_mgmt_multithread(uint8_t cycles)
 		LOG_INF("About to enter deep sleep");
 
 		pm_trigger_marker();
-		k_msleep(CONFIG_SYS_PM_MIN_RESIDENCY_DEEP_SLEEP_1 +
+		k_msleep(CONFIG_PM_MIN_RESIDENCY_DEEP_SLEEP_1 +
 			 DP_EXTRA_SLP_TIME);
 
 		LOG_INF("Wake from Deep Sleep");
@@ -277,7 +277,7 @@ int test_pwr_mgmt_singlethread(uint8_t cycles)
 		/* Trigger Light Sleep 1 state. 48MHz PLL stays on */
 		LOG_INF("About to enter light sleep");
 		pm_trigger_marker();
-		k_msleep(CONFIG_SYS_PM_MIN_RESIDENCY_SLEEP_1 +
+		k_msleep(CONFIG_PM_MIN_RESIDENCY_SLEEP_1 +
 			 LT_EXTRA_SLP_TIME);
 		LOG_INF("Wake from Light Sleep");
 		pm_exit_marker();
@@ -289,7 +289,7 @@ int test_pwr_mgmt_singlethread(uint8_t cycles)
 		LOG_INF("About to enter deep Sleep");
 
 		pm_trigger_marker();
-		k_msleep(CONFIG_SYS_PM_MIN_RESIDENCY_DEEP_SLEEP_1 +
+		k_msleep(CONFIG_PM_MIN_RESIDENCY_DEEP_SLEEP_1 +
 			 DP_EXTRA_SLP_TIME);
 
 		LOG_INF("Wake from Deep Sleep");
@@ -313,14 +313,14 @@ int test_dummy_init(void)
 	while (iterations-- > 0) {
 		LOG_INF("About to enter light sleep");
 		pm_trigger_marker();
-		k_msleep(CONFIG_SYS_PM_MIN_RESIDENCY_SLEEP_1 +
+		k_msleep(CONFIG_PM_MIN_RESIDENCY_SLEEP_1 +
 			 LT_EXTRA_SLP_TIME);
 		LOG_INF("Wake from Light Sleep");
 		pm_exit_marker();
 
 		LOG_INF("About to enter deep Sleep");
 		pm_trigger_marker();
-		k_msleep(CONFIG_SYS_PM_MIN_RESIDENCY_DEEP_SLEEP_1 +
+		k_msleep(CONFIG_PM_MIN_RESIDENCY_DEEP_SLEEP_1 +
 			 DP_EXTRA_SLP_TIME);
 		LOG_INF("Wake from Deep Sleep");
 		pm_exit_marker();

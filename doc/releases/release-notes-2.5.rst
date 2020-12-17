@@ -39,12 +39,20 @@ API Changes
   ``flags`` parameter, which allows to configure current LwM2M client session,
   for instance enable bootstrap procedure in the curent session.
 
+* LwM2M execute now supports arguments. The execute callback
+  `lwm2m_engine_execute_cb_t` is extended with an ``args`` parameter which points
+  to the CoAP payload that comprises the arguments, and an ``args_len`` parameter
+  to indicate the length of the ``args`` data.
+
 * Changed vcnl4040 dts binding default for property 'proximity-trigger'.
   Changed the default to match the HW POR state for this property.
 
 * The :c:func:`clock_control_async_on` function will now take ``callback`` and
   ``user_data`` as arguments instead of structure which contained list node,
   callback and user data.
+
+* The :c:func:`mqtt_keepalive_time_left` function now returns -1 if keep alive
+  messages are disabled by setting ``CONFIG_MQTT_KEEPALIVE`` to 0.
 
 Deprecated in this release
 ==========================
@@ -86,6 +94,7 @@ Architectures
 
   * Added support for the SPARC architecture, compatible with the SPARC V8
     specification and the SPARC ABI.
+  * FPU is supported in both shared and unshared FP register mode.
 
 * x86
 
@@ -107,6 +116,10 @@ Boards & SoC Support
   * SPARC QEMU for emulating LEON3 processors and running kernel tests
 
 * Made these changes in other boards:
+
+  * nRF5340 DK: Selected TF-M as the default Secure Processing Element
+    (SPE) when building Zephyr for the non-secure domain.
+
 
 * Added support for these following shields:
 
@@ -244,6 +257,8 @@ Libraries / Subsystems
 
   * MCUmgr
 
+    * Added support for flash devices that have non-0xff erase value.
+
   * updatehub
 
 * Settings
@@ -310,6 +325,12 @@ MCUBoot
   * Add possibility to set confirm flag for hex files as well.
   * Usage of --confirm implies --pad.
   * Fixed 'custom_tlvs' argument handling.
+
+
+Trusted-Firmware-M
+******************
+
+* Synchronized Trusted-Firmware-M module to the upstream v1.2.0 release.
 
 Documentation
 *************

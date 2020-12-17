@@ -30,6 +30,8 @@ zephyr_library_sources_ifdef(
 if(CONFIG_BT_HCI_HOST)
   zephyr_library_sources(
     uuid.c
+    addr.c
+    buf.c
     hci_core.c
     hci_common.c
     )
@@ -56,6 +58,12 @@ if(CONFIG_BT_HCI_HOST)
         smp_null.c
         )
     endif()
+  endif()
+
+  if(CONFIG_BT_DF)
+    zephyr_library_sources(
+      direction.c
+      )
   endif()
 endif()
 

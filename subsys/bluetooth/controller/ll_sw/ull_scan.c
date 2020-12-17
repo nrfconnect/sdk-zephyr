@@ -448,30 +448,14 @@ uint8_t ull_scan_enable(struct ll_scan_set *scan)
 
 uint8_t ull_scan_disable(uint8_t handle, struct ll_scan_set *scan)
 {
-	uint32_t volatile ret_cb;
-	void *mark;
-	uint32_t ret;
+	int err;
 
-	mark = ull_disable_mark(scan);
-	LL_ASSERT(mark == scan);
-
-	ret_cb = TICKER_STATUS_BUSY;
-	ret = ticker_stop(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_THREAD,
-			  TICKER_ID_SCAN_BASE + handle,
-			  ull_ticker_status_give, (void *)&ret_cb);
-	ret = ull_ticker_status_take(ret, &ret_cb);
-	if (ret) {
-		mark = ull_disable_unmark(scan);
-		LL_ASSERT(mark == scan);
-
+	err = ull_ticker_stop_with_mark(TICKER_ID_SCAN_BASE + handle,
+					scan, &scan->lll);
+	LL_ASSERT(err == 0 || err == -EALREADY);
+	if (err) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
-
-	ret = ull_disable(&scan->lll);
-	LL_ASSERT(!ret);
-
-	mark = ull_disable_unmark(scan);
-	LL_ASSERT(mark == scan);
 
 	return 0;
 }
@@ -579,6 +563,18 @@ uint8_t ull_scan_handle_get(struct ll_scan_set *scan)
 uint8_t ull_scan_lll_handle_get(struct lll_scan *lll)
 {
 	return ull_scan_handle_get((void *)lll->hdr.parent);
+}
+
+struct ll_scan_set *ull_scan_is_valid_get(struct ll_scan_set *scan)
+{
+	if (((uint8_t *)scan < (uint8_t *)ll_scan) ||
+	    ((uint8_t *)scan > ((uint8_t *)ll_scan +
+				(sizeof(struct ll_scan_set) *
+				 (BT_CTLR_SCAN_SET - 1))))) {
+		return NULL;
+	}
+
+	return scan;
 }
 
 struct ll_scan_set *ull_scan_is_enabled_get(uint8_t handle)

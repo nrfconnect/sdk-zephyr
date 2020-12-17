@@ -2611,6 +2611,7 @@ static uint8_t legacy_pairing_rsp(struct bt_smp *smp)
 
 	if (!atomic_test_bit(smp->flags, SMP_FLAG_USER)) {
 		atomic_set_bit(&smp->allowed_cmds, BT_SMP_CMD_PAIRING_CONFIRM);
+		atomic_set_bit(&smp->allowed_cmds, BT_SMP_KEYPRESS_NOTIFICATION);
 		return legacy_send_pairing_confirm(smp);
 	}
 
@@ -4075,6 +4076,9 @@ static uint8_t smp_public_key(struct bt_smp *smp, struct net_buf *buf)
 			atomic_set_bit(&smp->allowed_cmds,
 				       BT_SMP_CMD_PAIRING_CONFIRM);
 
+			atomic_set_bit(&smp->allowed_cmds,
+				       BT_SMP_KEYPRESS_NOTIFICATION);
+
 			err = smp_send_pairing_confirm(smp);
 			if (err) {
 				return err;
@@ -4083,6 +4087,10 @@ static uint8_t smp_public_key(struct bt_smp *smp, struct net_buf *buf)
 		case PASSKEY_INPUT:
 			atomic_set_bit(smp->flags, SMP_FLAG_USER);
 			bt_auth->passkey_entry(smp->chan.chan.conn);
+
+			atomic_set_bit(&smp->allowed_cmds,
+				       BT_SMP_KEYPRESS_NOTIFICATION);
+
 			break;
 		case LE_SC_OOB:
 			/* Step 6: Select random N */
@@ -4221,6 +4229,18 @@ static uint8_t smp_dhkey_check(struct bt_smp *smp, struct net_buf *buf)
 	return 0;
 }
 
+static uint8_t smp_keypress_notif(struct bt_smp *smp, struct net_buf *buf)
+{
+	ARG_UNUSED(smp);
+	ARG_UNUSED(buf);
+
+	BT_DBG("");
+
+	/* Ignore packets until keypress notifications are fully supported. */
+	atomic_set_bit(&smp->allowed_cmds, BT_SMP_KEYPRESS_NOTIFICATION);
+	return 0;
+}
+
 static const struct {
 	uint8_t  (*func)(struct bt_smp *smp, struct net_buf *buf);
 	uint8_t  expect_len;
@@ -4239,6 +4259,7 @@ static const struct {
 	{ smp_security_request,    sizeof(struct bt_smp_security_request) },
 	{ smp_public_key,          sizeof(struct bt_smp_public_key) },
 	{ smp_dhkey_check,         sizeof(struct bt_smp_dhkey_check) },
+	{ smp_keypress_notif,      sizeof(struct bt_smp_keypress_notif) },
 };
 
 static int bt_smp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
@@ -4266,7 +4287,17 @@ static int bt_smp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		return 0;
 	}
 
-	if (hdr->code >= ARRAY_SIZE(handlers) || !handlers[hdr->code].func) {
+	/*
+	 * Bluetooth Core Specification Version 5.2, Vol 3, Part H, page 1667:
+	 * If a packet is received with a Code that is reserved for future use
+	 * it shall be ignored.
+	 */
+	if (hdr->code >= ARRAY_SIZE(handlers)) {
+		BT_WARN("Received reserved SMP code 0x%02x", hdr->code);
+		return 0;
+	}
+
+	if (!handlers[hdr->code].func) {
 		BT_WARN("Unhandled SMP code 0x%02x", hdr->code);
 		smp_error(smp, BT_SMP_ERR_CMD_NOTSUPP);
 		return 0;

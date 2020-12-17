@@ -15,9 +15,12 @@ on:
     - 'tests/**'
     - '.known-issues/doc/**'
     - '**/Kconfig*'
+    - 'west.yml'
+    - '.github/workflows/doc-build.yml'
 
 jobs:
-  build:
+  doc-build:
+    name: "Documentation Build"
     runs-on: ubuntu-latest
 
     steps:

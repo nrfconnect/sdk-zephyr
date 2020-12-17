@@ -3472,7 +3472,7 @@ static void hl7800_rx(void)
 
 static void shutdown_uart(void)
 {
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 	int rc;
 
 	if (ictx.uart_on) {
@@ -3490,7 +3490,7 @@ static void shutdown_uart(void)
 
 static void power_on_uart(void)
 {
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 	int rc;
 
 	if (!ictx.uart_on) {
@@ -4583,9 +4583,6 @@ static int offload_put(struct net_context *context)
 	}
 	allow_sleep(true);
 
-	sock->context->connect_cb = NULL;
-	sock->context->recv_cb = NULL;
-	sock->context->send_cb = NULL;
 	socket_put(sock);
 	net_context_unref(context);
 	if (sock->type == SOCK_STREAM) {

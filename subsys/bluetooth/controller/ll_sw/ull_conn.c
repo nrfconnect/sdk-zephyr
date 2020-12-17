@@ -410,9 +410,29 @@ uint8_t ll_chm_get(uint16_t handle, uint8_t *chm)
 	return 0;
 }
 
+static bool is_valid_disconnect_reason(uint8_t reason)
+{
+	switch (reason) {
+	case BT_HCI_ERR_AUTH_FAIL:
+	case BT_HCI_ERR_REMOTE_USER_TERM_CONN:
+	case BT_HCI_ERR_REMOTE_LOW_RESOURCES:
+	case BT_HCI_ERR_REMOTE_POWER_OFF:
+	case BT_HCI_ERR_UNSUPP_REMOTE_FEATURE:
+	case BT_HCI_ERR_PAIRING_NOT_SUPPORTED:
+	case BT_HCI_ERR_UNACCEPT_CONN_PARAM:
+		return true;
+	default:
+		return false;
+	}
+}
+
 uint8_t ll_terminate_ind_send(uint16_t handle, uint8_t reason)
 {
 	struct ll_conn *conn;
+
+	if (!is_valid_disconnect_reason(reason)) {
+		return BT_HCI_ERR_INVALID_PARAM;
+	}
 
 	conn = ll_connected_get(handle);
 	if (!conn) {
@@ -1084,7 +1104,14 @@ void ull_conn_done(struct node_rx_event_done *done)
 	}
 
 	/* Events elapsed used in timeout checks below */
+#if defined(CONFIG_BT_CTLR_CONN_META)
+	/* If event has shallow expiry do not add latency, but rely on
+	 * accumulated lazy count.
+	 */
+	latency_event = conn->common.is_must_expire ? 0 : lll->latency_event;
+#else
 	latency_event = lll->latency_event;
+#endif
 	elapsed_event = latency_event + 1;
 
 	/* Slave drift compensation calc and new latency or
@@ -1164,7 +1191,7 @@ void ull_conn_done(struct node_rx_event_done *done)
 			if (conn->supervision_expire <= 6U) {
 				force = 1U;
 			}
-#if defined(CONFIG_BT_PERIPHERAL)
+#if defined(CONFIG_BT_CTLR_CONN_RANDOM_FORCE)
 			/* use randomness to force slave role when anchor
 			 * points are being missed.
 			 */
@@ -1181,7 +1208,7 @@ void ull_conn_done(struct node_rx_event_done *done)
 					}
 				}
 			}
-#endif /* CONFIG_BT_PERIPHERAL */
+#endif /* CONFIG_BT_CTLR_CONN_RANDOM_FORCE */
 		} else {
 			conn_cleanup(conn, BT_HCI_ERR_CONN_TIMEOUT);
 
@@ -1675,30 +1702,16 @@ static void ticker_op_stop_cb(uint32_t status, void *param)
 
 static inline void disable(uint16_t handle)
 {
-	uint32_t volatile ret_cb;
 	struct ll_conn *conn;
-	void *mark;
-	uint32_t ret;
+	int err;
 
 	conn = ll_conn_get(handle);
 
-	mark = ull_disable_mark(conn);
-	LL_ASSERT(mark == conn);
-
-	ret_cb = TICKER_STATUS_BUSY;
-	ret = ticker_stop(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_THREAD,
-			  TICKER_ID_CONN_BASE + handle,
-			  ull_ticker_status_give, (void *)&ret_cb);
-	ret = ull_ticker_status_take(ret, &ret_cb);
-	if (!ret) {
-		ret = ull_disable(&conn->lll);
-		LL_ASSERT(!ret);
-	}
+	err = ull_ticker_stop_with_mark(TICKER_ID_CONN_BASE + handle,
+					conn, &conn->lll);
+	LL_ASSERT(err == 0 || err == -EALREADY);
 
 	conn->lll.link_tx_free = NULL;
-
-	mark = ull_disable_unmark(conn);
-	LL_ASSERT(mark == conn);
 }
 
 static void conn_cleanup(struct ll_conn *conn, uint8_t reason)
@@ -1706,6 +1719,11 @@ static void conn_cleanup(struct ll_conn *conn, uint8_t reason)
 	struct lll_conn *lll = &conn->lll;
 	struct node_rx_pdu *rx;
 	uint32_t ticker_status;
+
+	/* reset mutex */
+	if (conn == conn_upd_curr) {
+		ull_conn_upd_curr_reset();
+	}
 
 	/* Only termination structure is populated here in ULL context
 	 * but the actual enqueue happens in the LLL context in
@@ -3462,7 +3480,7 @@ static inline void event_phy_req_prep(struct ll_conn *conn)
 		/* update preferred phy */
 		conn->phy_pref_tx = conn->llcp_phy.tx;
 		conn->phy_pref_rx = conn->llcp_phy.rx;
-		conn->phy_pref_flags = conn->llcp_phy.flags;
+		conn->lll.phy_flags = conn->llcp_phy.flags;
 
 		/* place the phy req packet as next in tx queue */
 		pdu_ctrl_tx = (void *)tx->pdu;
@@ -3680,7 +3698,6 @@ static inline void event_phy_upd_ind_prep(struct ll_conn *conn,
 
 #endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 		}
-		lll->phy_flags = conn->phy_pref_flags;
 
 		/* Acquire Rx node */
 		rx = conn->llcp_rx;

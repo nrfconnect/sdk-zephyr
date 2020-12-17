@@ -68,9 +68,9 @@ bindings_from_paths() helper function.
 #   variables. See the existing @properties for a template.
 
 from collections import OrderedDict, defaultdict
+import logging
 import os
 import re
-import sys
 
 import yaml
 try:
@@ -145,7 +145,7 @@ class EDT:
     The standard library's pickle module can be used to marshal and
     unmarshal EDT objects.
     """
-    def __init__(self, dts, bindings_dirs, warn_file=None,
+    def __init__(self, dts, bindings_dirs,
                  warn_reg_unit_address_mismatch=True,
                  default_prop_types=True,
                  support_fixed_partitions_on_any_bus=True,
@@ -159,11 +159,8 @@ class EDT:
           List of paths to directories containing bindings, in YAML format.
           These directories are recursively searched for .yaml files.
 
-        warn_file (default: None):
-          'file' object to write warnings to. If None, sys.stderr is used.
-
         warn_reg_unit_address_mismatch (default: True):
-          If True, a warning is printed if a node has a 'reg' property where
+          If True, a warning is logged if a node has a 'reg' property where
           the address of the first entry does not match the unit address of the
           node
 
@@ -182,11 +179,6 @@ class EDT:
           processed.)  Pass none if no nodes should support inferred bindings.
 
         """
-        # Do this indirection with None in case sys.stderr is
-        # deliberately overridden. We'll only hold on to this file
-        # while we're initializing.
-        self._warn_file = sys.stderr if warn_file is None else warn_file
-
         self._warn_reg_unit_address_mismatch = warn_reg_unit_address_mismatch
         self._default_prop_types = default_prop_types
         self._fixed_partitions_no_bus = support_fixed_partitions_on_any_bus
@@ -203,10 +195,7 @@ class EDT:
         self._init_graph()
         self._init_luts()
 
-        # Drop the reference to the open warn file. This is necessary
-        # to make this object pickleable, but also allows it to get
-        # garbage collected and closed if nobody else is using it.
-        self._warn_file = None
+        self._check()
 
     def get_node(self, path):
         """
@@ -339,8 +328,9 @@ class EDT:
                 # representing the file)
                 raw = yaml.load(contents, Loader=_BindingLoader)
             except yaml.YAMLError as e:
-                self._warn("'{}' appears in binding directories but isn't "
-                           "valid YAML: {}".format(binding_path, e))
+                _LOG.warning(
+                        f"'{binding_path}' appears in binding directories "
+                        f"but isn't valid YAML: {e}")
                 continue
 
             # Convert the raw data to a Binding object, erroring out
@@ -388,8 +378,7 @@ class EDT:
             return None
 
         # Initialize and return the Binding object.
-        return Binding(binding_path, self._binding_fname2path, raw=raw,
-                       warn_file=self._warn_file)
+        return Binding(binding_path, self._binding_fname2path, raw=raw)
 
     def _init_nodes(self):
         # Creates a list of edtlib.Node objects from the dtlib.Node objects, in
@@ -411,7 +400,7 @@ class EDT:
             else:
                 node.compats = []
             node.bus_node = node._bus_node(self._fixed_partitions_no_bus)
-            node._init_binding(warn_file=self._warn_file)
+            node._init_binding()
             node._init_regs()
 
             self.nodes.append(node)
@@ -429,9 +418,9 @@ class EDT:
             # This warning matches the simple_bus_reg warning in dtc
             for node in self.nodes:
                 if node.regs and node.regs[0].addr != node.unit_addr:
-                    self._warn("unit address and first address in 'reg' "
-                               f"(0x{node.regs[0].addr:x}) don't match for "
-                               f"{node.path}")
+                    _LOG.warning("unit address and first address in 'reg' "
+                                 f"(0x{node.regs[0].addr:x}) don't match for "
+                                 f"{node.path}")
 
     def _init_luts(self):
         # Initialize node lookup tables (LUTs).
@@ -455,12 +444,27 @@ class EDT:
             node = nodeset[0]
             self.dep_ord2node[node.dep_ordinal] = node
 
-    def _warn(self, msg):
-        if self._warn_file is not None:
-            print("warning: " + msg, file=self._warn_file)
-        else:
-            raise _err("can't _warn() outside of EDT.__init__")
+    def _check(self):
+        # Tree-wide checks and warnings.
 
+        for binding in self._compat2binding.values():
+            for spec in binding.prop2specs.values():
+                if not spec.enum or spec.type != 'string':
+                    continue
+
+                if not spec.enum_tokenizable:
+                    _LOG.warning(
+                        f"compatible '{binding.compatible}' "
+                        f"in binding '{binding.path}' has non-tokenizable enum "
+                        f"for property '{spec.name}': " +
+                        ', '.join(repr(x) for x in spec.enum))
+                elif not spec.enum_upper_tokenizable:
+                    _LOG.warning(
+                        f"compatible '{binding.compatible}' "
+                        f"in binding '{binding.path}' has enum for property "
+                        f"'{spec.name}' that is only tokenizable "
+                        'in lowercase: ' +
+                        ', '.join(repr(x) for x in spec.enum))
 
 class Node:
     """
@@ -742,7 +746,7 @@ class Node:
             "binding " + self.binding_path if self.binding_path
                 else "no binding")
 
-    def _init_binding(self, warn_file=None):
+    def _init_binding(self):
         # Initializes Node.matching_compat, Node._binding, and
         # Node.binding_path.
         #
@@ -755,7 +759,7 @@ class Node:
         # node_iter() order.
 
         if self.path in self.edt._infer_binding_for_paths:
-            self._binding_from_properties(warn_file=warn_file)
+            self._binding_from_properties()
             return
 
         if self.compats:
@@ -785,7 +789,7 @@ class Node:
         # No binding found
         self._binding = self.binding_path = self.matching_compat = None
 
-    def _binding_from_properties(self, warn_file):
+    def _binding_from_properties(self):
         # Sets up a Binding object synthesized from the properties in the node.
 
         if self.compats:
@@ -824,8 +828,7 @@ class Node:
         self.binding_path = None
         self.matching_compat = None
         self.compats = []
-        self._binding = Binding(None, {}, raw=raw, require_compatible=False,
-                                warn_file=warn_file)
+        self._binding = Binding(None, {}, raw=raw, require_compatible=False)
 
     def _binding_from_parent(self):
         # Returns the binding from 'child-binding:' in the parent node's
@@ -885,18 +888,11 @@ class Node:
             self._check_undeclared_props()
         elif default_prop_types:
             for name in node.props:
-                if name in _DEFAULT_PROP_TYPES:
-                    prop_type = _DEFAULT_PROP_TYPES[name]
-                    val = self._prop_val(name, prop_type, False, False, None)
-                    prop = Property()
-                    prop.node = self
-                    prop.name = name
-                    prop.description = None
-                    prop.val = val
-                    prop.type = prop_type
-                    # We don't set enum_index for "compatible"
-                    prop.enum_index = None
-                    self.props[name] = prop
+                if name not in _DEFAULT_PROP_SPECS:
+                    continue
+                prop_spec = _DEFAULT_PROP_SPECS[name]
+                val = self._prop_val(name, prop_spec.type, False, False, None)
+                self.props[name] = Property(prop_spec, val, self)
 
     def _init_prop(self, prop_spec):
         # _init_props() helper for initializing a single property.
@@ -934,17 +930,7 @@ class Node:
         if name[0] == "#" or name.endswith("-map"):
             return
 
-        prop = Property()
-        prop.node = self
-        prop.name = name
-        prop.description = prop_spec.description
-        if prop.description:
-            prop.description = prop.description.strip()
-        prop.val = val
-        prop.type = prop_type
-        prop.enum_index = None if enum is None else enum.index(val)
-
-        self.props[name] = prop
+        self.props[name] = Property(prop_spec, val, self)
 
     def _prop_val(self, name, prop_type, deprecated, required, default):
         # _init_prop() helper for getting the property's value
@@ -969,8 +955,8 @@ class Node:
         prop = node.props.get(name)
 
         if prop and deprecated:
-            self.edt._warn("'{}' is marked as deprecated in 'properties:' in {} "
-                 "for node {}.".format(name, self.binding_path, node.path))
+            _LOG.warning(f"'{name}' is marked as deprecated in 'properties:' "
+                         f"in {self.binding_path} for node {node.path}.")
 
         if not prop:
             if required and self.status == "okay":
@@ -1326,28 +1312,34 @@ class Property:
     additional info from the 'properties:' section of the binding.
 
     Only properties mentioned in 'properties:' get created. Properties of type
-    'compound' currently do not get Property instances, as I'm not sure what
-    information to store for them.
+    'compound' currently do not get Property instances, as it's not clear
+    what to generate for them.
+
+    These attributes are available on Property objects. Several are
+    just convenience accessors for attributes on the PropertySpec object
+    accessible via the 'spec' attribute.
 
     These attributes are available on Property objects:
 
     node:
       The Node instance the property is on
 
+    spec:
+      The PropertySpec object which specifies this property.
+
     name:
-      The name of the property
+      Convenience for spec.name.
 
     description:
-      The description string from the property as given in the binding, or None
-      if missing. Leading and trailing whitespace (including newlines) is
-      removed.
+      Convenience for spec.name with leading and trailing whitespace
+      (including newlines) removed.
 
     type:
-      A string with the type of the property, as given in the binding.
+      Convenience for spec.type.
 
     val:
-      The value of the property, with the format determined by the 'type:' key
-      from the binding.
+      The value of the property, with the format determined by spec.type,
+      which comes from the 'type:' string in the binding.
 
         - For 'type: int/array/string/string-array', 'val' is what you'd expect
           (a Python integer or string, or a list of them)
@@ -1361,10 +1353,47 @@ class Property:
         - For 'type: phandle-array', 'val' is a list of ControllerAndData
           instances. See the documentation for that class.
 
+    val_as_token:
+      The value of the property as a token, i.e. with non-alphanumeric
+      characters replaced with underscores. This is only safe to access
+      if self.enum_tokenizable returns True.
+
     enum_index:
-      The index of the property's value in the 'enum:' list in the binding, or
-      None if the binding has no 'enum:'
+      The index of 'val' in 'spec.enum' (which comes from the 'enum:' list
+      in the binding), or None if spec.enum is None.
     """
+
+    def __init__(self, spec, val, node):
+        self.val = val
+        self.spec = spec
+        self.node = node
+
+    @property
+    def name(self):
+        "See the class docstring"
+        return self.spec.name
+
+    @property
+    def description(self):
+        "See the class docstring"
+        return self.spec.description.strip()
+
+    @property
+    def type(self):
+        "See the class docstring"
+        return self.spec.type
+
+    @property
+    def val_as_token(self):
+        "See the class docstring"
+        return re.sub(_NOT_ALPHANUM_OR_UNDERSCORE, '_', self.val)
+
+    @property
+    def enum_index(self):
+        "See the class docstring"
+        enum = self.spec.enum
+        return enum.index(self.val) if enum else None
+
     def __repr__(self):
         fields = ["name: " + self.name,
                   # repr() to deal with lists
@@ -1433,8 +1462,7 @@ class Binding:
     """
 
     def __init__(self, path, fname2path, raw=None,
-                 require_compatible=True, require_description=True,
-                 warn_file=None):
+                 require_compatible=True, require_description=True):
         """
         Binding constructor.
 
@@ -1462,15 +1490,7 @@ class Binding:
           "description:" line. If False, a missing "description:" is
           not an error. Either way, "description:" must be a string
           if it is present in the binding.
-
-        warn_file (default: None):
-          'file' object to write warnings to. If None, sys.stderr is used.
         """
-        # Do this indirection with None in case sys.stderr is
-        # deliberately overridden. We'll only hold on to this file
-        # while we're initializing.
-        self._warn_file = sys.stderr if warn_file is None else warn_file
-
         self.path = path
         self._fname2path = fname2path
 
@@ -1516,11 +1536,6 @@ class Binding:
                 if child.compatible is None:
                     child.compatible = self.compatible
                 child = child.child_binding
-
-        # Drop the reference to the open warn file. This is necessary
-        # to make this object pickleable, but also allows it to get
-        # garbage collected and closed if nobody else is using it.
-        self._warn_file = None
 
     def __repr__(self):
         if self.compatible:
@@ -1712,12 +1727,6 @@ class Binding:
                 _err(f"const in {self.path} for property '{prop_name}' "
                      "is not a scalar")
 
-    def _warn(self, msg):
-        if self._warn_file is not None:
-            print("warning: " + msg, file=self._warn_file)
-        else:
-            raise _err("can't _warn() outside of Binding.__init__")
-
 
 def bindings_from_paths(yaml_paths, ignore_errors=False):
     """
@@ -1765,6 +1774,20 @@ class PropertySpec:
     enum:
       A list of values the property may take as given in the binding, or None.
 
+    enum_tokenizable:
+      True if enum is not None and all the values in it are tokenizable;
+      False otherwise.
+
+      A property must have string type and an "enum:" in its binding to be
+      tokenizable. Additionally, the "enum:" values must be unique after
+      converting all non-alphanumeric characters to underscores (so "foo bar"
+      and "foo_bar" in the same "enum:" would not be tokenizable).
+
+    enum_upper_tokenizable:
+      Like 'enum_tokenizable', with the additional restriction that the
+      "enum:" values must be unique after uppercasing and converting
+      non-alphanumeric characters to underscores.
+
     const:
       The property's constant value as given in the binding, or None.
 
@@ -1805,6 +1828,35 @@ class PropertySpec:
     def enum(self):
         "See the class docstring"
         return self._raw.get("enum")
+
+    @property
+    def enum_tokenizable(self):
+        "See the class docstring"
+        if not hasattr(self, '_enum_tokenizable'):
+            if self.type != 'string' or self.enum is None:
+                self._enum_tokenizable = False
+            else:
+                # Saving _as_tokens here lets us reuse it in
+                # enum_upper_tokenizable.
+                self._as_tokens = [re.sub(_NOT_ALPHANUM_OR_UNDERSCORE,
+                                          '_', value)
+                                   for value in self.enum]
+                self._enum_tokenizable = (len(self._as_tokens) ==
+                                          len(set(self._as_tokens)))
+
+        return self._enum_tokenizable
+
+    @property
+    def enum_upper_tokenizable(self):
+        "See the class docstring"
+        if not hasattr(self, '_enum_upper_tokenizable'):
+            if not self.enum_tokenizable:
+                self._enum_upper_tokenizable = False
+            else:
+                self._enum_upper_tokenizable = \
+                    (len(self._as_tokens) ==
+                     len(set(x.upper() for x in self._as_tokens)))
+        return self._enum_upper_tokenizable
 
     @property
     def const(self):
@@ -2460,6 +2512,11 @@ def _check_dt(dt):
 def _err(msg):
     raise EDTError(msg)
 
+# Logging object
+_LOG = logging.getLogger(__name__)
+
+# Regular expression for non-alphanumeric-or-underscore characters.
+_NOT_ALPHANUM_OR_UNDERSCORE = re.compile(r'\W', re.ASCII)
 
 # Custom PyYAML binding loader class to avoid modifying yaml.Loader directly,
 # which could interfere with YAML loading in clients
@@ -2482,8 +2539,14 @@ _BindingLoader.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
     lambda loader, node: OrderedDict(loader.construct_pairs(node)))
 
-# Zephyr: do not change this list without updating the documentation
-# for the DT_PROP() macro in include/devicetree.h.
+#
+# "Default" binding for properties which are defined by the spec.
+#
+# Zephyr: do not change the _DEFAULT_PROP_TYPES keys without
+# updating the documentation for the DT_PROP() macro in
+# include/devicetree.h.
+#
+
 _DEFAULT_PROP_TYPES = {
     "compatible": "string-array",
     "status": "string",
@@ -2494,4 +2557,31 @@ _DEFAULT_PROP_TYPES = {
     "interrupts-extended": "compound",
     "interrupt-names": "string-array",
     "interrupt-controller": "boolean",
+}
+
+_STATUS_ENUM = "ok okay disabled reserved fail fail-sss".split()
+
+def _raw_default_property_for(name):
+    ret = {
+        'type': _DEFAULT_PROP_TYPES[name],
+        'required': False,
+    }
+    if name == 'status':
+        ret['enum'] = _STATUS_ENUM
+    return ret
+
+_DEFAULT_PROP_BINDING = Binding(
+    None, {},
+    raw={
+        'properties': {
+            name: _raw_default_property_for(name)
+            for name in _DEFAULT_PROP_TYPES
+        },
+    },
+    require_compatible=False, require_description=False,
+)
+
+_DEFAULT_PROP_SPECS = {
+    name: PropertySpec(name, _DEFAULT_PROP_BINDING)
+    for name in _DEFAULT_PROP_TYPES
 }

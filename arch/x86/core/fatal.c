@@ -10,7 +10,7 @@
 #include <exc_handle.h>
 #include <logging/log.h>
 #include <x86_mmu.h>
-LOG_MODULE_DECLARE(os);
+LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
 #if defined(CONFIG_BOARD_QEMU_X86) || defined(CONFIG_BOARD_QEMU_X86_64)
 FUNC_NORETURN void arch_system_halt(unsigned int reason)
@@ -32,7 +32,6 @@ FUNC_NORETURN void arch_system_halt(unsigned int reason)
 }
 #endif
 
-#ifdef CONFIG_THREAD_STACK_INFO
 static inline uintptr_t esf_get_sp(const z_arch_esf_t *esf)
 {
 #ifdef CONFIG_X86_64
@@ -41,9 +40,7 @@ static inline uintptr_t esf_get_sp(const z_arch_esf_t *esf)
 	return esf->esp;
 #endif
 }
-#endif
 
-#ifdef CONFIG_EXCEPTION_DEBUG
 static inline uintptr_t esf_get_code(const z_arch_esf_t *esf)
 {
 #ifdef CONFIG_X86_64
@@ -52,7 +49,6 @@ static inline uintptr_t esf_get_code(const z_arch_esf_t *esf)
 	return esf->errorCode;
 #endif
 }
-#endif
 
 #ifdef CONFIG_THREAD_STACK_INFO
 bool z_x86_check_stack_bounds(uintptr_t addr, size_t size, uint16_t cs)
@@ -173,7 +169,7 @@ static inline uintptr_t get_cr3(const z_arch_esf_t *esf)
 
 static inline pentry_t *get_ptables(const z_arch_esf_t *esf)
 {
-	return (pentry_t *)get_cr3(esf);
+	return z_x86_virt_addr(get_cr3(esf));
 }
 
 #ifdef CONFIG_X86_64
@@ -287,45 +283,35 @@ static void log_exception(uintptr_t vector, uintptr_t code)
 	}
 }
 
-/* Page fault error code flags */
-#define PRESENT	BIT(0)
-#define WR	BIT(1)
-#define US	BIT(2)
-#define RSVD	BIT(3)
-#define ID	BIT(4)
-#define PK	BIT(5)
-#define SGX	BIT(15)
-
 static void dump_page_fault(z_arch_esf_t *esf)
 {
-	uintptr_t err, cr2;
+	uintptr_t err;
+	void *cr2;
 
-	/* See Section 6.15 of the IA32 Software Developer's Manual vol 3 */
-	__asm__ ("mov %%cr2, %0" : "=r" (cr2));
-
+	cr2 = z_x86_cr2_get();
 	err = esf_get_code(esf);
-	LOG_ERR("Page fault at address 0x%lx (error code 0x%lx)", cr2, err);
+	LOG_ERR("Page fault at address %p (error code 0x%lx)", cr2, err);
 
-	if ((err & RSVD) != 0) {
+	if ((err & PF_RSVD) != 0) {
 		LOG_ERR("Reserved bits set in page tables");
 	} else {
-		if ((err & PRESENT) == 0) {
+		if ((err & PF_P) == 0) {
 			LOG_ERR("Linear address not present in page tables");
 		}
 		LOG_ERR("Access violation: %s thread not allowed to %s",
-			(err & US) != 0U ? "user" : "supervisor",
-			(err & ID) != 0U ? "execute" : ((err & WR) != 0U ?
-							"write" :
-							"read"));
-		if ((err & PK) != 0) {
+			(err & PF_US) != 0U ? "user" : "supervisor",
+			(err & PF_ID) != 0U ? "execute" : ((err & PF_WR) != 0U ?
+							   "write" :
+							   "read"));
+		if ((err & PF_PK) != 0) {
 			LOG_ERR("Protection key disallowed");
-		} else if ((err & SGX) != 0) {
+		} else if ((err & PF_SGX) != 0) {
 			LOG_ERR("SGX access control violation");
 		}
 	}
 
 #ifdef CONFIG_X86_MMU
-	z_x86_dump_mmu_flags(get_ptables(esf), (void *)cr2);
+	z_x86_dump_mmu_flags(get_ptables(esf), cr2);
 #endif /* CONFIG_X86_MMU */
 }
 #endif /* CONFIG_EXCEPTION_DEBUG */

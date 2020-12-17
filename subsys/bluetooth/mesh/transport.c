@@ -727,7 +727,7 @@ static int sdu_recv(struct bt_mesh_net_rx *rx, uint8_t hdr, uint8_t aszmic,
 			.aszmic = aszmic,
 			.src = rx->ctx.addr,
 			.dst = rx->ctx.recv_dst,
-			.seq_num = rx->seq,
+			.seq_num = seg ? (seg->seq_auth & 0xffffff) : rx->seq,
 			.iv_index = BT_MESH_NET_IVI_RX(rx),
 		},
 		.buf = buf,
@@ -1110,6 +1110,7 @@ static void seg_rx_reset(struct seg_rx *rx, bool full_reset)
 static void seg_ack(struct k_work *work)
 {
 	struct seg_rx *rx = CONTAINER_OF(work, struct seg_rx, ack);
+	int32_t timeout;
 
 	BT_DBG("rx %p", rx);
 
@@ -1127,7 +1128,8 @@ static void seg_ack(struct k_work *work)
 	send_ack(rx->sub, rx->dst, rx->src, rx->ttl, &rx->seq_auth,
 		 rx->block, rx->obo);
 
-	k_delayed_work_submit(&rx->ack, K_MSEC(ack_timeout(rx)));
+	timeout = ack_timeout(rx);
+	k_delayed_work_submit(&rx->ack, K_MSEC(timeout));
 }
 
 static inline bool sdu_len_is_ok(bool ctl, uint8_t seg_n)
@@ -1409,7 +1411,9 @@ found_rx:
 
 	if (!k_delayed_work_remaining_get(&rx->ack) &&
 	    !bt_mesh_lpn_established()) {
-		k_delayed_work_submit(&rx->ack, K_MSEC(ack_timeout(rx)));
+		int32_t timeout = ack_timeout(rx);
+
+		k_delayed_work_submit(&rx->ack, K_MSEC(timeout));
 	}
 
 	/* Allocated segment here */
@@ -1442,9 +1446,6 @@ found_rx:
 	k_delayed_work_cancel(&rx->ack);
 	send_ack(net_rx->sub, net_rx->ctx.recv_dst, net_rx->ctx.addr,
 		 net_rx->ctx.send_ttl, seq_auth, rx->block, rx->obo);
-
-	/* Decrypt with seqAuth */
-	net_rx->seq = (rx->seq_auth & 0xffffff);
 
 	if (net_rx->ctl) {
 		NET_BUF_SIMPLE_DEFINE(sdu, BT_MESH_RX_CTL_MAX);
@@ -1666,6 +1667,8 @@ uint8_t bt_mesh_va_add(uint8_t uuid[16], uint16_t *addr)
 
 	va->ref = 1;
 	va_store(va);
+
+	*addr = va->addr;
 
 	return STATUS_SUCCESS;
 }

@@ -20,14 +20,10 @@ config TFM_BOARD
 
 menuconfig BUILD_WITH_TFM
 	bool "Build with TF-M as the Secure Execution Environment"
-	select CMSIS_RTOS_V2
-	imply POLL
-	imply THREAD_NAME
-	imply THREAD_STACK_INFO
-	imply INIT_STACKS
-	imply THREAD_MONITOR
 	depends on TRUSTED_EXECUTION_NONSECURE
 	depends on TFM_BOARD != ""
+	depends on ARM_TRUSTZONE_M
+	imply INIT_ARCH_HW_AT_BOOT
 	help
 	  When enabled, this option instructs the Zephyr build process to
 	  additionaly generate a TF-M image for the Secure Execution
@@ -44,10 +40,6 @@ menuconfig BUILD_WITH_TFM
 	    CONFIG_TRUSTED_EXECUTION_NONSECURE ie enabled.
 
 if BUILD_WITH_TFM
-
-config NUM_PREEMPT_PRIORITIES
-	int
-	default 56
 
 config TFM_KEY_FILE_S
 	string "Path to private key used to sign secure firmware images."
@@ -84,17 +76,20 @@ config TFM_ISOLATION_LEVEL
 	  1,2 or 3; the default is set by build configuration.
 
 choice TFM_BL2
-        prompt "BL2 configuration, should TFM build with MCUboot support"
-        default TFM_BL2_CONFIG_FILE_DEFAULT
+	prompt "BL2 configuration, should TFM build with MCUboot support"
+	default TFM_BL2_CONFIG_FILE_DEFAULT
 
 config TFM_BL2_CONFIG_FILE_DEFAULT
-        bool "Use TFM BL2 setting from TFM configuration file"
+	bool "Use TFM BL2 setting from TFM configuration file"
+	help
+	  This option does not set -DBL2 in TFM, which means the TF-M platform's
+	  default is used. Currently all TF-M platforms have BL2=ON as default.
 
 config TFM_BL2_TRUE
-        bool "TFM BL2 enabled"
+	bool "TFM BL2 enabled"
 
 config TFM_BL2_FALSE
-        bool "TFM BL2 disabled"
+	bool "TFM BL2 disabled"
 
 endchoice
 

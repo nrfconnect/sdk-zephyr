@@ -111,13 +111,13 @@ enum {
 
 struct bt_le_ext_adv {
 	/* ID Address used for advertising */
-	uint8_t                    id;
+	uint8_t                 id;
 
 	/* Advertising handle */
-	uint16_t			handle;
+	uint8_t                 handle;
 
 	/* Current local Random Address */
-	bt_addr_le_t		random_addr;
+	bt_addr_le_t            random_addr;
 
 	/* Current target address */
 	bt_addr_le_t            target_addr;
@@ -339,6 +339,8 @@ int bt_le_adv_start_internal(const struct bt_le_adv_param *param,
 
 void bt_le_adv_resume(void);
 bool bt_le_scan_random_addr_check(void);
+
+void bt_hci_host_num_completed_packets(struct net_buf *buf);
 
 /* HCI event handlers */
 void hci_evt_pin_code_req(struct net_buf *buf);

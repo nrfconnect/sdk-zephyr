@@ -50,15 +50,15 @@ extern PowerCC26X2_ModuleState PowerCC26X2_module;
 
 /*
  * Power state mapping:
- * SYS_POWER_STATE_SLEEP_1: Idle
- * SYS_POWER_STATE_SLEEP_2: Standby
- * SYS_POWER_STATE_DEEP_SLEEP_1: Shutdown
+ * POWER_STATE_SLEEP_1: Idle
+ * POWER_STATE_SLEEP_2: Standby
+ * POWER_STATE_DEEP_SLEEP_1: Shutdown
  */
 
 /* Invoke Low Power/System Off specific Tasks */
-void sys_set_power_state(enum power_states state)
+void pm_power_state_set(enum power_states state)
 {
-#ifdef CONFIG_SYS_POWER_SLEEP_STATES
+#ifdef CONFIG_PM_SLEEP_STATES
 	uint32_t modeVIMS;
 	uint32_t constraints;
 #endif
@@ -74,8 +74,8 @@ void sys_set_power_state(enum power_states state)
 	irq_unlock(0);
 
 	switch (state) {
-#ifdef CONFIG_SYS_POWER_SLEEP_STATES
-	case SYS_POWER_STATE_SLEEP_1:
+#ifdef CONFIG_PM_SLEEP_STATES
+	case POWER_STATE_SLEEP_1:
 		/* query the declared constraints */
 		constraints = Power_getConstraintMask();
 		/* 1. Get the current VIMS mode */
@@ -101,7 +101,7 @@ void sys_set_power_state(enum power_states state)
 		SysCtrlAonUpdate();
 		break;
 
-	case SYS_POWER_STATE_SLEEP_2:
+	case POWER_STATE_SLEEP_2:
 		/* schedule the wakeup event */
 		ClockP_start(ClockP_handle((ClockP_Struct *)
 			&PowerCC26X2_module.clockObj));
@@ -113,8 +113,8 @@ void sys_set_power_state(enum power_states state)
 		break;
 #endif
 
-#ifdef CONFIG_SYS_POWER_DEEP_SLEEP_STATES
-	case SYS_POWER_STATE_DEEP_SLEEP_1:
+#ifdef CONFIG_PM_DEEP_SLEEP_STATES
+	case POWER_STATE_DEEP_SLEEP_1:
 		Power_shutdown(0, 0);
 		break;
 #endif
@@ -127,7 +127,7 @@ void sys_set_power_state(enum power_states state)
 }
 
 /* Handle SOC specific activity after Low Power Mode Exit */
-void _sys_pm_power_state_exit_post_ops(enum power_states state)
+void _pm_power_state_exit_post_ops(enum power_states state)
 {
 	/*
 	 * System is now in active mode. Reenable interrupts which were disabled

@@ -12,8 +12,10 @@ on:
     - '*'
 
 jobs:
-  build:
+  doc-publish:
+    name: Publish Documentation
     runs-on: ubuntu-latest
+    if: github.repository == 'zephyrproject-rtos/zephyr'
 
     steps:
     - name: Update PATH for west

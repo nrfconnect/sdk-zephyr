@@ -165,7 +165,7 @@ config IDLE_STACK_SIZE
 	default 1024 if XTENSA
 	default 512 if RISCV
 	default 384 if DYNAMIC_OBJECTS
-	default 320 if ARC || (ARM && CPU_HAS_FPU)
+	default 320 if ARC || (ARM && CPU_HAS_FPU) || (X86 && MMU)
 	default 256
 	help
 	  Depending on the work that the idle task must do, most likely due to
@@ -464,6 +464,12 @@ endmenu
 
 menu "Other Kernel Object Options"
 
+config MEM_SLAB_TRACE_MAX_UTILIZATION
+	bool "Enable getting maximum slab utilization"
+	help
+	  This adds variable to the k_mem_slab structure to hold
+	  maximum utilization of the slab.
+
 config NUM_MBOX_ASYNC_MSGS
 	int "Maximum number of in-flight asynchronous mailbox messages"
 	default 10
@@ -495,16 +501,6 @@ config KERNEL_MEM_POOL
 	  Say y if unsure.
 
 if KERNEL_MEM_POOL
-
-config MEM_POOL_HEAP_BACKEND
-	bool "Use k_heap as the backend for k_mem_pool"
-	default y
-	help
-	  This selects a backend implementation for k_mem_pool based
-	  on the sys_heap abstraction instead of the legacy
-	  sys_mem_pool.  This backend has significantly better
-	  performance and memory utilization for general purpose
-	  workloads.
 
 config HEAP_MEM_POOL_SIZE
 	int "Heap memory pool size (in bytes)"
@@ -836,7 +832,8 @@ config TRACE_SCHED_IPI
 
 config KERNEL_COHERENCE
 	bool "Place all shared data into coherent memory"
-	default y if ARCH_HAS_COHERENCE && SMP && MP_NUM_CPUS > 1
+	depends on ARCH_HAS_COHERENCE
+	default y if SMP && MP_NUM_CPUS > 1
 	select THREAD_STACK_INFO
 	help
 	  When available and selected, the kernel will build in a mode
@@ -857,7 +854,7 @@ config TICKLESS_IDLE
 	# NB: This option is deprecated, see TICKLESS_KERNEL and
 	# https://github.com/zephyrproject-rtos/zephyr/pull/12234
 	bool "Tickless idle"
-	default y if SYS_POWER_MANAGEMENT || TICKLESS_CAPABLE
+	default y if PM || TICKLESS_CAPABLE
 	help
 	  This option suppresses periodic system clock interrupts whenever the
 	  kernel becomes idle. This permits the system to remain in a power

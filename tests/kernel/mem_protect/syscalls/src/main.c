@@ -209,8 +209,16 @@ void test_string_nlen(void)
 	 * this address doesn't fault
 	 * Also skip this scenario for em_starterkit_7d, which won't generate
 	 * exceptions when unmapped address is accessed.
+	 *
+	 * In addition to the above, skip the scenario for Non-Secure Cortex-M
+	 * builds; Zephyr running in Non-Secure mode will generate SecureFault
+	 * if it attempts to access any address outside the image Flash or RAM
+	 * boundaries, and the program will hang.
 	 */
-#if !((defined(CONFIG_BOARD_NSIM) && defined(CONFIG_SOC_NSIM_SEM)) || defined(CONFIG_SOC_EMSK_EM7D))
+#if !((defined(CONFIG_BOARD_NSIM) && defined(CONFIG_SOC_NSIM_SEM)) || \
+	defined(CONFIG_SOC_EMSK_EM7D) || \
+	(defined(CONFIG_CPU_CORTEX_M) && \
+		defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)))
 	/* Try to blow up the kernel */
 	ret = string_nlen((char *)FAULTY_ADDRESS, BUF_SIZE, &err);
 	zassert_equal(err, -1, "nonsense string address did not fault");
@@ -414,13 +422,13 @@ void test_syscall_context(void)
 	k_thread_user_mode_enter(test_syscall_context_user, NULL, NULL, NULL);
 }
 
-K_MEM_POOL_DEFINE(test_pool, BUF_SIZE, BUF_SIZE, 4 * NR_THREADS, 4);
+K_HEAP_DEFINE(test_heap, BUF_SIZE * (4 * NR_THREADS));
 
 void test_main(void)
 {
 	sprintf(kernel_string, "this is a kernel string");
 	sprintf(user_string, "this is a user string");
-	k_thread_resource_pool_assign(k_current_get(), &test_pool);
+	k_thread_heap_assign(k_current_get(), &test_heap);
 
 	ztest_test_suite(syscalls,
 			 ztest_unit_test(test_string_nlen),

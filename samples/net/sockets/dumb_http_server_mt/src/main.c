@@ -36,7 +36,11 @@ static const unsigned char private_key[] = {
 #else
 #define STACK_SIZE 1024
 #endif
-#define THREAD_PRIORITY K_PRIO_COOP(0)
+#if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
+#define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
+#else
+#define THREAD_PRIORITY K_PRIO_PREEMPT(8)
+#endif
 
 static const char content[] = {
 #if defined(CONFIG_NET_SAMPLE_SERVE_LARGE_FILE)
@@ -222,14 +226,13 @@ static void client_conn_handler(void *ptr1, void *ptr2, void *ptr3)
 		}
 	} while (true);
 
-	if (received > 0 && received < 10) {
-		/* We received status from the client */
-		if (strstr(buf, "OK")) {
-			running_status = true;
-		} else {
-			running_status = false;
-		}
-
+	/* We received status from the client */
+	if (strstr(buf, "\r\n\r\nOK")) {
+		running_status = true;
+		want_to_quit = true;
+		k_sem_give(&quit_lock);
+	} else if (strstr(buf, "\r\n\r\nFAIL")) {
+		running_status = false;
 		want_to_quit = true;
 		k_sem_give(&quit_lock);
 	} else {

@@ -84,12 +84,31 @@ if(CONFIG_BT_LL_SW_SPLIT)
       )
     endif()
   endif()
+  if(CONFIG_BT_CTLR_SET_HOST_FEATURE)
+    zephyr_library_sources(
+      ll_sw/ll_feat.c
+      )
+  endif()
+
+  if(CONFIG_BT_CTLR_ADV_ISO OR
+     CONFIG_BT_CTLR_SYNC_ISO OR
+     CONFIG_BT_CTLR_PERIPHERAL_ISO OR
+     CONFIG_BT_CTLR_CENTRAL_ISO)
+    zephyr_library_sources(
+      ll_sw/ull_iso.c
+      )
+  endif()
   if(CONFIG_BT_CONN OR
      CONFIG_BT_CTLR_ADV_PERIODIC OR
      CONFIG_BT_CTLR_SYNC_PERIODIC)
     zephyr_library_sources(
       ll_sw/ull_chan.c
       ll_sw/lll_chan.c
+      )
+  endif()
+  if(CONFIG_BT_CTLR_DF)
+    zephyr_library_sources(
+      ll_sw/ull_df.c
       )
   endif()
   zephyr_library_sources_ifdef(

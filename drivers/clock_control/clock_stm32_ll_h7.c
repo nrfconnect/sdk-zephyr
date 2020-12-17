@@ -7,6 +7,10 @@
  */
 
 #include <soc.h>
+#include <stm32_ll_bus.h>
+#include <stm32_ll_pwr.h>
+#include <stm32_ll_rcc.h>
+#include <stm32_ll_utils.h>
 #include <drivers/clock_control.h>
 #include <sys/util.h>
 #include <drivers/clock_control/stm32_clock_control.h>
@@ -107,27 +111,43 @@
 #define APB4_FREQ	((AHB_FREQ)/(CONFIG_CLOCK_STM32_D3PPRE))
 
 /* Datasheet maximum frequency definitions */
-#define SYSCLK_FREQ_MAX	480000000UL
-#define AHB_FREQ_MAX	240000000UL
-#define APBx_FREQ_MAX	120000000UL
+#if defined(CONFIG_SOC_STM32H743XX) ||\
+    defined(CONFIG_SOC_STM32H745XX) ||\
+    defined(CONFIG_SOC_STM32H747XX) ||\
+    defined(CONFIG_SOC_STM32H750XX)
+/* All h7 SoC with maximum 480MHz SYSCLK */
+#define SYSCLK_FREQ_MAX		480000000UL
+#define AHB_FREQ_MAX		240000000UL
+#define APBx_FREQ_MAX		120000000UL
+#elif defined(CONFIG_SOC_STM32H723XX)
+/* All h7 SoC with maximum 550MHz SYSCLK */
+#define SYSCLK_FREQ_MAX		550000000UL
+#define AHB_FREQ_MAX		275000000UL
+#define APBx_FREQ_MAX		137500000UL
+#else
+/* Default: All h7 SoC with maximum 280MHz SYSCLK */
+#define SYSCLK_FREQ_MAX		280000000UL
+#define AHB_FREQ_MAX		140000000UL
+#define APBx_FREQ_MAX		70000000UL
+#endif
 
 #if SYSCLK_FREQ > SYSCLK_FREQ_MAX
-#error "SYSCLK frequency is too high, max is 480MHz"
+#error "SYSCLK frequency is too high!"
 #endif
 #if AHB_FREQ > AHB_FREQ_MAX
-#error "AHB frequency is too high, max is 240MHz"
+#error "AHB frequency is too high!"
 #endif
 #if APB1_FREQ > APBx_FREQ_MAX
-#error "APB1 frequency is too high, max is 120MHz"
+#error "APB1 frequency is too high!"
 #endif
 #if APB2_FREQ > APBx_FREQ_MAX
-#error "APB2 frequency is too high, max is 120MHz"
+#error "APB2 frequency is too high!"
 #endif
 #if APB3_FREQ > APBx_FREQ_MAX
-#error "APB3 frequency is too high, max is 120MHz"
+#error "APB3 frequency is too high!"
 #endif
 #if APB4_FREQ > APBx_FREQ_MAX
-#error "APB4 frequency is too high, max is 120MHz"
+#error "APB4 frequency is too high!"
 #endif
 
 #if SYSCLK_FREQ != CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC
@@ -662,8 +682,9 @@ static int stm32_clock_control_init(const struct device *dev)
  * @brief RCC device, note that priority is intentionally set to 1 so
  * that the device init runs just after SOC init
  */
-DEVICE_AND_API_INIT(rcc_stm32, STM32_CLOCK_CONTROL_NAME,
+DEVICE_DT_DEFINE(DT_NODELABEL(rcc),
 		    &stm32_clock_control_init,
+		    device_pm_control_nop,
 		    NULL, NULL,
 		    PRE_KERNEL_1,
 		    CONFIG_CLOCK_CONTROL_STM32_DEVICE_INIT_PRIORITY,

@@ -113,7 +113,8 @@ struct uarte_nrfx_data {
 #ifdef CONFIG_UART_ASYNC_API
 	struct uarte_async_cb *async;
 #endif
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+	atomic_val_t poll_out_lock;
+#ifdef CONFIG_PM_DEVICE
 	uint32_t pm_state;
 #endif
 	uint8_t char_out;
@@ -1122,6 +1123,11 @@ static void uarte_nrfx_poll_out(const struct device *dev, unsigned char c)
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
 	int key;
 
+#ifdef CONFIG_PM_DEVICE
+	if (data->pm_state != DEVICE_PM_ACTIVE_STATE) {
+		return;
+	}
+#endif
 	if (isr_mode) {
 		while (1) {
 			key = irq_lock();
@@ -1254,9 +1260,16 @@ static int uarte_nrfx_irq_tx_ready_complete(const struct device *dev)
 	 * enabled, otherwise this function would always return true no matter
 	 * what would be the source of interrupt.
 	 */
-	return !data->int_driven->disable_tx_irq &&
-	       nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_TXSTOPPED) &&
-	       nrf_uarte_int_enable_check(uarte, NRF_UARTE_INT_TXSTOPPED_MASK);
+	bool ready = !data->int_driven->disable_tx_irq &&
+		     nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_TXSTOPPED) &&
+		     nrf_uarte_int_enable_check(uarte,
+						NRF_UARTE_INT_TXSTOPPED_MASK);
+
+	if (ready) {
+		data->int_driven->fifo_fill_lock = 0;
+	}
+
+	return ready;
 }
 
 static int uarte_nrfx_irq_rx_ready(const struct device *dev)
@@ -1418,7 +1431,7 @@ static int uarte_instance_init(const struct device *dev,
 		return err;
 	}
 
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 	data->pm_state = DEVICE_PM_ACTIVE_STATE;
 #endif
 
@@ -1467,7 +1480,7 @@ static int uarte_instance_init(const struct device *dev,
 	return 0;
 }
 
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 
 static void uarte_nrfx_pins_enable(const struct device *dev, bool enable)
 {
@@ -1534,6 +1547,8 @@ static void uarte_nrfx_set_power_state(const struct device *dev,
 			NRF_UARTE_PSEL_DISCONNECTED) {
 			nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STARTRX);
 		}
+
+		data->pm_state = new_state;
 	} else {
 		__ASSERT_NO_MSG(new_state == DEVICE_PM_LOW_POWER_STATE ||
 				new_state == DEVICE_PM_SUSPEND_STATE ||
@@ -1545,6 +1560,8 @@ static void uarte_nrfx_set_power_state(const struct device *dev,
 		if (data->pm_state != DEVICE_PM_ACTIVE_STATE) {
 			return;
 		}
+
+		data->pm_state = new_state;
 
 		/* Disabling UART requires stopping RX, but stop RX event is
 		 * only sent after each RX if async UART API is used.
@@ -1587,7 +1604,6 @@ static int uarte_nrfx_pm_control(const struct device *dev,
 
 		if (new_state != data->pm_state) {
 			uarte_nrfx_set_power_state(dev, new_state);
-			data->pm_state = new_state;
 		}
 	} else {
 		__ASSERT_NO_MSG(ctrl_command == DEVICE_PM_GET_POWER_STATE);
@@ -1600,7 +1616,7 @@ static int uarte_nrfx_pm_control(const struct device *dev,
 
 	return 0;
 }
-#endif /* CONFIG_DEVICE_POWER_MANAGEMENT */
+#endif /* CONFIG_PM_DEVICE */
 
 #define UARTE(idx)			DT_NODELABEL(uart##idx)
 #define UARTE_HAS_PROP(idx, prop)	DT_NODE_HAS_PROP(UARTE(idx), prop)
@@ -1617,7 +1633,7 @@ static int uarte_nrfx_pm_control(const struct device *dev,
 #define UARTE_IRQ_CONFIGURE(idx, isr_handler)				       \
 	do {								       \
 		IRQ_CONNECT(DT_IRQN(UARTE(idx)), DT_IRQ(UARTE(idx), priority), \
-			    isr_handler, DEVICE_GET(uart_nrfx_uarte##idx), 0); \
+			    isr_handler, DEVICE_DT_GET(UARTE(idx)), 0); \
 		irq_enable(DT_IRQN(UARTE(idx)));			       \
 	} while (0)
 
@@ -1630,7 +1646,7 @@ static int uarte_nrfx_pm_control(const struct device *dev,
 
 #define UART_NRF_UARTE_DEVICE(idx)					       \
 	HWFC_CONFIG_CHECK(idx);						       \
-	DEVICE_DECLARE(uart_nrfx_uarte##idx);				       \
+	DEVICE_DT_DECLARE(UARTE(idx));					       \
 	UARTE_INT_DRIVEN(idx);						       \
 	UARTE_ASYNC(idx);						       \
 	static struct uarte_nrfx_data uarte_##idx##_data = {		       \
@@ -1667,8 +1683,7 @@ static int uarte_nrfx_pm_control(const struct device *dev,
 			&init_config,					       \
 			IS_ENABLED(CONFIG_UART_##idx##_INTERRUPT_DRIVEN));     \
 	}								       \
-	DEVICE_DEFINE(uart_nrfx_uarte##idx,				       \
-		      DT_LABEL(UARTE(idx)),				       \
+	DEVICE_DT_DEFINE(UARTE(idx),					       \
 		      uarte_##idx##_init,				       \
 		      uarte_nrfx_pm_control,				       \
 		      &uarte_##idx##_data,				       \

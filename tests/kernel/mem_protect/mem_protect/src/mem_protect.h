@@ -50,6 +50,7 @@ extern void test_create_new_essential_thread_from_user(void);
 extern void test_create_new_higher_prio_thread_from_user(void);
 extern void test_create_new_invalid_prio_thread_from_user(void);
 extern void test_mark_thread_exit_uninitialized(void);
+extern void test_mem_part_overlap(void);
 
 /* Flag needed to figure out if the fault was expected or not. */
 extern volatile bool valid_fault;
@@ -113,7 +114,7 @@ static inline void set_fault_valid(bool valid)
 #ifndef _TEST_SYSCALLS_H_
 #define _TEST_SYSCALLS_H_
 
-__syscall struct k_mem_pool *ret_resource_pool_ptr(void);
+__syscall struct k_heap *ret_resource_pool_ptr(void);
 
 #include <syscalls/mem_protect.h>
 

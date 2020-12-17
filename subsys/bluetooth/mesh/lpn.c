@@ -52,11 +52,13 @@
 
 #define POLL_TIMEOUT_INIT         (CONFIG_BT_MESH_LPN_INIT_POLL_TIMEOUT * 100)
 
+#define POLL_TIMEOUT              (CONFIG_BT_MESH_LPN_POLL_TIMEOUT * 100)
+
 #define REQ_ATTEMPTS_MAX          6
 #define REQ_ATTEMPTS(lpn)         MIN(REQ_ATTEMPTS_MAX, \
-			  POLL_TIMEOUT_INIT / REQ_RETRY_DURATION(lpn))
+			  POLL_TIMEOUT / REQ_RETRY_DURATION(lpn))
 
-#define POLL_TIMEOUT_MAX(lpn)     (POLL_TIMEOUT_INIT - \
+#define POLL_TIMEOUT_MAX(lpn)     (POLL_TIMEOUT - \
 			  (REQ_ATTEMPTS(lpn) * REQ_RETRY_DURATION(lpn)))
 
 #define CLEAR_ATTEMPTS            3
@@ -286,13 +288,11 @@ static int send_friend_req(struct bt_mesh_lpn *lpn)
 {
 	const struct bt_mesh_comp *comp = bt_mesh_comp_get();
 	struct bt_mesh_msg_ctx ctx = {
-		.net_idx  = lpn->sub->net_idx,
 		.app_idx  = BT_MESH_KEY_UNUSED,
 		.addr     = BT_MESH_ADDR_FRIENDS,
 		.send_ttl = 0,
 	};
 	struct bt_mesh_net_tx tx = {
-		.sub = bt_mesh.lpn.sub,
 		.ctx = &ctx,
 		.src = bt_mesh_primary_addr(),
 		.xmit = POLL_XMIT,
@@ -307,6 +307,15 @@ static int send_friend_req(struct bt_mesh_lpn *lpn)
 	};
 
 	BT_DBG("");
+
+	lpn->sub = bt_mesh_subnet_next(NULL);
+	if (!lpn->sub) {
+		BT_ERR("No subnets, can't start LPN mode");
+		return -ENOENT;
+	}
+
+	ctx.net_idx = lpn->sub->net_idx;
+	tx.sub = lpn->sub;
 
 	return bt_mesh_ctl_send(&tx, TRANS_CTL_OP_FRIEND_REQ, &req,
 				sizeof(req), &friend_req_sent_cb, NULL);
@@ -345,6 +354,7 @@ static void req_sent(uint16_t duration, int err, void *user_data)
 		k_delayed_work_submit(&lpn->timer,
 				      K_MSEC(LPN_RECV_DELAY - SCAN_LATENCY));
 	} else {
+		lpn_set_state(BT_MESH_LPN_WAIT_UPDATE);
 		k_delayed_work_submit(&lpn->timer,
 				      K_MSEC(LPN_RECV_DELAY + duration +
 					     lpn->recv_win));
@@ -526,7 +536,6 @@ int bt_mesh_lpn_friend_offer(struct bt_mesh_net_rx *rx,
 
 	lpn->frnd_counter = frnd_counter;
 	lpn->frnd = rx->ctx.addr;
-	lpn->sub = rx->sub;
 
 	/* Create friend credentials for each of the valid keys in the
 	 * friendship subnet:
@@ -934,7 +943,9 @@ int bt_mesh_lpn_friend_sub_cfm(struct bt_mesh_net_rx *rx,
 	}
 
 	if (!lpn->sent_req) {
-		k_delayed_work_submit(&lpn->timer, K_MSEC(poll_timeout(lpn)));
+		int32_t timeout = poll_timeout(lpn);
+
+		k_delayed_work_submit(&lpn->timer, K_MSEC(timeout));
 	}
 
 	return 0;
@@ -1023,7 +1034,9 @@ int bt_mesh_lpn_friend_update(struct bt_mesh_net_rx *rx,
 	}
 
 	if (!lpn->sent_req) {
-		k_delayed_work_submit(&lpn->timer, K_MSEC(poll_timeout(lpn)));
+		int32_t timeout = poll_timeout(lpn);
+
+		k_delayed_work_submit(&lpn->timer, K_MSEC(timeout));
 	}
 
 	return 0;

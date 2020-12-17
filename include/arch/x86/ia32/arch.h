@@ -28,6 +28,7 @@
 
 #include <arch/common/addr_types.h>
 #include <arch/x86/ia32/segmentation.h>
+#include <power/power.h>
 
 #endif /* _ASMLANGUAGE */
 
@@ -233,20 +234,14 @@ typedef struct s_isrList {
 				   (flags_p)); \
 }
 
-#ifdef CONFIG_SYS_POWER_MANAGEMENT
-/*
- * FIXME: z_sys_power_save_idle_exit is defined in kernel.h, which cannot be
- *	  included here due to circular dependency
- */
-extern void z_sys_power_save_idle_exit(int32_t ticks);
-
+#ifdef CONFIG_PM
 static inline void arch_irq_direct_pm(void)
 {
 	if (_kernel.idle) {
 		int32_t idle_val = _kernel.idle;
 
 		_kernel.idle = 0;
-		z_sys_power_save_idle_exit(idle_val);
+		z_pm_save_idle_exit(idle_val);
 	}
 }
 

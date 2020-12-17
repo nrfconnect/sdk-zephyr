@@ -125,18 +125,147 @@ extern "C" {
  */
 #define DEVICE_DEFINE(dev_name, drv_name, init_fn, pm_control_fn,	\
 		      data_ptr, cfg_ptr, level, prio, api_ptr)		\
-	Z_DEVICE_DEFINE_PM(dev_name)					\
-	static const Z_DECL_ALIGN(struct device)			\
-		DEVICE_NAME_GET(dev_name) __used			\
-	__attribute__((__section__(".device_" #level STRINGIFY(prio)))) = { \
-		.name = drv_name,					\
-		.config = (cfg_ptr),					\
-		.api = (api_ptr),					\
-		.data = (data_ptr),					\
-		Z_DEVICE_DEFINE_PM_INIT(dev_name, pm_control_fn)	\
-	};								\
-	Z_INIT_ENTRY_DEFINE(_CONCAT(__device_, dev_name), init_fn,	\
-			    (&_CONCAT(__device_, dev_name)), level, prio)
+	Z_DEVICE_DEFINE(DT_INVALID_NODE, dev_name, drv_name, init_fn,	\
+			pm_control_fn,					\
+			data_ptr, cfg_ptr, level, prio, api_ptr)
+
+/**
+ * @def DEVICE_DT_DEFINE
+ *
+ * @brief Like DEVICE_DEFINE but taking metadata from a devicetree node.
+ *
+ * @details This macro defines a device object that is automatically
+ * configured by the kernel during system initialization.  The device
+ * object name is derived from the node identifier (encoding the
+ * devicetree path to the node), and the driver name is from the @p
+ * label property of the devicetree node.
+ *
+ * The device is declared with extern visibility, so device objects
+ * defined through this API can be obtained directly through
+ * DEVICE_DT_GET() using @p node_id.  Before using the pointer the
+ * referenced object should be checked using device_is_ready().
+ *
+ * @param node_id The devicetree node identifier.
+ *
+ * @param init_fn Address to the init function of the driver.
+ *
+ * @param pm_control_fn Pointer to device_pm_control function.
+ * Can be empty function (device_pm_control_nop) if not implemented.
+ *
+ * @param data_ptr Pointer to the device's private data.
+ *
+ * @param cfg_ptr The address to the structure containing the
+ * configuration information for this instance of the driver.
+ *
+ * @param level The initialization level.  See SYS_INIT() for
+ * details.
+ *
+ * @param prio Priority within the selected initialization level. See
+ * SYS_INIT() for details.
+ *
+ * @param api_ptr Provides an initial pointer to the API function struct
+ * used by the driver. Can be NULL.
+ */
+#define DEVICE_DT_DEFINE(node_id, init_fn, pm_control_fn,		\
+			 data_ptr, cfg_ptr, level, prio, api_ptr)	\
+	Z_DEVICE_DEFINE(node_id, node_id, DT_LABEL(node_id), init_fn,	\
+			pm_control_fn,					\
+			data_ptr, cfg_ptr, level, prio, api_ptr)
+
+/**
+ * @def DEVICE_DT_INST_DEFINE
+ *
+ * @brief Like DEVICE_DT_DEFINE for an instance of a DT_DRV_COMPAT compatible
+ *
+ * @param inst instance number.  This is replaced by
+ * <tt>DT_DRV_COMPAT(inst)</tt> in the call to DEVICE_DT_DEFINE.
+ *
+ * @param ... other parameters as expected by DEVICE_DT_DEFINE.
+ */
+#define DEVICE_DT_INST_DEFINE(inst, ...) \
+	DEVICE_DT_DEFINE(DT_DRV_INST(inst), __VA_ARGS__)
+
+/**
+ * @def DEVICE_DT_NAME_GET
+ *
+ * @brief The name of the struct device object for @p node_id
+ *
+ * @details Return the full name of a device object symbol created by
+ * DEVICE_DT_DEFINE(), using the dev_name derived from @p node_id
+ *
+ * It is meant to be used for declaring extern symbols pointing on device
+ * objects before using the DEVICE_DT_GET macro to get the device object.
+ *
+ * @param node_id The same as node_id provided to DEVICE_DT_DEFINE()
+ *
+ * @return The expanded name of the device object created by
+ * DEVICE_DT_DEFINE()
+ */
+#define DEVICE_DT_NAME_GET(node_id) DEVICE_NAME_GET(node_id)
+
+/**
+ * @def DEVICE_DT_GET
+ *
+ * @brief Obtain a pointer to a device object by @p node_id
+ *
+ * @details Return the address of a device object created by
+ * DEVICE_DT_INIT(), using the dev_name derived from @p node_id
+ *
+ * @note A declaration for the corresponding device must be in scope;
+ * e.g:
+ *
+ * @code DEVICE_DT_DECLARE(node_id); @endcode
+ *
+ * @param node_id The same as node_id provided to DEVICE_DT_DEFINE()
+ *
+ * @return A pointer to the device object created by DEVICE_DT_DEFINE()
+ */
+#define DEVICE_DT_GET(node_id) (&DEVICE_DT_NAME_GET(node_id))
+
+/** @def DEVICE_DT_INST_GET
+ *
+ * @brief Obtain a pointer to a device object for an instance of a
+ *        DT_DRV_COMPAT compatible
+ *
+ * @param inst instance number
+ */
+#define DEVICE_DT_INST_GET(inst) DEVICE_DT_GET(DT_DRV_INST(inst))
+
+/** @def DEVICE_DT_DECLARE
+ *
+ * @brief Declare a device object associated with @p node_id
+ *
+ * This macro can be used in source files to get a reference to the
+ * device structure corresponding to a devicetree node.
+ *
+ * Within driver implementation files it is used to declare a device so
+ * that DEVICE_DT_GET() may be used before the full declaration in
+ * DEVICE_DT_DEFINE().
+ *
+ * This is often useful when configuring interrupts statically in a
+ * device's init or per-instance config function, as the init function
+ * itself is required by DEVICE_DT_DEFINE() and use of DEVICE_DT_GET()
+ * inside it creates a circular dependency.
+ *
+ * It can also be used in unrelated modules to store the pointer to a
+ * device without having to look it up at runtime through
+ * device_get_binding().
+ *
+ * Note that the device declaration has no storage class specifiers.
+ *
+ * @param node_id The same as node_id provided to DEVICE_DT_DEFINE()
+ */
+#define DEVICE_DT_DECLARE(node_id)			\
+	extern const struct device DEVICE_DT_NAME_GET(node_id)
+
+/** @def DEVICE_DT_INST_DECLARE
+ *
+ * @brief Declare a device object associated for an instance of a
+ *        DT_DRV_COMPAT compatible
+ *
+ * @param inst instance number
+ */
+#define DEVICE_DT_INST_DECLARE(inst) DEVICE_DT_DECLARE(DT_DRV_INST(inst))
 
 /**
  * @def DEVICE_GET
@@ -206,7 +335,7 @@ struct device {
 	const void *api;
 	/** Address of the device instance private data */
 	void * const data;
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 	/** Power Management function */
 	int (*device_pm_control)(const struct device *dev, uint32_t command,
 				 void *context, device_pm_cb cb, void *arg);
@@ -247,6 +376,28 @@ size_t z_device_get_all_static(const struct device * *devices);
  */
 bool z_device_ready(const struct device *dev);
 
+/** @brief Verify that a device is ready for use.
+ *
+ * Indicates whether the provided device pointer is for a device known to be
+ * in a state where it can be used with its standard API.
+ *
+ * This can be used with device pointers captured from DEVICE_DT_GET(), which
+ * does not include the readiness checks of device_get_binding().  At minimum
+ * this means that the device has been successfully initialized, but it may
+ * take on further conditions (e.g. is not powered down).
+ *
+ * @param dev pointer to the device in question.
+ *
+ * @retval true if the device is ready for use.
+ * @retval false if the device is not ready for use.
+ */
+__syscall bool device_is_ready(const struct device *dev);
+
+static inline bool z_impl_device_is_ready(const struct device *dev)
+{
+	return z_device_ready(dev);
+}
+
 /**
  * @}
  */
@@ -258,7 +409,7 @@ bool z_device_ready(const struct device *dev);
  * @{
  */
 
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 
 /** @def DEVICE_PM_ACTIVE_STATE
  *
@@ -313,7 +464,7 @@ bool z_device_ready(const struct device *dev);
 #define DEVICE_PM_SET_POWER_STATE       1
 #define DEVICE_PM_GET_POWER_STATE       2
 
-#endif /* CONFIG_DEVICE_POWER_MANAGEMENT */
+#endif /* CONFIG_PM_DEVICE */
 
 /**
  * @brief Get name of device PM state
@@ -341,7 +492,7 @@ void device_busy_set(const struct device *busy_dev);
  */
 void device_busy_clear(const struct device *busy_dev);
 
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 /*
  * Device PM functions
  */
@@ -464,14 +615,14 @@ int device_any_busy_check(void);
  */
 int device_busy_check(const struct device *chk_dev);
 
-#ifdef CONFIG_DEVICE_IDLE_PM
+#ifdef CONFIG_PM_DEVICE_IDLE
 
-/* Device PM FSM states */
-enum device_pm_fsm_state {
-	DEVICE_PM_FSM_STATE_ACTIVE = 1,
-	DEVICE_PM_FSM_STATE_SUSPENDED,
-	DEVICE_PM_FSM_STATE_SUSPENDING,
-	DEVICE_PM_FSM_STATE_RESUMING,
+/* Device PM states */
+enum device_pm_state {
+	DEVICE_PM_STATE_ACTIVE = 1,
+	DEVICE_PM_STATE_SUSPENDED,
+	DEVICE_PM_STATE_SUSPENDING,
+	DEVICE_PM_STATE_RESUMING,
 };
 
 /**
@@ -574,7 +725,23 @@ static inline int device_pm_put_sync(const struct device *dev) { return -ENOTSUP
  * @}
  */
 
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#define Z_DEVICE_DEFINE(node_id, dev_name, drv_name, init_fn, pm_control_fn, \
+			data_ptr, cfg_ptr, level, prio, api_ptr)	\
+	Z_DEVICE_DEFINE_PM(dev_name)					\
+	COND_CODE_1(DT_NODE_EXISTS(dev_name), (), (static))		\
+		const Z_DECL_ALIGN(struct device)			\
+		DEVICE_NAME_GET(dev_name) __used			\
+	__attribute__((__section__(".device_" #level STRINGIFY(prio)))) = { \
+		.name = drv_name,					\
+		.config = (cfg_ptr),					\
+		.api = (api_ptr),					\
+		.data = (data_ptr),					\
+		Z_DEVICE_DEFINE_PM_INIT(dev_name, pm_control_fn)	\
+	};								\
+	Z_INIT_ENTRY_DEFINE(_CONCAT(__device_, dev_name), init_fn,	\
+			    (&_CONCAT(__device_, dev_name)), level, prio)
+
+#ifdef CONFIG_PM_DEVICE
 #define Z_DEVICE_DEFINE_PM(dev_name)					\
 	static struct device_pm _CONCAT(__pm_, dev_name) __used  = {	\
 		.usage = ATOMIC_INIT(0),				\

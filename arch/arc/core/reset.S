@@ -154,9 +154,9 @@ done_mpu_regions_reset:
 #endif
 #endif
 
-#if defined(CONFIG_SYS_POWER_DEEP_SLEEP_STATES) && \
+#if defined(CONFIG_PM_DEEP_SLEEP_STATES) && \
 	!defined(CONFIG_BOOTLOADER_CONTEXT_RESTORE)
-        jl @_sys_resume_from_deep_sleep
+        jl @pm_system_resume_from_deep_sleep
 #endif
 
 #if defined(CONFIG_SMP) || CONFIG_MP_NUM_CPUS  > 1

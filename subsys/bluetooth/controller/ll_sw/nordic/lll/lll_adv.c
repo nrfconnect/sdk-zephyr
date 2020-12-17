@@ -344,8 +344,8 @@ int lll_adv_scan_req_report(struct lll_adv *lll, struct pdu_adv *pdu_adv_rx,
 	pdu_len = offsetof(struct pdu_adv, payload) + pdu_adv_rx->len;
 	memcpy(pdu_adv, pdu_adv_rx, pdu_len);
 
-	node_rx->hdr.rx_ftr.rssi = (rssi_ready) ? (radio_rssi_get() & 0x7f) :
-						  0x7f;
+	node_rx->hdr.rx_ftr.rssi = (rssi_ready) ? radio_rssi_get() :
+						  BT_HCI_LE_RSSI_NOT_AVAILABLE;
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	node_rx->hdr.rx_ftr.rl_idx = rl_idx;
 #endif
@@ -417,10 +417,10 @@ static int prepare_cb(struct lll_prepare_param *p)
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 	/* TODO: if coded we use S8? */
 	radio_phy_set(lll->phy_p, 1);
-	radio_pkt_configure(8, PDU_AC_PAYLOAD_SIZE_MAX, (lll->phy_p << 1));
+	radio_pkt_configure(8, PDU_AC_LEG_PAYLOAD_SIZE_MAX, (lll->phy_p << 1));
 #else /* !CONFIG_BT_CTLR_ADV_EXT */
 	radio_phy_set(0, 0);
-	radio_pkt_configure(8, PDU_AC_PAYLOAD_SIZE_MAX, 0);
+	radio_pkt_configure(8, PDU_AC_LEG_PAYLOAD_SIZE_MAX, 0);
 #endif /* !CONFIG_BT_CTLR_ADV_EXT */
 
 	aa = sys_cpu_to_le32(PDU_AC_ACCESS_ADDR);
@@ -773,12 +773,12 @@ static void isr_done(void *param)
 #if defined(CONFIG_BT_CTLR_ADV_EXT) && defined(BT_CTLR_ADV_EXT_PBACK)
 	} else {
 		struct pdu_adv_com_ext_adv *p;
-		struct pdu_adv_hdr *h;
+		struct pdu_adv_ext_hdr *h;
 		struct pdu_adv *pdu;
 
 		pdu = lll_adv_data_curr_get(lll);
 		p = (void *)&pdu->adv_ext_ind;
-		h = (void *)p->ext_hdr_adi_adv_data;
+		h = (void *)p->ext_hdr_adv_data;
 
 		if ((pdu->type == PDU_ADV_TYPE_EXT_IND) && h->aux_ptr) {
 			radio_filter_disable();

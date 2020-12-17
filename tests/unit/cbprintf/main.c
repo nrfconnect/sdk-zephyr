@@ -182,6 +182,12 @@ static int rawprf(const char *format, ...)
 	va_start(ap, format);
 	rv = cbvprintf(out, NULL, format, ap);
 	va_end(ap);
+
+	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)
+	    && !IS_ENABLED(CONFIG_CBPRINTF_LIBC_SUBSTS)) {
+		zassert_equal(rv, 0, NULL);
+		rv = bp - buf;
+	}
 	return rv;
 }
 
@@ -224,9 +230,11 @@ static inline bool prf_check(const char *expected,
 	};
 
 	const char *str = buf;
-	const char *sp = str;
-	int rc = match_pfx(&str);
+	const char *sp;
+	int rc;
 
+	sp = str;
+	rc = match_pfx(&str);
 	if (rc != 0) {
 		return prf_failed(&ctx, sp, "pfx mismatch %d\n", rc);
 	}
@@ -235,7 +243,6 @@ static inline bool prf_check(const char *expected,
 	rc = match_str(&str, expected, strlen(expected));
 	if (rc != 0) {
 		return prf_failed(&ctx, sp, "str mismatch %d\n", rc);
-		return false;
 	}
 
 	sp = str;
@@ -247,9 +254,7 @@ static inline bool prf_check(const char *expected,
 	rc = (*str != 0);
 	if (rc != 0) {
 		return prf_failed(&ctx, str, "no eos %02x\n", *str);
-		return false;
 	}
-
 
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)
 	    && !IS_ENABLED(CONFIG_CBPRINTF_LIBC_SUBSTS)) {
@@ -354,19 +359,13 @@ static void test_v_c(void)
 	reset_out();
 	buf[1] = 'b';
 	rc = rawprf("%c", 'a');
-	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)
-	    && !IS_ENABLED(CONFIG_CBPRINTF_LIBC_SUBSTS)) {
-		zassert_equal(rc, 0, NULL);
-		rc = 1;
-	} else {
-		zassert_equal(rc, 1, NULL);
-	}
+	zassert_equal(rc, 1, NULL);
 	zassert_equal(buf[0], 'a', NULL);
 	if (!IS_ENABLED(USE_LIBC)) {
 		zassert_equal(buf[1], 'b', "wth %x", buf[1]);
 	}
-
 }
+
 static void test_d_length(void)
 {
 	int min = -1234567890;
@@ -719,6 +718,91 @@ static void test_fp_value(void)
 	} else {
 		PRF_CHECK("%a 5.562685e-309", rc);
 	}
+
+	/*
+	 * The following tests are tailored to exercise edge cases in
+	 * lib/os/cbprintf_complete.c:encode_float() and related functions.
+	 */
+
+	dv = 0x1.0p-3;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("0.125", rc);
+
+	dv = 0x1.0p-4;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("0.0625", rc);
+
+	dv = 0x1.8p-4;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("0.09375", rc);
+
+	dv = 0x1.cp-4;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("0.109375", rc);
+
+	dv = 0x1.9999999800000p-7;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("0.01249999999708962", rc);
+
+	dv = 0x1.9999999ffffffp-8;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("0.006250000005820765", rc);
+
+	dv = 0x1.0p+0;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("1", rc);
+
+	dv = 0x1.fffffffffffffp-1022;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("4.450147717014402e-308", rc);
+
+	dv = 0x1.ffffffffffffep-1022;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("4.450147717014402e-308", rc);
+
+	dv = 0x1.ffffffffffffdp-1022;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("4.450147717014401e-308", rc);
+
+	dv = 0x1.0000000000001p-1022;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("2.225073858507202e-308", rc);
+
+	dv = 0x1p-1022;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("2.225073858507201e-308", rc);
+
+	dv = 0x0.fffffffffffffp-1022;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("2.225073858507201e-308", rc);
+
+	dv = 0x0.0000000000001p-1022;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("4.940656458412465e-324", rc);
+
+	dv = 0x1.1fa182c40c60dp-1019;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("2e-307", rc);
+
+	dv = 0x1.fffffffffffffp+1023;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("1.797693134862316e+308", rc);
+
+	dv = 0x1.ffffffffffffep+1023;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("1.797693134862316e+308", rc);
+
+	dv = 0x1.ffffffffffffdp+1023;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("1.797693134862315e+308", rc);
+
+	dv = 0x1.0000000000001p+1023;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("8.988465674311582e+307", rc);
+
+	dv = 0x1p+1023;
+	rc = TEST_PRF("%.16g", dv);
+	PRF_CHECK("8.98846567431158e+307", rc);
 }
 
 static void test_fp_length(void)
@@ -928,9 +1012,6 @@ static void test_p(void)
 		return;
 	}
 
-	/* NANO and COMPLETE agree on the format of none-null
-	 * pointers, but not on null pointers.
-	 */
 	uintptr_t uip = 0xcafe21;
 	void *ptr = (void *)uip;
 	int rc;
@@ -948,18 +1029,22 @@ static void test_p(void)
 		rc = rawprf("/%12p/", ptr);
 		zassert_equal(rc, 14, NULL);
 		zassert_equal(strncmp("/    0xcafe21/", buf, rc), 0, NULL);
+
+		reset_out();
+		rc = rawprf("/%12p/", NULL);
+		zassert_equal(rc, 14, NULL);
+		zassert_equal(strncmp("/       (nil)/", buf, rc), 0, NULL);
 	}
 
 	reset_out();
 	rc = rawprf("/%-12p/", ptr);
-	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)
-	    && !IS_ENABLED(CONFIG_CBPRINTF_LIBC_SUBSTS)) {
-		zassert_equal(rc, 0, NULL);
-		rc = 14;
-	} else {
-		zassert_equal(rc, 14, NULL);
-	}
+	zassert_equal(rc, 14, NULL);
 	zassert_equal(strncmp("/0xcafe21    /", buf, rc), 0, NULL);
+
+	reset_out();
+	rc = rawprf("/%-12p/", NULL);
+	zassert_equal(rc, 14, NULL);
+	zassert_equal(strncmp("/(nil)       /", buf, rc), 0, NULL);
 
 	/* Nano doesn't support zero-padding of pointer values.
 	 */

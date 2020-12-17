@@ -16,7 +16,7 @@
 #include <kernel_internal.h>
 #include <logging/log.h>
 #include <sys/atomic.h>
-LOG_MODULE_DECLARE(os);
+LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
 /* Maximum time between the time a self-aborting thread flags itself
  * DEAD and the last read or write to its stack memory (i.e. the time
@@ -1256,14 +1256,19 @@ static inline void z_vrfy_k_yield(void)
 #include <syscalls/k_yield_mrsh.c>
 #endif
 
-static int32_t z_tick_sleep(int32_t ticks)
+static int32_t z_tick_sleep(k_ticks_t ticks)
 {
 #ifdef CONFIG_MULTITHREADING
-	uint32_t expected_wakeup_time;
+	uint32_t expected_wakeup_ticks;
 
 	__ASSERT(!arch_is_in_isr(), "");
 
-	LOG_DBG("thread %p for %d ticks", _current, ticks);
+#ifndef CONFIG_TIMEOUT_64BIT
+	/* LOG subsys does not handle 64-bit values
+	 * https://github.com/zephyrproject-rtos/zephyr/issues/26246
+	 */
+	LOG_DBG("thread %p for %u ticks", _current, ticks);
+#endif
 
 	/* wait of 0 ms is treated as a 'yield' */
 	if (ticks == 0) {
@@ -1277,10 +1282,10 @@ static int32_t z_tick_sleep(int32_t ticks)
 	timeout = Z_TIMEOUT_TICKS(ticks);
 #else
 	ticks += _TICK_ALIGN;
-	timeout = (k_ticks_t) ticks;
+	timeout = Z_TIMEOUT_TICKS(ticks);
 #endif
 
-	expected_wakeup_time = ticks + z_tick_get_32();
+	expected_wakeup_ticks = ticks + z_tick_get_32();
 
 	k_spinlock_key_t key = k_spin_lock(&sched_spinlock);
 
@@ -1295,7 +1300,7 @@ static int32_t z_tick_sleep(int32_t ticks)
 
 	__ASSERT(!z_is_thread_state_set(_current, _THREAD_SUSPENDED), "");
 
-	ticks = expected_wakeup_time - z_tick_get_32();
+	ticks = (k_ticks_t)expected_wakeup_ticks - z_tick_get_32();
 	if (ticks > 0) {
 		return ticks;
 	}

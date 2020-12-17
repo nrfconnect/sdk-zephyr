@@ -5,12 +5,18 @@
 '''Runners for Synopsys Metaware Debugger(mdb).'''
 
 
-import time
 import shutil
-import psutil
+import time
 import os
 from os import path
+
 from runners.core import ZephyrBinaryRunner, RunnerCaps
+
+try:
+    import psutil
+    MISSING_REQUIREMENTS = False
+except ImportError:
+    MISSING_REQUIREMENTS = True
 
 # normally we should create class with common functionality inherited from
 # ZephyrBinaryRunner and inherit MdbNsimBinaryRunner and MdbHwBinaryRunner
@@ -37,8 +43,7 @@ def get_cld_pid(mdb_process):
 # process pid to file (mdb.pid) so this process can be terminated correctly by
 # sanitycheck infrastructure
 def record_cld_pid(mdb_runner, mdb_process):
-    for _i in range(20):
-        time.sleep(0.5)
+    for _i in range(100):
         found, pid = get_cld_pid(mdb_process)
         if found:
             mdb_pid_file = path.join(mdb_runner.build_dir, 'mdb.pid')
@@ -46,6 +51,7 @@ def record_cld_pid(mdb_runner, mdb_process):
             with open(mdb_pid_file, 'w') as f:
                 f.write(str(pid))
             return
+        time.sleep(0.05)
 
 def mdb_do_run(mdb_runner, command):
     commander = "mdb"
@@ -205,4 +211,9 @@ class MdbHwBinaryRunner(ZephyrBinaryRunner):
             dig_device=args.dig_device)
 
     def do_run(self, command, **kwargs):
+        if MISSING_REQUIREMENTS:
+            raise RuntimeError('one or more Python dependencies were missing; '
+                               "see the getting started guide for details on "
+                               "how to fix")
+
         mdb_do_run(self, command)

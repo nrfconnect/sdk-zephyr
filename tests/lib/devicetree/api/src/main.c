@@ -20,6 +20,7 @@
 #define TEST_IRQ	DT_NODELABEL(test_irq)
 #define TEST_TEMP	DT_NODELABEL(test_temp_sensor)
 #define TEST_REG	DT_NODELABEL(test_reg)
+#define TEST_ENUM_0	DT_NODELABEL(test_enum_0)
 
 #define TEST_I2C_DEV DT_PATH(test, i2c_11112222, test_i2c_dev_10)
 #define TEST_I2C_BUS DT_BUS(TEST_I2C_DEV)
@@ -678,6 +679,14 @@ static void test_phandles(void)
 			     "TEST_GPIO_2"),
 		     "gpios[1].label");
 
+	/* DT_PROP_BY_PHANDLE_IDX_OR */
+	zassert_true(!strcmp(DT_PROP_BY_PHANDLE_IDX_OR(TEST_PH, phs_or, 0,
+						val, "zero"), "one"),
+		     "phs-or 0");
+	zassert_true(!strcmp(DT_PROP_BY_PHANDLE_IDX_OR(TEST_PH, phs_or, 1,
+						val, "zero"), "zero"),
+		     "phs-or 1");
+
 	/* phandle-array */
 	zassert_true(DT_NODE_HAS_PROP(TEST_PH, gpios), "gpios");
 	zassert_equal(ARRAY_SIZE(gps), 2, "gpios size");
@@ -856,6 +865,18 @@ static void test_phandles(void)
 #define DT_DRV_COMPAT vnd_phandle_holder
 static void test_gpio(void)
 {
+	/* DT_GPIO_CTLR_BY_IDX */
+	zassert_true(!strcmp(TO_STRING(DT_GPIO_CTLR_BY_IDX(TEST_PH, gpios, 0)),
+			     TO_STRING(DT_NODELABEL(test_gpio_1))),
+		     "gpio 0 ctlr idx");
+	zassert_true(!strcmp(TO_STRING(DT_GPIO_CTLR_BY_IDX(TEST_PH, gpios, 1)),
+			     TO_STRING(DT_NODELABEL(test_gpio_2))),
+		     "gpio 1 ctlr idx");
+
+	/* DT_GPIO_CTLR */
+	zassert_true(!strcmp(TO_STRING(DT_GPIO_CTLR(TEST_PH, gpios)),
+			     TO_STRING(DT_NODELABEL(test_gpio_1))),
+		     "gpio 0 ctlr");
 
 	/* DT_GPIO_LABEL_BY_IDX */
 	zassert_true(!strcmp(DT_GPIO_LABEL_BY_IDX(TEST_PH, gpios, 0),
@@ -1406,10 +1427,23 @@ static void test_chosen(void)
 		     "chosen");
 }
 
+#define TO_MY_ENUM(token) TO_MY_ENUM_2(token) /* force another expansion */
+#define TO_MY_ENUM_2(token) MY_ENUM_ ## token
 static void test_enums(void)
 {
-	zassert_equal(DT_ENUM_IDX(DT_NODELABEL(test_enum_0), val), 0, "0");
+	enum {
+		MY_ENUM_zero = 0xff,
+		MY_ENUM_ZERO = 0xaa,
+	};
+
+	zassert_equal(DT_ENUM_IDX(TEST_ENUM_0, val), 0, "0");
+	zassert_equal(TO_MY_ENUM(DT_ENUM_TOKEN(TEST_ENUM_0, val)),
+		      0xff, "zero as token");
+	zassert_equal(TO_MY_ENUM(DT_ENUM_UPPER_TOKEN(TEST_ENUM_0, val)),
+		      0xaa, "zero as uppercase token");
 }
+#undef TO_MY_ENUM
+#undef TO_MY_ENUM_2
 
 static void test_enums_required_false(void)
 {

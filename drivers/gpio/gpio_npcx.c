@@ -273,15 +273,15 @@ int gpio_npcx_init(const struct device *dev)
 		},                                                             \
 		.base = DT_INST_REG_ADDR(inst),                                \
 		.port = inst,                                                  \
-		.wui_size = DT_NPCX_WUI_ITEMS_LEN(inst),                       \
-		.wui_maps = DT_NPCX_WUI_ITEMS_LIST(inst)                       \
+		.wui_size = NPCX_DT_WUI_ITEMS_LEN(inst),                       \
+		.wui_maps = NPCX_DT_WUI_ITEMS_LIST(inst)                       \
 	};                                                                     \
 									       \
 	static struct gpio_npcx_data gpio_npcx_data_##inst;	               \
 									       \
-	DEVICE_AND_API_INIT(gpio_npcx_##inst,                                  \
-			    DT_INST_LABEL(inst),                               \
+	DEVICE_DT_INST_DEFINE(inst,					       \
 			    gpio_npcx_init,                                    \
+			    device_pm_control_nop,			       \
 			    &gpio_npcx_data_##inst,                            \
 			    &gpio_npcx_cfg_##inst,                             \
 			    POST_KERNEL,                                       \
@@ -291,7 +291,7 @@ int gpio_npcx_init(const struct device *dev)
 DT_INST_FOREACH_STATUS_OKAY(NPCX_GPIO_DEVICE_INIT)
 
 /* GPIO module instances */
-#define NPCX_GPIO_DEV(inst) DEVICE_GET(gpio_npcx_##inst),
+#define NPCX_GPIO_DEV(inst) DEVICE_DT_INST_GET(inst),
 static const struct device *gpio_devs[] = {
 	DT_INST_FOREACH_STATUS_OKAY(NPCX_GPIO_DEV)
 };

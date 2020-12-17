@@ -695,22 +695,10 @@ static size_t conversion_arglen(const struct conversion *conv)
 	return words;
 }
 
-/* Ceiling divide by two. */
-static void _rlrshift(uint64_t *v)
-{
-	*v = (*v & 1) + (*v >> 1);
-}
-
 #ifdef CONFIG_64BIT
 
 static void _ldiv5(uint64_t *v)
 {
-	/*
-	 * Usage in this file wants rounded behavior, not truncation.  So add
-	 * two to get the threshold right.
-	 */
-	*v += 2U;
-
 	/* The compiler can optimize this on its own on 64-bit architectures */
 	*v /= 5U;
 }
@@ -735,13 +723,11 @@ static void _ldiv5(uint64_t *v)
  *
  * Here the multiplier is: (1 << 64) / 5 = 0x3333333333333333
  * i.e. a 62 bits value. To compensate for the reduced precision, we
- * add an initial bias of 1 to v. Enlarging the multiplier to 64 bits
- * would also work but a final right shift would be needed, and carry
- * handling on the summing of partial mults would be necessary, requiring
- * more instructions. Given that we already want to add bias of 2 for
- * the result to be rounded to nearest and not truncated, we might  as well
- * combine those together into a bias of 3. This also conveniently allows
- * for keeping the multiplier in a single 32-bit register given its pattern.
+ * add an initial bias of 1 to v. This conveniently allows for keeping
+ * the multiplier in a single 32-bit register given its pattern.
+ * Enlarging the multiplier to 64 bits would also work but carry handling
+ * on the summing of partial mults would be necessary, and a final right
+ * shift would be needed, requiring more instructions.
  */
 static void _ldiv5(uint64_t *v)
 {
@@ -758,12 +744,10 @@ static void _ldiv5(uint64_t *v)
 	__asm__ ("" : "+r" (m));
 
 	/*
-	 * Apply the bias of 3. We can't add it to v as this would overflow
+	 * Apply a bias of 1 to v. We can't add it to v as this would overflow
 	 * it when at max range. Factor it out with the multiplier upfront.
-	 * Here we multiply the low and high parts separately to avoid an
-	 * unnecessary 64-bit add-with-carry.
 	 */
-	result = ((uint64_t)(m * 3U) << 32) | (m * 3U);
+	result = ((uint64_t)m << 32) | m;
 
 	/* The actual multiplication. */
 	result += (uint64_t)v_lo * m;
@@ -777,6 +761,13 @@ static void _ldiv5(uint64_t *v)
 }
 
 #endif /* CONFIG_64BIT */
+
+/* Division by 10 */
+static void _ldiv10(uint64_t *v)
+{
+	*v >>= 1;
+	_ldiv5(v);
+}
 
 /* Extract the next decimal character in the converted representation of a
  * fractional component.
@@ -854,9 +845,6 @@ static char *encode_uint(uint_value_type value,
 
 	return bp;
 }
-
-/* A magic value used in conversion. */
-#define MAX_FP1 UINT32_MAX
 
 /* Number of bits in the fractional part of an IEEE 754-2008 double
  * precision float.
@@ -1110,41 +1098,56 @@ static char *encode_float(double value,
 		fract |= BIT_63;
 	}
 
-
-	/* Magically convert the base-2 exponent to a base-10
-	 * exponent.
+	/*
+	 * Let's consider:
+	 *
+	 *	value = fract * 2^exp * 10^decexp
+	 *
+	 * Initially decexp = 0. The goal is to bring exp between
+	 * 0 and -2 as the magnitude of a fractional decimal digit is 3 bits.
 	 */
 	int decexp = 0;
 
-	while (exp <= -3) {
-		while ((fract >> 32) >= (MAX_FP1 / 5)) {
-			_rlrshift(&fract);
+	while (exp < -2) {
+		/*
+		 * Make roon to allow a multiplication by 5 without overflow.
+		 * We test only the top part for faster code.
+		 */
+		do {
+			fract >>= 1;
 			exp++;
-		}
+		} while ((uint32_t)(fract >> 32) >= (UINT32_MAX / 5U));
+
+		/* Perform fract * 5 * 2 / 10 */
 		fract *= 5U;
 		exp++;
 		decexp--;
-
-		while ((fract >> 32) <= (MAX_FP1 / 2)) {
-			fract <<= 1;
-			exp--;
-		}
 	}
 
 	while (exp > 0) {
+		/*
+		 * Perform fract / 5 / 2 * 10.
+		 * The +2 is there to do round the result of the division
+		 * by 5 not to lose too much precision in extreme cases.
+		 */
+		fract += 2;
 		_ldiv5(&fract);
 		exp--;
 		decexp++;
-		while ((fract >> 32) <= (MAX_FP1 / 2)) {
+
+		/* Bring back our fractional number to full scale */
+		do {
 			fract <<= 1;
 			exp--;
-		}
+		} while (!(fract & BIT_63));
 	}
 
-	while (exp < (0 + 4)) {
-		_rlrshift(&fract);
-		exp++;
-	}
+	/*
+	 * The binary fractional point is located somewhere above bit 63.
+	 * Move it between bits 59 and 60 to give 4 bits of room to the
+	 * integer part.
+	 */
+	fract >>= (4 - exp);
 
 	if ((c == 'g') || (c == 'G')) {
 		/* Use the specified precision and exponent to select the
@@ -1165,32 +1168,31 @@ static char *encode_float(double value,
 		}
 	}
 
+	int decimals;
 	if (c == 'f') {
-		exp = precision + decexp;
-		if (exp < 0) {
-			exp = 0;
+		decimals = precision + decexp;
+		if (decimals < 0) {
+			decimals = 0;
 		}
 	} else {
-		exp = precision + 1;
+		decimals = precision + 1;
 	}
 
 	int digit_count = 16;
 
-	if (exp > 16) {
-		exp = 16;
+	if (decimals > 16) {
+		decimals = 16;
 	}
 
-	uint64_t ltemp = BIT64(59);
-
-	while (exp--) {
-		_ldiv5(&ltemp);
-		_rlrshift(&ltemp);
+	/* Round the value to the last digit being printed. */
+	uint64_t round = BIT64(59); /* 0.5 */
+	while (decimals--) {
+		_ldiv10(&round);
 	}
-
-	fract += ltemp;
-	if ((fract >> 32) & (0x0FU << 28)) {
-		_ldiv5(&fract);
-		_rlrshift(&fract);
+	fract += round;
+	/* Make sure rounding didn't make fract >= 1.0 */
+	if (fract >= BIT64(60)) {
+		_ldiv10(&fract);
 		decexp++;
 	}
 
@@ -1393,57 +1395,69 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 			continue;
 		}
 
+		/* Force union into RAM with conversion state to
+		 * mitigate LLVM code generation bug.
+		 */
+		struct {
+			union argument_value value;
+			struct conversion conv;
+		} state = {
+			.value = {
+				.uint = 0,
+			},
+		};
+		struct conversion *const conv = &state.conv;
+		union argument_value *const value = &state.value;
 		const char *sp = fp;
-		struct conversion conv;
 		int width = -1;
 		int precision = -1;
 		const char *bps = NULL;
 		const char *bpe = buf + sizeof(buf);
 		char sign = 0;
 
-		fp = extract_conversion(&conv, sp);
+		fp = extract_conversion(conv, sp);
 
 		/* If dynamic width is specified, process it,
 		 * otherwise set with if present.
 		 */
-		if (conv.width_star) {
+		if (conv->width_star) {
 			width = va_arg(ap, int);
 
 			if (width < 0) {
-				conv.flag_dash = true;
+				conv->flag_dash = true;
 				width = -width;
 			}
-		} else if (conv.width_present) {
-			width = conv.width_value;
+		} else if (conv->width_present) {
+			width = conv->width_value;
 		}
 
 		/* If dynamic precision is specified, process it, otherwise
 		 * set precision if present.  For floating point where
 		 * precision is not present use 6.
 		 */
-		if (conv.prec_star) {
+		if (conv->prec_star) {
 			int arg = va_arg(ap, int);
 
 			if (arg < 0) {
-				conv.prec_present = false;
+				conv->prec_present = false;
 			} else {
 				precision = arg;
 			}
-		} else if (conv.prec_present) {
-			precision = conv.prec_value;
+		} else if (conv->prec_present) {
+			precision = conv->prec_value;
 		}
 
 		/* Reuse width and precision memory in conv for value
 		 * padding counts.
 		 */
-		conv.pad0_value = 0;
-		conv.pad0_pre_exp = 0;
+		conv->pad0_value = 0;
+		conv->pad0_pre_exp = 0;
 
 		/* FP conversion requires knowing the precision. */
 		if (IS_ENABLED(CONFIG_CBPRINTF_FP_SUPPORT)
-		    && (conv.specifier_cat == SPECIFIER_FP)
-		    && !conv.prec_present) {
-			if (conv.specifier_a) {
+		    && (conv->specifier_cat == SPECIFIER_FP)
+		    && !conv->prec_present) {
+			if (conv->specifier_a) {
 				precision = FRACTION_HEX;
 			} else {
 				precision = 6;
@@ -1457,12 +1471,9 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 		 * https://stackoverflow.com/a/8048892.
 		 */
 		enum specifier_cat_enum specifier_cat
-			= (enum specifier_cat_enum)conv.specifier_cat;
+			= (enum specifier_cat_enum)conv->specifier_cat;
 		enum length_mod_enum length_mod
-			= (enum length_mod_enum)conv.length_mod;
-		union argument_value value = (union argument_value){
-			.uint = 0,
-		};
+			= (enum length_mod_enum)conv->length_mod;
 
 		/* Extract the value based on the argument category and length.
 		 *
@@ -1475,17 +1486,17 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 			case LENGTH_NONE:
 			case LENGTH_HH:
 			case LENGTH_H:
-				value.sint = va_arg(ap, int);
+				value->sint = va_arg(ap, int);
 				break;
 			case LENGTH_L:
-				value.sint = va_arg(ap, long);
+				value->sint = va_arg(ap, long);
 				break;
 			case LENGTH_LL:
-				value.sint =
+				value->sint =
 					(sint_value_type)va_arg(ap, long long);
 				break;
 			case LENGTH_J:
-				value.sint =
+				value->sint =
 					(sint_value_type)va_arg(ap, intmax_t);
 				break;
 			case LENGTH_Z:		/* size_t */
@@ -1497,14 +1508,14 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 				 * other.  This can be checked in a platform
 				 * test.
 				 */
-				value.sint =
+				value->sint =
 					(sint_value_type)va_arg(ap, ptrdiff_t);
 				break;
 			}
 			if (length_mod == LENGTH_HH) {
-				value.sint = (char)value.sint;
+				value->sint = (char)value->sint;
 			} else if (length_mod == LENGTH_H) {
-				value.sint = (short)value.sint;
+				value->sint = (short)value->sint;
 			}
 		} else if (specifier_cat == SPECIFIER_UINT) {
 			switch (length_mod) {
@@ -1512,40 +1523,40 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 			case LENGTH_NONE:
 			case LENGTH_HH:
 			case LENGTH_H:
-				value.uint = va_arg(ap, unsigned int);
+				value->uint = va_arg(ap, unsigned int);
 				break;
 			case LENGTH_L:
-				value.uint = va_arg(ap, unsigned long);
+				value->uint = va_arg(ap, unsigned long);
 				break;
 			case LENGTH_LL:
-				value.uint =
+				value->uint =
 					(uint_value_type)va_arg(ap,
 						unsigned long long);
 				break;
 			case LENGTH_J:
-				value.uint =
+				value->uint =
 					(uint_value_type)va_arg(ap,
 								uintmax_t);
 				break;
 			case LENGTH_Z:		/* size_t */
 			case LENGTH_T:		/* ptrdiff_t */
-				value.uint =
+				value->uint =
 					(uint_value_type)va_arg(ap, size_t);
 				break;
 			}
 			if (length_mod == LENGTH_HH) {
-				value.uint = (unsigned char)value.uint;
+				value->uint = (unsigned char)value->uint;
 			} else if (length_mod == LENGTH_H) {
-				value.uint = (unsigned short)value.uint;
+				value->uint = (unsigned short)value->uint;
 			}
 		} else if (specifier_cat == SPECIFIER_FP) {
 			if (length_mod == LENGTH_UPPER_L) {
-				value.ldbl = va_arg(ap, long double);
+				value->ldbl = va_arg(ap, long double);
 			} else {
-				value.dbl = va_arg(ap, double);
+				value->dbl = va_arg(ap, double);
 			}
 		} else if (specifier_cat == SPECIFIER_PTR) {
-			value.ptr = va_arg(ap, void *);
+			value->ptr = va_arg(ap, void *);
 		}
 
 		/* We've now consumed all arguments related to this
@@ -1553,7 +1564,7 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 		 * something we don't support, then output the original
 		 * specification and move on.
 		 */
-		if (conv.invalid || conv.unsupported) {
+		if (conv->invalid || conv->unsupported) {
 			OUTS(sp, fp);
 			continue;
 		}
@@ -1561,12 +1572,12 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 		/* Do formatting, either into the buffer or
 		 * referencing external data.
 		 */
-		switch (conv.specifier) {
+		switch (conv->specifier) {
 		case '%':
 			OUTC('%');
 			break;
 		case 's': {
-			bps = (const char *)value.ptr;
+			bps = (const char *)value->ptr;
 
 			size_t len = strlen(bps);
 
@@ -1582,20 +1593,22 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 		}
 		case 'c':
 			bps = buf;
-			buf[0] = value.uint;
+			buf[0] = value->uint;
 			bpe = buf + 1;
 			break;
 		case 'd':
 		case 'i':
-			if (conv.flag_plus) {
+			if (conv->flag_plus) {
 				sign = '+';
-			} else if (conv.flag_space) {
+			} else if (conv->flag_space) {
 				sign = ' ';
 			}
 
-			if (value.sint < 0) {
+			if (value->sint < 0) {
 				sign = '-';
-				value.uint = -value.sint;
+				value->uint = (uint_value_type)-value->sint;
+			} else {
+				value->uint = (uint_value_type)value->sint;
 			}
 
 			__fallthrough;
@@ -1603,7 +1616,7 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 		case 'u':
 		case 'x':
 		case 'X':
-			bps = encode_uint(value.uint, &conv, buf, bpe);
+			bps = encode_uint(value->uint, conv, buf, bpe);
 
 		prec_int_pad0:
 			/* Update pad0 values based on precision and converted
@@ -1617,11 +1630,11 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 				/* Zero-padding flag is ignored for integer
 				 * conversions with precision.
 				 */
-				conv.flag_zero = false;
+				conv->flag_zero = false;
 
 				/* Set pad0_value to satisfy precision */
 				if (len < (size_t)precision) {
-					conv.pad0_value = precision - (int)len;
+					conv->pad0_value = precision - (int)len;
 				}
 			}
 
@@ -1631,13 +1644,13 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 			 * has 0x prefix followed by significant address hex
 			 * digits, no leading zeros.
 			 */
-			if (value.ptr != NULL) {
-				bps = encode_uint((uintptr_t)value.ptr, &conv,
+			if (value->ptr != NULL) {
+				bps = encode_uint((uintptr_t)value->ptr, conv,
 						  buf, bpe);
 
 				/* Use 0x prefix */
-				conv.altform_0c = true;
-				conv.specifier = 'x';
+				conv->altform_0c = true;
+				conv->specifier = 'x';
 
 				goto prec_int_pad0;
 			}
@@ -1648,14 +1661,14 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 			break;
 		case 'n':
 			if (IS_ENABLED(CONFIG_CBPRINTF_N_SPECIFIER)) {
-				store_count(&conv, value.ptr, count);
+				store_count(conv, value->ptr, count);
 			}
 
 			break;
 
 		case FP_CONV_CASES:
 			if (IS_ENABLED(CONFIG_CBPRINTF_FP_SUPPORT)) {
-				bps = encode_float(value.dbl, &conv, precision,
+				bps = encode_float(value->dbl, conv, precision,
 						   &sign, buf, &bpe);
 			}
 			break;
@@ -1694,15 +1707,15 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 			nj_len += 1U;
 		}
 
-		if (conv.altform_0c) {
+		if (conv->altform_0c) {
 			nj_len += 2U;
-		} else if (conv.altform_0) {
+		} else if (conv->altform_0) {
 			nj_len += 1U;
 		}
 
-		nj_len += conv.pad0_value;
-		if (conv.pad_fp) {
-			nj_len += conv.pad0_pre_exp;
+		nj_len += conv->pad0_value;
+		if (conv->pad_fp) {
+			nj_len += conv->pad0_pre_exp;
 		}
 
 		/* If we have a width update width to hold the padding we need
@@ -1715,13 +1728,13 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 		if (width > 0) {
 			width -= (int)nj_len;
 
-			if (!conv.flag_dash) {
+			if (!conv->flag_dash) {
 				char pad = ' ';
 
 				/* If we're zero-padding we have to emit the
 				 * sign first.
 				 */
-				if (conv.flag_zero) {
+				if (conv->flag_zero) {
 					if (sign != 0) {
 						OUTC(sign);
 						sign = 0;
@@ -1742,10 +1755,10 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 			OUTC(sign);
 		}
 
-		if (IS_ENABLED(CONFIG_CBPRINTF_FP_SUPPORT) && conv.pad_fp) {
+		if (IS_ENABLED(CONFIG_CBPRINTF_FP_SUPPORT) && conv->pad_fp) {
 			const char *cp = bps;
 
-			if (conv.specifier_a) {
+			if (conv->specifier_a) {
 				/* Only padding is pre_exp */
 				while (*cp != 'p') {
 					OUTC(*cp++);
@@ -1755,8 +1768,8 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 					OUTC(*cp++);
 				}
 
-				pad_len = conv.pad0_value;
-				if (!conv.pad_postdp) {
+				pad_len = conv->pad0_value;
+				if (!conv->pad_postdp) {
 					while (pad_len-- > 0) {
 						OUTC('0');
 					}
@@ -1776,22 +1789,22 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 				}
 			}
 
-			pad_len = conv.pad0_pre_exp;
+			pad_len = conv->pad0_pre_exp;
 			while (pad_len-- > 0) {
 				OUTC('0');
 			}
 
 			OUTS(cp, bpe);
 		} else {
-			if (conv.altform_0c | conv.altform_0) {
+			if (conv->altform_0c | conv->altform_0) {
 				OUTC('0');
 			}
 
-			if (conv.altform_0c) {
-				OUTC(conv.specifier);
+			if (conv->altform_0c) {
+				OUTC(conv->specifier);
 			}
 
-			pad_len = conv.pad0_value;
+			pad_len = conv->pad0_value;
 			while (pad_len-- > 0) {
 				OUTC('0');
 			}

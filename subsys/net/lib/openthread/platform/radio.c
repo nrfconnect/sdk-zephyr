@@ -45,7 +45,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_OPENTHREAD_L2_LOG_LEVEL);
 #define FRAME_TYPE_ACK 0x02
 
 #define OT_WORKER_STACK_SIZE 512
+
+#if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
 #define OT_WORKER_PRIORITY   K_PRIO_COOP(CONFIG_OPENTHREAD_THREAD_PRIORITY)
+#else
+#define OT_WORKER_PRIORITY   K_PRIO_PREEMPT(CONFIG_OPENTHREAD_THREAD_PRIORITY)
+#endif
 
 enum pending_events {
 	PENDING_EVENT_FRAME_TO_SEND, /* There is a tx frame to send  */
@@ -409,7 +414,12 @@ void platformRadioProcess(otInstance *aInstance)
 		while ((tx_pkt = (struct net_pkt *)k_fifo_get(&tx_pkt_fifo,
 							      K_NO_WAIT))
 		      != NULL) {
-			openthread_handle_frame_to_send(aInstance, tx_pkt);
+			if (IS_ENABLED(CONFIG_OPENTHREAD_COPROCESSOR_RCP)) {
+				net_pkt_unref(tx_pkt);
+			} else {
+				openthread_handle_frame_to_send(aInstance,
+					tx_pkt);
+			}
 		}
 	}
 
