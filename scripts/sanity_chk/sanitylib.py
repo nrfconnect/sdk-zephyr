@@ -2313,8 +2313,8 @@ class ProjectBuilder(FilterBuilder):
 
         overlays = extract_overlays(args)
 
-        if os.path.exists(os.path.join(instance.build_dir,
-                                       "sanitycheck", "testcase_extra.conf")):
+        if (self.testcase.extra_configs or self.coverage or
+                self.asan or self.ubsan):
             overlays.append(os.path.join(instance.build_dir,
                                          "sanitycheck", "testcase_extra.conf"))
 
