@@ -141,8 +141,7 @@ static int flash_nrf_read(const struct device *dev, off_t addr,
 		return 0;
 	}
 
-#if CONFIG_ARM_NONSECURE_FIRMWARE && CONFIG_SPM && USE_PARTITION_MANAGER \
-	&& CONFIG_SPM_SECURE_SERVICES
+#if CONFIG_ARM_NONSECURE_FIRMWARE && CONFIG_SPM && USE_PARTITION_MANAGER
 	if (addr < PM_APP_ADDRESS) {
 		return spm_request_read(data, addr, len);
 	}
