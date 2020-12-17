@@ -295,14 +295,7 @@ int settings_line_entry_copy(void *dst_ctx, off_t dst_off, void *src_ctx,
 			break;
 		}
 
-		size_t write_size = chunk_size;
-
-		if (chunk_size % settings_io_cb.rwbs) {
-			write_size += settings_io_cb.rwbs -
-				      chunk_size % settings_io_cb.rwbs;
-		}
-
-		rc = settings_io_cb.write_cb(dst_ctx, dst_off, buf, write_size);
+		rc = settings_io_cb.write_cb(dst_ctx, dst_off, buf, chunk_size);
 		if (rc) {
 			break;
 		}
