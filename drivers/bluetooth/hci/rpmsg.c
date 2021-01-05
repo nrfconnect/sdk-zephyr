@@ -22,6 +22,7 @@
 
 int bt_rpmsg_platform_init(void);
 int bt_rpmsg_platform_send(struct net_buf *buf);
+int bt_rpmsg_platform_endpoint_is_bound(void);
 
 static bool is_hci_event_discardable(const uint8_t *evt_data)
 {
@@ -190,7 +191,10 @@ static int bt_rpmsg_open(void)
 {
 	BT_DBG("");
 
-	return bt_rpmsg_platform_init();
+	while (!bt_rpmsg_platform_endpoint_is_bound()) {
+		k_sleep(K_MSEC(1));
+	}
+	return 0;
 }
 
 static const struct bt_hci_driver drv = {
@@ -207,7 +211,20 @@ static int bt_rpmsg_init(const struct device *unused)
 {
 	ARG_UNUSED(unused);
 
-	return bt_hci_driver_register(&drv);
+	int err;
+
+	err = bt_rpmsg_platform_init();
+	if (err < 0) {
+		BT_ERR("Failed to initialize BT RPMSG (err %d)", err);
+		return err;
+	}
+
+	err = bt_hci_driver_register(&drv);
+	if (err < 0) {
+		BT_ERR("Failed to register BT HIC driver (err %d)", err);
+	}
+
+	return err;
 }
 
-SYS_INIT(bt_rpmsg_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+SYS_INIT(bt_rpmsg_init, POST_KERNEL, CONFIG_IPC_SERVICE_INIT_PRIORITY);

@@ -44,6 +44,9 @@ config BOARD_ENABLE_CPUNET
 	  Network MCU.
 	default y if (BT || NRF_802154_SER_HOST)
 
+config BOARD_KEEP_SHM
+	bool
+
 config DOMAIN_CPUNET_BOARD
 	string
 	default "nrf5340pdk_nrf5340_cpunet" if BOARD_NRF5340PDK_NRF5340_CPUAPP || BOARD_NRF5340PDK_NRF5340_CPUAPPNS

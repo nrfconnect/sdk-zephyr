@@ -104,13 +104,8 @@ config NRF_802154_SER_HOST
 	bool "nRF IEEE 802.15.4 Driver serialization host"
 	depends on !NRF_802154_RADIO_DRIVER
 	depends on !HAS_HW_NRF_RADIO_IEEE802154
-	select IPM
-	select IPM_NRFX
-	select IPM_MSG_CH_0_ENABLE
-	select IPM_MSG_CH_1_ENABLE
-	select IPM_MSG_CH_0_TX
-	select IPM_MSG_CH_1_RX
-	select OPENAMP
+	select IPC_SERVICE
+	select IPC_SERVICE_MODE_MASTER
 	select IEEE802154_NRF5_EXT_IRQ_MGMT if IEEE802154_NRF5
 	help
 	  Enable serialization of nRF IEEE 802.15.4 Driver. This option is to be
@@ -121,13 +116,8 @@ menuconfig NRF_802154_SER_RADIO
 	bool "nRF IEEE 802.15.4 Driver serialization radio"
 	depends on HAS_HW_NRF_RADIO_IEEE802154
 	depends on !IEEE802154_NRF5
-	select IPM
-	select IPM_NRFX
-	select IPM_MSG_CH_0_ENABLE
-	select IPM_MSG_CH_1_ENABLE
-	select IPM_MSG_CH_0_RX
-	select IPM_MSG_CH_1_TX
-	select OPENAMP
+	select IPC_SERVICE
+	select IPC_SERVICE_MODE_SLAVE
 	select NRF_802154_RADIO_DRIVER
 	help
 	  Enable serialization of nRF IEEE 802.15.4 Driver. This option is to be

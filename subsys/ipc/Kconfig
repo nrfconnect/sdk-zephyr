@@ -1,0 +1,44 @@
+# Copyright (c) 2020 Nordic Semiconductor (ASA)
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig IPC_SERVICE
+	bool "IPC service for multiple users"
+	select BOARD_KEEP_SHM if BOARD_NRF5340PDK_NRF5340_CPUAPP || BOARD_NRF5340PDK_NRF5340_CPUAPPNS || BOARD_NRF5340DK_NRF5340_CPUAPP || BOARD_NRF5340DK_NRF5340_CPUAPPNS
+	select IPM
+	select IPM_NRFX
+	select IPM_MSG_CH_0_ENABLE
+	select IPM_MSG_CH_1_ENABLE
+	select OPENAMP
+	help
+	  Enables support for a service that can be shared by multiple
+	  users to establish an IPC endpoints for given channel.
+
+if IPC_SERVICE
+
+config IPC_SERVICE_MODE_MASTER
+	bool "IPC master"
+	select IPM_MSG_CH_0_TX
+	select IPM_MSG_CH_1_RX
+
+config IPC_SERVICE_MODE_SLAVE
+	bool "IPC slave"
+	select IPM_MSG_CH_0_RX
+	select IPM_MSG_CH_1_TX
+
+config IPC_SERVICE_NUM_ENDPOINTS
+	int "Max number of registered endpoints"
+	default 2
+	help
+	  Maximal number of endpoints that can be registered for given
+	  IPC service.
+
+config IPC_SERVICE_INIT_PRIORITY
+	int "Initialization priority of IPC service"
+	default 48
+	help
+	  IPC service must be initialized after rpmsg is available
+	  and before the remote device is enabled.
+
+	  If in doubt, do not modify this value.
+
+endif # IPC_SERVICE

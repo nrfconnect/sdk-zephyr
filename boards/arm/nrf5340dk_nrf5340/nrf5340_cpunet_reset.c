@@ -83,7 +83,8 @@ static int remoteproc_mgr_boot(const struct device *dev)
 	 * this case do the remainder of actions to properly configure and
 	 * boot the Network MCU.
 	 */
-#if defined(SHM_BASE_ADDRESS) && (SHM_BASE_ADDRESS != 0)
+#if !defined(CONFIG_BOARD_KEEP_SHM) && \
+	defined(SHM_BASE_ADDRESS) && (SHM_BASE_ADDRESS != 0)
 
 	/* Initialize inter-processor shared memory block to zero. It is
 	 * assumed that the application image has access to the shared
