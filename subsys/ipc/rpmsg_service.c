@@ -105,6 +105,29 @@ static int rpmsg_service_init(const struct device *dev)
 		return err;
 	}
 
+#if !IPC_MASTER
+	struct rpmsg_device *rdev;
+
+	rdev = rpmsg_virtio_get_rpmsg_device(&rvdev);
+
+	for (int i = 0; i < CONFIG_IPC_SERVICE_NUM_ENDPOINTS; ++i) {
+		if (endpoints[i].name) {
+			err = rpmsg_create_ept(&endpoints[i].ep,
+						rdev,
+						endpoints[i].name,
+						RPMSG_ADDR_ANY,
+						RPMSG_ADDR_ANY,
+						endpoints[i].cb,
+						rpmsg_service_unbind);
+
+			if (err) {
+				LOG_ERR("rpmsg_create_ept failed %d", err);
+				return err;
+			}
+		}
+	}
+#endif
+
 	LOG_DBG("RPMsg service initialized");
 
 	return 0;
@@ -116,18 +139,6 @@ int rpmsg_service_register_endpoint(const char *name, rpmsg_ept_cb cb)
 		if (!endpoints[i].name) {
 			endpoints[i].name = name;
 			endpoints[i].cb = cb;
-
-#if !IPC_MASTER
-			int err;
-			struct rpmsg_device *rdev;
-
-			rdev = rpmsg_virtio_get_rpmsg_device(&rvdev);
-			err = rpmsg_create_ept(&endpoints[i].ep, rdev, name,
-						RPMSG_ADDR_ANY, RPMSG_ADDR_ANY,
-						cb, rpmsg_service_unbind);
-
-			return err;
-#endif /* !IPC_MASTER */
 
 			return i;
 		}

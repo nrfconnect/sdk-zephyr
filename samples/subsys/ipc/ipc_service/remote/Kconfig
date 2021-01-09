@@ -1,0 +1,9 @@
+# Private config options for ipc service sample app
+
+# Copyright (c) 2021 Nordic Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config IPC_SERVICE_DUAL_DEV_SUPPORT
+	default y if BOARD_NRF5340PDK_NRF5340_CPUNET || BOARD_NRF5340DK_NRF5340_CPUNET
+
+source "Kconfig.zephyr"

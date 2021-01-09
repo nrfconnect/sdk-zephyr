@@ -55,8 +55,12 @@ struct k_work_q ipm_work_q;
 
 /* End of configuration defines */
 
+#if defined (CONFIG_IPC_SERVICE_DUAL_DEV_SUPPORT)
 static const struct device *ipm_tx_handle;
 static const struct device *ipm_rx_handle;
+#elif defined (CONFIG_IPC_SERVICE_SINGLE_DEV_SUPPORT)
+static const struct device *ipm_handle;
+#endif
 
 static metal_phys_addr_t shm_physmap[] = { SHM_START_ADDR };
 static struct metal_device shm_device = {
@@ -115,13 +119,28 @@ static void virtio_set_features(struct virtio_device *vdev,
 {
 }
 
-/* TODO: virtio_set_features is needed? */
-
 static void virtio_notify(struct virtqueue *vq)
 {
 	int status;
 
+#if defined(CONFIG_IPC_SERVICE_DUAL_DEV_SUPPORT)
 	status = ipm_send(ipm_tx_handle, 0, 0, NULL, 0);
+#elif defined(CONFIG_IPC_SERVICE_SINGLE_DEV_SUPPORT)
+
+#if defined(CONFIG_SOC_MPS2_AN521) || \
+	defined(CONFIG_SOC_V2M_MUSCA_A) || \
+	defined(CONFIG_SOC_V2M_MUSCA_B1)
+	uint32_t current_core = sse_200_platform_get_cpu_id();
+
+	status = ipm_send(ipm_handle, 0, current_core ? 0 : 1, 0, 1);
+#else
+	uint32_t dummy_data = 0x55005500; /* Some data must be provided */
+
+	status = ipm_send(ipm_handle, 0, 0, &dummy_data, sizeof(dummy_data));
+#endif /* #if defined(CONFIG_SOC_MPS2_AN521) */
+
+#endif
+
 	if (status != 0) {
 		LOG_ERR("ipm_send failed to notify: %d", status);
 	}
@@ -197,13 +216,9 @@ int rpmsg_backend_init(struct metal_io_region **io, struct virtio_device *vdev)
 	}
 
 	/* IPM setup */
-#if IPC_MASTER
-	ipm_tx_handle = device_get_binding("IPM_0");
-	ipm_rx_handle = device_get_binding("IPM_1");
-#else
-	ipm_rx_handle = device_get_binding("IPM_0");
-	ipm_tx_handle = device_get_binding("IPM_1");
-#endif
+#if defined(CONFIG_IPC_SERVICE_DUAL_DEV_SUPPORT)
+	ipm_tx_handle = device_get_binding(CONFIG_IPC_SERVICE_TX_DEV_NAME);
+	ipm_rx_handle = device_get_binding(CONFIG_IPC_SERVICE_RX_DEV_NAME);
 
 	if (!ipm_tx_handle) {
 		LOG_ERR("Could not get TX IPM device handle");
@@ -216,6 +231,22 @@ int rpmsg_backend_init(struct metal_io_region **io, struct virtio_device *vdev)
 	}
 
 	ipm_register_callback(ipm_rx_handle, ipm_callback, NULL);
+#elif defined(CONFIG_IPC_SERVICE_SINGLE_DEV_SUPPORT)
+	ipm_handle = device_get_binding(CONFIG_IPC_SERVICE_DEV_NAME);
+
+	if (ipm_handle == NULL) {
+		LOG_ERR("Could not get IPM device handle");
+		return -ENODEV;
+	}
+
+	ipm_register_callback(ipm_handle, ipm_callback, NULL);
+
+	err = ipm_set_enabled(ipm_handle, 1);
+	if (err != 0) {
+		LOG_ERR("Could not enable IPM interrupts and callbacks");
+		return err;
+	}
+#endif
 
 	/* Virtqueue setup */
 	vq[0] = virtqueue_allocate(VRING_SIZE);
@@ -249,3 +280,17 @@ int rpmsg_backend_init(struct metal_io_region **io, struct virtio_device *vdev)
 
 	return 0;
 }
+
+#if IPC_MASTER
+/* Make sure we clear out the status flag very early (before we bringup the
+ * secondary core) so the secondary core see's the proper status
+ */
+int init_status_flag(const struct device *arg)
+{
+    virtio_set_status(NULL, 0);
+
+    return 0;
+}
+
+SYS_INIT(init_status_flag, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+#endif /* IPC_MASTER */

@@ -227,4 +227,4 @@ static int bt_rpmsg_init(const struct device *unused)
 	return err;
 }
 
-SYS_INIT(bt_rpmsg_init, POST_KERNEL, CONFIG_IPC_SERVICE_INIT_PRIORITY);
+SYS_INIT(bt_rpmsg_init, POST_KERNEL, CONFIG_IPC_SERVICE_EP_REG_PRIORITY);

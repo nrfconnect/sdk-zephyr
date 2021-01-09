@@ -1,7 +1,10 @@
 # nRF5340 (P)DK board configuration
 
-# Copyright (c) 2019 - 2020 Nordic Semiconductor ASA
+# Copyright (c) 2019 - 2021 Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
+
+config IPM_NRFX
+	default IPM
 
 if BOARD_NRF5340PDK_NRF5340_CPUAPP || BOARD_NRF5340PDK_NRF5340_CPUAPPNS || BOARD_NRF5340DK_NRF5340_CPUAPP || BOARD_NRF5340DK_NRF5340_CPUAPPNS
 
@@ -46,6 +49,28 @@ config BOARD_ENABLE_CPUNET
 
 config BOARD_KEEP_SHM
 	bool
+	default y if IPC_SERVICE
+
+config IPC_SERVICE_DUAL_DEV_SUPPORT
+	default y if IPC_SERVICE
+
+config IPC_SERVICE_TX_DEV_NAME
+	default "IPM_0" if IPC_SERVICE_DUAL_DEV_SUPPORT
+
+config IPC_SERVICE_RX_DEV_NAME
+	default "IPM_1" if IPC_SERVICE_DUAL_DEV_SUPPORT
+
+config IPM_MSG_CH_0_ENABLE
+	default y if IPC_SERVICE_DUAL_DEV_SUPPORT
+
+config IPM_MSG_CH_1_ENABLE
+	default y if IPC_SERVICE_DUAL_DEV_SUPPORT
+
+config IPM_MSG_CH_0_TX
+	default y if IPC_SERVICE_DUAL_DEV_SUPPORT
+
+config IPM_MSG_CH_1_RX
+	default y if IPC_SERVICE_DUAL_DEV_SUPPORT
 
 config DOMAIN_CPUNET_BOARD
 	string
@@ -69,6 +94,27 @@ config BT_CTLR
 
 config BT_ECC
 	default y if BT
+
+config IPC_SERVICE_DUAL_DEV_SUPPORT
+	default y if IPC_SERVICE
+
+config IPC_SERVICE_TX_DEV_NAME
+	default "IPM_1" if IPC_SERVICE_DUAL_DEV_SUPPORT
+
+config IPC_SERVICE_RX_DEV_NAME
+	default "IPM_0" if IPC_SERVICE_DUAL_DEV_SUPPORT
+
+config IPM_MSG_CH_0_ENABLE
+	default y if IPC_SERVICE_DUAL_DEV_SUPPORT
+
+config IPM_MSG_CH_1_ENABLE
+	default y if IPC_SERVICE_DUAL_DEV_SUPPORT
+
+config IPM_MSG_CH_0_RX
+	default y if IPC_SERVICE_DUAL_DEV_SUPPORT
+
+config IPM_MSG_CH_1_TX
+	default y if IPC_SERVICE_DUAL_DEV_SUPPORT
 
 config DOMAIN_CPUAPP_BOARD
 	string

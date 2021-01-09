@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Nordic Semiconductor ASA
+ * Copyright (c) 2019-2021 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -208,34 +208,12 @@ int endpoint_cb(struct rpmsg_endpoint *ept, void *data, size_t len, uint32_t src
 	return RPMSG_SUCCESS;
 }
 
-static int hci_rpmsg_init(void)
-{
-	int err;
-
-	err = rpmsg_service_register_endpoint("nrf_bt_hci", endpoint_cb);
-
-	if (err < 0) {
-		LOG_ERR("Registering endpoint failed with %d", err);
-		return RPMSG_ERR_INIT;
-	}
-
-	endpoint_id = err;
-
-	return err;
-}
-
 void main(void)
 {
 	int err;
 
 	/* incoming events and data from the controller */
 	static K_FIFO_DEFINE(rx_queue);
-
-	/* initialize RPMSG */
-	err = hci_rpmsg_init();
-	if (err != 0) {
-		return;
-	}
 
 	LOG_DBG("Start");
 
@@ -260,3 +238,22 @@ void main(void)
 		}
 	}
 }
+
+/* Make sure we register endpoint before IPC Service is initialized. */
+int register_endpoint(const struct device *arg)
+{
+	int status;
+
+	status = rpmsg_service_register_endpoint("nrf_bt_hci", endpoint_cb);
+
+	if (status < 0) {
+		LOG_ERR("Registering endpoint failed with %d", status);
+		return status;
+	} else {
+		endpoint_id = status;
+	}
+
+	return 0;
+}
+
+SYS_INIT(register_endpoint, POST_KERNEL, CONFIG_IPC_SERVICE_EP_REG_PRIORITY);

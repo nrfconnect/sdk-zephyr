@@ -105,7 +105,6 @@ config NRF_802154_SER_HOST
 	depends on !NRF_802154_RADIO_DRIVER
 	depends on !HAS_HW_NRF_RADIO_IEEE802154
 	select IPC_SERVICE
-	select IPC_SERVICE_MODE_MASTER
 	select IEEE802154_NRF5_EXT_IRQ_MGMT if IEEE802154_NRF5
 	help
 	  Enable serialization of nRF IEEE 802.15.4 Driver. This option is to be
@@ -117,7 +116,6 @@ menuconfig NRF_802154_SER_RADIO
 	depends on HAS_HW_NRF_RADIO_IEEE802154
 	depends on !IEEE802154_NRF5
 	select IPC_SERVICE
-	select IPC_SERVICE_MODE_SLAVE
 	select NRF_802154_RADIO_DRIVER
 	help
 	  Enable serialization of nRF IEEE 802.15.4 Driver. This option is to be
@@ -132,6 +130,10 @@ config NRF_802154_SER_RADIO_INIT_PRIO
 	help
 	  Set the initialization priority number. Do not mess with it unless
 	  you know what you are doing.
+
+choice IPC_SERVICE_MODE
+	default IPC_SERVICE_MODE_REMOTE
+endchoice
 
 endif
 
@@ -167,6 +169,10 @@ config NRF_802154_RX_BUFFERS
 	help
 	  Number of buffers in nRF 802.15.4 driver serialization host's receive queue.
 	  If this value is modified, its remote counterpart must be set to the exact same value.
+
+choice IPC_SERVICE_MODE
+	default IPC_SERVICE_MODE_MASTER
+endchoice
 
 endif
 
