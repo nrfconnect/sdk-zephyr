@@ -1,4 +1,5 @@
 # Copyright (c) 2018 Linaro Limited
+# Copyright (c) 2021 Nordic Semiconductor
 # SPDX-License-Identifier: Apache-2.0
 
 config OPENAMP
@@ -18,13 +19,11 @@ config OPENAMP_SRC_PATH
 
 config OPENAMP_MASTER
 	bool "OpenAMP Master Support"
-	default y
 	help
 	  This option enables support for OpenAMP VirtIO Master
 
 config OPENAMP_SLAVE
 	bool "OpenAMP Slave Support"
-	default y
 	help
 	  This option enables support for OpenAMP VirtIO Slave
 
