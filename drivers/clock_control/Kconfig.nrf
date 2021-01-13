@@ -13,7 +13,8 @@ config CLOCK_CONTROL_NRF_FORCE_ALT
 menuconfig CLOCK_CONTROL_NRF
 	bool "NRF Clock controller support"
 	depends on SOC_COMPATIBLE_NRF
-	select NRFX_CLOCK if !CLOCK_CONTROL_NRF_FORCE_ALT
+	depends on !CLOCK_CONTROL_NRF_FORCE_ALT
+	select NRFX_CLOCK
 	default y
 	help
 	  Enable support for the Nordic Semiconductor nRFxx series SoC clock
@@ -57,7 +58,6 @@ endchoice
 config CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION
 	bool "Enable LF clock calibration"
 	depends on !SOC_SERIES_NRF91X
-	depends on !CLOCK_CONTROL_NRF_FORCE_ALT
 	default n if BOARD_NRF5340PDK_NRF5340_CPUAPP || BOARD_NRF5340PDK_NRF5340_CPUAPPNS
 	default y if CLOCK_CONTROL_NRF_K32SRC_RC
 	help
@@ -65,7 +65,14 @@ config CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION
 	  accuracy of the low frequency clock will degrade. Disable on your own
 	  risk.
 
-if CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION || CLOCK_CONTROL_NRF_FORCE_ALT
+if CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION
+
+config CLOCK_CONTROL_NRF_CALIBRATION_LF_ALWAYS_ON
+	bool "LF clock is always on"
+	default y if NRF_RTC_TIMER
+	help
+	  If RTC is used as system timer then LF clock is always on and handling
+	  can be simplified.
 
 config CLOCK_CONTROL_NRF_CALIBRATION_PERIOD
 	int "Calibration opportunity period in milliseconds"
@@ -88,17 +95,6 @@ config CLOCK_CONTROL_NRF_CALIBRATION_MAX_SKIP
 	  reaches configured value then calibration is performed
 	  unconditionally. Set to 0 to perform calibration periodically
 	  regardless of temperature change.
-
-endif # CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION || CLOCK_CONTROL_NRF_FORCE_ALT
-
-if CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION
-
-config CLOCK_CONTROL_NRF_CALIBRATION_LF_ALWAYS_ON
-	bool "LF clock is always on"
-	default y if NRF_RTC_TIMER
-	help
-	  If RTC is used as system timer then LF clock is always on and handling
-	  can be simplified.
 
 config CLOCK_CONTROL_NRF_CALIBRATION_TEMP_DIFF
 	int "Temperature change triggering calibration (in 0.25 degree units)"
