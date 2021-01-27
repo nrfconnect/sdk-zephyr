@@ -168,17 +168,22 @@ struct usbd_event {
 };
 
 /**
- * @brief Fifo element slab
+ * @brief Fifo element pool
  *	Used for allocating fifo elements to pass from ISR to work handler
  * TODO: The number of FIFO elements is an arbitrary number now but it should
  * be derived from the theoretical number of backlog events possible depending
  * on the number of endpoints configured.
  */
-#define FIFO_ELEM_SZ            sizeof(struct usbd_event)
+#define FIFO_ELEM_MIN_SZ        sizeof(struct usbd_event)
+#define FIFO_ELEM_MAX_SZ        sizeof(struct usbd_event)
 #define FIFO_ELEM_ALIGN         sizeof(unsigned int)
 
-K_MEM_SLAB_DEFINE(fifo_elem_slab, FIFO_ELEM_SZ,
-		  CONFIG_USB_NRFX_EVT_QUEUE_SIZE, FIFO_ELEM_ALIGN);
+#if CONFIG_USB_NRFX_EVT_QUEUE_SIZE < 4
+#error Invalid USBD event queue size (CONFIG_USB_NRFX_EVT_QUEUE_SIZE).
+#endif
+
+K_HEAP_DEFINE(fifo_elem_pool,
+	      FIFO_ELEM_MAX_SZ * CONFIG_USB_NRFX_EVT_QUEUE_SIZE);
 
 
 /** Number of IN Endpoints configured (including control) */
@@ -385,7 +390,7 @@ static inline void usbd_work_schedule(void)
  */
 static inline void usbd_evt_free(struct usbd_event *ev)
 {
-	k_mem_slab_free(&fifo_elem_slab, (void **)&ev->block.data);
+	k_heap_free(&fifo_elem_pool, &ev->block);
 }
 
 /**
@@ -433,8 +438,11 @@ static inline struct usbd_event *usbd_evt_alloc(void)
 	struct usbd_event *ev;
 	struct usbd_mem_block block;
 
-	if (k_mem_slab_alloc(&fifo_elem_slab,
-			     (void **)&block.data, K_NO_WAIT)) {
+	block.data = k_heap_alloc(&fifo_elem_pool,
+				  sizeof(struct usbd_event),
+				  K_NO_WAIT);
+
+	if (block.data == NULL) {
 		LOG_ERR("USBD event allocation failed!");
 
 		/*
@@ -445,7 +453,10 @@ static inline struct usbd_event *usbd_evt_alloc(void)
 		 */
 		usbd_evt_flush();
 
-		if (k_mem_slab_alloc(&fifo_elem_slab, (void **)&block.data, K_NO_WAIT)) {
+		block.data = k_heap_alloc(&fifo_elem_pool,
+					   sizeof(struct usbd_event),
+					   K_NO_WAIT);
+		if (block.data == NULL) {
 			LOG_ERR("USBD event memory corrupted");
 			__ASSERT_NO_MSG(0);
 			return NULL;
