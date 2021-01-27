@@ -22,6 +22,7 @@
 #include "lll_scan.h"
 #include "lll_scan_aux.h"
 #include "lll_sync.h"
+#include "lll_sync_iso.h"
 
 #include "ull_scan_types.h"
 #include "ull_sync_types.h"
@@ -124,13 +125,13 @@ void ull_scan_aux_setup(memq_link_t *link, struct node_rx_hdr *rx)
 			/* Here we are scanner context */
 			sync = sync_create_get(scan);
 			switch (phy) {
-			case BT_HCI_LE_EXT_SCAN_PHY_1M:
+			case PHY_1M:
 				rx->type = NODE_RX_TYPE_EXT_1M_REPORT;
 				break;
-			case BT_HCI_LE_EXT_SCAN_PHY_2M:
+			case PHY_2M:
 				rx->type = NODE_RX_TYPE_EXT_2M_REPORT;
 				break;
-			case BT_HCI_LE_EXT_SCAN_PHY_CODED:
+			case PHY_CODED:
 				rx->type = NODE_RX_TYPE_EXT_CODED_REPORT;
 				break;
 			default:

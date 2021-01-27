@@ -69,11 +69,18 @@ string(REPLACE ";" "?" DTS_ROOT_BINDINGS "${DTS_ROOT_BINDINGS}")
 # This allows Kconfig files to refer relative from a modules root as:
 # source "$(ZEPHYR_FOO_MODULE_DIR)/Kconfig"
 foreach(module_name ${ZEPHYR_MODULE_NAMES})
-  string(TOUPPER ${module_name} MODULE_NAME_UPPER)
+  zephyr_string(SANITIZE TOUPPER MODULE_NAME_UPPER ${module_name})
   list(APPEND
        ZEPHYR_KCONFIG_MODULES_DIR
        "ZEPHYR_${MODULE_NAME_UPPER}_MODULE_DIR=${ZEPHYR_${MODULE_NAME_UPPER}_MODULE_DIR}"
   )
+
+  if(ZEPHYR_${MODULE_NAME_UPPER}_KCONFIG)
+    list(APPEND
+         ZEPHYR_KCONFIG_MODULES_DIR
+         "ZEPHYR_${MODULE_NAME_UPPER}_KCONFIG=${ZEPHYR_${MODULE_NAME_UPPER}_KCONFIG}"
+  )
+  endif()
 endforeach()
 
 # A list of common environment settings used when invoking Kconfig during CMake

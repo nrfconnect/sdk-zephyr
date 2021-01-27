@@ -34,25 +34,16 @@
 		#interrupt-cells = <3>;
 	};
 
-	soc {
+	pcie0 {
+		label = "PCIE_0";
 		#address-cells = <1>;
 		#size-cells = <1>;
-		compatible = "simple-bus";
+		compatible = "intel,pcie";
 		ranges;
-
-		vtd: vtd@fed65000 {
-			compatible = "intel,vt-d";
-
-			label = "VTD_0";
-			reg = <0xfed65000 0x1000>;
-
-			status = "disabled";
-		};
 
 		uart0: uart@c000 {
 			compatible = "ns16550";
 
-			pcie;
 			reg = <PCIE_BDF(0,0x18,0) PCIE_ID(0x8086,0x5abc)>;
 
 			label = "UART_0";
@@ -66,7 +57,6 @@
 		uart1: uart@c100 {
 			compatible = "ns16550";
 
-			pcie;
 			reg = <PCIE_BDF(0,0x18,1) PCIE_ID(0x8086,0x5abe)>;
 
 			label = "UART_1";
@@ -81,7 +71,6 @@
 		uart2: uart@c200 {
 			compatible = "ns16550";
 
-			pcie;
 			reg = <PCIE_BDF(0,0x18,2) PCIE_ID(0x8086,0x5ac0)>;
 
 			label = "UART_2";
@@ -96,7 +85,6 @@
 		uart3: uart@c300 {
 			compatible = "ns16550";
 
-			pcie;
 			reg = <PCIE_BDF(0,0x18,3) PCIE_ID(0x8086,0x5aee)>;
 
 			label = "UART_3";
@@ -113,7 +101,6 @@
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			pcie;
 			reg = <PCIE_BDF(0,0x16,0) PCIE_ID(0x8086,0x5aac)>;
 			interrupts = <PCIE_IRQ_DETECT IRQ_TYPE_LOWEST_LEVEL_LOW 3>;
 			interrupt-parent = <&intc>;
@@ -127,7 +114,6 @@
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			pcie;
 			reg = <PCIE_BDF(0,0x16,1) PCIE_ID(0x8086,0x5aae)>;
 			interrupts = <PCIE_IRQ_DETECT IRQ_TYPE_LOWEST_LEVEL_LOW 3>;
 			interrupt-parent = <&intc>;
@@ -141,7 +127,6 @@
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			pcie;
 			reg = <PCIE_BDF(0,0x16,2) PCIE_ID(0x8086,0x5ab0)>;
 			interrupts = <PCIE_IRQ_DETECT IRQ_TYPE_LOWEST_LEVEL_LOW 3>;
 			interrupt-parent = <&intc>;
@@ -155,7 +140,6 @@
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			pcie;
 			reg = <PCIE_BDF(0,0x16,3) PCIE_ID(0x8086,0x5ab2)>;
 			interrupts = <PCIE_IRQ_DETECT IRQ_TYPE_LOWEST_LEVEL_LOW 3>;
 			interrupt-parent = <&intc>;
@@ -169,7 +153,6 @@
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			pcie;
 			reg = <PCIE_BDF(0,0x17,0) PCIE_ID(0x8086,0x5ab4)>;
 			interrupts = <PCIE_IRQ_DETECT IRQ_TYPE_LOWEST_LEVEL_LOW 3>;
 			interrupt-parent = <&intc>;
@@ -183,7 +166,6 @@
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			pcie;
 			reg = <PCIE_BDF(0,0x17,1) PCIE_ID(0x8086,0x5ab6)>;
 			interrupts = <PCIE_IRQ_DETECT IRQ_TYPE_LOWEST_LEVEL_LOW 3>;
 			interrupt-parent = <&intc>;
@@ -197,7 +179,6 @@
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			pcie;
 			reg = <PCIE_BDF(0,0x17,2) PCIE_ID(0x8086,0x5ab8)>;
 			interrupts = <PCIE_IRQ_DETECT IRQ_TYPE_LOWEST_LEVEL_LOW 3>;
 			interrupt-parent = <&intc>;
@@ -211,13 +192,28 @@
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			pcie;
 			reg = <PCIE_BDF(0,0x17,3) PCIE_ID(0x8086,0x5aba)>;
 			interrupts = <PCIE_IRQ_DETECT IRQ_TYPE_LOWEST_LEVEL_LOW 3>;
 			interrupt-parent = <&intc>;
 			label = "I2C_7";
 
 			status = "okay";
+		};
+	};
+
+	soc {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "simple-bus";
+		ranges;
+
+		vtd: vtd@fed65000 {
+			compatible = "intel,vt-d";
+
+			label = "VTD_0";
+			reg = <0xfed65000 0x1000>;
+
+			status = "disabled";
 		};
 
 		gpio_n_000_031: gpio@d0c50000 {

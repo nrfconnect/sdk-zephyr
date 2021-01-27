@@ -22,27 +22,6 @@ union axis3bit16_t {
 	uint8_t u8bit[6];
 };
 
-#if defined(CONFIG_IIS2DLPC_ODR_1_6)
-	#define IIS2DLPC_DEFAULT_ODR	IIS2DLPC_XL_ODR_1Hz6_LP_ONLY
-#elif defined(CONFIG_IIS2DLPC_ODR_12_5)
-	#define IIS2DLPC_DEFAULT_ODR	IIS2DLPC_XL_ODR_12Hz5
-#elif defined(CONFIG_IIS2DLPC_ODR_25)
-	#define IIS2DLPC_DEFAULT_ODR	IIS2DLPC_XL_ODR_25Hz
-#elif defined(CONFIG_IIS2DLPC_ODR_50)
-	#define IIS2DLPC_DEFAULT_ODR	IIS2DLPC_XL_ODR_50Hz
-#elif defined(CONFIG_IIS2DLPC_ODR_100) || \
-	defined(CONFIG_IIS2DLPC_ODR_RUNTIME)
-	#define IIS2DLPC_DEFAULT_ODR	IIS2DLPC_XL_ODR_100Hz
-#elif defined(CONFIG_IIS2DLPC_ODR_200)
-	#define IIS2DLPC_DEFAULT_ODR	IIS2DLPC_XL_ODR_200Hz
-#elif defined(CONFIG_IIS2DLPC_ODR_400)
-	#define IIS2DLPC_DEFAULT_ODR	IIS2DLPC_XL_ODR_400Hz
-#elif defined(CONFIG_IIS2DLPC_ODR_800)
-	#define IIS2DLPC_DEFAULT_ODR	IIS2DLPC_XL_ODR_800Hz
-#elif defined(CONFIG_IIS2DLPC_ODR_1600)
-	#define IIS2DLPC_DEFAULT_ODR	IIS2DLPC_XL_ODR_1k6Hz
-#endif
-
 /* Return ODR reg value based on data rate set */
 #define IIS2DLPC_ODR_TO_REG(_odr) \
 	((_odr <= 1) ? IIS2DLPC_XL_ODR_1Hz6_LP_ONLY : \
@@ -51,17 +30,6 @@ union axis3bit16_t {
 
 /* FS reg value from Full Scale */
 #define IIS2DLPC_FS_TO_REG(_fs)	(30 - __builtin_clz(_fs))
-
-#if defined(CONFIG_IIS2DLPC_ACCEL_RANGE_RUNTIME) || \
-	defined(CONFIG_IIS2DLPC_ACCEL_RANGE_2G)
-	#define IIS2DLPC_ACC_FS		IIS2DLPC_2g
-#elif defined(CONFIG_IIS2DLPC_ACCEL_RANGE_4G)
-	#define IIS2DLPC_ACC_FS		IIS2DLPC_4g
-#elif defined(CONFIG_IIS2DLPC_ACCEL_RANGE_8G)
-	#define IIS2DLPC_ACC_FS		IIS2DLPC_8g
-#elif defined(CONFIG_IIS2DLPC_ACCEL_RANGE_16G)
-	#define IIS2DLPC_ACC_FS		IIS2DLPC_16g
-#endif
 
 /* Acc Gain value in ug/LSB in High Perf mode */
 #define IIS2DLPC_FS_2G_GAIN		244
@@ -84,23 +52,24 @@ union axis3bit16_t {
  * @pm: Power mode (lis2dh_powermode).
  * @int_gpio_port: Pointer to GPIO PORT identifier.
  * @int_gpio_pin: GPIO pin number connecter to sensor int pin.
- * @int_pin: Sensor int pin (int1/int2).
+ * @drdy_int: Sensor drdy int (int1/int2).
  */
 struct iis2dlpc_device_config {
 	const char *bus_name;
 	iis2dlpc_mode_t pm;
+	uint8_t range;
 #ifdef CONFIG_IIS2DLPC_TRIGGER
 	const char *int_gpio_port;
 	uint8_t int_gpio_pin;
 	uint8_t int_gpio_flags;
-	uint8_t int_pin;
-#ifdef CONFIG_IIS2DLPC_PULSE
-	uint8_t pulse_trigger;
-	uint8_t pulse_ths[3];
-	uint8_t pulse_shock;
-	uint8_t pulse_ltncy;
-	uint8_t pulse_quiet;
-#endif /* CONFIG_IIS2DLPC_PULSE */
+	uint8_t drdy_int;
+#ifdef CONFIG_IIS2DLPC_TAP
+	uint8_t tap_mode;
+	uint8_t tap_threshold[3];
+	uint8_t tap_shock;
+	uint8_t tap_latency;
+	uint8_t tap_quiet;
+#endif /* CONFIG_IIS2DLPC_TAP */
 #endif /* CONFIG_IIS2DLPC_TRIGGER */
 };
 
@@ -119,10 +88,10 @@ struct iis2dlpc_data {
 	uint8_t gpio_pin;
 	struct gpio_callback gpio_cb;
 	sensor_trigger_handler_t drdy_handler;
-#ifdef CONFIG_IIS2DLPC_PULSE
+#ifdef CONFIG_IIS2DLPC_TAP
 	sensor_trigger_handler_t tap_handler;
 	sensor_trigger_handler_t double_tap_handler;
-#endif /* CONFIG_IIS2DLPC_PULSE */
+#endif /* CONFIG_IIS2DLPC_TAP */
 #if defined(CONFIG_IIS2DLPC_TRIGGER_OWN_THREAD)
 	K_KERNEL_STACK_MEMBER(thread_stack, CONFIG_IIS2DLPC_THREAD_STACK_SIZE);
 	struct k_thread thread;

@@ -95,6 +95,9 @@ def main():
         for node in sorted(edt.nodes, key=lambda node: node.dep_ordinal):
             write_node_comment(node)
 
+            out_comment(f"Node's full path:")
+            out_dt_define(f"{node.z_path_id}_PATH", f'"{escape(node.path)}"')
+
             if node.parent is not None:
                 out_comment(f"Node parent ({node.parent.path}) identifier:")
                 out_dt_define(f"{node.z_path_id}_PARENT",
@@ -110,8 +113,34 @@ def main():
         write_chosen(edt)
         write_global_compat_info(edt)
 
+        write_device_extern_header(args.device_header_out, edt)
+
     if args.edt_pickle_out:
         write_pickled_edt(edt, args.edt_pickle_out)
+
+
+def write_device_extern_header(device_header_out, edt):
+    # Generate header that will extern devicetree struct device's
+
+    with open(device_header_out, "w", encoding="utf-8") as dev_header_file:
+        print("#ifndef DEVICE_EXTERN_GEN_H", file=dev_header_file)
+        print("#define DEVICE_EXTERN_GEN_H", file=dev_header_file)
+        print("", file=dev_header_file)
+        print("#ifdef __cplusplus", file=dev_header_file)
+        print('extern "C" {', file=dev_header_file)
+        print("#endif", file=dev_header_file)
+        print("", file=dev_header_file)
+
+        for node in sorted(edt.nodes, key=lambda node: node.dep_ordinal):
+            print(f"extern const struct device DEVICE_DT_NAME_GET(DT_{node.z_path_id});", file=dev_header_file)
+
+        print("", file=dev_header_file)
+        print("#ifdef __cplusplus", file=dev_header_file)
+        print("}", file=dev_header_file)
+        print("#endif", file=dev_header_file)
+        print("", file=dev_header_file)
+        print("#endif /* DEVICE_EXTERN_GEN_H */", file=dev_header_file)
+
 
 def setup_edtlib_logging():
     # The edtlib module emits logs using the standard 'logging' module.
@@ -159,6 +188,8 @@ def parse_args():
     parser.add_argument("--dts-out", required=True,
                         help="path to write merged DTS source code to (e.g. "
                              "as a debugging aid)")
+    parser.add_argument("--device-header-out", required=True,
+                        help="path to write device struct extern header to")
     parser.add_argument("--edt-pickle-out",
                         help="path to write pickled edtlib.EDT object to")
 
@@ -217,11 +248,19 @@ Binding (compatible = {node.matching_compat}):
 """
 
     if node.description:
-        # Indent description by two spaces
-        s += "\nDescription:\n" + \
-            "\n".join("  " + line for line in
-                      node.description.splitlines()) + \
-            "\n"
+        # We used to put descriptions in the generated file, but
+        # devicetree bindings now have pages in the HTML
+        # documentation. Let users who are accustomed to digging
+        # around in the generated file where to find the descriptions
+        # now.
+        #
+        # Keeping them here would mean that the descriptions
+        # themselves couldn't contain C multi-line comments, which is
+        # inconvenient when we want to do things like quote snippets
+        # of .dtsi files within the descriptions, or otherwise
+        # include the string "*/".
+        s += ("\n(Descriptions have moved to the Devicetree Bindings Index\n"
+              "in the documentation.)\n")
 
     out_comment(s)
 
@@ -587,6 +626,13 @@ def phandle_macros(prop, macro):
             ret[f"{macro}_IDX_{i}_EXISTS"] = 1
     elif prop.type == "phandle-array":
         for i, entry in enumerate(prop.val):
+            if entry is None:
+                # Unspecified element. The phandle-array at this index
+                # does not point at a ControllerAndData value, but
+                # subsequent indices in the array may.
+                ret[f"{macro}_IDX_{i}_EXISTS"] = 0
+                continue
+
             ret.update(controller_and_data_macros(entry, i, macro))
 
     return ret

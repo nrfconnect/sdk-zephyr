@@ -6,9 +6,8 @@
 
 #define DT_DRV_COMPAT espressif_esp
 
-#define LOG_LEVEL CONFIG_WIFI_LOG_LEVEL
 #include <logging/log.h>
-LOG_MODULE_REGISTER(wifi_esp);
+LOG_MODULE_REGISTER(wifi_esp, CONFIG_WIFI_LOG_LEVEL);
 
 #include <kernel.h>
 #include <ctype.h>
@@ -26,9 +25,6 @@ LOG_MODULE_REGISTER(wifi_esp);
 #include <net/wifi_mgmt.h>
 
 #include "esp.h"
-
-#define RX_NET_PKT_ALLOC_TIMEOUT				\
-	K_MSEC(CONFIG_WIFI_ESP_RX_NET_PKT_ALLOC_TIMEOUT)
 
 /* pin settings */
 enum modem_control_pins {
@@ -395,118 +391,106 @@ MODEM_CMD_DEFINE(on_cmd_closed)
 	return 0;
 }
 
-struct net_pkt *esp_prepare_pkt(struct esp_data *dev, struct net_buf *src,
-				size_t offset, size_t len)
-{
-	struct net_buf *frag;
-	struct net_pkt *pkt;
-	size_t to_copy;
-
-	pkt = net_pkt_rx_alloc_with_buffer(dev->net_iface, len, AF_UNSPEC,
-					   0, RX_NET_PKT_ALLOC_TIMEOUT);
-	if (!pkt) {
-		return NULL;
-	}
-
-	frag = src;
-
-	/* find the right fragment to start copying from */
-	while (frag && offset >= frag->len) {
-		offset -= frag->len;
-		frag = frag->frags;
-	}
-
-	/* traverse the fragment chain until len bytes are copied */
-	while (frag && len > 0) {
-		to_copy = MIN(len, frag->len - offset);
-		if (net_pkt_write(pkt, frag->data + offset, to_copy) != 0) {
-			net_pkt_unref(pkt);
-			return NULL;
-		}
-
-		/* to_copy is always <= len */
-		len -= to_copy;
-		frag = frag->frags;
-
-		/* after the first iteration, this value will be 0 */
-		offset = 0;
-	}
-
-	net_pkt_cursor_init(pkt);
-
-	return pkt;
-}
-
 /*
  * Passive mode: "+IPD,<id>,<len>\r\n"
  * Other:        "+IPD,<id>,<len>:<data>"
  */
-#define MIN_IPD_LEN (sizeof("+IPD,I,LE") - 1)
-#define MAX_IPD_LEN (sizeof("+IPD,I,LLLLE") - 1)
-MODEM_CMD_DIRECT_DEFINE(on_cmd_ipd)
+#define MIN_IPD_LEN (sizeof("+IPD,I,0E") - 1)
+#define MAX_IPD_LEN (sizeof("+IPD,I,4294967295E") - 1)
+
+static int cmd_ipd_parse_hdr(struct net_buf *buf, uint16_t len,
+			     uint8_t *link_id,
+			     int *data_offset, int *data_len,
+			     char *end)
 {
-	char *endptr, end, ipd_buf[MAX_IPD_LEN + 1];
-	int data_offset, data_len, ret;
-	size_t match_len, frags_len;
-	struct esp_socket *sock;
-	struct esp_data *dev;
-	struct net_pkt *pkt;
-	uint8_t link_id;
+	char *endptr, ipd_buf[MAX_IPD_LEN + 1];
+	size_t frags_len;
+	size_t match_len;
 
-	dev = CONTAINER_OF(data, struct esp_data, cmd_handler_data);
-
-	frags_len = net_buf_frags_len(data->rx_buf);
+	frags_len = net_buf_frags_len(buf);
 
 	/* Wait until minimum cmd length is available */
 	if (frags_len < MIN_IPD_LEN) {
-		ret = -EAGAIN;
-		goto out;
+		return -EAGAIN;
 	}
 
 	match_len = net_buf_linearize(ipd_buf, MAX_IPD_LEN,
-				      data->rx_buf, 0, MAX_IPD_LEN);
+				      buf, 0, MAX_IPD_LEN);
 
 	ipd_buf[match_len] = 0;
 	if (ipd_buf[len] != ',' || ipd_buf[len + 2] != ',') {
 		LOG_ERR("Invalid IPD: %s", log_strdup(ipd_buf));
-		ret = len;
-		goto out;
+		return -EBADMSG;
 	}
 
-	link_id = ipd_buf[len + 1] - '0';
-	sock = esp_socket_from_link_id(dev, link_id);
-	if (sock == NULL) {
-		LOG_ERR("No socket for link %d", link_id);
-		ret = len;
-		goto out;
+	*link_id = ipd_buf[len + 1] - '0';
+
+	*data_len = strtol(&ipd_buf[len + 3], &endptr, 10);
+
+	if (endptr == &ipd_buf[len + 3] ||
+	    (*endptr == 0 && match_len >= MAX_IPD_LEN)) {
+		LOG_ERR("Invalid IPD len: %s", log_strdup(ipd_buf));
+		return -EBADMSG;
+	} else if (*endptr == 0) {
+		return -EAGAIN;
 	}
+
+	*end = *endptr;
+	*data_offset = (endptr - ipd_buf) + 1;
+
+	return 0;
+}
+
+static int cmd_ipd_check_hdr_end(struct esp_socket *sock, char actual)
+{
+	char expected;
 
 	/* When using passive mode, the +IPD command ends with \r\n */
 	if (ESP_PROTO_PASSIVE(sock->ip_proto)) {
-		end = '\r';
+		expected = '\r';
 	} else {
-		end = ':';
+		expected = ':';
 	}
 
-	data_len = strtol(&ipd_buf[len + 3], &endptr, 10);
-	if (endptr == &ipd_buf[len + 3] ||
-	    (*endptr == 0 && match_len >= MAX_IPD_LEN)) {
-		/* Invalid */
-		LOG_ERR("Invalid IPD len: %s", log_strdup(ipd_buf));
-		ret = len;
-		goto out;
-	} else if (*endptr == 0) {
-		ret = -EAGAIN;
-		goto out;
-	} else if (*endptr != end) {
-		LOG_ERR("Invalid cmd end 0x%02x, expected 0x%02x", *endptr,
-			end);
-		ret = len;
-		goto out;
+	if (expected != actual) {
+		LOG_ERR("Invalid cmd end 0x%02x, expected 0x%02x", actual,
+			expected);
+		return -EBADMSG;
 	}
 
-	*endptr = 0;
-	data_offset = strlen(ipd_buf) + 1;
+	return 0;
+}
+
+MODEM_CMD_DIRECT_DEFINE(on_cmd_ipd)
+{
+	struct esp_data *dev = CONTAINER_OF(data, struct esp_data,
+					    cmd_handler_data);
+	struct esp_socket *sock;
+	int data_offset, data_len;
+	uint8_t link_id;
+	char cmd_end;
+	int err;
+
+	err = cmd_ipd_parse_hdr(data->rx_buf, len, &link_id, &data_offset,
+				&data_len, &cmd_end);
+	if (err) {
+		if (err == -EAGAIN) {
+			return -EAGAIN;
+		}
+
+		return len;
+	}
+
+	sock = esp_socket_from_link_id(dev, link_id);
+	if (!sock) {
+		LOG_ERR("No socket for link %d", link_id);
+		return len;
+	}
+
+	err = cmd_ipd_check_hdr_end(sock, cmd_end);
+	if (err) {
+		return len;
+	}
 
 	/*
 	 * When using passive TCP, the data itself is not included in the +IPD
@@ -515,40 +499,17 @@ MODEM_CMD_DIRECT_DEFINE(on_cmd_ipd)
 	if (ESP_PROTO_PASSIVE(sock->ip_proto)) {
 		sock->bytes_avail = data_len;
 		k_work_submit_to_queue(&dev->workq, &sock->recvdata_work);
-		ret = data_offset;
-		goto out;
+		return data_offset;
 	}
 
 	/* Do we have the whole message? */
-	if (data_offset + data_len > frags_len) {
-		ret = -EAGAIN;
-		goto out;
+	if (data_offset + data_len > net_buf_frags_len(data->rx_buf)) {
+		return -EAGAIN;
 	}
 
-	ret = data_offset + data_len; /* Skip */
+	esp_socket_rx(sock, data->rx_buf, data_offset, data_len);
 
-	if ((sock->flags & (ESP_SOCK_CONNECTED | ESP_SOCK_CLOSE_PENDING)) !=
-							ESP_SOCK_CONNECTED) {
-		LOG_DBG("Received data on closed link %d", link_id);
-		goto out;
-	}
-
-	pkt = esp_prepare_pkt(dev, data->rx_buf, data_offset, data_len);
-	if (!pkt) {
-		LOG_ERR("Failed to get net_pkt: len %d", data_len);
-		if (sock->type == SOCK_STREAM) {
-			sock->flags |= ESP_SOCK_CLOSE_PENDING;
-		}
-		goto submit_work;
-	}
-
-	k_fifo_put(&sock->fifo_rx_pkt, pkt);
-
-submit_work:
-	k_work_submit_to_queue(&dev->workq, &sock->recv_work);
-
-out:
-	return ret;
+	return data_offset + data_len;
 }
 
 MODEM_CMD_DEFINE(on_cmd_busy_sending)

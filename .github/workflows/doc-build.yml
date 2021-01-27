@@ -6,6 +6,7 @@ name: Documentation GitHub Workflow
 on:
   pull_request:
     paths:
+    - 'Makefile'
     - 'doc/**'
     - '**.rst'
     - 'include/**'
@@ -43,7 +44,7 @@ jobs:
 
     - name: install-pip
       run: |
-        pip3 install setuptools
+        pip3 install setuptools wheel
         pip3 install -r scripts/requirements-base.txt
         pip3 install -r scripts/requirements-doc.txt
 

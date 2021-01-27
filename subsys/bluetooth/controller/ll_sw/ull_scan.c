@@ -185,7 +185,7 @@ uint8_t ll_scan_enable(uint8_t enable)
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 #if defined(CONFIG_BT_CTLR_PHY_CODED)
-	if (!is_coded_phy || (scan->lll.phy & BT_HCI_LE_EXT_SCAN_PHY_1M))
+	if (!is_coded_phy || (scan->lll.phy & PHY_1M))
 #endif /* CONFIG_BT_CTLR_PHY_CODED */
 	{
 		err = duration_period_setup(scan, duration, period,
@@ -233,7 +233,7 @@ uint8_t ll_scan_enable(uint8_t enable)
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 #if defined(CONFIG_BT_CTLR_PHY_CODED)
-	if (!is_coded_phy || (scan->lll.phy & BT_HCI_LE_EXT_SCAN_PHY_1M))
+	if (!is_coded_phy || (scan->lll.phy & PHY_1M))
 #endif /* CONFIG_BT_CTLR_PHY_CODED */
 	{
 		err = duration_period_update(scan, is_update_1m);
@@ -255,7 +255,7 @@ uint8_t ll_scan_enable(uint8_t enable)
 	}
 
 #if defined(CONFIG_BT_CTLR_PHY_CODED)
-	if (!is_coded_phy || (scan->lll.phy & BT_HCI_LE_EXT_SCAN_PHY_1M))
+	if (!is_coded_phy || (scan->lll.phy & PHY_1M))
 #endif /* CONFIG_BT_CTLR_PHY_CODED */
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 	{
@@ -339,7 +339,7 @@ void ull_scan_params_set(struct lll_scan *lll, uint8_t type, uint16_t interval,
 	lll->filter_policy = filter_policy;
 	lll->interval = interval;
 	lll->ticks_window = HAL_TICKER_US_TO_TICKS((uint64_t)window *
-						   SCAN_INTERVAL_UNIT_US);
+						   SCAN_INT_UNIT_US);
 }
 
 uint8_t ull_scan_enable(struct ll_scan_set *scan)
@@ -359,7 +359,7 @@ uint8_t ull_scan_enable(struct ll_scan_set *scan)
 	lll_hdr_init(lll, scan);
 
 	ticks_interval = HAL_TICKER_US_TO_TICKS((uint64_t)lll->interval *
-						SCAN_INTERVAL_UNIT_US);
+						SCAN_INT_UNIT_US);
 
 	/* TODO: active_to_start feature port */
 	scan->evt.ticks_active_to_start = 0U;
@@ -422,7 +422,7 @@ uint8_t ull_scan_enable(struct ll_scan_set *scan)
 			   TICKER_USER_ID_THREAD, TICKER_ID_SCAN_BASE + handle,
 			   ticks_anchor, 0, ticks_interval,
 			   HAL_TICKER_REMAINDER((uint64_t)lll->interval *
-						SCAN_INTERVAL_UNIT_US),
+						SCAN_INT_UNIT_US),
 			   TICKER_NULL_LAZY,
 			   (scan->evt.ticks_slot + ticks_slot_overhead),
 			   ticker_cb, scan,
@@ -525,7 +525,7 @@ void ull_scan_term_dequeue(uint8_t handle)
 		struct ll_scan_set *scan_coded;
 
 		scan_coded = ull_scan_set_get(SCAN_HANDLE_PHY_CODED);
-		if (scan_coded->lll.phy & BT_HCI_LE_EXT_SCAN_PHY_CODED) {
+		if (scan_coded->lll.phy & PHY_CODED) {
 			uint8_t err;
 
 			err = disable(SCAN_HANDLE_PHY_CODED);
@@ -535,7 +535,7 @@ void ull_scan_term_dequeue(uint8_t handle)
 		struct ll_scan_set *scan_1m;
 
 		scan_1m = ull_scan_set_get(SCAN_HANDLE_1M);
-		if (scan_1m->lll.phy & BT_HCI_LE_EXT_SCAN_PHY_1M) {
+		if (scan_1m->lll.phy & PHY_1M) {
 			uint8_t err;
 
 			err = disable(SCAN_HANDLE_1M);

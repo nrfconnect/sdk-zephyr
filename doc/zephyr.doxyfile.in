@@ -1973,11 +1973,13 @@ PREDEFINED             = "CONFIG_ARCH_HAS_CUSTOM_BUSY_WAIT" \
                          "CONFIG_FLASH_PAGE_LAYOUT" \
                          "CONFIG_FPU" \
                          "CONFIG_FPU_SHARING" \
+                         "CONFIG_HEAP_MEM_POOL_SIZE" \
                          "CONFIG_MMU" \
                          "CONFIG_NET_L2_ETHERNET_MGMT" \
                          "CONFIG_NET_MGMT_EVENT" \
                          "CONFIG_NET_TCP" \
                          "CONFIG_NET_UDP" \
+                         "CONFIG_PWM_CAPTURE" \
                          "CONFIG_SCHED_CPU_MASK" \
                          "CONFIG_SCHED_DEADLINE" \
                          "CONFIG_SCHED_DEADLINE" \
@@ -1996,7 +1998,6 @@ PREDEFINED             = "CONFIG_ARCH_HAS_CUSTOM_BUSY_WAIT" \
                          "CONFIG_USE_SWITCH" \
                          "NET_MGMT_DEFINE_REQUEST_HANDLER(x)=" \
                          "DEVICE_DEFINE()=" \
-                         "DEVICE_AND_API_INIT()=" \
                          "BUILD_ASSERT_MSG()=" \
                          "BUILD_ASSERT()=" \
                          "__deprecated=" \

@@ -77,6 +77,13 @@ enum {
 #define FS_MOUNT_FLAG_NO_FORMAT BIT(0)
 /** Flag makes mounted file system read-only */
 #define FS_MOUNT_FLAG_READ_ONLY BIT(1)
+/** Flag used in pre-defined mount structures that are to be mounted
+ * on startup.
+ *
+ * This flag has no impact in user-defined mount structures.
+ */
+#define FS_MOUNT_FLAG_AUTOMOUNT BIT(2)
+
 
 /**
  * @brief File system mount info structure
@@ -184,6 +191,34 @@ struct fs_statvfs {
 /**
  * @}
  */
+
+/*
+ * @brief Get the common mount flags for an fstab entry.
+
+ * @param node_id the node identifier for a child entry in a
+ * zephyr,fstab node.
+ * @return a value suitable for initializing an fs_mount_t flags
+ * member.
+ */
+#define FSTAB_ENTRY_DT_MOUNT_FLAGS(node_id)				\
+	((DT_PROP(node_id, automount) ? FS_MOUNT_FLAG_AUTOMOUNT : 0)	\
+	 | (DT_PROP(node_id, read_only) ? FS_MOUNT_FLAG_READ_ONLY : 0)	\
+	 | (DT_PROP(node_id, no_format) ? FS_MOUNT_FLAG_NO_FORMAT : 0))
+
+/**
+ * @brief The name under which a zephyr,fstab entry mount structure is
+ * defined.
+ */
+#define FS_FSTAB_ENTRY(node_id) _CONCAT(z_fsmp_, node_id)
+
+/**
+ * @brief Generate a declaration for the externally defined fstab
+ * entry.
+ *
+ * This will evaluate to the name of a struct fs_mount_t object.
+ */
+#define FS_FSTAB_DECLARE_ENTRY(node_id)		\
+	extern struct fs_mount_t FS_FSTAB_ENTRY(node_id)
 
 /**
  * @brief Open or create file

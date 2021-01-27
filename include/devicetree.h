@@ -65,7 +65,7 @@
  */
 
 /**
- * @defgroup devicetree-generic-id Node identifiers
+ * @defgroup devicetree-generic-id Node identifiers and helpers
  * @ingroup devicetree
  * @{
  */
@@ -77,6 +77,9 @@
 
 /**
  * @brief Get a node identifier for a devicetree path
+ *
+ * (This macro returns a node identifier from path components. To get
+ * a path string from a node identifier, use DT_NODE_PATH() instead.)
  *
  * The arguments to this macro are the names of non-root nodes in the
  * tree required to reach the desired node, starting from the root.
@@ -318,6 +321,27 @@
 #define DT_PARENT(node_id) UTIL_CAT(node_id, _PARENT)
 
 /**
+ * @brief Get a node identifier for a grandparent node
+ *
+ * Example devicetree fragment:
+ *
+ *     gparent: grandparent-node {
+ *             parent: parent-node {
+ *                     child: child-node { ... }
+ *             };
+ *     };
+ *
+ * The following are equivalent ways to get the same node identifier:
+ *
+ *     DT_GPARENT(DT_NODELABEL(child))
+ *     DT_PARENT(DT_PARENT(DT_NODELABEL(child))
+ *
+ * @param node_id node identifier
+ * @return a node identifier for the node's parent's parent
+ */
+#define DT_GPARENT(node_id) DT_PARENT(DT_PARENT(node_id))
+
+/**
  * @brief Get a node identifier for a child node
  *
  * Example devicetree fragment:
@@ -349,6 +373,52 @@
  * @return node identifier for the node with the name referred to by 'child'
  */
 #define DT_CHILD(node_id, child) UTIL_CAT(node_id, DT_S_PREFIX(child))
+
+/**
+ * @brief Get a devicetree node's full path as a string literal
+ *
+ * This returns the path to a node from a node identifier. To get a
+ * node identifier from path components instead, use DT_PATH().
+ *
+ * Example devicetree fragment:
+ *
+ *     / {
+ *             soc {
+ *                     node: my-node@12345678 { ... };
+ *             };
+ *     };
+ *
+ * Example usage:
+ *
+ *    DT_NODE_PATH(DT_NODELABEL(node)) // "/soc/my-node@12345678"
+ *    DT_NODE_PATH(DT_PATH(soc))       // "/soc"
+ *    DT_NODE_PATH(DT_ROOT)            // "/"
+ *
+ * @param node_id node identifier
+ * @return the node's full path in the devicetree
+ */
+#define DT_NODE_PATH(node_id) DT_CAT(node_id, _PATH)
+
+/**
+ * @brief Do node_id1 and node_id2 refer to the same node?
+ *
+ * Both "node_id1" and "node_id2" must be node identifiers for nodes
+ * that exist in the devicetree (if unsure, you can check with
+ * DT_NODE_EXISTS()).
+ *
+ * The expansion evaluates to 0 or 1, but may not be a literal integer
+ * 0 or 1.
+ *
+ * @param node_id1 first node identifer
+ * @param node_id2 second node identifier
+ * @return an expression that evaluates to 1 if the node identifiers
+ *         refer to the same node, and evaluates to 0 otherwise
+ */
+#define DT_SAME_NODE(node_id1, node_id2) \
+	(DT_DEP_ORD(node_id1) == (DT_DEP_ORD(node_id2)))
+
+/* Implementation note: distinct nodes have distinct node identifiers.
+ * See include/devicetree/ordinals.h. */
 
 /**
  * @}
@@ -420,6 +490,24 @@
  * @return the property's length
  */
 #define DT_PROP_LEN(node_id, prop) DT_PROP(node_id, prop##_LEN)
+
+/**
+ * @brief Like DT_PROP_LEN(), but with a fallback to default_value
+ *
+ * If the property is defined (as determined by DT_NODE_HAS_PROP()),
+ * this expands to DT_PROP_LEN(node_id, prop). The default_value
+ * parameter is not expanded in this case.
+ *
+ * Otherwise, this expands to default_value.
+ *
+ * @param node_id node identifier
+ * @param prop a lowercase-and-underscores property with a logical length
+ * @param default_value a fallback value to expand to
+ * @return the property's length or the given default value
+ */
+#define DT_PROP_LEN_OR(node_id, prop, default_value) \
+	COND_CODE_1(DT_NODE_HAS_PROP(node_id, prop), \
+		    (DT_PROP_LEN(node_id, prop)), (default_value))
 
 /**
  * @brief Is index "idx" valid for an array type property?

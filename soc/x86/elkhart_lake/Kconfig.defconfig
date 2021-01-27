@@ -42,7 +42,7 @@ endif # APIC_TIMER_TSC
 endif # APIC_TIMER
 
 config CLFLUSH_DETECT
-	default y if CACHE_FLUSHING
+	default y if CACHE_MANAGEMENT
 
 config X86_DYNAMIC_IRQ_STUBS
 	default 16
@@ -51,5 +51,13 @@ config X86_DYNAMIC_IRQ_STUBS
 config I2C_DW
 	default y
 	depends on I2C
+
+config I2C_DW_MAX_INSTANCES
+	default 15
+	depends on I2C_DW
+
+config UART_NS16550_MAX_INSTANCES
+	default 11
+	depends on UART_NS16550
 
 endif # SOC_ELKHART_LAKE

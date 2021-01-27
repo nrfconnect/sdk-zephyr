@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <stddef.h>
-#include <sys/util.h>
 #if defined(CONFIG_BT_CTLR_RX_PDU_META)
 #include "lll_meta.h"
 #endif /* CONFIG_BT_CTLR_RX_PDU_META */
@@ -18,6 +16,10 @@
 
 #define EVENT_PIPELINE_MAX 7
 #define EVENT_DONE_MAX 3
+
+#define ADV_INT_UNIT_US  625U
+#define SCAN_INT_UNIT_US 625U
+#define CONN_INT_UNIT_US 1250U
 
 #define HDR_ULL(p)     ((void *)((uint8_t *)(p) + sizeof(struct evt_hdr)))
 #define HDR_ULL2LLL(p) ((struct lll_hdr *)((uint8_t *)(p) + \
@@ -81,6 +83,11 @@ enum {
 	TICKER_ID_SCAN_SYNC_BASE,
 	TICKER_ID_SCAN_SYNC_LAST = ((TICKER_ID_SCAN_SYNC_BASE) +
 				    (CONFIG_BT_CTLR_SCAN_SYNC_SET) - 1),
+#if defined(CONFIG_BT_CTLR_SYNC_ISO)
+	TICKER_ID_SCAN_SYNC_ISO_BASE,
+	TICKER_ID_SCAN_SYNC_ISO_LAST = ((TICKER_ID_SCAN_SYNC_ISO_BASE) +
+					(CONFIG_BT_CTLR_SCAN_SYNC_ISO_SET) - 1),
+#endif /* CONFIG_BT_CTLR_SYNC_ISO */
 #endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* CONFIG_BT_OBSERVER */
@@ -162,12 +169,12 @@ struct lll_event {
 enum node_rx_type {
 	/* Unused */
 	NODE_RX_TYPE_NONE = 0x00,
+	/* Signals release of node */
+	NODE_RX_TYPE_RELEASE,
 	/* Signals completion of RX event */
 	NODE_RX_TYPE_EVENT_DONE,
 	/* Signals arrival of RX Data Channel payload */
 	NODE_RX_TYPE_DC_PDU,
-	/* Signals release of RX Data Channel payload */
-	NODE_RX_TYPE_DC_PDU_RELEASE,
 	/* Advertisement report from scanning */
 	NODE_RX_TYPE_REPORT,
 	NODE_RX_TYPE_EXT_1M_REPORT,
@@ -178,6 +185,8 @@ enum node_rx_type {
 	NODE_RX_TYPE_SYNC,
 	NODE_RX_TYPE_SYNC_REPORT,
 	NODE_RX_TYPE_SYNC_LOST,
+	NODE_RX_TYPE_SYNC_ISO,
+	NODE_RX_TYPE_SYNC_ISO_LOST,
 	NODE_RX_TYPE_EXT_ADV_TERMINATE,
 	NODE_RX_TYPE_BIG_COMPLETE,
 	NODE_RX_TYPE_BIG_TERMINATE,

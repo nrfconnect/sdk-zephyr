@@ -45,6 +45,7 @@
 /soc/arm/nuvoton_npcx/                    @MulinChao
 /soc/arm/qemu_cortex_a53/                 @carlocaione
 /soc/arm/quicklogic_eos_s3/               @kowalewskijan @kgugala
+/soc/arm/silabs_exx32/efm32pg1b/          @rdmeneze
 /soc/arm/silabs_exx32/efr32mg21/          @l-alfred
 /soc/arm/st_stm32/                        @erwango
 /soc/arm/st_stm32/*/power.c               @FRASTM
@@ -82,6 +83,7 @@
 /boards/arm/cc3220sf_launchxl/            @vanti
 /boards/arm/cy8*                          @nandojve
 /boards/arm/disco_l475_iot1/              @erwango
+/boards/arm/efm32pg_stk3401a/             @rdmeneze
 /boards/arm/faze/                         @mbittan @simonguinot
 /boards/arm/frdm*/                        @MaureenHelm
 /boards/arm/frdm*/doc/                    @MaureenHelm @MeganHansen
@@ -183,6 +185,7 @@
 /drivers/dma/*sam0*                       @Sizurka
 /drivers/dma/dma_stm32*                   @cybertale @lowlander
 /drivers/dma/*pl330*                      @raveenp
+/drivers/dma/*iproc_pax*                  @raveenp
 /drivers/ec_host_cmd_periph/              @jettr
 /drivers/eeprom/                          @henrikbrixandersen
 /drivers/eeprom/eeprom_stm32.c            @KwonTae-young
@@ -205,8 +208,10 @@
 /drivers/i2s/i2s_ll_stm32*                @avisconti
 /drivers/i2c/i2c_common.c                 @sjg20
 /drivers/i2c/i2c_emul.c                   @sjg20
+/drivers/i2c/i2c_ite_it8xxx2.c            @GTLin08
 /drivers/i2c/i2c_shell.c                  @nashif
 /drivers/i2c/Kconfig.i2c_emul             @sjg20
+/drivers/i2c/Kconfig.it8xxx2              @GTLin08
 /drivers/i2c/slave/*eeprom*               @henrikbrixandersen
 /drivers/i2s/*litex*                      @mateusz-holenko @kgugala @pgielda
 /drivers/ieee802154/                      @jukkar @tbursztyka
@@ -234,10 +239,14 @@
 /drivers/peci/                            @albertofloyd @franciscomunoz @scottwcpg
 /drivers/pinmux/*hsdk*                    @iriszzw
 /drivers/pinmux/*it8xxx2*                 @ite
+/drivers/psci/                            @carlocaione
 /drivers/ps2/                             @albertofloyd @franciscomunoz @scottwcpg
+/drivers/pwm/*rv32m1*                     @henrikbrixandersen
 /drivers/pwm/*sam0*                       @nzmichaelh
 /drivers/pwm/*stm32*                      @gmarull
 /drivers/pwm/*xlnx*                       @henrikbrixandersen
+/drivers/pwm/pwm_capture.c                @henrikbrixandersen
+/drivers/pwm/pwm_shell.c                  @henrikbrixandersen
 /drivers/regulator/                       @pabigot
 /drivers/sensor/                          @MaureenHelm
 /drivers/sensor/ams_iAQcore/              @alexanderwachter
@@ -264,8 +273,6 @@
 /drivers/serial/*apbuart*                 @martin-aberg
 /drivers/net/                             @jukkar @tbursztyka
 /drivers/ptp_clock/                       @jukkar
-/drivers/pwm/*rv32m1*                     @henrikbrixandersen
-/drivers/pwm/pwm_shell.c                  @henrikbrixandersen
 /drivers/spi/                             @tbursztyka
 /drivers/spi/spi_rv32m1_lpspi*            @karstenkoenig
 /drivers/timer/apic_timer.c               @andrewboie
@@ -288,8 +295,10 @@
 /drivers/i2c/i2c_dw*                      @dcpleung
 /drivers/*/*xec*                          @franciscomunoz @albertofloyd @scottwcpg
 /drivers/watchdog/*gecko*                 @oanerer
+/drivers/watchdog/*sifive*                @katsuster
 /drivers/watchdog/wdt_handlers.c          @andrewboie
 /drivers/wifi/                            @jukkar @tbursztyka @pfalcon
+/drivers/wifi/esp/                        @mniestroj
 /drivers/wifi/eswifi/                     @loicpoulain @nandojve
 /drivers/wifi/winc1500/                   @kludentwo
 /drivers/virtualization/		  @tbursztyka
@@ -314,12 +323,15 @@
 /dts/arm/nuvoton/npcx/                    @MulinChao
 /dts/arm/nxp/                             @MaureenHelm
 /dts/arm/microchip/                       @franciscomunoz @albertofloyd @scottwcpg
+/dts/arm/silabs/efm32_pg_1b.dtsi          @rdmeneze
 /dts/arm/silabs/efm32gg11b*               @oanerer
 /dts/arm/silabs/efm32_jg_pg*              @chrta
 /dts/arm/silabs/efr32bg13p*               @mnkp
 /dts/arm/silabs/efm32jg12b*               @chrta
 /dts/arm/silabs/efm32pg12b*               @chrta
+/dts/arm/silabs/efm32pg1b*                @rdmeneze
 /dts/arm/silabs/efr32mg21*                @l-alfred
+/dts/riscv/                               @kgugala @pgielda @nategraff-sifive
 /dts/riscv/it8xxx2.dtsi                   @ite
 /dts/riscv/microsemi-miv.dtsi             @galak
 /dts/riscv/rv32m1*                        @MaureenHelm
@@ -338,6 +350,7 @@
 /dts/bindings/adc/st*stm32-adc.yaml       @cybertale
 /dts/bindings/modem/*hl7800.yaml          @rerickson1
 /dts/bindings/serial/ns16550.yaml         @andrewboie
+/dts/bindings/wifi/*esp.yaml              @mniestroj
 /dts/bindings/*/*npcx*                    @MulinChao
 /dts/bindings/*/nordic*                   @anangl
 /dts/bindings/*/nxp*                      @MaureenHelm
@@ -347,6 +360,7 @@
 /dts/bindings/*/sifive*                   @mateusz-holenko @kgugala @pgielda @nategraff-sifive
 /dts/bindings/*/litex*                    @mateusz-holenko @kgugala @pgielda
 /dts/bindings/*/vexriscv*                 @mateusz-holenko @kgugala @pgielda
+/dts/bindings/psci/*                      @carlocaione
 /dts/posix/                               @aescolar @vanwinkeljan @daor-oti
 /dts/bindings/sensor/*bme680*             @BoschSensortec
 /dts/bindings/sensor/st*                  @avisconti
@@ -373,6 +387,7 @@
 /include/drivers/spi.h                    @tbursztyka
 /include/drivers/lora.h                   @Mani-Sadhasivam
 /include/drivers/peci.h                   @albertofloyd @franciscomunoz @scottwcpg
+/include/drivers/psci.h                   @carlocaione
 /include/app_memory/                      @andrewboie
 /include/arch/arc/                        @abrodkin @ruuddw
 /include/arch/arc/arch.h                  @andrewboie
@@ -380,6 +395,7 @@
 /include/arch/arm/aarch32/                @MaureenHelm @galak @ioannisg
 /include/arch/arm/aarch32/cortex_a_r/     @stephanosio
 /include/arch/arm/aarch64/                @carlocaione
+/include/arch/arm/arm-smccc.h             @carlocaione
 /include/arch/arm/aarch32/irq.h           @andrewboie
 /include/arch/nios2/                      @andrewboie
 /include/arch/nios2/arch.h                @andrewboie
@@ -495,6 +511,7 @@
 /arch/x86/gen_idt.py                      @andrewboie
 /scripts/gen_kobject_list.py              @andrewboie
 /scripts/gen_syscalls.py                  @andrewboie
+/scripts/list_boards.py                   @mbolivar-nordic
 /scripts/net/                             @jukkar
 /scripts/process_gperf.py                 @andrewboie
 /scripts/gen_relocate_app.py              @wentongwu
@@ -535,6 +552,7 @@
 /subsys/fs/fuse_fs_access.c               @vanwinkeljan
 /subsys/fs/littlefs_fs.c                  @pabigot
 /subsys/fs/nvs/                           @Laczen
+/subsys/ipc/                              @ioannisg
 /subsys/logging/                          @nordic-krch
 /subsys/logging/log_backend_net.c         @nordic-krch @jukkar
 /subsys/lorawan/                          @Mani-Sadhasivam
@@ -567,7 +585,7 @@
 /subsys/testsuite/                        @nashif
 /subsys/timing/                           @nashif @dcpleung
 /subsys/usb/                              @jfischer-no @finikorg
-/subsys/usb/class/usb_dfu.c               @nvlsianpu
+/subsys/usb/class/dfu/usb_dfu.c           @nvlsianpu
 /tests/                                   @nashif
 /tests/application_development/libcxx/    @pabigot
 /tests/arch/arm/                          @ioannisg @stephanosio

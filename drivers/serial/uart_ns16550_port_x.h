@@ -16,7 +16,7 @@ static void irq_config_func_@NUM@(const struct device *port);
 static const struct uart_ns16550_device_config uart_ns16550_dev_cfg_@NUM@ = {
 #ifdef UART_NS16550_ACCESS_IOPORT
 	.port = DT_INST_REG_ADDR(@NUM@),
-#elif !DT_INST_PROP(@NUM@, pcie)
+#elif !DT_INST_ON_BUS(@NUM@, pcie)
 	DEVICE_MMIO_ROM_INIT(DT_DRV_INST(@NUM@)),
 #endif
 	.sys_clk_freq = DT_INST_PROP(@NUM@, clock_frequency),
@@ -29,7 +29,11 @@ static const struct uart_ns16550_device_config uart_ns16550_dev_cfg_@NUM@ = {
 	.pcp = DT_INST_PROP(@NUM@, pcp),
 #endif
 
-#if DT_INST_PROP(@NUM@, pcie)
+#if DT_INST_NODE_HAS_PROP(@NUM@, reg_shift)
+	.reg_interval = (1 <<  DT_INST_PROP(@NUM@, reg_shift))
+#endif
+
+#if DT_INST_ON_BUS(@NUM@, pcie)
 	.pcie = true,
 	.pcie_bdf = DT_INST_REG_ADDR(@NUM@),
 	.pcie_id = DT_INST_REG_SIZE(@NUM@),
@@ -71,7 +75,7 @@ static void irq_config_func_@NUM@(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
-#if DT_INST_PROP(@NUM@, pcie)
+#if DT_INST_ON_BUS(@NUM@, pcie)
 #if DT_INST_IRQN(@NUM@) == PCIE_IRQ_DETECT
 
 	/* PCI(e) with auto IRQ detection */
@@ -125,4 +129,9 @@ static void irq_config_func_@NUM@(const struct device *dev)
 }
 #endif
 
+#endif
+
+/* Include subsequent instances */
+#if @NUM@ < (CONFIG_UART_NS16550_MAX_INSTANCES - 1)
+#include <uart_ns16550_port_@NEXT_NUM@.h>
 #endif

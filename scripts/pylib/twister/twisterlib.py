@@ -454,7 +454,10 @@ class BinaryHandler(Handler):
         # work.  Newer ninja's don't seem to pass SIGTERM down to the children
         # so we need to use try_kill_process_by_pid.
         for child in psutil.Process(proc.pid).children(recursive=True):
-            os.kill(child.pid, signal.SIGTERM)
+            try:
+                os.kill(child.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
         proc.terminate()
         # sleep for a while before attempting to kill
         time.sleep(0.5)
@@ -551,14 +554,13 @@ class BinaryHandler(Handler):
                 t.join()
             proc.wait()
             self.returncode = proc.returncode
+            self.try_kill_process_by_pid()
 
         handler_time = time.time() - start_time
 
         if self.coverage:
             subprocess.call(["GCOV_PREFIX=" + self.build_dir,
                              "gcov", self.sourcedir, "-b", "-s", self.build_dir], shell=True)
-
-        self.try_kill_process_by_pid()
 
         # FIXME: This is needed when killing the simulator, the console is
         # garbled and needs to be reset. Did not find a better way to do that.
@@ -2577,7 +2579,7 @@ class TestSuite(DisablePyTestCollectionMixin):
 
     def check_zephyr_version(self):
         try:
-            subproc = subprocess.run(["git", "describe"],
+            subproc = subprocess.run(["git", "describe", "--abbrev=12"],
                                      stdout=subprocess.PIPE,
                                      universal_newlines=True,
                                      cwd=ZEPHYR_BASE)
@@ -2986,9 +2988,15 @@ class TestSuite(DisablePyTestCollectionMixin):
         logger.info("Building initial testcase list...")
 
         for tc_name, tc in self.testcases.items():
+
+            if tc.build_on_all and not platform_filter:
+                platform_scope = self.platforms
+            else:
+                platform_scope = platforms
+
             # list of instances per testcase, aka configurations.
             instance_list = []
-            for plat in platforms:
+            for plat in platform_scope:
                 instance = TestInstance(tc, plat, self.outdir)
                 if runnable:
                     tfilter = 'runnable'
@@ -3025,9 +3033,6 @@ class TestSuite(DisablePyTestCollectionMixin):
 
                 if tc.skip:
                     discards[instance] = discards.get(instance, "Skip filter")
-
-                if tc.build_on_all and not platform_filter:
-                    platform_filter = []
 
                 if tag_filter and not tc.tags.intersection(tag_filter):
                     discards[instance] = discards.get(instance, "Command line testcase tag filter")
@@ -3483,39 +3488,31 @@ class TestSuite(DisablePyTestCollectionMixin):
                     rowdict["rom_size"] = rom_size
                 cw.writerow(rowdict)
 
-    def json_report(self, filename, platform=None, append=False, version="NA"):
+    def json_report(self, filename, append=False, version="NA"):
         logger.info(f"Writing JSON report {filename}")
-        rowdict = {}
-        results_dict = {}
-        rowdict["test_suite"] = []
-        results_dict["test_details"] = []
-        new_dict = {}
+        report = {}
+        selected = self.selected_platforms
+        report["environment"] = {"os": os.name,
+                                 "zephyr_version": version,
+                                 "toolchain": self.get_toolchain()
+                                 }
+        json_data = {}
+        if os.path.exists(filename) and append:
+            with open(filename, 'r') as json_file:
+                json_data = json.load(json_file)
 
-        if platform:
-            selected = [platform]
+        suites = json_data.get("testsuites", [])
+        if suites:
+            suite = suites[0]
+            testcases = suite.get("testcases", [])
         else:
-            selected = self.selected_platforms
+            suite = {}
+            testcases = []
 
-        rowdict["test_environment"] = {"os": os.name,
-                                        "zephyr_version": version,
-                                        "toolchain": self.get_toolchain()
-                                        }
         for p in selected:
-            json_dict = {}
             inst = self.get_platform_instances(p)
-
-            if os.path.exists(filename) and append:
-                with open(filename, 'r') as report:
-                    data = json.load(report)
-
-                for i in data["test_suite"]:
-                    test_details = i["test_details"]
-                    for test_data in test_details:
-                        if test_data.get("status") != "failed":
-                            new_dict = test_data
-                            results_dict["test_details"].append(new_dict)
-
             for _, instance in inst.items():
+                testcase = {}
                 handler_log = os.path.join(instance.build_dir, "handler.log")
                 build_log = os.path.join(instance.build_dir, "build.log")
                 device_log = os.path.join(instance.build_dir, "device.log")
@@ -3523,58 +3520,42 @@ class TestSuite(DisablePyTestCollectionMixin):
                 handler_time = instance.metrics.get('handler_time', 0)
                 ram_size = instance.metrics.get ("ram_size", 0)
                 rom_size  = instance.metrics.get("rom_size",0)
-                if os.path.exists(filename) and append:
-                    json_dict = {"testcase": instance.testcase.name,
-                                    "arch": instance.platform.arch,
-                                    "type": instance.testcase.type,
-                                    "platform": p,
-                                    }
-                    if instance.status in ["error", "failed", "timeout"]:
-                        json_dict["status"] = "failed"
-                        json_dict["reason"] = instance.reason
-                        json_dict["execution_time"] =  handler_time
+
+                for k in instance.results.keys():
+                    testcases = list(filter(lambda d: not (d.get('testcase') == k and d.get('platform') == p), testcases ))
+                    testcase = {"testcase": k,
+                                "arch": instance.platform.arch,
+                                "platform": p,
+                                }
+                    if instance.results[k] in ["PASS"]:
+                        testcase["status"] = "passed"
+                        if instance.handler:
+                            testcase["execution_time"] =  handler_time
+                        if ram_size:
+                            testcase["ram_size"] = ram_size
+                        if rom_size:
+                            testcase["rom_size"] = rom_size
+
+                    elif instance.results[k] in ['FAIL', 'BLOCK'] or instance.status in ["error", "failed", "timeout"]:
+                        testcase["status"] = "failed"
+                        testcase["reason"] = instance.reason
+                        testcase["execution_time"] =  handler_time
                         if os.path.exists(handler_log):
-                            json_dict["test_output"] = self.process_log(handler_log)
+                            testcase["test_output"] = self.process_log(handler_log)
                         elif os.path.exists(device_log):
-                            json_dict["device_log"] = self.process_log(device_log)
+                            testcase["device_log"] = self.process_log(device_log)
                         else:
-                            json_dict["build_log"] = self.process_log(build_log)
-                    results_dict["test_details"].append(json_dict)
-                else:
-                    for k in instance.results.keys():
-                        json_dict = {"testcase": k,
-                                    "arch": instance.platform.arch,
-                                    "type": instance.testcase.type,
-                                    "platform": p,
-                                    }
-                        if instance.results[k] in ["PASS"]:
-                            json_dict["status"] = "passed"
-                            if instance.handler:
-                                json_dict["execution_time"] =  handler_time
-                            if ram_size:
-                                json_dict["ram_size"] = ram_size
-                            if rom_size:
-                                json_dict["rom_size"] = rom_size
+                            testcase["build_log"] = self.process_log(build_log)
+                    else:
+                        testcase["status"] = "skipped"
+                        testcase["reason"] = instance.reason
+                    testcases.append(testcase)
 
-                        elif instance.results[k] in ['FAIL', 'BLOCK'] or instance.status in ["error", "failed", "timeout"]:
-                            json_dict["status"] = "failed"
-                            json_dict["reason"] = instance.reason
-                            json_dict["execution_time"] =  handler_time
-                            if os.path.exists(handler_log):
-                                json_dict["test_output"] = self.process_log(handler_log)
-                            elif os.path.exists(device_log):
-                                json_dict["device_log"] = self.process_log(device_log)
-                            else:
-                                json_dict["build_log"] = self.process_log(build_log)
-                        else:
-                            json_dict["status"] = "skipped"
-                            json_dict["reason"] = instance.reason
-                        results_dict["test_details"].append(json_dict)
-
-        rowdict["test_suite"].append(results_dict)
+        suites = [ {"testcases": testcases} ]
+        report["testsuites"] = suites
 
         with open(filename, "wt") as json_file:
-            json.dump(rowdict, json_file, indent=4, separators=(',',':'))
+            json.dump(report, json_file, indent=4, separators=(',',':'))
 
     def get_testcase(self, identifier):
         results = []
@@ -3602,6 +3583,7 @@ class CoverageTool:
             logger.error("Unsupported coverage tool specified: {}".format(tool))
             return None
 
+        logger.debug(f"Select {tool} as the coverage tool...")
         return t
 
     @staticmethod
@@ -3687,10 +3669,13 @@ class Lcov(CoverageTool):
     def _generate(self, outdir, coveragelog):
         coveragefile = os.path.join(outdir, "coverage.info")
         ztestfile = os.path.join(outdir, "ztest.info")
-        subprocess.call(["lcov", "--gcov-tool", self.gcov_tool,
+        cmd = ["lcov", "--gcov-tool", self.gcov_tool,
                          "--capture", "--directory", outdir,
                          "--rc", "lcov_branch_coverage=1",
-                         "--output-file", coveragefile], stdout=coveragelog)
+                         "--output-file", coveragefile]
+        cmd_str = " ".join(cmd)
+        logger.debug(f"Running {cmd_str}...")
+        subprocess.call(cmd, stdout=coveragelog)
         # We want to remove tests/* and tests/ztest/test/* but save tests/ztest
         subprocess.call(["lcov", "--gcov-tool", self.gcov_tool, "--extract",
                          coveragefile,
@@ -3749,10 +3734,12 @@ class Gcovr(CoverageTool):
         excludes = Gcovr._interleave_list("-e", self.ignores)
 
         # We want to remove tests/* and tests/ztest/test/* but save tests/ztest
-        subprocess.call(["gcovr", "-r", self.base_dir, "--gcov-executable",
-                         self.gcov_tool, "-e", "tests/*"] + excludes +
-                        ["--json", "-o", coveragefile, outdir],
-                        stdout=coveragelog)
+        cmd = ["gcovr", "-r", self.base_dir, "--gcov-executable",
+               self.gcov_tool, "-e", "tests/*"] + excludes + ["--json", "-o",
+               coveragefile, outdir]
+        cmd_str = " ".join(cmd)
+        logger.debug(f"Running {cmd_str}...")
+        subprocess.call(cmd, stdout=coveragelog)
 
         subprocess.call(["gcovr", "-r", self.base_dir, "--gcov-executable",
                          self.gcov_tool, "-f", "tests/ztest", "-e",
@@ -3826,6 +3813,16 @@ class DUT(object):
     def counter(self, value):
         with self._counter.get_lock():
             self._counter.value = value
+
+    def to_dict(self):
+        d = {}
+        exclude = ['_available', '_counter', 'match']
+        v = vars(self)
+        for k in v.keys():
+            if k not in exclude and v[k]:
+                d[k] = v[k]
+        return d
+
 
     def __repr__(self):
         return f"<{self.platform} ({self.product}) on {self.serial}>"
@@ -3960,26 +3957,34 @@ class HardwareMap:
 
     def save(self, hwm_file):
         # use existing map
+        self.detected.sort(key=lambda x: x.serial or '')
         if os.path.exists(hwm_file):
             with open(hwm_file, 'r') as yaml_file:
                 hwm = yaml.load(yaml_file, Loader=SafeLoader)
-                hwm.sort(key=lambda x: x['serial'] or '')
+                if hwm:
+                    hwm.sort(key=lambda x: x['serial'] or '')
 
-                # disconnect everything
-                for h in hwm:
-                    h['connected'] = False
-                    h['serial'] = None
-
-                self.detected.sort(key=lambda x: x.serial or '')
-                for _detected in self.detected:
+                    # disconnect everything
                     for h in hwm:
-                        if _detected.id == h['id'] and _detected.product == h['product'] and not h['connected'] and not _detected.match:
-                            h['connected'] = True
-                            h['serial'] = _detected.serial
-                            _detected.match = True
+                        h['connected'] = False
+                        h['serial'] = None
 
-                new = list(filter(lambda d: not d.match, self.detected))
-                hwm = hwm + new
+                    for _detected in self.detected:
+                        for h in hwm:
+                            if _detected.id == h['id'] and _detected.product == h['product'] and not _detected.match:
+                                h['connected'] = True
+                                h['serial'] = _detected.serial
+                                _detected.match = True
+
+                new_duts = list(filter(lambda d: not d.match, self.detected))
+                new = []
+                for d in new_duts:
+                    new.append(d.to_dict())
+
+                if hwm:
+                    hwm = hwm + new
+                else:
+                    hwm = new
 
             with open(hwm_file, 'w') as yaml_file:
                 yaml.dump(hwm, yaml_file, Dumper=Dumper, default_flow_style=False)

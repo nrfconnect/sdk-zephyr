@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018 Intel Corporation
+ * Copyright (c) 2021 Nordic Semiconductor
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -147,6 +148,21 @@ enum coap_response_code {
 
 #define COAP_CODE_EMPTY (0)
 
+/**
+ * @brief Set of Content-Format option values for CoAP.
+ *
+ * To be used when encoding or decoding a Content-Format option.
+ */
+enum coap_content_format {
+	COAP_CONTENT_FORMAT_TEXT_PLAIN = 0, /* charset=urf-8 */
+	COAP_CONTENT_FORMAT_APP_LINK_FORMAT = 40,
+	COAP_CONTENT_FORMAT_APP_XML = 41,
+	COAP_CONTENT_FORMAT_APP_OCTET_STREAM = 42,
+	COAP_CONTENT_FORMAT_APP_EXI = 47,
+	COAP_CONTENT_FORMAT_APP_JSON = 50,
+	COAP_CONTENT_FORMAT_APP_CBOR = 60,
+};
+
 /* block option helper */
 #define GET_BLOCK_NUM(v)        ((v) >> 4)
 #define GET_BLOCK_SIZE(v)       (((v) & 0x7))
@@ -233,6 +249,9 @@ typedef int (*coap_reply_t)(const struct coap_packet *response,
 			    struct coap_reply *reply,
 			    const struct sockaddr *from);
 
+#define COAP_DEFAULT_MAX_RETRANSMIT 4
+#define COAP_DEFAULT_ACK_RANDOM_FACTOR 1.5
+
 /**
  * @brief Represents a request awaiting for an acknowledgment (ACK).
  */
@@ -243,6 +262,7 @@ struct coap_pending {
 	uint16_t id;
 	uint8_t *data;
 	uint16_t len;
+	uint8_t retries;
 };
 
 /**
@@ -687,12 +707,14 @@ void coap_reply_init(struct coap_reply *reply,
  * confirmation message, initialized with data from @a request
  * @param request Message waiting for confirmation
  * @param addr Address to send the retransmission
+ * @param retries Maximum number of retransmissions of the message.
  *
  * @return 0 in case of success or negative in case of error.
  */
 int coap_pending_init(struct coap_pending *pending,
 		      const struct coap_packet *request,
-		      const struct sockaddr *addr);
+		      const struct sockaddr *addr,
+		      uint8_t retries);
 
 /**
  * @brief Returns the next available pending struct, that can be used

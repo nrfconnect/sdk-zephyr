@@ -105,6 +105,14 @@ enum {
 	BT_PER_ADV_ENABLED,
 	/* Periodic Advertising parameters has been set in the controller. */
 	BT_PER_ADV_PARAMS_SET,
+	/* Constant Tone Extension parameters for Periodic Advertising
+	 * has been set in the controller.
+	 */
+	BT_PER_ADV_CTE_PARAMS_SET,
+	/* Constant Tone Extension for Periodic Advertising has been enabled
+	 * in the controller.
+	 */
+	BT_PER_ADV_CTE_ENABLED,
 
 	BT_ADV_NUM_FLAGS,
 };
@@ -304,6 +312,32 @@ extern const struct bt_conn_auth_cb *bt_auth;
 
 enum bt_security_err bt_security_err_get(uint8_t hci_err);
 #endif /* CONFIG_BT_SMP || CONFIG_BT_BREDR */
+
+/* Data type to store state related with command to be updated
+ * when command completes successfully.
+ */
+struct bt_hci_cmd_state_set {
+	/* Target memory to be updated */
+	atomic_t *target;
+	/* Bit number to be updated in target memory */
+	int bit;
+	/* Value to determine if enable or disable bit */
+	bool val;
+};
+
+/* Initialize command state instance */
+static inline void bt_hci_cmd_state_set_init(struct bt_hci_cmd_state_set *state,
+					     atomic_t *target, int bit,
+					     bool val)
+{
+	state->target = target;
+	state->bit = bit;
+	state->val = val;
+}
+
+/* Set command state related with the command buffer */
+void bt_hci_cmd_data_state_set(struct net_buf *buf,
+			       struct bt_hci_cmd_state_set *state);
 
 int bt_hci_disconnect(uint16_t handle, uint8_t reason);
 

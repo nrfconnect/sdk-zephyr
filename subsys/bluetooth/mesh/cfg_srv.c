@@ -205,7 +205,7 @@ static uint8_t _mod_pub_set(struct bt_mesh_model *model, uint16_t pub_addr,
 		}
 
 		if (IS_ENABLED(CONFIG_BT_SETTINGS) && store) {
-			bt_mesh_store_mod_pub(model);
+			bt_mesh_model_pub_store(model);
 		}
 
 		return STATUS_SUCCESS;
@@ -247,7 +247,7 @@ static uint8_t _mod_pub_set(struct bt_mesh_model *model, uint16_t pub_addr,
 	}
 
 	if (IS_ENABLED(CONFIG_BT_SETTINGS) && store) {
-		bt_mesh_store_mod_pub(model);
+		bt_mesh_model_pub_store(model);
 	}
 
 	return STATUS_SUCCESS;
@@ -275,7 +275,7 @@ static uint8_t mod_bind(struct bt_mesh_model *model, uint16_t key_idx)
 			model->keys[i] = key_idx;
 
 			if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-				bt_mesh_store_mod_bind(model);
+				bt_mesh_model_bind_store(model);
 			}
 
 			return STATUS_SUCCESS;
@@ -303,7 +303,7 @@ static uint8_t mod_unbind(struct bt_mesh_model *model, uint16_t key_idx, bool st
 		model->keys[i] = BT_MESH_KEY_UNUSED;
 
 		if (IS_ENABLED(CONFIG_BT_SETTINGS) && store) {
-			bt_mesh_store_mod_bind(model);
+			bt_mesh_model_bind_store(model);
 		}
 
 		if (model->pub && model->pub->key == key_idx) {
@@ -1008,7 +1008,7 @@ static void mod_sub_add(struct bt_mesh_model *model,
 	status = STATUS_SUCCESS;
 
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		bt_mesh_store_mod_sub(mod);
+		bt_mesh_model_sub_store(mod);
 	}
 
 	if (IS_ENABLED(CONFIG_BT_MESH_LOW_POWER)) {
@@ -1078,7 +1078,7 @@ static void mod_sub_del(struct bt_mesh_model *model,
 		*match = BT_MESH_ADDR_UNASSIGNED;
 
 		if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-			bt_mesh_store_mod_sub(mod);
+			bt_mesh_model_sub_store(mod);
 		}
 	}
 
@@ -1150,7 +1150,7 @@ static void mod_sub_overwrite(struct bt_mesh_model *model,
 		status = STATUS_SUCCESS;
 
 		if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-			bt_mesh_store_mod_sub(mod);
+			bt_mesh_model_sub_store(mod);
 		}
 
 		if (IS_ENABLED(CONFIG_BT_MESH_LOW_POWER)) {
@@ -1205,7 +1205,7 @@ static void mod_sub_del_all(struct bt_mesh_model *model,
 				NULL);
 
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		bt_mesh_store_mod_sub(mod);
+		bt_mesh_model_sub_store(mod);
 	}
 
 	status = STATUS_SUCCESS;
@@ -1431,7 +1431,7 @@ static void mod_sub_va_add(struct bt_mesh_model *model,
 	}
 
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		bt_mesh_store_mod_sub(mod);
+		bt_mesh_model_sub_store(mod);
 	}
 
 	status = STATUS_SUCCESS;
@@ -1496,7 +1496,7 @@ static void mod_sub_va_del(struct bt_mesh_model *model,
 		*match = BT_MESH_ADDR_UNASSIGNED;
 
 		if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-			bt_mesh_store_mod_sub(mod);
+			bt_mesh_model_sub_store(mod);
 		}
 
 		status = STATUS_SUCCESS;
@@ -1557,7 +1557,7 @@ static void mod_sub_va_overwrite(struct bt_mesh_model *model,
 			mod->groups[0] = sub_addr;
 
 			if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-				bt_mesh_store_mod_sub(mod);
+				bt_mesh_model_sub_store(mod);
 			}
 
 			if (IS_ENABLED(CONFIG_BT_MESH_LOW_POWER)) {
@@ -2323,11 +2323,19 @@ static void heartbeat_sub_set(struct bt_mesh_model *model,
 	/* MESH/NODE/CFG/HBS/BV-01-C expects the MinHops to be 0x7f after
 	 * disabling subscription, but 0x00 for subsequent Get requests.
 	 */
-	if (!period_log) {
+	if (sub.src == BT_MESH_ADDR_UNASSIGNED || !period_log) {
 		sub.min_hops = BT_MESH_TTL_MAX;
 	}
 
 	hb_sub_send_status(model, ctx, &sub);
+
+	/* MESH/NODE/CFG/HBS/BV-02-C expects us to return previous
+	 * count value and then reset it to 0.
+	 */
+	if (sub.src != BT_MESH_ADDR_UNASSIGNED &&
+	    sub.dst != BT_MESH_ADDR_UNASSIGNED && !period) {
+		bt_mesh_hb_sub_reset_count();
+	}
 }
 
 const struct bt_mesh_model_op bt_mesh_cfg_srv_op[] = {
@@ -2416,7 +2424,7 @@ static void mod_reset(struct bt_mesh_model *mod, struct bt_mesh_elem *elem,
 
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
 		if (clear_count) {
-			bt_mesh_store_mod_sub(mod);
+			bt_mesh_model_sub_store(mod);
 		}
 	}
 

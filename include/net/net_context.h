@@ -6,6 +6,7 @@
 
 /*
  * Copyright (c) 2016 Intel Corporation
+ * Copyright (c) 2021 Nordic Semiconductor
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -121,7 +122,7 @@ typedef void (*net_context_send_cb_t)(struct net_context *context,
  * context is used here. Keep processing in the callback minimal to reduce the
  * time spent blocked while handling packets.
  *
- * @param context The context to use.
+ * @param new_context The context to use.
  * @param addr The peer address.
  * @param addrlen Length of the peer address.
  * @param status The status code, 0 on success, < 0 otherwise
@@ -303,6 +304,9 @@ __net_socket struct net_context {
 			struct sockaddr addr;
 			socklen_t addrlen;
 		} proxy;
+#endif
+#if defined(CONFIG_NET_CONTEXT_RCVTIMEO)
+		k_timeout_t rcvtimeo;
 #endif
 	} options;
 
@@ -1043,6 +1047,7 @@ enum net_context_option {
 	NET_OPT_TIMESTAMP	= 2,
 	NET_OPT_TXTIME		= 3,
 	NET_OPT_SOCKS5		= 4,
+	NET_OPT_RCVTIMEO        = 5,
 };
 
 /**

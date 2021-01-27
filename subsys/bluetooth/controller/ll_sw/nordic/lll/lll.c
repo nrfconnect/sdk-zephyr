@@ -4,14 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdint.h>
+#include <stdbool.h>
 #include <errno.h>
-#include <zephyr/types.h>
-#include <device.h>
-#include <drivers/entropy.h>
-#include <drivers/clock_control.h>
-#include <drivers/clock_control/nrf_clock_control.h>
+
+#include <toolchain.h>
 
 #include <soc.h>
+#include <device.h>
+
+#include <drivers/entropy.h>
 
 #include "hal/swi.h"
 #include "hal/ccm.h"
@@ -174,6 +176,8 @@ int lll_init(void)
 	(CONFIG_BT_CTLR_ULL_HIGH_PRIO != CONFIG_BT_CTLR_ULL_LOW_PRIO)
 	irq_enable(HAL_SWI_JOB_IRQ);
 #endif
+
+	radio_setup();
 
 	return 0;
 }
@@ -460,8 +464,8 @@ void lll_isr_tx_status_reset(void)
 	radio_status_reset();
 	radio_tmr_status_reset();
 
-	if (IS_ENABLED(CONFIG_BT_CTLR_GPIO_PA_PIN) ||
-	    IS_ENABLED(CONFIG_BT_CTLR_GPIO_LNA_PIN)) {
+	if (IS_ENABLED(CONFIG_BT_CTLR_GPIO_PA) ||
+	    IS_ENABLED(CONFIG_BT_CTLR_GPIO_LNA)) {
 		radio_gpio_pa_lna_disable();
 	}
 }
@@ -472,8 +476,8 @@ void lll_isr_rx_status_reset(void)
 	radio_tmr_status_reset();
 	radio_rssi_status_reset();
 
-	if (IS_ENABLED(CONFIG_BT_CTLR_GPIO_PA_PIN) ||
-	    IS_ENABLED(CONFIG_BT_CTLR_GPIO_LNA_PIN)) {
+	if (IS_ENABLED(CONFIG_BT_CTLR_GPIO_PA) ||
+	    IS_ENABLED(CONFIG_BT_CTLR_GPIO_LNA)) {
 		radio_gpio_pa_lna_disable();
 	}
 }
@@ -486,8 +490,8 @@ void lll_isr_status_reset(void)
 	radio_ar_status_reset();
 	radio_rssi_status_reset();
 
-	if (IS_ENABLED(CONFIG_BT_CTLR_GPIO_PA_PIN) ||
-	    IS_ENABLED(CONFIG_BT_CTLR_GPIO_LNA_PIN)) {
+	if (IS_ENABLED(CONFIG_BT_CTLR_GPIO_PA) ||
+	    IS_ENABLED(CONFIG_BT_CTLR_GPIO_LNA)) {
 		radio_gpio_pa_lna_disable();
 	}
 }

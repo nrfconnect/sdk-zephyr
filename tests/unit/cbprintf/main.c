@@ -17,10 +17,10 @@
 #include <sys/util.h>
 
 /* Unit testing doesn't use Kconfig, so if we're not building from
- * sanitycheck force selection of all features.  If we are use flags
- * to determine which features are desired.  Yes, this is a mess.
+ * twister force selection of all features.  If we are use flags to
+ * determine which features are desired.  Yes, this is a mess.
  */
-#ifndef VIA_SANITYCHECK
+#ifndef VIA_TWISTER
 /* Set this to truthy to use libc's snprintf as external validation.
  * This should be used with all options enabled.
  */
@@ -58,34 +58,43 @@
 #define CONFIG_CBPRINTF_REDUCED_INTEGRAL 1
 #endif
 
-#else /* VIA_SANITYCHECK */
-#if (VIA_SANITYCHECK & 0x01) != 0
+#else /* VIA_TWISTER */
+#if (VIA_TWISTER & 0x01) != 0
 #define CONFIG_CBPRINTF_FULL_INTEGRAL 1
 #else
 #define CONFIG_CBPRINTF_REDUCED_INTEGRAL 1
 #endif
-#if (VIA_SANITYCHECK & 0x02) != 0
+#if (VIA_TWISTER & 0x02) != 0
 #define CONFIG_CBPRINTF_FP_SUPPORT 1
 #endif
-#if (VIA_SANITYCHECK & 0x04) != 0
+#if (VIA_TWISTER & 0x04) != 0
 #define CONFIG_CBPRINTF_FP_A_SUPPORT 1
 #endif
-#if (VIA_SANITYCHECK & 0x08) != 0
+#if (VIA_TWISTER & 0x08) != 0
 #define CONFIG_CBPRINTF_N_SPECIFIER 1
 #endif
-#if (VIA_SANITYCHECK & 0x40) != 0
+#if (VIA_TWISTER & 0x40) != 0
 #define CONFIG_CBPRINTF_FP_ALWAYS_A 1
 #endif
-#if (VIA_SANITYCHECK & 0x80) != 0
+#if (VIA_TWISTER & 0x80) != 0
 #define CONFIG_CBPRINTF_NANO 1
 #else /* 0x80 */
 #define CONFIG_CBPRINTF_COMPLETE 1
 #endif /* 0x80 */
-#if (VIA_SANITYCHECK & 0x100) != 0
+#if (VIA_TWISTER & 0x100) != 0
 #define CONFIG_CBPRINTF_LIBC_SUBSTS 1
 #endif
 
-#endif /* VIA_SANITYCHECK */
+#endif /* VIA_TWISTER */
+
+/* Can't use IS_ENABLED on symbols that don't start with CONFIG_
+ * without checkpatch complaints, so do something else.
+ */
+#if USE_LIBC
+#define ENABLED_USE_LIBC true
+#else
+#define ENABLED_USE_LIBC false
+#endif
 
 #include "../../../lib/os/cbprintf.c"
 
@@ -292,12 +301,12 @@ static void test_c(void)
 	PRF_CHECK("a", rc);
 
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("short test for nano");
+		TC_PRINT("short test for nano\n");
 		return;
 	}
 
 	rc = TEST_PRF("%lc", (wint_t)'a');
-	if (IS_ENABLED(USE_LIBC)) {
+	if (ENABLED_USE_LIBC) {
 		PRF_CHECK("a", rc);
 	} else {
 		PRF_CHECK("%lc", rc);
@@ -337,15 +346,15 @@ static void test_s(void)
 	}
 
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("short test for nano");
+		TC_PRINT("short test for nano\n");
 		return;
 	}
 
-	rc = TEST_PRF("/%.6s/%.2s/", s, s);
-	PRF_CHECK("/123/12/", rc);
+	rc = TEST_PRF("/%.6s/%.2s/%.s/", s, s, s);
+	PRF_CHECK("/123/12//", rc);
 
 	rc = TEST_PRF("%ls", ws);
-	if (IS_ENABLED(USE_LIBC)) {
+	if (ENABLED_USE_LIBC) {
 		PRF_CHECK("abc", rc);
 	} else {
 		PRF_CHECK("%ls", rc);
@@ -361,7 +370,7 @@ static void test_v_c(void)
 	rc = rawprf("%c", 'a');
 	zassert_equal(rc, 1, NULL);
 	zassert_equal(buf[0], 'a', NULL);
-	if (!IS_ENABLED(USE_LIBC)) {
+	if (!ENABLED_USE_LIBC) {
 		zassert_equal(buf[1], 'b', "wth %x", buf[1]);
 	}
 }
@@ -414,7 +423,7 @@ static void test_d_length(void)
 	}
 
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("short test for nano");
+		TC_PRINT("short test for nano\n");
 		return;
 	}
 
@@ -450,7 +459,7 @@ static void test_d_flags(void)
 	int rc;
 
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("skipped test for nano");
+		TC_PRINT("skipped test for nano\n");
 		return;
 	}
 
@@ -509,7 +518,7 @@ static void test_x_length(void)
 	}
 
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("short test for nano");
+		TC_PRINT("short test for nano\n");
 		return;
 	}
 
@@ -569,7 +578,7 @@ static void test_x_flags(void)
 	int rc;
 
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("skipped test for nano");
+		TC_PRINT("skipped test for nano\n");
 		return;
 	}
 
@@ -602,7 +611,7 @@ static void test_o(void)
 	int rc;
 
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("skipped test for nano");
+		TC_PRINT("skipped test for nano\n");
 		return;
 	}
 
@@ -615,7 +624,7 @@ static void test_o(void)
 static void test_fp_value(void)
 {
 	if (!IS_ENABLED(CONFIG_CBPRINTF_FP_SUPPORT)) {
-		TC_PRINT("skipping unsupported feature");
+		TC_PRINT("skipping unsupported feature\n");
 		return;
 	}
 
@@ -808,7 +817,7 @@ static void test_fp_value(void)
 static void test_fp_length(void)
 {
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("skipped test for nano");
+		TC_PRINT("skipped test for nano\n");
 		return;
 	}
 
@@ -830,7 +839,7 @@ static void test_fp_length(void)
 	}
 
 	rc = TEST_PRF("/%Lg/", (long double)dv);
-	if (IS_ENABLED(USE_LIBC)) {
+	if (ENABLED_USE_LIBC) {
 		PRF_CHECK("/1.2345/", rc);
 	} else {
 		PRF_CHECK("/%Lg/", rc);
@@ -849,7 +858,7 @@ static void test_fp_length(void)
 static void test_fp_flags(void)
 {
 	if (!IS_ENABLED(CONFIG_CBPRINTF_FP_SUPPORT)) {
-		TC_PRINT("skipping unsupported feature");
+		TC_PRINT("skipping unsupported feature\n");
 		return;
 	}
 
@@ -882,7 +891,7 @@ static void test_fp_flags(void)
 static void test_star_width(void)
 {
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("skipped test for nano");
+		TC_PRINT("skipped test for nano\n");
 		return;
 	}
 
@@ -898,7 +907,7 @@ static void test_star_width(void)
 static void test_star_precision(void)
 {
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("skipped test for nano");
+		TC_PRINT("skipped test for nano\n");
 		return;
 	}
 
@@ -927,11 +936,11 @@ static void test_star_precision(void)
 static void test_n(void)
 {
 	if (!IS_ENABLED(CONFIG_CBPRINTF_N_SPECIFIER)) {
-		TC_PRINT("skipping unsupported feature");
+		TC_PRINT("skipping unsupported feature\n");
 		return;
 	}
 	if (IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
-		TC_PRINT("skipped test for nano");
+		TC_PRINT("skipped test for nano\n");
 		return;
 	}
 
@@ -975,40 +984,10 @@ static void test_n(void)
 #define EXPECTED_1ARG(_t) (IS_ENABLED(CONFIG_CBPRINTF_NANO) \
 			   ? 1U : (sizeof(_t) / sizeof(int)))
 
-static void test_arglen(void)
-{
-	zassert_equal(cbprintf_arglen("/%hhd/"), 1U, NULL);
-	zassert_equal(cbprintf_arglen("/%hd/"), 1U, NULL);
-	zassert_equal(cbprintf_arglen("/%d/"), 1U, NULL);
-	zassert_equal(cbprintf_arglen("/%ld/"),
-		      EXPECTED_1ARG(long), NULL);
-	zassert_equal(cbprintf_arglen("/%lld/"),
-		      EXPECTED_1ARG(long long), NULL);
-	zassert_equal(cbprintf_arglen("/%jd/"),
-		      EXPECTED_1ARG(intmax_t), NULL);
-	zassert_equal(cbprintf_arglen("/%zd/"),
-		      EXPECTED_1ARG(size_t), NULL);
-	zassert_equal(cbprintf_arglen("/%td/"),
-		      EXPECTED_1ARG(ptrdiff_t), NULL);
-	zassert_equal(cbprintf_arglen("/%f/"),
-		      EXPECTED_1ARG(double), NULL);
-	zassert_equal(cbprintf_arglen("/%Lf/"),
-		      EXPECTED_1ARG(long double), NULL);
-	zassert_equal(cbprintf_arglen("/%p/"),
-		      EXPECTED_1ARG(void *), NULL);
-
-	zassert_equal(cbprintf_arglen("/%%/"), 0U, NULL);
-	zassert_equal(cbprintf_arglen("/%*d%/"), 2U, NULL);
-	zassert_equal(cbprintf_arglen("/%.*d%/"), 2U, NULL);
-	zassert_equal(cbprintf_arglen("/%*.*d%/"),
-		      IS_ENABLED(CONFIG_CBPRINTF_NANO) ? 2U : 3U,
-		      NULL);
-}
-
 static void test_p(void)
 {
-	if (IS_ENABLED(USE_LIBC)) {
-		TC_PRINT("skipping on libc");
+	if (ENABLED_USE_LIBC) {
+		TC_PRINT("skipping on libc\n");
 		return;
 	}
 
@@ -1124,7 +1103,7 @@ void test_main(void)
 	}
 
 	TC_PRINT("Opts: " COND_CODE_1(M64_MODE, ("m64"), ("m32")) "\n");
-	if (IS_ENABLED(USE_LIBC)) {
+	if (ENABLED_USE_LIBC) {
 		TC_PRINT(" LIBC");
 	}
 	if (IS_ENABLED(CONFIG_CBPRINTF_COMPLETE)) {
@@ -1173,7 +1152,6 @@ void test_main(void)
 			 ztest_unit_test(test_star_precision),
 			 ztest_unit_test(test_n),
 			 ztest_unit_test(test_p),
-			 ztest_unit_test(test_arglen),
 			 ztest_unit_test(test_libc_substs),
 			 ztest_unit_test(test_nop)
 			 );

@@ -4,11 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/types.h>
+#include <stdint.h>
+
 #include <toolchain.h>
-#include <bluetooth/hci.h>
-#include <sys/byteorder.h>
+
 #include <soc.h>
+
+#include <sys/byteorder.h>
+#include <bluetooth/hci.h>
 
 #include "hal/cpu.h"
 #include "hal/ccm.h"
@@ -796,7 +799,7 @@ static inline int isr_rx_pdu(struct lll_scan *lll, struct pdu_adv *pdu_adv_rx,
 			uint32_t scan_interval_us;
 
 			/* FIXME: is this correct for continuous scanning? */
-			scan_interval_us = lll->interval * 625U;
+			scan_interval_us = lll->interval * SCAN_INT_UNIT_US;
 			pdu_end_us %= scan_interval_us;
 		}
 		evt = HDR_LLL2EVT(lll);
@@ -845,8 +848,10 @@ static inline int isr_rx_pdu(struct lll_scan *lll, struct pdu_adv *pdu_adv_rx,
 		       &lll_conn->crc_init[0], 3);
 		pdu_tx->connect_ind.win_size = 1;
 
-		conn_interval_us = (uint32_t)lll_conn->interval * 1250U;
-		conn_offset_us = radio_tmr_end_get() + 502 + 1250;
+		conn_interval_us = (uint32_t)lll_conn->interval *
+			CONN_INT_UNIT_US;
+		conn_offset_us = radio_tmr_end_get() + 502 +
+			CONN_INT_UNIT_US;
 
 		if (!IS_ENABLED(CONFIG_BT_CTLR_SCHED_ADVANCED) ||
 		    lll->conn_win_offset_us == 0U) {
@@ -860,7 +865,8 @@ static inline int isr_rx_pdu(struct lll_scan *lll, struct pdu_adv *pdu_adv_rx,
 			}
 			pdu_tx->connect_ind.win_offset =
 				sys_cpu_to_le16((conn_space_us -
-						 conn_offset_us) / 1250U);
+						 conn_offset_us) /
+				CONN_INT_UNIT_US);
 			pdu_tx->connect_ind.win_size++;
 		}
 
@@ -1196,11 +1202,11 @@ static int isr_rx_scan_report(struct lll_scan *lll, uint8_t rssi_ready,
 		struct pdu_adv *pdu_adv_rx;
 
 		switch (lll->phy) {
-		case BIT(0):
+		case PHY_1M:
 			node_rx->hdr.type = NODE_RX_TYPE_EXT_1M_REPORT;
 			break;
 
-		case BIT(2):
+		case PHY_CODED:
 			node_rx->hdr.type = NODE_RX_TYPE_EXT_CODED_REPORT;
 			break;
 

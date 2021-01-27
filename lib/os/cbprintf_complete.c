@@ -19,6 +19,11 @@
 #include <sys/util.h>
 #include <sys/cbprintf.h>
 
+/* newlib doesn't declare this function unless __POSIX_VISIBLE >= 200809.  No
+ * idea how to make that happen, so lets put it right here.
+ */
+size_t strnlen(const char *, size_t);
+
 /* Provide typedefs used for signed and unsigned integral types
  * capable of holding all convertable integral values.
  */
@@ -49,15 +54,15 @@ typedef uint32_t uint_value_type;
 
 /* The allowed types of length modifier. */
 enum length_mod_enum {
-	LENGTH_NONE,
-	LENGTH_HH,
-	LENGTH_H,
-	LENGTH_L,
-	LENGTH_LL,
-	LENGTH_J,
-	LENGTH_Z,
-	LENGTH_T,
-	LENGTH_UPPER_L,
+	LENGTH_NONE,		/* int */
+	LENGTH_HH,		/* char */
+	LENGTH_H,		/* short */
+	LENGTH_L,		/* long */
+	LENGTH_LL,		/* long long */
+	LENGTH_J,		/* intmax */
+	LENGTH_Z,		/* size_t */
+	LENGTH_T,		/* ptrdiff_t */
+	LENGTH_UPPER_L,		/* long double */
 };
 
 /* Categories of conversion specifiers. */
@@ -74,12 +79,53 @@ enum specifier_cat_enum {
 	SPECIFIER_FP,
 };
 
+#define CHAR_IS_SIGNED (CHAR_MIN != 0)
+#if CHAR_IS_SIGNED
+#define CASE_SINT_CHAR case 'c':
+#define CASE_UINT_CHAR
+#else
+#define CASE_SINT_CHAR
+#define CASE_UINT_CHAR case 'c':
+#endif
+
+/* We need two pieces of information about wchar_t:
+ * * WCHAR_IS_SIGNED: whether it's signed or unsigned;
+ * * WINT_TYPE: the type to use when extracting it from va_args
+ *
+ * The former can be determined from the value of WCHAR_MIN if it's defined.
+ * It's not for minimal libc, so treat it as whatever char is.
+ *
+ * The latter should be wint_t, but minimal libc doesn't provide it.  We can
+ * substitute wchar_t as long as that type does not undergo default integral
+ * promotion as an argument.  But it does for at least one toolchain (xtensa),
+ * and where it does we need to use the promoted type in va_arg() to avoid
+ * build errors, otherwise we can use the base type.  We can tell that
+ * integral promotion occurs if WCHAR_MAX is strictly less than INT_MAX.
+ */
+#ifndef WCHAR_MIN
+#define WCHAR_IS_SIGNED CHAR_IS_SIGNED
+#if WCHAR_IS_SIGNED
+#define WINT_TYPE int
+#else /* wchar signed */
+#define WINT_TYPE unsigned int
+#endif /* wchar signed */
+#else /* WCHAR_MIN defined */
+#define WCHAR_IS_SIGNED ((WCHAR_MIN - 0) != 0)
+#if WCHAR_MAX < INT_MAX
+/* Signed or unsigned, it'll be int */
+#define WINT_TYPE int
+#else /* wchar rank vs int */
+#define WINT_TYPE wchar_t
+#endif /* wchar rank vs int */
+#endif /* WCHAR_MIN defined */
+
 /* Case label to identify conversions for signed integral values.  The
  * corresponding argument_value tag is sint and category is
  * SPECIFIER_SINT.
  */
 #define SINT_CONV_CASES				\
 	'd':					\
+	CASE_SINT_CHAR				\
 	case 'i'
 
 /* Case label to identify conversions for signed integral arguments.
@@ -87,8 +133,8 @@ enum specifier_cat_enum {
  * SPECIFIER_UINT.
  */
 #define UINT_CONV_CASES				\
-	'c':					\
-	case 'o':				\
+	'o':					\
+	CASE_UINT_CHAR				\
 	case 'u':				\
 	case 'x':				\
 	case 'X'
@@ -342,8 +388,9 @@ static inline const char *extract_flags(struct conversion *conv,
 static inline const char *extract_width(struct conversion *conv,
 					const char *sp)
 {
+	conv->width_present = true;
+
 	if (*sp == '*') {
-		conv->width_present = true;
 		conv->width_star = true;
 		return ++sp;
 	}
@@ -354,10 +401,8 @@ static inline const char *extract_width(struct conversion *conv,
 	if (sp != wp) {
 		conv->width_present = true;
 		conv->width_value = width;
-		if (width != conv->width_value) {
-			/* Lost width data */
-			conv->unsupported = true;
-		}
+		conv->unsupported |= ((conv->width_value < 0)
+				      || (width != (size_t)conv->width_value));
 	}
 
 	return sp;
@@ -375,28 +420,23 @@ static inline const char *extract_width(struct conversion *conv,
 static inline const char *extract_prec(struct conversion *conv,
 				       const char *sp)
 {
-	if (*sp != '.') {
+	conv->prec_present = (*sp == '.');
+
+	if (!conv->prec_present) {
 		return sp;
 	}
 	++sp;
 
 	if (*sp == '*') {
-		conv->prec_present = true;
 		conv->prec_star = true;
 		return ++sp;
 	}
 
-	const char *wp = sp;
 	size_t prec = extract_decimal(&sp);
 
-	if (sp != wp) {
-		conv->prec_present = true;
-		conv->prec_value = prec;
-		if (prec != conv->prec_value) {
-			/* Lost precision data */
-			conv->unsupported = true;
-		}
-	}
+	conv->prec_value = prec;
+	conv->unsupported |= ((conv->prec_value < 0)
+			      || (prec != (size_t)conv->prec_value));
 
 	return sp;
 }
@@ -490,7 +530,7 @@ int_conv:
 		}
 
 		/* For c LENGTH_NONE and LENGTH_L would be ok,
-		 * but we don't support wide characters.
+		 * but we don't support formatting wide characters.
 		 */
 		if (conv->specifier == 'c') {
 			unsupported = (conv->length_mod != LENGTH_NONE);
@@ -615,84 +655,6 @@ static inline const char *extract_conversion(struct conversion *conv,
 	sp = extract_specifier(conv, sp);
 
 	return sp;
-}
-
-
-/* Get the number of int-sized objects required to provide the arguments for
- * the conversion.
- *
- * This has a role in the logging subsystem where the arguments must
- * be captured for formatting in another thread.
- *
- * If the conversion specifier is invalid the calculated length may
- * not match what was actually passed as arguments.
- */
-static size_t conversion_arglen(const struct conversion *conv)
-{
-	enum specifier_cat_enum specifier_cat
-		= (enum specifier_cat_enum)conv->specifier_cat;
-	enum length_mod_enum length_mod
-		= (enum length_mod_enum)conv->length_mod;
-	size_t words = 0;
-
-	/* If the conversion is invalid behavior is undefined.  What
-	 * this does is try to consume the argument anyway, in hopes
-	 * that subsequent valid arguments will format correctly.
-	 */
-
-	/* Percent has no arguments */
-	if (conv->specifier == '%') {
-		return words;
-	}
-
-	if (conv->width_star) {
-		words += sizeof(int) / sizeof(int);
-	}
-
-	if (conv->prec_star) {
-		words += sizeof(int) / sizeof(int);
-	}
-
-	if ((specifier_cat == SPECIFIER_SINT)
-	    || (specifier_cat == SPECIFIER_UINT)) {
-		/* The size of integral values is the same regardless
-		 * of signedness.
-		 */
-		switch (length_mod) {
-		case LENGTH_NONE:
-		case LENGTH_HH:
-		case LENGTH_H:
-			words += sizeof(int) / sizeof(int);
-			break;
-		case LENGTH_L:
-			words += sizeof(long) / sizeof(int);
-			break;
-		case LENGTH_LL:
-			words += sizeof(long long) / sizeof(int);
-			break;
-		case LENGTH_J:
-			words += sizeof(intmax_t) / sizeof(int);
-			break;
-		case LENGTH_Z:
-			words += sizeof(size_t) / sizeof(int);
-			break;
-		case LENGTH_T:
-			words += sizeof(ptrdiff_t) / sizeof(int);
-			break;
-		default:
-			break;
-		}
-	} else if (specifier_cat == SPECIFIER_FP) {
-		if (length_mod == LENGTH_UPPER_L) {
-			words += sizeof(long double) / sizeof(int);
-		} else {
-			words += sizeof(double) / sizeof(int);
-		}
-	} else if (specifier_cat == SPECIFIER_PTR) {
-		words += sizeof(void *) / sizeof(int);
-	}
-
-	return words;
 }
 
 #ifdef CONFIG_64BIT
@@ -1489,7 +1451,13 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 				value->sint = va_arg(ap, int);
 				break;
 			case LENGTH_L:
-				value->sint = va_arg(ap, long);
+				if (WCHAR_IS_SIGNED
+				    && (conv->specifier == 'c')) {
+					value->sint = (wchar_t)va_arg(ap,
+							      WINT_TYPE);
+				} else {
+					value->sint = va_arg(ap, long);
+				}
 				break;
 			case LENGTH_LL:
 				value->sint =
@@ -1526,7 +1494,13 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 				value->uint = va_arg(ap, unsigned int);
 				break;
 			case LENGTH_L:
-				value->uint = va_arg(ap, unsigned long);
+				if ((!WCHAR_IS_SIGNED)
+				    && (conv->specifier == 'c')) {
+					value->uint = (wchar_t)va_arg(ap,
+							      WINT_TYPE);
+				} else {
+					value->uint = va_arg(ap, unsigned long);
+				}
 				break;
 			case LENGTH_LL:
 				value->uint =
@@ -1579,11 +1553,12 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 		case 's': {
 			bps = (const char *)value->ptr;
 
-			size_t len = strlen(bps);
+			size_t len;
 
-			if ((precision >= 0)
-			    && ((size_t)precision < len)) {
-				len = (size_t)precision;
+			if (precision >= 0) {
+				len = strnlen(bps, precision);
+			} else {
+				len = strlen(bps);
 			}
 
 			bpe = bps + len;
@@ -1593,7 +1568,7 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 		}
 		case 'c':
 			bps = buf;
-			buf[0] = value->uint;
+			buf[0] = CHAR_IS_SIGNED ? value->sint : value->uint;
 			bpe = buf + 1;
 			break;
 		case 'd':
@@ -1822,21 +1797,4 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 	return count;
 #undef OUTS
 #undef OUTC
-}
-
-size_t cbprintf_arglen(const char *format)
-{
-	size_t rv = 0;
-	struct conversion conv;
-
-	while (*format) {
-		if (*format == '%') {
-			format = extract_conversion(&conv, format);
-			rv += conversion_arglen(&conv);
-		} else {
-			++format;
-		}
-	}
-
-	return rv;
 }

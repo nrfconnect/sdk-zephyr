@@ -6,21 +6,21 @@
  */
 
 #include <stddef.h>
-#include <zephyr/types.h>
 #include <string.h>
-#include <version.h>
 
-#include <soc.h>
-#include <toolchain.h>
+#include <version.h>
 #include <errno.h>
+
+#include <sys/util.h>
+#include <sys/byteorder.h>
 #include <sys/atomic.h>
+
+#include <drivers/bluetooth/hci_driver.h>
+
 #include <bluetooth/hci.h>
 #include <bluetooth/hci_vs.h>
 #include <bluetooth/buf.h>
 #include <bluetooth/bluetooth.h>
-#include <drivers/bluetooth/hci_driver.h>
-#include <sys/byteorder.h>
-#include <sys/util.h>
 
 #include "util/util.h"
 #include "util/memq.h"
@@ -29,6 +29,7 @@
 #include "ll_sw/pdu.h"
 #include "ll_sw/lll.h"
 #include "lll_adv.h"
+#include "lll_sync_iso.h"
 #include "ll_sw/lll_scan.h"
 #include "ll_sw/lll_sync.h"
 #include "ll_sw/lll_conn.h"
@@ -68,8 +69,14 @@ static uint16_t _opcode;
 #if CONFIG_BT_CTLR_DUP_FILTER_LEN > 0
 /* Scan duplicate filter */
 struct dup {
-	uint8_t         mask;
+	uint8_t      mask;
 	bt_addr_le_t addr;
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	uint8_t            adv_mode:2;
+	uint8_t            data_cmplt:1;
+	struct pdu_adv_adi adi;
+#endif
 };
 static struct dup dup_filter[CONFIG_BT_CTLR_DUP_FILTER_LEN];
 static int32_t dup_count;
@@ -2442,6 +2449,27 @@ static void le_df_set_cl_cte_tx_params(struct net_buf *buf,
 
 	*evt = cmd_complete_status(status);
 }
+
+static void le_df_set_cl_cte_enable(struct net_buf *buf, struct net_buf **evt)
+{
+	struct bt_hci_cp_le_set_cl_cte_tx_enable *cmd = (void *)buf->data;
+	uint8_t status;
+	uint8_t handle;
+
+	if (adv_cmds_ext_check(evt)) {
+		return;
+	}
+
+	status = ll_adv_set_by_hci_handle_get(cmd->handle, &handle);
+	if (status) {
+		*evt = cmd_complete_status(status);
+		return;
+	}
+
+	status = ll_df_set_cl_cte_tx_enable(handle, cmd->cte_enable);
+
+	*evt = cmd_complete_status(status);
+}
 #endif /* CONFIG_BT_CTLR_DF_ADV_CTE_TX */
 
 #if IS_ENABLED(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
@@ -3497,10 +3525,13 @@ static int controller_cmd_handle(uint16_t  ocf, struct net_buf *cmd,
 		le_read_tx_power(cmd, evt);
 		break;
 
-#if defined(CONFIG_BT_CTLR_DF)
+#if IS_ENABLED(CONFIG_BT_CTLR_DF)
 #if IS_ENABLED(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
 	case BT_OCF(BT_HCI_OP_LE_SET_CL_CTE_TX_PARAMS):
 		le_df_set_cl_cte_tx_params(cmd, evt);
+		break;
+	case BT_OCF(BT_HCI_OP_LE_SET_CL_CTE_TX_ENABLE):
+		le_df_set_cl_cte_enable(cmd, evt);
 		break;
 #endif /* CONFIG_BT_CTLR_DF_ADV_CTE_TX */
 	case BT_OCF(BT_HCI_OP_LE_READ_ANT_INFO):
@@ -4078,33 +4109,90 @@ int hci_acl_handle(struct net_buf *buf, struct net_buf **evt)
 #endif /* CONFIG_BT_CONN */
 
 #if CONFIG_BT_CTLR_DUP_FILTER_LEN > 0
-static inline bool dup_found(struct pdu_adv *adv)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+static void store_adi(int i, struct pdu_adv_adi *adi)
+{
+	if (adi) {
+		memcpy(&dup_filter[i].adi, adi, sizeof(*adi));
+	} else {
+		memset(&dup_filter[i].adi, 0, sizeof(*adi));
+	}
+}
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
+
+static inline bool is_dup_or_update(int i, uint8_t adv_type, uint8_t adv_mode,
+				    struct pdu_adv_adi *adi,
+				    uint8_t data_status)
+{
+	if (!(dup_filter[i].mask & BIT(adv_type))) {
+		/* report different adv types */
+		dup_filter[i].mask |= BIT(adv_type);
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+		dup_filter[i].adv_mode = adv_mode;
+		dup_filter[i].data_cmplt = !data_status;
+		store_adi(i, adi);
+
+		return false;
+	} else if (dup_filter[i].adv_mode != adv_mode) {
+		/* report different adv mode */
+		dup_filter[i].adv_mode = adv_mode;
+
+		dup_filter[i].data_cmplt = !data_status;
+		store_adi(i, adi);
+
+		return false;
+	} else if (adi && ((dup_filter[i].adi.sid != adi->sid) ||
+			   (dup_filter[i].adi.did != adi->did))) {
+		/* report different adi */
+		store_adi(i, adi);
+
+		dup_filter[i].data_cmplt = !data_status;
+
+		return false;
+	} else if (!dup_filter[i].data_cmplt && !data_status) {
+		/* report data complete */
+		dup_filter[i].data_cmplt = !data_status;
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
+
+		return false;
+	}
+
+	return true;
+}
+
+static bool dup_found(uint8_t adv_type, uint8_t addr_type, uint8_t *addr,
+		      uint8_t adv_mode, struct pdu_adv_adi *adi,
+		      uint8_t data_status)
 {
 	/* check for duplicate filtering */
 	if (dup_count >= 0) {
 		int i;
 
+		/* find for existing entry and update if changed */
 		for (i = 0; i < dup_count; i++) {
-			if (!memcmp(&adv->adv_ind.addr[0],
-				    &dup_filter[i].addr.a.val[0],
-				    sizeof(bt_addr_t)) &&
-			    adv->tx_addr == dup_filter[i].addr.type) {
-
-				if (dup_filter[i].mask & BIT(adv->type)) {
-					/* duplicate found */
-					return true;
-				}
-				/* report different adv types */
-				dup_filter[i].mask |= BIT(adv->type);
-				return false;
+			if (memcmp(addr, &dup_filter[i].addr.a.val[0],
+				   sizeof(bt_addr_t)) ||
+			    (addr_type != dup_filter[i].addr.type)) {
+				continue;
 			}
+
+			/* still duplicate or update entry with change */
+			return is_dup_or_update(i, adv_type, adv_mode, adi,
+						data_status);
 		}
 
 		/* insert into the duplicate filter */
-		memcpy(&dup_filter[dup_curr].addr.a.val[0],
-		       &adv->adv_ind.addr[0], sizeof(bt_addr_t));
-		dup_filter[dup_curr].addr.type = adv->tx_addr;
-		dup_filter[dup_curr].mask = BIT(adv->type);
+		memcpy(&dup_filter[dup_curr].addr.a.val[0], addr,
+		       sizeof(bt_addr_t));
+		dup_filter[dup_curr].addr.type = addr_type;
+		dup_filter[dup_curr].mask = BIT(adv_type);
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+		dup_filter[dup_curr].adv_mode = adv_mode;
+		dup_filter[i].data_cmplt = !data_status;
+		store_adi(dup_curr, adi);
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
 
 		if (dup_count < CONFIG_BT_CTLR_DUP_FILTER_LEN) {
 			dup_count++;
@@ -4137,7 +4225,7 @@ static inline void le_dir_adv_report(struct pdu_adv *adv, struct net_buf *buf,
 	LL_ASSERT(adv->type == PDU_ADV_TYPE_DIRECT_IND);
 
 #if CONFIG_BT_CTLR_DUP_FILTER_LEN > 0
-	if (dup_found(adv)) {
+	if (dup_found(adv->type, adv->tx_addr, adv->adv_ind.addr, 0, NULL, 0)) {
 		return;
 	}
 #endif /* CONFIG_BT_CTLR_DUP_FILTER_LEN > 0 */
@@ -4291,7 +4379,7 @@ static void le_advertising_report(struct pdu_data *pdu_data,
 	}
 
 #if CONFIG_BT_CTLR_DUP_FILTER_LEN > 0
-	if (dup_found(adv)) {
+	if (dup_found(adv->type, adv->tx_addr, adv->adv_ind.addr, 0, NULL, 0)) {
 		return;
 	}
 #endif /* CONFIG_BT_CTLR_DUP_FILTER_LEN > 0 */
@@ -4401,7 +4489,7 @@ static void le_ext_adv_legacy_report(struct pdu_data *pdu_data,
 #endif /* CONFIG_BT_CTLR_PRIVACY */
 
 #if CONFIG_BT_CTLR_DUP_FILTER_LEN > 0
-	if (dup_found(adv)) {
+	if (dup_found(adv->type, adv->tx_addr, adv->adv_ind.addr, 0, NULL, 0)) {
 		return;
 	}
 #endif /* CONFIG_BT_CTLR_DUP_FILTER_LEN > 0 */
@@ -4725,6 +4813,16 @@ no_ext_hdr:
 		node_rx_next = node_rx_curr->hdr.rx_ftr.extra;
 		adv = (void *)node_rx_curr->pdu;
 	} while (1);
+
+#if CONFIG_BT_CTLR_DUP_FILTER_LEN > 0
+	if (adv_addr) {
+		if (dup_found(PDU_ADV_TYPE_EXT_IND, adv_addr_type, adv_addr,
+			      evt_type, adi, data_status)) {
+			node_rx_extra_list_release(node_rx->hdr.rx_ftr.extra);
+			return;
+		}
+	}
+#endif /* CONFIG_BT_CTLR_DUP_FILTER_LEN > 0 */
 
 	/* FIXME: move most of below into above loop to dispatch fragments of
 	 * data in HCI event.
@@ -5700,7 +5798,7 @@ static void le_remote_feat_complete(uint8_t status, struct pdu_data *pdu_data,
 		return;
 	}
 
-	sep = meta_evt(buf, BT_HCI_EV_LE_REMOTE_FEAT_COMPLETE, sizeof(*sep));
+	sep = meta_evt(buf, BT_HCI_EVT_LE_REMOTE_FEAT_COMPLETE, sizeof(*sep));
 
 	sep->status = status;
 	sep->handle = sys_cpu_to_le16(handle);

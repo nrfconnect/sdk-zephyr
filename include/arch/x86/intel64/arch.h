@@ -110,7 +110,7 @@ struct x86_ssf {
 		"int $32\n\t" \
 		: \
 		: [reason] "i" (reason_p)); \
-	CODE_UNREACHABLE; \
+	CODE_UNREACHABLE; /* LCOV_EXCL_LINE */ \
 } while (false)
 
 #endif /* _ASMLANGUAGE */
@@ -132,5 +132,10 @@ struct x86_ssf {
 	arch_irq_connect_dynamic(irq_p, priority_p,			\
 				 (void (*)(const void *))isr_p,		\
 				 isr_param_p, flags_p)
+
+/*
+ * Thread object needs to be 16-byte aligned.
+ */
+#define ARCH_DYMANIC_OBJ_K_THREAD_ALIGNMENT	16
 
 #endif /* ZEPHYR_INCLUDE_ARCH_X86_INTEL64_ARCH_H_ */

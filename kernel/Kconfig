@@ -512,15 +512,6 @@ config HEAP_MEM_POOL_SIZE
 	  the memory pool is only limited to available memory. A size of zero
 	  means that no heap memory pool is defined.
 
-config HEAP_MEM_POOL_MIN_SIZE
-	int "The smallest blocks in the heap memory pool (in bytes)"
-	depends on HEAP_MEM_POOL_SIZE != 0
-	default 64
-	help
-	  This option specifies the size of the smallest block in the pool.
-	  Option must be a power of 2 and lower than or equal to the size
-	  of the entire pool.
-
 endif # KERNEL_MEM_POOL
 
 endmenu
@@ -595,18 +586,8 @@ config SYS_CLOCK_EXISTS
 	  this is disabled.  Obviously timeout-related APIs will not
 	  work.
 
-config LEGACY_TIMEOUT_API
-	bool "Support legacy k_timeout_t API"
-	help
-	  The k_timeout_t API has changed to become an opaque type
-	  that must be initialized with macros.  Older applications
-	  can choose this to continue using the old style of timeouts
-	  (which were int32_t counts of milliseconds), at the cost of
-	  not being able to use new features.
-
 config TIMEOUT_64BIT
 	bool "Store kernel timeouts in 64 bit precision"
-	depends on !LEGACY_TIMEOUT_API
 	default y
 	help
 	  When this option is true, the k_ticks_t values passed to

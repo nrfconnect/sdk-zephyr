@@ -66,7 +66,7 @@ NET_BUF_POOL_DEFINE(prep_pool, CONFIG_BT_ATT_PREPARE_COUNT, BT_ATT_MTU,
 #endif /* CONFIG_BT_ATT_PREPARE_COUNT */
 
 K_MEM_SLAB_DEFINE(req_slab, sizeof(struct bt_att_req),
-		  CONFIG_BT_ATT_TX_MAX, 16);
+		  CONFIG_BT_ATT_TX_MAX, __alignof__(struct bt_att_req));
 
 enum {
 	ATT_PENDING_RSP,
@@ -107,9 +107,10 @@ struct bt_att {
 };
 
 K_MEM_SLAB_DEFINE(att_slab, sizeof(struct bt_att),
-		  CONFIG_BT_MAX_CONN, 16);
+		  CONFIG_BT_MAX_CONN, __alignof__(struct bt_att));
 K_MEM_SLAB_DEFINE(chan_slab, sizeof(struct bt_att_chan),
-		  CONFIG_BT_MAX_CONN * ATT_CHAN_MAX, 16);
+		  CONFIG_BT_MAX_CONN * ATT_CHAN_MAX,
+		  __alignof__(struct bt_att_chan));
 static struct bt_att_req cancel;
 
 static void att_req_destroy(struct bt_att_req *req)
@@ -282,6 +283,11 @@ static void bt_att_sent(struct bt_l2cap_chan *ch)
 	}
 
 	atomic_clear_bit(chan->flags, ATT_PENDING_SENT);
+
+	if (!att) {
+		BT_DBG("Ignore sent on detached ATT chan");
+		return;
+	}
 
 	/* Process pending requests first since they require a response they
 	 * can only be processed one at time while if other queues were
@@ -2432,6 +2438,11 @@ static int bt_att_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 	BT_DBG("Received ATT chan %p code 0x%02x len %zu", att_chan, hdr->code,
 	       net_buf_frags_len(buf));
 
+	if (!att_chan->att) {
+		BT_DBG("Ignore recv on detached ATT chan");
+		return 0;
+	}
+
 	for (i = 0, handler = NULL; i < ARRAY_SIZE(handlers); i++) {
 		if (hdr->code == handlers[i].op) {
 			handler = &handlers[i];
@@ -2689,6 +2700,11 @@ static void bt_att_encrypt_change(struct bt_l2cap_chan *chan,
 	BT_DBG("chan %p conn %p handle %u sec_level 0x%02x status 0x%02x", ch,
 	       conn, conn->handle, conn->sec_level, hci_status);
 
+	if (!att_chan->att) {
+		BT_DBG("Ignore encrypt change on detached ATT chan");
+		return;
+	}
+
 	/*
 	 * If status (HCI status of security procedure) is non-zero, notify
 	 * outstanding request about security failure.
@@ -2730,6 +2746,11 @@ static void bt_att_status(struct bt_l2cap_chan *ch, atomic_t *status)
 	BT_DBG("chan %p status %p", ch, status);
 
 	if (!atomic_test_bit(status, BT_L2CAP_STATUS_OUT)) {
+		return;
+	}
+
+	if (!chan->att) {
+		BT_DBG("Ignore status on detached ATT chan");
 		return;
 	}
 

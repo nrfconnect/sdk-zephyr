@@ -12,8 +12,13 @@
 #define MIN3(_a, _b, _c) MIN((_a), MIN((_b), (_c)))
 #endif
 
+#define th_sport(_x) UNALIGNED_GET(&(_x)->th_sport)
+#define th_dport(_x) UNALIGNED_GET(&(_x)->th_dport)
 #define th_seq(_x) ntohl(UNALIGNED_GET(&(_x)->th_seq))
 #define th_ack(_x) ntohl(UNALIGNED_GET(&(_x)->th_ack))
+#define th_off(_x) ((_x)->th_off)
+#define th_flags(_x) UNALIGNED_GET(&(_x)->th_flags)
+#define th_win(_x) UNALIGNED_GET(&(_x)->th_win)
 
 #define tcp_slist(_slist, _op, _type, _link)				\
 ({									\
@@ -61,6 +66,26 @@
 			TCP_PKT_ALLOC_TIMEOUT);				\
 	} else {							\
 		_pkt = net_pkt_alloc(TCP_PKT_ALLOC_TIMEOUT);		\
+	}								\
+									\
+	tp_pkt_alloc(_pkt, tp_basename(__FILE__), __LINE__);		\
+									\
+	_pkt;								\
+})
+
+#define tcp_rx_pkt_alloc(_conn, _len)					\
+({									\
+	struct net_pkt *_pkt;						\
+									\
+	if ((_len) > 0) {						\
+		_pkt = net_pkt_rx_alloc_with_buffer(			\
+			(_conn)->iface,					\
+			(_len),						\
+			net_context_get_family((_conn)->context),	\
+			IPPROTO_TCP,					\
+			TCP_PKT_ALLOC_TIMEOUT);				\
+	} else {							\
+		_pkt = net_pkt_rx_alloc(TCP_PKT_ALLOC_TIMEOUT);		\
 	}								\
 									\
 	tp_pkt_alloc(_pkt, tp_basename(__FILE__), __LINE__);		\
@@ -133,7 +158,7 @@ struct tcphdr {
 	uint16_t th_win;
 	uint16_t th_sum;
 	uint16_t th_urp;
-};
+} __packed;
 
 enum th_flags {
 	FIN = 1,
@@ -182,6 +207,7 @@ struct tcp { /* TCP connection */
 	sys_snode_t next;
 	struct net_context *context;
 	struct net_pkt *send_data;
+	struct net_pkt *queue_recv_data;
 	struct net_if *iface;
 	void *recv_user_data;
 	sys_slist_t send_queue;
@@ -194,6 +220,7 @@ struct tcp { /* TCP connection */
 	struct k_fifo recv_data;  /* temp queue before passing data to app */
 	struct tcp_options recv_options;
 	struct k_delayed_work send_timer;
+	struct k_delayed_work recv_queue_timer;
 	struct k_delayed_work send_data_timer;
 	struct k_delayed_work timewait_timer;
 	struct k_delayed_work fin_timer;

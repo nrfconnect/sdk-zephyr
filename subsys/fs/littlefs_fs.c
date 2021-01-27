@@ -575,7 +575,7 @@ static int littlefs_mount(struct fs_mount_t *mountp)
 
 	dev = flash_area_get_device(fs->area);
 	if (dev == NULL) {
-		LOG_ERR("can't get flash device: %s", fs->area->fa_dev_name);
+		LOG_ERR("can't get flash device: %s", log_strdup(fs->area->fa_dev_name));
 		ret = -ENODEV;
 		goto out;
 	}
@@ -643,7 +643,7 @@ static int littlefs_mount(struct fs_mount_t *mountp)
 	lfs_size_t block_count = fs->area->fa_size / block_size;
 
 	LOG_INF("FS at %s:0x%x is %u 0x%x-byte blocks with %u cycle",
-		dev->name, (uint32_t)fs->area->fa_off,
+		log_strdup(dev->name), (uint32_t)fs->area->fa_off,
 		block_count, block_size, block_cycles);
 	LOG_INF("sizes: rd %u ; pr %u ; ca %u ; la %u",
 		read_size, prog_size, cache_size, lookahead_size);
@@ -751,10 +751,83 @@ static const struct fs_file_system_t littlefs_fs = {
 	.statvfs = littlefs_statvfs,
 };
 
+#define DT_DRV_COMPAT zephyr_fstab_littlefs
+#define FS_PARTITION(inst) DT_PHANDLE_BY_IDX(DT_DRV_INST(inst), partition, 0)
+
+#define DEFINE_FS(inst) \
+static uint8_t __aligned(4) \
+	read_buffer_##inst[DT_INST_PROP(inst, cache_size)]; \
+static uint8_t __aligned(4) \
+	prog_buffer_##inst[DT_INST_PROP(inst, cache_size)]; \
+static uint32_t lookahead_buffer_##inst[DT_INST_PROP(inst, lookahead_size) \
+					/ sizeof(uint32_t)]; \
+BUILD_ASSERT(DT_INST_PROP(inst, read_size) > 0); \
+BUILD_ASSERT(DT_INST_PROP(inst, prog_size) > 0); \
+BUILD_ASSERT(DT_INST_PROP(inst, cache_size) > 0); \
+BUILD_ASSERT(DT_INST_PROP(inst, lookahead_size) > 0); \
+BUILD_ASSERT((DT_INST_PROP(inst, lookahead_size) % 8) == 0); \
+BUILD_ASSERT((DT_INST_PROP(inst, cache_size) \
+	      % DT_INST_PROP(inst, read_size)) == 0); \
+BUILD_ASSERT((DT_INST_PROP(inst, cache_size) \
+	      % DT_INST_PROP(inst, prog_size)) == 0); \
+static struct fs_littlefs fs_data_##inst = { \
+	.cfg = { \
+		.read_size = DT_INST_PROP(inst, read_size), \
+		.prog_size = DT_INST_PROP(inst, prog_size), \
+		.cache_size = DT_INST_PROP(inst, cache_size), \
+		.lookahead_size = DT_INST_PROP(inst, lookahead_size), \
+		.read_buffer = read_buffer_##inst, \
+		.prog_buffer = prog_buffer_##inst, \
+		.lookahead_buffer = lookahead_buffer_##inst, \
+	}, \
+}; \
+struct fs_mount_t FS_FSTAB_ENTRY(DT_DRV_INST(inst)) = { \
+	.type = FS_LITTLEFS, \
+	.mnt_point = DT_INST_PROP(inst, mount_point), \
+	.fs_data = &fs_data_##inst, \
+	.storage_dev = (void *)DT_FIXED_PARTITION_ID(FS_PARTITION(inst)), \
+	.flags = FSTAB_ENTRY_DT_MOUNT_FLAGS(DT_DRV_INST(inst)), \
+};
+
+DT_INST_FOREACH_STATUS_OKAY(DEFINE_FS)
+
+#define REFERENCE_MOUNT(inst) (&FS_FSTAB_ENTRY(DT_DRV_INST(inst))),
+
+static void mount_init(struct fs_mount_t *mp)
+{
+
+	LOG_INF("littlefs partition at %s", mp->mnt_point);
+	if ((mp->flags & FS_MOUNT_FLAG_AUTOMOUNT) != 0) {
+		int rc = fs_mount(mp);
+
+		if (rc < 0) {
+			LOG_ERR("Automount %s failed: %d\n",
+				mp->mnt_point, rc);
+		} else {
+			LOG_INF("Automount %s succeeded\n",
+				mp->mnt_point);
+		}
+	}
+}
+
 static int littlefs_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
-	return fs_register(FS_LITTLEFS, &littlefs_fs);
+	static struct fs_mount_t *partitions[] = {
+		DT_INST_FOREACH_STATUS_OKAY(REFERENCE_MOUNT)
+	};
+
+	int rc = fs_register(FS_LITTLEFS, &littlefs_fs);
+
+	if (rc == 0) {
+		struct fs_mount_t **mpi = partitions;
+
+		while (mpi < (partitions + ARRAY_SIZE(partitions))) {
+			mount_init(*mpi++);
+		}
+	}
+
+	return rc;
 }
 
-SYS_INIT(littlefs_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+SYS_INIT(littlefs_init, POST_KERNEL, 99);

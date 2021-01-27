@@ -124,23 +124,37 @@ def test_bus():
     assert edt.get_node("/buses/foo-bus").on_bus is None
     assert edt.get_node("/buses/foo-bus").bus_node is None
 
-    # foo-bus/node is not a bus node...
-    assert edt.get_node("/buses/foo-bus/node").bus is None
+    # foo-bus/node1 is not a bus node...
+    assert edt.get_node("/buses/foo-bus/node1").bus is None
     # ...but is on a bus
-    assert edt.get_node("/buses/foo-bus/node").on_bus == "foo"
-    assert edt.get_node("/buses/foo-bus/node").bus_node.path == \
+    assert edt.get_node("/buses/foo-bus/node1").on_bus == "foo"
+    assert edt.get_node("/buses/foo-bus/node1").bus_node.path == \
         "/buses/foo-bus"
+
+    # foo-bus/node2 is not a bus node...
+    assert edt.get_node("/buses/foo-bus/node2").bus is None
+    # ...but is on a bus
+    assert edt.get_node("/buses/foo-bus/node2").on_bus == "foo"
+
+    # no-bus-node is not a bus node...
+    assert edt.get_node("/buses/no-bus-node").bus is None
+    # ... and is not on a bus
+    assert edt.get_node("/buses/no-bus-node").on_bus is None
 
     # Same compatible string, but different bindings from being on different
     # buses
-    assert str(edt.get_node("/buses/foo-bus/node").binding_path) == \
+    assert str(edt.get_node("/buses/foo-bus/node1").binding_path) == \
         hpath("test-bindings/device-on-foo-bus.yaml")
+    assert str(edt.get_node("/buses/foo-bus/node2").binding_path) == \
+        hpath("test-bindings/device-on-any-bus.yaml")
     assert str(edt.get_node("/buses/bar-bus/node").binding_path) == \
         hpath("test-bindings/device-on-bar-bus.yaml")
+    assert str(edt.get_node("/buses/no-bus-node").binding_path) == \
+        hpath("test-bindings/device-on-any-bus.yaml")
 
     # foo-bus/node/nested also appears on the foo-bus bus
-    assert edt.get_node("/buses/foo-bus/node/nested").on_bus == "foo"
-    assert str(edt.get_node("/buses/foo-bus/node/nested").binding_path) == \
+    assert edt.get_node("/buses/foo-bus/node1/nested").on_bus == "foo"
+    assert str(edt.get_node("/buses/foo-bus/node1/nested").binding_path) == \
         hpath("test-bindings/device-on-foo-bus.yaml")
 
 def test_child_binding():
@@ -215,7 +229,10 @@ def test_props():
         f"<Property, name: phandle-array-foos, type: phandle-array, value: [<ControllerAndData, controller: <Node /ctrl-1 in 'test.dts', binding {filenames[1]}>, data: OrderedDict([('one', 1)])>, <ControllerAndData, controller: <Node /ctrl-2 in 'test.dts', binding {filenames[2]}>, data: OrderedDict([('one', 2), ('two', 3)])>]>"
 
     assert str(edt.get_node("/props-2").props["phandle-array-foos"]) == \
-        f"<Property, name: phandle-array-foos, type: phandle-array, value: [<ControllerAndData, controller: <Node /ctrl-0-1 in 'test.dts', binding {filenames[0]}>, data: OrderedDict()>, <ControllerAndData, controller: <Node /ctrl-0-2 in 'test.dts', binding {filenames[0]}>, data: OrderedDict()>]>"
+        ("<Property, name: phandle-array-foos, type: phandle-array, value: ["
+         f"<ControllerAndData, name: a, controller: <Node /ctrl-0-1 in 'test.dts', binding {filenames[0]}>, data: OrderedDict()>, "
+         "None, "
+         f"<ControllerAndData, name: b, controller: <Node /ctrl-0-2 in 'test.dts', binding {filenames[0]}>, data: OrderedDict()>]>")
 
     assert str(edt.get_node("/props").props["foo-gpios"]) == \
         f"<Property, name: foo-gpios, type: phandle-array, value: [<ControllerAndData, controller: <Node /ctrl-1 in 'test.dts', binding {filenames[1]}>, data: OrderedDict([('gpio-one', 1)])>]>"
