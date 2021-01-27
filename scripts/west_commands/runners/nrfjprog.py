@@ -197,19 +197,12 @@ class NrfJprogBinaryRunner(ZephyrBinaryRunner):
 
         uicr = uicr_ranges[self.family]
 
-        if not self.uicr_data_ok and has_region(uicr, self.hex_):
-            # Hex file has UICR contents, and that's not OK.
+        if not self.force and has_region(uicr, self.hex_):
+            # Hex file has UICR contents.
             raise RuntimeError(
                 'The hex file contains data placed in the UICR, which '
                 'needs a full erase before reprogramming. Run west '
-                'flash again with --force, --erase, or --recover.')
-
-    @property
-    def uicr_data_ok(self):
-        # True if it's OK to try to flash even with UICR data
-        # in the image; False otherwise.
-
-        return self.force or self.erase or self.recover
+                'flash again with --force or --erase.')
 
     def recover_target(self):
         if self.family == 'NRF53':
