@@ -23,6 +23,7 @@
 #include <hal/nrf_gpio.h>
 #include <hal/nrf_oscillators.h>
 #include <hal/nrf_regulators.h>
+#include <hal/nrf_clock.h>
 #elif defined(CONFIG_SOC_NRF5340_CPUNET)
 #include <hal/nrf_nvmc.h>
 #endif
@@ -80,6 +81,10 @@ static int nordicsemi_nrf53_init(const struct device *arg)
 #endif
 #if defined(CONFIG_SOC_DCDC_NRF53X_HV)
 	nrf_regulators_dcdcen_vddh_set(NRF_REGULATORS, true);
+#endif
+
+#if defined(CONFIG_SOC_CLOCK_128MHZ_NRF53X_APP)
+	nrf_clock_hfclk_div_set(NRF_CLOCK, NRF_CLOCK_HFCLK_DIV_1);
 #endif
 
 	/* Install default handler that simply resets the CPU
