@@ -465,6 +465,14 @@ endforeach()
 set(ZEPHYR_CURRENT_MODULE_DIR)
 set(ZEPHYR_CURRENT_CMAKE_DIR)
 
+# The OpenThread module creates a print-ot-config that uses an echo command
+# which fails on Windows, see more: https://github.com/openthread/openthread/pull/6175
+# This code disable the target from `ALL` but the target can still be manually
+# called by the user. All the target does is printing the current OpenThread configuration.
+if(TARGET print-ot-config)
+  set_property(TARGET print-ot-config PROPERTY EXCLUDE_FROM_ALL TRUE)
+endif()
+
 set(syscall_list_h   ${CMAKE_CURRENT_BINARY_DIR}/include/generated/syscall_list.h)
 set(syscalls_json    ${CMAKE_CURRENT_BINARY_DIR}/misc/generated/syscalls.json)
 set(struct_tags_json ${CMAKE_CURRENT_BINARY_DIR}/misc/generated/struct_tags.json)
