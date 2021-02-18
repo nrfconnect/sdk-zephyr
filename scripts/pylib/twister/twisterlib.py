@@ -1348,7 +1348,11 @@ class TwisterConfigParser:
         self.common = {}
 
     def load(self):
-        self.data = scl.yaml_load_verify(self.filename, self.schema)
+        if(os.path.basename(self.filename) == 'CMakePresets.json'):
+            with open(self.filename, "r") as fp:
+                self.data = json.load(fp)['vendor']['zephyr']['twister']
+        else:
+            self.data = scl.yaml_load_verify(self.filename, self.schema)
 
         if 'tests' in self.data:
             self.tests = self.data['tests']
@@ -2521,6 +2525,7 @@ class TestSuite(DisablePyTestCollectionMixin):
 
     SAMPLE_FILENAME = 'sample.yaml'
     TESTCASE_FILENAME = 'testcase.yaml'
+    CMAKE_PRESETS = 'CMakePresets.json'
 
     def __init__(self, board_root_list=[], testcase_roots=[], outdir=None):
 
@@ -2832,6 +2837,8 @@ class TestSuite(DisablePyTestCollectionMixin):
                     filename = self.SAMPLE_FILENAME
                 elif self.TESTCASE_FILENAME in filenames:
                     filename = self.TESTCASE_FILENAME
+                elif self.CMAKE_PRESETS in filenames:
+                    filename = self.CMAKE_PRESETS
                 else:
                     continue
 
