@@ -228,4 +228,13 @@ config TFM_FLASH_MERGED_BINARY
 		(if building with TFM_BL2 is enabled), and the
 		Non-Secure application firmware.
 
+config TFM_EXTRA_CMAKE_ARGS
+	string
+	help
+	  Additional CMake flags to be provided when building TF-M.
+	  Those are given as regular CMake arguments with space as separator,
+	  like "-DARG0=val0 -DARG1=val1".
+	  The values may take a generator expression, for example
+	  `-DARG0=$<expression>`
+
 endif # BUILD_WITH_TFM

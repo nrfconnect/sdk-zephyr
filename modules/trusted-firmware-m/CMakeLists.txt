@@ -30,6 +30,9 @@ set(TFM_VALID_PARTITIONS
 # REGRESSION: Boolean if TF-M build includes building the TF-M regression tests
 # BL2: Boolean if the TF-M build uses MCUboot. Default: True
 # ENABLED_PARTITIONS: List of TFM partitions to enable.
+# CMAKE_ARGS: Additional CMake flags to be used when building TF-M
+#             This is a list of flags, such as
+#             `CMAKE_ARGS -DARG0=val0 -DARG1=val1`
 #
 # Example usage:
 #
@@ -46,7 +49,7 @@ function(trusted_firmware_build)
   set(options IPC REGRESSION BL2)
   set(oneValueArgs BINARY_DIR BOARD ISOLATION_LEVEL CMAKE_BUILD_TYPE BUILD_PROFILE
     MCUBOOT_IMAGE_NUMBER)
-  set(multiValueArgs ENABLED_PARTITIONS)
+  set(multiValueArgs ENABLED_PARTITIONS CMAKE_ARGS)
   cmake_parse_arguments(TFM "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   foreach(partition ${TFM_VALID_PARTITIONS})
@@ -149,6 +152,7 @@ function(trusted_firmware_build)
                ${TFM_REGRESSION_ARG}
                ${TFM_PROFILE_ARG}
                ${MCUBOOT_IMAGE_NUM_ARG}
+               "${TFM_CMAKE_ARGS}"
                -DTFM_TEST_REPO_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/tf-m-tests
                -DMCUBOOT_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/../tfm-mcuboot
                -DZEPHYR_BASE=${ZEPHYR_BASE}
@@ -236,6 +240,10 @@ if (CONFIG_BUILD_WITH_TFM)
         MCUBOOT_IMAGE_NUMBER ${CONFIG_TFM_MCUBOOT_IMAGE_NUMBER})
   endif()
 
+  if(DEFINED CONFIG_TFM_EXTRA_CMAKE_ARGS)
+    string(REPLACE " " ";" TFM_CMAKE_ARGS "${CONFIG_TFM_EXTRA_CMAKE_ARGS}")
+  endif()
+
   # Enable TFM partitions as specified in Kconfig
   foreach(partition ${TFM_VALID_PARTITIONS})
     if (CONFIG_${partition})
@@ -252,6 +260,7 @@ if (CONFIG_BUILD_WITH_TFM)
     ${TFM_BL2_ARG}
     ${TFM_IPC_ARG}
     ${TFM_REGRESSION_ARG}
+    CMAKE_ARGS "${TFM_CMAKE_ARGS}"
     ENABLED_PARTITIONS ${TFM_ENABLED_PARTITIONS_ARG}
     CMAKE_BUILD_TYPE ${TFM_CMAKE_BUILD_TYPE}
   )
