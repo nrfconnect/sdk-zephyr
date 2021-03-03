@@ -29,6 +29,8 @@ static inline int socketpair(int family, int type, int proto, int sv[2])
 
 #define MSG_PEEK ZSOCK_MSG_PEEK
 #define MSG_DONTWAIT ZSOCK_MSG_DONTWAIT
+#define MSG_TRUNC ZSOCK_MSG_TRUNC
+#define MSG_WAITALL ZSOCK_MSG_WAITALL
 
 static inline int shutdown(int sock, int how)
 {
