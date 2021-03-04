@@ -119,11 +119,17 @@ uint8_t ll_df_set_cl_cte_tx_params(uint8_t adv_handle, uint8_t cte_len,
 				   uint8_t num_ant_ids, uint8_t *ant_ids)
 {
 	struct ll_adv_set *adv;
+	struct lll_adv_sync *sync;
 	struct lll_df_adv_cfg *cfg;
 
 	/* Get the advertising set instance */
 	adv = ull_adv_is_created_get(adv_handle);
 	if (!adv) {
+		return BT_HCI_ERR_UNKNOWN_ADV_IDENTIFIER;
+	}
+
+	sync = adv->lll.sync;
+	if (!sync) {
 		return BT_HCI_ERR_UNKNOWN_ADV_IDENTIFIER;
 	}
 
@@ -157,11 +163,11 @@ uint8_t ll_df_set_cl_cte_tx_params(uint8_t adv_handle, uint8_t cte_len,
 		return BT_HCI_ERR_UNSUPP_FEATURE_PARAM_VAL;
 	}
 
-	if (!adv->df_cfg) {
-		adv->df_cfg = ull_df_adv_cfg_acquire();
+	if (!sync->df_cfg) {
+		sync->df_cfg = ull_df_adv_cfg_acquire();
 	}
 
-	cfg = adv->df_cfg;
+	cfg = sync->df_cfg;
 
 	if (cfg->is_enabled) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
@@ -277,7 +283,7 @@ static struct lll_df_adv_cfg *ull_df_adv_cfg_acquire(void)
 		return NULL;
 	}
 
-	df_adv_cfg->is_enabled = 0U;
+	df_adv_cfg->is_enabled = false;
 
 	return df_adv_cfg;
 }
