@@ -9,17 +9,15 @@
 #include <stddef.h>
 
 #include <toolchain.h>
-#include <soc.h>
 
 #include <sys/util.h>
-
-#include "hal/cpu.h"
-#include "hal/ccm.h"
-#include "hal/radio.h"
 
 #include "util/mem.h"
 #include "util/memq.h"
 #include "util/mfifo.h"
+
+#include "hal/ccm.h"
+#include "hal/radio.h"
 
 #include "pdu.h"
 
@@ -34,6 +32,7 @@
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
 #define LOG_MODULE_NAME bt_ctlr_lll_conn
 #include "common/log.h"
+#include <soc.h>
 #include "hal/debug.h"
 
 static int init_reset(void);
