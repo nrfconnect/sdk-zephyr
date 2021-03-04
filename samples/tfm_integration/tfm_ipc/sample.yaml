@@ -12,7 +12,6 @@ tests:
         harness_config:
           type: multi_line
           regex:
-            - "The version of the PSA Framework API is"
+            - "Booting TFM v1.0"
+            - "Booting Zephyr OS"
             - "Connect success!"
-            - "Call success!"
-            - "TF-M IPC on .*"
