@@ -134,8 +134,7 @@ void z_add_timeout(struct _timeout *to, _timeout_func_t fn,
 			 */
 			int32_t next_time = next_timeout();
 
-			if (next_time == 0 ||
-			    _current_cpu->slice_ticks != next_time) {
+			if (_current_cpu->slice_ticks != next_time) {
 				z_clock_set_timeout(next_time, false);
 			}
 #else
