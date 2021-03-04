@@ -3428,7 +3428,7 @@ class TestSuite(DisablePyTestCollectionMixin):
                         classname = p + ":" + ".".join(instance.testcase.name.split(".")[:2])
 
                     # remove testcases that are being re-run from exiting reports
-                    for tc in eleTestsuite.findall(f'testcase/[@classname="{classname}"][@name="{instance.testcase.name}"]'):
+                    for tc in eleTestsuite.findall(f'testcase/[@classname="{classname}"]'):
                         eleTestsuite.remove(tc)
 
                     eleTestcase = ET.SubElement(eleTestsuite, 'testcase',
