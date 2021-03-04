@@ -390,10 +390,9 @@ def dt_compat_on_bus(kconf, _, compat, bus):
     if doc_mode or edt is None:
         return "n"
 
-    if compat in edt.compat2okay:
-        for node in edt.compat2okay[compat]:
-            if node.on_bus is not None and node.on_bus == bus:
-                return "y"
+    for node in edt.compat2okay[compat]:
+        if node.on_bus is not None and node.on_bus == bus:
+            return "y"
 
     return "n"
 
@@ -407,10 +406,9 @@ def dt_nodelabel_has_compat(kconf, _, label, compat):
     if doc_mode or edt is None:
         return "n"
 
-    if compat in edt.compat2okay:
-        for node in edt.compat2okay[compat]:
-            if label in node.labels:
-                return "y"
+    for node in edt.compat2okay[compat]:
+        if label in node.labels:
+            return "y"
 
     return "n"
 
