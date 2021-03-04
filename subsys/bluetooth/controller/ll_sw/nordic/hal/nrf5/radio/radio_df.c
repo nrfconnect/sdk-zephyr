@@ -94,23 +94,22 @@ const static struct df_ant_cfg ant_cfg = {
 #error "DF antenna switching feature requires dfe_ant to be enabled in DTS"
 #endif
 
-/* @brief Function configures Radio with information about GPIO pins that may be
- *        used to drive antenna switching during CTE Tx/RX.
+#endif /* CONFIG_BT_CTLR_DF_ANT_SWITCH_TX || CONFIG_BT_CTLR_DF_ANT_SWITCH_RX */
+
+/* @brief Function performs steps related with DF antennas configuration.
  *
  * Sets up DF related PSEL.DFEGPIO registers to give possibility to Radio
- * to drive antennas switches.
- *
+ * to drivee antennas switches.
  */
-void radio_df_ant_switching_pin_sel_cfg(void)
+void radio_df_ant_configure(void)
 {
-	uint8_t pin_sel;
+#if defined(CONFIG_BT_CTLR_DF_ANT_SWITCH_TX) || \
+	defined(CONFIG_BT_CTLR_DF_ANT_SWITCH_RX)
 
 	for (uint8_t idx = 0; idx < DF_PSEL_GPIO_NUM; ++idx) {
-		pin_sel = ant_cfg.dfe_gpio[idx];
-
-		if (pin_sel != DF_GPIO_PIN_NOT_SET) {
+		if (ant_cfg.dfe_gpio[idx] != DF_GPIO_PIN_NOT_SET) {
 			nrf_radio_dfe_pattern_pin_set(NRF_RADIO,
-						      pin_sel,
+						      ant_cfg.dfe_gpio[idx],
 						      idx);
 		} else {
 			nrf_radio_dfe_pattern_pin_set(NRF_RADIO,
@@ -118,8 +117,8 @@ void radio_df_ant_switching_pin_sel_cfg(void)
 						      idx);
 		}
 	}
-}
 #endif /* CONFIG_BT_CTLR_DF_ANT_SWITCH_TX || CONFIG_BT_CTLR_DF_ANT_SWITCH_RX */
+}
 
 /* @brief Function provides number of available antennas for Direction Finding.
  *
