@@ -658,8 +658,6 @@ static uint8_t adv_sync_hdr_set_clear(struct lll_adv_sync *lll_sync,
 	struct pdu_adv_ext_hdr *ter_hdr, ter_hdr_prev;
 	uint8_t *ter_dptr, *ter_dptr_prev;
 	uint16_t ter_len, ter_len_prev;
-	uint16_t ext_hdr_buf_len;
-	uint8_t acad_len_prev;
 	uint8_t *ad_data;
 #if IS_ENABLED(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
 	uint8_t cte_info;
@@ -734,28 +732,12 @@ static uint8_t adv_sync_hdr_set_clear(struct lll_adv_sync *lll_sync,
 		ter_dptr++;
 	}
 
-	/* Calc previous ACAD len and update PDU len */
-	ter_len_prev = ter_dptr_prev - (uint8_t *)ter_com_hdr_prev;
-	ext_hdr_buf_len = ter_com_hdr_prev->ext_hdr_len +
-			  offsetof(struct pdu_adv_com_ext_adv,
-				   ext_hdr_adv_data);
-	if (ter_len_prev <= ext_hdr_buf_len) {
-		acad_len_prev = ext_hdr_buf_len - ter_len_prev;
-		ter_len_prev += acad_len_prev;
-		ter_dptr_prev += acad_len_prev;
-		ter_dptr += acad_len_prev;
-	} else {
-		acad_len_prev = 0;
-		/* NOTE: If no flags are set then extended header length will be
-		 *       zero. Under this condition the current ter_len_prev
-		 *       value will be greater than extended header length,
-		 *       hence set ter_len_prev to size of the length/mode
-		 *       field.
-		 */
-		ter_len_prev = offsetof(struct pdu_adv_com_ext_adv,
-					ext_hdr_adv_data);
-		ter_dptr_prev = (uint8_t *)ter_com_hdr_prev + ter_len_prev;
-	}
+	/* TODO: ACAD */
+
+	/* AdvData */
+	/* Calc previous tertiary PDU len */
+	ter_len_prev = ull_adv_aux_hdr_len_calc(ter_com_hdr_prev,
+						&ter_dptr_prev);
 
 	/* Did we parse beyond PDU length? */
 	if (ter_len_prev > ter_pdu_prev->len) {
@@ -800,10 +782,7 @@ static uint8_t adv_sync_hdr_set_clear(struct lll_adv_sync *lll_sync,
 	/* Fill AdvData in tertiary PDU */
 	memmove(ter_dptr, ad_data, ad_len);
 
-	/* Fill ACAD in tertiary PDU */
-	ter_dptr_prev -= acad_len_prev;
-	ter_dptr -= acad_len_prev;
-	memmove(ter_dptr, ter_dptr_prev, acad_len_prev);
+	/* TODO: Fill ACAD in tertiary PDU */
 
 	/* Tx Power */
 	if (ter_hdr->tx_pwr) {
