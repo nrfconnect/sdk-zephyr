@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 
-if(CONFIG_TEMP_NRF5 AND NOT CONFIG_TEMP_NRF5_FORCE_ALT)
-  zephyr_library()
-  zephyr_library_sources(temp_nrf5.c)
-endif()
+zephyr_library()
+
+zephyr_library_sources_ifdef(CONFIG_TEMP_NRF5 temp_nrf5.c)
