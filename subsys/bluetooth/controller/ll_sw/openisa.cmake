@@ -37,6 +37,10 @@ if(CONFIG_BT_LL_SW_SPLIT)
     CONFIG_BT_CTLR_DTM
     ll_sw/openisa/lll/lll_test.c
   )
+  zephyr_library_sources_ifdef(
+    CONFIG_BT_CTLR_PROFILE_ISR
+    ll_sw/openisa/lll/lll_test.c
+  )
 endif()
 
 zephyr_library_sources_ifdef(
