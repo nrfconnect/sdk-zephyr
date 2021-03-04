@@ -29,7 +29,7 @@ properties:
     interrupts:
       required: true
 
-    dfe-antenna-num:
+    dfe-ant-num:
       type: int
       required: true
       description: |
