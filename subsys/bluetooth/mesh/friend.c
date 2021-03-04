@@ -350,12 +350,7 @@ static int unseg_app_sdu_unpack(struct bt_mesh_friend *frnd,
 				struct unseg_app_sdu_meta *meta)
 {
 	uint16_t app_idx = FRIEND_ADV(buf)->app_idx;
-	struct bt_mesh_net_rx net = {
-		.ctx = {
-			.app_idx = app_idx,
-			.net_idx = frnd->subnet->net_idx,
-		},
-	};
+	struct bt_mesh_net_rx net;
 	int err;
 
 	meta->subnet = frnd->subnet;
@@ -431,8 +426,6 @@ static int unseg_app_sdu_prepare(struct bt_mesh_friend *frnd,
 	if (meta.crypto.seq_num == bt_mesh.seq) {
 		return 0;
 	}
-
-	BT_DBG("Re-encrypting friend pdu");
 
 	err = unseg_app_sdu_decrypt(frnd, buf, &meta);
 	if (err) {
