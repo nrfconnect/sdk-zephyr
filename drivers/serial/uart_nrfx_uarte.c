@@ -99,9 +99,6 @@ struct uarte_nrfx_int_driven {
 	uint8_t *tx_buffer;
 	uint16_t tx_buff_size;
 	volatile bool disable_tx_irq;
-#ifdef CONFIG_PM_DEVICE
-	bool rx_irq_enabled;
-#endif
 	atomic_t fifo_fill_lock;
 };
 #endif
@@ -1548,16 +1545,7 @@ static void uarte_nrfx_set_power_state(const struct device *dev,
 #endif
 		if (nrf_uarte_rx_pin_get(uarte) !=
 			NRF_UARTE_PSEL_DISCONNECTED) {
-
-			nrf_uarte_event_clear(uarte, NRF_UARTE_EVENT_ENDRX);
 			nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STARTRX);
-#ifdef UARTE_INTERRUPT_DRIVEN
-			if (data->int_driven &&
-			    data->int_driven->rx_irq_enabled) {
-				nrf_uarte_int_enable(uarte,
-						     NRF_UARTE_INT_ENDRX_MASK);
-			}
-#endif
 		}
 
 		data->pm_state = new_state;
@@ -1592,17 +1580,6 @@ static void uarte_nrfx_set_power_state(const struct device *dev,
 		}
 #endif
 		if (nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_RXSTARTED)) {
-#ifdef UARTE_INTERRUPT_DRIVEN
-			if (data->int_driven) {
-				data->int_driven->rx_irq_enabled =
-					nrf_uarte_int_enable_check(uarte,
-						NRF_UARTE_INT_ENDRX_MASK);
-				if (data->int_driven->rx_irq_enabled) {
-					nrf_uarte_int_disable(uarte,
-						NRF_UARTE_INT_ENDRX_MASK);
-				}
-			}
-#endif
 			nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STOPRX);
 			while (!nrf_uarte_event_check(uarte,
 						      NRF_UARTE_EVENT_RXTO)) {
