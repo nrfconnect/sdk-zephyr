@@ -210,7 +210,8 @@ static enum ieee802154_hw_caps nrf5_get_capabilities(const struct device *dev)
 {
 	return IEEE802154_HW_FCS |
 	       IEEE802154_HW_FILTER |
-#if !defined(CONFIG_NRF_802154_SL_OPENSOURCE)
+#if !defined(CONFIG_NRF_802154_SL_OPENSOURCE) && \
+    !defined(CONFIG_NRF_802154_SER_HOST)
 	       IEEE802154_HW_CSMA |
 #ifdef CONFIG_IEEE802154_NRF5_PKT_TXTIME
 	       IEEE802154_HW_TXTIME |
@@ -450,7 +451,8 @@ static int nrf5_tx(const struct device *dev,
 	case IEEE802154_TX_MODE_CCA:
 		ret = nrf_802154_transmit_raw(nrf5_radio->tx_psdu, true);
 		break;
-#if !defined(CONFIG_NRF_802154_SL_OPENSOURCE)
+#if !defined(CONFIG_NRF_802154_SL_OPENSOURCE) && \
+    !defined(CONFIG_NRF_802154_SER_HOST)
 	case IEEE802154_TX_MODE_CSMA_CA:
 		nrf_802154_transmit_csma_ca_raw(nrf5_radio->tx_psdu);
 		break;
