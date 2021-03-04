@@ -55,7 +55,7 @@ struct lll_adv_sync {
 	int8_t tx_pwr_lvl;
 #endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
 
-#if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
+#if IS_ENABLED(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
 	/* This flag is used only by LLL. It holds information if CTE
 	 * transmission was started by LLL.
 	 */
