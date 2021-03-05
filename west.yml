@@ -26,10 +26,10 @@ manifest:
   # Please add items below based on alphabetical order
   projects:
     - name: cmsis
-      revision: 421dcf358fa420e9721a8452c647f0d42af8d68c
+      revision: c3bd2094f92d574377f7af2aec147ae181aa5f8e
       path: modules/hal/cmsis
     - name: hal_atmel
-      revision: 9f0a699a2f0253dc9688211ef696daa7b8fadb75
+      revision: d17b7dd92d209b20bc1e15431d068edc29bf438d
       path: modules/hal/atmel
     - name: hal_altera
       revision: 23c1c1dd7a0c1cc9a399509d1819375847c95b97
@@ -37,15 +37,12 @@ manifest:
     - name: canopennode
       path: modules/lib/canopennode
       revision: 468d350028a975b96563e58344de48281a0ab371
-    - name: ci-tools
-      revision: da9a2df574094f52d87a03f6393928bdc7dce17c
-      path: tools/ci-tools
     - name: civetweb
       revision: e6903b80c09d17cd1a8bb32e40080005558aad29
       path: modules/lib/civetweb
     - name: hal_espressif
       west-commands: west/west-commands.yml
-      revision: 895d99ed0902e8f3ddde7bdeb3a1fe2fa875b005
+      revision: 17269ae883441d3dd8498b7f170cf9cb421edc05
       path: modules/hal/espressif
     - name: fatfs
       revision: 1d1fcc725aa1cb3c32f366e0c53d7490d0fe1109
@@ -57,7 +54,7 @@ manifest:
       revision: f1fa8241f8786198ba41155413243de36ed878a5
       path: modules/hal/infineon
     - name: hal_nordic
-      revision: 74e4ab0185a9a53d03bf382d4bfe5ec81e05b5e4
+      revision: 46b65a5a6ebb6d089431bc80a4f78746c1c90a88
       path: modules/hal/nordic
     - name: hal_openisa
       revision: 40d049f69c50b58ea20473bee14cf93f518bf262
@@ -69,13 +66,13 @@ manifest:
       revision: a1ec761014740a08699720298dd37ad4da360840
       path: modules/hal/microchip
     - name: hal_silabs
-      revision: 6bb4a17a2f94a39eba295dd55dbeae6f6c4c9b1b
+      revision: de93f34488f2ab4d6337af0819b377636034fcda
       path: modules/hal/silabs
     - name: hal_st
       revision: b52fdbf4b62439be9fab9bb4bae9690a42d2fb14
       path: modules/hal/st
     - name: hal_stm32
-      revision: cc8731dba4fd9c57d7fe8ea6149828b89c2bd635
+      revision: 9a069a55bd6a28598b9f9bafdd15056225ddf3b4
       path: modules/hal/stm32
     - name: hal_ti
       revision: 277d70a65ab14d46bf1ec0935cf9bb28bbaa8ab9
@@ -91,34 +88,34 @@ manifest:
       revision: 31acbaa36e9e74ab88ac81e3d21e7f1d00a71136
       path: modules/lib/gui/lvgl
     - name: mbedtls
-      revision: 13cf2e52024a144ecee9f37680681760a85febab
+      revision: 24d84ecff195fb15c889d9046e44e4804d626c67
       path: modules/crypto/mbedtls
     - name: mcuboot
-      revision: 3f49b5abf38659c22b6b73f5fe289de2e395263e
+      revision: 3fc59410b633a6d83bbb534e43aac43160f9bd32
       path: bootloader/mcuboot
     - name: mcumgr
-      revision: 43845e883ff3a6cdaae22e23f3e60b5fcf78c6ba
+      revision: c52ecb771a9b2bdabfc70bee094555f11edbb539
       path: modules/lib/mcumgr
     - name: net-tools
       revision: 41132e9220f8bc1223084975350c5e5f3b492afe
       path: tools/net-tools
     - name: hal_nxp
-      revision: 74ec105b931773854384ecabe95d7552c82e59e4
+      revision: b916bca1d5976b0157be80b326e3bb46ef605286
       path: modules/hal/nxp
     - name: open-amp
       revision: de1b85a13032a2de1d8b6695ae5f800b613e739d
       path: modules/lib/open-amp
     - name: loramac-node
-      revision: 3f545d76a2e6d1db83a470ccdb5bebd1f484e137
+      revision: 2cee5f7295ff0ff804bf06fea5de006bc7cd121e
       path: modules/lib/loramac-node
     - name: openthread
-      revision: b7433ff4ef9e0d8348bdc605ff82efb9c356b233
+      revision: fd27fc3a7758d409e00d0e8d43f3f8364ce6c7e9
       path: modules/lib/openthread
     - name: segger
       revision: 38c79a447e4a47d413b4e8d34448316a5cece77c
       path: modules/debug/segger
     - name: sof
-      revision: 9e75cce8bc1c649672931a4d772b2411a890804b
+      revision: b5b772dd611879ee6309da38759def79fc7f33f1
       path: modules/audio/sof
     - name: tinycbor
       path: modules/lib/tinycbor
@@ -140,10 +137,10 @@ manifest:
       path: modules/hal/xtensa
     - name: edtt
       path: tools/edtt
-      revision: b209a60ba3ad8887a7f35f67c0372c84a28b9b9b
+      revision: 7dd56fc100d79cc45c33d43e7401d1803e26f6e7
     - name: trusted-firmware-m
       path: modules/tee/tfm
-      revision: dcfa70e66e91d9bf31fd6f083e2fba19b4305f4e
+      revision: 69dc29a48b707dfe732a57e05a3291ca71138eec
     - name: tfm-mcuboot # This is used by the trusted-firmware-m module.
       repo-path: mcuboot
       path: modules/tee/tfm-mcuboot

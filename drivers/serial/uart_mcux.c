@@ -16,7 +16,7 @@
 
 struct uart_mcux_config {
 	UART_Type *base;
-	char *clock_name;
+	const struct device *clock_dev;
 	clock_control_subsys_t clock_subsys;
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	void (*irq_config_func)(const struct device *dev);
@@ -37,16 +37,10 @@ static int uart_mcux_configure(const struct device *dev,
 	const struct uart_mcux_config *config = dev->config;
 	struct uart_mcux_data *data = dev->data;
 	uart_config_t uart_config;
-	const struct device *clock_dev;
 	uint32_t clock_freq;
 	status_t retval;
 
-	clock_dev = device_get_binding(config->clock_name);
-	if (clock_dev == NULL) {
-		return -EINVAL;
-	}
-
-	if (clock_control_get_rate(clock_dev, config->clock_subsys,
+	if (clock_control_get_rate(config->clock_dev, config->clock_subsys,
 				   &clock_freq)) {
 		return -EINVAL;
 	}
@@ -257,7 +251,7 @@ static int uart_mcux_irq_rx_full(const struct device *dev)
 	return (flags & kUART_RxDataRegFullFlag) != 0U;
 }
 
-static int uart_mcux_irq_rx_ready(const struct device *dev)
+static int uart_mcux_irq_rx_pending(const struct device *dev)
 {
 	const struct uart_mcux_config *config = dev->config;
 	uint32_t mask = kUART_RxDataRegFullInterruptEnable;
@@ -288,7 +282,7 @@ static void uart_mcux_irq_err_disable(const struct device *dev)
 
 static int uart_mcux_irq_is_pending(const struct device *dev)
 {
-	return uart_mcux_irq_tx_ready(dev) || uart_mcux_irq_rx_ready(dev);
+	return uart_mcux_irq_tx_ready(dev) || uart_mcux_irq_rx_pending(dev);
 }
 
 static int uart_mcux_irq_update(const struct device *dev)
@@ -351,7 +345,7 @@ static const struct uart_driver_api uart_mcux_driver_api = {
 	.irq_tx_ready = uart_mcux_irq_tx_ready,
 	.irq_rx_enable = uart_mcux_irq_rx_enable,
 	.irq_rx_disable = uart_mcux_irq_rx_disable,
-	.irq_rx_ready = uart_mcux_irq_rx_ready,
+	.irq_rx_ready = uart_mcux_irq_rx_full,
 	.irq_err_enable = uart_mcux_irq_err_enable,
 	.irq_err_disable = uart_mcux_irq_err_disable,
 	.irq_is_pending = uart_mcux_irq_is_pending,
@@ -363,7 +357,7 @@ static const struct uart_driver_api uart_mcux_driver_api = {
 #define UART_MCUX_DECLARE_CFG(n, IRQ_FUNC_INIT)				\
 static const struct uart_mcux_config uart_mcux_##n##_config = {		\
 	.base = (UART_Type *)DT_INST_REG_ADDR(n),			\
-	.clock_name = DT_INST_CLOCKS_LABEL(n),				\
+	.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),		\
 	.clock_subsys = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, name),\
 	IRQ_FUNC_INIT							\
 }

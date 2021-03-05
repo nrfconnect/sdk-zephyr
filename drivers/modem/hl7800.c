@@ -869,7 +869,7 @@ static int send_at_cmd(struct hl7800_socket *sock, const uint8_t *data,
 		}
 		if (no_id_resp) {
 			strncpy(ictx.no_id_resp_cmd, data,
-				sizeof(ictx.no_id_resp_cmd));
+				sizeof(ictx.no_id_resp_cmd) - 1);
 			ictx.search_no_id_resp = true;
 		}
 
@@ -2776,7 +2776,7 @@ static void sock_read(struct net_buf **buf, uint16_t len)
 	sock = socket_from_id(ictx.last_socket_id);
 	if (!sock) {
 		LOG_ERR("Socket not found! (%d)", ictx.last_socket_id);
-		goto done;
+		goto exit;
 	}
 
 	if (sock->error) {
@@ -2913,6 +2913,7 @@ done:
 	} else {
 		sock->state = SOCK_IDLE;
 	}
+exit:
 	allow_sleep(true);
 	hl7800_TX_unlock();
 }
@@ -4885,6 +4886,7 @@ static struct net_if_api api_funcs = {
 	.init = offload_iface_init,
 };
 
-NET_DEVICE_OFFLOAD_INIT(modem_hl7800, "MODEM_HL7800", hl7800_init,
-			device_pm_control_nop, &ictx, NULL,
-			CONFIG_MODEM_HL7800_INIT_PRIORITY, &api_funcs, MDM_MTU);
+NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, hl7800_init, device_pm_control_nop,
+				  &ictx, NULL,
+				  CONFIG_MODEM_HL7800_INIT_PRIORITY, &api_funcs,
+				  MDM_MTU);

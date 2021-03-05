@@ -91,7 +91,8 @@ config BT_HCI_TX_STACK_SIZE
 	help
 	  Stack size needed for executing bt_send with specified driver.
 	  NOTE: This is an advanced setting and should not be changed unless
-	  absolutely necessary
+	  absolutely necessary.  To change this you must first select
+	  BT_HCI_TX_STACK_SIZE_WITH_PROMPT.
 
 config BT_HCI_TX_STACK_SIZE_WITH_PROMPT
 	bool "Override HCI Tx thread stack size"
@@ -162,8 +163,6 @@ config BT_DRIVER_RX_HIGH_PRIO
 	default 6
 
 if BT_HCI_HOST
-
-source "subsys/bluetooth/host/audio/Kconfig"
 
 config BT_HOST_CRYPTO
 	# Hidden option that compiles in random number generation and AES
@@ -328,6 +327,7 @@ config BT_SMP
 	select TINYCRYPT_AES
 	select TINYCRYPT_AES_CMAC
 	select BT_RPA
+	select BT_ECC
 	help
 	  This option enables support for the Security Manager Protocol
 	  (SMP), making it possible to pair devices over LE.
@@ -430,7 +430,6 @@ config BT_FIXED_PASSKEY
 
 config BT_USE_DEBUG_KEYS
 	bool "Enable Security Manager Debug Mode"
-	depends on BT_TINYCRYPT_ECC
 	help
 	  This option places Security Manager in a Debug Mode. In this mode
 	  predefined Diffie-Hellman private/public key pair is used as described
@@ -667,6 +666,12 @@ config BT_DEBUG_CONN
 	  This option enables debug support for Bluetooth
 	  connection handling.
 
+config BT_DEBUG_ISO
+	bool "ISO channel debug"
+	help
+	  Use this option to enable ISO channels debug logs for the
+	  Bluetooth Audio functionality.
+
 config BT_DEBUG_KEYS
 	bool "Bluetooth security keys debug"
 	depends on BT_HCI_HOST
@@ -748,6 +753,17 @@ config BT_DEBUG_SERVICE
 	  Services.
 
 endif # BT_DEBUG
+
+config BT_LOG_SNIFFER_INFO
+	bool "Bluetooth log information for sniffer"
+	help
+	  This option enables the Bluetooth stack to log information such as
+	  DH private key and LTK keys, which can be used by sniffers to decrypt
+	  the connection without the use of Debug keys.
+
+	  WARNING: This option prints out private security keys such as
+	  the Long Term Key.
+	  Use of this feature in production is strongly discouraged
 
 config BT_TESTING
 	bool "Bluetooth Testing"

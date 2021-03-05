@@ -542,7 +542,7 @@ struct bt_conn_le_create_param {
 	 *  Set zero to use the default @option{CONFIG_BT_CREATE_CONN_TIMEOUT}
 	 *  timeout.
 	 *
-	 *  @note Unused in @ref bt_conn_create_auto_le
+	 *  @note Unused in @ref bt_conn_le_create_auto
 	 */
 	uint16_t timeout;
 };
@@ -612,24 +612,6 @@ int bt_conn_le_create(const bt_addr_le_t *peer,
 		      const struct bt_le_conn_param *conn_param,
 		      struct bt_conn **conn);
 
-__deprecated static inline
-struct bt_conn *bt_conn_create_le(const bt_addr_le_t *peer,
-				  const struct bt_le_conn_param *conn_param)
-{
-	struct bt_conn *conn;
-	struct bt_conn_le_create_param param = BT_CONN_LE_CREATE_PARAM_INIT(
-						BT_CONN_LE_OPT_NONE,
-						BT_GAP_SCAN_FAST_INTERVAL,
-						BT_GAP_SCAN_FAST_INTERVAL);
-
-	if (bt_conn_le_create(peer, &param, conn_param,
-			      &conn)) {
-		return NULL;
-	}
-
-	return conn;
-}
-
 /** @brief Automatically connect to remote devices in whitelist.
  *
  *  This uses the Auto Connection Establishment procedure.
@@ -647,17 +629,6 @@ struct bt_conn *bt_conn_create_le(const bt_addr_le_t *peer,
  */
 int bt_conn_le_create_auto(const struct bt_conn_le_create_param *create_param,
 			   const struct bt_le_conn_param *conn_param);
-
-__deprecated static inline
-int bt_conn_create_auto_le(const struct bt_le_conn_param *conn_param)
-{
-	struct bt_conn_le_create_param param = BT_CONN_LE_CREATE_PARAM_INIT(
-						BT_CONN_LE_OPT_NONE,
-						BT_GAP_SCAN_FAST_INTERVAL,
-						BT_GAP_SCAN_FAST_WINDOW);
-
-	return bt_conn_le_create_auto(&param, conn_param);
-}
 
 /** @brief Stop automatic connect creation.
  *
@@ -682,45 +653,6 @@ int bt_conn_create_auto_stop(void);
 int bt_le_set_auto_conn(const bt_addr_le_t *addr,
 			const struct bt_le_conn_param *param);
 
-/** @brief Initiate directed advertising to a remote device
- *
- *  Allows initiating a new LE connection to remote peer with the remote
- *  acting in central role and the local device in peripheral role.
- *
- *  The advertising type will either be BT_LE_ADV_DIRECT_IND, or
- *  BT_LE_ADV_DIRECT_IND_LOW_DUTY if the BT_LE_ADV_OPT_DIR_MODE_LOW_DUTY
- *  option was used as part of the advertising parameters.
- *
- *  In case of high duty cycle this will result in a callback with
- *  connected() with a new connection or with an error.
- *
- *  The advertising may be canceled with bt_conn_disconnect().
- *
- *  The caller gets a new reference to the connection object which must be
- *  released with bt_conn_unref() once done using the object.
- *
- *  @param peer  Remote address.
- *  @param param Directed advertising parameters.
- *
- *  @return Valid connection object on success or NULL otherwise.
- */
-__deprecated static inline
-struct bt_conn *bt_conn_create_slave_le(const bt_addr_le_t *peer,
-					const struct bt_le_adv_param *param)
-{
-	struct bt_le_adv_param adv_param = *param;
-
-	adv_param.options |= (BT_LE_ADV_OPT_CONNECTABLE |
-			      BT_LE_ADV_OPT_ONE_TIME);
-	adv_param.peer = peer;
-
-	if (!bt_le_adv_start(&adv_param, NULL, 0, NULL, 0)) {
-		return NULL;
-	}
-
-	return bt_conn_lookup_addr_le(param->id, peer);
-}
-
 /** Security level. */
 typedef enum __packed {
 	/** Level 0: Only for BR/EDR special cases, like SDP */
@@ -733,13 +665,6 @@ typedef enum __packed {
 	BT_SECURITY_L3,
 	/** Level 4: Authenticated Secure Connections and 128-bit key. */
 	BT_SECURITY_L4,
-
-	BT_SECURITY_NONE   __deprecated = BT_SECURITY_L0,
-	BT_SECURITY_LOW    __deprecated = BT_SECURITY_L1,
-	BT_SECURITY_MEDIUM __deprecated = BT_SECURITY_L2,
-	BT_SECURITY_HIGH   __deprecated = BT_SECURITY_L3,
-	BT_SECURITY_FIPS   __deprecated = BT_SECURITY_L4,
-
 	/** Bit to force new pairing procedure, bit-wise OR with requested
 	 *  security level.
 	 */
@@ -783,12 +708,6 @@ int bt_conn_set_security(struct bt_conn *conn, bt_security_t sec);
  *  @return Connection security level
  */
 bt_security_t bt_conn_get_security(struct bt_conn *conn);
-
-static inline int __deprecated bt_conn_security(struct bt_conn *conn,
-						bt_security_t sec)
-{
-	return bt_conn_set_security(conn, sec);
-}
 
 /** @brief Get encryption key size.
  *
@@ -852,7 +771,7 @@ struct bt_conn_cb {
 	 *
 	 *  @p err can mean either of the following:
 	 *  - @ref BT_HCI_ERR_UNKNOWN_CONN_ID Creating the connection started by
-	 *    @ref bt_conn_create_le was canceled either by the user through
+	 *    @ref bt_conn_le_create was canceled either by the user through
 	 *    @ref bt_conn_disconnect or by the timeout in the host through
 	 *    @ref bt_conn_le_create_param timeout parameter, which defaults to
 	 *    @option{CONFIG_BT_CREATE_CONN_TIMEOUT} seconds.

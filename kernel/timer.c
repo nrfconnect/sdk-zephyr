@@ -82,9 +82,9 @@ void z_timer_expiration_handler(struct _timeout *t)
 	 */
 	z_unpend_thread_no_timeout(thread);
 
-	z_ready_thread(thread);
-
 	arch_thread_return_value_set(thread, 0);
+
+	z_ready_thread(thread);
 }
 
 
@@ -237,14 +237,16 @@ static inline uint32_t z_vrfy_k_timer_status_sync(struct k_timer *timer)
 }
 #include <syscalls/k_timer_status_sync_mrsh.c>
 
-static inline k_ticks_t z_vrfy_k_timer_remaining_ticks(struct k_timer *timer)
+static inline k_ticks_t z_vrfy_k_timer_remaining_ticks(
+						const struct k_timer *timer)
 {
 	Z_OOPS(Z_SYSCALL_OBJ(timer, K_OBJ_TIMER));
 	return z_impl_k_timer_remaining_ticks(timer);
 }
 #include <syscalls/k_timer_remaining_ticks_mrsh.c>
 
-static inline k_ticks_t z_vrfy_k_timer_expires_ticks(struct k_timer *timer)
+static inline k_ticks_t z_vrfy_k_timer_expires_ticks(
+						const struct k_timer *timer)
 {
 	Z_OOPS(Z_SYSCALL_OBJ(timer, K_OBJ_TIMER));
 	return z_impl_k_timer_expires_ticks(timer);

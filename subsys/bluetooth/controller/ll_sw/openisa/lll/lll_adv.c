@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 Nordic Semiconductor ASA
+ * Copyright (c) 2018-2021 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,12 +7,12 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include <zephyr/types.h>
+#include <toolchain.h>
+#include <soc.h>
+#include <bluetooth/hci.h>
 #include <sys/byteorder.h>
 
-#include <toolchain.h>
-#include <bluetooth/hci.h>
-
+#include "hal/cpu.h"
 #include "hal/ccm.h"
 #include "hal/radio.h"
 #include "hal/ticker.h"
@@ -28,7 +28,9 @@
 
 #include "lll.h"
 #include "lll_vendor.h"
+#include "lll_adv_types.h"
 #include "lll_adv.h"
+#include "lll_adv_pdu.h"
 #include "lll_conn.h"
 #include "lll_chan.h"
 #include "lll_filter.h"
@@ -40,7 +42,6 @@
 
 #define LOG_MODULE_NAME bt_ctlr_llsw_openisa_lll_adv
 #include "common/log.h"
-#include <soc.h>
 #include "hal/debug.h"
 
 static int init_reset(void);
@@ -150,6 +151,7 @@ int lll_adv_data_init(struct lll_adv_pdu *pdu)
 		return -ENOMEM;
 	}
 
+	p->len = 0U;
 	pdu->pdu[0] = (void *)p;
 
 	return 0;
@@ -212,14 +214,11 @@ struct pdu_adv *lll_adv_pdu_alloc(struct lll_adv_pdu *pdu, uint8_t *idx)
 		uint8_t first_latest;
 
 		pdu->last = first;
-		/* FIXME: Ensure that data is synchronized so that an ISR
+		/* NOTE: Ensure that data is synchronized so that an ISR
 		 *        vectored, after pdu->last has been updated, does
-		 *        access the latest value. __DSB() is used in ARM
-		 *        Cortex M4 architectures. Use appropriate
-		 *        instructions on other platforms.
-		 *
-		 *        cpu_dsb();
+		 *        access the latest value.
 		 */
+		cpu_dmb();
 		first_latest = pdu->first;
 		if (first_latest != first) {
 			last++;
@@ -277,8 +276,6 @@ struct pdu_adv *lll_adv_pdu_latest_get(struct lll_adv_pdu *pdu,
 		void *p;
 
 		if (!MFIFO_ENQUEUE_IDX_GET(pdu_free, &free_idx)) {
-			LL_ASSERT(false);
-
 			return NULL;
 		}
 
@@ -793,7 +790,9 @@ static void chan_prepare(struct lll_adv *lll)
 	uint8_t upd = 0U;
 
 	pdu = lll_adv_data_latest_get(lll, &upd);
+	LL_ASSERT(pdu);
 	scan_pdu = lll_adv_scan_rsp_latest_get(lll, &upd);
+	LL_ASSERT(scan_pdu);
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	if (upd) {

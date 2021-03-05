@@ -116,6 +116,7 @@ config ALTERA_AVALON_TIMER
 config ITE_IT8XXX2_TIMER
 	bool "ITE it8xxx2 timer driver"
 	depends on SOC_IT8XXX2
+	select TICKLESS_CAPABLE
 	help
 	  This module implements a kernel device driver for the ITE it8xxx2
 	  HW timer model
@@ -297,6 +298,16 @@ config LEON_GPTIMER
 	  This module implements a kernel device driver for the GRLIB
 	  GPTIMER which is common in LEON systems.
 
+config NPCX_ITIM_TIMER
+	bool "Nuvoton NPCX series internal 64/32-bit timers"
+	default y
+	depends on SOC_FAMILY_NPCX
+	select TICKLESS_CAPABLE
+	help
+	  This module implements a kernel device driver for the Nuvoton NPCX
+	  series internal 64/32-bit timers and provides the standard "system
+	  clock driver" interfaces.
+
 config SYSTEM_CLOCK_DISABLE
 	bool "API to disable system clock"
 	help
@@ -328,8 +339,9 @@ config SYSTEM_CLOCK_INIT_PRIORITY
 	  the clock to be running already, you should let the default value as it
 	  is (0).
 
+# Hidden option to be selected by individual SoC.
 config TICKLESS_CAPABLE
-	bool "Timer driver supports tickless operation"
+	bool
 	help
 	  Timer drivers should select this flag if they are capable of
 	  supporting tickless operation.  That is, a call to

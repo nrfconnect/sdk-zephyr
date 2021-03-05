@@ -533,6 +533,10 @@ static int exec_cmd(const struct shell *shell, size_t argc, const char **argv,
 	}
 
 	if (!ret_val) {
+#if CONFIG_SHELL_GETOPT
+		z_shell_getopt_init(&shell->ctx->getopt_state);
+#endif
+
 		z_flag_cmd_ctx_set(shell, true);
 		/* Unlock thread mutex in case command would like to borrow
 		 * shell context to other thread to avoid mutex deadlock.
@@ -662,8 +666,7 @@ static int execute(const struct shell *shell)
 		}
 
 		if (IS_ENABLED(CONFIG_SHELL_HELP) && (cmd_lvl > 0) &&
-		    (!strcmp(argvp[0], "-h") ||
-		     !strcmp(argvp[0], "--help"))) {
+		    z_shell_help_request(argvp[0])) {
 			/* Command called with help option so it makes no sense
 			 * to search deeper commands.
 			 */
@@ -1408,9 +1411,9 @@ void shell_vfprintf(const struct shell *shell, enum shell_vt100_color color,
 {
 	__ASSERT_NO_MSG(shell);
 	__ASSERT(!k_is_in_isr(), "Thread context required.");
+	__ASSERT_NO_MSG(shell->ctx);
 	__ASSERT_NO_MSG((shell->ctx->internal.flags.cmd_ctx == 1) ||
 			(k_current_get() != shell->ctx->tid));
-	__ASSERT_NO_MSG(shell->ctx);
 	__ASSERT_NO_MSG(shell->fprintf_ctx);
 	__ASSERT_NO_MSG(fmt);
 

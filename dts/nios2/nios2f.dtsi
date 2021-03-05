@@ -50,8 +50,16 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x100200 0x400>;
+			interrupts = <4 10>;
 			label = "I2C_0";
+		};
 
+		dma: dma@100200 {
+			compatible = "altr,msgdma";
+			reg = <0x1002c0 0x30>;
+			label = "DMA_0";
+			interrupts = <3 3>;
+			#dma-cells = <0>;
 		};
 	};
 };

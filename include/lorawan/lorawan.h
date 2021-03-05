@@ -104,6 +104,37 @@ struct lorawan_join_config {
 };
 
 /**
+ * @brief Add battery level callback function.
+ *
+ * Provide the LoRaWAN stack with a function to be called whenever a battery
+ * level needs to be read. As per LoRaWAN specification the callback needs to
+ * return "0:      node is connected to an external power source,
+ *         1..254: battery level, where 1 is the minimum and 254 is the maximum
+ *                 value,
+ *         255: the node was not able to measure the battery level"
+ *
+ * Should no callback be provided the lorawan backend will report 255.
+ *
+ * @param battery_lvl_cb Pointer to the battery level function
+ *
+ * @return 0 if successful, negative errno code if failure
+ */
+int lorawan_set_battery_level_callback(uint8_t (*battery_lvl_cb)(void));
+
+/**
+ * @brief Register a callback to be called when the datarate changes
+ *
+ * The callback is called once upon successfully joining a network and again
+ * each time the datarate changes due to ADR.
+ *
+ * The callback function takes one parameter:
+ *	- dr - updated datarate
+ *
+ * @param dr_cb Pointer to datarate update callback
+ */
+void lorawan_register_dr_changed_callback(void (*dr_cb)(enum lorawan_datarate));
+
+/**
  * @brief Join the LoRaWAN network
  *
  * Join the LoRaWAN network using OTAA or AWB.
@@ -186,6 +217,29 @@ void lorawan_enable_adr(bool enable);
  * @return 0 if successful, negative errno code if failure
  */
 int lorawan_set_datarate(enum lorawan_datarate dr);
+
+/**
+ * @brief Get the minimum possible datarate
+ *
+ * The minimum possible datarate may change in response to a TxParamSetupReq
+ * command from the network server.
+ *
+ * @return Minimum possible data rate
+ */
+enum lorawan_datarate lorawan_get_min_datarate(void);
+
+/**
+ * @brief Get the current payload sizes
+ *
+ * Query the current payload sizes. The maximum payload size varies with
+ * datarate, while the current payload size can be less due to MAC layer
+ * commands which are inserted into uplink packets.
+ *
+ * @param max_next_payload_size Maximum payload size for the next transmission
+ * @param max_payload_size Maximum payload size for this datarate
+ */
+void lorawan_get_payload_sizes(uint8_t *max_next_payload_size,
+			       uint8_t *max_payload_size);
 
 #ifdef __cplusplus
 }

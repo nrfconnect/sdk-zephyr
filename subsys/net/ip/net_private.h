@@ -235,7 +235,7 @@ static inline void net_pkt_hexdump(struct net_pkt *pkt, const char *str)
 	char pkt_str[sizeof("0x") + sizeof(intptr_t) * 2];
 
 	if (str && str[0]) {
-		LOG_DBG("%s", str);
+		LOG_DBG("%s", log_strdup(str));
 	}
 
 	snprintk(pkt_str, sizeof(pkt_str), "%p", pkt);
@@ -261,8 +261,8 @@ static inline void net_pkt_print_buffer_info(struct net_pkt *pkt, const char *st
 	}
 
 	while (buf) {
-		printk("%p[%d/%u (%u)]",
-		       buf, atomic_get(&pkt->atomic_ref), buf->len, buf->size);
+		printk("%p[%d/%u (%u/%u)]", buf, atomic_get(&pkt->atomic_ref),
+		       buf->len, net_buf_max_len(buf), buf->size);
 
 		buf = buf->frags;
 		if (buf) {

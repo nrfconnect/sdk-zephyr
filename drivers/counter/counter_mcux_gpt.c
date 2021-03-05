@@ -7,6 +7,7 @@
 #define DT_DRV_COMPAT nxp_imx_gpt
 
 #include <drivers/counter.h>
+#include <drivers/clock_control.h>
 #include <fsl_gpt.h>
 #include <logging/log.h>
 
@@ -15,6 +16,8 @@ LOG_MODULE_REGISTER(mcux_gpt, CONFIG_COUNTER_LOG_LEVEL);
 struct mcux_gpt_config {
 	/* info must be first element */
 	struct counter_config_info info;
+	const struct device *clock_dev;
+	clock_control_subsys_t clock_subsys;
 	GPT_Type *base;
 	clock_name_t clock_source;
 };
@@ -172,10 +175,15 @@ static int mcux_gpt_init(const struct device *dev)
 	gpt_config_t gptConfig;
 	uint32_t clock_freq;
 
+	if (clock_control_get_rate(config->clock_dev, config->clock_subsys,
+				   &clock_freq)) {
+		return -EINVAL;
+	}
+
 	/* Adjust divider to match expected freq */
-	clock_freq = CLOCK_GetFreq(config->clock_source);
 	if (clock_freq % config->info.freq) {
 		LOG_ERR("Cannot Adjust GPT freq to %u\n", config->info.freq);
+		LOG_ERR("clock src is %u\n", clock_freq);
 		return -EINVAL;
 	}
 
@@ -205,10 +213,12 @@ static const struct counter_driver_api mcux_gpt_driver_api = {
 									\
 	static const struct mcux_gpt_config mcux_gpt_config_ ## n = {	\
 		.base = (void *)DT_INST_REG_ADDR(n),			\
-		.clock_source = kCLOCK_PerClk,				\
+		.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),	\
+		.clock_subsys =						\
+			(clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, name),\
 		.info = {						\
 			.max_top_value = UINT32_MAX,			\
-			.freq = 25000000,				\
+			.freq = DT_INST_PROP(n, gptfreq),           \
 			.channels = 1,					\
 			.flags = COUNTER_CONFIG_INFO_COUNT_UP,		\
 		},							\

@@ -150,6 +150,7 @@ config SCHED_CPU_MASK
 config MAIN_STACK_SIZE
 	int "Size of stack for initialization and main thread"
 	default 2048 if COVERAGE_GCOV
+	default 1024 if TEST_ARM_CORTEX_M
 	default 512 if ZTEST && !(RISCV || X86)
 	default 1024
 	help
@@ -395,6 +396,15 @@ config SYSTEM_WORKQUEUE_PRIORITY
 	  priority. This means that any work handler, once started, won't
 	  be preempted by any other thread until finished.
 
+config SYSTEM_WORKQUEUE_NO_YIELD
+	bool "Select whether system work queue yields"
+	help
+	  By default, the system work queue yields between each work item, to
+	  prevent other threads from being starved.  Selecting this removes
+	  this yield, which may be useful if the work queue thread is
+	  cooperative and a sequence of work items is expected to complete
+	  without yielding.
+
 endmenu
 
 menu "Atomic Operations"
@@ -545,7 +555,7 @@ config ARCH_HAS_CUSTOM_BUSY_WAIT
 config SYS_CLOCK_TICKS_PER_SEC
 	int "System tick frequency (in ticks/second)"
 	default 100 if QEMU_TARGET || SOC_POSIX
-	default 10000 if TICKLESS_CAPABLE
+	default 10000 if TICKLESS_KERNEL
 	default 100
 	help
 	  This option specifies the nominal frequency of the system clock in Hz.
@@ -842,19 +852,10 @@ config TICKLESS_IDLE
 	  saving state for extended periods without having to wake up to
 	  service each tick as it occurs.
 
-config TICKLESS_IDLE_THRESH
-	int "Tickless idle threshold"
-	default 3
-	depends on TICKLESS_IDLE
-	help
-	  This option enables clock interrupt suppression when the kernel idles
-	  for only a short period of time. It specifies the minimum number of
-	  ticks that must occur before the next kernel timer expires in order
-	  for suppression to happen.
-
 config TICKLESS_KERNEL
 	bool "Tickless kernel"
 	default y if TICKLESS_CAPABLE
+	depends on TICKLESS_CAPABLE
 	help
 	  This option enables a fully event driven kernel. Periodic system
 	  clock interrupt generation would be stopped at all times.

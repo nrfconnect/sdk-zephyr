@@ -54,31 +54,10 @@ if SPI
 config SPI_XEC_QMSPI
 	default y
 
-if SPI_XEC_QMSPI
-
-config SPI_0
-	default y
-
-config SPI_0_OP_MODES
-	default 1
-
-endif # SPI_XEC_QMSPI
-
 endif # SPI
 
 config TACH_XEC
 	default y
 	depends on SENSOR
-
-# power management stuff
-if PM
-
-config PM_MIN_RESIDENCY_SLEEP_1
-	default 1000
-
-config PM_MIN_RESIDENCY_DEEP_SLEEP_1
-	default 2000
-
-endif # PM
 
 endif # BOARD_MEC15XXEVB_ASSY6853

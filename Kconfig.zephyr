@@ -167,6 +167,39 @@ config LINKER_SORT_BY_ALIGNMENT
 	  in decreasing size of symbols. This helps to minimize
 	  padding between symbols.
 
+config HAS_SRAM_OFFSET
+	bool
+	help
+	  This option is selected by targets that require SRAM_OFFSET.
+
+config SRAM_OFFSET
+	hex "Kernel SRAM offset" if HAS_SRAM_OFFSET
+	default 0
+	help
+	  This option specifies the byte offset from the beginning of SRAM
+	  where the kernel begins. Changing this value from zero will affect
+	  the Zephyr image's link, and will decrease the total amount of
+	  SRAM available for use by application code.
+
+	  If unsure, leave at the default value 0.
+
+config CAN_LINK_IN_VIRT
+	bool
+	help
+	  Hidden option to indicate that the architecture, SoC or board
+	  linker script can link the kernel in virtual address space.
+
+config KERNEL_LINK_IN_VIRT
+	bool "Link Kernel in Virtual Address Space"
+	depends on MMU
+	depends on CAN_LINK_IN_VIRT
+	help
+	  Enable linking the kernel in virtual address space defined by
+	  KERNEL_VM_BASE, KERNEL_VM_SIZE and KERNEL_VM_OFFSET.
+
+	  Requires linker script support. If unsure, says N and the kernel
+	  will be linked in physical address space.
+
 endmenu
 
 menu "Compiler Options"
@@ -317,6 +350,20 @@ config BUILD_OUTPUT_BIN
 	  Build a "raw" binary zephyr/zephyr.bin in the build directory.
 	  The name of this file can be customized with CONFIG_KERNEL_BIN_NAME.
 
+config BUILD_OUTPUT_EFI
+	bool "Build as an EFI application"
+	default n
+	depends on X86_64
+	help
+	  Build as an EFI application.
+
+	  This works by creating a "zephyr.efi" EFI binary containing a zephyr
+	  image extracted from a built zephyr.elf file.  EFI applications are
+	  relocatable, and cannot be placed at specific locations in memory.
+	  Instead, the stub code will copy the embedded zephyr sections to the
+	  appropriate locations at startup, clear any zero-filled (BSS, etc...)
+	  areas, then jump into the 64 bit entry point.
+
 config BUILD_OUTPUT_EXE
 	bool "Build a binary in ELF format with .exe extension"
 	help
@@ -329,6 +376,47 @@ config BUILD_OUTPUT_S19
 	help
 	  Build an S19 binary zephyr/zephyr.s19 in the build directory.
 	  The name of this file can be customized with CONFIG_KERNEL_BIN_NAME.
+
+config BUILD_OUTPUT_UF2
+	bool "Build a binary in UF2 format"
+	depends on BUILD_OUTPUT_BIN
+	help
+	  Build a UF2 binary zephyr/zephyr.uf2 in the build directory.
+	  The name of this file can be customized with CONFIG_KERNEL_BIN_NAME.
+
+if BUILD_OUTPUT_UF2
+
+config BUILD_OUTPUT_UF2_FAMILY_ID
+	string "UF2 device family ID"
+	default "0x1c5f21b0" if SOC_ESP32
+	default "0xada52840" if SOC_NRF52840_QIAA
+	default "0x4fb2d5bd" if SOC_SERIES_IMX_RT
+	default "0x2abc77ec" if SOC_SERIES_LPC55XXX
+	default "0x68ed2b88" if SOC_SERIES_SAMD21
+	default "0x55114460" if SOC_SERIES_SAMD51
+	default "0x647824b6" if SOC_SERIES_STM32F0X
+	default "0x5d1a0a2e" if SOC_SERIES_STM32F2X
+	default "0x6b846188" if SOC_SERIES_STM32F3X
+	default "0x53b80f00" if SOC_SERIES_STM32F7X
+	default "0x300f5633" if SOC_SERIES_STM32G0X
+	default "0x4c71240a" if SOC_SERIES_STM32G4X
+	default "0x6db66082" if SOC_SERIES_STM32H7X
+	default "0x202e3a91" if SOC_SERIES_STM32L0X
+	default "0x1e1f432d" if SOC_SERIES_STM32L1X
+	default "0x00ff6919" if SOC_SERIES_STM32L4X
+	default "0x04240bdf" if SOC_SERIES_STM32L5X
+	default "0x70d16653" if SOC_SERIES_STM32WBX
+	default "0x5ee21072" if SOC_STM32F103XE
+	default "0x57755a57" if SOC_STM32F401XC || SOC_STM32F401XE
+	default "0x6d0922fa" if SOC_STM32F407XE
+	default "0x8fb060fe" if SOC_STM32F407XG
+	help
+	  UF2 bootloaders only accept UF2 files with a matching family ID.
+	  This can be either a hex, e.g. 0x68ed2b88, or well-known family
+	  name string. If the SoC in use is known by UF2, the Family ID will
+	  be pre-filled with the known value.
+
+endif # BUILD_OUTPUT_UF2
 
 config BUILD_OUTPUT_STRIPPED
 	bool "Build a stripped binary"
@@ -347,13 +435,6 @@ config MAKEFILE_EXPORTS
 	help
 	  Generates a file with build information that can be read by
 	  third party Makefile-based build systems.
-
-config DEPRECATED_ZEPHYR_INT_TYPES
-	bool "Allow the use of the deprecated zephyr integer types"
-	help
-	  Allows the use of the deprecated Zephyr integer typedefs defined in
-	  Zephyr 2.3 and previous versions.  These types are:
-	  u8_t, u16_t, u32_t, u64_t, s8_t, s16_t, s32_t, and s64_t.
 
 endmenu
 endmenu

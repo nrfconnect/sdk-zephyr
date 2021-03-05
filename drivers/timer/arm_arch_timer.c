@@ -52,6 +52,7 @@ int z_clock_driver_init(const struct device *device)
 
 	IRQ_CONNECT(ARM_ARCH_TIMER_IRQ, ARM_ARCH_TIMER_PRIO,
 		    arm_arch_timer_compare_isr, NULL, ARM_ARCH_TIMER_FLAGS);
+	arm_arch_timer_init();
 	arm_arch_timer_set_compare(arm_arch_timer_count() + CYC_PER_TICK);
 	arm_arch_timer_enable(true);
 	irq_enable(ARM_ARCH_TIMER_IRQ);
@@ -62,11 +63,9 @@ int z_clock_driver_init(const struct device *device)
 
 void z_clock_set_timeout(int32_t ticks, bool idle)
 {
-	ARG_UNUSED(idle);
-
 #if defined(CONFIG_TICKLESS_KERNEL)
 
-	if (idle) {
+	if (ticks == K_TICKS_FOREVER && idle) {
 		return;
 	}
 
@@ -90,6 +89,9 @@ void z_clock_set_timeout(int32_t ticks, bool idle)
 	arm_arch_timer_set_irq_mask(false);
 	k_spin_unlock(&lock, key);
 
+#else  /* CONFIG_TICKLESS_KERNEL */
+	ARG_UNUSED(ticks);
+	ARG_UNUSED(idle);
 #endif
 }
 

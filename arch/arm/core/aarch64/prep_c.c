@@ -19,6 +19,12 @@
 
 extern FUNC_NORETURN void z_cstart(void);
 
+#ifdef CONFIG_ARM_MMU
+extern void z_arm64_mmu_init(void);
+#else
+static inline void z_arm64_mmu_init(void) { }
+#endif
+
 static inline void z_arm64_bss_zero(void)
 {
 	uint64_t *p = (uint64_t *)__bss_start;
@@ -40,6 +46,10 @@ static inline void z_arm64_bss_zero(void)
 void z_arm64_prep_c(void)
 {
 	z_arm64_bss_zero();
+#ifdef CONFIG_XIP
+	z_data_copy();
+#endif
+	z_arm64_mmu_init();
 	z_arm64_interrupt_init();
 	z_cstart();
 

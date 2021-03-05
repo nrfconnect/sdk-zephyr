@@ -52,7 +52,13 @@
 			compatible = "st,stm32-rcc";
 			#clock-cells = <2>;
 			reg = <0x40023800 0x400>;
-			label = "STM32_CLK_RCC";
+		};
+
+		exti: interrupt-controller@40013C00 {
+			compatible = "st,stm32-exti";
+			interrupt-controller;
+			#interrupt-cells = <1>;
+			reg = <0x40013C00 0x400>;
 		};
 
 		pinctrl: pin-controller@40020000 {
@@ -172,7 +178,7 @@
 		usart1: serial@40011000 {
 			compatible = "st,stm32-usart", "st,stm32-uart";
 			reg = <0x40011000 0x400>;
-			clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00004000>;
+			clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00000010>;
 			interrupts = <37 0>;
 			status = "disabled";
 			label = "UART_1";
@@ -275,6 +281,14 @@
 			status = "disabled";
 			label = "DAC_1";
 			#io-channel-cells = <1>;
+		};
+
+		backup_sram: memory@40024000 {
+			compatible = "st,stm32-backup-sram";
+			reg = <0x40024000 DT_SIZE_K(4)>;
+			clocks = <&rcc STM32_CLOCK_BUS_AHB1 0x00040000>;
+			label = "BACKUP_SRAM";
+			status = "disabled";
 		};
 	};
 

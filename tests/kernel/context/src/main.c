@@ -94,13 +94,9 @@
 #endif
 
 /* Cortex-M1, Nios II, and RISCV without CONFIG_RISCV_HAS_CPU_IDLE
- * do have a power saving instruction, so k_cpu_idle() returns immediately.
- *
- * Includes workaround on QEMU aarch64, see
- * https://github.com/zephyrproject-rtos/sdk-ng/issues/255
+ * do have a power saving instruction, so k_cpu_idle() returns immediately
  */
 #if !defined(CONFIG_CPU_CORTEX_M1) && !defined(CONFIG_NIOS2) && \
-	!defined(CONFIG_SOC_QEMU_CORTEX_A53) && \
 	(!defined(CONFIG_RISCV) || defined(CONFIG_RISCV_HAS_CPU_IDLE))
 #define HAS_POWERSAVE_INSTRUCTION
 #endif
@@ -609,7 +605,14 @@ static void test_kernel_interrupts(void)
  *   failure.
  *
  * Assumptions and Constraints:
- * - N/A
+ * - Note that this test works by disabling the timer interrupt
+ *   directly, without any interaction with the timer driver or
+ *   timeout subsystem.  NOT ALL ARCHITECTURES will latch and deliver
+ *   a timer interrupt that arrives while the interrupt is disabled,
+ *   which means that the timeout list will become corrupted (because
+ *   it contains items that should have expired in the past).  Any use
+ *   of kernel timeouts after completion of this test is disallowed.
+ *   RUN THIS TEST LAST IN THE SUITE.
  *
  * @see irq_disable(), irq_enable()
  */
@@ -1161,16 +1164,17 @@ void test_main(void)
 
 	kernel_init_objects();
 
+	/* The timer_interrupts test MUST BE LAST, see note above */
 	ztest_test_suite(context,
 			 ztest_unit_test(test_kernel_interrupts),
-			 ztest_1cpu_unit_test(test_kernel_timer_interrupts),
 			 ztest_unit_test(test_kernel_ctx_thread),
 			 ztest_1cpu_unit_test(test_busy_wait),
 			 ztest_1cpu_unit_test(test_k_sleep),
 			 ztest_unit_test(test_kernel_cpu_idle_atomic),
 			 ztest_unit_test(test_kernel_cpu_idle),
 			 ztest_1cpu_unit_test(test_k_yield),
-			 ztest_1cpu_unit_test(test_kernel_thread)
+			 ztest_1cpu_unit_test(test_kernel_thread),
+			 ztest_1cpu_unit_test(test_kernel_timer_interrupts)
 			 );
 	ztest_run_test_suite(context);
 }

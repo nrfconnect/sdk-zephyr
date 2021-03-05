@@ -97,6 +97,11 @@ current :ref:`stability level <api_lifecycle>`.
      - 2.4
      - 2.4
 
+   * - :ref:`edac_api`
+     - Experimental
+     - 2.5
+     - 2.5
+
    * - :ref:`eeprom_api`
      - Stable
      - 2.1
@@ -151,6 +156,11 @@ current :ref:`stability level <api_lifecycle>`.
      - Stable
      - 1.0
      - 2.4
+
+   * - :ref:`i2c-slave-api`
+     - Experimental
+     - 1.12
+     - 1.12
 
    * - :ref:`i2s_api`
      - Stable

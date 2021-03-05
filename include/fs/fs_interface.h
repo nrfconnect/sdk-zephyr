@@ -45,6 +45,8 @@ struct fs_mount_t;
 /**
  * @brief File object representing an open file
  *
+ * The object needs to be initialized with function fs_file_t_init().
+ *
  * @param Pointer to FATFS file object structure
  * @param mp Pointer to mount point structure
  */
@@ -56,6 +58,8 @@ struct fs_file_t {
 
 /**
  * @brief Directory object representing an open directory
+ *
+ * The object needs to be initialized with function fs_dir_t_init().
  *
  * @param dirp Pointer to directory object structure
  * @param mp Pointer to mount point structure

@@ -9,7 +9,7 @@
 #include <syscall_handler.h>
 #include <ztest_error_hook.h>
 
-#define STACK_SIZE (512 + CONFIG_TEST_EXTRA_STACKSIZE)
+#define STACK_SIZE (1024 + CONFIG_TEST_EXTRA_STACKSIZE)
 #define THREAD_TEST_PRIORITY 5
 
 static K_THREAD_STACK_DEFINE(tstack, STACK_SIZE);
@@ -22,7 +22,7 @@ extern struct k_sem offload_sem;
 
 /* test case type */
 enum {
-	ZTEST_CATCH_FATAL_ACCESS_NULL,
+	ZTEST_CATCH_FATAL_ACCESS,
 	ZTEST_CATCH_FATAL_ILLEAGAL_INSTRUCTION,
 	ZTEST_CATCH_FATAL_DIVIDE_ZERO,
 	ZTEST_CATCH_FATAL_K_PANIC,
@@ -49,12 +49,29 @@ static void trigger_fault_illeagl_instuction(void)
 	((void(*)(void))&a)();
 }
 
-static void trigger_fault_access_null(void)
+static void trigger_fault_access(void)
 {
-	void *a = NULL;
-
-	/* access a null of address */
-	int b = *((int *)a);
+#if defined(CONFIG_CPU_ARCEM) || defined(CONFIG_CPU_CORTEX_M)
+	/* For iotdk and ARC/nSIM, nSIM simulates full address space of memory,
+	 * so all accesses outside of CCMs are valid and access to 0x0 address
+	 * doesn't generate any exception.So we access it 0XFFFFFFFF instead to
+	 * trigger exception. See issue #31419.
+	 */
+	void *a = (void *)0xFFFFFFFF;
+#else
+	/* For most arch which support userspace, dereferencing NULL
+	 * pointer will be caught by exception.
+	 *
+	 * Note: this is not applicable for ARM Cortex-M:
+	 * In Cortex-M, nPRIV read access to address 0x0 is generally allowed,
+	 * provided that it is "mapped" e.g. when CONFIG_FLASH_BASE_ADDRESS is
+	 * 0x0. So, de-referencing NULL pointer is not guaranteed to trigger an
+	 * exception.
+	 */
+	void *a = (void *)NULL;
+#endif
+	/* access a illeagal address */
+	volatile int b = *((int *)a);
 
 	printk("b is %d\n", b);
 }
@@ -95,7 +112,7 @@ void ztest_post_fatal_error_hook(unsigned int reason,
 		const z_arch_esf_t *pEsf)
 {
 	switch (case_type) {
-	case ZTEST_CATCH_FATAL_ACCESS_NULL:
+	case ZTEST_CATCH_FATAL_ACCESS:
 	case ZTEST_CATCH_FATAL_ILLEAGAL_INSTRUCTION:
 	case ZTEST_CATCH_FATAL_DIVIDE_ZERO:
 	case ZTEST_CATCH_FATAL_K_PANIC:
@@ -147,9 +164,9 @@ static void tThread_entry(void *p1, void *p2, void *p3)
 	ztest_set_fault_valid(false);
 
 	switch (sub_type) {
-	case ZTEST_CATCH_FATAL_ACCESS_NULL:
+	case ZTEST_CATCH_FATAL_ACCESS:
 		ztest_set_fault_valid(true);
-		trigger_fault_access_null();
+		trigger_fault_access();
 		break;
 	case ZTEST_CATCH_FATAL_ILLEAGAL_INSTRUCTION:
 		ztest_set_fault_valid(true);
@@ -208,7 +225,7 @@ static int run_trigger_thread(int i)
 void test_catch_fatal_error(void)
 {
 #if defined(CONFIG_ARCH_HAS_USERSPACE)
-	run_trigger_thread(ZTEST_CATCH_FATAL_ACCESS_NULL);
+	run_trigger_thread(ZTEST_CATCH_FATAL_ACCESS);
 	run_trigger_thread(ZTEST_CATCH_FATAL_ILLEAGAL_INSTRUCTION);
 	run_trigger_thread(ZTEST_CATCH_FATAL_DIVIDE_ZERO);
 #endif

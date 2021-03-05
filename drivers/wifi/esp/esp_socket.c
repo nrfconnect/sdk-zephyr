@@ -1,10 +1,9 @@
 /*
  * Copyright (c) 2019 Tobias Svehagen
+ * Copyright (c) 2020 Grinn
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-#include <zephyr.h>
 
 #include "esp.h"
 
@@ -14,50 +13,68 @@ LOG_MODULE_DECLARE(wifi_esp, CONFIG_WIFI_LOG_LEVEL);
 #define RX_NET_PKT_ALLOC_TIMEOUT				\
 	K_MSEC(CONFIG_WIFI_ESP_RX_NET_PKT_ALLOC_TIMEOUT)
 
-/* esp_data->mtx_sock should be held */
-struct esp_socket *esp_socket_get(struct esp_data *data)
+struct esp_workq_flush_data {
+	struct k_work work;
+	struct k_sem sem;
+};
+
+struct esp_socket *esp_socket_get(struct esp_data *data,
+				  struct net_context *context)
 {
-	struct esp_socket *sock;
-	int i;
+	struct esp_socket *sock = data->sockets;
+	struct esp_socket *sock_end = sock + ARRAY_SIZE(data->sockets);
 
-	for (i = 0; i < ARRAY_SIZE(data->sockets); ++i) {
-		sock = &data->sockets[i];
-		if (!esp_socket_in_use(sock)) {
-			break;
-		}
-	}
+	for (; sock < sock_end; sock++) {
+		if (!esp_socket_flags_test_and_set(sock, ESP_SOCK_IN_USE)) {
+			/* here we should configure all the stuff needed */
+			sock->context = context;
+			context->offload_context = sock;
 
-	if (esp_socket_in_use(sock)) {
-		return NULL;
-	}
+			sock->connect_cb = NULL;
+			sock->recv_cb = NULL;
 
-	sock->link_id = i;
-	sock->flags |= ESP_SOCK_IN_USE;
+			atomic_inc(&sock->refcount);
 
-	return sock;
-}
-
-/* esp_data->mtx_sock should be held */
-int esp_socket_put(struct esp_socket *sock)
-{
-	sock->flags = 0;
-	sock->link_id = INVALID_LINK_ID;
-	return 0;
-}
-
-struct esp_socket *esp_socket_from_link_id(struct esp_data *data,
-					   uint8_t link_id)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(data->sockets); ++i) {
-		if (esp_socket_in_use(&data->sockets[i]) &&
-		    data->sockets[i].link_id == link_id) {
-			return &data->sockets[i];
+			return sock;
 		}
 	}
 
 	return NULL;
+}
+
+int esp_socket_put(struct esp_socket *sock)
+{
+	atomic_clear(&sock->flags);
+
+	return 0;
+}
+
+struct esp_socket *esp_socket_ref(struct esp_socket *sock)
+{
+	atomic_val_t ref;
+
+	do {
+		ref = atomic_get(&sock->refcount);
+		if (!ref) {
+			return NULL;
+		}
+	} while (!atomic_cas(&sock->refcount, ref, ref + 1));
+
+	return sock;
+}
+
+void esp_socket_unref(struct esp_socket *sock)
+{
+	atomic_val_t ref;
+
+	do {
+		ref = atomic_get(&sock->refcount);
+		if (!ref) {
+			return;
+		}
+	} while (!atomic_cas(&sock->refcount, ref, ref - 1));
+
+	k_sem_give(&sock->sem_free);
 }
 
 void esp_socket_init(struct esp_data *data)
@@ -68,22 +85,27 @@ void esp_socket_init(struct esp_data *data)
 	for (i = 0; i < ARRAY_SIZE(data->sockets); ++i) {
 		sock = &data->sockets[i];
 		sock->idx = i;
-		sock->link_id = INVALID_LINK_ID;
-		sock->flags = 0;
+		sock->link_id = i;
+		atomic_clear(&sock->refcount);
+		atomic_clear(&sock->flags);
+		k_mutex_init(&sock->lock);
 		k_sem_init(&sock->sem_data_ready, 0, 1);
-		k_fifo_init(&sock->fifo_rx_pkt);
+		k_work_init(&sock->connect_work, esp_connect_work);
+		k_work_init(&sock->recvdata_work, esp_recvdata_work);
+		k_work_init(&sock->close_work, esp_close_work);
 	}
 }
 
-static struct net_pkt *esp_prepare_pkt(struct esp_data *dev,
-				       struct net_buf *src,
-				       size_t offset, size_t len)
+static struct net_pkt *esp_socket_prepare_pkt(struct esp_socket *sock,
+					      struct net_buf *src,
+					      size_t offset, size_t len)
 {
+	struct esp_data *data = esp_socket_to_dev(sock);
 	struct net_buf *frag;
 	struct net_pkt *pkt;
 	size_t to_copy;
 
-	pkt = net_pkt_rx_alloc_with_buffer(dev->net_iface, len, AF_UNSPEC,
+	pkt = net_pkt_rx_alloc_with_buffer(data->net_iface, len, AF_UNSPEC,
 					   0, RX_NET_PKT_ALLOC_TIMEOUT);
 	if (!pkt) {
 		return NULL;
@@ -113,6 +135,7 @@ static struct net_pkt *esp_prepare_pkt(struct esp_data *dev,
 		offset = 0;
 	}
 
+	net_pkt_set_context(pkt, sock->context);
 	net_pkt_cursor_init(pkt);
 
 	return pkt;
@@ -121,28 +144,39 @@ static struct net_pkt *esp_prepare_pkt(struct esp_data *dev,
 void esp_socket_rx(struct esp_socket *sock, struct net_buf *buf,
 		   size_t offset, size_t len)
 {
-	struct esp_data *data = esp_socket_to_dev(sock);
 	struct net_pkt *pkt;
+	atomic_val_t flags;
 
-	if ((sock->flags & (ESP_SOCK_CONNECTED | ESP_SOCK_CLOSE_PENDING)) !=
-							ESP_SOCK_CONNECTED) {
+	flags = esp_socket_flags(sock);
+
+	if (!(flags & ESP_SOCK_CONNECTED) ||
+	    (flags & ESP_SOCK_CLOSE_PENDING)) {
 		LOG_DBG("Received data on closed link %d", sock->link_id);
 		return;
 	}
 
-	pkt = esp_prepare_pkt(data, buf, offset, len);
+	pkt = esp_socket_prepare_pkt(sock, buf, offset, len);
 	if (!pkt) {
 		LOG_ERR("Failed to get net_pkt: len %zu", len);
-		if (sock->type == SOCK_STREAM) {
-			sock->flags |= ESP_SOCK_CLOSE_PENDING;
+		if (esp_socket_type(sock) == SOCK_STREAM) {
+			if (!esp_socket_flags_test_and_set(sock,
+						ESP_SOCK_CLOSE_PENDING)) {
+				esp_socket_work_submit(sock, &sock->close_work);
+			}
 		}
-		goto submit_work;
+		return;
 	}
 
-	k_fifo_put(&sock->fifo_rx_pkt, pkt);
-
-submit_work:
-	k_work_submit_to_queue(&data->workq, &sock->recv_work);
+	k_mutex_lock(&sock->lock, K_FOREVER);
+	if (sock->recv_cb) {
+		sock->recv_cb(sock->context, pkt, NULL, NULL,
+			      0, sock->recv_user_data);
+		k_sem_give(&sock->sem_data_ready);
+	} else {
+		/* Discard */
+		net_pkt_unref(pkt);
+	}
+	k_mutex_unlock(&sock->lock);
 }
 
 void esp_socket_close(struct esp_socket *sock)
@@ -162,4 +196,27 @@ void esp_socket_close(struct esp_socket *sock)
 		LOG_ERR("Failed to close link %d, ret %d",
 			sock->link_id, ret);
 	}
+}
+
+static void esp_workq_flush_work(struct k_work *work)
+{
+	struct esp_workq_flush_data *flush =
+		CONTAINER_OF(work, struct esp_workq_flush_data, work);
+
+	k_sem_give(&flush->sem);
+}
+
+void esp_socket_workq_stop_and_flush(struct esp_socket *sock)
+{
+	struct esp_workq_flush_data flush;
+
+	k_work_init(&flush.work, esp_workq_flush_work);
+	k_sem_init(&flush.sem, 0, 1);
+
+	k_mutex_lock(&sock->lock, K_FOREVER);
+	esp_socket_flags_set(sock, ESP_SOCK_WORKQ_STOPPED);
+	__esp_socket_work_submit(sock, &flush.work);
+	k_mutex_unlock(&sock->lock);
+
+	k_sem_take(&flush.sem, K_FOREVER);
 }

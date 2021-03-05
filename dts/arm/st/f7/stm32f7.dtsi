@@ -53,11 +53,18 @@
 				write-block-size = <1>;
 			};
 		};
+
 		rcc: rcc@40023800 {
 			compatible = "st,stm32-rcc";
 			#clock-cells = <2>;
 			reg = <0x40023800 0x400>;
-			label = "STM32_CLK_RCC";
+		};
+
+		exti: interrupt-controller@40013C00 {
+			compatible = "st,stm32-exti";
+			interrupt-controller;
+			#interrupt-cells = <1>;
+			reg = <0x40013C00 0x400>;
 		};
 
 		pinctrl: pin-controller@40020000 {
@@ -678,6 +685,25 @@
 			clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00000800>;
 			status = "disabled";
 			label = "SDMMC_1";
+		};
+
+		backup_sram: memory@40024000 {
+			compatible = "st,stm32-backup-sram";
+			reg = <0x40024000 DT_SIZE_K(4)>;
+			clocks = <&rcc STM32_CLOCK_BUS_AHB1 0x00040000>;
+			label = "BACKUP_SRAM";
+			status = "disabled";
+		};
+
+		quadspi: quadspi@a0001000 {
+			compatible = "st,stm32-qspi";
+			#address-cells = <0x1>;
+			#size-cells = <0x0>;
+			reg = <0xa0001000 0x34>;
+			interrupts = <92 0>;
+			clocks = <&rcc STM32_CLOCK_BUS_AHB3 0x2>;
+			status = "disabled";
+			label = "QUADSPI";
 		};
 	};
 

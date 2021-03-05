@@ -61,6 +61,8 @@ config X86
 	select ARCH_HAS_GDBSTUB if !X86_64
 	select ARCH_HAS_TIMING_FUNCTIONS
 	select ARCH_HAS_THREAD_LOCAL_STORAGE
+	select ARCH_HAS_DEMAND_PAGING
+	select CAN_LINK_IN_VIRT
 	help
 	  x86 architecture
 
@@ -517,6 +519,40 @@ config CPU_HAS_MMU
 	  This hidden option is selected when the CPU has a Memory Management Unit
 	  (MMU).
 
+config ARCH_HAS_DEMAND_PAGING
+	bool
+	help
+	  This hidden configuration should be selected by the architecture if
+	  demand paging is supported.
+
+config ARCH_HAS_RESERVED_PAGE_FRAMES
+	bool
+	help
+	  This hidden configuration should be selected by the architecture if
+	  certain RAM page frames need to be marked as reserved and never used for
+	  memory mappings. The architecture will need to implement
+	  arch_reserved_pages_update().
+
+config ARCH_MAPS_ALL_RAM
+	bool
+	help
+	  This hidden option is selected by the architecture to inform the kernel
+	  that all RAM is mapped at boot, and not just the bounds of the Zephyr image.
+	  If RAM starts at 0x0, the first page must remain un-mapped to catch NULL
+	  pointer dereferences. With this enabled, the kernel will not assume that
+	  virtual memory addresses past the kernel image are available for mappings,
+	  but instead takes into account an entire RAM mapping instead.
+
+	  This is typically set by architectures which need direct access to all memory.
+	  It is the architecture's responsibility to mark reserved memory regions
+	  as such in arch_reserved_pages_update().
+
+	  Although the kernel will not disturb this RAM mapping by re-mapping the associated
+	  virtual addresses elsewhere, this is limited to only management of the
+	  virtual address space. The kernel's page frame ontology will not consider
+	  this mapping at all; non-kernel pages will be considered free (unless marked
+	  as reserved) and Z_PAGE_FRAME_MAPPED will not be set.
+
 menuconfig MMU
 	bool "Enable MMU features"
 	depends on CPU_HAS_MMU
@@ -533,21 +569,10 @@ config MMU_PAGE_SIZE
 	  support multiple page sizes, put the smallest one here.
 
 config KERNEL_VM_BASE
-	hex "Base virtual address to link the kernel"
+	hex "Virtual address space base address"
 	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_SRAM))
 	help
-	  Define the base virtual memory address for the core kernel.
-
-	  The kernel expects a mappings for all physical RAM regions starting at
-	  this virtual address, with any unused space up to the size denoted by
-	  KERNEL_VM_SIZE available for memory mappings. This base address denotes
-	  the start of the RAM mapping and may not be the base address of the
-	  kernel itself, but the offset of the kernel here will be the same as the
-	  offset from the beginning of physical memory where it was loaded.
-
-	  If there are multiple physical RAM regions which are discontinuous in
-	  the physical memory map, they should all be mapped in a continuous
-	  virtual region, with bounds defined by KERNEL_RAM_SIZE.
+	  Define the base of the kernel's address space.
 
 	  By default, this is the same as the DT_CHOSEN_Z_SRAM physical base SRAM
 	  address from DTS, in which case RAM will be identity-mapped. Some
@@ -555,7 +580,7 @@ config KERNEL_VM_BASE
 	  just one RAM region and doing this makes linking much simpler, as
 	  at least when the kernel boots all virtual RAM addresses are the same
 	  as their physical address (demand paging at runtime may later modify
-	  this for some subset of non-pinned pages).
+	  this for non-pinned page frames).
 
 	  Otherwise, if RAM isn't identity-mapped:
 	  1. It is the architecture's responsibility to transition the
@@ -568,34 +593,72 @@ config KERNEL_VM_BASE
 	  double-linking of paging structures to make the instruction pointer
 	  transition simpler).
 
-config KERNEL_RAM_SIZE
-	hex "Total size of RAM mappings in bytes"
-	default $(dt_chosen_reg_size_hex,$(DT_CHOSEN_Z_SRAM))
+	  Zephyr does not implement a split address space and if multiple
+	  page tables are in use, they all have the same virtual-to-physical
+	  mappings (with potentially different permissions).
+
+config KERNEL_VM_OFFSET
+	hex "Kernel offset within address space"
+	default 0
 	help
-	  Indicates to the kernel the total size of RAM that is mapped. The
-	  kernel expects that all physical RAM has a memory mapping in the virtual
-	  address space, and that these RAM mappings are all within the virtual
-	  region [KERNEL_VM_BASE..KERNEL_VM_BASE + KERNEL_RAM_SIZE).
+	  Offset that the kernel image begins within its address space,
+	  if this is not the same offset from the beginning of RAM.
+
+	  Some care may need to be taken in selecting this value. In certain
+	  build-time cases, or when a physical address cannot be looked up
+	  in page tables, the equation:
+
+	      virt = phys + ((KERNEL_VM_BASE + KERNEL_VM_OFFSET) -
+	                     (SRAM_BASE_ADDRESS + SRAM_OFFSET))
+
+	  Will be used to convert between physical and virtual addresses for
+	  memory that is mapped at boot.
+
+	  This uncommon and is only necessary if the beginning of VM and
+	  physical memory have dissimilar alignment.
 
 config KERNEL_VM_SIZE
 	hex "Size of kernel address space in bytes"
-	default 0xC0000000
+	default 0x800000
 	help
 	  Size of the kernel's address space. Constraining this helps control
 	  how much total memory can be used for page tables.
 
-	  The difference between KERNEL_RAM_SIZE and KERNEL_VM_SIZE indicates the
+	  The difference between KERNEL_VM_BASE and KERNEL_VM_SIZE indicates the
 	  size of the virtual region for runtime memory mappings. This is needed
 	  for mapping driver MMIO regions, as well as special RAM mapping use-cases
 	  such as VSDO pages, memory mapped thread stacks, and anonymous memory
-	  mappings.
+	  mappings. The kernel itself will be mapped in here as well at boot.
 
-	  The system currently assumes all RAM can be mapped in the virtual address
-	  space. Systems with very large amounts of memory (such as 512M or more)
+	  Systems with very large amounts of memory (such as 512M or more)
 	  will want to use a 64-bit build of Zephyr, there are no plans to
 	  implement a notion of "high" memory in Zephyr to work around physical
-	  RAM which can't have a boot-time mapping due to a too-small address space.
+	  RAM size larger than the defined bounds of the virtual address space.
 
+config DEMAND_PAGING
+	bool "Enable demand paging [EXPERIMENTAL]"
+	depends on ARCH_HAS_DEMAND_PAGING
+	help
+	  Enable demand paging. Requires architecture support in how the kernel
+	  is linked and the implementation of an eviction algorithm and a
+	  backing store for evicted pages.
+
+if DEMAND_PAGING
+config DEMAND_PAGING_ALLOW_IRQ
+	bool "Allow interrupts during page-ins/outs"
+	help
+	  Allow interrupts to be serviced while pages are being evicted or
+	  retrieved from the backing store. This is much better for system
+	  latency, but any code running in interrupt context that page faults
+	  will cause a kernel panic. Such code must work with exclusively pinned
+	  code and data pages.
+
+	  The scheduler is still disabled during this operation.
+
+	  If this option is disabled, the page fault servicing logic
+	  runs with interrupts disabled for the entire operation. However,
+	  ISRs may also page fault.
+endif	# DEMAND_PAGING
 endif   # MMU
 
 menuconfig MPU
@@ -702,11 +765,21 @@ config FPU
 
 config FPU_SHARING
 	bool "FPU register sharing"
-	depends on FPU
+	depends on FPU && MULTITHREADING
+	default y if ARM && ARMV7_M_ARMV8_M_FP
 	help
 	  This option enables preservation of the hardware floating point registers
 	  across context switches to allow multiple threads to perform concurrent
 	  floating point operations.
+
+	  Note that on Cortex-M processors with the floating point extension we
+	  enable by default the FPU register sharing mode, as some GCC compilers
+	  may activate a floating point context by generating FP instructions for
+	  any thread, and that context must be preserved when switching such
+	  threads in and out. The developers can still disable the FP sharing
+	  mode in their application projects, and switch to Unshared FP registers
+	  mode, if it is guaranteed that the image code does not generate FP
+	  instructions outside the single thread context that is allowed to do so.
 
 endmenu
 

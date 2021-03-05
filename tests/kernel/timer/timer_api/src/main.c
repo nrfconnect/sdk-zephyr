@@ -17,8 +17,8 @@ struct timer_data {
 #define DURATION 100
 #define PERIOD 50
 #define EXPIRE_TIMES 4
-#define WITHIN_ERROR(var, target, epsilon)       \
-		(((var) >= (target)) && ((var) <= (target) + (epsilon)))
+#define WITHIN_ERROR(var, target, epsilon) (abs((target) - (var)) <= (epsilon))
+
 /* ms can be converted precisely to ticks only when a ms is exactly
  * represented by an integral number of ticks.  If the conversion is
  * not precise, then the reverse conversion of a difference in ms can
@@ -81,6 +81,31 @@ static void init_timer_data(void)
 {
 	tdata.expire_cnt = 0;
 	tdata.stop_cnt = 0;
+
+	k_usleep(1); /* align to tick */
+	tdata.timestamp = k_uptime_get();
+}
+
+static bool interval_check(int64_t interval, int64_t desired)
+{
+	int64_t slop = INEXACT_MS_CONVERT ? 1 : 0;
+
+	/* Tickless kernels will advance time inside of an ISR, so it
+	 * is always possible (especially with high tick rates and
+	 * slow CPUs) for us to arrive at the uptime check above too
+	 * late to see a full period elapse before the next period.
+	 * We can alias at both sides of the interval, so two
+	 * one-ticks deltas (NOT one two-tick delta!)
+	 */
+	if (IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
+		slop += 2 * k_ticks_to_ms_ceil32(1);
+	}
+
+	if (abs(interval - desired) > slop) {
+		return false;
+	}
+
+	return true;
 }
 
 /* entry routines */
@@ -91,13 +116,9 @@ static void duration_expire(struct k_timer *timer)
 
 	tdata.expire_cnt++;
 	if (tdata.expire_cnt == 1) {
-		TIMER_ASSERT((interval >= DURATION)
-			     || (INEXACT_MS_CONVERT
-				 && (interval == DURATION - 1)), timer);
+		TIMER_ASSERT(interval_check(interval, DURATION), timer);
 	} else {
-		TIMER_ASSERT((interval >= PERIOD)
-			     || (INEXACT_MS_CONVERT
-				 && (interval == PERIOD - 1)), timer);
+		TIMER_ASSERT(interval_check(interval, PERIOD), timer);
 	}
 
 	if (tdata.expire_cnt >= EXPIRE_TIMES) {
@@ -165,9 +186,7 @@ void test_timer_duration_period(void)
 {
 	init_timer_data();
 	/** TESTPOINT: init timer via k_timer_init */
-	k_usleep(1); /* align to tick */
 	k_timer_start(&duration_timer, K_MSEC(DURATION), K_MSEC(PERIOD));
-	tdata.timestamp = k_uptime_get();
 	busy_wait_ms(DURATION + PERIOD * EXPIRE_TIMES + PERIOD / 2);
 	/** TESTPOINT: check expire and stop times */
 	TIMER_ASSERT(tdata.expire_cnt == EXPIRE_TIMES, &duration_timer);
@@ -236,7 +255,6 @@ void test_timer_period_0(void)
 			      - BUSY_SLEW_THRESHOLD_TICKS(DURATION
 							  * USEC_PER_MSEC)),
 		      K_NO_WAIT);
-	tdata.timestamp = k_uptime_get();
 	busy_wait_ms(DURATION + 1);
 
 	/** TESTPOINT: ensure it is one-short timer */
@@ -454,6 +472,7 @@ void test_timer_status_sync(void)
 		TIMER_ASSERT(tdata.expire_cnt == (i + 1), &status_sync_timer);
 	}
 
+	init_timer_data();
 	k_timer_start(&status_sync_timer, K_MSEC(DURATION), K_MSEC(PERIOD));
 	busy_wait_ms(PERIOD*2);
 	zassert_true(k_timer_status_sync(&status_sync_timer), NULL);
@@ -482,9 +501,7 @@ void test_timer_k_define(void)
 {
 	init_timer_data();
 	/** TESTPOINT: init timer via k_timer_init */
-	k_usleep(1); /* align to tick */
 	k_timer_start(&ktimer, K_MSEC(DURATION), K_MSEC(PERIOD));
-	tdata.timestamp = k_uptime_get();
 	busy_wait_ms(DURATION + PERIOD * EXPIRE_TIMES + PERIOD / 2);
 
 	/** TESTPOINT: check expire and stop times */
@@ -620,7 +637,6 @@ void test_timer_remaining(void)
 
 
 	init_timer_data();
-	k_usleep(1); /* align to tick */
 	k_timer_start(&remain_timer, K_MSEC(DURATION), K_NO_WAIT);
 	busy_wait_ms(DURATION / 2);
 	rem_ticks = k_timer_remaining_ticks(&remain_timer);
@@ -667,11 +683,10 @@ void test_timeout_abs(void)
 {
 #ifdef CONFIG_TIMEOUT_64BIT
 	const uint64_t exp_ms = 10000000;
-	uint64_t cap_ticks;
 	uint64_t rem_ticks;
-	uint64_t cap2_ticks;
 	uint64_t exp_ticks = k_ms_to_ticks_ceil64(exp_ms);
 	k_timeout_t t = K_TIMEOUT_ABS_TICKS(exp_ticks), t2;
+	uint64_t t0, t1;
 
 	/* Check the other generator macros to make sure they produce
 	 * the same (whiteboxed) converted values
@@ -690,30 +705,51 @@ void test_timeout_abs(void)
 
 	/* Now set the timeout and make sure the expiration time is
 	 * correct vs. current time.  Tick units and tick alignment
-	 * makes this math exact: remember to add one to match the
-	 * convention (i.e. a timer of "1 tick" will expire at "now
-	 * plus 2 ticks", because "now plus one" will always be
-	 * somewhat less than a tick).
-	 *
-	 * However, if the timer clock runs relatively fast the tick
-	 * clock may advance before or after reading the remaining
-	 * ticks, so we have to check that at least one case is
-	 * satisfied.
+	 * makes this math exact, no slop is needed.  Note that time
+	 * is advancing always, so we add a retry condition to be sure
+	 * that a tick advance did not happen between our reads of
+	 * "now" and "expires".
 	 */
-	k_usleep(1); /* align to tick */
+	init_timer_data();
 	k_timer_start(&remain_timer, t, K_FOREVER);
-	cap_ticks = k_uptime_ticks();
-	rem_ticks = k_timer_remaining_ticks(&remain_timer);
-	cap2_ticks = k_uptime_ticks();
+	k_usleep(1);
+
+	do {
+		t0 = k_uptime_ticks();
+		rem_ticks = k_timer_remaining_ticks(&remain_timer);
+		t1 = k_uptime_ticks();
+	} while (t0 != t1);
+
+	zassert_true(t0 + rem_ticks == exp_ticks,
+		     "Wrong remaining: now %lld rem %lld expires %lld (%d)",
+		     (uint64_t)t0, (uint64_t)rem_ticks, (uint64_t)exp_ticks,
+		     t0+rem_ticks-exp_ticks);
+
 	k_timer_stop(&remain_timer);
-	zassert_true((cap_ticks + rem_ticks + 1 == exp_ticks)
-		     || (rem_ticks + cap2_ticks + 1 == exp_ticks)
-		     || (INEXACT_MS_CONVERT
-			 && (cap_ticks + rem_ticks == exp_ticks))
-		     || (INEXACT_MS_CONVERT
-			 && (rem_ticks + cap2_ticks == exp_ticks)),
-		     NULL);
 #endif
+}
+
+void test_sleep_abs(void)
+{
+	const int sleep_ticks = 50;
+	int64_t start, end;
+
+	k_usleep(1); /* tick align */
+
+	start = k_uptime_ticks();
+	k_sleep(K_TIMEOUT_ABS_TICKS(start + sleep_ticks));
+	end = k_uptime_ticks();
+
+	/* Systems with very high tick rates and/or slow idle resume
+	 * (I've seen this on intel_adsp) can occasionally take more
+	 * than a tick to return from k_sleep().  Set a 100us real
+	 * time slop.
+	 */
+	k_ticks_t late = end - (start + sleep_ticks);
+
+	zassert_true(late >= 0 && late < k_us_to_ticks_ceil32(100),
+		     "expected wakeup at %lld, got %lld (late %lld)",
+		     start + sleep_ticks, end, late);
 }
 
 static void timer_init(struct k_timer *timer, k_timer_expiry_t expiry_fn,
@@ -751,6 +787,7 @@ void test_main(void)
 			 ztest_user_unit_test(test_timer_k_define),
 			 ztest_user_unit_test(test_timer_user_data),
 			 ztest_user_unit_test(test_timer_remaining),
-			 ztest_user_unit_test(test_timeout_abs));
+			 ztest_user_unit_test(test_timeout_abs),
+			 ztest_user_unit_test(test_sleep_abs));
 	ztest_run_test_suite(timer_api);
 }

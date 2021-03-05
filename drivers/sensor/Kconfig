@@ -24,7 +24,7 @@ config SENSOR_SHELL
 	bool "Enable sensor shell"
 	depends on SHELL
 	select CBPRINTF_FP_SUPPORT
-	default y
+	default y if !SHELL_MINIMAL
 	help
 	  This shell provides access to basic sensor data.
 
@@ -65,6 +65,8 @@ source "drivers/sensor/bme680/Kconfig"
 source "drivers/sensor/bmg160/Kconfig"
 
 source "drivers/sensor/bmi160/Kconfig"
+
+source "drivers/sensor/bmi270/Kconfig"
 
 source "drivers/sensor/bmm150/Kconfig"
 
@@ -142,6 +144,8 @@ source "drivers/sensor/max30101/Kconfig"
 
 source "drivers/sensor/max44009/Kconfig"
 
+source "drivers/sensor/max6675/Kconfig"
+
 source "drivers/sensor/mchp_tach_xec/Kconfig"
 
 source "drivers/sensor/mcp9808/Kconfig"
@@ -193,5 +197,7 @@ source "drivers/sensor/nxp_kinetis_temp/Kconfig"
 source "drivers/sensor/wsen_itds/Kconfig"
 
 source "drivers/sensor/mcux_acmp/Kconfig"
+
+source "drivers/sensor/nuvoton_tach_npcx/Kconfig"
 
 endif # SENSOR

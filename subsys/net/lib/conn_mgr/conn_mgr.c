@@ -69,11 +69,17 @@ static void conn_mgr_notify_status(int index)
 {
 	struct net_if *iface = net_if_get_by_index(index + 1);
 
+	if (iface == NULL) {
+		return;
+	}
+
 	if (iface_states[index] & NET_STATE_CONNECTED) {
-		NET_DBG("Iface %p connected", iface);
+		NET_DBG("Iface %d (%p) connected",
+			net_if_get_by_iface(iface), iface);
 		net_mgmt_event_notify(NET_EVENT_L4_CONNECTED, iface);
 	} else {
-		NET_DBG("Iface %p disconnected", iface);
+		NET_DBG("Iface %d (%p) disconnected",
+			net_if_get_by_iface(iface), iface);
 		net_mgmt_event_notify(NET_EVENT_L4_DISCONNECTED, iface);
 	}
 }
@@ -84,6 +90,11 @@ static void conn_mgr_act_on_changes(void)
 
 	for (idx = 0; idx < ARRAY_SIZE(iface_states); idx++) {
 		enum net_conn_mgr_state state;
+
+		if (iface_states[idx] == 0) {
+			/* This interface is not used */
+			continue;
+		}
 
 		if (!(iface_states[idx] & NET_STATE_CHANGED)) {
 			continue;
@@ -191,7 +202,13 @@ void net_conn_mgr_resend_status(void)
 
 static int conn_mgr_init(const struct device *dev)
 {
+	int i;
+
 	ARG_UNUSED(dev);
+
+	for (i = 0; i < ARRAY_SIZE(iface_states); i++) {
+		iface_states[i] = 0;
+	}
 
 	k_thread_start(conn_mgr);
 

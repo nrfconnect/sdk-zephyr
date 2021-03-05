@@ -20,18 +20,22 @@
 #include "ticker/ticker.h"
 
 #include "pdu.h"
-#include "ll.h"
+
 #include "lll.h"
-#include "lll_vendor.h"
 #include "lll_clock.h"
+#include "lll/lll_vendor.h"
+#include "lll/lll_adv_types.h"
 #include "lll_adv.h"
+#include "lll/lll_adv_pdu.h"
 #include "lll_adv_aux.h"
-#include "lll_adv_internal.h"
+#include "lll/lll_df_types.h"
 
 #include "ull_adv_types.h"
 
 #include "ull_internal.h"
 #include "ull_adv_internal.h"
+
+#include "ll.h"
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
 #define LOG_MODULE_NAME bt_ctlr_ull_adv_aux
@@ -323,7 +327,7 @@ uint16_t ll_adv_aux_max_data_length_get(void)
 
 uint8_t ll_adv_aux_set_count_get(void)
 {
-	return CONFIG_BT_CTLR_ADV_SET;
+	return BT_CTLR_ADV_SET;
 }
 
 uint8_t ll_adv_aux_set_remove(uint8_t handle)
@@ -352,8 +356,22 @@ uint8_t ll_adv_aux_set_remove(uint8_t handle)
 		if (sync->is_enabled) {
 			return BT_HCI_ERR_CMD_DISALLOWED;
 		}
+		lll->sync = NULL;
+
+		ull_adv_sync_release(sync);
 	}
 #endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
+
+#if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
+	if (adv->df_cfg) {
+		if (adv->df_cfg->is_enabled) {
+			return BT_HCI_ERR_CMD_DISALLOWED;
+		}
+
+		ull_df_adv_cfg_release(adv->df_cfg);
+		adv->df_cfg = NULL;
+	}
+#endif /* CONFIG_BT_CTLR_DF_ADV_CTE_TX */
 
 	/* Release auxiliary channel set */
 	if (lll->aux) {
@@ -421,15 +439,16 @@ uint8_t ull_adv_aux_hdr_set_clear(struct ll_adv_set *adv,
 	struct pdu_adv_com_ext_adv *sec_com_hdr, *sec_com_hdr_prev;
 	struct pdu_adv_ext_hdr *pri_hdr, pri_hdr_prev;
 	struct pdu_adv_ext_hdr *sec_hdr, sec_hdr_prev;
-	uint16_t pri_len, sec_len, sec_len_prev;
 	struct pdu_adv *pri_pdu, *pri_pdu_prev;
 	struct pdu_adv *sec_pdu_prev, *sec_pdu;
 	uint8_t *pri_dptr, *pri_dptr_prev;
 	uint8_t *sec_dptr, *sec_dptr_prev;
+	uint8_t pri_len, sec_len_prev;
 	struct lll_adv_aux *lll_aux;
 	struct lll_adv *lll;
 	uint8_t is_aux_new;
 	uint8_t *ad_data;
+	uint16_t sec_len;
 	uint8_t sec_idx;
 	uint8_t ad_len;
 
@@ -507,8 +526,7 @@ uint8_t ull_adv_aux_hdr_set_clear(struct ll_adv_set *adv,
 		 */
 		sec_pdu_prev->tx_addr = 0U;
 		sec_pdu_prev->rx_addr = 0U;
-		sec_pdu_prev->len = offsetof(struct pdu_adv_com_ext_adv,
-					     ext_hdr_adv_data);
+		sec_pdu_prev->len = PDU_AC_EXT_HEADER_SIZE_MIN;
 		*(uint8_t *)&sec_hdr_prev = 0U;
 	}
 	sec_dptr_prev = sec_hdr->data;
@@ -1001,6 +1019,10 @@ static inline void sync_info_fill(struct lll_adv_sync *lll_sync,
 
 	/* NOTE: sync offset and offset unit filled by secondary prepare */
 	si->offs_units = 0U;
+	/* If sync_info is part of ADV PDU the offs_adjust field
+	 * is always set to 0.
+	 */
+	si->offs_adjust = 0U;
 	si->offs = 0U;
 
 	sync = (void *)HDR_LLL2EVT(lll_sync);

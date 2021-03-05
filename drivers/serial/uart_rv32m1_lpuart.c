@@ -16,7 +16,7 @@
 
 struct rv32m1_lpuart_config {
 	LPUART_Type *base;
-	char *clock_name;
+	const struct device *clock_dev;
 	clock_control_subsys_t clock_subsys;
 	clock_ip_name_t clock_ip_name;
 	uint32_t clock_ip_src;
@@ -175,7 +175,7 @@ static int rv32m1_lpuart_irq_rx_full(const struct device *dev)
 	return (flags & kLPUART_RxDataRegFullFlag) != 0U;
 }
 
-static int rv32m1_lpuart_irq_rx_ready(const struct device *dev)
+static int rv32m1_lpuart_irq_rx_pending(const struct device *dev)
 {
 	const struct rv32m1_lpuart_config *config = dev->config;
 	uint32_t mask = kLPUART_RxDataRegFullInterruptEnable;
@@ -207,7 +207,7 @@ static void rv32m1_lpuart_irq_err_disable(const struct device *dev)
 static int rv32m1_lpuart_irq_is_pending(const struct device *dev)
 {
 	return (rv32m1_lpuart_irq_tx_ready(dev)
-		|| rv32m1_lpuart_irq_rx_ready(dev));
+		|| rv32m1_lpuart_irq_rx_pending(dev));
 }
 
 static int rv32m1_lpuart_irq_update(const struct device *dev)
@@ -239,19 +239,13 @@ static int rv32m1_lpuart_init(const struct device *dev)
 {
 	const struct rv32m1_lpuart_config *config = dev->config;
 	lpuart_config_t uart_config;
-	const struct device *clock_dev;
 	uint32_t clock_freq;
 
 	/* set clock source */
 	/* TODO: Don't change if another core has configured */
 	CLOCK_SetIpSrc(config->clock_ip_name, config->clock_ip_src);
 
-	clock_dev = device_get_binding(config->clock_name);
-	if (clock_dev == NULL) {
-		return -EINVAL;
-	}
-
-	if (clock_control_get_rate(clock_dev, config->clock_subsys,
+	if (clock_control_get_rate(config->clock_dev, config->clock_subsys,
 				   &clock_freq)) {
 		return -EINVAL;
 	}
@@ -287,7 +281,7 @@ static const struct uart_driver_api rv32m1_lpuart_driver_api = {
 	.irq_tx_ready = rv32m1_lpuart_irq_tx_ready,
 	.irq_rx_enable = rv32m1_lpuart_irq_rx_enable,
 	.irq_rx_disable = rv32m1_lpuart_irq_rx_disable,
-	.irq_rx_ready = rv32m1_lpuart_irq_rx_ready,
+	.irq_rx_ready = rv32m1_lpuart_irq_rx_full,
 	.irq_err_enable = rv32m1_lpuart_irq_err_enable,
 	.irq_err_disable = rv32m1_lpuart_irq_err_disable,
 	.irq_is_pending = rv32m1_lpuart_irq_is_pending,
@@ -299,7 +293,7 @@ static const struct uart_driver_api rv32m1_lpuart_driver_api = {
 #define RV32M1_LPUART_DECLARE_CFG(n, IRQ_FUNC_INIT)			\
 	static const struct rv32m1_lpuart_config rv32m1_lpuart_##n##_cfg = {\
 		.base = (LPUART_Type *)DT_INST_REG_ADDR(n),		\
-		.clock_name = DT_INST_CLOCKS_LABEL(n),			\
+		.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),	\
 		.clock_subsys =						\
 			(clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, name),\
 		.clock_ip_name = INST_DT_CLOCK_IP_NAME(n),		\

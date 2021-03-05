@@ -50,20 +50,18 @@ extern PowerCC26X2_ModuleState PowerCC26X2_module;
 
 /*
  * Power state mapping:
- * POWER_STATE_SLEEP_1: Idle
- * POWER_STATE_SLEEP_2: Standby
- * POWER_STATE_DEEP_SLEEP_1: Shutdown
+ * PM_STATE_SUSPEND_TO_IDLE: Idle
+ * PM_STATE_STANDBY: Standby
+ * PM_STATE_SUSPEND_TO_RAM | PM_STATE_SUSPEND_TO_DISK: Shutdown
  */
 
 /* Invoke Low Power/System Off specific Tasks */
-void pm_power_state_set(enum power_states state)
+void pm_power_state_set(struct pm_state_info info)
 {
-#ifdef CONFIG_PM_SLEEP_STATES
 	uint32_t modeVIMS;
 	uint32_t constraints;
-#endif
 
-	LOG_DBG("SoC entering power state %d", state);
+	LOG_DBG("SoC entering power state %d", info.state);
 
 	/* Switch to using PRIMASK instead of BASEPRI register, since
 	 * we are only able to wake up from standby while using PRIMASK.
@@ -73,9 +71,8 @@ void pm_power_state_set(enum power_states state)
 	/* Set BASEPRI to 0 */
 	irq_unlock(0);
 
-	switch (state) {
-#ifdef CONFIG_PM_SLEEP_STATES
-	case POWER_STATE_SLEEP_1:
+	switch (info.state) {
+	case PM_STATE_SUSPEND_TO_IDLE:
 		/* query the declared constraints */
 		constraints = Power_getConstraintMask();
 		/* 1. Get the current VIMS mode */
@@ -101,7 +98,7 @@ void pm_power_state_set(enum power_states state)
 		SysCtrlAonUpdate();
 		break;
 
-	case POWER_STATE_SLEEP_2:
+	case PM_STATE_STANDBY:
 		/* schedule the wakeup event */
 		ClockP_start(ClockP_handle((ClockP_Struct *)
 			&PowerCC26X2_module.clockObj));
@@ -111,23 +108,23 @@ void pm_power_state_set(enum power_states state)
 		ClockP_stop(ClockP_handle((ClockP_Struct *)
 			&PowerCC26X2_module.clockObj));
 		break;
-#endif
-
-#ifdef CONFIG_PM_DEEP_SLEEP_STATES
-	case POWER_STATE_DEEP_SLEEP_1:
+	case PM_STATE_SUSPEND_TO_RAM:
+		__fallthrough;
+	case PM_STATE_SUSPEND_TO_DISK:
+		__fallthrough;
+	case PM_STATE_SOFT_OFF:
 		Power_shutdown(0, 0);
 		break;
-#endif
 	default:
-		LOG_DBG("Unsupported power state %u", state);
+		LOG_DBG("Unsupported power state %u", info.state);
 		break;
 	}
 
-	LOG_DBG("SoC leaving power state %d", state);
+	LOG_DBG("SoC leaving power state %d", info.state);
 }
 
 /* Handle SOC specific activity after Low Power Mode Exit */
-void pm_power_state_exit_post_ops(enum power_states state)
+void pm_power_state_exit_post_ops(struct pm_state_info info)
 {
 	/*
 	 * System is now in active mode. Reenable interrupts which were disabled

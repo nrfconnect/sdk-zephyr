@@ -87,7 +87,7 @@ be run via ``qemu-system-arm``. The binary can be executed as follows:
 
    .. code-block:: bash
 
-      qemu-system-arm -M mps2-an521 -device loader,file=tfm_qemu.hex -serial stdio
+      qemu-system-arm -M mps2-an521 -device loader,file=tfm_merged.hex -serial stdio
 
 You can also run the binary as part of the ``west`` build process by appending
 the ``-t run`` flag to the end of your build command, or in the case of
@@ -162,7 +162,7 @@ On nRF5340 and nRF9160:
 =======================
 
 Build Zephyr with a non-secure configuration
-(``-DBOARD=nrf5340pdk_nrf5340_cpuappns`` or ``-DBOARD=nrf9160dk_nrf9160ns``).
+(``-DBOARD=nrf5340dk_nrf5340_cpuappns`` or ``-DBOARD=nrf9160dk_nrf9160ns``).
 
    Example, for nRF9160, using ``cmake`` and ``ninja``
 

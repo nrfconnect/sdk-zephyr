@@ -3,133 +3,13 @@
 # Copyright (c) 2016 Wind River Systems, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-config USB_CDC_ACM
-	bool "USB CDC ACM Device Class Driver"
-	select SERIAL_HAS_DRIVER
-	select SERIAL_SUPPORT_INTERRUPT
-	select RING_BUFFER
-	select UART_INTERRUPT_DRIVEN
-	help
-	  USB CDC ACM device class driver. Default device name is
-	  "CDC_ACM_0".
+source "subsys/usb/class/Kconfig.cdc"
 
-if USB_CDC_ACM
+source "subsys/usb/class/Kconfig.msc"
 
-config USB_CDC_ACM_RINGBUF_SIZE
-	int "USB CDC ACM ring buffer size"
-	default 1024
-	help
-	  USB CDC ACM ring buffer size
+source "subsys/usb/class/Kconfig.bt"
 
-config USB_CDC_ACM_DEVICE_NAME
-	string "USB CDC ACM device name template"
-	default "CDC_ACM"
-	help
-	  Device name template for the CDC ACM Devices. First device would
-	  have name $(USB_CDC_ACM_DEVICE_NAME)_0, etc.
-
-module = USB_CDC_ACM
-default-count = 1
-source "subsys/usb/class/Kconfig.template.composite_device_number"
-
-config CDC_ACM_INTERRUPT_EP_MPS
-	int
-	default 16
-	help
-	  CDC ACM class interrupt IN endpoint size
-
-config CDC_ACM_BULK_EP_MPS
-	int
-	default 64
-	help
-	  CDC ACM class bulk endpoints size
-
-config CDC_ACM_IAD
-	bool "Force using Interface Association Descriptor"
-	default y
-	help
-	  IAD should not be required for non-composite CDC ACM device,
-	  but Windows 7 fails to properly enumerate without it.
-	  Enable if you want CDC ACM to work with Windows 7.
-
-config CDC_ACM_DTE_RATE_CALLBACK_SUPPORT
-	bool "Support callbacks when the USB host changes the virtual baud rate"
-	default BOOTLOADER_BOSSA
-	help
-	  If set, enables support for a callback that is invoked when the
-	  remote host changes the virtual baud rate. This is used
-	  by Arduino style programmers to reset the device into the
-	  bootloader.
-
-module = USB_CDC_ACM
-module-str = usb cdc acm
-source "subsys/logging/Kconfig.template.log_config"
-
-endif # USB_CDC_ACM
-
-config USB_MASS_STORAGE
-	bool "USB Mass Storage Device Class Driver"
-	select DISK_ACCESS
-	help
-	  USB Mass Storage device class driver
-
-config MASS_STORAGE_DISK_NAME
-	string "Mass storage disk or drive name"
-	depends on USB_MASS_STORAGE
-	default "RAM"
-	help
-	  Mass storage device disk or drive name
-
-config MASS_STORAGE_BULK_EP_MPS
-	int
-	depends on USB_MASS_STORAGE
-	default 64
-	range 8 64
-	help
-	  Mass storage device class bulk endpoints size
-
-if USB_MASS_STORAGE
-module = USB_MASS_STORAGE
-module-str = usb mass storage
-source "subsys/logging/Kconfig.template.log_config"
-endif
-
-config USB_DEVICE_BLUETOOTH
-	bool "USB Bluetooth Device Class Driver"
-	select BT
-	select BT_HCI_RAW
-	help
-	  USB Bluetooth device class driver
-
-config USB_DEVICE_BLUETOOTH_VS_H4
-	bool "Enable USB Bluetooth H4 vendor command"
-	depends on USB_DEVICE_BLUETOOTH
-	select BT_HCI_RAW_H4
-	select BT_HCI_RAW_CMD_EXT
-	help
-	  Enables vendor command to switch to H:4 transport using the bulk
-	  endpoint.
-
-config USB_DEVICE_BT_H4
-	bool "USB Bluetooth H4 Device Class Driver"
-	select BT
-	select BT_HCI_RAW
-	select BT_HCI_RAW_H4
-	select BT_HCI_RAW_H4_ENABLE
-	help
-	  USB Bluetooth H4 device class driver
-
-config USB_DEVICE_LOOPBACK
-	bool "USB Loopback Function Driver"
-	help
-	  USB Loopback Function Driver
-
-config LOOPBACK_BULK_EP_MPS
-	int
-	depends on USB_DEVICE_LOOPBACK
-	default 64
-	help
-	  Loopback Function bulk endpoint size
+source "subsys/usb/class/Kconfig.test"
 
 source "subsys/usb/class/netusb/Kconfig"
 

@@ -398,8 +398,7 @@ int can_stm32_get_core_clock(const struct device *dev, uint32_t *rate)
 	const struct device *clock;
 	int ret;
 
-	clock = device_get_binding(STM32_CLOCK_CONTROL_NAME);
-	__ASSERT_NO_MSG(clock);
+	clock = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 
 	ret = clock_control_get_rate(clock,
 				     (clock_control_subsys_t *) &cfg->pclken,
@@ -438,8 +437,7 @@ static int can_stm32_init(const struct device *dev)
 	(void)memset(data->rx_cb, 0, sizeof(data->rx_cb));
 	(void)memset(data->cb_arg, 0, sizeof(data->cb_arg));
 
-	clock = device_get_binding(STM32_CLOCK_CONTROL_NAME);
-	__ASSERT_NO_MSG(clock);
+	clock = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 
 	ret = clock_control_on(clock, (clock_control_subsys_t *) &cfg->pclken);
 	if (ret != 0) {
@@ -1190,6 +1188,8 @@ static void config_can_1_irq(CAN_TypeDef *can)
 
 #include "socket_can_generic.h"
 
+static struct socket_can_context socket_can_context_1;
+
 static int socket_can_init_1(const struct device *dev)
 {
 	const struct device *can_dev = DEVICE_DT_GET(DT_NODELABEL(can1));
@@ -1279,6 +1279,8 @@ static void config_can_2_irq(CAN_TypeDef *can)
 #if defined(CONFIG_NET_SOCKETS_CAN)
 
 #include "socket_can_generic.h"
+
+static struct socket_can_context socket_can_context_2;
 
 static int socket_can_init_2(const struct device *dev)
 {

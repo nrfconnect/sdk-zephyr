@@ -81,9 +81,10 @@
  * walking and creating page tables.
  */
 #ifdef CONFIG_MMU
-#define Z_X86_VIRT_OFFSET  (CONFIG_KERNEL_VM_BASE - CONFIG_SRAM_BASE_ADDRESS)
+#define Z_X86_VIRT_OFFSET ((CONFIG_KERNEL_VM_BASE + CONFIG_KERNEL_VM_OFFSET) - \
+			   (CONFIG_SRAM_BASE_ADDRESS + CONFIG_SRAM_OFFSET))
 #else
-#define Z_X86_VIRT_OFFSET	0
+#define Z_X86_VIRT_OFFSET 0
 #endif
 
 /* ASM code */
@@ -168,6 +169,13 @@ void z_x86_set_stack_guard(k_thread_stack_t *stack);
  * IDT, etc)
  */
 extern uint8_t z_shared_kernel_page_start;
+
+#ifdef CONFIG_DEMAND_PAGING
+/* Called from page fault handler. ptables here is the ptage tables for the
+ * faulting user thread and not the current set of page tables
+ */
+extern bool z_x86_kpti_is_access_ok(void *virt, pentry_t *ptables)
+#endif /* CONFIG_DEMAND_PAGING */
 #endif /* CONFIG_X86_KPTI */
 #endif /* CONFIG_USERSPACE */
 

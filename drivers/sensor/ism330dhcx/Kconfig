@@ -53,20 +53,6 @@ config ISM330DHCX_THREAD_STACK_SIZE
 	help
 	  Stack size of thread used by the driver to handle interrupts.
 
-choice ISM330DHCX_INT_PIN
-	prompt "Sensor INT pin number"
-	default ISM330DHCX_INT_PIN_1
-	help
-	  The number of ISM330DHCX int pin used to generate interrupt to cpu.
-	  Supported values are int1 or int2
-
-config ISM330DHCX_INT_PIN_1
-	bool "int1"
-
-config ISM330DHCX_INT_PIN_2
-	bool "int2"
-endchoice
-
 endif # ISM330DHCX_TRIGGER
 
 config ISM330DHCX_ENABLE_TEMP
@@ -99,73 +85,5 @@ config ISM330DHCX_EXT_LPS22HB
 	bool "Enable LPS22HB as external sensor"
 
 endif # ISM330DHCX_SENSORHUB
-
-menu "Attributes"
-
-config ISM330DHCX_GYRO_FS
-	int "Gyroscope full-scale range"
-	default 0
-	help
-	  Specify the default gyroscope full-scale range.
-	  An X value for the config represents a range of +/- X degree per
-	  second. Valid values are:
-	  0:  Full Scale selected at runtime
-	  125:   +/- 125dps
-	  250:   +/- 250dps
-	  500:   +/- 500dps
-	  1000:  +/- 1000dps
-	  2000:  +/- 2000dps
-
-config ISM330DHCX_GYRO_ODR
-	int "Gyroscope Output data rate frequency"
-	range 0 10
-	default 0
-	help
-	  Specify the default accelerometer output data rate expressed in
-	  samples per second (Hz).
-	  0: ODR selected at runtime
-	  1: 12.5Hz
-	  2: 26Hz
-	  3: 52Hz
-	  4: 104Hz
-	  5: 208Hz
-	  6: 416Hz
-	  7: 833Hz
-	  8: 1660Hz
-	  9: 3330Hz
-	  10: 6660Hz
-
-config ISM330DHCX_ACCEL_FS
-	int "Accelerometer full-scale range"
-	default 0
-	help
-	  Specify the default accelerometer full-scale range.
-	  An X value for the config represents a range of +/- X G. Valid values
-	  are:
-	  0:  Full Scale selected at runtime
-	  2:  +/- 2g
-	  4:  +/- 4g
-	  8:  +/- 8g
-	  16: +/- 16g
-
-config ISM330DHCX_ACCEL_ODR
-	int "Accelerometer Output data rate frequency"
-	range 0 10
-	default 0
-	help
-	  Specify the default accelerometer output data rate expressed in
-	  samples per second (Hz).
-	  0: ODR selected at runtime
-	  1: 12.5Hz
-	  2: 26Hz
-	  3: 52Hz
-	  4: 104Hz
-	  5: 208Hz
-	  6: 416Hz
-	  7: 833Hz
-	  8: 1660Hz
-	  9: 3330Hz
-	  10: 6660Hz
-endmenu
 
 endif # ISM330DHCX

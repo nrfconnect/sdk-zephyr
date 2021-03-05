@@ -102,8 +102,8 @@ bool flash_stm32_valid_range(const struct device *dev, off_t offset,
 	if (write) {
 		if ((offset % FLASH_NB_32BITWORD_IN_FLASHWORD * 4) != 0) {
 			LOG_ERR("Write offset not aligned on flashword length. "
-				"Offset: 0x%x, flashword length: %d",
-				offset, FLASH_NB_32BITWORD_IN_FLASHWORD * 4);
+				"Offset: 0x%lx, flashword length: %d",
+				(unsigned long) offset, FLASH_NB_32BITWORD_IN_FLASHWORD * 4);
 			return false;
 		}
 	}
@@ -221,7 +221,7 @@ static int erase_sector(const struct device *dev, int offset)
 
 	if (sector.bank == 0) {
 
-		LOG_ERR("Offset %d does not exist", offset);
+		LOG_ERR("Offset %ld does not exist", (long) offset);
 		return -EINVAL;
 	}
 
@@ -235,7 +235,7 @@ static int erase_sector(const struct device *dev, int offset)
 		return rc;
 	}
 
-	*(sector.cr) &= FLASH_CR_SNB;
+	*(sector.cr) &= ~FLASH_CR_SNB;
 	*(sector.cr) |= (FLASH_CR_SER
 		| ((sector.sector_index << FLASH_CR_SNB_Pos) & FLASH_CR_SNB));
 	*(sector.cr) |= FLASH_CR_START;
@@ -270,7 +270,7 @@ static int wait_write_queue(const struct device *dev, off_t offset)
 	struct flash_stm32_sector_t sector = get_sector(dev, offset);
 
 	if (sector.bank == 0) {
-		LOG_ERR("Offset %d does not exist", offset);
+		LOG_ERR("Offset %ld does not exist", (long) offset);
 		return -EINVAL;
 	}
 
@@ -296,7 +296,7 @@ static int write_ndwords(const struct device *dev,
 	struct flash_stm32_sector_t sector = get_sector(dev, offset);
 
 	if (sector.bank == 0) {
-		LOG_ERR("Offset %d does not exist", offset);
+		LOG_ERR("Offset %ld does not exist", (long) offset);
 		return -EINVAL;
 	}
 
@@ -606,7 +606,7 @@ static const struct flash_driver_api flash_stm32h7_api = {
 static int stm32h7_flash_init(const struct device *dev)
 {
 	struct flash_stm32_priv *p = FLASH_STM32_PRIV(dev);
-	const struct device *clk = device_get_binding(STM32_CLOCK_CONTROL_NAME);
+	const struct device *clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 
 	/* enable clock */
 	if (clock_control_on(clk, (clock_control_subsys_t *)&p->pclken) != 0) {

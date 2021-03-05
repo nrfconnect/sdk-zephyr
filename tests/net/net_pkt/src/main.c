@@ -541,6 +541,7 @@ struct net_buf b5 = {
 	.data  = b5_data,
 	.len   = 0,
 	.size  = 0,
+	.__buf  = b5_data,
 };
 
 uint8_t b4_data[4] = "mnop";
@@ -550,11 +551,14 @@ struct net_buf b4 = {
 	.data  = b4_data,
 	.len   = sizeof(b4_data) - 2,
 	.size  = sizeof(b4_data),
+	.__buf  = b4_data,
 };
 
 struct net_buf b3 = {
 	.frags = &b4,
 	.ref   = 1,
+	.data  = NULL,
+	.__buf  = NULL,
 };
 
 uint8_t b2_data[8] = "efghijkl";
@@ -564,6 +568,7 @@ struct net_buf b2 = {
 	.data  = b2_data,
 	.len   = 0,
 	.size  = sizeof(b2_data),
+	.__buf  = b2_data,
 };
 
 uint8_t b1_data[4] = "abcd";
@@ -573,6 +578,7 @@ struct net_buf b1 = {
 	.data  = b1_data,
 	.len   = sizeof(b1_data) - 2,
 	.size  = sizeof(b1_data),
+	.__buf  = b1_data,
 };
 
 void test_net_pkt_copy(void)
@@ -785,6 +791,189 @@ void test_net_pkt_clone(void)
 	net_pkt_unref(cloned_pkt);
 }
 
+NET_BUF_POOL_FIXED_DEFINE(test_net_pkt_headroom_pool, 4, 2, NULL);
+void test_net_pkt_headroom(void)
+{
+	struct net_pkt *pkt;
+	struct net_buf *frag1;
+	struct net_buf *frag2;
+	struct net_buf *frag3;
+	struct net_buf *frag4;
+
+	/*
+	 * Create a net_pkt; append net_bufs with reserved bytes (headroom).
+	 *
+	 * Layout to be crafted before writing to the net_buf: "HA|HH|HA|AA"
+	 *  H: Headroom
+	 *  |: net_buf/fragment delimiter
+	 *  A: available byte
+	 */
+	pkt = net_pkt_alloc_on_iface(eth_if, K_NO_WAIT);
+	zassert_true(pkt != NULL, "Pkt not allocated");
+
+	/* 1st fragment has 1 byte headroom and one byte available: "HA" */
+	frag1 = net_buf_alloc_len(&test_net_pkt_headroom_pool, 2, K_NO_WAIT);
+	net_buf_reserve(frag1, 1);
+	net_pkt_append_buffer(pkt, frag1);
+	zassert_equal(net_pkt_available_buffer(pkt), 1, "Wrong space left");
+	zassert_equal(net_pkt_get_len(pkt), 0, "Length mismatch");
+
+	/* 2nd fragment affecting neither size nor length: "HH" */
+	frag2 = net_buf_alloc_len(&test_net_pkt_headroom_pool, 2, K_NO_WAIT);
+	net_buf_reserve(frag2, 2);
+	net_pkt_append_buffer(pkt, frag2);
+	zassert_equal(net_pkt_available_buffer(pkt), 1, "Wrong space left");
+	zassert_equal(net_pkt_get_len(pkt), 0, "Length mismatch");
+
+	/* 3rd fragment has 1 byte headroom and one byte available: "HA" */
+	frag3 = net_buf_alloc_len(&test_net_pkt_headroom_pool, 2, K_NO_WAIT);
+	net_buf_reserve(frag3, 1);
+	net_pkt_append_buffer(pkt, frag3);
+	zassert_equal(net_pkt_available_buffer(pkt), 2, "Wrong space left");
+	zassert_equal(net_pkt_get_len(pkt), 0, "Length mismatch");
+
+	/* 4th fragment has no headroom and two available bytes: "AA" */
+	frag4 = net_buf_alloc_len(&test_net_pkt_headroom_pool, 2, K_NO_WAIT);
+	net_pkt_append_buffer(pkt, frag4);
+	zassert_equal(net_pkt_available_buffer(pkt), 4, "Wrong space left");
+	zassert_equal(net_pkt_get_len(pkt), 0, "Length mismatch");
+
+	/* Writing net_pkt via cursor, spanning all 4 fragments */
+	net_pkt_cursor_init(pkt);
+	zassert_true(net_pkt_write(pkt, "1234", 4) == 0, "Pkt write failed");
+
+	/* Expected layout across all four fragments: "H1|HH|H2|34" */
+	zassert_equal(frag1->size, 2, "Size mismatch");
+	zassert_equal(frag1->len, 1, "Length mismatch");
+	zassert_equal(frag2->size, 2, "Size mismatch");
+	zassert_equal(frag2->len, 0, "Length mismatch");
+	zassert_equal(frag3->size, 2, "Size mismatch");
+	zassert_equal(frag3->len, 1, "Length mismatch");
+	zassert_equal(frag4->size, 2, "Size mismatch");
+	zassert_equal(frag4->len, 2, "Length mismatch");
+	net_pkt_cursor_init(pkt);
+	zassert_true(net_pkt_read(pkt, small_buffer, 4) == 0, "Read failed");
+	zassert_mem_equal(small_buffer, "1234", 4, "Data mismatch");
+
+	/* Making use of the headrooms */
+	net_buf_push_u8(frag3, 'D');
+	net_buf_push_u8(frag2, 'C');
+	net_buf_push_u8(frag2, 'B');
+	net_buf_push_u8(frag1, 'A');
+	net_pkt_cursor_init(pkt);
+	zassert_true(net_pkt_read(pkt, small_buffer, 8) == 0, "Read failed");
+	zassert_mem_equal(small_buffer, "A1BCD234", 8, "Data mismatch");
+
+	net_pkt_unref(pkt);
+}
+
+NET_BUF_POOL_FIXED_DEFINE(test_net_pkt_headroom_copy_pool, 2, 4, NULL);
+void test_net_pkt_headroom_copy(void)
+{
+	struct net_pkt *pkt_src;
+	struct net_pkt *pkt_dst;
+	struct net_buf *frag1_dst;
+	struct net_buf *frag2_dst;
+
+	/* Create et_pkt containing the bytes "0123" */
+	pkt_src = net_pkt_alloc_with_buffer(eth_if, 4,
+					AF_UNSPEC, 0, K_NO_WAIT);
+	zassert_true(pkt_src != NULL, "Pkt not allocated");
+	net_pkt_write(pkt_src, "0123", 4);
+
+	/* Create net_pkt consisting of net_buf fragments with reserved bytes */
+	pkt_dst = net_pkt_alloc_on_iface(eth_if, K_NO_WAIT);
+	zassert_true(pkt_src != NULL, "Pkt not allocated");
+
+	frag1_dst = net_buf_alloc_len(&test_net_pkt_headroom_copy_pool, 2,
+				      K_NO_WAIT);
+	net_buf_reserve(frag1_dst, 1);
+	net_pkt_append_buffer(pkt_dst, frag1_dst);
+	frag2_dst = net_buf_alloc_len(&test_net_pkt_headroom_copy_pool, 4,
+				      K_NO_WAIT);
+	net_buf_reserve(frag2_dst, 1);
+	net_pkt_append_buffer(pkt_dst, frag2_dst);
+	zassert_equal(net_pkt_available_buffer(pkt_dst), 4, "Wrong space left");
+	zassert_equal(net_pkt_get_len(pkt_dst), 0, "Length missmatch");
+
+	/* Copy to net_pkt which contains fragments with reserved bytes */
+	net_pkt_cursor_init(pkt_src);
+	net_pkt_cursor_init(pkt_dst);
+	net_pkt_copy(pkt_dst, pkt_src, 4);
+	zassert_equal(net_pkt_available_buffer(pkt_dst), 0, "Wrong space left");
+	zassert_equal(net_pkt_get_len(pkt_dst), 4, "Length missmatch");
+
+	net_pkt_cursor_init(pkt_dst);
+	zassert_true(net_pkt_read(pkt_dst, small_buffer, 4) == 0,
+		     "Pkt read failed");
+	zassert_mem_equal(small_buffer, "0123", 4, "Data mismatch");
+
+	net_pkt_unref(pkt_dst);
+	net_pkt_unref(pkt_src);
+}
+
+static void test_net_pkt_get_contiguous_len(void)
+{
+	size_t cont_len;
+	int res;
+	/* Allocate pkt with 2 fragments */
+	struct net_pkt *pkt = net_pkt_rx_alloc_with_buffer(
+					   NULL, CONFIG_NET_BUF_DATA_SIZE * 2,
+					   AF_UNSPEC, 0, K_NO_WAIT);
+
+	zassert_not_null(pkt, "Pkt not allocated");
+
+	net_pkt_cursor_init(pkt);
+
+	cont_len = net_pkt_get_contiguous_len(pkt);
+	zassert_equal(CONFIG_NET_BUF_DATA_SIZE, cont_len,
+		      "Expected one complete available net_buf");
+
+	net_pkt_set_overwrite(pkt, false);
+
+	/* now write 3 byte into the pkt */
+	for (int i = 0; i < 3; ++i) {
+		res = net_pkt_write_u8(pkt, 0xAA);
+		zassert_equal(0, res, "Write packet failed");
+	}
+
+	cont_len = net_pkt_get_contiguous_len(pkt);
+	zassert_equal(CONFIG_NET_BUF_DATA_SIZE - 3, cont_len,
+		      "Expected a three byte reduction");
+
+	/* Fill the first fragment up until only 3 bytes are free */
+	for (int i = 0; i < CONFIG_NET_BUF_DATA_SIZE - 6; ++i) {
+		res = net_pkt_write_u8(pkt, 0xAA);
+		zassert_equal(0, res, "Write packet failed");
+	}
+
+	cont_len = net_pkt_get_contiguous_len(pkt);
+	zassert_equal(3, cont_len, "Expected only three bytes are available");
+
+	/* Fill the complete first fragment, so the cursor points to the second
+	 * fragment.
+	 */
+	for (int i = 0; i < 3; ++i) {
+		res = net_pkt_write_u8(pkt, 0xAA);
+		zassert_equal(0, res, "Write packet failed");
+	}
+
+	cont_len = net_pkt_get_contiguous_len(pkt);
+	zassert_equal(CONFIG_NET_BUF_DATA_SIZE, cont_len,
+		      "Expected next full net_buf is available");
+
+	/* Fill the last fragment */
+	for (int i = 0; i < CONFIG_NET_BUF_DATA_SIZE; ++i) {
+		res = net_pkt_write_u8(pkt, 0xAA);
+		zassert_equal(0, res, "Write packet failed");
+	}
+
+	cont_len = net_pkt_get_contiguous_len(pkt);
+	zassert_equal(0, cont_len, "Expected no available space");
+
+	net_pkt_unref(pkt);
+}
+
 void test_main(void)
 {
 	eth_if = net_if_get_default();
@@ -797,7 +986,10 @@ void test_main(void)
 			 ztest_unit_test(test_net_pkt_easier_rw_usage),
 			 ztest_unit_test(test_net_pkt_copy),
 			 ztest_unit_test(test_net_pkt_pull),
-			 ztest_unit_test(test_net_pkt_clone)
+			 ztest_unit_test(test_net_pkt_clone),
+			 ztest_unit_test(test_net_pkt_headroom),
+			 ztest_unit_test(test_net_pkt_headroom_copy),
+			 ztest_unit_test(test_net_pkt_get_contiguous_len)
 		);
 
 	ztest_run_test_suite(net_pkt_tests);

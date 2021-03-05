@@ -923,12 +923,12 @@ static int mcp2515_init(const struct device *dev)
 		}
 	}
 
-	ret = can_set_mode(dev, CAN_NORMAL_MODE);
+	ret = can_set_timing(dev, &timing, NULL);
 	if (ret) {
 		return ret;
 	}
 
-	ret = can_set_timing(dev, &timing, NULL);
+	ret = can_set_mode(dev, CAN_NORMAL_MODE);
 
 	return ret;
 }
@@ -976,6 +976,8 @@ DEVICE_DT_INST_DEFINE(0, &mcp2515_init, device_pm_control_nop,
 #if defined(CONFIG_NET_SOCKETS_CAN)
 
 #include "socket_can_generic.h"
+
+static struct socket_can_context socket_can_context_1;
 
 static int socket_can_init(const struct device *dev)
 {

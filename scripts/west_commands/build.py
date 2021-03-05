@@ -190,7 +190,13 @@ class Build(Forceable):
         if self.cmake_cache:
             board, origin = (self.cmake_cache.get('CACHED_BOARD'),
                              'CMakeCache.txt')
-        elif self.args.board:
+
+            # A malformed CMake cache may exist, but not have a board.
+            # This happens if there's a build error from a previous run.
+            if board is not None:
+                return (board, origin)
+
+        if self.args.board:
             board, origin = self.args.board, 'command line'
         elif 'BOARD' in os.environ:
             board, origin = os.environ['BOARD'], 'env'
@@ -421,7 +427,13 @@ class Build(Forceable):
                     'Zephyr build system')
 
         cache = CMakeCache.from_build_dir(self.build_dir)
-        cmake_args = ['-P', cache['ZEPHYR_BASE'] + '/cmake/pristine.cmake']
+
+        app_src_dir = cache.get('APPLICATION_SOURCE_DIR')
+        app_bin_dir = cache.get('APPLICATION_BINARY_DIR')
+
+        cmake_args = [f'-DBINARY_DIR={app_bin_dir}',
+                      f'-DSOURCE_DIR={app_src_dir}',
+                      '-P', cache['ZEPHYR_BASE'] + '/cmake/pristine.cmake']
         run_cmake(cmake_args, cwd=self.build_dir, dry_run=self.args.dry_run)
 
     def _run_build(self, target):

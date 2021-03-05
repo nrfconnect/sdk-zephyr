@@ -9,6 +9,10 @@
  *
  * This module contains the initial code executed by the Zephyr Kernel ELF image
  * after having been loaded into RAM.
+ *
+ * Note that most addresses (functions and variables) must be in physical
+ * address space. Depending on page table setup, they may or may not be
+ * available in virtual address space after loading of page table.
  */
 
 #include <arch/x86/ia32/asm.h>
@@ -21,10 +25,11 @@
 	/* exports (private APIs) */
 
 	GTEXT(__start)
-	GTEXT(z_x86_enable_paging)
 
 	/* externs */
 	GTEXT(z_x86_prep_c)
+	GTEXT(z_bss_zero)
+	GTEXT(z_data_copy)
 
 	GDATA(_idt_base_address)
 	GDATA(z_interrupt_stacks)
@@ -34,7 +39,7 @@
 #endif
 
 
-#if defined(CONFIG_SSE)
+#if defined(CONFIG_X86_SSE)
 	GDATA(_sse_mxcsr_default_value)
 #endif
 
@@ -60,7 +65,8 @@ SECTION_FUNC(TEXT_START, __start)
 	 * booted operating systems to setup their own IDT and GDT.
 	 */
 #if CONFIG_SET_GDT
-	lgdt	_gdt_rom		/* load 32-bit operand size GDT */
+	/* load 32-bit operand size GDT */
+	lgdt	Z_X86_PHYS_ADDR(_gdt_rom)
 
 	/* If we set our own GDT, update the segment registers as well.
 	 */
@@ -72,7 +78,7 @@ SECTION_FUNC(TEXT_START, __start)
 	movw	%ax, %fs	/* Zero FS */
 	movw	%ax, %gs	/* Zero GS */
 
-	ljmp	$CODE_SEG, $__csSet	/* set CS = 0x08 */
+	ljmp	$CODE_SEG, $Z_X86_PHYS_ADDR(__csSet)	/* set CS = 0x08 */
 
 __csSet:
 #endif /* CONFIG_SET_GDT */
@@ -101,7 +107,7 @@ __csSet:
 
 	fninit				/* set x87 FPU to its default state */
 
-  #if defined(CONFIG_SSE)
+  #if defined(CONFIG_X86_SSE)
 	/*
 	 * Permit use of SSE instructions
 	 *
@@ -116,7 +122,7 @@ __csSet:
 
 	ldmxcsr _sse_mxcsr_default_value   /* initialize SSE control/status reg */
 
-  #endif /* CONFIG_SSE */
+  #endif /* CONFIG_X86_SSE */
 
 #endif /* !CONFIG_FPU */
 
@@ -133,7 +139,7 @@ __csSet:
 	 */
 #ifdef CONFIG_INIT_STACKS
 	movl $0xAAAAAAAA, %eax
-	leal z_interrupt_stacks, %edi
+	leal Z_X86_PHYS_ADDR(z_interrupt_stacks), %edi
 #ifdef CONFIG_X86_STACK_PROTECTION
 	addl $4096, %edi
 #endif
@@ -142,7 +148,7 @@ __csSet:
 	rep  stosl
 #endif
 
-	movl	$z_interrupt_stacks, %esp
+	movl	$Z_X86_PHYS_ADDR(z_interrupt_stacks), %esp
 #ifdef CONFIG_X86_STACK_PROTECTION
 	/* In this configuration, all stacks, including IRQ stack, are declared
 	 * with a 4K non-present guard page preceding the stack buffer
@@ -152,53 +158,29 @@ __csSet:
 	addl	$CONFIG_ISR_STACK_SIZE, %esp
 #endif
 
+	/* Clear BSS */
+	call	z_bss_zero
+
 #ifdef CONFIG_XIP
-	/*
-	 * copy DATA section from ROM to RAM region
-	 *	 DATA is followed by BSS section.
-	 */
-
-	movl	$__data_ram_start, %edi /* DATA in RAM (dest) */
-	movl	$__data_rom_start, %esi /* DATA in ROM (src) */
-	movl	$__data_num_words, %ecx /* Size of DATA in quad bytes */
-
-	call	_x86_data_copy
-
-#ifdef CONFIG_USERSPACE
-	movl	$_app_smem_start, %edi /* DATA in RAM (dest) */
-	movl	$_app_smem_rom_start, %esi /* DATA in ROM (src) */
-	movl	$_app_smem_num_words, %ecx /* Size of DATA in quad bytes */
-
-	call	_x86_data_copy
-#endif /* CONFIG_USERSPACE */
-#endif /* CONFIG_XIP */
-
-	/*
-	 * Clear BSS: bzero (__bss_start, __bss_num_words*4)
+	/* Copy data from flash to RAM.
 	 *
-	 * It's assumed that BSS size will be a multiple of a long (4 bytes),
-	 * and aligned on a double word (32-bit) boundary
+	 * This is a must is CONFIG_GDT_DYNAMIC is enabled,
+	 * as _gdt needs to be in RAM.
 	 */
-	movl	$__bss_start, %edi	/* load BSS start address */
-	movl	$__bss_num_words, %ecx	/* number of quad bytes in .bss */
-	call	_x86_bss_zero
-
-#ifdef CONFIG_COVERAGE_GCOV
-	movl	$__gcov_bss_start, %edi	/* load gcov BSS start address */
-	movl	$__gcov_bss_num_words, %ecx	/* number of quad bytes */
-	call	_x86_bss_zero
-#endif /* CONFIG_COVERAGE_GCOV */
+	call	z_data_copy
+#endif
 
 #ifdef CONFIG_GDT_DYNAMIC
 	/* activate RAM-based Global Descriptor Table (GDT) */
-	lgdt	%ds:_gdt
+	lgdt	%ds:Z_X86_PHYS_ADDR(_gdt)
 #endif
 
 #if defined(CONFIG_X86_ENABLE_TSS)
 	mov $MAIN_TSS, %ax
 	ltr %ax
 #endif
-	lidt	z_x86_idt		/* load 32-bit operand size IDT */
+	/* load 32-bit operand size IDT */
+	lidt	Z_X86_PHYS_ADDR(z_x86_idt)
 
 #ifdef CONFIG_X86_MMU
 	/* Install page tables */
@@ -224,88 +206,38 @@ __csSet:
 	movl %eax, %cr0
 #endif /* CONFIG_X86_MMU */
 
-#ifdef CONFIG_LOAPIC
-	/* For BSP, cpu_number is 0 */
-	xorl	%eax, %eax
-	pushl	%eax
-	call	z_loapic_enable
+#if (Z_X86_PHYS_ADDR(0x1000) != 0x1000)
+	/*
+	 * Page table loaded so we can start executing in
+	 * virtual address space.
+	 *
+	 * Note that __prep_c and z_x86_prep_c() must be
+	 * mapped in virtual address space in gen_mmu.py.
+	 *
+	 * This jump must be done due to relative
+	 * addressing code emitted by the toolchain
+	 * (think EIP + offset). If we are not already in
+	 * virtual address space, everything afterwards
+	 * would still be referenced via physical addresses
+	 * and will crash if we have a kernel bigger than
+	 * physical memory with demand paging (for example).
+	 */
+	ljmp	$CODE_SEG, $__prep_c
+
+__prep_c:
 #endif
 
 	pushl	%ebx		/* pointer to multiboot info, or NULL */
 	call	z_x86_prep_c	/* enter kernel; never returns */
 
-_x86_bss_zero:
-	/* ECX = size, EDI = starting address */
-#ifdef CONFIG_SSE
-	/* use XMM register to clear 16 bytes at a time */
-	pxor	%xmm0, %xmm0		/* zero out xmm0 register */
-
-	movl	%ecx, %edx		/* make a copy of # quad bytes */
-	shrl	$2, %ecx		/* How many multiples of 16 byte ? */
-	je	bssWords
-bssDQ:
-	movdqu	%xmm0, (%edi)		/* zero 16 bytes... */
-	addl	$16, %edi
-	loop	bssDQ
-
-	/* fall through to handle the remaining double words (32-bit chunks) */
-
-bssWords:
-	xorl	%eax, %eax		/* fill memory with 0 */
-	movl	%edx, %ecx		/* move # quad bytes into ECX (for rep) */
-	andl	$0x3, %ecx		/* only need to zero at most 3 quad bytes */
-	cld
-	rep
-	stosl				/* zero memory per 4 bytes */
-
-#else /* !CONFIG_SSE */
-
-	/* clear out BSS double words (32-bits at a time) */
-
-	xorl	%eax, %eax		/* fill memory with 0 */
-	cld
-	rep
-	stosl				/* zero memory per 4 bytes */
-
-#endif /* CONFIG_SSE */
-	ret
-
-#ifdef CONFIG_XIP
-_x86_data_copy:
-	/* EDI = dest, ESI = source, ECX = size in 32-bit chunks */
-  #ifdef CONFIG_SSE
-	/* copy 16 bytes at a time using XMM until < 16 bytes remain */
-
-	movl	%ecx ,%edx		/* save number of quad bytes */
-	shrl	$2, %ecx		/* How many 16 bytes? */
-	je	dataWords
-
-dataDQ:
-	movdqu	(%esi), %xmm0
-	movdqu	%xmm0, (%edi)
-	addl	$16, %esi
-	addl	$16, %edi
-	loop	dataDQ
-
-dataWords:
-	movl	%edx, %ecx	/* restore # quad bytes */
-	andl	$0x3, %ecx	/* only need to copy at most 3 quad bytes */
-  #endif /* CONFIG_SSE */
-
-	rep
-	movsl				/* copy data 4 bytes at a time */
-	ret
-#endif /* CONFIG_XIP */
-
-
-#if defined(CONFIG_SSE)
+#if defined(CONFIG_X86_SSE)
 
 	/* SSE control & status register initial value */
 
 _sse_mxcsr_default_value:
 	.long	0x1f80			/* all SSE exceptions clear & masked */
 
-#endif /* CONFIG_SSE */
+#endif /* CONFIG_X86_SSE */
 
 	 /* Interrupt Descriptor Table (IDT) definition */
 
@@ -318,7 +250,8 @@ z_x86_idt:
 	 * setup by the BIOS (or GRUB?).
 	 */
 
-	.long	_idt_base_address		/* physical start address */
+	/* physical start address */
+	.long	Z_X86_PHYS_ADDR(_idt_base_address)
 
 
 #ifdef CONFIG_SET_GDT
@@ -354,8 +287,11 @@ _gdt_rom:
 	/* Entry 0 (selector=0x0000): The "NULL descriptor". The CPU never
 	 * actually looks at this entry, so we stuff 6-byte the pseudo
 	 * descriptor here */
-	.word _gdt_rom_end - _gdt_rom - 1	/* Limit on GDT */
-	.long _gdt_rom				/* table address: _gdt_rom */
+
+	/* Limit on GDT */
+	.word Z_X86_PHYS_ADDR(_gdt_rom_end) - Z_X86_PHYS_ADDR(_gdt_rom) - 1
+	/* table address: _gdt_rom */
+	.long Z_X86_PHYS_ADDR(_gdt_rom)
 	.word   0x0000
 
 	/* Entry 1 (selector=0x0008): Code descriptor: DPL0 */

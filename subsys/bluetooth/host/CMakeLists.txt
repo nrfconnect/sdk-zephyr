@@ -39,6 +39,10 @@ if(CONFIG_BT_HCI_HOST)
     CONFIG_BT_HOST_CRYPTO
     crypto.c
     )
+  zephyr_library_sources_ifdef(
+    CONFIG_BT_ECC
+    ecc.c
+    )
 
   if(CONFIG_BT_CONN)
     zephyr_library_sources(
@@ -60,6 +64,11 @@ if(CONFIG_BT_HCI_HOST)
     endif()
   endif()
 
+  zephyr_library_sources_ifdef(
+    CONFIG_BT_ISO
+    iso.c
+    )
+
   if(CONFIG_BT_DF)
     zephyr_library_sources(
       direction.c
@@ -67,10 +76,16 @@ if(CONFIG_BT_HCI_HOST)
   endif()
 endif()
 
-if(CONFIG_BT_DEBUG_SMP OR CONFIG_BT_DEBUG_KEYS)
-  message(WARNING "One or both these options are enabled:
-  CONFIG_BT_DEBUG_SMP CONFIG_BT_DEBUG_KEYS.
+if(CONFIG_BT_DEBUG_SMP OR CONFIG_BT_DEBUG_KEYS OR CONFIG_BT_LOG_SNIFFER_INFO)
+  message(WARNING "One of these options are enabled:
+  CONFIG_BT_DEBUG_SMP CONFIG_BT_DEBUG_KEYS CONFIG_BT_LOG_SNIFFER_INFO.
   Private security keys such as the LTK will be printed out, do not use in
+  production."
+    )
+endif()
+if(CONFIG_BT_FIXED_PASSKEY)
+  message(WARNING "CONFIG_BT_FIXED_PASSKEY is enabled
+  A fixed passkey is easy to deduce during the pairing procedure, do not use in
   production."
     )
 endif()
@@ -95,5 +110,3 @@ if(CONFIG_BT_CONN_DISABLE_SECURITY)
   Do not use in production."
     )
 endif()
-
-add_subdirectory_ifdef(CONFIG_BT_AUDIO audio)

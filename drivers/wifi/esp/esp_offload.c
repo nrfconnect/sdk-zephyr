@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019 Tobias Svehagen
+ * Copyright (c) 2020 Grinn
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -40,38 +41,41 @@ static int _sock_connect(struct esp_data *dev, struct esp_socket *sock)
 	char connect_msg[sizeof("AT+CIPSTART=0,\"TCP\",\"\",65535,7200") +
 			 NET_IPV4_ADDR_LEN];
 	char addr_str[NET_IPV4_ADDR_LEN];
+	struct sockaddr dst;
 	int ret;
 
 	if (!esp_flags_are_set(dev, EDF_STA_CONNECTED)) {
 		return -ENETUNREACH;
 	}
 
-	if (sock->ip_proto == IPPROTO_TCP) {
-		net_addr_ntop(sock->dst.sa_family,
-			      &net_sin(&sock->dst)->sin_addr,
-			      addr_str, sizeof(addr_str));
+	k_mutex_lock(&sock->lock, K_FOREVER);
+	dst = sock->dst;
+	k_mutex_unlock(&sock->lock);
+
+	net_addr_ntop(dst.sa_family,
+		      &net_sin(&dst)->sin_addr,
+		      addr_str, sizeof(addr_str));
+
+	if (esp_socket_ip_proto(sock) == IPPROTO_TCP) {
 		snprintk(connect_msg, sizeof(connect_msg),
 			 "AT+CIPSTART=%d,\"TCP\",\"%s\",%d,7200",
 			 sock->link_id, addr_str,
-			 ntohs(net_sin(&sock->dst)->sin_port));
+			 ntohs(net_sin(&dst)->sin_port));
 	} else {
-		net_addr_ntop(sock->dst.sa_family,
-			      &net_sin(&sock->dst)->sin_addr,
-			      addr_str, sizeof(addr_str));
 		snprintk(connect_msg, sizeof(connect_msg),
 			 "AT+CIPSTART=%d,\"UDP\",\"%s\",%d",
 			 sock->link_id, addr_str,
-			 ntohs(net_sin(&sock->dst)->sin_port));
+			 ntohs(net_sin(&dst)->sin_port));
 	}
 
 	LOG_DBG("link %d, ip_proto %s, addr %s", sock->link_id,
-		sock->ip_proto == IPPROTO_TCP ? "TCP" : "UDP",
+		esp_socket_ip_proto(sock) == IPPROTO_TCP ? "TCP" : "UDP",
 		log_strdup(addr_str));
 
 	ret = esp_cmd_send(dev, NULL, 0, connect_msg, ESP_CMD_TIMEOUT);
 	if (ret == 0) {
-		sock->flags |= ESP_SOCK_CONNECTED;
-		if (sock->type == SOCK_STREAM) {
+		esp_socket_flags_set(sock, ESP_SOCK_CONNECTED);
+		if (esp_socket_type(sock) == SOCK_STREAM) {
 			net_context_set_state(sock->context,
 					      NET_CONTEXT_CONNECTED);
 		}
@@ -87,26 +91,20 @@ static int _sock_connect(struct esp_data *dev, struct esp_socket *sock)
 	return ret;
 }
 
-static void esp_connect_work(struct k_work *work)
+void esp_connect_work(struct k_work *work)
 {
-	struct esp_socket *sock;
-	struct esp_data *dev;
+	struct esp_socket *sock = CONTAINER_OF(work, struct esp_socket,
+					       connect_work);
+	struct esp_data *dev = esp_socket_to_dev(sock);
 	int ret;
-
-	sock = CONTAINER_OF(work, struct esp_socket, connect_work);
-	dev = esp_socket_to_dev(sock);
-
-	if (!esp_socket_in_use(sock)) {
-		LOG_DBG("Socket %d not in use", sock->idx);
-		return;
-	}
 
 	ret = _sock_connect(dev, sock);
 
+	k_mutex_lock(&sock->lock, K_FOREVER);
 	if (sock->connect_cb) {
 		sock->connect_cb(sock->context, ret, sock->conn_user_data);
 	}
-
+	k_mutex_unlock(&sock->lock);
 }
 
 static int esp_connect(struct net_context *context,
@@ -133,12 +131,14 @@ static int esp_connect(struct net_context *context,
 		return -EISCONN;
 	}
 
+	k_mutex_lock(&sock->lock, K_FOREVER);
 	sock->dst = *addr;
 	sock->connect_cb = cb;
 	sock->conn_user_data = user_data;
+	k_mutex_unlock(&sock->lock);
 
 	if (timeout == 0) {
-		k_work_submit_to_queue(&dev->workq, &sock->connect_work);
+		esp_socket_work_submit(sock, &sock->connect_work);
 		return 0;
 	}
 
@@ -189,8 +189,9 @@ MODEM_CMD_DEFINE(on_cmd_send_fail)
 	return 0;
 }
 
-static int _sock_send(struct esp_data *dev, struct esp_socket *sock)
+static int _sock_send(struct esp_socket *sock, struct net_pkt *pkt)
 {
+	struct esp_data *dev = esp_socket_to_dev(sock);
 	char cmd_buf[sizeof("AT+CIPSEND=0,,\"\",") +
 		     sizeof(STRINGIFY(ESP_MTU)) - 1 +
 		     NET_IPV4_ADDR_LEN + sizeof("65535") - 1];
@@ -202,26 +203,31 @@ static int _sock_send(struct esp_data *dev, struct esp_socket *sock)
 		MODEM_CMD("SEND OK", on_cmd_send_ok, 0U, ""),
 		MODEM_CMD("SEND FAIL", on_cmd_send_fail, 0U, ""),
 	};
+	struct sockaddr dst;
 
 	if (!esp_flags_are_set(dev, EDF_STA_CONNECTED)) {
 		return -ENETUNREACH;
 	}
 
-	pkt_len = net_pkt_get_len(sock->tx_pkt);
+	pkt_len = net_pkt_get_len(pkt);
 
 	LOG_DBG("link %d, len %d", sock->link_id, pkt_len);
 
-	if (sock->ip_proto == IPPROTO_TCP) {
+	if (esp_socket_ip_proto(sock) == IPPROTO_TCP) {
 		snprintk(cmd_buf, sizeof(cmd_buf),
 			 "AT+CIPSEND=%d,%d", sock->link_id, pkt_len);
 	} else {
-		net_addr_ntop(sock->dst.sa_family,
-			      &net_sin(&sock->dst)->sin_addr,
+		k_mutex_lock(&sock->lock, K_FOREVER);
+		dst = sock->dst;
+		k_mutex_unlock(&sock->lock);
+
+		net_addr_ntop(dst.sa_family,
+			      &net_sin(&dst)->sin_addr,
 			      addr_str, sizeof(addr_str));
 		snprintk(cmd_buf, sizeof(cmd_buf),
 			 "AT+CIPSEND=%d,%d,\"%s\",%d",
 			 sock->link_id, pkt_len, addr_str,
-			 ntohs(net_sin(&sock->dst)->sin_port));
+			 ntohs(net_sin(&dst)->sin_port));
 	}
 
 	k_sem_take(&dev->cmd_handler_data.sem_tx_lock, K_FOREVER);
@@ -255,7 +261,7 @@ static int _sock_send(struct esp_data *dev, struct esp_socket *sock)
 		goto out;
 	}
 
-	frag = sock->tx_pkt->frags;
+	frag = pkt->frags;
 	while (frag && pkt_len) {
 		write_len = MIN(pkt_len, frag->len);
 		dev->mctx.iface.write(&dev->mctx.iface, frag->data, write_len);
@@ -286,30 +292,22 @@ out:
 
 static void esp_send_work(struct k_work *work)
 {
-	struct esp_socket *sock;
-	struct esp_data *dev;
+	struct net_pkt *pkt = CONTAINER_OF(work, struct net_pkt, work);
+	struct net_context *context = pkt->context;
+	struct esp_socket *sock = context->offload_context;
 	int ret = 0;
 
-	sock = CONTAINER_OF(work, struct esp_socket, send_work);
-	dev = esp_socket_to_dev(sock);
-
-	if (!esp_socket_in_use(sock)) {
-		LOG_DBG("Socket %d not in use", sock->idx);
-		return;
-	}
-
-	ret = _sock_send(dev, sock);
+	ret = _sock_send(sock, pkt);
 	if (ret < 0) {
 		LOG_ERR("Failed to send data: link %d, ret %d", sock->link_id,
 			ret);
 	}
 
-	net_pkt_unref(sock->tx_pkt);
-	sock->tx_pkt = NULL;
-
-	if (sock->send_cb) {
-		sock->send_cb(sock->context, ret, sock->send_user_data);
+	if (context->send_cb) {
+		context->send_cb(context, ret, context->user_data);
 	}
+
+	net_pkt_unref(pkt);
 }
 
 static int esp_sendto(struct net_pkt *pkt,
@@ -334,11 +332,7 @@ static int esp_sendto(struct net_pkt *pkt,
 		return -ENETUNREACH;
 	}
 
-	if (sock->tx_pkt) {
-		return -EBUSY;
-	}
-
-	if (sock->type == SOCK_STREAM) {
+	if (esp_socket_type(sock) == SOCK_STREAM) {
 		if (!esp_socket_connected(sock)) {
 			return -ENOTCONN;
 		}
@@ -365,30 +359,10 @@ static int esp_sendto(struct net_pkt *pkt,
 		}
 	}
 
-	sock->tx_pkt = pkt;
-	sock->send_cb = cb;
-	sock->send_user_data = user_data;
+	k_work_init(&pkt->work, esp_send_work);
+	esp_socket_work_submit(sock, &pkt->work);
 
-	if (timeout == 0) {
-		k_work_submit_to_queue(&dev->workq, &sock->send_work);
-		return 0;
-	}
-
-	ret = _sock_send(dev, sock);
-	if (ret == 0) {
-		net_pkt_unref(sock->tx_pkt);
-	} else {
-		LOG_ERR("Failed to send data: link %d, ret %d", sock->link_id,
-			ret);
-	}
-
-	sock->tx_pkt = NULL;
-
-	if (cb) {
-		cb(context, ret, user_data);
-	}
-
-	return ret;
+	return 0;
 }
 
 static int esp_send(struct net_pkt *pkt,
@@ -423,7 +397,7 @@ static int cmd_ciprecvdata_parse(struct esp_socket *sock,
 	*data_len = strtol(&cmd_buf[len], &endptr, 10);
 	if (endptr == &cmd_buf[len] ||
 	    (*endptr == 0 && match_len >= CIPRECVDATA_CMD_MAX_LEN) ||
-	    *data_len > sock->bytes_avail) {
+	    *data_len > CIPRECVDATA_MAX_LEN) {
 		LOG_ERR("Invalid cmd: %s", log_strdup(cmd_buf));
 		return -EBADMSG;
 	} else if (*endptr == 0) {
@@ -465,97 +439,59 @@ MODEM_CMD_DIRECT_DEFINE(on_cmd_ciprecvdata)
 		return err;
 	}
 
-	sock->bytes_avail -= data_len;
-
 	esp_socket_rx(sock, data->rx_buf, data_offset, data_len);
 
 	return data_offset + data_len;
 }
 
-static void esp_recvdata_work(struct k_work *work)
+void esp_recvdata_work(struct k_work *work)
 {
-	struct esp_socket *sock;
-	struct esp_data *dev;
-	int len = CIPRECVDATA_MAX_LEN, ret;
+	struct esp_socket *sock = CONTAINER_OF(work, struct esp_socket,
+					       recvdata_work);
+	struct esp_data *data = esp_socket_to_dev(sock);
 	char cmd[sizeof("AT+CIPRECVDATA=0,"STRINGIFY(CIPRECVDATA_MAX_LEN))];
 	static const struct modem_cmd cmds[] = {
 		MODEM_CMD_DIRECT(_CIPRECVDATA, on_cmd_ciprecvdata),
 	};
+	int ret;
 
-	sock = CONTAINER_OF(work, struct esp_socket, recvdata_work);
-	dev = esp_socket_to_dev(sock);
+	LOG_DBG("reading available data on link %d", sock->link_id);
 
-	if (!esp_socket_in_use(sock)) {
-		LOG_DBG("Socket %d not in use", sock->idx);
-		return;
-	}
+	data->rx_sock = sock;
 
-	LOG_DBG("%d bytes available on link %d", sock->bytes_avail,
-		sock->link_id);
+	snprintk(cmd, sizeof(cmd), "AT+CIPRECVDATA=%d,%d", sock->link_id,
+		 CIPRECVDATA_MAX_LEN);
 
-	if (sock->bytes_avail == 0) {
-		LOG_WRN("No data available on link %d", sock->link_id);
-		return;
-	} else if (len > sock->bytes_avail) {
-		len = sock->bytes_avail;
-	}
-
-	dev->rx_sock = sock;
-
-	snprintk(cmd, sizeof(cmd), "AT+CIPRECVDATA=%d,%d", sock->link_id, len);
-
-	ret = esp_cmd_send(dev, cmds, ARRAY_SIZE(cmds), cmd, ESP_CMD_TIMEOUT);
+	ret = esp_cmd_send(data, cmds, ARRAY_SIZE(cmds), cmd, ESP_CMD_TIMEOUT);
 	if (ret < 0) {
 		LOG_ERR("Error during rx: link %d, ret %d", sock->link_id,
 			ret);
-	} else if (sock->bytes_avail > 0) {
-		k_work_submit_to_queue(&dev->workq, &sock->recvdata_work);
 	}
 }
 
-
-static void esp_recv_work(struct k_work *work)
+void esp_close_work(struct k_work *work)
 {
-	struct esp_socket *sock;
-	struct esp_data *dev;
-	struct net_pkt *pkt;
+	struct esp_socket *sock = CONTAINER_OF(work, struct esp_socket,
+					       close_work);
+	atomic_val_t old_flags;
 
-	sock = CONTAINER_OF(work, struct esp_socket, recv_work);
-	dev = esp_socket_to_dev(sock);
+	old_flags = esp_socket_flags_clear(sock,
+				(ESP_SOCK_CONNECTED | ESP_SOCK_CLOSE_PENDING));
 
-	if (!esp_socket_in_use(sock)) {
-		LOG_DBG("Socket %d not in use", sock->idx);
-		return;
-	}
-
-	pkt = k_fifo_get(&sock->fifo_rx_pkt, K_NO_WAIT);
-	while (pkt) {
-		if (sock->recv_cb) {
-			sock->recv_cb(sock->context, pkt, NULL, NULL,
-				      0, sock->recv_user_data);
-			k_sem_give(&sock->sem_data_ready);
-		} else {
-			/* Discard */
-			net_pkt_unref(pkt);
-		}
-
-		pkt = k_fifo_get(&sock->fifo_rx_pkt, K_NO_WAIT);
-	}
-
-	if (esp_socket_close_pending(sock)) {
-		if (esp_socket_connected(sock)) {
-			esp_socket_close(sock);
-		}
-
-		sock->flags &= ~(ESP_SOCK_CONNECTED | ESP_SOCK_CLOSE_PENDING);
+	if ((old_flags & ESP_SOCK_CONNECTED) &&
+	    (old_flags & ESP_SOCK_CLOSE_PENDING)) {
+		esp_socket_close(sock);
 	}
 
 	/* Should we notify that the socket has been closed? */
-	if (!esp_socket_connected(sock) && sock->bytes_avail == 0 &&
-	    sock->recv_cb) {
-		sock->recv_cb(sock->context, NULL, NULL, NULL, 0,
-			      sock->recv_user_data);
-		k_sem_give(&sock->sem_data_ready);
+	if (old_flags & ESP_SOCK_CONNECTED) {
+		k_mutex_lock(&sock->lock, K_FOREVER);
+		if (sock->recv_cb) {
+			sock->recv_cb(sock->context, NULL, NULL, NULL, 0,
+				      sock->recv_user_data);
+			k_sem_give(&sock->sem_data_ready);
+		}
+		k_mutex_unlock(&sock->lock);
 	}
 }
 
@@ -564,19 +500,17 @@ static int esp_recv(struct net_context *context,
 		    int32_t timeout,
 		    void *user_data)
 {
-	struct esp_socket *sock;
-	struct esp_data *dev;
+	struct esp_socket *sock = context->offload_context;
 	int ret;
-
-	sock = (struct esp_socket *)context->offload_context;
-	dev = esp_socket_to_dev(sock);
 
 	LOG_DBG("link_id %d, timeout %d, cb 0x%x, data 0x%x", sock->link_id,
 		timeout, (int)cb, (int)user_data);
 
+	k_mutex_lock(&sock->lock, K_FOREVER);
 	sock->recv_cb = cb;
 	sock->recv_user_data = user_data;
 	k_sem_reset(&sock->sem_data_ready);
+	k_mutex_unlock(&sock->lock);
 
 	if (timeout == 0) {
 		return 0;
@@ -584,33 +518,43 @@ static int esp_recv(struct net_context *context,
 
 	ret = k_sem_take(&sock->sem_data_ready, K_MSEC(timeout));
 
+	k_mutex_lock(&sock->lock, K_FOREVER);
 	sock->recv_cb = NULL;
+	sock->recv_user_data = NULL;
+	k_mutex_unlock(&sock->lock);
 
 	return ret;
 }
 
 static int esp_put(struct net_context *context)
 {
-	struct esp_socket *sock;
-	struct net_pkt *pkt;
+	struct esp_socket *sock = context->offload_context;
 
-	sock = (struct esp_socket *)context->offload_context;
+	esp_socket_workq_stop_and_flush(sock);
 
-	if (esp_socket_connected(sock)) {
+	if (esp_socket_flags_test_and_clear(sock, ESP_SOCK_CONNECTED)) {
 		esp_socket_close(sock);
 	}
 
+	k_mutex_lock(&sock->lock, K_FOREVER);
 	sock->connect_cb = NULL;
 	sock->recv_cb = NULL;
-	sock->send_cb = NULL;
-	sock->tx_pkt = NULL;
+	k_mutex_unlock(&sock->lock);
 
-	/* Drain rxfifo */
-	for (pkt = k_fifo_get(&sock->fifo_rx_pkt, K_NO_WAIT);
-	     pkt != NULL;
-	     pkt = k_fifo_get(&sock->fifo_rx_pkt, K_NO_WAIT)) {
-		net_pkt_unref(pkt);
-	}
+	k_sem_reset(&sock->sem_free);
+
+	esp_socket_unref(sock);
+
+	/*
+	 * Let's get notified when refcount reaches 0. Call to
+	 * esp_socket_unref() in this function might or might not be the last
+	 * one. The reason is that there might be still some work in progress in
+	 * esp_rx thread (parsing unsolicited AT command), so we want to wait
+	 * until it finishes.
+	 */
+	k_sem_take(&sock->sem_free, K_FOREVER);
+
+	sock->context = NULL;
 
 	esp_socket_put(sock);
 
@@ -638,19 +582,11 @@ static int esp_get(sa_family_t family,
 	 */
 	dev = &esp_driver_data;
 
-	sock = esp_socket_get(dev);
-	if (sock == NULL) {
+	sock = esp_socket_get(dev, *context);
+	if (!sock) {
+		LOG_ERR("No socket available!");
 		return -ENOMEM;
 	}
-
-	k_work_init(&sock->connect_work, esp_connect_work);
-	k_work_init(&sock->send_work, esp_send_work);
-	k_work_init(&sock->recv_work, esp_recv_work);
-	k_work_init(&sock->recvdata_work, esp_recvdata_work);
-	sock->type = type;
-	sock->ip_proto = ip_proto;
-	sock->context = *context;
-	(*context)->offload_context = sock;
 
 	return 0;
 }

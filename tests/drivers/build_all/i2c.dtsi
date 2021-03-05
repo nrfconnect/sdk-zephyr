@@ -576,3 +576,20 @@ test_i2c_vcnl4040: vcnl4040@60 {
 	reg = <0x60>;
 	int-gpios = <&test_gpio 0 0>;
 };
+
+test_i2c_bmi270: bmi270@4a {
+	compatible = "bosch,bmi270";
+	label = "BMI270";
+	reg = <0x4a>;
+};
+
+test_i2c_pcal6408a: pcal6408a@4b {
+	compatible = "nxp,pcal6408a";
+	label = "PCAL6408A";
+	reg = <0x4b>;
+	gpio-controller;
+	#gpio-cells = <2>;
+	ngpios = <8>;
+	int-gpios = <&test_gpio 0 0>;
+	reset-gpios = <&test_gpio 0 0>;
+};

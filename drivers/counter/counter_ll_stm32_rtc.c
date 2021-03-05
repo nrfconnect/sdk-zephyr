@@ -165,11 +165,13 @@ static int rtc_stm32_set_alarm(const struct device *dev, uint8_t chan_id,
 		 * that tick+1 event occurs before alarm setting is finished.
 		 */
 		ticks += now + 1;
+		alarm_val = (time_t)(counter_ticks_to_us(dev, ticks) / USEC_PER_SEC)
+			+ T_TIME_OFFSET;
+	} else {
+		alarm_val = (time_t)(counter_ticks_to_us(dev, ticks) / USEC_PER_SEC);
 	}
 
 	LOG_DBG("Set Alarm: %d\n", ticks);
-
-	alarm_val = (time_t)(counter_ticks_to_us(dev, ticks) / USEC_PER_SEC);
 
 	gmtime_r(&alarm_val, &alarm_tm);
 
@@ -286,14 +288,15 @@ void rtc_stm32_isr(const struct device *dev)
 
 static int rtc_stm32_init(const struct device *dev)
 {
-	const struct device *clk = device_get_binding(STM32_CLOCK_CONTROL_NAME);
+	const struct device *clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 	const struct rtc_stm32_config *cfg = DEV_CFG(dev);
-
-	__ASSERT_NO_MSG(clk);
 
 	DEV_DATA(dev)->callback = NULL;
 
-	clock_control_on(clk, (clock_control_subsys_t *) &cfg->pclken);
+	if (clock_control_on(clk, (clock_control_subsys_t *) &cfg->pclken) != 0) {
+		LOG_ERR("clock op failed\n");
+		return -EIO;
+	}
 
 	z_stm32_hsem_lock(CFG_HW_RCC_SEMID, HSEM_LOCK_DEFAULT_RETRY);
 

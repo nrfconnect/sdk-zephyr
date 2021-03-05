@@ -33,7 +33,6 @@ int stream_flash_erase_page(struct stream_flash_ctx *ctx, off_t off)
 		return 0;
 	}
 
-	ctx->last_erased_page_start_offset = page.start_offset;
 	LOG_DBG("Erasing page at offset 0x%08lx", (long)page.start_offset);
 
 	flash_write_protection_set(ctx->fdev, false);
@@ -42,6 +41,8 @@ int stream_flash_erase_page(struct stream_flash_ctx *ctx, off_t off)
 
 	if (rc != 0) {
 		LOG_ERR("Error %d while erasing page", rc);
+	} else {
+		ctx->last_erased_page_start_offset = page.start_offset;
 	}
 
 	return rc;
@@ -55,10 +56,11 @@ static int flash_sync(struct stream_flash_ctx *ctx)
 	size_t write_addr = ctx->offset + ctx->bytes_written;
 
 
+	if (ctx->buf_bytes == 0) {
+		return 0;
+	}
+
 	if (IS_ENABLED(CONFIG_STREAM_FLASH_ERASE)) {
-		if (ctx->buf_bytes == 0) {
-			return 0;
-		}
 
 		rc = stream_flash_erase_page(ctx,
 					     write_addr + ctx->buf_bytes - 1);
@@ -97,6 +99,7 @@ static int flash_sync(struct stream_flash_ctx *ctx)
 		rc = ctx->callback(ctx->buf, ctx->buf_bytes, write_addr);
 		if (rc != 0) {
 			LOG_ERR("callback failed: %d", rc);
+			return rc;
 		}
 	}
 
@@ -149,19 +152,7 @@ int stream_flash_buffered_write(struct stream_flash_ctx *ctx, const uint8_t *dat
 		fill_length = flash_get_write_block_size(ctx->fdev);
 		if (ctx->buf_bytes % fill_length) {
 			fill_length -= ctx->buf_bytes % fill_length;
-			/*
-			 * Leverage the fact that unwritten memory
-			 * should be erased in order to get the erased
-			 * byte-value.
-			 */
-			rc = flash_read(ctx->fdev,
-					ctx->offset + ctx->bytes_written,
-					(void *)&filler,
-					1);
-
-			if (rc != 0) {
-				return rc;
-			}
+			filler = flash_get_parameters(ctx->fdev)->erase_value;
 
 			memset(ctx->buf + ctx->buf_bytes, filler, fill_length);
 			ctx->buf_bytes += fill_length;
@@ -170,7 +161,11 @@ int stream_flash_buffered_write(struct stream_flash_ctx *ctx, const uint8_t *dat
 		}
 
 		rc = flash_sync(ctx);
-		ctx->bytes_written -= fill_length;
+		if (rc == 0) {
+			ctx->bytes_written -= fill_length;
+		} else {
+			ctx->buf_bytes -= fill_length;
+		}
 	}
 
 	return rc;

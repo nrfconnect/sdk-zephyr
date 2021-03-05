@@ -76,7 +76,7 @@ config BT_CTLR_DF_ANT_SWITCH_TX
 
 config BT_CTLR_DF_ANT_SWITCH_RX
 	bool "Enable antenna switching during CTE reception (AoA) feature"
-	depends on BT_CTLR_DF_ANT_SWITCH_2US_SUPPORT
+	depends on BT_CTLR_DF_CTE_RX && BT_CTLR_DF_ANT_SWITCH_2US_SUPPORT
 	default y
 	help
 	  Enable support for antenna switching during CTE reception.
@@ -92,7 +92,6 @@ config BT_CTLR_DF_CTE_RX
 config BT_CTLR_DF_CONN_CTE_RSP
 	bool "Enable Connection CTE Response feature"
 	depends on BT_CTLR_DF_CTE_TX && BT_CONN
-	default y
 	help
 	  Enable support for Bluetooth v5.1 Connection CTE Response feature
 	  in controller.
@@ -100,6 +99,7 @@ config BT_CTLR_DF_CONN_CTE_RSP
 config BT_CTLR_DF_ADV_CTE_TX
 	bool "Enable Connectionless CTE Transmitter feature"
 	depends on BT_CTLR_DF_CTE_TX && BT_CTLR_ADV_PERIODIC
+	select BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY
 	default y
 	help
 	  Enable support for Bluetooth v5.1 Connectionless CTE Transmitter
@@ -109,7 +109,7 @@ config BT_CTLR_DF_ADV_CTE_TX
 
 config BT_CTLR_DF_MAX_ANT_SW_PATTERN_LEN
 	int "Maximum length of antenna switch pattern"
-	range 3 40 if SOC_COMPATIBLE_NRF
+	range 3 39 if SOC_COMPATIBLE_NRF
 	range 2 75 if !SOC_COMPATIBLE_NRF
 	default 12
 	help
@@ -118,5 +118,17 @@ config BT_CTLR_DF_MAX_ANT_SW_PATTERN_LEN
 	  the value is within range 3 to 40, where last value is maximum.
 	  For general use cases Bluetooth Core 5.1 spec. required the value
 	  to be within range 2 up to 75.
+
+config BT_CTLR_DF_INIT_ANT_SEL_GPIOS
+	bool "Enable initialization of GPIOs responsible for antenna switching"
+	depends on BT_CTLR_DF_ANT_SWITCH_TX || BT_CTLR_DF_ANT_SWITCH_RX
+	default y
+	help
+	  Enable implicit initialization of GPIOs responsible for antenna
+	  switching during Radio initialization.
+	  If this feature is not enabled, the Radio initialization procedure will
+	  not initialize GPIOs pins selected to drive antenna switching.
+	  In such case application is responsible for appropriate GPIOs
+	  initialization.
 
 endif # BT_CTLR_DF

@@ -8,22 +8,26 @@
 #include <soc.h>
 #include <init.h>
 
+#include <stm32wbxx_ll_utils.h>
 #include <stm32wbxx_ll_bus.h>
 #include <stm32wbxx_ll_cortex.h>
 #include <stm32wbxx_ll_pwr.h>
 #include <stm32wbxx_ll_rcc.h>
+#include <clock_control/clock_stm32_ll_common.h>
 
 #include <logging/log.h>
 LOG_MODULE_DECLARE(soc, CONFIG_SOC_LOG_LEVEL);
 
 /* Invoke Low Power/System Off specific Tasks */
-void pm_power_state_set(enum power_states state)
+void pm_power_state_set(struct pm_state_info info)
 {
-	switch (state) {
-#ifdef CONFIG_PM_SLEEP_STATES
-#ifdef CONFIG_HAS_POWER_STATE_SLEEP_1
-	case POWER_STATE_SLEEP_1:
+	if (info.state != PM_STATE_SUSPEND_TO_IDLE) {
+		LOG_DBG("Unsupported power state %u", info.state);
+		return;
+	}
 
+	switch (info.substate_id) {
+	case 0:
 		/* this corresponds to the STOP0 mode: */
 #ifdef CONFIG_DEBUG
 		/* Enable the Debug Module during STOP mode */
@@ -37,9 +41,7 @@ void pm_power_state_set(enum power_states state)
 		/* enter SLEEP mode : WFE or WFI */
 		k_cpu_idle();
 		break;
-#endif /* CONFIG_HAS_POWER_STATE_SLEEP_1 */
-#ifdef CONFIG_HAS_POWER_STATE_SLEEP_2
-	case POWER_STATE_SLEEP_2:
+	case 1:
 		/* this corresponds to the STOP1 mode: */
 #ifdef CONFIG_DEBUG
 		/* Enable the Debug Module during STOP mode */
@@ -52,9 +54,7 @@ void pm_power_state_set(enum power_states state)
 		LL_LPM_EnableDeepSleep();
 		k_cpu_idle();
 		break;
-#endif /* CONFIG_HAS_POWER_STATE_SLEEP_2 */
-#ifdef CONFIG_HAS_POWER_STATE_SLEEP_3
-	case POWER_STATE_SLEEP_3:
+	case 2:
 		/* this corresponds to the STOP2 mode: */
 #ifdef CONFIG_DEBUG
 		/* Enable the Debug Module during STOP mode */
@@ -70,35 +70,34 @@ void pm_power_state_set(enum power_states state)
 		LL_LPM_EnableDeepSleep();
 		k_cpu_idle();
 		break;
-#endif /* CONFIG_HAS_POWER_STATE_SLEEP_3 */
-#endif /* CONFIG_PM_SLEEP_STATES */
 	default:
-		LOG_DBG("Unsupported power state %u", state);
+		LOG_DBG("Unsupported power substate-id %u", info.substate_id);
 		break;
 	}
 }
 
 /* Handle SOC specific activity after Low Power Mode Exit */
-void pm_power_state_exit_post_ops(enum power_states state)
+void pm_power_state_exit_post_ops(struct pm_state_info info)
 {
-	switch (state) {
-#ifdef CONFIG_PM_SLEEP_STATES
-#ifdef CONFIG_HAS_POWER_STATE_SLEEP_1
-	case POWER_STATE_SLEEP_1:
-#endif /* CONFIG_HAS_POWER_STATE_SLEEP_1 */
-#ifdef CONFIG_HAS_POWER_STATE_SLEEP_2
-	case POWER_STATE_SLEEP_2:
-#endif /* CONFIG_HAS_POWER_STATE_SLEEP_2 */
-#ifdef CONFIG_HAS_POWER_STATE_SLEEP_3
-	case POWER_STATE_SLEEP_3:
-#endif /* CONFIG_HAS_POWER_STATE_SLEEP_3 */
-		LL_LPM_DisableSleepOnExit();
-		LL_LPM_EnableSleep();
-		break;
-#endif /* CONFIG_PM_SLEEP_STATES */
-	default:
-		LOG_DBG("Unsupported power state %u", state);
-		break;
+	if (info.state != PM_STATE_SUSPEND_TO_IDLE) {
+		LOG_DBG("Unsupported power state %u", info.state);
+	} else {
+		switch (info.substate_id) {
+		case 0:	/* STOP0 */
+			__fallthrough;
+		case 1:	/* STOP1 */
+			__fallthrough;
+		case 2:	/* STOP2 */
+			LL_LPM_DisableSleepOnExit();
+			LL_LPM_EnableSleep();
+			break;
+		default:
+			LOG_DBG("Unsupported power substate-id %u",
+				info.substate_id);
+			break;
+		}
+		/* need to restore the clock */
+		stm32_clock_control_init(NULL);
 	}
 
 	/*
@@ -107,4 +106,9 @@ void pm_power_state_exit_post_ops(enum power_states state)
 	 * when OS started idling code.
 	 */
 	irq_unlock(0);
+}
+
+__weak bool pm_policy_low_power_devices(enum pm_state state)
+{
+	return pm_is_sleep_state(state);
 }

@@ -30,12 +30,15 @@ interaction is required. This module is a Unix-like shell with these features:
 * Built-in handler to display help for the commands.
 * Support for wildcards: ``*`` and ``?``.
 * Support for meta keys.
+* Support for getopt.
 * Kconfig configuration to optimize memory usage.
 
-Some of these features have a significant impact on RAM and flash usage,
-but many can be disabled when not needed.  A configuration that should
-produce the minimum useful feature set is in
-:zephyr_file:`samples/subsys/shell/shell_module/prj_minimal.conf`.
+.. note::
+	Some of these features have a significant impact on RAM and flash usage,
+	but many can be disabled when not needed.  To default to options which
+	favor reduced RAM and flash requirements instead of features, you should
+	enable :option:`CONFIG_SHELL_MINIMAL` and selectively enable just the
+	features you want.
 
 The module can be connected to any transport for command input and output.
 At this point, the following transport layers are implemented:
@@ -477,6 +480,28 @@ The shell module supports the following meta keys:
      - Moves the cursor forward one word.
 
 This feature is activated by :option:`CONFIG_SHELL_METAKEYS` set to ``y``.
+
+Getopt Feature
+*****************
+
+Some shell users apart from subcommands might need to use options as well.
+the arguments string, looking for supported options. Typically, this task
+is accomplished by the ``getopt`` function.
+
+For this purpose shell supports the getopt library available
+in the FreeBSD project. I was modified so that it can be used
+by all instances of the shell at the same time, hence its call requires
+one more parameter.
+
+An example usage:
+
+.. code-block:: c
+
+  while ((char c = shell_getopt(shell, argc, argv, "abhc:")) != -1) {
+     /* some code */
+  }
+
+This module is activated by :option:`CONFIG_SHELL_GETOPT` set to ``y``.
 
 Shell Logger Backend Feature
 ****************************

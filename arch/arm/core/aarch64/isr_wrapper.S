@@ -31,7 +31,6 @@ GDATA(_sw_isr_table)
 
 GTEXT(_isr_wrapper)
 SECTION_FUNC(TEXT, _isr_wrapper)
-	z_arm64_enter_exc x0, x1
 
 	/* ++(_kernel->nested) to be checked by arch_is_in_isr() */
 	inc_nest_counter x0, x1
@@ -52,20 +51,19 @@ SECTION_FUNC(TEXT, _isr_wrapper)
 	beq	spurious_continue
 
 	stp	x0, x1, [sp, #-16]!
-	lsl	x0, x0, #4 /* table is 16-byte wide */
 
 	/* Retrieve the interrupt service routine */
 	ldr	x1, =_sw_isr_table
-	add	x1, x1, x0
+	add	x1, x1, x0, lsl #4	/* table is 16-byte wide */
 	ldp	x0, x3, [x1] /* arg in x0, ISR in x3 */
 
 	/*
 	 * Call the ISR. Unmask and mask again the IRQs to support nested
 	 * exception handlers
 	 */
-	msr	daifclr, #(DAIFSET_IRQ)
+	msr	daifclr, #(DAIFCLR_IRQ_BIT)
 	blr	x3
-	msr	daifset, #(DAIFSET_IRQ)
+	msr	daifset, #(DAIFSET_IRQ_BIT)
 
 	/* Signal end-of-interrupt */
 	ldp	x0, x1, [sp], #16
@@ -81,10 +79,8 @@ spurious_continue:
 	bl	sys_trace_isr_exit
 #endif
 
-	/* --(_kernel->nested) */
+	/* if (--(_kernel->nested) != 0) exit */
 	dec_nest_counter x0, x1
-
-	cmp	x1, #0
 	bne	exit
 
 	/*
@@ -114,5 +110,5 @@ exit:
 #ifdef CONFIG_STACK_SENTINEL
 	bl	z_check_stack_sentinel
 #endif
-	z_arm64_exit_exc x0, x1
+	b	z_arm64_exit_exc
 

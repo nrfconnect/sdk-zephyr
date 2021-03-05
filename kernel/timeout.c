@@ -12,11 +12,6 @@
 #include <drivers/timer/system_timer.h>
 #include <sys_clock.h>
 
-#define LOCKED(lck) for (k_spinlock_key_t __i = {},			\
-					  __key = k_spin_lock(lck);	\
-			__i.key == 0;					\
-			k_spin_unlock(lck, __key), __i.key = 1)
-
 static uint64_t curr_tick;
 
 static sys_dlist_t timeout_list = SYS_DLIST_STATIC_INIT(&timeout_list);
@@ -91,14 +86,14 @@ void z_add_timeout(struct _timeout *to, _timeout_func_t fn,
 		return;
 	}
 
-#ifdef KERNEL_COHERENCE
+#ifdef CONFIG_KERNEL_COHERENCE
 	__ASSERT_NO_MSG(arch_mem_coherent(to));
 #endif
 
 	k_ticks_t ticks = timeout.ticks + 1;
 
 	if (IS_ENABLED(CONFIG_TIMEOUT_64BIT) && Z_TICK_ABS(ticks) >= 0) {
-		ticks = Z_TICK_ABS(ticks) - (curr_tick + elapsed());
+		ticks = Z_TICK_ABS(timeout.ticks) - (curr_tick + elapsed());
 	}
 
 	__ASSERT(!sys_dnode_is_linked(&to->node), "");
@@ -123,7 +118,24 @@ void z_add_timeout(struct _timeout *to, _timeout_func_t fn,
 		}
 
 		if (to == first()) {
+#if CONFIG_TIMESLICING
+			/*
+			 * This is not ideal, since it does not
+			 * account the time elapsed since the the
+			 * last announcement, and slice_ticks is based
+			 * on that. It means the that time remaining for
+			 * the next announcement can be lesser than
+			 * slice_ticks.
+			 */
+			int32_t next_time = next_timeout();
+
+			if (next_time == 0 ||
+			    _current_cpu->slice_ticks != next_time) {
+				z_clock_set_timeout(next_time, false);
+			}
+#else
 			z_clock_set_timeout(next_timeout(), false);
+#endif	/* CONFIG_TIMESLICING */
 		}
 	}
 }
@@ -198,7 +210,7 @@ void z_set_timeout_expiry(int32_t ticks, bool is_idle)
 	LOCKED(&timeout_lock) {
 		int next_to = next_timeout();
 		bool sooner = (next_to == K_TICKS_FOREVER)
-			      || (ticks < next_to);
+			      || (ticks <= next_to);
 		bool imminent = next_to <= 1;
 
 		/* Only set new timeouts when they are sooner than
@@ -212,7 +224,7 @@ void z_set_timeout_expiry(int32_t ticks, bool is_idle)
 		 * in.
 		 */
 		if (!imminent && (sooner || IS_ENABLED(CONFIG_SMP))) {
-			z_clock_set_timeout(ticks, is_idle);
+			z_clock_set_timeout(MIN(ticks, next_to), is_idle);
 		}
 	}
 }

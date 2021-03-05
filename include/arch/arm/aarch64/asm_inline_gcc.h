@@ -16,27 +16,12 @@
 
 #ifndef _ASMLANGUAGE
 
-#include <arch/arm/aarch64/cpu.h>
+#include <arch/arm/aarch64/lib_helpers.h>
 #include <zephyr/types.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-static ALWAYS_INLINE void __DSB(void)
-{
-	__asm__ volatile ("dsb sy" : : : "memory");
-}
-
-static ALWAYS_INLINE void __DMB(void)
-{
-	__asm__ volatile ("dmb sy" : : : "memory");
-}
-
-static ALWAYS_INLINE void __ISB(void)
-{
-	__asm__ volatile ("isb" : : : "memory");
-}
 
 static ALWAYS_INLINE unsigned int arch_irq_lock(void)
 {
@@ -46,29 +31,21 @@ static ALWAYS_INLINE unsigned int arch_irq_lock(void)
 	 * Return the whole DAIF register as key but use DAIFSET to disable
 	 * IRQs.
 	 */
-	__asm__ volatile("mrs %0, daif;"
-			 "msr daifset, %1;"
-			 "isb"
-			 : "=r" (key)
-			 : "i" (DAIFSET_IRQ)
-			 : "memory", "cc");
+	key = read_daif();
+	disable_irq();
 
 	return key;
 }
 
 static ALWAYS_INLINE void arch_irq_unlock(unsigned int key)
 {
-	__asm__ volatile("msr daif, %0;"
-			 "isb"
-			 :
-			 : "r" (key)
-			 : "memory", "cc");
+	write_daif(key);
 }
 
 static ALWAYS_INLINE bool arch_irq_unlocked(unsigned int key)
 {
 	/* We only check the (I)RQ bit on the DAIF register */
-	return (key & DAIF_IRQ) == 0;
+	return (key & DAIF_IRQ_BIT) == 0;
 }
 
 #ifdef __cplusplus

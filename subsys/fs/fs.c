@@ -143,25 +143,30 @@ int fs_open(struct fs_file_t *zfp, const char *file_name, fs_mode_t flags)
 		return -EINVAL;
 	}
 
+	if (zfp->mp != NULL) {
+		return -EBUSY;
+	}
+
 	rc = fs_get_mnt_point(&mp, file_name, NULL);
 	if (rc < 0) {
 		LOG_ERR("%s:mount point not found!!", __func__);
 		return rc;
 	}
 
-	zfp->mp = mp;
 	if (((mp->flags & FS_MOUNT_FLAG_READ_ONLY) != 0) &&
 	    (flags & FS_O_CREATE || flags & FS_O_WRITE)) {
 		return -EROFS;
 	}
 
-	CHECKIF(zfp->mp->fs->open == NULL) {
+	CHECKIF(mp->fs->open == NULL) {
 		return -ENOTSUP;
 	}
 
-	rc = zfp->mp->fs->open(zfp, file_name, flags);
+	zfp->mp = mp;
+	rc = mp->fs->open(zfp, file_name, flags);
 	if (rc < 0) {
 		LOG_ERR("file open error (%d)", rc);
+		zfp->mp = NULL;
 		return rc;
 	}
 
@@ -323,6 +328,11 @@ int fs_opendir(struct fs_dir_t *zdp, const char *abs_path)
 		return -EINVAL;
 	}
 
+	if (zdp->mp != NULL || zdp->dirp != NULL) {
+		return -EBUSY;
+	}
+
+
 	if (strcmp(abs_path, "/") == 0) {
 		/* Open VFS root dir, marked by zdp->mp == NULL */
 		k_mutex_lock(&mutex, K_FOREVER);
@@ -348,6 +358,8 @@ int fs_opendir(struct fs_dir_t *zdp, const char *abs_path)
 	zdp->mp = mp;
 	rc = zdp->mp->fs->opendir(zdp, abs_path);
 	if (rc < 0) {
+		zdp->mp = NULL;
+		zdp->dirp = NULL;
 		LOG_ERR("directory open error (%d)", rc);
 	}
 
@@ -456,6 +468,7 @@ int fs_closedir(struct fs_dir_t *zdp)
 	}
 
 	zdp->mp = NULL;
+	zdp->dirp = NULL;
 	return rc;
 }
 

@@ -137,6 +137,8 @@ static int cmd_ls(const struct shell *shell, size_t argc, char **argv)
 		create_abs_path(argv[1], path, sizeof(path));
 	}
 
+	fs_dir_t_init(&dir);
+
 	err = fs_opendir(&dir, path);
 	if (err) {
 		shell_error(shell, "Unable to open %s (err %d)", path, err);
@@ -188,7 +190,8 @@ static int cmd_trunc(const struct shell *shell, size_t argc, char **argv)
 		length = 0;
 	}
 
-	err = fs_open(&file, path, FS_O_CREATE | FS_O_RDWR);
+	fs_file_t_init(&file);
+	err = fs_open(&file, path, FS_O_WRITE);
 	if (err) {
 		shell_error(shell, "Failed to open %s (%d)", path, err);
 		return -ENOEXEC;;
@@ -277,7 +280,8 @@ static int cmd_read(const struct shell *shell, size_t argc, char **argv)
 
 	shell_print(shell, "File size: %zd", dirent.size);
 
-	err = fs_open(&file, path, FS_O_CREATE | FS_O_RDWR);
+	fs_file_t_init(&file);
+	err = fs_open(&file, path, FS_O_READ);
 	if (err) {
 		shell_error(shell, "Failed to open %s (%d)", path, err);
 		return -ENOEXEC;
@@ -376,7 +380,8 @@ static int cmd_write(const struct shell *shell, size_t argc, char **argv)
 		arg_offset = 2;
 	}
 
-	err = fs_open(&file, path, FS_O_CREATE | FS_O_RDWR);
+	fs_file_t_init(&file);
+	err = fs_open(&file, path, FS_O_CREATE | FS_O_WRITE);
 	if (err) {
 		shell_error(shell, "Failed to open %s (%d)", path, err);
 		return -ENOEXEC;

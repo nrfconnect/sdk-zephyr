@@ -5,31 +5,37 @@
  */
 
 #include <stdint.h>
+
 #include <zephyr.h>
 #include <sys/util.h>
 #include <bluetooth/hci.h>
 
-#include "hal/debug.h"
 #include "hal/cpu.h"
 
 #include "util/util.h"
-#include "util/memq.h"
 #include "util/mem.h"
+#include "util/memq.h"
 
 #include "pdu.h"
-#include "ll.h"
-#include "lll.h"
 
+#include "lll.h"
+#include "lll/lll_adv_types.h"
 #include "lll_adv.h"
+#include "lll/lll_adv_pdu.h"
+#include "lll/lll_df_types.h"
+#include "lll_df.h"
+
 #include "ull_adv_types.h"
+#include "ull_df.h"
+
 #include "ull_adv_internal.h"
 
-#include "ull_df.h"
-#include "lll_df_internal.h"
+#include "ll.h"
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
 #define LOG_MODULE_NAME bt_ctlr_ull_df
 #include "common/log.h"
+#include "hal/debug.h"
 
 /* ToDo:
  * - Add release of df_adv_cfg when adv_sync is released.
@@ -54,7 +60,7 @@ static int init_reset(void);
  *
  * @return Pointer to lll_df_adv_cfg or NULL if there is no more free memory.
  */
-static struct lll_df_adv_cfg *ull_df_adv_cfg_acquire(void);
+static struct lll_df_adv_cfg *df_adv_cfg_acquire(void);
 
 /* @brief Function performs ULL Direction Finding initialization
  *
@@ -98,6 +104,7 @@ static int init_reset(void)
 	return 0;
 }
 
+#if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
 /* @brief Function sets CTE transmission parameters for periodic advertising.
  *
  * @param[in]adv_handle                 Handle of advertising set.
@@ -118,18 +125,12 @@ uint8_t ll_df_set_cl_cte_tx_params(uint8_t adv_handle, uint8_t cte_len,
 				   uint8_t cte_type, uint8_t cte_count,
 				   uint8_t num_ant_ids, uint8_t *ant_ids)
 {
-	struct ll_adv_set *adv;
-	struct lll_adv_sync *sync;
 	struct lll_df_adv_cfg *cfg;
+	struct ll_adv_set *adv;
 
 	/* Get the advertising set instance */
 	adv = ull_adv_is_created_get(adv_handle);
 	if (!adv) {
-		return BT_HCI_ERR_UNKNOWN_ADV_IDENTIFIER;
-	}
-
-	sync = adv->lll.sync;
-	if (!sync) {
 		return BT_HCI_ERR_UNKNOWN_ADV_IDENTIFIER;
 	}
 
@@ -158,16 +159,16 @@ uint8_t ll_df_set_cl_cte_tx_params(uint8_t adv_handle, uint8_t cte_len,
 	if ((cte_type == BT_HCI_LE_AOD_CTE_1US ||
 	     cte_type == BT_HCI_LE_AOD_CTE_2US) &&
 	    (num_ant_ids < LLL_DF_MIN_ANT_PATTERN_LEN ||
-	     num_ant_ids > CONFIG_BT_CTLR_DF_MAX_ANT_SW_PATTERN_LEN ||
+	     num_ant_ids > BT_CTLR_DF_MAX_ANT_SW_PATTERN_LEN ||
 	     !ant_ids)) {
 		return BT_HCI_ERR_UNSUPP_FEATURE_PARAM_VAL;
 	}
 
-	if (!sync->df_cfg) {
-		sync->df_cfg = ull_df_adv_cfg_acquire();
+	if (!adv->df_cfg) {
+		adv->df_cfg = df_adv_cfg_acquire();
 	}
 
-	cfg = sync->df_cfg;
+	cfg = adv->df_cfg;
 
 	if (cfg->is_enabled) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
@@ -202,8 +203,102 @@ uint8_t ll_df_set_cl_cte_tx_params(uint8_t adv_handle, uint8_t cte_len,
  */
 uint8_t ll_df_set_cl_cte_tx_enable(uint8_t adv_handle, uint8_t cte_enable)
 {
-	return BT_HCI_ERR_CMD_DISALLOWED;
+	struct lll_adv_sync *lll_sync;
+	struct lll_df_adv_cfg *df_cfg;
+	struct ll_adv_sync_set *sync;
+	struct ll_adv_set *adv;
+	uint8_t err, ter_idx;
+
+	/* Get the advertising set instance */
+	adv = ull_adv_is_created_get(adv_handle);
+	if (!adv) {
+		return BT_HCI_ERR_UNKNOWN_ADV_IDENTIFIER;
+	}
+
+	lll_sync = adv->lll.sync;
+	/* If there is no sync in advertising set, then the HCI_LE_Set_-
+	 * Periodic_Advertising_Parameters command was not issued before.
+	 */
+	if (!lll_sync) {
+		return BT_HCI_ERR_CMD_DISALLOWED;
+	}
+
+	sync = (void *)HDR_LLL2EVT(lll_sync);
+
+	/* If df_cfg is NULL, then the HCI_LE_Set_Connectionless_CTE_Transmit_-
+	 * Parameters command was not issued before.
+	 */
+	df_cfg = adv->df_cfg;
+	if (!df_cfg) {
+		return BT_HCI_ERR_CMD_DISALLOWED;
+	}
+
+	if (adv->lll.phy_s == PHY_CODED) {
+		return BT_HCI_ERR_CMD_DISALLOWED;
+	}
+
+	if (!cte_enable) {
+		if (!df_cfg->is_enabled) {
+			return BT_HCI_ERR_CMD_DISALLOWED;
+		}
+
+		err = ull_adv_sync_pdu_set_clear(adv, 0,
+						 ULL_ADV_PDU_HDR_FIELD_CTE_INFO,
+						 NULL, &ter_idx);
+		if (err) {
+			return err;
+		}
+
+		if (sync->is_started) {
+			/* If CTE is disabled when advertising is pending,
+			 * decrease advertising event length
+			 */
+			ull_adv_sync_update(sync, 0, df_cfg->cte_length);
+			/* ToDo decrease number of chain PDUs in pending
+			 * advertising if there are added empty chain PDUs
+			 * to sent requested number of CTEs in a chain
+			 */
+		}
+
+		df_cfg->is_enabled = 0U;
+	} else {
+		struct pdu_cte_info cte_info;
+		struct adv_pdu_field_data pdu_data;
+
+		if (df_cfg->is_enabled) {
+			return BT_HCI_ERR_CMD_DISALLOWED;
+		}
+
+		cte_info.type = df_cfg->cte_type;
+		cte_info.time = df_cfg->cte_length;
+		pdu_data.field_data = (uint8_t *)&cte_info;
+		pdu_data.extra_data = df_cfg;
+		err = ull_adv_sync_pdu_set_clear(adv,
+						 ULL_ADV_PDU_HDR_FIELD_CTE_INFO,
+						 0, &pdu_data, &ter_idx);
+		if (err) {
+			return err;
+		}
+
+		if (sync->is_started) {
+			/* If CTE is enabled when advertising is pending,
+			 * increase advertising event length
+			 */
+			ull_adv_sync_update(sync, df_cfg->cte_length, 0);
+			/* ToDo increase number of chain PDUs in pending
+			 * advertising if requested more CTEs than available
+			 * PDU with advertising data.
+			 */
+		}
+
+		df_cfg->is_enabled = 1U;
+	}
+
+	lll_adv_sync_data_enqueue(adv->lll.sync, ter_idx);
+
+	return BT_HCI_ERR_SUCCESS;
 }
+#endif /* CONFIG_BT_CTLR_DF_ADV_CTE_TX */
 
 /* @brief Function sets CTE transmission parameters for a connection.
  *
@@ -269,12 +364,24 @@ void ll_df_read_ant_inf(uint8_t *switch_sample_rates,
 		*switch_sample_rates |= DF_AOA_1US;
 	}
 
-	*max_switch_pattern_len = CONFIG_BT_CTLR_DF_MAX_ANT_SW_PATTERN_LEN;
+	*max_switch_pattern_len = BT_CTLR_DF_MAX_ANT_SW_PATTERN_LEN;
 	*num_ant = lll_df_ant_num_get();
 	*max_cte_len = LLL_DF_MAX_CTE_LEN;
 }
 
-static struct lll_df_adv_cfg *ull_df_adv_cfg_acquire(void)
+#if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
+/* @brief Function releases unused memory for DF advertising configuration.
+ *
+ * The memory is released to private @ref lll_df_adv_cfg_pool memory store.
+ *
+ * @param[in] df_adv_cfg        Pointer to lll_df_adv_cfg memory to be released.
+ */
+void ull_df_adv_cfg_release(struct lll_df_adv_cfg *df_adv_cfg)
+{
+	mem_release(df_adv_cfg, &df_adv_cfg_free);
+}
+
+static struct lll_df_adv_cfg *df_adv_cfg_acquire(void)
 {
 	struct lll_df_adv_cfg *df_adv_cfg;
 
@@ -283,7 +390,8 @@ static struct lll_df_adv_cfg *ull_df_adv_cfg_acquire(void)
 		return NULL;
 	}
 
-	df_adv_cfg->is_enabled = false;
+	df_adv_cfg->is_enabled = 0U;
 
 	return df_adv_cfg;
 }
+#endif /* CONFIG_BT_CTLR_DF_ADV_CTE_TX */

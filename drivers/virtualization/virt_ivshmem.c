@@ -95,46 +95,13 @@ static void register_signal(const struct device *dev,
 }
 
 #else
+
+static const struct ivshmem_reg no_reg;
+
 #define ivshmem_configure_interrupts(...) true
 #define register_signal(...)
+
 #endif /* CONFIG_IVSHMEM_DOORBELL */
-
-static bool ivshmem_check_on_bdf(pcie_bdf_t bdf)
-{
-	uint32_t data;
-
-	data = pcie_conf_read(bdf, PCIE_CONF_ID);
-	if ((data != PCIE_ID_NONE) &&
-	    (PCIE_ID_TO_VEND(data) == IVSHMEM_VENDOR_ID) &&
-	    (PCIE_ID_TO_DEV(data) == IVSHMEM_DEVICE_ID)) {
-		return true;
-	}
-
-	return false;
-}
-
-/* Ivshmem's BDF is not a static value that we could get from DTS,
- * since the same image could run on qemu or ACRN which could set
- * a different one. So instead, let's find it at runtime.
- */
-static pcie_bdf_t ivshmem_bdf_lookup(void)
-{
-	int bus, dev, func;
-
-	for (bus = 0; bus <= MAX_BUS; bus++) {
-		for (dev = 0; dev <= MAX_DEV; ++dev) {
-			for (func = 0; func <= MAX_FUNC; ++func) {
-				pcie_bdf_t bdf = PCIE_BDF(bus, dev, func);
-
-				if (ivshmem_check_on_bdf(bdf)) {
-					return bdf;
-				}
-			}
-		}
-	}
-
-	return 0;
-}
 
 static bool ivshmem_configure(const struct device *dev)
 {
@@ -142,14 +109,20 @@ static bool ivshmem_configure(const struct device *dev)
 	struct pcie_mbar mbar_regs, mbar_mem;
 
 	if (!pcie_get_mbar(data->bdf, IVSHMEM_PCIE_REG_BAR_IDX, &mbar_regs)) {
+#ifdef CONFIG_IVSHMEM_DOORBELL
 		LOG_ERR("ivshmem regs bar not found");
 		return false;
+#else
+		LOG_DBG("ivshmem regs bar not found");
+		device_map(DEVICE_MMIO_RAM_PTR(dev), (uintptr_t)&no_reg,
+			   sizeof(struct ivshmem_reg), K_MEM_CACHE_NONE);
+#endif /* CONFIG_IVSHMEM_DOORBELL */
+	} else {
+		pcie_set_cmd(data->bdf, PCIE_CONF_CMDSTAT_MEM, true);
+
+		device_map(DEVICE_MMIO_RAM_PTR(dev), mbar_regs.phys_addr,
+			   mbar_regs.size, K_MEM_CACHE_NONE);
 	}
-
-	pcie_set_cmd(data->bdf, PCIE_CONF_CMDSTAT_MEM, true);
-
-	device_map(DEVICE_MMIO_RAM_PTR(dev), mbar_regs.phys_addr,
-		   mbar_regs.size, K_MEM_CACHE_NONE);
 
 	if (!pcie_get_mbar(data->bdf, IVSHMEM_PCIE_SHMEM_BAR_IDX, &mbar_mem)) {
 		LOG_ERR("ivshmem mem bar not found");
@@ -251,8 +224,9 @@ static int ivshmem_init(const struct device *dev)
 {
 	struct ivshmem *data = dev->data;
 
-	data->bdf = ivshmem_bdf_lookup();
-	if (data->bdf == 0) {
+	data->bdf = pcie_bdf_lookup(PCIE_ID(IVSHMEM_VENDOR_ID,
+					    IVSHMEM_DEVICE_ID));
+	if (data->bdf == PCIE_BDF_NONE) {
 		LOG_WRN("ivshmem device not found");
 		return -ENOTSUP;
 	}

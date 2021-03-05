@@ -59,20 +59,18 @@ LOG_MODULE_REGISTER(wdt_wwdg_stm32);
  */
 
 #define ABS_DIFF_UINT(a, b)  ((a) > (b) ? (a) - (b) : (b) - (a))
-#define WWDG_TIMEOUT_ERROR_MARGIN   (100 * USEC_PER_MSEC)
+#define WWDG_TIMEOUT_ERROR_MARGIN(__TIMEOUT__)   (__TIMEOUT__ / 10)
 #define IS_WWDG_TIMEOUT(__TIMEOUT_GOLDEN__, __TIMEOUT__)  \
-	(ABS_DIFF_UINT(__TIMEOUT_GOLDEN__, __TIMEOUT__) < \
-	 WWDG_TIMEOUT_ERROR_MARGIN)
+	(__TIMEOUT__ - __TIMEOUT_GOLDEN__) < \
+	WWDG_TIMEOUT_ERROR_MARGIN(__TIMEOUT_GOLDEN__)
 
 static void wwdg_stm32_irq_config(const struct device *dev);
 
 static uint32_t wwdg_stm32_get_pclk(const struct device *dev)
 {
-	const struct device *clk = device_get_binding(STM32_CLOCK_CONTROL_NAME);
+	const struct device *clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 	const struct wwdg_stm32_config *cfg = WWDG_STM32_CFG(dev);
 	uint32_t pclk_rate;
-
-	__ASSERT_NO_MSG(clk);
 
 	if (clock_control_get_rate(clk, (clock_control_subsys_t *) &cfg->pclken,
 			       &pclk_rate) < 0) {
@@ -116,7 +114,7 @@ static void wwdg_stm32_convert_timeout(const struct device *dev,
 {
 	uint32_t clock_freq = wwdg_stm32_get_pclk(dev);
 	uint8_t divider = 0U;
-	uint8_t shift = 3U;
+	uint8_t shift = 0U;
 
 	/* Convert timeout to seconds. */
 	float timeout_s = (float)timeout / USEC_PER_SEC;
@@ -125,18 +123,19 @@ static void wwdg_stm32_convert_timeout(const struct device *dev,
 	*prescaler = 0;
 	*counter = 0;
 
-	for (divider = 8; divider >= 1; divider >>= 1) {
-		wwdg_freq = ((float)clock_freq) / WWDG_INTERNAL_DIVIDER / divider;
+	for (divider = 0; divider <= 3; divider++) {
+		wwdg_freq = ((float)clock_freq) / WWDG_INTERNAL_DIVIDER / (1 << divider);
 		/* +1 to ceil the result, which may lose from truncation */
 		*counter = (uint32_t)(timeout_s * wwdg_freq + 1) - 1;
-		*counter |= WWDG_RESET_LIMIT;
+		*counter += WWDG_RESET_LIMIT;
 		*prescaler = shift << 7;
 
 		if (*counter <= WWDG_COUNTER_MAX) {
 			break;
 		}
 
-		shift--;
+		shift++;
+		*counter = WWDG_COUNTER_MAX;
 	}
 }
 
@@ -190,8 +189,11 @@ static int wwdg_stm32_install_timeout(const struct device *dev,
 	}
 
 	wwdg_stm32_convert_timeout(dev, timeout, &prescaler, &counter);
-
 	calculated_timeout = wwdg_stm32_get_timeout(dev, prescaler, counter);
+
+	LOG_DBG("Desired WDT: %d us", timeout);
+	LOG_DBG("Set WDT:     %d us", calculated_timeout);
+
 	if (!(IS_WWDG_PRESCALER(prescaler) && IS_WWDG_COUNTER(counter) &&
 	      IS_WWDG_TIMEOUT(timeout, calculated_timeout))) {
 		/* One of the parameters provided is invalid */
@@ -246,10 +248,8 @@ static const struct wdt_driver_api wwdg_stm32_api = {
 
 static int wwdg_stm32_init(const struct device *dev)
 {
-	const struct device *clk = device_get_binding(STM32_CLOCK_CONTROL_NAME);
+	const struct device *clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 	const struct wwdg_stm32_config *cfg = WWDG_STM32_CFG(dev);
-
-	__ASSERT_NO_MSG(clk);
 
 	clock_control_on(clk, (clock_control_subsys_t *) &cfg->pclken);
 

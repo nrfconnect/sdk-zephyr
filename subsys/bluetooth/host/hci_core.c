@@ -40,7 +40,7 @@
 #include "ecc.h"
 
 #include "conn_internal.h"
-#include "audio/iso_internal.h"
+#include "iso_internal.h"
 #include "l2cap_internal.h"
 #include "gatt_internal.h"
 #include "smp.h"
@@ -110,12 +110,6 @@ static sys_slist_t pa_sync_cbs = SYS_SLIST_STATIC_INIT(&pa_sync_cbs);
 #if defined(CONFIG_BT_HCI_VS_EVT_USER)
 static bt_hci_vnd_evt_cb_t *hci_vnd_evt_cb;
 #endif /* CONFIG_BT_HCI_VS_EVT_USER */
-
-#if defined(CONFIG_BT_ECC)
-static uint8_t pub_key[64];
-static struct bt_pub_key_cb *pub_key_cb;
-static bt_dh_key_cb_t dh_key_cb;
-#endif /* CONFIG_BT_ECC */
 
 #if defined(CONFIG_BT_BREDR)
 static bt_br_discovery_cb_t *discovery_cb;
@@ -670,7 +664,16 @@ static int le_set_private_addr(uint8_t id)
 	}
 
 	le_rpa_timeout_submit();
-	return err;
+
+	if (err) {
+		return err;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_LOG_SNIFFER_INFO)) {
+		BT_INFO("RPA: %s", bt_addr_str(&rpa));
+	}
+
+	return 0;
 }
 
 static int le_adv_set_private_addr(struct bt_le_ext_adv *adv)
@@ -717,7 +720,15 @@ static int le_adv_set_private_addr(struct bt_le_ext_adv *adv)
 		le_rpa_timeout_submit();
 	}
 
-	return err;
+	if (err) {
+		return err;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_LOG_SNIFFER_INFO)) {
+		BT_INFO("RPA: %s", bt_addr_str(&rpa));
+	}
+
+	return 0;
 }
 #else
 static int le_set_private_addr(uint8_t id)
@@ -732,7 +743,16 @@ static int le_set_private_addr(uint8_t id)
 
 	BT_ADDR_SET_NRPA(&nrpa);
 
-	return set_random_address(&nrpa);
+	err = set_random_address(&nrpa);
+	if (err)  {
+		return err;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_LOG_SNIFFER_INFO)) {
+		BT_INFO("NRPA: %s", bt_addr_str(&nrpa));
+	}
+
+	return 0;
 }
 
 static int le_adv_set_private_addr(struct bt_le_ext_adv *adv)
@@ -747,7 +767,16 @@ static int le_adv_set_private_addr(struct bt_le_ext_adv *adv)
 
 	BT_ADDR_SET_NRPA(&nrpa);
 
-	return set_adv_random_address(adv, &nrpa);
+	err = set_adv_random_address(adv, &nrpa);
+	if (err) {
+		return err;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_LOG_SNIFFER_INFO)) {
+		BT_INFO("NRPA: %s", bt_addr_str(&nrpa));
+	}
+
+	return 0;
 }
 #endif /* defined(CONFIG_BT_PRIVACY) */
 
@@ -3582,13 +3611,8 @@ done:
 	bt_adv_foreach(adv_unpause_enabled, NULL);
 }
 
-static void update_sec_level(struct bt_conn *conn)
+static bool update_sec_level(struct bt_conn *conn)
 {
-	if (!conn->encrypt) {
-		conn->sec_level = BT_SECURITY_L1;
-		return;
-	}
-
 	if (conn->le.keys && (conn->le.keys->flags & BT_KEYS_AUTHENTICATED)) {
 		if (conn->le.keys->flags & BT_KEYS_SC &&
 		    conn->le.keys->enc_size == BT_SMP_MAX_ENC_KEY_SIZE) {
@@ -3600,10 +3624,7 @@ static void update_sec_level(struct bt_conn *conn)
 		conn->sec_level = BT_SECURITY_L2;
 	}
 
-	if (conn->required_sec_level > conn->sec_level) {
-		BT_ERR("Failed to set required security level");
-		bt_conn_disconnect(conn, BT_HCI_ERR_AUTH_FAIL);
-	}
+	return !(conn->required_sec_level > conn->sec_level);
 }
 #endif /* CONFIG_BT_SMP */
 
@@ -3612,6 +3633,7 @@ static void hci_encrypt_change(struct net_buf *buf)
 {
 	struct bt_hci_evt_encrypt_change *evt = (void *)buf->data;
 	uint16_t handle = sys_le16_to_cpu(evt->handle);
+	uint8_t status = evt->status;
 	struct bt_conn *conn;
 
 	BT_DBG("status 0x%02x handle %u encrypt 0x%02x", evt->status, handle,
@@ -3623,9 +3645,9 @@ static void hci_encrypt_change(struct net_buf *buf)
 		return;
 	}
 
-	if (evt->status) {
-		bt_conn_security_changed(conn, evt->status,
-					 bt_security_err_get(evt->status));
+	if (status) {
+		bt_conn_security_changed(conn, status,
+					 bt_security_err_get(status));
 		bt_conn_unref(conn);
 		return;
 	}
@@ -3645,7 +3667,10 @@ static void hci_encrypt_change(struct net_buf *buf)
 		if (conn->encrypt) {
 			bt_smp_update_keys(conn);
 		}
-		update_sec_level(conn);
+
+		if (!update_sec_level(conn)) {
+			status = BT_HCI_ERR_AUTH_FAIL;
+		}
 	}
 #endif /* CONFIG_BT_SMP */
 #if defined(CONFIG_BT_BREDR)
@@ -3668,7 +3693,12 @@ static void hci_encrypt_change(struct net_buf *buf)
 	}
 #endif /* CONFIG_BT_BREDR */
 
-	bt_conn_security_changed(conn, evt->status, BT_SECURITY_ERR_SUCCESS);
+	bt_conn_security_changed(conn, status, bt_security_err_get(status));
+
+	if (status) {
+		BT_ERR("Failed to set required security level");
+		bt_conn_disconnect(conn, status);
+	}
 
 	bt_conn_unref(conn);
 }
@@ -3676,6 +3706,7 @@ static void hci_encrypt_change(struct net_buf *buf)
 static void hci_encrypt_key_refresh_complete(struct net_buf *buf)
 {
 	struct bt_hci_evt_encrypt_key_refresh_complete *evt = (void *)buf->data;
+	uint8_t status = evt->status;
 	struct bt_conn *conn;
 	uint16_t handle;
 
@@ -3689,9 +3720,9 @@ static void hci_encrypt_key_refresh_complete(struct net_buf *buf)
 		return;
 	}
 
-	if (evt->status) {
-		bt_conn_security_changed(conn, evt->status,
-					 bt_security_err_get(evt->status));
+	if (status) {
+		bt_conn_security_changed(conn, status,
+					 bt_security_err_get(status));
 		bt_conn_unref(conn);
 		return;
 	}
@@ -3705,7 +3736,10 @@ static void hci_encrypt_key_refresh_complete(struct net_buf *buf)
 #if defined(CONFIG_BT_SMP)
 	if (conn->type == BT_CONN_TYPE_LE) {
 		bt_smp_update_keys(conn);
-		update_sec_level(conn);
+
+		if (!update_sec_level(conn)) {
+			status = BT_HCI_ERR_AUTH_FAIL;
+		}
 	}
 #endif /* CONFIG_BT_SMP */
 #if defined(CONFIG_BT_BREDR)
@@ -3717,7 +3751,12 @@ static void hci_encrypt_key_refresh_complete(struct net_buf *buf)
 	}
 #endif /* CONFIG_BT_BREDR */
 
-	bt_conn_security_changed(conn, evt->status, BT_SECURITY_ERR_SUCCESS);
+	bt_conn_security_changed(conn, status, bt_security_err_get(status));
+	if (status) {
+		BT_ERR("Failed to set required security level");
+		bt_conn_disconnect(conn, status);
+	}
+
 	bt_conn_unref(conn);
 }
 #endif /* CONFIG_BT_SMP || CONFIG_BT_BREDR */
@@ -3830,43 +3869,6 @@ static void le_ltk_request(struct net_buf *buf)
 	bt_conn_unref(conn);
 }
 #endif /* CONFIG_BT_SMP */
-
-#if defined(CONFIG_BT_ECC)
-static void le_pkey_complete(struct net_buf *buf)
-{
-	struct bt_hci_evt_le_p256_public_key_complete *evt = (void *)buf->data;
-	struct bt_pub_key_cb *cb;
-
-	BT_DBG("status: 0x%02x", evt->status);
-
-	atomic_clear_bit(bt_dev.flags, BT_DEV_PUB_KEY_BUSY);
-
-	if (!evt->status) {
-		memcpy(pub_key, evt->key, 64);
-		atomic_set_bit(bt_dev.flags, BT_DEV_HAS_PUB_KEY);
-	}
-
-	for (cb = pub_key_cb; cb; cb = cb->_next) {
-		cb->func(evt->status ? NULL : pub_key);
-	}
-
-	pub_key_cb = NULL;
-}
-
-static void le_dhkey_complete(struct net_buf *buf)
-{
-	struct bt_hci_evt_le_generate_dhkey_complete *evt = (void *)buf->data;
-
-	BT_DBG("status: 0x%02x", evt->status);
-
-	if (dh_key_cb) {
-		bt_dh_key_cb_t cb = dh_key_cb;
-
-		dh_key_cb = NULL;
-		cb(evt->status ? NULL : evt->dhkey);
-	}
-}
-#endif /* CONFIG_BT_ECC */
 
 static void hci_reset_complete(struct net_buf *buf)
 {
@@ -4984,9 +4986,11 @@ static const struct event_handler meta_events[] = {
 		      sizeof(struct bt_hci_evt_le_ltk_request)),
 #endif /* CONFIG_BT_SMP */
 #if defined(CONFIG_BT_ECC)
-	EVENT_HANDLER(BT_HCI_EVT_LE_P256_PUBLIC_KEY_COMPLETE, le_pkey_complete,
+	EVENT_HANDLER(BT_HCI_EVT_LE_P256_PUBLIC_KEY_COMPLETE,
+		      bt_hci_evt_le_pkey_complete,
 		      sizeof(struct bt_hci_evt_le_p256_public_key_complete)),
-	EVENT_HANDLER(BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE, le_dhkey_complete,
+	EVENT_HANDLER(BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE,
+		      bt_hci_evt_le_dhkey_complete,
 		      sizeof(struct bt_hci_evt_le_generate_dhkey_complete)),
 #endif /* CONFIG_BT_SMP */
 #if defined(CONFIG_BT_EXT_ADV)
@@ -5196,7 +5200,7 @@ static void process_events(struct k_poll_event *ev, int count)
 #if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_ISO)
 /* command FIFO + conn_change signal + MAX_CONN + MAX_ISO_CONN */
-#define EV_COUNT (2 + CONFIG_BT_MAX_CONN + CONFIG_BT_MAX_ISO_CONN)
+#define EV_COUNT (2 + CONFIG_BT_MAX_CONN + CONFIG_BT_ISO_MAX_CHAN)
 #else
 /* command FIFO + conn_change signal + MAX_CONN */
 #define EV_COUNT (2 + CONFIG_BT_MAX_CONN)
@@ -5384,13 +5388,11 @@ static void read_supported_commands_complete(struct net_buf *buf)
 	memcpy(bt_dev.supported_commands, rp->commands,
 	       sizeof(bt_dev.supported_commands));
 
-	/*
-	 * Report "LE Read Local P-256 Public Key" and "LE Generate DH Key" as
+	/* Report additional HCI commands used for ECDH as
 	 * supported if TinyCrypt ECC is used for emulation.
 	 */
 	if (IS_ENABLED(CONFIG_BT_TINYCRYPT_ECC)) {
-		bt_dev.supported_commands[34] |= 0x02;
-		bt_dev.supported_commands[34] |= 0x04;
+		bt_hci_ecc_supported_commands(bt_dev.supported_commands);
 	}
 }
 
@@ -6050,9 +6052,32 @@ static void bt_dev_show_info(void)
 	BT_INFO("Identity%s: %s", bt_dev.id_count > 1 ? "[0]" : "",
 		bt_addr_le_str(&bt_dev.id_addr[0]));
 
+	if (IS_ENABLED(CONFIG_BT_LOG_SNIFFER_INFO)) {
+#if defined(CONFIG_BT_PRIVACY)
+		uint8_t irk[16];
+
+		sys_memcpy_swap(irk, bt_dev.irk[0], 16);
+		BT_INFO("IRK%s: 0x%s", bt_dev.id_count > 1 ? "[0]" : "",
+			bt_hex(irk, 16));
+#endif
+	}
+
 	for (i = 1; i < bt_dev.id_count; i++) {
 		BT_INFO("Identity[%d]: %s",
 			i, bt_addr_le_str(&bt_dev.id_addr[i]));
+
+		if (IS_ENABLED(CONFIG_BT_LOG_SNIFFER_INFO)) {
+#if defined(CONFIG_BT_PRIVACY)
+			uint8_t irk[16];
+
+			sys_memcpy_swap(irk, bt_dev.irk[i], 16);
+			BT_INFO("IRK[%d]: 0x%s", i, bt_hex(irk, 16));
+#endif
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_LOG_SNIFFER_INFO)) {
+		bt_keys_foreach(BT_KEYS_ALL, bt_keys_show_sniffer_info, NULL);
 	}
 
 	BT_INFO("HCI: version %s (0x%02x) revision 0x%04x, manufacturer 0x%04x",
@@ -6697,7 +6722,6 @@ static int set_sd(struct bt_le_ext_adv *adv, const struct bt_ad *sd,
 int bt_set_name(const char *name)
 {
 #if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
-	struct bt_le_ext_adv *adv = bt_adv_lookup_legacy();
 	size_t len = strlen(name);
 	int err;
 
@@ -6711,15 +6735,6 @@ int bt_set_name(const char *name)
 
 	strncpy(bt_dev.name, name, len);
 	bt_dev.name[len] = '\0';
-
-	/* Update advertising name if in use */
-	if (adv && atomic_test_bit(adv->flags, BT_ADV_INCLUDE_NAME)) {
-		struct bt_data data[] = { BT_DATA(BT_DATA_NAME_COMPLETE, name,
-						len) };
-		struct bt_ad sd = { data, ARRAY_SIZE(data) };
-
-		set_sd(adv, &sd, 1);
-	}
 
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
 		err = settings_save_one("bt/name", bt_dev.name, len);
@@ -6759,10 +6774,14 @@ int bt_set_id_addr(const bt_addr_le_t *addr)
 
 void bt_id_get(bt_addr_le_t *addrs, size_t *count)
 {
-	size_t to_copy = MIN(*count, bt_dev.id_count);
+	if (addrs) {
+		size_t to_copy = MIN(*count, bt_dev.id_count);
 
-	memcpy(addrs, bt_dev.id_addr, to_copy * sizeof(bt_addr_le_t));
-	*count = to_copy;
+		memcpy(addrs, bt_dev.id_addr, to_copy * sizeof(bt_addr_le_t));
+		*count = to_copy;
+	} else {
+		*count = bt_dev.id_count;
+	}
 }
 
 static int id_find(const bt_addr_le_t *addr)
@@ -6843,6 +6862,20 @@ int bt_id_create(bt_addr_le_t *addr, uint8_t *irk)
 
 	if (bt_dev.id_count == ARRAY_SIZE(bt_dev.id_addr)) {
 		return -ENOMEM;
+	}
+
+	/* bt_rand is not available before Bluetooth enable has been called */
+	if (!atomic_test_bit(bt_dev.flags, BT_DEV_ENABLE)) {
+		uint8_t zero_irk[16] = { 0 };
+
+		if (!(addr && bt_addr_le_cmp(addr, BT_ADDR_LE_ANY))) {
+			return -EINVAL;
+		}
+
+		if (IS_ENABLED(CONFIG_BT_PRIVACY) &&
+		    !(irk && memcmp(irk, zero_irk, 16))) {
+			return -EINVAL;
+		}
 	}
 
 	new_id = bt_dev.id_count++;
@@ -9288,91 +9321,6 @@ int bt_br_set_discoverable(bool enable)
 	}
 }
 #endif /* CONFIG_BT_BREDR */
-
-#if defined(CONFIG_BT_ECC)
-int bt_pub_key_gen(struct bt_pub_key_cb *new_cb)
-{
-	int err;
-
-	/*
-	 * We check for both "LE Read Local P-256 Public Key" and
-	 * "LE Generate DH Key" support here since both commands are needed for
-	 * ECC support. If "LE Generate DH Key" is not supported then there
-	 * is no point in reading local public key.
-	 */
-	if (!BT_CMD_TEST(bt_dev.supported_commands, 34, 1) ||
-	    !BT_CMD_TEST(bt_dev.supported_commands, 34, 2)) {
-		BT_WARN("ECC HCI commands not available");
-		return -ENOTSUP;
-	}
-
-	new_cb->_next = pub_key_cb;
-	pub_key_cb = new_cb;
-
-	if (atomic_test_and_set_bit(bt_dev.flags, BT_DEV_PUB_KEY_BUSY)) {
-		return 0;
-	}
-
-	atomic_clear_bit(bt_dev.flags, BT_DEV_HAS_PUB_KEY);
-
-	err = bt_hci_cmd_send_sync(BT_HCI_OP_LE_P256_PUBLIC_KEY, NULL, NULL);
-	if (err) {
-		BT_ERR("Sending LE P256 Public Key command failed");
-		atomic_clear_bit(bt_dev.flags, BT_DEV_PUB_KEY_BUSY);
-		pub_key_cb = NULL;
-		return err;
-	}
-
-	return 0;
-}
-
-const uint8_t *bt_pub_key_get(void)
-{
-	if (atomic_test_bit(bt_dev.flags, BT_DEV_HAS_PUB_KEY)) {
-		return pub_key;
-	}
-
-	return NULL;
-}
-
-int bt_dh_key_gen(const uint8_t remote_pk[64], bt_dh_key_cb_t cb)
-{
-	struct bt_hci_cp_le_generate_dhkey *cp;
-	struct net_buf *buf;
-	int err;
-
-	if (dh_key_cb == cb) {
-		return -EALREADY;
-	}
-
-	if (dh_key_cb || atomic_test_bit(bt_dev.flags, BT_DEV_PUB_KEY_BUSY)) {
-		return -EBUSY;
-	}
-
-	if (!atomic_test_bit(bt_dev.flags, BT_DEV_HAS_PUB_KEY)) {
-		return -EADDRNOTAVAIL;
-	}
-
-	dh_key_cb = cb;
-
-	buf = bt_hci_cmd_create(BT_HCI_OP_LE_GENERATE_DHKEY, sizeof(*cp));
-	if (!buf) {
-		dh_key_cb = NULL;
-		return -ENOBUFS;
-	}
-
-	cp = net_buf_add(buf, sizeof(*cp));
-	memcpy(cp->key, remote_pk, sizeof(cp->key));
-
-	err = bt_hci_cmd_send_sync(BT_HCI_OP_LE_GENERATE_DHKEY, buf, NULL);
-	if (err) {
-		dh_key_cb = NULL;
-		return err;
-	}
-
-	return 0;
-}
-#endif /* CONFIG_BT_ECC */
 
 #if defined(CONFIG_BT_BREDR)
 int bt_br_oob_get_local(struct bt_br_oob *oob)

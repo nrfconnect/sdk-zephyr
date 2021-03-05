@@ -24,16 +24,15 @@
 #include "ticker/ticker.h"
 
 #include "pdu.h"
-#include "ll.h"
-#include "ll_feat.h"
-#include "ll_settings.h"
+
 #include "lll.h"
-#include "lll_vendor.h"
 #include "lll_clock.h"
+#include "lll/lll_vendor.h"
+#include "lll/lll_adv_types.h"
 #include "lll_adv.h"
+#include "lll/lll_adv_pdu.h"
 #include "lll_scan.h"
 #include "lll_conn.h"
-#include "lll_internal.h"
 #include "lll_filter.h"
 
 #include "ull_adv_types.h"
@@ -45,6 +44,10 @@
 #include "ull_scan_internal.h"
 #include "ull_conn_internal.h"
 #include "ull_internal.h"
+
+#include "ll.h"
+#include "ll_feat.h"
+#include "ll_settings.h"
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
 #define LOG_MODULE_NAME bt_ctlr_ull_adv
@@ -77,6 +80,9 @@ static inline uint8_t disable(uint8_t handle);
 
 static const uint8_t *adva_update(struct ll_adv_set *adv, struct pdu_adv *pdu);
 static void tgta_update(struct ll_adv_set *adv, struct pdu_adv *pdu);
+
+static void init_pdu(struct pdu_adv *pdu, uint8_t pdu_type);
+static void init_set(struct ll_adv_set *adv);
 
 static struct ll_adv_set ll_adv[BT_CTLR_ADV_SET];
 
@@ -291,9 +297,13 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 	if (is_new_set) {
 		pdu->type = pdu_adv_type[adv_type];
 		is_pdu_type_changed = 1;
+	/* check if new PDU type is different that past one */
 	} else if (pdu->type != pdu_adv_type[adv_type]) {
 		is_pdu_type_changed = 1;
 
+		/* If old PDU was extended advertising PDU, release
+		 * auxiliary and periodic advertising sets.
+		 */
 		if (pdu->type == PDU_ADV_TYPE_EXT_IND) {
 			struct lll_adv_aux *lll_aux = adv->lll.aux;
 
@@ -306,8 +316,14 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 				pdu->len = 0;
 
 #if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
-				/* FIXME: release periodic adv set */
-				LL_ASSERT(!adv->lll.sync);
+				if (adv->lll.sync) {
+					struct ll_adv_sync_set *sync;
+
+					sync = (void *)HDR_LLL2EVT(adv->lll.sync);
+					adv->lll.sync = NULL;
+
+					ull_adv_sync_release(sync);
+				}
 #endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
 
 				/* Release auxiliary channel set */
@@ -897,12 +913,14 @@ uint8_t ll_adv_enable(uint8_t enable)
 		conn->llcp_enc.req = conn->llcp_enc.ack = 0U;
 		conn->llcp_enc.pause_tx = conn->llcp_enc.pause_rx = 0U;
 		conn->llcp_enc.refresh = 0U;
+		conn->slave.llcp_type = 0U;
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
 #if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
 		conn->llcp_conn_param.req = 0;
 		conn->llcp_conn_param.ack = 0;
 		conn->llcp_conn_param.disabled = 0;
+		conn->slave.ticks_to_offset = 0;
 #endif /* CONFIG_BT_CTLR_CONN_PARAM_REQ */
 
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
@@ -1202,7 +1220,7 @@ uint8_t ll_adv_enable(uint8_t enable)
 					ticks_slot_aux +
 					HAL_TICKER_US_TO_TICKS(EVENT_MAFS_US);
 
-				ret = ull_adv_sync_start(sync,
+				ret = ull_adv_sync_start(adv, sync,
 							 ticks_anchor_sync);
 				if (ret) {
 					goto failure_cleanup;
@@ -1358,6 +1376,10 @@ int ull_adv_reset(void)
 {
 	uint8_t handle;
 
+	for (handle = 0U; handle < BT_CTLR_ADV_SET; handle++) {
+		(void)disable(handle);
+	}
+
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 #if defined(CONFIG_BT_HCI_RAW)
 	ll_adv_cmds = LL_ADV_CMDS_ANY;
@@ -1386,10 +1408,6 @@ int ull_adv_reset(void)
 #endif /* CONFIG_BT_CTLR_ADV_AUX_SET */
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 
-	for (handle = 0U; handle < BT_CTLR_ADV_SET; handle++) {
-		(void)disable(handle);
-	}
-
 	return 0;
 }
 
@@ -1399,8 +1417,15 @@ int ull_adv_reset_finalize(void)
 	int err;
 
 	for (handle = 0U; handle < BT_CTLR_ADV_SET; handle++) {
-		lll_adv_data_reset(&ll_adv[handle].lll.adv_data);
-		lll_adv_data_reset(&ll_adv[handle].lll.scan_rsp);
+		struct ll_adv_set *adv = &ll_adv[handle];
+		struct lll_adv *lll = &adv->lll;
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+		adv->is_created = 0;
+		lll->aux = NULL;
+#endif
+		lll_adv_data_reset(&lll->adv_data);
+		lll_adv_data_reset(&lll->scan_rsp);
 	}
 
 	err = init_reset();
@@ -1633,6 +1658,13 @@ static int init_reset(void)
 		lll_adv_data_init(&ll_adv[handle].lll.adv_data);
 		lll_adv_data_init(&ll_adv[handle].lll.scan_rsp);
 	}
+
+	/* Make sure that set #0 is initialized with empty legacy PDUs. This is
+	 * especially important if legacy HCI interface is used for advertising
+	 * because it allows to enable advertising without any configuration,
+	 * thus we need to have PDUs already initialized.
+	 */
+	init_set(&ll_adv[0]);
 
 	return 0;
 }
@@ -2066,4 +2098,28 @@ static void tgta_update(struct ll_adv_set *adv, struct pdu_adv *pdu)
 	/* NOTE: identity TargetA is set when configuring advertising set, no
 	 *       need to update if LL Privacy is not supported.
 	 */
+}
+
+static void init_pdu(struct pdu_adv *pdu, uint8_t pdu_type)
+{
+	/* TODO: Add support for extended advertising PDU if needed */
+	pdu->type = pdu_type;
+	pdu->rfu = 0;
+	pdu->chan_sel = 0;
+	pdu->tx_addr = 0;
+	pdu->rx_addr = 0;
+	pdu->len = BDADDR_SIZE;
+}
+
+static void init_set(struct ll_adv_set *adv)
+{
+	adv->interval = BT_LE_ADV_INTERVAL_DEFAULT;
+#if defined(CONFIG_BT_CTLR_PRIVACY)
+	adv->own_addr_type = BT_ADDR_LE_PUBLIC;
+#endif /* CONFIG_BT_CTLR_PRIVACY */
+	adv->lll.chan_map = BT_LE_ADV_CHAN_MAP_ALL;
+	adv->lll.filter_policy = BT_LE_ADV_FP_NO_WHITELIST;
+
+	init_pdu(lll_adv_data_peek(&ll_adv[0].lll), PDU_ADV_TYPE_ADV_IND);
+	init_pdu(lll_adv_scan_rsp_peek(&ll_adv[0].lll), PDU_ADV_TYPE_SCAN_RSP);
 }

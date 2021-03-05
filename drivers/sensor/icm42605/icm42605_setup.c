@@ -12,7 +12,7 @@
 #include "icm42605_reg.h"
 #include "icm42605_spi.h"
 
-LOG_MODULE_REGISTER(ICM42605, CONFIG_SENSOR_LOG_LEVEL);
+LOG_MODULE_DECLARE(ICM42605, CONFIG_SENSOR_LOG_LEVEL);
 
 int icm42605_set_fs(const struct device *dev, uint16_t a_sf, uint16_t g_sf)
 {
@@ -232,7 +232,8 @@ int icm42605_turn_on_fifo(const struct device *dev)
 {
 	const struct icm42605_data *drv_data = dev->data;
 
-	uint8_t int0_en, fifo_en;
+	uint8_t int0_en = BIT_INT_UI_DRDY_INT1_EN;
+	uint8_t fifo_en = BIT_FIFO_ACCEL_EN | BIT_FIFO_GYRO_EN | BIT_FIFO_WM_TH;
 	uint8_t burst_read[3];
 	int result;
 	uint8_t v = 0;
@@ -265,14 +266,11 @@ int icm42605_turn_on_fifo(const struct device *dev)
 		return result;
 	}
 
-	fifo_en |= (BIT_FIFO_ACCEL_EN  | BIT_FIFO_GYRO_EN | BIT_FIFO_WM_TH);
-
 	result = inv_spi_single_write(REG_FIFO_CONFIG1, &fifo_en);
 	if (result) {
 		return result;
 	}
 
-	int0_en = BIT_INT_UI_DRDY_INT1_EN;
 	result = inv_spi_single_write(REG_INT_SOURCE0, &int0_en);
 	if (result) {
 		return result;

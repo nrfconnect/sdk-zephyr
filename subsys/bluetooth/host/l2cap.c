@@ -326,7 +326,7 @@ static bool l2cap_chan_add(struct bt_conn *conn, struct bt_l2cap_chan *chan,
 #endif
 
 	if (!ch) {
-		BT_ERR("Unable to allocate L2CAP CID");
+		BT_ERR("Unable to allocate L2CAP channel ID");
 		return false;
 	}
 
@@ -2189,6 +2189,12 @@ static void l2cap_chan_le_recv(struct bt_l2cap_le_chan *chan,
 		return;
 	}
 
+	if (buf->len < 2) {
+		BT_WARN("Too short data packet");
+		bt_l2cap_chan_disconnect(&chan->chan);
+		return;
+	}
+
 	sdu_len = net_buf_pull_le16(buf);
 
 	BT_DBG("chan %p len %u sdu_len %u", chan, buf->len, sdu_len);
@@ -2292,7 +2298,7 @@ void bt_l2cap_recv(struct bt_conn *conn, struct net_buf *buf)
 
 	chan = bt_l2cap_le_lookup_rx_cid(conn, cid);
 	if (!chan) {
-		BT_WARN("Ignoring data for unknown CID 0x%04x", cid);
+		BT_WARN("Ignoring data for unknown channel ID 0x%04x", cid);
 		net_buf_unref(buf);
 		return;
 	}

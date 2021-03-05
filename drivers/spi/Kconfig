@@ -223,4 +223,8 @@ source "drivers/spi/Kconfig.gecko"
 
 source "drivers/spi/Kconfig.xlnx"
 
+source "drivers/spi/Kconfig.esp32"
+
+source "drivers/spi/Kconfig.test"
+
 endif # SPI

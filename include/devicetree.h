@@ -28,15 +28,6 @@
  * @}
  */
 
-/**
- * @brief Name for an invalid node identifier
- *
- * This supports cases where factored macros can be invoked from paths where
- * devicetree data may or may not be available.  It is a preprocessor identifier
- * that does not match any valid devicetree node identifier.
- */
-#define DT_INVALID_NODE _
-
 /*
  * Property suffixes
  * -----------------
@@ -69,6 +60,15 @@
  * @ingroup devicetree
  * @{
  */
+
+/**
+ * @brief Name for an invalid node identifier
+ *
+ * This supports cases where factored macros can be invoked from paths where
+ * devicetree data may or may not be available.  It is a preprocessor identifier
+ * that does not match any valid devicetree node identifier.
+ */
+#define DT_INVALID_NODE _
 
 /**
  * @brief Node identifier for the root node in the devicetree
@@ -398,6 +398,28 @@
  * @return the node's full path in the devicetree
  */
 #define DT_NODE_PATH(node_id) DT_CAT(node_id, _PATH)
+
+/**
+ * @brief Get a devicetree node's name with unit-address as a string literal
+ *
+ * This returns the node name and unit-address from a node identifier.
+ *
+ * Example devicetree fragment:
+ *
+ *     / {
+ *             soc {
+ *                     node: my-node@12345678 { ... };
+ *             };
+ *     };
+ *
+ * Example usage:
+ *
+ *    DT_NODE_FULL_NAME(DT_NODELABEL(node)) // "my-node@12345678"
+ *
+ * @param node_id node identifier
+ * @return the node's name with unit-address as a string in the devicetree
+ */
+#define DT_NODE_FULL_NAME(node_id) DT_CAT(node_id, _FULL_NAME)
 
 /**
  * @brief Do node_id1 and node_id2 refer to the same node?
@@ -1092,7 +1114,12 @@
  * @return node identifier for the node with the phandle at that index
  */
 #define DT_PHANDLE_BY_IDX(node_id, prop, idx) \
-	DT_PROP(node_id, prop##_IDX_##idx##_PH)
+	DT_CAT6(node_id, _P_, prop, _IDX_, idx, _PH)
+/*
+ * Implementation note: using DT_CAT6 above defers concatenation until
+ * after expansion of each parameter. This is important when 'idx' is
+ * expandable to a number, but it isn't one "yet".
+ */
 
 /**
  * @brief Get a node identifier for a phandle property's value
@@ -1963,6 +1990,13 @@
  * @return the interrupt number for the node's only interrupt
  */
 #define DT_INST_IRQN(inst) DT_INST_IRQ(inst, irq)
+
+/**
+ * @brief Get a DT_DRV_COMPAT's bus node identifier
+ * @param inst instance number
+ * @return node identifier for the instance's bus node
+ */
+#define DT_INST_BUS(inst) DT_BUS(DT_DRV_INST(inst))
 
 /**
  * @brief Get a DT_DRV_COMPAT's bus node's label property

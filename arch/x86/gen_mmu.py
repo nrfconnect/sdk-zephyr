@@ -10,12 +10,11 @@ For additional detail on paging and x86 memory management, please
 consult the IA Architecture SW Developer Manual, volume 3a, chapter 4.
 
 This script produces the initial page tables installed into the CPU
-at early boot. These pages will have an identity mapping at
-CONFIG_SRAM_BASE_ADDRESS of size CONFIG_SRAM_SIZE. The script takes
-the 'zephyr_prebuilt.elf' as input to obtain region sizes, certain
-memory addresses, and configuration values.
+at early boot. These pages will have an identity mapping of the kernel
+image. The script takes the 'zephyr_prebuilt.elf' as input to obtain region
+sizes, certain memory addresses, and configuration values.
 
-If CONFIG_SRAM_REGION_PERMISSIONS is not enabled, all RAM will be
+If CONFIG_SRAM_REGION_PERMISSIONS is not enabled, the kernel image will be
 mapped with the Present and Write bits set. The linker scripts shouldn't
 add page alignment padding between sections.
 
@@ -52,8 +51,10 @@ import array
 import argparse
 import os
 import struct
-import elftools
+
 from distutils.version import LooseVersion
+
+import elftools
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 
@@ -62,6 +63,7 @@ if LooseVersion(elftools.__version__) < LooseVersion('0.24'):
 
 
 def bit(pos):
+    """Get value by shifting 1 by pos"""
     return 1 << pos
 
 
@@ -81,16 +83,19 @@ ENTRY_US = FLAG_US | FLAG_IGNORED1
 ENTRY_XD = FLAG_XD | FLAG_IGNORED2
 
 def debug(text):
+    """Display verbose debug message"""
     if not args.verbose:
         return
     sys.stdout.write(os.path.basename(sys.argv[0]) + ": " + text + "\n")
 
 
 def error(text):
+    """Display error message and exit program"""
     sys.exit(os.path.basename(sys.argv[0]) + ": " + text)
 
 
 def align_check(base, size):
+    """Make sure base and size are page-aligned"""
     if (base % 4096) != 0:
         error("unaligned base address %x" % base)
     if (size % 4096) != 0:
@@ -98,6 +103,7 @@ def align_check(base, size):
 
 
 def dump_flags(flags):
+    """Translate page table flags into string"""
     ret = ""
 
     if flags & FLAG_P:
@@ -117,11 +123,22 @@ def dump_flags(flags):
 
     return ret.strip()
 
+
+def round_up(val, align):
+    """Round up val to the next multiple of align"""
+    return (val + (align - 1)) & (~(align - 1))
+
+
+def round_down(val, align):
+    """Round down val to the previous multiple of align"""
+    return val & (~(align - 1))
+
+
 # Hard-coded flags for intermediate paging levels. Permissive, we only control
 # access or set caching properties at leaf levels.
 INT_FLAGS = FLAG_P | FLAG_RW | FLAG_US
 
-class MMUTable(object):
+class MMUTable():
     """Represents a particular table in a set of page tables, at any level"""
 
     def __init__(self):
@@ -265,17 +282,18 @@ class PtXd(Pt):
                        FLAG_IGNORED0 | FLAG_IGNORED1 | FLAG_IGNORED2)
 
 
-class PtableSet(object):
+class PtableSet():
     """Represents a complete set of page tables for any paging mode"""
 
-    def __init__(self, pages_start):
+    def __init__(self, pages_start, offset=0):
         """Instantiate a set of page tables which will be located in the
         image starting at the provided physical memory location"""
-        self.page_pos = pages_start
         self.toplevel = self.levels[0]()
+        self.virt_to_phys_offset = offset
+        self.page_pos = pages_start + offset
 
         debug("%s starting at physical address 0x%x" %
-              (self.__class__.__name__, pages_start))
+              (self.__class__.__name__, self.page_pos))
 
         # Database of page table pages. Maps physical memory address to
         # MMUTable objects, excluding the top-level table which is tracked
@@ -297,7 +315,18 @@ class PtableSet(object):
         some kind of leaf page table class (Pt or PtXd)"""
         raise NotImplementedError()
 
-    def map_page(self, virt_addr, phys_addr, flags):
+    def new_child_table(self, table, virt_addr, depth):
+        """Create a new child table"""
+        new_table_addr = self.get_new_mmutable_addr()
+        new_table = self.levels[depth]()
+        debug("new %s at physical addr 0x%x"
+                      % (self.levels[depth].__name__, new_table_addr))
+        self.tables[new_table_addr] = new_table
+        table.map(virt_addr, new_table_addr, INT_FLAGS)
+
+        return new_table
+
+    def map_page(self, virt_addr, phys_addr, flags, reserve):
         """Map a virtual address to a physical address in the page tables,
         with provided access flags"""
         table = self.toplevel
@@ -306,20 +335,43 @@ class PtableSet(object):
         for depth in range(1, len(self.levels)):
             # Create child table if needed
             if not table.has_entry(virt_addr):
-                new_table_addr = self.get_new_mmutable_addr()
-                new_table = self.levels[depth]()
-                debug("new %s at physical addr 0x%x"
-                      % (self.levels[depth].__name__, new_table_addr))
-                self.tables[new_table_addr] = new_table
-                table.map(virt_addr, new_table_addr, INT_FLAGS)
-                table = new_table
+                table = self.new_child_table(table, virt_addr, depth)
             else:
                 table = self.tables[table.lookup(virt_addr)]
 
         # Set up entry in leaf page table
-        table.map(virt_addr, phys_addr, flags)
+        if not reserve:
+            table.map(virt_addr, phys_addr, flags)
 
-    def map(self, phys_base, size, flags):
+    def reserve(self, virt_base, size):
+        """Reserve page table space with already aligned virt_base and size"""
+        debug("Reserving paging structures 0x%x (%d)" %
+              (virt_base, size))
+
+        align_check(virt_base, size)
+
+        # How much memory is covered by leaf page table
+        scope = 1 << self.levels[-2].addr_shift
+
+        if virt_base % scope != 0:
+            error("misaligned virtual address space, 0x%x not a multiple of 0x%x" %
+                  (virt_base, scope))
+
+        for addr in range(virt_base, virt_base + size, scope):
+            self.map_page(addr, 0, 0, True)
+
+    def reserve_unaligned(self, virt_base, size):
+        """Reserve page table space with virt_base and size alignment"""
+        # How much memory is covered by leaf page table
+        scope = 1 << self.levels[-2].addr_shift
+
+        mem_start = round_down(virt_base, scope)
+        mem_end = round_up(virt_base + size, scope)
+        mem_size = mem_end - mem_start
+
+        self.reserve(mem_start, mem_size)
+
+    def identity_map(self, phys_base, size, flags):
         """Identity map an address range in the page tables, with provided
         access flags.
         """
@@ -332,9 +384,32 @@ class PtableSet(object):
                 # Never map the NULL page
                 continue
 
-            self.map_page(addr, addr, flags)
+            self.map_page(addr, addr, flags, False)
 
-    def set_region_perms(self, name, flags):
+    def map(self, virt_base, size, flags):
+        """Map an address range in the page tables, with
+        virtual-to-physical address translation and provided access flags.
+        """
+        if self.virt_to_phys_offset == 0:
+            self.identity_map(virt_base, size, flags)
+        else:
+            phys_base = virt_base + self.virt_to_phys_offset
+
+            debug("Mapping 0x%x (%d) to 0x%x: %s" %
+                  (phys_base, size, virt_base, dump_flags(flags)))
+
+            align_check(phys_base, size)
+            align_check(virt_base, size)
+            for paddr in range(phys_base, phys_base + size, 4096):
+                if paddr == 0:
+                    # Never map the NULL page
+                    continue
+
+                vaddr = virt_base + (paddr - phys_base)
+
+                self.map_page(vaddr, paddr, flags, False)
+
+    def set_region_perms(self, name, flags, use_offset=False):
         """Set access permissions for a named region that is already mapped
 
         The bounds of the region will be looked up in the symbol table
@@ -345,6 +420,9 @@ class PtableSet(object):
         # either dual mapping or it's the same as physical
         base = syms[name + "_start"]
         size = syms[name + "_size"]
+
+        if use_offset:
+            base += self.virt_to_phys_offset
 
         debug("change flags for %s at 0x%x (%d): %s" %
               (name, base, size, dump_flags(flags)))
@@ -366,10 +444,10 @@ class PtableSet(object):
 
     def write_output(self, filename):
         """Write the page tables to the output file in binary format"""
-        with open(filename, "wb") as fp:
+        with open(filename, "wb") as output_fp:
             for addr in sorted(self.tables):
                 mmu_table = self.tables[addr]
-                fp.write(mmu_table.get_binary())
+                output_fp.write(mmu_table.get_binary())
 
             # We always have the top-level table be last. This is because
             # in PAE, the top-level PDPT has only 4 entries and is not a
@@ -378,21 +456,26 @@ class PtableSet(object):
             debug("top-level %s at physical addr 0x%x" %
                   (self.toplevel.__class__.__name__,
                    self.get_new_mmutable_addr()))
-            fp.write(self.toplevel.get_binary())
+            output_fp.write(self.toplevel.get_binary())
 
 # Paging mode classes, we'll use one depending on configuration
 class Ptables32bit(PtableSet):
+    """32-bit Page Tables"""
     levels = [Pd, Pt]
 
 class PtablesPAE(PtableSet):
+    """PAE Page Tables"""
     levels = [PdptPAE, PdXd, PtXd]
 
 class PtablesIA32e(PtableSet):
+    """Page Tables under IA32e mode"""
     levels = [Pml4, Pdpt, PdXd, PtXd]
 
 
 def parse_args():
+    """Parse command line arguments"""
     global args
+
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -408,8 +491,9 @@ def parse_args():
         args.verbose = True
 
 
-def get_symbols(obj):
-    for section in obj.iter_sections():
+def get_symbols(elf_obj):
+    """Get all symbols from the ELF file"""
+    for section in elf_obj.iter_sections():
         if isinstance(section, SymbolTableSection):
             return {sym.name: sym.entry.st_value
                     for sym in section.iter_symbols()}
@@ -417,14 +501,16 @@ def get_symbols(obj):
     raise LookupError("Could not find symbol table")
 
 def isdef(sym_name):
+    """True if symbol is defined in ELF file"""
     return sym_name in syms
 
 def main():
+    """Main program"""
     global syms
     parse_args()
 
-    with open(args.kernel, "rb") as fp:
-        kernel = ELFFile(fp)
+    with open(args.kernel, "rb") as elf_fp:
+        kernel = ELFFile(elf_fp)
         syms = get_symbols(kernel)
 
     if isdef("CONFIG_X86_64"):
@@ -436,13 +522,44 @@ def main():
 
     debug("building %s" % pclass.__name__)
 
-    ram_base = syms["CONFIG_SRAM_BASE_ADDRESS"]
-    ram_size = syms["CONFIG_SRAM_SIZE"] * 1024
+    vm_base = syms["CONFIG_KERNEL_VM_BASE"]
+    vm_size = syms["CONFIG_KERNEL_VM_SIZE"]
+    vm_offset = syms["CONFIG_KERNEL_VM_OFFSET"]
+
+    sram_base = syms["CONFIG_SRAM_BASE_ADDRESS"]
+    sram_size = syms["CONFIG_SRAM_SIZE"] * 1024
+
+    mapped_kernel_base = syms["z_mapped_start"]
+    mapped_kernel_size = syms["z_mapped_size"]
+
+    if isdef("CONFIG_SRAM_OFFSET"):
+        sram_offset = syms["CONFIG_SRAM_OFFSET"]
+    else:
+        sram_offset = 0
+
+    # Figure out if there is any need to do virtual-to-physical
+    # address translation
+    virt_to_phys_offset = (sram_base + sram_offset) - (vm_base + vm_offset)
+
+    if isdef("CONFIG_ARCH_MAPS_ALL_RAM"):
+        image_base = sram_base
+        image_size = sram_size
+    else:
+        image_base = mapped_kernel_base
+        image_size = mapped_kernel_size
+
     ptables_phys = syms["z_x86_pagetables_start"]
 
-    debug("Base addresses: physical 0x%x size %d" % (ram_base, ram_size))
+    debug("Address space: 0x%x - 0x%x size 0x%x" %
+          (vm_base, vm_base + vm_size, vm_size))
+
+    debug("Zephyr image: 0x%x - 0x%x size 0x%x" %
+          (image_base, image_base + image_size, image_size))
 
     is_perm_regions = isdef("CONFIG_SRAM_REGION_PERMISSIONS")
+
+    if image_size >= vm_size:
+        error("VM size is too small (have 0x%x need more than 0x%x)" % (vm_size, image_size))
 
     if is_perm_regions:
         # Don't allow execution by default for any pages. We'll adjust this
@@ -451,8 +568,31 @@ def main():
     else:
         map_flags = FLAG_P
 
-    pt = pclass(ptables_phys)
-    pt.map(ram_base, ram_size, map_flags | ENTRY_RW)
+    pt = pclass(ptables_phys, offset=virt_to_phys_offset)
+    # Instantiate all the paging structures for the address space
+    pt.reserve(vm_base, vm_size)
+    # Map the zephyr image
+    pt.map(image_base, image_size, map_flags | ENTRY_RW)
+
+    if isdef("CONFIG_KERNEL_LINK_IN_VIRT"):
+        pt.reserve_unaligned(sram_base, sram_size)
+
+        mapped_kernel_phys_base = mapped_kernel_base + virt_to_phys_offset
+        mapped_kernel_phys_size = mapped_kernel_size
+
+        debug("Kernel addresses: physical 0x%x size %d" % (mapped_kernel_phys_base,
+                                                           mapped_kernel_phys_size))
+        pt.identity_map(mapped_kernel_phys_base, mapped_kernel_phys_size,
+                        map_flags | ENTRY_RW)
+
+    if isdef("CONFIG_X86_64"):
+        # 64-bit has a special region in the first 64K to bootstrap other CPUs
+        # from real mode
+        locore_base = syms["_locore_start"]
+        locore_size = syms["_lodata_end"] - locore_base
+        debug("Base addresses: physical 0x%x size %d" % (locore_base,
+                                                         locore_size))
+        pt.map(locore_base, locore_size, map_flags | ENTRY_RW)
 
     if isdef("CONFIG_XIP"):
         # Additionally identity-map all ROM as read-only
@@ -468,10 +608,23 @@ def main():
         # - User mode needs access as we currently do not separate application
         #   text/rodata from kernel text/rodata
         if isdef("CONFIG_GDBSTUB"):
-            pt.set_region_perms("_image_text", FLAG_P | ENTRY_US | ENTRY_RW)
+            flags = FLAG_P | ENTRY_US | ENTRY_RW
+            pt.set_region_perms("_image_text", flags)
+
+            if isdef("CONFIG_KERNEL_LINK_IN_VIRT") and virt_to_phys_offset != 0:
+                pt.set_region_perms("_image_text", flags, use_offset=True)
         else:
-            pt.set_region_perms("_image_text", FLAG_P | ENTRY_US)
-        pt.set_region_perms("_image_rodata", FLAG_P | ENTRY_US | ENTRY_XD)
+            flags = FLAG_P | ENTRY_US
+            pt.set_region_perms("_image_text", flags)
+
+            if isdef("CONFIG_KERNEL_LINK_IN_VIRT") and virt_to_phys_offset != 0:
+                pt.set_region_perms("_image_text", flags, use_offset=True)
+
+        flags = FLAG_P | ENTRY_US | ENTRY_XD
+        pt.set_region_perms("_image_rodata", flags)
+
+        if isdef("CONFIG_KERNEL_LINK_IN_VIRT") and virt_to_phys_offset != 0:
+            pt.set_region_perms("_image_rodata", flags, use_offset=True)
 
         if isdef("CONFIG_COVERAGE_GCOV") and isdef("CONFIG_USERSPACE"):
             # If GCOV is enabled, user mode must be able to write to its

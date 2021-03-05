@@ -823,14 +823,16 @@ endfunction()
 #                   `<board>@2.0.0` or higher.
 #                   This field is not needed when `EXACT` is used.
 #
+# VALID_REVISIONS:  A list of valid revisions for this board.
+#                   If this argument is not provided, then each Kconfig fragment
+#                   of the form ``<board>_<revision>.conf`` in the board folder
+#                   will be used as a valid revision for the board.
+#
 function(board_check_revision)
   set(options EXACT)
   set(single_args FORMAT DEFAULT_REVISION HIGHEST_REVISION)
-  cmake_parse_arguments(BOARD_REV "${options}" "${single_args}" "" ${ARGN})
-
-  file(GLOB revision_candidates LIST_DIRECTORIES false RELATIVE ${BOARD_DIR}
-         ${BOARD_DIR}/${BOARD}_*.conf
-    )
+  set(multi_args  VALID_REVISIONS)
+  cmake_parse_arguments(BOARD_REV "${options}" "${single_args}" "${multi_args}" ${ARGN})
 
   string(TOUPPER ${BOARD_REV_FORMAT} BOARD_REV_FORMAT)
 
@@ -882,31 +884,40 @@ function(board_check_revision)
             Board `${BOARD}` uses revision format: ${BOARD_REV_FORMAT}.")
   endif()
 
-  string(REPLACE "." "_" underscore_revision_regex ${revision_regex})
-  set(file_revision_regex "${BOARD}_${underscore_revision_regex}.conf")
-  foreach(candidate ${revision_candidates})
-    if(${candidate} MATCHES "${file_revision_regex}")
-      string(REPLACE "_" "." FOUND_BOARD_REVISION ${CMAKE_MATCH_1})
-      if(${BOARD_REVISION} STREQUAL ${FOUND_BOARD_REVISION})
-        # Found exact match.
-        return()
+  if(NOT DEFINED BOARD_REV_VALID_REVISIONS)
+    file(GLOB revision_candidates LIST_DIRECTORIES false RELATIVE ${BOARD_DIR}
+         ${BOARD_DIR}/${BOARD}_*.conf
+    )
+    string(REPLACE "." "_" underscore_revision_regex ${revision_regex})
+    set(file_revision_regex "${BOARD}_${underscore_revision_regex}.conf")
+    foreach(candidate ${revision_candidates})
+      if(${candidate} MATCHES "${file_revision_regex}")
+        string(REPLACE "_" "." FOUND_BOARD_REVISION ${CMAKE_MATCH_1})
+        list(APPEND BOARD_REV_VALID_REVISIONS ${FOUND_BOARD_REVISION})
       endif()
+    endforeach()
+  endif()
 
-      if(NOT BOARD_REV_EXACT)
-        if((BOARD_REV_FORMAT MATCHES "^MAJOR\.MINOR\.PATCH$") AND
-           (${BOARD_REVISION} VERSION_GREATER_EQUAL ${FOUND_BOARD_REVISION}) AND
-           (${FOUND_BOARD_REVISION} VERSION_GREATER_EQUAL "${ACTIVE_BOARD_REVISION}")
-        )
-          set(ACTIVE_BOARD_REVISION ${FOUND_BOARD_REVISION})
-        elseif((BOARD_REV_FORMAT STREQUAL LETTER) AND
-               (${BOARD_REVISION} STRGREATER ${FOUND_BOARD_REVISION}) AND
-               (${FOUND_BOARD_REVISION} STRGREATER "${ACTIVE_BOARD_REVISION}")
-        )
-          set(ACTIVE_BOARD_REVISION ${FOUND_BOARD_REVISION})
-        endif()
+  if(${BOARD_REVISION} IN_LIST BOARD_REV_VALID_REVISIONS)
+    # Found exact match.
+    return()
+  endif()
+
+  if(NOT BOARD_REV_EXACT)
+    foreach(TEST_REVISION ${BOARD_REV_VALID_REVISIONS})
+      if((BOARD_REV_FORMAT MATCHES "^MAJOR\.MINOR\.PATCH$") AND
+         (${BOARD_REVISION} VERSION_GREATER_EQUAL ${TEST_REVISION}) AND
+         (${TEST_REVISION} VERSION_GREATER_EQUAL "${ACTIVE_BOARD_REVISION}")
+      )
+        set(ACTIVE_BOARD_REVISION ${TEST_REVISION})
+      elseif((BOARD_REV_FORMAT STREQUAL LETTER) AND
+             (${BOARD_REVISION} STRGREATER ${TEST_REVISION}) AND
+             (${TEST_REVISION} STRGREATER "${ACTIVE_BOARD_REVISION}")
+      )
+        set(ACTIVE_BOARD_REVISION ${TEST_REVISION})
       endif()
-    endif()
-  endforeach()
+    endforeach()
+  endif()
 
   if(BOARD_REV_EXACT OR NOT DEFINED ACTIVE_BOARD_REVISION)
     message(FATAL_ERROR "Board revision `${BOARD_REVISION}` for board \
@@ -2108,7 +2119,44 @@ function(zephyr_check_cache variable)
   # Store the specified variable in parent scope and the cache
   set(${variable} ${${variable}} PARENT_SCOPE)
   set(CACHED_${variable} ${${variable}} CACHE STRING "Selected ${variable_text}")
+
+  # The variable is now set to its final value.
+  zephyr_boilerplate_watch(${variable})
 endfunction(zephyr_check_cache variable)
+
+
+# Usage:
+#   zephyr_boilerplate_watch(SOME_BOILERPLATE_VAR)
+#
+# Inform the build system that SOME_BOILERPLATE_VAR, a variable
+# handled in cmake/app/boilerplate.cmake, is now fixed and should no
+# longer be changed.
+#
+# This function uses variable_watch() to print a noisy warning
+# if the variable is set after it returns.
+function(zephyr_boilerplate_watch variable)
+  variable_watch(${variable} zephyr_variable_set_too_late)
+endfunction()
+
+function(zephyr_variable_set_too_late variable access value current_list_file)
+  if (access STREQUAL "MODIFIED_ACCESS")
+    message(WARNING
+"
+   **********************************************************************
+   *
+   *                    WARNING
+   *
+   * CMake variable ${variable} set to \"${value}\" in:
+   *     ${current_list_file}
+   *
+   * This is too late to make changes! The change was ignored.
+   *
+   * Hint: ${variable} must be set before calling find_package(Zephyr ...).
+   *
+   **********************************************************************
+")
+  endif()
+endfunction()
 
 # Usage:
 #   zephyr_get_targets(<directory> <types> <targets>)
@@ -2135,4 +2183,28 @@ function(zephyr_get_targets directory types targets)
         zephyr_get_targets(${directory} "${types}" ${targets})
     endforeach()
     set(${targets} ${${targets}} PARENT_SCOPE)
+endfunction()
+
+# Usage:
+#   target_byproducts(TARGET <target> BYPRODUCTS <file> [<file>...])
+#
+# Specify additional BYPRODUCTS that this target produces.
+#
+# This function allows the build system to specify additional byproducts to
+# target created with `add_executable()`. When linking an executable the linker
+# may produce additional files, like map files. Those files are not known to the
+# build system. This function makes it possible to describe such additional
+# byproducts in an easy manner.
+function(target_byproducts)
+  cmake_parse_arguments(TB "" "TARGET" "BYPRODUCTS" ${ARGN})
+
+  if(NOT DEFINED TB_TARGET)
+    message(FATAL_ERROR "target_byproducts() missing parameter: TARGET <target>")
+  endif()
+
+  add_custom_command(TARGET ${TB_TARGET}
+                     POST_BUILD COMMAND ${CMAKE_COMMAND} -E echo ""
+                     BYPRODUCTS ${TB_BYPRODUCTS}
+                     COMMENT "Logical command for additional byproducts on target: ${TB_TARGET}"
+  )
 endfunction()

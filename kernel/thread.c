@@ -538,15 +538,6 @@ char *z_setup_new_thread(struct k_thread *new_thread,
 {
 	char *stack_ptr;
 
-#if __ASSERT_ON
-	atomic_val_t old_val = atomic_set(&new_thread->base.cookie,
-					  THREAD_COOKIE);
-	/* Must be garbage or 0, never already set. Cleared at the end of
-	 * z_thread_single_abort()
-	 */
-	__ASSERT(old_val != THREAD_COOKIE,
-		 "re-use of active thread object %p detected", new_thread);
-#endif
 	Z_ASSERT_VALID_PRIO(prio, entry);
 
 #ifdef CONFIG_USERSPACE
@@ -561,13 +552,13 @@ char *z_setup_new_thread(struct k_thread *new_thread,
 	/* Any given thread has access to itself */
 	k_object_access_grant(new_thread, new_thread);
 #endif
-	z_waitq_init(&new_thread->base.join_waiters);
+	z_waitq_init(&new_thread->join_queue);
 
 	/* Initialize various struct k_thread members */
 	z_init_thread_base(&new_thread->base, prio, _THREAD_PRESTART, options);
 	stack_ptr = setup_thread_stack(new_thread, stack, stack_size);
 
-#ifdef KERNEL_COHERENCE
+#ifdef CONFIG_KERNEL_COHERENCE
 	/* Check that the thread object is safe, but that the stack is
 	 * still cached!
 	 */
@@ -579,7 +570,6 @@ char *z_setup_new_thread(struct k_thread *new_thread,
 
 	/* static threads overwrite it afterwards with real value */
 	new_thread->init_data = NULL;
-	new_thread->fn_abort = NULL;
 
 #ifdef CONFIG_USE_SWITCH
 	/* switch_handle must be non-null except when inside z_swap()
@@ -653,13 +643,6 @@ k_tid_t z_impl_k_thread_create(struct k_thread *new_thread,
 			      int prio, uint32_t options, k_timeout_t delay)
 {
 	__ASSERT(!arch_is_in_isr(), "Threads may not be created in ISRs");
-
-	/* Special case, only for unit tests */
-#if defined(CONFIG_TEST) && defined(CONFIG_ARCH_HAS_USERSPACE) && !defined(CONFIG_USERSPACE)
-	__ASSERT((options & K_USER) == 0,
-		 "Platform is capable of user mode, and test thread created with K_USER option,"
-		 " but neither CONFIG_TEST_USERSPACE nor CONFIG_USERSPACE is set\n");
-#endif
 
 	z_setup_new_thread(new_thread, stack, stack_size, entry, p1, p2, p3,
 			  prio, options, NULL);
@@ -807,7 +790,7 @@ void z_init_thread_base(struct _thread_base *thread_base, int priority,
 		       uint32_t initial_state, unsigned int options)
 {
 	/* k_q_node is initialized upon first insertion in a list */
-
+	thread_base->pended_on = NULL;
 	thread_base->user_options = (uint8_t)options;
 	thread_base->thread_state = (uint8_t)initial_state;
 
@@ -883,6 +866,14 @@ void z_spin_lock_set_owner(struct k_spinlock *l)
 {
 	l->thread_cpu = _current_cpu->id | (uintptr_t)_current;
 }
+
+#ifdef CONFIG_KERNEL_COHERENCE
+bool z_spin_lock_mem_coherent(struct k_spinlock *l)
+{
+	return arch_mem_coherent((void *)l);
+}
+#endif /* CONFIG_KERNEL_COHERENCE */
+
 #endif /* CONFIG_SPIN_VALIDATE */
 
 int z_impl_k_float_disable(struct k_thread *thread)
@@ -1006,7 +997,7 @@ int z_vrfy_k_thread_stack_space_get(const struct k_thread *thread,
 
 #ifdef CONFIG_USERSPACE
 static inline k_ticks_t z_vrfy_k_thread_timeout_remaining_ticks(
-						    struct k_thread *t)
+						    const struct k_thread *t)
 {
 	Z_OOPS(Z_SYSCALL_OBJ(t, K_OBJ_THREAD));
 	return z_impl_k_thread_timeout_remaining_ticks(t);
@@ -1014,7 +1005,7 @@ static inline k_ticks_t z_vrfy_k_thread_timeout_remaining_ticks(
 #include <syscalls/k_thread_timeout_remaining_ticks_mrsh.c>
 
 static inline k_ticks_t z_vrfy_k_thread_timeout_expires_ticks(
-						  struct k_thread *t)
+						  const struct k_thread *t)
 {
 	Z_OOPS(Z_SYSCALL_OBJ(t, K_OBJ_THREAD));
 	return z_impl_k_thread_timeout_expires_ticks(t);

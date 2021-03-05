@@ -148,16 +148,8 @@ __start:
 
 	/*
 	 * N.B.: if multiboot info struct is present, "common.S"
-	 * has left a pointer to it in EBX. do not clobber (yet).
-	 *
-	 * next, clear the BSS. note we're still in 32-bit mode,
-	 * so the BSS must fit entirely in the first 4GB of RAM.
+	 * has left a pointer to it in EBX.
 	 */
-	cld
-	xorl %eax, %eax
-	movl $__bss_start, %edi
-	movl $__bss_num_dwords, %ecx
-	rep stosl
 
 	movl $x86_cpuboot, %ebp		/* BSP is always logical CPU id 0 */
 	movl %ebx, __x86_cpuboot_t_arg_OFFSET(%ebp)	/* multiboot info */
@@ -181,6 +173,15 @@ enter_code64:
 	movw %ax, %es
 	movw %ax, %ss
 	movw %ax, %fs
+
+	/* On Intel processors, if GS is not zero and is being set to
+	 * zero, GS_BASE is also being set to zero. This would interfere
+	 * with the actual use of GS_BASE for usespace. To avoid accidentally
+	 * clearing GS_BASE, simply set GS to 0 at boot, so any subsequent
+	 * clearing of GS will not clear GS_BASE.
+	 */
+	mov $0, %eax
+	movw %ax, %gs
 
 	movw __x86_cpuboot_t_tr_OFFSET(%rbp), %ax
 	ltr %ax

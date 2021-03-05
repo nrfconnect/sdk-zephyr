@@ -117,8 +117,7 @@ static void help_item_print(const struct shell *shell, const char *item_name,
 	}
 
 	if (!IS_ENABLED(CONFIG_NEWLIB_LIBC) &&
-	    !IS_ENABLED(CONFIG_ARCH_POSIX)  &&
-	    !IS_ENABLED(CONFIG_CBPRINTF_NANO)) {
+	    !IS_ENABLED(CONFIG_ARCH_POSIX)) {
 		/* print option name */
 		z_shell_fprintf(shell, SHELL_NORMAL, "%s%-*s%s:", tabulator,
 				item_name_width, item_name, tabulator);
@@ -187,4 +186,17 @@ void z_shell_help_cmd_print(const struct shell *shell,
 	z_shell_fprintf(shell, SHELL_NORMAL, "%s%s", cmd->syntax, cmd_sep);
 
 	formatted_text_print(shell, cmd->help, field_width, false);
+}
+
+bool z_shell_help_request(const char *str)
+{
+	if (!IS_ENABLED(CONFIG_SHELL_HELP_OPT_PARSE)) {
+		return false;
+	}
+
+	if (!strcmp(str, "-h") || !strcmp(str, "--help")) {
+		return true;
+	}
+
+	return false;
 }

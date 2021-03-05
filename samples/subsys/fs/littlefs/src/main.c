@@ -99,6 +99,8 @@ void main(void)
 
 	struct fs_file_t file;
 
+	fs_file_t_init(&file);
+
 	rc = fs_open(&file, fname, FS_O_CREATE | FS_O_RDWR);
 	if (rc < 0) {
 		printk("FAIL: open %s: %d\n", fname, rc);
@@ -123,7 +125,9 @@ void main(void)
 	rc = fs_close(&file);
 	printk("%s close: %d\n", fname, rc);
 
-	struct fs_dir_t dir = { 0 };
+	struct fs_dir_t dir;
+
+	fs_dir_t_init(&dir);
 
 	rc = fs_opendir(&dir, mp->mnt_point);
 	printk("%s opendir: %d\n", mp->mnt_point, rc);

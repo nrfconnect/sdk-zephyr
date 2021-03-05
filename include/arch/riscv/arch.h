@@ -54,7 +54,8 @@
  */
 #ifdef CONFIG_PMP_STACK_GUARD
 #define ARCH_KERNEL_STACK_RESERVED	Z_RISCV_STACK_GUARD_SIZE
-#define ARCH_KERNEL_STACK_OBJ_ALIGN	Z_RISCV_PMP_ALIGN
+#define ARCH_KERNEL_STACK_OBJ_ALIGN \
+		MAX(Z_RISCV_PMP_ALIGN, ARCH_STACK_PTR_ALIGN)
 #endif
 
 #ifdef CONFIG_USERSPACE
@@ -277,12 +278,6 @@ extern "C" {
 typedef struct {
 	uint8_t pmp_attr;
 } k_mem_partition_attr_t;
-
-/*
- * SOC-specific function to get the IRQ number generating the interrupt.
- * __soc_get_irq returns a bitfield of pending IRQs.
- */
-extern uint32_t __soc_get_irq(void);
 
 void arch_irq_enable(unsigned int irq);
 void arch_irq_disable(unsigned int irq);

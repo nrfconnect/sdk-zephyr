@@ -112,10 +112,29 @@
 		label = "SPI_0";
 	};
 
+	espi0: espi@300 {
+		status = "okay";
+		compatible = "zephyr,espi-emul-controller";
+		reg = <0x300 4>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		label = "ESPI_0";
+	};
+
 	uart0: uart {
 		status = "okay";
 		compatible = "zephyr,native-posix-uart";
 		label = "UART_0";
+		/* Dummy current-speed entry to comply with serial
+		 * DTS binding
+		 */
+		current-speed = <0>;
+	};
+
+	uart1: uart_1 {
+		status = "okay";
+		compatible = "zephyr,native-posix-uart";
+		label = "UART_1";
 		/* Dummy current-speed entry to comply with serial
 		 * DTS binding
 		 */

@@ -11,6 +11,11 @@ config SOC_SERIES
 config NUM_IRQS
 	default 64
 
+config CORTEX_M_SYSTICK
+	default !NPCX_ITIM_TIMER
+	help
+	  Disable Cortex-M system tick if NPCX_ITIM_TIMER is enabled.
+
 config CLOCK_CONTROL_NPCX
 	default y
 	depends on CLOCK_CONTROL
@@ -82,6 +87,30 @@ config I2C_NPCX
 	  Each interface is a two-wire serial interface that is compatible with
 	  both Intel SMBus and Philips I2C physical layer. There are 8 SMBus
 	  modules and 10 buses in NPCX7 series.
+
+config TACH_NPCX
+	default y
+	depends on SENSOR
+	help
+	  Enable support for NPCX tachometer sensor driver. The NPCX7 series
+	  contains two tachometer (TACH) modules that contains two counters
+	  (counter A and B). They are used to capture/compare a counter value
+	  when an event is generated on comparison of signals match.
+
+if SOC_POWER_MANAGEMENT
+
+config PM
+	default y if SYS_CLOCK_EXISTS
+	help
+	  Enable the kernel handles extra power management policies whenever
+	  system enters idle state.
+
+config PM_DEVICE
+	default y
+	help
+	  Enable device power management support.
+
+endif # SOC_POWER_MANAGEMENT
 
 source "soc/arm/nuvoton_npcx/npcx7/Kconfig.defconfig.npcx7*"
 

@@ -102,13 +102,13 @@ static void dma_stm32_irq_handler(const struct device *dev, uint32_t id)
 	}
 
 	/* the dma stream id is in range from STREAM_OFFSET..<dma-requests> */
-	if (dma_stm32_is_ht_active(dma, id)) {
+	if (stm32_dma_is_ht_irq_active(dma, id)) {
 		/* Let HAL DMA handle flags on its own */
 		if (!stream->hal_override) {
 			dma_stm32_clear_ht(dma, id);
 		}
 		stream->dma_callback(dev, stream->user_data, callback_arg, 0);
-	} else if (dma_stm32_is_tc_active(dma, id)) {
+	} else if (stm32_dma_is_tc_irq_active(dma, id)) {
 #ifdef CONFIG_DMAMUX_STM32
 		stream->busy = false;
 #endif
@@ -577,8 +577,7 @@ DMA_STM32_EXPORT_API int dma_stm32_stop(const struct device *dev, uint32_t id)
 static int dma_stm32_init(const struct device *dev)
 {
 	const struct dma_stm32_config *config = dev->config;
-	const struct device *clk =
-		device_get_binding(STM32_CLOCK_CONTROL_NAME);
+	const struct device *clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 
 	if (clock_control_on(clk,
 		(clock_control_subsys_t *) &config->pclken) != 0) {

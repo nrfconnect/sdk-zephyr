@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019 Tobias Svehagen
+ * Copyright (c) 2020 Grinn
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -78,6 +79,12 @@ extern "C" {
 #define CONN_CMD_MAX_LEN (sizeof("AT+"_CWJAP"=\"\",\"\"") + \
 			  WIFI_SSID_MAX_LEN + WIFI_PSK_MAX_LEN)
 
+#if defined(CONFIG_WIFI_ESP_DNS_USE)
+#define ESP_MAX_DNS	MIN(3, CONFIG_DNS_RESOLVER_MAX_SERVERS)
+#else
+#define ESP_MAX_DNS	0
+#endif
+
 #define ESP_MAX_SOCKETS 5
 
 /* Maximum amount that can be sent with CIPSEND and read with CIPRECVDATA */
@@ -131,44 +138,42 @@ enum esp_socket_flags {
 	ESP_SOCK_CONNECTING = BIT(2),
 	ESP_SOCK_CONNECTED  = BIT(3),
 	ESP_SOCK_CLOSE_PENDING = BIT(4),
+	ESP_SOCK_WORKQ_STOPPED = BIT(5),
 };
 
 struct esp_socket {
 	/* internal */
+	struct k_mutex lock;
+	atomic_t refcount;
+
 	uint8_t idx;
 	uint8_t link_id;
-	uint8_t flags;
+	atomic_t flags;
 
 	/* socket info */
-	enum net_sock_type type;
-	enum net_ip_protocol ip_proto;
 	struct sockaddr dst;
 
-	/* for +CIPRECVDATA */
-	size_t bytes_avail;
-
-	/* packets */
-	struct k_fifo fifo_rx_pkt;
-	struct net_pkt *tx_pkt;
-
 	/* sem */
-	struct k_sem sem_data_ready;
+	union {
+		/* handles blocking receive */
+		struct k_sem sem_data_ready;
+
+		/* notifies about reaching 0 refcount */
+		struct k_sem sem_free;
+	};
 
 	/* work */
 	struct k_work connect_work;
-	struct k_work send_work;
-	struct k_work recv_work;
 	struct k_work recvdata_work;
+	struct k_work close_work;
 
 	/* net context */
 	struct net_context *context;
 	net_context_connect_cb_t connect_cb;
-	net_context_send_cb_t send_cb;
 	net_context_recv_cb_t recv_cb;
 
 	/* callback data */
 	void *conn_user_data;
-	void *send_user_data;
 	void *recv_user_data;
 };
 
@@ -193,6 +198,7 @@ struct esp_data {
 	struct in_addr gw;
 	struct in_addr nm;
 	uint8_t mac_addr[6];
+	struct sockaddr_in dns_addresses[ESP_MAX_DNS];
 
 	/* modem context */
 	struct modem_context mctx;
@@ -216,6 +222,7 @@ struct esp_data {
 	struct k_work scan_work;
 	struct k_work connect_work;
 	struct k_work mode_switch_work;
+	struct k_work dns_work;
 
 	scan_result_cb_t scan_cb;
 
@@ -228,33 +235,110 @@ struct esp_data {
 
 int esp_offload_init(struct net_if *iface);
 
-struct esp_socket *esp_socket_get();
+struct esp_socket *esp_socket_get(struct esp_data *data,
+				  struct net_context *context);
 int esp_socket_put(struct esp_socket *sock);
-struct esp_socket *esp_socket_from_link_id(struct esp_data *data,
-					   uint8_t link_id);
 void esp_socket_init(struct esp_data *data);
 void esp_socket_close(struct esp_socket *sock);
 void esp_socket_rx(struct esp_socket *sock, struct net_buf *buf,
 		   size_t offset, size_t len);
+void esp_socket_workq_stop_and_flush(struct esp_socket *sock);
+struct esp_socket *esp_socket_ref(struct esp_socket *sock);
+void esp_socket_unref(struct esp_socket *sock);
+
+static inline
+struct esp_socket *esp_socket_ref_from_link_id(struct esp_data *data,
+					       uint8_t link_id)
+{
+	if (link_id >= ARRAY_SIZE(data->sockets)) {
+		return NULL;
+	}
+
+	return esp_socket_ref(&data->sockets[link_id]);
+}
+
+static inline atomic_val_t esp_socket_flags_update(struct esp_socket *sock,
+						   atomic_val_t value,
+						   atomic_val_t mask)
+{
+	atomic_val_t flags;
+
+	do {
+		flags = atomic_get(&sock->flags);
+	} while (!atomic_cas(&sock->flags, flags, (flags & ~mask) | value));
+
+	return flags;
+}
+
+static inline
+atomic_val_t esp_socket_flags_clear_and_set(struct esp_socket *sock,
+					    atomic_val_t clear_flags,
+					    atomic_val_t set_flags)
+{
+	return esp_socket_flags_update(sock, set_flags,
+				       clear_flags | set_flags);
+}
+
+static inline atomic_val_t esp_socket_flags_set(struct esp_socket *sock,
+						atomic_val_t flags)
+{
+	return atomic_or(&sock->flags, flags);
+}
+
+static inline bool esp_socket_flags_test_and_clear(struct esp_socket *sock,
+						   atomic_val_t flags)
+{
+	return (atomic_and(&sock->flags, ~flags) & flags);
+}
+
+static inline bool esp_socket_flags_test_and_set(struct esp_socket *sock,
+						 atomic_val_t flags)
+{
+	return (atomic_or(&sock->flags, flags) & flags);
+}
+
+static inline atomic_val_t esp_socket_flags_clear(struct esp_socket *sock,
+						  atomic_val_t flags)
+{
+	return atomic_and(&sock->flags, ~flags);
+}
+
+static inline atomic_val_t esp_socket_flags(struct esp_socket *sock)
+{
+	return atomic_get(&sock->flags);
+}
 
 static inline struct esp_data *esp_socket_to_dev(struct esp_socket *sock)
 {
 	return CONTAINER_OF(sock - sock->idx, struct esp_data, sockets);
 }
 
-static inline bool esp_socket_in_use(struct esp_socket *sock)
+static inline void __esp_socket_work_submit(struct esp_socket *sock,
+					    struct k_work *work)
 {
-	return (sock->flags & ESP_SOCK_IN_USE) != 0;
+	struct esp_data *data = esp_socket_to_dev(sock);
+
+	k_work_submit_to_queue(&data->workq, work);
+}
+
+static inline int esp_socket_work_submit(struct esp_socket *sock,
+					  struct k_work *work)
+{
+	int ret = -EBUSY;
+
+	k_mutex_lock(&sock->lock, K_FOREVER);
+	if (!(esp_socket_flags(sock) & ESP_SOCK_WORKQ_STOPPED)) {
+		__esp_socket_work_submit(sock, work);
+		ret = 0;
+	}
+	k_mutex_unlock(&sock->lock);
+
+	return ret;
 }
 
 static inline bool esp_socket_connected(struct esp_socket *sock)
 {
-	return (sock->flags & ESP_SOCK_CONNECTED) != 0;
-}
-
-static inline bool esp_socket_close_pending(struct esp_socket *sock)
-{
-	return (sock->flags & ESP_SOCK_CLOSE_PENDING) != 0;
+	return (esp_socket_flags(sock) & ESP_SOCK_CONNECTED) != 0;
 }
 
 static inline void esp_flags_set(struct esp_data *dev, uint8_t flags)
@@ -272,6 +356,16 @@ static inline bool esp_flags_are_set(struct esp_data *dev, uint8_t flags)
 	return (dev->flags & flags) != 0;
 }
 
+static inline enum net_sock_type esp_socket_type(struct esp_socket *sock)
+{
+	return net_context_get_type(sock->context);
+}
+
+static inline enum net_ip_protocol esp_socket_ip_proto(struct esp_socket *sock)
+{
+	return net_context_get_ip_proto(sock->context);
+}
+
 static inline int esp_cmd_send(struct esp_data *data,
 			       const struct modem_cmd *handlers,
 			       size_t handlers_len, const char *buf,
@@ -281,6 +375,10 @@ static inline int esp_cmd_send(struct esp_data *data,
 			      handlers, handlers_len, buf, &data->sem_response,
 			      timeout);
 }
+
+void esp_connect_work(struct k_work *work);
+void esp_recvdata_work(struct k_work *work);
+void esp_close_work(struct k_work *work);
 
 #ifdef __cplusplus
 }

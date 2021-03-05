@@ -54,7 +54,9 @@ def main():
                          warn_reg_unit_address_mismatch=
                              "-Wno-simple_bus_reg" not in args.dtc_flags,
                          default_prop_types=True,
-                         infer_binding_for_paths=["/zephyr,user"])
+                         infer_binding_for_paths=["/zephyr,user"],
+                         err_on_deprecated_properties=
+                         args.err_on_deprecated_properties)
     except edtlib.EDTError as e:
         sys.exit(f"devicetree error: {e}")
 
@@ -95,8 +97,12 @@ def main():
         for node in sorted(edt.nodes, key=lambda node: node.dep_ordinal):
             write_node_comment(node)
 
-            out_comment(f"Node's full path:")
+            out_comment("Node's full path:")
             out_dt_define(f"{node.z_path_id}_PATH", f'"{escape(node.path)}"')
+
+            out_comment("Node's name with unit-address:")
+            out_dt_define(f"{node.z_path_id}_FULL_NAME",
+                          f'"{escape(node.name)}"')
 
             if node.parent is not None:
                 out_comment(f"Node parent ({node.parent.path}) identifier:")
@@ -132,7 +138,8 @@ def write_device_extern_header(device_header_out, edt):
         print("", file=dev_header_file)
 
         for node in sorted(edt.nodes, key=lambda node: node.dep_ordinal):
-            print(f"extern const struct device DEVICE_DT_NAME_GET(DT_{node.z_path_id});", file=dev_header_file)
+            print(f"extern const struct device DEVICE_DT_NAME_GET(DT_{node.z_path_id}); /* dts_ord_{node.dep_ordinal} */",
+                  file=dev_header_file)
 
         print("", file=dev_header_file)
         print("#ifdef __cplusplus", file=dev_header_file)
@@ -192,6 +199,8 @@ def parse_args():
                         help="path to write device struct extern header to")
     parser.add_argument("--edt-pickle-out",
                         help="path to write pickled edtlib.EDT object to")
+    parser.add_argument("--err-on-deprecated-properties", action="store_true",
+                        help="if set, deprecated property usage is an error")
 
     return parser.parse_args()
 

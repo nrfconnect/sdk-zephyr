@@ -15,7 +15,7 @@
 
 struct mcux_lpsci_config {
 	UART0_Type *base;
-	char *clock_name;
+	const struct device *clock_dev;
 	clock_control_subsys_t clock_subsys;
 	uint32_t baud_rate;
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
@@ -172,7 +172,7 @@ static int mcux_lpsci_irq_rx_full(const struct device *dev)
 	return (flags & kLPSCI_RxDataRegFullFlag) != 0U;
 }
 
-static int mcux_lpsci_irq_rx_ready(const struct device *dev)
+static int mcux_lpsci_irq_rx_pending(const struct device *dev)
 {
 	const struct mcux_lpsci_config *config = dev->config;
 	uint32_t mask = kLPSCI_RxDataRegFullInterruptEnable;
@@ -204,7 +204,7 @@ static void mcux_lpsci_irq_err_disable(const struct device *dev)
 static int mcux_lpsci_irq_is_pending(const struct device *dev)
 {
 	return (mcux_lpsci_irq_tx_ready(dev)
-		|| mcux_lpsci_irq_rx_ready(dev));
+		|| mcux_lpsci_irq_rx_pending(dev));
 }
 
 static int mcux_lpsci_irq_update(const struct device *dev)
@@ -236,15 +236,9 @@ static int mcux_lpsci_init(const struct device *dev)
 {
 	const struct mcux_lpsci_config *config = dev->config;
 	lpsci_config_t uart_config;
-	const struct device *clock_dev;
 	uint32_t clock_freq;
 
-	clock_dev = device_get_binding(config->clock_name);
-	if (clock_dev == NULL) {
-		return -EINVAL;
-	}
-
-	if (clock_control_get_rate(clock_dev, config->clock_subsys,
+	if (clock_control_get_rate(config->clock_dev, config->clock_subsys,
 				   &clock_freq)) {
 		return -EINVAL;
 	}
@@ -276,7 +270,7 @@ static const struct uart_driver_api mcux_lpsci_driver_api = {
 	.irq_tx_ready = mcux_lpsci_irq_tx_ready,
 	.irq_rx_enable = mcux_lpsci_irq_rx_enable,
 	.irq_rx_disable = mcux_lpsci_irq_rx_disable,
-	.irq_rx_ready = mcux_lpsci_irq_rx_ready,
+	.irq_rx_ready = mcux_lpsci_irq_rx_full,
 	.irq_err_enable = mcux_lpsci_irq_err_enable,
 	.irq_err_disable = mcux_lpsci_irq_err_disable,
 	.irq_is_pending = mcux_lpsci_irq_is_pending,
@@ -309,7 +303,7 @@ static const struct uart_driver_api mcux_lpsci_driver_api = {
 #define MCUX_LPSCI_DECLARE_CFG(n, IRQ_FUNC_INIT)			\
 static const struct mcux_lpsci_config mcux_lpsci_##n##_config = {	\
 	.base = (UART0_Type *)DT_INST_REG_ADDR(n),			\
-	.clock_name = DT_INST_CLOCKS_LABEL(n),				\
+	.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),		\
 	.clock_subsys = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, name),\
 	.baud_rate = DT_INST_PROP(n, current_speed),			\
 	IRQ_FUNC_INIT							\

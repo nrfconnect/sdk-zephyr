@@ -172,6 +172,12 @@
 #define STM32_PERIPH_GPIOE LL_AHB2_GRP1_PERIPH_GPIOE
 #define STM32_PERIPH_GPIOF LL_AHB2_GRP1_PERIPH_GPIOF
 #define STM32_PERIPH_GPIOG LL_AHB2_GRP1_PERIPH_GPIOG
+#elif CONFIG_SOC_SERIES_STM32WLX
+#define STM32_CLOCK_BUS_GPIO STM32_CLOCK_BUS_AHB2
+#define STM32_PERIPH_GPIOA LL_AHB2_GRP1_PERIPH_GPIOA
+#define STM32_PERIPH_GPIOB LL_AHB2_GRP1_PERIPH_GPIOB
+#define STM32_PERIPH_GPIOC LL_AHB2_GRP1_PERIPH_GPIOC
+#define STM32_PERIPH_GPIOH LL_AHB2_GRP1_PERIPH_GPIOH
 #endif /* CONFIG_SOC_SERIES_* */
 
 #ifdef CONFIG_SOC_SERIES_STM32F1X
@@ -227,11 +233,19 @@ struct gpio_stm32_data {
 /**
  * @brief helper for configuration of GPIO pin
  *
- * @param base_addr GPIO port base address
+ * @param dev GPIO port device pointer
  * @param pin IO pin
- * @param func GPIO mode
+ * @param conf GPIO mode
  * @param altf Alternate function
  */
-int gpio_stm32_configure(uint32_t *base_addr, int pin, int conf, int altf);
+int gpio_stm32_configure(const struct device *dev, int pin, int conf, int altf);
+
+/**
+ * @brief Enable / disable GPIO port clock.
+ *
+ * @param dev GPIO port device pointer
+ * @param on boolean for on/off clock request
+ */
+int gpio_stm32_clock_request(const struct device *dev, bool on);
 
 #endif /* ZEPHYR_DRIVERS_GPIO_GPIO_STM32_H_ */

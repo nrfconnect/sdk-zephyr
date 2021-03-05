@@ -142,6 +142,20 @@ ARM arch:
     labels:
         - "area: ARM"
 
+ARM64 arch:
+    status: maintained
+    maintainers:
+        - carlocaione
+    collaborators:
+        - npitre
+        - ioannisg
+    files:
+        - arch/arm/core/aarch64/
+        - include/arch/arm/aarch64/
+        - tests/arch/arm64/
+    labels:
+        - "area: ARM64"
+
 Bluetooth:
     status: maintained
     maintainers:
@@ -149,6 +163,8 @@ Bluetooth:
     collaborators:
         - joerchan
         - Vudentz
+        - Thalley
+        - asbjornsabo
     files:
         - doc/reference/bluetooth/
         - doc/guides/bluetooth/
@@ -161,6 +177,7 @@ Bluetooth:
         - subsys/bluetooth/host/
         - subsys/bluetooth/services/
         - subsys/bluetooth/shell/
+        - subsys/bluetooth/audio/
         - tests/bluetooth/
     labels:
         - "area: Bluetooth"
@@ -200,6 +217,7 @@ Build system:
         - cmake/
         - CMakeLists.txt
         - scripts/zephyr_module.py
+        - share/
         - doc/guides/build/
         - doc/guides/modules.rst
     labels:
@@ -209,7 +227,6 @@ C library:
     status: orphaned
     collaborators:
          - nashif
-         - andrewboie
     files:
          - lib/libc/
          - tests/lib/c_lib/
@@ -227,8 +244,9 @@ CMSIS API layer:
 
 Common arch:
     status: maintained
-    maintainers:
-        - andrewboie
+    collaborators:
+        - dcpleung
+        - nashif
     files:
         - arch/common/
         - include/arch/common/
@@ -298,6 +316,7 @@ Devicetree:
         - tests/lib/devicetree/
         - dts/bindings/test/
         - doc/guides/dts/
+        - include/devicetree/
     labels:
         - "area: Devicetree"
 
@@ -390,6 +409,7 @@ Documentation:
         - samples/drivers/can/
         - tests/drivers/can/
         - samples/subsys/canbus/
+        - doc/reference/networking/can_api.rst
     labels:
         - "area: CAN"
 
@@ -596,8 +616,8 @@ Documentation:
 
 "Drivers: IPM":
     status: maintained
-    maintainers:
-        - andrewboie
+    collaborators:
+        - dcpleung
     files:
         - drivers/ipm/
     description: >-
@@ -642,6 +662,8 @@ Documentation:
     status: maintained
     maintainers:
         - Mani-Sadhasivam
+    collaborators:
+        - mniestroj
     files:
         - drivers/lora/
         - include/drivers/lora.h
@@ -671,7 +693,9 @@ Documentation:
     maintainers:
         - dcpleung
     collaborators:
-        - andrewboie
+        - jhedberg
+        - finikorg
+        - tbursztyka
     files:
         - drivers/pcie/
         - include/drivers/pcie/
@@ -708,16 +732,17 @@ Documentation:
     labels:
         - "area: Clocks"
 
-"Drivers: PSCI":
+"Drivers: PM CPU ops":
     status: maintained
     maintainers:
         - carlocaione
     files:
-        - drivers/psci/
-        - include/drivers/psci.h
+        - drivers/pm_cpu_ops/
+        - include/drivers/pm_cpu_ops/
+        - include/drivers/pm_cpu_ops.h
         - include/arch/arm/arm-smccc.h
     labels:
-        - "area: PSCI"
+        - "area: PM CPU ops"
 
 "Drivers: PWM":
     status: maintained
@@ -728,8 +753,8 @@ Documentation:
     files:
         - drivers/pwm/
         - dts/bindings/pwm/
-        - include/drivers/pwm.h
         - tests/drivers/pwm/
+        - include/*/pwms.h
     labels:
         - "area: PWM"
 
@@ -875,7 +900,10 @@ Kernel:
     maintainers:
         - andyross
     collaborators:
-        - andrewboie
+        - nashif
+        - ceolin
+        - dcpleung
+        - pabigot
     files:
         - doc/reference/kernel/
         - include/kernel*.h
@@ -890,7 +918,7 @@ Base OS:
     maintainers:
         - andyross
     collaborators:
-        - andrewboie
+        - dcpleung
         - nashif
     files:
         - include/sys/
@@ -1114,7 +1142,6 @@ RISCV arch:
     status: orphaned
     collaborators:
         - mgielda
-        - nategraff-sifive
         - katsuster
     files:
         - arch/riscv/
@@ -1198,6 +1225,36 @@ Synopsys Platforms:
     labels:
         - "platform: Synopsys"
 
+Nuvoton Platforms:
+    status: maintained
+    collaborators:
+        - MulinChao
+        - sjg20
+        - jackrosenthal
+        - ChiHuaL
+        - WealianLiao
+    files:
+        - soc/arm/nuvoton/
+        - boards/arm/npcx*/
+        - dts/arm/nuvoton/
+        - dts/bindings/*/nuvoton/*
+        - drivers/*/*_npcx*
+    labels:
+        - "platform: Nuvoton"
+
+SiLabs Platforms:
+    status: maintained
+    collaborators:
+        - chrta
+    files:
+        - soc/arm/silabs_*/
+        - boards/arm/ef*/
+        - dts/arm/silabs/
+        - dts/bindings/*/silabs*
+        - drivers/*/*_gecko*
+    labels:
+        - "platform: SiLabs"
+
 Intel Platforms (X86):
     status: maintained
     maintainers:
@@ -1239,6 +1296,7 @@ NXP Platforms:
     - drivers/*/*lpc*
     - drivers/*/*mcux*
     - dts/arm/nxp/
+    - dts/bindings/*/nxp*
   labels:
     - "platform: NXP"
 
@@ -1262,7 +1320,7 @@ nRF Platforms:
     maintainers:
         - ioannisg
     files:
-        - boards/arm/nrf*/
+        - boards/arm/*nrf*/
         - drivers/*/*nrfx*
         - soc/arm/nordic_nrf/
         - samples/boards/nrf/
@@ -1322,6 +1380,7 @@ Tracing:
         - subsys/timing/
         - samples/subsys/tracing/
         - doc/guides/tracing/
+        - tests/subsys/tracing/
     labels:
         - "area: tracing"
 
@@ -1344,8 +1403,9 @@ USB:
 
 Userspace:
     status: maintained
-    maintainers:
-        - andrewboie
+    collaborators:
+        - dcpleung
+        - ioannisg
     files:
         - doc/reference/usermode/kernelobjects.rst
         - include/app_memory/
@@ -1354,6 +1414,12 @@ Userspace:
         - samples/userspace/
         - include/syscall.h
         - kernel/userspace*
+        - scripts/gen_app_partitions.py
+        - scripts/gen_kobject_list.py
+        - scripts/gen_syscalls.py
+        - scripts/process_gperf.py
+        - scripts/gen_relocate_app.py
+        - include/sys/kobject.h
     labels:
         - "area: Userspace"
 
@@ -1389,7 +1455,7 @@ Xtensa arch:
         - dcpleung
     collaborators:
         - andyross
-        - andrewboie
+        - nashif
     files:
         - arch/xtensa/
         - include/arch/xtensa/
@@ -1405,7 +1471,7 @@ x86 arch:
     collaborators:
         - andyross
         - nashif
-        - andrewboie
+        - dcpleung
         - ceolin
         - jenmwms
         - aasthagr
@@ -1425,6 +1491,8 @@ CI:
         - .github/
         - .buildkite/
         - scripts/ci/
+        - .checkpatch.conf
+        - scripts/gitlint/
     labels:
         - "area: Continuous Integration"
 

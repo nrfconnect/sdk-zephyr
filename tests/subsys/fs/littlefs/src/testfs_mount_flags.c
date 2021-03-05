@@ -26,6 +26,7 @@ void test_fs_mount_flags(void)
 	int ret = 0;
 	struct fs_file_t fs;
 
+	fs_file_t_init(&fs);
 	cleanup(mp);
 
 	/* Test FS_MOUNT_FLAG_NO_FORMAT flag */
@@ -50,9 +51,11 @@ void test_fs_mount_flags(void)
 	zassert_equal(ret, 0, "Expected success", ret);
 	fs_close(&fs);
 	TC_PRINT("Create other directory\n");
-	zassert_equal(ret, 0, "Expected success", ret);
 	ret = fs_mkdir("/sml/other");
-	fs_unmount(mp);
+	zassert_equal(ret, 0, "Expected success", ret);
+
+	ret = fs_unmount(mp);
+	zassert_equal(ret, 0, "Expected success", ret);
 
 	/* Check fs operation on volume mounted with FS_MOUNT_FLAG_READ_ONLY */
 	mp->flags = FS_MOUNT_FLAG_READ_ONLY;
@@ -76,5 +79,6 @@ void test_fs_mount_flags(void)
 	ret = fs_open(&fs, "/sml/some", FS_O_READ);
 	zassert_equal(ret, 0, "Expected success", ret);
 	fs_close(&fs);
-	fs_unmount(mp);
+	ret = fs_unmount(mp);
+	zassert_equal(ret, 0, "Expected success", ret);
 }

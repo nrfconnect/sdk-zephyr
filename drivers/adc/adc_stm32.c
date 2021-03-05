@@ -319,11 +319,15 @@ static int start_read(const struct device *dev,
 	}
 
 	uint32_t channels = sequence->channels;
+	uint8_t index = find_lsb_set(channels) - 1;
+
+	if (channels > BIT(index)) {
+		LOG_ERR("Only single channel supported");
+		return -ENOTSUP;
+	}
 
 	data->buffer = sequence->buffer;
-	uint8_t index;
 
-	index = find_lsb_set(channels) - 1;
 	uint32_t channel = __LL_ADC_DECIMAL_NB_TO_CHANNEL(index);
 #if defined(CONFIG_SOC_SERIES_STM32H7X)
 	/*
@@ -580,8 +584,7 @@ static int adc_stm32_init(const struct device *dev)
 {
 	struct adc_stm32_data *data = dev->data;
 	const struct adc_stm32_cfg *config = dev->config;
-	const struct device *clk =
-		device_get_binding(STM32_CLOCK_CONTROL_NAME);
+	const struct device *clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 	ADC_TypeDef *adc = (ADC_TypeDef *)config->base;
 	int err;
 

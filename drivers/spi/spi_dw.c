@@ -35,7 +35,6 @@ LOG_MODULE_REGISTER(spi_dw);
 #include <init.h>
 
 #include <sys/sys_io.h>
-#include <drivers/clock_control.h>
 #include <sys/util.h>
 
 #ifdef CONFIG_IOAPIC
@@ -521,9 +520,6 @@ int spi_dw_init(const struct device *dev)
 	const struct spi_dw_config *info = dev->config;
 	struct spi_dw_data *spi = dev->data;
 
-	clock_config(dev);
-	clock_on(dev);
-
 	info->config_func();
 
 	/* Masking interrupt and making sure controller is disabled */
@@ -538,7 +534,7 @@ int spi_dw_init(const struct device *dev)
 }
 
 
-#ifdef CONFIG_SPI_0
+#if DT_NODE_HAS_STATUS(DT_DRV_INST(0), okay)
 void spi_config_0_irq(void);
 
 struct spi_dw_data spi_dw_data_port_0 = {
@@ -557,12 +553,8 @@ struct spi_dw_data spi_dw_data_port_0 = {
 const struct spi_dw_config spi_dw_config_0 = {
 	.regs = DT_INST_REG_ADDR(0),
 	.clock_frequency = INST_0_SNPS_DESIGNWARE_SPI_CLOCK_FREQ,
-#ifdef CONFIG_SPI_DW_PORT_0_CLOCK_GATE
-	.clock_name = CONFIG_SPI_DW_PORT_1_CLOCK_GATE_DRV_NAME,
-	.clock_data = UINT_TO_POINTER(CONFIG_SPI_DW_PORT_0_CLOCK_GATE_SUBSYS),
-#endif /* CONFIG_SPI_DW_PORT_0_CLOCK_GATE */
 	.config_func = spi_config_0_irq,
-	.op_modes = CONFIG_SPI_0_OP_MODES
+	.op_modes = SPI_CTX_RUNTIME_OP_MODE_MASTER
 };
 
 DEVICE_DT_INST_DEFINE(0, spi_dw_init, device_pm_control_nop,
@@ -572,7 +564,7 @@ DEVICE_DT_INST_DEFINE(0, spi_dw_init, device_pm_control_nop,
 
 void spi_config_0_irq(void)
 {
-#ifdef CONFIG_SPI_DW_PORT_0_INTERRUPT_SINGLE_LINE
+#if DT_NUM_IRQS(DT_DRV_INST(0)) == 1
 #if DT_INST_IRQ_HAS_NAME(0, flags)
 #define INST_0_IRQ_FLAGS DT_INST_IRQ_BY_NAME(0, flags, irq)
 #else
@@ -603,8 +595,9 @@ void spi_config_0_irq(void)
 
 #endif
 }
-#endif /* CONFIG_SPI_0 */
-#ifdef CONFIG_SPI_1
+#endif /* DT_NODE_HAS_STATUS(DT_DRV_INST(0), okay) */
+
+#if DT_NODE_HAS_STATUS(DT_DRV_INST(1), okay)
 void spi_config_1_irq(void);
 
 struct spi_dw_data spi_dw_data_port_1 = {
@@ -623,12 +616,8 @@ struct spi_dw_data spi_dw_data_port_1 = {
 static const struct spi_dw_config spi_dw_config_1 = {
 	.regs = DT_INST_REG_ADDR(1),
 	.clock_frequency = INST_1_SNPS_DESIGNWARE_SPI_CLOCK_FREQ,
-#ifdef CONFIG_SPI_DW_PORT_1_CLOCK_GATE
-	.clock_name = CONFIG_SPI_DW_PORT_1_CLOCK_GATE_DRV_NAME,
-	.clock_data = UINT_TO_POINTER(CONFIG_SPI_DW_PORT_1_CLOCK_GATE_SUBSYS),
-#endif /* CONFIG_SPI_DW_PORT_1_CLOCK_GATE */
 	.config_func = spi_config_1_irq,
-	.op_modes = CONFIG_SPI_1_OP_MODES
+	.op_modes = SPI_CTX_RUNTIME_OP_MODE_MASTER
 };
 
 DEVICE_DT_INST_DEFINE(1, spi_dw_init, device_pm_control_nop,
@@ -638,7 +627,7 @@ DEVICE_DT_INST_DEFINE(1, spi_dw_init, device_pm_control_nop,
 
 void spi_config_1_irq(void)
 {
-#ifdef CONFIG_SPI_DW_PORT_1_INTERRUPT_SINGLE_LINE
+#if DT_NUM_IRQS(DT_DRV_INST(1)) == 1
 #if DT_INST_IRQ_HAS_NAME(1, flags)
 #define INST_1_IRQ_FLAGS DT_INST_IRQ_BY_NAME(1, flags, irq)
 #else
@@ -669,8 +658,9 @@ void spi_config_1_irq(void)
 
 #endif
 }
-#endif /* CONFIG_SPI_1 */
-#ifdef CONFIG_SPI_2
+#endif /* DT_NODE_HAS_STATUS(DT_DRV_INST(1), okay) */
+
+#if DT_NODE_HAS_STATUS(DT_DRV_INST(2), okay)
 void spi_config_2_irq(void);
 
 struct spi_dw_data spi_dw_data_port_2 = {
@@ -689,12 +679,8 @@ struct spi_dw_data spi_dw_data_port_2 = {
 static const struct spi_dw_config spi_dw_config_2 = {
 	.regs = DT_INST_REG_ADDR(2),
 	.clock_frequency = INST_2_SNPS_DESIGNWARE_SPI_CLOCK_FREQ,
-#ifdef CONFIG_SPI_DW_PORT_2_CLOCK_GATE
-	.clock_name = CONFIG_SPI_DW_PORT_2_CLOCK_GATE_DRV_NAME,
-	.clock_data = UINT_TO_POINTER(CONFIG_SPI_DW_PORT_2_CLOCK_GATE_SUBSYS),
-#endif /* CONFIG_SPI_DW_PORT_2_CLOCK_GATE */
 	.config_func = spi_config_2_irq,
-	.op_modes = CONFIG_SPI_2_OP_MODES
+	.op_modes = SPI_CTX_RUNTIME_OP_MODE_MASTER
 };
 
 DEVICE_DT_INST_DEFINE(2, spi_dw_init, device_pm_control_nop,
@@ -704,7 +690,7 @@ DEVICE_DT_INST_DEFINE(2, spi_dw_init, device_pm_control_nop,
 
 void spi_config_2_irq(void)
 {
-#ifdef CONFIG_SPI_DW_PORT_2_INTERRUPT_SINGLE_LINE
+#if DT_NUM_IRQS(DT_DRV_INST(2)) == 1
 #if DT_INST_IRQ_HAS_NAME(2, flags)
 #define INST_2_IRQ_FLAGS DT_INST_IRQ_BY_NAME(2, flags, irq)
 #else
@@ -735,8 +721,9 @@ void spi_config_2_irq(void)
 
 #endif
 }
-#endif /* CONFIG_SPI_2 */
-#ifdef CONFIG_SPI_3
+#endif /* DT_NODE_HAS_STATUS(DT_DRV_INST(2), okay) */
+
+#if DT_NODE_HAS_STATUS(DT_DRV_INST(3), okay)
 void spi_config_3_irq(void);
 
 struct spi_dw_data spi_dw_data_port_3 = {
@@ -755,12 +742,8 @@ struct spi_dw_data spi_dw_data_port_3 = {
 static const struct spi_dw_config spi_dw_config_3 = {
 	.regs = DT_INST_REG_ADDR(3),
 	.clock_frequency = INST_3_SNPS_DESIGNWARE_SPI_CLOCK_FREQ,
-#ifdef CONFIG_SPI_DW_PORT_3_CLOCK_GATE
-	.clock_name = CONFIG_SPI_DW_PORT_3_CLOCK_GATE_DRV_NAME,
-	.clock_data = UINT_TO_POINTER(CONFIG_SPI_DW_PORT_3_CLOCK_GATE_SUBSYS),
-#endif /* CONFIG_SPI_DW_PORT_3_CLOCK_GATE */
 	.config_func = spi_config_3_irq,
-	.op_modes = CONFIG_SPI_3_OP_MODES
+	.op_modes = SPI_CTX_RUNTIME_OP_MODE_MASTER
 };
 
 DEVICE_DT_INST_DEFINE(3, spi_dw_init, device_pm_control_nop,
@@ -770,7 +753,7 @@ DEVICE_DT_INST_DEFINE(3, spi_dw_init, device_pm_control_nop,
 
 void spi_config_3_irq(void)
 {
-#ifdef CONFIG_SPI_DW_PORT_3_INTERRUPT_SINGLE_LINE
+#if DT_NUM_IRQS(DT_DRV_INST(3)) == 1
 #if DT_INST_IRQ_HAS_NAME(3, flags)
 #define INST_3_IRQ_FLAGS DT_INST_IRQ_BY_NAME(3, flags, irq)
 #else
@@ -801,4 +784,4 @@ void spi_config_3_irq(void)
 
 #endif
 }
-#endif /* CONFIG_SPI_3 */
+#endif /* DT_NODE_HAS_STATUS(DT_DRV_INST(3), okay) */

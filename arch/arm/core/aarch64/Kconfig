@@ -9,6 +9,7 @@ config CPU_CORTEX_A
 	select HAS_FLASH_LOAD_OFFSET
 	select USE_SWITCH
 	select USE_SWITCH_SUPPORTED
+	select HAS_ARM_SMCCC
 	help
 	  This option signifies the use of a CPU of the Cortex-A family.
 
@@ -55,6 +56,12 @@ config CMSIS_V2_THREAD_DYNAMIC_STACK_SIZE
 
 config IPM_CONSOLE_STACK_SIZE
 	default 2048
+
+config AARCH64_IMAGE_HEADER
+	bool "Add image header"
+	help
+	  This option enables standard ARM64 boot image header used by Linux
+	  and understood by loaders such as u-boot on Xen xl tool.
 
 if CPU_CORTEX_A
 
@@ -105,6 +112,9 @@ config EXCEPTION_DEBUG
 	  Print human-readable information about exception vectors, cause codes,
 	  and parameters, at a cost of code/data size for the human-readable
 	  strings.
+
+config XIP
+	select AARCH64_IMAGE_HEADER
 
 if ARM_MMU
 

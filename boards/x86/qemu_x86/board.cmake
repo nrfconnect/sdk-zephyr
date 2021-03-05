@@ -19,13 +19,55 @@ else()
   set(QEMU_CPU_TYPE_${ARCH} qemu32,+nx,+pae)
 endif()
 
+if(CONFIG_XIP)
+  # Extra 4MB to emulate flash area
+  math(EXPR QEMU_MEMORY_SIZE_MB "${CONFIG_SRAM_SIZE} / 1024 + 4")
+else()
+  math(EXPR QEMU_MEMORY_SIZE_MB "${CONFIG_SRAM_SIZE} / 1024")
+endif()
+
+set(QEMU_CPU_FLAGS "")
+if(CONFIG_X86_MMX)
+  string(JOIN "," QEMU_CPU_FLAGS "${QEMU_CPU_FLAGS}" "mmx")
+  string(JOIN "," QEMU_CPU_FLAGS "${QEMU_CPU_FLAGS}" "mmxext")
+endif()
+if(CONFIG_X86_SSE)
+  string(JOIN "," QEMU_CPU_FLAGS "${QEMU_CPU_FLAGS}" "sse")
+endif()
+if(CONFIG_X86_SSE2)
+  string(JOIN "," QEMU_CPU_FLAGS "${QEMU_CPU_FLAGS}" "sse2")
+endif()
+if(CONFIG_X86_SSE3)
+  string(JOIN "," QEMU_CPU_FLAGS "${QEMU_CPU_FLAGS}" "pni")
+endif()
+if(CONFIG_X86_SSSE3)
+  string(JOIN "," QEMU_CPU_FLAGS "${QEMU_CPU_FLAGS}" "ssse3")
+endif()
+if(CONFIG_X86_SSE41)
+  string(JOIN "," QEMU_CPU_FLAGS "${QEMU_CPU_FLAGS}" "sse4.1")
+endif()
+if(CONFIG_X86_SSE42)
+  string(JOIN "," QEMU_CPU_FLAGS "${QEMU_CPU_FLAGS}" "sse4.2")
+endif()
+if(CONFIG_X86_SSE4A)
+  string(JOIN "," QEMU_CPU_FLAGS "${QEMU_CPU_FLAGS}" "sse4a")
+endif()
+
 set(QEMU_FLAGS_${ARCH}
-  -m 9
-  -cpu ${QEMU_CPU_TYPE_${ARCH}}
+  -m ${QEMU_MEMORY_SIZE_MB}
+  -cpu ${QEMU_CPU_TYPE_${ARCH}}${QEMU_CPU_FLAGS}
   -device isa-debug-exit,iobase=0xf4,iosize=0x04
   ${REBOOT_FLAG}
   -nographic
   )
+
+if(NOT CONFIG_ACPI)
+  list(APPEND QEMU_FLAGS_${ARCH} -no-acpi)
+endif()
+
+if("${BOARD}" STREQUAL "qemu_x86_virt")
+  set(QEMU_KERNEL_OPTION "-kernel;${ZEPHYR_BINARY_DIR}/${BOARD}.elf")
+endif()
 
 # TODO: Support debug
 # board_set_debugger_ifnset(qemu)

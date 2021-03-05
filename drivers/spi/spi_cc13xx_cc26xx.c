@@ -148,9 +148,8 @@ static int spi_cc13xx_cc26xx_transceive(const struct device *dev,
 
 	spi_context_lock(ctx, false, NULL, config);
 
-#if defined(CONFIG_PM) && \
-	defined(CONFIG_PM_SLEEP_STATES)
-	pm_ctrl_disable_state(POWER_STATE_SLEEP_2);
+#ifdef CONFIG_PM
+	pm_constraint_set(PM_STATE_STANDBY);
 #endif
 
 	err = spi_cc13xx_cc26xx_configure(dev, config);
@@ -185,9 +184,8 @@ static int spi_cc13xx_cc26xx_transceive(const struct device *dev,
 	spi_context_cs_control(ctx, false);
 
 done:
-#if defined(CONFIG_PM) && \
-	defined(CONFIG_PM_SLEEP_STATES)
-	pm_ctrl_enable_state(POWER_STATE_SLEEP_2);
+#ifdef CONFIG_PM
+	pm_constraint_release(PM_STATE_STANDBY);
 #endif
 	spi_context_release(ctx, err);
 	return err;

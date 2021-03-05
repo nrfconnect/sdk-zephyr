@@ -60,11 +60,10 @@
 		};
 
 		mcg: clock-controller@40064000 {
-			compatible = "nxp,k22f-mcg";
+			compatible = "nxp,kinetis-mcg";
 			reg = <0x40064000 0xd>;
-			system-clock-frequency = <120000000>;
-
-			clock-controller;
+			label = "MCG";
+			#clock-cells = <1>;
 		};
 
 		osc: clock-controller@40065000 {
@@ -179,35 +178,30 @@
 			compatible = "nxp,kinetis-pinmux";
 			reg = <0x40049000 0xd0>;
 			clocks = <&sim KINETIS_SIM_BUS_CLK 0x1038 9>;
-			label = "porta";
 		};
 
 		portb: pinmux@4004a000 {
 			compatible = "nxp,kinetis-pinmux";
 			reg = <0x4004a000 0xd0>;
 			clocks = <&sim KINETIS_SIM_BUS_CLK 0x1038 10>;
-			label = "portb";
 		};
 
 		portc: pinmux@4004b000 {
 			compatible = "nxp,kinetis-pinmux";
 			reg = <0x4004b000 0xd0>;
 			clocks = <&sim KINETIS_SIM_BUS_CLK 0x1038 11>;
-			label = "portc";
 		};
 
 		portd: pinmux@4004c000 {
 			compatible = "nxp,kinetis-pinmux";
 			reg = <0x4004c000 0xd0>;
 			clocks = <&sim KINETIS_SIM_BUS_CLK 0x1038 12>;
-			label = "portd";
 		};
 
 		porte: pinmux@4004d000 {
 			compatible = "nxp,kinetis-pinmux";
 			reg = <0x4004d000 0xd0>;
 			clocks = <&sim KINETIS_SIM_BUS_CLK 0x1038 13>;
-			label = "porte";
 		};
 
 		gpioa: gpio@400ff000 {
@@ -298,6 +292,8 @@
 			compatible = "nxp,kinetis-ftm";
 			reg = <0x40038000 0x98>;
 			interrupts = <42 0>;
+			clocks = <&mcg KINETIS_MCG_FIXED_FREQ_CLK>,
+					 <&sim KINETIS_SIM_BUS_CLK 0x103C 24>;
 			prescaler = <16>;
 			label = "FTM_0";
 			status = "disabled";
@@ -307,6 +303,8 @@
 			compatible = "nxp,kinetis-ftm";
 			reg = <0x40039000 0x98>;
 			interrupts = <43 0>;
+			clocks = <&mcg KINETIS_MCG_FIXED_FREQ_CLK>,
+					 <&sim KINETIS_SIM_BUS_CLK 0x103C 25>;
 			prescaler = <16>;
 			label = "FTM_1";
 			status = "disabled";
@@ -316,6 +314,8 @@
 			compatible = "nxp,kinetis-ftm";
 			reg = <0x4003a000 0x98>;
 			interrupts = <44 0>;
+			clocks = <&mcg KINETIS_MCG_FIXED_FREQ_CLK>,
+					 <&sim KINETIS_SIM_BUS_CLK 0x103C 26>;
 			prescaler = <16>;
 			label = "FTM_2";
 			status = "disabled";
@@ -325,6 +325,8 @@
 			compatible = "nxp,kinetis-ftm";
 			reg = <0x400b9000 0x98>;
 			interrupts = <71 0>;
+			clocks = <&mcg KINETIS_MCG_FIXED_FREQ_CLK>,
+					 <&sim KINETIS_SIM_BUS_CLK 0x103C 6>;
 			prescaler = <16>;
 			label = "FTM_3";
 			status = "disabled";
@@ -335,6 +337,26 @@
 			reg = <0x4003b000 0x70>;
 			interrupts = <39 0>;
 			label = "ADC_0";
+			status = "disabled";
+			#io-channel-cells = <1>;
+		};
+
+		dac0: dac@4003f000 {
+			compatible = "nxp,kinetis-dac";
+			reg = <0x4003f000 0x1000>;
+			interrupts = <56 0>;
+			voltage-reference = <1>;
+			label = "DAC_0";
+			status = "disabled";
+			#io-channel-cells = <1>;
+		};
+
+		dac1: dac@40028000 {
+			compatible = "nxp,kinetis-dac";
+			reg = <0x40028000 0x1000>;
+			interrupts = <72 0>;
+			voltage-reference = <1>;
+			label = "DAC_1";
 			status = "disabled";
 			#io-channel-cells = <1>;
 		};

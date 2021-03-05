@@ -135,7 +135,7 @@ static int on_cmd_sockread_common(int socket_fd,
 	struct modem_socket	 *sock = NULL;
 	struct socket_read_data	 *sock_data;
 	int ret, i;
-	int socket_data_length = find_len(data->rx_buf->data);
+	int socket_data_length;
 	int bytes_to_skip;
 
 	if (!len) {
@@ -148,6 +148,8 @@ static int on_cmd_sockread_common(int socket_fd,
 		LOG_ERR("Incorrect format! Ignoring data!");
 		return -EINVAL;
 	}
+
+	socket_data_length = find_len(data->rx_buf->data);
 
 	/* No (or not enough) data available on the socket. */
 	bytes_to_skip = digits(socket_data_length) + 2 + 4;
@@ -907,6 +909,12 @@ static void pin_init(void)
 {
 	LOG_INF("Setting Modem Pins");
 
+#if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
+	LOG_INF("Deactivate W Disable");
+	modem_pin_write(&mctx, MDM_WDISABLE, 0);
+	k_sleep(K_MSEC(250));
+#endif
+
 	/* NOTE: Per the BG95 document, the Reset pin is internally connected to the
 	 * Power key pin.
 	 */
@@ -952,6 +960,46 @@ static const struct setup_cmd setup_cmds[] = {
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
 	SETUP_CMD_NOHANDLE("AT+QICSGP=1,1,\"" MDM_APN "\",\"" MDM_USERNAME "\", \"" MDM_PASSWORD "\",1"),
 };
+
+/* Func: modem_pdp_context_active
+ * Desc: This helper function is called from modem_setup, and is
+ * used to open the PDP context. If there is trouble activating the
+ * PDP context, we try to deactive and reactive MDM_PDP_ACT_RETRY_COUNT times.
+ * If it fails, we return an error.
+ */
+static int modem_pdp_context_activate(void)
+{
+	int ret;
+	int retry_count = 0;
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     NULL, 0U, "AT+QIACT=1", &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+
+	/* If there is trouble activating the PDP context, we try to deactivate/reactive it. */
+	while (ret == -EIO && retry_count < MDM_PDP_ACT_RETRY_COUNT) {
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     NULL, 0U, "AT+QIDEACT=1", &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+
+		/* If there's any error for AT+QIDEACT, restart the module. */
+		if (ret != 0) {
+			return ret;
+		}
+
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     NULL, 0U, "AT+QIACT=1", &mdata.sem_response,
+			     MDM_CMD_TIMEOUT);
+
+		retry_count++;
+	}
+
+	if (ret == -EIO && retry_count >= MDM_PDP_ACT_RETRY_COUNT) {
+		LOG_ERR("Retried activating/deactivating too many times.");
+	}
+
+	return ret;
+}
 
 /* Func: modem_setup
  * Desc: This function is used to setup the modem from zero. The idea
@@ -1024,13 +1072,10 @@ restart_rssi:
 				       &mdata.rssi_query_work,
 				       K_SECONDS(RSSI_TIMEOUT_SECS));
 
-	/* Once the network is ready, activate PDP context. */
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			     NULL, 0U, "AT+QIACT=1", &mdata.sem_response,
-			     MDM_CMD_TIMEOUT);
-
-	/* Retry or Possibly Exit. */
+	/* Once the network is ready, we try to activate the PDP context. */
+	ret = modem_pdp_context_activate();
 	if (ret < 0 && init_retry_count++ < MDM_INIT_RETRY_COUNT) {
+		LOG_ERR("Error activating modem with pdp context");
 		goto restart;
 	}
 
@@ -1173,10 +1218,10 @@ error:
 }
 
 /* Register the device with the Networking stack. */
-NET_DEVICE_OFFLOAD_INIT(modem_gb9x, DT_INST_LABEL(0),
-			modem_init, device_pm_control_nop, &mdata, NULL,
-			CONFIG_MODEM_QUECTEL_BG9X_INIT_PRIORITY, &api_funcs,
-			MDM_MAX_DATA_LENGTH);
+NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, device_pm_control_nop,
+				  &mdata, NULL,
+				  CONFIG_MODEM_QUECTEL_BG9X_INIT_PRIORITY,
+				  &api_funcs, MDM_MAX_DATA_LENGTH);
 
 /* Register NET sockets. */
 NET_SOCKET_REGISTER(quectel_bg9x, AF_UNSPEC, offload_is_supported, offload_socket);

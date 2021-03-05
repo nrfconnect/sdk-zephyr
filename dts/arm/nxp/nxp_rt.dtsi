@@ -72,6 +72,9 @@
 			label = "FLEXSPI";
 			#address-cells = <1>;
 			#size-cells = <0>;
+			ahb-bufferable;
+			ahb-cacheable;
+			status = "disabled";
 		};
 
 		flexspi2: spi@402a4000 {
@@ -81,6 +84,9 @@
 			label = "FLEXSPI1";
 			#address-cells = <1>;
 			#size-cells = <0>;
+			ahb-bufferable;
+			ahb-cacheable;
+			status = "disabled";
 		};
 
 		semc: semc0@402f0000 {
@@ -96,6 +102,8 @@
 			compatible = "nxp,imx-gpt";
 			reg = <0x401ec000 0x4000>;
 			interrupts = <100 0>;
+			gptfreq = <25000000>;
+			clocks = <&ccm IMX_CCM_GPT_CLK 0x6C 20>;
 			label = "GPT1";
 		};
 
@@ -103,6 +111,8 @@
 			compatible = "nxp,imx-gpt";
 			reg = <0x401f0000 0x4000>;
 			interrupts = <101 0>;
+			gptfreq = <25000000>;
+			clocks = <&ccm IMX_CCM_GPT_CLK 0x68 24>;
 			label = "GPT2";
 		};
 

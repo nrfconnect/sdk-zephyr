@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
+struct lll_df_adv_cfg;
+#endif /* CONFIG_BT_CTLR_DF_ADV_CTE_TX */
+
 struct ll_adv_set {
 	struct evt_hdr evt;
 	struct ull_hdr ull;
@@ -36,6 +40,10 @@ struct ll_adv_set {
 	uint8_t  id_addr_type:1;
 	uint8_t  id_addr[BDADDR_SIZE];
 #endif /* CONFIG_BT_CTLR_PRIVACY */
+
+#if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
+	struct lll_df_adv_cfg *df_cfg;
+#endif /* CONFIG_BT_CTLR_DF_ADV_CTE_TX */
 };
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
@@ -65,22 +73,24 @@ struct ll_adv_iso {
 	struct ull_hdr        ull;
 	struct lll_adv_iso    lll;
 
+#if defined(CONFIG_BT_CTLR_HCI_ADV_HANDLE_MAPPING)
 	uint8_t  hci_handle;
+#endif /* CONFIG_BT_CTLR_HCI_ADV_HANDLE_MAPPING */
+
 	uint16_t bis_handle; /* TODO: Support multiple BIS per BIG */
 
-	uint8_t  is_created:1;
-	uint8_t  encryption:1;
-	uint8_t  framing:1;
 	uint8_t  num_bis:5;
+	uint8_t  packing:1;
+	uint8_t  framing:1;
+	uint8_t  encryption:1;
 
 	uint32_t sdu_interval:20;
-	uint16_t max_sdu:12;
+	uint32_t max_sdu:12;
 
 	uint16_t max_latency:12;
+	uint16_t rtn:4;
 
-	uint8_t  rtn:4;
 	uint8_t  phy:3;
-	uint8_t  packing:1;
 
 	uint8_t  bcode[16];
 

@@ -14,6 +14,7 @@ LOG_MODULE_REGISTER(net_coap, CONFIG_COAP_LOG_LEVEL);
 #include <errno.h>
 #include <random/rand32.h>
 #include <sys/atomic.h>
+#include <sys/util.h>
 
 #include <zephyr/types.h>
 #include <sys/byteorder.h>
@@ -39,9 +40,6 @@ LOG_MODULE_REGISTER(net_coap, CONFIG_COAP_LOG_LEVEL);
 #define COAP_OPTION_EXT_14 14
 #define COAP_OPTION_EXT_15 15
 #define COAP_OPTION_EXT_269 269
-
-/* CoAP Version */
-#define COAP_VERSION		1
 
 /* CoAP Payload Marker */
 #define COAP_MARKER		0xFF
@@ -98,9 +96,9 @@ static inline bool append(struct coap_packet *cpkt, const uint8_t *data, uint16_
 	return true;
 }
 
-int coap_packet_init(struct coap_packet *cpkt, uint8_t *data,
-		     uint16_t max_len, uint8_t ver, uint8_t type,
-		     uint8_t tokenlen, uint8_t *token, uint8_t code, uint16_t id)
+int coap_packet_init(struct coap_packet *cpkt, uint8_t *data, uint16_t max_len,
+		     uint8_t ver, uint8_t type, uint8_t token_len,
+		     const uint8_t *token, uint8_t code, uint16_t id)
 {
 	uint8_t hdr;
 	bool res;
@@ -118,7 +116,7 @@ int coap_packet_init(struct coap_packet *cpkt, uint8_t *data,
 
 	hdr = (ver & 0x3) << 6;
 	hdr |= (type & 0x3) << 4;
-	hdr |= tokenlen & 0xF;
+	hdr |= token_len & 0xF;
 
 	res = append_u8(cpkt, hdr);
 	if (!res) {
@@ -135,17 +133,33 @@ int coap_packet_init(struct coap_packet *cpkt, uint8_t *data,
 		return -EINVAL;
 	}
 
-	if (token && tokenlen) {
-		res = append(cpkt, token, tokenlen);
+	if (token && token_len) {
+		res = append(cpkt, token, token_len);
 		if (!res) {
 			return -EINVAL;
 		}
 	}
 
 	/* Header length : (version + type + tkl) + code + id + [token] */
-	cpkt->hdr_len = 1 + 1 + 2 + tokenlen;
+	cpkt->hdr_len = 1 + 1 + 2 + token_len;
 
 	return 0;
+}
+
+int coap_ack_init(struct coap_packet *cpkt, const struct coap_packet *req,
+		  uint8_t *data, uint16_t max_len, uint8_t code)
+{
+	uint16_t id;
+	uint8_t ver;
+	uint8_t tkl;
+	uint8_t token[COAP_TOKEN_MAX_LEN];
+
+	ver = coap_header_get_version(req);
+	id = coap_header_get_id(req);
+	tkl = code ? coap_header_get_token(req, token) : 0;
+
+	return coap_packet_init(cpkt, data, max_len, ver, COAP_TYPE_ACK, tkl,
+				token, code, id);
 }
 
 static void option_header_set_delta(uint8_t *opt, uint8_t delta)
@@ -325,7 +339,7 @@ int coap_packet_append_payload_marker(struct coap_packet *cpkt)
 	return append_u8(cpkt, COAP_MARKER) ? 0 : -EINVAL;
 }
 
-int coap_packet_append_payload(struct coap_packet *cpkt, uint8_t *payload,
+int coap_packet_append_payload(struct coap_packet *cpkt, const uint8_t *payload,
 			       uint16_t payload_len)
 {
 	return append(cpkt, payload, payload_len) ? 0 : -EINVAL;
@@ -333,10 +347,12 @@ int coap_packet_append_payload(struct coap_packet *cpkt, uint8_t *payload,
 
 uint8_t *coap_next_token(void)
 {
-	static uint32_t rand[2];
+	static uint32_t rand[
+		ceiling_fraction(COAP_TOKEN_MAX_LEN, sizeof(uint32_t))];
 
-	rand[0] = sys_rand32_get();
-	rand[1] = sys_rand32_get();
+	for (size_t i = 0; i < ARRAY_SIZE(rand); ++i) {
+		rand[i] = sys_rand32_get();
+	}
 
 	return (uint8_t *) rand;
 }
@@ -1255,13 +1271,13 @@ struct coap_reply *coap_response_received(
 	struct coap_reply *replies, size_t len)
 {
 	struct coap_reply *r;
-	uint8_t token[8];
+	uint8_t token[COAP_TOKEN_MAX_LEN];
 	uint16_t id;
 	uint8_t tkl;
 	size_t i;
 
 	id = coap_header_get_id(response);
-	tkl = coap_header_get_token(response, (uint8_t *)token);
+	tkl = coap_header_get_token(response, token);
 
 	for (i = 0, r = replies; i < len; i++, r++) {
 		int age;
@@ -1301,12 +1317,12 @@ struct coap_reply *coap_response_received(
 void coap_reply_init(struct coap_reply *reply,
 		     const struct coap_packet *request)
 {
-	uint8_t token[8];
+	uint8_t token[COAP_TOKEN_MAX_LEN];
 	uint8_t tkl;
 	int age;
 
 	reply->id = coap_header_get_id(request);
-	tkl = coap_header_get_token(request, (uint8_t *)&token);
+	tkl = coap_header_get_token(request, token);
 
 	if (tkl > 0) {
 		memcpy(reply->token, token, tkl);

@@ -51,15 +51,18 @@ struct pwm_stm32_config {
 /** Series F3, F7, G0, G4, H7, L4, MP1 and WB have up to 6 channels, others up
  *  to 4.
  */
-#define TIMER_HAS_6CH                                                          \
-	(defined(CONFIG_SOC_SERIES_STM32F3X) ||                                \
-	 defined(CONFIG_SOC_SERIES_STM32F7X) ||                                \
-	 defined(CONFIG_SOC_SERIES_STM32G0X) ||                                \
-	 defined(CONFIG_SOC_SERIES_STM32G4X) ||                                \
-	 defined(CONFIG_SOC_SERIES_STM32H7X) ||                                \
-	 defined(CONFIG_SOC_SERIES_STM32L4X) ||                                \
-	 defined(CONFIG_SOC_SERIES_STM32MP1X) ||                               \
-	 defined(CONFIG_SOC_SERIES_STM32WBX))
+#if defined(CONFIG_SOC_SERIES_STM32F3X) ||				       \
+	defined(CONFIG_SOC_SERIES_STM32F7X) ||				       \
+	defined(CONFIG_SOC_SERIES_STM32G0X) ||				       \
+	defined(CONFIG_SOC_SERIES_STM32G4X) ||				       \
+	defined(CONFIG_SOC_SERIES_STM32H7X) ||				       \
+	defined(CONFIG_SOC_SERIES_STM32L4X) ||				       \
+	defined(CONFIG_SOC_SERIES_STM32MP1X) ||				       \
+	defined(CONFIG_SOC_SERIES_STM32WBX)
+#define TIMER_HAS_6CH 1
+#else
+#define TIMER_HAS_6CH 0
+#endif
 
 /** Maximum number of timer channels. */
 #if TIMER_HAS_6CH
@@ -117,8 +120,7 @@ static int get_tim_clk(const struct stm32_pclken *pclken, uint32_t *tim_clk)
 	const struct device *clk;
 	uint32_t bus_clk, apb_psc;
 
-	clk = device_get_binding(STM32_CLOCK_CONTROL_NAME);
-	__ASSERT_NO_MSG(clk);
+	clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 
 	r = clock_control_get_rate(clk, (clock_control_subsys_t *)pclken,
 				   &bus_clk);
@@ -284,8 +286,7 @@ static int pwm_stm32_init(const struct device *dev)
 	LL_TIM_InitTypeDef init;
 
 	/* enable clock and store its speed */
-	clk = device_get_binding(STM32_CLOCK_CONTROL_NAME);
-	__ASSERT_NO_MSG(clk);
+	clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 
 	r = clock_control_on(clk, (clock_control_subsys_t *)&cfg->pclken);
 	if (r < 0) {

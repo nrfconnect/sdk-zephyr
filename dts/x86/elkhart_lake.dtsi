@@ -16,7 +16,8 @@
 
 		cpu@0 {
 			device_type = "cpu";
-			compatible = "elkhart_lake";
+			compatible = "intel,elkhart_lake";
+			d-cache-line-size = <64>;
 			reg = <0>;
 		};
 
@@ -25,6 +26,12 @@
 	dram0: memory@0 {
 		device_type = "memory";
 		reg = <0x0 DT_DRAM_SIZE>;
+	};
+
+	ibecc: ibecc {
+	       compatible = "intel,ibecc";
+	       label = "ibecc";
+	       status = "okay";
 	};
 
 	intc: ioapic@fec00000  {
@@ -408,5 +415,4 @@
 			status = "okay";
 		};
 	};
-
 };

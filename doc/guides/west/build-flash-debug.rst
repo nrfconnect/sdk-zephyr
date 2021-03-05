@@ -381,6 +381,19 @@ the default with::
 
   west flash --runner jlink
 
+You can override the default flash runner at build time by using the
+``BOARD_FLASH_RUNNER`` CMake variable, and the debug runner with
+``BOARD_DEBUG_RUNNER``.
+
+For example::
+
+  # Set the default runner to "jlink", overriding the board's
+  # usual default.
+  west build [...] -- -DBOARD_FLASH_RUNNER=jlink
+
+See :ref:`west-building-cmake-args` and :ref:`west-building-cmake-config` for
+more information on setting CMake arguments.
+
 See :ref:`west-runner` below for more information on the ``runner``
 library used by West. The list of runners which support flashing can
 be obtained with ``west flash -H``; if run from a build directory or
@@ -392,14 +405,14 @@ Configuration Overrides
 
 The CMake cache contains default values West uses while flashing, such
 as where the board directory is on the file system, the path to the
-kernel binaries to flash in several formats, and more. You can
+zephyr binaries to flash in several formats, and more. You can
 override any of this configuration at runtime with additional options.
 
 For example, to override the HEX file containing the Zephyr image to
 flash (assuming your runner expects a HEX file), but keep other
 flash configuration at default values::
 
-  west flash --kernel-hex path/to/some/other.hex
+  west flash --hex-file path/to/some/other.hex
 
 The ``west flash -h`` output includes a complete list of overrides
 supported by all runners.
@@ -489,15 +502,15 @@ Configuration Overrides
 
 The CMake cache contains default values West uses for debugging, such
 as where the board directory is on the file system, the path to the
-kernel binaries containing symbol tables, and more. You can override
+zephyr binaries containing symbol tables, and more. You can override
 any of this configuration at runtime with additional options.
 
 For example, to override the ELF file containing the Zephyr binary and
 symbol tables (assuming your runner expects an ELF file), but keep
 other debug configuration at default values::
 
-  west debug --kernel-elf path/to/some/other.elf
-  west debugserver --kernel-elf path/to/some/other.elf
+  west debug --elf-file path/to/some/other.elf
+  west debugserver --elf-file path/to/some/other.elf
 
 The ``west debug -h`` output includes a complete list of overrides
 supported by all runners.

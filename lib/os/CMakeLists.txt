@@ -4,6 +4,8 @@ zephyr_sources_ifdef(CONFIG_BASE64 base64.c)
 
 zephyr_sources(
   cbprintf.c
+  cbprintf_packaged.c
+  crc32c_sw.c
   crc32_sw.c
   crc16_sw.c
   crc8_sw.c
@@ -18,7 +20,6 @@ zephyr_sources(
   sem.c
   thread_entry.c
   timeutil.c
-  work_q.c
   heap.c
   heap-validate.c
   )
@@ -32,7 +33,7 @@ zephyr_sources_ifdef(CONFIG_RING_BUFFER ring_buffer.c)
 
 zephyr_sources_ifdef(CONFIG_ASSERT assert.c)
 
-zephyr_sources_ifdef(CONFIG_USERSPACE mutex.c)
+zephyr_sources_ifdef(CONFIG_USERSPACE mutex.c user_work.c)
 
 zephyr_sources_ifdef(CONFIG_SCHED_DEADLINE p4wq.c)
 

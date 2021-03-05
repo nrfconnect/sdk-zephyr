@@ -304,12 +304,25 @@ static int apbuart_config_get(const struct device *dev, struct uart_config *cfg)
 }
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
+static void apbuart_isr(const struct device *dev);
+
 static int apbuart_fifo_fill(const struct device *dev, const uint8_t *tx_data,
 			     int size)
 {
 	volatile struct apbuart_regs *regs = (void *) DEV_CFG(dev)->regs;
 	int i;
 
+	if (DEV_DATA(dev)->usefifo) {
+		/* Transmitter FIFO full flag is available. */
+		for (
+			i = 0;
+			(i < size) && !(regs->status & APBUART_STATUS_TF);
+			i++
+		) {
+			regs->data = tx_data[i];
+		}
+		return i;
+	}
 	for (i = 0; (i < size) && (regs->status & APBUART_STATUS_TE); i++) {
 		regs->data = tx_data[i];
 	}
@@ -333,21 +346,45 @@ static int apbuart_fifo_read(const struct device *dev, uint8_t *rx_data,
 static void apbuart_irq_tx_enable(const struct device *dev)
 {
 	volatile struct apbuart_regs *regs = (void *) DEV_CFG(dev)->regs;
+	unsigned int key;
+
+	if (DEV_DATA(dev)->usefifo) {
+		/* Enable the FIFO level interrupt */
+		regs->ctrl |= APBUART_CTRL_TF;
+		return;
+	}
 
 	regs->ctrl |= APBUART_CTRL_TI;
+	/*
+	 * The "TI" interrupt is an edge interrupt.  It fires each time the TX
+	 * holding register (or FIFO if implemented) moves from non-empty to
+	 * empty.
+	 *
+	 * When the APBUART is implemented _without_ FIFO, the TI interrupt is
+	 * the only TX interrupt we have. When the APBUART is implemented
+	 * _with_ FIFO, the TI will fire on each TX byte.
+	 */
+	regs->ctrl |= APBUART_CTRL_TI;
+	/* Fire the first "TI" edge interrupt to get things going. */
+	key = irq_lock();
+	apbuart_isr(dev);
+	irq_unlock(key);
 }
 
 static void apbuart_irq_tx_disable(const struct device *dev)
 {
 	volatile struct apbuart_regs *regs = (void *) DEV_CFG(dev)->regs;
 
-	regs->ctrl &= ~APBUART_CTRL_TI;
+	regs->ctrl &= ~(APBUART_CTRL_TF | APBUART_CTRL_TI);
 }
 
 static int apbuart_irq_tx_ready(const struct device *dev)
 {
 	volatile struct apbuart_regs *regs = (void *) DEV_CFG(dev)->regs;
 
+	if (DEV_DATA(dev)->usefifo) {
+		return !(regs->status & APBUART_STATUS_TF);
+	}
 	return !!(regs->status & APBUART_STATUS_TE);
 }
 
@@ -388,9 +425,18 @@ static int apbuart_irq_is_pending(const struct device *dev)
 	if ((ctrl & APBUART_CTRL_RI) && (status & APBUART_STATUS_DR)) {
 		return 1;
 	}
-	if ((ctrl & APBUART_CTRL_TI) && (status & APBUART_STATUS_TE)) {
-		return 1;
+
+	if (DEV_DATA(dev)->usefifo) {
+		/* TH is the TX FIFO half-empty flag */
+		if (status & APBUART_STATUS_TH) {
+			return 1;
+		}
+	} else {
+		if ((ctrl & APBUART_CTRL_TI) && (status & APBUART_STATUS_TE)) {
+			return 1;
+		}
 	}
+
 	return 0;
 }
 

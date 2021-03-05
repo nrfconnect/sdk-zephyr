@@ -35,6 +35,7 @@ list(APPEND
   DTS_ROOT
   ${APPLICATION_SOURCE_DIR}
   ${BOARD_DIR}
+  ${SHIELD_DIRS}
   ${ZEPHYR_BASE}
   )
 list(REMOVE_DUPLICATES
@@ -187,6 +188,14 @@ if(SUPPORTS_DTS)
   if (check)
     set(DTC_NO_WARN_UNIT_ADDR "-Wno-unique_unit_address")
   endif()
+  set(VALID_EXTRA_DTC_FLAGS "")
+  foreach(extra_opt ${EXTRA_DTC_FLAGS})
+    check_dtc_flag(${extra_opt} check)
+    if (check)
+      list(APPEND VALID_EXTRA_DTC_FLAGS ${extra_opt})
+    endif()
+  endforeach()
+  set(EXTRA_DTC_FLAGS ${VALID_EXTRA_DTC_FLAGS})
   execute_process(
     COMMAND ${DTC}
     -O dts
@@ -210,14 +219,16 @@ if(SUPPORTS_DTS)
   # Run gen_defines.py to create a header file, zephyr.dts, and edt.pickle.
   #
 
+  string(REPLACE ";" " " EXTRA_DTC_FLAGS_RAW "${EXTRA_DTC_FLAGS}")
   set(CMD_EXTRACT ${PYTHON_EXECUTABLE} ${GEN_DEFINES_SCRIPT}
   --dts ${BOARD}.dts.pre.tmp
-  --dtc-flags '${EXTRA_DTC_FLAGS}'
+  --dtc-flags '${EXTRA_DTC_FLAGS_RAW}'
   --bindings-dirs ${DTS_ROOT_BINDINGS}
   --header-out ${DEVICETREE_UNFIXED_H}
   --device-header-out ${DEVICE_EXTERN_H}
   --dts-out ${ZEPHYR_DTS} # As a debugging aid
   --edt-pickle-out ${EDT_PICKLE}
+  ${EXTRA_GEN_DEFINES_ARGS}
   )
 
   execute_process(

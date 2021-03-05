@@ -21,7 +21,7 @@ Modules to be included in the default manifest of the Zephyr project need to
 provide functionality or features endorsed and approved by the project Technical
 Steering Committee and should comply with the
 :ref:`module licensing requirements<modules_licensing>` and
-:ref:`contribute guidelines<modules_contributing>`. They should also have a
+:ref:`contribution guidelines<modules_contributing>`. They should also have a
 Zephyr developer that is committed to maintain the module codebase.
 
 Zephyr depends on several categories of modules, including but not limited to:
@@ -392,7 +392,15 @@ variable or by adding a :makevar:`ZEPHYR_EXTRA_MODULES` line to ``.zephyrrc``
 useful if you want to keep the list of modules found with west and also add
 your own.
 
-See the section about :ref:`west-multi-repo` for more details.
+.. note::
+   If the module ``FOO`` is provided by :ref:`west <west>` but also given with
+   ``-DZEPHYR_EXTRA_MODULES=/<path>/foo`` then the module given by the command
+   line variable :makevar:`ZEPHYR_EXTRA_MODULES` will take precedence.
+   This allows you to use a custom version of ``FOO`` when building and still
+   use other Zephyr modules provided by :ref:`west <west>`.
+   This can for example be useful for special test purposes.
+
+See :ref:`west-basics` for more on west workspaces.
 
 Finally, you can also specify the list of modules yourself in various ways, or
 not use modules at all if your application doesn't need them.
@@ -745,7 +753,7 @@ Using West
 
 If west is installed and :makevar:`ZEPHYR_MODULES` is not already set, the
 build system finds all the modules in your :term:`west installation` and uses
-those. It does this by running :ref:`west list <west-multi-repo-misc>` to get
+those. It does this by running :ref:`west list <west-built-in-misc>` to get
 the paths of all the projects in the installation, then filters the results to
 just those projects which have the necessary module metadata files.
 

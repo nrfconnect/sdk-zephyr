@@ -24,6 +24,12 @@ config OPENTHREAD_XPANID
 	  Extended PAN ID for OpenThread with
 	  format "de:ad:00:be:ef:00:ca:fe"
 
+config OPENTHREAD_MASTERKEY
+	string "Default Thread Master Key"
+	help
+	  Master Key for OpenThread with format
+	  "00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff"
+
 config OPENTHREAD_JOINER_AUTOSTART
 	bool "Enable automatic joiner start"
 	depends on OPENTHREAD_JOINER
@@ -81,3 +87,9 @@ config OPENTHREAD_CSL_SAMPLE_WINDOW
 config OPENTHREAD_CSL_RECEIVE_TIME_AHEAD
 	int "CSL receiver wake up margin in units of 10 symbols"
 	default 3
+
+config OPENTHREAD_SRP_CLIENT
+	bool "Enable SRP Client support"
+
+config OPENTHREAD_SRP_SERVER
+	bool "Enable SRP Server support"

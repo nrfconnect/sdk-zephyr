@@ -378,7 +378,12 @@ static ssize_t send_socket_data(void *obj,
 	}
 
 	/* Wait for prompt '@' */
-	k_sem_take(&mdata.sem_prompt, K_FOREVER);
+	ret = k_sem_take(&mdata.sem_prompt, K_SECONDS(1));
+	if (ret != 0) {
+		ret = -ETIMEDOUT;
+		LOG_ERR("No @ prompt received");
+		goto exit;
+	}
 
 	/*
 	 * The AT commands manual requires a 50 ms wait
@@ -1912,7 +1917,8 @@ error:
 	return ret;
 }
 
-NET_DEVICE_OFFLOAD_INIT(modem_sara, CONFIG_MODEM_UBLOX_SARA_R4_NAME,
-			modem_init, device_pm_control_nop, &mdata, NULL,
-			CONFIG_MODEM_UBLOX_SARA_R4_INIT_PRIORITY, &api_funcs,
-			MDM_MAX_DATA_LENGTH);
+NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, device_pm_control_nop,
+				  &mdata, NULL,
+				  CONFIG_MODEM_UBLOX_SARA_R4_INIT_PRIORITY,
+				  &api_funcs,
+				  MDM_MAX_DATA_LENGTH);

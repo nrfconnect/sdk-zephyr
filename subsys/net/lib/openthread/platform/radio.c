@@ -45,9 +45,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_OPENTHREAD_L2_LOG_LEVEL);
 #define FRAME_TYPE_ACK 0x02
 
 #if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
-#define OT_WORKER_PRIORITY   K_PRIO_COOP(CONFIG_OPENTHREAD_THREAD_PRIORITY)
+#define OT_WORKER_PRIORITY K_PRIO_COOP(CONFIG_OPENTHREAD_THREAD_PRIORITY)
 #else
-#define OT_WORKER_PRIORITY   K_PRIO_PREEMPT(CONFIG_OPENTHREAD_THREAD_PRIORITY)
+#define OT_WORKER_PRIORITY K_PRIO_PREEMPT(CONFIG_OPENTHREAD_THREAD_PRIORITY)
 #endif
 
 enum pending_events {
@@ -82,14 +82,15 @@ static uint16_t channel;
 static bool promiscuous;
 
 static uint16_t energy_detection_time;
-static uint8_t  energy_detection_channel;
+static uint8_t energy_detection_channel;
 static int16_t energy_detected_value;
 
 ATOMIC_DEFINE(pending_events, PENDING_EVENT_COUNT);
 K_KERNEL_STACK_DEFINE(ot_task_stack,
 		      CONFIG_OPENTHREAD_RADIO_WORKQUEUE_STACK_SIZE);
 static struct k_work_q ot_work_q;
-static otError tx_rx_result;
+static otError rx_result;
+static otError tx_result;
 
 K_FIFO_DEFINE(rx_pkt_fifo);
 K_FIFO_DEFINE(tx_pkt_fifo);
@@ -168,24 +169,22 @@ void handle_radio_event(const struct device *dev, enum ieee802154_event evt,
 		break;
 	case IEEE802154_EVENT_RX_FAILED:
 		if (sState == OT_RADIO_STATE_RECEIVE) {
-			switch (*(enum ieee802154_rx_fail_reason *)
-				event_params) {
+			switch (*(enum ieee802154_rx_fail_reason *) event_params) {
 			case IEEE802154_RX_FAIL_NOT_RECEIVED:
-				tx_rx_result = OT_ERROR_NO_FRAME_RECEIVED;
+				rx_result = OT_ERROR_NO_FRAME_RECEIVED;
 				break;
 
 			case IEEE802154_RX_FAIL_INVALID_FCS:
-				tx_rx_result = OT_ERROR_FCS;
+				rx_result = OT_ERROR_FCS;
 				break;
 
 			case IEEE802154_RX_FAIL_ADDR_FILTERED:
-				tx_rx_result
-					= OT_ERROR_DESTINATION_ADDRESS_FILTERED;
+				rx_result = OT_ERROR_DESTINATION_ADDRESS_FILTERED;
 				break;
 
 			case IEEE802154_RX_FAIL_OTHER:
 			default:
-				tx_rx_result = OT_ERROR_FAILED;
+				rx_result = OT_ERROR_FAILED;
 				break;
 			}
 			set_pending_event(PENDING_EVENT_RX_FAILED);
@@ -243,7 +242,7 @@ void transmit_message(struct k_work *tx_job)
 {
 	ARG_UNUSED(tx_job);
 
-	tx_rx_result = OT_ERROR_NONE;
+	tx_result = OT_ERROR_NONE;
 	/*
 	 * The payload is already in tx_payload->data,
 	 * but we need to set the length field
@@ -261,20 +260,18 @@ void transmit_message(struct k_work *tx_job)
 	if (sTransmitFrame.mInfo.mTxInfo.mCsmaCaEnabled) {
 		if (radio_api->get_capabilities(radio_dev) &
 		    IEEE802154_HW_CSMA) {
-			if (radio_api->tx(radio_dev,
-					  IEEE802154_TX_MODE_CSMA_CA,
+			if (radio_api->tx(radio_dev, IEEE802154_TX_MODE_CSMA_CA,
 					  tx_pkt, tx_payload) != 0) {
-				tx_rx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
+				tx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
 			}
 		} else if (radio_api->cca(radio_dev) != 0 ||
 			   radio_api->tx(radio_dev, IEEE802154_TX_MODE_DIRECT,
 					 tx_pkt, tx_payload) != 0) {
-			tx_rx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
+			tx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
 		}
 	} else {
-		if (radio_api->tx(radio_dev, IEEE802154_TX_MODE_DIRECT,
-				  tx_pkt, tx_payload)) {
-			tx_rx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
+		if (radio_api->tx(radio_dev, IEEE802154_TX_MODE_DIRECT, tx_pkt, tx_payload)) {
+			tx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
 		}
 	}
 
@@ -284,8 +281,7 @@ void transmit_message(struct k_work *tx_job)
 static inline void handle_tx_done(otInstance *aInstance)
 {
 	if (IS_ENABLED(CONFIG_OPENTHREAD_DIAG) && otPlatDiagModeGet()) {
-		otPlatDiagRadioTransmitDone(aInstance, &sTransmitFrame,
-					    tx_rx_result);
+		otPlatDiagRadioTransmitDone(aInstance, &sTransmitFrame, tx_result);
 	} else {
 		if (sTransmitFrame.mPsdu[0] & IEEE802154_AR_FLAG_SET) {
 			if (ack_frame.mLength == 0) {
@@ -294,11 +290,10 @@ static inline void handle_tx_done(otInstance *aInstance)
 						  NULL, OT_ERROR_NO_ACK);
 			} else {
 				otPlatRadioTxDone(aInstance, &sTransmitFrame,
-						  &ack_frame, tx_rx_result);
+						  &ack_frame, tx_result);
 			}
 		} else {
-			otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL,
-					  tx_rx_result);
+			otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, tx_result);
 		}
 		ack_frame.mLength = 0;
 	}
@@ -315,22 +310,19 @@ static void openthread_handle_received_frame(otInstance *instance,
 	recv_frame.mChannel = platformRadioChannelGet(instance);
 	recv_frame.mInfo.mRxInfo.mLqi = net_pkt_ieee802154_lqi(pkt);
 	recv_frame.mInfo.mRxInfo.mRssi = net_pkt_ieee802154_rssi(pkt);
-	recv_frame.mInfo.mRxInfo.mAckedWithFramePending =
-						net_pkt_ieee802154_ack_fpb(pkt);
+	recv_frame.mInfo.mRxInfo.mAckedWithFramePending = net_pkt_ieee802154_ack_fpb(pkt);
 
 #if defined(CONFIG_NET_PKT_TIMESTAMP)
 	struct net_ptp_time *time = net_pkt_timestamp(pkt);
 
-	recv_frame.mInfo.mRxInfo.mTimestamp = time->second * USEC_PER_SEC +
-					      time->nanosecond / NSEC_PER_USEC;
+	recv_frame.mInfo.mRxInfo.mTimestamp =
+		time->second * USEC_PER_SEC + time->nanosecond / NSEC_PER_USEC;
 #endif
 
 	if (IS_ENABLED(CONFIG_OPENTHREAD_DIAG) && otPlatDiagModeGet()) {
-		otPlatDiagRadioReceiveDone(instance,
-					   &recv_frame, OT_ERROR_NONE);
+		otPlatDiagRadioReceiveDone(instance, &recv_frame, OT_ERROR_NONE);
 	} else {
-		otPlatRadioReceiveDone(instance,
-				       &recv_frame, OT_ERROR_NONE);
+		otPlatRadioReceiveDone(instance, &recv_frame, OT_ERROR_NONE);
 	}
 
 	net_pkt_unref(pkt);
@@ -353,8 +345,7 @@ static void openthread_handle_frame_to_send(otInstance *instance,
 	}
 
 	for (buf = pkt->buffer; buf; buf = buf->frags) {
-		if (otMessageAppend(message, buf->data,
-				    buf->len) != OT_ERROR_NONE) {
+		if (otMessageAppend(message, buf->data, buf->len) != OT_ERROR_NONE) {
 			NET_ERR("Error while appending to otMessage");
 			otMessageFree(message);
 			goto exit;
@@ -388,14 +379,13 @@ int notify_new_tx_frame(struct net_pkt *pkt)
 
 static int run_tx_task(otInstance *aInstance)
 {
-	static struct k_work tx_job;
+	static K_WORK_DEFINE(tx_job, transmit_message);
 
 	ARG_UNUSED(aInstance);
 
-	if (k_work_pending(&tx_job) == 0) {
+	if (!k_work_is_pending(&tx_job)) {
 		sState = OT_RADIO_STATE_TRANSMIT;
 
-		k_work_init(&tx_job, transmit_message);
 		k_work_submit_to_queue(&ot_work_q, &tx_job);
 		return 0;
 	} else {
@@ -411,14 +401,11 @@ void platformRadioProcess(otInstance *aInstance)
 		struct net_pkt *tx_pkt;
 
 		reset_pending_event(PENDING_EVENT_FRAME_TO_SEND);
-		while ((tx_pkt = (struct net_pkt *)k_fifo_get(&tx_pkt_fifo,
-							      K_NO_WAIT))
-		      != NULL) {
+		while ((tx_pkt = (struct net_pkt *) k_fifo_get(&tx_pkt_fifo, K_NO_WAIT)) != NULL) {
 			if (IS_ENABLED(CONFIG_OPENTHREAD_COPROCESSOR_RCP)) {
 				net_pkt_unref(tx_pkt);
 			} else {
-				openthread_handle_frame_to_send(aInstance,
-					tx_pkt);
+				openthread_handle_frame_to_send(aInstance, tx_pkt);
 			}
 		}
 	}
@@ -427,9 +414,7 @@ void platformRadioProcess(otInstance *aInstance)
 		struct net_pkt *rx_pkt;
 
 		reset_pending_event(PENDING_EVENT_FRAME_RECEIVED);
-		while ((rx_pkt = (struct net_pkt *)k_fifo_get(&rx_pkt_fifo,
-							      K_NO_WAIT))
-		      != NULL) {
+		while ((rx_pkt = (struct net_pkt *) k_fifo_get(&rx_pkt_fifo, K_NO_WAIT)) != NULL) {
 			openthread_handle_received_frame(aInstance, rx_pkt);
 		}
 	}
@@ -437,11 +422,9 @@ void platformRadioProcess(otInstance *aInstance)
 	if (is_pending_event_set(PENDING_EVENT_RX_FAILED)) {
 		reset_pending_event(PENDING_EVENT_RX_FAILED);
 		if (IS_ENABLED(CONFIG_OPENTHREAD_DIAG) && otPlatDiagModeGet()) {
-			otPlatDiagRadioReceiveDone(aInstance,
-						   NULL, tx_rx_result);
+			otPlatDiagRadioReceiveDone(aInstance, NULL, rx_result);
 		} else {
-			otPlatRadioReceiveDone(aInstance,
-					       NULL, tx_rx_result);
+			otPlatRadioReceiveDone(aInstance, NULL, rx_result);
 		}
 	}
 
@@ -476,8 +459,7 @@ void platformRadioProcess(otInstance *aInstance)
 		}
 
 		if (is_pending_event_set(PENDING_EVENT_DETECT_ENERGY_DONE)) {
-			otPlatRadioEnergyScanDone(aInstance,
-						(int8_t)energy_detected_value);
+			otPlatRadioEnergyScanDone(aInstance, (int8_t) energy_detected_value);
 			reset_pending_event(PENDING_EVENT_DETECT_ENERGY_DONE);
 		}
 	}
@@ -588,8 +570,7 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
 
 	radio_caps = radio_api->get_capabilities(radio_dev);
 
-	if ((sState == OT_RADIO_STATE_RECEIVE) ||
-		(radio_caps & IEEE802154_HW_SLEEP_TO_TX)) {
+	if ((sState == OT_RADIO_STATE_RECEIVE) || (radio_caps & IEEE802154_HW_SLEEP_TO_TX)) {
 		if (run_tx_task(aInstance) == 0) {
 			error = OT_ERROR_NONE;
 		}
@@ -714,8 +695,7 @@ otError otPlatRadioEnergyScan(otInstance *aInstance, uint8_t aScanChannel,
 
 	radio_api->set_channel(radio_dev, aScanChannel);
 
-	if (radio_api->ed_scan(radio_dev, energy_detection_time,
-				    energy_detected) != 0) {
+	if (radio_api->ed_scan(radio_dev, energy_detection_time, energy_detected) != 0) {
 		/*
 		 * OpenThread API does not accept failure of this function,
 		 * it can return 'No Error' or 'Not Implemented' error only.

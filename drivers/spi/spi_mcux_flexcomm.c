@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(spi_mcux_flexcomm, CONFIG_SPI_LOG_LEVEL);
 
 struct spi_mcux_config {
 	SPI_Type *base;
-	char *clock_name;
+	const struct device *clock_dev;
 	clock_control_subsys_t clock_subsys;
 	void (*irq_config_func)(const struct device *dev);
 };
@@ -38,7 +38,6 @@ struct spi_mcux_config {
 	(SPI_MCUX_FLEXCOMM_DMA_RX_DONE_FLAG | SPI_MCUX_FLEXCOMM_DMA_TX_DONE_FLAG)
 
 struct stream {
-	const char *dma_name;
 	const struct device *dma_dev;
 	uint32_t channel; /* stores the channel for dma */
 	struct dma_config dma_cfg;
@@ -48,7 +47,6 @@ struct stream {
 
 struct spi_mcux_data {
 	const struct device *dev;
-	const struct device *dev_clock;
 	spi_master_handle_t handle;
 	struct spi_context ctx;
 	size_t transfer_len;
@@ -176,7 +174,7 @@ static int spi_mcux_configure(const struct device *dev,
 		SPI_MasterGetDefaultConfig(&master_config);
 
 		/* Get the clock frequency */
-		if (clock_control_get_rate(data->dev_clock,
+		if (clock_control_get_rate(config->clock_dev,
 					   config->clock_subsys, &clock_freq)) {
 			return -EINVAL;
 		}
@@ -648,12 +646,7 @@ static int spi_mcux_transceive(const struct device *dev,
 			       const struct spi_buf_set *rx_bufs)
 {
 #ifdef CONFIG_SPI_MCUX_FLEXCOMM_DMA
-	struct spi_mcux_data *data = dev->data;
-
-	if ((data->dma_tx.dma_name != NULL)
-	 && (data->dma_rx.dma_name != NULL)) {
-		return transceive_dma(dev, spi_cfg, tx_bufs, rx_bufs, false, NULL);
-	}
+	return transceive_dma(dev, spi_cfg, tx_bufs, rx_bufs, false, NULL);
 #endif
 	return transceive(dev, spi_cfg, tx_bufs, rx_bufs, false, NULL);
 }
@@ -684,32 +677,20 @@ static int spi_mcux_init(const struct device *dev)
 	const struct spi_mcux_config *config = dev->config;
 	struct spi_mcux_data *data = dev->data;
 
-	data->dev_clock = device_get_binding(config->clock_name);
-	if (data->dev_clock == NULL) {
-		return -ENODEV;
-	}
-
 	config->irq_config_func(dev);
 
 	data->dev = dev;
 
 #ifdef CONFIG_SPI_MCUX_FLEXCOMM_DMA
-		if (data->dma_tx.dma_name != NULL) {
-			/* Get the binding to the DMA device */
-			data->dma_tx.dma_dev = device_get_binding(data->dma_tx.dma_name);
-			if (!data->dma_tx.dma_dev) {
-				LOG_ERR("%s device not found", data->dma_tx.dma_name);
-				return -ENODEV;
-			}
-		}
+	if (!device_is_ready(data->dma_tx.dma_dev)) {
+		LOG_ERR("%s device is not ready", data->dma_tx.dma_dev->name);
+		return -ENODEV;
+	}
 
-		if (data->dma_rx.dma_name != NULL) {
-			data->dma_rx.dma_dev = device_get_binding(data->dma_rx.dma_name);
-			if (!data->dma_rx.dma_dev) {
-				LOG_ERR("%s device not found", data->dma_rx.dma_name);
-				return -ENODEV;
-			}
-		}
+	if (!device_is_ready(data->dma_rx.dma_dev)) {
+		LOG_ERR("%s device is not ready", data->dma_rx.dma_dev->name);
+		return -ENODEV;
+	}
 #endif /* CONFIG_SPI_MCUX_FLEXCOMM_DMA */
 
 	spi_context_unlock_unconditionally(&data->ctx);
@@ -744,7 +725,7 @@ static void spi_mcux_config_func_##id(const struct device *dev) \
 #else
 #define SPI_DMA_CHANNELS(id)				\
 	.dma_tx = {						\
-		.dma_name = DT_INST_DMAS_LABEL_BY_NAME(id, tx),	\
+		.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_NAME(id, tx)), \
 		.channel =					\
 			DT_INST_DMAS_CELL_BY_NAME(id, tx, channel),	\
 		.dma_cfg = {					\
@@ -755,7 +736,7 @@ static void spi_mcux_config_func_##id(const struct device *dev) \
 		}							\
 	},								\
 	.dma_rx = {						\
-		.dma_name = DT_INST_DMAS_LABEL_BY_NAME(id, rx),	\
+		.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_NAME(id, rx)), \
 		.channel =					\
 			DT_INST_DMAS_CELL_BY_NAME(id, rx, channel),	\
 		.dma_cfg = {				\
@@ -773,7 +754,7 @@ static void spi_mcux_config_func_##id(const struct device *dev) \
 	static const struct spi_mcux_config spi_mcux_config_##id = {	\
 		.base =							\
 		(SPI_Type *)DT_INST_REG_ADDR(id),			\
-		.clock_name = DT_INST_CLOCKS_LABEL(id),			\
+		.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(id)),	\
 		.clock_subsys =					\
 		(clock_control_subsys_t)DT_INST_CLOCKS_CELL(id, name),\
 		SPI_MCUX_FLEXCOMM_IRQ_HANDLER_FUNC(id)			\

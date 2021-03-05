@@ -36,6 +36,7 @@
 #define MDM_BASE_SOCKET_NUM		  0
 #define MDM_NETWORK_RETRY_COUNT		  10
 #define MDM_INIT_RETRY_COUNT		  10
+#define MDM_PDP_ACT_RETRY_COUNT		  3
 #define MDM_WAIT_FOR_RSSI_COUNT		  10
 #define MDM_WAIT_FOR_RSSI_DELAY		  K_SECONDS(2)
 #define BUF_ALLOC_TIMEOUT		  K_SECONDS(1)
@@ -64,6 +65,9 @@ enum mdm_control_pins {
 	MDM_RESET,
 #if DT_INST_NODE_HAS_PROP(0, mdm_dtr_gpios)
 	MDM_DTR,
+#endif
+#if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
+	MDM_WDISABLE,
 #endif
 };
 
@@ -134,6 +138,12 @@ static struct modem_pin modem_pins[] = {
 	MODEM_PIN(DT_INST_GPIO_LABEL(0, mdm_dtr_gpios),
 		  DT_INST_GPIO_PIN(0, mdm_dtr_gpios),
 		  DT_INST_GPIO_FLAGS(0, mdm_dtr_gpios) | GPIO_OUTPUT_LOW),
+#endif
+#if DT_INST_NODE_HAS_PROP(0, mdm_wdisable_gpios)
+	/* MDM_WDISABLE */
+	MODEM_PIN(DT_INST_GPIO_LABEL(0, mdm_wdisable_gpios),
+		  DT_INST_GPIO_PIN(0, mdm_wdisable_gpios),
+		  DT_INST_GPIO_FLAGS(0, mdm_wdisable_gpios) | GPIO_OUTPUT_LOW),
 #endif
 };
 

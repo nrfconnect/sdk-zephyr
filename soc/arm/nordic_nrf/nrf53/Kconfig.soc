@@ -9,7 +9,6 @@ config SOC_NRF5340_CPUAPP
 	select CPU_HAS_NRF_IDAU
 	select CPU_HAS_FPU
 	select ARMV8_M_DSP
-	select HAS_POWER_STATE_DEEP_SLEEP_1
 	select HAS_HW_NRF_CC312
 	select HAS_HW_NRF_CLOCK
 	select HAS_HW_NRF_DPPIC
@@ -32,6 +31,8 @@ config SOC_NRF5340_CPUAPP
 	select HAS_HW_NRF_PWM1
 	select HAS_HW_NRF_PWM2
 	select HAS_HW_NRF_PWM3
+	select HAS_HW_NRF_QDEC0
+	select HAS_HW_NRF_QDEC1
 	select HAS_HW_NRF_QSPI
 	select HAS_HW_NRF_RTC0
 	select HAS_HW_NRF_RTC1
@@ -97,6 +98,7 @@ config SOC_NRF5340_CPUNET
 	select HAS_HW_NRF_TWIS0
 	select HAS_HW_NRF_UARTE0
 	select HAS_HW_NRF_WDT
+	select HAS_NO_SYS_PM
 
 choice
 	prompt "nRF53x MCU Selection"

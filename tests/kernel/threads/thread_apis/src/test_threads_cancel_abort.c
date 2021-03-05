@@ -107,51 +107,6 @@ void test_threads_abort_repeat(void)
 bool abort_called;
 void *block;
 
-static void abort_function(struct k_thread *aborted)
-{
-	printk("Child thread's abort handler called\n");
-	abort_called = true;
-
-	zassert_equal(aborted, &tdata, "wrong thread pointer");
-	zassert_not_equal(k_current_get(), aborted,
-			  "fn_abort ran on its own thread");
-	k_free(block);
-}
-
-static void uthread_entry(void)
-{
-	block = k_malloc(BLOCK_SIZE);
-	zassert_true(block != NULL, NULL);
-	printk("Child thread is running\n");
-	k_msleep(2);
-}
-
-/**
- * @ingroup kernel_thread_tests
- * @brief Test to validate the call of abort handler
- * specified by thread when it is aborted
- *
- * @see k_thread_abort(), #k_thread.fn_abort
- */
-void test_abort_handler(void)
-{
-	k_tid_t tid = k_thread_create(&tdata, tstack, STACK_SIZE,
-				      (k_thread_entry_t)uthread_entry, NULL, NULL, NULL,
-				      0, 0, K_NO_WAIT);
-
-	tdata.fn_abort = &abort_function;
-
-	k_msleep(1);
-
-	abort_called = false;
-
-	printk("Calling abort of child from parent\n");
-	k_thread_abort(tid);
-
-	zassert_true(abort_called == true, "Abort handler"
-		     " is not called");
-}
-
 static void delayed_thread_entry(void *p1, void *p2, void *p3)
 {
 	execute_flag = 1;
@@ -218,9 +173,15 @@ static void entry_abort_isr(void *p1, void *p2, void *p3)
 	ztest_test_fail();
 }
 
+extern struct k_sem offload_sem;
+
 /**
  * @ingroup kernel_thread_tests
- * @brief Show that threads can be aborted from interrupt context
+ *
+ * @brief Show that threads can be aborted from interrupt context by itself
+ *
+ * @details Spwan a thread, then enter ISR context in child thread and abort
+ * the child thread. Check if ISR completed and target thread was aborted.
  *
  * @see k_thread_abort()
  */
@@ -230,6 +191,56 @@ void test_abort_from_isr(void)
 	k_thread_create(&tdata, tstack, STACK_SIZE, entry_abort_isr,
 			NULL, NULL, NULL, 0, 0, K_NO_WAIT);
 
+
+	k_thread_join(&tdata, K_FOREVER);
+	zassert_true(isr_finished, "ISR did not complete");
+
+	/* Notice: Recover back the offload_sem: This is use for releasing
+	 * offload_sem which might be held when thread aborts itself in ISR
+	 * context, it will cause irq_offload cannot be used again.
+	 */
+	k_sem_give(&offload_sem);
+}
+
+/* use for sync thread start */
+static struct k_sem sem_abort;
+
+static void entry_aborted_thread(void *p1, void *p2, void *p3)
+{
+	k_sem_give(&sem_abort);
+
+	/* wait for being aborted */
+	while (1) {
+		k_sleep(K_MSEC(1));
+	}
+	zassert_unreachable("should not reach here");
+}
+
+/**
+ * @ingroup kernel_thread_tests
+ *
+ * @brief Show that threads can be aborted from interrupt context
+ *
+ * @details Spwan a thread, then enter ISR context in main thread and abort
+ * the child thread. Check if ISR completed and target thread was aborted.
+ *
+ * @see k_thread_abort()
+ */
+void test_abort_from_isr_not_self(void)
+{
+	k_tid_t tid;
+
+	isr_finished = false;
+	k_sem_init(&sem_abort, 0, 1);
+
+	tid = k_thread_create(&tdata, tstack, STACK_SIZE, entry_aborted_thread,
+			NULL, NULL, NULL, 0, 0, K_NO_WAIT);
+
+	/* wait for thread started */
+	k_sem_take(&sem_abort, K_FOREVER);
+
+	/* Simulate taking an interrupt which kills spwan thread */
+	irq_offload(offload_func, (void *)tid);
 
 	k_thread_join(&tdata, K_FOREVER);
 	zassert_true(isr_finished, "ISR did not complete");

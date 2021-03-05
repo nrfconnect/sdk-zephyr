@@ -98,7 +98,7 @@ by Zephyr are found in the parent `GitHub Zephyr project
 <https://github.com/zephyrproject-rtos/>`_.  Because of these
 dependencies, it's convenient to use the Zephyr-created :ref:`west
 <west>` tool to fetch and manage the Zephyr and external module source
-code.  See :ref:`west-multi-repo` for more details.
+code.  See :ref:`west-basics` for more details.
 
 Once your development tools are installed, use :ref:`west` to create,
 initialize, and download sources from the zephyr and external module
@@ -121,6 +121,20 @@ repo.
    changes, caused, for example, when you pull the :file:`zephyr`
    repository, switch branches in it, or perform a ``git bisect`` inside of
    it.
+
+Keeping Zephyr updated
+======================
+
+To update the Zephyr project source code, you need to get the latest
+changes via ``git``. Afterwards, run ``west update`` as mentioned in
+the previous paragraph.
+
+.. code-block:: console
+
+   # replace zephyrproject with the path you gave west init
+   cd zephyrproject/zephyr
+   git pull
+   west update
 
 Export Zephyr CMake package
 ***************************

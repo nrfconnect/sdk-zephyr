@@ -52,7 +52,6 @@ typedef void (*irq_config_func_t)(const struct device *dev);
 
 
 struct stream {
-	const char *name;
 	DMA_TypeDef *reg;
 	const struct device *dev;
 	uint32_t channel;
@@ -695,14 +694,9 @@ static int flash_stm32_qspi_init(const struct device *dev)
 	struct dma_config dma_cfg = dev_data->dma.cfg;
 	static DMA_HandleTypeDef hdma;
 
-	if (dev_data->dma.name != NULL) {
-		dev_data->dma.dev = device_get_binding(dev_data->dma.name);
-		if (!dev_data->dma.dev) {
-			LOG_ERR("%s device not found", dev_data->dma.name);
-			return -ENODEV;
-		}
-	} else {
-		return -EINVAL;
+	if (!device_is_ready(dev_data->dma.dev)) {
+		LOG_ERR("%s device not ready", dev_data->dma.dev->name);
+		return -ENODEV;
 	}
 
 	/* Proceed to the minimum Zephyr DMA driver init */
@@ -753,15 +747,13 @@ static int flash_stm32_qspi_init(const struct device *dev)
 #endif /* STM32_QSPI_USE_DMA */
 
 	/* Clock configuration */
-	__ASSERT_NO_MSG(device_get_binding(STM32_CLOCK_CONTROL_NAME));
-
-	if (clock_control_on(device_get_binding(STM32_CLOCK_CONTROL_NAME),
+	if (clock_control_on(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
 			     (clock_control_subsys_t) &dev_cfg->pclken) != 0) {
 		LOG_DBG("Could not enable QSPI clock");
 		return -EIO;
 	}
 
-	if (clock_control_get_rate(device_get_binding(STM32_CLOCK_CONTROL_NAME),
+	if (clock_control_get_rate(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
 			(clock_control_subsys_t) &dev_cfg->pclken,
 			&ahb_clock_freq) < 0) {
 		LOG_DBG("Failed to get AHB clock frequency");
@@ -863,7 +855,7 @@ static int flash_stm32_qspi_init(const struct device *dev)
 		DT_DMAS_CELL_BY_NAME(node, dir, channel_config)
 
 #define QSPI_DMA_CHANNEL_INIT(node, dir)				\
-	.name = DT_DMAS_LABEL_BY_NAME(node, dir),			\
+	.dev = DEVICE_DT_GET(DT_DMAS_CTLR(node)),			\
 	.channel = DT_DMAS_CELL_BY_NAME(node, dir, channel),		\
 	.reg = (DMA_TypeDef *)DT_REG_ADDR(				\
 				   DT_PHANDLE_BY_NAME(node, dmas, dir)),\

@@ -22,6 +22,8 @@ LOG_MODULE_REGISTER(net_tcp, CONFIG_NET_TCP_LOG_LEVEL);
 #include "net_private.h"
 #include "tcp2_priv.h"
 
+#define ACK_TIMEOUT_MS CONFIG_NET_TCP_ACK_TIMEOUT
+#define ACK_TIMEOUT K_MSEC(ACK_TIMEOUT_MS)
 #define FIN_TIMEOUT_MS MSEC_PER_SEC
 #define FIN_TIMEOUT K_MSEC(FIN_TIMEOUT_MS)
 
@@ -35,6 +37,9 @@ static K_MUTEX_DEFINE(tcp_lock);
 
 static K_MEM_SLAB_DEFINE(tcp_conns_slab, sizeof(struct tcp),
 				CONFIG_NET_MAX_CONTEXTS, 4);
+
+static struct k_work_q tcp_work_q;
+static K_KERNEL_STACK_DEFINE(work_q_stack, CONFIG_NET_TCP_WORKQ_STACK_SIZE);
 
 static void tcp_in(struct tcp *conn, struct net_pkt *pkt);
 
@@ -302,13 +307,19 @@ static void tcp_send(struct net_pkt *pkt)
 	if (is_6lo_technology(pkt)) {
 		struct net_pkt *new_pkt;
 
-		new_pkt = net_pkt_clone(pkt, TCP_PKT_ALLOC_TIMEOUT);
+		new_pkt = tcp_pkt_clone(pkt);
 		if (!new_pkt) {
+			/* The caller of this func assumes that the net_pkt
+			 * is consumed by this function. We call unref here
+			 * so that the unref at the end of the func will
+			 * free the net_pkt.
+			 */
+			tcp_pkt_unref(pkt);
 			goto out;
 		}
 
 		if (net_send_data(new_pkt) < 0) {
-			net_pkt_unref(new_pkt);
+			tcp_pkt_unref(new_pkt);
 		}
 
 		/* We simulate sending of the original pkt and unref it like
@@ -331,7 +342,7 @@ static void tcp_send_queue_flush(struct tcp *conn)
 
 	k_delayed_work_cancel(&conn->send_timer);
 
-	while ((pkt = tcp_slist(&conn->send_queue, get,
+	while ((pkt = tcp_slist(conn, &conn->send_queue, get,
 				struct net_pkt, next))) {
 		tcp_pkt_unref(pkt);
 	}
@@ -352,21 +363,24 @@ static int tcp_conn_unref(struct tcp *conn)
 	}
 #endif /* CONFIG_NET_TEST_PROTOCOL */
 
-	ref_count = atomic_dec(&conn->ref_count) - 1;
+	k_mutex_lock(&tcp_lock, K_FOREVER);
 
+	ref_count = atomic_dec(&conn->ref_count) - 1;
 	if (ref_count) {
 		tp_out(net_context_get_family(conn->context), conn->iface,
 		       "TP_TRACE", "event", "CONN_DELETE");
-		goto out;
+		goto unlock;
 	}
-
-	k_mutex_lock(&tcp_lock, K_FOREVER);
 
 	/* If there is any pending data, pass that to application */
 	while ((pkt = k_fifo_get(&conn->recv_data, K_NO_WAIT)) != NULL) {
-		net_context_packet_received(
-			(struct net_conn *)conn->context->conn_handler,
-			pkt, NULL, NULL, conn->recv_user_data);
+		if (net_context_packet_received(
+			    (struct net_conn *)conn->context->conn_handler,
+			    pkt, NULL, NULL, conn->recv_user_data) ==
+		    NET_DROP) {
+			/* Application is no longer there, unref the pkt */
+			tcp_pkt_unref(pkt);
+		}
 	}
 
 	if (conn->context->conn_handler) {
@@ -401,6 +415,7 @@ static int tcp_conn_unref(struct tcp *conn)
 
 	k_mem_slab_free(&tcp_conns_slab, (void **)&conn);
 
+unlock:
 	k_mutex_unlock(&tcp_lock);
 out:
 	return ref_count;
@@ -424,7 +439,7 @@ static bool tcp_send_process_no_lock(struct tcp *conn)
 	bool unref = false;
 	struct net_pkt *pkt;
 
-	pkt = tcp_slist(&conn->send_queue, peek_head,
+	pkt = tcp_slist(conn, &conn->send_queue, peek_head,
 			struct net_pkt, next);
 	if (!pkt) {
 		goto out;
@@ -450,8 +465,9 @@ static bool tcp_send_process_no_lock(struct tcp *conn)
 		bool forget = ACK == fl || PSH == fl || (ACK | PSH) == fl ||
 			RST & fl;
 
-		pkt = forget ? tcp_slist(&conn->send_queue, get, struct net_pkt,
-						next) : tcp_pkt_clone(pkt);
+		pkt = forget ? tcp_slist(conn, &conn->send_queue, get,
+					 struct net_pkt, next) :
+			tcp_pkt_clone(pkt);
 		if (!pkt) {
 			NET_ERR("net_pkt alloc failure");
 			goto out;
@@ -467,7 +483,8 @@ static bool tcp_send_process_no_lock(struct tcp *conn)
 	}
 
 	if (conn->in_retransmission) {
-		k_delayed_work_submit(&conn->send_timer, K_MSEC(tcp_rto));
+		k_delayed_work_submit_to_queue(&tcp_work_q, &conn->send_timer,
+					       K_MSEC(tcp_rto));
 	}
 
 out:
@@ -499,7 +516,7 @@ static void tcp_send_timer_cancel(struct tcp *conn)
 	k_delayed_work_cancel(&conn->send_timer);
 
 	{
-		struct net_pkt *pkt = tcp_slist(&conn->send_queue, get,
+		struct net_pkt *pkt = tcp_slist(conn, &conn->send_queue, get,
 						struct net_pkt, next);
 		if (pkt) {
 			NET_DBG("%s", log_strdup(tcp_th(pkt)));
@@ -511,7 +528,8 @@ static void tcp_send_timer_cancel(struct tcp *conn)
 		conn->in_retransmission = false;
 	} else {
 		conn->send_retries = tcp_retries;
-		k_delayed_work_submit(&conn->send_timer, K_MSEC(tcp_rto));
+		k_delayed_work_submit_to_queue(&tcp_work_q, &conn->send_timer,
+					       K_MSEC(tcp_rto));
 	}
 }
 
@@ -679,7 +697,7 @@ static int tcp_data_get(struct tcp *conn, struct net_pkt *pkt, size_t *len)
 	}
 
 	if (conn->context->recv_cb) {
-		struct net_pkt *up = net_pkt_clone(pkt, TCP_PKT_ALLOC_TIMEOUT);
+		struct net_pkt *up = tcp_pkt_clone(pkt);
 
 		if (!up) {
 			ret = -ENOBUFS;
@@ -913,11 +931,11 @@ static int tcp_send_data(struct tcp *conn)
 		conn->unacked_len += len;
 
 		if (conn->data_mode == TCP_DATA_MODE_RESEND) {
-			net_stats_update_tcp_resent(net_pkt_iface(pkt), len);
+			net_stats_update_tcp_resent(conn->iface, len);
 			net_stats_update_tcp_seg_rexmit(conn->iface);
 		} else {
-			net_stats_update_tcp_sent(net_pkt_iface(pkt), len);
-			net_stats_update_tcp_seg_sent(net_pkt_iface(pkt));
+			net_stats_update_tcp_sent(conn->iface, len);
+			net_stats_update_tcp_seg_sent(conn->iface);
 		}
 	}
 
@@ -975,7 +993,9 @@ static int tcp_send_queued_data(struct tcp *conn)
 
 	if (subscribe) {
 		conn->send_data_retries = 0;
-		k_delayed_work_submit(&conn->send_data_timer, K_MSEC(tcp_rto));
+		k_delayed_work_submit_to_queue(&tcp_work_q,
+					       &conn->send_data_timer,
+					       K_MSEC(tcp_rto));
 	}
  out:
 	return ret;
@@ -1024,7 +1044,9 @@ static void tcp_resend_data(struct k_work *work)
 			NET_DBG("TCP connection in active close, "
 				"not disposing yet (waiting %dms)",
 				FIN_TIMEOUT_MS);
-			k_delayed_work_submit(&conn->fin_timer, FIN_TIMEOUT);
+			k_delayed_work_submit_to_queue(&tcp_work_q,
+						       &conn->fin_timer,
+						       FIN_TIMEOUT);
 
 			conn_state(conn, TCP_FIN_WAIT_1);
 
@@ -1038,7 +1060,8 @@ static void tcp_resend_data(struct k_work *work)
 		}
 	}
 
-	k_delayed_work_submit(&conn->send_data_timer, K_MSEC(tcp_rto));
+	k_delayed_work_submit_to_queue(&tcp_work_q, &conn->send_data_timer,
+				       K_MSEC(tcp_rto));
 
  out:
 	k_mutex_unlock(&conn->lock);
@@ -1058,11 +1081,24 @@ static void tcp_timewait_timeout(struct k_work *work)
 	net_context_unref(conn->context);
 }
 
+static void tcp_establish_timeout(struct tcp *conn)
+{
+	NET_DBG("Did not receive %s in %dms", "ACK", ACK_TIMEOUT_MS);
+	NET_DBG("conn: %p %s", conn, log_strdup(tcp_conn_state(conn, NULL)));
+
+	(void)tcp_conn_unref(conn);
+}
+
 static void tcp_fin_timeout(struct k_work *work)
 {
 	struct tcp *conn = CONTAINER_OF(work, struct tcp, fin_timer);
 
-	NET_DBG("Did not receive FIN in %dms", FIN_TIMEOUT_MS);
+	if (conn->state == TCP_SYN_RECEIVED) {
+		tcp_establish_timeout(conn);
+		return;
+	}
+
+	NET_DBG("Did not receive %s in %dms", "FIN", FIN_TIMEOUT_MS);
 	NET_DBG("conn: %p %s", conn, log_strdup(tcp_conn_state(conn, NULL)));
 
 	/* Extra unref from net_tcp_put() */
@@ -1083,38 +1119,44 @@ static struct tcp *tcp_conn_alloc(void)
 
 	ret = k_mem_slab_alloc(&tcp_conns_slab, (void **)&conn, K_NO_WAIT);
 	if (ret) {
+		NET_ERR("Cannot allocate slab");
 		goto out;
 	}
 
 	memset(conn, 0, sizeof(*conn));
 
+	if (CONFIG_NET_TCP_RECV_QUEUE_TIMEOUT) {
+		conn->queue_recv_data = tcp_rx_pkt_alloc(conn, 0);
+		if (conn->queue_recv_data == NULL) {
+			NET_ERR("Cannot allocate %s queue for conn %p", "recv",
+				conn);
+			goto fail;
+		}
+	}
+
+	conn->send_data = tcp_pkt_alloc(conn, 0);
+	if (conn->send_data == NULL) {
+		NET_ERR("Cannot allocate %s queue for conn %p", "send", conn);
+		goto fail;
+	}
+
 	k_mutex_init(&conn->lock);
 	k_fifo_init(&conn->recv_data);
+	k_sem_init(&conn->connect_sem, 0, UINT_MAX);
 
+	conn->in_connect = false;
 	conn->state = TCP_LISTEN;
-
 	conn->recv_win = tcp_window;
-
 	conn->seq = (IS_ENABLED(CONFIG_NET_TEST_PROTOCOL) ||
 		     IS_ENABLED(CONFIG_NET_TEST)) ? 0 : sys_rand32_get();
 
 	sys_slist_init(&conn->send_queue);
 
 	k_delayed_work_init(&conn->send_timer, tcp_send_process);
-
 	k_delayed_work_init(&conn->timewait_timer, tcp_timewait_timeout);
 	k_delayed_work_init(&conn->fin_timer, tcp_fin_timeout);
-
-	if (CONFIG_NET_TCP_RECV_QUEUE_TIMEOUT) {
-		conn->queue_recv_data = tcp_rx_pkt_alloc(conn, 0);
-	}
-
-	conn->send_data = tcp_pkt_alloc(conn, 0);
 	k_delayed_work_init(&conn->send_data_timer, tcp_resend_data);
 	k_delayed_work_init(&conn->recv_queue_timer, tcp_cleanup_recv_queue);
-
-	k_sem_init(&conn->connect_sem, 0, UINT_MAX);
-	conn->in_connect = false;
 
 	tcp_conn_ref(conn);
 
@@ -1123,6 +1165,15 @@ out:
 	NET_DBG("conn: %p", conn);
 
 	return conn;
+
+fail:
+	if (CONFIG_NET_TCP_RECV_QUEUE_TIMEOUT && conn->queue_recv_data) {
+		tcp_pkt_unref(conn->queue_recv_data);
+		conn->queue_recv_data = NULL;
+	}
+
+	k_mem_slab_free(&tcp_conns_slab, (void **)&conn);
+	return NULL;
 }
 
 int net_tcp_get(struct net_context *context)
@@ -1411,8 +1462,9 @@ static void tcp_queue_recv_data(struct tcp *conn, struct net_pkt *pkt,
 		pkt->buffer = NULL;
 
 		if (!k_delayed_work_pending(&conn->recv_queue_timer)) {
-			k_delayed_work_submit(&conn->recv_queue_timer,
-				   K_MSEC(CONFIG_NET_TCP_RECV_QUEUE_TIMEOUT));
+			k_delayed_work_submit_to_queue(&tcp_work_q,
+						       &conn->recv_queue_timer,
+						       K_MSEC(CONFIG_NET_TCP_RECV_QUEUE_TIMEOUT));
 		}
 	}
 }
@@ -1535,6 +1587,12 @@ next_state:
 			tcp_out(conn, SYN | ACK);
 			conn_seq(conn, + 1);
 			next = TCP_SYN_RECEIVED;
+
+			/* Close the connection if we do not receive ACK on time.
+			 */
+			k_delayed_work_submit_to_queue(&tcp_work_q,
+						       &conn->establish_timer,
+						       ACK_TIMEOUT);
 		} else {
 			tcp_out(conn, SYN);
 			conn_seq(conn, + 1);
@@ -1544,6 +1602,7 @@ next_state:
 	case TCP_SYN_RECEIVED:
 		if (FL(&fl, &, ACK, th_ack(th) == conn->seq &&
 				th_seq(th) == conn->ack)) {
+			k_delayed_work_cancel(&conn->establish_timer);
 			tcp_send_timer_cancel(conn);
 			next = TCP_ESTABLISHED;
 			net_context_set_state(conn->context,
@@ -1739,8 +1798,9 @@ next_state:
 		}
 		break;
 	case TCP_TIME_WAIT:
-		k_delayed_work_submit(&conn->timewait_timer,
-				      K_MSEC(CONFIG_NET_TCP_TIME_WAIT_DELAY));
+		k_delayed_work_submit_to_queue(&tcp_work_q,
+					       &conn->timewait_timer,
+					       K_MSEC(CONFIG_NET_TCP_TIME_WAIT_DELAY));
 		break;
 	default:
 		NET_ASSERT(false, "%s is unimplemented",
@@ -1773,8 +1833,12 @@ next_state:
 	 */
 	while (conn_handler && atomic_get(&conn->ref_count) > 0 &&
 	       (recv_pkt = k_fifo_get(recv_data_fifo, K_NO_WAIT)) != NULL) {
-		net_context_packet_received(conn_handler, recv_pkt, NULL, NULL,
-					    recv_user_data);
+		if (net_context_packet_received(conn_handler, recv_pkt, NULL,
+						NULL, recv_user_data) ==
+		    NET_DROP) {
+			/* Application is no longer there, unref the pkt */
+			tcp_pkt_unref(recv_pkt);
+		}
 	}
 
 	/* We must not try to unref the connection while having a connection
@@ -1812,14 +1876,17 @@ int net_tcp_put(struct net_context *context)
 
 			/* How long to wait until all the data has been sent?
 			 */
-			k_delayed_work_submit(&conn->send_data_timer,
-					      K_MSEC(tcp_rto));
+			k_delayed_work_submit_to_queue(&tcp_work_q,
+						       &conn->send_data_timer,
+						       K_MSEC(tcp_rto));
 		} else {
 			int ret;
 
 			NET_DBG("TCP connection in active close, not "
 				"disposing yet (waiting %dms)", FIN_TIMEOUT_MS);
-			k_delayed_work_submit(&conn->fin_timer, FIN_TIMEOUT);
+			k_delayed_work_submit_to_queue(&tcp_work_q,
+						       &conn->fin_timer,
+						       FIN_TIMEOUT);
 
 			ret = tcp_out_ext(conn, FIN | ACK, NULL,
 				    conn->seq + conn->unacked_len);
@@ -1875,10 +1942,30 @@ int net_tcp_queue_data(struct net_context *context, struct net_pkt *pkt)
 
 	if (tcp_window_full(conn)) {
 		/* Trigger resend if the timer is not active */
-		if (!k_delayed_work_remaining_get(&conn->send_data_timer)) {
-			NET_DBG("Window full, trigger resend");
-			tcp_resend_data(&conn->send_data_timer.work);
-		}
+		/* TODO: use k_work_delayable for send_data_timer so we don't
+		 * have to directly access the internals of the legacy object.
+		 *
+		 * NOTE: It is not permitted to access any fields of k_work or
+		 * k_work_delayable directly.  This replacement does so, but
+		 * only as a temporary workaround until the legacy
+		 * k_delayed_work structure is replaced with k_work_delayable;
+		 * at that point k_work_schedule() can be invoked to cause the
+		 * work to be scheduled if it is not already scheduled.
+		 *
+		 * This solution diverges from the original, which would
+		 * invoke the retransmit function directly here.  Because that
+		 * function is given a k_work pointer, again this cannot be
+		 * done without accessing the internal data of the
+		 * k_work_delayable structure.
+		 *
+		 * The original inline retransmission could be supported by
+		 * refactoring the work_handler to delegate to a function that
+		 * takes conn directly, rather than the work item in which
+		 * conn is embedded, and calling that function directly here
+		 * and in the work handler.
+		 */
+		(void)k_work_schedule_for_queue(&tcp_work_q,
+						&conn->send_data_timer.work, K_NO_WAIT);
 
 		ret = -EAGAIN;
 		goto out;
@@ -2509,4 +2596,20 @@ void net_tcp_init(void)
 
 	tcp_recv_cb = tp_tcp_recv_cb;
 #endif
+
+#if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
+/* Lowest priority cooperative thread */
+#define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
+#else
+#define THREAD_PRIORITY K_PRIO_PREEMPT(CONFIG_NUM_PREEMPT_PRIORITIES - 1)
+#endif
+
+	/* Use private workqueue in order not to block the system work queue.
+	 */
+	k_work_q_start(&tcp_work_q, work_q_stack,
+		       K_KERNEL_STACK_SIZEOF(work_q_stack),
+		       THREAD_PRIORITY);
+
+	k_thread_name_set(&tcp_work_q.thread, "tcp_work");
+	NET_DBG("Workq started. Thread ID: %p", &tcp_work_q.thread);
 }

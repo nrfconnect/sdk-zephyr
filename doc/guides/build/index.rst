@@ -92,11 +92,11 @@ loading/flashing on the desired target board (:file:`zephyr.elf`,
 into four stages: the pre-build, first-pass binary, final binary, and
 post-processing.
 
-Pre-build occurs before any source files are compiled, because during
-this phase header files used by the source files are generated.
-
 Pre-build
 =========
+
+Pre-build occurs before any source files are compiled, because during
+this phase header files used by the source files are generated.
 
 Offset generation
    Access to high-level data structures and members is sometimes
@@ -127,7 +127,7 @@ generated during the configuration phase and the pre-build stage).
 If memory protection is enabled, then:
 
 Partition grouping
-   The gen_app_partitions.py script scans all the
+   The *gen_app_partitions.py* script scans all the
    generated archives and outputs linker scripts to ensure that
    application partitions are properly grouped and aligned for the
    target’s memory protection hardware.
@@ -151,9 +151,16 @@ is skipped.
 Final binary
 ============
 
-In some configurations, the binary from the previous stage is
-incomplete, with empty and/or placeholder sections that must be filled
-in by, essentially, reflection. When :ref:`usermode_api` is enabled:
+The binary from the previous stage is incomplete, with empty and/or
+placeholder sections that must be filled in by, essentially, reflection.
+
+Device dependencies
+   The *gen_handles.py* script scans the first-pass binary to determine
+   relationships between devices that were recorded from devicetree data,
+   and replaces the encoded relationships with values that are optimized to
+   locate the devices actually present in the application.
+
+When :ref:`usermode_api` is enabled:
 
 Kernel object hashing
    The *gen_kobject_list.py* scans the *ELF DWARF*
@@ -199,6 +206,15 @@ The following is a detailed description of the scripts used during the build pro
 ========================================
 
 .. include:: ../../../scripts/gen_syscalls.py
+   :start-after: """
+   :end-before: """
+
+.. _gen_handles.py:
+
+:zephyr_file:`scripts/gen_handles.py`
+==========================================
+
+.. include:: ../../../scripts/gen_handles.py
    :start-after: """
    :end-before: """
 

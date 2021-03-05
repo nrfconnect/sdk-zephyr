@@ -20,6 +20,7 @@
 #include <drivers/clock_control.h>
 #include <errno.h>
 #include <sys/util.h>
+#include <esp_attr.h>
 
 
 /*
@@ -63,7 +64,7 @@ struct uart_esp32_regs_t {
 struct uart_esp32_config {
 
 	struct uart_device_config dev_conf;
-	const char *clock_name;
+	const struct device *clock_dev;
 
 	const struct {
 		int tx_out;
@@ -90,7 +91,6 @@ struct uart_esp32_config {
 /* driver data */
 struct uart_esp32_data {
 	struct uart_config uart_config;
-	const struct device *clock_dev;
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	uart_irq_callback_user_data_t irq_cb;
 	void *irq_cb_data;
@@ -141,7 +141,7 @@ static int uart_esp32_poll_in(const struct device *dev, unsigned char *p_char)
 	return 0;
 }
 
-static void uart_esp32_poll_out(const struct device *dev,
+static IRAM_ATTR void uart_esp32_poll_out(const struct device *dev,
 				unsigned char c)
 {
 	/* Wait for space in FIFO */
@@ -191,7 +191,7 @@ static int uart_esp32_set_baudrate(const struct device *dev, int baudrate)
 {
 	uint32_t sys_clk_freq = 0;
 
-	if (clock_control_get_rate(DEV_DATA(dev)->clock_dev,
+	if (clock_control_get_rate(DEV_CFG(dev)->clock_dev,
 				   DEV_CFG(dev)->peripheral_id,
 				   &sys_clk_freq)) {
 		return -EINVAL;
@@ -248,7 +248,7 @@ static int uart_esp32_configure(const struct device *dev,
 		      | (UART_TX_FIFO_THRESH << UART_TXFIFO_EMPTY_THRHD_S);
 
 	uart_esp32_configure_pins(dev);
-	clock_control_on(DEV_DATA(dev)->clock_dev, DEV_CFG(dev)->peripheral_id);
+	clock_control_on(DEV_CFG(dev)->clock_dev, DEV_CFG(dev)->peripheral_id);
 
 	/*
 	 * Reset RX Buffer by reading all received bytes
@@ -316,12 +316,6 @@ static int uart_esp32_configure(const struct device *dev,
 
 static int uart_esp32_init(const struct device *dev)
 {
-	struct uart_esp32_data *data = DEV_DATA(dev);
-
-	data->clock_dev = device_get_binding(DEV_CFG(dev)->clock_name);
-
-	__ASSERT_NO_MSG(data->clock_dev);
-
 	uart_esp32_configure(dev, &DEV_DATA(dev)->uart_config);
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
@@ -443,7 +437,7 @@ void uart_esp32_isr(const struct device *dev)
 
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 
-static const struct uart_driver_api uart_esp32_api = {
+static const DRAM_ATTR struct uart_driver_api uart_esp32_api = {
 	.poll_in = uart_esp32_poll_in,
 	.poll_out = uart_esp32_poll_out,
 	.err_check = uart_esp32_err_check,
@@ -495,14 +489,14 @@ static const struct uart_driver_api uart_esp32_api = {
 #endif
 #define ESP32_UART_INIT(idx)						       \
 ESP32_UART_IRQ_HANDLER_DECL(idx);					       \
-static const struct uart_esp32_config uart_esp32_cfg_port_##idx = {	       \
+static const DRAM_ATTR struct uart_esp32_config uart_esp32_cfg_port_##idx = {	       \
 	.dev_conf = {							       \
 		.base =							       \
 		    (uint8_t *)DT_INST_REG_ADDR(idx), \
 		ESP32_UART_IRQ_HANDLER_FUNC(idx)			       \
 	},								       \
 											   \
-	.clock_name = DT_INST_CLOCKS_LABEL(idx),			       \
+	.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(idx)),		       \
 											   \
 	.signals = {							       \
 		.tx_out = U##idx##TXD_OUT_IDX,				       \
