@@ -176,6 +176,7 @@ function(trusted_firmware_build)
                -DTFM_TEST_REPO_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/tf-m-tests
                -DMCUBOOT_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/../tfm-mcuboot
                -DPSA_ARCH_TESTS_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/psa-arch-tests
+               -DZEPHYR_BASE=${ZEPHYR_BASE}
                ${TFM_PARTITIONS_ARGS}
     BUILD_ALWAYS True
     USES_TERMINAL_BUILD True
