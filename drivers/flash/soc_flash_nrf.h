@@ -8,7 +8,6 @@
 #define __SOC_FLASH_NRF_H__
 
 #include <kernel.h>
-#include <soc.h>
 
 #define FLASH_OP_DONE    (0) /* 0 for compliance with the driver API. */
 #define FLASH_OP_ONGOING  1
