@@ -563,6 +563,14 @@ __syscall int z_zsock_getaddrinfo_internal(const char *host,
 #define AI_ADDRCONFIG 0x20
 /** Assume service (port) is numeric */
 #define AI_NUMERICSERV 0x400
+/** Assume `service` contains a Packet Data Network (PDN) ID.
+ *  When specified together with the AI_NUMERICSERV flag,
+ *  `service` shall be formatted as follows: "port:pdn_id"
+ *  where "port" is the port number and "pdn_id" is the PDN ID.
+ *  Example: "8080:1", port 8080 PDN ID 1.
+ *  Example: "42:0", port 42 PDN ID 0.
+ */
+#define AI_PDNSERV 0x1000
 
 /**
  * @brief Resolve a domain name to one or more network addresses
