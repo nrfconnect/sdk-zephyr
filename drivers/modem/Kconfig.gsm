@@ -61,4 +61,24 @@ config MODEM_GSM_MANUAL_MCCMNO
 	  the network provider and may need to be changed if auto is not
 	  selected.
 
+config MODEM_ENABLE_PIN
+	bool "Enable the pin code enter"
+	default n
+	help
+	  This will add the possibility to enter SIM pin code.
+
+	if MODEM_ENABLE_PIN
+        config MODEM_SIM_PIN_CODE
+        int "pin code"
+		range 0 9999
+        help
+          put the pin code number as a number.
+		  example:
+			pin:0005 --> 5
+		  	pin:0026 --> 26
+		  	pin:0184 --> 148
+		  	pin:1234 --> 1234
+
+	endif
+
 endif

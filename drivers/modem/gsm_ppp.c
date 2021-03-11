@@ -108,6 +108,31 @@ static const struct modem_cmd response_cmds[] = {
 	MODEM_CMD("CONNECT", gsm_cmd_ok, 0U, ""),
 };
 
+#if defined(CONFIG_MODEM_ENABLE_PIN)
+#include <stdio.h>
+
+MODEM_CMD_DEFINE(gsm_cmd_ready)
+{
+	modem_cmd_handler_set_error(data, 0);
+	LOG_DBG("sim ready");
+	k_sem_give(&gsm.sem_response);
+	return 0;
+}
+
+MODEM_CMD_DEFINE(gsm_cmd_cpin)
+{
+	modem_cmd_handler_set_error(data, -EINVAL);
+	LOG_DBG("required pin code");
+	k_sem_give(&gsm.sem_response);
+	return 0;
+}
+
+static const struct modem_cmd cpin_response_cmds[] = {
+	MODEM_CMD("+CPIN: READY", gsm_cmd_ready, 0U, ""),
+	MODEM_CMD("+CPIN: SIM PIN", gsm_cmd_cpin, 0U, ""),
+};
+#endif //defined(CONFIG_MODEM_ENABLE_PIN)
+
 #if defined(CONFIG_MODEM_SHELL)
 #define MDM_MANUFACTURER_LENGTH  10
 #define MDM_MODEL_LENGTH         16
@@ -237,7 +262,7 @@ static const struct setup_cmd setup_cmds[] = {
 	SETUP_CMD_NOHANDLE("ATH"),
 	/* extender errors in numeric form */
 	SETUP_CMD_NOHANDLE("AT+CMEE=1"),
-
+	
 #if defined(CONFIG_MODEM_SHELL)
 	/* query modem info */
 	SETUP_CMD("AT+CGMI", "", on_cmd_atcmdinfo_manufacturer, 0U, ""),
@@ -368,6 +393,35 @@ static void gsm_finalize_connection(struct gsm_modem *gsm)
 
 	(void)gsm_setup_mccmno(gsm);
 
+#if defined(CONFIG_MODEM_ENABLE_PIN)
+	/* check the sim card */
+	ret = modem_cmd_send_nolock(&gsm->context.iface,
+				    &gsm->context.cmd_handler, &cpin_response_cmds[0],
+					    ARRAY_SIZE(cpin_response_cmds),
+				    "AT+CPIN?", &gsm->sem_response,
+				    GSM_CMD_AT_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("card sim required pin code. error %d", ret );
+
+		char cmd_pin[strlen("AT+CPIN=xxxx")];
+		sprintf(cmd_pin ,"AT+CPIN=%04d", CONFIG_MODEM_SIM_PIN_CODE );
+		/* check the sim card */
+		ret = modem_cmd_send_nolock(&gsm->context.iface,
+					    &gsm->context.cmd_handler, &cpin_response_cmds[0],
+					    ARRAY_SIZE(cpin_response_cmds),
+					    cmd_pin, &gsm->sem_response,
+					    GSM_CMD_AT_TIMEOUT);
+
+		if (ret < 0) {
+			LOG_ERR("modem sim card error %d", ret);
+			(void)k_delayed_work_submit(&gsm->gsm_configure_work,
+						    K_SECONDS(1));
+			return;
+		}
+	}
+	LOG_INF("modem sim card ready");
+
+#endif //CONFIG_MODEM_ENABLE_PIN
 	ret = modem_cmd_handler_setup_cmds_nolock(&gsm->context.iface,
 						  &gsm->context.cmd_handler,
 						  setup_cmds,
