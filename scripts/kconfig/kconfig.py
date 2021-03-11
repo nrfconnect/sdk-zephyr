@@ -68,7 +68,7 @@ def main():
     #
     # Kconfiglib caches calculated symbol values internally, so this is still
     # fast.
-    kconf.write_config(os.devnull)
+    kconf.write_config(os.devnull, save_old=False)
 
     if kconf.warnings:
         # Put a blank line between warnings to make them easier to read
