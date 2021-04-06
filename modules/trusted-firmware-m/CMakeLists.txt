@@ -121,6 +121,7 @@ function(trusted_firmware_build)
   set(TFM_S_SIGNED_BIN_FILE ${TFM_BINARY_DIR}/bin/tfm_s_signed.bin)
   set(TFM_NS_SIGNED_BIN_FILE ${TFM_BINARY_DIR}/bin/tfm_ns_signed.bin)
   set(TFM_S_NS_SIGNED_BIN_FILE ${TFM_BINARY_DIR}/bin/tfm_s_ns_signed.bin)
+  set(TFM_PLATFORM_NS_FILE ${TFM_BINARY_DIR}/platform/libplatform_ns.a)
 
   set(BUILD_BYPRODUCTS
     ${VENEERS_FILE}
@@ -136,6 +137,7 @@ function(trusted_firmware_build)
     ${TFM_S_HEX_FILE}
     ${TFM_NS_BIN_FILE}
     ${TFM_NS_HEX_FILE}
+    ${TFM_PLATFORM_NS_FILE}
     ${TFM_S_SIGNED_BIN_FILE}
     ${TFM_NS_SIGNED_BIN_FILE}
     ${TFM_S_NS_SIGNED_BIN_FILE}
@@ -224,6 +226,7 @@ function(trusted_firmware_build)
     PUBLIC
     zephyr_interface
     INTERFACE
+    ${TFM_PLATFORM_NS_FILE}
     ${PSA_TEST_VAL_FILE}
     ${PSA_TEST_PAL_FILE}
     ${PSA_TEST_COMBINE_FILE}
