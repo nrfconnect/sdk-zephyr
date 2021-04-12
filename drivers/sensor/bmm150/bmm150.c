@@ -592,6 +592,8 @@ static int bmm150_init(const struct device *dev)
 		return -EINVAL;
 	}
 
+	k_msleep(1); /* Start up delay */
+
 	if (bmm150_init_chip(dev) < 0) {
 		LOG_ERR("failed to initialize chip");
 		return -EIO;

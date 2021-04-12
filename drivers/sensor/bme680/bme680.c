@@ -414,6 +414,8 @@ static int bme680_init(const struct device *dev)
 
 	data->i2c_slave_addr = DT_INST_REG_ADDR(0);
 
+	k_msleep(2); /* Start up delay */
+
 	if (bme680_chip_init(dev) < 0) {
 		return -EINVAL;
 	}
