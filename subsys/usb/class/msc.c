@@ -118,7 +118,7 @@ static volatile uint32_t defered_wr_sz;
 static uint8_t __aligned(4) page[BLOCK_SIZE + CONFIG_MASS_STORAGE_BULK_EP_MPS];
 
 /* Initialized during mass_storage_init() */
-static uint32_t memory_size;
+static uint64_t memory_size;
 static uint32_t block_count;
 static const char *disk_pdrv = CONFIG_MASS_STORAGE_DISK_NAME;
 
@@ -168,7 +168,7 @@ static struct CBW cbw;
 static struct CSW csw;
 
 /*addr where will be read or written data*/
-static uint32_t addr;
+static uint64_t addr;
 
 /*length of a reading or writing*/
 static uint32_t length;
@@ -446,6 +446,7 @@ static bool check_cbw_data_length(void)
 static bool infoTransfer(void)
 {
 	uint32_t n;
+	uint64_t new_addr;
 
 	if (!check_cbw_data_length()) {
 		return false;
@@ -455,14 +456,16 @@ static bool infoTransfer(void)
 	n = sys_get_be32(&cbw.CB[2]);
 
 	LOG_DBG("LBA (block) : 0x%x ", n);
-	if ((n * BLOCK_SIZE) >= memory_size) {
+
+	new_addr = ((uint64_t)n * BLOCK_SIZE);
+	if (new_addr >= memory_size) {
 		LOG_ERR("LBA out of range");
 		csw.Status = CSW_FAILED;
 		sendCSW();
 		return false;
 	}
 
-	addr = n * BLOCK_SIZE;
+	addr = new_addr;
 
 	/* Number of Blocks to transfer */
 	switch (cbw.CB[0]) {
@@ -984,7 +987,7 @@ static int mass_storage_init(const struct device *dev)
 
 
 	LOG_INF("Sect Count %d", block_count);
-	memory_size = block_count * BLOCK_SIZE;
+	memory_size = ((uint64_t)block_count) * BLOCK_SIZE;
 	LOG_INF("Memory Size %d", memory_size);
 
 	msd_state_machine_reset();
