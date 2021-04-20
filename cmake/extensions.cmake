@@ -1311,9 +1311,9 @@ endfunction()
 # ifdef functions are added on an as-need basis. See
 # https://cmake.org/cmake/help/latest/manual/cmake-commands.7.html for
 # a list of available functions.
-function(add_subdirectory_ifdef feature_toggle source_dir)
+function(add_subdirectory_ifdef feature_toggle dir)
   if(${${feature_toggle}})
-    add_subdirectory(${source_dir} ${ARGN})
+    add_subdirectory(${dir})
   endif()
 endfunction()
 
