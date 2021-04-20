@@ -1738,12 +1738,7 @@ static int context_sendto(struct net_context *context,
 
 		net_pkt_cursor_init(pkt);
 
-		if (net_context_get_ip_proto(context) == IPPROTO_RAW) {
-			/* Pass to L2: */
-			ret = net_send_data(pkt);
-		} else {
-			net_if_queue_tx(net_pkt_iface(pkt), pkt);
-		}
+		net_if_queue_tx(net_pkt_iface(pkt), pkt);
 	} else if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
 		   net_context_get_family(context) == AF_CAN &&
 		   net_context_get_ip_proto(context) == CAN_RAW) {
