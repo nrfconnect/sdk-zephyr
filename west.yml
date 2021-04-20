@@ -140,12 +140,11 @@ manifest:
       revision: 7dd56fc100d79cc45c33d43e7401d1803e26f6e7
     - name: trusted-firmware-m
       path: modules/tee/tfm
-      url: https://github.com/nrfconnect/sdk-trusted-firmware-m
-      revision: 3599bcc187f3ac05119b9424c859332f5acb0db3
+      revision: 69dc29a48b707dfe732a57e05a3291ca71138eec
     - name: tfm-mcuboot # This is used by the trusted-firmware-m module.
-      url: https://github.com/nrfconnect/sdk-mcuboot
+      repo-path: mcuboot
       path: modules/tee/tfm-mcuboot
-      revision: 81d19f017f18f1bc6bea906d96fd45fba3672064
+      revision: 1.7.0-rc1
 
   self:
     path: zephyr
