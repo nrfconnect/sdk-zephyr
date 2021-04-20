@@ -14,6 +14,8 @@
 #define NRF5_PSDU_LENGTH  (125)
 #define NRF5_PHR_LENGTH   (1)
 
+#define MAC_KEY_SIZE 16
+
 struct nrf5_802154_rx_frame {
 	void *fifo_reserved; /* 1st word reserved for use by fifo. */
 	uint8_t *psdu; /* Pointer to a received frame. */
@@ -83,6 +85,24 @@ struct nrf5_802154_data {
 
 	/* Capabilities of the network interface. */
 	enum ieee802154_hw_caps capabilities;
+
+#if defined(CONFIG_NET_PKT_TXSEC)
+	/* Current MAC key index. */
+	uint8_t key_id;
+
+	/* Previous MAC key. */
+	uint8_t prev_key[MAC_KEY_SIZE];
+
+	/* Current MAC key. */
+	uint8_t curr_key[MAC_KEY_SIZE];
+
+	/* Next MAC key. */
+	uint8_t next_key[MAC_KEY_SIZE];
+
+	/* MAC frame counter value. */
+	uint32_t mac_frame_counter;
+#endif
+
 };
 
 #endif /* ZEPHYR_DRIVERS_IEEE802154_IEEE802154_NRF5_H_ */

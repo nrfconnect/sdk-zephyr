@@ -12,6 +12,9 @@ config OPENTHREAD_THREAD_VERSION_1_1
 	bool "Version 1.1"
 config OPENTHREAD_THREAD_VERSION_1_2
 	bool "Version 1.2"
+	select NET_PKT_TXTIME
+	select NET_PKT_TIMESTAMP
+	select NET_PKT_TXSEC
 endchoice
 
 config OPENTHREAD_THREAD_VERSION

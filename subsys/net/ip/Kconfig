@@ -820,6 +820,11 @@ config NET_PKT_TXTIME_STATS_DETAIL
 	  The extra statistics can be seen in net-shell using "net stats"
 	  command.
 
+config NET_PKT_TXSEC
+	bool "Enable network packet transmission security handling"
+	help
+	  Enable network packet TX security handling support.
+
 config NET_PROMISCUOUS_MODE
 	bool "Enable promiscuous mode support [EXPERIMENTAL]"
 	select NET_MGMT

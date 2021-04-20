@@ -47,7 +47,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "ieee802154_nrf5.h"
 #include "nrf_802154.h"
 
-#ifdef CONFIG_NRF_802154_SER_HOST
+#if defined(CONFIG_NRF_802154_SER_HOST)
 #include "nrf_802154_serialization_error.h"
 #endif
 
@@ -104,6 +104,10 @@ static struct nrf5_802154_data nrf5_data;
 #define IEEE802154_NRF5_VENDOR_OUI CONFIG_IEEE802154_VENDOR_OUI
 #else
 #define IEEE802154_NRF5_VENDOR_OUI (uint32_t)0xF4CE36
+#endif
+
+#if defined(CONFIG_NET_PKT_TXSEC)
+static K_MUTEX_DEFINE(sec_mutex);
 #endif
 
 static void nrf5_get_eui64(uint8_t *mac)
@@ -537,6 +541,13 @@ static int nrf5_tx(const struct device *dev,
 	return -EIO;
 }
 
+static uint64_t nrf5_get_time(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return nrf_802154_time_get();
+}
+
 static int nrf5_start(const struct device *dev)
 {
 	ARG_UNUSED(dev);
@@ -690,6 +701,24 @@ static int nrf5_configure(const struct device *dev,
 	case IEEE802154_CONFIG_EVENT_HANDLER:
 		nrf5_data.event_handler = config->event_handler;
 
+#if defined(CONFIG_NET_PKT_TXSEC)
+	case IEEE802154_CONFIG_MAC_KEYS:
+		k_mutex_lock(&sec_mutex, K_FOREVER);
+		nrf5_data.key_id = config->mac_keys.key_id;
+		memcpy(nrf5_data.prev_key, config->mac_keys.prev_key,
+		       MAC_KEY_SIZE);
+		memcpy(nrf5_data.curr_key, config->mac_keys.curr_key,
+		       MAC_KEY_SIZE);
+		memcpy(nrf5_data.next_key, config->mac_keys.next_key,
+		       MAC_KEY_SIZE);
+		k_mutex_unlock(&sec_mutex);
+
+	case IEEE802154_CONFIG_FRAME_COUNTER:
+		k_mutex_lock(&sec_mutex, K_FOREVER);
+		nrf5_data.mac_frame_counter = config->frame_counter;
+		k_mutex_unlock(&sec_mutex);
+#endif
+
 	default:
 		return -EINVAL;
 	}
@@ -763,7 +792,11 @@ void nrf_802154_receive_failed(nrf_802154_rx_error_t error)
 void nrf_802154_tx_ack_started(const uint8_t *data)
 {
 	nrf5_data.last_frame_ack_fpb =
-				data[FRAME_PENDING_BYTE] & FRAME_PENDING_BIT;
+		data[FRAME_PENDING_BYTE] & FRAME_PENDING_BIT;
+
+#if defined(CONFIG_NET_PKT_TXSEC)
+	/* TODO: Handle security here */
+#endif
 }
 
 void nrf_802154_transmitted_raw(const uint8_t *frame, uint8_t *ack,
@@ -829,7 +862,7 @@ void nrf_802154_energy_detection_failed(nrf_802154_ed_error_t error)
 	}
 }
 
-#ifdef CONFIG_NRF_802154_SER_HOST
+#if defined(CONFIG_NRF_802154_SER_HOST)
 void nrf_802154_serialization_error(const nrf_802154_ser_err_data_t *p_err)
 {
 	__ASSERT(false, "802.15.4 serialization error");
@@ -852,6 +885,7 @@ static struct ieee802154_radio_api nrf5_radio_api = {
 	.stop = nrf5_stop,
 	.tx = nrf5_tx,
 	.ed_scan = nrf5_energy_scan_start,
+	.get_time = nrf5_get_time,
 	.configure = nrf5_configure,
 };
 
