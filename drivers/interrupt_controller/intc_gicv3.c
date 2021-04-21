@@ -12,9 +12,9 @@
 #include "intc_gicv3_priv.h"
 
 /* Redistributor base addresses for each core */
-mem_addr_t gic_rdists[GIC_NUM_CPU_IF];
+mem_addr_t gic_rdists[CONFIG_MP_NUM_CPUS];
 
-#ifdef CONFIG_ARMV8_A_NS
+#if defined(CONFIG_ARMV8_A_NS) || defined(CONFIG_GIC_SINGLE_SECURITY_STATE)
 #define IGROUPR_VAL	0xFFFFFFFFU
 #else
 #define IGROUPR_VAL	0x0U
@@ -29,7 +29,7 @@ static int gic_wait_rwp(uint32_t intid)
 	mem_addr_t base;
 
 	if (intid < GIC_SPI_INT_BASE) {
-		base = (GIC_GET_RDIST(GET_CPUID) + GICR_CTLR);
+		base = (GIC_GET_RDIST(GET_CPUID()) + GICR_CTLR);
 		rwp_mask = BIT(GICR_CTLR_RWP);
 	} else {
 		base = GICD_CTLR;
@@ -175,7 +175,7 @@ static void gicv3_cpuif_init(void)
 	uint32_t icc_sre;
 	uint32_t intid;
 
-	mem_addr_t base = gic_rdists[GET_CPUID] + GICR_SGI_BASE_OFF;
+	mem_addr_t base = gic_rdists[GET_CPUID()] + GICR_SGI_BASE_OFF;
 
 	/* Disable all sgi ppi */
 	sys_write32(BIT_MASK(GIC_NUM_INTR_PER_REG), ICENABLER(base, 0));
@@ -243,6 +243,16 @@ static void gicv3_dist_init(void)
 	/* Disable the distributor */
 	sys_write32(0, GICD_CTLR);
 	gic_wait_rwp(GIC_SPI_INT_BASE);
+#ifdef CONFIG_GIC_SINGLE_SECURITY_STATE
+	/*
+	 * Before configuration, we need to check whether
+	 * the GIC single security state mode is supported.
+	 * Make sure GICD_CTRL_NS is 1.
+	 */
+	sys_set_bit(GICD_CTLR, GICD_CTRL_NS);
+	__ASSERT(sys_test_bit(GICD_CTLR, GICD_CTRL_NS),
+		"Current GIC does not support single security state");
+#endif
 
 	/*
 	 * Default configuration of all SPIs
@@ -281,27 +291,50 @@ static void gicv3_dist_init(void)
 	/* Enable distributor with ARE */
 	sys_write32(BIT(GICD_CTRL_ARE_NS) | BIT(GICD_CTLR_ENABLE_G1NS),
 		    GICD_CTLR);
+#elif defined(CONFIG_GIC_SINGLE_SECURITY_STATE)
+	/*
+	 * For GIC single security state, the config GIC_SINGLE_SECURITY_STATE
+	 * means the GIC is under single security state which has only two
+	 * groups: group 0 and group 1.
+	 * Then set GICD_CTLR_ARE and GICD_CTLR_ENABLE_G1 to enable Group 1
+	 * interrupt.
+	 * Since the GICD_CTLR_ARE and GICD_CTRL_ARE_S share BIT(4), and
+	 * similarly the GICD_CTLR_ENABLE_G1 and GICD_CTLR_ENABLE_G1NS share
+	 * BIT(1), we can reuse them.
+	 */
+	sys_write32(BIT(GICD_CTRL_ARE_S) | BIT(GICD_CTLR_ENABLE_G1NS),
+		    GICD_CTLR);
 #else
 	/* enable Group 1 secure interrupts */
 	sys_set_bit(GICD_CTLR, GICD_CTLR_ENABLE_G1S);
 #endif
 }
 
-/* TODO: add arm_gic_secondary_init() for multicore support */
 int arm_gic_init(const struct device *unused)
 {
+	int i;
+
 	ARG_UNUSED(unused);
 
 	gicv3_dist_init();
 
 	/* Fixme: populate each redistributor */
-	gic_rdists[0] = GIC_RDIST_BASE;
+	for (i = 0; i < GIC_NUM_CPU_IF; i++)
+		gic_rdists[i] = GIC_RDIST_BASE + i * 0x20000;
 
-	gicv3_rdist_enable(GIC_GET_RDIST(GET_CPUID));
+	gicv3_rdist_enable(GIC_GET_RDIST(GET_CPUID()));
 
 	gicv3_cpuif_init();
 
 	return 0;
 }
-
 SYS_INIT(arm_gic_init, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+
+#ifdef CONFIG_SMP
+void arm_gic_secondary_init(void)
+{
+	gicv3_rdist_enable(GIC_GET_RDIST(GET_CPUID()));
+
+	gicv3_cpuif_init();
+}
+#endif

@@ -45,7 +45,7 @@ static inline uint64_t z_arm_dwt_freq_get(void)
 
 	if (!dwt_frequency) {
 
-		z_arm_dwt_init(NULL);
+		z_arm_dwt_init();
 
 		uint32_t cyc_start = k_cycle_get_32();
 		uint64_t dwt_start = z_arm_dwt_get_cycles();
@@ -117,5 +117,5 @@ uint64_t arch_timing_cycles_to_ns_avg(uint64_t cycles, uint32_t count)
 
 uint32_t arch_timing_freq_get_mhz(void)
 {
-	return (uint32_t)(arch_timing_freq_get() / 1000000);
+	return (uint32_t)(arch_timing_freq_get() / 1000000U);
 }
