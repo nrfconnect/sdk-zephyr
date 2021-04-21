@@ -729,8 +729,11 @@ void nrf_802154_received_timestamp_raw(uint8_t *data, int8_t power, uint8_t lqi,
 	__ASSERT(false, "Not enough rx frames allocated for 15.4 driver");
 }
 
-void nrf_802154_receive_failed(nrf_802154_rx_error_t error)
+void nrf_802154_receive_failed(nrf_802154_rx_error_t error, uint32_t id)
 {
+	/* Only immediate reception windows are supported. */
+	__ASSERT_NO_MSG(id == NRF_802154_RESERVED_IMM_RX_WINDOW_ID);
+
 	enum ieee802154_rx_fail_reason reason;
 
 	switch (error) {
