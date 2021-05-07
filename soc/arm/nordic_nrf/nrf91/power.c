@@ -15,6 +15,9 @@ LOG_MODULE_DECLARE(soc, CONFIG_SOC_LOG_LEVEL);
 void pm_power_state_set(struct pm_state_info info)
 {
 	switch (info.state) {
+	case PM_STATE_SUSPEND_TO_IDLE:
+	        k_cpu_idle();
+	        break;
 	case PM_STATE_SOFT_OFF:
 		nrf_regulators_system_off(NRF_REGULATORS);
 		break;
@@ -28,6 +31,7 @@ void pm_power_state_set(struct pm_state_info info)
 void pm_power_state_exit_post_ops(struct pm_state_info info)
 {
 	switch (info.state) {
+        case PM_STATE_SUSPEND_TO_IDLE:
 	case PM_STATE_SOFT_OFF:
 		/* Nothing to do. */
 		break;
