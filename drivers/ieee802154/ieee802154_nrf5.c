@@ -39,9 +39,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <net/ieee802154_radio.h>
 
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && \
-	defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+#if defined(CONFIG_SPM_SERVICE_READ)
 #include <secure_services.h>
+#elif defined(CONFIG_BUILD_WITH_TFM)
+#include <tfm/tfm_ioctl_api.h>
+#endif
 #endif
 
 #include "ieee802154_nrf5.h"
@@ -123,16 +126,29 @@ static void nrf5_get_eui64(uint8_t *mac)
 	mac[index++] = IEEE802154_NRF5_VENDOR_OUI & 0xff;
 #endif
 
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && \
-	defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	int ret = -EPERM;
-#if defined(CONFIG_SPM)
+#if defined(CONFIG_SPM_SERVICE_READ)
 	ret = spm_request_read(&factoryAddress,
 			       (uint32_t)&EUI64_ADDR[EUI64_ADDR_HIGH],
 			       sizeof(factoryAddress));
+#elif defined(CONFIG_BUILD_WITH_TFM)
+	enum tfm_platform_err_t tfmError;
+	uint32_t tfmServiceError;
+
+	tfmError = tfm_platform_mem_read(&factoryAddress, (uint32_t)&EUI64_ADDR[EUI64_ADDR_HIGH],
+					 sizeof(factoryAddress), &tfmServiceError);
+
+	if (tfmError == TFM_PLATFORM_ERR_SUCCESS && tfmServiceError == 0) {
+		ret = 0;
+	} else if (tfmError == TFM_PLATFORM_ERR_INVALID_PARAM) {
+		ret = -EINVAL;
+	} else if (tfmError == TFM_PLATFORM_ERR_NOT_SUPPORTED) {
+		ret = -ENOTSUP;
+	}
 #endif
 	if (ret != 0) {
-		LOG_ERR("Unable to read EUI64 from the secure zone.");
+		LOG_ERR("Unable to read EUI64 from the secure zone: %d", ret);
 		LOG_ERR("Setting EUI64 to 0");
 		factoryAddress = 0ULL;
 	}
