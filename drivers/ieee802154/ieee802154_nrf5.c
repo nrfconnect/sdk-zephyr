@@ -727,10 +727,8 @@ void nrf_802154_received_timestamp_raw(uint8_t *data, int8_t power, uint8_t lqi,
 	__ASSERT(false, "Not enough rx frames allocated for 15.4 driver");
 }
 
-void nrf_802154_receive_failed(nrf_802154_rx_error_t error, uint32_t id)
+void nrf_802154_receive_failed(nrf_802154_rx_error_t error)
 {
-	ARG_UNUSED(id);
-
 	enum ieee802154_rx_fail_reason reason;
 
 	switch (error) {
