@@ -9,7 +9,7 @@ tests:
     min_flash: 54
     tags: cpp
   application_development.cpp.libcxx.exceptions:
-    platform_exclude: qemu_x86_coverage mps2_an385 mps2_an521
+    platform_exclude: qemu_x86_coverage
     toolchain_exclude: xcc
     min_flash: 54
     tags: cpp
