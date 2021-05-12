@@ -220,27 +220,9 @@ static uint8_t l2cap_br_get_ident(void)
 	return ident;
 }
 
-/* Send the buffer and release it in case of failure.
- * Any other cleanup in failure to send should be handled by the disconnected
- * handler.
- */
-static inline void l2cap_send(struct bt_conn *conn, uint16_t cid,
-			      struct net_buf *buf)
-{
-	if (bt_l2cap_send(conn, cid, buf)) {
-		net_buf_unref(buf);
-	}
-}
-
 static void l2cap_br_chan_send_req(struct bt_l2cap_br_chan *chan,
 				   struct net_buf *buf, k_timeout_t timeout)
 {
-
-	if (bt_l2cap_send(chan->chan.conn, BT_L2CAP_CID_BR_SIG, buf)) {
-		net_buf_unref(buf);
-		return;
-	}
-
 	/* BLUETOOTH SPECIFICATION Version 4.2 [Vol 3, Part A] page 126:
 	 *
 	 * The value of this timer is implementation-dependent but the minimum
@@ -251,6 +233,8 @@ static void l2cap_br_chan_send_req(struct bt_l2cap_br_chan *chan,
 	 * link is lost.
 	 */
 	k_delayed_work_submit(&chan->chan.rtx_work, timeout);
+
+	bt_l2cap_send(chan->chan.conn, BT_L2CAP_CID_BR_SIG, buf);
 }
 
 static void l2cap_br_get_info(struct bt_l2cap_br *l2cap, uint16_t info_type)
@@ -448,7 +432,7 @@ static int l2cap_br_info_req(struct bt_l2cap_br *l2cap, uint8_t ident,
 		break;
 	}
 
-	l2cap_send(conn, BT_L2CAP_CID_BR_SIG, rsp_buf);
+	bt_l2cap_send(conn, BT_L2CAP_CID_BR_SIG, rsp_buf);
 
 	return 0;
 }
@@ -656,7 +640,7 @@ static void l2cap_br_send_conn_rsp(struct bt_conn *conn, uint16_t scid,
 		rsp->status = sys_cpu_to_le16(BT_L2CAP_CS_NO_INFO);
 	}
 
-	l2cap_send(conn, BT_L2CAP_CID_BR_SIG, buf);
+	bt_l2cap_send(conn, BT_L2CAP_CID_BR_SIG, buf);
 }
 
 static int l2cap_br_conn_req_reply(struct bt_l2cap_chan *chan, uint16_t result)
@@ -895,7 +879,7 @@ static void l2cap_br_send_reject(struct bt_conn *conn, uint8_t ident,
 		net_buf_add_mem(buf, data, data_len);
 	}
 
-	l2cap_send(conn, BT_L2CAP_CID_BR_SIG, buf);
+	bt_l2cap_send(conn, BT_L2CAP_CID_BR_SIG, buf);
 }
 
 static uint16_t l2cap_br_conf_opt_mtu(struct bt_l2cap_chan *chan,
@@ -1024,7 +1008,7 @@ send_rsp:
 
 	hdr->len = sys_cpu_to_le16(buf->len - sizeof(*hdr));
 
-	l2cap_send(conn, BT_L2CAP_CID_BR_SIG, buf);
+	bt_l2cap_send(conn, BT_L2CAP_CID_BR_SIG, buf);
 
 	if (result != BT_L2CAP_CONF_SUCCESS) {
 		return;
@@ -1112,7 +1096,7 @@ static void l2cap_br_disconn_req(struct bt_l2cap_br *l2cap, uint8_t ident,
 
 	bt_l2cap_chan_del(&chan->chan);
 
-	l2cap_send(conn, BT_L2CAP_CID_BR_SIG, buf);
+	bt_l2cap_send(conn, BT_L2CAP_CID_BR_SIG, buf);
 }
 
 static void l2cap_br_connected(struct bt_l2cap_chan *chan)
