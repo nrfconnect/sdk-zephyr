@@ -1369,8 +1369,8 @@ int bt_le_per_adv_set_param(struct bt_le_ext_adv *adv,
 		return -EINVAL;
 	}
 
-	if (param->interval_min < 0x0006 ||
-	    param->interval_max > 0xFFFF ||
+	if (param->interval_min < BT_GAP_PER_ADV_MIN_INTERVAL ||
+	    param->interval_max > BT_GAP_PER_ADV_MAX_INTERVAL ||
 	    param->interval_min > param->interval_max) {
 		return -EINVAL;
 	}
@@ -1552,6 +1552,26 @@ void bt_hci_le_adv_set_terminated(struct net_buf *buf)
 	evt = (void *)buf->data;
 	adv = bt_adv_lookup_handle(evt->adv_handle);
 	conn_handle = sys_le16_to_cpu(evt->conn_handle);
+
+#if (CONFIG_BT_ID_MAX > 1) && (CONFIG_BT_EXT_ADV_MAX_ADV_SET > 1)
+	bt_dev.adv_conn_id = adv->id;
+	for (int i = 0; i < ARRAY_SIZE(bt_dev.cached_conn_complete); i++) {
+		if (bt_dev.cached_conn_complete[i].valid &&
+		    bt_dev.cached_conn_complete[i].evt.handle == evt->conn_handle) {
+			if (atomic_test_bit(adv->flags, BT_ADV_ENABLED)) {
+				/* Process the cached connection complete event
+				 * now that the corresponding advertising set is known.
+				 *
+				 * If the advertiser has been stopped before the connection
+				 * complete event has been raised to the application, we
+				 * discard the event.
+				 */
+				bt_hci_le_enh_conn_complete(&bt_dev.cached_conn_complete[i].evt);
+			}
+			bt_dev.cached_conn_complete[i].valid = false;
+		}
+	}
+#endif
 
 	BT_DBG("status 0x%02x adv_handle %u conn_handle 0x%02x num %u",
 	       evt->status, evt->adv_handle, conn_handle,

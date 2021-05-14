@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import re
 
-from sphinx.highlighting import lexers
 import sphinx_rtd_theme
 
 
@@ -32,7 +31,6 @@ sys.path.insert(0, str(ZEPHYR_BASE / "doc" / "_scripts"))
 # for autodoc directives on runners.xyz.
 sys.path.insert(0, str(ZEPHYR_BASE / "scripts" / "west_commands"))
 
-from lexer.DtsLexer import DtsLexer
 import redirects
 
 try:
@@ -83,6 +81,7 @@ extensions = [
     "zephyr.link-roles",
     "sphinx_tabs.tabs",
     "zephyr.warnings_filter",
+    "zephyr.doxyrunner",
 ]
 
 # Only use SVG converter when it is really needed, e.g. LaTeX.
@@ -106,8 +105,6 @@ else:
 default_role = "any"
 
 pygments_style = "sphinx"
-
-lexers["DTS"] = DtsLexer()
 
 todo_include_todos = False
 
@@ -159,11 +156,19 @@ latex_documents = [
     ("index", "zephyr.tex", "Zephyr Project Documentation", "many", "manual"),
 ]
 
+# -- Options for zephyr.doxyrunner plugin ---------------------------------
+
+doxyrunner_doxygen = os.environ.get("DOXYGEN_EXECUTABLE", "doxygen")
+doxyrunner_doxyfile = ZEPHYR_BASE / "doc" / "zephyr.doxyfile.in"
+doxyrunner_outdir = ZEPHYR_BUILD / "doxygen"
+doxyrunner_fmt = True
+doxyrunner_fmt_vars = {"ZEPHYR_BASE": str(ZEPHYR_BASE)}
+
 # -- Options for Breathe plugin -------------------------------------------
 
 breathe_projects = {
-    "Zephyr": str(ZEPHYR_BUILD / "doxygen" / "xml"),
-    "doc-examples": str(ZEPHYR_BUILD / "doxygen" / "xml"),
+    "Zephyr": str(doxyrunner_outdir / "xml"),
+    "doc-examples": str(doxyrunner_outdir / "xml"),
 }
 breathe_default_project = "Zephyr"
 breathe_domain_by_extension = {
