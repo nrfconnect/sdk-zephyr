@@ -287,7 +287,6 @@ static void print_supported_ethernet_capabilities(
 }
 #endif /* CONFIG_NET_L2_ETHERNET */
 
-#if defined(CONFIG_NET_NATIVE)
 static const char *iface_flags2str(struct net_if *iface)
 {
 	static char str[sizeof("POINTOPOINT") + sizeof("PROMISC") +
@@ -334,7 +333,6 @@ static const char *iface_flags2str(struct net_if *iface)
 
 	return str;
 }
-#endif
 
 static void iface_cb(struct net_if *iface, void *user_data)
 {
