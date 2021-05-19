@@ -145,11 +145,14 @@ config TFM_ISOLATION_LEVEL
 	  force level 1 when TFM_IPC is not enabled.
 
 config TFM_BL2
-	bool "Add MCUboot to TFM"
-	default y
+	bool "Add MCUboot to TFM" if !NORDIC_SECURITY_BACKEND
+	default y if !NORDIC_SECURITY_BACKEND
 	help
 	  TFM is designed to run with MCUboot in a certain configuration.
 	  This config adds MCUboot to the build - built via TFM's build system.
+	  Note:
+	  Currently building TF-M with MCUboot (BL2) is not supported, when
+	  using the Nordic-provided security backend.
 
 config TFM_MCUBOOT_IMAGE_NUMBER
 	int "Granularity of FW updates of TFM and app"
