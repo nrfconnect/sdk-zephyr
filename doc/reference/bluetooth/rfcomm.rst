@@ -9,5 +9,4 @@ API Reference
 *************
 
 .. doxygengroup:: bt_rfcomm
-   :project: Zephyr
    :members:
