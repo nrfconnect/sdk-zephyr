@@ -8,5 +8,4 @@ API Reference
 *************
 
 .. doxygengroup:: bt_buf
-   :project: Zephyr
    :members:
