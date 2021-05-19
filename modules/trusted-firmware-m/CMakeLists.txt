@@ -54,7 +54,7 @@ function(trusted_firmware_build)
   set(options IPC REGRESSION BL2)
   set(oneValueArgs BINARY_DIR BOARD ISOLATION_LEVEL CMAKE_BUILD_TYPE BUILD_PROFILE
     MCUBOOT_IMAGE_NUMBER PSA_TEST_SUITE)
-  set(multiValueArgs ENABLED_PARTITIONS)
+  set(multiValueArgs ENABLED_PARTITIONS CMAKE_ARGS)
   cmake_parse_arguments(TFM "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   foreach(partition ${TFM_VALID_PARTITIONS})
