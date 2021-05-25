@@ -183,7 +183,7 @@ function(trusted_firmware_build)
       ${PSA_TEST_ARG}
       ${TFM_CMAKE_ARGS}
       -DTFM_TEST_REPO_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/tf-m-tests
-      -DMBEDCRYPTO_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/../../crypto/mbedtls/mbedtls
+      -DMBEDCRYPTO_PATH=$<IF:$<BOOL:$<TARGET_PROPERTY:zephyr_property_target,TFM_MBEDCRYPTO_PATH>>,$<TARGET_PROPERTY:zephyr_property_target,TFM_MBEDCRYPTO_PATH>,${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/../../crypto/mbedtls/mbedtls>
       -DMCUBOOT_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/../tfm-mcuboot
       -DPSA_ARCH_TESTS_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/psa-arch-tests
       -DZEPHYR_BASE=${ZEPHYR_BASE}
