@@ -93,3 +93,7 @@ config OPENTHREAD_SRP_CLIENT
 
 config OPENTHREAD_SRP_SERVER
 	bool "Enable SRP Server support"
+
+config OPENTHREAD_MAC_SOFTWARE_TX_SECURITY_ENABLE
+	bool "Enable software transmission security logic"
+	default y if OPENTHREAD_THREAD_VERSION_1_2
