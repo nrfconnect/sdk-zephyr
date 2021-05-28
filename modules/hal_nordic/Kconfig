@@ -68,6 +68,8 @@ choice NRF_802154_SL_TYPE
 
 config NRF_802154_SL_OPENSOURCE
 	bool "Open source"
+	select SENSOR
+	select TEMP_NRF5
 
 endchoice
 
