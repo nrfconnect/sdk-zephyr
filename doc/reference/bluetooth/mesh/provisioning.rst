@@ -12,15 +12,15 @@ two devices operating in the following roles:
   Provisioning process. Before the provisioning process starts, the
   provisionee is an *unprovisioned device*.
 
-The Provisioning module in the Zephyr Bluetooth Mesh stack supports both the
+The Provisioning module in the Zephyr Bluetooth mesh stack supports both the
 Advertising and GATT Provisioning bearers for the provisionee role, as well as
 the Advertising Provisioning bearer for the provisioner role.
 
 The Provisioning process
 ************************
 
-All Bluetooth Mesh nodes must be provisioned before they can participate in a
-Bluetooth Mesh network. The Provisioning API provides all the functionality
+All Bluetooth mesh nodes must be provisioned before they can participate in a
+Bluetooth mesh network. The Provisioning API provides all the functionality
 necessary for a device to become a provisioned mesh node.
 
 Beaconing

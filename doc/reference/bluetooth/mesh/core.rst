@@ -4,7 +4,7 @@ Core API
 ########
 
 The Bluetooth Mesh Core API provides functionality for managing the general
-Bluetooth Mesh state.
+Bluetooth mesh state.
 
 Low Power Node
 **************

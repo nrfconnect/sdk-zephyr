@@ -1,13 +1,13 @@
 Bluetooth Mesh BabbleSim tests
 ##############################
 
-This directory contains a set of high level system tests for the Bluetooth Mesh
+This directory contains a set of high level system tests for the Bluetooth mesh
 subsystem. The tests run on the BabbleSim simulator, using the BabbleSim test
 framework.
 
 Tests are organized into bash scripts under the test_scripts folder. Each
 subfolder of test_scripts contains tests for a specific module in the Bluetooth
-Mesh subsystem, and each folder has a corresponding test_<subfolder>.c under the
+mesh subsystem, and each folder has a corresponding test_<subfolder>.c under the
 src/ directory containing the necessary test harnesses to execute the tests.
 
 There's only a single test application for all the Bluetooth Mesh BabbleSim
@@ -18,7 +18,7 @@ to use at runtime, using the test identifiers passed in the test scripts.
 Running the tests
 *****************
 
-The Bluetooth Mesh tests have no extra requirements, and can be run using the
+The Bluetooth mesh tests have no extra requirements, and can be run using the
 procedure described in the parent folder.
 
 To only run the mesh tests, set ``SEARCH_PATH`` to point to this folder before
@@ -113,6 +113,6 @@ has been called - otherwise, it will fail.
    The Bluetooth stack must be initialized in the ``test_main_f`` function of
    the harness, as the previous callbacks are all executed in hardware threads.
 
-The Bluetooth Mesh tests include the entire Bluetooth host and controller
+The Bluetooth mesh tests include the entire Bluetooth host and controller
 subsystems, so timing requirements should generally be kept fairly liberal to
 avoid regressions on changes in the underlying layers.

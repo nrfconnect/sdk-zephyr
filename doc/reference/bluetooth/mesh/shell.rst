@@ -3,10 +3,10 @@
 Shell
 #####
 
-The Bluetooth Mesh Shell subsystem provides a set of Bluetooth Mesh commands for the :ref:`shell_api` module.
-It allows for testing and exploring the Bluetooth Mesh API through an interactive interface, without having to write an application.
+The Bluetooth mesh shell subsystem provides a set of Bluetooth mesh commands for the :ref:`shell_api` module.
+It allows for testing and exploring the Bluetooth mesh API through an interactive interface, without having to write an application.
 
-The Bluetooth Mesh Shell interface provides access to most Bluetooth Mesh features, including provisioning, configuration, and message sending.
+The Bluetooth mesh shell interface provides access to most Bluetooth mesh features, including provisioning, configuration, and message sending.
 
 Prerequisites
 *************

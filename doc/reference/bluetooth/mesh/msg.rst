@@ -3,7 +3,7 @@
 Message API
 ###########
 
-The Bluetooth Mesh message API provides set of structures, macros and functions
+The Bluetooth mesh message API provides set of structures, macros and functions
 used for preparing message buffers, managing message and acknowledged message contexts.
 
 API reference

@@ -3,7 +3,7 @@
 Access
 ######
 
-The Bluetooth Mesh access layer is the application's interface to the mesh
+The Bluetooth mesh access layer is the application's interface to the mesh
 network. The access layer provides mechanisms for compartmentalizing the node
 behavior into elements and models, which are implemented by the application.
 
@@ -103,7 +103,7 @@ current state.
 Extended models
 ===============
 
-The Bluetooth Mesh specification allows the Mesh models to extend each other.
+The Bluetooth mesh specification allows the Mesh models to extend each other.
 When a model extends another, it inherits that model's functionality, and
 extension can be used to construct complex models out of simple ones,
 leveraging the existing model functionality to avoid defining new opcodes.
