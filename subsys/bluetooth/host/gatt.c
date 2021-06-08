@@ -4848,6 +4848,8 @@ void bt_gatt_connected(struct bt_conn *conn)
 	 * enabling encryption will fail.
 	 */
 	if (IS_ENABLED(CONFIG_BT_SMP) &&
+	    (conn->role == BT_HCI_ROLE_MASTER ||
+	     IS_ENABLED(CONFIG_BT_GATT_AUTO_SEC_REQ)) &&
 	    bt_conn_get_security(conn) < data.sec) {
 		bt_conn_set_security(conn, data.sec);
 	}
