@@ -27,9 +27,10 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define NETWORK_CONNECT_TIMEOUT	K_SECONDS(10)
 #define PACKET_TRANSFER_RETRY_MAX	3
 
-static char firmware_uri[URI_LEN];
+static char firmware_uri[CONFIG_LWM2M_FIRMWARE_INSTANCE_COUNT][URI_LEN];
 static struct lwm2m_ctx firmware_ctx = {
-	.sock_fd = -1
+	.sock_fd = -1,
+	.fw_obj_inst = -1
 };
 static int firmware_retry;
 static struct coap_block_context firmware_block_ctx;
@@ -45,20 +46,22 @@ static void do_transmit_timeout_cb(struct lwm2m_message *msg);
 
 static void set_update_result_from_error(int error_code)
 {
+	uint16_t oid = firmware_ctx.fw_obj_inst;
+
 	if (error_code == -ENOMEM) {
-		lwm2m_firmware_set_update_result(RESULT_OUT_OF_MEM);
+		lwm2m_firmware_set_update_result(oid, RESULT_OUT_OF_MEM);
 	} else if (error_code == -ENOSPC) {
-		lwm2m_firmware_set_update_result(RESULT_NO_STORAGE);
+		lwm2m_firmware_set_update_result(oid, RESULT_NO_STORAGE);
 	} else if (error_code == -EFAULT) {
-		lwm2m_firmware_set_update_result(RESULT_INTEGRITY_FAILED);
+		lwm2m_firmware_set_update_result(oid, RESULT_INTEGRITY_FAILED);
 	} else if (error_code == -ENOMSG) {
-		lwm2m_firmware_set_update_result(RESULT_CONNECTION_LOST);
+		lwm2m_firmware_set_update_result(oid, RESULT_CONNECTION_LOST);
 	} else if (error_code == -ENOTSUP) {
-		lwm2m_firmware_set_update_result(RESULT_INVALID_URI);
+		lwm2m_firmware_set_update_result(oid, RESULT_INVALID_URI);
 	} else if (error_code == -EPROTONOSUPPORT) {
-		lwm2m_firmware_set_update_result(RESULT_UNSUP_PROTO);
+		lwm2m_firmware_set_update_result(oid, RESULT_UNSUP_PROTO);
 	} else {
-		lwm2m_firmware_set_update_result(RESULT_UPDATE_FAILED);
+		lwm2m_firmware_set_update_result(oid, RESULT_UPDATE_FAILED);
 	}
 }
 
@@ -97,9 +100,9 @@ static int transfer_request(struct coap_block_context *ctx,
 
 #if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_SUPPORT)
 	/* TODO: shift to lower case */
-	if (strncmp(firmware_uri, "http", 4) == 0) {
+	if (strncmp(firmware_uri[firmware_ctx.fw_obj_inst], "http", 4) == 0) {
 		cursor = COAP2HTTP_PROXY_URI_PATH;
-	} else if (strncmp(firmware_uri, "coap", 4) == 0) {
+	} else if (strncmp(firmware_uri[firmware_ctx.fw_obj_inst], "coap", 4) == 0) {
 		cursor = COAP2COAP_PROXY_URI_PATH;
 	} else {
 		ret = -EPROTONOSUPPORT;
@@ -115,10 +118,11 @@ static int transfer_request(struct coap_block_context *ctx,
 	}
 #else
 	http_parser_url_init(&parser);
-	ret = http_parser_parse_url(firmware_uri, strlen(firmware_uri), 0,
-				    &parser);
+	ret = http_parser_parse_url(firmware_uri[firmware_ctx.fw_obj_inst],
+				    strlen(firmware_uri[firmware_ctx.fw_obj_inst]), 0, &parser);
 	if (ret < 0) {
-		LOG_ERR("Invalid firmware url: %s", log_strdup(firmware_uri));
+		LOG_ERR("Invalid firmware url: %s",
+			log_strdup(firmware_uri[firmware_ctx.fw_obj_inst]));
 		ret = -ENOTSUP;
 		goto cleanup;
 	}
@@ -126,7 +130,7 @@ static int transfer_request(struct coap_block_context *ctx,
 	/* if path is not available, off/len will be zero */
 	off = parser.field_data[UF_PATH].off;
 	len = parser.field_data[UF_PATH].len;
-	cursor = firmware_uri + off;
+	cursor = firmware_uri[firmware_ctx.fw_obj_inst] + off;
 
 	/* add path portions (separated by slashes) */
 	while (len > 0 && (next_slash = strchr(cursor, '/')) != NULL) {
@@ -166,10 +170,11 @@ static int transfer_request(struct coap_block_context *ctx,
 
 #if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_SUPPORT)
 	ret = coap_packet_append_option(&msg->cpkt, COAP_OPTION_PROXY_URI,
-					firmware_uri, strlen(firmware_uri));
+					firmware_uri[firmware_ctx.fw_obj_inst],
+					strlen(firmware_uri[obj_inst_id]));
 	if (ret < 0) {
 		LOG_ERR("Error adding PROXY_URI '%s'",
-			log_strdup(firmware_uri));
+			log_strdup(firmware_uri[firmware_ctx.fw_obj_inst]));
 		goto cleanup;
 	}
 #else
@@ -326,7 +331,7 @@ do_firmware_transfer_reply_cb(const struct coap_packet *response,
 		}
 	} else {
 		/* Download finished */
-		lwm2m_firmware_set_update_state(STATE_DOWNLOADED);
+		lwm2m_firmware_set_update_state(firmware_ctx.fw_obj_inst, STATE_DOWNLOADED);
 		lwm2m_engine_context_close(&firmware_ctx);
 	}
 
@@ -361,12 +366,12 @@ static void do_transmit_timeout_cb(struct lwm2m_message *msg)
 	} else {
 		LOG_ERR("TIMEOUT - Too many retry packet attempts! "
 			"Aborting firmware download.");
-		lwm2m_firmware_set_update_result(RESULT_CONNECTION_LOST);
+		lwm2m_firmware_set_update_result(firmware_ctx.fw_obj_inst, RESULT_CONNECTION_LOST);
 		lwm2m_engine_context_close(&firmware_ctx);
 	}
 }
 
-static void firmware_transfer(void)
+static void firmware_transfer(const uint16_t obj_inst_id)
 {
 	int ret;
 	char *server_addr;
@@ -383,7 +388,7 @@ static void firmware_transfer(void)
 	strcpy(proxy_uri, server_addr);
 	server_addr = proxy_uri;
 #else
-	server_addr = firmware_uri;
+	server_addr = firmware_uri[obj_inst_id];
 #endif
 
 	ret = lwm2m_parse_peerinfo(server_addr, &firmware_ctx.remote_addr,
@@ -400,7 +405,7 @@ static void firmware_transfer(void)
 		goto error;
 	}
 
-	LOG_INF("Connecting to server %s", log_strdup(firmware_uri));
+	LOG_INF("Connecting to server %s", log_strdup(firmware_uri[obj_inst_id]));
 
 	/* reset block transfer context */
 	coap_block_transfer_init(&firmware_block_ctx,
@@ -457,7 +462,7 @@ int lwm2m_firmware_cancel_transfer(void)
 	return 0;
 }
 
-int lwm2m_firmware_start_transfer(char *package_uri)
+int lwm2m_firmware_start_transfer(uint16_t obj_inst_id, char *package_uri)
 {
 	/* close old socket */
 	if (firmware_ctx.sock_fd > -1) {
@@ -467,12 +472,13 @@ int lwm2m_firmware_start_transfer(char *package_uri)
 	(void)memset(&firmware_ctx, 0, sizeof(struct lwm2m_ctx));
 	firmware_ctx.sock_fd = -1;
 	firmware_ctx.fault_cb = socket_fault_cb;
+	firmware_ctx.fw_obj_inst = obj_inst_id;
 	firmware_retry = 0;
-	lwm2m_firmware_set_update_state(STATE_DOWNLOADING);
+	lwm2m_firmware_set_update_state(obj_inst_id, STATE_DOWNLOADING);
 
 	/* start file transfer */
-	strncpy(firmware_uri, package_uri, URI_LEN - 1);
-	firmware_transfer();
+	strncpy(firmware_uri[obj_inst_id], package_uri, URI_LEN - 1);
+	firmware_transfer(obj_inst_id);
 
 	return 0;
 }

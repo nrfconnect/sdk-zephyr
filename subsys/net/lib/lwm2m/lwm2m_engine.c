@@ -4396,6 +4396,7 @@ int lwm2m_engine_context_close(struct lwm2m_ctx *client_ctx)
 
 	lwm2m_socket_del(client_ctx);
 	client_ctx->sock_fd = -1;
+	client_ctx->fw_obj_inst = -1;
 	if (sock_fd >= 0) {
 		return close(sock_fd);
 	} else {
