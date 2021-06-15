@@ -136,6 +136,11 @@ struct lwm2m_ctx {
 	 *  copied into the actual resource buffer.
 	 */
 	uint8_t validate_buf[CONFIG_LWM2M_ENGINE_VALIDATION_BUFFER_SIZE];
+
+	/**
+	 * Current FW update object instance.
+	 */
+	uint16_t fw_obj_inst;
 };
 
 
