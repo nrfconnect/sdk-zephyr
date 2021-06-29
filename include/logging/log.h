@@ -7,9 +7,6 @@
 #ifndef ZEPHYR_INCLUDE_LOGGING_LOG_H_
 #define ZEPHYR_INCLUDE_LOGGING_LOG_H_
 
-#include <logging/log_instance.h>
-#include <logging/log_core.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -27,6 +24,53 @@ extern "C" {
  * @ingroup logger
  * @{
  */
+
+#if defined(__JETBRAINS_IDE__) || defined(__clang__) || 1
+
+/* This include is kept to mimic behavior between IDE and "normal" build */
+#include <zephyr.h>
+
+__attribute__((format(printf, 1, 2)))
+static inline void log_noop(char *fmt, ...)
+{
+
+}
+
+#define LOG_DBG(...)	log_noop(__VA_ARGS__)
+
+#define LOG_INF(...)	log_noop(__VA_ARGS__)
+
+#define LOG_WRN(...)	log_noop(__VA_ARGS__)
+
+#define LOG_ERR(...)	log_noop(__VA_ARGS__)
+
+#define LOG_PRINTK(...)	log_noop(__VA_ARGS__)
+
+#define LOG_HEXDUMP_ERR(_data, _length, _str)	log_noop("")
+
+#define LOG_HEXDUMP_WRN(_data, _length, _str)	log_noop("")
+
+#define LOG_HEXDUMP_INF(_data, _length, _str)	log_noop("")
+
+#define LOG_HEXDUMP_DBG(_data, _length, _str)	log_noop("")
+
+static inline char *log_strdup(const char *str)
+{
+	return 0;
+}
+
+#define _LOG_MODULE_DATA_CREATE(_name, _level)
+
+#define LOG_MODULE_REGISTER(...)	;
+
+#define LOG_MODULE_DECLARE(...)		;
+
+#define LOG_LEVEL_SET(level)		(0)
+
+#else /* defined(__CLION_IDE__) || defined(PARASOFT) */
+
+#include <logging/log_instance.h>
+#include <logging/log_core.h>
 
 /**
  * @brief Writes an ERROR level message to the log.
@@ -439,8 +483,10 @@ static inline char *log_strdup(const char *str)
 #define LOG_LEVEL_SET(level) static const uint32_t __log_level __unused = \
 				Z_LOG_RESOLVED_LEVEL(level, 0)
 
+#endif /* defined(__CLION_IDE__) || defined(PARASOFT) */
 /**
  * @}
  */
 
 #endif /* ZEPHYR_INCLUDE_LOGGING_LOG_H_ */
+
