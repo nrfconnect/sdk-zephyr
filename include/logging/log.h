@@ -36,6 +36,12 @@ static inline void log_noop(char *fmt, ...)
 
 }
 
+static inline void log_hexdump_noop(const void * data, size_t length,
+	const char * str)
+{
+
+}
+
 #define LOG_DBG(...)	log_noop(__VA_ARGS__)
 
 #define LOG_INF(...)	log_noop(__VA_ARGS__)
@@ -46,13 +52,17 @@ static inline void log_noop(char *fmt, ...)
 
 #define LOG_PRINTK(...)	log_noop(__VA_ARGS__)
 
-#define LOG_HEXDUMP_ERR(_data, _length, _str)	log_noop("")
+#define LOG_HEXDUMP_ERR(_data, _length, _str)\
+			log_hexdump_noop(_data, _length, _str)
 
-#define LOG_HEXDUMP_WRN(_data, _length, _str)	log_noop("")
+#define LOG_HEXDUMP_WRN(_data, _length, _str)\
+			log_hexdump_noop(_data, _length, _str)
 
-#define LOG_HEXDUMP_INF(_data, _length, _str)	log_noop("")
+#define LOG_HEXDUMP_INF(_data, _length, _str)\
+			log_hexdump_noop(_data, _length, _str)
 
-#define LOG_HEXDUMP_DBG(_data, _length, _str)	log_noop("")
+#define LOG_HEXDUMP_DBG(_data, _length, _str)\
+			log_hexdump_noop(_data, _length, _str)
 
 static inline char *log_strdup(const char *str)
 {
