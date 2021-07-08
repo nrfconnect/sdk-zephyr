@@ -28,7 +28,7 @@ extern "C" {
  * @{
  */
 
-#if defined(__JETBRAINS_IDE__) || defined(__clang__)
+#if defined(__JETBRAINS_IDE__) || defined(__clang__) || defined (PARASOFT_CPPTEST)
 
 /* This include is kept to mimic behavior between IDE and "normal" build */
 #include <zephyr.h>
@@ -72,7 +72,7 @@ static inline char *log_strdup(const char *str)
 	return 0;
 }
 
-#else /* defined(__CLION_IDE__) || defined(PARASOFT) */
+#else /* defined(__CLION_IDE__) || defined(PARASOFT) || defined (PARASOFT_CPPTEST) */
 
 /**
  * @brief Writes an ERROR level message to the log.
@@ -342,7 +342,7 @@ static inline char *log_strdup(const char *str)
 	return z_log_strdup(str);
 }
 
-#endif /* defined(__CLION_IDE__) || defined(PARASOFT) */
+#endif /* defined(__CLION_IDE__) || defined(PARASOFT) || defined (PARASOFT_CPPTEST) */
 
 #ifdef __cplusplus
 }
