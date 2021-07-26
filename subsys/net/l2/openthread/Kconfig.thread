@@ -86,13 +86,7 @@ config OPENTHREAD_CSL_SAMPLE_WINDOW
 
 config OPENTHREAD_CSL_RECEIVE_TIME_AHEAD
 	int "CSL receiver wake up margin in units of 10 symbols"
-	default 480
-
-config OPENTHREAD_CSL_MIN_RECEIVE_ON
-	int "Minimum CSL receive window"
-	default 5696
-	help
-	  The minimum CSL receive window (in microseconds) required to receive a full IEEE 802.15.4 frame
+	default 3
 
 config OPENTHREAD_SRP_CLIENT
 	bool "Enable SRP Client support"

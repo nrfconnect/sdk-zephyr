@@ -21,7 +21,6 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <stdio.h>
 
 #include "platform-zephyr.h"
-#include "openthread-core-zephyr-config.h"
 
 static bool timer_ms_fired, timer_us_fired;
 

@@ -69,8 +69,7 @@ enum ieee802154_filter_type {
 
 enum ieee802154_event {
 	IEEE802154_EVENT_TX_STARTED, /* Data transmission started */
-	IEEE802154_EVENT_RX_FAILED, /* Data reception failed */
-	IEEE802154_EVENT_SLEEP, /* Sleep pending */
+	IEEE802154_EVENT_RX_FAILED   /* Data reception failed */
 };
 
 enum ieee802154_rx_fail_reason {
@@ -172,8 +171,8 @@ enum ieee802154_config_type {
 	/** Configure a radio reception slot */
 	IEEE802154_CONFIG_RX_SLOT,
 
-	/** Configure CSL receiver (Endpoint) period */
-	IEEE802154_CONFIG_CSL_PERIOD,
+	/** Enable CSL receiver (Endpoint) */
+	IEEE802154_CONFIG_CSL_RECEIVER,
 
 	/** Configure the next CSL receive window center, in units of microseconds,
 	 *  based on the radio time.
@@ -236,8 +235,11 @@ struct ieee802154_config {
 			uint32_t duration;
 		} rx_slot;
 
-		/** ``IEEE802154_CONFIG_CSL_PERIOD`` */
-		uint32_t csl_period;
+		/** ``IEEE802154_CONFIG_CSL_RECEIVER`` */
+		struct {
+			uint32_t period;
+			uint8_t *addr;
+		} csl_recv;
 
 		/** ``IEEE802154_CONFIG_CSL_RX_TIME`` */
 		uint32_t csl_rx_time;
