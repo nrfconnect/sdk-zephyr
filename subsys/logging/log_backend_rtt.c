@@ -154,11 +154,9 @@ static int line_out_drop_mode(void)
 		}
 	}
 
-	int ret;
-
 	RTT_LOCK();
-	ret = SEGGER_RTT_WriteSkipNoLock(CONFIG_LOG_BACKEND_RTT_BUFFER,
-					 line_buf, line_pos - line_buf);
+	int ret = SEGGER_RTT_WriteSkipNoLock(CONFIG_LOG_BACKEND_RTT_BUFFER,
+					     line_buf, line_pos - line_buf);
 	RTT_UNLOCK();
 
 	if (ret == 0) {
@@ -211,12 +209,12 @@ static int data_out_block_mode(uint8_t *data, size_t length, void *ctx)
 	do {
 		if (!is_sync_mode()) {
 			RTT_LOCK();
-			ret = SEGGER_RTT_WriteSkipNoLock(CONFIG_LOG_BACKEND_RTT_BUFFER,
-							 data, length);
+		}
+
+		ret = SEGGER_RTT_WriteSkipNoLock(CONFIG_LOG_BACKEND_RTT_BUFFER,
+						 data, length);
+		if (!is_sync_mode()) {
 			RTT_UNLOCK();
-		} else {
-			ret = SEGGER_RTT_WriteSkipNoLock(CONFIG_LOG_BACKEND_RTT_BUFFER,
-							 data, length);
 		}
 
 		if (ret) {
