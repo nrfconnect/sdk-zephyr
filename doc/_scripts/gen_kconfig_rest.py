@@ -23,18 +23,6 @@ import kconfiglib
 
 import gen_helpers
 
-NO_MAX_WIDTH = """
-
-.. raw:: html
-
-    <!--
-    FIXME: do not limit page width until content uses another representation
-    format other than tables
-    -->
-    <style>.wy-nav-content { max-width: none; !important }</style>
-
-"""
-
 def rst_link(sc):
     # Returns an RST link (string) for the symbol/choice 'sc', or the normal
     # Kconfig expression format (e.g. just the name) for 'sc' if it can't be
@@ -330,7 +318,6 @@ This index page lists all symbols, regardless of where they are defined:
                          index_header(title="All Configuration Options",
                                       link="configuration_options_all",
                                       desc_path=None) +
-                         NO_MAX_WIDTH +
                          sym_table_rst("Configuration Options",
                                        kconf.unique_defined_syms))
 
@@ -345,7 +332,6 @@ These index pages only list symbols defined within a particular subsystem:
 """ + "\n".join("   index-" + suffix for _, suffix, _, _, in modules)
 
     if not separate_all_index:
-        rst += NO_MAX_WIDTH
         # Put index of all symbols in index.rst
         rst += sym_table_rst("All configuration options",
                              kconf.unique_defined_syms)
@@ -373,7 +359,6 @@ def write_module_index_pages():
                            link="configuration_options_" + suffix,
                            desc_path=desc_path)
 
-        rst += NO_MAX_WIDTH
         rst += sym_table_rst("Configuration Options",
                              module2syms[title])
 
