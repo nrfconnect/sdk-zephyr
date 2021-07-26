@@ -34,7 +34,7 @@ int __weak sys_clock_device_ctrl(const struct device *dev,
 			       uint32_t ctrl_command,
 			       uint32_t *context, pm_device_cb cb, void *arg)
 {
-	return -ENOSYS;
+	return -ENOTSUP;
 }
 
 void __weak sys_clock_set_timeout(int32_t ticks, bool idle)
