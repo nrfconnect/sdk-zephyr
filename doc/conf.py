@@ -172,6 +172,7 @@ breathe_domain_by_extension = {
     "h": "c",
     "c": "c",
 }
+breathe_separate_member_pages = True
 breathe_show_enumvalue_initializer = True
 
 cpp_id_attributes = [
