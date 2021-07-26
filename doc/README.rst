@@ -64,8 +64,6 @@ described in :ref:`getting_started`. Then install additional tools
 that are only required to generate the documentation,
 as described below:
 
-.. doc_processors_installation_start
-
 .. tabs::
 
    .. group-tab:: Linux
@@ -98,8 +96,6 @@ as described below:
 
    .. group-tab:: macOS
 
-      Use ``brew`` and ``tlmgr`` to install the tools:
-
       .. code-block:: console
 
          brew install doxygen mactex librsvg
@@ -108,7 +104,7 @@ as described below:
 
    .. group-tab:: Windows
 
-      Open a ``cmd.exe`` window as **Administrator** and run the following command:
+      Run in an Administrator ``cmd.exe`` prompt:
 
       .. code-block:: console
 
@@ -117,11 +113,9 @@ as described below:
       .. note::
          On Windows, the Sphinx executable ``sphinx-build.exe`` is placed in
          the ``Scripts`` folder of your Python installation path.
-         Dependending on how you have installed Python, you might need to
+         Dependending on how you have installed Python, you may need to
          add this folder to your ``PATH`` environment variable. Follow
          the instructions in `Windows Python Path`_ to add those if needed.
-
-.. doc_processors_installation_end
 
 Documentation presentation theme
 ********************************
