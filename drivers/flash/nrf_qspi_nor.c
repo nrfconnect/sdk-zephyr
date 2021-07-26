@@ -390,6 +390,7 @@ static int anomaly_122_init(const struct device *dev)
 
 static void anomaly_122_uninit(const struct device *dev)
 {
+	struct qspi_nor_data *dev_data = get_dev_data(dev);
 	bool last = true;
 
 	if (!nrf52_errata_122()) {
@@ -398,13 +399,11 @@ static void anomaly_122_uninit(const struct device *dev)
 
 	qspi_lock(dev);
 
-#ifdef CONFIG_MULTITHREADING
-	struct qspi_nor_data *dev_data = get_dev_data(dev);
-
-	/* The last thread to finish using the driver uninit the QSPI */
-	(void) k_sem_take(&dev_data->count, K_NO_WAIT);
-	last = (k_sem_count_get(&dev_data->count) == 0);
-#endif
+	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
+		/* The last thread to finish using the driver uninit the QSPI */
+		(void) k_sem_take(&dev_data->count, K_NO_WAIT);
+		last = (k_sem_count_get(&dev_data->count) == 0);
+	}
 
 	if (last) {
 		while (nrfx_qspi_mem_busy_check() != NRFX_SUCCESS) {
