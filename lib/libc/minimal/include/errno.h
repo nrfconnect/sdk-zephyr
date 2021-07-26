@@ -114,7 +114,6 @@ extern "C" {
 #define ETOOMANYREFS 129    /**< Too many references: can't splice */
 #define ENOTSUP 134         /**< Unsupported value */
 #define EILSEQ 138          /**< Illegal byte sequence */
-#define EOVERFLOW 139       /**< Value overflow */
 #define ECANCELED 140       /**< Operation canceled */
 
 #define EWOULDBLOCK EAGAIN /**< Operation would block */
