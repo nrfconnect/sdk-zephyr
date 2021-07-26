@@ -24,6 +24,8 @@ LOG_MODULE_REGISTER(dma_stm32, CONFIG_DMA_LOG_LEVEL);
 #define DT_DRV_COMPAT st_stm32_dma_v1
 #elif DT_HAS_COMPAT_STATUS_OKAY(st_stm32_dma_v2)
 #define DT_DRV_COMPAT st_stm32_dma_v2
+#elif DT_HAS_COMPAT_STATUS_OKAY(st_stm32_dma_v2bis)
+#define DT_DRV_COMPAT st_stm32_dma_v2bis
 #endif
 
 #if DT_NODE_HAS_STATUS(DT_DRV_INST(0), okay)
@@ -263,7 +265,7 @@ DMA_STM32_EXPORT_API int dma_stm32_configure(const struct device *dev,
 	struct dma_stm32_stream *stream =
 				&dev_config->streams[id - STREAM_OFFSET];
 	DMA_TypeDef *dma = (DMA_TypeDef *)dev_config->base;
-	LL_DMA_InitTypeDef DMA_InitStruct;
+	LL_DMA_InitTypeDef DMA_InitStruct = {0};
 	int ret;
 
 	/* give channel from index 0 */
@@ -415,7 +417,7 @@ DMA_STM32_EXPORT_API int dma_stm32_configure(const struct device *dev,
 		DMA_InitStruct.Mode = LL_DMA_MODE_NORMAL;
 	}
 
-	stream->source_periph = stream->direction == MEMORY_TO_PERIPHERAL;
+	stream->source_periph = (stream->direction == PERIPHERAL_TO_MEMORY);
 
 	/* set the data width, when source_data_size equals dest_data_size */
 	int index = find_lsb_set(config->source_data_size) - 1;
@@ -462,7 +464,7 @@ DMA_STM32_EXPORT_API int dma_stm32_configure(const struct device *dev,
 					config->dest_data_size;
 	}
 
-#if defined(CONFIG_DMA_STM32_V2) || defined(CONFIG_DMAMUX_STM32)
+#if DT_HAS_COMPAT_STATUS_OKAY(st_stm32_dma_v2) || DT_HAS_COMPAT_STATUS_OKAY(st_stm32_dmamux)
 	/*
 	 * the with dma V2 and dma mux,
 	 * the request ID is stored in the dma_slot

@@ -61,6 +61,14 @@ enum {
 #define BT_DEV_PERSISTENT_FLAGS (BIT(BT_DEV_ENABLE) | \
 				 BIT(BT_DEV_PRESET_ID))
 
+#if defined(CONFIG_BT_EXT_ADV_LEGACY_SUPPORT)
+/* Check the feature bit for extended or legacy advertising commands */
+#define BT_DEV_FEAT_LE_EXT_ADV(feat) BT_FEAT_LE_EXT_ADV(feat)
+#else
+/* Always use extended advertising commands. */
+#define BT_DEV_FEAT_LE_EXT_ADV(feat)  1
+#endif
+
 enum {
 	/* Advertising set has been created in the host. */
 	BT_ADV_CREATED,
@@ -205,11 +213,11 @@ struct bt_dev_le {
 	struct k_sem		pkts;
 	uint16_t		acl_mtu;
 	struct k_sem		acl_pkts;
+#endif /* CONFIG_BT_CONN */
 #if defined(CONFIG_BT_ISO)
 	uint16_t		iso_mtu;
 	struct k_sem		iso_pkts;
 #endif /* CONFIG_BT_ISO */
-#endif /* CONFIG_BT_CONN */
 
 #if defined(CONFIG_BT_SMP)
 	/* Size of the the controller resolving list */
@@ -352,11 +360,6 @@ struct bt_hci_cmd_state_set {
 	int bit;
 	/* Value to determine if enable or disable bit */
 	bool val;
-};
-
-struct bt_adv_id_check_data {
-	uint8_t id;
-	bool adv_enabled;
 };
 
 /* Set command state related with the command buffer */

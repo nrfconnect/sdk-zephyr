@@ -28,17 +28,17 @@ When adding a new sample, add a new entry in :file:`samples/subsys/usb/usb_pid.K
 and a Kconfig file inside your sample subdirectory.
 The following Product IDs are currently used:
 
-* :option:`CONFIG_USB_PID_CDC_ACM_SAMPLE`
-* :option:`CONFIG_USB_PID_CDC_ACM_COMPOSITE_SAMPLE`
-* :option:`CONFIG_USB_PID_HID_CDC_SAMPLE`
-* :option:`CONFIG_USB_PID_CONSOLE_SAMPLE`
-* :option:`CONFIG_USB_PID_DFU_SAMPLE`
-* :option:`CONFIG_USB_PID_HID_SAMPLE`
-* :option:`CONFIG_USB_PID_HID_MOUSE_SAMPLE`
-* :option:`CONFIG_USB_PID_MASS_SAMPLE`
-* :option:`CONFIG_USB_PID_TESTUSB_SAMPLE`
-* :option:`CONFIG_USB_PID_WEBUSB_SAMPLE`
-* :option:`CONFIG_USB_PID_BLE_HCI_H4_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_CDC_ACM_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_CDC_ACM_COMPOSITE_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_HID_CDC_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_CONSOLE_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_DFU_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_HID_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_HID_MOUSE_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_MASS_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_TESTUSB_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_WEBUSB_SAMPLE`
+* :kconfig:`CONFIG_USB_PID_BLE_HCI_H4_SAMPLE`
 
 USB device controller drivers
 *****************************
@@ -52,7 +52,6 @@ USB Device Controller API
 =========================
 
 .. doxygengroup:: _usb_device_controller_api
-   :project: Zephyr
 
 USB device core layer
 *********************
@@ -95,7 +94,6 @@ High level API
   generic usb_transfer_ep_callback.
 
 .. doxygengroup:: _usb_device_core_api
-   :project: Zephyr
 
 USB device class drivers
 ************************
@@ -235,10 +233,8 @@ Example of a HID Report Descriptor:
 
 
 .. doxygengroup:: usb_hid_items
-   :project: Zephyr
 
 .. doxygengroup:: usb_hid_types
-   :project: Zephyr
 
 HID Mouse and Keyboard report descriptors
 =========================================
@@ -247,7 +243,6 @@ The pre-defined Mouse and Keyboard report descriptors can be used by
 a HID device implementation or simply as examples.
 
 .. doxygengroup:: usb_hid_mk_report_desc
-   :project: Zephyr
 
 HID Class Device API
 ********************
@@ -255,4 +250,3 @@ HID Class Device API
 USB HID devices like mouse, keyboard, or any other specific device use this API.
 
 .. doxygengroup:: usb_hid_device_api
-   :project: Zephyr

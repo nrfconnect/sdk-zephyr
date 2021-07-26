@@ -90,20 +90,21 @@ void z_add_timeout(struct _timeout *to, _timeout_func_t fn,
 	__ASSERT_NO_MSG(arch_mem_coherent(to));
 #endif
 
-	k_ticks_t ticks = timeout.ticks + 1;
-
-	if (IS_ENABLED(CONFIG_TIMEOUT_64BIT) && Z_TICK_ABS(ticks) >= 0) {
-		ticks = Z_TICK_ABS(timeout.ticks) - (curr_tick + elapsed());
-	}
-
 	__ASSERT(!sys_dnode_is_linked(&to->node), "");
 	to->fn = fn;
-	ticks = MAX(1, ticks);
 
 	LOCKED(&timeout_lock) {
 		struct _timeout *t;
 
-		to->dticks = ticks + elapsed();
+		if (IS_ENABLED(CONFIG_TIMEOUT_64BIT) &&
+		    Z_TICK_ABS(timeout.ticks) >= 0) {
+			k_ticks_t ticks = Z_TICK_ABS(timeout.ticks) - curr_tick;
+
+			to->dticks = MAX(1, ticks);
+		} else {
+			to->dticks = timeout.ticks + 1 + elapsed();
+		}
+
 		for (t = first(); t != NULL; t = next(t)) {
 			if (t->dticks > to->dticks) {
 				t->dticks -= to->dticks;
@@ -121,10 +122,10 @@ void z_add_timeout(struct _timeout *to, _timeout_func_t fn,
 #if CONFIG_TIMESLICING
 			/*
 			 * This is not ideal, since it does not
-			 * account the time elapsed since the the
+			 * account the time elapsed since the
 			 * last announcement, and slice_ticks is based
-			 * on that. It means the that time remaining for
-			 * the next announcement can be lesser than
+			 * on that. It means that the time remaining for
+			 * the next announcement can be less than
 			 * slice_ticks.
 			 */
 			int32_t next_time = next_timeout();

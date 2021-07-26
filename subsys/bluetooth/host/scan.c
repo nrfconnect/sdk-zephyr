@@ -112,7 +112,7 @@ static int bt_le_scan_set_enable_legacy(uint8_t enable)
 int bt_le_scan_set_enable(uint8_t enable)
 {
 	if (IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	    BT_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
+	    BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
 		return set_le_ext_scan_enable(enable, 0);
 	}
 
@@ -257,7 +257,7 @@ static int start_passive_scan(bool fast_scan)
 	}
 
 	if (IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	    BT_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
+	    BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
 		struct bt_hci_ext_scan_phy scan;
 
 		scan.type = BT_HCI_LE_SCAN_PASSIVE;
@@ -314,37 +314,6 @@ int bt_le_scan_update(bool fast_scan)
 #endif
 
 	return 0;
-}
-
-void bt_data_parse(struct net_buf_simple *ad,
-		   bool (*func)(struct bt_data *data, void *user_data),
-		   void *user_data)
-{
-	while (ad->len > 1) {
-		struct bt_data data;
-		uint8_t len;
-
-		len = net_buf_simple_pull_u8(ad);
-		if (len == 0U) {
-			/* Early termination */
-			return;
-		}
-
-		if (len > ad->len) {
-			BT_WARN("Malformed data");
-			return;
-		}
-
-		data.type = net_buf_simple_pull_u8(ad);
-		data.data_len = len - 1;
-		data.data = ad->data;
-
-		if (!func(&data, user_data)) {
-			return;
-		}
-
-		net_buf_simple_pull(ad, len - 1);
-	}
 }
 
 #if defined(CONFIG_BT_CENTRAL)
@@ -1026,7 +995,7 @@ int bt_le_scan_start(const struct bt_le_scan_param *param, bt_le_scan_cb_t cb)
 #endif /* defined(CONFIG_BT_WHITELIST) */
 
 	if (IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	    BT_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
+	    BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
 		struct bt_hci_ext_scan_phy param_1m;
 		struct bt_hci_ext_scan_phy param_coded;
 

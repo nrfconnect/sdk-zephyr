@@ -139,6 +139,8 @@ static struct usb_dev_priv {
 	bool configured;
 	/** Currently selected configuration */
 	uint8_t configuration;
+	/** Currently selected alternate setting */
+	uint8_t alt_setting[CONFIG_USB_MAX_ALT_SETTING];
 	/** Remote wakeup feature status */
 	bool remote_wakeup;
 } usb_dev;
@@ -170,6 +172,27 @@ static void usb_print_setup(struct usb_setup_packet *setup)
 		setup->wValue,
 		setup->wIndex,
 		setup->wLength);
+}
+
+static void usb_reset_alt_setting(void)
+{
+	memset(usb_dev.alt_setting, 0, ARRAY_SIZE(usb_dev.alt_setting));
+}
+
+static void usb_set_alt_setting(uint8_t iface, uint8_t alt_setting)
+{
+	if (iface < ARRAY_SIZE(usb_dev.alt_setting)) {
+		usb_dev.alt_setting[iface] = alt_setting;
+	}
+}
+
+static uint8_t usb_get_alt_setting(uint8_t iface)
+{
+	if (iface < ARRAY_SIZE(usb_dev.alt_setting)) {
+		return usb_dev.alt_setting[iface];
+	}
+
+	return 0;
 }
 
 /*
@@ -216,7 +239,7 @@ static bool usb_handle_request(struct usb_setup_packet *setup,
  *
  * @return N/A
  */
-static void usb_data_to_host(uint16_t len)
+static void usb_data_to_host(void)
 {
 	if (usb_dev.zlp_flag == false) {
 		uint32_t chunk = usb_dev.data_buf_residue;
@@ -232,12 +255,14 @@ static void usb_data_to_host(uint16_t len)
 		 * last chunk is wMaxPacketSize long, to indicate the last
 		 * packet.
 		 */
-		if (!usb_dev.data_buf_residue && len > usb_dev.data_buf_len) {
+		if (!usb_dev.data_buf_residue &&
+		    usb_dev.setup.wLength > usb_dev.data_buf_len) {
 			/* Send less data as requested during the Setup stage */
 			if (!(usb_dev.data_buf_len % USB_MAX_CTRL_MPS)) {
 				/* Transfers a zero-length packet */
 				LOG_DBG("ZLP, requested %u , length %u ",
-					len, usb_dev.data_buf_len);
+					usb_dev.setup.wLength,
+					usb_dev.data_buf_len);
 				usb_dev.zlp_flag = true;
 			}
 		}
@@ -318,7 +343,7 @@ static void usb_handle_control_transfer(uint8_t ep,
 		usb_dev.data_buf_residue = MIN(usb_dev.data_buf_len,
 					       setup->wLength);
 		/* Send first part (possibly a zero-length status message) */
-		usb_data_to_host(setup->wLength);
+		usb_data_to_host();
 	} else if (ep == USB_CONTROL_OUT_EP0) {
 		/* OUT transfer, data or status packets */
 		if (usb_dev.data_buf_residue <= 0) {
@@ -355,12 +380,12 @@ static void usb_handle_control_transfer(uint8_t ep,
 
 			/*Send status to host*/
 			LOG_DBG(">> usb_data_to_host(2)");
-			usb_data_to_host(setup->wLength);
+			usb_data_to_host();
 		}
 	} else if (ep == USB_CONTROL_IN_EP0) {
 		/* Send more data if available */
 		if (usb_dev.data_buf_residue != 0 || usb_dev.zlp_flag == true) {
-			usb_data_to_host(setup->wLength);
+			usb_data_to_host();
 		}
 	} else {
 		__ASSERT_NO_MSG(false);
@@ -663,6 +688,7 @@ static bool usb_set_interface(uint8_t iface, uint8_t alt_setting)
 
 			if (cur_iface == iface &&
 			    cur_alt_setting == alt_setting) {
+				usb_set_alt_setting(iface, alt_setting);
 				if_desc = (void *)p;
 			}
 
@@ -689,6 +715,32 @@ static bool usb_set_interface(uint8_t iface, uint8_t alt_setting)
 	}
 
 	return ret;
+}
+
+static bool usb_get_interface(struct usb_setup_packet *setup,
+			      int32_t *len, uint8_t **data_buf)
+{
+	const uint8_t *p = usb_dev.descriptors;
+	uint8_t *data = *data_buf;
+	uint8_t cur_iface;
+
+	while (p[DESC_bLength] != 0U) {
+		if (p[DESC_bDescriptorType] == USB_INTERFACE_DESC) {
+			cur_iface = p[INTF_DESC_bInterfaceNumber];
+			if (cur_iface == setup->wIndex) {
+				data[0] = usb_get_alt_setting(cur_iface);
+				LOG_DBG("Current iface %u alt setting %u",
+					setup->wIndex, data[0]);
+				*len = 1;
+				return true;
+			}
+		}
+
+		/* skip to next descriptor */
+		p += p[DESC_bLength];
+	}
+
+	return false;
 }
 
 /**
@@ -765,6 +817,7 @@ static bool usb_handle_std_device_req(struct usb_setup_packet *setup,
 			/* configuration successful,
 			 * update current configuration
 			 */
+			usb_reset_alt_setting();
 			usb_dev.configuration = value;
 		}
 		break;
@@ -875,14 +928,7 @@ static bool usb_handle_std_interface_req(struct usb_setup_packet *setup,
 		return false;
 
 	case REQ_GET_INTERFACE:
-		/** This handler is called for classes that does not support
-		 * alternate Interfaces so always return 0. Classes that
-		 * support alternative interfaces handles GET_INTERFACE
-		 * in custom_handler.
-		 */
-		data[0] = 0U;
-		*len = 1;
-		break;
+		return usb_get_interface(setup, len, data_buf);
 
 	case REQ_SET_INTERFACE:
 		LOG_DBG("REQ_SET_INTERFACE");
@@ -1145,6 +1191,10 @@ static void forward_status_cb(enum usb_dc_status_code status, const uint8_t *par
 {
 	size_t size = (__usb_data_end - __usb_data_start);
 
+	if (status == USB_DC_DISCONNECTED) {
+		usb_reset_alt_setting();
+	}
+
 	if (status == USB_DC_DISCONNECTED || status == USB_DC_SUSPEND) {
 		if (usb_dev.configured) {
 			usb_cancel_transfers();
@@ -1389,13 +1439,23 @@ static int custom_handler(struct usb_setup_packet *pSetup,
 			continue;
 		}
 
-		/* An exception for AUDIO_CLASS is temporary and shall not be
-		 * considered as valid solution for other classes.
-		 */
-		if (iface->custom_handler &&
-		    (if_descr->bInterfaceNumber == (pSetup->wIndex & 0xFF) ||
-		     if_descr->bInterfaceClass == AUDIO_CLASS)) {
+		if (iface->custom_handler == NULL) {
+			continue;
+		}
+
+		if (if_descr->bInterfaceNumber == (pSetup->wIndex & 0xFF)) {
 			return iface->custom_handler(pSetup, len, data);
+		} else {
+			/*
+			 * Audio has several interfaces.  if_descr points to
+			 * the first interface, but the request may be for
+			 * subsequent ones, so forward each request to audio.
+			 * The class does not actively engage in request
+			 * handling and therefore we can ignore return value.
+			 */
+			if (if_descr->bInterfaceClass == AUDIO_CLASS) {
+				(void)iface->custom_handler(pSetup, len, data);
+			}
 		}
 	}
 

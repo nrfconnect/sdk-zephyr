@@ -181,7 +181,7 @@ static uint8_t get_num_of_channels(const struct feature_unit_descriptor *fu)
  */
 static uint16_t get_controls(const struct feature_unit_descriptor *fu)
 {
-	return *(uint16_t *)((uint8_t *)fu + BMA_CONTROLS_OFFSET);
+	return sys_get_le16((uint8_t *)&fu->bmaControls[0]);
 }
 
 /**
@@ -221,7 +221,9 @@ static void fix_fu_descriptors(struct usb_if_descriptor *iface)
 
 	/* start from 1 as elem 0 is filled when descriptor is declared */
 	for (int i = 1; i < get_num_of_channels(fu); i++) {
-		*(fu->bmaControls + i) = fu->bmaControls[0];
+		(void)memcpy(&fu->bmaControls[i],
+			     &fu->bmaControls[0],
+			     sizeof(uint16_t));
 	}
 
 	if (header->bInCollection == 2) {
@@ -230,7 +232,9 @@ static void fix_fu_descriptors(struct usb_if_descriptor *iface)
 			INPUT_TERMINAL_DESC_SIZE +
 			OUTPUT_TERMINAL_DESC_SIZE);
 		for (int i = 1; i < get_num_of_channels(fu); i++) {
-			*(fu->bmaControls + i) = fu->bmaControls[0];
+			(void)memcpy(&fu->bmaControls[i],
+				     &fu->bmaControls[0],
+				     sizeof(uint16_t));
 		}
 	}
 }
@@ -689,6 +693,11 @@ static int audio_custom_handler(struct usb_setup_packet *pSetup, int32_t *len,
 
 	uint8_t iface = (pSetup->wIndex) & 0xFF;
 
+	if (REQTYPE_GET_RECIP(pSetup->bmRequestType) !=
+	    REQTYPE_RECIP_INTERFACE) {
+		return -EINVAL;
+	}
+
 	audio_dev_data = get_audio_dev_data_by_iface(iface);
 	if (audio_dev_data == NULL) {
 		return -EINVAL;
@@ -724,29 +733,15 @@ static int audio_custom_handler(struct usb_setup_packet *pSetup, int32_t *len,
 						USB_FORMAT_TYPE_I_DESC_SIZE);
 	}
 
-	if (REQTYPE_GET_RECIP(pSetup->bmRequestType) ==
-	    REQTYPE_RECIP_INTERFACE) {
-		switch (pSetup->bRequest) {
-		case REQ_SET_INTERFACE:
-			if (ep_desc->bEndpointAddress & USB_EP_DIR_MASK) {
-				audio_dev_data->tx_enable = pSetup->wValue;
-			} else {
-				audio_dev_data->rx_enable = pSetup->wValue;
-			}
-			return -EINVAL;
-		case REQ_GET_INTERFACE:
-			if (ep_desc->bEndpointAddress & USB_EP_DIR_MASK) {
-				*data[0] = audio_dev_data->tx_enable;
-			} else {
-				*data[0] = audio_dev_data->rx_enable;
-			}
-			return 0;
-		default:
-			break;
+	if (pSetup->bRequest == REQ_SET_INTERFACE) {
+		if (ep_desc->bEndpointAddress & USB_EP_DIR_MASK) {
+			audio_dev_data->tx_enable = pSetup->wValue;
+		} else {
+			audio_dev_data->rx_enable = pSetup->wValue;
 		}
 	}
 
-	return -ENOTSUP;
+	return -EINVAL;
 }
 
 /**

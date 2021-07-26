@@ -36,43 +36,19 @@ extern "C" {
  * @}
  */
 
-#if defined(CONFIG_COOP_ENABLED) && defined(CONFIG_PREEMPT_ENABLED)
-#define _NUM_COOP_PRIO (CONFIG_NUM_COOP_PRIORITIES)
-#define _NUM_PREEMPT_PRIO (CONFIG_NUM_PREEMPT_PRIORITIES + 1)
-#elif defined(CONFIG_COOP_ENABLED)
-#define _NUM_COOP_PRIO (CONFIG_NUM_COOP_PRIORITIES + 1)
-#define _NUM_PREEMPT_PRIO (0)
-#elif defined(CONFIG_PREEMPT_ENABLED)
-#define _NUM_COOP_PRIO (0)
-#define _NUM_PREEMPT_PRIO (CONFIG_NUM_PREEMPT_PRIORITIES + 1)
-#else
-#error "invalid configuration"
-#endif
-
-#define K_PRIO_COOP(x) (-(_NUM_COOP_PRIO - (x)))
-#define K_PRIO_PREEMPT(x) (x)
-
 #define K_ANY NULL
 #define K_END NULL
 
-#if defined(CONFIG_COOP_ENABLED) && defined(CONFIG_PREEMPT_ENABLED)
+#if CONFIG_NUM_COOP_PRIORITIES + CONFIG_NUM_PREEMPT_PRIORITIES == 0
+#error Zero available thread priorities defined!
+#endif
+
+#define K_PRIO_COOP(x) (-(CONFIG_NUM_COOP_PRIORITIES - (x)))
+#define K_PRIO_PREEMPT(x) (x)
+
 #define K_HIGHEST_THREAD_PRIO (-CONFIG_NUM_COOP_PRIORITIES)
-#elif defined(CONFIG_COOP_ENABLED)
-#define K_HIGHEST_THREAD_PRIO (-CONFIG_NUM_COOP_PRIORITIES - 1)
-#elif defined(CONFIG_PREEMPT_ENABLED)
-#define K_HIGHEST_THREAD_PRIO 0
-#else
-#error "invalid configuration"
-#endif
-
-#ifdef CONFIG_PREEMPT_ENABLED
 #define K_LOWEST_THREAD_PRIO CONFIG_NUM_PREEMPT_PRIORITIES
-#else
-#define K_LOWEST_THREAD_PRIO -1
-#endif
-
 #define K_IDLE_PRIO K_LOWEST_THREAD_PRIO
-
 #define K_HIGHEST_APPLICATION_THREAD_PRIO (K_HIGHEST_THREAD_PRIO)
 #define K_LOWEST_APPLICATION_THREAD_PRIO (K_LOWEST_THREAD_PRIO - 1)
 
@@ -131,7 +107,7 @@ typedef void (*k_thread_user_cb_t)(const struct k_thread *thread,
  * @param user_cb Pointer to the user callback function.
  * @param user_data Pointer to user data.
  *
- * @note @option{CONFIG_THREAD_MONITOR} must be set for this function
+ * @note @kconfig{CONFIG_THREAD_MONITOR} must be set for this function
  * to be effective.
  * @note This API uses @ref k_spin_lock to protect the _kernel.threads
  * list which means creation of new threads and terminations of existing
@@ -150,7 +126,7 @@ extern void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data);
  * @param user_cb Pointer to the user callback function.
  * @param user_data Pointer to user data.
  *
- * @note @option{CONFIG_THREAD_MONITOR} must be set for this function
+ * @note @kconfig{CONFIG_THREAD_MONITOR} must be set for this function
  * to be effective.
  * @note This API uses @ref k_spin_lock only when accessing the _kernel.threads
  * queue elements. It unlocks it during user callback function processing.
@@ -200,7 +176,7 @@ extern void k_thread_foreach_unlocked(
  * This option indicates that the thread uses the CPU's floating point
  * registers. This instructs the kernel to take additional steps to save
  * and restore the contents of these registers when scheduling the thread.
- * No effect if @option{CONFIG_FPU_SHARING} is not enabled.
+ * No effect if @kconfig{CONFIG_FPU_SHARING} is not enabled.
  */
 #define K_FP_REGS (BIT(1))
 #endif
@@ -219,7 +195,7 @@ extern void k_thread_foreach_unlocked(
  * @details
  * Indicates that the thread being created should inherit all kernel object
  * permissions from the thread that created it. No effect if
- * @option{CONFIG_USERSPACE} is not enabled.
+ * @kconfig{CONFIG_USERSPACE} is not enabled.
  */
 #define K_INHERIT_PERMS (BIT(3))
 
@@ -370,7 +346,7 @@ static inline void k_thread_heap_assign(struct k_thread *thread,
  *
  * Some hardware may prevent inspection of a stack buffer currently in use.
  * If this API is called from supervisor mode, on the currently running thread,
- * on a platform which selects @option{CONFIG_NO_UNUSED_STACK_INSPECTION}, an
+ * on a platform which selects @kconfig{CONFIG_NO_UNUSED_STACK_INSPECTION}, an
  * error will be generated.
  *
  * @param thread Thread to inspect stack information
@@ -459,7 +435,7 @@ static inline int32_t k_msleep(int32_t ms)
  *
  * This function is unlikely to work as expected without kernel tuning.
  * In particular, because the lower bound on the duration of a sleep is
- * the duration of a tick, @option{CONFIG_SYS_CLOCK_TICKS_PER_SEC} must be
+ * the duration of a tick, @kconfig{CONFIG_SYS_CLOCK_TICKS_PER_SEC} must be
  * adjusted to achieve the resolution desired. The implications of doing
  * this must be understood before attempting to use k_usleep(). Use with
  * caution.
@@ -747,7 +723,7 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  * above this call, which is simply input to the priority selection
  * logic.
  *
- * @note You should enable @option{CONFIG_SCHED_DEADLINE} in your project
+ * @note You should enable @kconfig{CONFIG_SCHED_DEADLINE} in your project
  * configuration.
  *
  * @param thread A thread on which to set the deadline
@@ -764,7 +740,7 @@ __syscall void k_thread_deadline_set(k_tid_t thread, int deadline);
  * After this returns, the thread will no longer be schedulable on any
  * CPUs.  The thread must not be currently runnable.
  *
- * @note You should enable @option{CONFIG_SCHED_DEADLINE} in your project
+ * @note You should enable @kconfig{CONFIG_SCHED_DEADLINE} in your project
  * configuration.
  *
  * @param thread Thread to operate upon
@@ -778,7 +754,7 @@ int k_thread_cpu_mask_clear(k_tid_t thread);
  * After this returns, the thread will be schedulable on any CPU.  The
  * thread must not be currently runnable.
  *
- * @note You should enable @option{CONFIG_SCHED_DEADLINE} in your project
+ * @note You should enable @kconfig{CONFIG_SCHED_DEADLINE} in your project
  * configuration.
  *
  * @param thread Thread to operate upon
@@ -791,7 +767,7 @@ int k_thread_cpu_mask_enable_all(k_tid_t thread);
  *
  * The thread must not be currently runnable.
  *
- * @note You should enable @option{CONFIG_SCHED_DEADLINE} in your project
+ * @note You should enable @kconfig{CONFIG_SCHED_DEADLINE} in your project
  * configuration.
  *
  * @param thread Thread to operate upon
@@ -805,7 +781,7 @@ int k_thread_cpu_mask_enable(k_tid_t thread, int cpu);
  *
  * The thread must not be currently runnable.
  *
- * @note You should enable @option{CONFIG_SCHED_DEADLINE} in your project
+ * @note You should enable @kconfig{CONFIG_SCHED_DEADLINE} in your project
  * configuration.
  *
  * @param thread Thread to operate upon
@@ -1002,7 +978,7 @@ __syscall void *k_thread_custom_data_get(void);
 /**
  * @brief Set current thread name
  *
- * Set the name of the thread to be used when @option{CONFIG_THREAD_MONITOR}
+ * Set the name of the thread to be used when @kconfig{CONFIG_THREAD_MONITOR}
  * is enabled for tracing and debugging.
  *
  * @param thread Thread to set name, or NULL to set the current thread
@@ -1539,6 +1515,7 @@ static inline void *z_impl_k_timer_user_data_get(const struct k_timer *timer)
 
 /**
  * @addtogroup clock_apis
+ * @ingroup kernel_apis
  * @{
  */
 
@@ -1546,7 +1523,7 @@ static inline void *z_impl_k_timer_user_data_get(const struct k_timer *timer)
  * @brief Get system uptime, in system ticks.
  *
  * This routine returns the elapsed time since the system booted, in
- * ticks (c.f. @option{CONFIG_SYS_CLOCK_TICKS_PER_SEC}), which is the
+ * ticks (c.f. @kconfig{CONFIG_SYS_CLOCK_TICKS_PER_SEC}), which is the
  * fundamental unit of resolution of kernel timekeeping.
  *
  * @return Current uptime in ticks.
@@ -1562,7 +1539,7 @@ __syscall int64_t k_uptime_ticks(void);
  * @note
  *    While this function returns time in milliseconds, it does
  *    not mean it has millisecond resolution. The actual resolution depends on
- *    @option{CONFIG_SYS_CLOCK_TICKS_PER_SEC} config option.
+ *    @kconfig{CONFIG_SYS_CLOCK_TICKS_PER_SEC} config option.
  *
  * @return Current uptime in milliseconds.
  */
@@ -1586,7 +1563,7 @@ static inline int64_t k_uptime_get(void)
  * @note
  *    While this function returns time in milliseconds, it does
  *    not mean it has millisecond resolution. The actual resolution depends on
- *    @option{CONFIG_SYS_CLOCK_TICKS_PER_SEC} config option
+ *    @kconfig{CONFIG_SYS_CLOCK_TICKS_PER_SEC} config option
  *
  * @return The low 32 bits of the current uptime, in milliseconds.
  */
@@ -2553,7 +2530,7 @@ struct k_mutex {
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
 	.owner = NULL, \
 	.lock_count = 0, \
-	.owner_orig_prio = K_LOWEST_THREAD_PRIO, \
+	.owner_orig_prio = K_LOWEST_APPLICATION_THREAD_PRIO, \
 	}
 
 /**
@@ -2950,6 +2927,7 @@ static inline bool k_work_is_pending(const struct k_work *work);
  * * @p queue is draining; or
  * * @p queue is plugged.
  * @retval -EINVAL if @p queue is null and the work item has never been run.
+ * @retval -ENODEV if @p queue has not been started.
  */
 int k_work_submit_to_queue(struct k_work_q *queue,
 			   struct k_work *work);
@@ -3228,6 +3206,12 @@ static inline k_ticks_t k_work_delayable_remaining_get(
  *
  * @retval 0 if work was already scheduled or submitted.
  * @retval 1 if work has been scheduled.
+ * @retval -EBUSY if @p delay is @c K_NO_WAIT and
+ *         k_work_submit_to_queue() fails with this code.
+ * @retval -EINVAL if @p delay is @c K_NO_WAIT and
+ *         k_work_submit_to_queue() fails with this code.
+ * @retval -ENODEV if @p delay is @c K_NO_WAIT and
+ *         k_work_submit_to_queue() fails with this code.
  */
 int k_work_schedule_for_queue(struct k_work_q *queue,
 			       struct k_work_delayable *dwork,
@@ -3277,6 +3261,12 @@ extern int k_work_schedule(struct k_work_delayable *dwork,
  * * delay not @c K_NO_WAIT and work has been scheduled
  * @retval 2 if delay is @c K_NO_WAIT and work was running and has been queued
  * to the queue that was running it
+ * @retval -EBUSY if @p delay is @c K_NO_WAIT and
+ *         k_work_submit_to_queue() fails with this code.
+ * @retval -EINVAL if @p delay is @c K_NO_WAIT and
+ *         k_work_submit_to_queue() fails with this code.
+ * @retval -ENODEV if @p delay is @c K_NO_WAIT and
+ *         k_work_submit_to_queue() fails with this code.
  */
 int k_work_reschedule_for_queue(struct k_work_q *queue,
 				 struct k_work_delayable *dwork,
@@ -3823,7 +3813,9 @@ struct k_work_user {
 
 #define Z_WORK_USER_INITIALIZER(work_handler) \
 	{ \
+	._reserved = NULL, \
 	.handler = work_handler, \
+	.flags = 0 \
 	}
 
 /**
@@ -4989,6 +4981,11 @@ void *k_heap_alloc(struct k_heap *h, size_t bytes,
  */
 void k_heap_free(struct k_heap *h, void *mem);
 
+/* Hand-calculated minimum heap sizes needed to return a successful
+ * 1-byte allocation.  See details in lib/os/heap.[ch]
+ */
+#define Z_HEAP_MIN_SIZE (sizeof(void *) > 4 ? 56 : 44)
+
 /**
  * @brief Define a static k_heap
  *
@@ -4996,15 +4993,20 @@ void k_heap_free(struct k_heap *h, void *mem);
  * k_heap of the requested size.  After kernel start, &name can be
  * used as if k_heap_init() had been called.
  *
+ * Note that this macro enforces a minimum size on the memory region
+ * to accommodate metadata requirements.  Very small heaps will be
+ * padded to fit.
+ *
  * @param name Symbol name for the struct k_heap object
  * @param bytes Size of memory region, in bytes
  */
 #define K_HEAP_DEFINE(name, bytes)				\
-	char __aligned(sizeof(void *)) kheap_##name[bytes];	\
+	char __aligned(8) /* CHUNK_UNIT */			\
+	     kheap_##name[MAX(bytes, Z_HEAP_MIN_SIZE)];		\
 	Z_STRUCT_SECTION_ITERABLE(k_heap, name) = {		\
 		.heap = {					\
 			.init_mem = kheap_##name,		\
-			.init_bytes = (bytes),			\
+			.init_bytes = MAX(bytes, Z_HEAP_MIN_SIZE), \
 		 },						\
 	}
 

@@ -78,7 +78,7 @@ class VndLookup:
             None: GENERIC_OR_VENDOR_INDEPENDENT,
         }
         found_separator = False     # have we found the '-----' separator?
-        with open(vendor_prefixes, 'r') as f:
+        with open(vendor_prefixes, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
                 if line and found_separator:
@@ -217,7 +217,8 @@ def load_bindings(dts_roots):
 
     binding_files = []
     for dts_root in dts_roots:
-        binding_files.extend(glob.glob(f'{dts_root}/dts/bindings/**/*.yaml'))
+        binding_files.extend(glob.glob(f'{dts_root}/dts/bindings/**/*.yaml',
+                                       recursive=True))
 
     bindings = edtlib.bindings_from_paths(binding_files, ignore_errors=True)
 
@@ -450,6 +451,14 @@ def print_binding_page(binding, base_names, vnd_lookup, dup_compats,
 
     print_block(f'''\
     :orphan:
+
+    .. raw:: html
+
+        <!--
+        FIXME: do not limit page width until content uses another representation
+        format other than tables
+        -->
+        <style>.wy-nav-content {{ max-width: none; !important }}</style>
 
     {dtcompatible}
     .. _{binding_ref_target(binding)}:

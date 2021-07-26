@@ -83,12 +83,11 @@
 	};
 };
 
-
-&clk_hse{
+&clk_hse {
 	status = "okay";
 };
 
-&clk_lse{
+&clk_lse {
 	status = "okay";
 };
 
@@ -164,6 +163,10 @@
 &usb {
 	status = "okay";
 	pinctrl-0 = <&usb_dm_pa11 &usb_dp_pa12>;
+};
+
+&rng {
+	status = "okay";
 };
 
 &flash0 {

@@ -436,6 +436,17 @@ endmacro()
 # zephyr_library_amend()
 # zephyr_libray_add_sources(...)
 #
+# It is also possible to use generator expression when amending to Zephyr
+# libraries.
+#
+# For example, in case it is required to expose the Zephyr library's folder as
+# include path then the following is possible:
+# zephyr_library_amend()
+# zephyr_library_include_directories($<TARGET_PROPERTY:SOURCE_DIR>)
+#
+# See the CMake documentation for more target properties or generator
+# expressions.
+#
 macro(zephyr_library_amend)
   # This is a macro because we need to ensure the ZEPHYR_CURRENT_LIBRARY and
   # following zephyr_library_* calls are executed within the scope of the
@@ -514,6 +525,15 @@ endfunction()
 # constructor but must called explicitly on CMake libraries that do
 # not use a zephyr library constructor.
 function(zephyr_append_cmake_library library)
+  if(TARGET zephyr_prebuilt)
+    message(WARNING
+      "zephyr_library() or zephyr_library_named() called in Zephyr CMake "
+      "application mode. `${library}` will not be treated as a Zephyr library."
+      "To create a Zephyr library in Zephyr CMake kernel mode consider "
+      "creating a Zephyr module. See more here: "
+      "https://docs.zephyrproject.org/latest/guides/modules.html"
+    )
+  endif()
   set_property(GLOBAL APPEND PROPERTY ZEPHYR_LIBS ${library})
 endfunction()
 
@@ -1057,7 +1077,7 @@ endfunction()
 function(zephyr_check_compiler_flag_hardcoded lang option check exists)
   # Various flags that are not supported for CXX may not be testable
   # because they would produce a warning instead of an error during
-  # the test.  Exclude them by toolchain-specific blacklist.
+  # the test.  Exclude them by toolchain-specific blocklist.
   if((${lang} STREQUAL CXX) AND ("${option}" IN_LIST CXX_EXCLUDED_OPTIONS))
     set(check 0 PARENT_SCOPE)
     set(exists 1 PARENT_SCOPE)
@@ -1079,7 +1099,8 @@ endfunction(zephyr_check_compiler_flag_hardcoded)
 #    RODATA       Inside the rodata output section.
 #    ROM_START    Inside the first output section of the image. This option is
 #                 currently only available on ARM Cortex-M, ARM Cortex-R,
-#                 x86, ARC, and openisa_rv32m1.
+#                 x86, ARC, openisa_rv32m1, and RISC-V.
+#                 Note: On RISC-V the rom_start section will be after vector section.
 #    RAM_SECTIONS Inside the RAMABLE_REGION GROUP.
 #    SECTIONS     Near the end of the file. Don't use this when linking into
 #                 RAMABLE_REGION, use RAM_SECTIONS instead.

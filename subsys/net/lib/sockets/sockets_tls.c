@@ -12,7 +12,6 @@
 LOG_MODULE_REGISTER(net_sock_tls, CONFIG_NET_SOCKETS_LOG_LEVEL);
 
 #include <init.h>
-#include <drivers/entropy.h>
 #include <sys/util.h>
 #include <net/socket.h>
 #include <random/rand32.h>
@@ -26,7 +25,6 @@ LOG_MODULE_REGISTER(net_sock_tls, CONFIG_NET_SOCKETS_LOG_LEVEL);
 #include CONFIG_MBEDTLS_CFG_FILE
 #endif /* CONFIG_MBEDTLS_CFG_FILE */
 
-#include <mbedtls/ctr_drbg.h>
 #include <mbedtls/net_sockets.h>
 #include <mbedtls/x509.h>
 #include <mbedtls/x509_crt.h>
@@ -94,6 +92,9 @@ __net_socket struct tls_context {
 
 	/** Information whether underlying socket is listening. */
 	bool is_listening;
+
+	/** Information whether TLS handshake is currently in progress. */
+	bool handshake_in_progress;
 
 	/** Information whether TLS handshake is complete or not. */
 	struct k_sem tls_established;
@@ -163,12 +164,6 @@ __net_socket struct tls_context {
 #endif /* CONFIG_MBEDTLS */
 };
 
-#if defined(CONFIG_ENTROPY_HAS_DRIVER)
-static const struct device *entropy_dev;
-#endif
-
-static mbedtls_ctr_drbg_context tls_ctr_drbg;
-
 /* A global pool of TLS contexts. */
 static struct tls_context tls_contexts[CONFIG_NET_SOCKETS_TLS_MAX_CONTEXTS];
 
@@ -204,37 +199,18 @@ static void tls_debug(void *ctx, int level, const char *file,
 }
 #endif /* defined(MBEDTLS_DEBUG_C) && (CONFIG_NET_SOCKETS_LOG_LEVEL >= LOG_LEVEL_DBG) */
 
+static int tls_ctr_drbg_random(void *ctx, unsigned char *buf, size_t len)
+{
+	ARG_UNUSED(ctx);
+
 #if defined(CONFIG_ENTROPY_HAS_DRIVER)
-static int tls_entropy_func(void *ctx, unsigned char *buf, size_t len)
-{
-	ARG_UNUSED(ctx);
-
-	return entropy_get_entropy(entropy_dev, buf, len);
-}
+	return sys_csrand_get(buf, len);
 #else
-static int tls_entropy_func(void *ctx, unsigned char *buf, size_t len)
-{
-	ARG_UNUSED(ctx);
-
-	size_t i = len / 4;
-	uint32_t val;
-
-	while (i--) {
-		val = sys_rand32_get();
-		UNALIGNED_PUT(val, (uint32_t *)buf);
-		buf += 4;
-	}
-
-	i = len & 0x3;
-	val = sys_rand32_get();
-	while (i--) {
-		*buf++ = val;
-		val >>= 8;
-	}
+	sys_rand_get(buf, len);
 
 	return 0;
+#endif
 }
-#endif /* defined(CONFIG_ENTROPY_HAS_DRIVER) */
 
 #if defined(CONFIG_NET_SOCKETS_ENABLE_DTLS)
 /* mbedTLS-defined function for setting timer. */
@@ -287,33 +263,14 @@ static int tls_init(const struct device *unused)
 {
 	ARG_UNUSED(unused);
 
-	int ret;
-	static const unsigned char drbg_seed[] = "zephyr";
-
-#if defined(CONFIG_ENTROPY_HAS_DRIVER)
-	entropy_dev = device_get_binding(DT_CHOSEN_ZEPHYR_ENTROPY_LABEL);
-	if (!entropy_dev) {
-		NET_ERR("Failed to obtain entropy device");
-		return -ENODEV;
-	}
-#else
+#if !defined(CONFIG_ENTROPY_HAS_DRIVER)
 	NET_WARN("No entropy device on the system, "
 		 "TLS communication may be insecure!");
-#endif /* defined(CONFIG_ENTROPY_HAS_DRIVER) */
+#endif
 
 	(void)memset(tls_contexts, 0, sizeof(tls_contexts));
 
 	k_mutex_init(&context_lock);
-
-	mbedtls_ctr_drbg_init(&tls_ctr_drbg);
-
-	ret = mbedtls_ctr_drbg_seed(&tls_ctr_drbg, tls_entropy_func, NULL,
-				    drbg_seed, sizeof(drbg_seed));
-	if (ret != 0) {
-		mbedtls_ctr_drbg_free(&tls_ctr_drbg);
-		NET_ERR("TLS entropy source initialization failed");
-		return -EFAULT;
-	}
 
 #if defined(MBEDTLS_DEBUG_C) && (CONFIG_NET_SOCKETS_LOG_LEVEL >= LOG_LEVEL_DBG)
 	mbedtls_debug_set_threshold(CONFIG_MBEDTLS_DEBUG_LEVEL);
@@ -563,9 +520,8 @@ static int dtls_rx(void *ctx, unsigned char *buf, size_t len,
 		   uint32_t dtls_timeout)
 {
 	struct tls_context *tls_ctx = ctx;
-	bool is_block = !((tls_ctx->flags & ZSOCK_MSG_DONTWAIT) ||
-			  (zsock_fcntl(tls_ctx->sock, F_GETFL, 0) &
-			   O_NONBLOCK));
+	int sock_flags = zsock_fcntl(tls_ctx->sock, F_GETFL, 0);
+	bool is_block;
 	int timeout = (dtls_timeout == 0U) ? -1 : dtls_timeout;
 	uint32_t entry_time = k_uptime_get_32();
 	socklen_t addrlen = sizeof(struct sockaddr);
@@ -575,6 +531,13 @@ static int dtls_rx(void *ctx, unsigned char *buf, size_t len,
 	bool retry;
 	struct zsock_pollfd fds;
 	int flags = tls_ctx->flags & ~ZSOCK_MSG_TRUNC;
+
+	if (sock_flags == -1) {
+		return MBEDTLS_ERR_SSL_INTERNAL_ERROR;
+	}
+
+	is_block = !((tls_ctx->flags & ZSOCK_MSG_DONTWAIT) ||
+		     (sock_flags & O_NONBLOCK));
 
 	do {
 		retry = false;
@@ -860,6 +823,22 @@ static int tls_mbedtls_reset(struct tls_context *context)
 static int tls_mbedtls_handshake(struct tls_context *context, bool block)
 {
 	int ret;
+	int sock_flags;
+
+	sock_flags = zsock_fcntl(context->sock, F_GETFL, 0);
+	if (sock_flags < 0) {
+		return -EIO;
+	}
+
+	if (block && sock_flags & O_NONBLOCK) {
+		/* Clear the O_NONBLOCK flag for the handshake to prevent busy
+		 * looping in the handshake thread.
+		 */
+		(void)zsock_fcntl(context->sock, F_SETFL,
+				  sock_flags & ~O_NONBLOCK);
+	}
+
+	context->handshake_in_progress = true;
 
 	while ((ret = mbedtls_ssl_handshake(&context->ssl)) != 0) {
 		if (ret == MBEDTLS_ERR_SSL_WANT_READ ||
@@ -887,9 +866,15 @@ static int tls_mbedtls_handshake(struct tls_context *context, bool block)
 		break;
 	}
 
+	if (block && sock_flags & O_NONBLOCK) {
+		(void)zsock_fcntl(context->sock, F_SETFL, sock_flags);
+	}
+
 	if (ret == 0) {
 		k_sem_give(&context->tls_established);
 	}
+
+	context->handshake_in_progress = false;
 
 	return ret;
 }
@@ -947,8 +932,8 @@ static int tls_mbedtls_init(struct tls_context *context, bool is_server)
 		/* Configure cookie for DTLS server */
 		if (role == MBEDTLS_SSL_IS_SERVER) {
 			ret = mbedtls_ssl_cookie_setup(&context->cookie,
-						       mbedtls_ctr_drbg_random,
-						       &tls_ctr_drbg);
+						       tls_ctr_drbg_random,
+						       NULL);
 			if (ret != 0) {
 				return -ENOMEM;
 			}
@@ -984,8 +969,8 @@ static int tls_mbedtls_init(struct tls_context *context, bool is_server)
 	}
 
 	mbedtls_ssl_conf_rng(&context->config,
-			     mbedtls_ctr_drbg_random,
-			     &tls_ctr_drbg);
+			     tls_ctr_drbg_random,
+			     NULL);
 
 	ret = tls_mbedtls_set_credentials(context);
 	if (ret != 0) {
@@ -1828,8 +1813,13 @@ static ssize_t recvfrom_dtls_server(struct tls_context *ctx, void *buf,
 {
 	int ret;
 	bool repeat;
-	bool is_block = !((flags & ZSOCK_MSG_DONTWAIT) ||
-			  (zsock_fcntl(ctx->sock, F_GETFL, 0) & O_NONBLOCK));
+	int sock_flags = zsock_fcntl(ctx->sock, F_GETFL, 0);
+	bool is_block;
+
+	if (sock_flags == -1) {
+		ret = -errno;
+		goto error;
+	}
 
 	if (!ctx->is_initialized) {
 		ret = tls_mbedtls_init(ctx, true);
@@ -1837,6 +1827,8 @@ static ssize_t recvfrom_dtls_server(struct tls_context *ctx, void *buf,
 			goto error;
 		}
 	}
+
+	is_block = !((flags & ZSOCK_MSG_DONTWAIT) || (sock_flags & O_NONBLOCK));
 
 	/* Loop to enable DTLS reconnection for servers without closing
 	 * a socket.
@@ -2127,7 +2119,48 @@ out:
 	return ret;
 }
 
-static inline int ztls_poll_offload(struct zsock_pollfd *fds, int nfds, int timeout)
+/* Return true if needed to retry rightoff or false otherwise. */
+static bool poll_offload_dtls_client_retry(struct tls_context *ctx,
+					   struct zsock_pollfd *pfd)
+{
+	/* DTLS client should wait for the handshake to complete before it
+	 * reports that data is ready.
+	 */
+	if ((ctx->type != SOCK_DGRAM) ||
+	    (ctx->options.role != MBEDTLS_SSL_IS_CLIENT)) {
+		return false;
+	}
+
+	if (ctx->handshake_in_progress) {
+		/* Add some sleep to allow lower priority threads to proceed
+		 * with handshake.
+		 */
+		k_msleep(10);
+
+		pfd->revents &= ~ZSOCK_POLLIN;
+		return true;
+	} else if (!is_handshake_complete(ctx)) {
+		uint8_t byte;
+		int ret;
+
+		/* Handshake didn't start yet - just drop the incoming data -
+		 * it's the client who should initiate the handshake.
+		 */
+		ret = zsock_recv(ctx->sock, &byte, sizeof(byte),
+				 ZSOCK_MSG_DONTWAIT);
+		if (ret < 0) {
+			pfd->revents |= ZSOCK_POLLERR;
+		}
+
+		pfd->revents &= ~ZSOCK_POLLIN;
+		return true;
+	}
+
+	/* Handshake complete, just proceed. */
+	return false;
+}
+
+static int ztls_poll_offload(struct zsock_pollfd *fds, int nfds, int timeout)
 {
 	int fd_backup[CONFIG_NET_SOCKETS_POLL_MAX];
 	const struct fd_op_vtable *vtable;
@@ -2196,6 +2229,12 @@ static inline int ztls_poll_offload(struct zsock_pollfd *fds, int nfds, int time
 					   0);
 			if (ctx != NULL) {
 				if (fds[i].events & ZSOCK_POLLIN) {
+					if (poll_offload_dtls_client_retry(
+							ctx, &fds[i])) {
+						retry = true;
+						continue;
+					}
+
 					result = ztls_poll_update_pollin(
 						    fd_backup[i], ctx, &fds[i]);
 					if (result == -EAGAIN) {

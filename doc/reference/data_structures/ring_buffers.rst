@@ -405,7 +405,7 @@ Configuration Options
 
 Related configuration options:
 
-* :option:`CONFIG_RING_BUFFER`: Enable ring buffer.
+* :kconfig:`CONFIG_RING_BUFFER`: Enable ring buffer.
 
 API Reference
 *************
@@ -413,4 +413,3 @@ API Reference
 The following ring buffer APIs are provided by :zephyr_file:`include/sys/ring_buffer.h`:
 
 .. doxygengroup:: ring_buffer_apis
-   :project: Zephyr

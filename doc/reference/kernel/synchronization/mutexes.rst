@@ -71,7 +71,7 @@ the unlocking thread resets its priority to the level it had before locking
 that mutex.
 
 .. note::
-    The :option:`CONFIG_PRIORITY_CEILING` configuration option limits
+    The :kconfig:`CONFIG_PRIORITY_CEILING` configuration option limits
     how high the kernel can raise a thread's priority due to priority
     inheritance. The default value of 0 permits unlimited elevation.
 
@@ -159,13 +159,12 @@ Configuration Options
 
 Related configuration options:
 
-* :option:`CONFIG_PRIORITY_CEILING`
+* :kconfig:`CONFIG_PRIORITY_CEILING`
 
 API Reference
 *************
 
 .. doxygengroup:: mutex_apis
-   :project: Zephyr
 
 Futex API Reference
 *******************
@@ -177,7 +176,6 @@ user memory so that any access bypasses the kernel object permission
 management mechanism.
 
 .. doxygengroup:: futex_apis
-   :project: Zephyr
 
 User Mode Mutex API Reference
 *****************************
@@ -187,4 +185,3 @@ that a sys_mutex instance can reside in user memory. When user mode isn't
 enabled, sys_mutex behaves like k_mutex.
 
 .. doxygengroup:: user_mutex_apis
-   :project: Zephyr

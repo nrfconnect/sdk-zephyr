@@ -12,10 +12,9 @@ Configuration Options
 
 Related configuration options:
 
-* :option:`CONFIG_GPIO`
+* :kconfig:`CONFIG_GPIO`
 
 API Reference
 *************
 
 .. doxygengroup:: gpio_interface
-   :project: Zephyr

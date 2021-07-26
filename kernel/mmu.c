@@ -210,8 +210,6 @@ static void virt_region_init(void)
 
 	if (Z_VM_RESERVED > 0) {
 		/* Mark reserved region at end of virtual address space */
-		offset = virt_to_bitmap_offset(Z_VIRT_REGION_END_ADDR,
-					       Z_VM_RESERVED);
 		num_bits = Z_VM_RESERVED / CONFIG_MMU_PAGE_SIZE;
 		(void)sys_bitarray_set_region(&virt_region_bitmap,
 					      num_bits, 0);
@@ -432,7 +430,7 @@ static int map_anon_page(void *addr, uint32_t flags)
 		bool dirty;
 		int ret;
 
-		pf = z_eviction_select(&dirty);
+		pf = k_mem_paging_eviction_select(&dirty);
 		__ASSERT(pf != NULL, "failed to get a page frame");
 		LOG_DBG("evicting %p at 0x%lx", pf->addr,
 			z_page_frame_to_phys(pf));
@@ -761,6 +759,23 @@ void z_mem_manage_init(void)
 		pf->flags |= Z_PAGE_FRAME_PINNED;
 	}
 
+#ifdef CONFIG_LINKER_USE_PINNED_SECTION
+	/* Pin the page frames correspondng to the pinned symbols */
+	uintptr_t pinned_start = ROUND_DOWN(POINTER_TO_UINT(lnkr_pinned_start),
+					    CONFIG_MMU_PAGE_SIZE);
+	uintptr_t pinned_end = ROUND_UP(POINTER_TO_UINT(lnkr_pinned_end),
+					CONFIG_MMU_PAGE_SIZE);
+	size_t pinned_size = pinned_end - pinned_start;
+
+	VIRT_FOREACH(UINT_TO_POINTER(pinned_start), pinned_size, addr)
+	{
+		pf = z_phys_to_page_frame(Z_BOOT_VIRT_TO_PHYS(addr));
+		frame_mapped_set(pf, addr);
+
+		pf->flags |= Z_PAGE_FRAME_PINNED;
+	}
+#endif
+
 	/* Any remaining pages that aren't mapped, reserved, or pinned get
 	 * added to the free pages list
 	 */
@@ -775,8 +790,8 @@ void z_mem_manage_init(void)
 #ifdef CONFIG_DEMAND_PAGING_TIMING_HISTOGRAM
 	z_paging_histogram_init();
 #endif
-	z_backing_store_init();
-	z_eviction_init();
+	k_mem_paging_backing_store_init();
+	k_mem_paging_eviction_init();
 #endif
 #if __ASSERT_ON
 	page_frames_initialized = true;
@@ -809,7 +824,7 @@ static inline void do_backing_store_page_in(uintptr_t location)
 #endif /* CONFIG_DEMAND_PAGING_STATS_USING_TIMING_FUNCTIONS */
 #endif /* CONFIG_DEMAND_PAGING_TIMING_HISTOGRAM */
 
-	z_backing_store_page_in(location);
+	k_mem_paging_backing_store_page_in(location);
 
 #ifdef CONFIG_DEMAND_PAGING_TIMING_HISTOGRAM
 #ifdef CONFIG_DEMAND_PAGING_STATS_USING_TIMING_FUNCTIONS
@@ -840,7 +855,7 @@ static inline void do_backing_store_page_out(uintptr_t location)
 #endif /* CONFIG_DEMAND_PAGING_STATS_USING_TIMING_FUNCTIONS */
 #endif /* CONFIG_DEMAND_PAGING_TIMING_HISTOGRAM */
 
-	z_backing_store_page_out(location);
+	k_mem_paging_backing_store_page_out(location);
 
 #ifdef CONFIG_DEMAND_PAGING_TIMING_HISTOGRAM
 #ifdef CONFIG_DEMAND_PAGING_STATS_USING_TIMING_FUNCTIONS
@@ -877,7 +892,8 @@ static void virt_region_foreach(void *addr, size_t size,
 /*
  * Perform some preparatory steps before paging out. The provided page frame
  * must be evicted to the backing store immediately after this is called
- * with a call to z_backing_store_page_out() if it contains a data page.
+ * with a call to k_mem_paging_backing_store_page_out() if it contains
+ * a data page.
  *
  * - Map page frame to scratch area if requested. This always is true if we're
  *   doing a page fault, but is only set on manual evictions if the page is
@@ -920,8 +936,8 @@ static int page_frame_prepare_locked(struct z_page_frame *pf, bool *dirty_ptr,
 	}
 
 	if (z_page_frame_is_mapped(pf)) {
-		ret = z_backing_store_location_get(pf, location_ptr,
-						   page_fault);
+		ret = k_mem_paging_backing_store_location_get(pf, location_ptr,
+							      page_fault);
 		if (ret != 0) {
 			LOG_ERR("out of backing store memory");
 			return -ENOMEM;
@@ -1147,7 +1163,7 @@ static inline struct z_page_frame *do_eviction_select(bool *dirty)
 #endif /* CONFIG_DEMAND_PAGING_STATS_USING_TIMING_FUNCTIONS */
 #endif /* CONFIG_DEMAND_PAGING_TIMING_HISTOGRAM */
 
-	pf = z_eviction_select(dirty);
+	pf = k_mem_paging_eviction_select(dirty);
 
 #ifdef CONFIG_DEMAND_PAGING_TIMING_HISTOGRAM
 #ifdef CONFIG_DEMAND_PAGING_STATS_USING_TIMING_FUNCTIONS
@@ -1180,7 +1196,7 @@ static bool do_page_fault(void *addr, bool pin)
 
 	/*
 	 * TODO: Add performance accounting:
-	 * - z_eviction_select() metrics
+	 * - k_mem_paging_eviction_select() metrics
 	 *   * periodic timer execution time histogram (if implemented)
 	 */
 
@@ -1201,14 +1217,14 @@ static bool do_page_fault(void *addr, bool pin)
 	 * entire operation. This is far worse for system interrupt latency
 	 * but requires less pinned pages and ISRs may also take page faults.
 	 *
-	 * Support for allowing z_backing_store_page_out() and
-	 * z_backing_store_page_in() to also sleep and allow other threads to
-	 * run (such as in the case where the transfer is async DMA) is not
-	 * implemented. Even if limited to thread context, arbitrary memory
-	 * access triggering exceptions that put a thread to sleep on a
-	 * contended page fault operation will break scheduling assumptions of
-	 * cooperative threads or threads that implement crticial sections with
-	 * spinlocks or disabling IRQs.
+	 * Support for allowing k_mem_paging_backing_store_page_out() and
+	 * k_mem_paging_backing_store_page_in() to also sleep and allow
+	 * other threads to run (such as in the case where the transfer is
+	 * async DMA) is not implemented. Even if limited to thread context,
+	 * arbitrary memory access triggering exceptions that put a thread to
+	 * sleep on a contended page fault operation will break scheduling
+	 * assumptions of cooperative threads or threads that implement
+	 * crticial sections with spinlocks or disabling IRQs.
 	 */
 	k_sched_lock();
 	__ASSERT(!k_is_in_isr(), "ISR page faults are forbidden");
@@ -1274,7 +1290,7 @@ static bool do_page_fault(void *addr, bool pin)
 	pf->flags |= Z_PAGE_FRAME_MAPPED;
 	pf->addr = addr;
 	arch_mem_page_in(addr, z_page_frame_to_phys(pf));
-	z_backing_store_page_finalize(pf, page_in_location);
+	k_mem_paging_backing_store_page_finalize(pf, page_in_location);
 out:
 	irq_unlock(key);
 #ifdef CONFIG_DEMAND_PAGING_ALLOW_IRQ

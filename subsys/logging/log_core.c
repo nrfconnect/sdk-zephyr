@@ -137,6 +137,7 @@ uint32_t z_log_get_s_mask(const char *str, uint32_t nargs)
 			arm = false;
 			arg++;
 		} else {
+			; /* standard character, continue walk */
 		}
 	}
 
@@ -233,6 +234,11 @@ static void z_log_msg_post_finalize(void)
 			k_sem_give(&log_process_thread_sem);
 		}
 	} else {
+		/* No action needed. Message processing will be triggered by the
+		 * timeout or when number of upcoming messages exceeds the
+		 * threshold.
+		 */
+		;
 	}
 }
 
@@ -411,6 +417,7 @@ uint32_t log_count_args(const char *fmt)
 			args++;
 			prev = false;
 		} else {
+			; /* standard character, continue walk */
 		}
 		fmt++;
 	}
@@ -948,7 +955,7 @@ uint32_t z_vrfy_log_filter_set(struct log_backend const *const backend,
 	Z_OOPS(Z_SYSCALL_VERIFY_MSG(src_id < log_sources_count(),
 		"Invalid log source id"));
 	Z_OOPS(Z_SYSCALL_VERIFY_MSG(
-		(level <= LOG_LEVEL_DBG) && (level >= LOG_LEVEL_NONE),
+		(level <= LOG_LEVEL_DBG),
 		"Invalid log level"));
 
 	return z_impl_log_filter_set(NULL, domain_id, src_id, level);

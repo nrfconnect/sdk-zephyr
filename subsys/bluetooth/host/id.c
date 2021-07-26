@@ -27,6 +27,11 @@
 #define LOG_MODULE_NAME bt_id
 #include "common/log.h"
 
+struct bt_adv_id_check_data {
+	uint8_t id;
+	bool adv_enabled;
+};
+
 #if defined(CONFIG_BT_OBSERVER) || defined(CONFIG_BT_BROADCASTER)
 const bt_addr_le_t *bt_lookup_id_addr(uint8_t id, const bt_addr_le_t *addr)
 {
@@ -141,7 +146,7 @@ int bt_id_set_adv_random_addr(struct bt_le_ext_adv *adv,
 	int err;
 
 	if (!(IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	      BT_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
+	      BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
 		return set_random_address(addr);
 	}
 
@@ -171,7 +176,9 @@ int bt_id_set_adv_random_addr(struct bt_le_ext_adv *adv,
 		return err;
 	}
 
-	bt_addr_copy(&adv->random_addr.a, addr);
+	if (&adv->random_addr.a != addr) {
+		bt_addr_copy(&adv->random_addr.a, addr);
+	}
 	adv->random_addr.type = BT_ADDR_LE_RANDOM;
 	return 0;
 }
@@ -240,7 +247,7 @@ int bt_id_set_adv_private_addr(struct bt_le_ext_adv *adv)
 	int err;
 
 	if (!(IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	      BT_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
+	      BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
 		return bt_id_set_private_addr(adv->id);
 	}
 
@@ -366,7 +373,7 @@ static void le_update_private_addr(void)
 
 	if (IS_ENABLED(CONFIG_BT_BROADCASTER) &&
 	    IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	    BT_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
+	    BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
 		bt_le_ext_adv_foreach(adv_update_rpa, NULL);
 	}
 
@@ -374,7 +381,6 @@ static void le_update_private_addr(void)
 	bool scan_enabled = false;
 
 	if (atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING) &&
-	    atomic_test_bit(bt_dev.flags, BT_DEV_ACTIVE_SCAN) &&
 	    !(IS_ENABLED(CONFIG_BT_EXT_ADV) &&
 	      atomic_test_bit(bt_dev.flags, BT_DEV_SCAN_LIMITED))) {
 		bt_le_scan_set_enable(BT_HCI_LE_SCAN_DISABLE);
@@ -392,7 +398,7 @@ static void le_update_private_addr(void)
 
 	if (IS_ENABLED(CONFIG_BT_BROADCASTER) &&
 	    !(IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	      BT_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
+	      BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
 		adv = bt_le_adv_lookup_legacy();
 
 		if (adv &&
@@ -479,7 +485,7 @@ bool bt_id_scan_random_addr_check(void)
 
 	if (!IS_ENABLED(CONFIG_BT_BROADCASTER) ||
 	    (IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	     BT_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
+	     BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
 		/* Advertiser is not enabled or advertiser and scanner are using
 		 * a different random address.
 		 */
@@ -524,7 +530,7 @@ bool bt_id_adv_random_addr_check(const struct bt_le_adv_param *param)
 {
 	if (!IS_ENABLED(CONFIG_BT_OBSERVER) ||
 	    (IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	     BT_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
+	     BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
 		/* If scanner roles are not enabled or advertiser and scanner
 		 * are using a different random address.
 		 */
@@ -930,21 +936,6 @@ done:
 	}
 }
 #endif /* defined(CONFIG_BT_SMP) */
-
-
-int bt_set_id_addr(const bt_addr_le_t *addr)
-{
-	bt_addr_le_t non_const_addr;
-
-	if (atomic_test_bit(bt_dev.flags, BT_DEV_READY)) {
-		BT_ERR("Setting identity not allowed after bt_enable()");
-		return -EBUSY;
-	}
-
-	bt_addr_le_copy(&non_const_addr, addr);
-
-	return bt_id_create(&non_const_addr, NULL);
-}
 
 void bt_id_get(bt_addr_le_t *addrs, size_t *count)
 {
@@ -1406,7 +1397,7 @@ static bool is_adv_using_rand_addr(void)
 
 	if (!IS_ENABLED(CONFIG_BT_BROADCASTER) ||
 	    (IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	     BT_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
+	     BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
 		/* When advertising is not enabled or is using extended
 		 * advertising HCI commands then only the scanner uses the set
 		 * random address command.
@@ -1527,7 +1518,7 @@ int bt_id_set_adv_own_addr(struct bt_le_ext_adv *adv, uint32_t options,
 
 			*own_addr_type = id_addr->type;
 		} else if (!(IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-			     BT_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
+			     BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
 			/* In case advertising set random address is not
 			 * available we must handle the shared random address
 			 * problem.
@@ -1538,10 +1529,9 @@ int bt_id_set_adv_own_addr(struct bt_le_ext_adv *adv, uint32_t options,
 			/* If active scan with NRPA is ongoing refresh NRPA */
 			if (!IS_ENABLED(CONFIG_BT_PRIVACY) &&
 			    !IS_ENABLED(CONFIG_BT_SCAN_WITH_IDENTITY) &&
-			    atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING) &&
-			    atomic_test_bit(bt_dev.flags, BT_DEV_ACTIVE_SCAN)) {
+			    atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING)) {
 				scan_enabled = true;
-				bt_le_scan_set_enable(false);
+				bt_le_scan_set_enable(BT_HCI_LE_SCAN_DISABLE);
 			}
 #endif /* defined(CONFIG_BT_OBSERVER) */
 			err = bt_id_set_adv_private_addr(adv);
@@ -1549,7 +1539,7 @@ int bt_id_set_adv_own_addr(struct bt_le_ext_adv *adv, uint32_t options,
 
 #if defined(CONFIG_BT_OBSERVER)
 			if (scan_enabled) {
-				bt_le_scan_set_enable(true);
+				bt_le_scan_set_enable(BT_HCI_LE_SCAN_ENABLE);
 			}
 #endif /* defined(CONFIG_BT_OBSERVER) */
 		} else {

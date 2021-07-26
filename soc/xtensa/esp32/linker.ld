@@ -181,12 +181,9 @@ SECTIONS
     KEEP(*(SORT_BY_NAME("._net_buf_pool.static.*")))
 
 #if defined(CONFIG_NETWORKING)
-    . = ALIGN(4);
-    Z_LINK_ITERABLE(net_if);
-    . = ALIGN(4);
-    Z_LINK_ITERABLE(net_if_dev);
-    . = ALIGN(4);
-    Z_LINK_ITERABLE(net_l2);
+    Z_LINK_ITERABLE_ALIGNED(net_if, 4);
+    Z_LINK_ITERABLE_ALIGNED(net_if_dev, 4);
+    Z_LINK_ITERABLE_ALIGNED(net_l2, 4);
 #endif
 
   } GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
@@ -265,41 +262,58 @@ _net_buf_pool_list = _esp_net_buf_pool_list;
  SECTION_PROLOGUE(_RODATA_SECTION_NAME,,ALIGN(20))
   {
     _rodata_start = ABSOLUTE(.);
+
+#ifdef CONFIG_USERSPACE
+    Z_LINK_ITERABLE_ALIGNED(z_object_assignment, 4);
+#endif
+
 #if defined(CONFIG_NET_SOCKETS)
-    . = ALIGN(4);
-    Z_LINK_ITERABLE(net_socket_register);
-    . = ALIGN(4);
+    Z_LINK_ITERABLE_ALIGNED(net_socket_register, 4);
+#endif
+
+#if defined(CONFIG_NET_L2_PPP)
+    Z_LINK_ITERABLE_ALIGNED(ppp_protocol_handler, 4);
+#endif
+
+    Z_LINK_ITERABLE_ALIGNED(bt_l2cap_fixed_chan, 4);
+
+#if defined(CONFIG_BT_BREDR)
+    Z_LINK_ITERABLE_ALIGNED(bt_l2cap_br_fixed_chan, 4);
+#endif
+
+    Z_LINK_ITERABLE_ALIGNED(bt_gatt_service_static, 4);
+
+#if defined(CONFIG_BT_MESH)
+    Z_LINK_ITERABLE_ALIGNED(bt_mesh_subnet_cb, 4);
+    Z_LINK_ITERABLE_ALIGNED(bt_mesh_app_key_cb, 4);
+    Z_LINK_ITERABLE_ALIGNED(bt_mesh_hb_cb, 4);
+#endif
+
+#if defined(CONFIG_BT_MESH_FRIEND)
+    Z_LINK_ITERABLE_ALIGNED(bt_mesh_friend_cb, 4);
+#endif
+
+#if defined(CONFIG_BT_MESH_LOW_POWER)
+    Z_LINK_ITERABLE_ALIGNED(bt_mesh_lpn_cb, 4);
+#endif
+
+#if defined(CONFIG_BT_MESH_PROXY)
+    Z_LINK_ITERABLE_ALIGNED(bt_mesh_proxy_cb, 4);
+#endif
+
+#if defined(CONFIG_EC_HOST_CMD)
+    Z_LINK_ITERABLE_ALIGNED(ec_host_cmd_handler, 4);
 #endif
 
 #if defined(CONFIG_SETTINGS)
-    . = ALIGN(4);
-    Z_LINK_ITERABLE(settings_handler_static);
-    . = ALIGN(4);
+    Z_LINK_ITERABLE_ALIGNED(settings_handler_static, 4);
 #endif
 
-#if defined(CONFIG_BT_BREDR)
-    . = ALIGN(4);
-    Z_LINK_ITERABLE(bt_l2cap_br_fixed_chan);
-    . = ALIGN(4);
-#endif
+    Z_LINK_ITERABLE_ALIGNED(k_p4wq_initparam, 4);
 
-#if defined(CONFIG_BT_MESH)
-    Z_LINK_ITERABLE(bt_mesh_subnet_cb);
-    Z_LINK_ITERABLE(bt_mesh_app_key_cb);
-    Z_LINK_ITERABLE(bt_mesh_hb_cb);
-#endif
+    Z_LINK_ITERABLE_ALIGNED(shell, 4);
 
-    . = ALIGN(4);
-    Z_LINK_ITERABLE(bt_gatt_service_static);
-    . = ALIGN(4);
-
-    . = ALIGN(4);
-    Z_LINK_ITERABLE(bt_l2cap_fixed_chan);
-    . = ALIGN(4);
-
-    . = ALIGN(4);
-    Z_LINK_ITERABLE(shell);
-    . = ALIGN(4);
+    Z_LINK_ITERABLE_ALIGNED(tracing_backend, 4)
 
     __esp_shell_root_cmds_start = .;
     KEEP(*(SORT(.shell_root_cmd_*)));
@@ -387,16 +401,17 @@ __shell_root_cmds_end = __esp_shell_root_cmds_end;
     *libzephyr.a:log_output.*(.literal .text .literal.* .text.*)
     *libzephyr.a:log_backend_uart.*(.literal .text .literal.* .text.*)
     *liblib__libc__minimal.a:string.*(.literal .text .literal.* .text.*)
+    *libphy.a:( .phyiram .phyiram.*)
     *libgcov.a:(.literal .text .literal.* .text.*)
 
 #if defined(CONFIG_ESP32_WIFI_IRAM_OPT)
-    *libnet80211.a:( .wifi0iram  .wifi0iram.*)
-    *libpp.a:( .wifi0iram  .wifi0iram.*)
+    *libnet80211.a:( .wifi0iram  .wifi0iram.* .wifislpiram .wifislpiram.*)
+    *libpp.a:( .wifi0iram  .wifi0iram.* .wifislpiram .wifislpiram.*)
 #endif
 
 #if defined(CONFIG_ESP32_WIFI_RX_IRAM_OPT)
-    *libnet80211.a:( .wifirxiram  .wifirxiram.*)
-    *libpp.a:( .wifirxiram  .wifirxiram.*)
+    *libnet80211.a:( .wifirxiram  .wifirxiram.* .wifislprxiram .wifislprxiram.*)
+    *libpp.a:( .wifirxiram  .wifirxiram.* .wifislprxiram .wifislprxiram.*)
 #endif
 
     _iram_text_end = ABSOLUTE(.);
@@ -410,13 +425,13 @@ __shell_root_cmds_end = __esp_shell_root_cmds_end;
     _text_start = ABSOLUTE(.);
 
 #if !defined(CONFIG_ESP32_WIFI_IRAM_OPT)
-    *libnet80211.a:( .wifi0iram  .wifi0iram.*)
-    *libpp.a:( .wifi0iram  .wifi0iram.*)
+    *libnet80211.a:( .wifi0iram  .wifi0iram.* .wifislpiram .wifislpiram.*)
+    *libpp.a:( .wifi0iram  .wifi0iram.* .wifislpiram .wifislpiram.*)
 #endif
 
 #if !defined(CONFIG_ESP32_WIFI_RX_IRAM_OPT)
-    *libnet80211.a:( .wifirxiram  .wifirxiram.*)
-    *libpp.a:( .wifirxiram  .wifirxiram.*)
+    *libnet80211.a:( .wifirxiram  .wifirxiram.* .wifislprxiram .wifislprxiram.*)
+    *libpp.a:( .wifirxiram  .wifirxiram.* .wifislprxiram .wifislprxiram.*)
 #endif
 
     *(.literal .text .literal.* .text.*)

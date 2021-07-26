@@ -4,7 +4,7 @@
 Generates an alphabetical index of Kconfig symbols with links in index.rst, and
 a separate CONFIG_FOO.rst file for each Kconfig symbol.
 
-The generated symbol pages can be referenced in RST as :option:`foo`, and the
+The generated symbol pages can be referenced in RST as :kconfig:`foo`, and the
 generated index page as `configuration options`_.
 
 Optionally, the documentation can be split up based on where symbols are
@@ -16,12 +16,29 @@ import collections
 from operator import attrgetter
 import os
 import pathlib
+import re
 import sys
 import textwrap
 
 import kconfiglib
 
 import gen_helpers
+
+NO_MAX_WIDTH = """
+
+.. raw:: html
+
+    <!--
+    FIXME: do not limit page width until content uses another representation
+    format other than tables
+    -->
+    <style>.wy-nav-content { max-width: none; !important }</style>
+
+"""
+
+def escape_inline_rst(text):
+    # Escape reStructuredText inline markup characters
+    return re.sub(r"(\*|_|`)", r"\\\1", text)
 
 def rst_link(sc):
     # Returns an RST link (string) for the symbol/choice 'sc', or the normal
@@ -34,13 +51,13 @@ def rst_link(sc):
         if sc.nodes:
             # The "\ " avoids RST issues for !CONFIG_FOO -- see
             # http://docutils.sourceforge.net/docs/ref/rst/restructuredtext.html#character-level-inline-markup
-            return fr"\ :option:`{sc.name} <CONFIG_{sc.name}>`"
+            return fr"\ :kconfig:`{sc.name} <CONFIG_{sc.name}>`"
 
     elif isinstance(sc, kconfiglib.Choice):
         # Choices appear as dependencies of choice symbols.
         #
-        # Use a :ref: instead of an :option:. With an :option:, we'd have to have
-        # an '.. option::' in the choice reference page as well. That would make
+        # Use a :ref: instead of an :kconfig:. With an :kconfig:, we'd have to have
+        # an '.. kconfig::' in the choice reference page as well. That would make
         # the internal choice ID show up in the documentation.
         #
         # Note that the first pair of <...> is non-syntactic here. We just display
@@ -318,6 +335,7 @@ This index page lists all symbols, regardless of where they are defined:
                          index_header(title="All Configuration Options",
                                       link="configuration_options_all",
                                       desc_path=None) +
+                         NO_MAX_WIDTH +
                          sym_table_rst("Configuration Options",
                                        kconf.unique_defined_syms))
 
@@ -332,6 +350,7 @@ These index pages only list symbols defined within a particular subsystem:
 """ + "\n".join("   index-" + suffix for _, suffix, _, _, in modules)
 
     if not separate_all_index:
+        rst += NO_MAX_WIDTH
         # Put index of all symbols in index.rst
         rst += sym_table_rst("All configuration options",
                              kconf.unique_defined_syms)
@@ -359,6 +378,7 @@ def write_module_index_pages():
                            link="configuration_options_" + suffix,
                            desc_path=desc_path)
 
+        rst += NO_MAX_WIDTH
         rst += sym_table_rst("Configuration Options",
                              module2syms[title])
 
@@ -379,12 +399,12 @@ def sym_table_rst(title, syms):
    :widths: auto
 
    * - Symbol name
-     - Help/prompt
+     - Prompt
 """
 
     for sym in sorted(syms, key=attrgetter("name")):
         rst += f"""\
-   * - :option:`CONFIG_{sym.name}`
+   * - :kconfig:`CONFIG_{sym.name}`
      - {sym_index_desc(sym)}
 """
 
@@ -394,15 +414,9 @@ def sym_table_rst(title, syms):
 def sym_index_desc(sym):
     # Returns the description used for 'sym' on the index page
 
-    # Use the first help text, if available
-    for node in sym.nodes:
-        if node.help is not None:
-            return node.help.replace("\n", "\n       ")
-
-    # If there's no help, use the first prompt string
     for node in sym.nodes:
         if node.prompt:
-            return node.prompt[0]
+            return escape_inline_rst(node.prompt[0])
 
     # No help text or prompt
     return ""
@@ -432,7 +446,10 @@ def index_header(title, link, desc_path):
                      f"'{desc_path}': {e}")
 
     return f"""\
+:orphan:
+
 .. _{link}:
+
 
 {title}
 {len(title)*'='}
@@ -471,7 +488,7 @@ def write_dummy_syms_page():
 
     rst = ":orphan:\n\nDummy symbols page for turbo mode.\n\n"
     for sym in kconf.unique_defined_syms:
-        rst += f".. option:: CONFIG_{sym.name}\n"
+        rst += f".. kconfig:: CONFIG_{sym.name}\n"
 
     write_if_updated("dummy-syms.rst", rst)
 
@@ -511,9 +528,12 @@ def sym_header_rst(sym):
     #
     # - '.. title::' sets the title of the document (e.g. <title>). This seems
     #   to be poorly documented at the moment.
+    l = len(f"CONFIG_{sym.name}")
     return ":orphan:\n\n" \
-           f".. title:: {sym.name}\n\n" \
-           f".. option:: CONFIG_{sym.name}\n\n" \
+           f".. title:: CONFIG_{sym.name}\n\n" \
+           f".. kconfig:: CONFIG_{sym.name}\n\n" \
+           f"CONFIG_{sym.name}\n" \
+           f"{'#' * l}\n\n" \
            f"{prompt_rst(sym)}\n\n" \
            f"Type: ``{kconfiglib.TYPE_TO_STR[sym.type]}``\n\n"
 
@@ -532,7 +552,7 @@ def choice_header_rst(choice):
 def prompt_rst(sc):
     # Returns RST that lists the prompts of 'sc' (symbol or choice)
 
-    return "\n\n".join(f"*{node.prompt[0]}*"
+    return "\n\n".join(f"*{escape_inline_rst(node.prompt[0])}*"
                        for node in sc.nodes if node.prompt) \
            or "*(No prompt -- not directly user assignable.)*"
 
@@ -548,7 +568,8 @@ def help_rst(sc):
         if node.help is not None:
             rst += "Help\n" \
                    "====\n\n" \
-                   f"{node.help}\n\n"
+                   ".. code-block:: none\n\n" \
+                   f"{textwrap.indent(node.help, 4 * ' ')}\n\n"
 
     return rst
 
@@ -721,15 +742,13 @@ def kconfig_definition_rst(sc):
     if len(sc.nodes) > 1: heading += "s"
     rst = f"{heading}\n{len(heading)*'='}\n\n"
 
-    rst += ".. highlight:: kconfig"
-
     for node in sc.nodes:
         rst += "\n\n" \
                f"At ``{strip_module_path(node.filename)}:{node.linenr}``\n\n" \
                f"{include_path(node)}" \
                f"Menu path: {menu_path(node)}\n\n" \
-               ".. parsed-literal::\n\n" \
-               f"{textwrap.indent(node.custom_str(rst_link), 4*' ')}"
+               ".. code-block:: kconfig\n\n" \
+               f"{textwrap.indent(str(node), 4*' ')}"
 
         # Not the last node?
         if node is not sc.nodes[-1]:

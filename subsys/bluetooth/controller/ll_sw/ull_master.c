@@ -11,6 +11,7 @@
 
 #include "util/util.h"
 #include "util/memq.h"
+#include "util/mem.h"
 #include "util/mayfly.h"
 
 #include "hal/cpu.h"
@@ -80,6 +81,8 @@ uint8_t ll_create_connection(uint16_t scan_interval, uint16_t scan_window,
 	uint32_t ready_delay_us;
 	struct lll_scan *lll;
 	struct ll_conn *conn;
+	uint16_t max_tx_time;
+	uint16_t max_rx_time;
 	memq_link_t *link;
 	uint8_t hop;
 	int err;
@@ -137,6 +140,9 @@ uint8_t ll_create_connection(uint16_t scan_interval, uint16_t scan_window,
 #endif /* !CONFIG_BT_CTLR_ADV_EXT */
 
 	if (lll->conn) {
+		conn_lll = lll->conn;
+		conn = HDR_LLL2ULL(conn_lll);
+
 		goto conn_is_valid;
 	}
 
@@ -183,12 +189,18 @@ uint8_t ll_create_connection(uint16_t scan_interval, uint16_t scan_window,
 	conn_lll->max_rx_octets = PDU_DC_PAYLOAD_SIZE_MIN;
 
 #if defined(CONFIG_BT_CTLR_PHY)
+	/* Use the default 1M packet Tx time, extended connection initiation
+	 * in LLL will update this with the correct PHY.
+	 */
 	conn_lll->max_tx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, PHY_1M);
 	conn_lll->max_rx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, PHY_1M);
 #endif /* CONFIG_BT_CTLR_PHY */
 #endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 
 #if defined(CONFIG_BT_CTLR_PHY)
+	/* Use the default 1M PHY, extended connection initiation in LLL will
+	 * update this with the correct PHY.
+	 */
 	conn_lll->phy_tx = PHY_1M;
 	conn_lll->phy_flags = 0;
 	conn_lll->phy_tx_time = PHY_1M;
@@ -303,23 +315,12 @@ uint8_t ll_create_connection(uint16_t scan_interval, uint16_t scan_window,
 	conn->tx_head = conn->tx_ctrl = conn->tx_ctrl_last =
 	conn->tx_data = conn->tx_data_last = 0;
 
-#if defined(CONFIG_BT_CTLR_PHY)
-	ready_delay_us = lll_radio_tx_ready_delay_get(conn_lll->phy_tx,
-						      conn_lll->phy_flags);
-#else
-	ready_delay_us = lll_radio_tx_ready_delay_get(0, 0);
-#endif
-
 	/* TODO: active_to_start feature port */
 	conn->ull.ticks_active_to_start = 0U;
 	conn->ull.ticks_prepare_to_start =
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
 	conn->ull.ticks_preempt_to_start =
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
-	conn->ull.ticks_slot =
-		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US +
-				       ready_delay_us +
-				       328 + EVENT_IFS_US + 328);
 
 	lll->conn = conn_lll;
 
@@ -327,6 +328,47 @@ uint8_t ll_create_connection(uint16_t scan_interval, uint16_t scan_window,
 	lll_hdr_init(&conn->lll, conn);
 
 conn_is_valid:
+#if defined(CONFIG_BT_CTLR_PHY)
+	ready_delay_us = lll_radio_tx_ready_delay_get(conn_lll->phy_tx,
+						      conn_lll->phy_flags);
+#else
+	ready_delay_us = lll_radio_tx_ready_delay_get(0, 0);
+#endif
+
+#if defined(CONFIG_BT_CTLR_DATA_LENGTH)
+#if defined(CONFIG_BT_CTLR_PHY)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	conn_lll->max_tx_time = MAX(conn_lll->max_tx_time,
+				    PKT_US(PDU_DC_PAYLOAD_SIZE_MIN,
+					   lll->phy));
+	conn_lll->max_rx_time = MAX(conn_lll->max_rx_time,
+				    PKT_US(PDU_DC_PAYLOAD_SIZE_MIN,
+					   lll->phy));
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
+	max_tx_time = conn_lll->max_tx_time;
+	max_rx_time = conn_lll->max_rx_time;
+#else /* !CONFIG_BT_CTLR_PHY */
+	max_tx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, PHY_1M);
+	max_rx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, PHY_1M);
+#endif /* !CONFIG_BT_CTLR_PHY */
+#else /* !CONFIG_BT_CTLR_DATA_LENGTH */
+	max_tx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, PHY_1M);
+	max_rx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, PHY_1M);
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	max_tx_time = MAX(max_tx_time,
+			  PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, lll->phy));
+	max_rx_time = MAX(max_rx_time,
+			  PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, lll->phy));
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
+#endif /* !CONFIG_BT_CTLR_DATA_LENGTH */
+
+	conn->ull.ticks_slot =
+		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US +
+				       ready_delay_us +
+				       max_tx_time +
+				       EVENT_IFS_US +
+				       max_rx_time);
+
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	ull_filter_scan_update(filter_policy);
 
@@ -665,8 +707,8 @@ void ull_master_cleanup(struct node_rx_hdr *rx_free)
 #endif /* CONFIG_BT_CTLR_ADV_EXT && CONFIG_BT_CTLR_PHY_CODED */
 }
 
-void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
-		      struct node_rx_ftr *ftr, struct lll_conn *lll)
+void ull_master_setup(struct node_rx_hdr *rx, struct node_rx_ftr *ftr,
+		      struct lll_conn *lll)
 {
 	uint32_t conn_offset_us, conn_interval_us;
 	uint8_t ticker_id_scan, ticker_id_conn;
@@ -679,6 +721,7 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	uint32_t ticker_status;
 	struct node_rx_cc *cc;
 	struct ll_conn *conn;
+	memq_link_t *link;
 	uint8_t chan_sel;
 
 	/* Get reference to Tx-ed CONNECT_IND PDU */
@@ -741,6 +784,11 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	lll->tx_pwr_lvl = RADIO_TXP_DEFAULT;
 #endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
 
+	/* Use the link stored in the node rx to enqueue connection
+	 * complete node rx towards LL context.
+	 */
+	link = rx->link;
+
 	/* Use Channel Selection Algorithm #2 if peer too supports it */
 	if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2)) {
 		struct node_rx_pdu *rx_csa;
@@ -778,17 +826,16 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 
 	ticks_slot_offset = MAX(conn->ull.ticks_active_to_start,
 				conn->ull.ticks_prepare_to_start);
-
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
 		ticks_slot_overhead = ticks_slot_offset;
 	} else {
 		ticks_slot_overhead = 0U;
 	}
+	ticks_slot_offset += HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US);
 
 	conn_interval_us = lll->interval * CONN_INT_UNIT_US;
 	conn_offset_us = ftr->radio_end_us;
 	conn_offset_us += EVENT_TICKER_RES_MARGIN_US;
-	conn_offset_us -= EVENT_OVERHEAD_START_US;
 
 #if defined(CONFIG_BT_CTLR_PHY)
 	conn_offset_us -= lll_radio_tx_ready_delay_get(lll->phy_tx,

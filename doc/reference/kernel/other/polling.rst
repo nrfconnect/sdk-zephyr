@@ -277,10 +277,9 @@ Configuration Options
 
 Related configuration options:
 
-* :option:`CONFIG_POLL`
+* :kconfig:`CONFIG_POLL`
 
 API Reference
 *************
 
 .. doxygengroup:: poll_apis
-   :project: Zephyr

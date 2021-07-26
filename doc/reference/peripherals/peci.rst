@@ -19,10 +19,9 @@ Configuration Options
 
 Related configuration options:
 
-* :option:`CONFIG_PECI`
+* :kconfig:`CONFIG_PECI`
 
 API Reference
 *************
 
 .. doxygengroup:: peci_interface
-   :project: Zephyr

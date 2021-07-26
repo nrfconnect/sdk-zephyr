@@ -1,5 +1,3 @@
-/*  Bluetooth Mesh */
-
 /*
  * Copyright (c) 2017 Intel Corporation
  *
@@ -44,7 +42,7 @@
 #define LOOPBACK_BUF_SUB(buf) (*(struct bt_mesh_subnet **)net_buf_user_data(buf))
 
 /* Seq limit after IV Update is triggered */
-#define IV_UPDATE_SEQ_LIMIT 8000000
+#define IV_UPDATE_SEQ_LIMIT CONFIG_BT_MESH_IV_UPDATE_SEQ_LIMIT
 
 #define IVI(pdu)           ((pdu)[0] >> 7)
 #define NID(pdu)           ((pdu)[0] & 0x7f)
@@ -313,12 +311,12 @@ do_update:
 		bt_mesh_friend_sec_update(BT_MESH_KEY_ANY);
 	}
 
+	bt_mesh_subnet_foreach(bt_mesh_beacon_update);
+
 	if (IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY) &&
 	    bt_mesh_gatt_proxy_get() == BT_MESH_GATT_PROXY_ENABLED) {
 		bt_mesh_proxy_beacon_send(NULL);
 	}
-
-	bt_mesh_subnet_foreach(bt_mesh_beacon_update);
 
 	if (IS_ENABLED(CONFIG_BT_MESH_CDB)) {
 		bt_mesh_cdb_iv_update(iv_index, iv_update);
@@ -388,7 +386,7 @@ static void bt_mesh_net_local(struct k_work *work)
 static const struct bt_mesh_net_cred *net_tx_cred_get(struct bt_mesh_net_tx *tx)
 {
 #if defined(CONFIG_BT_MESH_LOW_POWER)
-	if (tx->friend_cred && bt_mesh_lpn_established()) {
+	if (tx->friend_cred && bt_mesh.lpn.frnd) {
 		return &bt_mesh.lpn.cred[SUBNET_KEY_TX_IDX(tx->sub)];
 	}
 #endif
@@ -501,7 +499,7 @@ int bt_mesh_net_send(struct bt_mesh_net_tx *tx, struct net_buf *buf,
 
 	/* Deliver to local network interface if necessary */
 	if (bt_mesh_fixed_group_match(tx->ctx->addr) ||
-	    bt_mesh_elem_find(tx->ctx->addr)) {
+	    bt_mesh_has_addr(tx->ctx->addr)) {
 		err = loopback(tx, buf->data, buf->len);
 
 		/* Local unicast messages should not go out to network */
@@ -530,12 +528,13 @@ int bt_mesh_net_send(struct bt_mesh_net_tx *tx, struct net_buf *buf,
 		goto done;
 	}
 
+	BT_MESH_ADV(buf)->cb = cb;
+	BT_MESH_ADV(buf)->cb_data = cb_data;
+
 	/* Deliver to GATT Proxy Clients if necessary. */
 	if (IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY) &&
-	    bt_mesh_proxy_relay(&buf->b, tx->ctx->addr) &&
+	    bt_mesh_proxy_relay(buf, tx->ctx->addr) &&
 	    BT_MESH_ADDR_IS_UNICAST(tx->ctx->addr)) {
-		/* Notify completion if this only went through the Mesh Proxy */
-		send_cb_finalize(cb, cb_data);
 
 		err = 0;
 		goto done;
@@ -600,7 +599,7 @@ static bool net_decrypt(struct bt_mesh_net_rx *rx, struct net_buf_simple *in,
 		return false;
 	}
 
-	if (bt_mesh_elem_find(rx->ctx.addr)) {
+	if (bt_mesh_has_addr(rx->ctx.addr)) {
 		BT_DBG("Dropping locally originated packet");
 		return false;
 	}
@@ -702,7 +701,7 @@ static void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 	if (IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY) &&
 	    (rx->friend_cred ||
 	     bt_mesh_gatt_proxy_get() == BT_MESH_GATT_PROXY_ENABLED)) {
-		bt_mesh_proxy_relay(&buf->b, rx->ctx.recv_dst);
+		bt_mesh_proxy_relay(buf, rx->ctx.recv_dst);
 	}
 
 	if (relay_to_adv(rx->net_if) || rx->friend_cred) {
@@ -805,7 +804,7 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 	net_buf_simple_save(&buf, &state);
 
 	rx.local_match = (bt_mesh_fixed_group_match(rx.ctx.recv_dst) ||
-			  bt_mesh_elem_find(rx.ctx.recv_dst));
+			  bt_mesh_has_addr(rx.ctx.recv_dst));
 
 	if (IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY) &&
 	    net_if == BT_MESH_NET_IF_PROXY) {

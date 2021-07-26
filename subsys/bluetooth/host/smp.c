@@ -4159,8 +4159,11 @@ static uint8_t smp_public_key_slave(struct bt_smp *smp)
 	uint8_t err;
 
 	if (!atomic_test_bit(smp->flags, SMP_FLAG_SC_DEBUG_KEY) &&
-	    memcmp(smp->pkey, sc_public_key, 64) == 0) {
-		BT_WARN("Remote is using identical public key");
+	    memcmp(smp->pkey, sc_public_key, 32) == 0) {
+		/* Deny public key with identitcal X coordinate unless it is the
+		 * debug public key.
+		 */
+		BT_WARN("Remote public key rejected");
 		return BT_SMP_ERR_UNSPECIFIED;
 	}
 
@@ -4232,8 +4235,11 @@ static uint8_t smp_public_key(struct bt_smp *smp, struct net_buf *buf)
 	if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
 	    smp->chan.chan.conn->role == BT_HCI_ROLE_MASTER) {
 		if (!atomic_test_bit(smp->flags, SMP_FLAG_SC_DEBUG_KEY) &&
-		    memcmp(smp->pkey, sc_public_key, 64) == 0) {
-			BT_WARN("Remote is using identical public key");
+		    memcmp(smp->pkey, sc_public_key, 32) == 0) {
+			/* Deny public key with identitcal X coordinate unless
+			 * it is the debug public key.
+			 */
+			BT_WARN("Remote public key rejected");
 			return BT_SMP_ERR_UNSPECIFIED;
 		}
 
@@ -5633,10 +5639,6 @@ int bt_smp_start_security(struct bt_conn *conn)
 			return -ENOTCONN;
 		}
 
-		if (!smp_keys_check(conn)) {
-			return smp_send_pairing_req(conn);
-		}
-
 		/* pairing is in progress */
 		if (atomic_test_bit(smp->flags, SMP_FLAG_PAIRING)) {
 			return -EBUSY;
@@ -5645,6 +5647,10 @@ int bt_smp_start_security(struct bt_conn *conn)
 		/* Encryption is in progress */
 		if (atomic_test_bit(smp->flags, SMP_FLAG_ENC_PENDING)) {
 			return -EBUSY;
+		}
+
+		if (!smp_keys_check(conn)) {
+			return smp_send_pairing_req(conn);
 		}
 
 		/* LE SC LTK and legacy master LTK are stored in same place */

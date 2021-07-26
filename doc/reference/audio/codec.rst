@@ -13,10 +13,9 @@ Configuration Options
 
 Related configuration options:
 
-* :option:`CONFIG_AUDIO_CODEC`
+* :kconfig:`CONFIG_AUDIO_CODEC`
 
 API Reference
 *************
 
 .. doxygengroup:: audio_codec_interface
-   :project: Zephyr

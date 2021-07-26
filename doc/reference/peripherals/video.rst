@@ -48,13 +48,11 @@ Configuration Options
 
 Related configuration options:
 
-* :option:`CONFIG_VIDEO`
+* :kconfig:`CONFIG_VIDEO`
 
 API Reference
 *************
 
 .. doxygengroup:: video_interface
-   :project: Zephyr
 
 .. doxygengroup:: video_controls
-   :project: Zephyr

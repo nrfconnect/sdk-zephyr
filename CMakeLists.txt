@@ -169,6 +169,10 @@ if(CONFIG_CPLUSPLUS)
     set(STD_CPP_DIALECT_FLAGS $<TARGET_PROPERTY:compiler-cpp,dialect_cpp17>)
   elseif(CONFIG_STD_CPP2A)
     set(STD_CPP_DIALECT_FLAGS $<TARGET_PROPERTY:compiler-cpp,dialect_cpp2a>)
+  elseif(CONFIG_STD_CPP20)
+    set(STD_CPP_DIALECT_FLAGS $<TARGET_PROPERTY:compiler-cpp,dialect_cpp20>)
+  elseif(CONFIG_STD_CPP2B)
+    set(STD_CPP_DIALECT_FLAGS $<TARGET_PROPERTY:compiler-cpp,dialect_cpp2b>)
   else()
     assert(0 "Unreachable code. Expected C++ standard to have been chosen. See Kconfig.zephyr.")
   endif()
@@ -925,6 +929,7 @@ if(CONFIG_USERSPACE)
     COMMAND $<TARGET_PROPERTY:bintools,elfconvert_command>
             $<TARGET_PROPERTY:bintools,elfconvert_flag>
             $<TARGET_PROPERTY:bintools,elfconvert_flag_section_rename>.data=.kobject_data.data
+            $<TARGET_PROPERTY:bintools,elfconvert_flag_section_rename>.sdata=.kobject_data.sdata
             $<TARGET_PROPERTY:bintools,elfconvert_flag_section_rename>.text=.kobject_data.text
             $<TARGET_PROPERTY:bintools,elfconvert_flag_section_rename>.rodata=.kobject_data.rodata
             $<TARGET_PROPERTY:bintools,elfconvert_flag_infile>${KOBJECT_HASH_OUTPUT_OBJ_PATH}

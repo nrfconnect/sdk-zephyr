@@ -14,10 +14,9 @@ Configuration Options
 
 Related configuration options:
 
-* :option:`CONFIG_INTEL_GNA`
+* :kconfig:`CONFIG_INTEL_GNA`
 
 API Reference
 *************
 
 .. doxygengroup:: gna_interface
-   :project: Zephyr

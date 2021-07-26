@@ -26,10 +26,9 @@ at the same point after an unexpected interruption.
 
 The Stream Flash module offers an API for loading, saving and clearing stream
 write progress to persistent storage using the :ref:`Settings <settings_api>`
-module. The API can be enabled using :option:`CONFIG_STREAM_FLASH_PROGRESS`.
+module. The API can be enabled using :kconfig:`CONFIG_STREAM_FLASH_PROGRESS`.
 
 API Reference
 *************
 
 .. doxygengroup:: stream_flash
-   :project: Zephyr
