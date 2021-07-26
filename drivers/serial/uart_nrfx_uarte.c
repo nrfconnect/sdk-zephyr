@@ -1660,13 +1660,13 @@ static int uarte_instance_init(const struct device *dev,
 	nrf_gpio_cfg_output(config->pseltxd);
 
 	if (config->pselrxd !=  NRF_UARTE_PSEL_DISCONNECTED) {
-		nrf_gpio_cfg_input(config->pselrxd, NRF_GPIO_PIN_PULLUP);
+		nrf_gpio_cfg_input(config->pselrxd, NRF_GPIO_PIN_NOPULL);
 	}
 
 	nrf_uarte_txrx_pins_set(uarte, config->pseltxd, config->pselrxd);
 
 	if (config->pselcts != NRF_UARTE_PSEL_DISCONNECTED) {
-		nrf_gpio_cfg_input(config->pselcts, NRF_GPIO_PIN_PULLUP);
+		nrf_gpio_cfg_input(config->pselcts, NRF_GPIO_PIN_NOPULL);
 	}
 
 	if (config->pselrts != NRF_UARTE_PSEL_DISCONNECTED) {
@@ -1753,7 +1753,7 @@ static void uarte_nrfx_pins_enable(const struct device *dev, bool enable)
 		nrf_gpio_pin_write(tx_pin, 1);
 		nrf_gpio_cfg_output(tx_pin);
 		if (rx_pin != NRF_UARTE_PSEL_DISCONNECTED) {
-			nrf_gpio_cfg_input(rx_pin, NRF_GPIO_PIN_PULLUP);
+			nrf_gpio_cfg_input(rx_pin, NRF_GPIO_PIN_NOPULL);
 		}
 
 		if (IS_RTS_PIN_SET(get_dev_config(dev)->flags)) {
@@ -1763,7 +1763,7 @@ static void uarte_nrfx_pins_enable(const struct device *dev, bool enable)
 
 		if (IS_CTS_PIN_SET(get_dev_config(dev)->flags)) {
 			nrf_gpio_cfg_input(cts_pin,
-					   NRF_GPIO_PIN_PULLUP);
+					   NRF_GPIO_PIN_NOPULL);
 		}
 	} else {
 		nrf_gpio_cfg_default(tx_pin);
