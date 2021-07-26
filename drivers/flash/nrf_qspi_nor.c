@@ -399,19 +399,15 @@ static void anomaly_122_uninit(const struct device *dev)
 
 	qspi_lock(dev);
 
-	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
-		/* The last thread to finish using the driver uninit the QSPI */
-		(void) k_sem_take(&dev_data->count, K_NO_WAIT);
-		last = (k_sem_count_get(&dev_data->count) == 0);
-	}
+#ifdef CONFIG_MULTITHREADING
+	/* The last thread to finish using the driver uninit the QSPI */
+	(void) k_sem_take(&dev_data->count, K_NO_WAIT);
+	last = (k_sem_count_get(&dev_data->count) == 0);
+#endif
 
 	if (last) {
 		while (nrfx_qspi_mem_busy_check() != NRFX_SUCCESS) {
-			if (IS_ENABLED(CONFIG_MULTITHREADING)) {
-				k_msleep(50);
-			} else {
-				k_busy_wait(50000);
-			}
+			k_msleep(50);
 		}
 
 		nrf_gpio_cfg_output(QSPI_PROP_AT(csn_pins, 0));
