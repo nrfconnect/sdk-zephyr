@@ -386,7 +386,11 @@ uint32_t sys_clock_elapsed(void)
 		return 0;
 	}
 
-	return counter_sub(counter(), last_count) / CYC_PER_TICK;
+	k_spinlock_key_t key = k_spin_lock(&lock);
+	uint32_t ret = counter_sub(counter(), last_count) / CYC_PER_TICK;
+
+	k_spin_unlock(&lock, key);
+	return ret;
 }
 
 uint32_t sys_clock_cycle_get_32(void)
