@@ -100,10 +100,6 @@ enum net_local_protocol {
  *  option before the next send call.
  */
 #define SO_RAI_WAIT_MORE 54
-/** sockopt: Configurable TCP server session timeout in minutes.
- * Range is 0 to 135. 0 is no timeout and 135 is 2 h 15 min. Default is 0 (no timeout).
- */
-#define SO_TCP_SRV_SESSTIMEO 55
 
 /* NCS specific PDN options */
 
