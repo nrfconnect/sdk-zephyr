@@ -176,17 +176,17 @@ static int led_pwm_pm_set_state(const struct device *dev, uint32_t new_state)
 }
 
 static int led_pwm_pm_control(const struct device *dev, uint32_t ctrl_command,
-			      uint32_t *state, pm_device_cb cb, void *arg)
+			      void *context, pm_device_cb cb, void *arg)
 {
 	int err;
 
 	switch (ctrl_command) {
 	case PM_DEVICE_STATE_GET:
-		err = led_pwm_pm_get_state(dev, state);
+		err = led_pwm_pm_get_state(dev, context);
 		break;
 
 	case PM_DEVICE_STATE_SET:
-		err = led_pwm_pm_set_state(dev, *state);
+		err = led_pwm_pm_set_state(dev, *((uint32_t *)context));
 		break;
 
 	default:
@@ -195,7 +195,7 @@ static int led_pwm_pm_control(const struct device *dev, uint32_t ctrl_command,
 	}
 
 	if (cb) {
-		cb(dev, err, state, arg);
+		cb(dev, err, context, arg);
 	}
 
 	return err;
