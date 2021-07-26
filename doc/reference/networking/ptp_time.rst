@@ -20,3 +20,4 @@ API Reference
 *************
 
 .. doxygengroup:: ptp_time
+   :project: Zephyr

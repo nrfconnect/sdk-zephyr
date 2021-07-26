@@ -642,3 +642,4 @@ API Reference
 *************
 
 .. doxygengroup:: shell_api
+   :project: Zephyr

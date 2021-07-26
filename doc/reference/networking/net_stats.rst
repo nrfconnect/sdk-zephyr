@@ -36,3 +36,4 @@ API Reference
 *************
 
 .. doxygengroup:: net_stats
+   :project: Zephyr

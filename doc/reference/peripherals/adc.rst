@@ -11,3 +11,4 @@ API Reference
 *************
 
 .. doxygengroup:: adc_interface
+   :project: Zephyr

@@ -19,3 +19,4 @@ API Reference
 *************
 
 .. doxygengroup:: net_linkaddr
+   :project: Zephyr

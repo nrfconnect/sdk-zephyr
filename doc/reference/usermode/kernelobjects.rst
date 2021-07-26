@@ -270,3 +270,4 @@ API Reference
 *************
 
 .. doxygengroup:: usermode_apis
+   :project: Zephyr

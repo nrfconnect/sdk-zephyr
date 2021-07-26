@@ -154,3 +154,4 @@ API Reference
 *************
 
 .. doxygengroup:: net_l2
+   :project: Zephyr

@@ -11,3 +11,4 @@ API Reference
 *************
 
 .. doxygengroup:: dma_interface
+   :project: Zephyr

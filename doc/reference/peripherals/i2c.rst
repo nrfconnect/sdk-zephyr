@@ -63,6 +63,7 @@ API Reference
 *************
 
 .. doxygengroup:: i2c_interface
+   :project: Zephyr
 
 .. _i2c-specification:
    https://www.nxp.com/docs/en/user-guide/UM10204.pdf

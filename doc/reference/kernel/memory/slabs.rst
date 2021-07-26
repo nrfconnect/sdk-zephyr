@@ -145,3 +145,4 @@ API Reference
 *************
 
 .. doxygengroup:: mem_slab_apis
+   :project: Zephyr

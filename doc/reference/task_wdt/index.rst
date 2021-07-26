@@ -52,3 +52,4 @@ API Reference
 *************
 
 .. doxygengroup:: task_wdt_api
+   :project: Zephyr

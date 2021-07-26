@@ -66,6 +66,7 @@ information about time zones.  Zephyr provides this transformation with
 :c:func:`timeutil_timegm` and :c:func:`timeutil_timegm64`.
 
 .. doxygengroup:: timeutil_repr_apis
+   :project: Zephyr
 
 .. _timeutil_sync:
 
@@ -105,6 +106,7 @@ process:
   :c:func:`timeutil_sync_estimate_skew`.
 
 .. doxygengroup:: timeutil_sync_apis
+   :project: Zephyr
 
 .. _timeutil_concepts:
 

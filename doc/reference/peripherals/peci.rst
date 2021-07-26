@@ -25,3 +25,4 @@ API Reference
 *************
 
 .. doxygengroup:: peci_interface
+   :project: Zephyr

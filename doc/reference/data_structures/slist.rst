@@ -118,8 +118,10 @@ Single-linked List API Reference
 --------------------------------
 
 .. doxygengroup:: single-linked-list_apis
+   :project: Zephyr
 
 Flagged List API Reference
 --------------------------------
 
 .. doxygengroup:: flagged-single-linked-list_apis
+   :project: Zephyr

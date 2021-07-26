@@ -22,7 +22,9 @@ API for retrieving the layout of pages).
 User API Reference
 ******************
 .. doxygengroup:: flash_interface
+   :project: Zephyr
 
 Implementation interface API Reference
 **************************************
 .. doxygengroup:: flash_internal_interface
+   :project: Zephyr

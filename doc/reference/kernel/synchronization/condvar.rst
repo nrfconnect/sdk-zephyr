@@ -136,3 +136,4 @@ API Reference
 **************
 
 .. doxygengroup:: condvar_apis
+   :project: Zephyr

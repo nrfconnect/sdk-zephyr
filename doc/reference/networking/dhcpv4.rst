@@ -29,3 +29,4 @@ API Reference
 *************
 
 .. doxygengroup:: dhcpv4
+   :project: Zephyr

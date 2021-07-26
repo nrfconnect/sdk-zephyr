@@ -23,3 +23,4 @@ API Reference
 *************
 
 .. doxygengroup:: eeprom_interface
+   :project: Zephyr

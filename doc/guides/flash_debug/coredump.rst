@@ -341,5 +341,7 @@ API documentation
 *****************
 
 .. doxygengroup:: coredump_apis
+   :project: Zephyr
 
 .. doxygengroup:: arch-coredump
+   :project: Zephyr

@@ -52,3 +52,4 @@ API Reference
 *************
 
 .. doxygengroup:: vlan_api
+   :project: Zephyr

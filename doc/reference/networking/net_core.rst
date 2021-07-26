@@ -24,3 +24,4 @@ API Reference
 *************
 
 .. doxygengroup:: net_core
+   :project: Zephyr

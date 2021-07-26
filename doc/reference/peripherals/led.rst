@@ -24,8 +24,10 @@ LED
 ===
 
 .. doxygengroup:: led_interface
+   :project: Zephyr
 
 LED Strip
 =========
 
 .. doxygengroup:: led_strip_interface
+   :project: Zephyr

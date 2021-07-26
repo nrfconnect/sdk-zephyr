@@ -11,3 +11,4 @@ API Reference
 *************
 
 .. doxygengroup:: ipm_interface
+   :project: Zephyr

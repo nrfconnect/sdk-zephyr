@@ -15,3 +15,4 @@ API Reference
 *************
 
 .. doxygengroup:: entropy_interface
+   :project: Zephyr

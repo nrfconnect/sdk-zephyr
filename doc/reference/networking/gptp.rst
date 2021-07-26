@@ -73,3 +73,4 @@ API Reference
 *************
 
 .. doxygengroup:: gptp
+   :project: Zephyr

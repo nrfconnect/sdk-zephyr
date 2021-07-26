@@ -243,3 +243,4 @@ API Reference
 *************
 
 .. doxygengroup:: timer_apis
+   :project: Zephyr

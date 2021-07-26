@@ -9,4 +9,5 @@ API Reference
 **************
 
 .. doxygengroup:: version_apis
+   :project: Zephyr
    :content-only:

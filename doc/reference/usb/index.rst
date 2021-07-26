@@ -52,6 +52,7 @@ USB Device Controller API
 =========================
 
 .. doxygengroup:: _usb_device_controller_api
+   :project: Zephyr
 
 USB device core layer
 *********************
@@ -94,6 +95,7 @@ High level API
   generic usb_transfer_ep_callback.
 
 .. doxygengroup:: _usb_device_core_api
+   :project: Zephyr
 
 USB device class drivers
 ************************
@@ -233,8 +235,10 @@ Example of a HID Report Descriptor:
 
 
 .. doxygengroup:: usb_hid_items
+   :project: Zephyr
 
 .. doxygengroup:: usb_hid_types
+   :project: Zephyr
 
 HID Mouse and Keyboard report descriptors
 =========================================
@@ -243,6 +247,7 @@ The pre-defined Mouse and Keyboard report descriptors can be used by
 a HID device implementation or simply as examples.
 
 .. doxygengroup:: usb_hid_mk_report_desc
+   :project: Zephyr
 
 HID Class Device API
 ********************
@@ -250,3 +255,4 @@ HID Class Device API
 USB HID devices like mouse, keyboard, or any other specific device use this API.
 
 .. doxygengroup:: usb_hid_device_api
+   :project: Zephyr

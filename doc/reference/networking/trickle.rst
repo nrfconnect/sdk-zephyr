@@ -22,3 +22,4 @@ API Reference
 *************
 
 .. doxygengroup:: trickle
+   :project: Zephyr

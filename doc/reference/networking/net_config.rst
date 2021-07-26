@@ -72,3 +72,4 @@ API Reference
 *************
 
 .. doxygengroup:: net_config
+   :project: Zephyr

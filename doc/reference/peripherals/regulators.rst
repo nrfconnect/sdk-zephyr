@@ -41,3 +41,4 @@ API Reference
 **************
 
 .. doxygengroup:: regulator_interface
+   :project: Zephyr

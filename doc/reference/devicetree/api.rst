@@ -39,6 +39,7 @@ child node, respectively.
 The following macros create or operate on node identifiers.
 
 .. doxygengroup:: devicetree-generic-id
+   :project: Zephyr
 
 .. _devicetree-property-access:
 
@@ -53,6 +54,7 @@ Property values can be read using these macros even if the node is disabled,
 as long as it has a matching binding.
 
 .. doxygengroup:: devicetree-generic-prop
+   :project: Zephyr
 
 .. _devicetree-reg-property:
 
@@ -65,6 +67,7 @@ devicetree specification, these macros can be used even for nodes without
 matching bindings.
 
 .. doxygengroup:: devicetree-reg-prop
+   :project: Zephyr
 
 .. _devicetree-interrupts-property:
 
@@ -79,6 +82,7 @@ some of these macros can be used even for nodes without matching bindings. This
 does not apply to macros which take cell names as arguments.
 
 .. doxygengroup:: devicetree-interrupts-prop
+   :project: Zephyr
 
 For-each macros
 ===============
@@ -92,6 +96,7 @@ There are special-purpose for-each macros, like
 be defined before use.
 
 .. doxygengroup:: devicetree-generic-foreach
+   :project: Zephyr
 
 Existence checks
 ================
@@ -103,6 +108,7 @@ properties, etc. Some macros used for special purposes (such as
 documented elsewhere on this page.
 
 .. doxygengroup:: devicetree-generic-exist
+   :project: Zephyr
 
 .. _devicetree-dep-ord:
 
@@ -140,6 +146,7 @@ There are instance number-based conveniences as well; see
 :c:func:`DT_INST_DEP_ORD` and subsequent documentation.
 
 .. doxygengroup:: devicetree-dep-ord
+   :project: Zephyr
 
 Bus helpers
 ===========
@@ -150,6 +157,7 @@ In this case, child nodes are considered to be on a bus of the given type, and
 the following APIs may be used.
 
 .. doxygengroup:: devicetree-generic-bus
+   :project: Zephyr
 
 .. _devicetree-inst-apis:
 
@@ -199,6 +207,7 @@ Note that there are also helpers available for
 specific hardware; these are documented in :ref:`devicetree-hw-api`.
 
 .. doxygengroup:: devicetree-inst
+   :project: Zephyr
 
 .. _devicetree-hw-api:
 
@@ -215,6 +224,7 @@ These conveniences may be used for nodes which describe clock sources, and
 properties related to them.
 
 .. doxygengroup:: devicetree-clocks
+   :project: Zephyr
 
 DMA
 ===
@@ -223,6 +233,7 @@ These conveniences may be used for nodes which describe direct memory access
 controllers or channels, and properties related to them.
 
 .. doxygengroup:: devicetree-dmas
+   :project: Zephyr
 
 .. _devicetree-flash-api:
 
@@ -235,6 +246,7 @@ device tree. See :zephyr_file:`dts/bindings/mtd/partition.yaml` for this
 compatible's binding.
 
 .. doxygengroup:: devicetree-fixed-partition
+   :project: Zephyr
 
 .. _devicetree-gpio-api:
 
@@ -245,6 +257,7 @@ These conveniences may be used for nodes which describe GPIO controllers/pins,
 and properties related to them.
 
 .. doxygengroup:: devicetree-gpio
+   :project: Zephyr
 
 IO channels
 ===========
@@ -253,6 +266,7 @@ These are commonly used by device drivers which need to use IO
 channels (e.g. ADC or DAC channels) for conversion.
 
 .. doxygengroup:: devicetree-io-channels
+   :project: Zephyr
 
 PWM
 ===
@@ -261,6 +275,7 @@ These conveniences may be used for nodes which describe PWM controllers and
 properties related to them.
 
 .. doxygengroup:: devicetree-pwms
+   :project: Zephyr
 
 SPI
 ===
@@ -269,6 +284,7 @@ These conveniences may be used for nodes which describe either SPI controllers
 or devices, depending on the case.
 
 .. doxygengroup:: devicetree-spi
+   :project: Zephyr
 
 .. _devicetree-chosen-nodes:
 

@@ -7,3 +7,4 @@ API Reference
 *************
 
 .. doxygengroup:: edac
+   :project: Zephyr

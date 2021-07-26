@@ -165,6 +165,7 @@ API Reference
 *************
 
 .. doxygengroup:: mutex_apis
+   :project: Zephyr
 
 Futex API Reference
 *******************
@@ -176,6 +177,7 @@ user memory so that any access bypasses the kernel object permission
 management mechanism.
 
 .. doxygengroup:: futex_apis
+   :project: Zephyr
 
 User Mode Mutex API Reference
 *****************************
@@ -185,3 +187,4 @@ that a sys_mutex instance can reside in user memory. When user mode isn't
 enabled, sys_mutex behaves like k_mutex.
 
 .. doxygengroup:: user_mutex_apis
+   :project: Zephyr

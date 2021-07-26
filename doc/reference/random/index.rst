@@ -90,3 +90,4 @@ API Reference
 *************
 
 .. doxygengroup:: random_api
+   :project: Zephyr

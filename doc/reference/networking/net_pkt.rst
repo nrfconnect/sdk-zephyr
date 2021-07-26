@@ -360,3 +360,4 @@ API Reference
 *************
 
 .. doxygengroup:: net_pkt
+   :project: Zephyr

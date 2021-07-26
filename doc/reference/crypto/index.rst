@@ -11,3 +11,4 @@ API Reference
 *************
 
 .. doxygengroup:: crypto_cipher
+   :project: Zephyr

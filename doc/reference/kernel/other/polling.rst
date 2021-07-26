@@ -283,3 +283,4 @@ API Reference
 *************
 
 .. doxygengroup:: poll_apis
+   :project: Zephyr

@@ -32,3 +32,4 @@ API Reference
 *************
 
 .. doxygengroup:: stream_flash
+   :project: Zephyr

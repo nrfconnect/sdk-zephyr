@@ -21,3 +21,4 @@ API Reference
 *************
 
 .. doxygengroup:: lldp
+   :project: Zephyr

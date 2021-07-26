@@ -11,3 +11,4 @@ API Reference
 *************
 
 .. doxygengroup:: counter_interface
+   :project: Zephyr

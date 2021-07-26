@@ -143,4 +143,5 @@ API reference
 *************
 
 .. doxygengroup:: bt_mesh_access
+   :project: Zephyr
    :members:

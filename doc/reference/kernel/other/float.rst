@@ -352,3 +352,4 @@ API Reference
 *************
 
 .. doxygengroup:: float_apis
+   :project: Zephyr

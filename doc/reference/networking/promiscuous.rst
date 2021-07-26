@@ -77,3 +77,4 @@ API Reference
 *************
 
 .. doxygengroup:: promiscuous
+   :project: Zephyr

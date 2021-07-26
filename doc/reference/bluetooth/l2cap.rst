@@ -39,4 +39,5 @@ API Reference
 *************
 
 .. doxygengroup:: bt_l2cap
+   :project: Zephyr
    :members:

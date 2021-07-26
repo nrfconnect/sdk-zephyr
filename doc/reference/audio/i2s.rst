@@ -22,3 +22,4 @@ API Reference
 *************
 
 .. doxygengroup:: i2s_interface
+   :project: Zephyr

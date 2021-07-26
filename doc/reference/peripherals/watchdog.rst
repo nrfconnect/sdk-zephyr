@@ -11,3 +11,4 @@ API Reference
 *************
 
 .. doxygengroup:: watchdog_interface
+   :project: Zephyr

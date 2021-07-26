@@ -178,3 +178,4 @@ API Reference
 *************
 
 .. doxygengroup:: pipe_apis
+   :project: Zephyr

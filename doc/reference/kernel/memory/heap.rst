@@ -181,3 +181,4 @@ API Reference
 =============
 
 .. doxygengroup:: heap_apis
+   :project: Zephyr

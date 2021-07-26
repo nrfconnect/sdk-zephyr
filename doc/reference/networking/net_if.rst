@@ -59,3 +59,4 @@ API Reference
 *************
 
 .. doxygengroup:: net_if
+   :project: Zephyr

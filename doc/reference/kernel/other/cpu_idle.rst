@@ -139,3 +139,4 @@ API Reference
 *************
 
 .. doxygengroup:: cpu_idle_apis
+   :project: Zephyr

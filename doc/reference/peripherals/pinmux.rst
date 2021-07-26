@@ -11,3 +11,4 @@ API Reference
 *************
 
 .. doxygengroup:: pinmux_interface
+   :project: Zephyr

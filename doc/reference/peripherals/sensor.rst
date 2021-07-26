@@ -121,3 +121,4 @@ API Reference
 **************
 
 .. doxygengroup:: sensor_interface
+   :project: Zephyr

@@ -148,3 +148,4 @@ API Reference
 *************
 
 .. doxygengroup:: lifo_apis
+   :project: Zephyr

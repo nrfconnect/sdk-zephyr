@@ -137,3 +137,4 @@ API Reference
 *************
 
 .. doxygengroup:: net_buf
+   :project: Zephyr
