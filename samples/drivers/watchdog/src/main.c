@@ -123,7 +123,7 @@ void main(void)
 		return;
 	}
 
-	err = wdt_setup(wdt, WDT_OPT_PAUSE_HALTED_BY_DBG);
+	err = wdt_setup(wdt, 0);
 	if (err < 0) {
 		printk("Watchdog setup error\n");
 		return;
