@@ -57,9 +57,7 @@ Next, you'll install some host dependencies using your package manager.
 
    .. group-tab:: Ubuntu
 
-      .. _install_dependencies_ubuntu:
-
-      #. Use ``apt`` to install the required dependencies:
+      #. Use ``apt`` to install dependencies:
 
          .. code-block:: bash
 
@@ -68,13 +66,13 @@ Next, you'll install some host dependencies using your package manager.
               python3-dev python3-pip python3-setuptools python3-tk python3-wheel xz-utils file \
               make gcc gcc-multilib g++-multilib libsdl2-dev
 
-      #. Verify the version of cmake that is installed on your system by entering::
+      #. Verify the version of cmake installed on your system using::
 
             cmake --version
 
-         The version must be 3.13.1 or later. If your version is older, complete the following
-         steps to add the `Kitware third-party apt repository <https://apt.kitware.com/>`__,
-         which contains an updated version of cmake.
+         If it's not version 3.13.1 or higher, follow these steps to
+         add the `Kitware third-party apt repository <https://apt.kitware.com/>`__
+         to get an updated version of cmake.
 
          a) Add the Kitware signing key:
 
@@ -89,7 +87,7 @@ Next, you'll install some host dependencies using your package manager.
 
                sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ bionic main'
 
-         c) Then install the updated version of cmake with ``apt``:
+         c) Then install the updated cmake with ``apt``:
 
             .. code-block:: bash
 
@@ -98,15 +96,13 @@ Next, you'll install some host dependencies using your package manager.
 
    .. group-tab:: macOS
 
-      .. _install_dependencies_macos:
-
       #. Install `Homebrew <https://brew.sh/>`_:
 
          .. code-block:: bash
 
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-      #. Use ``brew`` to install the required dependencies:
+      #. Use ``brew`` to install dependencies:
 
          .. code-block:: bash
 
@@ -134,29 +130,27 @@ Next, you'll install some host dependencies using your package manager.
 
       |p|
 
-      .. _install_dependencies_windows:
+      #. `Install chocolatey`_
 
-      #. `Install chocolatey`_.
+      #. Open an **Administrator** ``cmd.exe`` window: press the Windows key,
+         type "cmd.exe", right-click the result, and choose "Run as
+         Administrator".
 
-      #. Open a ``cmd.exe`` window as **Administrator**. To do so, press the Windows key,
-         type "cmd.exe", right-click the result, and choose :guilabel:`Run as
-         Administrator`.
-
-      #. Disable global confirmation to avoid having to confirm the
+      #. Disable global confirmation to avoid having to confirm
          installation of individual programs:
 
          .. code-block:: console
 
             choco feature enable -n allowGlobalConfirmation
 
-      #. Use ``choco`` to install the required dependencies:
+      #. Use ``choco`` to install dependencies:
 
          .. code-block:: console
 
             choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System'
             choco install ninja gperf python git
 
-      #. Close the window and open a new ``cmd.exe`` window **as a regular user** to continue.
+      #. Open a new ``cmd.exe`` window **as a regular user** to continue.
 
 .. _Chocolatey: https://chocolatey.org/
 .. _Install chocolatey: https://chocolatey.org/install
