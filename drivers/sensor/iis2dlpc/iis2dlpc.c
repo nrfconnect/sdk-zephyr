@@ -269,9 +269,9 @@ static int iis2dlpc_init(const struct device *dev)
 		return -EIO;
 	}
 
-	/* set default odr to 12.5Hz acc */
-	if (iis2dlpc_set_odr(dev, 12) < 0) {
-		LOG_ERR("odr init error (12.5 Hz)");
+	/* INTELLINIUM: set default odr to 0 */
+	if (iis2dlpc_set_odr(dev, 0) < 0) {
+		LOG_ERR("odr init error (0 Hz)");
 		return -EIO;
 	}
 
