@@ -749,6 +749,10 @@ int lsm6dso_shub_init(const struct device *dev)
 	uint8_t i, n = 0, regn;
 	uint8_t chip_id;
 	struct lsm6dso_shub_slist *sp;
+	const struct lsm6dso_config *cfg = dev->config;
+	stmdev_ctx_t *ctx = (stmdev_ctx_t *)&cfg->ctx;
+
+	lsm6dso_sh_pin_mode_set (ctx, LSM6DSO_INTERNAL_PULL_UP);
 
 	for (n = 0; n < ARRAY_SIZE(lsm6dso_shub_slist); n++) {
 		if (num_ext_dev >= LSM6DSO_SHUB_MAX_NUM_SLVS)
