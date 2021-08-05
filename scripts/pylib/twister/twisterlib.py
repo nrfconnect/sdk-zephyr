@@ -2960,7 +2960,9 @@ class TestSuite(DisablePyTestCollectionMixin):
                         if tc.harness == 'console' and not tc.harness_config:
                             raise Exception('Harness config error: console harness defined without a configuration.')
                         tc.build_only = tc_dict["build_only"]
-                        tc.build_on_all = tc_dict["build_on_all"]
+
+                        # TEMPHACK: we have to ignore "build_on_all" until all yamls are fixed
+                        # tc.build_on_all = tc_dict["build_on_all"]
                         tc.slow = tc_dict["slow"]
                         tc.min_ram = tc_dict["min_ram"]
                         tc.depends_on = tc_dict["depends_on"]
