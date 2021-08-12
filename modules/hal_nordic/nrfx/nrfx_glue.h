@@ -230,6 +230,7 @@ void nrfx_busy_wait(uint32_t usec_to_wait);
 #define NRFX_PPI_CHANNELS_USED    (NRFX_PPI_CHANNELS_USED_BY_BT_CTLR |    \
 				   NRFX_PPI_CHANNELS_USED_BY_802154_DRV | \
 				   NRFX_PPI_CHANNELS_USED_BY_MPSL |       \
+				   NRFX_PPI_CHANNELS_USED_BY_GZLL |       \
 				   NRFX_PPI_CHANNELS_USED_BY_PWM_SW)
 
 /** @brief Bitmask that defines PPI groups that are reserved for use outside of the nrfx library. */
@@ -269,6 +270,13 @@ extern const uint32_t z_mpsl_used_nrf_ppi_groups;
 #else
 #define NRFX_PPI_CHANNELS_USED_BY_MPSL   0
 #define NRFX_PPI_GROUPS_USED_BY_MPSL     0
+#endif
+
+#if defined(CONFIG_GAZELL)
+extern const uint32_t nrf_gzll_used_nrf_ppi_channels;
+#define NRFX_PPI_CHANNELS_USED_BY_GZLL   nrf_gzll_used_nrf_ppi_channels
+#else
+#define NRFX_PPI_CHANNELS_USED_BY_GZLL   0
 #endif
 
 #if defined(CONFIG_PWM_NRF5_SW)
