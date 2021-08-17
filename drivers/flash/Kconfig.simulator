@@ -5,8 +5,8 @@
 
 menuconfig FLASH_SIMULATOR
 	bool "Flash simulator"
-	select STATS
-	select STATS_NAMES
+	imply STATS
+	imply STATS_NAMES
 	select FLASH_HAS_PAGE_LAYOUT
 	select FLASH_HAS_DRIVER_ENABLED
 	help

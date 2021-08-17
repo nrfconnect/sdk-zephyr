@@ -63,12 +63,17 @@
 #define STATS_NAME_DIRTYR(N, _) STATS_NAME(flash_sim_stats, dirty_read_unit##N)
 
 /* increment a unit erase cycles counter */
+#ifdef CONFIG_STATS
 #define ERASE_CYCLES_INC(U)						     \
 	do {								     \
 		if (U < STATS_PAGE_COUNT_THRESHOLD) {			     \
 			(*(&flash_sim_stats.erase_cycles_unit0 + (U)) += 1); \
 		}							     \
 	} while (0)
+#else
+#define ERASE_CYCLES_INC(U)						     \
+	do {} while (0)
+#endif
 
 #if (defined(CONFIG_STATS) && \
      (CONFIG_FLASH_SIMULATOR_STAT_PAGE_COUNT > STATS_PAGE_COUNT_THRESHOLD))
@@ -215,6 +220,7 @@ static int flash_sim_write(const struct device *dev, const off_t offset,
 		}
 	}
 
+#ifdef CONFIG_STATS
 	bool data_part_ignored = false;
 
 	if (flash_sim_thresholds.max_write_calls != 0) {
@@ -230,13 +236,16 @@ static int flash_sim_write(const struct device *dev, const off_t offset,
 			data_part_ignored = true;
 		}
 	}
+#endif
 
 	for (uint32_t i = 0; i < len; i++) {
+#ifdef CONFIG_STATS
 		if (data_part_ignored) {
 			if (i >= flash_sim_thresholds.max_len) {
 				return 0;
 			}
 		}
+#endif
 
 		/* only pull bits to zero */
 #if FLASH_SIMULATOR_ERASE_VALUE == 0xFF
@@ -246,6 +255,7 @@ static int flash_sim_write(const struct device *dev, const off_t offset,
 #endif
 	}
 
+#ifdef CONFIG_STATS
 	STATS_INCN(flash_sim_stats, bytes_written, len);
 
 #ifdef CONFIG_FLASH_SIMULATOR_SIMULATE_TIMING
@@ -253,6 +263,7 @@ static int flash_sim_write(const struct device *dev, const off_t offset,
 	k_busy_wait(CONFIG_FLASH_SIMULATOR_MIN_WRITE_TIME_US);
 	STATS_INCN(flash_sim_stats, flash_write_time_us,
 		   CONFIG_FLASH_SIMULATOR_MIN_WRITE_TIME_US);
+#endif
 #endif
 
 	return 0;
@@ -283,6 +294,7 @@ static int flash_sim_erase(const struct device *dev, const off_t offset,
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_STATS
 	STATS_INC(flash_sim_stats, flash_erase_calls);
 
 	if ((flash_sim_thresholds.max_erase_calls != 0) &&
@@ -290,6 +302,7 @@ static int flash_sim_erase(const struct device *dev, const off_t offset,
 		flash_sim_thresholds.max_erase_calls)){
 		return 0;
 	}
+#endif
 
 	/* the first unit to be erased */
 	uint32_t unit_start = (offset - FLASH_SIMULATOR_BASE_OFFSET) /
@@ -408,9 +421,11 @@ static int flash_mock_init(const struct device *dev)
 
 static int flash_init(const struct device *dev)
 {
+#ifdef CONFIG_STATS
 	STATS_INIT_AND_REG(flash_sim_stats, STATS_SIZE_32, "flash_sim_stats");
 	STATS_INIT_AND_REG(flash_sim_thresholds, STATS_SIZE_32,
 			   "flash_sim_thresholds");
+#endif
 	return flash_mock_init(dev);
 }
 
