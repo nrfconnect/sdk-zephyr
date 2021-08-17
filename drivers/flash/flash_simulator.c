@@ -133,7 +133,7 @@ static int flash_fd = -1;
 static const char *flash_file_path;
 static const char default_flash_file_path[] = "flash.bin";
 #else
-static uint8_t mock_flash[FLASH_SIMULATOR_FLASH_SIZE];
+uint8_t mock_flash[FLASH_SIMULATOR_FLASH_SIZE];
 #endif /* CONFIG_ARCH_POSIX */
 
 static const struct flash_driver_api flash_sim_api;
