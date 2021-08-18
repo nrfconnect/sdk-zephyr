@@ -144,6 +144,20 @@ int boot_read_bank_header(uint8_t area_id,
 	return 0;
 }
 
+static unsigned int slot_to_image_index(int slot)
+{
+	if (slot < 2) {
+		return 0;
+	} else {
+		return 1;
+	}
+}
+
+int mcuboot_swap_type_multi(int slot)
+{
+	return boot_swap_type_multi(slot_to_image_index(slot));
+}
+
 int mcuboot_swap_type(void)
 {
 #ifdef FLASH_AREA_IMAGE_SECONDARY

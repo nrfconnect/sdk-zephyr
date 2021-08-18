@@ -93,6 +93,21 @@ config UPDATEABLE_IMAGE_NUMBER
 	help
 	  If value is set to 2 or greater then, this enables support needed when
 	  application is combined with MCUboot multi-image boot.
+
+config BOOT_IMAGE_ACCESS_HOOKS
+	bool "Hooks for override MCUboot's native routines"
+	help
+	  Allow to provide procedures for override native MCUboot's routines
+	  required for access the image data and the image update.
+
+config BOOT_IMAGE_ACCESS_HOOKS_FILE
+	string "Hooks implementation file path"
+	depends on BOOT_IMAGE_ACCESS_HOOKS
+	default ""
+	help
+	  Path to the file which implements hooks. Path is relative to
+	  the zephyr port cmake directory (boot/zephyr/).
+
 endif
 
 endif # IMG_MANAGER
