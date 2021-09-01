@@ -429,6 +429,17 @@ please check your installation. ARCH roots searched: \n\
 ${ARCH_ROOT}")
 endif()
 
+if(DEFINED APPLICATION_CONFIG_DIR)
+  string(CONFIGURE ${APPLICATION_CONFIG_DIR} APPLICATION_CONFIG_DIR)
+  if(NOT IS_ABSOLUTE ${APPLICATION_CONFIG_DIR})
+    get_filename_component(APPLICATION_CONFIG_DIR ${APPLICATION_CONFIG_DIR} ABSOLUTE)
+  endif()
+else()
+  # Application config dir is not set, so we default to the  application
+  # source directory as configuration directory.
+  set(APPLICATION_CONFIG_DIR ${APPLICATION_SOURCE_DIR})
+endif()
+
 if(DEFINED CONF_FILE)
   # This ensures that CACHE{CONF_FILE} will be set correctly to current scope
   # variable CONF_FILE. An already current scope variable will stay the same.
@@ -446,14 +457,9 @@ if(DEFINED CONF_FILE)
     # Need the file name to look for match.
     # Need path in order to check if it is absolute.
     get_filename_component(CONF_FILE_NAME ${CONF_FILE} NAME)
-    get_filename_component(CONF_FILE_DIR ${CONF_FILE} DIRECTORY)
     if(${CONF_FILE_NAME} MATCHES "prj_(.*).conf")
       set(CONF_FILE_BUILD_TYPE ${CMAKE_MATCH_1})
       set(CONF_FILE_INCLUDE_FRAGMENTS true)
-
-      if(NOT IS_ABSOLUTE ${CONF_FILE_DIR})
-        set(CONF_FILE_DIR ${APPLICATION_SOURCE_DIR}/${CONF_FILE_DIR})
-      endif()
     endif()
   endif()
 elseif(CACHED_CONF_FILE)
@@ -468,21 +474,19 @@ elseif(COMMAND set_conf_file)
   message(WARNING "'set_conf_file' is deprecated, it will be removed in a future release.")
   set_conf_file()
 
-elseif(EXISTS   ${APPLICATION_SOURCE_DIR}/prj_${BOARD}.conf)
-  set(CONF_FILE ${APPLICATION_SOURCE_DIR}/prj_${BOARD}.conf)
+elseif(EXISTS   ${APPLICATION_CONFIG_DIR}/prj_${BOARD}.conf)
+  set(CONF_FILE ${APPLICATION_CONFIG_DIR}/prj_${BOARD}.conf)
 
-elseif(EXISTS   ${APPLICATION_SOURCE_DIR}/prj.conf)
-  set(CONF_FILE ${APPLICATION_SOURCE_DIR}/prj.conf)
+elseif(EXISTS   ${APPLICATION_CONFIG_DIR}/prj.conf)
+  set(CONF_FILE ${APPLICATION_CONFIG_DIR}/prj.conf)
   set(CONF_FILE_INCLUDE_FRAGMENTS true)
 endif()
 
 if(CONF_FILE_INCLUDE_FRAGMENTS)
-  if(NOT CONF_FILE_DIR)
-     set(CONF_FILE_DIR ${APPLICATION_SOURCE_DIR})
-  endif()
-  zephyr_file(CONF_FILES ${CONF_FILE_DIR}/boards KCONF CONF_FILE BUILD ${CONF_FILE_BUILD_TYPE})
+  zephyr_file(CONF_FILES ${APPLICATION_CONFIG_DIR}/boards KCONF CONF_FILE BUILD ${CONF_FILE_BUILD_TYPE})
 endif()
 
+set(APPLICATION_CONFIG_DIR ${APPLICATION_CONFIG_DIR} CACHE INTERNAL "The application configuration folder")
 set(CACHED_CONF_FILE ${CONF_FILE} CACHE STRING "If desired, you can build the application using\
 the configuration settings specified in an alternate .conf file using this parameter. \
 These settings will override the settings in the application’s .config file or its default .conf file.\
@@ -491,7 +495,7 @@ The CACHED_CONF_FILE is internal Zephyr variable used between CMake runs. \
 To change CONF_FILE, use the CONF_FILE variable.")
 unset(CONF_FILE CACHE)
 
-zephyr_file(CONF_FILES ${APPLICATION_SOURCE_DIR}/boards DTS APP_BOARD_DTS)
+zephyr_file(CONF_FILES ${APPLICATION_CONFIG_DIR}/boards DTS APP_BOARD_DTS)
 
 # The CONF_FILE variable is now set to its final value.
 zephyr_boilerplate_watch(CONF_FILE)
@@ -504,10 +508,10 @@ elseif(DEFINED ENV{DTC_OVERLAY_FILE})
   set(DTC_OVERLAY_FILE $ENV{DTC_OVERLAY_FILE})
 elseif(APP_BOARD_DTS)
   set(DTC_OVERLAY_FILE ${APP_BOARD_DTS})
-elseif(EXISTS          ${APPLICATION_SOURCE_DIR}/${BOARD}.overlay)
-  set(DTC_OVERLAY_FILE ${APPLICATION_SOURCE_DIR}/${BOARD}.overlay)
-elseif(EXISTS          ${APPLICATION_SOURCE_DIR}/app.overlay)
-  set(DTC_OVERLAY_FILE ${APPLICATION_SOURCE_DIR}/app.overlay)
+elseif(EXISTS          ${APPLICATION_CONFIG_DIR}/${BOARD}.overlay)
+  set(DTC_OVERLAY_FILE ${APPLICATION_CONFIG_DIR}/${BOARD}.overlay)
+elseif(EXISTS          ${APPLICATION_CONFIG_DIR}/app.overlay)
+  set(DTC_OVERLAY_FILE ${APPLICATION_CONFIG_DIR}/app.overlay)
 endif()
 
 set(DTC_OVERLAY_FILE ${DTC_OVERLAY_FILE} CACHE STRING "If desired, you can \
