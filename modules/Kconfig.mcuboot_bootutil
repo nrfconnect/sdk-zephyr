@@ -21,4 +21,21 @@ module-str = MCUboot bootutil
 source "subsys/logging/Kconfig.template.log_config"
 endif
 
+config BOOT_IMAGE_ACCESS_HOOKS
+	bool "Enable hooks for overriding MCUboot's bootutil native routines"
+	help
+	  Allow to provide procedures for override or extend native
+	  MCUboot's routines required for access the image data.
+
+config BOOT_IMAGE_ACCESS_HOOKS_FILE
+	string "Hooks implementation file path"
+	depends on BOOT_IMAGE_ACCESS_HOOKS
+	help
+	  Path to the file which implements hooks.
+	  You can use either absolute or relative path.
+	  In case relative path is used, the build system assumes that it starts
+	  from the directory where the project KConfig configuration file is
+	  located. If the key file is not there, the build system uses relative
+	  path that starts from the Application cmake directory.
+
 endif # MCUBOOT_BOOTUTIL_LIB
