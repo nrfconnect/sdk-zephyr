@@ -93,6 +93,13 @@ config UPDATEABLE_IMAGE_NUMBER
 	help
 	  If value is set to 2 or greater then, this enables support needed when
 	  application is combined with MCUboot multi-image boot.
+
+config BOOT_IMAGE_ACCESS_HOOKS
+	bool "Enable hooks for overriding MCUboot's bootuil_public native routines"
+	help
+	  Allow to provide procedures for override or extend native
+	  MCUboot's routines required for access the image data and the image
+	  update.
 endif
 
 endif # IMG_MANAGER
