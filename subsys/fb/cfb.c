@@ -141,7 +141,13 @@ int cfb_print(const struct device *dev, char *str, uint16_t x, uint16_t y)
 				x = 0U;
 				y += fptr->height;
 			}
-			x += fb->kerning + draw_char_vtmono(fb, str[i], x, y);
+
+			if (str[i] == '\n') {
+				x = 0U;
+				y += fptr->height;
+			} else {
+				x += fb->kerning + draw_char_vtmono(fb, str[i], x, y);
+			}
 		}
 		return 0;
 	}
