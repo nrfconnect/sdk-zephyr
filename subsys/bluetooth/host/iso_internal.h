@@ -21,9 +21,6 @@ struct iso_data {
 
 	/** ISO connection handle */
 	uint16_t handle;
-
-	/** ISO timestamp */
-	uint32_t ts;
 };
 
 enum {
@@ -146,3 +143,5 @@ void bt_iso_chan_set_state(struct bt_iso_chan *chan, uint8_t state);
 void bt_iso_recv(struct bt_conn *conn, struct net_buf *buf, uint8_t flags);
 
 struct bt_conn_iso *bt_conn_iso(struct bt_conn *conn);
+
+void bt_iso_remove_data_path(struct bt_conn *conn);

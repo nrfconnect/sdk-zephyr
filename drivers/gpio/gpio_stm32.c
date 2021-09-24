@@ -18,7 +18,7 @@
 #include <stm32_ll_system.h>
 #include <drivers/gpio.h>
 #include <drivers/clock_control/stm32_clock_control.h>
-#include <pinmux/stm32/pinmux_stm32.h>
+#include <pinmux/pinmux_stm32.h>
 #include <drivers/pinmux.h>
 #include <sys/util.h>
 #include <drivers/interrupt_controller/exti_stm32.h>
@@ -114,7 +114,7 @@ static inline uint32_t stm32_pinval_get(int pin)
 /**
  * @brief Configure the hardware.
  */
-int gpio_stm32_configure(const struct device *dev, int pin, int conf, int altf)
+void gpio_stm32_configure(const struct device *dev, int pin, int conf, int altf)
 {
 	const struct gpio_stm32_config *cfg = dev->config;
 	GPIO_TypeDef *gpio = (GPIO_TypeDef *)cfg->base;
@@ -221,7 +221,6 @@ int gpio_stm32_configure(const struct device *dev, int pin, int conf, int altf)
 	z_stm32_hsem_unlock(CFG_HW_GPIO_SEMID);
 #endif  /* CONFIG_SOC_SERIES_STM32F1X */
 
-	return 0;
 }
 
 /**
@@ -467,7 +466,7 @@ static int gpio_stm32_config(const struct device *dev,
 #ifdef CONFIG_PM_DEVICE_RUNTIME
 	/* Enable device clock before configuration (requires bank writes) */
 	if (data->power_state != PM_DEVICE_STATE_ACTIVE) {
-		err = pm_device_get_sync(dev);
+		err = pm_device_get(dev);
 		if (err < 0) {
 			return err;
 		}
@@ -488,7 +487,7 @@ static int gpio_stm32_config(const struct device *dev,
 #ifdef CONFIG_PM_DEVICE_RUNTIME
 	/* Release clock only if configuration doesn't require bank writes */
 	if ((flags & GPIO_OUTPUT) == 0) {
-		err = pm_device_put(dev);
+		err = pm_device_put_async(dev);
 		if (err < 0) {
 			return err;
 		}
@@ -581,7 +580,7 @@ static uint32_t gpio_stm32_get_power_state(const struct device *dev)
 }
 
 static int gpio_stm32_set_power_state(const struct device *dev,
-					      uint32_t new_state)
+					      enum pm_device_state new_state)
 {
 	struct gpio_stm32_data *data = dev->data;
 	int ret = 0;
@@ -605,7 +604,7 @@ static int gpio_stm32_set_power_state(const struct device *dev,
 
 static int gpio_stm32_pm_device_ctrl(const struct device *dev,
 				     uint32_t ctrl_command,
-				     uint32_t *state, pm_device_cb cb, void *arg)
+				     enum pm_device_state *state)
 {
 	struct gpio_stm32_data *data = dev->data;
 	uint32_t new_state;
@@ -624,10 +623,6 @@ static int gpio_stm32_pm_device_ctrl(const struct device *dev,
 	default:
 		ret = -EINVAL;
 
-	}
-
-	if (cb) {
-		cb(dev, ret, state, arg);
 	}
 
 	return ret;
@@ -687,7 +682,7 @@ static int gpio_stm32_init(const struct device *dev)
 			    gpio_stm32_pm_device_ctrl,			       \
 			    &gpio_stm32_data_## __suffix,		       \
 			    &gpio_stm32_cfg_## __suffix,		       \
-			    POST_KERNEL,				       \
+			    PRE_KERNEL_1,				       \
 			    CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,	       \
 			    &gpio_stm32_driver)
 

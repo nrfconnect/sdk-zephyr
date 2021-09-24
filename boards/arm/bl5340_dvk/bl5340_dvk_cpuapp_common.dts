@@ -64,7 +64,7 @@
 		compatible = "st,lis2dh";
 		label = "LIS3DH";
 		reg = <0x18>;
-		irq-gpios = <&gpio0 23 GPIO_ACTIVE_LOW>, <&gpio0 24 GPIO_ACTIVE_LOW>;
+		irq-gpios = <&gpio0 23 GPIO_ACTIVE_HIGH>, <&gpio0 24 GPIO_ACTIVE_HIGH>;
 	};
 
 	ft5336@38 {
@@ -78,6 +78,13 @@
 		compatible = "bosch,bme680";
 		reg = <0x76>;
 		label = "BME680";
+	};
+
+	dac0: mcp4725@60 {
+		compatible = "microchip,mcp4725";
+		reg = <0x60>;
+		label = "dac0";
+		#io-channel-cells = <1>;
 	};
 };
 
@@ -168,9 +175,9 @@
 	mx25r64: mx25r6435f@0 {
 		compatible = "nordic,qspi-nor";
 		reg = <0>;
-		/* MX24R64 supports only pp and pp4io */
+		/* MX25R64 supports only pp and pp4io */
 		writeoc = "pp4io";
-		/* MX24R64 supports all readoc options */
+		/* MX25R64 supports all readoc options */
 		readoc = "read4io";
 		sck-frequency = <8000000>;
 		label = "MX25R64";

@@ -125,9 +125,9 @@ need one.
 CMake
 =====
 
-CMake version 3.13.1 or higher is required. Check what version you have by
-using ``cmake --version``. If you have an older version, there are several ways
-of obtaining a more recent one:
+A :ref:`recent CMake version <install-required-tools>` is required. Check what
+version you have by using ``cmake --version``. If you have an older version,
+there are several ways of obtaining a more recent one:
 
 * On Ubuntu, you can follow the instructions for adding the
   `kitware third-party apt repository <https://apt.kitware.com/>`_
@@ -139,9 +139,9 @@ of obtaining a more recent one:
   .. code-block:: console
 
      cd ~
-     wget https://github.com/Kitware/CMake/releases/download/v3.15.3/cmake-3.15.3-Linux-x86_64.sh
-     chmod +x cmake-3.15.3-Linux-x86_64.sh
-     sudo ./cmake-3.15.3-Linux-x86_64.sh --skip-license --prefix=/usr/local
+     wget https://github.com/Kitware/CMake/releases/download/v3.21.1/cmake-3.21.1-Linux-x86_64.sh
+     chmod +x cmake-3.21.1-Linux-x86_64.sh
+     sudo ./cmake-3.21.1-Linux-x86_64.sh --skip-license --prefix=/usr/local
      hash -r
 
   The ``hash -r`` command may be necessary if the installation script
@@ -149,14 +149,14 @@ of obtaining a more recent one:
 
 * Download and install from the pre-built binaries provided by the CMake
   project itself in the `CMake Downloads`_ page.
-  For example, to install version 3.13.1 in :file:`~/bin/cmake`:
+  For example, to install version 3.21.1 in :file:`~/bin/cmake`:
 
   .. code-block:: console
 
      mkdir $HOME/bin/cmake && cd $HOME/bin/cmake
-     wget https://github.com/Kitware/CMake/releases/download/v3.13.1/cmake-3.13.1-Linux-x86_64.sh
-     yes | sh cmake-3.13.1-Linux-x86_64.sh | cat
-     echo "export PATH=$PWD/cmake-3.13.1-Linux-x86_64/bin:\$PATH" >> $HOME/.zephyrrc
+     wget https://github.com/Kitware/CMake/releases/download/v3.21.1/cmake-3.21.1-Linux-x86_64.sh
+     yes | sh cmake-3.21.1-Linux-x86_64.sh | cat
+     echo "export PATH=$PWD/cmake-3.21.1-Linux-x86_64/bin:\$PATH" >> $HOME/.zephyrrc
 
 * Use ``pip3``:
 
@@ -187,16 +187,16 @@ versions.)
 DTC (Device Tree Compiler)
 ==========================
 
-A recent DTC version (1.4.6 or higher) is required. Check what version you
-have by using ``dtc --version``. If you have an older version, either install a
-more recent one by building from source, or use the one that is bundled in
-the :ref:`Zephyr SDK <zephyr_sdk>` by installing it.
+A :ref:`recent DTC version <install-required-tools>` is required. Check what
+version you have by using ``dtc --version``. If you have an older version,
+either install a more recent one by building from source, or use the one that is
+bundled in the :ref:`Zephyr SDK <zephyr_sdk>` by installing it.
 
 Python
 ======
 
-Python 3.6 or later is required. Check what version you have by using ``python3
---version``.
+A `modern Python 3 version <install-required-tools>` is required. Check what
+version you have by using ``python3 --version``.
 
 If you have an older version, you will need to install a more recent Python 3.
 You can build from source, or use a backport from your distribution's package

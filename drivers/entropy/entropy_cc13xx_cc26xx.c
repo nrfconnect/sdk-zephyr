@@ -10,6 +10,7 @@
 #include <device.h>
 #include <drivers/entropy.h>
 #include <irq.h>
+#include <pm/pm.h>
 #include <pm/device.h>
 
 #include <sys/ring_buffer.h>
@@ -36,7 +37,7 @@ struct entropy_cc13xx_cc26xx_data {
 	bool constrained;
 #endif
 #ifdef CONFIG_PM_DEVICE
-	uint32_t pm_state;
+	enum device_pm_state pm_state;
 #endif
 };
 
@@ -267,7 +268,7 @@ static int post_notify_fxn(unsigned int eventType, uintptr_t eventArg,
 
 #ifdef CONFIG_PM_DEVICE
 static int entropy_cc13xx_cc26xx_set_power_state(const struct device *dev,
-						 uint32_t new_state)
+						 enum pm_device_state new_state)
 {
 	struct entropy_cc13xx_cc26xx_data *data = get_dev_data(dev);
 	int ret = 0;
@@ -293,14 +294,13 @@ static int entropy_cc13xx_cc26xx_set_power_state(const struct device *dev,
 
 static int entropy_cc13xx_cc26xx_pm_control(const struct device *dev,
 					    uint32_t ctrl_command,
-					    uint32_t *state, pm_device_cb cb,
-					    void *arg)
+					    enum pm_device_state *state)
 {
 	struct entropy_cc13xx_cc26xx_data *data = get_dev_data(dev);
 	int ret = 0;
 
 	if (ctrl_command == PM_DEVICE_STATE_SET) {
-		uint32_t new_state = *state;
+		enum pm_device_state new_state = *state;
 
 		if (new_state != data->pm_state) {
 			ret = entropy_cc13xx_cc26xx_set_power_state(dev,
@@ -309,10 +309,6 @@ static int entropy_cc13xx_cc26xx_pm_control(const struct device *dev,
 	} else {
 		__ASSERT_NO_MSG(ctrl_command == PM_DEVICE_STATE_GET);
 		*state = data->pm_state;
-	}
-
-	if (cb) {
-		cb(dev, ret, state, arg);
 	}
 
 	return ret;

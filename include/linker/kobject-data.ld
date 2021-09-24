@@ -15,7 +15,7 @@
 
 #ifdef CONFIG_DYNAMIC_OBJECTS
 	PROVIDE(_thread_idx_map = .);
-	. += CONFIG_MAX_THREAD_BYTES;
+	. = . + CONFIG_MAX_THREAD_BYTES;
 #endif
 
 #endif /* !LINKER_ZEPHYR_PREBUILT && !LINKER_ZEPHYR_FINAL */
@@ -40,7 +40,7 @@
 #endif
 #ifdef KOBJECT_DATA_ALIGN
 	. = ALIGN(KOBJECT_DATA_ALIGN);
-	. += KOBJECT_DATA_SZ;
+	. = . + KOBJECT_DATA_SZ;
 #endif
 #endif /* LINKER_ZEPHYR_PREBUILT */
 
@@ -53,6 +53,7 @@
 #endif
 
 	*(".kobject_data.data*")
+	*(".kobject_data.sdata*")
 
 #ifdef KOBJECT_DATA_ALIGN
 	_kobject_data_area_end = .;

@@ -95,31 +95,6 @@ typedef int16_t device_handle_t;
 		      NULL, NULL, level, prio, NULL)
 
 /**
- * @def DEVICE_INIT
- *
- * @brief Invoke DEVICE_DEFINE() with no power management support (@p
- * pm_control_fn) and no API (@p api_ptr).
- */
-#define DEVICE_INIT(dev_name, drv_name, init_fn,			\
-		    data_ptr, cfg_ptr, level, prio)			\
-	__DEPRECATED_MACRO						\
-	DEVICE_DEFINE(dev_name, drv_name, init_fn, NULL,		\
-		      data_ptr, cfg_ptr, level, prio, NULL)
-
-/**
- * @def DEVICE_AND_API_INIT
- *
- * @brief Invoke DEVICE_DEFINE() with no power management support (@p
- * pm_control_fn).
- */
-#define DEVICE_AND_API_INIT(dev_name, drv_name, init_fn,		\
-			    data_ptr, cfg_ptr, level, prio, api_ptr)	\
-	__DEPRECATED_MACRO						\
-	DEVICE_DEFINE(dev_name, drv_name, init_fn,			\
-		      NULL,						\
-		      data_ptr, cfg_ptr, level, prio, api_ptr)
-
-/**
  * @def DEVICE_DEFINE
  *
  * @brief Create device object and set it up for boot time initialization,
@@ -303,6 +278,29 @@ typedef int16_t device_handle_t;
 		    (NULL))
 
 /**
+ * @def DEVICE_DT_GET_ONE
+ *
+ * @brief Obtain a pointer to a device object by devicetree compatible
+ *
+ * If any enabled devicetree node has the given compatible and a
+ * device object was created from it, this returns that device.
+ *
+ * If there no such devices, this throws a compilation error.
+ *
+ * If there are multiple, this returns an arbitrary one.
+ *
+ * If this returns non-NULL, the device must be checked for readiness
+ * before use, e.g. with device_is_ready().
+ *
+ * @param compat lowercase-and-underscores devicetree compatible
+ * @return a pointer to a device
+ */
+#define DEVICE_DT_GET_ONE(compat)					    \
+	COND_CODE_1(DT_HAS_COMPAT_STATUS_OKAY(compat),			    \
+		    (DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(compat))), \
+		    (ZERO_OR_COMPILE_ERROR(0)))
+
+/**
  * @def DEVICE_GET
  *
  * @brief Obtain a pointer to a device object by name
@@ -387,7 +385,7 @@ struct device {
 #ifdef CONFIG_PM_DEVICE
 	/** Power Management function */
 	int (*pm_control)(const struct device *dev, uint32_t command,
-				 uint32_t *state, pm_device_cb cb, void *arg);
+			  enum pm_device_state *state);
 	/** Pointer to device instance power management data */
 	struct pm_device * const pm;
 #endif
@@ -581,8 +579,8 @@ static inline int z_device_usable_check(const struct device *dev)
  * distinct error values that identify the reason if it cannot.
  *
  * @retval 0 if the device is usable.
- * @retval -ENODEV if the device has not been initialized, or the
- * initialization failed.
+ * @retval -ENODEV if the device has not been initialized, the device pointer
+ * is NULL or the initialization failed.
  * @retval other negative error codes to indicate additional conditions that
  * make the device unusable.
  */
@@ -606,16 +604,13 @@ static inline int z_impl_device_usable_check(const struct device *dev)
  * @param dev pointer to the device in question.
  *
  * @retval true if the device is ready for use.
- * @retval false if the device is not ready for use.
+ * @retval false if the device is not ready for use or if a NULL device pointer
+ * is passed as argument.
  */
 static inline bool device_is_ready(const struct device *dev)
 {
 	return device_usable_check(dev) == 0;
 }
-
-/**
- * @}
- */
 
 /**
  * @brief Indicate that the device is in the middle of a transaction
@@ -695,11 +690,27 @@ int device_busy_check(const struct device *chk_dev);
 #define Z_DEVICE_EXTRA_HANDLES(...)				\
 	FOR_EACH_NONEMPTY_TERM(IDENTITY, (,), __VA_ARGS__)
 
+/* If device power management is enabled, this macro defines a pointer to a
+ * device in the z_pm_device_slots region. When invoked for each device, this
+ * will effectively result in a device pointer array with the same size of the
+ * actual devices list. This is used internally by the device PM subsystem to
+ * keep track of suspended devices during system power transitions.
+ */
+#if CONFIG_PM_DEVICE
+#define Z_DEVICE_DEFINE_PM_SLOT(dev_name)				\
+	static const Z_DECL_ALIGN(struct device *)			\
+	_CONCAT(__pm_device_slot_, DEVICE_NAME_GET(dev_name)) __used	\
+	__attribute__((__section__(".z_pm_device_slots")));
+#else
+#define Z_DEVICE_DEFINE_PM_SLOT(dev_name)
+#endif
+
 /* Construct objects that are referenced from struct device.  These
  * include power management and dependency handles.
  */
 #define Z_DEVICE_DEFINE_PRE(node_id, dev_name, ...)			\
-	Z_DEVICE_DEFINE_HANDLES(node_id, dev_name, __VA_ARGS__)
+	Z_DEVICE_DEFINE_HANDLES(node_id, dev_name, __VA_ARGS__)		\
+	Z_DEVICE_DEFINE_PM_SLOT(dev_name)
 
 
 /* Initial build provides a record that associates the device object

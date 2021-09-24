@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Nordic Semiconductor ASA
+ * Copyright (c) 2018-2021 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -67,10 +67,15 @@ static inline int isr_rx_pdu(struct lll_scan *lll, struct pdu_adv *pdu_adv_rx,
 			     uint8_t devmatch_ok, uint8_t devmatch_id,
 			     uint8_t irkmatch_ok, uint8_t irkmatch_id,
 			     uint8_t rl_idx, uint8_t rssi_ready);
+
 #if defined(CONFIG_BT_CENTRAL)
 static inline bool isr_scan_init_check(struct lll_scan *lll,
 				       struct pdu_adv *pdu, uint8_t rl_idx);
 #endif /* CONFIG_BT_CENTRAL */
+
+static bool isr_scan_tgta_check(struct lll_scan *lll, bool init,
+				uint8_t addr_type, uint8_t *addr,
+				uint8_t rl_idx, bool *dir_report);
 static inline bool isr_scan_tgta_rpa_check(struct lll_scan *lll,
 					   uint8_t addr_type, uint8_t *addr,
 					   bool *dir_report);
@@ -113,6 +118,75 @@ void lll_scan_prepare(void *param)
 	LL_ASSERT(!err || err == -EINPROGRESS);
 }
 
+#if defined(CONFIG_BT_CENTRAL) || defined(CONFIG_BT_CTLR_ADV_EXT)
+bool lll_scan_adva_check(struct lll_scan *lll, uint8_t addr_type, uint8_t *addr,
+			 uint8_t rl_idx)
+{
+#if defined(CONFIG_BT_CTLR_PRIVACY)
+	/* Only applies to initiator with no whitelist */
+	if (rl_idx != FILTER_IDX_NONE) {
+		return (rl_idx == lll->rl_idx);
+	} else if (!ull_filter_lll_rl_addr_allowed(addr_type, addr, &rl_idx)) {
+		return false;
+	}
+#endif /* CONFIG_BT_CTLR_PRIVACY */
+
+	/* NOTE: This function to be used only to check AdvA when intiating,
+	 *       hence, otherwise we should not use the return value.
+	 *       This function is referenced in lll_scan_ext_tgta_check, but
+	 *       is not used when not being an initiator, hence return false
+	 *       is never reached.
+	 */
+#if defined(CONFIG_BT_CENTRAL)
+	return ((lll->adv_addr_type == addr_type) &&
+		!memcmp(lll->adv_addr, addr, BDADDR_SIZE));
+#else /* CONFIG_BT_CENTRAL */
+	return false;
+#endif /* CONFIG_BT_CENTRAL */
+}
+#endif /* CONFIG_BT_CENTRAL || CONFIG_BT_CTLR_ADV_EXT */
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+bool lll_scan_ext_tgta_check(struct lll_scan *lll, bool pri, bool is_init,
+			     struct pdu_adv *pdu, uint8_t rl_idx)
+{
+	uint8_t is_directed;
+	uint8_t tx_addr;
+	uint8_t rx_addr;
+	uint8_t *adva;
+	uint8_t *tgta;
+
+	if (pri && !pdu->adv_ext_ind.ext_hdr.adv_addr) {
+		return true;
+	}
+
+	if (pdu->len <
+	    PDU_AC_EXT_HEADER_SIZE_MIN + sizeof(struct pdu_adv_ext_hdr) +
+	    ADVA_SIZE) {
+		return false;
+	}
+
+	is_directed = pdu->adv_ext_ind.ext_hdr.tgt_addr;
+	if (is_directed && (pdu->len < PDU_AC_EXT_HEADER_SIZE_MIN +
+				       sizeof(struct pdu_adv_ext_hdr) +
+				       ADVA_SIZE + TARGETA_SIZE)) {
+		return false;
+	}
+
+	tx_addr = pdu->tx_addr;
+	rx_addr = pdu->rx_addr;
+	adva = &pdu->adv_ext_ind.ext_hdr.data[ADVA_OFFSET];
+	tgta = &pdu->adv_ext_ind.ext_hdr.data[TGTA_OFFSET];
+	return ((!is_init ||
+		 (lll->filter_policy & 0x01) ||
+		 lll_scan_adva_check(lll, tx_addr, adva, rl_idx)) &&
+		((!is_directed) ||
+		 (is_directed &&
+		  isr_scan_tgta_check(lll, is_init, rx_addr, tgta, rl_idx,
+				      NULL))));
+}
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
+
 #if defined(CONFIG_BT_CENTRAL)
 void lll_scan_prepare_connect_req(struct lll_scan *lll, struct pdu_adv *pdu_tx,
 				  uint8_t phy, uint8_t adv_tx_addr,
@@ -146,7 +220,7 @@ void lll_scan_prepare_connect_req(struct lll_scan *lll, struct pdu_adv *pdu_tx,
 
 	conn_interval_us = (uint32_t)lll_conn->interval * CONN_INT_UNIT_US;
 	conn_offset_us = radio_tmr_end_get() + EVENT_IFS_US +
-			 PKT_AC_US(sizeof(struct pdu_adv_connect_ind), 0,
+			 PKT_AC_US(sizeof(struct pdu_adv_connect_ind),
 				   phy == PHY_LEGACY ? PHY_1M : phy);
 
 	/* Add transmitWindowDelay to default calculated connection offset:
@@ -1106,12 +1180,13 @@ static inline int isr_rx_pdu(struct lll_scan *lll, struct pdu_adv *pdu_adv_rx,
 		  ((pdu_adv_rx->type == PDU_ADV_TYPE_DIRECT_IND) &&
 		   (pdu_adv_rx->len == sizeof(struct pdu_adv_direct_ind)) &&
 		   (/* allow directed adv packets addressed to this device */
-		    lll_scan_tgta_check(lll, false, pdu_adv_rx->rx_addr,
+		    isr_scan_tgta_check(lll, false, pdu_adv_rx->rx_addr,
 					pdu_adv_rx->direct_ind.tgt_addr,
 					rl_idx, &dir_report))) ||
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 		  ((pdu_adv_rx->type == PDU_ADV_TYPE_EXT_IND) &&
-		   (lll->phy)) ||
+		   lll->phy && lll_scan_ext_tgta_check(lll, true, false,
+						       pdu_adv_rx, rl_idx)) ||
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 		  ((pdu_adv_rx->type == PDU_ADV_TYPE_SCAN_RSP) &&
 		   (pdu_adv_rx->len <= sizeof(struct pdu_adv_scan_rsp)) &&
@@ -1159,29 +1234,15 @@ static inline bool isr_scan_init_check(struct lll_scan *lll,
 		 ((pdu->type == PDU_ADV_TYPE_DIRECT_IND) &&
 		  (pdu->len == sizeof(struct pdu_adv_direct_ind)) &&
 		  (/* allow directed adv packets addressed to this device */
-			  lll_scan_tgta_check(lll, true, pdu->rx_addr,
+			  isr_scan_tgta_check(lll, true, pdu->rx_addr,
 					      pdu->direct_ind.tgt_addr, rl_idx,
 					      NULL)))));
 }
-
-bool lll_scan_adva_check(struct lll_scan *lll, uint8_t addr_type, uint8_t *addr,
-			 uint8_t rl_idx)
-{
-#if defined(CONFIG_BT_CTLR_PRIVACY)
-	/* Only applies to initiator with no whitelist */
-	if (rl_idx != FILTER_IDX_NONE) {
-		return (rl_idx == lll->rl_idx);
-	} else if (!ull_filter_lll_rl_addr_allowed(addr_type, addr, &rl_idx)) {
-		return false;
-	}
-#endif /* CONFIG_BT_CTLR_PRIVACY */
-	return ((lll->adv_addr_type == addr_type) &&
-		!memcmp(lll->adv_addr, addr, BDADDR_SIZE));
-}
 #endif /* CONFIG_BT_CENTRAL */
 
-bool lll_scan_tgta_check(struct lll_scan *lll, bool init, uint8_t addr_type,
-			 uint8_t *addr, uint8_t rl_idx, bool *dir_report)
+static bool isr_scan_tgta_check(struct lll_scan *lll, bool init,
+				uint8_t addr_type, uint8_t *addr,
+				uint8_t rl_idx, bool *dir_report)
 {
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	if (ull_filter_lll_rl_addr_resolve(addr_type, addr, rl_idx)) {

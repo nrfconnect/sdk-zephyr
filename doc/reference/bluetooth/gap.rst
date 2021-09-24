@@ -7,10 +7,7 @@ API Reference
 *************
 
 .. doxygengroup:: bt_gap
-   :members:
 
 .. doxygengroup:: bt_addr
-   :members:
 
 .. doxygengroup:: bt_gap_defines
-   :members:

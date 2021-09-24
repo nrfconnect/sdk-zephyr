@@ -31,45 +31,49 @@ The typical command to flash the board is:
 
 	west flash [ -r bossac ] [ -p /dev/ttyX ]
 
+Flash configuration for devices:
 
-Devices with ROM bootloader
----------------------------
+.. tabs::
 
-These devices don't need any special configuration.  After building your
-application, just run ``west flash`` to flash the board.
+    .. tab:: With ROM bootloader
 
+        These devices don't need any special configuration.  After building your
+        application, just run ``west flash`` to flash the board.
 
-Devices without ROM bootloader
-------------------------------
+    .. tab:: Without ROM bootloader
 
-For these devices, the user should:
+        For these devices, the user should:
 
-1. Define flash partitions required to accommodate the bootloader and
-   application image; see :ref:`flash_map_api` for details.
-2. Have board :file:`.defconfig` file with the
-   :option:`CONFIG_USE_DT_CODE_PARTITION` Kconfig option set to ``y`` to
-   instruct the build system to use these partitions for code relocation.
-   This option can also be set in ``prj.conf`` or any other Kconfig fragment.
-3. Build and flash the SAM-BA bootloader on the device.
+        1. Define flash partitions required to accommodate the bootloader and
+           application image; see :ref:`flash_map_api` for details.
+        2. Have board :file:`.defconfig` file with the
+           :kconfig:`CONFIG_USE_DT_CODE_PARTITION` Kconfig option set to ``y`` to
+           instruct the build system to use these partitions for code relocation.
+           This option can also be set in ``prj.conf`` or any other Kconfig fragment.
+        3. Build and flash the SAM-BA bootloader on the device.
 
+    .. tab:: With compatible SAM-BA bootloader
 
-Devices with compatible SAM-BA bootloader
------------------------------------------
+        For these devices, the user should:
 
-For these devices, the user should:
+        1. Define flash partitions required to accommodate the bootloader and
+           application image; see :ref:`flash_map_api` for details.
+        2. Have board :file:`.defconfig` file with the
+           :kconfig:`CONFIG_BOOTLOADER_BOSSA` Kconfig option set to ``y``.  This will
+           automatically select the :kconfig:`CONFIG_USE_DT_CODE_PARTITION` Kconfig
+           option which instruct the build system to use these partitions for code
+           relocation.  The board :file:`.defconfig` file should have
+           :kconfig:`CONFIG_BOOTLOADER_BOSSA_ARDUINO` ,
+           :kconfig:`CONFIG_BOOTLOADER_BOSSA_ADAFRUIT_UF2` or the
+           :kconfig:`CONFIG_BOOTLOADER_BOSSA_LEGACY` Kconfig option set to ``y``
+           to select the right compatible SAM-BA bootloader mode.
+           These options can also be set in ``prj.conf`` or any other Kconfig fragment.
+        3. Build and flash the SAM-BA bootloader on the device.
 
-1. Define flash partitions required to accommodate the bootloader and
-   application image; see :ref:`flash_map_api` for details.
-2. Have board :file:`.defconfig` file with the
-   :option:`CONFIG_BOOTLOADER_BOSSA` Kconfig option set to ``y``.  This will
-   automatically select the :option:`CONFIG_USE_DT_CODE_PARTITION` Kconfig
-   option which instruct the build system to use these partitions for code
-   relocation.  The board :file:`.defconfig` file should have
-   :option:`CONFIG_BOOTLOADER_BOSSA_ARDUINO` or the
-   :option:`CONFIG_BOOTLOADER_BOSSA_ADAFRUIT_UF2` Kconfig option set to ``y``
-   to select the right compatible SAM-BA bootloader mode.
-   These options can also be set in ``prj.conf`` or any other Kconfig fragment.
-3. Build and flash the SAM-BA bootloader on the device.
+.. note::
+
+    The :kconfig:`CONFIG_BOOTLOADER_BOSSA_LEGACY` Kconfig option should be used
+    as last resource.  Try configure first with Devices without ROM bootloader.
 
 
 Typical flash layout and configuration
@@ -176,6 +180,7 @@ As a quick reference, see these three board documentation pages:
   - :ref:`sam4e_xpro` (ROM bootloader)
   - :ref:`adafruit_feather_m0_basic_proto` (Adafruit UF2 bootloader)
   - :ref:`arduino_nano_33_iot` (Arduino bootloader)
+  - :ref:`arduino_nano_33_ble` (Arduino legacy bootloader)
 
 .. _jlink-debug-host-tools:
 

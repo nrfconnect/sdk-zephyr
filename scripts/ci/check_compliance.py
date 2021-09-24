@@ -551,7 +551,6 @@ UNDEF_KCONFIG_WHITELIST = {
     "FOO_LOG_LEVEL",
     "FOO_SETTING_1",
     "FOO_SETTING_2",
-    "LIS2DW12_INT_PIN",
     "LSM6DSO_INT_PIN",
     "MISSING",
     "MODULES",
@@ -900,15 +899,20 @@ class PyLint(ComplianceTest):
 
 def filter_py(root, fnames):
     # PyLint check helper. Returns all Python script filenames among the
-    # filenames in 'fnames', relative to directory 'root'. Uses the
-    # python-magic library, so that we can detect Python files that
-    # don't end in .py as well. python-magic is a frontend to libmagic,
-    # which is also used by 'file'.
+    # filenames in 'fnames', relative to directory 'root'.
+    #
+    # Uses the python-magic library, so that we can detect Python
+    # files that don't end in .py as well. python-magic is a frontend
+    # to libmagic, which is also used by 'file'.
+    #
+    # The extra os.path.isfile() is necessary because git includes
+    # submodule directories in its output.
 
     return [fname for fname in fnames
-            if fname.endswith(".py") or
-               magic.from_file(os.path.join(root, fname),
-                               mime=True) == "text/x-python"]
+            if os.path.isfile(os.path.join(root, fname)) and
+            (fname.endswith(".py") or
+             magic.from_file(os.path.join(root, fname),
+                             mime=True) == "text/x-python")]
 
 
 class Identity(ComplianceTest):
