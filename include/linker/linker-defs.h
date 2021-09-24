@@ -33,6 +33,7 @@
 #ifdef ZTEST_UNITTEST
 #define DT_NODE_HAS_STATUS(node, status) 0
 #else
+#include <linker/devicetree_reserved.h>
 #include <devicetree.h>
 #endif
 
@@ -41,6 +42,10 @@
 	_CONCAT(_##struct_type, _list_start) = .; \
 	KEEP(*(SORT_BY_NAME(._##struct_type.static.*))); \
 	_CONCAT(_##struct_type, _list_end) = .
+
+#define Z_LINK_ITERABLE_ALIGNED(struct_type, align) \
+	. = ALIGN(align); \
+	Z_LINK_ITERABLE(struct_type);
 
 #define Z_LINK_ITERABLE_GC_ALLOWED(struct_type) \
 	_CONCAT(_##struct_type, _list_start) = .; \
@@ -209,6 +214,10 @@ extern char _image_rodata_size[];
 extern char _vector_start[];
 extern char _vector_end[];
 
+#if DT_NODE_HAS_STATUS(_NODE_RESERVED, okay)
+DT_RESERVED_MEM_SYMBOLS()
+#endif
+
 #ifdef CONFIG_SW_VECTOR_RELAY
 extern char __vector_relay_table[];
 #endif
@@ -316,6 +325,56 @@ extern char __tls_start[];
 extern char __tls_end[];
 extern char __tls_size[];
 #endif /* CONFIG_THREAD_LOCAL_STORAGE */
+
+#ifdef CONFIG_LINKER_USE_BOOT_SECTION
+/* lnkr_boot_start[] and lnkr_boot_end[]
+ * must encapsulate all the boot sections.
+ */
+extern char lnkr_boot_start[];
+extern char lnkr_boot_end[];
+
+extern char lnkr_boot_text_start[];
+extern char lnkr_boot_text_end[];
+extern char lnkr_boot_text_size[];
+extern char lnkr_boot_data_start[];
+extern char lnkr_boot_data_end[];
+extern char lnkr_boot_data_size[];
+extern char lnkr_boot_rodata_start[];
+extern char lnkr_boot_rodata_end[];
+extern char lnkr_boot_rodata_size[];
+extern char lnkr_boot_bss_start[];
+extern char lnkr_boot_bss_end[];
+extern char lnkr_boot_bss_size[];
+extern char lnkr_boot_noinit_start[];
+extern char lnkr_boot_noinit_end[];
+extern char lnkr_boot_noinit_size[];
+#endif /* CONFIG_LINKER_USE_BOOT_SECTION */
+
+#ifdef CONFIG_LINKER_USE_PINNED_SECTION
+/* lnkr_pinned_start[] and lnkr_pinned_end[] must encapsulate
+ * all the pinned sections as these are used by
+ * the MMU code to mark the physical page frames with
+ * Z_PAGE_FRAME_PINNED.
+ */
+extern char lnkr_pinned_start[];
+extern char lnkr_pinned_end[];
+
+extern char lnkr_pinned_text_start[];
+extern char lnkr_pinned_text_end[];
+extern char lnkr_pinned_text_size[];
+extern char lnkr_pinned_data_start[];
+extern char lnkr_pinned_data_end[];
+extern char lnkr_pinned_data_size[];
+extern char lnkr_pinned_rodata_start[];
+extern char lnkr_pinned_rodata_end[];
+extern char lnkr_pinned_rodata_size[];
+extern char lnkr_pinned_bss_start[];
+extern char lnkr_pinned_bss_end[];
+extern char lnkr_pinned_bss_size[];
+extern char lnkr_pinned_noinit_start[];
+extern char lnkr_pinned_noinit_end[];
+extern char lnkr_pinned_noinit_size[];
+#endif /* CONFIG_LINKER_USE_PINNED_SECTION */
 
 #endif /* ! _ASMLANGUAGE */
 

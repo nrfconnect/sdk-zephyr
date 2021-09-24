@@ -360,7 +360,7 @@ static const char *ver_str(uint8_t ver)
 {
 	const char * const str[] = {
 		"1.0b", "1.1", "1.2", "2.0", "2.1", "3.0", "4.0", "4.1", "4.2",
-		"5.0", "5.1",
+		"5.0", "5.1", "5.2", "5.3"
 	};
 
 	if (ver < ARRAY_SIZE(str)) {
@@ -2429,13 +2429,52 @@ static int cmd_bonds(const struct shell *shell, size_t argc, char *argv[])
 	return 0;
 }
 
+static const char *role_str(uint8_t role)
+{
+	switch (role) {
+	case BT_CONN_ROLE_MASTER:
+		return "Master";
+	case BT_CONN_ROLE_SLAVE:
+		return "Slave";
+	}
+
+	return "Unknown";
+}
+
 static void connection_info(struct bt_conn *conn, void *user_data)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 	int *conn_count = user_data;
+	struct bt_conn_info info;
 
-	conn_addr_str(conn, addr, sizeof(addr));
-	shell_print(ctx_shell, "Remote Identity: %s", addr);
+	if (bt_conn_get_info(conn, &info) < 0) {
+		shell_error(ctx_shell, "Unable to get info: conn %p", conn);
+		return;
+	}
+
+	switch (info.type) {
+#if defined(CONFIG_BT_BREDR)
+	case BT_CONN_TYPE_BR:
+		bt_addr_to_str(info.br.dst, addr, sizeof(addr));
+		shell_print(ctx_shell, "#%u [BR][%s] %s", info.id,
+			    role_str(info.role), addr);
+		break;
+#endif
+	case BT_CONN_TYPE_LE:
+		bt_addr_le_to_str(info.le.dst, addr, sizeof(addr));
+		shell_print(ctx_shell, "#%u [LE][%s] %s: Interval %u latency %u"
+			    " timeout %u", info.id, role_str(info.role), addr,
+			    info.le.interval, info.le.latency, info.le.timeout);
+		break;
+#if defined(CONFIG_BT_ISO)
+	case BT_CONN_TYPE_ISO:
+		bt_addr_le_to_str(info.le.dst, addr, sizeof(addr));
+		shell_print(ctx_shell, "#%u [ISO][%s] %s", info.id,
+			    role_str(info.role), addr);
+		break;
+#endif
+	}
+
 	(*conn_count)++;
 }
 

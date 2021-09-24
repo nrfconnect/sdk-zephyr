@@ -254,9 +254,10 @@ void platformRadioInit(void)
 
 void transmit_message(struct k_work *tx_job)
 {
+	int tx_err;
+
 	ARG_UNUSED(tx_job);
 
-	tx_result = OT_ERROR_NONE;
 	/*
 	 * The payload is already in tx_payload->data,
 	 * but we need to set the length field
@@ -271,34 +272,56 @@ void transmit_message(struct k_work *tx_job)
 	radio_api->set_channel(radio_dev, sTransmitFrame.mChannel);
 	radio_api->set_txpower(radio_dev, tx_power);
 
-	net_pkt_set_ieee802154_frame_retry(tx_pkt,
-					   sTransmitFrame.mInfo.mTxInfo.mIsARetx);
+	net_pkt_set_ieee802154_frame_secured(tx_pkt,
+					     sTransmitFrame.mInfo.mTxInfo.mIsSecurityProcessed);
+	net_pkt_set_ieee802154_mac_hdr_rdy(tx_pkt, sTransmitFrame.mInfo.mTxInfo.mIsHeaderUpdated);
 
 	if ((radio_api->get_capabilities(radio_dev) & IEEE802154_HW_TXTIME) &&
 	    (sTransmitFrame.mInfo.mTxInfo.mTxDelay != 0)) {
 		uint64_t tx_at = sTransmitFrame.mInfo.mTxInfo.mTxDelayBaseTime +
 				 sTransmitFrame.mInfo.mTxInfo.mTxDelay;
 		net_pkt_set_txtime(tx_pkt, NSEC_PER_USEC * tx_at);
-		if (radio_api->tx(radio_dev, IEEE802154_TX_MODE_TXTIME_CCA,
-				  tx_pkt, tx_payload)) {
-			tx_result = OT_ERROR_INVALID_STATE;
-		}
+		tx_err =
+			radio_api->tx(radio_dev, IEEE802154_TX_MODE_TXTIME_CCA, tx_pkt, tx_payload);
 	} else if (sTransmitFrame.mInfo.mTxInfo.mCsmaCaEnabled) {
-		if (radio_api->get_capabilities(radio_dev) &
-		    IEEE802154_HW_CSMA) {
-			if (radio_api->tx(radio_dev, IEEE802154_TX_MODE_CSMA_CA,
-					  tx_pkt, tx_payload) != 0) {
-				tx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
+		if (radio_api->get_capabilities(radio_dev) & IEEE802154_HW_CSMA) {
+			tx_err = radio_api->tx(radio_dev, IEEE802154_TX_MODE_CSMA_CA, tx_pkt,
+					       tx_payload);
+		} else {
+			tx_err = radio_api->cca(radio_dev);
+			if (tx_err == 0) {
+				tx_err = radio_api->tx(radio_dev, IEEE802154_TX_MODE_DIRECT, tx_pkt,
+						       tx_payload);
 			}
-		} else if (radio_api->cca(radio_dev) != 0 ||
-			   radio_api->tx(radio_dev, IEEE802154_TX_MODE_DIRECT,
-					 tx_pkt, tx_payload) != 0) {
-			tx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
 		}
 	} else {
-		if (radio_api->tx(radio_dev, IEEE802154_TX_MODE_DIRECT, tx_pkt, tx_payload)) {
-			tx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
-		}
+		tx_err = radio_api->tx(radio_dev, IEEE802154_TX_MODE_DIRECT, tx_pkt, tx_payload);
+	}
+
+	/*
+	 * OpenThread handles the following errors:
+	 * - OT_ERROR_NONE
+	 * - OT_ERROR_NO_ACK
+	 * - OT_ERROR_CHANNEL_ACCESS_FAILURE
+	 * - OT_ERROR_ABORT
+	 * Any other error passed to `otPlatRadioTxDone` will result in assertion.
+	 */
+	switch (tx_err) {
+	case 0:
+		tx_result = OT_ERROR_NONE;
+		break;
+	case -ENOMSG:
+		tx_result = OT_ERROR_NO_ACK;
+		break;
+	case -EBUSY:
+		tx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
+		break;
+	case -EIO:
+		tx_result = OT_ERROR_ABORT;
+		break;
+	default:
+		tx_result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
+		break;
 	}
 
 	set_pending_event(PENDING_EVENT_TX_DONE);
@@ -306,6 +329,10 @@ void transmit_message(struct k_work *tx_job)
 
 static inline void handle_tx_done(otInstance *aInstance)
 {
+	sTransmitFrame.mInfo.mTxInfo.mIsSecurityProcessed =
+		net_pkt_ieee802154_frame_secured(tx_pkt);
+	sTransmitFrame.mInfo.mTxInfo.mIsHeaderUpdated = net_pkt_ieee802154_mac_hdr_rdy(tx_pkt);
+
 	if (IS_ENABLED(CONFIG_OPENTHREAD_DIAG) && otPlatDiagModeGet()) {
 		otPlatDiagRadioTransmitDone(aInstance, &sTransmitFrame, tx_result);
 	} else {
@@ -600,6 +627,7 @@ otError otPlatRadioReceive(otInstance *aInstance, uint8_t aChannel)
 	return OT_ERROR_NONE;
 }
 
+#if defined(CONFIG_OPENTHREAD_CSL_RECEIVER)
 otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel,
 			     uint32_t aStart, uint32_t aDuration)
 {
@@ -618,6 +646,7 @@ otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel,
 
 	return result ? OT_ERROR_FAILED : OT_ERROR_NONE;
 }
+#endif
 
 otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
 {
@@ -957,12 +986,21 @@ otError otPlatRadioSetTransmitPower(otInstance *aInstance, int8_t aPower)
 	return OT_ERROR_NONE;
 }
 
+uint64_t otPlatTimeGet(void)
+{
+	if (radio_api == NULL || radio_api->get_time == NULL) {
+		return k_ticks_to_us_floor64(k_uptime_ticks());
+	} else {
+		return radio_api->get_time(radio_dev);
+	}
+}
+
 #if defined(CONFIG_NET_PKT_TXTIME)
 uint64_t otPlatRadioGetNow(otInstance *aInstance)
 {
 	ARG_UNUSED(aInstance);
 
-	return radio_api->get_time(radio_dev);
+	return otPlatTimeGet();
 }
 #endif
 
@@ -1036,9 +1074,14 @@ otError otPlatRadioEnableCsl(otInstance *aInstance, uint32_t aCslPeriod, otShort
 	/* Leave CSL Phase empty intentionally */
 	sys_put_le16(aCslPeriod, &ie_header[OT_IE_HEADER_SIZE + 2]);
 	config.ack_ie.data = ie_header;
-	config.ack_ie.data_len = OT_IE_HEADER_SIZE + OT_CSL_IE_SIZE;
 	config.ack_ie.short_addr = aShortAddr;
 	config.ack_ie.ext_addr = aExtAddr->m8;
+
+	if (aCslPeriod > 0) {
+		config.ack_ie.data_len = OT_IE_HEADER_SIZE + OT_CSL_IE_SIZE;
+	} else {
+		config.ack_ie.data_len = 0;
+	}
 	result = radio_api->configure(radio_dev, IEEE802154_CONFIG_ENH_ACK_HEADER_IE, &config);
 
 	config.csl_period = aCslPeriod;
@@ -1061,10 +1104,10 @@ uint8_t otPlatRadioGetCslAccuracy(otInstance *aInstance)
 {
 	ARG_UNUSED(aInstance);
 
-	return radio_api->get_csl_acc(radio_dev);
+	return radio_api->get_sch_acc(radio_dev);
 }
 
-#if defined(CONFIG_OPENTHREAD_LINK_METRICS)
+#if defined(CONFIG_OPENTHREAD_LINK_METRICS_SUBJECT)
 /**
  * Header IE format - IEEE Std. 802.15.4-2015, 7.4.2.1 && 7.4.2.2
  *
@@ -1178,4 +1221,5 @@ otError otPlatRadioConfigureEnhAckProbing(otInstance *aInstance, otLinkMetrics a
 
 	return result ? OT_ERROR_FAILED : OT_ERROR_NONE;
 }
-#endif /* CONFIG_OPENTHREAD_LINK_METRICS */
+
+#endif /* CONFIG_OPENTHREAD_LINK_METRICS_SUBJECT */

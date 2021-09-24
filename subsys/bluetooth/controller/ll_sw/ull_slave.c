@@ -11,6 +11,7 @@
 
 #include "util/util.h"
 #include "util/memq.h"
+#include "util/mem.h"
 #include "util/mayfly.h"
 
 #include "hal/cpu.h"
@@ -49,13 +50,15 @@
 #include "common/log.h"
 #include "hal/debug.h"
 
+static void invalid_release(struct ull_hdr *hdr, struct lll_conn *lll,
+			    memq_link_t *link, struct node_rx_hdr *rx);
 static void ticker_op_stop_adv_cb(uint32_t status, void *param);
 static void ticker_op_cb(uint32_t status, void *param);
 static void ticker_update_latency_cancel_op_cb(uint32_t ticker_status,
 					       void *param);
 
-void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
-		     struct node_rx_ftr *ftr, struct lll_conn *lll)
+void ull_slave_setup(struct node_rx_hdr *rx, struct node_rx_ftr *ftr,
+		     struct lll_conn *lll)
 {
 	uint32_t conn_offset_us, conn_interval_us;
 	uint8_t ticker_id_adv, ticker_id_conn;
@@ -71,7 +74,10 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	uint16_t win_delay_us;
 	struct node_rx_cc *cc;
 	struct ll_conn *conn;
+	uint16_t max_tx_time;
+	uint16_t max_rx_time;
 	uint16_t win_offset;
+	memq_link_t *link;
 	uint16_t timeout;
 	uint8_t chan_sel;
 
@@ -99,6 +105,11 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 		memcpy(peer_id_addr, peer_addr, BDADDR_SIZE);
 	}
 
+	/* Use the link stored in the node rx to enqueue connection
+	 * complete node rx towards LL context.
+	 */
+	link = rx->link;
+
 #if defined(CONFIG_BT_CTLR_CHECK_SAME_PEER_CONN)
 	uint8_t own_addr_type = pdu_adv->rx_addr;
 	uint8_t *own_addr = adv->own_addr;
@@ -106,10 +117,8 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	/* Do not connect twice to the same peer */
 	if (ull_conn_peer_connected(own_addr_type, own_addr,
 				    peer_addr_type, peer_id_addr)) {
-		rx->type = NODE_RX_TYPE_RELEASE;
+		invalid_release(&adv->ull, lll, link, rx);
 
-		ll_rx_put(link, rx);
-		ll_rx_sched();
 		return;
 	}
 
@@ -130,34 +139,7 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	lll->interval = sys_le16_to_cpu(pdu_adv->connect_ind.interval);
 	if ((lll->data_chan_count < 2) || (lll->data_chan_hop < 5) ||
 	    (lll->data_chan_hop > 16) || !lll->interval) {
-		lll->slave.initiated = 0U;
-
-		/* Mark for buffer for release */
-		rx->type = NODE_RX_TYPE_RELEASE;
-
-		/* Release CSA#2 related node rx too */
-		if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2)) {
-			struct node_rx_pdu *rx_csa;
-
-			/* pick the rx node instance stored within the
-			 * connection rx node.
-			 */
-			rx_csa = (void *)ftr->extra;
-
-			/* Enqueue the connection event to be release */
-			ll_rx_put(link, rx);
-
-			/* Use the rx node for CSA event */
-			rx = (void *)rx_csa;
-			link = rx->link;
-
-			/* Mark for buffer for release */
-			rx->type = NODE_RX_TYPE_RELEASE;
-		}
-
-		/* Enqueue connection or CSA event to be release */
-		ll_rx_put(link, rx);
-		ll_rx_sched();
+		invalid_release(&adv->ull, lll, link, rx);
 
 		return;
 	}
@@ -325,6 +307,25 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	ll_rx_put(link, rx);
 	ll_rx_sched();
 
+#if defined(CONFIG_BT_CTLR_DATA_LENGTH)
+#if defined(CONFIG_BT_CTLR_PHY)
+	max_tx_time = lll->max_tx_time;
+	max_rx_time = lll->max_rx_time;
+#else /* !CONFIG_BT_CTLR_PHY */
+	max_tx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, PHY_1M);
+	max_rx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, PHY_1M);
+#endif /* !CONFIG_BT_CTLR_PHY */
+#else /* !CONFIG_BT_CTLR_DATA_LENGTH */
+	max_tx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, PHY_1M);
+	max_rx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, PHY_1M);
+#if defined(CONFIG_BT_CTLR_PHY)
+	max_tx_time = MAX(max_tx_time,
+			  PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, lll->phy_tx));
+	max_rx_time = MAX(max_rx_time,
+			  PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, lll->phy_rx));
+#endif /* !CONFIG_BT_CTLR_PHY */
+#endif /* !CONFIG_BT_CTLR_DATA_LENGTH */
+
 #if defined(CONFIG_BT_CTLR_PHY)
 	ready_delay_us = lll_radio_rx_ready_delay_get(lll->phy_rx, 1);
 #else
@@ -340,23 +341,24 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	conn->ull.ticks_slot =
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US +
 				       ready_delay_us +
-				       328 + EVENT_IFS_US + 328);
+				       max_rx_time +
+				       EVENT_IFS_US +
+				       max_tx_time);
 
 	ticks_slot_offset = MAX(conn->ull.ticks_active_to_start,
 				conn->ull.ticks_prepare_to_start);
-
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
 		ticks_slot_overhead = ticks_slot_offset;
 	} else {
 		ticks_slot_overhead = 0U;
 	}
+	ticks_slot_offset += HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US);
 
 	conn_interval_us -= lll->slave.window_widening_periodic_us;
 
 	conn_offset_us = ftr->radio_end_us;
 	conn_offset_us += win_offset * CONN_INT_UNIT_US;
 	conn_offset_us += win_delay_us;
-	conn_offset_us -= EVENT_OVERHEAD_START_US;
 	conn_offset_us -= EVENT_TICKER_RES_MARGIN_US;
 	conn_offset_us -= EVENT_JITTER_US;
 	conn_offset_us -= ready_delay_us;
@@ -572,6 +574,43 @@ uint8_t ll_start_enc_req_send(uint16_t handle, uint8_t error_code,
 	return 0;
 }
 #endif /* CONFIG_BT_CTLR_LE_ENC */
+
+static void invalid_release(struct ull_hdr *hdr, struct lll_conn *lll,
+			    memq_link_t *link, struct node_rx_hdr *rx)
+{
+	/* Reset the advertising disabled callback */
+	hdr->disabled_cb = NULL;
+
+	/* Let the advertiser continue with connectable advertising */
+	lll->slave.initiated = 0U;
+
+	/* Mark for buffer for release */
+	rx->type = NODE_RX_TYPE_RELEASE;
+
+	/* Release CSA#2 related node rx too */
+	if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2)) {
+		struct node_rx_pdu *rx_csa;
+
+		/* pick the rx node instance stored within the
+		 * connection rx node.
+		 */
+		rx_csa = rx->rx_ftr.extra;
+
+		/* Enqueue the connection event to be release */
+		ll_rx_put(link, rx);
+
+		/* Use the rx node for CSA event */
+		rx = (void *)rx_csa;
+		link = rx->link;
+
+		/* Mark for buffer for release */
+		rx->type = NODE_RX_TYPE_RELEASE;
+	}
+
+	/* Enqueue connection or CSA event to be release */
+	ll_rx_put(link, rx);
+	ll_rx_sched();
+}
 
 static void ticker_op_stop_adv_cb(uint32_t status, void *param)
 {

@@ -23,11 +23,15 @@
 #if !defined(_ASMLANGUAGE)
 #include <sys/atomic.h>
 #include <zephyr/types.h>
-#include <sched_priq.h>
+#include <kernel/sched_priq.h>
 #include <sys/dlist.h>
 #include <sys/util.h>
 #include <sys/sys_heap.h>
 #include <arch/structs.h>
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 #define K_NUM_PRIORITIES \
@@ -229,6 +233,10 @@ struct _timeout {
 	int32_t dticks;
 #endif
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _ASMLANGUAGE */
 

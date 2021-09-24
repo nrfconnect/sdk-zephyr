@@ -20,7 +20,7 @@ uint8_t ull_conn_default_phy_tx_get(void);
 uint8_t ull_conn_default_phy_rx_get(void);
 bool ull_conn_peer_connected(uint8_t own_addr_type, uint8_t *own_addr,
 			     uint8_t peer_addr_type, uint8_t *peer_addr);
-void ull_conn_setup(memq_link_t *link, struct node_rx_hdr *rx);
+void ull_conn_setup(memq_link_t *rx_link, struct node_rx_hdr *rx);
 int ull_conn_rx(memq_link_t *link, struct node_rx_pdu **rx);
 int ull_conn_llcp(struct ll_conn *conn, uint32_t ticks_at_expire, uint16_t lazy);
 void ull_conn_done(struct node_rx_event_done *done);
@@ -35,4 +35,3 @@ memq_link_t *ull_conn_ack_by_last_peek(uint8_t last, uint16_t *handle,
 void *ull_conn_ack_dequeue(void);
 void ull_conn_tx_ack(uint16_t handle, memq_link_t *link, struct node_tx *tx);
 uint8_t ull_conn_llcp_req(void *conn);
-void ull_conn_upd_curr_reset(void);

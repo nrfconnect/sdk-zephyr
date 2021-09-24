@@ -7,6 +7,7 @@
 #include "mesh/net.h"
 #include "mesh/transport.h"
 #include <sys/byteorder.h>
+#include "argparse.h"
 
 #define LOG_MODULE_NAME test_friendship
 
@@ -70,10 +71,8 @@ static void test_lpn_init(void)
 	 * devkey based on the device number, which is guaranteed to be unique
 	 * for each device in the simulation.
 	 */
-	extern uint global_device_nbr;
-
-	lpn_cfg.addr = LPN_ADDR_START + global_device_nbr;
-	lpn_cfg.dev_key[0] = global_device_nbr;
+	lpn_cfg.addr = LPN_ADDR_START + get_device_nbr();
+	lpn_cfg.dev_key[0] = get_device_nbr();
 	test_common_init(&lpn_cfg);
 }
 
@@ -256,9 +255,9 @@ static void test_friend_msg(void)
 	 * transport and network parts of the second packet.
 	 * Ensures coverage for the regression reported in #32033.
 	 */
-	ASSERT_OK(bt_mesh_test_send(friend_lpn_addr, 5, 0, K_SECONDS(1)),
+	ASSERT_OK(bt_mesh_test_send(friend_lpn_addr, BT_MESH_SDU_UNSEG_MAX, 0, K_SECONDS(1)),
 		  "Unseg send failed");
-	ASSERT_OK(bt_mesh_test_send(friend_lpn_addr, 5, 0, K_SECONDS(1)),
+	ASSERT_OK(bt_mesh_test_send(friend_lpn_addr, BT_MESH_SDU_UNSEG_MAX, 0, K_SECONDS(1)),
 		  "Unseg send failed");
 
 	/* Two messages require 2 polls plus the "no more messages" msg */
@@ -337,6 +336,8 @@ static void test_friend_group(void)
 
 	k_sleep(K_SECONDS(2));
 
+	evt_clear(FRIEND_POLLED);
+
 	/* Send a group message to the LPN */
 	ASSERT_OK(bt_mesh_test_send(GROUP_ADDR, 5, 0, K_SECONDS(1)),
 		  "Failed to send to LPN");
@@ -399,7 +400,7 @@ static void test_lpn_msg_frnd(void)
 	evt_clear(LPN_POLLED);
 
 	/* Give friend time to prepare the message */
-	k_sleep(K_SECONDS(2));
+	k_sleep(K_SECONDS(3));
 
 	/* Receive unsegmented message */
 	ASSERT_OK(bt_mesh_lpn_poll(), "Poll failed");
@@ -407,7 +408,7 @@ static void test_lpn_msg_frnd(void)
 		  "Failed to receive message");
 
 	/* Give friend time to prepare the message */
-	k_sleep(K_SECONDS(2));
+	k_sleep(K_SECONDS(3));
 
 	/* Receive segmented message */
 	ASSERT_OK(bt_mesh_lpn_poll(), "Poll failed");
@@ -419,9 +420,9 @@ static void test_lpn_msg_frnd(void)
 
 	/* Receive two unsegmented messages */
 	ASSERT_OK(bt_mesh_lpn_poll(), "Poll failed");
-	ASSERT_OK(bt_mesh_test_recv(5, cfg->addr, K_SECONDS(2)),
+	ASSERT_OK(bt_mesh_test_recv(BT_MESH_SDU_UNSEG_MAX, cfg->addr, K_SECONDS(2)),
 		  "Failed to receive message");
-	ASSERT_OK(bt_mesh_test_recv(5, cfg->addr, K_SECONDS(2)),
+	ASSERT_OK(bt_mesh_test_recv(BT_MESH_SDU_UNSEG_MAX, cfg->addr, K_SECONDS(2)),
 		  "Failed to receive message");
 
 	k_sleep(K_SECONDS(3));
@@ -492,7 +493,7 @@ static void test_lpn_msg_mesh(void)
 	test_model->pub->ttl = BT_MESH_TTL_DEFAULT;
 
 	net_buf_simple_reset(test_model->pub->msg);
-	bt_mesh_model_msg_init(test_model->pub->msg, TEST_MSG_OP);
+	bt_mesh_model_msg_init(test_model->pub->msg, TEST_MSG_OP_1);
 	ASSERT_OK(bt_mesh_model_publish(test_model));
 
 	PASS();
@@ -622,6 +623,13 @@ static void test_lpn_group(void)
 	ASSERT_OK(evt_wait(LPN_ESTABLISHED, K_SECONDS(5)),
 		  "LPN not established");
 	evt_clear(LPN_POLLED);
+
+	/* Send a message to the other mesh device to indicate that the
+	 * friendship has been established. Give the other device a time to
+	 * start up first.
+	 */
+	k_sleep(K_MSEC(10));
+	ASSERT_OK(bt_mesh_test_send(other_cfg.addr, 5, 0, K_SECONDS(1)));
 
 	k_sleep(K_SECONDS(5));
 	ASSERT_OK(bt_mesh_lpn_poll(), "Poll failed");
@@ -793,6 +801,9 @@ static void test_other_group(void)
 	bt_mesh_test_setup();
 
 	ASSERT_OK(bt_mesh_va_add(test_va_uuid, &virtual_addr));
+
+	/* Wait for LPN to send us a message after establishing the friendship */
+	ASSERT_OK(bt_mesh_test_recv(5, cfg->addr, K_SECONDS(1)));
 
 	/* Send a group message to the LPN */
 	ASSERT_OK(bt_mesh_test_send(GROUP_ADDR, 5, 0, K_SECONDS(1)),

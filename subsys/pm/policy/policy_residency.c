@@ -6,7 +6,8 @@
 
 #include <zephyr.h>
 #include <kernel.h>
-#include "pm_policy.h"
+#include <pm/pm.h>
+#include <pm/policy.h>
 
 #define LOG_LEVEL CONFIG_PM_LOG_LEVEL /* From power module Kconfig */
 #include <logging/log.h>
@@ -34,7 +35,7 @@ struct pm_state_info pm_policy_next_state(int32_t ticks)
 				"min_residency_us < exit_latency_us");
 
 		if ((ticks == K_TICKS_FOREVER) ||
-		    (ticks >= (min_residency - exit_latency))) {
+		    (ticks >= (min_residency + exit_latency))) {
 			LOG_DBG("Selected power state %d "
 				"(ticks: %d, min_residency: %u)",
 				pm_min_residency[i].state, ticks,

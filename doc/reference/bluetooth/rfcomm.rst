@@ -9,4 +9,3 @@ API Reference
 *************
 
 .. doxygengroup:: bt_rfcomm
-   :members:

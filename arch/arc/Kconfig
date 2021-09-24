@@ -18,10 +18,7 @@ config CPU_ARCEM
 
 config CPU_ARCHS
 	bool
-	# FIXME: ATOMIC_OPERATIONS_BUILTIN still has some problem in arcmwdt
-	# toolchain, so choosing ATOMIC_OPERATIONS_C instead.
-	select ATOMIC_OPERATIONS_C if "$(ZEPHYR_TOOLCHAIN_VARIANT)" = "arcmwdt"
-	select ATOMIC_OPERATIONS_BUILTIN if "$(ZEPHYR_TOOLCHAIN_VARIANT)" != "arcmwdt"
+	select ATOMIC_OPERATIONS_BUILTIN
 	help
 	  This option signifies the use of an ARC HS CPU
 
@@ -255,6 +252,7 @@ config CODE_DENSITY
 
 config ARC_HAS_ACCL_REGS
 	bool "Reg Pair ACCL:ACCH (FPU and/or MPY > 6)"
+	default y if CPU_HS3X
 	default y if FPU
 	help
 	  Depending on the configuration, CPU can contain accumulator reg-pair

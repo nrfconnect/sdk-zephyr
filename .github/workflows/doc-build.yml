@@ -19,6 +19,11 @@ on:
     - 'scripts/dts/**'
     - 'scripts/requirements-doc.txt'
 
+env:
+  # The latest CMake available directly with apt is 3.18, but we need >=3.20
+  # so we fetch that through pip.
+  CMAKE_VERSION: 3.20.5
+
 jobs:
   doc-build:
     name: "Documentation Build"
@@ -34,7 +39,7 @@ jobs:
 
     - name: install-pkgs
       run: |
-        sudo apt-get install -y ninja-build doxygen
+        sudo apt-get install -y ninja-build doxygen graphviz
 
     - name: cache-pip
       uses: actions/cache@v1
@@ -45,9 +50,9 @@ jobs:
     - name: install-pip
       run: |
         sudo pip3 install -U setuptools wheel pip
-        pip3 install -r scripts/requirements-base.txt
         pip3 install -r scripts/requirements-doc.txt
         pip3 install west==0.11.0
+        pip3 install cmake==${CMAKE_VERSION}
 
     - name: west setup
       run: |
@@ -55,8 +60,7 @@ jobs:
 
     - name: build-docs
       run: |
-        source zephyr-env.sh
-        make -C doc htmldocs
+        SPHINXOPTS="-q -W -j auto" make -C doc html
         tar cvf htmldocs.tar --directory=./doc/_build html
 
     - name: upload-build
@@ -65,15 +69,3 @@ jobs:
       with:
         name: htmldocs.tar
         path: htmldocs.tar
-
-    - name: check-warns
-      run: |
-        if [ -s doc/_build/doc.warnings ]; then
-           docwarn=$(cat doc/_build/doc.warnings)
-           docwarn="${docwarn//'%'/'%25'}"
-           docwarn="${docwarn//$'\n'/'%0A'}"
-           docwarn="${docwarn//$'\r'/'%0D'}"
-           # We treat doc warnings as errors
-           echo "::error file=doc.warnings::$docwarn"
-           exit 1
-        fi

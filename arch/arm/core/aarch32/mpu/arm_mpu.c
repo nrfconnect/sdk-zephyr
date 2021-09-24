@@ -326,11 +326,13 @@ int z_arm_mpu_init(void)
 	arm_core_mpu_disable();
 
 #if defined(CONFIG_NOCACHE_MEMORY)
-	/* Clean and invalidate data cache if
+	/* Clean and invalidate data cache if it is enabled and
 	 * that was not already done at boot
 	 */
 #if !defined(CONFIG_INIT_ARCH_HW_AT_BOOT)
-	SCB_CleanInvalidateDCache();
+	if (SCB->CCR & SCB_CCR_DC_Msk) {
+		SCB_CleanInvalidateDCache();
+	}
 #endif
 #endif /* CONFIG_NOCACHE_MEMORY */
 
@@ -351,14 +353,14 @@ int z_arm_mpu_init(void)
 	/* Program additional fixed flash region for null-pointer
 	 * dereferencing detection (debug feature)
 	 */
-#if defined(CONFIG_CORTEX_M_DEBUG_NULL_POINTER_EXCEPTION_DETECTION_MPU)
+#if defined(CONFIG_NULL_POINTER_EXCEPTION_DETECTION_MPU)
 #if (defined(CONFIG_ARMV8_M_BASELINE) || defined(CONFIG_ARMV8_M_MAINLINE)) && \
-	(CONFIG_FLASH_BASE_ADDRESS > CONFIG_CORTEX_M_DEBUG_NULL_POINTER_EXCEPTION_PAGE_SIZE)
+	(CONFIG_FLASH_BASE_ADDRESS > CONFIG_CORTEX_M_NULL_POINTER_EXCEPTION_PAGE_SIZE)
 #pragma message "Null-Pointer exception detection cannot be configured on un-mapped flash areas"
 #else
 	const struct z_arm_mpu_partition unmap_region =	{
 		.start = 0x0,
-		.size = CONFIG_CORTEX_M_DEBUG_NULL_POINTER_EXCEPTION_PAGE_SIZE,
+		.size = CONFIG_CORTEX_M_NULL_POINTER_EXCEPTION_PAGE_SIZE,
 #if defined(CONFIG_ARMV8_M_BASELINE) || defined(CONFIG_ARMV8_M_MAINLINE)
 		/* Overlapping region (with any permissions)
 		 * will result in fault generation
@@ -375,16 +377,16 @@ int z_arm_mpu_init(void)
 	 * (size and alignment).
 	 */
 	_ARCH_MEM_PARTITION_ALIGN_CHECK(0x0,
-		CONFIG_CORTEX_M_DEBUG_NULL_POINTER_EXCEPTION_PAGE_SIZE);
+		CONFIG_CORTEX_M_NULL_POINTER_EXCEPTION_PAGE_SIZE);
 
 #if defined(CONFIG_ARMV8_M_BASELINE) || defined(CONFIG_ARMV8_M_MAINLINE)
 	/* ARMv8-M requires that the area:
-	 * 0x0 - CORTEX_M_DEBUG_NULL_POINTER_EXCEPTION_PAGE_SIZE
+	 * 0x0 - CORTEX_M_NULL_POINTER_EXCEPTION_PAGE_SIZE
 	 * is not unmapped (belongs to a valid MPU region already).
 	 */
 	if ((arm_cmse_mpu_region_get(0x0) == -EINVAL) ||
 		(arm_cmse_mpu_region_get(
-			CONFIG_CORTEX_M_DEBUG_NULL_POINTER_EXCEPTION_PAGE_SIZE - 1)
+			CONFIG_CORTEX_M_NULL_POINTER_EXCEPTION_PAGE_SIZE - 1)
 		== -EINVAL)) {
 		__ASSERT(0,
 			"Null pointer detection page unmapped\n");
@@ -401,7 +403,7 @@ int z_arm_mpu_init(void)
 	static_regions_num++;
 
 #endif
-#endif /* CONFIG_CORTEX_M_DEBUG_NULL_POINTER_EXCEPTION_DETECTION_MPU */
+#endif /* CONFIG_NULL_POINTER_EXCEPTION_DETECTION_MPU */
 
 	/* Sanity check for number of regions in Cortex-M0+, M3, and M4. */
 #if defined(CONFIG_CPU_CORTEX_M0PLUS) || \

@@ -104,8 +104,13 @@
 
 		flash_reserved: flash@9D800 {
 			compatible = "soc-nv-flash";
-			reg = <0x9D800 DT_SIZE_K(10)>;
+			reg = <0x9D800 DT_SIZE_K(9)>;
 			status = "disabled";
+		};
+
+		uuid: flash@9fc70 {
+			compatible = "nxp,lpc-uid";
+			reg = <0x9fc70 0x10>;
 		};
 
 		boot_rom: flash@3000000 {
@@ -137,6 +142,7 @@
 		label = "GPIO_0";
 		gpio-controller;
 		#gpio-cells = <2>;
+		port = <0>;
 	};
 
 	gpio1: gpio@1 {
@@ -146,6 +152,7 @@
 		label = "GPIO_1";
 		gpio-controller;
 		#gpio-cells = <2>;
+		port = <1>;
 	};
 
 	dma0: dma-controller@82000 {

@@ -24,9 +24,13 @@
 
 #include "bt.h"
 
-static void iso_recv(struct bt_iso_chan *chan, struct net_buf *buf)
+#define DATA_MTU CONFIG_BT_ISO_TX_MTU
+
+static void iso_recv(struct bt_iso_chan *chan, const struct bt_iso_recv_info *info,
+		struct net_buf *buf)
 {
-	printk("Incoming data channel %p len %u\n", chan, buf->len);
+	printk("Incoming data channel %p len %u, seq: %d, ts: %d\n", chan, buf->len,
+			info->sn, info->ts);
 }
 
 static void iso_connected(struct bt_iso_chan *chan)
@@ -68,6 +72,9 @@ struct bt_iso_chan iso_chan = {
 	.qos = &iso_qos,
 };
 
+#if defined(CONFIG_BT_ISO_UNICAST)
+NET_BUF_POOL_FIXED_DEFINE(tx_pool, 1, DATA_MTU, NULL);
+
 static int iso_accept(struct bt_conn *conn, struct bt_iso_chan **chan)
 {
 	printk("Incoming conn %p\n", conn);
@@ -90,17 +97,36 @@ struct bt_iso_server iso_server = {
 static int cmd_listen(const struct shell *shell, size_t argc, char *argv[])
 {
 	int err;
+	static struct bt_iso_chan_io_qos *tx_qos, *rx_qos;
 
-	if (argc > 1) {
-		iso_server.sec_level = *argv[1] - '0';
+	if (!strcmp("tx", argv[1])) {
+		tx_qos = &iso_tx_qos;
+		rx_qos = NULL;
+	} else if (!strcmp("rx", argv[1])) {
+		tx_qos = NULL;
+		rx_qos = &iso_rx_qos;
+	} else if (!strcmp("txrx", argv[1])) {
+		tx_qos = &iso_tx_qos;
+		rx_qos = &iso_rx_qos;
+	} else {
+		shell_error(shell, "Invalid argument - use tx, rx or txrx");
+		return -ENOEXEC;
+	}
+
+	if (argc > 2) {
+		iso_server.sec_level = *argv[2] - '0';
 	}
 
 	err = bt_iso_server_register(&iso_server);
 	if (err) {
 		shell_error(shell, "Unable to register ISO cap (err %d)",
 			    err);
+		return err;
 	}
 
+	/* Setup peripheral iso data direction only if register is success */
+	iso_chan.qos->tx = tx_qos;
+	iso_chan.qos->rx = rx_qos;
 	return err;
 }
 
@@ -124,13 +150,13 @@ static int cmd_bind(const struct shell *shell, size_t argc, char *argv[])
 	chans[0] = &iso_chan;
 
 	if (argc > 1) {
-		if (!strcmp("tx", argv[2])) {
+		if (!strcmp("tx", argv[1])) {
 			chans[0]->qos->tx = &iso_tx_qos;
 			chans[0]->qos->rx = NULL;
-		} else if (!strcmp("rx", argv[2])) {
+		} else if (!strcmp("rx", argv[1])) {
 			chans[0]->qos->tx = NULL;
 			chans[0]->qos->rx = &iso_rx_qos;
-		} else if (!strcmp("txrx", argv[2])) {
+		} else if (!strcmp("txrx", argv[1])) {
 			chans[0]->qos->tx = &iso_tx_qos;
 			chans[0]->qos->rx = &iso_rx_qos;
 		}
@@ -228,8 +254,6 @@ static int cmd_connect(const struct shell *shell, size_t argc, char *argv[])
 	return 0;
 }
 
-#define DATA_MTU CONFIG_BT_ISO_TX_MTU
-NET_BUF_POOL_FIXED_DEFINE(tx_pool, 1, DATA_MTU, NULL);
 
 static int cmd_send(const struct shell *shell, size_t argc, char *argv[])
 {
@@ -258,6 +282,7 @@ static int cmd_send(const struct shell *shell, size_t argc, char *argv[])
 		net_buf_reserve(buf, BT_ISO_CHAN_SEND_RESERVE);
 
 		net_buf_add_mem(buf, buf_data, len);
+		shell_info(shell, "send: %d bytes of data", len);
 		ret = bt_iso_chan_send(&iso_chan, buf);
 		if (ret < 0) {
 			shell_print(shell, "Unable to send: %d", -ret);
@@ -286,6 +311,7 @@ static int cmd_disconnect(const struct shell *shell, size_t argc,
 
 	return 0;
 }
+#endif /* CONFIG_BT_ISO_UNICAST */
 
 #if defined(CONFIG_BT_ISO_BROADCAST)
 #define BIS_ISO_CHAN_COUNT 1
@@ -471,14 +497,16 @@ static int cmd_big_term(const struct shell *shell, size_t argc, char *argv[])
 #endif /* CONFIG_BT_ISO_BROADCAST */
 
 SHELL_STATIC_SUBCMD_SET_CREATE(iso_cmds,
+#if defined(CONFIG_BT_ISO_UNICAST)
 	SHELL_CMD_ARG(bind, NULL, "[dir=tx,rx,txrx] [interval] [packing] [framing] "
 		      "[latency] [sdu] [phy] [rtn]", cmd_bind, 1, 8),
 	SHELL_CMD_ARG(connect, NULL, "Connect ISO Channel", cmd_connect, 1, 0),
-	SHELL_CMD_ARG(listen, NULL, "[security level]", cmd_listen, 1, 1),
+	SHELL_CMD_ARG(listen, NULL, "<dir=tx,rx,txrx> [security level]", cmd_listen, 2, 1),
 	SHELL_CMD_ARG(send, NULL, "Send to ISO Channel [count]",
 		      cmd_send, 1, 1),
 	SHELL_CMD_ARG(disconnect, NULL, "Disconnect ISO Channel",
 		      cmd_disconnect, 1, 0),
+#endif /* CONFIG_BT_ISO_UNICAST */
 #if defined(CONFIG_BT_ISO_BROADCAST)
 	SHELL_CMD_ARG(create-big, NULL, "Create a BIG as a broadcaster [enc <broadcast code>]",
 		      cmd_big_create, 1, 2),

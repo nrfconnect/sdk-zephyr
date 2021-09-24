@@ -69,7 +69,12 @@ static struct nrf5_802154_data nrf5_data;
 
 #define DRX_SLOT_PH 0 /* Placeholder delayed reception window ID */
 #define DRX_SLOT_RX 1 /* Actual delayed reception window ID */
-#define PH_DURATION 10 /* Duration of the placeholder window, in microseconds  */
+#define PH_DURATION 10 /* Duration of the placeholder window, in microseconds */
+/* When scheduling the actual delayed reception window an adjustment of
+ * 800 us is required to match the CSL tranmission timing for unknown
+ * reasons. This is a temporary workaround until the root cause is found.
+ */
+#define DRX_ADJUST 800
 
 #if defined(CONFIG_IEEE802154_NRF5_UICR_EUI64_ENABLE)
 #if defined(CONFIG_SOC_NRF5340_CPUAPP)
@@ -473,26 +478,50 @@ static void nrf5_tx_started(const struct device *dev,
 	}
 }
 
+static bool nrf5_tx_immediate(struct net_pkt *pkt, uint8_t *payload, bool cca)
+{
+	nrf_802154_transmit_metadata_t metadata = {
+		.frame_props = {
+			.is_secured = pkt->ieee802154_frame_secured,
+			.dynamic_data_is_set = pkt->ieee802154_mac_hdr_rdy,
+		},
+		.cca = cca,
+	};
+
+	return nrf_802154_transmit_raw(payload, &metadata);
+}
+
+static bool nrf5_tx_csma_ca(struct net_pkt *pkt, uint8_t *payload)
+{
+	nrf_802154_transmit_csma_ca_metadata_t metadata = {
+		.frame_props = {
+			.is_secured = pkt->ieee802154_frame_secured,
+			.dynamic_data_is_set = pkt->ieee802154_mac_hdr_rdy,
+		},
+	};
+
+	return nrf_802154_transmit_csma_ca_raw(payload, &metadata);
+}
+
 /* This function cannot be used in the serialized version yet. */
 #if defined(CONFIG_NET_PKT_TXTIME) && !defined(CONFIG_NRF_802154_SER_HOST)
-static bool nrf5_tx_at(struct net_pkt *pkt, bool cca)
+static bool nrf5_tx_at(struct net_pkt *pkt, uint8_t *payload, bool cca)
 {
+	nrf_802154_transmit_at_metadata_t metadata = {
+		.frame_props = {
+			.is_secured = pkt->ieee802154_frame_secured,
+			.dynamic_data_is_set = pkt->ieee802154_mac_hdr_rdy,
+		},
+		.cca = cca,
+		.channel = nrf_802154_channel_get(),
+	};
 	uint32_t tx_at = net_pkt_txtime(pkt) / NSEC_PER_USEC;
 	bool ret;
 
-	if (net_pkt_ieee802154_frame_retry(pkt) == false) {
-		ret = nrf_802154_transmit_raw_at(nrf5_data.tx_psdu,
-						 cca,
-						 tx_at - TXTIME_OFFSET_US,
-						 TXTIME_OFFSET_US,
-						 nrf_802154_channel_get());
-	} else {
-		ret = nrf_802154_retransmit_raw_at(nrf5_data.tx_psdu,
-						   cca,
-						   tx_at - TXTIME_OFFSET_US,
-						   TXTIME_OFFSET_US,
-						   nrf_802154_channel_get());
-	}
+	ret = nrf_802154_transmit_raw_at(payload,
+					 tx_at - TXTIME_OFFSET_US,
+					 TXTIME_OFFSET_US,
+					 &metadata);
 	if (nrf5_data.event_handler) {
 		LOG_WRN("TX_STARTED event will be triggered without delay");
 	}
@@ -529,20 +558,19 @@ static int nrf5_tx(const struct device *dev,
 
 	switch (mode) {
 	case IEEE802154_TX_MODE_DIRECT:
-		ret = nrf_802154_transmit_raw(nrf5_radio->tx_psdu, false);
-		break;
 	case IEEE802154_TX_MODE_CCA:
-		ret = nrf_802154_transmit_raw(nrf5_radio->tx_psdu, true);
+		ret = nrf5_tx_immediate(pkt, nrf5_radio->tx_psdu,
+					mode == IEEE802154_TX_MODE_CCA);
 		break;
 	case IEEE802154_TX_MODE_CSMA_CA:
-		nrf5_tx_csma_ca(pkt, nrf5_radio->tx_psdu);
+		ret = nrf5_tx_csma_ca(pkt, nrf5_radio->tx_psdu);
 		break;
 /* This function cannot be used in the serialized version yet. */
 #if defined(CONFIG_NET_PKT_TXTIME) && !defined(CONFIG_NRF_802154_SER_HOST)
 	case IEEE802154_TX_MODE_TXTIME:
 	case IEEE802154_TX_MODE_TXTIME_CCA:
 		__ASSERT_NO_MSG(pkt);
-		ret = nrf5_tx_at(pkt,
+		ret = nrf5_tx_at(pkt, nrf5_radio->tx_psdu,
 				 mode == IEEE802154_TX_MODE_TXTIME_CCA);
 		break;
 #endif /* CONFIG_NET_PKT_TXTIME */
@@ -579,6 +607,8 @@ static int nrf5_tx(const struct device *dev,
 	 */
 	memcpy(payload, nrf5_radio->tx_psdu + 1, payload_len);
 #endif
+	net_pkt_set_ieee802154_frame_secured(pkt, nrf5_radio->tx_frame_is_secured);
+	net_pkt_set_ieee802154_mac_hdr_rdy(pkt, nrf5_radio->tx_frame_mac_hdr_rdy);
 
 	switch (nrf5_radio->tx_result) {
 	case NRF_802154_TX_ERROR_NONE:
@@ -771,12 +801,15 @@ static void nrf5_config_csl_period(uint16_t period)
 	/* A placeholder reception window is scheduled so that the radio driver is able to inject
 	 * the proper CSL Phase in the transmitted CSL Information Elements.
 	 */
-	nrf5_receive_at(nrf5_data.csl_rx_time, PH_DURATION, nrf_802154_channel_get(), DRX_SLOT_PH);
+	if (period > 0) {
+		nrf5_receive_at(nrf5_data.csl_rx_time, PH_DURATION, nrf_802154_channel_get(),
+				DRX_SLOT_PH);
+	}
 }
 
 static void nrf5_schedule_rx(uint8_t channel, uint32_t start, uint32_t duration)
 {
-	nrf5_receive_at(start, duration, channel, DRX_SLOT_RX);
+	nrf5_receive_at(start - DRX_ADJUST, duration, channel, DRX_SLOT_RX);
 
 	/* The placeholder reception window is rescheduled for the next period */
 	nrf_802154_receive_at_cancel(DRX_SLOT_PH);
@@ -862,10 +895,16 @@ static int nrf5_configure(const struct device *dev,
 		uint8_t short_addr_le[SHORT_ADDRESS_SIZE];
 		uint8_t ext_addr_le[EXTENDED_ADDRESS_SIZE];
 
-		/* We expect that addresses are in big endian format, but radio driver requires
-		 * to have them in little endian. Convert addresses to little endian.
-		 */
 		sys_put_le16(config->ack_ie.short_addr, short_addr_le);
+		/**
+		 * The extended address field passed to this function starts
+		 * with the leftmost octet and ends with the rightmost octet.
+		 * The IEEE 802.15.4 transmission order mandates this order to be
+		 * reversed in a transmitted frame.
+		 *
+		 * The nrf_802154_ack_data_set expects extended address in transmission
+		 * order.
+		 */
 		sys_memcpy_swap(ext_addr_le, config->ack_ie.ext_addr, EXTENDED_ADDRESS_SIZE);
 
 		if (config->ack_ie.data_len > 0) {
@@ -903,8 +942,7 @@ static int nrf5_configure(const struct device *dev,
 
 /* nRF5 radio driver callbacks */
 
-void nrf_802154_received_timestamp_raw(uint8_t *data, int8_t power, uint8_t lqi,
-				       uint32_t time)
+void nrf_802154_received_timestamp_raw(uint8_t *data, int8_t power, uint8_t lqi, uint32_t time)
 {
 	for (uint32_t i = 0; i < ARRAY_SIZE(nrf5_data.rx_frames); i++) {
 		if (nrf5_data.rx_frames[i].psdu != NULL) {
@@ -912,13 +950,15 @@ void nrf_802154_received_timestamp_raw(uint8_t *data, int8_t power, uint8_t lqi,
 		}
 
 		nrf5_data.rx_frames[i].psdu = data;
-		nrf5_data.rx_frames[i].time = time;
 		nrf5_data.rx_frames[i].rssi = power;
 		nrf5_data.rx_frames[i].lqi = lqi;
 
+#if !defined(CONFIG_NRF_802154_SER_HOST) && defined(CONFIG_NET_PKT_TIMESTAMP)
+		nrf5_data.rx_frames[i].time = nrf_802154_first_symbol_timestamp_get(time, data[0]);
+#endif
+
 		if (data[ACK_REQUEST_BYTE] & ACK_REQUEST_BIT) {
-			nrf5_data.rx_frames[i].ack_fpb =
-						nrf5_data.last_frame_ack_fpb;
+			nrf5_data.rx_frames[i].ack_fpb = nrf5_data.last_frame_ack_fpb;
 		} else {
 			nrf5_data.rx_frames[i].ack_fpb = false;
 		}
@@ -979,15 +1019,23 @@ void nrf_802154_tx_ack_started(const uint8_t *data)
 				data[FRAME_PENDING_BYTE] & FRAME_PENDING_BIT;
 }
 
-#if defined(CONFIG_NRF_802154_SER_HOST)
-void nrf_802154_transmitted_raw(const uint8_t *frame, uint8_t *ack, int8_t power, uint8_t lqi)
+void nrf_802154_transmitted_raw(uint8_t *frame,
+				const nrf_802154_transmit_done_metadata_t *metadata)
 {
 	ARG_UNUSED(frame);
 
 	nrf5_data.tx_result = NRF_802154_TX_ERROR_NONE;
-	nrf5_data.ack_frame.psdu = ack;
-	nrf5_data.ack_frame.rssi = power;
-	nrf5_data.ack_frame.lqi = lqi;
+	nrf5_data.tx_frame_is_secured = metadata->frame_props.is_secured;
+	nrf5_data.tx_frame_mac_hdr_rdy = metadata->frame_props.dynamic_data_is_set;
+	nrf5_data.ack_frame.psdu = metadata->data.transmitted.p_ack;
+	nrf5_data.ack_frame.rssi = metadata->data.transmitted.power;
+	nrf5_data.ack_frame.lqi = metadata->data.transmitted.lqi;
+
+#if !defined(CONFIG_NRF_802154_SER_HOST) && defined(CONFIG_NET_PKT_TIMESTAMP)
+	nrf5_data.ack_frame.time =
+		nrf_802154_first_symbol_timestamp_get(
+			metadata->data.transmitted.time, nrf5_data.ack_frame.psdu[0]);
+#endif
 
 	k_sem_give(&nrf5_data.tx_wait);
 }
@@ -1012,12 +1060,15 @@ void nrf_802154_transmitted_timestamp_raw(const uint8_t *frame, uint8_t *ack, in
 }
 #endif
 
-void nrf_802154_transmit_failed(const uint8_t *frame,
-				nrf_802154_tx_error_t error)
+void nrf_802154_transmit_failed(uint8_t *frame,
+				nrf_802154_tx_error_t error,
+				const nrf_802154_transmit_done_metadata_t *metadata)
 {
 	ARG_UNUSED(frame);
 
 	nrf5_data.tx_result = error;
+	nrf5_data.tx_frame_is_secured = metadata->frame_props.is_secured;
+	nrf5_data.tx_frame_mac_hdr_rdy = metadata->frame_props.dynamic_data_is_set;
 
 	k_sem_give(&nrf5_data.tx_wait);
 }
@@ -1084,7 +1135,7 @@ static struct ieee802154_radio_api nrf5_radio_api = {
 	.tx = nrf5_tx,
 	.ed_scan = nrf5_energy_scan_start,
 	.get_time = nrf5_get_time,
-	.get_csl_acc = nrf5_get_acc,
+	.get_sch_acc = nrf5_get_acc,
 	.configure = nrf5_configure,
 };
 

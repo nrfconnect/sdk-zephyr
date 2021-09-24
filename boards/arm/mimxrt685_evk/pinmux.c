@@ -192,6 +192,51 @@ static int mimxrt685_evk_pinmux_init(const struct device *dev)
 	IOPCTL_PinMuxSet(IOPCTL, 1U, 5U, port1_pin5_config);
 #endif
 
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(flexcomm4), nxp_lpc_usart, okay) && CONFIG_SERIAL
+	/* USART4 RX,  TX */
+	uint32_t port0_pin29_config = (/* Pin is configured as FC4_TXD_SCL_MISO_WS */
+			IOPCTL_PIO_FUNC1 |
+			/* Disable pull-up / pull-down function */
+			IOPCTL_PIO_PUPD_DI |
+			/* Enable pull-down function */
+			IOPCTL_PIO_PULLDOWN_EN |
+			/* Disable input buffer function */
+			IOPCTL_PIO_INBUF_DI |
+			/* Normal mode */
+			IOPCTL_PIO_SLEW_RATE_NORMAL |
+			/* Normal drive */
+			IOPCTL_PIO_FULLDRIVE_DI |
+			/* Analog mux is disabled */
+			IOPCTL_PIO_ANAMUX_DI |
+			/* Pseudo Output Drain is disabled */
+			IOPCTL_PIO_PSEDRAIN_DI |
+			/* Input function is not inverted */
+			IOPCTL_PIO_INV_DI);
+	/* PORT0 PIN1 (coords: G2) is configured as FC4_TXD_SCL_MISO_WS  */
+	IOPCTL_PinMuxSet(IOPCTL, 0U, 29U, port0_pin29_config);
+
+	uint32_t port0_pin30_config = (/* Pin is configured as FC4_RXD_SDA_MOSI_DATA  */
+			IOPCTL_PIO_FUNC1 |
+			/* Disable pull-up / pull-down function */
+			IOPCTL_PIO_PUPD_DI |
+			/* Enable pull-down function */
+			IOPCTL_PIO_PULLDOWN_EN |
+			/* Enables input buffer function */
+			IOPCTL_PIO_INBUF_EN |
+			/* Normal mode */
+			IOPCTL_PIO_SLEW_RATE_NORMAL |
+			/* Normal drive */
+			IOPCTL_PIO_FULLDRIVE_DI |
+			/* Analog mux is disabled */
+			IOPCTL_PIO_ANAMUX_DI |
+			/* Pseudo Output Drain is disabled */
+			IOPCTL_PIO_PSEDRAIN_DI |
+			/* Input function is not inverted */
+			IOPCTL_PIO_INV_DI);
+	/* PORT0 PIN2 (coords: G4) is configured as FC4_RXD_SDA_MOSI_DATA */
+	IOPCTL_PinMuxSet(IOPCTL, 0U, 30U, port0_pin30_config);
+#endif
+
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(flexcomm5), okay) && CONFIG_SPI
 	uint32_t port1_pin3_config = (/* Pin is configured as FC5_SCK */
 		IOPCTL_PIO_FUNC1 |
@@ -399,7 +444,7 @@ static int mimxrt685_evk_pinmux_init(const struct device *dev)
 #endif
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(flexspi), okay) && CONFIG_FLASH
-const uint32_t port1_pin11_config = (/* Pin is configured as FLEXSPI0B_DATA0 */
+	uint32_t port1_pin11_config = (/* Pin is configured as FLEXSPI0B_DATA0 */
 		IOPCTL_PIO_FUNC6 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -417,10 +462,10 @@ const uint32_t port1_pin11_config = (/* Pin is configured as FLEXSPI0B_DATA0 */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT1 PIN11 (coords: L2) is configured as FLEXSPI0B_DATA0 */
-IOPCTL_PinMuxSet(IOPCTL, 1U, 11U, port1_pin11_config);
+	/* PORT1 PIN11 (coords: L2) is configured as FLEXSPI0B_DATA0 */
+	IOPCTL_PinMuxSet(IOPCTL, 1U, 11U, port1_pin11_config);
 
-const uint32_t port1_pin12_config = (/* Pin is configured as FLEXSPI0B_DATA1 */
+	uint32_t port1_pin12_config = (/* Pin is configured as FLEXSPI0B_DATA1 */
 		IOPCTL_PIO_FUNC6 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -438,10 +483,10 @@ const uint32_t port1_pin12_config = (/* Pin is configured as FLEXSPI0B_DATA1 */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT1 PIN12 (coords: M2) is configured as FLEXSPI0B_DATA1 */
-IOPCTL_PinMuxSet(IOPCTL, 1U, 12U, port1_pin12_config);
+	/* PORT1 PIN12 (coords: M2) is configured as FLEXSPI0B_DATA1 */
+	IOPCTL_PinMuxSet(IOPCTL, 1U, 12U, port1_pin12_config);
 
-const uint32_t port1_pin13_config = (/* Pin is configured as FLEXSPI0B_DATA2 */
+	uint32_t port1_pin13_config = (/* Pin is configured as FLEXSPI0B_DATA2 */
 		IOPCTL_PIO_FUNC6 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -459,10 +504,10 @@ const uint32_t port1_pin13_config = (/* Pin is configured as FLEXSPI0B_DATA2 */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT1 PIN13 (coords: N1) is configured as FLEXSPI0B_DATA2 */
-IOPCTL_PinMuxSet(IOPCTL, 1U, 13U, port1_pin13_config);
+	/* PORT1 PIN13 (coords: N1) is configured as FLEXSPI0B_DATA2 */
+	IOPCTL_PinMuxSet(IOPCTL, 1U, 13U, port1_pin13_config);
 
-const uint32_t port1_pin14_config = (/* Pin is configured as FLEXSPI0B_DATA3 */
+	uint32_t port1_pin14_config = (/* Pin is configured as FLEXSPI0B_DATA3 */
 		IOPCTL_PIO_FUNC6 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -480,10 +525,10 @@ const uint32_t port1_pin14_config = (/* Pin is configured as FLEXSPI0B_DATA3 */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT1 PIN14 (coords: N2) is configured as FLEXSPI0B_DATA3 */
-IOPCTL_PinMuxSet(IOPCTL, 1U, 14U, port1_pin14_config);
+	/* PORT1 PIN14 (coords: N2) is configured as FLEXSPI0B_DATA3 */
+	IOPCTL_PinMuxSet(IOPCTL, 1U, 14U, port1_pin14_config);
 
-const uint32_t port1_pin29_config = (/* Pin is configured as FLEXSPI0B_SCLK */
+	uint32_t port1_pin29_config = (/* Pin is configured as FLEXSPI0B_SCLK */
 		IOPCTL_PIO_FUNC5 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -501,10 +546,10 @@ const uint32_t port1_pin29_config = (/* Pin is configured as FLEXSPI0B_SCLK */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT1 PIN29 (coords: U3) is configured as FLEXSPI0B_SCLK */
-IOPCTL_PinMuxSet(IOPCTL, 1U, 29U, port1_pin29_config);
+	/* PORT1 PIN29 (coords: U3) is configured as FLEXSPI0B_SCLK */
+	IOPCTL_PinMuxSet(IOPCTL, 1U, 29U, port1_pin29_config);
 
-const uint32_t port2_pin12_config = (/* Pin is configured as PIO2_12 */
+	uint32_t port2_pin12_config = (/* Pin is configured as PIO2_12 */
 		IOPCTL_PIO_FUNC0 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -522,10 +567,10 @@ const uint32_t port2_pin12_config = (/* Pin is configured as PIO2_12 */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT2 PIN12 (coords: T3) is configured as PIO2_12 */
-IOPCTL_PinMuxSet(IOPCTL, 2U, 12U, port2_pin12_config);
+	/* PORT2 PIN12 (coords: T3) is configured as PIO2_12 */
+	IOPCTL_PinMuxSet(IOPCTL, 2U, 12U, port2_pin12_config);
 
-const uint32_t port2_pin17_config = (/* Pin is configured as FLEXSPI0B_DATA4 */
+	uint32_t port2_pin17_config = (/* Pin is configured as FLEXSPI0B_DATA4 */
 		IOPCTL_PIO_FUNC6 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -543,10 +588,10 @@ const uint32_t port2_pin17_config = (/* Pin is configured as FLEXSPI0B_DATA4 */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT2 PIN17 (coords: U1) is configured as FLEXSPI0B_DATA4 */
-IOPCTL_PinMuxSet(IOPCTL, 2U, 17U, port2_pin17_config);
+	/* PORT2 PIN17 (coords: U1) is configured as FLEXSPI0B_DATA4 */
+	IOPCTL_PinMuxSet(IOPCTL, 2U, 17U, port2_pin17_config);
 
-const uint32_t port2_pin18_config = (/* Pin is configured as FLEXSPI0B_DATA5 */
+	uint32_t port2_pin18_config = (/* Pin is configured as FLEXSPI0B_DATA5 */
 		IOPCTL_PIO_FUNC6 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -564,10 +609,10 @@ const uint32_t port2_pin18_config = (/* Pin is configured as FLEXSPI0B_DATA5 */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT2 PIN18 (coords: R2) is configured as FLEXSPI0B_DATA5 */
-IOPCTL_PinMuxSet(IOPCTL, 2U, 18U, port2_pin18_config);
+	/* PORT2 PIN18 (coords: R2) is configured as FLEXSPI0B_DATA5 */
+	IOPCTL_PinMuxSet(IOPCTL, 2U, 18U, port2_pin18_config);
 
-const uint32_t port2_pin19_config = (/* Pin is configured as FLEXSPI0B_SS0_N */
+	uint32_t port2_pin19_config = (/* Pin is configured as FLEXSPI0B_SS0_N */
 		IOPCTL_PIO_FUNC6 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -585,10 +630,10 @@ const uint32_t port2_pin19_config = (/* Pin is configured as FLEXSPI0B_SS0_N */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT2 PIN19 (coords: T2) is configured as FLEXSPI0B_SS0_N */
-IOPCTL_PinMuxSet(IOPCTL, 2U, 19U, port2_pin19_config);
+	/* PORT2 PIN19 (coords: T2) is configured as FLEXSPI0B_SS0_N */
+	IOPCTL_PinMuxSet(IOPCTL, 2U, 19U, port2_pin19_config);
 
-const uint32_t port2_pin22_config = (/* Pin is configured as FLEXSPI0B_DATA6 */
+	uint32_t port2_pin22_config = (/* Pin is configured as FLEXSPI0B_DATA6 */
 		IOPCTL_PIO_FUNC6 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -606,10 +651,10 @@ const uint32_t port2_pin22_config = (/* Pin is configured as FLEXSPI0B_DATA6 */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT2 PIN22 (coords: P3) is configured as FLEXSPI0B_DATA6 */
-IOPCTL_PinMuxSet(IOPCTL, 2U, 22U, port2_pin22_config);
+	/* PORT2 PIN22 (coords: P3) is configured as FLEXSPI0B_DATA6 */
+	IOPCTL_PinMuxSet(IOPCTL, 2U, 22U, port2_pin22_config);
 
-const uint32_t port2_pin23_config = (/* Pin is configured as FLEXSPI0B_DATA7 */
+	uint32_t port2_pin23_config = (/* Pin is configured as FLEXSPI0B_DATA7 */
 		IOPCTL_PIO_FUNC6 |
 		/* Disable pull-up / pull-down function */
 		IOPCTL_PIO_PUPD_DI |
@@ -627,8 +672,8 @@ const uint32_t port2_pin23_config = (/* Pin is configured as FLEXSPI0B_DATA7 */
 		IOPCTL_PIO_PSEDRAIN_DI |
 		/* Input function is not inverted */
 		IOPCTL_PIO_INV_DI);
-/* PORT2 PIN23 (coords: P5) is configured as FLEXSPI0B_DATA7 */
-IOPCTL_PinMuxSet(IOPCTL, 2U, 23U, port2_pin23_config);
+	/* PORT2 PIN23 (coords: P5) is configured as FLEXSPI0B_DATA7 */
+	IOPCTL_PinMuxSet(IOPCTL, 2U, 23U, port2_pin23_config);
 #endif
 
 	return 0;
