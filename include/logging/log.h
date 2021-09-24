@@ -28,7 +28,7 @@ extern "C" {
  * @{
  */
 
-#if defined(__JETBRAINS_IDE__) || defined(__clang__)
+#if defined(__JETBRAINS_IDE__) || defined(__clang__) || defined (PARASOFT_CPPTEST)
 
 /* This include is kept to mimic behavior between IDE and "normal" build */
 #include <zephyr.h>
@@ -72,7 +72,7 @@ static inline char *log_strdup(const char *str)
 	return 0;
 }
 
-#else /* defined(__CLION_IDE__) || defined(PARASOFT) */
+#else /* defined(__CLION_IDE__) || defined(PARASOFT) || defined (PARASOFT_CPPTEST) */
 
 /**
  * @brief Writes an ERROR level message to the log.
@@ -342,7 +342,7 @@ static inline char *log_strdup(const char *str)
 	return z_log_strdup(str);
 }
 
-#endif /* defined(__CLION_IDE__) || defined(PARASOFT) */
+#endif /* defined(__CLION_IDE__) || defined(PARASOFT) || defined (PARASOFT_CPPTEST) */
 
 #ifdef __cplusplus
 }
@@ -486,6 +486,32 @@ static inline char *log_strdup(const char *str)
  */
 #define LOG_LEVEL_SET(level) static const uint32_t __log_level __unused = \
 				Z_LOG_RESOLVED_LEVEL(level, 0)
+
+/*
+ * Eclipse CDT parser is sometimes confused by logging API code and freezes the
+ * whole IDE. Following lines hides LOG_x macros from CDT.
+ */
+#if defined(__CDT_PARSER__)
+#undef LOG_ERR
+#undef LOG_WRN
+#undef LOG_INF
+#undef LOG_DBG
+
+#undef LOG_HEXDUMP_ERR
+#undef LOG_HEXDUMP_WRN
+#undef LOG_HEXDUMP_INF
+#undef LOG_HEXDUMP_DBG
+
+#define LOG_ERR(...) (void) 0
+#define LOG_WRN(...) (void) 0
+#define LOG_DBG(...) (void) 0
+#define LOG_INF(...) (void) 0
+
+#define LOG_HEXDUMP_ERR(...) (void) 0
+#define LOG_HEXDUMP_WRN(...) (void) 0
+#define LOG_HEXDUMP_DBG(...) (void) 0
+#define LOG_HEXDUMP_INF(...) (void) 0
+#endif
 
 /**
  * @}

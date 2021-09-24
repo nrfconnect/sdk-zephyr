@@ -27,16 +27,6 @@
 #include <drivers/i2c.h>
 #endif /* DT_ANY_INST_ON_BUS_STATUS_OKAY(i2c) */
 
-union axis3bit16_t {
-	int16_t i16bit[3];
-	uint8_t u8bit[6];
-};
-
-union axis1bit16_t {
-	int16_t i16bit;
-	uint8_t u8bit[2];
-};
-
 #define LSM6DSO_EN_BIT					0x01
 #define LSM6DSO_DIS_BIT					0x00
 
@@ -145,6 +135,9 @@ struct lsm6dso_data {
 		int16_t y0;
 		int16_t y1;
 	} hts221;
+	bool shub_inited;
+	uint8_t num_ext_dev;
+	uint8_t shub_ext[LSM6DSO_SHUB_MAX_NUM_SLVS];
 #endif /* CONFIG_LSM6DSO_SENSORHUB */
 
 	uint16_t accel_freq;
@@ -171,7 +164,7 @@ struct lsm6dso_data {
 #if defined(CONFIG_LSM6DSO_SENSORHUB)
 int lsm6dso_shub_init(const struct device *dev);
 int lsm6dso_shub_fetch_external_devs(const struct device *dev);
-int lsm6dso_shub_get_idx(enum sensor_channel type);
+int lsm6dso_shub_get_idx(const struct device *dev, enum sensor_channel type);
 int lsm6dso_shub_config(const struct device *dev, enum sensor_channel chan,
 			enum sensor_attribute attr,
 			const struct sensor_value *val);

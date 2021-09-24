@@ -338,9 +338,10 @@
 			label = "USBHS";
 		};
 
-		gmac: ethernet@40050088 {
+		gmac: ethernet@40050000 {
 			compatible = "atmel,sam-gmac";
-			reg = <0x40050088 0x4000>;
+			reg = <0x40050000 0x4000>;
+			peripheral-id = <39>;
 			interrupts = <39 0>, <66 0>, <67 0>;
 			interrupt-names = "gmac", "q1", "q2";
 			num-queues = <3>;
@@ -355,15 +356,16 @@
 				     &pd8a_gmac_gmdc &pd9a_gmac_gmdio>;
 		};
 
-		tc0: tc@4000C000 {
+		tc0: tc@4000c000 {
 			compatible = "atmel,sam-tc";
-			reg = <0x4000C000 0x100>;
+			reg = <0x4000c000 0x100>;
 			interrupts = <23 0
 				      24 0
 				      25 0>;
 			peripheral-id = <23 24 25>;
 			status = "disabled";
 			label = "TC0";
+			pinctrl-0 = <>;
 		};
 
 		tc1: tc@40010000 {
@@ -375,6 +377,7 @@
 			peripheral-id = <26 27 28>;
 			status = "disabled";
 			label = "TC1";
+			pinctrl-0 = <>;
 		};
 
 		tc2: tc@40014000 {
@@ -386,6 +389,7 @@
 			peripheral-id = <47 48 49>;
 			status = "disabled";
 			label = "TC2";
+			pinctrl-0 = <>;
 		};
 
 		tc3: tc@40054000 {
@@ -397,6 +401,7 @@
 			peripheral-id = <50 51 52>;
 			status = "disabled";
 			label = "TC3";
+			pinctrl-0 = <>;
 		};
 
 		trng: random@40070000 {

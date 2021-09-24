@@ -93,6 +93,9 @@ __net_socket struct tls_context {
 	/** Information whether underlying socket is listening. */
 	bool is_listening;
 
+	/** Information whether TLS handshake is currently in progress. */
+	bool handshake_in_progress;
+
 	/** Information whether TLS handshake is complete or not. */
 	struct k_sem tls_established;
 
@@ -517,9 +520,8 @@ static int dtls_rx(void *ctx, unsigned char *buf, size_t len,
 		   uint32_t dtls_timeout)
 {
 	struct tls_context *tls_ctx = ctx;
-	bool is_block = !((tls_ctx->flags & ZSOCK_MSG_DONTWAIT) ||
-			  (zsock_fcntl(tls_ctx->sock, F_GETFL, 0) &
-			   O_NONBLOCK));
+	int sock_flags = zsock_fcntl(tls_ctx->sock, F_GETFL, 0);
+	bool is_block;
 	int timeout = (dtls_timeout == 0U) ? -1 : dtls_timeout;
 	uint32_t entry_time = k_uptime_get_32();
 	socklen_t addrlen = sizeof(struct sockaddr);
@@ -529,6 +531,13 @@ static int dtls_rx(void *ctx, unsigned char *buf, size_t len,
 	bool retry;
 	struct zsock_pollfd fds;
 	int flags = tls_ctx->flags & ~ZSOCK_MSG_TRUNC;
+
+	if (sock_flags == -1) {
+		return MBEDTLS_ERR_SSL_INTERNAL_ERROR;
+	}
+
+	is_block = !((tls_ctx->flags & ZSOCK_MSG_DONTWAIT) ||
+		     (sock_flags & O_NONBLOCK));
 
 	do {
 		retry = false;
@@ -814,6 +823,22 @@ static int tls_mbedtls_reset(struct tls_context *context)
 static int tls_mbedtls_handshake(struct tls_context *context, bool block)
 {
 	int ret;
+	int sock_flags;
+
+	sock_flags = zsock_fcntl(context->sock, F_GETFL, 0);
+	if (sock_flags < 0) {
+		return -EIO;
+	}
+
+	if (block && sock_flags & O_NONBLOCK) {
+		/* Clear the O_NONBLOCK flag for the handshake to prevent busy
+		 * looping in the handshake thread.
+		 */
+		(void)zsock_fcntl(context->sock, F_SETFL,
+				  sock_flags & ~O_NONBLOCK);
+	}
+
+	context->handshake_in_progress = true;
 
 	while ((ret = mbedtls_ssl_handshake(&context->ssl)) != 0) {
 		if (ret == MBEDTLS_ERR_SSL_WANT_READ ||
@@ -841,9 +866,15 @@ static int tls_mbedtls_handshake(struct tls_context *context, bool block)
 		break;
 	}
 
+	if (block && sock_flags & O_NONBLOCK) {
+		(void)zsock_fcntl(context->sock, F_SETFL, sock_flags);
+	}
+
 	if (ret == 0) {
 		k_sem_give(&context->tls_established);
 	}
+
+	context->handshake_in_progress = false;
 
 	return ret;
 }
@@ -1782,8 +1813,13 @@ static ssize_t recvfrom_dtls_server(struct tls_context *ctx, void *buf,
 {
 	int ret;
 	bool repeat;
-	bool is_block = !((flags & ZSOCK_MSG_DONTWAIT) ||
-			  (zsock_fcntl(ctx->sock, F_GETFL, 0) & O_NONBLOCK));
+	int sock_flags = zsock_fcntl(ctx->sock, F_GETFL, 0);
+	bool is_block;
+
+	if (sock_flags == -1) {
+		ret = -errno;
+		goto error;
+	}
 
 	if (!ctx->is_initialized) {
 		ret = tls_mbedtls_init(ctx, true);
@@ -1791,6 +1827,8 @@ static ssize_t recvfrom_dtls_server(struct tls_context *ctx, void *buf,
 			goto error;
 		}
 	}
+
+	is_block = !((flags & ZSOCK_MSG_DONTWAIT) || (sock_flags & O_NONBLOCK));
 
 	/* Loop to enable DTLS reconnection for servers without closing
 	 * a socket.
@@ -2081,7 +2119,48 @@ out:
 	return ret;
 }
 
-static inline int ztls_poll_offload(struct zsock_pollfd *fds, int nfds, int timeout)
+/* Return true if needed to retry rightoff or false otherwise. */
+static bool poll_offload_dtls_client_retry(struct tls_context *ctx,
+					   struct zsock_pollfd *pfd)
+{
+	/* DTLS client should wait for the handshake to complete before it
+	 * reports that data is ready.
+	 */
+	if ((ctx->type != SOCK_DGRAM) ||
+	    (ctx->options.role != MBEDTLS_SSL_IS_CLIENT)) {
+		return false;
+	}
+
+	if (ctx->handshake_in_progress) {
+		/* Add some sleep to allow lower priority threads to proceed
+		 * with handshake.
+		 */
+		k_msleep(10);
+
+		pfd->revents &= ~ZSOCK_POLLIN;
+		return true;
+	} else if (!is_handshake_complete(ctx)) {
+		uint8_t byte;
+		int ret;
+
+		/* Handshake didn't start yet - just drop the incoming data -
+		 * it's the client who should initiate the handshake.
+		 */
+		ret = zsock_recv(ctx->sock, &byte, sizeof(byte),
+				 ZSOCK_MSG_DONTWAIT);
+		if (ret < 0) {
+			pfd->revents |= ZSOCK_POLLERR;
+		}
+
+		pfd->revents &= ~ZSOCK_POLLIN;
+		return true;
+	}
+
+	/* Handshake complete, just proceed. */
+	return false;
+}
+
+static int ztls_poll_offload(struct zsock_pollfd *fds, int nfds, int timeout)
 {
 	int fd_backup[CONFIG_NET_SOCKETS_POLL_MAX];
 	const struct fd_op_vtable *vtable;
@@ -2150,6 +2229,12 @@ static inline int ztls_poll_offload(struct zsock_pollfd *fds, int nfds, int time
 					   0);
 			if (ctx != NULL) {
 				if (fds[i].events & ZSOCK_POLLIN) {
+					if (poll_offload_dtls_client_retry(
+							ctx, &fds[i])) {
+						retry = true;
+						continue;
+					}
+
 					result = ztls_poll_update_pollin(
 						    fd_backup[i], ctx, &fds[i]);
 					if (result == -EAGAIN) {

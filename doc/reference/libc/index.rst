@@ -24,7 +24,7 @@ source code form with Zephyr. Instead, the :ref:`zephyr_sdk` comes with a
 precompiled library for each supported architecture (:file:`libc.a` and
 :file:`libm.a`). Other 3rd-party toolchains, such as :ref:`toolchain_gnuarmemb`,
 also bundle newlib as a precompiled library.
-Newlib can be enabled by selecting the :option:`CONFIG_NEWLIB_LIBC` in the
+Newlib can be enabled by selecting the :kconfig:`CONFIG_NEWLIB_LIBC` in the
 application configuration file. Part of the support for ``newlib`` is a set of
 hooks available under :file:`lib/libc/newlib/libc-hooks.c` which integrates
 the C standard library with basic kernel services.
@@ -56,7 +56,6 @@ Below is a list of the error number definitions. For the actual numeric values
 please refer to `errno.h`_.
 
 .. doxygengroup:: system_errno
-   :project: Zephyr
 
 .. _`POSIX errno.h specification`: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/errno.h.html
 .. _`errno.h`: https://github.com/zephyrproject-rtos/zephyr/blob/main/lib/libc/minimal/include/errno.h

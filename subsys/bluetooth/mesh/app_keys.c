@@ -249,7 +249,7 @@ uint8_t bt_mesh_app_key_add(uint16_t app_idx, uint16_t net_idx,
 
 	if (app->app_idx == app_idx) {
 		if (app->net_idx != net_idx) {
-			return STATUS_INVALID_BINDING;
+			return STATUS_INVALID_NETKEY;
 		}
 
 		if (memcmp(key, app->keys[0].val, 16)) {
@@ -460,7 +460,7 @@ int bt_mesh_keys_resolve(struct bt_mesh_msg_ctx *ctx,
 		}
 
 		if (ctx->app_idx == BT_MESH_KEY_DEV_REMOTE &&
-		    !bt_mesh_elem_find(ctx->addr)) {
+		    !bt_mesh_has_addr(ctx->addr)) {
 			struct bt_mesh_cdb_node *node;
 
 			if (!IS_ENABLED(CONFIG_BT_MESH_CDB)) {

@@ -8,7 +8,9 @@
 #include <stdlib.h>
 #include <sys/atomic.h>
 #include <shell/shell.h>
+#if defined(CONFIG_SHELL_BACKEND_DUMMY)
 #include <shell/shell_dummy.h>
+#endif
 #include "shell_ops.h"
 #include "shell_help.h"
 #include "shell_utils.h"
@@ -86,7 +88,7 @@ static inline void state_set(const struct shell *shell, enum shell_state state)
 {
 	shell->ctx->state = state;
 
-	if (state == SHELL_STATE_ACTIVE) {
+	if (state == SHELL_STATE_ACTIVE && !shell->ctx->bypass) {
 		cmd_buffer_clear(shell);
 		if (z_flag_print_noinit_get(shell)) {
 			z_shell_fprintf(shell, SHELL_WARNING, "%s",
@@ -105,8 +107,9 @@ static inline enum shell_state state_get(const struct shell *shell)
 static inline const struct shell_static_entry *
 selected_cmd_get(const struct shell *shell)
 {
-	if (IS_ENABLED(CONFIG_SHELL_CMDS_SELECT)) {
-	       return shell->ctx->selected_cmd;
+	if (IS_ENABLED(CONFIG_SHELL_CMDS_SELECT)
+	    || (CONFIG_SHELL_CMD_ROOT[0] != 0)) {
+		return shell->ctx->selected_cmd;
 	}
 
 	return NULL;
@@ -265,7 +268,8 @@ static bool tab_prepare(const struct shell *shell,
 	/* terminate arguments with NULL */
 	(*argv)[*argc] = NULL;
 
-	if (IS_ENABLED(CONFIG_SHELL_CMDS_SELECT) && (*argc > 0) &&
+	if ((IS_ENABLED(CONFIG_SHELL_CMDS_SELECT) || (CONFIG_SHELL_CMD_ROOT[0] != 0))
+	    && (*argc > 0) &&
 	    (strcmp("select", (*argv)[0]) == 0) &&
 	    !z_shell_in_select_mode(shell)) {
 		*argv = *argv + 1;
@@ -825,7 +829,11 @@ static void alt_metakeys_handle(const struct shell *shell, char data)
 			z_shell_cmd_line_erase(shell);
 			z_shell_fprintf(shell, SHELL_WARNING,
 					"Restored default root commands\n");
-			shell->ctx->selected_cmd = NULL;
+			if (CONFIG_SHELL_CMD_ROOT[0]) {
+				shell->ctx->selected_cmd = root_cmd_find(CONFIG_SHELL_CMD_ROOT);
+			} else {
+				shell->ctx->selected_cmd = NULL;
+			}
 			z_shell_print_prompt_and_cmd(shell);
 		}
 	}
@@ -932,6 +940,26 @@ static void state_collect(const struct shell *shell)
 	char data;
 
 	while (true) {
+		shell_bypass_cb_t bypass = shell->ctx->bypass;
+
+		if (bypass) {
+			uint8_t buf[16];
+
+			(void)shell->iface->api->read(shell->iface, buf,
+							sizeof(buf), &count);
+			if (count) {
+				bypass(shell, buf, count);
+				/* Check if bypass mode ended. */
+				if (!(volatile shell_bypass_cb_t *)shell->ctx->bypass) {
+					state_set(shell, SHELL_STATE_ACTIVE);
+				} else {
+					continue;
+				}
+			}
+
+			return;
+		}
+
 		(void)shell->iface->api->read(shell->iface, &data,
 					      sizeof(data), &count);
 		if (count == 0) {
@@ -1147,6 +1175,9 @@ static int instance_init(const struct shell *shell, const void *p_config,
 
 	memset(shell->ctx, 0, sizeof(*shell->ctx));
 	shell->ctx->prompt = shell->default_prompt;
+	if (CONFIG_SHELL_CMD_ROOT[0]) {
+		shell->ctx->selected_cmd = root_cmd_find(CONFIG_SHELL_CMD_ROOT);
+	}
 
 	history_init(shell);
 
@@ -1256,7 +1287,8 @@ void shell_thread(void *shell_handle, void *arg_log_backend,
 		return;
 	}
 
-	if (IS_ENABLED(CONFIG_SHELL_LOG_BACKEND) && log_backend) {
+	if (IS_ENABLED(CONFIG_SHELL_LOG_BACKEND) && log_backend
+	    && !IS_ENABLED(CONFIG_SHELL_START_OBSCURED)) {
 		z_shell_log_backend_enable(shell->log_backend, (void *)shell,
 					   log_level);
 	}
@@ -1435,11 +1467,11 @@ void shell_vfprintf(const struct shell *shell, enum shell_vt100_color color,
 	}
 
 	k_mutex_lock(&shell->ctx->wr_mtx, K_FOREVER);
-	if (!z_flag_cmd_ctx_get(shell)) {
+	if (!z_flag_cmd_ctx_get(shell) && !shell->ctx->bypass) {
 		z_shell_cmd_line_erase(shell);
 	}
 	z_shell_vfprintf(shell, color, fmt, args);
-	if (!z_flag_cmd_ctx_get(shell)) {
+	if (!z_flag_cmd_ctx_get(shell) && !shell->ctx->bypass) {
 		z_shell_print_prompt_and_cmd(shell);
 	}
 	z_transport_buffer_flush(shell);
@@ -1613,6 +1645,11 @@ int shell_mode_delete_set(const struct shell *shell, bool val)
 	}
 
 	return (int)z_flag_mode_delete_set(shell, val);
+}
+
+void shell_set_bypass(const struct shell *sh, shell_bypass_cb_t bypass)
+{
+	sh->ctx->bypass = bypass;
 }
 
 static int cmd_help(const struct shell *shell, size_t argc, char **argv)

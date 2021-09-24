@@ -68,4 +68,8 @@ source "drivers/interrupt_controller/Kconfig.npcx"
 
 source "drivers/interrupt_controller/Kconfig.intel_vtd"
 
+source "drivers/interrupt_controller/Kconfig.esp32"
+
+source "drivers/interrupt_controller/Kconfig.xec"
+
 endmenu

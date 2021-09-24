@@ -310,7 +310,7 @@ static int bmp388_attr_set(const struct device *dev,
 {
 	int ret;
 
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 	struct bmp388_data *data = DEV_DATA(dev);
 
 	if (data->device_power_state != PM_DEVICE_STATE_ACTIVE) {
@@ -347,7 +347,7 @@ static int bmp388_sample_fetch(const struct device *dev,
 
 	__ASSERT_NO_MSG(chan == SENSOR_CHAN_ALL);
 
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 	if (bmp388->device_power_state != PM_DEVICE_STATE_ACTIVE) {
 		return -EBUSY;
 	}
@@ -544,9 +544,9 @@ static int bmp388_get_calibration_data(const struct device *dev)
 	return 0;
 }
 
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 static int bmp388_set_power_state(const struct device *dev,
-				  uint32_t power_state)
+				  enum pm_device_state power_state)
 {
 	uint8_t reg_val;
 
@@ -589,24 +589,19 @@ static uint32_t bmp388_get_power_state(const struct device *dev)
 static int bmp388_device_ctrl(
 	const struct device *dev,
 	uint32_t ctrl_command,
-	void *context,
-	pm_device_cb cb,
-	void *arg)
+	enum pm_device_state *state)
 {
 	int ret = 0;
 
 	if (ctrl_command == PM_DEVICE_STATE_SET) {
-		ret = bmp388_set_power_state(dev, *((uint32_t *)context));
+		ret = bmp388_set_power_state(dev, *state);
 	} else if (ctrl_command == PM_DEVICE_STATE_GET) {
-		*((uint32_t *)context) = bmp388_get_power_state(dev);
+		*state = bmp388_get_power_state(dev);
 	}
 
-	if (cb) {
-		cb(dev, ret, context, arg);
-	}
 	return ret;
 }
-#endif /* CONFIG_DEVICE_POWER_MANAGEMENT */
+#endif /* CONFIG_PM_DEVICE */
 
 static const struct sensor_driver_api bmp388_api = {
 	.attr_set = bmp388_attr_set,
@@ -671,7 +666,7 @@ static int bmp388_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 	bmp388->device_power_state = PM_DEVICE_STATE_ACTIVE;
 #endif
 

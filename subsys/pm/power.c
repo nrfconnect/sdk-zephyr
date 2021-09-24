@@ -11,7 +11,10 @@
 #include <string.h>
 #include <pm/pm.h>
 #include <pm/state.h>
-#include "policy/pm_policy.h"
+#include <pm/policy.h>
+#include <tracing/tracing.h>
+
+#include "pm_priv.h"
 
 #define PM_STATES_LEN (1 + PM_STATE_SOFT_OFF - PM_STATE_ACTIVE)
 #define LOG_LEVEL CONFIG_PM_LOG_LEVEL
@@ -68,24 +71,33 @@ static void pm_log_debug_info(enum pm_state state) { }
 void pm_dump_debug_info(void) { }
 #endif
 
-__weak void pm_power_state_exit_post_ops(struct pm_state_info info)
+static inline void exit_pos_ops(struct pm_state_info info)
 {
-	/*
-	 * This function is supposed to be overridden to do SoC or
-	 * architecture specific post ops after sleep state exits.
-	 *
-	 * The kernel expects that irqs are unlocked after this.
-	 */
+	extern __weak void
+		pm_power_state_exit_post_ops(struct pm_state_info info);
 
-	irq_unlock(0);
+	if (pm_power_state_exit_post_ops != NULL) {
+		pm_power_state_exit_post_ops(info);
+	} else {
+		/*
+		 * This function is supposed to be overridden to do SoC or
+		 * architecture specific post ops after sleep state exits.
+		 *
+		 * The kernel expects that irqs are unlocked after this.
+		 */
+
+		irq_unlock(0);
+	}
 }
 
-__weak void pm_power_state_set(struct pm_state_info info)
+static inline void pm_state_set(struct pm_state_info info)
 {
-	/*
-	 * This function is supposed to be overridden to do SoC or
-	 * architecture specific post ops after sleep state exits.
-	 */
+	extern __weak void
+		pm_power_state_set(struct pm_state_info info);
+
+	if (pm_power_state_set != NULL) {
+		pm_power_state_set(info);
+	}
 }
 
 /*
@@ -132,7 +144,7 @@ void pm_system_resume(void)
 	 */
 	if (!post_ops_done) {
 		post_ops_done = 1;
-		pm_power_state_exit_post_ops(z_power_state);
+		exit_pos_ops(z_power_state);
 		pm_state_notify(false);
 	}
 }
@@ -154,7 +166,7 @@ void pm_power_state_force(struct pm_state_info info)
 	k_sched_lock();
 	pm_debug_start_timer();
 	/* Enter power state */
-	pm_power_state_set(z_power_state);
+	pm_state_set(z_power_state);
 	pm_debug_stop_timer();
 
 	pm_system_resume();
@@ -174,9 +186,11 @@ static enum pm_state _handle_device_abort(struct pm_state_info info)
 
 enum pm_state pm_system_suspend(int32_t ticks)
 {
+	SYS_PORT_TRACING_FUNC_ENTER(pm, system_suspend, ticks);
 	z_power_state = pm_policy_next_state(ticks);
 	if (z_power_state.state == PM_STATE_ACTIVE) {
 		LOG_DBG("No PM operations done.");
+		SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, ticks, z_power_state.state);
 		return z_power_state.state;
 	}
 	post_ops_done = 0;
@@ -210,12 +224,17 @@ enum pm_state pm_system_suspend(int32_t ticks)
 	case PM_STATE_STANDBY:
 		/* low power peripherals. */
 		if (pm_low_power_devices()) {
+			SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend,
+					ticks, _handle_device_abort(z_power_state));
 			return _handle_device_abort(z_power_state);
-		}		break;
+		}
+		break;
 	case PM_STATE_SUSPEND_TO_RAM:
 		__fallthrough;
 	case PM_STATE_SUSPEND_TO_DISK:
 		if (pm_suspend_devices()) {
+			SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend,
+					ticks, _handle_device_abort(z_power_state));
 			return _handle_device_abort(z_power_state);
 		}
 		break;
@@ -237,7 +256,7 @@ enum pm_state pm_system_suspend(int32_t ticks)
 	pm_debug_start_timer();
 	/* Enter power state */
 	pm_state_notify(true);
-	pm_power_state_set(z_power_state);
+	pm_state_set(z_power_state);
 	pm_debug_stop_timer();
 
 	/* Wake up sequence starts here */
@@ -250,7 +269,7 @@ enum pm_state pm_system_suspend(int32_t ticks)
 	pm_log_debug_info(z_power_state.state);
 	pm_system_resume();
 	k_sched_unlock();
-
+	SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, ticks, z_power_state.state);
 	return z_power_state.state;
 }
 
@@ -275,14 +294,3 @@ int pm_notifier_unregister(struct pm_notifier *notifier)
 
 	return ret;
 }
-
-#if CONFIG_PM_DEVICE
-static int pm_init(const struct device *dev)
-{
-	ARG_UNUSED(dev);
-
-	pm_create_device_list();
-	return 0;
-}
-SYS_INIT(pm_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
-#endif /* CONFIG_PM_DEVICE */
