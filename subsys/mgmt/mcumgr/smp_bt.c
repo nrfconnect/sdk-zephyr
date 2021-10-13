@@ -21,13 +21,29 @@
 
 #include <mgmt/mcumgr/smp.h>
 
-struct device;
+#define RESTORE_TIME	   COND_CODE_1(CONFIG_MCUMGR_SMP_BT_LOW_LATENCY, \
+				(CONFIG_MCUMGR_SMP_BT_LOW_LATENCY_RESTORE_TIME), (0))
+#define RESTORE_RETRY_TIME COND_CODE_1(CONFIG_MCUMGR_SMP_BT_LOW_LATENCY, \
+				(CONFIG_MCUMGR_SMP_BT_LOW_LATENCY_RESTORE_RETRY_TIME), (0))
 
 struct smp_bt_user_data {
 	struct bt_conn *conn;
 };
 
+enum {
+	CONN_LOW_LATENCY_ENABLED	= BIT(0),
+	CONN_LOW_LATENCY_REQUESTED	= BIT(1),
+};
+
+struct conn_param_data {
+	struct bt_conn *conn;
+	struct k_work_delayable dwork;
+	uint16_t default_latency;
+	uint8_t latency_state;
+};
+
 static struct zephyr_smp_transport smp_bt_transport;
+static struct conn_param_data conn_data[CONFIG_BT_MAX_CONN];
 
 /* SMP service.
  * {8D53DC1D-1DB7-4CD3-868B-8A527460AA84}
@@ -40,6 +56,101 @@ static struct bt_uuid_128 smp_bt_svc_uuid = BT_UUID_INIT_128(
  */
 static struct bt_uuid_128 smp_bt_chr_uuid = BT_UUID_INIT_128(
 	BT_UUID_128_ENCODE(0xda2e7828, 0xfbce, 0x4e01, 0xae9e, 0x261174997c48));
+
+/* Helper function that allocates conn_param_data for a conn. */
+static struct conn_param_data *alloc_conn_param_data(struct bt_conn *conn)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(conn_data); i++) {
+		if (conn_data[i].conn == NULL) {
+			conn_data[i].conn = conn;
+			return &conn_data[i];
+		}
+	}
+
+	/* Conn data must exists. */
+	__ASSERT_NO_MSG(false);
+	return NULL;
+}
+
+/* Helper function that returns conn_param_data associated with a conn. */
+static struct conn_param_data *get_conn_param_data(const struct bt_conn *conn)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(conn_data); i++) {
+		if (conn_data[i].conn == conn) {
+			return &conn_data[i];
+		}
+	}
+
+	/* Conn data must exists. */
+	__ASSERT_NO_MSG(false);
+	return NULL;
+}
+
+/* Work handler function for restoring the default latency for the connection. */
+static void restore_default_latency(struct k_work *work)
+{
+	struct bt_le_conn_param params;
+	struct conn_param_data *cpd;
+	struct bt_conn_info info;
+	int ret = 0;
+
+	cpd = CONTAINER_OF(work, struct conn_param_data, dwork);
+
+	if (cpd->latency_state & CONN_LOW_LATENCY_REQUESTED) {
+		(void)k_work_reschedule(&cpd->dwork, K_MSEC(RESTORE_TIME));
+		cpd->latency_state &= ~CONN_LOW_LATENCY_REQUESTED;
+	} else {
+		ret = bt_conn_get_info(cpd->conn, &info);
+		if (ret != 0) {
+			return;
+		}
+
+		if (info.le.latency >= cpd->default_latency) {
+			return;
+		}
+
+		params.interval_min = info.le.interval;
+		params.interval_max = info.le.interval;
+		params.latency = cpd->default_latency;
+		params.timeout = info.le.timeout;
+
+		ret = bt_conn_le_param_update(cpd->conn, &params);
+
+		if (ret != 0 && (ret != -EALREADY)) {
+			(void)k_work_reschedule(&cpd->dwork, K_MSEC(RESTORE_RETRY_TIME));
+		}
+	}
+}
+
+/* Enables low latency connection for a given conn. */
+static void enable_low_latency(struct bt_conn *conn)
+{
+	struct bt_le_conn_param params;
+	struct conn_param_data *cpd;
+	struct bt_conn_info info;
+	int ret = 0;
+
+	cpd = get_conn_param_data(conn);
+	if (cpd->latency_state == 0) {
+		ret = bt_conn_get_info(conn, &info);
+		if (ret != 0 || info.le.latency == 0) {
+			return;
+		}
+
+		params.interval_min = info.le.interval;
+		params.interval_max = info.le.interval;
+		params.latency = 0;
+		params.timeout = info.le.timeout;
+
+		ret = bt_conn_le_param_update(cpd->conn, &params);
+		if (ret != 0) {
+			return;
+		}
+		cpd->default_latency = info.le.latency;
+	}
+
+	cpd->latency_state |= CONN_LOW_LATENCY_REQUESTED;
+}
 
 /**
  * Write handler for the SMP characteristic; processes an incoming SMP request.
@@ -60,6 +171,10 @@ static ssize_t smp_bt_chr_write(struct bt_conn *conn,
 
 	ud = net_buf_user_data(nb);
 	ud->conn = bt_conn_ref(conn);
+
+	if (IS_ENABLED(CONFIG_MCUMGR_SMP_BT_LOW_LATENCY)) {
+		enable_low_latency(conn);
+	}
 
 	zephyr_smp_rx_req(&smp_bt_transport, nb);
 
@@ -191,9 +306,69 @@ int smp_bt_unregister(void)
 	return bt_gatt_service_unregister(&smp_bt_svc);
 }
 
+/* BT connected callback. */
+static void connected(struct bt_conn *conn, uint8_t err)
+{
+	if (err == 0) {
+		alloc_conn_param_data(conn);
+	}
+}
+
+/* BT disconnected callback. */
+static void disconnected(struct bt_conn *conn, uint8_t reason)
+{
+	struct conn_param_data *cpd = get_conn_param_data(conn);
+
+	/* Cancel work if ongoing. */
+	(void)k_work_cancel_delayable(&cpd->dwork);
+
+	/* Clear cpd. */
+	cpd->default_latency = 0;
+	cpd->latency_state = 0;
+	cpd->conn = NULL;
+}
+
+/* BT LE connection parameters updated callback. */
+static void le_param_updated(struct bt_conn *conn, uint16_t interval,
+			     uint16_t latency, uint16_t timeout)
+{
+	struct conn_param_data *cpd = get_conn_param_data(conn);
+
+	if (latency == 0) {
+		if (cpd->latency_state & CONN_LOW_LATENCY_REQUESTED) {
+			cpd->latency_state &= ~CONN_LOW_LATENCY_REQUESTED;
+			(void)k_work_reschedule(&cpd->dwork, K_MSEC(RESTORE_TIME));
+		}
+		cpd->latency_state = CONN_LOW_LATENCY_ENABLED;
+	} else {
+		(void)k_work_cancel_delayable(&cpd->dwork);
+		cpd->latency_state = 0;
+		cpd->default_latency = latency;
+	}
+}
+
+static void init_low_latency_support(void)
+{
+	/* Register BT callbacks */
+	static struct bt_conn_cb conn_callbacks = {
+		.connected = connected,
+		.disconnected = disconnected,
+		.le_param_updated = le_param_updated,
+	};
+	bt_conn_cb_register(&conn_callbacks);
+
+	for (size_t i = 0; i < ARRAY_SIZE(conn_data); i++) {
+		k_work_init_delayable(&conn_data[i].dwork, restore_default_latency);
+	}
+}
+
 static int smp_bt_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
+
+	if (IS_ENABLED(CONFIG_MCUMGR_SMP_BT_LOW_LATENCY)) {
+		init_low_latency_support();
+	}
 
 	zephyr_smp_transport_init(&smp_bt_transport, smp_bt_tx_pkt,
 				  smp_bt_get_mtu, smp_bt_ud_copy,
