@@ -29,11 +29,6 @@ enum net_lte_protocol {
 	NPROTO_PDN = 514
 };
 
-/** Protocol numbers for LOCAL protocols */
-enum net_local_protocol {
-	NPROTO_DFU = 515
-};
-
 /* NCS specific socket types. */
 
 #define SOCK_MGMT 4 /**< Management socket type. */
@@ -123,21 +118,6 @@ enum net_local_protocol {
 #define SO_PDN_AF 1
 #define SO_PDN_CONTEXT_ID 2
 #define SO_PDN_STATE 3
-
-/* NCS specific DFU options */
-
-/** Protocol level for DFU. */
-#define SOL_DFU 515
-
-/* Socket options for SOL_DFU level */
-#define SO_DFU_FW_VERSION 1
-#define SO_DFU_RESOURCES 2
-#define SO_DFU_TIMEO 3
-#define SO_DFU_APPLY 4
-#define SO_DFU_REVERT 5
-#define SO_DFU_BACKUP_DELETE 6
-#define SO_DFU_OFFSET 7
-#define SO_DFU_ERROR 20
 
 /* NCS specific gettaddrinfo() flags */
 
