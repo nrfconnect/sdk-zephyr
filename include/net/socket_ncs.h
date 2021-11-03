@@ -38,6 +38,15 @@ enum net_local_protocol {
 
 #define SOCK_MGMT 4 /**< Management socket type. */
 
+/* When CONFIG_NET_SOCKETS_OFFLOAD is enabled, offloaded sockets take precedence
+ * when creating a new socket. Combine this flag with a socket type when
+ * creating a socket, to enforce native socket creation (e. g. SOCK_STREAM | SOCK_NATIVE).
+ * If it's desired to create a native TLS socket, but still offload the
+ * underlying TCP/UDP socket, use e. g. SOCK_STREAM | SOCK_NATIVE_TLS.
+ */
+#define SOCK_NATIVE 0x80000000
+#define SOCK_NATIVE_TLS 0x40000000
+
 /* NCS specific TLS options */
 
 /** Socket option to control TLS session caching. Accepted values:
