@@ -26,17 +26,12 @@ extern "C" {
 /** Protocol numbers for LTE protocols */
 enum net_lte_protocol {
 	NPROTO_AT = 513,
-	NPROTO_PDN = 514
 };
 
 /** Protocol numbers for LOCAL protocols */
 enum net_local_protocol {
 	NPROTO_DFU = 515
 };
-
-/* NCS specific socket types. */
-
-#define SOCK_MGMT 4 /**< Management socket type. */
 
 /* When CONFIG_NET_SOCKETS_OFFLOAD is enabled, offloaded sockets take precedence
  * when creating a new socket. Combine this flag with a socket type when
@@ -113,16 +108,6 @@ enum net_local_protocol {
  * Range is 0 to 135. 0 is no timeout and 135 is 2 h 15 min. Default is 0 (no timeout).
  */
 #define SO_TCP_SRV_SESSTIMEO 55
-
-/* NCS specific PDN options */
-
-/** Protocol level for PDN. */
-#define SOL_PDN 514
-
-/* Socket options for SOL_PDN level */
-#define SO_PDN_AF 1
-#define SO_PDN_CONTEXT_ID 2
-#define SO_PDN_STATE 3
 
 /* NCS specific DFU options */
 
