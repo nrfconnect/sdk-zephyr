@@ -7,7 +7,6 @@ menuconfig LORAWAN
 	bool "LoRaWAN support [EXPERIMENTAL]"
 	depends on LORA
 	select HAS_SEMTECH_LORAMAC
-	select HAS_SEMTECH_SOFT_SE
 	help
 	  This option enables LoRaWAN support.
 
@@ -64,5 +63,63 @@ config LORAMAC_REGION_RU864
 	bool "Russia 864MHz Frequency band"
 
 endchoice
+
+choice LORAWAN_NVM
+	bool "LoRaWAN NVM backend"
+	default LORAWAN_NVM_SETTINGS if SETTINGS
+	default LORAWAN_NVM_NONE
+
+config LORAWAN_NVM_NONE
+	bool "No NVM backend for LoRaWAN"
+	help
+	  This configuration should only be used during testing as all
+	  the join request using OTAA will fail because of anti-replay
+	  protection
+
+config LORAWAN_NVM_SETTINGS
+	bool "Settings based NVM"
+	depends on SETTINGS
+
+endchoice
+
+config LORAWAN_SE_HAS_OWN_NVM
+	bool
+
+choice LORAWAN_SE
+	bool "LoRaWAN Secure element backend"
+	default LORAWAN_SE_SOFT
+
+config LORAWAN_SE_SOFT
+	bool "Software secure element backend"
+
+config LORAWAN_SE_NRFX
+	bool "nRFx series Key management secure element backend"
+	select MBEDTLS
+	select NORDIC_SECURITY_BACKEND
+	select CC3XX_BACKEND
+	select HWINFO
+	select MPU_ALLOW_FLASH_WRITE
+	select HW_UNIQUE_KEY
+	select HW_UNIQUE_KEY_RANDOM
+	select SETTINGS
+	help
+	  This option also links mbedTLS to manage all the
+	  cryptographic operations, as well as Nordic specific
+	  CC3xx hardware accelerated crypto
+
+endchoice
+
+if LORAWAN_SE_NRFX
+
+config LORAWAN_SE_NRFX_GENERATE_DEVEUI
+	bool "Generate devEUI using nRFx unique identifier"
+	default y
+	help
+	  The devEUI will be generated using the unique
+	  identifier found in the FICR registers
+	  If this option is enabled, the devEUI shall never be
+	  updated.
+
+endif # LORAWAN_SE_NRFX
 
 endif # LORAWAN
