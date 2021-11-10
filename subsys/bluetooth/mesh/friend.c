@@ -392,22 +392,13 @@ static int unseg_app_sdu_decrypt(struct bt_mesh_friend *frnd,
 				 struct net_buf *buf,
 				 const struct unseg_app_sdu_meta *meta)
 {
-	struct net_buf_simple in;
-	struct net_buf_simple out;
+	struct net_buf_simple sdu;
 
-	/* Direct the input buffer at the Upper Transport Access PDU, accounting for
-	 * the network header and the 1 byte lower transport header
-	 */
-	net_buf_simple_clone(&buf->b, &in);
-	net_buf_simple_pull(&in, BT_MESH_NET_HDR_LEN);
-	net_buf_simple_pull(&in, 1);
-	in.len -= BT_MESH_MIC_SHORT;
+	net_buf_simple_clone(&buf->b, &sdu);
+	net_buf_simple_pull(&sdu, 10);
+	sdu.len -= 4;
 
-	net_buf_simple_clone(&in, &out);
-	out.len = 0; /* length will be set by decrypt */
-
-	/* Decrypt in place, as we only need to test one key: */
-	return bt_mesh_app_decrypt(meta->key, &meta->crypto, &in, &out);
+	return bt_mesh_app_decrypt(meta->key, &meta->crypto, &sdu, &sdu);
 }
 
 static int unseg_app_sdu_encrypt(struct bt_mesh_friend *frnd,
@@ -417,9 +408,8 @@ static int unseg_app_sdu_encrypt(struct bt_mesh_friend *frnd,
 	struct net_buf_simple sdu;
 
 	net_buf_simple_clone(&buf->b, &sdu);
-	net_buf_simple_pull(&sdu, BT_MESH_NET_HDR_LEN);
-	net_buf_simple_pull(&sdu, 1);
-	sdu.len -= BT_MESH_MIC_SHORT;
+	net_buf_simple_pull(&sdu, 10);
+	sdu.len -= 4;
 
 	return bt_mesh_app_encrypt(meta->key, &meta->crypto, &sdu);
 }
