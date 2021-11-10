@@ -18,7 +18,6 @@ uint8_t bt_mesh_elem_count(void);
 struct bt_mesh_elem *bt_mesh_elem_find(uint16_t addr);
 
 bool bt_mesh_has_addr(uint16_t addr);
-bool bt_mesh_model_has_key(struct bt_mesh_model *mod, uint16_t key);
 
 struct bt_mesh_model *bt_mesh_model_root(struct bt_mesh_model *mod);
 void bt_mesh_model_tree_walk(struct bt_mesh_model *root,
