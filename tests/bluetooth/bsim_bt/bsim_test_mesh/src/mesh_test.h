@@ -28,9 +28,6 @@
 #define TEST_MOD_ID 0x8888
 #define TEST_MSG_OP BT_MESH_MODEL_OP_1(0x0f)
 
-#define TEST_VND_COMPANY_ID 0x1234
-#define TEST_VND_MOD_ID   0x5678
-
 #define FAIL(msg, ...)                                                         \
 	do {                                                                   \
 		bst_result = Failed;                                           \
@@ -55,23 +52,12 @@
 
 #define ASSERT_TRUE(cond, ...)                                                 \
 	do {                                                                   \
-		if (!(cond)) {                                                 \
+		if (!(cond)) {                                                   \
 			bst_result = Failed;                                   \
 			bs_trace_error_time_line(                              \
-				#cond " is false.", ##__VA_ARGS__);             \
+				#cond "is false.", ##__VA_ARGS__);             \
 		}                                                              \
 	} while (0)
-
-#define ASSERT_EQUAL(expected, got)                                            \
-	do {                                                                   \
-		if ((expected) != (got)) {                                     \
-			bst_result = Failed;                                   \
-			bs_trace_error_time_line(                              \
-				#expected " not equal to " #got ": %d != %d\n",\
-				(expected), (got));                            \
-		}                                                              \
-	} while (0)
-
 
 struct bt_mesh_test_cfg {
 	uint16_t addr;
@@ -99,7 +85,6 @@ struct bt_mesh_test_msg {
 extern enum bst_result_t bst_result;
 extern const struct bt_mesh_test_cfg *cfg;
 extern struct bt_mesh_model *test_model;
-extern struct bt_mesh_model *test_vnd_model;
 extern const uint8_t test_net_key[16];
 extern const uint8_t test_app_key[16];
 extern const uint8_t test_va_uuid[16];
