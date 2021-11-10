@@ -2581,26 +2581,24 @@ function(dt_num_regs var)
 endfunction()
 
 # Usage:
-#   dt_reg_addr(<var> PATH <path> [INDEX <idx>] [NAME <name>])
+#   dt_reg_addr(<var> PATH <path> [INDEX <idx>])
 #
-# Get the base address of the register block at index <idx>, or with
-# name <name>. If <idx> and <name> are both omitted, the value at
-# index 0 will be returned. Do not give both <idx> and <name>.
+# Get the base address of the register block at index <idx>.
+# If <idx> is omitted, then the value at index 0 will be returned.
 #
 # The value will be returned in the <var> parameter.
 #
 # Results can be:
 # - The base address of the register block
 # - <var> will be undefined if node does not exists or does not have a register
-#   block at the requested index or with the requested name
+#   block at the requested index.
 #
 # <var>          : Return variable where the address value will be stored
 # PATH <path>    : Node path
-# INDEX <idx>    : Register block index number
-# NAME <name>    : Register block name
+# INDEX <idx>    : Index number
 function(dt_reg_addr var)
   set(req_single_args "PATH")
-  set(single_args "INDEX;NAME")
+  set(single_args "INDEX")
   cmake_parse_arguments(DT_REG "" "${req_single_args};${single_args}" "" ${ARGN})
 
   if(${ARGV0} IN_LIST req_single_args)
@@ -2615,16 +2613,8 @@ function(dt_reg_addr var)
     endif()
   endforeach()
 
-  if(DEFINED DT_REG_INDEX AND DEFINED DT_REG_NAME)
-    message(FATAL_ERROR "dt_reg_addr(${ARGV0} ...) given both INDEX and NAME")
-  elseif(NOT DEFINED DT_REG_INDEX AND NOT DEFINED DT_REG_NAME)
+  if(NOT DEFINED DT_REG_INDEX)
     set(DT_REG_INDEX 0)
-  elseif(DEFINED DT_REG_NAME)
-    _dt_reg_get_index(DT_REG_INDEX "${DT_REG_PATH}" "${DT_REG_NAME}")
-    if(DT_REG_INDEX EQUAL "-1")
-      set(${var} PARENT_SCOPE)
-      return()
-    endif()
   endif()
 
   get_target_property(${var}_list devicetree_target "DT_REG|${DT_REG_PATH}|ADDR")
@@ -2639,21 +2629,19 @@ function(dt_reg_addr var)
 endfunction()
 
 # Usage:
-#   dt_reg_size(<var> PATH <path> [INDEX <idx>] [NAME <name>])
+#   dt_reg_size(<var> PATH <path> [INDEX <idx>])
 #
-# Get the size of the register block at index <idx>, or with
-# name <name>. If <idx> and <name> are both omitted, the value at
-# index 0 will be returned. Do not give both <idx> and <name>.
+# Get the size of the register block at index <idx>.
+# If INDEX is omitted, then the value at index 0 will be returned.
 #
 # The value will be returned in the <value> parameter.
 #
 # <var>          : Return variable where the size value will be stored
 # PATH <path>    : Node path
-# INDEX <idx>    : Register block index number
-# NAME <name>    : Register block name
+# INDEX <idx>    : Index number
 function(dt_reg_size var)
   set(req_single_args "PATH")
-  set(single_args "INDEX;NAME")
+  set(single_args "INDEX")
   cmake_parse_arguments(DT_REG "" "${req_single_args};${single_args}" "" ${ARGN})
 
   if(${ARGV0} IN_LIST req_single_args)
@@ -2668,16 +2656,8 @@ function(dt_reg_size var)
     endif()
   endforeach()
 
-  if(DEFINED DT_REG_INDEX AND DEFINED DT_REG_NAME)
-    message(FATAL_ERROR "dt_reg_size(${ARGV0} ...) given both INDEX and NAME")
-  elseif(NOT DEFINED DT_REG_INDEX AND NOT DEFINED DT_REG_NAME)
+  if(NOT DEFINED DT_REG_INDEX)
     set(DT_REG_INDEX 0)
-  elseif(DEFINED DT_REG_NAME)
-    _dt_reg_get_index(DT_REG_INDEX "${DT_REG_PATH}" "${DT_REG_NAME}")
-    if(DT_REG_INDEX EQUAL "-1")
-      set(${var} PARENT_SCOPE)
-      return()
-    endif()
   endif()
 
   get_target_property(${var}_list devicetree_target "DT_REG|${DT_REG_PATH}|SIZE")
@@ -2689,17 +2669,6 @@ function(dt_reg_size var)
   endif()
 
   set(${var} ${${var}} PARENT_SCOPE)
-endfunction()
-
-# Internal helper for dt_reg_addr/dt_reg_size; not meant to be used directly
-function(_dt_reg_get_index var path name)
-  dt_prop(reg_names PATH "${path}" PROPERTY "reg-names")
-  if(NOT DEFINED reg_names)
-    set(index "-1")
-  else()
-    list(FIND reg_names "${name}" index)
-  endif()
-  set("${var}" "${index}" PARENT_SCOPE)
 endfunction()
 
 # Usage:
