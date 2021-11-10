@@ -21,7 +21,6 @@ if(CONFIG_SETTINGS)
  target_sources(app PRIVATE
   src/settings_test_backend.c
   src/test_persistence.c
-  src/test_replay_cache.c
  )
 else()
  target_sources(app PRIVATE

@@ -9,7 +9,6 @@
 
 #if defined(CONFIG_SETTINGS)
 extern struct bst_test_list *test_persistence_install(struct bst_test_list *tests);
-extern struct bst_test_list *test_rpc_install(struct bst_test_list *tests);
 #else
 extern struct bst_test_list *test_transport_install(struct bst_test_list *tests);
 extern struct bst_test_list *test_friendship_install(struct bst_test_list *tests);
@@ -21,7 +20,6 @@ extern struct bst_test_list *test_scanner_install(struct bst_test_list *test);
 bst_test_install_t test_installers[] = {
 #if defined(CONFIG_SETTINGS)
 	test_persistence_install,
-	test_rpc_install,
 #else
 	test_transport_install,
 	test_friendship_install,
