@@ -41,10 +41,6 @@ config NUM_COOP_PRIORITIES
 	  This can be set to zero to disable cooperative scheduling. Cooperative
 	  threads always preempt preemptible threads.
 
-	  Each priority requires an extra 8 bytes of RAM. Each set of 32 extra
-	  total priorities require an extra 4 bytes and add one possible
-	  iteration to loops that search for the next thread to run.
-
 	  The total number of priorities is
 
 	   NUM_COOP_PRIORITIES + NUM_PREEMPT_PRIORITIES + 1
@@ -62,10 +58,6 @@ config NUM_PREEMPT_PRIORITIES
 	  to priorities 0 to CONFIG_NUM_PREEMPT_PRIORITIES - 1.
 
 	  This can be set to 0 to disable preemptible scheduling.
-
-	  Each priority requires an extra 8 bytes of RAM. Each set of 32 extra
-	  total priorities require an extra 4 bytes and add one possible
-	  iteration to loops that search for the next thread to run.
 
 	  The total number of priorities is
 
@@ -295,6 +287,22 @@ config WAITQ_DUMB
 	  a few threads blocked on any single IPC primitive.
 
 endchoice # WAITQ_ALGORITHM
+
+config DEVICE_HANDLE_PADDING
+	int "Number of additional device handles to use for padding"
+	default 0
+	range 0 10
+	help
+	  This is a "fudge factor" which works around build system
+	  limitations. It is safe to ignore unless you get a specific
+	  build system error about it.
+
+	  The option's value is the number of superfluous device handle
+	  values which are introduced into the array pointed to by each
+	  device's 'handles' member during the first linker pass.
+
+	  Each handle uses 2 bytes, so a value of 3 would use an extra
+	  6 bytes of ROM for every device.
 
 menu "Kernel Debugging and Metrics"
 

@@ -8,9 +8,11 @@ depends on SOC_SERIES_RISCV32_IT8XXX2
 config SOC_IT8XXX2
 	bool "ITE IT8XXX2 system implementation"
 	select RISCV
-	select ATOMIC_OPERATIONS_C
+	select ATOMIC_OPERATIONS_BUILTIN
 
 endchoice
+
+if SOC_IT8XXX2
 
 config SOC_IT8XXX2_PLL_FLASH_48M
 	bool "Flash frequency is 48MHz"
@@ -31,3 +33,5 @@ config SOC_IT8XXX2_EXT_32K
 	bool "Use external 32.768 kHz clock source"
 
 endchoice
+
+endif # SOC_IT8XXX2

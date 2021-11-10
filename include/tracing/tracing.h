@@ -17,6 +17,9 @@
 #elif defined CONFIG_TRACING_TEST
 #include "tracing_test.h"
 
+#elif defined CONFIG_TRACING_USER
+#include "tracing_user.h"
+
 #else
 
 /**
@@ -152,6 +155,18 @@
  * @param thread Thread object
  */
 #define sys_port_trace_k_thread_abort(thread)
+
+/**
+ * @brief Called when a thread enters the k_thread_abort routine
+ * @param thread Thread object
+ */
+#define sys_port_trace_k_thread_abort_enter(thread)
+
+/**
+ * @brief Called when a thread exits the k_thread_abort routine
+ * @param thread Thread object
+ */
+#define sys_port_trace_k_thread_abort_exit(thread)
 
 /**
  * @brief Called when setting priority of a thread
@@ -391,6 +406,12 @@
  * @ingroup tracing_apis
  * @{
  */
+
+/**
+ * @brief Trace initialisation of a Work Queue structure
+ * @param queue Work Queue structure
+ */
+#define sys_port_trace_k_work_queue_init(queue)
 
 /**
  * @brief Trace start of a Work Queue call entry
