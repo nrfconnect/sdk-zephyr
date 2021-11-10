@@ -14,7 +14,6 @@
  * @{
  */
 
-#include <toolchain.h>
 #include <net/socket_types.h>
 
 #ifdef __cplusplus
