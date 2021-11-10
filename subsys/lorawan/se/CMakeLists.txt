@@ -1,0 +1,2 @@
+zephyr_library_sources(lorawan_se.c)
+add_subdirectory_ifdef(CONFIG_LORAWAN_SE_NRFX nrfx-se)
