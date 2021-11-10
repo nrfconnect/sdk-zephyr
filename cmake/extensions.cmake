@@ -1241,66 +1241,6 @@ function(check_dtc_flag flag ok)
   endif()
 endfunction()
 
-# Function to create a build string based on BOARD, BOARD_REVISION, and BUILD
-# type.
-#
-# This is a common function to ensure that build strings are always created
-# in a uniform way.
-#
-# Usage:
-#   zephyr_build_string(<out-variable>
-#                       BOARD <board>
-#                       [BOARD_REVISION <revision>]
-#                       [BUILD <type>]
-#   )
-#
-# <out-variable>:            Output variable where the build string will be returned.
-# BOARD <board>:             Board name to use when creating the build string.
-# BOARD_REVISION <revision>: Board revision to use when creating the build string.
-# BUILD <type>:              Build type to use when creating the build string.
-#
-# Examples
-# calling
-#   zephyr_build_string(build_string BOARD alpha BUILD debug)
-# will return the string `alpha_debug` in `build_string` parameter.
-#
-# calling
-#   zephyr_build_string(build_string BOARD alpha BOARD_REVISION 1.0.0 BUILD debug)
-# will return the string `alpha_1_0_0_debug` in `build_string` parameter.
-#
-function(zephyr_build_string outvar)
-  set(single_args BOARD BOARD_REVISION BUILD)
-
-  cmake_parse_arguments(BUILD_STR "" "${single_args}" "" ${ARGN})
-  if(BUILD_STR_UNPARSED_ARGUMENTS)
-    message(FATAL_ERROR
-      "zephyr_build_string(${ARGV0} <val> ...) given unknown arguments:"
-      " ${BUILD_STR_UNPARSED_ARGUMENTS}"
-    )
-  endif()
-
-  if(DEFINED BUILD_STR_BOARD_REVISION AND NOT BUILD_STR_BOARD)
-    message(FATAL_ERROR
-      "zephyr_build_string(${ARGV0} <list> BOARD_REVISION ${BUILD_STR_BOARD_REVISION} ...)"
-      " given without BOARD argument, please specify BOARD"
-    )
-  endif()
-
-  set(${outvar} ${BUILD_STR_BOARD})
-
-  if(DEFINED BUILD_STR_BOARD_REVISION)
-    string(REPLACE "." "_" revision_string ${BUILD_STR_BOARD_REVISION})
-    set(${outvar} "${${outvar}}_${revision_string}")
-  endif()
-
-  if(BUILD_STR_BUILD)
-    set(${outvar} "${${outvar}}_${BUILD_STR_BUILD}")
-  endif()
-
-  # This updates the provided outvar in parent scope (callers scope)
-  set(${outvar} ${${outvar}} PARENT_SCOPE)
-endfunction()
-
 ########################################################
 # 2. Kconfig-aware extensions
 ########################################################
@@ -1948,8 +1888,6 @@ endfunction()
 #                          Issue an error for any relative path not specified
 #                          by user with `-D<path>`
 #
-# returns an updated list of absolute paths
-#
 # CONF_FILES <path>: Find all configuration files in path and return them in a
 #                    list. Configuration files will be:
 #                    - DTS:       Overlay files (.overlay)
@@ -1971,6 +1909,7 @@ endfunction()
 #                                  BUILD debug, will look for <board>_debug.conf
 #                                  and <board>_debug.overlay, instead of <board>.conf
 #
+# returns an updated list of absolute paths
 function(zephyr_file)
   set(file_options APPLICATION_ROOT CONF_FILES)
   if((ARGC EQUAL 0) OR (NOT (ARGV0 IN_LIST file_options)))
@@ -1986,7 +1925,7 @@ Please provide one of following: APPLICATION_ROOT, CONF_FILES")
 
   cmake_parse_arguments(FILE "" "${single_args}" "" ${ARGN})
   if(FILE_UNPARSED_ARGUMENTS)
-      message(FATAL_ERROR "zephyr_file(${ARGV0} <val> ...) given unknown arguments: ${FILE_UNPARSED_ARGUMENTS}")
+      message(FATAL_ERROR "zephyr_file(${ARGV0} <path> ...) given unknown arguments: ${FILE_UNPARSED_ARGUMENTS}")
   endif()
 
 
@@ -2041,22 +1980,15 @@ Relative paths are only allowed with `-D${ARGV1}=<path>`")
       endif()
     endif()
 
-    zephyr_build_string(filename
-                        BOARD ${FILE_BOARD}
-                        BUILD ${FILE_BUILD}
-    )
-    set(filename_list ${filename})
+    set(FILENAMES ${FILE_BOARD})
 
-    zephyr_build_string(filename
-                        BOARD ${FILE_BOARD}
-                        BOARD_REVISION ${FILE_BOARD_REVISION}
-                        BUILD ${FILE_BUILD}
-    )
-    list(APPEND filename_list ${filename})
-    list(REMOVE_DUPLICATES filename_list)
+    if(DEFINED FILE_BOARD_REVISION)
+      string(REPLACE "." "_" revision_string ${FILE_BOARD_REVISION})
+      list(APPEND FILENAMES "${FILE_BOARD}_${revision_string}")
+    endif()
 
     if(FILE_DTS)
-      foreach(filename ${filename_list})
+      foreach(filename ${FILENAMES})
         if(EXISTS ${FILE_CONF_FILES}/${filename}.overlay)
           list(APPEND ${FILE_DTS} ${FILE_CONF_FILES}/${filename}.overlay)
         endif()
@@ -2067,7 +1999,11 @@ Relative paths are only allowed with `-D${ARGV1}=<path>`")
     endif()
 
     if(FILE_KCONF)
-      foreach(filename ${filename_list})
+      foreach(filename ${FILENAMES})
+        if(FILE_BUILD)
+          set(filename "${filename}_${FILE_BUILD}")
+        endif()
+
         if(EXISTS ${FILE_CONF_FILES}/${filename}.conf)
           list(APPEND ${FILE_KCONF} ${FILE_CONF_FILES}/${filename}.conf)
         endif()
