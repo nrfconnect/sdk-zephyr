@@ -54,10 +54,7 @@ function RunTest(){
   for process_id in $process_ids; do
     wait $process_id || let "exit_code=$?"
   done
-
-  if [ "$exit_code" != "0" ] ; then
-    exit $exit_code #the last exit code != 0
-  fi
+  exit $exit_code #the last exit code != 0
 }
 
 : "${BSIM_OUT_PATH:?BSIM_OUT_PATH must be defined}"
