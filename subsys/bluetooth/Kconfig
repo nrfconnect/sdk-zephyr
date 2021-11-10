@@ -18,7 +18,7 @@ module = BT
 module-str = bt
 source "subsys/logging/Kconfig.template.log_config"
 
-choice BT_STACK_SELECTION
+choice
 	prompt "Bluetooth Stack Selection"
 	default BT_HCI
 	help
