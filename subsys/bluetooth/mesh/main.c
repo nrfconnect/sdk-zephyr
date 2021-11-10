@@ -20,7 +20,6 @@
 
 #include "test.h"
 #include "adv.h"
-#include "host/ecc.h"
 #include "prov.h"
 #include "provisioner.h"
 #include "net.h"

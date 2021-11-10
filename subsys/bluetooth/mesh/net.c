@@ -34,7 +34,6 @@
 #include "foundation.h"
 #include "beacon.h"
 #include "settings.h"
-#include "host/ecc.h"
 #include "prov.h"
 #include "cfg.h"
 

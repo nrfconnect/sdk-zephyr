@@ -14,7 +14,6 @@
 #include "adv.h"
 #include "crypto.h"
 #include "beacon.h"
-#include "host/ecc.h"
 #include "prov.h"
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_MESH_DEBUG_PROV)
