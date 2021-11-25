@@ -278,6 +278,10 @@ class KconfigCheck(ComplianceTest):
                     re.sub('[^a-zA-Z0-9]', '_', module).upper(),
                     nrf_modules_dir + '/' + module + '/Kconfig'
                 ))
+                fp_module_file.write("NCS_{}_KCONFIG = {}\n".format(
+                    re.sub('[^a-zA-Z0-9]', '_', module).upper(),
+                    modules_dir + '/' + module + '/Kconfig'
+                ))
             fp_module_file.write(content)
 
     def parse_kconfig(self):
