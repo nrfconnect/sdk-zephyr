@@ -154,6 +154,14 @@ test_i2c_mpu9150: mpu9150@16 {
 	reg = <0x16>;
 };
 
+mpu9250: mpu9250@17 {
+	compatible = "invensense,mpu9250";
+	reg = <0x17>;
+	irq-gpios = <&gpio0 06 0>;
+	label = "MPU9250";
+	status = "okay";
+};
+
 test_i2c_ina219: ina219@40 {
 	compatible = "ti,ina219";
 	label = "INA219";
