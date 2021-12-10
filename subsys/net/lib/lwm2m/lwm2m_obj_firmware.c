@@ -336,6 +336,10 @@ static struct lwm2m_engine_obj_inst *firmware_create(uint16_t obj_inst_id)
 			  &(update_state[obj_inst_id]), sizeof(update_state[obj_inst_id]));
 	INIT_OBJ_RES_DATA(FIRMWARE_UPDATE_RESULT_ID, res[obj_inst_id], i, res_inst[obj_inst_id], j,
 			  &(update_result[obj_inst_id]), sizeof(update_result[obj_inst_id]));
+	INIT_OBJ_RES_OPT(FIRMWARE_PACKAGE_NAME_ID, res[obj_inst_id], i, res_inst[obj_inst_id], j, 1,
+			 false, true, NULL, NULL, NULL, NULL, NULL);
+	INIT_OBJ_RES_OPT(FIRMWARE_PACKAGE_VERSION_ID, res[obj_inst_id], i, res_inst[obj_inst_id], j,
+			 1, false, true, NULL, NULL, NULL, NULL, NULL);
 	INIT_OBJ_RES_DATA(FIRMWARE_UPDATE_DELIV_METHOD_ID, res[obj_inst_id], i,
 			  res_inst[obj_inst_id], j, &(delivery_method[obj_inst_id]),
 			  sizeof(delivery_method[obj_inst_id]));
