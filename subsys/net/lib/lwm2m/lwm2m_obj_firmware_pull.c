@@ -49,19 +49,19 @@ static void set_update_result_from_error(int error_code)
 	uint16_t oid = firmware_ctx.fw_obj_inst;
 
 	if (error_code == -ENOMEM) {
-		lwm2m_firmware_set_update_result(oid, RESULT_OUT_OF_MEM);
+		lwm2m_firmware_set_update_result_with_instance(oid, RESULT_OUT_OF_MEM);
 	} else if (error_code == -ENOSPC) {
-		lwm2m_firmware_set_update_result(oid, RESULT_NO_STORAGE);
+		lwm2m_firmware_set_update_result_with_instance(oid, RESULT_NO_STORAGE);
 	} else if (error_code == -EFAULT) {
-		lwm2m_firmware_set_update_result(oid, RESULT_INTEGRITY_FAILED);
+		lwm2m_firmware_set_update_result_with_instance(oid, RESULT_INTEGRITY_FAILED);
 	} else if (error_code == -ENOMSG) {
-		lwm2m_firmware_set_update_result(oid, RESULT_CONNECTION_LOST);
+		lwm2m_firmware_set_update_result_with_instance(oid, RESULT_CONNECTION_LOST);
 	} else if (error_code == -ENOTSUP) {
-		lwm2m_firmware_set_update_result(oid, RESULT_INVALID_URI);
+		lwm2m_firmware_set_update_result_with_instance(oid, RESULT_INVALID_URI);
 	} else if (error_code == -EPROTONOSUPPORT) {
-		lwm2m_firmware_set_update_result(oid, RESULT_UNSUP_PROTO);
+		lwm2m_firmware_set_update_result_with_instance(oid, RESULT_UNSUP_PROTO);
 	} else {
-		lwm2m_firmware_set_update_result(oid, RESULT_UPDATE_FAILED);
+		lwm2m_firmware_set_update_result_with_instance(oid, RESULT_UPDATE_FAILED);
 	}
 }
 
@@ -331,7 +331,8 @@ do_firmware_transfer_reply_cb(const struct coap_packet *response,
 		}
 	} else {
 		/* Download finished */
-		lwm2m_firmware_set_update_state(firmware_ctx.fw_obj_inst, STATE_DOWNLOADED);
+		lwm2m_firmware_set_update_state_with_instance(firmware_ctx.fw_obj_inst,
+							      STATE_DOWNLOADED);
 		lwm2m_engine_context_close(&firmware_ctx);
 	}
 
@@ -366,7 +367,8 @@ static void do_transmit_timeout_cb(struct lwm2m_message *msg)
 	} else {
 		LOG_ERR("TIMEOUT - Too many retry packet attempts! "
 			"Aborting firmware download.");
-		lwm2m_firmware_set_update_result(firmware_ctx.fw_obj_inst, RESULT_CONNECTION_LOST);
+		lwm2m_firmware_set_update_result_with_instance(firmware_ctx.fw_obj_inst,
+							       RESULT_CONNECTION_LOST);
 		lwm2m_engine_context_close(&firmware_ctx);
 	}
 }
@@ -474,7 +476,7 @@ int lwm2m_firmware_start_transfer(uint16_t obj_inst_id, char *package_uri)
 	firmware_ctx.fault_cb = socket_fault_cb;
 	firmware_ctx.fw_obj_inst = obj_inst_id;
 	firmware_retry = 0;
-	lwm2m_firmware_set_update_state(obj_inst_id, STATE_DOWNLOADING);
+	lwm2m_firmware_set_update_state_with_instance(obj_inst_id, STATE_DOWNLOADING);
 
 	/* start file transfer */
 	strncpy(firmware_uri[obj_inst_id], package_uri, URI_LEN - 1);

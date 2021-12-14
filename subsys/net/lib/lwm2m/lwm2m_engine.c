@@ -4800,6 +4800,7 @@ int lwm2m_parse_peerinfo(char *url, struct sockaddr *addr, bool *use_dtls)
 		hints.ai_family = AF_UNSPEC;
 #endif /* defined(CONFIG_NET_IPV6) && defined(CONFIG_NET_IPV4) */
 		hints.ai_socktype = SOCK_DGRAM;
+
 		ret = getaddrinfo(url + off, NULL, &hints, &res);
 		if (ret != 0) {
 			LOG_ERR("Unable to resolve address");
