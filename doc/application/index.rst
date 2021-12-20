@@ -643,7 +643,7 @@ at CMake configure time if any experimental feature is enabled.
    CONFIG_WARN_EXPERIMENTAL=y
 
 For example, enabling experimental warnings and building a sample which enables
-:kconfig:`CONFIG_BT_EXT_ADV` will print the following warning at CMake
+:kconfig:`CONFIG_BT_PER_ADV` will print the following warning at CMake
 configure time.
 
 .. code-block:: shell
