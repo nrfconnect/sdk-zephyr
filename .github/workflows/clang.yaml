@@ -38,13 +38,16 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          path: ./zephyr
 
       - name: west setup
+        working-directory: ./zephyr
         run: |
           west init -l . || true
           west update
 
       - name: Check Environment
+        working-directory: ./zephyr
         run: |
           cmake --version
           ${CLANG_ROOT_DIR}/bin/clang --version
@@ -52,6 +55,7 @@ jobs:
           ls -la
 
       - name: Run Tests with Twister
+        working-directory: ./zephyr
         run: |
           #source zephyr-env.sh
           export ZEPHYR_BASE=${PWD}
@@ -63,7 +67,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: Unit Test Results (Subset ${{ matrix.subset }})
-          path: twister-out/twister.xml
+          path: zephyr/twister-out/twister.xml
 
   publish-test-results:
     name: "Publish Unit Tests Results"
