@@ -101,6 +101,14 @@ static inline bool is_aligned_32(uint32_t data)
 	return (data & 0x3) ? false : true;
 }
 
+static inline bool is_within_bounds(off_t addr, size_t len, off_t boundary_start,
+				    size_t boundary_size)
+{
+	return (addr >= boundary_start &&
+			(addr < (boundary_start + boundary_size)) &&
+			(len <= (boundary_start + boundary_size - addr)));
+}
+
 static inline bool is_regular_addr_valid(off_t addr, size_t len)
 {
 	size_t flash_size = nrfx_nvmc_flash_size_get();
