@@ -241,27 +241,6 @@ declarations. This warning may be caused by different Sphinx/Breathe issues:
 - Different objects (e.g. a struct and a function) can not share the same name
 - Nested elements (e.g. in a struct or union) can not share the same name
 
-Developer-mode Document Building
-********************************
-
-Building the documentation for all the Kconfig options significantly
-adds to the total doc build time.  When making and testing major changes
-to the documentation, we provide an option to temporarily stub-out
-the auto-generated configuration documentation so the doc build process
-runs much faster.
-
-To enable this mode, set the following option when invoking cmake::
-
-   -DKCONFIG_TURBO_MODE=1
-
-or invoke make with the following target::
-
-   cd ~/zephyr
-
-   # To generate HTML output without detailed Kconfig
-   make html-fast
-
-
 .. _reStructuredText: http://sphinx-doc.org/rest.html
 .. _Sphinx: http://sphinx-doc.org/
 .. _Windows Python Path: https://docs.python.org/3/using/windows.html#finding-the-python-executable
