@@ -42,13 +42,16 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          path: ./zephyr
 
       - name: west setup
+        working-directory: ./zephyr
         run: |
           west init -l . || true
           west update
 
       - name: Run Bluetooth Tests with BSIM
+        working-directory: ./zephyr
         run: |
           #source zephyr-env.sh
           export ZEPHYR_BASE=${PWD}
@@ -61,7 +64,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: Bluetooth Test Results
-          path: ./bsim_bt_out/bsim_results.xml
+          path: ./zephyr/bsim_bt_out/bsim_results.xml
 
   publish-test-results:
     name: "Publish Unit Tests Results"
