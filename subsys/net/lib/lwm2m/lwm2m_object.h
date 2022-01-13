@@ -504,6 +504,8 @@ struct lwm2m_writer {
 	size_t (*put_s64)(struct lwm2m_output_context *out,
 			  struct lwm2m_obj_path *path,
 			  int64_t value);
+	size_t (*put_time)(struct lwm2m_output_context *out,
+			  struct lwm2m_obj_path *path, int64_t value);
 	size_t (*put_string)(struct lwm2m_output_context *out,
 			     struct lwm2m_obj_path *path,
 			     char *buf, size_t buflen);
@@ -527,6 +529,8 @@ struct lwm2m_reader {
 	size_t (*get_s32)(struct lwm2m_input_context *in,
 			  int32_t *value);
 	size_t (*get_s64)(struct lwm2m_input_context *in,
+			  int64_t *value);
+	size_t (*get_time)(struct lwm2m_input_context *in,
 			  int64_t *value);
 	size_t (*get_string)(struct lwm2m_input_context *in,
 			     uint8_t *buf, size_t buflen);
@@ -702,6 +706,13 @@ static inline size_t engine_put_float(struct lwm2m_output_context *out,
 	return out->writer->put_float(out, path, value);
 }
 
+static inline size_t engine_put_time(struct lwm2m_output_context *out,
+				    struct lwm2m_obj_path *path,
+				    int64_t value)
+{
+	return out->writer->put_time(out, path, value);
+}
+
 static inline size_t engine_put_bool(struct lwm2m_output_context *out,
 				     struct lwm2m_obj_path *path,
 				     bool value)
@@ -753,6 +764,12 @@ static inline size_t engine_get_string(struct lwm2m_input_context *in,
 				       uint8_t *buf, size_t buflen)
 {
 	return in->reader->get_string(in, buf, buflen);
+}
+
+static inline size_t engine_get_time(struct lwm2m_input_context *in,
+				   int64_t *value)
+{
+	return in->reader->get_time(in, value);
 }
 
 static inline size_t engine_get_float(struct lwm2m_input_context *in,
