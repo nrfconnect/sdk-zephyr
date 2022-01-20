@@ -137,6 +137,15 @@ BUILD_ASSERT(CONFIG_LWM2M_COAP_BLOCK_SIZE <= CONFIG_LWM2M_COAP_MAX_MSG_SIZE,
 /* buffer util macros */
 #define CPKT_BUF_WRITE(cpkt)	(cpkt)->data, &(cpkt)->offset, (cpkt)->max_len
 #define CPKT_BUF_READ(cpkt)	(cpkt)->data, (cpkt)->max_len
+#define CPKT_BUF_W_PTR(cpkt)	((cpkt)->data + (cpkt)->offset)
+#define CPKT_BUF_W_SIZE(cpkt)	((cpkt)->max_len - (cpkt)->offset)
+
+#define CPKT_BUF_W_REGION(cpkt)  CPKT_BUF_W_PTR(cpkt), CPKT_BUF_W_SIZE(cpkt)
+
+/* Input context buffer util macros */
+#define ICTX_BUF_R_LEFT_SZ(i_ctx) ((i_ctx)->in_cpkt->max_len - (i_ctx)->offset)
+#define ICTX_BUF_R_PTR(i_ctx)	  ((i_ctx)->in_cpkt->data + (i_ctx)->offset)
+#define ICTX_BUF_R_REGION(i_ctx)   ICTX_BUF_R_PTR(i_ctx), ICTX_BUF_R_LEFT_SZ(i_ctx)
 
 struct lwm2m_engine_obj;
 struct lwm2m_message;
@@ -146,6 +155,8 @@ struct lwm2m_message;
 #define LWM2M_PATH_LEVEL_OBJECT_INST 2
 #define LWM2M_PATH_LEVEL_RESOURCE 3
 #define LWM2M_PATH_LEVEL_RESOURCE_INST 4
+
+#define LWM2M_OBJLNK_NULL 65535 /* null link */
 
 /* path representing object instances */
 #define OBJ_FIELD(_id, _perm, _type) \
