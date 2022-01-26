@@ -44,8 +44,11 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v2
+      with:
+        path: ./zephyr
 
     - name: install-pkgs
+      working-directory: ./zephyr
       run: |
         sudo apt-get install -y ninja-build graphviz libclang1-9 libclang-cpp9
         wget -q https://www.doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
@@ -54,6 +57,7 @@ jobs:
 
     - name: cache-pip
       uses: actions/cache@v1
+      working-directory: ./zephyr
       with:
         path: ~/.cache/pip
         key: pip-${{ hashFiles('scripts/requirements-doc.txt') }}
@@ -66,10 +70,12 @@ jobs:
         pip3 install cmake==${CMAKE_VERSION}
 
     - name: west setup
+      working-directory: ./zephyr
       run: |
         west init -l .
 
     - name: build-docs
+      working-directory: ./zephyr
       run: |
         if [[ "$GITHUB_REF" =~ "refs/tags/v" ]]; then
           DOC_TAG="release"
@@ -86,6 +92,7 @@ jobs:
         DOC_TAG=${DOC_TAG} SPHINXOPTS="-q -W -t publish" make -C doc ${DOC_TARGET}
 
     - name: compress-docs
+      working-directory: ./zephyr
       run: |
         tar cfJ html-output.tar.xz --directory=doc/_build html
 
@@ -93,7 +100,7 @@ jobs:
       uses: actions/upload-artifact@master
       with:
         name: html-output
-        path: html-output.tar.xz
+        path: zephyr/html-output.tar.xz
 
   doc-build-pdf:
     name: "Documentation Build (PDF)"
@@ -107,6 +114,8 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v2
+      with:
+        path: ./zephyr
 
     - name: install-pkgs
       run: |
@@ -127,10 +136,12 @@ jobs:
         pip3 install cmake==${CMAKE_VERSION}
 
     - name: west setup
+      working-directory: ./zephyr
       run: |
         west init -l .
 
     - name: build-docs
+      working-directory: ./zephyr
       run: |
         if [[ "$GITHUB_REF" =~ "refs/tags/v" ]]; then
           DOC_TAG="release"
@@ -144,4 +155,4 @@ jobs:
       uses: actions/upload-artifact@master
       with:
         name: pdf-output
-        path: doc/_build/latex/zephyr.pdf
+        path: zephyr/doc/_build/latex/zephyr.pdf
