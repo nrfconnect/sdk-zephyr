@@ -15,7 +15,7 @@ jobs:
           access_token: ${{ github.token }}
 
   codecov:
-    runs-on: zephyr_runner
+    runs-on: ubuntu-latest
     needs: codecov-prep
     container:
       image: zephyrprojectrtos/ci:v0.21.0
