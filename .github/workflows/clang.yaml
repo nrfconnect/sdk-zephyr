@@ -27,6 +27,7 @@ jobs:
       CLANG_ROOT_DIR: /usr/lib/llvm-12
       COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
       BASE_REF: ${{ github.base_ref }}
+      MATRIX_SIZE: 5
     outputs:
       report_needed: ${{ steps.twister.outputs.report_needed }}
     steps:
@@ -94,6 +95,17 @@ jobs:
           test -d github/home/.ccache && rm -rf /github/home/.ccache && mv github/home/.ccache /github/home/.ccache
           ccache -M 10G -s
 
+      - name: Build test plan with Twister
+        working-directory: ./zephyr
+        id: twister test plan
+        run: |
+          export ZEPHYR_BASE=${PWD}
+          export ZEPHYR_TOOLCHAIN_VARIANT=llvm
+
+          # check if we need to run a full twister or not based on files changed
+          python3 ./scripts/ci/test_plan.py -p native_posix -c origin/${BASE_REF}..
+
+
       - name: Run Tests with Twister
         working-directory: ./zephyr
         id: twister
@@ -101,14 +113,11 @@ jobs:
           export ZEPHYR_BASE=${PWD}
           export ZEPHYR_TOOLCHAIN_VARIANT=llvm
 
-          # check if we need to run a full twister or not based on files changed
-          python3 ./scripts/ci/test_plan.py -p native_posix --subset ${{matrix.subset}}/${MATRIX_SIZE} -c origin/${BASE_REF}..
-
           # We can limit scope to just what has changed
           if [ -s testplan.csv ]; then
             echo "::set-output name=report_needed::1";
             # Full twister but with options based on changes
-            ./scripts/twister --inline-logs -M -N -v --load-tests testplan.csv --retry-failed 2
+            ./scripts/twister --inline-logs -M -N -v --load-tests testplan.csv --retry-failed 2 --subset ${{matrix.subset}}/${MATRIX_SIZE}
           else
             # if nothing is run, skip reporting step
             echo "::set-output name=report_needed::0";
