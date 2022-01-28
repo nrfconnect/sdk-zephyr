@@ -97,7 +97,7 @@ jobs:
 
       - name: Build test plan with Twister
         working-directory: ./zephyr
-        id: twister test plan
+        id: twister_test_plan
         run: |
           export ZEPHYR_BASE=${PWD}
           export ZEPHYR_TOOLCHAIN_VARIANT=llvm
