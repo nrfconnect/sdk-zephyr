@@ -16,23 +16,6 @@
 extern "C" {
 #endif
 
-/* NCS specific protocol/address families. */
-
-#define PF_LTE 102 /**< Protocol family specific to LTE. */
-#define AF_LTE PF_LTE /**< Address family specific to LTE. */
-
-/* NCS specific protocol types. */
-
-/** Protocol numbers for LTE protocols */
-enum net_lte_protocol {
-	NPROTO_AT = 513,
-};
-
-/** Protocol numbers for LOCAL protocols */
-enum net_local_protocol {
-	NPROTO_DFU = 515
-};
-
 /* When CONFIG_NET_SOCKETS_OFFLOAD is enabled, offloaded sockets take precedence
  * when creating a new socket. Combine this flag with a socket type when
  * creating a socket, to enforce native socket creation (e. g. SOCK_STREAM | SOCK_NATIVE).
@@ -108,21 +91,6 @@ enum net_local_protocol {
  * Range is 0 to 135. 0 is no timeout and 135 is 2 h 15 min. Default is 0 (no timeout).
  */
 #define SO_TCP_SRV_SESSTIMEO 55
-
-/* NCS specific DFU options */
-
-/** Protocol level for DFU. */
-#define SOL_DFU 515
-
-/* Socket options for SOL_DFU level */
-#define SO_DFU_FW_VERSION 1
-#define SO_DFU_RESOURCES 2
-#define SO_DFU_TIMEO 3
-#define SO_DFU_APPLY 4
-#define SO_DFU_REVERT 5
-#define SO_DFU_BACKUP_DELETE 6
-#define SO_DFU_OFFSET 7
-#define SO_DFU_ERROR 20
 
 /* NCS specific gettaddrinfo() flags */
 
