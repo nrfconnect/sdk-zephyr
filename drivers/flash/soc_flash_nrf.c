@@ -181,6 +181,9 @@ static int flash_nrf_read(const struct device *dev, off_t addr,
 	 */
 	if (!is_within_bounds(addr, len, FLASH_AREA_OFFSET(image_0_nonsecure),
 			      FLASH_AREA_SIZE(image_0_nonsecure))) {
+#if CONFIG_SPM && CONFIG_SPM_SECURE_SERVICES
+		return spm_request_read(data, addr, len);
+#else
 		uint32_t err = 0;
 		enum tfm_platform_err_t plt_err;
 
@@ -193,6 +196,7 @@ static int flash_nrf_read(const struct device *dev, off_t addr,
 		}
 
 		return 0;
+#endif /* CONFIG_SPM && CONFIG_SPM_SECURE_SEVICES */
 	}
 #endif /* CONFIG_ARM_NONSECURE_FIRMWARE */
 
