@@ -179,8 +179,12 @@ static int flash_nrf_read(const struct device *dev, off_t addr,
 	 * possible to execute from slot 1. Partitions that are assumed to
 	 * be secure are: mcuboot, image_0, image_scratch, and storage.
 	 */
+#if FLASH_AREA_LABEL_EXISTS(image_0_nonsecure)
 	if (!is_within_bounds(addr, len, FLASH_AREA_OFFSET(image_0_nonsecure),
 			      FLASH_AREA_SIZE(image_0_nonsecure))) {
+#else
+	if (!is_within_bounds(addr, len, PM_APP_ADDRESS, PM_APP_END_ADDRESS)) {
+#endif
 #if CONFIG_SPM && CONFIG_SPM_SECURE_SERVICES
 		return spm_request_read(data, addr, len);
 #else
