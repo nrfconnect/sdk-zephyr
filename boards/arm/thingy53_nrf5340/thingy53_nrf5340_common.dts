@@ -183,7 +183,7 @@
 
 	nrf_radio_fem_spi: fem_spi@2 {
 		compatible = "nordic,nrf21540-fem-spi";
-		status = "okay";
+		status = "disabled";
 		reg = <2>;
 		label = "FEM_SPI_IF";
 		spi-max-frequency = <8000000>;
