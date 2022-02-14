@@ -170,6 +170,9 @@ struct zsock_pollfd {
  *  willing to handle CID from a peer, but does not specify its own CID.
  */
 #define TLS_DTLS_CONNECTION_ID 14
+/** Socket option to get the peer DTLS Connection ID.
+ */
+#define TLS_DTLS_PEER_CONNECTION_ID 15
 
 /** @} */
 
@@ -202,6 +205,12 @@ struct zsock_addrinfo {
 
 	struct sockaddr _ai_addr;
 	char _ai_canonname[DNS_MAX_NAME_SIZE + 1];
+};
+
+struct tls_dtls_peer_cid {
+	int enabled;
+	unsigned char peer_cid[32];
+	size_t peer_cid_len;
 };
 
 /**
