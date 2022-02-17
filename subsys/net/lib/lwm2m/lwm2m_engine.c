@@ -3101,7 +3101,6 @@ static int do_read_op(struct lwm2m_message *msg, uint16_t content_format)
 		return do_read_op_json(msg, content_format);
 #endif
 
-
 #if defined(CONFIG_LWM2M_RW_CBOR_SUPPORT)
 	case LWM2M_FORMAT_APP_CBOR:
 		return do_read_op_cbor(msg);

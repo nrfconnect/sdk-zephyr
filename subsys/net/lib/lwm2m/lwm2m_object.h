@@ -156,8 +156,6 @@ struct lwm2m_message;
 #define LWM2M_PATH_LEVEL_RESOURCE 3
 #define LWM2M_PATH_LEVEL_RESOURCE_INST 4
 
-#define LWM2M_OBJLNK_NULL 65535 /* null link */
-
 /* path representing object instances */
 #define OBJ_FIELD(_id, _perm, _type) \
 	{ .res_id = _id, \
