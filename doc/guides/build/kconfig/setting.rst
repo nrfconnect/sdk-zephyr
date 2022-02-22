@@ -7,9 +7,6 @@ The :ref:`menuconfig and guiconfig interfaces <menuconfig>` can be used to test
 out configurations during application development. This page explains how to
 make settings permanent.
 
-All Kconfig options can be searched in the :ref:`Kconfig search page
-<kconfig-search>`.
-
 .. note::
 
    Before making changes to Kconfig files, it's a good idea to also go through
@@ -115,9 +112,7 @@ Assignments in configuration files are only respected if the dependencies for
 the symbol are satisfied. A warning is printed otherwise. To figure out what
 the dependencies of a symbol are, use one of the :ref:`interactive
 configuration interfaces <menuconfig>` (you can jump directly to a symbol with
-:kbd:`/`), or look up the symbol in the :ref:`Kconfig search page
-<kconfig-search>`.
-
+:kbd:`/`).
 
 .. _initial-conf:
 
