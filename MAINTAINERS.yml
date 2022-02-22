@@ -479,7 +479,7 @@ Documentation:
         - tests/drivers/can/
         - samples/subsys/canbus/
         - doc/reference/canbus/
-        - modules/canopennode/
+        - modules/CANopenNode/
         - samples/modules/canopennode/
     labels:
         - "area: CAN"

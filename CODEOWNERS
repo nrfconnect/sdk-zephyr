@@ -598,7 +598,7 @@
 /lib/libc/                                @nashif
 /lib/libc/arcmwdt/                        @abrodkin @ruuddw @evgeniy-paltsev
 /modules/                                 @nashif
-/modules/canopennode/                     @henrikbrixandersen
+/modules/CANopenNode/                     @henrikbrixandersen
 /modules/mbedtls/                         @ceolin @d3zd3z
 /modules/hal_gigadevice/                  @nandojve
 /modules/trusted-firmware-m/              @microbuilder
