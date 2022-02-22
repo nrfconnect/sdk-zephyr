@@ -60,10 +60,10 @@ The board configuration supports the following hardware features:
      - Kconfig option
      - Devicetree compatible
    * - EXTI
-     - :kconfig:`CONFIG_GD32_EXTI`
+     - :kconfig:option:`CONFIG_GD32_EXTI`
      - :dtcompatible:`gd,gd32-exti`
    * - GPIO
-     - :kconfig:`CONFIG_GPIO`
+     - :kconfig:option:`CONFIG_GPIO`
      - :dtcompatible:`gd,gd32-gpio`
    * - NVIC
      - N/A
@@ -72,10 +72,10 @@ The board configuration supports the following hardware features:
      - N/A
      - N/A
    * - USART
-     - :kconfig:`CONFIG_SERIAL`
+     - :kconfig:option:`CONFIG_SERIAL`
      - :dtcompatible:`gd,gd32-usart`
    * - DAC
-     - :kconfig:`CONFIG_DAC`
+     - :kconfig:option:`CONFIG_DAC`
      - :dtcompatible:`gd,gd32-dac`
 
 Serial Port
