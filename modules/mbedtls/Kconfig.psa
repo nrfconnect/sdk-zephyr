@@ -5,6 +5,12 @@
 #
 menu "PSA RNG support"
 
+config PSA_PROMPTLESS
+	bool
+
+config PSA_DEFAULT_OFF
+	bool
+
 config PSA_WANT_ALG_CTR_DRBG
 	bool
 	prompt "PSA RNG using CTR_DRBG"
