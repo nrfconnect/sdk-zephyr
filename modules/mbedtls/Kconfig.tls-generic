@@ -9,6 +9,12 @@ menu "TLS configuration"
 
 menu "Supported TLS version"
 
+config NRF_SECURITY
+	bool
+
+config NORDIC_SECURITY_BACKEND
+	bool
+
 if !(NRF_SECURITY || NORDIC_SECURITY_BACKEND)
 
 config MBEDTLS_TLS_VERSION_1_0
