@@ -843,6 +843,9 @@ config SRAM_REGION_PERMISSIONS
 
 menu "Floating Point Options"
 
+config IS_SPM
+	bool
+
 config FPU
 	bool "Enable floating point unit (FPU)"
 	depends on CPU_HAS_FPU
