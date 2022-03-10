@@ -22,10 +22,15 @@ int mqtt_client_tls_connect(struct mqtt_client *client)
 {
 	const struct sockaddr *broker = client->broker;
 	struct mqtt_sec_config *tls_config = &client->transport.tls.config;
+	int type = SOCK_STREAM;
 	int ret;
 
+	if (!IS_ENABLED(CONFIG_NET_SOCKETS_OFFLOAD_DISPATCHER) && tls_config->set_native_tls) {
+		type |= SOCK_NATIVE_TLS;
+	}
+
 	client->transport.tls.sock = zsock_socket(broker->sa_family,
-						  SOCK_STREAM, IPPROTO_TLS_1_2);
+						  type, IPPROTO_TLS_1_2);
 	if (client->transport.tls.sock < 0) {
 		return -errno;
 	}
@@ -35,8 +40,8 @@ int mqtt_client_tls_connect(struct mqtt_client *client)
 	if (IS_ENABLED(CONFIG_NET_SOCKETS_OFFLOAD_DISPATCHER) && tls_config->set_native_tls) {
 		int tls_native = 1;
 
-		ret = zsock_setsockopt(client->transport.tls.sock, ZSOCK_SOL_TLS,
-				       ZSOCK_TLS_NATIVE, &tls_native,
+		ret = zsock_setsockopt(client->transport.tls.sock, SOL_TLS,
+				       TLS_NATIVE, &tls_native,
 				       sizeof(tls_native));
 		if (ret < 0) {
 			NET_ERR("Failed to set native TLS (%d)", -errno);
