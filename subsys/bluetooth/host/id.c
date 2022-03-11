@@ -775,7 +775,10 @@ void bt_id_add(struct bt_keys *keys)
 
 	err = hci_id_add(keys->id, &keys->addr, keys->irk.val);
 	if (err) {
-		BT_ERR("Failed to add IRK to controller");
+		/* Duplicate device is OK */
+		if (err != BT_HCI_ERR_INVALID_PARAM) {
+			BT_ERR("Failed to add IRK to controller");
+		}
 		goto done;
 	}
 
