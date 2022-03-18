@@ -423,7 +423,7 @@ config LWM2M_COMPOSITE_PATH_LIST_SIZE
 
 config LWM2M_RW_CBOR_SUPPORT
 	bool "support for CBOR writer [EXPERIMENTAL]"
-	select CDDL_GEN
+	select ZCBOR
 	select EXPERIMENTAL
 	help
 	  Include support for writing CBOR data

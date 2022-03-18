@@ -15,9 +15,9 @@
 #include <string.h>
 #include <time.h>
 
-#include <cbor_common.h>
-#include <cbor_decode.h>
-#include <cbor_encode.h>
+#include <zcbor_common.h>
+#include <zcbor_decode.h>
+#include <zcbor_encode.h>
 
 #include <net/lwm2m.h>
 #include "lwm2m_object.h"
@@ -31,26 +31,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define ICTX_CBOR_R_SZ(pos, ictx) ((size_t)pos - (size_t)(ictx)->in_cpkt->data - (ictx)->offset)
 
-enum  cbor_tag { /* www.iana.org/assignments/cbor-tags/cbor-tags.xhtml */
-	CBOR_TAG_TIME_TSTR =    0, /* text string	Standard date/time string */
-	CBOR_TAG_TIME_NUM =     1, /* integer or float	Epoch-based date/time */
-	CBOR_TAG_UBIGNUM_BSTR = 2, /* byte string	Unsigned bignum */
-	CBOR_TAG_BIGNUM_BSTR =  3, /* byte string	Negative bignum */
-	CBOR_TAG_DECFRAC_ARR =  4, /* array		Decimal fraction */
-	CBOR_TAG_BIGFLOAT_ARR = 5, /* array		Bigfloat */
-	CBOR_TAG_2BASE64URL =  21, /* (any)		Expected conversion to base64url encoding */
-	CBOR_TAG_2BASE64 =     22, /* (any)		Expected conversion to base64 encoding */
-	CBOR_TAG_2BASE16 =     23, /* (any)		Expected conversion to base16 encoding */
-	CBOR_TAG_BSTR =        24, /* byte string	Encoded CBOR data item */
-	CBOR_TAG_URI_TSTR =    32, /* text string	URI */
-	CBOR_TAG_BASE64URL_TSTR = 33, /* text string	base64url */
-	CBOR_TAG_BASE64_TSTR =    34, /* text string	base64 */
-	CBOR_TAG_MIME_TSTR =      36, /* text string	MIME message */
-	CBOR_TAG_CBOR =        55799, /* (any)	Self-described CBOR */
-};
-
-static int put_time(struct lwm2m_output_context *out,
-		      struct lwm2m_obj_path *path, int64_t value)
+static int put_time(struct lwm2m_output_context *out, struct lwm2m_obj_path *path, int64_t value)
 {
 	/* CBOR time output format is unspecified but SenML CBOR uses string format.
 	 * Let's stick into the same format with plain CBOR
@@ -60,6 +41,7 @@ static int put_time(struct lwm2m_output_context *out,
 	int len;
 	int str_sz;
 	int tag_sz;
+	bool ret;
 
 	if (gmtime_r((time_t *)&value, &dt) != &dt) {
 		LOG_ERR("unable to convert from secs since Epoch to a date/time construct");
@@ -81,12 +63,10 @@ static int put_time(struct lwm2m_output_context *out,
 		return -EINVAL;
 	}
 
-	cbor_state_t states[1];
-
-	new_state(states, 1, CPKT_BUF_W_REGION(out->out_cpkt), 1);
+	ZCBOR_STATE_E(states, 0, CPKT_BUF_W_PTR(out->out_cpkt), CPKT_BUF_W_SIZE(out->out_cpkt),  1);
 
 	/* TODO: Are tags required? V1.1 leaves this unspecified but some servers require tags */
-	bool ret = tag_encode(states, CBOR_TAG_TIME_TSTR);
+	ret = zcbor_tag_encode(states, ZCBOR_TAG_TIME_TSTR);
 
 	if (!ret) {
 		LOG_ERR("unable to encode date/time string tag");
@@ -97,8 +77,8 @@ static int put_time(struct lwm2m_output_context *out,
 
 	out->out_cpkt->offset += tag_sz;
 
-	ret = tstrx_encode(states,
-			   &(cbor_string_type_t){ .value = time_str, .len = strlen(time_str) });
+	ret = zcbor_tstr_encode(states,
+			   &(struct zcbor_string){ .value = time_str, .len = strlen(time_str) });
 	if (!ret) {
 		LOG_ERR("unable to encode date/time string");
 		return -ENOMEM;
@@ -114,20 +94,12 @@ static int put_time(struct lwm2m_output_context *out,
 static int put_s64(struct lwm2m_output_context *out,
 		      struct lwm2m_obj_path *path, int64_t value)
 {
-	cbor_state_t states[1];
 	int payload_len;
+	bool ret;
 
-	/* TODO: remove this check once the CBOR library supports 64-bit values */
-	if (value != (value & UINT32_MAX)) {
-		LOG_WRN("64-bit values are not supported");
-		return -EINVAL;
-	}
+	ZCBOR_STATE_E(states, 0, CPKT_BUF_W_PTR(out->out_cpkt), CPKT_BUF_W_SIZE(out->out_cpkt),  1);
 
-	new_state(states, 1, CPKT_BUF_W_REGION(out->out_cpkt), 1);
-
-	/* TODO: use intx64_encode once/if available */
-	uint32_t valueu32 = (uint32_t)value;
-	bool ret = uintx32_encode(states, &valueu32);
+	ret = zcbor_int64_encode(states, &value);
 
 	if (ret) {
 		payload_len = CPKT_CBOR_W_SZ(states[0].payload, out->out_cpkt);
@@ -140,15 +112,15 @@ static int put_s64(struct lwm2m_output_context *out,
 	return payload_len;
 }
 
-static int put_s32(struct lwm2m_output_context *out,
-		      struct lwm2m_obj_path *path, int32_t value)
+static int put_s32(struct lwm2m_output_context *out, struct lwm2m_obj_path *path, int32_t value)
 {
-	cbor_state_t states[1];
 	int payload_len;
+	bool ret;
 
-	new_state(states, 1, CPKT_BUF_W_REGION(out->out_cpkt), 1);
 
-	bool ret = intx32_encode(states, &value);
+	ZCBOR_STATE_E(states, 0, CPKT_BUF_W_PTR(out->out_cpkt), CPKT_BUF_W_SIZE(out->out_cpkt),  1);
+
+	ret = zcbor_int32_encode(states, &value);
 
 	if (ret) {
 		payload_len = CPKT_CBOR_W_SZ(states[0].payload, out->out_cpkt);
@@ -161,28 +133,25 @@ static int put_s32(struct lwm2m_output_context *out,
 	return payload_len;
 }
 
-static int put_s16(struct lwm2m_output_context *out,
-		      struct lwm2m_obj_path *path, int16_t value)
+static int put_s16(struct lwm2m_output_context *out, struct lwm2m_obj_path *path, int16_t value)
 {
 	return put_s32(out, path, value);
 }
 
-static int put_s8(struct lwm2m_output_context *out,
-		     struct lwm2m_obj_path *path, int8_t value)
+static int put_s8(struct lwm2m_output_context *out, struct lwm2m_obj_path *path, int8_t value)
 {
 	return put_s32(out, path, value);
 }
 
-static int put_string(struct lwm2m_output_context *out,
-			 struct lwm2m_obj_path *path,
-			 char *buf, size_t buflen)
+static int put_string(struct lwm2m_output_context *out, struct lwm2m_obj_path *path,
+					  char *buf, size_t buflen)
 {
-	cbor_state_t states[1];
 	int payload_len;
+	bool ret;
 
-	new_state(states, 1, CPKT_BUF_W_REGION(out->out_cpkt), 1);
+	ZCBOR_STATE_E(states, 0, CPKT_BUF_W_PTR(out->out_cpkt), CPKT_BUF_W_SIZE(out->out_cpkt),  1);
 
-	bool ret = tstrx_encode(states, &(cbor_string_type_t){ .value = buf, .len = buflen });
+	ret = zcbor_tstr_encode(states, &(struct zcbor_string){ .value = buf, .len = buflen });
 
 	if (ret) {
 		payload_len = CPKT_CBOR_W_SZ(states[0].payload, out->out_cpkt);
@@ -194,16 +163,15 @@ static int put_string(struct lwm2m_output_context *out,
 	return payload_len;
 }
 
-static int put_opaque(struct lwm2m_output_context *out,
-			 struct lwm2m_obj_path *path,
-			 char *buf, size_t buflen)
+static int put_opaque(struct lwm2m_output_context *out, struct lwm2m_obj_path *path,
+					  char *buf, size_t buflen)
 {
-	cbor_state_t states[1];
 	int payload_len;
+	bool ret;
 
-	new_state(states, 1, CPKT_BUF_W_REGION(out->out_cpkt), 1);
+	ZCBOR_STATE_E(states, 0, CPKT_BUF_W_PTR(out->out_cpkt), CPKT_BUF_W_SIZE(out->out_cpkt),  1);
 
-	bool ret = bstrx_encode(states, &(cbor_string_type_t){ .value = buf, .len = buflen });
+	ret = zcbor_bstr_encode(states, &(struct zcbor_string){ .value = buf, .len = buflen });
 
 	if (ret) {
 		payload_len = CPKT_CBOR_W_SZ(states[0].payload, out->out_cpkt);
@@ -215,16 +183,14 @@ static int put_opaque(struct lwm2m_output_context *out,
 	return payload_len;
 }
 
-static int put_bool(struct lwm2m_output_context *out,
-		       struct lwm2m_obj_path *path,
-		       bool value)
+static int put_bool(struct lwm2m_output_context *out, struct lwm2m_obj_path *path, bool value)
 {
-	cbor_state_t states[1];
 	int payload_len;
+	bool ret;
 
-	new_state(states, 1, CPKT_BUF_W_REGION(out->out_cpkt), 1);
+	ZCBOR_STATE_E(states, 0, CPKT_BUF_W_PTR(out->out_cpkt), CPKT_BUF_W_SIZE(out->out_cpkt),  1);
 
-	bool ret = boolx_encode(states, &value);
+	ret = zcbor_bool_encode(states, &value);
 
 	if (ret) {
 		payload_len = CPKT_CBOR_W_SZ(states[0].payload, out->out_cpkt);
@@ -236,8 +202,7 @@ static int put_bool(struct lwm2m_output_context *out,
 	return payload_len;
 }
 
-static int put_objlnk(struct lwm2m_output_context *out,
-			 struct lwm2m_obj_path *path,
+static int put_objlnk(struct lwm2m_output_context *out, struct lwm2m_obj_path *path,
 			 struct lwm2m_objlnk *value)
 {
 	char objlnk[sizeof("65535:65535")] = { 0 };
@@ -249,14 +214,10 @@ static int put_objlnk(struct lwm2m_output_context *out,
 
 static int get_s64(struct lwm2m_input_context *in, int64_t *value)
 {
-	cbor_state_t states[1];
-	/* TODO: CBOR data item header + the variable
-	 * 1 + 8 once 64-bit values are supported, 1 + 4 for now for uint32s.
-	 */
-	new_state(states, 1, ICTX_BUF_R_PTR(in), MIN(5, ICTX_BUF_R_LEFT_SZ(in)), 1);
+	ZCBOR_STATE_D(states, 0, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
 
-	if (!uintx32_decode(states, (uint32_t *)value)) {
-		LOG_WRN("unable to decode a 64-bit(uint32) integer value");
+	if (!zcbor_int64_decode(states, value)) {
+		LOG_WRN("unable to decode a 64-bit integer value");
 		return -EBADMSG;
 	}
 
@@ -264,17 +225,14 @@ static int get_s64(struct lwm2m_input_context *in, int64_t *value)
 
 	in->offset += len;
 
-	/* TODO: length of the original binary data or the decoded value? */
 	return len;
 }
 
 static int get_s32(struct lwm2m_input_context *in, int32_t *value)
 {
-	cbor_state_t states[1];
+	ZCBOR_STATE_D(states, 0, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
 
-	new_state(states, 1, ICTX_BUF_R_PTR(in), MIN(5, ICTX_BUF_R_LEFT_SZ(in)), 1);
-
-	if (!intx32_decode(states, value)) {
+	if (!zcbor_int32_decode(states, value)) {
 		LOG_WRN("unable to decode a 32-bit integer value");
 		return -EBADMSG;
 	}
@@ -286,20 +244,25 @@ static int get_s32(struct lwm2m_input_context *in, int32_t *value)
 	return len;
 }
 
-static int get_string(struct lwm2m_input_context *in,
-			 uint8_t *value, size_t buflen)
+static int get_string(struct lwm2m_input_context *in, uint8_t *value, size_t buflen)
 {
-	cbor_state_t states[1];
-	cbor_string_type_t hndl = { .value = value, .len = buflen };
+	struct zcbor_string hndl;
+	int len;
 
-	new_state(states, 1, ICTX_BUF_R_REGION(in), 1);
+	ZCBOR_STATE_D(states, 0, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
 
-	if (!tstrx_decode(states, &hndl)) {
+	if (!zcbor_tstr_decode(states, &hndl)) {
 		LOG_WRN("unable to decode a string");
 		return -EBADMSG;
 	}
 
-	int len = ICTX_CBOR_R_SZ(states[0].payload, in);
+	len = MIN(buflen-1, hndl.len);
+
+	memcpy(value, hndl.value, len);
+
+	value[len] = '\0';
+
+	len = ICTX_CBOR_R_SZ(states[0].payload, in);
 
 	in->offset += len;
 
@@ -312,13 +275,12 @@ static int get_string(struct lwm2m_input_context *in,
  */
 static int get_time_string(struct lwm2m_input_context *in, int64_t *value)
 {
-	cbor_state_t states[1];
 	char time_str[sizeof("4294967295")] = { 0 };
-	cbor_string_type_t hndl = { .value = time_str, .len = sizeof(time_str) - 1 };
+	struct zcbor_string hndl = { .value = time_str, .len = sizeof(time_str) - 1 };
 
-	new_state(states, 1, ICTX_BUF_R_REGION(in), 1);
+	ZCBOR_STATE_D(states, 0, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
 
-	if (!tstrx_decode(states, &hndl)) {
+	if (!zcbor_tstr_decode(states, &hndl)) {
 		return -EBADMSG;
 	}
 
@@ -334,11 +296,9 @@ static int get_time_string(struct lwm2m_input_context *in, int64_t *value)
  */
 static int get_time_numerical(struct lwm2m_input_context *in, int64_t *value)
 {
-	cbor_state_t states[1];
+	ZCBOR_STATE_D(states, 0, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
 
-	new_state(states, 1, ICTX_BUF_R_REGION(in), 1);
-
-	if (!uintx32_decode(states, (uint32_t *)value)) {
+	if (!zcbor_int64_decode(states, value)) {
 		LOG_WRN("unable to decode seconds since Epoch");
 		return -EBADMSG;
 	}
@@ -348,29 +308,28 @@ static int get_time_numerical(struct lwm2m_input_context *in, int64_t *value)
 
 static int get_time(struct lwm2m_input_context *in, int64_t *value)
 {
-	cbor_state_t states[1];
 	uint32_t tag;
 	int tag_sz = 0;
 	int data_len;
 	int ret;
 	bool success;
 
-	new_state(states, 1, ICTX_BUF_R_REGION(in), 1);
+	ZCBOR_STATE_D(states, 0, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
 
-	success = tag_decode(states, &tag);
+	success = zcbor_tag_decode(states, &tag);
 
 	if (success) {
 		tag_sz = ICTX_CBOR_R_SZ(states[0].payload, in);
 		in->offset += tag_sz;
 
 		switch (tag) {
-		case CBOR_TAG_TIME_NUM:
+		case ZCBOR_TAG_TIME_NUM:
 			ret = get_time_numerical(in, value);
 			if (ret < 0) {
 				goto error;
 			}
 			break;
-		case CBOR_TAG_TIME_TSTR:
+		case ZCBOR_TAG_TIME_TSTR:
 			ret = get_time_string(in, value);
 			if (ret < 0) {
 				goto error;
@@ -402,14 +361,11 @@ error:
 	return ret;
 }
 
-static int get_bool(struct lwm2m_input_context *in,
-		       bool *value)
+static int get_bool(struct lwm2m_input_context *in, bool *value)
 {
-	cbor_state_t states[1];
+	ZCBOR_STATE_D(states, 0, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
 
-	new_state(states, 1, ICTX_BUF_R_REGION(in), 1);
-
-	if (!boolx_decode(states, value)) {
+	if (!zcbor_bool_decode(states, value)) {
 		LOG_WRN("unable to decode a boolean value");
 		return -EBADMSG;
 	}
@@ -421,23 +377,19 @@ static int get_bool(struct lwm2m_input_context *in,
 	return len;
 }
 
-static int get_opaque(struct lwm2m_input_context *in,
-			 uint8_t *value, size_t buflen,
-			 struct lwm2m_opaque_context *opaque,
-			 bool *last_block)
+static int get_opaque(struct lwm2m_input_context *in, uint8_t *value, size_t buflen,
+			 struct lwm2m_opaque_context *opaque, bool *last_block)
 {
-	cbor_state_t states[1];
-	cbor_string_type_t info = { 0 };
+	struct zcbor_string info = { 0 };
 	int ret;
+	ZCBOR_STATE_D(states, 0, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
 
 	/* Get the CBOR header only on first read. */
 	if (opaque->remaining == 0) {
 		/* FIXME: When data is spread between non-contiguous blocks this range setting will
 		 * break the whole thing. Luckily we get the data length out though.
 		 */
-		new_state(states, 1, ICTX_BUF_R_REGION(in), 1);
-
-		ret = bstrx_cbor_start_decode(states, &info);
+		ret = zcbor_bstr_start_decode(states, &info);
 
 		/* FIXME: Uncomment once the range check is working */
 		(void)ret;
@@ -468,12 +420,10 @@ static int get_opaque(struct lwm2m_input_context *in,
 		}
 	}
 
-	return lwm2m_engine_get_opaque_more(in, value, buflen,
-					    opaque, last_block);
+	return lwm2m_engine_get_opaque_more(in, value, buflen, opaque, last_block);
 }
 
-static int get_objlnk(struct lwm2m_input_context *in,
-			 struct lwm2m_objlnk *value)
+static int get_objlnk(struct lwm2m_input_context *in, struct lwm2m_objlnk *value)
 {
 	char objlnk[sizeof("65535:65535")] = { 0 };
 	char *end;
