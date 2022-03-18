@@ -1,0 +1,9 @@
+# This is the Jenkins ci variant of the .github/labler.yaml
+
+"CI-homekit-test":
+  - "subsys/mgmt/mcumgr/**/*"
+  - "subsys/dfu/**/*"
+  - "include/mgmt/mcumgr/**/*"
+  - "include/dfu/**/*"
+  - "samples/subsys/mgmt/mcumgr/smp_svr/**/*"
+  - "samples/hci_rpmsg/**/*"
