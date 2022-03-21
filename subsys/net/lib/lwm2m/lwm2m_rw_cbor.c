@@ -419,44 +419,26 @@ static int get_bool(struct lwm2m_input_context *in, bool *value)
 static int get_opaque(struct lwm2m_input_context *in, uint8_t *value, size_t buflen,
 			 struct lwm2m_opaque_context *opaque, bool *last_block)
 {
-	struct zcbor_string info = { 0 };
+	struct zcbor_string_fragment hndl = { 0 };
 	int ret;
-	ZCBOR_STATE_D(states, 0, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
+
+	ZCBOR_STATE_D(states, 1, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
 
 	/* Get the CBOR header only on first read. */
 	if (opaque->remaining == 0) {
-		/* FIXME: When data is spread between non-contiguous blocks this range setting will
-		 * break the whole thing. Luckily we get the data length out though.
-		 */
-		ret = zcbor_bstr_start_decode(states, &info);
+		ret = zcbor_bstr_start_decode_fragment(states, &hndl);
 
-		/* FIXME: Uncomment once the range check is working */
-		(void)ret;
-		/*
-		 * if(!ret) {
-		 *	LOG_WRN("unable to decode opaque data header");
-		 *	return -EBADMSG;
-		 * }
-		 */
-
-		opaque->len = info.len;
-		opaque->remaining = info.len;
-
-		/* FIXME: Workaround for the bad range check.
-		 * Now it's CBOR data item header plus possible extended count
-		 */
-		if (info.len == 0) {
+		if (!ret) {
 			LOG_WRN("unable to decode opaque data header");
 			return -EBADMSG;
-		} else if (info.len <= 23) {
-			in->offset += 1;
-		} else if (info.len <= UINT8_MAX) {
-			in->offset += 1 + 1;
-		} else if (info.len <= UINT16_MAX) {
-			in->offset += 1 + 2;
-		} else if (info.len <= UINT32_MAX) {
-			in->offset += 1 + 4;
 		}
+
+		opaque->len = hndl.total_len;
+		opaque->remaining = hndl.total_len;
+
+		int len = ICTX_CBOR_R_SZ(states[0].payload, in);
+
+		in->offset += len;
 	}
 
 	return lwm2m_engine_get_opaque_more(in, value, buflen, opaque, last_block);
