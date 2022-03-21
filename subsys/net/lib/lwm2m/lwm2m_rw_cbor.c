@@ -143,6 +143,26 @@ static int put_s8(struct lwm2m_output_context *out, struct lwm2m_obj_path *path,
 	return put_s32(out, path, value);
 }
 
+static int put_float(struct lwm2m_output_context *out,
+		      struct lwm2m_obj_path *path, double *value)
+{
+	int payload_len;
+	bool ret;
+
+	ZCBOR_STATE_E(states, 0, CPKT_BUF_W_PTR(out->out_cpkt), CPKT_BUF_W_SIZE(out->out_cpkt),  1);
+
+	ret = zcbor_float64_encode(states, value);
+
+	if (ret) {
+		payload_len = CPKT_CBOR_W_SZ(states[0].payload, out->out_cpkt);
+		out->out_cpkt->offset += payload_len;
+	} else {
+		payload_len = -ENOMEM;
+	}
+
+	return payload_len;
+}
+
 static int put_string(struct lwm2m_output_context *out, struct lwm2m_obj_path *path,
 					  char *buf, size_t buflen)
 {
@@ -235,6 +255,25 @@ static int get_s32(struct lwm2m_input_context *in, int32_t *value)
 	if (!zcbor_int32_decode(states, value)) {
 		LOG_WRN("unable to decode a 32-bit integer value");
 		return -EBADMSG;
+	}
+
+	int len = ICTX_CBOR_R_SZ(states[0].payload, in);
+
+	in->offset += len;
+
+	return len;
+}
+
+static int get_float(struct lwm2m_input_context *in, double *value)
+{
+	ZCBOR_STATE_D(states, 0, ICTX_BUF_R_PTR(in), ICTX_BUF_R_LEFT_SZ(in),  1);
+
+	if (!zcbor_float32_decode(states, (float *)value)) {
+		LOG_INF("unable to decode a 32-bit floating-point value - trying width 64");
+		if (!zcbor_float64_decode(states, value)) {
+			LOG_ERR("unable to decode a floating-point value");
+			return -EBADMSG;
+		}
 	}
 
 	int len = ICTX_CBOR_R_SZ(states[0].payload, in);
@@ -471,7 +510,7 @@ const struct lwm2m_writer cbor_writer = {
 	.put_s32 = put_s32,
 	.put_s64 = put_s64,
 	.put_string = put_string,
-	.put_float = NULL,
+	.put_float = put_float,
 	.put_time = put_time,
 	.put_bool = put_bool,
 	.put_opaque = put_opaque,
@@ -483,7 +522,7 @@ const struct lwm2m_reader cbor_reader = {
 	.get_s64 = get_s64,
 	.get_time = get_time,
 	.get_string = get_string,
-	.get_float = NULL,
+	.get_float = get_float,
 	.get_bool = get_bool,
 	.get_opaque = get_opaque,
 	.get_objlnk = get_objlnk,
