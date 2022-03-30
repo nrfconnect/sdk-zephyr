@@ -1,9 +1,15 @@
 # This is the Jenkins ci variant of the .github/labler.yaml
 "CI-iot-samples-test":
-  - "**/*"
+  - "boards/arm/nrf9160dk_nrf9160/**/*"
+  - "dts/arm/nordic/nrf9160*"
+  - "include/net/**/*"
+  - "subsys/net/lib/**/*"
 
 "CI-iot-libraries-test":
-  - "**/*"
+  - "boards/arm/nrf9160dk_nrf9160/**/*"
+  - "dts/arm/nordic/nrf9160*"
+  - "include/net/socket_ncs.h"
+  - "subsys/testsuite/ztest/**/*"
 
 "CI-lwm2m-test":
   - "**/*"
