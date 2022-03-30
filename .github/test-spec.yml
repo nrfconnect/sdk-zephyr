@@ -28,7 +28,13 @@
   - "**/*"
 
 "CI-mesh-test":
-  - "**/*"
+  - "subsys/bluetooth/mesh/**/*"
+  - "include/bluetooth/mesh/**/*"
+  - "samples/bluetooth/mesh/**/*"
+  - "samples/bluetooth/mesh_demo/**/*"
+  - "samples/bluetooth/mesh_provisioner/**/*"
+  - "tests/bluetooth/mesh/**/*"
+  - "tests/bluetooth/mesh_shell/**/*"
 
 "CI-zigbee-test":
   - "subsys/mgmt/mcumgr/**/*"
