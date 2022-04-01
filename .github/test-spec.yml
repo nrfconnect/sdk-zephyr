@@ -5,6 +5,12 @@
 "CI-iot-libraries-test":
   - "**/*"
 
+"CI-iot-lwm2m-client-test":
+  - "subsys/net/ip/**/*"
+  - "subsys/net/**/*"
+  - "subsys/net/lib/lwm2m//**/*"
+  - "subsys/net/lib/http//**/*"
+
 "CI-lwm2m-test":
   - "**/*"
 
