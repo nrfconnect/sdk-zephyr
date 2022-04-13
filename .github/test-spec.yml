@@ -87,7 +87,20 @@
   - "**/*"
 
 "CI-modemshell-test":
-  - "**/*"
+  - "include/net/**/*"
+  - "include/posix/**/*"
+  - "include/shell/**/*"
+  - "drivers/net/**/*"
+  - "drivers/serial/**/*"
+  - "drivers/wifi/**/*"
+  - "subsys/shell/**/*"
+  - "subsys/net/**/*"
+  - "subsys/settings/**/*"
 
 "CI-positioning-test":
-  - "**/*"
+  - "include/net/**/*"
+  - "include/posix/**/*"
+  - "drivers/net/**/*"
+  - "drivers/wifi/**/*"
+  - "subsys/net/**/*"
+  - "subsys/settings/**/*"
