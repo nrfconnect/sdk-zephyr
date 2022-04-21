@@ -223,13 +223,12 @@
 /* Note: Need node for PDU and CTE sample */
 #define BT_CTLR_ADV_EXT_RX_CNT  (CONFIG_BT_CTLR_SCAN_AUX_SET * \
 				 CONFIG_BT_CTLR_DF_PER_SCAN_CTE_NUM_MAX * 2)
-#else
-/* Note: Assume up to 7 PDUs per advertising train (max data length) */
-#define BT_CTLR_ADV_EXT_RX_CNT  (CONFIG_BT_CTLR_SCAN_AUX_SET * 7)
-#endif /* CONFIG_BT_CTLR_DF_PER_SCAN_CTE_NUM_MAX */
-#else
+#else /* !CONFIG_BT_CTLR_DF_PER_SCAN_CTE_NUM_MAX */
+#define BT_CTLR_ADV_EXT_RX_CNT  1
+#endif /* !CONFIG_BT_CTLR_DF_PER_SCAN_CTE_NUM_MAX */
+#else /* !CONFIG_BT_CTLR_ADV_EXT || !CONFIG_BT_OBSERVER */
 #define BT_CTLR_ADV_EXT_RX_CNT  0
-#endif /* CONFIG_BT_CTLR_ADV_EXT && CONFIG_BT_OBSERVER */
+#endif /* !CONFIG_BT_CTLR_ADV_EXT || !CONFIG_BT_OBSERVER */
 
 #if !defined(TICKER_USER_LLL_VENDOR_OPS)
 #define TICKER_USER_LLL_VENDOR_OPS 0
@@ -297,7 +296,7 @@ static uint8_t MALIGN(4) ticker_users[MAYFLY_CALLER_COUNT][TICKER_USER_T_SIZE];
 /* Memory for user/context simultaneous API operations */
 static uint8_t MALIGN(4) ticker_user_ops[TICKER_USER_OPS][TICKER_USER_OP_T_SIZE];
 
-/* Semaphire to wakeup thread on ticker API callback */
+/* Semaphore to wakeup thread on ticker API callback */
 static struct k_sem sem_ticker_api_cb;
 
 /* Semaphore to wakeup thread on Rx-ed objects */
@@ -335,10 +334,17 @@ static MFIFO_DEFINE(prep, sizeof(struct lll_event), EVENT_PIPELINE_MAX);
  *
  * If Extended Scanning is supported, then an additional auxiliary scan event's
  * prepare could be enqueued in the pipeline during the preemption duration.
+ *
+ * If Extended Scanning with Coded PHY is supported, then an additional 1 resume
+ * prepare could be enqueued in the pipeline during the preemption duration.
  */
 #if !defined(VENDOR_EVENT_DONE_MAX)
 #if defined(CONFIG_BT_CTLR_ADV_EXT) && defined(CONFIG_BT_OBSERVER)
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+#define EVENT_DONE_MAX 6
+#else /* !CONFIG_BT_CTLR_PHY_CODED */
 #define EVENT_DONE_MAX 5
+#endif /* !CONFIG_BT_CTLR_PHY_CODED */
 #else /* !CONFIG_BT_CTLR_ADV_EXT || !CONFIG_BT_OBSERVER */
 #define EVENT_DONE_MAX 4
 #endif /* !CONFIG_BT_CTLR_ADV_EXT || !CONFIG_BT_OBSERVER */
@@ -448,7 +454,7 @@ static struct {
 	  (BT_CTLR_SCAN_SYNC_ISO_SET * 2) +                                    \
 	  (IQ_REPORT_CNT)))
 static struct {
-	uint8_t quota_pdu; /* Number of un-utilized buffers */
+	uint16_t quota_pdu; /* Number of un-utilized buffers */
 
 	void *free;
 	uint8_t pool[LINK_RX_POOL_SIZE];
@@ -698,21 +704,22 @@ void ll_reset(void)
 #endif /* CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_OBSERVER)
-	/* Reset scan state */
-	err = ull_scan_reset();
-	LL_ASSERT(!err);
-#endif /* CONFIG_BT_OBSERVER */
-
 #if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
-	/* Reset periodic sync sets */
-	err = ull_sync_reset();
-	LL_ASSERT(!err);
 #if defined(CONFIG_BT_CTLR_SYNC_ISO)
 	/* Reset periodic sync sets */
 	err = ull_sync_iso_reset();
 	LL_ASSERT(!err);
+#endif /* CONFIG_BT_CTLR_SYNC_ISO */
+
+	/* Reset periodic sync sets */
+	err = ull_sync_reset();
+	LL_ASSERT(!err);
 #endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
-#endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
+
+	/* Reset scan state */
+	err = ull_scan_reset();
+	LL_ASSERT(!err);
+#endif /* CONFIG_BT_OBSERVER */
 
 #if defined(CONFIG_BT_CTLR_ISO)
 	err = ull_iso_reset();
@@ -1232,6 +1239,10 @@ void ll_rx_dequeue(void)
 	case NODE_RX_TYPE_CONN_IQ_SAMPLE_REPORT:
 #endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 
+#if defined(CONFIG_BT_CTLR_DTM_HCI_DF_IQ_REPORT)
+	case NODE_RX_TYPE_DTM_IQ_SAMPLE_REPORT:
+#endif /* CONFIG_BT_CTLR_DTM_HCI_DF_IQ_REPORT */
+
 	/* Ensure that at least one 'case' statement is present for this
 	 * code block.
 	 */
@@ -1456,7 +1467,7 @@ void ll_rx_mem_release(void **node_rx)
 				 */
 				sync = scan->periodic.sync;
 
-				ull_sync_setup_complete(scan);
+				ull_sync_setup_reset(scan);
 
 				if (status != BT_HCI_ERR_SUCCESS) {
 					memq_link_t *link_sync_lost;
@@ -1511,9 +1522,11 @@ void ll_rx_mem_release(void **node_rx)
 #endif /* CONFIG_BT_CTLR_SYNC_ISO */
 #endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
 
-#if defined(CONFIG_BT_CTLR_DF_SCAN_CTE_RX) || defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_SCAN_CTE_RX) || defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX) || \
+	defined(CONFIG_BT_CTLR_DTM_HCI_DF_IQ_REPORT)
 		case NODE_RX_TYPE_SYNC_IQ_SAMPLE_REPORT:
 		case NODE_RX_TYPE_CONN_IQ_SAMPLE_REPORT:
+		case NODE_RX_TYPE_DTM_IQ_SAMPLE_REPORT:
 		{
 			const uint8_t report_cnt = 1U;
 
@@ -2519,9 +2532,11 @@ static inline int rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* CONFIG_BT_OBSERVER */
 
-#if defined(CONFIG_BT_CTLR_DF_SCAN_CTE_RX) || defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_SCAN_CTE_RX) || defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX) || \
+	defined(CONFIG_BT_CTLR_DTM_HCI_DF_IQ_REPORT)
 	case NODE_RX_TYPE_SYNC_IQ_SAMPLE_REPORT:
 	case NODE_RX_TYPE_CONN_IQ_SAMPLE_REPORT:
+	case NODE_RX_TYPE_DTM_IQ_SAMPLE_REPORT:
 	{
 		(void)memq_dequeue(memq_ull_rx.tail, &memq_ull_rx.head, NULL);
 		ll_rx_put(link, rx);

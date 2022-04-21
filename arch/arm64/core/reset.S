@@ -38,7 +38,7 @@ SECTION_FUNC(TEXT,z_arm64_el1_plat_prep_c)
 GTEXT(__reset_prep_c)
 SECTION_SUBSEC_FUNC(TEXT,_reset_section,__reset_prep_c)
 	/* return address: x23 */
-	mov	x23, x30
+	mov	x23, lr
 
 	switch_el x0, 3f, 2f, 1f
 3:
@@ -164,6 +164,9 @@ switch_el:
 1:
 	/* EL1 init */
 	bl	z_arm64_el1_init
+
+	/* We want to use SP_ELx from now on */
+	msr	SPSel, #1
 
 	/* Enable SError interrupts */
 	msr	DAIFClr, #(DAIFCLR_ABT_BIT)

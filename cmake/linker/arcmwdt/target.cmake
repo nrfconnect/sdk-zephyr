@@ -30,7 +30,6 @@ macro(configure_linker_script linker_script_gen linker_pass_define)
   endif()
 
   zephyr_get_include_directories_for_lang(C current_includes)
-  get_filename_component(base_name ${CMAKE_CURRENT_BINARY_DIR} NAME)
   get_property(current_defines GLOBAL PROPERTY PROPERTY_LINKER_SCRIPT_DEFINES)
 
 # the command to generate linker file from template
@@ -46,7 +45,7 @@ macro(configure_linker_script linker_script_gen linker_pass_define)
     -x c
     ${NOSYSDEF_CFLAG}
     -Hnocopyr
-    -MD -MF ${linker_script_gen}.dep -MT ${base_name}/${linker_script_gen}
+    -MD -MF ${linker_script_gen}.dep -MT ${linker_script_gen}
     -D_LINKER
     -D_ASMLANGUAGE
     -imacros ${AUTOCONF_H}
@@ -173,22 +172,22 @@ macro(toolchain_ld_base)
   )
 endmacro()
 
-# generate linker script snippts from configure files
+# generate linker script snippets from configure files
 macro(toolchain_ld_configure_files)
   configure_file(
-       $ENV{ZEPHYR_BASE}/include/arch/common/app_data_alignment.ld
+       $ENV{ZEPHYR_BASE}/include/zephyr/arch/common/app_data_alignment.ld
        ${PROJECT_BINARY_DIR}/include/generated/app_data_alignment.ld)
 
   configure_file(
-       $ENV{ZEPHYR_BASE}/include/linker/app_smem.ld
+       $ENV{ZEPHYR_BASE}/include/zephyr/linker/app_smem.ld
        ${PROJECT_BINARY_DIR}/include/generated/app_smem.ld)
 
   configure_file(
-       $ENV{ZEPHYR_BASE}/include/linker/app_smem_aligned.ld
+       $ENV{ZEPHYR_BASE}/include/zephyr/linker/app_smem_aligned.ld
        ${PROJECT_BINARY_DIR}/include/generated/app_smem_aligned.ld)
 
   configure_file(
-       $ENV{ZEPHYR_BASE}/include/linker/app_smem_unaligned.ld
+       $ENV{ZEPHYR_BASE}/include/zephyr/linker/app_smem_unaligned.ld
        ${PROJECT_BINARY_DIR}/include/generated/app_smem_unaligned.ld)
 endmacro()
 

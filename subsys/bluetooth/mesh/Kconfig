@@ -110,9 +110,9 @@ config BT_MESH_GATT
 
 config BT_MESH_PROXY_MSG_LEN
 	int
-	depends on BT_MESH_GATT
-	default 66 if BT_MESH_PB_GATT
+	default 66 if BT_MESH_PB_GATT_COMMON
 	default 33 if BT_MESH_GATT_PROXY
+	depends on BT_MESH_GATT
 
 config BT_MESH_GATT_CLIENT
 	bool
@@ -213,9 +213,9 @@ config BT_MESH_PROXY_FILTER_SIZE
 endif # BT_CONN
 
 config BT_MESH_ACCESS_LAYER_MSG
-	bool "Enable direct Bluetooth message access layer messages"
+	bool "Direct Bluetooth message access layer messages"
 	help
-	  This option allows the applicaiton to directly access
+	  This option allows the application to directly access
 	  Bluetooth access layer messages without the need to
 	  instantiate Bluetooth mesh models.
 
@@ -413,7 +413,7 @@ config BT_MESH_TX_SEG_MSG_COUNT
 	  Maximum number of simultaneous outgoing multi-segment and/or
 	  reliable messages.
 
-	  Note that: Since Mesh Segmentation/reassemblying is a mandatory
+	  Note that: Since Mesh Segmentation/reassembling is a mandatory
 	  feature of specification, set to zero will not allow send any
 	  Mesh Segment message.
 
@@ -769,13 +769,37 @@ config BT_MESH_CFG_CLI
 	help
 	  Enable support for the configuration client model.
 
+if BT_MESH_CFG_CLI
+
+config BT_MESH_CFG_CLI_TIMEOUT
+	int "Config Client model timeout in milliseconds"
+	default 5000
+	help
+	  This timeout controls how long config client waits for a response
+	  message to arrive. This value can be changed at runtime using
+	  @ref bt_mesh_cfg_cli_timeout_set.
+
+endif # BT_MESH_CFG_CLI
+
 config BT_MESH_HEALTH_CLI
 	bool "Support for Health Client Model"
 	help
 	  Enable support for the health client model.
 
+if BT_MESH_HEALTH_CLI
+
+config BT_MESH_HEALTH_CLI_TIMEOUT
+	int "Health Client model timeout in milliseconds"
+	default 2000
+	help
+	  This timeout controls how long health client waits for a response
+	  message to arrive. This value can be changed at runtime using
+	  @ref bt_mesh_health_cli_timeout_set.
+
+endif # BT_MESH_HEALTH_CLI
+
 config BT_MESH_SHELL
-	bool "Enable Bluetooth mesh shell"
+	bool "Bluetooth mesh shell"
 	select SHELL
 	help
 	  Activate shell module that provides Bluetooth mesh commands to
@@ -833,11 +857,14 @@ config BT_MESH_RPL_STORE_TIMEOUT
 	  stored by @ref BT_MESH_STORE_TIMEOUT. Finding the right balance
 	  between this timeout and calling @ref bt_mesh_rpl_pending_store
 	  may reduce a risk of security vulnerability and flash wear out.
+	  Failure to store the RPL and becoming vulnerable after reboot
+	  will cause the device to not perform the replay protection
+	  required by the spec.
 
 endif # BT_SETTINGS
 
 config BT_MESH_DEBUG
-	bool "Enable debug logs"
+	bool "Debug logs"
 	depends on BT_DEBUG
 	help
 	  Use this option to enable debug logs for the Bluetooth

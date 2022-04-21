@@ -29,8 +29,6 @@
 
 #define SDP_CHAN(_ch) CONTAINER_OF(_ch, struct bt_sdp, chan.chan)
 
-#define IN_RANGE(val, min, max) (val >= min && val <= max)
-
 #define SDP_DATA_MTU 200
 
 #define SDP_MTU (SDP_DATA_MTU + sizeof(struct bt_sdp_hdr))
@@ -1696,7 +1694,7 @@ static void sdp_client_notify_result(struct bt_sdp_client *session,
 		/*
 		 * Set user internal result buffer length as same as record
 		 * length to fake user. User will see the individual record
-		 * length as rec_len insted of whole session rec_buf length.
+		 * length as rec_len instead of whole session rec_buf length.
 		 */
 		result.resp_buf->len = rec_len;
 

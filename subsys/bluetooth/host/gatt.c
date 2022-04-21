@@ -78,8 +78,6 @@ struct gatt_sub {
 static struct gatt_sub subscriptions[SUB_MAX];
 static sys_slist_t callback_list;
 
-static const uint16_t gap_appearance = CONFIG_BT_DEVICE_APPEARANCE;
-
 #if defined(CONFIG_BT_GATT_DYNAMIC_DB)
 static sys_slist_t db;
 #endif /* CONFIG_BT_GATT_DYNAMIC_DB */
@@ -125,11 +123,52 @@ static ssize_t read_appearance(struct bt_conn *conn,
 			       const struct bt_gatt_attr *attr, void *buf,
 			       uint16_t len, uint16_t offset)
 {
-	uint16_t appearance = sys_cpu_to_le16(gap_appearance);
+	uint16_t appearance = sys_cpu_to_le16(bt_get_appearance());
 
 	return bt_gatt_attr_read(conn, attr, buf, len, offset, &appearance,
 				 sizeof(appearance));
 }
+
+#if defined(CONFIG_BT_DEVICE_APPEARANCE_GATT_WRITABLE)
+static ssize_t write_appearance(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+			 const void *buf, uint16_t len, uint16_t offset,
+			 uint8_t flags)
+{
+	uint16_t appearance_le = sys_cpu_to_le16(bt_get_appearance());
+	char * const appearance_le_bytes = (char *)&appearance_le;
+	uint16_t appearance;
+	int err;
+
+	if (offset >= sizeof(appearance_le)) {
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+	}
+
+	if ((offset + len) > sizeof(appearance_le)) {
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+	}
+
+	memcpy(&appearance_le_bytes[offset], buf, len);
+	appearance = sys_le16_to_cpu(appearance_le);
+
+	err = bt_set_appearance(appearance);
+
+	if (err) {
+		return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+	}
+
+	return len;
+}
+#endif /* CONFIG_BT_DEVICE_APPEARANCE_GATT_WRITABLE */
+
+#if CONFIG_BT_DEVICE_APPEARANCE_GATT_WRITABLE
+	#define GAP_APPEARANCE_PROPS (BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE)
+	#define GAP_APPEARANCE_PERMS (BT_GATT_PERM_READ | BT_GATT_PERM_WRITE_AUTHEN)
+	#define GAP_APPEARANCE_WRITE_HANDLER write_appearance
+#else
+	#define GAP_APPEARANCE_PROPS BT_GATT_CHRC_READ
+	#define GAP_APPEARANCE_PERMS BT_GATT_PERM_READ
+	#define GAP_APPEARANCE_WRITE_HANDLER NULL
+#endif
 
 #if defined (CONFIG_BT_GAP_PERIPHERAL_PREF_PARAMS)
 /* This checks if the range entered is valid */
@@ -197,8 +236,9 @@ BT_GATT_SERVICE_DEFINE(_2_gap_svc,
 	BT_GATT_CHARACTERISTIC(BT_UUID_GAP_DEVICE_NAME, BT_GATT_CHRC_READ,
 			       BT_GATT_PERM_READ, read_name, NULL, NULL),
 #endif /* CONFIG_BT_DEVICE_NAME_GATT_WRITABLE */
-	BT_GATT_CHARACTERISTIC(BT_UUID_GAP_APPEARANCE, BT_GATT_CHRC_READ,
-			       BT_GATT_PERM_READ, read_appearance, NULL, NULL),
+	BT_GATT_CHARACTERISTIC(BT_UUID_GAP_APPEARANCE, GAP_APPEARANCE_PROPS,
+			       GAP_APPEARANCE_PERMS, read_appearance,
+			       GAP_APPEARANCE_WRITE_HANDLER, NULL),
 #if defined(CONFIG_BT_CENTRAL) && defined(CONFIG_BT_PRIVACY)
 	BT_GATT_CHARACTERISTIC(BT_UUID_CENTRAL_ADDR_RES,
 			       BT_GATT_CHRC_READ, BT_GATT_PERM_READ,
@@ -812,6 +852,8 @@ static ssize_t db_hash_read(struct bt_conn *conn,
 			    const struct bt_gatt_attr *attr,
 			    void *buf, uint16_t len, uint16_t offset)
 {
+	struct gatt_cf_cfg *cfg;
+
 	/* Check if db_hash is already pending in which case it shall be
 	 * generated immediately instead of waiting for the work to complete.
 	 */
@@ -826,7 +868,15 @@ static ssize_t db_hash_read(struct bt_conn *conn,
 	 * The client reads the Database Hash characteristic and then the server
 	 * receives another ATT request from the client.
 	 */
-	(void)bt_gatt_change_aware(conn, true);
+	cfg = find_cf_cfg(conn);
+	if (cfg &&
+	    CF_ROBUST_CACHING(cfg) &&
+	    !atomic_test_bit(cfg->flags, CF_CHANGE_AWARE) &&
+	    atomic_test_bit(cfg->flags, CF_OUT_OF_SYNC)) {
+		atomic_clear_bit(cfg->flags, CF_OUT_OF_SYNC);
+		atomic_set_bit(cfg->flags, CF_CHANGE_AWARE);
+		BT_DBG("%s change-aware", bt_addr_le_str(&cfg->peer));
+	}
 
 	return bt_gatt_attr_read(conn, attr, buf, len, offset, db_hash.hash,
 				 sizeof(db_hash.hash));
@@ -1110,17 +1160,21 @@ static void sc_indicate_rsp(struct bt_conn *conn,
 	}
 
 #if defined(CONFIG_BT_GATT_CACHING)
-	/* BLUETOOTH CORE SPECIFICATION Version 5.1 | Vol 3, Part G page 2347:
+	/* BLUETOOTH CORE SPECIFICATION Version 5.3 | Vol 3, Part G page 1476:
 	 * 2.5.2.1 Robust Caching
-	 * A connected client becomes change-aware when...
-	 * The client receives and confirms a Service Changed indication.
+	 * ... a change-unaware connected client using exactly one ATT bearer
+	 * becomes change-aware when ...
+	 * The client receives and confirms a Handle Value Indication
+	 * for the Service Changed characteristic
 	 */
-	cfg = find_cf_cfg(conn);
-	if (cfg && CF_ROBUST_CACHING(cfg)) {
-		atomic_set_bit(cfg->flags, CF_CHANGE_AWARE);
-		BT_DBG("%s change-aware", bt_addr_le_str(&cfg->peer));
+	if (bt_att_fixed_chan_only(conn)) {
+		cfg = find_cf_cfg(conn);
+		if (cfg && CF_ROBUST_CACHING(cfg)) {
+			atomic_set_bit(cfg->flags, CF_CHANGE_AWARE);
+			BT_DBG("%s change-aware", bt_addr_le_str(&cfg->peer));
+		}
 	}
-#endif
+#endif /* CONFIG_BT_GATT_CACHING */
 }
 
 static void sc_process(struct k_work *work)
@@ -1892,7 +1946,7 @@ ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
 	if (!cfg) {
 		/* If there's no existing entry, but the new value is zero,
 		 * we don't need to do anything, since a disabled CCC is
-		 * behavioraly the same as no written CCC.
+		 * behaviorally the same as no written CCC.
 		 */
 		if (!value) {
 			return len;
@@ -2625,17 +2679,22 @@ static void sc_restore_rsp(struct bt_conn *conn,
 	BT_DBG("err 0x%02x", err);
 
 #if defined(CONFIG_BT_GATT_CACHING)
-	/* BLUETOOTH CORE SPECIFICATION Version 5.1 | Vol 3, Part G page 2347:
+	/* BLUETOOTH CORE SPECIFICATION Version 5.3 | Vol 3, Part G page 1476:
 	 * 2.5.2.1 Robust Caching
-	 * A connected client becomes change-aware when...
-	 * The client receives and confirms a Service Changed indication.
+	 * ... a change-unaware connected client using exactly one ATT bearer
+	 * becomes change-aware when ...
+	 * The client receives and confirms a Handle Value Indication
+	 * for the Service Changed characteristic
 	 */
-	cfg = find_cf_cfg(conn);
-	if (cfg && CF_ROBUST_CACHING(cfg)) {
-		atomic_set_bit(cfg->flags, CF_CHANGE_AWARE);
-		BT_DBG("%s change-aware", bt_addr_le_str(&cfg->peer));
+
+	if (bt_att_fixed_chan_only(conn)) {
+		cfg = find_cf_cfg(conn);
+		if (cfg && CF_ROBUST_CACHING(cfg)) {
+			atomic_set_bit(cfg->flags, CF_CHANGE_AWARE);
+			BT_DBG("%s change-aware", bt_addr_le_str(&cfg->peer));
+		}
 	}
-#endif
+#endif /* CONFIG_BT_GATT_CACHING */
 
 	if (!err && IS_ENABLED(CONFIG_BT_GATT_SERVICE_CHANGED)) {
 		struct gatt_sc_cfg *sc_cfg = find_sc_cfg(conn->id, &conn->le.dst);
@@ -2965,6 +3024,15 @@ static struct gatt_sub *gatt_sub_add_by_addr(uint8_t id,
 	return sub;
 }
 
+static bool check_subscribe_security_level(struct bt_conn *conn,
+					   const struct bt_gatt_subscribe_params *params)
+{
+#if defined(CONFIG_BT_SMP)
+	return conn->sec_level >= params->min_security;
+#endif
+	return true;
+}
+
 void bt_gatt_notification(struct bt_conn *conn, uint16_t handle,
 			  const void *data, uint16_t length)
 {
@@ -2983,9 +3051,11 @@ void bt_gatt_notification(struct bt_conn *conn, uint16_t handle,
 			continue;
 		}
 
-		if (params->notify(conn, params, data, length) ==
-		    BT_GATT_ITER_STOP) {
-			bt_gatt_unsubscribe(conn, params);
+		if (check_subscribe_security_level(conn, params)) {
+			if (params->notify(conn, params, data, length) ==
+			    BT_GATT_ITER_STOP) {
+				bt_gatt_unsubscribe(conn, params);
+			}
 		}
 	}
 }
@@ -3029,9 +3099,11 @@ void bt_gatt_mult_notification(struct bt_conn *conn, const void *data,
 				continue;
 			}
 
-			if (params->notify(conn, params, nfy->value, len) ==
-			    BT_GATT_ITER_STOP) {
-				bt_gatt_unsubscribe(conn, params);
+			if (check_subscribe_security_level(conn, params)) {
+				if (params->notify(conn, params, nfy->value, len) ==
+					BT_GATT_ITER_STOP) {
+					bt_gatt_unsubscribe(conn, params);
+				}
 			}
 		}
 
@@ -3102,6 +3174,8 @@ static int gatt_exchange_mtu_encode(struct net_buf *buf, size_t len,
 int bt_gatt_exchange_mtu(struct bt_conn *conn,
 			 struct bt_gatt_exchange_params *params)
 {
+	int err;
+
 	__ASSERT(conn, "invalid parameter\n");
 	__ASSERT(params && params->func, "invalid parameters\n");
 
@@ -3109,9 +3183,19 @@ int bt_gatt_exchange_mtu(struct bt_conn *conn,
 		return -ENOTCONN;
 	}
 
-	return gatt_req_send(conn, gatt_mtu_rsp, params,
-			     gatt_exchange_mtu_encode, BT_ATT_OP_MTU_REQ,
-			     sizeof(struct bt_att_exchange_mtu_req));
+	/* This request shall only be sent once during a connection by the client. */
+	if (atomic_test_and_set_bit(conn->flags, BT_CONN_ATT_MTU_EXCHANGED)) {
+		return -EALREADY;
+	}
+
+	err = gatt_req_send(conn, gatt_mtu_rsp, params,
+			    gatt_exchange_mtu_encode, BT_ATT_OP_MTU_REQ,
+			    sizeof(struct bt_att_exchange_mtu_req));
+	if (err) {
+		atomic_clear_bit(conn->flags, BT_CONN_ATT_MTU_EXCHANGED);
+	}
+
+	return err;
 }
 
 static void gatt_discover_next(struct bt_conn *conn, uint16_t last_handle,
@@ -4843,6 +4927,20 @@ static void add_subscriptions(struct bt_conn *conn)
 		}
 	}
 }
+
+#if defined(CONFIG_BT_GATT_AUTO_UPDATE_MTU)
+static void gatt_exchange_mtu_func(struct bt_conn *conn, uint8_t err,
+				   struct bt_gatt_exchange_params *params)
+{
+	if (err) {
+		BT_WARN("conn %p err 0x%02x", conn, err);
+	}
+}
+
+static struct bt_gatt_exchange_params gatt_exchange_params = {
+	.func = gatt_exchange_mtu_func,
+};
+#endif /* CONFIG_BT_GATT_AUTO_UPDATE_MTU */
 #endif /* CONFIG_BT_GATT_CLIENT */
 
 #define CCC_STORE_MAX 48
@@ -5105,7 +5203,14 @@ void bt_gatt_connected(struct bt_conn *conn)
 
 #if defined(CONFIG_BT_GATT_CLIENT)
 	add_subscriptions(conn);
+#if defined(CONFIG_BT_GATT_AUTO_UPDATE_MTU)
+	int err;
 
+	err = bt_gatt_exchange_mtu(conn, &gatt_exchange_params);
+	if (err) {
+		BT_WARN("MTU Exchange failed (err %d)", err);
+	}
+#endif /* CONFIG_BT_GATT_AUTO_UPDATE_MTU */
 #endif /* CONFIG_BT_GATT_CLIENT */
 }
 
@@ -5154,14 +5259,15 @@ bool bt_gatt_change_aware(struct bt_conn *conn, bool req)
 		return false;
 	}
 
-	/* BLUETOOTH CORE SPECIFICATION Version 5.1 | Vol 3, Part G page 2347:
+	/* BLUETOOTH CORE SPECIFICATION Version 5.3 | Vol 3, Part G page 1476:
 	 * 2.5.2.1 Robust Caching
-	 * A connected client becomes change-aware when...
-	 * The server sends the client a response with the error code set to
-	 * Database Out Of Sync and then the server receives another ATT
-	 * request from the client.
+	 * ... a change-unaware connected client using exactly one ATT bearer
+	 * becomes change-aware when ...
+	 * The server sends the client a response with the Error Code parameter
+	 * set to Database Out Of Sync (0x12) and then the server receives
+	 * another ATT request from the client.
 	 */
-	if (atomic_test_bit(cfg->flags, CF_OUT_OF_SYNC)) {
+	if (atomic_test_bit(cfg->flags, CF_OUT_OF_SYNC) && bt_att_fixed_chan_only(conn)) {
 		atomic_clear_bit(cfg->flags, CF_OUT_OF_SYNC);
 		atomic_set_bit(cfg->flags, CF_CHANGE_AWARE);
 		BT_DBG("%s change-aware", bt_addr_le_str(&cfg->peer));

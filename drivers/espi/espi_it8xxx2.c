@@ -918,13 +918,11 @@ static int espi_it8xxx2_write_lpc_request(const struct device *dev,
 #define ESPI_OOB_TAG                 0x00
 #define ESPI_OOB_TIMEOUT_MS          200
 
-/* eSPI oob cycle type, tag, and length fields. */
-#define ESPI_OOB_PACKET_SIZE_WITHOUT_DATA_BYTE  3
+/* eSPI tag + len[11:8] field */
+#define ESPI_TAG_LEN_FIELD(tag, len) \
+		   ((((tag) & 0xF) << 4) | (((len) >> 8) & 0xF))
 
 struct espi_oob_msg_packet {
-	uint8_t cycle_type;
-	uint8_t tag_len_bit_11_8;
-	uint8_t len_bit_7_0;
 	uint8_t data_byte[0];
 };
 
@@ -938,10 +936,6 @@ static int espi_it8xxx2_send_oob(const struct device *dev,
 		(struct espi_queue1_regs *)config->base_espi_queue1;
 	struct espi_oob_msg_packet *oob_pckt =
 		(struct espi_oob_msg_packet *)pckt->buf;
-	uint16_t oob_msg_len;
-
-	__ASSERT(pckt->len >= ESPI_OOB_PACKET_SIZE_WITHOUT_DATA_BYTE,
-		"Invalid OOB packet length");
 
 	if (!(slave_reg->CH_OOB_CAPCFG3 & IT8XXX2_ESPI_OOB_READY_MASK)) {
 		LOG_ERR("%s: OOB channel isn't ready", __func__);
@@ -953,17 +947,7 @@ static int espi_it8xxx2_send_oob(const struct device *dev,
 		return -EIO;
 	}
 
-	oob_msg_len = oob_pckt->len_bit_7_0 |
-				((oob_pckt->tag_len_bit_11_8 & 0xf) << 8);
-
-	if (pckt->len < (oob_msg_len +
-				ESPI_OOB_PACKET_SIZE_WITHOUT_DATA_BYTE)) {
-		LOG_ERR("%s: Out of tx buf %d vs %d", __func__, pckt->len,
-			(oob_msg_len + ESPI_OOB_PACKET_SIZE_WITHOUT_DATA_BYTE));
-		return -EINVAL;
-	}
-
-	if (oob_msg_len > ESPI_IT8XXX2_OOB_MAX_PAYLOAD_SIZE) {
+	if (pckt->len > ESPI_IT8XXX2_OOB_MAX_PAYLOAD_SIZE) {
 		LOG_ERR("%s: Out of OOB queue space", __func__);
 		return -EINVAL;
 	}
@@ -971,12 +955,12 @@ static int espi_it8xxx2_send_oob(const struct device *dev,
 	/* Set cycle type */
 	slave_reg->ESUCTRL1 = IT8XXX2_ESPI_CYCLE_TYPE_OOB;
 	/* Set tag and length[11:8] */
-	slave_reg->ESUCTRL2 = oob_pckt->tag_len_bit_11_8;
+	slave_reg->ESUCTRL2 = ESPI_TAG_LEN_FIELD(0, pckt->len);
 	/* Set length [7:0] */
-	slave_reg->ESUCTRL3 = oob_pckt->len_bit_7_0;
+	slave_reg->ESUCTRL3 = pckt->len & 0xff;
 
 	/* Set data byte */
-	for (int i = 0; i < oob_msg_len; i++) {
+	for (int i = 0; i < pckt->len; i++) {
 		queue1_reg->UPSTREAM_DATA[i] = oob_pckt->data_byte[i];
 	}
 
@@ -992,14 +976,12 @@ static int espi_it8xxx2_receive_oob(const struct device *dev,
 				struct espi_oob_packet *pckt)
 {
 	const struct espi_it8xxx2_config *const config = dev->config;
-	struct espi_it8xxx2_data *const data = dev->data;
 	struct espi_slave_regs *const slave_reg =
 		(struct espi_slave_regs *)config->base_espi_slave;
 	struct espi_queue0_regs *const queue0_reg =
 		(struct espi_queue0_regs *)config->base_espi_queue0;
 	struct espi_oob_msg_packet *oob_pckt =
 		(struct espi_oob_msg_packet *)pckt->buf;
-	int ret;
 	uint8_t oob_len;
 
 	if (!(slave_reg->CH_OOB_CAPCFG3 & IT8XXX2_ESPI_OOB_READY_MASK)) {
@@ -1007,12 +989,17 @@ static int espi_it8xxx2_receive_oob(const struct device *dev,
 		return -EIO;
 	}
 
+#ifndef CONFIG_ESPI_OOB_CHANNEL_RX_ASYNC
+	struct espi_it8xxx2_data *const data = dev->data;
+	int ret;
+
 	/* Wait until receive OOB message or timeout */
 	ret = k_sem_take(&data->oob_upstream_go, K_MSEC(ESPI_OOB_TIMEOUT_MS));
 	if (ret == -EAGAIN) {
 		LOG_ERR("%s: Timeout", __func__);
 		return -ETIMEDOUT;
 	}
+#endif
 
 	/* Get length */
 	oob_len = (slave_reg->ESOCTRL4 & IT8XXX2_ESPI_PUT_OOB_LEN_MASK);
@@ -1020,18 +1007,15 @@ static int espi_it8xxx2_receive_oob(const struct device *dev,
 	 * Buffer passed to driver isn't enough.
 	 * The first three bytes of buffer are cycle type, tag, and length.
 	 */
-	if ((oob_len + ESPI_OOB_PACKET_SIZE_WITHOUT_DATA_BYTE) > pckt->len) {
+	if (oob_len > pckt->len) {
 		LOG_ERR("%s: Out of rx buf %d vs %d", __func__,
-		(oob_len + ESPI_OOB_PACKET_SIZE_WITHOUT_DATA_BYTE), pckt->len);
+			oob_len, pckt->len);
 		return -EINVAL;
 	}
 
-	oob_pckt->cycle_type = ESPI_OOB_CYCLE_TYPE;
-	oob_pckt->tag_len_bit_11_8 = ESPI_OOB_TAG;
-	oob_pckt->len_bit_7_0 = oob_len;
-
+	pckt->len = oob_len;
 	/* Get data byte */
-	for (int i = 0; i < oob_pckt->len_bit_7_0; i++) {
+	for (int i = 0; i < oob_len; i++) {
 		oob_pckt->data_byte[i] = queue0_reg->PUT_OOB_DATA[i];
 	}
 
@@ -1041,11 +1025,14 @@ static int espi_it8xxx2_receive_oob(const struct device *dev,
 static void espi_it8xxx2_oob_init(const struct device *dev)
 {
 	const struct espi_it8xxx2_config *const config = dev->config;
-	struct espi_it8xxx2_data *const data = dev->data;
 	struct espi_slave_regs *const slave_reg =
 		(struct espi_slave_regs *)config->base_espi_slave;
 
+#ifndef CONFIG_ESPI_OOB_CHANNEL_RX_ASYNC
+	struct espi_it8xxx2_data *const data = dev->data;
+
 	k_sem_init(&data->oob_upstream_go, 0, 1);
+#endif
 
 	/* Upstream interrupt enable */
 	slave_reg->ESUCTRL0 |= IT8XXX2_ESPI_UPSTREAM_INTERRUPT_ENABLE;
@@ -1655,11 +1642,22 @@ static void espi_it8xxx2_put_oob_status_isr(const struct device *dev)
 	struct espi_it8xxx2_data *const data = dev->data;
 	struct espi_slave_regs *const slave_reg =
 		(struct espi_slave_regs *)config->base_espi_slave;
+#ifdef CONFIG_ESPI_OOB_CHANNEL_RX_ASYNC
+	struct espi_event evt = { .evt_type = ESPI_BUS_EVENT_OOB_RECEIVED,
+				  .evt_details = 0,
+				  .evt_data = 0 };
+#endif
 
 	/* Write-1 to clear this bit for the next coming posted transaction. */
 	slave_reg->ESOCTRL0 |= IT8XXX2_ESPI_PUT_OOB_STATUS;
 
+#ifndef CONFIG_ESPI_OOB_CHANNEL_RX_ASYNC
 	k_sem_give(&data->oob_upstream_go);
+#else
+	/* Additional detail is length field of PUT_OOB message packet. */
+	evt.evt_details = (slave_reg->ESOCTRL4 & IT8XXX2_ESPI_PUT_OOB_LEN_MASK);
+	espi_send_callbacks(&data->callbacks, dev, evt);
+#endif
 }
 #endif
 
@@ -1804,7 +1802,7 @@ static void espi_it8xxx2_enable_reset(void)
 	gpio_add_callback(ESPI_IT8XXX2_ESPI_RESET_PORT, &espi_reset_cb);
 	gpio_pin_interrupt_configure(ESPI_IT8XXX2_ESPI_RESET_PORT,
 					ESPI_IT8XXX2_ESPI_RESET_PIN,
-					GPIO_INT_TRIG_BOTH);
+					GPIO_INT_MODE_EDGE | GPIO_INT_TRIG_BOTH);
 }
 
 static struct espi_it8xxx2_data espi_it8xxx2_data_0;

@@ -102,10 +102,6 @@ static int pwm_npcx_pin_set(const struct device *dev, uint32_t pwm,
 	uint32_t dcr;
 	uint32_t prsc;
 
-	if (pulse_cycles > period_cycles) {
-		return -EINVAL;
-	}
-
 	ctl = inst->PWMCTL | BIT(NPCX_PWMCTL_PWR);
 
 	/* Select PWM inverted polarity (ie. active-low pulse). */
@@ -190,7 +186,7 @@ static int pwm_npcx_init(const struct device *dev)
 	int ret;
 
 	/*
-	 * NPCX PWM modulee mixes byte and word registers together. Make sure
+	 * NPCX PWM module mixes byte and word registers together. Make sure
 	 * word reg access via structure won't break into two byte reg accesses
 	 * unexpectedly by toolchains options or attributes. If so, stall here.
 	 */

@@ -53,8 +53,17 @@ static inline void relocate_vector_table(void)
 	__ISB();
 }
 
-#else
+#elif defined(CONFIG_AARCH32_ARMV8_R)
 
+#define VECTOR_ADDRESS ((uintptr_t)_vector_start)
+
+static inline void relocate_vector_table(void)
+{
+	write_vbar(VECTOR_ADDRESS & VBAR_MASK);
+	__ISB();
+}
+
+#else
 #define VECTOR_ADDRESS 0
 
 void __weak relocate_vector_table(void)
@@ -135,7 +144,15 @@ static inline void z_arm_floating_point_init(void)
 	__ISB();
 
 	/* Initialize the Floating Point Status and Control Register. */
+#if defined(CONFIG_ARMV8_1_M_MAINLINE)
+	/*
+	 * For ARMv8.1-M with FPU, the FPSCR[18:16] LTPSIZE field must be set
+	 * to 0b100 for "Tail predication not applied" as it's reset value
+	 */
+	__set_FPSCR(4 << FPU_FPDSCR_LTPSIZE_Pos);
+#else
 	__set_FPSCR(0);
+#endif
 
 	/*
 	 * Note:

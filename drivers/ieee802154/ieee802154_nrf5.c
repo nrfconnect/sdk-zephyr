@@ -23,6 +23,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <debug/stack.h>
 
 #include <soc.h>
+#include <soc_secure.h>
 #include <device.h>
 #include <init.h>
 #include <debug/stack.h>
@@ -62,23 +63,21 @@ static struct nrf5_802154_data nrf5_data;
 #define DRX_SLOT_RX 1 /* Actual delayed reception window ID */
 #define PH_DURATION 10 /* Duration of the placeholder window, in microseconds */
 /* When scheduling the actual delayed reception window an adjustment of
- * 800 us is required to match the CSL tranmission timing for unknown
+ * 800 us is required to match the CSL transmission timing for unknown
  * reasons. This is a temporary workaround until the root cause is found.
  */
 #define DRX_ADJUST 800
 
 #if defined(CONFIG_IEEE802154_NRF5_UICR_EUI64_ENABLE)
 #if defined(CONFIG_SOC_NRF5340_CPUAPP)
+#if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+#error "NRF_UICR->OTP is not supported to read from non-secure"
+#else
 #define EUI64_ADDR (NRF_UICR->OTP)
+#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 #else
 #define EUI64_ADDR (NRF_UICR->CUSTOMER)
 #endif /* CONFIG_SOC_NRF5340_CPUAPP */
-#else
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) || defined(CONFIG_SOC_NRF5340_CPUNET)
-#define EUI64_ADDR (NRF_FICR->INFO.DEVICEID)
-#else
-#define EUI64_ADDR (NRF_FICR->DEVICEID)
-#endif /* CONFIG_SOC_NRF5340_CPUAPP || CONFIG_SOC_NRF5340_CPUNET */
 #endif /* CONFIG_IEEE802154_NRF5_UICR_EUI64_ENABLE */
 
 #if defined(CONFIG_IEEE802154_NRF5_UICR_EUI64_ENABLE)
@@ -108,15 +107,17 @@ static void nrf5_get_eui64(uint8_t *mac)
 	uint32_t index = 0;
 
 #if !defined(CONFIG_IEEE802154_NRF5_UICR_EUI64_ENABLE)
+	uint32_t deviceid[2];
+
 	/* Set the MAC Address Block Larger (MA-L) formerly called OUI. */
 	mac[index++] = (IEEE802154_NRF5_VENDOR_OUI >> 16) & 0xff;
 	mac[index++] = (IEEE802154_NRF5_VENDOR_OUI >> 8) & 0xff;
 	mac[index++] = IEEE802154_NRF5_VENDOR_OUI & 0xff;
-#endif
 
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && \
-	defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
-#error Accessing EUI64 on the non-secure mode is not supported at the moment
+	soc_secure_read_deviceid(deviceid);
+
+	factoryAddress = (uint64_t)deviceid[EUI64_ADDR_HIGH] << 32;
+	factoryAddress |= deviceid[EUI64_ADDR_LOW];
 #else
 	/* Use device identifier assigned during the production. */
 	factoryAddress = (uint64_t)EUI64_ADDR[EUI64_ADDR_HIGH] << 32;
@@ -449,6 +450,7 @@ static bool nrf5_tx_immediate(struct net_pkt *pkt, uint8_t *payload, bool cca)
 	return nrf_802154_transmit_raw(payload, &metadata);
 }
 
+#if NRF_802154_CSMA_CA_ENABLED
 static bool nrf5_tx_csma_ca(struct net_pkt *pkt, uint8_t *payload)
 {
 	nrf_802154_transmit_csma_ca_metadata_t metadata = {
@@ -460,6 +462,7 @@ static bool nrf5_tx_csma_ca(struct net_pkt *pkt, uint8_t *payload)
 
 	return nrf_802154_transmit_csma_ca_raw(payload, &metadata);
 }
+#endif
 
 #if IS_ENABLED(CONFIG_NET_PKT_TXTIME)
 static bool nrf5_tx_at(struct net_pkt *pkt, uint8_t *payload, bool cca)
@@ -509,9 +512,11 @@ static int nrf5_tx(const struct device *dev,
 		ret = nrf5_tx_immediate(pkt, nrf5_radio->tx_psdu,
 					mode == IEEE802154_TX_MODE_CCA);
 		break;
+#if NRF_802154_CSMA_CA_ENABLED
 	case IEEE802154_TX_MODE_CSMA_CA:
 		ret = nrf5_tx_csma_ca(pkt, nrf5_radio->tx_psdu);
 		break;
+#endif
 #if IS_ENABLED(CONFIG_NET_PKT_TXTIME)
 	case IEEE802154_TX_MODE_TXTIME:
 	case IEEE802154_TX_MODE_TXTIME_CCA:
@@ -590,7 +595,7 @@ static uint8_t nrf5_get_acc(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
-	return CONFIG_IEEE802154_DELAY_TRX_ACC;
+	return CONFIG_IEEE802154_NRF5_DELAY_TRX_ACC;
 }
 
 static int nrf5_start(const struct device *dev)
@@ -1000,7 +1005,9 @@ void nrf_802154_receive_failed(nrf_802154_rx_error_t error, uint32_t id)
 	if ((id == DRX_SLOT_PH) || (id == DRX_SLOT_RX)) {
 		__ASSERT_NO_MSG(nrf5_data.event_handler);
 		nrf5_data.event_handler(dev, IEEE802154_EVENT_SLEEP, NULL);
-		return;
+		if (error == NRF_802154_RX_ERROR_DELAYED_TIMEOUT) {
+			return;
+		}
 	}
 #else
 	ARG_UNUSED(id);
@@ -1025,6 +1032,10 @@ void nrf_802154_receive_failed(nrf_802154_rx_error_t error, uint32_t id)
 	default:
 		reason = IEEE802154_RX_FAIL_OTHER;
 		break;
+	}
+
+	if (IS_ENABLED(CONFIG_IEEE802154_NRF5_LOG_RX_FAILURES)) {
+		LOG_INF("Rx failed, error = %d", error);
 	}
 
 	nrf5_data.last_frame_ack_fpb = false;

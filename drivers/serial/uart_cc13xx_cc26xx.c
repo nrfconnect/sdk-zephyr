@@ -10,20 +10,15 @@
 #include <errno.h>
 #include <sys/__assert.h>
 #include <pm/device.h>
-#include <pm/pm.h>
+#include <pm/policy.h>
 #include <drivers/uart.h>
+#include <drivers/pinctrl.h>
 
-#include <driverlib/ioc.h>
 #include <driverlib/prcm.h>
 #include <driverlib/uart.h>
 
 #include <ti/drivers/Power.h>
 #include <ti/drivers/power/PowerCC26X2.h>
-
-#define GET_PIN(n, pin_name) \
-	DT_INST_PROP_BY_IDX(n, pin_name, 0)
-#define GET_PORT(n, pin_name) \
-	DT_INST_PROP_BY_IDX(n, pin_name, 1)
 
 struct uart_cc13xx_cc26xx_config {
 	uint32_t reg;
@@ -32,6 +27,7 @@ struct uart_cc13xx_cc26xx_config {
 
 struct uart_cc13xx_cc26xx_data {
 	struct uart_config uart_config;
+	const struct pinctrl_dev_config *pcfg;
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	uart_irq_callback_user_data_t callback;
 	void *user_data;
@@ -254,7 +250,7 @@ static void uart_cc13xx_cc26xx_irq_tx_enable(const struct device *dev)
 		 * standby mode instead, since it is the power state that
 		 * would interfere with a transfer.
 		 */
-		pm_constraint_set(PM_STATE_STANDBY);
+		pm_policy_state_lock_get(PM_STATE_STANDBY);
 		data->tx_constrained = true;
 	}
 #endif
@@ -272,7 +268,7 @@ static void uart_cc13xx_cc26xx_irq_tx_disable(const struct device *dev)
 	struct uart_cc13xx_cc26xx_data *data = dev->data;
 
 	if (data->tx_constrained) {
-		pm_constraint_release(PM_STATE_STANDBY);
+		pm_policy_state_lock_put(PM_STATE_STANDBY);
 		data->tx_constrained = false;
 	}
 #endif
@@ -298,7 +294,7 @@ static void uart_cc13xx_cc26xx_irq_rx_enable(const struct device *dev)
 	 * standby.
 	 */
 	if (!data->rx_constrained) {
-		pm_constraint_set(PM_STATE_STANDBY);
+		pm_policy_state_lock_get(PM_STATE_STANDBY);
 		data->rx_constrained = true;
 	}
 #endif
@@ -314,7 +310,7 @@ static void uart_cc13xx_cc26xx_irq_rx_disable(const struct device *dev)
 	struct uart_cc13xx_cc26xx_data *data = dev->data;
 
 	if (data->rx_constrained) {
-		pm_constraint_release(PM_STATE_STANDBY);
+		pm_policy_state_lock_put(PM_STATE_STANDBY);
 		data->rx_constrained = false;
 	}
 #endif
@@ -597,11 +593,10 @@ static const struct uart_driver_api uart_cc13xx_cc26xx_driver_api = {
 									    \
 		UART_CC13XX_CC26XX_POWER_UART(n);			    \
 									    \
-		/* Configure IOC module to map UART signals to pins */	    \
-		IOCPortConfigureSet(GET_PIN(n, tx_pin), GET_PORT(n, tx_pin),\
-			IOC_STD_OUTPUT);				    \
-		IOCPortConfigureSet(GET_PIN(n, rx_pin), GET_PORT(n, rx_pin),\
-			IOC_STD_INPUT);					    \
+		ret = pinctrl_apply_state(data->pcfg, PINCTRL_STATE_DEFAULT);	\
+		if (ret < 0) {	\
+			return ret;	\
+		}				    \
 									    \
 		/* Configure and enable UART */				    \
 		ret = uart_cc13xx_cc26xx_configure(dev, &data->uart_config);\
@@ -614,6 +609,7 @@ static const struct uart_driver_api uart_cc13xx_cc26xx_driver_api = {
 
 
 #define UART_CC13XX_CC26XX_INIT(n)				     \
+	PINCTRL_DT_INST_DEFINE(n); \
 	UART_CC13XX_CC26XX_INIT_FUNC(n);			     \
 								     \
 	static const struct uart_cc13xx_cc26xx_config		     \
@@ -632,6 +628,7 @@ static const struct uart_driver_api uart_cc13xx_cc26xx_driver_api = {
 			.data_bits = UART_CFG_DATA_BITS_8,	     \
 			.flow_ctrl = UART_CFG_FLOW_CTRL_NONE,	     \
 		},						     \
+		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n), \
 		UART_CC13XX_CC26XX_INT_FIELDS			     \
 	};							     \
 								     \

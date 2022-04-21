@@ -111,7 +111,7 @@ static int net_bt_send(struct net_if *iface, struct net_pkt *pkt)
 
 	net_capture_pkt(iface, pkt);
 
-	/* Dettach data fragments for packet */
+	/* Detach data fragments for packet */
 	buffer = pkt->buffer;
 	pkt->buffer = NULL;
 
@@ -134,7 +134,7 @@ static int net_bt_enable(struct net_if *iface, bool state)
 
 	NET_DBG("iface %p %s", iface, state ? "up" : "down");
 
-	if (state && conn->ipsp_chan.chan.state != BT_L2CAP_CONNECTED) {
+	if (state && conn->ipsp_chan.state != BT_L2CAP_CONNECTED) {
 		return -ENETDOWN;
 	}
 

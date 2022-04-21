@@ -25,6 +25,7 @@ choice
 
 config LWM2M_VERSION_1_0
 	bool "LwM2M version 1.0"
+	imply LWM2M_RW_OMA_TLV_SUPPORT
 
 config LWM2M_VERSION_1_1
 	bool "LwM2M version 1.1 [EXPERIMENTAL]"
@@ -32,8 +33,15 @@ config LWM2M_VERSION_1_1
 
 endchoice
 
+config LWM2M_SHELL
+	bool "LwM2M shell utilities"
+	select SHELL
+	help
+	  Activate shell module that provides LwM2M commands like
+	  send to the console.
+
 config LWM2M_DTLS_SUPPORT
-	bool "Enable DTLS support in the LwM2M client"
+	bool "DTLS support in the LwM2M client"
 	select TLS_CREDENTIALS
 	select NET_SOCKETS_SOCKOPT_TLS
 	select NET_SOCKETS_ENABLE_DTLS
@@ -71,7 +79,7 @@ config LWM2M_SERVER_OBJECT_VERSION_1_1
 endchoice
 
 config LWM2M_DNS_SUPPORT
-	bool "Enable DNS support in the LWM2M client"
+	bool "DNS support in the LWM2M client"
 	default y if DNS_RESOLVER
 
 config LWM2M_ENGINE_STACK_SIZE
@@ -168,7 +176,7 @@ config LWM2M_SECONDS_TO_UPDATE_EARLY
 	  higher, in order to allow the response to arrive before timeout.
 
 config LWM2M_QUEUE_MODE_ENABLED
-	bool "Enable Queue Mode UDP binding"
+	bool "Queue Mode UDP binding"
 	help
 	  Set the transport binding to UDP with Queue Mode (UQ).
 
@@ -190,7 +198,7 @@ config LWM2M_RD_CLIENT_SUPPORT
 	  LWM2M servers (including bootstrap server support)
 
 config LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP
-	bool "Enable bootstrap support"
+	bool "Bootstrap support"
 	help
 	  Enabling this setting allows the RD client to support bootstrap mode.
 
@@ -199,7 +207,7 @@ config LWM2M_RD_CLIENT_ENDPOINT_NAME_MAX_LENGTH
 	depends on LWM2M_RD_CLIENT_SUPPORT
 	default 33
 	help
-	  Default: room for 32 hexadeciaml digits (UUID) + NULL
+	  Default: room for 32 hexadecimal digits (UUID) + NULL
 
 config LWM2M_RD_CLIENT_MAX_RETRIES
 	int "Specify maximum number of registration retries"
@@ -333,7 +341,7 @@ config LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT_MULTIPLE
 	depends on LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT
 	select EXPERIMENTAL
 	help
-	  Support multiple instances of LWM2M Firwmare Update Object (ID 5)
+	  Support multiple instances of LWM2M Firmware Update Object (ID 5)
 
 config LWM2M_FIRMWARE_UPDATE_OBJ_INSTANCE_COUNT
 	int "Maximum # of LWM2M Firmware update object instances"
@@ -402,6 +410,11 @@ config LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_ADDR
 	help
 	  Network address of the CoAP proxy server.
 
+config LWM2M_RW_OMA_TLV_SUPPORT
+	bool "TLV data format"
+	help
+	  Include support for write / parse TLV data
+
 config LWM2M_RW_JSON_SUPPORT
 	bool "support for JSON writer"
 	default y
@@ -459,7 +472,7 @@ config LWM2M_LOCATION_OBJ_SUPPORT
 	  Include support for LWM2M Location Object (ID 6)
 
 config LWM2M_GATEWAY_OBJ_SUPPORT
-	bool "Enable LwM2M Gateway Object (25) [EXPERIMENTAL]"
+	bool "LwM2M Gateway Object (25) [EXPERIMENTAL]"
 
 if LWM2M_GATEWAY_OBJ_SUPPORT
 

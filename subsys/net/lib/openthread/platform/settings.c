@@ -60,6 +60,7 @@ static int ot_setting_delete_cb(const char *key, size_t len,
 	if (ret != 0) {
 		LOG_ERR("Failed to remove setting %s, ret %d", log_strdup(path),
 			ret);
+		__ASSERT_NO_MSG(false);
 	}
 
 	ctx->status = 0;
@@ -98,6 +99,7 @@ static int ot_setting_delete_subtree(int key, int index)
 	if (ret != 0) {
 		LOG_ERR("Failed to delete OT subtree %s, index %d, ret %d",
 			subtree, index, ret);
+		__ASSERT_NO_MSG(false);
 	}
 
 	return delete_ctx.status;
@@ -140,7 +142,7 @@ struct ot_setting_read_ctx {
 	 */
 	int index;
 
-	/* Target instnace to read. */
+	/* Target instance to read. */
 	int target_index;
 
 	/* Operation result. */
@@ -192,11 +194,14 @@ out:
 
 /* OpenThread APIs */
 
-void otPlatSettingsInit(otInstance *aInstance)
+void otPlatSettingsInit(otInstance *aInstance, const uint16_t *aSensitiveKeys,
+			uint16_t aSensitiveKeysLength)
 {
 	int ret;
 
 	ARG_UNUSED(aInstance);
+	ARG_UNUSED(aSensitiveKeys);
+	ARG_UNUSED(aSensitiveKeysLength);
 
 	ret = settings_subsys_init();
 	if (ret != 0) {
@@ -306,15 +311,9 @@ otError otPlatSettingsDelete(otInstance *aInstance, uint16_t aKey, int aIndex)
 
 void otPlatSettingsWipe(otInstance *aInstance)
 {
-	int ret;
-
 	ARG_UNUSED(aInstance);
 
-	ret = ot_setting_delete_subtree(-1, -1);
-	if (ret != 0) {
-		LOG_ERR("Failed to delete OT subtree");
-		__ASSERT_NO_MSG(false);
-	}
+	(void)ot_setting_delete_subtree(-1, -1);
 }
 
 void otPlatSettingsDeinit(otInstance *aInstance)

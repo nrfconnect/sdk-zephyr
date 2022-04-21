@@ -7,7 +7,7 @@
 # PinMux options
 #
 menuconfig PINMUX
-	bool "Enable board pinmux driver"
+	bool "Board pinmux driver"
 
 if PINMUX
 
@@ -26,8 +26,6 @@ config PINMUX_INIT_PRIORITY
 
 source "drivers/pinmux/Kconfig.beetle"
 
-source "drivers/pinmux/Kconfig.cc13xx_cc26xx"
-
 source "drivers/pinmux/Kconfig.esp32"
 
 source "drivers/pinmux/Kconfig.hsdk"
@@ -43,10 +41,6 @@ source "drivers/pinmux/Kconfig.mcux"
 source "drivers/pinmux/Kconfig.mcux_lpc"
 
 source "drivers/pinmux/Kconfig.rv32m1"
-
-source "drivers/pinmux/Kconfig.sifive"
-
-source "drivers/pinmux/Kconfig.sam0"
 
 source "drivers/pinmux/Kconfig.stm32"
 

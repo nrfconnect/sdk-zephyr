@@ -23,6 +23,7 @@
 
 			#address-cells = <1>;
 			#size-cells = <1>;
+			d-cache-line-size = <32>;
 
 			mpu: mpu@e000ed90 {
 				compatible = "arm,armv7m-mpu";
@@ -34,6 +35,7 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-m4f";
 			reg = <1>;
+			d-cache-line-size = <32>;
 
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -72,6 +74,12 @@
 			substate-id = <IMX_SPC_SET_POINT_10_SUSPEND>;
 			min-residency-us = <5000>;
 		};
+	};
+
+	xtal: xtal-osc {
+		compatible = "fixed-clock";
+		clock-frequency = <24000000>;
+		#clock-cells = <0>;
 	};
 
 	soc {
@@ -177,7 +185,7 @@
 
 		/*
 		 * Note that CM7 and CM4 cores do not have the same memory addresses
-		 * for GPIO2 and GPIO3, so those periperals are defined in the SOC
+		 * for GPIO2 and GPIO3, so those peripherals are defined in the SOC
 		 * specific DTS files
 		 */
 
@@ -207,6 +215,22 @@
 			#gpio-cells = <2>;
 		};
 
+		gpio7: gpio@40c5c000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x40c5c000 0x4000>;
+			label = "GPIO_7";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
+		gpio8: gpio@40c60000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x40c60000 0x4000>;
+			label = "GPIO_8";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
 		gpio9: gpio@40c64000 {
 			compatible = "nxp,imx-gpio";
 			reg = <0x40c64000 0x4000>;
@@ -227,6 +251,14 @@
 			compatible = "nxp,imx-gpio";
 			reg = <0x40c6c000 0x4000>;
 			label = "GPIO_11";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
+		gpio12: gpio@40c70000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x40c70000 0x4000>;
+			label = "GPIO_12";
 			gpio-controller;
 			#gpio-cells = <2>;
 		};
@@ -313,8 +345,26 @@
 		};
 
 		iomuxc: iomuxc@400e8000 {
+			compatible = "nxp,imx-iomuxc";
 			reg = <0x400e8000 0x4000>;
-			label = "PINMUX_0";
+			status = "okay";
+			pinctrl: pinctrl {
+				status = "okay";
+				compatible = "nxp,mcux-rt11xx-pinctrl";
+			};
+		};
+
+		iomuxc_lpsr: iomuxc_lpsr@40c08000 {
+			compatible = "nxp,mcux-rt-pinctrl";
+			reg = <0x40c08000 0x4000>;
+			status = "disabled";
+		};
+
+		iomuxc_lpsr_gpr: iomuxc_lpsr_gpr@40c08000 {
+			compatible = "nxp,imx-gpr";
+			reg = <0x40c08000 0x4000>;
+			label = "IOMUX_GPR";
+			#pinmux-cells = <2>;
 		};
 
 		lcdif: display-controller@40804000 {
@@ -495,7 +545,7 @@
 			reg = <0x40098000 0x4000>;
 			interrupts = <31 0>;
 			clocks = <&ccm IMX_CCM_LPUART12_CLK 0x80 14>;
-			label = "UART_8";
+			label = "UART_12";
 			status = "disabled";
 		};
 
@@ -691,7 +741,7 @@
 			status = "disabled";
 			label = "ETH_0";
 			phy-addr = <2>;
-			ptp {
+			ptp: ptp {
 				compatible = "nxp,kinetis-ptp";
 				status = "disabled";
 				interrupts = <138 0>;
@@ -704,6 +754,7 @@
 			reg = <0x40430000 0x200>;
 			interrupts = <136 1>;
 			interrupt-names = "usb_otg";
+			clocks = <&xtal>;
 			num-bidir-endpoints = <8>;
 			maximum-speed = "full-speed";
 			status = "disabled";
@@ -715,6 +766,7 @@
 			reg = <0x4042c000 0x200>;
 			interrupts = <135 1>;
 			interrupt-names = "usb_otg";
+			clocks = <&xtal>;
 			num-bidir-endpoints = <8>;
 			maximum-speed = "full-speed";
 			status = "disabled";
@@ -888,8 +940,8 @@
 		};
 
 		iomuxcgpr: iomuxcgpr@400e4000 {
-			compatible = "nxp,imx-pinmux";
-			reg = <0x400E4000 0x4000>;
+			compatible = "nxp,imx-gpr";
+			reg = <0x400e4000 0x4000>;
 			label = "IOMUX_GPR";
 			#pinmux-cells = <2>;
 		};

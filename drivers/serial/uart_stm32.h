@@ -28,6 +28,8 @@ struct uart_stm32_config {
 	int  parity;
 	/* switch to enable single wire / half duplex feature */
 	bool single_wire;
+	/* enable tx/rx pin swap */
+	bool tx_rx_swap;
 	const struct pinctrl_dev_config *pcfg;
 #if defined(CONFIG_UART_INTERRUPT_DRIVEN) || defined(CONFIG_UART_ASYNC_API) || \
 	defined(CONFIG_PM)
@@ -78,7 +80,7 @@ struct uart_stm32_data {
 #ifdef CONFIG_PM
 	bool tx_poll_stream_on;
 	bool tx_int_stream_on;
-	bool pm_constraint_on;
+	bool pm_policy_state_on;
 #endif
 };
 

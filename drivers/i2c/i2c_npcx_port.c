@@ -12,7 +12,7 @@
  *
  * This file contains the driver of SMBus/I2C buses (ports) which provides
  * pin-muxing for each i2c io-pads. In order to support "SMBus Multi-Bus"
- * feature, please refer the diagram below, the driver alsp provides connection
+ * feature, please refer the diagram below, the driver also provides connection
  * between Zephyr i2c api functions and i2c controller driver which provides
  * full support for SMBus/I2C transactions.
  *
@@ -166,7 +166,7 @@ static const struct i2c_driver_api i2c_port_npcx_driver_api = {
 			    i2c_npcx_port_init,                                \
 			    NULL, NULL,                                        \
 			    &i2c_npcx_port_cfg_##inst,                         \
-			    PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,  \
+			    PRE_KERNEL_1, CONFIG_I2C_INIT_PRIORITY,            \
 			    &i2c_port_npcx_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(NPCX_I2C_PORT_INIT)

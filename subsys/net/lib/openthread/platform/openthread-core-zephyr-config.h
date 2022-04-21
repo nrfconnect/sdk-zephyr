@@ -13,7 +13,6 @@
 #ifndef OPENTHREAD_CORE_ZEPHYR_CONFIG_H_
 #define OPENTHREAD_CORE_ZEPHYR_CONFIG_H_
 
-#include <autoconf.h>
 #include <devicetree.h>
 #include <toolchain.h>
 
@@ -223,7 +222,7 @@
  */
 #define OPENTHREAD_CONFIG_HEAP_INTERNAL_SIZE_NO_DTLS (4 * sizeof(void *))
 
-/* Disable software srouce address matching. */
+/* Disable software source address matching. */
 
 /**
  * @def RADIO_CONFIG_SRC_MATCH_SHORT_ENTRY_NUM
@@ -293,17 +292,6 @@
 #define OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE \
 	CONFIG_OPENTHREAD_RADIO_LINK_TREL_ENABLE
 #endif /* CONFIG_OPENTHREAD_RADIO_LINK_TREL_ENABLE */
-
-/**
- * @def OPENTHREAD_CONFIG_CSL_SAMPLE_WINDOW
- *
- * CSL sample window in units of 10 symbols.
- *
- */
-#ifdef CONFIG_OPENTHREAD_CSL_SAMPLE_WINDOW
-#define OPENTHREAD_CONFIG_CSL_SAMPLE_WINDOW \
-	CONFIG_OPENTHREAD_CSL_SAMPLE_WINDOW
-#endif /* CONFIG_OPENTHREAD_CSL_SAMPLE_WINDOW */
 
 /**
  * @def OPENTHREAD_CONFIG_CSL_RECEIVE_TIME_AHEAD

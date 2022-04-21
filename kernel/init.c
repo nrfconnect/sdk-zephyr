@@ -245,7 +245,7 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 
 	main();
 
-	/* Mark nonessenrial since main() has no more work to do */
+	/* Mark nonessential since main() has no more work to do */
 	z_main_thread.base.user_options &= ~K_ESSENTIAL;
 
 #ifdef CONFIG_COVERAGE_DUMP
@@ -262,9 +262,14 @@ static void init_idle_thread(int i)
 	k_thread_stack_t *stack = z_idle_stacks[i];
 
 #ifdef CONFIG_THREAD_NAME
-	char tname[8];
 
+#if CONFIG_MP_NUM_CPUS > 1
+	char tname[8];
 	snprintk(tname, 8, "idle %02d", i);
+#else
+	char *tname = "idle";
+#endif
+
 #else
 	char *tname = NULL;
 #endif /* CONFIG_THREAD_NAME */
@@ -361,12 +366,11 @@ static FUNC_NORETURN void switch_to_main_thread(char *stack_ptr)
 __boot_func
 void z_early_boot_rand_get(uint8_t *buf, size_t length)
 {
-	int n = sizeof(uint32_t);
 #ifdef CONFIG_ENTROPY_HAS_DRIVER
-	const struct device *entropy = device_get_binding(DT_CHOSEN_ZEPHYR_ENTROPY_LABEL);
+	const struct device *entropy = DEVICE_DT_GET_OR_NULL(DT_CHOSEN(zephyr_entropy));
 	int rc;
 
-	if (entropy == NULL) {
+	if (!device_is_ready(entropy)) {
 		goto sys_rand_fallback;
 	}
 
@@ -394,25 +398,7 @@ sys_rand_fallback:
 	 * devices are available should be built, this is only a fallback for
 	 * those devices without a HWRNG entropy driver.
 	 */
-
-	while (length > 0U) {
-		uint32_t rndbits;
-		uint8_t *p_rndbits = (uint8_t *)&rndbits;
-
-		rndbits = sys_rand32_get();
-
-		if (length < sizeof(uint32_t)) {
-			n = length;
-		}
-
-		for (int i = 0; i < n; i++) {
-			*buf = *p_rndbits;
-			buf++;
-			p_rndbits++;
-		}
-
-		length -= n;
-	}
+	sys_rand_get(buf, length);
 }
 /* defined(CONFIG_ENTROPY_HAS_DRIVER) || defined(CONFIG_TEST_RANDOM_GENERATOR) */
 #endif

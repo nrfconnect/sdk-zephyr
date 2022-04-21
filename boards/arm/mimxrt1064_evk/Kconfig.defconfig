@@ -43,6 +43,9 @@ if NETWORKING
 config NET_L2_ETHERNET
 	default y
 
+config ETH_MCUX_PHY_RESET
+	default y
+
 endif # NETWORKING
 
 if LVGL
@@ -65,7 +68,7 @@ config LV_Z_VDB_SIZE
 config LV_Z_DPI
 	default 128
 
-choice LV_COLOR_DEPTH_BITS
+choice LV_COLOR_DEPTH
 	default LV_COLOR_DEPTH_16
 endchoice
 

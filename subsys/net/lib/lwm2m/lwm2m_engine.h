@@ -129,7 +129,10 @@ int lwm2m_register_payload_handler(struct lwm2m_message *msg);
 int lwm2m_perform_read_op(struct lwm2m_message *msg, uint16_t content_format);
 
 int lwm2m_perform_composite_read_op(struct lwm2m_message *msg, uint16_t content_format,
-				    sys_slist_t *lwm_path_list);
+				    sys_slist_t *lwm2m_path_list);
+
+int lwm2m_perform_composite_observation_op(struct lwm2m_message *msg, uint8_t *token,
+					   uint8_t token_length, sys_slist_t *lwm2m_path_list);
 
 int lwm2m_write_handler(struct lwm2m_engine_obj_inst *obj_inst,
 			struct lwm2m_engine_res *res,
@@ -162,6 +165,10 @@ int lwm2m_security_index_to_inst_id(int index);
 int32_t lwm2m_server_get_pmin(uint16_t obj_inst_id);
 int32_t lwm2m_server_get_pmax(uint16_t obj_inst_id);
 int lwm2m_server_short_id_to_inst(uint16_t short_id);
+
+#if defined(CONFIG_LWM2M_SERVER_OBJECT_VERSION_1_1)
+bool lwm2m_server_get_mute_send(uint16_t obj_inst_id);
+#endif
 
 #if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT)
 void lwm2m_firmware_set_update_state_inst(uint16_t obj_inst_id, uint8_t state);

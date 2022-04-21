@@ -91,7 +91,7 @@ static void send_cmd_status(uint16_t opcode, uint8_t status)
 	evt->opcode = sys_cpu_to_le16(opcode);
 	evt->status = status;
 
-	if (IS_ENABLED(CONFIG_BT_RECV_IS_RX_THREAD)) {
+	if (IS_ENABLED(CONFIG_BT_RECV_BLOCKING)) {
 		bt_recv_prio(buf);
 	} else {
 		bt_recv(buf);
@@ -358,4 +358,9 @@ void bt_hci_ecc_init(void)
 			K_KERNEL_STACK_SIZEOF(ecc_thread_stack), ecc_thread,
 			NULL, NULL, NULL, K_PRIO_PREEMPT(10), 0, K_NO_WAIT);
 	k_thread_name_set(&ecc_thread_data, "BT ECC");
+}
+
+void bt_hci_ecc_deinit(void)
+{
+	k_thread_abort(&ecc_thread_data);
 }
