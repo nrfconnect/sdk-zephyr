@@ -42,17 +42,16 @@ os_mgmt_echo(struct mgmt_ctxt *ctxt)
 		}
 	};
 
-	echo_buf[0] = '\0';
+	echo_buf[CONFIG_OS_MGMT_ECHO_LENGTH] = '\0';
 
 	err = cbor_read_object(&ctxt->it, attrs);
 	if (err != 0) {
 		return MGMT_ERR_EINVAL;
 	}
 
-	echo_buf[sizeof(echo_buf) - 1] = '\0';
-
 	err = cbor_encode_text_stringz(&ctxt->encoder, "r")				||
-	      cbor_encode_text_stringz(&ctxt->encoder, echo_buf);
+	      cbor_encode_text_string(&ctxt->encoder, echo_buf,
+				      strnlen(echo_buf, CONFIG_OS_MGMT_ECHO_LENGTH));
 
 	return (err == 0) ? 0 : MGMT_ERR_ENOMEM;
 }
