@@ -194,14 +194,11 @@ out:
 
 /* OpenThread APIs */
 
-void otPlatSettingsInit(otInstance *aInstance, const uint16_t *aSensitiveKeys,
-			uint16_t aSensitiveKeysLength)
+void otPlatSettingsInit(otInstance *aInstance)
 {
 	int ret;
 
 	ARG_UNUSED(aInstance);
-	ARG_UNUSED(aSensitiveKeys);
-	ARG_UNUSED(aSensitiveKeysLength);
 
 	ret = settings_subsys_init();
 	if (ret != 0) {
