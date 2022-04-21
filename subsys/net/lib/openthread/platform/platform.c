@@ -21,8 +21,8 @@ void otSysInit(int argc, char *argv[])
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
 
-	platformRadioInit();
 	platformAlarmInit();
+	platformRadioInit();
 }
 
 void otSysProcessDrivers(otInstance *aInstance)
