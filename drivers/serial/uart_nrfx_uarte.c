@@ -854,7 +854,8 @@ static void notify_uart_rx_rdy(const struct device *dev, size_t len)
 	user_callback(dev, &evt);
 }
 
-static void rx_buf_release(const struct device *dev, uint8_t **buf)
+static void notify_rx_buf_release(const struct device *dev,
+				  uint8_t **buf, bool clear)
 {
 	if (*buf) {
 		struct uart_event evt = {
@@ -863,7 +864,9 @@ static void rx_buf_release(const struct device *dev, uint8_t **buf)
 		};
 
 		user_callback(dev, &evt);
-		*buf = NULL;
+		if (clear) {
+			*buf = NULL;
+		}
 	}
 }
 
@@ -924,7 +927,8 @@ static int uarte_nrfx_rx_enable(const struct device *dev, uint8_t *buf,
 			if (!len) {
 				data->async->rx_flush_cnt -= cpy_len;
 				notify_uart_rx_rdy(dev, cpy_len);
-				rx_buf_release(dev, &data->async->rx_buf);
+				notify_rx_buf_release(dev, &data->async->rx_buf,
+						      true);
 				notify_rx_disable(dev);
 				return 0;
 			}
@@ -1190,7 +1194,7 @@ static void endrx_isr(const struct device *dev)
 		return;
 	}
 
-	rx_buf_release(dev, &data->async->rx_buf);
+	notify_rx_buf_release(dev, &data->async->rx_buf, false);
 
 	/* If there is a next buffer, then STARTRX will have already been
 	 * invoked by the short (the next buffer will be filling up already)
@@ -1323,8 +1327,8 @@ static void rxto_isr(const struct device *dev)
 	const struct uarte_nrfx_config *config = dev->config;
 	struct uarte_nrfx_data *data = dev->data;
 
-	rx_buf_release(dev, &data->async->rx_buf);
-	rx_buf_release(dev, &data->async->rx_next_buf);
+	notify_rx_buf_release(dev, &data->async->rx_buf, true);
+	notify_rx_buf_release(dev, &data->async->rx_next_buf, true);
 
 	/* If the rx_enabled flag is still set at this point, it means that
 	 * RX is being disabled because all provided RX buffers have been
