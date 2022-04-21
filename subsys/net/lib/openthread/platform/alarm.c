@@ -126,8 +126,3 @@ uint32_t otPlatAlarmMicroGetNow(void)
 {
 	return (uint32_t)(k_ticks_to_us_floor64(k_uptime_ticks()) - time_offset_us);
 }
-
-uint16_t otPlatTimeGetXtalAccuracy(void)
-{
-	return otPlatRadioGetCslAccuracy(NULL);
-}
