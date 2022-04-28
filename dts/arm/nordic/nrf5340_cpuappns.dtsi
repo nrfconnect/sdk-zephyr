@@ -57,6 +57,11 @@
 		label = "CRYPTOCELL_SW";
 		status = "okay";
 	};
+
+	/* Default IPC description */
+	ipc {
+		#include "nrf5340_cpuapp_ipc.dtsi"
+	};
 };
 
 &nvic {
