@@ -37,12 +37,10 @@ LOG_MODULE_REGISTER(flash_nrf);
 
 #define SOC_NV_FLASH_NODE DT_INST(0, soc_nv_flash)
 
-#if CONFIG_ARM_NONSECURE_FIRMWARE && CONFIG_SPM
-#include <secure_services.h>
-#if USE_PARTITION_MANAGER
+#if CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER
+#include <soc_secure.h>
 #include <pm_config.h>
-#endif /* USE_PARTITION_MANAGER */
-#endif /* CONFIG_ARM_NONSECURE_FIRMWARE  && CONFIG_SPM */
+#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER */
 
 #ifndef CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE
 #define FLASH_SLOT_WRITE     7500
@@ -144,10 +142,9 @@ static int flash_nrf_read(const struct device *dev, off_t addr,
 		return 0;
 	}
 
-#if CONFIG_ARM_NONSECURE_FIRMWARE && CONFIG_SPM && USE_PARTITION_MANAGER \
-	&& CONFIG_SPM_SECURE_SERVICES
+#if CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER && PM_APP_ADDRESS
 	if (addr < PM_APP_ADDRESS) {
-		return spm_request_read(data, addr, len);
+		return soc_secure_mem_read(data, (void *)addr, len);
 	}
 #endif
 

@@ -62,6 +62,7 @@ struct can_stm32_data {
 	void *cb_arg[CONFIG_CAN_MAX_FILTER];
 	can_state_change_callback_t state_change_cb;
 	void *state_change_cb_data;
+	enum can_state state;
 };
 
 struct can_stm32_config {
@@ -76,6 +77,8 @@ struct can_stm32_config {
 	struct stm32_pclken pclken;
 	void (*config_irq)(CAN_TypeDef *can);
 	const struct pinctrl_dev_config *pcfg;
+	const struct device *phy;
+	uint32_t max_bitrate;
 };
 
 #endif /*ZEPHYR_DRIVERS_CAN_STM32_CAN_H_*/

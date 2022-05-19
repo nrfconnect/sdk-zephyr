@@ -5,6 +5,7 @@
  */
 
 #include <drivers/can.h>
+#include <drivers/can/transceiver.h>
 #include <drivers/clock_control/stm32_clock_control.h>
 #include <drivers/clock_control.h>
 #include <drivers/pinctrl.h>
@@ -46,18 +47,6 @@ static int can_stm32h7_get_core_clock(const struct device *dev, uint32_t *rate)
 	LOG_DBG("rate=%d", *rate);
 
 	return 0;
-}
-
-static int can_stm32h7_get_max_filters(const struct device *dev,
-				       enum can_ide id_type)
-{
-	ARG_UNUSED(dev);
-
-	if (id_type == CAN_STANDARD_IDENTIFIER) {
-		return NUM_STD_FILTER_DATA;
-	} else {
-		return NUM_EXT_FILTER_DATA;
-	}
 }
 
 static int can_stm32h7_clock_enable(const struct device *dev)
@@ -178,6 +167,24 @@ static int can_stm32h7_set_timing(const struct device *dev,
 	return can_mcan_set_timing(&cfg->mcan_cfg, timing, timing_data);
 }
 
+static int can_stm32h7_get_max_bitrate(const struct device *dev, uint32_t *max_bitrate)
+{
+	const struct can_stm32h7_config *cfg = dev->config;
+
+	*max_bitrate = cfg->mcan_cfg.max_bitrate;
+
+	return 0;
+}
+
+#ifndef CONFIG_CAN_AUTO_BUS_OFF_RECOVERY
+static int can_stm32h7_recover(const struct device *dev, k_timeout_t timeout)
+{
+	const struct can_stm32h7_config *cfg = dev->config;
+
+	return can_mcan_recover(&cfg->mcan_cfg, timeout);
+}
+#endif /* CONFIG_CAN_AUTO_BUS_OFF_RECOVERY */
+
 static void can_stm32h7_line_0_isr(const struct device *dev)
 {
 	const struct can_stm32h7_config *cfg = dev->config;
@@ -202,10 +209,11 @@ static const struct can_driver_api can_api_funcs = {
 	.remove_rx_filter = can_stm32h7_remove_rx_filter,
 	.get_state = can_stm32h7_get_state,
 #ifndef CONFIG_CAN_AUTO_BUS_OFF_RECOVERY
-	.recover = can_mcan_recover,
+	.recover = can_stm32h7_recover,
 #endif
 	.get_core_clock = can_stm32h7_get_core_clock,
-	.get_max_filters = can_stm32h7_get_max_filters,
+	.get_max_bitrate = can_stm32h7_get_max_bitrate,
+	.get_max_filters = can_mcan_get_max_filters,
 	.set_state_change_callback = can_stm32h7_set_state_change_cb,
 	/* Timing limits are per the STM32H7 Reference Manual (RM0433 Rev 7),
 	 * section 56.5.7, FDCAN nominal bit timing and prescaler register
@@ -265,7 +273,9 @@ static const struct can_driver_api can_api_funcs = {
 			DT_INST_PROP_OR(n, phase_seg1_data, 0),		\
 		.ts2_data = DT_INST_PROP_OR(n, phase_seg2_data, 0),	\
 		.tx_delay_comp_offset =					\
-			DT_INST_PROP(n, tx_delay_comp_offset)		\
+			DT_INST_PROP(n, tx_delay_comp_offset),		\
+		.phy = DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(n, phys)),	\
+		.max_bitrate = DT_INST_CAN_TRANSCEIVER_MAX_BITRATE(n, 5000000), \
 	}
 #else /* CONFIG_CAN_FD_MODE */
 #define CAN_STM32H7_MCAN_MCAN_INIT(n)					\
@@ -277,6 +287,8 @@ static const struct can_driver_api can_api_funcs = {
 		.prop_ts1 = DT_INST_PROP_OR(n, prop_seg, 0) +		\
 			DT_INST_PROP_OR(n, phase_seg1, 0),		\
 		.ts2 = DT_INST_PROP_OR(n, phase_seg2, 0),		\
+		.phy = DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(n, phys)),	\
+		.max_bitrate = DT_INST_CAN_TRANSCEIVER_MAX_BITRATE(n, 1000000), \
 	}
 #endif /* !CONFIG_CAN_FD_MODE */
 

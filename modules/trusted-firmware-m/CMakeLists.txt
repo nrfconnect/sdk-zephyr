@@ -12,6 +12,7 @@ set(TFM_VALID_PARTITIONS
   TFM_PARTITION_INITIAL_ATTESTATION
   TFM_PARTITION_PLATFORM
   TFM_PARTITION_AUDIT_LOG
+  TFM_PARTITION_FIRMWARE_UPDATE
   )
 
 # List of all crypto modules that can be enabled/disabled
@@ -162,9 +163,11 @@ if (CONFIG_BUILD_WITH_TFM)
   endif()
 
   if(CONFIG_TFM_BL2)
+    set(BL2_ELF_FILE ${TFM_BINARY_DIR}/bin/bl2.elf)
     set(BL2_BIN_FILE ${TFM_BINARY_DIR}/bin/bl2.bin)
     set(BL2_HEX_FILE ${TFM_BINARY_DIR}/bin/bl2.hex)
   endif()
+  set(TFM_S_ELF_FILE ${TFM_BINARY_DIR}/bin/tfm_s.elf)
   set(TFM_S_BIN_FILE ${TFM_BINARY_DIR}/bin/tfm_s.bin)
   set(TFM_S_HEX_FILE ${TFM_BINARY_DIR}/bin/tfm_s.hex)
   set(TFM_NS_BIN_FILE ${TFM_BINARY_DIR}/bin/tfm_ns.bin)
@@ -181,8 +184,10 @@ if (CONFIG_BUILD_WITH_TFM)
     ${PSA_TEST_PAL_FILE}
     ${PSA_TEST_COMBINE_FILE}
     ${PLATFORM_NS_FILE}
+    ${BL2_ELF_FILE}
     ${BL2_BIN_FILE}
     ${BL2_HEX_FILE}
+    ${TFM_S_ELF_FILE}
     ${TFM_S_BIN_FILE}
     ${TFM_S_HEX_FILE}
     ${TFM_NS_BIN_FILE}
@@ -222,6 +227,10 @@ if (CONFIG_BUILD_WITH_TFM)
     list(APPEND TFM_CMAKE_ARGS -DMCUBOOT_PATH=${ZEPHYR_MCUBOOT_MODULE_DIR})
   endif()
 
+  if(CONFIG_TFM_MCUBOOT_DATA_SHARING)
+    list(APPEND TFM_CMAKE_ARGS -DMCUBOOT_DATA_SHARING=ON)
+  endif()
+
   if(TFM_PSA_TEST_SUITE)
     list(APPEND TFM_CMAKE_ARGS
       -DPSA_TOOLCHAIN_FILE=${CMAKE_CURRENT_LIST_DIR}/psa/GNUARM.cmake
@@ -241,7 +250,6 @@ if (CONFIG_BUILD_WITH_TFM)
       -DCROSS_COMPILE=${TFM_TOOLCHAIN_PATH}/${TFM_TOOLCHAIN_PREFIX}
       -DCMAKE_BUILD_TYPE=${TFM_CMAKE_BUILD_TYPE}
       -DTFM_PLATFORM=${CONFIG_TFM_BOARD}
-	  -DCRYPTO_HW_ACCELERATOR=True
       ${TFM_CMAKE_ARGS}
       $<GENEX_EVAL:$<TARGET_PROPERTY:zephyr_property_target,TFM_CMAKE_OPTIONS>>
       -DTFM_TEST_REPO_PATH=${ZEPHYR_TF_M_TESTS_MODULE_DIR}
@@ -288,6 +296,7 @@ if (CONFIG_BUILD_WITH_TFM)
   # These files are produced by the TFM build system.
   if(CONFIG_TFM_BL2)
     set_target_properties(tfm PROPERTIES
+      BL2_ELF_FILE ${BL2_ELF_FILE}
       BL2_BIN_FILE ${BL2_BIN_FILE}
       BL2_HEX_FILE ${BL2_HEX_FILE}
       )
@@ -298,6 +307,7 @@ if (CONFIG_BUILD_WITH_TFM)
   # Note that the Nonsecure FW is replaced by the Zephyr app in regular Zephyr
   # builds.
   set_target_properties(tfm PROPERTIES
+    TFM_S_ELF_FILE ${TFM_S_ELF_FILE}
     TFM_S_BIN_FILE ${TFM_S_BIN_FILE} # TFM Secure FW (unsigned)
     TFM_S_HEX_FILE ${TFM_S_HEX_FILE} # TFM Secure FW (unsigned)
     TFM_NS_BIN_FILE ${TFM_NS_BIN_FILE} # TFM Nonsecure FW (unsigned)
@@ -337,15 +347,6 @@ if (CONFIG_BUILD_WITH_TFM)
   # To ensure that generated include files are created before they are used.
   add_dependencies(zephyr_interface tfm)
 
-  # Set default image versions if not defined elsewhere
-  if (NOT DEFINED TFM_IMAGE_VERSION_S)
-    set(TFM_IMAGE_VERSION_S 0.0.0+0)
-  endif()
-
-  if (NOT DEFINED TFM_IMAGE_VERSION_NS)
-    set(TFM_IMAGE_VERSION_NS 0.0.0+0)
-  endif()
-
   if (CONFIG_TFM_BL2)
     set(PREPROCESSED_FILE_S "${TFM_BINARY_DIR}/bl2/ext/mcuboot/CMakeFiles/signing_layout_s.dir/signing_layout_s.o")
     set(PREPROCESSED_FILE_NS "${TFM_BINARY_DIR}/bl2/ext/mcuboot/CMakeFiles/signing_layout_ns.dir/signing_layout_ns.o")
@@ -380,7 +381,7 @@ if (CONFIG_BUILD_WITH_TFM)
       -k ${CONFIG_TFM_KEY_FILE_${SUFFIX}}
       --public-key-format ${TFM_PUBLIC_KEY_FORMAT}
       --align 1
-      -v ${TFM_IMAGE_VERSION_${SUFFIX}}
+      -v ${CONFIG_TFM_IMAGE_VERSION_${SUFFIX}}
       ${pad_args}
       ${HEX_ADDR_ARGS_${SUFFIX}}
       ${ADD_${SUFFIX}_IMAGE_MIN_VER}

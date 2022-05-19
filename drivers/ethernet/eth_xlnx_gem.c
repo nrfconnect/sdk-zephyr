@@ -768,7 +768,7 @@ static void eth_xlnx_gem_configure_clocks(const struct device *dev)
 	}
 
 	/*
-	 * Caclculate the divisors for the target frequency.
+	 * Calculate the divisors for the target frequency.
 	 * The frequency of the PLL to which the divisors shall be applied are
 	 * provided in the respective GEM's device tree data.
 	 */
@@ -1634,5 +1634,3 @@ static void eth_xlnx_gem_handle_tx_done(const struct device *dev)
 	/* Indicate completion to a blocking eth_xlnx_gem_send() call */
 	k_sem_give(&dev_data->tx_done_sem);
 }
-
-/* EOF */

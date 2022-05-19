@@ -33,7 +33,7 @@ struct shell_telnet *sh_telnet;
 #define TELNET_MIN_COMMAND_LEN 2
 #define TELNET_WILL_DO_COMMAND_LEN 3
 
-/* Basic TELNET implmentation. */
+/* Basic TELNET implementation. */
 
 static void telnet_end_client_connection(void)
 {
@@ -208,6 +208,8 @@ static void telnet_recv(struct net_context *client,
 	}
 
 	len = net_pkt_remaining_data(pkt);
+
+	(void)net_context_update_recv_wnd(client, len);
 
 	while (len >= TELNET_MIN_COMMAND_LEN) {
 		ret = telnet_handle_command(pkt);

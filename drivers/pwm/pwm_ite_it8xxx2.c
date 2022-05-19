@@ -58,30 +58,31 @@ static void pwm_enable(const struct device *dev, int enabled)
 	volatile uint8_t *reg_pcsgr = (uint8_t *)config->reg_pcsgr;
 	int ch = config->channel;
 
-	if (enabled)
+	if (enabled) {
 		/* PWM channel clock source not gating */
 		*reg_pcsgr &= ~BIT(ch);
-	else
+	} else {
 		/* PWM channel clock source gating */
 		*reg_pcsgr |= BIT(ch);
+	}
 }
 
 static int pwm_it8xxx2_get_cycles_per_sec(const struct device *dev,
-					     uint32_t pwm, uint64_t *cycles)
+					  uint32_t channel, uint64_t *cycles)
 {
-	ARG_UNUSED(pwm);
+	ARG_UNUSED(channel);
 
 	/*
-	 * There are three ways to call pwm_it8xxx2_pin_set() from pwm api:
-	 * 1) pwm_pin_set_usec() -> pwm_pin_set_cycles() -> pwm_it8xxx2_pin_set()
+	 * There are three ways to call pwm_it8xxx2_set_cycles() from pwm api:
+	 * 1) pwm_set_cycles_usec() -> pwm_set_cycles_cycles() -> pwm_it8xxx2_set_cycles()
 	 *    target_freq = pwm_clk_src / period_cycles
 	 *                = cycles / (period * cycles / USEC_PER_SEC)
 	 *                = USEC_PER_SEC / period
-	 * 2) pwm_pin_set_nsec() -> pwm_pin_set_cycles() -> pwm_it8xxx2_pin_set()
+	 * 2) pwm_set_cycles_nsec() -> pwm_set_cycles_cycles() -> pwm_it8xxx2_set_cycles()
 	 *    target_freq = pwm_clk_src / period_cycles
 	 *                = cycles / (period * cycles / NSEC_PER_SEC)
 	 *                = NSEC_PER_SEC / period
-	 * 3) pwm_pin_set_cycles() -> pwm_it8xxx2_pin_set()
+	 * 3) pwm_set_cycles_cycles() -> pwm_it8xxx2_set_cycles()
 	 *    target_freq = pwm_clk_src / period_cycles
 	 *                = cycles / period
 	 *
@@ -94,9 +95,9 @@ static int pwm_it8xxx2_get_cycles_per_sec(const struct device *dev,
 	return 0;
 }
 
-static int pwm_it8xxx2_pin_set(const struct device *dev,
-				uint32_t pwm, uint32_t period_cycles,
-				uint32_t pulse_cycles, pwm_flags_t flags)
+static int pwm_it8xxx2_set_cycles(const struct device *dev,
+				  uint32_t channel, uint32_t period_cycles,
+				  uint32_t pulse_cycles, pwm_flags_t flags)
 {
 	const struct pwm_it8xxx2_cfg *config = dev->config;
 	struct pwm_it8xxx2_regs *const inst = config->base;
@@ -107,19 +108,15 @@ static int pwm_it8xxx2_pin_set(const struct device *dev,
 	uint32_t actual_freq = 0xffffffff, target_freq, deviation, cxcprs, ctr;
 	uint64_t pwm_clk_src;
 
-	ARG_UNUSED(pwm);
-
-	if (pulse_cycles > period_cycles)
-		return -EINVAL;
-
 	/* PWM channel clock source gating before configuring */
 	pwm_enable(dev, 0);
 
 	/* Select PWM inverted polarity (ex. active-low pulse) */
-	if (flags & PWM_POLARITY_INVERTED)
+	if (flags & PWM_POLARITY_INVERTED) {
 		*reg_pwmpol |= BIT(ch);
-	else
+	} else {
 		*reg_pwmpol &= ~BIT(ch);
+	}
 
 	/* If pulse cycles is 0, set duty cycle 0 and enable pwm channel */
 	if (pulse_cycles == 0) {
@@ -128,7 +125,7 @@ static int pwm_it8xxx2_pin_set(const struct device *dev,
 		return 0;
 	}
 
-	pwm_it8xxx2_get_cycles_per_sec(dev, pwm, &pwm_clk_src);
+	pwm_it8xxx2_get_cycles_per_sec(dev, channel, &pwm_clk_src);
 	target_freq = ((uint32_t) pwm_clk_src) / period_cycles;
 
 	/*
@@ -254,7 +251,7 @@ static int pwm_it8xxx2_init(const struct device *dev)
 }
 
 static const struct pwm_driver_api pwm_it8xxx2_api = {
-	.pin_set = pwm_it8xxx2_pin_set,
+	.set_cycles = pwm_it8xxx2_set_cycles,
 	.get_cycles_per_sec = pwm_it8xxx2_get_cycles_per_sec,
 };
 

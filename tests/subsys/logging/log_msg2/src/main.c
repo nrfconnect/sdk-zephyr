@@ -19,15 +19,6 @@
 #include <ztest.h>
 #include <sys/cbprintf.h>
 
-#if defined(CONFIG_ARCH_POSIX)
-/* On some platforms all strings are considered RW, that impacts size of the
- * package.
- */
-#define TEST_LOG_MSG2_RW_STRINGS 1
-#else
-#define TEST_LOG_MSG2_RW_STRINGS 0
-#endif
-
 #if CONFIG_NO_OPTIMIZATIONS
 #define EXP_MODE(name) Z_LOG_MSG2_MODE_RUNTIME
 #else
@@ -168,7 +159,7 @@ void validate_base_message_set(const struct log_source_const_data *source,
 
 	int rv = memcmp(msg0, msg1, sizeof(int) * len0);
 
-	zassert_equal(rv, 0, "Unxecpted memcmp result: %d", rv);
+	zassert_equal(rv, 0, "Unexpected memcmp result: %d", rv);
 
 	/* msg1 is not validated because it should be the same as msg0. */
 	basic_validate(&msg0->log, source, domain, level,
@@ -198,7 +189,7 @@ void test_log_msg2_0_args_msg(void)
 	zassert_equal(mode, EXP_MODE(FROM_STACK), NULL);
 
 	z_log_msg2_runtime_create(domain, source,
-				  level, NULL, 0, TEST_MSG);
+				  level, NULL, 0, 0, TEST_MSG);
 
 	validate_base_message_set(source, domain, level,
 				   TEST_TIMESTAMP_INIT_VALUE,
@@ -231,7 +222,7 @@ void test_log_msg2_various_args(void)
 	zassert_equal(mode, EXP_MODE(FROM_STACK), NULL);
 
 	z_log_msg2_runtime_create(domain, (void *)source, level, NULL,
-				  0, TEST_MSG, s8, u, lld, str, lld, iarray);
+				  0, 0, TEST_MSG, s8, u, lld, str, lld, iarray);
 	snprintfcb(str, sizeof(str), TEST_MSG, s8, u, lld, str, lld, iarray);
 
 	validate_base_message_set(source, domain, level,
@@ -258,7 +249,7 @@ void test_log_msg2_only_data(void)
 	zassert_equal(mode, EXP_MODE(FROM_STACK), NULL);
 
 	z_log_msg2_runtime_create(domain, (void *)source, level, array,
-				  sizeof(array), NULL);
+				  sizeof(array), 0, NULL);
 
 	validate_base_message_set(source, domain, level,
 				   TEST_TIMESTAMP_INIT_VALUE,
@@ -287,7 +278,7 @@ void test_log_msg2_string_and_data(void)
 	zassert_equal(mode, EXP_MODE(FROM_STACK), NULL);
 
 	z_log_msg2_runtime_create(domain, (void *)source, level, array,
-				  sizeof(array), TEST_MSG);
+				  sizeof(array), 0, TEST_MSG);
 
 	validate_base_message_set(source, domain, level,
 				   TEST_TIMESTAMP_INIT_VALUE,
@@ -323,7 +314,7 @@ void test_log_msg2_fp(void)
 			TEST_MSG, i, lli, (double)f, &i, d, source);
 	zassert_equal(mode, EXP_MODE(FROM_STACK), NULL);
 
-	z_log_msg2_runtime_create(domain, (void *)source, level, NULL, 0,
+	z_log_msg2_runtime_create(domain, (void *)source, level, NULL, 0, 0,
 				  TEST_MSG, i, lli, (double)f, &i, d, source);
 	snprintfcb(str, sizeof(str), TEST_MSG, i, lli, (double)f, &i, d, source);
 
@@ -370,11 +361,8 @@ void test_mode_size_plain_string(void)
 	 *
 	 * Message size is rounded up to the required alignment.
 	 */
-	exp_len = sizeof(struct log_msg2_hdr) +
+	exp_len = offsetof(struct log_msg2, data) +
 			 /* package */2 * sizeof(const char *);
-	if (mode == Z_LOG_MSG2_MODE_RUNTIME && TEST_LOG_MSG2_RW_STRINGS) {
-		exp_len += 2 + strlen("test str");
-	}
 
 	exp_len = ROUND_UP(exp_len, Z_LOG_MSG2_ALIGNMENT) / sizeof(int);
 	get_msg_validate_length(exp_len);
@@ -404,7 +392,7 @@ void test_mode_size_data_only(void)
 	 *
 	 * Message size is rounded up to the required alignment.
 	 */
-	exp_len = sizeof(struct log_msg2_hdr) + sizeof(data);
+	exp_len = offsetof(struct log_msg2, data) + sizeof(data);
 	exp_len = ROUND_UP(exp_len, Z_LOG_MSG2_ALIGNMENT) / sizeof(int);
 	get_msg_validate_length(exp_len);
 }
@@ -432,11 +420,8 @@ void test_mode_size_plain_str_data(void)
 	 *
 	 * Message size is rounded up to the required alignment.
 	 */
-	exp_len = sizeof(struct log_msg2_hdr) + sizeof(data) +
+	exp_len = offsetof(struct log_msg2, data) + sizeof(data) +
 		  /* package */2 * sizeof(char *);
-	if (mode == Z_LOG_MSG2_MODE_RUNTIME && TEST_LOG_MSG2_RW_STRINGS) {
-		exp_len += 2 + strlen("test str");
-	}
 	exp_len = ROUND_UP(exp_len, Z_LOG_MSG2_ALIGNMENT) / sizeof(int);
 	get_msg_validate_length(exp_len);
 }
@@ -469,7 +454,7 @@ void test_mode_size_str_with_strings(void)
 	 *
 	 * Message size is rounded up to the required alignment.
 	 */
-	exp_len = sizeof(struct log_msg2_hdr) +
+	exp_len = offsetof(struct log_msg2, data) +
 			 /* package */3 * sizeof(const char *);
 	exp_len = ROUND_UP(exp_len, Z_LOG_MSG2_ALIGNMENT) / sizeof(int);
 
@@ -488,34 +473,30 @@ void test_mode_size_str_with_2strings(void)
 	uint32_t exp_len;
 	int mode;
 	static const char *prefix = "prefix";
+	char sufix[] = "sufix";
 
 	Z_LOG_MSG2_CREATE3(1, mode,
 			   1 /* accept one string pointer*/,
 			   domain, source, level,
-			   NULL, 0, TEST_STR, prefix, "sufix");
-	zassert_equal(mode, EXP_MODE(RUNTIME),
+			   NULL, 0, TEST_STR, prefix, sufix);
+	zassert_equal(mode, EXP_MODE(FROM_STACK),
 			"Unexpected creation mode");
 	Z_LOG_MSG2_CREATE3(0, mode,
 			   1 /* accept one string pointer*/,
 			   domain, source, level,
-			   NULL, 0, TEST_STR, prefix, "sufix");
-	zassert_equal(mode, EXP_MODE(RUNTIME),
+			   NULL, 0, TEST_STR, prefix, sufix);
+	zassert_equal(mode, EXP_MODE(FROM_STACK),
 			"Unexpected creation mode");
 
 	/* Calculate expected message length. Message consists of:
 	 * - header
-	 * - package: header + fmt pointer + 2 pointers (on some platforms
-	 *   strings are included in the package)
+	 * - package: header + fmt pointer + 2 pointers
+	 * - index location of read only string
 	 *
 	 * Message size is rounded up to the required alignment.
 	 */
-	exp_len = sizeof(struct log_msg2_hdr) +
-			 /* package */4 * sizeof(const char *);
-	if (TEST_LOG_MSG2_RW_STRINGS) {
-		exp_len += strlen("sufix") + 2 /* null + header */ +
-			  strlen(prefix) + 2 /* null + header */+
-			  strlen(TEST_STR) + 2 /* null + header */;
-	}
+	exp_len = offsetof(struct log_msg2, data) +
+			 /* package */4 * sizeof(const char *) + 2 + strlen(sufix);
 
 	exp_len = ROUND_UP(exp_len, Z_LOG_MSG2_ALIGNMENT) / sizeof(int);
 
@@ -535,7 +516,7 @@ void test_saturate(void)
 	}
 
 	uint32_t exp_len =
-		ROUND_UP(sizeof(struct log_msg2_hdr) + 2 * sizeof(void *),
+		ROUND_UP(offsetof(struct log_msg2, data) + 2 * sizeof(void *),
 			 Z_LOG_MSG2_ALIGNMENT);
 	uint32_t exp_capacity = (CONFIG_LOG_BUFFER_SIZE - 1) / exp_len;
 	int mode;
@@ -554,7 +535,7 @@ void test_saturate(void)
 	/* Message should not fit in and be dropped. */
 	Z_LOG_MSG2_CREATE3(1, mode, 0, 0, (void *)1, 2, NULL, 0, "test");
 	Z_LOG_MSG2_CREATE3(0, mode, 0, 0, (void *)1, 2, NULL, 0, "test");
-	z_log_msg2_runtime_create(0, (void *)1, 2, NULL, 0, "test");
+	z_log_msg2_runtime_create(0, (void *)1, 2, NULL, 0, 0, "test");
 
 	zassert_equal(z_log_dropped_read_and_clear(), 3, "No dropped messages.");
 

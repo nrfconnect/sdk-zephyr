@@ -202,7 +202,7 @@ error:
  * First we signal the module that we want to send data over a socket.
  * This is done by sending AT+CASEND=<sockfd>,<nbytes>\r\n.
  * If The module is ready to send data it will send back
- * an UNTERMINATED promt '> '. After that data can be sent to the modem.
+ * an UNTERMINATED prompt '> '. After that data can be sent to the modem.
  * As terminating byte a STRG+Z (0x1A) is sent. The module will
  * then send a OK or ERROR.
  */
@@ -746,6 +746,21 @@ static struct net_if_api api_funcs = {
 
 static bool offload_is_supported(int family, int type, int proto)
 {
+	if (family != AF_INET &&
+	    family != AF_INET6) {
+		return false;
+	}
+
+	if (type != SOCK_DGRAM &&
+	    type != SOCK_STREAM) {
+		return false;
+	}
+
+	if (proto != IPPROTO_TCP &&
+	    proto != IPPROTO_UDP) {
+		return false;
+	}
+
 	return true;
 }
 
@@ -918,7 +933,7 @@ MODEM_CMD_DEFINE(on_urc_ftpget)
 }
 
 /*
- * Read manufacurer identification.
+ * Read manufacturer identification.
  */
 MODEM_CMD_DEFINE(on_cmd_cgmi)
 {
@@ -1283,7 +1298,7 @@ static int modem_autobaud(void)
  * Get the next parameter from the gnss phrase.
  *
  * @param src The source string supported on first call.
- * @param delim The delimeter of the parameter list.
+ * @param delim The delimiter of the parameter list.
  * @param saveptr Pointer for subsequent parses.
  * @return On success a pointer to the parameter. On failure
  *         or end of string NULL is returned.
@@ -1873,7 +1888,7 @@ static int mdm_decode_pdu(const char *pdu, size_t pdu_len, struct sim7080_sms *t
 		return -1;
 	}
 
-	/* read protocol idenifier */
+	/* read protocol identifier */
 	target_buf->tp_pid = mdm_pdu_read_byte(pdu, index++);
 
 	if (index >= pdu_len) {
@@ -2380,5 +2395,5 @@ NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, NULL, &mdata, NULL,
 				  CONFIG_MODEM_SIMCOM_SIM7080_INIT_PRIORITY, &api_funcs,
 				  MDM_MAX_DATA_LENGTH);
 
-NET_SOCKET_REGISTER(simcom_sim7080, MDM_SOCKET_PRIO, AF_UNSPEC, offload_is_supported,
-		    offload_socket);
+NET_SOCKET_REGISTER(simcom_sim7080, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY, AF_UNSPEC,
+		    offload_is_supported, offload_socket);

@@ -8,7 +8,6 @@
 #include "zephyr/types.h"
 #include "ztest.h"
 #include <stdlib.h>
-#include "kconfig.h"
 
 #include <bluetooth/hci.h>
 #include <sys/slist.h>
@@ -40,9 +39,9 @@
 #include "helper_util.h"
 
 static uint32_t event_active;
-static uint16_t lazy;
 sys_slist_t ut_rx_q;
 static sys_slist_t lt_tx_q;
+static uint32_t no_of_ctx_buffers_at_test_setup;
 
 #define PDU_DC_LL_HEADER_SIZE (offsetof(struct pdu_data, lldata))
 #define NODE_RX_HEADER_SIZE (offsetof(struct node_rx_pdu, pdu))
@@ -193,6 +192,11 @@ void test_print_conn(struct ll_conn *conn)
 	printf("--------------------->\n");
 }
 
+uint16_t test_ctx_buffers_cnt(void)
+{
+	return no_of_ctx_buffers_at_test_setup;
+}
+
 void test_setup(struct ll_conn *conn)
 {
 	ull_conn_init();
@@ -218,7 +222,8 @@ void test_setup(struct ll_conn *conn)
 	ll_reset();
 	conn->lll.event_counter = 0;
 	event_active = 0;
-	lazy = 0;
+
+	no_of_ctx_buffers_at_test_setup = ctx_buffers_free();
 }
 
 
@@ -253,9 +258,6 @@ void event_prepare(struct ll_conn *conn)
 	lll->event_counter = event_counter + 1;
 
 	lll->latency_prepare = 0;
-
-	/* Rest lazy */
-	lazy = 0;
 }
 
 void event_tx_ack(struct ll_conn *conn, struct node_tx *tx)
@@ -282,15 +284,10 @@ void event_done(struct ll_conn *conn)
 
 uint16_t event_counter(struct ll_conn *conn)
 {
-	/* TODO(thoh): Mocked lll_conn */
-	struct lll_conn *lll;
 	uint16_t event_counter;
 
-	/**/
-	lll = &conn->lll;
-
 	/* Calculate current event counter */
-	event_counter = lll->event_counter + lll->latency_prepare + lazy;
+	event_counter = ull_conn_event_counter(conn);
 
 	/* If event_counter is called inside an event_prepare()/event_done() pair
 	 * return the current event counter value (i.e. -1);
@@ -320,6 +317,17 @@ void lt_tx_real(const char *file, uint32_t line, enum helper_pdu_opcode opcode,
 	zassert_not_null(helper_pdu_encode[opcode], "PDU encode function cannot be NULL\n");
 	helper_pdu_encode[opcode](pdu, param);
 
+	sys_slist_append(&lt_tx_q, (sys_snode_t *)rx);
+}
+
+void lt_tx_real_no_encode(const char *file, uint32_t line, struct pdu_data *pdu,
+			  struct ll_conn *conn, void *param)
+{
+	struct node_rx_pdu *rx;
+
+	rx = malloc(PDU_RX_NODE_SIZE);
+	zassert_not_null(rx, "Out of memory.\nCalled at %s:%d\n", file, line);
+	memcpy((struct pdu_data *)rx->pdu, pdu, sizeof(struct pdu_data));
 	sys_slist_append(&lt_tx_q, (sys_snode_t *)rx);
 }
 
@@ -395,4 +403,10 @@ void ut_rx_q_is_empty_real(const char *file, uint32_t line)
 
 	ntf = (struct node_rx_pdu *)sys_slist_get(&ut_rx_q);
 	zassert_is_null(ntf, "Ntf Q not empty.\nCalled at %s:%d\n", file, line);
+}
+
+void encode_pdu(enum helper_pdu_opcode opcode, struct pdu_data *pdu, void *param)
+{
+	zassert_not_null(helper_pdu_encode[opcode], "PDU encode function cannot be NULL\n");
+	helper_pdu_encode[opcode](pdu, param);
 }

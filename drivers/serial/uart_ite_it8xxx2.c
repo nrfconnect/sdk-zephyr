@@ -11,12 +11,11 @@
 #include <drivers/uart.h>
 #include <kernel.h>
 #include <pm/device.h>
-#include <pm/pm.h>
 #include <pm/policy.h>
 #include <soc.h>
 
 #include <logging/log.h>
-LOG_MODULE_REGISTER(uart_ite_it8xxx2, LOG_LEVEL_ERR);
+LOG_MODULE_REGISTER(uart_ite_it8xxx2, CONFIG_UART_LOG_LEVEL);
 
 #if defined(CONFIG_PM_DEVICE) && defined(CONFIG_UART_CONSOLE_INPUT_EXPIRED)
 static struct uart_it8xxx2_data *uart_console_data;
@@ -57,7 +56,7 @@ void uart1_wui_isr(const struct device *gpio, struct gpio_callback *cb,
 	 * The pm state of it8xxx2 chip only supports standby, so here we
 	 * can directly set the constraint for standby.
 	 */
-	pm_constraint_set(PM_STATE_STANDBY);
+	pm_policy_state_lock_get(PM_STATE_STANDBY);
 	k_work_reschedule(&uart_console_data->rx_refresh_timeout_work, delay);
 #endif
 }
@@ -77,7 +76,7 @@ void uart2_wui_isr(const struct device *gpio, struct gpio_callback *cb,
 	 * The pm state of it8xxx2 chip only supports standby, so here we
 	 * can directly set the constraint for standby.
 	 */
-	pm_constraint_set(PM_STATE_STANDBY);
+	pm_policy_state_lock_get(PM_STATE_STANDBY);
 	k_work_reschedule(&uart_console_data->rx_refresh_timeout_work, delay);
 #endif
 }
@@ -97,7 +96,7 @@ static inline int uart_it8xxx2_pm_action(const struct device *dev,
 	case PM_DEVICE_ACTION_SUSPEND:
 		/* Enable UART WUI */
 		ret = gpio_pin_interrupt_configure_dt(&config->gpio_wui,
-						      GPIO_INT_TRIG_LOW);
+						      GPIO_INT_MODE_EDGE | GPIO_INT_TRIG_LOW);
 		if (ret < 0) {
 			LOG_ERR("Failed to configure UART%d WUI (ret %d)",
 				config->port, ret);
@@ -117,7 +116,7 @@ static void uart_it8xxx2_rx_refresh_timeout(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
-	pm_constraint_release(PM_STATE_STANDBY);
+	pm_policy_state_lock_put(PM_STATE_STANDBY);
 }
 #endif
 #endif /* CONFIG_PM_DEVICE */

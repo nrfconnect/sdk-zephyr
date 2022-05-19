@@ -910,6 +910,7 @@ static const struct fs_file_system_t littlefs_fs = {
 
 #define DT_DRV_COMPAT zephyr_fstab_littlefs
 #define FS_PARTITION(inst) DT_PHANDLE_BY_IDX(DT_DRV_INST(inst), partition, 0)
+#define FS_PARTITION_LABEL(inst) DT_STRING_TOKEN(FS_PARTITION(inst), label)
 
 #define DEFINE_FS(inst) \
 static uint8_t __aligned(4) \
@@ -946,7 +947,7 @@ struct fs_mount_t FS_FSTAB_ENTRY(DT_DRV_INST(inst)) = { \
 	  COND_CODE_1(FLASH_AREA_LABEL_EXISTS(littlefs_storage), \
 		      (FLASH_AREA_ID(littlefs_storage)), \
 		      (FLASH_AREA_ID(storage))) :\
-	  DT_FIXED_PARTITION_ID(FS_PARTITION(inst))), \
+	  FLASH_AREA_ID(FS_PARTITION_LABEL(inst))), \
 	.flags = FSTAB_ENTRY_DT_MOUNT_FLAGS(DT_DRV_INST(inst)), \
 };
 

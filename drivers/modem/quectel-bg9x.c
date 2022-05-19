@@ -930,7 +930,7 @@ static const struct setup_cmd setup_cmds[] = {
 /* Func: modem_pdp_context_active
  * Desc: This helper function is called from modem_setup, and is
  * used to open the PDP context. If there is trouble activating the
- * PDP context, we try to deactive and reactive MDM_PDP_ACT_RETRY_COUNT times.
+ * PDP context, we try to deactivate and reactivate MDM_PDP_ACT_RETRY_COUNT times.
  * If it fails, we return an error.
  */
 static int modem_pdp_context_activate(void)
@@ -1085,6 +1085,19 @@ static struct net_if_api api_funcs = {
 
 static bool offload_is_supported(int family, int type, int proto)
 {
+	if (family != AF_INET &&
+	    family != AF_INET6) {
+		return false;
+	}
+
+	if (type != SOCK_STREAM) {
+		return false;
+	}
+
+	if (proto != IPPROTO_TCP) {
+		return false;
+	}
+
 	return true;
 }
 
@@ -1190,5 +1203,5 @@ NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, NULL,
 				  &api_funcs, MDM_MAX_DATA_LENGTH);
 
 /* Register NET sockets. */
-NET_SOCKET_REGISTER(quectel_bg9x, NET_SOCKET_DEFAULT_PRIO, AF_UNSPEC,
+NET_SOCKET_REGISTER(quectel_bg9x, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY, AF_UNSPEC,
 		    offload_is_supported, offload_socket);

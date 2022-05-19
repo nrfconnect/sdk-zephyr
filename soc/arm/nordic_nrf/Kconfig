@@ -48,7 +48,7 @@ config NRF_ACL_FLASH_REGION_SIZE
 
 config NFCT_PINS_AS_GPIOS
 	bool "NFCT pins as GPIOs"
-	depends on HAS_HW_NRF_NFCT
+	depends on $(dt_has_compat,$(DT_COMPAT_NORDIC_NRF_NFCT))
 	help
 	  Two pins are usually reserved for NFC in SoCs that implement the
 	  NFCT peripheral. This option switches them to normal GPIO mode.
@@ -128,7 +128,7 @@ config NRF_SECURE_APPROTECT_USER_HANDLING
 endchoice
 
 config NRF_TRACE_PORT
-	bool "Enable nRF TPIU"
+	bool "nRF TPIU"
 	depends on !SOC_SERIES_NRF51X
 	help
 	  Enable this option to initialize the TPIU (Trace Port Interface

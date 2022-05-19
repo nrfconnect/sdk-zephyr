@@ -23,7 +23,7 @@ def test_discard_report(class_testsuite, platforms_list, all_testcases_dict, cap
     Test 1: Check if apply_filters function has been run before running
     discard_report
     Test 2: Test if the generated report is not empty
-    Test 3: Test if the gerenrated report contains the expected columns"""
+    Test 3: Test if the generated report contains the expected columns"""
     class_testsuite.platforms = platforms_list
     class_testsuite.platform_names = [p.name for p in platforms_list]
     class_testsuite.testcases = all_testcases_dict
@@ -43,7 +43,7 @@ def test_discard_report(class_testsuite, platforms_list, all_testcases_dict, cap
 
 def test_csv_report(class_testsuite, instances_fixture, tmpdir):
     """ Testing csv_report function of Testsuite class in twister
-    Test 1: Assert the csv_report isnt empty after execution of csv_report function
+    Test 1: Assert the csv_report isn't empty after execution of csv_report function
     Test 2: Assert on the columns and values of the generated csv_report"""
     class_testsuite.instances = instances_fixture
     filename = tmpdir.mkdir("test_csv").join("twister_csv_report.csv")
@@ -53,7 +53,7 @@ def test_csv_report(class_testsuite, instances_fixture, tmpdir):
 
     mydict = {'test': [], 'arch' : [], 'platform' : [], 'status': [],
               'extra_args': [], 'handler': [], 'handler_time': [],
-              'ram_size': [], 'rom_size': []}
+              'ram_size': [], 'rom_size': [], 'run_id': []}
 
     with open(filename, "r") as file:
         csv_reader = csv.reader(file)
@@ -71,6 +71,7 @@ def test_csv_report(class_testsuite, instances_fixture, tmpdir):
         mydict["handler_time"].append(instance.metrics.get("handler_time", ""))
         mydict["ram_size"].append(instance.metrics.get("ram_size", '0'))
         mydict["rom_size"].append(instance.metrics.get("rom_size", '0'))
+        mydict["run_id"].append(instance.run_id)
 
     dict_file = open(filename, "r")
     dict_reader = csv.DictReader(dict_file)

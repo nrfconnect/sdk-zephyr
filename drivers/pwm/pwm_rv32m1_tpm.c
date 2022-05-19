@@ -38,32 +38,31 @@ struct rv32m1_tpm_data {
 	tpm_chnl_pwm_signal_param_t channel[MAX_CHANNELS];
 };
 
-static int rv32m1_tpm_pin_set(const struct device *dev, uint32_t pwm,
-			      uint32_t period_cycles, uint32_t pulse_cycles,
-			      pwm_flags_t flags)
+static int rv32m1_tpm_set_cycles(const struct device *dev, uint32_t channel,
+				 uint32_t period_cycles, uint32_t pulse_cycles,
+				 pwm_flags_t flags)
 {
 	const struct rv32m1_tpm_config *config = dev->config;
 	struct rv32m1_tpm_data *data = dev->data;
 	uint8_t duty_cycle;
 
-	if ((period_cycles == 0U) || (pulse_cycles > period_cycles)) {
-		LOG_ERR("Invalid combination: period_cycles=%d, "
-			    "pulse_cycles=%d", period_cycles, pulse_cycles);
-		return -EINVAL;
+	if (period_cycles == 0U) {
+		LOG_ERR("Channel can not be set to inactive level");
+		return -ENOTSUP;
 	}
 
-	if (pwm >= config->channel_count) {
+	if (channel >= config->channel_count) {
 		LOG_ERR("Invalid channel");
 		return -ENOTSUP;
 	}
 
 	duty_cycle = pulse_cycles * 100U / period_cycles;
-	data->channel[pwm].dutyCyclePercent = duty_cycle;
+	data->channel[channel].dutyCyclePercent = duty_cycle;
 
 	if ((flags & PWM_POLARITY_INVERTED) == 0) {
-		data->channel[pwm].level = kTPM_HighTrue;
+		data->channel[channel].level = kTPM_HighTrue;
 	} else {
-		data->channel[pwm].level = kTPM_LowTrue;
+		data->channel[channel].level = kTPM_LowTrue;
 	}
 
 	LOG_DBG("pulse_cycles=%d, period_cycles=%d, duty_cycle=%d, flags=%d",
@@ -106,9 +105,9 @@ static int rv32m1_tpm_pin_set(const struct device *dev, uint32_t pwm,
 		}
 		TPM_StartTimer(config->base, config->tpm_clock_source);
 	} else {
-		TPM_UpdateChnlEdgeLevelSelect(config->base, pwm,
-					      data->channel[pwm].level);
-		TPM_UpdatePwmDutycycle(config->base, pwm, config->mode,
+		TPM_UpdateChnlEdgeLevelSelect(config->base, channel,
+					      data->channel[channel].level);
+		TPM_UpdatePwmDutycycle(config->base, channel, config->mode,
 				       duty_cycle);
 	}
 
@@ -116,8 +115,7 @@ static int rv32m1_tpm_pin_set(const struct device *dev, uint32_t pwm,
 }
 
 static int rv32m1_tpm_get_cycles_per_sec(const struct device *dev,
-					 uint32_t pwm,
-					 uint64_t *cycles)
+					 uint32_t channel, uint64_t *cycles)
 {
 	const struct rv32m1_tpm_config *config = dev->config;
 	struct rv32m1_tpm_data *data = dev->data;
@@ -168,7 +166,7 @@ static int rv32m1_tpm_init(const struct device *dev)
 }
 
 static const struct pwm_driver_api rv32m1_tpm_driver_api = {
-	.pin_set = rv32m1_tpm_pin_set,
+	.set_cycles = rv32m1_tpm_set_cycles,
 	.get_cycles_per_sec = rv32m1_tpm_get_cycles_per_sec,
 };
 

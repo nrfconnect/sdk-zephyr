@@ -27,7 +27,7 @@
  * LFCLK - Low-Frequency Clock. Its frequency is fixed to 32kHz.
  * HFCLK - High-Frequency (PLL) Clock. Its frequency is configured to OFMCLK.
  *
- * Based on the follwoing criteria:
+ * Based on the following criteria:
  *
  * - A delay of 'Instant' wake-up from 'Deep Sleep' is 20 us.
  * - A delay of 'Standard' wake-up from 'Deep Sleep' is 3.43 ms.
@@ -124,7 +124,7 @@ static void npcx_power_enter_system_sleep(int slp_mode, int wk_mode)
 	NPCX_ENTER_SYSTEM_SLEEP();
 
 	/*
-	 * Compensate system timer by the elasped time of low-freq timer during
+	 * Compensate system timer by the elapsed time of low-freq timer during
 	 * system sleep mode.
 	 */
 	npcx_clock_compensate_system_timer();
@@ -153,14 +153,14 @@ __weak void pm_state_set(enum pm_state state, uint8_t substate_id)
 		case 0:	/* Sub-state 0: Deep sleep with instant wake-up */
 			npcx_power_enter_system_sleep(NPCX_DEEP_SLEEP,
 							NPCX_INSTANT_WAKE_UP);
-			if (IS_ENABLED(CONFIG_SOC_POWER_MANAGEMENT_TRACE)) {
+			if (IS_ENABLED(CONFIG_NPCX_PM_TRACE)) {
 				cnt_sleep0++;
 			}
 			break;
 		case 1:	/* Sub-state 1: Deep sleep with standard wake-up */
 			npcx_power_enter_system_sleep(NPCX_DEEP_SLEEP,
 							NPCX_STANDARD_WAKE_UP);
-			if (IS_ENABLED(CONFIG_SOC_POWER_MANAGEMENT_TRACE)) {
+			if (IS_ENABLED(CONFIG_NPCX_PM_TRACE)) {
 				cnt_sleep1++;
 			}
 			break;
@@ -194,7 +194,7 @@ __weak void pm_state_exit_post_ops(enum pm_state state, uint8_t substate_id)
 		}
 	}
 
-	if (IS_ENABLED(CONFIG_SOC_POWER_MANAGEMENT_TRACE)) {
+	if (IS_ENABLED(CONFIG_NPCX_PM_TRACE)) {
 		LOG_DBG("sleep: %d, deep sleep: %d", cnt_sleep0, cnt_sleep1);
 		LOG_INF("total ticks in sleep: %lld",
 			npcx_clock_get_sleep_ticks());

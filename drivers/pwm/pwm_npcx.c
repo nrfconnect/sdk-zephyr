@@ -88,12 +88,12 @@ static void pwm_npcx_configure(const struct device *dev, int clk_bus)
 }
 
 /* PWM api functions */
-static int pwm_npcx_pin_set(const struct device *dev, uint32_t pwm,
-			   uint32_t period_cycles, uint32_t pulse_cycles,
-			   pwm_flags_t flags)
+static int pwm_npcx_set_cycles(const struct device *dev, uint32_t channel,
+			       uint32_t period_cycles, uint32_t pulse_cycles,
+			       pwm_flags_t flags)
 {
 	/* Single channel for each pwm device */
-	ARG_UNUSED(pwm);
+	ARG_UNUSED(channel);
 	struct pwm_npcx_data *const data = dev->data;
 	struct pwm_reg *const inst = HAL_INSTANCE(dev);
 	int prescaler;
@@ -101,10 +101,6 @@ static int pwm_npcx_pin_set(const struct device *dev, uint32_t pwm,
 	uint32_t ctr;
 	uint32_t dcr;
 	uint32_t prsc;
-
-	if (pulse_cycles > period_cycles) {
-		return -EINVAL;
-	}
 
 	ctl = inst->PWMCTL | BIT(NPCX_PWMCTL_PWR);
 
@@ -164,11 +160,11 @@ static int pwm_npcx_pin_set(const struct device *dev, uint32_t pwm,
 	return 0;
 }
 
-static int pwm_npcx_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
-				      uint64_t *cycles)
+static int pwm_npcx_get_cycles_per_sec(const struct device *dev,
+				       uint32_t channel, uint64_t *cycles)
 {
 	/* Single channel for each pwm device */
-	ARG_UNUSED(pwm);
+	ARG_UNUSED(channel);
 	struct pwm_npcx_data *const data = dev->data;
 
 	*cycles = data->cycles_per_sec;
@@ -177,7 +173,7 @@ static int pwm_npcx_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
 
 /* PWM driver registration */
 static const struct pwm_driver_api pwm_npcx_driver_api = {
-	.pin_set = pwm_npcx_pin_set,
+	.set_cycles = pwm_npcx_set_cycles,
 	.get_cycles_per_sec = pwm_npcx_get_cycles_per_sec
 };
 
@@ -190,7 +186,7 @@ static int pwm_npcx_init(const struct device *dev)
 	int ret;
 
 	/*
-	 * NPCX PWM modulee mixes byte and word registers together. Make sure
+	 * NPCX PWM module mixes byte and word registers together. Make sure
 	 * word reg access via structure won't break into two byte reg accesses
 	 * unexpectedly by toolchains options or attributes. If so, stall here.
 	 */

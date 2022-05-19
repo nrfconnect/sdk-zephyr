@@ -69,6 +69,7 @@
 	cryptocell_sw: cryptocell-sw {
 		compatible = "nordic,nrf-cc310-sw";
 		label = "CRYPTOCELL_SW";
+		status = "okay";
 	};
 };
 

@@ -643,7 +643,6 @@ static int clk_init(const struct device *dev)
 
 	IRQ_CONNECT(DT_INST_IRQN(0), DT_INST_IRQ(0, priority),
 		    nrfx_isr, nrfx_power_clock_irq_handler, 0);
-	irq_enable(DT_INST_IRQN(0));
 
 	nrfx_err = nrfx_clock_init(clock_event_handler);
 	if (nrfx_err != NRFX_SUCCESS) {
@@ -763,5 +762,5 @@ SHELL_STATIC_SUBCMD_SET_CREATE(subcmds,
 
 SHELL_COND_CMD_REGISTER(CONFIG_CLOCK_CONTROL_NRF_SHELL,
 			nrf_clock_control, &subcmds,
-			"Clock control commmands",
+			"Clock control commands",
 			cmd_status);

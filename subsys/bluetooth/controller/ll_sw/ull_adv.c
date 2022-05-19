@@ -959,12 +959,16 @@ uint8_t ll_adv_enable(uint8_t enable)
 		conn_lll->max_rx_time = PDU_DC_MAX_US(PDU_DC_PAYLOAD_SIZE_MIN,
 						      PHY_1M);
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
-		conn_lll->max_tx_time = MAX(conn_lll->max_tx_time,
-					    PDU_DC_MAX_US(PDU_DC_PAYLOAD_SIZE_MIN,
-							  lll->phy_s));
-		conn_lll->max_rx_time = MAX(conn_lll->max_rx_time,
-					    PDU_DC_MAX_US(PDU_DC_PAYLOAD_SIZE_MIN,
-							  lll->phy_s));
+		if (pdu_adv->type == PDU_ADV_TYPE_EXT_IND) {
+			conn_lll->max_tx_time =
+				MAX(conn_lll->max_tx_time,
+				    PDU_DC_MAX_US(PDU_DC_PAYLOAD_SIZE_MIN,
+						  lll->phy_s));
+			conn_lll->max_rx_time =
+				MAX(conn_lll->max_rx_time,
+				    PDU_DC_MAX_US(PDU_DC_PAYLOAD_SIZE_MIN,
+						  lll->phy_s));
+		}
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* CONFIG_BT_CTLR_PHY */
 #endif
@@ -1120,6 +1124,10 @@ uint8_t ll_adv_enable(uint8_t enable)
 		conn->phy_pref_tx = ull_conn_default_phy_tx_get();
 		conn->phy_pref_rx = ull_conn_default_phy_rx_get();
 #endif /* CONFIG_BT_CTLR_PHY */
+
+#if defined(CONFIG_BT_CTLR_LE_ENC)
+		conn->pause_rx_data = 0U;
+#endif /* CONFIG_BT_CTLR_LE_ENC */
 
 		/* Re-initialize the Tx Q */
 		ull_tx_q_init(&conn->tx_q);
@@ -1507,7 +1515,7 @@ uint8_t ll_adv_enable(uint8_t enable)
 		ull_filter_adv_scan_state_cb(BIT(0) | BIT(1));
 	}
 #else /* !CONFIG_BT_HCI_MESH_EXT */
-	if (IS_ENABLED(CONFIG_BT_OBSERVER) && !ull_scan_is_enabled_get(0)) {
+	if (!IS_ENABLED(CONFIG_BT_OBSERVER) || !ull_scan_is_enabled_get(0)) {
 		ull_filter_adv_scan_state_cb(BIT(0));
 	}
 #endif /* !CONFIG_BT_HCI_MESH_EXT */
@@ -1835,7 +1843,7 @@ static uint32_t ticker_update_rand(struct ll_adv_set *adv, uint32_t ticks_delay_
 	uint32_t ret;
 
 	/* Get pseudo-random number in the range [0..ticks_delay_window].
-	 * Please note that using modulo of 2^32 samle space has an uneven
+	 * Please note that using modulo of 2^32 sample space has an uneven
 	 * distribution, slightly favoring smaller values.
 	 */
 	lll_rand_isr_get(&random_delay, sizeof(random_delay));
@@ -2652,7 +2660,7 @@ static inline uint8_t disable(uint8_t handle)
 	adv->is_enabled = 0U;
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
-	if (IS_ENABLED(CONFIG_BT_OBSERVER) && !ull_scan_is_enabled_get(0)) {
+	if (!IS_ENABLED(CONFIG_BT_OBSERVER) || !ull_scan_is_enabled_get(0)) {
 		ull_filter_adv_scan_state_cb(0);
 	}
 #endif /* CONFIG_BT_CTLR_PRIVACY */

@@ -365,14 +365,9 @@ static int register_ept(const struct device *instance, void **token,
 	struct ipc_rpmsg_instance *rpmsg_inst;
 	struct ipc_rpmsg_ept *rpmsg_ept;
 
-	/* Instance is still being initialized */
-	if (data->state == STATE_BUSY) {
+	/* Instance is not ready */
+	if (atomic_get(&data->state) != STATE_INITED) {
 		return -EBUSY;
-	}
-
-	/* Instance is not initialized */
-	if (data->state == STATE_READY) {
-		return -EINVAL;
 	}
 
 	/* Empty name is not valid */
@@ -400,14 +395,9 @@ static int send(const struct device *instance, void *token,
 	struct backend_data_t *data = instance->data;
 	struct ipc_rpmsg_ept *rpmsg_ept;
 
-	/* Instance is still being initialized */
-	if (data->state == STATE_BUSY) {
+	/* Instance is not ready */
+	if (atomic_get(&data->state) != STATE_INITED) {
 		return -EBUSY;
-	}
-
-	/* Instance is not initialized */
-	if (data->state == STATE_READY) {
-		return -EINVAL;
 	}
 
 	/* Empty message is not allowed */
@@ -418,6 +408,27 @@ static int send(const struct device *instance, void *token,
 	rpmsg_ept = (struct ipc_rpmsg_ept *) token;
 
 	return rpmsg_send(&rpmsg_ept->ep, msg, len);
+}
+
+static int send_nocopy(const struct device *instance, void *token,
+		       const void *msg, size_t len)
+{
+	struct backend_data_t *data = instance->data;
+	struct ipc_rpmsg_ept *rpmsg_ept;
+
+	/* Instance is not ready */
+	if (atomic_get(&data->state) != STATE_INITED) {
+		return -EBUSY;
+	}
+
+	/* Empty message is not allowed */
+	if (len == 0) {
+		return -EBADMSG;
+	}
+
+	rpmsg_ept = (struct ipc_rpmsg_ept *) token;
+
+	return rpmsg_send_nocopy(&rpmsg_ept->ep, msg, len);
 }
 
 static int open(const struct device *instance)
@@ -471,10 +482,107 @@ error:
 
 }
 
+static int get_tx_buffer_size(const struct device *instance, void *token)
+{
+	struct backend_data_t *data = instance->data;
+	struct ipc_rpmsg_instance *rpmsg_inst;
+	struct rpmsg_device *rdev;
+	int size;
+
+	rpmsg_inst = &data->rpmsg_inst;
+	rdev = rpmsg_virtio_get_rpmsg_device(&rpmsg_inst->rvdev);
+
+	size = rpmsg_virtio_get_buffer_size(rdev);
+	if (size < 0) {
+		return -EIO;
+	}
+
+	return size;
+}
+
+static int get_tx_buffer(const struct device *instance, void *token,
+			 void **r_data, uint32_t *size, k_timeout_t wait)
+{
+	struct ipc_rpmsg_ept *rpmsg_ept;
+	void *payload;
+	int buf_size;
+
+	rpmsg_ept = (struct ipc_rpmsg_ept *) token;
+
+	if (!r_data || !size) {
+		return -EINVAL;
+	}
+
+	/* OpenAMP only supports a binary wait / no-wait */
+	if (!K_TIMEOUT_EQ(wait, K_FOREVER) && !K_TIMEOUT_EQ(wait, K_NO_WAIT)) {
+		return -ENOTSUP;
+	}
+
+	/* The user requested a specific size */
+	if (*size) {
+		buf_size = get_tx_buffer_size(instance, token);
+		if (buf_size < 0) {
+			return -EIO;
+		}
+
+		/* Too big to fit */
+		if (*size > buf_size) {
+			*size = buf_size;
+			return -ENOMEM;
+		}
+	}
+
+	payload = rpmsg_get_tx_payload_buffer(&rpmsg_ept->ep, size, K_TIMEOUT_EQ(wait, K_FOREVER));
+	if (!payload) {
+		return -EIO;
+	}
+
+	(*r_data) = payload;
+
+	return 0;
+}
+
+static int hold_rx_buffer(const struct device *instance, void *token,
+			  void *data)
+{
+	struct ipc_rpmsg_ept *rpmsg_ept;
+
+	rpmsg_ept = (struct ipc_rpmsg_ept *) token;
+
+	rpmsg_hold_rx_buffer(&rpmsg_ept->ep, data);
+
+	return 0;
+}
+
+static int release_rx_buffer(const struct device *instance, void *token,
+			     void *data)
+{
+	struct ipc_rpmsg_ept *rpmsg_ept;
+
+	rpmsg_ept = (struct ipc_rpmsg_ept *) token;
+
+	rpmsg_release_rx_buffer(&rpmsg_ept->ep, data);
+
+	return 0;
+}
+
+static int drop_tx_buffer(const struct device *instance, void *token,
+			  const void *data)
+{
+	/* Not yet supported by OpenAMP */
+	return -ENOTSUP;
+}
+
 const static struct ipc_service_backend backend_ops = {
 	.open_instance = open,
 	.register_endpoint = register_ept,
 	.send = send,
+	.send_nocopy = send_nocopy,
+	.drop_tx_buffer = drop_tx_buffer,
+	.get_tx_buffer = get_tx_buffer,
+	.get_tx_buffer_size = get_tx_buffer_size,
+	.hold_rx_buffer = hold_rx_buffer,
+	.release_rx_buffer = release_rx_buffer,
 };
 
 static int backend_init(const struct device *instance)
@@ -490,13 +598,13 @@ static int backend_init(const struct device *instance)
 	return 0;
 }
 
-#define BACKEND_CONFIG_POPULATE(i)						\
-	{									\
-		.role = DT_ENUM_IDX_OR(DT_DRV_INST(i), role, ROLE_HOST),	\
-		.shm_size = DT_REG_SIZE(DT_INST_PHANDLE(i, memory_region)),	\
-		.shm_addr = DT_REG_ADDR(DT_INST_PHANDLE(i, memory_region)),	\
-		.mbox_tx = MBOX_DT_CHANNEL_GET(DT_DRV_INST(i), tx),		\
-		.mbox_rx = MBOX_DT_CHANNEL_GET(DT_DRV_INST(i), rx),		\
+#define BACKEND_CONFIG_POPULATE(i)							\
+	{										\
+		.role = DT_ENUM_IDX_OR(DT_DRV_INST(i), role, ROLE_HOST),		\
+		.shm_size = DT_REG_SIZE(DT_INST_PHANDLE(i, memory_region)),		\
+		.shm_addr = DT_REG_ADDR(DT_INST_PHANDLE(i, memory_region)),		\
+		.mbox_tx = MBOX_DT_CHANNEL_GET(DT_DRV_INST(i), tx),			\
+		.mbox_rx = MBOX_DT_CHANNEL_GET(DT_DRV_INST(i), rx),			\
 		.wq_prio = COND_CODE_1(DT_INST_NODE_HAS_PROP(i, zephyr_priority),	\
 			   (DT_INST_PROP_BY_IDX(i, zephyr_priority, 0)),		\
 			   (0)),							\
@@ -523,6 +631,7 @@ DT_INST_FOREACH_STATUS_OKAY(BACKEND_DEVICE_DEFINE)
 
 #define BACKEND_CONFIG_DEFINE(i) BACKEND_CONFIG_POPULATE(i),
 
+#if defined(CONFIG_IPC_SERVICE_BACKEND_RPMSG_SHMEM_RESET)
 static int shared_memory_prepare(const struct device *arg)
 {
 	const struct backend_config_t *backend_config;
@@ -542,3 +651,4 @@ static int shared_memory_prepare(const struct device *arg)
 }
 
 SYS_INIT(shared_memory_prepare, PRE_KERNEL_1, 1);
+#endif /* CONFIG_IPC_SERVICE_BACKEND_RPMSG_SHMEM_RESET */

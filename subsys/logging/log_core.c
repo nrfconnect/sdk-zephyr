@@ -60,6 +60,10 @@ LOG_MODULE_REGISTER(log);
 #define CONFIG_LOG_BUFFER_SIZE 4
 #endif
 
+#ifndef CONFIG_LOG_TAG_MAX_LEN
+#define CONFIG_LOG_TAG_MAX_LEN 0
+#endif
+
 #ifndef CONFIG_LOG2_ALWAYS_RUNTIME
 BUILD_ASSERT(!IS_ENABLED(CONFIG_NO_OPTIMIZATIONS),
 	     "Option must be enabled when CONFIG_NO_OPTIMIZATIONS is set");
@@ -154,6 +158,11 @@ static void msg_process(union log_msgs msg, bool bypass);
 static log_timestamp_t dummy_timestamp(void)
 {
 	return 0;
+}
+
+log_timestamp_t z_log_timestamp(void)
+{
+	return timestamp_func();
 }
 
 uint32_t z_log_get_s_mask(const char *str, uint32_t nargs)
@@ -399,7 +408,7 @@ void z_log_vprintk(const char *fmt, va_list ap)
 
 	if (!IS_ENABLED(CONFIG_LOG1)) {
 		z_log_msg2_runtime_vcreate(CONFIG_LOG_DOMAIN_ID, NULL,
-					   LOG_LEVEL_INTERNAL_RAW_STRING, NULL, 0,
+					   LOG_LEVEL_INTERNAL_RAW_STRING, NULL, 0, 0,
 					   fmt, ap);
 		return;
 	}
@@ -607,16 +616,16 @@ void log_core_init(void)
 	if (IS_ENABLED(CONFIG_LOG_RUNTIME_FILTERING)) {
 		z_log_runtime_filters_init();
 	}
+
+	if (IS_ENABLED(CONFIG_LOG_FRONTEND)) {
+		log_frontend_init();
+	}
 }
 
 void log_init(void)
 {
 	__ASSERT_NO_MSG(log_backend_count_get() < LOG_FILTERS_NUM_OF_SLOTS);
 	int i;
-
-	if (IS_ENABLED(CONFIG_LOG_FRONTEND)) {
-		log_frontend_init();
-	}
 
 	if (atomic_inc(&initialized) != 0) {
 		return;
@@ -686,6 +695,10 @@ void z_impl_log_panic(void)
 	 * Forcing initialization of the logger and auto-starting backends.
 	 */
 	log_init();
+
+	if (IS_ENABLED(CONFIG_LOG_FRONTEND)) {
+		log_frontend_panic();
+	}
 
 	for (int i = 0; i < log_backend_count_get(); i++) {
 		backend = log_backend_get(i);
@@ -1258,10 +1271,7 @@ const char *z_log_get_tag(void)
 
 int log_set_tag(const char *str)
 {
-	if (CONFIG_LOG_TAG_MAX_LEN == 0) {
-		return -ENOTSUP;
-	}
-
+#if CONFIG_LOG_TAG_MAX_LEN > 0
 	if (str == NULL) {
 		return -EINVAL;
 	}
@@ -1278,6 +1288,9 @@ int log_set_tag(const char *str)
 	}
 
 	return 0;
+#else
+	return -ENOTSUP;
+#endif
 }
 
 int log_mem_get_usage(uint32_t *buf_size, uint32_t *usage)

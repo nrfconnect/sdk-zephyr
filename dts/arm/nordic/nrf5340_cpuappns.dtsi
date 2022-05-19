@@ -29,16 +29,8 @@
 	};
 
 	chosen {
-		zephyr,flash-controller = &flash_controller;
-
-		/*
-		 * By default, system entropy comes from the entropy_cc310.c
-		 * driver in the nrf repository. This is devicetree glue
-		 * needed to make the system aware of that fact. Individual
-		 * applications can override this by changing this property
-		 * value.
-		 */
 		zephyr,entropy = &cryptocell_sw;
+		zephyr,flash-controller = &flash_controller;
 	};
 
 	soc {
@@ -63,6 +55,12 @@
 		compatible = "nordic,nrf-cc312-sw";
 		#address-cells = <0>;
 		label = "CRYPTOCELL_SW";
+		status = "okay";
+	};
+
+	/* Default IPC description */
+	ipc {
+		#include "nrf5340_cpuapp_ipc.dtsi"
 	};
 };
 

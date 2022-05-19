@@ -6,6 +6,7 @@
 
 #include <sys/slist.h>
 #include <arch/arm/aarch32/mpu/arm_mpu.h>
+#include <linker/devicetree_regions.h>
 
 #include "arm_mpu_mem_cfg.h"
 #if USE_PARTITION_MANAGER
@@ -42,6 +43,8 @@ static const struct arm_mpu_region mpu_regions[] = {
 
 #endif /* USE_PARTITION_MANAGER */
 
+	/* DT-defined regions */
+	LINKER_DT_REGION_MPU(ARM_MPU_REGION_INIT)
 };
 
 const struct arm_mpu_config mpu_config = {

@@ -46,7 +46,6 @@
 #define RFCOMM_IDLE_TIMEOUT     K_SECONDS(2)
 
 #define DLC_RTX(_w) CONTAINER_OF(_w, struct bt_rfcomm_dlc, rtx_work)
-
 #define SESSION_RTX(_w) CONTAINER_OF(_w, struct bt_rfcomm_session, rtx_work)
 
 static struct bt_rfcomm_server *servers;
@@ -782,7 +781,7 @@ static enum security_result rfcomm_dlc_security(struct bt_rfcomm_dlc *dlc)
 
 	/* If current security level is greater than or equal to required
 	 * security level  then return SUCCESS.
-	 * For SSP devices the current security will be atleast MEDIUM
+	 * For SSP devices the current security will be at least MEDIUM
 	 * since L2CAP is enforcing it
 	 */
 	if (conn->sec_level >= dlc->required_sec_level) {
@@ -1647,7 +1646,7 @@ int bt_rfcomm_dlc_connect(struct bt_conn *conn, struct bt_rfcomm_dlc *dlc,
 			break;
 		}
 		chan = &session->br_chan.chan;
-		chan->required_sec_level = dlc->required_sec_level;
+		BR_CHAN(chan)->required_sec_level = dlc->required_sec_level;
 		ret = bt_l2cap_chan_connect(conn, chan, BT_L2CAP_PSM_RFCOMM);
 		if (ret < 0) {
 			session->state = BT_RFCOMM_STATE_IDLE;

@@ -32,7 +32,7 @@
 #define WAIT_SECONDS 30                         /* seconds */
 #define WAIT_TIME (WAIT_SECONDS * USEC_PER_SEC) /* microseconds*/
 
-#define WAIT_FOR(cond) while (!(cond)) { k_sleep(K_MSEC(1)); }
+#define WAIT_FOR_COND(cond) while (!(cond)) { k_sleep(K_MSEC(1)); }
 
 #define CREATE_FLAG(flag) static atomic_t flag = (atomic_t)false
 #define SET_FLAG(flag) (void)atomic_set(&flag, (atomic_t)true)
@@ -57,6 +57,7 @@
 
 #define AD_SIZE 1
 extern const struct bt_data ad[AD_SIZE];
+extern struct bt_conn *default_conn;
 
 void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 		  struct net_buf_simple *ad);

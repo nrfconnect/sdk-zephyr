@@ -3,8 +3,6 @@
 # Copyright (c) 2016-2017 Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
 
-comment "BLE Controller support"
-
 # The following symbols are enabled depending if the controller actually
 # supports the respective features.
 
@@ -69,9 +67,6 @@ config BT_CTLR_CHAN_SEL_2_SUPPORT
 config BT_CTLR_MIN_USED_CHAN_SUPPORT
 	bool
 
-config BT_CTLR_DTM_HCI_SUPPORT
-	bool
-
 config BT_CTLR_SMI_SUPPORT
 	bool
 
@@ -102,7 +97,6 @@ choice BT_LL_CHOICE
 config BT_LL_SW_SPLIT
 	bool "Software-based BLE Link Layer [EXPERIMENTAL]"
 	select EXPERIMENTAL
-	select BT_RECV_IS_RX_THREAD
 	select ENTROPY_GENERATOR
 	select NRF_HW_TIMER0_RESERVED
 	select NRF_HW_RTC0_RESERVED
@@ -114,7 +108,7 @@ endchoice
 comment "BLE Controller configuration"
 
 config BT_CTLR_CRYPTO
-	bool "Enable crypto functions in Controller"
+	bool "Crypto functions in Controller"
 	default y
 	select ENTROPY_GENERATOR
 	help
@@ -133,7 +127,7 @@ config BT_CTLR_HCI_VS_BUILD_INFO
 	  already included information.
 
 config BT_CTLR_AD_DATA_BACKUP
-	bool "Enable Legacy AD Data backup"
+	bool "Legacy AD Data backup"
 	depends on BT_PERIPHERAL || BT_CTLR_ADV_EXT
 	default y
 	help
@@ -144,7 +138,7 @@ config BT_CTLR_AD_DATA_BACKUP
 	  Advertising or switch between Legacy and Extended Advertising.
 
 config BT_CTLR_HCI_ADV_HANDLE_MAPPING
-	bool "Enable advertising set handle mapping between HCI and LL"
+	bool "Advertising set handle mapping between HCI and LL"
 	depends on BT_CTLR_ADV_EXT
 	default y if BT_HCI_RAW
 	help
@@ -231,8 +225,26 @@ config BT_CTLR_ISO_TX_BUFFER_SIZE
 	  Size of the Isochronous Tx buffers and the value returned in HCI LE
 	  Read Buffer Size V2 command response.
 
+config BT_CTLR_ISOAL_SOURCES
+	int "Number of Isochronous Adaptation Layer sinks"
+	depends on BT_CTLR_ADV_ISO || BT_CTLR_CONN_ISO
+	range 1 64
+	default 1
+	help
+	  Set the number of concurrently active sources supported by the
+	  ISO AL.
+
+config BT_CTLR_ISOAL_SINKS
+	int "Number of Isochronous Adaptation Layer sinks"
+	depends on BT_CTLR_SYNC_ISO || BT_CTLR_CONN_ISO
+	range 1 64
+	default 1
+	help
+	  Set the number of concurrently active sinks supported by the
+	  ISO AL.
+
 config BT_CTLR_ISO_VENDOR_DATA_PATH
-	bool "Enable vendor-specific ISO data path"
+	bool "Vendor-specific ISO data path"
 	depends on BT_CTLR_SYNC_ISO || BT_CTLR_CONN_ISO
 
 choice BT_CTLR_TX_PWR
@@ -263,7 +275,7 @@ config BT_CTLR_TX_PWR_PLUS_4
 
 config BT_CTLR_TX_PWR_PLUS_3
 	bool "+3 dBm"
-	depends on SOC_COMPATIBLE_NRF52X
+	depends on SOC_COMPATIBLE_NRF52X || SOC_SERIES_NRF53X
 
 config BT_CTLR_TX_PWR_PLUS_2
 	bool "+2 dBm"
@@ -293,7 +305,7 @@ config BT_CTLR_TX_PWR_MINUS_30
 
 config BT_CTLR_TX_PWR_MINUS_40
 	bool "-40 dBm"
-	depends on SOC_COMPATIBLE_NRF52X
+	depends on SOC_COMPATIBLE_NRF52X || SOC_SERIES_NRF53X
 
 endchoice
 
@@ -322,7 +334,7 @@ config BT_CTLR_ECDH
 	depends on BT_CTLR_ECDH_SUPPORT
 	default y
 	help
-	  Enable support for Bluetoooth v4.2 Elliptic Curve Diffie-Hellman
+	  Enable support for Bluetooth v4.2 Elliptic Curve Diffie-Hellman
 	  feature in the controller.
 
 config BT_CTLR_CONN_PARAM_REQ
@@ -482,8 +494,14 @@ config BT_CTLR_ADV_EXT
 	  Controller.
 
 config BT_CTLR_ADV_EXT
-	prompt "LE Advertising Extensions [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+	prompt "LE Advertising Extensions (Split Link Layer) [EXPERIMENTAL]" if BT_LL_SW_SPLIT
 	select EXPERIMENTAL if BT_LL_SW_SPLIT
+
+config PROMPT_ADJUSTMENT_WORKAROUND
+	bool
+	help
+	  Unused and hidden Kconfig symbol to allow prompt adjustment.
+	  Work around for https://github.com/ulfalizer/Kconfiglib/issues/117
 
 if BT_CTLR_ADV_EXT
 
@@ -526,8 +544,11 @@ config BT_CTLR_ADV_PERIODIC
 	  Controller.
 
 config BT_CTLR_ADV_PERIODIC
-	bool "LE Periodic Advertising in Advertising State [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+	bool "LE Periodic Advertising in Advertising State (Split Link Layer) [EXPERIMENTAL]" if BT_LL_SW_SPLIT
 	select EXPERIMENTAL if BT_LL_SW_SPLIT
+
+config PROMPT_ADJUSTMENT_WORKAROUND
+	bool
 
 config BT_CTLR_ADV_PERIODIC_ADI_SUPPORT
 	bool "Periodic Advertising ADI support"
@@ -546,8 +567,11 @@ config BT_CTLR_SYNC_PERIODIC
 	  Synchronization state in the Controller.
 
 config BT_CTLR_SYNC_PERIODIC
-	bool "LE Periodic Advertising in Synchronization State [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+	bool "LE Periodic Advertising in Synchronization State (Split Link Layer) [EXPERIMENTAL]" if BT_LL_SW_SPLIT
 	select EXPERIMENTAL if BT_LL_SW_SPLIT
+
+config PROMPT_ADJUSTMENT_WORKAROUND
+	bool
 
 config BT_CTLR_SYNC_PERIODIC_ADV_LIST
 	bool "LE Periodic Advertiser List support"
@@ -597,7 +621,7 @@ config BT_CTLR_ADV_ISO
 	  Controller.
 
 config BT_CTLR_ADV_ISO
-	bool "LE Broadcast Isochronous Channel advertising [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+	bool "LE Broadcast Isochronous Channel advertising (Split Link Layer) [EXPERIMENTAL]" if BT_LL_SW_SPLIT
 	select EXPERIMENTAL if BT_LL_SW_SPLIT
 
 config BT_CTLR_SYNC_ISO
@@ -610,7 +634,7 @@ config BT_CTLR_SYNC_ISO
 	  the Controller.
 
 config BT_CTLR_SYNC_ISO
-	bool "LE Broadcast Isochronous Channel advertising sync [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+	bool "LE Broadcast Isochronous Channel advertising sync (Split Link Layer) [EXPERIMENTAL]" if BT_LL_SW_SPLIT
 	select EXPERIMENTAL if BT_LL_SW_SPLIT
 
 config BT_CTLR_BROADCAST_ISO
@@ -688,7 +712,7 @@ config BT_CTLR_CENTRAL_ISO
 	  Central role in the Controller.
 
 config BT_CTLR_CENTRAL_ISO
-	bool "LE Connected Isochronous Stream Central [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+	bool "LE Connected Isochronous Stream Central (Split Link Layer) [EXPERIMENTAL]" if BT_LL_SW_SPLIT
 	select BT_CTLR_SET_HOST_FEATURE
 	select EXPERIMENTAL if BT_LL_SW_SPLIT
 
@@ -700,7 +724,7 @@ config BT_CTLR_PERIPHERAL_ISO
 	  Peripheral role in the Controller.
 
 config BT_CTLR_PERIPHERAL_ISO
-	bool "LE Connected Isochronous Stream Peripheral [EXPERIMENTAL]" if BT_LL_SW_SPLIT
+	bool "LE Connected Isochronous Stream Peripheral (Split Link Layer) [EXPERIMENTAL]" if BT_LL_SW_SPLIT
 	select BT_CTLR_SET_HOST_FEATURE
 	select EXPERIMENTAL if BT_LL_SW_SPLIT
 
@@ -739,6 +763,14 @@ config BT_CTLR_CONN_ISO_HCI_DATAPATH_SKIP_INVALID_DATA
 	  This allows for applications to decide whether to
 	  forward invalid SDUs through HCI upwards.
 
+config BT_CTLR_CONN_ISO_STREAMS_MAX_NSE
+	int "LE Connected Isochronous Streams max number of subevents"
+	depends on BT_CTLR_CONN_ISO
+	range 1 31
+	default 31
+	help
+	  Maximum number of CIS subevents.
+
 config BT_CTLR_ISO
 	bool
 	default BT_CTLR_BROADCAST_ISO || BT_CTLR_CONN_ISO
@@ -749,18 +781,6 @@ config BT_CTLR_READ_ISO_LINK_QUALITY
 	depends on BT_CTLR_SYNC_ISO || BT_CTLR_CONN_ISO
 	help
 	  Enable support for LE Read ISO Link Quality command.
-
-config BT_CTLR_DTM
-	bool
-	help
-	  Enable support for Direct Test Mode in the Controller.
-
-config BT_CTLR_DTM_HCI
-	bool "Direct Test Mode over HCI"
-	depends on BT_CTLR_DTM_HCI_SUPPORT
-	select BT_CTLR_DTM
-	help
-	  Enable support for Direct Test Mode over the HCI transport.
 
 config BT_CTLR_SMI_RX
 	bool "Stable modulation index - Receiver"
@@ -788,6 +808,7 @@ config BT_CTLR_HCI_CODEC_AND_DELAY_INFO
 
 rsource "Kconfig.df"
 rsource "Kconfig.ll_sw_split"
+rsource "Kconfig.dtm"
 
 config BT_CTLR_ASSERT_HANDLER
 	bool "Application Defined Assertion Handler"

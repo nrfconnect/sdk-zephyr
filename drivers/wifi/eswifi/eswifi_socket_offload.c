@@ -492,6 +492,23 @@ static int eswifi_socket_bind(void *obj, const struct sockaddr *addr,
 
 static bool eswifi_socket_is_supported(int family, int type, int proto)
 {
+	enum eswifi_transport_type eswifi_socket_type;
+	int err;
+
+	if (family != AF_INET) {
+		return false;
+	}
+
+	if (type != SOCK_DGRAM &&
+	    type != SOCK_STREAM) {
+		return false;
+	}
+
+	err = eswifi_socket_type_from_zephyr(proto, &eswifi_socket_type);
+	if (err) {
+		return false;
+	}
+
 	return true;
 }
 
@@ -571,7 +588,7 @@ static const struct socket_op_vtable eswifi_socket_fd_op_vtable = {
 };
 
 #ifdef CONFIG_NET_SOCKETS_OFFLOAD
-NET_SOCKET_REGISTER(eswifi, NET_SOCKET_DEFAULT_PRIO, AF_UNSPEC,
+NET_SOCKET_REGISTER(eswifi, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY, AF_UNSPEC,
 		    eswifi_socket_is_supported, eswifi_socket_create);
 #endif
 

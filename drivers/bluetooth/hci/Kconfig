@@ -15,7 +15,6 @@ config BT_H4
 	bool "H:4 UART"
 	select UART_INTERRUPT_DRIVEN
 	select BT_UART
-	select BT_RECV_IS_RX_THREAD
 	depends on SERIAL
 	help
 	  Bluetooth H:4 UART driver. Requires hardware flow control
@@ -86,13 +85,13 @@ config BT_SPI_INIT_PRIORITY
 	default 75
 
 config BT_BLUENRG_ACI
-	bool "Enable ACI message with with BlueNRG-based devices"
+	bool "ACI message with with BlueNRG-based devices"
 	help
 	  Enable support for devices compatible with the BlueNRG Bluetooth
 	  Stack. Current driver supports: ST BLUENRG-MS.
 
 config BT_SPI_BLUENRG
-	bool "Enable compatibility with BlueNRG-based devices"
+	bool "Compatibility with BlueNRG-based devices"
 	help
 	  Enable support for devices compatible with the BlueNRG Bluetooth
 	  Stack. Current driver supports: ST BLUENRG-MS.

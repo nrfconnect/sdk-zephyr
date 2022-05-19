@@ -239,9 +239,9 @@ static void set_stream(struct bt_audio_stream *stream)
 #if defined(CONFIG_BT_AUDIO_UNICAST)
 static void print_qos(struct bt_codec_qos *qos)
 {
-	shell_print(ctx_shell, "QoS: dir 0x%02x interval %u framing 0x%02x "
+	shell_print(ctx_shell, "QoS: interval %u framing 0x%02x "
 		    "phy 0x%02x sdu %u rtn %u latency %u pd %u",
-		    qos->dir, qos->interval, qos->framing, qos->phy, qos->sdu,
+		    qos->interval, qos->framing, qos->phy, qos->sdu,
 		    qos->rtn, qos->latency, qos->pd);
 }
 
@@ -269,13 +269,14 @@ static int cmd_select_unicast(const struct shell *sh, size_t argc, char *argv[])
 
 static struct bt_audio_stream *lc3_config(struct bt_conn *conn,
 					struct bt_audio_ep *ep,
+					enum bt_audio_pac_type type,
 					struct bt_audio_capability *cap,
 					struct bt_codec *codec)
 {
 	int i;
 
-	shell_print(ctx_shell, "ASE Codec Config: conn %p ep %p cap %p", conn,
-		    ep, cap);
+	shell_print(ctx_shell, "ASE Codec Config: conn %p ep %p type %u, cap %p",
+		    conn, ep, type, cap);
 
 	print_codec(codec);
 
@@ -349,8 +350,8 @@ static int lc3_qos(struct bt_audio_stream *stream, struct bt_codec_qos *qos)
 		connecting = false;
 
 		err = bt_audio_stream_enable(stream,
-					     default_preset->preset.codec.meta_count,
-					     default_preset->preset.codec.meta);
+					     default_preset->preset.codec.meta,
+					     default_preset->preset.codec.meta_count);
 		if (err) {
 			shell_error(ctx_shell, "Unable to enable Channel");
 			return -ENOEXEC;
@@ -362,9 +363,10 @@ static int lc3_qos(struct bt_audio_stream *stream, struct bt_codec_qos *qos)
 }
 
 static int lc3_enable(struct bt_audio_stream *stream,
-		      uint8_t meta_count, struct bt_codec_data *meta)
+		      struct bt_codec_data *meta,
+		      size_t meta_count)
 {
-	shell_print(ctx_shell, "Enable: stream %p meta_count %u", stream,
+	shell_print(ctx_shell, "Enable: stream %p meta_count %zu", stream,
 		    meta_count);
 
 	return 0;
@@ -378,9 +380,10 @@ static int lc3_start(struct bt_audio_stream *stream)
 }
 
 static int lc3_metadata(struct bt_audio_stream *stream,
-			uint8_t meta_count, struct bt_codec_data *meta)
+			struct bt_codec_data *meta,
+			size_t meta_count)
 {
-	shell_print(ctx_shell, "Metadata: stream %p meta_count %u", stream,
+	shell_print(ctx_shell, "Metadata: stream %p meta_count %zu", stream,
 		    meta_count);
 
 	return 0;
@@ -416,9 +419,9 @@ static int lc3_release(struct bt_audio_stream *stream)
 static struct bt_codec lc3_codec = BT_CODEC_LC3(BT_CODEC_LC3_FREQ_ANY,
 						BT_CODEC_LC3_DURATION_ANY,
 						0x03, 30, 240, 2,
-						(BT_CODEC_META_CONTEXT_VOICE |
-						BT_CODEC_META_CONTEXT_MEDIA),
-						BT_CODEC_META_CONTEXT_ANY);
+						(BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+						BT_AUDIO_CONTEXT_TYPE_MEDIA),
+						BT_AUDIO_CONTEXT_TYPE_ANY);
 
 static struct bt_audio_capability_ops lc3_ops = {
 	.config = lc3_config,
@@ -759,8 +762,8 @@ static int cmd_enable(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	err = bt_audio_stream_enable(default_stream,
-				     default_preset->preset.codec.meta_count,
-				     default_preset->preset.codec.meta);
+				     default_preset->preset.codec.meta,
+				     default_preset->preset.codec.meta_count);
 	if (err) {
 		shell_error(sh, "Unable to enable Channel");
 		return -ENOEXEC;
@@ -774,26 +777,30 @@ static int cmd_enable(const struct shell *sh, size_t argc, char *argv[])
 
 static uint16_t strmeta(const char *name)
 {
-	if (!strcmp(name, "None")) {
-		return BT_CODEC_META_CONTEXT_NONE;
-	} else if (!strcmp(name, "Voice")) {
-		return BT_CODEC_META_CONTEXT_VOICE;
+	if (!strcmp(name, "Unspecified")) {
+		return BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED;
+	} else if (!strcmp(name, "Conversational")) {
+		return BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL;
 	} else if (!strcmp(name, "Media")) {
-		return BT_CODEC_META_CONTEXT_MEDIA;
-	} else if (!strcmp(name, "Instruction")) {
-		return BT_CODEC_META_CONTEXT_INSTRUCTION;
-	} else if (!strcmp(name, "Attention")) {
-		return BT_CODEC_META_CONTEXT_ATTENTION;
-	} else if (!strcmp(name, "Alert")) {
-		return BT_CODEC_META_CONTEXT_ALERT;
-	} else if (!strcmp(name, "ManMachine")) {
-		return BT_CODEC_META_CONTEXT_MAN_MACHINE;
-	} else if (!strcmp(name, "Emergency")) {
-		return BT_CODEC_META_CONTEXT_EMERGENCY;
+		return BT_AUDIO_CONTEXT_TYPE_MEDIA;
+	} else if (!strcmp(name, "Game")) {
+		return BT_AUDIO_CONTEXT_TYPE_GAME;
+	} else if (!strcmp(name, "Instructional")) {
+		return BT_AUDIO_CONTEXT_TYPE_INSTRUCTIONAL;
+	} else if (!strcmp(name, "VoiceAssistants")) {
+		return BT_AUDIO_CONTEXT_TYPE_VOICE_ASSISTANTS;
+	} else if (!strcmp(name, "Live")) {
+		return BT_AUDIO_CONTEXT_TYPE_LIVE;
+	} else if (!strcmp(name, "SoundEffects")) {
+		return BT_AUDIO_CONTEXT_TYPE_SOUND_EFFECTS;
+	} else if (!strcmp(name, "Notifications")) {
+		return BT_AUDIO_CONTEXT_TYPE_NOTIFICATIONS;
 	} else if (!strcmp(name, "Ringtone")) {
-		return BT_CODEC_META_CONTEXT_RINGTONE;
-	} else if (!strcmp(name, "TV")) {
-		return BT_CODEC_META_CONTEXT_TV;
+		return BT_AUDIO_CONTEXT_TYPE_RINGTONE;
+	} else if (!strcmp(name, "Alerts")) {
+		return BT_AUDIO_CONTEXT_TYPE_ALERTS;
+	} else if (!strcmp(name, "EmergencyAlarm")) {
+		return BT_AUDIO_CONTEXT_TYPE_EMERGENCY_ALARM;
 	}
 
 	return 0u;
@@ -822,8 +829,8 @@ static int cmd_metadata(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	err = bt_audio_stream_metadata(default_stream,
-				       default_preset->preset.codec.meta_count,
-				       default_preset->preset.codec.meta);
+				       default_preset->preset.codec.meta,
+				       default_preset->preset.codec.meta_count);
 	if (err) {
 		shell_error(sh, "Unable to set Channel metadata");
 		return -ENOEXEC;

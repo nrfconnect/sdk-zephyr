@@ -25,9 +25,6 @@ struct pwm_litex_cfg {
 	volatile uint32_t *reg_period;
 };
 
-#define GET_PWM_CFG(dev)				       \
-	((const struct pwm_litex_cfg *) dev->config)
-
 static void litex_set_reg(volatile uint32_t *reg, uint32_t reg_size, uint32_t val)
 {
 	uint32_t shifted_data;
@@ -42,19 +39,19 @@ static void litex_set_reg(volatile uint32_t *reg, uint32_t reg_size, uint32_t va
 
 int pwm_litex_init(const struct device *dev)
 {
-	const struct pwm_litex_cfg *cfg = GET_PWM_CFG(dev);
+	const struct pwm_litex_cfg *cfg = dev->config;
 
 	litex_set_reg(cfg->reg_en, cfg->reg_en_size, REG_EN_ENABLE);
 	return 0;
 }
 
-int pwm_litex_pin_set(const struct device *dev, uint32_t pwm,
-		      uint32_t period_cycles,
-		      uint32_t pulse_cycles, pwm_flags_t flags)
+int pwm_litex_set_cycles(const struct device *dev, uint32_t channel,
+			 uint32_t period_cycles,
+			 uint32_t pulse_cycles, pwm_flags_t flags)
 {
-	const struct pwm_litex_cfg *cfg = GET_PWM_CFG(dev);
+	const struct pwm_litex_cfg *cfg = dev->config;
 
-	if (pwm >= NUMBER_OF_CHANNELS) {
+	if (channel >= NUMBER_OF_CHANNELS) {
 		return -EINVAL;
 	}
 
@@ -66,10 +63,10 @@ int pwm_litex_pin_set(const struct device *dev, uint32_t pwm,
 	return 0;
 }
 
-int pwm_litex_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
+int pwm_litex_get_cycles_per_sec(const struct device *dev, uint32_t channel,
 				 uint64_t *cycles)
 {
-	if (pwm >= NUMBER_OF_CHANNELS) {
+	if (channel >= NUMBER_OF_CHANNELS) {
 		return -EINVAL;
 	}
 
@@ -78,13 +75,13 @@ int pwm_litex_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
 }
 
 static const struct pwm_driver_api pwm_litex_driver_api = {
-	.pin_set             = pwm_litex_pin_set,
-	.get_cycles_per_sec  = pwm_litex_get_cycles_per_sec,
+	.set_cycles = pwm_litex_set_cycles,
+	.get_cycles_per_sec = pwm_litex_get_cycles_per_sec,
 };
 
 /* Device Instantiation */
 
-/* LiteX regisers use only first byte from 4-bytes register, that's why they
+/* LiteX registers use only first byte from 4-bytes register, that's why they
  * occupy larger space in memory. We need to know the size that is
  * actually used, that is why the register size from dts is divided by 4.
  */

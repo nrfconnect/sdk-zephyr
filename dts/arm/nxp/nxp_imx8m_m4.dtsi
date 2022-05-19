@@ -7,6 +7,7 @@
 #include <arm/armv7-m.dtsi>
 #include <dt-bindings/clock/imx_ccm.h>
 #include <dt-bindings/rdc/imx_rdc.h>
+#include <dt-bindings/gpio/gpio.h>
 #include <mem.h>
 
 / {
@@ -60,6 +61,76 @@
 			label = "OCRAM_S SYSTEM";
 		};
 
+		gpio1: gpio@30200000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x30200000 DT_SIZE_K(64)>;
+			interrupts = <64 0>, <65 0>;
+			rdc = <(RDC_DOMAIN_PERM(A7_DOMAIN_ID,\
+					       RDC_DOMAIN_PERM_RW)|\
+			       RDC_DOMAIN_PERM(M4_DOMAIN_ID,\
+					       RDC_DOMAIN_PERM_RW))>;
+			label = "GPIO_1";
+			gpio-controller;
+			#gpio-cells = <2>;
+			status = "disabled";
+		};
+
+		gpio2: gpio@30210000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x30210000 DT_SIZE_K(64)>;
+			interrupts = <66 0>, <67 0>;
+			rdc = <(RDC_DOMAIN_PERM(A7_DOMAIN_ID,\
+					       RDC_DOMAIN_PERM_RW)|\
+			       RDC_DOMAIN_PERM(M4_DOMAIN_ID,\
+					       RDC_DOMAIN_PERM_RW))>;
+			label = "GPIO_2";
+			gpio-controller;
+			#gpio-cells = <2>;
+			status = "disabled";
+		};
+
+		gpio3: gpio@30220000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x30220000 DT_SIZE_K(64)>;
+			interrupts = <68 0>, <69 0>;
+			rdc = <(RDC_DOMAIN_PERM(A7_DOMAIN_ID,\
+					       RDC_DOMAIN_PERM_RW)|\
+			       RDC_DOMAIN_PERM(M4_DOMAIN_ID,\
+					       RDC_DOMAIN_PERM_RW))>;
+			label = "GPIO_3";
+			gpio-controller;
+			#gpio-cells = <2>;
+			status = "disabled";
+		};
+
+		gpio4: gpio@30230000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x30230000 DT_SIZE_K(64)>;
+			interrupts = <70 0>, <71 0>;
+			rdc = <(RDC_DOMAIN_PERM(A7_DOMAIN_ID,\
+					       RDC_DOMAIN_PERM_RW)|\
+			       RDC_DOMAIN_PERM(M4_DOMAIN_ID,\
+					       RDC_DOMAIN_PERM_RW))>;
+			label = "GPIO_4";
+			gpio-controller;
+			#gpio-cells = <2>;
+			status = "disabled";
+		};
+
+		gpio5: gpio@30240000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x30240000 DT_SIZE_K(64)>;
+			interrupts = <72 0>, <73 0>;
+			rdc = <(RDC_DOMAIN_PERM(A7_DOMAIN_ID,\
+					       RDC_DOMAIN_PERM_RW)|\
+			       RDC_DOMAIN_PERM(M4_DOMAIN_ID,\
+					       RDC_DOMAIN_PERM_RW))>;
+			label = "GPIO_5";
+			gpio-controller;
+			#gpio-cells = <2>;
+			status = "disabled";
+		};
+
 		ccm: ccm@30380000 {
 			compatible = "nxp,imx-ccm";
 			reg = <0x30380000 DT_SIZE_K(64)>;
@@ -71,7 +142,7 @@
 			compatible = "nxp,imx-iuart";
 			reg = <0x30860000 0x10000>;
 			interrupts = <26 3>;
-			clocks = <&ccm IMX_CCM_UART_CLK 0x7c 24>;
+			clocks = <&ccm IMX_CCM_UART1_CLK 0x7c 24>;
 			label = "UART_1";
 			status = "disabled";
 		};
@@ -80,7 +151,7 @@
 			compatible = "nxp,imx-iuart";
 			reg = <0x30890000 0x10000>;
 			interrupts = <27 3>;
-			clocks = <&ccm IMX_CCM_UART_CLK 0x68 28>;
+			clocks = <&ccm IMX_CCM_UART2_CLK 0x68 28>;
 			label = "UART_2";
 			status = "disabled";
 		};
@@ -89,7 +160,7 @@
 			compatible = "nxp,imx-iuart";
 			reg = <0x30880000 0x10000>;
 			interrupts = <28 3>;
-			clocks = <&ccm IMX_CCM_UART_CLK 0x68 12>;
+			clocks = <&ccm IMX_CCM_UART3_CLK 0x68 12>;
 			label = "UART_3";
 			status = "disabled";
 		};
@@ -98,7 +169,7 @@
 			compatible = "nxp,imx-iuart";
 			reg = <0x30a60000 0x10000>;
 			interrupts = <29 3>;
-			clocks = <&ccm IMX_CCM_UART_CLK 0x6c 24>;
+			clocks = <&ccm IMX_CCM_UART4_CLK 0x6c 24>;
 			label = "UART_4";
 			status = "disabled";
 		};

@@ -21,7 +21,7 @@
 #include <init.h>
 #include <drivers/uart.h>
 #include <drivers/clock_control.h>
-#include <pm/pm.h>
+#include <pm/policy.h>
 
 #ifdef CONFIG_UART_ASYNC_API
 #include <drivers/dma/dma_stm32.h>
@@ -36,7 +36,7 @@
 #include <stm32_ll_lpuart.h>
 
 #include <logging/log.h>
-LOG_MODULE_REGISTER(uart_stm32);
+LOG_MODULE_REGISTER(uart_stm32, CONFIG_UART_LOG_LEVEL);
 
 #define HAS_LPUART_1 (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(lpuart1), \
 					 st_stm32_lpuart, okay))
@@ -72,23 +72,23 @@ uint32_t lpuartdiv_calc(const uint64_t clock_rate, const uint32_t baud_rate)
 #define TIMEOUT 1000
 
 #ifdef CONFIG_PM
-static void uart_stm32_pm_constraint_set(const struct device *dev)
+static void uart_stm32_pm_policy_state_lock_get(const struct device *dev)
 {
 	struct uart_stm32_data *data = dev->data;
 
-	if (!data->pm_constraint_on) {
-		data->pm_constraint_on = true;
-		pm_constraint_set(PM_STATE_SUSPEND_TO_IDLE);
+	if (!data->pm_policy_state_on) {
+		data->pm_policy_state_on = true;
+		pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE);
 	}
 }
 
-static void uart_stm32_pm_constraint_release(const struct device *dev)
+static void uart_stm32_pm_policy_state_lock_put(const struct device *dev)
 {
 	struct uart_stm32_data *data = dev->data;
 
-	if (data->pm_constraint_on) {
-		data->pm_constraint_on = false;
-		pm_constraint_release(PM_STATE_SUSPEND_TO_IDLE);
+	if (data->pm_policy_state_on) {
+		data->pm_policy_state_on = false;
+		pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE);
 	}
 }
 #endif /* CONFIG_PM */
@@ -473,6 +473,12 @@ static int uart_stm32_configure(const struct device *dev,
 		data->baud_rate = cfg->baudrate;
 	}
 
+#ifdef LL_USART_TXRX_SWAPPED
+	if (config->tx_rx_swap) {
+		LL_USART_SetTXRXSwap(config->usart, LL_USART_TXRX_SWAPPED);
+	}
+#endif
+
 	LL_USART_Enable(config->usart);
 	return 0;
 };
@@ -551,7 +557,7 @@ static void uart_stm32_poll_out(const struct device *dev,
 		/* Don't allow system to suspend until stream
 		 * transmission has completed
 		 */
-		uart_stm32_pm_constraint_set(dev);
+		uart_stm32_pm_policy_state_lock_get(dev);
 
 		/* Enable TC interrupt so we can release suspend
 		 * constraint when done
@@ -695,7 +701,7 @@ static void uart_stm32_irq_tx_enable(const struct device *dev)
 	key = irq_lock();
 	data->tx_poll_stream_on = false;
 	data->tx_int_stream_on = true;
-	uart_stm32_pm_constraint_set(dev);
+	uart_stm32_pm_policy_state_lock_get(dev);
 #endif
 	LL_USART_EnableIT_TC(config->usart);
 
@@ -718,7 +724,7 @@ static void uart_stm32_irq_tx_disable(const struct device *dev)
 
 #ifdef CONFIG_PM
 	data->tx_int_stream_on = false;
-	uart_stm32_pm_constraint_release(dev);
+	uart_stm32_pm_policy_state_lock_put(dev);
 #endif
 
 #ifdef CONFIG_PM
@@ -967,14 +973,14 @@ static void uart_stm32_isr(const struct device *dev)
 		LL_USART_IsActiveFlag_TC(config->usart)) {
 
 		if (data->tx_poll_stream_on) {
-			/* A poll stream transmition just completed,
+			/* A poll stream transmission just completed,
 			 * allow system to suspend
 			 */
 			LL_USART_DisableIT_TC(config->usart);
 			data->tx_poll_stream_on = false;
-			uart_stm32_pm_constraint_release(dev);
+			uart_stm32_pm_policy_state_lock_put(dev);
 		}
-		/* Stream transmition was either async or IRQ based,
+		/* Stream transmission was either async or IRQ based,
 		 * constraint will be released at the same time TC IT
 		 * is disabled
 		 */
@@ -1011,7 +1017,7 @@ static void uart_stm32_isr(const struct device *dev)
 		async_evt_tx_done(data);
 
 #ifdef CONFIG_PM
-		uart_stm32_pm_constraint_release(dev);
+		uart_stm32_pm_policy_state_lock_put(dev);
 #endif
 	} else if (LL_USART_IsEnabledIT_RXNE(config->usart) &&
 			LL_USART_IsActiveFlag_RXNE(config->usart)) {
@@ -1103,7 +1109,7 @@ static int uart_stm32_async_rx_disable(const struct device *dev)
 	data->rx_next_buffer = NULL;
 	data->rx_next_buffer_len = 0;
 
-	/* When async rx is disabled, enable interruptable instance of uart to function normally*/
+	/* When async rx is disabled, enable interruptible instance of uart to function normally */
 	LL_USART_EnableIT_RXNE(config->usart);
 
 	LOG_DBG("rx: disabled");
@@ -1142,7 +1148,7 @@ static void uart_stm32_dma_replace_buffer(const struct device *dev)
 	const struct uart_stm32_config *config = dev->config;
 	struct uart_stm32_data *data = dev->data;
 
-	/* Replace the buffer and relod the DMA */
+	/* Replace the buffer and reload the DMA */
 	LOG_DBG("Replacing RX buffer: %d", data->rx_next_buffer_len);
 
 	/* reload DMA */
@@ -1255,7 +1261,7 @@ static int uart_stm32_async_tx(const struct device *dev,
 #ifdef CONFIG_PM
 
 	/* Do not allow system to suspend until transmission has completed */
-	uart_stm32_pm_constraint_set(dev);
+	uart_stm32_pm_policy_state_lock_get(dev);
 #endif
 
 	/* Enable TX DMA requests */
@@ -1715,6 +1721,7 @@ static const struct uart_stm32_config uart_stm32_cfg_##index = {	\
 	.parity = DT_INST_ENUM_IDX_OR(index, parity, UART_CFG_PARITY_NONE),	\
 	.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(index),			\
 	.single_wire = DT_INST_PROP_OR(index, single_wire, false), \
+	.tx_rx_swap = DT_INST_PROP_OR(index, tx_rx_swap, false),	\
 	STM32_UART_IRQ_HANDLER_FUNC(index)				\
 };									\
 									\

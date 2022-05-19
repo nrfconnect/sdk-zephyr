@@ -9,6 +9,7 @@
 #include <dt-bindings/clock/imx_ccm.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/i2c/i2c.h>
+#include <dt-bindings/pwm/pwm.h>
 
 / {
 	chosen {
@@ -19,9 +20,10 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		cpu@0 {
+		cpu0: cpu@0 {
 			device_type = "cpu";
 			compatible = "arm,cortex-m7";
+			d-cache-line-size = <32>;
 			reg = <0>;
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -182,6 +184,41 @@
 			gpio-controller;
 			#gpio-cells = <2>;
 		};
+		/*
+		 * Note: interrupts for GPIO6-9 are not currently supported
+		 * by the gpio driver.
+		 */
+		gpio6: gpio@42000000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x42000000 0x4000>;
+			label = "GPIO_6";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
+		gpio7: gpio@42004000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x42004000 0x4000>;
+			label = "GPIO_7";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
+		gpio8: gpio@42008000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x42008000 0x4000>;
+			label = "GPIO_8";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
+		gpio9: gpio@4200c000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x4200c000 0x4000>;
+			label = "GPIO_9";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
 
 		lpi2c1: i2c@403f0000 {
 			compatible = "nxp,imx-lpi2c";
@@ -232,8 +269,13 @@
 		};
 
 		iomuxc: iomuxc@401f8000 {
+			compatible = "nxp,imx-iomuxc";
 			reg = <0x401f8000 0x4000>;
-			label = "PINMUX_0";
+			status = "okay";
+			pinctrl: pinctrl {
+				status = "okay";
+				compatible = "nxp,mcux-rt-pinctrl";
+			};
 		};
 
 		lcdif: display-controller@402b8000 {
@@ -293,6 +335,8 @@
 			reg = <0x40184000 0x4000>;
 			interrupts = <20 0>;
 			clocks = <&ccm IMX_CCM_LPUART_CLK 0x7c 24>;
+			dmas = <&edma0 1 2>, <&edma0 2 3>;
+			dma-names = "tx", "rx";
 			label = "UART_1";
 			status = "disabled";
 		};
@@ -302,6 +346,8 @@
 			reg = <0x40188000 0x4000>;
 			interrupts = <21 0>;
 			clocks = <&ccm IMX_CCM_LPUART_CLK 0x68 28>;
+			dmas = <&edma0 3 66>, <&edma0 4 67>;
+			dma-names = "tx", "rx";
 			label = "UART_2";
 			status = "disabled";
 		};
@@ -311,6 +357,8 @@
 			reg = <0x4018c000 0x4000>;
 			interrupts = <22 0>;
 			clocks = <&ccm IMX_CCM_LPUART_CLK 0x68 12>;
+			dmas = <&edma0 5 4>, <&edma0 6 5>;
+			dma-names = "tx", "rx";
 			label = "UART_3";
 			status = "disabled";
 		};
@@ -320,6 +368,8 @@
 			reg = <0x40190000 0x4000>;
 			interrupts = <23 0>;
 			clocks = <&ccm IMX_CCM_LPUART_CLK 0x6c 24>;
+			dmas = <&edma0 7 68>, <&edma0 8 69>;
+			dma-names = "tx", "rx";
 			label = "UART_4";
 			status = "disabled";
 		};
@@ -329,6 +379,8 @@
 			reg = <0x40194000 0x4000>;
 			interrupts = <24 0>;
 			clocks = <&ccm IMX_CCM_LPUART_CLK 0x74 2>;
+			dmas = <&edma0 9 6>, <&edma0 10 7>;
+			dma-names = "tx", "rx";
 			label = "UART_5";
 			status = "disabled";
 		};
@@ -338,6 +390,8 @@
 			reg = <0x40198000 0x4000>;
 			interrupts = <25 0>;
 			clocks = <&ccm IMX_CCM_LPUART_CLK 0x74 6>;
+			dmas = <&edma0 11 70>, <&edma0 12 71>;
+			dma-names = "tx", "rx";
 			label = "UART_6";
 			status = "disabled";
 		};
@@ -347,6 +401,8 @@
 			reg = <0x4019c000 0x4000>;
 			interrupts = <26 0>;
 			clocks = <&ccm IMX_CCM_LPUART_CLK 0x7c 26>;
+			dmas = <&edma0 13 8>, <&edma0 14 9>;
+			dma-names = "tx", "rx";
 			label = "UART_7";
 			status = "disabled";
 		};
@@ -356,6 +412,8 @@
 			reg = <0x401a0000 0x4000>;
 			interrupts = <27 0>;
 			clocks = <&ccm IMX_CCM_LPUART_CLK 0x80 14>;
+			dmas = <&edma0 15 72>, <&edma0 16 73>;
+			dma-names = "tx", "rx";
 			label = "UART_8";
 			status = "disabled";
 		};
@@ -392,7 +450,7 @@
 				index = <0>;
 				label = "FLEXPWM1_PWM0";
 				interrupts = <102 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -402,7 +460,7 @@
 				index = <1>;
 				label = "FLEXPWM1_PWM1";
 				interrupts = <103 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -412,7 +470,7 @@
 				index = <2>;
 				label = "FLEXPWM1_PWM2";
 				interrupts = <104 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -422,7 +480,7 @@
 				index = <3>;
 				label = "FLEXPWM1_PWM3";
 				interrupts = <105 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -438,7 +496,7 @@
 				index = <0>;
 				label = "FLEXPWM2_PWM0";
 				interrupts = <137 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -448,7 +506,7 @@
 				index = <1>;
 				label = "FLEXPWM2_PWM1";
 				interrupts = <138 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -458,7 +516,7 @@
 				index = <2>;
 				label = "FLEXPWM2_PWM2";
 				interrupts = <139 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -468,7 +526,7 @@
 				index = <3>;
 				label = "FLEXPWM2_PWM3";
 				interrupts = <140 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -484,7 +542,7 @@
 				index = <0>;
 				label = "FLEXPWM3_PWM0";
 				interrupts = <142 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -494,7 +552,7 @@
 				index = <1>;
 				label = "FLEXPWM3_PWM1";
 				interrupts = <143 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -504,7 +562,7 @@
 				index = <2>;
 				label = "FLEXPWM3_PWM2";
 				interrupts = <144 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -514,7 +572,7 @@
 				index = <3>;
 				label = "FLEXPWM3_PWM3";
 				interrupts = <145 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -530,7 +588,7 @@
 				index = <0>;
 				label = "FLEXPWM4_PWM0";
 				interrupts = <147 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -540,7 +598,7 @@
 				index = <1>;
 				label = "FLEXPWM4_PWM1";
 				interrupts = <148 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -550,7 +608,7 @@
 				index = <2>;
 				label = "FLEXPWM4_PWM2";
 				interrupts = <149 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -560,7 +618,7 @@
 				index = <3>;
 				label = "FLEXPWM4_PWM3";
 				interrupts = <150 0>;
-				#pwm-cells = <1>;
+				#pwm-cells = <2>;
 				clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
 				status = "disabled";
 			};
@@ -574,7 +632,7 @@
 			status = "disabled";
 			label = "ETH_0";
 			phy-addr = <0>;
-			ptp {
+			ptp: ptp {
 				compatible = "nxp,kinetis-ptp";
 				status = "disabled";
 				interrupts = <115 0>;
@@ -614,6 +672,7 @@
 			reg = <0x402E0200 0x200>;
 			interrupts = <112 1>;
 			interrupt-names = "usb_otg";
+			clocks = <&sysclk>;
 			num-bidir-endpoints = <8>;
 			maximum-speed = "full-speed";
 			status = "disabled";
@@ -729,7 +788,7 @@
 		};
 
 		iomuxcgpr: iomuxcgpr@400ac000 {
-			compatible = "nxp,imx-pinmux";
+			compatible = "nxp,imx-gpr";
 			reg = <0x400AC000 0x4000>;
 			label = "IOMUX_GPR";
 			#pinmux-cells = <2>;

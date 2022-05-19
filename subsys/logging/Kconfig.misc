@@ -12,9 +12,9 @@ config LOG_DOMAIN_ID
 	  In multicore system each application/core must have unique domain ID.
 
 config LOG_CMDS
-	bool "Enable shell commands"
+	bool "Shell commands"
 	depends on SHELL
-	depends on !LOG_FRONTEND && !LOG_MODE_MINIMAL
+	depends on !LOG_FRONTEND_ONLY && !LOG_MODE_MINIMAL
 	default y if SHELL
 
 config LOG_TEST_CLEAR_MESSAGE_SPACE
@@ -57,12 +57,22 @@ config LOG2_FMT_SECTION
 	  logging.
 
 config LOG_MEM_UTILIZATION
-	bool "Enable tracking maximum memory utilization"
+	bool "Tracking maximum memory utilization"
 	depends on LOG_MODE_DEFERRED
 	default y if LOG_CMDS
 	select MEM_SLAB_TRACE_MAX_UTILIZATION if LOG1
 	help
 	  When enabled, maximum usage of memory used for log messages in deferred
 	  mode is tracked. It can be used to trim LOG_BUFFER_SIZE.
+
+config LOG_DICTIONARY_DB
+	bool
+
+config LOG2_MSG_PKG_ALWAYS_ADD_RO_STRING_IDXS
+	bool
+	help
+	  Enable this option to force log messages to always append indexes of
+	  read-only string arguments in the package. This should be selected by
+	  backends if required.
 
 endmenu
