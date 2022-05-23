@@ -1,4 +1,7 @@
 # This is the Jenkins ci variant of the .github/labler.yaml
+"CI-iot-zephyr-lwm2m":
+  - "**/*"
+
 "CI-iot-samples-test":
   - "**/*"
 
