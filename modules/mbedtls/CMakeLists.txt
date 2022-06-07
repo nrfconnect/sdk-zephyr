@@ -6,6 +6,8 @@ if(CONFIG_MBEDTLS_BUILTIN)
     MBEDTLS_CONFIG_FILE="${CONFIG_MBEDTLS_CFG_FILE}"
   )
 
+  zephyr_include_directories(${ZEPHYR_CURRENT_MODULE_DIR}/include)
+
   target_include_directories(mbedTLS INTERFACE
     ${ZEPHYR_CURRENT_MODULE_DIR}/include
     # mbedTLS v3.1.0 has psa_crypto_cipher.c including an internal header using <>.
