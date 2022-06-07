@@ -8,6 +8,6 @@ if(CONFIG_TFM_FLASH_MERGED_BINARY)
   set_property(TARGET runners_yaml_props_target PROPERTY hex_file "${CMAKE_BINARY_DIR}/tfm_merged.hex")
 endif()
 
-board_runner_args(jlink "--device=nRF9160_xxAA" "--speed=4000")
+board_runner_args(jlink "--device=nRF9160_xxAA" "--speed=4000" "--reset-after-load")
 include(${ZEPHYR_BASE}/boards/common/nrfjprog.board.cmake)
 include(${ZEPHYR_BASE}/boards/common/jlink.board.cmake)
