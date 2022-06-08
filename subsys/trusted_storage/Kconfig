@@ -1,0 +1,185 @@
+# Subsystem configuration options
+
+# Copyright (c) 2022 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig TRUSTED_STORAGE
+	bool "Trusted Storage"
+	help
+	  The trusted storage subsystem allows its users to store in a trusted
+	  way data ensuring data integrity by providing integrity check on the
+	  storage data using hash algorithms and optionally data privacy by
+	  using AEAD algorithms.
+	  It supports several trusted implementation back-ends to provide
+	  various levels of trust depending on the device security features.
+
+if TRUSTED_STORAGE
+module = TRUSTED_STORAGE
+module-str = trusted_storage
+source "subsys/logging/Kconfig.template.log_config"
+endif
+
+config TRUSTED_STORAGE_SETTINGS_HELPERS
+	bool "Trusted Storage Settings Helpers"
+	depends on SETTINGS
+	depends on SETTINGS_RUNTIME
+	help
+	  Build Settings subsystem based Trusted Storage helpers.
+
+config TRUSTED_STORAGE_SETTINGS_AUTH_CRYPT_BACKEND
+	bool "Trusted Storage Authenticated Encryption Backend"
+	select TRUSTED_STORAGE_SETTINGS_HELPERS
+	help
+	  Build Trusted Storage Authenticated Encryption Backend.
+
+config TRUSTED_STORAGE_AUTH_CRYPT_NONCE_SEED_COUNTER
+	bool "Seed + Counter Nonce Implementation"
+	help
+	  Use initial random seed, then incrementing nonce for each AEAD
+	  encryption implementation.
+
+if TRUSTED_STORAGE_SETTINGS_AUTH_CRYPT_BACKEND
+
+choice TRUSTED_STORAGE_AUTH_CRYPT_NONCE_IMPL
+	prompt "Trusted Storage Authenticated Encryption Nonce implementation"
+	depends on TRUSTED_STORAGE_SETTINGS_AUTH_CRYPT_BACKEND
+	default TRUSTED_STORAGE_AUTH_CRYPT_NONCE_SEED_COUNTER_PSA
+	help
+	  Crypto implementation for the Authenticated Encryption Nonce
+	  provider implementation.
+
+config TRUSTED_STORAGE_AUTH_CRYPT_NONCE_SEED_COUNTER_PSA
+	bool "PSA Nonce Seed + Counter Implementation"
+	select TRUSTED_STORAGE_AUTH_CRYPT_NONCE_SEED_COUNTER
+	help
+	  Use PSA Crypto for Nonce initial random seed, then incrementing
+	  nonce for each AEAD encryption.
+
+config TRUSTED_STORAGE_AUTH_CRYPT_NONCE_CUSTOM
+	bool "Custom Nonce Implementation"
+	help
+	  Use custom implementation for AEAD Nonce provider..
+
+endchoice
+
+endif
+
+config TRUSTED_STORAGE_AUTH_CRYPT_BACKEND_PSA
+	bool "Trusted Storage Authenticated Encryption with PSA Crypto"
+	depends on MBEDTLS_BUILTIN_PSA_CRYPTO
+	depends on MBEDTLS_CIPHER
+	depends on MBEDTLS_CIPHER_AES_ENABLED
+	depends on MBEDTLS_CIPHER_GCM_ENABLED
+	help
+	  Build Trusted Storage Authenticated Encryption using PSA Crypto
+	  implementation to be used with the Authenticated Encryption Backend.
+
+config TRUSTED_STORAGE_SETTINGS_MAX_DATA_SIZE
+	int "Trusted Storage Settings backend maximum storage size"
+	depends on TRUSTED_STORAGE_SETTINGS_HELPERS
+	default 256
+	help
+	  This defines the maximum data size that can be stored.
+
+config PROTECTED_STORAGE
+	bool "Protected Storage"
+	depends on TRUSTED_STORAGE
+	depends on !BUILD_WITH_TFM
+	help
+	  The Protected Storage is designed to store in a trusted
+	  way device intimate data and protects against physical attacks.
+	  It supports several storage back-ends and several trusted
+	  implementation back-ends to provide various levels of trust.
+
+if PROTECTED_STORAGE
+
+choice PROTECTED_STORAGE_BACKEND
+	prompt "Protected Storage back-end"
+	depends on PROTECTED_STORAGE
+	default PROTECTED_STORAGE_SETTINGS
+	help
+	  Storage back-end to be used by the Protected Storage API.
+
+config PROTECTED_STORAGE_SETTINGS
+	bool "Settings"
+	select TRUSTED_STORAGE_SETTINGS_HELPERS
+	help
+	  Use the Settings subsystem as storage back-end.
+
+config PROTECTED_STORAGE_CUSTOM
+	bool "Custom"
+	help
+	  Use a custom implementation as storage back-end.
+
+endchoice
+
+if PROTECTED_STORAGE_SETTINGS
+
+config PROTECTED_STORAGE_SETTINGS_PREFIX
+	string "Protected Storage Settings backend object prefix"
+	depends on PROTECTED_STORAGE_SETTINGS
+	default "ps/"
+	help
+	  This defines a prefix for the Protected Storage object name.
+
+choice PROTECTED_STORAGE_SETTINGS_TRUST_BACKEND
+	prompt "Protected Storage with Settings trust back-end"
+	depends on PROTECTED_STORAGE_SETTINGS
+	default PROTECTED_STORAGE_SETTINGS_TRUST_INTEGRITY
+	help
+	  Trust back-end to be used by the Protected Storage API.
+
+config PROTECTED_STORAGE_SETTINGS_TRUST_NONE
+	bool "Integrity"
+	help
+	  Use pass-throught based trust implementation.
+
+config PROTECTED_STORAGE_SETTINGS_TRUST_INTEGRITY
+	bool "Integrity"
+	depends on MBEDTLS_BUILTIN_PSA_CRYPTO
+	depends on MBEDTLS_MD
+	depends on MBEDTLS_HASH_SHA256_ENABLED
+	help
+	  Use SHA256 integrity check based backend implementation.
+
+config PROTECTED_STORAGE_SETTINGS_TRUST_AUTH_CRYPT
+	bool "Authenticated Encryption"
+	select TRUSTED_STORAGE_SETTINGS_AUTH_CRYPT_BACKEND
+	help
+	  Use AEAD Authenticated Encryption based backend implementation.
+
+config PROTECTED_STORAGE_SETTINGS_TRUST_CUSTOM
+	bool "Custom"
+	help
+	  Use a custom trust scheme implementation.
+
+endchoice
+
+if PROTECTED_STORAGE_SETTINGS_TRUST_AUTH_CRYPT
+
+choice PROTECTED_STORAGE_SETTINGS_TRUST_AUTH_CRYPT_IMPL
+	prompt "Protected Storage with Settings Authenticated Encryption impl"
+	depends on PROTECTED_STORAGE_SETTINGS_TRUST_AUTH_CRYPT
+	default PROTECTED_STORAGE_SETTINGS_TRUST_AUTH_CRYPT_PSA
+	help
+	  Crypto implementation for the Protected Storage with Settings
+	  Authenticated Encryption trust implementation.
+
+config PROTECTED_STORAGE_SETTINGS_TRUST_AUTH_CRYPT_PSA
+	bool "PSA AEAD Crypto Implementation"
+	select TRUSTED_STORAGE_AUTH_CRYPT_BACKEND_PSA
+	help
+	  Use PSA Crypto for AEAD Authenticated Encryption.
+
+config PROTECTED_STORAGE_SETTINGS_TRUST_AUTH_CRYPT_CUSTOM
+	bool "Custom AEAD Crypto Implementation"
+	help
+	  Use custom crypto for AEAD Authenticated Encryption.
+
+endchoice
+
+endif
+
+endif
+
+endif

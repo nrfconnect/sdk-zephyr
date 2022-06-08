@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+
+zephyr_sources_ifdef(CONFIG_PROTECTED_STORAGE
+	backend_interface.c
+)
+zephyr_sources_ifdef(CONFIG_PROTECTED_STORAGE_SETTINGS
+	settings_backend.c
+)
+zephyr_sources_ifdef(CONFIG_PROTECTED_STORAGE_SETTINGS_TRUST_INTEGRITY
+	settings_trust_integrity.c
+)
+zephyr_sources_ifdef(CONFIG_PROTECTED_STORAGE_SETTINGS_TRUST_AUTH_CRYPT
+	settings_trust_auth_crypt.c
+)
