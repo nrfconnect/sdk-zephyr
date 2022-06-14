@@ -14,3 +14,4 @@ zephyr_sources_ifdef(CONFIG_TRUSTED_STORAGE_AUTH_CRYPT_NONCE_SEED_COUNTER
 )
 
 add_subdirectory_ifdef(CONFIG_PROTECTED_STORAGE protected_storage)
+add_subdirectory_ifdef(CONFIG_INTERNAL_TRUSTED_STORAGE internal_trusted_storage)

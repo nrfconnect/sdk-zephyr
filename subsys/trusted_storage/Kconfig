@@ -183,3 +183,69 @@ endif
 endif
 
 endif
+
+config INTERNAL_TRUSTED_STORAGE
+	bool "Internal Trusted Storage"
+	depends on TRUSTED_STORAGE
+	depends on !BUILD_WITH_TFM
+	help
+	  The Internal Trusted Storage is designed to store assets that must
+	  be placed inside internal flash. Some examples of assets that require
+	  this are replay protection values for external storage and keys for
+	  use by components of the PSA Root of Trust.
+
+if INTERNAL_TRUSTED_STORAGE
+
+choice INTERNAL_TRUSTED_STORAGE_BACKEND
+	prompt "Internal Trusted Storage back-end"
+	depends on INTERNAL_TRUSTED_STORAGE
+	default INTERNAL_TRUSTED_STORAGE_SETTINGS
+	help
+	  Storage back-end to be used by the Internal Trusted Storage API.
+
+config INTERNAL_TRUSTED_STORAGE_SETTINGS
+	bool "Settings"
+	select TRUSTED_STORAGE_SETTINGS_HELPERS
+	help
+	  Use the Settings subsystem as storage back-end.
+
+config INTERNAL_TRUSTED_STORAGE_CUSTOM
+	bool "Custom"
+	help
+	  Use a custom implementation as storage back-end.
+
+endchoice
+
+if INTERNAL_TRUSTED_STORAGE_SETTINGS
+
+config INTERNAL_TRUSTED_STORAGE_SETTINGS_PREFIX
+	string "Internal Trusted Storage Settings backend object prefix"
+	depends on INTERNAL_TRUSTED_STORAGE_SETTINGS
+	default "its/"
+	help
+	  This defines a prefix for the Internal Trusted Storage object name.
+
+choice INTERNAL_TRUSTED_STORAGE_SETTINGS_TRUST_BACKEND
+	prompt "Internal Trusted Storage with Settings trust back-end"
+	depends on INTERNAL_TRUSTED_STORAGE_SETTINGS
+	default INTERNAL_TRUSTED_STORAGE_SETTINGS_TRUST_CHACHAPOLY
+	help
+	  Trust back-end to be used by the Internal Trusted Storage API.
+
+config INTERNAL_TRUSTED_STORAGE_SETTINGS_TRUST_CHACHAPOLY
+	bool "Chachapoly Authenticated Encryption"
+	select TRUSTED_STORAGE_SETTINGS_AUTH_CRYPT_BACKEND
+	depends on MBEDTLS_CHACHAPOLY_AEAD_ENABLED
+	help
+	  Use Chachapoly AEAD Authenticated Encryption based backend implementation.
+
+config INTERNAL_TRUSTED_STORAGE_SETTINGS_TRUST_CUSTOM
+	bool "Custom"
+	help
+	  Use a custom trust scheme implementation.
+
+endchoice
+
+endif
+
+endif
