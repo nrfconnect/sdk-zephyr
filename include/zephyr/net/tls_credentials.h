@@ -58,7 +58,13 @@ enum tls_credential_type {
 	/** Opaque Pre-shared key. Should be registered together with a
 	 *  corresponding PSK identity. Used with PSK-based ciphersuites.
 	 */
-	TLS_CREDENTIAL_OPAQUE_PSK
+	TLS_CREDENTIAL_OPAQUE_PSK,
+
+	/** Opaque Private key. Should be registered together with a
+	 *  corresponding public certificate.
+	 *  Used with certificate-based ciphersuites.
+	 */
+	TLS_CREDENTIAL_OPAQUE_PRIVATE_KEY
 };
 
 /** Secure tag, a reference to TLS credential
