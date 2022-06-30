@@ -390,7 +390,7 @@
 		status = "disabled";
 		prescaler = <2>;
 		label = "SC_TIMER";
-		#pwm-cells = <3>;
+		#pwm-cells = <2>;
 	};
 };
 
