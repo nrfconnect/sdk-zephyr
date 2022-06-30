@@ -556,7 +556,8 @@ static int hci_set_adv_ext_complete(struct bt_le_ext_adv *adv, uint16_t hci_op,
 		total_data_len = BT_GAP_ADV_MAX_ADV_DATA_LEN;
 	}
 
-	cmd_size = sizeof(*set_data) + total_data_len;
+	cmd_size = total_data_len +
+		   offsetof(struct bt_hci_cp_le_set_ext_adv_data, data);
 
 	buf = bt_hci_cmd_create(hci_op, cmd_size);
 	if (!buf) {
@@ -595,8 +596,9 @@ static int hci_set_adv_ext_fragmented(struct bt_le_ext_adv *adv, uint16_t hci_op
 	while (!ad_stream_is_empty(&stream)) {
 		struct bt_hci_cp_le_set_ext_adv_data *set_data;
 		struct net_buf *buf;
-		const size_t data_len = MIN(BT_HCI_LE_EXT_ADV_FRAG_MAX_LEN, stream.remaining_size);
-		const size_t cmd_size = sizeof(*set_data) + data_len;
+		size_t data_len = MIN(sizeof(set_data->data), stream.remaining_size);
+		const size_t cmd_size = data_len +
+					offsetof(struct bt_hci_cp_le_set_ext_adv_data, data);
 		int err;
 
 		buf = bt_hci_cmd_create(hci_op, cmd_size);
@@ -608,7 +610,7 @@ static int hci_set_adv_ext_fragmented(struct bt_le_ext_adv *adv, uint16_t hci_op
 
 		set_data->handle = adv->handle;
 		set_data->frag_pref = BT_HCI_LE_EXT_ADV_FRAG_ENABLED;
-		set_data->len = ad_stream_read(&stream, set_data->data, data_len);
+		set_data->len = ad_stream_read(&stream, set_data->data, sizeof(set_data->data));
 
 		if (is_first_iteration && ad_stream_is_empty(&stream)) {
 			set_data->op = BT_HCI_LE_EXT_ADV_OP_COMPLETE_DATA;
@@ -703,8 +705,9 @@ static int hci_set_per_adv_data(const struct bt_le_ext_adv *adv,
 	while (!ad_stream_is_empty(&stream)) {
 		struct bt_hci_cp_le_set_per_adv_data *set_data;
 		struct net_buf *buf;
-		const size_t data_len = MIN(BT_HCI_LE_PER_ADV_FRAG_MAX_LEN, stream.remaining_size);
-		const size_t cmd_size = sizeof(*set_data) + data_len;
+		size_t data_len = MIN(sizeof(set_data->data), stream.remaining_size);
+		const size_t cmd_size = data_len +
+					offsetof(struct bt_hci_cp_le_set_ext_adv_data, data);
 		int err;
 
 		buf = bt_hci_cmd_create(BT_HCI_OP_LE_SET_PER_ADV_DATA, cmd_size);
@@ -716,7 +719,7 @@ static int hci_set_per_adv_data(const struct bt_le_ext_adv *adv,
 		(void)memset(set_data, 0, cmd_size);
 
 		set_data->handle = adv->handle;
-		set_data->len = ad_stream_read(&stream, set_data->data, data_len);
+		set_data->len = ad_stream_read(&stream, set_data->data, sizeof(set_data->data));
 
 		if (is_first_iteration && ad_stream_is_empty(&stream)) {
 			set_data->op = BT_HCI_LE_EXT_ADV_OP_COMPLETE_DATA;
