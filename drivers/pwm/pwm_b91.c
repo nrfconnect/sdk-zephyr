@@ -55,10 +55,10 @@ static int pwm_b91_init(const struct device *dev)
 	return 0;
 }
 
-/* API implementation: set_cycles */
-static int pwm_b91_set_cycles(const struct device *dev, uint32_t channel,
-			      uint32_t period_cycles, uint32_t pulse_cycles,
-			      pwm_flags_t flags)
+/* API implementation: pin_set */
+static int pwm_b91_pin_set(const struct device *dev, uint32_t channel,
+			   uint32_t period_cycles, uint32_t pulse_cycles,
+			   pwm_flags_t flags)
 {
 	ARG_UNUSED(dev);
 
@@ -119,7 +119,7 @@ static int pwm_b91_get_cycles_per_sec(const struct device *dev,
 
 /* PWM driver APIs structure */
 static const struct pwm_driver_api pwm_b91_driver_api = {
-	.set_cycles = pwm_b91_set_cycles,
+	.pin_set = pwm_b91_pin_set,
 	.get_cycles_per_sec = pwm_b91_get_cycles_per_sec,
 };
 

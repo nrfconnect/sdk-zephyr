@@ -294,9 +294,11 @@ static int pwm_led_esp32_timer_set(int speed_mode, int timer,
 }
 
 /* period_cycles is not used, set frequency on menuconfig instead. */
-static int pwm_led_esp32_set_cycles(const struct device *dev, uint32_t channel,
-				    uint32_t period_cycles,
-				    uint32_t pulse_cycles, pwm_flags_t flags)
+static int pwm_led_esp32_pin_set_cycles(const struct device *dev,
+					uint32_t channel,
+					uint32_t period_cycles,
+					uint32_t pulse_cycles,
+					pwm_flags_t flags)
 {
 	int speed_mode;
 	int channel;
@@ -373,7 +375,7 @@ static int pwm_led_esp32_get_cycles_per_sec(const struct device *dev,
 }
 
 static const struct pwm_driver_api pwm_led_esp32_api = {
-	.set_cycles = pwm_led_esp32_set_cycles,
+	.pin_set = pwm_led_esp32_pin_set_cycles,
 	.get_cycles_per_sec = pwm_led_esp32_get_cycles_per_sec,
 };
 

@@ -231,9 +231,9 @@ static int get_tim_clk(const struct stm32_pclken *pclken, uint32_t *tim_clk)
 	return 0;
 }
 
-static int pwm_stm32_set_cycles(const struct device *dev, uint32_t channel,
-				uint32_t period_cycles, uint32_t pulse_cycles,
-				pwm_flags_t flags)
+static int pwm_stm32_pin_set(const struct device *dev, uint32_t channel,
+			     uint32_t period_cycles, uint32_t pulse_cycles,
+			     pwm_flags_t flags)
 {
 	const struct pwm_stm32_config *cfg = dev->config;
 
@@ -395,10 +395,9 @@ static int init_capture_channel(const struct device *dev, uint32_t channel,
 	return 0;
 }
 
-static int pwm_stm32_configure_capture(const struct device *dev,
-				       uint32_t channel, pwm_flags_t flags,
-				       pwm_capture_callback_handler_t cb,
-				       void *user_data)
+static int pwm_stm32_pin_configure_capture(
+	const struct device *dev, uint32_t channel, pwm_flags_t flags,
+	pwm_capture_callback_handler_t cb, void *user_data)
 {
 
 	/*
@@ -471,7 +470,8 @@ static int pwm_stm32_configure_capture(const struct device *dev,
 	return 0;
 }
 
-static int pwm_stm32_enable_capture(const struct device *dev, uint32_t channel)
+static int pwm_stm32_pin_enable_capture(const struct device *dev,
+					uint32_t channel)
 {
 	const struct pwm_stm32_config *cfg = dev->config;
 	struct pwm_stm32_data *data = dev->data;
@@ -511,7 +511,8 @@ static int pwm_stm32_enable_capture(const struct device *dev, uint32_t channel)
 	return 0;
 }
 
-static int pwm_stm32_disable_capture(const struct device *dev, uint32_t channel)
+static int pwm_stm32_pin_disable_capture(const struct device *dev,
+					 uint32_t channel)
 {
 	const struct pwm_stm32_config *cfg = dev->config;
 
@@ -575,7 +576,7 @@ static void pwm_stm32_isr(const struct device *dev)
 			}
 
 			if (!cpt->continuous) {
-				pwm_stm32_disable_capture(dev, in_ch);
+				pwm_stm32_pin_disable_capture(dev, in_ch);
 			} else {
 				cpt->overflows = 0u;
 			}
@@ -614,12 +615,12 @@ static int pwm_stm32_get_cycles_per_sec(const struct device *dev,
 }
 
 static const struct pwm_driver_api pwm_stm32_driver_api = {
-	.set_cycles = pwm_stm32_set_cycles,
+	.pin_set = pwm_stm32_pin_set,
 	.get_cycles_per_sec = pwm_stm32_get_cycles_per_sec,
 #ifdef CONFIG_PWM_CAPTURE
-	.configure_capture = pwm_stm32_configure_capture,
-	.enable_capture = pwm_stm32_enable_capture,
-	.disable_capture = pwm_stm32_disable_capture,
+	.pin_configure_capture = pwm_stm32_pin_configure_capture,
+	.pin_enable_capture = pwm_stm32_pin_enable_capture,
+	.pin_disable_capture = pwm_stm32_pin_disable_capture,
 #endif /* CONFIG_PWM_CAPTURE */
 };
 
