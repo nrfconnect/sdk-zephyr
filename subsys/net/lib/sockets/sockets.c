@@ -373,11 +373,6 @@ static void zsock_received_cb(struct net_context *ctx,
 	NET_DBG("ctx=%p, pkt=%p, st=%d, user_data=%p", ctx, pkt, status,
 		user_data);
 
-	if (status < 0) {
-		ctx->user_data = INT_TO_POINTER(-status);
-		sock_set_error(ctx);
-	}
-
 	/* if pkt is NULL, EOF */
 	if (!pkt) {
 		struct net_pkt *last_pkt = k_fifo_peek_tail(&ctx->recv_q);
@@ -1216,7 +1211,7 @@ static inline ssize_t zsock_recv_stream(struct net_context *ctx,
 
 	if ((flags & ZSOCK_MSG_DONTWAIT) || sock_is_nonblock(ctx)) {
 		timeout = K_NO_WAIT;
-	} else if (!sock_is_eof(ctx) && !sock_is_error(ctx)) {
+	} else if (!sock_is_eof(ctx)) {
 		net_context_get_option(ctx, NET_OPT_RCVTIMEO, &timeout, NULL);
 	}
 
@@ -1226,11 +1221,6 @@ static inline ssize_t zsock_recv_stream(struct net_context *ctx,
 		struct net_pkt *pkt;
 		size_t data_len, read_len;
 		bool release_pkt = true;
-
-		if (sock_is_error(ctx)) {
-			errno = POINTER_TO_INT(ctx->user_data);
-			return -1;
-		}
 
 		if (sock_is_eof(ctx)) {
 			return 0;
@@ -1253,9 +1243,6 @@ static inline ssize_t zsock_recv_stream(struct net_context *ctx,
 
 			if (waitall && (recv_len > 0)) {
 				return recv_len;
-			} else if (sock_is_error(ctx)) {
-				errno = POINTER_TO_INT(ctx->user_data);
-				return -1;
 			} else if (sock_is_eof(ctx)) {
 				return 0;
 			} else {
@@ -1450,10 +1437,10 @@ static int zsock_poll_prepare_ctx(struct net_context *ctx,
 
 	}
 
-	/* If socket is already in EOF or error, it can be reported
+	/* If socket is already in EOF, it can be reported
 	 * immediately, so we tell poll() to short-circuit wait.
 	 */
-	if (sock_is_eof(ctx) || sock_is_error(ctx)) {
+	if (sock_is_eof(ctx)) {
 		return -EALREADY;
 	}
 
@@ -1483,10 +1470,6 @@ static int zsock_poll_update_ctx(struct net_context *ctx,
 		} else {
 			pfd->revents |= ZSOCK_POLLOUT;
 		}
-	}
-
-	if (sock_is_error(ctx)) {
-		pfd->revents |= ZSOCK_POLLERR;
 	}
 
 	if (sock_is_eof(ctx)) {
