@@ -1128,7 +1128,7 @@ static void lwm2m_rd_client_service(struct k_work *work)
 	k_mutex_unlock(&client.mutex);
 }
 
-int lwm2m_rd_client_start(struct lwm2m_ctx *client_ctx, const char *ep_name,
+void lwm2m_rd_client_start(struct lwm2m_ctx *client_ctx, const char *ep_name,
 			   uint32_t flags, lwm2m_ctx_event_cb_t event_cb,
 			   lwm2m_observe_cb_t observe_cb)
 {
@@ -1140,15 +1140,7 @@ int lwm2m_rd_client_start(struct lwm2m_ctx *client_ctx, const char *ep_name,
 			"CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP.");
 
 		k_mutex_unlock(&client.mutex);
-		return -ENOTSUP;
-	}
-
-	/* Check client idle state or socket is still active */
-
-	if (client.ctx && (client.engine_state != ENGINE_IDLE || client.ctx->sock_fd != -1)) {
-		LOG_WRN("Client is already running. state %d ", client.engine_state);
-		k_mutex_unlock(&client.mutex);
-		return -EINPROGRESS;
+		return;
 	}
 
 	client.ctx = client_ctx;
@@ -1164,20 +1156,14 @@ int lwm2m_rd_client_start(struct lwm2m_ctx *client_ctx, const char *ep_name,
 	LOG_INF("Start LWM2M Client: %s", log_strdup(client.ep_name));
 
 	k_mutex_unlock(&client.mutex);
-	return 0;
 }
 
-int lwm2m_rd_client_stop(struct lwm2m_ctx *client_ctx,
+void lwm2m_rd_client_stop(struct lwm2m_ctx *client_ctx,
 			   lwm2m_ctx_event_cb_t event_cb, bool deregister)
 {
 	k_mutex_lock(&client.mutex, K_FOREVER);
 
-	if (client.ctx != client_ctx) {
-		k_mutex_unlock(&client.mutex);
-		LOG_WRN("Cannot stop. Wrong context");
-		return -EPERM;
-	}
-
+	client.ctx = client_ctx;
 	client.event_cb = event_cb;
 
 	if (sm_is_registered() && deregister) {
@@ -1193,7 +1179,6 @@ int lwm2m_rd_client_stop(struct lwm2m_ctx *client_ctx,
 	while (get_sm_state() != ENGINE_IDLE) {
 		k_sleep(K_MSEC(STATE_MACHINE_UPDATE_INTERVAL_MS / 2));
 	}
-	return 0;
 }
 
 void lwm2m_rd_client_update(void)
@@ -1261,8 +1246,6 @@ bool lwm2m_rd_client_is_registred(struct lwm2m_ctx *client_ctx)
 
 static int lwm2m_rd_client_init(const struct device *dev)
 {
-	client.ctx = NULL;
-	client.engine_state = ENGINE_IDLE;
 	k_mutex_init(&client.mutex);
 
 	return lwm2m_engine_add_service(lwm2m_rd_client_service,
