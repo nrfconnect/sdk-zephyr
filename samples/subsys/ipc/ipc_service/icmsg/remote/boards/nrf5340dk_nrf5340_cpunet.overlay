@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/delete-node/ &ipc0;
+
 / {
 	chosen {
 		/delete-property/ zephyr,ipc_shm;
@@ -21,16 +23,12 @@
 		};
 	};
 
-	ipc {
-		/delete-node/ ipc0;
-
-		ipc0: ipc0 {
-			compatible = "zephyr,ipc-icmsg";
-			tx-region = <&sram_tx>;
-			rx-region = <&sram_rx>;
-			mboxes = <&mbox 0>, <&mbox 1>;
-			mbox-names = "rx", "tx";
-			status = "okay";
-		};
+	ipc0: ipc0 {
+		compatible = "zephyr,ipc-icmsg";
+		tx-region = <&sram_tx>;
+		rx-region = <&sram_rx>;
+		mboxes = <&mbox 0>, <&mbox 1>;
+		mbox-names = "rx", "tx";
+		status = "okay";
 	};
 };
