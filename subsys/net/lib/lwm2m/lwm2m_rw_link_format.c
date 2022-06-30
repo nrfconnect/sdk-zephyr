@@ -28,13 +28,10 @@ LOG_MODULE_REGISTER(net_lwm2m_link_format, CONFIG_LWM2M_LOG_LEVEL);
  * missing.
  */
 
+#if defined(CONFIG_LWM2M_RW_JSON_SUPPORT)
+#define RESOURCE_TYPE		";rt=\"oma.lwm2m\""
 
-#if defined(CONFIG_LWM2M_RW_SENML_CBOR_SUPPORT)
-#define REG_PREFACE		"</>;ct=" STRINGIFY(LWM2M_FORMAT_APP_SENML_CBOR)
-#elif defined(CONFIG_LWM2M_RW_SENML_JSON_SUPPORT)
-#define REG_PREFACE		"</>;ct=" STRINGIFY(LWM2M_FORMAT_APP_SEML_JSON)
-#elif defined(CONFIG_LWM2M_RW_JSON_SUPPORT)
-#define REG_PREFACE		"</>;rt=\"oma.lwm2m\"" \
+#define REG_PREFACE		"</>" RESOURCE_TYPE \
 				";ct=" STRINGIFY(LWM2M_FORMAT_OMA_JSON)
 #else
 #define REG_PREFACE		""
@@ -64,8 +61,8 @@ static int put_begin(struct lwm2m_output_context *out,
 		break;
 
 	case LINK_FORMAT_MODE_REGISTER:
-		/* No need to append content type */
-		if (strlen(REG_PREFACE) == 0) {
+		/* Only indicate content type if json is enabled.  */
+		if (!IS_ENABLED(CONFIG_LWM2M_RW_JSON_SUPPORT)) {
 			return 0;
 		}
 
