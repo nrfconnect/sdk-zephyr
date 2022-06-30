@@ -323,9 +323,10 @@
 
 	sw_pwm: sw-pwm {
 		compatible = "nordic,nrf-sw-pwm";
-		status = "disabled";
+		status = "okay";
 		label = "SW_PWM";
 		generator = <&timer1>;
+		channel-count = <3>;
 		clock-prescaler = <0>;
 		#pwm-cells = <1>;
 	};
