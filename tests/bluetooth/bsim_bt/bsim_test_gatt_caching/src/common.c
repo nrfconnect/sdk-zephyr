@@ -21,7 +21,6 @@ void test_init(void)
 }
 
 #define CHANNEL_ID 0
-#define MSG_SIZE 1
 
 void backchannel_init(void)
 {
@@ -40,7 +39,8 @@ void backchannel_init(void)
 
 void backchannel_sync_send(void)
 {
-	uint8_t sync_msg[MSG_SIZE] = { get_device_nbr() };
+	/* Dummy message */
+	uint8_t sync_msg[] = { 'A' };
 
 	printk("Sending sync\n");
 	bs_bc_send_msg(CHANNEL_ID, sync_msg, ARRAY_SIZE(sync_msg));
@@ -48,17 +48,7 @@ void backchannel_sync_send(void)
 
 void backchannel_sync_wait(void)
 {
-	uint8_t sync_msg[MSG_SIZE];
-
-	while (true) {
-		if (bs_bc_is_msg_received(CHANNEL_ID) > 0) {
-			bs_bc_receive_msg(CHANNEL_ID, sync_msg, ARRAY_SIZE(sync_msg));
-			if (sync_msg[0] != get_device_nbr()) {
-				/* Received a message from another device, exit */
-				break;
-			}
-		}
-
+	while (!bs_bc_is_msg_received(CHANNEL_ID)) {
 		k_sleep(K_MSEC(1));
 	}
 
