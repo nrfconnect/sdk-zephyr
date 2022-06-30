@@ -45,13 +45,13 @@ int pwm_litex_init(const struct device *dev)
 	return 0;
 }
 
-int pwm_litex_pin_set(const struct device *dev, uint32_t channel,
+int pwm_litex_pin_set(const struct device *dev, uint32_t pwm,
 		      uint32_t period_cycles,
 		      uint32_t pulse_cycles, pwm_flags_t flags)
 {
 	const struct pwm_litex_cfg *cfg = dev->config;
 
-	if (channel >= NUMBER_OF_CHANNELS) {
+	if (pwm >= NUMBER_OF_CHANNELS) {
 		return -EINVAL;
 	}
 
@@ -63,10 +63,10 @@ int pwm_litex_pin_set(const struct device *dev, uint32_t channel,
 	return 0;
 }
 
-int pwm_litex_get_cycles_per_sec(const struct device *dev, uint32_t channel,
+int pwm_litex_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
 				 uint64_t *cycles)
 {
-	if (channel >= NUMBER_OF_CHANNELS) {
+	if (pwm >= NUMBER_OF_CHANNELS) {
 		return -EINVAL;
 	}
 

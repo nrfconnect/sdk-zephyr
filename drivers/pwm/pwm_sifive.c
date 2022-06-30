@@ -106,8 +106,10 @@ static int pwm_sifive_init(const struct device *dev)
 	return 0;
 }
 
-static int pwm_sifive_pin_set(const struct device *dev, uint32_t channel,
-			      uint32_t period_cycles, uint32_t pulse_cycles,
+static int pwm_sifive_pin_set(const struct device *dev,
+			      uint32_t pwm,
+			      uint32_t period_cycles,
+			      uint32_t pulse_cycles,
 			      pwm_flags_t flags)
 {
 	const struct pwm_sifive_cfg *config = dev->config;
@@ -120,13 +122,13 @@ static int pwm_sifive_pin_set(const struct device *dev, uint32_t channel,
 		return -ENOTSUP;
 	}
 
-	if (channel >= SF_NUMCHANNELS) {
-		LOG_ERR("The requested PWM channel %d is invalid\n", channel);
+	if (pwm >= SF_NUMCHANNELS) {
+		LOG_ERR("The requested PWM channel %d is invalid\n", pwm);
 		return -EINVAL;
 	}
 
 	/* Channel 0 sets the period, we can't output PWM with it */
-	if (channel == 0U) {
+	if (pwm == 0U) {
 		LOG_ERR("PWM channel 0 cannot be configured\n");
 		return -ENOTSUP;
 	}
@@ -168,20 +170,21 @@ static int pwm_sifive_pin_set(const struct device *dev, uint32_t channel,
 
 	/* Set the duty cycle by setting pwmcmpX */
 	sys_write32((pulse_cycles >> pwmscale),
-		    PWM_REG(config, REG_PWMCMP(channel)));
+		    PWM_REG(config, REG_PWMCMP(pwm)));
 
 	LOG_DBG("channel: %d, pwmscale: %d, pwmcmp0: %d, pwmcmp%d: %d",
-		channel,
+		pwm,
 		pwmscale,
 		(period_cycles >> pwmscale),
-		channel,
+		pwm,
 		(pulse_cycles >> pwmscale));
 
 	return 0;
 }
 
 static int pwm_sifive_get_cycles_per_sec(const struct device *dev,
-					 uint32_t channel, uint64_t *cycles)
+					 uint32_t pwm,
+					 uint64_t *cycles)
 {
 	const struct pwm_sifive_cfg *config;
 
@@ -197,7 +200,7 @@ static int pwm_sifive_get_cycles_per_sec(const struct device *dev,
 	}
 
 	/* Fail if we don't have that channel */
-	if (channel >= SF_NUMCHANNELS) {
+	if (pwm >= SF_NUMCHANNELS) {
 		return -EINVAL;
 	}
 
