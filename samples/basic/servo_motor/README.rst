@@ -19,24 +19,29 @@ to modify the source code if you are using a different servomotor.
 Requirements
 ************
 
-The sample requires a servomotor whose signal pin is connected to a pin driven
-by PWM. The servo must be defined in Devicetree using the ``pwm-servo``
-compatible (part of the sample) and setting its node label to ``servo``. You
-will need to do something like this:
+You will see this error if you try to build this sample for an unsupported
+board:
 
-.. code-block:: devicetree
+.. code-block:: none
+
+   Unsupported board: pwm-servo devicetree alias is not defined
+
+The sample requires a servomotor whose signal pin is connected to a PWM
+device's channel 0. The PWM device must be configured using the ``pwm-servo``
+:ref:`devicetree <dt-guide>` alias. Usually you will need to set this up via a
+:ref:`devicetree overlay <set-devicetree-overlays>` like so:
+
+.. code-block:: DTS
 
    / {
-       servo: servo {
-           compatible = "pwm-servo";
-           pwms = <&pwm0 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-           min-pulse = <PWM_USEC(700)>;
-           max-pulse = <PWM_USEC(2500)>;
-       };
+   	aliases {
+   		pwm-servo = &some_pwm_node;
+   	};
    };
 
-Note that a commonly used period value is 20 ms. See
-:zephyr_file:`samples/basic/servo_motor/boards/bbc_microbit.overlay` for an
+Where ``some_pwm_node`` is the node label of a PWM device in your system.
+
+See :zephyr_file:`samples/basic/servo_motor/boards/bbc_microbit.overlay` for an
 example.
 
 Wiring

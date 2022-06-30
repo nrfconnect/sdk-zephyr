@@ -13,11 +13,20 @@
 #include <device.h>
 #include <drivers/pwm.h>
 
-static const struct pwm_dt_spec servo = PWM_DT_SPEC_GET(DT_NODELABEL(servo));
-static const uint32_t min_pulse = DT_PROP(DT_NODELABEL(servo), min_pulse);
-static const uint32_t max_pulse = DT_PROP(DT_NODELABEL(servo), max_pulse);
+#define PWM_NODE DT_ALIAS(pwm_servo)
 
-#define STEP PWM_USEC(100)
+#if !DT_NODE_HAS_STATUS(PWM_NODE, okay)
+#error "Unsupported board: pwm-servo devicetree alias is not defined or enabled"
+#endif
+
+/*
+ * Unlike pulse width, the PWM period is not a critical parameter for
+ * motor control. 20 ms is commonly used.
+ */
+#define PERIOD_USEC	(20U * USEC_PER_MSEC)
+#define STEP_USEC	100
+#define MIN_PULSE_USEC	700
+#define MAX_PULSE_USEC	2300
 
 enum direction {
 	DOWN,
@@ -26,37 +35,39 @@ enum direction {
 
 void main(void)
 {
-	uint32_t pulse_width = min_pulse;
+	const struct device *pwm;
+	uint32_t pulse_width = MIN_PULSE_USEC;
 	enum direction dir = UP;
 	int ret;
 
 	printk("Servomotor control\n");
 
-	if (!device_is_ready(servo.dev)) {
-		printk("Error: PWM device %s is not ready\n", servo.dev->name);
+	pwm = DEVICE_DT_GET(PWM_NODE);
+	if (!device_is_ready(pwm)) {
+		printk("Error: PWM device %s is not ready\n", pwm->name);
 		return;
 	}
 
 	while (1) {
-		ret = pwm_set_nsec_pulse_dt(&servo, pulse_width);
+		ret = pwm_set_usec(pwm, 0, PERIOD_USEC, pulse_width, 0);
 		if (ret < 0) {
 			printk("Error %d: failed to set pulse width\n", ret);
 			return;
 		}
 
 		if (dir == DOWN) {
-			if (pulse_width <= min_pulse) {
+			if (pulse_width <= MIN_PULSE_USEC) {
 				dir = UP;
-				pulse_width = min_pulse;
+				pulse_width = MIN_PULSE_USEC;
 			} else {
-				pulse_width -= STEP;
+				pulse_width -= STEP_USEC;
 			}
 		} else {
-			pulse_width += STEP;
+			pulse_width += STEP_USEC;
 
-			if (pulse_width >= max_pulse) {
+			if (pulse_width >= MAX_PULSE_USEC) {
 				dir = DOWN;
-				pulse_width = max_pulse;
+				pulse_width = MAX_PULSE_USEC;
 			}
 		}
 
