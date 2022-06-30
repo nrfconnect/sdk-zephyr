@@ -10,9 +10,7 @@ This application "fades" a LED using the :ref:`PWM API <pwm_api>`.
 
 The LED starts off increases its brightness until it is fully or nearly fully
 on. The brightness then decreases until the LED is off, completing on fade
-cycle. Each cycle takes 2.5 seconds, and the cycles repeat forever. The PWM
-period is taken from Devicetree. It should be fast enough to be above the
-flicker fusion threshold.
+cycle. Each cycle takes 2.5 seconds, and the cycles repeat forever.
 
 Requirements and Wiring
 ***********************
