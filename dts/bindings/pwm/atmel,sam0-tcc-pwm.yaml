@@ -59,8 +59,7 @@ properties:
       - 1024
 
   "#pwm-cells":
-    const: 2
+    const: 1
 
 pwm-cells:
   - channel
-  - period
