@@ -1076,10 +1076,6 @@ static int tcp_send_queued_data(struct tcp *conn)
 		}
 	}
 
-	if (tcp_window_full(conn)) {
-		(void)k_sem_take(&conn->tx_sem, K_NO_WAIT);
-	}
-
 	if (conn->unacked_len) {
 		subscribe = true;
 	}
@@ -1142,8 +1138,6 @@ static void tcp_resend_data(struct k_work *work)
 	conn->data_mode = TCP_DATA_MODE_RESEND;
 	conn->unacked_len = 0;
 
-	(void)k_sem_take(&conn->tx_sem, K_NO_WAIT);
-
 	ret = tcp_send_data(conn);
 	conn->send_data_retries++;
 	if (ret == 0) {
@@ -1167,11 +1161,6 @@ static void tcp_resend_data(struct k_work *work)
 		}
 	} else if (ret == -ENODATA) {
 		conn->data_mode = TCP_DATA_MODE_SEND;
-
-		if (!tcp_window_full(conn)) {
-			k_sem_give(&conn->tx_sem);
-		}
-
 		goto out;
 	}
 
@@ -1262,7 +1251,6 @@ static struct tcp *tcp_conn_alloc(struct net_context *context)
 	k_mutex_init(&conn->lock);
 	k_fifo_init(&conn->recv_data);
 	k_sem_init(&conn->connect_sem, 0, K_SEM_MAX_LIMIT);
-	k_sem_init(&conn->tx_sem, 1, 1);
 
 	conn->in_connect = false;
 	conn->state = TCP_LISTEN;
@@ -1831,12 +1819,6 @@ static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
 
 			conn->send_win = max_win;
 		}
-
-		if (tcp_window_full(conn)) {
-			(void)k_sem_take(&conn->tx_sem, K_NO_WAIT);
-		} else {
-			k_sem_give(&conn->tx_sem);
-		}
 	}
 
 next_state:
@@ -1982,11 +1964,6 @@ next_state:
 			} else {
 				conn->unacked_len -= len_acked;
 			}
-
-			if (!tcp_window_full(conn)) {
-				k_sem_give(&conn->tx_sem);
-			}
-
 			conn_seq(conn, + len_acked);
 			net_stats_update_tcp_seg_recv(conn->iface);
 
@@ -2923,13 +2900,6 @@ uint16_t net_tcp_get_recv_mss(const struct tcp *conn)
 const char *net_tcp_state_str(enum tcp_state state)
 {
 	return tcp_state_to_str(state, false);
-}
-
-struct k_sem *net_tcp_tx_sem_get(struct net_context *context)
-{
-	struct tcp *conn = context->tcp;
-
-	return &conn->tx_sem;
 }
 
 void net_tcp_init(void)
