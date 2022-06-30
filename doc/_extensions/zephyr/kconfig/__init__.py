@@ -337,11 +337,7 @@ def kconfig_build_resources(app: Sphinx) -> None:
                 iternode = node
                 while iternode.parent is not iternode.kconfig.top_node:
                     iternode = iternode.parent
-                    if iternode.prompt:
-                        title = iternode.prompt[0]
-                    else:
-                        title = kconfiglib.standard_sc_expr_str(iternode.item)
-                    menupath = f" > {title}" + menupath
+                    menupath = f" > {iternode.prompt[0]}" + menupath
 
                 menupath = "(Top)" + menupath
 
