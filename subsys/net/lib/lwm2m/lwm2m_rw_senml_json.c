@@ -1224,25 +1224,11 @@ static int lwm2m_senml_write_operation(struct lwm2m_message *msg, struct json_in
 
 	ret = lwm2m_engine_get_create_res_inst(&msg->path, &res, &res_inst);
 	if (ret < 0) {
-		/* if OPTIONAL and BOOTSTRAP-WRITE or CREATE use ENOTSUP */
-		if ((msg->ctx->bootstrap_mode ||
-				msg->operation == LWM2M_OP_CREATE) &&
-			LWM2M_HAS_PERM(obj_field, BIT(LWM2M_FLAG_OPTIONAL))) {
-			ret = -ENOTSUP;
-			return ret;
-		}
-
-		ret = -ENOENT;
-		return ret;
+		return -ENOENT;
 	}
 
 	/* Write the resource value */
 	ret = lwm2m_write_handler(obj_inst, res, res_inst, obj_field, msg);
-	if (ret == -EACCES || ret == -ENOENT) {
-		/* if read-only or non-existent data buffer move on */
-		ret = 0;
-	}
-
 	return ret;
 }
 
@@ -1423,14 +1409,8 @@ int do_write_op_senml_json(struct lwm2m_message *msg)
 			msg->path = resource_path;
 			ret = lwm2m_senml_write_operation(msg, &fd);
 
-			/*
-			 * for OP_CREATE and BOOTSTRAP WRITE: errors on
-			 * optional resources are ignored (ENOTSUP)
-			 */
-			if (ret < 0 && !((ret == -ENOTSUP) &&
-					(msg->ctx->bootstrap_mode ||
-					msg->operation == LWM2M_OP_CREATE))) {
-				goto end_of_operation;
+			if (ret < 0) {
+				break;
 			}
 		}
 	}
@@ -1446,19 +1426,7 @@ int do_write_op_senml_json(struct lwm2m_message *msg)
 		block_ctx->json_flags = fd.json_flags;
 		msg->path = resource_path;
 		ret = lwm2m_senml_write_operation(msg, &fd);
-
-		/*
-		 * for OP_CREATE and BOOTSTRAP WRITE: errors on
-		 * optional resources are ignored (ENOTSUP)
-		 */
-		if (ret < 0 && !((ret == -ENOTSUP) &&
-				(msg->ctx->bootstrap_mode ||
-				msg->operation == LWM2M_OP_CREATE))) {
-			goto end_of_operation;
-		}
 	}
-
-	ret = 0;
 
 end_of_operation:
 	engine_clear_in_user_data(&msg->in);
