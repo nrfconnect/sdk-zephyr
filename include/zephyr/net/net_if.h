@@ -19,7 +19,7 @@
  * @{
  */
 
-#include <zephyr/device.h>
+#include <device.h>
 #include <sys/slist.h>
 
 #include <net/net_core.h>

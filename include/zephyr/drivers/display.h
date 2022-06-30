@@ -19,7 +19,7 @@
  * @{
  */
 
-#include <zephyr/device.h>
+#include <device.h>
 #include <stddef.h>
 #include <zephyr/types.h>
 

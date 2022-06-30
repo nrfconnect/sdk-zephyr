@@ -10,7 +10,7 @@
 #include <zephyr/types.h>
 #include <arch/arm64/arm-smccc.h>
 #include <stddef.h>
-#include <zephyr/device.h>
+#include <device.h>
 
 #ifdef __cplusplus
 extern "C" {

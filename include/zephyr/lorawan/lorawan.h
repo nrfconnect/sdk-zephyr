@@ -15,7 +15,7 @@
  * @{
  */
 
-#include <zephyr/device.h>
+#include <device.h>
 #include <sys/slist.h>
 
 #ifdef __cplusplus

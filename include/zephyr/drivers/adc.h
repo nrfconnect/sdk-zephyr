@@ -13,7 +13,7 @@
 #ifndef ZEPHYR_INCLUDE_DRIVERS_ADC_H_
 #define ZEPHYR_INCLUDE_DRIVERS_ADC_H_
 
-#include <zephyr/device.h>
+#include <device.h>
 #include <dt-bindings/adc/adc.h>
 
 #ifdef __cplusplus

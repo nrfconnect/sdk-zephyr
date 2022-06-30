@@ -7,7 +7,7 @@
 #ifndef ZEPHYR_INCLUDE_DRIVERS_BBRAM_H
 #define ZEPHYR_INCLUDE_DRIVERS_BBRAM_H
 
-#include <zephyr/device.h>
+#include <device.h>
 
 #ifdef __cplusplus
 extern "C" {

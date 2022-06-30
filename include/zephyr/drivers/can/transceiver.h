@@ -7,7 +7,7 @@
 #ifndef ZEPHYR_INCLUDE_DRIVERS_CAN_TRANSCEIVER_H_
 #define ZEPHYR_INCLUDE_DRIVERS_CAN_TRANSCEIVER_H_
 
-#include <zephyr/device.h>
+#include <device.h>
 
 #ifdef __cplusplus
 extern "C" {

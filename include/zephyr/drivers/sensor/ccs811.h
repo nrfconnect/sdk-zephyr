@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#include <zephyr/device.h>
+#include <device.h>
 #include <drivers/sensor.h>
 
 /* Status register fields */

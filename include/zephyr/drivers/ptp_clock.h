@@ -9,7 +9,7 @@
 
 #include <kernel.h>
 #include <stdint.h>
-#include <zephyr/device.h>
+#include <device.h>
 #include <sys/util.h>
 #include <net/ptp_time.h>
 

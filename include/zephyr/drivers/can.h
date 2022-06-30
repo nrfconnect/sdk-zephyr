@@ -9,7 +9,7 @@
 #define ZEPHYR_INCLUDE_DRIVERS_CAN_H_
 
 #include <zephyr/types.h>
-#include <zephyr/device.h>
+#include <device.h>
 #include <string.h>
 #include <sys/util.h>
 

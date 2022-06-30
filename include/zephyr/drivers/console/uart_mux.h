@@ -19,7 +19,7 @@
  * @{
  */
 
-#include <zephyr/device.h>
+#include <device.h>
 #include <drivers/uart.h>
 
 #ifdef __cplusplus

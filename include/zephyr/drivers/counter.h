@@ -22,7 +22,7 @@
 
 #include <zephyr/types.h>
 #include <stddef.h>
-#include <zephyr/device.h>
+#include <device.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus

@@ -12,7 +12,7 @@
 #ifndef __CFB_H__
 #define __CFB_H__
 
-#include <zephyr/device.h>
+#include <device.h>
 #include <drivers/display.h>
 
 #ifdef __cplusplus
