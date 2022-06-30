@@ -54,9 +54,7 @@ properties:
         in the request, i.e. PWM_POLARITY_INVERTED or PWM_POLARITY_NORMAL.
 
     "#pwm-cells":
-      const: 3
+      const: 1
 
 pwm-cells:
   - channel
-  - period
-  - flags

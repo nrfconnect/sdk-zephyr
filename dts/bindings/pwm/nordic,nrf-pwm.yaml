@@ -107,9 +107,7 @@ properties:
         Set this to invert channel 3.
 
     "#pwm-cells":
-      const: 3
+      const: 1
 
 pwm-cells:
   - channel
-  - period
-  - flags
