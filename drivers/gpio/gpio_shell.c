@@ -49,10 +49,11 @@ static int cmd_gpio_conf(const struct shell *sh, size_t argc, char **argv)
 		} else if (!strcmp(argv[args_indx.mode], "out")) {
 			type = GPIO_OUTPUT;
 		} else {
+			shell_error(sh, "Invalid parameter for conf. Use \"out\" or \"in\".");
 			return 0;
 		}
 	} else {
-		shell_error(sh, "Wrong parameters for conf");
+		shell_error(sh, "Wrong parameters for conf. Use \"out\" or \"in\".");
 		return -ENOTSUP;
 	}
 
@@ -78,7 +79,7 @@ static int cmd_gpio_get(const struct shell *sh,
 	if (isdigit((unsigned char)argv[args_indx.index][0])) {
 		index = (uint8_t)atoi(argv[args_indx.index]);
 	} else {
-		shell_error(sh, "Wrong parameters for get");
+		shell_error(sh, "Wrong parameters for get. Define pin number. ");
 		return -EINVAL;
 	}
 
@@ -112,7 +113,7 @@ static int cmd_gpio_set(const struct shell *sh,
 		index = (uint8_t)atoi(argv[args_indx.index]);
 		value = (uint8_t)atoi(argv[args_indx.value]);
 	} else {
-		shell_print(sh, "Wrong parameters for set");
+		shell_print(sh, "Wrong parameters for set. Use numerical values for pin number and desired state (0 or 1)");
 		return -EINVAL;
 	}
 	dev = device_get_binding(argv[args_indx.port]);
@@ -143,7 +144,7 @@ static int cmd_gpio_blink(const struct shell *sh,
 	if (isdigit((unsigned char)argv[args_indx.index][0])) {
 		index = (uint8_t)atoi(argv[args_indx.index]);
 	} else {
-		shell_error(sh, "Wrong parameters for blink");
+		shell_error(sh, "Wrong parameters for blink. Use numerical value for pin number");
 		return -EINVAL;
 	}
 	dev = device_get_binding(argv[args_indx.port]);
