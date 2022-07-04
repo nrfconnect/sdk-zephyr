@@ -14,6 +14,10 @@ LOG_MODULE_REGISTER(net_test, CONFIG_NET_SOCKETS_LOG_LEVEL);
 
 #include "../../socket_helpers.h"
 
+#if defined(CONFIG_MBEDTLS_USE_PSA_CRYPTO)
+#include <psa/crypto.h>
+#endif /* CONFIG_MBEDTLS_USE_PSA_CRYPTO */
+
 #define TEST_STR_SMALL "test"
 
 #define ANY_PORT 0
@@ -31,18 +35,54 @@ static const unsigned char psk[] = {
 };
 static const char psk_id[] = "test_identity";
 
+#if defined(CONFIG_MBEDTLS_USE_PSA_CRYPTO)
+static psa_key_id_t psk_opaque_key;
+
+static void test_import_psk_psa(void)
+{
+	psa_key_attributes_t key_attributes = psa_key_attributes_init();
+
+	psa_set_key_usage_flags(&key_attributes, PSA_KEY_USAGE_DERIVE);
+	psa_set_key_algorithm(&key_attributes,
+			      PSA_ALG_TLS12_PSK_TO_MS(PSA_ALG_SHA_256));
+	psa_set_key_type(&key_attributes,
+			 PSA_KEY_TYPE_DERIVE);
+
+	zassert_equal(psa_crypto_init(), PSA_SUCCESS,
+		      "Failed to initialize PSA Crypto %d");
+
+	psa_destroy_key(psk_opaque_key);
+
+	zassert_equal(psa_import_key(&key_attributes, psk, sizeof(psk),
+		      &psk_opaque_key), PSA_SUCCESS,
+		      "Failed to import PSK %d");
+}
+#endif
+
 static void test_config_psk(int s_sock, int c_sock)
 {
 	sec_tag_t sec_tag_list[] = {
 		PSK_TAG
 	};
 
+#if defined(CONFIG_MBEDTLS_USE_PSA_CRYPTO)
+	(void)tls_credential_delete(PSK_TAG, TLS_CREDENTIAL_OPAQUE_PSK);
+#else
 	(void)tls_credential_delete(PSK_TAG, TLS_CREDENTIAL_PSK);
+#endif
 	(void)tls_credential_delete(PSK_TAG, TLS_CREDENTIAL_PSK_ID);
 
+#if defined(CONFIG_MBEDTLS_USE_PSA_CRYPTO)
+	test_import_psk_psa();
+
+	zassert_equal(tls_credential_add(PSK_TAG, TLS_CREDENTIAL_OPAQUE_PSK,
+					 &psk_opaque_key, sizeof(psa_key_id_t)),
+		      0, "Failed to register PSK Opaque %d");
+#else
 	zassert_equal(tls_credential_add(PSK_TAG, TLS_CREDENTIAL_PSK,
 					 psk, sizeof(psk)),
 		      0, "Failed to register PSK %d");
+#endif
 	zassert_equal(tls_credential_add(PSK_TAG, TLS_CREDENTIAL_PSK_ID,
 					 psk_id, strlen(psk_id)),
 		      0, "Failed to register PSK ID");

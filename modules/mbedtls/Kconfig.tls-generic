@@ -431,4 +431,15 @@ config MBEDTLS_PKCS5_C
 	help
 	  Enable PKCS5 functions
 
+config MBEDTLS_BUILTIN_PSA_CRYPTO
+	bool "mbed TLS built-in PSA implementation"
+	depends on MBEDTLS_BUILTIN && !BUILD_WITH_TFM
+	depends on MBEDTLS_ENTROPY_ENABLED
+	help
+	  mbedTLS can provide a built-in implementation of the PSA crypto API.
+
+config MBEDTLS_USE_PSA_CRYPTO
+	bool "Use PSA crypto in mbed TLS implementation"
+	depends on MBEDTLS_BUILTIN_PSA_CRYPTO || BUILD_WITH_TFM
+
 endmenu
