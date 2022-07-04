@@ -762,6 +762,24 @@ static int tls_set_private_key(struct tls_context *tls,
 	return -ENOTSUP;
 }
 
+static int tls_set_opaque_private_key(struct tls_context *tls,
+				      struct tls_credential *priv_key)
+{
+#if defined(MBEDTLS_USE_PSA_CRYPTO)
+	const psa_key_id_t *key = priv_key->buf;
+	int err;
+
+	err = mbedtls_pk_setup_opaque(&tls->priv_key, *key);
+	if (err != 0) {
+		return -EINVAL;
+	}
+
+	return 0;
+#endif /* MBEDTLS_USE_PSA_CRYPTO */
+
+	return -ENOTSUP;
+}
+
 static int tls_set_psk(struct tls_context *tls,
 		       struct tls_credential *psk,
 		       struct tls_credential *psk_id)
@@ -781,6 +799,26 @@ static int tls_set_psk(struct tls_context *tls,
 	return -ENOTSUP;
 }
 
+static int tls_set_opaque_psk(struct tls_context *tls,
+			      struct tls_credential *psk,
+			      struct tls_credential *psk_id)
+{
+#if defined(MBEDTLS_USE_PSA_CRYPTO)
+	const psa_key_id_t *key = psk->buf;
+
+	int err = mbedtls_ssl_conf_psk_opaque(&tls->config, *key,
+			(const unsigned char *)psk_id->buf,
+			psk_id->len);
+	if (err != 0) {
+		return -EINVAL;
+	}
+
+	return 0;
+#endif /* MBEDTLS_USE_PSA_CRYPTO */
+
+	return -ENOTSUP;
+}
+
 static int tls_set_credential(struct tls_context *tls,
 			      struct tls_credential *cred)
 {
@@ -795,13 +833,21 @@ static int tls_set_credential(struct tls_context *tls,
 		return tls_set_private_key(tls, cred);
 	break;
 
+	case TLS_CREDENTIAL_OPAQUE_PRIVATE_KEY:
+		return tls_set_opaque_private_key(tls, cred);
+	break;
+
 	case TLS_CREDENTIAL_PSK:
+	case TLS_CREDENTIAL_OPAQUE_PSK:
 	{
 		struct tls_credential *psk_id =
 			credential_get(cred->tag, TLS_CREDENTIAL_PSK_ID);
 		if (!psk_id) {
 			return -ENOENT;
 		}
+
+		if (cred->type == TLS_CREDENTIAL_OPAQUE_PSK)
+			return tls_set_opaque_psk(tls, cred, psk_id);
 
 		return tls_set_psk(tls, cred, psk_id);
 	}

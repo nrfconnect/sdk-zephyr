@@ -13,6 +13,10 @@
 #include <sys/util.h>
 #include <ztest.h>
 
+#if defined(CONFIG_MBEDTLS_USE_PSA_CRYPTO)
+#include <psa/crypto.h>
+#endif /* CONFIG_MBEDTLS_USE_PSA_CRYPTO */
+
 LOG_MODULE_REGISTER(tls_test, CONFIG_NET_SOCKETS_LOG_LEVEL);
 
 /**
@@ -414,6 +418,35 @@ static void test_tls_peer_verify_required(void)
 	test_common(TLS_PEER_VERIFY_REQUIRED);
 }
 
+#if defined(CONFIG_MBEDTLS_USE_PSA_CRYPTO)
+static psa_key_id_t server_privkey_opaque_key;
+static psa_key_id_t client_privkey_opaque_key;
+
+static int tls_credential_add_opaque(sec_tag_t tag,
+				     enum tls_credential_type type,
+				     const void *cred, size_t credlen,
+				     psa_key_id_t *key)
+{
+	psa_key_attributes_t key_attributes = psa_key_attributes_init();
+
+	psa_set_key_usage_flags(&key_attributes, PSA_KEY_USAGE_DERIVE);
+	psa_set_key_algorithm(&key_attributes,
+			      PSA_ALG_RSA_PKCS1V15_SIGN(PSA_ALG_SHA_256));
+	psa_set_key_type(&key_attributes, PSA_KEY_TYPE_RSA_KEY_PAIR);
+
+	zassert_equal(psa_crypto_init(), PSA_SUCCESS,
+		      "Failed to initialize PSA Crypto %d");
+
+	psa_destroy_key(*key);
+
+	zassert_equal(psa_import_key(&key_attributes, cred, credlen, key),
+				     PSA_SUCCESS,
+				     "Failed to import Private Key %d");
+
+	return tls_credential_add(tag, type, key, sizeof(psa_key_id_t));
+}
+#endif
+
 void test_main(void)
 {
 	int r;
@@ -449,9 +482,17 @@ void test_main(void)
 				       server, sizeof(server));
 		zassert_equal(r, 0, "failed to add Server Certificate (%d)", r);
 
+#if defined(CONFIG_MBEDTLS_USE_PSA_CRYPTO)
+		r = tls_credential_add_opaque(SERVER_CERTIFICATE_TAG,
+					      TLS_CREDENTIAL_OPAQUE_PRIVATE_KEY,
+					      server_privkey,
+					      sizeof(server_privkey),
+					      &server_privkey_opaque_key);
+#else
 		r = tls_credential_add(SERVER_CERTIFICATE_TAG,
 				       TLS_CREDENTIAL_PRIVATE_KEY,
 				       server_privkey, sizeof(server_privkey));
+#endif
 		zassert_equal(r, 0, "failed to add Server Private Key (%d)", r);
 
 		r = tls_credential_add(CLIENT_CERTIFICATE_TAG,
@@ -459,9 +500,17 @@ void test_main(void)
 				       client, sizeof(client));
 		zassert_equal(r, 0, "failed to add Client Certificate (%d)", r);
 
+#if defined(CONFIG_MBEDTLS_USE_PSA_CRYPTO)
+		r = tls_credential_add_opaque(CLIENT_CERTIFICATE_TAG,
+					      TLS_CREDENTIAL_OPAQUE_PRIVATE_KEY,
+					      client_privkey,
+					      sizeof(client_privkey),
+					      &client_privkey_opaque_key);
+#else
 		r = tls_credential_add(CLIENT_CERTIFICATE_TAG,
 				       TLS_CREDENTIAL_PRIVATE_KEY,
 				       client_privkey, sizeof(client_privkey));
+#endif
 		zassert_equal(r, 0, "failed to add Client Private Key (%d)", r);
 	}
 
