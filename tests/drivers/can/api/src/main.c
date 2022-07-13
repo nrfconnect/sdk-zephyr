@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <drivers/can.h>
+#include <zephyr/drivers/can.h>
 #include <ztest.h>
 
 /**
@@ -16,9 +16,10 @@
  */
 
 /**
- * Test bitrate in bits/second.
+ * Test bitrates in bits/second.
  */
-#define TEST_BITRATE 125000
+#define TEST_BITRATE_1 125000
+#define TEST_BITRATE_2 250000
 
 /**
  * @brief Test timeouts.
@@ -635,7 +636,7 @@ static void test_set_bitrate_too_high(void)
 	zassert_equal(err, 0, "failed to get max bitrate (err %d)", err);
 	zassert_not_equal(max, 0, "max bitrate is 0");
 
-	err = can_set_bitrate(can_dev, max + 1, max + 1);
+	err = can_set_bitrate(can_dev, max + 1);
 	zassert_equal(err, -ENOTSUP, "too high bitrate accepted");
 }
 
@@ -646,7 +647,7 @@ static void test_set_bitrate(void)
 {
 	int err;
 
-	err = can_set_bitrate(can_dev, TEST_BITRATE, 0);
+	err = can_set_bitrate(can_dev, TEST_BITRATE_1);
 	zassert_equal(err, 0, "failed to set bitrate");
 }
 
@@ -660,7 +661,7 @@ static void test_set_loopback(void)
 {
 	int err;
 
-	err = can_set_mode(can_dev, CAN_LOOPBACK_MODE);
+	err = can_set_mode(can_dev, CAN_MODE_LOOPBACK);
 	zassert_equal(err, 0, "failed to set loopback-mode (err %d)", err);
 }
 
@@ -952,11 +953,39 @@ static void test_filters_preserved_through_mode_change(void)
 	zassert_equal(err, 0, "receive timeout");
 	assert_frame_equal(&frame, &test_std_frame_1, 0);
 
-	err = can_set_mode(can_dev, CAN_NORMAL_MODE);
+	err = can_set_mode(can_dev, CAN_MODE_NORMAL);
 	zassert_equal(err, 0, "failed to set normal mode (err %d)", err);
 
-	err = can_set_mode(can_dev, CAN_LOOPBACK_MODE);
+	err = can_set_mode(can_dev, CAN_MODE_LOOPBACK);
 	zassert_equal(err, 0, "failed to set loopback-mode (err %d)", err);
+
+	send_test_frame(can_dev, &test_std_frame_1);
+
+	err = k_msgq_get(&can_msgq, &frame, TEST_RECEIVE_TIMEOUT);
+	zassert_equal(err, 0, "receive timeout");
+	assert_frame_equal(&frame, &test_std_frame_1, 0);
+
+	can_remove_rx_filter(can_dev, filter_id);
+}
+
+static void test_filters_preserved_through_bitrate_change(void)
+{
+	struct zcan_frame frame;
+	int filter_id;
+	int err;
+
+	filter_id = add_rx_msgq(can_dev, &test_std_filter_1);
+	send_test_frame(can_dev, &test_std_frame_1);
+
+	err = k_msgq_get(&can_msgq, &frame, TEST_RECEIVE_TIMEOUT);
+	zassert_equal(err, 0, "receive timeout");
+	assert_frame_equal(&frame, &test_std_frame_1, 0);
+
+	err = can_set_bitrate(can_dev, TEST_BITRATE_2);
+	zassert_equal(err, 0, "failed to set bitrate");
+
+	err = can_set_bitrate(can_dev, TEST_BITRATE_1);
+	zassert_equal(err, 0, "failed to set bitrate");
 
 	send_test_frame(can_dev, &test_std_frame_1);
 
@@ -999,6 +1028,7 @@ void test_main(void)
 			 ztest_unit_test(test_send_receive_wrong_id),
 			 ztest_user_unit_test(test_recover),
 			 ztest_user_unit_test(test_get_state),
-			 ztest_user_unit_test(test_filters_preserved_through_mode_change));
+			 ztest_user_unit_test(test_filters_preserved_through_mode_change),
+			 ztest_user_unit_test(test_filters_preserved_through_bitrate_change));
 	ztest_run_test_suite(can_api_tests);
 }

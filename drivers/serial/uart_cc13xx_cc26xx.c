@@ -6,13 +6,13 @@
 
 #define DT_DRV_COMPAT ti_cc13xx_cc26xx_uart
 
-#include <device.h>
+#include <zephyr/device.h>
 #include <errno.h>
-#include <sys/__assert.h>
-#include <pm/device.h>
-#include <pm/policy.h>
-#include <drivers/uart.h>
-#include <drivers/pinctrl.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/drivers/pinctrl.h>
 
 #include <driverlib/prcm.h>
 #include <driverlib/uart.h>
@@ -250,7 +250,7 @@ static void uart_cc13xx_cc26xx_irq_tx_enable(const struct device *dev)
 		 * standby mode instead, since it is the power state that
 		 * would interfere with a transfer.
 		 */
-		pm_policy_state_lock_get(PM_STATE_STANDBY);
+		pm_policy_state_lock_get(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
 		data->tx_constrained = true;
 	}
 #endif
@@ -268,7 +268,7 @@ static void uart_cc13xx_cc26xx_irq_tx_disable(const struct device *dev)
 	struct uart_cc13xx_cc26xx_data *data = dev->data;
 
 	if (data->tx_constrained) {
-		pm_policy_state_lock_put(PM_STATE_STANDBY);
+		pm_policy_state_lock_put(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
 		data->tx_constrained = false;
 	}
 #endif
@@ -294,7 +294,7 @@ static void uart_cc13xx_cc26xx_irq_rx_enable(const struct device *dev)
 	 * standby.
 	 */
 	if (!data->rx_constrained) {
-		pm_policy_state_lock_get(PM_STATE_STANDBY);
+		pm_policy_state_lock_get(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
 		data->rx_constrained = true;
 	}
 #endif
@@ -310,7 +310,7 @@ static void uart_cc13xx_cc26xx_irq_rx_disable(const struct device *dev)
 	struct uart_cc13xx_cc26xx_data *data = dev->data;
 
 	if (data->rx_constrained) {
-		pm_policy_state_lock_put(PM_STATE_STANDBY);
+		pm_policy_state_lock_put(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
 		data->rx_constrained = false;
 	}
 #endif

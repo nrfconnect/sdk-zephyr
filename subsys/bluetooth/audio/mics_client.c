@@ -7,18 +7,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <zephyr/types.h>
 
-#include <sys/check.h>
+#include <zephyr/sys/check.h>
 
-#include <device.h>
-#include <init.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
 
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/conn.h>
-#include <bluetooth/gatt.h>
-#include <bluetooth/audio/mics.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/audio/mics.h>
 
 #include "mics_internal.h"
 
@@ -60,7 +60,13 @@ static uint8_t mute_notify_handler(struct bt_conn *conn,
 				   const void *data, uint16_t length)
 {
 	uint8_t *mute_val;
-	struct bt_mics *mics_inst = &mics_insts[bt_conn_index(conn)];
+	struct bt_mics *mics_inst;
+
+	if (conn == NULL) {
+		return BT_GATT_ITER_CONTINUE;
+	}
+
+	mics_inst = &mics_insts[bt_conn_index(conn)];
 
 	if (data != NULL) {
 		if (length == sizeof(*mute_val)) {

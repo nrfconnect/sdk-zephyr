@@ -24,9 +24,9 @@
 
 #include <sys/types.h>
 #include <zephyr/types.h>
-#include <net/net_ip.h>
-#include <net/dns_resolve.h>
-#include <net/socket_select.h>
+#include <zephyr/net/net_ip.h>
+#include <zephyr/net/dns_resolve.h>
+#include <zephyr/net/socket_select.h>
 #include <stdlib.h>
 
 #ifdef __cplusplus
@@ -138,12 +138,31 @@ struct zsock_pollfd {
  */
 #define TLS_DTLS_HANDSHAKE_TIMEOUT_MIN 8
 #define TLS_DTLS_HANDSHAKE_TIMEOUT_MAX 9
-
 /** Socket option for preventing certificates from being copied to the mbedTLS
  *  heap if possible. The option is only effective for DER certificates and is
  *  ignored for PEM certificates.
  */
 #define TLS_CERT_NOCOPY	       10
+/** TLS socket option to use with offloading. The option instructs the network
+ *  stack only to offload underlying TCP/UDP communication. The TLS/DTLS
+ *  operation is handled by a native TLS/DTLS socket implementation from Zephyr.
+ *
+ *  Note, that this option is only applicable if socket dispatcher is used
+ *  (CONFIG_NET_SOCKETS_OFFLOAD_DISPATCHER is enabled).
+ *  In such case, it should be the first socket option set on a newly created
+ *  socket. After that, the application may use SO_BINDTODEVICE to choose the
+ *  dedicated network interface for the underlying TCP/UDP socket.
+ */
+#define TLS_NATIVE 11
+/** Socket option to control TLS session caching on a socket. Accepted values:
+ *  - 0 - Disabled.
+ *  - 1 - Enabled.
+ */
+#define TLS_SESSION_CACHE 12
+/** Write-only socket option to purge session cache immediately.
+ *  This option accepts any value.
+ */
+#define TLS_SESSION_CACHE_PURGE 13
 
 /** @} */
 
@@ -159,6 +178,10 @@ struct zsock_pollfd {
 /* Valid values for TLS_CERT_NOCOPY option */
 #define TLS_CERT_NOCOPY_NONE 0     /**< Cert duplicated in heap */
 #define TLS_CERT_NOCOPY_OPTIONAL 1 /**< Cert not copied in heap if DER */
+
+/* Valid values for TLS_SESSION_CACHE option */
+#define TLS_SESSION_CACHE_DISABLED 0 /**< Disable TLS session caching. */
+#define TLS_SESSION_CACHE_ENABLED 1 /**< Enable TLS session caching. */
 
 struct zsock_addrinfo {
 	struct zsock_addrinfo *ai_next;
@@ -934,6 +957,7 @@ struct ifreq {
  */
 struct net_socket_register {
 	int family;
+	bool is_offloaded;
 	bool (*is_supported)(int family, int type, int proto);
 	int (*handler)(int family, int type, int proto);
 };
@@ -943,13 +967,20 @@ struct net_socket_register {
 #define NET_SOCKET_GET_NAME(socket_name, prio)	\
 	__net_socket_register_##prio##_##socket_name
 
-#define NET_SOCKET_REGISTER(socket_name, prio, _family, _is_supported, _handler) \
+#define _NET_SOCKET_REGISTER(socket_name, prio, _family, _is_supported, _handler, _is_offloaded) \
 	static const STRUCT_SECTION_ITERABLE(net_socket_register,	\
-			NET_SOCKET_GET_NAME(socket_name, prio)) = {		\
+			NET_SOCKET_GET_NAME(socket_name, prio)) = {	\
 		.family = _family,					\
+		.is_offloaded = _is_offloaded,				\
 		.is_supported = _is_supported,				\
 		.handler = _handler,					\
 	}
+
+#define NET_SOCKET_REGISTER(socket_name, prio, _family, _is_supported, _handler) \
+	_NET_SOCKET_REGISTER(socket_name, prio, _family, _is_supported, _handler, false)
+
+#define NET_SOCKET_OFFLOAD_REGISTER(socket_name, prio, _family, _is_supported, _handler) \
+	_NET_SOCKET_REGISTER(socket_name, prio, _family, _is_supported, _handler, true)
 
 /** @endcond */
 

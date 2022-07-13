@@ -17,21 +17,20 @@
 
 #include <soc.h>
 #include <errno.h>
-#include <device.h>
-#include <drivers/gpio.h>
-#include <dt-bindings/gpio/espressif-esp32-gpio.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/dt-bindings/gpio/espressif-esp32-gpio.h>
 #ifdef CONFIG_SOC_ESP32C3
-#include <drivers/interrupt_controller/intc_esp32c3.h>
+#include <zephyr/drivers/interrupt_controller/intc_esp32c3.h>
 #else
-#include <drivers/interrupt_controller/intc_esp32.h>
+#include <zephyr/drivers/interrupt_controller/intc_esp32.h>
 #endif
-#include <kernel.h>
-#include <sys/util.h>
-#include <drivers/pinmux.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/util.h>
 
 #include "gpio_utils.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(gpio_esp32, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_SOC_ESP32C3
@@ -63,7 +62,6 @@ struct gpio_esp32_config {
 struct gpio_esp32_data {
 	/* gpio_driver_data needs to be first */
 	struct gpio_driver_data common;
-	const struct device *pinmux;
 	sys_slist_t cb;
 };
 
@@ -109,22 +107,51 @@ static int gpio_esp32_config(const struct device *dev,
 	}
 #endif
 
-	/* Set pin function as GPIO */
-	ret = pinmux_pin_set(data->pinmux, io_pin, PIN_FUNC_GPIO);
-	if (ret < 0) {
-		LOG_ERR("Invalid pinmux configuration.");
+	if (io_pin >= GPIO_NUM_MAX) {
+		LOG_ERR("Invalid pin.");
+		ret = -EINVAL;
 		goto end;
 	}
+
+	/* Set pin function as GPIO */
+	gpio_ll_iomux_func_sel(GPIO_PIN_MUX_REG[io_pin], PIN_FUNC_GPIO);
 
 	if (flags & GPIO_PULL_UP) {
-		ret = pinmux_pin_pullup(data->pinmux, io_pin, PINMUX_PULLUP_ENABLE);
-	} else if (flags & GPIO_PULL_DOWN) {
-		ret = pinmux_pin_pullup(data->pinmux, io_pin, PINMUX_PULLUP_DISABLE);
-	}
+		if (!rtc_gpio_is_valid_gpio(io_pin) || SOC_GPIO_SUPPORT_RTC_INDEPENDENT) {
+			gpio_ll_pulldown_dis(&GPIO, io_pin);
+			gpio_ll_pullup_en(&GPIO, io_pin);
+		} else {
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+			int rtcio_num = rtc_io_num_map[io_pin];
 
-	if (ret < 0) {
-		LOG_ERR("Invalid pinmux configuration.");
-		goto end;
+			rtcio_hal_pulldown_disable(rtc_io_num_map[io_pin]);
+
+			if (rtc_io_desc[rtcio_num].pullup) {
+				rtcio_hal_pullup_enable(rtc_io_num_map[io_pin]);
+			} else {
+				ret = -ENOTSUP;
+				goto end;
+			}
+#endif
+		}
+	} else if (flags & GPIO_PULL_DOWN) {
+		if (!rtc_gpio_is_valid_gpio(io_pin) || SOC_GPIO_SUPPORT_RTC_INDEPENDENT) {
+			gpio_ll_pullup_dis(&GPIO, io_pin);
+			gpio_ll_pulldown_en(&GPIO, io_pin);
+		} else {
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+			int rtcio_num = rtc_io_num_map[io_pin];
+
+			rtcio_hal_pulldown_enable(rtc_io_num_map[io_pin]);
+
+			if (rtc_io_desc[rtcio_num].pullup) {
+				rtcio_hal_pullup_disable(rtc_io_num_map[io_pin]);
+			} else {
+				ret = -ENOTSUP;
+				goto end;
+			}
+#endif
+		}
 	}
 
 	if (flags & GPIO_OUTPUT) {
@@ -189,14 +216,12 @@ static int gpio_esp32_config(const struct device *dev,
 			gpio_ll_set_level(cfg->gpio_base, io_pin, 0);
 		}
 
-		ret = pinmux_pin_input_enable(data->pinmux, io_pin, PINMUX_OUTPUT_ENABLED);
-		if (ret < 0) {
-			goto end;
-		}
+		gpio_ll_output_enable(&GPIO, io_pin);
+		esp_rom_gpio_matrix_out(io_pin, SIG_GPIO_OUT_IDX, false, false);
 	}
 
 	if (flags & GPIO_INPUT) {
-		ret = pinmux_pin_input_enable(data->pinmux, io_pin, PINMUX_INPUT_ENABLED);
+		gpio_ll_input_enable(&GPIO, io_pin);
 	}
 
 end:
@@ -390,22 +415,12 @@ static void IRAM_ATTR gpio_esp32_fire_callbacks(const struct device *dev)
 	}
 }
 
-static void IRAM_ATTR gpio_esp32_isr(void *param);
+static void gpio_esp32_isr(void *param);
 
 static int gpio_esp32_init(const struct device *dev)
 {
 	struct gpio_esp32_data *data = dev->data;
 	static bool isr_connected;
-
-	data->pinmux = DEVICE_DT_GET(DT_NODELABEL(pinmux));
-	if ((data->pinmux != NULL)
-	    && !device_is_ready(data->pinmux)) {
-		data->pinmux = NULL;
-	}
-
-	if (!data->pinmux) {
-		return -ENOTSUP;
-	}
 
 	if (!isr_connected) {
 		esp_intr_alloc(DT_IRQN(DT_NODELABEL(gpio0)),

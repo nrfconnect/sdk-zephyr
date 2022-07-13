@@ -12,10 +12,10 @@
 #ifndef ZEPHYR_INCLUDE_NET_IEEE802154_RADIO_H_
 #define ZEPHYR_INCLUDE_NET_IEEE802154_RADIO_H_
 
-#include <device.h>
-#include <net/net_if.h>
-#include <net/net_pkt.h>
-#include <net/ieee802154.h>
+#include <zephyr/device.h>
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_pkt.h>
+#include <zephyr/net/ieee802154.h>
 
 #ifdef __cplusplus
 extern "C" {

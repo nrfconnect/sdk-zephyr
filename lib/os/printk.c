@@ -12,14 +12,14 @@
  * init time. If no routine is installed, a nop routine is called.
  */
 
-#include <kernel.h>
-#include <sys/printk.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/printk.h>
 #include <stdarg.h>
-#include <toolchain.h>
-#include <linker/sections.h>
-#include <syscall_handler.h>
-#include <logging/log.h>
-#include <sys/cbprintf.h>
+#include <zephyr/toolchain.h>
+#include <zephyr/linker/sections.h>
+#include <zephyr/syscall_handler.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/sys/cbprintf.h>
 #include <sys/types.h>
 
 /* Option present only when CONFIG_USERSPACE enabled. */
@@ -51,7 +51,7 @@ __attribute__((weak)) int arch_printk_char_out(int c)
 }
 /* LCOV_EXCL_STOP */
 
-int (*_char_out)(int) = arch_printk_char_out;
+int (*_char_out)(int c) = arch_printk_char_out;
 
 /**
  * @brief Install the character output routine for printk
@@ -60,7 +60,7 @@ int (*_char_out)(int) = arch_printk_char_out;
  * routine that outputs one ASCII character at a time.
  * @param fn putc routine to install
  */
-void __printk_hook_install(int (*fn)(int))
+void __printk_hook_install(int (*fn)(int c))
 {
 	_char_out = fn;
 }

@@ -19,8 +19,8 @@
 extern "C" {
 #endif
 
-#include <device.h>
-#include <drivers/sensor.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/sensor.h>
 
 /* Status register fields */
 #define CCS811_STATUS_ERROR             BIT(0)

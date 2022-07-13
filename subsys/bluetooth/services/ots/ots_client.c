@@ -6,19 +6,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <zephyr/types.h>
 
-#include <device.h>
-#include <init.h>
-#include <sys/byteorder.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
+#include <zephyr/sys/byteorder.h>
 
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/conn.h>
-#include <bluetooth/gatt.h>
-#include <bluetooth/l2cap.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/l2cap.h>
 
-#include <bluetooth/services/ots.h>
+#include <zephyr/bluetooth/services/ots.h>
 #include "ots_internal.h"
 #include "ots_client_internal.h"
 #include "ots_l2cap_internal.h"
@@ -349,8 +349,13 @@ uint8_t bt_ots_client_indicate_handler(struct bt_conn *conn,
 				       const void *data, uint16_t length)
 {
 	uint16_t handle = params->value_handle;
-	struct bt_otc_internal_instance_t *inst =
-		lookup_inst_by_handle(handle);
+	struct bt_otc_internal_instance_t *inst;
+
+	if (conn == NULL) {
+		return BT_GATT_ITER_CONTINUE;
+	}
+
+	inst = lookup_inst_by_handle(handle);
 
 	/* TODO: Can we somehow avoid exposing this
 	 * callback via the public API?

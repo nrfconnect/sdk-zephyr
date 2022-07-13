@@ -21,8 +21,8 @@
  */
 
 #include <zephyr/types.h>
-#include <sys/util.h>
-#include <device.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/device.h>
 
 #ifdef __cplusplus
 extern "C" {

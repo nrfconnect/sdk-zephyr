@@ -12,8 +12,8 @@
 #ifndef __CFB_H__
 #define __CFB_H__
 
-#include <device.h>
-#include <drivers/display.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/display.h>
 
 #ifdef __cplusplus
 extern "C" {

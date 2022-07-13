@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <drivers/gpio.h>
+#include <zephyr/drivers/gpio.h>
 
 #define VEXT_PIN  DT_GPIO_PIN(DT_NODELABEL(vext), gpios)
 #define OLED_RST  DT_GPIO_PIN(DT_NODELABEL(oledrst), gpios)
@@ -30,4 +30,4 @@ static int board_heltec_wifi_lora32_v2_init(const struct device *dev)
 	return 0;
 }
 
-SYS_INIT(board_heltec_wifi_lora32_v2_init, PRE_KERNEL_2, CONFIG_PINMUX_INIT_PRIORITY);
+SYS_INIT(board_heltec_wifi_lora32_v2_init, PRE_KERNEL_2, CONFIG_GPIO_INIT_PRIORITY);

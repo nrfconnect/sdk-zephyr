@@ -8,9 +8,9 @@
 #define ZEPHYR_INCLUDE_DRIVERS_PM_CPU_OPS_PSCI_H_
 
 #include <zephyr/types.h>
-#include <arch/arm64/arm-smccc.h>
+#include <zephyr/arch/arm64/arm-smccc.h>
 #include <stddef.h>
-#include <device.h>
+#include <zephyr/device.h>
 
 #ifdef __cplusplus
 extern "C" {

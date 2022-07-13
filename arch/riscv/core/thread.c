@@ -5,11 +5,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <kernel.h>
+#include <zephyr/kernel.h>
 #include <ksched.h>
-#include <arch/riscv/csr.h>
+#include <zephyr/arch/riscv/csr.h>
 #include <stdio.h>
-#include <core_pmp.h>
+#include <pmp.h>
 
 #if defined(CONFIG_USERSPACE) && !defined(CONFIG_SMP)
 /*
@@ -81,18 +81,19 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	stack_init->mstatus |= MSTATUS_FS_INIT;
 #endif
 
-#if defined(CONFIG_PMP_STACK_GUARD) || defined(CONFIG_USERSPACE)
-	/* Clear PMP context if RISC-V PMP is used. */
-	z_riscv_pmp_init_thread(thread);
-#endif /* CONFIG_PMP_STACK_GUARD || CONFIG_USERSPACE */
-
 #if defined(CONFIG_USERSPACE)
 	/* Clear user thread context */
+	z_riscv_pmp_usermode_init(thread);
 	thread->arch.priv_stack_start = 0;
 
 	/* the unwound stack pointer upon exiting exception */
 	stack_init->sp = (ulong_t)(stack_init + 1);
 #endif /* CONFIG_USERSPACE */
+
+#if defined(CONFIG_THREAD_LOCAL_STORAGE)
+	stack_init->tp = thread->tls;
+	thread->callee_saved.tp = thread->tls;
+#endif
 
 	/* Assign thread entry point and mstatus.MPRV mode. */
 	if (IS_ENABLED(CONFIG_USERSPACE)
@@ -114,7 +115,7 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 
 #if defined(CONFIG_PMP_STACK_GUARD)
 	/* Setup PMP regions of PMP stack guard of thread. */
-	z_riscv_init_stack_guard(thread);
+	z_riscv_pmp_stackguard_prepare(thread);
 #endif /* CONFIG_PMP_STACK_GUARD */
 
 #ifdef CONFIG_RISCV_SOC_CONTEXT_SAVE
@@ -215,13 +216,15 @@ FUNC_NORETURN void arch_user_mode_enter(k_thread_entry_t user_entry,
 #ifdef CONFIG_GEN_PRIV_STACKS
 	_current->arch.priv_stack_start =
 			(ulong_t)z_priv_stack_find(_current->stack_obj);
+	/* remove the stack guard from the main stack */
+	_current->stack_info.start -= K_THREAD_STACK_RESERVED;
+	_current->stack_info.size += K_THREAD_STACK_RESERVED;
 #else
-	_current->arch.priv_stack_start =
-			(ulong_t)(_current->stack_obj) +
-			Z_RISCV_STACK_GUARD_SIZE;
+	_current->arch.priv_stack_start = (ulong_t)_current->stack_obj;
 #endif /* CONFIG_GEN_PRIV_STACKS */
-	top_of_priv_stack = Z_STACK_PTR_ALIGN(_current->arch.priv_stack_start
-					      + CONFIG_PRIVILEGED_STACK_SIZE);
+	top_of_priv_stack = Z_STACK_PTR_ALIGN(_current->arch.priv_stack_start +
+					      K_KERNEL_STACK_RESERVED +
+					      CONFIG_PRIVILEGED_STACK_SIZE);
 
 	top_of_user_stack = Z_STACK_PTR_ALIGN(
 				_current->stack_info.start +
@@ -240,16 +243,17 @@ FUNC_NORETURN void arch_user_mode_enter(k_thread_entry_t user_entry,
 	csr_write(mstatus, status);
 	csr_write(mepc, z_thread_entry);
 
-	/* exception stack has to be in mscratch */
-	csr_write(mscratch, top_of_priv_stack);
-
-	/* Set up Physical Memory Protection */
-#if defined(CONFIG_PMP_STACK_GUARD)
-	z_riscv_init_stack_guard(_current);
+#ifdef CONFIG_PMP_STACK_GUARD
+	/* reconfigure as the kernel mode stack will be different */
+	z_riscv_pmp_stackguard_prepare(_current);
 #endif
 
-	z_riscv_init_user_accesses(_current);
-	z_riscv_configure_user_allowed_stack(_current);
+	/* Set up Physical Memory Protection */
+	z_riscv_pmp_usermode_prepare(_current);
+	z_riscv_pmp_usermode_enable(_current);
+
+	/* exception stack has to be in mscratch */
+	csr_write(mscratch, top_of_priv_stack);
 
 #if !defined(CONFIG_SMP)
 	is_user_mode = true;

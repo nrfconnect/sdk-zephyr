@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(net_l2_ppp, CONFIG_NET_L2_PPP_LOG_LEVEL);
 
-#include <net/net_core.h>
-#include <net/net_pkt.h>
+#include <zephyr/net/net_core.h>
+#include <zephyr/net/net_pkt.h>
 
-#include <net/ppp.h>
+#include <zephyr/net/ppp.h>
 
 #include "net_private.h"
 #include "ipv6.h"
@@ -156,10 +156,6 @@ static int ipv6cp_config_info_ack(struct ppp_fsm *fsm,
 				  struct net_pkt *pkt,
 				  uint16_t length)
 {
-	struct ppp_context *ctx = CONTAINER_OF(fsm, struct ppp_context,
-					       ipv6cp.fsm);
-	uint8_t *iid = ctx->ipv6cp.my_options.iid;
-	size_t iid_len = sizeof(ctx->ipv6cp.my_options.iid);
 	int ret;
 
 	ret = ppp_my_options_parse_conf_ack(fsm, pkt, length);
@@ -173,6 +169,10 @@ static int ipv6cp_config_info_ack(struct ppp_fsm *fsm,
 	}
 
 	if (CONFIG_NET_L2_PPP_LOG_LEVEL >= LOG_LEVEL_DBG) {
+		struct ppp_context *ctx = CONTAINER_OF(fsm, struct ppp_context,
+						       ipv6cp.fsm);
+		uint8_t *iid = ctx->ipv6cp.my_options.iid;
+		size_t iid_len = sizeof(ctx->ipv6cp.my_options.iid);
 		uint8_t iid_str[sizeof("xx:xx:xx:xx:xx:xx:xx:xx")];
 
 		net_sprint_ll_addr_buf(iid, iid_len,

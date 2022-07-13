@@ -9,22 +9,22 @@
 
 #include <errno.h>
 
-#include <device.h>
+#include <zephyr/device.h>
 #ifdef CONFIG_SOC_SERIES_MEC172X
-#include <drivers/clock_control/mchp_xec_clock_control.h>
-#include <drivers/interrupt_controller/intc_mchp_xec_ecia.h>
+#include <zephyr/drivers/clock_control/mchp_xec_clock_control.h>
+#include <zephyr/drivers/interrupt_controller/intc_mchp_xec_ecia.h>
 #endif
 #ifdef CONFIG_PINCTRL
-#include <drivers/pinctrl.h>
+#include <zephyr/drivers/pinctrl.h>
 #endif
-#include <drivers/pwm.h>
+#include <zephyr/drivers/pwm.h>
 #include <errno.h>
-#include <kernel.h>
-#include <init.h>
+#include <zephyr/kernel.h>
+#include <zephyr/init.h>
 #include <soc.h>
 #include <stdlib.h>
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pwm_mchp_xec, CONFIG_PWM_LOG_LEVEL);
 
 /* Minimal on/off are 1 & 1 both are incremented, so 4.
@@ -313,16 +313,16 @@ done:
 	regs->CONFIG = cfgval;
 }
 
-static int pwm_xec_pin_set(const struct device *dev, uint32_t pwm,
-			   uint32_t period_cycles, uint32_t pulse_cycles,
-			   pwm_flags_t flags)
+static int pwm_xec_set_cycles(const struct device *dev, uint32_t channel,
+			      uint32_t period_cycles, uint32_t pulse_cycles,
+			      pwm_flags_t flags)
 {
 	const struct pwm_xec_config * const cfg = dev->config;
 	struct pwm_regs * const regs = cfg->regs;
 	uint32_t target_freq;
 	uint32_t on, off;
 
-	if (pwm > 0) {
+	if (channel > 0) {
 		return -EIO;
 	}
 
@@ -355,12 +355,12 @@ static int pwm_xec_pin_set(const struct device *dev, uint32_t pwm,
 	return 0;
 }
 
-static int pwm_xec_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
-				      uint64_t *cycles)
+static int pwm_xec_get_cycles_per_sec(const struct device *dev,
+				      uint32_t channel, uint64_t *cycles)
 {
 	ARG_UNUSED(dev);
 
-	if (pwm > 0) {
+	if (channel > 0) {
 		return -EIO;
 	}
 
@@ -375,7 +375,7 @@ static int pwm_xec_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
 }
 
 static const struct pwm_driver_api pwm_xec_driver_api = {
-	.pin_set = pwm_xec_pin_set,
+	.set_cycles = pwm_xec_set_cycles,
 	.get_cycles_per_sec = pwm_xec_get_cycles_per_sec,
 };
 

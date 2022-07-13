@@ -152,6 +152,7 @@ ARM64 arch:
     collaborators:
         - npitre
         - povergoing
+        - sgrrzhf
     files:
         - arch/arm64/
         - include/zephyr/arch/arm64/
@@ -167,11 +168,13 @@ Bluetooth:
     maintainers:
         - jhedberg
     collaborators:
+        - hermabe
         - jori-nordic
         - alwa-nordic
         - Vudentz
         - Thalley
         - asbjornsabo
+        - sjanc
     files:
         - doc/connectivity/bluetooth/
         - drivers/bluetooth/
@@ -244,6 +247,7 @@ Bluetooth Audio:
         - Casper-Bonde-Bose
         - MariuszSkamra
         - rymanluk
+        - sjanc
     files:
         - subsys/bluetooth/audio/
         - include/zephyr/bluetooth/audio/
@@ -290,6 +294,7 @@ C library:
          - nashif
          - enjiamai
          - KangJianX
+         - keith-packard
     files:
          - lib/libc/
          - tests/lib/c_lib/
@@ -307,6 +312,7 @@ CMSIS API layer:
          - samples/subsys/portability/cmsis_rtos_v*/
          - tests/subsys/portability/cmsis_rtos_v*/
     labels:
+        - "area: CMSIS API Layer"
         - "area: Portability"
 
 CMSIS-DSP integration:
@@ -321,6 +327,18 @@ CMSIS-DSP integration:
         - tests/lib/cmsis_dsp/
     labels:
         - "area: CMSIS-DSP"
+
+CMSIS-NN integration:
+    status: maintained
+    maintainers:
+        - JordanYates
+    collaborators:
+        - stephanosio
+    files:
+        - modules/Kconfig.cmsis_nn
+        - tests/lib/cmsis_nn/
+    labels:
+        - "area: CMSIS-NN"
 
 Common Architecture Interface:
     status: odd fixes
@@ -350,6 +368,7 @@ Debug:
     collaborators:
         - dcpleung
         - chen-png
+        - mrkhldn
     files:
         - include/zephyr/debug/
         - subsys/debug/
@@ -404,9 +423,9 @@ Devicetree:
 Disk:
     status: maintained
     maintainers:
-        - jfischer-no
-    collaborators:
         - danieldegrasse
+    collaborators:
+        - jfischer-no
     files:
         - include/zephyr/storage/disk_access.h
         - include/zephyr/drivers/disk.h
@@ -488,9 +507,7 @@ Documentation:
     collaborators:
         - alexanderwachter
         - karstenkoenig
-        - nixward
         - martinjaeger
-        - legoabram
     files:
         - doc/hardware/peripherals/canbus/
         - drivers/can/
@@ -534,6 +551,18 @@ Documentation:
     labels:
         - "area: Console"
 
+"Drivers: Coredump":
+    status: maintained
+    maintainers:
+        - mrkhldn
+    files:
+        - drivers/coredump/
+        - dts/bindings/coredump/
+        - include/zephyr/drivers/coredump.h
+        - tests/drivers/coredump/
+    labels:
+        - "area: Coredump"
+
 "Drivers: Counter":
     status: maintained
     maintainers:
@@ -568,6 +597,20 @@ Documentation:
         - samples/drivers/dac/
     labels:
         - "area: DAC"
+
+"Drivers: DAI":
+    status: maintained
+    maintainers:
+        - juimonen
+    collaborators:
+        - lgirdwood
+        - kv2019i
+    files:
+        - drivers/dai/
+        - doc/hardware/peripherals/audio/dai.rst
+        - include/zephyr/drivers/dai.h
+    labels:
+        - "area: DAI"
 
 "Drivers: DMA":
     status: maintained
@@ -990,6 +1033,24 @@ Documentation:
     labels:
         - "area: Wifi"
 
+Xen Platform:
+    status: maintained
+    maintainers:
+        - povergoing
+    collaborators:
+        - SgrrZhf
+        - lorc
+        - firscity
+        - luca-fancellu
+    files:
+        - include/zephyr/xen/
+        - drivers/xen/
+        - arch/arm64/core/xen/
+        - soc/arm64/xenvm/
+        - boards/arm64/xenvm/
+    labels:
+        - "area: Xen Platform"
+
 Filesystems:
     status: maintained
     maintainers:
@@ -1010,6 +1071,8 @@ Formatted Output:
     status: maintained
     maintainers:
       - nordic-krch
+    collaborators:
+      - dcpleung
     files:
       - include/zephyr/sys/cbprintf*
       - tests/unit/cbprintf/
@@ -1096,6 +1159,21 @@ Base OS:
     labels:
         - "area: Base OS"
 
+Laird Connectivity platforms:
+    status: maintained
+    maintainers:
+        - rerickson1
+    collaborators:
+        - greg-leach
+    files:
+        - boards/arm/bl5340_dvk/
+        - boards/arm/bl65*/
+        - boards/arm/bt510/
+        - boards/arm/bt610/
+        - boards/arm/pinnacle_100_dvk/
+    labels:
+        - "platform: Laird Connectivity"
+
 Little FS:
     status: odd fixes
     files:
@@ -1113,6 +1191,8 @@ Logging:
         - nordic-krch
     collaborators:
         - chen-png
+        - aasthagr
+        - dcpleung
     files:
         - include/zephyr/logging/
         - samples/subsys/logging/
@@ -1330,7 +1410,7 @@ nRF52 BSIM:
     files:
         - boards/posix/nrf52_bsim/
     labels:
-        - "platform: nrf52_bsim"
+        - "platform: nRF52 BSIM"
 
 POSIX API layer:
     status: odd fixes
@@ -1501,7 +1581,7 @@ Synopsys Platforms:
     labels:
         - "platform: Synopsys"
 
-Nuvoton_NPCX Platforms:
+Nuvoton NPCX Platforms:
     status: maintained
     maintainers:
         - MulinChao
@@ -1523,9 +1603,9 @@ Nuvoton_NPCX Platforms:
         - dts/bindings/*/*npcx*
         - drivers/*/*_npcx*.c
     labels:
-        - "platform: Nuvoton_NPCX"
+        - "platform: Nuvoton NPCX"
 
-Nuvoton_Numicro Platforms:
+Nuvoton Numicro Platforms:
     status: odd fixes
     collaborators:
         - ssekar15
@@ -1536,7 +1616,7 @@ Nuvoton_Numicro Platforms:
         - dts/bindings/*/*numicro*
         - drivers/*/*_numicro*
     labels:
-        - "platform: Nuvoton_Numicro"
+        - "platform: Nuvoton Numicro"
 
 SiLabs Platforms:
     status: odd fixes
@@ -1582,7 +1662,6 @@ Intel Platforms (Xtensa):
     files:
         - boards/xtensa/intel_*/
         - soc/xtensa/intel_*/
-        - samples/boards/intel_s1000_crb/
     labels:
         - "platform: Intel CAVS"
 
@@ -1607,7 +1686,7 @@ NXP Platforms:
   labels:
     - "platform: NXP"
 
-Microchip Platforms:
+Microchip MEC Platforms:
   status: maintained
   maintainers:
     - jvasanth1
@@ -1620,7 +1699,23 @@ Microchip Platforms:
     - soc/arm/microchip_mec/
     - drivers/*/*mchp*.c
   labels:
-    - "platform: Microchip"
+    - "platform: Microchip MEC"
+
+Microchip SAM Platforms:
+  status: maintained
+  maintainers:
+    - nandojve
+  collaborators:
+    - mnkp
+    - stephanosio
+  files:
+    - boards/arm/atsam*/
+    - boards/arm/sam*/
+    - dts/arm/atmel/
+    - soc/arm/atmel_sam*/
+    - drivers/*/*sam*.c
+  labels:
+    - "platform: Microchip SAM"
 
 nRF Platforms:
     status: maintained
@@ -1661,6 +1756,7 @@ STM32 Platforms:
         - ABOSTM
         - FRASTM
         - gmarull
+        - GeorgeCGV
     files:
         - boards/arm/nucleo_*/
         - boards/arm/stm32*_disco/
@@ -1718,7 +1814,7 @@ ITE Platforms:
         - drivers/*/*/*it8xxx2*.c
         - drivers/*/*it8xxx2*.c
         - dts/bindings/*/*ite*
-        - dts/riscv/*it8xxx2*
+        - dts/riscv/ite/
         - soc/riscv/riscv-ite/
     labels:
         - "platform: ITE"
@@ -1742,6 +1838,20 @@ TI Platforms:
         - soc/arm/ti*/
     labels:
         - "platform: TI"
+
+Xilinx Platforms:
+  status: odd fixes
+  collaborators:
+    - henrikbrixandersen
+    - ibirnbaum
+  files:
+    - drivers/*/*xlnx*
+    - dts/*/xilinx/
+    - dts/bindings/*/*xlnx*
+    - include/zephyr/*/*/*xlnx*
+    - soc/arm/xilinx*/
+  labels:
+    - "platform: Xilinx"
 
 Storage:
     status: maintained
@@ -1776,6 +1886,20 @@ TF-M Integration:
         - modules/trusted-firmware-m/
     labels:
         - "area: TF-M"
+
+Toolchain Integration:
+    status: maintained
+    maintainers:
+        - tejlmand
+    collaborators:
+        - stephanosio
+    files:
+        - cmake/bintools/
+        - cmake/compiler/
+        - cmake/linker/
+        - cmake/toolchain/
+    labels:
+        - "area: Toolchains"
 
 Tracing:
     status: maintained
@@ -1868,16 +1992,6 @@ West:
     labels:
         - manifest-canopennode
         - "area: CAN"
-
-"West project: civetweb":
-    status: obsolete
-    files:
-        - samples/net/civetweb/
-        - modules/Kconfig.civetweb
-    labels:
-        - manifest-civetweb
-        - "area: Networking"
-        - "area: civetweb"
 
 "West project: cmsis":
     status: maintained
@@ -2247,6 +2361,16 @@ West:
     files: []
     labels:
         - manifest-openthread
+
+"West project: picolibc":
+    status: maintained
+    maintainers:
+        - keith-packard
+    collaborators:
+        - stephanosio
+    files: []
+    labels:
+        - manifest-picolibc
 
 "West project: segger":
     status: odd fixes

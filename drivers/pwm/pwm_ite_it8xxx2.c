@@ -6,32 +6,22 @@
 
 #define DT_DRV_COMPAT ite_it8xxx2_pwm
 
-#include <device.h>
-#include <drivers/pwm.h>
-#include <drivers/pinmux.h>
-#include <dt-bindings/pwm/it8xxx2_pwm.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/pwm.h>
+#include <zephyr/drivers/pinctrl.h>
+#include <zephyr/dt-bindings/pwm/it8xxx2_pwm.h>
 #include <errno.h>
-#include <kernel.h>
+#include <zephyr/kernel.h>
 #include <soc.h>
 #include <soc_dt.h>
 #include <stdlib.h>
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pwm_ite_it8xxx2, CONFIG_PWM_LOG_LEVEL);
 
 #define PWM_CTRX_MIN	100
 #define PWM_FREQ	EC_FREQ
 #define PCSSG_MASK	0x3
-
-/* Device config */
-struct pwm_alt_cfg {
-	/* Pinmux control device structure */
-	const struct device *pinctrls;
-	/* GPIO pin */
-	uint8_t pin;
-	/* Alternate function */
-	uint8_t alt_fun;
-};
 
 struct pwm_it8xxx2_cfg {
 	/* PWM channel duty cycle register */
@@ -48,8 +38,8 @@ struct pwm_it8xxx2_cfg {
 	struct pwm_it8xxx2_regs *base;
 	/* Select PWM prescaler that output to PWM channel */
 	int prs_sel;
-	/* PWM alternate configuration list */
-	const struct pwm_alt_cfg *alt_list;
+	/* PWM alternate configuration */
+	const struct pinctrl_dev_config *pcfg;
 };
 
 static void pwm_enable(const struct device *dev, int enabled)
@@ -58,30 +48,31 @@ static void pwm_enable(const struct device *dev, int enabled)
 	volatile uint8_t *reg_pcsgr = (uint8_t *)config->reg_pcsgr;
 	int ch = config->channel;
 
-	if (enabled)
+	if (enabled) {
 		/* PWM channel clock source not gating */
 		*reg_pcsgr &= ~BIT(ch);
-	else
+	} else {
 		/* PWM channel clock source gating */
 		*reg_pcsgr |= BIT(ch);
+	}
 }
 
 static int pwm_it8xxx2_get_cycles_per_sec(const struct device *dev,
-					     uint32_t pwm, uint64_t *cycles)
+					  uint32_t channel, uint64_t *cycles)
 {
-	ARG_UNUSED(pwm);
+	ARG_UNUSED(channel);
 
 	/*
-	 * There are three ways to call pwm_it8xxx2_pin_set() from pwm api:
-	 * 1) pwm_pin_set_usec() -> pwm_pin_set_cycles() -> pwm_it8xxx2_pin_set()
+	 * There are three ways to call pwm_it8xxx2_set_cycles() from pwm api:
+	 * 1) pwm_set_cycles_usec() -> pwm_set_cycles_cycles() -> pwm_it8xxx2_set_cycles()
 	 *    target_freq = pwm_clk_src / period_cycles
 	 *                = cycles / (period * cycles / USEC_PER_SEC)
 	 *                = USEC_PER_SEC / period
-	 * 2) pwm_pin_set_nsec() -> pwm_pin_set_cycles() -> pwm_it8xxx2_pin_set()
+	 * 2) pwm_set_cycles_nsec() -> pwm_set_cycles_cycles() -> pwm_it8xxx2_set_cycles()
 	 *    target_freq = pwm_clk_src / period_cycles
 	 *                = cycles / (period * cycles / NSEC_PER_SEC)
 	 *                = NSEC_PER_SEC / period
-	 * 3) pwm_pin_set_cycles() -> pwm_it8xxx2_pin_set()
+	 * 3) pwm_set_cycles_cycles() -> pwm_it8xxx2_set_cycles()
 	 *    target_freq = pwm_clk_src / period_cycles
 	 *                = cycles / period
 	 *
@@ -94,9 +85,9 @@ static int pwm_it8xxx2_get_cycles_per_sec(const struct device *dev,
 	return 0;
 }
 
-static int pwm_it8xxx2_pin_set(const struct device *dev,
-				uint32_t pwm, uint32_t period_cycles,
-				uint32_t pulse_cycles, pwm_flags_t flags)
+static int pwm_it8xxx2_set_cycles(const struct device *dev,
+				  uint32_t channel, uint32_t period_cycles,
+				  uint32_t pulse_cycles, pwm_flags_t flags)
 {
 	const struct pwm_it8xxx2_cfg *config = dev->config;
 	struct pwm_it8xxx2_regs *const inst = config->base;
@@ -107,16 +98,15 @@ static int pwm_it8xxx2_pin_set(const struct device *dev,
 	uint32_t actual_freq = 0xffffffff, target_freq, deviation, cxcprs, ctr;
 	uint64_t pwm_clk_src;
 
-	ARG_UNUSED(pwm);
-
 	/* PWM channel clock source gating before configuring */
 	pwm_enable(dev, 0);
 
 	/* Select PWM inverted polarity (ex. active-low pulse) */
-	if (flags & PWM_POLARITY_INVERTED)
+	if (flags & PWM_POLARITY_INVERTED) {
 		*reg_pwmpol |= BIT(ch);
-	else
+	} else {
 		*reg_pwmpol &= ~BIT(ch);
+	}
 
 	/* If pulse cycles is 0, set duty cycle 0 and enable pwm channel */
 	if (pulse_cycles == 0) {
@@ -125,7 +115,7 @@ static int pwm_it8xxx2_pin_set(const struct device *dev,
 		return 0;
 	}
 
-	pwm_it8xxx2_get_cycles_per_sec(dev, pwm, &pwm_clk_src);
+	pwm_it8xxx2_get_cycles_per_sec(dev, channel, &pwm_clk_src);
 	target_freq = ((uint32_t) pwm_clk_src) / period_cycles;
 
 	/*
@@ -167,11 +157,18 @@ static int pwm_it8xxx2_pin_set(const struct device *dev,
 	 *          CTRx[7:0] value FFh results in a divisor 256
 	 */
 	for (ctr = 0xFF; ctr >= PWM_CTRX_MIN; ctr--) {
-		cxcprs = (((uint32_t) pwm_clk_src) / (ctr + 1) / target_freq) - 1;
-		if (cxcprs >= 0) {
-			actual_freq = ((uint32_t) pwm_clk_src) / (ctr + 1) / (cxcprs + 1);
-			if (abs(actual_freq - target_freq) < deviation)
+		cxcprs = (((uint32_t) pwm_clk_src) / (ctr + 1) / target_freq);
+		/*
+		 * Make sure cxcprs isn't zero, or we will have
+		 * divide-by-zero on calculating actual_freq.
+		 */
+		if (cxcprs != 0) {
+			actual_freq = ((uint32_t) pwm_clk_src) / (ctr + 1) / cxcprs;
+			if (abs(actual_freq - target_freq) < deviation) {
+				/* CxCPRS[15:0] = cxcprs - 1 */
+				cxcprs--;
 				break;
+			}
 		}
 	}
 
@@ -216,6 +213,7 @@ static int pwm_it8xxx2_init(const struct device *dev)
 	int prs_sel = config->prs_sel;
 	int pcssg_shift;
 	int pcssg_mask;
+	int status;
 
 	/* PWM channel clock source gating before configuring */
 	pwm_enable(dev, 0);
@@ -244,22 +242,23 @@ static int pwm_it8xxx2_init(const struct device *dev)
 	inst->ZTIER |= IT8XXX2_PWM_PCCE;
 
 	/* Set alternate mode of PWM pin */
-	pinmux_pin_set(config->alt_list->pinctrls,
-		       config->alt_list->pin,
-		       config->alt_list->alt_fun);
+	status = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+	if (status < 0) {
+		LOG_ERR("Failed to configure PWM pins");
+		return status;
+	}
+
 	return 0;
 }
 
 static const struct pwm_driver_api pwm_it8xxx2_api = {
-	.pin_set = pwm_it8xxx2_pin_set,
+	.set_cycles = pwm_it8xxx2_set_cycles,
 	.get_cycles_per_sec = pwm_it8xxx2_get_cycles_per_sec,
 };
 
 /* Device Instance */
 #define PWM_IT8XXX2_INIT(inst)								\
-	static const struct pwm_alt_cfg							\
-		pwm_alt_##inst[DT_INST_NUM_PINCTRLS_BY_IDX(inst, 0)] =			\
-			IT8XXX2_DT_ALT_ITEMS_LIST(inst);				\
+	PINCTRL_DT_INST_DEFINE(inst);							\
 											\
 	static const struct pwm_it8xxx2_cfg pwm_it8xxx2_cfg_##inst = {			\
 		.reg_dcr = DT_INST_REG_ADDR_BY_IDX(inst, 0),				\
@@ -269,7 +268,7 @@ static const struct pwm_driver_api pwm_it8xxx2_api = {
 		.channel = DT_PROP(DT_INST(inst, ite_it8xxx2_pwm), channel),		\
 		.base = (struct pwm_it8xxx2_regs *) DT_REG_ADDR(DT_NODELABEL(prs)),	\
 		.prs_sel = DT_PROP(DT_INST(inst, ite_it8xxx2_pwm), prescaler_cx),	\
-		.alt_list = pwm_alt_##inst,						\
+		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),				\
 	};										\
 											\
 	DEVICE_DT_INST_DEFINE(inst,							\

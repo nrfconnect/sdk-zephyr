@@ -6,15 +6,15 @@
 
 #define DT_DRV_COMPAT nxp_kinetis_pwt
 
-#include <drivers/clock_control.h>
+#include <zephyr/drivers/clock_control.h>
 #include <errno.h>
-#include <drivers/pwm.h>
+#include <zephyr/drivers/pwm.h>
 #include <soc.h>
 #include <fsl_pwt.h>
 #include <fsl_clock.h>
-#include <drivers/pinctrl.h>
+#include <zephyr/drivers/pinctrl.h>
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pwm_mcux_pwt, CONFIG_PWM_LOG_LEVEL);
 
 /* Number of PWT input ports */
@@ -50,12 +50,12 @@ static inline bool mcux_pwt_is_active(const struct device *dev)
 	return !!(config->base->CS & PWT_CS_PWTEN_MASK);
 }
 
-static int mcux_pwt_pin_set(const struct device *dev, uint32_t pwm,
-			    uint32_t period_cycles, uint32_t pulse_cycles,
-			    pwm_flags_t flags)
+static int mcux_pwt_set_cycles(const struct device *dev, uint32_t channel,
+			       uint32_t period_cycles, uint32_t pulse_cycles,
+			       pwm_flags_t flags)
 {
 	ARG_UNUSED(dev);
-	ARG_UNUSED(pwm);
+	ARG_UNUSED(channel);
 	ARG_UNUSED(period_cycles);
 	ARG_UNUSED(pulse_cycles);
 	ARG_UNUSED(flags);
@@ -65,17 +65,16 @@ static int mcux_pwt_pin_set(const struct device *dev, uint32_t pwm,
 	return -ENOTSUP;
 }
 
-static int mcux_pwt_pin_configure_capture(const struct device *dev,
-					  uint32_t pwm,
-					  pwm_flags_t flags,
-					  pwm_capture_callback_handler_t cb,
-					  void *user_data)
+static int mcux_pwt_configure_capture(const struct device *dev,
+				      uint32_t channel, pwm_flags_t flags,
+				      pwm_capture_callback_handler_t cb,
+				      void *user_data)
 {
 	const struct mcux_pwt_config *config = dev->config;
 	struct mcux_pwt_data *data = dev->data;
 
-	if (pwm >= PWT_INPUTS) {
-		LOG_ERR("invalid channel %d", pwm);
+	if (channel >= PWT_INPUTS) {
+		LOG_ERR("invalid channel %d", channel);
 		return -EINVAL;
 	}
 
@@ -87,7 +86,7 @@ static int mcux_pwt_pin_configure_capture(const struct device *dev,
 	data->callback = cb;
 	data->user_data = user_data;
 
-	data->pwt_config.inputSelect = pwm;
+	data->pwt_config.inputSelect = channel;
 
 	data->continuous =
 		(flags & PWM_CAPTURE_MODE_MASK) == PWM_CAPTURE_MODE_CONTINUOUS;
@@ -102,13 +101,13 @@ static int mcux_pwt_pin_configure_capture(const struct device *dev,
 	return 0;
 }
 
-static int mcux_pwt_pin_enable_capture(const struct device *dev, uint32_t pwm)
+static int mcux_pwt_enable_capture(const struct device *dev, uint32_t channel)
 {
 	const struct mcux_pwt_config *config = dev->config;
 	struct mcux_pwt_data *data = dev->data;
 
-	if (pwm >= PWT_INPUTS) {
-		LOG_ERR("invalid channel %d", pwm);
+	if (channel >= PWT_INPUTS) {
+		LOG_ERR("invalid channel %d", channel);
 		return -EINVAL;
 	}
 
@@ -130,12 +129,12 @@ static int mcux_pwt_pin_enable_capture(const struct device *dev, uint32_t pwm)
 	return 0;
 }
 
-static int mcux_pwt_pin_disable_capture(const struct device *dev, uint32_t pwm)
+static int mcux_pwt_disable_capture(const struct device *dev, uint32_t channel)
 {
 	const struct mcux_pwt_config *config = dev->config;
 
-	if (pwm >= PWT_INPUTS) {
-		LOG_ERR("invalid channel %d", pwm);
+	if (channel >= PWT_INPUTS) {
+		LOG_ERR("invalid channel %d", channel);
 		return -EINVAL;
 	}
 
@@ -263,13 +262,13 @@ static void mcux_pwt_isr(const struct device *dev)
 	}
 }
 
-static int mcux_pwt_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
-				       uint64_t *cycles)
+static int mcux_pwt_get_cycles_per_sec(const struct device *dev,
+				       uint32_t channel, uint64_t *cycles)
 {
 	const struct mcux_pwt_config *config = dev->config;
 	struct mcux_pwt_data *data = dev->data;
 
-	ARG_UNUSED(pwm);
+	ARG_UNUSED(channel);
 
 	*cycles = data->clock_freq >> config->prescale;
 
@@ -306,11 +305,11 @@ static int mcux_pwt_init(const struct device *dev)
 }
 
 static const struct pwm_driver_api mcux_pwt_driver_api = {
-	.pin_set = mcux_pwt_pin_set,
+	.set_cycles = mcux_pwt_set_cycles,
 	.get_cycles_per_sec = mcux_pwt_get_cycles_per_sec,
-	.pin_configure_capture = mcux_pwt_pin_configure_capture,
-	.pin_enable_capture = mcux_pwt_pin_enable_capture,
-	.pin_disable_capture = mcux_pwt_pin_disable_capture,
+	.configure_capture = mcux_pwt_configure_capture,
+	.enable_capture = mcux_pwt_enable_capture,
+	.disable_capture = mcux_pwt_disable_capture,
 };
 
 #define TO_PWT_PRESCALE_DIVIDE(val) _DO_CONCAT(kPWT_Prescale_Divide_, val)

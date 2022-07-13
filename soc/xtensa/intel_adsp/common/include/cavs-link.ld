@@ -13,14 +13,14 @@
 
 OUTPUT_ARCH(xtensa)
 
-#include <devicetree.h>
+#include <zephyr/devicetree.h>
 #include <xtensa/config/core-isa.h>
-#include <linker/sections.h>
+#include <zephyr/linker/sections.h>
 #include <cavs-vectors.h>
 #include <cavs-mem.h>
 
-#include <linker/linker-defs.h>
-#include <linker/linker-tool.h>
+#include <zephyr/linker/linker-defs.h>
+#include <zephyr/linker/linker-tool.h>
 
 ENTRY(rom_entry);
 
@@ -277,6 +277,10 @@ SECTIONS {
     *(.rodata.*)
     *(.gnu.linkonce.r.*)
     *(.rodata1)
+
+    . = ALIGN(4);
+    #include <snippets-rodata.ld>
+
     __XT_EXCEPTION_TABLE__ = .;
     KEEP (*(.xt_except_table))
     KEEP (*(.gcc_except_table .gcc_except_table.*))
@@ -307,13 +311,13 @@ SECTIONS {
 
   .module_init : {
     _module_init_start = .;
-    *(*.module_init)
+    *(*.initcall)
     _module_init_end = .;
   } >ram
 
 #define RAMABLE_REGION ram
 #define ROMABLE_REGION ram
-#include <linker/common-rom.ld>
+#include <zephyr/linker/common-rom.ld>
 
   .fw_ready : {
     KEEP(*(".fw_ready"));
@@ -364,7 +368,7 @@ SECTIONS {
 #define RAMABLE_REGION ucram
 #define ROMABLE_REGION ucram
 
-#include <linker/common-ram.ld>
+#include <zephyr/linker/common-ram.ld>
 
   .tm_clone_table : {
     *(.tm_clone_table)
@@ -451,7 +455,7 @@ SECTIONS {
     . = ALIGN(16);
   } >noload
 
-#include <linker/debug-sections.ld>
+#include <zephyr/linker/debug-sections.ld>
 
   .xtensa.info 0 : { *(.xtensa.info) }
   .xt.insn 0 : {
@@ -482,6 +486,6 @@ SECTIONS {
   }
 
 #ifdef CONFIG_GEN_ISR_TABLES
-#include <linker/intlist.ld>
+#include <zephyr/linker/intlist.ld>
 #endif
 }

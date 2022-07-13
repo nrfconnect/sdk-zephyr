@@ -7,11 +7,11 @@
 #ifndef SHELL_LOG_BACKEND_H__
 #define SHELL_LOG_BACKEND_H__
 
-#include <zephyr.h>
-#include <logging/log_backend.h>
-#include <logging/log_output.h>
-#include <sys/mpsc_pbuf.h>
-#include <sys/atomic.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/logging/log_backend.h>
+#include <zephyr/logging/log_output.h>
+#include <zephyr/sys/mpsc_pbuf.h>
+#include <zephyr/sys/atomic.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -35,7 +35,6 @@ struct shell_log_backend_control_block {
 /** @brief Shell log backend instance structure (RO data). */
 struct shell_log_backend {
 	const struct log_backend *backend;
-	struct k_msgq *msgq;
 	const struct log_output *log_output;
 	struct shell_log_backend_control_block *control_block;
 	uint32_t timeout;
@@ -70,8 +69,6 @@ int z_shell_log_backend_output_func(uint8_t *data, size_t length, void *ctx);
 #ifdef CONFIG_SHELL_LOG_BACKEND
 #define Z_SHELL_LOG_BACKEND_DEFINE(_name, _buf, _size, _queue_size, _timeout) \
 	LOG_BACKEND_DEFINE(_name##_backend, log_backend_shell_api, false); \
-	K_MSGQ_DEFINE(_name##_msgq, sizeof(struct shell_log_backend_msg), \
-			_queue_size, sizeof(void *)); \
 	LOG_OUTPUT_DEFINE(_name##_log_output, z_shell_log_backend_output_func,\
 			  _buf, _size); \
 	static struct shell_log_backend_control_block _name##_control_block; \
@@ -86,15 +83,11 @@ int z_shell_log_backend_output_func(uint8_t *data, size_t length, void *ctx);
 	struct mpsc_pbuf_buffer _name##_mpsc_buffer; \
 	static const struct shell_log_backend _name##_log_backend = { \
 		.backend = &_name##_backend, \
-		.msgq = IS_ENABLED(CONFIG_LOG_MODE_DEFERRED) ? \
-			&_name##_msgq : NULL, \
 		.log_output = &_name##_log_output, \
 		.control_block = &_name##_control_block, \
 		.timeout = _timeout, \
-		.mpsc_buffer_config = IS_ENABLED(CONFIG_LOG2_DEFERRED) ? \
-			&_name##_mpsc_buffer_config : NULL, \
-		.mpsc_buffer = IS_ENABLED(CONFIG_LOG2_DEFERRED) ? \
-			&_name##_mpsc_buffer : NULL, \
+		.mpsc_buffer_config = &_name##_mpsc_buffer_config, \
+		.mpsc_buffer = &_name##_mpsc_buffer, \
 	}
 
 #define Z_SHELL_LOG_BACKEND_PTR(_name) (&_name##_log_backend)

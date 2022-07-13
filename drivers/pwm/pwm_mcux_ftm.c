@@ -7,16 +7,16 @@
 
 #define DT_DRV_COMPAT nxp_kinetis_ftm_pwm
 
-#include <drivers/clock_control.h>
+#include <zephyr/drivers/clock_control.h>
 #include <errno.h>
-#include <drivers/pwm.h>
+#include <zephyr/drivers/pwm.h>
 #include <soc.h>
 #include <fsl_ftm.h>
 #include <fsl_clock.h>
-#include <drivers/pinctrl.h>
+#include <zephyr/drivers/pinctrl.h>
 
 #define LOG_LEVEL CONFIG_PWM_LOG_LEVEL
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pwm_mcux_ftm);
 
 #define MAX_CHANNELS ARRAY_SIZE(FTM0->CONTROLS)
@@ -58,15 +58,15 @@ struct mcux_ftm_data {
 #endif /* CONFIG_PWM_CAPTURE */
 };
 
-static int mcux_ftm_pin_set(const struct device *dev, uint32_t pwm,
-			    uint32_t period_cycles, uint32_t pulse_cycles,
-			    pwm_flags_t flags)
+static int mcux_ftm_set_cycles(const struct device *dev, uint32_t channel,
+			       uint32_t period_cycles, uint32_t pulse_cycles,
+			       pwm_flags_t flags)
 {
 	const struct mcux_ftm_config *config = dev->config;
 	struct mcux_ftm_data *data = dev->data;
 	status_t status;
 #ifdef CONFIG_PWM_CAPTURE
-	uint32_t pair = pwm / 2U;
+	uint32_t pair = channel / 2U;
 	uint32_t irqs;
 #endif /* CONFIG_PWM_CAPTURE */
 
@@ -75,7 +75,7 @@ static int mcux_ftm_pin_set(const struct device *dev, uint32_t pwm,
 		return -ENOTSUP;
 	}
 
-	if (pwm >= config->channel_count) {
+	if (channel >= config->channel_count) {
 		LOG_ERR("Invalid channel");
 		return -ENOTSUP;
 	}
@@ -88,12 +88,12 @@ static int mcux_ftm_pin_set(const struct device *dev, uint32_t pwm,
 	}
 #endif /* CONFIG_PWM_CAPTURE */
 
-	data->channel[pwm].dutyValue = pulse_cycles;
+	data->channel[channel].dutyValue = pulse_cycles;
 
 	if ((flags & PWM_POLARITY_INVERTED) == 0) {
-		data->channel[pwm].level = kFTM_HighTrue;
+		data->channel[channel].level = kFTM_HighTrue;
 	} else {
-		data->channel[pwm].level = kFTM_LowTrue;
+		data->channel[channel].level = kFTM_LowTrue;
 	}
 
 	LOG_DBG("pulse_cycles=%d, period_cycles=%d, flags=%d",
@@ -136,18 +136,17 @@ static int mcux_ftm_pin_set(const struct device *dev, uint32_t pwm,
 }
 
 #ifdef CONFIG_PWM_CAPTURE
-static int mcux_ftm_pin_configure_capture(const struct device *dev,
-					  uint32_t pwm,
-					  pwm_flags_t flags,
-					  pwm_capture_callback_handler_t cb,
-					  void *user_data)
+static int mcux_ftm_configure_capture(const struct device *dev,
+				      uint32_t channel, pwm_flags_t flags,
+				      pwm_capture_callback_handler_t cb,
+				      void *user_data)
 {
 	const struct mcux_ftm_config *config = dev->config;
 	struct mcux_ftm_data *data = dev->data;
 	ftm_dual_edge_capture_param_t *param;
-	uint32_t pair = pwm / 2U;
+	uint32_t pair = channel / 2U;
 
-	if (pwm & 0x1U) {
+	if (channel & 0x1U) {
 		LOG_ERR("PWM capture only supported on even channels");
 		return -ENOTSUP;
 	}
@@ -207,13 +206,13 @@ static int mcux_ftm_pin_configure_capture(const struct device *dev,
 	return 0;
 }
 
-static int mcux_ftm_pin_enable_capture(const struct device *dev, uint32_t pwm)
+static int mcux_ftm_enable_capture(const struct device *dev, uint32_t channel)
 {
 	const struct mcux_ftm_config *config = dev->config;
 	struct mcux_ftm_data *data = dev->data;
-	uint32_t pair = pwm / 2U;
+	uint32_t pair = channel / 2U;
 
-	if (pwm & 0x1U) {
+	if (channel & 0x1U) {
 		LOG_ERR("PWM capture only supported on even channels");
 		return -ENOTSUP;
 	}
@@ -245,13 +244,13 @@ static int mcux_ftm_pin_enable_capture(const struct device *dev, uint32_t pwm)
 	return 0;
 }
 
-static int mcux_ftm_pin_disable_capture(const struct device *dev, uint32_t pwm)
+static int mcux_ftm_disable_capture(const struct device *dev, uint32_t channel)
 {
 	const struct mcux_ftm_config *config = dev->config;
 	struct mcux_ftm_data *data = dev->data;
-	uint32_t pair = pwm / 2U;
+	uint32_t pair = channel / 2U;
 
-	if (pwm & 0x1U) {
+	if (channel & 0x1U) {
 		LOG_ERR("PWM capture only supported on even channels");
 		return -ENOTSUP;
 	}
@@ -271,12 +270,13 @@ static int mcux_ftm_pin_disable_capture(const struct device *dev, uint32_t pwm)
 	return 0;
 }
 
-static void mcux_ftm_capture_first_edge(const struct device *dev, uint32_t pwm)
+static void mcux_ftm_capture_first_edge(const struct device *dev,
+					uint32_t channel)
 {
 	const struct mcux_ftm_config *config = dev->config;
 	struct mcux_ftm_data *data = dev->data;
 	struct mcux_ftm_capture_data *capture;
-	uint32_t pair = pwm / 2U;
+	uint32_t pair = channel / 2U;
 
 	__ASSERT_NO_MSG(pair < ARRAY_SIZE(data->capture));
 	capture = &data->capture[pair];
@@ -285,13 +285,14 @@ static void mcux_ftm_capture_first_edge(const struct device *dev, uint32_t pwm)
 	capture->first_edge_overflows = data->overflows;
 }
 
-static void mcux_ftm_capture_second_edge(const struct device *dev, uint32_t pwm)
+static void mcux_ftm_capture_second_edge(const struct device *dev,
+					 uint32_t channel)
 {
 	const struct mcux_ftm_config *config = dev->config;
 	struct mcux_ftm_data *data = dev->data;
 	uint32_t second_edge_overflows = data->overflows;
 	struct mcux_ftm_capture_data *capture;
-	uint32_t pair = pwm / 2U;
+	uint32_t pair = channel / 2U;
 	uint32_t overflows;
 	uint32_t first_cnv;
 	uint32_t second_cnv;
@@ -373,8 +374,8 @@ static void mcux_ftm_isr(const struct device *dev)
 }
 #endif /* CONFIG_PWM_CAPTURE */
 
-static int mcux_ftm_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
-				       uint64_t *cycles)
+static int mcux_ftm_get_cycles_per_sec(const struct device *dev,
+				       uint32_t channel, uint64_t *cycles)
 {
 	const struct mcux_ftm_config *config = dev->config;
 	struct mcux_ftm_data *data = dev->data;
@@ -437,12 +438,12 @@ static int mcux_ftm_init(const struct device *dev)
 }
 
 static const struct pwm_driver_api mcux_ftm_driver_api = {
-	.pin_set = mcux_ftm_pin_set,
+	.set_cycles = mcux_ftm_set_cycles,
 	.get_cycles_per_sec = mcux_ftm_get_cycles_per_sec,
 #ifdef CONFIG_PWM_CAPTURE
-	.pin_configure_capture = mcux_ftm_pin_configure_capture,
-	.pin_enable_capture = mcux_ftm_pin_enable_capture,
-	.pin_disable_capture = mcux_ftm_pin_disable_capture,
+	.configure_capture = mcux_ftm_configure_capture,
+	.enable_capture = mcux_ftm_enable_capture,
+	.disable_capture = mcux_ftm_disable_capture,
 #endif /* CONFIG_PWM_CAPTURE */
 };
 

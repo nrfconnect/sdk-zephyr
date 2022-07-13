@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015 Intel Corporation.
  * Copyright (c) 2020 Norbit ODM AS
+ * Copyright 2022 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,23 +9,23 @@
 #define DT_DRV_COMPAT nxp_pca95xx
 
 /**
- * @file Driver for PCA95XX I2C-based GPIO driver.
+ * @file Driver for PCA95XX and PCAL95XX I2C-based GPIO driver.
  */
 
 #include <errno.h>
 
-#include <kernel.h>
-#include <device.h>
-#include <init.h>
-#include <sys/byteorder.h>
-#include <sys/util.h>
-#include <drivers/gpio.h>
-#include <drivers/i2c.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/i2c.h>
 
 #include "gpio_utils.h"
 
 #define LOG_LEVEL CONFIG_GPIO_LOG_LEVEL
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(gpio_pca95xx);
 
 /* Register definitions */
@@ -55,6 +56,7 @@ LOG_MODULE_REGISTER(gpio_pca95xx);
 /* Driver flags */
 #define PCA_HAS_PUD			BIT(0)
 #define PCA_HAS_INTERRUPT		BIT(1)
+#define PCA_HAS_INTERRUPT_MASK_REG	BIT(2)
 
 /** Configuration data */
 struct gpio_pca95xx_config {
@@ -78,6 +80,7 @@ struct gpio_pca95xx_drv_data {
 		uint16_t dir;
 		uint16_t pud_en;
 		uint16_t pud_sel;
+		uint16_t int_mask;
 	} reg_cache;
 
 	struct k_sem lock;
@@ -226,6 +229,17 @@ static inline int update_pul_en_regs(const struct device *dev, uint16_t value)
 			       &drv_data->reg_cache.pud_en, value);
 }
 
+#ifdef CONFIG_GPIO_PCA95XX_INTERRUPT
+static inline int update_int_mask_regs(const struct device *dev, uint16_t value)
+{
+	struct gpio_pca95xx_drv_data * const drv_data =
+		(struct gpio_pca95xx_drv_data * const)dev->data;
+
+	return write_port_regs(dev, REG_INT_MASK_PORT0,
+			       &drv_data->reg_cache.int_mask, value);
+}
+#endif /* CONFIG_GPIO_PCA95XX_INTERRUPT */
+
 /**
  * @brief Setup the pin direction (input or output)
  *
@@ -250,14 +264,13 @@ static int setup_pin_dir(const struct device *dev, uint32_t pin, int flags)
 		} else if ((flags & GPIO_OUTPUT_INIT_LOW) != 0U) {
 			reg_out &= ~BIT(pin);
 		}
+		ret = update_output_regs(dev, reg_out);
+		if (ret != 0) {
+			return ret;
+		}
 		reg_dir &= ~BIT(pin);
 	} else {
 		reg_dir |= BIT(pin);
-	}
-
-	ret = update_output_regs(dev, reg_out);
-	if (ret != 0) {
-		return ret;
 	}
 
 	ret = update_direction_regs(dev, reg_dir);
@@ -567,6 +580,21 @@ static int gpio_pca95xx_pin_interrupt_configure(const struct device *dev,
 
 	k_sem_take(&drv_data->lock, K_FOREVER);
 
+	/* Check if GPIO port has an interrupt mask register */
+	if (config->capabilities & PCA_HAS_INTERRUPT_MASK_REG) {
+		uint16_t reg_out;
+
+		reg_out = drv_data->reg_cache.int_mask;
+		WRITE_BIT(reg_out, pin, (mode == GPIO_INT_MODE_DISABLED));
+
+		ret = update_int_mask_regs(dev, reg_out);
+		if (ret != 0) {
+			LOG_ERR("PCA95XX[0x%X]: failed to update int mask (%d)",
+				config->bus.addr, ret);
+			goto err;
+		}
+	}
+
 	/* Update interrupt masks */
 	enabled = ((mode & GPIO_INT_MODE_DISABLED) == 0U);
 	edge = (mode == GPIO_INT_MODE_EDGE);
@@ -711,11 +739,12 @@ static const struct gpio_pca95xx_config gpio_pca95xx_##inst##_cfg = {	\
 	},								\
 	.bus = I2C_DT_SPEC_INST_GET(inst),				\
 	.capabilities =							\
-		(DT_INST_PROP(inst, has_pud) ?			\
-			PCA_HAS_PUD : 0) |				\
+		(DT_INST_PROP(inst, has_pud) ? PCA_HAS_PUD : 0) |	\
 		IF_ENABLED(CONFIG_GPIO_PCA95XX_INTERRUPT, (		\
 		(DT_INST_NODE_HAS_PROP(inst, interrupt_gpios) ?		\
 			PCA_HAS_INTERRUPT : 0) |			\
+		(DT_INST_PROP(inst, has_interrupt_mask_reg) ?		\
+			PCA_HAS_INTERRUPT_MASK_REG : 0) |		\
 		))							\
 		0,							\
 	IF_ENABLED(CONFIG_GPIO_PCA95XX_INTERRUPT,			\

@@ -106,7 +106,7 @@ set_compiler_property(PROPERTY cstd -std=)
 
 if (NOT CONFIG_NEWLIB_LIBC AND
     NOT COMPILER STREQUAL "xcc" AND
-    NOT ZEPHYR_TOOLCHAIN_VARIANT STREQUAL "espressif" AND
+    NOT CONFIG_HAS_ESPRESSIF_HAL AND
     NOT CONFIG_NATIVE_APPLICATION)
   set_compiler_property(PROPERTY nostdinc -nostdinc)
   set_compiler_property(APPEND PROPERTY nostdinc_include ${NOSTDINC})
@@ -176,6 +176,8 @@ set_compiler_property(PROPERTY imacros -imacros)
 
 # GCC compiler flags for sanitizing.
 set_compiler_property(PROPERTY sanitize_address -fsanitize=address)
+
+set_compiler_property(PROPERTY gprof -pg)
 
 set_compiler_property(PROPERTY sanitize_undefined -fsanitize=undefined)
 

@@ -7,13 +7,13 @@
 #define DT_DRV_COMPAT ti_cc13xx_cc26xx_spi
 
 #define LOG_LEVEL CONFIG_SPI_LOG_LEVEL
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(spi_cc13xx_cc26xx);
 
-#include <drivers/spi.h>
-#include <drivers/pinctrl.h>
-#include <pm/device.h>
-#include <pm/policy.h>
+#include <zephyr/drivers/spi.h>
+#include <zephyr/drivers/pinctrl.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
 
 #include <driverlib/prcm.h>
 #include <driverlib/ssi.h>
@@ -141,7 +141,7 @@ static int spi_cc13xx_cc26xx_transceive(const struct device *dev,
 	int err;
 
 	spi_context_lock(ctx, false, NULL, config);
-	pm_policy_state_lock_get(PM_STATE_STANDBY);
+	pm_policy_state_lock_get(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
 
 	err = spi_cc13xx_cc26xx_configure(dev, config);
 	if (err) {
@@ -175,7 +175,7 @@ static int spi_cc13xx_cc26xx_transceive(const struct device *dev,
 	spi_context_cs_control(ctx, false);
 
 done:
-	pm_policy_state_lock_put(PM_STATE_STANDBY);
+	pm_policy_state_lock_put(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
 	spi_context_release(ctx, err);
 	return err;
 }

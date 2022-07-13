@@ -6,18 +6,19 @@
 
 #define DT_DRV_COMPAT nuvoton_npcx_uart
 
-#include <sys/__assert.h>
-#include <drivers/gpio.h>
-#include <drivers/uart.h>
-#include <drivers/clock_control.h>
-#include <kernel.h>
-#include <pm/device.h>
-#include <pm/policy.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/pinctrl.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/drivers/clock_control.h>
+#include <zephyr/kernel.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
 #include <soc.h>
 #include "soc_miwu.h"
 #include "soc_power.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(uart_npcx, CONFIG_UART_LOG_LEVEL);
 
 /* Driver config */
@@ -31,8 +32,7 @@ struct uart_npcx_config {
 	/* int-mux configuration */
 	const struct npcx_wui uart_rx_wui;
 	/* pinmux configuration */
-	const uint8_t alts_size;
-	const struct npcx_alt *alts_list;
+	const struct pinctrl_dev_config *pcfg;
 };
 
 enum uart_pm_policy_state_flag {
@@ -64,7 +64,7 @@ static void uart_npcx_pm_policy_state_lock_get(struct uart_npcx_data *data,
 					       enum uart_pm_policy_state_flag flag)
 {
 	if (atomic_test_and_set_bit(data->pm_policy_state_flag, flag) == 0) {
-		pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE);
+		pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
 	}
 }
 
@@ -72,7 +72,7 @@ static void uart_npcx_pm_policy_state_lock_put(struct uart_npcx_data *data,
 					    enum uart_pm_policy_state_flag flag)
 {
 	if (atomic_test_and_clear_bit(data->pm_policy_state_flag, flag) == 1) {
-		pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE);
+		pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
 	}
 }
 #endif /* defined(CONFIG_PM) && defined(CONFIG_UART_INTERRUPT_DRIVEN) */
@@ -499,7 +499,11 @@ static int uart_npcx_init(const struct device *dev)
 	}
 
 	/* Configure pin-mux for uart device */
-	npcx_pinctrl_mux_configure(config->alts_list, config->alts_size, 1);
+	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+	if (ret < 0) {
+		LOG_ERR("UART pinctrl setup failed (%d)", ret);
+		return ret;
+	}
 
 	return 0;
 }
@@ -524,14 +528,13 @@ static int uart_npcx_init(const struct device *dev)
 #define NPCX_UART_INIT(i)                                                                       \
 	NPCX_UART_IRQ_CONFIG_FUNC_DECL(i);                                                      \
 												\
-	static const struct npcx_alt uart_alts##i[] = NPCX_DT_ALT_ITEMS_LIST(i);                \
+	PINCTRL_DT_INST_DEFINE(i);                                                              \
 												\
 	static const struct uart_npcx_config uart_npcx_cfg_##i = {                              \
 		.inst = (struct uart_reg *)DT_INST_REG_ADDR(i),                                 \
 		.clk_cfg = NPCX_DT_CLK_CFG_ITEM(i),                                             \
 		.uart_rx_wui = NPCX_DT_WUI_ITEM_BY_NAME(0, uart_rx),                            \
-		.alts_size = ARRAY_SIZE(uart_alts##i),                                          \
-		.alts_list = uart_alts##i,                                                      \
+		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(i),                                      \
 		NPCX_UART_IRQ_CONFIG_FUNC_INIT(i)                                               \
 	};                                                                                      \
 												\

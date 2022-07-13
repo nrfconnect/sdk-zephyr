@@ -11,9 +11,9 @@ LOG_MODULE_DECLARE(LOG_MODULE_NAME);
 #include <limits.h>
 #include <fcntl.h>
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 /* Define sockaddr, etc, before simplelink.h */
-#include <net/socket_offload.h>
+#include <zephyr/net/socket_offload.h>
 
 #include <errno.h>
 #include <ti/drivers/net/wifi/simplelink.h>
@@ -1258,7 +1258,7 @@ static bool simplelink_is_supported(int family, int type, int proto)
 	return true;
 }
 
-static int simplelink_socket_create(int family, int type, int proto)
+int simplelink_socket_create(int family, int type, int proto)
 {
 	int fd = z_reserve_fd();
 	int sock;
@@ -1304,8 +1304,8 @@ static int simplelink_socket_accept(void *obj, struct sockaddr *addr,
 }
 
 #ifdef CONFIG_NET_SOCKETS_OFFLOAD
-NET_SOCKET_REGISTER(simplelink, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY, AF_UNSPEC,
-		    simplelink_is_supported, simplelink_socket_create);
+NET_SOCKET_OFFLOAD_REGISTER(simplelink, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY, AF_UNSPEC,
+			    simplelink_is_supported, simplelink_socket_create);
 #endif
 
 void simplelink_sockets_init(void)

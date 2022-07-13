@@ -6,14 +6,14 @@
 
 #define DT_DRV_COMPAT sensirion_shtcx
 
-#include <device.h>
-#include <drivers/i2c.h>
-#include <kernel.h>
-#include <drivers/sensor.h>
-#include <sys/__assert.h>
-#include <sys/byteorder.h>
-#include <sys/crc.h>
-#include <logging/log.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/kernel.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/crc.h>
+#include <zephyr/logging/log.h>
 
 #include "shtcx.h"
 
@@ -30,7 +30,7 @@ static const uint16_t measure_wait_us[2][2] = {
 	/* shtc1: 14.4ms, 0.94ms */
 	{ 14400, 940 }, /* shtc1 */
 	/* shtc3: 12.1ms, 0.8ms */
-	{ 1210, 800 }, /* shtc3 */
+	{ 12100, 800 }, /* shtc3 */
 };
 
 /*

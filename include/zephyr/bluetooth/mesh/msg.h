@@ -17,8 +17,8 @@
  * @{
  */
 
-#include <zephyr.h>
-#include <net/buf.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/net/buf.h>
 
 #ifdef __cplusplus
 extern "C" {

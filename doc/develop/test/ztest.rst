@@ -138,6 +138,19 @@ it needs to report either a pass or fail.  For example::
 		ztest_run_test_suite(common);
 	}
 
+Use the following macro at the start of your test to skip it with a KConfig
+option.
+
+#define Z_TEST_SKIP_IFDEF(config)
+
+For example::
+
+	void test_test1(void)
+	{
+		Z_TEST_SKIP_IFDEF(CONFIG_BUGxxxxx);
+		zassert_equal(1, 0, NULL);
+	}
+
 Quick start - Unit testing
 **************************
 
@@ -183,7 +196,7 @@ Here is a generic template for a test showing the expected use of
 
 .. code-block:: C
 
-   #include <ztest.h>
+   #include <zephyr/ztest.h>
 
    extern void test_sometest1(void);
    extern void test_sometest2(void);
@@ -214,7 +227,7 @@ Alternatively, it is possible to split tests across multiple files using
 
 .. code-block:: C
 
-  #include <ztest.h>
+  #include <zephyr/ztest.h>
 
   void test_sometest1(void) {
   	zassert_true(1, "true");
@@ -238,7 +251,7 @@ state and different test suites need to run. This is achieved in the following:
 
 .. code-block:: C
 
-  #include <ztest.h>
+  #include <zephyr/ztest.h>
 
   struct state {
   	bool is_hibernating;
@@ -495,3 +508,33 @@ These will be surrounded by blocks such as::
         #ifndef SOMETHING
         #define SOMETHING <default implementation>
         #endif /* SOMETHING */
+
+.. _ztest_shuffle:
+
+Shuffling Test Sequence
+***********************
+By default the tests are sorted and ran in alphanumerical order.  Test cases may
+be dependent on this sequence. Enable `ZTEST_SHUFFLE` to randomize the order. The
+output from the test will display the seed for failed tests.  For native posix
+builds you can provide the seed as an argument to twister with `--seed`
+
+Static configuration of ZTEST_SHUFFLE contains:
+
+ - :c:macro:`ZTEST_SHUFFLE_SUITE_REPEAT_COUNT` - Number of iterations the test suite will run.
+ - :c:macro:`ZTEST_SHUFFLE_TEST_REPEAT_COUNT` - Number of iterations the test will run.
+
+
+Test Selection
+**************
+For POSIX enabled builds with ZTEST_NEW_API use command line arguments to list
+or select tests to run. The test argument expects a comma separated list
+of ``suite::test`` .  You can substitute the test name with an ``*`` to run all
+tests within a suite.
+
+For example
+
+.. code-block:: bash
+
+    $ zephyr.exe -list
+    $ zephyr.exe -test="fixture_tests::test_fixture_pointer,framework_tests::test_assert_mem_equal"
+    $ zephyr.exe -test="framework_tests::*"

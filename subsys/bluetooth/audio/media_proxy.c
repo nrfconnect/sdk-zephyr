@@ -6,11 +6,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <sys/check.h>
+#include <zephyr/sys/check.h>
 
-#include <bluetooth/services/ots.h>
-#include <bluetooth/audio/media_proxy.h>
-#include <bluetooth/audio/mcc.h>
+#include <zephyr/bluetooth/services/ots.h>
+#include <zephyr/bluetooth/audio/media_proxy.h>
+#include <zephyr/bluetooth/audio/mcc.h>
 
 #include "media_proxy_internal.h"
 
@@ -197,7 +197,7 @@ uint8_t media_proxy_sctrl_get_media_state(void)
 	return mprx.local_player.calls->get_media_state();
 }
 
-void media_proxy_sctrl_send_command(struct mpl_cmd cmd)
+void media_proxy_sctrl_send_command(const struct mpl_cmd *cmd)
 {
 	mprx.local_player.calls->send_command(cmd);
 }
@@ -208,7 +208,7 @@ uint32_t media_proxy_sctrl_get_commands_supported(void)
 }
 
 #ifdef CONFIG_BT_MPL_OBJECTS
-void media_proxy_sctrl_send_search(struct mpl_search search)
+void media_proxy_sctrl_send_search(const struct mpl_search *search)
 {
 	mprx.local_player.calls->send_search(search);
 }
@@ -522,11 +522,11 @@ static void mcc_read_media_state_cb(struct bt_conn *conn, int err, uint8_t state
 	}
 }
 
-static void mcc_send_cmd_cb(struct bt_conn *conn, int err, struct mpl_cmd cmd)
+static void mcc_send_cmd_cb(struct bt_conn *conn, int err, const struct mpl_cmd *cmd)
 {
 	if (err) {
 		BT_ERR("Command send failed (%d) - opcode: %d, param: %d",
-		       err, cmd.opcode, cmd.param);
+		       err, cmd->opcode, cmd->param);
 	}
 
 	if (mprx.ctrlr.cbs && mprx.ctrlr.cbs->command_send) {
@@ -537,11 +537,11 @@ static void mcc_send_cmd_cb(struct bt_conn *conn, int err, struct mpl_cmd cmd)
 }
 
 static void mcc_cmd_ntf_cb(struct bt_conn *conn, int err,
-			   struct mpl_cmd_ntf ntf)
+			   const struct mpl_cmd_ntf *ntf)
 {
 	if (err) {
 		BT_ERR("Command notification error (%d) - command opcode: %d, result: %d",
-		       err, ntf.requested_opcode, ntf.result_code);
+		       err, ntf->requested_opcode, ntf->result_code);
 	}
 
 	if (mprx.ctrlr.cbs && mprx.ctrlr.cbs->command_recv) {
@@ -565,7 +565,7 @@ static void mcc_read_opcodes_supported_cb(struct bt_conn *conn, int err, uint32_
 }
 
 #ifdef CONFIG_MCTL_REMOTE_PLAYER_CONTROL_OBJECTS
-static void mcc_send_search_cb(struct bt_conn *conn, int err, struct mpl_search search)
+static void mcc_send_search_cb(struct bt_conn *conn, int err, const struct mpl_search *search)
 {
 	if (err) {
 		BT_ERR("Search send failed (%d)", err);
@@ -1523,10 +1523,10 @@ int media_proxy_ctrl_get_media_state(struct media_player *player)
 	return -EINVAL;
 }
 
-int media_proxy_ctrl_send_command(struct media_player *player, struct mpl_cmd cmd)
+int media_proxy_ctrl_send_command(struct media_player *player, const struct mpl_cmd *cmd)
 {
-	CHECKIF(player == NULL) {
-		BT_DBG("player is NULL");
+	CHECKIF(player == NULL || cmd == NULL) {
+		BT_DBG("NULL pointer");
 		return -EINVAL;
 	}
 
@@ -1594,10 +1594,10 @@ int media_proxy_ctrl_get_commands_supported(struct media_player *player)
 	return -EINVAL;
 }
 
-int media_proxy_ctrl_send_search(struct media_player *player, struct mpl_search search)
+int media_proxy_ctrl_send_search(struct media_player *player, const struct mpl_search *search)
 {
-	CHECKIF(player == NULL) {
-		BT_DBG("player is NULL");
+	CHECKIF(player == NULL || search == NULL) {
+		BT_DBG("NULL pointer");
 		return -EINVAL;
 	}
 
@@ -1866,8 +1866,13 @@ void media_proxy_pl_media_state_cb(uint8_t state)
 	}
 }
 
-void media_proxy_pl_command_cb(struct mpl_cmd_ntf cmd_ntf)
+void media_proxy_pl_command_cb(const struct mpl_cmd_ntf *cmd_ntf)
 {
+	CHECKIF(cmd_ntf == NULL) {
+		BT_WARN("cmd_ntf is NULL");
+		return;
+	}
+
 	mprx.sctrlr.cbs->command(cmd_ntf);
 
 	if (mprx.ctrlr.cbs && mprx.ctrlr.cbs->command_recv) {

@@ -47,15 +47,15 @@
 /* stdint conversions */
 #include <zephyr/types.h>
 #include <stddef.h>
-#include <kernel.h>
+#include <zephyr/kernel.h>
 
-#include <net/net_ip.h>
-#include <sys/printk.h>
-#include <sys/util.h>
+#include <zephyr/net/net_ip.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
 #include <sys/types.h>
 
-#include <net/coap.h>
-#include <net/lwm2m.h>
+#include <zephyr/net/coap.h>
+#include <zephyr/net/lwm2m.h>
 
 #include "buf_util.h"
 
@@ -139,6 +139,13 @@ BUILD_ASSERT(CONFIG_LWM2M_COAP_BLOCK_SIZE <= CONFIG_LWM2M_COAP_MAX_MSG_SIZE,
 #define CPKT_BUF_READ(cpkt)	(cpkt)->data, (cpkt)->max_len
 #define CPKT_BUF_W_PTR(cpkt)	((cpkt)->data + (cpkt)->offset)
 #define CPKT_BUF_W_SIZE(cpkt)	((cpkt)->max_len - (cpkt)->offset)
+
+#define CPKT_BUF_W_REGION(cpkt)  CPKT_BUF_W_PTR(cpkt), CPKT_BUF_W_SIZE(cpkt)
+
+/* Input context buffer util macros */
+#define ICTX_BUF_R_LEFT_SZ(i_ctx) ((i_ctx)->in_cpkt->max_len - (i_ctx)->offset)
+#define ICTX_BUF_R_PTR(i_ctx)	  ((i_ctx)->in_cpkt->data + (i_ctx)->offset)
+#define ICTX_BUF_R_REGION(i_ctx)   ICTX_BUF_R_PTR(i_ctx), ICTX_BUF_R_LEFT_SZ(i_ctx)
 
 struct lwm2m_engine_obj;
 struct lwm2m_message;
@@ -232,14 +239,14 @@ struct lwm2m_engine_obj {
 #endif /* CONFIG_LWM2M_ENGINE_VALIDATION_BUFFER_SIZE > 0 */
 
 #define _INIT_OBJ_RES_INST(_ri_ptr, _ri_idx, _ri_count, _ri_create, \
-			   _data_ptr, _data_len) \
+			   _data_ptr, _data_sz, _data_len) \
 	do { \
 		if (_ri_ptr != NULL && _ri_count > 0) { \
 			for (int _i = 0; _i < _ri_count; _i++) { \
 				_ri_ptr[_ri_idx + _i].data_ptr = \
 						(_data_ptr + _i); \
 				_ri_ptr[_ri_idx + _i].max_data_len = \
-						_data_len; \
+						_data_sz; \
 				_ri_ptr[_ri_idx + _i].data_len = \
 						_data_len; \
 				if (_ri_create) { \
@@ -282,10 +289,22 @@ struct lwm2m_engine_obj {
 			      (_ri_ptr + _ri_idx), _ri_count, _multi_ri, \
 			      _r_cb, _pre_w_cb, _val_cb, _post_w_cb, _ex_cb); \
 		_INIT_OBJ_RES_INST(_ri_ptr, _ri_idx, _ri_count, _ri_create, \
-				   _data_ptr, _data_len); \
+				   _data_ptr, _data_len, _data_len); \
 	++_r_idx; \
 	} while (false)
 
+#define INIT_OBJ_RES_LEN(_id, _r_ptr, _r_idx, \
+		     _ri_ptr, _ri_idx, _ri_count, _multi_ri, _ri_create, \
+		     _data_ptr, _data_sz, _data_len, \
+		     _r_cb, _pre_w_cb, _val_cb, _post_w_cb, _ex_cb) \
+	do { \
+		_INIT_OBJ_RES(_id, _r_ptr, _r_idx, \
+			      (_ri_ptr + _ri_idx), _ri_count, _multi_ri, \
+			      _r_cb, _pre_w_cb, _val_cb, _post_w_cb, _ex_cb); \
+		_INIT_OBJ_RES_INST(_ri_ptr, _ri_idx, _ri_count, _ri_create, \
+				   _data_ptr, _data_sz, _data_len); \
+	++_r_idx; \
+	} while (false)
 
 #define INIT_OBJ_RES_OPT(_id, _r_ptr, _r_idx, \
 			 _ri_ptr, _ri_idx, _ri_count, _multi_ri, _ri_create, \
@@ -305,16 +324,27 @@ struct lwm2m_engine_obj {
 		     _ri_ptr, _ri_idx, _ri_count, true, _ri_create, \
 		     _data_ptr, _data_len, NULL, NULL, NULL, NULL, NULL)
 
+#define INIT_OBJ_RES_MULTI_DATA_LEN(_id, _r_ptr, _r_idx, \
+				_ri_ptr, _ri_idx, _ri_count, _ri_create, \
+				_data_ptr, _data_sz, _data_len) \
+	INIT_OBJ_RES_LEN(_id, _r_ptr, _r_idx, \
+		     _ri_ptr, _ri_idx, _ri_count, true, _ri_create, \
+		     _data_ptr, _data_sz, _data_len, NULL, NULL, NULL, NULL, NULL)
+
 #define INIT_OBJ_RES_MULTI_OPTDATA(_id, _r_ptr, _r_idx, \
 				   _ri_ptr, _ri_idx, _ri_count, _ri_create) \
 	INIT_OBJ_RES_OPT(_id, _r_ptr, _r_idx, \
 			 _ri_ptr, _ri_idx, _ri_count, true, _ri_create, \
 			 NULL, NULL, NULL, NULL, NULL)
 
-#define INIT_OBJ_RES_DATA(_id, _r_ptr, _r_idx, _ri_ptr, _ri_idx, \
-			  _data_ptr, _data_len) \
-	INIT_OBJ_RES(_id, _r_ptr, _r_idx, _ri_ptr, _ri_idx, 1U, false, true, \
-		     _data_ptr, _data_len, NULL, NULL, NULL, NULL, NULL)
+#define INIT_OBJ_RES_DATA_LEN(_id, _r_ptr, _r_idx, _ri_ptr, _ri_idx, \
+			  _data_ptr, _data_sz, _data_len) \
+	INIT_OBJ_RES_LEN(_id, _r_ptr, _r_idx, _ri_ptr, _ri_idx, 1U, false, true, \
+		     _data_ptr, _data_sz, _data_len, NULL, NULL, NULL, NULL, NULL)
+
+#define INIT_OBJ_RES_DATA(_id, _r_ptr, _r_idx, _ri_ptr, _ri_idx, _data_ptr, _data_len)     \
+	INIT_OBJ_RES_DATA_LEN(_id, _r_ptr, _r_idx, _ri_ptr, _ri_idx, _data_ptr, _data_len, \
+			      _data_len)
 
 #define INIT_OBJ_RES_OPTDATA(_id, _r_ptr, _r_idx, _ri_ptr, _ri_idx) \
 	INIT_OBJ_RES_OPT(_id, _r_ptr, _r_idx, _ri_ptr, _ri_idx, 1U, false, \
@@ -413,15 +443,14 @@ struct lwm2m_senml_json_context {
 struct lwm2m_block_context {
 	struct coap_block_context ctx;
 	struct lwm2m_opaque_context opaque;
-#if defined(CONFIG_LWM2M_RW_SENML_JSON_SUPPORT)
-struct lwm2m_senml_json_context senml_json_ctx;
-#endif
 	int64_t timestamp;
 	uint32_t expected;
 	uint8_t token[8];
 	uint8_t tkl;
 	bool last_block : 1;
+	uint8_t  level;  /* 3/4 (4 = resource instance) */
 	uint16_t res_id;
+	uint16_t res_inst_id;
 };
 
 struct lwm2m_output_context {

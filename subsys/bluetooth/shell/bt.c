@@ -18,21 +18,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <sys/printk.h>
-#include <sys/byteorder.h>
-#include <sys/util.h>
-#include <zephyr.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/zephyr.h>
 
-#include <settings/settings.h>
+#include <zephyr/settings/settings.h>
 
-#include <bluetooth/hci.h>
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/conn.h>
-#include <bluetooth/rfcomm.h>
-#include <bluetooth/sdp.h>
-#include <bluetooth/iso.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/rfcomm.h>
+#include <zephyr/bluetooth/sdp.h>
+#include <zephyr/bluetooth/iso.h>
 
-#include <shell/shell.h>
+#include <zephyr/shell/shell.h>
 
 #include "bt.h"
 #include "ll.h"
@@ -1048,8 +1048,8 @@ static int cmd_scan_filter_set_addr(const struct shell *sh, size_t argc,
 {
 	const char *addr_arg = argv[1];
 
-	/* Validate length */
-	if (strlen(addr_arg) > sizeof(scan_filter.addr)) {
+	/* Validate length including null terminator. */
+	if (strlen(addr_arg) >= sizeof(scan_filter.addr)) {
 		shell_error(ctx_shell, "Invalid address string: %s\n",
 			    addr_arg);
 		return -ENOEXEC;

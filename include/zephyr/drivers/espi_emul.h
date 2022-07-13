@@ -14,9 +14,9 @@
  */
 
 #include <zephyr/types.h>
-#include <device.h>
-#include <drivers/espi.h>
-#include <drivers/emul.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/espi.h>
+#include <zephyr/drivers/emul.h>
 
 /**
  * @brief eSPI Emulation Interface

@@ -18,15 +18,15 @@
 #define ZEPHYR_INCLUDE_ARCH_POSIX_ARCH_H_
 
 /* Add include for DTS generated information */
-#include <devicetree.h>
+#include <zephyr/devicetree.h>
 
-#include <toolchain.h>
-#include <irq.h>
-#include <arch/posix/asm_inline.h>
-#include <arch/posix/thread.h>
+#include <zephyr/toolchain.h>
+#include <zephyr/irq.h>
+#include <zephyr/arch/posix/asm_inline.h>
+#include <zephyr/arch/posix/thread.h>
 #include <board_irq.h> /* Each board must define this */
-#include <sw_isr_table.h>
-#include <arch/posix/posix_soc_if.h>
+#include <zephyr/sw_isr_table.h>
+#include <zephyr/arch/posix/posix_soc_if.h>
 
 #ifdef __cplusplus
 extern "C" {

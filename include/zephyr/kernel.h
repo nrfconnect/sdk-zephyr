@@ -14,16 +14,24 @@
 #define ZEPHYR_INCLUDE_KERNEL_H_
 
 #if !defined(_ASMLANGUAGE)
-#include <kernel_includes.h>
+#include <zephyr/kernel_includes.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
-#include <toolchain.h>
-#include <tracing/tracing_macros.h>
+#include <zephyr/toolchain.h>
+#include <zephyr/tracing/tracing_macros.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/*
+ * Zephyr currently assumes the size of a couple standard types to simplify
+ * print string formats. Let's make sure this doesn't change without notice.
+ */
+BUILD_ASSERT(sizeof(int32_t) == sizeof(int));
+BUILD_ASSERT(sizeof(int64_t) == sizeof(long long));
+BUILD_ASSERT(sizeof(intptr_t) == sizeof(long));
 
 /**
  * @brief Kernel APIs
@@ -463,6 +471,19 @@ __syscall int32_t k_usleep(int32_t us);
  * clock tolerances.
  */
 __syscall void k_busy_wait(uint32_t usec_to_wait);
+
+/**
+ * @brief Check whether it is possible to yield in the current context.
+ *
+ * This routine checks whether the kernel is in a state where it is possible to
+ * yield or call blocking API's. It should be used by code that needs to yield
+ * to perform correctly, but can feasibly be called from contexts where that
+ * is not possible. For example in the PRE_KERNEL initialization step, or when
+ * being run from the idle thread.
+ *
+ * @return True if it is possible to yield in the current context, false otherwise.
+ */
+bool k_can_yield(void);
 
 /**
  * @brief Yield the current thread.
@@ -1074,12 +1095,16 @@ __syscall int k_thread_name_copy(k_tid_t thread, char *buf,
 /**
  * @brief Get thread state string
  *
- * Get the human friendly thread state string
+ * This routine generates a human friendly string containing the thread's
+ * state, and copies as much of it as possible into @a buf.
  *
  * @param thread_id Thread ID
- * @retval Thread state string, empty if no state flag is set
+ * @param buf Buffer into which to copy state strings
+ * @param buf_size Size of the buffer
+ *
+ * @retval Pointer to @a buf if data was copied, else a pointer to "".
  */
-const char *k_thread_state_str(k_tid_t thread_id);
+const char *k_thread_state_str(k_tid_t thread_id, char *buf, size_t buf_size);
 
 /**
  * @}
@@ -4116,6 +4141,21 @@ extern void k_work_user_queue_start(struct k_work_user_q *work_q,
 				    size_t stack_size, int prio,
 				    const char *name);
 
+/**
+ * @brief Access the user mode thread that animates a work queue.
+ *
+ * This is necessary to grant a user mode work queue thread access to things
+ * the work items it will process are expected to use.
+ *
+ * @param work_q pointer to the user mode queue structure.
+ *
+ * @return the user mode thread associated with the work queue.
+ */
+static inline k_tid_t k_work_user_queue_thread_get(struct k_work_user_q *work_q)
+{
+	return &work_q->thread;
+}
+
 /** @} */
 
 /**
@@ -5918,7 +5958,7 @@ extern void k_sys_runtime_stats_disable(void);
 }
 #endif
 
-#include <tracing/tracing.h>
+#include <zephyr/tracing/tracing.h>
 #include <syscalls/kernel.h>
 
 #endif /* !_ASMLANGUAGE */

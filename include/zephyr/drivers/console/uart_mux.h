@@ -19,8 +19,8 @@
  * @{
  */
 
-#include <device.h>
-#include <drivers/uart.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/uart.h>
 
 #ifdef __cplusplus
 extern "C" {

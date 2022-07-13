@@ -10,9 +10,6 @@ if BOOTLOADER_MCUBOOT
 config HAS_FLASH_LOAD_OFFSET
 	default y
 
-config XIP
-	default y
-
 config MCUBOOT_GENERATE_UNSIGNED_IMAGE
 	default y
 
@@ -21,6 +18,9 @@ config MCUBOOT_GENERATE_CONFIRMED_IMAGE
 
 config ROM_START_OFFSET
 	default 0x20
+
+config HAS_DYNAMIC_DEVICE_HANDLES
+	default y
 
 endif
 
@@ -49,9 +49,6 @@ config ATOMIC_OPERATIONS_C
 	default y
 
 config MINIMAL_LIBC_OPTIMIZE_STRING_FOR_SIZE
-	default n
-
-config LOG_DETECT_MISSED_STRDUP
 	default n
 
 endif

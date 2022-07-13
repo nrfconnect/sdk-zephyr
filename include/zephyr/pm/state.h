@@ -7,8 +7,8 @@
 #ifndef ZEPHYR_INCLUDE_PM_STATE_H_
 #define ZEPHYR_INCLUDE_PM_STATE_H_
 
-#include <sys/util.h>
-#include <devicetree.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/devicetree.h>
 
 #ifdef __cplusplus
 extern "C" {

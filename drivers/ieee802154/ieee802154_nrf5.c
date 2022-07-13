@@ -13,32 +13,32 @@
 #define LOG_LEVEL LOG_LEVEL_NONE
 #endif
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <errno.h>
 
-#include <kernel.h>
-#include <arch/cpu.h>
-#include <debug/stack.h>
+#include <zephyr/kernel.h>
+#include <zephyr/arch/cpu.h>
+#include <zephyr/debug/stack.h>
 
 #include <soc.h>
 #include <soc_secure.h>
-#include <device.h>
-#include <init.h>
-#include <debug/stack.h>
-#include <net/net_if.h>
-#include <net/net_pkt.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
+#include <zephyr/debug/stack.h>
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_pkt.h>
 
 #if defined(CONFIG_NET_L2_OPENTHREAD)
-#include <net/openthread.h>
+#include <zephyr/net/openthread.h>
 #endif
 
-#include <sys/byteorder.h>
+#include <zephyr/sys/byteorder.h>
 #include <string.h>
-#include <random/rand32.h>
+#include <zephyr/random/rand32.h>
 
-#include <net/ieee802154_radio.h>
+#include <zephyr/net/ieee802154_radio.h>
 
 #include "ieee802154_nrf5.h"
 #include "nrf_802154.h"
@@ -62,11 +62,6 @@ static struct nrf5_802154_data nrf5_data;
 #define DRX_SLOT_PH 0 /* Placeholder delayed reception window ID */
 #define DRX_SLOT_RX 1 /* Actual delayed reception window ID */
 #define PH_DURATION 10 /* Duration of the placeholder window, in microseconds */
-/* When scheduling the actual delayed reception window an adjustment of
- * 800 us is required to match the CSL transmission timing for unknown
- * reasons. This is a temporary workaround until the root cause is found.
- */
-#define DRX_ADJUST 800
 
 #if defined(CONFIG_IEEE802154_NRF5_UICR_EUI64_ENABLE)
 #if defined(CONFIG_SOC_NRF5340_CPUAPP)
@@ -448,6 +443,12 @@ static bool nrf5_tx_immediate(struct net_pkt *pkt, uint8_t *payload, bool cca)
 			.dynamic_data_is_set = pkt->ieee802154_mac_hdr_rdy,
 		},
 		.cca = cca,
+		.tx_power = {
+			.use_metadata_value = IS_ENABLED(CONFIG_IEEE802154_SELECTIVE_TXPOWER),
+#if defined(CONFIG_IEEE802154_SELECTIVE_TXPOWER)
+			.power = pkt->ieee802154_txpwr,
+#endif
+		},
 	};
 
 	return nrf_802154_transmit_raw(payload, &metadata);
@@ -461,6 +462,12 @@ static bool nrf5_tx_csma_ca(struct net_pkt *pkt, uint8_t *payload)
 			.is_secured = pkt->ieee802154_frame_secured,
 			.dynamic_data_is_set = pkt->ieee802154_mac_hdr_rdy,
 		},
+		.tx_power = {
+			.use_metadata_value = IS_ENABLED(CONFIG_IEEE802154_SELECTIVE_TXPOWER),
+#if defined(CONFIG_IEEE802154_SELECTIVE_TXPOWER)
+			.power = pkt->ieee802154_txpwr,
+#endif
+		},
 	};
 
 	return nrf_802154_transmit_csma_ca_raw(payload, &metadata);
@@ -468,6 +475,73 @@ static bool nrf5_tx_csma_ca(struct net_pkt *pkt, uint8_t *payload)
 #endif
 
 #if IS_ENABLED(CONFIG_NET_PKT_TXTIME)
+/**
+ * @brief Convert 32-bit target time to absolute 64-bit target time.
+ */
+static uint64_t target_time_convert_to_64_bits(uint32_t target_time)
+{
+	/**
+	 * Target time is provided as two 32-bit integers defining a moment in time
+	 * in microsecond domain. In order to use bit-shifting instead of modulo
+	 * division, calculations are performed in microsecond domain, not in RTC ticks.
+	 *
+	 * The target time can point to a moment in the future, but can be overdue
+	 * as well. In order to determine what's the case and correctly set the
+	 * absolute target time, it's necessary to compare the least significant
+	 * 32 bits of the current time, 64-bit time with the provided 32-bit target
+	 * time. Let's assume that half of the 32-bit range can be used for specifying
+	 * target times in the future, and the other half - in the past.
+	 */
+	uint64_t now_us = nrf_802154_time_get();
+	uint32_t now_us_wrapped = (uint32_t)now_us;
+	uint32_t time_diff = target_time - now_us_wrapped;
+	uint64_t result = UINT64_C(0);
+
+	if (time_diff < 0x80000000) {
+		/**
+		 * Target time is assumed to be in the future. Check if a 32-bit overflow
+		 * occurs between the current time and the target time.
+		 */
+		if (now_us_wrapped > target_time) {
+			/**
+			 * Add a 32-bit overflow and replace the least significant 32 bits
+			 * with the provided target time.
+			 */
+			result = now_us + UINT32_MAX + 1;
+			result &= ~(uint64_t)UINT32_MAX;
+			result |= target_time;
+		} else {
+			/**
+			 * Leave the most significant 32 bits and replace the least significant
+			 * 32 bits with the provided target time.
+			 */
+			result = (now_us & (~(uint64_t)UINT32_MAX)) | target_time;
+		}
+	} else {
+		/**
+		 * Target time is assumed to be in the past. Check if a 32-bit overflow
+		 * occurs between the target time and the current time.
+		 */
+		if (now_us_wrapped > target_time) {
+			/**
+			 * Leave the most significant 32 bits and replace the least significant
+			 * 32 bits with the provided target time.
+			 */
+			result = (now_us & (~(uint64_t)UINT32_MAX)) | target_time;
+		} else {
+			/**
+			 * Subtract a 32-bit overflow and replace the least significant
+			 * 32 bits with the provided target time.
+			 */
+			result = now_us - UINT32_MAX - 1;
+			result &= ~(uint64_t)UINT32_MAX;
+			result |= target_time;
+		}
+	}
+
+	return result;
+}
+
 static bool nrf5_tx_at(struct net_pkt *pkt, uint8_t *payload, bool cca)
 {
 	nrf_802154_transmit_at_metadata_t metadata = {
@@ -477,8 +551,14 @@ static bool nrf5_tx_at(struct net_pkt *pkt, uint8_t *payload, bool cca)
 		},
 		.cca = cca,
 		.channel = nrf_802154_channel_get(),
+		.tx_power = {
+			.use_metadata_value = IS_ENABLED(CONFIG_IEEE802154_SELECTIVE_TXPOWER),
+#if defined(CONFIG_IEEE802154_SELECTIVE_TXPOWER)
+			.power = pkt->ieee802154_txpwr,
+#endif
+		},
 	};
-	uint64_t tx_at = net_pkt_txtime(pkt) / NSEC_PER_USEC;
+	uint64_t tx_at = target_time_convert_to_64_bits(net_pkt_txtime(pkt) / NSEC_PER_USEC);
 	bool ret;
 
 	ret = nrf_802154_transmit_raw_at(payload,
@@ -740,73 +820,6 @@ static void nrf5_config_mac_keys(struct ieee802154_key *mac_keys)
 #endif /* CONFIG_IEEE802154_2015 */
 
 #if defined(CONFIG_IEEE802154_CSL_ENDPOINT)
-/**
- * @brief Convert 32-bit target time to absolute 64-bit target time.
- */
-static uint64_t target_time_convert_to_64_bits(uint32_t target_time)
-{
-	/**
-	 * Target time is provided as two 32-bit integers defining a moment in time
-	 * in microsecond domain. In order to use bit-shifting instead of modulo
-	 * division, calculations are performed in microsecond domain, not in RTC ticks.
-	 *
-	 * The target time can point to a moment in the future, but can be overdue
-	 * as well. In order to determine what's the case and correctly set the
-	 * absolute target time, it's necessary to compare the least significant
-	 * 32 bits of the current time, 64-bit time with the provided 32-bit target
-	 * time. Let's assume that half of the 32-bit range can be used for specifying
-	 * target times in the future, and the other half - in the past.
-	 */
-	uint64_t now_us = nrf_802154_time_get();
-	uint32_t now_us_wrapped = (uint32_t)now_us;
-	uint32_t time_diff = target_time - now_us_wrapped;
-	uint64_t result = UINT64_C(0);
-
-	if (time_diff < 0x80000000) {
-		/**
-		 * Target time is assumed to be in the future. Check if a 32-bit overflow
-		 * occurs between the current time and the target time.
-		 */
-		if (now_us_wrapped > target_time) {
-			/**
-			 * Add a 32-bit overflow and replace the least significant 32 bits
-			 * with the provided target time.
-			 */
-			result = now_us + UINT32_MAX + 1;
-			result &= ~(uint64_t)UINT32_MAX;
-			result |= target_time;
-		} else {
-			/**
-			 * Leave the most significant 32 bits and replace the least significant
-			 * 32 bits with the provided target time.
-			 */
-			result = (now_us & (~(uint64_t)UINT32_MAX)) | target_time;
-		}
-	} else {
-		/**
-		 * Target time is assumed to be in the past. Check if a 32-bit overflow
-		 * occurs between the target time and the current time.
-		 */
-		if (now_us_wrapped > target_time) {
-			/**
-			 * Leave the most significant 32 bits and replace the least significant
-			 * 32 bits with the provided target time.
-			 */
-			result = (now_us & (~(uint64_t)UINT32_MAX)) | target_time;
-		} else {
-			/**
-			 * Subtract a 32-bit overflow and replace the least significant
-			 * 32 bits with the provided target time.
-			 */
-			result = now_us - UINT32_MAX - 1;
-			result &= ~(uint64_t)UINT32_MAX;
-			result |= target_time;
-		}
-	}
-
-	return result;
-}
-
 static void nrf5_receive_at(uint32_t start, uint32_t duration, uint8_t channel, uint32_t id)
 {
 	/*
@@ -836,7 +849,7 @@ static void nrf5_config_csl_period(uint16_t period)
 
 static void nrf5_schedule_rx(uint8_t channel, uint32_t start, uint32_t duration)
 {
-	nrf5_receive_at(start - DRX_ADJUST, duration, channel, DRX_SLOT_RX);
+	nrf5_receive_at(start, duration, channel, DRX_SLOT_RX);
 
 	/* The placeholder reception window is rescheduled for the next period */
 	nrf_802154_receive_at_cancel(DRX_SLOT_PH);
@@ -981,7 +994,7 @@ void nrf_802154_received_timestamp_raw(uint8_t *data, int8_t power, uint8_t lqi,
 		nrf5_data.rx_frames[i].lqi = lqi;
 
 #if IS_ENABLED(CONFIG_NET_PKT_TIMESTAMP)
-		nrf5_data.rx_frames[i].time = nrf_802154_first_symbol_timestamp_get(time, data[0]);
+		nrf5_data.rx_frames[i].time = nrf_802154_mhr_timestamp_get(time, data[0]);
 #endif
 
 		if (data[ACK_REQUEST_BYTE] & ACK_REQUEST_BIT) {
@@ -1069,7 +1082,7 @@ void nrf_802154_transmitted_raw(uint8_t *frame,
 
 #if IS_ENABLED(CONFIG_NET_PKT_TIMESTAMP)
 		nrf5_data.ack_frame.time =
-			nrf_802154_first_symbol_timestamp_get(
+			nrf_802154_mhr_timestamp_get(
 				metadata->data.transmitted.time, nrf5_data.ack_frame.psdu[0]);
 #endif
 	}

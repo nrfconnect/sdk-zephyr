@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <kernel.h>
-#include <arch/cpu.h>
-#include <kernel_structs.h>
+#include <zephyr/kernel.h>
+#include <zephyr/arch/cpu.h>
+#include <zephyr/kernel_structs.h>
 #include <inttypes.h>
 #include <xtensa/config/specreg.h>
 #include <xtensa-asm2-context.h>
@@ -14,7 +14,7 @@
 #include <xtensa_backtrace.h>
 #endif
 #endif
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
 #ifdef XT_SIMULATOR
@@ -118,6 +118,7 @@ void exit(int return_code)
 	LOG_ERR("exit(%d)", return_code);
 	k_panic();
 #endif
+	CODE_UNREACHABLE;
 }
 
 #ifdef XT_SIMULATOR

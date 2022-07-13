@@ -6,17 +6,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/atomic.h>
-#include <sys/byteorder.h>
-#include <sys/util.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/util.h>
 
-#include <bluetooth/hci.h>
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/conn.h>
-#include <drivers/bluetooth/hci_driver.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/drivers/bluetooth/hci_driver.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_L2CAP)
 #define LOG_MODULE_NAME bt_l2cap_br
@@ -1353,7 +1353,8 @@ static void l2cap_br_conn_rsp(struct bt_l2cap_br *l2cap, uint8_t ident,
 	}
 }
 
-int bt_l2cap_br_chan_send(struct bt_l2cap_chan *chan, struct net_buf *buf)
+int bt_l2cap_br_chan_send_cb(struct bt_l2cap_chan *chan, struct net_buf *buf, bt_conn_tx_cb_t cb,
+			     void *user_data)
 {
 	struct bt_l2cap_br_chan *br_chan = BR_CHAN(chan);
 
@@ -1361,7 +1362,12 @@ int bt_l2cap_br_chan_send(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		return -EMSGSIZE;
 	}
 
-	return bt_l2cap_send_cb(br_chan->chan.conn, br_chan->tx.cid, buf, NULL, NULL);
+	return bt_l2cap_send_cb(br_chan->chan.conn, br_chan->tx.cid, buf, cb, user_data);
+}
+
+int bt_l2cap_br_chan_send(struct bt_l2cap_chan *chan, struct net_buf *buf)
+{
+	return bt_l2cap_br_chan_send_cb(chan, buf, NULL, NULL);
 }
 
 static int l2cap_br_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)

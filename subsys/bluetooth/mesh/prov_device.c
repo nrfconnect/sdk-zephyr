@@ -5,21 +5,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <errno.h>
-#include <sys/atomic.h>
-#include <sys/util.h>
-#include <sys/byteorder.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/byteorder.h>
 
-#include <tinycrypt/constants.h>
-#include <tinycrypt/ecc.h>
-#include <tinycrypt/ecc_dh.h>
-
-#include <net/buf.h>
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/conn.h>
-#include <bluetooth/mesh.h>
-#include <bluetooth/uuid.h>
+#include <zephyr/net/buf.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/mesh.h>
+#include <zephyr/bluetooth/uuid.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_MESH_DEBUG_PROV_DEVICE)
 #define LOG_MODULE_NAME bt_mesh_prov_device
@@ -321,18 +317,14 @@ static void prov_dh_key_gen(void)
 
 	if (IS_ENABLED(CONFIG_BT_MESH_PROV_OOB_PUBLIC_KEY) &&
 	    atomic_test_bit(bt_mesh_prov_link.flags, OOB_PUB_KEY)) {
-		if (uECC_valid_public_key(remote_pk, &curve_secp256r1)) {
-			BT_ERR("Public key is not valid");
-		} else if (uECC_shared_secret(remote_pk, bt_mesh_prov->private_key_be,
-					      bt_mesh_prov_link.dhkey,
-					      &curve_secp256r1) != TC_CRYPTO_SUCCESS) {
-			BT_ERR("DHKey generation failed");
-		} else {
-			dh_key_gen_complete();
+
+		if (bt_mesh_dhkey_gen(remote_pk, bt_mesh_prov->private_key_be,
+				bt_mesh_prov_link.dhkey)) {
+			prov_fail(PROV_ERR_UNEXP_ERR);
 			return;
 		}
 
-		prov_fail(PROV_ERR_UNEXP_ERR);
+		dh_key_gen_complete();
 		return;
 	}
 

@@ -224,7 +224,7 @@
 			label = "RTC_1";
 		};
 
-		qdec: qdec@40012000 {
+		qdec: qdec0: qdec@40012000 {
 			compatible = "nordic,nrf-qdec";
 			reg = <0x40012000 0x1000>;
 			interrupts = <18 NRF_DEFAULT_IRQ_PRIORITY>;
@@ -314,9 +314,8 @@
 		status = "disabled";
 		label = "SW_PWM";
 		generator = <&timer2>;
-		channel-count = <3>;
 		clock-prescaler = <0>;
-		#pwm-cells = <1>;
+		#pwm-cells = <3>;
 	};
 };
 

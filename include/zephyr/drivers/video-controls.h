@@ -19,9 +19,9 @@
  * @{
  */
 
-#include <device.h>
+#include <zephyr/device.h>
 #include <stddef.h>
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 
 #include <zephyr/types.h>
 

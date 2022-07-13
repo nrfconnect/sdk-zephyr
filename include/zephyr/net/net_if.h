@@ -19,22 +19,22 @@
  * @{
  */
 
-#include <device.h>
-#include <sys/slist.h>
+#include <zephyr/device.h>
+#include <zephyr/sys/slist.h>
 
-#include <net/net_core.h>
-#include <net/hostname.h>
-#include <net/net_linkaddr.h>
-#include <net/net_ip.h>
-#include <net/net_l2.h>
-#include <net/net_stats.h>
-#include <net/net_timeout.h>
+#include <zephyr/net/net_core.h>
+#include <zephyr/net/hostname.h>
+#include <zephyr/net/net_linkaddr.h>
+#include <zephyr/net/net_ip.h>
+#include <zephyr/net/net_l2.h>
+#include <zephyr/net/net_stats.h>
+#include <zephyr/net/net_timeout.h>
 
 #if defined(CONFIG_NET_DHCPV4) && defined(CONFIG_NET_NATIVE_IPV4)
-#include <net/dhcpv4.h>
+#include <zephyr/net/dhcpv4.h>
 #endif
 #if defined(CONFIG_NET_IPV4_AUTO) && defined(CONFIG_NET_NATIVE_IPV4)
-#include <net/ipv4_autoconf.h>
+#include <zephyr/net/ipv4_autoconf.h>
 #endif
 
 #ifdef __cplusplus
@@ -412,6 +412,14 @@ struct net_traffic_class {
 };
 
 /**
+ * @typedef net_socket_create_t
+
+ * @brief A function prototype to create an offloaded socket. The prototype is
+ *        compatible with socket() function.
+ */
+typedef int (*net_socket_create_t)(int, int, int);
+
+/**
  * @brief Network Interface Device structure
  *
  * Used to handle a network interface on top of a device driver instance.
@@ -453,8 +461,10 @@ struct net_if_dev {
 	uint16_t mtu;
 
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
-	/** Indicate whether interface is offloaded at socket level. */
-	bool offloaded;
+	/** A function pointer to create an offloaded socket.
+	 *  If non-NULL, the interface is considered offloaded at socket level.
+	 */
+	net_socket_create_t socket_offload;
 #endif /* CONFIG_NET_SOCKETS_OFFLOAD */
 };
 
@@ -662,11 +672,46 @@ static inline struct net_offload *net_if_offload(struct net_if *iface)
 static inline bool net_if_is_socket_offloaded(struct net_if *iface)
 {
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
-	return iface->if_dev->offloaded;
+	return (iface->if_dev->socket_offload != NULL);
 #else
 	ARG_UNUSED(iface);
 
 	return false;
+#endif
+}
+
+/**
+ * @brief Set the function to create an offloaded socket
+ *
+ * @param iface Network interface
+ * @param socket_offload A function to create an offloaded socket
+ */
+static inline void net_if_socket_offload_set(
+		struct net_if *iface, net_socket_create_t socket_offload)
+{
+#if defined(CONFIG_NET_SOCKETS_OFFLOAD)
+	iface->if_dev->socket_offload = socket_offload;
+#else
+	ARG_UNUSED(iface);
+	ARG_UNUSED(socket_offload);
+#endif
+}
+
+/**
+ * @brief Return the function to create an offloaded socket
+ *
+ * @param iface Network interface
+ *
+ * @return NULL if the interface is not socket offloaded, valid pointer otherwise
+ */
+static inline net_socket_create_t net_if_socket_offload(struct net_if *iface)
+{
+#if defined(CONFIG_NET_SOCKETS_OFFLOAD)
+	return iface->if_dev->socket_offload;
+#else
+	ARG_UNUSED(iface);
+
+	return NULL;
 #endif
 }
 
@@ -856,6 +901,13 @@ static inline struct net_if_config *net_if_config_get(struct net_if *iface)
  * @param router Pointer to existing router
  */
 void net_if_router_rm(struct net_if_router *router);
+
+/**
+ * @brief Set the default network interface.
+ *
+ * @param iface New default interface, or NULL to revert to the one set by Kconfig.
+ */
+void net_if_set_default(struct net_if *iface);
 
 /**
  * @brief Get the default network interface.
@@ -2407,7 +2459,8 @@ struct net_if_api {
 				      api, l2, l2_ctx_type, mtu)	\
 	Z_NET_DEVICE_INIT_INSTANCE(node_id,				\
 				   Z_DEVICE_DT_DEV_NAME(node_id),	\
-				   DT_LABEL(node_id), instance,		\
+				   DT_PROP_OR(node_id, label, ""),	\
+				   instance, init_fn,			\
 				   pm_action_cb, data, cfg, prio, api,	\
 				   l2, l2_ctx_type, mtu)
 
@@ -2484,7 +2537,7 @@ struct net_if_api {
 #define NET_DEVICE_DT_OFFLOAD_DEFINE(node_id, init_fn, pm_action_cb,	\
 				   data, cfg, prio, api, mtu)		\
 	Z_NET_DEVICE_OFFLOAD_INIT(node_id, Z_DEVICE_DT_DEV_NAME(node_id), \
-				  DT_PROP_OR(node_id, label, NULL),	\
+				  DT_PROP_OR(node_id, label, ""),	\
 				  init_fn, pm_action_cb, data, cfg,	\
 				  prio, api, mtu)
 

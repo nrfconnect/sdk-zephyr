@@ -4,15 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
-#include <syscall_handler.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/syscall_handler.h>
 #include <ztest.h>
-#include <linker/linker-defs.h>
+#include <zephyr/linker/linker-defs.h>
 #include "test_syscalls.h"
 #include <mmu.h>
 
 #define BUF_SIZE	32
+
+#if defined(CONFIG_BOARD_FVP_BASE_REVC_2XAEMV8A)
+#define SLEEP_MS_LONG	30000
+#else
 #define SLEEP_MS_LONG	15000
+#endif
 
 #if defined(CONFIG_BOARD_NUCLEO_F429ZI) || defined(CONFIG_BOARD_NUCLEO_F207ZG) \
 	|| defined(CONFIG_BOARD_NUCLEO_L073RZ) \
@@ -375,8 +380,8 @@ void test_syscall_torture(void)
 				2, K_INHERIT_PERMS | K_USER, K_NO_WAIT);
 	}
 
-	/* Let the torture threads hog the system for 15 seconds before we
-	 * abort them.
+	/* Let the torture threads hog the system for several seconds before
+	 * we abort them.
 	 * They will all be hammering the cpu(s) with system calls,
 	 * hopefully smoking out any issues and causing a crash.
 	 */

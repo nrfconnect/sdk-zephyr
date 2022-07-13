@@ -5,15 +5,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <sys/printk.h>
-#include <shell/shell.h>
-#include <init.h>
-#include <sys/reboot.h>
-#include <debug/stack.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/shell/shell.h>
+#include <zephyr/init.h>
+#include <zephyr/sys/reboot.h>
+#include <zephyr/debug/stack.h>
 #include <string.h>
-#include <device.h>
-#include <drivers/timer/system_timer.h>
-#include <kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/timer/system_timer.h>
+#include <zephyr/kernel.h>
 #include <kernel_internal.h>
 
 static int cmd_kernel_version(const struct shell *shell,
@@ -62,6 +62,7 @@ static void shell_tdata_dump(const struct k_thread *cthread, void *user_data)
 	size_t size = thread->stack_info.size;
 	const char *tname;
 	int ret;
+	char state_str[32];
 
 #ifdef CONFIG_THREAD_RUNTIME_STATS
 	k_thread_runtime_stats_t rt_stats_thread;
@@ -79,7 +80,8 @@ static void shell_tdata_dump(const struct k_thread *cthread, void *user_data)
 		      thread->base.user_options,
 		      thread->base.prio,
 		      (int64_t)thread->base.timeout.dticks);
-	shell_print(shell, "\tstate: %s, entry: %p", k_thread_state_str(thread),
+	shell_print(shell, "\tstate: %s, entry: %p",
+		    k_thread_state_str(thread, state_str, sizeof(state_str)),
 		    thread->entry.pEntry);
 
 #ifdef CONFIG_THREAD_RUNTIME_STATS
@@ -182,8 +184,8 @@ static void shell_stack_dump(const struct k_thread *thread, void *user_data)
 		      size, unused, size - unused, size, pcnt);
 }
 
-extern K_KERNEL_STACK_ARRAY_DEFINE(z_interrupt_stacks, CONFIG_MP_NUM_CPUS,
-				   CONFIG_ISR_STACK_SIZE);
+K_KERNEL_STACK_ARRAY_DECLARE(z_interrupt_stacks, CONFIG_MP_NUM_CPUS,
+			     CONFIG_ISR_STACK_SIZE);
 
 static int cmd_kernel_stacks(const struct shell *shell,
 			     size_t argc, char **argv)

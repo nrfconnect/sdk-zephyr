@@ -4,23 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_ethernet, CONFIG_NET_L2_ETHERNET_LOG_LEVEL);
 
-#include <net/net_core.h>
-#include <net/net_l2.h>
-#include <net/net_if.h>
-#include <net/net_mgmt.h>
-#include <net/ethernet.h>
-#include <net/ethernet_mgmt.h>
-#include <net/gptp.h>
-#include <random/rand32.h>
+#include <zephyr/net/net_core.h>
+#include <zephyr/net/net_l2.h>
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_mgmt.h>
+#include <zephyr/net/ethernet.h>
+#include <zephyr/net/ethernet_mgmt.h>
+#include <zephyr/net/gptp.h>
+#include <zephyr/random/rand32.h>
 
 #if defined(CONFIG_NET_LLDP)
-#include <net/lldp.h>
+#include <zephyr/net/lldp.h>
 #endif
 
-#include <syscall_handler.h>
+#include <zephyr/syscall_handler.h>
 
 #include "arp.h"
 #include "eth_stats.h"
@@ -254,6 +254,11 @@ static enum net_verdict ethernet_recv(struct net_if *iface,
 		goto drop;
 #endif
 	default:
+		if (IS_ENABLED(CONFIG_NET_ETHERNET_FORWARD_UNRECOGNISED_ETHERTYPE)) {
+			family = AF_UNSPEC;
+			break;
+		}
+
 		NET_DBG("Unknown hdr type 0x%04x iface %p", type, iface);
 		goto drop;
 	}

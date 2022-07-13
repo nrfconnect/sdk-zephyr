@@ -5,12 +5,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <settings/settings.h>
+#include <zephyr/settings/settings.h>
 
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/hci_vs.h>
-#include <bluetooth/buf.h>
-#include <drivers/bluetooth/hci_driver.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/hci_vs.h>
+#include <zephyr/bluetooth/buf.h>
+#include <zephyr/drivers/bluetooth/hci_driver.h>
 
 #include "hci_core.h"
 #include "id.h"
@@ -643,6 +643,10 @@ static int hci_id_add(uint8_t id, const bt_addr_le_t *addr, uint8_t peer_irk[16]
 {
 	struct bt_hci_cp_le_add_dev_to_rl *cp;
 	struct net_buf *buf;
+
+	if (id >= CONFIG_BT_ID_MAX) {
+		return -EINVAL;
+	}
 
 	BT_DBG("addr %s", bt_addr_le_str(addr));
 

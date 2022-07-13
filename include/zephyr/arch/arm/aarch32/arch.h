@@ -17,34 +17,34 @@
 #define ZEPHYR_INCLUDE_ARCH_ARM_AARCH32_ARCH_H_
 
 /* Add include for DTS generated information */
-#include <devicetree.h>
+#include <zephyr/devicetree.h>
 
 /* ARM GPRs are often designated by two different names */
 #define sys_define_gpr_with_alias(name1, name2) union { uint32_t name1, name2; }
 
-#include <arch/arm/aarch32/thread.h>
-#include <arch/arm/aarch32/exc.h>
-#include <arch/arm/aarch32/irq.h>
-#include <arch/arm/aarch32/error.h>
-#include <arch/arm/aarch32/misc.h>
-#include <arch/common/addr_types.h>
-#include <arch/common/ffs.h>
-#include <arch/arm/aarch32/nmi.h>
-#include <arch/arm/aarch32/asm_inline.h>
-#include <arch/common/sys_bitops.h>
+#include <zephyr/arch/arm/aarch32/thread.h>
+#include <zephyr/arch/arm/aarch32/exc.h>
+#include <zephyr/arch/arm/aarch32/irq.h>
+#include <zephyr/arch/arm/aarch32/error.h>
+#include <zephyr/arch/arm/aarch32/misc.h>
+#include <zephyr/arch/common/addr_types.h>
+#include <zephyr/arch/common/ffs.h>
+#include <zephyr/arch/arm/aarch32/nmi.h>
+#include <zephyr/arch/arm/aarch32/asm_inline.h>
+#include <zephyr/arch/common/sys_bitops.h>
 
 #ifdef CONFIG_CPU_CORTEX_M
-#include <arch/arm/aarch32/cortex_m/cpu.h>
-#include <arch/arm/aarch32/cortex_m/memory_map.h>
-#include <arch/common/sys_io.h>
+#include <zephyr/arch/arm/aarch32/cortex_m/cpu.h>
+#include <zephyr/arch/arm/aarch32/cortex_m/memory_map.h>
+#include <zephyr/arch/common/sys_io.h>
 #elif defined(CONFIG_CPU_AARCH32_CORTEX_R) || defined(CONFIG_CPU_AARCH32_CORTEX_A)
-#include <arch/arm/aarch32/cortex_a_r/cpu.h>
-#include <arch/arm/aarch32/cortex_a_r/sys_io.h>
+#include <zephyr/arch/arm/aarch32/cortex_a_r/cpu.h>
+#include <zephyr/arch/arm/aarch32/cortex_a_r/sys_io.h>
 #if defined(CONFIG_AARCH32_ARMV8_R)
-#include <arch/arm/aarch32/cortex_a_r/lib_helpers.h>
-#include <arch/arm/aarch32/cortex_a_r/armv8_timer.h>
+#include <zephyr/arch/arm/aarch32/cortex_a_r/lib_helpers.h>
+#include <zephyr/arch/arm/aarch32/cortex_a_r/armv8_timer.h>
 #else
-#include <arch/arm/aarch32/cortex_a_r/timer.h>
+#include <zephyr/arch/arm/aarch32/cortex_a_r/timer.h>
 #endif
 #endif
 
@@ -97,6 +97,13 @@ extern "C" {
  * address (lowest address).  Stack guard, if present, will comprise
  * the lowest MPU_GUARD_ALIGN_AND_SIZE bytes of the stack.
  *
+ * The guard region must include enough space for an exception frame
+ * below the trapping region as a stack fault will end up storing
+ * the exception data (0x20 bytes) onto the stack below wherever
+ * the stack pointer refers, even if that is within the guard region,
+ * so we make sure the region is strictly larger than this size by
+ * setting it to 0x40 (to respect any power-of-two requirements).
+ *
  * As the stack grows down, it will reach the end of the stack when it
  * encounters either the stack guard region, or the stack allocation
  * address.
@@ -123,7 +130,12 @@ extern "C" {
  *
  */
 #if defined(CONFIG_MPU_STACK_GUARD)
+/* make sure there's more than enough space for an exception frame */
+#if CONFIG_ARM_MPU_REGION_MIN_ALIGN_AND_SIZE <= 0x20
+#define MPU_GUARD_ALIGN_AND_SIZE 0x40
+#else
 #define MPU_GUARD_ALIGN_AND_SIZE CONFIG_ARM_MPU_REGION_MIN_ALIGN_AND_SIZE
+#endif
 #else
 #define MPU_GUARD_ALIGN_AND_SIZE 0
 #endif
@@ -140,7 +152,11 @@ extern "C" {
  */
 #if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING) \
 	&& defined(CONFIG_MPU_STACK_GUARD)
+#if CONFIG_MPU_STACK_GUARD_MIN_SIZE_FLOAT <= 0x20
+#define MPU_GUARD_ALIGN_AND_SIZE_FLOAT 0x40
+#else
 #define MPU_GUARD_ALIGN_AND_SIZE_FLOAT CONFIG_MPU_STACK_GUARD_MIN_SIZE_FLOAT
+#endif
 #else
 #define MPU_GUARD_ALIGN_AND_SIZE_FLOAT 0
 #endif
@@ -191,14 +207,14 @@ extern "C" {
 /* Legacy case: retain containing extern "C" with C++ */
 #ifdef CONFIG_ARM_MPU
 #ifdef CONFIG_CPU_HAS_ARM_MPU
-#include <arch/arm/aarch32/mpu/arm_mpu.h>
+#include <zephyr/arch/arm/aarch32/mpu/arm_mpu.h>
 #endif /* CONFIG_CPU_HAS_ARM_MPU */
 #ifdef CONFIG_CPU_HAS_NXP_MPU
-#include <arch/arm/aarch32/mpu/nxp_mpu.h>
+#include <zephyr/arch/arm/aarch32/mpu/nxp_mpu.h>
 #endif /* CONFIG_CPU_HAS_NXP_MPU */
 #endif /* CONFIG_ARM_MPU */
 #ifdef CONFIG_ARM_AARCH32_MMU
-#include <arch/arm/aarch32/mmu/arm_mmu.h>
+#include <zephyr/arch/arm/aarch32/mmu/arm_mmu.h>
 #endif /* CONFIG_ARM_AARCH32_MMU */
 
 #ifdef __cplusplus

@@ -4,21 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_tcp, CONFIG_NET_TCP_LOG_LEVEL);
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <zephyr.h>
-#include <random/rand32.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/random/rand32.h>
 
 #if defined(CONFIG_NET_TCP_ISN_RFC6528)
 #include <mbedtls/md5.h>
 #endif
-#include <net/net_pkt.h>
-#include <net/net_context.h>
-#include <net/udp.h>
+#include <zephyr/net/net_pkt.h>
+#include <zephyr/net/net_context.h>
+#include <zephyr/net/udp.h>
 #include "ipv4.h"
 #include "ipv6.h"
 #include "connection.h"
@@ -28,8 +28,10 @@ LOG_MODULE_REGISTER(net_tcp, CONFIG_NET_TCP_LOG_LEVEL);
 
 #define ACK_TIMEOUT_MS CONFIG_NET_TCP_ACK_TIMEOUT
 #define ACK_TIMEOUT K_MSEC(ACK_TIMEOUT_MS)
-#define FIN_TIMEOUT_MS MSEC_PER_SEC
+/* Allow for (tcp_retries + 1) transmissions */
+#define FIN_TIMEOUT_MS (tcp_rto * (tcp_retries + 1))
 #define FIN_TIMEOUT K_MSEC(FIN_TIMEOUT_MS)
+#define ACK_DELAY K_MSEC(100)
 
 static int tcp_rto = CONFIG_NET_TCP_INIT_RETRANSMISSION_TIMEOUT;
 static int tcp_retries = CONFIG_NET_TCP_RETRY_COUNT;
@@ -50,8 +52,9 @@ K_MEM_SLAB_DEFINE_STATIC(tcp_conns_slab, sizeof(struct tcp),
 static struct k_work_q tcp_work_q;
 static K_KERNEL_STACK_DEFINE(work_q_stack, CONFIG_NET_TCP_WORKQ_STACK_SIZE);
 
-static void tcp_in(struct tcp *conn, struct net_pkt *pkt);
+static enum net_verdict tcp_in(struct tcp *conn, struct net_pkt *pkt);
 static bool is_destination_local(struct net_pkt *pkt);
+static void tcp_out(struct tcp *conn, uint8_t flags);
 
 int (*tcp_send_cb)(struct net_pkt *pkt) = NULL;
 size_t (*tcp_recv_cb)(struct tcp *conn, struct net_pkt *pkt) = NULL;
@@ -237,7 +240,9 @@ static const char *tcp_flags(uint8_t flags)
 			len += snprintk(buf + len, BUF_SIZE - len, "URG,");
 		}
 
-		buf[len - 1] = '\0'; /* delete the last comma */
+		if (len > 0) {
+			buf[len - 1] = '\0'; /* delete the last comma */
+		}
 	}
 #undef BUF_SIZE
 	return buf;
@@ -357,12 +362,13 @@ static void tcp_send_queue_flush(struct tcp *conn)
 }
 
 #if CONFIG_NET_TCP_LOG_LEVEL >= LOG_LEVEL_DBG
-#define tcp_conn_unref(conn)				\
-	tcp_conn_unref_debug(conn, __func__, __LINE__)
+#define tcp_conn_unref(conn, status)				\
+	tcp_conn_unref_debug(conn, status, __func__, __LINE__)
 
-static int tcp_conn_unref_debug(struct tcp *conn, const char *caller, int line)
+static int tcp_conn_unref_debug(struct tcp *conn, int status,
+				const char *caller, int line)
 #else
-static int tcp_conn_unref(struct tcp *conn)
+static int tcp_conn_unref(struct tcp *conn, int status)
 #endif
 {
 	int ref_count = atomic_get(&conn->ref_count);
@@ -408,7 +414,7 @@ static int tcp_conn_unref(struct tcp *conn)
 
 	if (conn->context->recv_cb) {
 		conn->context->recv_cb(conn->context, NULL, NULL, NULL,
-					-ECONNRESET, conn->recv_user_data);
+				       status, conn->recv_user_data);
 	}
 
 	conn->context->tcp = NULL;
@@ -424,8 +430,10 @@ static int tcp_conn_unref(struct tcp *conn)
 		tcp_pkt_unref(conn->queue_recv_data);
 	}
 
-	k_work_cancel_delayable(&conn->timewait_timer);
-	k_work_cancel_delayable(&conn->fin_timer);
+	(void)k_work_cancel_delayable(&conn->timewait_timer);
+	(void)k_work_cancel_delayable(&conn->fin_timer);
+	(void)k_work_cancel_delayable(&conn->persist_timer);
+	(void)k_work_cancel_delayable(&conn->ack_timer);
 
 	sys_slist_find_and_remove(&tcp_conns, &conn->next);
 
@@ -445,7 +453,7 @@ int net_tcp_unref(struct net_context *context)
 	NET_DBG("context: %p, conn: %p", context, context->tcp);
 
 	if (context->tcp) {
-		ref_count = tcp_conn_unref(context->tcp);
+		ref_count = tcp_conn_unref(context->tcp, 0);
 	}
 
 	return ref_count;
@@ -529,7 +537,7 @@ static void tcp_send_process(struct k_work *work)
 	k_mutex_unlock(&conn->lock);
 
 	if (unref) {
-		tcp_conn_unref(conn);
+		tcp_conn_unref(conn, -ETIMEDOUT);
 	}
 }
 
@@ -687,6 +695,52 @@ end:
 	return result;
 }
 
+static bool tcp_short_window(struct tcp *conn)
+{
+	int32_t threshold = MIN(conn_mss(conn), conn->recv_win_max / 2);
+
+	if (conn->recv_win > threshold) {
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * @brief Update TCP receive window
+ *
+ * @param conn TCP network connection
+ * @param delta Receive window delta
+ *
+ * @return 0 on success, -EINVAL
+ *         if the receive window delta is out of bounds
+ */
+static int tcp_update_recv_wnd(struct tcp *conn, int32_t delta)
+{
+	int32_t new_win;
+	bool short_win_before;
+	bool short_win_after;
+
+	new_win = conn->recv_win + delta;
+	if (new_win < 0 || new_win > UINT16_MAX) {
+		return -EINVAL;
+	}
+
+	short_win_before = tcp_short_window(conn);
+
+	conn->recv_win = new_win;
+
+	short_win_after = tcp_short_window(conn);
+
+	if (short_win_before && !short_win_after &&
+	    conn->state == TCP_ESTABLISHED) {
+		k_work_cancel_delayable(&conn->ack_timer);
+		tcp_out(conn, ACK);
+	}
+
+	return 0;
+}
+
 static size_t tcp_check_pending_data(struct tcp *conn, struct net_pkt *pkt,
 				     size_t len)
 {
@@ -715,9 +769,9 @@ static size_t tcp_check_pending_data(struct tcp *conn, struct net_pkt *pkt,
 	return pending_len;
 }
 
-static int tcp_data_get(struct tcp *conn, struct net_pkt *pkt, size_t *len)
+static enum net_verdict tcp_data_get(struct tcp *conn, struct net_pkt *pkt, size_t *len)
 {
-	int ret = 0;
+	enum net_verdict ret = NET_DROP;
 
 	if (tcp_recv_cb) {
 		tcp_recv_cb(conn, pkt);
@@ -725,24 +779,17 @@ static int tcp_data_get(struct tcp *conn, struct net_pkt *pkt, size_t *len)
 	}
 
 	if (conn->context->recv_cb) {
-		struct net_pkt *up = tcp_pkt_clone(pkt);
-
-		if (!up) {
-			ret = -ENOBUFS;
-			goto out;
-		}
-
 		/* If there is any out-of-order pending data, then pass it
 		 * to the application here.
 		 */
-		*len += tcp_check_pending_data(conn, up, *len);
+		*len += tcp_check_pending_data(conn, pkt, *len);
 
-		net_pkt_cursor_init(up);
-		net_pkt_set_overwrite(up, true);
+		net_pkt_cursor_init(pkt);
+		net_pkt_set_overwrite(pkt, true);
 
-		net_pkt_skip(up, net_pkt_get_len(up) - *len);
+		net_pkt_skip(pkt, net_pkt_get_len(pkt) - *len);
 
-		net_context_update_recv_wnd(conn->context, -*len);
+		tcp_update_recv_wnd(conn, -*len);
 
 		/* Do not pass data to application with TCP conn
 		 * locked as there could be an issue when the app tries
@@ -750,7 +797,9 @@ static int tcp_data_get(struct tcp *conn, struct net_pkt *pkt, size_t *len)
 		 * data is placed in fifo which is flushed in tcp_in()
 		 * after unlocking the conn
 		 */
-		k_fifo_put(&conn->recv_data, up);
+		k_fifo_put(&conn->recv_data, pkt);
+
+		ret = NET_OK;
 	}
  out:
 	return ret;
@@ -820,6 +869,37 @@ static int ip_header_add(struct tcp *conn, struct net_pkt *pkt)
 	return -EINVAL;
 }
 
+static int set_tcp_nodelay(struct tcp *conn, const void *value, size_t len)
+{
+	int no_delay_int;
+
+	if (len != sizeof(int)) {
+		return -EINVAL;
+	}
+
+	no_delay_int = *(int *)value;
+
+	if ((no_delay_int < 0) || (no_delay_int > 1)) {
+		return -EINVAL;
+	}
+
+	conn->tcp_nodelay = (bool)no_delay_int;
+
+	return 0;
+}
+
+static int get_tcp_nodelay(struct tcp *conn, void *value, size_t *len)
+{
+	int no_delay_int = (int)conn->tcp_nodelay;
+
+	*((int *)value) = no_delay_int;
+
+	if (len) {
+		*len = sizeof(int);
+	}
+	return 0;
+}
+
 static int net_tcp_set_mss_opt(struct tcp *conn, struct net_pkt *pkt)
 {
 	NET_PKT_DATA_ACCESS_DEFINE(mss_opt_access, struct tcp_mss_option);
@@ -831,7 +911,7 @@ static int net_tcp_set_mss_opt(struct tcp *conn, struct net_pkt *pkt)
 		return -ENOBUFS;
 	}
 
-	recv_mss = net_tcp_get_recv_mss(conn);
+	recv_mss = net_tcp_get_supported_mss(conn);
 	recv_mss |= (NET_TCP_MSS_OPT << 24) | (NET_TCP_MSS_SIZE << 16);
 
 	UNALIGNED_PUT(htonl(recv_mss), (uint32_t *)mss);
@@ -928,7 +1008,7 @@ static int tcp_out_ext(struct tcp *conn, uint8_t flags, struct net_pkt *data,
 		k_work_schedule_for_queue(&tcp_work_q,
 					  &conn->send_timer, K_NO_WAIT);
 	} else if (tcp_send_process_no_lock(conn)) {
-		tcp_conn_unref(conn);
+		tcp_conn_unref(conn, -ETIMEDOUT);
 	}
 out:
 	return ret;
@@ -973,7 +1053,7 @@ static int tcp_pkt_peek(struct net_pkt *to, struct net_pkt *from, size_t pos,
 
 static bool tcp_window_full(struct tcp *conn)
 {
-	bool window_full = !(conn->unacked_len < conn->send_win);
+	bool window_full = (conn->send_data_total >= conn->send_win);
 
 	NET_DBG("conn: %p window_full=%hu", conn, window_full);
 
@@ -992,6 +1072,11 @@ static int tcp_unsent_len(struct tcp *conn)
 	}
 
 	unsent_len = conn->send_data_total - conn->unacked_len;
+	if (conn->unacked_len >= conn->send_win) {
+		unsent_len = 0;
+	} else {
+		unsent_len = MIN(unsent_len, conn->send_win - conn->unacked_len);
+	}
  out:
 	NET_DBG("unsent_len=%d", unsent_len);
 
@@ -1001,10 +1086,9 @@ static int tcp_unsent_len(struct tcp *conn)
 static int tcp_send_data(struct tcp *conn)
 {
 	int ret = 0;
-	int pos, len;
+	int len;
 	struct net_pkt *pkt;
 
-	pos = conn->unacked_len;
 	len = MIN3(conn->send_data_total - conn->unacked_len,
 		   conn->send_win - conn->unacked_len,
 		   conn_mss(conn));
@@ -1021,7 +1105,7 @@ static int tcp_send_data(struct tcp *conn)
 		goto out;
 	}
 
-	ret = tcp_pkt_peek(pkt, conn->send_data, pos, len);
+	ret = tcp_pkt_peek(pkt, conn->send_data, conn->unacked_len, len);
 	if (ret < 0) {
 		tcp_pkt_unref(pkt);
 		ret = -ENOBUFS;
@@ -1065,9 +1149,17 @@ static int tcp_send_queued_data(struct tcp *conn)
 	}
 
 	while (tcp_unsent_len(conn) > 0) {
-		if (tcp_window_full(conn)) {
-			subscribe = true;
-			break;
+		/* Implement Nagle's algorithm */
+		if ((conn->tcp_nodelay == false) && (conn->unacked_len > 0)) {
+			/* If there is already pending data */
+			if (tcp_unsent_len(conn) < conn_mss(conn)) {
+				/* The number of bytes to be transmitted is less than an MSS,
+				 * skip transmission for now.
+				 * Wait for more data to be transmitted or all pending data
+				 * being acknowledged.
+				 */
+				break;
+			}
 		}
 
 		ret = tcp_send_data(conn);
@@ -1076,20 +1168,12 @@ static int tcp_send_queued_data(struct tcp *conn)
 		}
 	}
 
-	if (conn->unacked_len) {
+	if (conn->send_data_total) {
 		subscribe = true;
 	}
 
 	if (k_work_delayable_remaining_get(&conn->send_data_timer)) {
 		subscribe = false;
-	}
-
-	/* If we have out-of-bufs case, then do not start retransmit timer
-	 * yet. The socket layer will catch this and resend data if needed.
-	 */
-	if (ret == -ENOBUFS) {
-		NET_DBG("No bufs, cancelling retransmit timer");
-		k_work_cancel_delayable(&conn->send_data_timer);
 	}
 
 	if (subscribe) {
@@ -1161,7 +1245,10 @@ static void tcp_resend_data(struct k_work *work)
 		}
 	} else if (ret == -ENODATA) {
 		conn->data_mode = TCP_DATA_MODE_SEND;
+
 		goto out;
+	} else if (ret == -ENOBUFS) {
+		NET_ERR("TCP failed to allocate buffer in retransmission");
 	}
 
 	k_work_reschedule_for_queue(&tcp_work_q, &conn->send_data_timer,
@@ -1171,7 +1258,7 @@ static void tcp_resend_data(struct k_work *work)
 	k_mutex_unlock(&conn->lock);
 
 	if (conn_unref) {
-		tcp_conn_unref(conn);
+		tcp_conn_unref(conn, -ETIMEDOUT);
 	}
 }
 
@@ -1191,7 +1278,7 @@ static void tcp_establish_timeout(struct tcp *conn)
 	NET_DBG("Did not receive %s in %dms", "ACK", ACK_TIMEOUT_MS);
 	NET_DBG("conn: %p %s", conn, log_strdup(tcp_conn_state(conn, NULL)));
 
-	(void)tcp_conn_unref(conn);
+	(void)tcp_conn_unref(conn, -ETIMEDOUT);
 }
 
 static void tcp_fin_timeout(struct k_work *work)
@@ -1209,6 +1296,35 @@ static void tcp_fin_timeout(struct k_work *work)
 
 	/* Extra unref from net_tcp_put() */
 	net_context_unref(conn->context);
+}
+
+static void tcp_send_zwp(struct k_work *work)
+{
+	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+	struct tcp *conn = CONTAINER_OF(dwork, struct tcp, persist_timer);
+
+	k_mutex_lock(&conn->lock, K_FOREVER);
+
+	(void)tcp_out_ext(conn, ACK, NULL, conn->seq - 1);
+
+	if (conn->send_win == 0) {
+		(void)k_work_reschedule_for_queue(
+			&tcp_work_q, &conn->persist_timer, K_MSEC(tcp_rto));
+	}
+
+	k_mutex_unlock(&conn->lock);
+}
+
+static void tcp_send_ack(struct k_work *work)
+{
+	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+	struct tcp *conn = CONTAINER_OF(dwork, struct tcp, ack_timer);
+
+	k_mutex_lock(&conn->lock, K_FOREVER);
+
+	tcp_out(conn, ACK);
+
+	k_mutex_unlock(&conn->lock);
 }
 
 static void tcp_conn_ref(struct tcp *conn)
@@ -1251,18 +1367,22 @@ static struct tcp *tcp_conn_alloc(struct net_context *context)
 	k_mutex_init(&conn->lock);
 	k_fifo_init(&conn->recv_data);
 	k_sem_init(&conn->connect_sem, 0, K_SEM_MAX_LIMIT);
+	k_sem_init(&conn->tx_sem, 1, 1);
 
 	conn->in_connect = false;
 	conn->state = TCP_LISTEN;
-	conn->recv_win = tcp_window;
+	conn->recv_win_max = tcp_window;
+	conn->tcp_nodelay = false;
 
 	/* Set the recv_win with the rcvbuf configured for the socket. */
 	if (IS_ENABLED(CONFIG_NET_CONTEXT_RCVBUF) &&
 		net_context_get_option(context, NET_OPT_RCVBUF, &recv_window, &len) == 0) {
 		if (recv_window != 0) {
-			conn->recv_win = recv_window;
+			conn->recv_win_max = recv_window;
 		}
 	}
+
+	conn->recv_win = conn->recv_win_max;
 
 	/* The ISN value will be set when we get the connection attempt or
 	 * when trying to create a connection.
@@ -1276,6 +1396,8 @@ static struct tcp *tcp_conn_alloc(struct net_context *context)
 	k_work_init_delayable(&conn->fin_timer, tcp_fin_timeout);
 	k_work_init_delayable(&conn->send_data_timer, tcp_resend_data);
 	k_work_init_delayable(&conn->recv_queue_timer, tcp_cleanup_recv_queue);
+	k_work_init_delayable(&conn->persist_timer, tcp_send_zwp);
+	k_work_init_delayable(&conn->ack_timer, tcp_send_ack);
 
 	tcp_conn_ref(conn);
 
@@ -1361,6 +1483,7 @@ static enum net_verdict tcp_recv(struct net_conn *net_conn,
 {
 	struct tcp *conn;
 	struct tcphdr *th;
+	enum net_verdict verdict = NET_DROP;
 
 	ARG_UNUSED(net_conn);
 	ARG_UNUSED(proto);
@@ -1387,10 +1510,10 @@ static enum net_verdict tcp_recv(struct net_conn *net_conn,
 	}
  in:
 	if (conn) {
-		tcp_in(conn, pkt);
+		verdict = tcp_in(conn, pkt);
 	}
 
-	return NET_DROP;
+	return verdict;
 }
 
 static uint32_t seq_scale(uint32_t seq)
@@ -1690,22 +1813,32 @@ static void tcp_queue_recv_data(struct tcp *conn, struct net_pkt *pkt,
 	}
 }
 
-static bool tcp_data_received(struct tcp *conn, struct net_pkt *pkt,
-			      size_t *len)
+static enum net_verdict tcp_data_received(struct tcp *conn, struct net_pkt *pkt,
+					  size_t *len)
 {
+	enum net_verdict ret;
+
 	if (*len == 0) {
-		return false;
+		return NET_DROP;
 	}
 
-	if (tcp_data_get(conn, pkt, len) < 0) {
-		return false;
-	}
+	ret = tcp_data_get(conn, pkt, len);
 
 	net_stats_update_tcp_seg_recv(conn->iface);
 	conn_ack(conn, *len);
-	tcp_out(conn, ACK);
 
-	return true;
+	/* Delay ACK response in case of small window or missing PSH,
+	 * as described in RFC 813.
+	 */
+	if (tcp_short_window(conn)) {
+		k_work_schedule_for_queue(&tcp_work_q, &conn->ack_timer,
+					  ACK_DELAY);
+	} else {
+		k_work_cancel_delayable(&conn->ack_timer);
+		tcp_out(conn, ACK);
+	}
+
+	return ret;
 }
 
 static void tcp_out_of_order_data(struct tcp *conn, struct net_pkt *pkt,
@@ -1730,7 +1863,7 @@ static void tcp_out_of_order_data(struct tcp *conn, struct net_pkt *pkt,
 }
 
 /* TCP state machine, everything happens here */
-static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
+static enum net_verdict tcp_in(struct tcp *conn, struct net_pkt *pkt)
 {
 	struct tcphdr *th = pkt ? th_get(pkt) : NULL;
 	uint8_t next = 0, fl = 0;
@@ -1743,10 +1876,19 @@ static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
 	struct k_fifo *recv_data_fifo;
 	size_t len;
 	int ret;
+	int sndbuf_opt = 0;
+	int close_status = 0;
+	enum net_verdict verdict = NET_DROP;
 
 	if (th) {
 		/* Currently we ignore ECN and CWR flags */
 		fl = th_flags(th) & ~(ECN | CWR);
+	}
+
+	if (IS_ENABLED(CONFIG_NET_CONTEXT_SNDBUF) &&
+	    conn->state != TCP_SYN_SENT) {
+		(void)net_context_get_option(conn->context, NET_OPT_SNDBUF,
+					     &sndbuf_opt, NULL);
 	}
 
 	k_mutex_lock(&conn->lock, K_FOREVER);
@@ -1756,6 +1898,7 @@ static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
 	if (th && th_off(th) < 5) {
 		tcp_out(conn, RST);
 		conn_state(conn, TCP_CLOSED);
+		close_status = -ECONNRESET;
 		goto next_state;
 	}
 
@@ -1764,11 +1907,12 @@ static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
 		if (!tcp_validate_seq(conn, th)) {
 			net_stats_update_tcp_seg_rsterr(net_pkt_iface(pkt));
 			k_mutex_unlock(&conn->lock);
-			return;
+			return verdict;
 		}
 
 		net_stats_update_tcp_seg_rst(net_pkt_iface(pkt));
 		conn_state(conn, TCP_CLOSED);
+		close_status = -ECONNRESET;
 		goto next_state;
 	}
 
@@ -1777,14 +1921,12 @@ static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
 		NET_DBG("DROP: Invalid TCP option list");
 		tcp_out(conn, RST);
 		conn_state(conn, TCP_CLOSED);
+		close_status = -ECONNRESET;
 		goto next_state;
 	}
 
 	if (th) {
 		size_t max_win;
-		int sndbuf;
-		size_t sndbuf_len;
-
 
 		conn->send_win = ntohs(th_win(th));
 
@@ -1801,15 +1943,8 @@ static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
 				   CONFIG_NET_BUF_DATA_SIZE) / 3;
 		}
 
-		if (IS_ENABLED(CONFIG_NET_CONTEXT_SNDBUF) &&
-			conn->state != TCP_SYN_SENT &&
-			net_context_get_option(conn->context,
-					       NET_OPT_SNDBUF,
-					       &sndbuf,
-					       &sndbuf_len) == 0) {
-			if (sndbuf > 0) {
-				max_win = sndbuf;
-			}
+		if (sndbuf_opt > 0) {
+			max_win = sndbuf_opt;
 		}
 
 		max_win = MAX(max_win, NET_IPV6_MTU);
@@ -1818,6 +1953,19 @@ static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
 				(size_t)conn->send_win, max_win);
 
 			conn->send_win = max_win;
+		}
+
+		if (conn->send_win == 0) {
+			(void)k_work_reschedule_for_queue(
+				&tcp_work_q, &conn->persist_timer, K_MSEC(tcp_rto));
+		} else {
+			(void)k_work_cancel_delayable(&conn->persist_timer);
+		}
+
+		if (tcp_window_full(conn)) {
+			(void)k_sem_take(&conn->tx_sem, K_NO_WAIT);
+		} else {
+			k_sem_give(&conn->tx_sem);
 		}
 	}
 
@@ -1872,9 +2020,8 @@ next_state:
 			}
 
 			if (len) {
-				if (tcp_data_get(conn, pkt, &len) < 0) {
-					break;
-				}
+				verdict = tcp_data_get(conn, pkt, &len);
+
 				conn_ack(conn, + len);
 				tcp_out(conn, ACK);
 			}
@@ -1889,9 +2036,8 @@ next_state:
 			tcp_send_timer_cancel(conn);
 			conn_ack(conn, th_seq(th) + 1);
 			if (len) {
-				if (tcp_data_get(conn, pkt, &len) < 0) {
-					break;
-				}
+				verdict = tcp_data_get(conn, pkt, &len);
+
 				conn_ack(conn, + len);
 			}
 
@@ -1930,9 +2076,7 @@ next_state:
 		} else if (th && FL(&fl, ==, (FIN | ACK | PSH),
 				    th_seq(th) == conn->ack)) {
 			if (len) {
-				if (tcp_data_get(conn, pkt, &len) < 0) {
-					break;
-				}
+				verdict = tcp_data_get(conn, pkt, &len);
 			}
 
 			conn_ack(conn, + len + 1);
@@ -1955,6 +2099,7 @@ next_state:
 				net_stats_update_tcp_seg_drop(conn->iface);
 				tcp_out(conn, RST);
 				conn_state(conn, TCP_CLOSED);
+				close_status = -ECONNRESET;
 				break;
 			}
 
@@ -1964,6 +2109,11 @@ next_state:
 			} else {
 				conn->unacked_len -= len_acked;
 			}
+
+			if (!tcp_window_full(conn)) {
+				k_sem_give(&conn->tx_sem);
+			}
+
 			conn_seq(conn, + len_acked);
 			net_stats_update_tcp_seg_recv(conn->iface);
 
@@ -1996,15 +2146,18 @@ next_state:
 			if (ret < 0 && ret != -ENOBUFS) {
 				tcp_out(conn, RST);
 				conn_state(conn, TCP_CLOSED);
+				close_status = ret;
 				break;
+			}
+
+			if (tcp_window_full(conn)) {
+				(void)k_sem_take(&conn->tx_sem, K_NO_WAIT);
 			}
 		}
 
 		if (th) {
 			if (th_seq(th) == conn->ack) {
-				if (!tcp_data_received(conn, pkt, &len)) {
-					break;
-				}
+				verdict = tcp_data_received(conn, pkt, &len);
 			} else if (net_tcp_seq_greater(conn->ack, th_seq(th))) {
 				tcp_out(conn, ACK); /* peer has resent */
 
@@ -2023,6 +2176,7 @@ next_state:
 		if (th && FL(&fl, ==, ACK, th_seq(th) == conn->ack)) {
 			tcp_send_timer_cancel(conn);
 			next = TCP_CLOSED;
+			close_status = 0;
 		}
 		break;
 	case TCP_CLOSED:
@@ -2067,6 +2221,14 @@ next_state:
 		}
 		break;
 	case TCP_TIME_WAIT:
+		/* Acknowledge any FIN attempts, in case retransmission took
+		 * place.
+		 */
+		if (th && (FL(&fl, ==, (FIN | ACK), th_seq(th) + 1 == conn->ack) ||
+			   FL(&fl, ==, FIN, th_seq(th) + 1 == conn->ack))) {
+			tcp_out(conn, ACK);
+		}
+
 		k_work_reschedule_for_queue(
 			&tcp_work_q, &conn->timewait_timer,
 			K_MSEC(CONFIG_NET_TCP_TIME_WAIT_DELAY));
@@ -2121,8 +2283,10 @@ next_state:
 	 * to a deadlock.
 	 */
 	if (do_close) {
-		tcp_conn_unref(conn);
+		tcp_conn_unref(conn, close_status);
 	}
+
+	return verdict;
 }
 
 /* Active connection close: send FIN and go to FIN_WAIT_1 state */
@@ -2194,21 +2358,21 @@ int net_tcp_listen(struct net_context *context)
 
 int net_tcp_update_recv_wnd(struct net_context *context, int32_t delta)
 {
-	int32_t new_win;
+	struct tcp *conn = context->tcp;
+	int ret;
 
-	if (!context->tcp) {
+	if (!conn) {
 		NET_ERR("context->tcp == NULL");
 		return -EPROTOTYPE;
 	}
 
-	new_win = ((struct tcp *)context->tcp)->recv_win + delta;
-	if (new_win < 0 || new_win > UINT16_MAX) {
-		return -EINVAL;
-	}
+	k_mutex_lock(&conn->lock, K_FOREVER);
 
-	((struct tcp *)context->tcp)->recv_win = new_win;
+	ret = tcp_update_recv_wnd((struct tcp *)context->tcp, delta);
 
-	return 0;
+	k_mutex_unlock(&conn->lock);
+
+	return ret;
 }
 
 /* net_context queues the outgoing data for the TCP connection */
@@ -2227,7 +2391,11 @@ int net_tcp_queue_data(struct net_context *context, struct net_pkt *pkt)
 
 	if (tcp_window_full(conn)) {
 		if (conn->send_win == 0) {
-			tcp_out_ext(conn, ACK, NULL, conn->seq - 1);
+			/* No point retransmiting if the current TX window size
+			 * is 0.
+			 */
+			ret = -EAGAIN;
+			goto out;
 		}
 
 		/* Trigger resend if the timer is not active */
@@ -2260,11 +2428,6 @@ int net_tcp_queue_data(struct net_context *context, struct net_pkt *pkt)
 		goto out;
 	}
 
-	if (conn->data_mode == TCP_DATA_MODE_RESEND) {
-		ret = -EAGAIN;
-		goto out;
-	}
-
 	len = net_pkt_get_len(pkt);
 
 	if (conn->send_data->buffer) {
@@ -2279,8 +2442,21 @@ int net_tcp_queue_data(struct net_context *context, struct net_pkt *pkt)
 
 	ret = tcp_send_queued_data(conn);
 	if (ret < 0 && ret != -ENOBUFS) {
-		tcp_conn_unref(conn);
+		tcp_conn_unref(conn, ret);
 		goto out;
+	}
+
+	if ((ret == -ENOBUFS) &&
+		(conn->send_data_total < (conn->unacked_len + len))) {
+		/* Some of the data has been sent, we cannot remove the
+		 * whole chunk, the remainder portion is already
+		 * in the send_data and will be transmitted upon a
+		 * received ack or the next send call
+		 *
+		 * Set the return code back to 0 to pretend we just
+		 * transmitted the chunk
+		 */
+		ret = 0;
 	}
 
 	if (ret == -ENOBUFS) {
@@ -2296,7 +2472,23 @@ int net_tcp_queue_data(struct net_context *context, struct net_pkt *pkt)
 			pkt->buffer = conn->send_data->buffer;
 			conn->send_data->buffer = NULL;
 		}
+
+		/* If we have out-of-bufs case, and the send_data buffer has
+		 * become empty, till the retransmit timer, as there is no
+		 * data to retransmit.
+		 * The socket layer will catch this and resend data if needed.
+		 * Only perform this when it is just the newly added packet,
+		 * otherwise it can disrupt any pending transmission
+		 */
+		if (conn->send_data_total == 0) {
+			NET_DBG("No bufs, cancelling retransmit timer");
+			k_work_cancel_delayable(&conn->send_data_timer);
+		}
 	} else {
+		if (tcp_window_full(conn)) {
+			(void)k_sem_take(&conn->tx_sem, K_NO_WAIT);
+		}
+
 		/* We should not free the pkt if there was an error. It will be
 		 * freed in net_context.c:context_sendto()
 		 */
@@ -2429,13 +2621,13 @@ int net_tcp_connect(struct net_context *context,
 	 * a TCP connection to be established
 	 */
 	conn->in_connect = !IS_ENABLED(CONFIG_NET_TEST_PROTOCOL);
-	tcp_in(conn, NULL);
+	(void)tcp_in(conn, NULL);
 
 	if (!IS_ENABLED(CONFIG_NET_TEST_PROTOCOL)) {
 		if (k_sem_take(&conn->connect_sem, timeout) != 0 &&
 		    conn->state != TCP_ESTABLISHED) {
 			conn->in_connect = false;
-			tcp_conn_unref(conn);
+			tcp_conn_unref(conn, -ETIMEDOUT);
 			ret = -ETIMEDOUT;
 			goto out;
 		}
@@ -2595,6 +2787,7 @@ static enum net_verdict tcp_input(struct net_conn *net_conn,
 				  void *user_data)
 {
 	struct tcphdr *th = th_get(pkt);
+	enum net_verdict verdict = NET_DROP;
 
 	if (th) {
 		struct tcp *conn = tcp_conn_search(pkt);
@@ -2615,11 +2808,11 @@ static enum net_verdict tcp_input(struct net_conn *net_conn,
 
 		if (conn) {
 			conn->iface = pkt->iface;
-			tcp_in(conn, pkt);
+			verdict = tcp_in(conn, pkt);
 		}
 	}
 
-	return NET_DROP;
+	return verdict;
 }
 
 static size_t tp_tcp_recv_cb(struct tcp *conn, struct net_pkt *pkt)
@@ -2684,6 +2877,7 @@ enum net_verdict tp_input(struct net_conn *net_conn,
 	enum tp_type type;
 	bool responded = false;
 	static char buf[512];
+	enum net_verdict verdict = NET_DROP;
 
 	net_pkt_cursor_init(pkt);
 	net_pkt_set_overwrite(pkt, true);
@@ -2732,7 +2926,7 @@ enum net_verdict tp_input(struct net_conn *net_conn,
 				tcp_conn_ref(conn);
 			}
 			conn->seq = tp->seq;
-			tcp_in(conn, NULL);
+			verdict = tcp_in(conn, NULL);
 		}
 		if (is("CLOSE", tp->op)) {
 			tp_trace = false;
@@ -2741,7 +2935,7 @@ enum net_verdict tp_input(struct net_conn *net_conn,
 
 				conn = (void *)sys_slist_peek_head(&tcp_conns);
 				context = conn->context;
-				while (tcp_conn_unref(conn))
+				while (tcp_conn_unref(conn, 0))
 					;
 				tcp_free(context);
 			}
@@ -2812,7 +3006,7 @@ enum net_verdict tp_input(struct net_conn *net_conn,
 		tp_output(pkt->family, pkt->iface, buf, 1);
 	}
 
-	return NET_DROP;
+	return verdict;
 }
 
 static void test_cb_register(sa_family_t family, uint8_t proto, uint16_t remote_port,
@@ -2856,7 +3050,7 @@ void net_tcp_foreach(net_tcp_cb_t cb, void *user_data)
 	k_mutex_unlock(&tcp_lock);
 }
 
-uint16_t net_tcp_get_recv_mss(const struct tcp *conn)
+uint16_t net_tcp_get_supported_mss(const struct tcp *conn)
 {
 	sa_family_t family = net_context_get_family(conn->context);
 
@@ -2897,9 +3091,66 @@ uint16_t net_tcp_get_recv_mss(const struct tcp *conn)
 	return 0;
 }
 
+int net_tcp_set_option(struct net_context *context,
+		       enum tcp_conn_option option,
+		       const void *value, size_t len)
+{
+	int ret = 0;
+
+	NET_ASSERT(context);
+
+	struct tcp *conn = context->tcp;
+
+	NET_ASSERT(conn);
+
+	k_mutex_lock(&conn->lock, K_FOREVER);
+
+	switch (option) {
+	case TCP_OPT_NODELAY:
+		ret = set_tcp_nodelay(conn, value, len);
+		break;
+	}
+
+	k_mutex_unlock(&conn->lock);
+
+	return ret;
+}
+
+int net_tcp_get_option(struct net_context *context,
+		       enum tcp_conn_option option,
+		       void *value, size_t *len)
+{
+	int ret = 0;
+
+	NET_ASSERT(context);
+
+	struct tcp *conn = context->tcp;
+
+	NET_ASSERT(conn);
+
+	k_mutex_lock(&conn->lock, K_FOREVER);
+
+	switch (option) {
+	case TCP_OPT_NODELAY:
+		ret = get_tcp_nodelay(conn, value, len);
+		break;
+	}
+
+	k_mutex_unlock(&conn->lock);
+
+	return ret;
+}
+
 const char *net_tcp_state_str(enum tcp_state state)
 {
 	return tcp_state_to_str(state, false);
+}
+
+struct k_sem *net_tcp_tx_sem_get(struct net_context *context)
+{
+	struct tcp *conn = context->tcp;
+
+	return &conn->tx_sem;
 }
 
 void net_tcp_init(void)

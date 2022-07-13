@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <soc.h>
-#include <bluetooth/hci.h>
-#include <sys/byteorder.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/sys/byteorder.h>
 
 #include "util/util.h"
 #include "util/memq.h"
@@ -285,9 +285,11 @@ uint8_t ll_create_connection(uint16_t scan_interval, uint16_t scan_window,
 	conn->supervision_reload = RADIO_CONN_EVENTS(timeout * 10000U,
 							 conn_interval_us);
 
+#if defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
 	conn->procedure_expire = 0U;
 	conn->procedure_reload = RADIO_CONN_EVENTS(40000000,
 						       conn_interval_us);
+#endif /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 
 #if defined(CONFIG_BT_CTLR_LE_PING)
 	conn->apto_expire = 0U;
@@ -322,6 +324,12 @@ uint8_t ll_create_connection(uint16_t scan_interval, uint16_t scan_window,
 	 * terminate ind rx node
 	 */
 	conn->llcp_terminate.node_rx.hdr.link = link;
+
+#if defined(CONFIG_BT_CTLR_RX_ENQUEUE_HOLD)
+	conn->llcp_rx_hold = NULL;
+	conn_lll->rx_hold_req = 0U;
+	conn_lll->rx_hold_ack = 0U;
+#endif /* CONFIG_BT_CTLR_RX_ENQUEUE_HOLD */
 
 #if defined(CONFIG_BT_CTLR_LE_ENC)
 	conn_lll->enc_rx = conn_lll->enc_tx = 0U;
@@ -360,6 +368,9 @@ uint8_t ll_create_connection(uint16_t scan_interval, uint16_t scan_window,
 #else /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 	/* Re-initialize the control procedure data structures */
 	ull_llcp_init(conn);
+
+	/* Setup the PRT reload */
+	ull_cp_prt_reload_set(conn, conn_interval_us);
 
 	conn->central.terminate_ack = 0U;
 

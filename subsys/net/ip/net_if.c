@@ -4,23 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_if, CONFIG_NET_IF_LOG_LEVEL);
 
-#include <init.h>
-#include <kernel.h>
-#include <linker/sections.h>
-#include <random/rand32.h>
-#include <syscall_handler.h>
+#include <zephyr/init.h>
+#include <zephyr/kernel.h>
+#include <zephyr/linker/sections.h>
+#include <zephyr/random/rand32.h>
+#include <zephyr/syscall_handler.h>
 #include <stdlib.h>
 #include <string.h>
-#include <net/igmp.h>
-#include <net/net_core.h>
-#include <net/net_pkt.h>
-#include <net/net_if.h>
-#include <net/net_mgmt.h>
-#include <net/ethernet.h>
-#include <net/virtual.h>
+#include <zephyr/net/igmp.h>
+#include <zephyr/net/net_core.h>
+#include <zephyr/net/net_pkt.h>
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_mgmt.h>
+#include <zephyr/net/ethernet.h>
+#include <zephyr/net/virtual.h>
 
 #include "net_private.h"
 #include "ipv6.h"
@@ -43,6 +43,8 @@ static K_MUTEX_DEFINE(lock);
 /* net_if dedicated section limiters */
 extern struct net_if _net_if_list_start[];
 extern struct net_if _net_if_list_end[];
+
+static struct net_if *default_iface;
 
 #if defined(CONFIG_NET_NATIVE_IPV4) || defined(CONFIG_NET_NATIVE_IPV6)
 static struct net_if_router routers[CONFIG_NET_MAX_ROUTERS];
@@ -552,12 +554,21 @@ struct net_if *net_if_lookup_by_dev(const struct device *dev)
 	return NULL;
 }
 
+void net_if_set_default(struct net_if *iface)
+{
+	default_iface = iface;
+}
+
 struct net_if *net_if_get_default(void)
 {
 	struct net_if *iface = NULL;
 
 	if (_net_if_list_start == _net_if_list_end) {
 		return NULL;
+	}
+
+	if (default_iface != NULL) {
+		return default_iface;
 	}
 
 #if defined(CONFIG_NET_DEFAULT_IF_ETHERNET)

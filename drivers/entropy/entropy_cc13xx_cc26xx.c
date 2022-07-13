@@ -6,15 +6,15 @@
 
 #define DT_DRV_COMPAT ti_cc13xx_cc26xx_trng
 
-#include <kernel.h>
-#include <device.h>
-#include <drivers/entropy.h>
-#include <irq.h>
-#include <pm/policy.h>
-#include <pm/device.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/entropy.h>
+#include <zephyr/irq.h>
+#include <zephyr/pm/policy.h>
+#include <zephyr/pm/device.h>
 
-#include <sys/ring_buffer.h>
-#include <sys/sys_io.h>
+#include <zephyr/sys/ring_buffer.h>
+#include <zephyr/sys/sys_io.h>
 
 #include <driverlib/prcm.h>
 #include <driverlib/trng.h>
@@ -101,7 +101,7 @@ static int entropy_cc13xx_cc26xx_get_entropy(const struct device *dev,
 	unsigned int key = irq_lock();
 
 	if (!data->constrained) {
-		pm_policy_state_lock_get(PM_STATE_STANDBY);
+		pm_policy_state_lock_get(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
 		data->constrained = true;
 	}
 	irq_unlock(key);
@@ -147,7 +147,8 @@ static void entropy_cc13xx_cc26xx_isr(const struct device *dev)
 #ifdef CONFIG_PM
 			if (data->constrained) {
 				pm_policy_state_lock_put(
-					PM_STATE_STANDBY);
+					PM_STATE_STANDBY,
+					PM_ALL_SUBSTATES);
 				data->constrained = false;
 			}
 #endif
@@ -290,7 +291,7 @@ static int entropy_cc13xx_cc26xx_init(const struct device *dev)
 #if defined(CONFIG_PM)
 	Power_setDependency(PowerCC26XX_PERIPH_TRNG);
 	/* Stay out of standby until buffer is filled with entropy */
-	pm_policy_state_lock_get(PM_STATE_STANDBY);
+	pm_policy_state_lock_get(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
 	data->constrained = true;
 	/* Register notification function */
 	Power_registerNotify(&data->post_notify,

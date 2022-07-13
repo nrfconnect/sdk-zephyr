@@ -8,7 +8,7 @@
 #define ZEPHYR_INCLUDE_IPC_IPC_SERVICE_H_
 
 #include <stdio.h>
-#include <device.h>
+#include <zephyr/device.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -233,6 +233,7 @@ int ipc_service_register_endpoint(const struct device *instance,
  *  @retval -EBADMSG when the data is invalid (i.e. invalid data format,
  *		     invalid length, ...)
  *  @retval -EBUSY when the instance is busy.
+ *  @retval -ENOMEM when no memory / buffers are available.
  *
  *  @retval bytes number of bytes sent.
  *  @retval other errno codes depending on the implementation of the backend.

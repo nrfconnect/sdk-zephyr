@@ -17,8 +17,8 @@
 #ifndef ZEPHYR_INCLUDE_CRYPTO_CIPHER_H_
 #define ZEPHYR_INCLUDE_CRYPTO_CIPHER_H_
 
-#include <device.h>
-#include <sys/util.h>
+#include <zephyr/device.h>
+#include <zephyr/sys/util.h>
 /**
  * @addtogroup crypto_cipher
  * @{

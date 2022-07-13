@@ -194,7 +194,7 @@ A device-specific API definition typically looks like this:
 
 .. code-block:: C
 
-   #include <drivers/subsystem.h>
+   #include <zephyr/drivers/subsystem.h>
 
    /* When extensions need not be invoked from user mode threads */
    int specific_do_that(const struct device *dev, int foo);
@@ -235,7 +235,7 @@ implementation of both the subsystem API and the specific APIs:
 
    #ifdef CONFIG_USERSPACE
 
-   #include <syscall_handler.h>
+   #include <zephyr/syscall_handler.h>
 
    int z_vrfy_specific_from_user(const struct device *dev, int bar)
    {
@@ -526,6 +526,37 @@ For example:
       /* Write some data to the MMIO regions */
       sys_write32(0xDEADBEEF, DEVICE_MMIO_GET(dev, grault));
       sys_write32(0xF0CCAC1A, DEVICE_MMIO_GET(dev, corge));
+      ...
+   }
+
+Device Model Drivers with multiple MMIO regions in the same DT node
+===================================================================
+
+Some drivers may have multiple MMIO regions defined into the same DT device
+node using the ``reg-names`` property to differentiate them, for example:
+
+.. code-block:: devicetree
+
+   /dts-v1/;
+
+   / {
+           a-driver@40000000 {
+                   reg = <0x40000000 0x1000>,
+                         <0x40001000 0x1000>;
+                   reg-names = "corge", "grault";
+           };
+   };
+
+This can be managed as seen in the previous section but this time using the
+``DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME`` macro instead. So the only difference
+would be in the driver config struct:
+
+.. code-block:: C
+
+   const static struct my_driver_config my_driver_config_0 = {
+      ...
+      DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(corge, DT_DRV_INST(...)),
+      DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(grault, DT_DRV_INST(...)),
       ...
    }
 

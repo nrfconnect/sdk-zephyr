@@ -68,7 +68,7 @@ backend.
     ``settings_load()``.
 
 **csi_save**
-    This gets called when a saving a single setting to persistent storage using
+    This gets called when saving a single setting to persistent storage using
     ``settings_save_one()``.
 
 **csi_save_start**
@@ -199,7 +199,7 @@ export functionality, for example, writing to the shell console).
     }
 
     static int foo_settings_export(int (*storage_func)(const char *name,
-                                                       void *value,
+                                                       const void *value,
                                                        size_t val_len))
     {
         return storage_func("foo/bar", &foo_val, sizeof(foo_val));
@@ -225,10 +225,10 @@ up from where it was before restart.
 
 .. code-block:: c
 
-    #include <zephyr.h>
-    #include <sys/reboot.h>
-    #include <settings/settings.h>
-    #include <sys/printk.h>
+    #include <zephyr/zephyr.h>
+    #include <zephyr/sys/reboot.h>
+    #include <zephyr/settings/settings.h>
+    #include <zephyr/sys/printk.h>
     #include <inttypes.h>
 
     #define DEFAULT_FOO_VAL_VALUE 0
@@ -274,7 +274,7 @@ up from where it was before restart.
 
         printk("foo: %d\n", foo_val);
 
-        k_sleep(1000);
+        k_msleep(1000);
         sys_reboot(SYS_REBOOT_COLD);
     }
 

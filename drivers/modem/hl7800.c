@@ -6,7 +6,7 @@
 
 #define DT_DRV_COMPAT swir_hl7800
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(modem_hl7800, CONFIG_MODEM_LOG_LEVEL);
 
 #include <zephyr/types.h>
@@ -14,19 +14,19 @@ LOG_MODULE_REGISTER(modem_hl7800, CONFIG_MODEM_LOG_LEVEL);
 #include <stdlib.h>
 #include <ctype.h>
 #include <errno.h>
-#include <zephyr.h>
-#include <drivers/gpio.h>
-#include <device.h>
-#include <init.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
 
-#include <pm/device.h>
-#include <drivers/uart.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/drivers/uart.h>
 
-#include <net/net_context.h>
-#include <net/net_if.h>
-#include <net/net_offload.h>
-#include <net/net_pkt.h>
-#include <net/dns_resolve.h>
+#include <zephyr/net/net_context.h>
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_offload.h>
+#include <zephyr/net/net_pkt.h>
+#include <zephyr/net/dns_resolve.h>
 #if defined(CONFIG_NET_IPV6)
 #include "ipv6.h"
 #endif
@@ -38,11 +38,11 @@ LOG_MODULE_REGISTER(modem_hl7800, CONFIG_MODEM_LOG_LEVEL);
 #endif
 
 #ifdef CONFIG_MODEM_HL7800_FW_UPDATE
-#include <fs/fs.h>
+#include <zephyr/fs/fs.h>
 #endif
 
 #include "modem_receiver.h"
-#include <drivers/modem/hl7800.h>
+#include <zephyr/drivers/modem/hl7800.h>
 
 #define PREFIXED_SWITCH_CASE_RETURN_STRING(prefix, val)                        \
 	case prefix##_##val: {                                                 \
@@ -406,6 +406,7 @@ static uint8_t mdm_recv_buf[MDM_MAX_DATA_LENGTH];
 
 static K_SEM_DEFINE(hl7800_RX_lock_sem, 1, 1);
 static K_SEM_DEFINE(hl7800_TX_lock_sem, 1, 1);
+static K_MUTEX_DEFINE(cb_lock);
 
 /* RX thread structures */
 K_THREAD_STACK_DEFINE(hl7800_rx_stack, CONFIG_MODEM_HL7800_RX_STACK_SIZE);
@@ -557,7 +558,6 @@ struct hl7800_iface_ctx {
 	enum hl7800_lpm low_power_mode;
 	enum mdm_hl7800_network_state network_state;
 	enum net_operator_status operator_status;
-	void (*event_callback)(enum mdm_hl7800_event event, void *event_data);
 	struct tm local_time;
 	int32_t local_time_offset;
 	bool local_time_valid;
@@ -577,6 +577,9 @@ struct cmd_handler {
 	uint16_t cmd_len;
 	bool (*func)(struct net_buf **buf, uint16_t len);
 };
+
+static sys_slist_t hl7800_event_callback_list =
+	SYS_SLIST_STATIC_INIT(&hl7800_event_callback_list);
 
 static struct hl7800_iface_ctx ictx;
 
@@ -962,9 +965,17 @@ static void allow_sleep(bool allow)
 
 static void event_handler(enum mdm_hl7800_event event, void *event_data)
 {
-	if (ictx.event_callback != NULL) {
-		ictx.event_callback(event, event_data);
+	sys_snode_t *node;
+	struct mdm_hl7800_callback_agent *agent;
+
+	k_mutex_lock(&cb_lock, K_FOREVER);
+	SYS_SLIST_FOR_EACH_NODE(&hl7800_event_callback_list, node) {
+		agent = CONTAINER_OF(node, struct mdm_hl7800_callback_agent, node);
+		if (agent->event_callback != NULL) {
+			agent->event_callback(event, event_data);
+		}
 	}
+	k_mutex_unlock(&cb_lock);
 }
 
 void mdm_hl7800_get_signal_quality(int *rsrp, int *sinr)
@@ -1219,7 +1230,7 @@ int32_t mdm_hl7800_get_functionality(void)
 int32_t mdm_hl7800_set_functionality(enum mdm_hl7800_functionality mode)
 {
 	int ret;
-	char buf[sizeof("AT+CFUN=0,0")] = { 0 };
+	char buf[sizeof("AT+CFUN=###,0")] = { 0 };
 
 	hl7800_lock();
 	wakeup_hl7800();
@@ -3818,7 +3829,7 @@ done:
 
 static int delete_socket(struct hl7800_socket *sock, enum net_sock_type type, uint8_t id)
 {
-	char cmd[sizeof("AT+KUDPCLOSE=##")];
+	char cmd[sizeof("AT+KUDPCLOSE=###")];
 
 	if (type == SOCK_STREAM) {
 		snprintk(cmd, sizeof(cmd), "AT+KTCPDEL=%d", id);
@@ -4094,7 +4105,7 @@ done:
 
 static int start_socket_rx(struct hl7800_socket *sock, uint16_t rx_size)
 {
-	char sendbuf[sizeof("AT+KTCPRCV=##,####")];
+	char sendbuf[sizeof("AT+KTCPRCV=+#########,#####")];
 
 	if ((sock->socket_id <= 0) || (sock->rx_size <= 0)) {
 		LOG_WRN("Cannot start socket RX, ID: %d rx size: %d",
@@ -4698,8 +4709,6 @@ static void mdm_vgpio_work_cb(struct k_work *item)
 		    ictx.desired_sleep_level == HL7800_SLEEP_LITE_HIBERNATE) {
 			if (ictx.sleep_state != ictx.desired_sleep_level) {
 				set_sleep_state(ictx.desired_sleep_level);
-			} else {
-				LOG_WRN("Unexpected sleep condition");
 			}
 		}
 		if (ictx.iface && ictx.initialized && net_if_is_up(ictx.iface) &&
@@ -4842,15 +4851,15 @@ void mdm_uart_cts_callback(const struct device *port, struct gpio_callback *cb, 
 	}
 
 #ifdef CONFIG_MODEM_HL7800_LOW_POWER_MODE
-	if (ictx.desired_sleep_level == HL7800_SLEEP_SLEEP) {
-		if (ictx.cts_state) {
-			/* HL7800 is not awake, shut down UART to save power */
+	if (ictx.cts_state) {
+		/* HL7800 is not awake, shut down UART to save power */
+		if (ictx.allow_sleep) {
 			shutdown_uart();
-		} else {
-			power_on_uart();
-			if (ictx.sleep_state == HL7800_SLEEP_SLEEP) {
-				allow_sleep(false);
-			}
+		}
+	} else {
+		power_on_uart();
+		if (ictx.sleep_state == HL7800_SLEEP_SLEEP) {
+			allow_sleep(false);
 		}
 	}
 #endif
@@ -5316,12 +5325,14 @@ reboot:
 	/* query modem serial number */
 	SEND_COMPLEX_AT_CMD("AT+KGSN=3");
 
-	/* query SIM ICCID */
-	SEND_AT_CMD_IGNORE_ERROR("AT+CCID?");
+	if (ictx.mdm_startup_state != HL7800_STARTUP_STATE_SIM_NOT_PRESENT) {
+		/* query SIM ICCID */
+		SEND_AT_CMD_IGNORE_ERROR("AT+CCID?");
 
-	/* query SIM IMSI */
-	(void)send_at_cmd(NULL, "AT+CIMI", MDM_CMD_SEND_TIMEOUT,
-			  MDM_DEFAULT_AT_CMD_RETRIES, true);
+		/* query SIM IMSI */
+		(void)send_at_cmd(NULL, "AT+CIMI", MDM_CMD_SEND_TIMEOUT, MDM_DEFAULT_AT_CMD_RETRIES,
+				  true);
+	}
 
 	/* Query PDP context to get APN */
 	SEND_AT_CMD_EXPECT_OK("AT+CGDCONT?");
@@ -5476,12 +5487,21 @@ int32_t mdm_hl7800_power_off(void)
 	return rc;
 }
 
-void mdm_hl7800_register_event_callback(mdm_hl7800_event_callback_t cb)
+void mdm_hl7800_register_event_callback(struct mdm_hl7800_callback_agent *agent)
 {
-	int key = irq_lock();
+	k_mutex_lock(&cb_lock, K_FOREVER);
+	if (!agent->event_callback) {
+		LOG_WRN("event_callback is NULL");
+	}
+	sys_slist_append(&hl7800_event_callback_list, &agent->node);
+	k_mutex_unlock(&cb_lock);
+}
 
-	ictx.event_callback = cb;
-	irq_unlock(key);
+void mdm_hl7800_unregister_event_callback(struct mdm_hl7800_callback_agent *agent)
+{
+	k_mutex_lock(&cb_lock, K_FOREVER);
+	(void)sys_slist_find_and_remove(&hl7800_event_callback_list, &agent->node);
+	k_mutex_unlock(&cb_lock);
 }
 
 /*** OFFLOAD FUNCTIONS ***/

@@ -20,15 +20,15 @@
 #include <stm32_ll_rcc.h>
 #include <stm32_ll_system.h>
 #include <string.h>
-#include <usb/usb_device.h>
-#include <drivers/clock_control/stm32_clock_control.h>
-#include <sys/util.h>
-#include <drivers/gpio.h>
-#include <drivers/pinctrl.h>
+#include <zephyr/usb/usb_device.h>
+#include <zephyr/drivers/clock_control/stm32_clock_control.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/pinctrl.h>
 #include "stm32_hsem.h"
 
 #define LOG_LEVEL CONFIG_USB_DRIVER_LOG_LEVEL
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(usb_dc_stm32);
 
 #if DT_HAS_COMPAT_STATUS_OKAY(st_stm32_otgfs) && DT_HAS_COMPAT_STATUS_OKAY(st_stm32_otghs)
@@ -1099,7 +1099,7 @@ void HAL_PCD_DataInStageCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
 	}
 }
 
-#if (defined(USB) || defined(USB_DRD_FS)) && defined(CONFIG_USB_DC_STM32_DISCONN_ENABLE)
+#if (defined(USB) || defined(USB_DRD_FS)) && DT_INST_NODE_HAS_PROP(0, disconnect_gpios)
 void HAL_PCDEx_SetConnectionState(PCD_HandleTypeDef *hpcd, uint8_t state)
 {
 	const struct device *usb_disconnect;
@@ -1112,4 +1112,4 @@ void HAL_PCDEx_SetConnectionState(PCD_HandleTypeDef *hpcd, uint8_t state)
 			   DT_GPIO_FLAGS(DT_INST(0, st_stm32_usb), disconnect_gpios) |
 			   (state ? GPIO_OUTPUT_ACTIVE : GPIO_OUTPUT_INACTIVE));
 }
-#endif /* USB && CONFIG_USB_DC_STM32_DISCONN_ENABLE */
+#endif /* USB && DT_INST_NODE_HAS_PROP(0, disconnect_gpios) */

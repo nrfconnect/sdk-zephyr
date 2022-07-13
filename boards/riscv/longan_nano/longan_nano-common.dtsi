@@ -96,3 +96,23 @@
 	pinctrl-0 = <&dac_default>;
 	pinctrl-names = "default";
 };
+
+&spi1 {
+	status = "okay";
+	pinctrl-0 = <&spi1_default>;
+	pinctrl-names = "default";
+
+	cs-gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
+
+	sdhc0: sdhc@0 {
+		compatible = "zephyr,sdhc-spi-slot";
+		reg = <0>;
+		status = "okay";
+		label = "SDHC_0";
+		spi-max-frequency = <24000000>;
+		mmc {
+			compatible = "zephyr,sdmmc-disk";
+			status = "okay";
+		};
+	};
+};

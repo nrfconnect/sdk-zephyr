@@ -11,12 +11,12 @@
  * Linker script for the Cortex-M platforms.
  */
 
-#include <linker/sections.h>
-#include <devicetree.h>
+#include <zephyr/linker/sections.h>
+#include <zephyr/devicetree.h>
 
-#include <linker/devicetree_regions.h>
-#include <linker/linker-defs.h>
-#include <linker/linker-tool.h>
+#include <zephyr/linker/devicetree_regions.h>
+#include <zephyr/linker/linker-defs.h>
+#include <zephyr/linker/linker-tool.h>
 
 /* physical address of RAM */
 #ifdef CONFIG_XIP
@@ -136,7 +136,7 @@ ENTRY(CONFIG_KERNEL_ENTRY)
 SECTIONS
     {
 
-#include <linker/rel-sections.ld>
+#include <zephyr/linker/rel-sections.ld>
 
     /*
      * .plt and .iplt are here according to 'arm-zephyr-elf-ld --verbose',
@@ -177,7 +177,7 @@ SECTIONS
 	{
 	__text_region_start = .;
 
-#include <linker/kobject-text.ld>
+#include <zephyr/linker/kobject-text.ld>
 
 	*(.text)
 	*(".text.*")
@@ -221,8 +221,8 @@ SECTIONS
 
 	__rodata_region_start = .;
 
-#include <linker/common-rom.ld>
-#include <linker/thread-local-storage.ld>
+#include <zephyr/linker/common-rom.ld>
+#include <zephyr/linker/thread-local-storage.ld>
 
     SECTION_PROLOGUE(_RODATA_SECTION_NAME,,)
 	{
@@ -235,7 +235,7 @@ SECTIONS
  */
 #include <snippets-rodata.ld>
 
-#include <linker/kobject-rom.ld>
+#include <zephyr/linker/kobject-rom.ld>
 
 	/*
 	 * For XIP images, in order to avoid the situation when __data_rom_start
@@ -250,7 +250,7 @@ SECTIONS
 	. = ALIGN(4);
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
-#include <linker/cplusplus-rom.ld>
+#include <zephyr/linker/cplusplus-rom.ld>
 
 	__rodata_region_end = .;
 	MPU_ALIGN(__rodata_region_end -__rom_region_start);
@@ -318,7 +318,7 @@ SECTIONS
 	__bss_end = ALIGN(4);
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
 
-#include <linker/common-noinit.ld>
+#include <zephyr/linker/common-noinit.ld>
 
 #endif  /* CONFIG_USERSPACE */
 
@@ -348,10 +348,10 @@ SECTIONS
 
     __data_region_load_start = LOADADDR(_DATA_SECTION_NAME);
 
-#include <linker/common-ram.ld>
-#include <linker/kobject-data.ld>
+#include <zephyr/linker/common-ram.ld>
+#include <zephyr/linker/kobject-data.ld>
 
-#include <linker/cplusplus-ram.ld>
+#include <zephyr/linker/cplusplus-ram.ld>
 
 /* Located in generated directory. This file is populated by the
  * zephyr_linker_sources() Cmake function.
@@ -472,7 +472,7 @@ GROUP_END(DTCM)
  */
 #include <snippets-sections.ld>
 
-#include <linker/debug-sections.ld>
+#include <zephyr/linker/debug-sections.ld>
 
     /DISCARD/ : { *(.note.GNU-stack) }
 

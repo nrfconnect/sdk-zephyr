@@ -27,7 +27,7 @@
 	pwmleds {
 		compatible = "pwm-leds";
 		pwm_led0: pwm_led_0 {
-			pwms = <&pwm0 3>;
+			pwms = <&pwm0 0 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
 		};
 	};
 
@@ -45,6 +45,8 @@
 		bootloader-led0 = &blue_led;
 		pwm-led0 = &pwm_led0;
 		sw0 = &button0;
+		mcuboot-button0 = &button0;
+		mcuboot-led0 = &blue_led;
 	};
 
 	/* Used for accessing other pins */

@@ -23,11 +23,13 @@
 #include <errno.h>
 #include <stdint.h>
 
-#include <device.h>
-#include <sys/math_extras.h>
-#include <toolchain.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/sys_clock.h>
+#include <zephyr/sys/math_extras.h>
+#include <zephyr/toolchain.h>
 
-#include <dt-bindings/pwm/pwm.h>
+#include <zephyr/dt-bindings/pwm/pwm.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -77,6 +79,295 @@ extern "C" {
 typedef uint16_t pwm_flags_t;
 
 /**
+ * @brief Container for PWM information specified in devicetree.
+ *
+ * This type contains a pointer to a PWM device, channel number (controlled by
+ * the PWM device), the PWM signal period in nanoseconds and the flags
+ * applicable to the channel. Note that not all PWM drivers support flags. In
+ * such case, flags will be set to 0.
+ *
+ * @see PWM_DT_SPEC_GET_BY_NAME
+ * @see PWM_DT_SPEC_GET_BY_NAME_OR
+ * @see PWM_DT_SPEC_GET_BY_IDX
+ * @see PWM_DT_SPEC_GET_BY_IDX_OR
+ * @see PWM_DT_SPEC_GET
+ * @see PWM_DT_SPEC_GET_OR
+ */
+struct pwm_dt_spec {
+	/** PWM device instance. */
+	const struct device *dev;
+	/** Channel number. */
+	uint32_t channel;
+	/** Period in nanoseconds. */
+	uint32_t period;
+	/** Flags. */
+	pwm_flags_t flags;
+};
+
+/**
+ * @brief Static initializer for a struct pwm_dt_spec
+ *
+ * This returns a static initializer for a struct pwm_dt_spec given a devicetree
+ * node identifier and an index.
+ *
+ * Example devicetree fragment:
+ *
+ * @code{.dts}
+ *    n: node {
+ *        pwms = <&pwm1 1 1000 PWM_POLARITY_NORMAL>,
+ *               <&pwm2 3 2000 PWM_POLARITY_INVERTED>;
+ *        pwm-names = "alpha", "beta";
+ *    };
+ * @endcode
+ *
+ * Example usage:
+ *
+ * @code{.c}
+ *    const struct pwm_dt_spec spec =
+ *        PWM_DT_SPEC_GET_BY_NAME(DT_NODELABEL(n), alpha);
+ *
+ *    // Initializes 'spec' to:
+ *    // {
+ *    //         .dev = DEVICE_DT_GET(DT_NODELABEL(pwm1)),
+ *    //         .channel = 1,
+ *    //         .period = 1000,
+ *    //         .flags = PWM_POLARITY_NORMAL,
+ *    // }
+ * @endcode
+ *
+ * The device (dev) must still be checked for readiness, e.g. using
+ * device_is_ready(). It is an error to use this macro unless the node exists,
+ * has the 'pwms' property, and that 'pwms' property specifies a PWM controller,
+ * a channel, a period in nanoseconds and optionally flags.
+ *
+ * @param node_id Devicetree node identifier.
+ * @param name Lowercase-and-underscores name of a pwms element as defined by
+ *             the node's pwm-names property.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property.
+ *
+ * @see PWM_DT_SPEC_INST_GET_BY_NAME
+ */
+#define PWM_DT_SPEC_GET_BY_NAME(node_id, name)				       \
+	{								       \
+		.dev = DEVICE_DT_GET(DT_PWMS_CTLR_BY_NAME(node_id, name)),     \
+		.channel = DT_PWMS_CHANNEL_BY_NAME(node_id, name),	       \
+		.period = DT_PWMS_PERIOD_BY_NAME(node_id, name),	       \
+		.flags = DT_PWMS_FLAGS_BY_NAME(node_id, name),		       \
+	}
+
+/**
+ * @brief Static initializer for a struct pwm_dt_spec from a DT_DRV_COMPAT
+ *        instance.
+ *
+ * @param inst DT_DRV_COMPAT instance number
+ * @param name Lowercase-and-underscores name of a pwms element as defined by
+ *             the node's pwm-names property.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property.
+ *
+ * @see PWM_DT_SPEC_GET_BY_NAME
+ */
+#define PWM_DT_SPEC_INST_GET_BY_NAME(inst, name)			       \
+	PWM_DT_SPEC_GET_BY_NAME(DT_DRV_INST(inst), name)
+
+/**
+ * @brief Like PWM_DT_SPEC_GET_BY_NAME(), with a fallback to a default value.
+ *
+ * If the devicetree node identifier 'node_id' refers to a node with a property
+ * 'pwms', this expands to <tt>PWM_DT_SPEC_GET_BY_NAME(node_id, name)</tt>. The
+ * @p default_value parameter is not expanded in this case. Otherwise, this
+ * expands to @p default_value.
+ *
+ * @param node_id Devicetree node identifier.
+ * @param name Lowercase-and-underscores name of a pwms element as defined by
+ *             the node's pwm-names property
+ * @param default_value Fallback value to expand to.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property,
+ *         or @p default_value if the node or property do not exist.
+ *
+ * @see PWM_DT_SPEC_INST_GET_BY_NAME_OR
+ */
+#define PWM_DT_SPEC_GET_BY_NAME_OR(node_id, name, default_value)	       \
+	COND_CODE_1(DT_NODE_HAS_PROP(node_id, pwms),			       \
+		    (PWM_DT_SPEC_GET_BY_NAME(node_id, name)),		       \
+		    (default_value))
+
+/**
+ * @brief Like PWM_DT_SPEC_INST_GET_BY_NAME(), with a fallback to a default
+ *        value.
+ *
+ * @param inst DT_DRV_COMPAT instance number
+ * @param name Lowercase-and-underscores name of a pwms element as defined by
+ *             the node's pwm-names property.
+ * @param default_value Fallback value to expand to.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property,
+ *         or @p default_value if the node or property do not exist.
+ *
+ * @see PWM_DT_SPEC_GET_BY_NAME_OR
+ */
+#define PWM_DT_SPEC_INST_GET_BY_NAME_OR(inst, name, default_value)	       \
+	PWM_DT_SPEC_GET_BY_NAME_OR(DT_DRV_INST(inst), name, default_value)
+
+/**
+ * @brief Static initializer for a struct pwm_dt_spec
+ *
+ * This returns a static initializer for a struct pwm_dt_spec given a devicetree
+ * node identifier and an index.
+ *
+ * Example devicetree fragment:
+ *
+ * @code{.dts}
+ *    n: node {
+ *        pwms = <&pwm1 1 1000 PWM_POLARITY_NORMAL>,
+ *               <&pwm2 3 2000 PWM_POLARITY_INVERTED>;
+ *    };
+ * @endcode
+ *
+ * Example usage:
+ *
+ * @code{.c}
+ *    const struct pwm_dt_spec spec =
+ *        PWM_DT_SPEC_GET_BY_IDX(DT_NODELABEL(n), 1);
+ *
+ *    // Initializes 'spec' to:
+ *    // {
+ *    //         .dev = DEVICE_DT_GET(DT_NODELABEL(pwm2)),
+ *    //         .channel = 3,
+ *    //         .period = 2000,
+ *    //         .flags = PWM_POLARITY_INVERTED,
+ *    // }
+ * @endcode
+ *
+ * The device (dev) must still be checked for readiness, e.g. using
+ * device_is_ready(). It is an error to use this macro unless the node exists,
+ * has the 'pwms' property, and that 'pwms' property specifies a PWM controller,
+ * a channel, a period in nanoseconds and optionally flags.
+ *
+ * @param node_id Devicetree node identifier.
+ * @param idx Logical index into 'pwms' property.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property.
+ *
+ * @see PWM_DT_SPEC_INST_GET_BY_IDX
+ */
+#define PWM_DT_SPEC_GET_BY_IDX(node_id, idx)				       \
+	{								       \
+		.dev = DEVICE_DT_GET(DT_PWMS_CTLR_BY_IDX(node_id, idx)),       \
+		.channel = DT_PWMS_CHANNEL_BY_IDX(node_id, idx),	       \
+		.period = DT_PWMS_PERIOD_BY_IDX(node_id, idx),		       \
+		.flags = DT_PWMS_FLAGS_BY_IDX(node_id, idx),		       \
+	}
+
+/**
+ * @brief Static initializer for a struct pwm_dt_spec from a DT_DRV_COMPAT
+ *        instance.
+ *
+ * @param inst DT_DRV_COMPAT instance number
+ * @param idx Logical index into 'pwms' property.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property.
+ *
+ * @see PWM_DT_SPEC_GET_BY_IDX
+ */
+#define PWM_DT_SPEC_INST_GET_BY_IDX(inst, idx)				       \
+	PWM_DT_SPEC_GET_BY_IDX(DT_DRV_INST(inst), idx)
+
+/**
+ * @brief Like PWM_DT_SPEC_GET_BY_IDX(), with a fallback to a default value.
+ *
+ * If the devicetree node identifier 'node_id' refers to a node with a property
+ * 'pwms', this expands to <tt>PWM_DT_SPEC_GET_BY_IDX(node_id, idx)</tt>. The
+ * @p default_value parameter is not expanded in this case. Otherwise, this
+ * expands to @p default_value.
+ *
+ * @param node_id Devicetree node identifier.
+ * @param idx Logical index into 'pwms' property.
+ * @param default_value Fallback value to expand to.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property,
+ *         or @p default_value if the node or property do not exist.
+ *
+ * @see PWM_DT_SPEC_INST_GET_BY_IDX_OR
+ */
+#define PWM_DT_SPEC_GET_BY_IDX_OR(node_id, idx, default_value)		       \
+	COND_CODE_1(DT_NODE_HAS_PROP(node_id, pwms),			       \
+		    (PWM_DT_SPEC_GET_BY_IDX(node_id, idx)),		       \
+		    (default_value))
+
+/**
+ * @brief Like PWM_DT_SPEC_INST_GET_BY_IDX(), with a fallback to a default
+ *        value.
+ *
+ * @param inst DT_DRV_COMPAT instance number
+ * @param idx Logical index into 'pwms' property.
+ * @param default_value Fallback value to expand to.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property,
+ *         or @p default_value if the node or property do not exist.
+ *
+ * @see PWM_DT_SPEC_GET_BY_IDX_OR
+ */
+#define PWM_DT_SPEC_INST_GET_BY_IDX_OR(inst, idx, default_value)	       \
+	PWM_DT_SPEC_GET_BY_IDX_OR(DT_DRV_INST(inst), idx, default_value)
+
+/**
+ * @brief Equivalent to <tt>PWM_DT_SPEC_GET_BY_IDX(node_id, 0)</tt>.
+ *
+ * @param node_id Devicetree node identifier.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property.
+ *
+ * @see PWM_DT_SPEC_GET_BY_IDX
+ * @see PWM_DT_SPEC_INST_GET
+ */
+#define PWM_DT_SPEC_GET(node_id) PWM_DT_SPEC_GET_BY_IDX(node_id, 0)
+
+/**
+ * @brief Equivalent to <tt>PWM_DT_SPEC_INST_GET_BY_IDX(inst, 0)</tt>.
+ *
+ * @param inst DT_DRV_COMPAT instance number
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property.
+ *
+ * @see PWM_DT_SPEC_INST_GET_BY_IDX
+ * @see PWM_DT_SPEC_GET
+ */
+#define PWM_DT_SPEC_INST_GET(inst) PWM_DT_SPEC_GET(DT_DRV_INST(inst))
+
+/**
+ * @brief Equivalent to
+ *        <tt>PWM_DT_SPEC_GET_BY_IDX_OR(node_id, 0, default_value)</tt>.
+ *
+ * @param node_id Devicetree node identifier.
+ * @param default_value Fallback value to expand to.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property.
+ *
+ * @see PWM_DT_SPEC_GET_BY_IDX_OR
+ * @see PWM_DT_SPEC_INST_GET_OR
+ */
+#define PWM_DT_SPEC_GET_OR(node_id, default_value)			       \
+	PWM_DT_SPEC_GET_BY_IDX_OR(node_id, 0, default_value)
+
+/**
+ * @brief Equivalent to
+ *        <tt>PWM_DT_SPEC_INST_GET_BY_IDX_OR(inst, 0, default_value)</tt>.
+ *
+ * @param inst DT_DRV_COMPAT instance number
+ * @param default_value Fallback value to expand to.
+ *
+ * @return Static initializer for a struct pwm_dt_spec for the property.
+ *
+ * @see PWM_DT_SPEC_INST_GET_BY_IDX_OR
+ * @see PWM_DT_SPEC_GET_OR
+ */
+#define PWM_DT_SPEC_INST_GET_OR(inst, default_value)			       \
+	PWM_DT_SPEC_GET_OR(DT_DRV_INST(inst), default_value)
+
+/**
  * @brief PWM capture callback handler function signature
  *
  * @note The callback handler will be called in interrupt context.
@@ -85,17 +376,18 @@ typedef uint16_t pwm_flags_t;
  * support.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
+
  * @param period_cycles Captured PWM period width (in clock cycles). HW
  *                      specific.
  * @param pulse_cycles Captured PWM pulse width (in clock cycles). HW specific.
  * @param status Status for the PWM capture (0 if no error, negative errno
- *               otherwise. See pwm_pin_capture_cycles() return value
+ *               otherwise. See pwm_capture_cycles() return value
  *               descriptions for details).
- * @param user_data User data passed to pwm_pin_configure_capture()
+ * @param user_data User data passed to pwm_configure_capture()
  */
 typedef void (*pwm_capture_callback_handler_t)(const struct device *dev,
-					       uint32_t pwm,
+					       uint32_t channel,
 					       uint32_t period_cycles,
 					       uint32_t pulse_cycles,
 					       int status, void *user_data);
@@ -103,51 +395,51 @@ typedef void (*pwm_capture_callback_handler_t)(const struct device *dev,
 /** @cond INTERNAL_HIDDEN */
 /**
  * @brief PWM driver API call to configure PWM pin period and pulse width.
- * @see pwm_pin_set_cycles() for argument description.
+ * @see pwm_set_cycles() for argument description.
  */
-typedef int (*pwm_pin_set_t)(const struct device *dev, uint32_t pwm,
-			     uint32_t period_cycles, uint32_t pulse_cycles,
-			     pwm_flags_t flags);
+typedef int (*pwm_set_cycles_t)(const struct device *dev, uint32_t channel,
+				uint32_t period_cycles, uint32_t pulse_cycles,
+				pwm_flags_t flags);
 
 /**
  * @brief PWM driver API call to obtain the PWM cycles per second (frequency).
  * @see pwm_get_cycles_per_sec() for argument description
  */
 typedef int (*pwm_get_cycles_per_sec_t)(const struct device *dev,
-					uint32_t pwm, uint64_t *cycles);
+					uint32_t channel, uint64_t *cycles);
 
 #ifdef CONFIG_PWM_CAPTURE
 /**
  * @brief PWM driver API call to configure PWM capture.
- * @see pwm_pin_configure_capture() for argument description.
+ * @see pwm_configure_capture() for argument description.
  */
-typedef int (*pwm_pin_configure_capture_t)(const struct device *dev,
-					   uint32_t pwm, pwm_flags_t flags,
-					   pwm_capture_callback_handler_t cb,
-					   void *user_data);
+typedef int (*pwm_configure_capture_t)(const struct device *dev,
+				       uint32_t channel, pwm_flags_t flags,
+				       pwm_capture_callback_handler_t cb,
+				       void *user_data);
+
 /**
  * @brief PWM driver API call to enable PWM capture.
- * @see pwm_pin_enable_capture() for argument description.
+ * @see pwm_enable_capture() for argument description.
  */
-typedef int (*pwm_pin_enable_capture_t)(const struct device *dev,
-					uint32_t pwm);
+typedef int (*pwm_enable_capture_t)(const struct device *dev, uint32_t channel);
 
 /**
  * @brief PWM driver API call to disable PWM capture.
- * @see pwm_pin_disable_capture() for argument description
+ * @see pwm_disable_capture() for argument description
  */
-typedef int (*pwm_pin_disable_capture_t)(const struct device *dev,
-					 uint32_t pwm);
+typedef int (*pwm_disable_capture_t)(const struct device *dev,
+				     uint32_t channel);
 #endif /* CONFIG_PWM_CAPTURE */
 
 /** @brief PWM driver API definition. */
 __subsystem struct pwm_driver_api {
-	pwm_pin_set_t pin_set;
+	pwm_set_cycles_t set_cycles;
 	pwm_get_cycles_per_sec_t get_cycles_per_sec;
 #ifdef CONFIG_PWM_CAPTURE
-	pwm_pin_configure_capture_t pin_configure_capture;
-	pwm_pin_enable_capture_t pin_enable_capture;
-	pwm_pin_disable_capture_t pin_disable_capture;
+	pwm_configure_capture_t configure_capture;
+	pwm_enable_capture_t enable_capture;
+	pwm_disable_capture_t disable_capture;
 #endif /* CONFIG_PWM_CAPTURE */
 };
 /** @endcond */
@@ -173,7 +465,7 @@ __subsystem struct pwm_driver_api {
  * to be driven to a constant active level.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  * @param period Period (in clock cycles) set to the PWM. HW specific.
  * @param pulse Pulse width (in clock cycles) set to the PWM. HW specific.
  * @param flags Flags for pin configuration.
@@ -182,14 +474,13 @@ __subsystem struct pwm_driver_api {
  * @retval -EINVAL If pulse > period.
  * @retval -errno Negative errno code on failure.
  */
-__syscall int pwm_pin_set_cycles(const struct device *dev, uint32_t pwm,
-				 uint32_t period, uint32_t pulse,
-				 pwm_flags_t flags);
+__syscall int pwm_set_cycles(const struct device *dev, uint32_t channel,
+			     uint32_t period, uint32_t pulse,
+			     pwm_flags_t flags);
 
-static inline int z_impl_pwm_pin_set_cycles(const struct device *dev,
-					    uint32_t pwm,
-					    uint32_t period, uint32_t pulse,
-					    pwm_flags_t flags)
+static inline int z_impl_pwm_set_cycles(const struct device *dev,
+					uint32_t channel, uint32_t period,
+					uint32_t pulse, pwm_flags_t flags)
 {
 	const struct pwm_driver_api *api =
 		(const struct pwm_driver_api *)dev->api;
@@ -198,80 +489,41 @@ static inline int z_impl_pwm_pin_set_cycles(const struct device *dev,
 		return -EINVAL;
 	}
 
-	return api->pin_set(dev, pwm, period, pulse, flags);
+	return api->set_cycles(dev, channel, period, pulse, flags);
 }
 
 /**
  * @brief Get the clock rate (cycles per second) for a single PWM output.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  * @param[out] cycles Pointer to the memory to store clock rate (cycles per
  *                    sec). HW specific.
  *
  * @retval 0 If successful.
  * @retval -errno Negative errno code on failure.
  */
-__syscall int pwm_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
+__syscall int pwm_get_cycles_per_sec(const struct device *dev, uint32_t channel,
 				     uint64_t *cycles);
 
 static inline int z_impl_pwm_get_cycles_per_sec(const struct device *dev,
-						uint32_t pwm,
+						uint32_t channel,
 						uint64_t *cycles)
 {
 	const struct pwm_driver_api *api =
 		(const struct pwm_driver_api *)dev->api;
 
-	return api->get_cycles_per_sec(dev, pwm, cycles);
-}
-
-/**
- * @brief Set the period and pulse width in microseconds for a single PWM
- *        output.
- *
- * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
- * @param period Period (in microseconds) set to the PWM.
- * @param pulse Pulse width (in microseconds) set to the PWM.
- * @param flags Flags for pin configuration (polarity).
- *
- * @retval 0 If successful.
- * @retval -ENOTSUP If requested period or pulse cycles are not supported.
- * @retval -errno Other negative errno code on failure.
- */
-static inline int pwm_pin_set_usec(const struct device *dev, uint32_t pwm,
-				   uint32_t period, uint32_t pulse,
-				   pwm_flags_t flags)
-{
-	int err;
-	uint64_t pulse_cycles;
-	uint64_t period_cycles;
-	uint64_t cycles_per_sec;
-
-	err = pwm_get_cycles_per_sec(dev, pwm, &cycles_per_sec);
-	if (err < 0) {
-		return err;
-	}
-
-	period_cycles = (period * cycles_per_sec) / USEC_PER_SEC;
-	if (period_cycles > UINT32_MAX) {
-		return -ENOTSUP;
-	}
-
-	pulse_cycles = (pulse * cycles_per_sec) / USEC_PER_SEC;
-	if (pulse_cycles > UINT32_MAX) {
-		return -ENOTSUP;
-	}
-
-	return pwm_pin_set_cycles(dev, pwm, (uint32_t)period_cycles,
-				  (uint32_t)pulse_cycles, flags);
+	return api->get_cycles_per_sec(dev, channel, cycles);
 }
 
 /**
  * @brief Set the period and pulse width in nanoseconds for a single PWM output.
  *
+ * @note Utility macros such as PWM_MSEC() can be used to convert from other
+ * scales or units to nanoseconds, the units used by this function.
+ *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  * @param period Period (in nanoseconds) set to the PWM.
  * @param pulse Pulse width (in nanoseconds) set to the PWM.
  * @param flags Flags for pin configuration (polarity).
@@ -280,16 +532,15 @@ static inline int pwm_pin_set_usec(const struct device *dev, uint32_t pwm,
  * @retval -ENOTSUP If requested period or pulse cycles are not supported.
  * @retval -errno Other negative errno code on failure.
  */
-static inline int pwm_pin_set_nsec(const struct device *dev, uint32_t pwm,
-				   uint32_t period, uint32_t pulse,
-				   pwm_flags_t flags)
+static inline int pwm_set(const struct device *dev, uint32_t channel,
+			  uint32_t period, uint32_t pulse, pwm_flags_t flags)
 {
 	int err;
 	uint64_t pulse_cycles;
 	uint64_t period_cycles;
 	uint64_t cycles_per_sec;
 
-	err = pwm_get_cycles_per_sec(dev, pwm, &cycles_per_sec);
+	err = pwm_get_cycles_per_sec(dev, channel, &cycles_per_sec);
 	if (err < 0) {
 		return err;
 	}
@@ -304,15 +555,62 @@ static inline int pwm_pin_set_nsec(const struct device *dev, uint32_t pwm,
 		return -ENOTSUP;
 	}
 
-	return pwm_pin_set_cycles(dev, pwm, (uint32_t)period_cycles,
-				  (uint32_t)pulse_cycles, flags);
+	return pwm_set_cycles(dev, channel, (uint32_t)period_cycles,
+			      (uint32_t)pulse_cycles, flags);
+}
+
+/**
+ * @brief Set the period and pulse width in nanoseconds from a struct
+ *        pwm_dt_spec (with custom period).
+ *
+ * This is equivalent to:
+ *
+ *     pwm_set(spec->dev, spec->channel, period, pulse, spec->flags)
+ *
+ * The period specified in @p spec is ignored. This API call can be used when
+ * the period specified in Devicetree needs to be changed at runtime.
+ *
+ * @param[in] spec PWM specification from devicetree.
+ * @param period Period (in nanoseconds) set to the PWM.
+ * @param pulse Pulse width (in nanoseconds) set to the PWM.
+ *
+ * @return A value from pwm_set().
+ *
+ * @see pwm_set_pulse_dt()
+ */
+static inline int pwm_set_dt(const struct pwm_dt_spec *spec, uint32_t period,
+			     uint32_t pulse)
+{
+	return pwm_set(spec->dev, spec->channel, period, pulse, spec->flags);
+}
+
+/**
+ * @brief Set the period and pulse width in nanoseconds from a struct
+ *        pwm_dt_spec.
+ *
+ * This is equivalent to:
+ *
+ *     pwm_set(spec->dev, spec->channel, spec->period, pulse, spec->flags)
+ *
+ * @param[in] spec PWM specification from devicetree.
+ * @param pulse Pulse width (in nanoseconds) set to the PWM.
+ *
+ * @return A value from pwm_set().
+ *
+ * @see pwm_set_pulse_dt()
+ */
+static inline int pwm_set_pulse_dt(const struct pwm_dt_spec *spec,
+				   uint32_t pulse)
+{
+	return pwm_set(spec->dev, spec->channel, spec->period, pulse,
+		       spec->flags);
 }
 
 /**
  * @brief Convert from PWM cycles to microseconds.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  * @param cycles Cycles to be converted.
  * @param[out] usec Pointer to the memory to store calculated usec.
  *
@@ -320,14 +618,14 @@ static inline int pwm_pin_set_nsec(const struct device *dev, uint32_t pwm,
  * @retval -ERANGE If result is too large.
  * @retval -errno Other negative errno code on failure.
  */
-static inline int pwm_pin_cycles_to_usec(const struct device *dev, uint32_t pwm,
-					 uint32_t cycles, uint64_t *usec)
+static inline int pwm_cycles_to_usec(const struct device *dev, uint32_t channel,
+				     uint32_t cycles, uint64_t *usec)
 {
 	int err;
 	uint64_t temp;
 	uint64_t cycles_per_sec;
 
-	err = pwm_get_cycles_per_sec(dev, pwm, &cycles_per_sec);
+	err = pwm_get_cycles_per_sec(dev, channel, &cycles_per_sec);
 	if (err < 0) {
 		return err;
 	}
@@ -345,7 +643,7 @@ static inline int pwm_pin_cycles_to_usec(const struct device *dev, uint32_t pwm,
  * @brief Convert from PWM cycles to nanoseconds.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  * @param cycles Cycles to be converted.
  * @param[out] nsec Pointer to the memory to store the calculated nsec.
  *
@@ -353,14 +651,14 @@ static inline int pwm_pin_cycles_to_usec(const struct device *dev, uint32_t pwm,
  * @retval -ERANGE If result is too large.
  * @retval -errno Other negative errno code on failure.
  */
-static inline int pwm_pin_cycles_to_nsec(const struct device *dev, uint32_t pwm,
-					 uint32_t cycles, uint64_t *nsec)
+static inline int pwm_cycles_to_nsec(const struct device *dev, uint32_t channel,
+				     uint32_t cycles, uint64_t *nsec)
 {
 	int err;
 	uint64_t temp;
 	uint64_t cycles_per_sec;
 
-	err = pwm_get_cycles_per_sec(dev, pwm, &cycles_per_sec);
+	err = pwm_get_cycles_per_sec(dev, channel, &cycles_per_sec);
 	if (err < 0) {
 		return err;
 	}
@@ -379,19 +677,19 @@ static inline int pwm_pin_cycles_to_nsec(const struct device *dev, uint32_t pwm,
  * @brief Configure PWM period/pulse width capture for a single PWM input.
  *
  * After configuring PWM capture using this function, the capture can be
- * enabled/disabled using pwm_pin_enable_capture() and
- * pwm_pin_disable_capture().
+ * enabled/disabled using pwm_enable_capture() and
+ * pwm_disable_capture().
  *
  * @note This API function cannot be invoked from user space due to the use of a
  * function callback. In user space, one of the simpler API functions
- * (pwm_pin_capture_cycles(), pwm_pin_capture_usec(), or
- * pwm_pin_capture_nsec()) can be used instead.
+ * (pwm_capture_cycles(), pwm_capture_usec(), or
+ * pwm_capture_nsec()) can be used instead.
  *
  * @note @kconfig{CONFIG_PWM_CAPTURE} must be selected for this function to be
  * available.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  * @param flags PWM capture flags
  * @param[in] cb Application callback handler function to be called upon capture
  * @param[in] user_data User data to pass to the application callback handler
@@ -403,33 +701,34 @@ static inline int pwm_pin_cycles_to_nsec(const struct device *dev, uint32_t pwm,
  * @retval -EIO if IO error occurred while configuring
  * @retval -EBUSY if PWM capture is already in progress
  */
-static inline int pwm_pin_configure_capture(const struct device *dev,
-					    uint32_t pwm, pwm_flags_t flags,
-					    pwm_capture_callback_handler_t cb,
-					    void *user_data)
+static inline int pwm_configure_capture(const struct device *dev,
+					uint32_t channel, pwm_flags_t flags,
+					pwm_capture_callback_handler_t cb,
+					void *user_data)
 {
 	const struct pwm_driver_api *api =
 		(const struct pwm_driver_api *)dev->api;
 
-	if (api->pin_configure_capture == NULL) {
+	if (api->configure_capture == NULL) {
 		return -ENOSYS;
 	}
 
-	return api->pin_configure_capture(dev, pwm, flags, cb, user_data);
+	return api->configure_capture(dev, channel, flags, cb,
+					      user_data);
 }
 #endif /* CONFIG_PWM_CAPTURE */
 
 /**
  * @brief Enable PWM period/pulse width capture for a single PWM input.
  *
- * The PWM pin must be configured using pwm_pin_configure_capture() prior to
+ * The PWM pin must be configured using pwm_configure_capture() prior to
  * calling this function.
  *
  * @note @kconfig{CONFIG_PWM_CAPTURE} must be selected for this function to be
  * available.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  *
  * @retval 0 If successful.
  * @retval -EINVAL if invalid function parameters were given
@@ -437,20 +736,20 @@ static inline int pwm_pin_configure_capture(const struct device *dev,
  * @retval -EIO if IO error occurred while enabling PWM capture
  * @retval -EBUSY if PWM capture is already in progress
  */
-__syscall int pwm_pin_enable_capture(const struct device *dev, uint32_t pwm);
+__syscall int pwm_enable_capture(const struct device *dev, uint32_t channel);
 
 #ifdef CONFIG_PWM_CAPTURE
-static inline int z_impl_pwm_pin_enable_capture(const struct device *dev,
-						uint32_t pwm)
+static inline int z_impl_pwm_enable_capture(const struct device *dev,
+					    uint32_t channel)
 {
 	const struct pwm_driver_api *api =
 		(const struct pwm_driver_api *)dev->api;
 
-	if (api->pin_enable_capture == NULL) {
+	if (api->enable_capture == NULL) {
 		return -ENOSYS;
 	}
 
-	return api->pin_enable_capture(dev, pwm);
+	return api->enable_capture(dev, channel);
 }
 #endif /* CONFIG_PWM_CAPTURE */
 
@@ -461,27 +760,27 @@ static inline int z_impl_pwm_pin_enable_capture(const struct device *dev,
  * available.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  *
  * @retval 0 If successful.
  * @retval -EINVAL if invalid function parameters were given
  * @retval -ENOSYS if PWM capture is not supported
  * @retval -EIO if IO error occurred while disabling PWM capture
  */
-__syscall int pwm_pin_disable_capture(const struct device *dev, uint32_t pwm);
+__syscall int pwm_disable_capture(const struct device *dev, uint32_t channel);
 
 #ifdef CONFIG_PWM_CAPTURE
-static inline int z_impl_pwm_pin_disable_capture(const struct device *dev,
-						 uint32_t pwm)
+static inline int z_impl_pwm_disable_capture(const struct device *dev,
+					     uint32_t channel)
 {
 	const struct pwm_driver_api *api =
 		(const struct pwm_driver_api *)dev->api;
 
-	if (api->pin_disable_capture == NULL) {
+	if (api->disable_capture == NULL) {
 		return -ENOSYS;
 	}
 
-	return api->pin_disable_capture(dev, pwm);
+	return api->disable_capture(dev, channel);
 }
 #endif /* CONFIG_PWM_CAPTURE */
 
@@ -489,16 +788,16 @@ static inline int z_impl_pwm_pin_disable_capture(const struct device *dev,
  * @brief Capture a single PWM period/pulse width in clock cycles for a single
  *        PWM input.
  *
- * This API function wraps calls to pwm_pin_configure_capture(),
- * pwm_pin_enable_capture(), and pwm_pin_disable_capture() and passes the
- * capture result to the caller. The function is blocking until either the PWM
- * capture is completed or a timeout occurs.
+ * This API function wraps calls to pwm_configure_capture(),
+ * pwm_enable_capture(), and pwm_disable_capture() and passes
+ * the capture result to the caller. The function is blocking until either the
+ * PWM capture is completed or a timeout occurs.
  *
  * @note @kconfig{CONFIG_PWM_CAPTURE} must be selected for this function to be
  * available.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  * @param flags PWM capture flags.
  * @param[out] period Pointer to the memory to store the captured PWM period
  *                    width (in clock cycles). HW specific.
@@ -512,16 +811,16 @@ static inline int z_impl_pwm_pin_disable_capture(const struct device *dev,
  * @retval -EIO IO error while capturing.
  * @retval -ERANGE If result is too large.
  */
-__syscall int pwm_pin_capture_cycles(const struct device *dev, uint32_t pwm,
-				     pwm_flags_t flags, uint32_t *period,
-				     uint32_t *pulse, k_timeout_t timeout);
+__syscall int pwm_capture_cycles(const struct device *dev, uint32_t channel,
+				 pwm_flags_t flags, uint32_t *period,
+				 uint32_t *pulse, k_timeout_t timeout);
 
 /**
  * @brief Capture a single PWM period/pulse width in microseconds for a single
  *        PWM input.
  *
- * This API function wraps calls to pwm_pin_capture_cycles() and
- * pwm_pin_cycles_to_usec() and passes the capture result to the caller. The
+ * This API function wraps calls to pwm_capture_cycles() and
+ * pwm_cycles_to_usec() and passes the capture result to the caller. The
  * function is blocking until either the PWM capture is completed or a timeout
  * occurs.
  *
@@ -529,7 +828,7 @@ __syscall int pwm_pin_capture_cycles(const struct device *dev, uint32_t pwm,
  * available.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  * @param flags PWM capture flags.
  * @param[out] period Pointer to the memory to store the captured PWM period
  *                    width (in usec).
@@ -544,26 +843,26 @@ __syscall int pwm_pin_capture_cycles(const struct device *dev, uint32_t pwm,
  * @retval -ERANGE If result is too large.
  * @retval -errno Other negative errno code on failure.
  */
-static inline int pwm_pin_capture_usec(const struct device *dev, uint32_t pwm,
-				       pwm_flags_t flags, uint64_t *period,
-				       uint64_t *pulse, k_timeout_t timeout)
+static inline int pwm_capture_usec(const struct device *dev, uint32_t channel,
+				   pwm_flags_t flags, uint64_t *period,
+				   uint64_t *pulse, k_timeout_t timeout)
 {
 	int err;
 	uint32_t pulse_cycles;
 	uint32_t period_cycles;
 
-	err = pwm_pin_capture_cycles(dev, pwm, flags, &period_cycles,
-				     &pulse_cycles, timeout);
+	err = pwm_capture_cycles(dev, channel, flags, &period_cycles,
+				 &pulse_cycles, timeout);
 	if (err < 0) {
 		return err;
 	}
 
-	err = pwm_pin_cycles_to_usec(dev, pwm, period_cycles, period);
+	err = pwm_cycles_to_usec(dev, channel, period_cycles, period);
 	if (err < 0) {
 		return err;
 	}
 
-	err = pwm_pin_cycles_to_usec(dev, pwm, pulse_cycles, pulse);
+	err = pwm_cycles_to_usec(dev, channel, pulse_cycles, pulse);
 	if (err < 0) {
 		return err;
 	}
@@ -575,8 +874,8 @@ static inline int pwm_pin_capture_usec(const struct device *dev, uint32_t pwm,
  * @brief Capture a single PWM period/pulse width in nanoseconds for a single
  *        PWM input.
  *
- * This API function wraps calls to pwm_pin_capture_cycles() and
- * pwm_pin_cycles_to_nsec() and passes the capture result to the caller. The
+ * This API function wraps calls to pwm_capture_cycles() and
+ * pwm_cycles_to_nsec() and passes the capture result to the caller. The
  * function is blocking until either the PWM capture is completed or a timeout
  * occurs.
  *
@@ -584,7 +883,7 @@ static inline int pwm_pin_capture_usec(const struct device *dev, uint32_t pwm,
  * available.
  *
  * @param[in] dev PWM device instance.
- * @param pwm PWM pin.
+ * @param channel PWM channel.
  * @param flags PWM capture flags.
  * @param[out] period Pointer to the memory to store the captured PWM period
  *                    width (in nsec).
@@ -599,32 +898,174 @@ static inline int pwm_pin_capture_usec(const struct device *dev, uint32_t pwm,
  * @retval -ERANGE If result is too large.
  * @retval -errno Other negative errno code on failure.
  */
-static inline int pwm_pin_capture_nsec(const struct device *dev, uint32_t pwm,
-				       pwm_flags_t flags, uint64_t *period,
-				       uint64_t *pulse, k_timeout_t timeout)
+static inline int pwm_capture_nsec(const struct device *dev, uint32_t channel,
+				   pwm_flags_t flags, uint64_t *period,
+				   uint64_t *pulse, k_timeout_t timeout)
 {
 	int err;
 	uint32_t pulse_cycles;
 	uint32_t period_cycles;
 
-	err = pwm_pin_capture_cycles(dev, pwm, flags, &period_cycles,
-				     &pulse_cycles, timeout);
+	err = pwm_capture_cycles(dev, channel, flags, &period_cycles,
+				 &pulse_cycles, timeout);
 	if (err < 0) {
 		return err;
 	}
 
-	err = pwm_pin_cycles_to_nsec(dev, pwm, period_cycles, period);
+	err = pwm_cycles_to_nsec(dev, channel, period_cycles, period);
 	if (err < 0) {
 		return err;
 	}
 
-	err = pwm_pin_cycles_to_nsec(dev, pwm, pulse_cycles, pulse);
+	err = pwm_cycles_to_nsec(dev, channel, pulse_cycles, pulse);
 	if (err < 0) {
 		return err;
 	}
 
 	return 0;
 }
+
+/**
+ * @defgroup pwm_interface_deprecated PWM driver interface (deprecated)
+ * @{
+ */
+
+/**
+ * @brief Set the period and pulse width for a single PWM output.
+ * @deprecated Use pwm_set_cycles() instead.
+ */
+__deprecated static inline int
+pwm_pin_set_cycles(const struct device *dev, uint32_t channel, uint32_t period,
+		   uint32_t pulse, pwm_flags_t flags)
+{
+	return pwm_set_cycles(dev, channel, period, pulse, flags);
+}
+
+/**
+ * @brief Set the period and pulse width for a single PWM output.
+ * @deprecated Use pwm_set() with PWM_USEC() instead.
+ */
+__deprecated static inline int pwm_pin_set_usec(const struct device *dev,
+						uint32_t channel,
+						uint32_t period, uint32_t pulse,
+						pwm_flags_t flags)
+{
+	return pwm_set(dev, channel, period * NSEC_PER_USEC,
+		       pulse * NSEC_PER_USEC, flags);
+}
+
+/**
+ * @brief Set the period and pulse width for a single PWM output.
+ * @deprecated Use pwm_set() instead.
+ */
+__deprecated static inline int pwm_pin_set_nsec(const struct device *dev,
+						uint32_t channel,
+						uint32_t period, uint32_t pulse,
+						pwm_flags_t flags)
+{
+	return pwm_set(dev, channel, period, pulse, flags);
+}
+
+/**
+ * @brief Convert from PWM cycles to microseconds.
+ * @deprecated Use pwm_cycles_to_usec() instead.
+ */
+__deprecated static inline int pwm_pin_cycles_to_usec(const struct device *dev,
+						      uint32_t channel,
+						      uint32_t cycles,
+						      uint64_t *usec)
+{
+	return pwm_cycles_to_usec(dev, channel, cycles, usec);
+}
+
+/**
+ * @brief Convert from PWM cycles to nanoseconds.
+ * @deprecated Use pwm_cycles_to_nsec() instead.
+ */
+__deprecated static inline int pwm_pin_cycles_to_nsec(const struct device *dev,
+						      uint32_t channel,
+						      uint32_t cycles,
+						      uint64_t *nsec)
+{
+	return pwm_cycles_to_nsec(dev, channel, cycles, nsec);
+}
+
+#if defined(CONFIG_PWM_CAPTURE) || defined(__DOXYGEN__)
+/**
+ * @brief Configure PWM period/pulse width capture for a single PWM input.
+ * @deprecated Use pwm_configure_capture() instead.
+ */
+__deprecated static inline int
+pwm_pin_configure_capture(const struct device *dev, uint32_t channel,
+			  pwm_flags_t flags, pwm_capture_callback_handler_t cb,
+			  void *user_data)
+{
+	return pwm_configure_capture(dev, channel, flags, cb, user_data);
+}
+#endif /* CONFIG_PWM_CAPTURE */
+
+/**
+ * @brief Enable PWM period/pulse width capture for a single PWM input.
+ * @deprecated Use pwm_enable_capture() instead.
+ */
+__deprecated static inline int pwm_pin_enable_capture(const struct device *dev,
+						      uint32_t channel)
+{
+	return pwm_enable_capture(dev, channel);
+}
+
+/**
+ * @brief Disable PWM period/pulse width capture for a single PWM input.
+ * @deprecated Use pwm_disable_capture() instead.
+ */
+__deprecated static inline int pwm_pin_disable_capture(const struct device *dev,
+						       uint32_t channel)
+{
+	return pwm_disable_capture(dev, channel);
+}
+
+/**
+ * @brief Capture a single PWM period/pulse width in clock cycles for a single
+ *        PWM input.
+ * @deprecated Use pwm_capture_cycles() instead.
+ */
+__deprecated static inline int
+pwm_pin_capture_cycles(const struct device *dev, uint32_t channel,
+		       pwm_flags_t flags, uint32_t *period, uint32_t *pulse,
+		       k_timeout_t timeout)
+{
+	return pwm_capture_cycles(dev, channel, flags, period, pulse, timeout);
+}
+
+/**
+ * @brief Capture a single PWM period/pulse width in microseconds for a single
+ *        PWM input.
+ * @deprecated Use pwm_capture_usec() instead.
+ */
+__deprecated static inline int
+pwm_pin_capture_usec(const struct device *dev, uint32_t channel,
+		     pwm_flags_t flags, uint64_t *period, uint64_t *pulse,
+		     k_timeout_t timeout)
+{
+	return pwm_capture_usec(dev, channel, flags, period, pulse, timeout);
+}
+
+/**
+ * @brief Capture a single PWM period/pulse width in nanoseconds for a single
+ *        PWM input.
+ * @deprecated Use pwm_capture_nsec() instead.
+ */
+__deprecated static inline int
+pwm_pin_capture_nsec(const struct device *dev, uint32_t channel,
+		     pwm_flags_t flags, uint64_t *period, uint64_t *pulse,
+		     k_timeout_t timeout)
+{
+	return pwm_capture_nsec(dev, channel, flags, period, pulse, timeout);
+}
+
+/**
+ * @}
+ */
 
 #ifdef __cplusplus
 }

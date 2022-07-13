@@ -11,10 +11,10 @@
 
 #define DT_DRV_COMPAT atmel_sam0_tcc_pwm
 
-#include <device.h>
+#include <zephyr/device.h>
 #include <errno.h>
-#include <drivers/pwm.h>
-#include <drivers/pinctrl.h>
+#include <zephyr/drivers/pwm.h>
+#include <zephyr/drivers/pinctrl.h>
 #include <soc.h>
 
 /* Static configuration */
@@ -43,12 +43,12 @@ static void wait_synchronization(Tcc *regs)
 	}
 }
 
-static int pwm_sam0_get_cycles_per_sec(const struct device *dev, uint32_t ch,
-				       uint64_t *cycles)
+static int pwm_sam0_get_cycles_per_sec(const struct device *dev,
+				       uint32_t channel, uint64_t *cycles)
 {
 	const struct pwm_sam0_config *const cfg = dev->config;
 
-	if (ch >= cfg->channels) {
+	if (channel >= cfg->channels) {
 		return -EINVAL;
 	}
 	*cycles = cfg->freq;
@@ -56,18 +56,18 @@ static int pwm_sam0_get_cycles_per_sec(const struct device *dev, uint32_t ch,
 	return 0;
 }
 
-static int pwm_sam0_pin_set(const struct device *dev, uint32_t ch,
-			    uint32_t period_cycles, uint32_t pulse_cycles,
-			    pwm_flags_t flags)
+static int pwm_sam0_set_cycles(const struct device *dev, uint32_t channel,
+			       uint32_t period_cycles, uint32_t pulse_cycles,
+			       pwm_flags_t flags)
 {
 	const struct pwm_sam0_config *const cfg = dev->config;
 	Tcc *regs = cfg->regs;
 	uint32_t top = 1 << cfg->counter_size;
-	uint32_t invert_mask = 1 << ch;
+	uint32_t invert_mask = 1 << channel;
 	bool invert = ((flags & PWM_POLARITY_INVERTED) != 0);
 	bool inverted = ((regs->DRVCTRL.vec.INVEN & invert_mask) != 0);
 
-	if (ch >= cfg->channels) {
+	if (channel >= cfg->channels) {
 		return -EINVAL;
 	}
 	if (period_cycles >= top || pulse_cycles >= top) {
@@ -80,11 +80,11 @@ static int pwm_sam0_pin_set(const struct device *dev, uint32_t ch,
 	 */
 #ifdef TCC_PERBUF_PERBUF
 	/* SAME51 naming */
-	regs->CCBUF[ch].reg = TCC_CCBUF_CCBUF(pulse_cycles);
+	regs->CCBUF[channel].reg = TCC_CCBUF_CCBUF(pulse_cycles);
 	regs->PERBUF.reg = TCC_PERBUF_PERBUF(period_cycles);
 #else
 	/* SAMD21 naming */
-	regs->CCB[ch].reg = TCC_CCB_CCB(pulse_cycles);
+	regs->CCB[channel].reg = TCC_CCB_CCB(pulse_cycles);
 	regs->PERB.reg = TCC_PERB_PERB(period_cycles);
 #endif
 
@@ -136,7 +136,7 @@ static int pwm_sam0_init(const struct device *dev)
 }
 
 static const struct pwm_driver_api pwm_sam0_driver_api = {
-	.pin_set = pwm_sam0_pin_set,
+	.set_cycles = pwm_sam0_set_cycles,
 	.get_cycles_per_sec = pwm_sam0_get_cycles_per_sec,
 };
 

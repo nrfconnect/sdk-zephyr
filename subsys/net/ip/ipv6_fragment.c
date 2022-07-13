@@ -8,16 +8,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(net_ipv6, CONFIG_NET_IPV6_LOG_LEVEL);
 
 #include <errno.h>
-#include <net/net_core.h>
-#include <net/net_pkt.h>
-#include <net/net_stats.h>
-#include <net/net_context.h>
-#include <net/net_mgmt.h>
-#include <random/rand32.h>
+#include <zephyr/net/net_core.h>
+#include <zephyr/net/net_pkt.h>
+#include <zephyr/net/net_stats.h>
+#include <zephyr/net/net_context.h>
+#include <zephyr/net/net_mgmt.h>
+#include <zephyr/random/rand32.h>
 #include "net_private.h"
 #include "connection.h"
 #include "icmpv6.h"
@@ -73,7 +73,6 @@ int net_ipv6_find_last_ext_hdr(struct net_pkt *pkt, uint16_t *next_hdr_off,
 	*next_hdr_off = offsetof(struct net_ipv6_hdr, nexthdr);
 	*last_hdr_off = sizeof(struct net_ipv6_hdr);
 
-	nexthdr = hdr->nexthdr;
 	while (!net_ipv6_is_nexthdr_upper_layer(nexthdr)) {
 		if (net_pkt_read_u8(pkt, &next_nexthdr)) {
 			goto fail;

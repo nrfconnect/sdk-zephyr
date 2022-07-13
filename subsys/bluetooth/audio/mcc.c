@@ -8,19 +8,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <zephyr/types.h>
-#include <sys/byteorder.h>
-#include <sys/check.h>
-#include <device.h>
-#include <init.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/check.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
 
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/conn.h>
-#include <bluetooth/gatt.h>
-#include <bluetooth/audio/mcc.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/audio/mcc.h>
 
-#include <bluetooth/services/ots.h>
+#include <zephyr/bluetooth/services/ots.h>
 #include "../services/ots/ots_client_internal.h"
 
 /* TODO: Temporarily copied here from media_proxy_internal.h - clean up */
@@ -40,9 +40,6 @@
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_MCC)
 #define LOG_MODULE_NAME bt_mcc
 #include "common/log.h"
-
-#define FIRST_HANDLE			0x0001
-#define LAST_HANDLE			0xFFFF
 
 struct mcs_instance_t {
 	uint16_t start_handle;
@@ -200,7 +197,7 @@ static uint8_t mcc_read_player_name_cb(struct bt_conn *conn, uint8_t err,
 			length = sizeof(name) - 1;
 		}
 
-		memcpy(&name, data, length);
+		(void)memcpy(&name, data, length);
 		name[length] = '\0';
 		BT_DBG("Player name: %s", log_strdup(name));
 	}
@@ -259,7 +256,7 @@ static uint8_t mcc_read_icon_url_cb(struct bt_conn *conn, uint8_t err,
 		cb_err = BT_ATT_ERR_INSUFFICIENT_RESOURCES;
 	} else {
 		BT_HEXDUMP_DBG(data, length, "Icon URL");
-		memcpy(&url, data, length);
+		(void)memcpy(&url, data, length);
 		url[length] = '\0';
 		BT_DBG("Icon URL: %s", log_strdup(url));
 	}
@@ -289,7 +286,7 @@ static uint8_t mcc_read_track_title_cb(struct bt_conn *conn, uint8_t err,
 			/* If the description is too long; clip it. */
 			length = sizeof(title) - 1;
 		}
-		memcpy(&title, data, length);
+		(void)memcpy(&title, data, length);
 		title[length] = '\0';
 		BT_DBG("Track title: %s", log_strdup(title));
 	}
@@ -778,9 +775,9 @@ static void mcs_write_cp_cb(struct bt_conn *conn, uint8_t err,
 		BT_DBG("length: %d, data: %p", params->length, params->data);
 		cb_err = BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
 	} else {
-		memcpy(&cmd.opcode, params->data, sizeof(cmd.opcode));
+		(void)memcpy(&cmd.opcode, params->data, sizeof(cmd.opcode));
 		if (params->length == sizeof(cmd.opcode) + sizeof(cmd.param)) {
-			memcpy(&cmd.param,
+			(void)memcpy(&cmd.param,
 			       (char *)(params->data) + sizeof(cmd.opcode),
 			       sizeof(cmd.param));
 			cmd.use_param = true;
@@ -789,7 +786,7 @@ static void mcs_write_cp_cb(struct bt_conn *conn, uint8_t err,
 	}
 
 	if (mcc_cb && mcc_cb->send_cmd) {
-		mcc_cb->send_cmd(conn, cb_err, cmd);
+		mcc_cb->send_cmd(conn, cb_err, &cmd);
 	}
 }
 
@@ -838,12 +835,12 @@ static void mcs_write_scp_cb(struct bt_conn *conn, uint8_t err,
 		cb_err = BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
 	} else {
 		search.len = params->length;
-		memcpy(search.search, params->data, params->length);
+		(void)memcpy(search.search, params->data, params->length);
 		BT_DBG("Length of returned value in callback: %d", search.len);
 	}
 
 	if (mcc_cb && mcc_cb->send_search) {
-		mcc_cb->send_search(conn, cb_err, search);
+		mcc_cb->send_search(conn, cb_err, &search);
 	}
 }
 
@@ -910,6 +907,10 @@ static uint8_t mcs_notify_handler(struct bt_conn *conn,
 				  const void *data, uint16_t length)
 {
 	uint16_t handle = params->value_handle;
+
+	if (conn == NULL) {
+		return BT_GATT_ITER_CONTINUE;
+	}
 
 	BT_DBG("Notification, handle: %d", handle);
 
@@ -1006,7 +1007,7 @@ static uint8_t mcs_notify_handler(struct bt_conn *conn,
 			}
 
 			if (mcc_cb && mcc_cb->cmd_ntf) {
-				mcc_cb->cmd_ntf(conn, cb_err, ntf);
+				mcc_cb->cmd_ntf(conn, cb_err, &ntf);
 			}
 
 		} else if (handle == cur_mcs_inst->opcodes_supported_handle) {
@@ -1485,13 +1486,13 @@ int bt_mcc_discover_mcs(struct bt_conn *conn, bool subscribe)
 	subscribe_all = subscribe;
 	memset(&discover_params, 0, sizeof(discover_params));
 	memset(&mcs_inst, 0, sizeof(mcs_inst));
-	memcpy(&uuid, BT_UUID_GMCS, sizeof(uuid));
+	(void)memcpy(&uuid, BT_UUID_GMCS, sizeof(uuid));
 
 	discover_params.func = discover_primary_func;
 	discover_params.uuid = &uuid.uuid;
 	discover_params.type = BT_GATT_DISCOVER_PRIMARY;
-	discover_params.start_handle = FIRST_HANDLE;
-	discover_params.end_handle = LAST_HANDLE;
+	discover_params.start_handle = BT_ATT_FIRST_ATTRIBUTE_HANDLE;
+	discover_params.end_handle = BT_ATT_LAST_ATTRIBUTE_HANDLE;
 
 	BT_DBG("start discovery of GMCS primary service");
 	return bt_gatt_discover(conn, &discover_params);
@@ -1678,7 +1679,7 @@ int bt_mcc_set_track_position(struct bt_conn *conn, int32_t pos)
 		return -EBUSY;
 	}
 
-	memcpy(cur_mcs_inst->write_buf, &pos, sizeof(pos));
+	(void)memcpy(cur_mcs_inst->write_buf, &pos, sizeof(pos));
 
 	cur_mcs_inst->write_params.offset = 0;
 	cur_mcs_inst->write_params.data = cur_mcs_inst->write_buf;
@@ -1738,7 +1739,7 @@ int bt_mcc_set_playback_speed(struct bt_conn *conn, int8_t speed)
 		return -EBUSY;
 	}
 
-	memcpy(cur_mcs_inst->write_buf, &speed, sizeof(speed));
+	(void)memcpy(cur_mcs_inst->write_buf, &speed, sizeof(speed));
 
 	cur_mcs_inst->write_params.offset = 0;
 	cur_mcs_inst->write_params.data = cur_mcs_inst->write_buf;
@@ -2070,7 +2071,7 @@ int bt_mcc_set_playing_order(struct bt_conn *conn, uint8_t order)
 		return -EBUSY;
 	}
 
-	memcpy(cur_mcs_inst->write_buf, &order, sizeof(order));
+	(void)memcpy(cur_mcs_inst->write_buf, &order, sizeof(order));
 
 	cur_mcs_inst->write_params.offset = 0;
 	cur_mcs_inst->write_params.data = cur_mcs_inst->write_buf;
@@ -2142,10 +2143,10 @@ int bt_mcc_read_media_state(struct bt_conn *conn)
 	return err;
 }
 
-int bt_mcc_send_cmd(struct bt_conn *conn, struct mpl_cmd cmd)
+int bt_mcc_send_cmd(struct bt_conn *conn, const struct mpl_cmd *cmd)
 {
 	int err;
-	int length = sizeof(cmd.opcode);
+	int length = sizeof(cmd->opcode);
 
 	CHECKIF(!conn) {
 		return -EINVAL;
@@ -2158,11 +2159,11 @@ int bt_mcc_send_cmd(struct bt_conn *conn, struct mpl_cmd cmd)
 		return -EBUSY;
 	}
 
-	memcpy(cur_mcs_inst->write_buf, &cmd.opcode, length);
-	if (cmd.use_param) {
-		length += sizeof(cmd.param);
-		memcpy(&cur_mcs_inst->write_buf[sizeof(cmd.opcode)], &cmd.param,
-		       sizeof(cmd.param));
+	(void)memcpy(cur_mcs_inst->write_buf, &cmd->opcode, length);
+	if (cmd->use_param) {
+		length += sizeof(cmd->param);
+		(void)memcpy(&cur_mcs_inst->write_buf[sizeof(cmd->opcode)], &cmd->param,
+		       sizeof(cmd->param));
 	}
 
 	cur_mcs_inst->write_params.offset = 0;
@@ -2171,7 +2172,7 @@ int bt_mcc_send_cmd(struct bt_conn *conn, struct mpl_cmd cmd)
 	cur_mcs_inst->write_params.handle = cur_mcs_inst->cp_handle;
 	cur_mcs_inst->write_params.func = mcs_write_cp_cb;
 
-	BT_HEXDUMP_DBG(cur_mcs_inst->write_params.data, sizeof(cmd),
+	BT_HEXDUMP_DBG(cur_mcs_inst->write_params.data, sizeof(*cmd),
 		       "Command sent");
 
 	err = bt_gatt_write(conn, &cur_mcs_inst->write_params);
@@ -2209,7 +2210,7 @@ int bt_mcc_read_opcodes_supported(struct bt_conn *conn)
 }
 
 #ifdef CONFIG_BT_MCC_OTS
-int bt_mcc_send_search(struct bt_conn *conn, struct mpl_search search)
+int bt_mcc_send_search(struct bt_conn *conn, const struct mpl_search *search)
 {
 	int err;
 
@@ -2224,15 +2225,15 @@ int bt_mcc_send_search(struct bt_conn *conn, struct mpl_search search)
 		return -EBUSY;
 	}
 
-	memcpy(cur_mcs_inst->write_buf, &search.search, search.len);
+	(void)memcpy(cur_mcs_inst->write_buf, &search->search, search->len);
 
 	cur_mcs_inst->write_params.offset = 0;
 	cur_mcs_inst->write_params.data = cur_mcs_inst->write_buf;
-	cur_mcs_inst->write_params.length = search.len;
+	cur_mcs_inst->write_params.length = search->len;
 	cur_mcs_inst->write_params.handle = cur_mcs_inst->scp_handle;
 	cur_mcs_inst->write_params.func = mcs_write_scp_cb;
 
-	BT_HEXDUMP_DBG(cur_mcs_inst->write_params.data, search.len,
+	BT_HEXDUMP_DBG(cur_mcs_inst->write_params.data, search->len,
 		       "Search sent");
 
 	err = bt_gatt_write(conn, &cur_mcs_inst->write_params);
@@ -2394,7 +2395,7 @@ static void decode_track_segments(struct net_buf_simple *buff,
 				seg->name_len =
 					CONFIG_BT_MCC_SEGMENT_NAME_MAX - 1;
 			}
-			memcpy(seg->name, name, seg->name_len);
+			(void)memcpy(seg->name, name, seg->name_len);
 		}
 		seg->name[seg->name_len] = '\0';
 

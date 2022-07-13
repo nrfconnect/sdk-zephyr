@@ -6,8 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <sys/util.h>
-#include <bluetooth/addr.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/bluetooth/addr.h>
 
 #define BTP_MTU 1024
 #define BTP_DATA_MAX_SIZE (BTP_MTU - sizeof(struct btp_hdr))
@@ -575,6 +575,12 @@ struct gatt_read_rp {
 	uint8_t data[];
 } __packed;
 
+struct gatt_char_value {
+	uint16_t handle;
+	uint8_t data_len;
+	uint8_t data[0];
+} __packed;
+
 #define GATT_READ_UUID			0x12
 struct gatt_read_uuid_cmd {
 	uint8_t address_type;
@@ -586,8 +592,8 @@ struct gatt_read_uuid_cmd {
 } __packed;
 struct gatt_read_uuid_rp {
 	uint8_t att_response;
-	uint16_t data_length;
-	uint8_t data[];
+	uint8_t values_count;
+	struct gatt_char_value values[0];
 } __packed;
 
 #define GATT_READ_LONG			0x13
@@ -715,6 +721,13 @@ struct gatt_get_attribute_value_rp {
 struct gatt_change_db_cmd {
 	uint16_t start_handle;
 	uint8_t visibility;
+} __packed;
+
+#define GATT_EATT_CONNECT		0x1f
+struct gatt_eatt_connect_cmd {
+	uint8_t address_type;
+	uint8_t address[6];
+	uint8_t num_channels;
 } __packed;
 
 #define GATT_READ_MULTIPLE_VAR		0x20

@@ -12,8 +12,8 @@
 #ifndef ZEPHYR_INCLUDE_NET_TFTP_H_
 #define ZEPHYR_INCLUDE_NET_TFTP_H_
 
-#include <zephyr.h>
-#include <net/socket.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/net/socket.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -237,7 +237,7 @@ BSS.
 
 .. code-block:: c
 
-    #include <app_memory/app_memdomain.h>
+    #include <zephyr/app_memory/app_memdomain.h>
 
     /* Declare a k_mem_partition "my_partition" that is read-write to
      * user mode. Note that we do not specify a base address or size.
@@ -289,6 +289,8 @@ be edited.
 For Zephyr libraries created using ``zephyr_library`` or ``zephyr_library_named``
 the ``zephyr_library_app_memory`` function can be used to specify the memory
 partition where all globals in the library should be placed.
+
+.. _memory_domain_predefined_partitions:
 
 Pre-defined Memory Partitions
 -----------------------------
@@ -439,6 +441,6 @@ Related configuration options:
 API Reference
 *************
 
-The following memory domain APIs are provided by :zephyr_file:`include/kernel.h`:
+The following memory domain APIs are provided by :zephyr_file:`include/zephyr/kernel.h`:
 
 .. doxygengroup:: mem_domain_apis
