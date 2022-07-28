@@ -276,6 +276,7 @@ static bool oobd_present;
 static bool sc_supported;
 static const uint8_t *sc_public_key;
 static K_SEM_DEFINE(sc_local_pkey_ready, 0, 1);
+static bool duplicate_rl;
 
 static bool le_sc_supported(void)
 {
@@ -1825,6 +1826,7 @@ static void smp_reset(struct bt_smp *smp)
 
 	smp->method = JUST_WORKS;
 	atomic_set(smp->allowed_cmds, 0);
+	duplicate_rl = false;
 
 	if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
 	    conn->role == BT_HCI_ROLE_CENTRAL) {
@@ -3889,7 +3891,11 @@ static uint8_t smp_ident_info(struct bt_smp *smp, struct net_buf *buf)
 			return BT_SMP_ERR_UNSPECIFIED;
 		}
 
-		memcpy(keys->irk.val, req->irk, 16);
+		if (!memcmp(keys->irk.val, req->irk, sizeof(*keys->irk.val))) {
+			duplicate_rl = true;
+		} else {
+			memcpy(keys->irk.val, req->irk, 16);
+		}
 	}
 
 	atomic_set_bit(smp->allowed_cmds, BT_SMP_CMD_IDENT_ADDR_INFO);
@@ -3957,14 +3963,20 @@ static uint8_t smp_ident_addr_info(struct bt_smp *smp, struct net_buf *buf)
 			 * present before ie. due to re-pairing.
 			 */
 			if (!bt_addr_le_is_identity(&conn->le.dst)) {
-				bt_addr_le_copy(&keys->addr, &req->addr);
-				bt_addr_le_copy(&conn->le.dst, &req->addr);
+				if (bt_addr_le_cmp(&keys->addr, &req->addr)) {
+					duplicate_rl = false;
+				} else {
+					bt_addr_le_copy(&keys->addr, &req->addr);
+				}
 
+				bt_addr_le_copy(&conn->le.dst, &req->addr);
 				bt_conn_identity_resolved(conn);
 			}
+		} else {
+			duplicate_rl = false;
 		}
 
-		bt_id_add(keys);
+		bt_id_add_option(keys, duplicate_rl);
 	}
 
 	smp->remote_dist &= ~BT_SMP_DIST_ID_KEY;
