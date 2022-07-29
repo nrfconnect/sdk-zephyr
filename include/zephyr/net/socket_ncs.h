@@ -56,13 +56,13 @@ extern "C" {
 /** sockopt: disable IPv6 ICMP replies */
 #define SO_IPV6_ECHO_REPLY 32
 /** sockopt: Release Assistance Indication feature: This will indicate that the
- *  next call to send/sendto will be the last one for some time.
- */
-#define SO_RAI_LAST 50
-/** sockopt: Release Assistance Indication feature: This will indicate that the
  *  application will not send any more data.
  */
-#define SO_RAI_NO_DATA 51
+#define SO_RAI_NO_DATA 50
+/** sockopt: Release Assistance Indication feature: This will indicate that the
+ *  next call to send/sendto will be the last one for some time.
+ */
+#define SO_RAI_LAST 51
 /** sockopt: Release Assistance Indication feature: This will indicate that
  *  after the next call to send/sendto, the application is expecting to receive
  *  one more data packet before this socket will not be used again for some time.
