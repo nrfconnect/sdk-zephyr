@@ -113,6 +113,39 @@ static inline struct bt_mesh_ext_adv *gatt_adv_get(void)
 #endif /* CONFIG_BT_MESH_ADV_EXT_GATT_SEPARATE */
 }
 
+static uint32_t tx_counter[4];
+
+static int tag_to_counter_idx(enum bt_mesh_adv_tag tag)
+{
+	if (tag & BT_MESH_LOCAL_ADV) {
+		return 0;
+	} else if (tag & BT_MESH_RELAY_ADV) {
+		return 1;
+	} else if (tag & BT_MESH_PROXY_ADV) {
+		return 2;
+	} else {
+		return 3;
+	}
+
+}
+
+static void tx_counter_work_handler(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(tx_counter_work, tx_counter_work_handler);
+
+static void tx_counter_work_handler(struct k_work *work)
+{
+	if (bt_mesh_relay_get() == BT_MESH_RELAY_DISABLED) {
+		return;
+	}
+
+	BT_ERR("Adv report: l:%u,r:%u,p:%u,u:%u",
+	       tx_counter[0], tx_counter[1], tx_counter[2], tx_counter[3]);
+
+	memset(&tx_counter[0], 0, ARRAY_SIZE(tx_counter) * sizeof(uint32_t));
+
+	k_work_reschedule(&tx_counter_work, K_SECONDS(1));
+}
+
 static int adv_start(struct bt_mesh_ext_adv *adv,
 		     const struct bt_le_adv_param *param,
 		     struct bt_le_ext_adv_start_param *start,
@@ -219,6 +252,8 @@ static void send_pending_adv(struct k_work *work)
 		int64_t duration = k_uptime_delta(&adv->timestamp);
 
 		BT_DBG("Advertising stopped after %u ms", (uint32_t)duration);
+
+		tx_counter[tag_to_counter_idx(adv->tag)]++;
 
 		atomic_clear_bit(adv->flags, ADV_FLAG_ACTIVE);
 		atomic_clear_bit(adv->flags, ADV_FLAG_PROXY);
@@ -405,6 +440,8 @@ int bt_mesh_adv_enable(void)
 			return err;
 		}
 	}
+
+	k_work_reschedule(&tx_counter_work, K_SECONDS(1));
 
 	return 0;
 }
