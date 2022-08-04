@@ -389,7 +389,6 @@ static void adv_disable_rpa(struct bt_le_ext_adv *adv, void *data)
 {
 	uint8_t adv_index = bt_le_ext_adv_get_index(adv);
 	bool *adv_disabled = data;
-	bool rpa_invalid = true;
 
 	adv_disabled[adv_index] = false;
 
@@ -406,14 +405,7 @@ static void adv_disable_rpa(struct bt_le_ext_adv *adv, void *data)
 		adv_disabled[adv_index] = true;
 	}
 
-	/* Notify the user about the RPA timeout and set the RPA validity. */
-	if (adv->cb && adv->cb->rpa_expired) {
-		rpa_invalid = adv->cb->rpa_expired(adv);
-	}
-
-	if (rpa_invalid) {
-		atomic_clear_bit(adv->flags, BT_ADV_RPA_VALID);
-	}
+	atomic_clear_bit(adv->flags, BT_ADV_RPA_VALID);
 }
 
 static void adv_enable_rpa(struct bt_le_ext_adv *adv, void *data)
@@ -441,12 +433,6 @@ static void adv_update_rpa_foreach(void)
 	bool adv_disabled[CONFIG_BT_EXT_ADV_MAX_ADV_SET];
 
 	bt_le_ext_adv_foreach(adv_disable_rpa, adv_disabled);
-
-	/* Submit the timeout in case all sets use the same
-	 * RPA for the next rotation period.
-	 */
-	le_rpa_timeout_submit();
-
 	bt_le_ext_adv_foreach(adv_enable_rpa, adv_disabled);
 #endif
 }
