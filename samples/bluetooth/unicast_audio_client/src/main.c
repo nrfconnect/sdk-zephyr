@@ -685,17 +685,6 @@ static struct bt_gatt_cb gatt_callbacks = {
 	.att_mtu_updated = att_mtu_updated,
 };
 
-static void unicast_client_location_cb(struct bt_conn *conn,
-				      enum bt_audio_dir dir,
-				      enum bt_audio_location loc)
-{
-	printk("dir %u loc %X\n", dir, loc);
-}
-
-const struct bt_audio_unicast_client_cb unicast_client_cbs = {
-	.location = unicast_client_location_cb
-};
-
 static int init(void)
 {
 	int err;
@@ -994,12 +983,6 @@ void main(void)
 		return;
 	}
 	printk("Initialized\n");
-
-	err = bt_audio_unicast_client_register_cb(&unicast_client_cbs);
-	if (err != 0) {
-		printk("Failed to register client callbacks: %d", err);
-		return;
-	}
 
 	while (true) {
 		reset_data();
