@@ -97,26 +97,23 @@ static void broadcast_sink_iso_recv(struct bt_iso_chan *chan,
 {
 	struct bt_audio_iso *audio_iso = CONTAINER_OF(chan, struct bt_audio_iso,
 						      iso_chan);
-	struct bt_audio_stream *stream = audio_iso->sink_stream;
+	struct bt_audio_ep *ep = audio_iso->sink_ep;
 	const struct bt_audio_stream_ops *ops;
 
-	if (stream == NULL) {
-		BT_ERR("Could not lookup stream by iso %p", chan);
-		return;
-	} else if (stream->ep == NULL) {
-		BT_ERR("Stream not associated with an ep");
+	if (ep == NULL) {
+		BT_ERR("Could not lookup ep by iso %p", chan);
 		return;
 	}
 
-	ops = stream->ops;
+	ops = ep->stream->ops;
 
 	if (IS_ENABLED(CONFIG_BT_AUDIO_DEBUG_STREAM_DATA)) {
 		BT_DBG("stream %p ep %p len %zu",
-		       stream, stream->ep, net_buf_frags_len(buf));
+		       chan, ep, net_buf_frags_len(buf));
 	}
 
 	if (ops != NULL && ops->recv != NULL) {
-		ops->recv(stream, info, buf);
+		ops->recv(ep->stream, info, buf);
 	} else {
 		BT_WARN("No callback for recv set");
 	}
@@ -126,25 +123,22 @@ static void broadcast_sink_iso_connected(struct bt_iso_chan *chan)
 {
 	struct bt_audio_iso *audio_iso = CONTAINER_OF(chan, struct bt_audio_iso,
 						      iso_chan);
-	struct bt_audio_stream *stream = audio_iso->sink_stream;
+	struct bt_audio_ep *ep = audio_iso->sink_ep;
 	const struct bt_audio_stream_ops *ops;
 
-	if (stream == NULL) {
-		BT_ERR("Could not lookup stream by iso %p", chan);
-		return;
-	} else if (stream->ep == NULL) {
-		BT_ERR("Stream not associated with an ep");
+	if (ep == NULL) {
+		BT_ERR("Could not lookup ep by iso %p", chan);
 		return;
 	}
 
-	ops = stream->ops;
+	ops = ep->stream->ops;
 
-	BT_DBG("stream %p", stream);
+	BT_DBG("stream %p ep %p", chan, ep);
 
-	broadcast_sink_set_ep_state(stream->ep, BT_AUDIO_EP_STATE_STREAMING);
+	broadcast_sink_set_ep_state(ep, BT_AUDIO_EP_STATE_STREAMING);
 
 	if (ops != NULL && ops->started != NULL) {
-		ops->started(stream);
+		ops->started(ep->stream);
 	} else {
 		BT_WARN("No callback for connected set");
 	}
@@ -155,22 +149,21 @@ static void broadcast_sink_iso_disconnected(struct bt_iso_chan *chan,
 {
 	struct bt_audio_iso *audio_iso = CONTAINER_OF(chan, struct bt_audio_iso,
 						      iso_chan);
-	struct bt_audio_stream *stream = audio_iso->sink_stream;
+	struct bt_audio_ep *ep = audio_iso->sink_ep;
 	const struct bt_audio_stream_ops *ops;
+	struct bt_audio_stream *stream;
 
-	if (stream == NULL) {
+	if (ep == NULL) {
 		BT_ERR("Could not lookup ep by iso %p", chan);
-		return;
-	} else if (stream->ep == NULL) {
-		BT_ERR("Stream not associated with an ep");
 		return;
 	}
 
-	ops = stream->ops;
+	ops = ep->stream->ops;
+	stream = ep->stream;
 
-	BT_DBG("stream %p ep %p reason 0x%02x", stream, stream->ep, reason);
+	BT_DBG("stream %p ep %p reason 0x%02x", chan, ep, reason);
 
-	broadcast_sink_set_ep_state(stream->ep, BT_AUDIO_EP_STATE_IDLE);
+	broadcast_sink_set_ep_state(ep, BT_AUDIO_EP_STATE_IDLE);
 
 	if (ops != NULL && ops->stopped != NULL) {
 		ops->stopped(stream);
@@ -822,12 +815,13 @@ static void broadcast_sink_ep_init(struct bt_audio_ep *ep,
 	(void)memset(ep, 0, sizeof(*ep));
 	ep->dir = BT_AUDIO_DIR_SINK;
 	ep->iso = iso;
+	iso->sink_ep = ep;
 
-	iso_chan = &iso->iso_chan;
+	iso_chan = &ep->iso->iso_chan;
 
 	iso_chan->ops = &broadcast_sink_iso_ops;
 	iso_chan->qos = &ep->iso->iso_qos;
-	iso_chan->qos->rx = &iso->sink_io_qos;
+	iso_chan->qos->rx = &ep->iso_io_qos;
 	iso_chan->qos->tx = NULL;
 }
 
@@ -870,7 +864,6 @@ static int bt_audio_broadcast_sink_setup_stream(uint8_t index,
 	}
 
 	bt_audio_stream_attach(NULL, stream, ep, codec);
-	ep->iso->sink_stream = stream;
 	/* TODO: The values of sink_chan_io_qos and codec_qos are not used,
 	 * but the `rx` and `qos` pointers need to be set. This should be fixed.
 	 */

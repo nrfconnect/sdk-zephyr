@@ -303,25 +303,6 @@ static void audio_timer_timeout(struct k_work *work)
 
 #endif
 
-
-static enum bt_audio_dir stream_dir(const struct bt_audio_stream *stream)
-{
-	for (size_t i = 0U; i < ARRAY_SIZE(sinks); i++) {
-		if (sinks[i].ep != NULL && stream->ep == sinks[i].ep) {
-			return BT_AUDIO_DIR_SINK;
-		}
-	}
-
-	for (size_t i = 0U; i < ARRAY_SIZE(sources); i++) {
-		if (sources[i] != NULL && stream->ep == sources[i]) {
-			return BT_AUDIO_DIR_SOURCE;
-		}
-	}
-
-	__ASSERT(false, "Invalid stream");
-	return 0;
-}
-
 static void print_hex(const uint8_t *ptr, size_t len)
 {
 	while (len-- != 0) {
@@ -832,16 +813,14 @@ static int configure_streams(void)
 
 static int create_group(void)
 {
-	struct bt_audio_unicast_group_param params[ARRAY_SIZE(streams)];
+	struct bt_audio_stream *streams_p[ARRAY_SIZE(streams)];
 	int err;
 
 	for (size_t i = 0U; i < configured_stream_count; i++) {
-		params[i].stream = &streams[i];
-		params[i].qos = &codec_configuration.qos;
-		params[i].dir = stream_dir(params[i].stream);
+		streams_p[i] = &streams[i];
 	}
 
-	err = bt_audio_unicast_group_create(params, configured_stream_count,
+	err = bt_audio_unicast_group_create(streams_p, configured_stream_count,
 					    &unicast_group);
 	if (err != 0) {
 		printk("Could not create unicast group (err %d)\n", err);
@@ -855,9 +834,10 @@ static int set_stream_qos(void)
 {
 	int err;
 
-	err = bt_audio_stream_qos(default_conn, unicast_group);
+	err = bt_audio_stream_qos(default_conn, unicast_group,
+				&codec_configuration.qos);
 	if (err != 0) {
-		printk("Unable to setup QoS: %d\n", err);
+		printk("Unable to setup QoS: %d", err);
 		return err;
 	}
 

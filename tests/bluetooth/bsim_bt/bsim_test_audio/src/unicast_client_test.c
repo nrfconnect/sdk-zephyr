@@ -308,42 +308,74 @@ static size_t release_streams(size_t stream_cnt)
 	return stream_cnt;
 }
 
-
 static void create_unicast_group(struct bt_audio_unicast_group **unicast_group,
 				 size_t stream_cnt)
 {
-	struct bt_audio_unicast_group_param params[ARRAY_SIZE(g_streams)];
-
-	for (size_t i = 0U; i < stream_cnt; i++) {
-		params[i].stream = &g_streams[i];
-		params[i].qos = &preset_16_2_1.qos;
-		params[i].dir = BT_AUDIO_DIR_SINK; /* we only configure sinks */
-	}
-
-#if defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	struct bt_audio_stream *streams[ARRAY_SIZE(g_streams)];
 	int err;
 
-	/* Require controller support for CIGs */
+	for (size_t i = 0U; i < stream_cnt; i++) {
+		streams[i] = &g_streams[i];
+	}
+
 	printk("Creating unicast group\n");
-	err = bt_audio_unicast_group_create(&params, 1, unicast_group);
+	err = bt_audio_unicast_group_create(streams, 1, unicast_group);
 	if (err != 0) {
 		FAIL("Unable to create unicast group: %d", err);
 		return;
 	}
-#endif /* CONFIG_BT_CTLR_CENTRAL_ISO */
+
+	/* Test removing streams from group before adding them */
+	if (stream_cnt > 1) {
+		const size_t remaining_streams = stream_cnt - 1;
+
+		err = bt_audio_unicast_group_remove_streams(*unicast_group,
+							    &streams[1],
+							    remaining_streams);
+		if (err == 0) {
+			FAIL("Able to remove stream not in group");
+			return;
+		}
+
+		/* Test adding streams to group after creation */
+		err = bt_audio_unicast_group_add_streams(*unicast_group,
+							 &streams[1],
+							 remaining_streams);
+		if (err != 0) {
+			FAIL("Unable to add streams to unicast group: %d", err);
+			return;
+		}
+	}
 }
 
-static void delete_unicast_group(struct bt_audio_unicast_group *unicast_group)
+static void delete_unicast_group(struct bt_audio_unicast_group *unicast_group,
+				 size_t stream_cnt)
 {
-#if defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	struct bt_audio_stream *streams[ARRAY_SIZE(g_streams)];
 	int err;
-	/* Require controller support for CIGs */
+
+	for (size_t i = 0U; i < stream_cnt; i++) {
+		streams[i] = &g_streams[i];
+	}
+
+	if (stream_cnt > 1) {
+		const size_t remove_streams_cnt = stream_cnt - 1;
+
+		err = bt_audio_unicast_group_remove_streams(unicast_group,
+							    &streams[1],
+							    remove_streams_cnt);
+		if (err != 0) {
+			FAIL("Unable to remove streams from unicast group: %d",
+			     err);
+			return;
+		}
+	}
+
 	err = bt_audio_unicast_group_delete(unicast_group);
 	if (err != 0) {
 		FAIL("Unable to delete unicast group: %d", err);
 		return;
 	}
-#endif /* CONFIG_BT_CTLR_CENTRAL_ISO */
 }
 
 static void test_main(void)
@@ -378,7 +410,7 @@ static void test_main(void)
 
 		/* Test removing streams from group after creation */
 		printk("Deleting unicast group\n");
-		delete_unicast_group(unicast_group);
+		delete_unicast_group(unicast_group, stream_cnt);
 		unicast_group = NULL;
 	}
 
