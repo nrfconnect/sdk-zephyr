@@ -443,21 +443,22 @@ BT_GATT_SERVICE_DEFINE(pacs_svc,
 			       snk_read, NULL, NULL),
 	BT_GATT_CCC(snk_cfg_changed,
 		    BT_GATT_PERM_READ | BT_GATT_PERM_WRITE_ENCRYPT),
-#if defined(CONFIG_BT_PAC_SNK_LOC_WRITEABLE)
+#if defined(CONFIG_BT_PAC_SNK_LOC)
 	BT_GATT_CHARACTERISTIC(BT_UUID_PACS_SNK_LOC,
 			       BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE |
 			       BT_GATT_CHRC_NOTIFY,
 			       BT_GATT_PERM_READ_ENCRYPT |
 			       BT_GATT_PERM_WRITE_ENCRYPT,
-			       snk_loc_read, snk_loc_write, NULL),
-#elif defined(CONFIG_BT_PAC_SNK_LOC)
-	BT_GATT_CHARACTERISTIC(BT_UUID_PACS_SNK_LOC,
-			       BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-			       BT_GATT_PERM_READ_ENCRYPT,
-			       snk_loc_read, NULL, NULL),
+			       snk_loc_read,
+#if defined(CONFIG_BT_PAC_SNK_LOC_WRITEABLE)
+			       snk_loc_write,
+#else
+			       NULL,
 #endif /* CONFIG_BT_PAC_SNK_LOC_WRITEABLE */
+			       NULL),
 	BT_GATT_CCC(snk_loc_cfg_changed,
 		    BT_GATT_PERM_READ | BT_GATT_PERM_WRITE_ENCRYPT),
+#endif /* CONFIG_BT_PAC_SNK_LOC */
 #endif /* CONFIG_BT_PAC_SNK */
 #if defined(CONFIG_BT_PAC_SRC)
 	BT_GATT_CHARACTERISTIC(BT_UUID_PACS_SRC,
@@ -466,22 +467,23 @@ BT_GATT_SERVICE_DEFINE(pacs_svc,
 			       src_read, NULL, NULL),
 	BT_GATT_CCC(src_cfg_changed,
 		    BT_GATT_PERM_READ | BT_GATT_PERM_WRITE_ENCRYPT),
-#if defined(CONFIG_BT_PAC_SRC_LOC_WRITEABLE)
+#if defined(CONFIG_BT_PAC_SRC_LOC)
 	BT_GATT_CHARACTERISTIC(BT_UUID_PACS_SRC_LOC,
 			       BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE |
 			       BT_GATT_CHRC_NOTIFY,
 			       BT_GATT_PERM_READ_ENCRYPT |
 			       BT_GATT_PERM_WRITE_ENCRYPT,
-			       src_loc_read, src_loc_write, NULL),
-#elif defined(CONFIG_BT_PAC_SRC_LOC)
-	BT_GATT_CHARACTERISTIC(BT_UUID_PACS_SRC_LOC,
-			       BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-			       BT_GATT_PERM_READ_ENCRYPT,
-			       src_loc_read, NULL, NULL),
+			       src_loc_read,
+#if defined(CONFIG_BT_PAC_SRC_LOC_WRITEABLE)
+			       src_loc_write,
+#else
+			       NULL,
 #endif /* CONFIG_BT_PAC_SRC_LOC_WRITEABLE */
+			       NULL),
 	BT_GATT_CCC(src_loc_cfg_changed,
 		    BT_GATT_PERM_READ | BT_GATT_PERM_WRITE_ENCRYPT),
-#endif /* CONFIG_BT_PAC_SRC */
+#endif /* CONFIG_BT_PAC_SRC_LOC */
+#endif /* CONFIG_BT_PAC_SNK */
 	BT_GATT_CHARACTERISTIC(BT_UUID_PACS_AVAILABLE_CONTEXT,
 			       BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
 			       BT_GATT_PERM_READ_ENCRYPT,
