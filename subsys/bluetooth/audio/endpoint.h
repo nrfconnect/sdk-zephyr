@@ -32,10 +32,8 @@ struct bt_audio_ep;
 struct bt_audio_iso {
 	struct bt_iso_chan iso_chan;
 	struct bt_iso_chan_qos iso_qos;
-	struct bt_iso_chan_io_qos sink_io_qos;
-	struct bt_iso_chan_io_qos source_io_qos;
-	struct bt_audio_stream *sink_stream;
-	struct bt_audio_stream *source_stream;
+	struct bt_audio_ep *sink_ep;
+	struct bt_audio_ep *source_ep;
 };
 
 struct bt_audio_ep {
@@ -52,6 +50,7 @@ struct bt_audio_ep {
 	struct bt_codec_qos qos;
 	struct bt_codec_qos_pref qos_pref;
 	struct bt_audio_iso *iso;
+	struct bt_iso_chan_io_qos iso_io_qos;
 	struct bt_gatt_subscribe_params subscribe;
 	struct bt_gatt_discover_params discover;
 
@@ -62,10 +61,9 @@ struct bt_audio_ep {
 };
 
 struct bt_audio_unicast_group {
-	uint8_t index;
 	bool allocated;
 	/* QoS used to create the CIG */
-	const struct bt_codec_qos *qos;
+	struct bt_codec_qos *qos;
 	struct bt_iso_cig *cig;
 	/* The ISO API for CIG creation requires an array of pointers to ISO channels */
 	struct bt_iso_chan *cis[UNICAST_GROUP_STREAM_CNT];
