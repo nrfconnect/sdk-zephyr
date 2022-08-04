@@ -44,7 +44,6 @@ enum {
 	BT_DEV_INITIATING,
 
 	BT_DEV_RPA_VALID,
-	BT_DEV_RPA_TIMEOUT_CHANGED,
 
 	BT_DEV_ID_PENDING,
 	BT_DEV_STORE_ID,
@@ -359,9 +358,6 @@ struct bt_dev {
 
 	/* Work used for RPA rotation */
 	struct k_work_delayable rpa_update;
-
-	/* The RPA timeout value. */
-	uint16_t rpa_timeout;
 #endif
 
 	/* Local Name */

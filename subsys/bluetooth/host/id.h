@@ -5,7 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define RPA_TIMEOUT_MS(_rpa_timeout) (_rpa_timeout * MSEC_PER_SEC)
+#define RPA_TIMEOUT_MS       (CONFIG_BT_RPA_TIMEOUT * MSEC_PER_SEC)
+#define RPA_TIMEOUT          K_MSEC(RPA_TIMEOUT_MS)
 
 static inline bool bt_id_rpa_is_new(void)
 {
@@ -15,7 +16,7 @@ static inline bool bt_id_rpa_is_new(void)
 	/* RPA is considered new if there is less than half a second since the
 	 * timeout was started.
 	 */
-	return remaining_ms > (RPA_TIMEOUT_MS(bt_dev.rpa_timeout) - 500);
+	return remaining_ms > (RPA_TIMEOUT_MS - 500);
 #else
 	return false;
 #endif
