@@ -30,9 +30,6 @@ struct ot_setting_delete_ctx {
 
 	/* Operation result. */
 	int status;
-
-	/* Indicates if delete subtree root. */
-	bool delete_subtree_root;
 };
 
 static int ot_setting_delete_cb(const char *key, size_t len,
@@ -50,10 +47,6 @@ static int ot_setting_delete_cb(const char *key, size_t len,
 
 	if ((ctx->target_index != -1) && (ctx->target_index != ctx->index)) {
 		ctx->index++;
-		return 0;
-	}
-
-	if (key == NULL && ctx->delete_subtree_root == false) {
 		return 0;
 	}
 
@@ -82,15 +75,14 @@ static int ot_setting_delete_cb(const char *key, size_t len,
 	return 0;
 }
 
-static int ot_setting_delete_subtree(int key, int index, bool delete_subtree_root)
+static int ot_setting_delete_subtree(int key, int index)
 {
 	int ret;
 	char subtree[OT_SETTINGS_MAX_PATH_LEN];
 	struct ot_setting_delete_ctx delete_ctx = {
 		.subtree = subtree,
 		.status = -ENOENT,
-		.target_index = index,
-		.delete_subtree_root = delete_subtree_root,
+		.target_index = index
 	};
 
 	if (key == -1) {
@@ -260,9 +252,10 @@ otError otPlatSettingsSet(otInstance *aInstance, uint16_t aKey,
 
 	LOG_DBG("%s Entry aKey %u", __func__, aKey);
 
-	(void)ot_setting_delete_subtree(aKey, -1, false);
+	(void)ot_setting_delete_subtree(aKey, -1);
 
-	ret = snprintk(path, sizeof(path), "%s/%x", OT_SETTINGS_ROOT_KEY, aKey);
+	ret = snprintk(path, sizeof(path), "%s/%x/%08x", OT_SETTINGS_ROOT_KEY,
+		       aKey, sys_rand32_get());
 	__ASSERT(ret < sizeof(path), "Setting path buffer too small.");
 
 	ret = settings_save_one(path, aValue, aValueLength);
@@ -307,7 +300,7 @@ otError otPlatSettingsDelete(otInstance *aInstance, uint16_t aKey, int aIndex)
 
 	LOG_DBG("%s Entry aKey %u aIndex %d", __func__, aKey, aIndex);
 
-	ret = ot_setting_delete_subtree(aKey, aIndex, true);
+	ret = ot_setting_delete_subtree(aKey, aIndex);
 	if (ret != 0) {
 		LOG_DBG("Entry not found aKey %u aIndex %d", aKey, aIndex);
 		return OT_ERROR_NOT_FOUND;
@@ -320,7 +313,7 @@ void otPlatSettingsWipe(otInstance *aInstance)
 {
 	ARG_UNUSED(aInstance);
 
-	(void)ot_setting_delete_subtree(-1, -1, true);
+	(void)ot_setting_delete_subtree(-1, -1);
 }
 
 void otPlatSettingsDeinit(otInstance *aInstance)
