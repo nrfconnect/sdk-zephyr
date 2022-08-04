@@ -28,6 +28,8 @@
 #define LOG_MODULE_NAME bt_unicast_client
 #include "common/log.h"
 
+#if defined(CONFIG_BT_AUDIO_UNICAST_CLIENT)
+
 #define PAC_DIR_UNUSED(dir) ((dir) != BT_AUDIO_DIR_SINK && (dir) != BT_AUDIO_DIR_SOURCE)
 
 static struct unicast_client_pac {
@@ -2122,3 +2124,5 @@ int bt_audio_discover(struct bt_conn *conn,
 
 	return bt_gatt_read(conn, &params->read);
 }
+
+#endif /* CONFIG_BT_AUDIO_UNICAST_CLIENT */
