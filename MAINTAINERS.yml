@@ -1311,6 +1311,7 @@ Networking:
         - samples/net/lwm2m_client/
         - subsys/net/lib/coap/
         - subsys/net/lib/lwm2m/
+        - subsys/net/lib/openthread/
         - subsys/net/lib/tls_credentials/
     labels:
         - "area: Networking"
@@ -1386,6 +1387,7 @@ Networking:
         - pdgendt
     files:
         - subsys/net/l2/openthread/
+        - subsys/net/lib/openthread/
         - samples/net/openthread/
     labels:
         - "area: Networking"
@@ -2356,8 +2358,7 @@ West:
         - rlubos
     collaborators:
         - pdgendt
-    files:
-        - modules/openthread/
+    files: []
     labels:
         - manifest-openthread
 
