@@ -5862,7 +5862,7 @@ static void socket_loop(void)
 	}
 }
 
-#if defined(CONFIG_LWM2M_DTLS_SUPPORT) && defined(CONFIG_TLS_CREDENTIALS)
+#if defined(CONFIG_LWM2M_DTLS_SUPPORT)
 static int load_tls_credential(struct lwm2m_ctx *client_ctx, uint16_t res_id,
 			       enum tls_credential_type type)
 {
@@ -5898,7 +5898,7 @@ static int load_tls_credential(struct lwm2m_ctx *client_ctx, uint16_t res_id,
 
 	return ret;
 }
-#endif /* CONFIG_LWM2M_DTLS_SUPPORT && CONFIG_TLS_CREDENTIALS*/
+#endif /* CONFIG_LWM2M_DTLS_SUPPORT */
 
 int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 {
@@ -5915,9 +5915,7 @@ int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 		if (ret < 0) {
 			return ret;
 		}
-	}
-#if defined(CONFIG_TLS_CREDENTIALS)
-	else {
+	} else {
 		ret = load_tls_credential(client_ctx, 3, TLS_CREDENTIAL_PSK_ID);
 		if (ret < 0) {
 			return ret;
@@ -5928,7 +5926,6 @@ int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 			return ret;
 		}
 	}
-#endif /* CONFIG_TLS_CREDENTIALS */
 #endif /* CONFIG_LWM2M_DTLS_SUPPORT */
 
 	if (client_ctx->sock_fd < 0) {
