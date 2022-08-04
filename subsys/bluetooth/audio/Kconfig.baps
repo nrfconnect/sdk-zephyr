@@ -153,8 +153,6 @@ config BT_AUDIO_BROADCAST_SINK
 	bool "Bluetooth Broadcast Sink Audio Support [EXPERIMENTAL]"
 	select EXPERIMENTAL
 	select BT_ISO_SYNC_RECEIVER
-	depends on BT_PERIPHERAL
-	depends on BT_PAC_SNK
 	help
 	  This option enables support for Bluetooth Broadcast Sink Audio using
 	  Isochronous channels.
@@ -245,7 +243,7 @@ config BT_AUDIO_STREAM
 config BT_AUDIO_CAPABILITY
 	# Virtual/hidden option
 	bool
-	default y if BT_PACS
+	default y if BT_ASCS || BT_AUDIO_BROADCAST_SINK
 
 rsource "Kconfig.pacs"
 rsource "Kconfig.ascs"
