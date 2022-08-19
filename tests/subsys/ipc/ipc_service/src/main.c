@@ -4,7 +4,7 @@
 
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
-#include <ztest.h>
+#include <zephyr/ztest.h>
 #include <zephyr/ipc/ipc_service.h>
 
 static void received_cb(const void *data, size_t len, void *priv)
@@ -24,7 +24,7 @@ static struct ipc_ept_cfg ept_cfg = {
 	},
 };
 
-void test_ipc_service(void)
+ZTEST(ipc_service, test_ipc_service)
 {
 	const struct device *dev_10;
 	const struct device *dev_20;
@@ -69,9 +69,4 @@ void test_ipc_service(void)
 	zassert_ok(ret, "ipc_service_send() failed", NULL);
 }
 
-void test_main(void)
-{
-	ztest_test_suite(ipc_service,
-			 ztest_unit_test(test_ipc_service));
-	ztest_run_test_suite(ipc_service);
-}
+ZTEST_SUITE(ipc_service, NULL, NULL, NULL, NULL, NULL);

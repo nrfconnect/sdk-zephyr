@@ -184,7 +184,6 @@ static void set_sm_state(uint8_t sm_state)
 		    sm_state == ENGINE_DEREGISTERED) &&
 		   (client.engine_state >= ENGINE_DO_REGISTRATION &&
 		    client.engine_state <= ENGINE_DEREGISTER_SENT)) {
-		lwm2m_engine_context_close(client.ctx);
 		event = LWM2M_RD_CLIENT_EVENT_DISCONNECT;
 	} else if (sm_state == ENGINE_NETWORK_ERROR) {
 		lwm2m_engine_context_close(client.ctx);
@@ -418,7 +417,7 @@ static int do_registration_reply_cb(const struct coap_packet *response,
 		client.server_ep[options[1].len] = '\0';
 		set_sm_state(ENGINE_REGISTRATION_DONE);
 		LOG_INF("Registration Done (EP='%s')",
-			log_strdup(client.server_ep));
+			client.server_ep);
 
 		return 0;
 	}
@@ -611,6 +610,7 @@ static int sm_select_security_inst(bool bootstrap_server, int *sec_obj_inst)
 
 static int sm_do_init(void)
 {
+	lwm2m_engine_context_close(client.ctx);
 	client.ctx->sec_obj_inst = -1;
 	client.ctx->srv_obj_inst = -1;
 	client.trigger_update = false;
@@ -682,7 +682,7 @@ static int sm_send_bootstrap_registration(void)
 
 	/* log the bootstrap attempt */
 	LOG_DBG("Register ID with bootstrap server as '%s'",
-		log_strdup(query_buffer));
+		query_buffer);
 
 	lwm2m_send_message_async(msg);
 
@@ -713,7 +713,7 @@ static int sm_do_bootstrap_reg(void)
 	}
 
 	LOG_INF("Bootstrap started with endpoint '%s' with client lifetime %d",
-		log_strdup(client.ep_name), client.lifetime);
+		client.ep_name, client.lifetime);
 
 	ret = lwm2m_engine_start(client.ctx);
 	if (ret < 0) {
@@ -890,7 +890,7 @@ static int sm_send_registration(bool send_obj_support_data,
 
 	/* log the registration attempt */
 	LOG_DBG("registration sent [%s]",
-		log_strdup(lwm2m_sprint_ip_addr(&client.ctx->remote_addr)));
+		lwm2m_sprint_ip_addr(&client.ctx->remote_addr));
 
 	return 0;
 
@@ -943,7 +943,7 @@ static int sm_do_registration(void)
 	}
 
 	LOG_INF("RD Client started with endpoint '%s' with client lifetime %d",
-		log_strdup(client.ep_name), client.lifetime);
+		client.ep_name, client.lifetime);
 
 	ret = lwm2m_engine_start(client.ctx);
 	if (ret < 0) {
@@ -1055,7 +1055,7 @@ static int sm_do_deregister(void)
 		goto cleanup;
 	}
 
-	LOG_INF("Deregister from '%s'", log_strdup(client.server_ep));
+	LOG_INF("Deregister from '%s'", client.server_ep);
 
 	lwm2m_send_message_async(msg);
 
@@ -1146,6 +1146,7 @@ static void lwm2m_rd_client_service(struct k_work *work)
 			break;
 
 		case ENGINE_DEREGISTERED:
+			lwm2m_engine_context_close(client.ctx);
 			set_sm_state(ENGINE_IDLE);
 			break;
 
@@ -1195,7 +1196,7 @@ int lwm2m_rd_client_start(struct lwm2m_ctx *client_ctx, const char *ep_name,
 	set_sm_state(ENGINE_INIT);
 	strncpy(client.ep_name, ep_name, CLIENT_EP_LEN - 1);
 	client.ep_name[CLIENT_EP_LEN - 1] = '\0';
-	LOG_INF("Start LWM2M Client: %s", log_strdup(client.ep_name));
+	LOG_INF("Start LWM2M Client: %s", client.ep_name);
 
 	k_mutex_unlock(&client.mutex);
 	return 0;
@@ -1220,7 +1221,7 @@ int lwm2m_rd_client_stop(struct lwm2m_ctx *client_ctx,
 		set_sm_state(ENGINE_DEREGISTERED);
 	}
 
-	LOG_INF("Stop LWM2M Client: %s", log_strdup(client.ep_name));
+	LOG_INF("Stop LWM2M Client: %s", client.ep_name);
 
 	k_mutex_unlock(&client.mutex);
 

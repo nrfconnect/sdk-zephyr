@@ -8,8 +8,8 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/arch/arm/aarch32/cortex_m/cmsis.h>
-#include <ztest.h>
-#include <tc_util.h>
+#include <zephyr/ztest.h>
+#include <zephyr/tc_util.h>
 
 /* on v8m arch the nmi pend bit is renamed to pend nmi map it to old name */
 #ifndef SCB_ICSR_NMIPENDSET_Msk
@@ -46,7 +46,7 @@ static void nmi_test_isr(void)
  *
  * @see z_NmiHandlerSet()
  */
-void test_arm_runtime_nmi(void)
+ZTEST(arm_runtime_nmi_fn, test_arm_runtime_nmi)
 {
 	uint32_t i = 0U;
 

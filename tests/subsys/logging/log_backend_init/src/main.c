@@ -5,13 +5,13 @@
  */
 
 
-#include <tc_util.h>
+#include <zephyr/tc_util.h>
 #include <stdbool.h>
-#include <zephyr.h>
-#include <ztest.h>
-#include <logging/log_backend.h>
-#include <logging/log_ctrl.h>
-#include <logging/log.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/ztest.h>
+#include <zephyr/logging/log_backend.h>
+#include <zephyr/logging/log_ctrl.h>
+#include <zephyr/logging/log.h>
 
 #define LOG_MODULE_NAME test
 LOG_MODULE_REGISTER(LOG_MODULE_NAME);
@@ -35,13 +35,13 @@ static int cbprintf_callback(int c, void *ctx)
 }
 
 static void backend_process(const struct log_backend *const backend,
-			    union log_msg2_generic *msg)
+			    union log_msg_generic *msg)
 {
 	char str[100];
 	char *pstr = str;
 	struct backend_context *context = (struct backend_context *)backend->cb->ctx;
 	size_t len;
-	uint8_t *p = log_msg2_get_package(&msg->log, &len);
+	uint8_t *p = log_msg_get_package(&msg->log, &len);
 
 	(void)len;
 	int slen = cbpprintf(cbprintf_callback, &pstr, p);

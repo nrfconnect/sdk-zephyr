@@ -66,6 +66,7 @@
 		sw0 = &user_key;
 		pwm-led0 = &pwm_led;
 		eeprom-0 = &eeprom0;
+		spi-flash0 = &nor_flash;
 	};
 };
 
@@ -101,6 +102,12 @@
 	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&usart0_default>;
+	pinctrl-names = "default";
+};
+
+&adc0 {
+	status = "okay";
+	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
 };
 

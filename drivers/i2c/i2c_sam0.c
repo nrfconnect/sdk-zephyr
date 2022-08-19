@@ -202,7 +202,7 @@ static void i2c_sam0_dma_write_done(const struct device *dma_dev, void *arg,
 	ARG_UNUSED(dma_dev);
 	ARG_UNUSED(id);
 
-	int key = irq_lock();
+	unsigned int key = irq_lock();
 
 	if (i2c_sam0_terminate_on_error(dev)) {
 		irq_unlock(key);
@@ -293,7 +293,7 @@ static void i2c_sam0_dma_read_done(const struct device *dma_dev, void *arg,
 	ARG_UNUSED(dma_dev);
 	ARG_UNUSED(id);
 
-	int key = irq_lock();
+	unsigned int key = irq_lock();
 
 	if (i2c_sam0_terminate_on_error(dev)) {
 		irq_unlock(key);
@@ -435,7 +435,7 @@ static int i2c_sam0_transfer(const struct device *dev, struct i2c_msg *msgs,
 #endif
 		}
 
-		int key = irq_lock();
+		unsigned int key = irq_lock();
 
 		/*
 		 * Writing the address starts the transaction, issuing
@@ -668,7 +668,7 @@ static int i2c_sam0_configure(const struct device *dev, uint32_t config)
 	SercomI2cm *i2c = cfg->regs;
 	int retval;
 
-	if (!(config & I2C_MODE_MASTER)) {
+	if (!(config & I2C_MODE_CONTROLLER)) {
 		return -EINVAL;
 	}
 
@@ -780,7 +780,7 @@ static const struct i2c_driver_api i2c_sam0_driver_api = {
 			    i2c_sam0_isr,				\
 			    DEVICE_DT_INST_GET(n), 0);			\
 		irq_enable(DT_INST_IRQ_BY_IDX(n, m, irq));		\
-	} while (0)
+	} while (false)
 
 #if DT_INST_IRQ_HAS_IDX(0, 3)
 #define I2C_SAM0_IRQ_HANDLER(n)						\

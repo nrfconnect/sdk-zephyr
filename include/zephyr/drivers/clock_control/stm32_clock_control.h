@@ -126,7 +126,20 @@
 #define STM32_PLL_R_DIVISOR	DT_PROP_OR(DT_NODELABEL(pll), div_r, 1)
 #endif
 
-#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(pll3), st_stm32h7_pll_clock, okay)
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(pll2), st_stm32u5_pll_clock, okay)
+#define STM32_PLL2_ENABLED	1
+#define STM32_PLL2_M_DIVISOR	DT_PROP(DT_NODELABEL(pll2), div_m)
+#define STM32_PLL2_N_MULTIPLIER	DT_PROP(DT_NODELABEL(pll2), mul_n)
+#define STM32_PLL2_P_ENABLED	DT_NODE_HAS_PROP(DT_NODELABEL(pll2), div_p)
+#define STM32_PLL2_P_DIVISOR	DT_PROP_OR(DT_NODELABEL(pll2), div_p, 1)
+#define STM32_PLL2_Q_ENABLED	DT_NODE_HAS_PROP(DT_NODELABEL(pll2), div_q)
+#define STM32_PLL2_Q_DIVISOR	DT_PROP_OR(DT_NODELABEL(pll2), div_q, 1)
+#define STM32_PLL2_R_ENABLED	DT_NODE_HAS_PROP(DT_NODELABEL(pll2), div_r)
+#define STM32_PLL2_R_DIVISOR	DT_PROP_OR(DT_NODELABEL(pll2), div_r, 1)
+#endif
+
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(pll3), st_stm32h7_pll_clock, okay) || \
+	DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(pll3), st_stm32u5_pll_clock, okay)
 #define STM32_PLL3_ENABLED	1
 #define STM32_PLL3_M_DIVISOR	DT_PROP(DT_NODELABEL(pll3), div_m)
 #define STM32_PLL3_N_MULTIPLIER	DT_PROP(DT_NODELABEL(pll3), mul_n)
@@ -154,6 +167,7 @@
 #define STM32_PLL_MULTIPLIER	DT_PROP(DT_NODELABEL(pll), mul)
 #endif
 
+/** PLL/PLL1 clock source */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(pll), okay) && \
 	DT_NODE_HAS_PROP(DT_NODELABEL(pll), clocks)
 #define DT_PLL_CLOCKS_CTRL	DT_CLOCKS_CTLR(DT_NODELABEL(pll))
@@ -174,6 +188,38 @@
 #endif
 #if DT_SAME_NODE(DT_PLL_CLOCKS_CTRL, DT_NODELABEL(pll2))
 #define STM32_PLL_SRC_PLL2	1
+#endif
+
+#endif
+
+/** PLL2 clock source */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pll2), okay) && \
+	DT_NODE_HAS_PROP(DT_NODELABEL(pll2), clocks)
+#define DT_PLL2_CLOCKS_CTRL	DT_CLOCKS_CTLR(DT_NODELABEL(pll2))
+#if DT_SAME_NODE(DT_PLL2_CLOCKS_CTRL, DT_NODELABEL(clk_msis))
+#define STM32_PLL2_SRC_MSIS	1
+#endif
+#if DT_SAME_NODE(DT_PLL2_CLOCKS_CTRL, DT_NODELABEL(clk_hsi))
+#define STM32_PLL2_SRC_HSI	1
+#endif
+#if DT_SAME_NODE(DT_PLL2_CLOCKS_CTRL, DT_NODELABEL(clk_hse))
+#define STM32_PLL2_SRC_HSE	1
+#endif
+
+#endif
+
+/** PLL3 clock source */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pll3), okay) && \
+	DT_NODE_HAS_PROP(DT_NODELABEL(pll3), clocks)
+#define DT_PLL3_CLOCKS_CTRL	DT_CLOCKS_CTLR(DT_NODELABEL(pll3))
+#if DT_SAME_NODE(DT_PLL3_CLOCKS_CTRL, DT_NODELABEL(clk_msis))
+#define STM32_PLL3_SRC_MSIS	1
+#endif
+#if DT_SAME_NODE(DT_PLL3_CLOCKS_CTRL, DT_NODELABEL(clk_hsi))
+#define STM32_PLL3_SRC_HSI	1
+#endif
+#if DT_SAME_NODE(DT_PLL3_CLOCKS_CTRL, DT_NODELABEL(clk_hse))
+#define STM32_PLL3_SRC_HSE	1
 #endif
 
 #endif
@@ -241,13 +287,17 @@
 #endif
 
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(clk_hsi), fixed_clock, okay)
+#define STM32_HSI_DIV_ENABLED	0
 #define STM32_HSI_ENABLED	1
 #define STM32_HSI_FREQ		DT_PROP(DT_NODELABEL(clk_hsi), clock_frequency)
-#elif DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(clk_hsi), st_stm32h7_hsi_clock, okay)
+#elif DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(clk_hsi), st_stm32h7_hsi_clock, okay) \
+	|| DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(clk_hsi), st_stm32g0_hsi_clock, okay)
+#define STM32_HSI_DIV_ENABLED	1
 #define STM32_HSI_ENABLED	1
 #define STM32_HSI_DIVISOR	DT_PROP(DT_NODELABEL(clk_hsi), hsi_div)
 #define STM32_HSI_FREQ		DT_PROP(DT_NODELABEL(clk_hsi), clock_frequency)
 #else
+#define STM32_HSI_DIV_ENABLED	0
 #define STM32_HSI_DIVISOR	1
 #define STM32_HSI_FREQ		0
 #endif
@@ -281,27 +331,19 @@ struct stm32_pclken {
 
 /** Device tree clocks helpers  */
 
-#define STM32_CLOCK_INFO(clk_index, id)					\
+#define STM32_CLOCK_INFO(clk_index, node_id)				\
 	{								\
-	.enr = DT_CLOCKS_CELL_BY_IDX(DT_NODELABEL(id), clk_index, bits),\
-	.bus = DT_CLOCKS_CELL_BY_IDX(DT_NODELABEL(id), clk_index, bus)	\
+	.enr = DT_CLOCKS_CELL_BY_IDX(node_id, clk_index, bits),		\
+	.bus = DT_CLOCKS_CELL_BY_IDX(node_id, clk_index, bus)		\
 	}
-#define STM32_DT_CLOCKS(id)						\
+#define STM32_DT_CLOCKS(node_id)					\
 	{								\
-		LISTIFY(DT_NUM_CLOCKS(DT_NODELABEL(id)),		\
-			STM32_CLOCK_INFO, (,), id)			\
+		LISTIFY(DT_NUM_CLOCKS(node_id),				\
+			STM32_CLOCK_INFO, (,), node_id)			\
 	}
 
-#define STM32_INST_CLOCK_INFO(clk_index, inst)				\
-	{								\
-	.enr = DT_INST_CLOCKS_CELL_BY_IDX(inst, clk_index, bits),	\
-	.bus = DT_INST_CLOCKS_CELL_BY_IDX(inst, clk_index, bus)		\
-	}
 #define STM32_DT_INST_CLOCKS(inst)					\
-	{								\
-		LISTIFY(DT_INST_NUM_CLOCKS(inst),			\
-			STM32_INST_CLOCK_INFO, (,), inst)		\
-	}
+	STM32_DT_CLOCKS(DT_DRV_INST(inst))
 
 #define STM32_OPT_CLOCK_INST_SUPPORT(inst) DT_INST_CLOCKS_HAS_IDX(inst, 1) ||
 #define STM32_DT_INST_DEV_OPT_CLOCK_SUPPORT				\

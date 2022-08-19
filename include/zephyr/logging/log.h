@@ -266,12 +266,6 @@ extern "C" {
  */
 void z_log_vprintk(const char *fmt, va_list ap);
 
-/** @brief Deprecated. */
-static inline char *log_strdup(const char *str)
-{
-	return (char *)str;
-}
-
 #ifdef __cplusplus
 }
 #define LOG_IN_CPLUSPLUS 1
@@ -328,7 +322,7 @@ static inline char *log_strdup(const char *str)
 /**
  * @brief Create module-specific state and register the module with Logger.
  *
- * This macro normally must be used after including <logging/log.h> to
+ * This macro normally must be used after including <zephyr/logging/log.h> to
  * complete the initialization of the module.
  *
  * Module registration can be skipped in two cases:
@@ -424,10 +418,10 @@ static inline char *log_strdup(const char *str)
 				Z_LOG_RESOLVED_LEVEL(level, 0)
 
 /*
- * Eclipse CDT parser is sometimes confused by logging API code and freezes the
- * whole IDE. Following lines hides LOG_x macros from CDT.
+ * Eclipse CDT or JetBrains Clion parser is sometimes confused by logging API
+ * code and freezes the whole IDE. Following lines hides LOG_x macros from them.
  */
-#if defined(__CDT_PARSER__)
+#if defined(__CDT_PARSER__) || defined(__JETBRAINS_IDE__)
 #undef LOG_ERR
 #undef LOG_WRN
 #undef LOG_INF

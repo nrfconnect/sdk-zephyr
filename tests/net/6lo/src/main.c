@@ -10,7 +10,7 @@
 LOG_MODULE_REGISTER(net_test, CONFIG_NET_6LO_LOG_LEVEL);
 
 #include <zephyr/zephyr.h>
-#include <ztest.h>
+#include <zephyr/ztest.h>
 #include <zephyr/linker/sections.h>
 
 #include <zephyr/types.h>
@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(net_test, CONFIG_NET_6LO_LOG_LEVEL);
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/dummy.h>
 
-#include <tc_util.h>
+#include <zephyr/tc_util.h>
 
 #include "6lo.h"
 #include "icmpv6.h"
@@ -1142,7 +1142,7 @@ static const struct {
 #endif
 };
 
-void test_loop(void)
+ZTEST(t_6lo, test_loop)
 {
 	int count;
 
@@ -1169,8 +1169,4 @@ void test_loop(void)
 }
 
 /*test case main entry*/
-void test_main(void)
-{
-	ztest_test_suite(test_6lo, ztest_unit_test(test_loop));
-	ztest_run_test_suite(test_6lo);
-}
+ZTEST_SUITE(t_6lo, NULL, NULL, NULL, NULL, NULL);

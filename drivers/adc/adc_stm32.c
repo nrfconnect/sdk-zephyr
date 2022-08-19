@@ -261,6 +261,7 @@ struct adc_stm32_cfg {
 	const struct pinctrl_dev_config *pcfg;
 	bool has_temp_channel;
 	bool has_vref_channel;
+	bool has_vbat_channel;
 };
 
 #ifdef CONFIG_ADC_STM32_SHARED_IRQS
@@ -344,6 +345,20 @@ static void adc_stm32_calib(const struct device *dev)
 }
 #endif
 
+/*
+ * Disable ADC peripheral, and wait until it is disabled
+ */
+static inline void adc_stm32_disable(ADC_TypeDef *adc)
+{
+	if (LL_ADC_IsEnabled(adc) != 1UL) {
+		return;
+	}
+
+	LL_ADC_Disable(adc);
+	while (LL_ADC_IsEnabled(adc) == 1UL) {
+	}
+}
+
 #if defined(CONFIG_SOC_SERIES_STM32G0X) || \
 	defined(CONFIG_SOC_SERIES_STM32G4X) || \
 	defined(CONFIG_SOC_SERIES_STM32H7X) || \
@@ -369,14 +384,58 @@ static void adc_stm32_calib(const struct device *dev)
 	};
 #endif /* ! ADC_VER_V5_V90 */
 
+/*
+ * Function to configure the oversampling scope. It is basically a wrapper over
+ * LL_ADC_SetOverSamplingScope() which in addition stops the ADC if needed.
+ */
+static void adc_stm32_oversampling_scope(ADC_TypeDef *adc, uint32_t ovs_scope)
+{
+#if defined(CONFIG_SOC_SERIES_STM32L0X) || \
+	defined(CONFIG_SOC_SERIES_STM32WLX)
 	/*
-	 * Function to configure the oversampling ratio and shit using stm32 LL
-	 * ratio is directly the sequence->oversampling (a 2^n value)
-	 * shift is the corresponding LL_ADC_OVS_SHIFT_RIGHT_x constant
+	 * setting OVS bits is conditioned to ADC state: ADC must be disabled
+	 * or enabled without conversion on going : disable it, it will stop
 	 */
+	if (LL_ADC_GetOverSamplingScope(adc) == ovs_scope) {
+		return;
+	}
+	adc_stm32_disable(adc);
+#endif
+	LL_ADC_SetOverSamplingScope(adc, ovs_scope);
+}
+
+#if !defined(CONFIG_SOC_SERIES_STM32H7X)
+/*
+ * Function to configure the oversampling ratio and shift. It is basically a
+ * wrapper over LL_ADC_SetOverSamplingRatioShift() which in addition stops the
+ * ADC if needed.
+ */
+static void adc_stm32_oversampling_ratioshift(ADC_TypeDef *adc, uint32_t ratio, uint32_t shift)
+{
+#if defined(CONFIG_SOC_SERIES_STM32L0X) || \
+	defined(CONFIG_SOC_SERIES_STM32WLX)
+	/*
+	 * setting OVS bits is conditioned to ADC state: ADC must be disabled
+	 * or enabled without conversion on going : disable it, it will stop
+	 */
+	if ((LL_ADC_GetOverSamplingRatio(adc) == ratio)
+	    && (LL_ADC_GetOverSamplingShift(adc) == shift)) {
+		return;
+	}
+	adc_stm32_disable(adc);
+#endif
+	LL_ADC_ConfigOverSamplingRatioShift(adc, ratio, shift);
+}
+#endif
+
+/*
+ * Function to configure the oversampling ratio and shit using stm32 LL
+ * ratio is directly the sequence->oversampling (a 2^n value)
+ * shift is the corresponding LL_ADC_OVS_SHIFT_RIGHT_x constant
+ */
 static void adc_stm32_oversampling(ADC_TypeDef *adc, uint8_t ratio, uint32_t shift)
 {
-	LL_ADC_SetOverSamplingScope(adc, LL_ADC_OVS_GRP_REGULAR_CONTINUED);
+	adc_stm32_oversampling_scope(adc, LL_ADC_OVS_GRP_REGULAR_CONTINUED);
 #if defined(CONFIG_SOC_SERIES_STM32H7X)
 	/*
 	 * Set bits manually to circumvent bug in LL Libraries
@@ -396,13 +455,13 @@ static void adc_stm32_oversampling(ADC_TypeDef *adc, uint8_t ratio, uint32_t shi
 #elif defined(CONFIG_SOC_SERIES_STM32U5X)
 	if (adc == ADC1) {
 		/* the LL function expects a value from 1 to 1024 */
-		LL_ADC_ConfigOverSamplingRatioShift(adc, (1 << ratio), shift);
+		adc_stm32_oversampling_ratioshift(adc, (1 << ratio), shift);
 	} else {
 		/* the LL function expects a value LL_ADC_OVS_RATIO_x */
-		LL_ADC_ConfigOverSamplingRatioShift(adc, stm32_adc_ratio_table[ratio], shift);
+		adc_stm32_oversampling_ratioshift(adc, stm32_adc_ratio_table[ratio], shift);
 	}
 #else /* CONFIG_SOC_SERIES_STM32H7X */
-	LL_ADC_ConfigOverSamplingRatioShift(adc, stm32_adc_ratio_table[ratio], shift);
+	adc_stm32_oversampling_ratioshift(adc, stm32_adc_ratio_table[ratio], shift);
 #endif /* CONFIG_SOC_SERIES_STM32H7X */
 }
 #endif /* CONFIG_SOC_SERIES_STM32xxx */
@@ -412,6 +471,9 @@ static void adc_stm32_oversampling(ADC_TypeDef *adc, uint8_t ratio, uint32_t shi
  */
 static int adc_stm32_enable(ADC_TypeDef *adc)
 {
+	if (LL_ADC_IsEnabled(adc) == 1UL) {
+		return 0;
+	}
 #if defined(CONFIG_SOC_SERIES_STM32L4X) || \
 	defined(CONFIG_SOC_SERIES_STM32L5X) || \
 	defined(CONFIG_SOC_SERIES_STM32WBX) || \
@@ -419,10 +481,6 @@ static int adc_stm32_enable(ADC_TypeDef *adc)
 	defined(CONFIG_SOC_SERIES_STM32G4X) || \
 	defined(CONFIG_SOC_SERIES_STM32H7X) || \
 	defined(CONFIG_SOC_SERIES_STM32WLX)
-
-	if (LL_ADC_IsEnabled(adc) == 1UL) {
-		return 0;
-	}
 
 	LL_ADC_ClearFlag_ADRDY(adc);
 	LL_ADC_Enable(adc);
@@ -444,10 +502,84 @@ static int adc_stm32_enable(ADC_TypeDef *adc)
 		}
 	}
 #else
+	/*
+	 * On the stm32F10x, do not re-enable the ADC :
+	 * if ADON holds 1 (LL_ADC_IsEnabled is true) and 1 is written,
+	 * then conversion starts ; that's not what is expected
+	 */
 	LL_ADC_Enable(adc);
 #endif
 
 	return 0;
+}
+
+/*
+ * Enable internal channel source
+ */
+static void adc_stm32_set_common_path(const struct device *dev, uint32_t PathInternal)
+{
+	const struct adc_stm32_cfg *config =
+		(const struct adc_stm32_cfg *)dev->config;
+	ADC_TypeDef *adc = (ADC_TypeDef *)config->base;
+	(void) adc; /* Avoid 'unused variable' warning for some families */
+
+	/* Do not remove existing paths */
+	PathInternal |= LL_ADC_GetCommonPathInternalCh(__LL_ADC_COMMON_INSTANCE(adc));
+	LL_ADC_SetCommonPathInternalCh(__LL_ADC_COMMON_INSTANCE(adc), PathInternal);
+}
+
+static void adc_stm32_setup_channels(const struct device *dev, uint8_t channel_id)
+{
+	const struct adc_stm32_cfg *config = dev->config;
+	ADC_TypeDef *adc = (ADC_TypeDef *)config->base;
+
+#ifdef CONFIG_SOC_SERIES_STM32G4X
+	if (config->has_temp_channel) {
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(adc1), okay)
+		if ((__LL_ADC_CHANNEL_TO_DECIMAL_NB(LL_ADC_CHANNEL_TEMPSENSOR_ADC1) == channel_id)
+		    && (config->base == ADC1)) {
+			adc_stm32_disable(adc);
+			adc_stm32_set_common_path(dev, LL_ADC_PATH_INTERNAL_TEMPSENSOR);
+			k_usleep(LL_ADC_DELAY_TEMPSENSOR_STAB_US);
+		}
+#endif
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(adc5), okay)
+		if ((__LL_ADC_CHANNEL_TO_DECIMAL_NB(LL_ADC_CHANNEL_TEMPSENSOR_ADC5) == channel_id)
+		   && (config->base == ADC5)) {
+			adc_stm32_disable(adc);
+			adc_stm32_set_common_path(dev, LL_ADC_PATH_INTERNAL_TEMPSENSOR);
+			k_usleep(LL_ADC_DELAY_TEMPSENSOR_STAB_US);
+		}
+#endif
+	}
+#else
+	if (config->has_temp_channel &&
+		__LL_ADC_CHANNEL_TO_DECIMAL_NB(LL_ADC_CHANNEL_TEMPSENSOR) == channel_id) {
+		adc_stm32_disable(adc);
+		adc_stm32_set_common_path(dev, LL_ADC_PATH_INTERNAL_TEMPSENSOR);
+#ifdef LL_ADC_DELAY_TEMPSENSOR_STAB_US
+		k_usleep(LL_ADC_DELAY_TEMPSENSOR_STAB_US);
+#endif
+	}
+#endif /* CONFIG_SOC_SERIES_STM32G4X */
+
+	if (config->has_vref_channel &&
+		__LL_ADC_CHANNEL_TO_DECIMAL_NB(LL_ADC_CHANNEL_VREFINT) == channel_id) {
+		adc_stm32_disable(adc);
+		adc_stm32_set_common_path(dev, LL_ADC_PATH_INTERNAL_VREFINT);
+#ifdef LL_ADC_DELAY_VREFINT_STAB_US
+		k_usleep(LL_ADC_DELAY_VREFINT_STAB_US);
+#endif
+	}
+#if defined(LL_ADC_CHANNEL_VBAT)
+	/* Enable the bridge divider only when needed for ADC conversion. */
+	if (config->has_vbat_channel &&
+		__LL_ADC_CHANNEL_TO_DECIMAL_NB(LL_ADC_CHANNEL_VBAT) == channel_id) {
+		adc_stm32_disable(adc);
+		adc_stm32_set_common_path(dev, LL_ADC_PATH_INTERNAL_VBAT);
+	}
+
+#endif /* LL_ADC_CHANNEL_VBAT */
 }
 
 static int start_read(const struct device *dev,
@@ -513,6 +645,8 @@ static int start_read(const struct device *dev,
 		return -ENOTSUP;
 	}
 
+	adc_stm32_setup_channels(dev, index);
+
 	data->buffer = sequence->buffer;
 
 	uint32_t channel = __LL_ADC_DECIMAL_NB_TO_CHANNEL(index);
@@ -546,31 +680,17 @@ static int start_read(const struct device *dev,
 
 #if defined(CONFIG_SOC_SERIES_STM32G0X) || \
 	defined(CONFIG_SOC_SERIES_STM32WLX)
-	/*
-	 * Writing ADC_CFGR1 register while ADEN bit is set
-	 * resets RES[1:0] bitfield. We need to disable and enable adc.
-	 */
-	if (LL_ADC_IsEnabled(adc) == 1UL) {
-		LL_ADC_Disable(adc);
+	if (LL_ADC_GetResolution(adc) != resolution) {
+		/*
+		 * Writing ADC_CFGR1 register while ADEN bit is set
+		 * resets RES[1:0] bitfield. We need to disable and enable adc.
+		 */
+		adc_stm32_disable(adc);
+		LL_ADC_SetResolution(adc, resolution);
 	}
-	while (LL_ADC_IsEnabled(adc) == 1UL) {
-	}
-	LL_ADC_SetResolution(adc, resolution);
-	adc_stm32_enable(adc);
 #elif !defined(CONFIG_SOC_SERIES_STM32F1X) && \
 	!defined(STM32F3X_ADC_V2_5)
 	LL_ADC_SetResolution(adc, resolution);
-#endif
-
-#if defined(CONFIG_SOC_SERIES_STM32L0X) || \
-	defined(CONFIG_SOC_SERIES_STM32WLX)
-	/*
-	 * setting OVS bits is conditioned to ADC state: ADC must be disabled
-	 * or enabled without conversion on going : disable it, it will stop
-	 */
-	LL_ADC_Disable(adc);
-	while (LL_ADC_IsEnabled(adc) == 1UL) {
-	}
 #endif
 
 #if defined(CONFIG_SOC_SERIES_STM32G0X) || \
@@ -585,7 +705,7 @@ static int start_read(const struct device *dev,
 
 	switch (sequence->oversampling) {
 	case 0:
-		LL_ADC_SetOverSamplingScope(adc, LL_ADC_OVS_DISABLE);
+		adc_stm32_oversampling_scope(adc, LL_ADC_OVS_DISABLE);
 		break;
 	case 1:
 		adc_stm32_oversampling(adc, 1, LL_ADC_OVS_SHIFT_RIGHT_1);
@@ -625,8 +745,6 @@ static int start_read(const struct device *dev,
 		adc_stm32_enable(adc);
 		return -EINVAL;
 	}
-	/* re-enable ADC after changing the OVS */
-	adc_stm32_enable(adc);
 #else
 	if (sequence->oversampling) {
 		LOG_ERR("Oversampling not supported");
@@ -643,17 +761,20 @@ static int start_read(const struct device *dev,
 	!defined(CONFIG_SOC_SERIES_STM32L1X)
 
 		/* we cannot calibrate the ADC while the ADC is enabled */
-		LL_ADC_Disable(adc);
-		while (LL_ADC_IsEnabled(adc) == 1UL) {
-		}
+		adc_stm32_disable(adc);
 		adc_stm32_calib(dev);
-		/* re-enable ADC after calibration */
-		adc_stm32_enable(adc);
 #else
 		LOG_ERR("Calibration not supported");
 		return -ENOTSUP;
 #endif
 	}
+
+	/*
+	 * Make sure the ADC is enabled as it might have been disabled earlier
+	 * to set the resolution, to set the oversampling or to perform the
+	 * calibration.
+	 */
+	adc_stm32_enable(adc);
 
 #if defined(CONFIG_SOC_SERIES_STM32F0X) || \
 	defined(STM32F3X_ADC_V1_1) || \
@@ -667,10 +788,8 @@ static int start_read(const struct device *dev,
 	defined(CONFIG_SOC_SERIES_STM32U5X) || \
 	defined(CONFIG_SOC_SERIES_STM32WLX)
 	LL_ADC_EnableIT_EOC(adc);
-#elif defined(CONFIG_SOC_SERIES_STM32F1X)
-	LL_ADC_EnableIT_EOS(adc);
-#elif defined(STM32F3X_ADC_V2_5)
-	adc_stm32_enable(adc);
+#elif defined(STM32F3X_ADC_V2_5) || \
+	defined(CONFIG_SOC_SERIES_STM32F1X)
 	LL_ADC_EnableIT_EOS(adc);
 #else
 	LL_ADC_EnableIT_EOCS(adc);
@@ -766,21 +885,6 @@ static int adc_stm32_check_acq_time(uint16_t acq_time)
 	return -EINVAL;
 }
 
-/*
- * Enable internal channel source
- */
-static void adc_stm32_set_common_path(const struct device *dev, uint32_t PathInternal)
-{
-	const struct adc_stm32_cfg *config =
-		(const struct adc_stm32_cfg *)dev->config;
-	ADC_TypeDef *adc = (ADC_TypeDef *)config->base;
-	(void) adc; /* Avoid 'unused variable' warning for some families */
-
-	/* Do not remove existing paths */
-	PathInternal |= LL_ADC_GetCommonPathInternalCh(__LL_ADC_COMMON_INSTANCE(adc));
-	LL_ADC_SetCommonPathInternalCh(__LL_ADC_COMMON_INSTANCE(adc), PathInternal);
-}
-
 static void adc_stm32_setup_speed(const struct device *dev, uint8_t id,
 				  uint8_t acq_time_index)
 {
@@ -792,6 +896,10 @@ static void adc_stm32_setup_speed(const struct device *dev, uint8_t id,
 	LL_ADC_SetSamplingTimeCommonChannels(adc,
 		table_samp_time[acq_time_index]);
 #elif defined(CONFIG_SOC_SERIES_STM32G0X)
+	/* Errata ES0418 and more: ADC sampling time might be one cycle longer */
+	if (acq_time_index  < 2) {
+		acq_time_index = 2;
+	}
 	LL_ADC_SetSamplingTimeCommonChannels(adc, LL_ADC_SAMPLINGTIME_COMMON_1,
 		table_samp_time[acq_time_index]);
 #else
@@ -799,37 +907,6 @@ static void adc_stm32_setup_speed(const struct device *dev, uint8_t id,
 		__LL_ADC_DECIMAL_NB_TO_CHANNEL(id),
 		table_samp_time[acq_time_index]);
 #endif
-}
-
-static void adc_stm32_setup_channels(const struct device *dev, uint8_t channel_id)
-{
-	const struct adc_stm32_cfg *config = dev->config;
-#ifdef CONFIG_SOC_SERIES_STM32G4X
-	if (config->has_temp_channel) {
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(adc1), okay)
-		if ((__LL_ADC_CHANNEL_TO_DECIMAL_NB(LL_ADC_CHANNEL_TEMPSENSOR_ADC1) == channel_id)
-		    && (config->base == ADC1)) {
-			adc_stm32_set_common_path(dev, LL_ADC_PATH_INTERNAL_TEMPSENSOR);
-		}
-#endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(adc5), okay)
-		if ((__LL_ADC_CHANNEL_TO_DECIMAL_NB(LL_ADC_CHANNEL_TEMPSENSOR_ADC5) == channel_id)
-		   && (config->base == ADC5)) {
-			adc_stm32_set_common_path(dev, LL_ADC_PATH_INTERNAL_TEMPSENSOR);
-		}
-#endif
-	}
-#else
-	if (config->has_temp_channel &&
-		__LL_ADC_CHANNEL_TO_DECIMAL_NB(LL_ADC_CHANNEL_TEMPSENSOR) == channel_id) {
-		adc_stm32_set_common_path(dev, LL_ADC_PATH_INTERNAL_TEMPSENSOR);
-	}
-#endif /* CONFIG_SOC_SERIES_STM32G4X */
-
-	if (config->has_vref_channel &&
-		__LL_ADC_CHANNEL_TO_DECIMAL_NB(LL_ADC_CHANNEL_VREFINT) == channel_id) {
-		adc_stm32_set_common_path(dev, LL_ADC_PATH_INTERNAL_VREFINT);
-	}
 }
 
 static int adc_stm32_channel_setup(const struct device *dev,
@@ -879,8 +956,6 @@ static int adc_stm32_channel_setup(const struct device *dev,
 		LOG_ERR("Invalid channel reference");
 		return -EINVAL;
 	}
-
-	adc_stm32_setup_channels(dev, channel_cfg->channel_id);
 
 	adc_stm32_setup_speed(dev, channel_cfg->channel_id,
 				  acq_time_index);
@@ -1006,13 +1081,6 @@ static int adc_stm32_init(const struct device *dev)
 	if (LL_ADC_IsActiveFlag_ADRDY(adc)) {
 		LL_ADC_ClearFlag_ADRDY(adc);
 	}
-
-	/*
-	 * These STM32 series has one internal voltage reference source
-	 * to be enabled.
-	 */
-	LL_ADC_SetCommonPathInternalCh(__LL_ADC_COMMON_INSTANCE(adc),
-				       LL_ADC_PATH_INTERNAL_VREFINT);
 #endif
 
 #if defined(CONFIG_SOC_SERIES_STM32F0X) || \
@@ -1145,8 +1213,9 @@ static const struct adc_stm32_cfg adc_stm32_cfg_##index = {		\
 		.bus = DT_INST_CLOCKS_CELL(index, bus),			\
 	},								\
 	.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(index),			\
-	.has_temp_channel = DT_INST_PROP(index, has_temp_channel),		\
-	.has_vref_channel = DT_INST_PROP(index, has_vref_channel),		\
+	.has_temp_channel = DT_INST_PROP(index, has_temp_channel),	\
+	.has_vref_channel = DT_INST_PROP(index, has_vref_channel),	\
+	.has_vbat_channel = DT_INST_PROP(index, has_vbat_channel),	\
 };
 #else
 #define ADC_STM32_CONFIG(index)						\
@@ -1166,8 +1235,9 @@ static const struct adc_stm32_cfg adc_stm32_cfg_##index = {		\
 		.bus = DT_INST_CLOCKS_CELL(index, bus),			\
 	},								\
 	.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(index),			\
-	.has_temp_channel = DT_INST_PROP(index, has_temp_channel),		\
-	.has_vref_channel = DT_INST_PROP(index, has_vref_channel),		\
+	.has_temp_channel = DT_INST_PROP(index, has_temp_channel),	\
+	.has_vref_channel = DT_INST_PROP(index, has_vref_channel),	\
+	.has_vbat_channel = DT_INST_PROP(index, has_vbat_channel),	\
 };
 #endif /* CONFIG_ADC_STM32_SHARED_IRQS */
 

@@ -14,13 +14,12 @@
 #define STM32_SRC_PLL1_P	0x001
 #define STM32_SRC_PLL1_Q	0x002
 #define STM32_SRC_PLL1_R	0x003
-/** PLL2/3 not yet supported */
-/* #define STM32_SRC_PLL2_P	0x004 */
-/* #define STM32_SRC_PLL2_Q	0x005 */
-/* #define STM32_SRC_PLL2_R	0x006 */
-/* #define STM32_SRC_PLL3_P	0x007 */
-/* #define STM32_SRC_PLL3_Q	0x008 */
-/* #define STM32_SRC_PLL3_R	0x009 */
+#define STM32_SRC_PLL2_P	0x004
+#define STM32_SRC_PLL2_Q	0x005
+#define STM32_SRC_PLL2_R	0x006
+#define STM32_SRC_PLL3_P	0x007
+#define STM32_SRC_PLL3_Q	0x008
+#define STM32_SRC_PLL3_R	0x009
 /** Fixed clocks  */
 #define STM32_SRC_HSE		0x00A
 #define STM32_SRC_LSE		0x00B
@@ -33,9 +32,6 @@
 #define STM32_SRC_SYSCLK	0x011
 /** Clock muxes */
 /* #define STM32_SRC_ICLK	0x012 */
-
-#define STM32_SRC_CLOCK_MIN	STM32_SRC_PLL1_P
-#define STM32_SRC_CLOCK_MAX	STM32_SRC_SYSCLK
 
 /** Bus clocks */
 #define STM32_CLOCK_BUS_AHB1    0x088

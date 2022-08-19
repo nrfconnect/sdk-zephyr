@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <ztest.h>
+#include <zephyr/ztest.h>
 #include <pthread.h>
 #include <zephyr/sys/util.h>
 
@@ -53,7 +53,7 @@ static void *thread_top(void *p1)
 	return NULL;
 }
 
-void test_posix_rw_lock(void)
+ZTEST(posix_apis, test_posix_rw_lock)
 {
 	int32_t i, ret;
 	pthread_attr_t attr[N_THR];

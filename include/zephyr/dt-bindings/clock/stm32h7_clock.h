@@ -37,9 +37,6 @@
 /** Clock muxes */
 #define STM32_SRC_CKPER		0x013
 
-#define STM32_SRC_CLOCK_MIN	STM32_SRC_PLL1_P
-#define STM32_SRC_CLOCK_MAX	STM32_SRC_CKPER
-
 /** Bus clocks */
 #define STM32_CLOCK_BUS_AHB3    0x0D4
 #define STM32_CLOCK_BUS_AHB1    0x0D8
@@ -102,6 +99,8 @@
 #define DSI_SEL(val)		STM32_CLOCK(val, 1, 8, D1CCIPR_REG)
 #define SDMMC_SEL(val)		STM32_CLOCK(val, 1, 16, D1CCIPR_REG)
 #define CKPER_SEL(val)		STM32_CLOCK(val, 3, 28, D1CCIPR_REG)
+/* device clk sources selection helpers (RM0468.pdf) */
+#define OSPI_SEL(val)		STM32_CLOCK(val, 3, 4, D1CCIPR_REG)
 /** D2CCIP1R devices */
 #define SAI1_SEL(val)		STM32_CLOCK(val, 7, 0, D2CCIP1R_REG)
 #define SAI23_SEL(val)		STM32_CLOCK(val, 7, 6, D2CCIP1R_REG)

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <ztest.h>
+#include <zephyr/ztest.h>
 #include <soc.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
@@ -35,7 +35,7 @@ static void test_sysclk_freq(void)
 
 static void test_spi_clk_config(void)
 {
-	static const struct stm32_pclken pclken[] = STM32_DT_CLOCKS(spi1);
+	static const struct stm32_pclken pclken[] = STM32_DT_CLOCKS(DT_NODELABEL(spi1));
 	struct stm32_pclken spi1_reg_clk_cfg = pclken[0];
 
 	uint32_t spi1_actual_clk_src, spi1_dt_ker_clk_src;

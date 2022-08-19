@@ -11,7 +11,7 @@
 #include <zephyr/net/socket.h>
 #include <sockets_internal.h>
 #include <zephyr/sys/fdtable.h>
-#include <ztest.h>
+#include <zephyr/ztest.h>
 
 
 LOG_MODULE_REGISTER(net_test, CONFIG_NET_SOCKETS_LOG_LEVEL);
@@ -815,6 +815,7 @@ static void test_tls_native_iface_native(void)
 
 	ret = zsock_setsockopt(test_sock, SOL_TLS, TLS_NATIVE,
 			       &tls_native, sizeof(tls_native));
+	zassert_equal(0, ret, "setsockopt() failed");
 	zassert_false(test_socket_ctx[OFFLOAD_1].socket_called,
 		     "TLS socket dispatched to wrong iface");
 	zassert_false(test_socket_ctx[OFFLOAD_2].socket_called,

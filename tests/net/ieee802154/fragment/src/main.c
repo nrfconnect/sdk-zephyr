@@ -10,7 +10,7 @@
 LOG_MODULE_REGISTER(net_test, CONFIG_NET_L2_IEEE802154_LOG_LEVEL);
 
 #include <zephyr/zephyr.h>
-#include <ztest.h>
+#include <zephyr/ztest.h>
 #include <zephyr/linker/sections.h>
 
 #include <zephyr/types.h>
@@ -26,7 +26,7 @@ LOG_MODULE_REGISTER(net_test, CONFIG_NET_L2_IEEE802154_LOG_LEVEL);
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/dummy.h>
 
-#include <tc_util.h>
+#include <zephyr/tc_util.h>
 
 #include "6lo.h"
 #include "ieee802154_fragment.h"
@@ -576,56 +576,56 @@ end:
 	return result;
 }
 
-static void test_fragment_sam00_dam00(void)
+ZTEST(ieee802154_fragment, test_fragment_sam00_dam00)
 {
 	bool ret = test_fragment(&test_data_1);
 
 	zassert_true(ret, NULL);
 }
 
-static void test_fragment_sam01_dam01(void)
+ZTEST(ieee802154_fragment, test_fragment_sam01_dam01)
 {
 	bool ret = test_fragment(&test_data_2);
 
 	zassert_true(ret, NULL);
 }
 
-static void test_fragment_sam10_dam10(void)
+ZTEST(ieee802154_fragment, test_fragment_sam10_dam10)
 {
 	bool ret = test_fragment(&test_data_3);
 
 	zassert_true(ret, NULL);
 }
 
-static void test_fragment_sam00_m1_dam00(void)
+ZTEST(ieee802154_fragment, test_fragment_sam00_m1_dam00)
 {
 	bool ret = test_fragment(&test_data_4);
 
 	zassert_true(ret, NULL);
 }
 
-static void test_fragment_sam01_m1_dam01(void)
+ZTEST(ieee802154_fragment, test_fragment_sam01_m1_dam01)
 {
 	bool ret = test_fragment(&test_data_5);
 
 	zassert_true(ret, NULL);
 }
 
-static void test_fragment_sam10_m1_dam10(void)
+ZTEST(ieee802154_fragment, test_fragment_sam10_m1_dam10)
 {
 	bool ret = test_fragment(&test_data_6);
 
 	zassert_true(ret, NULL);
 }
 
-static void test_fragment_ipv6_dispatch_small(void)
+ZTEST(ieee802154_fragment, test_fragment_ipv6_dispatch_small)
 {
 	bool ret = test_fragment(&test_data_7);
 
 	zassert_true(ret, NULL);
 }
 
-static void test_fragment_ipv6_dispatch_big(void)
+ZTEST(ieee802154_fragment, test_fragment_ipv6_dispatch_big)
 {
 	bool ret = test_fragment(&test_data_8);
 
@@ -633,18 +633,4 @@ static void test_fragment_ipv6_dispatch_big(void)
 }
 
 
-void test_main(void)
-{
-	ztest_test_suite(ieee802154_fragment,
-			 ztest_unit_test(test_fragment_sam00_dam00),
-			 ztest_unit_test(test_fragment_sam01_dam01),
-			 ztest_unit_test(test_fragment_sam10_dam10),
-			 ztest_unit_test(test_fragment_sam00_m1_dam00),
-			 ztest_unit_test(test_fragment_sam01_m1_dam01),
-			 ztest_unit_test(test_fragment_sam10_m1_dam10),
-			 ztest_unit_test(test_fragment_ipv6_dispatch_small),
-			 ztest_unit_test(test_fragment_ipv6_dispatch_big)
-		);
-
-	ztest_run_test_suite(ieee802154_fragment);
-}
+ZTEST_SUITE(ieee802154_fragment, NULL, NULL, NULL, NULL, NULL);

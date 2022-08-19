@@ -11,10 +11,10 @@
  */
 
 
-#include <tc_util.h>
+#include <zephyr/tc_util.h>
 #include <stdbool.h>
 #include <zephyr/zephyr.h>
-#include <ztest.h>
+#include <zephyr/ztest.h>
 #include <zephyr/logging/log_backend.h>
 #include <zephyr/logging/log_ctrl.h>
 #include <zephyr/logging/log.h>
@@ -45,7 +45,7 @@ struct backend_cb {
 };
 
 static void process(struct log_backend const *const backend,
-		    union log_msg2_generic *msg)
+		    union log_msg_generic *msg)
 {
 }
 
@@ -214,7 +214,7 @@ void test_log_message_with_string(void)
 	int repeat = 8;
 
 	for (int i = 0; i < repeat; i++) {
-		LOG_ERR("test with string to duplicate: %s", log_strdup(strbuf));
+		LOG_ERR("test with string to duplicate: %s", strbuf);
 	}
 
 	cyc = test_helpers_cycle_get() - cyc;

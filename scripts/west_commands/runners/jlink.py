@@ -70,12 +70,17 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
     @classmethod
     def capabilities(cls):
         return RunnerCaps(commands={'flash', 'debug', 'debugserver', 'attach'},
-                          dev_id=True, flash_addr=True, erase=True)
+                          dev_id=True, flash_addr=True, erase=True,
+                          tool_opt=True)
 
     @classmethod
     def dev_id_help(cls) -> str:
         return '''Device identifier. Use it to select the J-Link Serial Number
                   of the device connected over USB.'''
+
+    @classmethod
+    def tool_opt_help(cls) -> str:
+        return "Additional options for JLink Commander, e.g. '-autoconnect 1'"
 
     @classmethod
     def do_add_parser(cls, parser):
@@ -101,9 +106,6 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         parser.add_argument('--gdb-port', default=DEFAULT_JLINK_GDB_PORT,
                             help='pyocd gdb port, defaults to {}'.format(
                                 DEFAULT_JLINK_GDB_PORT))
-        parser.add_argument('--tool-opt', default=[], action='append',
-                            help='''Additional options for JLink Commander,
-                            e.g. \'-autoconnect 1\' ''')
         parser.add_argument('--commander', default=DEFAULT_JLINK_EXE,
                             help=f'''J-Link Commander, default is
                             {DEFAULT_JLINK_EXE}''')
@@ -262,14 +264,14 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         # Get the build artifact to flash, preferring .hex over .bin
         if self.hex_name is not None and os.path.isfile(self.hex_name):
             flash_file = self.hex_name
-            flash_cmd = f'loadfile {self.hex_name}'
+            flash_cmd = f'loadfile "{self.hex_name}"'
         elif self.bin_name is not None and os.path.isfile(self.bin_name):
             if self.dt_flash:
                 flash_addr = self.flash_address_from_build_conf(self.build_conf)
             else:
                 flash_addr = 0
             flash_file = self.bin_name
-            flash_cmd = f'loadfile {self.bin_name} 0x{flash_addr:x}'
+            flash_cmd = f'loadfile "{self.bin_name}" 0x{flash_addr:x}'
         else:
             err = 'Cannot flash; no hex ({}) or bin ({}) files found.'
             raise ValueError(err.format(self.hex_name, self.bin_name))

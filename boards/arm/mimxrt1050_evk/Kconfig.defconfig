@@ -28,7 +28,7 @@ config FLASH_MCUX_FLEXSPI_NOR
 endif #FLASH
 
 config I2C
-	default y if KSCAN
+	default y if KSCAN || SENSOR
 
 config KSCAN
 	default y if LVGL
@@ -60,12 +60,6 @@ config LV_Z_POINTER_KSCAN
 
 config LV_Z_POINTER_KSCAN_DEV_NAME
 	default "FT5336"
-
-config LV_Z_HOR_RES_MAX
-	default 480
-
-config LV_Z_VER_RES_MAX
-	default 272
 
 config LV_Z_VDB_SIZE
 	default 16
