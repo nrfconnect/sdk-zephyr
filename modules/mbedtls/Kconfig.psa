@@ -308,7 +308,7 @@ config PSA_WANT_ALG_TLS12_PSK_TO_MS
 endmenu # PSA Key derivation support
 
 
-menu "PSA Assymetric support"
+menu "PSA Asymmetric support"
 
 config PSA_HAS_ASYM_ENCRYPT_SUPPORT
 	bool
@@ -316,8 +316,8 @@ config PSA_HAS_ASYM_ENCRYPT_SUPPORT
 	depends on PSA_WANT_ALG_RSA_OAEP || \
 			   PSA_WANT_ALG_RSA_PKCS1V15_CRYPT
 	help
-	  Prompt-less configuration that states the PSA APIs enables
-	  a configuration that adds the PSA Assymetric encrypt module.
+	  Prompt-less configuration that states that asymmetric encryption
+	  is supported.
 
 
 config PSA_HAS_ASYM_SIGN_SUPPORT
@@ -328,8 +328,8 @@ config PSA_HAS_ASYM_SIGN_SUPPORT
 		   PSA_WANT_ALG_RSA_PSS
 
 	help
-	  Prompt-less configuration that states the PSA APIs enables
-	  a configuration that adds the PSA Assymetric sign module.
+	  Prompt-less configuration that states that asymmetric signing
+	  is supported.
 
 config PSA_HAS_ECC_SUPPORT
 	bool
@@ -437,7 +437,7 @@ config PSA_WANT_ALG_RSA_PSS
 	bool
 	prompt "PSA RSA (PSS mode)" if !PSA_PROMPTLESS
 
-endmenu # PSA_ASSYMETRIC_SUPPORT
+endmenu # PSA Asymmetric support
 
 config PSA_WANT_ALG_STREAM_CIPHER
 	bool
