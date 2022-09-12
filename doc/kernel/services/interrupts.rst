@@ -185,6 +185,7 @@ APIs inside a zero-latency interrupt context is responsible for directly
 verifying correct behavior). Zero-latency interrupts may not modify any data
 inspected by kernel APIs invoked from normal Zephyr contexts and shall not
 generate exceptions that need to be handled synchronously (e.g. kernel panic).
+Macro ISR_DIRECT_PM should not be used with zero-latency interrupts.
 
 .. important::
     Zero-latency interrupts are supported on an architecture-specific basis.

@@ -261,6 +261,11 @@ void sys_clock_idle_exit(void)
 	}
 }
 
+void sys_clock_zli_idle_exit(void)
+{
+	SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+}
+
 void sys_clock_disable(void)
 {
 	SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
