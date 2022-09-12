@@ -81,6 +81,13 @@ Building the sample application
 The below steps describe how to build and run the ``smp_svr`` sample in
 Zephyr. The ``smp_svr`` sample comes in different flavours.
 
+
+.. note::
+   Note that when providing `-DOVERLAY_CONFIG=` option to builds for boards with
+   board specific configuration, stored in `configuration/<board> sub-directory,
+   you need to either provide full absolute path to overlay file or path relative
+   to that sub-directory, for example: `-DOVERLAY_CONFIG=../../overlay-bt.conf`.
+
 .. tabs::
 
    .. group-tab:: Bluetooth
