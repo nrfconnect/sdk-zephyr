@@ -34,6 +34,11 @@ tests:
       - nrf52833dk_nrf52820
       - nrf52833dk_nrf52833
       - nrf52840dk_nrf52840
+  sample.mcumg.smp_svr.cdc.nrf5340dk_nrf5340:
+    extra_args: OVERLAY_CONFIG="../../overlay-cdc.conf"
+                DTC_OVERLAY_FILE="usb.overlay"
+    platform_allow: nrf5340dk_nrf5340_cpuapp
+    integration_platforms:
       - nrf5340dk_nrf5340_cpuapp
   sample.mcumgr.smp_svr.serial:
     extra_args: OVERLAY_CONFIG="overlay-serial.conf"
