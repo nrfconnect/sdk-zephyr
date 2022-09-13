@@ -252,6 +252,14 @@ struct net_pkt {
 	uint8_t ipv6_next_hdr;	/* What is the very first next header */
 #endif /* CONFIG_NET_IPV6 */
 
+#if defined(CONFIG_NET_IP_DSCP_ECN)
+	/** IPv4/IPv6 Differentiated Services Code Point value. */
+	uint8_t ip_dscp : 6;
+
+	/** IPv4/IPv6 Explicit Congestion Notification value. */
+	uint8_t ip_ecn : 2;
+#endif /* CONFIG_NET_IP_DSCP_ECN */
+
 #if defined(CONFIG_IEEE802154)
 #if defined(CONFIG_IEEE802154_2015)
 	uint32_t ieee802154_ack_fc; /* Frame counter set in the ACK */
@@ -407,6 +415,38 @@ static inline void net_pkt_set_ip_hdr_len(struct net_pkt *pkt, uint8_t len)
 {
 #if defined(CONFIG_NET_IP)
 	pkt->ip_hdr_len = len;
+#endif
+}
+
+static inline uint8_t net_pkt_ip_dscp(struct net_pkt *pkt)
+{
+#if defined(CONFIG_NET_IP_DSCP_ECN)
+	return pkt->ip_dscp;
+#else
+	return 0;
+#endif
+}
+
+static inline void net_pkt_set_ip_dscp(struct net_pkt *pkt, uint8_t dscp)
+{
+#if defined(CONFIG_NET_IP_DSCP_ECN)
+	pkt->ip_dscp = dscp;
+#endif
+}
+
+static inline uint8_t net_pkt_ip_ecn(struct net_pkt *pkt)
+{
+#if defined(CONFIG_NET_IP_DSCP_ECN)
+	return pkt->ip_ecn;
+#else
+	return 0;
+#endif
+}
+
+static inline void net_pkt_set_ip_ecn(struct net_pkt *pkt, uint8_t ecn)
+{
+#if defined(CONFIG_NET_IP_DSCP_ECN)
+	pkt->ip_ecn = ecn;
 #endif
 }
 
