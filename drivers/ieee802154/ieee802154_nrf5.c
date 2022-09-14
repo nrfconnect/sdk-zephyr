@@ -55,6 +55,7 @@ struct nrf5_802154_config {
 };
 
 static struct nrf5_802154_data nrf5_data;
+static uint32_t nrf5_csl_period_us;
 
 #define ACK_REQUEST_BYTE 1
 #define ACK_REQUEST_BIT (1 << 5)
@@ -839,6 +840,7 @@ static void nrf5_config_csl_period(uint16_t period)
 	nrf_802154_receive_at_cancel(DRX_SLOT_RX);
 
 	nrf_802154_csl_writer_period_set(period);
+	nrf5_csl_period_us = period * 160;
 
 	/* A placeholder reception window is scheduled so that the radio driver is able to inject
 	 * the proper CSL Phase in the transmitted CSL Information Elements.
@@ -855,7 +857,7 @@ static void nrf5_schedule_rx(uint8_t channel, uint32_t start, uint32_t duration)
 
 	/* The placeholder reception window is rescheduled for the next period */
 	nrf_802154_receive_at_cancel(DRX_SLOT_PH);
-	nrf5_receive_at(nrf5_data.csl_rx_time, PH_DURATION, channel, DRX_SLOT_PH);
+	nrf5_receive_at(start + nrf5_csl_period_us, duration, channel, DRX_SLOT_PH);
 }
 #endif /* CONFIG_IEEE802154_CSL_ENDPOINT */
 
