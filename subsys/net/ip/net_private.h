@@ -28,7 +28,7 @@ union net_mgmt_events {
 #if defined(CONFIG_NET_DHCPV4)
 	struct net_if_dhcpv4 dhcpv4;
 #endif /* CONFIG_NET_DHCPV4 */
-#if defined(CONFIG_NET_L2_WIFI_MGMT)
+#if defined(CONFIG_NET_L2_WIFI_MGMT) || defined(CONFIG_NET_L2_NRF_WIFI_MGMT)
 	struct wifi_scan_result wifi_scan_result;
 #endif /* CONFIG_NET_L2_WIFI_MGMT */
 #if defined(CONFIG_NET_IPV6) && defined(CONFIG_NET_IPV6_MLD)
