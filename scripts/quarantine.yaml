@@ -163,6 +163,12 @@
     - logging.log_api_immediate_rt_filter_cpp.tagged_args
     - logging.log_api_immediate_static_filter_cpp
     - logging.log_api_immediate_static_filter_cpp.tagged_args
+    - testing.fail.zephyr.assert_after
+    - testing.fail.zephyr.assert_teardown
+    - testing.fail.zephyr.assume_after
+    - testing.fail.zephyr.assume_teardown
+    - testing.fail.zephyr.pass_after
+    - testing.fail.zephyr.pass_teardown
     - testing.ztest.base.cpp
   platforms:
     - native_posix
