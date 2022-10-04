@@ -2,6 +2,8 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
+include_guard(GLOBAL)
+
 enable_language(C CXX ASM)
 
 include(root)
