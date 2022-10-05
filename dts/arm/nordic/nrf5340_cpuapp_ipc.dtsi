@@ -5,10 +5,10 @@
  */
 
 ipc0: ipc0 {
-	compatible = "zephyr,ipc-openamp-static-vrings";
-	memory-region = <&sram0_shared>;
+	compatible = "zephyr,ipc-icmsg-me-initiator";
+	tx-region = <&sram0_shared_to_net>;
+	rx-region = <&sram0_shared_to_app>;
 	mboxes = <&mbox 0>, <&mbox 1>;
 	mbox-names = "tx", "rx";
-	role = "host";
 	status = "okay";
 };
