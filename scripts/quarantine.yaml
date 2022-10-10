@@ -3,51 +3,6 @@
 # https://docs.zephyrproject.org/latest/guides/test/twister.html#quarantine
 
 - scenarios:
-    - drivers.modem.build
-  platforms:
-    - nrf52dk_nrf52832
-
-- scenarios:
-    - sample.tfm.secure_partition
-    - sample.tfm.secure_partition.ipc
-    - drivers.hwinfo.api
-  platforms:
-    - nrf9160dk_nrf9160_ns
-    - nrf5340dk_nrf5340_cpuapp_ns
-  comment: "https://projecttools.nordicsemi.no/jira/browse/NCSDK-7558"
-
-- scenarios:
-    - libraries.libc.newlib.thread_safety.userspace.stress
-    - libraries.libc.newlib_nano.thread_safety.userspace.stress
-  platforms:
-    - nrf52dk_nrf52832
-    - nrf9160dk_nrf9160_ns
-    - nrf9160dk_nrf9160
-    - nrf52833dk_nrf52833
-  comment: "Might be related: https://github.com/zephyrproject-rtos/zephyr/issues/38044"
-
-- scenarios:
-    - sample.psa_crypto
-    - sample.tfm.protected_storage
-    - sample.tfm_ipc
-    - sample.tfm.psa_internal_trusted_storage_test
-    - sample.tfm.psa_protected_storage_test
-    - sample.tfm.tfm_regression
-    - arch.arm.swap.tz
-    - arch.arm.swap.tz_off
-  platforms:
-    - nrf5340dk_nrf5340_cpuapp_ns
-    - nrf9160dk_nrf9160_ns
-  comment: "Upstream issue (imgtool version related): https://github.com/zephyrproject-rtos/zephyr/issues/40254"
-
-- scenarios:
-    - sample.drivers.crypto.mbedtls
-  platforms:
-    - nrf5340dk_nrf5340_cpuapp_ns
-    - nrf9160dk_nrf9160_ns
-  comment: "MBEDTLS_BUILTIN not supported for TF-M builds"
-
-- scenarios:
     - testing.ztest.busy_sim
     - testing.ztest.busy_sim_nrf52840dk_pin
   platforms:
@@ -57,10 +12,9 @@
 # https://github.com/zephyrproject-rtos/zephyr/issues/44947
 - scenarios:
     - libraries.cmsis_dsp.matrix.unary_f64
-    - libraries.libc.newlib.thread_safety.userspace.stress
-    - libraries.libc.newlib_nano.thread_safety.userspace.stress
   platforms:
     - nrf5340dk_nrf5340_cpunet
+    - qemu_cortex_m3
   comment: "Flash overflows"
 
 # Already reported, but will not be fixed (look at the discussion):
@@ -86,33 +40,6 @@
     - nrf9160dk_nrf9160_ns
   comment: "Flash overflows"
 
-# Already fixed in Upstream by this commit:
-# https://github.com/zephyrproject-rtos/zephyr/commit/20ff55e234cccea801717723146aa94458348586
-# should be introduced with upmerge Zephyr to version 3.1.0 (or later)
-- scenarios:
-    - sample.bluetooth.central.multilink
-    - sample.bluetooth.peripheral_identity
-  platforms:
-    - qemu_cortex_m3
-  comment: "Flash overflows. Already fixed in Upstream Zephyr."
-
-# Already reported, but will not be fixed (look at the discussion):
-# https://github.com/zephyrproject-rtos/zephyr/issues/44947
-- scenarios:
-    - libraries.cmsis_dsp.matrix.unary_f64
-  platforms:
-    - qemu_cortex_m3
-  comment: "Flash overflows"
-
-# Already reported in this issue:
-# https://github.com/zephyrproject-rtos/zephyr/issues/44948
-- scenarios:
-    - libraries.cmsis_dsp.transform.cf64.fpu
-    - libraries.cmsis_dsp.transform.rf64.fpu
-  platforms:
-    - mps2_an521_remote
-  comment: "Flash overflows"
-
 # libsdl2-dev package should be added into docker image
 - scenarios:
     - sample.boards.nrf.nrf_led_matrix
@@ -120,59 +47,6 @@
   platforms:
     - native_posix
   comment: "libsdl2-dev package not available"
-
-# g++-multilib package should be added into docker image, already reported here:
-# https://ci-help.nordicsemi.no/#ticket/zoom/1713
-- scenarios:
-    - cpp.main
-    - cpp.main.minimal
-    - sample.modules.chre
-    - libraries.cbprintf_package_cpp
-    - libraries.cbprintf_package_fp_align_offset_cpp
-    - libraries.cbprintf_package_fp_cpp
-    - libraries.cbprintf_package_long_double_align_offset_cpp
-    - libraries.cbprintf_package_long_double_cpp
-    - libraries.cbprintf_package_nano_cpp
-    - libraries.cbprintf_package_no_generic_cpp
-    - logging.log_api_deferred_64b_timestamp_cpp
-    - logging.log_api_deferred_64b_timestamp_cpp.tagged_args
-    - logging.log_api_deferred_func_prefix_cpp
-    - logging.log_api_deferred_func_prefix_cpp.tagged_args
-    - logging.log_api_deferred_no_overflow_cpp
-    - logging.log_api_deferred_no_overflow_cpp.tagged_args
-    - logging.log_api_deferred_overflow_cpp
-    - logging.log_api_deferred_overflow_cpp.tagged_args
-    - logging.log_api_deferred_overflow_rt_filter_cpp
-    - logging.log_api_deferred_overflow_rt_filter_cpp.tagged_args
-    - logging.log_api_deferred_printk_cpp
-    - logging.log_api_deferred_printk_cpp.tagged_args
-    - logging.log_api_deferred_static_filter_cpp
-    - logging.log_api_deferred_static_filter_cpp.tagged_args
-    - logging.log_api_frontend_cpp
-    - logging.log_api_frontend_dbg_cpp
-    - logging.log_api_frontend_immediate_cpp
-    - logging.log_api_frontend_no_backends_cpp
-    - logging.log_api_frontend_only_cpp
-    - logging.log_api_immediate_64b_timestamp_cpp
-    - logging.log_api_immediate_64b_timestamp_cpp.tagged_args
-    - logging.log_api_immediate_cpp
-    - logging.log_api_immediate_cpp.tagged_args
-    - logging.log_api_immediate_printk_cpp
-    - logging.log_api_immediate_printk_cpp.tagged_args
-    - logging.log_api_immediate_rt_filter_cpp
-    - logging.log_api_immediate_rt_filter_cpp.tagged_args
-    - logging.log_api_immediate_static_filter_cpp
-    - logging.log_api_immediate_static_filter_cpp.tagged_args
-    - testing.fail.zephyr.assert_after
-    - testing.fail.zephyr.assert_teardown
-    - testing.fail.zephyr.assume_after
-    - testing.fail.zephyr.assume_teardown
-    - testing.fail.zephyr.pass_after
-    - testing.fail.zephyr.pass_teardown
-    - testing.ztest.base.cpp
-  platforms:
-    - native_posix
-  comment: "g++-multilib package not available"
 
 - scenarios:
     - sample.net.zperf.netusb_ecm
