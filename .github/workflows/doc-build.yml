@@ -44,11 +44,8 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v2
-      with:
-        path: ./zephyr
 
     - name: install-pkgs
-      working-directory: ./zephyr
       run: |
         sudo apt-get update
         sudo apt-get install -y ninja-build graphviz libclang1-9 libclang-cpp9
@@ -60,22 +57,20 @@ jobs:
       uses: actions/cache@v1
       with:
         path: ~/.cache/pip
-        key: pip-${{ hashFiles('zephyr/scripts/requirements-doc.txt') }}
+        key: pip-${{ hashFiles('scripts/requirements-doc.txt') }}
 
     - name: install-pip
       run: |
         sudo pip3 install -U setuptools wheel pip
-        pip3 install -r zephyr/scripts/requirements-doc.txt
+        pip3 install -r scripts/requirements-doc.txt
         pip3 install west==${WEST_VERSION}
         pip3 install cmake==${CMAKE_VERSION}
 
     - name: west setup
-      working-directory: ./zephyr
       run: |
         west init -l .
 
     - name: build-docs
-      working-directory: ./zephyr
       run: |
         if [[ "$GITHUB_REF" =~ "refs/tags/v" ]]; then
           DOC_TAG="release"
@@ -92,7 +87,6 @@ jobs:
         DOC_TAG=${DOC_TAG} SPHINXOPTS="-q -W -t publish" make -C doc ${DOC_TARGET}
 
     - name: compress-docs
-      working-directory: ./zephyr
       run: |
         tar cfJ html-output.tar.xz --directory=doc/_build html
 
@@ -100,7 +94,7 @@ jobs:
       uses: actions/upload-artifact@master
       with:
         name: html-output
-        path: zephyr/html-output.tar.xz
+        path: html-output.tar.xz
 
     - name: process-pr
       if: github.event_name == 'pull_request'
@@ -131,8 +125,6 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v2
-      with:
-        path: ./zephyr
 
     - name: install-pkgs
       run: |
@@ -143,22 +135,20 @@ jobs:
       uses: actions/cache@v1
       with:
         path: ~/.cache/pip
-        key: pip-${{ hashFiles('zephyr/scripts/requirements-doc.txt') }}
+        key: pip-${{ hashFiles('scripts/requirements-doc.txt') }}
 
     - name: install-pip
       run: |
         pip3 install -U setuptools wheel pip
-        pip3 install -r zephyr/scripts/requirements-doc.txt
+        pip3 install -r scripts/requirements-doc.txt
         pip3 install west==${WEST_VERSION}
         pip3 install cmake==${CMAKE_VERSION}
 
     - name: west setup
-      working-directory: ./zephyr
       run: |
         west init -l .
 
     - name: build-docs
-      working-directory: ./zephyr
       run: |
         if [[ "$GITHUB_REF" =~ "refs/tags/v" ]]; then
           DOC_TAG="release"
@@ -172,4 +162,4 @@ jobs:
       uses: actions/upload-artifact@master
       with:
         name: pdf-output
-        path: zephyr/doc/_build/latex/zephyr.pdf
+        path: doc/_build/latex/zephyr.pdf

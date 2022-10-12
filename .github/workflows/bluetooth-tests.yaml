@@ -49,13 +49,11 @@ jobs:
       - name: checkout
         uses: actions/checkout@v2
         with:
-          path: ./zephyr
           fetch-depth: 0
 
       - name: west setup
         env:
           BASE_REF: ${{ github.base_ref }}
-        working-directory: ./zephyr
         run: |
           git config --global user.email "you@example.com"
           git config --global user.name "Your Name"
@@ -66,7 +64,6 @@ jobs:
           west update 2>&1 1> west.update.log || west update 2>&1 1> west.update2.log
 
       - name: Run Bluetooth Tests with BSIM
-        working-directory: ./zephyr
         run: |
           export ZEPHYR_BASE=${PWD}
           WORK_DIR=${ZEPHYR_BASE}/bsim_bt_out tests/bluetooth/bsim_bt/compile.sh
@@ -78,7 +75,9 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: bluetooth-test-results
-          path: ./zephyr/bsim_bt_out/bsim_results.xml
+          path: |
+            ./bsim_bt_out/bsim_results.xml
+            ${{ github.event_path }}
 
       - name: Upload Event Details
         if: always()
