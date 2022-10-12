@@ -445,25 +445,19 @@ uint8_t ull_scan_enable(struct ll_scan_set *scan)
 		    (lll->ticks_window != 0U)) {
 			const struct lll_scan *lll_coded;
 			uint32_t ticks_interval_coded;
-			uint32_t ticks_window_sum_min;
-			uint32_t ticks_window_sum_max;
 
 			lll_coded = &scan_coded->lll;
 			ticks_interval_coded = HAL_TICKER_US_TO_TICKS(
 						(uint64_t)lll_coded->interval *
 						SCAN_INT_UNIT_US);
-			ticks_window_sum_min = lll->ticks_window +
-					       lll_coded->ticks_window;
-			ticks_window_sum_max = ticks_window_sum_min +
-				HAL_TICKER_US_TO_TICKS(EVENT_TICKER_RES_MARGIN_US << 1);
 			/* Check if 1M and Coded PHY scanning use same interval
 			 * and the sum of the scan window duration equals their
 			 * interval then use continuous scanning and avoid time
 			 * reservation from overlapping.
 			 */
 			if ((ticks_interval == ticks_interval_coded) &&
-			    IN_RANGE(ticks_interval, ticks_window_sum_min,
-				     ticks_window_sum_max)) {
+			    (ticks_interval == (lll->ticks_window +
+						lll_coded->ticks_window))) {
 				if (IS_ENABLED(CONFIG_BT_CTLR_SCAN_UNRESERVED)) {
 					scan->ull.ticks_slot = 0U;
 				} else {
@@ -496,8 +490,6 @@ uint8_t ull_scan_enable(struct ll_scan_set *scan)
 		scan_1m = ull_scan_set_get(SCAN_HANDLE_1M);
 		if (IS_PHY_ENABLED(scan_1m, PHY_1M) &&
 		    (lll->ticks_window != 0U)) {
-			uint32_t ticks_window_sum_min;
-			uint32_t ticks_window_sum_max;
 			uint32_t ticks_interval_1m;
 			struct lll_scan *lll_1m;
 
@@ -505,18 +497,14 @@ uint8_t ull_scan_enable(struct ll_scan_set *scan)
 			ticks_interval_1m = HAL_TICKER_US_TO_TICKS(
 						(uint64_t)lll_1m->interval *
 						SCAN_INT_UNIT_US);
-			ticks_window_sum_min = lll->ticks_window +
-					       lll_1m->ticks_window;
-			ticks_window_sum_max = ticks_window_sum_min +
-				HAL_TICKER_US_TO_TICKS(EVENT_TICKER_RES_MARGIN_US << 1);
 			/* Check if 1M and Coded PHY scanning use same interval
 			 * and the sum of the scan window duration equals their
 			 * interval then use continuous scanning and avoid time
 			 * reservation from overlapping.
 			 */
 			if ((ticks_interval == ticks_interval_1m) &&
-			    IN_RANGE(ticks_interval, ticks_window_sum_min,
-				     ticks_window_sum_max)) {
+			    (ticks_interval == (lll->ticks_window +
+						lll_1m->ticks_window))) {
 				if (IS_ENABLED(CONFIG_BT_CTLR_SCAN_UNRESERVED)) {
 					scan->ull.ticks_slot = 0U;
 				} else {
