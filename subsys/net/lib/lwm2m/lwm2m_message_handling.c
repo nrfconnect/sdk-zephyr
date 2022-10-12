@@ -172,8 +172,9 @@ static void free_block_ctx(struct lwm2m_block_context *ctx)
 	ctx->tkl = 0U;
 }
 
-void lwm2m_engine_context_close(struct lwm2m_ctx *client_ctx)
+int lwm2m_engine_context_close(struct lwm2m_ctx *client_ctx)
 {
+	int sock_fd = client_ctx->sock_fd;
 	struct lwm2m_message *msg;
 	sys_snode_t *obs_node;
 	struct observe_node *obs;
@@ -200,6 +201,13 @@ void lwm2m_engine_context_close(struct lwm2m_ctx *client_ctx)
 #if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED)
 	client_ctx->buffer_client_messages = true;
 #endif
+	lwm2m_socket_del(client_ctx);
+	client_ctx->sock_fd = -1;
+	if (sock_fd >= 0) {
+		return close(sock_fd);
+	} else {
+		return 0;
+	}
 }
 
 void lwm2m_engine_context_init(struct lwm2m_ctx *client_ctx)
