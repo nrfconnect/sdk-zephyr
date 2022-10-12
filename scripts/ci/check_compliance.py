@@ -736,7 +736,7 @@ class Codeowners(ComplianceTest):
             # the entire tree. 2. run the former always.
             return
 
-        logger.info("If this takes too long then cleanup and try again")
+        logging.info("If this takes too long then cleanup and try again")
         patrn2files = self.ls_owned_files(codeowners)
 
         # The way git finds Renames and Copies is not "exact science",
@@ -744,7 +744,7 @@ class Codeowners(ComplianceTest):
         # Addition instead.
         new_files = git("diff", "--name-only", "--diff-filter=ARC",
                         COMMIT_RANGE).splitlines()
-        logger.debug("New files %s", new_files)
+        logging.debug("New files %s", new_files)
 
         # Convert to pathlib.Path string representation (e.g.,
         # backslashes 'dir1\dir2\' on Windows) to be consistent
@@ -756,10 +756,10 @@ class Codeowners(ComplianceTest):
             f_is_owned = False
 
             for git_pat, owned in patrn2files.items():
-                logger.debug("Scanning %s for %s", git_pat, newf)
+                logging.debug("Scanning %s for %s", git_pat, newf)
 
                 if newf in owned:
-                    logger.info("%s matches new file %s", git_pat, newf)
+                    logging.info("%s matches new file %s", git_pat, newf)
                     f_is_owned = True
                     # Unlike github, we don't care about finding any
                     # more specific owner.
@@ -1017,6 +1017,9 @@ class Identity(ComplianceTest):
 def init_logs(cli_arg):
     # Initializes logging
 
+    # TODO: there may be a shorter version thanks to:
+    # logging.basicConfig(...)
+
     global logger
 
     level = os.environ.get('LOG_LEVEL', "WARN")
@@ -1026,9 +1029,9 @@ def init_logs(cli_arg):
 
     logger = logging.getLogger('')
     logger.addHandler(console)
-    logger.setLevel(cli_arg or level)
+    logger.setLevel(cli_arg if cli_arg else level)
 
-    logger.info("Log init completed, level=%s",
+    logging.info("Log init completed, level=%s",
                  logging.getLevelName(logger.getEffectiveLevel()))
 
 
@@ -1051,9 +1054,7 @@ def parse_args():
     parser.add_argument('-l', '--list', action="store_true",
                         help="List all checks and exit")
 
-    parser.add_argument("-v", "--loglevel", choices=['DEBUG', 'INFO', 'WARNING',
-                                                     'ERROR', 'CRITICAL'],
-                        help="python logging level")
+    parser.add_argument("-v", "--loglevel", help="python logging level")
 
     parser.add_argument('-m', '--module', action="append", default=[],
                         help="Checks to run. All checks by default.")
