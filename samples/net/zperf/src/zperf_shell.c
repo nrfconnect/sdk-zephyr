@@ -5,13 +5,14 @@
  */
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(net_zperf, CONFIG_NET_ZPERF_LOG_LEVEL);
+LOG_MODULE_REGISTER(net_zperf_sample, LOG_LEVEL_DBG);
 
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <zephyr/zephyr.h>
+#include <zephyr/sys/printk.h>
 #include <zephyr/shell/shell.h>
 
 #include <zephyr/net/net_ip.h>

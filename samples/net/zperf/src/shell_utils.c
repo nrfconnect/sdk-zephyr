@@ -5,6 +5,7 @@
  */
 
 #include <ctype.h>
+#include <zephyr/sys/printk.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
