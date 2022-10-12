@@ -24,7 +24,7 @@
  * NOTE: Update comments here and calculate which struct occupies max size.
  */
 
-#if defined(CONFIG_NET_L2_WIFI_MGMT)
+#if defined(CONFIG_NET_L2_WIFI_MGMT) || defined(CONFIG_NET_L2_NRF_WIFI_MGMT)
 
 #include <zephyr/net/wifi_mgmt.h>
 #define NET_EVENT_INFO_MAX_SIZE sizeof(struct wifi_scan_result)
