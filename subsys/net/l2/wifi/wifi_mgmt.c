@@ -28,21 +28,14 @@ static int wifi_connect(uint32_t mgmt_request, struct net_if *iface,
 
 	LOG_HEXDUMP_DBG(params->ssid, params->ssid_length, "ssid");
 	LOG_HEXDUMP_DBG(params->psk, params->psk_length, "psk");
-	if (params->sae_password) {
-		LOG_HEXDUMP_DBG(params->sae_password, params->sae_password_length, "sae");
-	}
 	NET_DBG("ch %u sec %u", params->channel, params->security);
 
-	if ((params->security > WIFI_SECURITY_TYPE_MAX) ||
+	if ((params->security > WIFI_SECURITY_TYPE_PSK) ||
 	    (params->ssid_length > WIFI_SSID_MAX_LEN) ||
 	    (params->ssid_length == 0U) ||
-	    ((params->security == WIFI_SECURITY_TYPE_PSK ||
-		  params->security == WIFI_SECURITY_TYPE_PSK_SHA256) &&
+	    ((params->security == WIFI_SECURITY_TYPE_PSK) &&
 	     ((params->psk_length < 8) || (params->psk_length > 64) ||
 	      (params->psk_length == 0U) || !params->psk)) ||
-	    ((params->security == WIFI_SECURITY_TYPE_SAE) &&
-	      ((params->psk_length == 0U) || !params->psk) &&
-		  ((params->sae_password_length == 0U) || !params->sae_password)) ||
 	    ((params->channel != WIFI_CHANNEL_ANY) &&
 	     (params->channel > WIFI_CHANNEL_MAX)) ||
 	    !params->ssid) {
