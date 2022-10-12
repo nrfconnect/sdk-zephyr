@@ -25,7 +25,6 @@
 		led0 = &green_led_10;
 		sw0 = &user_button;
 		watchdog0 = &iwdg;
-		accel0 = &lsm6dso;
 	};
 };
 
