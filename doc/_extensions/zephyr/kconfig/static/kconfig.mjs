@@ -289,23 +289,11 @@ function doSearch() {
     }
 
     /* perform search */
-    const regexes = input.value.trim().split(/\s+/).map(
-        element => new RegExp(element.toLowerCase())
-    );
+    let pattern = new RegExp(input.value, 'i');
     let count = 0;
 
     const searchResults = db.filter(entry => {
-        let matches = 0;
-        const name = entry.name.toLowerCase();
-        const prompt = entry.prompt ? entry.prompt.toLowerCase() : "";
-
-        regexes.forEach(regex => {
-            if (name.search(regex) >= 0 || prompt.search(regex) >= 0) {
-                matches++;
-            }
-        });
-
-        if (matches === regexes.length) {
+        if (entry.name.match(pattern)) {
             count++;
             if (count > searchOffset && count <= (searchOffset + MAX_RESULTS)) {
                 return true;
