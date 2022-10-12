@@ -2936,15 +2936,11 @@ static void le_df_connectionless_iq_report(struct pdu_data *pdu_rx,
 	}
 #endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
 
-	/* If packet status does not indicate insufficient resources for IQ samples and for
-	 * some reason sample_count is zero, inform Host about lack of valid IQ samples by
-	 * storing single I_sample and Q_sample with BT_HCI_LE_CTE_REPORT_NO_VALID_SAMPLE value.
+	/* If there are no IQ samples due to insufficient resources
+	 * HCI event should inform about it by storing single octet with
+	 * special I_sample and Q_sample data.
 	 */
-	if (iq_report->packet_status == BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
-		samples_cnt = 0U;
-	} else {
-		samples_cnt = MAX(1, iq_report->sample_count);
-	}
+	samples_cnt = MAX(1, iq_report->sample_count);
 
 	sep = meta_evt(buf, BT_HCI_EVT_LE_CONNECTIONLESS_IQ_REPORT,
 		       (sizeof(*sep) +
@@ -2971,21 +2967,18 @@ static void le_df_connectionless_iq_report(struct pdu_data *pdu_rx,
 
 	sep->packet_status = iq_report->packet_status;
 
-	if (iq_report->packet_status != BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
-		if (iq_report->sample_count == 0U) {
-			sep->sample[0].i = BT_HCI_LE_CTE_REPORT_NO_VALID_SAMPLE;
-			sep->sample[0].q = BT_HCI_LE_CTE_REPORT_NO_VALID_SAMPLE;
-		} else {
-			for (uint8_t idx = 0U; idx < samples_cnt; ++idx) {
-				sep->sample[idx].i =
-					iq_convert_12_to_8_bits(iq_report->sample[idx].i);
-				sep->sample[idx].q =
-					iq_convert_12_to_8_bits(iq_report->sample[idx].q);
-			}
+	if (iq_report->packet_status == BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
+		sep->sample[0].i = BT_HCI_LE_CTE_REPORT_NO_VALID_SAMPLE;
+		sep->sample[0].q = BT_HCI_LE_CTE_REPORT_NO_VALID_SAMPLE;
+		sep->sample_count = 0U;
+	} else {
+		for (uint8_t idx = 0U; idx < samples_cnt; ++idx) {
+			sep->sample[idx].i = iq_convert_12_to_8_bits(iq_report->sample[idx].i);
+			sep->sample[idx].q = iq_convert_12_to_8_bits(iq_report->sample[idx].q);
 		}
-	}
 
-	sep->sample_count = samples_cnt;
+		sep->sample_count = samples_cnt;
+	}
 }
 #endif /* defined(CONFIG_BT_CTLR_DF_SCAN_CTE_RX) || defined(CONFIG_BT_CTLR_DTM_HCI_DF_IQ_REPORT) */
 
@@ -3068,15 +3061,10 @@ static void le_df_connection_iq_report(struct node_rx_pdu *node_rx, struct net_b
 		return;
 	}
 
-	/* If packet status does not indicate insufficient resources for IQ samples and for
-	 * some reason sample_count is zero, inform Host about lack of valid IQ samples by
-	 * storing single I_sample and Q_sample with BT_HCI_LE_CTE_REPORT_NO_VALID_SAMPLE value.
+	/* If there are no IQ samples due to insufficient resources HCI event should inform about
+	 * it by store single octet with special I_sample and Q_sample data.
 	 */
-	if (iq_report->packet_status == BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
-		samples_cnt = 0;
-	} else {
-		samples_cnt = MAX(1, iq_report->sample_count);
-	}
+	samples_cnt = MAX(1, iq_report->sample_count);
 
 	sep = meta_evt(buf, BT_HCI_EVT_LE_CONNECTION_IQ_REPORT,
 		       (sizeof(*sep) + (samples_cnt * sizeof(struct bt_hci_le_iq_sample))));
@@ -3102,21 +3090,17 @@ static void le_df_connection_iq_report(struct node_rx_pdu *node_rx, struct net_b
 
 	sep->packet_status = iq_report->packet_status;
 
-	if (iq_report->packet_status != BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
-		if (iq_report->sample_count == 0U) {
-			sep->sample[0].i = BT_HCI_LE_CTE_REPORT_NO_VALID_SAMPLE;
-			sep->sample[0].q = BT_HCI_LE_CTE_REPORT_NO_VALID_SAMPLE;
-		} else {
-			for (uint8_t idx = 0U; idx < samples_cnt; ++idx) {
-				sep->sample[idx].i =
-					iq_convert_12_to_8_bits(iq_report->sample[idx].i);
-				sep->sample[idx].q =
-					iq_convert_12_to_8_bits(iq_report->sample[idx].q);
-			}
+	if (iq_report->packet_status == BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
+		sep->sample[0].i = BT_HCI_LE_CTE_REPORT_NO_VALID_SAMPLE;
+		sep->sample[0].q = BT_HCI_LE_CTE_REPORT_NO_VALID_SAMPLE;
+		sep->sample_count = 0U;
+	} else {
+		for (uint8_t idx = 0U; idx < samples_cnt; ++idx) {
+			sep->sample[idx].i = iq_convert_12_to_8_bits(iq_report->sample[idx].i);
+			sep->sample[idx].q = iq_convert_12_to_8_bits(iq_report->sample[idx].q);
 		}
+		sep->sample_count = samples_cnt;
 	}
-
-	sep->sample_count = samples_cnt;
 }
 #endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 
@@ -5045,16 +5029,11 @@ static void vs_le_df_connectionless_iq_report(struct pdu_data *pdu_rx, struct no
 	sync_handle = ull_sync_handle_get(sync);
 	per_evt_counter = iq_report->event_counter;
 
-	/* If packet status does not indicate insufficient resources for IQ samples and for
-	 * some reason sample_count is zero, inform Host about lack of valid IQ samples by
-	 * storing single I_sample and Q_sample with BT_HCI_VS_LE_CTE_REPORT_NO_VALID_SAMPLE
-	 * value.
+	/* If there are no IQ samples due to insufficient resources
+	 * HCI event should inform about it by storing single octet with
+	 * special I_sample and Q_sample data.
 	 */
-	if (iq_report->packet_status == BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
-		samples_cnt = 0U;
-	} else {
-		samples_cnt = MAX(1, iq_report->sample_count);
-	}
+	samples_cnt = MAX(1, iq_report->sample_count);
 
 	sep = vs_event(buf, BT_HCI_EVT_VS_LE_CONNECTIONLESS_IQ_REPORT,
 		       (sizeof(*sep) + (samples_cnt * sizeof(struct bt_hci_le_iq_sample16))));
@@ -5079,19 +5058,18 @@ static void vs_le_df_connectionless_iq_report(struct pdu_data *pdu_rx, struct no
 
 	sep->packet_status = iq_report->packet_status;
 
-	if (iq_report->packet_status != BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
-		if (iq_report->sample_count == 0U) {
-			sep->sample[0].i = sys_cpu_to_le16(BT_HCI_VS_LE_CTE_REPORT_NO_VALID_SAMPLE);
-			sep->sample[0].q = sys_cpu_to_le16(BT_HCI_VS_LE_CTE_REPORT_NO_VALID_SAMPLE);
-		} else {
-			for (uint8_t idx = 0U; idx < samples_cnt; ++idx) {
-				sep->sample[idx].i = sys_cpu_to_le16(iq_report->sample[idx].i);
-				sep->sample[idx].q = sys_cpu_to_le16(iq_report->sample[idx].q);
-			}
+	if (iq_report->packet_status == BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
+		sep->sample[0].i = BT_HCI_VS_LE_CTE_REPORT_NO_VALID_SAMPLE;
+		sep->sample[0].q = BT_HCI_VS_LE_CTE_REPORT_NO_VALID_SAMPLE;
+		sep->sample_count = 0U;
+	} else {
+		for (uint8_t idx = 0U; idx < samples_cnt; ++idx) {
+			sep->sample[idx].i = sys_cpu_to_le16(iq_report->sample[idx].i);
+			sep->sample[idx].q = sys_cpu_to_le16(iq_report->sample[idx].q);
 		}
-	}
 
-	sep->sample_count = samples_cnt;
+		sep->sample_count = samples_cnt;
+	}
 }
 #endif /* CONFIG_BT_CTLR_DF_VS_CL_IQ_REPORT_16_BITS_IQ_SAMPLES */
 
@@ -5131,15 +5109,10 @@ static void vs_le_df_connection_iq_report(struct node_rx_pdu *node_rx, struct ne
 		return;
 	}
 
-	/* If packet status does not indicate insufficient resources for IQ samples and for
-	 * some reason sample_count is zero, inform Host about lack of valid IQ samples by
-	 * storing single I_sample and Q_sample with BT_HCI_VS_LE_CTE_REPORT_NO_VALID_SAMPLE value.
+	/* If there are no IQ samples due to insufficient resources HCI event should inform about
+	 * it by store single octet with special I_sample and Q_sample data.
 	 */
-	if (iq_report->packet_status == BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
-		samples_cnt = 0U;
-	} else {
-		samples_cnt = MAX(1, iq_report->sample_count);
-	}
+	samples_cnt = MAX(1, iq_report->sample_count);
 
 	sep = vs_event(buf, BT_HCI_EVT_VS_LE_CONNECTION_IQ_REPORT,
 			(sizeof(*sep) + (samples_cnt * sizeof(struct bt_hci_le_iq_sample16))));
@@ -5165,19 +5138,17 @@ static void vs_le_df_connection_iq_report(struct node_rx_pdu *node_rx, struct ne
 
 	sep->packet_status = iq_report->packet_status;
 
-	if (iq_report->packet_status != BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
-		if (iq_report->sample_count == 0U) {
-			sep->sample[0].i = sys_cpu_to_le16(BT_HCI_VS_LE_CTE_REPORT_NO_VALID_SAMPLE);
-			sep->sample[0].q = sys_cpu_to_le16(BT_HCI_VS_LE_CTE_REPORT_NO_VALID_SAMPLE);
-		} else {
-			for (uint8_t idx = 0U; idx < samples_cnt; ++idx) {
-				sep->sample[idx].i = sys_cpu_to_le16(iq_report->sample[idx].i);
-				sep->sample[idx].q = sys_cpu_to_le16(iq_report->sample[idx].q);
-			}
+	if (iq_report->packet_status == BT_HCI_LE_CTE_INSUFFICIENT_RESOURCES) {
+		sep->sample[0].i = BT_HCI_VS_LE_CTE_REPORT_NO_VALID_SAMPLE;
+		sep->sample[0].q = BT_HCI_VS_LE_CTE_REPORT_NO_VALID_SAMPLE;
+		sep->sample_count = 0U;
+	} else {
+		for (uint8_t idx = 0U; idx < samples_cnt; ++idx) {
+			sep->sample[idx].i = sys_cpu_to_le16(iq_report->sample[idx].i);
+			sep->sample[idx].q = sys_cpu_to_le16(iq_report->sample[idx].q);
 		}
+		sep->sample_count = samples_cnt;
 	}
-
-	sep->sample_count = samples_cnt;
 }
 #endif /* CONFIG_BT_CTLR_DF_VS_CONN_IQ_REPORT_16_BITS_IQ_SAMPLES */
 
