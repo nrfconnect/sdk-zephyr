@@ -55,11 +55,11 @@ LOG_MODULE_REGISTER(net_pkt, CONFIG_NET_PKT_LOG_LEVEL);
  */
 #define MAX_IP_PROTO_LEN 8
 #else
-#if defined(CONFIG_NET_ETHERNET_BRIDGE)
+#if defined(CONFIG_NET_ETHERNET_BRIDGE) || defined(CONFIG_NET_L2_IEEE802154)
 #define MAX_IP_PROTO_LEN 0
 #else
-#error "Either IPv6 or IPv4 needs to be selected."
-#endif /* ETHERNET_BRIDGE */
+#error "Some packet protocol (e.g. IPv6, IPv4, ETH, IEEE 802.15.4) needs to be selected."
+#endif /* ETHERNET_BRIDGE / L2_IEEE802154 */
 #endif /* SOCKETS_CAN */
 #endif /* IPv4 */
 #endif /* IPv6 */
@@ -756,7 +756,7 @@ void net_pkt_frag_insert(struct net_pkt *pkt, struct net_buf *frag)
 	pkt->frags = frag;
 }
 
-bool net_pkt_compact(struct net_pkt *pkt)
+void net_pkt_compact(struct net_pkt *pkt)
 {
 	struct net_buf *frag, *prev;
 
@@ -812,8 +812,6 @@ bool net_pkt_compact(struct net_pkt *pkt)
 		prev = frag;
 		frag = frag->frags;
 	}
-
-	return true;
 }
 
 void net_pkt_get_info(struct k_mem_slab **rx,

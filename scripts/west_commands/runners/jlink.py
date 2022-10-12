@@ -17,6 +17,7 @@ import tempfile
 from runners.core import ZephyrBinaryRunner, RunnerCaps, depr_action
 
 try:
+    import pylink
     from pylink.library import Library
     MISSING_REQUIREMENTS = False
 except ImportError:
@@ -37,6 +38,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                  commander=DEFAULT_JLINK_EXE,
                  dt_flash=True, erase=True, reset_after_load=False,
                  iface='swd', speed='auto',
+                 loader=None,
                  gdbserver='JLinkGDBServer',
                  gdb_host='',
                  gdb_port=DEFAULT_JLINK_GDB_PORT,
@@ -58,6 +60,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         self.gdb_host = gdb_host
         self.gdb_port = gdb_port
         self.tui_arg = ['-tui'] if tui else []
+        self.loader = loader
 
         self.tool_opt = []
         for opts in [shlex.split(opt) for opt in tool_opt]:
@@ -88,6 +91,8 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         parser.add_argument('--device', required=True, help='device name')
 
         # Optional:
+        parser.add_argument('--loader', required=False, dest='loader',
+                            help='specifies a loader type')
         parser.add_argument('--id', required=False, dest='dev_id',
                             action=partial(depr_action,
                                            replacement='-i/--dev-id'),
@@ -126,6 +131,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                                  reset_after_load=args.reset_after_load,
                                  iface=args.iface, speed=args.speed,
                                  gdbserver=args.gdbserver,
+                                 loader=args.loader,
                                  gdb_host=args.gdb_host,
                                  gdb_port=args.gdb_port,
                                  tui=args.tui, tool_opt=args.tool_opt)
@@ -150,16 +156,23 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         # to load the shared library distributed with the tools, which
         # provides an API call for getting the version.
         if not hasattr(self, '_jlink_version'):
+            # pylink 0.14.0/0.14.1 exposes JLink SDK DLL (libjlinkarm) in
+            # JLINK_SDK_STARTS_WITH, while other versions use JLINK_SDK_NAME
+            if pylink.__version__ in ('0.14.0', '0.14.1'):
+                sdk = Library.JLINK_SDK_STARTS_WITH
+            else:
+                sdk = Library.JLINK_SDK_NAME
+
             plat = sys.platform
             if plat.startswith('win32'):
                 libname = Library.get_appropriate_windows_sdk_name() + '.dll'
             elif plat.startswith('linux'):
-                libname = Library.JLINK_SDK_NAME + '.so'
+                libname = sdk + '.so'
             elif plat.startswith('darwin'):
-                libname = Library.JLINK_SDK_NAME + '.dylib'
+                libname = sdk + '.dylib'
             else:
                 self.logger.warning(f'unknown platform {plat}; assuming UNIX')
-                libname = Library.JLINK_SDK_NAME + '.so'
+                libname = sdk + '.so'
 
             lib = Library(dllpath=os.fspath(Path(self.commander).parent /
                                             libname))
@@ -192,7 +205,12 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         # RTOSPlugin_Zephyr was introduced in 7.11b
         return self.jlink_version >= (7, 11, 2)
 
+    @property
+    def supports_loader(self):
+        return self.jlink_version >= (7, 70, 4)
+
     def do_run(self, command, **kwargs):
+
         if MISSING_REQUIREMENTS:
             raise RuntimeError('one or more Python dependencies were missing; '
                                "see the getting started guide for details on "
@@ -253,6 +271,8 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                 self.run_client(client_cmd)
 
     def flash(self, **kwargs):
+
+        loader_details = ""
         lines = [
             'ExitOnError 1',  # Treat any command-error as fatal
             'r',  # Reset and halt the target
@@ -304,13 +324,16 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
             fname = os.path.join(d, 'runner.jlink')
             with open(fname, 'wb') as f:
                 f.writelines(bytes(line + '\n', 'utf-8') for line in lines)
+            if self.supports_loader and self.loader:
+                loader_details = "?" + self.loader
+
             cmd = ([self.commander] +
                     # only USB connections supported
                    (['-USB', f'{self.dev_id}'] if self.dev_id else []) +
                    (['-nogui', '1'] if self.supports_nogui else []) +
                    ['-if', self.iface,
                     '-speed', self.speed,
-                    '-device', self.device,
+                    '-device', self.device + loader_details,
                     '-CommanderScript', fname] +
                    (['-nogui', '1'] if self.supports_nogui else []) +
                    self.tool_opt)

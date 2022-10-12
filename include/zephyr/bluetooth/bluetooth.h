@@ -37,8 +37,6 @@ extern "C" {
  */
 
 /**
- * @def BT_ID_DEFAULT
- *
  * Convenience macro for specifying the default identity. This helps
  * make the code more readable, especially when only one identity is
  * supported.
@@ -244,7 +242,7 @@ int bt_set_appearance(uint16_t new_appearance);
  * count of all available identities that can be retrieved with a
  * subsequent call to this function with non-NULL @a addrs parameter.
  *
- * @note Deleted identities may show up as BT_LE_ADDR_ANY in the returned
+ * @note Deleted identities may show up as @ref BT_ADDR_LE_ANY in the returned
  * array.
  *
  * @param addrs Array where to store the configured identities.

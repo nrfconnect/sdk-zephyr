@@ -11,8 +11,7 @@ Cortex-M4 at 240 MHz. The i.MX RT1160 MCU offers support over a wide
 temperature range and is qualified for consumer, industrial and automotive
 markets.
 
-.. image:: ./mimxrt1160_evk.jpg
-   :width: 600px
+.. image:: mimxrt1160_evk.jpg
    :align: center
    :alt: MIMXRT1160-EVK
 
@@ -82,8 +81,12 @@ these references:
 Supported Features
 ==================
 
-The mimxrt1160_evk board configuration supports the following hardware
-features:
+The mimxrt1160_evk board configuration supports the hardware features listed
+below.  For additional features not yet supported, please also refer to the
+:ref:`mimxrt1170_evk` , which is the superset board in NXP's i.MX RT11xx family.
+NXP prioritizes enabling the superset board with NXP's Full Platform Support for
+Zephyr.  Therefore, the mimxrt1170_evk board may have additional features
+already supported, which can also be re-used on this mimxrt1160_evk board:
 
 +-----------+------------+-------------------------------------+
 | Interface | Controller | Driver/Component                    |
@@ -118,6 +121,10 @@ features:
 | USB       | on-chip    | USB Device                          |
 +-----------+------------+-------------------------------------+
 | HWINFO    | on-chip    | Unique device serial number         |
++-----------+------------+-------------------------------------+
+| CAAM RNG  | on-chip    | entropy                             |
++-----------+------------+-------------------------------------+
+| FLEXSPI   | on-chip    | flash programming                   |
 +-----------+------------+-------------------------------------+
 
 The default configuration can be found in the defconfig file:
@@ -263,7 +270,7 @@ should see the following message in the terminal:
    https://www.nxp.com/design/development-boards/i-mx-evaluation-and-development-boards/i-mx-rt1160-evaluation-kit:MIMXRT1160-EVK
 
 .. _MIMXRT1160-EVK Board Hardware User's Guide:
-   https://www.nxp.com/docs/en/user-guide/UM11617.pdf
+   https://www.nxp.com/webapp/Download?colCode=UM11617
 
 .. _i.MX RT1160 Website:
    https://www.nxp.com/products/processors-and-microcontrollers/arm-microcontrollers/i-mx-rt-crossover-mcus/i-mx-rt1160-crossover-mcu-family-high-performance-mcu-with-arm-cortex-m7-and-cortex-m4-cores:i.MX-RT1160

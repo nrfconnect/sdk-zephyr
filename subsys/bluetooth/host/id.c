@@ -295,7 +295,9 @@ int bt_id_set_adv_private_addr(struct bt_le_ext_adv *adv)
 		return 0;
 	}
 
-	if (adv == bt_le_adv_lookup_legacy() && adv->id == BT_ID_DEFAULT) {
+	if (!(IS_ENABLED(CONFIG_BT_EXT_ADV) &&
+	      BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features)) &&
+	    (adv == bt_le_adv_lookup_legacy()) && (adv->id == BT_ID_DEFAULT)) {
 		/* Make sure that a Legacy advertiser using default ID has same
 		 * RPA address as scanner roles.
 		 */
@@ -401,7 +403,12 @@ static void adv_disable_rpa(struct bt_le_ext_adv *adv, void *data)
 	/* Disable advertising sets to prepare them for RPA update. */
 	if (atomic_test_bit(adv->flags, BT_ADV_ENABLED) &&
 	    !atomic_test_bit(adv->flags, BT_ADV_USE_IDENTITY)) {
-		bt_le_adv_set_enable_ext(adv, false, NULL);
+		int err;
+
+		err = bt_le_adv_set_enable_ext(adv, false, NULL);
+		if (err) {
+			BT_ERR("Failed to disable advertising (err %d)", err);
+		}
 
 		adv_disabled[adv_index] = true;
 	}
@@ -430,7 +437,10 @@ static void adv_enable_rpa(struct bt_le_ext_adv *adv, void *data)
 				err);
 		}
 
-		bt_le_adv_set_enable_ext(adv, true, NULL);
+		err = bt_le_adv_set_enable_ext(adv, true, NULL);
+		if (err) {
+			BT_ERR("Failed to enable advertising (err %d)", err);
+		}
 	}
 }
 #endif /* defined(CONFIG_BT_EXT_ADV) && defined(CONFIG_BT_PRIVACY) */
@@ -781,9 +791,9 @@ void bt_id_pending_keys_update(void)
 	if (atomic_test_and_clear_bit(bt_dev.flags, BT_DEV_ID_PENDING)) {
 		if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
 		    IS_ENABLED(CONFIG_BT_PRIVACY)) {
-			bt_keys_foreach(BT_KEYS_ALL, pending_id_update, NULL);
+			bt_keys_foreach_type(BT_KEYS_ALL, pending_id_update, NULL);
 		} else {
-			bt_keys_foreach(BT_KEYS_IRK, pending_id_update, NULL);
+			bt_keys_foreach_type(BT_KEYS_IRK, pending_id_update, NULL);
 		}
 	}
 }
@@ -994,9 +1004,9 @@ void bt_id_del(struct bt_keys *keys)
 		keys->state &= ~BT_KEYS_ID_ADDED;
 		if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
 		    IS_ENABLED(CONFIG_BT_PRIVACY)) {
-			bt_keys_foreach(BT_KEYS_ALL, keys_add_id, NULL);
+			bt_keys_foreach_type(BT_KEYS_ALL, keys_add_id, NULL);
 		} else {
-			bt_keys_foreach(BT_KEYS_IRK, keys_add_id, NULL);
+			bt_keys_foreach_type(BT_KEYS_IRK, keys_add_id, NULL);
 		}
 		goto done;
 	}
@@ -1339,12 +1349,22 @@ int bt_setup_public_id_addr(void)
 
 	bt_read_identity_root(ir);
 
-	if (!bt_smp_irk_get(ir, ir_irk)) {
-		irk = ir_irk;
-	} else if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		atomic_set_bit(bt_dev.flags, BT_DEV_STORE_ID);
+	if (!IS_ENABLED(CONFIG_BT_PRIVACY_RANDOMIZE_IR)) {
+		if (!bt_smp_irk_get(ir, ir_irk)) {
+			irk = ir_irk;
+		}
 	}
 #endif /* defined(CONFIG_BT_PRIVACY) */
+
+	/* If true, `id_create` will randomize the IRK. */
+	if (!irk && IS_ENABLED(CONFIG_BT_PRIVACY)) {
+		/* `id_create` will not store the id when called before BT_DEV_READY.
+		 * But since part of the id will be randomized, it needs to be stored.
+		 */
+		if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+			atomic_set_bit(bt_dev.flags, BT_DEV_STORE_ID);
+		}
+	}
 
 	return id_create(BT_ID_DEFAULT, &addr, irk);
 }
@@ -1419,13 +1439,23 @@ int bt_setup_random_id_addr(void)
 #if defined(CONFIG_BT_PRIVACY)
 				uint8_t ir_irk[16];
 
-				if (!bt_smp_irk_get(addrs[i].ir, ir_irk)) {
-					irk = ir_irk;
-				} else if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-					atomic_set_bit(bt_dev.flags,
-						       BT_DEV_STORE_ID);
+				if (!IS_ENABLED(CONFIG_BT_PRIVACY_RANDOMIZE_IR)) {
+					if (!bt_smp_irk_get(addrs[i].ir, ir_irk)) {
+						irk = ir_irk;
+					}
 				}
 #endif /* CONFIG_BT_PRIVACY */
+
+				/* If true, `id_create` will randomize the IRK. */
+				if (!irk && IS_ENABLED(CONFIG_BT_PRIVACY)) {
+					/* `id_create` will not store the id when called before
+					 * BT_DEV_READY. But since part of the id will be
+					 * randomized, it needs to be stored.
+					 */
+					if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+						atomic_set_bit(bt_dev.flags, BT_DEV_STORE_ID);
+					}
+				}
 
 				bt_addr_copy(&addr.a, &addrs[i].bdaddr);
 				addr.type = BT_ADDR_LE_RANDOM;

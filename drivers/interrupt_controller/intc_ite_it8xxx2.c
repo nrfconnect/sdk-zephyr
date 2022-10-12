@@ -62,6 +62,7 @@ static uint8_t ier_setting[IT8XXX2_IER_COUNT];
 
 void ite_intc_save_and_disable_interrupts(void)
 {
+	volatile uint8_t _ier __unused;
 	/* Disable global interrupt for critical section */
 	unsigned int key = irq_lock();
 
@@ -70,6 +71,13 @@ void ite_intc_save_and_disable_interrupts(void)
 		ier_setting[i] = *reg_enable[i];
 		*reg_enable[i] = 0;
 	}
+	/*
+	 * This load operation will guarantee the above modification of
+	 * SOC's register can be seen by any following instructions.
+	 * Note: Barrier instruction can not synchronize chip register,
+	 * so we introduce workaround here.
+	 */
+	_ier = *reg_enable[IT8XXX2_IER_COUNT - 1];
 	irq_unlock(key);
 }
 
@@ -102,7 +110,7 @@ void ite_intc_isr_clear(unsigned int irq)
 	*isr = BIT(i);
 }
 
-void ite_intc_irq_enable(unsigned int irq)
+void __soc_ram_code ite_intc_irq_enable(unsigned int irq)
 {
 	uint32_t g, i;
 	volatile uint8_t *en;
@@ -120,7 +128,7 @@ void ite_intc_irq_enable(unsigned int irq)
 	irq_unlock(key);
 }
 
-void ite_intc_irq_disable(unsigned int irq)
+void __soc_ram_code ite_intc_irq_disable(unsigned int irq)
 {
 	uint32_t g, i;
 	volatile uint8_t *en;
@@ -168,7 +176,7 @@ void ite_intc_irq_polarity_set(unsigned int irq, unsigned int flags)
 	}
 }
 
-int ite_intc_irq_is_enable(unsigned int irq)
+int __soc_ram_code ite_intc_irq_is_enable(unsigned int irq)
 {
 	uint32_t g, i;
 	volatile uint8_t *en;
@@ -182,17 +190,17 @@ int ite_intc_irq_is_enable(unsigned int irq)
 	return IS_MASK_SET(*en, BIT(i));
 }
 
-uint8_t ite_intc_get_irq_num(void)
+uint8_t __soc_ram_code ite_intc_get_irq_num(void)
 {
 	return intc_irq;
 }
 
-bool ite_intc_no_irq(void)
+bool __soc_ram_code ite_intc_no_irq(void)
 {
 	return (IVECT == IVECT_OFFSET_WITH_IRQ);
 }
 
-uint8_t get_irq(void *arg)
+uint8_t __soc_ram_code get_irq(void *arg)
 {
 	ARG_UNUSED(arg);
 

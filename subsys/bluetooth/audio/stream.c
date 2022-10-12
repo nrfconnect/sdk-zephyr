@@ -7,7 +7,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/check.h>
 
@@ -28,12 +28,42 @@
 #define LOG_MODULE_NAME bt_audio_stream
 #include "common/log.h"
 
-void bt_audio_codec_qos_to_iso_qos(struct bt_iso_chan_io_qos *io,
-				  const struct bt_codec_qos *codec)
+static uint8_t pack_bt_codec_cc(const struct bt_codec *codec, uint8_t cc[])
 {
-	io->sdu = codec->sdu;
-	io->phy = codec->phy;
-	io->rtn = codec->rtn;
+	uint8_t len;
+
+	len = 0U;
+	for (size_t i = 0U; i < codec->data_count; i++) {
+		const struct bt_data *data = &codec->data[i].data;
+
+		/* We assume that data_len and data has previously been verified
+		 * and that based on the Kconfigs we can assume that the length
+		 * will always fit in `cc`
+		 */
+		(void)memcpy(cc + len, data->data, data->data_len);
+		len += data->data_len;
+	}
+
+	return len;
+}
+
+void bt_audio_codec_to_iso_path(struct bt_iso_chan_path *path,
+				const struct bt_codec *codec)
+{
+	path->pid = codec->path_id;
+	path->format = codec->id;
+	path->cid = codec->cid;
+	path->vid = codec->vid;
+	path->delay = 0; /* TODO: Add to bt_codec? Use presentation delay? */
+	path->cc_len = pack_bt_codec_cc(codec, path->cc);
+}
+
+void bt_audio_codec_qos_to_iso_qos(struct bt_iso_chan_io_qos *io,
+				   const struct bt_codec_qos *codec_qos)
+{
+	io->sdu = codec_qos->sdu;
+	io->phy = codec_qos->phy;
+	io->rtn = codec_qos->rtn;
 }
 
 void bt_audio_stream_attach(struct bt_conn *conn,
@@ -1155,13 +1185,13 @@ int bt_audio_stream_disable(struct bt_audio_stream *stream)
 	return 0;
 }
 
-int bt_audio_stream_release(struct bt_audio_stream *stream, bool cache)
+int bt_audio_stream_release(struct bt_audio_stream *stream)
 {
 	uint8_t state;
 	uint8_t role;
 	int err;
 
-	BT_DBG("stream %p cache %s", stream, cache ? "true" : "false");
+	BT_DBG("stream %p", stream);
 
 	CHECKIF(stream == NULL || stream->ep == NULL || stream->conn == NULL) {
 		BT_DBG("Invalid stream");
@@ -1192,7 +1222,7 @@ int bt_audio_stream_release(struct bt_audio_stream *stream, bool cache)
 		err = bt_unicast_client_release(stream);
 	} else if (IS_ENABLED(CONFIG_BT_AUDIO_UNICAST_SERVER) &&
 		   role == BT_HCI_ROLE_PERIPHERAL) {
-		err = bt_unicast_server_release(stream, cache);
+		err = bt_unicast_server_release(stream);
 	} else {
 		err = -EOPNOTSUPP;
 	}

@@ -73,7 +73,7 @@ static int can_exit_sleep_mode(struct can_mcan_reg *can)
 	return 0;
 }
 
-static int can_enter_init_mode(struct can_mcan_reg  *can, k_timeout_t timeout)
+static int can_enter_init_mode(struct can_mcan_reg *can, k_timeout_t timeout)
 {
 	int64_t start_time;
 
@@ -90,7 +90,7 @@ static int can_enter_init_mode(struct can_mcan_reg  *can, k_timeout_t timeout)
 	return 0;
 }
 
-static int can_leave_init_mode(struct can_mcan_reg  *can, k_timeout_t timeout)
+static int can_leave_init_mode(struct can_mcan_reg *can, k_timeout_t timeout)
 {
 	int64_t start_time;
 
@@ -173,25 +173,14 @@ int can_mcan_set_timing(const struct device *dev,
 			const struct can_timing *timing)
 {
 	const struct can_mcan_config *cfg = dev->config;
+	struct can_mcan_data *data = dev->data;
 	struct can_mcan_reg *can = cfg->can;
-	int ret;
 
-	ret = can_enter_init_mode(can, K_MSEC(CAN_INIT_TIMEOUT));
-	if (ret) {
-		LOG_ERR("Failed to enter init mode");
-		return -EIO;
+	if (data->started) {
+		return -EBUSY;
 	}
-
-	/* Configuration Change Enable */
-	can->cccr |= CAN_MCAN_CCCR_CCE;
 
 	can_mcan_configure_timing(can, timing, NULL);
-
-	ret = can_leave_init_mode(can, K_MSEC(CAN_INIT_TIMEOUT));
-	if (ret) {
-		LOG_ERR("Failed to leave init mode");
-		return -EIO;
-	}
 
 	return 0;
 }
@@ -201,25 +190,14 @@ int can_mcan_set_timing_data(const struct device *dev,
 			const struct can_timing *timing_data)
 {
 	const struct can_mcan_config *cfg = dev->config;
+	struct can_mcan_data *data = dev->data;
 	struct can_mcan_reg *can = cfg->can;
-	int ret;
 
-	ret = can_enter_init_mode(can, K_MSEC(CAN_INIT_TIMEOUT));
-	if (ret) {
-		LOG_ERR("Failed to enter init mode");
-		return -EIO;
+	if (data->started) {
+		return -EBUSY;
 	}
-
-	/* Configuration Change Enable */
-	can->cccr |= CAN_MCAN_CCCR_CCE;
 
 	can_mcan_configure_timing(can, NULL, timing_data);
-
-	ret = can_leave_init_mode(can, K_MSEC(CAN_INIT_TIMEOUT));
-	if (ret) {
-		LOG_ERR("Failed to leave init mode");
-		return -EIO;
-	}
 
 	return 0;
 }
@@ -238,11 +216,92 @@ int can_mcan_get_capabilities(const struct device *dev, can_mode_t *cap)
 	return 0;
 }
 
+int can_mcan_start(const struct device *dev)
+{
+	const struct can_mcan_config *cfg = dev->config;
+	struct can_mcan_data *data = dev->data;
+	struct can_mcan_reg *can = cfg->can;
+	int ret;
+
+	if (data->started) {
+		return -EALREADY;
+	}
+
+	if (cfg->phy != NULL) {
+		ret = can_transceiver_enable(cfg->phy);
+		if (ret != 0) {
+			LOG_ERR("failed to enable CAN transceiver (err %d)", ret);
+			return ret;
+		}
+	}
+
+	ret = can_leave_init_mode(can, K_MSEC(CAN_INIT_TIMEOUT));
+	if (ret) {
+		LOG_ERR("failed to leave init mode");
+
+		if (cfg->phy != NULL) {
+			/* Attempt to disable the CAN transceiver in case of error */
+			(void)can_transceiver_disable(cfg->phy);
+		}
+
+		return -EIO;
+	}
+
+	data->started = true;
+
+	return 0;
+}
+
+int can_mcan_stop(const struct device *dev)
+{
+	const struct can_mcan_config *cfg = dev->config;
+	struct can_mcan_data *data = dev->data;
+	struct can_mcan_reg *can = cfg->can;
+	can_tx_callback_t tx_cb;
+	uint32_t tx_idx;
+	int ret;
+
+	if (!data->started) {
+		return -EALREADY;
+	}
+
+	/* CAN transmissions are automatically stopped when entering init mode */
+	ret = can_enter_init_mode(can, K_MSEC(CAN_INIT_TIMEOUT));
+	if (ret != 0) {
+		LOG_ERR("Failed to enter init mode");
+		return -EIO;
+	}
+
+	if (cfg->phy != NULL) {
+		ret = can_transceiver_disable(cfg->phy);
+		if (ret != 0) {
+			LOG_ERR("failed to disable CAN transceiver (err %d)", ret);
+			return ret;
+		}
+	}
+
+	can_mcan_enable_configuration_change(dev);
+
+	data->started = false;
+
+	for (tx_idx = 0; tx_idx < ARRAY_SIZE(data->tx_fin_cb); tx_idx++) {
+		tx_cb = data->tx_fin_cb[tx_idx];
+
+		if (tx_cb != NULL) {
+			data->tx_fin_cb[tx_idx] = NULL;
+			tx_cb(dev, -ENETDOWN, data->tx_fin_cb_arg[tx_idx]);
+			k_sem_give(&data->tx_sem);
+		}
+	}
+
+	return 0;
+}
+
 int can_mcan_set_mode(const struct device *dev, can_mode_t mode)
 {
 	const struct can_mcan_config *cfg = dev->config;
+	struct can_mcan_data *data = dev->data;
 	struct can_mcan_reg *can = cfg->can;
-	int ret;
 
 #ifdef CONFIG_CAN_FD_MODE
 	if ((mode & ~(CAN_MODE_LOOPBACK | CAN_MODE_LISTENONLY | CAN_MODE_FD)) != 0) {
@@ -256,28 +315,9 @@ int can_mcan_set_mode(const struct device *dev, can_mode_t mode)
 	}
 #endif /* CONFIG_CAN_FD_MODE */
 
-	if (cfg->phy != NULL) {
-		ret = can_transceiver_enable(cfg->phy);
-		if (ret != 0) {
-			LOG_ERR("failed to enable CAN transceiver (err %d)", ret);
-			return ret;
-		}
+	if (data->started) {
+		return -EBUSY;
 	}
-
-	ret = can_enter_init_mode(can, K_MSEC(CAN_INIT_TIMEOUT));
-	if (ret) {
-		LOG_ERR("Failed to enter init mode");
-
-		if (cfg->phy != NULL) {
-			/* Attempt to disable the CAN transceiver in case of error */
-			(void)can_transceiver_disable(cfg->phy);
-		}
-
-		return -EIO;
-	}
-
-	/* Configuration Change Enable */
-	can->cccr |= CAN_MCAN_CCCR_CCE;
 
 	if ((mode & CAN_MODE_LOOPBACK) != 0) {
 		/* Loopback mode */
@@ -302,16 +342,6 @@ int can_mcan_set_mode(const struct device *dev, can_mode_t mode)
 	}
 #endif /* CONFIG_CAN_FD_MODE */
 
-	ret = can_leave_init_mode(can, K_MSEC(CAN_INIT_TIMEOUT));
-	if (ret) {
-		LOG_ERR("Failed to leave init mode");
-
-		if (cfg->phy != NULL) {
-			/* Attempt to disable the CAN transceiver in case of error */
-			(void)can_transceiver_disable(cfg->phy);
-		}
-	}
-
 	return 0;
 }
 
@@ -331,39 +361,26 @@ int can_mcan_init(const struct device *dev)
 	k_mutex_init(&data->tx_mtx);
 	k_sem_init(&data->tx_sem, NUM_TX_BUF_ELEMENTS, NUM_TX_BUF_ELEMENTS);
 
-	for (int i = 0; i < ARRAY_SIZE(data->tx_fin_sem); ++i) {
-		k_sem_init(&data->tx_fin_sem[i], 0, 1);
-	}
-
 	if (cfg->phy != NULL) {
 		if (!device_is_ready(cfg->phy)) {
 			LOG_ERR("CAN transceiver not ready");
 			return -ENODEV;
-		}
-
-		ret = can_transceiver_enable(cfg->phy);
-		if (ret != 0) {
-			LOG_ERR("failed to enable CAN transceiver (err %d)", ret);
-			return -EIO;
 		}
 	}
 
 	ret = can_exit_sleep_mode(can);
 	if (ret) {
 		LOG_ERR("Failed to exit sleep mode");
-		ret = -EIO;
-		goto done;
+		return -EIO;
 	}
 
 	ret = can_enter_init_mode(can, K_MSEC(CAN_INIT_TIMEOUT));
 	if (ret) {
 		LOG_ERR("Failed to enter init mode");
-		ret = -EIO;
-		goto done;
+		return -EIO;
 	}
 
-	/* Configuration Change Enable */
-	can->cccr |= CAN_MCAN_CCCR_CCE;
+	can_mcan_enable_configuration_change(dev);
 
 	LOG_DBG("IP rel: %lu.%lu.%lu %02lu.%lu.%lu",
 		(can->crel & CAN_MCAN_CREL_REL) >> CAN_MCAN_CREL_REL_POS,
@@ -446,8 +463,7 @@ int can_mcan_init(const struct device *dev)
 				      cfg->sample_point);
 		if (ret == -EINVAL) {
 			LOG_ERR("Can't find timing for given param");
-			ret = -EIO;
-			goto done;
+			return -EIO;
 		}
 		LOG_DBG("Presc: %d, TS1: %d, TS2: %d",
 			timing.prescaler, timing.phase_seg1, timing.phase_seg2);
@@ -468,8 +484,7 @@ int can_mcan_init(const struct device *dev)
 					   cfg->sample_point_data);
 		if (ret == -EINVAL) {
 			LOG_ERR("Can't find timing for given dataphase param");
-			ret = -EIO;
-			goto done;
+			return -EIO;
 		}
 
 		LOG_DBG("Sample-point err data phase: %d", ret);
@@ -510,20 +525,7 @@ int can_mcan_init(const struct device *dev)
 	memset32_volatile(msg_ram, 0, sizeof(struct can_mcan_msg_sram));
 	sys_cache_data_range(msg_ram, sizeof(struct can_mcan_msg_sram), K_CACHE_WB);
 
-	ret = can_leave_init_mode(can, K_MSEC(CAN_INIT_TIMEOUT));
-	if (ret) {
-		LOG_ERR("Failed to leave init mode");
-		ret = -EIO;
-		goto done;
-	}
-
-done:
-	if (ret != 0 && cfg->phy != NULL) {
-		/* Attempt to disable the CAN transceiver in case of error */
-		(void)can_transceiver_disable(cfg->phy);
-	}
-
-	return ret;
+	return 0;
 }
 
 static void can_mcan_state_change_handler(const struct device *dev)
@@ -565,11 +567,8 @@ static void can_mcan_tc_event_handler(const struct device *dev)
 		k_sem_give(&data->tx_sem);
 
 		tx_cb = data->tx_fin_cb[tx_idx];
-		if (tx_cb == NULL) {
-			k_sem_give(&data->tx_fin_sem[tx_idx]);
-		} else {
-			tx_cb(dev, 0, data->tx_fin_cb_arg[tx_idx]);
-		}
+		data->tx_fin_cb[tx_idx] = NULL;
+		tx_cb(dev, 0, data->tx_fin_cb_arg[tx_idx]);
 	}
 }
 
@@ -619,7 +618,7 @@ static void can_mcan_get_message(const struct device *dev,
 {
 	struct can_mcan_data *data = dev->data;
 	uint32_t get_idx, filt_idx;
-	struct zcan_frame frame;
+	struct can_frame frame;
 	can_rx_callback_t cb;
 	int data_length;
 	void *cb_arg;
@@ -744,17 +743,20 @@ int can_mcan_get_state(const struct device *dev, enum can_state *state,
 		       struct can_bus_err_cnt *err_cnt)
 {
 	const struct can_mcan_config *cfg = dev->config;
+	struct can_mcan_data *data = dev->data;
 	struct can_mcan_reg *can = cfg->can;
 
 	if (state != NULL) {
-		if (can->psr & CAN_MCAN_PSR_BO) {
-			*state = CAN_BUS_OFF;
+		if (!data->started) {
+			*state = CAN_STATE_STOPPED;
+		} else if (can->psr & CAN_MCAN_PSR_BO) {
+			*state = CAN_STATE_BUS_OFF;
 		} else if (can->psr & CAN_MCAN_PSR_EP) {
-			*state = CAN_ERROR_PASSIVE;
+			*state = CAN_STATE_ERROR_PASSIVE;
 		} else if (can->psr & CAN_MCAN_PSR_EW) {
-			*state = CAN_ERROR_WARNING;
+			*state = CAN_STATE_ERROR_WARNING;
 		} else {
-			*state = CAN_ERROR_ACTIVE;
+			*state = CAN_STATE_ERROR_ACTIVE;
 		}
 	}
 
@@ -773,7 +775,12 @@ int can_mcan_get_state(const struct device *dev, enum can_state *state,
 int can_mcan_recover(const struct device *dev, k_timeout_t timeout)
 {
 	const struct can_mcan_config *cfg = dev->config;
+	struct can_mcan_data *data = dev->data;
 	struct can_mcan_reg *can = cfg->can;
+
+	if (!data->started) {
+		return -ENETDOWN;
+	}
 
 	return can_leave_init_mode(can, timeout);
 }
@@ -781,7 +788,7 @@ int can_mcan_recover(const struct device *dev, k_timeout_t timeout)
 
 
 int can_mcan_send(const struct device *dev,
-		  const struct zcan_frame *frame,
+		  const struct can_frame *frame,
 		  k_timeout_t timeout,
 		  can_tx_callback_t callback, void *user_data)
 {
@@ -813,6 +820,8 @@ int can_mcan_send(const struct device *dev,
 		frame->fd == CAN_DATAFRAME ? "" : "FD frame",
 		frame->brs == CAN_DATAFRAME ? "" : "BRS");
 
+	__ASSERT_NO_MSG(callback != NULL);
+
 	if (data_length > sizeof(frame->data)) {
 		LOG_ERR("data length (%zu) > max frame data length (%zu)",
 			data_length, sizeof(frame->data));
@@ -824,8 +833,12 @@ int can_mcan_send(const struct device *dev,
 		return -EINVAL;
 	}
 
-	if (can->psr & CAN_MCAN_PSR_BO) {
+	if (!data->started) {
 		return -ENETDOWN;
+	}
+
+	if (can->psr & CAN_MCAN_PSR_BO) {
+		return -ENETUNREACH;
 	}
 
 	ret = k_sem_take(&data->tx_sem, timeout);
@@ -865,11 +878,6 @@ int can_mcan_send(const struct device *dev,
 
 	k_mutex_unlock(&data->tx_mtx);
 
-	if (callback == NULL) {
-		LOG_DBG("Waiting for TX complete");
-		k_sem_take(&data->tx_fin_sem[put_idx], K_FOREVER);
-	}
-
 	return 0;
 }
 
@@ -902,7 +910,7 @@ int can_mcan_get_max_filters(const struct device *dev, enum can_ide id_type)
  */
 int can_mcan_add_rx_filter_std(const struct device *dev,
 			       can_rx_callback_t callback, void *user_data,
-			       const struct zcan_filter *filter)
+			       const struct can_filter *filter)
 {
 	struct can_mcan_data *data = dev->data;
 	struct can_mcan_msg_sram *msg_ram = data->msg_ram;
@@ -966,7 +974,7 @@ static int can_mcan_get_free_ext(volatile struct can_mcan_ext_filter *filters)
 
 static int can_mcan_add_rx_filter_ext(const struct device *dev,
 				      can_rx_callback_t callback, void *user_data,
-				      const struct zcan_filter *filter)
+				      const struct can_filter *filter)
 {
 	struct can_mcan_data *data = dev->data;
 	struct can_mcan_msg_sram *msg_ram = data->msg_ram;
@@ -1019,7 +1027,7 @@ static int can_mcan_add_rx_filter_ext(const struct device *dev,
 
 int can_mcan_add_rx_filter(const struct device *dev,
 			   can_rx_callback_t callback, void *user_data,
-			   const struct zcan_filter *filter)
+			   const struct can_filter *filter)
 {
 	int filter_id;
 
@@ -1085,4 +1093,16 @@ int can_mcan_get_max_bitrate(const struct device *dev, uint32_t *max_bitrate)
 	*max_bitrate = cfg->max_bitrate;
 
 	return 0;
+}
+
+/* helper function allowing mcan drivers without access to private mcan
+ * definitions to set CCCR_CCE, which might be needed to disable write
+ * protection for some registers.
+ */
+void can_mcan_enable_configuration_change(const struct device *dev)
+{
+	const struct can_mcan_config *cfg = dev->config;
+	struct can_mcan_reg *can = cfg->can;
+
+	can->cccr |= CAN_MCAN_CCCR_CCE;
 }

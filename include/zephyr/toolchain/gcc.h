@@ -618,5 +618,11 @@ do {                                                                    \
  */
 #define Z_IS_POW2(x) (((x) != 0) && (((x) & ((x)-1)) == 0))
 
+#if defined(CONFIG_ASAN) && defined(__clang__)
+#define __noasan __attribute__((no_sanitize("address")))
+#else
+#define __noasan /**/
+#endif
+
 #endif /* !_LINKER */
 #endif /* ZEPHYR_INCLUDE_TOOLCHAIN_GCC_H_ */

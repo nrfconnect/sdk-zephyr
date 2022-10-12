@@ -10,20 +10,19 @@ zephyr_library_include_directories(include)
 zephyr_library_include_directories(${ZEPHYR_BASE}/drivers)
 
 zephyr_library_sources(trace_out.c)
-zephyr_library_sources_ifdef(CONFIG_CAVS_IPC ipc.c)
+zephyr_library_sources_ifdef(CONFIG_INTEL_ADSP_IPC ipc.c)
 
 zephyr_library_sources(
     rimage_modules.c
     boot.c
+    soc.c
     )
 
-zephyr_library_sources_ifdef(CONFIG_CAVS_CLOCK clk.c)
+zephyr_library_sources_ifdef(CONFIG_ADSP_CLOCK clk.c)
 
 if(CONFIG_SMP OR CONFIG_MP_NUM_CPUS GREATER 1)
   zephyr_library_sources(multiprocessing.c)
 endif()
-
-zephyr_library_sources_ifdef(CONFIG_CAVS_ICTL irq.c)
 
 zephyr_library_link_libraries(INTEL_ADSP_COMMON)
 
