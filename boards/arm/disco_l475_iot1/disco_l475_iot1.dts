@@ -49,7 +49,6 @@
 		eswifi0 = &wifi0;
 		watchdog0 = &iwdg;
 		spi-flash0 = &mx25r6435f;
-		accel0 = &lsm6dsl;
 	};
 };
 
@@ -120,7 +119,7 @@
 		label = "LPS22HB";
 	};
 
-	lsm6dsl: lsm6dsl@6a {
+	lsm6dsl@6a {
 		compatible = "st,lsm6dsl";
 		reg = <0x6a>;
 		irq-gpios = <&gpiod 11 GPIO_ACTIVE_HIGH>;
