@@ -253,10 +253,7 @@ def kconfig_build_resources(app: Sphinx) -> None:
         kconfig, module_paths = kconfig_load(app)
         db = list()
 
-        for sc in sorted(
-            chain(kconfig.unique_defined_syms, kconfig.unique_choices),
-            key=lambda sc: sc.name if sc.name else "",
-        ):
+        for sc in chain(kconfig.unique_defined_syms, kconfig.unique_choices):
             # skip nameless symbols
             if not sc.name:
                 continue
