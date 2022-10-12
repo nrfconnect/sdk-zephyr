@@ -81,10 +81,10 @@ static int zperf_receiver_send_stat(const struct shell *sh,
 
 	build_reply(hdr, stat, reply);
 
-	ret = zsock_sendto(sock, reply, sizeof(reply), 0, addr,
-			   addr->sa_family == AF_INET6 ?
-			   sizeof(struct sockaddr_in6) :
-			   sizeof(struct sockaddr_in));
+	ret = sendto(sock, reply, sizeof(reply), 0, addr,
+		     addr->sa_family == AF_INET6 ?
+		     sizeof(struct sockaddr_in6) :
+		     sizeof(struct sockaddr_in));
 	if (ret < 0) {
 		shell_fprintf(sh, SHELL_WARNING,
 			      " Cannot send data to peer (%d)", errno);
@@ -259,7 +259,7 @@ void udp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 	static uint8_t buf[UDP_RECEIVER_BUF_SIZE];
 	const struct shell *sh = ptr1;
 	int port = POINTER_TO_INT(ptr2);
-	struct zsock_pollfd fds[SOCK_ID_MAX] = { 0 };
+	struct pollfd fds[SOCK_ID_MAX] = { 0 };
 	int ret;
 
 	for (int i = 0; i < ARRAY_SIZE(fds); i++) {
@@ -271,8 +271,7 @@ void udp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 
 		in4_addr_my = zperf_get_sin();
 
-		fds[SOCK_ID_IPV4].fd = zsock_socket(AF_INET, SOCK_DGRAM,
-						    IPPROTO_UDP);
+		fds[SOCK_ID_IPV4].fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 		if (fds[SOCK_ID_IPV4].fd < 0) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "Cannot create IPv4 network socket.\n");
@@ -306,9 +305,9 @@ void udp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 
 		in4_addr_my->sin_port = htons(port);
 
-		ret = zsock_bind(fds[SOCK_ID_IPV4].fd,
-				 (struct sockaddr *)in4_addr_my,
-				 sizeof(struct sockaddr_in));
+		ret = bind(fds[SOCK_ID_IPV4].fd,
+			   (struct sockaddr *)in4_addr_my,
+			   sizeof(struct sockaddr_in));
 		if (ret < 0) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "Cannot bind IPv4 UDP port %d (%d)\n",
@@ -317,7 +316,7 @@ void udp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 			goto cleanup;
 		}
 
-		fds[SOCK_ID_IPV4].events = ZSOCK_POLLIN;
+		fds[SOCK_ID_IPV4].events = POLLIN;
 	}
 
 	if (IS_ENABLED(CONFIG_NET_IPV6)) {
@@ -325,8 +324,7 @@ void udp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 
 		in6_addr_my = zperf_get_sin6();
 
-		fds[SOCK_ID_IPV6].fd = zsock_socket(AF_INET6, SOCK_DGRAM,
-						    IPPROTO_UDP);
+		fds[SOCK_ID_IPV6].fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 		if (fds[SOCK_ID_IPV6].fd < 0) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "Cannot create IPv4 network socket.\n");
@@ -361,9 +359,9 @@ void udp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 
 		in6_addr_my->sin6_port = htons(port);
 
-		ret = zsock_bind(fds[SOCK_ID_IPV6].fd,
-				 (struct sockaddr *)in6_addr_my,
-				 sizeof(struct sockaddr_in6));
+		ret = bind(fds[SOCK_ID_IPV6].fd,
+			   (struct sockaddr *)in6_addr_my,
+			   sizeof(struct sockaddr_in6));
 		if (ret < 0) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "Cannot bind IPv6 UDP port %d (%d)\n",
@@ -372,14 +370,14 @@ void udp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 			goto cleanup;
 		}
 
-		fds[SOCK_ID_IPV6].events = ZSOCK_POLLIN;
+		fds[SOCK_ID_IPV6].events = POLLIN;
 	}
 
 	shell_fprintf(sh, SHELL_NORMAL,
 		      "Listening on port %d\n", port);
 
 	while (true) {
-		ret = zsock_poll(fds, ARRAY_SIZE(fds), -1);
+		ret = poll(fds, ARRAY_SIZE(fds), -1);
 		if (ret < 0) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "UDP receiver poll error (%d)\n",
@@ -391,8 +389,8 @@ void udp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 			struct sockaddr addr;
 			socklen_t addrlen = sizeof(addr);
 
-			if ((fds[i].revents & ZSOCK_POLLERR) ||
-			    (fds[i].revents & ZSOCK_POLLNVAL)) {
+			if ((fds[i].revents & POLLERR) ||
+			    (fds[i].revents & POLLNVAL)) {
 				shell_fprintf(
 					sh, SHELL_WARNING,
 					"UDP receiver IPv%d socket error\n",
@@ -400,12 +398,12 @@ void udp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 				goto cleanup;
 			}
 
-			if (!(fds[i].revents & ZSOCK_POLLIN)) {
+			if (!(fds[i].revents & POLLIN)) {
 				continue;
 			}
 
-			ret = zsock_recvfrom(fds[i].fd, buf, sizeof(buf), 0,
-					     &addr, &addrlen);
+			ret = recvfrom(fds[i].fd, buf, sizeof(buf), 0, &addr,
+				       &addrlen);
 			if (ret < 0) {
 				shell_fprintf(
 					sh, SHELL_WARNING,
@@ -421,7 +419,7 @@ void udp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 cleanup:
 	for (int i = 0; i < ARRAY_SIZE(fds); i++) {
 		if (fds[i].fd >= 0) {
-			zsock_close(fds[i].fd);
+			close(fds[i].fd);
 		}
 	}
 }
