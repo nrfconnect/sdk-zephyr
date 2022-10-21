@@ -40,6 +40,7 @@ config TFM_PARTITION_CRYPTO
 
 config TFM_PARTITION_INITIAL_ATTESTATION
 	bool "Secure partition 'Initial Attestation'"
+	select SB_IMPLEMENTATION_ID
 	default y
 	help
 	  Setting this option will cause '-DTFM_PARTITION_INITIAL_ATTESTATION'
