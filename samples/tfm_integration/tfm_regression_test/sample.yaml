@@ -24,3 +24,12 @@ tests:
 
   sample.tfm.regression_ipc_lvl2:
     timeout: 200
+
+  # Regression tests are too large for bootloaders to be enabled.
+  # Run S and NS test suites separately.
+  sample.tfm.regression.bootloaders_s:
+    extra_args: CONFIG_BOOTLOADER_MCUBOOT=y CONFIG_SECURE_BOOT=y CONFIG_TFM_REGRESSION_NS=n
+    timeout: 200
+  sample.tfm.regression.bootloaders_ns:
+    extra_args: CONFIG_BOOTLOADER_MCUBOOT=y CONFIG_SECURE_BOOT=y CONFIG_TFM_REGRESSION_S=n
+    timeout: 200
