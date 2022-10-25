@@ -25,7 +25,7 @@ LOG_MODULE_DECLARE(settings, CONFIG_SETTINGS_LOG_LEVEL);
 
 #define SETTINGS_FCB_VERS		1
 
-int settings_backend_init(void);
+int settings_fcb_backend_init(void);
 void settings_mount_fcb_backend(struct settings_fcb *cf);
 static void *settings_fcb_storage_get(struct settings_store *cs);
 
@@ -119,12 +119,12 @@ static bool settings_fcb_check_duplicate(struct settings_fcb *cf,
 					const char * const name)
 {
 	struct fcb_entry_ctx entry2_ctx = *entry_ctx;
-
+		
 	while (fcb_getnext(&cf->cf_fcb, &entry2_ctx.loc) == 0) {
 		char name2[SETTINGS_MAX_NAME_LEN + SETTINGS_EXTRA_LEN + 1];
 		size_t name2_len;
 
-		if (settings_line_name_read(name2, sizeof(name2), &name2_len,
+		if (settings_line_name_read(SETTINGS_STORAGE_FCB, name2, sizeof(name2), &name2_len,
 					    &entry2_ctx)) {
 			LOG_ERR("failed to load line");
 			continue;
@@ -133,7 +133,7 @@ static bool settings_fcb_check_duplicate(struct settings_fcb *cf,
 		if (!strcmp(name, name2)) {
 			return true;
 		}
-	}
+	}	
 	return false;
 }
 
@@ -163,7 +163,7 @@ static int settings_fcb_load_priv(struct settings_store *cs,
 		int rc;
 		bool pass_entry = true;
 
-		rc = settings_line_name_read(name, sizeof(name), &name_len,
+		rc = settings_line_name_read(SETTINGS_STORAGE_FCB, name, sizeof(name), &name_len,
 					     (void *)&entry_ctx);
 		if (rc) {
 			LOG_ERR("Failed to load line name: %d", rc);
@@ -191,10 +191,16 @@ static int settings_fcb_load_priv(struct settings_store *cs,
 static int settings_fcb_load(struct settings_store *cs,
 			     const struct settings_load_arg *arg)
 {
+	struct settings_load_arg_w_storage_type load_arg;
+	load_arg.storage_type = SETTINGS_STORAGE_FCB;
+	load_arg.cb = arg->cb;
+	load_arg.param = arg->param;
+	load_arg.subtree = arg->subtree;
+
 	return settings_fcb_load_priv(
 		cs,
 		settings_line_load_cb,
-		(void *)arg,
+		(void *)&load_arg,
 		true);
 }
 
@@ -245,7 +251,7 @@ static void settings_fcb_compress(struct settings_fcb *cf)
 
 		size_t val1_off;
 
-		rc = settings_line_name_read(name1, sizeof(name1), &val1_off,
+		rc = settings_line_name_read(SETTINGS_STORAGE_FCB, name1, sizeof(name1), &val1_off,
 					     &loc1);
 		if (rc) {
 			continue;
@@ -264,7 +270,7 @@ static void settings_fcb_compress(struct settings_fcb *cf)
 		while (fcb_getnext(&cf->cf_fcb, &loc2.loc) == 0) {
 			size_t val2_off;
 
-			rc = settings_line_name_read(name2, sizeof(name2),
+			rc = settings_line_name_read(SETTINGS_STORAGE_FCB, name2, sizeof(name2),
 						     &val2_off, &loc2);
 			if (rc) {
 				continue;
@@ -288,7 +294,7 @@ static void settings_fcb_compress(struct settings_fcb *cf)
 			continue;
 		}
 
-		rc = settings_line_entry_copy(&loc2, 0, &loc1, 0,
+		rc = settings_line_entry_copy(SETTINGS_STORAGE_FCB, &loc2, 0, &loc1, 0,
 					      loc1.loc.fe_data_len);
 		if (rc) {
 			continue;
@@ -357,7 +363,7 @@ static int settings_fcb_save_priv(struct settings_store *cs, const char *name,
 
 	loc.fap = cf->cf_fcb.fap;
 
-	rc = settings_line_write(name, value, val_len, 0, (void *)&loc);
+	rc = settings_line_write(SETTINGS_STORAGE_FCB, name, value, val_len, 0, (void *)&loc);
 
 	if (rc != -EIO) {
 		i = fcb_append_finish(&cf->cf_fcb, &loc.loc);
@@ -384,6 +390,7 @@ static int settings_fcb_save(struct settings_store *cs, const char *name,
 	cdca.val = (char *)value;
 	cdca.is_dup = 0;
 	cdca.val_len = val_len;
+	cdca.storage_type = SETTINGS_STORAGE_FCB;
 	settings_fcb_load_priv(cs, settings_line_dup_check_cb, &cdca, false);
 	if (cdca.is_dup == 1) {
 		return 0;
@@ -396,11 +403,10 @@ void settings_mount_fcb_backend(struct settings_fcb *cf)
 	uint8_t rbs;
 
 	rbs = cf->cf_fcb.f_align;
-
-	settings_line_io_init(read_handler, write_handler, get_len_cb, rbs);
+	settings_line_io_init(read_handler, write_handler, get_len_cb, rbs, SETTINGS_STORAGE_FCB);
 }
 
-int settings_backend_init(void)
+int settings_fcb_backend_init(void)
 {
 	static struct flash_sector
 		settings_fcb_area[CONFIG_SETTINGS_FCB_NUM_AREAS + 1];
@@ -444,11 +450,13 @@ int settings_backend_init(void)
 		k_panic();
 	}
 
+#if defined(CONFIG_SETTINGS_STORAGE_DST_FCB)
 	rc = settings_fcb_dst(&config_init_settings_fcb);
 
 	if (rc != 0) {
 		k_panic();
 	}
+#endif
 
 	settings_mount_fcb_backend(&config_init_settings_fcb);
 

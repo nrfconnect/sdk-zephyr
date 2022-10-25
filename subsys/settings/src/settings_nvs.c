@@ -342,7 +342,7 @@ int settings_nvs_backend_init(struct settings_nvs *cf)
 	return 0;
 }
 
-int settings_backend_init(void)
+int settings_nv_backend_init(void)
 {
 	static struct settings_nvs default_settings_nvs;
 	int rc;
@@ -397,7 +397,9 @@ int settings_backend_init(void)
 		return rc;
 	}
 
+#if defined(CONFIG_SETTINGS_STORAGE_DST_NVS)
 	rc = settings_nvs_dst(&default_settings_nvs);
+#endif
 
 	return rc;
 }

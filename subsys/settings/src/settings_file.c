@@ -29,7 +29,7 @@ LOG_MODULE_DECLARE(settings, CONFIG_SETTINGS_LOG_LEVEL);
 #define SETTINGS_FILE_PATH		CONFIG_SETTINGS_FILE_PATH
 #endif
 
-int settings_backend_init(void);
+int settings_file_backend_init(void);
 void settings_mount_file_backend(struct settings_file *cf);
 
 static int settings_file_load(struct settings_store *cs,
@@ -90,7 +90,7 @@ static bool settings_file_check_duplicate(
 	struct line_entry_ctx entry2_ctx = *entry_ctx;
 
 	/* Searching the duplicates */
-	while (settings_next_line_ctx(&entry2_ctx) == 0) {
+	while (settings_next_line_ctx(SETTINGS_STORAGE_FILE, &entry2_ctx) == 0) {
 		char name2[SETTINGS_MAX_NAME_LEN + SETTINGS_EXTRA_LEN + 1];
 		size_t name2_len;
 
@@ -98,7 +98,7 @@ static bool settings_file_check_duplicate(
 			break;
 		}
 
-		if (settings_line_name_read(name2, sizeof(name2), &name2_len,
+		if (settings_line_name_read(SETTINGS_STORAGE_FILE, name2, sizeof(name2), &name2_len,
 					    &entry2_ctx)) {
 			continue;
 		}
@@ -151,12 +151,12 @@ static int settings_file_load_priv(struct settings_store *cs, line_load_cb cb,
 		size_t name_len;
 		bool pass_entry = true;
 
-		rc = settings_next_line_ctx(&entry_ctx);
+		rc = settings_next_line_ctx(SETTINGS_STORAGE_FILE, &entry_ctx);
 		if (rc || entry_ctx.len == 0) {
 			break;
 		}
 
-		rc = settings_line_name_read(name, sizeof(name), &name_len,
+		rc = settings_line_name_read(SETTINGS_STORAGE_FILE, name, sizeof(name), &name_len,
 					     &entry_ctx);
 
 		if (rc || name_len == 0) {
@@ -189,9 +189,15 @@ static int settings_file_load_priv(struct settings_store *cs, line_load_cb cb,
 static int settings_file_load(struct settings_store *cs,
 			      const struct settings_load_arg *arg)
 {
+	struct settings_load_arg_w_storage_type load_arg;
+	load_arg.storage_type = SETTINGS_STORAGE_FILE;
+	load_arg.cb = arg->cb;
+	load_arg.param = arg->param;
+	load_arg.subtree = arg->subtree;
+
 	return settings_file_load_priv(cs,
 				       settings_line_load_cb,
-				       (void *)arg,
+				       (void *)&load_arg,
 				       true);
 }
 
@@ -276,14 +282,14 @@ static int settings_file_save_and_compress(struct settings_file *cf,
 	new_name_len = strlen(name);
 
 	while (1) {
-		rc = settings_next_line_ctx(&loc1);
+		rc = settings_next_line_ctx(SETTINGS_STORAGE_FILE, &loc1);
 
 		if (rc || loc1.len == 0) {
 			/* try to amend new value to the compressed file */
 			break;
 		}
 
-		rc = settings_line_name_read(name1, sizeof(name1), &val1_off,
+		rc = settings_line_name_read(SETTINGS_STORAGE_FILE, name1, sizeof(name1), &val1_off,
 					     &loc1);
 		if (rc) {
 			/* try to process next line */
@@ -309,7 +315,7 @@ static int settings_file_save_and_compress(struct settings_file *cf,
 		while (1) {
 			size_t val2_off;
 
-			rc = settings_next_line_ctx(&loc2);
+			rc = settings_next_line_ctx(SETTINGS_STORAGE_FILE, &loc2);
 
 			if (rc || loc2.len == 0) {
 				/* try to amend new value to */
@@ -317,7 +323,7 @@ static int settings_file_save_and_compress(struct settings_file *cf,
 				break;
 			}
 
-			rc = settings_line_name_read(name2, sizeof(name2),
+			rc = settings_line_name_read(SETTINGS_STORAGE_FILE, name2, sizeof(name2),
 						     &val2_off, &loc2);
 			if (rc) {
 				/* try to process next line */
@@ -336,7 +342,7 @@ static int settings_file_save_and_compress(struct settings_file *cf,
 		loc2 = loc1;
 		loc2.len += 2;
 		loc2.seek -= 2;
-		rc = settings_line_entry_copy(&loc3, 0, &loc2, 0, loc2.len);
+		rc = settings_line_entry_copy(SETTINGS_STORAGE_FILE, &loc3, 0, &loc2, 0, loc2.len);
 		if (rc) {
 			/* compressed file might be corrupted */
 			goto end_rolback;
@@ -346,7 +352,7 @@ static int settings_file_save_and_compress(struct settings_file *cf,
 	}
 
 	/* at last store the new value */
-	rc = settings_line_write(name, value, val_len, 0, &loc3);
+	rc = settings_line_write(SETTINGS_STORAGE_FILE, name, value, val_len, 0, &loc3);
 	if (rc) {
 		/* compressed file might be corrupted */
 		goto end_rolback;
@@ -408,7 +414,7 @@ static int settings_file_save_priv(struct settings_store *cs, const char *name,
 		rc = fs_seek(&file, 0, FS_SEEK_END);
 		if (rc == 0) {
 			entry_ctx.stor_ctx = &file;
-			rc = settings_line_write(name, value, val_len, 0,
+			rc = settings_line_write(SETTINGS_STORAGE_FILE, name, value, val_len, 0,
 						  (void *)&entry_ctx);
 			if (rc == 0) {
 				cf->cf_lines++;
@@ -444,6 +450,7 @@ static int settings_file_save(struct settings_store *cs, const char *name,
 	cdca.val = (char *)value;
 	cdca.is_dup = 0;
 	cdca.val_len = val_len;
+	cdca.storage_type = SETTINGS_STORAGE_FILE;
 	settings_file_load_priv(cs, settings_line_dup_check_cb, &cdca, false);
 	if (cdca.is_dup == 1) {
 		return 0;
@@ -516,10 +523,10 @@ static int write_handler(void *ctx, off_t off, char const *buf, size_t len)
 
 void settings_mount_file_backend(struct settings_file *cf)
 {
-	settings_line_io_init(read_handler, write_handler, get_len_cb, 1);
+	settings_line_io_init(read_handler, write_handler, get_len_cb, 1, SETTINGS_STORAGE_FILE);
 }
 
-int settings_backend_init(void)
+int settings_file_backend_init(void)
 {
 	static struct settings_file config_init_settings_file = {
 		.cf_name = SETTINGS_FILE_PATH,
@@ -534,10 +541,12 @@ int settings_backend_init(void)
 		k_panic();
 	}
 
+#if defined(CONFIG_SETTINGS_STORAGE_DST_FILE)
 	rc = settings_file_dst(&config_init_settings_file);
 	if (rc) {
 		k_panic();
 	}
+#endif
 
 	settings_mount_file_backend(&config_init_settings_file);
 

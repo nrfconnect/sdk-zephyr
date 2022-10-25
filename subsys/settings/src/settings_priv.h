@@ -17,6 +17,20 @@
 extern "C" {
 #endif
 
+enum settings_storage_type {
+  SETTINGS_STORAGE_FCB,
+  SETTINGS_STORAGE_FILE,
+  SETTINGS_STORAGE_NVS,
+  SETTINGS_STORAGE_INVALID
+};
+
+struct settings_load_arg_w_storage_type {
+	enum settings_storage_type storage_type;
+	const char *subtree;
+	settings_load_direct_cb cb;
+	void *param;
+};
+
 int settings_cli_register(void);
 int settings_nmgr_register(void);
 
@@ -29,9 +43,9 @@ void settings_line_io_init(int (*read_cb)(void *ctx, off_t off, char *buf,
 			   int (*write_cb)(void *ctx, off_t off,
 					   char const *buf, size_t len),
 			   size_t (*get_len_cb)(void *ctx),
-			   uint8_t io_rwbs);
+			   uint8_t io_rwbs, enum settings_storage_type storage_type);
 
-int settings_line_write(const char *name, const char *value, size_t val_len,
+int settings_line_write(enum settings_storage_type storage_type, const char *name, const char *value, size_t val_len,
 			off_t w_loc, void *cb_arg);
 
 /* Get len of record without alignment to write-block-size */
@@ -47,11 +61,13 @@ typedef int (*line_load_cb)(const char *name, void *val_read_cb_ctx,
 			     off_t off, void *cb_arg);
 
 struct settings_line_read_value_cb_ctx {
+	enum settings_storage_type storage_type;
 	void *read_cb_ctx;
 	off_t off;
 };
 
 struct settings_line_dup_check_arg {
+	enum settings_storage_type storage_type;
 	const char *name;
 	const char *val;
 	size_t val_len;
@@ -66,7 +82,7 @@ struct line_entry_ctx {
 	size_t len; /* len of line without len value */
 };
 
-int settings_next_line_ctx(struct line_entry_ctx *entry_ctx);
+int settings_next_line_ctx(enum settings_storage_type storage_type, struct line_entry_ctx *entry_ctx);
 #endif
 
 /**
@@ -82,14 +98,14 @@ int settings_next_line_ctx(struct line_entry_ctx *entry_ctx);
  * @retval 0 on success,
  * -ERCODE on storage errors
  */
-int settings_line_raw_read(off_t seek, char *out, size_t len_req,
+int settings_line_raw_read(enum settings_storage_type storage_type, off_t seek, char *out, size_t len_req,
 			   size_t *len_read, void *cb_arg);
 
 /*
  * @param val_off offset of the value-string.
  * @param off from val_off (so within the value-string)
  */
-int settings_line_val_read(off_t val_off, off_t off, char *out, size_t len_req,
+int settings_line_val_read(enum settings_storage_type storage_type, off_t val_off, off_t off, char *out, size_t len_req,
 			   size_t *len_read, void *cb_arg);
 
 /**
@@ -105,20 +121,13 @@ int settings_line_val_read(off_t val_off, off_t off, char *out, size_t len_req,
  * 1 on when read improper name,
  * -ERCODE on storage errors
  */
-int settings_line_name_read(char *out, size_t len_req, size_t *len_read,
+int settings_line_name_read(enum settings_storage_type storage_type, char *out, size_t len_req, size_t *len_read,
 			    void *cb_arg);
 
-size_t settings_line_val_get_len(off_t val_off, void *read_cb_ctx);
+size_t settings_line_val_get_len(enum settings_storage_type storage_type, off_t val_off, void *read_cb_ctx);
 
-int settings_line_entry_copy(void *dst_ctx, off_t dst_off, void *src_ctx,
+int settings_line_entry_copy(enum settings_storage_type storage_type, void *dst_ctx, off_t dst_off, void *src_ctx,
 			off_t src_off, size_t len);
-
-void settings_line_io_init(int (*read_cb)(void *ctx, off_t off, char *buf,
-					  size_t *len),
-			  int (*write_cb)(void *ctx, off_t off, char const *buf,
-					  size_t len),
-			  size_t (*get_len_cb)(void *ctx),
-			  uint8_t io_rwbs);
 
 
 extern sys_slist_t settings_load_srcs;

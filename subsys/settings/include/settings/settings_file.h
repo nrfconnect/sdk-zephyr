@@ -37,6 +37,8 @@ __deprecated static inline void settings_mount_fs_backend(struct settings_file *
 	settings_mount_file_backend(cf);
 }
 
+int settings_file_backend_init(void);
+
 #ifdef __cplusplus
 }
 #endif

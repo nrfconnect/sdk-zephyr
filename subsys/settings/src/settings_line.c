@@ -21,7 +21,37 @@ struct settings_io_cb_s {
 	uint8_t rwbs;
 } static settings_io_cb;
 
-int settings_line_write(const char *name, const char *value, size_t val_len,
+#if defined(CONFIG_SETTINGS_FILE)
+static struct settings_io_cb_s settings_file_io_cb;
+#endif
+#if defined(CONFIG_SETTINGS_FCB)
+static struct settings_io_cb_s settings_fcb_io_cb;
+#endif
+
+#define MAX_ENC_BLOCK_SIZE 4
+
+static void settings_reset_io_cb(enum settings_storage_type storage_type)
+{
+#if defined(CONFIG_SETTINGS_FCB) 
+		if (storage_type == SETTINGS_STORAGE_FCB) {
+			settings_io_cb.read_cb = settings_fcb_io_cb.read_cb;
+			settings_io_cb.write_cb = settings_fcb_io_cb.write_cb;
+			settings_io_cb.get_len_cb = settings_fcb_io_cb.get_len_cb;
+			settings_io_cb.rwbs = settings_fcb_io_cb.rwbs;
+		} 
+#endif
+	
+#if defined(CONFIG_SETTINGS_FILE)
+		if (storage_type == SETTINGS_STORAGE_FILE) {
+			settings_io_cb.read_cb = settings_file_io_cb.read_cb;
+			settings_io_cb.write_cb = settings_file_io_cb.write_cb;
+			settings_io_cb.get_len_cb = settings_file_io_cb.get_len_cb;
+			settings_io_cb.rwbs = settings_file_io_cb.rwbs;
+		}
+#endif
+}
+
+int settings_line_write(enum settings_storage_type storage_type, const char *name, const char *value, size_t val_len,
 			off_t w_loc, void *cb_arg)
 {
 	size_t w_size, rem, add;
@@ -30,6 +60,7 @@ int settings_line_write(const char *name, const char *value, size_t val_len,
 	char w_buf[16]; /* write buff, must be aligned either to minimal */
 			/* base64 encoding size and write-block-size */
 	int rc;
+	settings_reset_io_cb(storage_type);
 	uint8_t wbs = settings_io_cb.rwbs;
 #ifdef CONFIG_SETTINGS_ENCODE_LEN
 	uint16_t len_field;
@@ -38,32 +69,34 @@ int settings_line_write(const char *name, const char *value, size_t val_len,
 	rem = strlen(name);
 
 #ifdef CONFIG_SETTINGS_ENCODE_LEN
-	len_field = settings_line_len_calc(name, val_len);
-	memcpy(w_buf, &len_field, sizeof(len_field));
-	w_size = 0;
+	if (storage_type == SETTINGS_STORAGE_FILE) {
+		len_field = settings_line_len_calc(name, val_len);
+		memcpy(w_buf, &len_field, sizeof(len_field));
+		w_size = 0;
 
 
-	add = sizeof(len_field) % wbs;
-	if (add) {
-		w_size = wbs - add;
-		if (rem < w_size) {
-			w_size = rem;
+		add = sizeof(len_field) % wbs;
+		if (add) {
+			w_size = wbs - add;
+			if (rem < w_size) {
+				w_size = rem;
+			}
+
+			memcpy(w_buf + sizeof(len_field), name, w_size);
+			name += w_size;
+			rem -= w_size;
 		}
 
-		memcpy(w_buf + sizeof(len_field), name, w_size);
-		name += w_size;
-		rem -= w_size;
-	}
-
-	w_size += sizeof(len_field);
-	if (w_size % wbs == 0) {
-		rc = settings_io_cb.write_cb(cb_arg, w_loc, w_buf, w_size);
-		if (rc) {
-			return -EIO;
+		w_size += sizeof(len_field);
+		if (w_size % wbs == 0) {
+			rc = settings_io_cb.write_cb(cb_arg, w_loc, w_buf, w_size);
+			if (rc) {
+				return -EIO;
+			}
 		}
+		/* The Alternative to condition above mean that `rem == 0` as `name` */
+		/* must have been consumed					     */
 	}
-	/* The Alternative to condition above mean that `rem == 0` as `name` */
-	/* must have been consumed					     */
 #endif
 	w_size = rem - rem % wbs;
 	rem %= wbs;
@@ -120,7 +153,7 @@ int settings_line_write(const char *name, const char *value, size_t val_len,
 }
 
 #ifdef CONFIG_SETTINGS_ENCODE_LEN
-int settings_next_line_ctx(struct line_entry_ctx *entry_ctx)
+int settings_next_line_ctx(enum settings_storage_type storage_type, struct line_entry_ctx *entry_ctx)
 {
 	size_t len_read;
 	uint16_t readout;
@@ -130,7 +163,7 @@ int settings_next_line_ctx(struct line_entry_ctx *entry_ctx)
 
 	entry_ctx->len = 0; /* ask read handler to ignore len */
 
-	rc = settings_line_raw_read(0, (char *)&readout, sizeof(readout),
+	rc = settings_line_raw_read(storage_type, 0, (char *)&readout, sizeof(readout),
 			   &len_read, entry_ctx);
 	if (rc == 0) {
 		if (len_read != sizeof(readout)) {
@@ -169,13 +202,14 @@ int settings_line_len_calc(const char *name, size_t val_len)
  * @retval 0 on success,
  * -ERCODE on storage errors
  */
-static int settings_line_raw_read_until(off_t seek, char *out, size_t len_req,
+static int settings_line_raw_read_until(enum settings_storage_type storage_type, off_t seek, char *out, size_t len_req,
 				 size_t *len_read, char const *until_char,
 				 void *cb_arg)
 {
 	size_t rem_size, len;
 	char temp_buf[16]; /* buffer for fit read-block-size requirements */
 	size_t exp_size, read_size;
+	settings_reset_io_cb(storage_type);
 	uint8_t rbs = settings_io_cb.rwbs;
 	off_t off;
 	int rc = -EINVAL;
@@ -231,25 +265,25 @@ static int settings_line_raw_read_until(off_t seek, char *out, size_t len_req,
 	return 0;
 }
 
-int settings_line_raw_read(off_t seek, char *out, size_t len_req,
+int settings_line_raw_read(enum settings_storage_type storage_type, off_t seek, char *out, size_t len_req,
 			   size_t *len_read, void *cb_arg)
 {
-	return settings_line_raw_read_until(seek, out, len_req, len_read,
+	return settings_line_raw_read_until(storage_type, seek, out, len_req, len_read,
 					    NULL, cb_arg);
 }
 
 /* off from value begin */
-int settings_line_val_read(off_t val_off, off_t off, char *out, size_t len_req,
+int settings_line_val_read(enum settings_storage_type storage_type, off_t val_off, off_t off, char *out, size_t len_req,
 			   size_t *len_read, void *cb_arg)
 {
-	return settings_line_raw_read(val_off + off, out, len_req, len_read,
+	return settings_line_raw_read(storage_type, val_off + off, out, len_req, len_read,
 				      cb_arg);
 }
 
-size_t settings_line_val_get_len(off_t val_off, void *read_cb_ctx)
+size_t settings_line_val_get_len(enum settings_storage_type storage_type, off_t val_off, void *read_cb_ctx)
 {
 	size_t len;
-
+	settings_reset_io_cb(storage_type);
 	len = settings_io_cb.get_len_cb(read_cb_ctx);
 
 	return len - val_off;
@@ -262,26 +296,28 @@ size_t settings_line_val_get_len(off_t val_off, void *read_cb_ctx)
  * 1 : when read unproper name
  * -ERCODE for storage errors
  */
-int settings_line_name_read(char *out, size_t len_req, size_t *len_read,
+int settings_line_name_read(enum settings_storage_type storage_type, char *out, size_t len_req, size_t *len_read,
 			    void *cb_arg)
 {
 	char const until_char = '=';
 
-	return settings_line_raw_read_until(0, out, len_req, len_read,
+	return settings_line_raw_read_until(storage_type, 0, out, len_req, len_read,
 					    &until_char, cb_arg);
 }
 
 
-int settings_line_entry_copy(void *dst_ctx, off_t dst_off, void *src_ctx,
+int settings_line_entry_copy(enum settings_storage_type storage_type, void *dst_ctx, off_t dst_off, void *src_ctx,
 			     off_t src_off, size_t len)
 {
 	int rc = -EINVAL;
 	char buf[16];
 	size_t chunk_size;
 
+	settings_reset_io_cb(storage_type);
+
 	while (len) {
 		chunk_size = MIN(len, sizeof(buf));
-
+		
 		rc = settings_io_cb.read_cb(src_ctx, src_off, buf, &chunk_size);
 		if (rc) {
 			break;
@@ -313,17 +349,33 @@ void settings_line_io_init(int (*read_cb)(void *ctx, off_t off, char *buf,
 			  int (*write_cb)(void *ctx, off_t off, char const *buf,
 					  size_t len),
 			  size_t (*get_len_cb)(void *ctx),
-			  uint8_t io_rwbs)
+			  uint8_t io_rwbs,
+			  enum settings_storage_type storage_type)
 {
-	settings_io_cb.read_cb = read_cb;
-	settings_io_cb.write_cb = write_cb;
-	settings_io_cb.get_len_cb = get_len_cb;
-	settings_io_cb.rwbs = io_rwbs;
+#if defined(CONFIG_SETTINGS_FCB)
+		if (storage_type == SETTINGS_STORAGE_FCB) {
+			settings_fcb_io_cb.read_cb = read_cb;
+			settings_fcb_io_cb.write_cb = write_cb;
+			settings_fcb_io_cb.get_len_cb = get_len_cb;
+			settings_fcb_io_cb.rwbs = io_rwbs;
+		} 
+#endif
+#if defined(CONFIG_SETTINGS_FILE)
+		if (storage_type == SETTINGS_STORAGE_FILE) {
+			settings_file_io_cb.read_cb = read_cb;
+			settings_file_io_cb.write_cb = write_cb;
+			settings_file_io_cb.get_len_cb = get_len_cb;
+			settings_file_io_cb.rwbs = io_rwbs;
+		}
+#endif
+
 }
 
 
+
+
 /* val_off - offset of value-string within line entries */
-static int settings_line_cmp(char const *val, size_t val_len,
+static int settings_line_cmp(enum settings_storage_type storage_type, char const *val, size_t val_len,
 			     void *val_read_cb_ctx, off_t val_off)
 {
 	size_t len_read, exp_len;
@@ -338,7 +390,7 @@ static int settings_line_cmp(char const *val, size_t val_len,
 
 	for (rem = val_len; rem > 0; rem -= len_read) {
 		len_read = exp_len = MIN(sizeof(buf), rem);
-		rc = settings_line_val_read(val_off, off, buf, len_read,
+		rc = settings_line_val_read(storage_type, val_off, off, buf, len_read,
 					    &len_read, val_read_cb_ctx);
 		if (rc) {
 			break;
@@ -363,21 +415,20 @@ static int settings_line_cmp(char const *val, size_t val_len,
 int settings_line_dup_check_cb(const char *name, void *val_read_cb_ctx,
 				off_t off, void *cb_arg)
 {
-	struct settings_line_dup_check_arg *cdca;
+	struct settings_line_dup_check_arg *cdca = (struct settings_line_dup_check_arg *)cb_arg;
 	size_t len_read;
-
-	cdca = (struct settings_line_dup_check_arg *)cb_arg;
+	
 	if (strcmp(name, cdca->name)) {
 		return 0;
 	}
 
-	len_read = settings_line_val_get_len(off, val_read_cb_ctx);
+	len_read = settings_line_val_get_len(cdca->storage_type, off, val_read_cb_ctx);
 	if (len_read != cdca->val_len) {
 		cdca->is_dup = 0;
 	} else if (len_read == 0) {
 		cdca->is_dup = 1;
 	} else {
-		if (!settings_line_cmp(cdca->val, cdca->val_len,
+		if (!settings_line_cmp(cdca->storage_type, cdca->val, cdca->val_len,
 				       val_read_cb_ctx, off)) {
 			cdca->is_dup = 1;
 		} else {
@@ -393,7 +444,7 @@ static ssize_t settings_line_read_cb(void *cb_arg, void *data, size_t len)
 	size_t len_read;
 	int rc;
 
-	rc = settings_line_val_read(value_context->off, 0, data, len,
+	rc = settings_line_val_read(value_context->storage_type, value_context->off, 0, data, len,
 				    &len_read,
 				    value_context->read_cb_ctx);
 
@@ -409,11 +460,19 @@ int settings_line_load_cb(const char *name, void *val_read_cb_ctx, off_t off,
 {
 	size_t len;
 	struct settings_line_read_value_cb_ctx value_ctx;
-	struct settings_load_arg *arg = cb_arg;
+	struct settings_load_arg_w_storage_type *arg_w_storage_type = cb_arg;
+
+	struct settings_load_arg arg;
+	arg.cb = arg_w_storage_type->cb;
+	arg.param = arg_w_storage_type->param;
+	arg.subtree = arg_w_storage_type->subtree;
+
 	value_ctx.read_cb_ctx = val_read_cb_ctx;
 	value_ctx.off = off;
-	len = settings_line_val_get_len(off, val_read_cb_ctx);
+	value_ctx.storage_type = arg_w_storage_type->storage_type;
+	
+	len = settings_line_val_get_len(arg_w_storage_type->storage_type, off, val_read_cb_ctx);
 
 	return settings_call_set_handler(name, len, settings_line_read_cb,
-					 &value_ctx, arg);
+					 &value_ctx, &arg);
 }

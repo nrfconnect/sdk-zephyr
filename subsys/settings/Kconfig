@@ -30,15 +30,40 @@ config SETTINGS_DYNAMIC_HANDLERS
 config SETTINGS_ENCODE_LEN
 	bool
 
-choice SETTINGS_BACKEND
-	prompt "Storage back-end"
-	default SETTINGS_NVS if NVS
-	default SETTINGS_FCB if FCB
-	default SETTINGS_FILE if FILE_SYSTEM
-	default SETTINGS_NONE
+choice SETTINGS_STORAGE_DST
+	prompt "storage back-end destination"
+	default SETTINGS_STORAGE_DST_FCB if SETTINGS_FCB
+	default SETTINGS_STORAGE_DST_FILE if SETTINGS_FILE
+	default SETTINGS_STORAGE_DST_NVS if SETTINGS_NVS
+	default SETTINGS_STORAGE_DST_NONE
+	depends on SETTINGS
 	help
-	  Storage back-end to be used by the settings subsystem.
+	  Storage destination back-end to be used by the settings subsystem.
 
+config SETTINGS_STORAGE_DST_FCB
+	bool "DST FCB"
+	depends on SETTINGS_FCB
+	help
+	  Use FCB as a settings storage destination back-end.
+
+config SETTINGS_STORAGE_DST_FILE
+	bool "DST FILE SYSTEM"
+	depends on SETTINGS_FILE
+	help
+	  Use FILE SYSTEM as a settings storage destination back-end.
+
+config SETTINGS_STORAGE_DST_NVS
+	bool "DST NVS"
+	depends on SETTINGS_NVS
+	help
+	  Use NVS as a settings storage destination back-end.
+		
+config SETTINGS_STORAGE_DST_NONE
+	bool "DST FCB"
+	help
+	  No storage destination back-end.		
+endchoice	
+		
 config SETTINGS_FCB
 	bool "FCB"
 	depends on FCB
@@ -94,7 +119,6 @@ config SETTINGS_NONE
 	bool "NONE"
 	help
 	  No storage back-end.
-endchoice
 
 config SETTINGS_FCB_NUM_AREAS
 	int "Number of flash areas used by the settings subsystem"
