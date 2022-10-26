@@ -100,7 +100,6 @@ jobs:
           ccache -M 10G -s
 
       - name: Build test plan with Twister
-        working-directory: ./zephyr
         id: twister_test_plan
         run: |
           export ZEPHYR_BASE=${PWD}
