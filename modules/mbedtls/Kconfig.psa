@@ -21,18 +21,13 @@ config PSA_WANT_ALG_HMAC_DRBG
 
 endmenu # RNG support
 
-menu "PSA Key support"
-
 config PSA_HAS_KEY_SUPPORT
 	bool
 	default y
-	depends on PSA_WANT_KEY_TYPE_DERIVE 		|| \
-		   PSA_WANT_KEY_TYPE_HMAC 		|| \
+	depends on PSA_WANT_KEY_TYPE_DERIVE		|| \
+		   PSA_WANT_KEY_TYPE_HMAC		|| \
 		   PSA_WANT_KEY_TYPE_AES 		|| \
-		   PSA_WANT_KEY_TYPE_ARIA		|| \
-		   PSA_WANT_KEY_TYPE_CAMELLIA		|| \
 		   PSA_WANT_KEY_TYPE_CHACHA20		|| \
-		   PSA_WANT_KEY_TYPE_DES		|| \
 		   PSA_WANT_KEY_TYPE_ECC_KEY_PAIR	|| \
 		   PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY	|| \
 		   PSA_WANT_KEY_TYPE_RSA_KEY_PAIR	|| \
@@ -40,75 +35,59 @@ config PSA_HAS_KEY_SUPPORT
 
 config PSA_WANT_KEY_TYPE_DERIVE
 	bool
-	prompt "PSA Key derivation support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
+	default y
+	depends on PSA_HAS_KEY_DERIVATION
+	help
+	  Prompt-less configuration that states that the derived key type is used.
 
 config PSA_WANT_KEY_TYPE_HMAC
 	bool
-	prompt "PSA Key type HMAC support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
+	default y
 	depends on PSA_HAS_MAC_SUPPORT
+	help
+	  Prompt-less configuration that states that the HMAC key type is used.
 
 config PSA_WANT_KEY_TYPE_AES
 	bool
-	prompt "PSA Key Type AES support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
+	default y
 	depends on PSA_HAS_CIPHER_SUPPORT || PSA_HAS_AEAD_SUPPORT
-
-config PSA_WANT_KEY_TYPE_ARIA
-	bool
-	default y if !PSA_DEFAULT_OFF
 	help
-	  Currently not supported
-
-config PSA_WANT_KEY_TYPE_CAMELLIA
-	bool
-	depends on PSA_HAS_CIPHER_SUPPORT
-	help
-	  Currently not supported
+	  Prompt-less configuration that states that AES key type is used.
 
 config PSA_WANT_KEY_TYPE_CHACHA20
 	bool
-	prompt "PSA Key type Chacha20 support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
+	default y
 	depends on PSA_WANT_ALG_CHACHA20_POLY1305
-
-config PSA_WANT_KEY_TYPE_DES
-	bool
-	depends on PSA_HAS_CIPHER_SUPPORT
 	help
-	  Currently not supported
+	  Prompt-less configuration that states that CHACHA20 key type is used.
 
 config PSA_WANT_KEY_TYPE_ECC_KEY_PAIR
 	bool
-	prompt "PSA Key type ECC key pair support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
+	default y
 	depends on PSA_HAS_ECC_SUPPORT
+	help
+	  Prompt-less configuration that states that ECC key pair type is used.
 
 config PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY
 	bool
-	prompt "PSA Key type ECC public key support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
+	default y
 	depends on PSA_HAS_ECC_SUPPORT
-
-config PSA_WANT_KEY_TYPE_RAW_DATA
-	bool
-	prompt "PSA Key type RAW key support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
+	help
+	  Prompt-less configuration that states that ECC public key type is used.
 
 config PSA_WANT_KEY_TYPE_RSA_KEY_PAIR
 	bool
-	prompt "PSA Key type RSA key pair support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
+	default y
 	depends on PSA_HAS_RSA_SUPPORT
+	help
+	  Prompt-less configuration that states that RSA key pair type is used.
 
 config PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY
 	bool
-	prompt "PSA Key type RSA Public key support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
+	default y
 	depends on PSA_HAS_RSA_SUPPORT
-
-endmenu # PSA_KEY_DERIVATION
+	help
+	  Prompt-less configuration that states that RSA public key type is used.
 
 menu "PSA AEAD support"
 
@@ -118,6 +97,8 @@ config PSA_HAS_AEAD_SUPPORT
 	depends on PSA_WANT_ALG_CCM || \
 		   PSA_WANT_ALG_GCM || \
 		   PSA_WANT_ALG_CHACHA20_POLY1305
+	help
+	  Prompt-less configuration that states that AEAD is supported.
 
 config PSA_WANT_ALG_CCM
 	bool
@@ -137,7 +118,7 @@ config PSA_WANT_ALG_CHACHA20_POLY1305
 endmenu # PSA AEAD support
 
 
-menu "PSA Mac support"
+menu "PSA MAC support"
 
 config PSA_HAS_MAC_SUPPORT
 	bool
@@ -146,8 +127,7 @@ config PSA_HAS_MAC_SUPPORT
 		   PSA_WANT_ALG_CMAC	|| \
 		   PSA_WANT_ALG_HMAC
 	help
-	  Prompt-less configuration that states the PSA APIs enables
-	  a configuration that adds the PSA mac module.
+	  Prompt-less configuration that states that MAC is supported.
 
 config PSA_WANT_ALG_CBC_MAC
 	bool
@@ -164,7 +144,7 @@ config PSA_WANT_ALG_HMAC
 	prompt "PSA HMAC support" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
-endmenu # PSA Mac support
+endmenu # PSA MAC support
 
 
 menu "PSA Hash support"
@@ -179,6 +159,8 @@ config PSA_HAS_HASH_SUPPORT
 		   PSA_WANT_ALG_SHA_512		|| \
 		   PSA_WANT_ALG_RIPEMD160	|| \
 		   PSA_WANT_ALG_MD5
+	help
+	  Prompt-less configuration that states that hash is supported.
 
 config PSA_WANT_ALG_SHA_1
 	bool
@@ -231,8 +213,7 @@ config PSA_HAS_CIPHER_SUPPORT
 		   PSA_WANT_ALG_CTR		|| \
 		   PSA_WANT_ALG_XTS
 	help
-	  Prompt-less configuration that states the PSA APIs enables
-	  a configuration that adds the PSA Cipher module.
+	  Prompt-less configuration that states that cipher is supported.
 
 config PSA_WANT_ALG_ECB_NO_PADDING
 	bool
@@ -282,8 +263,7 @@ config PSA_HAS_KEY_DERIVATION
 		   PSA_WANT_ALG_TLS12_PRF	|| \
 		   PSA_WANT_ALG_TLS12_PSK_TO_MS
 	help
-	  Prompt-less configuration that states the PSA APIs enables
-	  a configuration that adds the PSA key derivation module.
+	  Prompt-less configuration that states that key derivation is supported.
 
 config PSA_WANT_ALG_HKDF
 	bool
@@ -323,7 +303,8 @@ config PSA_HAS_ASYM_ENCRYPT_SUPPORT
 config PSA_HAS_ASYM_SIGN_SUPPORT
 	bool
 	default y
-	depends on PSA_WANT_ALG_ECDSA 			|| \
+	depends on PSA_WANT_ALG_DETERMINISTIC_ECDSA	|| \
+		   PSA_WANT_ALG_ECDSA 			|| \
 		   PSA_WANT_ALG_RSA_PKCS1V15_SIGN	|| \
 		   PSA_WANT_ALG_RSA_PSS
 
@@ -336,8 +317,7 @@ config PSA_HAS_ECC_SUPPORT
 	depends on PSA_WANT_ALG_ECDH || PSA_WANT_ALG_ECDSA || PSA_WANT_ALG_DETERMINISTIC_ECDSA
 	default y
 	help
-	  Prompt-less configuration that states the PSA APIs enables
-	  a configuration that adds the PSA encrypt/sign module for ECC.
+	  Prompt-less configuration that states that ECC is supported.
 
 config PSA_WANT_ALG_ECDH
 	bool
@@ -418,8 +398,7 @@ config PSA_HAS_RSA_SUPPORT
 		   PSA_WANT_ALG_RSA_PSS
 	default y
 	help
-	  Prompt-less configuration that states the PSA APIs enables
-	  a configuration that adds the PSA encrypt/sign module for RSA.
+	  Prompt-less configuration that states that RSA is supported.
 
 config PSA_WANT_ALG_RSA_OAEP
 	bool
