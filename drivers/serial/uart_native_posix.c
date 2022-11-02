@@ -337,7 +337,7 @@ static int np_uart_stdin_poll_in(const struct device *dev,
 	}
 
 	n = read(in_f, p_char, 1);
-	if ((n == -1) || (n == 0)) {
+	if (n == -1) {
 		return -1;
 	}
 
