@@ -47,6 +47,9 @@
 #endif /* CONFIG_BT_CTLR_USER_EXT */
 
 #include "ull_internal.h"
+#if !defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
+#include "ull_llcp_internal.h"
+#endif /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 #include "ull_sched_internal.h"
 #include "ull_chan_internal.h"
 #include "ull_conn_internal.h"
@@ -185,7 +188,7 @@ static uint8_t force_md_cnt_calc(struct lll_conn *lll_conn, uint32_t tx_rate);
  * Allocate additional Tx buffers to accommodate simultaneous encryption setup
  * across active connections.
  */
-#if defined(CONFIG_BT_CTLR_LE_ENC)
+#if defined(CONFIG_BT_CTLR_LE_ENC) && defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
 #define CONN_ENC_REQ_BUFFERS CONFIG_BT_CTLR_LLCP_CONN
 #else
 #define CONN_ENC_REQ_BUFFERS 0
@@ -197,7 +200,11 @@ static uint8_t force_md_cnt_calc(struct lll_conn *lll_conn, uint32_t tx_rate);
  * simultaneously, for example 2 for encryption, 1 for termination,
  * and 1 one that is in flight and has not been returned to the pool
  */
+#if defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
 #define CONN_TX_CTRL_BUFFERS (4 * CONFIG_BT_CTLR_LLCP_CONN)
+#else /* !CONFIG_BT_LL_SW_LLCP_LEGACY */
+#define CONN_TX_CTRL_BUFFERS LLCP_TX_CTRL_BUF_COUNT
+#endif /* !CONFIG_BT_LL_SW_LLCP_LEGACY */
 #define CONN_TX_CTRL_BUF_SIZE MROUND(offsetof(struct node_tx, pdu) + \
 				     offsetof(struct pdu_data, llctrl) + \
 				     sizeof(struct pdu_data_llctrl))
@@ -209,6 +216,10 @@ static uint8_t force_md_cnt_calc(struct lll_conn *lll_conn, uint32_t tx_rate);
 /* CIS Establishment procedure state values */
 #define CIS_REQUEST_AWAIT_HOST 2
 
+/*
+ * TODO: when the legacy LLCP is removed we can replace 'CONN_TX_CTRL_BUFFERS'
+ * with 'LLCP_TX_CTRL_BUF_COUNT'
+ */
 static MFIFO_DEFINE(conn_tx, sizeof(struct lll_tx), CONN_DATA_BUFFERS);
 static MFIFO_DEFINE(conn_ack, sizeof(struct lll_tx),
 		    (CONN_DATA_BUFFERS +
@@ -219,10 +230,12 @@ static struct {
 	uint8_t pool[CONN_TX_BUF_SIZE * CONN_DATA_BUFFERS];
 } mem_conn_tx;
 
+#if defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
 static struct {
 	void *free;
 	uint8_t pool[CONN_TX_CTRL_BUF_SIZE * CONN_TX_CTRL_BUFFERS];
 } mem_conn_tx_ctrl;
+#endif /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 
 static struct {
 	void *free;
@@ -684,14 +697,30 @@ uint8_t ll_version_ind_send(uint16_t handle)
 }
 
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
+static bool ll_len_validate(uint16_t tx_octets, uint16_t tx_time)
+{
+	/* validate if within HCI allowed range */
+	if (!IN_RANGE(tx_octets, PDU_DC_PAYLOAD_SIZE_MIN,
+		      PDU_DC_PAYLOAD_SIZE_MAX)) {
+		return false;
+	}
+
+	/* validate if within HCI allowed range */
+	if (!IN_RANGE(tx_time, PDU_DC_PAYLOAD_TIME_MIN,
+		      PDU_DC_PAYLOAD_TIME_MAX_CODED)) {
+		return false;
+	}
+
+	return true;
+}
+
 uint32_t ll_length_req_send(uint16_t handle, uint16_t tx_octets,
 			    uint16_t tx_time)
 {
 	struct ll_conn *conn;
 
 	if (IS_ENABLED(CONFIG_BT_CTLR_PARAM_CHECK) &&
-	    ((tx_octets > LL_LENGTH_OCTETS_TX_MAX) ||
-	     (tx_time > PDU_DC_PAYLOAD_TIME_MAX_CODED))) {
+	    !ll_len_validate(tx_octets, tx_time)) {
 		return BT_HCI_ERR_INVALID_PARAM;
 	}
 
@@ -778,7 +807,10 @@ void ll_length_default_get(uint16_t *max_tx_octets, uint16_t *max_tx_time)
 
 uint32_t ll_length_default_set(uint16_t max_tx_octets, uint16_t max_tx_time)
 {
-	/* TODO: parameter check (for BT 5.0 compliance) */
+	if (IS_ENABLED(CONFIG_BT_CTLR_PARAM_CHECK) &&
+	    !ll_len_validate(max_tx_octets, max_tx_time)) {
+		return BT_HCI_ERR_INVALID_PARAM;
+	}
 
 	default_tx_octets = max_tx_octets;
 	default_tx_time = max_tx_time;
@@ -2218,9 +2250,11 @@ static int init_reset(void)
 	mem_init(mem_conn_tx.pool, CONN_TX_BUF_SIZE, CONN_DATA_BUFFERS,
 		 &mem_conn_tx.free);
 
+#if defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
 	/* Initialize tx ctrl pool. */
 	mem_init(mem_conn_tx_ctrl.pool, CONN_TX_CTRL_BUF_SIZE,
 		 CONN_TX_CTRL_BUFFERS, &mem_conn_tx_ctrl.free);
+#endif /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 
 	/* Initialize tx link pool. */
 	mem_init(mem_link_tx.pool, sizeof(memq_link_t),
@@ -8107,47 +8141,45 @@ void ull_dle_max_time_get(struct ll_conn *conn, uint16_t *max_rx_time,
 	return dle_max_time_get(conn, max_rx_time, max_tx_time);
 }
 
+/*
+ * TODO: this probably can be optimised for ex. by creating a macro for the
+ * ull_dle_update_eff function
+ */
 uint8_t ull_dle_update_eff(struct ll_conn *conn)
 {
 	uint8_t dle_changed = 0U;
 
-	const uint16_t eff_tx_octets =
-		MAX(MIN(conn->lll.dle.local.max_tx_octets, conn->lll.dle.remote.max_rx_octets),
-		    PDU_DC_PAYLOAD_SIZE_MIN);
+	/* Note that we must use bitwise or and not logical or */
+	dle_changed = ull_dle_update_eff_rx(conn);
+	dle_changed |= ull_dle_update_eff_tx(conn);
+
+	return dle_changed;
+}
+
+uint8_t ull_dle_update_eff_rx(struct ll_conn *conn)
+{
+	uint8_t dle_changed = 0U;
+
 	const uint16_t eff_rx_octets =
 		MAX(MIN(conn->lll.dle.local.max_rx_octets, conn->lll.dle.remote.max_tx_octets),
 		    PDU_DC_PAYLOAD_SIZE_MIN);
 
 #if defined(CONFIG_BT_CTLR_PHY)
-	unsigned int min_eff_tx_time = (conn->lll.phy_tx == PHY_CODED) ?
-			PDU_DC_PAYLOAD_TIME_MIN_CODED : PDU_DC_PAYLOAD_TIME_MIN;
 	unsigned int min_eff_rx_time = (conn->lll.phy_rx == PHY_CODED) ?
 			PDU_DC_PAYLOAD_TIME_MIN_CODED : PDU_DC_PAYLOAD_TIME_MIN;
 
-	const uint16_t eff_tx_time =
-		MAX(MIN(conn->lll.dle.local.max_tx_time, conn->lll.dle.remote.max_rx_time),
-		    min_eff_tx_time);
 	const uint16_t eff_rx_time =
 		MAX(MIN(conn->lll.dle.local.max_rx_time, conn->lll.dle.remote.max_tx_time),
 		    min_eff_rx_time);
 
-	if (eff_tx_time != conn->lll.dle.eff.max_tx_time) {
-		conn->lll.dle.eff.max_tx_time = eff_tx_time;
-		dle_changed = 1;
-	}
 	if (eff_rx_time != conn->lll.dle.eff.max_rx_time) {
 		conn->lll.dle.eff.max_rx_time = eff_rx_time;
 		dle_changed = 1;
 	}
 #else
 	conn->lll.dle.eff.max_rx_time = PDU_DC_MAX_US(eff_rx_octets, PHY_1M);
-	conn->lll.dle.eff.max_tx_time = PDU_DC_MAX_US(eff_tx_octets, PHY_1M);
 #endif
 
-	if (eff_tx_octets != conn->lll.dle.eff.max_tx_octets) {
-		conn->lll.dle.eff.max_tx_octets = eff_tx_octets;
-		dle_changed = 1;
-	}
 	if (eff_rx_octets != conn->lll.dle.eff.max_rx_octets) {
 		conn->lll.dle.eff.max_rx_octets = eff_rx_octets;
 		dle_changed = 1;
@@ -8156,8 +8188,64 @@ uint8_t ull_dle_update_eff(struct ll_conn *conn)
 	return dle_changed;
 }
 
+uint8_t ull_dle_update_eff_tx(struct ll_conn *conn)
+
+{
+	uint8_t dle_changed = 0U;
+
+	const uint16_t eff_tx_octets =
+		MAX(MIN(conn->lll.dle.local.max_tx_octets, conn->lll.dle.remote.max_rx_octets),
+		    PDU_DC_PAYLOAD_SIZE_MIN);
+
+#if defined(CONFIG_BT_CTLR_PHY)
+	unsigned int min_eff_tx_time = (conn->lll.phy_tx == PHY_CODED) ?
+			PDU_DC_PAYLOAD_TIME_MIN_CODED : PDU_DC_PAYLOAD_TIME_MIN;
+
+	const uint16_t eff_tx_time =
+		MAX(MIN(conn->lll.dle.local.max_tx_time, conn->lll.dle.remote.max_rx_time),
+		    min_eff_tx_time);
+
+	if (eff_tx_time != conn->lll.dle.eff.max_tx_time) {
+		conn->lll.dle.eff.max_tx_time = eff_tx_time;
+		dle_changed = 1;
+	}
+#else
+	conn->lll.dle.eff.max_tx_time = PDU_DC_MAX_US(eff_tx_octets, PHY_1M);
+#endif
+
+	if (eff_tx_octets != conn->lll.dle.eff.max_tx_octets) {
+		conn->lll.dle.eff.max_tx_octets = eff_tx_octets;
+		dle_changed = 1;
+	}
+
+	return dle_changed;
+}
+
+static void ull_len_data_length_trim(uint16_t *tx_octets, uint16_t *tx_time)
+{
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+	uint16_t tx_time_max =
+			PDU_DC_MAX_US(LL_LENGTH_OCTETS_TX_MAX, PHY_CODED);
+#else /* !CONFIG_BT_CTLR_PHY_CODED */
+	uint16_t tx_time_max =
+			PDU_DC_MAX_US(LL_LENGTH_OCTETS_TX_MAX, PHY_1M);
+#endif /* !CONFIG_BT_CTLR_PHY_CODED */
+
+	/* trim to supported values */
+	if (*tx_octets > LL_LENGTH_OCTETS_TX_MAX) {
+		*tx_octets = LL_LENGTH_OCTETS_TX_MAX;
+	}
+
+	if (*tx_time > tx_time_max) {
+		*tx_time = tx_time_max;
+	}
+}
+
 void ull_dle_local_tx_update(struct ll_conn *conn, uint16_t tx_octets, uint16_t tx_time)
 {
+	/* Trim to supported values */
+	ull_len_data_length_trim(&tx_octets, &tx_time);
+
 	conn->lll.dle.default_tx_octets = tx_octets;
 
 #if defined(CONFIG_BT_CTLR_PHY)
@@ -8201,7 +8289,7 @@ void ull_dle_init(struct ll_conn *conn, uint8_t phy)
 	 * Part B, section 4.5.10 we can call ull_dle_update_eff
 	 * for initialisation
 	 */
-	ull_dle_update_eff(conn);
+	(void)ull_dle_update_eff(conn);
 
 	/* Check whether the controller should perform a data length update after
 	 * connection is established
