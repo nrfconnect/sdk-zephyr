@@ -4,12 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <bluetooth/addr.h>
+#include <zephyr/bluetooth/addr.h>
 
 /* BT (ID, Address) pair */
 struct id_addr_pair {
-	uint8_t id;			    /* ID */
-	bt_addr_le_t *addr;		/* Pointer to the address */
+	uint8_t id;	    /* ID */
+	bt_addr_le_t *addr; /* Pointer to the address */
+};
+
+/* BT Key (ID, Address, type) info */
+struct id_addr_type {
+	uint8_t id;	    /*	ID */
+	bt_addr_le_t *addr; /*	Pointer to the address	*/
+	int type;	    /*	Key type */
 };
 
 /* keys.c declarations */
@@ -21,11 +28,6 @@ uint32_t bt_keys_get_aging_counter_val(void);
 /* keys_help_utils.c declarations */
 void clear_key_pool(void);
 int fill_key_pool_by_id_addr(const struct id_addr_pair src[], int size, struct bt_keys *refs[]);
+int fill_key_pool_by_id_addr_type(const struct id_addr_type src[], int size,
+				  struct bt_keys *refs[]);
 bool check_key_pool_is_empty(void);
-
-/* Repeat test entries */
-#define REGISTER_SETUP_TEARDOWN(i, ...) \
-	ztest_unit_test_setup_teardown(__VA_ARGS__, unit_test_setup, unit_test_noop)
-
-#define ztest_unit_test_setup(fn, setup) \
-	ztest_unit_test_setup_teardown(fn, setup, unit_test_noop)

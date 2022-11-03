@@ -92,6 +92,7 @@
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
 #define LOG_MODULE_NAME bt_ctlr_hci
 #include "common/log.h"
+#include "common/bt_str.h"
 #include "hal/debug.h"
 
 #define STR_NULL_TERMINATOR 0x00
@@ -5676,7 +5677,7 @@ int hci_iso_handle(struct net_buf *buf, struct net_buf **evt)
 		sdu_frag_tx.target_event = cis->lll.event_count +
 			(cis->lll.tx.flush_timeout > 1 ? 0 : 1);
 
-		sdu_frag_tx.cig_ref_point = cig->cig_ref_point;
+		sdu_frag_tx.grp_ref_point = cig->cig_ref_point;
 
 		/* Get controller's input data path for CIS */
 		dp_in = hdr->datapath_in;

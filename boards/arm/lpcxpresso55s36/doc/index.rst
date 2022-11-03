@@ -66,7 +66,8 @@ already supported, which can also be re-used on this lpcxpresso55s36 board:
 +-----------+------------+-------------------------------------+
 | GPIO      | on-chip    | gpio                                |
 +-----------+------------+-------------------------------------+
-| USART     | on-chip    | serial port                         |
+| USART     | on-chip    | serial port-polling;                |
+|           |            | serial port-interrupt               |
 +-----------+------------+-------------------------------------+
 | CLOCK     | on-chip    | clock_control                       |
 +-----------+------------+-------------------------------------+
@@ -75,6 +76,8 @@ already supported, which can also be re-used on this lpcxpresso55s36 board:
 | IAP       | on-chip    | flash                               |
 +-----------+------------+-------------------------------------+
 | PWM       | on-chip    | pwm                                 |
++-----------+------------+-------------------------------------+
+| CSS       | on-chip    | entropy                             |
 +-----------+------------+-------------------------------------+
 
 Other hardware features are not currently enabled.
