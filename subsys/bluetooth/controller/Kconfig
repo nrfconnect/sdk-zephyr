@@ -95,8 +95,7 @@ choice BT_LL_CHOICE
 	  Select the Bluetooth Link Layer to compile.
 
 config BT_LL_SW_SPLIT
-	bool "Software-based BLE Link Layer [EXPERIMENTAL]"
-	select EXPERIMENTAL
+	bool "Software-based BLE Link Layer"
 	select ENTROPY_GENERATOR
 	select NRF_HW_TIMER0_RESERVED
 	select NRF_HW_RTC0_RESERVED
