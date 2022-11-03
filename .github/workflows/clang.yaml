@@ -11,7 +11,7 @@ jobs:
         with:
           access_token: ${{ github.token }}
   clang-build:
-    runs-on: ubuntu-latest
+    runs-on: zephyr_runner
     needs: clang-build-prep
     container:
       image: ghcr.io/zephyrproject-rtos/ci:v0.24.2
