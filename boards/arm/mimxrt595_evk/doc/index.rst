@@ -77,7 +77,8 @@ already supported, which can also be re-used on this mimxrt595_evk board:
 +-----------+------------+-------------------------------------+
 | GPIO      | on-chip    | gpio                                |
 +-----------+------------+-------------------------------------+
-| USART     | on-chip    | serial port-polling                 |
+| USART     | on-chip    | serial port-polling;                |
+|           |            | serial port-interrupt               |
 +-----------+------------+-------------------------------------+
 | CLOCK     | on-chip    | clock_control                       |
 +-----------+------------+-------------------------------------+
@@ -96,6 +97,8 @@ already supported, which can also be re-used on this mimxrt595_evk board:
 | USB       | on-chip    | USB device                          |
 +-----------+------------+-------------------------------------+
 | FLEXSPI   | on-chip    | flash programming                   |
++-----------+------------+-------------------------------------+
+| RTC       | on-chip    | counter                             |
 +-----------+------------+-------------------------------------+
 
 The default configuration can be found in the defconfig file:
