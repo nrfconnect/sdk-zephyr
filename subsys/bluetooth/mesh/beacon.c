@@ -108,8 +108,7 @@ static bool secure_beacon_send(struct bt_mesh_subnet *sub, void *cb_data)
 	time_diff = now - sub->beacon_sent;
 	time_since_last_recv = now - sub->beacon_recv;
 	if (time_diff < (600 * MSEC_PER_SEC) &&
-		(time_diff < BEACON_THRESHOLD(sub) ||
-		 time_since_last_recv < (10 * MSEC_PER_SEC))) {
+		time_diff < BEACON_THRESHOLD(sub)) {
 		return false;
 	}
 
