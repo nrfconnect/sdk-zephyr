@@ -23,6 +23,7 @@
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_AUDIO_DEBUG_BROADCAST_SINK)
 #define LOG_MODULE_NAME bt_audio_broadcast_sink
 #include "common/log.h"
+#include "common/bt_str.h"
 
 #define PA_SYNC_SKIP              5
 #define SYNC_RETRY_COUNT          6 /* similar to retries for connections */
@@ -1044,7 +1045,10 @@ int bt_audio_broadcast_sink_sync(struct bt_audio_broadcast_sink *sink,
 		if ((indexes_bitfield & BIT(i)) != 0) {
 			struct bt_codec *codec = codec_from_base_by_index(&sink->base, i);
 
-			__ASSERT(codec != NULL, "Codec[%d] was NULL", i);
+			if (codec == NULL) {
+				BT_DBG("Index %d not found in BASE", i);
+				return -EINVAL;
+			}
 
 			codecs[stream_count++] = codec;
 
@@ -1063,6 +1067,7 @@ int bt_audio_broadcast_sink_sync(struct bt_audio_broadcast_sink *sink,
 		}
 	}
 
+	sink->stream_count = 0U;
 	for (size_t i = 0; i < stream_count; i++) {
 		struct bt_audio_stream *stream;
 		struct bt_codec *codec;
