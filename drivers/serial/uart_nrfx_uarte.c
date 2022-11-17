@@ -1955,10 +1955,11 @@ static int uarte_nrfx_pm_action(const struct device *dev,
 		nrf_uarte_enable(uarte);
 
 #ifdef UARTE_ANY_ASYNC
-		if (HW_RX_COUNTING_ENABLED(data)) {
-			nrfx_timer_enable(&cfg->timer);
-		}
 		if (data->async) {
+			if (HW_RX_COUNTING_ENABLED(data)) {
+				nrfx_timer_enable(&cfg->timer);
+			}
+
 			return 0;
 		}
 #endif
