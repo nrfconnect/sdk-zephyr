@@ -84,19 +84,7 @@
   - "**/*"
 
 "CI-matter-test":
-  - "include/dfu/**/*"
-  - "include/mgmt/mcumgr/**/*"
-  - "soc/arm/nordic_nrf/**/*"
-  - "subsys/dfu/**/*"
-  - "subsys/settings/**/*"
-  - "subsys/net/**/*"
-  - "subsys/mgmt/mcumgr/**/*"
-  - "drivers/net/**/*"
-  - "samples/hci_rpmsg/**/*"
-  - any:
-    - "subsys/bluetooth/**/*"
-    - "!subsys/bluetooth/mesh/**/*"
-    - "!subsys/bluetooth/audio/**/*"
+  - "**/*"
 
 "CI-find-my-test":
   - "**/*"
