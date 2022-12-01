@@ -21,6 +21,8 @@ manifest:
   remotes:
     - name: upstream
       url-base: https://github.com/zephyrproject-rtos
+    - name: vgeorge
+      url-base: https://github.com/Vge0rge
 
   #
   # Please add items below based on alphabetical order
@@ -240,13 +242,15 @@ manifest:
       groups:
         - tee
     - name: tf-m-tests
-      revision: bcb53bccccdc05c713aade707e7a8ddad35c210f
+      revision: psa_arch_tests_fixes
       path: modules/tee/tf-m/tf-m-tests
+      remote: vgeorge
       groups:
         - tee
     - name: psa-arch-tests
-      revision: f4fc2442b8e29e2a03d9899e46e5a3ea3df8c2c9
+      revision: psa_arch_tests_fixes
       path: modules/tee/tf-m/psa-arch-tests
+      remote: vgeorge
       groups:
         - tee
     - name: uoscore-uedhoc
