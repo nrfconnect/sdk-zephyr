@@ -373,6 +373,26 @@ config TFM_PSA_TEST_NONE
 
 endchoice
 
+config TFM_PSA_TEST_CUSTOM_INCLUDE_DIR
+	string "Custom include folder for the PSA arch tests"
+	depends on TFM_PSA_TEST_CRYPTO
+	help
+	  This Kconfig allows to set a custom include path when building the
+	  PSA arch tests. It allows platforms to use out of tree configuration
+	  files for the tests. This can be useful to only test the features
+	  which are enabled by a particular configuration.
+
+config TFM_PSA_TEST_CRYPTO_CUSTOM_PAL_CFG
+	string "Filename of the header to replace pal_crypto_config.h"
+	depends on TFM_PSA_TEST_CRYPTO
+	depends on TFM_PSA_TEST_CUSTOM_INCLUDE_DIR != ""
+	help
+	  Use a custom header file for the crypto configuration used by
+	  the TF-M PSA arch tests. The default file is named pal_crypto_config.h.
+	  If this is define it is the responsibility of the user to make sure that
+	  the required include path is provided to the build system by the
+	  TFM_PSA_TEST_CUSTOM_INCLUDE_DIR Kconfig option.
+
 if TFM_BL2
 
 config ROM_START_OFFSET
