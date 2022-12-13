@@ -244,7 +244,6 @@
 /drivers/counter/counter_ll_stm32_timer.c @kentjhall
 /drivers/counter/*esp32*                  @glaubermaroto
 /drivers/crypto/*nrf_ecb*                 @maciekfabia @anangl
-/drivers/display/display_framebuf.c       @dcpleung
 /drivers/display/*rm68200*                @mmahadevan108
 /drivers/dac/                             @martinjaeger
 /drivers/dai/                             @juimonen @marcinszkudlinski @abonislawski
@@ -309,6 +308,7 @@
 /drivers/i2s/i2s_ll_stm32*                @avisconti
 /drivers/i2s/*nrfx*                       @anangl
 /drivers/i3c/                             @dcpleung
+/drivers/i3c/i3c_cdns.c                   @XenuIsWatching
 /drivers/ieee802154/                      @rlubos @tbursztyka
 /drivers/ieee802154/*b91*                 @andy-liu-telink
 /drivers/ieee802154/ieee802154_nrf5*      @jciupis
@@ -365,7 +365,9 @@
 /drivers/pwm/*it8xxx2*                    @RuibinChang
 /drivers/pwm/*esp32*                      @LucasTambor
 /drivers/pwm/*rcar*                       @pmarzin
-/drivers/regulator/*pmic*                 @danieldegrasse
+/drivers/regulator/*                      @gmarull
+/drivers/regulator/regulator_pca9420.c    @danieldegrasse
+/drivers/regulator/regulator_shell.c      @danieldegrasse
 /drivers/reset/                           @andrei-edward-popa
 /drivers/sensor/                          @MaureenHelm
 /drivers/sensor/ams_iAQcore/              @alexanderwachter
@@ -627,6 +629,7 @@
 /include/zephyr/net/coap*.h                      @rlubos
 /include/zephyr/net/lwm2m*.h                     @rlubos
 /include/zephyr/net/mqtt.h                       @rlubos
+/include/zephyr/net/mqtt_sn.h                    @rlubos @BeckmaR
 /include/zephyr/net/net_pkt_filter.h             @npitre
 /include/zephyr/posix/                           @pfalcon
 /include/zephyr/pm/pm.h                          @nashif @ceolin
@@ -681,6 +684,7 @@
 /samples/net/dns_resolve/                 @rlubos @tbursztyka @pfalcon
 /samples/net/lwm2m_client/                @rlubos
 /samples/net/mqtt_publisher/              @rlubos
+/samples/net/mqtt_sn_publisher/           @rlubos @BeckmaR
 /samples/net/sockets/coap_*/              @rlubos
 /samples/net/sockets/                     @rlubos @tbursztyka @pfalcon
 /samples/sensor/                          @MaureenHelm
@@ -711,6 +715,7 @@ scripts/build/gen_image_info.py           @tejlmand
 /scripts/dts/                             @mbolivar-nordic @galak
 /scripts/release/                         @nashif
 /scripts/ci/                              @nashif
+/scripts/ci/check_compliance.py           @nashif @carlescufi
 /arch/x86/gen_gdt.py                      @dcpleung @nashif
 /arch/x86/gen_idt.py                      @dcpleung @nashif
 /scripts/build/gen_kobject_list.py        @dcpleung @nashif
@@ -719,6 +724,7 @@ scripts/build/gen_image_info.py           @tejlmand
 /scripts/list_boards.py                   @mbolivar-nordic
 /scripts/build/process_gperf.py           @dcpleung @nashif
 /scripts/build/gen_relocate_app.py        @dcpleung
+/scripts/generate_usb_vif/                @madhurimaparuchuri
 /scripts/requirements*.txt                @mbolivar-nordic @galak @nashif
 /scripts/tests/twister/                   @aasthagr
 /scripts/tests/build/test_subfolder_list.py @rmstoi
@@ -752,6 +758,7 @@ scripts/build/gen_image_info.py           @tejlmand
 /subsys/debug/gdbstub.c                   @ceolin
 /subsys/dfu/                              @de-nordic @nordicjm
 /subsys/disk/                             @jfischer-no
+/subsys/dsp/                              @yperess
 /subsys/tracing/                          @nashif
 /subsys/debug/asan_hacks.c                @aescolar @daor-oti
 /subsys/demand_paging/                    @dcpleung @nashif
@@ -761,12 +768,12 @@ scripts/build/gen_image_info.py           @tejlmand
 /subsys/fs/nvs/                           @Laczen
 /subsys/ipc/                              @carlocaione
 /subsys/logging/                          @nordic-krch
-/subsys/logging/log_backend_net.c         @nordic-krch @rlubos
+/subsys/logging/backends/log_backend_net.c @nordic-krch @rlubos
 /subsys/lorawan/                          @Mani-Sadhasivam
 /subsys/mgmt/ec_host_cmd/                 @jettr
 /subsys/mgmt/mcumgr/                      @carlescufi @de-nordic @nordicjm
 /subsys/mgmt/hawkbit/                     @Navin-Sankar
-/subsys/mgmt/mcumgr/smp_udp.c             @aunsbjerg
+/subsys/mgmt/mcumgr/transport/src/smp_udp.c @aunsbjerg
 /subsys/mgmt/updatehub/                   @nandojve @otavio
 /subsys/mgmt/osdp/                        @sidcha
 /subsys/modbus/                           @jfischer-no
@@ -777,6 +784,7 @@ scripts/build/gen_image_info.py           @tejlmand
 /subsys/net/lib/lwm2m/                    @rlubos
 /subsys/net/lib/config/                   @rlubos @tbursztyka @pfalcon
 /subsys/net/lib/mqtt/                     @rlubos
+/subsys/net/lib/mqtt_sn/                  @rlubos @BeckmaR
 /subsys/net/lib/coap/                     @rlubos
 /subsys/net/lib/sockets/socketpair.c      @cfriedt
 /subsys/net/lib/sockets/                  @rlubos @tbursztyka @pfalcon
@@ -827,6 +835,8 @@ scripts/build/gen_image_info.py           @tejlmand
 /tests/net/lib/                           @rlubos @tbursztyka @pfalcon
 /tests/net/lib/http_header_fields/        @rlubos @tbursztyka
 /tests/net/lib/mqtt_packet/               @rlubos
+/tests/net/lib/mqtt_sn_packet/            @rlubos @BeckmaR
+/tests/net/lib/mqtt_sn_client/            @rlubos @BeckmaR
 /tests/net/lib/coap/                      @rlubos
 /tests/net/npf/                           @npitre
 /tests/net/socket/socketpair/             @cfriedt

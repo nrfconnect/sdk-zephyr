@@ -121,10 +121,15 @@ static inline void arch_setup_callee_saved_regs(struct k_thread *thread,
 
 	ARG_UNUSED(regs);
 
-#ifdef CONFIG_THREAD_LOCAL_STORAGE
+/* GCC uses tls pointer cached in register, MWDT just call for _mwget_tls */
+#if defined(CONFIG_THREAD_LOCAL_STORAGE) && !defined(__CCAC__)
 #ifdef CONFIG_ISA_ARCV2
-	/* R26 is used for thread pointer for ARCv2 */
-	regs->r26 = thread->tls;
+#if __ARC_TLS_REGNO__ <= 0
+#error Compiler not configured for thread local storage
+#endif
+#define TLSREG _CONCAT(r, __ARC_TLS_REGNO__)
+	/* __ARC_TLS_REGNO__ is used for thread pointer for ARCv2 */
+	regs->TLSREG = thread->tls;
 #else
 	/* R30 is used for thread pointer for ARCv3 */
 	regs->r30 = thread->tls;

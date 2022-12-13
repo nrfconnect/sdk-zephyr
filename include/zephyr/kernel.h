@@ -2123,7 +2123,7 @@ __syscall void k_event_post(struct k_event *event, uint32_t events);
  * events tracked by the event object.
  *
  * @param event Address of the event object
- * @param events Set of events to post to @a event
+ * @param events Set of events to set in @a event
  */
 __syscall void k_event_set(struct k_event *event, uint32_t events);
 
@@ -2136,11 +2136,21 @@ __syscall void k_event_set(struct k_event *event, uint32_t events);
  * allows specific event bits to be set and cleared as determined by the mask.
  *
  * @param event Address of the event object
- * @param events Set of events to post to @a event
+ * @param events Set of events to set/clear in @a event
  * @param events_mask Mask to be applied to @a events
  */
 __syscall void k_event_set_masked(struct k_event *event, uint32_t events,
 				  uint32_t events_mask);
+
+/**
+ * @brief Clear the events in an event object
+ *
+ * This routine clears (resets) the specified events stored in an event object.
+ *
+ * @param event Address of the event object
+ * @param events Set of events to clear in @a event
+ */
+__syscall void k_event_clear(struct k_event *event, uint32_t events);
 
 /**
  * @brief Wait for any of the specified events
@@ -2167,7 +2177,7 @@ __syscall uint32_t k_event_wait(struct k_event *event, uint32_t events,
 				bool reset, k_timeout_t timeout);
 
 /**
- * @brief Wait for any of the specified events
+ * @brief Wait for all of the specified events
  *
  * This routine waits on event object @a event until all of the specified
  * events have been delivered to the event object, or the maximum wait time
@@ -5122,6 +5132,7 @@ void *k_heap_aligned_alloc(struct k_heap *h, size_t align, size_t bytes,
  * timeout API, or K_NO_WAIT or K_FOREVER) waiting for memory to be
  * freed.  If the allocation cannot be performed by the expiration of
  * the timeout, NULL will be returned.
+ * Allocated memory is aligned on a multiple of pointer sizes.
  *
  * @note @a timeout must be set to K_NO_WAIT if called from ISR.
  * @note When CONFIG_MULTITHREADING=n any @a timeout is treated as K_NO_WAIT.
@@ -5250,6 +5261,7 @@ extern void *k_aligned_alloc(size_t align, size_t size);
  *
  * This routine provides traditional malloc() semantics. Memory is
  * allocated from the heap memory pool.
+ * Allocated memory is aligned on a multiple of pointer sizes.
  *
  * @param size Amount of memory requested (in bytes).
  *

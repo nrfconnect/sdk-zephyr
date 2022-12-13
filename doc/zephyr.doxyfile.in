@@ -2316,6 +2316,7 @@ PREDEFINED             = __DOXYGEN__ \
                          CONFIG_ERRNO \
                          CONFIG_FLASH_JESD216_API \
                          CONFIG_FLASH_PAGE_LAYOUT \
+                         CONFIG_FP16 \
                          CONFIG_FPU \
                          CONFIG_FPU_SHARING \
                          CONFIG_GDBSTUB \
@@ -2353,7 +2354,6 @@ PREDEFINED             = __DOXYGEN__ \
                          __attribute__(x)= \
                          __syscall= \
                          __must_check= \
-                         DT_DOXYGEN \
                          "ATOMIC_DEFINE(x, y)=atomic_t x[ATOMIC_BITMAP_SIZE(y)]"
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this

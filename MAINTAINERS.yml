@@ -249,7 +249,9 @@ Bluetooth Audio:
     - MariuszSkamra
     - rymanluk
     - sjanc
+    - szymon-czapracki
     - asbjornsabo
+    - fredrikdanebjer
   files:
     - subsys/bluetooth/audio/
     - include/zephyr/bluetooth/audio/
@@ -266,6 +268,7 @@ Build system:
   collaborators:
     - jeremybettis
     - nashif
+    - nordicjm
   files:
     - cmake/
     - CMakeLists.txt
@@ -320,6 +323,17 @@ CMSIS API layer:
   labels:
     - "area: CMSIS API Layer"
     - "area: Portability"
+
+DSP subsystem:
+  status: maintained
+  maintainers:
+    - stephanosio
+    - yperess
+  files:
+    - subsys/dsp/
+    - tests/subsys/dsp/
+  labels:
+    - "area: DSP"
 
 CMSIS-DSP integration:
   status: maintained
@@ -746,6 +760,35 @@ Release Notes:
     - tests/drivers/flash/
   labels:
     - "area: Flash"
+
+"Drivers: FPGA":
+  status: maintained
+  maintainers:
+    - cfriedt
+  collaborators:
+    - tgorochowik
+    - fkokosinski
+    - msierszulski
+  files:
+    - drivers/fpga/
+    - dts/bindings/fpga/
+    - include/zephyr/drivers/fpga.h
+    - samples/drivers/fpga/
+  labels:
+    - "area: FPGA"
+
+"Drivers: Fuel Gauge":
+  status: maintained
+  maintainers:
+    - aaronemassey
+    - teburd
+  files:
+    - drivers/fuel_gauge/
+    - dts/bindings/fuel-gauge/
+    - include/zephyr/drivers/fuel_gauge.h
+    - tests/drivers/fuel_gauge/
+  labels:
+    - "area: Fuel Gauge"
 
 "Drivers: GPIO":
   status: maintained
@@ -1520,6 +1563,21 @@ Networking:
     - tests/net/lib/mqtt_*/
     - samples/net/cloud/mqtt_azure/
     - samples/net/mqtt_publisher/
+  files-exclude:
+    - tests/net/lib/mqtt_sn*/
+  labels:
+    - "area: Networking"
+
+"Networking: MQTT-SN":
+  status: maintained
+  maintainers:
+    - rlubos
+  collaborators:
+    - BeckmaR
+  files:
+    - subsys/net/lib/mqtt_sn/
+    - tests/net/lib/mqtt_sn*/
+    - samples/net/mqtt_sn_publisher/
   labels:
     - "area: Networking"
 
@@ -1744,7 +1802,6 @@ Nuvoton NPCX Platforms:
     - keith-zephyr
     - jackrosenthal
     - fabiobaltieri
-    - yperess
   files:
     - soc/arm/nuvoton_npcx/
     - boards/arm/npcx*/
@@ -1781,9 +1838,9 @@ SiLabs Platforms:
 Intel Platforms (X86):
   status: maintained
   maintainers:
-    - enjiamai
-  collaborators:
     - jhedberg
+  collaborators:
+    - tbursztyka
     - aasthagr
     - laurenmurphyx64
     - MaureenHelm
@@ -1863,6 +1920,7 @@ Microchip SAM Platforms:
   maintainers:
     - nandojve
   collaborators:
+    - attie-argentum
     - mnkp
     - stephanosio
   files:
@@ -1913,6 +1971,7 @@ STM32 Platforms:
   collaborators:
     - ABOSTM
     - FRASTM
+    - gautierg-st
     - GeorgeCGV
   files:
     - boards/arm/nucleo_*/
@@ -1936,11 +1995,10 @@ Espressif Platforms:
   status: maintained
   maintainers:
     - sylvioalves
-    - glaubermaroto
-    - uLipe
   collaborators:
     - LucasTambor
     - marekmatej
+    - uLipe
   files:
     - drivers/*/*esp32*.c
     - boards/xtensa/esp32*/
@@ -1968,7 +2026,6 @@ ITE Platforms:
     - jackrosenthal
     - keith-zephyr
     - brockus-zephyr
-    - yperess
     - sjg20
   files:
     - boards/riscv/it8xxx2_evb/
@@ -2079,7 +2136,6 @@ Tracing:
     - nashif
   collaborators:
     - teburd
-    - tleksell-pe
   files:
     - subsys/tracing/
     - include/zephyr/tracing/
@@ -2104,6 +2160,7 @@ USB:
     - samples/subsys/usb/
     - subsys/usb/
     - tests/subsys/usb/
+    - tests/drivers/udc/
   labels:
     - "area: USB"
 
@@ -2635,7 +2692,7 @@ West:
 "West project: TraceRecorderSource":
   status: maintained
   maintainers:
-    - tleksell-pe
+    - eriktamlin
   files:
     - modules/TraceRecorder/
   labels:
@@ -2736,6 +2793,7 @@ x86 arch:
   maintainers:
     - jhedberg
   collaborators:
+    - tbursztyka
     - andyross
     - nashif
     - dcpleung
