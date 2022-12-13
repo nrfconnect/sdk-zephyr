@@ -460,7 +460,11 @@ static bool channel_processing_check_and_clear(int32_t chan)
 
 static void process_channel(int32_t chan)
 {
+	__ASSERT_NO_MSG(chan < CHAN_COUNT);
+
 	if (channel_processing_check_and_clear(chan)) {
+		__ASSERT_NO_MSG(chan < CHAN_COUNT);
+
 		void *user_context;
 		uint32_t mcu_critical_state;
 		uint64_t curr_time;
@@ -478,6 +482,7 @@ static void process_channel(int32_t chan)
 		/* If target_time is in the past or is equal to current time
 		 * value, execute the handler.
 		 */
+		__ASSERT_NO_MSG(chan < CHAN_COUNT);
 		expire_time = cc_data[chan].target_time;
 		if (curr_time >= expire_time) {
 			handler = cc_data[chan].callback;
