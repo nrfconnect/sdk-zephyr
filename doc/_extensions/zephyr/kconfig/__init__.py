@@ -354,9 +354,8 @@ def kconfig_build_resources(app: Sphinx) -> None:
 
                 filename = node.filename
                 for name, path in module_paths.items():
-                    path += "/"
                     if node.filename.startswith(path):
-                        filename = node.filename.replace(path, f"<module:{name}>/")
+                        filename = node.filename.replace(path, f"<module:{name}>")
                         break
 
                 db.append(
