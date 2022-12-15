@@ -45,23 +45,27 @@ static inline bool is_tx_channel_valid(const struct device *dev, uint32_t ch)
 	return ((ch < IPC_CONF_NUM) && (conf->tx_mask & BIT(ch)));
 }
 
-static void mbox_dispatcher(uint8_t event_idx, void *p_context)
+static void mbox_dispatcher(uint32_t event_mask, void *p_context)
 {
 	struct mbox_nrf_data *data = (struct mbox_nrf_data *) p_context;
 	const struct device *dev = data->dev;
 
-	uint32_t channel = event_idx;
+	while (event_mask) {
+		uint32_t channel = __CLZ(__RBIT(event_mask));
 
-	if (!is_rx_channel_valid(dev, channel)) {
-		LOG_WRN("RX event on illegal channel");
-	}
+		if (!is_rx_channel_valid(dev, channel)) {
+			LOG_WRN("RX event on illegal channel");
+		}
 
-	if (!(data->enabled_mask & BIT(channel))) {
-		LOG_WRN("RX event on disabled channel");
-	}
+		if (!(data->enabled_mask & BIT(channel))) {
+			LOG_WRN("RX event on disabled channel");
+		}
 
-	if (data->cb[channel] != NULL) {
-		data->cb[channel](dev, channel, data->user_data[channel], NULL);
+		event_mask &= ~BIT(channel);
+
+		if (data->cb[channel] != NULL) {
+			data->cb[channel](dev, channel, data->user_data[channel], NULL);
+		}
 	}
 }
 
