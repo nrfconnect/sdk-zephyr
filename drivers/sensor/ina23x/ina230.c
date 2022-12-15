@@ -34,6 +34,12 @@ LOG_MODULE_REGISTER(INA230, CONFIG_SENSOR_LOG_LEVEL);
  */
 #define INA230_POWER_VALUE_LSB 25
 
+/**
+ * @brief sensor value get
+ *
+ * @retval 0 for success
+ * @retval -ENOTSUP for unsupported channels
+ */
 static int ina230_channel_get(const struct device *dev,
 			      enum sensor_channel chan,
 			      struct sensor_value *val)
@@ -96,6 +102,12 @@ static int ina230_channel_get(const struct device *dev,
 	return 0;
 }
 
+/**
+ * @brief sensor sample fetch
+ *
+ * @retval 0 for success
+ * @retval -ENOTSUP for unsupported channels
+ */
 static int ina230_sample_fetch(const struct device *dev,
 			       enum sensor_channel chan)
 {
@@ -137,6 +149,13 @@ static int ina230_sample_fetch(const struct device *dev,
 	return 0;
 }
 
+/**
+ * @brief sensor attribute set
+ *
+ * @retval 0 for success
+ * @retval -ENOTSUP for unsupported channels
+ * @retval -EIO for i2c write failure
+ */
 static int ina230_attr_set(const struct device *dev, enum sensor_channel chan,
 			   enum sensor_attribute attr,
 			   const struct sensor_value *val)
@@ -159,6 +178,13 @@ static int ina230_attr_set(const struct device *dev, enum sensor_channel chan,
 	}
 }
 
+/**
+ * @brief sensor attribute get
+ *
+ * @retval 0 for success
+ * @retval -ENOTSUP for unsupported channels
+ * @retval -EIO for i2c read failure
+ */
 static int ina230_attr_get(const struct device *dev, enum sensor_channel chan,
 			   enum sensor_attribute attr,
 			   struct sensor_value *val)
@@ -203,6 +229,12 @@ static int ina230_attr_get(const struct device *dev, enum sensor_channel chan,
 	return 0;
 }
 
+/**
+ * @brief sensor calibrate
+ *
+ * @retval 0 for success
+ * @retval -EIO for i2c write failure
+ */
 static int ina230_calibrate(const struct device *dev)
 {
 	const struct ina230_config *config = dev->config;
@@ -219,6 +251,12 @@ static int ina230_calibrate(const struct device *dev)
 	return 0;
 }
 
+/**
+ * @brief Initialize the INA230
+ *
+ * @retval 0 for success
+ * @retval -EINVAL on error
+ */
 static int ina230_init(const struct device *dev)
 {
 	const struct ina230_config *const config = dev->config;
