@@ -102,7 +102,7 @@ LOG_MODULE_REGISTER(net_shell, LOG_LEVEL_DBG);
 	shell_fprintf(sh, SHELL_WARNING, fmt, ##__VA_ARGS__)
 
 #include "net_private.h"
-
+int count_seq;
 struct net_shell_user_data {
 	const struct shell *sh;
 	void *user_data;
@@ -4111,6 +4111,7 @@ static enum net_verdict handle_ipv4_echo_reply(struct net_pkt *pkt,
 #endif
 			);
 	}
+	printf("%d bytes from %s to %s: icmp_seq=%d ttl=%d %s\n",ntohs(ip_hdr->len) - net_pkt_ipv6_ext_len(pkt) -  NET_ICMPH_LEN,net_sprint_ipv4_addr(&ip_hdr->src),net_sprint_ipv4_addr(&ip_hdr->dst),ntohs(icmp_echo->sequence),ip_hdr->ttl,time_buf);
 
 	PR_SHELL(shell_for_ping, "%d bytes from %s to %s: icmp_seq=%d ttl=%d "
 		 "%s\n",
@@ -4122,6 +4123,7 @@ static enum net_verdict handle_ipv4_echo_reply(struct net_pkt *pkt,
 		 ip_hdr->ttl,
 		 time_buf);
 
+		 count_seq = ntohs(icmp_echo->sequence);
 	k_sem_give(&ping_timeout);
 
 	net_pkt_unref(pkt);
