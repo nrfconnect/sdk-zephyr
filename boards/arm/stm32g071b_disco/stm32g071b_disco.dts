@@ -143,7 +143,8 @@
 			INA230_CONV_TIME_1100,
 			INA230_CONV_TIME_1100,
 			INA230_AVG_MODE_1)>;
-		current-lsb-microamps = <1000>;
+		/* Set current LSB to 1mA */
+		current-lsb = <1>;
 		rshunt-milliohms = <15>;
 	};
 };
