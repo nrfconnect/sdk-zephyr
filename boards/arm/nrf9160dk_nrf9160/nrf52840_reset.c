@@ -8,7 +8,6 @@
 #include <zephyr/drivers/uart.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
-#include <zephyr/kernel.h>
 
 #define RESET_NODE DT_NODELABEL(nrf52840_reset)
 
