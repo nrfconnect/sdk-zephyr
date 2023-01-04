@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "lwm2m_engine.h"
 #include "lwm2m_object.h"
 #include "lwm2m_util.h"
+#include "lwm2m_rd_client.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -39,9 +40,6 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <fcntl.h>
 
-#ifdef CONFIG_LWM2M_RD_CLIENT_SUPPORT
-#include "lwm2m_rd_client.h"
-#endif
 #if defined(CONFIG_LWM2M_RW_SENML_JSON_SUPPORT)
 #include "lwm2m_rw_senml_json.h"
 #endif
@@ -53,9 +51,6 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #endif
 #ifdef CONFIG_LWM2M_RW_SENML_CBOR_SUPPORT
 #include "lwm2m_rw_senml_cbor.h"
-#endif
-#ifdef CONFIG_LWM2M_RD_CLIENT_SUPPORT
-#include "lwm2m_rd_client.h"
 #endif
 
 #define OBSERVE_COUNTER_START 0U
@@ -1468,18 +1463,6 @@ void lwm2m_engine_free_list(sys_slist_t *path_list, sys_slist_t *free_list)
 	}
 }
 
-static bool lwm2m_path_object_compare(struct lwm2m_obj_path *path,
-				      struct lwm2m_obj_path *compare_path)
-{
-	if (path->level != compare_path->level || path->obj_id != compare_path->obj_id ||
-	    path->obj_inst_id != compare_path->obj_inst_id ||
-	    path->res_id != compare_path->res_id ||
-	    path->res_inst_id != compare_path->res_inst_id) {
-		return false;
-	}
-	return true;
-}
-
 void lwm2m_engine_path_list_init(sys_slist_t *lwm2m_path_list, sys_slist_t *lwm2m_free_list,
 				 struct lwm2m_obj_path_list path_object_buf[],
 				 uint8_t path_object_size)
@@ -1519,7 +1502,7 @@ int lwm2m_engine_add_path_to_list(sys_slist_t *lwm2m_path_list, sys_slist_t *lwm
 		/* Keep list Ordered by Object ID/ Object instance/ resource ID */
 		SYS_SLIST_FOR_EACH_CONTAINER(lwm2m_path_list, entry, node) {
 			if (entry->path.level == LWM2M_PATH_LEVEL_NONE ||
-			    lwm2m_path_object_compare(&entry->path, &new_entry->path)) {
+			    lwm2m_obj_path_equal(&entry->path, &new_entry->path)) {
 				/* Already Root request at list or current path is at list */
 				sys_slist_append(lwm2m_free_list, &new_entry->node);
 				return 0;

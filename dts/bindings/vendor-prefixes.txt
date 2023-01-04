@@ -262,6 +262,7 @@ hycon	Hycon Technology Corp.
 hydis	Hydis Technologies
 hynitron	Hynitron
 hyundai	Hyundai Technology
+hzgrow	Hangzhou Grow Technology Co., Ltd.
 i2se	I2SE GmbH
 ibm	International Business Machines (IBM)
 icplus	IC Plus Corp.
@@ -566,6 +567,7 @@ solidrun	SolidRun
 solomon	Solomon Systech Limited
 sony	Sony Corporation
 spansion	Spansion Inc.
+sparkfun	SparkFun Electronics
 sprd	Spreadtrum Communications Inc.
 sst	Silicon Storage Technology, Inc.
 sstar	Xiamen Xingchen(SigmaStar) Technology Co., Ltd. (formerly part of MStar Semiconductor, Inc.)

@@ -64,8 +64,11 @@ static ZTEST_BMEM enum ztest_status test_status = ZTEST_STATUS_OK;
 
 extern ZTEST_DMEM const struct ztest_arch_api ztest_api;
 
-void end_report(void)
+static void __ztest_show_suite_summary(void);
+
+static void end_report(void)
 {
+	__ztest_show_suite_summary();
 	if (test_status) {
 		TC_END_REPORT(TC_FAIL);
 	} else {
@@ -105,7 +108,7 @@ static int cleanup_test(struct ztest_unit_test *test)
 
 #ifdef KERNEL
 
-#ifdef CONFIG_SMP
+#if defined(CONFIG_SMP) && (CONFIG_MP_MAX_NUM_CPUS > 1)
 #define MAX_NUM_CPUHOLD (CONFIG_MP_MAX_NUM_CPUS - 1)
 #define CPUHOLD_STACK_SZ (512 + CONFIG_TEST_EXTRA_STACK_SIZE)
 static struct k_thread cpuhold_threads[MAX_NUM_CPUHOLD];
@@ -154,11 +157,11 @@ static void cpu_hold(void *arg1, void *arg2, void *arg3)
 		     "1cpu test took too long (%d ms)", dt);
 	arch_irq_unlock(key);
 }
-#endif /* CONFIG_SMP */
+#endif /* CONFIG_SMP && (CONFIG_MP_MAX_NUM_CPUS > 1) */
 
 void z_impl_z_test_1cpu_start(void)
 {
-#ifdef CONFIG_SMP
+#if defined(CONFIG_SMP) && (CONFIG_MP_MAX_NUM_CPUS > 1)
 	unsigned int num_cpus = arch_num_cpus();
 
 	cpuhold_active = 1;
@@ -184,7 +187,7 @@ void z_impl_z_test_1cpu_start(void)
 
 void z_impl_z_test_1cpu_stop(void)
 {
-#ifdef CONFIG_SMP
+#if defined(CONFIG_SMP) && (CONFIG_MP_MAX_NUM_CPUS > 1)
 	unsigned int num_cpus = arch_num_cpus();
 
 	cpuhold_active = 0;
@@ -848,14 +851,15 @@ static void __ztest_show_suite_summary_oneline(struct ztest_suite_node *suite)
 	flush_log();
 }
 
-#ifdef CONFIG_ZTEST_VERBOSE_SUMMARY
 static void __ztest_show_suite_summary_verbose(struct ztest_suite_node *suite)
 {
 	struct ztest_unit_test *test = NULL;
 	int tc_result = TC_PASS;
 	int flush_frequency = 0;
 
-	__ztest_show_suite_summary_oneline(suite);
+	if (IS_ENABLED(CONFIG_ZTEST_VERBOSE_SUMMARY) == 0) {
+		return;
+	}
 
 	while (((test = z_ztest_get_next_test(suite->name, test)) != NULL)) {
 		if (test->stats->skip_count == test->stats->run_count) {
@@ -881,10 +885,12 @@ static void __ztest_show_suite_summary_verbose(struct ztest_suite_node *suite)
 	TC_SUMMARY_PRINT("\n");
 	flush_log();
 }
-#endif
 
 static void __ztest_show_suite_summary(void)
 {
+	if (IS_ENABLED(CONFIG_ZTEST_SUMMARY) == 0) {
+		return;
+	}
 	/* Flush the log a lot to ensure that no summary content
 	 * is dropped if it goes through the logging subsystem.
 	 */
@@ -894,11 +900,8 @@ static void __ztest_show_suite_summary(void)
 	for (struct ztest_suite_node *ptr = _ztest_suite_node_list_start;
 	     ptr < _ztest_suite_node_list_end; ++ptr) {
 
-#ifdef CONFIG_ZTEST_VERBOSE_SUMMARY
-		__ztest_show_suite_summary_verbose(ptr);
-#else
 		__ztest_show_suite_summary_oneline(ptr);
-#endif
+		__ztest_show_suite_summary_verbose(ptr);
 	}
 	TC_SUMMARY_PRINT("------ TESTSUITE SUMMARY END ------\n\n");
 	flush_log();
@@ -909,10 +912,9 @@ static int __ztest_run_test_suite(struct ztest_suite_node *ptr, const void *stat
 	struct ztest_suite_stats *stats = ptr->stats;
 	int count = 0;
 
-	__ztest_init_unit_test_result_for_suite(ptr);
-
 	for (int i = 0; i < NUM_ITER_PER_SUITE; i++) {
 		if (ztest_api.should_suite_run(state, ptr)) {
+			__ztest_init_unit_test_result_for_suite(ptr);
 			int fail = z_ztest_run_test_suite_ptr(ptr);
 
 			count++;
@@ -963,8 +965,6 @@ int z_impl_ztest_run_test_suites(const void *state)
 		}
 	}
 #endif
-
-	__ztest_show_suite_summary();
 
 	return count;
 }

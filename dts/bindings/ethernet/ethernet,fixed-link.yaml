@@ -1,5 +1,5 @@
 # Copyright (c) 2020, DENX Software Engineering GmbH
-#		      Lukasz Majewski <lukma@denx.de>
+#                     Lukasz Majewski <lukma@denx.de>
 # SPDX-License-Identifier: Apache-2.0
 
 child-binding:
@@ -14,5 +14,4 @@ child-binding:
             - 10
        full-duplex:
           type: boolean
-          required: false
           description: The fixed link operates in full duplex mode

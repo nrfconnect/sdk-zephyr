@@ -46,6 +46,7 @@
 #define LWM2M_OBJECT_CONNECTIVITY_STATISTICS_ID 7
 #define LWM2M_OBJECT_SOFTWARE_MANAGEMENT_ID     9
 #define LWM2M_OBJECT_PORTFOLIO_ID               16
+#define LWM2M_OBJECT_BINARYAPPDATACONTAINER_ID	19
 #define LWM2M_OBJECT_EVENT_LOG_ID               20
 #define LWM2M_OBJECT_GATEWAY_ID                 25
 /* clang-format on */
@@ -966,7 +967,15 @@ int lwm2m_engine_get_time(const char *pathstr, time_t *buf);
 /**
  * @brief Set resource (instance) read callback
  *
- * LwM2M clients can use this to set the callback function for resource reads.
+ * LwM2M clients can use this to set the callback function for resource reads when data
+ * handling in the LwM2M engine needs to be bypassed.
+ * For example reading back opaque binary data from external storage.
+ *
+ * This callback should not generally be used for any data that might be observed as
+ * engine does not have any knowledge of data changes.
+ *
+ * When separate buffer for data should be used, use lwm2m_engine_set_res_buf() instead
+ * to set the storage.
  *
  * @param[in] pathstr LwM2M path string "obj/obj-inst/res(/res-inst)"
  * @param[in] cb Read resource callback

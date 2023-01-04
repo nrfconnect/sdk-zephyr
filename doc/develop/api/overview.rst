@@ -109,6 +109,10 @@ between major releases are available in the :ref:`zephyr_release_notes`.
      - Stable
      - 1.11
 
+   * - :ref:`fuel_gauge_api`
+     - Experimental
+     - 3.3
+
    * - :ref:`flash_map_api`
      - Stable
      - 1.11
@@ -312,3 +316,7 @@ between major releases are available in the :ref:`zephyr_release_notes`.
    * - :ref:`watchdog_api`
      - Stable
      - 1.0
+
+   * - :ref:`zdsp_api`
+     - Experimental
+     - 3.3

@@ -23,7 +23,7 @@ LOG_MODULE_REGISTER(net_l2_ppp, CONFIG_NET_L2_PPP_LOG_LEVEL);
 
 static K_FIFO_DEFINE(tx_queue);
 
-#if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
+#if defined(CONFIG_NET_TC_THREAD_COOPERATIVE)
 /* Lowest priority cooperative thread */
 #define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
 #else
@@ -282,7 +282,7 @@ static void carrier_on_off(struct k_work *work)
 
 	if (ppp_carrier_up) {
 		ppp_mgmt_raise_carrier_on_event(ctx->iface);
-		net_if_carrier_on(ctx->iface);
+		net_if_up(ctx->iface);
 	} else {
 		if (ppp_lcp) {
 			ppp_lcp->close(ctx, "Shutdown");
@@ -291,7 +291,7 @@ static void carrier_on_off(struct k_work *work)
 			ppp_change_phase(ctx, PPP_DEAD);
 
 			ppp_mgmt_raise_carrier_off_event(ctx->iface);
-			net_if_carrier_off(ctx->iface);
+			net_if_down(ctx->iface);
 		}
 	}
 }

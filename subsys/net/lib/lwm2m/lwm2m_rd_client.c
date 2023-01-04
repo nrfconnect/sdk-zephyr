@@ -1115,6 +1115,13 @@ static int sm_do_deregister(void)
 	struct lwm2m_message *msg;
 	int ret;
 
+	if (lwm2m_engine_connection_resume(client.ctx)) {
+		lwm2m_engine_context_close(client.ctx);
+		/* Connection failed, enter directly to deregistered state */
+		set_sm_state(ENGINE_DEREGISTERED);
+		return 0;
+	}
+
 	msg = rd_get_message();
 	if (!msg) {
 		LOG_ERR("Unable to get a lwm2m message!");
@@ -1354,11 +1361,12 @@ int lwm2m_rd_client_stop(struct lwm2m_ctx *client_ctx,
 
 	LOG_INF("Stop LWM2M Client: %s", client.ep_name);
 
+	k_mutex_unlock(&client.mutex);
 
 	while (get_sm_state() != ENGINE_IDLE) {
 		k_sleep(K_MSEC(STATE_MACHINE_UPDATE_INTERVAL_MS / 2));
 	}
-	k_mutex_unlock(&client.mutex);
+
 	return 0;
 }
 

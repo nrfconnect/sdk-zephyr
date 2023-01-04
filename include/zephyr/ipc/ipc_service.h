@@ -21,12 +21,22 @@ extern "C" {
  * @{
  * @}
  */
+
 /**
  * @brief IPC Service API
  * @defgroup ipc_service_api IPC service APIs
  * @ingroup ipc
  * @{
+ */
+
+/**
+ * @cond INTERNAL_HIDDEN
  *
+ * These are for internal use only, so skip these in
+ * public documentation.
+ */
+
+/**
  * Some terminology:
  *
  * - INSTANCE: an instance is the external representation of a physical
@@ -120,6 +130,10 @@ extern "C" {
  *    # We can also drop it if needed
  *    ipc_service_drop_tx_buffer()
  *
+ */
+
+/**
+ * @endcond
  */
 
 /** @brief Event callback structure.
@@ -419,7 +433,7 @@ int ipc_service_send_nocopy(struct ipc_ept *ept, const void *data, size_t len);
  *  using the @ref ipc_service_release_rx_buffer function.
  *
  *  @param[in] ept Registered endpoint by @ref ipc_service_register_endpoint.
- *  @param[in] data Pointer to the RX buffer to release.
+ *  @param[in] data Pointer to the RX buffer to hold.
  *
  *  @retval -EIO when no backend is registered or release hook is missing from
  *		 backend.

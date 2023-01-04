@@ -954,14 +954,14 @@ use_random_mac:
 
 	memset(ppp->buf, 0, sizeof(ppp->buf));
 
-	/* If the interface autostart is disabled from Kconfig, then do not
-	 * start the interface automatically but only after manually started.
+	/* If we have a GSM modem with PPP support or interface autostart is disabled
+	 * from Kconfig, then do not start the interface automatically but only
+	 * after the modem is ready or when manually started.
 	 */
-	if (IS_ENABLED(CONFIG_PPP_NET_IF_NO_AUTO_START)) {
+	if (IS_ENABLED(CONFIG_MODEM_GSM_PPP) ||
+	    IS_ENABLED(CONFIG_PPP_NET_IF_NO_AUTO_START)) {
 		net_if_flag_set(iface, NET_IF_NO_AUTO_START);
 	}
-
-	net_if_carrier_off(iface);
 }
 
 #if defined(CONFIG_NET_STATISTICS_PPP)
@@ -1023,7 +1023,7 @@ static int ppp_start(const struct device *dev)
 		 * configuration is enabled, and use that. If none are enabled,
 		 * then use our own config.
 		 */
-#if IS_ENABLED(CONFIG_GSM_MUX)
+#if defined(CONFIG_GSM_MUX)
 		const struct device *mux;
 
 		mux = uart_mux_find(CONFIG_GSM_MUX_DLCI_PPP);

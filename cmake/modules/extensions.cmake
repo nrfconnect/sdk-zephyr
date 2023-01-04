@@ -2152,8 +2152,8 @@ endfunction()
 #                                               If no board is given the current BOARD and
 #                                               BOARD_REVISION will be used.
 #
-#                    DTS <list>:   List to populate with DTS overlay files
-#                    KCONF <list>: List to populate with Kconfig fragment files
+#                    DTS <list>:   List to append DTS overlay files in <path> to
+#                    KCONF <list>: List to append Kconfig fragment files in <path> to
 #                    BUILD <type>: Build type to include for search.
 #                                  For example:
 #                                  BUILD debug, will look for <board>_debug.conf
@@ -2651,7 +2651,7 @@ function(target_byproducts)
 endfunction()
 
 ########################################################
-# 4. Zephyr devicetree function
+# 4. Devicetree extensions
 ########################################################
 # 4.1. dt_*
 #
@@ -4120,7 +4120,7 @@ endfunction()
 # BAZ: <undefined>
 # QUX: option set
 #
-# will create a list as: "FOO;bar;QUX:TRUE" which can then be parsed as argument
+# will create a list as: "FOO;bar;QUX;TRUE" which can then be parsed as argument
 # list later.
 macro(zephyr_linker_arg_val_list list arguments)
   foreach(arg ${arguments})

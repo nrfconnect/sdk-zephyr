@@ -36,8 +36,14 @@ The boards support the following hardware features:
 | SIUL2     | on-chip    | pinctrl                             |
 |           |            |                                     |
 |           |            | gpio                                |
+|           |            |                                     |
+|           |            | external interrupt controller       |
 +-----------+------------+-------------------------------------+
 | LINFlexD  | on-chip    | serial                              |
++-----------+------------+-------------------------------------+
+| SPI       | on-chip    | spi                                 |
++-----------+------------+-------------------------------------+
+| SWT       | on-chip    | watchdog                            |
 +-----------+------------+-------------------------------------+
 
 Other hardware features are not currently supported by the port.
@@ -100,6 +106,12 @@ Serial Port
 The SoC has 12 LINFlexD instances that can be used in UART mode. Instance 0
 (defined as ``uart0`` in devicetree) is configured for the console and the
 remaining are disabled and not configured.
+
+Watchdog
+========
+
+Currently Watchdog only supports interrupt triggering, but does not support
+reset function because currently the board does not support running on flash.
 
 Programming and Debugging
 *************************

@@ -1290,6 +1290,7 @@ if(CONFIG_USERSPACE)
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${KOBJECT_HASH_OUTPUT_OBJ_RENAMED}
     COMMAND $<TARGET_PROPERTY:bintools,elfconvert_command>
             $<TARGET_PROPERTY:bintools,elfconvert_flag>
+            $<TARGET_PROPERTY:bintools,elfconvert_flag_section_rename>.literal=.kobject_data.literal
             $<TARGET_PROPERTY:bintools,elfconvert_flag_section_rename>.data=.kobject_data.data
             $<TARGET_PROPERTY:bintools,elfconvert_flag_section_rename>.sdata=.kobject_data.sdata
             $<TARGET_PROPERTY:bintools,elfconvert_flag_section_rename>.text=.kobject_data.text
@@ -1715,6 +1716,11 @@ endif()
 # Generate and use MCUboot related artifacts as needed.
 if(CONFIG_BOOTLOADER_MCUBOOT)
   include(${CMAKE_CURRENT_LIST_DIR}/cmake/mcuboot.cmake)
+endif()
+
+# Generate USB-C VIF policies in XML format
+if (CONFIG_BUILD_OUTPUT_VIF)
+  include(${CMAKE_CURRENT_LIST_DIR}/cmake/vif.cmake)
 endif()
 
 get_property(extra_post_build_commands

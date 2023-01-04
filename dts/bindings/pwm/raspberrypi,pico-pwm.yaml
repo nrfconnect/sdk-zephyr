@@ -16,7 +16,6 @@ properties:
 
     divider-int-0:
       type: int
-      required: false
       default: 1
       description: |
         The integral part of the divider for pwm slice 0.
@@ -25,7 +24,6 @@ properties:
 
     divider-frac-0:
       type: int
-      required: false
       default: 0
       description: |
         The fractional part of the divider for pwm slice 0.
@@ -34,85 +32,71 @@ properties:
 
     divider-int-1:
       type: int
-      required: false
       default: 1
       description: See divider-int-0 for help
 
     divider-frac-1:
       type: int
-      required: false
       default: 0
       description: See divider-frac-0 for help
 
     divider-int-2:
       type: int
-      required: false
       default: 1
       description: See divider-int-0 for help
 
     divider-frac-2:
       type: int
-      required: false
       default: 0
       description: See divider-frac-0 for help
 
     divider-int-3:
       type: int
-      required: false
       default: 1
       description: See divider-int-0 for help
 
     divider-frac-3:
       type: int
-      required: false
       default: 0
       description: See divider-frac-0 for help
 
     divider-int-4:
       type: int
-      required: false
       default: 1
       description: See divider-int-0 for help
 
     divider-frac-4:
       type: int
-      required: false
       default: 0
       description: See divider-frac-0 for help
 
     divider-int-5:
       type: int
-      required: false
       default: 1
       description: See divider-int-0 for help
 
     divider-frac-5:
       type: int
-      required: false
       default: 0
       description: See divider-frac-0 for help
 
     divider-int-6:
       type: int
-      required: false
       default: 1
       description: See divider-int-0 for help
 
     divider-frac-6:
       type: int
-      required: false
       default: 0
       description: See divider-frac-0 for help
 
     divider-int-7:
       type: int
-      required: false
       default: 1
       description: See divider-int-0 for help
 
     divider-frac-7:
       type: int
-      required: false
       default: 0
       description: See divider-frac-0 for help
 
@@ -120,10 +104,10 @@ properties:
       const: 3
 
 pwm-cells:
-# The rpi pico pwm peripheral is divided in 8 slices with an individual
-# clock setting and two output channels. The pwm channels are mapped the
-# following way PWM_CH0_A is addressed as <&pwm 0 PWM_FLAGS>, PWM_CH0B
-# is <&pwm 1 PMW_FLAGS>, PWM_CH1_A si <&pwm 2 PWM_FLAGS> and so on.
+  # The rpi pico pwm peripheral is divided in 8 slices with an individual
+  # clock setting and two output channels. The pwm channels are mapped the
+  # following way PWM_CH0_A is addressed as <&pwm 0 PWM_FLAGS>, PWM_CH0B
+  # is <&pwm 1 PMW_FLAGS>, PWM_CH1_A si <&pwm 2 PWM_FLAGS> and so on.
   - channel
   - period
   - flags

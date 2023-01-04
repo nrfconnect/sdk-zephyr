@@ -23,6 +23,7 @@ LOG_MODULE_REGISTER(net_if, CONFIG_NET_IF_LOG_LEVEL);
 #include <zephyr/net/virtual.h>
 
 #include "net_private.h"
+#include "ipv4.h"
 #include "ipv6.h"
 #include "ipv4_autoconf_internal.h"
 
@@ -486,6 +487,12 @@ enum net_verdict net_if_send_data(struct net_if *iface, struct net_pkt *pkt)
 	if (IS_ENABLED(CONFIG_NET_IPV6) && net_pkt_family(pkt) == AF_INET6) {
 		verdict = net_ipv6_prepare_for_send(pkt);
 	}
+
+#if defined(CONFIG_NET_IPV4_FRAGMENT)
+	if (net_pkt_family(pkt) == AF_INET) {
+		verdict = net_ipv4_prepare_for_send(pkt);
+	}
+#endif
 
 done:
 	/*   NET_OK in which case packet has checked successfully. In this case
@@ -4028,6 +4035,21 @@ static inline bool is_iface_offloaded(struct net_if *iface)
 
 static void notify_iface_up(struct net_if *iface)
 {
+	/* In many places it's assumed that link address was set with
+	 * net_if_set_link_addr(). Better check that now.
+	 */
+#if defined(CONFIG_NET_L2_CANBUS_RAW)
+	if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
+	    (net_if_l2(iface) == &NET_L2_GET_NAME(CANBUS_RAW)))	{
+		/* CAN does not require link address. */
+	} else
+#endif	/* CONFIG_NET_L2_CANBUS_RAW */
+	{
+		if (!is_iface_offloaded(iface)) {
+			NET_ASSERT(net_if_get_link_addr(iface)->addr != NULL);
+		}
+	}
+
 	net_if_flag_set(iface, NET_IF_RUNNING);
 	net_mgmt_event_notify(NET_EVENT_IF_UP, iface);
 	net_virtual_enable(iface);
@@ -4163,19 +4185,6 @@ int net_if_up(struct net_if *iface)
 	status = net_if_l2(iface)->enable(iface, true);
 	if (status < 0) {
 		goto out;
-	}
-
-	/* In many places it's assumed that link address was set with
-	 * net_if_set_link_addr(). Better check that now.
-	 */
-#if defined(CONFIG_NET_L2_CANBUS_RAW)
-	if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
-	    (net_if_l2(iface) == &NET_L2_GET_NAME(CANBUS_RAW)))	{
-		/* CAN does not require link address. */
-	} else
-#endif	/* CONFIG_NET_L2_CANBUS_RAW */
-	{
-		NET_ASSERT(net_if_get_link_addr(iface)->addr != NULL);
 	}
 
 done:
