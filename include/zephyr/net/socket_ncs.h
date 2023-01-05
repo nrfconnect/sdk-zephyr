@@ -34,11 +34,39 @@ extern "C" {
  */
 #define TLS_DTLS_HANDSHAKE_TIMEO 14
 
+/** Socket option to set and get DTLS CID setting, specifically for nRF sockets.
+ *  The option accepts an integer, indicating the setting.
+ *  Accepted vaules for the option are: 0, 1 and 2.
+ */
+#define TLS_DTLS_CID 17
+
+/** Socket option to get DTLS CID status, specifically for nRF sockets.
+ *  The option accepts an integer, indicating the setting.
+ *  Accepted vaules for the option are: 0, 1, 2 and 3.
+ */
+#define TLS_DTLS_CID_STATUS 18
+
+/** Socket option to save DTLS connection, specifically for nRF sockets.
+ */
+#define TLS_DTLS_CONN_SAVE 19
+
+/** Socket option to load DTLS connection, specifically for nRF sockets.
+ */
+#define TLS_DTLS_CONN_LOAD 20
+
+/** Socket option to get result of latest TLS/DTLS completed handshakes end status,
+ *  specifically for nRF sockets.
+ *  The option accepts an integer, indicating the setting.
+ *  Accepted vaules for the option are: 0 and 1.
+ */
+#define TLS_DTLS_HANDSHAKE_STATUS 21
+
 /* Valid values for TLS_SESSION_CACHE option */
 #define TLS_SESSION_CACHE_DISABLED 0 /**< Disable TLS session caching. */
 #define TLS_SESSION_CACHE_ENABLED 1 /**< Enable TLS session caching. */
 
 /* Valid values for TLS_DTLS_HANDSHAKE_TIMEO option */
+#define TLS_DTLS_HANDSHAKE_TIMEO_NONE 0 /**< No timeout */
 #define TLS_DTLS_HANDSHAKE_TIMEO_1S 1 /**< 1 second */
 #define TLS_DTLS_HANDSHAKE_TIMEO_3S 3 /**< 1s + 2s */
 #define TLS_DTLS_HANDSHAKE_TIMEO_7S 7 /**< 1s + 2s + 4s */
@@ -46,6 +74,21 @@ extern "C" {
 #define TLS_DTLS_HANDSHAKE_TIMEO_31S 31 /**< 1s + 2s + 4s + 8s + 16s */
 #define TLS_DTLS_HANDSHAKE_TIMEO_63S 63 /**< 1s + 2s + 4s + 8s + 16s + 32s */
 #define TLS_DTLS_HANDSHAKE_TIMEO_123S 123 /**< 1s + 2s + 4s + 8s + 16s + 32s + 60s */
+
+/* Valid values for TLS_DTLS_CID option */
+#define TLS_DTLS_CID_DISABLED		0
+#define TLS_DTLS_CID_SUPPORTED		1
+#define TLS_DTLS_CID_ENABLED		2
+
+/* Valid values for TLS_DTLS_CID_STATUS option */
+#define TLS_DTLS_CID_STATUS_DISABLED		0
+#define TLS_DTLS_CID_STATUS_DOWNLINK		1
+#define TLS_DTLS_CID_STATUS_UPLINK		2
+#define TLS_DTLS_CID_STATUS_BIDIRECTIONAL	3
+
+/* Valid values for TLS_DTLS_HANDSHAKE_STATUS option */
+#define TLS_DTLS_HANDSHAKE_STATUS_FULL		0
+#define TLS_DTLS_HANDSHAKE_STATUS_CACHED	1
 
 /* NCS specific socket options */
 
