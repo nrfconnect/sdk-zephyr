@@ -494,8 +494,6 @@ that are used to emulate, flash and debug Zephyr applications.
 
    .. group-tab:: Ubuntu
 
-      .. _ubuntu_zephyr_sdk:
-
       #. Download and verify the `latest Zephyr SDK bundle
          <https://github.com/zephyrproject-rtos/sdk-ng/releases>`_:
 
@@ -551,8 +549,6 @@ that are used to emulate, flash and debug Zephyr applications.
 
    .. group-tab:: macOS
 
-      .. _macos_zephyr_sdk:
-
       #. Download and verify the `latest Zephyr SDK bundle
          <https://github.com/zephyrproject-rtos/sdk-ng/releases>`_:
 
@@ -599,8 +595,6 @@ that are used to emulate, flash and debug Zephyr applications.
             the initial setup.
 
    .. group-tab:: Windows
-
-      .. _windows_zephyr_sdk:
 
       #. Open a ``cmd.exe`` window by pressing the Windows key typing "cmd.exe".
 
