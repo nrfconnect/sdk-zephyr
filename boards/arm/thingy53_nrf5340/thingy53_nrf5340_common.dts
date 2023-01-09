@@ -14,7 +14,6 @@
 		zephyr,bt-c2h-uart = &uart0;
 		zephyr,bt-hci-rpmsg-ipc = &ipc0;
 		zephyr,ieee802154 = &ieee802154;
-		nordic,pm-ext-flash = &mx25r64;
 	};
 
 	buttons {
