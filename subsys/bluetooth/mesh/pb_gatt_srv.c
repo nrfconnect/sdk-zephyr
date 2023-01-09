@@ -100,7 +100,7 @@ static void gatt_connected(struct bt_conn *conn, uint8_t err)
 
 	bt_conn_get_info(conn, &info);
 	if (info.role != BT_CONN_ROLE_PERIPHERAL || !service_registered ||
-	    bt_mesh_is_provisioned() || info.id != BT_ID_DEFAULT || cli)  {
+	    bt_mesh_is_provisioned() || info.id != BT_ID_DEFAULT) {
 		return;
 	}
 
@@ -115,12 +115,14 @@ static void gatt_disconnected(struct bt_conn *conn, uint8_t reason)
 
 	bt_conn_get_info(conn, &info);
 	if (info.role != BT_CONN_ROLE_PERIPHERAL || !service_registered ||
-	    info.id != BT_ID_DEFAULT || !cli || cli->conn != conn) {
+	    info.id != BT_ID_DEFAULT) {
 		return;
 	}
 
-	bt_mesh_proxy_role_cleanup(cli);
-	cli = NULL;
+	if (cli) {
+		bt_mesh_proxy_role_cleanup(cli);
+		cli = NULL;
+	}
 
 	bt_mesh_pb_gatt_close(conn);
 
