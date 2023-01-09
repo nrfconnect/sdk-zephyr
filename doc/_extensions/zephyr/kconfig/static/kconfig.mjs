@@ -344,12 +344,8 @@ function doSearchFromURL() {
         return;
     }
 
-    const option = decodeURIComponent(rawOption);
-    if (option.startsWith('!')) {
-        input.value = option.substring(1);
-    } else {
-        input.value = '^' + option + '$';
-    }
+    const option = rawOption.replace(/[^A-Za-z0-9_]+/g, '');
+    input.value = '^' + option + '$';
 
     searchOffset = 0;
     doSearch();
@@ -364,32 +360,10 @@ function setupKconfigSearch() {
     }
 
     /* create input field */
-    const inputContainer = document.createElement('div');
-    inputContainer.className = 'input-container'
-    container.appendChild(inputContainer)
-
     input = document.createElement('input');
     input.placeholder = 'Type a Kconfig option name (RegEx allowed)';
     input.type = 'text';
-    inputContainer.appendChild(input);
-
-    const copyLinkButton = document.createElement('button');
-    copyLinkButton.title = "Copy link to results";
-    copyLinkButton.onclick = () => {
-        if (!window.isSecureContext) {
-            console.error("Cannot copy outside of a secure context");
-            return;
-        }
-
-        const copyURL = window.location.protocol + '//' + window.location.host +
-        window.location.pathname + '#!' + input.value;
-
-        navigator.clipboard.writeText(encodeURI(copyURL));
-    }
-    inputContainer.appendChild(copyLinkButton)
-
-    const copyLinkText = document.createTextNode('🔗');
-    copyLinkButton.appendChild(copyLinkText);
+    container.appendChild(input);
 
     /* create search tools container */
     searchTools = document.createElement('div');
