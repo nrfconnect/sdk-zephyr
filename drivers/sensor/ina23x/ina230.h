@@ -53,7 +53,7 @@ struct ina230_config {
 #ifdef CONFIG_INA230_TRIGGER
 	bool trig_enabled;
 	uint16_t mask;
-	const struct gpio_dt_spec alert_gpio;
+	const struct gpio_dt_spec gpio_alert;
 	uint16_t alert_limit;
 #endif  /* CONFIG_INA230_TRIGGER */
 };

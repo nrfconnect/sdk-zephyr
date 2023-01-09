@@ -50,14 +50,14 @@ int ina230_trigger_mode_init(const struct device *dev)
 	int ret;
 
 	/* setup alert gpio interrupt */
-	if (!device_is_ready(config->alert_gpio.port)) {
+	if (!device_is_ready(config->gpio_alert.port)) {
 		LOG_ERR("Alert GPIO device not ready");
 		return -ENODEV;
 	}
 
 	ina230->dev = dev;
 
-	ret = gpio_pin_configure_dt(&config->alert_gpio, GPIO_INPUT);
+	ret = gpio_pin_configure_dt(&config->gpio_alert, GPIO_INPUT);
 	if (ret < 0) {
 		LOG_ERR("Could not configure gpio");
 		return ret;
@@ -65,14 +65,14 @@ int ina230_trigger_mode_init(const struct device *dev)
 
 	gpio_init_callback(&ina230->gpio_cb,
 			   ina230_gpio_callback,
-			   BIT(config->alert_gpio.pin));
+			   BIT(config->gpio_alert.pin));
 
-	ret = gpio_add_callback(config->alert_gpio.port, &ina230->gpio_cb);
+	ret = gpio_add_callback(config->gpio_alert.port, &ina230->gpio_cb);
 	if (ret < 0) {
 		LOG_ERR("Could not set gpio callback");
 		return ret;
 	}
 
-	return gpio_pin_interrupt_configure_dt(&config->alert_gpio,
+	return gpio_pin_interrupt_configure_dt(&config->gpio_alert,
 					       GPIO_INT_EDGE_BOTH);
 }
