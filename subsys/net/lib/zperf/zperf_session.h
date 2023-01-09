@@ -16,6 +16,7 @@
 #include <zephyr/net/net_core.h>
 
 #include "zperf_internal.h"
+#include "shell_utils.h"
 
 /* Type definition */
 enum state {
