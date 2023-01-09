@@ -1639,7 +1639,7 @@ int bt_le_ext_adv_stop(struct bt_le_ext_adv *adv)
 	}
 
 	if (atomic_test_and_clear_bit(adv->flags, BT_ADV_LIMITED)) {
-		bt_id_adv_limited_stopped(adv);
+		atomic_clear_bit(adv->flags, BT_ADV_RPA_VALID);
 
 #if defined(CONFIG_BT_SMP)
 		bt_id_pending_keys_update();
@@ -2015,7 +2015,7 @@ void bt_hci_le_adv_set_terminated(struct net_buf *buf)
 	}
 
 	if (atomic_test_and_clear_bit(adv->flags, BT_ADV_LIMITED)) {
-		bt_id_adv_limited_stopped(adv);
+		atomic_clear_bit(adv->flags, BT_ADV_RPA_VALID);
 
 #if defined(CONFIG_BT_SMP)
 		bt_id_pending_keys_update();
