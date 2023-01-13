@@ -139,6 +139,8 @@ static struct bt_scan_filter {
 	bool addr_set;
 	int8_t rssi;
 	bool rssi_set;
+	uint16_t pa_interval;
+	bool pa_interval_set;
 } scan_filter;
 
 
@@ -194,27 +196,32 @@ static void scan_recv(const struct bt_le_scan_recv_info *info,
 	char le_addr[BT_ADDR_LE_STR_LEN];
 	char name[NAME_LEN];
 
-	(void)memset(name, 0, sizeof(name));
-
-	bt_data_parse(buf, data_cb, name);
-
-	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
-
-	if (scan_filter.name_set && !is_substring(scan_filter.name, name)) {
+	if (scan_filter.rssi_set && (scan_filter.rssi > info->rssi)) {
 		return;
 	}
+
+	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
 
 	if (scan_filter.addr_set && !is_substring(scan_filter.addr, le_addr)) {
 		return;
 	}
 
-	if (scan_filter.rssi_set && (scan_filter.rssi > info->rssi)) {
+	(void)memset(name, 0, sizeof(name));
+
+	bt_data_parse(buf, data_cb, name);
+
+	if (scan_filter.name_set && !is_substring(scan_filter.name, name)) {
+		return;
+	}
+
+	if (scan_filter.pa_interval_set &&
+	    (scan_filter.pa_interval > BT_CONN_INTERVAL_TO_MS(info->interval))) {
 		return;
 	}
 
 	shell_print(ctx_shell, "[DEVICE]: %s, AD evt type %u, RSSI %i %s "
 		    "C:%u S:%u D:%d SR:%u E:%u Prim: %s, Secn: %s, "
-		    "Interval: 0x%04x (%u ms), SID: 0x%x",
+		    "Interval: 0x%04x (%u us), SID: 0x%x",
 		    le_addr, info->adv_type, info->rssi, name,
 		    (info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE) != 0,
 		    (info->adv_props & BT_GAP_ADV_PROP_SCANNABLE) != 0,
@@ -222,7 +229,7 @@ static void scan_recv(const struct bt_le_scan_recv_info *info,
 		    (info->adv_props & BT_GAP_ADV_PROP_SCAN_RESPONSE) != 0,
 		    (info->adv_props & BT_GAP_ADV_PROP_EXT_ADV) != 0,
 		    phy2str(info->primary_phy), phy2str(info->secondary_phy),
-		    info->interval, BT_CONN_INTERVAL_TO_MS(info->interval),
+		    info->interval, BT_CONN_INTERVAL_TO_US(info->interval),
 		    info->sid);
 
 	/* Store address for later use */
@@ -624,9 +631,9 @@ static void per_adv_sync_sync_cb(struct bt_le_per_adv_sync *sync,
 	}
 
 	shell_print(ctx_shell, "PER_ADV_SYNC[%u]: [DEVICE]: %s synced, "
-		    "Interval 0x%04x (%u ms), PHY %s, SD 0x%04X, PAST peer %s",
+		    "Interval 0x%04x (%u us), PHY %s, SD 0x%04X, PAST peer %s",
 		    bt_le_per_adv_sync_get_index(sync), le_addr,
-		    info->interval, BT_CONN_INTERVAL_TO_MS(info->interval),
+		    info->interval, BT_CONN_INTERVAL_TO_US(info->interval),
 		    phy2str(info->phy), info->service_data, past_peer);
 
 	if (info->conn) { /* if from PAST */
@@ -678,12 +685,12 @@ static void per_adv_sync_biginfo_cb(struct bt_le_per_adv_sync *sync,
 
 	bt_addr_le_to_str(biginfo->addr, le_addr, sizeof(le_addr));
 	shell_print(ctx_shell, "BIG_INFO PER_ADV_SYNC[%u]: [DEVICE]: %s, sid 0x%02x, num_bis %u, "
-		    "nse 0x%02x, interval 0x%04x (%u ms), bn 0x%02x, pto 0x%02x, irc 0x%02x, "
+		    "nse 0x%02x, interval 0x%04x (%u us), bn 0x%02x, pto 0x%02x, irc 0x%02x, "
 		    "max_pdu 0x%04x, sdu_interval 0x%04x, max_sdu 0x%04x, phy %s, framing 0x%02x, "
 		    "%sencrypted",
 		    bt_le_per_adv_sync_get_index(sync), le_addr, biginfo->sid, biginfo->num_bis,
 		    biginfo->sub_evt_count, biginfo->iso_interval,
-		    BT_CONN_INTERVAL_TO_MS(biginfo->iso_interval), biginfo->burst_number,
+		    BT_CONN_INTERVAL_TO_US(biginfo->iso_interval), biginfo->burst_number,
 		    biginfo->offset, biginfo->rep_count, biginfo->max_pdu, biginfo->sdu_interval,
 		    biginfo->max_sdu, phy2str(biginfo->phy), biginfo->framing,
 		    biginfo->encryption ? "" : "not ");
@@ -1191,6 +1198,39 @@ static int cmd_scan_filter_set_rssi(const struct shell *sh, size_t argc, char *a
 		}
 
 		shell_print(sh, "value out of bounds (%d to %d)", INT8_MIN, INT8_MAX);
+		err = -ERANGE;
+	}
+
+	shell_print(sh, "error %d", err);
+	shell_help(sh);
+
+	return SHELL_CMD_HELP_PRINTED;
+}
+
+static int cmd_scan_filter_set_pa_interval(const struct shell *sh, size_t argc,
+					   char *argv[])
+{
+	unsigned long pa_interval;
+	int err = 0;
+
+	pa_interval = shell_strtoul(argv[1], 10, &err);
+
+	if (!err) {
+		if (IN_RANGE(pa_interval,
+			     BT_GAP_PER_ADV_MIN_INTERVAL,
+			     BT_GAP_PER_ADV_MAX_INTERVAL)) {
+			scan_filter.pa_interval = (uint16_t)pa_interval;
+			scan_filter.pa_interval_set = true;
+			shell_print(sh, "PA interval cutoff set at %u",
+				    scan_filter.pa_interval);
+
+			return 0;
+		}
+
+		shell_print(sh, "value out of bounds (%d to %d)",
+			    BT_GAP_PER_ADV_MIN_INTERVAL,
+			    BT_GAP_PER_ADV_MAX_INTERVAL);
+
 		err = -ERANGE;
 	}
 
@@ -2501,12 +2541,11 @@ static int cmd_info(const struct shell *sh, size_t argc, char *argv[])
 		print_le_addr("Remote on-air", info.le.remote);
 		print_le_addr("Local on-air", info.le.local);
 
-		shell_print(ctx_shell, "Interval: 0x%04x (%u ms)",
+		shell_print(ctx_shell, "Interval: 0x%04x (%u us)",
 			    info.le.interval,
-			    BT_CONN_INTERVAL_TO_MS(info.le.interval));
-		shell_print(ctx_shell, "Latency: 0x%04x (%u ms)",
-			    info.le.latency,
-			    BT_CONN_INTERVAL_TO_MS(info.le.latency));
+			    BT_CONN_INTERVAL_TO_US(info.le.interval));
+		shell_print(ctx_shell, "Latency: 0x%04x",
+			    info.le.latency);
 		shell_print(ctx_shell, "Supervision timeout: 0x%04x (%d ms)",
 			    info.le.timeout, info.le.timeout * 10);
 #if defined(CONFIG_BT_USER_PHY_UPDATE)
@@ -3527,6 +3566,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_scan_filter_set_cmds,
 	SHELL_CMD_ARG(name, NULL, "<name>", cmd_scan_filter_set_name, 2, 0),
 	SHELL_CMD_ARG(addr, NULL, "<addr>", cmd_scan_filter_set_addr, 2, 0),
 	SHELL_CMD_ARG(rssi, NULL, "<rssi>", cmd_scan_filter_set_rssi, 1, 1),
+	SHELL_CMD_ARG(pa_interval, NULL, "<pa_interval>",
+		      cmd_scan_filter_set_pa_interval, 2, 0),
 	SHELL_SUBCMD_SET_END
 );
 

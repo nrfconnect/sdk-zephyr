@@ -41,6 +41,7 @@
 #include "adv.h"
 #include "scan.h"
 
+#include "addr_internal.h"
 #include "conn_internal.h"
 #include "iso_internal.h"
 #include "l2cap_internal.h"
@@ -53,7 +54,7 @@
 #include "br.h"
 #endif
 
-#if IS_ENABLED(CONFIG_BT_DF)
+#if defined(CONFIG_BT_DF)
 #include "direction_internal.h"
 #endif /* CONFIG_BT_DF */
 
@@ -1205,11 +1206,8 @@ void bt_hci_le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 		return;
 	}
 
-	/* Translate "enhanced" identity address type to normal one */
-	if (evt->peer_addr.type == BT_ADDR_LE_PUBLIC_ID ||
-	    evt->peer_addr.type == BT_ADDR_LE_RANDOM_ID) {
-		bt_addr_le_copy(&id_addr, &evt->peer_addr);
-		id_addr.type -= BT_ADDR_LE_PUBLIC_ID;
+	if (bt_addr_le_is_resolved(&evt->peer_addr)) {
+		bt_addr_le_copy_resolved(&id_addr, &evt->peer_addr);
 
 		bt_addr_copy(&peer_addr.a, &evt->peer_rpa);
 		peer_addr.type = BT_ADDR_LE_RANDOM;
@@ -2465,6 +2463,13 @@ static void process_events(struct k_poll_event *ev, int count)
 		switch (ev->state) {
 		case K_POLL_STATE_SIGNALED:
 			break;
+		case K_POLL_STATE_SEM_AVAILABLE:
+			/* After this fn is exec'd, `bt_conn_prepare_events()`
+			 * will be called once again, and this time buffers will
+			 * be available, so the FIFO will be added to the poll
+			 * list instead of the ctlr buffers semaphore.
+			 */
+			break;
 		case K_POLL_STATE_FIFO_DATA_AVAILABLE:
 			if (ev->tag == BT_EVENT_CMD_TX) {
 				send_cmd();
@@ -2524,6 +2529,7 @@ static void hci_tx_thread(void *p1, void *p2, void *p3)
 		events[0].state = K_POLL_STATE_NOT_READY;
 		ev_count = 1;
 
+		/* This adds the FIFO per-connection */
 		if (IS_ENABLED(CONFIG_BT_CONN) || IS_ENABLED(CONFIG_BT_ISO)) {
 			ev_count += bt_conn_prepare_events(&events[1]);
 		}
@@ -3052,7 +3058,7 @@ static int le_init(void)
 	}
 #endif
 
-#if IS_ENABLED(CONFIG_BT_DF)
+#if defined(CONFIG_BT_DF)
 	if (BT_FEAT_LE_CONNECTIONLESS_CTE_TX(bt_dev.le.features) ||
 	    BT_FEAT_LE_CONNECTIONLESS_CTE_RX(bt_dev.le.features) ||
 	    BT_FEAT_LE_RX_CTE(bt_dev.le.features)) {
@@ -3790,9 +3796,9 @@ int bt_disable(void)
 
 	bt_monitor_send(BT_MONITOR_CLOSE_INDEX, NULL, 0);
 
-#if defined(CONFIG_BT_EXT_ADV) || defined(CONFIG_BT_BROADCASTER)
+#if defined(CONFIG_BT_BROADCASTER)
 	bt_adv_reset_adv_pool();
-#endif /* CONFIG_BT_EXT_ADV || CONFIG_BT_BROADCASTER */
+#endif /* CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_PRIVACY)
 	k_work_cancel_delayable(&bt_dev.rpa_update);
@@ -4047,7 +4053,8 @@ void bt_data_parse(struct net_buf_simple *ad,
 		}
 
 		if (len > ad->len) {
-			LOG_WRN("malformed advertising data");
+			LOG_WRN("malformed advertising data %u / %u",
+				len, ad->len);
 			return;
 		}
 
