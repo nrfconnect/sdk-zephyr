@@ -70,6 +70,27 @@ Changes in this release
   :kconfig:option:`CONFIG_MCUMGR_TRANSPORT_BT_AUTOMATIC_INIT` should be
   disabled and the application should call :c:func:`smp_bt_start` at startup.
 
+* MCUmgr transport Kconfigs have changed from ``select`` to ``depends on``
+  which means that for applications using the Bluetooth transport,
+  applications will now need to enable the following:
+
+  * :kconfig:option:`CONFIG_BT`
+  * :kconfig:option:`CONFIG_BT_PERIPHERAL`
+
+  For CDC or serial transports:
+
+  * :kconfig:option:`CONFIG_CONSOLE`
+
+  For shell transport:
+
+  * :kconfig:option:`CONFIG_SHELL`
+  * :kconfig:option:`CONFIG_SHELL_BACKEND_SERIAL`
+
+  For UDP transport:
+
+  * :kconfig:option:`CONFIG_NETWORKING`
+  * :kconfig:option:`CONFIG_NET_UDP`
+
 Removed APIs in this release
 ============================
 
@@ -88,6 +109,24 @@ Removed APIs in this release
 
 Deprecated in this release
 ==========================
+
+* C++ library Kconfig options have been renamed to improve consistency. See
+  below for the list of deprecated Kconfig options and their replacements:
+
+  .. table::
+     :align: center
+
+     +----------------------------------------+------------------------------------------------+
+     | Deprecated                             | Replacement                                    |
+     +========================================+================================================+
+     | :kconfig:option:`CONFIG_CPLUSPLUS`     | :kconfig:option:`CONFIG_CPP`                   |
+     +----------------------------------------+------------------------------------------------+
+     | :kconfig:option:`CONFIG_EXCEPTIONS`    | :kconfig:option:`CONFIG_CPP_EXCEPTIONS`        |
+     +----------------------------------------+------------------------------------------------+
+     | :kconfig:option:`CONFIG_RTTI`          | :kconfig:option:`CONFIG_CPP_RTTI`              |
+     +----------------------------------------+------------------------------------------------+
+     | :kconfig:option:`CONFIG_LIB_CPLUSPLUS` | :kconfig:option:`CONFIG_LIBCPP_IMPLEMENTATION` |
+     +----------------------------------------+------------------------------------------------+
 
 * MCUmgr subsystem, specifically the SMP transport API, is dropping `zephyr_`
   prefix, deprecating prefixed functions and callback type definitions with the
@@ -379,6 +418,18 @@ Drivers and Sensors
 
 * USB
 
+  * STM32F1: Clock bus configuration is not done automatically by driver anymore.
+    It is user's responsibility to configure the proper bus prescaler using clock_control
+    device tree node to achieve a 48MHz bus clock. Note that, in most cases, core clock
+    is 72MHz and default prescaler configuration is set to achieve 48MHz USB bus clock.
+    Prescaler only needs to be configured manually when core clock is already 48MHz.
+
+  * STM32 (non F1): Clock bus configuration is now expected to be done in device tree
+    using ``clocks`` node property. When a dedicated HSI 48MHz clock is available on target,
+    is it configured by default as the USB bus clock, but user has the ability to select
+    another 48MHz clock source. When no HSI48 is available, a specific 48MHz bus clock
+    source should be configured by user.
+
 * W1
 
 * Watchdog
@@ -413,6 +464,35 @@ Devicetree
 
 Libraries / Subsystems
 **********************
+
+* C++ Library
+
+  * C++ support in Zephyr is no longer considered a "subsystem" because it
+    mainly consists of the C++ ABI runtime library and the C++ standard
+    library, which are "libraries" that are dissimilar to the existing Zephyr
+    subsystems. C++ support components are now located in ``lib/cpp`` as
+    "C++ library."
+  * C++ ABI runtime library components such as global constructor/destructor
+    and initialiser handlers, that were previously located under
+    ``subsys/cpp``, have been moved to ``lib/cpp/abi`` in order to provide a
+    clear separation between the C++ ABI runtime library and the C++ standard
+    library.
+  * C++ minimal library components have been moved to ``lib/cpp/minimal``.
+  * C++ tests have been moved to ``tests/lib/cpp``.
+  * C++ samples have been moved to ``samples/cpp``.
+  * :kconfig:option:`CONFIG_CPLUSPLUS` has been renamed to
+    :kconfig:option:`CONFIG_CPP`.
+  * :kconfig:option:`CONFIG_EXCEPTIONS` has been renamed to
+    :kconfig:option:`CONFIG_CPP_EXCEPTIONS`.
+  * :kconfig:option:`CONFIG_RTTI` has been renamed to
+    :kconfig:option:`CONFIG_CPP_RTTI`.
+  * :kconfig:option:`CONFIG_LIB_CPLUSPLUS` is deprecated. A toolchain-specific
+    C++ standard library Kconfig option from
+    :kconfig:option:`CONFIG_LIBCPP_IMPLEMENTATION` should be selected instead.
+  * Zephyr subsystems and modules that require the features from the full C++
+    standard library (e.g. Standard Template Library) can now select
+    :kconfig:option:`CONFIG_REQUIRES_FULL_LIBC`, which automatically selects
+    a compatible C++ standard library.
 
 * File systems
 
