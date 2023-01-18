@@ -336,19 +336,21 @@ static size_t release_streams(size_t stream_cnt)
 }
 
 
-static void create_unicast_group(struct bt_audio_unicast_group **unicast_group,
-				 size_t stream_cnt)
+static void create_unicast_group(struct bt_audio_unicast_group **unicast_group)
 {
-	struct bt_audio_unicast_group_stream_param stream_params[ARRAY_SIZE(g_streams)];
+	const size_t stream_cnt = ARRAY_SIZE(g_streams);
+	struct bt_audio_unicast_group_stream_pair_param pair_params[stream_cnt];
+	struct bt_audio_unicast_group_stream_param stream_params[stream_cnt];
 	struct bt_audio_unicast_group_param param;
 
 	for (size_t i = 0U; i < stream_cnt; i++) {
 		stream_params[i].stream = &g_streams[i];
 		stream_params[i].qos = &preset_16_2_1.qos;
-		stream_params[i].dir = BT_AUDIO_DIR_SINK; /* we only configure sinks */
+		pair_params[i].rx_param = NULL;
+		pair_params[i].tx_param = &stream_params[i];
 	}
 
-	param.params = stream_params;
+	param.params = pair_params;
 	param.params_count = stream_cnt;
 	param.packing = BT_ISO_PACKING_SEQUENTIAL;
 
@@ -398,11 +400,11 @@ static void test_main(void)
 	for (unsigned int i = 0U; i < iterations; i++) {
 		printk("\n########### Running iteration #%u\n\n", i);
 
+		printk("Creating unicast group\n");
+		create_unicast_group(&unicast_group);
+
 		printk("Configuring streams\n");
 		stream_cnt = configure_streams();
-
-		printk("Creating unicast group\n");
-		create_unicast_group(&unicast_group, stream_cnt);
 
 		/* TODO: When babblesim supports ISO setup Audio streams */
 
