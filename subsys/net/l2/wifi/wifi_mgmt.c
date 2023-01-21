@@ -55,7 +55,7 @@ static int wifi_connect(uint32_t mgmt_request, struct net_if *iface,
 		return -EINVAL;
 	}
 #ifdef CONFIG_WPA_SUPP
-	return zephyr_supp_connect(dev, params);
+	return z_wpa_supplicant_connect(dev, params);
 #else
 	return off_api->connect(dev, params);
 #endif /* CONFIG_WPA_SUPP */
@@ -108,7 +108,7 @@ static int wifi_disconnect(uint32_t mgmt_request, struct net_if *iface,
 	const struct device *dev = net_if_get_device(iface);
 
 #ifdef CONFIG_WPA_SUPP
-	return zephyr_supp_disconnect(dev);
+	return z_wpa_supplicant_disconnect(dev);
 #else
 	struct net_wifi_mgmt_offload *off_api =
 		(struct net_wifi_mgmt_offload *) dev->api;
@@ -190,7 +190,7 @@ static int wifi_iface_status(uint32_t mgmt_request, struct net_if *iface,
 	}
 
 #ifdef CONFIG_WPA_SUPP
-	return zephyr_supp_status(dev, status);
+	return z_wpa_supplicant_status(dev, status);
 #else
 	struct net_wifi_mgmt_offload *off_api =
 		(struct net_wifi_mgmt_offload *) dev->api;
