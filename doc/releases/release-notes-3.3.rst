@@ -181,6 +181,9 @@ Deprecated in this release
   :kconfig:option:`CONFIG_COUNTER_RTC_STM32_CLOCK_LSE` options are now
   deprecated.
 
+* STM32 Interrupt controller Kconfig symbols such as :kconfig:option:`CONFIG_EXTI_STM32_EXTI0_IRQ_PRI`
+  are removed. Related IRQ prioritues should now be configured in device tree.
+
 * File backend for settings APIs and Kconfig options were deprecated:
 
   :c:func:`settings_mount_fs_backend` in favor of :c:func:`settings_mount_file_backend`
@@ -198,6 +201,9 @@ Deprecated in this release
   deprecated in favor of a centralized scan of available PCIe devices.
 
 * SPI DT :c:func:`spi_is_ready` function has been deprecated in favor of :c:func:`spi_is_ready_dt`.
+
+* LwM2M APIs using string references as LwM2M paths has been deprecated in favor of functions
+  using :c:struct:`lwm2m_path_obj` instead.
 
 Stable API changes in this release
 ==================================
@@ -381,6 +387,8 @@ Drivers and Sensors
 
 * Interrupt Controller
 
+  * STM32: Driver configuration and initialization is now based on device tree
+
 * IPM
 
 * KSCAN
@@ -504,6 +512,9 @@ Libraries / Subsystems
   * Added new API call `fs_mkfs`.
   * Added new sample `samples/subsys/fs/format`.
   * FAT FS driver has been updated to version 0.15 w/patch1.
+  * Added the option to disable CRC checking in :ref:`fcb_api` by enabling the
+    Kconfig option :kconfig:option:`CONFIG_FCB_ALLOW_FIXED_ENDMARKER`
+    and setting the `FCB_FLAGS_CRC_DISABLED` flag in the :c:struct:`fcb` struct.
 
 * Management
 
@@ -753,6 +764,15 @@ Libraries / Subsystems
     the resultant response will now be an empty CBOR map. The old behaviour can
     be restored by enabling
     :kconfig:option:`CONFIG_MCUMGR_SMP_LEGACY_RC_BEHAVIOUR`.
+
+  * MCUMGR now has log outputting on most errors from the included fs, img,
+    os, shell, stat and zephyr_basic group commands. The level of logging can be
+    controlled by adjusting: :kconfig:option:`CONFIG_MCUMGR_GRP_FS_LOG_LEVEL`,
+    :kconfig:option:`CONFIG_MCUMGR_GRP_IMG_LOG_LEVEL`,
+    :kconfig:option:`CONFIG_MCUMGR_GRP_OS_LOG_LEVEL`,
+    :kconfig:option:`CONFIG_MCUMGR_GRP_SHELL_LOG_LEVEL`,
+    :kconfig:option:`CONFIG_MCUMGR_GRP_STAT_LOG_LEVEL` and
+    :kconfig:option:`CONFIG_MCUMGR_GRP_ZBASIC_LOG_LEVEL`.
 
 * LwM2M
 

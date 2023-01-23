@@ -94,6 +94,12 @@ enum bt_audio_parental_rating {
 	BT_AUDIO_PARENTAL_RATING_AGE_18_OR_ABOVE  = 0x0F
 };
 
+/** @brief Audio Active State defined by the Generic Audio assigned numbers (bluetooth.com). */
+enum bt_audio_active_state {
+	BT_AUDIO_ACTIVE_STATE_DISABLED       = 0x00,
+	BT_AUDIO_ACTIVE_STATE_ENABLED        = 0x01,
+};
+
 /**
  * @brief Codec metadata type IDs
  *
@@ -109,7 +115,7 @@ enum bt_audio_metadata_type {
 	 *
 	 * See the BT_AUDIO_CONTEXT_* for valid values.
 	 */
-	BT_AUDIO_METADATA_TYPE_PREF_CONTEXT      = 0x01,
+	BT_AUDIO_METADATA_TYPE_PREF_CONTEXT        = 0x01,
 
 	/** @brief Streaming audio context.
 	 *
@@ -120,34 +126,43 @@ enum bt_audio_metadata_type {
 	 *
 	 * See the BT_AUDIO_CONTEXT_* for valid values.
 	 */
-	BT_AUDIO_METADATA_TYPE_STREAM_CONTEXT    = 0x02,
+	BT_AUDIO_METADATA_TYPE_STREAM_CONTEXT      = 0x02,
 
 	/** UTF-8 encoded title or summary of stream content */
-	BT_AUDIO_METADATA_TYPE_PROGRAM_INFO      = 0x03,
+	BT_AUDIO_METADATA_TYPE_PROGRAM_INFO        = 0x03,
 
 	/** @brief Stream language
 	 *
 	 * 3 octet lower case language code defined by ISO 639-3
 	 */
-	BT_AUDIO_METADATA_TYPE_STREAM_LANG       = 0x04,
+	BT_AUDIO_METADATA_TYPE_STREAM_LANG         = 0x04,
 
 	/** Array of 8-bit CCID values */
-	BT_AUDIO_METADATA_TYPE_CCID_LIST         = 0x05,
+	BT_AUDIO_METADATA_TYPE_CCID_LIST           = 0x05,
 
 	/** @brief Parental rating
 	 *
 	 * See @ref bt_audio_parental_rating for valid values.
 	 */
-	BT_AUDIO_METADATA_TYPE_PARENTAL_RATING   = 0x06,
+	BT_AUDIO_METADATA_TYPE_PARENTAL_RATING     = 0x06,
 
 	/** UTF-8 encoded URI for additional Program information */
-	BT_AUDIO_METADATA_TYPE_PROGRAM_INFO_URI  = 0x07,
+	BT_AUDIO_METADATA_TYPE_PROGRAM_INFO_URI    = 0x07,
+
+	/** @brief Audio active state
+	 *
+	 * See @ref bt_audio_active_state for valid values.
+	 */
+	BT_AUDIO_METADATA_TYPE_AUDIO_STATE         = 0x08,
+
+	/** Broadcast Audio Immediate Rendering flag  */
+	BT_AUDIO_METADATA_TYPE_BROADCAST_IMMEDIATE = 0x09,
 
 	/** Extended metadata */
-	BT_AUDIO_METADATA_TYPE_EXTENDED          = 0xFE,
+	BT_AUDIO_METADATA_TYPE_EXTENDED            = 0xFE,
 
 	/** Vendor specific metadata */
-	BT_AUDIO_METADATA_TYPE_VENDOR            = 0xFF,
+	BT_AUDIO_METADATA_TYPE_VENDOR              = 0xFF,
 };
 
 /* Unicast Announcement Type, Generic Audio */
@@ -222,6 +237,7 @@ struct bt_codec_data {
  * These values are defined by the Generic Audio Assigned Numbers, bluetooth.com
  */
 enum bt_audio_location {
+	BT_AUDIO_LOCATION_PROHIBITED = 0,
 	BT_AUDIO_LOCATION_FRONT_LEFT = BIT(0),
 	BT_AUDIO_LOCATION_FRONT_RIGHT = BIT(1),
 	BT_AUDIO_LOCATION_FRONT_CENTER = BIT(2),
@@ -251,6 +267,38 @@ enum bt_audio_location {
 	BT_AUDIO_LOCATION_LEFT_SURROUND = BIT(26),
 	BT_AUDIO_LOCATION_RIGHT_SURROUND = BIT(27),
 };
+
+/**
+ * Any known location.
+ */
+#define BT_AUDIO_LOCATION_ANY (BT_AUDIO_LOCATION_FRONT_LEFT | \
+			       BT_AUDIO_LOCATION_FRONT_RIGHT | \
+			       BT_AUDIO_LOCATION_FRONT_CENTER | \
+			       BT_AUDIO_LOCATION_LOW_FREQ_EFFECTS_1 | \
+			       BT_AUDIO_LOCATION_BACK_LEFT | \
+			       BT_AUDIO_LOCATION_BACK_RIGHT | \
+			       BT_AUDIO_LOCATION_FRONT_LEFT_OF_CENTER | \
+			       BT_AUDIO_LOCATION_FRONT_RIGHT_OF_CENTER | \
+			       BT_AUDIO_LOCATION_BACK_CENTER | \
+			       BT_AUDIO_LOCATION_LOW_FREQ_EFFECTS_2 | \
+			       BT_AUDIO_LOCATION_SIDE_LEFT | \
+			       BT_AUDIO_LOCATION_SIDE_RIGHT | \
+			       BT_AUDIO_LOCATION_TOP_FRONT_LEFT | \
+			       BT_AUDIO_LOCATION_TOP_FRONT_RIGHT | \
+			       BT_AUDIO_LOCATION_TOP_FRONT_CENTER | \
+			       BT_AUDIO_LOCATION_TOP_CENTER | \
+			       BT_AUDIO_LOCATION_TOP_BACK_LEFT | \
+			       BT_AUDIO_LOCATION_TOP_BACK_RIGHT | \
+			       BT_AUDIO_LOCATION_TOP_SIDE_LEFT | \
+			       BT_AUDIO_LOCATION_TOP_SIDE_RIGHT | \
+			       BT_AUDIO_LOCATION_TOP_BACK_CENTER | \
+			       BT_AUDIO_LOCATION_BOTTOM_FRONT_CENTER | \
+			       BT_AUDIO_LOCATION_BOTTOM_FRONT_LEFT | \
+			       BT_AUDIO_LOCATION_BOTTOM_FRONT_RIGHT | \
+			       BT_AUDIO_LOCATION_FRONT_LEFT_WIDE | \
+			       BT_AUDIO_LOCATION_FRONT_RIGHT_WIDE | \
+			       BT_AUDIO_LOCATION_LEFT_SURROUND | \
+			       BT_AUDIO_LOCATION_RIGHT_SURROUND)
 
 /** @brief Codec structure. */
 struct bt_codec {

@@ -143,7 +143,8 @@ void clear_attrs(void *ref)
 	}
 }
 
-static bool lwm2m_observer_path_compare(struct lwm2m_obj_path *o_p, struct lwm2m_obj_path *p)
+static bool lwm2m_observer_path_compare(const struct lwm2m_obj_path *o_p,
+					const struct lwm2m_obj_path *p)
 {
 	/* check obj id matched or not */
 	if (p->obj_id != o_p->obj_id) {
@@ -173,7 +174,7 @@ static bool lwm2m_observer_path_compare(struct lwm2m_obj_path *o_p, struct lwm2m
 	return true;
 }
 
-static bool lwm2m_notify_observer_list(sys_slist_t *path_list, struct lwm2m_obj_path *path)
+static bool lwm2m_notify_observer_list(sys_slist_t *path_list, const struct lwm2m_obj_path *path)
 {
 	struct lwm2m_obj_path_list *o_p;
 
@@ -198,7 +199,7 @@ int lwm2m_notify_observer(uint16_t obj_id, uint16_t obj_inst_id, uint16_t res_id
 	return lwm2m_notify_observer_path(&path);
 }
 
-static int engine_observe_get_attributes(struct lwm2m_obj_path *path,
+static int engine_observe_get_attributes(const struct lwm2m_obj_path *path,
 					 struct notification_attrs *attrs, uint16_t srv_obj_inst)
 {
 	struct lwm2m_engine_obj *obj;
@@ -334,7 +335,7 @@ int engine_observe_attribute_list_get(sys_slist_t *path_list, struct notificatio
 	return 0;
 }
 
-int lwm2m_notify_observer_path(struct lwm2m_obj_path *path)
+int lwm2m_notify_observer_path(const struct lwm2m_obj_path *path)
 {
 	struct observe_node *obs;
 	struct notification_attrs nattrs = {0};
@@ -904,7 +905,7 @@ const char *lwm2m_engine_get_attr_name(const struct lwm2m_attr *attr)
 }
 
 static int lwm2m_engine_observer_timestamp_update(sys_slist_t *observer,
-						  struct lwm2m_obj_path *path,
+						  const struct lwm2m_obj_path *path,
 						  uint16_t srv_obj_inst)
 {
 	struct observe_node *obs;
@@ -946,7 +947,7 @@ static int lwm2m_engine_observer_timestamp_update(sys_slist_t *observer,
 
 /* input / output selection */
 
-int lwm2m_get_path_reference_ptr(struct lwm2m_engine_obj *obj, struct lwm2m_obj_path *path,
+int lwm2m_get_path_reference_ptr(struct lwm2m_engine_obj *obj, const struct lwm2m_obj_path *path,
 				 void **ref)
 {
 	struct lwm2m_engine_obj_inst *obj_inst;
@@ -996,22 +997,16 @@ int lwm2m_get_path_reference_ptr(struct lwm2m_engine_obj *obj, struct lwm2m_obj_
 	return 0;
 }
 
-int lwm2m_engine_update_observer_min_period(struct lwm2m_ctx *client_ctx, const char *pathstr,
-					    uint32_t period_s)
+int lwm2m_update_observer_min_period(struct lwm2m_ctx *client_ctx,
+				     const struct lwm2m_obj_path *path, uint32_t period_s)
 {
 	int ret;
-	struct lwm2m_obj_path path;
 	struct notification_attrs nattrs = {0};
 	struct notification_attrs attrs = {0};
 	void *ref;
 
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-
 	/* Read Reference pointer to attribute */
-	ret = lwm2m_get_path_reference_ptr(NULL, &path, &ref);
+	ret = lwm2m_get_path_reference_ptr(NULL, path, &ref);
 	if (ret < 0) {
 		return ret;
 	}
@@ -1027,7 +1022,7 @@ int lwm2m_engine_update_observer_min_period(struct lwm2m_ctx *client_ctx, const 
 	}
 
 	/* Read Pmin & Pmax values for path */
-	ret = engine_observe_get_attributes(&path, &attrs, client_ctx->srv_obj_inst);
+	ret = engine_observe_get_attributes(path, &attrs, client_ctx->srv_obj_inst);
 	if (ret < 0) {
 		return ret;
 	}
@@ -1040,22 +1035,30 @@ int lwm2m_engine_update_observer_min_period(struct lwm2m_ctx *client_ctx, const 
 	return lwm2m_update_or_allocate_attribute(ref, LWM2M_ATTR_PMIN, &period_s);
 }
 
-int lwm2m_engine_update_observer_max_period(struct lwm2m_ctx *client_ctx, const char *pathstr,
+int lwm2m_engine_update_observer_min_period(struct lwm2m_ctx *client_ctx, const char *pathstr,
 					    uint32_t period_s)
 {
 	int ret;
 	struct lwm2m_obj_path path;
-	void *ref;
-	struct notification_attrs nattrs = {0};
-	struct notification_attrs attrs = {0};
 
 	ret = lwm2m_string_to_path(pathstr, &path, '/');
 	if (ret < 0) {
 		return ret;
 	}
 
+	return lwm2m_update_observer_min_period(client_ctx, &path, period_s);
+}
+
+int lwm2m_update_observer_max_period(struct lwm2m_ctx *client_ctx,
+				     const struct lwm2m_obj_path *path, uint32_t period_s)
+{
+	int ret;
+	void *ref;
+	struct notification_attrs nattrs = {0};
+	struct notification_attrs attrs = {0};
+
 	/* Read Reference pointer to attribute */
-	ret = lwm2m_get_path_reference_ptr(NULL, &path, &ref);
+	ret = lwm2m_get_path_reference_ptr(NULL, path, &ref);
 	if (ret < 0) {
 		return ret;
 	}
@@ -1071,7 +1074,7 @@ int lwm2m_engine_update_observer_max_period(struct lwm2m_ctx *client_ctx, const 
 	}
 
 	/* Read Pmin & Pmax values for path */
-	ret = engine_observe_get_attributes(&path, &attrs, client_ctx->srv_obj_inst);
+	ret = engine_observe_get_attributes(path, &attrs, client_ctx->srv_obj_inst);
 	if (ret < 0) {
 		return ret;
 	}
@@ -1088,8 +1091,22 @@ int lwm2m_engine_update_observer_max_period(struct lwm2m_ctx *client_ctx, const 
 	}
 
 	/* Update Observer timestamp */
-	return lwm2m_engine_observer_timestamp_update(&client_ctx->observer, &path,
+	return lwm2m_engine_observer_timestamp_update(&client_ctx->observer, path,
 						      client_ctx->srv_obj_inst);
+}
+
+int lwm2m_engine_update_observer_max_period(struct lwm2m_ctx *client_ctx, const char *pathstr,
+					    uint32_t period_s)
+{
+	int ret;
+	struct lwm2m_obj_path path;
+
+	ret = lwm2m_string_to_path(pathstr, &path, '/');
+	if (ret < 0) {
+		return ret;
+	}
+
+	return lwm2m_update_observer_max_period(client_ctx, &path, period_s);
 }
 
 struct lwm2m_attr *lwm2m_engine_get_next_attr(const void *ref, struct lwm2m_attr *prev)
@@ -1347,28 +1364,34 @@ int lwm2m_write_attr_handler(struct lwm2m_engine_obj *obj, struct lwm2m_message 
 	return 0;
 }
 
+bool lwm2m_path_is_observed(const struct lwm2m_obj_path *path)
+{
+	int i;
+	struct observe_node *obs;
+	struct lwm2m_ctx **sock_ctx = lwm2m_sock_ctx();
+
+	for (i = 0; i < lwm2m_sock_nfds(); ++i) {
+		SYS_SLIST_FOR_EACH_CONTAINER(&sock_ctx[i]->observer, obs, node) {
+
+			if (lwm2m_notify_observer_list(&obs->path_list, path)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 bool lwm2m_engine_path_is_observed(const char *pathstr)
 {
-	struct observe_node *obs;
-	struct lwm2m_obj_path path;
 	int ret;
-	int i;
-	struct lwm2m_ctx **sock_ctx = lwm2m_sock_ctx();
+	struct lwm2m_obj_path path;
 
 	ret = lwm2m_string_to_path(pathstr, &path, '/');
 	if (ret < 0) {
 		return false;
 	}
 
-	for (i = 0; i < lwm2m_sock_nfds(); ++i) {
-		SYS_SLIST_FOR_EACH_CONTAINER(&sock_ctx[i]->observer, obs, node) {
-
-			if (lwm2m_notify_observer_list(&obs->path_list, &path)) {
-				return true;
-			}
-		}
-	}
-	return false;
+	return lwm2m_path_is_observed(&path);
 }
 
 int lwm2m_engine_observation_handler(struct lwm2m_message *msg, int observe, uint16_t accept,
@@ -1478,7 +1501,7 @@ void lwm2m_engine_path_list_init(sys_slist_t *lwm2m_path_list, sys_slist_t *lwm2
 }
 
 int lwm2m_engine_add_path_to_list(sys_slist_t *lwm2m_path_list, sys_slist_t *lwm2m_free_list,
-				  struct lwm2m_obj_path *path)
+				  const struct lwm2m_obj_path *path)
 {
 	struct lwm2m_obj_path_list *prev = NULL;
 	struct lwm2m_obj_path_list *entry;

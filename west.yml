@@ -42,7 +42,7 @@ manifest:
       groups:
         - tools
     - name: fatfs
-      revision: 89f53db0207cdcea5bd9bdd64acc3e1ed9a65b15
+      revision: 427159bf95ea49b7680facffaa29ad506b42709b
       path: modules/fs/fatfs
       groups:
         - fs
@@ -129,7 +129,7 @@ manifest:
       groups:
         - hal
     - name: hal_stm32
-      revision: 6679ef7c30178191638f023f81f054cd053f5eb9
+      revision: 83cf59e4309e5f1758a76c0513c437e0fbcee40b
       path: modules/hal/stm32
       groups:
         - hal
@@ -181,7 +181,7 @@ manifest:
       groups:
         - crypto
     - name: mcuboot
-      revision: dd59d907639b81f3c0556ebf6e9249f85482b407
+      revision: 750678e33819b95756203e5db1ba827baee35708
       path: bootloader/mcuboot
     - name: mipi-sys-t
       path: modules/debug/mipi-sys-t
