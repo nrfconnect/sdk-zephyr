@@ -553,6 +553,8 @@ static void ucpd_start_transmit(const struct device *dev,
 
 		imr = LL_UCPD_ReadReg(config->ucpd_port, IMR);
 		imr |= UCPD_IMR_HRSTDISCIE | UCPD_IMR_HRSTSENTIE;
+		LL_UCPD_WriteReg(config->ucpd_port, IMR, imr);
+
 		/* Initiate Hard Reset */
 		cr |= UCPD_CR_TXHRST;
 		LL_UCPD_WriteReg(config->ucpd_port, CR, cr);
@@ -794,12 +796,11 @@ static void ucpd_manage_tx(struct alert_info *info)
 		break;
 
 	case STATE_HARD_RESET:
-		if (atomic_test_and_clear_bit(&info->evt, UCPD_EVT_HR_DONE)) {
+		if (atomic_test_bit(&info->evt, UCPD_EVT_HR_DONE) ||
+		    atomic_test_bit(&info->evt, UCPD_EVT_HR_FAIL)) {
+			atomic_clear_bit(&info->evt, UCPD_EVT_HR_DONE);
+			atomic_clear_bit(&info->evt, UCPD_EVT_HR_FAIL);
 			/* HR complete, reset tx state values */
-			ucpd_set_tx_state(info->dev, STATE_IDLE);
-			data->ucpd_tx_request = 0;
-			data->tx_retry_count = 0;
-		} else if (atomic_test_and_clear_bit(&info->evt, UCPD_EVT_HR_FAIL)) {
 			ucpd_set_tx_state(info->dev, STATE_IDLE);
 			data->ucpd_tx_request = 0;
 			data->tx_retry_count = 0;
@@ -1136,7 +1137,7 @@ static void ucpd_isr(const struct device *dev_inst[])
 	 */
 	if (sr & tx_done_mask) {
 		/* Check for tx message complete */
-		if (sr & (UCPD_SR_TXMSGSENT | UCPD_SR_HRSTSENT)) {
+		if (sr & UCPD_SR_TXMSGSENT) {
 			atomic_set_bit(&info->evt, UCPD_EVT_TX_MSG_SUCCESS);
 		} else if (sr & (UCPD_SR_TXMSGABT | UCPD_SR_TXUND)) {
 			atomic_set_bit(&info->evt, UCPD_EVT_TX_MSG_FAIL);

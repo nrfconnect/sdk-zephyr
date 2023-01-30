@@ -123,7 +123,7 @@ static inline void assert_buf_len(int need, int have)
 static int cp_build_command(struct osdp_pd *pd, uint8_t *buf, int max_len)
 {
 	struct osdp_cmd *cmd = NULL;
-	int i, ret = -1, len = 0;
+	int ret = -1, len = 0;
 	int data_off = osdp_phy_packet_get_data_offset(pd, buf);
 #ifdef CONFIG_OSDP_SC_ENABLED
 	uint8_t *smb = osdp_phy_packet_get_smb(pd, buf);
@@ -181,7 +181,7 @@ static int cp_build_command(struct osdp_pd *pd, uint8_t *buf, int max_len)
 		break;
 	case CMD_OUT:
 		assert_buf_len(CMD_OUT_LEN, max_len);
-		cmd = (struct osdp_cmd *)pd->cmd_data;
+		cmd = (struct osdp_cmd *)pd->ephemeral_data;
 		buf[len++] = pd->cmd_id;
 		buf[len++] = cmd->output.output_no;
 		buf[len++] = cmd->output.control_code;
@@ -191,7 +191,7 @@ static int cp_build_command(struct osdp_pd *pd, uint8_t *buf, int max_len)
 		break;
 	case CMD_LED:
 		assert_buf_len(CMD_LED_LEN, max_len);
-		cmd = (struct osdp_cmd *)pd->cmd_data;
+		cmd = (struct osdp_cmd *)pd->ephemeral_data;
 		buf[len++] = pd->cmd_id;
 		buf[len++] = cmd->led.reader;
 		buf[len++] = cmd->led.led_number;
@@ -213,7 +213,7 @@ static int cp_build_command(struct osdp_pd *pd, uint8_t *buf, int max_len)
 		break;
 	case CMD_BUZ:
 		assert_buf_len(CMD_BUZ_LEN, max_len);
-		cmd = (struct osdp_cmd *)pd->cmd_data;
+		cmd = (struct osdp_cmd *)pd->ephemeral_data;
 		buf[len++] = pd->cmd_id;
 		buf[len++] = cmd->buzzer.reader;
 		buf[len++] = cmd->buzzer.control_code;
@@ -223,7 +223,7 @@ static int cp_build_command(struct osdp_pd *pd, uint8_t *buf, int max_len)
 		ret = 0;
 		break;
 	case CMD_TEXT:
-		cmd = (struct osdp_cmd *)pd->cmd_data;
+		cmd = (struct osdp_cmd *)pd->ephemeral_data;
 		assert_buf_len(CMD_TEXT_LEN + cmd->text.length, max_len);
 		buf[len++] = pd->cmd_id;
 		buf[len++] = cmd->text.reader;
@@ -232,14 +232,13 @@ static int cp_build_command(struct osdp_pd *pd, uint8_t *buf, int max_len)
 		buf[len++] = cmd->text.offset_row;
 		buf[len++] = cmd->text.offset_col;
 		buf[len++] = cmd->text.length;
-		for (i = 0; i < cmd->text.length; i++) {
-			buf[len++] = cmd->text.data[i];
-		}
+		memcpy(buf + len, cmd->text.data, cmd->text.length);
+		len += cmd->text.length;
 		ret = 0;
 		break;
 	case CMD_COMSET:
 		assert_buf_len(CMD_COMSET_LEN, max_len);
-		cmd = (struct osdp_cmd *)pd->cmd_data;
+		cmd = (struct osdp_cmd *)pd->ephemeral_data;
 		buf[len++] = pd->cmd_id;
 		buf[len++] = cmd->comset.address;
 		buf[len++] = BYTE_0(cmd->comset.baud_rate);
@@ -272,9 +271,8 @@ static int cp_build_command(struct osdp_pd *pd, uint8_t *buf, int max_len)
 		smb[1] = SCS_11;  /* type */
 		smb[2] = ISSET_FLAG(pd, PD_FLAG_SC_USE_SCBKD) ? 0 : 1;
 		buf[len++] = pd->cmd_id;
-		for (i = 0; i < 8; i++) {
-			buf[len++] = pd->sc.cp_random[i];
-		}
+		memcpy(buf + len, pd->sc.cp_random, 8);
+		len += 8;
 		ret = 0;
 		break;
 	case CMD_SCRYPT:
@@ -287,9 +285,8 @@ static int cp_build_command(struct osdp_pd *pd, uint8_t *buf, int max_len)
 		smb[1] = SCS_13;  /* type */
 		smb[2] = ISSET_FLAG(pd, PD_FLAG_SC_USE_SCBKD) ? 0 : 1;
 		buf[len++] = pd->cmd_id;
-		for (i = 0; i < 16; i++) {
-			buf[len++] = pd->sc.cp_cryptogram[i];
-		}
+		memcpy(buf + len, pd->sc.cp_cryptogram, 16);
+		len += 16;
 		ret = 0;
 		break;
 #endif /* CONFIG_OSDP_SC_ENABLED */
@@ -321,7 +318,7 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 {
 	uint32_t temp32;
 	struct osdp *ctx = pd_to_osdp(pd);
-	int i, ret = OSDP_CP_ERR_GENERIC, pos = 0, t1, t2;
+	int ret = OSDP_CP_ERR_GENERIC, pos = 0, t1, t2;
 	struct osdp_event event;
 
 	if (len < 1) {
@@ -443,9 +440,7 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		if ((len - REPLY_KEYPPAD_DATA_LEN) != event.keypress.length) {
 			break;
 		}
-		for (i = 0; i < event.keypress.length; i++) {
-			event.keypress.data[i] = buf[pos + i];
-		}
+		memcpy(event.keypress.data, buf + pos, event.keypress.length);
 		ctx->event_callback(ctx->event_callback_arg, pd->idx, &event);
 		ret = OSDP_CP_ERR_NONE;
 		break;
@@ -463,9 +458,7 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		if (t1 != (len - REPLY_RAW_DATA_LEN)) {
 			break;
 		}
-		for (i = 0; i < t1; i++) {
-			event.cardread.data[i] = buf[pos + i];
-		}
+		memcpy(event.cardread.data, buf + pos, t1);
 		ctx->event_callback(ctx->event_callback_arg, pd->idx, &event);
 		ret = OSDP_CP_ERR_NONE;
 		break;
@@ -482,9 +475,7 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		    event.cardread.length > OSDP_EVENT_MAX_DATALEN) {
 			break;
 		}
-		for (i = 0; i < event.cardread.length; i++) {
-			event.cardread.data[i] = buf[pos + i];
-		}
+		memcpy(event.cardread.data, buf + pos, event.cardread.length);
 		ctx->event_callback(ctx->event_callback_arg, pd->idx, &event);
 		ret = OSDP_CP_ERR_NONE;
 		break;
@@ -500,15 +491,10 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		if (len != REPLY_CCRYPT_DATA_LEN) {
 			break;
 		}
-		for (i = 0; i < 8; i++) {
-			pd->sc.pd_client_uid[i] = buf[pos++];
-		}
-		for (i = 0; i < 8; i++) {
-			pd->sc.pd_random[i] = buf[pos++];
-		}
-		for (i = 0; i < 16; i++) {
-			pd->sc.pd_cryptogram[i] = buf[pos++];
-		}
+		memcpy(pd->sc.pd_client_uid, buf + pos, 8);
+		memcpy(pd->sc.pd_random, buf + pos + 8, 8);
+		memcpy(pd->sc.pd_cryptogram, buf + pos + 16, 16);
+		pos += 32;
 		osdp_compute_session_keys(pd);
 		if (osdp_verify_pd_cryptogram(pd) != 0) {
 			LOG_ERR("Failed to verify PD cryptogram");
@@ -520,9 +506,7 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		if (len != REPLY_RMAC_I_DATA_LEN) {
 			break;
 		}
-		for (i = 0; i < 16; i++) {
-			pd->sc.r_mac[i] = buf[pos++];
-		}
+		memcpy(pd->sc.r_mac, buf + pos, 16);
 		sc_activate(pd);
 		ret = OSDP_CP_ERR_NONE;
 		break;
@@ -684,7 +668,7 @@ static int cp_phy_state_update(struct osdp_pd *pd)
 			break;
 		}
 		pd->cmd_id = cmd->id;
-		memcpy(pd->cmd_data, cmd, sizeof(struct osdp_cmd));
+		memcpy(pd->ephemeral_data, cmd, sizeof(struct osdp_cmd));
 		cp_cmd_free(pd, cmd);
 		/* fall-thru */
 	case OSDP_CP_PHY_STATE_SEND_CMD:

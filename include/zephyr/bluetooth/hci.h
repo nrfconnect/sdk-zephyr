@@ -718,7 +718,6 @@ struct bt_hci_rp_read_bd_addr {
 #define BT_HCI_DATAPATH_ID_HCI      0x00
 #define BT_HCI_DATAPATH_ID_VS       0x01
 #define BT_HCI_DATAPATH_ID_VS_END   0xfe
-#define BT_HCI_DATAPATH_ID_DISABLED 0xff
 
 /* coding format assigned numbers, used for codec IDs */
 #define BT_HCI_CODING_FORMAT_ULAW_LOG    0x00
@@ -1766,9 +1765,10 @@ struct bt_hci_rp_le_per_adv_set_info_transfer {
 	uint16_t conn_handle;
 } __packed;
 
-#define BT_HCI_LE_PAST_MODE_NO_SYNC              0x00
-#define BT_HCI_LE_PAST_MODE_NO_REPORTS           0x01
-#define BT_HCI_LE_PAST_MODE_SYNC                 0x02
+#define BT_HCI_LE_PAST_MODE_NO_SYNC                0x00
+#define BT_HCI_LE_PAST_MODE_NO_REPORTS             0x01
+#define BT_HCI_LE_PAST_MODE_SYNC                   0x02
+#define BT_HCI_LE_PAST_MODE_SYNC_FILTER_DUPLICATES 0x03
 
 #define BT_HCI_LE_PAST_CTE_TYPE_NO_AOA           BIT(0)
 #define BT_HCI_LE_PAST_CTE_TYPE_NO_AOD_1US       BIT(1)

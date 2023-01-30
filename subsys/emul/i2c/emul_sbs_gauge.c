@@ -97,7 +97,7 @@ static int sbs_gauge_emul_transfer_i2c(const struct emul *target, struct i2c_msg
 
 	__ASSERT_NO_MSG(msgs && num_msgs);
 
-	i2c_dump_msgs("emul", msgs, num_msgs, addr);
+	i2c_dump_msgs_rw("emul", msgs, num_msgs, addr, false);
 	switch (num_msgs) {
 	case 2:
 		if (msgs->flags & I2C_MSG_READ) {
@@ -174,6 +174,6 @@ static int emul_sbs_sbs_gauge_init(const struct emul *target, const struct devic
 		.addr = DT_INST_REG_ADDR(n),                                                       \
 	};                                                                                         \
 	EMUL_DT_INST_DEFINE(n, emul_sbs_sbs_gauge_init, &sbs_gauge_emul_data_##n,                  \
-			    &sbs_gauge_emul_cfg_##n, &sbs_gauge_emul_api_i2c)
+			    &sbs_gauge_emul_cfg_##n, &sbs_gauge_emul_api_i2c, NULL)
 
 DT_INST_FOREACH_STATUS_OKAY(SBS_GAUGE_EMUL)

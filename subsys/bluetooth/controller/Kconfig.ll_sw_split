@@ -31,6 +31,8 @@ config BT_LLL_VENDOR_NORDIC
 	select BT_CTLR_SYNC_PERIODIC_SUPPORT
 	select BT_CTLR_ADV_ISO_SUPPORT
 	select BT_CTLR_SYNC_ISO_SUPPORT
+	select BT_CTLR_CENTRAL_ISO_SUPPORT
+	select BT_CTLR_PERIPHERAL_ISO_SUPPORT
 	select BT_CTLR_DF_SUPPORT if HAS_HW_NRF_RADIO_DFE
 	select BT_CTLR_CTEINLINE_SUPPORT if HAS_HW_NRF_RADIO_DFE
 	select BT_CTLR_CHAN_SEL_2_SUPPORT
@@ -893,6 +895,13 @@ config BT_CTLR_JIT_SCHEDULING
 	  feature, which eliminates priorities and collision resolving in the
 	  ticker, and instead relies on just-in-time ("lazy") resolution in
 	  the link layer.
+
+config BT_CTLR_PERIPHERAL_ISO_EARLY_CIG_START
+	bool "Early start of peripheral CIG event"
+	depends on BT_CTLR_PERIPHERAL_ISO
+	help
+	  Start scheduling the Peripheral ISO CIG events one event in advance
+	  and hence adjust CIG offset and reference point ahead one interval.
 
 config BT_CTLR_USER_EXT
 	prompt "Proprietary extensions in Controller"

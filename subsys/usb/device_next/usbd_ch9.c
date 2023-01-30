@@ -736,6 +736,12 @@ int usbd_handle_ctrl_xfer(struct usbd_contex *const uds_ctx,
 	}
 
 	if (err && err != -ENOMEM && !bi->setup) {
+		if (err == -ECONNABORTED) {
+			LOG_INF("Transfer 0x%02x aborted (bus reset?)", bi->ep);
+			net_buf_unref(buf);
+			return 0;
+		}
+
 		LOG_ERR("Control transfer for 0x%02x has error %d, halt",
 			bi->ep, err);
 		net_buf_unref(buf);
@@ -811,6 +817,8 @@ int usbd_handle_ctrl_xfer(struct usbd_contex *const uds_ctx,
 	}
 
 	if (bi->status && bi->ep == USB_CONTROL_EP_IN) {
+		net_buf_unref(buf);
+
 		if (ch9_get_ctrl_type(uds_ctx) == CTRL_AWAIT_STATUS_STAGE) {
 			LOG_INF("s-(out)-status finished");
 			if (unlikely(uds_ctx->ch9_data.new_address)) {
@@ -819,8 +827,6 @@ int usbd_handle_ctrl_xfer(struct usbd_contex *const uds_ctx,
 		} else {
 			LOG_WRN("Awaited s-(out)-status not finished");
 		}
-
-		net_buf_unref(buf);
 
 		return ret;
 	}

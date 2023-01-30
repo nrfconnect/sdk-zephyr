@@ -10,8 +10,6 @@
 #include <zephyr/mgmt/osdp.h>
 #include <zephyr/sys/__assert.h>
 
-#define STR(x) #x
-
 #define OSDP_RESP_TOUT_MS              (200)
 
 #define OSDP_QUEUE_SLAB_SIZE \
@@ -35,7 +33,6 @@
 	(uint32_t)((1 << ((ctx)->num_pd)) - 1)
 #define AES_PAD_LEN(x)                 ((x + 16 - 1) & (~(16 - 1)))
 #define NUM_PD(ctx)                    ((ctx)->num_pd)
-#define OSDP_COMMAND_DATA_MAX_LEN      sizeof(struct osdp_cmd)
 
 /**
  * @brief OSDP reserved commands
@@ -120,6 +117,8 @@
 #define PD_FLAG_SC_USE_SCBKD    0x00000080 /* in this SC attempt, use SCBKD */
 #define PD_FLAG_SC_ACTIVE       0x00000100 /* secure channel is active */
 #define PD_FLAG_SC_SCBKD_DONE   0x00000200 /* SCBKD check is done */
+#define PD_FLAG_PKT_HAS_MARK    0x00000400 /* Packet has mark byte */
+#define PD_FLAG_PKT_SKIP_MARK   0x00000800 /* CONFIG_OSDP_SKIP_MARK_BYTE */
 #define PD_FLAG_INSTALL_MODE    0x40000000 /* PD is in install mode */
 #define PD_FLAG_PD_MODE         0x80000000 /* device is setup as PD */
 
@@ -318,6 +317,7 @@ union osdp_ephemeral_data {
 	struct osdp_cmd cmd;
 	struct osdp_event event;
 };
+#define OSDP_EPHEMERAL_DATA_MAX_LEN sizeof(union osdp_ephemeral_data)
 
 /**
  * @brief PD capability structure. Each PD capability has a 3 byte
@@ -435,7 +435,7 @@ struct osdp_pd {
 
 	int cmd_id;
 	int reply_id;
-	uint8_t cmd_data[OSDP_COMMAND_DATA_MAX_LEN];
+	uint8_t ephemeral_data[OSDP_EPHEMERAL_DATA_MAX_LEN];
 
 	struct osdp_channel channel;
 

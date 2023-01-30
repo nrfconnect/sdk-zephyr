@@ -12,6 +12,7 @@
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <zephyr/dt-bindings/pwm/pwm.h>
 #include <zephyr/dt-bindings/pwm/stm32_pwm.h>
+#include <zephyr/dt-bindings/dma/stm32_dma.h>
 #include <zephyr/dt-bindings/reset/stm32h7_reset.h>
 #include <zephyr/dt-bindings/adc/adc.h>
 #include <zephyr/dt-bindings/memory-controller/stm32-fmc-sdram.h>
@@ -727,8 +728,6 @@
 			interrupts = <18 0>;
 			status = "disabled";
 			#io-channel-cells = <1>;
-			has-temp-channel;
-			has-vref-channel;
 		};
 
 		adc2: adc@40022100 {
@@ -757,8 +756,6 @@
 			interrupts = <127 0>;
 			status = "disabled";
 			#io-channel-cells = <1>;
-			has-temp-channel;
-			has-vref-channel;
 		};
 
 		dac1: dac@40007400 {

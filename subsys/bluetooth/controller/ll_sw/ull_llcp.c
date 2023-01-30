@@ -18,7 +18,10 @@
 #include "util/memq.h"
 #include "util/dbuf.h"
 
+#include "pdu_df.h"
+#include "lll/pdu_vendor.h"
 #include "pdu.h"
+
 #include "ll.h"
 #include "ll_feat.h"
 #include "ll_settings.h"
@@ -43,7 +46,7 @@
 #include "ull_llcp.h"
 #include "ull_llcp_features.h"
 #include "ull_llcp_internal.h"
-#include "ull_periph_internal.h"
+#include "ull_peripheral_internal.h"
 
 #include <soc.h>
 #include "hal/debug.h"
@@ -889,18 +892,18 @@ uint8_t ull_cp_cis_create(struct ll_conn *conn, struct ll_conn_iso_stream *cis)
 	ctx->data.cis_create.p_phy = cis->lll.rx.phy;
 	ctx->data.cis_create.c_sdu_interval = cig->c_sdu_interval;
 	ctx->data.cis_create.p_sdu_interval = cig->p_sdu_interval;
-	ctx->data.cis_create.c_max_pdu = cis->lll.tx.max_octets;
-	ctx->data.cis_create.p_max_pdu = cis->lll.rx.max_octets;
+	ctx->data.cis_create.c_max_pdu = cis->lll.tx.max_pdu;
+	ctx->data.cis_create.p_max_pdu = cis->lll.rx.max_pdu;
 	ctx->data.cis_create.c_max_sdu = cis->c_max_sdu;
 	ctx->data.cis_create.p_max_sdu = cis->p_max_sdu;
 	ctx->data.cis_create.iso_interval = cig->iso_interval;
 	ctx->data.cis_create.framed = cis->framed;
-	ctx->data.cis_create.nse = cis->lll.num_subevents;
+	ctx->data.cis_create.nse = cis->lll.nse;
 	ctx->data.cis_create.sub_interval = cis->lll.sub_interval;
-	ctx->data.cis_create.c_bn = cis->lll.tx.burst_number;
-	ctx->data.cis_create.p_bn = cis->lll.rx.burst_number;
-	ctx->data.cis_create.c_ft = cis->lll.tx.flush_timeout;
-	ctx->data.cis_create.p_ft = cis->lll.rx.flush_timeout;
+	ctx->data.cis_create.c_bn = cis->lll.tx.bn;
+	ctx->data.cis_create.p_bn = cis->lll.rx.bn;
+	ctx->data.cis_create.c_ft = cis->lll.tx.ft;
+	ctx->data.cis_create.p_ft = cis->lll.rx.ft;
 
 	ctx->data.cis_create.conn_event_count =
 		ull_central_iso_cis_offset_get(cis->lll.handle,
@@ -1230,6 +1233,7 @@ void ull_cp_cte_req_set_disable(struct ll_conn *conn)
 	conn->llcp.cte_req.req_interval = 0U;
 }
 #endif /* CONFIG_BT_CTLR_DF_CONN_CTE_REQ */
+
 #if defined(CONFIG_BT_PERIPHERAL) && defined(CONFIG_BT_CTLR_PERIPHERAL_ISO)
 bool ull_cp_cc_awaiting_reply(struct ll_conn *conn)
 {
@@ -1276,7 +1280,50 @@ void ull_cp_cc_reject(struct ll_conn *conn, uint8_t error_code)
 		llcp_rp_cc_reject(conn, ctx);
 	}
 }
-#endif /* defined(CONFIG_BT_PERIPHERAL) && defined(CONFIG_BT_CTLR_PERIPHERAL_ISO) */
+#endif /* CONFIG_BT_PERIPHERAL && CONFIG_BT_CTLR_PERIPHERAL_ISO */
+
+#if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO) || defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+bool ull_cp_cc_awaiting_established(struct ll_conn *conn)
+{
+	struct proc_ctx *ctx;
+
+#if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO)
+	ctx = llcp_rr_peek(conn);
+	if (ctx && ctx->proc == PROC_CIS_CREATE) {
+		return llcp_rp_cc_awaiting_established(ctx);
+	}
+#endif /* CONFIG_BT_CTLR_PERIPHERAL_ISO */
+
+#if defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	ctx = llcp_lr_peek(conn);
+	if (ctx && ctx->proc == PROC_CIS_CREATE) {
+		return llcp_lp_cc_awaiting_established(ctx);
+	}
+#endif /* CONFIG_BT_CTLR_CENTRAL_ISO */
+	return false;
+}
+
+void ull_cp_cc_established(struct ll_conn *conn, uint8_t error_code)
+{
+	struct proc_ctx *ctx;
+
+#if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO)
+	ctx = llcp_rr_peek(conn);
+	if (ctx && ctx->proc == PROC_CIS_CREATE) {
+		ctx->data.cis_create.error = error_code;
+		llcp_rp_cc_established(conn, ctx);
+	}
+#endif /* CONFIG_BT_CTLR_PERIPHERAL_ISO */
+
+#if defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	ctx = llcp_lr_peek(conn);
+	if (ctx && ctx->proc == PROC_CIS_CREATE) {
+		ctx->data.cis_create.error = error_code;
+		llcp_lp_cc_established(conn, ctx);
+	}
+#endif /* CONFIG_BT_CTLR_CENTRAL_ISO */
+}
+#endif /* CONFIG_BT_CTLR_PERIPHERAL_ISO || CONFIG_BT_CTLR_CENTRAL_ISO */
 
 #if defined(CONFIG_BT_CENTRAL) && defined(CONFIG_BT_CTLR_CENTRAL_ISO)
 bool ull_lp_cc_is_active(struct ll_conn *conn)

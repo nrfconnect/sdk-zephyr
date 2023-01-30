@@ -443,12 +443,6 @@ static int udc_vrt_ep_clear_halt(const struct device *dev,
 	return 0;
 }
 
-static int udc_vrt_ep_flush(const struct device *dev,
-			    struct udc_ep_config *cfg)
-{
-	return -ENOTSUP;
-}
-
 static int udc_vrt_set_address(const struct device *dev, const uint8_t addr)
 {
 	struct udc_vrt_data *priv = udc_get_private(dev);
@@ -557,6 +551,7 @@ static int udc_vrt_driver_preinit(const struct device *dev)
 	k_fifo_init(&priv->fifo);
 
 	data->caps.rwup = true;
+	data->caps.mps0 = UDC_MPS0_64;
 	if (config->speed_idx == 2) {
 		data->caps.hs = true;
 		mps = 1024;
@@ -634,7 +629,6 @@ static const struct udc_api udc_vrt_api = {
 	.ep_disable = udc_vrt_ep_disable,
 	.ep_set_halt = udc_vrt_ep_set_halt,
 	.ep_clear_halt = udc_vrt_ep_clear_halt,
-	.ep_flush = udc_vrt_ep_flush,
 	.ep_enqueue = udc_vrt_ep_enqueue,
 	.ep_dequeue = udc_vrt_ep_dequeue,
 };

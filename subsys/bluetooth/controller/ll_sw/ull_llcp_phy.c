@@ -18,7 +18,10 @@
 #include "util/memq.h"
 #include "util/dbuf.h"
 
+#include "pdu_df.h"
+#include "lll/pdu_vendor.h"
 #include "pdu.h"
+
 #include "ll.h"
 #include "ll_settings.h"
 
@@ -892,6 +895,12 @@ void llcp_lp_pu_tx_ntf(struct ll_conn *conn, struct proc_ctx *ctx)
 {
 	lp_pu_execute_fsm(conn, ctx, LP_PU_EVT_NTF, NULL);
 }
+
+bool llcp_lp_pu_awaiting_instant(struct proc_ctx *ctx)
+{
+	return (ctx->state == LP_PU_STATE_WAIT_INSTANT);
+}
+
 /*
  * LLCP Remote Procedure PHY Update FSM
  */
@@ -1317,4 +1326,9 @@ void llcp_rp_pu_tx_ack(struct ll_conn *conn, struct proc_ctx *ctx, void *param)
 void llcp_rp_pu_tx_ntf(struct ll_conn *conn, struct proc_ctx *ctx)
 {
 	rp_pu_execute_fsm(conn, ctx, RP_PU_EVT_NTF, NULL);
+}
+
+bool llcp_rp_pu_awaiting_instant(struct proc_ctx *ctx)
+{
+	return (ctx->state == RP_PU_STATE_WAIT_INSTANT);
 }

@@ -253,7 +253,6 @@ static void ep_update_mps(const struct device *dev,
 			  uint16_t *const mps)
 {
 	struct udc_device_caps caps = udc_caps(dev);
-	const uint16_t spec_iso_mps = caps.hs ? 1024 : 1023;
 	const uint16_t spec_int_mps = caps.hs ? 1024 : 64;
 	const uint16_t spec_bulk_mps = caps.hs ? 512 : 64;
 
@@ -269,12 +268,10 @@ static void ep_update_mps(const struct device *dev,
 	case USB_EP_TYPE_INTERRUPT:
 		*mps = MIN(cfg->caps.mps, spec_int_mps);
 		break;
-	case USB_EP_TYPE_ISO:
-		*mps = MIN(cfg->caps.mps, spec_iso_mps);
-		break;
 	case USB_EP_TYPE_CONTROL:
-		*mps = 64U;
-		break;
+		__fallthrough;
+	case USB_EP_TYPE_ISO:
+		__fallthrough;
 	default:
 		return;
 	}
@@ -491,33 +488,6 @@ int udc_ep_clear_halt(const struct device *dev, const uint8_t ep)
 	}
 
 ep_clear_halt_error:
-	api->unlock(dev);
-
-	return ret;
-}
-
-int udc_ep_flush(const struct device *dev, const uint8_t ep)
-{
-	const struct udc_api *api = dev->api;
-	struct udc_ep_config *cfg;
-	int ret;
-
-	api->lock(dev);
-
-	if (!udc_is_enabled(dev)) {
-		ret = -EPERM;
-		goto ep_flush_error;
-	}
-
-	cfg = udc_get_ep_cfg(dev, ep);
-	if (cfg == NULL) {
-		ret = -ENODEV;
-		goto ep_flush_error;
-	}
-
-	ret = api->ep_flush(dev, cfg);
-
-ep_flush_error:
 	api->unlock(dev);
 
 	return ret;

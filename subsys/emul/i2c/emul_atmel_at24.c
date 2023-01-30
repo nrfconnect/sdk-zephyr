@@ -81,7 +81,7 @@ static int at24_emul_transfer(const struct emul *target, struct i2c_msg *msgs,
 		return -EIO;
 	}
 
-	i2c_dump_msgs("emul", msgs, num_msgs, addr);
+	i2c_dump_msgs_rw("emul", msgs, num_msgs, addr, false);
 	switch (num_msgs) {
 	case 1:
 		if (msgs->flags & I2C_MSG_READ) {
@@ -162,6 +162,6 @@ static int emul_atmel_at24_init(const struct emul *target, const struct device *
 		.addr_width = 8,                                                                   \
 	};                                                                                         \
 	EMUL_DT_INST_DEFINE(n, emul_atmel_at24_init, &at24_emul_data_##n, &at24_emul_cfg_##n,      \
-			    &bus_api)
+			    &bus_api, NULL)
 
 DT_INST_FOREACH_STATUS_OKAY(EEPROM_AT24_EMUL)

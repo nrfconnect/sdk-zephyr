@@ -32,8 +32,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/types.h>
+#include <zephyr/posix/fcntl.h>
 
-#include <fcntl.h>
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
 #include <zephyr/net/tls_credentials.h>
 #endif
@@ -126,9 +126,7 @@ char *lwm2m_sprint_ip_addr(const struct sockaddr *addr)
 		return net_addr_ntop(AF_INET, &net_sin(addr)->sin_addr, buf, sizeof(buf));
 	}
 
-	LOG_ERR("Unknown IP address family:%d", addr->sa_family);
-	strcpy(buf, "unk");
-	return buf;
+	return "::";
 }
 
 static uint8_t to_hex_digit(uint8_t digit)
@@ -457,6 +455,15 @@ static int32_t engine_next_service_timeout_ms(uint32_t max_timeout, const int64_
 int lwm2m_engine_add_service(k_work_handler_t service, uint32_t period_ms)
 {
 	int i;
+
+	if (!service) {
+		return -EINVAL;
+	}
+
+	/* First, try if the service is already registered, and modify it*/
+	if (lwm2m_engine_update_service_period(service, period_ms) == 0) {
+		return 0;
+	}
 
 	/* find an unused service index node */
 	for (i = 0; i < MAX_PERIODIC_SERVICE; i++) {

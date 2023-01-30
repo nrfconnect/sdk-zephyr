@@ -746,6 +746,7 @@ Release Notes:
     - dts/bindings/flash_controller/
     - include/zephyr/drivers/flash.h
     - samples/drivers/flash_shell/
+    - samples/drivers/soc_flash_nrf/
     - tests/drivers/flash/
   labels:
     - "area: Flash"
@@ -1421,6 +1422,7 @@ MCU Manager:
     - include/zephyr/mgmt/mcumgr/
     - samples/subsys/mgmt/mcumgr/
     - tests/subsys/mgmt/mcumgr/
+    - doc/services/device_mgmt/
   labels:
     - "area: mcumgr"
 
@@ -1561,6 +1563,7 @@ Networking:
     - SeppoTakalo
   files:
     - samples/net/lwm2m_client/
+    - tests/net/lib/lwm2m/
     - subsys/net/lib/lwm2m/
   labels:
     - "area: LWM2M"
@@ -1700,6 +1703,7 @@ Settings:
     - subsys/settings/
     - tests/subsys/settings/
     - samples/subsys/settings/
+    - doc/services/settings/
   labels:
     - "area: Settings"
 
@@ -2159,7 +2163,7 @@ USB:
   maintainers:
     - jfischer-no
   collaborators:
-    - desowin
+    - tmon-nordic
   files:
     - drivers/usb/
     - dts/bindings/usb/
@@ -2247,6 +2251,15 @@ West:
   labels:
     - manifest-canopennode
     - "area: CAN"
+
+"West project: chre":
+  status: maintained
+  maintainers:
+    - yperess
+  files:
+    - samples/modules/chre/
+  labels:
+    - manifest-chre
 
 "West project: cmsis":
   status: maintained

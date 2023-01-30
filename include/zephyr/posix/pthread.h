@@ -12,8 +12,8 @@
 #include <zephyr/posix/time.h>
 #include <zephyr/posix/unistd.h>
 #include "posix_types.h"
-#include "posix_sched.h"
-#include <zephyr/posix/pthread_key.h>
+#include <zephyr/posix/sched.h>
+#include "pthread_key.h"
 #include <stdlib.h>
 #include <string.h>
 

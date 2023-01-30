@@ -27,7 +27,7 @@ def test_testplan_add_testsuites(class_testplan):
     class_testplan.TESTSUITE_FILENAME = 'test_data.yaml'
     class_testplan.add_testsuites()
 
-    tests_rel_dir = 'zephyr/scripts/tests/twister/test_data/testsuites/tests/'
+    tests_rel_dir = 'scripts/tests/twister/test_data/testsuites/tests/'
     expected_testsuites = ['test_b.check_1',
                           'test_b.check_2',
                           'test_c.check_1',
@@ -260,26 +260,26 @@ def test_add_instances(test_data, class_env, all_testsuites_dict, platforms_list
 
 
 QUARANTINE_BASIC = {
-    'demo_board_1/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'a1 on board_1 and board_3',
-    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'a1 on board_1 and board_3'
+    'demo_board_1/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'a1 on board_1 and board_3',
+    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'a1 on board_1 and board_3'
 }
 
 QUARANTINE_WITH_REGEXP = {
-    'demo_board_2/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_2' : 'a2 and c2 on x86',
-    'demo_board_1/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
-    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
-    'demo_board_2/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
-    'demo_board_2/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_2' : 'a2 and c2 on x86'
+    'demo_board_2/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_2' : 'a2 and c2 on x86',
+    'demo_board_1/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
+    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
+    'demo_board_2/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
+    'demo_board_2/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_2' : 'a2 and c2 on x86'
 }
 
 QUARANTINE_PLATFORM = {
-    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'all on board_3',
-    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_2' : 'all on board_3',
-    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all on board_3',
-    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_b/test_b.check_1' : 'all on board_3',
-    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_b/test_b.check_2' : 'all on board_3',
-    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_1' : 'all on board_3',
-    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_2' : 'all on board_3'
+    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'all on board_3',
+    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_2' : 'all on board_3',
+    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all on board_3',
+    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_b/test_b.check_1' : 'all on board_3',
+    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_b/test_b.check_2' : 'all on board_3',
+    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_1' : 'all on board_3',
+    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_2' : 'all on board_3'
 }
 
 QUARANTINE_MULTIFILES = {
