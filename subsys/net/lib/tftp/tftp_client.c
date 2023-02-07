@@ -196,17 +196,22 @@ int tftp_get(struct sockaddr *server_addr, struct tftpc *client,
 			ackhdr.block = htons(block_no);
 			tx_count = 0;
 
-			/* Only copy block if user buffer has enough space */
-			if (data_size > (client->user_buf_size - tftpc_index)) {
-				LOG_ERR("User buffer is full.");
-				send_err(sock, TFTP_ERROR_DISK_FULL, NULL);
-				ret = TFTPC_BUFFER_OVERFLOW;
-				break;
-			}
+			if (client->data_handler != NULL) {
+				/* Send received data directly to client */
+				client->data_handler(tftpc_buffer + TFTP_HEADER_SIZE, data_size);
+			} else {
+				/* Only copy block if user buffer has enough space */
+				if (data_size > (client->user_buf_size - tftpc_index)) {
+					LOG_ERR("User buffer is full.");
+					send_err(sock, TFTP_ERROR_DISK_FULL, NULL);
+					ret = TFTPC_BUFFER_OVERFLOW;
+					break;
+				}
 
-			/* Perform the actual copy and update the index. */
-			memcpy(client->user_buf + tftpc_index,
-				tftpc_buffer + TFTP_HEADER_SIZE, data_size);
+				/* Perform the actual copy and update the index. */
+				memcpy(client->user_buf + tftpc_index,
+					tftpc_buffer + TFTP_HEADER_SIZE, data_size);
+			}
 			tftpc_index += data_size;
 
 			/* Per RFC1350, the end of a transfer is marked

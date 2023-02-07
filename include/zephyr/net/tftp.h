@@ -19,9 +19,22 @@
 extern "C" {
 #endif
 
+/**
+ * @typedef tftp_data_handler_t
+ *
+ * Handler to handle data received from TFTP server
+ *
+ * @param data    Data received.
+ * @param datalen Length of the data received.
+ *
+ * @note The handler must not call @ref tftp_get.
+ */
+typedef void (*tftp_data_handler_t)(const uint8_t *data, size_t datalen);
+
 struct tftpc {
 	uint8_t   *user_buf;
 	uint32_t  user_buf_size;
+	tftp_data_handler_t data_handler;
 };
 
 /* TFTP Client Error codes. */
