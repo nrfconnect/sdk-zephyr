@@ -712,6 +712,10 @@ static void test_tcp_recv_cb(struct net_context *context,
 	if (status && status != -ECONNRESET) {
 		zassert_true(false, "failed to recv the data");
 	}
+
+	if (pkt) {
+		net_pkt_unref(pkt);
+	}
 }
 
 static struct net_context *accepted_ctx;
@@ -1500,6 +1504,9 @@ struct out_of_order_check_struct reorder_timeout_list[] = {
  */
 static void test_server_timeout_out_of_order_data(void)
 {
+	struct net_pkt *rst;
+	int ret;
+
 	if (CONFIG_NET_TCP_RECV_QUEUE_TIMEOUT == 0) {
 		return;
 	}
@@ -1509,6 +1516,18 @@ static void test_server_timeout_out_of_order_data(void)
 	checklist_based_out_of_order_test(reorder_timeout_list,
 					  ARRAY_SIZE(reorder_timeout_list),
 					  OUT_OF_ORDER_SEQ_INIT + 1);
+
+	/* Just send a RST packet to abort the underlying connection, so that
+	 * the testcase does not need to implement full TCP closing handshake.
+	 */
+	seq = expected_ack + 1;
+	rst = prepare_rst_packet(AF_INET6, htons(MY_PORT), htons(PEER_PORT));
+
+	ret = net_recv_data(iface, rst);
+	zassert_true(ret == 0, "recv data failed (%d)", ret);
+
+	/* Let the receiving thread run */
+	k_msleep(50);
 
 	net_context_put(ooo_ctx);
 	net_context_put(accepted_ctx);

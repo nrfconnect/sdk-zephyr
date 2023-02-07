@@ -90,6 +90,10 @@ Changes in this release
   * :kconfig:option:`CONFIG_NETWORKING`
   * :kconfig:option:`CONFIG_NET_UDP`
 
+* MCUmgr fs_mgmt hash/checksum function, type and variable names have been
+  changed to be prefixed with ``fs_mgmt_`` to retain alignment with other
+  zephyr and MCUmgr APIs.
+
 * Python's argparse argument parser usage in Zephyr scripts has been updated
   to disable abbreviations, any future python scripts or python code updates
   must also disable allowing abbreviations by using ``allow_abbrev=False``
@@ -116,6 +120,17 @@ Removed APIs in this release
 
 * Removed deprecated tinycbor module, code that uses this module should be
   updated to use zcbor as a replacement.
+
+* Removed deprecated GPIO flags used for setting debounce, drive strength and
+  voltage level. All drivers now use vendor-specific flags as needed.
+
+* Removed deprecated ``UTIL_LISTIFY`` helper macro.
+
+* Removed deprecated ``pwm_pin*`` family of functions from the PWM API.
+
+* Removed deprecated ``nvs_init`` function from the NVS filesystem API.
+
+* Removed deprecated ``DT_CHOSEN_*_LABEL`` helper macros.
 
 Deprecated in this release
 ==========================
@@ -324,6 +339,9 @@ Boards & SoC Support
 
 * Added support for these following shields:
 
+  * nPM6001 EK
+  * nPM1100 EK
+
 Build system and infrastructure
 *******************************
 
@@ -387,6 +405,8 @@ Drivers and Sensors
 
 * GPIO
 
+  * Added driver for nPM6001 PMIC GPIOs
+
 * I2C
 
 * I2S
@@ -427,6 +447,46 @@ Drivers and Sensors
 
 * Power domain
 
+* Regulators
+
+  * Completed an API overhaul so that devices like PMICs can be supported. The
+    API now offers a clear and concise API that allows to perform the following
+    operations:
+
+      - Enable/disable regulator output (reference counted)
+      - List supported voltages
+      - Get/set operating voltage
+      - Get/set maximum current
+      - Get/set operating mode
+      - Obtain errors, e.g. overcurrent.
+
+    The devicetree part maintains compatibility with Linux bindings, for example,
+    the following properties are well supported:
+
+      - ``regulator-boot-on``
+      - ``regulator-always-on``
+      - ``regulator-min-microvolt``
+      - ``regulator-max-microvolt``
+      - ``regulator-min-microamp``
+      - ``regulator-max-microamp``
+      - ``regulator-allowed-modes``
+      - ``regulator-initial-mode``
+
+    A common driver class layer takes care of the common functionality so that
+    driver implementations are kept simple. For example, allowed voltage ranges
+    are verified before calling into the driver.
+
+    An experimental parent API to configure DVS (Dynamic Voltage Scaling) has
+    also been introduced.
+
+  * Refactored NXP PCA9420 driver to align with the new API.
+  * Added support for nPM6001 PMIC (LDO and BUCK converters).
+  * Added support for nPM1100 PMIC (allows to dynamically change its mode).
+  * Added a new test that allows to verify regulator output voltage using the
+    ADC API.
+  * Added a new test that checks API behavior provided we have a well-behaved
+    driver.
+
 * Reset
 
 * SDHC
@@ -456,6 +516,8 @@ Drivers and Sensors
 * W1
 
 * Watchdog
+
+  * Added driver for nPM6001 PMIC Watchdog.
 
 * WiFi
 
@@ -775,7 +837,7 @@ Libraries / Subsystems
     be restored by enabling
     :kconfig:option:`CONFIG_MCUMGR_SMP_LEGACY_RC_BEHAVIOUR`.
 
-  * MCUMGR now has log outputting on most errors from the included fs, img,
+  * MCUmgr now has log outputting on most errors from the included fs, img,
     os, shell, stat and zephyr_basic group commands. The level of logging can be
     controlled by adjusting: :kconfig:option:`CONFIG_MCUMGR_GRP_FS_LOG_LEVEL`,
     :kconfig:option:`CONFIG_MCUMGR_GRP_IMG_LOG_LEVEL`,
@@ -783,6 +845,25 @@ Libraries / Subsystems
     :kconfig:option:`CONFIG_MCUMGR_GRP_SHELL_LOG_LEVEL`,
     :kconfig:option:`CONFIG_MCUMGR_GRP_STAT_LOG_LEVEL` and
     :kconfig:option:`CONFIG_MCUMGR_GRP_ZBASIC_LOG_LEVEL`.
+
+  * MCUmgr img_mgmt has a new field which is sent in the final packet (if
+    :kconfig:option:`CONFIG_IMG_ENABLE_IMAGE_CHECK` is enabled) named ``match``
+    which is a boolean and is true if the uploaded data matches the supplied
+    hash, or false otherwise.
+
+  * MCUmgr img_mgmt will now skip receiving data if the provided hash already
+    matches the hash of the data present (if
+    :kconfig:option:`CONFIG_IMG_ENABLE_IMAGE_CHECK` is enabled) and finish the
+    upload operation request instantly.
+
+  * MCUmgr img_mgmt structs are now packed, which fixes a fault issue on
+    processors that do not support unaligned memory access.
+
+  * If MCUmgr is used with the shell transport and ``printk()`` functionality
+    is used, there can be an issue whereby the ``printk()`` calls output during
+    a MCUmgr frame receive, this has been fixed by default in zephyr by routing
+    ``printk()`` calls to the logging system, For user applications,
+    :kconfig:option:`CONFIG_LOG_PRINTK` should be enabled to include this fix.
 
 * LwM2M
 
@@ -792,6 +873,11 @@ Libraries / Subsystems
 
   * Replaced all :c:func:`k_panic` invocations within settings backend
     initialization with returning / propagating error codes.
+
+* Utilities
+
+  * Added the linear range API to map values in a linear range to a range index
+    :zephyr_file:`include/zephyr/sys/linear_range.h`.
 
 HALs
 ****
@@ -824,6 +910,9 @@ https://github.com/zephyrproject-rtos/zcbor/blob/0.6.0/RELEASE_NOTES.md
 
 Documentation
 *************
+
+* Upgraded to Doxygen 1.9.6.
+* It is now possible to link to Kconfig search results.
 
 Tests and Samples
 *****************
