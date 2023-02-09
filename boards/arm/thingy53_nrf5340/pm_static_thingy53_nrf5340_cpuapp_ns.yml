@@ -8,20 +8,20 @@ mcuboot_pad:
   size: 0x200
 tfm_secure:
   address: 0x10000
-  size: 0xc200
+  size: 0xc000
   span: [mcuboot_pad, tfm]
 tfm_nonsecure:
-  address: 0x1c200
-  size: 0xd3e00
+  address: 0x1c000
+  size: 0xd4000
   span: [app]
 tfm:
   address: 0x10200
   region: flash_primary
-  size: 0xc000
+  size: 0xbe00
 app:
-  address: 0x1c200
+  address: 0x1c000
   region: flash_primary
-  size: 0xd3e00
+  size: 0xd4000
 mcuboot_primary:
   address: 0x10000
   orig_span: &id001
