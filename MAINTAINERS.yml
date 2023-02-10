@@ -118,7 +118,7 @@ ARC arch:
   collaborators:
     - abrodkin
     - evgeniy-paltsev
-    - IRISZZW
+    - SiyuanCheng-CN
   files:
     - arch/arc/
     - include/zephyr/arch/arc/
@@ -175,6 +175,7 @@ Bluetooth:
     - Thalley
     - asbjornsabo
     - sjanc
+    - theob-pro
   files:
     - doc/connectivity/bluetooth/
     - drivers/bluetooth/
@@ -1089,6 +1090,7 @@ Release Notes:
   collaborators:
     - avisconti
     - teburd
+    - yperess
   files:
     - drivers/sensor/
     - include/zephyr/drivers/sensor.h
@@ -2050,7 +2052,9 @@ ITE Platforms:
     - "platform: ITE"
 
 TI Platforms:
-  status: odd fixes
+  status: maintained
+  maintainers:
+    - vaishnavachath
   collaborators:
     - vanti
     - cfriedt
@@ -2558,6 +2562,7 @@ West:
   status: odd fixes
   collaborators:
     - brgl
+    - pdgendt
   files:
     - modules/Kconfig.lvgl
   labels:
@@ -2696,6 +2701,17 @@ West:
   labels:
     - manifest-tflite-micro
 
+"West project: thrift":
+  status: maintained
+  maintainers:
+    - cfriedt
+  files:
+    - modules/thrift/Kconfig
+    - samples/modules/thrift/
+    - tests/lib/thrift/
+  labels:
+    - manifest-thrift
+
 "West project: tinycrypt":
   status: odd fixes
   files:
@@ -2827,9 +2843,9 @@ x86 arch:
 Continuous Integration:
   status: maintained
   maintainers:
+    - stephanosio
     - nashif
     - galak
-    - stephanosio
   files:
     - .github/
     - scripts/ci/
@@ -2895,3 +2911,16 @@ Testing with Renode:
     - boards/*/*/support/*.resc
   labels:
     - "area: Renode"
+
+zbus:
+  status: maintained
+  maintainers:
+    - rodrigopex
+  files:
+    - samples/subsys/zbus/
+    - include/zephyr/zbus/
+    - tests/subsys/zbus/
+    - subsys/zbus/
+    - doc/services/zbus/
+  labels:
+    - "area: zbus"
