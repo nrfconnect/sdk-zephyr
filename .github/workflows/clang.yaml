@@ -10,7 +10,7 @@ jobs:
   clang-build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/zephyrproject-rtos/ci:v0.24.6
+      image: ghcr.io/zephyrproject-rtos/ci:v0.24.11
       options: '--entrypoint /bin/bash'
       volumes:
         - /repo-cache/zephyrproject:/github/cache/zephyrproject

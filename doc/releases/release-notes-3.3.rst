@@ -14,11 +14,26 @@ The following sections provide detailed lists of changes by component.
 Security Vulnerability Related
 ******************************
 
+The following CVEs are addressed by this release:
+
+More detailed information can be found in:
+https://docs.zephyrproject.org/latest/security/vulnerabilities.html
+
+* CVE-2023-0359: Under embargo until 2023-04-20
+
+* CVE-2023-0779: Under embargo until 2023-04-22
+
+
 API Changes
 ***********
 
 Changes in this release
 =======================
+
+* Newlib nano variant is no longer selected by default when
+  :kconfig:option:`CONFIG_NEWLIB_LIBC` is selected.
+  :kconfig:option:`CONFIG_NEWLIB_LIBC_NANO` must now be explicitly selected in
+  order to use the nano variant.
 
 * Bluetooth: Add extra options to bt_le_per_adv_sync_transfer_subscribe to
   allow disabling sync reports, and enable sync report filtering. these two
@@ -90,6 +105,10 @@ Changes in this release
   * :kconfig:option:`CONFIG_NETWORKING`
   * :kconfig:option:`CONFIG_NET_UDP`
 
+* MCUmgr fs_mgmt hash/checksum function, type and variable names have been
+  changed to be prefixed with ``fs_mgmt_`` to retain alignment with other
+  zephyr and MCUmgr APIs.
+
 * Python's argparse argument parser usage in Zephyr scripts has been updated
   to disable abbreviations, any future python scripts or python code updates
   must also disable allowing abbreviations by using ``allow_abbrev=False``
@@ -100,6 +119,15 @@ Changes in this release
   building to work. As an example, if a script argument had ``--reset-type``
   and an out-of-tree script used this by passing ``--reset`` then it will need
   to be updated to use the full argument name, ``--reset-type``.
+
+* Rewrote the CAN API to utilize flag bitfields instead discrete of struct
+  members for indicating standard/extended CAN ID, Remote Transmission Request
+  (RTR), and added support for filtering of CAN-FD format frames.
+
+* New :ref:`Zephyr message bus (Zbus) <zbus>` subsystem added; a message-oriented
+  bus that enables one-to-one, one-to-many and many-to-many communication
+  between threads.
+
 
 Removed APIs in this release
 ============================
@@ -112,10 +140,28 @@ Removed APIs in this release
   This should now be configured using the new ``lse_bypass`` property of
   LSE clock
 
-* Removed :kconfig:option:`CONFIG_COUNTER_RTC_STM32_BACKUP_DOMAIN_RESET`
+* Removed :kconfig:option:`CONFIG_COUNTER_RTC_STM32_BACKUP_DOMAIN_RESET`. Its purpose
+  was to control the reset of the counter value at board reset. It is removed since
+  it has too wide scope (full Backup RAM reset). Replaced by
+  :kconfig:option:`CONFIG_COUNTER_RTC_STM32_SAVE_VALUE_BETWEEN_RESETS` which also
+  allows to control the reset of counter value, with an opposite logic.
 
 * Removed deprecated tinycbor module, code that uses this module should be
   updated to use zcbor as a replacement.
+
+* Removed deprecated GPIO flags used for setting debounce, drive strength and
+  voltage level. All drivers now use vendor-specific flags as needed.
+
+* Removed deprecated ``UTIL_LISTIFY`` helper macro.
+
+* Removed deprecated ``pwm_pin*`` family of functions from the PWM API.
+
+* Removed deprecated ``nvs_init`` function from the NVS filesystem API.
+
+* Removed deprecated ``DT_CHOSEN_*_LABEL`` helper macros.
+
+* removed deprecated property ``enable-pin-remap`` from  :dtcompatible: `st,stm32-usb`:.
+  ``remap-pa11-pa12`` from :dtcompatible: `st-stm32-pinctrl`: should now be used.
 
 Deprecated in this release
 ==========================
@@ -194,6 +240,8 @@ Deprecated in this release
 * STM32 Interrupt controller Kconfig symbols such as :kconfig:option:`CONFIG_EXTI_STM32_EXTI0_IRQ_PRI`
   are removed. Related IRQ prioritues should now be configured in device tree.
 
+* `PWM_STM32_COMPLEMENTARY` deprecated in favor of `STM32_PWM_COMPLEMENTARY`.
+
 * File backend for settings APIs and Kconfig options were deprecated:
 
   :c:func:`settings_mount_fs_backend` in favor of :c:func:`settings_mount_file_backend`
@@ -209,6 +257,13 @@ Deprecated in this release
 
 * PCIe APIs :c:func:`pcie_probe` and :c:func:`pcie_bdf_lookup` have been
   deprecated in favor of a centralized scan of available PCIe devices.
+
+* POSIX API
+
+    * Deprecated :c:macro:`PTHREAD_COND_DEFINE`, :c:macro:`PTHREAD_MUTEX_DEFINE` in favour of the
+      standard :c:macro:`PTHREAD_COND_INITIALIZER` and :c:macro:`PTHREAD_MUTEX_INITIALIZER`.
+    * Deprecated ``<fcntl.h>``, ``<sys/stat.h>`` header files in the minimal libc in favour of
+      ``<zephyr/posix/fcntl.h>`` and ``<zephyr/posix/sys/stat.h>``.
 
 * SPI DT :c:func:`spi_is_ready` function has been deprecated in favor of :c:func:`spi_is_ready_dt`.
 
@@ -230,11 +285,23 @@ Stable API changes in this release
   Applications using this APIs will need to be updated to provide the expected
   fragment length.
 
+* Marked the Controller Area Network (CAN) controller driver API as stable.
+
 New APIs in this release
 ========================
 
 Kernel
 ******
+
+* Add an "EARLY" init level that runs immediately on entry to z_cstart()
+
+* Refactored the internal CPU count API to allow for runtime changes
+
+* Allow application main() to be defined in C++ code
+
+* Fix a race condition on SMP when pending threads where a second CPU
+  could attempt to run a thread before the pending thread had finished
+  the context switch.
 
 Architectures
 *************
@@ -243,9 +310,42 @@ Architectures
 
 * ARM
 
+  * More precise 'reason' codes are now returned in the fault handler.
+  * Cache functions now use proper ``sys_*`` functions.
+  * Renamed default RAM region from ``SRAM`` to ``RAM``.
+
 * ARM64
 
+  * Implemented ASID support for ARM64 MMU
+
 * RISC-V
+
+  * Converted :kconfig:option:`CONFIG_MP_NUM_CPUS` to
+    :kconfig:option:`CONFIG_MP_MAX_NUM_CPUS`.
+
+  * Added support for hardware register stacking/unstacking during ISRs and
+    exceptions.
+
+  * Added support for overriding :c:func:`arch_irq_lock`,
+    :c:func:`arch_irq_unlock` and :c:func:`arch_irq_unlocked`.
+
+  * Zephyr CPU number is now decoupled from the hart ID.
+
+  * Secondary boot code is no longer included when
+    :kconfig:option:`CONFIG_MP_MAX_NUM_CPUS` equals ``1``.
+
+  * IPIs are no longer hardcoded to :c:func:`z_sched_ipi`.
+
+  * Implemented an on-demand context switching algorithm for thread FPU
+    accesses.
+
+  * Enabled booting from non-zero indexed RISC-V harts with
+    :kconfig:option:`CONFIG_RV_BOOT_HART`.
+
+  * Hart IDs are now mapped to Zephyr CPUs with the devicetree.
+
+  * Added a workaround for ``MTVAL`` not updating properly on QEMU-based
+    platforms.
 
 * Xtensa
 
@@ -254,49 +354,151 @@ Bluetooth
 
 * Audio
 
-* Direction Finding
+  * Refactored the handling of extended and periodic advertising in the BAP
+    broadcast source.
+  * Implemented the Common Audio Profile initiator role.
+  * Added support for Broadcast source subgroup and BIS codec configuration.
+  * Renamed the CSI and VCP functionality to use the "P" postfix for profile
+    instead of "S" for service.
+  * Added a broadcast source metadata update function.
+  * Added (un)binding of audio ISO structs to Audio Streams.
+  * Added support for encrypted broadcast.
+  * Added the ability to change the supported contexts in PACS.
+  * Improved stream coupling for CIS as the unicast client
+  * Added broadcast source metadata update function
+  * Added packing to unicast group create
+  * Added packing field to broadcast source
+  * Renamed BASS and BASS client to BAP Scan Delegator and BPA Broadcast Assistant
+  * Added support for multiple subgroups for BAP broadcast sink
+  * Replaced capabilities API with PACS
 
 * Host
 
+  * Added a new ``BT_CONN_INTERVAL_TO_US`` utility macro.
+  * Made the HCI fragmentation logic asynchronous, thus fixing a long-standing
+    potential deadlock between data and control procedures.
+  * Added the local advertising address to :c:func:`bt_le_ext_adv_get_info`.
+  * Improved the implementation of :c:func:`bt_disable` to handle additional
+    edge cases.
+  * Removed all Bluetooth-specific logging macros and functionality, switching
+    instead to the OS-wide ones.
+  * Added a new :c:func:`bt_le_per_adv_sync_lookup_index` function.
   * Fixed missing calls to bt_le_per_adv_sync_cb.term when deleting a periodic
     advertising sync object.
-
   * Added local advertising address to bt_le_ext_adv_info.
+  * Added the printing of function names by default when logging.
+  * Changed the policy for advertising restart after disconneciton, which is now
+    done only for connections in the peripheral role.
+  * Added a guard to prevent bonding to the same device more than once.
+  * Refactored crypto functionality from SMP into its own folder, and added the
+    h8 crypto function.
+  * Changed the behavior when receiving an L2CAP K-frame larger than the MPS,
+    disconnecting instead of truncating it.
+  * Added a new :kconfig:option:`BT_ID_ALLOW_UNAUTH_OVERWRITE` that allows
+    unauthorized bond overrides with multiple identities.
+  * Added suppor for the object calculate checksum feature in OTS.
+  * Changed back the semantics of :kconfig:option:`BT_PRIVACY` to refer to local
+    RPA address generation.
+  * Modified the SMP behavior when outside a pairing procedure. The stack no
+    longer sends unnecessary Pairing Failed PDUs in that state.
+
+  * ISO: Changed ISO seq_num to 16-bit
 
 * Mesh
 
-  * Change default advertiser to be extended advertiser.
+  * Changed the default advertiser to be extended advertiser.
+  * Made the provisioning feature set dynamic.
+  * Made the maximum number of simultaneous Bluetooth connections that the mesh
+    stack can use configurable via :kconfig:option:`BT_MESH_MAX_CONN`.
+  * Changed the advertising duration calculation to avoid imprecise estimations.
+  * Added the :kconfig:option:`BT_MESH_FRIEND_ADV_LATENCY` Kconfig option.
 
 * Controller
 
-* HCI Driver
+  * Implemented the Read/Write Connection Accept Timeout HCI commands.
+  * Implemented the Sleep Clock Accuracy Update procedure.
+  * Implemented additional ISO-related HCI commands.
+  * Implemented ISO-AL SDU buffering and PDU release timeout.
+  * Added support for hanlding fragmented AD without chaining PDUs.
+  * Added support for multiple memory pools for advertising PDUs
+  * Added support for retrying the automatic peripheral connection parameter
+    update.
+  * Added support for deferring anchor points moves using an external hook.
+  * Added a new ``LL_ASSERT_MSG`` macro for verbose assertions.
+  * Added long control PDU support.
+  * Added support for Broadcast ISO encryption.
+  * Added support for central CIS/CIG, including ULL and Nordic LLL.
+  * Added support for peripheral CIS/CIG in the Nordic LLL.
+  * Added the :kconfig:option:`BT_CTLR_SLOT_RESERVATION_UPDATE` Kconfig option.
+  * Integrated ISOAL for ISO broadcast.
 
 Boards & SoC Support
 ********************
 
 * Added support for these SoC series:
 
+  * Atmel SAMC20, SAMC21
+  * Atmel SAME70Q19
+  * GigaDevice GD32L23X
+  * GigaDevice GD32A50X
+
 * Removed support for these SoC series:
 
 * Made these changes in other SoC series:
+
+  * STM32F1: USB Prescaler configuration is now expected to be done using
+    :dtcompatible: `st,stm32f1-pll-clock`: ``usbpre``
+    or :dtcompatible: `st,stm32f105-pll-clock`: ``otgfspre`` properties.
+  * STM32F7/L4: Now supports configuring MCO.
+  * STM32G0: Now supports FDCAN
+  * STM32G4: Now supports power management (STOP0 and STOP1 low power modes).
+  * STM32H7: Now supports PLL2, USB OTG HS and ULPI PHY.
+  * STM32L5: Now supports RTC based :ref:`counter_api`.
+  * STM32U5: Now supports :ref:`crypto_api` through AES device.
+  * STM32F7/L4: Now supports configuring MCO.
 
 * Changes for ARC boards:
 
 * Added support for these ARM boards:
 
+  * Adafruit ItsyBitsy nRF52840 Express
+  * Adafruit KB2040
+  * Atmel atsamc21n_xpro
+  * GigaDevice GD32L233R-EVAL
+  * GigaDevice GD32A503V-EVAL
+  * nRF5340 Audio DK
+  * Sparkfun pro micro RP2040
+  * Arduino Portenta H7
+  * SECO JUNO SBC-D23 (STM32F302)
+  * ST Nucleo G070RB
+  * ST Nucleo L4A6ZG
+
 * Added support for these ARM64 boards:
+
+  * i.MX93 (Cortex-A) EVK board
+  * Khadas Edge-V board
+  * QEMU Virt KVM
 
 * Removed support for these ARM boards:
 
-* Removed support for these X86 boards:
+* Added support for these X86 boards:
+
+  * Intel Raptor Lake CRB
 
 * Added support for these RISC-V boards:
+
+  * Added LCD support for ``longan_nano`` board.
 
 * Added support for these Xtensa boards:
 
 * Removed support for these Xtensa boards:
 
 * Made these changes in ARM boards:
+
+  * sam4s_xplained: Enabled PWM
+  * sam_e70_xplained: Added DMA devicetree entries for SPI
+  * sam_v71_xult: Added DMA devicetree entries for SPI
+  * tdk_robokit1: Added DMA devicetree entries for SPI
 
   * The scratch partition has been removed for the following Nordic boards and
     flash used by this area re-assigned to other partitions to free up space
@@ -320,9 +522,31 @@ Boards & SoC Support
     Note that MCUboot and MCUboot image updates from pre-Zephyr 3.3 might be
     incompatible with Zephyr 3.3 onwards and vice versa.
 
+  * The default console for the ``nrf52840dongle_nrf52840`` board has been
+    changed from physical UART (which is not connected to anything on the
+    board) to use USB CDC instead.
+  * Forced configuration of FPU was removed from following boards:
+    ``stm32373c_eval``
+    ``stm32f3_disco``
+
+  * On STM32 boards, configuration of USB, SDMMC and entropy devices that generally
+    expect a 48MHz clock is now done using device tree. When available, HSI48 is enabled
+    and configured as domain clock for these devices, otherwise PLL_Q output or MSI is used.
+    On some boards, previous PLL SAI confguration has been changed to above options,
+    since PLL SAI cannot yet be configured using device tree.
+
 * Made these changes in other boards:
 
+  * The nrf52_bsim (natively simulated nRF52 device with BabbleSim) now models
+    a nRF52833 instead of a nRF52832 device
+
 * Added support for these following shields:
+
+  * Adafruit PCA9685
+  * nPM6001 EK
+  * nPM1100 EK
+  * Semtech SX1262MB2DAS
+  * Sparkfun MAX3421E
 
 Build system and infrastructure
 *******************************
@@ -332,22 +556,71 @@ Build system and infrastructure
   * ``zephyr_code_relocate`` API has changed to accept a list of files to
     relocate and a location to place the files.
 
+* Sysbuild
+
+  * Issue with duplicate sysbuild image name causing an infinite cmake loop
+    has been fixed.
+
+  * Issue with board revision not being passed to sysbuild images has been
+    fixed.
+
+  * Application specific configurations of sysbuild controlled images.
+
+* Userspace
+
+  * Userspace option to disable using the ``relax`` linker option has been
+    added.
+
+* Tools
+
+  * Static code analyser (SCA) tool support has been added.
+
 Drivers and Sensors
 *******************
 
 * ADC
 
+  * STM32: Now Supports sequencing multiple channels into a single read.
+  * Fixed a problem in :c:macro:`ADC_CHANNEL_CFG_DT` that forced users to add
+    artificial ``input-positive`` property in nodes related to ADC drivers that
+    do not use configurable analog inputs when such drivers were used together
+    with an ADC driver that uses such input configuration.
+  * Added driver for TI CC13xx/CC26xx family.
+  * Added driver for Infineon XMC4xxx family.
+  * Added driver for ESP32 SoCs.
+
+* Battery-backed RAM
+
+  * STM32: Added driver to enable support for backup registers from RTC.
+
 * CAN
+
+  * Added RX overflow counter statistics support (STM32 bxCAN, Renesas R-Car,
+    and NXP FlexCAN).
+  * Added support for TWAI on ESP32-C3.
+  * Added support for multiple MCP2515 driver instances.
+  * Added Kvaser PCIcan driver and support for using it under QEMU.
+  * Made the fake CAN test driver generally available.
+  * Added support for compiling the Native Posix Linux CAN driver against Linux
+    kernel headers prior to v5.14.
+  * Removed the CONFIG_CAN_HAS_RX_TIMESTAMP and CONFIG_CAN_HAS_CANFD Kconfig
+    helper symbols.
 
 * Clock control
 
+  * STM32: HSI48 can now be configured using device tree.
+
 * Counter
 
-  * STM32 RTC based counter should now be configured using device tree.
+  * STM32 RTC based counter domain clock (LSE/SLI) should now be configured using device tree.
+  * Added Timer based driver for GigaDevice GD32 SoCs.
 
 * Crypto
 
 * DAC
+
+  * Added support for GigaDevice GD32 SoCs.
+  * Added support for Espressif ESP32 SoCs.
 
 * DFU
 
@@ -356,11 +629,46 @@ Drivers and Sensors
 
 * Disk
 
+  * STM32 SD host controller clocks are now configured via devicetree.
+  * Zephyr flash disks are now configured using the :dtcompatible:`zephyr,flash-disk`
+    devicetree binding
+  * Flash disks can be marked as read only by setting the ``read-only`` property
+    on the linked flash device partition.
+
 * Display
 
 * DMA
 
+  * Adjust incorrect dma1 clock source for GD32 gd32vf103 SoC.
+  * Atmel SAM: Added support to select fixed or increment address mode when using
+    peripherals to memory or memory to peripheral transfers.
+  * STM32 DMA variable scope cleanups
+  * Intel GPDMA linked list transfer descriptors appropriately aligned to 64 byte addresses
+  * Intel GPDMA fix bug in transfer configuration to initialize cfg_hi and cfg_lo
+  * STM32 DMA Support for the STM32MP1 series
+  * SAM XDMAC fixes to enable usage with SPI DMA transfers
+  * Intel GPDMA fix to return errors on dma stop
+  * Intel GPDMA disable interrupts when unneeded
+  * Intel GPDMA fix for register/ip ownership
+  * STM32U5 GPDMA bug fix for busy flag
+  * STM32U5 Suspend and resume features added
+  * Intel GPDMA Report total bytes read/written (linear link position) in dma status
+  * DMA API get attribute function added, added attributes for scatter/gather blocks available
+    to Intel HDA and Intel GPDMA drivers.
+  * Intel GPDMA Power management functionality added
+  * Intel HDA Power management functionality added
+  * GD32 Slot used for peripheral selection
+  * GD32 memory to memory support added
+  * ESP32C3 GDMA driver added
+  * Intel HDA underrun/overrun (xrun) handling and reporting added
+  * Intel GPDMA underrun/overrun (xrun) handling nad reporting added
+  * DMA API start/stop are defined to be repeatable callable with test cases added.
+    STM32 DMA, Intel HDA, and Intel GPDMA all comply with the contract after patches.
+  * NXP EDMA Unused mutex removed
+
 * EEPROM
+
+  * Added fake EEPROM driver for testing purposes.
 
 * Entropy
 
@@ -370,6 +678,13 @@ Drivers and Sensors
 
   * STM32: Default Mac address configuration is now uid based. Optionally, user can
     configure it to be random or provide its own address using device tree.
+  * STM32: Added support for STM32Cube HAL Ethernet API V2 on F4/F7/H7. By default disabled,
+    it can be enabled with :kconfig:option:`CONFIG_ETH_STM32_HAL_API_V2`.
+  * STM32: Added ethernet support on STM32F107 devices.
+  * STM32: Now supports multicast hash filtering in the MAC. It can be enabled using
+    :kconfig:option:`CONFIG_ETH_STM32_MULTICAST_FILTER`.
+  * STM32: Now supports statistics logging through :kconfig:option:`CONFIG_NET_STATISTICS_ETHERNET`.
+    Requires use of HAL Ethernet API V2.
 
 * Flash
 
@@ -385,9 +700,50 @@ Drivers and Sensors
     full flash erase was started before a restart, this might result in several
     minutes of waiting time (depending on flash size and erase speed).
 
+  * rpi_pico: Added a flash driver for the Raspberry Pi Pico platform.
+
+  * STM32 OSPI: sfdp-bfp table and jedec-id can now be read from device tree and override
+    the flash content if required.
+
+  * STM32 OSPI: Now supports DMA tranfser on STM32U5.
+
+  * STM32: Flash driver was revisited to simplify re-use of driver for new series, taking
+    advantage of device tree compatibles.
+
+* FPGA
+
+  * Add preliminary support for the Lattice iCE40.
+  * Add Qomu board sample.
+
 * GPIO
 
+  * Atmel SAM: Added support to configure Open-Drain pins
+  * Added driver for nPM6001 PMIC GPIOs
+
+* hwinfo
+
+  * Added hwinfo_get_device_id for ESP32-C3
+  * Add reset cause for iwdg and wwdg for STM32H7 and MP1
+
 * I2C
+
+  * SAM0 Fixed spurious trailing data by moving stop condition from thread into ISR
+  * I2C Shell command adds ability to configure bus speed through `i2c speed`
+  * ITE usage of instruction local memory support
+  * NPCX bus recovery on transaction timeout
+  * ITE log status of registers on transfer failure
+  * ESP32 enable configuring a hardware timeout to account for longer durations of clock stretching
+  * ITE fix bug where an operation was done outside of the driver mutex
+  * NRFX TWIM Make transfer timeout configurable
+  * DW Bug fix for clearing FIFO on initialization
+  * NPCX simplify smb bank register usage
+  * NXP LPI2C enable target mode
+  * NXP FlexComm Adds semaphore for shared usage of bus
+  * I2C Allow dumping messages in the log for all transactions, reads and writes
+  * STM32: Slave configuration now supports 10-bit addressing.
+  * STM32: Now support power management. 3 modes supported: :kconfig:option:`CONFIG_PM`,
+    :kconfig:option:`CONFIG_PM_DEVICE`, :kconfig:option:`CONFIG_PM_DEVICE_RUNTIME`.
+  * STM32: Domain clock can now be configured using device tree
 
 * I2S
 
@@ -422,22 +778,120 @@ Drivers and Sensors
     grandchild level, while drivers using the node approach need to include it
     at the child level. This change will only impact out-of-tree pin control
     drivers, sinc all in-tree drivers have been updated.
+  * Added NXP S32 SIUL2 driver
+  * Added Nuvoton NuMicro driver
+  * Added Silabs Gecko driver
+  * Added support for i.MX93 in the i.MX driver
+  * Added support for GD32L23x/GD32A50x in the Gigadevice driver
 
 * PWM
 
+  * Atmel SAM: Added support to select pin polarity
+  * Added driver for NXP PCA9685 LED controller
+
 * Power domain
+
+* Regulators
+
+  * Completed an API overhaul so that devices like PMICs can be supported. The
+    API now offers a clear and concise API that allows to perform the following
+    operations:
+
+      - Enable/disable regulator output (reference counted)
+      - List supported voltages
+      - Get/set operating voltage
+      - Get/set maximum current
+      - Get/set operating mode
+      - Obtain errors, e.g. overcurrent.
+
+    The devicetree part maintains compatibility with Linux bindings, for example,
+    the following properties are well supported:
+
+      - ``regulator-boot-on``
+      - ``regulator-always-on``
+      - ``regulator-min-microvolt``
+      - ``regulator-max-microvolt``
+      - ``regulator-min-microamp``
+      - ``regulator-max-microamp``
+      - ``regulator-allowed-modes``
+      - ``regulator-initial-mode``
+
+    A common driver class layer takes care of the common functionality so that
+    driver implementations are kept simple. For example, allowed voltage ranges
+    are verified before calling into the driver.
+
+    An experimental parent API to configure DVS (Dynamic Voltage Scaling) has
+    also been introduced.
+
+  * Refactored NXP PCA9420 driver to align with the new API.
+  * Added support for nPM6001 PMIC (LDO and BUCK converters).
+  * Added support for nPM1100 PMIC (allows to dynamically change its mode).
+  * Added a new test that allows to verify regulator output voltage using the
+    ADC API.
+  * Added a new test that checks API behavior provided we have a well-behaved
+    driver.
 
 * Reset
 
+  * STM32: STM32 reset driver is now available. Devices reset line configuration should
+    be done using device tree.
+
 * SDHC
+
+  * i.MX RT USDHC:
+
+    - Support HS400 and HS200 mode. This mode is used with eMMC devices,
+      and will enable high speed operation for those cards.
+    - Support DMA operation on SOCs that do not support noncacheable memory,
+      such as the RT595. DMA will enable higher performance SD modes,
+      such as HS400 and SDR104, to reliably transfer data using the
+      SD host controller
 
 * Sensor
 
+  * Refactored all drivers to use :c:macro:`SENSOR_DEVICE_DT_INST_DEFINE` to
+    enable a new sensor info iterable section and shell command. See
+    :kconfig:option:`CONFIG_SENSOR_INFO`.
+  * Refactored all sensor devicetree bindings to inherit new base sensor device
+    properties in :zephyr_file:`dts/bindings/sensor/sensor-device.yaml`.
+  * Added sensor attribute support to the shell.
+  * Added ESP32 and RaspberryPi Pico die temperature sensor drivers.
+  * Added TDK InvenSense ICM42688 six axis IMU driver.
+  * Added TDK InvenSense ICP10125 pressure and temperature sensor driver.
+  * Added AMS AS5600 magnetic angle sensor driver.
+  * Added AMS AS621x temperature sensor driver.
+  * Added HZ-Grow R502A fingerprint sensor driver.
+  * Enhanced FXOS8700, FXAS21002, and BMI270 drivers to support SPI in addition
+    to I2C.
+  * Enhanced ST LIS2DW12 driver to support freefall detection.
+  * rpi_pico: Added die temperature sensor driver.
+  * STM32 family Quadrature Decoder driver was added. Only enabled on STM32F4 for now.
+
 * Serial
+
+  * Atmel SAM: UART/USART: Added support to configure driver at runtime
+  * STM32: DMA now supported on STM32U5 series.
 
 * SPI
 
+  * Added dma support for GD32 driver.
+  * Atmel SAM:
+
+    * Added support to transfers using DMA.
+    * Added support to loopback mode for testing purposes.
+
 * Timer
+
+  * Correct CPU numbering on SMP RISC-V systems using the mtime device
+
+  * Add support for OpenTitan's priviledged timer device to riscv_machine_timer
+
+  * Refactor SYS_CLOCK_EXISTS such that it always matches the
+    existence of a timer device in kconfig
+
+  * Significant rework to nrf_rtc_timer with multiple fixes
+
+  * Fix prescaler correction in stm32_lptim driver and fix race with autoreload
 
 * USB
 
@@ -446,26 +900,180 @@ Drivers and Sensors
     device tree node to achieve a 48MHz bus clock. Note that, in most cases, core clock
     is 72MHz and default prescaler configuration is set to achieve 48MHz USB bus clock.
     Prescaler only needs to be configured manually when core clock is already 48MHz.
-
   * STM32 (non F1): Clock bus configuration is now expected to be done in device tree
     using ``clocks`` node property. When a dedicated HSI 48MHz clock is available on target,
     is it configured by default as the USB bus clock, but user has the ability to select
     another 48MHz clock source. When no HSI48 is available, a specific 48MHz bus clock
     source should be configured by user.
+  * STM32: Now supports :c:func:`usb_dc_detach` and :c:func:`usb_dc_wakeup_request`.
+  * STM32: Vbus sensing is now supported and determined based on the presence of the
+    hardware detection pin(s) in the device tree. E.g: pinctrl-0 = <&usb_otg_fs_vbus_pa9 ...>;
 
 * W1
 
 * Watchdog
+
+  * Added driver for nPM6001 PMIC Watchdog.
+  * Added free watchdog driver for GigaDevice GD32 SoCs.
+  * Added window watchdog driver for GigaDevice GD32 SoCs.
 
 * WiFi
 
 Networking
 **********
 
-IPv4 packet fragmentation support has been added, this allows large packets to
-be split up before sending or reassembled during receive for packets that are
-larger than the network device MTU. This is disabled by default but can be
-enabled with :kconfig:option:`CONFIG_NET_IPV4_FRAGMENT`.
+* CoAP:
+
+  * Implemented insertion of a CoAP option at arbitrary position.
+
+* Ethernet:
+
+  * Fixed AF_PACKET/SOCK_RAW/IPPROTO_RAW sockets on top of Ethernet L2.
+  * Added support for setting Ethernet MAC address with net shell.
+  * Added check for return values of the driver start/stop routines when
+    bringing Ethernet interface up.
+  * Added ``unknown_protocol`` statistic for packets with unrecognized protocol
+    field, instead of using ``error`` for this purpose.
+
+* HTTP:
+
+  * Reworked HTTP headers: moved methods to a separate header, added status
+    response codes header and grouped HTTP headers in a subdirectory.
+  * Used :c:func:`zsock_poll` for HTTP timeout instead of a delayed work.
+
+* ICMPv4:
+
+  * Added support to autogenerate Echo Request payload.
+
+* ICMPv6:
+
+  * Added support to autogenerate Echo Request payload.
+  * Fixed stats counting for ND packets.
+
+* IEEE802154:
+
+  * Improved short address support.
+  * Improved IEEE802154 context thread safety.
+  * Decoupled IEEE802154 parameters from :c:struct:`net_pkt` into
+    :c:struct:`net_pkt_cb_ieee802154`.
+  * Multiple other minor fixes/improvements.
+
+* IPv4:
+
+  * IPv4 packet fragmentation support has been added, this allows large packets
+    to be split up before sending or reassembled during receive for packets that
+    are larger than the network device MTU. This is disabled by default but can
+    be enabled with :kconfig:option:`CONFIG_NET_IPV4_FRAGMENT`.
+  * Added support for setting/reading DSCP/ECN fields.
+  * Fixed packet leak in IPv4 address auto-configuration procedure.
+  * Added support for configuring IPv4 addresses with ``net ipv4`` shell
+    command.
+  * Zephyr now adds IGMP all systems 224.0.0.1 address to all IPv4 network
+    interfaces by default.
+
+* IPv6:
+
+  * Made it possible to add route to router's link local address.
+  * Added support for setting/reading DSCP/ECN fields.
+  * Improved test coverage for IPv6 fragmentation.
+  * Added support for configuring IPv6 addresses with ``net ipv6`` shell
+    command.
+  * Added support for configuring IPv6 routes with ``net route`` shell
+    command.
+
+* LwM2M:
+
+  * Renamed ``LWM2M_RD_CLIENT_EVENT_REG_UPDATE_FAILURE`` to
+    :c:macro:`LWM2M_RD_CLIENT_EVENT_REG_TIMEOUT`. This event is now used in case
+    of registration timeout.
+  * Added new LwM2M APIs for historical data storage for LwM2M resource.
+  * Updated LwM2M APIs to use ``const`` pointers when possible.
+  * Added shell command to lock/unlock LwM2M registry.
+  * Added shell command to enable historical data cache for a resource.
+  * Switched to use ``zsock_*`` functions internally.
+  * Added uCIFI LPWAN (ID 3412) object implementation.
+  * Added BinaryAppDataContainer (ID 19) object implementation.
+  * Deprecated :kconfig:option:`CONFIG_LWM2M_RD_CLIENT_SUPPORT`, as it's now
+    considered as an integral part of the LwM2M library.
+  * Added support for SenML Object Link data type.
+  * Fixed a bug causing incorrect ordering of the observation paths.
+  * Deprecated string based LwM2M APIs. LwM2M APIs now use
+    :c:struct:`lwm2m_obj_path` to represent object/resource paths.
+  * Refactored ``lwm2m_client`` sample by splitting specific functionalities
+    into separate modules.
+  * Multiple other minor fixes within the LwM2M library.
+
+* Misc:
+
+  * Updated various networking test suites to use the new ztest API.
+  * Added redirect support for ``big_http_download`` sample and updated the
+    server URL for TLS variant.
+  * Fixed memory leak in ``net udp`` shell command.
+  * Fixed cloning of LL address for :c:struct:`net_pkt`.
+  * Added support for QoS and payload size setting in ``net ping`` shell
+    command.
+  * Added support for aborting ``net ping`` shell command.
+  * Introduced carrier and dormant management on network interfaces. Separated
+    interface administrative state from operational state.
+  * Improved DHCPv4 behavior with multiple DHCPv4 servers in the network.
+  * Fixed net_mgmt event size calculation.
+  * Added :kconfig:option:`CONFIG_NET_LOOPBACK_MTU` option to configure loopback
+    interface MTU.
+  * Reimplemented the IP/UDP/TCP checksum calculation to speed up the
+    processing.
+  * Removed :kconfig:option:`CONFIG_NET_CONFIG_SETTINGS` use from test cases to
+    improve test execution on real platforms.
+  * Added MQTT-SN library and sample.
+  * Fixed variable buffer length configuration
+    (:kconfig:option:`CONFIG_NET_BUF_VARIABLE_DATA_SIZE`).
+  * Fixed IGMPv2 membership report destination address.
+  * Added mutex protection for the connection list handling.
+  * Separated user data pointer from FIFO reserved space in
+    :c:struct:`net_context`.
+  * Added input validation for ``net pkt`` shell command.
+
+* OpenThread:
+
+  * Implemented PSA support for ECDSA API.
+  * Fixed :c:func:`otPlatRadioSetMacKey` when asserts are disabled.
+  * Depracated :c:func:`openthread_set_state_changed_cb` in favour of more
+    generic :c:func:`openthread_state_changed_cb_register`.
+  * Implemented diagnostic GPIO commands.
+
+* SNTP:
+
+  * Switched to use ``zsock_*`` functions internally.
+  * Fixed the library operation with IPv4 disabled.
+
+* Sockets:
+
+  * Fixed a possible memory leak on failed TLS socket creation.
+
+* TCP:
+
+  * Extended the default TCP out-of-order receive queue timeout to 2 seconds.
+  * Reimplemented TCP ref counting, to prevent situation, where TCP connection
+    context could be released prematurely.
+
+* Websockets:
+
+  * Reimplemented websocket receive routine to fix several issues.
+  * Implemented proper websocket close procedure.
+  * Fixed a bug where websocket would overwrite the mutex used by underlying TCP
+    socket.
+
+* Wi-Fi:
+
+  * Added support for power save configuration.
+  * Added support for regulatory domain configuration.
+  * Added support for power save timeout configuration.
+
+* zperf
+
+  * Added option to set QoS for zperf.
+  * Fixed out of order/lost packets statistics.
+  * Defined a public API for the library to allow throughput measurement without shell enabled.
+  * Added an option for asynchronous upload.
 
 USB
 ***
@@ -481,12 +1089,35 @@ Devicetree
 
     * STM32 SoCs:
 
-      * :dtcompatible: `st,stm32-lse-clock`: new ``lse-bypass`` property
-      * :dtcompatible: `st,stm32-ethernet`: now allows ``local-mac-address`` and
+      * :dtcompatible:`st,stm32-lse-clock`: new ``lse-bypass`` property
+      * :dtcompatible:`st,stm32-ethernet`: now allows ``local-mac-address`` and
          ``zephyr,random-mac-address`` properties.
+      * :dtcompatible:`st,stm32-adc`:`has-temp-channel`, `has-vref-channel` and
+        `has-vbat-channel` were replaced by `temp-channel`, `vref-channel` and
+        `vbat-channel`.
+
+    * GD32 SoCs:
+
+      * :dtcompatible: `gd,gd322-dma`: Provide some helper macro to easily setup `dma-cells`.
+
+* Shields
+
+  * In order to avoid name conflicts with devices that may be defined at
+    board level, it is advised, specifically for shields devicetree descriptions,
+    to provide a device nodelabel is the form <device>_<shield>. In tree shields
+    have been updated to follow this recommendation.
 
 Libraries / Subsystems
 **********************
+
+* C Library
+
+  * Newlib nano variant is no longer selected by default when
+    :kconfig:option:`CONFIG_NEWLIB_LIBC` is selected.
+    :kconfig:option:`CONFIG_NEWLIB_LIBC_NANO` must now be explicitly selected
+    in order to use the nano variant.
+  * Picolibc now supports all architectures supported by Zephyr.
+  * Added C11 ``aligned_alloc`` support to the minimal libc.
 
 * C++ Library
 
@@ -516,6 +1147,24 @@ Libraries / Subsystems
     standard library (e.g. Standard Template Library) can now select
     :kconfig:option:`CONFIG_REQUIRES_FULL_LIBC`, which automatically selects
     a compatible C++ standard library.
+  * Introduced :kconfig:option:`CONFIG_CPP_MAIN` to support defining ``main()``
+    function in a C++ source file. Enabling this option makes the Zephyr kernel
+    invoke ``int main(void)``, which is required by the ISO C++ standards, as
+    opposed to the Zephyr default ``void main(void)``.
+  * Added no-throwing implementation of new operator to the C++ minimal
+    library.
+  * Added support for new operator with alignment request (C++17) to the C++
+    minimal library.
+  * Added GNU C++ standard library support with Picolibc when using a suitably
+    configured toolchain (e.g. the upcoming Zephyr SDK 0.16.0 release).
+
+* Cache
+
+  * Introduced new Cache API
+  * ``CONFIG_HAS_ARCH_CACHE`` has been renamed to
+    :kconfig:option:`CONFIG_ARCH_CACHE`
+  * ``CONFIG_HAS_EXTERNAL_CACHE`` has been renamed to
+    :kconfig:option:`CONFIG_EXTERNAL_CACHE`
 
 * File systems
 
@@ -525,6 +1174,25 @@ Libraries / Subsystems
   * Added the option to disable CRC checking in :ref:`fcb_api` by enabling the
     Kconfig option :kconfig:option:`CONFIG_FCB_ALLOW_FIXED_ENDMARKER`
     and setting the `FCB_FLAGS_CRC_DISABLED` flag in the :c:struct:`fcb` struct.
+
+* IPC
+
+  * Added :c:func:`ipc_rpmsg_deinit`, :c:func:`ipc_service_close_instance` and
+    :c:func:`ipc_static_vrings_deinit`  functions
+  * Added deregister API support for icmsg backend
+  * Added a multi-endpoint feature to icmsg backend
+  * Added no-copy features to icmsg backend
+
+* ISO-TP
+
+  * Rewrote the ISO-TP API to not reuse definitions from the CAN controller API.
+
+* Logging
+
+  * Added support for logging on multiple domains.
+  * :kconfig:option:`CONFIG_LOG_PRINTK` is now by default enabled which means that
+    when logging is enabled then printk is by directed to the logging subsystem.
+  * Added option to use custom logging header.
 
 * Management
 
@@ -775,7 +1443,7 @@ Libraries / Subsystems
     be restored by enabling
     :kconfig:option:`CONFIG_MCUMGR_SMP_LEGACY_RC_BEHAVIOUR`.
 
-  * MCUMGR now has log outputting on most errors from the included fs, img,
+  * MCUmgr now has log outputting on most errors from the included fs, img,
     os, shell, stat and zephyr_basic group commands. The level of logging can be
     controlled by adjusting: :kconfig:option:`CONFIG_MCUMGR_GRP_FS_LOG_LEVEL`,
     :kconfig:option:`CONFIG_MCUMGR_GRP_IMG_LOG_LEVEL`,
@@ -784,17 +1452,172 @@ Libraries / Subsystems
     :kconfig:option:`CONFIG_MCUMGR_GRP_STAT_LOG_LEVEL` and
     :kconfig:option:`CONFIG_MCUMGR_GRP_ZBASIC_LOG_LEVEL`.
 
+  * MCUmgr img_mgmt has a new field which is sent in the final packet (if
+    :kconfig:option:`CONFIG_IMG_ENABLE_IMAGE_CHECK` is enabled) named ``match``
+    which is a boolean and is true if the uploaded data matches the supplied
+    hash, or false otherwise.
+
+  * MCUmgr img_mgmt will now skip receiving data if the provided hash already
+    matches the hash of the data present (if
+    :kconfig:option:`CONFIG_IMG_ENABLE_IMAGE_CHECK` is enabled) and finish the
+    upload operation request instantly.
+
+  * MCUmgr img_mgmt structs are now packed, which fixes a fault issue on
+    processors that do not support unaligned memory access.
+
+  * If MCUmgr is used with the shell transport and ``printk()`` functionality
+    is used, there can be an issue whereby the ``printk()`` calls output during
+    a MCUmgr frame receive, this has been fixed by default in zephyr by routing
+    ``printk()`` calls to the logging system, For user applications,
+    :kconfig:option:`CONFIG_LOG_PRINTK` should be enabled to include this fix.
+
+  * A bug when MCUmgr shell transport is used (issue was observed over USB CDC
+    but could also occur with UART) whereby the default shell receive ring
+    buffer is insufficient has been fixed by making the default size 256 bytes
+    instead of 64 when the shell MCUmgr transport is selected.
+
+  * UpdateHub:
+
+    * The integrity check was reworked to allow use by other libraries. Since
+      then UpdateHub uses mbedTLS library as default crypto library.
+    * Added a new Storage Abstraction to isolate both flash operations and
+      MCUboot internals.
+    * The UpdateHub User API was moved as a Zephyr public API and the userspace
+      now is available. This added :c:func:`updatehub_confirm` and
+      :c:func:`updatehub_reboot` functions.
+
 * LwM2M
 
   * The ``lwm2m_senml_cbor_*`` files have been regenerated using zcbor 0.6.0.
+
+* POSIX API
+
+  * Harmonize posix type definitions across the minimal libc, newlib and picolibc.
+
+    * Abstract ``pthread_t``, ``pthread_key_t``, ``pthread_cond_t``,
+      ``pthread_mutex_t``, as ``uint32_t``.
+    * Define :c:macro:`PTHREAD_KEY_INITIALIZER`, :c:macro:`PTHREAD_COND_INITIALIZER`,
+      :c:macro:`PTHREAD_MUTEX_INITIALIZER` to align with POSIX 1003.1.
+
+  * Allow non-prefixed standard include paths with :kconfig:option:`CONFIG_POSIX_API`.
+
+    * I.e. ``#include <unistd.h>`` instead of ``#include <zephyr/posix/unistd.h>``.
+    * Primarily to ease integration with external libraries.
+    * Internal Zephyr code should continue to use prefixed header paths.
+
+  * Enable ``eventfd()``, ``getopt()`` by default with :kconfig:option:`CONFIG_POSIX_API`.
+  * Move / rename header files to align with POSIX specifications.
+
+    * E.g. move ``fcntl.h``, ``sys/stat.h`` from the minimal libc into the
+      ``include/zephyr/posix`` directory. Rename ``posix_sched.h`` to ``sched.h``.
+    * Move :c:macro:`O_ACCMODE`, :c:macro:`O_RDONLY`, :c:macro:`O_WRONLY`,
+      :c:macro:`O_WRONLY`, to ``fcntl.h``.
+
+  * Added :kconfig:option:`CONFIG_TIMER_CREATE_WAIT`, :kconfig:option:`CONFIG_MAX_PTHREAD_KEY_COUNT`,
+    :kconfig:option:`CONFIG_MAX_PTHREAD_COND_COUNT`, :kconfig:option:`CONFIG_MAX_PTHREAD_MUTEX_COUNT`.
+  * Define :c:macro:`SEEK_SET`, :c:macro:`SEEK_CUR`, :c:macro:`SEEK_END`.
+
+* SD Subsystem
+
+  * Added support for eMMC protocol in Zephyr.
+
+    - Speed modes up to HS400 are supported using 1.8v operation.
+    - Additional protocol tests have been added to verify eMMC functionality.
+    - Disk subsystem tests have been updated to function with eMMC.
+
+  * Card and host combinations that cannot utilize UHS (ultra high speed) mode
+    will now use 4 bit bus width when possible. This will greatly improve
+    performance for these systems.
 
 * Settings
 
   * Replaced all :c:func:`k_panic` invocations within settings backend
     initialization with returning / propagating error codes.
 
+* Utilities
+
+  * Added the linear range API to map values in a linear range to a range index
+    :zephyr_file:`include/zephyr/sys/linear_range.h`.
+
+
+* Zbus
+
+  * Added the :ref:`zbus` to Zephyr.
+
+    * Channel-centric multi-paradigm (message-passing and publish-subscribe) communication message bus.
+    * Virtual Distributed Event Dispatcher.
+    * Observers can be listeners (synchronous) and subscribers (asynchronous).
+    * One-to-one, one-to-many, and many-to-many communications.
+    * Persistent messages distributed by shared-memory approach.
+    * Delivery guarantee only for listeners.
+    * Uses mutex to control channels access.
+    * Added the following samples:
+
+      * :ref:`zbus-hello-world-sample`
+      * :ref:`zbus-work-queue-sample`
+      * :ref:`zbus-dyn-channel-sample`
+      * :ref:`zbus-uart-bridge-sample`
+      * :ref:`zbus-remote-mock-sample`
+      * :ref:`zbus-runtime-obs-registration-sample`
+      * :ref:`zbus-benchmark-sample`
+
+    * Added zbus channels APIs:
+
+      * :c:func:`zbus_chan_pub`
+      * :c:func:`zbus_chan_read`
+      * :c:func:`zbus_chan_notify`
+      * :c:func:`zbus_chan_claim`
+      * :c:func:`zbus_chan_finish`
+      * :c:func:`zbus_chan_name`
+      * :c:func:`zbus_chan_msg`
+      * :c:func:`zbus_chan_const_msg`
+      * :c:func:`zbus_chan_msg_size`
+      * :c:func:`zbus_chan_user_data`
+      * :c:func:`zbus_chan_add_obs`
+      * :c:func:`zbus_chan_rm_obs`
+      * :c:func:`zbus_runtime_obs_pool`
+      * :c:func:`zbus_obs_set_enable`
+      * :c:func:`zbus_obs_name`
+      * :c:func:`zbus_sub_wait`
+      * :c:func:`zbus_iterate_over_channels`
+      * :c:func:`zbus_iterate_over_observers`
+
+    * Added the related configuration options:
+
+      * :kconfig:option:`CONFIG_ZBUS_CHANNEL_NAME`
+      * :kconfig:option:`CONFIG_ZBUS_OBSERVER_NAME`
+      * :kconfig:option:`CONFIG_ZBUS_STRUCTS_ITERABLE_ACCESS`
+      * :kconfig:option:`CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE`
+
 HALs
 ****
+
+* Atmel
+
+  * sam0: Added support for SAMC20/21.
+  * sam4l: Added ``US_MR_CHRL_{n}_BIT`` Register Aliases for USART Driver.
+
+* GigaDevice
+
+  * Added support for gd32l23x.
+  * Added support for gd32a50x.
+
+* Nordic
+
+  * Updated nrfx to version 2.10.0.
+
+* STM32
+
+  * stm32cube: updated stm32h7 to cube version V1.11.0.
+  * stm32cube: updated stm32l5 to cube version V1.5.0.
+  * stm32cube: updated stm32wl to cube version V1.3.0.
+
+* Espressif
+
+  * Added Ethernet driver support
+  * Added light-sleep and deep-sleep support over PM interface
+  * Added ADC and DAC driver support
+  * Added GDMA driver support
 
 MCUboot
 *******
@@ -808,6 +1631,13 @@ Storage
 
 Trusted Firmware-M
 ******************
+
+* Updated to TF-M 1.7.0 (and MbedTLS 3.2.1).
+* Initial attestation service has been disabled by default due to license
+  issues with the QCBOR dependecy. To enable it, set the path for QCBOR via
+  ``CONFIG_TFM_QCBOR_PATH`` or set the path to ``DOWNLOAD``.
+* Firmware update sample removed pending update to 1.0 FWU service.
+* psa_crypto sample removed pending resolution of PSA API conflicts w/MbedTLS.
 
 zcbor
 *****
@@ -824,6 +1654,9 @@ https://github.com/zephyrproject-rtos/zcbor/blob/0.6.0/RELEASE_NOTES.md
 
 Documentation
 *************
+
+* Upgraded to Doxygen 1.9.6.
+* It is now possible to link to Kconfig search results.
 
 Tests and Samples
 *****************

@@ -1104,6 +1104,7 @@ int net_ipv6_send_na(struct net_if *iface, const struct in6_addr *src,
 		goto drop;
 	}
 
+	net_stats_update_icmp_sent(net_pkt_iface(pkt));
 	net_stats_update_ipv6_nd_sent(iface);
 
 	return 0;
@@ -1815,8 +1816,6 @@ static enum net_verdict handle_na_input(struct net_pkt *pkt,
 		goto drop;
 	}
 
-	net_stats_update_ipv6_nd_sent(net_pkt_iface(pkt));
-
 	net_pkt_unref(pkt);
 
 	return NET_OK;
@@ -1954,6 +1953,7 @@ int net_ipv6_send_ns(struct net_if *iface,
 		goto drop;
 	}
 
+	net_stats_update_icmp_sent(net_pkt_iface(pkt));
 	net_stats_update_ipv6_nd_sent(iface);
 
 	return 0;
@@ -2025,6 +2025,7 @@ int net_ipv6_send_rs(struct net_if *iface)
 		goto drop;
 	}
 
+	net_stats_update_icmp_sent(net_pkt_iface(pkt));
 	net_stats_update_ipv6_nd_sent(iface);
 
 	return 0;

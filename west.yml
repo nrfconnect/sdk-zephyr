@@ -231,7 +231,7 @@ manifest:
       groups:
         - debug
     - name: trusted-firmware-m
-      revision: 5503c15bd4026e3ea4264a62d70395af34e16742
+      revision: f2a639c8d1842acb2964a27461f5c9cfdfaa4d16
       path: modules/tee/tf-m/trusted-firmware-m
       groups:
         - tee
@@ -241,7 +241,7 @@ manifest:
       groups:
         - tee
     - name: tf-m-tests
-      revision: ce57ade67f4e70724975a3bbadeea488f4b9effc
+      revision: 0f80a65193ddbbe3f0ac38b33b07b26138c11fa7
       path: modules/tee/tf-m/tf-m-tests
       groups:
         - tee
@@ -259,6 +259,9 @@ manifest:
     - name: zscilib
       path: modules/lib/zscilib
       revision: 0035be5e6a45e4ab89755b176d305d7a877fc79c
+    - name: thrift
+      path: modules/lib/thrift
+      revision: 10023645a0e6cb7ce23fcd7fd3dbac9f18df6234
 
   self:
     path: zephyr
