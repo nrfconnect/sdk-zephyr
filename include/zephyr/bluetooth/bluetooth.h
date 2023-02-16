@@ -692,6 +692,67 @@ struct bt_le_per_adv_param {
 	uint32_t options;
 };
 
+struct bt_le_per_adv_param_v2 {
+	/**
+	 * @brief Minimum Periodic Advertising Interval (N * 1.25 ms)
+	 *
+	 * Shall be greater or equal to BT_GAP_PER_ADV_MIN_INTERVAL and
+	 * less or equal to interval_max.
+	 */
+	uint16_t interval_min;
+
+	/**
+	 * @brief Maximum Periodic Advertising Interval (N * 1.25 ms)
+	 *
+	 * Shall be less or equal to BT_GAP_PER_ADV_MAX_INTERVAL and
+	 * greater or equal to interval_min.
+	 */
+	uint16_t interval_max;
+
+	/** Bit-field of periodic advertising options */
+	uint32_t options;
+
+	/**
+	 * @brief Number of subevents
+	 *
+	 * If zero, subevent_interval, response_slot_delay, response_slot_spacing,
+	 * and num_response_slots parameter shall be ignored.
+	 */
+	uint8_t num_subevents;
+
+	/**
+	 * @brief Interval between subevents (N * 1.25 ms)
+	 *
+	 * Shall be between 7.5ms to 318.75ms
+	 */
+	uint8_t subevents_interval;
+
+	/**
+	 * @brief Time between the advertising packet in a subevent and the first response slot
+	 * 	  (N * 1.25ms)
+	 *
+	 * Zero means no reponse slots,
+	 * otherwise shall be between 7.5ms to 317.5ms
+	 */
+	uint8_t response_slot_delay;
+
+	/**
+	 * @brief Time between response slots (N * 0.125 ms)
+	 *
+	 * Zero means no response slots,
+	 * otherwise shall be between 0.25ms to 31.875ms
+	 */
+	uint8_t response_slot_spacing;
+
+	/**
+	 * @brief Number of subevent response slots
+	 *
+	 * Zero means no response slots,
+	 * otherwise shall be between 0x01 to 0xFF
+	*/
+	uint8_t num_response_slots;
+};
+
 /**
  * @brief Initialize advertising parameters
  *
@@ -1141,6 +1202,23 @@ typedef void bt_le_scan_cb_t(const bt_addr_le_t *addr, int8_t rssi,
 int bt_le_per_adv_set_param(struct bt_le_ext_adv *adv,
 			    const struct bt_le_per_adv_param *param);
 
+
+/**
+ * @brief Set or update the periodic advertising parameters V2.
+ *
+ * The periodic advertising parameters can only be set or updated on an
+ * extended advertisement set which is neither scannable, connectable nor
+ * anonymous.
+ *
+ * @param adv   Advertising set object.
+ * @param param Periodic Advertising with Responses parameters.
+ *
+ * @return Zero on success or (negative) error code otherwise.
+ */
+
+int bt_le_per_adv_set_param_v2(struct bt_le_ext_adv *adv,
+			       const struct bt_le_per_adv_param_v2 *param);
+
 /**
  * @brief Set or update the periodic advertising data.
  *
@@ -1156,6 +1234,36 @@ int bt_le_per_adv_set_param(struct bt_le_ext_adv *adv,
  */
 int bt_le_per_adv_set_data(const struct bt_le_ext_adv *adv,
 			   const struct bt_data *ad, size_t ad_len);
+
+struct bt_le_pawr_subevent_param {
+	/* Advertising handle */
+	uint8_t                 handle;
+	uint8_t			num_subevents;
+};
+
+struct bt_le_pawr_subevent_data {
+	uint8_t                 subevent;
+	uint8_t                 response_slot_start;
+	uint8_t                 response_slot_count;
+	uint8_t                 subevent_data_length;
+};
+
+/**
+ * @brief Set the periodic advertising with response subevent data.
+ *
+ * This function is called by the Host to set the data for one or more subevents of PAwR in reply
+ * to an HCI_LE_Periodic_Advertising_Subevent_Data_Request event. The data for a subevent shall be
+ * transmitted only once.
+ *
+ * @param param     Subevent param.
+ * @param subevent  Subevents.
+ * @param data      Advertising data array.
+ *
+ * @return          Zero on success or (negative) error code otherwise.
+ */
+int bt_le_pawr_set_subevent_data(const struct bt_le_pawr_subevent_param *param,
+				 const struct bt_le_pawr_subevent_data *subevent,
+				 const uint8_t **data);
 
 /**
  * @brief Starts periodic advertising.
@@ -1219,6 +1327,20 @@ struct bt_le_per_adv_sync_synced_info {
 	 *
 	 */
 	struct bt_conn *conn;
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_SCAN)
+	/** Number of subevents */
+	uint8_t num_subevents;
+
+	/** Subevent interval (N * 1.25ms) */
+	uint8_t subevent_interval;
+
+	/** Response slot delay (N * 1.25ms) */
+	uint8_t response_slot_delay;
+
+	/** Reponse slot spacing (N * 1.25ms) */
+	uint8_t response_slot_spacing;
+
+#endif
 };
 
 struct bt_le_per_adv_sync_term_info {
@@ -1247,6 +1369,12 @@ struct bt_le_per_adv_sync_recv_info {
 
 	/** The Constant Tone Extension (CTE) of the advertisement (@ref bt_df_cte_type) */
 	uint8_t cte_type;
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_SCAN)
+	/** The value of paEventCounter for the reported periodic advertising packet. */
+	uint16_t periodic_event_counter;
+	/** The subevent number. */
+	uint8_t  subevent;
+#endif
 };
 
 
@@ -1332,6 +1460,70 @@ struct bt_le_per_adv_sync_cb {
 
 	sys_snode_t node;
 };
+
+struct bt_le_periodic_adv_subevent_data_request
+{
+    uint8_t start;
+    uint8_t data_count;
+};
+
+struct bt_hci_evt_le_per_adv_response_report {
+	uint8_t adv_handle;
+	uint8_t subevent;
+	uint8_t tx_status;
+	uint8_t num_responses;
+	uint8_t array_params[0];
+} __packed;
+
+struct bt_hci_evt_le_per_adv_response_report_data {
+    int8_t tx_power;
+    int8_t rssi;
+    uint8_t cte_type;
+    uint8_t response_slot;
+    uint8_t data_status;
+    uint8_t data_length;
+    uint8_t data[0];
+} __packed;
+
+struct bt_le_pawr_adv_cb {
+	/**
+	 * @brief The Controller indicates it is ready to transmit one or more subvenvt.
+	 *
+	 * This callback notifies the application that data request from controller.
+	 *
+	 * @param adv  The advertising set object.
+	 * @param info Information about the sent event.
+	 */
+	void (*request)(struct bt_le_ext_adv *adv,
+			struct bt_le_periodic_adv_subevent_data_request *info);
+	/**
+	 * @brief The Controller indicates that one or more BT device have responsded to a
+	 * a periodic advertising subevent.
+	 *
+	 * This callback notifies the application that data request from controller.
+	 *
+	 * @param adv		The advertising set object.
+	 * @param responses	Information about the responses received.
+	 */
+	void (*response)(struct bt_le_ext_adv *adv,
+			 struct bt_hci_evt_le_per_adv_response_report *responses);
+
+	sys_snode_t node;
+};
+
+/**
+ * @brief Register periodic advertising with responses - Advertiser callbacks.
+ *
+ * Adds the callback structure to the list of callback structures for periodic
+ * advertising with responses - Advertiser.
+ *
+ * This callback will be called for all PAWR - Advertiser event,
+ * such as subevent data request, response report is received.
+ *
+ * @param cb Callback struct. Must point to memory that remains valid.
+ */
+
+void bt_le_pawr_adv_cb_register(struct bt_le_pawr_adv_cb *cb);
 
 /** Periodic advertising sync options */
 enum {
@@ -2341,6 +2533,60 @@ void bt_foreach_bond(uint8_t id, void (*func)(const struct bt_bond_info *info,
  */
 int bt_configure_data_path(uint8_t dir, uint8_t id, uint8_t vs_config_len,
 			   const uint8_t *vs_config);
+
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_SCAN)
+
+struct bt_le_pawr_sync_subevent_param {
+	/** Periodic_Advertising_Properties */
+	uint16_t properties;
+
+	/** Number of subevents to sync */
+	uint8_t num_subevents;
+
+	/** The subevent to synchronize with */
+	uint8_t *subevent;
+};
+
+/** @brief Synchronize with a subset of subevents
+ *
+ *  The HCI_LE_Set_Periodic_Sync_Subevent command is used to instruct the
+ *  Controller to synchronize with a subset of the subevents within a PAwR train
+ *  identified by the Sync_Handle parameter, listen for packets sent by the peer
+ *  device and pass any received data up to the Host
+ *
+ *  @param per_adv_sync   The periodic advertising sync object.
+ *
+ *  @param param          Properties, Num_subevents, subevent.
+ *
+ *  @return 0 in case of success or negative value in case of error.
+ */
+int bt_pawr_sync_subevent(struct bt_le_per_adv_sync *per_adv_sync, struct bt_le_pawr_sync_subevent_param *param);
+
+struct bt_le_pawr_response_param {
+	uint16_t	request_event;
+	uint8_t		request_subevent;
+	uint8_t		response_subevent;
+	uint8_t		response_slot;
+	uint8_t		response_data_length;
+};
+
+/**
+ * @brief Set the data for a response slot in a specific subevent of the PAwR.
+ *
+ * This function is called by the Host to set the response dat.
+ * The data for a repsonse slot shall be transmitted only once.
+ *
+ * @param per_adv_sync   The periodic advertising sync object.
+ * @param param      param.
+ * @param data      Advertising data array.
+ *
+ * @return          Zero on success or (negative) error code otherwise.
+ */
+int bt_pawr_set_response_data(struct bt_le_per_adv_sync *per_adv_sync,
+			      const struct bt_le_pawr_response_param *param,
+			      const uint8_t *data);
+
+#endif /* defined(CONFIG_BT_CTLR_SDC_PAWR_SCAN) */
 
 /**
  * @}

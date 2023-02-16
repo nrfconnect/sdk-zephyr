@@ -174,6 +174,9 @@ enum {
 /** Maximum Periodic Advertising Interval (N * 1.25 ms) */
 #define BT_GAP_PER_ADV_MAX_INTERVAL             0xFFFF
 
+/** Maximum Periodic Advertising with responses data request subevent */
+#define BT_GAP_PAWR_MAX_SUBEVENT		0x80
+
 /**
  * @brief Convert periodic advertising interval (N * 1.25 ms) to milliseconds
  *

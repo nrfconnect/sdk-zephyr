@@ -2270,6 +2270,12 @@ static const struct event_handler meta_events[] = {
 	EVENT_HANDLER(BT_HCI_EVT_LE_PER_ADV_SYNC_ESTABLISHED,
 		      bt_hci_le_per_adv_sync_established,
 		      sizeof(struct bt_hci_evt_le_per_adv_sync_established)),
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_SCAN)
+	EVENT_HANDLER(BT_HCI_EVT_LE_PER_ADVERTISING_REPORT_V2, bt_hci_le_per_adv_report_v2,
+		      sizeof(struct bt_hci_evt_le_per_advertising_report_v2)),
+	EVENT_HANDLER(BT_HCI_EVT_LE_PAST_RECEIVED_V2, bt_hci_le_past_received_v2,
+		      sizeof(struct bt_hci_evt_le_past_received_v2)),
+#endif
 	EVENT_HANDLER(BT_HCI_EVT_LE_PER_ADVERTISING_REPORT, bt_hci_le_per_adv_report,
 		      sizeof(struct bt_hci_evt_le_per_advertising_report)),
 	EVENT_HANDLER(BT_HCI_EVT_LE_PER_ADV_SYNC_LOST, bt_hci_le_per_adv_sync_lost,
@@ -2319,6 +2325,12 @@ static const struct event_handler meta_events[] = {
 	EVENT_HANDLER(BT_HCI_EVT_LE_CTE_REQUEST_FAILED, bt_hci_le_df_cte_req_failed,
 		      sizeof(struct bt_hci_evt_le_cte_req_failed)),
 #endif /* CONFIG_BT_DF_CONNECTION_CTE_REQ */
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_ADV)
+	EVENT_HANDLER(BT_HCI_EVT_LE_PER_ADV_SUBEVENT_DATA_REQUEST, bt_hci_le_pawr_subevent_data_request,
+		      sizeof(struct bt_hci_evt_le_per_adv_subevent_data_request)),
+	EVENT_HANDLER(BT_HCI_EVT_LE_PER_ADV_RESPONSE_REPORT, bt_hci_le_pawr_response_report,
+		      sizeof(struct bt_hci_evt_le_per_adv_response_report)),
+#endif
 
 };
 
@@ -2329,6 +2341,17 @@ static void hci_le_meta_event(struct net_buf *buf)
 	evt = net_buf_pull_mem(buf, sizeof(*evt));
 
 	LOG_DBG("subevent 0x%02x", evt->subevent);
+	switch (evt->subevent) {
+		case BT_HCI_EVT_LE_ENH_CONN_COMPLETE_V2:
+		case BT_HCI_EVT_LE_PER_ADV_RESPONSE_REPORT:
+		case BT_HCI_EVT_LE_PER_ADV_SYNC_ESTABLISHED_V2:
+		case BT_HCI_EVT_LE_PAST_RECEIVED_V2:
+		case BT_HCI_EVT_LE_PER_ADVERTISING_REPORT_V2:
+			// printk("subevent 0x%02x\n", evt->subevent);
+			break;
+		default:
+			break;
+	}
 
 	handle_event(evt->subevent, buf, meta_events, ARRAY_SIZE(meta_events));
 }
@@ -2877,6 +2900,17 @@ static int le_set_event_mask(void)
 	if (IS_ENABLED(CONFIG_BT_DF_CONNECTION_CTE_RX)) {
 		mask |= BT_EVT_MASK_LE_CONNECTION_IQ_REPORT;
 		mask |= BT_EVT_MASK_LE_CTE_REQUEST_FAILED;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_CTLR_SDC_PAWR_ADV)) {
+		mask |= BT_EVT_MASK_LE_PER_ADV_SUBEVENT_DATA_REQ;
+		mask |= BT_EVT_MASK_LE_PER_ADV_RESPONSE_REPORT;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_CTLR_SDC_PAWR_SCAN)) {
+		mask |= BT_EVT_MASK_LE_PER_ADVERTISING_REPORT_V2;
+		mask |= BT_EVT_MASK_LE_PER_ADV_SYNC_ESTABLISHED_V2;
+		mask |= BT_EVT_MASK_LE_PAST_RECEIVED_V2;
 	}
 
 	sys_put_le64(mask, cp_mask->events);

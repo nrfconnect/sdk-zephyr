@@ -23,6 +23,11 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_adv);
 
+#if IS_ENABLED(CONFIG_BT_CTLR_SDC_PAWR_ADV)
+static sys_slist_t pawr_cbs  = SYS_SLIST_STATIC_INIT(&pawr_cbs);
+#include <sdc_hci_cmd_le.h>
+#endif
+
 enum adv_name_type {
 	ADV_NAME_TYPE_NONE,
 	ADV_NAME_TYPE_AD,
@@ -1829,6 +1834,66 @@ int bt_le_per_adv_set_data(const struct bt_le_ext_adv *adv,
 	return hci_set_per_adv_data(adv, ad, ad_len);
 }
 
+int bt_le_pawr_set_subevent_data(const struct bt_le_pawr_subevent_param *param,
+				 const struct bt_le_pawr_subevent_data *subevents,
+				 const uint8_t **data)
+{
+	struct bt_hci_cp_le_set_pawr_subevent_data *subevent_data;
+	struct bt_hci_cp_le_set_pawr_subevent_data_array *array_params;
+	struct bt_hci_rp_le_set_pawr_subevent_data *rp;
+	struct net_buf *buf, *rsp;
+	size_t cmd_size, data_size;
+	uint8_t total_data_len = 0;
+	int err;
+
+	if (!BT_FEAT_LE_PAWR_ADVERTISER(bt_dev.le.features)) {
+		return -ENOTSUP;
+	}
+
+	cmd_size = sizeof(struct bt_hci_cp_le_set_pawr_subevent_data);
+	data_size = sizeof(struct bt_hci_cp_le_set_pawr_subevent_data_array);
+	buf = bt_hci_cmd_create(BT_HCI_OP_LE_SET_PAWR_SUBEVENT_DATA, cmd_size);
+
+	if (!buf) {
+		return -ENOBUFS;
+	}
+
+	subevent_data = net_buf_add(buf, cmd_size);
+	subevent_data->adv_handle = param->handle;
+	subevent_data->num_subevents = param->num_subevents;
+
+	for(size_t i = 0; i < param->num_subevents; i++) {
+		array_params = net_buf_add(buf, data_size);
+		array_params->subevent = subevents[i].subevent;
+		array_params->response_slot_start = subevents[i].response_slot_start;
+		array_params->response_slot_count = subevents[i].response_slot_count;
+		array_params->subevent_data_length = subevents[i].subevent_data_length;
+		net_buf_add_mem(buf, data[i], subevents[i].subevent_data_length);
+		total_data_len += subevents[i].subevent_data_length;
+	}
+
+	LOG_DBG("total hci cmd len %d", cmd_size + data_size + total_data_len);
+	/* Override HCI Header size*/
+	buf->data[2] = cmd_size + data_size + total_data_len;
+
+
+	err = bt_hci_cmd_send_sync(BT_HCI_OP_LE_SET_PAWR_SUBEVENT_DATA, buf, &rsp);
+	LOG_DBG("set evt %d %d", subevents[0].subevent, (subevents[0].subevent + param->num_subevents));
+	if (err != 0) {
+		LOG_ERR("Failed bt_le_pawr_set_subevent_data failed err (err %d) evt %d", err, subevents[0].subevent);
+		return err;
+	}
+
+	rp = (void *)rsp->data;
+	if (rp->adv_handle != param->handle) {
+		LOG_WRN("ret handle %d adv handle %d",rp->adv_handle, param->handle);
+	}
+
+	net_buf_unref(rsp);
+
+	return err;
+}
+
 static int bt_le_per_adv_enable(struct bt_le_ext_adv *adv, bool enable)
 {
 	struct bt_hci_cp_le_set_per_adv_enable *cp;
@@ -1889,6 +1954,129 @@ int bt_le_per_adv_stop(struct bt_le_ext_adv *adv)
 {
 	return bt_le_per_adv_enable(adv, false);
 }
+
+void bt_le_pawr_adv_cb_register(struct bt_le_pawr_adv_cb *cb)
+{
+	sys_slist_append(&pawr_cbs, &cb->node);
+}
+
+int bt_le_per_adv_set_param_v2(struct bt_le_ext_adv *adv,
+			       const struct bt_le_per_adv_param_v2 *param)
+{
+	struct bt_hci_cp_le_set_per_adv_param_v2 *cp;
+	struct bt_hci_rp_le_set_per_adv_param_v2 *rp;
+	struct net_buf *buf, *rsp;
+	int err;
+	uint16_t props = 0;
+
+	if (!BT_FEAT_LE_PAWR_ADVERTISER(bt_dev.le.features)) {
+		return -ENOTSUP;
+	}
+
+	if (atomic_test_bit(adv->flags, BT_ADV_SCANNABLE)) {
+		return -EINVAL;
+	} else if (atomic_test_bit(adv->flags, BT_ADV_CONNECTABLE)) {
+		return -EINVAL;
+	} else if (!atomic_test_bit(adv->flags, BT_ADV_EXT_ADV)) {
+		return -EINVAL;
+	}
+
+	if (param->interval_min < BT_GAP_PER_ADV_MIN_INTERVAL ||
+	    param->interval_max > BT_GAP_PER_ADV_MAX_INTERVAL ||
+	    param->interval_min > param->interval_max) {
+		return -EINVAL;
+	}
+
+	if (!BT_FEAT_LE_PER_ADV_ADI_SUPP(bt_dev.le.features) &&
+	    (param->options & BT_LE_PER_ADV_OPT_INCLUDE_ADI)) {
+		return -ENOTSUP;
+	}
+
+	buf = bt_hci_cmd_create(BT_HCI_OP_LE_SET_PER_ADV_PARAM_V2, sizeof(*cp));
+	if (!buf) {
+		return -ENOBUFS;
+	}
+
+	cp = net_buf_add(buf, sizeof(*cp));
+	(void)memset(cp, 0, sizeof(*cp));
+
+	cp->handle = adv->handle;
+	cp->min_interval = sys_cpu_to_le16(param->interval_min);
+	cp->max_interval = sys_cpu_to_le16(param->interval_max);
+
+	if (param->options & BT_LE_PER_ADV_OPT_USE_TX_POWER) {
+		props |= BT_HCI_LE_ADV_PROP_TX_POWER;
+	}
+
+	cp->props = sys_cpu_to_le16(props);
+	cp->num_subevents = param->num_subevents;
+	cp->subevent_interval = param->subevents_interval;
+	cp->response_slot_delay = param->response_slot_delay;
+	cp->response_slot_spacing = param->response_slot_spacing;
+	cp->num_response_slots = param->num_response_slots;
+	LOG_HEXDUMP_INF(buf->data, sizeof(*cp) + 3, "bt_le_per_adv_set_param_v2");
+	LOG_INF("handle 0x%02x pa_int_min 0x%04x pa_int_max 0x%04x prop 0x%04x num_events 0x%02x "
+		"subevt_int 0x%02x delay 0x%02x spacing 0x%02x slots 0x%02x",
+		cp->handle, cp->min_interval, cp->max_interval, cp->props, cp->num_subevents,
+		cp->subevent_interval, cp->response_slot_delay, cp->response_slot_spacing,
+		cp->num_response_slots);
+	err = bt_hci_cmd_send_sync(BT_HCI_OP_LE_SET_PER_ADV_PARAM_V2, buf, &rsp);
+	if (err != 0) {
+		LOG_ERR("bt_le_per_adv_set_param_v2 err %d", err);
+		return err;
+	}
+
+	rp = (void *)rsp->data;
+	LOG_DBG("bt_le_per_adv_set_param_v2 send success, status %d, handle %d\n", rp->status, rp->adv_handle);
+	if (param->options & BT_LE_PER_ADV_OPT_INCLUDE_ADI) {
+		atomic_set_bit(adv->flags, BT_PER_ADV_INCLUDE_ADI);
+	} else {
+		atomic_clear_bit(adv->flags, BT_PER_ADV_INCLUDE_ADI);
+	}
+
+	atomic_set_bit(adv->flags, BT_PER_ADV_PARAMS_SET);
+
+	return 0;
+}
+
+void bt_hci_le_pawr_subevent_data_request(struct net_buf *buf)
+{
+	struct bt_hci_evt_le_per_adv_subevent_data_request *evt =
+		(struct bt_hci_evt_le_per_adv_subevent_data_request *)buf->data;
+	struct bt_le_pawr_adv_cb *listener;
+	struct bt_le_periodic_adv_subevent_data_request info;
+	struct bt_le_ext_adv *adv;
+
+	adv = bt_adv_lookup_handle(evt->adv_handle);
+
+	LOG_DBG("bt_hci_le_pawr_subevent_data_request, handle %d start %d count %d\n", evt->adv_handle, evt->subevent_start, evt->subevent_data_count);
+	info.start = evt->subevent_start;
+	info.data_count = evt->subevent_data_count;
+	SYS_SLIST_FOR_EACH_CONTAINER(&pawr_cbs, listener, node) {
+		if (listener->request) {
+			listener->request(adv, &info);
+		}
+	}
+}
+
+void bt_hci_le_pawr_response_report(struct net_buf *buf)
+{
+	struct bt_hci_evt_le_per_adv_response_report *evt =
+		(struct bt_hci_evt_le_per_adv_response_report *)buf->data;
+	struct bt_le_pawr_adv_cb *listener;
+	struct bt_le_ext_adv *adv;
+
+	adv = bt_adv_lookup_handle(evt->adv_handle);
+
+	LOG_INF("bt_hci_le_pawr_response_report, handle %d subevent %d num_responses %d\n", evt->adv_handle, evt->subevent, evt->num_responses);
+	SYS_SLIST_FOR_EACH_CONTAINER(&pawr_cbs, listener, node) {
+		if (listener->response) {
+			listener->response(adv, evt);
+		}
+	}
+
+}
+
 
 #if defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_SENDER)
 int bt_le_per_adv_set_info_transfer(const struct bt_le_ext_adv *adv,
