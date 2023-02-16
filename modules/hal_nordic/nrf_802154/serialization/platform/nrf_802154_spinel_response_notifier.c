@@ -8,6 +8,7 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
@@ -45,6 +46,7 @@ void nrf_802154_spinel_response_notifier_init(void)
 	LOG_INF("awaited_property: %d",awaited_property);
 	notify_buff.free = true;
 	k_mutex_init(&await_mutex);
+
 }
 
 void nrf_802154_spinel_response_notifier_lock_before_request(spinel_prop_key_t property)
@@ -55,13 +57,18 @@ void nrf_802154_spinel_response_notifier_lock_before_request(spinel_prop_key_t p
 	 *       to await simultaneously
 	 */
 
-	LOG_DBG("Locking response notifier");
+	LOG_INF("Locking response notifier");
 	int ret = k_mutex_lock(&await_mutex, K_FOREVER);
 
 	assert(ret == 0);
 	(void)ret;
 
-	assert(awaited_property == AWAITED_PROPERTY_NONE);
+	if(awaited_property != AWAITED_PROPERTY_NONE)
+	{
+		printf("awaited_property: %d != %ld\n", awaited_property, AWAITED_PROPERTY_NONE);
+		assert(awaited_property == AWAITED_PROPERTY_NONE);
+	}
+
 	awaited_property = property;
 }
 
