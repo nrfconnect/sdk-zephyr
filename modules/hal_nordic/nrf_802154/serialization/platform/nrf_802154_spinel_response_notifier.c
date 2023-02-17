@@ -43,9 +43,10 @@ static spinel_prop_key_t awaited_property = AWAITED_PROPERTY_NONE;
 
 void nrf_802154_spinel_response_notifier_init(void)
 {
-	LOG_INF("awaited_property: %d",awaited_property);
+	printf("awaited_property: %d",awaited_property);
 	notify_buff.free = true;
 	k_mutex_init(&await_mutex);
+	awaited_property = AWAITED_PROPERTY_NONE;
 
 }
 
