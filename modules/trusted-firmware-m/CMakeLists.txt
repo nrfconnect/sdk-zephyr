@@ -31,7 +31,6 @@ set(TFM_CRYPTO_MODULES
 
 
 if (CONFIG_BUILD_WITH_TFM)
-  list(APPEND TFM_CMAKE_ARGS -DTFM_LIB_MODEL=OFF)
   # PSA API awareness for the Non-Secure application
   target_compile_definitions(app PRIVATE "TFM_PSA_API")
   if (CONFIG_TFM_SFN)
@@ -239,6 +238,34 @@ if (CONFIG_BUILD_WITH_TFM)
     message(FATAL_ERROR "Unsupported ZEPHYR_TOOLCHAIN_VARIANT: ${ZEPHYR_TOOLCHAIN_VARIANT}")
   endif()
 
+  if (CONFIG_TFM_PARTITION_INITIAL_ATTESTATION AND CONFIG_TFM_QCBOR_PATH STREQUAL "")
+    # TODO: Remove this when QCBOR licensing issues w/t_cose have been resolved,
+    # or only allow it when 'QCBOR_PATH' is set to a local path where QCBOR has
+    # been manually downloaded by the user before starting the build.
+    message(FATAL_ERROR "CONFIG_TFM_PARTITION_INITIAL_ATTESTATION is not available "
+      "with TF-M 1.7.0 due to licensing issues with a dependent library. This "
+      "restriction will be removed once licensing issues have been resolved."
+      )
+  endif()
+
+  if (CONFIG_TFM_PSA_TEST_INITIAL_ATTESTATION AND CONFIG_TFM_QCBOR_PATH STREQUAL "")
+    # TODO: Remove this when QCBOR licensing issues w/t_cose have been resolved,
+    # or only allow it when 'QCBOR_PATH' is set to a local path where QCBOR has
+    # been manually downloaded by the user before starting the build.
+    message(FATAL_ERROR "CONFIG_TFM_PSA_TEST_INITIAL_ATTESTATION is not available "
+      "with TF-M 1.7.0 due to licensing issues with a dependent library. This "
+      "restriction will be removed once licensing issues have been resolved."
+      )
+  endif()
+
+  if (CONFIG_TFM_QCBOR_PATH STREQUAL "DOWNLOAD")
+    # Change CMake cache type to string to avoid QCBOR_PATH=/absolute/path/DOWNLOAD being set.
+    set(QCBOR_PATH_TYPE ":STRING")
+  endif()
+  # Always set QCBOR_PATH, this will make sure that we don't automatically download this
+  # dependency in the TF-M build system and it will fail when set to an invalid value.
+  list(APPEND TFM_CMAKE_ARGS -DQCBOR_PATH${QCBOR_PATH_TYPE}=${CONFIG_TFM_QCBOR_PATH})
+
   if(CONFIG_BOARD_LPCXPRESSO55S69_CPU0)
     # Supply path to NXP HAL sources used for TF-M build
     set(TFM_PLATFORM_NXP_HAL_FILE_PATH ${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/platform/ext/target/nxp/)
@@ -262,10 +289,13 @@ if (CONFIG_BUILD_WITH_TFM)
   endif()
 
   if(CONFIG_FPU AND CONFIG_FP_HARDABI)
-    list(APPEND TFM_CMAKE_ARGS -DCONFIG_TFM_FP=hard)
+    list(APPEND TFM_CMAKE_ARGS -DCONFIG_TFM_ENABLE_FP=ON)
+    # Note: This is not a cmake option in TF-M.
+    # This should be specified by the platform in preload.cmake
+    # This works as a workaround for the platforms that do not have this.
     list(APPEND TFM_CMAKE_ARGS -DCONFIG_TFM_FP_ARCH=${FPU_FOR_${GCC_M_CPU}})
   else()
-    list(APPEND TFM_CMAKE_ARGS -DCONFIG_TFM_FP=soft)
+    list(APPEND TFM_CMAKE_ARGS -DCONFIG_TFM_ENABLE_FP=OFF)
   endif()
 
   file(MAKE_DIRECTORY ${TFM_BINARY_DIR})

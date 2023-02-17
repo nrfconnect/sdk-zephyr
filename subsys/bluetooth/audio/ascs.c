@@ -1466,12 +1466,12 @@ static int ase_stream_qos(struct bt_audio_stream *stream,
 {
 	struct bt_audio_ep *ep;
 
-	LOG_DBG("stream %p ep %p qos %p", stream, stream->ep, qos);
-
 	if (stream == NULL || stream->ep == NULL || qos == NULL) {
 		LOG_DBG("Invalid input stream, ep or qos pointers");
 		return -EINVAL;
 	}
+
+	LOG_DBG("stream %p ep %p qos %p", stream, stream->ep, qos);
 
 	ep = stream->ep;
 
@@ -1593,7 +1593,7 @@ static void ase_qos(struct bt_ascs_ase *ase, const struct bt_ascs_qos *qos)
 			} else if (cqos->pd == 0) {
 				reason = BT_ASCS_REASON_PD;
 			}
-		} else if (err == -EADDRINUSE) {
+		} else if (err == -EALREADY) {
 			reason = BT_ASCS_REASON_CIS;
 			/* FIXME: Ugly workaround to send Response_Code
 			 *        0x09 = Invalid Configuration Parameter Value

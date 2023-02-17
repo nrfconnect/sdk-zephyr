@@ -36,7 +36,6 @@ struct gpio_keys_pin_data {
 
 struct gpio_keys_data {
 	gpio_keys_callback_handler_t callback;
-	int num_keys;
 	struct gpio_keys_pin_data *pin_data;
 };
 
@@ -68,7 +67,7 @@ static void gpio_keys_change_deferred(struct k_work *work)
 
 static void gpio_keys_change_call_deferred(struct gpio_keys_pin_data *data, uint32_t msec)
 {
-	int rv = k_work_reschedule(&data->work, K_MSEC(msec));
+	int __maybe_unused rv = k_work_reschedule(&data->work, K_MSEC(msec));
 
 	__ASSERT(rv >= 0, "Set wake mask work queue error");
 }
@@ -82,9 +81,8 @@ static void gpio_keys_interrupt(const struct device *dev, struct gpio_callback *
 	struct gpio_keys_pin_data *pin_data =
 		CONTAINER_OF(cbdata, struct gpio_keys_pin_data, cb_data);
 	const struct gpio_keys_config *cfg = pin_data->dev->config;
-	struct gpio_keys_data *data = pin_data->dev->data;
 
-	for (int i = 0; i < data->num_keys; i++) {
+	for (int i = 0; i < cfg->num_keys; i++) {
 		if (pins & BIT(cfg->pin_cfg[i].spec.pin)) {
 			gpio_keys_change_call_deferred(pin_data, cfg->debounce_interval_ms);
 		}
@@ -118,7 +116,7 @@ static int gpio_keys_zephyr_enable_interrupt(const struct device *dev,
 	struct gpio_keys_data *data = dev->data;
 
 	data->callback = gpio_keys_cb;
-	for (int i = 0; i < data->num_keys; i++) {
+	for (int i = 0; i < cfg->num_keys; i++) {
 		retval = gpio_keys_interrupt_configure(&cfg->pin_cfg[i].spec,
 						       &data->pin_data[i].cb_data,
 						       cfg->pin_cfg[i].zephyr_code);
@@ -134,7 +132,7 @@ static int gpio_keys_zephyr_disable_interrupt(const struct device *dev)
 	struct gpio_keys_data *data = dev->data;
 	const struct gpio_dt_spec *gpio_spec;
 
-	for (int i = 0; i < data->num_keys; i++) {
+	for (int i = 0; i < cfg->num_keys; i++) {
 		gpio_spec = &cfg->pin_cfg[i].spec;
 		retval = z_impl_gpio_pin_interrupt_configure(gpio_spec->port, gpio_spec->pin,
 							     GPIO_INT_MODE_DISABLED);
@@ -168,7 +166,7 @@ static int gpio_keys_zephyr_get_pin(const struct device *dev, uint32_t idx)
 	const struct gpio_keys_config *cfg = dev->config;
 	const struct gpio_dt_spec *gpio_spec = &cfg->pin_cfg[idx].spec;
 	const struct device *gpio_dev = gpio_spec->port;
-	const struct gpio_driver_config *gpio_cfg = gpio_dev->config;
+	const struct gpio_driver_config __maybe_unused *gpio_cfg = gpio_dev->config;
 	int ret;
 	gpio_port_value_t value;
 
@@ -192,8 +190,23 @@ static int gpio_keys_zephyr_get_pin(const struct device *dev, uint32_t idx)
 static int gpio_keys_init(const struct device *dev)
 {
 	struct gpio_keys_data *data = dev->data;
+	const struct gpio_keys_config *cfg = dev->config;
+	int ret;
 
-	for (int i = 0; i < data->num_keys; i++) {
+	for (int i = 0; i < cfg->num_keys; i++) {
+		const struct gpio_dt_spec *gpio = &cfg->pin_cfg[i].spec;
+
+		if (!gpio_is_ready_dt(gpio)) {
+			LOG_ERR("%s is not ready", gpio->port->name);
+			return -ENODEV;
+		}
+
+		ret = gpio_pin_configure_dt(gpio, GPIO_INPUT);
+		if (ret != 0) {
+			LOG_ERR("Pin %d configuration failed: %d", i, ret);
+			return ret;
+		}
+
 		data->pin_data[i].dev = dev;
 		k_work_init_delayable(&data->pin_data[i].work, gpio_keys_change_deferred);
 	}
@@ -224,7 +237,6 @@ static const struct gpio_keys_api gpio_keys_zephyr_api = {
 	static struct gpio_keys_pin_data                                                           \
 		gpio_keys_pin_data_##i[ARRAY_SIZE(gpio_keys_pin_config_##i)];                      \
 	static struct gpio_keys_data gpio_keys_data_##i = {                                        \
-		.num_keys = ARRAY_SIZE(gpio_keys_pin_config_##i),                                  \
 		.pin_data = gpio_keys_pin_data_##i,                                                \
 	};                                                                                         \
 	DEVICE_DT_INST_DEFINE(i, &gpio_keys_init, NULL, &gpio_keys_data_##i,                       \
