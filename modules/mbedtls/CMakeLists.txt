@@ -79,6 +79,7 @@ else()
   # are defined the users need add a custom Kconfig choice to the
   # MBEDTLS_IMPLEMENTATION and manually add the mbedtls library and
   # included the required directories for mbedtls in their projects.
+  #zephyr_library_sources_ifdef(CONFIG_MBEDTLS_DEBUG_C debug.c)
 endif()
 
 endif()

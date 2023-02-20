@@ -179,6 +179,7 @@ __net_socket struct tls_context {
 		uint32_t dtls_handshake_timeout_min;
 		uint32_t dtls_handshake_timeout_max;
 
+#if defined(CONFIG_MBEDTLS_SSL_DTLS_CONNECTION_ID)
 		struct {
 			/** The CID value to use. */
 			uint8_t value[MBEDTLS_SSL_CID_IN_LEN_MAX];
@@ -188,6 +189,7 @@ __net_socket struct tls_context {
 			 */
 			int len;
 		} dtls_cid;
+#endif
 #endif /* CONFIG_NET_SOCKETS_ENABLE_DTLS */
 	} options;
 
@@ -390,6 +392,52 @@ static inline void tls_set_max_frag_len(mbedtls_ssl_config *config)
 static inline void tls_set_max_frag_len(mbedtls_ssl_config *config) {}
 #endif
 
+#if defined(CONFIG_MBEDTLS_DEBUG_C)
+void zephyr_mbedtls_debug(void *ctx, int level, const char *file, int line, const char *str)
+{
+	const char *p, *basename = file;
+	int str_len;
+
+	ARG_UNUSED(ctx);
+
+	if (!file || !str) {
+		return;
+	}
+
+	/* Extract basename from file */
+	if (IS_ENABLED(CONFIG_MBEDTLS_DEBUG_EXTRACT_BASENAME_AT_RUNTIME)) {
+		for (p = basename = file; *p != '\0'; p++) {
+			if (*p == '/' || *p == '\\') {
+				basename = p + 1;
+			}
+		}
+	}
+
+	str_len = strlen(str);
+
+	/* Remove newline only when it exists */
+	if (str_len > 0 && str[str_len - 1] == '\n') {
+		str_len--;
+	}
+
+	switch (level) {
+	case 0:
+	case 1:
+		LOG_ERR("%s:%04d: %.*s", basename, line, str_len, str);
+		break;
+	case 2:
+		LOG_WRN("%s:%04d: %.*s", basename, line, str_len, str);
+		break;
+	case 3:
+		LOG_INF("%s:%04d: %.*s", basename, line, str_len, str);
+		break;
+	default:
+		LOG_DBG("%s:%04d: %.*s", basename, line, str_len, str);
+		break;
+	}
+}
+#endif
+
 /* Allocate TLS context. */
 static struct tls_context *tls_alloc(void)
 {
@@ -425,7 +473,9 @@ static struct tls_context *tls_alloc(void)
 			MBEDTLS_SSL_DTLS_TIMEOUT_DFL_MIN;
 		tls->options.dtls_handshake_timeout_max =
 			MBEDTLS_SSL_DTLS_TIMEOUT_DFL_MAX;
+#if defined(CONFIG_MBEDTLS_SSL_DTLS_CONNECTION_ID)
 		tls->options.dtls_cid.len = DTLS_CONNECTION_ID_DISABLED;
+#endif
 #endif
 #if defined(MBEDTLS_X509_CRT_PARSE_C)
 		mbedtls_x509_crt_init(&tls->ca_chain);
@@ -433,7 +483,9 @@ static struct tls_context *tls_alloc(void)
 		mbedtls_pk_init(&tls->priv_key);
 #endif
 
-#if defined(CONFIG_MBEDTLS_DEBUG)
+#if defined(CONFIG_MBEDTLS_DEBUG) || defined(CONFIG_MBEDTLS_DEBUG_C)
+		LOG_INF("Enabling MbedTLS debug output");
+		mbedtls_debug_set_threshold(CONFIG_MBEDTLS_DEBUG_LEVEL);
 		mbedtls_ssl_conf_dbg(&tls->config, zephyr_mbedtls_debug, NULL);
 #endif
 	} else {
