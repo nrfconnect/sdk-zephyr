@@ -32,6 +32,36 @@ extern "C" {
 #endif
 
 #define BT_AUDIO_BROADCAST_ID_SIZE               3 /* octets */
+/** Maximum broadcast ID value */
+#define BT_AUDIO_BROADCAST_ID_MAX                0xFFFFFFU
+/** Indicates that the server have no preference for the presentation delay */
+#define BT_AUDIO_PD_PREF_NONE                    0x000000U
+/** Maximum presentation delay in microseconds */
+#define BT_AUDIO_PD_MAX                          0xFFFFFFU
+
+/** Endpoint states */
+enum bt_audio_state {
+	/** Audio Stream Endpoint Idle state */
+	BT_AUDIO_EP_STATE_IDLE =             0x00,
+
+	/** Audio Stream Endpoint Codec Configured state */
+	BT_AUDIO_EP_STATE_CODEC_CONFIGURED = 0x01,
+
+	/** Audio Stream Endpoint QoS Configured state */
+	BT_AUDIO_EP_STATE_QOS_CONFIGURED =   0x02,
+
+	/** Audio Stream Endpoint Enabling state */
+	BT_AUDIO_EP_STATE_ENABLING =         0x03,
+
+	/** Audio Stream Endpoint Streaming state */
+	BT_AUDIO_EP_STATE_STREAMING =        0x04,
+
+	/** Audio Stream Endpoint Disabling state */
+	BT_AUDIO_EP_STATE_DISABLING =        0x05,
+
+	/** Audio Stream Endpoint Streaming state */
+	BT_AUDIO_EP_STATE_RELEASING =        0x06,
+};
 
 /** @brief Audio Context Type for Generic Audio
  *
@@ -452,7 +482,11 @@ struct bt_codec_qos {
 
 	/** QoS Frame Interval */
 	uint32_t interval;
-	/** QoS Presentation Delay */
+
+	/** @brief QoS Presentation Delay in microseconds
+	 *
+	 *  Value range 0 to @ref BT_AUDIO_PD_MAX.
+	 */
 	uint32_t pd;
 };
 
@@ -499,10 +533,13 @@ struct bt_codec_qos_pref {
 	/** Preferred Transport Latency */
 	uint16_t latency;
 
-	/** @brief Minimum Presentation Delay
+	/** @brief Minimum Presentation Delay in microseconds
 	 *
 	 *  Unlike the other fields, this is not a preference but a minimum
 	 *  requirement.
+	 *
+	 *  Value range 0 to @ref BT_AUDIO_PD_MAX, or @ref BT_AUDIO_PD_PREF_NONE
+	 *  to indicate no preference.
 	 */
 	uint32_t pd_min;
 
@@ -510,13 +547,22 @@ struct bt_codec_qos_pref {
 	 *
 	 *  Unlike the other fields, this is not a preference but a maximum
 	 *  requirement.
+	 *
+	 *  Value range 0 to @ref BT_AUDIO_PD_MAX, or @ref BT_AUDIO_PD_PREF_NONE
+	 *  to indicate no preference.
 	 */
 	uint32_t pd_max;
 
-	/** @brief Preferred minimum Presentation Delay */
+	/** @brief Preferred minimum Presentation Delay
+	 *
+	 *  Value range 0 to @ref BT_AUDIO_PD_MAX.
+	 */
 	uint32_t pref_pd_min;
 
-	/** @brief Preferred maximum Presentation Delay	*/
+	/** @brief Preferred maximum Presentation Delay
+	 *
+	 *  Value range 0 to @ref BT_AUDIO_PD_MAX.
+	 */
 	uint32_t pref_pd_max;
 };
 
@@ -1356,8 +1402,14 @@ struct bt_audio_stream {
 	/** Audio stream operations */
 	struct bt_audio_stream_ops *ops;
 
-	/** Audio ISO reference */
+#if defined(CONFIG_BT_AUDIO_UNICAST_CLIENT)
+	/** @brief Audio ISO reference
+	 *
+	 *  This is only used for Unicast Client streams,
+	 *  and is handled internally.
+	 */
 	struct bt_audio_iso *audio_iso;
+#endif /* CONFIG_BT_AUDIO_UNICAST_CLIENT */
 
 	union {
 		void *group;
@@ -1784,6 +1836,59 @@ int bt_audio_unicast_server_register_cb(const struct bt_audio_unicast_server_cb 
  */
 int bt_audio_unicast_server_unregister_cb(const struct bt_audio_unicast_server_cb *cb);
 
+/** Structure holding information of audio stream endpoint */
+struct bt_audio_ep_info {
+	/** The ID of the endpoint */
+	uint8_t id;
+
+	/** The state of the endpoint */
+	enum bt_audio_state state;
+
+	/** Capabilities type */
+	enum bt_audio_dir dir;
+};
+
+/** @brief Return structure holding information of audio stream endpoint
+ *
+ *  @param ep   The audio stream endpoint object.
+ *  @param info The structure object to be filled with the info.
+ *
+ *  @return 0 in case of success or negative value in case of error.
+ */
+int bt_audio_ep_get_info(const struct bt_audio_ep *ep,
+			 struct bt_audio_ep_info *info);
+
+/** @typedef bt_audio_ep_func_t
+ *  @brief The callback function called for each endpoint.
+ *
+ *  @param ep The structure object with endpoint info.
+ *  @param user_data Data to pass to the function.
+ */
+typedef void (*bt_audio_ep_func_t)(struct bt_audio_ep *ep, void *user_data);
+
+/** @brief Iterate through all endpoints of the given connection.
+ *
+ *  @param conn Connection object
+ *  @param func Function to call for each endpoint.
+ *  @param user_data Data to pass to the callback function.
+ */
+void bt_audio_unicast_server_foreach_ep(struct bt_conn *conn,
+					bt_audio_ep_func_t func,
+					void *user_data);
+
+/** @brief Initialize and configure a new ASE.
+ *
+ *  @param conn Connection object
+ *  @param stream Configured stream object to be attached to the ASE
+ *  @param codec Codec configuration
+ *  @param qos_pref Audio Stream Quality of Service Preference
+ *
+ *  @return 0 in case of success or negative value in case of error.
+ */
+int bt_audio_unicast_server_config_ase(struct bt_conn *conn, struct bt_audio_stream *stream,
+				       struct bt_codec *codec,
+				       const struct bt_codec_qos_pref *qos_pref);
+
 /** @} */ /* End of group bt_audio_server */
 
 /**
@@ -1930,6 +2035,17 @@ int bt_audio_stream_disable(struct bt_audio_stream *stream);
  *
  *  This procedure is used by a unicast client or unicast server to make a
  *  stream start streaming.
+ *
+ *  For the unicast client, this will connect the CIS for the stream before
+ *  sending the start command.
+ *
+ *  For the unicast server, this will put a @ref BT_AUDIO_DIR_SINK stream into
+ *  the streaming state if the CIS is connected (initialized by the unicast
+ *  client). If the CIS is not connected yet, the stream will go into the
+ *  streaming state as soon as the CIS is connected.
+ *  @ref BT_AUDIO_DIR_SOURCE streams will go into the streaming state when the
+ *  unicast client sends the Receiver Start Ready operation, which will trigger
+ *  the @ref bt_audio_unicast_server_cb.start() callback.
  *
  *  This shall only be called for unicast streams.
  *  Broadcast sinks will always be started once synchronized, and broadcast

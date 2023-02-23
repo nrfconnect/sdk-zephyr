@@ -96,6 +96,48 @@ static int unicast_client_ep_set_codec(struct bt_audio_ep *ep, uint8_t id,
 				       uint16_t cid, uint16_t vid,
 				       void *data, uint8_t len, struct bt_codec *codec);
 
+static void unicast_client_ep_idle_state(struct bt_audio_ep *ep);
+
+/** Checks if the stream can terminate the CIS
+ *
+ * If the CIS is used for another stream, or if the CIS is not in the connected
+ * state it will return false.
+ */
+static bool unicast_client_can_disconnect_stream(const struct bt_audio_stream *stream)
+{
+	const struct bt_audio_ep *stream_ep;
+	enum bt_iso_state iso_state;
+
+	if (stream == NULL) {
+		return false;
+	}
+
+	stream_ep = stream->ep;
+
+	if (stream_ep ==  NULL || stream_ep->iso == NULL) {
+		return false;
+	}
+
+	iso_state = stream_ep->iso->chan.state;
+
+	if (iso_state == BT_ISO_STATE_CONNECTED ||
+	    iso_state == BT_ISO_STATE_CONNECTING) {
+		const struct bt_audio_ep *pair_ep;
+
+		pair_ep = bt_audio_iso_get_paired_ep(stream_ep);
+
+		/* If there are no paired endpoint, or the paired endpoint is
+		 * not in the streaming state, we can disconnect the CIS
+		 */
+		if (pair_ep == NULL ||
+		    pair_ep->status.state != BT_AUDIO_EP_STATE_STREAMING) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void unicast_client_ep_iso_recv(struct bt_iso_chan *chan,
 				       const struct bt_iso_recv_info *info,
 				       struct net_buf *buf)
@@ -106,11 +148,23 @@ static void unicast_client_ep_iso_recv(struct bt_iso_chan *chan,
 	struct bt_audio_ep *ep = iso->rx.ep;
 
 	if (ep == NULL) {
-		LOG_ERR("iso %p not bound with ep", chan);
+		/* In the case that the CIS has been setup as bidirectional, and
+		 * only one of the directions have an ASE configured yet,
+		 * we should only care about valid ISO packets when doing this
+		 * check. The reason is that some controllers send HCI ISO data
+		 * packets to the host, even if no SDU was sent on the remote
+		 * side. This basically means that empty PDUs are sent to the
+		 * host as HCI ISO data packets, which we should just ignore
+		 */
+		if ((info->flags & BT_ISO_FLAGS_VALID) != 0) {
+			LOG_ERR("iso %p not bound with ep", chan);
+		}
+
 		return;
 	}
 
-	if (ep->status.state != BT_AUDIO_EP_STATE_STREAMING) {
+	if (IS_ENABLED(CONFIG_BT_AUDIO_DEBUG_STREAM_DATA) &&
+	    ep->status.state != BT_AUDIO_EP_STATE_STREAMING) {
 		LOG_DBG("ep %p is not in the streaming state: %s",
 			ep, bt_audio_ep_state_str(ep->status.state));
 		return;
@@ -212,10 +266,18 @@ static void unicast_client_ep_iso_disconnected(struct bt_audio_ep *ep,
 
 	LOG_DBG("stream %p ep %p reason 0x%02x", stream, ep, reason);
 
-	if (stream->ops != NULL && stream->ops->stopped != NULL) {
-		stream->ops->stopped(stream);
+	/* If we were in the idle state when we started the ISO disconnection
+	 * then we need to call unicast_client_ep_idle_state again when
+	 * the ISO has finalized the disconnection
+	 */
+	if (ep->status.state == BT_AUDIO_EP_STATE_IDLE) {
+		unicast_client_ep_idle_state(ep);
 	} else {
-		LOG_WRN("No callback for stopped set");
+		if (stream->ops != NULL && stream->ops->stopped != NULL) {
+			stream->ops->stopped(stream);
+		} else {
+			LOG_WRN("No callback for stopped set");
+		}
 	}
 }
 
@@ -383,13 +445,27 @@ static struct bt_audio_ep *unicast_client_ep_get(struct bt_conn *conn,
 	return unicast_client_ep_new(conn, dir, handle);
 }
 
-static void unicast_client_ep_idle_state(struct bt_audio_ep *ep,
-					 struct net_buf_simple *buf)
+static void unicast_client_ep_idle_state(struct bt_audio_ep *ep)
 {
 	struct bt_audio_stream *stream = ep->stream;
 	const struct bt_audio_stream_ops *ops;
 
 	if (stream == NULL) {
+		return;
+	}
+
+	/* If CIS is connected, disconnect and wait for CIS disconnection */
+	if (unicast_client_can_disconnect_stream(stream)) {
+		const int err = bt_audio_stream_disconnect(stream);
+
+		if (err != 0) {
+			LOG_ERR("Failed to disconnect stream: %d", err);
+		} else {
+			return;
+		}
+	} else if (ep->iso != NULL &&
+		   ep->iso->chan.state == BT_ISO_STATE_DISCONNECTING) {
+		/* Wait */
 		return;
 	}
 
@@ -559,8 +635,12 @@ static void unicast_client_ep_qos_state(struct bt_audio_ep *ep,
 	       stream->qos->pd);
 
 	/* Disconnect ISO if connected */
-	if (ep->iso->chan.state == BT_ISO_STATE_CONNECTED) {
-		bt_audio_stream_disconnect(stream);
+	if (unicast_client_can_disconnect_stream(stream)) {
+		const int err = bt_audio_stream_disconnect(stream);
+
+		if (err != 0) {
+			LOG_ERR("Failed to disconnect stream: %d", err);
+		}
 	} else {
 		/* We setup the data path here, as this is the earliest where
 		 * we have the ISO <-> EP coupling completed (due to setting
@@ -729,12 +809,19 @@ static void unicast_client_ep_releasing_state(struct bt_audio_ep *ep,
 
 	LOG_DBG("dir %s", bt_audio_dir_str(ep->dir));
 
-	/* The Unicast Client shall terminate any CIS established for that ASE
-	 * by following the Connected Isochronous Stream Terminate procedure
-	 * defined in Volume 3, Part C, Section 9.3.15 in when the Unicast
-	 * Client has determined that the ASE is in the Releasing state.
-	 */
-	bt_audio_stream_disconnect(stream);
+	if (unicast_client_can_disconnect_stream(stream)) {
+		/* The Unicast Client shall terminate any CIS established for
+		 * that ASE by following the Connected Isochronous Stream
+		 * Terminate procedure defined in Volume 3, Part C,
+		 * Section 9.3.15 in when the Unicast Client has determined
+		 * that the ASE is in the Releasing state.
+		 */
+		const int err = bt_audio_stream_disconnect(stream);
+
+		if (err != 0) {
+			LOG_ERR("Failed to disconnect stream: %d", err);
+		}
+	}
 }
 
 static void unicast_client_ep_set_status(struct bt_audio_ep *ep,
@@ -764,7 +851,7 @@ static void unicast_client_ep_set_status(struct bt_audio_ep *ep,
 
 	switch (status->state) {
 	case BT_AUDIO_EP_STATE_IDLE:
-		unicast_client_ep_idle_state(ep, buf);
+		unicast_client_ep_idle_state(ep);
 		break;
 	case BT_AUDIO_EP_STATE_CODEC_CONFIGURED:
 		switch (old_state) {

@@ -334,6 +334,7 @@ CMSIS API layer:
     - include/zephyr/portability/cmsis*
     - samples/subsys/portability/cmsis_rtos_v*/
     - tests/subsys/portability/cmsis_rtos_v*/
+    - doc/services/portability/
   labels:
     - "area: CMSIS API Layer"
     - "area: Portability"
@@ -409,6 +410,7 @@ Debug:
     - tests/subsys/debug/
     - scripts/coredump/
     - samples/subsys/debug/
+    - doc/services/debugging/
   labels:
     - "area: Debugging"
 
@@ -541,8 +543,7 @@ Documentation Infrastructure:
 Release Notes:
   status: maintained
   maintainers:
-    - laurenmurphyx64
-    - stephanosio
+    - nashif
   files:
     - doc/releases/release-notes-*
   labels:
@@ -576,6 +577,17 @@ Release Notes:
     - include/zephyr/audio/
   labels:
     - "area: Audio"
+
+"Drivers: bbram":
+  status: maintained
+  maintainers:
+    - yperess
+  files:
+    - tests/drivers/bbram/
+    - drivers/bbram/
+    - include/zephyr/drivers/bbram.h
+  labels:
+    - "area: Battery Backed RAM (bbram)"
 
 "Drivers: CAN":
   status: maintained
@@ -657,6 +669,7 @@ Release Notes:
     - tests/drivers/counter/
     - doc/hardware/peripherals/counter.rst
     - samples/drivers/counter/
+    - tests/drivers/build_all/counter/
   labels:
     - "area: Counter"
 
@@ -794,6 +807,7 @@ Release Notes:
     - samples/drivers/flash_shell/
     - samples/drivers/soc_flash_nrf/
     - tests/drivers/flash/
+    - doc/hardware/peripherals/flash.rst
   labels:
     - "area: Flash"
 
@@ -810,6 +824,7 @@ Release Notes:
     - dts/bindings/fpga/
     - include/zephyr/drivers/fpga.h
     - samples/drivers/fpga/
+    - tests/drivers/build_all/fpga/
   labels:
     - "area: FPGA"
 
@@ -823,6 +838,7 @@ Release Notes:
     - dts/bindings/fuel-gauge/
     - include/zephyr/drivers/fuel_gauge.h
     - tests/drivers/fuel_gauge/
+    - doc/hardware/peripherals/fuel_gauge.rst
   labels:
     - "area: Fuel Gauge"
 
@@ -896,6 +912,7 @@ Release Notes:
     - include/zephyr/drivers/i3c.h
     - include/zephyr/drivers/i3c/
     - doc/hardware/peripherals/i3c.rst
+    - tests/drivers/build_all/i3c/
   labels:
     - "area: I3C"
 
@@ -978,6 +995,7 @@ Release Notes:
     - drivers/led_strip/
     - dts/bindings/led_strip/
     - include/zephyr/drivers/led_strip.h
+    - tests/drivers/build_all/led_strip/
   labels:
     - "area: LED"
 
@@ -1005,6 +1023,9 @@ Release Notes:
     - rerickson1
   files:
     - drivers/modem/
+    - tests/drivers/build_all/modem/
+    - dts/bindings/modem/
+    - include/zephyr/drivers/modem/
   labels:
     - "area: Modem"
 
@@ -1160,6 +1181,7 @@ Release Notes:
     - include/zephyr/drivers/sensor/
     - include/zephyr/dt-bindings/sensor/
     - doc/hardware/peripherals/sensor.rst
+    - tests/drivers/build_all/sensor/
   labels:
     - "area: Sensors"
 
@@ -1271,6 +1293,20 @@ Release Notes:
     - dts/bindings/mm/
   labels:
     - "area: Memory Management"
+
+"Drivers: Virtualization":
+  status: maintained
+  maintainers:
+    - tbursztyka
+  files:
+    - drivers/virtualization/
+    - tests/drivers/virtualization/
+    - dts/bindings/virtualization/
+    - include/zephyr/drivers/virtualization/
+    - doc/services/virtualization/
+    - include/zephyr/drivers/virtualization/ivshmem.h
+  labels:
+    - "area: Virtualization"
 
 Xen Platform:
   status: maintained
@@ -1387,6 +1423,7 @@ Kernel:
     - include/zephyr/sys_clock.h
     - samples/kernel/
     - include/zephyr/kernel/
+    - tests/lib/p4workq/
   files-exclude:
     - tests/kernel/mem_protect/
   labels:
@@ -1451,6 +1488,7 @@ Logging:
     - subsys/logging/
     - tests/subsys/logging/
     - scripts/logging/
+    - doc/services/logging/
   labels:
     - "area: Logging"
 
@@ -1711,6 +1749,7 @@ POSIX API layer:
     - lib/posix/
     - tests/posix/
     - samples/posix/
+    - tests/lib/fdtable/
   labels:
     - "area: POSIX"
 
@@ -2675,6 +2714,7 @@ West:
     - pdgendt
   files:
     - modules/Kconfig.lvgl
+    - tests/lib/gui/lvgl/
   labels:
     - manifest-lvgl
 

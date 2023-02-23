@@ -153,16 +153,21 @@ static void handle_wifi_twt_event(struct net_mgmt_event_callback *cb)
 	const struct wifi_twt_params *resp =
 		(const struct wifi_twt_params *)cb->info;
 
-	print(context.sh, SHELL_NORMAL, "TWT response: %s for dialog: %d and flow: %d\n",
-	      wifi_twt_setup_cmd2str[resp->setup_cmd], resp->dialog_token, resp->flow_id);
+	if (resp->resp_status == WIFI_TWT_RESP_NOT_RECEIVED) {
+		print(context.sh, SHELL_NORMAL, "TWT response status: %s\n",
+		      wifi_twt_setup_resp2str[resp->resp_status]);
+	} else {
+		print(context.sh, SHELL_NORMAL, "TWT response: %s for dialog: %d and flow: %d\n",
+		      wifi_twt_setup_cmd2str[resp->setup_cmd], resp->dialog_token, resp->flow_id);
 
-	/* If accepted, then no need to print TWT params */
-	if (resp->setup_cmd != WIFI_TWT_SETUP_CMD_ACCEPT) {
-		print(context.sh, SHELL_NORMAL,
-		      "TWT parameters: trigger: %s wake_interval_ms: %d, interval_ms: %d\n",
-		      resp->setup.trigger ? "trigger" : "no_trigger",
-		      resp->setup.twt_wake_interval_ms,
-		      resp->setup.twt_interval_ms);
+		/* If accepted, then no need to print TWT params */
+		if (resp->setup_cmd != WIFI_TWT_SETUP_CMD_ACCEPT) {
+			print(context.sh, SHELL_NORMAL,
+			      "TWT parameters: trigger: %s wake_interval_ms: %d, interval_ms: %d\n",
+			      resp->setup.trigger ? "trigger" : "no_trigger",
+			      resp->setup.twt_wake_interval_ms,
+			      resp->setup.twt_interval_ms);
+		}
 	}
 }
 
@@ -370,6 +375,8 @@ static int cmd_wifi_status(const struct shell *sh, size_t argc, char *argv[])
 		shell_fprintf(sh, SHELL_NORMAL, "MFP: %s\n",
 				wifi_mfp_txt(status.mfp));
 		shell_fprintf(sh, SHELL_NORMAL, "RSSI: %d\n", status.rssi);
+		shell_fprintf(sh, SHELL_NORMAL, "Beacon Interval: %d\n", status.beacon_interval);
+		shell_fprintf(sh, SHELL_NORMAL, "DTIM: %d\n", status.dtim_period);
 	}
 
 	return 0;

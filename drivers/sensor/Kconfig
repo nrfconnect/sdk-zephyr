@@ -59,6 +59,8 @@ source "drivers/sensor/ams_iAQcore/Kconfig"
 
 source "drivers/sensor/apds9960/Kconfig"
 
+source "drivers/sensor/bh1750/Kconfig"
+
 source "drivers/sensor/bma280/Kconfig"
 
 source "drivers/sensor/bmc150_magn/Kconfig"
@@ -274,5 +276,7 @@ source "drivers/sensor/pcnt_esp32/Kconfig"
 source "drivers/sensor/esp32_temp/Kconfig"
 
 source "drivers/sensor/rpi_pico_temp/Kconfig"
+
+source "drivers/sensor/xmc4xxx_temp/Kconfig"
 
 endif # SENSOR
