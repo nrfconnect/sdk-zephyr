@@ -32,8 +32,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/types.h>
-
+#ifdef CONFIG_ARCH_POSIX
 #include <fcntl.h>
+#else
+#include <zephyr/posix/fcntl.h>
+#endif
+
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
 #include <zephyr/net/tls_credentials.h>
 #endif
@@ -47,6 +51,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "lwm2m_rw_oma_tlv.h"
 #include "lwm2m_rw_plain_text.h"
 #include "lwm2m_util.h"
+#include "lwm2m_rd_client.h"
 #if defined(CONFIG_LWM2M_RW_SENML_JSON_SUPPORT)
 #include "lwm2m_rw_senml_json.h"
 #endif
@@ -59,11 +64,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #ifdef CONFIG_LWM2M_RW_SENML_CBOR_SUPPORT
 #include "lwm2m_rw_senml_cbor.h"
 #endif
-#ifdef CONFIG_LWM2M_RD_CLIENT_SUPPORT
-#include "lwm2m_rd_client.h"
-#endif
 
-#if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
+#if defined(CONFIG_NET_TC_THREAD_COOPERATIVE)
 /* Lowest priority cooperative thread */
 #define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
 #else
@@ -128,9 +130,7 @@ char *lwm2m_sprint_ip_addr(const struct sockaddr *addr)
 		return net_addr_ntop(AF_INET, &net_sin(addr)->sin_addr, buf, sizeof(buf));
 	}
 
-	LOG_ERR("Unknown IP address family:%d", addr->sa_family);
-	strcpy(buf, "unk");
-	return buf;
+	return "::";
 }
 
 static uint8_t to_hex_digit(uint8_t digit)
@@ -319,14 +319,12 @@ int lwm2m_engine_validate_write_access(struct lwm2m_message *msg,
 #if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP)
 static bool bootstrap_delete_allowed(int obj_id, int obj_inst_id)
 {
-	char pathstr[MAX_RESOURCE_LEN];
 	bool bootstrap_server;
 	int ret;
 
 	if (obj_id == LWM2M_OBJECT_SECURITY_ID) {
-		snprintk(pathstr, sizeof(pathstr), "%d/%d/1", LWM2M_OBJECT_SECURITY_ID,
-			 obj_inst_id);
-		ret = lwm2m_engine_get_bool(pathstr, &bootstrap_server);
+		ret = lwm2m_get_bool(&LWM2M_OBJ(LWM2M_OBJECT_SECURITY_ID, obj_inst_id, 1),
+					    &bootstrap_server);
 		if (ret < 0) {
 			return false;
 		}
@@ -461,6 +459,15 @@ static int32_t engine_next_service_timeout_ms(uint32_t max_timeout, const int64_
 int lwm2m_engine_add_service(k_work_handler_t service, uint32_t period_ms)
 {
 	int i;
+
+	if (!service) {
+		return -EINVAL;
+	}
+
+	/* First, try if the service is already registered, and modify it*/
+	if (lwm2m_engine_update_service_period(service, period_ms) == 0) {
+		return 0;
+	}
 
 	/* find an unused service index node */
 	for (i = 0; i < MAX_PERIODIC_SERVICE; i++) {
@@ -633,14 +640,36 @@ static int socket_recv_message(struct lwm2m_ctx *client_ctx)
 
 static int socket_send_message(struct lwm2m_ctx *client_ctx)
 {
+	int rc;
 	sys_snode_t *msg_node = sys_slist_get(&client_ctx->pending_sends);
 	struct lwm2m_message *msg;
 
 	if (!msg_node) {
 		return 0;
 	}
+
 	msg = SYS_SLIST_CONTAINER(msg_node, msg, node);
-	return lwm2m_send_message(msg);
+	if (!msg || !msg->ctx) {
+		LOG_ERR("LwM2M message is invalid.");
+		return -EINVAL;
+	}
+
+	if (msg->type == COAP_TYPE_CON) {
+		coap_pending_cycle(msg->pending);
+	}
+
+	rc = zsock_send(msg->ctx->sock_fd, msg->cpkt.data, msg->cpkt.offset, 0);
+
+	if (rc < 0) {
+		LOG_ERR("Failed to send packet, err %d", errno);
+		rc = -errno;
+	}
+
+	if (msg->type != COAP_TYPE_CON) {
+		lwm2m_reset_message(msg, true);
+	}
+
+	return rc;
 }
 
 static void socket_reset_pollfd_events(void)
@@ -659,20 +688,30 @@ static void socket_loop(void)
 	int i, rc;
 	int64_t timestamp;
 	int32_t timeout, next_retransmit;
+	bool rd_client_paused;
 
 	while (1) {
+		rd_client_paused = false;
 		/* Check is Thread Suspend Requested */
 		if (suspend_engine_thread) {
-#if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT)
-			lwm2m_rd_client_pause();
-#endif
+			rc = lwm2m_rd_client_pause();
+			if (rc == 0) {
+				rd_client_paused = true;
+			} else {
+				LOG_ERR("Could not pause RD client");
+			}
+
 			suspend_engine_thread = false;
 			active_engine_thread = false;
 			k_thread_suspend(engine_thread_id);
 			active_engine_thread = true;
-#if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT)
-			lwm2m_rd_client_resume();
-#endif
+
+			if (rd_client_paused) {
+				rc = lwm2m_rd_client_resume();
+				if (rc < 0) {
+					LOG_ERR("Could not resume RD client");
+				}
+			}
 		}
 
 		timestamp = k_uptime_get();
@@ -739,7 +778,15 @@ static void socket_loop(void)
 			}
 
 			if (sock_fds[i].revents & ZSOCK_POLLOUT) {
-				socket_send_message(sock_ctx[i]);
+				rc = socket_send_message(sock_ctx[i]);
+				/* Drop packets that cannot be send, CoAP layer handles retry */
+				/* Other fatal errors should trigger a recovery */
+				if (rc < 0 && rc != -EAGAIN) {
+					LOG_ERR("send() reported a socket error, %d", -rc);
+					if (sock_ctx[i] != NULL && sock_ctx[i]->fault_cb != NULL) {
+						sock_ctx[i]->fault_cb(-rc);
+					}
+				}
 			}
 		}
 	}
@@ -753,16 +800,15 @@ static int load_tls_credential(struct lwm2m_ctx *client_ctx, uint16_t res_id,
 	void *cred = NULL;
 	uint16_t cred_len;
 	uint8_t cred_flags;
-	char pathstr[MAX_RESOURCE_LEN];
 
 	/* ignore error value */
 	tls_credential_delete(client_ctx->tls_tag, type);
 
-	snprintk(pathstr, sizeof(pathstr), "0/%d/%u", client_ctx->sec_obj_inst, res_id);
-
-	ret = lwm2m_engine_get_res_buf(pathstr, &cred, NULL, &cred_len, &cred_flags);
+	ret = lwm2m_get_res_buf(&LWM2M_OBJ(0, client_ctx->sec_obj_inst, res_id), &cred, NULL,
+				&cred_len, &cred_flags);
 	if (ret < 0) {
-		LOG_ERR("Unable to get resource data for '%s'", pathstr);
+		LOG_ERR("Unable to get resource data for %d/%d/%d", 0,  client_ctx->sec_obj_inst,
+			res_id);
 		return ret;
 	}
 
@@ -881,16 +927,16 @@ int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 		goto error;
 	}
 
-	flags = fcntl(client_ctx->sock_fd, F_GETFL, 0);
+	flags = zsock_fcntl(client_ctx->sock_fd, F_GETFL, 0);
 	if (flags == -1) {
 		ret = -errno;
-		LOG_ERR("fcntl(F_GETFL) failed (%d)", ret);
+		LOG_ERR("zsock_fcntl(F_GETFL) failed (%d)", ret);
 		goto error;
 	}
-	ret = fcntl(client_ctx->sock_fd, F_SETFL, flags | O_NONBLOCK);
+	ret = zsock_fcntl(client_ctx->sock_fd, F_SETFL, flags | O_NONBLOCK);
 	if (ret == -1) {
 		ret = -errno;
-		LOG_ERR("fcntl(F_SETFL) failed (%d)", ret);
+		LOG_ERR("zsock_fcntl(F_SETFL) failed (%d)", ret);
 		goto error;
 	}
 
@@ -923,15 +969,14 @@ int lwm2m_engine_stop(struct lwm2m_ctx *client_ctx)
 
 int lwm2m_engine_start(struct lwm2m_ctx *client_ctx)
 {
-	char pathstr[MAX_RESOURCE_LEN];
 	char *url;
 	uint16_t url_len;
 	uint8_t url_data_flags;
 	int ret = 0U;
 
 	/* get the server URL */
-	snprintk(pathstr, sizeof(pathstr), "0/%d/0", client_ctx->sec_obj_inst);
-	ret = lwm2m_engine_get_res_buf(pathstr, (void **)&url, NULL, &url_len, &url_data_flags);
+	ret = lwm2m_get_res_buf(&LWM2M_OBJ(0, client_ctx->sec_obj_inst, 0), (void **)&url, NULL,
+				&url_len, &url_data_flags);
 	if (ret < 0) {
 		return ret;
 	}

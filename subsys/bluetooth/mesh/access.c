@@ -188,11 +188,7 @@ static int publish_transmit(struct bt_mesh_model *mod)
 {
 	NET_BUF_SIMPLE_DEFINE(sdu, BT_MESH_TX_SDU_MAX);
 	struct bt_mesh_model_pub *pub = mod->pub;
-	struct bt_mesh_msg_ctx ctx = {
-		.addr = pub->addr,
-		.send_ttl = pub->ttl,
-		.app_idx = pub->key,
-	};
+	struct bt_mesh_msg_ctx ctx = BT_MESH_MSG_CTX_INIT_PUB(pub);
 	struct bt_mesh_net_tx tx = {
 		.ctx = &ctx,
 		.src = bt_mesh_model_elem(mod)->addr,
@@ -1149,7 +1145,7 @@ static void store_pending_mod_sub(struct bt_mesh_model *mod, bool vnd)
 
 static void store_pending_mod_pub(struct bt_mesh_model *mod, bool vnd)
 {
-	struct mod_pub_val pub;
+	struct mod_pub_val pub = {0};
 	char path[20];
 	int err;
 

@@ -25,6 +25,8 @@
 
 #include "ticker/ticker.h"
 
+#include "pdu_df.h"
+#include "pdu_vendor.h"
 #include "pdu.h"
 
 #include "lll.h"
@@ -1393,6 +1395,10 @@ static inline int isr_rx_pdu(struct lll_scan *lll, struct pdu_adv *pdu_adv_rx,
 			/* Auxiliary PDU LLL scanning has been setup */
 			if (IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT) &&
 			    (err == -EBUSY)) {
+				if (IS_ENABLED(CONFIG_BT_CTLR_PROFILE_ISR)) {
+					lll_prof_cputime_capture();
+				}
+
 				return 0;
 			}
 

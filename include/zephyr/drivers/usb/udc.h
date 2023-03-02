@@ -19,6 +19,16 @@
 #include <zephyr/usb/usb_ch9.h>
 
 /**
+ * @brief Maximum packet size of control endpoint supported by the controller.
+ */
+enum udc_mps0 {
+	UDC_MPS0_8,
+	UDC_MPS0_16,
+	UDC_MPS0_32,
+	UDC_MPS0_64,
+};
+
+/**
  * USB device controller capabilities
  *
  * This structure is mainly intended for the USB device stack.
@@ -30,6 +40,8 @@ struct udc_device_caps {
 	uint32_t rwup : 1;
 	/** Controller performs status OUT stage automatically */
 	uint32_t out_ack : 1;
+	/** Maximum packet size for control endpoint */
+	enum udc_mps0 mps0 : 2;
 };
 
 /**
@@ -74,12 +86,12 @@ struct udc_ep_stat {
 	uint32_t enabled : 1;
 	/** Endpoint is halted (returning STALL PID) */
 	uint32_t halted : 1;
-	/** Endpoint transfer (usually OUT) is pending for a request */
-	uint32_t pending : 1;
 	/** Last submitted PID is DATA1 */
 	uint32_t data1 : 1;
 	/** If double buffering is supported, last used buffer is odd */
 	uint32_t odd : 1;
+	/** Endpoint is busy */
+	uint32_t busy : 1;
 };
 
 /**
@@ -210,8 +222,6 @@ struct udc_api {
 			  struct net_buf *const buf);
 	int (*ep_dequeue)(const struct device *dev,
 			  struct udc_ep_config *const cfg);
-	int (*ep_flush)(const struct device *dev,
-			struct udc_ep_config *const cfg);
 	int (*ep_set_halt)(const struct device *dev,
 			   struct udc_ep_config *const cfg);
 	int (*ep_clear_halt)(const struct device *dev,
@@ -554,18 +564,6 @@ int udc_ep_set_halt(const struct device *dev, const uint8_t ep);
  * @retval -EPERM controller is not enabled
  */
 int udc_ep_clear_halt(const struct device *dev, const uint8_t ep);
-
-/**
- * @brief Flush endpoint buffer (TBD)
- *
- * @param[in] dev    Pointer to device struct of the driver instance
- * @param[in] ep     Endpoint address
- *
- * @return 0 on success, all other values should be treated as error.
- * @retval -ENODEV endpoint configuration not found
- * @retval -EPERM controller is not initialized
- */
-int udc_ep_flush(const struct device *dev, const uint8_t ep);
 
 /**
  * @brief Queue USB device controller request

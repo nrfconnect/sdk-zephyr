@@ -250,7 +250,7 @@ do {                                                                    \
 
 #define likely(x)   (__builtin_expect((bool)!!(x), true) != 0L)
 #define unlikely(x) (__builtin_expect((bool)!!(x), false) != 0L)
-#define popcount(x) __builtin_popcount(x)
+#define POPCOUNT(x) __builtin_popcount(x)
 
 #ifndef __no_optimization
 #define __no_optimization __attribute__((optimize("-O0")))
@@ -623,6 +623,17 @@ do {                                                                    \
 #define __noasan __attribute__((no_sanitize("address")))
 #else
 #define __noasan /**/
+#endif
+
+/**
+ * @brief Function attribute to disable stack protector.
+ *
+ * @note Only supported for GCC >= 11.0.0 or Clang >= 7.
+ */
+#if (TOOLCHAIN_GCC_VERSION >= 110000) || (TOOLCHAIN_CLANG_VERSION >= 70000)
+#define FUNC_NO_STACK_PROTECTOR __attribute__((no_stack_protector))
+#else
+#define FUNC_NO_STACK_PROTECTOR
 #endif
 
 #endif /* !_LINKER */

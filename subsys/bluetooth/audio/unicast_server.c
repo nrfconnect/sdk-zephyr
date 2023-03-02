@@ -10,6 +10,7 @@
 
 #include <zephyr/bluetooth/audio/audio.h>
 
+#include "audio_iso.h"
 #include "pacs_internal.h"
 #include "endpoint.h"
 
@@ -82,19 +83,23 @@ int bt_unicast_server_reconfig(struct bt_audio_stream *stream,
 
 int bt_unicast_server_start(struct bt_audio_stream *stream)
 {
-	int err;
+	struct bt_audio_ep *ep = stream->ep;
 
-	if (unicast_server_cb != NULL && unicast_server_cb->start != NULL) {
-		err = unicast_server_cb->start(stream);
+	if (ep->dir != BT_AUDIO_DIR_SINK) {
+		LOG_DBG("Invalid operation for stream %p with dir %u",
+			stream, ep->dir);
+
+		return -EINVAL;
+	}
+
+	/* If ISO is connected to go streaming state,
+	 * else wait for ISO to be connected
+	 */
+	if (ep->iso->chan.state == BT_ISO_STATE_CONNECTED) {
+		ascs_ep_set_state(ep, BT_AUDIO_EP_STATE_STREAMING);
 	} else {
-		err = -ENOTSUP;
+		ep->receiver_ready = true;
 	}
-
-	if (err != 0) {
-		return err;
-	}
-
-	ascs_ep_set_state(stream->ep, BT_AUDIO_EP_STATE_STREAMING);
 
 	return 0;
 }
@@ -178,4 +183,17 @@ int bt_unicast_server_release(struct bt_audio_stream *stream)
 	ascs_ep_set_state(stream->ep, BT_AUDIO_EP_STATE_RELEASING);
 
 	return 0;
+}
+
+int bt_audio_unicast_server_config_ase(struct bt_conn *conn, struct bt_audio_stream *stream,
+				       struct bt_codec *codec,
+				       const struct bt_codec_qos_pref *qos_pref)
+{
+	return bt_ascs_config_ase(conn, stream, codec, qos_pref);
+}
+
+void bt_audio_unicast_server_foreach_ep(struct bt_conn *conn, bt_audio_ep_func_t func,
+					void *user_data)
+{
+	bt_ascs_foreach_ep(conn, func, user_data);
 }

@@ -417,6 +417,13 @@ out:
 	return ret;
 }
 
+bool dw_dma_is_enabled(const struct device *dev, uint32_t channel)
+{
+	const struct dw_dma_dev_cfg *const dev_cfg = dev->config;
+
+	return dw_read(dev_cfg->base, DW_DMA_CHAN_EN) & DW_CHAN_MASK(channel);
+}
+
 int dw_dma_start(const struct device *dev, uint32_t channel)
 {
 	const struct dw_dma_dev_cfg *const dev_cfg = dev->config;
@@ -426,6 +433,10 @@ int dw_dma_start(const struct device *dev, uint32_t channel)
 	/* validate channel */
 	if (channel >= DW_MAX_CHAN) {
 		ret = -EINVAL;
+		goto out;
+	}
+
+	if (dw_dma_is_enabled(dev, channel)) {
 		goto out;
 	}
 
@@ -506,6 +517,7 @@ int dw_dma_stop(const struct device *dev, uint32_t channel)
 {
 	const struct dw_dma_dev_cfg *const dev_cfg = dev->config;
 	struct dw_dma_dev_data *dev_data = dev->data;
+	struct dw_dma_chan_data *chan_data = &dev_data->chan[channel];
 	int ret = 0;
 
 	if (channel >= DW_MAX_CHAN) {
@@ -513,9 +525,9 @@ int dw_dma_stop(const struct device *dev, uint32_t channel)
 		goto out;
 	}
 
-#if defined(CONFIG_DMA_DW_HW_LLI) || defined(CONFIG_DMA_DW_SUSPEND_DRAIN)
-	struct dw_dma_chan_data *chan_data = &dev_data->chan[channel];
-#endif
+	if (!dw_dma_is_enabled(dev, channel) && chan_data->state != DW_DMA_SUSPENDED) {
+		goto out;
+	}
 
 #ifdef CONFIG_DMA_DW_HW_LLI
 	struct dw_lli *lli = chan_data->lli;
@@ -786,7 +798,7 @@ int dw_dma_get_status(const struct device *dev, uint32_t channel,
 #if CONFIG_DMA_DW_HW_LLI
 	if (!(dw_read(dev_cfg->base, DW_DMA_CHAN_EN) & DW_CHAN(channel))) {
 		LOG_ERR("xrun detected");
-		return -ENODATA;
+		return -EPIPE;
 	}
 #endif
 	return 0;

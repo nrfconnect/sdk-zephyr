@@ -181,7 +181,8 @@ extern void k_thread_foreach_unlocked(
  * and restore the contents of these registers when scheduling the thread.
  * No effect if @kconfig{CONFIG_FPU_SHARING} is not enabled.
  */
-#define K_FP_REGS (BIT(1))
+#define K_FP_IDX 1
+#define K_FP_REGS (BIT(K_FP_IDX))
 #endif
 
 /**
@@ -212,6 +213,37 @@ extern void k_thread_foreach_unlocked(
  * Effectively it serves as a tiny bit of zero-overhead TLS data.
  */
 #define K_CALLBACK_STATE (BIT(4))
+
+#ifdef CONFIG_ARC
+/* ARC processor Bitmask definitions for threads user options */
+
+#if defined(CONFIG_ARC_DSP_SHARING)
+/**
+ * @brief DSP registers are managed by context switch
+ *
+ * @details
+ * This option indicates that the thread uses the CPU's DSP registers.
+ * This instructs the kernel to take additional steps to save and
+ * restore the contents of these registers when scheduling the thread.
+ * No effect if @kconfig{CONFIG_ARC_DSP_SHARING} is not enabled.
+ */
+#define K_DSP_IDX 6
+#define K_ARC_DSP_REGS (BIT(K_DSP_IDX))
+#endif
+
+#if defined(CONFIG_ARC_AGU_SHARING)
+/**
+ * @brief AGU registers are managed by context switch
+ *
+ * @details
+ * This option indicates that the thread uses the ARC processor's XY
+ * memory and DSP feature. Often used with @kconfig{CONFIG_ARC_AGU_SHARING}.
+ * No effect if @kconfig{CONFIG_ARC_AGU_SHARING} is not enabled.
+ */
+#define K_AGU_IDX 7
+#define K_ARC_AGU_REGS (BIT(K_AGU_IDX))
+#endif
+#endif
 
 #ifdef CONFIG_X86
 /* x86 Bitmask definitions for threads user options */
@@ -628,7 +660,6 @@ struct _static_thread_data {
 	int init_prio;
 	uint32_t init_options;
 	int32_t init_delay;
-	void (*init_abort)(void);
 	const char *init_name;
 };
 
@@ -2080,6 +2111,8 @@ struct k_event {
 	_wait_q_t         wait_q;
 	uint32_t          events;
 	struct k_spinlock lock;
+
+	SYS_PORT_TRACING_TRACKING_FIELD(k_event)
 };
 
 #define Z_EVENT_INITIALIZER(obj) \
@@ -3467,9 +3500,9 @@ extern int k_work_schedule(struct k_work_delayable *dwork,
 /** @brief Reschedule a work item to a queue after a delay.
  *
  * Unlike k_work_schedule_for_queue() this function can change the deadline of
- * a scheduled work item, and will schedule a work item that isn't idle
- * (e.g. is submitted or running).  This function does not affect ("unsubmit")
- * a work item that has been submitted to a queue.
+ * a scheduled work item, and will schedule a work item that is in any state
+ * (e.g. is idle, submitted, or running).  This function does not affect
+ * ("unsubmit") a work item that has been submitted to a queue.
  *
  * @funcprops \isr_ok
  *
@@ -4416,6 +4449,24 @@ __syscall int k_msgq_get(struct k_msgq *msgq, void *data, k_timeout_t timeout);
  * @retval -ENOMSG Returned when the queue has no message.
  */
 __syscall int k_msgq_peek(struct k_msgq *msgq, void *data);
+
+/**
+ * @brief Peek/read a message from a message queue at the specified index
+ *
+ * This routine reads a message from message queue at the specified index
+ * and leaves the message in the queue.
+ * k_msgq_peek_at(msgq, data, 0) is equivalent to k_msgq_peek(msgq, data)
+ *
+ * @funcprops \isr_ok
+ *
+ * @param msgq Address of the message queue.
+ * @param data Address of area to hold the message read from the queue.
+ * @param idx Message queue index at which to peek
+ *
+ * @retval 0 Message read.
+ * @retval -ENOMSG Returned when the queue has no message at index.
+ */
+__syscall int k_msgq_peek_at(struct k_msgq *msgq, void *data, uint32_t idx);
 
 /**
  * @brief Purge a message queue.

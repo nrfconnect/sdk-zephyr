@@ -102,10 +102,6 @@ static int udc_rpi_start_xfer(uint8_t ep, const void *data, size_t len)
 		}
 	} else {
 		ep_state->read_offset = 0;
-
-		if (USB_EP_GET_IDX(ep) == 0) {
-			ep_state->next_pid = 1;
-		}
 	}
 
 	LOG_DBG("xfer ep %d len %d pid: %d", ep, len, ep_state->next_pid);
@@ -125,6 +121,7 @@ static void udc_rpi_handle_setup(void)
 
 	/* Set DATA1 PID for the next (data or status) stage */
 	udc_rpi_get_ep_state(USB_CONTROL_EP_IN)->next_pid = 1;
+	udc_rpi_get_ep_state(USB_CONTROL_EP_OUT)->next_pid = 1;
 
 	msg.ep = USB_CONTROL_EP_OUT;
 	msg.type = USB_DC_EP_SETUP;
@@ -233,6 +230,30 @@ static void udc_rpi_isr(const void *arg)
 		LOG_WRN("data seq");
 		hw_clear_alias(usb_hw)->sie_status = USB_SIE_STATUS_DATA_SEQ_ERROR_BITS;
 		handled |= USB_INTS_ERROR_DATA_SEQ_BITS;
+	}
+
+	if (status & USB_INTS_ERROR_RX_TIMEOUT_BITS) {
+		LOG_WRN("rx timeout");
+		hw_clear_alias(usb_hw)->sie_status = USB_SIE_STATUS_RX_TIMEOUT_BITS;
+		handled |= USB_INTS_ERROR_RX_TIMEOUT_BITS;
+	}
+
+	if (status & USB_INTS_ERROR_RX_OVERFLOW_BITS) {
+		LOG_WRN("rx overflow");
+		hw_clear_alias(usb_hw)->sie_status = USB_SIE_STATUS_RX_OVERFLOW_BITS;
+		handled |= USB_INTS_ERROR_RX_OVERFLOW_BITS;
+	}
+
+	if (status & USB_INTS_ERROR_BIT_STUFF_BITS) {
+		LOG_WRN("bit stuff error");
+		hw_clear_alias(usb_hw)->sie_status = USB_SIE_STATUS_BIT_STUFF_ERROR_BITS;
+		handled |= USB_INTS_ERROR_BIT_STUFF_BITS;
+	}
+
+	if (status & USB_INTS_ERROR_CRC_BITS) {
+		LOG_ERR("crc error");
+		hw_clear_alias(usb_hw)->sie_status = USB_SIE_STATUS_CRC_ERROR_BITS;
+		handled |= USB_INTS_ERROR_CRC_BITS;
 	}
 
 	if (status ^ handled) {
@@ -349,8 +370,7 @@ int usb_dc_ep_start_read(uint8_t ep, size_t len)
 
 	LOG_DBG("ep 0x%02x len %d", ep, len);
 
-	/* we flush USB_CONTROL_EP_IN by doing a 0 length receive on it */
-	if (!USB_EP_DIR_IS_OUT(ep) && (ep != USB_CONTROL_EP_IN || len)) {
+	if (!USB_EP_DIR_IS_OUT(ep)) {
 		LOG_ERR("invalid ep 0x%02x", ep);
 		return -EINVAL;
 	}

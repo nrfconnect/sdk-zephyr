@@ -104,6 +104,7 @@ set_compiler_property(PROPERTY warning_error_coding_guideline
 set_compiler_property(PROPERTY cstd -std=)
 
 if (NOT CONFIG_NEWLIB_LIBC AND
+    NOT (CONFIG_PICOLIBC AND NOT CONFIG_PICOLIBC_USE_MODULE) AND
     NOT COMPILER STREQUAL "xcc" AND
     NOT CONFIG_HAS_ESPRESSIF_HAL AND
     NOT CONFIG_NATIVE_APPLICATION)
@@ -132,6 +133,10 @@ set_property(TARGET compiler-cpp PROPERTY dialect_cpp2b "-std=c++2b"
 
 # Flag for disabling strict aliasing rule in C and C++
 set_compiler_property(PROPERTY no_strict_aliasing -fno-strict-aliasing)
+
+# Extra warning options
+set_property(TARGET compiler PROPERTY warnings_as_errors -Werror)
+set_property(TARGET asm PROPERTY warnings_as_errors -Werror -Wa,--fatal-warnings)
 
 # Disable exceptions flag in C++
 set_property(TARGET compiler-cpp PROPERTY no_exceptions "-fno-exceptions")
@@ -200,3 +205,5 @@ set_compiler_property(PROPERTY no_position_independent
                       -fno-pic
                       -fno-pie
 )
+
+set_compiler_property(PROPERTY no_global_merge "")

@@ -147,6 +147,8 @@ name:
   The actual name of the board as it appears in marketing material.
 type:
   Type of the board or configuration, currently we support 2 types: mcu, qemu
+simulation:
+  Simulator used to simulate the platform, e.g. qemu.
 arch:
   Architecture of the board
 toolchain:
@@ -310,10 +312,32 @@ extra_configs: <list of extra configurations>
             extra_configs:
               - CONFIG_ADC_ASYNC=y
 
+    Using namespacing, it is possible to apply a configuration only to some
+    hardware. Currently both architectures and platforms are supported::
+
+        common:
+          tags: drivers adc
+        tests:
+          test:
+            depends_on: adc
+          test_async:
+            extra_configs:
+              - arch:x86:CONFIG_ADC_ASYNC=y
+              - platform:qemu_x86:CONFIG_DEBUG=y
+
 
 build_only: <True|False> (default False)
-    If true, don't try to run the test even if the
-    selected platform supports it.
+    If true, twister will not try to run the test even if the test is runnable
+    on the platform.
+
+    This keyword is reserved for tests that are used to test if some code
+    actually builds. A ``build_only`` test is not designed to be run in any
+    environment and should not be testing any functionality, it only verifies
+    that the code builds.
+
+    This option is often used to test drivers and the fact that they are correctly
+    enabled in Zephyr and that the code builds, for example sensor drivers. Such
+    test shall not be used to verify the functionality of the dritver.
 
 build_on_all: <True|False> (default False)
     If true, attempt to build test on all available platforms.
@@ -369,11 +393,51 @@ sysbuild: <True|False> (default False)
     in tests requiring sysbuild support being skipped.
 
 harness: <string>
-    A harness string needed to run the tests successfully. This can be as
-    simple as a loopback wiring or a complete hardware test setup for
-    sensor and IO testing.
-    Usually pertains to external dependency domains but can be anything such as
-    console, sensor, net, keyboard, Bluetooth or pytest.
+    A harness keyword in the ``testcase.yaml`` file identifies a Twister
+    harness needed to run a test successfully. A harness is a feature of
+    Twister and implemented by Twister, some harnesses are defined as
+    placeholders and have no implementation yet.
+
+    A harness can be seen as the handler that needs to be implemented in
+    Twister to be able to evaluate if a test passes criteria. For example, a
+    keyboard harness is set on tests that require keyboard interaction to reach
+    verdict on whether a test has passed or failed, however, Twister lack this
+    harness implementation at the momemnt.
+    The console harness tells Twister to parse a test's text output for a regex
+    defined in the test's YAML file.
+
+    Supported harnesses:
+
+    - ztest
+    - test
+    - console
+    - pytest
+
+    Some widely used harnesses that are not supported yet:
+
+    - keyboard
+    - net
+    - bluetooth
+
+
+platform_key: <list of platform attributes>
+    Often a test needs to only be built and run once to qualify as passing.
+    Imagine a library of code that depends on the platform architecture where
+    passing the test on a single platform for each arch is enough to qualify the
+    tests and code as passing. The platform_key attribute enables doing just
+    that.
+
+    For example to key on (arch, simulation) to ensure a test is run once
+    per arch and simulation (as would be most common)::
+
+      platform_key:
+        - arch
+        - simulation
+
+    Adding platform (board) attributes to include things such as soc name,
+    soc family, and perhaps sets of IP blocks implementing each peripheral
+    interface would enable other interesting uses. For example, this could enable
+    building and running SPI tests once for eacn unique IP block.
 
 harness_config: <harness configuration options>
     Extra harness configuration options to be used to select a board and/or
@@ -411,7 +475,8 @@ harness_config: <harness configuration options>
         automation setup based on "fixture" keyword. Some sample fixture names
         are i2c_hts221, i2c_bme280, i2c_FRAM, ble_fw and gpio_loop.
 
-        Only one fixture can be defined per testcase.
+        Only one fixture can be defined per testcase and the fixture name has to
+        be unique across all tests in the test suite.
 
     pytest_root: <pytest directory> (default pytest)
         Specify a pytest directory which need to execute when test case begin to running,
@@ -868,14 +933,15 @@ using an external J-Link probe.  The "probe_id" keyword overrides the
 Quarantine
 ++++++++++
 
-Twister allows using user-defined yaml files defining the list of tests to be put
-under quarantine. Such tests will be skipped and marked accordingly in the output
-reports. This feature is especially useful when running larger test suits, where
-a failure of one test can affect the execution of other tests (e.g. putting the
-physical board in a corrupted state).
+Twister allows user to provide onfiguration files defining a list of tests or
+platforms to be put under quarantine. Such tests will be skipped and marked
+accordingly in the output reports. This feature is especially useful when
+running larger test suits, where a failure of one test can affect the execution
+of other tests (e.g. putting the physical board in a corrupted state).
 
 To use the quarantine feature one has to add the argument
 ``--quarantine-list <PATH_TO_QUARANTINE_YAML>`` to a twister call.
+Multiple quarantine files can be used.
 The current status of tests on the quarantine list can also be verified by adding
 ``--quarantine-verify`` to the above argument. This will make twister skip all tests
 which are not on the given list.
@@ -886,21 +952,32 @@ to put under quarantine. In addition, an optional entry "comment" can be used, w
 some more details can be given (e.g. link to a reported issue). These comments will also
 be added to the output reports.
 
+When quarantining a class of tests or many scenarios in a single testsuite or
+when dealing with multiple issues within a subsystem, it is possible to use
+regular expressions, for example, **kernel.*** would quarantine
+all kernel tests.
+
 An example of entries in a quarantine yaml::
 
     - scenarios:
         - sample.basic.helloworld
-      platforms:
-        - all
       comment: "Link to the issue: https://github.com/zephyrproject-rtos/zephyr/pull/33287"
 
     - scenarios:
         - kernel.common
-        - kernel.common.misra
+        - kernel.common.(misra|tls)
         - kernel.common.nano64
       platforms:
-        - qemu_cortex_m3
+        - .*_cortex_.*
         - native_posix
+
+To exclude a platform, use the following syntax::
+
+    - platforms:
+      - qemu_x86
+      comment: "broken qemu"
+
+Additionally you can quarantine entire architectures or a specific simulator for executing tests.
 
 Running in Tests in Random Order
 ********************************
