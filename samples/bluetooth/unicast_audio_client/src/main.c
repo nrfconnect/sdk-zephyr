@@ -908,21 +908,17 @@ static int configure_streams(void)
 
 static int create_group(void)
 {
-	struct bt_audio_unicast_group_stream_param stream_params[ARRAY_SIZE(streams)];
-	struct bt_audio_unicast_group_param param;
+	struct bt_audio_unicast_group_param params[ARRAY_SIZE(streams)];
 	int err;
 
 	for (size_t i = 0U; i < configured_stream_count; i++) {
-		stream_params[i].stream = &streams[i];
-		stream_params[i].qos = &codec_configuration.qos;
-		stream_params[i].dir = stream_dir(stream_params[i].stream);
+		params[i].stream = &streams[i];
+		params[i].qos = &codec_configuration.qos;
+		params[i].dir = stream_dir(params[i].stream);
 	}
 
-	param.params = stream_params;
-	param.params_count = configured_stream_count;
-	param.packing = BT_ISO_PACKING_SEQUENTIAL;
-
-	err = bt_audio_unicast_group_create(&param, &unicast_group);
+	err = bt_audio_unicast_group_create(params, configured_stream_count,
+					    &unicast_group);
 	if (err != 0) {
 		printk("Could not create unicast group (err %d)\n", err);
 		return err;
