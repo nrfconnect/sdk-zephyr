@@ -643,8 +643,6 @@ int lwm2m_engine_update_observer_max_period(struct lwm2m_ctx *client_ctx, const 
 /**
  * @brief Create an LwM2M object instance.
  *
- * @deprecated Use lwm2m_create_obj_inst() instead.
- *
  * LwM2M clients use this function to create non-default LwM2M objects:
  * Example to create first temperature sensor object:
  * lwm2m_engine_create_obj_inst("3303/0");
@@ -653,26 +651,10 @@ int lwm2m_engine_update_observer_max_period(struct lwm2m_ctx *client_ctx, const 
  *
  * @return 0 for success or negative in case of error.
  */
-__deprecated
 int lwm2m_engine_create_obj_inst(const char *pathstr);
 
 /**
- * @brief Create an LwM2M object instance.
- *
- * LwM2M clients use this function to create non-default LwM2M objects:
- * Example to create first temperature sensor object:
- * lwm2m_create_obj_inst(&LWM2M_OBJ(3303, 0));
- *
- * @param[in] path LwM2M path as a struct
- *
- * @return 0 for success or negative in case of error.
- */
-int lwm2m_create_object_inst(const struct lwm2m_obj_path *path);
-
-/**
  * @brief Delete an LwM2M object instance.
- *
- * @deprecated Use lwm2m_delete_obj_inst() instead.
  *
  * LwM2M clients use this function to delete LwM2M objects.
  *
@@ -680,19 +662,7 @@ int lwm2m_create_object_inst(const struct lwm2m_obj_path *path);
  *
  * @return 0 for success or negative in case of error.
  */
-__deprecated
 int lwm2m_engine_delete_obj_inst(const char *pathstr);
-
-/**
- * @brief Delete an LwM2M object instance.
- *
- * LwM2M clients use this function to delete LwM2M objects.
- *
- * @param[in] path LwM2M path as a struct
- *
- * @return 0 for success or negative in case of error.
- */
-int lwm2m_delete_object_inst(const struct lwm2m_obj_path *path);
 
 /**
  * @brief Locks the registry for this thread.
@@ -1582,8 +1552,6 @@ int lwm2m_engine_get_res_data(const char *pathstr, void **data_ptr, uint16_t *da
 /**
  * @brief Create a resource instance
  *
- * @deprecated Use lwm2m_create_res_inst() instead.
- *
  * LwM2M clients use this function to create multi-resource instances:
  * Example to create 0 instance of device available power sources:
  * lwm2m_engine_create_res_inst("3/0/6/0");
@@ -1592,26 +1560,10 @@ int lwm2m_engine_get_res_data(const char *pathstr, void **data_ptr, uint16_t *da
  *
  * @return 0 for success or negative in case of error.
  */
-__deprecated
 int lwm2m_engine_create_res_inst(const char *pathstr);
 
 /**
- * @brief Create a resource instance
- *
- * LwM2M clients use this function to create multi-resource instances:
- * Example to create 0 instance of device available power sources:
- * lwm2m_create_res_inst(&LWM2M_OBJ(3, 0, 6, 0));
- *
- * @param[in] path LwM2M path as a struct
- *
- * @return 0 for success or negative in case of error.
- */
-int lwm2m_create_res_inst(const struct lwm2m_obj_path *path);
-
-/**
  * @brief Delete a resource instance
- *
- * @deprecated Use lwm2m_delete_res_inst() instead.
  *
  * Use this function to remove an existing resource instance
  *
@@ -1619,19 +1571,7 @@ int lwm2m_create_res_inst(const struct lwm2m_obj_path *path);
  *
  * @return 0 for success or negative in case of error.
  */
-__deprecated
 int lwm2m_engine_delete_res_inst(const char *pathstr);
-
-/**
- * @brief Delete a resource instance
- *
- * Use this function to remove an existing resource instance
- *
- * @param[in] path LwM2M path as a struct
- *
- * @return 0 for success or negative in case of error.
- */
-int lwm2m_delete_res_inst(const struct lwm2m_obj_path *path);
 
 /**
  * @brief Update the period of a given service.
