@@ -58,9 +58,30 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.disconnected = disconnected,
 };
 
-void start_smp_bluetooth_adverts(void)
+static void bt_ready(int err)
+{
+	if (err) {
+		LOG_ERR("Bluetooth init failed (err %d)", err);
+		return;
+	}
+
+	LOG_INF("Bluetooth initialized");
+
+	k_work_submit(&advertise_work);
+}
+
+void start_smp_bluetooth(void)
 {
 	k_work_init(&advertise_work, advertise);
 
-	k_work_submit(&advertise_work);
+	/* Enable Bluetooth. */
+	int rc = bt_enable(bt_ready);
+
+	if (rc != 0) {
+		LOG_ERR("Bluetooth init failed (err %d)", rc);
+		return;
+	}
+
+	/* Initialize the Bluetooth mcumgr transport. */
+	smp_bt_register();
 }
