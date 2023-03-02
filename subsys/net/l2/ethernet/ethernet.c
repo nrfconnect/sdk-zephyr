@@ -747,7 +747,6 @@ error:
 
 static inline int ethernet_enable(struct net_if *iface, bool state)
 {
-	int ret = 0;
 	const struct ethernet_api *eth =
 		net_if_get_device(iface)->api;
 
@@ -759,15 +758,15 @@ static inline int ethernet_enable(struct net_if *iface, bool state)
 		net_arp_clear_cache(iface);
 
 		if (eth->stop) {
-			ret = eth->stop(net_if_get_device(iface));
+			eth->stop(net_if_get_device(iface));
 		}
 	} else {
 		if (eth->start) {
-			ret = eth->start(net_if_get_device(iface));
+			eth->start(net_if_get_device(iface));
 		}
 	}
 
-	return ret;
+	return 0;
 }
 
 enum net_l2_flags ethernet_flags(struct net_if *iface)
