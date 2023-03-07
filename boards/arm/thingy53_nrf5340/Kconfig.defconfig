@@ -135,14 +135,12 @@ config USB_DEVICE_REMOTE_WAKEUP
 if LOG
 
 # Logger cannot use itself to log
-choice USB_CDC_ACM_LOG_LEVEL_CHOICE
-	default USB_CDC_ACM_LOG_LEVEL_OFF
-endchoice
+config USB_CDC_ACM_LOG_LEVEL
+	default 0
 
 # Set USB log level to error only
-choice USB_DEVICE_LOG_LEVEL_CHOICE
-	default USB_DEVICE_LOG_LEVEL_ERR
-endchoice
+config USB_DEVICE_LOG_LEVEL
+	default 1
 
 # Wait 4000ms at startup for logging
 config LOG_PROCESS_THREAD_STARTUP_DELAY_MS
