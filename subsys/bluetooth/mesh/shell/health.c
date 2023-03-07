@@ -41,8 +41,12 @@ static int cmd_fault_get(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	struct bt_mesh_health_cli *cli = mod->user_data;
-	struct bt_mesh_msg_ctx ctx = BT_MESH_MSG_CTX_INIT_APP(bt_mesh_shell_target_ctx.app_idx,
-							      bt_mesh_shell_target_ctx.dst);
+	struct bt_mesh_msg_ctx ctx = {
+		.net_idx = bt_mesh_shell_target_ctx.net_idx,
+		.addr = bt_mesh_shell_target_ctx.dst,
+		.app_idx = bt_mesh_shell_target_ctx.app_idx,
+	};
+
 	uint8_t faults[32];
 	size_t fault_count;
 	uint8_t test_id;
@@ -75,8 +79,12 @@ static int fault_clear(const struct shell *sh, size_t argc, char *argv[], bool a
 	}
 
 	struct bt_mesh_health_cli *cli = mod->user_data;
-	struct bt_mesh_msg_ctx ctx = BT_MESH_MSG_CTX_INIT_APP(bt_mesh_shell_target_ctx.app_idx,
-							      bt_mesh_shell_target_ctx.dst);
+	struct bt_mesh_msg_ctx ctx = {
+		.net_idx = bt_mesh_shell_target_ctx.net_idx,
+		.addr = bt_mesh_shell_target_ctx.dst,
+		.app_idx = bt_mesh_shell_target_ctx.app_idx,
+	};
+
 	uint8_t test_id;
 	uint16_t cid;
 	int err = 0;
@@ -127,8 +135,12 @@ static int fault_test(const struct shell *sh, size_t argc, char *argv[], bool ac
 	}
 
 	struct bt_mesh_health_cli *cli = mod->user_data;
-	struct bt_mesh_msg_ctx ctx = BT_MESH_MSG_CTX_INIT_APP(bt_mesh_shell_target_ctx.app_idx,
-							      bt_mesh_shell_target_ctx.dst);
+	struct bt_mesh_msg_ctx ctx = {
+		.net_idx = bt_mesh_shell_target_ctx.net_idx,
+		.addr = bt_mesh_shell_target_ctx.dst,
+		.app_idx = bt_mesh_shell_target_ctx.app_idx,
+	};
+
 	uint8_t test_id;
 	uint16_t cid;
 	int err = 0;
@@ -180,8 +192,12 @@ static int cmd_period_get(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	struct bt_mesh_health_cli *cli = mod->user_data;
-	struct bt_mesh_msg_ctx ctx = BT_MESH_MSG_CTX_INIT_APP(bt_mesh_shell_target_ctx.app_idx,
-							      bt_mesh_shell_target_ctx.dst);
+	struct bt_mesh_msg_ctx ctx = {
+		.net_idx = bt_mesh_shell_target_ctx.net_idx,
+		.addr = bt_mesh_shell_target_ctx.dst,
+		.app_idx = bt_mesh_shell_target_ctx.app_idx,
+	};
+
 	uint8_t divisor;
 	int err;
 
@@ -202,8 +218,12 @@ static int period_set(const struct shell *sh, size_t argc, char *argv[], bool ac
 	}
 
 	struct bt_mesh_health_cli *cli = mod->user_data;
-	struct bt_mesh_msg_ctx ctx = BT_MESH_MSG_CTX_INIT_APP(bt_mesh_shell_target_ctx.app_idx,
-							      bt_mesh_shell_target_ctx.dst);
+	struct bt_mesh_msg_ctx ctx = {
+		.net_idx = bt_mesh_shell_target_ctx.net_idx,
+		.addr = bt_mesh_shell_target_ctx.dst,
+		.app_idx = bt_mesh_shell_target_ctx.app_idx,
+	};
+
 	uint8_t divisor;
 	int err = 0;
 
@@ -252,8 +272,12 @@ static int cmd_attention_get(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	struct bt_mesh_health_cli *cli = mod->user_data;
-	struct bt_mesh_msg_ctx ctx = BT_MESH_MSG_CTX_INIT_APP(bt_mesh_shell_target_ctx.app_idx,
-							      bt_mesh_shell_target_ctx.dst);
+	struct bt_mesh_msg_ctx ctx = {
+		.net_idx = bt_mesh_shell_target_ctx.net_idx,
+		.addr = bt_mesh_shell_target_ctx.dst,
+		.app_idx = bt_mesh_shell_target_ctx.app_idx,
+	};
+
 	uint8_t attention;
 	int err;
 
@@ -274,8 +298,12 @@ static int attention_set(const struct shell *sh, size_t argc, char *argv[], bool
 	}
 
 	struct bt_mesh_health_cli *cli = mod->user_data;
-	struct bt_mesh_msg_ctx ctx = BT_MESH_MSG_CTX_INIT_APP(bt_mesh_shell_target_ctx.app_idx,
-							      bt_mesh_shell_target_ctx.dst);
+	struct bt_mesh_msg_ctx ctx = {
+		.net_idx = bt_mesh_shell_target_ctx.net_idx,
+		.addr = bt_mesh_shell_target_ctx.dst,
+		.app_idx = bt_mesh_shell_target_ctx.app_idx,
+	};
+
 	uint8_t attention;
 	int err = 0;
 
