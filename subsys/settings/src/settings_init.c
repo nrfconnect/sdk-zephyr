@@ -15,7 +15,6 @@
 #include "settings/settings_file.h"
 #include <zephyr/kernel.h>
 
-extern struct k_mutex settings_lock;
 
 bool settings_subsys_initialized;
 
@@ -28,19 +27,17 @@ int settings_subsys_init(void)
 
 	int err = 0;
 
-	k_mutex_lock(&settings_lock, K_FOREVER);
-
-	if (!settings_subsys_initialized) {
-		settings_init();
-
-		err = settings_backend_init(); /* func rises kernel panic once error */
-
-		if (!err) {
-			settings_subsys_initialized = true;
-		}
+	if (settings_subsys_initialized) {
+		return 0;
 	}
 
-	k_mutex_unlock(&settings_lock);
+	settings_init();
+
+	err = settings_backend_init(); /* func rises kernel panic once error */
+
+	if (!err) {
+		settings_subsys_initialized = true;
+	}
 
 	return err;
 }
