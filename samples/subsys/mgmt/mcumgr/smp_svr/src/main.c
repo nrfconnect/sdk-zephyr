@@ -66,7 +66,6 @@ void main(void)
 		LOG_ERR("Error mounting littlefs [%d]", rc);
 	}
 #endif
-
 #ifdef CONFIG_MCUMGR_SMP_BT
 	start_smp_bluetooth_adverts();
 #endif
