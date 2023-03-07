@@ -1321,10 +1321,12 @@ void shell_thread(void *shell_handle, void *arg_log_backend,
 					   log_level);
 	}
 
-	/* Enable shell and print prompt. */
-	err = shell_start(shell);
-	if (err != 0) {
-		return;
+	if (IS_ENABLED(CONFIG_SHELL_AUTOSTART)) {
+		/* Enable shell and print prompt. */
+		err = shell_start(shell);
+		if (err != 0) {
+			return;
+		}
 	}
 
 	while (true) {
@@ -1656,6 +1658,15 @@ int shell_use_colors_set(const struct shell *shell, bool val)
 	return (int)z_flag_use_colors_set(shell, val);
 }
 
+int shell_use_vt100_set(const struct shell *sh, bool val)
+{
+	if (sh == NULL) {
+		return -EINVAL;
+	}
+
+	return (int)z_flag_use_vt100_set(sh, val);
+}
+
 int shell_echo_set(const struct shell *shell, bool val)
 {
 	if (shell == NULL) {
@@ -1688,6 +1699,10 @@ void shell_set_bypass(const struct shell *sh, shell_bypass_cb_t bypass)
 	__ASSERT_NO_MSG(sh);
 
 	sh->ctx->bypass = bypass;
+
+	if (bypass == NULL) {
+		cmd_buffer_clear(sh);
+	}
 }
 
 bool shell_ready(const struct shell *sh)

@@ -26,6 +26,8 @@
 
 #include "ticker/ticker.h"
 
+#include "pdu_df.h"
+#include "lll/pdu_vendor.h"
 #include "pdu.h"
 
 #include "lll.h"
@@ -1121,6 +1123,7 @@ uint8_t ll_adv_enable(uint8_t enable)
 		conn->llcp_req = conn->llcp_ack = conn->llcp_type = 0;
 		conn->llcp_rx = NULL;
 		conn->llcp_cu.req = conn->llcp_cu.ack = 0;
+		conn->llcp_cu.pause_tx = 0U;
 		conn->llcp_feature.req = conn->llcp_feature.ack = 0;
 		conn->llcp_feature.features_conn = ll_feat_get();
 		conn->llcp_feature.features_peer = 0;
@@ -1148,10 +1151,11 @@ uint8_t ll_adv_enable(uint8_t enable)
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
 #if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
-		conn->llcp_conn_param.req = 0;
-		conn->llcp_conn_param.ack = 0;
-		conn->llcp_conn_param.disabled = 0;
-		conn->periph.ticks_to_offset = 0;
+		conn->llcp_conn_param.req = 0U;
+		conn->llcp_conn_param.ack = 0U;
+		conn->llcp_conn_param.disabled = 0U;
+		conn->llcp_conn_param.cache.timeout = 0U;
+		conn->periph.ticks_to_offset = 0U;
 #endif /* CONFIG_BT_CTLR_CONN_PARAM_REQ */
 
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
@@ -1358,13 +1362,7 @@ uint8_t ll_adv_enable(uint8_t enable)
 
 #if !defined(CONFIG_BT_HCI_MESH_EXT)
 	ticks_anchor = ticker_ticks_now_get();
-
-#if !defined(CONFIG_BT_TICKER_LOW_LAT)
-	/* NOTE: mesh bsim loopback_group_low_lat test needs both adv and scan
-	 * to not have that start overhead added to pass the test.
-	 */
 	ticks_anchor += HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US);
-#endif /* !CONFIG_BT_TICKER_LOW_LAT */
 
 #else /* CONFIG_BT_HCI_MESH_EXT */
 	if (!at_anchor) {
@@ -1472,7 +1470,9 @@ uint8_t ll_adv_enable(uint8_t enable)
 			 * started.
 			 */
 			if (sync) {
+				uint32_t ticks_slot_overhead;
 				uint32_t ticks_slot_aux;
+
 #if defined(CONFIG_BT_CTLR_ADV_RESERVE_MAX)
 				uint32_t us_slot;
 
@@ -1487,6 +1487,8 @@ uint8_t ll_adv_enable(uint8_t enable)
 						 ticks_slot_overhead_aux;
 #endif
 
+#if !defined(CONFIG_BT_CTLR_ADV_AUX_SYNC_OFFSET) || \
+	(CONFIG_BT_CTLR_ADV_AUX_SYNC_OFFSET == 0)
 				/* Schedule periodic advertising PDU after
 				 * auxiliary PDUs.
 				 * Reduce the MAFS offset by the Event Overhead
@@ -1497,16 +1499,25 @@ uint8_t ll_adv_enable(uint8_t enable)
 				 * to accumulation of remainder to maintain
 				 * average ticker interval.
 				 */
-				uint32_t ticks_anchor_sync =
-					ticks_anchor_aux + ticks_slot_aux +
+				uint32_t ticks_anchor_sync = ticks_anchor_aux +
+					ticks_slot_aux +
 					HAL_TICKER_US_TO_TICKS(
 						MAX(EVENT_MAFS_US,
 						    EVENT_OVERHEAD_START_US) -
 						EVENT_OVERHEAD_START_US +
 						(EVENT_TICKER_RES_MARGIN_US << 1));
 
+#else /* CONFIG_BT_CTLR_ADV_AUX_SYNC_OFFSET */
+				uint32_t ticks_anchor_sync = ticks_anchor_aux +
+					HAL_TICKER_US_TO_TICKS(
+						CONFIG_BT_CTLR_ADV_AUX_SYNC_OFFSET);
+
+#endif /* CONFIG_BT_CTLR_ADV_AUX_SYNC_OFFSET */
+
+				ticks_slot_overhead = ull_adv_sync_evt_init(adv, sync, NULL);
 				ret = ull_adv_sync_start(adv, sync,
-							 ticks_anchor_sync);
+							 ticks_anchor_sync,
+							 ticks_slot_overhead);
 				if (ret) {
 					goto failure_cleanup;
 				}
@@ -1995,7 +2006,7 @@ void ull_adv_done(struct node_rx_event_done *done)
 	lll = &adv->lll;
 
 #if defined(CONFIG_BT_CTLR_JIT_SCHEDULING)
-	if (done->extra.result != DONE_COMPLETED) {
+	if (done->extra.type == EVENT_DONE_EXTRA_TYPE_ADV && done->extra.result != DONE_COMPLETED) {
 		/* Event aborted or too late - try to re-schedule */
 		uint32_t ticks_elapsed;
 		uint32_t ticks_now;
@@ -2061,6 +2072,12 @@ void ull_adv_done(struct node_rx_event_done *done)
 			adv->lll.hdr.score -= 1;
 		}
 	}
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	if (done->extra.type == EVENT_DONE_EXTRA_TYPE_ADV && adv->lll.aux) {
+		/* Primary event of extended advertising done - wait for aux done */
+		return;
+	}
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* CONFIG_BT_CTLR_JIT_SCHEDULING */
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
@@ -2329,6 +2346,23 @@ static void ticker_cb(uint32_t ticks_at_expire, uint32_t ticks_drift,
 	DEBUG_RADIO_PREPARE_A(1);
 
 	lll = &adv->lll;
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	if (lll->aux) {
+		/* Check if we are about to exceed the duration or max events limit
+		 * Usually this will be handled in ull_adv_done(), but in cases where
+		 * the extended advertising events overlap (ie. several primary advertisings
+		 * point to the same AUX_ADV_IND packet) the ticker will not be stopped
+		 * in time. To handle this, we simply ignore the extra ticker callback and
+		 * wait for the usual ull_adv_done() handling to run
+		 */
+		if ((adv->max_events && adv->event_counter >= adv->max_events) ||
+		    (adv->remain_duration_us &&
+		     adv->remain_duration_us <= (uint64_t)adv->interval * ADV_INT_UNIT_US)) {
+			return;
+		}
+	}
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
 
 	if (IS_ENABLED(CONFIG_BT_TICKER_LOW_LAT) ||
 	    (lazy != TICKER_LAZY_MUST_EXPIRE)) {
