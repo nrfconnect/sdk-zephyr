@@ -109,6 +109,9 @@ config OPENTHREAD_DNS_CLIENT
 config OPENTHREAD_DNS_DSO
 	bool "DNS Stateful Operations (DSO) support"
 
+config OPENTHREAD_DNS_QUERY_UPSTREAM
+	bool "Enable forwarding DNS queries to upstream"
+
 config OPENTHREAD_DNSSD_SERVER
 	bool "DNS-SD server support"
 
@@ -165,6 +168,9 @@ config OPENTHREAD_LOG_LEVEL_DYNAMIC
 
 config OPENTHREAD_MAC_FILTER
 	bool "MAC filter support"
+
+config OPENTHREAD_MESH_DIAG
+	bool "Enable Mesh Diagnostics"
 
 config OPENTHREAD_MESSAGE_USE_HEAP
 	bool "Heap allocator for message buffers"
@@ -234,6 +240,9 @@ config OPENTHREAD_SRP_SERVER
 	bool "SRP Server support"
 	select OPENTHREAD_NETDATA_PUBLISHER
 	select OPENTHREAD_ECDSA
+
+config OPENTHREAD_TCP
+	bool "TCP support"
 
 config OPENTHREAD_TIME_SYNC
 	bool "The time synchronization service feature"
