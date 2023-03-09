@@ -58,6 +58,12 @@ else()
   set(OT_BACKBONE_ROUTER_MULTICAST_ROUTING OFF CACHE BOOL "Enable BBR MR support" FORCE)
 endif()
 
+if(CONFIG_OPENTHREAD_BBTC)
+  set(OT_BBTC ON CACHE BOOL "Enable BBTC support" FORCE)
+else()
+  set(OT_BBTC OFF CACHE BOOL "Enable BBTC support" FORCE)
+endif()
+
 if(CONFIG_OPENTHREAD_BORDER_AGENT)
   set(OT_BORDER_AGENT ON CACHE BOOL "Enable Border Agent" FORCE)
 else()
