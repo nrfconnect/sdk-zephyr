@@ -1,0 +1,6 @@
+/* Prevent port expander driver configuration of [port] interrupt (+60 uA sleep). */
+&i2c1 {
+	gpio_exp0: tca9538@70 {
+		/delete-property/ nint-gpios;
+	};
+};

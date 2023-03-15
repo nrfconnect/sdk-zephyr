@@ -1,0 +1,4 @@
+/* Disable to achieve lower sleep current. */
+arduino_serial: &uart1 {
+    status = "disabled";
+};

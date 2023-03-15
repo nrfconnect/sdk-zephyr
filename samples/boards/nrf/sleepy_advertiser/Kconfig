@@ -1,0 +1,32 @@
+# Copyright (c) 2021 Nordic Semiconductor ASA
+# Copyright (c) 2023 Laird Connectivity
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "Nordic Sleepy Advertiser Demo"
+
+config ADVERTISE
+	bool "Advertise on startup"
+	depends on BT
+	help
+	  Rate is approximately 1 second.
+
+config ADVERTISE_FAST
+	bool "Advertise quickly"
+	depends on ADVERTISE
+	help
+	  Reduce the amount of time required to obtain RF power measurements
+	  using max hold. Increases current consumption.
+	  Rate is approximately 30 ms.
+
+config SCANNABLE
+	bool "Advertise as scannable"
+	depends on ADVERTISE
+	help
+	  Allow transmission of empty scan response.
+	  Used to confirm GPIO states of FEM in receive mode.
+
+config SLEEP_DURATION_SECONDS
+	int "Seconds [to advertise] before going into system off"
+	default 30
+
+source "Kconfig.zephyr"

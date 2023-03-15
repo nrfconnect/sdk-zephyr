@@ -1,0 +1,30 @@
+/*
+ * Make nrf21540dk have the same FEM control as the BL5340PA.
+ */
+
+fem_spi: &spi3 {
+    status = "disabled";
+	nrf_radio_fem_spi: nrf21540_fem_spi@0 {
+		status = "disabled";
+    };
+};
+
+/ {
+    nrf_radio_fem: nrf21540_fem {
+        /delete-property/ ant-sel-gpios;
+        /delete-property/ spi-if;
+    };
+
+    /* Development board uses switch connectors (there are two internal antennas).
+     * When mocking, internal-antenna means use the connector closest to 4 buttons.
+     */
+    lcz_fem: nrf21540_lcz_fem {
+        compatible = "lairdconnect,nrf21540-lcz-fem";
+        ant-sel-gpios = <&gpio0 20 GPIO_ACTIVE_HIGH>;
+        spi-clk-gpios = <&gpio1 15 GPIO_ACTIVE_HIGH>;
+        spi-mosi-gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+        spi-csn-gpios = <&gpio0 21 GPIO_ACTIVE_LOW>;
+        spi-miso-gpios = <&gpio1 4 GPIO_ACTIVE_HIGH>;
+        internal-antenna;
+    };
+};

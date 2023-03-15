@@ -1,0 +1,4 @@
+/* Disable to achieve lower sleep current */
+&uart0 {
+	status = "disabled";
+};

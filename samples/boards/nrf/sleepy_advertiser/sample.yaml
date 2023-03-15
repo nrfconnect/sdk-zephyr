@@ -1,0 +1,41 @@
+sample:
+  name: Sleepy Advertiser
+common:
+  tags: power bluetooth
+tests:
+  sample.boards.nrf.sleepy_advertiser:
+    build_only: true
+    platform_allow: |
+      nrf21540dk_nrf52840 bl5340_dvk_cpuapp bl5340pa_dvk_cpuapp
+      nrf52840dk_nrf52840 nrf52dk_nrf52832 nrf51dk_nrf51422
+      nrf5340dk_nrf5340_cpuapp
+  sample.boards.nrf.sleepy_advertiser.mock_using_nrf52840:
+    build_only: true
+    platform_allow: |
+      nrf21540dk_nrf52840
+    extra_args: MOCK_LCZ_FEM=y
+  sample.boards.nrf.sleepy_advertiser.shield:
+    build_only: true
+    platform_allow: |
+      nrf5340dk_nrf5340_cpuapp
+    extra_args: SHIELD=nrf21540_ek_fwd hci_rpmsg_SHIELD=nrf21540_ek
+  sample.boards.nrf.sleepy_advertiser.mock_using_nrf5340:
+    build_only: true
+    platform_allow: |
+      nrf5340dk_nrf5340_cpuapp
+    extra_args: SHIELD=nrf21540_ek_fwd hci_rpmsg_SHIELD=nrf21540_ek MOCK_LCZ_FEM=y
+  sample.boards.nrf.sleepy_advertiser.bl5340_internal_ant_no_adv:
+    build_only: true
+    platform_allow: |
+      bl5340pa_dvk_cpuapp
+    extra_args: hci_rpmsg_CONFIG_LCZ_FEM_INTERNAL_ANTENNA=y
+    extra_configs:
+      - CONFIG_ADVERTISE=n
+  sample.boards.nrf.sleepy_advertiser.other_options:
+    build_only: true
+    platform_allow: |
+      nrf21540dk_nrf52840 bl5340pa_dvk_cpuapp
+    extra_configs:
+      - CONFIG_ADVERTISE_FAST=y
+      - CONFIG_SCANNABLE=y
+      - CONFIG_SLEEP_DURATION_SECONDS=600

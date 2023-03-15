@@ -1,0 +1,33 @@
+/* Copyright (c) 2021 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+fem_spi: &arduino_spi {
+    status = "disabled";
+    nrf_radio_fem_spi: nrf21540_fem_spi@0 {
+        status = "disabled";
+    };
+};
+
+/* todo: why is this needed? */
+&radio {
+    fem = <&nrf_radio_fem>;
+};
+
+/ {
+    nrf_radio_fem: nrf21540_fem {
+        /delete-property/ ant-sel-gpios;
+        /delete-property/ spi-if;
+    };
+
+    /* When mocking, internal-antenna means use ant1 and external (default) means ant2 */
+    lcz_fem: nrf21540_lcz_fem {
+        compatible = "lairdconnect,nrf21540-lcz-fem";
+        ant-sel-gpios = <&arduino_header 10 GPIO_ACTIVE_HIGH>;
+        spi-clk-gpios = <&gpio1 15 GPIO_ACTIVE_HIGH>;
+        spi-mosi-gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+        spi-csn-gpios = <&arduino_header 16 GPIO_ACTIVE_LOW>;
+        spi-miso-gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>;
+    };
+};
