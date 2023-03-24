@@ -343,6 +343,8 @@ class NrfJprogBinaryRunner(ZephyrBinaryRunner):
             net_hex.write_hex_file(net_hex_file)
             app_hex.write_hex_file(app_hex_file)
 
+            # halt app CPU before flashing network core
+            program_commands.append(['nrfjprog', '--halt', '--coprocessor', 'CP_APPLICATION'])
             add_program_cmd(net_hex_file, 'CP_NETWORK', [])
             add_program_cmd(app_hex_file, 'CP_APPLICATION', qspi_erase_opt)
         # Otherwise, only the network core is programmed.
