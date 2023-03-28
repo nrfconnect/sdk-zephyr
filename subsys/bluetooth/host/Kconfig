@@ -777,11 +777,10 @@ config BT_ID_MAX
 	  products this is safe to leave as the default value (1).
 
 config BT_DF
-	bool "Direction Finding support [EXPERIMENTAL]"
+	bool "Direction Finding support"
 	depends on !BT_CTLR || BT_CTLR_DF_SUPPORT
-	select EXPERIMENTAL
 	help
-	  Enable support for Bluetooth 5.1 Direction Finding.
+	  Enable support for Bluetooth Direction Finding.
 	  It will allow to: get information about antennae, configure
 	  Constant Tone Extension, transmit CTE and sample incoming CTE.
 
