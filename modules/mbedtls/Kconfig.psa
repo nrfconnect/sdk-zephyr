@@ -5,6 +5,11 @@
 #
 menu "PSA RNG support"
 
+config PSA_WANT_GENERATE_RANDOM
+	bool
+	prompt "PSA RNG support"
+	default y
+
 config PSA_WANT_ALG_CTR_DRBG
 	bool
 	prompt "PSA RNG using CTR_DRBG"
@@ -190,12 +195,10 @@ config PSA_WANT_ALG_SHA_512
 config PSA_WANT_ALG_RIPEMD160
 	bool
 	prompt "PSA RIPEMD160 support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_MD5
 	bool
 	prompt "PSA MD5 support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 endmenu # PSA Hash support
 
@@ -233,7 +236,6 @@ config PSA_WANT_ALG_CBC_PKCS7
 config PSA_WANT_ALG_CFB
 	bool
 	prompt "PSA AES CFB support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_CTR
 	bool
@@ -243,7 +245,6 @@ config PSA_WANT_ALG_CTR
 config PSA_WANT_ALG_OFB
 	bool
 	prompt "PSA AES OFB mode support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_XTS
 	bool
@@ -348,11 +349,13 @@ config PSA_WANT_ECC_BRAINPOOL_P_R1_512
 	bool "PSA ECC Brainpool512r1 support"
 
 config PSA_WANT_ECC_MONTGOMERY_255
-	bool "PSA ECC Curve25519 support"
+	bool "PSA ECC Curve X25519 support"
 
 config PSA_WANT_ECC_MONTGOMERY_448
-	bool "PSA ECC Curve448 support"
-	default n
+	bool "PSA ECC Curve X448 support"
+
+config PSA_WANT_ECC_TWISTED_EDWARDS_255
+	bool "PSA ECC Curve Ed25519 support"
 
 config PSA_WANT_ECC_SECP_K1_192
 	bool "PSA ECC secp192k1 support"
