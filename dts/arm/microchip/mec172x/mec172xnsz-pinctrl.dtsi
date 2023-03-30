@@ -709,6 +709,10 @@
 		pinmux = < MCHP_XEC_PINMUX(022, MCHP_AF4) >;
 	};
 
+	/omit-if-no-ref/ tst_clk_out_gpio060: tst_clk_out_gpio060 {
+		pinmux = < MCHP_XEC_PINMUX(060, MCHP_AF2) >;
+	};
+
 	/* PROCHOT */
 	/omit-if-no-ref/ prochot_in_n_alt_gpio222: prochot_in_n_alt_gpio222 {
 		pinmux = < MCHP_XEC_PINMUX(0222, MCHP_AF2) >;
@@ -1066,6 +1070,27 @@
 
 	/omit-if-no-ref/ cmp_vref1_gpio106: cmp_vref1_gpio106 {
 		pinmux = < MCHP_XEC_PINMUX(0106, MCHP_AF2) >;
+	};
+
+};
+
+/* Add Sleep Pin Control */
+&pinctrl {
+	adc00_gpio200_sleep: adc00_gpio200_sleep {
+		pinmux = < MCHP_XEC_PINMUX(0200, MCHP_AF1) >;
+		low-power-enable;
+	};
+	adc03_gpio203_sleep: adc03_gpio203_sleep {
+		pinmux = < MCHP_XEC_PINMUX(0203, MCHP_AF1) >;
+		low-power-enable;
+	};
+	adc04_gpio204_sleep: adc04_gpio204_sleep {
+		pinmux = < MCHP_XEC_PINMUX(0204, MCHP_AF1) >;
+		low-power-enable;
+	};
+	adc05_gpio205_sleep: adc05_gpio205_sleep {
+		pinmux = < MCHP_XEC_PINMUX(0205, MCHP_AF1) >;
+		low-power-enable;
 	};
 
 };

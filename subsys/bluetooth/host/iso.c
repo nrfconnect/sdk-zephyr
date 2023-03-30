@@ -207,8 +207,7 @@ static int hci_le_setup_iso_data_path(const struct bt_conn *iso, uint8_t dir,
 		 dir == BT_HCI_DATAPATH_DIR_CTLR_TO_HOST,
 		 "invalid ISO data path dir: %u", dir);
 
-	if ((path->cc == NULL && path->cc_len != 0) ||
-	    (path->cc != NULL && path->cc_len == 0)) {
+	if ((path->cc == NULL && path->cc_len != 0)) {
 		LOG_DBG("Invalid ISO data path CC: %p %u", path->cc, path->cc_len);
 
 		return -EINVAL;
@@ -369,10 +368,11 @@ void bt_iso_connected(struct bt_conn *iso)
 
 	err = bt_iso_setup_data_path(chan);
 	if (err != 0) {
-		LOG_ERR("Unable to setup data path: %d", err);
+		if (false) {
+
 #if defined(CONFIG_BT_ISO_BROADCAST)
-		if (iso->iso.info.type == BT_ISO_CHAN_TYPE_BROADCASTER ||
-		    iso->iso.info.type == BT_ISO_CHAN_TYPE_SYNC_RECEIVER) {
+		} else if (iso->iso.info.type == BT_ISO_CHAN_TYPE_BROADCASTER ||
+			   iso->iso.info.type == BT_ISO_CHAN_TYPE_SYNC_RECEIVER) {
 			struct bt_iso_big *big;
 			int err;
 
@@ -382,9 +382,9 @@ void bt_iso_connected(struct bt_conn *iso)
 			if (err != 0) {
 				LOG_ERR("Could not terminate BIG: %d", err);
 			}
-		}
 #endif /* CONFIG_BT_ISO_BROADCAST */
-		if (IS_ENABLED(CONFIG_BT_ISO_UNICAST) &&
+
+		} else if (IS_ENABLED(CONFIG_BT_ISO_UNICAST) &&
 		    iso->iso.info.type == BT_ISO_CHAN_TYPE_CONNECTED) {
 			bt_conn_disconnect(iso,
 					   BT_HCI_ERR_REMOTE_USER_TERM_CONN);
@@ -896,9 +896,28 @@ int bt_iso_chan_disconnect(struct bt_iso_chan *chan)
 		return -EINVAL;
 	}
 
-	if (chan->iso->iso.acl == NULL) {
+	if (chan->iso->iso.acl == NULL ||
+	    chan->state == BT_ISO_STATE_DISCONNECTED) {
 		LOG_DBG("Channel is not connected");
 		return -ENOTCONN;
+	}
+
+	if (chan->state == BT_ISO_STATE_ENCRYPT_PENDING) {
+		LOG_DBG("Channel already disconnected");
+		bt_iso_chan_set_state(chan, BT_ISO_STATE_DISCONNECTED);
+
+		if (chan->ops->disconnected) {
+			chan->ops->disconnected(chan,
+						BT_HCI_ERR_LOCALHOST_TERM_CONN);
+		}
+
+		return 0;
+	}
+
+	if (chan->state == BT_ISO_STATE_DISCONNECTING) {
+		LOG_DBG("Already disconnecting");
+
+		return -EALREADY;
 	}
 
 	return bt_conn_disconnect(chan->iso, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
@@ -2033,7 +2052,7 @@ int bt_iso_chan_connect(const struct bt_iso_connect_param *param, size_t count)
 {
 	int err;
 
-	CHECKIF(param == NULL || count == 0) {
+	CHECKIF(param == NULL) {
 		LOG_DBG("param is NULL");
 		return -EINVAL;
 	}

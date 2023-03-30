@@ -25,4 +25,19 @@ config HAS_XMCLIB_ERU
 	help
 	  Enable XMCLIB Event Request Unit (ERU) for GPIO interrupt support
 
+config HAS_XMCLIB_VADC
+	bool
+	help
+	  Enable XMCLIB VADC
+
+config HAS_XMCLIB_DMA
+	bool
+	help
+	  Enable XMCLIB DMA
+
+config HAS_XMCLIB_SPI
+	bool
+	help
+	  Enable XMCLIB SPI
+
 endif # HAS_XMCLIB

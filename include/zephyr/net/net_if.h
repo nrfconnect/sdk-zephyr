@@ -332,6 +332,12 @@ struct net_if_dhcpv4 {
 
 	/** Number of attempts made for REQUEST and RENEWAL messages */
 	uint8_t attempts;
+
+	/** The address of the server the request is sent to */
+	struct in_addr request_server_addr;
+
+	/** The source address of a received DHCP message */
+	struct in_addr response_src_addr;
 };
 #endif /* CONFIG_NET_DHCPV4 */
 
@@ -857,7 +863,7 @@ static inline int net_if_set_link_addr_unlocked(struct net_if *iface,
 						uint8_t *addr, uint8_t len,
 						enum net_link_type type)
 {
-	if (net_if_flag_is_set(iface, NET_IF_UP)) {
+	if (net_if_flag_is_set(iface, NET_IF_RUNNING)) {
 		return -EPERM;
 	}
 
@@ -1504,6 +1510,10 @@ uint32_t net_if_ipv6_calc_reachable_time(struct net_if_ipv6 *ipv6);
 static inline void net_if_ipv6_set_reachable_time(struct net_if_ipv6 *ipv6)
 {
 #if defined(CONFIG_NET_NATIVE_IPV6)
+	if (ipv6 == NULL) {
+		return;
+	}
+
 	ipv6->reachable_time = net_if_ipv6_calc_reachable_time(ipv6);
 #endif
 }
