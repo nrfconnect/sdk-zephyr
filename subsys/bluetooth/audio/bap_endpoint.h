@@ -31,7 +31,6 @@
 struct bt_bap_unicast_group;
 struct bt_bap_broadcast_source;
 struct bt_bap_broadcast_sink;
-struct bt_bap_ep;
 
 struct bt_bap_ep {
 	uint8_t  dir;
@@ -44,7 +43,7 @@ struct bt_bap_ep {
 	struct bt_codec_qos_pref qos_pref;
 	struct bt_bap_iso *iso;
 
-	/* Used by the unicast server */
+	/* Used by the unicast server and client */
 	bool receiver_ready;
 
 	/* TODO: Create a union to reduce memory usage */
@@ -102,6 +101,7 @@ struct bt_bap_broadcast_sink {
 	bool big_encrypted;
 	uint32_t broadcast_id; /* 24 bit */
 	struct bt_bap_base base;
+	struct bt_codec_qos codec_qos;
 	struct bt_le_per_adv_sync *pa_sync;
 	struct bt_iso_big *big;
 	struct bt_iso_chan *bis[BROADCAST_SNK_STREAM_CNT];

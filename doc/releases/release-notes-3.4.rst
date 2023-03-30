@@ -104,17 +104,40 @@ Changes in this release
    | :kconfig:option:`CONFIG_HWINFO`                  |
    +--------------------------------------------------+
 
+* The sensor driver API clarified :c:func:`sensor_trigger_set` to state that
+  the user-allocated sensor trigger will be stored by the driver as a pointer,
+  rather than a copy, and passed back to the handler. This enables the handler
+  to use :c:macro:`CONTAINER_OF` to retrieve a context pointer when the trigger
+  is embedded in a larger struct and requires that the trigger is not allocated
+  on the stack. Applications that allocate a sensor trigger on the stack need
+  to be updated.
+
 Removed APIs in this release
 ============================
 
 Deprecated in this release
 ==========================
 
+* Configuring applications with ``prj_<board>.conf`` files has been deprecated,
+  this should be replaced by using a prj.conf with the common configuration and
+  board-specific configuration in board Kconfig fragments in the ``boards``
+  folder of the application.
+
 Stable API changes in this release
 ==================================
 
+* Removed `bt_set_oob_data_flag` and replaced it with two new API calls:
+  * :c:func:`bt_le_oob_set_sc_flag` for setting/clearing OOB flag in SC pairing
+  * :c:func:`bt_le_oob_set_legacy_flag` for setting/clearing OOB flag in legacy paring
+
 New APIs in this release
 ========================
+
+* Introduced :c:func:`flash_ex_op` function. This allows to perform extra
+  operations on flash devices, defined by Zephyr Flash API or by vendor specific
+  header files. Support for extra operations is enabled by
+  :kconfig:option:`CONFIG_FLASH_EX_OP_ENABLED` which depends on
+  :kconfig:option:`CONFIG_FLASH_HAS_EX_OP` selected by driver.
 
 Kernel
 ******
@@ -164,6 +187,8 @@ Boards & SoC Support
 
 * Added support for these ARM boards:
 
+  * Seeed Studio Wio Terminal
+
 * Added support for these ARM64 boards:
 
 * Added support for these RISC-V boards:
@@ -203,13 +228,29 @@ Boards & SoC Support
 Build system and infrastructure
 *******************************
 
-* Fixed an issue whereby whereby older versions of the Zephyr SDK toolchain
-  were used instead of the latest compatible version.
+* Fixed an issue whereby older versions of the Zephyr SDK toolchain were used
+  instead of the latest compatible version.
+
+* Fixed an issue whereby building an application with sysbuild and specifying
+  mcuboot's verification to be checksum only did not build a bootable image.
+
+* Fixed an issue whereby if no prj.conf file was present then board
+  configuration files would not be included by emitting a fatal error. As a
+  result, prj.conf files are now mandatory in projects.
+
+* Introduced support for extending/replacing the signing mechanism in zephyr,
+  see :ref:`West extending signing <west-extending-signing>` for further
+  details.
 
 Drivers and Sensors
 *******************
 
 * ADC
+
+ * MCUX LPADC driver now uses the channel parameter to select a software channel
+   configuration buffer. Use ``zephyr,input-positive`` and
+   ``zephyr,input-negative`` devicetree properties to select the hardware
+   channel(s) to link a software channel configuration to.
 
 * Battery-backed RAM
 
@@ -245,6 +286,14 @@ Drivers and Sensors
 
 * Flash
 
+  * Introduced new flash API call :c:func:`flash_ex_op` which calls
+    :c:func:`ec_op` callback provided by a flash driver. This allows to perform
+    extra operations on flash devices, defined by Zephyr Flash API or by vendor
+    specific header files. :kconfig:option:`CONFIG_FLASH_HAS_EX_OP` should be
+    selected by the driver to indicate that extra operations are supported.
+    To enable extra operations user should select
+    :kconfig:option:`CONFIG_FLASH_EX_OP_ENABLED`.
+
 * FPGA
 
 * Fuel Gauge
@@ -276,6 +325,11 @@ Drivers and Sensors
 * PCIE
 
 * PECI
+
+* Retained memory
+
+  * Retained memory (retained_mem) driver has been added with backends for
+    Nordic nRF GPREGRET, and uninitialised RAM.
 
 Trusted Firmware-M
 ******************
@@ -309,6 +363,9 @@ Trusted Firmware-M
 
 Networking
 **********
+* Wi-Fi
+
+  * TWT intervals are changed from milli-seconds to micro-seconds, interval variables are also renamed.
 
 USB
 ***
@@ -319,11 +376,27 @@ Devicetree
 Libraries / Subsystems
 **********************
 
+* File systems
+
+  * Added :kconfig:option:`CONFIG_FS_FATFS_REENTRANT` to enable the FAT FS reentrant option.
+
+* Management
+
+  * Added optional input expiration to shell MCUmgr transport, this allows
+    returning the shell to normal operation if a complete MCUmgr packet is not
+    received in a specific duration. Can be enabled with
+    :kconfig:option:`CONFIG_MCUMGR_TRANSPORT_SHELL_INPUT_TIMEOUT` and timeout
+    set with
+    :kconfig:option:`CONFIG_MCUMGR_TRANSPORT_SHELL_INPUT_TIMEOUT_TIME`.
+
 HALs
 ****
 
 MCUboot
 *******
+
+* Added :kconfig:option:`CONFIG_MCUBOOT_CMAKE_WEST_SIGN_PARAMS` that allows to pass arguments to
+  west sign when invoked from cmake.
 
 Storage
 *******

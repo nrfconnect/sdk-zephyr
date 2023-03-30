@@ -403,6 +403,11 @@ static bool net_buf_decode_bis_data(struct net_buf_simple *buf, struct bt_bap_ba
 		while (ltv_buf.len != 0) {
 			struct bt_codec_data *bis_codec_data;
 
+			if (bis->data_count >= ARRAY_SIZE(bis->data)) {
+				LOG_WRN("BIS data overflow; discarding");
+				break;
+			}
+
 			bis_codec_data = &bis->data[bis->data_count];
 
 			if (!net_buf_decode_codec_ltv(&ltv_buf,
@@ -411,6 +416,7 @@ static bool net_buf_decode_bis_data(struct net_buf_simple *buf, struct bt_bap_ba
 					bis->data_count);
 				return false;
 			}
+
 			bis->data_count++;
 		}
 	}
@@ -457,13 +463,22 @@ static bool net_buf_decode_subgroup(struct net_buf_simple *buf,
 	 * broadcasted BASEs
 	 */
 	while (ltv_buf.len != 0) {
-		struct bt_codec_data *codec_data = &codec->data[codec->data_count++];
+		struct bt_codec_data *codec_data;
+
+		if (codec->data_count >= ARRAY_SIZE(codec->data)) {
+			LOG_WRN("BIS codec data overflow; discarding");
+			break;
+		}
+
+		codec_data = &codec->data[codec->data_count];
 
 		if (!net_buf_decode_codec_ltv(&ltv_buf, codec_data)) {
 			LOG_DBG("Failed to decode codec config data for entry %u",
-				codec->data_count - 1);
+				codec->data_count);
 			return false;
 		}
+
+		codec->data_count++;
 	}
 
 	if (buf->len < sizeof(len)) {
@@ -490,13 +505,22 @@ static bool net_buf_decode_subgroup(struct net_buf_simple *buf,
 	 * broadcasted BASEs
 	 */
 	while (ltv_buf.len != 0) {
-		struct bt_codec_data *metadata = &codec->meta[codec->meta_count++];
+		struct bt_codec_data *metadata;
+
+		if (codec->meta_count >= ARRAY_SIZE(codec->meta)) {
+			LOG_WRN("BIS codec metadata overflow; discarding");
+			break;
+		}
+
+		metadata = &codec->meta[codec->meta_count];
 
 		if (!net_buf_decode_codec_ltv(&ltv_buf, metadata)) {
 			LOG_DBG("Failed to decode codec metadata for entry %u",
-				codec->meta_count - 1);
+				codec->meta_count);
 			return false;
 		}
+
+		codec->meta_count++;
 	}
 
 	for (int i = 0; i < subgroup->bis_count; i++) {
@@ -513,7 +537,6 @@ static bool pa_decode_base(struct bt_data *data, void *user_data)
 {
 	struct bt_bap_broadcast_sink *sink = (struct bt_bap_broadcast_sink *)user_data;
 	struct bt_bap_broadcast_sink_cb *listener;
-	struct bt_codec_qos codec_qos = { 0 };
 	struct bt_bap_base base = {0};
 	struct bt_uuid_16 broadcast_uuid;
 	struct net_buf_simple net_buf;
@@ -547,7 +570,7 @@ static bool pa_decode_base(struct bt_data *data, void *user_data)
 		return true;
 	}
 
-	codec_qos.pd = net_buf_simple_pull_le24(&net_buf);
+	base.pd = net_buf_simple_pull_le24(&net_buf);
 	base.subgroup_count = net_buf_simple_pull_u8(&net_buf);
 
 	if (base.subgroup_count > ARRAY_SIZE(base.subgroups)) {
@@ -581,6 +604,7 @@ static bool pa_decode_base(struct bt_data *data, void *user_data)
 	 * been decoded to avoid overwriting it with invalid data
 	 */
 	(void)memcpy(&sink->base, &base, sizeof(base));
+	sink->codec_qos.pd = base.pd;
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&sink_cbs, listener, _node) {
 		if (listener->base_recv != NULL) {
@@ -626,6 +650,11 @@ static void biginfo_recv(struct bt_le_per_adv_sync *sync,
 	sink->iso_interval = biginfo->iso_interval;
 	sink->biginfo_num_bis = biginfo->num_bis;
 	sink->big_encrypted = biginfo->encryption;
+
+	sink->codec_qos.framing = biginfo->framing;
+	sink->codec_qos.phy = biginfo->phy;
+	sink->codec_qos.sdu = biginfo->max_sdu;
+	sink->codec_qos.interval = biginfo->sdu_interval;
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&sink_cbs, listener, _node) {
 		if (listener->syncable != NULL) {
@@ -915,10 +944,9 @@ static struct bt_bap_ep *broadcast_sink_new_ep(uint8_t index)
 	return NULL;
 }
 
-static int bt_bap_broadcast_sink_setup_stream(uint8_t index, struct bt_bap_stream *stream,
-					      struct bt_codec *codec)
+static int bt_bap_broadcast_sink_setup_stream(struct bt_bap_broadcast_sink *sink,
+					      struct bt_bap_stream *stream, struct bt_codec *codec)
 {
-	static struct bt_codec_qos codec_qos;
 	struct bt_bap_iso *iso;
 	struct bt_bap_ep *ep;
 
@@ -927,7 +955,7 @@ static int bt_bap_broadcast_sink_setup_stream(uint8_t index, struct bt_bap_strea
 		return -EALREADY;
 	}
 
-	ep = broadcast_sink_new_ep(index);
+	ep = broadcast_sink_new_ep(sink->index);
 	if (ep == NULL) {
 		LOG_DBG("Could not allocate new broadcast endpoint");
 		return -ENOMEM;
@@ -942,13 +970,13 @@ static int bt_bap_broadcast_sink_setup_stream(uint8_t index, struct bt_bap_strea
 	bt_bap_iso_init(iso, &broadcast_sink_iso_ops);
 	bt_bap_iso_bind_ep(iso, ep);
 
-	bt_audio_codec_qos_to_iso_qos(iso->chan.qos->rx, &codec_qos);
+	bt_audio_codec_qos_to_iso_qos(iso->chan.qos->rx, &sink->codec_qos);
 	bt_audio_codec_to_iso_path(iso->chan.qos->rx->path, codec);
 
 	bt_bap_iso_unref(iso);
 
 	bt_bap_stream_attach(NULL, stream, ep, codec);
-	stream->qos = &codec_qos;
+	stream->qos = &sink->codec_qos;
 
 	return 0;
 }
@@ -1106,7 +1134,7 @@ int bt_bap_broadcast_sink_sync(struct bt_bap_broadcast_sink *sink, uint32_t inde
 		stream = streams[i];
 		codec = codecs[i];
 
-		err = bt_bap_broadcast_sink_setup_stream(sink->index, stream, codec);
+		err = bt_bap_broadcast_sink_setup_stream(sink, stream, codec);
 		if (err != 0) {
 			LOG_DBG("Failed to setup streams[%zu]: %d", i, err);
 			broadcast_sink_cleanup_streams(sink);
