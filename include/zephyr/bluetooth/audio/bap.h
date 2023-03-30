@@ -9,9 +9,6 @@
 
 #ifndef ZEPHYR_INCLUDE_BLUETOOTH_AUDIO_BAP_
 #define ZEPHYR_INCLUDE_BLUETOOTH_AUDIO_BAP_
-#include <zephyr/types.h>
-#include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/audio/audio.h>
 
 /**
  * @brief Bluetooth Basic Audio Profile (BAP)
@@ -19,6 +16,9 @@
  * @ingroup bluetooth
  * @{
  */
+
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/audio/audio.h>
 
 #if defined(CONFIG_BT_BAP_SCAN_DELEGATOR)
 #define BT_BAP_SCAN_DELEGATOR_MAX_METADATA_LEN CONFIG_BT_BAP_SCAN_DELEGATOR_MAX_METADATA_LEN
@@ -82,6 +82,133 @@ enum bt_bap_ep_state {
 	/** Audio Stream Endpoint Streaming state */
 	BT_BAP_EP_STATE_RELEASING = 0x06,
 };
+
+/**
+ * @brief Response Status Code
+ *
+ * These are sent by the server to the client when a stream operation is
+ * requested.
+ */
+enum bt_bap_ascs_rsp_code {
+	/** Server completed operation successfully */
+	BT_BAP_ASCS_RSP_CODE_SUCCESS = 0x00,
+	/** Server did not support operation by client */
+	BT_BAP_ASCS_RSP_CODE_NOT_SUPPORTED = 0x01,
+	/** Server rejected due to invalid operation length */
+	BT_BAP_ASCS_RSP_CODE_INVALID_LENGTH = 0x02,
+	/** Invalid ASE ID */
+	BT_BAP_ASCS_RSP_CODE_INVALID_ASE = 0x03,
+	/** Invalid ASE state */
+	BT_BAP_ASCS_RSP_CODE_INVALID_ASE_STATE = 0x04,
+	/** Invalid operation for direction */
+	BT_BAP_ASCS_RSP_CODE_INVALID_DIR = 0x05,
+	/** Capabilities not supported by server */
+	BT_BAP_ASCS_RSP_CODE_CAP_UNSUPPORTED = 0x06,
+	/** Configuration parameters not supported by server */
+	BT_BAP_ASCS_RSP_CODE_CONF_UNSUPPORTED = 0x07,
+	/** Configuration parameters rejected by server */
+	BT_BAP_ASCS_RSP_CODE_CONF_REJECTED = 0x08,
+	/** Invalid Configuration parameters */
+	BT_BAP_ASCS_RSP_CODE_CONF_INVALID = 0x09,
+	/** Unsupported metadata */
+	BT_BAP_ASCS_RSP_CODE_METADATA_UNSUPPORTED = 0x0a,
+	/** Metadata rejected by server */
+	BT_BAP_ASCS_RSP_CODE_METADATA_REJECTED = 0x0b,
+	/** Invalid metadata */
+	BT_BAP_ASCS_RSP_CODE_METADATA_INVALID = 0x0c,
+	/** Server has insufficient resources */
+	BT_BAP_ASCS_RSP_CODE_NO_MEM = 0x0d,
+	/** Unspecified error */
+	BT_BAP_ASCS_RSP_CODE_UNSPECIFIED = 0x0e,
+};
+
+/**
+ * @brief Response Reasons
+ *
+ * These are used if the @ref bt_bap_ascs_rsp_code value is
+ * @ref BT_BAP_ASCS_RSP_CODE_CONF_UNSUPPORTED, @ref BT_BAP_ASCS_RSP_CODE_CONF_REJECTED or
+ * @ref BT_BAP_ASCS_RSP_CODE_CONF_INVALID.
+ */
+enum bt_bap_ascs_reason {
+	/** No reason */
+	BT_BAP_ASCS_REASON_NONE = 0x00,
+	/** Codec ID */
+	BT_BAP_ASCS_REASON_CODEC = 0x01,
+	/** Codec configuration */
+	BT_BAP_ASCS_REASON_CODEC_DATA = 0x02,
+	/** SDU interval */
+	BT_BAP_ASCS_REASON_INTERVAL = 0x03,
+	/** Framing */
+	BT_BAP_ASCS_REASON_FRAMING = 0x04,
+	/** PHY */
+	BT_BAP_ASCS_REASON_PHY = 0x05,
+	/** Maximum SDU size*/
+	BT_BAP_ASCS_REASON_SDU = 0x06,
+	/** RTN */
+	BT_BAP_ASCS_REASON_RTN = 0x07,
+	/** Max transport latency */
+	BT_BAP_ASCS_REASON_LATENCY = 0x08,
+	/** Presendation delay */
+	BT_BAP_ASCS_REASON_PD = 0x09,
+	/** Invalid CIS mapping */
+	BT_BAP_ASCS_REASON_CIS = 0x0a,
+};
+
+/** @brief Structure storing values of fields of ASE Control Point notification. */
+struct bt_bap_ascs_rsp {
+	/** @brief Value of the Response Code field. */
+	enum bt_bap_ascs_rsp_code code;
+
+	/**
+	 * @brief Value of the Reason field.
+	 *
+	 * The meaning of this value depend on the Response Code field.
+	 */
+	union {
+		/**
+		 * @brief Response reason
+		 *
+		 * If the Response Code is one of the following:
+		 * - @ref BT_BAP_ASCS_RSP_CODE_CONF_UNSUPPORTED
+		 * - @ref BT_BAP_ASCS_RSP_CODE_CONF_REJECTED
+		 * - @ref BT_BAP_ASCS_RSP_CODE_CONF_INVALID
+		 * all values from @ref bt_bap_ascs_reason can be used.
+		 *
+		 * If the Response Code is one of the following:
+		 * - @ref BT_BAP_ASCS_RSP_CODE_SUCCESS
+		 * - @ref BT_BAP_ASCS_RSP_CODE_NOT_SUPPORTED
+		 * - @ref BT_BAP_ASCS_RSP_CODE_INVALID_LENGTH
+		 * - @ref BT_BAP_ASCS_RSP_CODE_INVALID_ASE
+		 * - @ref BT_BAP_ASCS_RSP_CODE_INVALID_ASE_STATE
+		 * - @ref BT_BAP_ASCS_RSP_CODE_INVALID_DIR
+		 * - @ref BT_BAP_ASCS_RSP_CODE_CAP_UNSUPPORTED
+		 * - @ref BT_BAP_ASCS_RSP_CODE_NO_MEM
+		 * - @ref BT_BAP_ASCS_RSP_CODE_UNSPECIFIED
+		 * only value @ref BT_BAP_ASCS_REASON_NONE shall be used.
+		 */
+		enum bt_bap_ascs_reason reason;
+
+		/**
+		 * @brief Response metadata type
+		 *
+		 * If the Response Code is one of the following:
+		 * - @ref BT_BAP_ASCS_RSP_CODE_METADATA_UNSUPPORTED
+		 * - @ref BT_BAP_ASCS_RSP_CODE_METADATA_REJECTED
+		 * - @ref BT_BAP_ASCS_RSP_CODE_METADATA_INVALID
+		 * the value of the Metadata Type shall be used.
+		 */
+		enum bt_audio_metadata_type metadata_type;
+	};
+};
+
+/**
+ * @brief Macro used to initialise the object storing values of ASE Control Point notification.
+ *
+ * @param c Response Code field
+ * @param r Reason field - @ref bt_bap_ascs_reason or @ref bt_audio_metadata_type (see notes in
+ *          @ref bt_bap_ascs_rsp).
+ */
+#define BT_BAP_ASCS_RSP(c, r) (struct bt_bap_ascs_rsp) { .code = c, .reason = r }
 
 /** @brief Abstract Audio Broadcast Source structure. */
 struct bt_bap_broadcast_source;
@@ -509,12 +636,14 @@ struct bt_bap_unicast_server_cb {
 	 * @param[out] stream  Pointer to stream that will be configured for the endpoint.
 	 * @param[out] pref    Pointer to a QoS preference object that shall be populated with
 	 *                     values. Invalid values will reject the codec configuration request.
+	 * @param[out] rsp     Object for the ASE operation response. Only used if the return
+	 *                     value is non-zero.
 	 *
 	 * @return 0 in case of success or negative value in case of error.
 	 */
 	int (*config)(struct bt_conn *conn, const struct bt_bap_ep *ep, enum bt_audio_dir dir,
 		      const struct bt_codec *codec, struct bt_bap_stream **stream,
-		      struct bt_codec_qos_pref *const pref);
+		      struct bt_codec_qos_pref *const pref, struct bt_bap_ascs_rsp *rsp);
 
 	/**
 	 * @brief Stream reconfig request callback
@@ -527,11 +656,14 @@ struct bt_bap_unicast_server_cb {
 	 * @param[in]  codec   Codec configuration.
 	 * @param[out] pref    Pointer to a QoS preference object that shall be populated with
 	 *                     values. Invalid values will reject the codec configuration request.
+	 * @param[out] rsp     Object for the ASE operation response. Only used if the return
+	 *                     value is non-zero.
 	 *
 	 * @return 0 in case of success or negative value in case of error.
 	 */
 	int (*reconfig)(struct bt_bap_stream *stream, enum bt_audio_dir dir,
-			const struct bt_codec *codec, struct bt_codec_qos_pref *const pref);
+			const struct bt_codec *codec, struct bt_codec_qos_pref *const pref,
+			struct bt_bap_ascs_rsp *rsp);
 
 	/**
 	 * @brief Stream QoS request callback
@@ -539,73 +671,86 @@ struct bt_bap_unicast_server_cb {
 	 * QoS callback is called whenever an Audio Stream Quality of
 	 * Service needs to be configured.
 	 *
-	 * @param stream  Stream object being reconfigured.
-	 * @param qos     Quality of Service configuration.
+	 * @param[in]  stream  Stream object being reconfigured.
+	 * @param[in]  qos     Quality of Service configuration.
+	 * @param[out] rsp     Object for the ASE operation response. Only used if the return
+	 *                     value is non-zero.
 	 *
 	 * @return 0 in case of success or negative value in case of error.
 	 */
-	int (*qos)(struct bt_bap_stream *stream, const struct bt_codec_qos *qos);
+	int (*qos)(struct bt_bap_stream *stream, const struct bt_codec_qos *qos,
+		   struct bt_bap_ascs_rsp *rsp);
 
 	/**
 	 * @brief Stream Enable request callback
 	 *
 	 * Enable callback is called whenever an Audio Stream is requested to be enabled to stream.
 	 *
-	 * @param stream      Stream object being enabled.
-	 * @param meta        Metadata entries
-	 * @param meta_count  Number of metadata entries
+	 * @param[in]  stream      Stream object being enabled.
+	 * @param[in]  meta        Metadata entries
+	 * @param[in]  meta_count  Number of metadata entries
+	 * @param[out] rsp         Object for the ASE operation response. Only used if the return
+	 *                         value is non-zero.
 	 *
 	 * @return 0 in case of success or negative value in case of error.
 	 */
 	int (*enable)(struct bt_bap_stream *stream, const struct bt_codec_data *meta,
-		      size_t meta_count);
+		      size_t meta_count, struct bt_bap_ascs_rsp *rsp);
 
 	/**
 	 * @brief Stream Start request callback
 	 *
 	 * Start callback is called whenever an Audio Stream is requested to start streaming.
 	 *
-	 * @param stream Stream object.
+	 * @param[in]  stream Stream object.
+	 * @param[out] rsp    Object for the ASE operation response. Only used if the return
+	 *                    value is non-zero.
 	 *
 	 * @return 0 in case of success or negative value in case of error.
 	 */
-	int (*start)(struct bt_bap_stream *stream);
+	int (*start)(struct bt_bap_stream *stream, struct bt_bap_ascs_rsp *rsp);
 
 	/**
 	 * @brief Stream Metadata update request callback
 	 *
 	 * Metadata callback is called whenever an Audio Stream is requested to update its metadata.
 	 *
-	 * @param stream       Stream object.
-	 * @param meta         Metadata entries
-	 * @param meta_count   Number of metadata entries
+	 * @param[in]  stream       Stream object.
+	 * @param[in]  meta         Metadata entries
+	 * @param[in]  meta_count   Number of metadata entries
+	 * @param[out] rsp          Object for the ASE operation response. Only used if the return
+	 *                          value is non-zero.
 	 *
 	 * @return 0 in case of success or negative value in case of error.
 	 */
 	int (*metadata)(struct bt_bap_stream *stream, const struct bt_codec_data *meta,
-			size_t meta_count);
+			size_t meta_count, struct bt_bap_ascs_rsp *rsp);
 
 	/**
 	 * @brief Stream Disable request callback
 	 *
 	 * Disable callback is called whenever an Audio Stream is requested to disable the stream.
 	 *
-	 * @param stream Stream object being disabled.
+	 * @param[in]  stream Stream object being disabled.
+	 * @param[out] rsp    Object for the ASE operation response. Only used if the return
+	 *                    value is non-zero.
 	 *
 	 * @return 0 in case of success or negative value in case of error.
 	 */
-	int (*disable)(struct bt_bap_stream *stream);
+	int (*disable)(struct bt_bap_stream *stream, struct bt_bap_ascs_rsp *rsp);
 
 	/**
 	 * @brief Stream Stop callback
 	 *
 	 * Stop callback is called whenever an Audio Stream is requested to stop streaming.
 	 *
-	 * @param stream Stream object.
+	 * @param[in]  stream Stream object.
+	 * @param[out] rsp    Object for the ASE operation response. Only used if the return
+	 *                    value is non-zero.
 	 *
 	 * @return 0 in case of success or negative value in case of error.
 	 */
-	int (*stop)(struct bt_bap_stream *stream);
+	int (*stop)(struct bt_bap_stream *stream, struct bt_bap_ascs_rsp *rsp);
 
 	/**
 	 * @brief Stream release callback
@@ -613,11 +758,13 @@ struct bt_bap_unicast_server_cb {
 	 * Release callback is called whenever a new Audio Stream needs to be released and thus
 	 * deallocated.
 	 *
-	 * @param stream Stream object.
+	 * @param[in]  stream Stream object.
+	 * @param[out] rsp    Object for the ASE operation response. Only used if the return
+	 *                    value is non-zero.
 	 *
 	 * @return 0 in case of success or negative value in case of error.
 	 */
-	int (*release)(struct bt_bap_stream *stream);
+	int (*release)(struct bt_bap_stream *stream, struct bt_bap_ascs_rsp *rsp);
 };
 
 /**
@@ -801,6 +948,108 @@ struct bt_bap_unicast_client_cb {
 	 */
 	void (*available_contexts)(struct bt_conn *conn, enum bt_audio_context snk_ctx,
 				   enum bt_audio_context src_ctx);
+
+	/**
+	 * @brief Callback function for bt_bap_stream_config() and bt_bap_stream_reconfig().
+	 *
+	 * Called when the codec configure operation is completed on the server.
+	 *
+	 * @param stream   Stream the operation was performed on.
+	 * @param rsp_code Response code.
+	 * @param reason   Reason code.
+	 */
+	void (*config)(struct bt_bap_stream *stream, enum bt_bap_ascs_rsp_code rsp_code,
+		       enum bt_bap_ascs_reason reason);
+
+	/**
+	 * @brief Callback function for bt_bap_stream_qos().
+	 *
+	 * Called when the QoS configure operation is completed on the server.
+	 * This will be called for each stream in the group that was being QoS
+	 * configured.
+	 *
+	 * @param stream   Stream the operation was performed on.
+	 * @param rsp_code Response code.
+	 * @param reason   Reason code.
+	 */
+	void (*qos)(struct bt_bap_stream *stream, enum bt_bap_ascs_rsp_code rsp_code,
+		    enum bt_bap_ascs_reason reason);
+
+	/**
+	 * @brief Callback function for bt_bap_stream_enable().
+	 *
+	 * Called when the enable operation is completed on the server.
+	 *
+	 * @param stream   Stream the operation was performed on.
+	 * @param rsp_code Response code.
+	 * @param reason   Reason code.
+	 */
+	void (*enable)(struct bt_bap_stream *stream, enum bt_bap_ascs_rsp_code rsp_code,
+		       enum bt_bap_ascs_reason reason);
+
+	/**
+	 * @brief Callback function for bt_bap_stream_start().
+	 *
+	 * Called when the start operation is completed on the server. This will
+	 * only be called if the stream supplied to bt_bap_stream_start() is
+	 * for a @ref BT_AUDIO_DIR_SOURCE endpoint.
+	 *
+	 * @param stream   Stream the operation was performed on.
+	 * @param rsp_code Response code.
+	 * @param reason   Reason code.
+	 */
+	void (*start)(struct bt_bap_stream *stream, enum bt_bap_ascs_rsp_code rsp_code,
+		      enum bt_bap_ascs_reason reason);
+
+	/**
+	 * @brief Callback function for bt_bap_stream_stop().
+	 *
+	 * Called when the stop operation is completed on the server. This will
+	 * only be called if the stream supplied to bt_bap_stream_stop() is
+	 * for a @ref BT_AUDIO_DIR_SOURCE endpoint.
+	 *
+	 * @param stream   Stream the operation was performed on.
+	 * @param rsp_code Response code.
+	 * @param reason   Reason code.
+	 */
+	void (*stop)(struct bt_bap_stream *stream, enum bt_bap_ascs_rsp_code rsp_code,
+		     enum bt_bap_ascs_reason reason);
+
+	/**
+	 * @brief Callback function for bt_bap_stream_disable().
+	 *
+	 * Called when the disable operation is completed on the server.
+	 *
+	 * @param stream   Stream the operation was performed on.
+	 * @param rsp_code Response code.
+	 * @param reason   Reason code.
+	 */
+	void (*disable)(struct bt_bap_stream *stream, enum bt_bap_ascs_rsp_code rsp_code,
+			enum bt_bap_ascs_reason reason);
+
+	/**
+	 * @brief Callback function for bt_bap_stream_metadata().
+	 *
+	 * Called when the metadata operation is completed on the server.
+	 *
+	 * @param stream   Stream the operation was performed on.
+	 * @param rsp_code Response code.
+	 * @param reason   Reason code.
+	 */
+	void (*metadata)(struct bt_bap_stream *stream, enum bt_bap_ascs_rsp_code rsp_code,
+			 enum bt_bap_ascs_reason reason);
+
+	/**
+	 * @brief Callback function for bt_bap_stream_release().
+	 *
+	 * Called when the release operation is completed on the server.
+	 *
+	 * @param stream   Stream the operation was performed on.
+	 * @param rsp_code Response code.
+	 * @param reason   Reason code.
+	 */
+	void (*release)(struct bt_bap_stream *stream, enum bt_bap_ascs_rsp_code rsp_code,
+			enum bt_bap_ascs_reason reason);
 };
 
 /**
