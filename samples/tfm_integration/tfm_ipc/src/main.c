@@ -1,17 +1,17 @@
 /*
- * Copyright (c) 2019,2020, 2021, 2023 Linaro Limited
+ * Copyright (c) 2019,2020, 2021 Linaro Limited
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/sys/reboot.h>
 
 #include "tfm_api.h"
 #include "tfm_ns_interface.h"
 #ifdef TFM_PSA_API
 #include "psa_manifest/sid.h"
-#include "psa/crypto.h"
 #endif
 
 /**
@@ -21,7 +21,7 @@
  *       mean to test all possible combinations of
  *       input parameters and return values.
  */
-static void tfm_get_version(void)
+static void tfm_ipc_test_01(void)
 {
 	uint32_t version;
 
@@ -35,11 +35,10 @@ static void tfm_get_version(void)
 	}
 }
 
-#ifdef TFM_PSA_API
 /**
- * \brief Retrieve the minor version of a RoT Service.
+ * Retrieve the minor version of a RoT Service.
  */
-static void tfm_get_sid(void)
+static void tfm_ipc_test_02(void)
 {
 	uint32_t version;
 
@@ -51,36 +50,44 @@ static void tfm_get_sid(void)
 	}
 
 	/* Valid version number */
-	printk("The PSA Crypto service minor version is %d.\n", version);
+	printk("The minor version is %d.\n", version);
 }
 
 /**
- * \brief Generates random data using the TF-M crypto service.
+ * Connect to a RoT Service by its SID.
  */
-void tfm_psa_crypto_rng(void)
+static void tfm_ipc_test_03(void)
 {
-	psa_status_t status;
-	uint8_t outbuf[256] = { 0 };
+	psa_handle_t handle;
 
-	status = psa_generate_random(outbuf, 256);
-	printk("Generating 256 bytes of random data:");
-	for (uint16_t i = 0; i < 256; i++) {
-		if (!(i % 16)) {
-			printk("\n");
-		}
-		printk("%02X ", (uint8_t)(outbuf[i] & 0xFF));
+	handle = psa_connect(TFM_SP_PLATFORM_SYSTEM_RESET_SID,
+			     TFM_SP_PLATFORM_SYSTEM_RESET_VERSION);
+	if (handle > 0) {
+		printk("Connect success!\n");
+	} else {
+		printk("The RoT Service has refused the connection!\n");
+		return;
 	}
-	printk("\n");
+	psa_close(handle);
 }
-#endif
+
+/* For performing secure reset in PSA API mode (TFM_IPC)
+ * we invoke directly Arm's sys_arch_reboot, instead of
+ * sys_reboot(..) since the latter will first do an
+ * irq_lock() which will make the psa_connect() call to
+ * fail. See #36998.
+ */
+extern void sys_arch_reboot(int);
 
 void main(void)
 {
+	tfm_ipc_test_01();
+	tfm_ipc_test_02();
+	tfm_ipc_test_03();
+
 	printk("TF-M IPC on %s\n", CONFIG_BOARD);
 
-	tfm_get_version();
-#ifdef TFM_PSA_API
-	tfm_get_sid();
-	tfm_psa_crypto_rng();
-#endif
+	k_sleep(K_MSEC(5000));
+	/* TODO switch to sys_reboot() when #36998 is resolved. */
+	sys_arch_reboot(0);
 }
