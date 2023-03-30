@@ -378,6 +378,7 @@ zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler-cpp,
 
 # @Intent: Do not make position independent code / executable
 zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,no_position_independent>>)
+zephyr_link_libraries($<TARGET_PROPERTY:linker,no_position_independent>)
 
 # Allow the user to inject options when calling cmake, e.g.
 # 'cmake -DEXTRA_CFLAGS="-Werror -Wno-deprecated-declarations" ..'
@@ -408,7 +409,8 @@ zephyr_compile_options(${COMPILER_OPT_AS_LIST})
 # TODO: Include arch compiler options at this point.
 
 if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang" AND
-   NOT CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM")
+   NOT CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM" AND
+   NOT CMAKE_C_COMPILER_ID STREQUAL "ARMClang")
   # GCC assumed
   zephyr_cc_option(-fno-reorder-functions)
 
@@ -735,6 +737,7 @@ add_custom_command(OUTPUT include/generated/syscall_dispatch.c ${syscall_list_h}
   --base-output      include/generated/syscalls           # Write to this dir
   --syscall-dispatch include/generated/syscall_dispatch.c # Write this file
   --syscall-list     ${syscall_list_h}
+  $<$<BOOL:${CONFIG_USERSPACE}>:--gen-mrsh-files>
   ${SYSCALL_LONG_REGISTERS_ARG}
   ${SYSCALL_SPLIT_TIMEOUT_ARG}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -1717,7 +1720,18 @@ endif()
 
 # Generate and use MCUboot related artifacts as needed.
 if(CONFIG_BOOTLOADER_MCUBOOT)
-  include(${CMAKE_CURRENT_LIST_DIR}/cmake/mcuboot.cmake)
+  get_target_property(signing_script zephyr_property_target SIGNING_SCRIPT)
+  if(NOT signing_script)
+    set_target_properties(zephyr_property_target PROPERTIES SIGNING_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/cmake/mcuboot.cmake)
+  endif()
+endif()
+
+# Include signing script, if set
+get_target_property(signing_script zephyr_property_target SIGNING_SCRIPT)
+if(signing_script)
+  message(STATUS "Including signing script: ${signing_script}")
+
+  include(${signing_script})
 endif()
 
 # Generate USB-C VIF policies in XML format

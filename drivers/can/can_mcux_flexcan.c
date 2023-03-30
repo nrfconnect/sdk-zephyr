@@ -204,7 +204,8 @@ static int mcux_flexcan_start(const struct device *dev)
 		}
 	}
 
-	/* Clear error counters */
+	/* Reset statistics and clear error counters */
+	CAN_STATS_RESET(dev);
 	config->base->ECR &= ~(CAN_ECR_TXERRCNT_MASK | CAN_ECR_RXERRCNT_MASK);
 
 	/* Delay this until start since setting the timing automatically exits freeze mode */
@@ -514,7 +515,7 @@ static int mcux_flexcan_add_rx_filter(const struct device *dev,
 	}
 
 	if (alloc == -ENOSPC) {
-		return alloc;
+		goto unlock;
 	}
 
 	mcux_flexcan_can_filter_to_mbconfig(filter, &data->rx_cbs[alloc].mb_config,
@@ -543,6 +544,7 @@ static int mcux_flexcan_add_rx_filter(const struct device *dev,
 		alloc = -ENOSPC;
 	}
 
+unlock:
 	k_mutex_unlock(&data->rx_mutex);
 
 	return alloc;
