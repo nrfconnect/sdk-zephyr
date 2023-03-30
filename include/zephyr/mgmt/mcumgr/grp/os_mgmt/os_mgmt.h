@@ -83,6 +83,11 @@ struct os_mgmt_info_append {
 	bool *prior_output;
 };
 
+/**
+ * @brief Registers the OS management command handler group.
+ */
+void os_mgmt_register_group(void);
+
 #ifdef __cplusplus
 }
 #endif
