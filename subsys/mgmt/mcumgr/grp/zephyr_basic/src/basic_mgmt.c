@@ -10,7 +10,6 @@
 #include <zephyr/storage/flash_map.h>
 
 #include <zephyr/mgmt/mcumgr/mgmt/mgmt.h>
-#include <zephyr/mgmt/mcumgr/mgmt/handlers.h>
 #include <zephyr/mgmt/mcumgr/grp/zephyr/zephyr_basic.h>
 
 LOG_MODULE_REGISTER(mcumgr_zephyr_grp);
@@ -60,9 +59,13 @@ static struct mgmt_group zephyr_basic_mgmt_group = {
 	.mg_group_id = (ZEPHYR_MGMT_GRP_BASIC),
 };
 
-void zephyr_basic_mgmt_init(void)
+static int zephyr_basic_mgmt_init(const struct device *dev)
 {
+	ARG_UNUSED(dev);
+
+	LOG_INF("Registering Zephyr basic mgmt group");
 	mgmt_register_group(&zephyr_basic_mgmt_group);
+	return 0;
 }
 
-MCUMGR_HANDLER_DEFINE(zephyr_basic_mgmt, zephyr_basic_mgmt_init);
+SYS_INIT(zephyr_basic_mgmt_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
