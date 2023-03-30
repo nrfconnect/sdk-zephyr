@@ -20,3 +20,6 @@ sample:
 tests:
   sample.tfm.secure_partition:
     tags: tfm
+  sample.tfm.secure_partition.lib:
+    tags: tfm
+    extra_args: "CONFIG_TFM_LIBRARY=y"
