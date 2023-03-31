@@ -78,17 +78,7 @@ static int sdmmc_spi_send_ocr(struct sd_card *card, uint32_t arg)
 
 	ret = sdhc_request(card->sdhc, &cmd, NULL);
 
-	if (ret) {
-		LOG_DBG("CMD58 failed: %d", ret);
-		return ret;
-	}
-
 	card->ocr = cmd.response[1];
-	if (card->ocr == 0) {
-		LOG_DBG("No OCR detected");
-		return -ENOTSUP;
-	}
-
 	return ret;
 }
 
