@@ -237,6 +237,10 @@ between major releases are available in the :ref:`zephyr_release_notes`.
      - Experimental
      - 2.4
 
+   * - :ref:`retained_mem_api`
+     - Experimental
+     - 3.4
+
    * - :ref:`reset_api`
      - Experimental
      - 3.1
@@ -244,6 +248,10 @@ between major releases are available in the :ref:`zephyr_release_notes`.
    * - :ref:`rtio_api`
      - Experimental
      - 3.2
+
+   * - :ref:`smbus_api`
+     - Experimental
+     - 3.4
 
    * - :ref:`spi_api`
      - Stable

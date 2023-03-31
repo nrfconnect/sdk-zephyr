@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 menuconfig SENSOR
-	bool "Sensor Drivers"
+	bool "Sensor drivers"
 	help
 	  Include sensor drivers in system config
 
@@ -286,5 +286,7 @@ source "drivers/sensor/esp32_temp/Kconfig"
 source "drivers/sensor/rpi_pico_temp/Kconfig"
 
 source "drivers/sensor/xmc4xxx_temp/Kconfig"
+
+source "drivers/sensor/tmd2620/Kconfig"
 
 endif # SENSOR

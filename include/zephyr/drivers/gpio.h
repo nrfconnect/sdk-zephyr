@@ -513,7 +513,8 @@ enum gpio_int_mode {
 
 enum gpio_int_trig {
 	/* Trigger detection when input state is (or transitions to)
-	 * physical low. (Edge Failing or Active Low) */
+	 * physical low. (Edge Falling or Active Low)
+	 */
 	GPIO_INT_TRIG_LOW = GPIO_INT_LOW_0,
 	/* Trigger detection when input state is (or transitions to)
 	 * physical high. (Edge Rising or Active High) */
@@ -1444,6 +1445,23 @@ static inline int gpio_add_callback(const struct device *port,
 }
 
 /**
+ * @brief Add an application callback.
+ *
+ * This is equivalent to:
+ *
+ *     gpio_add_callback(spec->port, callback);
+ *
+ * @param spec GPIO specification from devicetree.
+ * @param callback A valid application's callback structure pointer.
+ * @return a value from gpio_add_callback().
+ */
+static inline int gpio_add_callback_dt(const struct gpio_dt_spec *spec,
+				       struct gpio_callback *callback)
+{
+	return gpio_add_callback(spec->port, callback);
+}
+
+/**
  * @brief Remove an application callback.
  * @param port Pointer to the device structure for the driver instance.
  * @param callback A valid application's callback structure pointer.
@@ -1470,6 +1488,23 @@ static inline int gpio_remove_callback(const struct device *port,
 	}
 
 	return api->manage_callback(port, callback, false);
+}
+
+/**
+ * @brief Remove an application callback.
+ *
+ * This is equivalent to:
+ *
+ *     gpio_remove_callback(spec->port, callback);
+ *
+ * @param spec GPIO specification from devicetree.
+ * @param callback A valid application's callback structure pointer.
+ * @return a value from gpio_remove_callback().
+ */
+static inline int gpio_remove_callback_dt(const struct gpio_dt_spec *spec,
+					  struct gpio_callback *callback)
+{
+	return gpio_remove_callback(spec->port, callback);
 }
 
 /**

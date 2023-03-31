@@ -253,6 +253,8 @@ static inline int stm32_clock_control_configure(const struct device *dev,
 		return 0;
 	}
 
+	sys_clear_bits(DT_REG_ADDR(DT_NODELABEL(rcc)) + STM32_CLOCK_REG_GET(pclken->enr),
+		       STM32_CLOCK_MASK_GET(pclken->enr) << STM32_CLOCK_SHIFT_GET(pclken->enr));
 	sys_set_bits(DT_REG_ADDR(DT_NODELABEL(rcc)) + STM32_CLOCK_REG_GET(pclken->enr),
 		     STM32_CLOCK_VAL_GET(pclken->enr) << STM32_CLOCK_SHIFT_GET(pclken->enr));
 
@@ -622,11 +624,13 @@ static void set_up_fixed_clock_sources(void)
 
 		z_stm32_hsem_lock(CFG_HW_RCC_SEMID, HSEM_LOCK_DEFAULT_RETRY);
 
+#if defined(PWR_CR_DBP) || defined(PWR_CR1_DBP) || defined(PWR_DBPR_DBP)
 		/* Set the DBP bit in the Power control register 1 (PWR_CR1) */
 		LL_PWR_EnableBkUpAccess();
 		while (!LL_PWR_IsEnabledBkUpAccess()) {
 			/* Wait for Backup domain access */
 		}
+#endif /* PWR_CR_DBP || PWR_CR1_DBP || PWR_DBPR_DBP */
 
 #if STM32_LSE_DRIVING
 		/* Configure driving capability */
@@ -651,7 +655,9 @@ static void set_up_fixed_clock_sources(void)
 		}
 #endif /* RCC_BDCR_LSESYSEN */
 
+#if defined(PWR_CR_DBP) || defined(PWR_CR1_DBP) || defined(PWR_DBPR_DBP)
 		LL_PWR_DisableBkUpAccess();
+#endif /* PWR_CR_DBP || PWR_CR1_DBP || PWR_DBPR_DBP */
 
 		z_stm32_hsem_unlock(CFG_HW_RCC_SEMID);
 	}

@@ -97,8 +97,24 @@ struct rtio_iodev;
 
 /**
  * @brief The next request in the queue should wait on this one.
+ *
+ * Chained SQEs are individual units of work describing patterns of
+ * ordering and failure cascading. A chained SQE must be started only
+ * after the one before it. They are given to the iodevs one after another.
  */
 #define RTIO_SQE_CHAINED BIT(0)
+
+/**
+ * @brief The next request in the queue is part of a transaction.
+ *
+ * Transactional SQEs are sequential parts of a unit of work.
+ * Only the first transactional SQE is submitted to an iodev, the
+ * remaining SQEs are never individually submitted but instead considered
+ * to be part of the transaction to the single iodev. The first sqe in the
+ * sequence holds the iodev that will be used and the last holds the userdata
+ * that will be returned in a single completion on failure/success.
+ */
+#define RTIO_SQE_TRANSACTION BIT(1)
 
 /**
  * @}
@@ -318,6 +334,7 @@ static inline void rtio_sqe_prep_nop(struct rtio_sqe *sqe,
 				void *userdata)
 {
 	sqe->op = RTIO_OP_NOP;
+	sqe->flags = 0;
 	sqe->iodev = iodev;
 	sqe->userdata = userdata;
 }
@@ -334,6 +351,7 @@ static inline void rtio_sqe_prep_read(struct rtio_sqe *sqe,
 {
 	sqe->op = RTIO_OP_RX;
 	sqe->prio = prio;
+	sqe->flags = 0;
 	sqe->iodev = iodev;
 	sqe->buf_len = len;
 	sqe->buf = buf;
@@ -352,6 +370,7 @@ static inline void rtio_sqe_prep_write(struct rtio_sqe *sqe,
 {
 	sqe->op = RTIO_OP_TX;
 	sqe->prio = prio;
+	sqe->flags = 0;
 	sqe->iodev = iodev;
 	sqe->buf_len = len;
 	sqe->buf = buf;
@@ -402,7 +421,7 @@ static inline void rtio_sqe_prep_write(struct rtio_sqe *sqe,
 	IF_ENABLED(CONFIG_RTIO_SUBMIT_SEM,							   \
 		   (static K_SEM_DEFINE(_submit_sem_##name, 0, K_SEM_MAX_LIMIT)))		   \
 	IF_ENABLED(CONFIG_RTIO_CONSUME_SEM,							   \
-		   (static K_SEM_DEFINE(_consume_sem_##name, 0, 1)))				   \
+		   (static K_SEM_DEFINE(_consume_sem_##name, 0, K_SEM_MAX_LIMIT)))		   \
 	static RTIO_SQ_DEFINE(_sq_##name, sq_sz);						   \
 	static RTIO_CQ_DEFINE(_cq_##name, cq_sz);						   \
 	STRUCT_SECTION_ITERABLE(rtio, name) = {							   \
@@ -496,7 +515,15 @@ static inline void rtio_sqe_drop_all(struct rtio *r)
  */
 static inline struct rtio_cqe *rtio_cqe_consume(struct rtio *r)
 {
+#ifdef CONFIG_RTIO_CONSUME_SEM
+	if (k_sem_take(r->consume_sem, K_NO_WAIT) == 0) {
+		return rtio_spsc_consume(r->cq);
+	} else {
+		return NULL;
+	}
+#else
 	return rtio_spsc_consume(r->cq);
+#endif
 }
 
 /**
@@ -513,21 +540,18 @@ static inline struct rtio_cqe *rtio_cqe_consume_block(struct rtio *r)
 {
 	struct rtio_cqe *cqe;
 
-	/* TODO is there a better way? reset this in submit? */
 #ifdef CONFIG_RTIO_CONSUME_SEM
-	k_sem_reset(r->consume_sem);
-#endif
+	k_sem_take(r->consume_sem, K_FOREVER);
+
+	cqe = rtio_spsc_consume(r->cq);
+#else
 	cqe = rtio_spsc_consume(r->cq);
 
 	while (cqe == NULL) {
 		cqe = rtio_spsc_consume(r->cq);
 
-#ifdef CONFIG_RTIO_CONSUME_SEM
-		k_sem_take(r->consume_sem, K_FOREVER);
-#else
-		k_yield();
-#endif
 	}
+#endif
 
 	return cqe;
 }
@@ -567,6 +591,24 @@ static inline void rtio_iodev_sqe_ok(struct rtio_iodev_sqe *iodev_sqe, int resul
 static inline void rtio_iodev_sqe_err(struct rtio_iodev_sqe *iodev_sqe, int result)
 {
 	iodev_sqe->r->executor->api->err(iodev_sqe, result);
+}
+
+/**
+ * @brief Cancel all requests that are pending for the iodev
+ *
+ * @param iodev IODev to cancel all requests for
+ */
+static inline void rtio_iodev_cancel_all(struct rtio_iodev *iodev)
+{
+	/* Clear pending requests as -ENODATA */
+	struct rtio_mpsc_node *node = rtio_mpsc_pop(&iodev->iodev_sq);
+
+	while (node != NULL) {
+		struct rtio_iodev_sqe *iodev_sqe = CONTAINER_OF(node, struct rtio_iodev_sqe, q);
+
+		rtio_iodev_sqe_err(iodev_sqe, -ECANCELED);
+		node = rtio_mpsc_pop(&iodev->iodev_sq);
+	}
 }
 
 /**
