@@ -51,7 +51,6 @@ LOG_MODULE_REGISTER(bt_ascs, CONFIG_BT_ASCS_LOG_LEVEL);
 struct bt_ascs_ase {
 	struct bt_ascs *ascs;
 	struct bt_audio_ep ep;
-	const struct bt_gatt_attr *attr;
 };
 
 struct bt_ascs {
@@ -931,7 +930,7 @@ static void ase_process(struct k_work *work)
 	if (conn != NULL && conn->state == BT_CONN_CONNECTED) {
 		ascs_ep_get_status(ep, &ase_buf);
 
-		bt_gatt_notify(conn, ase->attr,
+		bt_gatt_notify(conn, ep->server.attr,
 			       ase_buf.data, ase_buf.len);
 	}
 
@@ -976,7 +975,7 @@ static uint8_t ase_attr_cb(const struct bt_gatt_attr *attr, uint16_t handle,
 	struct bt_ascs_ase *ase = user_data;
 
 	if (ase->ep.status.id == POINTER_TO_UINT(BT_AUDIO_CHRC_USER_DATA(attr))) {
-		ase->attr = attr;
+		ase->ep.server.attr = attr;
 
 		return BT_GATT_ITER_STOP;
 	}
@@ -1003,7 +1002,7 @@ static void ase_init(struct bt_ascs_ase *ase, uint8_t id)
 	/* Lookup ASE characteristic */
 	bt_gatt_foreach_attr_type(0x0001, 0xffff, ASE_UUID(id), NULL, 0, ase_attr_cb, ase);
 
-	__ASSERT(ase->attr, "ASE characteristic not found\n");
+	__ASSERT(ase->ep.server.attr, "ASE characteristic not found\n");
 }
 
 static struct bt_ascs_ase *ase_new(struct bt_ascs *ascs, uint8_t id)
