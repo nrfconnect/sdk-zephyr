@@ -103,6 +103,4 @@ void zperf_tcp_uploader_init(void);
 void zperf_udp_receiver_init(void);
 void zperf_tcp_receiver_init(void);
 
-void zperf_shell_init(void);
-
 #endif /* __ZPERF_INTERNAL_H */
