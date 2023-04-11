@@ -1,11 +1,6 @@
 /*
- * Copyright (c) 2023 Nordic Semiconductor ASA
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-/*
  * Generated using zcbor version 0.6.0
- * https://github.com/zephyrproject-rtos/zcbor
+ * https://github.com/NordicSemiconductor/zcbor
  * Generated with a --default-max-qty of 99
  */
 
@@ -16,19 +11,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
-#include "zcbor_common.h"
-
-enum lwm2m_senml_cbor_key {
-	lwm2m_senml_cbor_key_bn = -2,
-	lwm2m_senml_cbor_key_bt = -3,
-	lwm2m_senml_cbor_key_n = 0,
-	lwm2m_senml_cbor_key_t = 6,
-	lwm2m_senml_cbor_key_vi = 2,
-	lwm2m_senml_cbor_key_vf = 2,
-	lwm2m_senml_cbor_key_vs = 3,
-	lwm2m_senml_cbor_key_vb = 4,
-	lwm2m_senml_cbor_key_vd = 8,
-};
+#include "zcbor_encode.h"
 
 /** Which value for --default-max-qty this file was created with.
  *
@@ -37,7 +20,7 @@ enum lwm2m_senml_cbor_key {
  *
  *  See `zcbor --help` for more information about --default-max-qty
  */
-#define DEFAULT_MAX_QTY CONFIG_LWM2M_RW_SENML_CBOR_RECORDS
+#define DEFAULT_MAX_QTY 99
 
 struct record_bn {
 	struct zcbor_string _record_bn;
@@ -128,7 +111,7 @@ struct record {
 };
 
 struct lwm2m_senml {
-	struct record _lwm2m_senml__record[DEFAULT_MAX_QTY];
+	struct record _lwm2m_senml__record[99];
 	uint_fast32_t _lwm2m_senml__record_count;
 };
 
