@@ -10,6 +10,7 @@
 #include <openthread/platform/diag.h>
 
 #include "platform-zephyr.h"
+#include "utils/code_utils.h"
 
 /**
  * Diagnostics mode variables.
@@ -100,52 +101,45 @@ static const struct gpio_dt_spec gpio_spec[] = {
 
 static otError gpio_get_spec(uint32_t gpio_idx, const struct gpio_dt_spec **spec)
 {
-	if (gpio_idx >= ARRAY_SIZE(gpio_spec)) {
-		return OT_ERROR_INVALID_ARGS;
-	}
+	otError error = OT_ERROR_NONE;
+
+	otEXPECT_ACTION(gpio_idx < otARRAY_LENGTH(gpio_spec), error = OT_ERROR_INVALID_ARGS);
 
 	*spec = &gpio_spec[gpio_idx];
 
-	if (!otPlatDiagModeGet()) {
-		return OT_ERROR_INVALID_STATE;
-	}
-
-	if (!gpio_is_ready_dt(*spec)) {
-		return OT_ERROR_INVALID_ARGS;
-	}
+	otEXPECT_ACTION(otPlatDiagModeGet(), error = OT_ERROR_INVALID_STATE);
+	otEXPECT_ACTION(gpio_is_ready_dt(*spec), error = OT_ERROR_INVALID_ARGS);
 
 	const struct gpio_driver_config *const cfg =
 		(const struct gpio_driver_config *)((*spec)->port->config);
 
-	if ((cfg->port_pin_mask & (gpio_port_pins_t)BIT((*spec)->pin)) == 0U) {
-		return OT_ERROR_INVALID_ARGS;
-	}
+	otEXPECT_ACTION((cfg->port_pin_mask & (gpio_port_pins_t)BIT((*spec)->pin)) != 0U,
+			error = OT_ERROR_INVALID_ARGS);
 
-	return OT_ERROR_NONE;
+exit:
+	return error;
 }
 
 otError otPlatDiagGpioSet(uint32_t aGpio, bool aValue)
 {
 	const struct gpio_dt_spec *spec;
 	otError error;
+	int rv;
 
 	error = gpio_get_spec(aGpio, &spec);
 
-	if (error != OT_ERROR_NONE) {
-		return error;
-	}
+	otEXPECT(error == OT_ERROR_NONE);
 
 #if defined(CONFIG_GPIO_GET_DIRECTION)
-	if (gpio_pin_is_output_dt(spec) != 1) {
-		return OT_ERROR_INVALID_STATE;
-	}
+	rv = gpio_pin_is_output_dt(spec);
+	otEXPECT_ACTION(rv == 1, error = OT_ERROR_INVALID_STATE);
 #endif
 
-	if (gpio_pin_set_dt(spec, (int)aValue) != 0) {
-		return OT_ERROR_FAILED;
-	}
+	rv = gpio_pin_set_dt(spec, (int)aValue);
+	otEXPECT_ACTION(rv == 0, error = OT_ERROR_FAILED);
 
-	return OT_ERROR_NONE;
+exit:
+	return error;
 }
 
 otError otPlatDiagGpioGet(uint32_t aGpio, bool *aValue)
@@ -156,27 +150,20 @@ otError otPlatDiagGpioGet(uint32_t aGpio, bool *aValue)
 
 	error = gpio_get_spec(aGpio, &spec);
 
-	if (error != OT_ERROR_NONE) {
-		return error;
-	}
-
-	if (aValue == NULL) {
-		return OT_ERROR_INVALID_ARGS;
-	}
+	otEXPECT(error == OT_ERROR_NONE);
+	otEXPECT_ACTION(aValue != NULL, error = OT_ERROR_INVALID_ARGS);
 
 #if defined(CONFIG_GPIO_GET_DIRECTION)
-	if (gpio_pin_is_input_dt(spec) != 1) {
-		return OT_ERROR_INVALID_STATE;
-	}
+	rv = gpio_pin_is_input_dt(spec);
+	otEXPECT_ACTION(rv == 1, error = OT_ERROR_INVALID_STATE);
 #endif
 
 	rv = gpio_pin_get_dt(spec);
-	if (rv < 0) {
-		return OT_ERROR_FAILED;
-	}
+	otEXPECT_ACTION(rv >= 0, error = OT_ERROR_FAILED);
 	*aValue = (bool)rv;
 
-	return OT_ERROR_NONE;
+exit:
+	return error;
 }
 
 otError otPlatDiagGpioSetMode(uint32_t aGpio, otGpioMode aMode)
@@ -187,9 +174,7 @@ otError otPlatDiagGpioSetMode(uint32_t aGpio, otGpioMode aMode)
 
 	error = gpio_get_spec(aGpio, &spec);
 
-	if (error != OT_ERROR_NONE) {
-		return error;
-	}
+	otEXPECT(error == OT_ERROR_NONE);
 
 	switch (aMode) {
 	case OT_GPIO_MODE_INPUT:
@@ -201,14 +186,13 @@ otError otPlatDiagGpioSetMode(uint32_t aGpio, otGpioMode aMode)
 		break;
 
 	default:
-		return OT_ERROR_INVALID_ARGS;
+		error = OT_ERROR_INVALID_ARGS;
 	}
 
-	if (rv != 0) {
-		return OT_ERROR_FAILED;
-	}
+	otEXPECT_ACTION(rv == 0, error = OT_ERROR_FAILED);
 
-	return OT_ERROR_NONE;
+exit:
+	return error;
 }
 
 #if defined(CONFIG_GPIO_GET_DIRECTION)
@@ -217,29 +201,25 @@ otError otPlatDiagGpioGetMode(uint32_t aGpio, otGpioMode *aMode)
 	const struct gpio_dt_spec *spec;
 	otError error;
 	gpio_port_pins_t pins_in, pins_out;
+	int rv;
 
 	error = gpio_get_spec(aGpio, &spec);
 
-	if (error != OT_ERROR_NONE) {
-		return error;
-	}
-	if (aMode == NULL) {
-		return OT_ERROR_INVALID_ARGS;
-	}
+	otEXPECT(error == OT_ERROR_NONE);
+	otEXPECT_ACTION(aMode != NULL, error = OT_ERROR_INVALID_ARGS);
 
-	if (gpio_port_get_direction(spec->port, BIT(spec->pin), &pins_in, &pins_out) < 0) {
-		return OT_ERROR_FAILED;
-	}
+	rv = gpio_port_get_direction(spec->port, BIT(spec->pin), &pins_in, &pins_out);
+	otEXPECT_ACTION(rv >= 0, error = OT_ERROR_FAILED);
 
 	if (((gpio_port_pins_t)BIT(spec->pin) & pins_in) != 0U) {
 		*aMode = OT_GPIO_MODE_INPUT;
 	} else if (((gpio_port_pins_t)BIT(spec->pin) & pins_out) != 0U) {
 		*aMode = OT_GPIO_MODE_OUTPUT;
 	} else {
-		return OT_ERROR_FAILED;
+		error = OT_ERROR_FAILED;
 	}
-
-	return OT_ERROR_NONE;
+exit:
+	return error;
 }
 #endif /* CONFIG_GPIO_GET_DIRECTION */
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(openthread_config) && \
