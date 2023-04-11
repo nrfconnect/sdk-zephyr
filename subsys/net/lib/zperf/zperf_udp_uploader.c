@@ -10,15 +10,16 @@ LOG_MODULE_DECLARE(net_zperf, CONFIG_NET_ZPERF_LOG_LEVEL);
 #include <zephyr/kernel.h>
 
 #include <zephyr/net/socket.h>
-#include <zephyr/net/zperf.h>
 
+#include "zperf.h"
 #include "zperf_internal.h"
 
 static uint8_t sample_packet[sizeof(struct zperf_udp_datagram) +
 			     sizeof(struct zperf_client_hdr_v1) +
 			     PACKET_SIZE_MAX];
 
-static inline void zperf_upload_decode_stat(const uint8_t *data,
+static inline void zperf_upload_decode_stat(const struct shell *sh,
+					    const uint8_t *data,
 					    size_t datalen,
 					    struct zperf_results *results)
 {
@@ -26,7 +27,8 @@ static inline void zperf_upload_decode_stat(const uint8_t *data,
 
 	if (datalen < sizeof(struct zperf_udp_datagram) +
 		      sizeof(struct zperf_server_hdr)) {
-		NET_WARN("Network packet too short");
+		shell_fprintf(sh, SHELL_WARNING,
+			      "Network packet too short\n");
 	}
 
 	stat = (struct zperf_server_hdr *)
@@ -36,18 +38,19 @@ static inline void zperf_upload_decode_stat(const uint8_t *data,
 	results->nb_packets_lost = ntohl(UNALIGNED_GET(&stat->error_cnt));
 	results->nb_packets_outorder =
 		ntohl(UNALIGNED_GET(&stat->outorder_cnt));
-	results->total_len = ntohl(UNALIGNED_GET(&stat->total_len2));
+	results->nb_bytes_sent = ntohl(UNALIGNED_GET(&stat->total_len2));
 	results->time_in_us = ntohl(UNALIGNED_GET(&stat->stop_usec)) +
 		ntohl(UNALIGNED_GET(&stat->stop_sec)) * USEC_PER_SEC;
 	results->jitter_in_us = ntohl(UNALIGNED_GET(&stat->jitter2)) +
 		ntohl(UNALIGNED_GET(&stat->jitter1)) * USEC_PER_SEC;
 }
 
-static inline int zperf_upload_fin(int sock,
-				   uint32_t nb_packets,
-				   uint64_t end_time,
-				   uint32_t packet_size,
-				   struct zperf_results *results)
+static inline void zperf_upload_fin(const struct shell *sh,
+				    int sock,
+				    uint32_t nb_packets,
+				    uint64_t end_time,
+				    uint32_t packet_size,
+				    struct zperf_results *results)
 {
 	uint8_t stats[sizeof(struct zperf_udp_datagram) +
 		      sizeof(struct zperf_server_hdr)] = { 0 };
@@ -89,7 +92,9 @@ static inline int zperf_upload_fin(int sock,
 		/* Send the packet */
 		ret = zsock_send(sock, sample_packet, packet_size, 0);
 		if (ret < 0) {
-			NET_ERR("Failed to send the packet (%d)", errno);
+			shell_fprintf(sh, SHELL_WARNING,
+				      "Failed to send the packet (%d)\n",
+				      errno);
 			continue;
 		}
 
@@ -97,23 +102,26 @@ static inline int zperf_upload_fin(int sock,
 		ret = zsock_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeo,
 				       sizeof(rcvtimeo));
 		if (ret < 0) {
-			NET_ERR("setsockopt error (%d)", errno);
+			shell_fprintf(sh, SHELL_WARNING,
+				      "setsockopt error (%d)\n",
+				      errno);
 			continue;
 		}
 
 		ret = zsock_recv(sock, stats, sizeof(stats), 0);
 		if (ret == -EAGAIN) {
-			NET_WARN("Stats receive timeout");
+			shell_fprintf(sh, SHELL_WARNING,
+					"Stats receive timeout\n");
 		} else if (ret < 0) {
-			NET_ERR("Failed to receive packet (%d)", errno);
+			shell_fprintf(sh, SHELL_WARNING,
+					"Failed to receive packet (%d)\n",
+					errno);
 		}
 	}
 
 	/* Decode statistics */
 	if (ret > 0) {
-		zperf_upload_decode_stat(stats, ret, results);
-	} else {
-		return ret;
+		zperf_upload_decode_stat(sh, stats, ret, results);
 	}
 
 	/* Drain RX */
@@ -123,35 +131,48 @@ static inline int zperf_upload_fin(int sock,
 			break;
 		}
 
-		NET_WARN("Drain one spurious stat packet!");
+		shell_fprintf(sh, SHELL_WARNING,
+			      "Drain one spurious stat packet!\n");
 	}
-
-	return 0;
 }
 
-static int udp_upload(int sock, int port,
+void zperf_udp_upload(const struct shell *sh,
+		      int sock,
+		      int port,
 		      unsigned int duration_in_ms,
 		      unsigned int packet_size,
 		      unsigned int rate_in_kbps,
 		      struct zperf_results *results)
 {
-	uint32_t packet_duration = zperf_packet_duration(packet_size, rate_in_kbps);
+	uint32_t packet_duration = ((uint64_t)packet_size * 8U * USEC_PER_SEC) /
+				   (rate_in_kbps * 1024U);
 	uint64_t duration = sys_clock_timeout_end_calc(K_MSEC(duration_in_ms));
 	uint64_t delay = packet_duration;
 	uint32_t nb_packets = 0U;
 	int64_t start_time, end_time;
 	int64_t last_print_time, last_loop_time;
 	int64_t remaining;
-	int ret;
 
 	if (packet_size > PACKET_SIZE_MAX) {
-		NET_WARN("Packet size too large! max size: %u",
-			 PACKET_SIZE_MAX);
+		shell_fprintf(sh, SHELL_WARNING,
+			      "Packet size too large! max size: %u\n",
+			      PACKET_SIZE_MAX);
 		packet_size = PACKET_SIZE_MAX;
 	} else if (packet_size < sizeof(struct zperf_udp_datagram)) {
-		NET_WARN("Packet size set to the min size: %zu",
-			 sizeof(struct zperf_udp_datagram));
+		shell_fprintf(sh, SHELL_WARNING,
+			      "Packet size set to the min size: %zu\n",
+			      sizeof(struct zperf_udp_datagram));
 		packet_size = sizeof(struct zperf_udp_datagram);
+	}
+
+	if (packet_duration > 1000U) {
+		shell_fprintf(sh, SHELL_NORMAL,
+			      "Packet duration %u ms\n",
+			      (unsigned int)(packet_duration / 1000U));
+	} else {
+		shell_fprintf(sh, SHELL_NORMAL,
+			      "Packet duration %u us\n",
+			      (unsigned int)packet_duration);
 	}
 
 	/* Start the loop */
@@ -167,6 +188,7 @@ static int udp_upload(int sock, int port,
 		uint32_t secs, usecs;
 		int64_t loop_time;
 		int32_t adjust;
+		int ret;
 
 		/* Timestamp */
 		loop_time = k_uptime_ticks();
@@ -215,8 +237,10 @@ static int udp_upload(int sock, int port,
 		/* Send the packet */
 		ret = zsock_send(sock, sample_packet, packet_size, 0);
 		if (ret < 0) {
-			NET_ERR("Failed to send the packet (%d)", errno);
-			return -errno;
+			shell_fprintf(sh, SHELL_WARNING,
+				      "Failed to send the packet (%d)\n",
+				      errno);
+			break;
 		} else {
 			nb_packets++;
 		}
@@ -227,9 +251,10 @@ static int udp_upload(int sock, int port,
 			int64_t print_info = print_interval - k_uptime_ticks();
 
 			if (print_info <= 0) {
-				NET_DBG("nb_packets=%u\tdelay=%u\tadjust=%d",
-					nb_packets, (unsigned int)delay,
-					(int)adjust);
+				shell_fprintf(sh, SHELL_WARNING,
+					    "nb_packets=%u\tdelay=%u\tadjust=%d\n",
+					      nb_packets, (unsigned int)delay,
+					      (int)adjust);
 				print_interval = sys_clock_timeout_end_calc(K_SECONDS(1));
 			}
 		}
@@ -252,52 +277,12 @@ static int udp_upload(int sock, int port,
 
 	end_time = k_uptime_ticks();
 
-	ret = zperf_upload_fin(sock, nb_packets, end_time, packet_size,
-			       results);
-	if (ret < 0) {
-		return ret;
-	}
+	zperf_upload_fin(sh, sock, nb_packets, end_time, packet_size,
+			 results);
 
 	/* Add result coming from the client */
 	results->nb_packets_sent = nb_packets;
 	results->client_time_in_us =
 				k_ticks_to_us_ceil32(end_time - start_time);
 	results->packet_size = packet_size;
-
-	return 0;
-}
-
-int zperf_udp_upload(const struct zperf_upload_params *param,
-		     struct zperf_results *result)
-{
-	int port = 0;
-	int sock;
-	int ret;
-
-	if (param == NULL || result == NULL) {
-		return -EINVAL;
-	}
-
-	if (param->peer_addr.sa_family == AF_INET) {
-		port = ntohs(net_sin(&param->peer_addr)->sin_port);
-	} else if (param->peer_addr.sa_family == AF_INET6) {
-		port = ntohs(net_sin6(&param->peer_addr)->sin6_port);
-	} else {
-		NET_ERR("Invalid address family (%d)",
-			param->peer_addr.sa_family);
-		return -EINVAL;
-	}
-
-	sock = zperf_prepare_upload_sock(&param->peer_addr, param->options.tos,
-					 IPPROTO_UDP);
-	if (sock < 0) {
-		return sock;
-	}
-
-	ret = udp_upload(sock, port, param->duration_ms, param->packet_size,
-			 param->rate_kbps, result);
-
-	zsock_close(sock);
-
-	return ret;
 }
