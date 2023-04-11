@@ -7,7 +7,6 @@ menuconfig MCUMGR
 	select NET_BUF
 	select ZCBOR
 	select CRC
-	select BOOT_IMAGE_ACCESS_HOOKS if (SOC_NRF5340_CPUAPP_QKAA && MCUMGR_CMD_IMG_MGMT)
 	help
 	  This option enables the mcumgr management library.
 
