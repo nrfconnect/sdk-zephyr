@@ -114,8 +114,6 @@ static int zperf_init(const struct device *unused)
 
 	zperf_udp_uploader_init();
 	zperf_tcp_uploader_init();
-	zperf_udp_receiver_init();
-	zperf_tcp_receiver_init();
 
 	return 0;
 }

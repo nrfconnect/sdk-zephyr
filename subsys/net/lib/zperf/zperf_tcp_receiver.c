@@ -25,7 +25,9 @@ LOG_MODULE_DECLARE(net_zperf, CONFIG_NET_ZPERF_LOG_LEVEL);
 static struct sockaddr_in6 *in6_addr_my;
 static struct sockaddr_in *in4_addr_my;
 
-#if defined(CONFIG_NET_TC_THREAD_COOPERATIVE)
+static bool init_done;
+
+#if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
 #define TCP_RECEIVER_THREAD_PRIORITY K_PRIO_COOP(8)
 #else
 #define TCP_RECEIVER_THREAD_PRIORITY K_PRIO_PREEMPT(8)
@@ -40,7 +42,6 @@ static struct sockaddr_in *in4_addr_my;
 #define SOCK_ID_MAX 4
 
 #define TCP_RECEIVER_BUF_SIZE 1500
-#define POLL_TIMEOUT_MS 100
 
 static K_THREAD_STACK_DEFINE(tcp_receiver_stack_area, TCP_RECEIVER_STACK_SIZE);
 static struct k_thread tcp_receiver_thread_data;
@@ -48,9 +49,6 @@ static struct k_thread tcp_receiver_thread_data;
 static zperf_callback tcp_session_cb;
 static void *tcp_user_data;
 static bool tcp_server_running;
-static bool tcp_server_stop;
-static uint16_t tcp_server_port;
-static K_SEM_DEFINE(tcp_server_run, 0, 1);
 
 static void tcp_received(int sock, size_t datalen)
 {
@@ -97,6 +95,8 @@ static void tcp_received(int sock, size_t datalen)
 					       tcp_user_data);
 			}
 
+			zperf_tcp_stopped();
+
 			session->state = STATE_NULL;
 		}
 
@@ -109,9 +109,13 @@ static void tcp_received(int sock, size_t datalen)
 	}
 }
 
-static void tcp_server_session(void)
+void tcp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
 {
+	ARG_UNUSED(ptr1);
+	ARG_UNUSED(ptr3);
+
 	static uint8_t buf[TCP_RECEIVER_BUF_SIZE];
+	int port = POINTER_TO_INT(ptr2);
 	struct zsock_pollfd fds[SOCK_ID_MAX] = { 0 };
 	int ret;
 
@@ -128,7 +132,7 @@ static void tcp_server_session(void)
 							   IPPROTO_TCP);
 		if (fds[SOCK_ID_IPV4_LISTEN].fd < 0) {
 			NET_ERR("Cannot create IPv4 network socket.");
-			goto error;
+			goto cleanup;
 		}
 
 		if (MY_IP4ADDR && strlen(MY_IP4ADDR)) {
@@ -145,13 +149,13 @@ static void tcp_server_session(void)
 			in4_addr = zperf_get_default_if_in4_addr();
 			if (!in4_addr) {
 				NET_ERR("Unable to get IPv4 by default");
-				goto error;
+				goto cleanup;
 			}
 			memcpy(&in4_addr_my->sin_addr, in4_addr,
 				sizeof(struct in_addr));
 		}
 
-		in4_addr_my->sin_port = htons(tcp_server_port);
+		in4_addr_my->sin_port = htons(port);
 
 		NET_INFO("Binding to %s",
 			 net_sprint_ipv4_addr(&in4_addr_my->sin_addr));
@@ -162,13 +166,13 @@ static void tcp_server_session(void)
 		if (ret < 0) {
 			NET_ERR("Cannot bind IPv4 UDP port %d (%d)",
 				ntohs(in4_addr_my->sin_port), errno);
-			goto error;
+			goto cleanup;
 		}
 
 		ret = zsock_listen(fds[SOCK_ID_IPV4_LISTEN].fd, 1);
 		if (ret < 0) {
 			NET_ERR("Cannot listen IPv4 TCP (%d)", errno);
-			goto error;
+			goto cleanup;
 		}
 
 		fds[SOCK_ID_IPV4_LISTEN].events = ZSOCK_POLLIN;
@@ -183,7 +187,7 @@ static void tcp_server_session(void)
 							   IPPROTO_TCP);
 		if (fds[SOCK_ID_IPV6_LISTEN].fd < 0) {
 			NET_ERR("Cannot create IPv6 network socket.");
-			goto error;
+			goto cleanup;
 		}
 
 		if (MY_IP6ADDR && strlen(MY_IP6ADDR)) {
@@ -201,13 +205,13 @@ static void tcp_server_session(void)
 			in6_addr = zperf_get_default_if_in6_addr();
 			if (!in6_addr) {
 				NET_ERR("Unable to get IPv4 by default");
-				goto error;
+				goto cleanup;
 			}
 			memcpy(&in6_addr_my->sin6_addr, in6_addr,
 				sizeof(struct in6_addr));
 		}
 
-		in6_addr_my->sin6_port = htons(tcp_server_port);
+		in6_addr_my->sin6_port = htons(port);
 
 		NET_INFO("Binding to %s",
 			 net_sprint_ipv6_addr(&in6_addr_my->sin6_addr));
@@ -218,33 +222,29 @@ static void tcp_server_session(void)
 		if (ret < 0) {
 			NET_ERR("Cannot bind IPv6 UDP port %d (%d)",
 				ntohs(in6_addr_my->sin6_port), errno);
-			goto error;
+			goto cleanup;
 		}
 
 		ret = zsock_listen(fds[SOCK_ID_IPV6_LISTEN].fd, 1);
 		if (ret < 0) {
 			NET_ERR("Cannot listen IPv6 TCP (%d)", errno);
-			goto error;
+			goto cleanup;
 		}
 
 		fds[SOCK_ID_IPV6_LISTEN].events = ZSOCK_POLLIN;
 	}
 
-	NET_INFO("Listening on port %d", tcp_server_port);
+	NET_INFO("Listening on port %d", port);
+
+	/* TODO Investigate started/stopped logic */
+	zperf_tcp_started();
+	init_done = true;
 
 	while (true) {
-		ret = zsock_poll(fds, ARRAY_SIZE(fds), POLL_TIMEOUT_MS);
+		ret = zsock_poll(fds, ARRAY_SIZE(fds), -1);
 		if (ret < 0) {
 			NET_ERR("TCP receiver poll error (%d)", errno);
-			goto error;
-		}
-
-		if (tcp_server_stop) {
 			goto cleanup;
-		}
-
-		if (ret == 0) {
-			continue;
 		}
 
 		for (int i = 0; i < ARRAY_SIZE(fds); i++) {
@@ -255,7 +255,7 @@ static void tcp_server_session(void)
 			    (fds[i].revents & ZSOCK_POLLNVAL)) {
 				NET_ERR("TCP receiver IPv%d socket error",
 					(i <= SOCK_ID_IPV4_DATA) ? 4 : 6);
-				goto error;
+				goto cleanup;
 			}
 
 			if (!(fds[i].revents & ZSOCK_POLLIN)) {
@@ -271,7 +271,7 @@ static void tcp_server_session(void)
 				if (sock < 0) {
 					NET_ERR("TCP receiver IPv%d accept error",
 						(i <= SOCK_ID_IPV4_DATA) ? 4 : 6);
-					goto error;
+					goto cleanup;
 				}
 
 				if (i == SOCK_ID_IPV4_LISTEN &&
@@ -298,7 +298,7 @@ static void tcp_server_session(void)
 					NET_ERR("recv failed on IPv%d socket (%d)",
 						(i <= SOCK_ID_IPV4_DATA) ? 4 : 6,
 						errno);
-					goto error;
+					goto cleanup;
 				}
 
 				tcp_received(fds[i].fd, ret);
@@ -313,13 +313,12 @@ static void tcp_server_session(void)
 		}
 	}
 
-error:
+cleanup:
 	if (tcp_session_cb != NULL) {
 		tcp_session_cb(ZPERF_SESSION_ERROR, NULL,
 			       tcp_user_data);
 	}
 
-cleanup:
 	for (int i = 0; i < ARRAY_SIZE(fds); i++) {
 		if (fds[i].fd >= 0) {
 			zsock_close(fds[i].fd);
@@ -327,28 +326,18 @@ cleanup:
 	}
 }
 
-void tcp_receiver_thread(void *ptr1, void *ptr2, void *ptr3)
+void zperf_tcp_receiver_init(int port)
 {
-	ARG_UNUSED(ptr1);
-	ARG_UNUSED(ptr2);
-	ARG_UNUSED(ptr3);
-
-	while (true) {
-		k_sem_take(&tcp_server_run, K_FOREVER);
-
-		tcp_server_session();
-
-		tcp_server_running = false;
+	if (init_done) {
+		zperf_tcp_started();
+		return;
 	}
-}
 
-void zperf_tcp_receiver_init(void)
-{
 	k_thread_create(&tcp_receiver_thread_data,
 			tcp_receiver_stack_area,
 			K_THREAD_STACK_SIZEOF(tcp_receiver_stack_area),
 			tcp_receiver_thread,
-			NULL, NULL, NULL,
+			NULL, INT_TO_POINTER(port), NULL,
 			TCP_RECEIVER_THREAD_PRIORITY,
 			IS_ENABLED(CONFIG_USERSPACE) ? K_USER |
 						       K_INHERIT_PERMS : 0,
@@ -368,23 +357,9 @@ int zperf_tcp_download(const struct zperf_download_params *param,
 
 	tcp_session_cb = callback;
 	tcp_user_data = user_data;
-	tcp_server_port = param->port;
 	tcp_server_running = true;
-	tcp_server_stop = false;
 
-	k_sem_give(&tcp_server_run);
-
-	return 0;
-}
-
-int zperf_tcp_download_stop(void)
-{
-	if (!tcp_server_running) {
-		return -EALREADY;
-	}
-
-	tcp_server_stop = true;
-	tcp_session_cb = NULL;
+	zperf_tcp_receiver_init(param->port);
 
 	return 0;
 }
