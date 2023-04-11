@@ -9,8 +9,7 @@ record = {
 	    vf => float       // ; Float Value
 	    vs => tstr        // ; String Value
 	    vb => bool        // ; Boolean Value
-	    vd => bstr        // ; Data Value
-	    vlo => tstr ),       ; Object Link Value
+	    vd => bstr ),        ; Data Value
 	0*5 key-value-pair       ; To handle unordered maps; length-first ordered map keys
 }
 
@@ -28,4 +27,3 @@ vf = 2
 vs = 3
 vd = 8
 vb = 4
-vlo = "vlo"
