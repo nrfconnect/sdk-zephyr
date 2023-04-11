@@ -7,8 +7,7 @@
 
 # Image management group public API is exported by MCUmgr interface API,
 # when Image Management is enabled.
-zephyr_library(mgmt_mcumgr_grp_img)
-zephyr_library_sources(
+add_library(mgmt_mcumgr_grp_img
   src/zephyr_img_mgmt.c
   src/zephyr_img_mgmt_log.c
   src/img_mgmt_state.c
@@ -16,8 +15,15 @@ zephyr_library_sources(
   src/img_mgmt.c
 )
 
-zephyr_library_include_directories(include)
+target_include_directories(mgmt_mcumgr_grp_img PUBLIC include)
+
+# Allow fs group interface to be included out of MCUmgr subsystem scope
+target_link_libraries(mgmt_mcumgr_grp_img PRIVATE
+  zephyr_interface mgmt_mcumgr_mgmt mgmt_mcumgr_util
+)
 
 if(CONFIG_MCUBOOT_IMG_MANAGER)
-  zephyr_library_link_libraries(MCUBOOT_BOOTUTIL)
+  target_link_libraries(mgmt_mcumgr_grp_img PRIVATE MCUBOOT_BOOTUTIL)
 endif()
+
+target_link_libraries(mgmt_mcumgr INTERFACE mgmt_mcumgr_grp_img)
