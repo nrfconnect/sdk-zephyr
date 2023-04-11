@@ -78,9 +78,8 @@ struct openthread_context {
  * changes within OpenThread.
  *
  * @param cb function to call in callback procedure.
- * @deprecated Use openthread_state_changed_cb_register() instead.
  */
-__deprecated void openthread_set_state_changed_cb(otStateChangedCallback cb);
+void openthread_set_state_changed_cb(otStateChangedCallback cb);
 
 /**
  * @brief Get OpenThread thread identification.
