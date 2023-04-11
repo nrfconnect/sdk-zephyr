@@ -514,8 +514,9 @@ static int lwm2m_check_buf_sizes(uint8_t data_type, uint16_t resource_length, ui
 	return 0;
 }
 
-static int lwm2m_engine_set(const struct lwm2m_obj_path *path, const void *value, uint16_t len)
+static int lwm2m_engine_set(const char *pathstr, const void *value, uint16_t len)
 {
+	struct lwm2m_obj_path path;
 	struct lwm2m_engine_obj_inst *obj_inst;
 	struct lwm2m_engine_obj_field *obj_field;
 	struct lwm2m_engine_res *res = NULL;
@@ -525,32 +526,37 @@ static int lwm2m_engine_set(const struct lwm2m_obj_path *path, const void *value
 	int ret = 0;
 	bool changed = false;
 
-	if (path->level < LWM2M_PATH_LEVEL_RESOURCE) {
+	LOG_DBG("path:%s, value:%p, len:%d", pathstr, value, len);
+
+	/* translate path -> path_obj */
+	ret = lwm2m_string_to_path(pathstr, &path, '/');
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (path.level < LWM2M_PATH_LEVEL_RESOURCE) {
 		LOG_ERR("path must have at least 3 parts");
 		return -EINVAL;
 	}
 
-	LOG_DBG("path:%u/%u/%u, buf:%p, len:%d", path->obj_id, path->obj_inst_id,
-		path->res_id, value, len);
-
 	k_mutex_lock(&registry_lock, K_FOREVER);
 	/* look up resource obj */
-	ret = path_to_objs(path, &obj_inst, &obj_field, &res, &res_inst);
+	ret = path_to_objs(&path, &obj_inst, &obj_field, &res, &res_inst);
 	if (ret < 0) {
 		k_mutex_unlock(&registry_lock);
 		return ret;
 	}
 
 	if (!res_inst) {
-		LOG_ERR("res instance %d not found", path->res_inst_id);
+		LOG_ERR("res instance %d not found", path.res_inst_id);
 		k_mutex_unlock(&registry_lock);
 		return -ENOENT;
 	}
 
 	if (LWM2M_HAS_RES_FLAG(res_inst, LWM2M_RES_DATA_FLAG_RO)) {
 		LOG_ERR("res instance data pointer is read-only "
-			"[%u/%u/%u/%u:lvl%u]", path->obj_id, path->obj_inst_id, path->res_id,
-			path->res_inst_id, path->level);
+			"[%u/%u/%u/%u:%u]",
+			path.obj_id, path.obj_inst_id, path.res_id, path.res_inst_id, path.level);
 		k_mutex_unlock(&registry_lock);
 		return -EACCES;
 	}
@@ -566,15 +572,15 @@ static int lwm2m_engine_set(const struct lwm2m_obj_path *path, const void *value
 	}
 
 	if (!data_ptr) {
-		LOG_ERR("res instance data pointer is NULL [%u/%u/%u/%u:%u]", path->obj_id,
-			path->obj_inst_id, path->res_id, path->res_inst_id, path->level);
+		LOG_ERR("res instance data pointer is NULL [%u/%u/%u/%u:%u]", path.obj_id,
+			path.obj_inst_id, path.res_id, path.res_inst_id, path.level);
 		k_mutex_unlock(&registry_lock);
 		return -EINVAL;
 	}
 
 	ret = lwm2m_check_buf_sizes(obj_field->data_type, len, max_data_len);
 	if (ret) {
-		LOG_ERR("Incorrect buffer length %u for res data length %zu", len,
+		LOG_ERR("Incorrect buffer length %u for res data length %u", len,
 			max_data_len);
 		k_mutex_unlock(&registry_lock);
 		return ret;
@@ -605,7 +611,7 @@ static int lwm2m_engine_set(const struct lwm2m_obj_path *path, const void *value
 		/* check length (note: we add 1 to string length for NULL pad) */
 		if (len > max_data_len - 1) {
 			LOG_ERR("String length %u is too long for res instance %d data", len,
-				path->res_id);
+				path.res_id);
 			k_mutex_unlock(&registry_lock);
 			return -ENOMEM;
 		}
@@ -627,7 +633,7 @@ static int lwm2m_engine_set(const struct lwm2m_obj_path *path, const void *value
 
 	case LWM2M_RES_TYPE_TIME:
 		if (!lwm2m_validate_time_resource_lenghts(max_data_len, len)) {
-			LOG_ERR("Time Set: buffer length %u  max data len %zu not supported", len,
+			LOG_ERR("Time Set: buffer length %u  max data len %u not supported", len,
 				max_data_len);
 			return -EINVAL;
 		}
@@ -640,8 +646,8 @@ static int lwm2m_engine_set(const struct lwm2m_obj_path *path, const void *value
 			}
 		} else {
 			LOG_WRN("Converting time to 32bit may cause integer overflow on resource "
-				"[%u/%u/%u/%u:%u]", path->obj_id, path->obj_inst_id, path->res_id,
-				path->res_inst_id, path->level);
+				"%s",
+				pathstr);
 			if (len == sizeof(uint32_t)) {
 				*((uint32_t *)data_ptr) = *(uint32_t *)value;
 			} else {
@@ -689,7 +695,7 @@ static int lwm2m_engine_set(const struct lwm2m_obj_path *path, const void *value
 
 	/* Cache Data Write */
 #if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
-	lwm2m_engine_cache_write(obj_field, path, value, len);
+	lwm2m_engine_cache_write(obj_field, &path, value, len);
 #endif
 
 	if (res->post_write_cb) {
@@ -698,251 +704,82 @@ static int lwm2m_engine_set(const struct lwm2m_obj_path *path, const void *value
 	}
 
 	if (changed && LWM2M_HAS_PERM(obj_field, LWM2M_PERM_R)) {
-		lwm2m_notify_observer_path(path);
+		lwm2m_notify_observer_path(&path);
 	}
 	k_mutex_unlock(&registry_lock);
 	return ret;
 }
 
-int lwm2m_set_opaque(const struct lwm2m_obj_path *path, const char *data_ptr, uint16_t data_len)
-{
-	return lwm2m_engine_set(path, data_ptr, data_len);
-}
-
 int lwm2m_engine_set_opaque(const char *pathstr, const char *data_ptr, uint16_t data_len)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_opaque(&path, data_ptr, data_len);
-}
-
-int lwm2m_set_string(const struct lwm2m_obj_path *path, const char *data_ptr)
-{
-	return lwm2m_engine_set(path, data_ptr, strlen(data_ptr));
+	return lwm2m_engine_set(pathstr, data_ptr, data_len);
 }
 
 int lwm2m_engine_set_string(const char *pathstr, const char *data_ptr)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_string(&path, data_ptr);
-}
-
-int lwm2m_set_u8(const struct lwm2m_obj_path *path, uint8_t value)
-{
-	return lwm2m_engine_set(path, &value, 1);
+	return lwm2m_engine_set(pathstr, data_ptr, strlen(data_ptr));
 }
 
 int lwm2m_engine_set_u8(const char *pathstr, uint8_t value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_u8(&path, value);
-}
-
-int lwm2m_set_u16(const struct lwm2m_obj_path *path, uint16_t value)
-{
-	return lwm2m_engine_set(path, &value, 2);
+	return lwm2m_engine_set(pathstr, &value, 1);
 }
 
 int lwm2m_engine_set_u16(const char *pathstr, uint16_t value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_u16(&path, value);
-}
-
-int lwm2m_set_u32(const struct lwm2m_obj_path *path, uint32_t value)
-{
-	return lwm2m_engine_set(path, &value, 4);
+	return lwm2m_engine_set(pathstr, &value, 2);
 }
 
 int lwm2m_engine_set_u32(const char *pathstr, uint32_t value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_u32(&path, value);
-}
-
-int lwm2m_set_u64(const struct lwm2m_obj_path *path, uint64_t value)
-{
-	return lwm2m_engine_set(path, &value, 8);
+	return lwm2m_engine_set(pathstr, &value, 4);
 }
 
 int lwm2m_engine_set_u64(const char *pathstr, uint64_t value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_u64(&path, value);
-}
-
-int lwm2m_set_s8(const struct lwm2m_obj_path *path, int8_t value)
-{
-	return lwm2m_engine_set(path, &value, 1);
+	return lwm2m_engine_set(pathstr, &value, 8);
 }
 
 int lwm2m_engine_set_s8(const char *pathstr, int8_t value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_s8(&path, value);
-}
-
-int lwm2m_set_s16(const struct lwm2m_obj_path *path, int16_t value)
-{
-	return lwm2m_engine_set(path, &value, 2);
-
+	return lwm2m_engine_set(pathstr, &value, 1);
 }
 
 int lwm2m_engine_set_s16(const char *pathstr, int16_t value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_s16(&path, value);
-}
-
-int lwm2m_set_s32(const struct lwm2m_obj_path *path, int32_t value)
-{
-	return lwm2m_engine_set(path, &value, 4);
+	return lwm2m_engine_set(pathstr, &value, 2);
 }
 
 int lwm2m_engine_set_s32(const char *pathstr, int32_t value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_s32(&path, value);
-}
-
-int lwm2m_set_s64(const struct lwm2m_obj_path *path, int64_t value)
-{
-	return lwm2m_engine_set(path, &value, 8);
+	return lwm2m_engine_set(pathstr, &value, 4);
 }
 
 int lwm2m_engine_set_s64(const char *pathstr, int64_t value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_s64(&path, value);
-}
-
-int lwm2m_set_bool(const struct lwm2m_obj_path *path, bool value)
-{
-	uint8_t temp = (value != 0 ? 1 : 0);
-
-	return lwm2m_engine_set(path, &temp, 1);
+	return lwm2m_engine_set(pathstr, &value, 8);
 }
 
 int lwm2m_engine_set_bool(const char *pathstr, bool value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
+	uint8_t temp = (value != 0 ? 1 : 0);
 
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_bool(&path, value);
-}
-
-int lwm2m_set_f64(const struct lwm2m_obj_path *path, const double value)
-{
-	return lwm2m_engine_set(path, &value, sizeof(double));
+	return lwm2m_engine_set(pathstr, &temp, 1);
 }
 
 int lwm2m_engine_set_float(const char *pathstr, const double *value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_f64(&path, *value);
-}
-
-int lwm2m_set_objlnk(const struct lwm2m_obj_path *path, const struct lwm2m_objlnk *value)
-{
-	return lwm2m_engine_set(path, value, sizeof(struct lwm2m_objlnk));
+	return lwm2m_engine_set(pathstr, value, sizeof(double));
 }
 
 int lwm2m_engine_set_objlnk(const char *pathstr, const struct lwm2m_objlnk *value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_objlnk(&path, value);
-}
-
-int lwm2m_set_time(const struct lwm2m_obj_path *path, time_t value)
-{
-	return lwm2m_engine_set(path, &value, sizeof(time_t));
+	return lwm2m_engine_set(pathstr, value, sizeof(struct lwm2m_objlnk));
 }
 
 int lwm2m_engine_set_time(const char *pathstr, time_t value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_set_time(&path, value);
+	return lwm2m_engine_set(pathstr, &value, sizeof(time_t));
 }
 
 int lwm2m_engine_set_res_data_len(const char *pathstr, uint16_t data_len)
@@ -1016,9 +853,10 @@ int lwm2m_engine_get_res_data(const char *pathstr, void **data_ptr, uint16_t *da
 	return lwm2m_engine_get_res_buf(pathstr, data_ptr, NULL, data_len, data_flags);
 }
 
-static int lwm2m_engine_get(const struct lwm2m_obj_path *path, void *buf, uint16_t buflen)
+static int lwm2m_engine_get(const char *pathstr, void *buf, uint16_t buflen)
 {
 	int ret = 0;
+	struct lwm2m_obj_path path;
 	struct lwm2m_engine_obj_inst *obj_inst;
 	struct lwm2m_engine_obj_field *obj_field;
 	struct lwm2m_engine_res *res = NULL;
@@ -1026,23 +864,28 @@ static int lwm2m_engine_get(const struct lwm2m_obj_path *path, void *buf, uint16
 	void *data_ptr = NULL;
 	size_t data_len = 0;
 
-	if (path->level < LWM2M_PATH_LEVEL_RESOURCE) {
+	LOG_DBG("path:%s, buf:%p, buflen:%d", pathstr, buf, buflen);
+
+	/* translate path -> path_obj */
+	ret = lwm2m_string_to_path(pathstr, &path, '/');
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (path.level < LWM2M_PATH_LEVEL_RESOURCE) {
 		LOG_ERR("path must have at least 3 parts");
 		return -EINVAL;
 	}
-	LOG_DBG("path:%u/%u/%u/%u, level %u, buf:%p, buflen:%d", path->obj_id, path->obj_inst_id,
-		path->res_id, path->res_inst_id, path->level, buf, buflen);
-
 	k_mutex_lock(&registry_lock, K_FOREVER);
 	/* look up resource obj */
-	ret = path_to_objs(path, &obj_inst, &obj_field, &res, &res_inst);
+	ret = path_to_objs(&path, &obj_inst, &obj_field, &res, &res_inst);
 	if (ret < 0) {
 		k_mutex_unlock(&registry_lock);
 		return ret;
 	}
 
 	if (!res_inst) {
-		LOG_ERR("res instance %d not found", path->res_inst_id);
+		LOG_ERR("res instance %d not found", path.res_inst_id);
 		k_mutex_unlock(&registry_lock);
 		return -ENOENT;
 	}
@@ -1060,7 +903,7 @@ static int lwm2m_engine_get(const struct lwm2m_obj_path *path, void *buf, uint16
 	if (data_ptr && data_len > 0) {
 		ret = lwm2m_check_buf_sizes(obj_field->data_type, data_len, buflen);
 		if (ret) {
-			LOG_ERR("Incorrect resource data length %zu. Buffer length %u", data_len,
+			LOG_ERR("Incorrect resource data length %u. Buffer length %u", data_len,
 				buflen);
 			k_mutex_unlock(&registry_lock);
 			return ret;
@@ -1081,7 +924,7 @@ static int lwm2m_engine_get(const struct lwm2m_obj_path *path, void *buf, uint16
 			break;
 		case LWM2M_RES_TYPE_TIME:
 			if (!lwm2m_validate_time_resource_lenghts(data_len, buflen)) {
-				LOG_ERR("Time get buffer length %u  data len %zu not supported",
+				LOG_ERR("Time get buffer length %u  data len %u not supported",
 					buflen, data_len);
 				return -EINVAL;
 			}
@@ -1092,11 +935,13 @@ static int lwm2m_engine_get(const struct lwm2m_obj_path *path, void *buf, uint16
 				} else {
 					/* In this case get operation may not got correct value */
 					LOG_WRN("Converting time to 32bit may cause integer "
-						"overflow");
+						"overflow:%s",
+						pathstr);
 					*((uint32_t *)buf) = (uint32_t) *((time_t *)data_ptr);
 				}
 			} else {
-				LOG_WRN("Converting time to 32bit may cause integer overflow");
+				LOG_WRN("Converting time to 32bit may cause integer overflow:%s",
+					pathstr);
 				if (buflen == sizeof(uint32_t)) {
 					*((uint32_t *)buf) = *(uint32_t *)data_ptr;
 				} else {
@@ -1151,182 +996,62 @@ static int lwm2m_engine_get(const struct lwm2m_obj_path *path, void *buf, uint16
 	return 0;
 }
 
-int lwm2m_get_opaque(const struct lwm2m_obj_path *path, void *buf, uint16_t buflen)
-{
-	return lwm2m_engine_get(path, buf, buflen);
-}
-
 int lwm2m_engine_get_opaque(const char *pathstr, void *buf, uint16_t buflen)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_opaque(&path, buf, buflen);
+	return lwm2m_engine_get(pathstr, buf, buflen);
 }
 
-int lwm2m_get_string(const struct lwm2m_obj_path *path, void *str, uint16_t strlen)
+int lwm2m_engine_get_string(const char *pathstr, void *buf, uint16_t buflen)
 {
-	return lwm2m_engine_get(path, str, strlen);
-}
-
-int lwm2m_engine_get_string(const char *pathstr, void *str, uint16_t strlen)
-{
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_opaque(&path, str, strlen);
-}
-
-int lwm2m_get_u8(const struct lwm2m_obj_path *path, uint8_t *value)
-{
-	return lwm2m_engine_get(path, value, 1);
+	return lwm2m_engine_get(pathstr, buf, buflen);
 }
 
 int lwm2m_engine_get_u8(const char *pathstr, uint8_t *value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_u8(&path, value);
-}
-
-int lwm2m_get_u16(const struct lwm2m_obj_path *path, uint16_t *value)
-{
-	return lwm2m_engine_get(path, value, 2);
+	return lwm2m_engine_get(pathstr, value, 1);
 }
 
 int lwm2m_engine_get_u16(const char *pathstr, uint16_t *value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_u16(&path, value);
-}
-
-int lwm2m_get_u32(const struct lwm2m_obj_path *path, uint32_t *value)
-{
-	return lwm2m_engine_get(path, value, 4);
+	return lwm2m_engine_get(pathstr, value, 2);
 }
 
 int lwm2m_engine_get_u32(const char *pathstr, uint32_t *value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_u32(&path, value);
-}
-
-int lwm2m_get_u64(const struct lwm2m_obj_path *path, uint64_t *value)
-{
-	return lwm2m_engine_get(path, value, 8);
+	return lwm2m_engine_get(pathstr, value, 4);
 }
 
 int lwm2m_engine_get_u64(const char *pathstr, uint64_t *value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_u64(&path, value);
-}
-
-int lwm2m_get_s8(const struct lwm2m_obj_path *path, int8_t *value)
-{
-	return lwm2m_engine_get(path, value, 1);
+	return lwm2m_engine_get(pathstr, value, 8);
 }
 
 int lwm2m_engine_get_s8(const char *pathstr, int8_t *value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_s8(&path, value);
-}
-
-int lwm2m_get_s16(const struct lwm2m_obj_path *path, int16_t *value)
-{
-	return lwm2m_engine_get(path, value, 2);
+	return lwm2m_engine_get(pathstr, value, 1);
 }
 
 int lwm2m_engine_get_s16(const char *pathstr, int16_t *value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_s16(&path, value);
-}
-
-int lwm2m_get_s32(const struct lwm2m_obj_path *path, int32_t *value)
-{
-	return lwm2m_engine_get(path, value, 4);
+	return lwm2m_engine_get(pathstr, value, 2);
 }
 
 int lwm2m_engine_get_s32(const char *pathstr, int32_t *value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_s32(&path, value);
-}
-
-int lwm2m_get_s64(const struct lwm2m_obj_path *path, int64_t *value)
-{
-	return lwm2m_engine_get(path, value, 8);
+	return lwm2m_engine_get(pathstr, value, 4);
 }
 
 int lwm2m_engine_get_s64(const char *pathstr, int64_t *value)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_s64(&path, value);
+	return lwm2m_engine_get(pathstr, value, 8);
 }
 
-int lwm2m_get_bool(const struct lwm2m_obj_path *path, bool *value)
+int lwm2m_engine_get_bool(const char *pathstr, bool *value)
 {
 	int ret = 0;
 	int8_t temp = 0;
 
-	ret = lwm2m_get_s8(path, &temp);
+	ret = lwm2m_engine_get_s8(pathstr, &temp);
 	if (!ret) {
 		*value = temp != 0;
 	}
@@ -1334,67 +1059,19 @@ int lwm2m_get_bool(const struct lwm2m_obj_path *path, bool *value)
 	return ret;
 }
 
-int lwm2m_engine_get_bool(const char *pathstr, bool *value)
-{
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_bool(&path, value);
-}
-
-int lwm2m_get_f64(const struct lwm2m_obj_path *path, double *value)
-{
-	return lwm2m_engine_get(path, value, sizeof(double));
-}
-
 int lwm2m_engine_get_float(const char *pathstr, double *buf)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_f64(&path, buf);
-}
-
-int lwm2m_get_objlnk(const struct lwm2m_obj_path *path, struct lwm2m_objlnk *buf)
-{
-	return lwm2m_engine_get(path, buf, sizeof(struct lwm2m_objlnk));
+	return lwm2m_engine_get(pathstr, buf, sizeof(double));
 }
 
 int lwm2m_engine_get_objlnk(const char *pathstr, struct lwm2m_objlnk *buf)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_objlnk(&path, buf);
-}
-
-int lwm2m_get_time(const struct lwm2m_obj_path *path, time_t *buf)
-{
-	return lwm2m_engine_get(path, buf, sizeof(time_t));
+	return lwm2m_engine_get(pathstr, buf, sizeof(struct lwm2m_objlnk));
 }
 
 int lwm2m_engine_get_time(const char *pathstr, time_t *buf)
 {
-	struct lwm2m_obj_path path;
-	int ret = 0;
-
-	ret = lwm2m_string_to_path(pathstr, &path, '/');
-	if (ret < 0) {
-		return ret;
-	}
-	return lwm2m_get_time(&path, buf);
+	return lwm2m_engine_get(pathstr, buf, sizeof(time_t));
 }
 
 int lwm2m_engine_get_resource(const char *pathstr, struct lwm2m_engine_res **res)
