@@ -197,12 +197,6 @@ We need to reset the board manually after flashing the image to run this code.
 On nRF5340 and nRF9160:
 =======================
 
-.. note::
-   To be able to create an initial attestation token (IAT), the device has to be provisioned
-   by generating a Hardware Unique key (HUK) and an identity key.
-   An example on how to do this can be found in the TF-M provisioning sample of the nRF Connect SDK.
-
-
 Build Zephyr with a non-secure configuration
 (``-DBOARD=nrf5340dk_nrf5340_cpuapp_ns`` or ``-DBOARD=nrf9160dk_nrf9160_ns``).
 
