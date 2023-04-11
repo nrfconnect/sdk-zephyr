@@ -127,7 +127,8 @@ static int parse_ipv6_addr(const struct shell *sh, char *host, char *port,
 	return 0;
 }
 
-int zperf_get_ipv6_addr(char *host, char *prefix_str, struct in6_addr *addr)
+int zperf_get_ipv6_addr(const struct shell *sh, char *host,
+			char *prefix_str, struct in6_addr *addr)
 {
 	struct net_if_ipv6_prefix *prefix;
 	struct net_if_addr *ifaddr;
@@ -148,7 +149,8 @@ int zperf_get_ipv6_addr(char *host, char *prefix_str, struct in6_addr *addr)
 	ifaddr = net_if_ipv6_addr_add(net_if_get_default(),
 				      addr, NET_ADDR_MANUAL, 0);
 	if (!ifaddr) {
-		NET_ERR("Cannot set IPv6 address %s", host);
+		shell_fprintf(sh, SHELL_WARNING,
+			      "Cannot set IPv6 address %s\n", host);
 		return -EINVAL;
 	}
 
@@ -156,7 +158,8 @@ int zperf_get_ipv6_addr(char *host, char *prefix_str, struct in6_addr *addr)
 					addr, prefix_len,
 					NET_IPV6_ND_INFINITE_LIFETIME);
 	if (!prefix) {
-		NET_ERR("Cannot set IPv6 prefix %s", prefix_str);
+		shell_fprintf(sh, SHELL_WARNING,
+			      "Cannot set IPv6 prefix %s\n", prefix_str);
 		return -EINVAL;
 	}
 
@@ -189,7 +192,8 @@ static int parse_ipv4_addr(const struct shell *sh, char *host, char *port,
 	return 0;
 }
 
-int zperf_get_ipv4_addr(char *host, struct in_addr *addr)
+int zperf_get_ipv4_addr(const struct shell *sh, char *host,
+			struct in_addr *addr)
 {
 	struct net_if_addr *ifaddr;
 	int ret;
@@ -206,7 +210,8 @@ int zperf_get_ipv4_addr(char *host, struct in_addr *addr)
 	ifaddr = net_if_ipv4_addr_add(net_if_get_default(),
 				      addr, NET_ADDR_MANUAL, 0);
 	if (!ifaddr) {
-		NET_ERR("Cannot set IPv4 address %s", host);
+		shell_fprintf(sh, SHELL_WARNING,
+			      "Cannot set IPv4 address %s\n", host);
 		return -EINVAL;
 	}
 
@@ -245,7 +250,7 @@ static int cmd_setip(const struct shell *sh, size_t argc, char *argv[])
 			return -ENOEXEC;
 		}
 
-		if (zperf_get_ipv6_addr(argv[start + 1], argv[start + 2],
+		if (zperf_get_ipv6_addr(sh, argv[start + 1], argv[start + 2],
 					&ipv6) < 0) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "Unable to set IP\n");
@@ -263,7 +268,7 @@ static int cmd_setip(const struct shell *sh, size_t argc, char *argv[])
 			return -ENOEXEC;
 		}
 
-		if (zperf_get_ipv4_addr(argv[start + 1], &ipv4) < 0) {
+		if (zperf_get_ipv4_addr(sh, argv[start + 1], &ipv4) < 0) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "Unable to set IP\n");
 			return -ENOEXEC;
@@ -281,7 +286,7 @@ static int cmd_setip(const struct shell *sh, size_t argc, char *argv[])
 				return -ENOEXEC;
 			}
 
-			if (zperf_get_ipv4_addr(argv[start + 1],
+			if (zperf_get_ipv4_addr(sh, argv[start + 1],
 						&ipv4) < 0) {
 				shell_fprintf(sh, SHELL_WARNING,
 					      "Unable to set IP\n");
@@ -297,7 +302,7 @@ static int cmd_setip(const struct shell *sh, size_t argc, char *argv[])
 				return -ENOEXEC;
 			}
 
-			if (zperf_get_ipv6_addr(argv[start + 1],
+			if (zperf_get_ipv6_addr(sh, argv[start + 1],
 						argv[start + 2], &ipv6) < 0) {
 				shell_fprintf(sh, SHELL_WARNING,
 					      "Unable to set IP\n");
@@ -313,90 +318,35 @@ static int cmd_setip(const struct shell *sh, size_t argc, char *argv[])
 	return 0;
 }
 
-static void udp_session_cb(enum zperf_status status,
-			   struct zperf_results *result,
-			   void *user_data)
-{
-	const struct shell *sh = user_data;
-
-	switch (status) {
-	case ZPERF_SESSION_STARTED:
-		shell_fprintf(sh, SHELL_NORMAL, "New session started.\n");
-		break;
-
-	case ZPERF_SESSION_FINISHED: {
-		uint32_t rate_in_kbps;
-
-		/* Compute baud rate */
-		if (result->time_in_us != 0U) {
-			rate_in_kbps = (uint32_t)
-				(((uint64_t)result->total_len * 8ULL *
-				  (uint64_t)USEC_PER_SEC) /
-				 ((uint64_t)result->time_in_us * 1024ULL));
-		} else {
-			rate_in_kbps = 0U;
-		}
-
-		shell_fprintf(sh, SHELL_NORMAL, "End of session!\n");
-
-		shell_fprintf(sh, SHELL_NORMAL, " duration:\t\t");
-		print_number(sh, result->time_in_us, TIME_US, TIME_US_UNIT);
-		shell_fprintf(sh, SHELL_NORMAL, "\n");
-
-		shell_fprintf(sh, SHELL_NORMAL, " received packets:\t%u\n",
-			      result->nb_packets_rcvd);
-		shell_fprintf(sh, SHELL_NORMAL, " nb packets lost:\t%u\n",
-			      result->nb_packets_lost);
-		shell_fprintf(sh, SHELL_NORMAL, " nb packets outorder:\t%u\n",
-			      result->nb_packets_outorder);
-
-		shell_fprintf(sh, SHELL_NORMAL, " jitter:\t\t\t");
-		print_number(sh, result->jitter_in_us, TIME_US, TIME_US_UNIT);
-		shell_fprintf(sh, SHELL_NORMAL, "\n");
-
-		shell_fprintf(sh, SHELL_NORMAL, " rate:\t\t\t");
-		print_number(sh, rate_in_kbps, KBPS, KBPS_UNIT);
-		shell_fprintf(sh, SHELL_NORMAL, "\n");
-
-		break;
-	}
-
-	case ZPERF_SESSION_ERROR:
-		shell_fprintf(sh, SHELL_ERROR, "UDP session error.\n");
-		break;
-	}
-}
-
 static int cmd_udp_download(const struct shell *sh, size_t argc,
 			    char *argv[])
 {
 	if (IS_ENABLED(CONFIG_NET_UDP)) {
-		struct zperf_download_params param = { 0 };
-		int ret;
+		static bool udp_stopped = true;
+		int port, start = 0;
 
 		do_init(sh);
 
 		if (argc >= 2) {
-			param.port = strtoul(argv[1], NULL, 10);
+			port = strtoul(argv[start + 1], NULL, 10);
 		} else {
-			param.port = DEF_PORT;
+			port = DEF_PORT;
 		}
 
-		ret = zperf_udp_download(&param, udp_session_cb, (void *)sh);
-		if (ret == -EALREADY) {
+		if (!udp_stopped) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "UDP server already started!\n");
 			return -ENOEXEC;
-		} else if (ret < 0) {
-			shell_fprintf(sh, SHELL_ERROR,
-				      "Failed to start UDP server!\n");
-			return -ENOEXEC;
 		}
+
+		zperf_udp_receiver_init(sh, port);
 
 		k_yield();
 
+		udp_stopped = false;
+
 		shell_fprintf(sh, SHELL_NORMAL,
-			      "UDP server started on port %u\n", param.port);
+			      "UDP server started on port %u\n", port);
 
 		return 0;
 	} else {
@@ -1024,77 +974,30 @@ void zperf_tcp_started(void)
 	tcp_running = true;
 }
 
-static void tcp_session_cb(enum zperf_status status,
-			   struct zperf_results *result,
-			   void *user_data)
-{
-	const struct shell *sh = user_data;
-
-	switch (status) {
-	case ZPERF_SESSION_STARTED:
-		shell_fprintf(sh, SHELL_NORMAL, "New TCP session started.\n");
-		break;
-
-	case ZPERF_SESSION_FINISHED: {
-		uint32_t rate_in_kbps;
-
-		/* Compute baud rate */
-		if (result->time_in_us != 0U) {
-			rate_in_kbps = (uint32_t)
-				(((uint64_t)result->total_len * 8ULL *
-				  (uint64_t)USEC_PER_SEC) /
-				 ((uint64_t)result->time_in_us * 1024ULL));
-		} else {
-			rate_in_kbps = 0U;
-		}
-
-		shell_fprintf(sh, SHELL_NORMAL, "TCP session ended\n");
-
-		shell_fprintf(sh, SHELL_NORMAL, " Duration:\t\t");
-		print_number(sh, result->time_in_us, TIME_US, TIME_US_UNIT);
-		shell_fprintf(sh, SHELL_NORMAL, "\n");
-
-		shell_fprintf(sh, SHELL_NORMAL, " rate:\t\t\t");
-		print_number(sh, rate_in_kbps, KBPS, KBPS_UNIT);
-		shell_fprintf(sh, SHELL_NORMAL, "\n");
-
-		break;
-	}
-
-	case ZPERF_SESSION_ERROR:
-		shell_fprintf(sh, SHELL_ERROR, "TCP session error.\n");
-		break;
-	}
-}
-
 static int cmd_tcp_download(const struct shell *sh, size_t argc,
 			    char *argv[])
 {
 	if (IS_ENABLED(CONFIG_NET_TCP)) {
-		struct zperf_download_params param = { 0 };
-		int ret;
+		int port;
 
 		do_init(sh);
 
 		if (argc >= 2) {
-			param.port = strtoul(argv[1], NULL, 10);
+			port = strtoul(argv[1], NULL, 10);
 		} else {
-			param.port = DEF_PORT;
+			port = DEF_PORT;
 		}
 
-		ret = zperf_tcp_download(&param, tcp_session_cb, (void *)sh);
-		if (ret == -EALREADY) {
+		if (tcp_running) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "TCP server already started!\n");
 			return -ENOEXEC;
-		} else if (ret < 0) {
-			shell_fprintf(sh, SHELL_ERROR,
-				      "Failed to start TCP server!\n");
-			return -ENOEXEC;
 		}
 
+		zperf_tcp_receiver_init(sh, port);
+
 		shell_fprintf(sh, SHELL_NORMAL,
-			      "TCP server started on port %u\n", param.port);
+			      "TCP server started on port %u\n", port);
 
 		return 0;
 	} else {
@@ -1117,7 +1020,7 @@ static void zperf_init(const struct shell *sh)
 	shell_fprintf(sh, SHELL_NORMAL, "\n");
 
 	if (IS_ENABLED(CONFIG_NET_IPV6) && MY_IP6ADDR) {
-		if (zperf_get_ipv6_addr(MY_IP6ADDR, MY_PREFIX_LEN_STR,
+		if (zperf_get_ipv6_addr(sh, MY_IP6ADDR, MY_PREFIX_LEN_STR,
 					&ipv6) < 0) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "Unable to set IP\n");
@@ -1144,7 +1047,7 @@ static void zperf_init(const struct shell *sh)
 	}
 
 	if (IS_ENABLED(CONFIG_NET_IPV4) && MY_IP4ADDR) {
-		if (zperf_get_ipv4_addr(MY_IP4ADDR, &ipv4) < 0) {
+		if (zperf_get_ipv4_addr(sh, MY_IP4ADDR, &ipv4) < 0) {
 			shell_fprintf(sh, SHELL_WARNING,
 				      "Unable to set IP\n");
 		} else {
