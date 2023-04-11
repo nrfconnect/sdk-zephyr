@@ -377,7 +377,7 @@ void main(void)
 
 	/* Initialize IPC service instance and register endpoint. */
 	err = ipc_service_open_instance(hci_ipc_instance);
-	if (err < 0 && err != -EALREADY) {
+	if (err) {
 		LOG_ERR("IPC service instance initialization failed: %d\n", err);
 	}
 
