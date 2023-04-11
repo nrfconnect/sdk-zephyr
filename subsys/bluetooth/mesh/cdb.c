@@ -1023,29 +1023,27 @@ static void store_cdb_pending_nodes(void)
 
 	for (i = 0; i < ARRAY_SIZE(cdb_node_updates); ++i) {
 		struct node_update *update = &cdb_node_updates[i];
-		uint16_t addr;
 
 		if (update->addr == BT_MESH_ADDR_UNASSIGNED) {
 			continue;
 		}
 
-		addr = update->addr;
-		update->addr = BT_MESH_ADDR_UNASSIGNED;
-
-		LOG_DBG("addr: 0x%04x, clear: %d", addr, update->clear);
+		LOG_DBG("addr: 0x%04x, clear: %d", update->addr, update->clear);
 
 		if (update->clear) {
-			clear_cdb_node(addr);
+			clear_cdb_node(update->addr);
 		} else {
 			struct bt_mesh_cdb_node *node;
 
-			node = bt_mesh_cdb_node_get(addr);
+			node = bt_mesh_cdb_node_get(update->addr);
 			if (node) {
 				store_cdb_node(node);
 			} else {
-				LOG_WRN("Node 0x%04x not found", addr);
+				LOG_WRN("Node 0x%04x not found", update->addr);
 			}
 		}
+
+		update->addr = BT_MESH_ADDR_UNASSIGNED;
 	}
 }
 
@@ -1059,8 +1057,6 @@ static void store_cdb_pending_keys(void)
 		if (!update->valid) {
 			continue;
 		}
-
-		update->valid = 0U;
 
 		if (update->clear) {
 			if (update->app_key) {
@@ -1089,6 +1085,8 @@ static void store_cdb_pending_keys(void)
 				}
 			}
 		}
+
+		update->valid = 0U;
 	}
 }
 
