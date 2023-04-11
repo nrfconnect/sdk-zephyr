@@ -424,18 +424,25 @@ static void sys_clock_timeout_handler(int32_t chan,
 
 static bool channel_processing_check_and_clear(int32_t chan)
 {
+	bool result = false;
+
+	uint32_t mcu_critical_state = full_int_lock();
+
 	if (nrf_rtc_int_enable_check(RTC, RTC_CHANNEL_INT_MASK(chan))) {
 		/* The processing of channel can be caused by CC match
 		 * or be forced.
 		 */
-		if ((atomic_and(&force_isr_mask, ~BIT(chan)) & BIT(chan)) ||
-		    event_check(chan)) {
+		result = (atomic_and(&force_isr_mask, ~BIT(chan)) & BIT(chan)) ||
+			 event_check(chan);
+
+		if (result) {
 			event_clear(chan);
-			return true;
 		}
 	}
 
-	return false;
+	full_int_unlock(mcu_critical_state);
+
+	return result;
 }
 
 static void process_channel(int32_t chan)
