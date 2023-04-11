@@ -367,22 +367,6 @@ static void udp_session_cb(enum zperf_status status,
 	}
 }
 
-static int cmd_udp_download_stop(const struct shell *sh, size_t argc,
-				 char *argv[])
-{
-	int ret;
-
-	ret = zperf_udp_download_stop();
-	if (ret < 0) {
-		shell_fprintf(sh, SHELL_WARNING, "UDP server not running!\n");
-		return -ENOEXEC;
-	}
-
-	shell_fprintf(sh, SHELL_NORMAL, "UDP server stopped\n");
-
-	return 0;
-}
-
 static int cmd_udp_download(const struct shell *sh, size_t argc,
 			    char *argv[])
 {
@@ -1071,22 +1055,6 @@ static void tcp_session_cb(enum zperf_status status,
 	}
 }
 
-static int cmd_tcp_download_stop(const struct shell *sh, size_t argc,
-				 char *argv[])
-{
-	int ret;
-
-	ret = zperf_tcp_download_stop();
-	if (ret < 0) {
-		shell_fprintf(sh, SHELL_WARNING, "TCP server not running!\n");
-		return -ENOEXEC;
-	}
-
-	shell_fprintf(sh, SHELL_NORMAL, "TCP server stopped\n");
-
-	return 0;
-}
-
 static int cmd_tcp_download(const struct shell *sh, size_t argc,
 			    char *argv[])
 {
@@ -1194,11 +1162,6 @@ static void zperf_init(const struct shell *sh)
 	zperf_session_init();
 }
 
-SHELL_STATIC_SUBCMD_SET_CREATE(zperf_cmd_tcp_download,
-	SHELL_CMD(stop, NULL, "Stop TCP server\n", cmd_tcp_download_stop),
-	SHELL_SUBCMD_SET_END
-);
-
 SHELL_STATIC_SUBCMD_SET_CREATE(zperf_cmd_tcp,
 	SHELL_CMD(upload, NULL,
 		  "[<options>] <dest ip> <dest port> <duration> <packet size>[K]\n"
@@ -1236,15 +1199,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(zperf_cmd_tcp,
 #endif
 		  ,
 		  cmd_tcp_upload2),
-	SHELL_CMD(download, &zperf_cmd_tcp_download,
+	SHELL_CMD(download, NULL,
 		  "[<port>]\n"
 		  "Example: tcp download 5001\n",
 		  cmd_tcp_download),
-	SHELL_SUBCMD_SET_END
-);
-
-SHELL_STATIC_SUBCMD_SET_CREATE(zperf_cmd_udp_download,
-	SHELL_CMD(stop, NULL, "Stop UDP server\n", cmd_udp_download_stop),
 	SHELL_SUBCMD_SET_END
 );
 
@@ -1288,7 +1246,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(zperf_cmd_udp,
 #endif
 		  ,
 		  cmd_udp_upload2),
-	SHELL_CMD(download, &zperf_cmd_udp_download,
+	SHELL_CMD(download, NULL,
 		  "[<port>]\n"
 		  "Example: udp download 5001\n",
 		  cmd_udp_download),
