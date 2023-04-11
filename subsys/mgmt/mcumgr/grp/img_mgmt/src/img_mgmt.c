@@ -607,9 +607,15 @@ static struct mgmt_group img_mgmt_group = {
 	.mg_group_id = MGMT_GROUP_ID_IMAGE,
 };
 
-static void img_mgmt_register_group(void)
+
+void img_mgmt_register_group(void)
 {
 	mgmt_register_group(&img_mgmt_group);
+}
+
+void img_mgmt_unregister_group(void)
+{
+	mgmt_unregister_group(&img_mgmt_group);
 }
 
 MCUMGR_HANDLER_DEFINE(img_mgmt, img_mgmt_register_group);

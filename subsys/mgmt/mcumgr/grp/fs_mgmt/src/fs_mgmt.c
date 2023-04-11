@@ -672,7 +672,7 @@ static struct mgmt_group fs_mgmt_group = {
 	.mg_group_id = MGMT_GROUP_ID_FS,
 };
 
-static void fs_mgmt_register_group(void)
+void fs_mgmt_register_group(void)
 {
 	mgmt_register_group(&fs_mgmt_group);
 

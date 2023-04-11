@@ -25,6 +25,11 @@ struct stat_mgmt_entry {
 	uint64_t value;
 };
 
+/**
+ * @brief Registers the statistics management command handler group.
+ */
+void stat_mgmt_register_group(void);
+
 #ifdef __cplusplus
 }
 #endif
