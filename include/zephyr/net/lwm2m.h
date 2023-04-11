@@ -1666,8 +1666,6 @@ int lwm2m_register_delete_callback(uint16_t obj_id,
 /**
  * @brief Set data buffer for a resource
  *
- * @deprecated Use lwm2m_set_res_buf() instead.
- *
  * Use this function to set the data buffer and flags for the specified LwM2M
  * resource.
  *
@@ -1679,7 +1677,6 @@ int lwm2m_register_delete_callback(uint16_t obj_id,
  *
  * @return 0 for success or negative in case of error.
  */
-__deprecated
 int lwm2m_engine_set_res_buf(const char *pathstr, void *buffer_ptr, uint16_t buffer_len,
 			     uint16_t data_len, uint8_t data_flags);
 
@@ -1689,24 +1686,7 @@ int lwm2m_engine_set_res_buf(const char *pathstr, void *buffer_ptr, uint16_t buf
  * Use this function to set the data buffer and flags for the specified LwM2M
  * resource.
  *
- * @param[in] path LwM2M path as a struct
- * @param[in] buffer_ptr Data buffer pointer
- * @param[in] buffer_len Length of buffer
- * @param[in] data_len Length of existing data in the buffer
- * @param[in] data_flags Data buffer flags (such as read-only, etc)
- *
- * @return 0 for success or negative in case of error.
- */
-int lwm2m_set_res_buf(const struct lwm2m_obj_path *path, void *buffer_ptr, uint16_t buffer_len,
-		      uint16_t data_len, uint8_t data_flags);
-
-/**
- * @brief Set data buffer for a resource
- *
- * Use this function to set the data buffer and flags for the specified LwM2M
- * resource.
- *
- * @deprecated Use lwm2m_set_res_buf() instead, so you can define buffer size and data size
+ * @deprecated Use lwm2m_engine_set_res_buf() instead, so you can define buffer size and data size
  *             separately.
  *
  * @param[in] pathstr LwM2M path string "obj/obj-inst/res(/res-inst)"
@@ -1723,8 +1703,6 @@ int lwm2m_engine_set_res_data(const char *pathstr, void *data_ptr, uint16_t data
 /**
  * @brief Update data size for a resource
  *
- * @deprecated Use lwm2m_set_res_data_len() instead.
- *
  * Use this function to set the new size of data in the buffer if you write
  * to a buffer received by lwm2m_engine_get_res_buf().
  *
@@ -1732,25 +1710,10 @@ int lwm2m_engine_set_res_data(const char *pathstr, void *data_ptr, uint16_t data
  * @param[in] data_len Length of data
  * @return 0 for success or negative in case of error.
  */
-__deprecated
 int lwm2m_engine_set_res_data_len(const char *pathstr, uint16_t data_len);
 
 /**
- * @brief Update data size for a resource
- *
- * Use this function to set the new size of data in the buffer if you write
- * to a buffer received by lwm2m_engine_get_res_buf().
- *
- * @param[in] path LwM2M path as a struct
- * @param[in] data_len Length of data
- * @return 0 for success or negative in case of error.
- */
-int lwm2m_set_res_data_len(const struct lwm2m_obj_path *path, uint16_t data_len);
-
-/**
  * @brief Get data buffer for a resource
- *
- * @deprecated Use lwm2m_get_res_buf() instead.
  *
  * Use this function to get the data buffer information for the specified LwM2M
  * resource.
@@ -1768,7 +1731,6 @@ int lwm2m_set_res_data_len(const struct lwm2m_obj_path *path, uint16_t data_len)
  *
  * @return 0 for success or negative in case of error.
  */
-__deprecated
 int lwm2m_engine_get_res_buf(const char *pathstr, void **buffer_ptr, uint16_t *buffer_len,
 			     uint16_t *data_len, uint8_t *data_flags);
 
@@ -1778,29 +1740,7 @@ int lwm2m_engine_get_res_buf(const char *pathstr, void **buffer_ptr, uint16_t *b
  * Use this function to get the data buffer information for the specified LwM2M
  * resource.
  *
- * If you directly write into the buffer, you must use lwm2m_set_res_data_len()
- * function to update the new size of the written data.
- *
- * All parameters, except for the pathstr, can be NULL if you don't want to read those values.
- *
- * @param[in] path LwM2M path as a struct
- * @param[out] buffer_ptr Data buffer pointer
- * @param[out] buffer_len Length of buffer
- * @param[out] data_len Length of existing data in the buffer
- * @param[out] data_flags Data buffer flags (such as read-only, etc)
- *
- * @return 0 for success or negative in case of error.
- */
-int lwm2m_get_res_buf(const struct lwm2m_obj_path *path, void **buffer_ptr, uint16_t *buffer_len,
-		      uint16_t *data_len, uint8_t *data_flags);
-
-/**
- * @brief Get data buffer for a resource
- *
- * Use this function to get the data buffer information for the specified LwM2M
- * resource.
- *
- * @deprecated Use lwm2m_get_res_buf() as it can tell you the size of the buffer as well.
+ * @deprecated Use lwm2m_engine_get_res_buf() as it can tell you the size of the buffer as well.
  *
  * @param[in] pathstr LwM2M path string "obj/obj-inst/res(/res-inst)"
  * @param[out] data_ptr Data buffer pointer
