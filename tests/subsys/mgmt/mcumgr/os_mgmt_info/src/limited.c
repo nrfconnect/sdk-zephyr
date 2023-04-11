@@ -48,7 +48,7 @@ ZTEST(os_mgmt_info_limited, test_info_1_kernel_name)
 	size_t decoded = 0;
 
 	struct zcbor_map_decode_key_val output_decode[] = {
-		ZCBOR_MAP_DECODE_KEY_VAL(output, zcbor_tstr_decode, &output),
+		ZCBOR_MAP_DECODE_KEY_DECODER("output", zcbor_tstr_decode, &output),
 	};
 
 	memset(buffer, 0, sizeof(buffer));
@@ -110,11 +110,11 @@ ZTEST(os_mgmt_info_limited, test_info_2_all)
 	int32_t rc;
 
 	struct zcbor_map_decode_key_val output_decode[] = {
-		ZCBOR_MAP_DECODE_KEY_VAL(output, zcbor_tstr_decode, &output),
+		ZCBOR_MAP_DECODE_KEY_DECODER("output", zcbor_tstr_decode, &output),
 	};
 
 	struct zcbor_map_decode_key_val error_decode[] = {
-		ZCBOR_MAP_DECODE_KEY_VAL(rc, zcbor_int32_decode, &rc),
+		ZCBOR_MAP_DECODE_KEY_DECODER("rc", zcbor_int32_decode, &rc),
 	};
 
 	memset(buffer, 0, sizeof(buffer));
@@ -165,14 +165,6 @@ ZTEST(os_mgmt_info_limited, test_info_2_all)
 		      rc);
 }
 
-static void *setup_tests(void)
-{
-	/* Register os_mgmt mcumgr group */
-	os_mgmt_register_group();
-
-	return NULL;
-}
-
 static void cleanup_test(void *p)
 {
 	if (nb != NULL) {
@@ -182,6 +174,6 @@ static void cleanup_test(void *p)
 }
 
 /* Limited size buffer test set */
-ZTEST_SUITE(os_mgmt_info_limited, NULL, setup_tests, NULL, cleanup_test, NULL);
+ZTEST_SUITE(os_mgmt_info_limited, NULL, NULL, NULL, cleanup_test, NULL);
 
 #endif

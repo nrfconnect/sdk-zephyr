@@ -13,7 +13,7 @@ jobs:
     if: github.repository == 'zephyrproject-rtos/zephyr'
     runs-on: zephyr-runner-linux-x64-4xlarge
     container:
-      image: ghcr.io/zephyrproject-rtos/ci:v0.24.6
+      image: ghcr.io/zephyrproject-rtos/ci:v0.24.11
       options: '--entrypoint /bin/bash'
       volumes:
         - /repo-cache/zephyrproject:/github/cache/zephyrproject
@@ -112,7 +112,7 @@ jobs:
     name: "Publish Coverage Results"
     needs: codecov
     runs-on: ubuntu-20.04
-      # the codecov job might be skipped, we don't need to run this job then
+    # the codecov job might be skipped, we don't need to run this job then
     if: success() || failure()
 
     steps:

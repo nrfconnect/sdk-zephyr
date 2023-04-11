@@ -424,7 +424,8 @@ int lwm2m_ftoa(double *input, char *out, size_t outlen, int8_t dec_limit)
 			(val1 == 0 && val2 < 0) ? "-" : "", (long long)val1, buf);
 }
 
-int lwm2m_path_to_string(char *buf, size_t buf_size, struct lwm2m_obj_path *input, int level_max)
+int lwm2m_path_to_string(char *buf, size_t buf_size, const struct lwm2m_obj_path *input,
+			 int level_max)
 {
 	size_t fpl = 0; /* Length of the formed path */
 	int level;
@@ -550,4 +551,31 @@ int lwm2m_string_to_path(const char *pathstr, struct lwm2m_obj_path *path,
 	}
 
 	return 0;
+}
+
+bool lwm2m_obj_path_equal(const struct lwm2m_obj_path *a, const struct lwm2m_obj_path *b)
+{
+	uint8_t level = a->level;
+
+	if (a->level != b->level) {
+		return false;
+	}
+
+	if (level >= LWM2M_PATH_LEVEL_OBJECT && (a->obj_id != b->obj_id)) {
+		return false;
+	}
+
+	if (level >= LWM2M_PATH_LEVEL_OBJECT_INST && (a->obj_inst_id != b->obj_inst_id)) {
+		return false;
+	}
+
+	if (level >= LWM2M_PATH_LEVEL_RESOURCE && (a->res_id != b->res_id)) {
+		return false;
+	}
+
+	if (level >= LWM2M_PATH_LEVEL_RESOURCE_INST && (a->res_inst_id != b->res_inst_id)) {
+		return false;
+	}
+
+	return true;
 }

@@ -95,6 +95,15 @@ static void test_udc_ep_try_config(const struct device *dev,
 				ed->bInterval);
 	zassert_equal(err, 0, "Failed to test endpoint configuration");
 
+	if (ed->bmAttributes == USB_EP_TYPE_CONTROL ||
+	    ed->bmAttributes == USB_EP_TYPE_ISO) {
+		/*
+		 * Skip subsequent test since udc_ep_try_config() does not
+		 * update mps argument for control and iso endpoints.
+		 */
+		return;
+	}
+
 	mps = 0;
 	err = udc_ep_try_config(dev, ed->bEndpointAddress,
 				ed->bmAttributes, &mps,
@@ -338,7 +347,7 @@ static void test_udc_ep_api(const struct device *dev,
 		zassert_ok(err, "Failed to dequeue endpoint");
 
 		err = k_sem_take(&ep_queue_sem, K_MSEC(100));
-		zassert_ok(err, "Timeout to dequeue endpoint %d", err);
+		zassert_ok(err, "Timeout to dequeue endpoint %x %d", last_used_ep, err);
 	}
 }
 
@@ -354,7 +363,7 @@ static void test_udc_ep_mps(uint8_t type)
 		.bInterval = 0,
 	};
 	const struct device *dev;
-	uint16_t supported;
+	uint16_t supported = 0;
 	int err;
 
 	dev = DEVICE_DT_GET(DT_NODELABEL(zephyr_udc0));
@@ -401,7 +410,7 @@ static void test_udc_ep_mps(uint8_t type)
 	zassert_ok(err, "Failed to shoot-down UDC driver");
 }
 
-ZTEST(udc_driver_test, test_udc_device_get)
+static void *test_udc_device_get(void)
 {
 	struct udc_device_caps caps;
 	const struct device *dev;
@@ -419,6 +428,8 @@ ZTEST(udc_driver_test, test_udc_device_get)
 			K_PRIO_COOP(9), 0, K_NO_WAIT);
 
 	k_thread_name_set(&test_udc_thread_data, "test-udc");
+
+	return (void *)dev;
 }
 
 static struct usb_ep_descriptor ed_ctrl_out = {
@@ -594,4 +605,4 @@ ZTEST(udc_driver_test, test_udc_ep_iso)
 	test_udc_ep_mps(USB_EP_TYPE_ISO);
 }
 
-ZTEST_SUITE(udc_driver_test, NULL, NULL, NULL, NULL, NULL);
+ZTEST_SUITE(udc_driver_test, NULL, test_udc_device_get, NULL, NULL, NULL);

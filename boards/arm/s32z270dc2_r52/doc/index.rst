@@ -29,9 +29,17 @@ The boards support the following hardware features:
 +-----------+------------+-------------------------------------+
 | Interface | Controller | Driver/Component                    |
 +===========+============+=====================================+
-| GIC       | on-chip    | interrupt_controller                |
+| Arm GIC   | on-chip    | interrupt_controller                |
 +-----------+------------+-------------------------------------+
-| ARM Timer | on-chip    | timer                               |
+| Arm Timer | on-chip    | timer                               |
++-----------+------------+-------------------------------------+
+| LINFlexD  | on-chip    | serial                              |
++-----------+------------+-------------------------------------+
+| MRU       | on-chip    | mbox                                |
++-----------+------------+-------------------------------------+
+| NETC      | on-chip    | ethernet                            |
+|           |            |                                     |
+|           |            | mdio                                |
 +-----------+------------+-------------------------------------+
 | SIUL2     | on-chip    | pinctrl                             |
 |           |            |                                     |
@@ -39,9 +47,9 @@ The boards support the following hardware features:
 |           |            |                                     |
 |           |            | external interrupt controller       |
 +-----------+------------+-------------------------------------+
-| LINFlexD  | on-chip    | serial                              |
-+-----------+------------+-------------------------------------+
 | SPI       | on-chip    | spi                                 |
++-----------+------------+-------------------------------------+
+| SWT       | on-chip    | watchdog                            |
 +-----------+------------+-------------------------------------+
 
 Other hardware features are not currently supported by the port.
@@ -104,6 +112,21 @@ Serial Port
 The SoC has 12 LINFlexD instances that can be used in UART mode. Instance 0
 (defined as ``uart0`` in devicetree) is configured for the console and the
 remaining are disabled and not configured.
+
+Watchdog
+========
+
+The watchdog driver only supports triggering an interrupt upon timer expiration.
+Zephyr is currently running from SRAM on this board, thus system reset is not
+supported.
+
+Ethernet
+========
+
+NETC driver supports to manage the Physical Station Interface (PSI0) and/or a
+single Virtual SI (VSI). The rest of the VSI's shall be assigned to different
+cores of the system. Refer to :ref:`nxp_s32_netc-samples` to learn how to
+configure the Ethernet network controller.
 
 Programming and Debugging
 *************************

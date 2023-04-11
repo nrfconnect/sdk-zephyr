@@ -27,6 +27,7 @@
 
 #include "common/assert.h"
 
+#include "addr_internal.h"
 #include "hci_core.h"
 #include "id.h"
 #include "adv.h"
@@ -45,7 +46,15 @@ LOG_MODULE_REGISTER(bt_conn);
 
 struct tx_meta {
 	struct bt_conn_tx *tx;
+	/* This flag indicates if the current buffer has already been partially
+	 * sent to the controller (ie, the next fragments should be sent as
+	 * continuations).
+	 */
+	bool is_cont;
 };
+
+BUILD_ASSERT(sizeof(struct tx_meta) == CONFIG_BT_CONN_TX_USER_DATA_SIZE,
+	     "User data size is wrong!");
 
 #define tx_data(buf) ((struct tx_meta *)net_buf_user_data(buf))
 K_FIFO_DEFINE(free_tx);
@@ -82,7 +91,7 @@ static void notify_connected(struct bt_conn *conn);
 static struct bt_conn acl_conns[CONFIG_BT_MAX_CONN];
 NET_BUF_POOL_DEFINE(acl_tx_pool, CONFIG_BT_L2CAP_TX_BUF_COUNT,
 		    BT_L2CAP_BUF_SIZE(CONFIG_BT_L2CAP_TX_MTU),
-		    sizeof(struct tx_meta), NULL);
+		    CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 
 #if CONFIG_BT_L2CAP_TX_FRAG_COUNT > 0
 /* Dedicated pool for fragment buffers in case queued up TX buffers don't
@@ -92,7 +101,8 @@ NET_BUF_POOL_DEFINE(acl_tx_pool, CONFIG_BT_L2CAP_TX_BUF_COUNT,
  * another buffer from the acl_tx_pool would result in a deadlock.
  */
 NET_BUF_POOL_FIXED_DEFINE(frag_pool, CONFIG_BT_L2CAP_TX_FRAG_COUNT,
-			  BT_BUF_ACL_SIZE(CONFIG_BT_BUF_ACL_TX_SIZE), 8, NULL);
+			  BT_BUF_ACL_SIZE(CONFIG_BT_BUF_ACL_TX_SIZE),
+			  CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 
 #endif /* CONFIG_BT_L2CAP_TX_FRAG_COUNT > 0 */
 
@@ -133,6 +143,7 @@ struct k_sem *bt_conn_get_pkts(struct bt_conn *conn)
 		return &bt_dev.br.pkts;
 	}
 #endif /* CONFIG_BT_BREDR */
+
 #if defined(CONFIG_BT_ISO)
 	/* Use ISO pkts semaphore if LE Read Buffer Size command returned
 	 * dedicated ISO buffers.
@@ -145,11 +156,14 @@ struct k_sem *bt_conn_get_pkts(struct bt_conn *conn)
 		return NULL;
 	}
 #endif /* CONFIG_BT_ISO */
+
 #if defined(CONFIG_BT_CONN)
-	return &bt_dev.le.acl_pkts;
-#else
-	return NULL;
+	if (bt_dev.le.acl_mtu) {
+		return &bt_dev.le.acl_pkts;
+	}
 #endif /* CONFIG_BT_CONN */
+
+	return NULL;
 }
 
 static inline const char *state2str(bt_conn_state_t state)
@@ -401,6 +415,11 @@ int bt_conn_send_cb(struct bt_conn *conn, struct net_buf *buf,
 	LOG_DBG("conn handle %u buf len %u cb %p user_data %p", conn->handle, buf->len, cb,
 		user_data);
 
+	if (buf->user_data_size < CONFIG_BT_CONN_TX_USER_DATA_SIZE) {
+		LOG_ERR("not enough room in user_data");
+		return -EINVAL;
+	}
+
 	if (conn->state != BT_CONN_CONNECTED) {
 		LOG_ERR("not connected!");
 		return -ENOTCONN;
@@ -428,6 +447,8 @@ int bt_conn_send_cb(struct bt_conn *conn, struct net_buf *buf,
 	} else {
 		tx_data(buf)->tx = NULL;
 	}
+
+	tx_data(buf)->is_cont = false;
 
 	net_buf_put(&conn->tx_queue, buf);
 	return 0;
@@ -497,23 +518,41 @@ static int send_iso(struct bt_conn *conn, struct net_buf *buf, uint8_t flags)
 	return bt_send(buf);
 }
 
-static bool send_frag(struct bt_conn *conn, struct net_buf *buf, uint8_t flags,
-		      bool always_consume)
+static inline uint16_t conn_mtu(struct bt_conn *conn)
+{
+#if defined(CONFIG_BT_BREDR)
+	if (conn->type == BT_CONN_TYPE_BR ||
+	    (conn->type != BT_CONN_TYPE_ISO && !bt_dev.le.acl_mtu)) {
+		return bt_dev.br.mtu;
+	}
+#endif /* CONFIG_BT_BREDR */
+#if defined(CONFIG_BT_ISO)
+	if (conn->type == BT_CONN_TYPE_ISO) {
+		return bt_dev.le.iso_mtu;
+	}
+#endif /* CONFIG_BT_ISO */
+#if defined(CONFIG_BT_CONN)
+	return bt_dev.le.acl_mtu;
+#else
+	return 0;
+#endif /* CONFIG_BT_CONN */
+}
+
+static int do_send_frag(struct bt_conn *conn, struct net_buf *buf, uint8_t flags)
 {
 	struct bt_conn_tx *tx = tx_data(buf)->tx;
 	uint32_t *pending_no_cb;
 	unsigned int key;
 	int err = 0;
 
-	LOG_DBG("conn %p buf %p len %u flags 0x%02x", conn, buf, buf->len, flags);
-
-	/* Wait until the controller can accept ACL packets */
-	k_sem_take(bt_conn_get_pkts(conn), K_FOREVER);
-
 	/* Check for disconnection while waiting for pkts_sem */
 	if (conn->state != BT_CONN_CONNECTED) {
+		err = -ENOTCONN;
 		goto fail;
 	}
+
+	LOG_DBG("conn %p buf %p len %u flags 0x%02x", conn, buf, buf->len,
+		flags);
 
 	/* Add to pending, it must be done before bt_buf_set_type */
 	key = irq_lock();
@@ -552,12 +591,21 @@ static bool send_frag(struct bt_conn *conn, struct net_buf *buf, uint8_t flags,
 			(*pending_no_cb)--;
 		}
 		irq_unlock(key);
+
+		/* We don't want to end up in a situation where send_acl/iso
+		 * returns the same error code as when we don't get a buffer in
+		 * time.
+		 */
+		err = -EIO;
 		goto fail;
 	}
 
-	return true;
+	return 0;
 
 fail:
+	/* If we get here, something has seriously gone wrong:
+	 * We also need to destroy the `parent` buf.
+	 */
 	k_sem_give(bt_conn_get_pkts(conn));
 	if (tx) {
 		/* `buf` might not get destroyed, and its `tx` pointer will still be reachable.
@@ -567,35 +615,41 @@ fail:
 		conn_tx_destroy(conn, tx);
 	}
 
-	if (always_consume) {
-		net_buf_unref(buf);
-	}
-	return false;
+	return err;
 }
 
-static inline uint16_t conn_mtu(struct bt_conn *conn)
+static int send_frag(struct bt_conn *conn,
+		     struct net_buf *buf, struct net_buf *frag,
+		     uint8_t flags)
 {
-#if defined(CONFIG_BT_BREDR)
-	if (conn->type == BT_CONN_TYPE_BR || !bt_dev.le.acl_mtu) {
-		return bt_dev.br.mtu;
+	/* Check if the controller can accept ACL packets */
+	if (k_sem_take(bt_conn_get_pkts(conn), K_NO_WAIT)) {
+		LOG_DBG("no controller bufs");
+		return -ENOBUFS;
 	}
-#endif /* CONFIG_BT_BREDR */
-#if defined(CONFIG_BT_ISO)
-	if (conn->type == BT_CONN_TYPE_ISO && bt_dev.le.iso_mtu) {
-		return bt_dev.le.iso_mtu;
+
+	/* Add the data to the buffer */
+	if (frag) {
+		uint16_t frag_len = MIN(conn_mtu(conn), net_buf_tailroom(frag));
+
+		net_buf_add_mem(frag, buf->data, frag_len);
+		net_buf_pull(buf, frag_len);
+	} else {
+		/* De-queue the buffer now that we know we can send it.
+		 * Only applies if the buffer to be sent is the original buffer,
+		 * and not one of its fragments.
+		 * This buffer was fetched from the FIFO using a peek operation.
+		 */
+		buf = net_buf_get(&conn->tx_queue, K_NO_WAIT);
+		frag = buf;
 	}
-#endif /* CONFIG_BT_ISO */
-#if defined(CONFIG_BT_CONN)
-	return bt_dev.le.acl_mtu;
-#else
-	return 0;
-#endif /* CONFIG_BT_CONN */
+
+	return do_send_frag(conn, frag, flags);
 }
 
 static struct net_buf *create_frag(struct bt_conn *conn, struct net_buf *buf)
 {
 	struct net_buf *frag;
-	uint16_t frag_len;
 
 	switch (conn->type) {
 #if defined(CONFIG_BT_ISO)
@@ -619,52 +673,55 @@ static struct net_buf *create_frag(struct bt_conn *conn, struct net_buf *buf)
 
 	/* Fragments never have a TX completion callback */
 	tx_data(frag)->tx = NULL;
-
-	frag_len = MIN(conn_mtu(conn), net_buf_tailroom(frag));
-
-	net_buf_add_mem(frag, buf->data, frag_len);
-	net_buf_pull(buf, frag_len);
+	tx_data(frag)->is_cont = false;
 
 	return frag;
 }
 
-static bool send_buf(struct bt_conn *conn, struct net_buf *buf)
+static int send_buf(struct bt_conn *conn, struct net_buf *buf)
 {
 	struct net_buf *frag;
+	uint8_t flags;
+	int err;
 
 	LOG_DBG("conn %p buf %p len %u", conn, buf, buf->len);
 
 	/* Send directly if the packet fits the ACL MTU */
-	if (buf->len <= conn_mtu(conn)) {
-		return send_frag(conn, buf, FRAG_SINGLE, false);
+	if (buf->len <= conn_mtu(conn) && !tx_data(buf)->is_cont) {
+		LOG_DBG("send single");
+		return send_frag(conn, buf, NULL, FRAG_SINGLE);
 	}
 
-	/* Create & enqueue first fragment */
-	frag = create_frag(conn, buf);
-	if (!frag) {
-		return false;
-	}
-
-	if (!send_frag(conn, frag, FRAG_START, true)) {
-		return false;
-	}
-
+	LOG_DBG("start fragmenting");
 	/*
 	 * Send the fragments. For the last one simply use the original
-	 * buffer (which works since we've used net_buf_pull on it.
+	 * buffer (which works since we've used net_buf_pull on it).
 	 */
+	flags = FRAG_START;
+	if (tx_data(buf)->is_cont) {
+		flags = FRAG_CONT;
+	}
+
 	while (buf->len > conn_mtu(conn)) {
 		frag = create_frag(conn, buf);
 		if (!frag) {
-			return false;
+			return -ENOMEM;
 		}
 
-		if (!send_frag(conn, frag, FRAG_CONT, true)) {
-			return false;
+		err = send_frag(conn, buf, frag, flags);
+		if (err) {
+			LOG_DBG("%p failed, mark as existing frag", buf);
+			tx_data(buf)->is_cont = flags != FRAG_START;
+			net_buf_unref(frag);
+			return err;
 		}
+
+		flags = FRAG_CONT;
 	}
 
-	return send_frag(conn, buf, FRAG_END, false);
+	LOG_DBG("last frag");
+	tx_data(buf)->is_cont = true;
+	return send_frag(conn, buf, NULL, FRAG_END);
 }
 
 static struct k_poll_signal conn_change =
@@ -699,11 +756,10 @@ static void conn_cleanup(struct bt_conn *conn)
 
 static void conn_destroy(struct bt_conn *conn, void *data)
 {
-	k_work_cancel_delayable(&conn->deferred_work);
-
-	conn->pending_no_cb = 0;
-
-	conn_cleanup(conn);
+	if (conn->state == BT_CONN_CONNECTED ||
+	    conn->state == BT_CONN_DISCONNECTING) {
+		bt_conn_set_state(conn, BT_CONN_DISCONNECT_COMPLETE);
+	}
 
 	bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
 }
@@ -732,10 +788,35 @@ static int conn_prepare_events(struct bt_conn *conn,
 
 	LOG_DBG("Adding conn %p to poll list", conn);
 
-	k_poll_event_init(&events[0],
-			K_POLL_TYPE_FIFO_DATA_AVAILABLE,
-			K_POLL_MODE_NOTIFY_ONLY,
-			&conn->tx_queue);
+	/* ISO Synchronized Receiver only builds do not transmit and hence
+	 * may not have any tx buffers allocated in a Controller.
+	 */
+	struct k_sem *conn_pkts = bt_conn_get_pkts(conn);
+
+	if (!conn_pkts) {
+		return -ENOTCONN;
+	}
+
+	bool buffers_available = k_sem_count_get(conn_pkts) > 0;
+	bool packets_waiting = !k_fifo_is_empty(&conn->tx_queue);
+
+	if (packets_waiting && !buffers_available) {
+		/* Only resume sending when the controller has buffer space
+		 * available for this connection.
+		 */
+		LOG_DBG("wait on ctlr buffers");
+		k_poll_event_init(&events[0],
+				  K_POLL_TYPE_SEM_AVAILABLE,
+				  K_POLL_MODE_NOTIFY_ONLY,
+				  conn_pkts);
+	} else {
+		/* Wait until there is more data to send. */
+		LOG_DBG("wait on host fifo");
+		k_poll_event_init(&events[0],
+				  K_POLL_TYPE_FIFO_DATA_AVAILABLE,
+				  K_POLL_MODE_NOTIFY_ONLY,
+				  &conn->tx_queue);
+	}
 	events[0].tag = BT_EVENT_CONN_TX_QUEUE;
 
 	return 0;
@@ -779,6 +860,7 @@ int bt_conn_prepare_events(struct k_poll_event events[])
 void bt_conn_process_tx(struct bt_conn *conn)
 {
 	struct net_buf *buf;
+	int err;
 
 	LOG_DBG("conn %p", conn);
 
@@ -789,10 +871,23 @@ void bt_conn_process_tx(struct bt_conn *conn)
 		return;
 	}
 
-	/* Get next ACL packet for connection */
-	buf = net_buf_get(&conn->tx_queue, K_NO_WAIT);
+	/* Get next ACL packet for connection. The buffer will only get dequeued
+	 * if there is a free controller buffer to put it in.
+	 *
+	 * Important: no operations should be done on `buf` until it is properly
+	 * dequeued from the FIFO, using the `net_buf_get()` API.
+	 */
+	buf = k_fifo_peek_head(&conn->tx_queue);
 	BT_ASSERT(buf);
-	if (!send_buf(conn, buf)) {
+
+	/* Since we used `peek`, the queue still owns the reference to the
+	 * buffer, so we need to take an explicit additional reference here.
+	 */
+	buf = net_buf_ref(buf);
+	err = send_buf(conn, buf);
+	net_buf_unref(buf);
+
+	if (err  == -EIO) {
 		struct bt_conn_tx *tx = tx_data(buf)->tx;
 
 		tx_data(buf)->tx = NULL;
@@ -1013,10 +1108,6 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 			bt_conn_unref(conn);
 			break;
 		case BT_CONN_CONNECTED:
-			/* Can only happen if bt_conn_cleanup_all is called
-			 * whilst in a connection.
-			 */
-			break;
 		case BT_CONN_DISCONNECTING:
 		case BT_CONN_DISCONNECTED:
 			/* Cannot happen. */
@@ -1896,6 +1987,11 @@ struct bt_conn *bt_conn_add_sco(const bt_addr_t *peer, int link_type)
 	}
 
 	sco_conn->sco.acl = bt_conn_lookup_addr_br(peer);
+	if (!sco_conn->sco.acl) {
+		bt_conn_unref(sco_conn);
+		return NULL;
+	}
+
 	sco_conn->type = BT_CONN_TYPE_SCO;
 
 	if (link_type == BT_HCI_SCO) {
@@ -2091,7 +2187,7 @@ void bt_conn_security_changed(struct bt_conn *conn, uint8_t hci_err,
 		}
 	}
 
-#if IS_ENABLED(CONFIG_BT_KEYS_OVERWRITE_OLDEST)
+#if defined(CONFIG_BT_KEYS_OVERWRITE_OLDEST)
 	if (!err && conn->sec_level >= BT_SECURITY_L2) {
 		if (conn->type == BT_CONN_TYPE_LE) {
 			bt_keys_update_usage(conn->id, bt_conn_get_dst(conn));
@@ -2369,7 +2465,7 @@ int bt_conn_get_info(const struct bt_conn *conn, struct bt_conn_info *info)
 #if defined(CONFIG_BT_ISO)
 	case BT_CONN_TYPE_ISO:
 		if (IS_ENABLED(CONFIG_BT_ISO_UNICAST) &&
-		    conn->iso.info.type == BT_ISO_CHAN_TYPE_CONNECTED) {
+		    conn->iso.info.type == BT_ISO_CHAN_TYPE_CONNECTED && conn->iso.acl != NULL) {
 			info->le.dst = &conn->iso.acl->le.dst;
 			info->le.src = &bt_dev.id_addr[conn->iso.acl->id];
 		} else {
@@ -2731,10 +2827,8 @@ int bt_conn_le_create(const bt_addr_le_t *peer,
 		return -EINVAL;
 	}
 
-	if (peer->type == BT_ADDR_LE_PUBLIC_ID ||
-	    peer->type == BT_ADDR_LE_RANDOM_ID) {
-		bt_addr_le_copy(&dst, peer);
-		dst.type -= BT_ADDR_LE_PUBLIC_ID;
+	if (bt_addr_le_is_resolved(peer)) {
+		bt_addr_le_copy_resolved(&dst, peer);
 	} else {
 		bt_addr_le_copy(&dst, bt_lookup_id_addr(BT_ID_DEFAULT, peer));
 	}
@@ -2749,8 +2843,7 @@ int bt_conn_le_create(const bt_addr_le_t *peer,
 	create_param_setup(create_param);
 
 #if defined(CONFIG_BT_SMP)
-	if (IS_ENABLED(CONFIG_BT_PRIVACY) &&
-	    (bt_dev.le.rl_entries > bt_dev.le.rl_size)) {
+	if (bt_dev.le.rl_entries > bt_dev.le.rl_size) {
 		/* Use host-based identity resolving. */
 		bt_conn_set_state(conn, BT_CONN_CONNECTING_SCAN);
 

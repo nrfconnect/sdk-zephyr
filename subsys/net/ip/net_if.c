@@ -481,6 +481,13 @@ enum net_verdict net_if_send_data(struct net_if *iface, struct net_pkt *pkt)
 	}
 #endif
 
+	/* Bypass the IP stack with SOCK_RAW/IPPROTO_RAW sockets */
+	if (IS_ENABLED(CONFIG_NET_SOCKETS_PACKET) &&
+	    context && net_context_get_type(context) == SOCK_RAW &&
+	    net_context_get_proto(context) == IPPROTO_RAW) {
+		goto done;
+	}
+
 	/* If the ll dst address is not set check if it is present in the nbr
 	 * cache.
 	 */
@@ -3265,6 +3272,14 @@ const struct in_addr *net_if_ipv4_select_src_addr(struct net_if *dst_iface,
 	if (!src) {
 		src = net_if_ipv4_get_global_addr(dst_iface,
 						  NET_ADDR_PREFERRED);
+
+		if (IS_ENABLED(CONFIG_NET_IPV4_AUTO) && !src) {
+			/* Try to use LL address if there's really no other
+			 * address available.
+			 */
+			src = net_if_ipv4_get_ll(dst_iface, NET_ADDR_PREFERRED);
+		}
+
 		if (!src) {
 			src = net_ipv4_unspecified_address();
 		}
@@ -4035,6 +4050,21 @@ static inline bool is_iface_offloaded(struct net_if *iface)
 
 static void notify_iface_up(struct net_if *iface)
 {
+	/* In many places it's assumed that link address was set with
+	 * net_if_set_link_addr(). Better check that now.
+	 */
+#if defined(CONFIG_NET_L2_CANBUS_RAW)
+	if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
+	    (net_if_l2(iface) == &NET_L2_GET_NAME(CANBUS_RAW)))	{
+		/* CAN does not require link address. */
+	} else
+#endif	/* CONFIG_NET_L2_CANBUS_RAW */
+	{
+		if (!is_iface_offloaded(iface)) {
+			NET_ASSERT(net_if_get_link_addr(iface)->addr != NULL);
+		}
+	}
+
 	net_if_flag_set(iface, NET_IF_RUNNING);
 	net_mgmt_event_notify(NET_EVENT_IF_UP, iface);
 	net_virtual_enable(iface);
@@ -4144,6 +4174,21 @@ exit:
 	}
 }
 
+static void init_igmp(struct net_if *iface)
+{
+#if defined(CONFIG_NET_IPV4_IGMP)
+	/* Ensure IPv4 is enabled for this interface. */
+	if (net_if_config_ipv4_get(iface, NULL)) {
+		return;
+	}
+
+	net_ipv4_igmp_init(iface);
+#else
+	ARG_UNUSED(iface);
+	return;
+#endif
+}
+
 int net_if_up(struct net_if *iface)
 {
 	int status = 0;
@@ -4172,18 +4217,7 @@ int net_if_up(struct net_if *iface)
 		goto out;
 	}
 
-	/* In many places it's assumed that link address was set with
-	 * net_if_set_link_addr(). Better check that now.
-	 */
-#if defined(CONFIG_NET_L2_CANBUS_RAW)
-	if (IS_ENABLED(CONFIG_NET_SOCKETS_CAN) &&
-	    (net_if_l2(iface) == &NET_L2_GET_NAME(CANBUS_RAW)))	{
-		/* CAN does not require link address. */
-	} else
-#endif	/* CONFIG_NET_L2_CANBUS_RAW */
-	{
-		NET_ASSERT(net_if_get_link_addr(iface)->addr != NULL);
-	}
+	init_igmp(iface);
 
 done:
 	net_if_flag_set(iface, NET_IF_UP);

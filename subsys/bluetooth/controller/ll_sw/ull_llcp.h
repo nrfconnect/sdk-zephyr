@@ -36,11 +36,6 @@ void ull_cp_update_tx_buffer_queue(struct ll_conn *conn);
 void ull_cp_release_tx(struct ll_conn *conn, struct node_tx *tx);
 
 /**
- *
- */
-void ull_cp_release_ntf(struct node_rx_pdu *ntf);
-
-/**
  * @brief Procedure Response Timeout Check
  * @param elapsed_event The number of elapsed events.
  * @param[out] error_code The error code for this timeout.
@@ -68,7 +63,7 @@ void ull_cp_tx_ntf(struct ll_conn *conn);
 /**
  * @brief Handle received LL Control PDU.
  */
-void ull_cp_rx(struct ll_conn *conn, struct node_rx_pdu *rx);
+void ull_cp_rx(struct ll_conn *conn, memq_link_t *link, struct node_rx_pdu *rx);
 
 #if defined(CONFIG_BT_CTLR_LE_PING)
 /**
@@ -192,6 +187,11 @@ uint8_t ull_cp_cis_create(struct ll_conn *conn, struct ll_conn_iso_stream *cis);
 bool ull_cp_cc_awaiting_reply(struct ll_conn *conn);
 
 /**
+ * @brief Is ongoing create cis procedure expecting an established event?
+ */
+bool ull_cp_cc_awaiting_established(struct ll_conn *conn);
+
+/**
  * @brief Get handle of ongoing create cis procedure.
  * @return 0xFFFF if none
  */
@@ -203,7 +203,7 @@ uint16_t ull_cp_cc_ongoing_handle(struct ll_conn *conn);
 void ull_cp_cc_accept(struct ll_conn *conn);
 
 /**
- * @brief Rejset the remote device’s request to create cis.
+ * @brief Reject the remote device’s request to create cis.
  */
 void ull_cp_cc_reject(struct ll_conn *conn, uint8_t error_code);
 

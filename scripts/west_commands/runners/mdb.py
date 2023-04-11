@@ -6,17 +6,11 @@
 
 
 import shutil
-import time
 import os
 from os import path
 
 from runners.core import ZephyrBinaryRunner, RunnerCaps
 
-try:
-    import psutil
-    MISSING_REQUIREMENTS = False
-except ImportError:
-    MISSING_REQUIREMENTS = True
 
 # normally we should create class with common functionality inherited from
 # ZephyrBinaryRunner and inherit MdbNsimBinaryRunner and MdbHwBinaryRunner
@@ -25,33 +19,6 @@ except ImportError:
 # So, we move all common functionality to helper functions instead.
 def simulation_run(mdb_runner):
     return mdb_runner.nsim_args != ''
-
-def get_cld_pid(mdb_process):
-    try:
-        parent = psutil.Process(mdb_process.pid)
-        children = parent.children(recursive=True)
-        for process in children:
-            if process.name().startswith("cld"):
-                return (True, process.pid)
-    except psutil.Error:
-        pass
-
-    return (False, -1)
-
-# MDB creates child process (cld) which won't be terminated if we simply
-# terminate parents process (mdb). 'record_cld_pid' is provided to record 'cld'
-# process pid to file (mdb.pid) so this process can be terminated correctly by
-# twister infrastructure
-def record_cld_pid(mdb_runner, mdb_process):
-    for _i in range(100):
-        found, pid = get_cld_pid(mdb_process)
-        if found:
-            mdb_pid_file = path.join(mdb_runner.build_dir, 'mdb.pid')
-            mdb_runner.logger.debug("MDB CLD pid: " + str(pid) + " " + mdb_pid_file)
-            with open(mdb_pid_file, 'w') as f:
-                f.write(str(pid))
-            return
-        time.sleep(0.05)
 
 def mdb_do_run(mdb_runner, command):
     commander = "mdb"
@@ -74,10 +41,11 @@ def mdb_do_run(mdb_runner, command):
     # hardware target
     else:
         if mdb_runner.jtag == 'digilent':
-            mdb_target = ['-digilent', mdb_runner.dig_device]
+            mdb_target = ['-digilent']
+            if mdb_runner.dig_device: mdb_target += [mdb_runner.dig_device]
         else:
             # \todo: add support of other debuggers
-            mdb_target = ['']
+            raise ValueError('unsupported jtag adapter {}'.format(mdb_runner.jtag))
 
     if command == 'flash':
         if simulation_run(mdb_runner):
@@ -96,14 +64,11 @@ def mdb_do_run(mdb_runner, command):
     elif 1 < mdb_runner.cores <= 4:
         mdb_multifiles = '-multifiles='
         for i in range(mdb_runner.cores):
-            # note that: mdb requires -pset starting from 1, not 0 !!!
-            mdb_sub_cmd = ([commander] +
-                        ['-pset={}'.format(i + 1),
-                         '-psetname=core{}'.format(i),
-            # -prop=download=2 is used for SMP application debug, only the 1st
-            # core will download the shared image.
-                         ('-prop=download=2' if i > 0 else '')] +
-                         mdb_basic_options + mdb_target + [mdb_runner.elf_name])
+            mdb_sub_cmd = [commander] + ['-pset={}'.format(i + 1), '-psetname=core{}'.format(i)]
+            # -prop=download=2 is used for SMP application debug, only the 1st core
+            # will download the shared image.
+            if i > 0: mdb_sub_cmd += ['-prop=download=2']
+            mdb_sub_cmd += mdb_basic_options + mdb_target + [mdb_runner.elf_name]
             mdb_runner.check_call(mdb_sub_cmd, cwd=mdb_runner.build_dir)
             mdb_multifiles += ('core{}'.format(mdb_runner.cores-1-i) if i == 0 else ',core{}'.format(mdb_runner.cores-1-i))
 
@@ -112,12 +77,11 @@ def mdb_do_run(mdb_runner, command):
         if simulation_run(mdb_runner):
             os.environ["NSIM_MULTICORE"] = '1'
 
-        mdb_cmd = ([commander] + [mdb_multifiles] + mdb_run)
+        mdb_cmd = [commander] + [mdb_multifiles] + mdb_run
     else:
         raise ValueError('unsupported cores {}'.format(mdb_runner.cores))
 
-    process = mdb_runner.popen_ignore_int(mdb_cmd, cwd=mdb_runner.build_dir)
-    record_cld_pid(mdb_runner, process)
+    mdb_runner.call(mdb_cmd, cwd=mdb_runner.build_dir)
 
 
 class MdbNsimBinaryRunner(ZephyrBinaryRunner):
@@ -211,9 +175,4 @@ class MdbHwBinaryRunner(ZephyrBinaryRunner):
             dig_device=args.dig_device)
 
     def do_run(self, command, **kwargs):
-        if MISSING_REQUIREMENTS:
-            raise RuntimeError('one or more Python dependencies were missing; '
-                               "see the getting started guide for details on "
-                               "how to fix")
-
         mdb_do_run(self, command)

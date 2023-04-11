@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2021 Vestas Wind Systems A/S
+ * Copyright (c) 2018 Karsten Koenig
  * Copyright (c) 2018 Alexander Wachter
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -196,6 +197,9 @@ struct can_frame {
 /** Filter matches data frames */
 #define CAN_FILTER_DATA BIT(2)
 
+/** Filter matches CAN-FD frames (FDF) */
+#define CAN_FILTER_FDF BIT(3)
+
 /** @} */
 
 /**
@@ -212,7 +216,7 @@ struct can_filter {
 	 */
 	uint32_t mask         : 29;
 	/** Flags. @see @ref CAN_FILTER_FLAGS. */
-	uint8_t flags         : 3;
+	uint8_t flags;
 };
 
 /**
@@ -458,6 +462,7 @@ STATS_SECT_ENTRY32(stuff_error)
 STATS_SECT_ENTRY32(crc_error)
 STATS_SECT_ENTRY32(form_error)
 STATS_SECT_ENTRY32(ack_error)
+STATS_SECT_ENTRY32(rx_overrun)
 STATS_SECT_END;
 
 STATS_NAME_START(can)
@@ -467,6 +472,7 @@ STATS_NAME(can, stuff_error)
 STATS_NAME(can, crc_error)
 STATS_NAME(can, form_error)
 STATS_NAME(can, ack_error)
+STATS_NAME(can, rx_overrun)
 STATS_NAME_END(can);
 
 /** @endcond */
@@ -556,6 +562,18 @@ struct can_device_state {
 #define CAN_STATS_ACK_ERROR_INC(dev_)			\
 	STATS_INC(Z_CAN_GET_STATS(dev_), ack_error)
 
+/**
+ * @brief Increment the RX overrun counter for a CAN device
+ *
+ * The RX overrun counter is incremented when the CAN controller receives a CAN
+ * frame matching an installed filter but lacks the capacity to store it (either
+ * due to an already full RX mailbox or a full RX FIFO).
+ *
+ * @param dev_ Pointer to the device structure for the driver instance.
+ */
+#define CAN_STATS_RX_OVERRUN_INC(dev_)			\
+	STATS_INC(Z_CAN_GET_STATS(dev_), rx_overrun)
+
 /** @cond INTERNAL_HIDDEN */
 
 /**
@@ -576,7 +594,7 @@ struct can_device_state {
 	{								\
 		struct can_device_state *state =			\
 			CONTAINER_OF(dev->state, struct can_device_state, devstate); \
-		stats_init(&state->stats.s_hdr, STATS_SIZE_32, 6,	\
+		stats_init(&state->stats.s_hdr, STATS_SIZE_32, 7,	\
 			   STATS_NAME_INIT_PARMS(can));			\
 		stats_register(dev->name, &(state->stats.s_hdr));	\
 		return init_fn(dev);					\
@@ -623,6 +641,7 @@ struct can_device_state {
 #define CAN_STATS_CRC_ERROR_INC(dev_)
 #define CAN_STATS_FORM_ERROR_INC(dev_)
 #define CAN_STATS_ACK_ERROR_INC(dev_)
+#define CAN_STATS_RX_OVERRUN_INC(dev_)
 
 #define CAN_DEVICE_DT_DEFINE(node_id, init_fn, pm, data, config, level,	\
 			     prio, api, ...)				\
@@ -1159,7 +1178,7 @@ static inline int can_add_rx_filter(const struct device *dev, can_rx_callback_t 
 	K_MSGQ_DEFINE(name, sizeof(struct can_frame), max_frames, 4)
 
 /**
- * @brief Wrapper function for adding a message queue for a given filter
+ * @brief Simple wrapper function for adding a message queue for a given filter
  *
  * Wrapper function for @a can_add_rx_filter() which puts received CAN frames
  * matching the filter in a message queue instead of calling a callback.
@@ -1171,6 +1190,10 @@ static inline int can_add_rx_filter(const struct device *dev, can_rx_callback_t 
  *
  * @note The message queue must be initialized before calling this function and
  * the caller must have appropriate permissions on it.
+ *
+ * @warning Message queue overruns are silently ignored and overrun frames
+ * discarded. Custom error handling can be implemented by using
+ * @a can_add_rx_filter() and @a k_msgq_put() directly.
  *
  * @param dev    Pointer to the device structure for the driver instance.
  * @param msgq   Pointer to the already initialized @a k_msgq struct.
@@ -1355,6 +1378,54 @@ static inline uint8_t can_bytes_to_dlc(uint8_t num_bytes)
 	       num_bytes <= 32 ? 13 :
 	       num_bytes <= 48 ? 14 :
 	       15;
+}
+
+/**
+ * @brief Check if a CAN frame matches a CAN filter
+ *
+ * @param frame CAN frame.
+ * @param filter CAN filter.
+ * @return true if the CAN frame matches the CAN filter, false otherwise
+ */
+static inline bool can_frame_matches_filter(const struct can_frame *frame,
+					    const struct can_filter *filter)
+{
+	if ((frame->flags & CAN_FRAME_IDE) != 0 && (filter->flags & CAN_FILTER_IDE) == 0) {
+		/* Extended (29-bit) ID frame, standard (11-bit) filter */
+		return false;
+	}
+
+	if ((frame->flags & CAN_FRAME_IDE) == 0 && (filter->flags & CAN_FILTER_IDE) != 0) {
+		/* Standard (11-bit) ID frame, extended (29-bit) filter */
+		return false;
+	}
+
+	if ((frame->flags & CAN_FRAME_RTR) == 0 && (filter->flags & CAN_FILTER_DATA) == 0) {
+		/* non-RTR frame, remote transmission request (RTR) filter */
+		return false;
+	}
+
+	if ((frame->flags & CAN_FRAME_RTR) != 0 && (filter->flags & CAN_FILTER_RTR) == 0) {
+		/* Remote transmission request (RTR) frame, non-RTR filter */
+		return false;
+	}
+
+	if ((frame->flags & CAN_FRAME_FDF) != 0 && (filter->flags & CAN_FILTER_FDF) == 0) {
+		/* CAN-FD format frame, classic format filter */
+		return false;
+	}
+
+	if ((frame->flags & CAN_FRAME_FDF) == 0 && (filter->flags & CAN_FILTER_FDF) != 0) {
+		/* Classic frame, CAN-FD format filter */
+		return false;
+	}
+
+	if ((frame->id ^ filter->id) & filter->mask) {
+		/* Masked ID mismatch */
+		return false;
+	}
+
+	return true;
 }
 
 /** @} */

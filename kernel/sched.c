@@ -178,6 +178,7 @@ static ALWAYS_INLINE struct k_thread *_priq_dumb_mask_best(sys_dlist_t *pq)
 }
 #endif
 
+#if defined(CONFIG_SCHED_DUMB) || defined(CONFIG_WAITQ_DUMB)
 static ALWAYS_INLINE void z_priq_dumb_add(sys_dlist_t *pq,
 					  struct k_thread *thread)
 {
@@ -195,6 +196,7 @@ static ALWAYS_INLINE void z_priq_dumb_add(sys_dlist_t *pq,
 
 	sys_dlist_append(pq, &thread->base.qnode_dlist);
 }
+#endif
 
 static ALWAYS_INLINE void *thread_runq(struct k_thread *thread)
 {
@@ -786,7 +788,9 @@ static inline void unpend_thread_no_timeout(struct k_thread *thread)
 ALWAYS_INLINE void z_unpend_thread_no_timeout(struct k_thread *thread)
 {
 	LOCKED(&sched_spinlock) {
-		unpend_thread_no_timeout(thread);
+		if (thread->base.pended_on != NULL) {
+			unpend_thread_no_timeout(thread);
+		}
 	}
 }
 
@@ -1910,4 +1914,29 @@ int z_sched_wait(struct k_spinlock *lock, k_spinlock_key_t key,
 		*data = _current->base.swap_data;
 	}
 	return ret;
+}
+
+int z_sched_waitq_walk(_wait_q_t  *wait_q,
+		       int (*func)(struct k_thread *, void *), void *data)
+{
+	struct k_thread *thread;
+	int  status = 0;
+
+	LOCKED(&sched_spinlock) {
+		_WAIT_Q_FOR_EACH(wait_q, thread) {
+
+			/*
+			 * Invoke the callback function on each waiting thread
+			 * for as long as there are both waiting threads AND
+			 * it returns 0.
+			 */
+
+			status = func(thread, data);
+			if (status != 0) {
+				break;
+			}
+		}
+	}
+
+	return status;
 }

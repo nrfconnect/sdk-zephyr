@@ -48,7 +48,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_OPENTHREAD_L2_LOG_LEVEL);
 #define FRAME_TYPE_MASK 0x07
 #define FRAME_TYPE_ACK 0x02
 
-#if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
+#if defined(CONFIG_NET_TC_THREAD_COOPERATIVE)
 #define OT_WORKER_PRIORITY K_PRIO_COOP(CONFIG_OPENTHREAD_THREAD_PRIORITY)
 #else
 #define OT_WORKER_PRIORITY K_PRIO_PREEMPT(CONFIG_OPENTHREAD_THREAD_PRIORITY)
@@ -83,7 +83,8 @@ static const struct device *const radio_dev =
 	DEVICE_DT_GET(DT_CHOSEN(zephyr_ieee802154));
 static struct ieee802154_radio_api *radio_api;
 
-static int8_t tx_power;
+/* Get the default tx output power from Kconfig */
+static int8_t tx_power = CONFIG_OPENTHREAD_DEFAULT_TX_POWER;
 static uint16_t channel;
 static bool promiscuous;
 
@@ -630,9 +631,8 @@ otError otPlatRadioSleep(otInstance *aInstance)
 	    sState == OT_RADIO_STATE_RECEIVE ||
 	    sState == OT_RADIO_STATE_TRANSMIT) {
 		error = OT_ERROR_NONE;
-		if (radio_api->stop(radio_dev)) {
-			sState = OT_RADIO_STATE_SLEEP;
-		}
+		radio_api->stop(radio_dev);
+		sState = OT_RADIO_STATE_SLEEP;
 	}
 
 	return error;
@@ -672,6 +672,36 @@ otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel,
 	return result ? OT_ERROR_FAILED : OT_ERROR_NONE;
 }
 #endif
+
+otError platformRadioTransmitCarrier(otInstance *aInstance, bool aEnable)
+{
+	if (radio_api->continuous_carrier == NULL) {
+		return OT_ERROR_NOT_IMPLEMENTED;
+	}
+
+	if ((aEnable) && (sState == OT_RADIO_STATE_RECEIVE)) {
+		radio_api->set_txpower(radio_dev, get_transmit_power_for_channel(channel));
+
+		if (radio_api->continuous_carrier(radio_dev) != 0) {
+			return OT_ERROR_FAILED;
+		}
+
+		sState = OT_RADIO_STATE_TRANSMIT;
+	} else if ((!aEnable) && (sState == OT_RADIO_STATE_TRANSMIT)) {
+		return otPlatRadioReceive(aInstance, channel);
+	} else {
+		return OT_ERROR_INVALID_STATE;
+	}
+
+	return OT_ERROR_NONE;
+}
+
+otRadioState otPlatRadioGetState(otInstance *aInstance)
+{
+	ARG_UNUSED(aInstance);
+
+	return sState;
+}
 
 otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
 {

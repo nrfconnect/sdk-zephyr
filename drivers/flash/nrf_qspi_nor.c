@@ -54,9 +54,7 @@ struct qspi_nor_config {
 	/* JEDEC id from devicetree */
 	uint8_t id[SPI_NOR_MAX_ID_LEN];
 
-#ifdef CONFIG_PINCTRL
 	const struct pinctrl_dev_config *pcfg;
-#endif
 };
 
 /* Status register bits */
@@ -77,45 +75,45 @@ BUILD_ASSERT(!(DT_INST_NODE_HAS_PROP(0, size_in_bytes) && DT_INST_NODE_HAS_PROP(
 	     "properties; use exactly one");
 
 
-/*
- * Determine a configuration value (INST_0_SCK_CFG) to be used to achieve the
- * SCK frequency specified in DT and, if needed, a divider (BASE_CLOCK_DIV) for
- * the clock from which the SCK frequency is derived.
- */
 #define INST_0_SCK_FREQUENCY DT_INST_PROP(0, sck_frequency)
+/*
+ * According to the respective specifications, the nRF52 QSPI supports clock
+ * frequencies 2 - 32 MHz and the nRF53 one supports 6 - 96 MHz.
+ */
 BUILD_ASSERT(INST_0_SCK_FREQUENCY >= (NRF_QSPI_BASE_CLOCK_FREQ / 16),
 	     "Unsupported SCK frequency.");
 
+/*
+ * Determine a configuration value (INST_0_SCK_CFG) and, if needed, a divider
+ * (BASE_CLOCK_DIV) for the clock from which the SCK frequency is derived that
+ * need to be used to achieve the SCK frequency as close as possible (but not
+ * higher) to the one specified in DT.
+ */
 #if defined(CONFIG_SOC_SERIES_NRF53X)
 /*
- * On nRF53 Series SoCs, the highest SCK frequencies can only be achieved
- * when the HFCLK192M clock divider is changed from the default /4 setting.
- * Such change results in increased power consumption, so the divider needs
- * to be changed only for periods when it is actually needed.
+ * On nRF53 Series SoCs, the default /4 divider for the HFCLK192M clock can
+ * only be used when the QSPI peripheral is idle. When a QSPI operation is
+ * performed, the divider needs to be changed to /1 or /2 (particularly,
+ * the specification says that the peripheral "supports 192 MHz and 96 MHz
+ * PCLK192M frequency"), but after that operation is complete, the default
+ * divider needs to be restored to avoid increased current consumption.
  */
 #if (INST_0_SCK_FREQUENCY >= NRF_QSPI_BASE_CLOCK_FREQ)
-/* Use HFCLK192M / 1 / (2*1) = 96 MHz */
+/* For requested SCK >= 96 MHz, use HFCLK192M / 1 / (2*1) = 96 MHz */
 #define BASE_CLOCK_DIV NRF_CLOCK_HFCLK_DIV_1
 #define INST_0_SCK_CFG NRF_QSPI_FREQ_DIV1
 #elif (INST_0_SCK_FREQUENCY >= (NRF_QSPI_BASE_CLOCK_FREQ / 2))
-/* Use HFCLK192M / 2 / (2*1) = 48 MHz */
+/* For 96 MHz > SCK >= 48 MHz, use HFCLK192M / 2 / (2*1) = 48 MHz */
 #define BASE_CLOCK_DIV NRF_CLOCK_HFCLK_DIV_2
 #define INST_0_SCK_CFG NRF_QSPI_FREQ_DIV1
 #elif (INST_0_SCK_FREQUENCY >= (NRF_QSPI_BASE_CLOCK_FREQ / 3))
-/* Use HFCLK192M / 1 / (2*3) = 32 MHz */
+/* For 48 MHz > SCK >= 32 MHz, use HFCLK192M / 1 / (2*3) = 32 MHz */
 #define BASE_CLOCK_DIV NRF_CLOCK_HFCLK_DIV_1
 #define INST_0_SCK_CFG NRF_QSPI_FREQ_DIV3
-#elif (INST_0_SCK_FREQUENCY >= (NRF_QSPI_BASE_CLOCK_FREQ / 4))
-/* Use HFCLK192M / 4 / (2*1) = 24 MHz */
-/* BASE_CLOCK_DIV not defined => the default NRF_CLOCK_HFCLK_DIV_4 is used. */
-#define INST_0_SCK_CFG NRF_QSPI_FREQ_DIV1
-#elif (INST_0_SCK_FREQUENCY >= (NRF_QSPI_BASE_CLOCK_FREQ / 6))
-/* Use HFCLK192M / 2 / (2*3) = 16 MHz */
-#define BASE_CLOCK_DIV NRF_CLOCK_HFCLK_DIV_2
-#define INST_0_SCK_CFG NRF_QSPI_FREQ_DIV3
 #else
-/* BASE_CLOCK_DIV not defined => the default NRF_CLOCK_HFCLK_DIV_4 is used. */
-#define INST_0_SCK_CFG (ceiling_fraction(NRF_QSPI_BASE_CLOCK_FREQ / 4, \
+/* For requested SCK < 32 MHz, use divider /2 for HFCLK192M. */
+#define BASE_CLOCK_DIV NRF_CLOCK_HFCLK_DIV_2
+#define INST_0_SCK_CFG (ceiling_fraction(NRF_QSPI_BASE_CLOCK_FREQ / 2, \
 					 INST_0_SCK_FREQUENCY) - 1)
 #endif
 
@@ -214,9 +212,7 @@ struct qspi_cmd {
 static int qspi_nor_write_protection_set(const struct device *dev,
 					 bool write_protect);
 
-#ifdef CONFIG_PM_DEVICE
 static int exit_dpd(const struct device *const dev);
-#endif
 
 /**
  * @brief Test whether offset is aligned.
@@ -259,7 +255,7 @@ static inline void qspi_lock(const struct device *dev)
 	 * for the time the driver is locked to perform a QSPI operation,
 	 * unless the divider is forced to be kept set permanently.
 	 */
-#if defined(BASE_CLOCK_DIV)
+#if defined(CONFIG_SOC_SERIES_NRF53X)
 	if (!dev_data->keep_base_clock_div_set) {
 		nrf_clock_hfclk192m_div_set(NRF_CLOCK, BASE_CLOCK_DIV);
 	}
@@ -270,7 +266,7 @@ static inline void qspi_unlock(const struct device *dev)
 {
 	struct qspi_nor_data *dev_data = dev->data;
 
-#if defined(BASE_CLOCK_DIV)
+#if defined(CONFIG_SOC_SERIES_NRF53X)
 	/* Restore the default base clock divider, unless instructed not to. */
 	if (!dev_data->keep_base_clock_div_set) {
 		nrf_clock_hfclk192m_div_set(NRF_CLOCK, NRF_CLOCK_HFCLK_DIV_4);
@@ -407,11 +403,6 @@ static void qspi_device_uninit(const struct device *dev)
 		}
 
 		nrfx_qspi_uninit();
-
-#ifndef CONFIG_PINCTRL
-		nrf_gpio_cfg_output(QSPI_PROP_AT(csn_pins, 0));
-		nrf_gpio_pin_set(QSPI_PROP_AT(csn_pins, 0));
-#endif
 
 		qspi_initialized = false;
 	}
@@ -673,9 +664,24 @@ static int qspi_nrfx_configure(const struct device *dev)
 	struct qspi_nor_data *dev_data = dev->data;
 	const struct qspi_nor_config *dev_config = dev->config;
 
+#if defined(CONFIG_SOC_SERIES_NRF53X)
+	/* When the QSPI peripheral is activated, during the nrfx_qspi driver
+	 * initialization, it reads the status of the connected flash chip.
+	 * Make sure this transaction is performed with a valid base clock
+	 * divider.
+	 */
+	nrf_clock_hfclk192m_div_set(NRF_CLOCK, BASE_CLOCK_DIV);
+#endif
+
 	nrfx_err_t res = nrfx_qspi_init(&dev_config->nrfx_cfg,
 					qspi_handler,
 					dev_data);
+
+#if defined(CONFIG_SOC_SERIES_NRF53X)
+	/* Restore the default /4 divider after the QSPI initialization. */
+	nrf_clock_hfclk192m_div_set(NRF_CLOCK, NRF_CLOCK_HFCLK_DIV_4);
+#endif
+
 	int ret = qspi_get_zephyr_ret_code(res);
 	if (ret < 0) {
 		return ret;
@@ -687,18 +693,21 @@ static int qspi_nrfx_configure(const struct device *dev)
 	}
 #endif
 
-#ifdef CONFIG_PM_DEVICE
 	/* It may happen that after the flash chip was previously put into
 	 * the DPD mode, the system was reset but the flash chip was not.
 	 * Consequently, the flash chip can be in the DPD mode at this point.
 	 * Some flash chips will just exit the DPD mode on the first CS pulse,
 	 * but some need to receive the dedicated command to do it, so send it.
+	 * This can be the case even if the current image does not have
+	 * CONFIG_PM_DEVICE set to enter DPD mode, as a previously executing image
+	 * (for example the main image if the currently executing image is the
+	 * bootloader) might have set DPD mode before reboot. As a result,
+	 * attempt to exit DPD mode regardless of whether CONFIG_PM_DEVICE is set.
 	 */
 	ret = exit_dpd(dev);
 	if (ret < 0) {
 		return ret;
 	}
-#endif
 
 	/* Set QE to match transfer mode.  If not using quad
 	 * it's OK to leave QE set, but doing so prevents use
@@ -1180,19 +1189,12 @@ static int qspi_nor_configure(const struct device *dev)
  */
 static int qspi_nor_init(const struct device *dev)
 {
-#if defined(CONFIG_SOC_SERIES_NRF53X)
-	/* Make sure the default /4 divider is set initially. */
-	nrf_clock_hfclk192m_div_set(NRF_CLOCK, NRF_CLOCK_HFCLK_DIV_4);
-#endif
-
-#ifdef CONFIG_PINCTRL
 	const struct qspi_nor_config *dev_config = dev->config;
 	int ret = pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_DEFAULT);
 
 	if (ret < 0) {
 		return ret;
 	}
-#endif
 
 	IRQ_CONNECT(DT_IRQN(QSPI_NODE), DT_IRQ(QSPI_NODE, priority),
 		    nrfx_isr, nrfx_qspi_irq_handler, 0);
@@ -1277,6 +1279,7 @@ static int enter_dpd(const struct device *const dev)
 
 	return 0;
 }
+#endif /* CONFIG_PM_DEVICE */
 
 static int exit_dpd(const struct device *const dev)
 {
@@ -1303,6 +1306,7 @@ static int exit_dpd(const struct device *const dev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_DEVICE
 static int qspi_nor_pm_action(const struct device *dev,
 			      enum pm_device_action action)
 {
@@ -1328,23 +1332,19 @@ static int qspi_nor_pm_action(const struct device *dev,
 		}
 
 		nrfx_qspi_uninit();
-#ifdef CONFIG_PINCTRL
 		ret = pinctrl_apply_state(dev_config->pcfg,
 					  PINCTRL_STATE_SLEEP);
 		if (ret < 0) {
 			return ret;
 		}
-#endif
 		break;
 
 	case PM_DEVICE_ACTION_RESUME:
-#ifdef CONFIG_PINCTRL
 		ret = pinctrl_apply_state(dev_config->pcfg,
 					  PINCTRL_STATE_DEFAULT);
 		if (ret < 0) {
 			return ret;
 		}
-#endif
 		err = nrfx_qspi_init(&dev_config->nrfx_cfg,
 				     qspi_handler,
 				     dev_data);
@@ -1371,7 +1371,7 @@ static int qspi_nor_pm_action(const struct device *dev,
 void  z_impl_nrf_qspi_nor_base_clock_div_force(const struct device *dev,
 					       bool force)
 {
-#if defined(BASE_CLOCK_DIV)
+#if defined(CONFIG_SOC_SERIES_NRF53X)
 	struct qspi_nor_data *dev_data = dev->data;
 	/*
 	 * The divider is normally changed, unless the flag is set, only for
@@ -1411,30 +1411,14 @@ static struct qspi_nor_data qspi_nor_dev_data = {
 #endif /* CONFIG_MULTITHREADING */
 };
 
-NRF_DT_CHECK_PIN_ASSIGNMENTS(QSPI_NODE, 1, sck_pin, csn_pins, io_pins);
+NRF_DT_CHECK_NODE_HAS_PINCTRL_SLEEP(QSPI_NODE);
 
-IF_ENABLED(CONFIG_PINCTRL, (PINCTRL_DT_DEFINE(QSPI_NODE)));
+PINCTRL_DT_DEFINE(QSPI_NODE);
 
 static const struct qspi_nor_config qspi_nor_dev_config = {
-#ifdef CONFIG_PINCTRL
 	.nrfx_cfg.skip_gpio_cfg = true,
 	.nrfx_cfg.skip_psel_cfg = true,
 	.pcfg = PINCTRL_DT_DEV_CONFIG_GET(QSPI_NODE),
-#else
-	.nrfx_cfg.pins = {
-		.sck_pin = DT_PROP(QSPI_NODE, sck_pin),
-		.csn_pin = QSPI_PROP_AT(csn_pins, 0),
-		.io0_pin = QSPI_PROP_AT(io_pins, 0),
-		.io1_pin = QSPI_PROP_AT(io_pins, 1),
-#if QSPI_PROP_LEN(io_pins) > 2
-		.io2_pin = QSPI_PROP_AT(io_pins, 2),
-		.io3_pin = QSPI_PROP_AT(io_pins, 3),
-#else
-		.io2_pin = NRF_QSPI_PIN_NOT_CONNECTED,
-		.io3_pin = NRF_QSPI_PIN_NOT_CONNECTED,
-#endif
-	},
-#endif /* CONFIG_PINCTRL */
 	.nrfx_cfg.prot_if = {
 		.readoc = COND_CODE_1(DT_INST_NODE_HAS_PROP(0, readoc),
 			(_CONCAT(NRF_QSPI_READOC_,
