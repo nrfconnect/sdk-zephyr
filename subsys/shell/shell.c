@@ -385,8 +385,8 @@ static void autocomplete(const struct shell *shell,
 	}
 
 	/* Next character in the buffer is not 'space'. */
-	if (!isspace((int) shell->ctx->cmd_buff[
-					shell->ctx->cmd_buff_pos])) {
+	if (isspace((int) shell->ctx->cmd_buff[
+					shell->ctx->cmd_buff_pos]) == 0) {
 		if (z_flag_insert_mode_get(shell)) {
 			z_flag_insert_mode_set(shell, false);
 			z_shell_op_char_insert(shell, ' ');
@@ -969,7 +969,9 @@ static void state_collect(const struct shell *shell)
 			(void)shell->iface->api->read(shell->iface, buf,
 							sizeof(buf), &count);
 			if (count) {
+				z_flag_cmd_ctx_set(shell, true);
 				bypass(shell, buf, count);
+				z_flag_cmd_ctx_set(shell, false);
 				/* Check if bypass mode ended. */
 				if (!(volatile shell_bypass_cb_t *)shell->ctx->bypass) {
 					state_set(shell, SHELL_STATE_ACTIVE);
@@ -1049,7 +1051,7 @@ static void state_collect(const struct shell *shell)
 				break;
 
 			default:
-				if (isprint((int) data)) {
+				if (isprint((int) data) != 0) {
 					z_flag_history_exit_set(shell, true);
 					z_shell_op_char_insert(shell, data);
 				} else if (z_flag_echo_get(shell)) {
@@ -1557,7 +1559,7 @@ void shell_hexdump_line(const struct shell *shell, unsigned int offset,
 			char c = data[i];
 
 			shell_fprintf(shell, SHELL_NORMAL, "%c",
-				      isprint((int)c) ? c : '.');
+				      isprint((int)c) != 0 ? c : '.');
 		} else {
 			shell_fprintf(shell, SHELL_NORMAL, " ");
 		}
