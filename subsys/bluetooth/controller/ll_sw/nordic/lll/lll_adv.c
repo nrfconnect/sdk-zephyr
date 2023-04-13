@@ -89,7 +89,7 @@ static inline bool isr_rx_ci_adva_check(uint8_t tx_addr, uint8_t *addr,
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 #define PAYLOAD_BASED_FRAG_COUNT \
-	ceiling_fraction(CONFIG_BT_CTLR_ADV_DATA_LEN_MAX, \
+	DIV_ROUND_UP(CONFIG_BT_CTLR_ADV_DATA_LEN_MAX, \
 			 PDU_AC_PAYLOAD_SIZE_MAX)
 #define PAYLOAD_FRAG_COUNT MAX(PAYLOAD_BASED_FRAG_COUNT, BT_CTLR_DF_PER_ADV_CTE_NUM_MAX)
 #define BT_CTLR_ADV_AUX_SET  CONFIG_BT_CTLR_ADV_AUX_SET
@@ -1038,6 +1038,20 @@ static int prepare_cb(struct lll_prepare_param *p)
 #endif /* CONFIG_BT_CTLR_XTAL_ADVANCED */
 	{
 		uint32_t ret;
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+		if (lll->aux) {
+			/* fill in aux ptr in pdu */
+			ull_adv_aux_lll_auxptr_fill(pdu, lll);
+
+			/* NOTE: as first primary channel PDU does not use remainder, the packet
+			 * timer is started one tick in advance to start the radio with
+			 * microsecond precision, hence compensate for the higher start_us value
+			 * captured at radio start of the first primary channel PDU.
+			 */
+			lll->aux->ticks_pri_pdu_offset += 1U;
+		}
+#endif
 
 		ret = lll_prepare_done(lll);
 		LL_ASSERT(!ret);
