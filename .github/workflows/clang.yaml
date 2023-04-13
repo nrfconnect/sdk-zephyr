@@ -10,7 +10,7 @@ jobs:
   clang-build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/zephyrproject-rtos/ci:v0.24.11
+      image: ghcr.io/zephyrproject-rtos/ci:v0.26.1
       options: '--entrypoint /bin/bash'
       volumes:
         - /repo-cache/zephyrproject:/github/cache/zephyrproject
@@ -20,8 +20,8 @@ jobs:
         platform: ["native_posix"]
         subset: [1, 2, 3, 4, 5]
     env:
-      ZEPHYR_SDK_INSTALL_DIR: /opt/toolchains/zephyr-sdk-0.15.2
-      LLVM_TOOLCHAIN_PATH: /usr/lib/llvm-15
+      ZEPHYR_SDK_INSTALL_DIR: /opt/toolchains/zephyr-sdk-0.16.0
+      LLVM_TOOLCHAIN_PATH: /usr/lib/llvm-16
       COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
       BASE_REF: ${{ github.base_ref }}
       MATRIX_SIZE: 5
@@ -140,7 +140,7 @@ jobs:
   clang-build-results:
     name: "Publish Unit Tests Results"
     needs: clang-build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     if: (success() || failure() ) && needs.clang-build.outputs.report_needed != 0
     steps:
       - name: Download Artifacts
