@@ -1429,6 +1429,7 @@ toolchain_ld_link_elf(
 target_byproducts(TARGET ${ZEPHYR_LINK_STAGE_EXECUTABLE}
                   BYPRODUCTS ${PROJECT_BINARY_DIR}/${ZEPHYR_LINK_STAGE_EXECUTABLE}.map
 )
+set(BYPRODUCT_KERNEL_ELF_NAME "${PROJECT_BINARY_DIR}/${KERNEL_ELF_NAME}" CACHE FILEPATH "Kernel elf file" FORCE)
 set_property(TARGET
   ${ZEPHYR_LINK_STAGE_EXECUTABLE}
   PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/${ZEPHYR_CURRENT_LINKER_CMD}
@@ -1576,6 +1577,7 @@ if(CONFIG_BUILD_OUTPUT_HEX OR BOARD_FLASH_RUNNER STREQUAL openocd)
       ${KERNEL_HEX_NAME}
       # ${out_hex_byprod} # Is this needed ?
       )
+    set(BYPRODUCT_KERNEL_HEX_NAME "${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}" CACHE FILEPATH "Kernel hex file" FORCE)
   endif()
 endif()
 
@@ -1598,6 +1600,7 @@ if(CONFIG_BUILD_OUTPUT_BIN)
       ${KERNEL_BIN_NAME}
       # ${out_hex_byprod} # Is this needed ?
       )
+    set(BYPRODUCT_KERNEL_BIN_NAME "${PROJECT_BINARY_DIR}/${KERNEL_BIN_NAME}" CACHE FILEPATH "Kernel binary file" FORCE)
   endif()
 endif()
 
@@ -1630,6 +1633,7 @@ if(CONFIG_BUILD_OUTPUT_BIN AND CONFIG_BUILD_OUTPUT_UF2)
     post_build_byproducts
     ${KERNEL_UF2_NAME}
   )
+  set(BYPRODUCT_KERNEL_UF2_NAME "${PROJECT_BINARY_DIR}/${KERNEL_UF2_NAME}" CACHE FILEPATH "Kernel uf2 file" FORCE)
 endif()
 
 if(CONFIG_BUILD_OUTPUT_META)
@@ -1681,6 +1685,7 @@ if(CONFIG_BUILD_OUTPUT_S19)
       # ${out_S19_byprod} # Is this needed ?
 
       )
+    set(BYPRODUCT_KERNEL_S19_NAME "${PROJECT_BINARY_DIR}/${KERNEL_S19_NAME}" CACHE FILEPATH "Kernel s19 file" FORCE)
   endif()
 endif()
 
@@ -1764,6 +1769,7 @@ if(CONFIG_BUILD_OUTPUT_EXE)
     post_build_byproducts
     ${KERNEL_EXE_NAME}
     )
+  set(BYPRODUCT_KERNEL_EXE_NAME "${PROJECT_BINARY_DIR}/${KERNEL_EXE_NAME}" CACHE FILEPATH "Kernel exe file" FORCE)
 endif()
 
 if(CONFIG_BUILD_OUTPUT_INFO_HEADER)
