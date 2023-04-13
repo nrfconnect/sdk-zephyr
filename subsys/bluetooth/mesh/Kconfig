@@ -397,7 +397,7 @@ if BT_MESH_ADV_EXT
 
 config BT_MESH_RELAY_ADV_SETS
 	int "Maximum of simultaneous relay message support"
-	default 0
+	default 4
 	range 0 BT_EXT_ADV_MAX_ADV_SET
 	depends on BT_MESH_RELAY
 	help
@@ -426,6 +426,7 @@ config BT_MESH_ADV_EXT_RELAY_USING_MAIN_ADV_SET
 config BT_MESH_ADV_EXT_GATT_SEPARATE
 	bool "Use a separate extended advertising set for GATT Server Advertising"
 	depends on BT_MESH_GATT_SERVER
+	default y
 	help
 	  Use a separate extended advertising set for GATT Server Advertising,
 	  otherwise a shared advertising set will be used.
@@ -433,6 +434,7 @@ config BT_MESH_ADV_EXT_GATT_SEPARATE
 config BT_MESH_ADV_EXT_FRIEND_SEPARATE
 	bool "Use a separate extended advertising set for Friend advertising"
 	depends on BT_MESH_FRIEND
+	default y
 	help
 	  Use a separate extended advertising set for Friend advertising,
 	  otherwise a shared advertising set will be used. Using the separate
@@ -673,7 +675,7 @@ config BT_MESH_RELAY_RETRANSMIT_INTERVAL
 
 config BT_MESH_RELAY_BUF_COUNT
 	int "Number of advertising buffers for relayed messages"
-	default 32
+	default 7
 	range 1 256
 	help
 	  Number of advertising buffers available for messages to be relayed.
