@@ -15,14 +15,14 @@
 #define DT_DRV_COMPAT atmel_sam_afec
 #elif DT_HAS_COMPAT_STATUS_OKAY(espressif_esp32_adc)
 #define DT_DRV_COMPAT espressif_esp32_adc
+#elif DT_HAS_COMPAT_STATUS_OKAY(atmel_sam_adc)
+#define DT_DRV_COMPAT atmel_sam_adc
 #elif DT_HAS_COMPAT_STATUS_OKAY(atmel_sam0_adc)
 #define DT_DRV_COMPAT atmel_sam0_adc
 #elif DT_HAS_COMPAT_STATUS_OKAY(ite_it8xxx2_adc)
 #define DT_DRV_COMPAT ite_it8xxx2_adc
 #elif DT_HAS_COMPAT_STATUS_OKAY(microchip_xec_adc)
 #define DT_DRV_COMPAT microchip_xec_adc
-#elif DT_HAS_COMPAT_STATUS_OKAY(microchip_xec_adc_v2)
-#define DT_DRV_COMPAT microchip_xec_adc_v2
 #elif DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_adc)
 #define DT_DRV_COMPAT nordic_nrf_adc
 #elif DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_saadc)
@@ -135,7 +135,7 @@ static int cmd_adc_ch_id(const struct shell *shell, size_t argc, char **argv)
 		return -ENODEV;
 	}
 
-	if (!isdigit((unsigned char)argv[1][0])) {
+	if (isdigit((unsigned char)argv[1][0]) == 0) {
 		shell_error(shell, "<channel> must be digits");
 		return -EINVAL;
 	}
@@ -159,7 +159,7 @@ static int cmd_adc_ch_neg(const struct shell *shell, size_t argc, char **argv)
 		return -ENODEV;
 	}
 
-	if (!isdigit((unsigned char)argv[1][0])) {
+	if (isdigit((unsigned char)argv[1][0]) == 0) {
 		shell_error(shell, "<negative input> must be digits");
 		return -EINVAL;
 	}
@@ -186,7 +186,7 @@ static int cmd_adc_ch_pos(const struct shell *shell, size_t argc, char **argv)
 		return -ENODEV;
 	}
 
-	if (!isdigit((unsigned char)argv[1][0])) {
+	if (isdigit((unsigned char)argv[1][0]) == 0) {
 		shell_error(shell, "<positive input> must be digits");
 		return -EINVAL;
 	}
@@ -237,7 +237,7 @@ static int cmd_adc_acq(const struct shell *shell, size_t argc, char **argv)
 		return -ENODEV;
 	}
 
-	if (!isdigit((unsigned char)argv[1][0])) {
+	if (isdigit((unsigned char)argv[1][0]) == 0) {
 		shell_error(shell, "<time> must be digits");
 		return -EINVAL;
 	}
@@ -272,7 +272,7 @@ static int cmd_adc_reso(const struct shell *shell, size_t argc, char **argv)
 		return -ENODEV;
 	}
 
-	if (!isdigit((unsigned char)argv[1][0])) {
+	if (isdigit((unsigned char)argv[1][0]) == 0) {
 		shell_error(shell, "<resolution> must be digits");
 		return -EINVAL;
 	}
