@@ -688,11 +688,12 @@ static void local_input_complete(void)
 	}
 }
 
-static void prov_link_closed(void)
+static void prov_link_closed(enum prov_bearer_link_status status)
 {
 	if (IS_ENABLED(CONFIG_BT_MESH_RPR_SRV) &&
 	    atomic_test_bit(bt_mesh_prov_link.flags, REPROVISION)) {
-		if (atomic_test_bit(bt_mesh_prov_link.flags, COMPLETE)) {
+		if (atomic_test_bit(bt_mesh_prov_link.flags, COMPLETE) &&
+		    status == PROV_BEARER_LINK_STATUS_SUCCESS) {
 			reprovision_complete();
 		} else {
 			reprovision_fail();
@@ -742,7 +743,7 @@ int bt_mesh_prov_enable(bt_mesh_prov_bearer_t bearers)
 		return -EALREADY;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_DEBUG)) {
+	if (IS_ENABLED(CONFIG_BT_MESH_PROV_DEVICE_LOG_LEVEL_INF)) {
 		struct bt_uuid_128 uuid = { .uuid = { BT_UUID_TYPE_128 } };
 
 		memcpy(uuid.val, bt_mesh_prov->uuid, 16);
