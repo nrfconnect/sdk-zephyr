@@ -306,7 +306,7 @@ static void bt_spi_rx_thread(void)
 				   !ret)) && exit_irq_high_loop());
 
 			size = header_slave[STATUS_HEADER_TOREAD];
-			if (!ret || size != 0) {
+			if (ret == 0 && size != 0) {
 				do {
 					ret = bt_spi_transceive(&txmsg, size,
 								&rxmsg, size);
@@ -517,9 +517,8 @@ static const struct bt_hci_driver drv = {
 	.send		= bt_spi_send,
 };
 
-static int bt_spi_init(const struct device *unused)
+static int bt_spi_init(void)
 {
-	ARG_UNUSED(unused);
 
 	if (!spi_is_ready_dt(&bus)) {
 		LOG_ERR("SPI device not ready");
