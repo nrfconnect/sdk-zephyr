@@ -56,7 +56,7 @@ LOG_MODULE_REGISTER(net_sock_tls, CONFIG_NET_SOCKETS_LOG_LEVEL);
 #include "sockets_internal.h"
 #include "tls_internal.h"
 
-#if defined(CONFIG_MBEDTLS_DEBUG)
+#if defined(CONFIG_MBEDTLS_BUILTIN)
 #include <zephyr_mbedtls_priv.h>
 #endif
 
