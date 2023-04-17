@@ -74,13 +74,12 @@ DEVICE_DEFINE(ipm_console_recv0, "ipm_recv0", ipm_console_receiver_init,
 
 static const char thestr[] = "everything is awesome\n";
 
-void main(void)
+int main(void)
 {
 	int rv, i;
 	const struct device *ipm;
 
 	TC_SUITE_START("test_ipm");
-	TC_START(__func__);
 	ipm = device_get_binding("ipm_dummy0");
 
 	/* Try sending a raw string to the IPM device to show that the
@@ -108,4 +107,5 @@ void main(void)
 	TC_END_RESULT(rv);
 	TC_SUITE_END("test_ipm", rv);
 	TC_END_REPORT(rv);
+	return 0;
 }

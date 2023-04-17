@@ -14,6 +14,7 @@
 #include <zephyr/linker/sections.h>
 #include <zephyr/sys/device_mmio.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/toolchain.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -584,8 +585,12 @@ device_supported_handles_get(const struct device *dev, size_t *count)
 			}
 			rv++;
 		}
-		/* Count supporting devices */
-		while (rv[i] != DEVICE_HANDLE_ENDS) {
+		/* Count supporting devices.
+		 * Trailing NULL's can be injected by gen_handles.py due to
+		 * CONFIG_PM_DEVICE_POWER_DOMAIN_DYNAMIC_NUM
+		 */
+		while ((rv[i] != DEVICE_HANDLE_ENDS) &&
+		       (rv[i] != DEVICE_HANDLE_NULL)) {
 			++i;
 		}
 		*count = i;
@@ -902,13 +907,17 @@ static inline bool z_impl_device_is_ready(const struct device *dev)
  * @brief Define the init entry for a device.
  *
  * @param dev_id Device identifier.
- * @param init_fn Device init function.
+ * @param init_fn_ Device init function.
  * @param level Initialization level.
  * @param prio Initialization priority.
  */
-#define Z_DEVICE_INIT_ENTRY_DEFINE(dev_id, init_fn, level, prio)               \
-	Z_INIT_ENTRY_DEFINE(DEVICE_NAME_GET(dev_id), init_fn,                  \
-			    (&DEVICE_NAME_GET(dev_id)), level, prio)
+#define Z_DEVICE_INIT_ENTRY_DEFINE(dev_id, init_fn_, level, prio)              \
+	static const Z_DECL_ALIGN(struct init_entry)                           \
+		Z_INIT_ENTRY_SECTION(level, prio) __used __noasan              \
+		Z_INIT_ENTRY_NAME(DEVICE_NAME_GET(dev_id)) = {                 \
+			.init_fn = {.dev = (init_fn_)},                        \
+			.dev = &DEVICE_NAME_GET(dev_id),                       \
+	}
 
 /**
  * @brief Define a @ref device and all other required objects.

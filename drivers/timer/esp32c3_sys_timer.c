@@ -65,9 +65,9 @@ static void sys_timer_isr(const void *arg)
 	k_spinlock_key_t key = k_spin_lock(&lock);
 	uint64_t now = get_systimer_alarm();
 
-	uint32_t dticks = (uint32_t)((now - last_count) / CYC_PER_TICK);
+	uint64_t dticks = (uint64_t)((now - last_count) / CYC_PER_TICK);
 
-	last_count = now;
+	last_count += dticks * CYC_PER_TICK;
 
 	if (!TICKLESS) {
 		uint64_t next = last_count + CYC_PER_TICK;
@@ -79,7 +79,7 @@ static void sys_timer_isr(const void *arg)
 	}
 
 	k_spin_unlock(&lock, key);
-	sys_clock_announce(IS_ENABLED(CONFIG_TICKLESS_KERNEL) ? dticks : 1);
+	sys_clock_announce(dticks);
 }
 
 void sys_clock_set_timeout(int32_t ticks, bool idle)
@@ -135,9 +135,8 @@ uint64_t sys_clock_cycle_get_64(void)
 	return get_systimer_alarm();
 }
 
-static int sys_clock_driver_init(const struct device *dev)
+static int sys_clock_driver_init(void)
 {
-	ARG_UNUSED(dev);
 
 	esp_intr_alloc(DT_IRQN(DT_NODELABEL(systimer0)),
 		0,
