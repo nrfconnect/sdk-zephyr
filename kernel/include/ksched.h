@@ -55,7 +55,7 @@ void z_thread_priority_set(struct k_thread *thread, int prio);
 bool z_set_prio(struct k_thread *thread, int prio);
 void *z_get_next_switch_handle(void *interrupted);
 void idle(void *unused1, void *unused2, void *unused3);
-void z_time_slice(int ticks);
+void z_time_slice(void);
 void z_reset_time_slice(struct k_thread *curr);
 void z_sched_abort(struct k_thread *thread);
 void z_sched_ipi(void);
@@ -314,6 +314,18 @@ static ALWAYS_INLINE bool z_is_thread_timeout_expired(struct k_thread *thread)
  * @retval false If the wait_q was empty
  */
 bool z_sched_wake(_wait_q_t *wait_q, int swap_retval, void *swap_data);
+
+/**
+ * Wakes the specified thread.
+ *
+ * Given a specific thread, wake it up. This routine assumes that the given
+ * thread is not on the timeout queue.
+ *
+ * @param thread Given thread to wake up.
+ * @param is_timeout True if called from the timer ISR; false otherwise.
+ *
+ */
+void z_sched_wake_thread(struct k_thread *thread, bool is_timeout);
 
 /**
  * Wake up all threads pending on the provided wait queue
