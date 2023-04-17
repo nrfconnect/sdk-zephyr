@@ -279,17 +279,6 @@ void llcp_tx_resume_data(struct ll_conn *conn, enum llcp_tx_q_pause_data_mask re
 	}
 }
 
-void llcp_rx_node_retain(struct proc_ctx *ctx)
-{
-	LL_ASSERT(ctx->node_ref.rx);
-
-	/* Mark RX node to NOT release */
-	ctx->node_ref.rx->hdr.type = NODE_RX_TYPE_RETAIN;
-
-	/* store link element reference to use once this node is moved up */
-	ctx->node_ref.rx->hdr.link = ctx->node_ref.link;
-}
-
 /*
  * LLCP Procedure Creation
  */
@@ -307,8 +296,7 @@ static struct proc_ctx *create_procedure(enum llcp_proc proc, struct llcp_mem_po
 	ctx->collision = 0U;
 	ctx->done = 0U;
 	ctx->rx_greedy = 0U;
-	ctx->node_ref.rx = NULL;
-	ctx->node_ref.tx_ack = NULL;
+	ctx->tx_ack = NULL;
 
 	/* Clear procedure data */
 	memset((void *)&ctx->data, 0, sizeof(ctx->data));
@@ -585,6 +573,12 @@ void ull_cp_release_tx(struct ll_conn *conn, struct node_tx *tx)
 	ARG_UNUSED(conn);
 #endif /* LLCP_TX_CTRL_BUF_QUEUE_ENABLE */
 	tx_release(tx);
+}
+
+void ull_cp_release_ntf(struct node_rx_pdu *ntf)
+{
+	ntf->hdr.next = NULL;
+	ll_rx_mem_release((void **)&ntf);
 }
 
 static int prt_elapse(uint16_t *expire, uint16_t elapsed_event)
@@ -1668,13 +1662,13 @@ void ull_cp_tx_ack(struct ll_conn *conn, struct node_tx *tx)
 	struct proc_ctx *ctx;
 
 	ctx = llcp_lr_peek(conn);
-	if (ctx && ctx->node_ref.tx_ack == tx) {
+	if (ctx && ctx->tx_ack == tx) {
 		/* TX ack re. local request */
 		llcp_lr_tx_ack(conn, ctx, tx);
 	}
 
 	ctx = llcp_rr_peek(conn);
-	if (ctx && ctx->node_ref.tx_ack == tx) {
+	if (ctx && ctx->tx_ack == tx) {
 		/* TX ack re. remote response */
 		llcp_rr_tx_ack(conn, ctx, tx);
 	}
@@ -1697,7 +1691,7 @@ void ull_cp_tx_ntf(struct ll_conn *conn)
 	}
 }
 
-void ull_cp_rx(struct ll_conn *conn, memq_link_t *link, struct node_rx_pdu *rx)
+void ull_cp_rx(struct ll_conn *conn, struct node_rx_pdu *rx)
 {
 	struct proc_ctx *ctx_l;
 	struct proc_ctx *ctx_r;
@@ -1751,15 +1745,18 @@ void ull_cp_rx(struct ll_conn *conn, memq_link_t *link, struct node_rx_pdu *rx)
 					 pdu_is_unknown(pdu, ctx_r) ||
 					 pdu_is_reject_ext(pdu, ctx_r));
 
-			if (unexpected_l && unexpected_r) {
-				/* Local active procedure
-				 * Unexpected local procedure PDU
-				 * Remote active procedure
-				 * Unexpected remote procedure PDU
+			if (unexpected_l == unexpected_r) {
+				/* Both Local and Remote procedure active
+				 * and PDU is either
+				 * unexpected by both
+				 * or
+				 * expected by both
+				 *
+				 * Both situations is a result of invalid behaviour
 				 */
-
-				/* Invalid Behaviour */
-				conn->llcp_terminate.reason_final = BT_HCI_ERR_LOCALHOST_TERM_CONN;
+				conn->llcp_terminate.reason_final =
+					unexpected_r ? BT_HCI_ERR_LMP_PDU_NOT_ALLOWED :
+						       BT_HCI_ERR_UNSPECIFIED;
 			} else if (unexpected_l) {
 				/* Local active procedure
 				 * Unexpected local procedure PDU
@@ -1768,7 +1765,7 @@ void ull_cp_rx(struct ll_conn *conn, memq_link_t *link, struct node_rx_pdu *rx)
 				 */
 
 				/* Process PDU in remote procedure */
-				llcp_rr_rx(conn, ctx_r, link, rx);
+				llcp_rr_rx(conn, ctx_r, rx);
 			} else if (unexpected_r) {
 				/* Local active procedure
 				 * Expected local procedure PDU
@@ -1777,17 +1774,11 @@ void ull_cp_rx(struct ll_conn *conn, memq_link_t *link, struct node_rx_pdu *rx)
 				 */
 
 				/* Process PDU in local procedure */
-				llcp_lr_rx(conn, ctx_l, link, rx);
-			} else {
-				/* Local active procedure
-				 * Expected local procedure PDU
-				 * Remote active procedure
-				 * Expected remote procedure PDU
-				 */
-
-				/* This cannot happen */
-				LL_ASSERT(0);
+				llcp_lr_rx(conn, ctx_l, rx);
 			}
+			/* no else clause as this cannot occur with the logic above:
+			 * if they are not identical then one must be true
+			 */
 		} else {
 			/* Local active procedure
 			 * No remote active procedure
@@ -1805,7 +1796,7 @@ void ull_cp_rx(struct ll_conn *conn, memq_link_t *link, struct node_rx_pdu *rx)
 
 				/* Process PDU as a new remote request */
 				LL_ASSERT(pdu_valid);
-				llcp_rr_new(conn, link, rx, true);
+				llcp_rr_new(conn, rx, true);
 			} else {
 				/* Local active procedure
 				 * Expected local procedure PDU
@@ -1813,7 +1804,7 @@ void ull_cp_rx(struct ll_conn *conn, memq_link_t *link, struct node_rx_pdu *rx)
 				 */
 
 				/* Process PDU in local procedure */
-				llcp_lr_rx(conn, ctx_l, link, rx);
+				llcp_lr_rx(conn, ctx_l, rx);
 			}
 		}
 	} else if (ctx_r) {
@@ -1822,14 +1813,14 @@ void ull_cp_rx(struct ll_conn *conn, memq_link_t *link, struct node_rx_pdu *rx)
 		 */
 
 		/* Process PDU in remote procedure */
-		llcp_rr_rx(conn, ctx_r, link, rx);
+		llcp_rr_rx(conn, ctx_r, rx);
 	} else {
 		/* No local active procedure
 		 * No remote active procedure
 		 */
 
 		/* Process PDU as a new remote request */
-		llcp_rr_new(conn, link, rx, pdu_valid);
+		llcp_rr_new(conn, rx, pdu_valid);
 	}
 }
 

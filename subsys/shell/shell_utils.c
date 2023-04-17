@@ -194,7 +194,7 @@ static char make_argv(char **ppcmd, uint8_t c)
 			}
 		}
 
-		if (!quote && isspace((int) c)) {
+		if (!quote && isspace((int) c) != 0) {
 			break;
 		}
 
@@ -219,7 +219,7 @@ char z_shell_make_argv(size_t *argc, const char **argv, char *cmd,
 			break;
 		}
 
-		if (isspace((int) c)) {
+		if (isspace((int) c) != 0) {
 			*cmd++ = '\0';
 			continue;
 		}
@@ -431,9 +431,9 @@ void z_shell_spaces_trim(char *str)
 	}
 
 	for (uint16_t i = 0; i < len - 1; i++) {
-		if (isspace((int)str[i])) {
+		if (isspace((int)str[i]) != 0) {
 			for (uint16_t j = i + 1; j < len; j++) {
-				if (isspace((int)str[j])) {
+				if (isspace((int)str[j]) != 0) {
 					shift++;
 					continue;
 				}
@@ -465,7 +465,7 @@ static void buffer_trim(char *buff, uint16_t *buff_len)
 		return;
 	}
 
-	while (isspace((int) buff[*buff_len - 1U])) {
+	while (isspace((int) buff[*buff_len - 1U]) != 0) {
 		*buff_len -= 1U;
 		if (*buff_len == 0U) {
 			buff[0] = '\0';
@@ -477,7 +477,7 @@ static void buffer_trim(char *buff, uint16_t *buff_len)
 	/* Counting whitespace characters starting from beginning of the
 	 * command.
 	 */
-	while (isspace((int) buff[i++])) {
+	while (isspace((int) buff[i++]) != 0) {
 	}
 
 
@@ -488,10 +488,10 @@ static void buffer_trim(char *buff, uint16_t *buff_len)
 	}
 }
 
-void z_shell_cmd_trim(const struct shell *shell)
+void z_shell_cmd_trim(const struct shell *sh)
 {
-	buffer_trim(shell->ctx->cmd_buff, &shell->ctx->cmd_buff_len);
-	shell->ctx->cmd_buff_pos = shell->ctx->cmd_buff_len;
+	buffer_trim(sh->ctx->cmd_buff, &sh->ctx->cmd_buff_len);
+	sh->ctx->cmd_buff_pos = sh->ctx->cmd_buff_len;
 }
 
 const struct device *shell_device_lookup(size_t idx,
