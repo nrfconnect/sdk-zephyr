@@ -54,7 +54,14 @@
     - sample.net.zperf.netusb_rndis
   platforms:
     - nrf52833dk_nrf52833
-  comment: "Ram overflows, also in the upstream"
+    - nrf5340dk_nrf5340_cpuapp_ns
+  comment: "Ram/flash overflows, also in the upstream"
+
+- scenarios:
+    - net.mqtt.tls
+  platforms:
+    - nrf5340dk_nrf5340_cpuapp_ns
+  comment: "Ram/flash overflows, also in the upstream"
 
 - scenarios:
     - kernel.common.picolibc
