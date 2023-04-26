@@ -260,7 +260,6 @@ class TestPlan:
         per_set = int(total / sets)
         num_extra_sets = total - (per_set * sets)
 
-        # Try and be more fair for rounding error with integer division
         # so the last subset doesn't get overloaded, we add 1 extra to
         # subsets 1..num_extra_sets.
         if subset <= num_extra_sets:
@@ -271,6 +270,7 @@ class TestPlan:
             start = ((subset - num_extra_sets - 1) * per_set) + base
             end = start + per_set
 
+        print(f"SUBSET START {start} END {end} TOTAL {total}")
         sliced_instances = islice(to_run.items(), start, end)
         skipped = {k : v for k,v in self.instances.items() if v.status == 'skipped'}
         errors = {k : v for k,v in self.instances.items() if v.status == 'error'}
