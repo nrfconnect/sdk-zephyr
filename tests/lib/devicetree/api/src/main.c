@@ -180,6 +180,16 @@ ZTEST(devicetree_api, test_inst_props)
 			      strlen(label_startswith)), "");
 }
 
+#undef DT_DRV_COMPAT
+#define DT_DRV_COMPAT vnd_device_with_props
+ZTEST(devicetree_api, test_any_inst_prop)
+{
+	zassert_equal(DT_ANY_INST_HAS_PROP_STATUS_OKAY(foo), 1, "");
+	zassert_equal(DT_ANY_INST_HAS_PROP_STATUS_OKAY(bar), 1, "");
+	zassert_equal(DT_ANY_INST_HAS_PROP_STATUS_OKAY(baz), 0, "");
+	zassert_equal(DT_ANY_INST_HAS_PROP_STATUS_OKAY(does_not_exist), 0, "");
+}
+
 ZTEST(devicetree_api, test_default_prop_access)
 {
 	/*
@@ -2467,17 +2477,10 @@ ZTEST(devicetree_api, test_pinctrl)
 	zassert_equal(DT_INST_PINCTRL_HAS_NAME(0, f_o_o2), 0, "");
 }
 
-static int test_mbox_init(const struct device *dev)
-{
-	ARG_UNUSED(dev);
-
-	return 0;
-}
-
-DEVICE_DT_DEFINE(DT_NODELABEL(test_mbox), test_mbox_init, NULL,
-		 NULL, NULL, POST_KERNEL, 90, NULL);
-DEVICE_DT_DEFINE(DT_NODELABEL(test_mbox_zero_cell), test_mbox_init, NULL,
-		 NULL, NULL, POST_KERNEL, 90, NULL);
+DEVICE_DT_DEFINE(DT_NODELABEL(test_mbox), NULL, NULL, NULL, NULL, POST_KERNEL,
+		 90, NULL);
+DEVICE_DT_DEFINE(DT_NODELABEL(test_mbox_zero_cell), NULL, NULL, NULL, NULL,
+		 POST_KERNEL, 90, NULL);
 
 ZTEST(devicetree_api, test_mbox)
 {

@@ -161,23 +161,22 @@ if(CONFIG_DNS_SD)
 endif()
 
 if(CONFIG_PCIE)
-  zephyr_linker_section(NAME irq_alloc GROUP RODATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-  zephyr_linker_section_configure(SECTION irq_alloc INPUT ".irq_alloc*" KEEP SORT NAME)
+  zephyr_iterable_section(NAME irq_alloc KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 endif()
 
-zephyr_linker_section(NAME log_strings KVMA RAM_REGION GROUP RODATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-zephyr_linker_section_configure(SECTION log_strings INPUT ".log_strings*" KEEP SORT NAME)
+zephyr_iterable_section(NAME log_strings KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
-zephyr_linker_section(NAME log_const KVMA RAM_REGION GROUP RODATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-zephyr_linker_section_configure(SECTION log_const INPUT ".log_const_*" KEEP SORT NAME)
+zephyr_iterable_section(NAME log_const KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
 zephyr_iterable_section(NAME shell KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
-zephyr_linker_section(NAME shell_root_cmds KVMA RAM_REGION GROUP RODATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-zephyr_linker_section_configure(SECTION shell_root_cmds INPUT ".shell_root_cmd_*" KEEP SORT NAME)
+zephyr_iterable_section(NAME shell_root_cmds KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
-zephyr_linker_section(NAME font_entry KVMA RAM_REGION GROUP RODATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-zephyr_linker_section_configure(SECTION font_entry INPUT "._cfb_font.*" KEEP SORT NAME)
+zephyr_iterable_section(NAME shell_subcmds KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
+
+zephyr_iterable_section(NAME shell_dynamic_subcmds KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
+
+zephyr_iterable_section(NAME cfb_font KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
 zephyr_iterable_section(NAME tracing_backend KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
