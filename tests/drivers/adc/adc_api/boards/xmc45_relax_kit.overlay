@@ -1,4 +1,8 @@
-#include <zephyr/dt-bindings/adc/adc.h>
+/*
+ * Copyright 2023 Schlumberger
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 / {
 	zephyr,user {

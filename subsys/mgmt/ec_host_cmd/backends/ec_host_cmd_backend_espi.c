@@ -78,7 +78,7 @@ static void espi_handler(const struct device *dev, struct espi_callback *cb,
 	 * bigger than rx buf size or the shared memory size
 	 */
 	if (rx_header->prtcl_ver != 3 ||
-	    rx_valid_data_size > CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER ||
+	    rx_valid_data_size > CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER_SIZE ||
 	    rx_valid_data_size > shared_size) {
 		memcpy(hc_espi->rx_ctx->buf, (void *)rx_header, RX_HEADER_SIZE);
 		hc_espi->rx_ctx->len = RX_HEADER_SIZE;
@@ -147,7 +147,7 @@ struct ec_host_cmd_backend *ec_host_cmd_backend_get_espi(const struct device *de
 	return &ec_host_cmd_espi;
 }
 
-#if DT_NODE_EXISTS(DT_CHOSEN(zephyr_host_cmd_backend))
+#if DT_NODE_EXISTS(DT_CHOSEN(zephyr_host_cmd_espi_backend))
 static int host_cmd_init(void)
 {
 	const struct device *const dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_host_cmd_backend));
