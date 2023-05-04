@@ -205,7 +205,7 @@ uint16_t ull_cp_cc_ongoing_handle(struct ll_conn *conn);
 /**
  * @brief Accept the remote device’s request to create cis.
  */
-void ull_cp_cc_accept(struct ll_conn *conn);
+void ull_cp_cc_accept(struct ll_conn *conn, uint32_t cis_offset_min);
 
 /**
  * @brief Reject the remote device’s request to create cis.
@@ -221,6 +221,11 @@ void ull_cp_cc_established(struct ll_conn *conn, uint8_t error_code);
  * @brief CIS creation ongoing.
  */
 bool ull_lp_cc_is_active(struct ll_conn *conn);
+
+/**
+ * @brief CIS creation ongoing or enqueued.
+ */
+bool ull_lp_cc_is_enqueued(struct ll_conn *conn);
 
 /**
  * @brief Initiate a Channel Map Update Procedure.

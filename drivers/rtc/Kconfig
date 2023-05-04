@@ -8,6 +8,16 @@ menuconfig RTC
 
 if RTC
 
+module = RTC
+module-str = rtc
+source "subsys/logging/Kconfig.template.log_config"
+
+config RTC_INIT_PRIORITY
+	int "RTC init priority"
+	default KERNEL_INIT_PRIORITY_DEVICE
+	help
+	  RTC device driver initialization priority.
+
 config RTC_ALARM
 	bool "RTC driver alarm support"
 	help
@@ -26,5 +36,7 @@ config RTC_CALIBRATION
 	  calibration.
 
 source "drivers/rtc/Kconfig.emul"
+source "drivers/rtc/Kconfig.pcf8523"
+source "drivers/rtc/Kconfig.mc146818"
 
 endif # RTC

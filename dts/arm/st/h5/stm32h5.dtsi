@@ -6,11 +6,13 @@
 
 
 #include <arm/armv8-m.dtsi>
+#include <zephyr/dt-bindings/adc/adc.h>
 #include <zephyr/dt-bindings/clock/stm32h5_clock.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/reset/stm32h5_reset.h>
 #include <zephyr/dt-bindings/dma/stm32_dma.h>
 #include <zephyr/dt-bindings/pwm/pwm.h>
+#include <zephyr/dt-bindings/adc/stm32l4_adc.h>
 #include <freq.h>
 
 / {
@@ -262,6 +264,10 @@
 			#io-channel-cells = <1>;
 			temp-channel = <16>;
 			vref-channel = <17>;
+			resolutions = <STM32_ADC_RES(12, 0x00)
+				       STM32_ADC_RES(10, 0x01)
+				       STM32_ADC_RES(8, 0x02)
+				       STM32_ADC_RES(6, 0x03)>;
 		};
 
 		rtc: rtc@44007800 {
@@ -462,6 +468,18 @@
 			dma-offset = <8>;
 			status = "disabled";
 		};
+	};
+
+	die_temp: dietemp {
+		compatible = "st,stm32-temp-cal";
+		ts-cal1-addr = <0x08fff814>;
+		ts-cal2-addr = <0x08fff818>;
+		ts-cal1-temp = <30>;
+		ts-cal2-temp = <130>;
+		ts-cal-vrefanalog = <3300>;
+		ts-cal-resolution = <12>;
+		io-channels = <&adc1 16>;
+		status = "disabled";
 	};
 };
 
