@@ -19,13 +19,13 @@
  */
 enum wifi_security_type {
 	WIFI_SECURITY_TYPE_NONE = 0,
-	WIFI_SECURITY_TYPE_WEP,
-	WIFI_SECURITY_TYPE_WPA_PSK,
 	WIFI_SECURITY_TYPE_PSK,
 	WIFI_SECURITY_TYPE_PSK_SHA256,
 	WIFI_SECURITY_TYPE_SAE,
 	WIFI_SECURITY_TYPE_WAPI,
 	WIFI_SECURITY_TYPE_EAP,
+	WIFI_SECURITY_TYPE_WEP,
+	WIFI_SECURITY_TYPE_WPA_PSK,
 
 	__WIFI_SECURITY_TYPE_AFTER_LAST,
 	WIFI_SECURITY_TYPE_MAX = __WIFI_SECURITY_TYPE_AFTER_LAST - 1,
@@ -336,4 +336,41 @@ enum wifi_twt_setup_resp_status {
 	WIFI_TWT_RESP_NOT_RECEIVED,
 };
 
+enum wifi_twt_fail_reason {
+	WIFI_TWT_FAIL_UNSPECIFIED,
+	WIFI_TWT_FAIL_CMD_EXEC_FAIL,
+	WIFI_TWT_FAIL_OPERATION_NOT_SUPPORTED,
+	WIFI_TWT_FAIL_UNABLE_TO_GET_IFACE_STATUS,
+	WIFI_TWT_FAIL_DEVICE_NOT_CONNECTED,
+	WIFI_TWT_FAIL_PEER_NOT_HE_CAPAB,
+	WIFI_TWT_FAIL_PEER_NOT_TWT_CAPAB,
+	WIFI_TWT_FAIL_OPERATION_IN_PROGRESS,
+	WIFI_TWT_FAIL_INVALID_FLOW_ID,
+};
+
+static const char * const twt_err_code_tbl[] = {
+	[WIFI_TWT_FAIL_UNSPECIFIED] = "Unspecfied",
+	[WIFI_TWT_FAIL_CMD_EXEC_FAIL] = "Command Execution failed",
+	[WIFI_TWT_FAIL_OPERATION_NOT_SUPPORTED] =
+		"Operation not supported",
+	[WIFI_TWT_FAIL_UNABLE_TO_GET_IFACE_STATUS] =
+		"Unable to get iface status",
+	[WIFI_TWT_FAIL_DEVICE_NOT_CONNECTED] =
+		"Device not connected",
+	[WIFI_TWT_FAIL_PEER_NOT_HE_CAPAB] = "Peer not HE capable",
+	[WIFI_TWT_FAIL_PEER_NOT_TWT_CAPAB] = "Peer not TWT capable",
+	[WIFI_TWT_FAIL_OPERATION_IN_PROGRESS] =
+		"Operation already in progress",
+	[WIFI_TWT_FAIL_INVALID_FLOW_ID] =
+		"Invalid negotiated flow id",
+};
+
+static inline const char *get_twt_err_code_str(int16_t err_no)
+{
+	if ((err_no) < ARRAY_SIZE(twt_err_code_tbl)) {
+		return twt_err_code_tbl[err_no];
+	}
+
+	return "<unknown>";
+}
 #endif /* ZEPHYR_INCLUDE_NET_WIFI_H_ */

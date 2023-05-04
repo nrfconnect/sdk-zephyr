@@ -29,12 +29,17 @@
 #define MEM_BLK_ALIGN 4
 
 RTIO_EXECUTOR_SIMPLE_DEFINE(simple_exec_simp);
+/*
+ * Purposefully double the block count and half the block size. This leaves the same size mempool,
+ * but ensures that allocation is done in larger blocks because the tests assume a larger block
+ * size.
+ */
 RTIO_DEFINE_WITH_MEMPOOL(r_simple_simp, (struct rtio_executor *)&simple_exec_simp, 4, 4,
-			 MEM_BLK_COUNT, MEM_BLK_SIZE, MEM_BLK_ALIGN);
+			 MEM_BLK_COUNT * 2, MEM_BLK_SIZE / 2, MEM_BLK_ALIGN);
 
 RTIO_EXECUTOR_CONCURRENT_DEFINE(simple_exec_con, 1);
 RTIO_DEFINE_WITH_MEMPOOL(r_simple_con, (struct rtio_executor *)&simple_exec_con, 4, 4,
-			 MEM_BLK_COUNT, MEM_BLK_SIZE, MEM_BLK_ALIGN);
+			 MEM_BLK_COUNT * 2, MEM_BLK_SIZE / 2, MEM_BLK_ALIGN);
 
 RTIO_IODEV_TEST_DEFINE(iodev_test_simple);
 
@@ -325,7 +330,7 @@ static void test_rtio_simple_mempool_(struct rtio *r, int run_count)
 	zassert_equal(buffer_len, MEM_BLK_SIZE);
 	zassert_mem_equal(buffer, mempool_data, MEM_BLK_SIZE, "Data expected to be the same");
 	TC_PRINT("Calling rtio_cqe_get_mempool_buffer\n");
-	rtio_release_buffer(r, buffer);
+	rtio_release_buffer(r, buffer, buffer_len);
 }
 
 static void rtio_simple_mempool_test(void *a, void *b, void *c)
@@ -433,7 +438,7 @@ void test_rtio_transaction_(struct rtio *r)
 		}
 		uintptr_t idx = *(uintptr_t *)cqe->userdata;
 
-		TC_PRINT("userdata is %p, value %lu\n", cqe->userdata, idx);
+		TC_PRINT("userdata is %p, value %" PRIuPTR "\n", cqe->userdata, idx);
 		zassert(idx == 0 || idx == 1, "idx should be 0 or 1");
 		seen[idx] = true;
 		rtio_spsc_release(r->cq);
