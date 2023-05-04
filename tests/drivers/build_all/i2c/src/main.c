@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-int main(void)
+void main(void)
 {
-	return 0;
 }
