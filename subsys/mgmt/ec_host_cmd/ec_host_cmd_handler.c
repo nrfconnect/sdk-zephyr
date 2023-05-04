@@ -13,14 +13,29 @@
 
 LOG_MODULE_REGISTER(host_cmd_handler, CONFIG_EC_HC_LOG_LEVEL);
 
+#define EC_HOST_CMD_CHOSEN_BACKEND_LIST                                                            \
+	zephyr_host_cmd_espi_backend, zephyr_host_cmd_shi_backend, zephyr_host_cmd_uart_backend
+
+#define EC_HOST_CMD_ADD_CHOSEN(chosen) COND_CODE_1(DT_NODE_EXISTS(DT_CHOSEN(chosen)), (1), (0))
+
+#define NUMBER_OF_CHOSEN_BACKENDS                                                                  \
+	FOR_EACH(EC_HOST_CMD_ADD_CHOSEN, (+), EC_HOST_CMD_CHOSEN_BACKEND_LIST)                     \
+	+0
+
+BUILD_ASSERT(NUMBER_OF_CHOSEN_BACKENDS < 2, "Number of chosen backends > 1");
+
 #define RX_HEADER_SIZE (sizeof(struct ec_host_cmd_request_header))
 #define TX_HEADER_SIZE (sizeof(struct ec_host_cmd_response_header))
 
 #define EC_HOST_CMD_DEFINE(_name)                                                                  \
-	COND_CODE_1(CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER_DEF,                                      \
-		    (static uint8_t _name##_rx_buffer[CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER];), ()) \
-	COND_CODE_1(CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER_DEF,                                      \
-		    (static uint8_t _name##_tx_buffer[CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER];), ()) \
+	COND_CODE_1(                                                                               \
+		CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER_DEF,                                          \
+		(static uint8_t _name##_rx_buffer[CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER_SIZE];),    \
+		())                                                                                \
+	COND_CODE_1(                                                                               \
+		CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER_DEF,                                          \
+		(static uint8_t _name##_tx_buffer[CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER_SIZE];),    \
+		())                                                                                \
 	static K_KERNEL_STACK_DEFINE(_name##stack, CONFIG_EC_HOST_CMD_HANDLER_STACK_SIZE);         \
 	static struct k_thread _name##thread;                                                      \
 	static struct ec_host_cmd _name = {                                                        \
@@ -33,9 +48,9 @@ LOG_MODULE_REGISTER(host_cmd_handler, CONFIG_EC_HC_LOG_LEVEL);
 			{                                                                          \
 				.buf = COND_CODE_1(CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER_DEF,       \
 						   (_name##_tx_buffer), (NULL)),                   \
-				.len_max =                                                         \
-					COND_CODE_1(CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER_DEF,      \
-						    (CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER), (0)),  \
+				.len_max = COND_CODE_1(                                            \
+					CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER_DEF,                  \
+					(CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER_SIZE), (0)),         \
 			},                                                                         \
 		.thread = &_name##thread,                                                          \
 		.stack = _name##stack,                                                             \

@@ -93,7 +93,7 @@ static int request_expected_size(const struct ec_host_cmd_request_header *r)
 
 #define EC_HOST_CMD_UART_DEFINE(_name)                                                             \
 	static struct ec_host_cmd_uart_ctx _name##_hc_uart = {                                     \
-		.rx_buf_size = CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER,                               \
+		.rx_buf_size = CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER_SIZE,                          \
 	};                                                                                         \
 	static struct ec_host_cmd_backend _name = {                                                \
 		.api = &ec_host_cmd_api,                                                           \
@@ -302,7 +302,7 @@ struct ec_host_cmd_backend *ec_host_cmd_backend_get_uart(const struct device *de
 	return &ec_host_cmd_uart;
 }
 
-#if DT_NODE_EXISTS(DT_CHOSEN(zephyr_host_cmd_backend))
+#if DT_NODE_EXISTS(DT_CHOSEN(zephyr_host_cmd_uart_backend))
 static int host_cmd_init(void)
 {
 	const struct device *const dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_host_cmd_backend));
