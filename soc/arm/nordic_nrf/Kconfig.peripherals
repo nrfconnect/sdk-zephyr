@@ -14,7 +14,7 @@ config HAS_HW_NRF_BPROT
 
 config HAS_HW_NRF_CC310
 	def_bool $(dt_compat_enabled,$(DT_COMPAT_NORDIC_NRF_CC310)) || \
-		 ($(dt_nodelabel_enabled,psa_rng) && SOC_NRF9160)
+		 ($(dt_nodelabel_enabled,psa_rng) && SOC_SERIES_NRF91X)
 
 config HAS_HW_NRF_CC312
 	def_bool $(dt_compat_enabled,$(DT_COMPAT_NORDIC_NRF_CC312)) || \
