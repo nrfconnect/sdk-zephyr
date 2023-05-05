@@ -106,3 +106,9 @@ else()
     set(WEST WEST-NOTFOUND CACHE INTERNAL "West")
   endif()
 endif()
+
+if(DEFINED WEST_PYTHON AND WIN32)
+  # Replace windows back-slashes in path with forward-slashes to prevent issues
+  # with the back-slashes being wrongly interpreted as escape sequence codes.
+  file(TO_CMAKE_PATH "${WEST_PYTHON}" WEST_PYTHON)
+endif()
