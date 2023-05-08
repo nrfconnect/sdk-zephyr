@@ -3192,11 +3192,11 @@ static void sc_restore_rsp(struct bt_conn *conn,
 }
 
 static struct bt_gatt_indicate_params sc_restore_params[CONFIG_BT_MAX_CONN];
+static uint16_t sc_range[2];
 
 static void sc_restore(struct bt_conn *conn)
 {
 	struct gatt_sc_cfg *cfg;
-	uint16_t sc_range[2];
 	uint8_t index;
 
 	cfg = find_sc_cfg(conn->id, &conn->le.dst);
