@@ -49,6 +49,13 @@
   comment: "libsdl2-dev package not available"
 
 - scenarios:
+    - sample.net.sockets.echo_server.usbnet
+    - sample.net.sockets.echo_server.usbnet_composite
+  platforms:
+    - nrf5340dk_nrf5340_cpuapp_ns
+  comment: "Ram/flash overflows, also in the upstream"
+
+- scenarios:
     - sample.net.zperf.netusb_ecm
     - sample.net.zperf.netusb_eem
     - sample.net.zperf.netusb_rndis
