@@ -262,13 +262,14 @@ config PSA_HAS_KEY_DERIVATION
 	depends on PSA_WANT_ALG_HKDF 		|| \
 		   PSA_WANT_ALG_PBKDF2_HMAC	|| \
 		   PSA_WANT_ALG_TLS12_PRF	|| \
-		   PSA_WANT_ALG_TLS12_PSK_TO_MS
+		   PSA_WANT_ALG_TLS12_PSK_TO_MS || \
+		   PSA_WANT_ALG_TLS12_ECJPAKE_TO_PMS
 	help
 	  Prompt-less configuration that states that key derivation is supported.
 
 config PSA_WANT_ALG_HKDF
 	bool
-	prompt "PSA HKFD support" if !PSA_PROMPTLESS
+	prompt "PSA HKDF support" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 	depends on PSA_WANT_ALG_HMAC
 
@@ -285,6 +286,10 @@ config PSA_WANT_ALG_TLS12_PRF
 config PSA_WANT_ALG_TLS12_PSK_TO_MS
 	bool
 	prompt "PSA TLS 1.2 PSK to MS support" if !PSA_PROMPTLESS
+
+config PSA_WANT_ALG_TLS12_ECJPAKE_TO_PMS
+	bool
+	prompt "PSA TLS 1.2 EC J-PAKE to PMS support" if !PSA_PROMPTLESS
 
 endmenu # PSA Key derivation support
 
@@ -425,3 +430,19 @@ config PSA_WANT_ALG_STREAM_CIPHER
 	bool
 	prompt "PSA stream cipher support" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
+
+config PSA_WANT_ALG_JPAKE
+	bool
+	prompt "PSA EC J-PAKE support" if !PSA_PROMPTLESS
+	default y if !PSA_DEFAULT_OFF
+
+config PSA_WANT_ALG_SPAKE2P
+	bool
+	prompt "PSA SPAKE2+ support" if !PSA_PROMPTLESS
+	default y if !PSA_DEFAULT_OFF
+
+config PSA_WANT_ALG_SRP
+	bool
+	prompt "PSA SRP support" if !PSA_PROMPTLESS
+	default n
+	select EXPERIMENTAL
