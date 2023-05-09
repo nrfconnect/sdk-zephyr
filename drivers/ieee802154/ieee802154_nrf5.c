@@ -754,6 +754,8 @@ static void nrf5_irq_config(const struct device *dev)
 #endif
 }
 
+static volatile bool m_nrf5_init_called;
+
 static int nrf5_init(const struct device *dev)
 {
 	const struct nrf5_802154_config *nrf5_radio_cfg = NRF5_802154_CFG(dev);
@@ -778,11 +780,15 @@ static int nrf5_init(const struct device *dev)
 
 	LOG_INF("nRF5 802154 radio initialized");
 
+	m_nrf5_init_called = true;
+
 	return 0;
 }
 
 static void nrf5_iface_init(struct net_if *iface)
 {
+	__ASSERT(m_nrf5_init_called, "nrf5_init did not finish");
+
 	const struct device *dev = net_if_get_device(iface);
 	struct nrf5_802154_data *nrf5_radio = NRF5_802154_DATA(dev);
 
