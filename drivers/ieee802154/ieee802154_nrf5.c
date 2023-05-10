@@ -787,7 +787,10 @@ static int nrf5_init(const struct device *dev)
 
 static void nrf5_iface_init(struct net_if *iface)
 {
-	__ASSERT(m_nrf5_init_called, "nrf5_init did not finish");
+#ifdef NDEBUG
+#error Do not define NDEBUG
+#endif
+	assert(m_nrf5_init_called);
 
 	const struct device *dev = net_if_get_device(iface);
 	struct nrf5_802154_data *nrf5_radio = NRF5_802154_DATA(dev);
