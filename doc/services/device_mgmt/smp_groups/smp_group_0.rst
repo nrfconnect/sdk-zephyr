@@ -28,6 +28,8 @@ OS management group defines following commands:
     +-------------------+-----------------------------------------------+
     | ``7``             | OS/Application info                           |
     +-------------------+-----------------------------------------------+
+    | ``8``             | Bootloader parameters                         |
+    +-------------------+-----------------------------------------------+
 
 Echo command
 ************
@@ -668,4 +670,113 @@ where:
     +--------------+-----------------------------------------------+
     | "rc"         | :c:enum:`mcumgr_err_t`                        |
     |              | only appears if non-zero (error condition).   |
+    +--------------+-----------------------------------------------+
+
+Bootloader Information
+**********************
+
+Allows to obtain information on board bootloader and its parameters.
+
+Bootloader Information Request
+==============================
+
+Bootloader information request header:
+
+.. table::
+    :align: center
+
+    +--------+--------------+----------------+
+    | ``OP`` | ``Group ID`` | ``Command ID`` |
+    +========+==============+================+
+    | ``0``  | ``0``        |  ``8``         |
+    +--------+--------------+----------------+
+
+CBOR data of request:
+
+.. code-block:: none
+
+    {
+        (str,opt)"query"  : (str)
+    }
+
+where:
+
+.. table::
+    :align: center
+
+    +--------------+-----------------------------------------------+
+    | "query"      | Is string representing query for parameters,  |
+    |              | with no restrictions how the query looks like |
+    |              | as processing of query is left for bootloader |
+    |              | backend.                                      |
+    +--------------+-----------------------------------------------+
+    | "rc"         | :c:enum:`mcumgr_err_t`                        |
+    |              | only appears if non-zero (error condition).   |
+    +--------------+-----------------------------------------------+
+
+Bootloader Information Response
+===============================
+
+Bootloader information response header:
+
+.. table::
+    :align: center
+
+    +--------+--------------+----------------+
+    | ``OP`` | ``Group ID`` | ``Command ID`` |
+    +========+==============+================+
+    | ``2``  | ``0``        |  ``8``         |
+    +--------+--------------+----------------+
+
+In case when no "query" has been provided in request,
+CBOR data of response:
+
+.. code-block:: none
+
+    {
+        (str)"bootloader"      : (str)
+        (opt,str)"rc"          : (int)
+    }
+
+where:
+
+.. table::
+    :align: center
+
+    +--------------+-----------------------------------------------+
+    | "bootloader" | String represengint bootloader name           |
+    +--------------+-----------------------------------------------+
+    | "rc"         | :c:enum:`mcumgr_err_t`                        |
+    |              | only appears if non-zero (error condition).   |
+    +--------------+-----------------------------------------------+
+
+
+In case when "query" is provided:
+
+.. code-block:: none
+
+    {
+        (str,opt)<param_name>   : ()
+        ...
+        (opt,str)"rc"           : (int)
+    }
+
+where:
+
+.. table::
+    :align: center
+
+    +--------------+-----------------------------------------------+
+    | <param_name> | Response to "query". This is optional and may |
+    |              | be left out in case when query yields no      |
+    |              | response, but the "rc" code needs to          |
+    |              | `MGMT_ERR_ENOENT`.                            |
+    |              | Response may have more than one paraeter      |
+    |              | reported back or it may be a map, that is     |
+    |              | dependent on bootloader backednd and query.   |
+    +--------------+-----------------------------------------------+
+    | "rc"         | :c:enum:`mcumgr_err_t`                        |
+    |              | only appears if non-zero (error condition).   |
+    |              | `MGMT_ERR_ENOENT` shall be returned when      |
+    |              | query has no result.                          |
     +--------------+-----------------------------------------------+
