@@ -255,6 +255,11 @@ img_mgmt_state_read(struct smp_streamer *ctxt)
 	     zcbor_list_start_encode(zse, 2 * CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER);
 
 	for (i = 0; ok && i < 2 * CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER; i++) {
+		/* Slot 2 mcuboot_primary_1 only exists when ram_flash is enabled*/
+		if (i == 2 && !IS_ENABLED(CONFIG_FLASH_SIMULATOR)) {
+			continue;
+		}
+
 		int rc = img_mgmt_read_info(i, &ver, hash, &flags);
 		if (rc != 0) {
 			continue;

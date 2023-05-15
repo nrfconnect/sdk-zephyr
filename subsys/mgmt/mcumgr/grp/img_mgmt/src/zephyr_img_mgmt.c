@@ -709,7 +709,7 @@ img_mgmt_erased_val(int slot, uint8_t *erased_val)
 
 	rc = flash_area_open(area_id, &fa);
 	if (rc != 0) {
-		LOG_ERR("Failed to open flash area ID %u: %d", area_id, rc);
+		LOG_WRN("Failed to open flash area ID %u: %d", area_id, rc);
 		return MGMT_ERR_EUNKNOWN;
 	}
 
