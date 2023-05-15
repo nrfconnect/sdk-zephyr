@@ -74,8 +74,8 @@
   - "samples/hci_rpmsg/**/*"
   - "samples/subsys/mgmt/mcumgr/smp_svr/**/*"
   - any:
-    - "subsys/bluetooth/**/*"
-    - "!subsys/bluetooth/mesh/**/*"
+      - "subsys/bluetooth/**/*"
+      - "!subsys/bluetooth/mesh/**/*"
 
 "CI-thread-test":
   - "**/*"
@@ -94,9 +94,9 @@
   - "drivers/net/**/*"
   - "samples/hci_rpmsg/**/*"
   - any:
-    - "subsys/bluetooth/**/*"
-    - "!subsys/bluetooth/mesh/**/*"
-    - "!subsys/bluetooth/audio/**/*"
+      - "subsys/bluetooth/**/*"
+      - "!subsys/bluetooth/mesh/**/*"
+      - "!subsys/bluetooth/audio/**/*"
 
 "CI-find-my-test":
   - "**/*"
