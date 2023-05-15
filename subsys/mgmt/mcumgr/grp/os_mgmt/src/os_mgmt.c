@@ -30,7 +30,7 @@
 #include <zephyr/mgmt/mcumgr/mgmt/callbacks.h>
 #endif
 
-#ifdef CONFIG_MCUMGR_GRP_OS_INFO
+#if defined(CONFIG_MCUMGR_GRP_OS_INFO) || defined(CONFIG_MCUMGR_GRP_OS_BOOTLOADER_INFO)
 #include <stdio.h>
 #include <version.h>
 #include <os_mgmt_processor.h>
@@ -358,6 +358,56 @@ os_mgmt_mcumgr_params(struct smp_streamer *ctxt)
 	     zcbor_uint32_put(zse, CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE)	&&
 	     zcbor_tstr_put_lit(zse, "buf_count")		&&
 	     zcbor_uint32_put(zse, CONFIG_MCUMGR_TRANSPORT_NETBUF_COUNT);
+
+	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
+}
+#endif
+
+#if defined(CONFIG_MCUMGR_GRP_OS_BOOTLOADER_INFO)
+
+#if defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SINGLE_APP)
+#define BOOTLOADER_MODE OS_MGMT_BOOTLOADER_INFO_MCUBOOT_MODE_SINGLE_APP
+#elif defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_WITHOUT_SCRATCH)
+#define BOOTLOADER_MODE OS_MGMT_BOOTLOADER_INFO_MCUBOOT_MODE_SWAP_WITHOUT_SCRATCH
+#elif defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_SCRATCH)
+#define BOOTLOADER_MODE OS_MGMT_BOOTLOADER_INFO_MCUBOOT_MODE_SWAP_SCRATCH
+#elif defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_DIRECT_XIP)
+#define BOOTLOADER_MODE OS_MGMT_BOOTLOADER_INFO_MCUBOOT_MODE_DIRECT_XIP
+#else
+#define BOOTLOADER_MODE OS_MGMT_BOOTLOADER_INFO_MCUBOOT_MODE_UNKNOWN
+#endif
+
+static int
+os_mgmt_bootloader_info(struct smp_streamer *ctxt)
+{
+	zcbor_state_t *zse = ctxt->writer->zs;
+	zcbor_state_t *zsd = ctxt->reader->zs;
+	struct zcbor_string query = { 0 };
+	size_t decoded;
+	bool ok;
+
+	struct zcbor_map_decode_key_val bootloader_info[] = {
+		ZCBOR_MAP_DECODE_KEY_DECODER("query", zcbor_tstr_decode, &query),
+	};
+
+	if (zcbor_map_decode_bulk(zsd, bootloader_info, ARRAY_SIZE(bootloader_info), &decoded)) {
+		return MGMT_ERR_EINVAL;
+	}
+
+	/* If no parameter is recognized then just introduce the bootloade */
+	if (decoded == 0) {
+		ok = zcbor_tstr_put_lit(zse, "bootloader") &&
+		     zcbor_tstr_put_lit(zse, "MCUboot");
+	} else if (zcbor_map_decode_bulk_key_found(bootloader_info, ARRAY_SIZE(bootloader_info),
+		   "query") &&
+		   (sizeof("mode") - 1) == query.len &&
+		   memcmp("mode", query.value, query.len) == 0) {
+
+		ok = zcbor_tstr_put_lit(zse, "mode") &&
+		     zcbor_int32_put(zse, BOOTLOADER_MODE);
+	} else {
+		return MGMT_ERR_ENOENT;
+	}
 
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 }
@@ -698,6 +748,11 @@ static const struct mgmt_handler os_mgmt_group_handlers[] = {
 #ifdef CONFIG_MCUMGR_GRP_OS_INFO
 	[OS_MGMT_ID_INFO] = {
 		os_mgmt_info, NULL
+	},
+#endif
+#ifdef CONFIG_MCUMGR_GRP_OS_BOOTLOADER_INFO
+	[OS_MGMT_ID_BOOTLOADER_INFO] = {
+		os_mgmt_bootloader_info, NULL
 	},
 #endif
 };

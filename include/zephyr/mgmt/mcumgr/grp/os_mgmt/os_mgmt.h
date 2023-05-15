@@ -23,6 +23,7 @@ extern "C" {
 #define OS_MGMT_ID_RESET		5
 #define OS_MGMT_ID_MCUMGR_PARAMS	6
 #define OS_MGMT_ID_INFO			7
+#define OS_MGMT_ID_BOOTLOADER_INFO	8
 
 /**
  * Command result codes for OS management group.
@@ -107,6 +108,13 @@ struct os_mgmt_info_append {
  */
 int os_mgmt_translate_error_code(uint16_t ret);
 #endif
+
+/* MCUboot mode of operation */
+#define OS_MGMT_BOOTLOADER_INFO_MCUBOOT_MODE_SINGLE_APP			0
+#define OS_MGMT_BOOTLOADER_INFO_MCUBOOT_MODE_SWAP_SCRATCH		1
+#define OS_MGMT_BOOTLOADER_INFO_MCUBOOT_MODE_SWAP_WITHOUT_SCRATCH	2
+#define OS_MGMT_BOOTLOADER_INFO_MCUBOOT_MODE_DIRECT_XIP			3
+#define OS_MGMT_BOOTLOADER_INFO_MCUBOOT_MODE_UNKNOWN			-1
 
 #ifdef __cplusplus
 }
