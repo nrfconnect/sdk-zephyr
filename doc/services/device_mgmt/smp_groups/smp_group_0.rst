@@ -780,3 +780,48 @@ where:
     |              | `MGMT_ERR_ENOENT` shall be returned when      |
     |              | query has no result.                          |
     +--------------+-----------------------------------------------+
+
+Bootloader Information: MCUboot
+===============================
+
+In case when MCUboot is application bootloader empty request will
+be responded with:
+
+.. code-block:: none
+
+    {
+        (str)"bootloader"      : (str)"MCUboot"
+    }
+
+Currently "MCUboot" supports querying for mode of operation:
+
+.. code-block:: none
+
+    {
+        (str)"query"           : (str)"mode"
+    }
+
+Response to "mode" is:
+
+.. code-block:: none
+
+    {
+        (str)"mode"            : (int)
+    }
+
+where "mode" is one of:
+
+.. table::
+    :align: center
+
+    +-----+-------------------------------------------------+
+    | -1  | Unknown mode of MCUboot                         |
+    +-----+-------------------------------------------------+
+    |  0  | MCUboot is in single application mode           |
+    +-----+-------------------------------------------------+
+    |  1  | MCUboot is in swap using scratch partition mode |
+    +-----+-------------------------------------------------+
+    |  2  | MCUboot is in swap without scratch mode         |
+    +-----+-------------------------------------------------+
+    |  3  | MCUboot is in DirectXIP mode                    |
+    +-----+-------------------------------------------------+
