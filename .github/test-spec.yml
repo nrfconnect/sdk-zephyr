@@ -141,3 +141,7 @@
   - "subsys/dfu/**/*"
   - "subsys/net/**/*"
   - "subsys/settings/**/*"
+
+"CI-wifi":
+  - "subsys/net/l2/wifi/**/*"
+  - "subsys/net/l2/ethernet/**/*"
