@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <assert.h>
+
 #include <zephyr/kernel.h>
 #include <zephyr/ipc/ipc_service.h>
 #include <zephyr/device.h>
@@ -51,18 +53,21 @@ nrf_802154_ser_err_t nrf_802154_backend_init(void)
 
 	err = ipc_service_open_instance(ipc_instance);
 	if (err < 0 && err != -EALREADY) {
+		assert(false);
 		LOG_ERR("Failed to open IPC instance: %d", err);
 		return NRF_802154_SERIALIZATION_ERROR_INIT_FAILED;
 	}
 
 	err = ipc_service_register_endpoint(ipc_instance, &ept, &ept_cfg);
 	if (err < 0) {
+		assert(false);
 		LOG_ERR("Failed to register IPC endpoint: %d", err);
 		return NRF_802154_SERIALIZATION_ERROR_INIT_FAILED;
 	}
 
 	err = k_sem_take(&edp_bound_sem, IPC_BOUND_TIMEOUT_IN_MS);
 	if (err < 0) {
+		assert(false);
 		LOG_ERR("IPC endpoint bind timed out");
 		return NRF_802154_SERIALIZATION_ERROR_INIT_FAILED;
 	}
