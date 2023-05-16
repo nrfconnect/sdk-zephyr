@@ -359,13 +359,13 @@ config PSA_WANT_ECC_BRAINPOOL_P_R1_512
 	bool "PSA ECC Brainpool512r1 support"
 
 config PSA_WANT_ECC_MONTGOMERY_255
-	bool "PSA ECC Curve X25519 support"
+	bool "PSA ECC Curve25519 (X25519) support"
 
 config PSA_WANT_ECC_MONTGOMERY_448
-	bool "PSA ECC Curve X448 support"
+	bool "PSA ECC Curve448 (X448) support"
 
 config PSA_WANT_ECC_TWISTED_EDWARDS_255
-	bool "PSA ECC Curve Ed25519 support"
+	bool "PSA ECC Edwards25519 (Ed25519) support"
 
 config PSA_WANT_ECC_SECP_K1_192
 	bool "PSA ECC secp192k1 support"
