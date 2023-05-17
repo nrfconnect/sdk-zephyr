@@ -21,6 +21,8 @@ manifest:
   remotes:
     - name: upstream
       url-base: https://github.com/zephyrproject-rtos
+    - name: ankuns
+      url-base: https://github.com/ankuns
 
   #
   # Please add items below based on alphabetical order
@@ -83,7 +85,8 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: 140140ea047f441fe076d26f79eb54dc9a38bcb6
+      remote: ankuns
+      revision: fix_nrf5340_errata_161
       path: modules/hal/nordic
       groups:
         - hal
