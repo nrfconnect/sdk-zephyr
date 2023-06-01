@@ -301,75 +301,6 @@ static int wifi_get_power_save_config(uint32_t mgmt_request, struct net_if *ifac
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_PS_CONFIG, wifi_get_power_save_config);
 
-#ifdef CONFIG_WIFI_MGMT_TWT_CHECK_IP
-static bool is_ip_assigned(struct net_if *iface)
-{
-	struct net_if_config *if_cfg = NULL;
-	struct net_if_ipv4 *ipv4_addr = NULL;
-	struct net_if_ipv6 *ipv6_addr = NULL;
-	struct net_if_addr *ifaddr = NULL;
-	struct in6_addr ipv6_in_addr;
-	struct in_addr  ipv4_in_addr;
-	bool ip_assigned = false;
-	int i = 0;
-
-	if_cfg = net_if_config_get(iface);
-
-	if (!if_cfg) {
-		return false;
-	}
-
-	ipv4_addr = if_cfg->ip.ipv4;
-	ipv6_addr = if_cfg->ip.ipv6;
-
-	if (ipv4_addr) {
-		for (i = 0; i < NET_IF_MAX_IPV4_ADDR; i++) {
-			if (ipv4_addr->unicast[i].is_used) {
-				memcpy(&ipv4_in_addr,
-				       &ipv4_addr->unicast[i].address.in_addr,
-				       sizeof(ipv4_in_addr));
-				break;
-			}
-		}
-
-		ifaddr = net_if_ipv4_addr_lookup(&ipv4_in_addr, &iface);
-
-		if (!ifaddr ||
-		    !(net_ipv4_addr_cmp(&ifaddr->address.in_addr,
-					&ipv4_in_addr) &&
-		      ifaddr->addr_state == NET_ADDR_PREFERRED)) {
-			ip_assigned = false;
-		} else {
-			ip_assigned = true;
-		}
-	}
-
-	if (!ip_assigned && ipv6_addr) {
-		for (i = 0; i < NET_IF_MAX_IPV6_ADDR; i++) {
-			if (ipv6_addr->unicast[i].is_used) {
-				memcpy(&ipv6_in_addr,
-				       &ipv6_addr->unicast[i].address.in6_addr,
-				       sizeof(ipv6_in_addr));
-				break;
-			}
-		}
-
-		ifaddr = net_if_ipv6_addr_lookup(&ipv6_in_addr, &iface);
-
-		if (!ifaddr ||
-		    !(net_ipv6_addr_cmp(&ifaddr->address.in6_addr,
-					&ipv6_in_addr) &&
-		      ifaddr->addr_state != NET_ADDR_PREFERRED)) {
-			ip_assigned = false;
-		} else {
-			ip_assigned = true;
-		}
-	}
-
-	return ip_assigned;
-}
-#endif /* CONFIG_WIFI_MGMT_TWT_CHECK_IP */
-
 static int wifi_set_twt(uint32_t mgmt_request, struct net_if *iface,
 			  void *data, size_t len)
 {
@@ -399,7 +330,8 @@ static int wifi_set_twt(uint32_t mgmt_request, struct net_if *iface,
 	}
 
 #ifdef CONFIG_WIFI_MGMT_TWT_CHECK_IP
-	if (!is_ip_assigned(iface)) {
+	if ((!net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED)) &&
+	    (!net_if_ipv6_get_global_addr(NET_ADDR_PREFERRED, &iface))) {
 		twt_params->fail_reason =
 			WIFI_TWT_FAIL_IP_NOT_ASSIGNED;
 		goto fail;
