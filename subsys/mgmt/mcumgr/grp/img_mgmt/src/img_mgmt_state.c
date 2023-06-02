@@ -251,13 +251,11 @@ img_mgmt_state_any_pending(void)
 int
 img_mgmt_slot_in_use(int slot)
 {
-	int active_slot = img_mgmt_active_slot(img_mgmt_active_image());
+	int image = img_mgmt_slot_to_image(slot);
+	int active_slot = img_mgmt_active_slot(img_mgmt_active_slot(image));
 
-#ifndef CONFIG_MCUBOOT_BOOTLOADER_MODE_DIRECT_XIP
-	uint8_t state_flags = img_mgmt_state_flags(slot);
-
-	if (state_flags & IMG_MGMT_STATE_F_CONFIRMED ||
-	    state_flags & IMG_MGMT_STATE_F_PENDING) {
+#if !defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_DIRECT_XIP)
+	if (slot == img_mgmt_get_next_boot_slot(image, NULL)) {
 		return 1;
 	}
 #endif
@@ -325,66 +323,104 @@ err:
 	return rc;
 }
 
+#define REPORT_SLOT_ACTIVE	BIT(0)
+#define REPORT_SLOT_PENDING	BIT(1)
+#define REPORT_SLOT_CONFIRMED	BIT(2)
+#define REPORT_SLOT_PERMANENT	BIT(3)
+/* Return zcbor encoding result */
+static bool img_mgmt_state_encode_slot(zcbor_state_t *zse, uint32_t slot, int state_flags)
+{
+	uint32_t flags;
+	char vers_str[IMG_MGMT_VER_MAX_STR_LEN];
+	uint8_t hash[IMAGE_HASH_LEN]; /* SHA256 hash */
+	struct zcbor_string zhash = { .value = hash, .len = IMAGE_HASH_LEN };
+	struct image_version ver;
+	bool ok;
+	int rc = img_mgmt_read_info(slot, &ver, hash, &flags);
+
+	if (rc != 0) {
+		/* zcbor encoding did not fail */
+		return true;
+	}
+
+	ok = zcbor_map_start_encode(zse, MAX_IMG_CHARACTERISTICS)	&&
+	     (CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER == 1	||
+	      (zcbor_tstr_put_lit(zse, "image")			&&
+	       zcbor_uint32_put(zse, slot >> 1)))			&&
+	     zcbor_tstr_put_lit(zse, "slot")				&&
+	     zcbor_uint32_put(zse, slot % 2)				&&
+	     zcbor_tstr_put_lit(zse, "version");
+
+	if (ok) {
+		if (img_mgmt_ver_str(&ver, vers_str) < 0) {
+			ok = zcbor_tstr_put_lit(zse, "<\?\?\?>");
+		} else {
+			vers_str[sizeof(vers_str) - 1] = '\0';
+			ok = zcbor_tstr_put_term(zse, vers_str);
+		}
+	}
+
+	ok = ok && zcbor_tstr_put_term(zse, "hash")						&&
+	     zcbor_bstr_encode(zse, &zhash)						&&
+	     ZCBOR_ENCODE_FLAG(zse, "bootable", !(flags & IMAGE_F_NON_BOOTABLE))	&&
+	     ZCBOR_ENCODE_FLAG(zse, "pending", state_flags & REPORT_SLOT_PENDING)	&&
+	     ZCBOR_ENCODE_FLAG(zse, "confirmed", state_flags & REPORT_SLOT_CONFIRMED)	&&
+	     ZCBOR_ENCODE_FLAG(zse, "active", state_flags & REPORT_SLOT_ACTIVE)		&&
+	     ZCBOR_ENCODE_FLAG(zse, "permanent", state_flags & REPORT_SLOT_PERMANENT)	&&
+	     zcbor_map_end_encode(zse, MAX_IMG_CHARACTERISTICS);
+
+	return ok;
+}
+
 /**
  * Command handler: image state read
  */
 int
 img_mgmt_state_read(struct smp_streamer *ctxt)
 {
-	char vers_str[IMG_MGMT_VER_MAX_STR_LEN];
-	uint8_t hash[IMAGE_HASH_LEN]; /* SHA256 hash */
-	struct image_version ver;
-	uint32_t flags;
-	uint8_t state_flags;
-	uint32_t i;
 	zcbor_state_t *zse = ctxt->writer->zs;
+	uint32_t i;
 	bool ok;
-	struct zcbor_string zhash = { .value = hash, .len = IMAGE_HASH_LEN };
 
 	ok = zcbor_tstr_put_lit(zse, "images") &&
 	     zcbor_list_start_encode(zse, 2 * CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER);
 
 	img_mgmt_take_lock();
 
-	for (i = 0; ok && i < 2 * CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER; i++) {
-		int rc = img_mgmt_read_info(i, &ver, hash, &flags);
-		if (rc != 0) {
-			continue;
+	for (i = 0; ok && i < CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER; i++) {
+		/* _a is active slot, _o is opposite slot */
+		int type;
+		int next_boot_slot = img_mgmt_get_next_boot_slot(i, &type);
+		int slot_a = img_mgmt_active_slot(i);
+		int slot_o = img_mgmt_get_opposite_slot(slot_a);
+		int flags_a = REPORT_SLOT_ACTIVE;
+		int flags_o = 0;
+
+		if (type != NEXT_BOOT_TYPE_REVERT) {
+			flags_a |= REPORT_SLOT_CONFIRMED;
 		}
 
-		state_flags = img_mgmt_state_flags(i);
-
-		ok = zcbor_map_start_encode(zse, MAX_IMG_CHARACTERISTICS)	&&
-		     (CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER == 1	||
-		      (zcbor_tstr_put_lit(zse, "image")			&&
-		       zcbor_uint32_put(zse, i >> 1)))				&&
-		     zcbor_tstr_put_lit(zse, "slot")				&&
-		     zcbor_uint32_put(zse, i % 2)				&&
-		     zcbor_tstr_put_lit(zse, "version");
-
-		if (ok) {
-			if (img_mgmt_ver_str(&ver, vers_str) < 0) {
-				ok = zcbor_tstr_put_lit(zse, "<\?\?\?>");
-			} else {
-				vers_str[sizeof(vers_str) - 1] = '\0';
-				ok = zcbor_tstr_put_term(zse, vers_str);
+		if (next_boot_slot != slot_a) {
+			if (type == NEXT_BOOT_TYPE_NORMAL) {
+				flags_o = REPORT_SLOT_PENDING | REPORT_SLOT_PERMANENT;
+			} else if (type == NEXT_BOOT_TYPE_REVERT) {
+				flags_o = REPORT_SLOT_CONFIRMED;
+			} else if (type == NEXT_BOOT_TYPE_TEST) {
+				flags_o = REPORT_SLOT_PENDING;
 			}
 		}
 
-		ok = ok && zcbor_tstr_put_term(zse, "hash")					&&
-		     zcbor_bstr_encode(zse, &zhash)						&&
-		     ZCBOR_ENCODE_FLAG(zse, "bootable", !(flags & IMAGE_F_NON_BOOTABLE))	&&
-		     ZCBOR_ENCODE_FLAG(zse, "pending",
-				       state_flags & IMG_MGMT_STATE_F_PENDING)			&&
-		     ZCBOR_ENCODE_FLAG(zse, "confirmed",
-				       state_flags & IMG_MGMT_STATE_F_CONFIRMED)		&&
-		     ZCBOR_ENCODE_FLAG(zse, "active",
-				       state_flags & IMG_MGMT_STATE_F_ACTIVE)			&&
-		     ZCBOR_ENCODE_FLAG(zse, "permanent",
-				       state_flags & IMG_MGMT_STATE_F_PERMANENT)		&&
-		     zcbor_map_end_encode(zse, MAX_IMG_CHARACTERISTICS);
+		/* Need to report slots in proper order */
+		if (slot_a < slot_o) {
+			ok = img_mgmt_state_encode_slot(zse, slot_a, flags_a)	&&
+			     img_mgmt_state_encode_slot(zse, slot_o, flags_o);
+		} else {
+			ok = img_mgmt_state_encode_slot(zse, slot_o, flags_o)	&&
+			     img_mgmt_state_encode_slot(zse, slot_a, flags_a);
+		}
 	}
 
+	/* Ending list encoding for two slots per image */
 	ok = ok && zcbor_list_end_encode(zse, 2 * CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER);
 	/* splitStatus is always 0 so in frugal list it is not present at all */
 	if (!IS_ENABLED(CONFIG_MCUMGR_GRP_IMG_FRUGAL_LIST) && ok) {
@@ -402,35 +438,57 @@ int img_mgmt_set_next_boot_slot(int slot, bool confirm)
 	const struct flash_area *fa;
 	int area_id = img_mgmt_flash_area_id(slot);
 	int rc = 0;
-	bool active = (slot == img_mgmt_active_slot(img_mgmt_active_image()));
+	int active_image = img_mgmt_active_image();
+	int active_slot = img_mgmt_active_slot(active_image);
+	int type;
+	int next_boot_slot = img_mgmt_get_next_boot_slot(active_image, &type);
 
-#if defined(CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS)
-	int32_t ret_rc;
-	uint16_t ret_group;
-#endif
-
-	if (active) {
-		confirm = true;
-	} else {
-		if (slot != 1 &&
-		    !(CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER == 2 && slot == 3)) {
-			return MGMT_ERR_EINVAL;
+	if (type == NEXT_BOOT_TYPE_TEST) {
+		/* Can not change state when already set to test the non-active image */
+		if ((confirm && slot != active_slot) ||
+		    (!confirm && slot == active_slot)) {
+			return IMG_MGMT_RET_RC_IMAGE_ALREADY_PENDING;
 		}
+		/* Nothing to do if trying to set for test when already in the mode */
+		return 0;
 	}
 
-	/* Confirm disallowed if a test is pending. */
-	if (active && img_mgmt_state_any_pending()) {
-		return IMG_MGMT_RET_RC_IMAGE_ALREADY_PENDING;
+	if (type == NEXT_BOOT_TYPE_NORMAL) {
+		/* Do nothing when attempting to select for next boot the slot
+		 * that is already selected.
+		 */
+		if (slot == next_boot_slot) {
+			return 0;
+		}
+		/* Can not change slot once other has been selected */
+		if (active_slot != next_boot_slot) {
+			return IMG_MGMT_RET_RC_IMAGE_ALREADY_PENDING;
+		}
+		/* Allow selecting non-active slot for boot */
+	}
+
+	if (type == NEXT_BOOT_TYPE_REVERT) {
+		/* Nothing to do when requested to confirm the next boot slot,
+		 * as it is already confirmed in this mode.
+		 */
+		if (confirm && slot == next_boot_slot) {
+			return 0;
+		}
+		/* Trying to set any slot for test is an error */
+		if (!confirm) {
+			return IMG_MGMT_RET_RC_IMAGE_ALREADY_PENDING;
+		}
+		/* Allow confirming slot == active_slot */
 	}
 
 	if (flash_area_open(area_id, &fa) != 0) {
 		return IMG_MGMT_RET_RC_FLASH_OPEN_FAILED;
 	}
 
-	rc = boot_set_next(fa, active, confirm);
+	rc = boot_set_next(fa, slot == active_slot, confirm);
 	if (rc != 0) {
 		/* Failed to set next slot for boot as desired */
-		if (active) {
+		if (slot == active_slot) {
 			LOG_ERR("Failed to write confirmed flag: %d", rc);
 		} else {
 			LOG_ERR("Failed to write pending flag for slot %d: %d", slot, rc);
@@ -450,7 +508,9 @@ int img_mgmt_set_next_boot_slot(int slot, bool confirm)
 	flash_area_close(fa);
 
 #if defined(CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS)
-	if (active) {
+	if (slot == active_slot && confirm) {
+		int32_t ret_rc;
+		uint16_t ret_group;
 		/* Confirm event is only sent for active slot */
 		(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_CONFIRMED, NULL, 0, &ret_rc,
 					   &ret_group);
