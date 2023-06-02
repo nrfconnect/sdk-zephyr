@@ -9,6 +9,7 @@
 #include <zephyr/toolchain.h>
 #include <string.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/dfu/mcuboot.h>
 
 #include <zcbor_common.h>
 #include <zcbor_decode.h>
@@ -133,6 +134,104 @@ img_mgmt_state_flags(int query_slot)
 	return flags;
 }
 #endif
+
+/* Return number of slot that is considered candidate for next boot */
+int img_mgmt_get_opposite_slot(int slot)
+{
+	switch (slot) {
+	case 0:
+		return 1;
+	case 1:
+		return 0;
+#if CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER == 2
+	case 2:
+		return 3;
+	case 3:
+		return 2;
+#endif
+	}
+	LOG_DBG("Impossible slot number: %d", -1);
+	return -1;
+}
+
+#ifndef CONFIG_MCUBOOT_BOOTLOADER_MODE_DIRECT_XIP
+int img_mgmt_get_next_boot_slot(int image, int *type)
+{
+	int state = mcuboot_swap_type_multi(image);
+	int slot = 0;		/* Default to slot 0 as next boot slot */
+	int lt = NEXT_BOOT_TYPE_NORMAL;
+
+	switch (state) {
+	case BOOT_SWAP_TYPE_NONE:
+		if (CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER != 1 && image == 1) {
+			/* Primary slot of second image is 2 */
+			slot = 2;
+		}
+		break;
+	case BOOT_SWAP_TYPE_PERM:
+		/* Type is NEXT_BOOT_TYPE_NORMAL as it means that the returned slot
+		 * is boot slot is normal slot for all next boots.
+		 */
+		if (CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER == 1 || image == 0) {
+			slot = 1;
+		} else {
+			/* Secondary slot of second image is 3 */
+			slot = 3;
+		}
+		break;
+	case BOOT_SWAP_TYPE_REVERT:
+		{
+			const int active_slot = img_mgmt_active_slot(image);
+
+			slot = img_mgmt_get_opposite_slot(active_slot);
+			/* App has boot to be tested and has not yet been confirmed, which means
+			 * that next boot will be revert to reported slot.
+			 */
+			lt = NEXT_BOOT_TYPE_REVERT;
+		}
+		break;
+	case BOOT_SWAP_TYPE_TEST:
+		{
+			const int active_slot = img_mgmt_active_slot(image);
+
+			slot = img_mgmt_get_opposite_slot(active_slot);
+			/* Reported next boot slot is set for one boot only and app needs to
+			 * confirm itself or it will be reverted.
+			 */
+			lt = NEXT_BOOT_TYPE_TEST;
+		}
+		break;
+	default:
+		/* Should never, ever happen */
+		LOG_ERR("Unexpected swap state %d\n", state);
+		return -1;
+	}
+
+	if (type != NULL) {
+		*type = lt;
+	}
+	return slot;
+}
+#else
+int img_mgmt_get_next_boot_slot(int image, int *type)
+{
+	struct image_version aver;
+	struct image_version over;
+	int active_slot = img_mgmt_active_slot(image);
+	int other_slot = img_mgmt_get_opposite_slot(active_slot);
+	*type = NEXT_BOOT_TYPE_NORMAL;
+
+	int rcs = img_mgmt_read_info(other_slot, &over, NULL, NULL);
+	int rca = img_mgmt_read_info(active_slot, &aver, NULL, NULL);
+
+	if (rcs == 0 && rca == 0 && img_mgmt_vercmp(&aver, &over) < 0) {
+		return other_slot;
+	}
+
+	return active_slot;
+}
+#endif
+
 
 /**
  * Indicates whether any image slot is pending (i.e., whether a test swap will

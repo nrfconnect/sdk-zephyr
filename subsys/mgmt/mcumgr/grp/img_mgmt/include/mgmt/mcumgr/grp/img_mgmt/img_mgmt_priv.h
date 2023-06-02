@@ -87,6 +87,51 @@ int img_mgmt_write_image_data(unsigned int offset, const void *data, unsigned in
 int img_mgmt_swap_type(int slot);
 
 /**
+ * @brief Returns image given slot belongs to.
+ *
+ * @param slot			A slot number.
+ *
+ * @return 0 based image number.
+ */
+int img_mgmt_slot_to_image(int slot);
+
+/**
+ * @brief Get number of other slot in pair
+ *
+ * @param slot			A slot number.
+ *
+ * @return Number of other slot in pair
+ */
+int img_mgmt_get_opposite_slot(int slot);
+
+/**
+ * @brief Get number of next boot slot for given image.
+ *
+ * @param image			An image number.
+ * @param type			Type of next boot
+ *
+ * @return Number of slot, from pair of slots assigned to image, that will
+ * be boot on next reset; -1 in case when next boot slot can not be
+ * established.
+ * @p type Will be set to next boot type. There are currently three types
+ * defined:
+ *  NEXT_BOOT_TYPE_NORMAL -- this is normal boot to active or non-active slot;
+ *			     user may compare active slot against returned slot
+ *			     slot number to find out whether application image
+ *			     changes on the next boot.
+ *  NEXT_BOOT_TYPE_TEST   -- application from returned slot will be set only
+ *			     for the next boot; if it is not confirmed, it will
+ *			     be reverted.
+ *  NEXT_BOOT_TYPE_REVERT -- running application is not confirmed yet and next
+ *			     boot will revert to returned slot number.
+ */
+int img_mgmt_get_next_boot_slot(int image, int *type);
+
+#define NEXT_BOOT_TYPE_NORMAL	0
+#define NEXT_BOOT_TYPE_TEST	1
+#define NEXT_BOOT_TYPE_REVERT	2
+
+/**
  * Collects information about the specified image slot.
  *
  * @return Flags of the specified image slot
