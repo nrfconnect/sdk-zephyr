@@ -208,4 +208,10 @@ config BOOT_IMAGE_ACCESS_HOOKS
 	  It is up to the application project to add source file which
 	  implements hooks to the build.
 
+config MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP
+	bool "DirectXIP support in bootutil"
+	help
+	  Adds support for setting for test and confirming images
+	  when bootloader is in DirectXIP-revert mode.
+
 endif # MCUBOOT_BOOTUTIL_LIB
