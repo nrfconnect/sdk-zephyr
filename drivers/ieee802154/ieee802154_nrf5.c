@@ -122,94 +122,102 @@ static void nrf5_get_eui64(uint8_t *mac)
 	memcpy(mac + index, &factoryAddress, sizeof(factoryAddress) - index);
 }
 
+static void nrf5_rx_frame_process(struct nrf5_802154_data *nrf5_radio,
+				struct nrf5_802154_rx_frame *rx_frame)
+{
+	struct net_pkt *pkt = NULL;
+	uint8_t pkt_len;
+	uint8_t *psdu;
+
+	__ASSERT_NO_MSG(rx_frame->psdu);
+
+	/* rx_mpdu contains length, psdu, fcs|lqi
+	 * The last 2 bytes contain LQI or FCS, depending if
+	 * automatic CRC handling is enabled or not, respectively.
+	 */
+	if (IS_ENABLED(CONFIG_IEEE802154_NRF5_FCS_IN_LENGTH)) {
+		pkt_len = rx_frame->psdu[0];
+	} else {
+		pkt_len = rx_frame->psdu[0] -  NRF5_FCS_LENGTH;
+	}
+
+#if defined(CONFIG_NET_BUF_DATA_SIZE)
+	__ASSERT_NO_MSG(pkt_len <= CONFIG_NET_BUF_DATA_SIZE);
+#endif
+
+	LOG_DBG("Frame received");
+
+	/* Block the RX thread until net_pkt is available, so that we
+	 * don't drop already ACKed frame in case of temporary net_pkt
+	 * scarcity. The nRF 802154 radio driver will accumulate any
+	 * incoming frames until it runs out of internal buffers (and
+	 * thus stops acknowledging consecutive frames).
+	 */
+	pkt = net_pkt_rx_alloc_with_buffer(nrf5_radio->iface, pkt_len,
+						AF_UNSPEC, 0, K_FOREVER);
+
+	if (net_pkt_write(pkt, rx_frame->psdu + 1, pkt_len)) {
+		goto drop;
+	}
+
+	net_pkt_set_ieee802154_lqi(pkt, rx_frame->lqi);
+	net_pkt_set_ieee802154_rssi(pkt, rx_frame->rssi);
+	net_pkt_set_ieee802154_ack_fpb(pkt, rx_frame->ack_fpb);
+
+#if defined(CONFIG_NET_PKT_TIMESTAMP)
+	struct net_ptp_time timestamp = {
+		.second = rx_frame->time / USEC_PER_SEC,
+		.nanosecond =
+			(rx_frame->time % USEC_PER_SEC) * NSEC_PER_USEC
+	};
+
+	net_pkt_set_timestamp(pkt, &timestamp);
+#endif
+
+	LOG_DBG("Caught a packet (%u) (LQI: %u)",
+			pkt_len, rx_frame->lqi);
+
+	if (net_recv_data(nrf5_radio->iface, pkt) < 0) {
+		LOG_ERR("Packet dropped by NET stack");
+		goto drop;
+	}
+
+	psdu = rx_frame->psdu;
+	rx_frame->psdu = NULL;
+	nrf_802154_buffer_free_raw(psdu);
+
+	if (LOG_LEVEL >= LOG_LEVEL_DBG) {
+		log_stack_usage(&nrf5_radio->rx_thread);
+	}
+
+	return;
+
+drop:
+	psdu = rx_frame->psdu;
+	rx_frame->psdu = NULL;
+	nrf_802154_buffer_free_raw(psdu);
+
+	net_pkt_unref(pkt);
+}
+
 static void nrf5_rx_thread(void *arg1, void *arg2, void *arg3)
 {
 	struct nrf5_802154_data *nrf5_radio = (struct nrf5_802154_data *)arg1;
-	struct net_pkt *pkt;
 	struct nrf5_802154_rx_frame *rx_frame;
-	uint8_t pkt_len;
-	uint8_t *psdu;
 
 	ARG_UNUSED(arg2);
 	ARG_UNUSED(arg3);
 
 	while (1) {
-		pkt = NULL;
 		rx_frame = NULL;
 
 		LOG_DBG("Waiting for frame");
 
 		rx_frame = k_fifo_get(&nrf5_radio->rx_fifo, K_FOREVER);
 
-		__ASSERT_NO_MSG(rx_frame->psdu);
-
-		/* rx_mpdu contains length, psdu, fcs|lqi
-		 * The last 2 bytes contain LQI or FCS, depending if
-		 * automatic CRC handling is enabled or not, respectively.
-		 */
-		if (IS_ENABLED(CONFIG_IEEE802154_NRF5_FCS_IN_LENGTH)) {
-			pkt_len = rx_frame->psdu[0];
-		} else {
-			pkt_len = rx_frame->psdu[0] -  NRF5_FCS_LENGTH;
+		if (rx_frame != NULL) {
+			nrf5_rx_frame_process(nrf5_radio, rx_frame);
 		}
-
-#if defined(CONFIG_NET_BUF_DATA_SIZE)
-		__ASSERT_NO_MSG(pkt_len <= CONFIG_NET_BUF_DATA_SIZE);
-#endif
-
-		LOG_DBG("Frame received");
-
-		/* Block the RX thread until net_pkt is available, so that we
-		 * don't drop already ACKed frame in case of temporary net_pkt
-		 * scarcity. The nRF 802154 radio driver will accumulate any
-		 * incoming frames until it runs out of internal buffers (and
-		 * thus stops acknowledging consecutive frames).
-		 */
-		pkt = net_pkt_rx_alloc_with_buffer(nrf5_radio->iface, pkt_len,
-						   AF_UNSPEC, 0, K_FOREVER);
-
-		if (net_pkt_write(pkt, rx_frame->psdu + 1, pkt_len)) {
-			goto drop;
-		}
-
-		net_pkt_set_ieee802154_lqi(pkt, rx_frame->lqi);
-		net_pkt_set_ieee802154_rssi(pkt, rx_frame->rssi);
-		net_pkt_set_ieee802154_ack_fpb(pkt, rx_frame->ack_fpb);
-
-#if defined(CONFIG_NET_PKT_TIMESTAMP)
-		struct net_ptp_time timestamp = {
-			.second = rx_frame->time / USEC_PER_SEC,
-			.nanosecond =
-				(rx_frame->time % USEC_PER_SEC) * NSEC_PER_USEC
-		};
-
-		net_pkt_set_timestamp(pkt, &timestamp);
-#endif
-
-		LOG_DBG("Caught a packet (%u) (LQI: %u)",
-			 pkt_len, rx_frame->lqi);
-
-		if (net_recv_data(nrf5_radio->iface, pkt) < 0) {
-			LOG_ERR("Packet dropped by NET stack");
-			goto drop;
-		}
-
-		psdu = rx_frame->psdu;
-		rx_frame->psdu = NULL;
-		nrf_802154_buffer_free_raw(psdu);
-
-		if (LOG_LEVEL >= LOG_LEVEL_DBG) {
-			log_stack_usage(&nrf5_radio->rx_thread);
-		}
-
-		continue;
-
-drop:
-		psdu = rx_frame->psdu;
-		rx_frame->psdu = NULL;
-		nrf_802154_buffer_free_raw(psdu);
-
-		net_pkt_unref(pkt);
 	}
 }
 
