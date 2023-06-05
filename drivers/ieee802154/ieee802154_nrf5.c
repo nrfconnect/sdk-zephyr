@@ -238,6 +238,26 @@ static enum ieee802154_hw_caps nrf5_get_capabilities(const struct device *dev)
 	return nrf5_data.capabilities;
 }
 
+FUNC_NORETURN static void nrf5_callback_timeout(void)
+{
+	/* Callback from the radio driver did not come in specified timeout */
+	__ASSERT(false, "802.15.4 callback timeout");
+	k_oops();
+	CODE_UNREACHABLE;
+}
+
+static void nrf5_callback_sem_take(struct k_sem *sem, uint32_t additional_ms)
+{
+	if (CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS == 0) {
+		k_sem_take(sem, K_FOREVER);
+	} else {
+		if (k_sem_take(sem,
+			K_MSEC(additional_ms + CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS)) != 0) {
+			nrf5_callback_timeout();
+		}
+	}
+}
+
 static int nrf5_cca(const struct device *dev)
 {
 	struct nrf5_802154_data *nrf5_radio = NRF5_802154_DATA(dev);
@@ -250,7 +270,7 @@ static int nrf5_cca(const struct device *dev)
 	/* The nRF driver guarantees that a callback will be called once
 	 * the CCA function is done, thus unlocking the semaphore.
 	 */
-	k_sem_take(&nrf5_radio->cca_wait, K_FOREVER);
+	nrf5_callback_sem_take(&nrf5_radio->cca_wait, 0);
 
 	LOG_DBG("Channel free? %d", nrf5_radio->channel_free);
 
@@ -480,8 +500,10 @@ static bool nrf5_tx_csma_ca(struct net_pkt *pkt, uint8_t *payload)
 #if defined(CONFIG_NET_PKT_TXTIME)
 /**
  * @brief Convert 32-bit target time to absolute 64-bit target time.
+ * @param[in] target_time	32-bit time to convert
+ * @param[in] now_us		Result of @ref nrf_802154_time_get
  */
-static uint64_t target_time_convert_to_64_bits(uint32_t target_time)
+static uint64_t target_time_convert_to_64_bits_from_given(uint32_t target_time, uint64_t now_us)
 {
 	/**
 	 * Target time is provided as two 32-bit integers defining a moment in time
@@ -495,7 +517,6 @@ static uint64_t target_time_convert_to_64_bits(uint32_t target_time)
 	 * time. Let's assume that half of the 32-bit range can be used for specifying
 	 * target times in the future, and the other half - in the past.
 	 */
-	uint64_t now_us = nrf_802154_time_get();
 	uint32_t now_us_wrapped = (uint32_t)now_us;
 	uint32_t time_diff = target_time - now_us_wrapped;
 	uint64_t result = UINT64_C(0);
@@ -545,7 +566,18 @@ static uint64_t target_time_convert_to_64_bits(uint32_t target_time)
 	return result;
 }
 
-static bool nrf5_tx_at(struct net_pkt *pkt, uint8_t *payload, bool cca)
+
+#if defined(CONFIG_IEEE802154_CSL_ENDPOINT)
+/**
+ * @brief Convert 32-bit target time to absolute 64-bit target time.
+ */
+static uint64_t target_time_convert_to_64_bits(uint32_t target_time)
+{
+	return target_time_convert_to_64_bits_from_given(target_time, nrf_802154_time_get());
+}
+#endif
+
+static bool nrf5_tx_at(struct net_pkt *pkt, uint8_t *payload, bool cca, uint32_t *time_ahead)
 {
 	nrf_802154_transmit_at_metadata_t metadata = {
 		.frame_props = {
@@ -561,7 +593,16 @@ static bool nrf5_tx_at(struct net_pkt *pkt, uint8_t *payload, bool cca)
 #endif
 		},
 	};
-	uint64_t tx_at = target_time_convert_to_64_bits(net_pkt_txtime(pkt) / NSEC_PER_USEC);
+	uint64_t now_us = nrf_802154_time_get();
+	uint64_t tx_at = target_time_convert_to_64_bits_from_given(
+			net_pkt_txtime(pkt) / NSEC_PER_USEC, now_us);
+
+	if (time_ahead != NULL) {
+		*time_ahead = 0;
+		if (tx_at > now_us) {
+			*time_ahead = (uint32_t)(tx_at - now_us);
+		}
+	}
 
 	return nrf_802154_transmit_raw_at(payload, tx_at, &metadata);
 }
@@ -576,6 +617,7 @@ static int nrf5_tx(const struct device *dev,
 	uint8_t payload_len = frag->len;
 	uint8_t *payload = frag->data;
 	bool ret = true;
+	uint32_t callback_sem_take_additional_time = 0;
 
 	LOG_DBG("%p (%u)", payload, payload_len);
 
@@ -601,7 +643,9 @@ static int nrf5_tx(const struct device *dev,
 	case IEEE802154_TX_MODE_TXTIME_CCA:
 		__ASSERT_NO_MSG(pkt);
 		ret = nrf5_tx_at(pkt, nrf5_radio->tx_psdu,
-				 mode == IEEE802154_TX_MODE_TXTIME_CCA);
+				 mode == IEEE802154_TX_MODE_TXTIME_CCA,
+				 &callback_sem_take_additional_time);
+		callback_sem_take_additional_time /= 1000;
 		break;
 #endif /* CONFIG_NET_PKT_TXTIME */
 	default:
@@ -620,7 +664,7 @@ static int nrf5_tx(const struct device *dev,
 		nrf_802154_channel_get(), nrf_802154_tx_power_get());
 
 	/* Wait for the callback from the radio driver. */
-	k_sem_take(&nrf5_radio->tx_wait, K_FOREVER);
+	nrf5_callback_sem_take(&nrf5_radio->tx_wait, callback_sem_take_additional_time);
 
 	LOG_DBG("Result: %d", nrf5_data.tx_result);
 

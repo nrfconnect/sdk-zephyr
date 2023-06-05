@@ -78,6 +78,17 @@ config IEEE802154_NRF5_DELAY_TRX_ACC
 	  Accuracy of the clock used for scheduling radio delayed operations (delayed transmission
 	  or delayed reception), in ppm.
 
+config IEEE802154_NRF5_CALLOUT_TIMEOUT_MS
+	int "Timeout in milliseconds of waiting for a callout that finishes a requested operation"
+	default 10000
+	help
+	  This parameter limits the maximum time that can pass between
+	  a request to the nRF 802.15.4 Radio Driver to the corresponding asynchronous callout
+	  notifying the result of the operation. Reaching this timeout is a fatal error
+	  of the nRF 802.15.4 Radio Driver thus rather big values are advised.
+	  Set this value to 0 to have no limit (equivalent to K_FOREVER) which turns off the
+	  timing-out feature.
+
 config IEEE802154_NRF5_LOG_RX_FAILURES
 	bool "Frame reception failures logging"
 	help
