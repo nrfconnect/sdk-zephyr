@@ -89,6 +89,17 @@ config IEEE802154_NRF5_CALLOUT_TIMEOUT_MS
 	  Set this value to 0 to have no limit (equivalent to K_FOREVER) which turns off the
 	  timing-out feature.
 
+config IEEE802154_NRF5_RX_THREAD_HEARTBEAT_PERIOD_MS
+	int "Period in milliseconds of polling nRF 802.15.4 Radio Driver to detect potential malfunctions"
+	default 60000 if NRF_802154_SER_HOST
+	default 0
+	help
+	  The nRF 802.15.4 Radio Driver is polled with period set by this parameter in order to
+	  detect any potential malfunctions of the driver. This option is useful when
+	  the radio driver implementation is provided by separate core through serialization.
+	  To keep energy usage low the value should be set to big values.
+	  Value equal to 0 turns off the polling completely.
+
 config IEEE802154_NRF5_LOG_RX_FAILURES
 	bool "Frame reception failures logging"
 	help
