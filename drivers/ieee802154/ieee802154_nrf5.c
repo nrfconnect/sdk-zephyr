@@ -204,6 +204,7 @@ static void nrf5_rx_thread(void *arg1, void *arg2, void *arg3)
 {
 	struct nrf5_802154_data *nrf5_radio = (struct nrf5_802154_data *)arg1;
 	struct nrf5_802154_rx_frame *rx_frame;
+	uint64_t last_heartbeat_timestamp = 0;
 
 	ARG_UNUSED(arg2);
 	ARG_UNUSED(arg3);
@@ -213,10 +214,26 @@ static void nrf5_rx_thread(void *arg1, void *arg2, void *arg3)
 
 		LOG_DBG("Waiting for frame");
 
-		rx_frame = k_fifo_get(&nrf5_radio->rx_fifo, K_FOREVER);
+		rx_frame = k_fifo_get(&nrf5_radio->rx_fifo,
+			(CONFIG_IEEE802154_NRF5_RX_THREAD_HEARTBEAT_PERIOD_MS != 0) ?
+				K_MSEC(CONFIG_IEEE802154_NRF5_RX_THREAD_HEARTBEAT_PERIOD_MS) :
+				K_FOREVER);
 
 		if (rx_frame != NULL) {
 			nrf5_rx_frame_process(nrf5_radio, rx_frame);
+		} else if (CONFIG_IEEE802154_NRF5_RX_THREAD_HEARTBEAT_PERIOD_MS != 0) {
+			/* No frame was received long enough.
+			 * If core implementing the function below is dead, there will be
+			 * serialization error.
+			 */
+			uint64_t ts = nrf_802154_time_get();
+
+			if (ts < last_heartbeat_timestamp) {
+				/* The core providing nRF 802.15.4 has been reset silently */
+				__ASSERT(false, "802.15.4 heartbeat failure");
+				k_oops();
+			}
+			last_heartbeat_timestamp = ts;
 		}
 	}
 }
