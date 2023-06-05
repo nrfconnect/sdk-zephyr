@@ -246,6 +246,15 @@ FUNC_NORETURN static void nrf5_callback_timeout(void)
 	CODE_UNREACHABLE;
 }
 
+#if (CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS != 0)
+static void ed_timer_expired(struct k_timer *timer)
+{
+	ARG_UNUSED(timer);
+
+	nrf5_callback_timeout();
+}
+#endif /* CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS != 0 */
+
 static void nrf5_callback_sem_take(struct k_sem *sem, uint32_t additional_ms)
 {
 	if (CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS == 0) {
@@ -306,6 +315,14 @@ static int nrf5_energy_scan_start(const struct device *dev,
 		if (nrf_802154_energy_detection(duration * 1000) == false) {
 			nrf5_data.energy_scan_done = NULL;
 			err = -EPERM;
+		} else {
+#if (CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS != 0)
+			struct nrf5_802154_data *nrf5_radio = NRF5_802154_DATA(dev);
+
+			k_timer_start(&nrf5_radio->ed_timer,
+				K_MSEC(duration + CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS),
+				K_NO_WAIT);
+#endif
 		}
 	} else {
 		err = -EALREADY;
@@ -807,6 +824,10 @@ static int nrf5_init(const struct device *dev)
 	k_sem_init(&nrf5_radio->tx_wait, 0, 1);
 	k_sem_init(&nrf5_radio->cca_wait, 0, 1);
 
+#if (CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS != 0)
+	k_timer_init(&nrf5_radio->ed_timer, ed_timer_expired, NULL);
+#endif
+
 	nrf_802154_init();
 
 	nrf5_get_capabilities_at_boot();
@@ -1168,6 +1189,10 @@ void nrf_802154_energy_detected(uint8_t result)
 		int16_t dbm;
 		energy_scan_done_cb_t callback = nrf5_data.energy_scan_done;
 
+#if (CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS != 0)
+		k_timer_stop(&nrf5_data.ed_timer);
+#endif
+
 		nrf5_data.energy_scan_done = NULL;
 		dbm = nrf_802154_dbm_from_energy_level_calculate(result);
 		callback(net_if_get_device(nrf5_data.iface), dbm);
@@ -1178,6 +1203,10 @@ void nrf_802154_energy_detection_failed(nrf_802154_ed_error_t error)
 {
 	if (nrf5_data.energy_scan_done != NULL) {
 		energy_scan_done_cb_t callback = nrf5_data.energy_scan_done;
+
+#if (CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS != 0)
+		k_timer_stop(&nrf5_data.ed_timer);
+#endif
 
 		nrf5_data.energy_scan_done = NULL;
 		callback(net_if_get_device(nrf5_data.iface), SHRT_MAX);
