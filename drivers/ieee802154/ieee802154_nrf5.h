@@ -76,6 +76,11 @@ struct nrf5_802154_data {
 	 */
 	energy_scan_done_cb_t energy_scan_done;
 
+#if (CONFIG_IEEE802154_NRF5_CALLOUT_TIMEOUT_MS != 0)
+	/* Timer allowing to detect timeout of energy scan operation */
+	struct k_timer ed_timer;
+#endif
+
 	/* Callback handler to notify of any important radio events.
 	 * Can be NULL if event notification is not needed.
 	 */
