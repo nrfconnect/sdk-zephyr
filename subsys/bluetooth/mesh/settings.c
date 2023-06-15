@@ -115,8 +115,7 @@ SETTINGS_STATIC_HANDLER_DEFINE(bt_mesh, "bt/mesh", NULL, NULL, mesh_commit,
 			      BIT(BT_MESH_SETTINGS_CFG_PENDING)      |      \
 			      BIT(BT_MESH_SETTINGS_MOD_PENDING)      |      \
 			      BIT(BT_MESH_SETTINGS_VA_PENDING)       |      \
-			      BIT(BT_MESH_SETTINGS_SSEQ_PENDING)     |      \
-			      BIT(BT_MESH_SETTINGS_COMP_PENDING))
+			      BIT(BT_MESH_SETTINGS_SSEQ_PENDING))
 
 void bt_mesh_settings_store_schedule(enum bt_mesh_settings_flag flag)
 {
@@ -196,11 +195,6 @@ static void store_pending(struct k_work *work)
 	if (atomic_test_and_clear_bit(pending_flags,
 				      BT_MESH_SETTINGS_CFG_PENDING)) {
 		bt_mesh_cfg_pending_store();
-	}
-
-	if (atomic_test_and_clear_bit(pending_flags,
-				      BT_MESH_SETTINGS_COMP_PENDING)) {
-		bt_mesh_comp_data_pending_clear();
 	}
 
 	if (atomic_test_and_clear_bit(pending_flags,
