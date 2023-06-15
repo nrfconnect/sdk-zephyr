@@ -11,7 +11,9 @@ Peripherals
 
    w1.rst
    adc.rst
+   auxdisplay.rst
    audio/index.rst
+   bbram.rst
    bc12.rst
    clock_control.rst
    canbus/index.rst

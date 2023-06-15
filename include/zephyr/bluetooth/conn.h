@@ -21,10 +21,11 @@
 #include <stdint.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci_err.h>
+#include <zephyr/bluetooth/hci_types.h>
 #include <zephyr/bluetooth/addr.h>
 #include <zephyr/bluetooth/gap.h>
 #include <zephyr/bluetooth/direction.h>
+#include <zephyr/sys/iterable_sections.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -708,6 +709,40 @@ int bt_conn_le_create(const bt_addr_le_t *peer,
 		      const struct bt_conn_le_create_param *create_param,
 		      const struct bt_le_conn_param *conn_param,
 		      struct bt_conn **conn);
+
+struct bt_conn_le_create_synced_param {
+
+	/** @brief Remote address
+	 *
+	 * The peer must be synchronized to the PAwR train.
+	 *
+	 */
+	const bt_addr_le_t *peer;
+
+	/** The subevent where the connection will be initiated. */
+	uint8_t subevent;
+};
+
+/** @brief Create a connection to a synced device
+ *
+ *  Initiate a connection to a synced device from a Periodic Advertising
+ *  with Responses (PAwR) train.
+ *
+ *  The caller gets a new reference to the connection object which must be
+ *  released with bt_conn_unref() once done using the object.
+ *
+ *  This uses the Periodic Advertising Connection Procedure.
+ *
+ *  @param[in]  adv          The adverting set the PAwR advertiser belongs to.
+ *  @param[in]  synced_param Create connection parameters.
+ *  @param[in]  conn_param   Initial connection parameters.
+ *  @param[out] conn         Valid connection object on success.
+ *
+ *  @return Zero on success or (negative) error code on failure.
+ */
+int bt_conn_le_create_synced(const struct bt_le_ext_adv *adv,
+			     const struct bt_conn_le_create_synced_param *synced_param,
+			     const struct bt_le_conn_param *conn_param, struct bt_conn **conn);
 
 /** @brief Automatically connect to remote devices in the filter accept list..
  *

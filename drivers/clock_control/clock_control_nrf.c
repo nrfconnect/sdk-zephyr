@@ -111,13 +111,13 @@ static struct onoff_manager *get_onoff_manager(const struct device *dev,
 struct onoff_manager *z_nrf_clock_control_get_onoff(clock_control_subsys_t sys)
 {
 	return get_onoff_manager(CLOCK_DEVICE,
-				(enum clock_control_nrf_type)sys);
+				(enum clock_control_nrf_type)(size_t)sys);
 }
 
 static enum clock_control_status get_status(const struct device *dev,
 					    clock_control_subsys_t subsys)
 {
-	enum clock_control_nrf_type type = (enum clock_control_nrf_type)subsys;
+	enum clock_control_nrf_type type = (enum clock_control_nrf_type)(size_t)subsys;
 
 	__ASSERT_NO_MSG(type < CLOCK_CONTROL_NRF_TYPE_COUNT);
 
@@ -342,7 +342,7 @@ void z_nrf_clock_bt_ctlr_hf_release(void)
 static int stop(const struct device *dev, clock_control_subsys_t subsys,
 		uint32_t ctx)
 {
-	enum clock_control_nrf_type type = (enum clock_control_nrf_type)subsys;
+	enum clock_control_nrf_type type = (enum clock_control_nrf_type)(size_t)subsys;
 	struct nrf_clock_control_sub_data *subdata = get_sub_data(dev, type);
 	int err;
 
@@ -366,7 +366,7 @@ static int api_stop(const struct device *dev, clock_control_subsys_t subsys)
 static int async_start(const struct device *dev, clock_control_subsys_t subsys,
 			clock_control_cb_t cb, void *user_data, uint32_t ctx)
 {
-	enum clock_control_nrf_type type = (enum clock_control_nrf_type)subsys;
+	enum clock_control_nrf_type type = (enum clock_control_nrf_type)(size_t)subsys;
 	struct nrf_clock_control_sub_data *subdata = get_sub_data(dev, type);
 	int err;
 
@@ -437,7 +437,7 @@ static void onoff_started_callback(const struct device *dev,
 				   clock_control_subsys_t sys,
 				   void *user_data)
 {
-	enum clock_control_nrf_type type = (enum clock_control_nrf_type)sys;
+	enum clock_control_nrf_type type = (enum clock_control_nrf_type)(size_t)sys;
 	struct onoff_manager *mgr = get_onoff_manager(dev, type);
 	onoff_notify_fn notify = user_data;
 
@@ -476,17 +476,17 @@ static void lfclk_spinwait(enum nrf_lfclk_start_mode mode)
 	static const nrf_clock_domain_t d = NRF_CLOCK_DOMAIN_LFCLK;
 	static const nrf_clock_lfclk_t target_type =
 		/* For sources XTAL, EXT_LOW_SWING, and EXT_FULL_SWING,
-		 * NRF_CLOCK_LFCLK_Xtal is returned as the type of running clock.
+		 * NRF_CLOCK_LFCLK_XTAL is returned as the type of running clock.
 		 */
 		(IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL) ||
 		 IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_K32SRC_EXT_LOW_SWING) ||
 		 IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_K32SRC_EXT_FULL_SWING))
-		? NRF_CLOCK_LFCLK_Xtal
+		? NRF_CLOCK_LFCLK_XTAL
 		: CLOCK_CONTROL_NRF_K32SRC;
 	nrf_clock_lfclk_t type;
 
 	if ((mode == CLOCK_CONTROL_NRF_LF_START_AVAILABLE) &&
-	    (target_type == NRF_CLOCK_LFCLK_Xtal) &&
+	    (target_type == NRF_CLOCK_LFCLK_XTAL) &&
 	    (nrf_clock_lf_srccopy_get(NRF_CLOCK) == CLOCK_CONTROL_NRF_K32SRC)) {
 		/* If target clock source is using XTAL then due to two-stage
 		 * clock startup sequence, RC might already be running.
@@ -519,7 +519,7 @@ static void lfclk_spinwait(enum nrf_lfclk_start_mode mode)
 		}
 
 		/* Clock interrupt is locked, LFCLKSTARTED is handled here. */
-		if ((target_type ==  NRF_CLOCK_LFCLK_Xtal)
+		if ((target_type ==  NRF_CLOCK_LFCLK_XTAL)
 		    && (nrf_clock_lf_src_get(NRF_CLOCK) == NRF_CLOCK_LFCLK_RC)
 		    && nrf_clock_event_check(NRF_CLOCK,
 					     NRF_CLOCK_EVENT_LFCLKSTARTED)) {
@@ -735,6 +735,8 @@ DEVICE_DT_DEFINE(DT_NODELABEL(clock), clk_init, NULL,
 		 PRE_KERNEL_1, CONFIG_CLOCK_CONTROL_INIT_PRIORITY,
 		 &clock_control_api);
 
+#if defined(CONFIG_SHELL)
+
 static int cmd_status(const struct shell *sh, size_t argc, char **argv)
 {
 	nrf_clock_hfclk_t hfclk_src;
@@ -780,3 +782,5 @@ SHELL_COND_CMD_REGISTER(CONFIG_CLOCK_CONTROL_NRF_SHELL,
 			nrf_clock_control, &subcmds,
 			"Clock control commands",
 			cmd_status);
+
+#endif /* defined(CONFIG_SHELL) */

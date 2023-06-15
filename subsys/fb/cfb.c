@@ -12,8 +12,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(cfb);
 
-extern const struct cfb_font __font_entry_start[];
-extern const struct cfb_font __font_entry_end[];
+STRUCT_SECTION_START_EXTERN(cfb_font);
+STRUCT_SECTION_END_EXTERN(cfb_font);
 
 static inline uint8_t byte_reverse(uint8_t b)
 {
@@ -183,6 +183,57 @@ static uint8_t draw_char_vtmono(const struct char_framebuffer *fb,
 	return fptr->width;
 }
 
+static inline void draw_point(struct char_framebuffer *fb, int16_t x, int16_t y)
+{
+	const bool need_reverse = ((fb->screen_info & SCREEN_INFO_MONO_MSB_FIRST) != 0);
+	const size_t index = ((y / 8) * fb->x_res);
+	uint8_t m = BIT(y % 8);
+
+	if (x < 0 || x >= fb->x_res) {
+		return;
+	}
+
+	if (y < 0 || y >= fb->y_res) {
+		return;
+	}
+
+	if (need_reverse) {
+		m = byte_reverse(m);
+	}
+
+	fb->buf[index + x] |= m;
+}
+
+static void draw_line(struct char_framebuffer *fb, int16_t x0, int16_t y0, int16_t x1, int16_t y1)
+{
+	int16_t sx = (x0 < x1) ? 1 : -1;
+	int16_t sy = (y0 < y1) ? 1 : -1;
+	int16_t dx = (sx > 0) ? (x1 - x0) : (x0 - x1);
+	int16_t dy = (sy > 0) ? (y0 - y1) : (y1 - y0);
+	int16_t err = dx + dy;
+	int16_t e2;
+
+	while (true) {
+		draw_point(fb, x0, y0);
+
+		if (x0 == x1 && y0 == y1) {
+			break;
+		}
+
+		e2 = 2 * err;
+
+		if (e2 >= dy) {
+			err += dy;
+			x0 += sx;
+		}
+
+		if (e2 <= dx) {
+			err += dx;
+			y0 += sy;
+		}
+	}
+}
+
 static int draw_text(const struct device *dev, const char *const str, int16_t x, int16_t y,
 		     bool wrap)
 {
@@ -213,6 +264,38 @@ static int draw_text(const struct device *dev, const char *const str, int16_t x,
 
 	LOG_ERR("Unsupported framebuffer configuration");
 	return -EINVAL;
+}
+
+int cfb_draw_point(const struct device *dev, const struct cfb_position *pos)
+{
+	struct char_framebuffer *fb = &char_fb;
+
+	draw_point(fb, pos->x, pos->y);
+
+	return 0;
+}
+
+int cfb_draw_line(const struct device *dev, const struct cfb_position *start,
+		  const struct cfb_position *end)
+{
+	struct char_framebuffer *fb = &char_fb;
+
+	draw_line(fb, start->x, start->y, end->x, end->y);
+
+	return 0;
+}
+
+int cfb_draw_rect(const struct device *dev, const struct cfb_position *start,
+		  const struct cfb_position *end)
+{
+	struct char_framebuffer *fb = &char_fb;
+
+	draw_line(fb, start->x, start->y, end->x, start->y);
+	draw_line(fb, end->x, start->y, end->x, end->y);
+	draw_line(fb, end->x, end->y, start->x, end->y);
+	draw_line(fb, start->x, end->y, start->x, start->y);
+
+	return 0;
 }
 
 int cfb_draw_text(const struct device *dev, const char *const str, int16_t x, int16_t y)
@@ -272,27 +355,34 @@ int cfb_invert_area(const struct device *dev, uint16_t x, uint16_t y,
 					uint8_t m = BIT_MASK((j % 8));
 					uint8_t b = fb->buf[index];
 
-					if (need_reverse) {
-						m = byte_reverse(m);
-						b = byte_reverse(b);
+					/*
+					 * Generate mask for remaining lines in case of
+					 * drawing within 8 lines from the start line
+					 */
+					if (remains < 8) {
+						m |= BIT_MASK((8 - (j % 8) + remains))
+						     << ((j % 8) + remains);
 					}
 
-					fb->buf[index] = ~(b | m) | (b & m);
+					if (need_reverse) {
+						m = byte_reverse(m);
+					}
+
+					fb->buf[index] = (b ^ (~m));
 					j += 7 - (j % 8);
 				} else if (remains >= 8) {
 					/* No mask required if no start or end line is included */
 					fb->buf[index] = ~fb->buf[index];
 					j += 7;
 				} else {
-					uint8_t m = BIT_MASK(remains % 8) << (8 - (remains % 8));
+					uint8_t m = BIT_MASK(8 - remains) << (remains);
 					uint8_t b = fb->buf[index];
 
 					if (need_reverse) {
 						m = byte_reverse(m);
-						b = byte_reverse(b);
 					}
 
-					fb->buf[index] = ~(b | m) | (b & m);
+					fb->buf[index] = (b ^ (~m));
 					j += (remains - 1);
 				}
 			}
@@ -425,11 +515,11 @@ int cfb_get_font_size(const struct device *dev, uint8_t idx, uint8_t *width,
 	}
 
 	if (width) {
-		*width = __font_entry_start[idx].width;
+		*width = TYPE_SECTION_START(cfb_font)[idx].width;
 	}
 
 	if (height) {
-		*height = __font_entry_start[idx].height;
+		*height = TYPE_SECTION_START(cfb_font)[idx].height;
 	}
 
 	return 0;
@@ -457,7 +547,8 @@ int cfb_framebuffer_init(const struct device *dev)
 
 	api->get_capabilities(dev, &cfg);
 
-	fb->numof_fonts = __font_entry_end - __font_entry_start;
+	STRUCT_SECTION_COUNT(cfb_font, &fb->numof_fonts);
+
 	LOG_DBG("number of fonts %d", fb->numof_fonts);
 	if (!fb->numof_fonts) {
 		return -ENODEV;
@@ -472,7 +563,7 @@ int cfb_framebuffer_init(const struct device *dev)
 	fb->kerning = 0;
 	fb->inverted = false;
 
-	fb->fonts = __font_entry_start;
+	fb->fonts = TYPE_SECTION_START(cfb_font);
 	fb->font_idx = 0U;
 
 	fb->size = fb->x_res * fb->y_res / fb->ppt;

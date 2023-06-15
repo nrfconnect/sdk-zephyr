@@ -7,6 +7,7 @@
 #include <arm/armv7-m.dtsi>
 
 /* Macros for device tree declarations of npcx soc family */
+#include <zephyr/dt-bindings/adc/adc.h>
 #include <zephyr/dt-bindings/clock/npcx_clock.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
@@ -526,8 +527,8 @@
 			status = "disabled";
 		};
 
-		kscan0: kscan@400a3000 {
-			compatible = "nuvoton,npcx-kscan";
+		kbd: kbd@400a3000 {
+			compatible = "nuvoton,npcx-kbd";
 			reg = <0x400a3000 0x2000>;
 			interrupts = <49 4>;
 			clocks = <&pcc NPCX_CLOCK_BUS_APB1 NPCX_PWDWN_CTL1 0>;

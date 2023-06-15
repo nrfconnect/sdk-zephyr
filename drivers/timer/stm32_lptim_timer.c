@@ -50,18 +50,24 @@ static const struct device *const clk_ctrl = DEVICE_DT_GET(STM32_CLOCK_CONTROL_N
  * Assumptions and limitations:
  *
  * - system clock based on an LPTIM instance, clocked by LSI or LSE
- * - prescaler is set to 1 (LL_LPTIM_PRESCALER_DIV1 in the related register)
+ * - prescaler is set to a 2^value from 1 (division of the LPTIM source clock by 1)
+ *   to 128 (division of the LPTIM source clock by 128)
  * - using LPTIM AutoReload capability to trig the IRQ (timeout irq)
  * - when timeout irq occurs the counter is already reset
  * - the maximum timeout duration is reached with the lptim_time_base value
- * - with prescaler of 1, the max timeout (lptim_time_base) is 2seconds
+ * - with prescaler of 1, the max timeout (LPTIM_TIMEBASE) is 2 seconds:
+ *    0xFFFF / (LSE freq (32768Hz) / 1)
+ * - with prescaler of 128, the max timeout (LPTIM_TIMEBASE) is 256 seconds:
+ *    0xFFFF / (LSE freq (32768Hz) / 128)
  */
 
-static uint32_t lptim_clock_freq = 32000;
+static uint32_t lptim_clock_freq = KHZ(32);
 static int32_t lptim_time_base;
 
+/* The prescaler given by the DTS and to apply to the lptim_clock_freq */
+#define LPTIM_CLOCK_RATIO DT_PROP(DT_DRV_INST(0), st_prescaler)
 
-/* minimum nb of clock cycles to have to set autoreload register correctly */
+/* Minimum nb of clock cycles to have to set autoreload register correctly */
 #define LPTIM_GUARD_VALUE 2
 
 /* A 32bit value cannot exceed 0xFFFFFFFF/LPTIM_TIMEBASE counting cycles.
@@ -219,9 +225,9 @@ void sys_clock_set_timeout(int32_t ticks, bool idle)
 	next_arr = (((lp_time * CONFIG_SYS_CLOCK_TICKS_PER_SEC)
 			/ lptim_clock_freq) + 1) * lptim_clock_freq
 			/ (CONFIG_SYS_CLOCK_TICKS_PER_SEC);
-	/* add count unit from the expected nb of Ticks */
 	next_arr = next_arr + ((uint32_t)(ticks) * lptim_clock_freq)
-			/ CONFIG_SYS_CLOCK_TICKS_PER_SEC - 1;
+			/ CONFIG_SYS_CLOCK_TICKS_PER_SEC;
+	/* if the lptim_clock_freq <  one ticks/sec, then next_arr must be > 0 */
 
 	/* maximise to TIMEBASE */
 	if (next_arr > lptim_time_base) {
@@ -234,6 +240,8 @@ void sys_clock_set_timeout(int32_t ticks, bool idle)
 	else if (next_arr < (lp_time + LPTIM_GUARD_VALUE)) {
 		next_arr = lp_time + LPTIM_GUARD_VALUE;
 	}
+	/* with slow lptim_clock_freq, LPTIM_GUARD_VALUE of 1 is enough */
+	next_arr = next_arr - 1;
 
 	/* Update autoreload register */
 	lptim_set_autoreload(next_arr);
@@ -317,6 +325,7 @@ void stm32_lptim_wait_ready(void)
 
 static int sys_clock_driver_init(void)
 {
+	uint32_t count_per_tick;
 	int err;
 
 
@@ -386,6 +395,9 @@ static int sys_clock_driver_init(void)
 	 * Time base = (2s * freq) - 1
 	 */
 
+	/* Actual lptim clock freq when the clock source is reduced by the prescaler */
+	lptim_clock_freq = lptim_clock_freq / LPTIM_CLOCK_RATIO;
+
 	/* Clear the event flag and possible pending interrupt */
 	IRQ_CONNECT(DT_INST_IRQN(0),
 		    DT_INST_IRQ(0, priority),
@@ -399,8 +411,8 @@ static int sys_clock_driver_init(void)
 
 	/* configure the LPTIM counter */
 	LL_LPTIM_SetClockSource(LPTIM, LL_LPTIM_CLK_SOURCE_INTERNAL);
-	/* configure the LPTIM prescaler with 1 */
-	LL_LPTIM_SetPrescaler(LPTIM, LL_LPTIM_PRESCALER_DIV1);
+	/* the LPTIM clock freq is affected by the prescaler */
+	LL_LPTIM_SetPrescaler(LPTIM, (__CLZ(__RBIT(LPTIM_CLOCK_RATIO)) << LPTIM_CFGR_PRESC_Pos));
 #ifdef CONFIG_SOC_SERIES_STM32U5X
 	LL_LPTIM_OC_SetPolarity(LPTIM, LL_LPTIM_CHANNEL_CH1,
 				LL_LPTIM_OUTPUT_POLARITY_REGULAR);
@@ -449,8 +461,10 @@ static int sys_clock_driver_init(void)
 		/* LPTIM is triggered on a LPTIM_TIMEBASE period */
 		lptim_set_autoreload(lptim_time_base);
 	} else {
+		/* nb of LPTIM counter unit per kernel tick (depends on lptim clock prescaler) */
+		count_per_tick = (lptim_clock_freq / CONFIG_SYS_CLOCK_TICKS_PER_SEC);
 		/* LPTIM is triggered on a Tick period */
-		lptim_set_autoreload((lptim_clock_freq / CONFIG_SYS_CLOCK_TICKS_PER_SEC) - 1);
+		lptim_set_autoreload(count_per_tick - 1);
 	}
 
 	/* Start the LPTIM counter in continuous mode */

@@ -8,7 +8,7 @@
 #include <errno.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/byteorder.h>
-
+#include <zephyr/sys/iterable_sections.h>
 #include <zephyr/net/buf.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
@@ -153,11 +153,17 @@ static int private_random_update(void)
 	uint64_t uptime = k_uptime_get();
 	int err;
 
+	/* If private beacon will not be sent there is no point in generating new random */
+	if (bt_mesh_priv_beacon_get() != BT_MESH_FEATURE_ENABLED) {
+		return 0;
+	}
+
 	/* The Private beacon random value should change every N seconds to maintain privacy.
 	 * N = (10 * interval) seconds, or on every beacon creation, if the interval is 0.
 	 */
 	if (interval &&
-	    uptime - priv_random.timestamp < (10 * interval * MSEC_PER_SEC)) {
+	    uptime - priv_random.timestamp < (10 * interval * MSEC_PER_SEC) &&
+	    priv_random.timestamp != 0) {
 		/* Not time yet */
 		return 0;
 	}
@@ -501,6 +507,21 @@ static bool secure_beacon_authenticate(struct bt_mesh_subnet *sub, void *cb_data
 	for (int i = 0; i < ARRAY_SIZE(sub->keys); i++) {
 		if (sub->keys[i].valid && auth_match(&sub->keys[i], params)) {
 			params->new_key = (i > 0);
+#if defined(CONFIG_BT_TESTING)
+			struct bt_mesh_snb beacon_info;
+
+			beacon_info.flags = params->flags;
+			memcpy(&beacon_info.net_id, params->net_id, 8);
+			beacon_info.iv_idx = params->iv_index;
+			memcpy(&beacon_info.auth_val, params->auth, 8);
+
+			STRUCT_SECTION_FOREACH(bt_mesh_beacon_cb, cb) {
+				if (cb->snb_received) {
+					cb->snb_received(&beacon_info);
+				}
+			}
+#endif
+
 			return true;
 		}
 	}
@@ -526,6 +547,21 @@ static bool priv_beacon_decrypt(struct bt_mesh_subnet *sub, void *cb_data)
 			params->new_key = (i > 0);
 			params->flags = out[0];
 			params->iv_index = sys_get_be32(&out[1]);
+
+#if defined(CONFIG_BT_TESTING)
+			struct bt_mesh_prb beacon_info;
+
+			memcpy(beacon_info.random, params->random, 13);
+			beacon_info.flags = params->flags;
+			beacon_info.iv_idx = params->iv_index;
+			memcpy(&beacon_info.auth_tag, params->auth, 8);
+
+			STRUCT_SECTION_FOREACH(bt_mesh_beacon_cb, cb) {
+				if (cb->priv_received) {
+					cb->priv_received(&beacon_info);
+				}
+			}
+#endif
 			return true;
 		}
 	}
@@ -688,6 +724,7 @@ void bt_mesh_beacon_update(struct bt_mesh_subnet *sub)
 #if defined(CONFIG_BT_MESH_PRIV_BEACONS)
 	/* Invalidate private beacon to force regeneration: */
 	sub->priv_beacon_ctx.idx = priv_random.idx - 1;
+	priv_random.timestamp = 0;
 #endif
 
 	bt_mesh_beacon_auth(keys->beacon, flags, keys->net_id, bt_mesh.iv_index,

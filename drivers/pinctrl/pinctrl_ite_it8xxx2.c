@@ -91,22 +91,28 @@ static int pinctrl_it8xxx2_set(const pinctrl_soc_pin_t *pins)
 		return -EINVAL;
 	}
 
-	/* Setting voltage 3.3V or 1.8V. */
-	switch (IT8XXX2_DT_PINCFG_VOLTAGE(pincfg)) {
-	case IT8XXX2_VOLTAGE_3V3:
-		/* Input voltage selection 3.3V. */
-		*reg_volt_sel &= ~gpio->volt_sel_mask[pin];
-		break;
-	case IT8XXX2_VOLTAGE_1V8:
-		__ASSERT(!(IT8XXX2_DT_PINCFG_PUPDR(pincfg)
-			   == IT8XXX2_PULL_UP),
-		"Don't enable internal pullup if 1.8V voltage is used");
-		/* Input voltage selection 1.8V. */
-		*reg_volt_sel |= gpio->volt_sel_mask[pin];
-		break;
-	default:
-		LOG_ERR("The voltage selection is not supported");
-		return -EINVAL;
+	/*
+	 * Since not all GPIOs support voltage selection, configure voltage
+	 * selection register only if it is present.
+	 */
+	if (reg_volt_sel != NULL) {
+		/* Setting voltage 3.3V or 1.8V. */
+		switch (IT8XXX2_DT_PINCFG_VOLTAGE(pincfg)) {
+		case IT8XXX2_VOLTAGE_3V3:
+			/* Input voltage selection 3.3V. */
+			*reg_volt_sel &= ~gpio->volt_sel_mask[pin];
+			break;
+		case IT8XXX2_VOLTAGE_1V8:
+			__ASSERT(!(IT8XXX2_DT_PINCFG_PUPDR(pincfg)
+				   == IT8XXX2_PULL_UP),
+			"Don't enable internal pullup if 1.8V voltage is used");
+			/* Input voltage selection 1.8V. */
+			*reg_volt_sel |= gpio->volt_sel_mask[pin];
+			break;
+		default:
+			LOG_ERR("The voltage selection is not supported");
+			return -EINVAL;
+		}
 	}
 
 	/* Setting tri-state mode. */
@@ -241,13 +247,15 @@ static int pinctrl_kscan_it8xxx2_configure_pins(const pinctrl_soc_pin_t *pins)
 {
 	const struct pinctrl_it8xxx2_config *pinctrl_config = pins->pinctrls->config;
 	const struct pinctrl_it8xxx2_ksi_kso *ksi_kso = &(pinctrl_config->ksi_kso);
-	volatile uint8_t *reg_gctrl = ksi_kso->reg_gctrl;
-	uint8_t pin_mask = BIT(pins->pin);
 
 	/* Set a pin of KSI[7:0]/KSO[15:0] to pullup, push-pull/open-drain */
 	if (pinctrl_kscan_it8xxx2_set(pins)) {
 		return -EINVAL;
 	}
+
+#ifdef CONFIG_SOC_IT8XXX2_REG_SET_V1
+	uint8_t pin_mask = BIT(pins->pin);
+	volatile uint8_t *reg_gctrl = ksi_kso->reg_gctrl;
 
 	switch (pins->alt_func) {
 	case IT8XXX2_ALT_FUNC_1:
@@ -258,6 +266,22 @@ static int pinctrl_kscan_it8xxx2_configure_pins(const pinctrl_soc_pin_t *pins)
 		/* Set a pin of KSI[7:0]/KSO[15:0] to gpio mode */
 		*reg_gctrl |= pin_mask;
 		break;
+#elif CONFIG_SOC_IT8XXX2_REG_SET_V2
+	uint8_t pin = pins->pin;
+	volatile uint8_t *reg_gctrl = ksi_kso->reg_gctrl + pin;
+
+	switch (pins->alt_func) {
+	case IT8XXX2_ALT_FUNC_1:
+		/* Set a pin of KSI[7:0]/KSO[15:0] to kbs mode */
+		*reg_gctrl &= ~(GPCR_PORT_PIN_MODE_INPUT |
+				GPCR_PORT_PIN_MODE_OUTPUT);
+		break;
+	case IT8XXX2_ALT_DEFAULT:
+		/* Set a pin of KSI[7:0]/KSO[15:0] to gpio mode */
+		*reg_gctrl = (*reg_gctrl | GPCR_PORT_PIN_MODE_INPUT) &
+			      ~GPCR_PORT_PIN_MODE_OUTPUT;
+		break;
+#endif
 	default:
 		LOG_ERR("Alternate function not supported");
 		return -ENOTSUP;
@@ -308,6 +332,16 @@ static int pinctrl_it8xxx2_init(const struct device *dev)
 	 * have to set UART1PSEL = 1 in UART1PMR register.
 	 */
 
+#ifdef CONFIG_SOC_IT8XXX2_REG_SET_V2
+	/*
+	 * Swap the default I2C2 SMCLK2/SMDAT2 pins from GPC7/GPD0 to GPF6/GPF7,
+	 * and I2C3 SMCLK3/SMDAT3 pins from GPB2/GPB5 to GPH1/GPH2,
+	 * and I2C5 SMCLK5/SMDAT5 pins from GPE1/GPE2 to GPA4/GPA5,
+	 */
+	gpio_base->GPIO_GCR7 &= ~(IT8XXX2_GPIO_SMB2PS |
+				  IT8XXX2_GPIO_SMB3PS |
+				  IT8XXX2_GPIO_SMB5PS);
+#endif
 	return 0;
 }
 

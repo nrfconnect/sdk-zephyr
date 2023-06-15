@@ -7,6 +7,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define BT_ASCS_ASE_ID_NONE              0x00
+
+/* The number of ASEs in the notification when the opcode is unsupported or the length of the
+ * control point write request is incorrect
+ */
+#define BT_ASCS_UNSUPP_OR_LENGTH_ERR_NUM_ASE 0xFFU
 
 /* Transport QoS Packing */
 #define BT_ASCS_QOS_PACKING_SEQ          0x00

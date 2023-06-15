@@ -19,6 +19,11 @@
 		ztest,gpio = &test_nodelabel;
 	};
 
+	zephyr,user {
+		ph = <&test_gpio_1>;
+		string = "foo";
+	};
+
 	test {
 		#address-cells = < 0x1 >;
 		#size-cells = < 0x1 >;
@@ -535,6 +540,25 @@
 				ranges = <0x0 0x0 0x0 0x3eff0000 0x10000>,
 				         <0x0 0x10000000 0x0 0x10000000 0x2eff0000>;
 			};
+		};
+
+		device-with-props-0 {
+			compatible = "vnd,device-with-props";
+			status = "okay";
+			foo = <1>;
+			bar = <2>;
+		};
+
+		device-with-props-1 {
+			compatible = "vnd,device-with-props";
+			status = "okay";
+			foo = <2>;
+		};
+
+		device-with-props-2 {
+			compatible = "vnd,device-with-props";
+			status = "disabled";
+			baz = <1>;
 		};
 
 		test_string_token_0: string-token-0 {

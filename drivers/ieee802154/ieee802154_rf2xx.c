@@ -486,30 +486,30 @@ static int rf2xx_set_txpower(const struct device *dev, int16_t dbm)
 
 	min = conf->tx_pwr_min[1];
 	if (conf->tx_pwr_min[0] == 0x01) {
-		min *= -1.0;
+		min *= -1.0f;
 	}
 
 	max = conf->tx_pwr_max[1];
 	if (conf->tx_pwr_max[0] == 0x01) {
-		min *= -1.0;
+		min *= -1.0f;
 	}
 
-	step = (max - min) / ((float)conf->tx_pwr_table_size - 1.0);
+	step = (max - min) / ((float)conf->tx_pwr_table_size - 1.0f);
 
-	if (step == 0.0) {
-		step = 1.0;
+	if (step == 0.0f) {
+		step = 1.0f;
 	}
 
 	LOG_DBG("Tx-power values: min %f, max %f, step %f, entries %d",
-		min, max, step, conf->tx_pwr_table_size);
+		(double)min, (double)max, (double)step, conf->tx_pwr_table_size);
 
 	if (dbm < min) {
 		LOG_INF("TX-power %d dBm below min of %f dBm, using %f dBm",
-			dbm, min, max);
+			dbm, (double)min, (double)max);
 		dbm = min;
 	} else if (dbm > max) {
 		LOG_INF("TX-power %d dBm above max of %f dBm, using %f dBm",
-			dbm, min, max);
+			dbm, (double)min, (double)max);
 		dbm = max;
 	}
 
@@ -902,7 +902,11 @@ static int power_on_and_setup(const struct device *dev)
 
 	gpio_init_callback(&ctx->irq_cb, trx_isr_handler,
 			   BIT(conf->irq_gpio.pin));
-	gpio_add_callback(conf->irq_gpio.port, &ctx->irq_cb);
+
+	if (gpio_add_callback(conf->irq_gpio.port, &ctx->irq_cb) < 0) {
+		LOG_ERR("Could not set IRQ callback.");
+		return -ENXIO;
+	}
 
 	return 0;
 }

@@ -44,11 +44,13 @@ static struct bt_iso_recv_info iso_info_data[CONFIG_BT_ISO_RX_BUF_COUNT];
 
 #if defined(CONFIG_BT_ISO_UNICAST) || defined(CONFIG_BT_ISO_BROADCAST)
 NET_BUF_POOL_FIXED_DEFINE(iso_tx_pool, CONFIG_BT_ISO_TX_BUF_COUNT,
-			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU), 8, NULL);
+			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU),
+			  CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 
 #if CONFIG_BT_ISO_TX_FRAG_COUNT > 0
 NET_BUF_POOL_FIXED_DEFINE(iso_frag_pool, CONFIG_BT_ISO_TX_FRAG_COUNT,
-			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU), 8, NULL);
+			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU),
+			  CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 #endif /* CONFIG_BT_ISO_TX_FRAG_COUNT > 0 */
 #endif /* CONFIG_BT_ISO_UNICAST || CONFIG_BT_ISO_BROADCAST */
 
@@ -803,7 +805,10 @@ int bt_iso_chan_send(struct bt_iso_chan *chan, struct net_buf *buf,
 								     BT_ISO_DATA_VALID));
 	}
 
-	return bt_conn_send_cb(iso_conn, buf, bt_iso_send_cb, NULL);
+	return bt_conn_send_iso_cb(iso_conn,
+				   buf,
+				   bt_iso_send_cb,
+				   ts != BT_ISO_TIMESTAMP_NONE);
 }
 
 #if defined(CONFIG_BT_ISO_CENTRAL) || defined(CONFIG_BT_ISO_BROADCASTER)
@@ -974,7 +979,7 @@ void hci_le_cis_established(struct net_buf *buf)
 	uint16_t handle = sys_le16_to_cpu(evt->conn_handle);
 	struct bt_conn *iso;
 
-	LOG_DBG("status %u handle %u", evt->status, handle);
+	LOG_DBG("status 0x%02x handle %u", evt->status, handle);
 
 	/* ISO connection handles are already assigned at this point */
 	iso = bt_conn_lookup_handle(handle);
@@ -1366,9 +1371,9 @@ static void bt_iso_remove_data_path(struct bt_conn *iso)
 
 		/* Only remove one data path for BIS as per the spec */
 		if (tx_qos) {
-			dir = BT_HCI_DATAPATH_DIR_HOST_TO_CTLR;
+			dir = BIT(BT_HCI_DATAPATH_DIR_HOST_TO_CTLR);
 		} else {
-			dir = BT_HCI_DATAPATH_DIR_CTLR_TO_HOST;
+			dir = BIT(BT_HCI_DATAPATH_DIR_CTLR_TO_HOST);
 		}
 
 		(void)hci_le_remove_iso_data_path(iso, dir);
@@ -1379,10 +1384,8 @@ static void bt_iso_remove_data_path(struct bt_conn *iso)
 		/* TODO: Check which has been setup first to avoid removing
 		 * data paths that are not setup
 		 */
-		(void)hci_le_remove_iso_data_path(iso,
-						  BT_HCI_DATAPATH_DIR_CTLR_TO_HOST);
-		(void)hci_le_remove_iso_data_path(iso,
-						  BT_HCI_DATAPATH_DIR_HOST_TO_CTLR);
+		(void)hci_le_remove_iso_data_path(iso, BIT(BT_HCI_DATAPATH_DIR_HOST_TO_CTLR));
+		(void)hci_le_remove_iso_data_path(iso, BIT(BT_HCI_DATAPATH_DIR_CTLR_TO_HOST));
 	} else {
 		__ASSERT(false, "Invalid iso.type: %u", type);
 	}
@@ -2470,7 +2473,7 @@ void hci_le_big_complete(struct net_buf *buf)
 	big = lookup_big_by_handle(evt->big_handle);
 	atomic_clear_bit(big->flags, BT_BIG_PENDING);
 
-	LOG_DBG("BIG[%u] %p completed, status %u", big->handle, big, evt->status);
+	LOG_DBG("BIG[%u] %p completed, status 0x%02x", big->handle, big, evt->status);
 
 	if (evt->status || evt->num_bis != big->num_bis) {
 		if (evt->status == BT_HCI_ERR_SUCCESS && evt->num_bis != big->num_bis) {
@@ -2644,7 +2647,7 @@ void hci_le_big_sync_established(struct net_buf *buf)
 	big = lookup_big_by_handle(evt->big_handle);
 	atomic_clear_bit(big->flags, BT_BIG_SYNCING);
 
-	LOG_DBG("BIG[%u] %p sync established, status %u", big->handle, big, evt->status);
+	LOG_DBG("BIG[%u] %p sync established, status 0x%02x", big->handle, big, evt->status);
 
 	if (evt->status || evt->num_bis != big->num_bis) {
 		if (evt->status == BT_HCI_ERR_SUCCESS && evt->num_bis != big->num_bis) {

@@ -108,9 +108,18 @@ static struct lwm2m_ctx *sock_ctx[MAX_POLL_FD];
 static int sock_nfds;
 
 /* Resource wrappers */
+#if defined(CONFIG_LWM2M_COAP_BLOCK_TRANSFER)
+static struct coap_block_context output_block_contexts[NUM_OUTPUT_BLOCK_CONTEXT];
+#endif
+
+/* Resource wrappers */
 struct lwm2m_ctx **lwm2m_sock_ctx(void) { return sock_ctx; }
 
 int lwm2m_sock_nfds(void) { return sock_nfds; }
+
+#if defined(CONFIG_LWM2M_COAP_BLOCK_TRANSFER)
+struct coap_block_context *lwm2m_output_block_context(void) { return output_block_contexts; }
+#endif
 
 static int lwm2m_socket_update(struct lwm2m_ctx *ctx);
 
@@ -193,15 +202,18 @@ int lwm2m_engine_connection_resume(struct lwm2m_ctx *client_ctx)
 	int ret;
 
 	if (client_ctx->connection_suspended) {
-		lwm2m_close_socket(client_ctx);
-		client_ctx->connection_suspended = false;
-		ret = lwm2m_open_socket(client_ctx);
-		if (ret) {
-			return ret;
+		if (IS_ENABLED(CONFIG_LWM2M_RD_CLIENT_STOP_POLLING_AT_IDLE)) {
+			lwm2m_socket_update(client_ctx);
+		} else {
+			lwm2m_close_socket(client_ctx);
+			client_ctx->connection_suspended = false;
+			ret = lwm2m_open_socket(client_ctx);
+			if (ret) {
+				return ret;
+			}
+			LOG_DBG("Resume suspended connection");
+			return lwm2m_socket_start(client_ctx);
 		}
-
-		LOG_DBG("Resume suspended connection");
-		return lwm2m_socket_start(client_ctx);
 	}
 
 	return 0;
@@ -813,8 +825,14 @@ int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 		}
 	}
 
+	if (client_ctx->set_socketoptions) {
+		ret = client_ctx->set_socketoptions(client_ctx);
+		if (ret) {
+			return ret;
+		}
+	}
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
-	if (client_ctx->use_dtls) {
+	else if (client_ctx->use_dtls) {
 		sec_tag_t tls_tag_list[] = {
 			client_ctx->tls_tag,
 		};
@@ -866,8 +884,8 @@ int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 	} else if ((client_ctx->remote_addr).sa_family == AF_INET6) {
 		addr_len = sizeof(struct sockaddr_in6);
 	} else {
-		lwm2m_engine_stop(client_ctx);
-		return -EPROTONOSUPPORT;
+		ret = -EPROTONOSUPPORT;
+		goto error;
 	}
 
 	if (zsock_connect(client_ctx->sock_fd, &client_ctx->remote_addr, addr_len) < 0) {
@@ -892,7 +910,7 @@ int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 	LOG_INF("Connected, sock id %d", client_ctx->sock_fd);
 	return 0;
 error:
-	lwm2m_engine_stop(client_ctx);
+	lwm2m_socket_close(client_ctx);
 	return ret;
 }
 
@@ -979,6 +997,9 @@ static int lwm2m_engine_init(void)
 	}
 
 	lwm2m_clear_block_contexts();
+#if defined(CONFIG_LWM2M_COAP_BLOCK_TRANSFER)
+	(void)memset(output_block_contexts, 0, sizeof(output_block_contexts));
+#endif
 
 	if (IS_ENABLED(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)) {
 		/* Init data cache */
