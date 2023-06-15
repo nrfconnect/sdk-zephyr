@@ -23,15 +23,7 @@ LOG_MODULE_REGISTER(conn_mgr, CONFIG_NET_CONNECTION_MANAGER_LOG_LEVEL);
 #define THREAD_PRIORITY K_PRIO_PREEMPT(7)
 #endif
 
-/* Tracks per-iface state and event flags */
 uint16_t iface_states[CONN_MGR_IFACE_MAX];
-
-/* Tracks the total number of L4-ready ifaces */
-static uint16_t ready_count;
-
-/* Tracks the last ifaces to change state in each respective direction */
-static int last_iface_down;
-static int last_iface_up;
 
 /* Used to signal when modifications have been made that need to be responded to */
 K_SEM_DEFINE(conn_mgr_event_signal, 1, 1);
@@ -89,36 +81,50 @@ static int conn_mgr_get_index_for_if(struct net_if *iface)
 	return net_if_get_by_iface(iface) - 1;
 }
 
+/**
+ * @brief Notifies listeners of the current readiness state of the iface at the given index
+ *
+ * @param index - Index of the iface (in iface_states)
+ */
+static void conn_mgr_notify_if_readiness(int index)
+{
+	struct net_if *iface = conn_mgr_get_if_by_index(index);
+	bool readiness = iface_states[index] & CONN_MGR_IF_READY;
+
+	if (iface == NULL) {
+		return;
+	}
+
+	NET_DBG("Iface %d (%p) %s", net_if_get_by_iface(iface),
+		iface, readiness ? "ready" : "unready");
+
+	net_mgmt_event_notify(
+		readiness ? NET_EVENT_L4_CONNECTED : NET_EVENT_L4_DISCONNECTED,
+		iface
+	);
+
+}
+
 static void conn_mgr_set_ready(int idx, bool readiness)
 {
 	/* Clear and then update the L4-readiness bit */
 	iface_states[idx] &= ~CONN_MGR_IF_READY;
-
 	if (readiness) {
 		iface_states[idx] |= CONN_MGR_IF_READY;
-
-		ready_count += 1;
-		last_iface_up = idx;
-	} else {
-		ready_count -= 1;
-		last_iface_down = idx;
 	}
 }
 
 static void conn_mgr_act_on_changes(void)
 {
 	int idx;
-	int original_ready_count;
 	bool is_ip_ready;
 	bool is_l4_ready;
 	bool is_oper_up;
 	bool was_l4_ready;
 	bool is_ignored;
-	struct net_if *last_iface;
 
 	k_mutex_lock(&conn_mgr_lock, K_FOREVER);
 
-	original_ready_count = ready_count;
 	for (idx = 0; idx < ARRAY_SIZE(iface_states); idx++) {
 		if (iface_states[idx] == 0) {
 			/* This interface is not used */
@@ -144,22 +150,11 @@ static void conn_mgr_act_on_changes(void)
 		if (was_l4_ready != is_l4_ready) {
 			/* Track the iface readiness change */
 			conn_mgr_set_ready(idx, is_l4_ready);
+
+			/* Notify listeners of the readiness change */
+			conn_mgr_notify_if_readiness(idx);
 		}
 	}
-
-	/* If the total number of ready ifaces changed, possibly send an event */
-	if (ready_count != original_ready_count) {
-		if (ready_count == 0) {
-			/* We just lost connectivity */
-			last_iface = conn_mgr_get_if_by_index(last_iface_down);
-			net_mgmt_event_notify(NET_EVENT_L4_DISCONNECTED, last_iface);
-		} else if (original_ready_count == 0) {
-			/* We just gained connectivity */
-			last_iface = conn_mgr_get_if_by_index(last_iface_up);
-			net_mgmt_event_notify(NET_EVENT_L4_CONNECTED, last_iface);
-		}
-	}
-
 	k_mutex_unlock(&conn_mgr_lock);
 }
 
@@ -238,16 +233,12 @@ K_THREAD_DEFINE(conn_mgr, CONFIG_NET_CONNECTION_MANAGER_STACK_SIZE,
 
 void conn_mgr_resend_status(void)
 {
-	struct net_if *last_iface;
+	int idx;
 
 	k_mutex_lock(&conn_mgr_lock, K_FOREVER);
 
-	if (ready_count == 0) {
-		last_iface = conn_mgr_get_if_by_index(last_iface_down);
-		net_mgmt_event_notify(NET_EVENT_L4_DISCONNECTED, last_iface);
-	} else {
-		last_iface = conn_mgr_get_if_by_index(last_iface_up);
-		net_mgmt_event_notify(NET_EVENT_L4_CONNECTED, last_iface);
+	for (idx = 0; idx < ARRAY_SIZE(iface_states); idx++) {
+		conn_mgr_notify_if_readiness(idx);
 	}
 
 	k_mutex_unlock(&conn_mgr_lock);
