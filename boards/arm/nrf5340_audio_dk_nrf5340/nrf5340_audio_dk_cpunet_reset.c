@@ -9,7 +9,6 @@
 #include <zephyr/logging/log.h>
 
 #include <soc.h>
-#include <hal/nrf_reset.h>
 
 #include <nrfx_gpiote.h>
 
@@ -72,7 +71,7 @@ static int remoteproc_mgr_boot(void)
 	 */
 
 	/* Release the Network MCU, 'Release force off signal' */
-	nrf_reset_network_force_off(NRF_RESET, false);
+	NRF_RESET->NETWORK.FORCEOFF = RESET_NETWORK_FORCEOFF_FORCEOFF_Release;
 
 	LOG_DBG("Network MCU released.");
 #endif /* !CONFIG_TRUSTED_EXECUTION_SECURE */
