@@ -51,6 +51,11 @@
 extern struct k_sem conn_mgr_event_signal;
 extern struct k_mutex conn_mgr_lock;
 
+enum conn_mgr_state {
+	CONN_MGR_STATE_DISCONNECTED	= 0,
+	CONN_MGR_STATE_CONNECTED	= 1,
+};
+
 void conn_mgr_init_events_handler(void);
 
 /**
