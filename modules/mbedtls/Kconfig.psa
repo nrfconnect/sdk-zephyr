@@ -197,7 +197,7 @@ config PSA_WANT_ALG_SHA_224
 
 config PSA_WANT_ALG_SHA_256
 	bool
-	prompt "PSA SSH-256 support" if !PSA_PROMPTLESS
+	prompt "PSA SHA-256 support" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_SHA_384
