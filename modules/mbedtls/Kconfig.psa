@@ -328,7 +328,7 @@ config PSA_HAS_ASYM_ENCRYPT_SUPPORT
 	bool
 	default y
 	depends on PSA_WANT_ALG_RSA_OAEP || \
-			   PSA_WANT_ALG_RSA_PKCS1V15_CRYPT
+		   PSA_WANT_ALG_RSA_PKCS1V15_CRYPT
 	help
 	  Prompt-less configuration that states that asymmetric encryption
 	  is supported.
@@ -341,7 +341,6 @@ config PSA_HAS_ASYM_SIGN_SUPPORT
 		   PSA_WANT_ALG_ECDSA 			|| \
 		   PSA_WANT_ALG_RSA_PKCS1V15_SIGN	|| \
 		   PSA_WANT_ALG_RSA_PSS
-
 	help
 	  Prompt-less configuration that states that asymmetric signing
 	  is supported.
