@@ -8,7 +8,6 @@ menu "PSA RNG support"
 config PSA_WANT_GENERATE_RANDOM
 	bool
 	prompt "PSA RNG support"
-	default y
 	help
 	  Provide random number generator (RNG) support.
 
@@ -124,17 +123,14 @@ config PSA_HAS_AEAD_SUPPORT
 config PSA_WANT_ALG_CCM
 	bool
 	prompt "PSA CCM support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_GCM
 	bool
 	prompt "PSA GCM support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_CHACHA20_POLY1305
 	bool
 	prompt "PSA ChaCha20-Poly1305 support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 endmenu # PSA AEAD support
 
@@ -158,12 +154,10 @@ config PSA_WANT_ALG_CBC_MAC
 config PSA_WANT_ALG_CMAC
 	bool
 	prompt "PSA CMAC support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_HMAC
 	bool
 	prompt "PSA HMAC support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 endmenu # PSA MAC support
 
@@ -186,27 +180,22 @@ config PSA_HAS_HASH_SUPPORT
 config PSA_WANT_ALG_SHA_1
 	bool
 	prompt "PSA SHA1 support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_SHA_224
 	bool
 	prompt "PSA SHA-224 support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_SHA_256
 	bool
 	prompt "PSA SHA-256 support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_SHA_384
 	bool
 	prompt "PSA SHA-384 support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_SHA_512
 	bool
 	prompt "PSA SHA-512 support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_RIPEMD160
 	bool
@@ -238,17 +227,14 @@ config PSA_HAS_CIPHER_SUPPORT
 config PSA_WANT_ALG_ECB_NO_PADDING
 	bool
 	prompt "PSA ECB block cipher mode support (with no padding)" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_CBC_NO_PADDING
 	bool
 	prompt "PSA CBC block cipher mode support (with no padding)" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_CBC_PKCS7
 	bool
 	prompt "PSA CBC block cipher mode support (with PKCS#7 padding)" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_CFB
 	bool
@@ -257,7 +243,6 @@ config PSA_WANT_ALG_CFB
 config PSA_WANT_ALG_CTR
 	bool
 	prompt "PSA stream cipher using CTR block cipher mode support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_OFB
 	bool
@@ -270,7 +255,6 @@ config PSA_WANT_ALG_XTS
 config PSA_WANT_ALG_STREAM_CIPHER
 	bool
 	prompt "PSA stream cipher support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 endmenu # PSA Cipher Support
 
@@ -292,7 +276,6 @@ config PSA_HAS_KEY_DERIVATION
 config PSA_WANT_ALG_HKDF
 	bool
 	prompt "PSA HKDF support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 	depends on PSA_WANT_ALG_HMAC
 
 config PSA_WANT_ALG_PBKDF2_HMAC
@@ -353,17 +336,14 @@ config PSA_HAS_ECC_SUPPORT
 config PSA_WANT_ALG_ECDH
 	bool
 	prompt "PSA ECDH support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_ECDSA
 	bool
 	prompt "PSA ECDSA support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_DETERMINISTIC_ECDSA
 	bool
 	prompt "PSA ECDSA support (deterministic mode)" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 menu "Elliptic Curve type support"
 	depends on PSA_HAS_ECC_SUPPORT
@@ -411,7 +391,6 @@ config PSA_WANT_ECC_SECP_R1_224
 config PSA_WANT_ECC_SECP_R1_256
 	bool
 	prompt "PSA ECC secp256r1" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ECC_SECP_R1_384
 	bool
