@@ -384,7 +384,7 @@ class HardwareMap:
 
     def save(self, hwm_file):
         # use existing map
-        self.detected = natsorted(self.detected, key=lambda x: x.serial or '')
+        self.detected.sort(key=lambda x: x.serial or '')
         if os.path.exists(hwm_file):
             with open(hwm_file) as yaml_file:
                 hwm = yaml.load(yaml_file, Loader=SafeLoader)
