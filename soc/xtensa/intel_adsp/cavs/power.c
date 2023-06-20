@@ -12,10 +12,13 @@
 #include <zephyr/kernel.h>
 #include <zephyr/pm/pm.h>
 #include <zephyr/device.h>
+#include <zephyr/cache.h>
 #include <cpu_init.h>
 
+#include <adsp_memory.h>
 #include <adsp_shim.h>
 #include <adsp_clk.h>
+#include <adsp_imr_layout.h>
 #include <cavs-idc.h>
 #include "soc.h"
 
@@ -35,7 +38,6 @@ LOG_MODULE_REGISTER(soc);
 #ifdef CONFIG_PM_POLICY_CUSTOM
 #define SRAM_ALIAS_BASE		0x9E000000
 #define SRAM_ALIAS_MASK		0xFF000000
-#define EBB_BANKS_IN_SEGMENT	32
 #define SRAM_ALIAS_OFFSET	0x20000000
 
 #define L2_INTERRUPT_NUMBER     4
@@ -45,6 +47,11 @@ LOG_MODULE_REGISTER(soc);
 #define L3_INTERRUPT_MASK       (1<<L3_INTERRUPT_NUMBER)
 
 #define ALL_USED_INT_LEVELS_MASK (L2_INTERRUPT_MASK | L3_INTERRUPT_MASK)
+
+/*
+ * @biref FW entry point called by ROM during normal boot flow
+ */
+extern void rom_entry(void);
 
 struct core_state {
 	uint32_t intenable;
@@ -78,13 +85,23 @@ __weak void pm_state_set(enum pm_state state, uint8_t substate_id)
 		core_desc[cpu].intenable = XTENSA_RSR("INTENABLE");
 		z_xt_ints_off(0xffffffff);
 		soc_cpus_active[cpu] = false;
-		z_xtensa_cache_flush_inv_all();
+		sys_cache_data_flush_and_invd_all();
 		if (cpu == 0) {
-			uint32_t ebb = EBB_BANKS_IN_SEGMENT;
+			uint32_t hpsram_mask[HPSRAM_SEGMENTS];
+
+			struct imr_header hdr = {
+				.adsp_imr_magic = ADSP_IMR_MAGIC_VALUE,
+				.imr_restore_vector = rom_entry,
+			};
+			struct imr_layout *imr_layout =
+			  arch_xtensa_uncached_ptr((struct imr_layout *)L3_MEM_BASE_ADDR);
+			imr_layout->imr_state.header = hdr;
+
 			/* turn off all HPSRAM banks - get a full bitmap */
-			uint32_t hpsram_mask = (1 << ebb) - 1;
+			for (int i = 0; i < HPSRAM_SEGMENTS; i++)
+				hpsram_mask[i] = HPSRAM_MEMMASK(i);
 			/* do power down - this function won't return */
-			power_down_cavs(true, uncache_to_cache(&hpsram_mask));
+			power_down_cavs(true, uncache_to_cache(&hpsram_mask[0]));
 		} else {
 			z_xt_ints_on(core_desc[cpu].intenable);
 			k_cpu_idle();
@@ -102,7 +119,7 @@ __weak void pm_state_exit_post_ops(enum pm_state state, uint8_t substate_id)
 
 	if (state == PM_STATE_SOFT_OFF) {
 		soc_cpus_active[cpu] = true;
-		z_xtensa_cache_flush_inv_all();
+		sys_cache_data_flush_and_invd_all();
 		z_xt_ints_on(core_desc[cpu].intenable);
 	} else {
 		__ASSERT(false, "invalid argument - unsupported power state");

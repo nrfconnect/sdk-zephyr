@@ -43,8 +43,16 @@ config BT_CTLR_ADV_PERIODIC_SUPPORT
 	depends on BT_CTLR_ADV_EXT_SUPPORT
 	bool
 
+config BT_CTLR_ADV_PERIODIC_RSP_SUPPORT
+	depends on BT_CTLR_ADV_PERIODIC_SUPPORT
+	bool
+
 config BT_CTLR_SYNC_PERIODIC_SUPPORT
 	depends on BT_CTLR_ADV_EXT_SUPPORT
+	bool
+
+config BT_CTLR_SYNC_PERIODIC_RSP_SUPPORT
+	depends on BT_CTLR_SYNC_PERIODIC_SUPPORT
 	bool
 
 config BT_CTLR_SYNC_TRANSFER_SENDER_SUPPORT
@@ -346,6 +354,24 @@ config BT_CTLR_TX_PWR_MINUS_40
 
 endchoice
 
+config BT_CTLR_TX_PWR_DBM
+	int
+	default 8 if BT_CTLR_TX_PWR_PLUS_8
+	default 7 if BT_CTLR_TX_PWR_PLUS_7
+	default 6 if BT_CTLR_TX_PWR_PLUS_6
+	default 5 if BT_CTLR_TX_PWR_PLUS_5
+	default 4 if BT_CTLR_TX_PWR_PLUS_4
+	default 3 if BT_CTLR_TX_PWR_PLUS_3
+	default 2 if BT_CTLR_TX_PWR_PLUS_2
+	default 0 if BT_CTLR_TX_PWR_0
+	default -4 if BT_CTLR_TX_PWR_MINUS_4
+	default -8 if BT_CTLR_TX_PWR_MINUS_8
+	default -12 if BT_CTLR_TX_PWR_MINUS_12
+	default -16 if BT_CTLR_TX_PWR_MINUS_16
+	default -20 if BT_CTLR_TX_PWR_MINUS_20
+	default -30 if BT_CTLR_TX_PWR_MINUS_30
+	default -40 if BT_CTLR_TX_PWR_MINUS_40
+
 config BT_CTLR_TX_PWR_ANTENNA
 	int "Set TX power (dBm)"
 	range -127 127
@@ -431,6 +457,7 @@ config BT_CTLR_DATA_LENGTH
 config BT_CTLR_DATA_LENGTH_MAX
 	int "Maximum data length supported"
 	depends on BT_CTLR_DATA_LENGTH
+	default BT_BUF_ACL_RX_SIZE if BT_BUF_ACL_RX_SIZE < 251
 	default 27
 	range 27 BT_BUF_ACL_RX_SIZE if BT_BUF_ACL_RX_SIZE < 251
 	range 27 251
@@ -547,7 +574,6 @@ config BT_CTLR_ADV_EXT
 	depends on BT_CTLR_ADV_EXT_SUPPORT
 	select BT_CTLR_CHAN_SEL_2 if BT_LL_SW_SPLIT && BT_BROADCASTER
 	select BT_CTLR_SCAN_REQ_NOTIFY if BT_LL_SW_SPLIT && BT_BROADCASTER
-	select BT_TICKER_EXT if BT_LL_SW_SPLIT
 	default y if BT_EXT_ADV
 	help
 	  Enable support for Bluetooth 5.0 LE Advertising Extensions in the
@@ -608,6 +634,15 @@ config BT_CTLR_ADV_PERIODIC
 	  Enable support for Bluetooth 5.0 LE Periodic Advertising in the
 	  Controller.
 
+config BT_CTLR_ADV_PERIODIC_RSP
+	bool "LE Periodic Advertising with Responses in Advertising State"
+	depends on BT_BROADCASTER && BT_CTLR_ADV_PERIODIC_RSP_SUPPORT
+	select BT_CTLR_CHAN_SEL_2
+	default y if BT_PER_ADV_RSP
+	help
+	  Enable support for Bluetooth 5.4 LE Periodic Advertising with
+	  Responses in the Controller.
+
 if BT_CTLR_ADV_PERIODIC
 
 config BT_CTLR_ADV_PERIODIC_ADI_SUPPORT
@@ -637,6 +672,15 @@ config BT_CTLR_SYNC_PERIODIC
 	help
 	  Enable support for Bluetooth 5.0 LE Periodic Advertising in
 	  Synchronization state in the Controller.
+
+config BT_CTLR_SYNC_PERIODIC_RSP
+	bool "LE Periodic Advertising with Responses in Synchronization State"
+	depends on BT_OBSERVER && BT_CTLR_SYNC_PERIODIC_RSP_SUPPORT
+	select BT_CTLR_CHAN_SEL_2
+	default y if BT_PER_ADV_SYNC_RSP
+	help
+	  Enable support for Bluetooth 5.4 LE Periodic Advertising with
+	  Responses in Synchronization state in the Controller.
 
 if BT_CTLR_SYNC_PERIODIC
 
@@ -699,6 +743,7 @@ config BT_CTLR_ADV_ISO
 	depends on BT_BROADCASTER && BT_CTLR_ADV_ISO_SUPPORT
 	select BT_CTLR_ADV_PERIODIC
 	select BT_CTLR_SET_HOST_FEATURE
+	default y if BT_ISO_BROADCASTER
 	help
 	  Enable support for Bluetooth 5.2 LE Isochronous Advertising in the
 	  Controller.
@@ -712,6 +757,7 @@ config BT_CTLR_SYNC_ISO
 	depends on BT_OBSERVER && BT_CTLR_SYNC_ISO_SUPPORT
 	select BT_CTLR_SYNC_PERIODIC
 	select BT_CTLR_SET_HOST_FEATURE
+	default y if BT_ISO_SYNC_RECEIVER
 	help
 	  Enable support for Bluetooth 5.2 LE Isochronous Advertising sync in
 	  the Controller.
@@ -791,6 +837,7 @@ config BT_CTLR_SET_HOST_FEATURE
 config BT_CTLR_CENTRAL_ISO
 	bool "LE Connected Isochronous Stream Central" if !BT_LL_SW_SPLIT
 	depends on BT_CTLR_CENTRAL_ISO_SUPPORT && BT_CENTRAL
+	default y if BT_ISO_CENTRAL
 	help
 	  Enable support for Bluetooth 5.2 LE Connected Isochronous Stream
 	  Central role in the Controller.
@@ -803,6 +850,7 @@ config BT_CTLR_CENTRAL_ISO
 config BT_CTLR_PERIPHERAL_ISO
 	bool "LE Connected Isochronous Stream Peripheral" if !BT_LL_SW_SPLIT
 	depends on BT_CTLR_PERIPHERAL_ISO_SUPPORT && BT_PERIPHERAL
+	default y if BT_ISO_PERIPHERAL
 	help
 	  Enable support for Bluetooth 5.2 LE Connected Isochronous Stream
 	  Peripheral role in the Controller.

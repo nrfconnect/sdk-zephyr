@@ -4,6 +4,7 @@
 
 if(CONFIG_HAS_XMCLIB OR CONFIG_SOC_FAMILY_PSOC6 OR CONFIG_SOC_FAMILY_INFINEON_CAT1)
   zephyr_library_named(modules_hal_infineon)
+  zephyr_library_compile_options(-Wno-array-bounds)
 endif()
 
 ## Add PDL sources for XMC devices
@@ -35,4 +36,8 @@ endif()
 ## Add btstack-integration for CYW43xx BT devices
 if (CONFIG_BT_CYW43XXX)
   add_subdirectory(btstack-integration)
+endif()
+
+if (CONFIG_BT_PSOC6_BLESS)
+add_subdirectory(bless)
 endif()

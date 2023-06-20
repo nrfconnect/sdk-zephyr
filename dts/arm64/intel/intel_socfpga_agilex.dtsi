@@ -41,7 +41,7 @@
 	};
 
 	gic: interrupt-controller@fffc1000 {
-		compatible = "arm,gic";
+		compatible = "arm,gic-v2", "arm,gic";
 		reg = <0xfffc1000 0x1000>,
 		      <0xfffc2000 0x2000>;
 		interrupt-controller;
@@ -109,5 +109,12 @@
 		interrupt-names = "irq_0";
 		clocks = <&clock INTEL_SOCFPGA_CLOCK_UART>;
 		status = "disabled";
+	};
+
+	sip_smc: smc{
+		compatible = "intel,agilex-socfpga-sip-smc";
+		method = "smc";
+		status = "disabled";
+		zephyr,num-clients = <2>;
 	};
 };

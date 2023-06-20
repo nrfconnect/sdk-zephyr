@@ -5,7 +5,6 @@
  */
 
 &pinctrl {
-
 	uart1_test: uart1_test {
 		group1 {
 			pinmux = <UART1_TX_GPIO5>;

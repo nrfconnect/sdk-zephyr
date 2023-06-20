@@ -131,10 +131,15 @@ int bt_bap_ep_get_info(const struct bt_bap_ep *ep, struct bt_bap_ep_info *info)
 	info->state = ep->status.state;
 	info->dir = ep->dir;
 
+	if (ep->iso == NULL) {
+		info->paired_ep = NULL;
+	} else {
+		info->paired_ep = bt_bap_iso_get_paired_ep(ep);
+	}
+
 	return 0;
 }
 
-#if defined(CONFIG_BT_BAP_UNICAST) || defined(CONFIG_BT_BAP_BROADCAST_SOURCE)
 enum bt_bap_ascs_reason bt_audio_verify_qos(const struct bt_codec_qos *qos)
 {
 	if (qos->interval < BT_ISO_SDU_INTERVAL_MIN ||
@@ -161,15 +166,72 @@ enum bt_bap_ascs_reason bt_audio_verify_qos(const struct bt_codec_qos *qos)
 		return BT_BAP_ASCS_REASON_SDU;
 	}
 
+#if defined(CONFIG_BT_BAP_BROADCAST_SOURCE) || defined(CONFIG_BT_BAP_UNICAST)
 	if (qos->latency < BT_ISO_LATENCY_MIN ||
 	    qos->latency > BT_ISO_LATENCY_MAX) {
 		LOG_DBG("Invalid Latency %u", qos->latency);
 		return BT_BAP_ASCS_REASON_LATENCY;
 	}
+#endif /* CONFIG_BT_BAP_BROADCAST_SOURCE || CONFIG_BT_BAP_UNICAST */
+
+	if (qos->pd > BT_AUDIO_PD_MAX) {
+		LOG_DBG("Invalid presentation delay %u", qos->pd);
+		return BT_BAP_ASCS_REASON_PD;
+	}
 
 	return BT_BAP_ASCS_REASON_NONE;
 }
 
+bool bt_audio_valid_codec_data(const struct bt_codec_data *data)
+{
+	if (data->data.data_len > ARRAY_SIZE(data->value)) {
+		LOG_DBG("data invalid length: %zu/%zu", data->data.data_len,
+			ARRAY_SIZE(data->value));
+		return false;
+	}
+
+	return true;
+}
+
+bool bt_audio_valid_codec(const struct bt_codec *codec)
+{
+	if (codec == NULL) {
+		LOG_DBG("codec is NULL");
+		return false;
+	}
+
+#if CONFIG_BT_CODEC_MAX_DATA_COUNT > 0
+	if (codec->data_count > CONFIG_BT_CODEC_MAX_DATA_COUNT) {
+		LOG_DBG("codec->data_count (%zu) is invalid", codec->data_count);
+		return false;
+	}
+
+	for (size_t i = 0U; i < codec->data_count; i++) {
+		if (!bt_audio_valid_codec_data(&codec->data[i])) {
+			LOG_DBG("codec->data[%zu] invalid", i);
+			return false;
+		}
+	}
+#endif /* CONFIG_BT_CODEC_MAX_DATA_COUNT > 0 */
+
+#if CONFIG_BT_CODEC_MAX_METADATA_COUNT > 0
+	if (codec->meta_count > CONFIG_BT_CODEC_MAX_METADATA_COUNT) {
+		LOG_DBG("codec->meta_count (%zu) is invalid", codec->meta_count);
+		return false;
+	}
+
+	for (size_t i = 0U; i < codec->meta_count; i++) {
+		if (!bt_audio_valid_codec_data(&codec->meta[i])) {
+			LOG_DBG("codec->meta[%zu] invalid", i);
+			return false;
+		}
+	}
+#endif /* CONFIG_BT_CODEC_MAX_METADATA_COUNT > 0 */
+
+	return true;
+}
+
+#if defined(CONFIG_BT_AUDIO_TX)
 int bt_bap_stream_send(struct bt_bap_stream *stream, struct net_buf *buf,
 			 uint16_t seq_num, uint32_t ts)
 {
@@ -192,9 +254,48 @@ int bt_bap_stream_send(struct bt_bap_stream *stream, struct net_buf *buf,
 	return bt_iso_chan_send(bt_bap_stream_iso_chan_get(stream),
 				buf, seq_num, ts);
 }
-#endif /* CONFIG_BT_BAP_UNICAST || CONFIG_BT_BAP_BROADCAST_SOURCE */
+#endif /* CONFIG_BT_AUDIO_TX */
 
 #if defined(CONFIG_BT_BAP_UNICAST)
+
+/** Checks if the stream can terminate the CIS
+ *
+ * If the CIS is used for another stream, or if the CIS is not in the connected
+ * state it will return false.
+ */
+bool bt_bap_stream_can_disconnect(const struct bt_bap_stream *stream)
+{
+	const struct bt_bap_ep *stream_ep;
+	enum bt_iso_state iso_state;
+
+	if (stream == NULL) {
+		return false;
+	}
+
+	stream_ep = stream->ep;
+
+	if (stream_ep == NULL || stream_ep->iso == NULL) {
+		return false;
+	}
+
+	iso_state = stream_ep->iso->chan.state;
+
+	if (iso_state == BT_ISO_STATE_CONNECTED || iso_state == BT_ISO_STATE_CONNECTING) {
+		const struct bt_bap_ep *pair_ep;
+
+		pair_ep = bt_bap_iso_get_paired_ep(stream_ep);
+
+		/* If there are no paired endpoint, or the paired endpoint is
+		 * not in the streaming state, we can disconnect the CIS
+		 */
+		if (pair_ep == NULL || pair_ep->status.state != BT_BAP_EP_STATE_STREAMING) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static bool bt_bap_stream_is_broadcast(const struct bt_bap_stream *stream)
 {
 	return (IS_ENABLED(CONFIG_BT_BAP_BROADCAST_SOURCE) &&

@@ -325,7 +325,7 @@ int ztress_execute(struct ztress_context_data *timer_data,
 	int old_prio = k_thread_priority_get(k_current_get());
 	int priority, ztress_prio = 0;
 
-	if (cnt > CONFIG_ZTRESS_MAX_THREADS) {
+	if ((cnt + (timer_data ? 1 : 0)) > CONFIG_ZTRESS_MAX_THREADS) {
 		return -EINVAL;
 	}
 
@@ -461,9 +461,9 @@ static int ztress_cpu_clock_to_sys_clock_check(void)
 	}
 
 	t = sys_clock_tick_get_32() - t;
-	/* Threshold is arbitrary. Derived from nRF platorm where CPU runs at 64MHz and
-	 * system clock at 32kHz (sys clock interrupt every 1950 cycles). That ratio is
-	 * ok even for no optimization case.
+	/* Threshold is arbitrary. Derived from nRF platform where CPU runs
+	 * at 64MHz and system clock at 32kHz (sys clock interrupt every 1950
+	 * cycles). That ratio is ok even for no optimization case.
 	 * If some valid platforms are cut because of that, it can be changed.
 	 */
 	cpu_sys_clock_ok = t <= 12;

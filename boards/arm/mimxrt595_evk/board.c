@@ -1,5 +1,5 @@
 /*
- * Copyright 2022,  NXP
+ * Copyright 2022-2023 NXP
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -95,12 +95,65 @@ static int mimxrt595_evk_init(void)
 	/* Do not enter deep low power modes until the PMIC modes have been initialized */
 	pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
 
+#ifdef CONFIG_I2S
+
+	/* Set shared signal set 0 SCK, WS from Transmit I2S - Flexcomm3 */
+	SYSCTL1->SHAREDCTRLSET[0] = SYSCTL1_SHAREDCTRLSET_SHAREDSCKSEL(3) |
+				SYSCTL1_SHAREDCTRLSET_SHAREDWSSEL(3);
+
+#ifdef CONFIG_I2S_TEST_SEPARATE_DEVICES
+	/* Select Data in from Transmit I2S - Flexcomm 3 */
+	SYSCTL1->SHAREDCTRLSET[0] |= SYSCTL1_SHAREDCTRLSET_SHAREDDATASEL(3);
+	/* Enable Transmit I2S - Flexcomm 3 for Shared Data Out */
+	SYSCTL1->SHAREDCTRLSET[0] |= SYSCTL1_SHAREDCTRLSET_FC3DATAOUTEN(1);
+#endif
+
+	/* Set Receive I2S - Flexcomm 1 SCK, WS from shared signal set 0 */
+	SYSCTL1->FCCTRLSEL[1] = SYSCTL1_FCCTRLSEL_SCKINSEL(1) |
+				SYSCTL1_FCCTRLSEL_WSINSEL(1);
+
+	/* Set Transmit I2S - Flexcomm 3 SCK, WS from shared signal set 0 */
+	SYSCTL1->FCCTRLSEL[3] = SYSCTL1_FCCTRLSEL_SCKINSEL(1) |
+				SYSCTL1_FCCTRLSEL_WSINSEL(1);
+
+#ifdef CONFIG_I2S_TEST_SEPARATE_DEVICES
+	/* Select Receive I2S - Flexcomm 1 Data in from shared signal set 0 */
+	SYSCTL1->FCCTRLSEL[1] |= SYSCTL1_FCCTRLSEL_DATAINSEL(1);
+	/* Select Transmit I2S - Flexcomm 3 Data out to shared signal set 0 */
+	SYSCTL1->FCCTRLSEL[3] |= SYSCTL1_FCCTRLSEL_DATAOUTSEL(1);
+#endif
+
+#endif
 	return 0;
 }
+
+
+#ifdef CONFIG_LV_Z_VBD_CUSTOM_SECTION
+extern char __flexspi2_start[];
+extern char __flexspi2_end[];
+
+static int init_psram_framebufs(void)
+{
+	/*
+	 * Framebuffers will be stored in PSRAM, within FlexSPI2 linker
+	 * section. Zero out BSS section.
+	 */
+	memset(__flexspi2_start, 0, __flexspi2_end - __flexspi2_start);
+	return 0;
+}
+
+#endif /* CONFIG_LV_Z_VBD_CUSTOM_SECTION */
 
 #if CONFIG_REGULATOR
 /* PMIC setup is dependent on the regulator API */
 SYS_INIT(board_config_pmic, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);
+#endif
+
+#ifdef CONFIG_LV_Z_VBD_CUSTOM_SECTION
+/* Framebuffers should be setup after PSRAM is initialized but before
+ * Graphics framework init
+ */
+SYS_INIT(init_psram_framebufs, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);
 #endif
 
 SYS_INIT(mimxrt595_evk_init, PRE_KERNEL_1, CONFIG_BOARD_INIT_PRIORITY);

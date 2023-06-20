@@ -55,6 +55,9 @@
 		sw0 = &user_button;
 		watchdog0 = &iwdg;
 		spi-flash0 = &mx25lm51245;
+		die-temp0 = &die_temp;
+		volt-sensor0 = &vref;
+		volt-sensor1 = &vbat;
 	};
 };
 
@@ -118,6 +121,10 @@
 		pinctrl-0 = <&tim3_ch2_pb5>;
 		pinctrl-names = "default";
 	};
+};
+
+&aes {
+	status = "okay";
 };
 
 &rng {
@@ -235,4 +242,16 @@
 			   };
 		};
 	};
+};
+
+&die_temp {
+	status = "okay";
+};
+
+&vref {
+	status = "okay";
+};
+
+&vbat {
+	status = "okay";
 };

@@ -8,13 +8,7 @@ zephyr_linker_section_obj_level(SECTION init LEVEL POST_KERNEL)
 zephyr_linker_section_obj_level(SECTION init LEVEL APPLICATION)
 zephyr_linker_section_obj_level(SECTION init LEVEL SMP)
 
-zephyr_linker_section(NAME device KVMA RAM_REGION GROUP RODATA_REGION)
-zephyr_linker_section_obj_level(SECTION device LEVEL EARLY)
-zephyr_linker_section_obj_level(SECTION device LEVEL PRE_KERNEL_1)
-zephyr_linker_section_obj_level(SECTION device LEVEL PRE_KERNEL_2)
-zephyr_linker_section_obj_level(SECTION device LEVEL POST_KERNEL)
-zephyr_linker_section_obj_level(SECTION device LEVEL APPLICATION)
-zephyr_linker_section_obj_level(SECTION device LEVEL SMP)
+zephyr_iterable_section(NAME device NUMERIC KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
 if(CONFIG_GEN_SW_ISR_TABLE AND NOT CONFIG_DYNAMIC_INTERRUPTS)
   # ld align has been changed to subalign to provide identical behavior scatter vs. ld.
@@ -142,8 +136,16 @@ if(CONFIG_SETTINGS)
   zephyr_iterable_section(NAME settings_handler_static KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 endif()
 
+if(CONFIG_SENSING)
+  zephyr_iterable_section(NAME sensing_sensor_info KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
+endif()
+
 if(CONFIG_SENSOR_INFO)
   zephyr_iterable_section(NAME sensor_info KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
+endif()
+
+if(CONFIG_SENSOR_ASYNC_API)
+  zephyr_iterable_section(NAME sensor_decoder_api KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 endif()
 
 if(CONFIG_MCUMGR)
@@ -161,23 +163,22 @@ if(CONFIG_DNS_SD)
 endif()
 
 if(CONFIG_PCIE)
-  zephyr_linker_section(NAME irq_alloc GROUP RODATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-  zephyr_linker_section_configure(SECTION irq_alloc INPUT ".irq_alloc*" KEEP SORT NAME)
+  zephyr_iterable_section(NAME irq_alloc KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 endif()
 
-zephyr_linker_section(NAME log_strings KVMA RAM_REGION GROUP RODATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-zephyr_linker_section_configure(SECTION log_strings INPUT ".log_strings*" KEEP SORT NAME)
+zephyr_iterable_section(NAME log_strings KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
-zephyr_linker_section(NAME log_const KVMA RAM_REGION GROUP RODATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-zephyr_linker_section_configure(SECTION log_const INPUT ".log_const_*" KEEP SORT NAME)
+zephyr_iterable_section(NAME log_const KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
 zephyr_iterable_section(NAME shell KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
-zephyr_linker_section(NAME shell_root_cmds KVMA RAM_REGION GROUP RODATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-zephyr_linker_section_configure(SECTION shell_root_cmds INPUT ".shell_root_cmd_*" KEEP SORT NAME)
+zephyr_iterable_section(NAME shell_root_cmds KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
-zephyr_linker_section(NAME font_entry KVMA RAM_REGION GROUP RODATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-zephyr_linker_section_configure(SECTION font_entry INPUT "._cfb_font.*" KEEP SORT NAME)
+zephyr_iterable_section(NAME shell_subcmds KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
+
+zephyr_iterable_section(NAME shell_dynamic_subcmds KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
+
+zephyr_iterable_section(NAME cfb_font KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 
 zephyr_iterable_section(NAME tracing_backend KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 

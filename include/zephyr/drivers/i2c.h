@@ -25,6 +25,7 @@
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/slist.h>
+#include <zephyr/rtio/rtio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -226,6 +227,16 @@ typedef int (*i2c_api_transfer_cb_t)(const struct device *dev,
 				 i2c_callback_t cb,
 				 void *userdata);
 #endif /* CONFIG_I2C_CALLBACK */
+#if defined(CONFIG_I2C_RTIO) || defined(DOXYGEN)
+
+/**
+ * @typedef i2c_api_iodev_submit
+ * @brief Callback API for submitting work to a I2C device with RTIO
+ */
+typedef void (*i2c_api_iodev_submit)(const struct device *dev,
+				     struct rtio_iodev_sqe *iodev_sqe);
+#endif /* CONFIG_I2C_RTIO */
+
 typedef int (*i2c_api_recover_bus_t)(const struct device *dev);
 
 __subsystem struct i2c_driver_api {
@@ -236,6 +247,9 @@ __subsystem struct i2c_driver_api {
 	i2c_api_target_unregister_t target_unregister;
 #ifdef CONFIG_I2C_CALLBACK
 	i2c_api_transfer_cb_t transfer_cb;
+#endif
+#ifdef CONFIG_I2C_RTIO
+	i2c_api_iodev_submit iodev_submit;
 #endif
 	i2c_api_recover_bus_t recover_bus;
 };
@@ -507,8 +521,7 @@ static inline void i2c_xfer_stats(const struct device *dev, struct i2c_msg *msgs
 	for (uint8_t i = 0U; i < num_msgs; i++) {
 		if (msgs[i].flags & I2C_MSG_READ) {
 			bytes_read += msgs[i].len;
-		}
-		if (msgs[i].flags & I2C_MSG_WRITE) {
+		} else {
 			bytes_written += msgs[i].len;
 		}
 	}
@@ -539,7 +552,11 @@ static inline void i2c_xfer_stats(const struct device *dev, struct i2c_msg *msgs
 		stats_init(&state->stats.s_hdr, STATS_SIZE_32, 4,	\
 			   STATS_NAME_INIT_PARMS(i2c));			\
 		stats_register(dev->name, &(state->stats.s_hdr));	\
-		return init_fn(dev);					\
+		if (init_fn != NULL) {					\
+			return init_fn(dev);				\
+		}							\
+									\
+		return 0;						\
 	}
 
 /** @endcond */
@@ -553,7 +570,7 @@ static inline void i2c_xfer_stats(const struct device *dev, struct i2c_msg *msgs
  *
  * @param node_id The devicetree node identifier.
  *
- * @param init_fn Name of the init function of the driver.
+ * @param init_fn Name of the init function of the driver. Can be `NULL`.
  *
  * @param pm PM device resources reference (NULL if device does not use PM).
  *
@@ -594,7 +611,7 @@ static inline void i2c_xfer_stats(const struct device *dev, struct i2c_msg *msgs
 
 #define I2C_DEVICE_DT_DEFINE(node_id, init_fn, pm, data, config, level,	\
 			     prio, api, ...)				\
-	DEVICE_DT_DEFINE(node_id, &init_fn, pm, data, config, level,	\
+	DEVICE_DT_DEFINE(node_id, init_fn, pm, data, config, level,	\
 			 prio, api, __VA_ARGS__)
 
 #endif /* CONFIG_I2C_STATS */
@@ -896,6 +913,57 @@ static inline int i2c_transfer_signal(const struct device *dev,
 #endif /* CONFIG_POLL */
 
 #endif /* CONFIG_I2C_CALLBACK */
+
+
+#if defined(CONFIG_I2C_RTIO) || defined(DOXYGEN)
+
+/**
+ * @brief Submit request(s) to an I2C device with RTIO
+ *
+ * @param iodev_sqe Prepared submissions queue entry connected to an iodev
+ *                  defined by I2C_DT_IODEV_DEFINE.
+ */
+static inline void i2c_iodev_submit(struct rtio_iodev_sqe *iodev_sqe)
+{
+	const struct i2c_dt_spec *dt_spec = iodev_sqe->sqe->iodev->data;
+	const struct device *dev = dt_spec->bus;
+	const struct i2c_driver_api *api = (const struct i2c_driver_api *)dev->api;
+
+	api->iodev_submit(dt_spec->bus, iodev_sqe);
+}
+
+extern const struct rtio_iodev_api i2c_iodev_api;
+
+/**
+ * @brief Define an iodev for a given dt node on the bus
+ *
+ * These do not need to be shared globally but doing so
+ * will save a small amount of memory.
+ *
+ * @param node DT_NODE
+ */
+#define I2C_DT_IODEV_DEFINE(name, node_id)					\
+	const struct i2c_dt_spec _i2c_dt_spec_##name =				\
+		I2C_DT_SPEC_GET(node_id);					\
+	RTIO_IODEV_DEFINE(name, &i2c_iodev_api, (void *)&_i2c_dt_spec_##name)
+
+/**
+ * @brief Copy the i2c_msgs into a set of RTIO requests
+ *
+ * @param r RTIO context
+ * @param iodev RTIO IODev to target for the submissions
+ * @param msgs Array of messages
+ * @param num_msgs Number of i2c msgs in array
+ *
+ * @retval sqe Last submission in the queue added
+ * @retval NULL Not enough memory in the context to copy the requests
+ */
+struct rtio_sqe *i2c_rtio_copy(struct rtio *r,
+			       struct rtio_iodev *iodev,
+			       const struct i2c_msg *msgs,
+			       uint8_t num_msgs);
+
+#endif /* CONFIG_I2C_RTIO */
 
 /**
  * @brief Perform data transfer to another I2C device in controller mode.

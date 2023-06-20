@@ -78,6 +78,10 @@ static uint32_t get_startup_frequency(void)
 		return get_msis_frequency();
 	case LL_RCC_SYS_CLKSOURCE_STATUS_HSI:
 		return STM32_HSI_FREQ;
+	case LL_RCC_SYS_CLKSOURCE_STATUS_HSE:
+		return STM32_HSE_FREQ;
+	case LL_RCC_SYS_CLKSOURCE_STATUS_PLL1:
+		return get_pllsrc_frequency(PLL1_ID);
 	default:
 		__ASSERT(0, "Unexpected startup freq");
 		return 0;
@@ -451,12 +455,12 @@ static void clock_switch_to_hsi(void)
 		}
 	}
 
-	LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
-
 	/* Set HSI as SYSCLCK source */
 	LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_HSI);
 	while (LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_HSI) {
 	}
+
+	LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
 }
 
 __unused

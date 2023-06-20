@@ -13,6 +13,7 @@ import yaml
 import scl
 import logging
 from pathlib import Path
+from natsort import natsorted
 
 from twisterlib.environment import ZEPHYR_BASE
 
@@ -166,24 +167,27 @@ class HardwareMap:
                 if not self.options.platform:
                     self.options.platform = []
                     for d in self.duts:
-                        if d.connected:
+                        if d.connected and d.platform != 'unknown':
                             self.options.platform.append(d.platform)
 
-            elif self.options.device_serial or self.options.device_serial_pty:
-                if self.options.device_serial:
-                    self.add_device(self.options.device_serial,
-                                    self.options.platform[0],
-                                    self.options.pre_script,
-                                    False,
-                                    baud=self.options.device_serial_baud,
-                                    flash_timeout=self.options.device_flash_timeout,
-                                    flash_with_test=self.options.device_flash_with_test
-                                    )
-                else:
-                    self.add_device(self.options.device_serial_pty,
-                                                    self.options.platform[0],
-                                                    self.options.pre_script,
-                                                    True)
+            elif self.options.device_serial:
+                self.add_device(self.options.device_serial,
+                                self.options.platform[0],
+                                self.options.pre_script,
+                                False,
+                                baud=self.options.device_serial_baud,
+                                flash_timeout=self.options.device_flash_timeout,
+                                flash_with_test=self.options.device_flash_with_test
+                                )
+
+            elif self.options.device_serial_pty:
+                self.add_device(self.options.device_serial_pty,
+                                self.options.platform[0],
+                                self.options.pre_script,
+                                True,
+                                flash_timeout=self.options.device_flash_timeout,
+                                flash_with_test=self.options.device_flash_with_test
+                                )
 
             # the fixtures given by twister command explicitly should be assigned to each DUT
             if self.options.fixture:
@@ -318,7 +322,7 @@ class HardwareMap:
 
     def save(self, hwm_file):
         # use existing map
-        self.detected.sort(key=lambda x: x.serial or '')
+        self.detected = natsorted(self.detected, key=lambda x: x.serial or '')
         if os.path.exists(hwm_file):
             with open(hwm_file, 'r') as yaml_file:
                 hwm = yaml.load(yaml_file, Loader=SafeLoader)

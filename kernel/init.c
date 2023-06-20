@@ -42,7 +42,11 @@ BUILD_ASSERT(CONFIG_MP_NUM_CPUS == CONFIG_MP_MAX_NUM_CPUS,
 	     "CONFIG_MP_NUM_CPUS and CONFIG_MP_MAX_NUM_CPUS need to be set the same");
 
 /* the only struct z_kernel instance */
+__pinned_bss
 struct z_kernel _kernel;
+
+__pinned_bss
+atomic_t _cpus_active;
 
 /* init/main and idle threads */
 K_THREAD_PINNED_STACK_DEFINE(z_main_stack, CONFIG_MAIN_STACK_SIZE);
@@ -252,20 +256,26 @@ static void z_sys_init_run_level(enum init_level level)
 		const struct device *dev = entry->dev;
 
 		if (dev != NULL) {
-			int rc = entry->init_fn.dev(dev);
-			/* Mark device initialized.  If initialization
-			 * failed, record the error condition.
-			 */
-			if (rc != 0) {
-				if (rc < 0) {
-					rc = -rc;
+			int rc = 0;
+
+			if (entry->init_fn.dev != NULL) {
+				rc = entry->init_fn.dev(dev);
+				/* Mark device initialized. If initialization
+				 * failed, record the error condition.
+				 */
+				if (rc != 0) {
+					if (rc < 0) {
+						rc = -rc;
+					}
+					if (rc > UINT8_MAX) {
+						rc = UINT8_MAX;
+					}
+					dev->state->init_res = rc;
 				}
-				if (rc > UINT8_MAX) {
-					rc = UINT8_MAX;
-				}
-				dev->state->init_res = rc;
 			}
+
 			dev->state->initialized = true;
+
 			if (rc == 0) {
 				/* Run automatic device runtime enablement */
 				(void)pm_device_runtime_auto_enable(dev);
@@ -388,6 +398,12 @@ void z_init_cpu(int id)
 	_kernel.cpus[id].usage.track_usage =
 		CONFIG_SCHED_THREAD_USAGE_AUTO_ENABLE;
 #endif
+
+	/*
+	 * Increment number of CPUs active. The pm subsystem
+	 * will keep track of this from here.
+	 */
+	atomic_inc(&_cpus_active);
 }
 
 /**

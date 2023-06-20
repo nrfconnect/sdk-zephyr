@@ -26,10 +26,11 @@ OS Services
    settings/index.rst
    smf/index.rst
    storage/index.rst
+   sensing/index.rst
    task_wdt/index.rst
    tfm/index
-   usb/index.rst
    virtualization/index.rst
+   retention/index.rst
    rtio/index.rst
    zbus/index.rst
    misc.rst

@@ -11,7 +11,9 @@ Peripherals
 
    w1.rst
    adc.rst
+   auxdisplay.rst
    audio/index.rst
+   bbram.rst
    bc12.rst
    clock_control.rst
    canbus/index.rst
@@ -38,6 +40,7 @@ Peripherals
    mdio.rst
    mipi_dsi.rst
    mbox.rst
+   pcie.rst
    peci.rst
    ps2.rst
    pwm.rst

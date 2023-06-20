@@ -103,8 +103,6 @@ pygments_style = "sphinx"
 
 todo_include_todos = False
 
-numfig = True
-
 nitpick_ignore = [
     # ignore C standard identifiers (they are not defined in Zephyr docs)
     ("c:identifier", "FILE"),
@@ -161,16 +159,10 @@ html_context = {
     "current_version": version,
     "versions": (
         ("latest", "/"),
+        ("3.4.0", "/3.4.0/"),
         ("3.3.0", "/3.3.0/"),
         ("3.2.0", "/3.2.0/"),
-        ("3.1.0", "/3.1.0/"),
-        ("3.0.0", "/3.0.0/"),
-        ("2.7.4 (LTS)", "/2.7.4/"),
-        ("2.6.0", "/2.6.0/"),
-        ("2.5.0", "/2.5.0/"),
-        ("2.4.0", "/2.4.0/"),
-        ("2.3.0", "/2.3.0/"),
-        ("1.14.1", "/1.14.1/"),
+        ("2.7.5 (LTS)", "/2.7.5/"),
     ),
     "display_vcs_link": True,
     "reference_links": {
@@ -232,6 +224,7 @@ breathe_default_members = ("members", )
 
 cpp_id_attributes = [
     "__syscall",
+    "__syscall_always_inline",
     "__deprecated",
     "__may_alias",
     "__used",

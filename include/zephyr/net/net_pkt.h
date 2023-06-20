@@ -95,7 +95,10 @@ struct net_pkt {
 #endif
 
 #if defined(CONFIG_NET_PKT_TIMESTAMP)
-	/** Timestamp if available. */
+	/**
+	 * Timestamp if available.
+	 * For IEEE 802.15.4 packets this refers to the first symbol of the MAC Header.
+	 */
 	struct net_ptp_time timestamp;
 #endif
 
@@ -317,8 +320,10 @@ static inline void net_pkt_set_iface(struct net_pkt *pkt, struct net_if *iface)
 	 * that the address type is properly set and is not forgotten.
 	 */
 	if (iface) {
-		pkt->lladdr_src.type = net_if_get_link_addr(iface)->type;
-		pkt->lladdr_dst.type = net_if_get_link_addr(iface)->type;
+		uint8_t type = net_if_get_link_addr(iface)->type;
+
+		pkt->lladdr_src.type = type;
+		pkt->lladdr_dst.type = type;
 	}
 }
 

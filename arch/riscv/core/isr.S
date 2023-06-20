@@ -557,6 +557,8 @@ irq_done:
 
 check_reschedule:
 
+#ifdef CONFIG_MULTITHREADING
+
 	/* Get pointer to current thread on this CPU */
 	lr a1, ___cpu_t_current_OFFSET(s0)
 
@@ -586,6 +588,8 @@ z_riscv_thread_start:
 might_have_rescheduled:
 	/* reload s0 with &_current_cpu as it might have changed or be unset */
 	get_current_cpu s0
+
+#endif /* CONFIG_MULTITHREADING */
 
 no_reschedule:
 

@@ -14,6 +14,7 @@
 #include <stdint.h>
 
 #include <zephyr/kernel.h>
+#include <zephyr/sys/iterable_sections.h>
 
 /**
  * @brief Provisioning
@@ -762,6 +763,73 @@ struct bt_mesh_friend_cb {
 	static const STRUCT_SECTION_ITERABLE(bt_mesh_friend_cb,          \
 					     _CONCAT(bt_mesh_friend_cb_, \
 						     _name))
+#if defined(CONFIG_BT_TESTING)
+struct bt_mesh_snb {
+	/** Flags */
+	uint8_t flags;
+
+	/** Network ID */
+	uint64_t net_id;
+
+	/** IV Index */
+	uint32_t iv_idx;
+
+	/** Authentication Value */
+	uint64_t auth_val;
+};
+
+#if defined(CONFIG_BT_MESH_V1d1)
+struct bt_mesh_prb {
+	/** Random */
+	uint8_t random[13];
+
+	/** Flags */
+	uint8_t flags;
+
+	/** IV Index */
+	uint32_t iv_idx;
+
+	/** Authentication tag */
+	uint64_t auth_tag;
+};
+#endif
+
+/** Beacon callback functions. */
+struct bt_mesh_beacon_cb {
+	/** @brief Secure Network Beacon received.
+	 *
+	 *  This callback notifies the application that Secure Network Beacon
+	 *  was received.
+	 *
+	 *  @param snb  Structure describing received Secure Network Beacon
+	 */
+	void (*snb_received)(const struct bt_mesh_snb *snb);
+
+#if defined(CONFIG_BT_MESH_V1d1)
+	/** @brief Private Beacon received.
+	 *
+	 *  This callback notifies the application that Private Beacon
+	 *  was received and successfully decrypted.
+	 *
+	 *  @param prb  Structure describing received Private Beacon
+	 */
+	void (*priv_received)(const struct bt_mesh_prb *prb);
+#endif
+};
+
+/**
+ *  @brief Register a callback structure for beacon events.
+ *
+ *  Registers a callback structure that will be called whenever beacon advertisement
+ *  is received.
+ *
+ *  @param _name Name of callback structure.
+ */
+#define BT_MESH_BEACON_CB_DEFINE(_name)                                  \
+	static const STRUCT_SECTION_ITERABLE(bt_mesh_beacon_cb,          \
+					     _CONCAT(bt_mesh_beacon_cb_, \
+						     _name))
+#endif
 
 /** @brief Terminate Friendship.
  *
@@ -785,6 +853,23 @@ int bt_mesh_friend_terminate(uint16_t lpn_addr);
  * @ref BT_MESH_ADDR_ALL_NODES to store all pending RPL entries.
  */
 void bt_mesh_rpl_pending_store(uint16_t addr);
+
+/** @brief Iterate stored Label UUIDs.
+ *
+ * When @c addr is @ref BT_MESH_ADDR_UNASSIGNED, this function iterates over all available addresses
+ * starting with @c uuid. In this case, use @c retaddr to get virtual address representation of
+ * the returned Label UUID. When @c addr is a virtual address, this function returns next Label
+ * UUID corresponding to the @c addr. When @c uuid is NULL, this function returns the first
+ * available UUID. If @c uuid is previously returned uuid, this function returns following uuid.
+ *
+ * @param addr    Virtual address to search for, or @ref BT_MESH_ADDR_UNASSIGNED.
+ * @param uuid    Pointer to the previously returned Label UUID or NULL.
+ * @param retaddr Pointer to a memory where virtual address representation of the returning UUID is
+ *                to be stored to.
+ *
+ * @return Pointer to Label UUID, or NULL if no more entries found.
+ */
+const uint8_t *bt_mesh_va_uuid_get(uint16_t addr, const uint8_t *uuid, uint16_t *retaddr);
 
 #ifdef __cplusplus
 }

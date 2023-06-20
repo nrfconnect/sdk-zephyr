@@ -454,7 +454,13 @@ static ALWAYS_INLINE void clock_init(void)
 
 #ifdef CONFIG_DISPLAY_MCUX_ELCDIF
 	rootCfg.mux = kCLOCK_LCDIF_ClockRoot_MuxSysPll2Out;
-	rootCfg.div = 9;
+	/*
+	 * PLL2 is fixed at 528MHz. Use desired panel clock clock to
+	 * calculate LCDIF clock.
+	 */
+	rootCfg.div = ((SYS_PLL2_FREQ /
+			DT_PROP(DT_CHILD(DT_NODELABEL(lcdif), display_timings),
+			clock_frequency)) + 1);
 	CLOCK_SetRootClock(kCLOCK_Root_Lcdif, &rootCfg);
 #endif
 
@@ -659,6 +665,11 @@ static int imxrt_init(void)
 #ifndef CONFIG_IMXRT1XXX_CODE_CACHE
 	/* SystemInit enables code cache, disable it here */
 	SCB_DisableICache();
+#else
+	/* z_arm_init_arch_hw_at_boot() disables code cache if CONFIG_ARCH_CACHE is enabled,
+	 * enable it here.
+	 */
+	SCB_EnableICache();
 #endif
 
 	if (IS_ENABLED(CONFIG_IMXRT1XXX_DATA_CACHE)) {

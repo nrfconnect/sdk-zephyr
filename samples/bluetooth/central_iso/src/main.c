@@ -26,8 +26,8 @@ static struct k_work_delayable iso_send_work;
 static struct bt_iso_chan iso_chan;
 static uint16_t seq_num;
 static uint32_t interval_us = 10U * USEC_PER_MSEC; /* 10 ms */
-NET_BUF_POOL_FIXED_DEFINE(tx_pool, 1, BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU), 8,
-			  NULL);
+NET_BUF_POOL_FIXED_DEFINE(tx_pool, 1, BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU),
+			  CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 
 /**
  * @brief Send ISO data on timeout
@@ -67,6 +67,7 @@ static void iso_timer_timeout(struct k_work *work)
 
 	if (ret < 0) {
 		printk("Failed to send ISO data (%d)\n", ret);
+		net_buf_unref(buf);
 	}
 
 	k_work_schedule(&iso_send_work, K_USEC(interval_us));

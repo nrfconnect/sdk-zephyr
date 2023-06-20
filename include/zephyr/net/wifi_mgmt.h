@@ -113,6 +113,8 @@ enum net_event_wifi_cmd {
 	NET_EVENT_WIFI_CMD_IFACE_STATUS,
 	NET_EVENT_WIFI_CMD_TWT,
 	NET_EVENT_WIFI_CMD_TWT_SLEEP_STATE,
+	NET_EVENT_WIFI_CMD_RAW_SCAN_RESULT,
+	NET_EVENT_WIFI_CMD_DISCONNECT_COMPLETE,
 };
 
 #define NET_EVENT_WIFI_SCAN_RESULT				\
@@ -135,6 +137,12 @@ enum net_event_wifi_cmd {
 
 #define NET_EVENT_WIFI_TWT_SLEEP_STATE				\
 	(_NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_TWT_SLEEP_STATE)
+
+#define NET_EVENT_WIFI_RAW_SCAN_RESULT                          \
+	(_NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_RAW_SCAN_RESULT)
+
+#define NET_EVENT_WIFI_DISCONNECT_COMPLETE			\
+	(_NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_DISCONNECT_COMPLETE)
 /* Each result is provided to the net_mgmt_event_callback
  * via its info attribute (see net_mgmt.h)
  */
@@ -187,18 +195,17 @@ struct wifi_iface_status {
 	int rssi;
 	unsigned char dtim_period;
 	unsigned short beacon_interval;
+	bool twt_capable;
 };
 
 struct wifi_ps_params {
 	enum wifi_ps enabled;
-};
-
-struct wifi_ps_mode_params {
+	unsigned short listen_interval;
+	enum wifi_ps_wakeup_mode wakeup_mode;
 	enum wifi_ps_mode mode;
-};
-
-struct wifi_ps_timeout_params {
 	int timeout_ms;
+	enum ps_param_type type;
+	enum wifi_config_ps_param_fail_reason fail_reason;
 };
 
 struct wifi_twt_params {
@@ -226,11 +233,12 @@ struct wifi_twt_params {
 			bool teardown_all;
 		} teardown;
 	};
+	enum wifi_twt_fail_reason fail_reason;
 };
 
 /* Flow ID is only 3 bits */
 #define WIFI_MAX_TWT_FLOWS 8
-#define WIFI_MAX_TWT_INTERVAL_US (ULONG_MAX - 1)
+#define WIFI_MAX_TWT_INTERVAL_US (LONG_MAX - 1)
 /* 256 (u8) * 1TU */
 #define WIFI_MAX_TWT_WAKE_INTERVAL_US 262144
 struct wifi_twt_flow_info {
@@ -250,10 +258,9 @@ struct wifi_twt_flow_info {
 };
 
 struct wifi_ps_config {
-	struct wifi_twt_flow_info twt_flows[WIFI_MAX_TWT_FLOWS];
-	bool enabled;
-	enum wifi_ps_mode mode;
 	char num_twt_flows;
+	struct wifi_twt_flow_info twt_flows[WIFI_MAX_TWT_FLOWS];
+	struct wifi_ps_params ps_params;
 };
 
 /* Generic get/set operation for any command*/
@@ -274,11 +281,23 @@ enum wifi_twt_sleep_state {
 	WIFI_TWT_STATE_AWAKE = 1,
 };
 
+#ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS
+struct wifi_raw_scan_result {
+	int8_t rssi;
+	int frame_length;
+	unsigned short frequency;
+	uint8_t data[CONFIG_WIFI_MGMT_RAW_SCAN_RESULT_LENGTH];
+};
+#endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS */
 #include <zephyr/net/net_if.h>
 
 typedef void (*scan_result_cb_t)(struct net_if *iface, int status,
 				 struct wifi_scan_result *entry);
 
+#ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS
+typedef void (*raw_scan_result_cb_t)(struct net_if *iface, int status,
+				     struct wifi_raw_scan_result *entry);
+#endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS */
 struct net_wifi_mgmt_offload {
 	/**
 	 * Mandatory to get in first position.
@@ -308,12 +327,9 @@ struct net_wifi_mgmt_offload {
 	int (*get_stats)(const struct device *dev, struct net_stats_wifi *stats);
 #endif /* CONFIG_NET_STATISTICS_WIFI */
 	int (*set_power_save)(const struct device *dev, struct wifi_ps_params *params);
-	int (*set_power_save_mode)(const struct device *dev, struct wifi_ps_mode_params *params);
 	int (*set_twt)(const struct device *dev, struct wifi_twt_params *params);
 	int (*get_power_save_config)(const struct device *dev, struct wifi_ps_config *config);
 	int (*reg_domain)(const struct device *dev, struct wifi_reg_domain *reg_domain);
-	int (*set_power_save_timeout)(const struct device *dev,
-				      struct wifi_ps_timeout_params *ps_timeout);
 };
 
 /* Make sure that the network interface API is properly setup inside
@@ -328,6 +344,11 @@ void wifi_mgmt_raise_iface_status_event(struct net_if *iface,
 void wifi_mgmt_raise_twt_event(struct net_if *iface,
 		struct wifi_twt_params *twt_params);
 void wifi_mgmt_raise_twt_sleep_state(struct net_if *iface, int twt_sleep_state);
+#ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS
+void wifi_mgmt_raise_raw_scan_result_event(struct net_if *iface,
+		struct wifi_raw_scan_result *raw_scan_info);
+#endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS */
+void wifi_mgmt_raise_disconnect_complete_event(struct net_if *iface, int status);
 #ifdef __cplusplus
 }
 #endif

@@ -192,6 +192,7 @@ arduino_spi: &spi3 {
 
 	gd25lb256: gd25lb256e3ir@1 {
 		compatible = "jedec,spi-nor";
+		status = "disabled";
 		reg = <1>;
 		spi-max-frequency = <60000000>;
 		jedec-id = [c8 67 19];
@@ -263,4 +264,4 @@ arduino_spi: &spi3 {
 };
 
 /* Include partition configuration file */
-#include "nrf9161dk_nrf9161_partition_conf.dts"
+#include "nrf9161dk_nrf9161_partition_conf.dtsi"

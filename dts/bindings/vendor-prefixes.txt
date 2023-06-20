@@ -240,6 +240,7 @@ greeled	GreeLed Electronic Ltd.
 grinn	Grinn
 grmn	Garmin Limited
 gumstix	Gumstix, Inc.
+hamamatsu	Hamamatsu Photonics K.K.
 hannstar	HannStar Display Corporation
 haoyu	Haoyu Microelectronic Co. Ltd.
 hardkernel	Hardkernel Co., Ltd
@@ -297,6 +298,7 @@ jdi	Japan Display Inc.
 jedec	JEDEC Solid State Technology Association
 jesurun	Shenzhen Jesurun Electronics Business Dept.
 jianda	Jiandangjing Technology Co., Ltd.
+jhd	Shenzhen Jinghua Displays Electronics Co., Ltd.
 kam	Kamstrup A/S
 karo	Ka-Ro electronics GmbH
 keithkoep	Keith & Koep GmbH
@@ -374,7 +376,6 @@ microbit	Micro:bit Educational Foundation
 microchip	Microchip Technology Inc.
 microcrystal	Micro Crystal AG
 micron	Micron Technology Inc.
-microsemi	Microchip Technology Inc. (formerly Microsemi Corporation)
 microsoft	Microsoft Corporation
 microsys	MicroSys Electronics GmbH
 mikroe	MikroElektronika d.o.o.
@@ -391,7 +392,6 @@ mpl	MPL AG
 mps	Monolithic Power Systems Inc.
 mqmaker	mqmaker Inc.
 mrvl	Marvell Technology Group Ltd.
-mscc	Microsemi Corporation
 msi	Micro-Star International Co. Ltd.
 mstar	MStar Semiconductor, Inc. (acquired by MediaTek Inc.)
 mti	Imagination Technologies Ltd. (formerly MIPS Technologies Inc.)
@@ -417,6 +417,7 @@ nintendo	Nintendo
 nlt	NLT Technologies, Ltd.
 nokia	Nokia
 nordic	Nordic Semiconductor
+noritake	Noritake Co., Inc. Electronics Division
 novtech	NovTech, Inc.
 nutsboard	NutsBoard
 nuclei	Nuclei System Technology
@@ -438,6 +439,7 @@ opalkelly	Opal Kelly Incorporated
 opencores	OpenCores.org
 openisa	open-isa.org
 openrisc	OpenRISC.io
+openthread	OpenThread.io
 option	Option NV
 oranth	Shenzhen Oranth Technology Co., Ltd.
 ORCL	Oracle Corporation

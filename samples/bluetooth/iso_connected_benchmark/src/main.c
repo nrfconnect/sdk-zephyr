@@ -30,7 +30,7 @@ enum benchmark_role {
 
 #define DEFAULT_CIS_RTN         2
 #define DEFAULT_CIS_INTERVAL_US 7500
-#define DEFAULT_CIS_LATENCY_MS  10
+#define DEFAULT_CIS_LATENCY_MS  40
 #define DEFAULT_CIS_PHY         BT_GAP_LE_PHY_2M
 #define DEFAULT_CIS_SDU_SIZE    CONFIG_BT_ISO_TX_MTU
 #define DEFAULT_CIS_PACKING     0
@@ -69,7 +69,7 @@ static uint32_t iso_send_count;
 static struct bt_iso_cig *cig;
 
 NET_BUF_POOL_FIXED_DEFINE(tx_pool, 1, BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU),
-			   8, NULL);
+			  CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 static uint8_t iso_data[CONFIG_BT_ISO_TX_MTU];
 
 static K_SEM_DEFINE(sem_adv, 0, 1);
@@ -1012,7 +1012,12 @@ static int run_peripheral(void)
 	}
 
 	LOG_INF("Starting advertising");
-	err = bt_le_adv_start(BT_LE_ADV_CONN_NAME, NULL, 0, NULL, 0);
+	err = bt_le_adv_start(
+		BT_LE_ADV_PARAM(BT_LE_ADV_OPT_ONE_TIME | BT_LE_ADV_OPT_CONNECTABLE |
+					BT_LE_ADV_OPT_USE_NAME |
+					BT_LE_ADV_OPT_FORCE_NAME_IN_AD,
+				BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2, NULL),
+		NULL, 0, NULL, 0);
 	if (err != 0) {
 		LOG_ERR("Advertising failed to start: %d", err);
 		return err;
