@@ -133,9 +133,6 @@ set(SNIPPET_NAMES {' '.join(f'"{name}"' for name in snippet_names)})
 # The paths to all the snippet.yml files. One snippet
 # can have multiple snippet.yml files.
 set(SNIPPET_PATHS {snippet_path_list})
-
-# Create variable scope for snippets build variables
-zephyr_create_scope(snippets)
 ''')
 
         for snippet_name in snippet_names:
@@ -171,7 +168,7 @@ if("${{BOARD}}" STREQUAL "{board}")''')
         space = '  ' * indent
         for name, values in appends.items():
             for value in values:
-                self.print(f'{space}zephyr_set({name} {value} SCOPE snippets APPEND)')
+                self.print(f'{space}list(APPEND {name} {value})')
 
     def print(self, *args, **kwargs):
         kwargs['file'] = self.out_file
