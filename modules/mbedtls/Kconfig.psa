@@ -248,8 +248,7 @@ config PSA_WANT_ALG_OFB
 
 config PSA_WANT_ALG_XTS
 	bool
-	help
-	  PSA XTS is currently not supported
+	prompt "PSA XTS mode support" if !PSA_PROMPTLESS
 
 endmenu # PSA Cipher Support
 
