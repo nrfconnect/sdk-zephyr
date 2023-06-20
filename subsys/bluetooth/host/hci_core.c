@@ -630,52 +630,6 @@ int bt_le_create_conn_ext(const struct bt_conn *conn)
 	return bt_hci_cmd_send_sync(BT_HCI_OP_LE_EXT_CREATE_CONN, buf, NULL);
 }
 
-int bt_le_create_conn_synced(const struct bt_conn *conn, const struct bt_le_ext_adv *adv,
-			     uint8_t subevent)
-{
-	struct bt_hci_cp_le_ext_create_conn_v2 *cp;
-	struct bt_hci_ext_conn_phy *phy;
-	struct bt_hci_cmd_state_set state;
-	struct net_buf *buf;
-	uint8_t own_addr_type;
-	int err;
-
-	err = bt_id_set_create_conn_own_addr(false, &own_addr_type);
-	if (err) {
-		return err;
-	}
-
-	/* There shall only be one Initiating_PHYs */
-	buf = bt_hci_cmd_create(BT_HCI_OP_LE_EXT_CREATE_CONN_V2, sizeof(*cp) + sizeof(*phy));
-	if (!buf) {
-		return -ENOBUFS;
-	}
-
-	cp = net_buf_add(buf, sizeof(*cp));
-	(void)memset(cp, 0, sizeof(*cp));
-
-	bt_addr_le_copy(&cp->peer_addr, &conn->le.dst);
-	cp->filter_policy = BT_HCI_LE_CREATE_CONN_FP_NO_FILTER;
-	cp->own_addr_type = own_addr_type;
-
-	/* The Initiating_PHY is the secondary phy of the corresponding ext adv set */
-	if (adv->options & BT_LE_ADV_OPT_CODED) {
-		cp->phys = BT_HCI_LE_EXT_SCAN_PHY_CODED;
-	} else if (adv->options & BT_LE_ADV_OPT_NO_2M) {
-		cp->phys = BT_HCI_LE_EXT_SCAN_PHY_1M;
-	} else {
-		cp->phys = BT_HCI_LE_EXT_SCAN_PHY_2M;
-	}
-
-	phy = net_buf_add(buf, sizeof(*phy));
-	(void)memset(phy, 0, sizeof(*phy));
-	set_phy_conn_param(conn, phy);
-
-	bt_hci_cmd_state_set_init(buf, &state, bt_dev.flags, BT_DEV_INITIATING, true);
-
-	return bt_hci_cmd_send_sync(BT_HCI_OP_LE_EXT_CREATE_CONN_V2, buf, NULL);
-}
-
 static int bt_le_create_conn_legacy(const struct bt_conn *conn)
 {
 	struct bt_hci_cp_le_create_conn *cp;
@@ -1116,7 +1070,7 @@ static void conn_auto_initiate(struct bt_conn *conn)
 	}
 }
 
-static void le_conn_complete_cancel(uint8_t err)
+static void le_conn_complete_cancel(void)
 {
 	struct bt_conn *conn;
 
@@ -1131,7 +1085,7 @@ static void le_conn_complete_cancel(uint8_t err)
 		return;
 	}
 
-	conn->err = err;
+	conn->err = BT_HCI_ERR_UNKNOWN_CONN_ID;
 
 	/* Handle cancellation of outgoing connection attempt. */
 	if (!IS_ENABLED(CONFIG_BT_FILTER_ACCEPT_LIST)) {
@@ -1226,46 +1180,12 @@ static void enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 	bt_hci_le_enh_conn_complete(evt);
 }
 
-static void translate_addrs(bt_addr_le_t *peer_addr, bt_addr_le_t *id_addr,
-			    const struct bt_hci_evt_le_enh_conn_complete *evt, uint8_t id)
-{
-	if (bt_addr_le_is_resolved(&evt->peer_addr)) {
-		bt_addr_le_copy_resolved(id_addr, &evt->peer_addr);
-
-		bt_addr_copy(&peer_addr->a, &evt->peer_rpa);
-		peer_addr->type = BT_ADDR_LE_RANDOM;
-	} else {
-		bt_addr_le_copy(id_addr, bt_lookup_id_addr(id, &evt->peer_addr));
-		bt_addr_le_copy(peer_addr, &evt->peer_addr);
-	}
-}
-
-static void update_conn(struct bt_conn *conn, const bt_addr_le_t *id_addr,
-			const struct bt_hci_evt_le_enh_conn_complete *evt)
-{
-	conn->handle = sys_le16_to_cpu(evt->handle);
-	bt_addr_le_copy(&conn->le.dst, id_addr);
-	conn->le.interval = sys_le16_to_cpu(evt->interval);
-	conn->le.latency = sys_le16_to_cpu(evt->latency);
-	conn->le.timeout = sys_le16_to_cpu(evt->supv_timeout);
-	conn->role = evt->role;
-	conn->err = 0U;
-
-#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
-	conn->le.data_len.tx_max_len = BT_GAP_DATA_LEN_DEFAULT;
-	conn->le.data_len.tx_max_time = BT_GAP_DATA_TIME_DEFAULT;
-	conn->le.data_len.rx_max_len = BT_GAP_DATA_LEN_DEFAULT;
-	conn->le.data_len.rx_max_time = BT_GAP_DATA_TIME_DEFAULT;
-#endif
-}
-
 void bt_hci_le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 {
 	uint16_t handle = sys_le16_to_cpu(evt->handle);
 	bool is_disconnected = conn_handle_is_disconnected(handle);
 	bt_addr_le_t peer_addr, id_addr;
 	struct bt_conn *conn;
-	uint8_t id;
 
 	LOG_DBG("status 0x%02x handle %u role %u peer %s peer RPA %s", evt->status, handle,
 		evt->role, bt_addr_le_str(&evt->peer_addr), bt_addr_str(&evt->peer_rpa));
@@ -1284,17 +1204,8 @@ void bt_hci_le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 
 		if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
 		    evt->status == BT_HCI_ERR_UNKNOWN_CONN_ID) {
-			le_conn_complete_cancel(evt->status);
+			le_conn_complete_cancel();
 			bt_le_scan_update(false);
-			return;
-		}
-
-		if (IS_ENABLED(CONFIG_BT_CENTRAL) && IS_ENABLED(CONFIG_BT_PER_ADV_RSP) &&
-		    evt->status == BT_HCI_ERR_CONN_FAIL_TO_ESTAB) {
-			le_conn_complete_cancel(evt->status);
-
-			atomic_clear_bit(bt_dev.flags, BT_DEV_INITIATING);
-
 			return;
 		}
 
@@ -1303,8 +1214,19 @@ void bt_hci_le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 		return;
 	}
 
-	id = evt->role == BT_HCI_ROLE_PERIPHERAL ? bt_dev.adv_conn_id : BT_ID_DEFAULT;
-	translate_addrs(&peer_addr, &id_addr, evt, id);
+	if (bt_addr_le_is_resolved(&evt->peer_addr)) {
+		bt_addr_le_copy_resolved(&id_addr, &evt->peer_addr);
+
+		bt_addr_copy(&peer_addr.a, &evt->peer_rpa);
+		peer_addr.type = BT_ADDR_LE_RANDOM;
+	} else {
+		uint8_t id = evt->role == BT_HCI_ROLE_PERIPHERAL ? bt_dev.adv_conn_id :
+							   BT_ID_DEFAULT;
+
+		bt_addr_le_copy(&id_addr,
+				bt_lookup_id_addr(id, &evt->peer_addr));
+		bt_addr_le_copy(&peer_addr, &evt->peer_addr);
+	}
 
 	conn = find_pending_connect(evt->role, &id_addr);
 
@@ -1334,7 +1256,20 @@ void bt_hci_le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 		return;
 	}
 
-	update_conn(conn, &id_addr, evt);
+	conn->handle = handle;
+	bt_addr_le_copy(&conn->le.dst, &id_addr);
+	conn->le.interval = sys_le16_to_cpu(evt->interval);
+	conn->le.latency = sys_le16_to_cpu(evt->latency);
+	conn->le.timeout = sys_le16_to_cpu(evt->supv_timeout);
+	conn->role = evt->role;
+	conn->err = 0U;
+
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
+	conn->le.data_len.tx_max_len = BT_GAP_DATA_LEN_DEFAULT;
+	conn->le.data_len.tx_max_time = BT_GAP_DATA_TIME_DEFAULT;
+	conn->le.data_len.rx_max_len = BT_GAP_DATA_LEN_DEFAULT;
+	conn->le.data_len.rx_max_time = BT_GAP_DATA_TIME_DEFAULT;
+#endif
 
 #if defined(CONFIG_BT_USER_PHY_UPDATE)
 	conn->le.phy.tx_phy = BT_GAP_LE_PHY_1M;
@@ -1454,30 +1389,6 @@ static void le_enh_conn_complete(struct net_buf *buf)
 {
 	enh_conn_complete((void *)buf->data);
 }
-
-#if defined(CONFIG_BT_PER_ADV_RSP)
-static void le_enh_conn_complete_v2(struct net_buf *buf)
-{
-	struct bt_hci_evt_le_enh_conn_complete_v2 *evt =
-		(struct bt_hci_evt_le_enh_conn_complete_v2 *)buf->data;
-
-	if (evt->adv_handle == BT_HCI_ADV_HANDLE_INVALID &&
-	    evt->sync_handle == BT_HCI_SYNC_HANDLE_INVALID) {
-		/* The connection was not created via PAwR, handle the event like v1 */
-		enh_conn_complete((struct bt_hci_evt_le_enh_conn_complete *)evt);
-	}
-#if defined(CONFIG_BT_PER_ADV_RSP)
-	else if (evt->adv_handle != BT_HCI_ADV_HANDLE_INVALID &&
-		 evt->sync_handle == BT_HCI_SYNC_HANDLE_INVALID) {
-		/* The connection was created via PAwR advertiser, it can be handled like v1 */
-		enh_conn_complete((struct bt_hci_evt_le_enh_conn_complete *)evt);
-	}
-#endif /* CONFIG_BT_PER_ADV_RSP */
-	else {
-		LOG_ERR("Invalid connection complete event");
-	}
-}
-#endif /* CONFIG_BT_PER_ADV_RSP */
 
 static void le_legacy_conn_complete(struct net_buf *buf)
 {
@@ -2430,12 +2341,6 @@ static const struct event_handler meta_events[] = {
 	EVENT_HANDLER(BT_HCI_EVT_LE_PER_ADV_RESPONSE_REPORT, bt_hci_le_per_adv_response_report,
 		      sizeof(struct bt_hci_evt_le_per_adv_response_report)),
 #endif /* CONFIG_BT_PER_ADV_RSP */
-#if defined(CONFIG_BT_CONN)
-#if defined(CONFIG_BT_PER_ADV_RSP)
-	EVENT_HANDLER(BT_HCI_EVT_LE_ENH_CONN_COMPLETE_V2, le_enh_conn_complete_v2,
-		      sizeof(struct bt_hci_evt_le_enh_conn_complete_v2)),
-#endif /* CONFIG_BT_PER_ADV_RSP */
-#endif /* CONFIG_BT_CONN */
 
 };
 
@@ -3019,11 +2924,6 @@ static int le_set_event_mask(void)
 		mask |= BT_EVT_MASK_LE_PER_ADVERTISING_REPORT_V2;
 		mask |= BT_EVT_MASK_LE_PER_ADV_SYNC_ESTABLISHED_V2;
 		mask |= BT_EVT_MASK_LE_PAST_RECEIVED_V2;
-	}
-
-	if (IS_ENABLED(CONFIG_BT_CONN) &&
-	    IS_ENABLED(CONFIG_BT_PER_ADV_RSP)) {
-		mask |= BT_EVT_MASK_LE_ENH_CONN_COMPLETE_V2;
 	}
 
 	sys_put_le64(mask, cp_mask->events);
