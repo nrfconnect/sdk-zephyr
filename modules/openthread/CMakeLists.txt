@@ -184,10 +184,10 @@ else()
   set(OT_DNS_DSO OFF CACHE BOOL "Enable DNS Stateful Operations (DSO) support" FORCE)
 endif()
 
-if(CONFIG_OPENTHREAD_DNS_QUERY_UPSTREAM)
-  set(OT_DNS_QUERY_UPSTREAM ON CACHE BOOL "Enable forwarding DNS queries to upstream" FORCE)
+if(CONFIG_OPENTHREAD_DNS_UPSTREAM_QUERY)
+  set(OT_DNS_UPSTREAM_QUERY ON CACHE BOOL "Enable forwarding DNS queries to upstream" FORCE)
 else()
-  set(OT_DNS_QUERY_UPSTREAM OFF CACHE BOOL "Enable forwarding DNS queries to upstream" FORCE)
+  set(OT_DNS_UPSTREAM_QUERY OFF CACHE BOOL "Enable forwarding DNS queries to upstream" FORCE)
 endif()
 
 if(CONFIG_OPENTHREAD_DNSSD_SERVER)
