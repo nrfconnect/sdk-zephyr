@@ -203,7 +203,7 @@ manifest:
       revision: aedcc262f93bbb1b0c2f58026911575729b7465c
       path: modules/lib/open-amp
     - name: openthread
-      revision: 25942910ab57b32f73d9c56d8c6cf07c7cf98c49
+      revision: 7bdcf8a5d49838ce6e3e227e2780e4f12c461330
       path: modules/lib/openthread
     - name: picolibc
       path: modules/lib/picolibc
