@@ -34,34 +34,14 @@
 #include <zephyr/mgmt/mcumgr/mgmt/callbacks.h>
 #endif
 
-#if USE_PARTITION_MANAGER
-#include <flash_map_pm.h>
-
-#ifdef PM_MCUBOOT_SECONDARY_PAD_SIZE
-BUILD_ASSERT(PM_MCUBOOT_PAD_SIZE == PM_MCUBOOT_SECONDARY_PAD_SIZE);
-#endif
-
-#if CONFIG_BUILD_WITH_TFM
-  #define PM_ADDRESS_OFFSET (PM_MCUBOOT_PAD_SIZE + PM_TFM_SIZE)
-#else
-  #define PM_ADDRESS_OFFSET (PM_MCUBOOT_PAD_SIZE)
-#endif
-
-#define FIXED_PARTITION_IS_CHOSEN_CODE_PARTITION(label)	\
-	(FIXED_PARTITION_OFFSET(label) == (PM_ADDRESS - PM_ADDRESS_OFFSET))
-
-#else /* ! USE_PARTITION_MANAGER */
-
 #define FIXED_PARTITION_IS_CHOSEN_CODE_PARTITION(label)	\
 	DT_SAME_NODE(DT_NODELABEL(label), DT_CHOSEN(zephyr_code_partition))
-
-#endif /* USE_PARTITION_MANAGER */
 
 #if !(FIXED_PARTITION_IS_CHOSEN_CODE_PARTITION(slot0_partition) ||	\
         FIXED_PARTITION_IS_CHOSEN_CODE_PARTITION(slot0_ns_partition) || \
 	FIXED_PARTITION_IS_CHOSEN_CODE_PARTITION(slot1_partition) ||	\
 	FIXED_PARTITION_IS_CHOSEN_CODE_PARTITION(slot2_partition))
-#error "Unsupported chosen code partition for boot application."
+#error "Unsupported chosen zephyr,code-partition for boot application."
 #endif
 
 LOG_MODULE_REGISTER(mcumgr_img_grp, CONFIG_MCUMGR_GRP_IMG_LOG_LEVEL);
