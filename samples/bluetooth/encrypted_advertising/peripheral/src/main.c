@@ -97,17 +97,16 @@ static int setup_btn(void)
 	return 0;
 }
 
-int main(void)
+void main(void)
 {
 	int err;
 
 	err = setup_btn();
 	if (err) {
-		return 0;
+		return;
 	}
 
 	LOG_DBG("Starting peripheral sample...");
 
 	(void)run_peripheral_sample(get_passkey_confirmation);
-	return 0;
 }
