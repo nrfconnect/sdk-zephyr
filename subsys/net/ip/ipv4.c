@@ -17,6 +17,7 @@ LOG_MODULE_REGISTER(net_ipv4, CONFIG_NET_IPV4_LOG_LEVEL);
 #include <zephyr/net/net_stats.h>
 #include <zephyr/net/net_context.h>
 #include <zephyr/net/virtual.h>
+#include <zephyr/net/net_filter.h>
 #include "net_private.h"
 #include "connection.h"
 #include "net_stats.h"
@@ -329,6 +330,11 @@ enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 	net_pkt_set_ipv4_ttl(pkt, hdr->ttl);
 
 	net_pkt_set_family(pkt, PF_INET);
+
+	if (nf_prerouting_hook(PF_INET, pkt) != NET_CONTINUE) {
+		/*Drop the packet */
+		return NET_DROP;
+	}
 
 	if (IS_ENABLED(CONFIG_NET_IPV4_FRAGMENT)) {
 		/* Check if this is a fragmented packet, and if so, handle reassembly */

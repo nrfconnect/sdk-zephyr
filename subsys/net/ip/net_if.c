@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(net_if, CONFIG_NET_IF_LOG_LEVEL);
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/ethernet.h>
 #include <zephyr/net/virtual.h>
+#include <zephyr/net/net_filter.h>
 
 #include "net_private.h"
 #include "ipv4.h"
@@ -339,6 +340,12 @@ void net_if_queue_tx(struct net_if *iface, struct net_pkt *pkt)
 {
 	if (!net_pkt_filter_send_ok(pkt)) {
 		/* silently drop the packet */
+		net_pkt_unref(pkt);
+		return;
+	}
+
+	if (nf_postrouting_hook(pkt) != NET_CONTINUE) {
+		/* Drop the packet */
 		net_pkt_unref(pkt);
 		return;
 	}

@@ -1,0 +1,4 @@
+tests:
+  net.net_filter:
+    tags: net filter
+    depends_on: netif

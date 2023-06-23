@@ -24,6 +24,7 @@ LOG_MODULE_REGISTER(net_ipv6, CONFIG_NET_IPV6_LOG_LEVEL);
 #include <zephyr/net/net_context.h>
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/virtual.h>
+#include <zephyr/net/net_filter.h>
 #include "net_private.h"
 #include "connection.h"
 #include "icmpv6.h"
@@ -519,6 +520,11 @@ enum net_verdict net_ipv6_input(struct net_pkt *pkt, bool is_loopback)
 	net_pkt_set_ip_hdr_len(pkt, sizeof(struct net_ipv6_hdr));
 	net_pkt_set_ipv6_hop_limit(pkt, NET_IPV6_HDR(pkt)->hop_limit);
 	net_pkt_set_family(pkt, PF_INET6);
+
+	if (nf_prerouting_hook(PF_INET6, pkt) != NET_CONTINUE) {
+		/*Drop the packet */
+		return NET_DROP;
+	}
 
 	if (IS_ENABLED(CONFIG_NET_ROUTE_MCAST) &&
 		net_ipv6_is_addr_mcast((struct in6_addr *)hdr->dst)) {
