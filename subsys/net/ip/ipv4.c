@@ -330,6 +330,8 @@ enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 
 	net_pkt_set_family(pkt, PF_INET);
 
+	// NF_HOOK();
+
 	if (IS_ENABLED(CONFIG_NET_IPV4_FRAGMENT)) {
 		/* Check if this is a fragmented packet, and if so, handle reassembly */
 		if ((ntohs(*((uint16_t *)&hdr->offset[0])) &

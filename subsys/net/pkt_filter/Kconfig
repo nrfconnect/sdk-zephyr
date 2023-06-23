@@ -19,4 +19,17 @@ module-help = Enables packet filter output debug messages
 source "subsys/net/Kconfig.template.log_config.net"
 endif # NET_PKT_FILTER
 
+config NET_FILTER
+	bool "Network filtering"
+	help
+	  The Network Filtering
+
+if NET_FILTER
+module = NET_FILTER
+module-dep = NET_LOG
+module-str = Log level for network trafic filtering
+module-help = Enables network filter output debug messages
+source "subsys/net/Kconfig.template.log_config.net"
+endif # NET_FILTER
+
 endmenu
