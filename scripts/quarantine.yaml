@@ -68,6 +68,7 @@
     - net.mqtt.tls
   platforms:
     - nrf5340dk_nrf5340_cpuapp_ns
+    - nrf9160dk_nrf9160_ns
   comment: "Ram/flash overflows, also in the upstream"
 
 - scenarios:
