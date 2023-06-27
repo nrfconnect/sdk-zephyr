@@ -19,7 +19,6 @@ config PSA_WANT_ALG_CTR_DRBG
 	  Provide random number generator (RNG) using CTR-DRBG as the
 	  pseudo-random number generator (PRNG), seeded by a true random
 	  number generator (TRNG).
-	  Note: This configuration is currently not described and has no effect.
 
 config PSA_WANT_ALG_HMAC_DRBG
 	bool
@@ -28,7 +27,6 @@ config PSA_WANT_ALG_HMAC_DRBG
 	  Provide random number generator (RNG) using HMAC-DRBG as the
 	  pseudo-random number generator (PRNG), seeded by a true random
 	  number generator (TRNG).
-	  Note: This configuration is currently not described and has no effect.
 
 endmenu # RNG support
 
