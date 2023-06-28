@@ -37,12 +37,7 @@ struct rpl_val {
 
 static struct bt_mesh_rpl replay_list[CONFIG_BT_MESH_CRPL];
 static ATOMIC_DEFINE(store, CONFIG_BT_MESH_CRPL);
-
-enum {
-	PENDING_CLEAR,
-	PENDING_RESET,
-};
-static atomic_t rpl_flags;
+static atomic_t clear;
 
 static inline int rpl_idx(const struct bt_mesh_rpl *rpl)
 {
@@ -58,8 +53,6 @@ static void clear_rpl(struct bt_mesh_rpl *rpl)
 		return;
 	}
 
-	atomic_clear_bit(store, rpl_idx(rpl));
-
 	snprintk(path, sizeof(path), "bt/mesh/RPL/%x", rpl->src);
 	err = settings_delete(path);
 	if (err) {
@@ -67,6 +60,9 @@ static void clear_rpl(struct bt_mesh_rpl *rpl)
 	} else {
 		LOG_DBG("Cleared RPL");
 	}
+
+	(void)memset(rpl, 0, sizeof(*rpl));
+	atomic_clear_bit(store, rpl_idx(rpl));
 }
 
 static void schedule_rpl_store(struct bt_mesh_rpl *entry, bool force)
@@ -109,7 +105,6 @@ void bt_mesh_rpl_update(struct bt_mesh_rpl *rpl,
 bool bt_mesh_rpl_check(struct bt_mesh_net_rx *rx,
 		struct bt_mesh_rpl **match)
 {
-	struct bt_mesh_rpl *rpl;
 	int i;
 
 	/* Don't bother checking messages from ourselves */
@@ -123,33 +118,34 @@ bool bt_mesh_rpl_check(struct bt_mesh_net_rx *rx,
 	}
 
 	for (i = 0; i < ARRAY_SIZE(replay_list); i++) {
-		rpl = &replay_list[i];
+		struct bt_mesh_rpl *rpl = &replay_list[i];
 
 		/* Empty slot */
 		if (!rpl->src) {
-			goto match;
+			if (match) {
+				*match = rpl;
+			} else {
+				bt_mesh_rpl_update(rpl, rx);
+			}
+
+			return false;
 		}
 
 		/* Existing slot for given address */
 		if (rpl->src == rx->ctx.addr) {
-			if (!rpl->old_iv &&
-			    atomic_test_bit(&rpl_flags, PENDING_RESET) &&
-			    !atomic_test_bit(store, i)) {
-				/* Until rpl reset is finished, entry with old_iv == false and
-				 * without "store" bit set will be removed, therefore it can be
-				 * reused. If such entry is reused, "store" bit will be set and
-				 * the entry won't be removed.
-				 */
-				goto match;
-			}
-
 			if (rx->old_iv && !rpl->old_iv) {
 				return true;
 			}
 
 			if ((!rx->old_iv && rpl->old_iv) ||
 			    rpl->seq < rx->seq) {
-				goto match;
+				if (match) {
+					*match = rpl;
+				} else {
+					bt_mesh_rpl_update(rpl, rx);
+				}
+
+				return false;
 			} else {
 				return true;
 			}
@@ -158,15 +154,6 @@ bool bt_mesh_rpl_check(struct bt_mesh_net_rx *rx,
 
 	LOG_ERR("RPL is full!");
 	return true;
-
-match:
-	if (match) {
-		*match = rpl;
-	} else {
-		bt_mesh_rpl_update(rpl, rx);
-	}
-
-	return false;
 }
 
 void bt_mesh_rpl_clear(void)
@@ -178,7 +165,7 @@ void bt_mesh_rpl_clear(void)
 		return;
 	}
 
-	atomic_set_bit(&rpl_flags, PENDING_CLEAR);
+	(void)atomic_cas(&clear, 0, 1);
 
 	bt_mesh_settings_store_schedule(BT_MESH_SETTINGS_RPL_PENDING);
 }
@@ -212,56 +199,41 @@ static struct bt_mesh_rpl *bt_mesh_rpl_alloc(uint16_t src)
 
 void bt_mesh_rpl_reset(void)
 {
+	int shift = 0;
+	int last = 0;
+
 	/* Discard "old old" IV Index entries from RPL and flag
 	 * any other ones (which are valid) as old.
 	 */
-	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		int i;
+	for (int i = 0; i < ARRAY_SIZE(replay_list); i++) {
+		struct bt_mesh_rpl *rpl = &replay_list[i];
 
-		for (i = 0; i < ARRAY_SIZE(replay_list); i++) {
-			struct bt_mesh_rpl *rpl = &replay_list[i];
-
-			if (!rpl->src) {
-				continue;
-			}
-
-			/* Entries with "store" bit set will be stored, other entries will be
-			 * removed.
-			 */
-			atomic_set_bit_to(store, i, !rpl->old_iv);
-			rpl->old_iv = !rpl->old_iv;
-		}
-
-		if (i != 0) {
-			atomic_set_bit(&rpl_flags, PENDING_RESET);
-			bt_mesh_settings_store_schedule(BT_MESH_SETTINGS_RPL_PENDING);
-		}
-	} else {
-		int shift = 0;
-		int last = 0;
-
-		for (int i = 0; i < ARRAY_SIZE(replay_list); i++) {
-			struct bt_mesh_rpl *rpl = &replay_list[i];
-
-			if (rpl->src) {
-				if (rpl->old_iv) {
-					(void)memset(rpl, 0, sizeof(*rpl));
-
-					shift++;
+		if (rpl->src) {
+			if (rpl->old_iv) {
+				if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+					clear_rpl(rpl);
 				} else {
-					rpl->old_iv = true;
-
-					if (shift > 0) {
-						replay_list[i - shift] = *rpl;
-					}
+					(void)memset(rpl, 0, sizeof(*rpl));
 				}
 
-				last = i;
-			}
-		}
+				shift++;
+			} else {
+				rpl->old_iv = true;
 
-		(void)memset(&replay_list[last - shift + 1], 0, sizeof(struct bt_mesh_rpl) * shift);
+				if (shift > 0) {
+					replay_list[i - shift] = *rpl;
+				}
+
+				if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+					schedule_rpl_store(&replay_list[i - shift], true);
+				}
+			}
+
+			last = i;
+		}
 	}
+
+	(void) memset(&replay_list[last - shift + 1], 0, sizeof(struct bt_mesh_rpl) * shift);
 }
 
 static int rpl_set(const char *name, size_t len_rd,
@@ -343,10 +315,7 @@ static void store_rpl(struct bt_mesh_rpl *entry)
 
 void bt_mesh_rpl_pending_store(uint16_t addr)
 {
-	int shift = 0;
-	int last = 0;
 	bool clr;
-	bool rst;
 
 	if (!IS_ENABLED(CONFIG_BT_SETTINGS) ||
 	    (!BT_MESH_ADDR_IS_UNICAST(addr) &&
@@ -358,49 +327,22 @@ void bt_mesh_rpl_pending_store(uint16_t addr)
 		bt_mesh_settings_store_cancel(BT_MESH_SETTINGS_RPL_PENDING);
 	}
 
-	clr = atomic_test_and_clear_bit(&rpl_flags, PENDING_CLEAR);
-	rst = atomic_test_bit(&rpl_flags, PENDING_RESET);
+	clr = atomic_cas(&clear, 1, 0);
 
 	for (int i = 0; i < ARRAY_SIZE(replay_list); i++) {
-		struct bt_mesh_rpl *rpl = &replay_list[i];
-
-		if (addr != BT_MESH_ADDR_ALL_NODES && addr != rpl->src) {
+		if (addr != BT_MESH_ADDR_ALL_NODES &&
+		    addr != replay_list[i].src) {
 			continue;
 		}
 
 		if (clr) {
-			clear_rpl(rpl);
-			shift++;
-		} else if (atomic_test_and_clear_bit(store, i)) {
-			if (shift > 0) {
-				replay_list[i - shift] = *rpl;
-			}
-
-			store_rpl(&replay_list[i - shift]);
-		} else if (rst) {
-			clear_rpl(rpl);
-
-			/* Check if this entry was re-used during removal. If so, shift it as well.
-			 * Otherwise, increment shift counter.
-			 */
-			if (atomic_test_and_clear_bit(store, i)) {
-				replay_list[i - shift] = *rpl;
-				atomic_set_bit(store, i - shift);
-			} else {
-				shift++;
-			}
+			clear_rpl(&replay_list[i]);
+		} else if (atomic_test_and_clear_bit(store, rpl_idx(&replay_list[i]))) {
+			store_rpl(&replay_list[i]);
 		}
-
-		last = i;
 
 		if (addr != BT_MESH_ADDR_ALL_NODES) {
 			break;
 		}
-	}
-
-	atomic_test_and_clear_bit(&rpl_flags, PENDING_RESET);
-
-	if (addr == BT_MESH_ADDR_ALL_NODES) {
-		(void)memset(&replay_list[last - shift + 1], 0, sizeof(struct bt_mesh_rpl) * shift);
 	}
 }
