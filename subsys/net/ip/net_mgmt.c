@@ -79,11 +79,9 @@ static inline void mgmt_push_event(uint32_t mgmt_event, struct net_if *iface,
 	new_event.event = mgmt_event;
 	new_event.iface = iface;
 
-	if (k_msgq_put(&event_msgq, &new_event,
-		K_MSEC(CONFIG_NET_MGMT_EVENT_QUEUE_TIMEOUT)) != 0) {
+	if (k_msgq_put(&event_msgq, &new_event, K_MSEC(10)) != 0) {
 		NET_WARN("Failure to push event (%u), "
-			 "try increasing the 'CONFIG_NET_MGMT_EVENT_QUEUE_SIZE' "
-			 "or 'CONFIG_NET_MGMT_EVENT_QUEUE_TIMEOUT' options.",
+			 "try increasing the 'CONFIG_NET_MGMT_EVENT_QUEUE_SIZE'",
 			 mgmt_event);
 	}
 
