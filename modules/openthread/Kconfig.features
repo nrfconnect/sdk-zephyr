@@ -286,4 +286,3 @@ config OPENTHREAD_UDP_FORWARD
 
 config OPENTHREAD_UPTIME
 	bool "Openthread uptime counter"
-	default y if OPENTHREAD_FTD
