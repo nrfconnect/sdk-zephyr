@@ -305,16 +305,6 @@
 #endif /* CONFIG_OPENTHREAD_MIN_RECEIVE_ON_AFTER */
 
 /**
- * @def OPENTHREAD_CONFIG_CSL_TIMEOUT
- *
- * The default CSL timeout in seconds.
- *
- */
-#ifdef CONFIG_OPENTHREAD_CSL_TIMEOUT
-#define OPENTHREAD_CONFIG_CSL_TIMEOUT CONFIG_OPENTHREAD_CSL_TIMEOUT
-#endif /* CONFIG_OPENTHREAD_CSL_TIMEOUT */
-
-/**
  * @def OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_SECURITY_ENABLE
  *
  * Set to 1 to enable software transmission security logic.
