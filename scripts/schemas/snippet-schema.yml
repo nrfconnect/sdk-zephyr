@@ -9,9 +9,9 @@ schema;append-schema:
   # See uses under 'append:' keys below.
   type: map
   mapping:
-    EXTRA_DTC_OVERLAY_FILE:
+    DTC_OVERLAY_FILE:
       type: str
-    EXTRA_CONF_FILE:
+    OVERLAY_CONFIG:
       type: str
 
 type: map
