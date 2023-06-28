@@ -103,18 +103,16 @@ static int setup_btn(void)
 	return 0;
 }
 
-int main(void)
+void main(void)
 {
 	int err;
 
 	err = setup_btn();
 	if (err) {
-		return 0;
+		return;
 	}
 
 	LOG_DBG("Starting central sample...");
 
 	(void)run_central_sample(get_passkey_confirmation, NULL, 0, NULL);
-
-	return 0;
 }
