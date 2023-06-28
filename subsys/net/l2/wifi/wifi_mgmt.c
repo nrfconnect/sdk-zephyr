@@ -81,10 +81,8 @@ static void scan_result_cb(struct net_if *iface, int status,
 		return;
 	}
 
-#ifndef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS_ONLY
 	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_SCAN_RESULT, iface,
 					entry, sizeof(struct wifi_scan_result));
-#endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS_ONLY */
 }
 
 static int wifi_scan(uint32_t mgmt_request, struct net_if *iface,
@@ -364,20 +362,3 @@ void wifi_mgmt_raise_twt_sleep_state(struct net_if *iface,
 					iface, INT_TO_POINTER(twt_sleep_state),
 					sizeof(twt_sleep_state));
 }
-
-#ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS
-void wifi_mgmt_raise_raw_scan_result_event(struct net_if *iface,
-					   struct wifi_raw_scan_result *raw_scan_result)
-{
-	if (raw_scan_result->frame_length > CONFIG_WIFI_MGMT_RAW_SCAN_RESULT_LENGTH) {
-		LOG_INF("raw scan result frame length = %d too big,"
-			 "saving upto max raw scan length = %d",
-			 raw_scan_result->frame_length,
-			 CONFIG_WIFI_MGMT_RAW_SCAN_RESULT_LENGTH);
-	}
-
-	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_RAW_SCAN_RESULT,
-					iface, raw_scan_result,
-					sizeof(*raw_scan_result));
-}
-#endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS */
