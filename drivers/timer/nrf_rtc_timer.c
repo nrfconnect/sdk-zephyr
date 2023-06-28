@@ -231,20 +231,9 @@ uint64_t z_nrf_rtc_timer_get_ticks(k_timeout_t t)
  * @param[in] chan A channel for which a new CC value is to be set.
  *
  * @param[in] req_cc Requested CC register value to be set.
- *
- * @param[in] exact Use @c false to allow CC adjustment if @c req_cc value is
- *                  close to the current value of the timer.
- *                  Use @c true to disallow CC adjustment. The function can
- *                  fail with -EINVAL result if @p req_cc is too close to the
- *                  current value.
- *
- * @retval 0 The requested CC has been set successfully.
- * @retval -EINVAL The requested CC value could not be reliably set.
  */
-static int set_alarm(int32_t chan, uint32_t req_cc, bool exact)
+static void set_alarm(int32_t chan, uint32_t req_cc)
 {
-	int ret = 0;
-
 	/* Ensure that the value exposed in this driver API is consistent with
 	 * assumptions of this function.
 	 */
@@ -311,16 +300,9 @@ static int set_alarm(int32_t chan, uint32_t req_cc, bool exact)
 				now = counter();
 				if (counter_sub(now, req_cc) > COUNTER_HALF_SPAN) {
 					event_clear(chan);
-					if (exact) {
-						ret = -EINVAL;
-						break;
-					}
 				} else {
 					break;
 				}
-			} else if (exact) {
-				ret = -EINVAL;
-				break;
 			}
 
 			cc_val = now + cc_inc;
@@ -329,13 +311,11 @@ static int set_alarm(int32_t chan, uint32_t req_cc, bool exact)
 			break;
 		}
 	}
-
-	return ret;
 }
 
 static int compare_set_nolocks(int32_t chan, uint64_t target_time,
 			z_nrf_rtc_timer_compare_handler_t handler,
-			void *user_data, bool exact)
+			void *user_data)
 {
 	int ret = 0;
 	uint32_t cc_value = absolute_time_to_cc(target_time);
@@ -351,33 +331,29 @@ static int compare_set_nolocks(int32_t chan, uint64_t target_time,
 			/* Target time is valid and is different than currently set.
 			 * Set CC value.
 			 */
-			ret = set_alarm(chan, cc_value, exact);
+			set_alarm(chan, cc_value);
 		}
-	} else if (!exact) {
+	} else {
 		/* Force ISR handling when exiting from critical section. */
 		atomic_or(&force_isr_mask, BIT(chan));
-	} else {
-		ret = -EINVAL;
 	}
 
-	if (ret == 0) {
-		cc_data[chan].target_time = target_time;
-		cc_data[chan].callback = handler;
-		cc_data[chan].user_context = user_data;
-	}
+	cc_data[chan].target_time = target_time;
+	cc_data[chan].callback = handler;
+	cc_data[chan].user_context = user_data;
 
 	return ret;
 }
 
 static int compare_set(int32_t chan, uint64_t target_time,
 			z_nrf_rtc_timer_compare_handler_t handler,
-			void *user_data, bool exact)
+			void *user_data)
 {
 	bool key;
 
 	key = compare_int_lock(chan);
 
-	int ret = compare_set_nolocks(chan, target_time, handler, user_data, exact);
+	int ret = compare_set_nolocks(chan, target_time, handler, user_data);
 
 	compare_int_unlock(chan, key);
 
@@ -390,16 +366,7 @@ int z_nrf_rtc_timer_set(int32_t chan, uint64_t target_time,
 {
 	__ASSERT_NO_MSG(chan > 0 && chan < CHAN_COUNT);
 
-	return compare_set(chan, target_time, handler, user_data, false);
-}
-
-int z_nrf_rtc_timer_exact_set(int32_t chan, uint64_t target_time,
-			      z_nrf_rtc_timer_compare_handler_t handler,
-			      void *user_data)
-{
-	__ASSERT_NO_MSG(chan > 0 && chan < CHAN_COUNT);
-
-	return compare_set(chan, target_time, handler, user_data, true);
+	return compare_set(chan, target_time, handler, user_data);
 }
 
 void z_nrf_rtc_timer_abort(int32_t chan)
@@ -480,7 +447,7 @@ static void sys_clock_timeout_handler(int32_t chan,
 		 * so it won't get preempted by the interrupt.
 		 */
 		compare_set(chan, last_count + CYC_PER_TICK,
-					  sys_clock_timeout_handler, NULL, false);
+					  sys_clock_timeout_handler, NULL);
 	}
 
 	sys_clock_announce(dticks);
@@ -676,7 +643,7 @@ void sys_clock_set_timeout(int32_t ticks, bool idle)
 
 	uint64_t target_time = cyc + last_count;
 
-	compare_set(0, target_time, sys_clock_timeout_handler, NULL, false);
+	compare_set(0, target_time, sys_clock_timeout_handler, NULL);
 }
 
 uint32_t sys_clock_elapsed(void)
@@ -754,7 +721,7 @@ static int sys_clock_driver_init(void)
 	uint32_t initial_timeout = IS_ENABLED(CONFIG_TICKLESS_KERNEL) ?
 		MAX_CYCLES : CYC_PER_TICK;
 
-	compare_set(0, initial_timeout, sys_clock_timeout_handler, NULL, false);
+	compare_set(0, initial_timeout, sys_clock_timeout_handler, NULL);
 
 	z_nrf_clock_control_lf_on(mode);
 
