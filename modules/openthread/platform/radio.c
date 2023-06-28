@@ -38,8 +38,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_OPENTHREAD_L2_LOG_LEVEL);
 
 #define SHORT_ADDRESS_SIZE 2
 
-#define FCS_SIZE     2
-#define PHR_DURATION 32
+#define FCS_SIZE 2
 #if defined(CONFIG_IEEE802154_2015)
 #define ACK_PKT_LENGTH 127
 #else
@@ -186,9 +185,8 @@ enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
 #if defined(CONFIG_NET_PKT_TIMESTAMP)
 	struct net_ptp_time *pkt_time = net_pkt_timestamp(pkt);
 
-	/* OpenThread expects the timestamp to point to the end of SFD */
-	ack_frame.mInfo.mRxInfo.mTimestamp = pkt_time->second * USEC_PER_SEC +
-					     pkt_time->nanosecond / NSEC_PER_USEC - PHR_DURATION;
+	ack_frame.mInfo.mRxInfo.mTimestamp =
+		pkt_time->second * USEC_PER_SEC + pkt_time->nanosecond / NSEC_PER_USEC;
 #endif
 
 	return NET_OK;
@@ -396,9 +394,8 @@ static void openthread_handle_received_frame(otInstance *instance,
 #if defined(CONFIG_NET_PKT_TIMESTAMP)
 	struct net_ptp_time *pkt_time = net_pkt_timestamp(pkt);
 
-	/* OpenThread expects the timestamp to point to the end of SFD */
-	recv_frame.mInfo.mRxInfo.mTimestamp = pkt_time->second * USEC_PER_SEC +
-					      pkt_time->nanosecond / NSEC_PER_USEC - PHR_DURATION;
+	recv_frame.mInfo.mRxInfo.mTimestamp =
+		pkt_time->second * USEC_PER_SEC + pkt_time->nanosecond / NSEC_PER_USEC;
 #endif
 
 #if defined(CONFIG_IEEE802154_2015)
