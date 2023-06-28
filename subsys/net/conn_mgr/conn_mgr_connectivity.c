@@ -46,8 +46,6 @@ out:
 	return status;
 }
 
-static void conn_mgr_conn_handle_iface_hard_down(struct net_if *iface);
-
 int conn_mgr_if_disconnect(struct net_if *iface)
 {
 	struct conn_mgr_conn_binding *binding;
@@ -76,11 +74,6 @@ int conn_mgr_if_disconnect(struct net_if *iface)
 
 out:
 	k_mutex_unlock(binding->mutex);
-
-	/* Inform conn_mgr that this is a hard-down scenario, since it won't know from the
-	 * if_down event alone.
-	 */
-	conn_mgr_conn_handle_iface_hard_down(iface);
 
 	return status;
 }
@@ -268,59 +261,6 @@ static void conn_mgr_conn_handle_iface_admin_up(struct net_if *iface)
 	}
 }
 
-/**
- * @brief Perform automated behaviors in response to any iface that loses
- * connection and does not expect to regain it (referred to, here, as hard-down).
- *
- * This is how conn_mgr_conn automatically takes such ifaces admin-down.
- *
- * @param iface - The iface which experienced hard-down.
- */
-static void conn_mgr_conn_handle_iface_hard_down(struct net_if *iface)
-{
-	/* NOTE: This will be double-fired for ifaces that are both non-persistent
-	 * and are being directly requested to disconnect, since both of these conditions
-	 * separately trigger conn_mgr_conn_handle_iface_hard_down.
-	 *
-	 * This is fine, because net_if_down is idempotent, but if you are adding other
-	 * behaviors to this function, bear it in mind.
-	 */
-
-	/* Ignore ifaces that don't have connectivity implementations */
-	if (!conn_mgr_if_is_bound(iface)) {
-		return;
-	}
-
-	/* Take the iface admin-down if AUTO_DOWN is enabled */
-	if (IS_ENABLED(CONFIG_NET_CONNECTION_MANAGER_AUTO_IF_DOWN) &&
-	    !conn_mgr_if_get_flag(iface, CONN_MGR_IF_NO_AUTO_DOWN)) {
-		net_if_down(iface);
-	}
-}
-
-/**
- * @brief Perform automated behaviors in response to any iface that loses oper-up state.
- *
- * This is how conn_mgr_conn automatically takes such ifaces admin-down if they are not persistent.
- *
- * @param iface - The iface which lost oper-up state.
- */
-static void conn_mgr_conn_handle_iface_down(struct net_if *iface)
-{
-	/* Ignore ifaces that don't have connectivity implementations */
-	if (!conn_mgr_if_is_bound(iface)) {
-		return;
-	}
-
-	/* If the iface is persistent, do not treat any disconnect as hard-down */
-	if (conn_mgr_if_get_flag(iface, CONN_MGR_IF_PERSISTENT)) {
-		return;
-	}
-
-	/* Otherwise, treat as a hard-down */
-	conn_mgr_conn_handle_iface_hard_down(iface);
-}
-
 static struct net_mgmt_event_callback conn_mgr_conn_iface_cb;
 static void conn_mgr_conn_iface_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event,
 					struct net_if *iface)
@@ -330,40 +270,10 @@ static void conn_mgr_conn_iface_handler(struct net_mgmt_event_callback *cb, uint
 	}
 
 	switch (NET_MGMT_GET_COMMAND(mgmt_event)) {
-	case NET_EVENT_IF_CMD_DOWN:
-		conn_mgr_conn_handle_iface_down(iface);
-		break;
 	case NET_EVENT_IF_CMD_ADMIN_UP:
 		conn_mgr_conn_handle_iface_admin_up(iface);
 		break;
 	}
-}
-
-static struct net_mgmt_event_callback conn_mgr_conn_self_cb;
-static void conn_mgr_conn_self_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event,
-				       struct net_if *iface)
-{
-	if ((mgmt_event & CONN_MGR_CONN_SELF_EVENTS_MASK) != mgmt_event) {
-		return;
-	}
-
-	switch (NET_MGMT_GET_COMMAND(mgmt_event)) {
-	case NET_EVENT_CONN_CMD_IF_FATAL_ERROR:
-		if (cb->info) {
-			NET_ERR("Fatal connectivity error on iface %d (%p). Reason: %d.",
-				net_if_get_by_iface(iface), iface, *((int *)cb->info)
-			);
-		} else {
-			NET_ERR("Unknown fatal connectivity error on iface %d (%p).",
-				net_if_get_by_iface(iface), iface
-			);
-		}
-	__fallthrough;
-	case NET_EVENT_CONN_CMD_IF_TIMEOUT:
-		conn_mgr_conn_handle_iface_hard_down(iface);
-		break;
-	}
-
 }
 
 void conn_mgr_conn_init(void)
@@ -392,10 +302,6 @@ void conn_mgr_conn_init(void)
 	net_mgmt_init_event_callback(&conn_mgr_conn_iface_cb, conn_mgr_conn_iface_handler,
 				     CONN_MGR_CONN_IFACE_EVENTS_MASK);
 	net_mgmt_add_event_callback(&conn_mgr_conn_iface_cb);
-
-	net_mgmt_init_event_callback(&conn_mgr_conn_self_cb, conn_mgr_conn_self_handler,
-				     CONN_MGR_CONN_SELF_EVENTS_MASK);
-	net_mgmt_add_event_callback(&conn_mgr_conn_self_cb);
 
 	/* Trigger any initial automated behaviors for ifaces */
 	STRUCT_SECTION_FOREACH(conn_mgr_conn_binding, binding) {
