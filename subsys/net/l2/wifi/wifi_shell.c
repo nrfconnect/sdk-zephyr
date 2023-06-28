@@ -676,7 +676,7 @@ static int cmd_wifi_ps_timeout(const struct shell *sh, size_t argc, char *argv[]
 	}
 
 	params.timeout_ms = timeout_ms;
-	params.type = WIFI_PS_PARAM_TIMEOUT;
+	params.type = WIFI_PS_PARAM_MODE;
 
 	if (net_mgmt(NET_REQUEST_WIFI_PS, iface, &params, sizeof(params))) {
 		shell_fprintf(sh, SHELL_WARNING,
