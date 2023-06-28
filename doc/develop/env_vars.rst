@@ -185,7 +185,7 @@ a comprehensive list.
 
    See :ref:`important-build-vars`.
 
-.. envvar:: EXTRA_ZEPHYR_MODULES
+.. envvar:: ZEPHYR_EXTRA_MODULES
 
    See :ref:`important-build-vars`.
 
