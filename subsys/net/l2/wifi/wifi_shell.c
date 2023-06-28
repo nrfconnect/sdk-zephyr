@@ -617,10 +617,8 @@ static int cmd_wifi_ps(const struct shell *sh, size_t argc, char *argv[])
 	params.type = WIFI_PS_PARAM_STATE;
 
 	if (net_mgmt(NET_REQUEST_WIFI_PS, iface, &params, sizeof(params))) {
-		shell_fprintf(sh, SHELL_WARNING,
-			      "PS %s failed. Reason: %s\n",
-			      params.enabled ? "enable" : "disable",
-			      get_ps_config_err_code_str(params.fail_reason));
+		shell_fprintf(sh, SHELL_WARNING, "Power save %s failed\n",
+			params.enabled ? "enable" : "disable");
 		return -ENOEXEC;
 	}
 
@@ -648,9 +646,7 @@ static int cmd_wifi_ps_mode(const struct shell *sh, size_t argc, char *argv[])
 	params.type = WIFI_PS_PARAM_MODE;
 
 	if (net_mgmt(NET_REQUEST_WIFI_PS, iface, &params, sizeof(params))) {
-		shell_fprintf(sh, SHELL_WARNING, "%s failed Reason : %s\n",
-			      wifi_ps_mode2str[params.mode],
-			      get_ps_config_err_code_str(params.fail_reason));
+		shell_fprintf(sh, SHELL_WARNING, "%s failed\n", wifi_ps_mode2str[params.mode]);
 		return -ENOEXEC;
 	}
 
@@ -679,9 +675,7 @@ static int cmd_wifi_ps_timeout(const struct shell *sh, size_t argc, char *argv[]
 	params.type = WIFI_PS_PARAM_MODE;
 
 	if (net_mgmt(NET_REQUEST_WIFI_PS, iface, &params, sizeof(params))) {
-		shell_fprintf(sh, SHELL_WARNING,
-			      "Setting PS timeout failed. Reason : %s\n",
-			      get_ps_config_err_code_str(params.fail_reason));
+		shell_fprintf(sh, SHELL_WARNING, "Setting PS timeout failed\n");
 		return -ENOEXEC;
 	}
 
@@ -989,18 +983,7 @@ static int cmd_wifi_listen_interval(const struct shell *sh, size_t argc, char *a
 	params.type = WIFI_PS_PARAM_LISTEN_INTERVAL;
 
 	if (net_mgmt(NET_REQUEST_WIFI_PS, iface, &params, sizeof(params))) {
-		if (params.fail_reason ==
-		    WIFI_PS_PARAM_LISTEN_INTERVAL_RANGE_INVALID) {
-			shell_fprintf(sh, SHELL_WARNING,
-			      "Setting listen interval failed. Reason :%s\n",
-			      get_ps_config_err_code_str(params.fail_reason));
-			shell_fprintf(sh, SHELL_WARNING,
-				"Hardware support valid range : 3 - 65535\n");
-		} else  {
-			shell_fprintf(sh, SHELL_WARNING,
-				"Setting listen interval failed. Reason :%s\n",
-				get_ps_config_err_code_str(params.fail_reason));
-		}
+		shell_fprintf(sh, SHELL_WARNING, "Setting listen interval failed\n");
 		return -ENOEXEC;
 	}
 
@@ -1031,10 +1014,8 @@ static int cmd_wifi_ps_wakeup_mode(const struct shell *sh, size_t argc, char *ar
 	params.type = WIFI_PS_PARAM_WAKEUP_MODE;
 
 	if (net_mgmt(NET_REQUEST_WIFI_PS, iface, &params, sizeof(params))) {
-		shell_fprintf(sh, SHELL_WARNING,
-			      "Setting PS wake up mode to %s failed..Reason :%s\n",
-			      params.wakeup_mode ? "Listen interval" : "DTIM interval",
-			      get_ps_config_err_code_str(params.fail_reason));
+		shell_fprintf(sh, SHELL_WARNING, "Setting PS wake up mode to %s failed\n",
+			params.wakeup_mode ? "Listen interval" : "DTIM interval");
 		return -ENOEXEC;
 	}
 
