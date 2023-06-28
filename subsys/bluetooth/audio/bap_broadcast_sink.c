@@ -347,6 +347,7 @@ static void broadcast_sink_iso_disconnected(struct bt_iso_chan *chan,
 	struct bt_bap_stream *stream;
 	struct bt_bap_ep *ep = iso->rx.ep;
 	struct bt_bap_broadcast_sink *sink;
+	bool all_disconnected;
 
 	if (ep == NULL) {
 		LOG_ERR("iso %p not bound with ep", chan);
@@ -377,12 +378,17 @@ static void broadcast_sink_iso_disconnected(struct bt_iso_chan *chan,
 		return;
 	}
 
-	if (!sys_slist_find_and_remove(&sink->streams, &stream->_node)) {
-		LOG_DBG("Could not find and remove stream %p from sink %p", stream, sink);
+	all_disconnected = true;
+	SYS_SLIST_FOR_EACH_CONTAINER(&sink->streams, stream, _node) {
+		/* stream->ep is cleared when the steam disconnects */
+		if (stream->ep != NULL) {
+			all_disconnected = false;
+			break;
+		}
 	}
 
 	/* Clear sink->big if not already cleared */
-	if (sys_slist_is_empty(&sink->streams) && sink->big) {
+	if (all_disconnected && sink->big) {
 		broadcast_sink_clear_big(sink, reason);
 	}
 }
