@@ -28,6 +28,22 @@
 #define BT_BAP_SCAN_DELEGATOR_MAX_SUBGROUPS    0
 #endif
 
+/** The minimum size of a Broadcast Audio Source Endpoint (BASE)
+ * 2 octets UUID
+ * 3 octets presentation delay
+ * 1 octet number of subgroups (which is minimum 1)
+ * 1 octet number of BIS (which is minimum 1)
+ * 5 octets codec_id
+ * 1 octet codec configuration length (which may be 0)
+ * 1 octet metadata length (which may be 0)
+ * 1 octet BIS index
+ * 1 octet BIS specific codec configuration length (which may be 0)
+ */
+#define BT_BAP_BASE_MIN_SIZE 16
+
+/** The minimum size of a bt_bap_base_bis_data */
+#define BT_BAP_BASE_BIS_DATA_MIN_SIZE 2 /* index and length */
+
 /** Periodic advertising state reported by the Scan Delegator */
 enum bt_bap_pa_state {
 	/** The periodic advertising has not been synchronized */
@@ -403,6 +419,11 @@ struct bt_bap_ep_info {
 
 	/** Capabilities type */
 	enum bt_audio_dir dir;
+
+	/** Pointer to paired endpoint if the endpoint is part of a bidirectional CIS,
+	 *  otherwise NULL
+	 */
+	struct bt_bap_ep *paired_ep;
 };
 
 /**
@@ -1105,7 +1126,8 @@ struct bt_bap_unicast_client_cb {
 	 * This will be called for each stream in the group that was being QoS
 	 * configured.
 	 *
-	 * @param stream   Stream the operation was performed on.
+	 * @param stream   Stream the operation was performed on. May be NULL if there is no stream
+	 *                 associated with the ASE ID sent by the server.
 	 * @param rsp_code Response code.
 	 * @param reason   Reason code.
 	 */
@@ -1117,7 +1139,8 @@ struct bt_bap_unicast_client_cb {
 	 *
 	 * Called when the enable operation is completed on the server.
 	 *
-	 * @param stream   Stream the operation was performed on.
+	 * @param stream   Stream the operation was performed on. May be NULL if there is no stream
+	 *                 associated with the ASE ID sent by the server.
 	 * @param rsp_code Response code.
 	 * @param reason   Reason code.
 	 */
@@ -1131,7 +1154,8 @@ struct bt_bap_unicast_client_cb {
 	 * only be called if the stream supplied to bt_bap_stream_start() is
 	 * for a @ref BT_AUDIO_DIR_SOURCE endpoint.
 	 *
-	 * @param stream   Stream the operation was performed on.
+	 * @param stream   Stream the operation was performed on. May be NULL if there is no stream
+	 *                 associated with the ASE ID sent by the server.
 	 * @param rsp_code Response code.
 	 * @param reason   Reason code.
 	 */
@@ -1145,7 +1169,8 @@ struct bt_bap_unicast_client_cb {
 	 * only be called if the stream supplied to bt_bap_stream_stop() is
 	 * for a @ref BT_AUDIO_DIR_SOURCE endpoint.
 	 *
-	 * @param stream   Stream the operation was performed on.
+	 * @param stream   Stream the operation was performed on. May be NULL if there is no stream
+	 *                 associated with the ASE ID sent by the server.
 	 * @param rsp_code Response code.
 	 * @param reason   Reason code.
 	 */
@@ -1157,7 +1182,8 @@ struct bt_bap_unicast_client_cb {
 	 *
 	 * Called when the disable operation is completed on the server.
 	 *
-	 * @param stream   Stream the operation was performed on.
+	 * @param stream   Stream the operation was performed on. May be NULL if there is no stream
+	 *                 associated with the ASE ID sent by the server.
 	 * @param rsp_code Response code.
 	 * @param reason   Reason code.
 	 */
@@ -1169,7 +1195,8 @@ struct bt_bap_unicast_client_cb {
 	 *
 	 * Called when the metadata operation is completed on the server.
 	 *
-	 * @param stream   Stream the operation was performed on.
+	 * @param stream   Stream the operation was performed on. May be NULL if there is no stream
+	 *                 associated with the ASE ID sent by the server.
 	 * @param rsp_code Response code.
 	 * @param reason   Reason code.
 	 */
@@ -1181,12 +1208,57 @@ struct bt_bap_unicast_client_cb {
 	 *
 	 * Called when the release operation is completed on the server.
 	 *
-	 * @param stream   Stream the operation was performed on.
+	 * @param stream   Stream the operation was performed on. May be NULL if there is no stream
+	 *                 associated with the ASE ID sent by the server.
 	 * @param rsp_code Response code.
 	 * @param reason   Reason code.
 	 */
 	void (*release)(struct bt_bap_stream *stream, enum bt_bap_ascs_rsp_code rsp_code,
 			enum bt_bap_ascs_reason reason);
+
+	/**
+	 * @brief Remote Published Audio Capability (PAC) record discovered
+	 *
+	 * Called when a PAC record has been discovered as part of the discovery procedure.
+	 *
+	 * The @p codec is only valid while in the callback, so the values must be stored by the
+	 * receiver if future use is wanted.
+	 *
+	 * @param conn     Connection to the remote unicast server.
+	 * @param dir      The type of remote endpoints and capabilities discovered.
+	 * @param codec    Remote capabilities.
+	 *
+	 * If discovery procedure has complete both @p codec and @p ep are set to NULL.
+	 */
+	void (*pac_record)(struct bt_conn *conn, enum bt_audio_dir dir,
+			   const struct bt_codec *codec);
+
+	/**
+	 * @brief Remote Audio Stream Endoint (ASE) discovered
+	 *
+	 * Called when an ASE has been discovered as part of the discovery procedure.
+	 *
+	 * @param conn     Connection to the remote unicast server.
+	 * @param dir      The type of remote endpoints and capabilities discovered.
+	 * @param ep       Remote endpoint.
+	 *
+	 * If discovery procedure has complete both @p codec and @p ep are set to NULL.
+	 */
+	void (*endpoint)(struct bt_conn *conn, enum bt_audio_dir dir, struct bt_bap_ep *ep);
+
+	/**
+	 * @brief BAP discovery callback function.
+	 *
+	 * If discovery procedure has completed @p ep is set to NULL and @p err is 0.
+	 *
+	 * @param conn     Connection to the remote unicast server.
+	 * @param err      Error value. 0 on success, GATT error on positive value or errno on
+	 *                 negative value.
+	 * @param dir      The type of remote endpoints and capabilities discovered.
+	 *
+	 * If discovery procedure has complete both @p codec and @p ep are set to NULL.
+	 */
+	void (*discover)(struct bt_conn *conn, int err, enum bt_audio_dir dir);
 };
 
 /**
@@ -1201,65 +1273,16 @@ struct bt_bap_unicast_client_cb {
  */
 int bt_bap_unicast_client_register_cb(const struct bt_bap_unicast_client_cb *cb);
 
-struct bt_bap_unicast_client_discover_params;
-
-/**
- * @typedef bt_bap_unicast_client_discover_func_t
- * @brief Discover Audio capabilities and endpoints callback function.
- *
- * If discovery procedure has complete both cap and ep are set to NULL.
- *
- * The @p codec is only valid while in the callback, so the values must be stored by the receiver
- * if future use is wanted.
- *
- * @param conn     Connection to the remote unicast server.
- * @param codec    Remote capabilities.
- * @param ep       Remote endpoint.
- * @param params   Pointer to the discover parameters.
- *
- * If discovery procedure has complete both @p codec and @p ep are set to NULL.
- */
-typedef void (*bt_bap_unicast_client_discover_func_t)(
-	struct bt_conn *conn, struct bt_codec *codec, struct bt_bap_ep *ep,
-	struct bt_bap_unicast_client_discover_params *params);
-
-struct bt_bap_unicast_client_discover_params {
-	/** Capabilities type */
-	enum bt_audio_dir dir;
-
-	/** Callback function */
-	bt_bap_unicast_client_discover_func_t func;
-
-	/** Number of capabilities found */
-	uint8_t num_caps;
-
-	/** Number of endpoints found */
-	uint8_t num_eps;
-
-	/** Error code. */
-	uint8_t err;
-
-	/** Read parameters used interally for discovery */
-	struct bt_gatt_read_params read;
-
-	/** Discover parameters used interally for discovery */
-	struct bt_gatt_discover_params discover;
-};
-
 /**
  * @brief Discover remote capabilities and endpoints
  *
  * This procedure is used by a client to discover remote capabilities and
  * endpoints and notifies via params callback.
  *
- * @note This procedure is asynchronous therefore the parameters need to
- *       remains valid while it is active.
- *
  * @param conn   Connection object
- * @param params Discover parameters
+ * @param dir    The type of remote endpoints and capabilities to discover.
  */
-int bt_bap_unicast_client_discover(struct bt_conn *conn,
-				   struct bt_bap_unicast_client_discover_params *params);
+int bt_bap_unicast_client_discover(struct bt_conn *conn, enum bt_audio_dir dir);
 
 /** @} */ /* End of group bt_bap_unicast_client */
 /**
@@ -1313,6 +1336,18 @@ struct bt_bap_base {
 	struct bt_bap_base_subgroup subgroups[BROADCAST_SNK_SUBGROUP_CNT];
 };
 
+/** @brief Decode a Broadcast Audio Source Endpoint (BASE) from advertising data
+ *
+ *  The BASE is sent via periodic advertising, and can be decoded into a
+ *  bt_bap_base using this function.
+ *
+ *  @param data The periodic advertising data
+ *  @param base The output struct to put the decode BASE in
+ *
+ *  @return 0 in case of success or negative errno value in case of error.
+ */
+int bt_bap_decode_base(struct bt_data *data, struct bt_bap_base *base);
+
 /** @} */ /* End of group bt_bap_broadcast */
 
 /**
@@ -1327,6 +1362,7 @@ struct bt_bap_broadcast_source_stream_param {
 	/** Audio stream */
 	struct bt_bap_stream *stream;
 
+#if CONFIG_BT_CODEC_MAX_DATA_COUNT > 0
 	/**
 	 * @brief The number of elements in the @p data array.
 	 *
@@ -1336,6 +1372,7 @@ struct bt_bap_broadcast_source_stream_param {
 
 	/** BIS Codec Specific Configuration */
 	struct bt_codec_data *data;
+#endif /* CONFIG_BT_CODEC_MAX_DATA_COUNT > 0 */
 };
 
 /** Broadcast Source subgroup parameters*/
@@ -1598,7 +1635,7 @@ struct bt_bap_broadcast_sink_cb {
  * *
  *  @param cb  Broadcast sink callback structure.
  */
-void bt_bap_broadcast_sink_register_cb(struct bt_bap_broadcast_sink_cb *cb);
+int bt_bap_broadcast_sink_register_cb(struct bt_bap_broadcast_sink_cb *cb);
 
 /** @brief Start scan for broadcast sources.
  *
@@ -1844,30 +1881,6 @@ const struct bt_bap_scan_delegator_recv_state *bt_bap_scan_delegator_find_state(
 /******************************** CLIENT API ********************************/
 
 /**
- * @brief Callback function for when a receive state is read or updated
- *
- * Called whenever a receive state is read or updated.
- *
- * @param conn     The connection to the Broadcast Audio Scan Service server.
- * @param err      Error value. 0 on success, GATT error on fail.
- * @param state    The receive state.
- */
-typedef void (*bt_bap_broadcast_assistant_recv_state_cb)(
-	struct bt_conn *conn, int err,
-	const struct bt_bap_scan_delegator_recv_state *state);
-
-/**
- * @brief Callback function for when a receive state is removed.
- *
- * @param conn     The connection to the Broadcast Audio Scan Service server.
- * @param err      Error value. 0 on success, GATT error on fail.
- * @param src_id   The receive state.
- */
-typedef void (*bt_bap_broadcast_assistant_recv_state_rem_cb)(struct bt_conn *conn,
-							     int err,
-							     uint8_t src_id);
-
-/**
  * @brief Callback function for writes.
  *
  * @param conn    The connection to the peer device.
@@ -2025,7 +2038,7 @@ struct bt_bap_broadcast_assistant_add_src_param {
 	uint8_t adv_sid;
 
 	/** Whether to sync to periodic advertisements. */
-	uint8_t pa_sync;
+	bool pa_sync;
 
 	/** 24-bit broadcast ID */
 	uint32_t broadcast_id;
@@ -2052,8 +2065,8 @@ struct bt_bap_broadcast_assistant_add_src_param {
  *
  * @return Error value. 0 on success, GATT error or ERRNO on fail.
  */
-int bt_bap_broadcast_assistant_add_src(struct bt_conn *conn,
-				       struct bt_bap_broadcast_assistant_add_src_param *param);
+int bt_bap_broadcast_assistant_add_src(
+	struct bt_conn *conn, const struct bt_bap_broadcast_assistant_add_src_param *param);
 
 /** Parameters for modifying a source */
 struct bt_bap_broadcast_assistant_mod_src_param {
@@ -2061,7 +2074,7 @@ struct bt_bap_broadcast_assistant_mod_src_param {
 	uint8_t src_id;
 
 	/** Whether to sync to periodic advertisements. */
-	uint8_t pa_sync;
+	bool pa_sync;
 
 	/**
 	 * @brief Periodic advertising interval.
@@ -2084,8 +2097,8 @@ struct bt_bap_broadcast_assistant_mod_src_param {
  *
  *  @return Error value. 0 on success, GATT error or ERRNO on fail.
  */
-int bt_bap_broadcast_assistant_mod_src(struct bt_conn *conn,
-				       struct bt_bap_broadcast_assistant_mod_src_param *param);
+int bt_bap_broadcast_assistant_mod_src(
+	struct bt_conn *conn, const struct bt_bap_broadcast_assistant_mod_src_param *param);
 
 /** @brief Set a broadcast code to the specified receive state.
  *
@@ -2096,7 +2109,8 @@ int bt_bap_broadcast_assistant_mod_src(struct bt_conn *conn,
  *  @return Error value. 0 on success, GATT error or ERRNO on fail.
  */
 int bt_bap_broadcast_assistant_set_broadcast_code(
-	struct bt_conn *conn, uint8_t src_id, uint8_t broadcast_code[BT_AUDIO_BROADCAST_CODE_SIZE]);
+	struct bt_conn *conn, uint8_t src_id,
+	const uint8_t broadcast_code[BT_AUDIO_BROADCAST_CODE_SIZE]);
 
 /** @brief Remove a source from the server.
  *

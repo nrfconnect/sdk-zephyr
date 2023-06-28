@@ -14,9 +14,10 @@ protocol version 3.
 Architecture
 ************
 The Host Command subsystem contains a few components:
-  * Backend
-  * General handler
-  * Command handler
+
+* Backend
+* General handler
+* Command handler
 
 The backend is a layer between a peripheral driver and the general handler. It is responsible for
 sending and receiving commands via chosen peripheral.
@@ -36,31 +37,37 @@ one backend layer.
    :align: center
 
 The supported backend and peripheral drivers:
-  * Simulator
-  * SHI - ITE and NPCX
-  * eSPI - any eSPI slave driver that support :kconfig:option:`CONFIG_ESPI_PERIPHERAL_EC_HOST_CMD` and
-    :kconfig:option:`CONFIG_ESPI_PERIPHERAL_CUSTOM_OPCODE`
-  * UART - any UART driver that supports the asynchronous API
+
+* Simulator
+* SHI - ITE and NPCX
+* eSPI - any eSPI slave driver that support :kconfig:option:`CONFIG_ESPI_PERIPHERAL_EC_HOST_CMD` and
+  :kconfig:option:`CONFIG_ESPI_PERIPHERAL_CUSTOM_OPCODE`
+* UART - any UART driver that supports the asynchronous API
 
 Initialization
 **************
 
-If the application configures the ``zephyr,host-cmd-backend`` chosen node, then the backend
-automatically initializes the host command subsystem by calling :c:func:`ec_host_cmd_init`.
+If the application configures one of the following backend chosen nodes and
+:kconfig:option:`CONFIG_EC_HOST_CMD_INITIALIZE_AT_BOOT` is set, then the corresponding backend
+initializes the host command subsystem by calling :c:func:`ec_host_cmd_init`:
 
-If ``zephyr,host-cmd-backend`` is not chosen, the :c:func:`ec_host_cmd_init` function should be
-called by application code. This way of initialization is useful if a backend is chosen in runtime
+* ``zephyr,host-cmd-espi-backend``
+* ``zephyr,host-cmd-shi-backend``
+* ``zephyr,host-cmd-uart-backend``
+
+If no backend chosen node is configured, the application must call the :c:func:`ec_host_cmd_init`
+function directly. This way of initialization is useful if a backend is chosen in runtime
 based on e.g. GPIO state.
 
 Buffers
 *******
 
 The host command communication requires buffers for rx and tx. The buffers are be provided by the
-general handler if :kconfig:option:`CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER` > 0 for rx buffer and
-:kconfig:option:`CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER` > 0 for the tx buffer. The shared buffers are
-useful for applications that use multiple backends. Defining separate buffers by every backend would
-increase the memory usage. However, some buffers can be defined by a peripheral driver e.g. eSPI.
-These ones should be reused as much as possible.
+general handler if :kconfig:option:`CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER_SIZE` > 0 for rx buffer and
+:kconfig:option:`CONFIG_EC_HOST_CMD_HANDLER_TX_BUFFER_SIZE` > 0 for the tx buffer. The shared
+buffers are useful for applications that use multiple backends. Defining separate buffers by every
+backend would increase the memory usage. However, some buffers can be defined by a peripheral driver
+e.g. eSPI. These ones should be reused as much as possible.
 
 API Reference
 *************

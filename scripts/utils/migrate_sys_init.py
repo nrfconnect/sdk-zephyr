@@ -19,9 +19,6 @@ from pathlib import Path
 import re
 
 
-ZEPHYR_BASE = Path(__file__).parents[2]
-
-
 def update_sys_init(project, dry_run):
     for p in project.glob("**/*"):
         if not p.is_file() or not p.suffix or p.suffix[1:] not in ("c", "cpp"):
@@ -48,6 +45,7 @@ def update_sys_init(project, dry_run):
         arg = None
         content = ""
         update = False
+        unused = False
         for line in lines:
             m = re.match(
                 r"(.*)int ("
@@ -63,8 +61,14 @@ def update_sys_init(project, dry_run):
                 m = re.match(r"^\s?ARG_UNUSED\(" + arg + r"\);.*$", line)
                 if m:
                     arg = None
+                    unused = True
                 else:
                     content += line
+            elif unused:
+                m = re.match(r"^\s?\n$", line)
+                if not m:
+                    content += line
+                unused = False
             else:
                 content += line
 

@@ -20,6 +20,9 @@
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
 
 /* Macros to fill up prescaler values */
+#define z_hsi_divider(v) LL_RCC_HSI_DIV_ ## v
+#define hsi_divider(v) z_hsi_divider(v)
+
 #define z_ahb_prescaler(v) LL_RCC_SYSCLK_DIV_ ## v
 #define ahb_prescaler(v) z_ahb_prescaler(v)
 
@@ -389,12 +392,12 @@ static void clock_switch_to_hsi(void)
 		}
 	}
 
-	LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
-
 	/* Set HSI as SYSCLCK source */
 	LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_HSI);
 	while (LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_HSI) {
 	}
+
+	LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
 }
 
 __unused
@@ -618,6 +621,8 @@ static void set_up_fixed_clock_sources(void)
 			/* Wait for HSI ready */
 			}
 		}
+		/* HSI divider configuration */
+		LL_RCC_HSI_SetDivider(hsi_divider(STM32_HSI_DIVISOR));
 	}
 
 	if (IS_ENABLED(STM32_LSE_ENABLED)) {

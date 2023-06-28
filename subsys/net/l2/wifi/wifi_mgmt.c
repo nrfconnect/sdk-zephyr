@@ -81,8 +81,10 @@ static void scan_result_cb(struct net_if *iface, int status,
 		return;
 	}
 
+#ifndef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS_ONLY
 	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_SCAN_RESULT, iface,
 					entry, sizeof(struct wifi_scan_result));
+#endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS_ONLY */
 }
 
 static int wifi_scan(uint32_t mgmt_request, struct net_if *iface,
@@ -241,8 +243,35 @@ static int wifi_set_power_save(uint32_t mgmt_request, struct net_if *iface,
 	struct net_wifi_mgmt_offload *off_api =
 		(struct net_wifi_mgmt_offload *) dev->api;
 	struct wifi_ps_params *ps_params = data;
+	struct wifi_iface_status info = { 0 };
 
 	if (off_api == NULL || off_api->set_power_save == NULL) {
+		return -ENOTSUP;
+	}
+
+	switch (ps_params->type) {
+	case WIFI_PS_PARAM_LISTEN_INTERVAL:
+	case WIFI_PS_PARAM_MODE:
+		if (net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &info,
+			     sizeof(struct wifi_iface_status))) {
+			ps_params->fail_reason =
+				WIFI_PS_PARAM_FAIL_UNABLE_TO_GET_IFACE_STATUS;
+			return -EIO;
+		}
+
+		if (info.state == WIFI_STATE_COMPLETED) {
+			ps_params->fail_reason =
+				WIFI_PS_PARAM_FAIL_DEVICE_CONNECTED;
+			return -ENOTSUP;
+		}
+		break;
+	case WIFI_PS_PARAM_STATE:
+	case WIFI_PS_PARAM_WAKEUP_MODE:
+	case WIFI_PS_PARAM_TIMEOUT:
+		break;
+	default:
+		ps_params->fail_reason =
+			WIFI_PS_PARAM_FAIL_OPERATION_NOT_SUPPORTED;
 		return -ENOTSUP;
 	}
 
@@ -272,23 +301,6 @@ static int wifi_get_power_save_config(uint32_t mgmt_request, struct net_if *ifac
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_PS_CONFIG, wifi_get_power_save_config);
 
-static int wifi_set_power_save_mode(uint32_t mgmt_request, struct net_if *iface,
-			  void *data, size_t len)
-{
-	const struct device *dev = net_if_get_device(iface);
-	struct net_wifi_mgmt_offload *off_api =
-		(struct net_wifi_mgmt_offload *) dev->api;
-	struct wifi_ps_mode_params *ps_mode_params = data;
-
-	if (off_api == NULL || off_api->set_power_save_mode == NULL) {
-		return -ENOTSUP;
-	}
-
-	return off_api->set_power_save_mode(dev, ps_mode_params);
-}
-
-NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_PS_MODE, wifi_set_power_save_mode);
-
 static int wifi_set_twt(uint32_t mgmt_request, struct net_if *iface,
 			  void *data, size_t len)
 {
@@ -296,12 +308,55 @@ static int wifi_set_twt(uint32_t mgmt_request, struct net_if *iface,
 	struct net_wifi_mgmt_offload *off_api =
 		(struct net_wifi_mgmt_offload *) dev->api;
 	struct wifi_twt_params *twt_params = data;
+	struct wifi_iface_status info = { 0 };
 
 	if (off_api == NULL || off_api->set_twt == NULL) {
+		twt_params->fail_reason =
+			WIFI_TWT_FAIL_OPERATION_NOT_SUPPORTED;
 		return -ENOTSUP;
 	}
 
+	if (net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &info,
+			sizeof(struct wifi_iface_status))) {
+		twt_params->fail_reason =
+			WIFI_TWT_FAIL_UNABLE_TO_GET_IFACE_STATUS;
+		goto fail;
+	}
+
+	if (info.state != WIFI_STATE_COMPLETED) {
+		twt_params->fail_reason =
+			WIFI_TWT_FAIL_DEVICE_NOT_CONNECTED;
+		goto fail;
+	}
+
+#ifdef CONFIG_WIFI_MGMT_TWT_CHECK_IP
+	if ((!net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED)) &&
+	    (!net_if_ipv6_get_global_addr(NET_ADDR_PREFERRED, &iface))) {
+		twt_params->fail_reason =
+			WIFI_TWT_FAIL_IP_NOT_ASSIGNED;
+		goto fail;
+	}
+#else
+	NET_WARN("Check for valid IP address been disabled. "
+		 "Device might be unreachable or might not receive traffic.\n");
+#endif /* CONFIG_WIFI_MGMT_TWT_CHECK_IP */
+
+	if (info.link_mode < WIFI_6) {
+		twt_params->fail_reason =
+			WIFI_TWT_FAIL_PEER_NOT_HE_CAPAB;
+		goto fail;
+	}
+
+	if (!info.twt_capable) {
+		twt_params->fail_reason =
+			WIFI_TWT_FAIL_PEER_NOT_TWT_CAPAB;
+		goto fail;
+	}
+
 	return off_api->set_twt(dev, twt_params);
+fail:
+	return -ENOEXEC;
+
 }
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_TWT, wifi_set_twt);
@@ -334,31 +389,39 @@ static int wifi_reg_domain(uint32_t mgmt_request, struct net_if *iface,
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_REG_DOMAIN, wifi_reg_domain);
 
-static int wifi_set_power_save_timeout(uint32_t mgmt_request, struct net_if *iface,
-				       void *data, size_t len)
-{
-	const struct device *dev = net_if_get_device(iface);
-	struct net_wifi_mgmt_offload *off_api =
-		(struct net_wifi_mgmt_offload *) dev->api;
-	struct wifi_ps_timeout_params *ps_timeout = data;
-
-	if (off_api == NULL || off_api->set_power_save_timeout == NULL) {
-		return -ENOTSUP;
-	}
-
-	if (!data || len != sizeof(*ps_timeout)) {
-		return -EINVAL;
-	}
-
-	return off_api->set_power_save_timeout(dev, ps_timeout);
-}
-
-NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_PS_TIMEOUT, wifi_set_power_save_timeout);
-
 void wifi_mgmt_raise_twt_sleep_state(struct net_if *iface,
 				     int twt_sleep_state)
 {
 	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_TWT_SLEEP_STATE,
-					iface, INT_TO_POINTER(twt_sleep_state),
+					iface, &twt_sleep_state,
 					sizeof(twt_sleep_state));
+}
+
+#ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS
+void wifi_mgmt_raise_raw_scan_result_event(struct net_if *iface,
+					   struct wifi_raw_scan_result *raw_scan_result)
+{
+	if (raw_scan_result->frame_length > CONFIG_WIFI_MGMT_RAW_SCAN_RESULT_LENGTH) {
+		LOG_INF("raw scan result frame length = %d too big,"
+			 "saving upto max raw scan length = %d",
+			 raw_scan_result->frame_length,
+			 CONFIG_WIFI_MGMT_RAW_SCAN_RESULT_LENGTH);
+	}
+
+	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_RAW_SCAN_RESULT,
+					iface, raw_scan_result,
+					sizeof(*raw_scan_result));
+}
+#endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS */
+
+void wifi_mgmt_raise_disconnect_complete_event(struct net_if *iface,
+					       int status)
+{
+	struct wifi_status cnx_status = {
+		.status = status,
+	};
+
+	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_DISCONNECT_COMPLETE,
+					iface, &cnx_status,
+					sizeof(struct wifi_status));
 }

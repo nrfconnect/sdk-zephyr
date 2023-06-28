@@ -285,7 +285,7 @@ class Build(Forceable):
                     arg_list = extra.split(" ")
                 else:
                     arg_list = extra
-                args = ["-D{}".format(arg.replace('"', '')) for arg in arg_list]
+                args = ["-D{}".format(arg.replace('"', '\"')) for arg in arg_list]
                 if self.args.cmake_opts:
                     self.args.cmake_opts.extend(args)
                 else:
@@ -497,7 +497,7 @@ class Build(Forceable):
         # to Just Work:
         #
         # west build -- -DOVERLAY_CONFIG=relative-path.conf
-        final_cmake_args = ['-DWEST_PYTHON={}'.format(sys.executable),
+        final_cmake_args = ['-DWEST_PYTHON={}'.format(pathlib.Path(sys.executable).as_posix()),
                             '-B{}'.format(self.build_dir),
                             '-G{}'.format(config_get('generator',
                                                      DEFAULT_CMAKE_GENERATOR))]

@@ -16,6 +16,7 @@
 #include <zephyr/bluetooth/audio/cap.h>
 
 #include "shell/bt.h"
+#include "audio.h"
 
 #if defined(CONFIG_BT_BAP_UNICAST_CLIENT)
 #define CAP_UNICAST_CLIENT_STREAM_COUNT ARRAY_SIZE(unicast_streams)
@@ -124,27 +125,6 @@ static void populate_connected_conns(struct bt_conn *conn, void *data)
 			connected_conns[i] = conn;
 			return;
 		}
-	}
-}
-
-static void cap_copy_preset(struct unicast_stream *uni_stream,
-			    const struct named_lc3_preset *name_preset)
-{
-	memcpy(&uni_stream->qos, &name_preset->preset.qos, sizeof(uni_stream->qos));
-	memcpy(&uni_stream->codec, &name_preset->preset.codec,
-	       sizeof(uni_stream->codec));
-
-	/* Need to update the `bt_data.data` pointer to the new value after copying the codec */
-	for (size_t i = 0U; i < ARRAY_SIZE(uni_stream->codec.data); i++) {
-		struct bt_codec_data *data = &uni_stream->codec.data[i];
-
-		data->data.data = data->value;
-	}
-
-	for (size_t i = 0U; i < ARRAY_SIZE(uni_stream->codec.meta); i++) {
-		struct bt_codec_data *data = &uni_stream->codec.meta[i];
-
-		data->data.data = data->value;
 	}
 }
 
@@ -263,7 +243,7 @@ static int cmd_cap_initiator_unicast_start(const struct shell *sh, size_t argc,
 			stream_param[start_param.count].member.member = conn;
 			stream_param[start_param.count].stream = stream;
 			stream_param[start_param.count].ep = snk_ep;
-			cap_copy_preset(uni_stream, default_sink_preset);
+			copy_unicast_stream_preset(uni_stream, default_sink_preset);
 			stream_param[start_param.count].codec = &uni_stream->codec;
 			stream_param[start_param.count].qos = &uni_stream->qos;
 
@@ -297,7 +277,7 @@ static int cmd_cap_initiator_unicast_start(const struct shell *sh, size_t argc,
 			stream_param[start_param.count].member.member = conn;
 			stream_param[start_param.count].stream = stream;
 			stream_param[start_param.count].ep = src_ep;
-			cap_copy_preset(uni_stream, default_source_preset);
+			copy_unicast_stream_preset(uni_stream, default_source_preset);
 			stream_param[start_param.count].codec = &uni_stream->codec;
 			stream_param[start_param.count].qos = &uni_stream->qos;
 
@@ -398,9 +378,9 @@ static int cmd_cap_initiator_unicast_update(const struct shell *sh, size_t argc,
 
 
 			if (ep_info.dir == BT_AUDIO_DIR_SINK) {
-				cap_copy_preset(uni_stream, default_sink_preset);
+				copy_unicast_stream_preset(uni_stream, default_sink_preset);
 			} else {
-				cap_copy_preset(uni_stream, default_source_preset);
+				copy_unicast_stream_preset(uni_stream, default_source_preset);
 			}
 
 			params[count].meta = uni_stream->codec.meta;
@@ -440,9 +420,9 @@ static int cmd_cap_initiator_unicast_update(const struct shell *sh, size_t argc,
 			params[count].stream = stream;
 
 			if (ep_info.dir == BT_AUDIO_DIR_SINK) {
-				cap_copy_preset(uni_stream, default_sink_preset);
+				copy_unicast_stream_preset(uni_stream, default_sink_preset);
 			} else {
-				cap_copy_preset(uni_stream, default_source_preset);
+				copy_unicast_stream_preset(uni_stream, default_source_preset);
 			}
 
 			params[count].meta = uni_stream->codec.meta;
@@ -489,6 +469,19 @@ static int cmd_cap_initiator_unicast_stop(const struct shell *sh, size_t argc,
 	return err;
 }
 
+static int cmd_cap_initiator_unicast_cancel(const struct shell *sh, size_t argc, char *argv[])
+{
+	int err = 0;
+
+	err = bt_cap_initiator_unicast_audio_cancel();
+	if (err != 0) {
+		shell_print(sh, "Failed to cancel unicast audio procedure: %d", err);
+
+		return -ENOEXEC;
+	}
+
+	return 0;
+}
 #endif /* CONFIG_BT_BAP_UNICAST_CLIENT */
 
 static int cmd_cap_initiator(const struct shell *sh, size_t argc, char **argv)
@@ -519,6 +512,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(cap_initiator_cmds,
 		      CAP_UNICAST_CLIENT_STREAM_COUNT),
 	SHELL_CMD_ARG(unicast-stop, NULL, "Unicast stop all streams",
 		      cmd_cap_initiator_unicast_stop, 1, 0),
+	SHELL_CMD_ARG(unicast-cancel, NULL, "Unicast cancel current procedure",
+		      cmd_cap_initiator_unicast_cancel, 1, 0),
 #endif /* CONFIG_BT_BAP_UNICAST_CLIENT */
 	SHELL_SUBCMD_SET_END
 );

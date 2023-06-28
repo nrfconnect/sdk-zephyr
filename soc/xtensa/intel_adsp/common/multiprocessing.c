@@ -20,7 +20,7 @@ LOG_MODULE_REGISTER(soc_mp, CONFIG_SOC_LOG_LEVEL);
 #include <zsr.h>
 #include <cavs-idc.h>
 #include <soc.h>
-#include <zephyr/arch/xtensa/cache.h>
+#include <zephyr/cache.h>
 #include <adsp_shim.h>
 #include <adsp_memory.h>
 #include <cpu_init.h>
@@ -93,7 +93,7 @@ __asm__(".section .text.z_soc_mp_asm_entry, \"x\" \n\t"
 	"  j soc_mp_idle            \n\t");
 
 #undef NOP128
-#undef NOP16
+#undef NOP32
 #undef NOP4
 
 __imr void z_mp_entry(void)

@@ -1,5 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
+zephyr_syscall_header_ifdef(
+  CONFIG_FLASH_SIMULATOR
+  ${ZEPHYR_BASE}/include/zephyr/drivers/flash/flash_simulator.h
+)
+
+zephyr_syscall_header_ifdef(
+  CONFIG_NORDIC_QSPI_NOR
+  ${ZEPHYR_BASE}/include/zephyr/drivers/flash/nrf_qspi_nor.h
+)
+
+zephyr_syscall_header(${ZEPHYR_BASE}/include/zephyr/drivers/flash.h)
+
 zephyr_library()
 
 zephyr_library_sources_ifdef(CONFIG_SOC_FLASH_CC13XX_CC26XX soc_flash_cc13xx_cc26xx.c)
@@ -86,3 +98,4 @@ zephyr_library_include_directories_ifdef(
 
 zephyr_library_sources_ifdef(CONFIG_FLASH_SHELL flash_shell.c)
 zephyr_library_sources_ifdef(CONFIG_FLASH_JESD216 jesd216.c)
+zephyr_library_sources_ifdef(CONFIG_FLASH_INFINEON_CAT1 flash_ifx_cat1.c)

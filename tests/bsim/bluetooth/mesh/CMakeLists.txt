@@ -2,19 +2,13 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
-if (NOT DEFINED ENV{BSIM_COMPONENTS_PATH})
-	message(FATAL_ERROR "This test requires the BabbleSim simulator. Please set\
- the  environment variable BSIM_COMPONENTS_PATH to point to its components \
- folder. More information can be found in\
- https://babblesim.github.io/folder_structure_and_env.html")
-endif()
-
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(bsim_test_mesh)
 
 target_sources(app PRIVATE
  src/main.c
  src/mesh_test.c
+ src/friendship_common.c
 )
 
 if(CONFIG_BT_MESH_V1d1)
@@ -36,8 +30,15 @@ if(CONFIG_SETTINGS)
   target_sources(app PRIVATE
    src/test_dfu.c
    src/test_blob.c
+   src/test_sar.c
  )
  endif()
+
+if(CONFIG_BT_MESH_USES_MBEDTLS_PSA)
+ target_sources(app PRIVATE
+  src/distribute_keyid.c
+ )
+endif()
 
 elseif(CONFIG_BT_MESH_GATT_PROXY)
 
@@ -78,6 +79,6 @@ else()
 endif()
 
 zephyr_include_directories(
-  $ENV{BSIM_COMPONENTS_PATH}/libUtilv1/src/
-  $ENV{BSIM_COMPONENTS_PATH}/libPhyComv1/src/
+  ${BSIM_COMPONENTS_PATH}/libUtilv1/src/
+  ${BSIM_COMPONENTS_PATH}/libPhyComv1/src/
 )

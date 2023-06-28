@@ -10,6 +10,7 @@
 #include <zephyr/sys/mpsc_packet.h>
 #include <zephyr/sys/cbprintf.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/sys/iterable_sections.h>
 #include <zephyr/sys/util.h>
 #include <string.h>
 #include <zephyr/toolchain.h>
@@ -226,12 +227,12 @@ enum z_log_msg_mode {
 #define Z_LOG_MSG_STACK_CREATE(_cstr_cnt, _domain_id, _source, _level, _data, _dlen, ...) \
 do { \
 	int _plen; \
-	uint32_t flags = Z_LOG_MSG_CBPRINTF_FLAGS(_cstr_cnt) | \
-			 CBPRINTF_PACKAGE_ADD_RW_STR_POS; \
+	uint32_t _options = Z_LOG_MSG_CBPRINTF_FLAGS(_cstr_cnt) | \
+			  CBPRINTF_PACKAGE_ADD_RW_STR_POS; \
 	if (GET_ARG_N(1, __VA_ARGS__) == NULL) { \
 		_plen = 0; \
 	} else { \
-		CBPRINTF_STATIC_PACKAGE(NULL, 0, _plen, Z_LOG_MSG_ALIGN_OFFSET, flags, \
+		CBPRINTF_STATIC_PACKAGE(NULL, 0, _plen, Z_LOG_MSG_ALIGN_OFFSET, _options, \
 					__VA_ARGS__); \
 	} \
 	struct log_msg *_msg; \
@@ -239,7 +240,7 @@ do { \
 	Z_LOG_ARM64_VLA_PROTECT(); \
 	if (_plen != 0) { \
 		CBPRINTF_STATIC_PACKAGE(_msg->data, _plen, \
-					_plen, Z_LOG_MSG_ALIGN_OFFSET, flags, \
+					_plen, Z_LOG_MSG_ALIGN_OFFSET, _options, \
 					__VA_ARGS__);\
 	} \
 	struct log_msg_desc _desc = \
@@ -342,7 +343,7 @@ do { \
 	COND_CODE_0(NUM_VA_ARGS_LESS_1(_, ##__VA_ARGS__), \
 		    (/* No args provided, no variable */), \
 		    (static const char _name[] \
-			__attribute__((__section__(".log_strings"))) = \
+		     __in_section(_log_strings, static, _CONCAT(_name, _)) __used __noasan = \
 			GET_ARG_N(1, __VA_ARGS__);))
 
 /** @brief Create variable in the dedicated memory section (if enabled).

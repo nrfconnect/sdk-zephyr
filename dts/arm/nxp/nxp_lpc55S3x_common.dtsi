@@ -5,6 +5,7 @@
  */
 
 #include <arm/armv8-m.dtsi>
+#include <zephyr/dt-bindings/adc/adc.h>
 #include <zephyr/dt-bindings/clock/mcux_lpc_syscon_clock.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
@@ -98,11 +99,6 @@
 			status = "disabled";
 		};
 
-		uuid: flash@9fc70 {
-			compatible = "nxp,lpc-uid";
-			reg = <0x9fc70 0x10>;
-		};
-
 		boot_rom: flash@3000000 {
 			compatible = "soc-nv-flash";
 			reg = <0x3000000 DT_SIZE_K(128)>;
@@ -123,7 +119,7 @@
 	gpio0: gpio@0 {
 		compatible = "nxp,lpc-gpio";
 		reg = <0x8c000 0x278c>;
-		interrupts = <4 2>,<5 2>,<6 2>,<7 2>;
+		int-source = "pint";
 		gpio-controller;
 		#gpio-cells = <2>;
 		port = <0>;
@@ -132,7 +128,7 @@
 	gpio1: gpio@1 {
 		compatible = "nxp,lpc-gpio";
 		reg = <0x8c000 0x278c>;
-		interrupts = <32 2>,<33 2>,<34 2>,<35 2>;
+		int-source = "pint";
 		gpio-controller;
 		#gpio-cells = <2>;
 		port = <1>;
@@ -141,10 +137,21 @@
 	gpio2: gpio@2 {
 		compatible = "nxp,lpc-gpio";
 		reg = <0x8c000 0x278c>;
-		#interrupts = <32 2>,<33 2>,<34 2>,<35 2>;
 		gpio-controller;
 		#gpio-cells = <2>;
 		port = <2>;
+	};
+
+	pint: pint@4000 {
+		compatible = "nxp,pint";
+		reg = <0x4000 0x1000>;
+		interrupt-controller;
+		#interrupt-cells = <1>;
+		#address-cells = <0>;
+		interrupts = <4 2>, <5 2>, <6 2>, <7 2>,
+			<32 2>, <33 2>, <34 2>, <35 2>;
+		num-lines = <8>;
+		num-inputs = <64>;
 	};
 
 	flexcomm0: flexcomm@86000 {
@@ -234,9 +241,9 @@
 		status = "disabled";
 		clk-divider = <8>;
 		clk-source = <0>;
-		voltage-ref= <2>;
+		voltage-ref= <1>;
 		calibration-average = <128>;
-		power-level = <1>;
+		power-level = <0>;
 		offset-value-a = <10>;
 		offset-value-b = <10>;
 		#io-channel-cells = <1>;
@@ -245,15 +252,9 @@
 	can0: can@4009d000 {
 		compatible = "nxp,lpc-mcan";
 		reg = <0x4009d000 0x1000>;
-		reg-names = "m_can";
 		interrupts = <43 0>, <44 0>;
 		clocks = <&syscon MCUX_MCAN_CLK>;
-		std-filter-elements = <15>;
-		ext-filter-elements = <15>;
-		rx-fifo0-elements = <8>;
-		rx-fifo1-elements = <8>;
-		rx-buffer-elements = <8>;
-		tx-buffer-elements = <15>;
+		bosch,mram-cfg = <0x0 15 15 8 8 0 15 15>;
 		sjw = <1>;
 		sample-point = <875>;
 		sjw-data = <1>;
@@ -368,6 +369,16 @@
 			status = "disabled";
 			run-in-wait;
 		};
+	};
+
+	usbfs: usbfs@84000 {
+		compatible = "nxp,mcux-usbd";
+		reg = <0x84000 0x1000>;
+		interrupts = <28 0>;
+		num-bidir-endpoints = <5>;
+		maximum-speed = "full-speed";
+		usb-controller-index = "LpcIp3511Fs0";
+		status = "disabled";
 	};
 
 	sc_timer: pwm@85000 {

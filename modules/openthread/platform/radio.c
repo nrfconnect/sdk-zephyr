@@ -38,11 +38,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_OPENTHREAD_L2_LOG_LEVEL);
 
 #define SHORT_ADDRESS_SIZE 2
 
-#define FCS_SIZE 2
-#if defined(CONFIG_IEEE802154_2015)
-#define ACK_PKT_LENGTH 127
-#else
+#define FCS_SIZE     2
+#define PHR_DURATION 32
+#if defined(CONFIG_OPENTHREAD_THREAD_VERSION_1_1)
 #define ACK_PKT_LENGTH 5
+#else
+#define ACK_PKT_LENGTH 127
 #endif
 
 #define FRAME_TYPE_MASK 0x07
@@ -153,8 +154,7 @@ void energy_detected(const struct device *dev, int16_t max_ed)
 	}
 }
 
-enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
-					     struct net_pkt *pkt)
+enum net_verdict ieee802154_handle_ack(struct net_if *iface, struct net_pkt *pkt)
 {
 	ARG_UNUSED(iface);
 
@@ -180,13 +180,14 @@ enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
 	ack_frame.mPsdu = ack_psdu;
 	ack_frame.mLength = ack_len;
 	ack_frame.mInfo.mRxInfo.mLqi = net_pkt_ieee802154_lqi(pkt);
-	ack_frame.mInfo.mRxInfo.mRssi = net_pkt_ieee802154_rssi(pkt);
+	ack_frame.mInfo.mRxInfo.mRssi = net_pkt_ieee802154_rssi_dbm(pkt);
 
 #if defined(CONFIG_NET_PKT_TIMESTAMP)
 	struct net_ptp_time *pkt_time = net_pkt_timestamp(pkt);
 
-	ack_frame.mInfo.mRxInfo.mTimestamp =
-		pkt_time->second * USEC_PER_SEC + pkt_time->nanosecond / NSEC_PER_USEC;
+	/* OpenThread expects the timestamp to point to the end of SFD */
+	ack_frame.mInfo.mRxInfo.mTimestamp = pkt_time->second * USEC_PER_SEC +
+					     pkt_time->nanosecond / NSEC_PER_USEC - PHR_DURATION;
 #endif
 
 	return NET_OK;
@@ -388,17 +389,17 @@ static void openthread_handle_received_frame(otInstance *instance,
 	recv_frame.mLength = net_buf_frags_len(pkt->buffer);
 	recv_frame.mChannel = platformRadioChannelGet(instance);
 	recv_frame.mInfo.mRxInfo.mLqi = net_pkt_ieee802154_lqi(pkt);
-	recv_frame.mInfo.mRxInfo.mRssi = net_pkt_ieee802154_rssi(pkt);
+	recv_frame.mInfo.mRxInfo.mRssi = net_pkt_ieee802154_rssi_dbm(pkt);
 	recv_frame.mInfo.mRxInfo.mAckedWithFramePending = net_pkt_ieee802154_ack_fpb(pkt);
 
 #if defined(CONFIG_NET_PKT_TIMESTAMP)
 	struct net_ptp_time *pkt_time = net_pkt_timestamp(pkt);
 
-	recv_frame.mInfo.mRxInfo.mTimestamp =
-		pkt_time->second * USEC_PER_SEC + pkt_time->nanosecond / NSEC_PER_USEC;
+	/* OpenThread expects the timestamp to point to the end of SFD */
+	recv_frame.mInfo.mRxInfo.mTimestamp = pkt_time->second * USEC_PER_SEC +
+					      pkt_time->nanosecond / NSEC_PER_USEC - PHR_DURATION;
 #endif
 
-#if defined(CONFIG_IEEE802154_2015)
 	if (net_pkt_ieee802154_arb(pkt) && net_pkt_ieee802154_fv2015(pkt)) {
 		recv_frame.mInfo.mRxInfo.mAckedWithSecEnhAck =
 			net_pkt_ieee802154_ack_seb(pkt);
@@ -407,7 +408,6 @@ static void openthread_handle_received_frame(otInstance *instance,
 		recv_frame.mInfo.mRxInfo.mAckKeyId =
 			net_pkt_ieee802154_ack_keyid(pkt);
 	}
-#endif
 
 	if (IS_ENABLED(CONFIG_OPENTHREAD_DIAG) && otPlatDiagModeGet()) {
 		otPlatDiagRadioReceiveDone(instance, &recv_frame, OT_ERROR_NONE);
@@ -526,7 +526,8 @@ void platformRadioProcess(otInstance *aInstance)
 	if (is_pending_event_set(PENDING_EVENT_TX_DONE)) {
 		reset_pending_event(PENDING_EVENT_TX_DONE);
 
-		if (sState == OT_RADIO_STATE_TRANSMIT) {
+		if (sState == OT_RADIO_STATE_TRANSMIT ||
+		    radio_api->get_capabilities(radio_dev) & IEEE802154_HW_SLEEP_TO_TX) {
 			sState = OT_RADIO_STATE_RECEIVE;
 			handle_tx_done(aInstance);
 		}
@@ -800,7 +801,7 @@ otRadioCaps otPlatRadioGetCaps(otInstance *aInstance)
 		caps |= OT_RADIO_CAPS_SLEEP_TO_TX;
 	}
 
-#if defined(CONFIG_IEEE802154_2015)
+#if !defined(CONFIG_OPENTHREAD_THREAD_VERSION_1_1)
 	if (radio_caps & IEEE802154_HW_TX_SEC) {
 		caps |= OT_RADIO_CAPS_TRANSMIT_SEC;
 	}
@@ -1063,7 +1064,7 @@ uint64_t otPlatRadioGetNow(otInstance *aInstance)
 }
 #endif
 
-#if defined(CONFIG_IEEE802154_2015)
+#if !defined(CONFIG_OPENTHREAD_THREAD_VERSION_1_1)
 void otPlatRadioSetMacKey(otInstance *aInstance, uint8_t aKeyIdMode, uint8_t aKeyId,
 			  const otMacKeyMaterial *aPrevKey, const otMacKeyMaterial *aCurrKey,
 			  const otMacKeyMaterial *aNextKey, otRadioKeyType aKeyType)

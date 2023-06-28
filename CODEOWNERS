@@ -81,10 +81,10 @@
 /soc/posix/                               @aescolar @daor-oti
 /soc/riscv/                               @kgugala @pgielda
 /soc/riscv/openisa*/                      @dleach02
-/soc/riscv/riscv-privilege/andes_v5/      @cwshu @kevinwang821020 @jimmyzhe
-/soc/riscv/riscv-privilege/neorv32/       @henrikbrixandersen
-/soc/riscv/riscv-privilege/gd32vf103/     @soburi
-/soc/riscv/riscv-privilege/niosv/         @sweeaun
+/soc/riscv/riscv-privileged/andes_v5/      @cwshu @kevinwang821020 @jimmyzhe
+/soc/riscv/riscv-privileged/neorv32/       @henrikbrixandersen
+/soc/riscv/riscv-privileged/gd32vf103/     @soburi
+/soc/riscv/riscv-privileged/niosv/         @sweeaun
 /soc/x86/                                 @dcpleung @nashif @aasthagr
 /arch/xtensa/                             @dcpleung @andyross @nashif
 /soc/xtensa/                              @dcpleung @andyross @nashif
@@ -180,7 +180,7 @@
 /boards/riscv/adp_xc7k_ae350/             @cwshu @kevinwang821020 @jimmyzhe
 /boards/riscv/longan_nano/                @soburi
 /boards/riscv/neorv32/                    @henrikbrixandersen
-/boards/riscv/niosv_m/                    @sweeaun
+/boards/riscv/niosv*/                     @sweeaun
 /boards/shields/                          @erwango
 /boards/shields/atmel_rf2xx/              @nandojve
 /boards/shields/esp_8266/                 @nandojve
@@ -211,6 +211,7 @@
 /doc/develop/tools/coccinelle.rst                @himanshujha199640 @JuliaLawall
 /doc/services/device_mgmt/smp_protocol.rst  @de-nordic @nordicjm
 /doc/services/device_mgmt/smp_groups/       @de-nordic @nordicjm
+/doc/services/sensing/                      @lixuzha @ghu0510 @qianruh
 /doc/CMakeLists.txt                       @carlescufi
 /doc/_scripts/                            @carlescufi
 /doc/connectivity/bluetooth/                    @alwa-nordic @jhedberg @Vudentz
@@ -236,6 +237,7 @@
 /drivers/adc/adc_ads1x1x.c                @XenuIsWatching
 /drivers/adc/adc_stm32.c                  @cybertale
 /drivers/audio/*nrfx*                     @anangl
+/drivers/auxdisplay/*                      @thedjnK
 /drivers/bbram/*                          @yperess @sjg20 @jackrosenthal
 /drivers/bluetooth/                       @alwa-nordic @jhedberg @Vudentz
 /drivers/bluetooth/hci/hci_esp32.c        @sylvioalves
@@ -246,7 +248,7 @@
 /drivers/can/*rcar*                       @aaillet @pmarzin
 /drivers/clock_control/*agilex*           @siclim
 /drivers/clock_control/*nrf*              @nordic-krch
-/drivers/clock_control/*esp32*            @extremegtx @glaubermaroto
+/drivers/clock_control/*esp32*            @extremegtx @sylvioalves
 /drivers/clock_control/*cpg_mssr*         @aaillet
 /drivers/counter/                         @nordic-krch
 /drivers/console/ipm_console.c            @finikorg
@@ -254,9 +256,10 @@
 /drivers/console/jailhouse_debug_console.c @MrVan
 /drivers/counter/counter_cmos.c           @dcpleung
 /drivers/counter/counter_ll_stm32_timer.c @kentjhall
-/drivers/counter/*esp32*                  @glaubermaroto
+/drivers/counter/*esp32*                  @sylvioalves
 /drivers/crypto/*nrf_ecb*                 @maciekfabia @anangl
 /drivers/display/*rm68200*                @mmahadevan108
+/drivers/display/display_ili9342c.*       @extremegtx
 /drivers/dac/                             @martinjaeger
 /drivers/dai/                             @juimonen @marcinszkudlinski @abonislawski
 /drivers/dai/intel/                       @juimonen @marcinszkudlinski @abonislawski
@@ -285,15 +288,18 @@
 /drivers/ethernet/*w5500*                 @parthitce
 /drivers/ethernet/*xlnx_gem*              @ibirnbaum
 /drivers/ethernet/*smsc91x*               @sgrrzhf
+/drivers/ethernet/*adin2111*              @GeorgeCGV
 /drivers/ethernet/phy/                    @rlubos @tbursztyka @arvinf
+/drivers/ethernet/phy/*adin2111*          @GeorgeCGV
 /drivers/mdio/                            @rlubos @tbursztyka @arvinf
+/drivers/mdio/*adin2111*                  @GeorgeCGV
 /drivers/flash/                           @nashif @de-nordic
 /drivers/flash/*stm32_qspi*               @lmajewski
 /drivers/flash/*b91*                      @andy-liu-telink
 /drivers/flash/*cadence*                  @ngboonkhai
 /drivers/flash/*cc13xx_cc26xx*            @pepe2k
 /drivers/flash/*nrf*                      @de-nordic
-/drivers/flash/*esp32*                    @glaubermaroto
+/drivers/flash/*esp32*                    @sylvioalves
 /drivers/fpga/                            @tgorochowik @kgugala
 /drivers/gpio/                            @mnkp
 /drivers/gpio/*b91*                       @andy-liu-telink
@@ -302,7 +308,7 @@
 /drivers/gpio/*stm32*                     @erwango
 /drivers/gpio/*eos_s3*                    @fkokosinski @kgugala
 /drivers/gpio/*rcar*                      @aaillet
-/drivers/gpio/*esp32*                     @glaubermaroto
+/drivers/gpio/*esp32*                     @sylvioalves
 /drivers/gpio/*rpi_pico*                  @yonsch
 /drivers/gpio/*xlnx_ps*                   @ibirnbaum
 /drivers/hwinfo/                          @alexanderwachter
@@ -329,7 +335,7 @@
 /drivers/ieee802154/ieee802154_cc13xx*    @bwitherspoon @cfriedt @vaishnavachath
 /drivers/interrupt_controller/            @dcpleung @nashif
 /drivers/interrupt_controller/intc_gic.c  @stephanosio
-/drivers/interrupt_controller/*esp32*     @glaubermaroto
+/drivers/interrupt_controller/*esp32*     @sylvioalves
 /drivers/interrupt_controller/intc_nuclei_eclic.c  @soburi
 /drivers/ipm/ipm_mhu*                     @karl-zh
 /drivers/ipm/Kconfig.nrfx                 @masz-nordic
@@ -359,7 +365,7 @@
 /drivers/pcie/                            @dcpleung @nashif @jhedberg
 /drivers/peci/                            @albertofloyd @franciscomunoz @sjvasanth1
 /drivers/pinctrl/                         @gmarull
-/drivers/pinctrl/*esp32*                  @glaubermaroto
+/drivers/pinctrl/*esp32*                  @sylvioalves
 /drivers/pinctrl/*it8xxx2*                @ite
 /drivers/pm_cpu_ops/                      @carlocaione
 /drivers/power_domain/                    @ceolin
@@ -399,7 +405,7 @@
 /drivers/serial/uart_altera_jtag.c        @nashif @gohshunjing
 /drivers/serial/uart_altera.c             @gohshunjing
 /drivers/serial/*ns16550*                 @dcpleung @nashif @aasthagr
-/drivers/serial/*nrfx*                    @Mierunski @anangl
+/drivers/serial/*nrfx*                    @anangl
 /drivers/serial/uart_liteuart.c           @mateusz-holenko @kgugala @pgielda
 /drivers/serial/Kconfig.mcux_iuart        @Mani-Sadhasivam
 /drivers/serial/uart_mcux_iuart.c         @Mani-Sadhasivam
@@ -421,6 +427,7 @@
 /drivers/serial/Kconfig.it8xxx2           @GTLin08
 /drivers/serial/uart_ite_it8xxx2.c        @GTLin08
 /drivers/smbus/                           @finikorg
+/drivers/sip_svc/                         @maheshraotm
 /drivers/disk/                            @jfischer-no
 /drivers/disk/sdmmc_sdhc.h                @JunYangNXP
 /drivers/disk/sdmmc_stm32.c               @anthonybrandon
@@ -429,7 +436,7 @@
 /drivers/spi/                             @tbursztyka
 /drivers/spi/*b91*                        @andy-liu-telink
 /drivers/spi/spi_rv32m1_lpspi*            @karstenkoenig
-/drivers/spi/*esp32*                      @glaubermaroto
+/drivers/spi/*esp32*                      @sylvioalves
 /drivers/sdhc/                            @danieldegrasse
 /drivers/timer/*apic*                     @dcpleung @nashif
 /drivers/timer/apic_tsc.c                 @andyross
@@ -473,6 +480,7 @@
 /drivers/watchdog/wdt_counter.c           @nordic-krch
 /drivers/watchdog/*rpi_pico*              @thedjnK
 /drivers/watchdog/*dw*                    @softwarecki
+/drivers/watchdog/*ifx*                   @sreeramIfx
 /drivers/wifi/                            @rlubos @tbursztyka
 /drivers/wifi/esp_at/                     @mniestroj
 /drivers/wifi/eswifi/                     @loicpoulain @nandojve
@@ -520,12 +528,12 @@
 /dts/arm/silabs/efr32fg13*                @yonsch
 /dts/riscv/                               @kgugala @pgielda
 /dts/riscv/ite/                           @ite
-/dts/riscv/microsemi/microsemi-miv.dtsi   @galak
+/dts/riscv/microchip/microchip-miv.dtsi   @galak
 /dts/riscv/openisa/rv32m1*                @dleach02
 /dts/riscv/riscv32-litex-vexriscv.dtsi    @mateusz-holenko @kgugala @pgielda
 /dts/riscv/starfive/                      @rajnesh-kanwal
 /dts/riscv/andes/andes_v5*                @cwshu @kevinwang821020 @jimmyzhe
-/dts/riscv/niosv/niosv-m.dtsi             @sweeaun
+/dts/riscv/niosv/                         @sweeaun
 /dts/arm/armv*m.dtsi                      @galak @ioannisg
 /dts/arm/armv7-a.dtsi                     @ibirnbaum
 /dts/arm/armv7-r.dtsi                     @bbolen @stephanosio
@@ -534,7 +542,7 @@
 /dts/x86/                                 @jhedberg
 /dts/xtensa/xtensa.dtsi                   @ydamigos
 /dts/xtensa/intel/                        @dcpleung
-/dts/xtensa/espressif/                    @glaubermaroto
+/dts/xtensa/espressif/                    @sylvioalves
 /dts/xtensa/nxp/                          @iuliana-prodan @dbaluta
 /dts/sparc/                               @julius-barendt
 /dts/bindings/                            @galak
@@ -564,16 +572,21 @@
 /dts/bindings/i3c/                        @dcpleung
 /dts/bindings/pm_cpu_ops/*                @carlocaione
 /dts/bindings/ethernet/*gem.yaml          @ibirnbaum
+/dts/bindings/auxdisplay/*                 @thedjnK
 /dts/posix/                               @aescolar @daor-oti
 /dts/bindings/sensor/*bme680*             @BoschSensortec
 /dts/bindings/sensor/*ina23*              @bbilas
 /dts/bindings/sensor/st*                  @avisconti
+/dts/bindings/sensor/zephyr,sensing.yaml    @lixuzha @ghu0510 @qianruh
+/dts/bindings/sensor/zephyr,sensing*.yaml   @lixuzha @ghu0510 @qianruh
 /dts/bindings/smbus/                      @finikorg
+/dts/bindings/sip_svc/                    @maheshraotm
 /dts/bindings/cpu/intel,niosv.yaml        @sweeaun
 /dts/common/                              @galak
 /include/                                 @nashif @carlescufi @galak @MaureenHelm
 /include/zephyr/drivers/*/*litex*                @mateusz-holenko @kgugala @pgielda
 /include/zephyr/drivers/adc.h                    @anangl
+/include/zephyr/drivers/auxdisplay.h       @thedjnK
 /include/zephyr/drivers/can.h                    @alexanderwachter @henrikbrixandersen
 /include/zephyr/drivers/can/                     @alexanderwachter @henrikbrixandersen
 /include/zephyr/drivers/counter.h                @nordic-krch
@@ -595,6 +608,7 @@
 /include/zephyr/drivers/sensor.h                 @MaureenHelm
 /include/zephyr/drivers/smbus.h                  @finikorg
 /include/zephyr/drivers/spi.h                    @tbursztyka
+/include/zephyr/drivers/sip_svc/                 @maheshraotm
 /include/zephyr/drivers/lora.h                   @Mani-Sadhasivam
 /include/zephyr/drivers/peci.h                   @albertofloyd @franciscomunoz @sjvasanth1
 /include/zephyr/drivers/pm_cpu_ops.h             @carlocaione
@@ -634,7 +648,7 @@
 /include/zephyr/dt-bindings/clock/kinetis_scg.h  @henrikbrixandersen
 /include/zephyr/dt-bindings/ethernet/xlnx_gem.h  @ibirnbaum
 /include/zephyr/dt-bindings/pcie/                @dcpleung
-/include/zephyr/dt-bindings/pinctrl/esp*         @glaubermaroto
+/include/zephyr/dt-bindings/pinctrl/esp*         @sylvioalves
 /include/zephyr/dt-bindings/pwm/*it8xxx2*        @RuibinChang
 /include/zephyr/dt-bindings/usb/usb.h            @galak
 /include/zephyr/drivers/emul.h                   @sjg20
@@ -649,7 +663,7 @@
 /include/zephyr/logging/                         @nordic-krch
 /include/zephyr/lorawan/lorawan.h                @Mani-Sadhasivam
 /include/zephyr/mgmt/osdp.h                      @sidcha
-/include/zephyr/mgmt/mcumgr/                     @de-nordic
+/include/zephyr/mgmt/mcumgr/                     @nordicjm
 /include/zephyr/net/                             @rlubos @tbursztyka
 /include/zephyr/net/buf.h                        @jhedberg @tbursztyka @rlubos
 /include/zephyr/net/coap*.h                      @rlubos
@@ -661,11 +675,13 @@
 /include/zephyr/pm/pm.h                          @nashif @ceolin
 /include/zephyr/drivers/ptp_clock.h              @tbursztyka
 /include/zephyr/rtio/                            @teburd
+/include/zephyr/sensing/                           @lixuzha @ghu0510 @qianruh
 /include/zephyr/shared_irq.h                     @dcpleung @nashif @andyross
 /include/zephyr/shell/                           @jakub-uC @nordic-krch
 /include/zephyr/shell/shell_mqtt.h               @ycsin
 /include/zephyr/sw_isr_table.h                   @dcpleung @nashif @andyross
 /include/zephyr/sd/                              @danieldegrasse
+/include/zephyr/sip_svc/                         @maheshraotm
 /include/zephyr/sys_clock.h                      @dcpleung @nashif @andyross
 /include/zephyr/sys/sys_io.h                     @dcpleung @nashif @andyross
 /include/zephyr/sys/kobject.h                    @dcpleung @nashif
@@ -683,6 +699,7 @@
 /lib/posix/                               @cfriedt
 /lib/posix/getopt/                        @jakub-uC
 /subsys/portability/                      @nashif
+/subsys/sensing/                            @lixuzha @ghu0510 @qianruh
 /lib/libc/                                @nashif
 /lib/libc/arcmwdt/                        @abrodkin @ruuddw @evgeniy-paltsev
 /misc/                                    @tejlmand
@@ -722,12 +739,14 @@
 /samples/subsys/logging/                  @nordic-krch @jakub-uC
 /samples/subsys/logging/syst/             @dcpleung
 /samples/subsys/shell/                    @jakub-uC @nordic-krch
+/samples/subsys/sip_svc/                  @maheshraotm
 /samples/subsys/mgmt/mcumgr/              @de-nordic @nordicjm
 /samples/subsys/mgmt/updatehub/           @nandojve @otavio
 /samples/subsys/mgmt/osdp/                @sidcha
 /samples/subsys/usb/                      @jfischer-no
 /samples/subsys/usb_c/                    @sambhurst
 /samples/subsys/pm/                       @nashif @ceolin
+/samples/subsys/sensing/                  @lixuzha @ghu0510 @qianruh
 /samples/tfm_integration/                 @microbuilder
 /samples/userspace/                       @dcpleung @nashif
 /scripts/release/bug_bash.py              @cfriedt
@@ -805,7 +824,6 @@ scripts/build/gen_image_info.py           @tejlmand
 /subsys/mgmt/ec_host_cmd/                 @jettr
 /subsys/mgmt/mcumgr/                      @carlescufi @de-nordic @nordicjm
 /subsys/mgmt/hawkbit/                     @Navin-Sankar
-/subsys/mgmt/mcumgr/transport/src/smp_udp.c @aunsbjerg
 /subsys/mgmt/updatehub/                   @nandojve @otavio
 /subsys/mgmt/osdp/                        @sidcha
 /subsys/modbus/                           @jfischer-no
@@ -830,6 +848,7 @@ scripts/build/gen_image_info.py           @tejlmand
 /subsys/shell/                            @jakub-uC @nordic-krch
 /subsys/shell/backends/shell_mqtt.c       @ycsin
 /subsys/sd/                               @danieldegrasse
+/subsys/sip_svc/                          @maheshraotm
 /subsys/task_wdt/                         @martinjaeger
 /subsys/testsuite/                        @nashif
 /subsys/testsuite/ztest/*/ztress*         @nordic-krch
@@ -858,7 +877,7 @@ scripts/build/gen_image_info.py           @tejlmand
 /tests/drivers/hwinfo/                    @alexanderwachter
 /tests/drivers/smbus/                     @finikorg
 /tests/drivers/spi/                       @tbursztyka
-/tests/drivers/uart/uart_async_api/       @Mierunski
+/tests/drivers/uart/uart_async_api/       @anangl
 /tests/drivers/w1/                        @str4t0m
 /tests/kernel/                            @dcpleung @andyross @nashif
 /tests/lib/                               @nashif

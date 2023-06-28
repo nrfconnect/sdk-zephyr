@@ -234,7 +234,7 @@ SECTIONS {
   } >vector_double_text
 
   .text : {
-    _text_start = .;
+    __text_region_start = .;
     *(.iram1 .iram1.*)
     *(.entry.text)
     *(.init.literal)
@@ -245,7 +245,7 @@ SECTIONS {
     *(.fini.literal)
     KEEP(*(.fini))
     *(.gnu.version)
-    _text_end = .;
+    __text_region_end = .;
   } >ram
 
   .rodata : ALIGN(4096)
@@ -282,7 +282,6 @@ SECTIONS {
     LONG(_bss_start)
     LONG(_bss_end)
     _bss_table_end = .;
-    __rodata_region_end = .;
   } >ram
 
   .module_init : {
@@ -294,6 +293,7 @@ SECTIONS {
 #define RAMABLE_REGION ram
 #define ROMABLE_REGION ram
 #include <zephyr/linker/common-rom.ld>
+   __rodata_region_end = .;
 
   .fw_ready : {
     KEEP(*(".fw_ready"));
@@ -395,7 +395,6 @@ SECTIONS {
   {
     _heap_start = .;
     *(.heap_mem)
-    _heap_end = .;
   } >ucram
 
   .unused_ram_start_marker SEGSTART_CACHED (NOLOAD) :
@@ -408,6 +407,7 @@ SECTIONS {
 
   . = L2_SRAM_BASE + L2_SRAM_SIZE;
   . = SEGSTART_UNCACHED;
+  _heap_end = .;
   _heap_sentry = .;
 
   /* dma buffers */

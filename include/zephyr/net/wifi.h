@@ -12,20 +12,25 @@
 #ifndef ZEPHYR_INCLUDE_NET_WIFI_H_
 #define ZEPHYR_INCLUDE_NET_WIFI_H_
 
+#include <zephyr/sys/util.h>  /* for ARRAY_SIZE */
+
 #define WIFI_COUNTRY_CODE_LEN 2
+
+#define WIFI_LISTEN_INTERVAL_MIN 0
+#define WIFI_LISTEN_INTERVAL_MAX 65535
 
 /* Not having support for legacy types is deliberate to enforce
  * higher security.
  */
 enum wifi_security_type {
 	WIFI_SECURITY_TYPE_NONE = 0,
-	WIFI_SECURITY_TYPE_WEP,
-	WIFI_SECURITY_TYPE_WPA_PSK,
 	WIFI_SECURITY_TYPE_PSK,
 	WIFI_SECURITY_TYPE_PSK_SHA256,
 	WIFI_SECURITY_TYPE_SAE,
 	WIFI_SECURITY_TYPE_WAPI,
 	WIFI_SECURITY_TYPE_EAP,
+	WIFI_SECURITY_TYPE_WEP,
+	WIFI_SECURITY_TYPE_WPA_PSK,
 
 	__WIFI_SECURITY_TYPE_AFTER_LAST,
 	WIFI_SECURITY_TYPE_MAX = __WIFI_SECURITY_TYPE_AFTER_LAST - 1,
@@ -336,4 +341,96 @@ enum wifi_twt_setup_resp_status {
 	WIFI_TWT_RESP_NOT_RECEIVED,
 };
 
+enum wifi_twt_fail_reason {
+	WIFI_TWT_FAIL_UNSPECIFIED,
+	WIFI_TWT_FAIL_CMD_EXEC_FAIL,
+	WIFI_TWT_FAIL_OPERATION_NOT_SUPPORTED,
+	WIFI_TWT_FAIL_UNABLE_TO_GET_IFACE_STATUS,
+	WIFI_TWT_FAIL_DEVICE_NOT_CONNECTED,
+	WIFI_TWT_FAIL_PEER_NOT_HE_CAPAB,
+	WIFI_TWT_FAIL_PEER_NOT_TWT_CAPAB,
+	WIFI_TWT_FAIL_OPERATION_IN_PROGRESS,
+	WIFI_TWT_FAIL_INVALID_FLOW_ID,
+	WIFI_TWT_FAIL_IP_NOT_ASSIGNED,
+};
+
+static const char * const twt_err_code_tbl[] = {
+	[WIFI_TWT_FAIL_UNSPECIFIED] = "Unspecfied",
+	[WIFI_TWT_FAIL_CMD_EXEC_FAIL] = "Command Execution failed",
+	[WIFI_TWT_FAIL_OPERATION_NOT_SUPPORTED] =
+		"Operation not supported",
+	[WIFI_TWT_FAIL_UNABLE_TO_GET_IFACE_STATUS] =
+		"Unable to get iface status",
+	[WIFI_TWT_FAIL_DEVICE_NOT_CONNECTED] =
+		"Device not connected",
+	[WIFI_TWT_FAIL_PEER_NOT_HE_CAPAB] = "Peer not HE capable",
+	[WIFI_TWT_FAIL_PEER_NOT_TWT_CAPAB] = "Peer not TWT capable",
+	[WIFI_TWT_FAIL_OPERATION_IN_PROGRESS] =
+		"Operation already in progress",
+	[WIFI_TWT_FAIL_INVALID_FLOW_ID] =
+		"Invalid negotiated flow id",
+	[WIFI_TWT_FAIL_IP_NOT_ASSIGNED] =
+		"IP address not assigned",
+};
+
+static inline const char *get_twt_err_code_str(int16_t err_no)
+{
+	if ((err_no) < (int16_t)ARRAY_SIZE(twt_err_code_tbl)) {
+		return twt_err_code_tbl[err_no];
+	}
+
+	return "<unknown>";
+}
+
+enum ps_param_type {
+	WIFI_PS_PARAM_STATE,
+	WIFI_PS_PARAM_LISTEN_INTERVAL,
+	WIFI_PS_PARAM_WAKEUP_MODE,
+	WIFI_PS_PARAM_MODE,
+	WIFI_PS_PARAM_TIMEOUT,
+};
+
+enum wifi_ps_wakeup_mode {
+	WIFI_PS_WAKEUP_MODE_DTIM = 0,
+	WIFI_PS_WAKEUP_MODE_LISTEN_INTERVAL,
+};
+
+static const char * const wifi_ps_wakeup_mode2str[] = {
+	[WIFI_PS_WAKEUP_MODE_DTIM] = "PS wakeup mode DTIM",
+	[WIFI_PS_WAKEUP_MODE_LISTEN_INTERVAL] = "PS wakeup mode listen interval",
+};
+
+enum wifi_config_ps_param_fail_reason {
+	WIFI_PS_PARAM_FAIL_UNSPECIFIED,
+	WIFI_PS_PARAM_FAIL_CMD_EXEC_FAIL,
+	WIFI_PS_PARAM_FAIL_OPERATION_NOT_SUPPORTED,
+	WIFI_PS_PARAM_FAIL_UNABLE_TO_GET_IFACE_STATUS,
+	WIFI_PS_PARAM_FAIL_DEVICE_NOT_CONNECTED,
+	WIFI_PS_PARAM_FAIL_DEVICE_CONNECTED,
+	WIFI_PS_PARAM_LISTEN_INTERVAL_RANGE_INVALID,
+};
+
+static const char * const ps_param_config_err_code_tbl[] = {
+	[WIFI_PS_PARAM_FAIL_UNSPECIFIED] = "Unspecfied",
+	[WIFI_PS_PARAM_FAIL_CMD_EXEC_FAIL] = "Command Execution failed",
+	[WIFI_PS_PARAM_FAIL_OPERATION_NOT_SUPPORTED] =
+		"Operation not supported",
+	[WIFI_PS_PARAM_FAIL_UNABLE_TO_GET_IFACE_STATUS] =
+		"Unable to get iface status",
+	[WIFI_PS_PARAM_FAIL_DEVICE_NOT_CONNECTED] =
+		"Can not set while device not connected",
+	[WIFI_PS_PARAM_FAIL_DEVICE_CONNECTED] =
+		"Can not set while device already connected",
+	[WIFI_PS_PARAM_LISTEN_INTERVAL_RANGE_INVALID] =
+		"Can not set due to invalid range",
+};
+
+static inline const char *get_ps_config_err_code_str(int16_t err_no)
+{
+	if ((err_no) < (int16_t)ARRAY_SIZE(ps_param_config_err_code_tbl)) {
+		return ps_param_config_err_code_tbl[err_no];
+	}
+
+	return "<unknown>";
+}
 #endif /* ZEPHYR_INCLUDE_NET_WIFI_H_ */

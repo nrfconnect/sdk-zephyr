@@ -7,8 +7,7 @@
 #include <stddef.h>
 #include <zephyr/kernel.h>
 #include <soc.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/hci_types.h>
 #include <zephyr/sys/byteorder.h>
 
 #include "hal/cpu.h"
@@ -447,7 +446,7 @@ uint8_t ll_feature_req_send(uint16_t handle)
 
 	uint8_t err;
 
-	err = ull_cp_feature_exchange(conn);
+	err = ull_cp_feature_exchange(conn, 1U);
 	if (err) {
 		return err;
 	}
@@ -824,13 +823,11 @@ int ull_conn_rx(memq_link_t *link, struct node_rx_pdu **rx)
 	switch (pdu_rx->ll_id) {
 	case PDU_DATA_LLID_CTRL:
 	{
-		ARG_UNUSED(link);
-		ARG_UNUSED(pdu_rx);
-
-		ull_cp_rx(conn, *rx);
-
 		/* Mark buffer for release */
 		(*rx)->hdr.type = NODE_RX_TYPE_RELEASE;
+
+		ull_cp_rx(conn, link, *rx);
+
 		return 0;
 	}
 
@@ -868,11 +865,13 @@ int ull_conn_rx(memq_link_t *link, struct node_rx_pdu **rx)
 	return 0;
 }
 
-int ull_conn_llcp(struct ll_conn *conn, uint32_t ticks_at_expire, uint16_t lazy)
+int ull_conn_llcp(struct ll_conn *conn, uint32_t ticks_at_expire,
+		  uint32_t remainder, uint16_t lazy)
 {
 	LL_ASSERT(conn->lll.handle != LLL_HANDLE_INVALID);
 
 	conn->llcp.prep.ticks_at_expire = ticks_at_expire;
+	conn->llcp.prep.remainder = remainder;
 	conn->llcp.prep.lazy = lazy;
 
 	ull_cp_run(conn);
@@ -1727,6 +1726,7 @@ static void conn_cleanup_finalize(struct ll_conn *conn)
 #if defined(LLCP_TX_CTRL_BUF_QUEUE_ENABLE)
 	ull_cp_update_tx_buffer_queue(conn);
 #endif /* LLCP_TX_CTRL_BUF_QUEUE_ENABLE */
+	ull_cp_release_nodes(conn);
 
 	/* flush demux-ed Tx buffer still in ULL context */
 	tx_ull_flush(conn);
@@ -1936,10 +1936,6 @@ static int empty_data_start_release(struct ll_conn *conn, struct node_tx *tx)
 }
 #endif /* CONFIG_BT_CTLR_LLID_DATA_START_EMPTY */
 
-/*
- * TODO: struct lll_conn *lll_conn gives a CI error that tag names
- * must be unique. This may be a false positive
- */
 #if defined(CONFIG_BT_CTLR_FORCE_MD_AUTO)
 static uint8_t force_md_cnt_calc(struct lll_conn *lll_connection, uint32_t tx_rate)
 {

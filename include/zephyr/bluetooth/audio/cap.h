@@ -78,10 +78,12 @@ struct bt_cap_initiator_cb {
 	 *
 	 * @param unicast_group  The unicast group pointer supplied to
 	 *                       bt_cap_initiator_unicast_audio_start().
-	 * @param err            0 if success, else BT_GATT_ERR() with a
-	 *                       specific ATT (BT_ATT_ERR_*) error code.
+	 * @param err            0 if success, BT_GATT_ERR() with a
+	 *                       specific ATT (BT_ATT_ERR_*) error code or -ECANCELED if cancelled
+	 *                       by bt_cap_initiator_unicast_audio_cancel().
 	 * @param conn           Pointer to the connection where the error
-	 *                       occurred. NULL if @p err is 0.
+	 *                       occurred. NULL if @p err is 0 or if cancelled by
+	 *                       bt_cap_initiator_unicast_audio_cancel()
 	 */
 	void (*unicast_start_complete)(struct bt_bap_unicast_group *unicast_group,
 				       int err, struct bt_conn *conn);
@@ -89,10 +91,12 @@ struct bt_cap_initiator_cb {
 	/**
 	 * @brief Callback for bt_cap_initiator_unicast_audio_update().
 	 *
-	 * @param err            0 if success, else BT_GATT_ERR() with a
-	 *                       specific ATT (BT_ATT_ERR_*) error code.
+	 * @param err            0 if success, BT_GATT_ERR() with a
+	 *                       specific ATT (BT_ATT_ERR_*) error code or -ECANCELED if cancelled
+	 *                       by bt_cap_initiator_unicast_audio_cancel().
 	 * @param conn           Pointer to the connection where the error
-	 *                       occurred. NULL if @p err is 0.
+	 *                       occurred. NULL if @p err is 0 or if cancelled by
+	 *                       bt_cap_initiator_unicast_audio_cancel()
 	 */
 	void (*unicast_update_complete)(int err, struct bt_conn *conn);
 
@@ -107,10 +111,12 @@ struct bt_cap_initiator_cb {
 	 *
 	 * @param unicast_group  The unicast group pointer supplied to
 	 *                       bt_cap_initiator_unicast_audio_stop().
-	 * @param err            0 if success, else BT_GATT_ERR() with a
-	 *                       specific ATT (BT_ATT_ERR_*) error code.
+	 * @param err            0 if success, BT_GATT_ERR() with a
+	 *                       specific ATT (BT_ATT_ERR_*) error code or -ECANCELED if cancelled
+	 *                       by bt_cap_initiator_unicast_audio_cancel().
 	 * @param conn           Pointer to the connection where the error
-	 *                       occurred. NULL if @p err is 0.
+	 *                       occurred. NULL if @p err is 0 or if cancelled by
+	 *                       bt_cap_initiator_unicast_audio_cancel()
 	 */
 	void (*unicast_stop_complete)(struct bt_bap_unicast_group *unicast_group,
 				      int err, struct bt_conn *conn);
@@ -192,15 +198,6 @@ struct bt_cap_unicast_audio_start_param {
 
 	/** Array of stream parameters */
 	struct bt_cap_unicast_audio_start_stream_param *stream_params;
-
-	/** @brief Unicast Group packing mode.
-	 *
-	 *  @ref BT_ISO_PACKING_SEQUENTIAL or @ref BT_ISO_PACKING_INTERLEAVED.
-	 *
-	 *  @note This is a recommendation to the controller, which the
-	 *  controller may ignore.
-	 */
-	uint8_t packing;
 };
 
 struct bt_cap_unicast_audio_update_param {
@@ -278,6 +275,30 @@ int bt_cap_initiator_unicast_audio_update(const struct bt_cap_unicast_audio_upda
  */
 int bt_cap_initiator_unicast_audio_stop(struct bt_bap_unicast_group *unicast_group);
 
+/** @brief Cancel any current Common Audio Profile procedure
+ *
+ * This will stop the current procedure from continuing and making it possible to run a new
+ * Common Audio Profile procedure.
+ *
+ * It is recommended to do this if any existing procedure take longer time than expected, which
+ * could indicate a missing response from the Common Audio Profile Acceptor.
+ *
+ * This does not send any requests to any Common Audio Profile Acceptors involved with the current
+ * procedure, and thus notifications from the Common Audio Profile Acceptors may arrive after this
+ * has been called. It is thus recommended to either only use this if a procedure has stalled, or
+ * wait a short while before starting any new Common Audio Profile procedure after this has been
+ * called to avoid getting notifications from the cancelled procedure. The wait time depends on
+ * the connection interval, the number of devices in the previous procedure and the behavior of the
+ * Common Audio Profile Acceptors.
+ *
+ * The respective callbacks of the procedure will be called as part of this with the connection
+ * pointer set to 0 and the err value set to -ECANCELED.
+ *
+ * @retval 0 on success
+ * @retval -EALREADY if no procedure is active
+ */
+int bt_cap_initiator_unicast_audio_cancel(void);
+
 struct bt_cap_initiator_broadcast_stream_param {
 	/** Audio stream */
 	struct bt_cap_stream *stream;
@@ -341,9 +362,25 @@ struct bt_cap_initiator_broadcast_create_param {
 };
 
 /**
- * @brief Create and start Common Audio Profile Common Audio Profile broadcast source.
+ * @brief Create a Common Audio Profile broadcast source.
  *
  * Create a new audio broadcast source with one or more audio streams.
+ * * *
+ * @note @kconfig{CONFIG_BT_CAP_INITIATOR} and
+ * @kconfig{CONFIG_BT_BAP_BROADCAST_SOURCE} must be enabled for this function
+ * to be enabled.
+ *
+ * @param[in]  param             Parameters to start the audio streams.
+ * @param[out] broadcast_source  Pointer to the broadcast source created.
+ *
+ * @return 0 on success or negative error value on failure.
+ */
+int bt_cap_initiator_broadcast_audio_create(
+	const struct bt_cap_initiator_broadcast_create_param *param,
+	struct bt_cap_broadcast_source **broadcast_source);
+
+/**
+ * @brief Start Common Audio Profile broadcast source.
  *
  * The broadcast source will be visible for scanners once this has been called,
  * and the device will advertise audio announcements.
@@ -355,16 +392,14 @@ struct bt_cap_initiator_broadcast_create_param {
  * @kconfig{CONFIG_BT_BAP_BROADCAST_SOURCE} must be enabled for this function
  * to be enabled.
  *
- * @param[in]  param             Parameters to start the audio streams.
- * @param[in]  adv               Pointer to an extended advertising set with
- *                               periodic advertising configured.
- * @param[out] broadcast_source  Pointer to the broadcast source created.
+ * @param broadcast_source  Pointer to the broadcast source.
+ * @param adv               Pointer to an extended advertising set with
+ *                          periodic advertising configured.
  *
  * @return 0 on success or negative error value on failure.
  */
-int bt_cap_initiator_broadcast_audio_start(struct bt_cap_initiator_broadcast_create_param *param,
-					   struct bt_le_ext_adv *adv,
-					   struct bt_cap_broadcast_source **broadcast_source);
+int bt_cap_initiator_broadcast_audio_start(struct bt_cap_broadcast_source *broadcast_source,
+					   struct bt_le_ext_adv *adv);
 /**
  * @brief Update broadcast audio streams for a Common Audio Profile broadcast source.
  *
@@ -425,12 +460,12 @@ int bt_cap_initiator_broadcast_audio_delete(struct bt_cap_broadcast_source *broa
  *
  * See table 3.14 in the Basic Audio Profile v1.0.1 for the structure.
  *
- * @param[in]  source        Pointer to the broadcast source.
- * @param[out] broadcast_id  Pointer to the 3-octet broadcast ID.
+ * @param[in]  broadcast_source  Pointer to the broadcast source.
+ * @param[out] broadcast_id      Pointer to the 3-octet broadcast ID.
  *
  * @return int		0 if on success, errno on error.
  */
-int bt_cap_initiator_broadcast_get_id(const struct bt_cap_broadcast_source *source,
+int bt_cap_initiator_broadcast_get_id(const struct bt_cap_broadcast_source *broadcast_source,
 				      uint32_t *const broadcast_id);
 
 /**
@@ -443,14 +478,13 @@ int bt_cap_initiator_broadcast_get_id(const struct bt_cap_broadcast_source *sour
  *
  * See table 3.15 in the Basic Audio Profile v1.0.1 for the structure.
  *
- * @param source        Pointer to the broadcast source.
- * @param base_buf      Pointer to a buffer where the BASE will be inserted.
+ * @param broadcast_source  Pointer to the broadcast source.
+ * @param base_buf          Pointer to a buffer where the BASE will be inserted.
  *
  * @return int		0 if on success, errno on error.
  */
-int bt_cap_initiator_broadcast_get_base(struct bt_cap_broadcast_source *source,
+int bt_cap_initiator_broadcast_get_base(struct bt_cap_broadcast_source *broadcast_source,
 					struct net_buf_simple *base_buf);
-
 
 struct bt_cap_unicast_to_broadcast_param {
 	/** The source unicast group with the streams. */

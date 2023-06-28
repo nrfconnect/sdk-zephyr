@@ -18,22 +18,10 @@ zephyr_linker_section_configure(SECTION device_states
 )
 
 if(CONFIG_PM_DEVICE)
-  zephyr_linker_section(NAME pm_device_slots GROUP DATA_REGION TYPE NOLOAD NOINPUT ${XIP_ALIGN_WITH_INPUT})
-  zephyr_linker_section_configure(SECTION pm_device_slots KEEP INPUT ".z_pm_device_slots")
+  zephyr_iterable_section(NAME pm_device_slots GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
 endif()
 
-zephyr_linker_section(NAME initshell GROUP DATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT})
-zephyr_linker_section_configure(SECTION initshell
-  KEEP INPUT ".shell_module_*"
-  SYMBOLS __shell_module_start __shell_module_end
-)
-zephyr_linker_section_configure(SECTION initshell
-  KEEP INPUT ".shell_cmd_*"
-  SYMBOLS __shell_cmd_start __shell_end_end
-)
-
-zephyr_linker_section(NAME log_dynamic GROUP DATA_REGION NOINPUT)
-zephyr_linker_section_configure(SECTION log_dynamic KEEP INPUT ".log_dynamic_*")
+zephyr_iterable_section(NAME log_dynamic GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
 
 if(CONFIG_USERSPACE)
   # All kernel objects within are assumed to be either completely
@@ -57,11 +45,7 @@ zephyr_iterable_section(NAME k_queue GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT} S
 zephyr_iterable_section(NAME k_condvar GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
 zephyr_iterable_section(NAME k_event GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
 
-zephyr_linker_section(NAME _net_buf_pool_area GROUP DATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
-zephyr_linker_section_configure(SECTION _net_buf_pool_area
-  KEEP SORT NAME INPUT "._net_buf_pool.static.*"
-  SYMBOLS _net_buf_pool_list
-)
+zephyr_iterable_section(NAME net_buf_pool GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
 
 if(CONFIG_NETWORKING)
   zephyr_iterable_section(NAME net_if     GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
@@ -70,11 +54,12 @@ if(CONFIG_NETWORKING)
   zephyr_iterable_section(NAME eth_bridge GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
 endif()
 
+if(CONFIG_SENSING)
+  zephyr_iterable_section(NAME sensing_sensor GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
+endif()
+
 if(CONFIG_UART_MUX)
-  zephyr_linker_section(NAME uart_mux GROUP DATA_REGION NOINPUT ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
-  zephyr_linker_section_configure(SECTION uart_mux
-    KEEP SORT NAME INPUT ".uart_mux.*"
-  )
+  zephyr_iterable_section(NAME uart_mux GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT} SUBALIGN 4)
 endif()
 
 if(CONFIG_USB_DEVICE_STACK)

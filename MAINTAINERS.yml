@@ -430,8 +430,25 @@ Coding Guidelines:
     - carlescufi
     - jfischer-no
   files:
+    - .checkpatch.conf
     - .clang-format
+    - .editorconfig
+    - .gitlint
+    - .yamllint
     - doc/contribute/guidelines.rst
+    - doc/contribute/coding_guidelines/
+    - scripts/checkpatch.pl
+    - scripts/checkpatch/
+    - scripts/ci/check_compliance.py
+    - scripts/ci/guideline_check.py
+    - scripts/ci/pylintrc
+    - scripts/coccicheck
+    - scripts/coccinelle/
+    - scripts/gitlint/
+    - scripts/pylint/
+    - scripts/spelling.txt
+  labels:
+    - "area: Coding Guidelines"
 
 Common Architecture Interface:
   status: odd fixes
@@ -472,8 +489,9 @@ Debug:
 Device Driver Model:
   status: maintained
   maintainers:
-    - tbursztyka
+    - gmarull
   collaborators:
+    - tbursztyka
     - dcpleung
     - nashif
   files:
@@ -576,6 +594,8 @@ Documentation:
     - doc/known-warnings.txt
     - doc/templates/sample.tmpl
     - doc/templates/board.tmpl
+  files-exclude:
+    - doc/releases/release-notes-*
   labels:
     - "area: Documentation"
 
@@ -600,6 +620,7 @@ Release Notes:
   status: maintained
   maintainers:
     - nashif
+    - jgl-meta
   files:
     - doc/releases/release-notes-*
   labels:
@@ -645,6 +666,17 @@ Release Notes:
   labels:
     - "area: Battery Backed RAM (bbram)"
 
+"Drivers: Aux display":
+  status: maintained
+  maintainers:
+    - thedjnK
+  files:
+    - include/zephyr/drivers/auxdisplay.h
+    - drivers/auxdisplay/*
+    - dts/bindings/auxdisplay/*
+  labels:
+    - "area: Aux display"
+
 "Drivers: CAN":
   status: maintained
   maintainers:
@@ -671,6 +703,7 @@ Release Notes:
     - samples/subsys/canbus/
     - subsys/canbus/
     - subsys/net/l2/canbus/
+    - tests/drivers/build_all/can/
     - tests/drivers/can/
     - tests/net/socket/can/
     - tests/subsys/canbus/
@@ -981,6 +1014,8 @@ Release Notes:
   collaborators:
     - rlubos
     - jciupis
+    - cfriedt
+    - fgrandel
   files:
     - drivers/ieee802154/
   labels:
@@ -1103,12 +1138,14 @@ Release Notes:
     - gmarull
   collaborators:
     - danieldegrasse
+    - aasinclair
   files:
     - drivers/regulator/
     - include/zephyr/drivers/regulator/
     - include/zephyr/drivers/regulator.h
     - include/zephyr/dt-bindings/regulator/
     - tests/drivers/regulator/
+    - tests/drivers/build_all/regulator/
     - doc/hardware/peripherals/regulators.rst
   labels:
     - "area: Regulators"
@@ -1676,9 +1713,9 @@ Mbed TLS:
 MCU Manager:
   status: maintained
   maintainers:
-    - de-nordic
-  collaborators:
     - nordicjm
+  collaborators:
+    - de-nordic
   files:
     - subsys/mgmt/mcumgr/
     - include/zephyr/mgmt/mcumgr/
@@ -1955,6 +1992,35 @@ RISCV arch:
   labels:
     - "area: RISCV"
 
+Retention:
+  status: maintained
+  maintainers:
+    - nordicjm
+  files:
+    - dts/bindings/retention/
+    - include/zephyr/retention/
+    - subsys/retention/
+  labels:
+    - "area: Retention"
+
+Sensor Subsystem:
+  status: maintained
+  maintainers:
+    - lixuzha
+    - ghu0510
+    - yperess
+  collaborators:
+    - qianruh
+  files:
+    - dts/bindings/sensor/zephyr,sensing.yaml
+    - dts/bindings/sensor/zephyr,sensing*.yaml
+    - include/zephyr/sensing/
+    - doc/services/sensing/
+    - subsys/sensing/
+    - samples/subsys/sensing/
+  labels:
+    - "area: Sensor Subsystem"
+
 Twister:
   status: maintained
   maintainers:
@@ -2059,7 +2125,7 @@ GD32 Platforms:
     - dts/*/gigadevice/
     - dts/bindings/*/*gd32*
     - soc/arm/gigadevice/
-    - soc/riscv/riscv-privilege/gd32vf103/
+    - soc/riscv/riscv-privileged/gd32vf103/
     - scripts/west_commands/*/*gd32*
   labels:
     - "platform: GD32"
@@ -2207,6 +2273,8 @@ NXP Platforms:
     - EmilioCBen
     - decsny
     - manuargue
+    - dbaluta
+    - iuliana-prodan
   files:
     - boards/arm/mimx*/
     - boards/arm/frdm_k*/
@@ -2570,7 +2638,7 @@ USB:
     - subsys/usb/
     - tests/subsys/usb/
     - tests/drivers/udc/
-    - doc/services/usb/
+    - doc/connectivity/usb/
   labels:
     - "area: USB"
 
@@ -2587,7 +2655,7 @@ USB-C:
     - include/zephyr/usb_c/
     - samples/subsys/usb_c/
     - subsys/usb/usb_c/
-    - doc/connectivity/usb_c/
+    - doc/connectivity/usb/pd/
   labels:
     - "area: USB-C"
 
@@ -2998,7 +3066,7 @@ West:
     - de-nordic
     - nordicjm
   files:
-    - modules/Kconfig.mcuboot_bootutil
+    - modules/Kconfig.mcuboot
     - tests/boot/test_mcuboot/
   labels:
     - manifest-mcuboot

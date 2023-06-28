@@ -33,10 +33,16 @@
 #define DT_DRV_COMPAT nxp_kinetis_adc12
 #elif DT_HAS_COMPAT_STATUS_OKAY(nxp_kinetis_adc16)
 #define DT_DRV_COMPAT nxp_kinetis_adc16
+#elif DT_HAS_COMPAT_STATUS_OKAY(nxp_vf610_adc)
+#define DT_DRV_COMPAT nxp_vf610_adc
 #elif DT_HAS_COMPAT_STATUS_OKAY(st_stm32_adc)
 #define DT_DRV_COMPAT st_stm32_adc
 #elif DT_HAS_COMPAT_STATUS_OKAY(nuvoton_npcx_adc)
 #define DT_DRV_COMPAT nuvoton_npcx_adc
+#elif DT_HAS_COMPAT_STATUS_OKAY(ti_ads1112)
+#define DT_DRV_COMPAT ti_ads1112
+#elif DT_HAS_COMPAT_STATUS_OKAY(ti_ads1119)
+#define DT_DRV_COMPAT ti_ads1119
 #elif DT_HAS_COMPAT_STATUS_OKAY(ti_cc32xx_adc)
 #define DT_DRV_COMPAT ti_cc32xx_adc
 #elif DT_HAS_COMPAT_STATUS_OKAY(raspberrypi_pico_adc)

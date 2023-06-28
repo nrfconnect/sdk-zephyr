@@ -152,7 +152,6 @@ static void usb_device_clock_init(void)
 	/* Make sure USBHS ram buffer and usb1 phy has power up */
 	POWER_DisablePD(kPDRUNCFG_APD_USBHS_SRAM);
 	POWER_DisablePD(kPDRUNCFG_PPD_USBHS_SRAM);
-	POWER_DisablePD(kPDRUNCFG_LP_HSPAD_FSPI0_VDET);
 	POWER_ApplyPD();
 
 	RESET_PeripheralReset(kUSBHS_PHY_RST_SHIFT_RSTn);
@@ -289,9 +288,24 @@ static void clock_init(void)
 #if CONFIG_USB_DC_NXP_LPCIP3511
 	usb_device_clock_init();
 #endif
+
+#if (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(flexcomm1), nxp_lpc_i2s, okay) && CONFIG_I2S)
+	/* attach AUDIO PLL clock to FLEXCOMM1 (I2S1) */
+	CLOCK_AttachClk(kAUDIO_PLL_to_FLEXCOMM1);
+#endif
+#if (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(flexcomm3), nxp_lpc_i2s, okay) && CONFIG_I2S)
+	/* attach AUDIO PLL clock to FLEXCOMM3 (I2S3) */
+	CLOCK_AttachClk(kAUDIO_PLL_to_FLEXCOMM3);
+#endif
+
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(flexcomm4), nxp_lpc_i2c, okay)
 	/* Switch FLEXCOMM4 to FRO_DIV4 */
 	CLOCK_AttachClk(kFRO_DIV4_to_FLEXCOMM4);
+#endif
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(i3c0), nxp_mcux_i3c, okay)
+	/* Attach main clock to I3C, divider will be set in i3c_mcux.c */
+	CLOCK_AttachClk(kMAIN_CLK_to_I3C_CLK);
+	CLOCK_AttachClk(kLPOSC_to_I3C_TC_CLK);
 #endif
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(hs_spi1), nxp_lpc_spi, okay)
 	CLOCK_AttachClk(kFRO_DIV4_to_FLEXCOMM16);
@@ -313,9 +327,13 @@ static void clock_init(void)
 	 * (height + VSW + VFP + VBP) * (width + HSW + HFP + HBP) * frame rate.
 	 * this means the clock divider will vary depending on
 	 * the attached display.
+	 *
+	 * The root clock used here is the AUX0 PLL (PLL0 PFD2).
 	 */
 	CLOCK_SetClkDiv(kCLOCK_DivDcPixelClk,
-		DT_PROP(DT_NODELABEL(lcdif), clk_div));
+		((CLOCK_GetSysPfdFreq(kCLOCK_Pfd2) /
+		DT_PROP(DT_CHILD(DT_NODELABEL(lcdif), display_timings),
+			clock_frequency)) + 1));
 
 	CLOCK_EnableClock(kCLOCK_DisplayCtrl);
 	RESET_ClearPeripheralReset(kDISP_CTRL_RST_SHIFT_RSTn);
@@ -383,6 +401,15 @@ static void clock_init(void)
 	/* Reset peripheral module */
 	RESET_PeripheralReset(kFLEXSPI1_RST_SHIFT_RSTn);
 #endif
+
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(lpadc0), nxp_lpc_lpadc, okay)
+	SYSCTL0->PDRUNCFG0_CLR = SYSCTL0_PDRUNCFG0_ADC_PD_MASK;
+	SYSCTL0->PDRUNCFG0_CLR = SYSCTL0_PDRUNCFG0_ADC_LP_MASK;
+	RESET_PeripheralReset(kADC0_RST_SHIFT_RSTn);
+	CLOCK_AttachClk(kFRO_DIV4_to_ADC_CLK);
+	CLOCK_SetClkDiv(kCLOCK_DivAdcClk, 1);
+#endif
+
 	/* Set SystemCoreClock variable. */
 	SystemCoreClock = CLOCK_INIT_CORE_CLOCK;
 
@@ -414,12 +441,13 @@ void imxrt_pre_init_display_interface(void)
 	 *     (Pixel clock * bit per output pixel) / number of MIPI data lane
 	 *
 	 * DPHY supports up to 895.1MHz bit clock.
-	 * Note: AUX1 PLL clock is system pll clock * 18 / pfd.
-	 * system pll clock is configured at 528MHz by default.
+	 * We set the divider of the PFD3 output of the SYSPLL, which has a
+	 * fixed multiplied of 18, and use this output frequency for the DPHY.
 	 */
 	CLOCK_AttachClk(kAUX1_PLL_to_MIPI_DPHY_CLK);
 	CLOCK_InitSysPfd(kCLOCK_Pfd3,
-		DT_PROP(DT_NODELABEL(mipi_dsi), dphy_clk_div));
+		((CLOCK_GetSysPllFreq() * 18ull) /
+		((unsigned long long)(DT_PROP(DT_NODELABEL(mipi_dsi), phy_clock)))));
 	CLOCK_SetClkDiv(kCLOCK_DivDphyClk, 1);
 
 	/* Clear DSI control reset (Note that DPHY reset is cleared later)*/

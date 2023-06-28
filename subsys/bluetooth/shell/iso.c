@@ -195,9 +195,7 @@ static int cmd_cig_create(const struct shell *sh, size_t argc, char *argv[])
 			return -ENOEXEC;
 		}
 
-		if (!IN_RANGE(packing,
-			      BT_ISO_PACKING_SEQUENTIAL,
-			      BT_ISO_PACKING_INTERLEAVED)) {
+		if (packing != BT_ISO_PACKING_SEQUENTIAL && packing != BT_ISO_PACKING_INTERLEAVED) {
 			shell_error(sh, "Invalid packing %lu", packing);
 
 			return -ENOEXEC;
@@ -218,9 +216,7 @@ static int cmd_cig_create(const struct shell *sh, size_t argc, char *argv[])
 			return -ENOEXEC;
 		}
 
-		if (!IN_RANGE(framing,
-			      BT_ISO_FRAMING_UNFRAMED,
-			      BT_ISO_FRAMING_FRAMED)) {
+		if (framing != BT_ISO_FRAMING_UNFRAMED && framing != BT_ISO_FRAMING_FRAMED) {
 			shell_error(sh, "Invalid framing %lu", framing);
 
 			return -ENOEXEC;
@@ -581,7 +577,8 @@ static struct bt_iso_chan *bis_channels[BIS_ISO_CHAN_COUNT] = { &bis_iso_chan };
 static uint32_t bis_sdu_interval_us;
 
 NET_BUF_POOL_FIXED_DEFINE(bis_tx_pool, BIS_ISO_CHAN_COUNT,
-			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU), 8, NULL);
+			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU),
+			  CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 
 static int cmd_broadcast(const struct shell *sh, size_t argc, char *argv[])
 {

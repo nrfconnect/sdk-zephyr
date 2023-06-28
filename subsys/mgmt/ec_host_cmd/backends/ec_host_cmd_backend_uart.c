@@ -93,7 +93,7 @@ static int request_expected_size(const struct ec_host_cmd_request_header *r)
 
 #define EC_HOST_CMD_UART_DEFINE(_name)                                                             \
 	static struct ec_host_cmd_uart_ctx _name##_hc_uart = {                                     \
-		.rx_buf_size = CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER,                               \
+		.rx_buf_size = CONFIG_EC_HOST_CMD_HANDLER_RX_BUFFER_SIZE,                          \
 	};                                                                                         \
 	static struct ec_host_cmd_backend _name = {                                                \
 		.api = &ec_host_cmd_api,                                                           \
@@ -103,7 +103,7 @@ static int request_expected_size(const struct ec_host_cmd_request_header *r)
 /* Waiting time in microseconds to detect overrun */
 #define UART_OVERRUN_TIMEOUT_US 300
 /* Timeout after receiving first byte */
-#define UART_REQ_RX_TIMEOUT	K_MSEC(150)
+#define UART_REQ_RX_TIMEOUT     K_MSEC(150)
 
 static void rx_timeout(struct k_work *work)
 {
@@ -302,10 +302,11 @@ struct ec_host_cmd_backend *ec_host_cmd_backend_get_uart(const struct device *de
 	return &ec_host_cmd_uart;
 }
 
-#if DT_NODE_EXISTS(DT_CHOSEN(zephyr_host_cmd_backend))
+#if DT_NODE_EXISTS(DT_CHOSEN(zephyr_host_cmd_uart_backend)) &&                                     \
+	defined(CONFIG_EC_HOST_CMD_INITIALIZE_AT_BOOT)
 static int host_cmd_init(void)
 {
-	const struct device *const dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_host_cmd_backend));
+	const struct device *const dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_host_cmd_uart_backend));
 
 	ec_host_cmd_init(ec_host_cmd_backend_get_uart(dev));
 	return 0;

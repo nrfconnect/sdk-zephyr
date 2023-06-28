@@ -13,6 +13,7 @@ LOG_MODULE_REGISTER(pcie, LOG_LEVEL_ERR);
 #include <zephyr/sys/check.h>
 #include <stdbool.h>
 #include <zephyr/drivers/pcie/pcie.h>
+#include <zephyr/sys/iterable_sections.h>
 
 #if CONFIG_PCIE_MSI
 #include <zephyr/drivers/pcie/msi.h>
@@ -494,8 +495,15 @@ static bool pcie_dev_cb(pcie_bdf_t bdf, pcie_id_t id, void *cb_data)
 			continue;
 		}
 
-		if (dev->id == id) {
+		if (dev->id != id) {
+			continue;
+		}
+
+		uint32_t class_rev = pcie_conf_read(bdf, PCIE_CONF_CLASSREV);
+
+		if (dev->class_rev == (class_rev & dev->class_rev_mask)) {
 			dev->bdf = bdf;
+			dev->class_rev = class_rev;
 			data->found++;
 			break;
 		}

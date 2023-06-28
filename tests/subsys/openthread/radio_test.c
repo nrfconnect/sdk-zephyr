@@ -73,15 +73,8 @@ static struct ieee802154_radio_api rapi = {.get_capabilities = get_capabilities,
 #endif /* CONFIG_NET_L2_IEEE802154_SUB_GHZ */
 					   .ed_scan = scan_mock};
 
-static int init_mock(const struct device *dev)
-{
-	ARG_UNUSED(dev);
-
-	return 0;
-}
-
 #define DT_DRV_COMPAT vnd_ieee802154
-DEVICE_DT_INST_DEFINE(0, init_mock, NULL, NULL, NULL, POST_KERNEL, 0, &rapi);
+DEVICE_DT_INST_DEFINE(0, NULL, NULL, NULL, NULL, POST_KERNEL, 0, &rapi);
 
 static const struct device *const radio = DEVICE_DT_INST_GET(0);
 
@@ -250,9 +243,9 @@ static void create_ack_frame(void)
 	buf->len = ACK_PKT_LENGTH;
 	buf->data[0] = FRAME_TYPE_ACK;
 
-	net_pkt_set_ieee802154_rssi(packet, rssi);
+	net_pkt_set_ieee802154_rssi_dbm(packet, rssi);
 	net_pkt_set_ieee802154_lqi(packet, lqi);
-	zassert_equal(ieee802154_radio_handle_ack(NULL, packet), NET_OK, "Handling ack failed.");
+	zassert_equal(ieee802154_handle_ack(NULL, packet), NET_OK, "Handling ack failed.");
 	net_pkt_unref(packet);
 }
 
@@ -759,7 +752,7 @@ ZTEST(openthread_radio, test_receive_test)
 	buf = packet->buffer;
 
 	net_pkt_set_ieee802154_lqi(packet, lqi);
-	net_pkt_set_ieee802154_rssi(packet, rssi);
+	net_pkt_set_ieee802154_rssi_dbm(packet, rssi);
 
 	zassert_equal(otPlatRadioSetTransmitPower(ot, power), OT_ERROR_NONE,
 		      "Failed to set TX power.");

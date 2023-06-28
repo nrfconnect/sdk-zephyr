@@ -50,7 +50,7 @@ elif [ -n "${TESTS_LIST}" ]; then
 else
 	SEARCH_PATH="${SEARCH_PATH:-.}"
 	all_cases=`find ${SEARCH_PATH} -name "*.sh" | \
-  	         grep -Ev "(/_|run_parallel|compile.sh)"`
+	         grep -Ev "(/_|run_parallel|compile.sh|generate_coverage_report.sh)"`
 	#we dont run ourselves
 fi
 
@@ -64,8 +64,6 @@ n_cases=$((${#all_cases_a[@]}))
 touch ${RESULTS_FILE}
 echo "Attempting to run ${n_cases} cases (logging to \
  `realpath ${RESULTS_FILE}`)"
-
-chmod +x $all_cases
 
 export CLEAN_XML="sed -E -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' \
                   -e 's/\"/&quot;/g'"

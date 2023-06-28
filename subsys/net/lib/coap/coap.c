@@ -748,6 +748,10 @@ uint8_t coap_header_get_token(const struct coap_packet *cpkt, uint8_t *token)
 	}
 
 	tkl = cpkt->data[0] & 0x0f;
+	if (tkl > COAP_TOKEN_MAX_LEN) {
+		return 0;
+	}
+
 	if (tkl) {
 		memcpy(token, cpkt->data + BASIC_HEADER_SIZE, tkl);
 	}
@@ -909,6 +913,12 @@ static int method_from_code(const struct coap_resource *resource,
 	}
 }
 
+
+static inline bool is_empty_message(const struct coap_packet *cpkt)
+{
+	return __coap_header_get_code(cpkt) == COAP_CODE_EMPTY;
+}
+
 static bool is_request(const struct coap_packet *cpkt)
 {
 	uint8_t code = coap_header_get_code(cpkt);
@@ -971,6 +981,15 @@ int coap_block_transfer_init(struct coap_block_context *ctx,
 #define SET_BLOCK_SIZE(v, b) (v |= ((b) & 0x07))
 #define SET_MORE(v, m) ((v) |= (m) ? 0x08 : 0x00)
 #define SET_NUM(v, n) ((v) |= ((n) << 4))
+
+int coap_append_descriptive_block_option(struct coap_packet *cpkt, struct coap_block_context *ctx)
+{
+	if (is_request(cpkt)) {
+		return coap_append_block1_option(cpkt, ctx);
+	} else {
+		return coap_append_block2_option(cpkt, ctx);
+	}
+}
 
 int coap_append_block1_option(struct coap_packet *cpkt,
 			      struct coap_block_context *ctx)
@@ -1039,6 +1058,20 @@ int coap_get_option_int(const struct coap_packet *cpkt, uint16_t code)
 	val = coap_option_value_to_int(&option);
 
 	return val;
+}
+
+int coap_get_block1_option(const struct coap_packet *cpkt, bool *has_more, uint8_t *block_number)
+{
+	int ret = coap_get_option_int(cpkt, COAP_OPTION_BLOCK1);
+
+	if (ret < 0) {
+		return ret;
+	}
+
+	*has_more = GET_MORE(ret);
+	*block_number = GET_NUM(ret);
+	ret = 1 << (GET_BLOCK_SIZE(ret) + 4);
+	return ret;
 }
 
 int insert_option(struct coap_packet *cpkt, uint16_t code, const uint8_t *value, uint16_t len)
@@ -1437,6 +1470,11 @@ struct coap_reply *coap_response_received(
 	uint16_t id;
 	uint8_t tkl;
 	size_t i;
+
+	if (!is_empty_message(response) && is_request(response)) {
+		/* Request can't be response */
+		return NULL;
+	}
 
 	id = coap_header_get_id(response);
 	tkl = coap_header_get_token(response, token);

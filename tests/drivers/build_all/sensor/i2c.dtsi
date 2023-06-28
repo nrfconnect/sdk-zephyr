@@ -694,3 +694,60 @@ test_i2c_wsen_pads: wsen_pads@6A {
 	drdy-gpios = <&test_gpio 0 0>;
 	odr = <1>;
 };
+
+test_i2c_s11059: s11059@6b {
+	compatible = "hamamatsu,s11059";
+	reg = <0x6b>;
+	integration-time = <546000>;
+};
+
+test_i2c_wsen_pdus: wsen_pdus@6C {
+	compatible = "we,wsen-pdus";
+	reg = <0x6C>;
+	sensor-type = <3>;
+};
+
+test_i2c_veml7700: veml7700@6d {
+	compatible = "vishay,veml7700";
+	reg = <0x6d>;
+	psm-mode = <0x03>;
+};
+
+test_i2c_ina3221: ina3221@6e {
+	compatible = "ti,ina3221";
+	reg = <0x6e>;
+	shunt-resistors = <1000 1000 1000>;
+	enable-channel = <1 0 0>;
+	conv-time-bus = <7>;
+	conv-time-shunt = <7>;
+	avg-mode = <2>;
+};
+
+test_i2c_lsm6dso16is: lsm6dso16is@6f {
+	compatible = "st,lsm6dso16is";
+	reg = <0x6f>;
+	irq-gpios = <&test_gpio 0 0>;
+};
+
+test_i2c_lsm6dsv16x: lsm6dsv16x@70 {
+	compatible = "st,lsm6dsv16x";
+	reg = <0x70>;
+	irq-gpios = <&test_gpio 0 0>;
+};
+
+test_i2c_mcp9600: mcp9600@71 {
+	compatible = "microchip,mcp9600";
+	reg = <0x71>;
+};
+
+test_i2c_tcs3400: tcs3400@72 {
+	compatible = "ams,tcs3400";
+	reg = <0x72>;
+	int-gpios = <&test_gpio 0 0>;
+};
+
+test_tcn75a: tcn75a@73 {
+	compatible = "microchip,tcn75a";
+	reg = <0x73>;
+	alert-gpios = <&test_gpio 0 0>;
+};

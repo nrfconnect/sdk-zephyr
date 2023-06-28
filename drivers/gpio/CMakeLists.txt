@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
+zephyr_syscall_header(${ZEPHYR_BASE}/include/zephyr/drivers/gpio.h)
+
 zephyr_library()
 
 zephyr_library_sources_ifdef(CONFIG_GPIO_TELINK_B91 gpio_b91.c)
@@ -13,6 +15,7 @@ zephyr_library_sources_ifdef(CONFIG_GPIO_SIFIVE     gpio_sifive.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_GECKO      gpio_gecko.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_IMX        gpio_imx.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_ITE_IT8XXX2 gpio_ite_it8xxx2.c)
+zephyr_library_sources_ifdef(CONFIG_GPIO_ITE_IT8XXX2_V2 gpio_ite_it8xxx2_v2.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_KSCAN_ITE_IT8XXX2 gpio_kscan_ite_it8xxx2.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_MCP23S17   gpio_mcp23s17.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_MCP23XXX   gpio_mcp23xxx.c)
@@ -36,6 +39,7 @@ zephyr_library_sources_ifdef(CONFIG_GPIO_STELLARIS  gpio_stellaris.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_RPI_PICO   gpio_rpi_pico.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_RV32M1     gpio_rv32m1.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_LMP90XXX   gpio_lmp90xxx.c)
+zephyr_library_sources_ifdef(CONFIG_GPIO_ADS114S0X  gpio_ads114s0x.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_LITEX      gpio_litex.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_LPC11U6X   gpio_lpc11u6x.c)
 zephyr_library_sources_ifdef(CONFIG_GPIO_XLNX_AXI   gpio_xlnx_axi.c)

@@ -10,6 +10,8 @@
 
 #include "mimxrt595_evk_cm33-pinctrl.dtsi"
 
+#include <zephyr/dt-bindings/display/panel.h>
+
 / {
 	model = "NXP MIMXRT595-EVK board";
 	compatible = "nxp,mimxrt595";
@@ -147,6 +149,7 @@
  */
 &os_timer {
 	status = "okay";
+	wakeup-source;
 };
 
 &rtc {
@@ -157,17 +160,28 @@
 	status = "okay";
 	width = <720>;
 	height = <1280>;
-	clk-div = <7>;
-	polarity = <12>;
-	hsync = <8>;
-	hfp = <32>;
-	hbp = <32>;
-	vsync = <2>;
-	vfp = <16>;
-	vbp = <14>;
+	display-timings {
+		compatible = "zephyr,panel-timing";
+		hsync-len = <8>;
+		hfront-porch = <32>;
+		hback-porch = <32>;
+		vsync-len = <2>;
+		vfront-porch = <16>;
+		vback-porch = <14>;
+		hsync-active = <0>;
+		vsync-active = <0>;
+		de-active = <1>;
+		pixelclk-active = <1>;
+		/*
+		 * Pixel clock is given by the following formula:
+		 * (height + vsync-len + vfront-porch + vback-porch) *
+		 * (width + hsync-len + hfront-porch + hback-porch) * frame rate
+		 */
+		clock-frequency = <62346240>;
+	};
 	backlight-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
 	data-bus-width = "24-bit";
-	pixel-format = "rgb-565";
+	pixel-format = <PANEL_PIXEL_FORMAT_BGR_565>;
 };
 
 &mipi_dsi {
@@ -178,7 +192,11 @@
 	dpi-video-mode = "burst";
 	dpi-bllp-mode = "low-power";
 	autoinsert-eotp;
-	dphy-clk-div = <12>;
+	/*
+	 * PHY clock is given by the following formula:
+	 * (pixel clock * bits per pixel) / MIPI data lanes
+	 */
+	phy-clock = <748154880>;
 
 	rm68200@0 {
 		status = "okay";
@@ -198,6 +216,8 @@
 	current-speed = <115200>;
 	pinctrl-0 = <&pinmux_flexcomm0_usart>;
 	pinctrl-names = "default";
+	dmas = <&dma0 0>, <&dma0 1>;
+	dma-names = "rx", "tx";
 };
 
 arduino_i2c: &flexcomm4 {
@@ -233,12 +253,38 @@ hs_spi1: &hs_lspi1 {
 	status = "okay";
 };
 
+/* I2S RX */
+i2s0: &flexcomm1 {
+	compatible = "nxp,lpc-i2s";
+	pinctrl-0 = <&pinmux_flexcomm1_i2s>;
+	pinctrl-names = "default";
+	#address-cells = <1>;
+	#size-cells = <0>;
+	dmas = <&dma0 2>;
+	dma-names = "rx";
+	status = "disabled";
+};
+
+/* I2S TX */
+i2s1: &flexcomm3 {
+	compatible = "nxp,lpc-i2s";
+	pinctrl-0 = <&pinmux_flexcomm3_i2s>;
+	pinctrl-names = "default";
+	#address-cells = <1>;
+	#size-cells = <0>;
+	dmas = <&dma0 7>;
+	dma-names = "tx";
+	status = "disabled";
+};
+
 arduino_serial: &flexcomm12 {
 	compatible = "nxp,lpc-usart";
 	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&pinmux_flexcomm12_usart>;
 	pinctrl-names = "default";
+	dmas = <&dma0 34>, <&dma0 35>;
+	dma-names = "rx", "tx";
 };
 
 /* PCA9420 PMIC */
@@ -304,12 +350,24 @@ arduino_serial: &flexcomm12 {
 	status = "okay";
 };
 
+/*
+ * GPIO module interrupts are shared between all GPIO devices on this
+ * SOC, but Zephyr does not currently support sharing interrupts between
+ * devices. The user can select GPIO modules to support interrupts by
+ * setting the appropriate `int-source` and `interrupt` property for
+ * a given module. On this board, GPIO3 and GPIO4 are configured to support
+ * interrupts.
+ */
 &gpio3 {
 	status = "okay";
+	int-source = "int-a";
+	interrupts = <2 0>;
 };
 
 &gpio4 {
 	status = "okay";
+	int-source = "int-b";
+	interrupts = <3 0>;
 };
 
 &gpio5 {
@@ -472,5 +530,17 @@ zephyr_udc0: &usbhs {
 &sc_timer {
 	pinctrl-0 = <&pinmux_sctimer_default>;
 	pinctrl-names = "default";
+	status = "okay";
+};
+
+&i3c0 {
+	pinctrl-0 = <&pinmux_i3c>;
+	pinctrl-names = "default";
+
+	status = "okay";
+};
+
+/* Disable this node if not using USB and need another MPU region */
+&sram1 {
 	status = "okay";
 };

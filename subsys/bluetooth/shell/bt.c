@@ -32,9 +32,6 @@
 #include <zephyr/bluetooth/rfcomm.h>
 #include <zephyr/bluetooth/sdp.h>
 #include <zephyr/bluetooth/iso.h>
-#include <zephyr/bluetooth/audio/audio.h>
-#include <zephyr/bluetooth/audio/pacs.h>
-#include <zephyr/bluetooth/audio/csip.h>
 
 #include <zephyr/shell/shell.h>
 
@@ -67,6 +64,8 @@ static struct bt_conn_auth_info_cb auth_info_cb;
 #define NAME_LEN 30
 
 #define KEY_STR_LEN 33
+
+#define ADV_DATA_DELIMITER ", "
 
 /*
  * Based on the maximum number of parameters for HCI_LE_Generate_DHKey
@@ -139,7 +138,7 @@ static struct bt_auto_connect {
 static struct bt_scan_filter {
 	char name[NAME_LEN];
 	bool name_set;
-	char addr[18]; /* fits xx:xx:xx:xx:xx:xx\0 */
+	char addr[BT_ADDR_STR_LEN];
 	bool addr_set;
 	int8_t rssi;
 	bool rssi_set;
@@ -147,6 +146,8 @@ static struct bt_scan_filter {
 	bool pa_interval_set;
 } scan_filter;
 
+static const char scan_response_label[] = "[DEVICE]: ";
+static bool scan_verbose_output;
 
 /**
  * @brief Compares two strings without case sensitivy
@@ -194,11 +195,163 @@ static bool data_cb(struct bt_data *data, void *user_data)
 	}
 }
 
+static void print_data_hex(const uint8_t *data, uint8_t len, enum shell_vt100_color color)
+{
+	if (len == 0)
+		return;
+
+	shell_fprintf(ctx_shell, color, "0x");
+	/* Reverse the byte order when printing as advertising data is LE
+	 * and the MSB should be first in the printed output.
+	 */
+	for (int16_t i = len - 1; i >= 0; i--) {
+		shell_fprintf(ctx_shell, color, "%02x", data[i]);
+	}
+}
+
+static void print_data_set(uint8_t set_value_len,
+			   const uint8_t *scan_data, uint8_t scan_data_len)
+{
+	uint8_t idx = 0;
+
+	if (scan_data_len == 0 || set_value_len > scan_data_len) {
+		return;
+	}
+
+	do {
+		if (idx > 0) {
+			shell_fprintf(ctx_shell, SHELL_INFO, ADV_DATA_DELIMITER);
+		}
+
+		print_data_hex(&scan_data[idx], set_value_len, SHELL_INFO);
+		idx += set_value_len;
+	} while (idx + set_value_len <= scan_data_len);
+
+	if (idx < scan_data_len) {
+		shell_fprintf(ctx_shell, SHELL_WARNING, " Excess data: ");
+		print_data_hex(&scan_data[idx], scan_data_len - idx, SHELL_WARNING);
+	}
+}
+
+static bool data_verbose_cb(struct bt_data *data, void *user_data)
+{
+	shell_fprintf(ctx_shell, SHELL_INFO, "%*sType 0x%02x: ",
+		      strlen(scan_response_label), "", data->type);
+
+	switch (data->type) {
+	case BT_DATA_UUID16_SOME:
+	case BT_DATA_UUID16_ALL:
+	case BT_DATA_SOLICIT16:
+		print_data_set(BT_UUID_SIZE_16, data->data, data->data_len);
+		break;
+	case BT_DATA_SVC_DATA16:
+		/* Data starts with a UUID16 (2 bytes),
+		 * the rest is unknown and printed as single bytes
+		 */
+		if (data->data_len < BT_UUID_SIZE_16) {
+			shell_fprintf(ctx_shell, SHELL_WARNING,
+				      "BT_DATA_SVC_DATA16 data length too short (%u)",
+				      data->data_len);
+			break;
+		}
+		print_data_set(BT_UUID_SIZE_16, data->data, BT_UUID_SIZE_16);
+		if (data->data_len > BT_UUID_SIZE_16) {
+			shell_fprintf(ctx_shell, SHELL_INFO, ADV_DATA_DELIMITER);
+			print_data_set(1, data->data + BT_UUID_SIZE_16,
+				       data->data_len - BT_UUID_SIZE_16);
+		}
+		break;
+	case BT_DATA_UUID32_SOME:
+	case BT_DATA_UUID32_ALL:
+		print_data_set(BT_UUID_SIZE_32, data->data, data->data_len);
+		break;
+	case BT_DATA_SVC_DATA32:
+		/* Data starts with a UUID32 (4 bytes),
+		 * the rest is unknown and printed as single bytes
+		 */
+		if (data->data_len < BT_UUID_SIZE_32) {
+			shell_fprintf(ctx_shell, SHELL_WARNING,
+				      "BT_DATA_SVC_DATA32 data length too short (%u)",
+				      data->data_len);
+			break;
+		}
+		print_data_set(BT_UUID_SIZE_32, data->data, BT_UUID_SIZE_32);
+		if (data->data_len > BT_UUID_SIZE_32) {
+			shell_fprintf(ctx_shell, SHELL_INFO, ADV_DATA_DELIMITER);
+			print_data_set(1, data->data + BT_UUID_SIZE_32,
+				       data->data_len - BT_UUID_SIZE_32);
+		}
+		break;
+	case BT_DATA_UUID128_SOME:
+	case BT_DATA_UUID128_ALL:
+	case BT_DATA_SOLICIT128:
+		print_data_set(BT_UUID_SIZE_128, data->data, data->data_len);
+		break;
+	case BT_DATA_SVC_DATA128:
+		/* Data starts with a UUID128 (16 bytes),
+		 * the rest is unknown and printed as single bytes
+		 */
+		if (data->data_len < BT_UUID_SIZE_128) {
+			shell_fprintf(ctx_shell, SHELL_WARNING,
+				      "BT_DATA_SVC_DATA128 data length too short (%u)",
+				      data->data_len);
+			break;
+		}
+		print_data_set(BT_UUID_SIZE_128, data->data, BT_UUID_SIZE_128);
+		if (data->data_len > BT_UUID_SIZE_128) {
+			shell_fprintf(ctx_shell, SHELL_INFO, ADV_DATA_DELIMITER);
+			print_data_set(1, data->data + BT_UUID_SIZE_128,
+				       data->data_len - BT_UUID_SIZE_128);
+		}
+		break;
+	case BT_DATA_NAME_SHORTENED:
+	case BT_DATA_NAME_COMPLETE:
+	case BT_DATA_BROADCAST_NAME:
+		shell_fprintf(ctx_shell, SHELL_INFO, "%.*s", data->data_len, data->data);
+		break;
+	case BT_DATA_PUB_TARGET_ADDR:
+	case BT_DATA_RAND_TARGET_ADDR:
+	case BT_DATA_LE_BT_DEVICE_ADDRESS:
+		print_data_set(BT_ADDR_SIZE, data->data, data->data_len);
+		break;
+	case BT_DATA_CSIS_RSI:
+		print_data_set(3, data->data, data->data_len);
+		break;
+	default:
+		print_data_set(1, data->data, data->data_len);
+	}
+
+	shell_fprintf(ctx_shell, SHELL_INFO, "\n");
+
+	return true;
+}
+
+static const char *scan_response_type_txt(uint8_t type)
+{
+	switch (type) {
+	case BT_GAP_ADV_TYPE_ADV_IND:
+		return "ADV_IND";
+	case BT_GAP_ADV_TYPE_ADV_DIRECT_IND:
+		return "ADV_DIRECT_IND";
+	case BT_GAP_ADV_TYPE_ADV_SCAN_IND:
+		return "ADV_SCAN_IND";
+	case BT_GAP_ADV_TYPE_ADV_NONCONN_IND:
+		return "ADV_NONCONN_IND";
+	case BT_GAP_ADV_TYPE_SCAN_RSP:
+		return "SCAN_RSP";
+	case BT_GAP_ADV_TYPE_EXT_ADV:
+		return "EXT_ADV";
+	default:
+		return "UNKNOWN";
+	}
+}
+
 static void scan_recv(const struct bt_le_scan_recv_info *info,
 		      struct net_buf_simple *buf)
 {
 	char le_addr[BT_ADDR_LE_STR_LEN];
 	char name[NAME_LEN];
+	struct net_buf_simple buf_copy;
 
 	if (scan_filter.rssi_set && (scan_filter.rssi > info->rssi)) {
 		return;
@@ -208,6 +361,11 @@ static void scan_recv(const struct bt_le_scan_recv_info *info,
 
 	if (scan_filter.addr_set && !is_substring(scan_filter.addr, le_addr)) {
 		return;
+	}
+
+	if (scan_verbose_output) {
+		/* call to bt_data_parse consumes netbufs so shallow clone for verbose output */
+		net_buf_simple_clone(buf, &buf_copy);
 	}
 
 	(void)memset(name, 0, sizeof(name));
@@ -223,9 +381,10 @@ static void scan_recv(const struct bt_le_scan_recv_info *info,
 		return;
 	}
 
-	shell_print(ctx_shell, "[DEVICE]: %s, AD evt type %u, RSSI %i %s "
+	shell_print(ctx_shell, "%s%s, AD evt type %u, RSSI %i %s "
 		    "C:%u S:%u D:%d SR:%u E:%u Prim: %s, Secn: %s, "
 		    "Interval: 0x%04x (%u us), SID: 0x%x",
+		    scan_response_label,
 		    le_addr, info->adv_type, info->rssi, name,
 		    (info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE) != 0,
 		    (info->adv_props & BT_GAP_ADV_PROP_SCANNABLE) != 0,
@@ -236,13 +395,22 @@ static void scan_recv(const struct bt_le_scan_recv_info *info,
 		    info->interval, BT_CONN_INTERVAL_TO_US(info->interval),
 		    info->sid);
 
+	if (scan_verbose_output) {
+		shell_info(ctx_shell,
+			   "%*s[SCAN DATA START - %s]",
+			   strlen(scan_response_label), "",
+			   scan_response_type_txt(info->adv_type));
+		bt_data_parse(&buf_copy, data_verbose_cb, NULL);
+		shell_info(ctx_shell, "%*s[SCAN DATA END]", strlen(scan_response_label), "");
+	}
+
 	/* Store address for later use */
 #if defined(CONFIG_BT_CENTRAL)
 	auto_connect.addr_set = true;
 	bt_addr_le_copy(&auto_connect.addr, info->addr);
 
 	/* Use the above auto_connect.addr address to automatically connect */
-	if (auto_connect.connect_name) {
+	if ((info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE) != 0U && auto_connect.connect_name) {
 		auto_connect.connect_name = false;
 
 		cmd_scan_off(ctx_shell);
@@ -418,6 +586,30 @@ done:
 	}
 }
 
+static void disconencted_set_new_default_conn_cb(struct bt_conn *conn, void *user_data)
+{
+	struct bt_conn_info info;
+
+	if (default_conn != NULL) {
+		/* nop */
+		return;
+	}
+
+	if (bt_conn_get_info(conn, &info) != 0) {
+		shell_error(ctx_shell, "Unable to get info: conn %p", conn);
+		return;
+	}
+
+	if (info.state == BT_CONN_STATE_CONNECTED) {
+		char addr_str[BT_ADDR_LE_STR_LEN];
+
+		default_conn = bt_conn_ref(conn);
+
+		bt_addr_le_to_str(info.le.dst, addr_str, sizeof(addr_str));
+		shell_print(ctx_shell, "Selected conn is now: %s", addr_str);
+	}
+}
+
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -428,6 +620,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	if (default_conn == conn) {
 		bt_conn_unref(default_conn);
 		default_conn = NULL;
+
+		/* If we are connected to other devices, set one of them as default */
+		bt_conn_foreach(BT_CONN_TYPE_LE, disconencted_set_new_default_conn_cb, NULL);
 	}
 }
 
@@ -1137,6 +1332,23 @@ static int cmd_scan(const struct shell *sh, size_t argc, char *argv[])
 	return 0;
 }
 
+static int cmd_scan_verbose_output(const struct shell *sh, size_t argc, char *argv[])
+{
+	const char *verbose_state;
+
+	verbose_state = argv[1];
+	if (!strcmp(verbose_state, "on")) {
+		scan_verbose_output = true;
+	} else if (!strcmp(verbose_state, "off")) {
+		scan_verbose_output = false;
+	} else {
+		shell_help(sh);
+		return SHELL_CMD_HELP_PRINTED;
+	}
+
+	return 0;
+}
+
 static int cmd_scan_filter_set_name(const struct shell *sh, size_t argc,
 				    char *argv[])
 {
@@ -1157,10 +1369,11 @@ static int cmd_scan_filter_set_name(const struct shell *sh, size_t argc,
 static int cmd_scan_filter_set_addr(const struct shell *sh, size_t argc,
 				    char *argv[])
 {
+	const size_t max_cpy_len = sizeof(scan_filter.addr) - 1;
 	const char *addr_arg = argv[1];
 
 	/* Validate length including null terminator. */
-	if (strlen(addr_arg) >= sizeof(scan_filter.addr)) {
+	if (strlen(addr_arg) > max_cpy_len) {
 		shell_error(ctx_shell, "Invalid address string: %s\n",
 			    addr_arg);
 		return -ENOEXEC;
@@ -1179,7 +1392,8 @@ static int cmd_scan_filter_set_addr(const struct shell *sh, size_t argc,
 		}
 	}
 
-	strcpy(scan_filter.addr, addr_arg);
+	strncpy(scan_filter.addr, addr_arg, max_cpy_len);
+	scan_filter.addr[max_cpy_len] = '\0'; /* ensure NULL termination */
 	scan_filter.addr_set = true;
 
 	return 0;
@@ -2507,6 +2721,7 @@ static int cmd_disconnect(const struct shell *sh, size_t argc, char *argv[])
 
 static int cmd_select(const struct shell *sh, size_t argc, char *argv[])
 {
+	char addr_str[BT_ADDR_LE_STR_LEN];
 	struct bt_conn *conn;
 	bt_addr_le_t addr;
 	int err;
@@ -2528,6 +2743,9 @@ static int cmd_select(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	default_conn = conn;
+
+	bt_addr_le_to_str(&addr, addr_str, sizeof(addr_str));
+	shell_print(sh, "Selected conn is now: %s", addr_str);
 
 	return 0;
 }
@@ -3735,6 +3953,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 	SHELL_CMD(scan-filter-clear, &bt_scan_filter_clear_cmds,
 		      "Scan filter clear commands",
 		      cmd_default_handler),
+	SHELL_CMD_ARG(scan-verbose-output, NULL, "<value: on, off>", cmd_scan_verbose_output, 2, 0),
 #endif /* CONFIG_BT_OBSERVER */
 #if defined(CONFIG_BT_BROADCASTER)
 	SHELL_CMD_ARG(advertise, NULL,

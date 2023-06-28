@@ -38,6 +38,32 @@ references to optional :ref:`binary blobs <bin-blobs>`.
 This page summarizes a list of policies and best practices which aim at
 better organizing the workflow in Zephyr modules.
 
+.. _modules-vs-projects:
+
+Modules vs west projects
+************************
+
+Zephyr modules, described in this page, are not the same as :ref:`west projects
+<west-workspace>`. In fact, modules :ref:`do not require west
+<modules_without_west>` at all. However, when using modules :ref:`with west
+<modules_using_west>`, then the build system uses west in order to find modules.
+
+In summary:
+
+Modules are repositories that contain a :file:`zephyr/module.yml` file, so that
+the Zephyr build system can pull in the source code from the repository.
+:ref:`West projects <west-manifests-projects>` are entries in the `projects:`
+section in the :file:`west.yml` manifest file.
+West projects are often also modules, but not always. There are west projects
+that are not included in the final firmware image (eg. tools) and thus do not
+need to be modules.
+Modules are found by the Zephyr build system either via :ref:`west itself
+<modules_using_west>`, or via the :ref:`ZEPHYR_MODULES CMake variable
+<modules_without_west>`.
+
+The contents of this page only apply to modules, and not to west projects in
+general (unless they are a module themselves).
+
 Module Repositories
 *******************
 
@@ -396,16 +422,16 @@ added to the build using CMake's `add_subdirectory()`_ command, and the
 If you have :ref:`west <west>` installed, you don't need to worry about how
 this variable is defined unless you are adding a new module. The build system
 knows how to use west to set :makevar:`ZEPHYR_MODULES`. You can add additional
-modules to this list by setting the :makevar:`ZEPHYR_EXTRA_MODULES` CMake
-variable or by adding a :makevar:`ZEPHYR_EXTRA_MODULES` line to ``.zephyrrc``
+modules to this list by setting the :makevar:`EXTRA_ZEPHYR_MODULES` CMake
+variable or by adding a :makevar:`EXTRA_ZEPHYR_MODULES` line to ``.zephyrrc``
 (See the section on :ref:`env_vars` for more details). This can be
 useful if you want to keep the list of modules found with west and also add
 your own.
 
 .. note::
    If the module ``FOO`` is provided by :ref:`west <west>` but also given with
-   ``-DZEPHYR_EXTRA_MODULES=/<path>/foo`` then the module given by the command
-   line variable :makevar:`ZEPHYR_EXTRA_MODULES` will take precedence.
+   ``-DEXTRA_ZEPHYR_MODULES=/<path>/foo`` then the module given by the command
+   line variable :makevar:`EXTRA_ZEPHYR_MODULES` will take precedence.
    This allows you to use a custom version of ``FOO`` when building and still
    use other Zephyr modules provided by :ref:`west <west>`.
    This can for example be useful for special test purposes.

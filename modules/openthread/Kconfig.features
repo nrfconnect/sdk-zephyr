@@ -133,9 +133,6 @@ config OPENTHREAD_ENABLE_SERVICE
 	help
 	  Enable Thread Services capability in OpenThread stack
 
-config OPENTHREAD_EXCLUDE_TCPLP_LIB
-	bool "Exclude TCPlp library from build"
-
 config OPENTHREAD_EXTERNAL_HEAP
 	bool "External heap support"
 
@@ -185,6 +182,7 @@ config OPENTHREAD_MESSAGE_USE_HEAP
 
 config OPENTHREAD_MLE_LONG_ROUTES
 	bool "MLE long routes extension (experimental)"
+	select EXPERIMENTAL
 	help
 	  Enable MLE long routes extension (experimental, breaks Thread conformance)
 
@@ -192,9 +190,6 @@ config OPENTHREAD_MLR
 	bool "Multicast Listener Registration support"
 	help
 	  Enable Multicast Listener Registration support for Thread 1.2
-
-config OPENTHREAD_MTD_NETDIAG
-	bool "TMF network diagnostics on MTDs"
 
 config OPENTHREAD_MULTIPLE_INSTANCE
 	bool "OpenThread multiple instances"
@@ -204,6 +199,9 @@ config OPENTHREAD_NAT64_BORDER_ROUTING
 
 config OPENTHREAD_NAT64_TRANSLATOR
 	bool "NAT64 translator support"
+
+config OPENTHREAD_NETDIAG_CLIENT
+	bool "TMF network diagnostics on client"
 
 config OPENTHREAD_NEIGHBOR_DISCOVERY_AGENT
 	bool "Neighbor discovery agent support"
@@ -289,3 +287,4 @@ config OPENTHREAD_UDP_FORWARD
 
 config OPENTHREAD_UPTIME
 	bool "Openthread uptime counter"
+	default y if OPENTHREAD_FTD
