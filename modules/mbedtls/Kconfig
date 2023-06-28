@@ -231,7 +231,7 @@ config APP_LINK_WITH_MBEDTLS
 	  disabled if the include paths for MBEDTLS are causing aliasing
 	  issues for 'app'.
 
+endif # MBEDTLS
+
 # Add PSA configurations
 rsource "Kconfig.psa"
-
-endif # MBEDTLS
