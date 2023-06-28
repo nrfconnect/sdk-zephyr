@@ -16,9 +16,6 @@
 
 #define WIFI_COUNTRY_CODE_LEN 2
 
-#define WIFI_LISTEN_INTERVAL_MIN 0
-#define WIFI_LISTEN_INTERVAL_MAX 65535
-
 /* Not having support for legacy types is deliberate to enforce
  * higher security.
  */
@@ -378,9 +375,4 @@ static inline const char *get_twt_err_code_str(int16_t err_no)
 
 	return "<unknown>";
 }
-
-enum ps_param_type {
-        WIFI_PS_PARAM_STATE,
-	WIFI_PS_PARAM_LISTEN_INTERVAL,
-};
 #endif /* ZEPHYR_INCLUDE_NET_WIFI_H_ */
