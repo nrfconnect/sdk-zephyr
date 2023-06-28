@@ -593,13 +593,8 @@ static int cmd_wifi_ps(const struct shell *sh, size_t argc, char *argv[])
 		shell_fprintf(sh, SHELL_NORMAL, "PS wake up mode: %s\n",
 				config.ps_params.wakeup_mode ? "Listen interval" : "DTIM");
 
-		if (config.ps_params.timeout_ms) {
-			shell_fprintf(sh, SHELL_NORMAL, "PS timeout: %d ms\n",
-					config.ps_params.timeout_ms);
-		} else {
-			shell_fprintf(sh, SHELL_NORMAL, "PS timeout: disabled\n");
-		}
-
+		shell_fprintf(sh, SHELL_NORMAL, "PS timeout: %d ms\n",
+				config.ps_params.timeout_ms);
 
 		if (config.num_twt_flows == 0) {
 			shell_fprintf(sh, SHELL_NORMAL, "No TWT flows\n");
@@ -700,11 +695,8 @@ static int cmd_wifi_ps_timeout(const struct shell *sh, size_t argc, char *argv[]
 		return -ENOEXEC;
 	}
 
-	if (params.timeout_ms) {
-		shell_fprintf(sh, SHELL_NORMAL, "PS timeout: %d ms\n", params.timeout_ms);
-	} else {
-		shell_fprintf(sh, SHELL_NORMAL, "PS timeout: disabled\n");
-	}
+	shell_fprintf(sh, SHELL_NORMAL,
+		"PS timeout %d ms\n", params.timeout_ms);
 
 	return 0;
 }

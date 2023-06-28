@@ -203,13 +203,7 @@ struct wifi_ps_params {
 	unsigned short listen_interval;
 	enum wifi_ps_wakeup_mode wakeup_mode;
 	enum wifi_ps_mode mode;
-	/* This is the time out to wait after sending a TX packet
-	 * before going back to power save (in ms) to receive any replies
-	 * from the AP. Zero means this feature is disabled.
-	 *
-	 * It's a tradeoff between power consumption and latency.
-	 */
-	unsigned int timeout_ms;
+	int timeout_ms;
 	enum ps_param_type type;
 	enum wifi_config_ps_param_fail_reason fail_reason;
 };
