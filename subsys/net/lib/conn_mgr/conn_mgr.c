@@ -14,7 +14,6 @@ LOG_MODULE_REGISTER(conn_mgr, CONFIG_NET_CONNECTION_MANAGER_LOG_LEVEL);
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_mgmt.h>
 
-#include <zephyr/net/conn_mgr_connectivity.h>
 #include <conn_mgr.h>
 
 #if defined(CONFIG_NET_TC_THREAD_COOPERATIVE)
@@ -175,8 +174,6 @@ static void conn_mgr_init_cb(struct net_if *iface, void *user_data)
 
 static void conn_mgr_handler(void)
 {
-	conn_mgr_conn_init();
-
 	conn_mgr_init_events_handler();
 
 	net_if_foreach(conn_mgr_init_cb, NULL);
