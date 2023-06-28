@@ -160,7 +160,7 @@ static void init_bufs(void)
 	}
 }
 
-int main(void)
+void main(void)
 {
 	int err;
 	struct bt_le_ext_adv *pawr_adv;
@@ -173,40 +173,38 @@ int main(void)
 	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
-		return 0;
+		return;
 	}
 
 	/* Create a non-connectable non-scannable advertising set */
 	err = bt_le_ext_adv_create(BT_LE_EXT_ADV_NCONN_NAME, &adv_cb, &pawr_adv);
 	if (err) {
 		printk("Failed to create advertising set (err %d)\n", err);
-		return 0;
+		return;
 	}
 
 	/* Set periodic advertising parameters */
 	err = bt_le_per_adv_set_param(pawr_adv, &per_adv_params);
 	if (err) {
 		printk("Failed to set periodic advertising parameters (err %d)\n", err);
-		return 0;
+		return;
 	}
 
 	/* Enable Periodic Advertising */
 	err = bt_le_per_adv_start(pawr_adv);
 	if (err) {
 		printk("Failed to enable periodic advertising (err %d)\n", err);
-		return 0;
+		return;
 	}
 
 	printk("Start Periodic Advertising\n");
 	err = bt_le_ext_adv_start(pawr_adv, BT_LE_EXT_ADV_START_DEFAULT);
 	if (err) {
 		printk("Failed to start extended advertising (err %d)\n", err);
-		return 0;
+		return;
 	}
 
 	while (true) {
 		k_sleep(K_SECONDS(1));
 	}
-
-	return 0;
 }
