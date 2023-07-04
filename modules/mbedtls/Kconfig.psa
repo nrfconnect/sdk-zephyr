@@ -107,12 +107,12 @@ config PSA_HAS_AEAD_SUPPORT
 
 config PSA_WANT_ALG_CCM
 	bool
-	prompt "PSA AES CCM support" if !PSA_PROMPTLESS
+	prompt "PSA CCM support" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_GCM
 	bool
-	prompt "PSA AES GCM support" if !PSA_PROMPTLESS
+	prompt "PSA GCM support" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_CHACHA20_POLY1305
@@ -141,7 +141,7 @@ config PSA_WANT_ALG_CBC_MAC
 
 config PSA_WANT_ALG_CMAC
 	bool
-	prompt "PSA AES CMAC support" if !PSA_PROMPTLESS
+	prompt "PSA CMAC support" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_HMAC
@@ -220,7 +220,7 @@ config PSA_HAS_CIPHER_SUPPORT
 
 config PSA_WANT_ALG_ECB_NO_PADDING
 	bool
-	prompt "PSA AES ECB (no padding)" if !PSA_PROMPTLESS
+	prompt "PSA ECB (no padding)" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_CBC_NO_PADDING
@@ -235,21 +235,21 @@ config PSA_WANT_ALG_CBC_PKCS7
 
 config PSA_WANT_ALG_CFB
 	bool
-	prompt "PSA AES CFB support" if !PSA_PROMPTLESS
+	prompt "PSA CFB support" if !PSA_PROMPTLESS
 
 config PSA_WANT_ALG_CTR
 	bool
-	prompt "PSA AES CTR mode support" if !PSA_PROMPTLESS
+	prompt "PSA CTR mode support" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_OFB
 	bool
-	prompt "PSA AES OFB mode support" if !PSA_PROMPTLESS
+	prompt "PSA OFB mode support" if !PSA_PROMPTLESS
 
 config PSA_WANT_ALG_XTS
 	bool
 	help
-	  AES XTS is currently not supported
+	  PSA XTS is currently not supported
 
 endmenu # PSA Cipher Support
 
