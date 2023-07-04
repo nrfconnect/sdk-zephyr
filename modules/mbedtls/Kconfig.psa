@@ -220,35 +220,40 @@ config PSA_HAS_CIPHER_SUPPORT
 
 config PSA_WANT_ALG_ECB_NO_PADDING
 	bool
-	prompt "PSA ECB (no padding)" if !PSA_PROMPTLESS
+	prompt "PSA ECB block cipher mode support (with no padding)" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_CBC_NO_PADDING
 	bool
-	prompt "PSA CBC support (without padding)" if !PSA_PROMPTLESS
+	prompt "PSA CBC block cipher mode support (with no padding)" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_CBC_PKCS7
 	bool
-	prompt "PSA CBC support (padded with PKCS#7)" if !PSA_PROMPTLESS
+	prompt "PSA CBC block cipher mode support (with PKCS#7 padding)" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_CFB
 	bool
-	prompt "PSA CFB support" if !PSA_PROMPTLESS
+	prompt "PSA stream cipher using CFB block cipher mode support" if !PSA_PROMPTLESS
 
 config PSA_WANT_ALG_CTR
 	bool
-	prompt "PSA CTR mode support" if !PSA_PROMPTLESS
+	prompt "PSA stream cipher using CTR block cipher mode support" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_OFB
 	bool
-	prompt "PSA OFB mode support" if !PSA_PROMPTLESS
+	prompt "PSA stream cipher using OFB block cipher mode support" if !PSA_PROMPTLESS
 
 config PSA_WANT_ALG_XTS
 	bool
-	prompt "PSA XTS mode support" if !PSA_PROMPTLESS
+	prompt "PSA XTS block cipher mode support" if !PSA_PROMPTLESS
+
+config PSA_WANT_ALG_STREAM_CIPHER
+	bool
+	prompt "PSA stream cipher support" if !PSA_PROMPTLESS
+	default y if !PSA_DEFAULT_OFF
 
 endmenu # PSA Cipher Support
 
@@ -429,11 +434,6 @@ config PSA_WANT_ALG_RSA_PSS
 	prompt "PSA RSA (PSS mode)" if !PSA_PROMPTLESS
 
 endmenu # PSA Asymmetric support
-
-config PSA_WANT_ALG_STREAM_CIPHER
-	bool
-	prompt "PSA stream cipher support" if !PSA_PROMPTLESS
-	default y if !PSA_DEFAULT_OFF
 
 config PSA_WANT_ALG_JPAKE
 	bool
