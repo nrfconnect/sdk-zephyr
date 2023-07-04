@@ -226,7 +226,8 @@ config PSA_HAS_CIPHER_SUPPORT
 		   PSA_WANT_ALG_CTR		|| \
 		   PSA_WANT_ALG_OFB		|| \
 		   PSA_WANT_ALG_CTR		|| \
-		   PSA_WANT_ALG_XTS
+		   PSA_WANT_ALG_XTS             || \
+		   PSA_WANT_ALG_STREAM_CIPHER
 	help
 	  Prompt-less configuration that states that cipher is supported.
 
