@@ -73,7 +73,8 @@ config PSA_WANT_KEY_TYPE_AES
 config PSA_WANT_KEY_TYPE_CHACHA20
 	bool
 	default y
-	depends on PSA_WANT_ALG_CHACHA20_POLY1305
+	depends on PSA_WANT_ALG_CHACHA20_POLY1305 || \
+		   PSA_WANT_ALG_STREAM_CIPHER
 	help
 	  Prompt-less configuration that states that CHACHA20 key type is used.
 
