@@ -117,7 +117,7 @@ config PSA_WANT_ALG_GCM
 
 config PSA_WANT_ALG_CHACHA20_POLY1305
 	bool
-	prompt "PSA ChaCha20/Poly1305 support" if !PSA_PROMPTLESS
+	prompt "PSA ChaCha20-Poly1305 support" if !PSA_PROMPTLESS
 	default y if !PSA_DEFAULT_OFF
 
 endmenu # PSA AEAD support
