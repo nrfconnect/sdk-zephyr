@@ -55,7 +55,18 @@ config PSA_WANT_KEY_TYPE_HMAC
 config PSA_WANT_KEY_TYPE_AES
 	bool
 	default y
-	depends on PSA_HAS_CIPHER_SUPPORT || PSA_HAS_AEAD_SUPPORT
+	depends on PSA_WANT_ALG_ECB_NO_PADDING	|| \
+		   PSA_WANT_ALG_CBC_NO_PADDING	|| \
+		   PSA_WANT_ALG_CBC_PKCS7	|| \
+		   PSA_WANT_ALG_CFB 		|| \
+		   PSA_WANT_ALG_CTR		|| \
+		   PSA_WANT_ALG_OFB		|| \
+		   PSA_WANT_ALG_CTR		|| \
+		   PSA_WANT_ALG_XTS             || \
+		   PSA_WANT_ALG_CCM             || \
+		   PSA_WANT_ALG_GCM             || \
+		   PSA_WANT_ALG_CBC_MAC	        || \
+		   PSA_WANT_ALG_CMAC
 	help
 	  Prompt-less configuration that states that AES key type is used.
 
