@@ -419,11 +419,11 @@ config PSA_WANT_ALG_RSA_OAEP
 
 config PSA_WANT_ALG_RSA_PKCS1V15_CRYPT
 	bool
-	prompt "PSA RSA crypt support (PKCS1V15 mode)" if !PSA_PROMPTLESS
+	prompt "PSA RSA crypt support (PKCS#1 v1.5 mode)" if !PSA_PROMPTLESS
 
 config PSA_WANT_ALG_RSA_PKCS1V15_SIGN
 	bool
-	prompt "PSA RSA signature support (PKCS1V15 mode)" if !PSA_PROMPTLESS
+	prompt "PSA RSA signature support (PKCS#1 v1.5 mode)" if !PSA_PROMPTLESS
 
 config PSA_WANT_ALG_RSA_PSS
 	bool
