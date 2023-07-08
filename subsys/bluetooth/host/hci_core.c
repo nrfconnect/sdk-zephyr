@@ -1698,8 +1698,14 @@ static void le_phy_update_complete(struct net_buf *buf)
 
 bool bt_le_conn_params_valid(const struct bt_le_conn_param *param)
 {
-	/* All limits according to BT Core spec 5.0 [Vol 2, Part E, 7.8.12] */
+	bool llpm = (((0x0D01 <= param->interval_min) && (param->interval_max <= 0x0D07)) &&
+				((0x0D01 <= param->interval_min) && (param->interval_max <= 0x0D07)));
+	if (llpm)
+	{
+		return true;
+	}
 
+	/* All limits according to BT Core spec 5.0 [Vol 2, Part E, 7.8.12] */
 	if (param->interval_min > param->interval_max ||
 	    param->interval_min < 6 || param->interval_max > 3200) {
 		return false;
