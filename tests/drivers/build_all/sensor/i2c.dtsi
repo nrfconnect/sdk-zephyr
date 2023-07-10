@@ -90,12 +90,6 @@ test_i2c_bmm150: bmm150@d {
 	reg = <0xd>;
 };
 
-test_i2c_ft5336: ft5336@e {
-	compatible = "focaltech,ft5336";
-	reg = <0xe>;
-	int-gpios = <&test_gpio 0 0>;
-};
-
 test_i2c_ht16k33: ht16k33@f {
 	compatible = "holtek,ht16k33";
 	reg = <0xf>;
@@ -597,7 +591,7 @@ test_i2c_ina230: ina230@5e {
 	reg = <0x5e>;
 	config = <0>;
 	current-lsb-microamps = <1000>;
-	rshunt-milliohms = <0>;
+	rshunt-micro-ohms = <1000>;
 	mask = <0>;
 	alert-limit = <0>;
 	alert-gpios = <&test_gpio 0 0>;
@@ -614,7 +608,7 @@ test_i2c_ina231: ina231@60 {
 	reg = <0x60>;
 	config = <0>;
 	current-lsb-microamps = <1000>;
-	rshunt-milliohms = <0>;
+	rshunt-micro-ohms = <1000>;
 	mask = <0>;
 	alert-limit = <0>;
 	alert-gpios = <&test_gpio 0 0>;
@@ -626,7 +620,7 @@ test_i2c_ina237: ina237@61 {
 	config = <0>;
 	current-lsb-microamps = <1000>;
 	adc-config = <0>;
-	rshunt-milliohms = <0>;
+	rshunt-micro-ohms = <1000>;
 	alert-config = <0>;
 	alert-gpios = <&test_gpio 0 0>;
 };

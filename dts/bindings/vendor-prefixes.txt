@@ -173,6 +173,7 @@ ebv	EBV Elektronik
 eckelmann	Eckelmann AG
 edt	Emerging Display Technologies
 eeti	eGalax_eMPIA Technology Inc
+efinix	Efinix Inc
 einfochips	Einfochips
 elan	Elan Microelectronic Corp.
 element14	Element14 (A Premier Farnell Company)
@@ -612,6 +613,7 @@ topeet	Topeet
 toppoly	TPO (deprecated, use tpo)
 topwise	Topwise Communication Co., Ltd.
 toradex	Toradex AG
+torex	Torex Semiconductor Ltd.
 toshiba	Toshiba Corporation
 toumaz	Toumaz
 tpk	TPK U.S.A. LLC

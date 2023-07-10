@@ -461,6 +461,17 @@
 			status = "disabled";
 		};
 
+		mac: ethernet@40028000 {
+			compatible = "st,stm32-ethernet";
+			reg = <0x40028000 0x8000>;
+			interrupts = <106 0>;
+			clock-names = "stmmaceth", "mac-clk-tx", "mac-clk-rx";
+			clocks = <&rcc STM32_CLOCK_BUS_AHB1 0x00080000>,
+				 <&rcc STM32_CLOCK_BUS_AHB1 0x00100000>,
+				 <&rcc STM32_CLOCK_BUS_AHB1 0x00200000>;
+			status = "disabled";
+		};
+
 		gpdma1: dma@40020000 {
 			compatible = "st,stm32u5-dma";
 			#dma-cells = <3>;
@@ -482,6 +493,19 @@
 			dma-channels = <8>;
 			dma-requests = <140>;
 			dma-offset = <8>;
+			status = "disabled";
+		};
+
+		usb: usb@40016000 {
+			compatible = "st,stm32-usb";
+			reg = <0x40016000 0x400>;
+			interrupts = <74 0>;
+			interrupt-names = "usb";
+			num-bidir-endpoints = <8>;
+			ram-size = <2048>;
+			phys = <&usb_fs_phy>;
+			clocks = <&rcc STM32_CLOCK_BUS_APB2 0x01000000>,
+				 <&rcc STM32_SRC_HSI48 USB_SEL(3)>;
 			status = "disabled";
 		};
 	};
@@ -511,6 +535,11 @@
 		ratio = <4>;
 		io-channels = <&adc1 2>;
 		status = "disabled";
+	};
+
+	usb_fs_phy: usbphy {
+		compatible = "usb-nop-xceiv";
+		#phy-cells = <0>;
 	};
 };
 
