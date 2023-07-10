@@ -1015,12 +1015,6 @@ static inline int net_eth_get_ptp_port(struct net_if *iface)
  */
 #if defined(CONFIG_NET_L2_PTP)
 void net_eth_set_ptp_port(struct net_if *iface, int port);
-#else
-static inline void net_eth_set_ptp_port(struct net_if *iface, int port)
-{
-	ARG_UNUSED(iface);
-	ARG_UNUSED(port);
-}
 #endif /* CONFIG_NET_L2_PTP */
 
 /**
