@@ -52,7 +52,6 @@ zephyr_interface_library_named(mbedTLS)
       ${ZEPHYR_CURRENT_MODULE_DIR}/library/cipher.c
       ${ZEPHYR_CURRENT_MODULE_DIR}/library/cipher_wrap.c
       ${ZEPHYR_CURRENT_MODULE_DIR}/library/cmac.c
-      ${ZEPHYR_CURRENT_MODULE_DIR}/library/code_share.c
       ${ZEPHYR_CURRENT_MODULE_DIR}/library/ctr_drbg.c
       ${ZEPHYR_CURRENT_MODULE_DIR}/library/debug.c
       ${ZEPHYR_CURRENT_MODULE_DIR}/library/des.c
