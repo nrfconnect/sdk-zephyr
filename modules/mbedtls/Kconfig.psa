@@ -29,6 +29,8 @@ config PSA_WANT_ALG_HMAC_DRBG
 
 endmenu # RNG support
 
+menu "PSA key type support"
+
 config PSA_HAS_KEY_SUPPORT
 	bool
 	default y
@@ -39,75 +41,74 @@ config PSA_HAS_KEY_SUPPORT
 		   PSA_WANT_KEY_TYPE_ECC_KEY_PAIR	|| \
 		   PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY	|| \
 		   PSA_WANT_KEY_TYPE_RSA_KEY_PAIR	|| \
-		   PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY
+		   PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY     || \
+		   PSA_WANT_KEY_TYPE_DH_KEY_PAIR        || \
+		   PSA_WANT_KEY_TYPE_DH_KEY_PAIR
 
 config PSA_WANT_KEY_TYPE_DERIVE
-	bool
-	default y
-	depends on PSA_HAS_KEY_DERIVATION
+	bool "PSA derive key type support"
 	help
-	  Prompt-less configuration that states that the derived key type is used.
+	  This key type is for high-entropy secrets only.
+	  For low-entropy secrets, password key type should be used instead.
+
+config PSA_WANT_KEY_TYPE_RAW_DATA
+	bool "PSA raw data key type support"
+	help
+	  A "key" of this type cannot be used for any cryptographic operation.
+	  Applications can use this type to store arbitrary data in the keystore.
 
 config PSA_WANT_KEY_TYPE_HMAC
-	bool
-	default y
-	depends on PSA_HAS_MAC_SUPPORT
+	bool "PSA HMAC key type support"
 	help
-	  Prompt-less configuration that states that the HMAC key type is used.
+	  HMAC key.
 
 config PSA_WANT_KEY_TYPE_AES
-	bool
-	default y
-	depends on PSA_WANT_ALG_ECB_NO_PADDING	|| \
-		   PSA_WANT_ALG_CBC_NO_PADDING	|| \
-		   PSA_WANT_ALG_CBC_PKCS7	|| \
-		   PSA_WANT_ALG_CFB 		|| \
-		   PSA_WANT_ALG_CTR		|| \
-		   PSA_WANT_ALG_OFB		|| \
-		   PSA_WANT_ALG_CTR		|| \
-		   PSA_WANT_ALG_XTS             || \
-		   PSA_WANT_ALG_CCM             || \
-		   PSA_WANT_ALG_GCM             || \
-		   PSA_WANT_ALG_CBC_MAC	        || \
-		   PSA_WANT_ALG_CMAC
+	bool "PSA AES key type support"
 	help
-	  Prompt-less configuration that states that AES key type is used.
+	  Key for cipher, AEAD or MAC algorithm based on the AES block cipher.
 
 config PSA_WANT_KEY_TYPE_CHACHA20
-	bool
+	bool "PSA ChaCha20 key type support"
 	default y
 	depends on PSA_WANT_ALG_CHACHA20_POLY1305 || \
 		   PSA_WANT_ALG_STREAM_CIPHER
 	help
-	  Prompt-less configuration that states that CHACHA20 key type is used.
+	  Key for the ChaCha20 stream cipher or the ChaCha20-Poly1305 AEAD algorithm.
 
 config PSA_WANT_KEY_TYPE_ECC_KEY_PAIR
-	bool
-	default y
-	depends on PSA_HAS_ECC_SUPPORT
+	bool "PSA ECC key pair support"
+	select PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY
 	help
-	  Prompt-less configuration that states that ECC key pair type is used.
+	  Elliptic curve key pair: both the private and public key.
 
 config PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY
-	bool
-	default y
-	depends on PSA_HAS_ECC_SUPPORT
+	bool "PSA ECC public key support"
 	help
-	  Prompt-less configuration that states that ECC public key type is used.
+	  Elliptic curve public key.
 
 config PSA_WANT_KEY_TYPE_RSA_KEY_PAIR
-	bool
-	default y
-	depends on PSA_HAS_RSA_SUPPORT
+	bool "PSA RSA key pair type support"
+	select PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY
 	help
-	  Prompt-less configuration that states that RSA key pair type is used.
+	  RSA key pair: both the private and public key.
 
 config PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY
-	bool
-	default y
-	depends on PSA_HAS_RSA_SUPPORT
+	bool "PSA RSA public key support"
 	help
-	  Prompt-less configuration that states that RSA public key type is used.
+	  RSA public key.
+
+config PSA_WANT_KEY_TYPE_DH_KEY_PAIR
+	bool "PSA DH key pair type support"
+	select PSA_WANT_KEY_TYPE_DH_PUBLIC_KEY
+	help
+	  Finite-field Diffie-Hellman key pair: both the private key and public key.
+
+config PSA_WANT_KEY_TYPE_DH_PUBLIC_KEY
+	bool "PSA DH public key support"
+	help
+	  Finite-field Diffie-Hellman public key.
+
+endmenu # PSA Key type support
 
 menu "PSA AEAD support"
 
@@ -334,7 +335,11 @@ config PSA_HAS_ASYM_SIGN_SUPPORT
 
 config PSA_HAS_ECC_SUPPORT
 	bool
-	depends on PSA_WANT_ALG_ECDH || PSA_WANT_ALG_ECDSA || PSA_WANT_ALG_DETERMINISTIC_ECDSA
+	depends on PSA_WANT_ALG_ECDH                    || \
+		   PSA_WANT_ALG_ECDSA                   || \
+		   PSA_WANT_ALG_DETERMINISTIC_ECDSA     || \
+		   PSA_WANT_KEY_TYPE_ECC_KEY_PAIR       || \
+		   PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY
 	default y
 	help
 	  Prompt-less configuration that states that ECC is supported.
@@ -413,7 +418,9 @@ config PSA_HAS_RSA_SUPPORT
 	depends on PSA_WANT_ALG_RSA_OAEP 		|| \
 		   PSA_WANT_ALG_RSA_PKCS1V15_CRYPT 	|| \
 		   PSA_WANT_ALG_RSA_PKCS1V15_SIGN 	|| \
-		   PSA_WANT_ALG_RSA_PSS
+		   PSA_WANT_ALG_RSA_PSS                 || \
+		   PSA_WANT_KEY_TYPE_RSA_KEY_PAIR       || \
+		   PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY
 	default y
 	help
 	  Prompt-less configuration that states that RSA is supported.
