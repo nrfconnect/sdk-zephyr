@@ -179,7 +179,7 @@ config PSA_HAS_HASH_SUPPORT
 
 config PSA_WANT_ALG_SHA_1
 	bool
-	prompt "PSA SHA1 support" if !PSA_PROMPTLESS
+	prompt "PSA SHA-1 support" if !PSA_PROMPTLESS
 
 config PSA_WANT_ALG_SHA_224
 	bool
@@ -199,7 +199,7 @@ config PSA_WANT_ALG_SHA_512
 
 config PSA_WANT_ALG_RIPEMD160
 	bool
-	prompt "PSA RIPEMD160 support" if !PSA_PROMPTLESS
+	prompt "PSA RIPEMD-160 support" if !PSA_PROMPTLESS
 
 config PSA_WANT_ALG_MD5
 	bool
