@@ -179,7 +179,10 @@ config PSA_HAS_HASH_SUPPORT
 
 config PSA_WANT_ALG_SHA_1
 	bool
-	prompt "PSA SHA-1 support" if !PSA_PROMPTLESS
+	prompt "PSA SHA-1 support (weak)" if !PSA_PROMPTLESS
+	help
+	  Warning: The SHA-1 hash is weak and deprecated and is only recommended
+	  for use in legacy protocols.
 
 config PSA_WANT_ALG_SHA_224
 	bool
@@ -203,7 +206,10 @@ config PSA_WANT_ALG_RIPEMD160
 
 config PSA_WANT_ALG_MD5
 	bool
-	prompt "PSA MD5 support" if !PSA_PROMPTLESS
+	prompt "PSA MD5 support (weak)" if !PSA_PROMPTLESS
+	help
+	  Warning: The MD5 hash is weak and deprecated and is only recommended
+	  for use in legacy protocols.
 
 endmenu # PSA Hash support
 
