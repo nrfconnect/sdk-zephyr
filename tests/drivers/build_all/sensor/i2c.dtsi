@@ -90,12 +90,6 @@ test_i2c_bmm150: bmm150@d {
 	reg = <0xd>;
 };
 
-test_i2c_ft5336: ft5336@e {
-	compatible = "focaltech,ft5336";
-	reg = <0xe>;
-	int-gpios = <&test_gpio 0 0>;
-};
-
 test_i2c_ht16k33: ht16k33@f {
 	compatible = "holtek,ht16k33";
 	reg = <0xf>;
@@ -597,7 +591,7 @@ test_i2c_ina230: ina230@5e {
 	reg = <0x5e>;
 	config = <0>;
 	current-lsb-microamps = <1000>;
-	rshunt-milliohms = <0>;
+	rshunt-micro-ohms = <1000>;
 	mask = <0>;
 	alert-limit = <0>;
 	alert-gpios = <&test_gpio 0 0>;
@@ -614,7 +608,7 @@ test_i2c_ina231: ina231@60 {
 	reg = <0x60>;
 	config = <0>;
 	current-lsb-microamps = <1000>;
-	rshunt-milliohms = <0>;
+	rshunt-micro-ohms = <1000>;
 	mask = <0>;
 	alert-limit = <0>;
 	alert-gpios = <&test_gpio 0 0>;
@@ -626,7 +620,7 @@ test_i2c_ina237: ina237@61 {
 	config = <0>;
 	current-lsb-microamps = <1000>;
 	adc-config = <0>;
-	rshunt-milliohms = <0>;
+	rshunt-micro-ohms = <1000>;
 	alert-config = <0>;
 	alert-gpios = <&test_gpio 0 0>;
 };
@@ -750,4 +744,26 @@ test_tcn75a: tcn75a@73 {
 	compatible = "microchip,tcn75a";
 	reg = <0x73>;
 	alert-gpios = <&test_gpio 0 0>;
+};
+
+test_i2c_bmi08x_accel: bmi08x@74 {
+	compatible = "bosch,bmi08x-accel";
+	reg = <0x74>;
+	int-gpios = <&test_gpio 0 0>;
+	int1-map-io = <0x01>;
+	int2-map-io = <0x00>;
+	int1-conf-io = <0x0A>;
+	int2-conf-io = <0x17>;
+	accel-hz = "800";
+	accel-fs = <4>;
+};
+
+test_i2c_bmi08x_gyro: bmi08x@75 {
+	compatible = "bosch,bmi08x-gyro";
+	reg = <0x75>;
+	int-gpios = <&test_gpio 0 0>;
+	int3-4-map-io = <0x01>;
+	int3-4-conf-io = <0x01>;
+	gyro-hz = "1000_116";
+	gyro-fs = <1000>;
 };

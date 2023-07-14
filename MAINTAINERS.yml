@@ -670,6 +670,8 @@ Release Notes:
   status: maintained
   maintainers:
     - thedjnK
+  collaborators:
+    - xingrz
   files:
     - include/zephyr/drivers/auxdisplay.h
     - drivers/auxdisplay/*
@@ -1018,6 +1020,7 @@ Release Notes:
     - fgrandel
   files:
     - drivers/ieee802154/
+    - include/zephyr/net/ieee802154_radio.h
   labels:
     - "area: IEEE 802.15.4"
 
@@ -1548,6 +1551,7 @@ Input:
     - include/zephyr/input/
     - samples/subsys/input/
     - subsys/input/
+    - tests/drivers/build_all/input/
     - tests/subsys/input/
   description: >-
     Input subsystem and drivers
@@ -1670,7 +1674,6 @@ Logging:
   maintainers:
     - nordic-krch
   collaborators:
-    - aasthagr
     - dcpleung
   files:
     - include/zephyr/logging/
@@ -1775,26 +1778,29 @@ hawkBit:
   description: >-
     UpdateHub embedded Firmware Over-The-Air (FOTA) upgrade agent
 
-Native POSIX and POSIX arch:
+Native POSIX/Sim and POSIX arch:
   status: maintained
   maintainers:
     - aescolar
   files:
     - arch/posix/
-    - boards/posix/native_posix/
+    - boards/posix/native_*/
     - boards/posix/doc/
     - boards/posix/*.rst
-    - drivers/*/*native_posix*
-    - drivers/*/*/*native_posix*
+    - drivers/*/*posix*
+    - drivers/*/*native*
+    - drivers/*/*/*posix*
+    - drivers/*/*/*native*
     - dts/posix/
     - include/zephyr/arch/posix/
+    - scripts/native_simulator/*
     - scripts/valgrind.supp
     - soc/posix/
     - tests/boards/native_posix/
   labels:
     - "area: native port"
   description: >-
-    POSIX architecture and SOC, native_posix board, and related drivers
+    POSIX architecture and SOC, native_posix & native_sim boards, and related drivers
 
 Networking:
   status: maintained
@@ -1802,6 +1808,7 @@ Networking:
     - rlubos
   collaborators:
     - tbursztyka
+    - ssharks
   files:
     - drivers/net/
     - include/zephyr/net/
@@ -1896,6 +1903,24 @@ Networking:
   labels:
     - "area: Networking"
 
+"Networking: Native IEEE 802.15.4":
+  status: maintained
+  maintainers:
+    - tbursztyka
+  collaborators:
+    - rlubos
+    - fgrandel
+  files:
+    - doc/connectivity/networking/api/ieee802154.rst
+    - include/zephyr/net/ieee802154.h
+    - include/zephyr/net/ieee802154_pkt.h
+    - include/zephyr/net/ieee802154_mgmt.h
+    - subsys/net/l2/ieee802154/
+    - subsys/net/lib/config/ieee802154_*
+    - tests/net/ieee802154/
+  labels:
+    - "area: IEEE 802.15.4"
+
 "Networking: OpenThread":
   status: maintained
   maintainers:
@@ -1960,6 +1985,7 @@ Power management:
     - gmarull
     - teburd
     - tmleman
+    - JordanYates
   files:
     - include/zephyr/pm/
     - samples/subsys/pm/
@@ -2031,11 +2057,14 @@ Twister:
     - hakehuang
     - gopiotr
     - golowanow
+    - gchwier
   files:
     - scripts/twister
     - scripts/pylib/twister/
     - scripts/tests/twister/
     - doc/develop/test/twister.rst
+    - scripts/pylib/pytest-twister-harness/
+    - doc/develop/test/pytest.rst
   labels:
     - "area: Twister"
 
@@ -2222,9 +2251,7 @@ Intel Platforms (X86):
     - jhedberg
   collaborators:
     - tbursztyka
-    - aasthagr
     - laurenmurphyx64
-    - MaureenHelm
   files:
     - boards/x86/
     - dts/x86/intel/
@@ -2244,7 +2271,6 @@ Intel Platforms (Xtensa):
     - lgirdwood
     - marc-hb
     - kv2019i
-    - MaureenHelm
     - ceolin
     - aborisovich
     - tmleman
@@ -2378,6 +2404,20 @@ Renesas R-Car Platforms:
     Renesas R-Car SOCs, dts files and related drivers. Renesas boards based
     on R-Car SOCs.
 
+Renesas R-Car ARM64 Platforms:
+  status: maintained
+  maintainers:
+    - lorc
+  files:
+    - boards/arm64/rcar_*/
+    - dts/arm64/renesas/
+    - soc/arm64/renesas_rcar/
+  labels:
+    - "platform: Renesas R-Car ARM64"
+  description: >-
+    Renesas R-Car SOCs and dts files, ARMv8 side. Zephyr running on ARMv8 CPUs on Renesas
+    boards based on R-Car SOCs.
+
 STM32 Platforms:
   status: maintained
   maintainers:
@@ -2437,15 +2477,12 @@ ITE Platforms:
     - GTLin08
     - RuibinChang
   collaborators:
-    - Dino-Li
-    - GTLin08
-    - RuibinChang
     - jackrosenthal
     - keith-zephyr
     - brockus-zephyr
     - sjg20
   files:
-    - boards/riscv/it8xxx2_evb/
+    - boards/riscv/it8*_evb/
     - drivers/*/*/*it8xxx2*.c
     - drivers/*/*it8xxx2*.c
     - dts/bindings/*/*ite*
@@ -2583,7 +2620,7 @@ Task Watchdog:
 TF-M Integration:
   status: maintained
   maintainers:
-    - microbuilder
+    - d3zd3z
   collaborators:
     - joerchan
   files:
@@ -2961,7 +2998,9 @@ West:
     - manifest-hal_telink
 
 "West project: hal_ti":
-  status: odd fixes
+  status: maintained
+  maintainers:
+    - vaishnavachath
   collaborators:
     - cfriedt
   files: []
@@ -3207,11 +3246,10 @@ West:
 "West project: trusted-firmware-m":
   status: maintained
   maintainers:
-    - microbuilder
+    - d3zd3z
   collaborators:
     - joerchan
     - SebastianBoe
-    - theotherjimmy
   files:
     - modules/trusted-firmware-m/
   labels:
@@ -3220,11 +3258,10 @@ West:
 "West project: tf-m-tests":
   status: maintained
   maintainers:
-    - microbuilder
+    - d3zd3z
   collaborators:
     - joerchan
     - SebastianBoe
-    - theotherjimmy
   files: []
   labels:
     - manifest-tf-m-tests
@@ -3244,11 +3281,10 @@ West:
 "West project: psa-arch-tests":
   status: maintained
   maintainers:
-    - microbuilder
+    - d3zd3z
   collaborators:
     - joerchan
     - SebastianBoe
-    - theotherjimmy
   files: []
   labels:
     - manifest-psa-arch-tests
@@ -3306,7 +3342,6 @@ x86 arch:
     - nashif
     - dcpleung
     - ceolin
-    - aasthagr
     - laurenmurphyx64
   files:
     - arch/x86/

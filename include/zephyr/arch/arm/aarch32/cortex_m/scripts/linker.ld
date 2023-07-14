@@ -407,13 +407,8 @@ SECTIONS
 
     /* Define linker symbols */
 
-    _image_ram_end = .;
-    _end = .; /* end of image */
-
     __kernel_ram_end = RAM_ADDR + RAM_SIZE;
     __kernel_ram_size = __kernel_ram_end - __kernel_ram_start;
-
-    GROUP_END(RAMABLE_REGION)
 
 #if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_itcm), okay)
 GROUP_START(ITCM)
@@ -471,6 +466,10 @@ GROUP_END(DTCM)
  * zephyr_linker_sources() Cmake function.
  */
 #include <snippets-sections.ld>
+
+#include <zephyr/linker/ram-end.ld>
+
+    GROUP_END(RAMABLE_REGION)
 
 #include <zephyr/linker/debug-sections.ld>
 

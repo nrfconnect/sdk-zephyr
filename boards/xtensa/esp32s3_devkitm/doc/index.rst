@@ -92,6 +92,8 @@ Current Zephyr's ESP32-S3-DevKitM board supports the following features:
 +------------+------------+-------------------------------------+
 | SPI Master | on-chip    | spi                                 |
 +------------+------------+-------------------------------------+
+| TWAI/CAN   | on-chip    | can                                 |
++------------+------------+-------------------------------------+
 | Timers     | on-chip    | counter                             |
 +------------+------------+-------------------------------------+
 | Watchdog   | on-chip    | watchdog                            |
@@ -105,6 +107,8 @@ Current Zephyr's ESP32-S3-DevKitM board supports the following features:
 | PCNT       | on-chip    | qdec                                |
 +------------+------------+-------------------------------------+
 | GDMA       | on-chip    | dma                                 |
++------------+------------+-------------------------------------+
+| USB-CDC    | on-chip    | serial                              |
 +------------+------------+-------------------------------------+
 
 Prerequisites

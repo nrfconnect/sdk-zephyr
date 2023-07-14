@@ -327,13 +327,15 @@ struct ieee802154_cmd_assoc_req {
 		uint8_t dev_type : 1;
 		uint8_t power_src : 1;
 		uint8_t rx_on : 1;
-		uint8_t reserved_2 : 2;
+		uint8_t association_type : 1;
+		uint8_t reserved_2 : 1;
 		uint8_t sec_capability : 1;
 		uint8_t alloc_addr : 1;
 #else
 		uint8_t alloc_addr : 1;
 		uint8_t sec_capability : 1;
-		uint8_t reserved_2 : 2;
+		uint8_t reserved_2 : 1;
+		uint8_t association_type : 1;
 		uint8_t rx_on : 1;
 		uint8_t power_src : 1;
 		uint8_t dev_type : 1;
@@ -451,7 +453,7 @@ struct ieee802154_mpdu {
 struct ieee802154_frame_params {
 	struct {
 		union {
-			uint8_t *ext_addr; /* in big endian */
+			uint8_t ext_addr[IEEE802154_EXT_ADDR_LENGTH]; /* in big endian */
 			uint16_t short_addr; /* in CPU byte order */
 		};
 
@@ -478,7 +480,8 @@ void ieee802154_compute_header_and_authtag_len(struct net_if *iface, struct net_
 					       uint8_t *authtag_len);
 
 bool ieee802154_create_data_frame(struct ieee802154_context *ctx, struct net_linkaddr *dst,
-				  struct net_linkaddr *src, struct net_buf *buf, uint8_t hdr_len);
+				  struct net_linkaddr *src, struct net_buf *buf,
+				  uint8_t ll_hdr_len);
 
 struct net_pkt *ieee802154_create_mac_cmd_frame(struct net_if *iface, enum ieee802154_cfi type,
 						struct ieee802154_frame_params *params);

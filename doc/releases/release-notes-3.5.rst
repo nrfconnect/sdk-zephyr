@@ -190,8 +190,6 @@ Drivers and Sensors
 
 * PECI
 
-Trusted Firmware-M
-******************
 * Pin control
 
 * PWM
@@ -212,6 +210,12 @@ Trusted Firmware-M
 
 * Timer
 
+  * The TI CC13xx/26xx system clock timer compatible was changed from
+    :dtcompatible:`ti,cc13xx-cc26xx-rtc` to :dtcompatible:`ti,cc13xx-cc26xx-rtc-timer`
+    and the corresponding Kconfig option from :kconfig:option:`CC13X2_CC26X2_RTC_TIMER`
+    to :kconfig:option:`CC13XX_CC26XX_RTC_TIMER` for improved consistency and
+    extensibility. No action is required unless the internal timer was modified.
+
 * USB
 
 * W1
@@ -223,6 +227,10 @@ Trusted Firmware-M
 Networking
 **********
 
+* Wi-Fi
+  * Added Passive scan support.
+  * The Wi-Fi scan API updated with Wi-Fi scan parameter to allow scan mode selection.
+
 USB
 ***
 
@@ -231,6 +239,11 @@ Devicetree
 
 Libraries / Subsystems
 **********************
+
+* Management
+
+  * Added response checking to MCUmgr's :c:enumerator:`MGMT_EVT_OP_CMD_RECV`
+    notification callback to allow applications to reject MCUmgr commands.
 
 HALs
 ****
@@ -243,6 +256,11 @@ Storage
 
 Trusted Firmware-M
 ******************
+
+Trusted Firmware-A
+******************
+
+* Updated to TF-A 2.9.0.
 
 zcbor
 *****

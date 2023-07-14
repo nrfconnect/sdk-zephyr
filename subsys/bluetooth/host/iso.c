@@ -124,7 +124,7 @@ void hci_iso(struct net_buf *buf)
 		return;
 	}
 
-	iso = bt_conn_lookup_handle(iso(buf)->handle);
+	iso = bt_conn_lookup_handle(iso(buf)->handle, BT_CONN_TYPE_ISO);
 	if (iso == NULL) {
 		LOG_ERR("Unable to find conn for handle %u", iso(buf)->handle);
 		net_buf_unref(buf);
@@ -982,7 +982,7 @@ void hci_le_cis_established(struct net_buf *buf)
 	LOG_DBG("status 0x%02x handle %u", evt->status, handle);
 
 	/* ISO connection handles are already assigned at this point */
-	iso = bt_conn_lookup_handle(handle);
+	iso = bt_conn_lookup_handle(handle, BT_CONN_TYPE_ISO);
 	if (!iso) {
 		LOG_ERR("No connection found for handle %u", handle);
 		return;
@@ -1014,6 +1014,12 @@ void hci_le_cis_established(struct net_buf *buf)
 			rx = chan->qos->rx;
 			tx = chan->qos->tx;
 
+			/* As of BT Core 5.4, there is no way for the peripheral to get the actual
+			 * SDU size or SDU interval without the use of higher layer profiles such as
+			 * the Basic Audio Profile (BAP). The best we can do is use the PDU size
+			 * until https://bluetooth.atlassian.net/browse/ES-18552 has been resolved
+			 * and incorporated
+			 */
 			if (rx != NULL) {
 				rx->phy = bt_get_phy(evt->c_phy);
 				rx->sdu = sys_le16_to_cpu(evt->c_max_pdu);
@@ -1229,7 +1235,7 @@ void hci_le_cis_req(struct net_buf *buf)
 	}
 
 	/* Lookup existing connection with same handle */
-	iso = bt_conn_lookup_handle(cis_handle);
+	iso = bt_conn_lookup_handle(cis_handle, BT_CONN_TYPE_ISO);
 	if (iso) {
 		LOG_ERR("Invalid ISO handle %u", cis_handle);
 		hci_le_reject_cis(cis_handle, BT_HCI_ERR_CONN_LIMIT_EXCEEDED);
@@ -1238,7 +1244,7 @@ void hci_le_cis_req(struct net_buf *buf)
 	}
 
 	/* Lookup ACL connection to attach */
-	acl = bt_conn_lookup_handle(acl_handle);
+	acl = bt_conn_lookup_handle(acl_handle, BT_CONN_TYPE_LE);
 	if (!acl) {
 		LOG_ERR("Invalid ACL handle %u", acl_handle);
 		hci_le_reject_cis(cis_handle, BT_HCI_ERR_UNKNOWN_CONN_ID);
