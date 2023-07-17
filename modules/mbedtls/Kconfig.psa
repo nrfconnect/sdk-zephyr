@@ -453,8 +453,7 @@ config PSA_WANT_ALG_SPAKE2P
 	prompt "PSA SPAKE2+ support" if !PSA_PROMPTLESS
 	select EXPERIMENTAL
 
-config PSA_WANT_ALG_SRP
+config PSA_WANT_ALG_SRP_6
 	bool
-	prompt "PSA SRP support" if !PSA_PROMPTLESS
-	default n
+	prompt "PSA SRP-6 support" if !PSA_PROMPTLESS
 	select EXPERIMENTAL
