@@ -20,6 +20,9 @@
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device_runtime.h>
+#include <zephyr/pm/device.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(sx1509b, CONFIG_GPIO_LOG_LEVEL);
@@ -537,18 +540,17 @@ static int pin_interrupt_configure(const struct device *dev,
 }
 
 /**
- * @brief Initialization function of SX1509B
- *
+ * @brief PM power on function for SX1509B. This function essentially re-runs init so that SX1509B can be powered on
+ * when power is removed and then resupplied.
  * @param dev Device struct
  * @return 0 if successful, failed otherwise.
  */
-static int sx1509b_init(const struct device *dev)
-{
-	const struct sx1509b_config *cfg = dev->config;
+static int sx1509b_power_on(const struct device *dev) {
+    int rc;
+    const struct sx1509b_config *cfg = dev->config;
 	struct sx1509b_drv_data *drv_data = dev->data;
-	int rc;
 
-	if (!device_is_ready(cfg->bus.bus)) {
+    if (!device_is_ready(cfg->bus.bus)) {
 		LOG_ERR("I2C bus not ready");
 		rc = -ENODEV;
 		goto out;
@@ -627,6 +629,30 @@ out:
 	}
 	k_sem_give(&drv_data->lock);
 	return rc;
+}
+
+/**
+ * @brief Initialization function of SX1509B
+ *
+ * @param dev Device struct
+ * @return 0 if successful, failed otherwise.
+ */
+static int sx1509b_init(const struct device *dev)
+{
+	int rc;
+
+    rc = sx1509b_power_on(dev);
+    if (rc < 0) {
+        LOG_ERR("Failed %s init: %d", dev->name, rc);
+        return rc;
+    }
+
+    rc = pm_device_runtime_enable(dev);
+    if ((rc < 0) && (rc != -ENOSYS)) {
+        LOG_ERR("Failed %s pm setup: %d", dev->name, rc);
+        return rc;
+    }
+    return rc;
 }
 
 #ifdef CONFIG_GPIO_SX1509B_INTERRUPT
@@ -724,22 +750,47 @@ int sx1509b_led_intensity_pin_set(const struct device *dev, gpio_pin_t pin,
 	return rc;
 }
 
-#define GPIO_SX1509B_DEFINE(inst)                                              \
-	static const struct sx1509b_config sx1509b_cfg##inst = {               \
-		.common = {                                                    \
-			.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(inst),\
-		},                                                             \
-		.bus = I2C_DT_SPEC_INST_GET(inst),                             \
-		IF_ENABLED(CONFIG_GPIO_SX1509B_INTERRUPT,                      \
-			   (GPIO_DT_SPEC_INST_GET(inst, nint_gpios)))          \
-	};                                                                     \
-                                                                               \
-	static struct sx1509b_drv_data sx1509b_drvdata##inst = {               \
-		.lock = Z_SEM_INITIALIZER(sx1509b_drvdata##inst.lock, 1, 1),   \
-	};                                                                     \
-                                                                               \
-	DEVICE_DT_INST_DEFINE(inst, sx1509b_init, NULL, &sx1509b_drvdata##inst,\
-			      &sx1509b_cfg##inst, POST_KERNEL,                 \
-			      CONFIG_GPIO_SX1509B_INIT_PRIORITY, &api_table);
+static int sx1509b_pm_action(const struct device *dev, enum pm_device_action action)
+{
+    switch (action) {
+    case PM_DEVICE_ACTION_SUSPEND:
+        /* suspend the device */
+        break;
+    case PM_DEVICE_ACTION_RESUME:
+        /* resume the device */
+        // Re-initialize the sx1509b on resume
+        sx1509b_power_on(dev);
+        break;
+    case PM_DEVICE_ACTION_TURN_OFF:
+        break;
+    case PM_DEVICE_ACTION_TURN_ON:
+        // Re-initialize the sx1509b on resume
+        sx1509b_power_on(dev);
+        break;
+    default:
+        return -ENOTSUP;
+    }
 
-DT_INST_FOREACH_STATUS_OKAY(GPIO_SX1509B_DEFINE)
+    return 0;
+}
+
+static const struct sx1509b_config sx1509b_cfg = {
+	.common = {
+		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(0),
+	},
+	.bus = I2C_DT_SPEC_INST_GET(0),
+#ifdef CONFIG_GPIO_SX1509B_INTERRUPT
+	.nint_gpio = GPIO_DT_SPEC_INST_GET(0, nint_gpios),
+#endif
+};
+
+static struct sx1509b_drv_data sx1509b_drvdata = {
+	.lock = Z_SEM_INITIALIZER(sx1509b_drvdata.lock, 1, 1),
+};
+
+PM_DEVICE_DT_INST_DEFINE(0, sx1509b_pm_action);
+
+DEVICE_DT_INST_DEFINE(0, sx1509b_init, PM_DEVICE_DT_INST_GET(0),
+		 &sx1509b_drvdata, &sx1509b_cfg,
+		 POST_KERNEL, CONFIG_GPIO_SX1509B_INIT_PRIORITY,
+		 &api_table);
