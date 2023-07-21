@@ -12,6 +12,9 @@
 #include <zephyr/sys/byteorder.h>
 #include <string.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/device_runtime.h>
+#include <zephyr/pm/device.h>
 
 #include "hts221.h"
 
@@ -198,6 +201,30 @@ int hts221_init(const struct device *dev)
 	return 0;
 }
 
+static int hts221_pm_action(const struct device *dev, enum pm_device_action action)
+{
+    switch (action) {
+    case PM_DEVICE_ACTION_SUSPEND:
+        /* suspend the device */
+        break;
+    case PM_DEVICE_ACTION_RESUME:
+        /* resume the device */
+        // Re-initialize the hts221 on resume
+        hts221_init(dev);
+        break;
+    case PM_DEVICE_ACTION_TURN_OFF:
+        break;
+    case PM_DEVICE_ACTION_TURN_ON:
+        // Re-initialize the hts221 on resume
+        hts221_init(dev);
+        break;
+    default:
+        return -ENOTSUP;
+    }
+
+    return 0;
+}
+
 #if DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) == 0
 #warning "HTS221 driver enabled without any devices"
 #endif
@@ -207,9 +234,10 @@ int hts221_init(const struct device *dev)
  */
 
 #define HTS221_DEVICE_INIT(inst)					\
+    PM_DEVICE_DT_INST_DEFINE(inst, hts221_pm_action); \
 	SENSOR_DEVICE_DT_INST_DEFINE(inst,				\
 			      hts221_init,				\
-			      NULL,					\
+			      PM_DEVICE_DT_INST_GET(inst),					\
 			      &hts221_data_##inst,			\
 			      &hts221_config_##inst,			\
 			      POST_KERNEL,				\
