@@ -13,8 +13,8 @@
 #define BT_MESH_ADV(buf) (*(struct bt_mesh_adv **)net_buf_user_data(buf))
 
 #define BT_MESH_ADV_SCAN_UNIT(_ms) ((_ms) * 8 / 5)
-#define BT_MESH_SCAN_INTERVAL_MS 30
-#define BT_MESH_SCAN_WINDOW_MS   30
+#define BT_MESH_SCAN_INTERVAL_MS 3000
+#define BT_MESH_SCAN_WINDOW_MS   3000
 
 enum bt_mesh_adv_type {
 	BT_MESH_ADV_PROV,
