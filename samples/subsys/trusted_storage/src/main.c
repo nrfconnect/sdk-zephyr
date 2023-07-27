@@ -13,13 +13,48 @@
 #define TEST_STRING_1 "The quick brown fox jumps over the lazy dog"
 #define TEST_STRING_2 "Lorem ipsum dolor sit amet"
 
+/* Use settings with littlefs backend */
+#ifdef CONFIG_PSA_TRUSTED_STORAGE
+
+#include "settings/settings_file.h"
+#include <zephyr/device.h>
+#include <zephyr/fs/fs.h>
+#include <zephyr/fs/littlefs.h>
+
+#define STORAGE_PARTITION    storage_partition
+#define STORAGE_PARTITION_ID FIXED_PARTITION_ID(STORAGE_PARTITION)
+
+/* LittleFS work area struct */
+FS_LITTLEFS_DECLARE_DEFAULT_CONFIG(cstorage);
+static struct fs_mount_t littlefs_mnt = {
+	.type = FS_LITTLEFS,
+	.fs_data = &cstorage,
+	.storage_dev = (void *)STORAGE_PARTITION_ID,
+	.mnt_point = "/0",
+};
+
+static int setup_settings_backend(void)
+{
+	int rc;
+
+	rc = fs_mount(&littlefs_mnt);
+	if (rc != 0) {
+		return rc;
+	}
+
+	return 0;
+}
+
+SYS_INIT(setup_settings_backend, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+#endif
+
 int main(void)
 {
 	psa_status_t status = 0;
 
 	printk("Protected Storage sample started.\n");
-	printk("PSA Protected Storage API Version %d.%d\n",
-			PSA_PS_API_VERSION_MAJOR, PSA_PS_API_VERSION_MINOR);
+	printk("PSA Protected Storage API Version %d.%d\n", PSA_PS_API_VERSION_MAJOR,
+	       PSA_PS_API_VERSION_MINOR);
 
 	printk("Writing data to UID1: %s\n", TEST_STRING_1);
 	psa_storage_uid_t uid1 = 1;
@@ -69,6 +104,7 @@ int main(void)
 	status = psa_ps_set(uid2, sizeof(TEST_STRING_1), TEST_STRING_1, uid2_flag);
 	if (status != PSA_SUCCESS) {
 		printk("Failed to set write once flag! (%d)\n", status);
+		printk("Maybe erase the device?\n");
 		return 0;
 	}
 
@@ -86,5 +122,8 @@ int main(void)
 		printk("Failed to remove UID1! (%d)\n", status);
 		return 0;
 	}
+
+	printk("Done");
+
 	return 0;
 }

@@ -12,6 +12,8 @@ project(protected_storage)
 
 target_sources(app PRIVATE src/main.c)
 
-target_include_directories(app PRIVATE
-  $<TARGET_PROPERTY:tfm,TFM_BINARY_DIR>/install/interface/include
-)
+if(CONFIG_BUILD_WITH_TFM)
+        target_include_directories(app PRIVATE
+        $<TARGET_PROPERTY:tfm,TFM_BINARY_DIR>/install/interface/include
+        )
+endif()
