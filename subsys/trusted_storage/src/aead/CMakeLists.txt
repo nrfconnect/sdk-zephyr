@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+
+zephyr_sources_ifdef(CONFIG_TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND
+	trusted_backend_aead.c
+)
+zephyr_sources_ifdef(CONFIG_TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_CRYPTO_PSA_CHACHAPOLY
+	aead_crypt_psa_chachapoly.c
+)
+zephyr_sources_ifdef(CONFIG_TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_CRYPTO_MBEDTLS_CHACHAPOLY
+	aead_crypt_mbedtls_chachapoly.c
+)
+zephyr_sources_ifdef(CONFIG_TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_NONCE_PSA_SEED_COUNTER
+	aead_ctr_nonce.c
+)
+zephyr_sources_ifdef(CONFIG_TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_KEY_HASH_UID
+	aead_key_hash.c
+)

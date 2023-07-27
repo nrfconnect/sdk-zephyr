@@ -1,0 +1,187 @@
+# Trusted storage subsystem configuration options
+
+# Copyright (c) 2023 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig PSA_TRUSTED_STORAGE
+	bool "Trusted Storage"
+	depends on !BUILD_WITH_TFM
+	help
+	  The trusted storage subsystem allows its users to store in a trusted
+	  way data ensuring data integrity and confidentially by using AEAD
+	  algorithms. It supports several trusted implementation back-ends to
+	  provide various levels of trust depending on the device security
+	  features.
+
+if PSA_TRUSTED_STORAGE
+module = PSA_TRUSTED_STORAGE
+module-str = trusted_storage
+source "subsys/logging/Kconfig.template.log_config"
+
+
+menuconfig PROTECTED_STORAGE
+	bool "Protected Storage"
+	depends on PSA_TRUSTED_STORAGE
+	help
+	  The Protected Storage is designed to store in a trusted
+	  way device intimate data and protects against physical attacks.
+	  It supports several storage back-ends and several trusted
+	  implementation back-ends to provide various levels of trust.
+
+if PROTECTED_STORAGE
+
+config PROTECTED_STORAGE_PREFIX
+	string "Protected Storage object prefix"
+	depends on PROTECTED_STORAGE
+	default "ps/"
+	help
+	  This defines the prefix for Protected Storage object names.
+
+endif # PROTECTED_STORAGE
+
+menuconfig INTERNAL_TRUSTED_STORAGE
+	bool "Internal Trusted Storage"
+	depends on PSA_TRUSTED_STORAGE
+	default y
+	help
+	  The Internal Trusted Storage is designed to store assets that must
+	  be placed inside internal flash. Some examples of assets that require
+	  this are replay protection values for external storage and keys for
+	  use by components of the PSA Root of Trust.
+
+if INTERNAL_TRUSTED_STORAGE
+
+config INTERNAL_TRUSTED_STORAGE_PREFIX
+	string "Internal Trusted Storage object prefix"
+	depends on INTERNAL_TRUSTED_STORAGE
+	default "its/"
+	help
+	  This defines the prefix for Internal Trusted Storage object names.
+
+endif # INTERNAL_TRUSTED_STORAGE
+
+choice PROTECTED_STORAGE_TRUSTED_BACKEND
+	prompt "Trust backend"
+	depends on PSA_TRUSTED_STORAGE
+	default TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND
+	help
+	  The backend that handles encryption, authentication or other means of
+	  trust validation of the stored assets.
+
+menuconfig TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND
+	bool "Use AEAD scheme"
+	help
+	  Use an AEAD scheme to encrypt the asset data and authenticate its
+	  data including the meta data.
+
+if TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND
+
+config TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_MAX_DATA_SIZE
+	int "AEAD backend maximum storage size"
+	depends on TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND
+	default 256
+	help
+	  This defines the maximum data size that can be stored.
+
+choice TRUSTED_STORAGE_TRUSTED_AEAD_CRYPTO_BACKEND
+	prompt "AEAD crypto backend"
+	depends on TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND
+	default TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_CRYPTO_PSA_CHACHAPOLY
+	help
+	  Decides which implementation to be used to perform the AEAD crypto
+	  operations.
+
+config TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_CRYPTO_PSA_CHACHAPOLY
+	prompt "PSA ChaChaPoly"
+	select PSA_WANT_ALG_CHACHA20_POLY1305
+	help
+	  Use PSA Crypto API's with the ChaChaPoly-1305 AEAD algorithm.
+
+config TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_CRYPTO_MBEDTLS_CHACHAPOLY
+	bool "MbedTLS ChaChaPoly"
+	select MBEDTLS_CHACHA20_C
+	select MBEDTLS_POLY1305_C
+	select MBEDTLS_CHACHAPOLY_C
+	select MBEDTLS_LEGACY_CRYPTO_C
+	help
+	  Use MbedTLS ChaChaPoly-1305 AEAD based backend implementation.
+
+config TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_CRYPT_CUSTOM
+	bool "Custom"
+	help
+	  Custom implementation for AEAD.
+endchoice # TRUSTED_STORAGE_TRUSTED_AEAD_CRYPTO_BACKEND
+
+choice TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_NONCE
+	prompt "AEAD nonce implementation"
+	depends on TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND
+	default TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_NONCE_PSA_SEED_COUNTER
+	help
+	  Implementation to provide a AEAD nonce.
+
+config TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_NONCE_PSA_SEED_COUNTER
+	bool "PSA Nonce Seed + Counter"
+	select PSA_WANT_GENERATE_RANDOM
+	help
+	  Use PSA Crypto for Nonce initial random seed, then incrementing
+	  nonce for each AEAD encryption.
+
+config TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_NONCE_CUSTOM
+	bool "Custom"
+	help
+	  Use custom implementation for AEAD Nonce provider.
+
+endchoice # TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_NONCE
+
+choice TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_KEY
+	prompt "AEAD Key implementation"
+	depends on TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND
+	default TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_KEY_HASH_UID
+	help
+	  Implementation to provide the AEAD keys.
+
+config TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_KEY_HASH_UID
+	bool "Hash of UID"
+	select PSA_WANT_ALG_SHA_256
+	help
+	  Use SHA-256 hash of UID as key
+
+config TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_KEY_CUSTOM
+	bool "Custom"
+	help
+	  Use custom implementation for AEAD key provider.
+
+endchoice # TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND_KEY
+
+endif # TRUSTED_STORAGE_TRUSTED_AEAD_BACKEND
+
+config TRUSTED_STORAGE_TRUSTED_CUSTOM_BACKEND
+	bool "Custom"
+	help
+	  Use a custom implementation as trusted backend.
+
+endchoice # PROTECTED_STORAGE_TRUSTED_BACKEND
+
+choice TRUSTED_STORAGE_STORAGE_BACKEND
+	prompt "Storage backend"
+	depends on PSA_TRUSTED_STORAGE
+	default TRUSTED_STORAGE_STORAGE_SETTINGS_BACKEND
+	help
+	  Implementation used to store the assets
+
+config TRUSTED_STORAGE_STORAGE_SETTINGS_BACKEND
+	bool "Settings for storage"
+	depends on SETTINGS
+	depends on SETTINGS_RUNTIME
+	help
+	  Use the Settings subsystem to store the assets
+
+config  TRUSTED_STORAGE_STORAGE_CUSTOM_BACKEND
+	bool "Custom storage implementation"
+	help
+	  Use custom implementation to store assets.
+
+endchoice # CONFIG_TRUSTED_STORAGE_STORAGE_BACKEND
+
+
+endif # PSA_TRUSTED_STORAGE
