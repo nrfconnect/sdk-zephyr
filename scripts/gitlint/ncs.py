@@ -31,7 +31,11 @@ class NCSSauceTags(CommitRule):
             return [RuleViolation(self.id, 'Title does not contain a sauce tag',
                                   line_nr=1)]
 
-        tag = m.group(1)
+        tag = m.group(2)
+
+        if not tag:
+            return [RuleViolation(self.id, 'Title does not contain a sauce tag',
+                                  line_nr=1)]
         self.log.debug(f'Matched sauce tag {tag}')
 
         if tag == 'mergeup':
