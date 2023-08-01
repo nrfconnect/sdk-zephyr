@@ -22,6 +22,7 @@
 LOG_MODULE_REGISTER(spi_nrfx_spim, CONFIG_SPI_LOG_LEVEL);
 
 #include "spi_context.h"
+#include "spi_nrfx_common.h"
 
 #if (CONFIG_SPI_NRFX_RAM_BUFFER_SIZE > 0)
 #define SPI_BUFFER_IN_RAM 1
@@ -57,6 +58,7 @@ struct spi_nrfx_config {
 #ifdef CONFIG_SOC_NRF52832_ALLOW_SPIM_DESPITE_PAN_58
 	bool anomaly_58_workaround;
 #endif
+	uint32_t wake_pin;
 };
 
 static void event_handler(const nrfx_spim_evt_t *p_event, void *p_context);
@@ -374,6 +376,7 @@ static int transceive(const struct device *dev,
 		      void *userdata)
 {
 	struct spi_nrfx_data *dev_data = dev->data;
+	const struct spi_nrfx_config *dev_config = dev->config;
 	int error;
 
 	spi_context_lock(&dev_data->ctx, asynchronous, cb, userdata, spi_cfg);
@@ -381,6 +384,18 @@ static int transceive(const struct device *dev,
 	error = configure(dev, spi_cfg);
 	if (error == 0) {
 		dev_data->busy = true;
+
+		if (dev_config->wake_pin != WAKE_PIN_NOT_USED) {
+			error = spi_nrfx_wake_request(dev_config->wake_pin);
+			if (error == -ETIMEDOUT) {
+				LOG_WRN("Waiting for WAKE acknowledgment timed out");
+				/* If timeout occurs, try to perform the transfer
+				 * anyway, just in case the slave device was unable
+				 * to signal that it was already awaken and prepared
+				 * for the transfer.
+				 */
+			}
+		}
 
 		spi_context_buffers_setup(&dev_data->ctx, tx_bufs, rx_bufs, 1);
 		spi_context_cs_control(&dev_data->ctx, true);
@@ -500,6 +515,18 @@ static int spi_nrfx_init(const struct device *dev)
 	}
 #endif
 
+	if (dev_config->wake_pin != WAKE_PIN_NOT_USED) {
+		err = spi_nrfx_wake_init(dev_config->wake_pin);
+		if (err == -ENODEV) {
+			LOG_ERR("Failed to allocate GPIOTE channel for WAKE");
+			return err;
+		}
+		if (err == -EIO) {
+			LOG_ERR("Failed to configure WAKE pin");
+			return err;
+		}
+	}
+
 	dev_config->irq_connect();
 
 	err = spi_context_cs_configure_all(&dev_data->ctx);
@@ -599,7 +626,12 @@ static int spi_nrfx_init(const struct device *dev)
 			())						       \
 		IF_ENABLED(CONFIG_PINCTRL,				       \
 			(.pcfg = PINCTRL_DT_DEV_CONFIG_GET(SPIM(idx)),))       \
+		.wake_pin = NRF_DT_GPIOS_TO_PSEL_OR(SPIM(idx), wake_gpios,     \
+						    WAKE_PIN_NOT_USED),	       \
 	};								       \
+	BUILD_ASSERT(!DT_NODE_HAS_PROP(SPIM(idx), wake_gpios) ||	       \
+		     !(DT_GPIO_FLAGS(SPIM(idx), wake_gpios) & GPIO_ACTIVE_LOW),\
+		     "WAKE line must be configured as active high");	       \
 	PM_DEVICE_DT_DEFINE(SPIM(idx), spim_nrfx_pm_action);		       \
 	DEVICE_DT_DEFINE(SPIM(idx),					       \
 		      spi_nrfx_init,					       \
