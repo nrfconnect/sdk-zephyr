@@ -5,6 +5,7 @@
  */
 
 #include <stdlib.h>
+#include <malloc.h>
 #include <zephyr/kernel.h>
 #include <zephyr/init.h>
 #include <errno.h>
@@ -229,6 +230,38 @@ void free(void *ptr)
 	(void) sys_mutex_unlock(&z_malloc_heap_mutex);
 }
 
+#if __GLIBC__ < 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 33)
+struct mallinfo mallinfo(void)
+#else
+struct mallinfo2 mallinfo2(void)
+#endif /* __GLIBC__ < 2 && (__GLIBC__ == 2 && __GLIBC_MINOR__ < 33) */
+{
+#if __GLIBC__ < 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 33)
+	struct mallinfo info = { 0 };
+#else
+	struct mallinfo2 info = { 0 };
+#endif /* __GLIBC__ < 2 && (__GLIBC__ == 2 && __GLIBC_MINOR__ < 33) */
+#ifdef CONFIG_SYS_HEAP_RUNTIME_STATS
+	struct sys_memory_stats stats;
+	int ret = sys_heap_runtime_stats_get(&z_malloc_heap, &stats);
+
+	if (ret != 0) {
+		LOG_ERR("Failed to get heap stats");
+		return info;
+	}
+
+	info.arena = stats.free_bytes + stats.allocated_bytes;
+	info.fordblks = stats.free_bytes;
+	info.uordblks = stats.allocated_bytes;
+	info.usmblks = stats.max_allocated_bytes;
+#else
+	ARG_UNUSED(info);
+	LOG_ERR("CONFIG_SYS_HEAP_RUNTIME_STATS is not enabled");
+#endif
+
+	return info;
+}
+
 SYS_INIT(malloc_prepare, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
 #else /* No malloc arena */
 void *malloc(size_t size)
@@ -250,6 +283,15 @@ void *realloc(void *ptr, size_t size)
 {
 	ARG_UNUSED(ptr);
 	return malloc(size);
+}
+
+struct mallinfo2 mallinfo2(void)
+{
+	struct mallinfo2 info = { 0 };
+
+	LOG_ERR("CONFIG_COMMON_LIBC_MALLOC_ARENA_SIZE is 0");
+
+	return info;
 }
 #endif /* else no malloc arena */
 
