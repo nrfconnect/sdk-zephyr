@@ -53,3 +53,7 @@ pcd_sram:
   address: 0x20000000
   size: 0x2000
   region: sram_primary
+shared_sram:
+  address: 0x20070000
+  size: 0x10000
+  region: sram_primary
