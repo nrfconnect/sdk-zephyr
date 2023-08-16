@@ -33,6 +33,12 @@ LOG_MODULE_REGISTER(spi_nrfx_spim, CONFIG_SPI_LOG_LEVEL);
 #define SPI_BUFFER_IN_RAM 1
 #endif
 
+/* nRF54Hx always uses bounce buffers in RAM */
+#ifdef CONFIG_SOC_SERIES_NRF54HX
+BUILD_ASSERT(CONFIG_SPI_NRFX_RAM_BUFFER_SIZE > 0,
+	     "SPI_NRFX_RAM_BUFFER_SIZE must be defined and greater than 0 when using nRF54H series");
+#endif /* CONFIG_SOC_SERIES_NRF54HX */
+
 struct spi_nrfx_data {
 	struct spi_context ctx;
 	const struct device *dev;
@@ -320,24 +326,18 @@ static void transfer_next_chunk(const struct device *dev)
 		}
 
 #ifdef SPI_BUFFER_IN_RAM
+		if (chunk_len > CONFIG_SPI_NRFX_RAM_BUFFER_SIZE) {
+			chunk_len = CONFIG_SPI_NRFX_RAM_BUFFER_SIZE;
+		}
+
 		if (spi_context_tx_buf_on(ctx) &&
 		    !nrf_dma_accessible_check(&dev_config->spim.p_reg, tx_buf)) {
-
-			if (chunk_len > CONFIG_SPI_NRFX_RAM_BUFFER_SIZE) {
-				chunk_len = CONFIG_SPI_NRFX_RAM_BUFFER_SIZE;
-			}
-
 			memcpy(dev_data->tx_buffer, tx_buf, chunk_len);
 			tx_buf = dev_data->tx_buffer;
 		}
 
 		if (spi_context_rx_buf_on(ctx) &&
 		    !nrf_dma_accessible_check(&dev_config->spim.p_reg, rx_buf)) {
-
-			if (chunk_len > CONFIG_SPI_NRFX_RAM_BUFFER_SIZE) {
-				chunk_len = CONFIG_SPI_NRFX_RAM_BUFFER_SIZE;
-			}
-
 			rx_buf = dev_data->rx_buffer;
 		}
 #endif
