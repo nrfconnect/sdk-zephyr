@@ -20,7 +20,7 @@
 #include <zephyr/net/net_event.h>
 
 #ifdef CONFIG_NET_L2_WIFI_MGMT
-/* For struct wifi_scan_result */
+/* For union wifi_mgmt_events */
 #include <zephyr/net/wifi_mgmt.h>
 #endif /* CONFIG_NET_L2_WIFI_MGMT */
 
@@ -31,10 +31,7 @@ union net_mgmt_events {
 	struct net_if_dhcpv4 dhcpv4;
 #endif /* CONFIG_NET_DHCPV4 */
 #if defined(CONFIG_NET_L2_WIFI_MGMT)
-	struct wifi_scan_result wifi_scan_result;
-#if defined(CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS)
-	struct wifi_raw_scan_result raw_scan_result;
-#endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS */
+	union wifi_mgmt_events wifi;
 #endif /* CONFIG_NET_L2_WIFI_MGMT */
 #if defined(CONFIG_NET_IPV6) && defined(CONFIG_NET_IPV6_MLD)
 	struct net_event_ipv6_route ipv6_route;
