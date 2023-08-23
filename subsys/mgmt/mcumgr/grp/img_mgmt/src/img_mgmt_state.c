@@ -467,7 +467,7 @@ int img_mgmt_set_next_boot_slot(int slot, bool confirm)
 			return 0;
 		}
 		/* Changing to other, for test or not, is not allowed/ */
-		return IMG_MGMT_ERR_IMAGE_ALREADY_PENDING;
+		return IMG_MGMT_RET_RC_IMAGE_ALREADY_PENDING;
 	}
 
 	/* Normal boot means confirmed boot to either active slot or the opposite slot. */
@@ -480,7 +480,7 @@ int img_mgmt_set_next_boot_slot(int slot, bool confirm)
 		/* Can not change slot once other than running has been confirmed. */
 		if ((slot == active_slot && active_slot != next_boot_slot) ||
 		    (!confirm && slot != active_slot && slot == next_boot_slot)) {
-			return IMG_MGMT_ERR_IMAGE_ALREADY_PENDING;
+			return IMG_MGMT_RET_RC_IMAGE_ALREADY_PENDING;
 		}
 		/* Allow selecting non-active slot for boot */
 	}
@@ -494,7 +494,7 @@ int img_mgmt_set_next_boot_slot(int slot, bool confirm)
 		}
 		/* Trying to set any slot for test is an error */
 		if (!confirm) {
-			return IMG_MGMT_ERR_IMAGE_ALREADY_PENDING;
+			return IMG_MGMT_RET_RC_IMAGE_ALREADY_PENDING;
 		}
 		/* Allow confirming slot == active_slot */
 	}
