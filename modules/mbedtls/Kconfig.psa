@@ -472,3 +472,15 @@ config PSA_WANT_ALG_SRP_6
 	bool
 	prompt "PSA SRP-6 support" if !PSA_PROMPTLESS
 	select EXPERIMENTAL
+
+config PSA_WANT_ALG_PURE_EDDSA
+	bool
+	prompt "PSA PURE_EDDSA support" if !PSA_PROMPTLESS
+
+config PSA_WANT_ALG_ED25519PH
+	bool
+	prompt "PSA ED25519PH support" if !PSA_PROMPTLESS
+
+config PSA_WANT_ALG_ED448PH
+	bool
+	prompt "PSA ED448PH support" if !PSA_PROMPTLESS
