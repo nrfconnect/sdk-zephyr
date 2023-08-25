@@ -177,7 +177,15 @@
   - "**/*"
 
 "CI-gazell-test":
-  - "**/*"
+  - "include/zephyr/crypto/**/*"
+  - "include/zephyr/drivers/clock_control.h"
+  - "include/zephyr/drivers/clock_control/**/*"
+  - "include/zephyr/drivers/entropy.h"
+  - "include/zephyr/settings/**/*"
+  - "drivers/clock_control/**/*"
+  - "drivers/crypto/**/*"
+  - "drivers/entropy/**/*"
+  - "subsys/settings/**/*"
 
 "CI-rpc-test":
   - "**/*"
