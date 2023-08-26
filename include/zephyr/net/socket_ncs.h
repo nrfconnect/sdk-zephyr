@@ -69,6 +69,13 @@ extern "C" {
 
 /* NCS specific socket options */
 
+/** sockopt: enable sending data as part of exceptional events */
+#define SO_EXCEPTIONAL_DATA 33
+/** sockopt: bind to PDN */
+#define SO_BINDTOPDN 40
+/** sockopt: Release Assistance Indication feature: This will indicate that the
+ *  application will not send any more data.
+ */
 #define SO_RAI_NO_DATA 50
 /** sockopt: Release Assistance Indication feature: This will indicate that the
  *  next call to send/sendto will be the last one for some time.
@@ -124,6 +131,15 @@ extern "C" {
  *  Example: "42:0", port 42 PDN ID 0.
  */
 #define AI_PDNSERV 0x1000
+
+/* NCS specific send() and sendto() flags */
+
+/** Request a blocking send operation until the request is acknowledged.
+ *  When used in send() or sendto(), the request will not return until the
+ *  send operation is completed by lower layers, or until the timeout, given by the SO_SNDTIMEO
+ *  socket option, is reached. Valid timeout values are 1 to 600 seconds.
+ */
+#define MSG_WAITACK 0x200
 
 #ifdef __cplusplus
 }
