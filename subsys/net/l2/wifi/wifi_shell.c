@@ -779,7 +779,7 @@ static int cmd_wifi_ps(const struct shell *sh, size_t argc, char *argv[])
 		shell_fprintf(sh, SHELL_WARNING,
 			      "PS %s failed. Reason: %s\n",
 			      params.enabled ? "enable" : "disable",
-			      get_ps_config_err_code_str(params.fail_reason));
+			      wifi_ps_get_config_err_code_str(params.fail_reason));
 		return -ENOEXEC;
 	}
 
@@ -809,7 +809,7 @@ static int cmd_wifi_ps_mode(const struct shell *sh, size_t argc, char *argv[])
 	if (net_mgmt(NET_REQUEST_WIFI_PS, iface, &params, sizeof(params))) {
 		shell_fprintf(sh, SHELL_WARNING, "%s failed Reason : %s\n",
 			      wifi_ps_mode2str[params.mode],
-			      get_ps_config_err_code_str(params.fail_reason));
+			      wifi_ps_get_config_err_code_str(params.fail_reason));
 		return -ENOEXEC;
 	}
 
@@ -840,7 +840,7 @@ static int cmd_wifi_ps_timeout(const struct shell *sh, size_t argc, char *argv[]
 	if (net_mgmt(NET_REQUEST_WIFI_PS, iface, &params, sizeof(params))) {
 		shell_fprintf(sh, SHELL_WARNING,
 			      "Setting PS timeout failed. Reason : %s\n",
-			      get_ps_config_err_code_str(params.fail_reason));
+			      wifi_ps_get_config_err_code_str(params.fail_reason));
 		return -ENOEXEC;
 	}
 
@@ -889,7 +889,7 @@ static int cmd_wifi_twt_setup_quick(const struct shell *sh, size_t argc,
 		shell_fprintf(sh, SHELL_WARNING, "%s with %s failed, reason : %s\n",
 			wifi_twt_operation2str[params.operation],
 			wifi_twt_negotiation_type2str[params.negotiation_type],
-			get_twt_err_code_str(params.fail_reason));
+			wifi_twt_get_err_code_str(params.fail_reason));
 
 		return -ENOEXEC;
 	}
@@ -945,7 +945,7 @@ static int cmd_wifi_twt_setup(const struct shell *sh, size_t argc,
 		shell_fprintf(sh, SHELL_WARNING, "%s with %s failed. reason : %s\n",
 			wifi_twt_operation2str[params.operation],
 			wifi_twt_negotiation_type2str[params.negotiation_type],
-			get_twt_err_code_str(params.fail_reason));
+			wifi_twt_get_err_code_str(params.fail_reason));
 
 		return -ENOEXEC;
 	}
@@ -991,7 +991,7 @@ static int cmd_wifi_twt_teardown(const struct shell *sh, size_t argc,
 		shell_fprintf(sh, SHELL_WARNING, "%s with %s failed, reason : %s\n",
 			wifi_twt_operation2str[params.operation],
 			wifi_twt_negotiation_type2str[params.negotiation_type],
-			get_twt_err_code_str(params.fail_reason));
+			wifi_twt_get_err_code_str(params.fail_reason));
 
 		return -ENOEXEC;
 	}
@@ -1018,7 +1018,7 @@ static int cmd_wifi_twt_teardown_all(const struct shell *sh, size_t argc,
 		shell_fprintf(sh, SHELL_WARNING, "%s with %s failed, reason : %s\n",
 			wifi_twt_operation2str[params.operation],
 			wifi_twt_negotiation_type2str[params.negotiation_type],
-			get_twt_err_code_str(params.fail_reason));
+			wifi_twt_get_err_code_str(params.fail_reason));
 
 		return -ENOEXEC;
 	}
@@ -1155,13 +1155,13 @@ static int cmd_wifi_listen_interval(const struct shell *sh, size_t argc, char *a
 		    WIFI_PS_PARAM_LISTEN_INTERVAL_RANGE_INVALID) {
 			shell_fprintf(sh, SHELL_WARNING,
 			      "Setting listen interval failed. Reason :%s\n",
-			      get_ps_config_err_code_str(params.fail_reason));
+			      wifi_ps_get_config_err_code_str(params.fail_reason));
 			shell_fprintf(sh, SHELL_WARNING,
 				"Hardware support valid range : 3 - 65535\n");
 		} else  {
 			shell_fprintf(sh, SHELL_WARNING,
 				"Setting listen interval failed. Reason :%s\n",
-				get_ps_config_err_code_str(params.fail_reason));
+				wifi_ps_get_config_err_code_str(params.fail_reason));
 		}
 		return -ENOEXEC;
 	}
@@ -1196,7 +1196,7 @@ static int cmd_wifi_ps_wakeup_mode(const struct shell *sh, size_t argc, char *ar
 		shell_fprintf(sh, SHELL_WARNING,
 			      "Setting PS wake up mode to %s failed..Reason :%s\n",
 			      params.wakeup_mode ? "Listen interval" : "DTIM interval",
-			      get_ps_config_err_code_str(params.fail_reason));
+			      wifi_ps_get_config_err_code_str(params.fail_reason));
 		return -ENOEXEC;
 	}
 
