@@ -1,5 +1,11 @@
 / {
 	chosen {
+		zephyr,uart-mcumgr = &uart0;
+		zephyr,console = &uart1;
 		nordic,pm-ext-flash = &mx25r64;
 	};
+};
+
+&uart1 {
+	status = "okay";
 };
