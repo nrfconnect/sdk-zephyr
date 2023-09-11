@@ -8,7 +8,6 @@
 LOG_MODULE_REGISTER(net_wifi_mgmt, CONFIG_NET_L2_WIFI_MGMT_LOG_LEVEL);
 
 #include <errno.h>
-#include <string.h>
 
 #include <zephyr/net/net_core.h>
 #include <zephyr/net/net_if.h>
@@ -111,16 +110,7 @@ static int wifi_scan(uint32_t mgmt_request, struct net_if *iface,
 	if (data && (len == sizeof(*params))) {
 #ifdef CONFIG_WIFI_MGMT_FORCED_PASSIVE_SCAN
 		params->scan_type = WIFI_SCAN_TYPE_PASSIVE;
-#endif /* CONFIG_WIFI_MGMT_FORCED_PASSIVE_SCAN */
-
-		if (!params->bands) {
-			if (wifi_utils_parse_scan_bands(CONFIG_WIFI_MGMT_SCAN_BANDS,
-							&params->bands)) {
-				NET_ERR("Incorrect value(s) in CONFIG_WIFI_MGMT_SCAN_BANDS: %s",
-						CONFIG_WIFI_MGMT_SCAN_BANDS);
-				return -EINVAL;
-			}
-		}
+#endif
 	}
 
 	return wifi_mgmt_api->scan(dev, params, scan_result_cb);
