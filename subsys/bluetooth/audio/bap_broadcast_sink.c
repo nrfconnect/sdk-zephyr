@@ -6,7 +6,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/device.h>
+#include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/check.h>
@@ -32,7 +32,6 @@ LOG_MODULE_REGISTER(bt_bap_broadcast_sink, CONFIG_BT_BAP_BROADCAST_SINK_LOG_LEVE
 
 #include "common/bt_str.h"
 
-#define PA_SYNC_SKIP              5
 #define SYNC_RETRY_COUNT          6 /* similar to retries for connections */
 #define BROADCAST_SYNC_MIN_INDEX  (BIT(1))
 
@@ -44,34 +43,31 @@ LOG_MODULE_REGISTER(bt_bap_broadcast_sink, CONFIG_BT_BAP_BROADCAST_SINK_LOG_LEVE
 static struct bt_bap_ep broadcast_sink_eps[CONFIG_BT_BAP_BROADCAST_SNK_COUNT]
 					    [BROADCAST_SNK_STREAM_CNT];
 static struct bt_bap_broadcast_sink broadcast_sinks[CONFIG_BT_BAP_BROADCAST_SNK_COUNT];
-static struct bt_le_scan_cb broadcast_scan_cb;
 
-struct codec_lookup_id_data {
+struct codec_cap_lookup_id_data {
 	uint8_t id;
-	struct bt_codec *codec;
+	const struct bt_audio_codec_cap *codec_cap;
 };
 
 static sys_slist_t sink_cbs = SYS_SLIST_STATIC_INIT(&sink_cbs);
 
 static void broadcast_sink_cleanup(struct bt_bap_broadcast_sink *sink);
 
-static enum bt_bap_scan_delegator_iter
-find_recv_state_by_sink_cb(const struct bt_bap_scan_delegator_recv_state *recv_state,
-			   void *user_data)
+static bool find_recv_state_by_sink_cb(const struct bt_bap_scan_delegator_recv_state *recv_state,
+				       void *user_data)
 {
 	const struct bt_bap_broadcast_sink *sink = user_data;
 
 	if (atomic_test_bit(sink->flags, BT_BAP_BROADCAST_SINK_FLAG_SRC_ID_VALID) &&
 	    sink->bass_src_id == recv_state->src_id) {
-		return BT_BAP_SCAN_DELEGATOR_ITER_STOP;
+		return true;
 	}
 
-	return BT_BAP_SCAN_DELEGATOR_ITER_CONTINUE;
+	return false;
 }
 
-static enum bt_bap_scan_delegator_iter
-find_recv_state_by_pa_sync_cb(const struct bt_bap_scan_delegator_recv_state *recv_state,
-			      void *user_data)
+static bool find_recv_state_by_pa_sync_cb(const struct bt_bap_scan_delegator_recv_state *recv_state,
+					  void *user_data)
 {
 	struct bt_le_per_adv_sync *sync = user_data;
 	struct bt_le_per_adv_sync_info sync_info;
@@ -81,15 +77,15 @@ find_recv_state_by_pa_sync_cb(const struct bt_bap_scan_delegator_recv_state *rec
 	if (err != 0) {
 		LOG_DBG("Failed to get sync info: %d", err);
 
-		return BT_BAP_SCAN_DELEGATOR_ITER_CONTINUE;
+		return false;
 	}
 
 	if (bt_addr_le_eq(&recv_state->addr, &sync_info.addr) &&
 	    recv_state->adv_sid == sync_info.sid) {
-		return BT_BAP_SCAN_DELEGATOR_ITER_STOP;
+		return true;
 	}
 
-	return BT_BAP_SCAN_DELEGATOR_ITER_CONTINUE;
+	return false;
 };
 
 static void update_recv_state_big_synced(const struct bt_bap_broadcast_sink *sink)
@@ -246,7 +242,7 @@ static void broadcast_sink_set_ep_state(struct bt_bap_ep *ep, uint8_t state)
 		if (stream != NULL) {
 			bt_bap_iso_unbind_ep(ep->iso, ep);
 			stream->ep = NULL;
-			stream->codec = NULL;
+			stream->codec_cfg = NULL;
 			ep->stream = NULL;
 		}
 	}
@@ -392,30 +388,6 @@ static struct bt_iso_chan_ops broadcast_sink_iso_ops = {
 	.disconnected	= broadcast_sink_iso_disconnected,
 };
 
-static struct bt_bap_broadcast_sink *broadcast_sink_syncing_get(void)
-{
-	for (int i = 0; i < ARRAY_SIZE(broadcast_sinks); i++) {
-		if (atomic_test_bit(broadcast_sinks[i].flags,
-				    BT_BAP_BROADCAST_SINK_FLAG_SYNCING)) {
-			return &broadcast_sinks[i];
-		}
-	}
-
-	return NULL;
-}
-
-static struct bt_bap_broadcast_sink *broadcast_sink_scanning_get(void)
-{
-	for (int i = 0; i < ARRAY_SIZE(broadcast_sinks); i++) {
-		if (atomic_test_bit(broadcast_sinks[i].flags,
-				    BT_BAP_BROADCAST_SINK_FLAG_SCANNING)) {
-			return &broadcast_sinks[i];
-		}
-	}
-
-	return NULL;
-}
-
 static struct bt_bap_broadcast_sink *broadcast_sink_free_get(void)
 {
 	/* Find free entry */
@@ -436,17 +408,6 @@ static struct bt_bap_broadcast_sink *broadcast_sink_get_by_pa(struct bt_le_per_a
 {
 	for (int i = 0; i < ARRAY_SIZE(broadcast_sinks); i++) {
 		if (broadcast_sinks[i].pa_sync == sync) {
-			return &broadcast_sinks[i];
-		}
-	}
-
-	return NULL;
-}
-
-static struct bt_bap_broadcast_sink *broadcast_sink_get_by_broadcast_id(uint32_t broadcast_id)
-{
-	for (size_t i = 0U; i < ARRAY_SIZE(broadcast_sinks); i++) {
-		if (broadcast_sinks[i].broadcast_id == broadcast_id) {
 			return &broadcast_sinks[i];
 		}
 	}
@@ -476,146 +437,26 @@ static void broadcast_sink_add_src(struct bt_bap_broadcast_sink *sink)
 	}
 }
 
-static void handle_past_sync(struct bt_le_per_adv_sync *sync)
+static int update_recv_state_base_copy_meta(const struct bt_bap_base *base,
+					    struct bt_bap_scan_delegator_mod_src_param *param)
 {
-	const struct bt_bap_scan_delegator_recv_state *recv_state;
-
-	recv_state = bt_bap_scan_delegator_find_state(find_recv_state_by_pa_sync_cb, (void *)sync);
-	if (recv_state != NULL) {
-		/* If we receive a PAST transfer that fits a
-		 * known BASS Receive State, then we create it
-		 * as a Broadcast Sink
-		 *
-		 * The PA state in the Receive State will be
-		 * updated by the Scan Delegator
-		 */
-		int err;
-
-		err = bt_bap_broadcast_sink_create(sync, recv_state->broadcast_id);
-		if (err != 0) {
-			LOG_WRN("Failed to create Broadcast Sink: %d", err);
-		}
-	}
-}
-
-static void pa_synced(struct bt_le_per_adv_sync *sync,
-		      struct bt_le_per_adv_sync_synced_info *info)
-{
-	const struct bt_bap_scan_delegator_recv_state *recv_state;
-	struct bt_bap_broadcast_sink_cb *listener;
-	struct bt_bap_broadcast_sink *sink;
-	int err;
-
-	sink = broadcast_sink_syncing_get();
-	if (sink == NULL || sync != sink->pa_sync) {
-		if (info->conn) { /* PAST */
-			handle_past_sync(sync);
-		} else {
-			/* Not ours */
-		}
-
-		return;
+	if (base->subgroup_count > ARRAY_SIZE(param->subgroups)) {
+		LOG_DBG("Could not fit %zu subgroups in the mod param (max %zu)",
+			base->subgroup_count, ARRAY_SIZE(param->subgroups));
 	}
 
-	LOG_DBG("Synced to broadcast source with ID 0x%06X", sink->broadcast_id);
+	param->num_subgroups = base->subgroup_count;
 
-	atomic_clear_bit(sink->flags, BT_BAP_BROADCAST_SINK_FLAG_SYNCING);
-
-	err = bt_bap_broadcast_sink_scan_stop();
-	if (err != 0 && err != -EALREADY) {
-		LOG_WRN("Failed to stop sink scan: %d", err);
-		/* Even if we cannot stop scanning here, we can still move on */
-	}
-
-	/* Add the PA sync to the scan delegator or modify if it already exists */
-	recv_state = bt_bap_scan_delegator_find_state(find_recv_state_by_pa_sync_cb, (void *)sync);
-	if (recv_state == NULL) {
-		broadcast_sink_add_src(sink);
-	} else {
-		/* Set PA sync state */
-		err = bt_bap_scan_delegator_set_pa_state(recv_state->src_id,
-							 BT_BAP_PA_STATE_SYNCED);
-		if (err != 0) {
-			LOG_WRN("Failed to set PA state: %d", err);
-		}
-	}
-
-	SYS_SLIST_FOR_EACH_CONTAINER(&sink_cbs, listener, _node) {
-		if (listener->pa_synced != NULL) {
-			listener->pa_synced(sink, sink->pa_sync, sink->broadcast_id);
-		}
-	}
-
-	/* TBD: What if sync to a bad broadcast source that does not send
-	 * properly formatted (or any) BASE?
-	 */
-}
-
-static void pa_term(struct bt_le_per_adv_sync *sync,
-		    const struct bt_le_per_adv_sync_term_info *info)
-{
-	struct bt_bap_broadcast_sink_cb *listener;
-	struct bt_bap_broadcast_sink *sink;
-
-	sink = broadcast_sink_get_by_pa(sync);
-	if (sink == NULL) {
-		/* Not ours */
-		return;
-	}
-
-	LOG_DBG("PA sync with broadcast source with ID 0x%06X lost", sink->broadcast_id);
-
-	if (sink->big != NULL) {
-		const int err = bt_iso_big_terminate(sink->big);
-
-		if (err != 0) {
-			LOG_ERR("Failed to disconnect BIG sync: %d", err);
-		}
-	}
-
-	broadcast_sink_cleanup(sink);
-	SYS_SLIST_FOR_EACH_CONTAINER(&sink_cbs, listener, _node) {
-		if (listener->pa_sync_lost != NULL) {
-			listener->pa_sync_lost(sink);
-		}
-	}
-}
-
-static void update_recv_state_base_copy_meta(const struct bt_bap_base *base,
-					     struct bt_bap_scan_delegator_mod_src_param *param)
-{
 	for (uint8_t i = 0U; i < base->subgroup_count; i++) {
 		struct bt_bap_scan_delegator_subgroup *subgroup_param = &param->subgroups[i];
 		const struct bt_bap_base_subgroup *subgroup = &base->subgroups[i];
-		uint8_t *metadata_param = subgroup_param->metadata;
-		size_t total_len;
 
-		/* Copy metadata into subgroup_param, changing it from an array
-		 * of bt_codec_data to a uint8_t buffer
-		 */
-		total_len = 0U;
-		for (size_t j = 0; j < subgroup->codec.meta_count; j++) {
-			const struct bt_codec_data *meta = &subgroup->codec.meta[j];
-			const struct bt_data *data = &meta->data;
-			const uint8_t len = data->data_len;
-			const uint8_t type = data->type;
-			const size_t ltv_len = sizeof(len) + sizeof(type) + len;
-
-			if (total_len + ltv_len > sizeof(subgroup_param->metadata)) {
-				LOG_WRN("Could not fit entire metadata for subgroup[%u]", i);
-
-				return;
-			}
-
-			metadata_param[total_len++] = len + 1;
-			metadata_param[total_len++] = type;
-			(void)memcpy(&metadata_param[total_len], data->data,
-				     len);
-			total_len += len;
-		}
-
-		subgroup_param->metadata_len = total_len;
+		subgroup_param->metadata_len = subgroup->codec_cfg.meta_len;
+		memcpy(subgroup_param->metadata, subgroup->codec_cfg.meta,
+		       subgroup->codec_cfg.meta_len);
 	}
+
+	return 0;
 }
 
 static void update_recv_state_base(const struct bt_bap_broadcast_sink *sink)
@@ -634,8 +475,11 @@ static void update_recv_state_base(const struct bt_bap_broadcast_sink *sink)
 
 	base = &sink->base;
 
-	mod_src_param.num_subgroups = base->subgroup_count;
-	update_recv_state_base_copy_meta(base, &mod_src_param);
+	err = update_recv_state_base_copy_meta(base, &mod_src_param);
+	if (err != 0) {
+		LOG_WRN("Failed to modify Receive State for sink %p: %d", sink, err);
+		return;
+	}
 
 	/* Copy existing unchanged data */
 	mod_src_param.src_id = recv_state->src_id;
@@ -829,169 +673,6 @@ static uint16_t interval_to_sync_timeout(uint16_t interval)
 	return timeout;
 }
 
-static void sync_broadcast_pa(const struct bt_le_scan_recv_info *info,
-			      uint32_t broadcast_id)
-{
-	struct bt_bap_broadcast_sink_cb *listener;
-	struct bt_le_per_adv_sync_param param;
-	struct bt_bap_broadcast_sink *sink;
-	int err;
-
-	sink = broadcast_sink_scanning_get();
-	/* Should never happen as we set the scanning flag before registering
-	 * the scanning callbacks
-	 */
-	__ASSERT(sink != NULL, "sink is NULL");
-
-	/* Unregister the callbacks to prevent broadcast_scan_recv to be called again */
-	bt_le_scan_cb_unregister(&broadcast_scan_cb);
-	err = bt_le_scan_stop();
-	if (err != 0) {
-		LOG_ERR("Could not stop scan: %d", err);
-	} else {
-		atomic_clear_bit(sink->flags, BT_BAP_BROADCAST_SINK_FLAG_SCANNING);
-	}
-
-	bt_addr_le_copy(&param.addr, info->addr);
-	param.options = 0;
-	param.sid = info->sid;
-	param.skip = PA_SYNC_SKIP;
-	param.timeout = interval_to_sync_timeout(info->interval);
-	err = bt_le_per_adv_sync_create(&param, &sink->pa_sync);
-	if (err != 0) {
-		LOG_ERR("Could not sync to PA: %d", err);
-		broadcast_sink_cleanup(sink);
-
-		SYS_SLIST_FOR_EACH_CONTAINER(&sink_cbs, listener, _node) {
-			if (listener->scan_term != NULL) {
-				listener->scan_term(err);
-			}
-		}
-	} else {
-		atomic_set_bit(sink->flags,
-			       BT_BAP_BROADCAST_SINK_FLAG_SYNCING);
-		sink->broadcast_id = broadcast_id;
-	}
-}
-
-static bool scan_check_and_sync_broadcast(struct bt_data *data, void *user_data)
-{
-	uint32_t *broadcast_id = user_data;
-	struct bt_uuid_16 adv_uuid;
-
-	if (sys_slist_is_empty(&sink_cbs)) {
-		/* Terminate early if we do not have any broadcast sink listeners */
-		return false;
-	}
-
-	if (data->type != BT_DATA_SVC_DATA16) {
-		return true;
-	}
-
-	if (data->data_len < BT_UUID_SIZE_16 + BT_AUDIO_BROADCAST_ID_SIZE) {
-		return true;
-	}
-
-	if (!bt_uuid_create(&adv_uuid.uuid, data->data, BT_UUID_SIZE_16)) {
-		return true;
-	}
-
-	if (bt_uuid_cmp(&adv_uuid.uuid, BT_UUID_BROADCAST_AUDIO)) {
-		return true;
-	}
-
-	if (broadcast_sink_syncing_get() != NULL) {
-		/* Already syncing, can maximum sync one */
-		return true;
-	}
-
-	*broadcast_id = sys_get_le24(data->data + BT_UUID_SIZE_16);
-
-	/* Stop parsing */
-	return false;
-}
-
-static void broadcast_scan_recv(const struct bt_le_scan_recv_info *info,
-				struct net_buf_simple *ad)
-{
-	struct bt_bap_broadcast_sink_cb *listener;
-	struct net_buf_simple_state state;
-	uint32_t broadcast_id;
-
-	/* We are only interested in non-connectable periodic advertisers */
-	if ((info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE) ||
-	     info->interval == 0) {
-		return;
-	}
-
-	/* As scan_check_and_sync_broadcast modifies the AD data,
-	 * we store the state before parsing it
-	 */
-	net_buf_simple_save(ad, &state);
-	broadcast_id = INVALID_BROADCAST_ID;
-	bt_data_parse(ad, scan_check_and_sync_broadcast, (void *)&broadcast_id);
-	net_buf_simple_restore(ad, &state);
-
-	/* We check if `broadcast_id` was modified by `scan_check_and_sync_broadcast`.
-	 * If it was then that means that we found a broadcast source
-	 */
-	if (broadcast_id != INVALID_BROADCAST_ID) {
-		LOG_DBG("Found broadcast source with address %s and id 0x%06X",
-			bt_addr_le_str(info->addr), broadcast_id);
-
-		if (broadcast_sink_get_by_broadcast_id(broadcast_id) != NULL) {
-			LOG_DBG("Broadcast sink with broadcast_id 0x%X already exists",
-				broadcast_id);
-
-			return;
-		}
-
-		SYS_SLIST_FOR_EACH_CONTAINER(&sink_cbs, listener, _node) {
-			if (listener->scan_recv != NULL) {
-				bool sync_pa;
-
-
-				/* As the callback receiver may modify the AD
-				 * data, we store the state so that we can
-				 * restore it for each callback
-				 */
-				net_buf_simple_save(ad, &state);
-
-				sync_pa = listener->scan_recv(info, ad, broadcast_id);
-
-				if (sync_pa) {
-					sync_broadcast_pa(info, broadcast_id);
-					break;
-				}
-
-				net_buf_simple_restore(ad, &state);
-			}
-		}
-	}
-}
-
-static void broadcast_scan_timeout(void)
-{
-	struct bt_bap_broadcast_sink_cb *listener;
-	struct bt_bap_broadcast_sink *sink;
-
-	bt_le_scan_cb_unregister(&broadcast_scan_cb);
-
-	sink = broadcast_sink_scanning_get();
-	/* Should never happen as we set the scanning flag before registering
-	 * the scanning callbacks
-	 */
-	__ASSERT(sink != NULL, "sink is NULL");
-
-	broadcast_sink_cleanup(sink);
-
-	SYS_SLIST_FOR_EACH_CONTAINER(&sink_cbs, listener, _node) {
-		if (listener->scan_term != NULL) {
-			listener->scan_term(-ETIME);
-		}
-	}
-}
-
 int bt_bap_broadcast_sink_register_cb(struct bt_bap_broadcast_sink_cb *cb)
 {
 	CHECKIF(cb == NULL) {
@@ -1002,94 +683,6 @@ int bt_bap_broadcast_sink_register_cb(struct bt_bap_broadcast_sink_cb *cb)
 	sys_slist_append(&sink_cbs, &cb->_node);
 
 	return 0;
-}
-
-int bt_bap_broadcast_sink_scan_start(const struct bt_le_scan_param *param)
-{
-	struct bt_bap_broadcast_sink *sink;
-	int err;
-
-	CHECKIF(param == NULL) {
-		LOG_DBG("param is NULL");
-		return -EINVAL;
-	}
-
-	CHECKIF(param->timeout != 0) {
-		/* This is to avoid having to re-implement the scan timeout
-		 * callback as well, and can be modified later if requested
-		 */
-		LOG_DBG("Scan param shall not have a timeout");
-		return -EINVAL;
-	}
-
-	if (sys_slist_is_empty(&sink_cbs)) {
-		LOG_WRN("No broadcast sink callbacks registered");
-		return -EINVAL;
-	}
-
-	if (broadcast_sink_scanning_get() != NULL) {
-		LOG_DBG("Already scanning");
-
-		return -EALREADY;
-	}
-
-	sink = broadcast_sink_free_get();
-	if (sink == NULL) {
-		LOG_DBG("No more free broadcast sinks");
-		return -ENOMEM;
-	}
-
-	/* TODO: check for scan callback */
-	err = bt_le_scan_start(param, NULL);
-	if (err == 0) {
-		atomic_set_bit(sink->flags,
-			       BT_BAP_BROADCAST_SINK_FLAG_INITIALIZED);
-		atomic_set_bit(sink->flags,
-			       BT_BAP_BROADCAST_SINK_FLAG_SCANNING);
-
-		broadcast_scan_cb.recv = broadcast_scan_recv;
-		broadcast_scan_cb.timeout = broadcast_scan_timeout;
-		bt_le_scan_cb_register(&broadcast_scan_cb);
-	}
-
-	return err;
-}
-
-int bt_bap_broadcast_sink_scan_stop(void)
-{
-	struct bt_bap_broadcast_sink_cb *listener;
-	struct bt_bap_broadcast_sink *sink;
-	int err;
-
-	sink = broadcast_sink_scanning_get();
-	if (sink == NULL) {
-		LOG_DBG("Not scanning");
-
-		return -EALREADY;
-	}
-
-	if (sink->pa_sync != NULL) {
-		err = bt_le_per_adv_sync_delete(sink->pa_sync);
-		if (err != 0) {
-			LOG_DBG("Could not delete PA sync: %d", err);
-			return err;
-		}
-	}
-
-	broadcast_sink_cleanup(sink);
-
-	err = bt_le_scan_stop();
-	if (err == 0) {
-		bt_le_scan_cb_unregister(&broadcast_scan_cb);
-	}
-
-	SYS_SLIST_FOR_EACH_CONTAINER(&sink_cbs, listener, _node) {
-		if (listener->scan_term != NULL) {
-			listener->scan_term(err);
-		}
-	}
-
-	return err;
 }
 
 bool bt_bap_ep_is_broadcast_snk(const struct bt_bap_ep *ep)
@@ -1128,7 +721,8 @@ static struct bt_bap_ep *broadcast_sink_new_ep(uint8_t index)
 }
 
 static int bt_bap_broadcast_sink_setup_stream(struct bt_bap_broadcast_sink *sink,
-					      struct bt_bap_stream *stream, struct bt_codec *codec)
+					      struct bt_bap_stream *stream,
+					      struct bt_audio_codec_cfg *codec_cfg)
 {
 	struct bt_bap_iso *iso;
 	struct bt_bap_ep *ep;
@@ -1154,11 +748,11 @@ static int bt_bap_broadcast_sink_setup_stream(struct bt_bap_broadcast_sink *sink
 	bt_bap_iso_bind_ep(iso, ep);
 
 	bt_audio_codec_qos_to_iso_qos(iso->chan.qos->rx, &sink->codec_qos);
-	bt_audio_codec_to_iso_path(iso->chan.qos->rx->path, codec);
+	bt_audio_codec_cfg_to_iso_path(iso->chan.qos->rx->path, codec_cfg);
 
 	bt_bap_iso_unref(iso);
 
-	bt_bap_stream_attach(NULL, stream, ep, codec);
+	bt_bap_stream_attach(NULL, stream, ep, codec_cfg);
 	stream->qos = &sink->codec_qos;
 
 	return 0;
@@ -1176,7 +770,7 @@ static void broadcast_sink_cleanup_streams(struct bt_bap_broadcast_sink *sink)
 		}
 
 		stream->qos = NULL;
-		stream->codec = NULL;
+		stream->codec_cfg = NULL;
 		stream->group = NULL;
 
 		sys_slist_remove(&sink->streams, NULL, &stream->_node);
@@ -1205,14 +799,15 @@ static void broadcast_sink_cleanup(struct bt_bap_broadcast_sink *sink)
 	(void)memset(sink, 0, sizeof(*sink)); /* also clears flags */
 }
 
-static struct bt_codec *codec_from_base_by_index(struct bt_bap_base *base, uint8_t index)
+static struct bt_audio_codec_cfg *codec_cfg_from_base_by_index(struct bt_bap_base *base,
+							       uint8_t index)
 {
 	for (size_t i = 0U; i < base->subgroup_count; i++) {
 		struct bt_bap_base_subgroup *subgroup = &base->subgroups[i];
 
 		for (size_t j = 0U; j < subgroup->bis_count; j++) {
 			if (subgroup->bis_data[j].index == index) {
-				return &subgroup->codec;
+				return &subgroup->codec_cfg;
 			}
 		}
 	}
@@ -1222,10 +817,10 @@ static struct bt_codec *codec_from_base_by_index(struct bt_bap_base *base, uint8
 
 static bool codec_lookup_id(const struct bt_pacs_cap *cap, void *user_data)
 {
-	struct codec_lookup_id_data *data = user_data;
+	struct codec_cap_lookup_id_data *data = user_data;
 
-	if (cap->codec->id == data->id) {
-		data->codec = cap->codec;
+	if (cap->codec_cap->id == data->id) {
+		data->codec_cap = cap->codec_cap;
 
 		return false;
 	}
@@ -1233,10 +828,10 @@ static bool codec_lookup_id(const struct bt_pacs_cap *cap, void *user_data)
 	return true;
 }
 
-int bt_bap_broadcast_sink_create(struct bt_le_per_adv_sync *pa_sync, uint32_t broadcast_id)
+int bt_bap_broadcast_sink_create(struct bt_le_per_adv_sync *pa_sync, uint32_t broadcast_id,
+				 struct bt_bap_broadcast_sink **out_sink)
 {
 	const struct bt_bap_scan_delegator_recv_state *recv_state;
-	struct bt_bap_broadcast_sink_cb *listener;
 	struct bt_bap_broadcast_sink *sink;
 
 	CHECKIF(pa_sync == NULL) {
@@ -1251,11 +846,10 @@ int bt_bap_broadcast_sink_create(struct bt_le_per_adv_sync *pa_sync, uint32_t br
 		return -EINVAL;
 	}
 
-	if (broadcast_sink_get_by_broadcast_id(broadcast_id) != NULL) {
-		LOG_DBG("Broadcast sink with broadcast_id 0x%X already exists",
-			broadcast_id);
+	CHECKIF(out_sink == NULL) {
+		LOG_DBG("sink was NULL");
 
-		return -EALREADY;
+		return -EINVAL;
 	}
 
 	sink = broadcast_sink_free_get();
@@ -1264,6 +858,9 @@ int bt_bap_broadcast_sink_create(struct bt_le_per_adv_sync *pa_sync, uint32_t br
 
 		return -ENOMEM;
 	}
+
+	sink->broadcast_id = broadcast_id;
+	sink->pa_sync = pa_sync;
 
 	recv_state = bt_bap_scan_delegator_find_state(find_recv_state_by_pa_sync_cb,
 						      (void *)pa_sync);
@@ -1275,23 +872,15 @@ int bt_bap_broadcast_sink_create(struct bt_le_per_adv_sync *pa_sync, uint32_t br
 			LOG_DBG("Broadcast ID mismatch: 0x%X != 0x%X",
 				recv_state->broadcast_id, broadcast_id);
 
+			broadcast_sink_cleanup(sink);
 			return -EINVAL;
 		}
 
 		sink->bass_src_id = recv_state->src_id;
 	}
-
-	sink->broadcast_id = broadcast_id;
-	sink->pa_sync = pa_sync;
 	atomic_set_bit(sink->flags, BT_BAP_BROADCAST_SINK_FLAG_INITIALIZED);
 
-	SYS_SLIST_FOR_EACH_CONTAINER(&sink_cbs, listener, _node) {
-		if (listener->pa_synced != NULL) {
-			listener->pa_synced(sink, sink->pa_sync,
-					    sink->broadcast_id);
-		}
-	}
-
+	*out_sink = sink;
 	return 0;
 }
 
@@ -1299,7 +888,7 @@ int bt_bap_broadcast_sink_sync(struct bt_bap_broadcast_sink *sink, uint32_t inde
 			       struct bt_bap_stream *streams[], const uint8_t broadcast_code[16])
 {
 	struct bt_iso_big_sync_param param;
-	struct bt_codec *codecs[BROADCAST_SNK_STREAM_CNT] = { NULL };
+	struct bt_audio_codec_cfg *codec_cfgs[BROADCAST_SNK_STREAM_CNT] = {NULL};
 	uint8_t stream_count;
 	int err;
 
@@ -1350,29 +939,30 @@ int bt_bap_broadcast_sink_sync(struct bt_bap_broadcast_sink *sink, uint32_t inde
 	stream_count = 0;
 	for (int i = 1; i < BT_ISO_MAX_GROUP_ISO_COUNT; i++) {
 		if ((indexes_bitfield & BIT(i)) != 0) {
-			struct bt_codec *codec = codec_from_base_by_index(&sink->base, i);
-			struct codec_lookup_id_data lookup_data = { };
+			struct bt_audio_codec_cfg *codec_cfg =
+				codec_cfg_from_base_by_index(&sink->base, i);
+			struct codec_cap_lookup_id_data lookup_data = {};
 
-			if (codec == NULL) {
+			if (codec_cfg == NULL) {
 				LOG_DBG("Index %d not found in BASE", i);
 				return -EINVAL;
 			}
 
 			/* Lookup and assign path_id based on capabilities */
-			lookup_data.id = codec->id;
+			lookup_data.id = codec_cfg->id;
 
 			bt_pacs_cap_foreach(BT_AUDIO_DIR_SINK, codec_lookup_id,
 					    &lookup_data);
-			if (lookup_data.codec == NULL) {
+			if (lookup_data.codec_cap == NULL) {
 				LOG_DBG("Codec with id %u is not supported by our capabilities",
-				       codec->id);
+					codec_cfg->id);
 
 				return -ENOENT;
 			}
 
-			codec->path_id = lookup_data.codec->path_id;
+			codec_cfg->path_id = lookup_data.codec_cap->path_id;
 
-			codecs[stream_count++] = codec;
+			codec_cfgs[stream_count++] = codec_cfg;
 
 			if (stream_count > BROADCAST_SNK_STREAM_CNT) {
 				LOG_DBG("Cannot sync to more than %d streams",
@@ -1392,12 +982,12 @@ int bt_bap_broadcast_sink_sync(struct bt_bap_broadcast_sink *sink, uint32_t inde
 	sink->stream_count = 0U;
 	for (size_t i = 0; i < stream_count; i++) {
 		struct bt_bap_stream *stream;
-		struct bt_codec *codec;
+		struct bt_audio_codec_cfg *codec_cfg;
 
 		stream = streams[i];
-		codec = codecs[i];
+		codec_cfg = codec_cfgs[i];
 
-		err = bt_bap_broadcast_sink_setup_stream(sink, stream, codec);
+		err = bt_bap_broadcast_sink_setup_stream(sink, stream, codec_cfg);
 		if (err != 0) {
 			LOG_DBG("Failed to setup streams[%zu]: %d", i, err);
 			broadcast_sink_cleanup_streams(sink);
@@ -1529,10 +1119,8 @@ int bt_bap_broadcast_sink_delete(struct bt_bap_broadcast_sink *sink)
 static int broadcast_sink_init(void)
 {
 	static struct bt_le_per_adv_sync_cb cb = {
-		.synced = pa_synced,
 		.recv = pa_recv,
-		.term = pa_term,
-		.biginfo = biginfo_recv
+		.biginfo = biginfo_recv,
 	};
 
 	bt_le_per_adv_sync_cb_register(&cb);

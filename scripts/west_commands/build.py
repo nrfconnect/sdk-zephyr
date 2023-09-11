@@ -123,7 +123,12 @@ class Build(Forceable):
                            (try "-t usage")''')
         group.add_argument('-T', '--test-item',
                            help='''Build based on test data in testcase.yaml
-                           or sample.yaml''')
+                           or sample.yaml. If source directory is not used
+                           an argument has to be defined as
+                           SOURCE_PATH/TEST_NAME.
+                           E.g. samples/hello_world/sample.basic.helloworld.
+                           If source directory is passed
+                           then "TEST_NAME" is enough.''')
         group.add_argument('-o', '--build-opt', default=[], action='append',
                            help='''options to pass to the build tool
                            (make or ninja); may be given more than once''')
@@ -165,11 +170,17 @@ class Build(Forceable):
         if self.args.test_item:
             # we get path + testitem
             item = os.path.basename(self.args.test_item)
-            test_path = os.path.dirname(self.args.test_item)
-            if test_path:
+            if self.args.source_dir:
+                test_path = self.args.source_dir
+            else:
+                test_path = os.path.dirname(self.args.test_item)
+            if test_path and os.path.exists(test_path):
                 self.args.source_dir = test_path
-            if not self._parse_test_item(item):
-                log.die("No test metadata found")
+                if not self._parse_test_item(item):
+                    log.die("No test metadata found")
+            else:
+                log.die("test item path does not exist")
+
         if source_dir:
             if self.args.source_dir:
                 log.die("source directory specified twice:({} and {})".format(
@@ -270,6 +281,7 @@ class Build(Forceable):
                     y = yaml.safe_load(stream)
                 except yaml.YAMLError as exc:
                     log.die(exc)
+            common = y.get('common')
             tests = y.get('tests')
             if not tests:
                 log.die(f"No tests found in {yf}")
@@ -277,19 +289,68 @@ class Build(Forceable):
             if not item:
                 log.die(f"Test item {test_item} not found in {yf}")
 
-            for data in ['extra_args', 'extra_configs']:
-                extra = item.get(data)
-                if not extra:
+            sysbuild = False
+            extra_dtc_overlay_files = []
+            extra_overlay_confs = []
+            extra_conf_files = []
+            for section in [common, item]:
+                if not section:
                     continue
-                if isinstance(extra, str):
-                    arg_list = extra.split(" ")
-                else:
-                    arg_list = extra
-                args = ["-D{}".format(arg.replace('"', '\"')) for arg in arg_list]
-                if self.args.cmake_opts:
-                    self.args.cmake_opts.extend(args)
-                else:
-                    self.args.cmake_opts = args
+                sysbuild = section.get('sysbuild', sysbuild)
+                for data in [
+                        'extra_args',
+                        'extra_configs',
+                        'extra_conf_files',
+                        'extra_overlay_confs',
+                        'extra_dtc_overlay_files'
+                        ]:
+                    extra = section.get(data)
+                    if not extra:
+                        continue
+                    if isinstance(extra, str):
+                        arg_list = extra.split(" ")
+                    else:
+                        arg_list = extra
+
+                    if data == 'extra_configs':
+                        args = ["-D{}".format(arg.replace('"', '\"')) for arg in arg_list]
+                    elif data == 'extra_args':
+                        args = ["-D{}".format(arg.replace('"', '')) for arg in arg_list]
+                    elif data == 'extra_conf_files':
+                        extra_conf_files.extend(arg_list)
+                        continue
+                    elif data == 'extra_overlay_confs':
+                        extra_overlay_confs.extend(arg_list)
+                        continue
+                    elif data == 'extra_dtc_overlay_files':
+                        extra_dtc_overlay_files.extend(arg_list)
+                        continue
+
+                    if self.args.cmake_opts:
+                        self.args.cmake_opts.extend(args)
+                    else:
+                        self.args.cmake_opts = args
+
+            self.args.sysbuild = sysbuild
+
+        if found_test_metadata:
+            args = []
+            if extra_conf_files:
+                args.append(f"CONF_FILE=\"{';'.join(extra_conf_files)}\"")
+
+            if extra_dtc_overlay_files:
+                args.append(f"DTC_OVERLAY_FILE=\"{';'.join(extra_dtc_overlay_files)}\"")
+
+            if extra_overlay_confs:
+                args.append(f"OVERLAY_CONFIG=\"{';'.join(extra_overlay_confs)}\"")
+            # Build the final argument list
+            args_expanded = ["-D{}".format(a.replace('"', '')) for a in args]
+
+            if self.args.cmake_opts:
+                self.args.cmake_opts.extend(args_expanded)
+            else:
+                self.args.cmake_opts = args_expanded
+
         return found_test_metadata
 
     def _sanity_precheck(self):

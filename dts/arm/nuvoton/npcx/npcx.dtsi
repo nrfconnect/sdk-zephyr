@@ -9,6 +9,7 @@
 /* Macros for device tree declarations of npcx soc family */
 #include <zephyr/dt-bindings/adc/adc.h>
 #include <zephyr/dt-bindings/clock/npcx_clock.h>
+#include <zephyr/dt-bindings/flash_controller/npcx_fiu_qspi.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <zephyr/dt-bindings/pinctrl/npcx-pinctrl.h>
@@ -25,6 +26,23 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-m4f";
 			reg = <0>;
+			cpu-power-states = <&suspend_to_idle0 &suspend_to_idle1>;
+		};
+
+		power-states {
+			suspend_to_idle0: suspend-to-idle0 {
+				compatible = "zephyr,power-state";
+				power-state-name = "suspend-to-idle";
+				substate-id = <0>;
+				min-residency-us = <1000>;
+			};
+
+			suspend_to_idle1: suspend-to-idle1 {
+				compatible = "zephyr,power-state";
+				power-state-name = "suspend-to-idle";
+				substate-id = <1>;
+				min-residency-us = <201000>;
+			};
 		};
 	};
 
@@ -83,10 +101,12 @@
 		scfg: scfg@400c3000 {
 			compatible = "nuvoton,npcx-scfg";
 			/* First reg region is System Configuration Device */
-			/* Second reg region is System Glue Device */
+			/* Second reg region is Debugger Interface Device */
+			/* Third reg region is System Glue Device */
 			reg = <0x400c3000 0x70
+			       0x400c3070 0x30
 			       0x400a5000 0x2000>;
-			reg-names = "scfg", "glue";
+			reg-names = "scfg", "dbg", "glue";
 			#alt-cells = <3>;
 			#lvol-cells = <2>;
 		};
@@ -508,13 +528,12 @@
 			};
 		};
 
-		/* Dedicated SPI interface to access SPI flashes */
-		spi_fiu0: spi@40020000 {
-			compatible = "nuvoton,npcx-spi-fiu";
+		/* Dedicated Quad-SPI interface to access SPI flashes */
+		qspi_fiu0: quadspi@40020000 {
+			compatible = "nuvoton,npcx-fiu-qspi";
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x40020000 0x2000>;
-			clocks = <&pcc NPCX_CLOCK_BUS_FIU NPCX_PWDWN_CTL1 2>;
 		};
 
 		peci0: peci@400d4000 {

@@ -15,9 +15,9 @@
 #define ZEPHYR_INCLUDE_ISOTP_H_
 
 /**
- * @brief CAN ISO-TP Interface
- * @defgroup can_isotp CAN ISO-TP Interface
- * @ingroup CAN
+ * @brief CAN ISO-TP Protocol
+ * @defgroup can_isotp CAN ISO-TP Protocol
+ * @ingroup connectivity
  * @{
  */
 
@@ -121,7 +121,7 @@
 /** Mask for priority in fixed addressing mode */
 #define ISOTP_FIXED_ADDR_PRIO_MASK      (CONFIG_ISOTP_FIXED_ADDR_PRIO_MASK)
 
-/* CAN filter RX mask to match any priority and source address (SA) */
+/** CAN filter RX mask to match any priority and source address (SA) */
 #define ISOTP_FIXED_ADDR_RX_MASK        (CONFIG_ISOTP_FIXED_ADDR_RX_MASK)
 
 #ifdef __cplusplus
@@ -172,6 +172,14 @@ struct isotp_fc_opts {
 	uint8_t stmin; /**< Minimum separation time. Min time between frames */
 };
 
+/**
+ * @brief Transmission callback
+ *
+ * This callback is called when a transmission is completed.
+ *
+ * @param error_nr ISOTP_N_OK on success, ISOTP_N_* on error
+ * @param arg      Callback argument passed to the send function
+ */
 typedef void (*isotp_tx_callback_t)(int error_nr, void *arg);
 
 struct isotp_send_ctx;
@@ -383,7 +391,7 @@ struct isotp_send_ctx {
 		};
 	};
 	struct k_work work;
-	struct _timeout timeout;
+	struct k_timer timer;
 	union {
 		struct isotp_callback fin_cb;
 		struct k_sem fin_sem;
@@ -413,7 +421,7 @@ struct isotp_recv_ctx {
 	uint32_t length;
 	int error_nr;
 	struct k_work work;
-	struct _timeout timeout;
+	struct k_timer timer;
 	struct k_fifo fifo;
 	struct isotp_msg_id rx_addr;
 	struct isotp_msg_id tx_addr;

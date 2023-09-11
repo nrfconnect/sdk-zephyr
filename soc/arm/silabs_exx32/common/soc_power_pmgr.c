@@ -21,7 +21,7 @@ LOG_MODULE_DECLARE(soc, CONFIG_SOC_LOG_LEVEL);
 
 
 /* Invoke Low Power/System Off specific Tasks */
-__weak void pm_state_set(enum pm_state state, uint8_t substate_id)
+void pm_state_set(enum pm_state state, uint8_t substate_id)
 {
 	ARG_UNUSED(substate_id);
 	sl_power_manager_em_t energy_mode = SL_POWER_MANAGER_EM0;
@@ -73,6 +73,11 @@ __weak void pm_state_set(enum pm_state state, uint8_t substate_id)
 	__enable_irq();
 }
 
+void pm_state_exit_post_ops(enum pm_state state, uint8_t substate_id)
+{
+	ARG_UNUSED(state);
+	ARG_UNUSED(substate_id);
+}
 
 /**
  * Some SiLabs blobs, such as RAIL, call directly into sl_power_manager, and

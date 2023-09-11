@@ -16,7 +16,7 @@ OS management group defines following commands:
     | ``1``             | Console/Terminal echo control;                |
     |                   | unimplemented by Zephyr                       |
     +-------------------+-----------------------------------------------+
-    | ``2``             | Statistics                                    |
+    | ``2``             | Task Statistics                               |
     +-------------------+-----------------------------------------------+
     | ``3``             | Memory pool statistics                        |
     +-------------------+-----------------------------------------------+
@@ -275,11 +275,11 @@ where:
     | <pool_name>           | string representing the pool name, used as a key |
     |                       | for dictionary with pool statistics data         |
     +-----------------------+--------------------------------------------------+
-    | "blksiz"              | size of the memory block in the pool             |
+    | "blksiz"              | size of the memory blocks in the pool            |
     +-----------------------+--------------------------------------------------+
     | "nblks"               | number of blocks in the pool                     |
     +-----------------------+--------------------------------------------------+
-    | "nrfree"              | number of free blocks                            |
+    | "nfree"               | number of free blocks                            |
     +-----------------------+--------------------------------------------------+
     | "min"                 | lowest number of free blocks the pool reached    |
     |                       | during run-time                                  |
@@ -318,7 +318,7 @@ Date-time request header fields:
 
 The command sends an empty CBOR map as data.
 
-Data-time get response
+Date-time get response
 ----------------------
 
 Date-time get response header fields:
@@ -399,7 +399,7 @@ where:
     |                       | yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ                 |
     +-----------------------+---------------------------------------------------+
 
-Data-time set response
+Date-time set response
 ----------------------
 
 Date-time set response header fields:
@@ -410,7 +410,7 @@ Date-time set response header fields:
     +--------+--------------+----------------+
     | ``OP`` | ``Group ID`` | ``Command ID`` |
     +========+==============+================+
-    | ``1``  | ``0``        |  ``4``         |
+    | ``3``  | ``0``        |  ``4``         |
     +--------+--------------+----------------+
 
 The command sends an empty CBOR map as data if successful. In case of error the
@@ -543,7 +543,7 @@ MCUmgr parameters response header fields
     +--------+--------------+----------------+
     | ``OP`` | ``Group ID`` | ``Command ID`` |
     +========+==============+================+
-    | ``2``  | ``0``        |  ``6``         |
+    | ``1``  | ``0``        |  ``6``         |
     +--------+--------------+----------------+
 
 CBOR data of successful response:
@@ -646,7 +646,7 @@ OS/Application info response header fields
     +--------+--------------+----------------+
     | ``OP`` | ``Group ID`` | ``Command ID`` |
     +========+==============+================+
-    | ``2``  | ``0``        |  ``7``         |
+    | ``1``  | ``0``        |  ``7``         |
     +--------+--------------+----------------+
 
 CBOR data of response:

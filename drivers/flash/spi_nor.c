@@ -11,11 +11,13 @@
 
 #include <errno.h>
 #include <zephyr/drivers/flash.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/spi.h>
 #include <zephyr/init.h>
 #include <string.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys_clock.h>
+#include <zephyr/pm/device.h>
 
 #include "spi_nor.h"
 #include "jesd216.h"
@@ -65,6 +67,10 @@ LOG_MODULE_REGISTER(spi_nor, CONFIG_FLASH_LOG_LEVEL);
 struct spi_nor_config {
 	/* Devicetree SPI configuration */
 	struct spi_dt_spec spi;
+
+#if DT_INST_NODE_HAS_PROP(0, reset_gpios)
+	const struct gpio_dt_spec reset;
+#endif
 
 	/* Runtime SFDP stores no static configuration. */
 
@@ -774,7 +780,7 @@ static int spi_nor_erase(const struct device *dev, off_t addr, size_t size)
 
 				if ((etp->exp != 0)
 				    && SPI_NOR_IS_ALIGNED(addr, etp->exp)
-				    && SPI_NOR_IS_ALIGNED(size, etp->exp)
+				    && (size >= BIT(etp->exp))
 				    && ((bet == NULL)
 					|| (etp->exp > bet->exp))) {
 					bet = etp;
@@ -1143,10 +1149,32 @@ static int spi_nor_configure(const struct device *dev)
 		return -ENODEV;
 	}
 
+#if DT_INST_NODE_HAS_PROP(0, reset_gpios)
+	if (!gpio_is_ready_dt(&cfg->reset)) {
+		LOG_ERR("Reset pin not ready");
+		return -ENODEV;
+	}
+	if (gpio_pin_configure_dt(&cfg->reset, GPIO_OUTPUT_ACTIVE)) {
+		LOG_ERR("Couldn't configure reset pin");
+		return -ENODEV;
+	}
+	rc = gpio_pin_set_dt(&cfg->reset, 0);
+	if (rc) {
+		return rc;
+	}
+#endif
+
 	/* After a soft-reset the flash might be in DPD or busy writing/erasing.
 	 * Exit DPD and wait until flash is ready.
 	 */
 	acquire_device(dev);
+
+	rc = exit_dpd(dev);
+	if (rc < 0) {
+		LOG_ERR("Failed to exit DPD (%d)", rc);
+		return -ENODEV;
+	}
+
 	rc = spi_nor_rdsr(dev);
 	if (rc > 0 && (rc & SPI_NOR_WIP_BIT)) {
 		LOG_WRN("Waiting until flash is ready");
@@ -1245,6 +1273,44 @@ static int spi_nor_configure(const struct device *dev)
 
 	return 0;
 }
+
+#ifdef CONFIG_PM_DEVICE
+
+static int spi_nor_pm_control(const struct device *dev, enum pm_device_action action)
+{
+	int rc = 0;
+
+	switch (action) {
+#ifdef CONFIG_SPI_NOR_IDLE_IN_DPD
+	case PM_DEVICE_ACTION_SUSPEND:
+	case PM_DEVICE_ACTION_RESUME:
+		break;
+#else
+	case PM_DEVICE_ACTION_SUSPEND:
+		acquire_device(dev);
+		rc = enter_dpd(dev);
+		release_device(dev);
+		break;
+	case PM_DEVICE_ACTION_RESUME:
+		acquire_device(dev);
+		rc = exit_dpd(dev);
+		release_device(dev);
+		break;
+#endif /* CONFIG_SPI_NOR_IDLE_IN_DPD */
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Coming out of power off */
+		rc = spi_nor_configure(dev);
+		break;
+	case PM_DEVICE_ACTION_TURN_OFF:
+		break;
+	default:
+		rc = -ENOSYS;
+	}
+
+	return rc;
+}
+
+#endif /* CONFIG_PM_DEVICE */
 
 /**
  * @brief Initialize and configure the flash
@@ -1359,6 +1425,10 @@ BUILD_ASSERT(DT_INST_PROP(0, has_lock) == (DT_INST_PROP(0, has_lock) & 0xFF),
 static const struct spi_nor_config spi_nor_config_0 = {
 	.spi = SPI_DT_SPEC_INST_GET(0, SPI_WORD_SET(8),
 				    CONFIG_SPI_NOR_CS_WAIT_DELAY),
+#if DT_INST_NODE_HAS_PROP(0, reset_gpios)
+	.reset = GPIO_DT_SPEC_INST_GET(0, reset_gpios),
+#endif
+
 #if !defined(CONFIG_SPI_NOR_SFDP_RUNTIME)
 
 #if defined(CONFIG_FLASH_PAGE_LAYOUT)
@@ -1389,7 +1459,8 @@ static const struct spi_nor_config spi_nor_config_0 = {
 
 static struct spi_nor_data spi_nor_data_0;
 
-DEVICE_DT_INST_DEFINE(0, &spi_nor_init, NULL,
+PM_DEVICE_DT_INST_DEFINE(0, spi_nor_pm_control);
+DEVICE_DT_INST_DEFINE(0, &spi_nor_init, PM_DEVICE_DT_INST_GET(0),
 		 &spi_nor_data_0, &spi_nor_config_0,
 		 POST_KERNEL, CONFIG_SPI_NOR_INIT_PRIORITY,
 		 &spi_nor_api);

@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include <zephyr/device.h>
+#include <zephyr/init.h>
 #include <zephyr/drivers/timer/system_timer.h>
 #include <zephyr/sys_clock.h>
 #include <zephyr/spinlock.h>
@@ -224,6 +224,15 @@ static int sys_clock_driver_init(void)
 	irq_init();
 	return 0;
 }
+
+#ifdef CONFIG_PM
+
+void sys_clock_idle_exit(void)
+{
+	sys_clock_driver_init();
+}
+
+#endif
 
 SYS_INIT(sys_clock_driver_init, PRE_KERNEL_2,
 	 CONFIG_SYSTEM_CLOCK_INIT_PRIORITY);

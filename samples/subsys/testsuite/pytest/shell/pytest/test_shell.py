@@ -2,44 +2,32 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-import time
 import logging
 
-from twister_harness.device.device_abstract import DeviceAbstract
+import pytest
+from twister_harness import DeviceAdapter, Shell
 
 logger = logging.getLogger(__name__)
 
 
-def wait_for_message(dut: DeviceAbstract, message, timeout=20):
-    time_started = time.time()
-    for line in dut.iter_stdout:
-        if line:
-            logger.debug("#: " + line)
-        if message in line:
-            return True
-        if time.time() > time_started + timeout:
-            return False
+@pytest.fixture(scope='function')
+def shell(dut: DeviceAdapter) -> Shell:
+    """Return ready to use shell interface"""
+    shell = Shell(dut, timeout=20.0)
+    logger.info('wait for prompt')
+    assert shell.wait_for_prompt()
+    return shell
 
 
-def wait_for_prompt(dut: DeviceAbstract, prompt='uart:~$', timeout=20):
-    time_started = time.time()
-    while True:
-        dut.write(b'\n')
-        for line in dut.iter_stdout:
-            if prompt in line:
-                logger.debug('Got prompt')
-                return True
-        if time.time() > time_started + timeout:
-            return False
+def test_shell_print_help(shell: Shell):
+    logger.info('send "help" command')
+    lines = shell.exec_command('help')
+    assert 'Available commands:' in lines, 'expected response not found'
+    logger.info('response is valid')
 
 
-def test_shell_print_help(dut: DeviceAbstract):
-    wait_for_prompt(dut)
-    dut.write(b'help\n')
-    assert wait_for_message(dut, "Available commands")
-
-
-def test_shell_print_version(dut: DeviceAbstract):
-    wait_for_prompt(dut)
-    dut.write(b'kernel version\n')
-    assert wait_for_message(dut, "Zephyr version")
+def test_shell_print_version(shell: Shell):
+    logger.info('send "kernel version" command')
+    lines = shell.exec_command('kernel version')
+    assert any(['Zephyr version' in line for line in lines]), 'expected response not found'
+    logger.info('response is valid')

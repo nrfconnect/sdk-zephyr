@@ -32,7 +32,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_l2cap, CONFIG_BT_L2CAP_LOG_LEVEL);
 
-#define LE_CHAN_RTX(_w) CONTAINER_OF(_w, struct bt_l2cap_le_chan, rtx_work)
+#define LE_CHAN_RTX(_w) CONTAINER_OF(k_work_delayable_from_work(_w), \
+				     struct bt_l2cap_le_chan, rtx_work)
 #define CHAN_RX(_w) CONTAINER_OF(_w, struct bt_l2cap_le_chan, rx_work)
 
 #define L2CAP_LE_MIN_MTU		23
@@ -914,7 +915,7 @@ static void l2cap_chan_tx_process(struct k_work *work)
 	struct bt_l2cap_le_chan *ch;
 	struct net_buf *buf;
 
-	ch = CONTAINER_OF(work, struct bt_l2cap_le_chan, tx_work);
+	ch = CONTAINER_OF(k_work_delayable_from_work(work), struct bt_l2cap_le_chan, tx_work);
 
 	/* Resume tx in case there are buffers in the queue */
 	while ((buf = l2cap_chan_le_get_tx_buf(ch))) {
@@ -1320,7 +1321,7 @@ callback:
 	if (ecred_cb && ecred_cb->ecred_conn_req) {
 		ecred_cb->ecred_conn_req(conn, result, psm);
 	}
-	if (rsp_queued && result == BT_L2CAP_LE_SUCCESS) {
+	if (rsp_queued) {
 		for (i = 0; i < req_cid_count; i++) {
 			/* Raise connected callback for established channels */
 			if ((dcid[i] != 0x00) && (chan[i]->ops->connected != NULL)) {
@@ -1840,6 +1841,11 @@ static struct net_buf *l2cap_chan_create_seg(struct bt_l2cap_le_chan *ch,
 			net_buf_push_le16(buf, net_buf_frags_len(buf));
 		}
 		return net_buf_ref(buf);
+	} else {
+		/* Unnecessary fragmentation. Ensure the source buffer has
+		 * BT_L2CAP_SDU_BUF_SIZE(0) headroom.
+		 */
+		LOG_DBG("not enough headroom on %p", buf);
 	}
 
 segment:
@@ -2082,7 +2088,7 @@ static int l2cap_chan_le_send_sdu(struct bt_l2cap_le_chan *ch,
 
 	net_buf_unref(frag);
 
-	return ret;
+	return sent;
 }
 
 static void le_credits(struct bt_l2cap *l2cap, uint8_t ident,
@@ -2143,7 +2149,8 @@ static void reject_cmd(struct bt_l2cap *l2cap, uint8_t ident,
 
 static int l2cap_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 {
-	struct bt_l2cap *l2cap = CONTAINER_OF(chan, struct bt_l2cap, chan);
+	struct bt_l2cap_le_chan *l2chan = CONTAINER_OF(chan, struct bt_l2cap_le_chan, chan);
+	struct bt_l2cap *l2cap = CONTAINER_OF(l2chan, struct bt_l2cap, chan);
 	struct bt_l2cap_sig_hdr *hdr;
 	uint16_t len;
 
@@ -2653,7 +2660,12 @@ static void l2cap_chan_le_recv(struct bt_l2cap_le_chan *chan,
 		return;
 	}
 
-	l2cap_chan_send_credits(chan, 1);
+	/* Only attempt to send credits if the channel wasn't disconnected
+	 * in the recv() callback above
+	 */
+	if (bt_l2cap_chan_get_state(&chan->chan) == BT_L2CAP_CONNECTED) {
+		l2cap_chan_send_credits(chan, 1);
+	}
 }
 
 static void l2cap_chan_recv_queue(struct bt_l2cap_le_chan *chan,

@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
+# FIXME: SHADOW_VARS: Remove this once we have enabled -Wshadow globally.
+add_compile_options($<TARGET_PROPERTY:compiler,warning_shadow_variables>)
+
 add_definitions(-D__ZEPHYR_SUPERVISOR__)
 
 add_subdirectory(disk)
@@ -79,3 +82,4 @@ add_subdirectory_ifdef(CONFIG_WATCHDOG watchdog)
 add_subdirectory_ifdef(CONFIG_WIFI wifi)
 add_subdirectory_ifdef(CONFIG_RTC rtc)
 add_subdirectory_ifdef(CONFIG_ARM_SIP_SVC_DRIVER sip_svc)
+add_subdirectory_ifdef(CONFIG_HWSPINLOCK  hwspinlock)

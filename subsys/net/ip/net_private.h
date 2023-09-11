@@ -19,8 +19,10 @@
 
 #include <zephyr/net/net_event.h>
 
+#ifdef CONFIG_NET_L2_WIFI_MGMT
 /* For struct wifi_scan_result */
 #include <zephyr/net/wifi_mgmt.h>
+#endif /* CONFIG_NET_L2_WIFI_MGMT */
 
 #define DEFAULT_NET_EVENT_INFO_SIZE 32
 /* NOTE: Update this union with all *big* event info structs */
@@ -29,14 +31,14 @@ union net_mgmt_events {
 	struct net_if_dhcpv4 dhcpv4;
 #endif /* CONFIG_NET_DHCPV4 */
 #if defined(CONFIG_NET_L2_WIFI_MGMT)
-	struct wifi_scan_result wifi_scan_result;
-#if defined(CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS)
-	struct wifi_raw_scan_result raw_scan_result;
-#endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS */
+	union wifi_mgmt_events wifi;
 #endif /* CONFIG_NET_L2_WIFI_MGMT */
-#if defined(CONFIG_NET_IPV6) && defined(CONFIG_NET_IPV6_MLD)
+#if defined(CONFIG_NET_IPV6)
+	struct net_event_ipv6_prefix ipv6_prefix;
+#if defined(CONFIG_NET_IPV6_MLD)
 	struct net_event_ipv6_route ipv6_route;
-#endif /* CONFIG_NET_IPV6 && CONFIG_NET_IPV6_MLD */
+#endif /* CONFIG_NET_IPV6_MLD */
+#endif /* CONFIG_NET_IPV6 */
 	char default_event[DEFAULT_NET_EVENT_INFO_SIZE];
 };
 

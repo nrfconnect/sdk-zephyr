@@ -18,11 +18,13 @@ tests:
       - gd32f450i_eval
       - gd32vf103v_eval
       - gd32f403z_eval
-      - esp32
+      - esp32_devkitc_wroom
+      - esp32_devkitc_wrover
       - esp32s2_saola
       - esp32c3_devkitm
       - gd32l233r_eval
       - lpcxpresso55s36
+      - mr_canhubk3
     integration_platforms:
       - nucleo_l073rz
       - nrf52840dk_nrf52840

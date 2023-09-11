@@ -407,6 +407,34 @@
 #define Z_IS_254_EQ_254(...) \,
 #define Z_IS_255_EQ_255(...) \,
 
+/*
+ * Generic sparse list of odd numbers (check the implementation of
+ * GPIO_DT_RESERVED_RANGES_NGPIOS as a usage example)
+ */
+#define Z_SPARSE_LIST_ODD_NUMBERS		\
+	EMPTY,  1, EMPTY,  3, EMPTY,  5, EMPTY,  7, \
+	EMPTY,  9, EMPTY, 11, EMPTY, 13, EMPTY, 15, \
+	EMPTY, 17, EMPTY, 19, EMPTY, 21, EMPTY, 23, \
+	EMPTY, 25, EMPTY, 27, EMPTY, 29, EMPTY, 31, \
+	EMPTY, 33, EMPTY, 35, EMPTY, 37, EMPTY, 39, \
+	EMPTY, 41, EMPTY, 43, EMPTY, 45, EMPTY, 47, \
+	EMPTY, 49, EMPTY, 51, EMPTY, 53, EMPTY, 55, \
+	EMPTY, 57, EMPTY, 59, EMPTY, 61, EMPTY, 63
+
+/*
+ * Generic sparse list of even numbers (check the implementation of
+ * GPIO_DT_RESERVED_RANGES_NGPIOS as a usage example)
+ */
+#define Z_SPARSE_LIST_EVEN_NUMBERS		\
+	 0, EMPTY,  2, EMPTY,  4, EMPTY,  6, EMPTY, \
+	 8, EMPTY, 10, EMPTY, 12, EMPTY, 14, EMPTY, \
+	16, EMPTY, 18, EMPTY, 20, EMPTY, 22, EMPTY, \
+	24, EMPTY, 26, EMPTY, 28, EMPTY, 30, EMPTY, \
+	32, EMPTY, 34, EMPTY, 36, EMPTY, 38, EMPTY, \
+	40, EMPTY, 42, EMPTY, 44, EMPTY, 46, EMPTY, \
+	48, EMPTY, 50, EMPTY, 52, EMPTY, 54, EMPTY, \
+	56, EMPTY, 58, EMPTY, 60, EMPTY, 62, EMPTY
+
 #define UTIL_INC_0 1
 #define UTIL_INC_1 2
 #define UTIL_INC_2 3
@@ -457,16 +485,6 @@
 #define UTIL_INC_47 48
 #define UTIL_INC_48 49
 #define UTIL_INC_49 50
-#define UTIL_INC_50 51
-#define UTIL_INC_51 52
-#define UTIL_INC_52 53
-#define UTIL_INC_53 54
-#define UTIL_INC_54 55
-#define UTIL_INC_55 56
-#define UTIL_INC_56 57
-#define UTIL_INC_57 58
-#define UTIL_INC_58 59
-#define UTIL_INC_59 60
 #define UTIL_INC_50 51
 #define UTIL_INC_51 52
 #define UTIL_INC_52 53
@@ -1006,11 +1024,11 @@
 #define UTIL_X2_72 144
 #define UTIL_X2_73 146
 #define UTIL_X2_74 148
-#define UTIL_X2_75 140
-#define UTIL_X2_76 142
-#define UTIL_X2_77 144
-#define UTIL_X2_78 146
-#define UTIL_X2_79 148
+#define UTIL_X2_75 150
+#define UTIL_X2_76 152
+#define UTIL_X2_77 154
+#define UTIL_X2_78 156
+#define UTIL_X2_79 158
 #define UTIL_X2_80 160
 #define UTIL_X2_81 162
 #define UTIL_X2_82 164
@@ -1026,11 +1044,11 @@
 #define UTIL_X2_92 184
 #define UTIL_X2_93 186
 #define UTIL_X2_94 188
-#define UTIL_X2_95 180
-#define UTIL_X2_96 182
-#define UTIL_X2_97 184
-#define UTIL_X2_98 186
-#define UTIL_X2_99 188
+#define UTIL_X2_95 190
+#define UTIL_X2_96 192
+#define UTIL_X2_97 194
+#define UTIL_X2_98 196
+#define UTIL_X2_99 198
 #define UTIL_X2_100 200
 #define UTIL_X2_101 202
 #define UTIL_X2_102 204
@@ -1186,6 +1204,6 @@
 #define UTIL_X2_252 504
 #define UTIL_X2_253 506
 #define UTIL_X2_254 508
-#define UTIL_X2_255 512
+#define UTIL_X2_255 510
 
 #endif /* ZEPHYR_INCLUDE_SYS_UTIL_INTERNAL_H_ */

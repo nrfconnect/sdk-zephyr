@@ -10,7 +10,9 @@
 #include <zephyr/drivers/regulator.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/sensor/npm1300_charger.h>
+#include <zephyr/drivers/led.h>
 #include <zephyr/dt-bindings/regulator/npm1300.h>
+#include <zephyr/drivers/mfd/npm1300.h>
 #include <zephyr/sys/printk.h>
 #include <getopt.h>
 
@@ -22,6 +24,10 @@ static const struct gpio_dt_spec button1 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios
 static const struct device *regulators = DEVICE_DT_GET(DT_NODELABEL(npm1300_ek_regulators));
 
 static const struct device *charger = DEVICE_DT_GET(DT_NODELABEL(npm1300_ek_charger));
+
+static const struct device *leds = DEVICE_DT_GET(DT_NODELABEL(npm1300_ek_leds));
+
+static const struct device *pmic = DEVICE_DT_GET(DT_NODELABEL(npm1300_ek_pmic));
 
 void configure_ui(void)
 {
@@ -40,6 +46,31 @@ void configure_ui(void)
 	}
 
 	printk("Set up button at %s pin %d\n", button1.port->name, button1.pin);
+
+	if (!device_is_ready(leds)) {
+		printk("Error: led device is not ready\n");
+		return;
+	}
+}
+
+static void event_callback(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
+{
+	printk("Event detected\n");
+}
+
+void configure_events(void)
+{
+	if (!device_is_ready(pmic)) {
+		printk("Pmic device not ready.\n");
+		return;
+	}
+
+	/* Setup callback for shiphold button press */
+	static struct gpio_callback event_cb;
+
+	gpio_init_callback(&event_cb, event_callback, BIT(NPM1300_EVENT_SHIPHOLD_PRESS));
+
+	mfd_npm1300_add_callback(pmic, &event_cb);
 }
 
 void read_sensors(void)
@@ -71,6 +102,8 @@ int main(void)
 {
 	configure_ui();
 
+	configure_events();
+
 	if (!device_is_ready(regulators)) {
 		printk("Error: Regulator device is not ready\n");
 		return 0;
@@ -90,6 +123,15 @@ int main(void)
 		if (button_state && !last_button) {
 			dvs_state = (dvs_state + 1) % 4;
 			regulator_parent_dvs_state_set(regulators, dvs_state);
+		}
+
+		/* Update PMIC LED if button state has changed */
+		if (button_state != last_button) {
+			if (button_state) {
+				led_on(leds, 2U);
+			} else {
+				led_off(leds, 2U);
+			}
 		}
 
 		/* Read and display charger status */

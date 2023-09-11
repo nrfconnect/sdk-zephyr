@@ -43,12 +43,33 @@ config CPU_CORTEX_A55
 	help
 	  This option signifies the use of a Cortex-A55 CPU
 
+config CPU_CORTEX_A57
+	bool
+	select CPU_CORTEX_A
+	select ARMV8_A
+	help
+	  This option signifies the use of a Cortex-A57 CPU
+
 config CPU_CORTEX_A72
 	bool
 	select CPU_CORTEX_A
 	select ARMV8_A
 	help
 	  This option signifies the use of a Cortex-A72 CPU
+
+config CPU_CORTEX_A76
+	bool
+	select CPU_CORTEX_A
+	select ARMV8_A
+	help
+	  This option signifies the use of a Cortex-A76 CPU
+
+config CPU_CORTEX_A76_A55
+	bool
+	select CPU_CORTEX_A
+	select ARMV8_A
+	help
+	  This option signifies the use of a Cortex-A76 and A55 big little CPU cluster
 
 config CPU_CORTEX_R82
 	bool
@@ -121,6 +142,15 @@ config ARM64_SAFE_EXCEPTION_STACK
 	  used for user stack overflow checking, because kernel stack support
 	  the checking work.
 
+config ARM64_ENABLE_FRAME_POINTER
+	bool
+	default y
+	depends on OVERRIDE_FRAME_POINTER_DEFAULT && !OMIT_FRAME_POINTER
+	help
+	  Hidden option to simplify access to OVERRIDE_FRAME_POINTER_DEFAULT
+	  and OMIT_FRAME_POINTER. It is automatically enabled when the frame
+	  pointer unwinding is enabled.
+
 config ARM64_SAFE_EXCEPTION_STACK_SIZE
 	int "The stack size of the safe exception stack"
 	default 4096
@@ -128,6 +158,15 @@ config ARM64_SAFE_EXCEPTION_STACK_SIZE
 	help
 	  The stack size of the safe exception stack. The safe exception stack
 	  requires to be enough to do the stack overflow check.
+
+config ARM64_FALLBACK_ON_RESERVED_CORES
+	bool "To enable fallback on reserved cores"
+	help
+	  Give the ability to define more cores in the device tree than required
+	  via CONFIG_MP_MAX_NUM_CPUS.  The extra cores in the device tree
+	  become reserved.  If there is an issue powering on a core during boot
+	  then that core will be skipped and the next core in the device tree
+	  will be used.
 
 if CPU_CORTEX_A
 
@@ -225,7 +264,7 @@ if ARM_MMU
 config MMU_PAGE_SIZE
 	default 0x1000
 
-choice
+choice ARM64_VA_BITS
 	prompt "Virtual address space size"
 	default ARM64_VA_BITS_32
 	help
@@ -257,7 +296,7 @@ config ARM64_VA_BITS
 	default 42 if ARM64_VA_BITS_42
 	default 48 if ARM64_VA_BITS_48
 
-choice
+choice ARM64_PA_BITS
 	prompt "Physical address space size"
 	default ARM64_PA_BITS_32
 	help

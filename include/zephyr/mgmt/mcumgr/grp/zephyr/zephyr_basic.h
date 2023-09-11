@@ -18,33 +18,22 @@ extern "C" {
 /**
  * Command result codes for statistics management group.
  */
-enum zephyr_basic_group_ret_code_t {
+enum zephyr_basic_group_err_code_t {
 	/** No error, this is implied if there is no ret value in the response */
-	ZEPHYR_MGMT_GRP_CMD_RC_OK = 0,
+	ZEPHYRBASIC_MGMT_ERR_OK = 0,
 
 	/** Unknown error occurred. */
-	ZEPHYR_MGMT_RET_RC_UNKNOWN,
+	ZEPHYRBASIC_MGMT_ERR_UNKNOWN,
 
 	/** Opening of the flash area has failed. */
-	ZEPHYR_MGMT_GRP_CMD_RC_FLASH_OPEN_FAILED,
+	ZEPHYRBASIC_MGMT_ERR_FLASH_OPEN_FAILED,
 
 	/** Querying the flash area parameters has failed. */
-	ZEPHYR_MGMT_GRP_CMD_RC_FLASH_CONFIG_QUERY_FAIL,
+	ZEPHYRBASIC_MGMT_ERR_FLASH_CONFIG_QUERY_FAIL,
 
 	/** Erasing the flash area has failed. */
-	ZEPHYR_MGMT_GRP_CMD_RC_FLASH_ERASE_FAILED,
+	ZEPHYRBASIC_MGMT_ERR_FLASH_ERASE_FAILED,
 };
-
-#ifdef CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
-/*
- * @brief	Translate zephyr basic group error code into MCUmgr error code
- *
- * @param ret	#zephyr_basic_group_ret_code_t error code
- *
- * @return	#mcumgr_err_t error code
- */
-int zephyr_basic_group_translate_error_code(uint16_t ret);
-#endif
 
 #ifdef __cplusplus
 }

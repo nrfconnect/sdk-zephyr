@@ -27,6 +27,8 @@ struct counter_alarm_cfg alarm_cfg;
 #define TIMER DT_INST(0, st_stm32_counter)
 #elif defined(CONFIG_COUNTER_RTC_STM32)
 #define TIMER DT_INST(0, st_stm32_rtc)
+#elif defined(CONFIG_COUNTER_SMARTBOND_TIMER)
+#define TIMER DT_NODELABEL(timer3)
 #elif defined(CONFIG_COUNTER_NATIVE_POSIX)
 #define TIMER DT_NODELABEL(counter0)
 #elif defined(CONFIG_COUNTER_XLNX_AXI_TIMER)
@@ -43,6 +45,12 @@ struct counter_alarm_cfg alarm_cfg;
 #define TIMER DT_NODELABEL(rtcc0)
 #elif defined(CONFIG_COUNTER_GECKO_STIMER)
 #define TIMER DT_NODELABEL(stimer0)
+#elif defined(CONFIG_COUNTER_INFINEON_CAT1)
+#define TIMER DT_NODELABEL(counter0_0)
+#elif defined(CONFIG_COUNTER_AMBIQ)
+#define TIMER DT_NODELABEL(counter0)
+#elif defined(CONFIG_COUNTER_SNPS_DW)
+#define TIMER DT_NODELABEL(timer0)
 #endif
 
 static void test_counter_interrupt_fn(const struct device *counter_dev,

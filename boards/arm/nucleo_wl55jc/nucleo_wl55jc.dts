@@ -8,6 +8,7 @@
 #include <st/wl/stm32wl55Xc.dtsi>
 #include <st/wl/stm32wl55jcix-pinctrl.dtsi>
 #include "arduino_r3_connector.dtsi"
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
 	model = "STMicroelectronics STM32WL55JC-NUCLEO board";
@@ -21,7 +22,7 @@
 		zephyr,code-partition = &flash0;
 	};
 
-	leds {
+	leds: leds {
 		compatible = "gpio-leds";
 		blue_led_1: led_0 {
 			gpios = <&gpiob 15 GPIO_ACTIVE_HIGH>;
@@ -42,14 +43,17 @@
 		user_button_1: button_0 {
 			label = "SW1";
 			gpios = <&gpioa 0 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			zephyr,code = <INPUT_KEY_0>;
 		};
 		user_button_2: button_1 {
 			label = "SW2";
 			gpios = <&gpioa 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			zephyr,code = <INPUT_KEY_1>;
 		};
 		user_button_3: button_2 {
 			label = "SW3";
 			gpios = <&gpioc 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			zephyr,code = <INPUT_KEY_2>;
 		};
 	};
 
@@ -64,10 +68,6 @@
 		volt-sensor0 = &vref;
 		volt-sensor1 = &vbat;
 	};
-};
-
-&cpu0 {
-	cpu-power-states = <&stop0 &stop1 &stop2>;
 };
 
 &clk_lsi {
@@ -144,6 +144,8 @@
 &adc1 {
 	pinctrl-0 = <&adc_in5_pb1>;
 	pinctrl-names = "default";
+	st,adc-clock-source = <SYNC>;
+	st,adc-prescaler = <4>;
 	status = "okay";
 };
 

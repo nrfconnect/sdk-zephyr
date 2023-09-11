@@ -28,6 +28,13 @@ config SOC_GECKO_SERIES2
 	  This is equivalent of _SILICON_LABS_32B_SERIES_2 definition in HAL
 	  code.
 
+config SOC_GECKO_SERIES1
+	bool
+	help
+	  Set if we're building for Gecko Series 1 SoC.
+	  This is equivalent of _SILICON_LABS_32B_SERIES_1 definition in HAL
+	  code.
+
 config SOC_GECKO_BURTC
 	bool
 	help
@@ -38,6 +45,11 @@ config SOC_GECKO_CORE
 	default y
 	help
 	  Set if the Core interrupt handling (CORE) HAL module is used.
+
+config SOC_GECKO_ADC
+	bool
+	help
+	  Set if the Analog to Digital Converter (ADC) HAL module is used.
 
 config SOC_GECKO_IADC
 	bool
@@ -187,8 +199,8 @@ config SOC_GECKO_DEV_INIT
 config COUNTER_GECKO_STIMER
 	bool
 	help
-	  Enable counter driver based on RTCC module for Silicon Labs Gecko
-	  chips.
+	  Enable counter driver based on the Sleep Timer driver for Silicon Labs
+	  Gecko chips.
 
 config SOC_GECKO_CMU
 	bool
@@ -306,5 +318,12 @@ config SOC_GECKO_HAS_HFRCO_FREQRANGE
 	  via FREQRANGE field. This is supported for e.g. efr32fg1p, efr32mg12p series.
 	  If disabled, indicates that configuration of HFRCO frequency for corresponding SOC
 	  is not supported via this field. This is the case for e.g. efm32hg, efm32wg series.
+
+config SOC_GECKO_USE_RAIL
+	bool "Use RAIL (Radio Abstraction Interface Layer)"
+	help
+	  RAIL (Radio Abstraction Interface Layer) is a library needed to use the EFR radio
+	  hardware. This option enable the proper set of features to allow to properly compile
+	  with the RAIL blob.
 
 endif # SOC_FAMILY_EXX32

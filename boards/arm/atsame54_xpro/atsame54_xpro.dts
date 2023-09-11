@@ -7,6 +7,7 @@
 /dts-v1/;
 #include <atmel/same5xx20.dtsi>
 #include "atsame54_xpro-pinctrl.dtsi"
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
 	model = "SAM E54 Xplained Pro";
@@ -47,6 +48,7 @@
 		button0: button_0 {
 			gpios = <&portb 31 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
 			label = "SW0";
+			zephyr,code = <INPUT_KEY_0>;
 		};
 	};
 };
@@ -121,13 +123,7 @@ zephyr_udc0: &usb0 {
 	pinctrl-names = "default";
 
 	mac-eeprom = <&eeprom>;
-
-	phy: phy {
-		compatible = "ethernet-phy";
-		status = "okay";
-		address = <0>;
-		mdio = <&mdio>;
-	};
+	phy-handle = <&phy>;
 };
 
 &mdio {
@@ -135,4 +131,10 @@ zephyr_udc0: &usb0 {
 
 	pinctrl-0 = <&mdio_default>;
 	pinctrl-names = "default";
+
+	phy: phy {
+		compatible = "ethernet-phy";
+		status = "okay";
+		address = <0>;
+	};
 };

@@ -265,7 +265,7 @@ static inline int request_body_encode_buffer(uint8_t **buffer)
 static inline void release_body_encode_buffer(uint8_t **buffer)
 {
 	if (buffer && *buffer) {
-		k_mem_slab_free(&body_encode_buffer_slab, (void **)buffer);
+		k_mem_slab_free(&body_encode_buffer_slab, (void *)*buffer);
 		log_buffer_usage();
 	}
 }
@@ -676,6 +676,7 @@ int lwm2m_send_message_async(struct lwm2m_message *msg)
 	if (IS_ENABLED(CONFIG_LWM2M_QUEUE_MODE_ENABLED)) {
 		engine_update_tx_time();
 	}
+	lwm2m_engine_wake_up();
 	return ret;
 }
 
@@ -692,6 +693,7 @@ int lwm2m_information_interface_send(struct lwm2m_message *msg)
 
 	if (msg->ctx->buffer_client_messages) {
 		sys_slist_append(&msg->ctx->queued_messages, &msg->node);
+		lwm2m_engine_wake_up();
 		return 0;
 	}
 #endif

@@ -253,12 +253,12 @@ static int mcux_lpi2c_recover_bus(const struct device *dev)
 	uint32_t bitrate_cfg;
 	int error = 0;
 
-	if (!device_is_ready(config->scl.port)) {
+	if (!gpio_is_ready_dt(&config->scl)) {
 		LOG_ERR("SCL GPIO device not ready");
 		return -EIO;
 	}
 
-	if (!device_is_ready(config->sda.port)) {
+	if (!gpio_is_ready_dt(&config->sda)) {
 		LOG_ERR("SDA GPIO device not ready");
 		return -EIO;
 	}
@@ -494,6 +494,11 @@ static int mcux_lpi2c_init(const struct device *dev)
 		return -ENODEV;
 	}
 
+	error = pinctrl_apply_state(config->pincfg, PINCTRL_STATE_DEFAULT);
+	if (error) {
+		return error;
+	}
+
 	if (clock_control_get_rate(config->clock_dev, config->clock_subsys,
 				   &clock_freq)) {
 		return -EINVAL;
@@ -509,11 +514,6 @@ static int mcux_lpi2c_init(const struct device *dev)
 	bitrate_cfg = i2c_map_dt_bitrate(config->bitrate);
 
 	error = mcux_lpi2c_configure(dev, I2C_MODE_CONTROLLER | bitrate_cfg);
-	if (error) {
-		return error;
-	}
-
-	error = pinctrl_apply_state(config->pincfg, PINCTRL_STATE_DEFAULT);
 	if (error) {
 		return error;
 	}

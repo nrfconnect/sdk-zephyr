@@ -146,20 +146,9 @@ struct bt_conn_tx {
 	uint32_t pending_no_cb;
 };
 
-struct acl_data {
-	/* Extend the bt_buf user data */
-	struct bt_buf_data buf_data;
-
-	/* Index into the bt_conn storage array */
-	uint8_t  index;
-
-	/** ACL connection handle */
-	uint16_t handle;
-};
-
 struct bt_conn {
 	uint16_t			handle;
-	uint8_t			type;
+	enum bt_conn_type	type;
 	uint8_t			role;
 
 	ATOMIC_DEFINE(flags, BT_CONN_NUM_FLAGS);
@@ -308,7 +297,7 @@ void bt_conn_disconnect_all(uint8_t id);
 struct bt_conn *bt_conn_new(struct bt_conn *conns, size_t size);
 
 /* Look up an existing connection */
-struct bt_conn *bt_conn_lookup_handle(uint16_t handle);
+struct bt_conn *bt_conn_lookup_handle(uint16_t handle, enum bt_conn_type type);
 
 static inline bool bt_conn_is_handle_valid(struct bt_conn *conn)
 {

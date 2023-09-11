@@ -206,8 +206,21 @@ SECTIONS
 
 #include <zephyr/linker/cplusplus-rom.ld>
 
+#if defined(CONFIG_BUILD_ALIGN_LMA)
+    /*
+     * Include a padding section here to make sure that the LMA address
+     * of the sections in the RAMABLE_REGION are aligned with those
+     * section's VMA alignment requirements.
+     */
+    SECTION_PROLOGUE(padding_section,,)
+	{
 	__rodata_region_end = .;
 	MPU_ALIGN(__rodata_region_end - ADDR(rom_start));
+	} GROUP_LINK_IN(ROMABLE_REGION)
+#else
+	__rodata_region_end = .;
+	MPU_ALIGN(__rodata_region_end - ADDR(rom_start));
+#endif
 	__rom_region_end = __rom_region_start + . - ADDR(rom_start);
 
     GROUP_END(ROMABLE_REGION)
@@ -361,13 +374,8 @@ SECTIONS
 
     /* Define linker symbols */
 
-    _image_ram_end = .;
-    _end = .; /* end of image */
-
     __kernel_ram_end = RAM_ADDR + RAM_SIZE;
     __kernel_ram_size = __kernel_ram_end - __kernel_ram_start;
-
-    GROUP_END(RAMABLE_REGION)
 
 #if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_itcm), okay)
 GROUP_START(ITCM)
@@ -425,6 +433,10 @@ GROUP_END(DTCM)
  * zephyr_linker_sources() Cmake function.
  */
 #include <snippets-sections.ld>
+
+#include <zephyr/linker/ram-end.ld>
+
+    GROUP_END(RAMABLE_REGION)
 
 #include <zephyr/linker/debug-sections.ld>
 
