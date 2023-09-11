@@ -568,7 +568,7 @@ static bool nrf5_tx_at(struct nrf5_802154_data *nrf5_radio, struct net_pkt *pkt,
 #if defined(CONFIG_IEEE802154_NRF5_MULTIPLE_CCA)
 	case IEEE802154_OPENTHREAD_TX_MODE_TXTIME_MULTIPLE_CCA:
 		cca = true;
-		max_extra_cca_attempts = nrf5_data.max_extra_cca_attempts;
+		max_extra_cca_attempts = nrf5_radio->max_extra_cca_attempts;
 		break;
 #endif
 		break;
@@ -1007,13 +1007,13 @@ static int nrf5_configure(const struct device *dev,
 		break;
 #endif /* CONFIG_IEEE802154_CSL_ENDPOINT */
 
-#if defined(CONFIG_IEEE802154_NRF5_MULTIPLE_CCA)
-	case IEEE802154_OPENTHREAD_CONFIG_MAX_EXTRA_CCA_ATTEMPTS:
+#if defined(IEEE802154_NRF5_MULTIPLE_CCA)
+	case IEEE802154_OPENTHREAD_CONFIG_MULTIPLE_CCA:
 		nrf5_data.max_extra_cca_attempts =
 			((const struct ieee802154_openthread_config *)config)
 				->max_extra_cca_attempts;
 		break;
-#endif /* CONFIG_IEEE802154_NRF5_MULTIPLE_CCA */
+#endif /* IEEE802154_NRF5_MULTIPLE_CCA */
 
 	default:
 		return -EINVAL;
@@ -1029,8 +1029,8 @@ static int nrf5_attr_get(const struct device *dev,
 	ARG_UNUSED(dev);
 	ARG_UNUSED(value);
 
-	switch ((uint32_t)attr) {
-#if defined(CONFIG_IEEE802154_NRF5_MULTIPLE_CCA)
+	switch (attr) {
+#if defined(IEEE802154_NRF5_MULTIPLE_CCA)
 	/* TODO: t_recca and t_ccatx should be provided by the public API of the
 	 * nRF 802.15.4 Radio Driver.
 	 */
