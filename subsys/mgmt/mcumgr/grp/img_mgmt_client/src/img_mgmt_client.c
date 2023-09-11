@@ -345,11 +345,9 @@ int img_mgmt_client_upload(struct img_mgmt_client *client, const uint8_t *data, 
 
 	request_length = length;
 	wrote_length = 0;
-	/* Calculate max data length based on
-	 * net_buf size - (SMP header + CBOR message_len + 16-bit CRC + 16-bit length)
-	 */
+	/* Calculate max data length based on net_buf size - (SMP header + CBOR message_len) */
 	max_data_length = CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE -
-			  (active_client->upload.upload_header_size + MGMT_HDR_SIZE + 2U + 2U);
+			  (active_client->upload.upload_header_size + MGMT_HDR_SIZE);
 	/* Trim length based on CONFIG_MCUMGR_GRP_IMG_UPLOAD_DATA_ALIGNMENT_SIZE */
 	if (max_data_length % CONFIG_MCUMGR_GRP_IMG_UPLOAD_DATA_ALIGNMENT_SIZE) {
 		max_data_length -=
