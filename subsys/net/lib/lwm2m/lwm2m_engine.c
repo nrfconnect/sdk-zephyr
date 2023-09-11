@@ -1167,7 +1167,6 @@ int lwm2m_engine_pause(void)
 	}
 
 	suspend_engine_thread = true;
-	lwm2m_engine_wake_up();
 
 	while (active_engine_thread) {
 		k_msleep(10);
@@ -1184,7 +1183,6 @@ int lwm2m_engine_resume(void)
 	}
 
 	k_thread_resume(engine_thread_id);
-	lwm2m_engine_wake_up();
 	while (!active_engine_thread) {
 		k_msleep(10);
 	}
