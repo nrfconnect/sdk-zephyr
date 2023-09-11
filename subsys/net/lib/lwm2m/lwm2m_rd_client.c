@@ -68,8 +68,6 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define CLIENT_EP_LEN		CONFIG_LWM2M_RD_CLIENT_ENDPOINT_NAME_MAX_LENGTH
 #define CLIENT_BINDING_LEN sizeof("UQ")
 #define CLIENT_QUEUE_LEN sizeof("Q")
-#define DELAY_BEFORE_CLOSING	(1 * MSEC_PER_SEC)
-#define DELAY_FOR_ACK		100U
 
 static void sm_handle_registration_update_failure(void);
 static int sm_send_registration_msg(void);
@@ -383,8 +381,6 @@ void engine_trigger_update(bool update_objects)
 	}
 
 	client.trigger_update = true;
-	/* short delay for Ack, then trigger an update */
-	next_event_at(k_uptime_get() + DELAY_FOR_ACK);
 
 	if (update_objects) {
 		client.update_objects = true;
@@ -468,7 +464,7 @@ int engine_trigger_bootstrap(void)
 	rd_client_message_free();
 	client.use_bootstrap = true;
 	client.trigger_update = false;
-	set_sm_state_delayed(ENGINE_INIT, DELAY_BEFORE_CLOSING);
+	set_sm_state(ENGINE_INIT);
 	k_mutex_unlock(&client.mutex);
 	return 0;
 #else
@@ -851,7 +847,7 @@ void engine_bootstrap_finish(void)
 	/* Delay the state transition, so engine have some time to send ACK
 	 * before we close the socket
 	 */
-	set_sm_state_delayed(ENGINE_BOOTSTRAP_TRANS_DONE, DELAY_BEFORE_CLOSING);
+	set_sm_state_delayed(ENGINE_BOOTSTRAP_TRANS_DONE, 1000);
 }
 
 static int sm_bootstrap_trans_done(void)
@@ -1104,13 +1100,13 @@ static int64_t next_update(void)
 	 * check for lifetime seconds - SECONDS_TO_UPDATE_EARLY
 	 * so that we can update early and avoid lifetime timeout
 	 */
-	return client.last_update + (client.lifetime - SECONDS_TO_UPDATE_EARLY) * MSEC_PER_SEC;
+	return client.last_update + (client.lifetime - SECONDS_TO_UPDATE_EARLY) * 1000;
 }
 
 static int64_t next_rx_off(void)
 {
 	if (IS_ENABLED(CONFIG_LWM2M_QUEUE_MODE_ENABLED)) {
-		return client.last_tx + CONFIG_LWM2M_QUEUE_MODE_UPTIME * MSEC_PER_SEC;
+		return client.last_tx + CONFIG_LWM2M_QUEUE_MODE_UPTIME * 1000;
 	} else {
 		return next_update();
 	}
@@ -1256,7 +1252,7 @@ static void sm_do_network_error(void)
 
 	if (client.retry_delay) {
 		client.retry_delay = 0;
-		next_event_at(k_uptime_get() + client.retry_delay * MSEC_PER_SEC);
+		next_event_at(k_uptime_get() + client.retry_delay * 1000);
 		return;
 	}
 
@@ -1268,8 +1264,7 @@ static void sm_do_network_error(void)
 	}
 #endif
 
-	if (!client.last_update ||
-	    (k_uptime_get() - client.last_update) / MSEC_PER_SEC > client.lifetime) {
+	if (!client.last_update || (k_uptime_get() - client.last_update) / 1000 > client.lifetime) {
 		/* do full registration as there is no active registration or lifetime exceeded */
 		lwm2m_engine_context_close(client.ctx);
 		set_sm_state(ENGINE_DO_REGISTRATION);
@@ -1521,7 +1516,7 @@ int lwm2m_rd_client_resume(void)
 	if (client.engine_state >= ENGINE_DO_REGISTRATION &&
 		client.engine_state <= ENGINE_SUSPENDED) {
 		if (!client.last_update ||
-			(client.lifetime <= (k_uptime_get() - client.last_update) / MSEC_PER_SEC)) {
+			(client.lifetime <= (k_uptime_get() - client.last_update) / 1000)) {
 			/* No lifetime left, register again */
 			client.engine_state = ENGINE_DO_REGISTRATION;
 		} else {
@@ -1540,6 +1535,7 @@ int lwm2m_rd_client_resume(void)
 void lwm2m_rd_client_update(void)
 {
 	engine_trigger_update(false);
+	next_event_at(0);
 }
 
 struct lwm2m_ctx *lwm2m_rd_client_ctx(void)
