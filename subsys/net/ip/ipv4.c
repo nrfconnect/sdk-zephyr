@@ -302,15 +302,6 @@ enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 		goto drop;
 	}
 
-	net_pkt_set_ipv4_ttl(pkt, hdr->ttl);
-
-	net_pkt_set_family(pkt, PF_INET);
-
-	if (!net_pkt_filter_ip_recv_ok(pkt)) {
-		/* drop the packet */
-		return NET_DROP;
-	}
-
 	if ((!net_ipv4_is_my_addr((struct in_addr *)hdr->dst) &&
 	     !net_ipv4_is_addr_mcast((struct in_addr *)hdr->dst) &&
 	     !(hdr->proto == IPPROTO_UDP &&
@@ -334,6 +325,10 @@ enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 			goto drop;
 		}
 	}
+
+	net_pkt_set_ipv4_ttl(pkt, hdr->ttl);
+
+	net_pkt_set_family(pkt, PF_INET);
 
 	if (IS_ENABLED(CONFIG_NET_IPV4_FRAGMENT)) {
 		/* Check if this is a fragmented packet, and if so, handle reassembly */
