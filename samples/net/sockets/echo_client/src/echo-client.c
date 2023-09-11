@@ -247,6 +247,7 @@ static void init_app(void)
 	if (err < 0) {
 		LOG_ERR("Failed to register public certificate: %d", err);
 	}
+#endif
 
 #if defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED)
 	err = tls_credential_add(PSK_TAG,
@@ -263,9 +264,7 @@ static void init_app(void)
 	if (err < 0) {
 		LOG_ERR("Failed to register PSK ID: %d", err);
 	}
-#endif /* defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED) */
-#endif /* defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS) */
-
+#endif
 
 	if (IS_ENABLED(CONFIG_NET_CONNECTION_MANAGER)) {
 		net_mgmt_init_event_callback(&mgmt_cb,
