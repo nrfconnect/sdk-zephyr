@@ -10,7 +10,6 @@ config SOC_ESP32S2
 	select PINCTRL
 	select XIP if !MCUBOOT
 	select HAS_ESPRESSIF_HAL
-	select HAS_PM
 
 if SOC_ESP32S2
 
