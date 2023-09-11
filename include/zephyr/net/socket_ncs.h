@@ -25,7 +25,7 @@ extern "C" {
 #define SOCK_NATIVE 0x80000000
 #define SOCK_NATIVE_TLS 0x40000000
 
-/* NCS specific TLS level socket options */
+/* NCS specific TLS options */
 
 /** Socket option to set DTLS handshake timeout, specifically for nRF sockets.
  *  The option accepts an integer, indicating the total handshake timeout,
@@ -92,6 +92,15 @@ extern "C" {
 
 /* NCS specific socket options */
 
+/** sockopt: disable all replies to unexpected traffics */
+#define SO_SILENCE_ALL 30
+/** sockopt: disable IPv4 ICMP replies */
+#define SO_IP_ECHO_REPLY 31
+/** sockopt: disable IPv6 ICMP replies */
+#define SO_IPV6_ECHO_REPLY 32
+/** sockopt: Release Assistance Indication feature: This will indicate that the
+ *  application will not send any more data.
+ */
 #define SO_RAI_NO_DATA 50
 /** sockopt: Release Assistance Indication feature: This will indicate that the
  *  next call to send/sendto will be the last one for some time.
@@ -112,26 +121,6 @@ extern "C" {
  *  option before the next send call.
  */
 #define SO_RAI_WAIT_MORE 54
-
-/* NCS specific IPPROTO_ALL level socket options */
-
-/** IPv4 and IPv6 protocol level (pseudo-val) for nRF sockets. */
-#define IPPROTO_ALL 512
-/** sockopt: disable all replies to unexpected traffics */
-#define SO_SILENCE_ALL 30
-
-/* NCS specific IPPROTO_IP level socket options */
-
-/** sockopt: enable IPv4 ICMP replies */
-#define SO_IP_ECHO_REPLY 31
-
-/* NCS specific IPPROTO_IPV6 level socket options */
-
-/** sockopt: enable IPv6 ICMP replies */
-#define SO_IPV6_ECHO_REPLY 32
-
-/* NCS specific TCP level socket options */
-
 /** sockopt: Configurable TCP server session timeout in minutes.
  * Range is 0 to 135. 0 is no timeout and 135 is 2 h 15 min. Default is 0 (no timeout).
  */
