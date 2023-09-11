@@ -1,9 +1,8 @@
+common:
+  depends_on: netif
 tests:
   net.lwm2m.content_json:
-    platform_key:
-      - simulation
+    filter: TOOLCHAIN_HAS_NEWLIB == 1
     tags:
       - lwm2m
       - net
-    integration_platforms:
-      - native_posix

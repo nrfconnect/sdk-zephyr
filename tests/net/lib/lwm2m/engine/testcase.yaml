@@ -1,9 +1,8 @@
+common:
+  depends_on: netif
 tests:
   net.lwm2m.engine:
-    platform_key:
-      - simulation
+    platform_allow: native_posix
     tags:
       - lwm2m
       - net
-    integration_platforms:
-      - native_posix
