@@ -1,5 +1,9 @@
 sample:
   name: littlefs filesystem sample
+common:
+  tags:
+    - filesystem
+    - littefs
 tests:
   sample.filesystem.littlefs:
     build_only: true
@@ -14,7 +18,7 @@ tests:
       - native_posix
       - mimxrt1160_evk_cm7
       - lpcxpresso55s69_cpu0
-    tags: filesystem
+      - mr_canhubk3
     integration_platforms:
       - nrf52840dk_nrf52840
   sample.filesystem.littlefs.nrf52840dk_spi:

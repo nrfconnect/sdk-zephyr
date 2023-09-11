@@ -8,6 +8,7 @@
 #include <zephyr/device.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/devicetree.h>
+#include <zephyr/init.h>
 #include "usbh_internal.h"
 #include <zephyr/sys/iterable_sections.h>
 #include <zephyr/logging/log.h>
@@ -51,7 +52,7 @@ static int event_ep_request(struct usbh_contex *const ctx,
 	return uhc_xfer_free(dev, xfer);
 }
 
-static int ALWAYS_INLINE usbh_event_handler(struct usbh_contex *const ctx,
+static ALWAYS_INLINE int usbh_event_handler(struct usbh_contex *const ctx,
 					    struct uhc_event *const event)
 {
 	int ret = 0;
@@ -72,7 +73,7 @@ static int ALWAYS_INLINE usbh_event_handler(struct usbh_contex *const ctx,
 		}
 		break;
 	case UHC_EVT_RESETED:
-		LOG_DBG("Bus reseted");
+		LOG_DBG("Bus reset");
 		/* TODO */
 		if (class_data && class_data->removed) {
 			ret = class_data->removed(ctx);

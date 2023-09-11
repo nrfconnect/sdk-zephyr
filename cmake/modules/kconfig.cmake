@@ -84,6 +84,7 @@ if(EXTRA_CONF_FILE)
   string(REPLACE " " ";" EXTRA_CONF_FILE_AS_LIST "${EXTRA_CONF_FILE_EXPANDED}")
 endif()
 
+zephyr_file(CONF_FILES ${BOARD_EXTENSION_DIRS} KCONF board_extension_conf_files)
 
 # DTS_ROOT_BINDINGS is a semicolon separated list, this causes
 # problems when invoking kconfig_target since semicolon is a special
@@ -210,19 +211,15 @@ if(SYSBUILD)
   endforeach()
 else()
   get_cmake_property(cache_variable_names CACHE_VARIABLES)
+  list(FILTER cache_variable_names INCLUDE REGEX "^(CLI_)?${KCONFIG_NAMESPACE}_")
+  list(TRANSFORM cache_variable_names REPLACE "^CLI_" "")
+  list(REMOVE_DUPLICATES cache_variable_names)
 endif()
 
+# Sorting the variable names will make checksum calculation more stable.
+list(SORT cache_variable_names)
 foreach (name ${cache_variable_names})
-  if("${name}" MATCHES "^CLI_${KCONFIG_NAMESPACE}_")
-    # Variable was set by user in earlier invocation, let's append to extra
-    # config unless a new value has been given.
-    string(REGEX REPLACE "^CLI_" "" org_name ${name})
-    if(NOT DEFINED ${org_name})
-      set(EXTRA_KCONFIG_OPTIONS
-        "${EXTRA_KCONFIG_OPTIONS}\n${org_name}=${${name}}"
-      )
-    endif()
-  elseif("${name}" MATCHES "^${KCONFIG_NAMESPACE}_")
+  if(DEFINED ${name})
     # When a cache variable starts with the 'KCONFIG_NAMESPACE' value, it is
     # assumed to be a Kconfig symbol assignment from the CMake command line.
     set(EXTRA_KCONFIG_OPTIONS
@@ -230,6 +227,13 @@ foreach (name ${cache_variable_names})
       )
     set(CLI_${name} "${${name}}")
     list(APPEND cli_config_list ${name})
+  elseif(DEFINED CLI_${name})
+    # An additional 'CLI_' prefix means that the value was set by the user in
+    # an earlier invocation. Append it to extra config only if no new value was
+    # assigned above.
+    set(EXTRA_KCONFIG_OPTIONS
+      "${EXTRA_KCONFIG_OPTIONS}\n${name}=${CLI_${name}}"
+      )
   endif()
 endforeach()
 
@@ -249,6 +253,7 @@ set(
   merge_config_files
   ${BOARD_DEFCONFIG}
   ${BOARD_REVISION_CONFIG}
+  ${board_extension_conf_files}
   ${CONF_FILE_AS_LIST}
   ${shield_conf_files}
   ${EXTRA_CONF_FILE_AS_LIST}
@@ -373,15 +378,32 @@ foreach (name ${cli_config_list})
   unset(${name} CACHE)
 endforeach()
 
+# Before importing the symbol values from DOTCONFIG, process the CLI values by
+# re-importing them from EXTRA_KCONFIG_OPTIONS_FILE. Later, we want to compare
+# the values from both files, and 'import_kconfig' will make this easier.
+if(EXTRA_KCONFIG_OPTIONS_FILE)
+  import_kconfig(${KCONFIG_NAMESPACE} ${EXTRA_KCONFIG_OPTIONS_FILE})
+  foreach (name ${cache_variable_names})
+    if(DEFINED ${name})
+      set(temp_${name} "${${name}}")
+      unset(${name})
+    endif()
+  endforeach()
+endif()
+
 # Import the .config file and make all settings available in CMake processing.
 import_kconfig(${KCONFIG_NAMESPACE} ${DOTCONFIG})
 
 # Cache the CLI Kconfig symbols that survived through Kconfig, prefixed with CLI_.
 # Remove those who might have changed compared to earlier runs, if they no longer appears.
-foreach (name ${cli_config_list})
-  if(DEFINED ${name})
+foreach (name ${cache_variable_names})
+  # Note: "${CLI_${name}}" is the verbatim value of ${name} from command-line,
+  # while "${temp_${name}}" is the same value processed by 'import_kconfig'.
+  if(((NOT DEFINED ${name}) AND (NOT DEFINED temp_${name})) OR
+     ((DEFINED ${name}) AND (DEFINED temp_${name}) AND (${name} STREQUAL temp_${name})))
     set(CLI_${name} ${CLI_${name}} CACHE INTERNAL "")
   else()
     unset(CLI_${name} CACHE)
   endif()
+  unset(temp_${name})
 endforeach()

@@ -21,7 +21,7 @@ extern "C" {
  * that need to call into the kernel as system calls
  */
 
-#if defined(CONFIG_NEWLIB_LIBC) || defined(CONFIG_ARCMWDT_LIBC) || defined(CONFIG_PICOLIBC)
+#if defined(CONFIG_NEWLIB_LIBC) || defined(CONFIG_ARCMWDT_LIBC)
 
 /* syscall generation ignores preprocessor, ensure this is defined to ensure
  * we don't have compile errors
@@ -31,12 +31,17 @@ __syscall int zephyr_read_stdin(char *buf, int nbytes);
 __syscall int zephyr_write_stdout(const void *buf, int nbytes);
 
 #else
-/* Minimal libc */
+/* Minimal libc and picolibc */
 
 __syscall int zephyr_fputc(int c, FILE * stream);
 
+#ifdef CONFIG_MINIMAL_LIBC
+/* Minimal libc only */
+
 __syscall size_t zephyr_fwrite(const void *ZRESTRICT ptr, size_t size,
 				size_t nitems, FILE *ZRESTRICT stream);
+#endif
+
 #endif /* CONFIG_NEWLIB_LIBC */
 
 /* Handle deprecated malloc arena size configuration values */
@@ -87,7 +92,8 @@ __syscall size_t zephyr_fwrite(const void *ZRESTRICT ptr, size_t size,
 extern struct k_mem_partition z_malloc_partition;
 #endif
 
-#if defined(CONFIG_NEWLIB_LIBC) || defined(CONFIG_STACK_CANARIES) || \
+#if defined(CONFIG_NEWLIB_LIBC) || (defined(CONFIG_STACK_CANARIES) && \
+			    !defined(CONFIG_STACK_CANARIES_TLS)) || \
 defined(CONFIG_PICOLIBC) || defined(CONFIG_NEED_LIBC_MEM_PARTITION)
 /* - All newlib globals will be placed into z_libc_partition.
  * - Minimal C library globals, if any, will be placed into

@@ -15,9 +15,9 @@
 #define ZEPHYR_INCLUDE_ISOTP_H_
 
 /**
- * @brief CAN ISO-TP Interface
- * @defgroup can_isotp CAN ISO-TP Interface
- * @ingroup CAN
+ * @brief CAN ISO-TP Protocol
+ * @defgroup can_isotp CAN ISO-TP Protocol
+ * @ingroup connectivity
  * @{
  */
 
@@ -121,12 +121,33 @@
 /** Mask for priority in fixed addressing mode */
 #define ISOTP_FIXED_ADDR_PRIO_MASK      (CONFIG_ISOTP_FIXED_ADDR_PRIO_MASK)
 
-/* CAN filter RX mask to match any priority and source address (SA) */
+/** CAN filter RX mask to match any priority and source address (SA) */
 #define ISOTP_FIXED_ADDR_RX_MASK        (CONFIG_ISOTP_FIXED_ADDR_RX_MASK)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @name ISO-TP message ID flags
+ * @anchor ISOTP_MSG_FLAGS
+ *
+ * @{
+ */
+
+/** Message uses ISO-TP extended addressing (first payload byte of CAN frame) */
+#define ISOTP_MSG_EXT_ADDR BIT(0)
+
+/**
+ * Message uses ISO-TP fixed addressing (according to SAE J1939). Only valid in combination with
+ * ``ISOTP_MSG_IDE``.
+ */
+#define ISOTP_MSG_FIXED_ADDR BIT(1)
+
+/** Message uses extended (29-bit) CAN ID */
+#define ISOTP_MSG_IDE BIT(2)
+
+/** @} */
 
 /**
  * @brief ISO-TP message id struct
@@ -146,12 +167,8 @@ struct isotp_msg_id {
 	};
 	/** ISO-TP extended address (if used) */
 	uint8_t ext_addr;
-	/** Indicates the CAN identifier type (0 for standard or 1 for extended) */
-	uint8_t ide : 1;
-	/** Indicates if ISO-TP extended addressing is used */
-	uint8_t use_ext_addr : 1;
-	/** Indicates if ISO-TP fixed addressing (acc. to SAE J1939) is used */
-	uint8_t use_fixed_addr : 1;
+	/** Flags. @see @ref ISOTP_MSG_FLAGS. */
+	uint8_t flags;
 };
 
 /*
@@ -172,6 +189,14 @@ struct isotp_fc_opts {
 	uint8_t stmin; /**< Minimum separation time. Min time between frames */
 };
 
+/**
+ * @brief Transmission callback
+ *
+ * This callback is called when a transmission is completed.
+ *
+ * @param error_nr ISOTP_N_OK on success, ISOTP_N_* on error
+ * @param arg      Callback argument passed to the send function
+ */
 typedef void (*isotp_tx_callback_t)(int error_nr, void *arg);
 
 struct isotp_send_ctx;
@@ -383,7 +408,7 @@ struct isotp_send_ctx {
 		};
 	};
 	struct k_work work;
-	struct _timeout timeout;
+	struct k_timer timer;
 	union {
 		struct isotp_callback fin_cb;
 		struct k_sem fin_sem;
@@ -413,7 +438,7 @@ struct isotp_recv_ctx {
 	uint32_t length;
 	int error_nr;
 	struct k_work work;
-	struct _timeout timeout;
+	struct k_timer timer;
 	struct k_fifo fifo;
 	struct isotp_msg_id rx_addr;
 	struct isotp_msg_id tx_addr;

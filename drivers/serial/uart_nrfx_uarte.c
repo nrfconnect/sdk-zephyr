@@ -40,28 +40,28 @@ LOG_MODULE_REGISTER(uart_nrfx_uarte, CONFIG_UART_LOG_LEVEL);
 #endif
 
 
-#if	(defined(CONFIG_UART_0_NRF_UARTE) &&         \
+#if	(defined(CONFIG_HAS_HW_NRF_UARTE0) &&         \
 	 defined(CONFIG_UART_0_INTERRUPT_DRIVEN)) || \
-	(defined(CONFIG_UART_1_NRF_UARTE) &&         \
+	(defined(CONFIG_HAS_HW_NRF_UARTE1) &&         \
 	 defined(CONFIG_UART_1_INTERRUPT_DRIVEN)) || \
-	(defined(CONFIG_UART_2_NRF_UARTE) &&         \
+	(defined(CONFIG_HAS_HW_NRF_UARTE2) &&         \
 	 defined(CONFIG_UART_2_INTERRUPT_DRIVEN)) || \
-	(defined(CONFIG_UART_3_NRF_UARTE) &&         \
+	(defined(CONFIG_HAS_HW_NRF_UARTE3) &&         \
 	 defined(CONFIG_UART_3_INTERRUPT_DRIVEN))
 	#define UARTE_INTERRUPT_DRIVEN	1
 #endif
 
-#if	(defined(CONFIG_UART_0_NRF_UARTE) && !defined(CONFIG_UART_0_ASYNC)) || \
-	(defined(CONFIG_UART_1_NRF_UARTE) && !defined(CONFIG_UART_1_ASYNC)) || \
-	(defined(CONFIG_UART_2_NRF_UARTE) && !defined(CONFIG_UART_2_ASYNC)) || \
-	(defined(CONFIG_UART_3_NRF_UARTE) && !defined(CONFIG_UART_3_ASYNC))
+#if	(defined(CONFIG_HAS_HW_NRF_UARTE0) && !defined(CONFIG_UART_0_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE1) && !defined(CONFIG_UART_1_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE2) && !defined(CONFIG_UART_2_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE3) && !defined(CONFIG_UART_3_ASYNC))
 #define UARTE_ANY_NONE_ASYNC 1
 #endif
 
-#if	(defined(CONFIG_UART_0_NRF_UARTE) && defined(CONFIG_UART_0_ASYNC)) || \
-	(defined(CONFIG_UART_1_NRF_UARTE) && defined(CONFIG_UART_1_ASYNC)) || \
-	(defined(CONFIG_UART_2_NRF_UARTE) && defined(CONFIG_UART_2_ASYNC)) || \
-	(defined(CONFIG_UART_3_NRF_UARTE) && defined(CONFIG_UART_3_ASYNC))
+#if	(defined(CONFIG_HAS_HW_NRF_UARTE0) && defined(CONFIG_UART_0_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE1) && defined(CONFIG_UART_1_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE2) && defined(CONFIG_UART_2_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE3) && defined(CONFIG_UART_3_ASYNC))
 #define UARTE_ANY_ASYNC 1
 #endif
 
@@ -937,6 +937,11 @@ static int uarte_nrfx_callback_set(const struct device *dev,
 	data->async->user_callback = callback;
 	data->async->user_data = user_data;
 
+#if defined(CONFIG_UART_EXCLUSIVE_API_CALLBACKS) && defined(UARTE_INTERRUPT_DRIVEN)
+	data->int_driven->cb = NULL;
+	data->int_driven->cb_data = NULL;
+#endif
+
 	return 0;
 }
 
@@ -1675,6 +1680,11 @@ static void uarte_nrfx_irq_callback_set(const struct device *dev,
 
 	data->int_driven->cb = cb;
 	data->int_driven->cb_data = cb_data;
+
+#if defined(UARTE_ANY_ASYNC) && defined(CONFIG_UART_EXCLUSIVE_API_CALLBACKS)
+	data->async->user_callback = NULL;
+	data->async->user_data = NULL;
+#endif
 }
 #endif /* UARTE_INTERRUPT_DRIVEN */
 
@@ -2058,18 +2068,18 @@ static int uarte_nrfx_pm_action(const struct device *dev,
 			DT_PHANDLE(UARTE(idx), memory_regions)))))),	       \
 		())
 
-#ifdef CONFIG_UART_0_NRF_UARTE
+#ifdef CONFIG_HAS_HW_NRF_UARTE0
 UART_NRF_UARTE_DEVICE(0);
 #endif
 
-#ifdef CONFIG_UART_1_NRF_UARTE
+#ifdef CONFIG_HAS_HW_NRF_UARTE1
 UART_NRF_UARTE_DEVICE(1);
 #endif
 
-#ifdef CONFIG_UART_2_NRF_UARTE
+#ifdef CONFIG_HAS_HW_NRF_UARTE2
 UART_NRF_UARTE_DEVICE(2);
 #endif
 
-#ifdef CONFIG_UART_3_NRF_UARTE
+#ifdef CONFIG_HAS_HW_NRF_UARTE3
 UART_NRF_UARTE_DEVICE(3);
 #endif

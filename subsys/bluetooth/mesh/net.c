@@ -35,6 +35,7 @@
 #include "settings.h"
 #include "prov.h"
 #include "cfg.h"
+#include "statistic.h"
 
 #ifdef CONFIG_BT_MESH_V1d1
 #include "sar_cfg_internal.h"
@@ -56,13 +57,6 @@ LOG_MODULE_REGISTER(bt_mesh_net);
 #define SEQ(pdu)           (sys_get_be24(&pdu[2]))
 #define SRC(pdu)           (sys_get_be16(&(pdu)[5]))
 #define DST(pdu)           (sys_get_be16(&(pdu)[7]))
-
-/** Define CONFIG_BT_MESH_SEQ_STORE_RATE even if settings are disabled to
- * compile the code.
- */
-#ifndef CONFIG_BT_SETTINGS
-#define CONFIG_BT_MESH_SEQ_STORE_RATE 1
-#endif
 
 /* Mesh network information for persistent storage. */
 struct net_val {
@@ -284,6 +278,12 @@ bool bt_mesh_net_iv_update(uint32_t iv_index, bool iv_update)
 		return false;
 	}
 
+	/* Discard [iv, false] --> [iv, true] */
+	if (iv_index == bt_mesh.iv_index && iv_update) {
+		LOG_DBG("Ignore previous IV update procedure");
+		return false;
+	}
+
 	if ((iv_index > bt_mesh.iv_index + 1) ||
 	    (iv_index == bt_mesh.iv_index + 1 &&
 	     (atomic_test_bit(bt_mesh.flags, BT_MESH_IVU_IN_PROGRESS) || !iv_update))) {
@@ -427,7 +427,7 @@ static void bt_mesh_net_local(struct k_work *work)
 
 		net_buf_simple_init_with_data(&sbuf, buf->data, buf->len);
 		(void)bt_mesh_trans_recv(&sbuf, &rx);
-		k_mem_slab_free(&loopback_buf_pool, (void **)&buf);
+		k_mem_slab_free(&loopback_buf_pool, (void *)buf);
 	}
 }
 
@@ -609,7 +609,7 @@ void bt_mesh_net_loopback_clear(uint16_t net_idx)
 
 		if (net_idx == BT_MESH_KEY_ANY || net_idx == buf->sub->net_idx) {
 			LOG_DBG("Dropped 0x%06x", SEQ(buf->data));
-			k_mem_slab_free(&loopback_buf_pool, (void **)&buf);
+			k_mem_slab_free(&loopback_buf_pool, (void *)buf);
 		} else {
 			sys_slist_append(&new_list, &buf->node);
 		}
@@ -849,6 +849,10 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 
 	if (bt_mesh_net_decode(data, net_if, &rx, &buf)) {
 		return;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_MESH_STATISTIC)) {
+		bt_mesh_stat_rx(net_if);
 	}
 
 	/* Save the state so the buffer can later be relayed */

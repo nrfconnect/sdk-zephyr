@@ -45,28 +45,44 @@ BUILD_ASSERT(CONFIG_BT_L2CAP_TX_BUF_COUNT >= TBS_CLIENT_BUF_COUNT, "Too few L2CA
 
 #include "common/bt_str.h"
 
-#if defined(CONFIG_BT_TBS_CLIENT_GTBS)
-#define BT_TBS_INSTANCE_MAX_CNT    (CONFIG_BT_TBS_CLIENT_MAX_TBS_INSTANCES + 1)
-#else
-#define BT_TBS_INSTANCE_MAX_CNT    CONFIG_BT_TBS_CLIENT_MAX_TBS_INSTANCES
-#endif /* IS_ENABLED(CONFIG_BT_TBS_CLIENT_GTBS) */
-
 struct bt_tbs_server_inst {
-	struct bt_tbs_instance tbs_insts[BT_TBS_INSTANCE_MAX_CNT];
+#if defined(CONFIG_BT_TBS_CLIENT_TBS)
+	struct bt_tbs_instance tbs_insts[CONFIG_BT_TBS_CLIENT_MAX_TBS_INSTANCES];
+	uint8_t inst_cnt;
+#endif /* CONFIG_BT_TBS_CLIENT_TBS */
+#if defined(CONFIG_BT_TBS_CLIENT_GTBS)
+	struct bt_tbs_instance gtbs_inst;
+#endif /* IS_ENABLED(CONFIG_BT_TBS_CLIENT_GTBS) */
 	struct bt_gatt_discover_params discover_params;
 	struct bt_tbs_instance *current_inst;
-	struct bt_tbs_instance *gtbs;
-	uint8_t inst_cnt;
-	bool subscribe_all;
 };
 
 static const struct bt_tbs_client_cb *tbs_client_cbs;
 
 static struct bt_tbs_server_inst srv_insts[CONFIG_BT_MAX_CONN];
-static const struct bt_uuid *tbs_uuid = BT_UUID_TBS;
-static const struct bt_uuid *gtbs_uuid = BT_UUID_GTBS;
 
-static void discover_next_instance(struct bt_conn *conn, uint8_t index);
+static void discover_next_instance(struct bt_conn *conn);
+
+typedef  bool (*tbs_instance_find_func_t)(struct bt_tbs_instance *inst, void *user_data);
+
+static struct bt_tbs_instance *tbs_instance_find(struct bt_tbs_server_inst *server,
+						 tbs_instance_find_func_t func, void *user_data)
+{
+#if defined(CONFIG_BT_TBS_CLIENT_GTBS)
+		if (func(&server->gtbs_inst, user_data)) {
+			return &server->gtbs_inst;
+		}
+#endif /* CONFIG_BT_TBS_CLIENT_GTBS */
+#if defined(CONFIG_BT_TBS_CLIENT_TBS)
+	for (size_t i = 0; i < server->inst_cnt; i++) {
+		if (func(&server->tbs_insts[i], user_data)) {
+			return &server->tbs_insts[i];
+		}
+	}
+#endif /* CONFIG_BT_TBS_CLIENT_TBS */
+
+	return NULL;
+}
 
 static struct bt_tbs_instance *tbs_inst_by_index(struct bt_conn *conn, uint8_t index)
 {
@@ -76,20 +92,16 @@ static struct bt_tbs_instance *tbs_inst_by_index(struct bt_conn *conn, uint8_t i
 
 	server = &srv_insts[bt_conn_index(conn)];
 
-	if (IS_ENABLED(CONFIG_BT_TBS_CLIENT_GTBS)) {
-		/* GTBS can be accessed by BT_TBS_GTBS_INDEX only */
-		if (index == ARRAY_SIZE(server->tbs_insts) - 1) {
-			return NULL;
-		}
-
-		if (index == BT_TBS_GTBS_INDEX) {
-			return server->gtbs;
-		}
+#if defined(CONFIG_BT_TBS_CLIENT_GTBS)
+	if (index == BT_TBS_GTBS_INDEX) {
+		return &server->gtbs_inst;
 	}
-
+#endif /* CONFIG_BT_TBS_CLIENT_GTBS */
+#if defined(CONFIG_BT_TBS_CLIENT_TBS)
 	if (index < server->inst_cnt) {
 		return &server->tbs_insts[index];
 	}
+#endif /* CONFIG_BT_TBS_CLIENT_TBS */
 
 	return NULL;
 }
@@ -104,12 +116,19 @@ static uint8_t tbs_index(struct bt_conn *conn, const struct bt_tbs_instance *ins
 
 	server = &srv_insts[bt_conn_index(conn)];
 
-	if (IS_ENABLED(CONFIG_BT_TBS_CLIENT_GTBS) && inst == server->gtbs) {
+#if defined(CONFIG_BT_TBS_CLIENT_GTBS)
+	if (inst == &server->gtbs_inst) {
 		return BT_TBS_GTBS_INDEX;
 	}
-
+#endif /* CONFIG_BT_TBS_CLIENT_GTBS */
+#if defined(CONFIG_BT_TBS_CLIENT_TBS)
 	index = inst - server->tbs_insts;
-	__ASSERT_NO_MSG(index >= 0 && index < ARRAY_SIZE(server->tbs_insts));
+	__ASSERT(index >= 0 && index < ARRAY_SIZE(server->tbs_insts),
+		 "Invalid bt_tbs_instance pointer");
+
+#else
+	__ASSERT_PRINT("Invalid bt_tbs_instance pointer");
+#endif /* CONFIG_BT_TBS_CLIENT_TBS */
 
 	return (uint8_t)index;
 }
@@ -127,23 +146,30 @@ static bool free_call_spot(struct bt_tbs_instance *inst)
 }
 #endif /* defined(CONFIG_BT_TBS_CLIENT_ORIGINATE_CALL) */
 
+static bool is_instance_handle(struct bt_tbs_instance *inst, void *user_data)
+{
+	uint16_t handle = POINTER_TO_UINT(user_data);
+
+	return inst->start_handle <= handle && inst->end_handle >= handle;
+}
+
 static struct bt_tbs_instance *lookup_inst_by_handle(struct bt_conn *conn,
 							 uint16_t handle)
 {
 	uint8_t conn_index;
 	struct bt_tbs_server_inst *srv_inst;
+	struct bt_tbs_instance *inst;
 
 	__ASSERT(conn, "NULL conn");
 
 	conn_index = bt_conn_index(conn);
 	srv_inst = &srv_insts[conn_index];
 
-	for (size_t i = 0; i < ARRAY_SIZE(srv_inst->tbs_insts); i++) {
-		if (srv_inst->tbs_insts[i].start_handle <= handle &&
-		    srv_inst->tbs_insts[i].end_handle >= handle) {
-			return &srv_inst->tbs_insts[i];
-		}
+	inst = tbs_instance_find(srv_inst, is_instance_handle, UINT_TO_POINTER(handle));
+	if (inst != NULL) {
+		return inst;
 	}
+
 	LOG_DBG("Could not find instance with handle 0x%04x", handle);
 
 	return NULL;
@@ -543,18 +569,16 @@ static uint8_t notify_handler(struct bt_conn *conn,
 			      const void *data, uint16_t length)
 {
 	uint16_t handle = params->value_handle;
-	struct bt_tbs_instance *tbs_inst = lookup_inst_by_handle(conn, handle);
+	struct bt_tbs_instance *tbs_inst;
 
-	if (data == NULL) {
+	if (data == NULL || conn == NULL) {
 		LOG_DBG("[UNSUBSCRIBED] 0x%04X", params->value_handle);
 		params->value_handle = 0U;
-		if (tbs_inst != NULL) {
-			tbs_inst->subscribe_cnt--;
-		}
 
 		return BT_GATT_ITER_STOP;
 	}
 
+	tbs_inst = lookup_inst_by_handle(conn, handle);
 	if (tbs_inst != NULL) {
 		uint8_t inst_index = tbs_index(conn, tbs_inst);
 
@@ -657,6 +681,24 @@ static int tbs_client_gatt_read(struct bt_conn *conn, struct bt_tbs_instance *in
 	return 0;
 }
 
+static bool gtbs_found(struct bt_tbs_server_inst *srv_inst)
+{
+#if defined(CONFIG_BT_TBS_CLIENT_GTBS)
+	return srv_inst->gtbs_inst.start_handle != 0;
+#else
+	return false;
+#endif /* CONFIG_BT_TBS_CLIENT_GTBS */
+}
+
+static uint8_t inst_cnt(struct bt_tbs_server_inst *srv_inst)
+{
+#if defined(CONFIG_BT_TBS_CLIENT_TBS)
+	return srv_inst->inst_cnt;
+#else
+	return 0;
+#endif /* CONFIG_BT_TBS_CLIENT_TBS */
+}
+
 static void tbs_client_discover_complete(struct bt_conn *conn, int err)
 {
 	struct bt_tbs_server_inst *srv_inst = &srv_insts[bt_conn_index(conn)];
@@ -667,7 +709,7 @@ static void tbs_client_discover_complete(struct bt_conn *conn, int err)
 	srv_inst->current_inst = NULL;
 
 	if (tbs_client_cbs != NULL && tbs_client_cbs->discover != NULL) {
-		tbs_client_cbs->discover(conn, err, srv_inst->inst_cnt, srv_inst->gtbs != NULL);
+		tbs_client_cbs->discover(conn, err, inst_cnt(srv_inst), gtbs_found(srv_inst));
 	}
 }
 
@@ -1304,7 +1346,6 @@ static uint8_t disc_read_ccid_cb(struct bt_conn *conn, uint8_t err,
 				 const void *data, uint16_t length)
 {
 	struct bt_tbs_instance *inst = CONTAINER_OF(params, struct bt_tbs_instance, read_params);
-	struct bt_tbs_server_inst *srv_inst = &srv_insts[bt_conn_index(conn)];
 	uint8_t inst_index = tbs_index(conn, inst);
 	int cb_err = err;
 
@@ -1327,21 +1368,7 @@ static uint8_t disc_read_ccid_cb(struct bt_conn *conn, uint8_t err,
 	if (cb_err != 0) {
 		tbs_client_discover_complete(conn, cb_err);
 	} else {
-		if (IS_ENABLED(CONFIG_BT_TBS_CLIENT_GTBS) && inst == srv_inst->gtbs) {
-			LOG_DBG("Setup complete GTBS");
-
-			inst_index = 0;
-		} else {
-			inst_index++;
-
-			LOG_DBG("Setup complete for %u / %u TBS", inst_index, srv_inst->inst_cnt);
-		}
-
-		if (inst_index < srv_inst->inst_cnt) {
-			discover_next_instance(conn, inst_index);
-		} else {
-			tbs_client_discover_complete(conn, 0);
-		}
+		discover_next_instance(conn);
 	}
 
 	return BT_GATT_ITER_STOP;
@@ -1378,6 +1405,8 @@ static uint8_t discover_func(struct bt_conn *conn,
 #if defined(CONFIG_BT_TBS_CLIENT_CCID)
 		/* Read the CCID as the last part of discovering a TBS instance */
 		tbs_client_disc_read_ccid(conn);
+#else
+		discover_next_instance(conn);
 #endif /* defined(CONFIG_BT_TBS_CLIENT_CCID) */
 
 		return BT_GATT_ITER_STOP;
@@ -1494,7 +1523,7 @@ static uint8_t discover_func(struct bt_conn *conn,
 #endif /* defined(CONFIG_BT_TBS_CLIENT_INCOMING_CALL) */
 		}
 
-		if (srv_insts[conn_index].subscribe_all && sub_params != NULL) {
+		if (sub_params != NULL) {
 			sub_params->value = 0;
 			if (chrc->properties & BT_GATT_CHRC_NOTIFY) {
 				sub_params->value = BT_GATT_CCC_NOTIFY;
@@ -1528,15 +1557,40 @@ static uint8_t discover_func(struct bt_conn *conn,
 	return BT_GATT_ITER_CONTINUE;
 }
 
-static void discover_next_instance(struct bt_conn *conn, uint8_t index)
+static struct bt_tbs_instance *get_next_instance(struct bt_conn *conn,
+						 struct bt_tbs_server_inst *srv_inst)
+{
+	uint8_t inst_index;
+
+	if (srv_inst->current_inst != NULL) {
+		inst_index = tbs_index(conn, srv_inst->current_inst);
+		if (inst_index == BT_TBS_GTBS_INDEX) {
+			inst_index = 0;
+		} else {
+			inst_index++;
+		}
+
+		return tbs_inst_by_index(conn, inst_index);
+	}
+
+	inst_index = gtbs_found(srv_inst) ? BT_TBS_GTBS_INDEX : 0;
+
+	return tbs_inst_by_index(conn, inst_index);
+}
+
+static void discover_next_instance(struct bt_conn *conn)
 {
 	int err;
 	uint8_t conn_index = bt_conn_index(conn);
 	struct bt_tbs_server_inst *srv_inst = &srv_insts[conn_index];
 
-	srv_inst->current_inst = tbs_inst_by_index(conn, index);
-	__ASSERT(srv_inst->current_inst != NULL,
-		 "srv_inst->current_inst was NULL for conn %p and index %u", conn, index);
+	srv_inst->current_inst = get_next_instance(conn, srv_inst);
+	if (srv_inst->current_inst == NULL) {
+		tbs_client_discover_complete(conn, 0);
+		return;
+	}
+
+	LOG_DBG("inst_index %u", tbs_index(conn, srv_inst->current_inst));
 
 	(void)memset(&srv_inst->discover_params, 0, sizeof(srv_inst->discover_params));
 	srv_inst->discover_params.uuid = NULL;
@@ -1554,16 +1608,16 @@ static void discover_next_instance(struct bt_conn *conn, uint8_t index)
 static void primary_discover_complete(struct bt_tbs_server_inst *server, struct bt_conn *conn)
 {
 	if (IS_ENABLED(CONFIG_BT_TBS_CLIENT_GTBS)) {
-		LOG_DBG("Discover complete, found %u instances (GTBS%s found)", server->inst_cnt,
-			server->gtbs != NULL ? "" : " not");
+		LOG_DBG("Discover complete, found %u instances (GTBS%s found)",
+			inst_cnt(server), gtbs_found(server) ? "" : " not");
 	} else {
-		LOG_DBG("Discover complete, found %u instances", server->inst_cnt);
+		LOG_DBG("Discover complete, found %u instances", inst_cnt(server));
 	}
 
-	if (IS_ENABLED(CONFIG_BT_TBS_CLIENT_GTBS) && server->gtbs != NULL) {
-		discover_next_instance(conn, BT_TBS_GTBS_INDEX);
-	} else if (server->inst_cnt > 0) {
-		discover_next_instance(conn, 0);
+	server->current_inst = NULL;
+
+	if (gtbs_found(server) || inst_cnt(server) > 0) {
+		discover_next_instance(conn);
 	} else {
 		tbs_client_discover_complete(conn, 0);
 	}
@@ -1574,11 +1628,16 @@ static void primary_discover_complete(struct bt_tbs_server_inst *server, struct 
  * handles of the writeable characteristics and subscribing to all notify and
  * indicate characteristics.
  */
-static uint8_t primary_discover_tbs(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-				    struct bt_gatt_discover_params *params)
+#if defined(CONFIG_BT_TBS_CLIENT_TBS)
+static const struct bt_uuid *tbs_uuid = BT_UUID_TBS;
+
+static uint8_t primary_discover_tbs_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+				       struct bt_gatt_discover_params *params)
 {
 	const uint8_t conn_index = bt_conn_index(conn);
 	struct bt_tbs_server_inst *srv_inst = &srv_insts[conn_index];
+
+	LOG_DBG("conn %p attr %p", (void *)conn, attr);
 
 	if (attr != NULL) {
 		const struct bt_gatt_service_val *prim_service;
@@ -1591,7 +1650,7 @@ static uint8_t primary_discover_tbs(struct bt_conn *conn, const struct bt_gatt_a
 		srv_inst->current_inst->start_handle = attr->handle + 1;
 		srv_inst->current_inst->end_handle = prim_service->end_handle;
 
-		if (srv_inst->inst_cnt < CONFIG_BT_TBS_CLIENT_MAX_TBS_INSTANCES) {
+		if (srv_inst->inst_cnt < ARRAY_SIZE(srv_inst->tbs_insts)) {
 			return BT_GATT_ITER_CONTINUE;
 		}
 	}
@@ -1601,11 +1660,34 @@ static uint8_t primary_discover_tbs(struct bt_conn *conn, const struct bt_gatt_a
 	return BT_GATT_ITER_STOP;
 }
 
-static uint8_t primary_discover_gtbs(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-				     struct bt_gatt_discover_params *params)
+static int primary_discover_tbs(struct bt_conn *conn)
+{
+	struct bt_tbs_server_inst *srv_inst = &srv_insts[bt_conn_index(conn)];
+	struct bt_gatt_discover_params *params = &srv_inst->discover_params;
+
+	LOG_DBG("conn %p", (void *)conn);
+
+	(void)memset(params, 0, sizeof(*params));
+	params->uuid = tbs_uuid;
+	params->func = primary_discover_tbs_cb;
+	params->type = BT_GATT_DISCOVER_PRIMARY;
+	params->start_handle = BT_ATT_FIRST_ATTRIBUTE_HANDLE;
+	params->end_handle = BT_ATT_LAST_ATTRIBUTE_HANDLE;
+
+	return bt_gatt_discover(conn, params);
+}
+#endif /* CONFIG_BT_TBS_CLIENT_TBS */
+
+#if defined(CONFIG_BT_TBS_CLIENT_GTBS)
+static const struct bt_uuid *gtbs_uuid = BT_UUID_GTBS;
+
+static uint8_t primary_discover_gtbs_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+					struct bt_gatt_discover_params *params)
 {
 	const uint8_t conn_index = bt_conn_index(conn);
 	struct bt_tbs_server_inst *srv_inst = &srv_insts[conn_index];
+
+	LOG_DBG("conn %p attr %p", (void *)conn, attr);
 
 	if (attr != NULL) {
 		const struct bt_gatt_service_val *prim_service;
@@ -1614,33 +1696,44 @@ static uint8_t primary_discover_gtbs(struct bt_conn *conn, const struct bt_gatt_
 
 		prim_service = (struct bt_gatt_service_val *)attr->user_data;
 
-		/* GTBS is placed as the "last" instance */
-		srv_inst->gtbs = &srv_inst->tbs_insts[ARRAY_SIZE(srv_inst->tbs_insts) - 1];
-		srv_inst->gtbs->start_handle = attr->handle + 1;
-		srv_inst->gtbs->end_handle = prim_service->end_handle;
-
-		srv_inst->current_inst = srv_inst->gtbs;
+		srv_inst->current_inst = &srv_inst->gtbs_inst;
+		srv_inst->current_inst->start_handle = attr->handle + 1;
+		srv_inst->current_inst->end_handle = prim_service->end_handle;
 	}
 
-	if (CONFIG_BT_TBS_CLIENT_MAX_TBS_INSTANCES > 0) {
-		int err;
+#if defined(CONFIG_BT_TBS_CLIENT_TBS)
+	int err;
 
-		params->uuid = tbs_uuid;
-		params->func = primary_discover_tbs;
-		params->start_handle = BT_ATT_FIRST_ATTRIBUTE_HANDLE;
-
-		err = bt_gatt_discover(conn, params);
-		if (err == 0) {
-			return BT_GATT_ITER_STOP;
-		}
-
-		LOG_DBG("Discover failed (err %d)", err);
+	err = primary_discover_tbs(conn);
+	if (err == 0) {
+		return BT_GATT_ITER_STOP;
 	}
+
+	LOG_DBG("Discover failed (err %d)", err);
+#endif /* CONFIG_BT_TBS_CLIENT_TBS */
 
 	primary_discover_complete(srv_inst, conn);
 
 	return BT_GATT_ITER_STOP;
 }
+
+static int primary_discover_gtbs(struct bt_conn *conn)
+{
+	struct bt_tbs_server_inst *srv_inst = &srv_insts[bt_conn_index(conn)];
+	struct bt_gatt_discover_params *params = &srv_inst->discover_params;
+
+	LOG_DBG("conn %p", (void *)conn);
+
+	(void)memset(params, 0, sizeof(*params));
+	params->uuid = gtbs_uuid;
+	params->func = primary_discover_gtbs_cb;
+	params->type = BT_GATT_DISCOVER_PRIMARY;
+	params->start_handle = BT_ATT_FIRST_ATTRIBUTE_HANDLE;
+	params->end_handle = BT_ATT_LAST_ATTRIBUTE_HANDLE;
+
+	return bt_gatt_discover(conn, params);
+}
+#endif /* IS_ENABLED(CONFIG_BT_TBS_CLIENT_GTBS) */
 
 /****************************** PUBLIC API ******************************/
 
@@ -2136,7 +2229,7 @@ int bt_tbs_client_read_friendly_name(struct bt_conn *conn, uint8_t inst_index)
 }
 #endif /* defined(CONFIG_BT_TBS_CLIENT_CALL_FRIENDLY_NAME) */
 
-int bt_tbs_client_discover(struct bt_conn *conn, bool subscribe)
+int bt_tbs_client_discover(struct bt_conn *conn)
 {
 	uint8_t conn_index;
 	struct bt_tbs_server_inst *srv_inst;
@@ -2152,25 +2245,16 @@ int bt_tbs_client_discover(struct bt_conn *conn, bool subscribe)
 		return -EBUSY;
 	}
 
+#if defined(CONFIG_BT_TBS_CLIENT_TBS)
 	(void)memset(srv_inst->tbs_insts, 0, sizeof(srv_inst->tbs_insts)); /* reset data */
 	srv_inst->inst_cnt = 0;
-	srv_inst->gtbs = NULL;
-	/* Discover TBS on peer, setup handles and notify/indicate */
-	srv_inst->subscribe_all = subscribe;
-	(void)memset(&srv_inst->discover_params, 0, sizeof(srv_inst->discover_params));
-	if (IS_ENABLED(CONFIG_BT_TBS_CLIENT_GTBS)) {
-		LOG_DBG("Discovering GTBS");
-		srv_inst->discover_params.uuid = gtbs_uuid;
-		srv_inst->discover_params.func = primary_discover_gtbs;
-	} else {
-		srv_inst->discover_params.uuid = tbs_uuid;
-		srv_inst->discover_params.func = primary_discover_tbs;
-	}
-	srv_inst->discover_params.type = BT_GATT_DISCOVER_PRIMARY;
-	srv_inst->discover_params.start_handle = BT_ATT_FIRST_ATTRIBUTE_HANDLE;
-	srv_inst->discover_params.end_handle = BT_ATT_LAST_ATTRIBUTE_HANDLE;
-
-	return bt_gatt_discover(conn, &srv_inst->discover_params);
+#endif /* CONFIG_BT_TBS_CLIENT_TBS */
+#if defined(CONFIG_BT_TBS_CLIENT_GTBS)
+	(void)memset(&srv_inst->gtbs_inst, 0, sizeof(srv_inst->gtbs_inst)); /* reset data */
+	return primary_discover_gtbs(conn);
+#else
+	return primary_discover_tbs(conn);
+#endif /* CONFIG_BT_TBS_CLIENT_GTBS */
 }
 
 void bt_tbs_client_register_cb(const struct bt_tbs_client_cb *cbs)
@@ -2179,6 +2263,13 @@ void bt_tbs_client_register_cb(const struct bt_tbs_client_cb *cbs)
 }
 
 #if defined(CONFIG_BT_TBS_CLIENT_CCID)
+static bool tbs_instance_ccid_is_eq(struct bt_tbs_instance *inst, void *user_data)
+{
+	uint8_t ccid = POINTER_TO_UINT(user_data);
+
+	return inst->ccid == ccid;
+}
+
 struct bt_tbs_instance *bt_tbs_client_get_by_ccid(const struct bt_conn *conn,
 						  uint8_t ccid)
 {
@@ -2191,12 +2282,6 @@ struct bt_tbs_instance *bt_tbs_client_get_by_ccid(const struct bt_conn *conn,
 
 	server = &srv_insts[bt_conn_index(conn)];
 
-	for (size_t i = 0; i < ARRAY_SIZE(server->tbs_insts); i++) {
-		if (server->tbs_insts[i].ccid == ccid) {
-			return &server->tbs_insts[i];
-		}
-	}
-
-	return NULL;
+	return tbs_instance_find(server, tbs_instance_ccid_is_eq, UINT_TO_POINTER(ccid));
 }
 #endif /* defined(CONFIG_BT_TBS_CLIENT_CCID) */

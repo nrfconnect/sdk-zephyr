@@ -72,6 +72,7 @@ extensions = [
     "sphinx.ext.extlinks",
     "sphinx.ext.autodoc",
     "sphinx.ext.graphviz",
+    "sphinxcontrib.jquery",
     "zephyr.application",
     "zephyr.html_redirects",
     "zephyr.kconfig",
@@ -83,7 +84,9 @@ extensions = [
     "zephyr.vcs_link",
     "notfound.extension",
     "sphinx_copybutton",
+    "sphinx_togglebutton",
     "zephyr.external_content",
+    "zephyr.domain",
 ]
 
 # Only use SVG converter when it is really needed, e.g. LaTeX.
@@ -161,7 +164,6 @@ html_context = {
         ("latest", "/"),
         ("3.4.0", "/3.4.0/"),
         ("3.3.0", "/3.3.0/"),
-        ("3.2.0", "/3.2.0/"),
         ("2.7.5 (LTS)", "/2.7.5/"),
     ),
     "display_vcs_link": True,

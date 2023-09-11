@@ -8,6 +8,7 @@
 #include <st/f4/stm32f429Xi.dtsi>
 #include <st/f4/stm32f429zitx-pinctrl.dtsi>
 #include <zephyr/dt-bindings/display/ili9xxx.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
 	model = "STMicroelectronics STM32F429I_DISC1 board";
@@ -31,11 +32,11 @@
 
 	leds {
 		compatible = "gpio-leds";
-		orange_led_3: led_3 {
+		green_led_3: led_3 {
 			gpios = <&gpiog 13 GPIO_ACTIVE_HIGH>;
 			label = "User LD3";
 		};
-		green_led_4: led_4 {
+		red_led_4: led_4 {
 			gpios = <&gpiog 14 GPIO_ACTIVE_HIGH>;
 			label = "User LD4";
 		};
@@ -46,11 +47,12 @@
 		user_button: button {
 			label = "User";
 			gpios = <&gpioa 0 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_0>;
 		};
 	};
 
 	aliases {
-		led0 = &green_led_4;
+		led0 = &green_led_3;
 		sw0 = &user_button;
 	};
 };

@@ -32,7 +32,7 @@ static struct bt_bap_lc3_preset preset_16_2_1 = BT_BAP_LC3_UNICAST_PRESET_16_2_1
 CREATE_FLAG(flag_mtu_exchanged);
 CREATE_FLAG(flag_sink_discovered);
 CREATE_FLAG(flag_source_discovered);
-CREATE_FLAG(flag_codec_found);
+CREATE_FLAG(flag_codec_cap_found);
 CREATE_FLAG(flag_endpoint_found);
 CREATE_FLAG(flag_stream_codec_configured);
 static atomic_t flag_stream_qos_configured;
@@ -43,7 +43,7 @@ CREATE_FLAG(flag_stream_released);
 CREATE_FLAG(flag_operation_success);
 
 static void stream_configured(struct bt_bap_stream *stream,
-			      const struct bt_codec_qos_pref *pref)
+			      const struct bt_audio_codec_qos_pref *pref)
 {
 	printk("Configured stream %p\n", stream);
 
@@ -231,11 +231,12 @@ static void add_remote_source(struct bt_bap_ep *ep)
 	FAIL("Could not add source ep\n");
 }
 
-static void print_remote_codec(const struct bt_codec *codec, enum bt_audio_dir dir)
+static void print_remote_codec_cap(const struct bt_audio_codec_cap *codec_cap,
+				   enum bt_audio_dir dir)
 {
-	printk("codec %p dir 0x%02x\n", codec, dir);
+	printk("codec %p dir 0x%02x\n", codec_cap, dir);
 
-	print_codec(codec);
+	print_codec_cap(codec_cap);
 }
 
 static void discover_sinks_cb(struct bt_conn *conn, int err, enum bt_audio_dir dir)
@@ -262,10 +263,11 @@ static void discover_sources_cb(struct bt_conn *conn, int err, enum bt_audio_dir
 	SET_FLAG(flag_source_discovered);
 }
 
-static void pac_record_cb(struct bt_conn *conn, enum bt_audio_dir dir, const struct bt_codec *codec)
+static void pac_record_cb(struct bt_conn *conn, enum bt_audio_dir dir,
+			  const struct bt_audio_codec_cap *codec_cap)
 {
-	print_remote_codec(codec, dir);
-	SET_FLAG(flag_codec_found);
+	print_remote_codec_cap(codec_cap, dir);
+	SET_FLAG(flag_codec_cap_found);
 }
 
 static void endpoint_cb(struct bt_conn *conn, enum bt_audio_dir dir, struct bt_bap_ep *ep)
@@ -352,7 +354,7 @@ static void discover_sinks(void)
 
 	unicast_client_cbs.discover = discover_sinks_cb;
 
-	UNSET_FLAG(flag_codec_found);
+	UNSET_FLAG(flag_codec_cap_found);
 	UNSET_FLAG(flag_sink_discovered);
 	UNSET_FLAG(flag_endpoint_found);
 
@@ -364,7 +366,7 @@ static void discover_sinks(void)
 
 	memset(g_sinks, 0, sizeof(g_sinks));
 
-	WAIT_FOR_FLAG(flag_codec_found);
+	WAIT_FOR_FLAG(flag_codec_cap_found);
 	WAIT_FOR_FLAG(flag_endpoint_found);
 	WAIT_FOR_FLAG(flag_sink_discovered);
 }
@@ -375,7 +377,7 @@ static void discover_sources(void)
 
 	unicast_client_cbs.discover = discover_sources_cb;
 
-	UNSET_FLAG(flag_codec_found);
+	UNSET_FLAG(flag_codec_cap_found);
 	UNSET_FLAG(flag_source_discovered);
 
 	err = bt_bap_unicast_client_discover(default_conn, BT_AUDIO_DIR_SOURCE);
@@ -386,7 +388,7 @@ static void discover_sources(void)
 
 	memset(g_sources, 0, sizeof(g_sources));
 
-	WAIT_FOR_FLAG(flag_codec_found);
+	WAIT_FOR_FLAG(flag_codec_cap_found);
 	WAIT_FOR_FLAG(flag_source_discovered);
 }
 
@@ -399,7 +401,7 @@ static int codec_configure_stream(struct bt_bap_stream *stream, struct bt_bap_ep
 
 	do {
 
-		err = bt_bap_stream_config(default_conn, stream, ep, &preset_16_2_1.codec);
+		err = bt_bap_stream_config(default_conn, stream, ep, &preset_16_2_1.codec_cfg);
 		if (err == -EBUSY) {
 			k_sleep(BAP_STREAM_RETRY_WAIT);
 		} else if (err != 0) {
@@ -499,23 +501,15 @@ static void enable_streams(size_t stream_cnt)
 
 static int metadata_update_stream(struct bt_bap_stream *stream)
 {
-	struct bt_codec_data new_meta = BT_CODEC_DATA(
-		BT_AUDIO_METADATA_TYPE_VENDOR, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
-		0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24,
-		0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32,
-		0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f, 0x40,
-		0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e,
-		0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x5b, 0x5c,
-		0x5d, 0x5e, 0x5f, 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a,
-		0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78,
-		0x79, 0x7a, 0x7b, 0x7c, 0x7d, 0x7e, 0x7f);
+	const uint8_t new_meta[] = {
+		BT_AUDIO_CODEC_DATA(BT_AUDIO_METADATA_TYPE_VENDOR, LONG_META),
+	};
 	int err;
 
 	UNSET_FLAG(flag_stream_metadata);
 
 	do {
-		err = bt_bap_stream_metadata(stream, &new_meta, 1);
+		err = bt_bap_stream_metadata(stream, new_meta, ARRAY_SIZE(new_meta));
 		if (err == -EBUSY) {
 			k_sleep(BAP_STREAM_RETRY_WAIT);
 		} else if (err != 0) {

@@ -5,13 +5,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/sys/dlist.h>
 #include <zephyr/toolchain.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <soc.h>
 
 #include <hal/nrf_rtc.h>
 #include <hal/nrf_timer.h>
+#include <hal/nrf_radio.h>
 #include <hal/nrf_ccm.h>
 #include <hal/nrf_aar.h>
 
@@ -445,7 +445,9 @@ void radio_pkt_configure(uint8_t bits_len, uint8_t max_len, uint8_t flags)
 	/* To use same Data Channel PDU structure with nRF5 specific overhead
 	 * byte, include the S1 field in radio packet configuration.
 	 */
-	if (pdu_type == RADIO_PKT_CONF_PDU_TYPE_DC) {
+	if ((pdu_type == RADIO_PKT_CONF_PDU_TYPE_DC) ||
+	    (pdu_type == RADIO_PKT_CONF_PDU_TYPE_BIS) ||
+	    (pdu_type == RADIO_PKT_CONF_PDU_TYPE_CIS)) {
 		extra |= (RADIO_PCNF0_S1INCL_Include <<
 			  RADIO_PCNF0_S1INCL_Pos) & RADIO_PCNF0_S1INCL_Msk;
 #if defined(CONFIG_BT_CTLR_DF)
@@ -566,18 +568,18 @@ void radio_status_reset(void)
 	 *       register value, PPI task will be triggered. Hence, other
 	 *       EVENT_* registers are not reset to save code and CPU time.
 	 */
-	NRF_RADIO->EVENTS_READY = 0;
-	NRF_RADIO->EVENTS_END = 0;
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_READY);
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_END);
 #if defined(CONFIG_BT_CTLR_DF_SUPPORT) && !defined(CONFIG_ZTEST)
 	/* Clear it only for SoCs supporting DF extension */
-	NRF_RADIO->EVENTS_PHYEND = 0;
-	NRF_RADIO->EVENTS_CTEPRESENT = 0;
-	NRF_RADIO->EVENTS_BCMATCH = 0;
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_PHYEND);
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_CTEPRESENT);
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_BCMATCH);
 #endif /* CONFIG_BT_CTLR_DF_SUPPORT && !CONFIG_ZTEST */
-	NRF_RADIO->EVENTS_DISABLED = 0;
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_DISABLED);
 #if defined(CONFIG_BT_CTLR_PHY_CODED)
 #if defined(CONFIG_HAS_HW_NRF_RADIO_BLE_CODED)
-	NRF_RADIO->EVENTS_RATEBOOST = 0;
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_RATEBOOST);
 #endif /* CONFIG_HAS_HW_NRF_RADIO_BLE_CODED */
 #endif /* CONFIG_BT_CTLR_PHY_CODED */
 }
@@ -1017,7 +1019,7 @@ uint32_t radio_rssi_get(void)
 
 void radio_rssi_status_reset(void)
 {
-	NRF_RADIO->EVENTS_RSSIEND = 0;
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_RSSIEND);
 }
 
 uint32_t radio_rssi_is_ready(void)
@@ -1049,7 +1051,7 @@ void radio_filter_disable(void)
 
 void radio_filter_status_reset(void)
 {
-	NRF_RADIO->EVENTS_DEVMATCH = 0;
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_DEVMATCH);
 }
 
 uint32_t radio_filter_has_match(void)
@@ -1070,7 +1072,7 @@ void radio_bc_configure(uint32_t n)
 
 void radio_bc_status_reset(void)
 {
-	NRF_RADIO->EVENTS_BCMATCH = 0;
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_BCMATCH);
 }
 
 uint32_t radio_bc_has_match(void)
@@ -1354,7 +1356,7 @@ uint32_t radio_tmr_start_us(uint8_t trx, uint32_t start_us)
 		start_us = (now_us << 1) - start_us;
 
 		/* Setup compare event with min. 1 us offset */
-		EVENT_TIMER->EVENTS_COMPARE[0] = 0U;
+		nrf_timer_event_clear(EVENT_TIMER, NRF_TIMER_EVENT_COMPARE0);
 		nrf_timer_cc_set(EVENT_TIMER, 0, start_us + 1U);
 
 		/* Capture the current time */
@@ -1643,7 +1645,7 @@ void radio_gpio_pa_lna_disable(void)
 
 static uint8_t MALIGN(4) _ccm_scratch[(HAL_RADIO_PDU_LEN_MAX - 4) + 16];
 
-void *radio_ccm_rx_pkt_set(struct ccm *ccm, uint8_t phy, void *pkt)
+static void *radio_ccm_ext_rx_pkt_set(struct ccm *cnf, uint8_t phy, uint8_t pdu_type, void *pkt)
 {
 	uint32_t mode;
 
@@ -1726,22 +1728,47 @@ void *radio_ccm_rx_pkt_set(struct ccm *ccm, uint8_t phy, void *pkt)
 	NRF_CCM->MAXPACKETSIZE = max_len - 4U;
 #endif
 
+#if defined(CONFIG_HAS_HW_NRF_CCM_HEADERMASK)
+	switch (pdu_type) {
+	case RADIO_PKT_CONF_PDU_TYPE_BIS:
+		NRF_CCM->HEADERMASK = 0xC3; /* mask CSSN and CSTF */
+		break;
+	case RADIO_PKT_CONF_PDU_TYPE_CIS:
+		NRF_CCM->HEADERMASK = 0xA3; /* mask SN, NESN, CIE and NPI */
+		break;
+	default:
+		/* Using default reset value of HEADERMASK */
+		NRF_CCM->HEADERMASK = 0xE3; /* mask SN, NESN and MD */
+		break;
+	}
+#endif /* CONFIG_HAS_HW_NRF_CCM_HEADERMASK */
+
 	NRF_CCM->MODE = mode;
-	NRF_CCM->CNFPTR = (uint32_t)ccm;
+	NRF_CCM->CNFPTR = (uint32_t)cnf;
 	NRF_CCM->INPTR = (uint32_t)_pkt_scratch;
 	NRF_CCM->OUTPTR = (uint32_t)pkt;
 	NRF_CCM->SCRATCHPTR = (uint32_t)_ccm_scratch;
 	NRF_CCM->SHORTS = 0;
-	NRF_CCM->EVENTS_ENDKSGEN = 0;
-	NRF_CCM->EVENTS_ENDCRYPT = 0;
-	NRF_CCM->EVENTS_ERROR = 0;
+	nrf_ccm_event_clear(NRF_CCM, NRF_CCM_EVENT_ENDKSGEN);
+	nrf_ccm_event_clear(NRF_CCM, NRF_CCM_EVENT_ENDCRYPT);
+	nrf_ccm_event_clear(NRF_CCM, NRF_CCM_EVENT_ERROR);
 
 	nrf_ccm_task_trigger(NRF_CCM, NRF_CCM_TASK_KSGEN);
 
 	return _pkt_scratch;
 }
 
-void *radio_ccm_tx_pkt_set(struct ccm *ccm, void *pkt)
+void *radio_ccm_rx_pkt_set(struct ccm *cnf, uint8_t phy, void *pkt)
+{
+	return radio_ccm_ext_rx_pkt_set(cnf, phy, RADIO_PKT_CONF_PDU_TYPE_DC, pkt);
+}
+
+void *radio_ccm_iso_rx_pkt_set(struct ccm *cnf, uint8_t phy, uint8_t pdu_type, void *pkt)
+{
+	return radio_ccm_ext_rx_pkt_set(cnf, phy, pdu_type, pkt);
+}
+
+static void *radio_ccm_ext_tx_pkt_set(struct ccm *cnf, uint8_t pdu_type, void *pkt)
 {
 	uint32_t mode;
 
@@ -1772,19 +1799,44 @@ void *radio_ccm_tx_pkt_set(struct ccm *ccm, void *pkt)
 	NRF_CCM->MAXPACKETSIZE = max_len - 4U;
 #endif
 
+#if defined(CONFIG_HAS_HW_NRF_CCM_HEADERMASK)
+	switch (pdu_type) {
+	case RADIO_PKT_CONF_PDU_TYPE_BIS:
+		NRF_CCM->HEADERMASK = 0xC3; /* mask CSSN and CSTF */
+		break;
+	case RADIO_PKT_CONF_PDU_TYPE_CIS:
+		NRF_CCM->HEADERMASK = 0xA3; /* mask SN, NESN, CIE and NPI */
+		break;
+	default:
+		/* Using default reset value of HEADERMASK */
+		NRF_CCM->HEADERMASK = 0xE3; /* mask SN, NESN and MD */
+		break;
+	}
+#endif /* CONFIG_HAS_HW_NRF_CCM_HEADERMASK */
+
 	NRF_CCM->MODE = mode;
-	NRF_CCM->CNFPTR = (uint32_t)ccm;
+	NRF_CCM->CNFPTR = (uint32_t)cnf;
 	NRF_CCM->INPTR = (uint32_t)pkt;
 	NRF_CCM->OUTPTR = (uint32_t)_pkt_scratch;
 	NRF_CCM->SCRATCHPTR = (uint32_t)_ccm_scratch;
 	NRF_CCM->SHORTS = CCM_SHORTS_ENDKSGEN_CRYPT_Msk;
-	NRF_CCM->EVENTS_ENDKSGEN = 0;
-	NRF_CCM->EVENTS_ENDCRYPT = 0;
-	NRF_CCM->EVENTS_ERROR = 0;
+	nrf_ccm_event_clear(NRF_CCM, NRF_CCM_EVENT_ENDKSGEN);
+	nrf_ccm_event_clear(NRF_CCM, NRF_CCM_EVENT_ENDCRYPT);
+	nrf_ccm_event_clear(NRF_CCM, NRF_CCM_EVENT_ERROR);
 
 	nrf_ccm_task_trigger(NRF_CCM, NRF_CCM_TASK_KSGEN);
 
 	return _pkt_scratch;
+}
+
+void *radio_ccm_tx_pkt_set(struct ccm *cnf, void *pkt)
+{
+	return radio_ccm_ext_tx_pkt_set(cnf, RADIO_PKT_CONF_PDU_TYPE_DC, pkt);
+}
+
+void *radio_ccm_iso_tx_pkt_set(struct ccm *cnf, uint8_t pdu_type, void *pkt)
+{
+	return radio_ccm_ext_tx_pkt_set(cnf, pdu_type, pkt);
 }
 
 uint32_t radio_ccm_is_done(void)
@@ -1847,9 +1899,9 @@ void radio_ar_configure(uint32_t nirk, void *irk, uint8_t flags)
 	NRF_AAR->ADDRPTR = addrptr;
 	NRF_AAR->SCRATCHPTR = (uint32_t)&_aar_scratch[0];
 
-	NRF_AAR->EVENTS_END = 0;
-	NRF_AAR->EVENTS_RESOLVED = 0;
-	NRF_AAR->EVENTS_NOTRESOLVED = 0;
+	nrf_aar_event_clear(NRF_AAR, NRF_AAR_EVENT_END);
+	nrf_aar_event_clear(NRF_AAR, NRF_AAR_EVENT_RESOLVED);
+	nrf_aar_event_clear(NRF_AAR, NRF_AAR_EVENT_NOTRESOLVED);
 
 	radio_bc_configure(bcc);
 	radio_bc_status_reset();
@@ -1905,9 +1957,9 @@ uint8_t radio_ar_resolve(const uint8_t *addr)
 
 	NRF_AAR->ADDRPTR = (uint32_t)addr - 3;
 
-	NRF_AAR->EVENTS_END = 0;
-	NRF_AAR->EVENTS_RESOLVED = 0;
-	NRF_AAR->EVENTS_NOTRESOLVED = 0;
+	nrf_aar_event_clear(NRF_AAR, NRF_AAR_EVENT_END);
+	nrf_aar_event_clear(NRF_AAR, NRF_AAR_EVENT_RESOLVED);
+	nrf_aar_event_clear(NRF_AAR, NRF_AAR_EVENT_NOTRESOLVED);
 
 	NVIC_ClearPendingIRQ(nrfx_get_irq_number(NRF_AAR));
 

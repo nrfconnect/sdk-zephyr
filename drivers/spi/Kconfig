@@ -107,8 +107,6 @@ source "drivers/spi/Kconfig.test"
 
 source "drivers/spi/Kconfig.psoc6"
 
-source "drivers/spi/Kconfig.npcx_fiu"
-
 source "drivers/spi/Kconfig.bitbang"
 
 source "drivers/spi/Kconfig.gd32"
@@ -128,5 +126,11 @@ source "drivers/spi/Kconfig.pw"
 source "drivers/spi/Kconfig.smartbond"
 
 source "drivers/spi/Kconfig.opentitan"
+
+source "drivers/spi/Kconfig.numaker"
+
+source "drivers/spi/Kconfig.ambiq"
+
+source "drivers/spi/Kconfig.rpi_pico"
 
 endif # SPI

@@ -454,7 +454,7 @@ def write_interrupts(node):
         err(f"Invalid interrupt type specified for {irq!r}")
 
     def encode_zephyr_multi_level_irq(irq, irq_num):
-        # See doc/reference/kernel/other/interrupts.rst for details
+        # See doc/kernel/services/interrupts.rst for details
         # on how this encoding works
 
         irq_ctrl = irq.controller
@@ -747,6 +747,7 @@ def write_dep_info(node):
 
     out_comment("Node's dependency ordinal:")
     out_dt_define(f"{node.z_path_id}_ORD", node.dep_ordinal)
+    out_dt_define(f"{node.z_path_id}_ORD_STR_SORTABLE", f"{node.dep_ordinal:0>5}")
 
     out_comment("Ordinals for what this node depends on directly:")
     out_dt_define(f"{node.z_path_id}_REQUIRES_ORDS",
@@ -920,6 +921,11 @@ def write_global_macros(edt):
                   " ".join(f"fn(DT_{node.z_path_id})" for node in edt.nodes))
     out_dt_define("FOREACH_OKAY_HELPER(fn)",
                   " ".join(f"fn(DT_{node.z_path_id})" for node in edt.nodes
+                           if node.status == "okay"))
+    out_dt_define("FOREACH_VARGS_HELPER(fn, ...)",
+                  " ".join(f"fn(DT_{node.z_path_id}, __VA_ARGS__)" for node in edt.nodes))
+    out_dt_define("FOREACH_OKAY_VARGS_HELPER(fn, ...)",
+                  " ".join(f"fn(DT_{node.z_path_id}, __VA_ARGS__)" for node in edt.nodes
                            if node.status == "okay"))
 
     n_okay_macros = {}

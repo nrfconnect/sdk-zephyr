@@ -14,32 +14,20 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/init.h>
-#include <zephyr/arch/arm/aarch32/cortex_m/cmsis.h>
-#include <zephyr/arch/arm/aarch32/nmi.h>
 #include <soc/nrfx_coredep.h>
 #include <zephyr/logging/log.h>
+
+#include <cmsis_core.h>
 
 #define LOG_LEVEL CONFIG_SOC_LOG_LEVEL
 LOG_MODULE_REGISTER(soc);
 
 static int nordicsemi_nrf91_init(void)
 {
-	uint32_t key;
-
-
-	key = irq_lock();
-
 #ifdef CONFIG_NRF_ENABLE_ICACHE
 	/* Enable the instruction cache */
 	NRF_NVMC->ICACHECNF = NVMC_ICACHECNF_CACHEEN_Msk;
 #endif
-
-	/* Install default handler that simply resets the CPU
-	* if configured in the kernel, NOP otherwise
-	*/
-	NMI_INIT();
-
-	irq_unlock(key);
 
 	return 0;
 }

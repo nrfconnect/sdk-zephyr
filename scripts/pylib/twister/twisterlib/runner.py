@@ -25,6 +25,7 @@ from colorama import Fore
 from domains import Domains
 from twisterlib.cmakecache import CMakeCache
 from twisterlib.environment import canonical_zephyr_base
+from twisterlib.error import BuildError
 
 import elftools
 from elftools.elf.elffile import ELFFile
@@ -358,6 +359,10 @@ class CMake:
         cmake_opts = ['-DBOARD={}'.format(self.platform.name)]
         cmake_args.extend(cmake_opts)
 
+        if self.instance.testsuite.required_snippets:
+            cmake_opts = ['-DSNIPPET={}'.format(';'.join(self.instance.testsuite.required_snippets))]
+            cmake_args.extend(cmake_opts)
+
         cmake = shutil.which('cmake')
         cmd = [cmake] + cmake_args
 
@@ -618,8 +623,14 @@ class ProjectBuilder(FilterBuilder):
                     pipeline.put({"op": "report", "test": self.instance})
                 else:
                     logger.debug(f"Determine test cases for test instance: {self.instance.name}")
-                    self.determine_testcases(results)
-                    pipeline.put({"op": "gather_metrics", "test": self.instance})
+                    try:
+                        self.determine_testcases(results)
+                        pipeline.put({"op": "gather_metrics", "test": self.instance})
+                    except BuildError as e:
+                        logger.error(str(e))
+                        self.instance.status = "error"
+                        self.instance.reason = str(e)
+                        pipeline.put({"op": "report", "test": self.instance})
 
         elif op == "gather_metrics":
             self.gather_metrics(self.instance)
@@ -673,10 +684,11 @@ class ProjectBuilder(FilterBuilder):
         yaml_testsuite_name = self.instance.testsuite.id
         logger.debug(f"Determine test cases for test suite: {yaml_testsuite_name}")
 
-        elf = ELFFile(open(self.instance.get_elf_file(), "rb"))
+        elf_file = self.instance.get_elf_file()
+        elf = ELFFile(open(elf_file, "rb"))
 
         logger.debug(f"Test instance {self.instance.name} already has {len(self.instance.testcases)} cases.")
-        new_ztest_unit_test_regex = re.compile(r"z_ztest_unit_test__([^\s]*)__([^\s]*)")
+        new_ztest_unit_test_regex = re.compile(r"z_ztest_unit_test__([^\s]+?)__([^\s]*)")
         detected_cases = []
         for section in elf.iter_sections():
             if isinstance(section, SymbolTableSection):
@@ -695,6 +707,7 @@ class ProjectBuilder(FilterBuilder):
                             detected_cases.append(testcase_id)
 
         if detected_cases:
+            logger.debug(f"{', '.join(detected_cases)} in {elf_file}")
             self.instance.testcases.clear()
             self.instance.testsuite.testcases.clear()
 
@@ -923,6 +936,8 @@ class ProjectBuilder(FilterBuilder):
                 if instance.handler.ready and instance.run:
                     more_info = instance.handler.type_str
                     htime = instance.execution_time
+                    if instance.dut:
+                        more_info += f": {instance.dut},"
                     if htime:
                         more_info += " {:.3f}s".format(htime)
                 else:
@@ -963,9 +978,15 @@ class ProjectBuilder(FilterBuilder):
         sys.stdout.flush()
 
     @staticmethod
-    def cmake_assemble_args(args, handler, extra_conf_files, extra_overlay_confs,
+    def cmake_assemble_args(extra_args, handler, extra_conf_files, extra_overlay_confs,
                             extra_dtc_overlay_files, cmake_extra_args,
                             build_dir):
+        # Retain quotes around config options
+        config_options = [arg for arg in extra_args if arg.startswith("CONFIG_")]
+        args = [arg for arg in extra_args if not arg.startswith("CONFIG_")]
+
+        args_expanded = ["-D{}".format(a.replace('"', '\"')) for a in config_options]
+
         if handler.ready:
             args.extend(handler.args)
 
@@ -988,7 +1009,7 @@ class ProjectBuilder(FilterBuilder):
             args.append("OVERLAY_CONFIG=\"%s\"" % (" ".join(overlays)))
 
         # Build the final argument list
-        args_expanded = ["-D{}".format(a.replace('"', '\"')) for a in cmake_extra_args]
+        args_expanded.extend(["-D{}".format(a.replace('"', '\"')) for a in cmake_extra_args])
         args_expanded.extend(["-D{}".format(a.replace('"', '')) for a in args])
 
         return args_expanded

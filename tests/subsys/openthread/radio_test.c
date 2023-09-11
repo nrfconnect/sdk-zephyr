@@ -30,6 +30,8 @@ DEFINE_FFF_GLOBALS;
 #define FRAME_TYPE_MASK 0x07
 #define FRAME_TYPE_ACK	0x02
 
+#define PHY_SHR_DURATION 160
+
 K_SEM_DEFINE(ot_sem, 0, 1);
 
 /**
@@ -46,13 +48,12 @@ FAKE_VALUE_FUNC(int, set_channel_mock, const struct device *, uint16_t);
 FAKE_VALUE_FUNC(int, filter_mock, const struct device *, bool, enum ieee802154_filter_type,
 		const struct ieee802154_filter *);
 FAKE_VALUE_FUNC(int, set_txpower_mock, const struct device *, int16_t);
+FAKE_VALUE_FUNC(int64_t, get_time_mock, const struct device *);
 FAKE_VALUE_FUNC(int, tx_mock, const struct device *, enum ieee802154_tx_mode, struct net_pkt *,
 		struct net_buf *);
 FAKE_VALUE_FUNC(int, start_mock, const struct device *);
 FAKE_VALUE_FUNC(int, stop_mock, const struct device *);
 FAKE_VALUE_FUNC(int, configure_mock, const struct device *, enum ieee802154_config_type,
-		const struct ieee802154_config *);
-FAKE_VALUE_FUNC(int, configure_promiscuous_mock, const struct device *, enum ieee802154_config_type,
 		const struct ieee802154_config *);
 FAKE_VALUE_FUNC(enum ieee802154_hw_caps, get_capabilities_caps_mock, const struct device *);
 
@@ -64,6 +65,7 @@ static struct ieee802154_radio_api rapi = {.get_capabilities = get_capabilities,
 					   .set_channel = set_channel_mock,
 					   .filter = filter_mock,
 					   .set_txpower = set_txpower_mock,
+					   .get_time = get_time_mock,
 					   .tx = tx_mock,
 					   .start = start_mock,
 					   .stop = stop_mock,
@@ -122,14 +124,17 @@ FAKE_VOID_FUNC(otPlatRadioTxDone, otInstance *, otRadioFrame *, otRadioFrame *, 
 
 static enum ieee802154_hw_caps get_capabilities(const struct device *dev)
 {
+	enum ieee802154_hw_caps caps;
+
 	zassert_equal(dev, radio, "Device handle incorrect.");
 
-	return IEEE802154_HW_FCS | IEEE802154_HW_2_4_GHZ | IEEE802154_HW_TX_RX_ACK |
+	caps = IEEE802154_HW_FCS | IEEE802154_HW_2_4_GHZ | IEEE802154_HW_TX_RX_ACK |
 	       IEEE802154_HW_FILTER | IEEE802154_HW_ENERGY_SCAN | IEEE802154_HW_SLEEP_TO_TX;
+	if (IS_ENABLED(CONFIG_NET_PKT_TXTIME)) {
+		caps |= IEEE802154_HW_TXTIME;
+	}
+	return caps;
 }
-
-FAKE_VALUE_FUNC(int, configure_match_mock, const struct device *, enum ieee802154_config_type,
-		const struct ieee802154_config *);
 
 FAKE_VALUE_FUNC(otError, otIp6Send, otInstance *, otMessage *);
 
@@ -260,6 +265,7 @@ ZTEST(openthread_radio, test_tx_test)
 	const uint8_t chan = 20;
 	uint8_t chan2 = chan - 1;
 	const int8_t power = -3;
+	net_time_t expected_target_time = 0;
 
 	otRadioFrame *frm = otPlatRadioGetTransmitBuffer(ot);
 
@@ -281,12 +287,27 @@ ZTEST(openthread_radio, test_tx_test)
 	RESET_FAKE(start_mock);
 	FFF_RESET_HISTORY();
 
+	if (IS_ENABLED(CONFIG_NET_PKT_TXTIME)) {
+		/* cover dealing with wrapped scheduling time:
+		 *  current time: (UINT32_MAX + 1) us
+		 *  target time wrapped: (3 + 5) us, unwrapped: (UINT32_MAX + 3 + 5) us
+		 */
+		get_time_mock_fake.return_val = (int64_t)UINT32_MAX * NSEC_PER_USEC + 1000;
+		frm->mInfo.mTxInfo.mTxDelayBaseTime = 3U;
+		frm->mInfo.mTxInfo.mTxDelay = 5U;
+		expected_target_time = get_time_mock_fake.return_val +
+				       (frm->mInfo.mTxInfo.mTxDelayBaseTime +
+					frm->mInfo.mTxInfo.mTxDelay + PHY_SHR_DURATION) *
+					       NSEC_PER_USEC;
+	}
+
 	/* ACKed frame */
 	frm->mChannel = chan2;
 	frm->mInfo.mTxInfo.mCsmaCaEnabled = true;
 	frm->mPsdu[0] = IEEE802154_AR_FLAG_SET;
 	set_channel_mock_fake.return_val = 0;
 	zassert_equal(otPlatRadioTransmit(ot, frm), OT_ERROR_NONE, "Transmit failed.");
+	k_yield();
 
 	create_ack_frame();
 	make_sure_sem_set(Z_TIMEOUT_MS(100));
@@ -294,12 +315,21 @@ ZTEST(openthread_radio, test_tx_test)
 	platformRadioProcess(ot);
 	zassert_equal(1, set_channel_mock_fake.call_count);
 	zassert_equal(chan2, set_channel_mock_fake.arg1_val);
-	zassert_equal(1, cca_mock_fake.call_count);
-	zassert_equal_ptr(radio, cca_mock_fake.arg0_val, NULL);
+	if (IS_ENABLED(CONFIG_NET_PKT_TXTIME)) {
+		zassert_equal(0, cca_mock_fake.call_count);
+	} else {
+		zassert_equal(1, cca_mock_fake.call_count);
+		zassert_equal_ptr(radio, cca_mock_fake.arg0_val, NULL);
+	}
 	zassert_equal(1, set_txpower_mock_fake.call_count);
 	zassert_equal(power, set_txpower_mock_fake.arg1_val);
 	zassert_equal(1, tx_mock_fake.call_count);
 	zassert_equal_ptr(frm->mPsdu, tx_mock_fake.arg3_val->data, NULL);
+	zassert_equal(expected_target_time,
+		      net_ptp_time_to_ns(net_pkt_timestamp(tx_mock_fake.arg2_val)));
+	zassert_equal(IS_ENABLED(CONFIG_NET_PKT_TXTIME) ? IEEE802154_TX_MODE_TXTIME_CCA
+							: IEEE802154_TX_MODE_DIRECT,
+		      tx_mock_fake.arg1_val);
 	zassert_equal(1, otPlatRadioTxDone_fake.call_count);
 	zassert_equal_ptr(ot, otPlatRadioTxDone_fake.arg0_val, NULL);
 	zassert_equal(OT_ERROR_NONE, otPlatRadioTxDone_fake.arg3_val);
@@ -432,9 +462,8 @@ static void set_expected_match_values(enum ieee802154_config_type type, uint8_t 
 ZTEST(openthread_radio, test_source_match_test)
 {
 	otExtAddress ext_addr;
-	configure_match_mock_fake.custom_fake = custom_configure_match_mock;
+	configure_mock_fake.custom_fake = custom_configure_match_mock;
 
-	rapi.configure = configure_match_mock;
 	/* Enable/Disable */
 	set_expected_match_values(IEEE802154_CONFIG_AUTO_ACK_FPB, NULL, false, true);
 	otPlatRadioEnableSrcMatch(ot, true);
@@ -473,8 +502,6 @@ ZTEST(openthread_radio, test_source_match_test)
 
 	set_expected_match_values(IEEE802154_CONFIG_ACK_FPB, NULL, true, false);
 	otPlatRadioClearSrcMatchExtEntries(ot);
-
-	rapi.configure = configure_mock;
 }
 
 static bool custom_configure_promiscuous_mock_promiscuous;
@@ -495,27 +522,22 @@ static int custom_configure_promiscuous_mock(const struct device *dev,
  */
 ZTEST(openthread_radio, test_promiscuous_mode_set_test)
 {
-	rapi.configure = configure_promiscuous_mock;
-
 	zassert_false(otPlatRadioGetPromiscuous(ot),
 		      "By default promiscuous mode shall be disabled.");
 
-	configure_promiscuous_mock_fake.custom_fake = custom_configure_promiscuous_mock;
+	configure_mock_fake.custom_fake = custom_configure_promiscuous_mock;
 	otPlatRadioSetPromiscuous(ot, true);
 	zassert_true(otPlatRadioGetPromiscuous(ot), "Mode not enabled.");
-	zassert_equal(1, configure_promiscuous_mock_fake.call_count);
+	zassert_equal(1, configure_mock_fake.call_count);
 	zassert_true(custom_configure_promiscuous_mock_promiscuous);
 
-	RESET_FAKE(configure_promiscuous_mock);
-	FFF_RESET_HISTORY();
+	RESET_FAKE(configure_mock);
 
-	configure_promiscuous_mock_fake.custom_fake = custom_configure_promiscuous_mock;
+	configure_mock_fake.custom_fake = custom_configure_promiscuous_mock;
 	otPlatRadioSetPromiscuous(ot, false);
 	zassert_false(otPlatRadioGetPromiscuous(ot), "Mode still enabled.");
-	zassert_equal(1, configure_promiscuous_mock_fake.call_count);
+	zassert_equal(1, configure_mock_fake.call_count);
 	zassert_false(custom_configure_promiscuous_mock_promiscuous);
-
-	rapi.configure = configure_mock;
 }
 
 /**
@@ -545,10 +567,6 @@ ZTEST(openthread_radio, test_get_caps_test)
 		      "Incorrect capabilities returned.");
 
 	/* not implemented or not fully supported */
-	get_capabilities_caps_mock_fake.return_val = IEEE802154_HW_TXTIME;
-	zassert_equal(otPlatRadioGetCaps(ot), OT_RADIO_CAPS_NONE,
-		      "Incorrect capabilities returned.");
-
 	get_capabilities_caps_mock_fake.return_val = IEEE802154_HW_PROMISC;
 	zassert_equal(otPlatRadioGetCaps(ot), OT_RADIO_CAPS_NONE,
 		      "Incorrect capabilities returned.");
@@ -566,6 +584,12 @@ ZTEST(openthread_radio, test_get_caps_test)
 	zassert_equal(otPlatRadioGetCaps(ot), OT_RADIO_CAPS_ACK_TIMEOUT,
 		      "Incorrect capabilities returned.");
 
+	get_capabilities_caps_mock_fake.return_val = IEEE802154_HW_TXTIME;
+	zassert_equal(otPlatRadioGetCaps(ot),
+		      IS_ENABLED(CONFIG_NET_PKT_TXTIME) ? OT_RADIO_CAPS_TRANSMIT_TIMING
+							: OT_RADIO_CAPS_NONE,
+		      "Incorrect capabilities returned.");
+
 	get_capabilities_caps_mock_fake.return_val = IEEE802154_HW_SLEEP_TO_TX;
 	zassert_equal(otPlatRadioGetCaps(ot), OT_RADIO_CAPS_SLEEP_TO_TX,
 		      "Incorrect capabilities returned.");
@@ -576,10 +600,12 @@ ZTEST(openthread_radio, test_get_caps_test)
 		IEEE802154_HW_CSMA | IEEE802154_HW_2_4_GHZ | IEEE802154_HW_TX_RX_ACK |
 		IEEE802154_HW_SUB_GHZ | IEEE802154_HW_ENERGY_SCAN | IEEE802154_HW_TXTIME |
 		IEEE802154_HW_SLEEP_TO_TX;
-	zassert_equal(otPlatRadioGetCaps(ot),
-		      OT_RADIO_CAPS_CSMA_BACKOFF | OT_RADIO_CAPS_ENERGY_SCAN |
-			      OT_RADIO_CAPS_ACK_TIMEOUT | OT_RADIO_CAPS_SLEEP_TO_TX,
-		      "Incorrect capabilities returned.");
+	zassert_equal(
+		otPlatRadioGetCaps(ot),
+		OT_RADIO_CAPS_CSMA_BACKOFF | OT_RADIO_CAPS_ENERGY_SCAN | OT_RADIO_CAPS_ACK_TIMEOUT |
+			OT_RADIO_CAPS_SLEEP_TO_TX |
+			(IS_ENABLED(CONFIG_NET_PKT_TXTIME) ? OT_RADIO_CAPS_TRANSMIT_TIMING : 0),
+		"Incorrect capabilities returned.");
 
 	rapi.get_capabilities = get_capabilities;
 }
@@ -882,6 +908,62 @@ ZTEST(openthread_radio, test_net_pkt_transmit)
 	zassert_equal_ptr(ip_msg, otIp6Send_fake.arg1_val, NULL);
 }
 
+#ifdef CONFIG_OPENTHREAD_CSL_RECEIVER
+static int64_t custom_configure_csl_rx_time_mock_csl_rx_time;
+static int custom_configure_csl_rx_time(const struct device *dev,
+					     enum ieee802154_config_type type,
+					     const struct ieee802154_config *config)
+{
+	zassert_equal(dev, radio, "Device handle incorrect.");
+	zassert_equal(type, IEEE802154_CONFIG_CSL_RX_TIME, "Config type incorrect.");
+	custom_configure_csl_rx_time_mock_csl_rx_time = config->csl_rx_time;
+
+	return 0;
+}
+
+ZTEST(openthread_radio, test_csl_receiver_sample_time)
+{
+	uint32_t sample_time = 50U;
+
+	configure_mock_fake.custom_fake = custom_configure_csl_rx_time;
+	otPlatRadioUpdateCslSampleTime(NULL, sample_time);
+	zassert_equal(1, configure_mock_fake.call_count);
+	zassert_equal(sample_time * NSEC_PER_USEC, custom_configure_csl_rx_time_mock_csl_rx_time);
+}
+
+
+static struct ieee802154_config custom_configure_rx_slot_mock_config;
+static int custom_configure_csl_rx_slot(const struct device *dev,
+					     enum ieee802154_config_type type,
+					     const struct ieee802154_config *config)
+{
+	zassert_equal(dev, radio, "Device handle incorrect.");
+	zassert_equal(type, IEEE802154_CONFIG_RX_SLOT, "Config type incorrect.");
+	custom_configure_rx_slot_mock_config.rx_slot.channel = config->rx_slot.channel;
+	custom_configure_rx_slot_mock_config.rx_slot.start = config->rx_slot.start;
+	custom_configure_rx_slot_mock_config.rx_slot.duration = config->rx_slot.duration;
+
+	return 0;
+}
+
+ZTEST(openthread_radio, test_csl_receiver_receive_at)
+{
+	uint8_t channel = 11U;
+	uint32_t start = 1000U;
+	uint32_t duration = 100U;
+	int res;
+
+	configure_mock_fake.custom_fake = custom_configure_csl_rx_slot;
+	res = otPlatRadioReceiveAt(NULL, channel, start, duration);
+	zassert_ok(res);
+	zassert_equal(1, configure_mock_fake.call_count);
+	zassert_equal(channel, custom_configure_rx_slot_mock_config.rx_slot.channel);
+	zassert_equal(start * NSEC_PER_USEC, custom_configure_rx_slot_mock_config.rx_slot.start);
+	zassert_equal(duration * NSEC_PER_USEC,
+		      custom_configure_rx_slot_mock_config.rx_slot.duration);
+}
+#endif
+
 static void *openthread_radio_setup(void)
 {
 	platformRadioInit();
@@ -900,7 +982,6 @@ static void openthread_radio_before(void *f)
 	RESET_FAKE(start_mock);
 	RESET_FAKE(stop_mock);
 	RESET_FAKE(configure_mock);
-	RESET_FAKE(configure_promiscuous_mock);
 	RESET_FAKE(get_capabilities_caps_mock);
 	RESET_FAKE(otPlatRadioEnergyScanDone);
 	RESET_FAKE(otPlatRadioTxDone);

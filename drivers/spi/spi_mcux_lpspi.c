@@ -33,6 +33,7 @@ struct spi_mcux_config {
 	uint32_t sck_pcs_delay;
 	uint32_t transfer_delay;
 	const struct pinctrl_dev_config *pincfg;
+	lpspi_pin_config_t data_pin_config;
 };
 
 #ifdef CONFIG_SPI_MCUX_LPSPI_DMA
@@ -211,6 +212,8 @@ static int spi_mcux_configure(const struct device *dev,
 	master_config.pcsToSckDelayInNanoSec = config->pcs_sck_delay;
 	master_config.lastSckToPcsDelayInNanoSec = config->sck_pcs_delay;
 	master_config.betweenTransferDelayInNanoSec = config->transfer_delay;
+
+	master_config.pinCfg = config->data_pin_config;
 
 	if (!device_is_ready(config->clock_dev)) {
 		LOG_ERR("clock control device not ready");
@@ -469,7 +472,7 @@ out:
 	return ret;
 }
 
-#endif
+#else
 
 static int transceive(const struct device *dev,
 		      const struct spi_config *spi_cfg,
@@ -502,6 +505,8 @@ out:
 	return ret;
 }
 
+#endif /*CONFIG_SPI_MCUX_LPSPI_DMA */
+
 static int spi_mcux_transceive(const struct device *dev,
 			       const struct spi_config *spi_cfg,
 			       const struct spi_buf_set *tx_bufs,
@@ -509,8 +514,9 @@ static int spi_mcux_transceive(const struct device *dev,
 {
 #ifdef CONFIG_SPI_MCUX_LPSPI_DMA
 	return transceive_dma(dev, spi_cfg, tx_bufs, rx_bufs, false, NULL, NULL);
-#endif /* CONFIG_SPI_MCUX_LPSPI_DMA */
+#else
 	return transceive(dev, spi_cfg, tx_bufs, rx_bufs, false, NULL, NULL);
+#endif /* CONFIG_SPI_MCUX_LPSPI_DMA */
 }
 
 #ifdef CONFIG_SPI_ASYNC
@@ -635,6 +641,7 @@ static const struct spi_driver_api spi_mcux_driver_api = {
 			DT_INST_NODE_HAS_PROP(n, transfer_delay),	\
 			DT_INST_PROP(n, transfer_delay)),		\
 		.pincfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),		\
+		.data_pin_config = DT_INST_ENUM_IDX(n, data_pin_config),\
 	};								\
 									\
 	static struct spi_mcux_data spi_mcux_data_##n = {		\

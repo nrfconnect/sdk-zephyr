@@ -173,34 +173,31 @@ enum bt_audio_metadata_type {
 	BT_AUDIO_METADATA_TYPE_VENDOR              = 0xFF,
 };
 
+/**
+ * Helper to check whether metadata type is known by the stack.
+ */
+#define BT_AUDIO_METADATA_TYPE_IS_KNOWN(_type) \
+	(IN_RANGE(_type, BT_AUDIO_METADATA_TYPE_PREF_CONTEXT, \
+			 BT_AUDIO_METADATA_TYPE_BROADCAST_IMMEDIATE) || \
+	 IN_RANGE(_type, BT_AUDIO_METADATA_TYPE_EXTENDED, BT_AUDIO_METADATA_TYPE_VENDOR))
+
 /* Unicast Announcement Type, Generic Audio */
 #define BT_AUDIO_UNICAST_ANNOUNCEMENT_GENERAL    0x00
 #define BT_AUDIO_UNICAST_ANNOUNCEMENT_TARGETED   0x01
 
-/** @brief Codec configuration structure */
-struct bt_codec_data {
-	struct bt_data data;
-	uint8_t value[CONFIG_BT_CODEC_MAX_DATA_LEN];
-};
-
 /**
- *  @brief Helper to declare elements of bt_codec_data arrays
+ * @brief Helper to declare elements of bt_audio_codec_cap arrays
  *
- *  This macro is mainly for creating an array of struct bt_codec_data
- *  elements inside bt_codec which is then passed to the likes of
- *  bt_bap_stream_config or bt_bap_stream_reconfig.
+ * This macro is mainly for creating an array of struct bt_audio_codec_cap data arrays.
  *
- *  @param _type Type of advertising data field
- *  @param _bytes Variable number of single-byte parameters
+ * @param _type Type of advertising data field
+ * @param _bytes Variable number of single-byte parameters
  */
-#define BT_CODEC_DATA(_type, _bytes...) \
-	{ \
-		.data = BT_DATA(_type, ((uint8_t []) { _bytes }), \
-				sizeof((uint8_t []) { _bytes })) \
-	}
+#define BT_AUDIO_CODEC_DATA(_type, _bytes...)                                                      \
+	(sizeof((uint8_t)_type) + sizeof((uint8_t[]){_bytes})), (_type), _bytes
 
 /**
- *  @brief Helper to declare bt_codec structure
+ *  @brief Helper to declare @ref bt_audio_codec_cfg
  *
  *  @param _id Codec ID
  *  @param _cid Company ID
@@ -208,18 +205,40 @@ struct bt_codec_data {
  *  @param _data Codec Specific Data in LVT format
  *  @param _meta Codec Specific Metadata in LVT format
  */
-#define BT_CODEC(_id, _cid, _vid, _data, _meta) \
-	{ \
-		/* Use HCI data path as default, can be overwritten by application */ \
-		.path_id = BT_ISO_DATA_PATH_HCI, \
-		.id = _id, \
-		.cid = _cid, \
-		.vid = _vid, \
-		.data_count = ARRAY_SIZE(((struct bt_codec_data[]) _data)), \
-		.data = _data, \
-		.meta_count = ARRAY_SIZE(((struct bt_codec_data[]) _meta)), \
-		.meta = _meta, \
-	}
+#define BT_AUDIO_CODEC_CFG(_id, _cid, _vid, _data, _meta)                                          \
+	((struct bt_audio_codec_cfg){                                                              \
+		/* Use HCI data path as default, can be overwritten by application */              \
+		.path_id = BT_ISO_DATA_PATH_HCI,                                                   \
+		.id = _id,                                                                         \
+		.cid = _cid,                                                                       \
+		.vid = _vid,                                                                       \
+		.data_len = sizeof((uint8_t[])_data),                                              \
+		.data = _data,                                                                     \
+		.meta_len = sizeof((uint8_t[])_meta),                                              \
+		.meta = _meta,                                                                     \
+	})
+
+/**
+ *  @brief Helper to declare @ref bt_audio_codec_cap structure
+ *
+ *  @param _id Codec ID
+ *  @param _cid Company ID
+ *  @param _vid Vendor ID
+ *  @param _data Codec Specific Data in LVT format
+ *  @param _meta Codec Specific Metadata in LVT format
+ */
+#define BT_AUDIO_CODEC_CAP(_id, _cid, _vid, _data, _meta)                                          \
+	((struct bt_audio_codec_cap){                                                              \
+		/* Use HCI data path as default, can be overwritten by application */              \
+		.path_id = BT_ISO_DATA_PATH_HCI,                                                   \
+		.id = (_id),                                                                       \
+		.cid = (_cid),                                                                     \
+		.vid = (_vid),                                                                     \
+		.data_len = sizeof((uint8_t[])_data),                                              \
+		.data = _data,                                                                     \
+		.meta_len = sizeof((uint8_t[])_meta),                                              \
+		.meta = _meta,                                                                     \
+	})
 
 /** @brief Location values for BT Audio.
  *
@@ -289,8 +308,36 @@ enum bt_audio_location {
 			       BT_AUDIO_LOCATION_LEFT_SURROUND | \
 			       BT_AUDIO_LOCATION_RIGHT_SURROUND)
 
-/** @brief Codec structure. */
-struct bt_codec {
+/** @brief Codec capability structure. */
+struct bt_audio_codec_cap {
+	/** Data path ID
+	 *
+	 * @ref BT_ISO_DATA_PATH_HCI for HCI path, or any other value for
+	 * vendor specific ID.
+	 */
+	uint8_t path_id;
+	/** Codec ID */
+	uint8_t id;
+	/** Codec Company ID */
+	uint16_t cid;
+	/** Codec Company Vendor ID */
+	uint16_t vid;
+#if CONFIG_BT_AUDIO_CODEC_CAP_MAX_DATA_SIZE > 0
+	/** Codec Specific Capabilities Data count */
+	size_t data_len;
+	/** Codec Specific Capabilities Data */
+	uint8_t data[CONFIG_BT_AUDIO_CODEC_CAP_MAX_DATA_SIZE];
+#endif /* CONFIG_BT_AUDIO_CODEC_CAP_MAX_DATA_SIZE > 0 */
+#if defined(CONFIG_BT_AUDIO_CODEC_CAP_MAX_METADATA_SIZE)
+	/** Codec Specific Capabilities Metadata count */
+	size_t meta_len;
+	/** Codec Specific Capabilities Metadata */
+	uint8_t meta[CONFIG_BT_AUDIO_CODEC_CAP_MAX_METADATA_SIZE];
+#endif /* CONFIG_BT_AUDIO_CODEC_CAP_MAX_METADATA_SIZE */
+};
+
+/** @brief Codec specific configuration structure. */
+struct bt_audio_codec_cfg {
 	/** Data path ID
 	 *
 	 * @ref BT_ISO_DATA_PATH_HCI for HCI path, or any other value for
@@ -303,19 +350,36 @@ struct bt_codec {
 	uint16_t cid;
 	/** Codec Company Vendor ID */
 	uint16_t vid;
-#if defined(CONFIG_BT_CODEC_MAX_DATA_COUNT)
-	/** Codec Specific Data count */
-	size_t   data_count;
-	/** Codec Specific Data */
-	struct bt_codec_data data[CONFIG_BT_CODEC_MAX_DATA_COUNT];
-#endif /* CONFIG_BT_CODEC_MAX_DATA_COUNT */
-#if defined(CONFIG_BT_CODEC_MAX_METADATA_COUNT)
-	/** Codec Specific Metadata count */
-	size_t   meta_count;
-	/** Codec Specific Metadata */
-	struct bt_codec_data meta[CONFIG_BT_CODEC_MAX_METADATA_COUNT];
-#endif /* CONFIG_BT_CODEC_MAX_METADATA_COUNT */
+#if CONFIG_BT_AUDIO_CODEC_CFG_MAX_DATA_SIZE > 0
+	/** Codec Specific Capabilities Data count */
+	size_t data_len;
+	/** Codec Specific Capabilities Data */
+	uint8_t data[CONFIG_BT_AUDIO_CODEC_CFG_MAX_DATA_SIZE];
+#endif /* CONFIG_BT_AUDIO_CODEC_CFG_MAX_DATA_SIZE > 0 */
+#if CONFIG_BT_AUDIO_CODEC_CFG_MAX_METADATA_SIZE > 0
+	/** Codec Specific Capabilities Metadata count */
+	size_t meta_len;
+	/** Codec Specific Capabilities Metadata */
+	uint8_t meta[CONFIG_BT_AUDIO_CODEC_CFG_MAX_METADATA_SIZE];
+#endif /* CONFIG_BT_AUDIO_CODEC_CFG_MAX_METADATA_SIZE > 0 */
 };
+
+/**
+ * @brief Helper for parsing length-type-value data.
+ *
+ * @param ltv       Length-type-value (LTV) encoded data.
+ * @param size      Size of the @p ltv data.
+ * @param func      Callback function which will be called for each element
+ *                  that's found in the data. The callback should return
+ *                  true to continue parsing, or false to stop parsing.
+ * @param user_data User data to be passed to the callback.
+ *
+ * @retval 0 if all entries were parsed.
+ * @retval -EINVAL if the data is incorrectly encoded
+ * @retval -ECANCELED if parsing was prematurely cancelled by the callback
+ */
+int bt_audio_data_parse(const uint8_t ltv[], size_t size,
+			bool (*func)(struct bt_data *data, void *user_data), void *user_data);
 
 /** @brief Audio Capability type */
 enum bt_audio_dir {
@@ -324,7 +388,7 @@ enum bt_audio_dir {
 };
 
 /**
- *  @brief Helper to declare elements of bt_codec_qos
+ *  @brief Helper to declare elements of bt_audio_codec_qos
  *
  *  @param _interval SDU interval (usec)
  *  @param _framing Framing
@@ -334,33 +398,32 @@ enum bt_audio_dir {
  *  @param _latency Maximum Transport Latency (msec)
  *  @param _pd Presentation Delay (usec)
  */
-#define BT_CODEC_QOS(_interval, _framing, _phy, _sdu, _rtn, _latency, \
-		     _pd) \
-	{ \
-		.interval = _interval, \
-		.framing = _framing, \
-		.phy = _phy, \
-		.sdu = _sdu, \
-		.rtn = _rtn, \
-		.latency = _latency, \
-		.pd = _pd, \
-	}
+#define BT_AUDIO_CODEC_QOS(_interval, _framing, _phy, _sdu, _rtn, _latency, _pd)                   \
+	((struct bt_audio_codec_qos){                                                              \
+		.interval = _interval,                                                             \
+		.framing = _framing,                                                               \
+		.phy = _phy,                                                                       \
+		.sdu = _sdu,                                                                       \
+		.rtn = _rtn,                                                                       \
+		.latency = _latency,                                                               \
+		.pd = _pd,                                                                         \
+	})
 
 /** @brief Codec QoS Framing */
-enum {
-	BT_CODEC_QOS_UNFRAMED = 0x00,
-	BT_CODEC_QOS_FRAMED = 0x01,
+enum bt_audio_codec_qos_framing {
+	BT_AUDIO_CODEC_QOS_FRAMING_UNFRAMED = 0x00,
+	BT_AUDIO_CODEC_QOS_FRAMING_FRAMED = 0x01,
 };
 
 /** @brief Codec QoS Preferred PHY */
 enum {
-	BT_CODEC_QOS_1M = BIT(0),
-	BT_CODEC_QOS_2M = BIT(1),
-	BT_CODEC_QOS_CODED = BIT(2),
+	BT_AUDIO_CODEC_QOS_1M = BIT(0),
+	BT_AUDIO_CODEC_QOS_2M = BIT(1),
+	BT_AUDIO_CODEC_QOS_CODED = BIT(2),
 };
 
 /**
- *  @brief Helper to declare Input Unframed bt_codec_qos
+ *  @brief Helper to declare Input Unframed bt_audio_codec_qos
  *
  *  @param _interval SDU interval (usec)
  *  @param _sdu Maximum SDU Size
@@ -368,12 +431,12 @@ enum {
  *  @param _latency Maximum Transport Latency (msec)
  *  @param _pd Presentation Delay (usec)
  */
-#define BT_CODEC_QOS_UNFRAMED(_interval, _sdu, _rtn, _latency, _pd) \
-	BT_CODEC_QOS(_interval, BT_CODEC_QOS_UNFRAMED, BT_CODEC_QOS_2M, _sdu, \
-		     _rtn, _latency, _pd)
+#define BT_AUDIO_CODEC_QOS_UNFRAMED(_interval, _sdu, _rtn, _latency, _pd)                          \
+	BT_AUDIO_CODEC_QOS(_interval, BT_AUDIO_CODEC_QOS_FRAMING_UNFRAMED, BT_AUDIO_CODEC_QOS_2M,  \
+			   _sdu, _rtn, _latency, _pd)
 
 /**
- *  @brief Helper to declare Input Framed bt_codec_qos
+ *  @brief Helper to declare Input Framed bt_audio_codec_qos
  *
  *  @param _interval SDU interval (usec)
  *  @param _sdu Maximum SDU Size
@@ -381,17 +444,17 @@ enum {
  *  @param _latency Maximum Transport Latency (msec)
  *  @param _pd Presentation Delay (usec)
  */
-#define BT_CODEC_QOS_FRAMED(_interval, _sdu, _rtn, _latency, _pd) \
-	BT_CODEC_QOS(_interval, BT_CODEC_QOS_FRAMED, BT_CODEC_QOS_2M, _sdu, \
-		     _rtn, _latency, _pd)
+#define BT_AUDIO_CODEC_QOS_FRAMED(_interval, _sdu, _rtn, _latency, _pd)                            \
+	BT_AUDIO_CODEC_QOS(_interval, BT_AUDIO_CODEC_QOS_FRAMING_FRAMED, BT_AUDIO_CODEC_QOS_2M,    \
+			   _sdu, _rtn, _latency, _pd)
 
 /** @brief Codec QoS structure. */
-struct bt_codec_qos {
+struct bt_audio_codec_qos {
 	/** QoS PHY */
 	uint8_t  phy;
 
 	/** QoS Framing */
-	uint8_t  framing;
+	enum bt_audio_codec_qos_framing framing;
 
 	/** QoS Retransmission Number */
 	uint8_t rtn;
@@ -419,7 +482,7 @@ struct bt_codec_qos {
 };
 
 /**
- *  @brief Helper to declare elements of @ref bt_codec_qos_pref
+ *  @brief Helper to declare elements of @ref bt_audio_codec_qos_pref
  *
  *  @param _unframed_supported Unframed PDUs supported
  *  @param _phy Preferred Target PHY
@@ -430,21 +493,21 @@ struct bt_codec_qos {
  *  @param _pref_pd_min Preferred Minimum Presentation Delay (usec)
  *  @param _pref_pd_max Preferred Maximum Presentation Delay (usec)
  */
-#define BT_CODEC_QOS_PREF(_unframed_supported, _phy, _rtn, _latency, _pd_min, \
-			  _pd_max, _pref_pd_min, _pref_pd_max) \
-	{ \
-		.unframed_supported = _unframed_supported, \
-		.phy = _phy, \
-		.rtn = _rtn, \
-		.latency = _latency, \
-		.pd_min = _pd_min, \
-		.pd_max = _pd_max, \
-		.pref_pd_min = _pref_pd_min, \
-		.pref_pd_max = _pref_pd_max, \
+#define BT_AUDIO_CODEC_QOS_PREF(_unframed_supported, _phy, _rtn, _latency, _pd_min, _pd_max,       \
+				_pref_pd_min, _pref_pd_max)                                        \
+	{                                                                                          \
+		.unframed_supported = _unframed_supported,                                         \
+		.phy = _phy,                                                                       \
+		.rtn = _rtn,                                                                       \
+		.latency = _latency,                                                               \
+		.pd_min = _pd_min,                                                                 \
+		.pd_max = _pd_max,                                                                 \
+		.pref_pd_min = _pref_pd_min,                                                       \
+		.pref_pd_max = _pref_pd_max,                                                       \
 	}
 
 /** @brief Audio Stream Quality of Service Preference structure. */
-struct bt_codec_qos_pref {
+struct bt_audio_codec_qos_pref {
 	/** @brief Unframed PDUs supported
 	 *
 	 *  Unlike the other fields, this is not a preference but whether
@@ -494,27 +557,11 @@ struct bt_codec_qos_pref {
 	uint32_t pref_pd_max;
 };
 
-/** @brief Turns an array of bt_codec_data to a flat LTV encoded uint8_t array
- *
- *  The resulting @p buf array can then be used to send over air.
- *
- * @param codec_data The codec data. Can either be codec configuration data,
- *                   or codec metadata.
- * @param count      The number of elements in the @p codec_data array
- * @param buf        The resulting buffer to put the LTV encoded data.
- * @param buf_size   The size of @p buf.
- *
- * @retval The length of the encoded data if successful.
- * @retval -ENOMEM if the @p codec_data did not fit into the @p buf.
- */
-ssize_t bt_audio_codec_data_to_buf(const struct bt_codec_data *codec_data, size_t count,
-				   uint8_t *buf, size_t buf_size);
-
 /**
  * @brief Audio codec Config APIs
  * @defgroup bt_audio_codec_cfg Codec config parsing APIs
  *
- * Functions to parse codec config data when formatted as LTV wrapped into @ref bt_codec.
+ * Functions to parse codec config data when formatted as LTV wrapped into @ref bt_audio_codec_cfg.
  *
  * @{
  */
@@ -522,7 +569,7 @@ ssize_t bt_audio_codec_data_to_buf(const struct bt_codec_data *codec_data, size_
 /**
  * @brief Codec parser error codes for @ref bt_audio_codec_cfg.
  */
-enum bt_audio_codec_parse_err {
+enum bt_audio_codec_cfg_parse_err {
 
 	/** @brief The requested type is not present in the data set. */
 	BT_AUDIO_CODEC_PARSE_ERR_SUCCESS               = 0,
@@ -539,21 +586,21 @@ enum bt_audio_codec_parse_err {
 
 /**@brief Extract the frequency from a codec configuration.
  *
- * @param codec The codec configuration to extract data from.
+ * @param codec_cfg The codec configuration to extract data from.
  *
  * @return The frequency in Hz if found else a negative value of type
- *         @ref bt_audio_codec_parse_err.
+ *         @ref bt_audio_codec_cfg_parse_err.
  */
-int bt_codec_cfg_get_freq(const struct bt_codec *codec);
+int bt_audio_codec_cfg_get_freq(const struct bt_audio_codec_cfg *codec_cfg);
 
 /** @brief Extract frame duration from BT codec config
  *
- *  @param codec The codec configuration to extract data from.
+ *  @param codec_cfg The codec configuration to extract data from.
  *
  *  @return Frame duration in microseconds if value is found else a negative value
- *          of type @ref bt_audio_codec_parse_err.
+ *          of type @ref bt_audio_codec_cfg_parse_err.
  */
-int bt_codec_cfg_get_frame_duration_us(const struct bt_codec *codec);
+int bt_audio_codec_cfg_get_frame_duration_us(const struct bt_audio_codec_cfg *codec_cfg);
 
 /** @brief Extract channel allocation from BT codec config
  *
@@ -561,16 +608,16 @@ int bt_codec_cfg_get_frame_duration_us(const struct bt_codec *codec);
  *  specified by @ref bt_audio_location
  *  Shall match one or more of the bits set in BT_PAC_SNK_LOC/BT_PAC_SRC_LOC.
  *
- *  Up to the configured @ref BT_CODEC_LC3_CHAN_COUNT number of channels can be present.
+ *  Up to the configured @ref BT_AUDIO_CODEC_LC3_CHAN_COUNT number of channels can be present.
  *
- *  @param codec The codec configuration to extract data from.
+ *  @param codec_cfg The codec configuration to extract data from.
  *  @param chan_allocation Pointer to the variable to store the extracted value in.
  *
  *  @return BT_AUDIO_CODEC_PARSE_SUCCESS if value is found and stored in the pointer provided
- *          else a negative value of type @ref bt_audio_codec_parse_err.
+ *          else a negative value of type @ref bt_audio_codec_cfg_parse_err.
  */
-int bt_codec_cfg_get_chan_allocation_val(const struct bt_codec *codec,
-					 enum bt_audio_location *chan_allocation);
+int bt_audio_codec_cfg_get_chan_allocation_val(const struct bt_audio_codec_cfg *codec_cfg,
+					       enum bt_audio_location *chan_allocation);
 
 /** @brief Extract frame size in octets from BT codec config
  *
@@ -583,12 +630,12 @@ int bt_codec_cfg_get_chan_allocation_val(const struct bt_codec *codec,
  *  Hence it is recommended to use the received SDU size and divide by
  *  blocks_per_sdu rather than relying on this octets_per_sdu value to be fixed.
  *
- *  @param codec The codec configuration to extract data from.
+ *  @param codec_cfg The codec configuration to extract data from.
  *
  *  @return Frame length in octets if value is found else a negative value
- *          of type @ref bt_audio_codec_parse_err.
+ *          of type @ref bt_audio_codec_cfg_parse_err.
  */
-int bt_codec_cfg_get_octets_per_frame(const struct bt_codec *codec);
+int bt_audio_codec_cfg_get_octets_per_frame(const struct bt_audio_codec_cfg *codec_cfg);
 
 /** @brief Extract number of audio frame blockss in each SDU from BT codec config
  *
@@ -600,35 +647,35 @@ int bt_codec_cfg_get_octets_per_frame(const struct bt_codec *codec);
  *  for different channels. If the stream have two audio channels and this value is two
  *  there will be four frames in the SDU.
  *
- *  @param codec The codec configuration to extract data from.
+ *  @param codec_cfg The codec configuration to extract data from.
  *  @param fallback_to_default If true this function will return the default value of 1
  *         if the type is not found. In this case the function will only fail if a NULL
  *         pointer is provided.
  *
  *  @return The count of codec frames in each SDU if value is found else a negative value
- *          of type @ref bt_audio_codec_parse_err - unless when \p fallback_to_default is true
+ *          of type @ref bt_audio_codec_cfg_parse_err - unless when \p fallback_to_default is true
  *          then the value 1 is returned if frames per sdu is not found.
  */
-int bt_codec_cfg_get_frame_blocks_per_sdu(const struct bt_codec *codec, bool fallback_to_default);
+int bt_audio_codec_cfg_get_frame_blocks_per_sdu(const struct bt_audio_codec_cfg *codec_cfg,
+						bool fallback_to_default);
 
 /** @brief Lookup a specific value based on type
  *
- *  Depending on context bt_codec will be either codec capabilities, codec configuration or
- *  meta data.
+ *  Depending on context bt_audio_codec_cfg will be either codec capabilities, codec configuration
+ *  or meta data.
  *
  *  Typically types used are:
- *  @ref bt_codec_capability_type
- *  @ref bt_codec_config_type
+ *  @ref bt_audio_codec_capability_type
+ *  @ref bt_audio_codec_config_type
  *  @ref bt_audio_metadata_type
  *
- *  @param codec The codec data to search in.
- *  @param type The type id to look for
- *  @param data Pointer to the data-pointer to update when item is found
- *  @return True if the type is found, false otherwise.
+ *  @param[in] codec_cfg The codec data to search in.
+ *  @param[in] type The type id to look for
+ *  @param[out] data Pointer to the data-pointer to update when item is found
+ *  @return Length of found @p data or 0 if not found
  */
-bool bt_codec_get_val(const struct bt_codec *codec,
-		      uint8_t type,
-		      const struct bt_codec_data **data);
+uint8_t bt_audio_codec_cfg_get_val(const struct bt_audio_codec_cfg *codec_cfg, uint8_t type,
+				   const uint8_t **data);
 
 /** @} */ /* End of bt_audio_codec_cfg */
 

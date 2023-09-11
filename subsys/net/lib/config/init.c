@@ -16,6 +16,7 @@ LOG_MODULE_REGISTER(net_config, CONFIG_NET_CONFIG_LOG_LEVEL);
 #include <stdlib.h>
 
 #include <zephyr/logging/log_backend.h>
+#include <zephyr/net/ethernet.h>
 #include <zephyr/net/net_core.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/net_if.h>
@@ -110,6 +111,22 @@ static void setup_dhcpv4(struct net_if *iface)
 #else
 #define setup_dhcpv4(...)
 #endif /* CONFIG_NET_DHCPV4 */
+
+#if defined(CONFIG_NET_VLAN) && (CONFIG_NET_CONFIG_MY_VLAN_ID > 0)
+
+static void setup_vlan(struct net_if *iface)
+{
+	int ret = net_eth_vlan_enable(iface, CONFIG_NET_CONFIG_MY_VLAN_ID);
+
+	if (ret < 0) {
+		NET_ERR("Network interface %d (%p): cannot set VLAN tag (%d)",
+			net_if_get_by_iface(iface), iface, ret);
+	}
+}
+
+#else
+#define setup_vlan(...)
+#endif /* CONFIG_NET_VLAN && (CONFIG_NET_CONFIG_MY_VLAN_ID > 0) */
 
 #if defined(CONFIG_NET_NATIVE_IPV4) && !defined(CONFIG_NET_DHCPV4) && \
 	!defined(CONFIG_NET_CONFIG_MY_IPV4_ADDR)
@@ -350,6 +367,14 @@ int net_config_init_by_iface(struct net_if *iface, const char *app_info,
 		iface = net_if_get_default();
 	}
 
+	if (!iface) {
+		return -ENOENT;
+	}
+
+	if (net_if_flag_is_set(iface, NET_IF_NO_AUTO_START)) {
+		return -ENETDOWN;
+	}
+
 	if (timeout < 0) {
 		count = -1;
 	} else if (timeout == 0) {
@@ -379,6 +404,7 @@ int net_config_init_by_iface(struct net_if *iface, const char *app_info,
 #endif
 	}
 
+	setup_vlan(iface);
 	setup_ipv4(iface);
 	setup_dhcpv4(iface);
 	setup_ipv6(iface, flags);
@@ -435,7 +461,7 @@ int net_config_init_app(const struct device *dev, const char *app_info)
 		}
 	}
 
-	ret = z_net_config_ieee802154_setup();
+	ret = z_net_config_ieee802154_setup(iface);
 	if (ret < 0) {
 		NET_ERR("Cannot setup IEEE 802.15.4 interface (%d)", ret);
 	}
@@ -448,6 +474,17 @@ int net_config_init_app(const struct device *dev, const char *app_info)
 	}
 #endif
 
+	/* Only try to use a network interface that is auto started */
+	if (iface == NULL) {
+		net_if_foreach(iface_find_cb, &iface);
+	}
+
+	if (!iface) {
+		NET_WARN("No auto-started network interface - "
+			 "network-bound app initialization skipped.");
+		return 0;
+	}
+
 	if (IS_ENABLED(CONFIG_NET_CONFIG_NEED_IPV6)) {
 		flags |= NET_CONFIG_NEED_IPV6;
 	}
@@ -458,11 +495,6 @@ int net_config_init_app(const struct device *dev, const char *app_info)
 
 	if (IS_ENABLED(CONFIG_NET_CONFIG_NEED_IPV4)) {
 		flags |= NET_CONFIG_NEED_IPV4;
-	}
-
-	/* Only try to use a network interface that is auto started */
-	if (iface == NULL) {
-		net_if_foreach(iface_find_cb, &iface);
 	}
 
 	/* Initialize the application automatically if needed */

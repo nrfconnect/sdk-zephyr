@@ -30,20 +30,20 @@
 #include <zephyr/drivers/flash.h>
 #include <soc.h>
 
-#if defined(CONFIG_SOC_ESP32)
+#if defined(CONFIG_SOC_SERIES_ESP32)
 #include "soc/dport_reg.h"
 #include "esp32/rom/cache.h"
 #include "esp32/rom/spi_flash.h"
 #include "esp32/spiram.h"
-#elif defined(CONFIG_SOC_ESP32S2)
+#elif defined(CONFIG_SOC_SERIES_ESP32S2)
 #include "soc/spi_mem_reg.h"
 #include "esp32s2/rom/cache.h"
 #include "esp32s2/rom/spi_flash.h"
-#elif defined(CONFIG_SOC_ESP32S3)
+#elif defined(CONFIG_SOC_SERIES_ESP32S3)
 #include "soc/spi_mem_reg.h"
 #include "esp32s3/rom/cache.h"
 #include "esp32s3/rom/spi_flash.h"
-#elif defined(CONFIG_SOC_ESP32C3)
+#elif defined(CONFIG_SOC_SERIES_ESP32C3)
 #include "soc/spi_periph.h"
 #include "soc/spi_mem_reg.h"
 #include "soc/dport_access.h"
@@ -56,6 +56,8 @@
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(flash_esp32, CONFIG_FLASH_LOG_LEVEL);
+
+#define FLASH_SEM_TIMEOUT (k_is_in_isr() ? K_NO_WAIT : K_FOREVER)
 
 struct flash_esp32_dev_config {
 	spi_dev_t *controller;
@@ -77,7 +79,7 @@ static inline void flash_esp32_sem_take(const struct device *dev)
 {
 	struct flash_esp32_dev_data *data = dev->data;
 
-	k_sem_take(&data->sem, K_FOREVER);
+	k_sem_take(&data->sem, FLASH_SEM_TIMEOUT);
 }
 
 static inline void flash_esp32_sem_give(const struct device *dev)

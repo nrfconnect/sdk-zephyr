@@ -6,7 +6,7 @@
 
 #include <limits.h>
 
-#include <zephyr/device.h>
+#include <zephyr/init.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/timer/system_timer.h>
 #include <zephyr/sys_clock.h>
@@ -67,9 +67,9 @@
 #define DT_DRV_COMPAT scr_machine_timer
 #define MTIMER_HAS_DIVIDER
 
-#define MTIMEDIV_REG	(DT_INST_REG_ADDR(0) + 4)
-#define MTIME_REG	(DT_INST_REG_ADDR(0) + 8)
-#define MTIMECMP_REG	(DT_INST_REG_ADDR(0) + 16)
+#define MTIMEDIV_REG	(DT_INST_REG_ADDR_U64(0) + 4)
+#define MTIME_REG	(DT_INST_REG_ADDR_U64(0) + 8)
+#define MTIMECMP_REG	(DT_INST_REG_ADDR_U64(0) + 16)
 #define TIMER_IRQN	DT_INST_IRQN(0)
 #endif
 

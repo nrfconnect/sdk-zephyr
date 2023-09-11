@@ -11,6 +11,7 @@
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <zephyr/dt-bindings/mipi_dsi/mipi_dsi.h>
+#include <zephyr/dt-bindings/inputmux/inputmux_trigger_ports.h>
 
 / {
 	chosen {
@@ -26,11 +27,39 @@
 			reg = <0>;
 			#address-cells = <1>;
 			#size-cells = <1>;
+			cpu-power-states = <&idle &suspend>;
 
 			mpu: mpu@e000ed90 {
 				compatible = "arm,armv8m-mpu";
 				reg = <0xe000ed90 0x40>;
 				arm,num-mpu-regions = <8>;
+			};
+		};
+
+		power-states {
+			/* This is the setting Sleep Mode */
+			idle: idle {
+				compatible = "zephyr,power-state";
+				power-state-name = "runtime-idle";
+				min-residency-us = <0>;
+				exit-latency-us = <0>;
+			};
+			/* This is the setting for Deep-sleep Mode */
+			suspend: suspend {
+				compatible = "nxp,pdcfg-power", "zephyr,power-state";
+				power-state-name = "suspend-to-idle";
+				min-residency-us = <500>;
+				exit-latency-us = <120>;
+				/*
+				 * These values are written to the PDSLEEPCFG
+				 * registers to keep certain blocks such as
+				 * LPOSC, SRAM's, FlexSPI0 SRAM powered on
+				 * during deep sleep mode.
+				 */
+				deep-sleep-config = <0xC800>,
+							<0x80000004>,
+							<0xFFFFFFFF>,
+							<0>;
 			};
 		};
 	};
@@ -49,7 +78,7 @@
 		compatible =  "zephyr,memory-region", "mmio-sram";
 		reg = <0x40140000 DT_SIZE_K(16)>;
 		zephyr,memory-region = "SRAM1";
-		zephyr,memory-region-mpu = "RAM";
+		zephyr,memory-attr = "RAM";
 	};
 };
 
@@ -326,6 +355,10 @@
 		compatible = "nxp,lpc-dma";
 		reg = <0x104000 0x1000>;
 		interrupts = <1 0>;
+		dma-channels = <37>;
+		nxp,dma-num-of-otrigs = <4>;
+		nxp,dma-otrig-base-address = <RT595_DMA0_OTRIG_BASE>;
+		nxp,dma-itrig-base-address = <RT595_DMA0_ITRIG_BASE>;
 		status = "disabled";
 		#dma-cells = <1>;
 	};
@@ -334,6 +367,10 @@
 		compatible = "nxp,lpc-dma";
 		reg = <0x105000 0x1000>;
 		interrupts = <54 0>;
+		dma-channels = <37>;
+		nxp,dma-num-of-otrigs = <4>;
+		nxp,dma-otrig-base-address = <RT595_DMA1_OTRIG_BASE>;
+		nxp,dma-itrig-base-address = <RT595_DMA1_ITRIG_BASE>;
 		status = "disabled";
 		#dma-cells = <1>;
 	};
@@ -488,7 +525,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x31000 0x1000>;
-		interrupts = <87 0>;
+		interrupts = <71 0>;
 		clocks = <&clkctl1 MCUX_MIPI_DSI_DPHY_CLK>,
 			<&clkctl1 MCUX_MIPI_DSI_ESC_CLK>,
 			<&clkctl1 MCUX_LCDIF_PIXEL_CLK>;

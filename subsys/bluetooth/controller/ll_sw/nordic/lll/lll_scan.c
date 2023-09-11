@@ -343,6 +343,7 @@ static int common_prepare_cb(struct lll_prepare_param *p, bool is_resume)
 	struct lll_scan *lll;
 	struct ull_hdr *ull;
 	uint32_t remainder;
+	uint32_t ret;
 	uint32_t aa;
 
 	DEBUG_RADIO_START_O(1);
@@ -475,58 +476,51 @@ static int common_prepare_cb(struct lll_prepare_param *p, bool is_resume)
 
 #if defined(CONFIG_BT_CTLR_XTAL_ADVANCED) && \
 	(EVENT_OVERHEAD_PREEMPT_US <= EVENT_OVERHEAD_PREEMPT_MIN_US)
+	uint32_t overhead;
+
+	overhead = lll_preempt_calc(ull, (TICKER_ID_SCAN_BASE + ull_scan_lll_handle_get(lll)),
+				    ticks_at_event);
 	/* check if preempt to start has changed */
-	if (lll_preempt_calc(ull, (TICKER_ID_SCAN_BASE +
-				   ull_scan_lll_handle_get(lll)),
-			     ticks_at_event)) {
+	if (overhead) {
+		LL_ASSERT_OVERHEAD(overhead);
+
 		radio_isr_set(isr_abort, lll);
 		radio_disable();
-	} else
-#endif /* CONFIG_BT_CTLR_XTAL_ADVANCED &&
-	* (EVENT_OVERHEAD_PREEMPT_US <= EVENT_OVERHEAD_PREEMPT_MIN_US)
-	*/
-	{
-		uint32_t ret;
 
-		if (!is_resume && lll->ticks_window) {
-			/* start window close timeout */
-			ret = ticker_start(TICKER_INSTANCE_ID_CTLR,
-					   TICKER_USER_ID_LLL,
-					   TICKER_ID_SCAN_STOP,
-					   ticks_at_event, lll->ticks_window,
-					   TICKER_NULL_PERIOD,
-					   TICKER_NULL_REMAINDER,
-					   TICKER_NULL_LAZY, TICKER_NULL_SLOT,
-					   ticker_stop_cb, lll,
-					   ticker_op_start_cb,
-					   (void *)__LINE__);
-			LL_ASSERT((ret == TICKER_STATUS_SUCCESS) ||
-				  (ret == TICKER_STATUS_BUSY));
-		}
+		return -ECANCELED;
+	}
+#endif /* !CONFIG_BT_CTLR_XTAL_ADVANCED */
+
+	if (!is_resume && lll->ticks_window) {
+		/* start window close timeout */
+		ret = ticker_start(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_LLL, TICKER_ID_SCAN_STOP,
+				   ticks_at_event, lll->ticks_window, TICKER_NULL_PERIOD,
+				   TICKER_NULL_REMAINDER, TICKER_NULL_LAZY, TICKER_NULL_SLOT,
+				   ticker_stop_cb, lll, ticker_op_start_cb, (void *)__LINE__);
+		LL_ASSERT((ret == TICKER_STATUS_SUCCESS) ||
+			  (ret == TICKER_STATUS_BUSY));
+	}
 
 #if defined(CONFIG_BT_CENTRAL) && defined(CONFIG_BT_CTLR_SCHED_ADVANCED)
-		/* calc next group in us for the anchor where first connection
-		 * event to be placed.
-		 */
-		if (lll->conn) {
-			static memq_link_t link;
-			static struct mayfly mfy_after_cen_offset_get = {
-				0, 0, &link, NULL,
-				ull_sched_mfy_after_cen_offset_get};
-			uint32_t retval;
+	/* calc next group in us for the anchor where first connection
+	 * event to be placed.
+	 */
+	if (lll->conn) {
+		static memq_link_t link;
+		static struct mayfly mfy_after_cen_offset_get = {
+			0U, 0U, &link, NULL, ull_sched_mfy_after_cen_offset_get};
+		uint32_t retval;
 
-			mfy_after_cen_offset_get.param = p;
+		mfy_after_cen_offset_get.param = p;
 
-			retval = mayfly_enqueue(TICKER_USER_ID_LLL,
-						TICKER_USER_ID_ULL_LOW, 1,
-						&mfy_after_cen_offset_get);
-			LL_ASSERT(!retval);
-		}
+		retval = mayfly_enqueue(TICKER_USER_ID_LLL, TICKER_USER_ID_ULL_LOW, 1U,
+					&mfy_after_cen_offset_get);
+		LL_ASSERT(!retval);
+	}
 #endif /* CONFIG_BT_CENTRAL && CONFIG_BT_CTLR_SCHED_ADVANCED */
 
-		ret = lll_prepare_done(lll);
-		LL_ASSERT(!ret);
-	}
+	ret = lll_prepare_done(lll);
+	LL_ASSERT(!ret);
 
 	DEBUG_RADIO_START_O(1);
 
@@ -1037,8 +1031,8 @@ static void isr_done_cleanup(void *param)
 	 * Deferred attempt to stop can fail as it would have
 	 * expired, hence ignore failure.
 	 */
-	ticker_stop(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_LLL,
-		    TICKER_ID_SCAN_STOP, NULL, NULL);
+	(void)ticker_stop(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_LLL,
+			  TICKER_ID_SCAN_STOP, NULL, NULL);
 
 #if defined(CONFIG_BT_CTLR_SCAN_INDICATION)
 	struct node_rx_hdr *node_rx;
@@ -1089,18 +1083,18 @@ static void isr_done_cleanup(void *param)
 	}
 
 	if (lll->is_aux_sched) {
-		struct node_rx_pdu *node_rx;
+		struct node_rx_pdu *node_rx2;
 
 		lll->is_aux_sched = 0U;
 
-		node_rx = ull_pdu_rx_alloc();
-		LL_ASSERT(node_rx);
+		node_rx2 = ull_pdu_rx_alloc();
+		LL_ASSERT(node_rx2);
 
-		node_rx->hdr.type = NODE_RX_TYPE_EXT_AUX_RELEASE;
+		node_rx2->hdr.type = NODE_RX_TYPE_EXT_AUX_RELEASE;
 
-		node_rx->hdr.rx_ftr.param = lll;
+		node_rx2->hdr.rx_ftr.param = lll;
 
-		ull_rx_put_sched(node_rx->hdr.link, node_rx);
+		ull_rx_put_sched(node_rx2->hdr.link, node_rx2);
 	}
 #endif  /* CONFIG_BT_CTLR_ADV_EXT */
 
@@ -1273,6 +1267,7 @@ static inline int isr_rx_pdu(struct lll_scan *lll, struct pdu_adv *pdu_adv_rx,
 	/* Active scanner */
 	} else if (((pdu_adv_rx->type == PDU_ADV_TYPE_ADV_IND) ||
 		    (pdu_adv_rx->type == PDU_ADV_TYPE_SCAN_IND)) &&
+		   (pdu_adv_rx->len >= offsetof(struct pdu_adv_adv_ind, data)) &&
 		   (pdu_adv_rx->len <= sizeof(struct pdu_adv_adv_ind)) &&
 		   lll->type && !lll->state &&
 #if defined(CONFIG_BT_CENTRAL)
@@ -1365,6 +1360,7 @@ static inline int isr_rx_pdu(struct lll_scan *lll, struct pdu_adv *pdu_adv_rx,
 	else if (((((pdu_adv_rx->type == PDU_ADV_TYPE_ADV_IND) ||
 		    (pdu_adv_rx->type == PDU_ADV_TYPE_NONCONN_IND) ||
 		    (pdu_adv_rx->type == PDU_ADV_TYPE_SCAN_IND)) &&
+		   (pdu_adv_rx->len >= offsetof(struct pdu_adv_adv_ind, data)) &&
 		   (pdu_adv_rx->len <= sizeof(struct pdu_adv_adv_ind))) ||
 		  ((pdu_adv_rx->type == PDU_ADV_TYPE_DIRECT_IND) &&
 		   (pdu_adv_rx->len == sizeof(struct pdu_adv_direct_ind)) &&
@@ -1379,6 +1375,7 @@ static inline int isr_rx_pdu(struct lll_scan *lll, struct pdu_adv *pdu_adv_rx,
 						       &dir_report)) ||
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 		  ((pdu_adv_rx->type == PDU_ADV_TYPE_SCAN_RSP) &&
+		   (pdu_adv_rx->len >= offsetof(struct pdu_adv_scan_rsp, data)) &&
 		   (pdu_adv_rx->len <= sizeof(struct pdu_adv_scan_rsp)) &&
 		   (lll->state != 0U) &&
 		   isr_scan_rsp_adva_matches(pdu_adv_rx))) &&
@@ -1429,6 +1426,7 @@ static inline bool isr_scan_init_check(const struct lll_scan *lll,
 		lll_scan_adva_check(lll, pdu->tx_addr, pdu->adv_ind.addr,
 				    rl_idx)) &&
 		(((pdu->type == PDU_ADV_TYPE_ADV_IND) &&
+		  (pdu->len >= offsetof(struct pdu_adv_adv_ind, data)) &&
 		  (pdu->len <= sizeof(struct pdu_adv_adv_ind))) ||
 		 ((pdu->type == PDU_ADV_TYPE_DIRECT_IND) &&
 		  (pdu->len == sizeof(struct pdu_adv_direct_ind)) &&

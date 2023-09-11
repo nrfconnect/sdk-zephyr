@@ -231,6 +231,8 @@ IF_ENABLED(CONFIG_ADC_CONFIGURABLE_INPUTS, \
 	(.differential    = DT_NODE_HAS_PROP(node_id, zephyr_input_negative), \
 	 .input_positive  = DT_PROP_OR(node_id, zephyr_input_positive, 0), \
 	 .input_negative  = DT_PROP_OR(node_id, zephyr_input_negative, 0),)) \
+IF_ENABLED(DT_PROP(node_id, zephyr_differential), \
+	(.differential    = true,)) \
 IF_ENABLED(CONFIG_ADC_CONFIGURABLE_EXCITATION_CURRENT_SOURCE_PIN, \
 	(.current_source_pin_set = DT_NODE_HAS_PROP(node_id, zephyr_current_source_pin), \
 	 .current_source_pin = DT_PROP_OR(node_id, zephyr_current_source_pin, {0}),)) \
@@ -844,6 +846,18 @@ static inline int adc_sequence_init_dt(const struct adc_dt_spec *spec,
 	seq->oversampling = spec->oversampling;
 
 	return 0;
+}
+
+/**
+ * @brief Validate that the ADC device is ready.
+ *
+ * @param spec ADC specification from devicetree
+ *
+ * @retval true if the ADC device is ready for use and false otherwise.
+ */
+static inline bool adc_is_ready_dt(const struct adc_dt_spec *spec)
+{
+	return device_is_ready(spec->dev);
 }
 
 /**

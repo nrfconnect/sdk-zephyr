@@ -416,8 +416,52 @@ uint8_t ll_terminate_ind_send(uint16_t handle, uint8_t reason)
 #if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO) || defined(CONFIG_BT_CTLR_CENTRAL_ISO)
 	if (IS_CIS_HANDLE(handle)) {
 		cis = ll_iso_stream_connected_get(handle);
-		/* Disallow if CIS is not connected */
 		if (!cis) {
+#if defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+			/* CIS is not connected - get the unconnected instance */
+			cis = ll_conn_iso_stream_get(handle);
+
+			/* Sanity-check instance to make sure it's created but not connected */
+			if (cis->group && cis->lll.handle == handle && !cis->established) {
+				if (cis->group->state == CIG_STATE_CONFIGURABLE) {
+					/* Disallow if CIG is still in configurable state */
+					return BT_HCI_ERR_CMD_DISALLOWED;
+
+				} else if (cis->group->state == CIG_STATE_INITIATING) {
+					conn = ll_connected_get(cis->lll.acl_handle);
+
+					/* CIS is not yet established - try to cancel procedure */
+					if (ull_cp_cc_cancel(conn)) {
+						/* Successfully canceled - complete disconnect */
+						struct node_rx_pdu *node_terminate;
+
+						node_terminate = ull_pdu_rx_alloc();
+						LL_ASSERT(node_terminate);
+
+						node_terminate->hdr.handle = handle;
+						node_terminate->hdr.type = NODE_RX_TYPE_TERMINATE;
+						*((uint8_t *)node_terminate->pdu) =
+							BT_HCI_ERR_LOCALHOST_TERM_CONN;
+
+						ll_rx_put_sched(node_terminate->hdr.link,
+							node_terminate);
+
+						/* We're no longer initiating a connection */
+						cis->group->state = CIG_STATE_CONFIGURABLE;
+
+						/* This is now a successful disconnection */
+						return BT_HCI_ERR_SUCCESS;
+					}
+
+					/* Procedure could not be canceled in the current
+					 * state - let it run its course and enqueue a
+					 * terminate procedure.
+					 */
+					return ull_cp_cis_terminate(conn, cis, reason);
+				}
+			}
+#endif /* CONFIG_BT_CTLR_CENTRAL_ISO */
+			/* Disallow if CIS is not connected */
 			return BT_HCI_ERR_CMD_DISALLOWED;
 		}
 
@@ -803,7 +847,7 @@ void ull_conn_setup(memq_link_t *rx_link, struct node_rx_hdr *rx)
 	}
 }
 
-int ull_conn_rx(memq_link_t *link, struct node_rx_pdu **rx)
+void ull_conn_rx(memq_link_t *link, struct node_rx_pdu **rx)
 {
 	struct pdu_data *pdu_rx;
 	struct ll_conn *conn;
@@ -813,7 +857,7 @@ int ull_conn_rx(memq_link_t *link, struct node_rx_pdu **rx)
 		/* Mark for buffer for release */
 		(*rx)->hdr.type = NODE_RX_TYPE_RELEASE;
 
-		return 0;
+		return;
 	}
 
 	ull_cp_tx_ntf(conn);
@@ -828,7 +872,7 @@ int ull_conn_rx(memq_link_t *link, struct node_rx_pdu **rx)
 
 		ull_cp_rx(conn, link, *rx);
 
-		return 0;
+		return;
 	}
 
 	case PDU_DATA_LLID_DATA_CONTINUE:
@@ -860,9 +904,6 @@ int ull_conn_rx(memq_link_t *link, struct node_rx_pdu **rx)
 
 		break;
 	}
-
-
-	return 0;
 }
 
 int ull_conn_llcp(struct ll_conn *conn, uint32_t ticks_at_expire,
@@ -1240,7 +1281,7 @@ void ull_conn_done(struct node_rx_event_done *done)
 	    ticks_slot_plus || ticks_slot_minus ||
 	    lazy || force) {
 		uint8_t ticker_id = TICKER_ID_CONN_BASE + lll->handle;
-		struct ll_conn *conn = lll->hdr.parent;
+		struct ll_conn *conn_ll = lll->hdr.parent;
 		uint32_t ticker_status;
 
 		/* Call to ticker_update can fail under the race
@@ -1256,10 +1297,10 @@ void ull_conn_done(struct node_rx_event_done *done)
 					      ticks_slot_plus, ticks_slot_minus,
 					      lazy, force,
 					      ticker_update_conn_op_cb,
-					      conn);
+					      conn_ll);
 		LL_ASSERT((ticker_status == TICKER_STATUS_SUCCESS) ||
 			  (ticker_status == TICKER_STATUS_BUSY) ||
-			  ((void *)conn == ull_disable_mark_get()));
+			  ((void *)conn_ll == ull_disable_mark_get()));
 	}
 }
 

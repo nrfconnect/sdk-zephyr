@@ -57,6 +57,8 @@ class Snippet:
                 if not path.is_file():
                     _err(f'snippet file {pathobj}: {variable}: file not found: {path}')
                 return f'"{path}"'
+            if variable in ('DTS_EXTRA_CPPFLAGS'):
+                return f'"{value}"'
             _err(f'unknown append variable: {variable}')
 
         for variable, value in snippet_data.get('append', {}).items():
@@ -232,6 +234,22 @@ def process_snippets(args: argparse.Namespace) -> Snippets:
     # Process each path in snippet_root in order, adjusting
     # snippets as needed for each one.
     for root in args.snippet_root:
+        process_snippets_in(root, snippets)
+
+    return snippets
+
+def find_snippets_in_roots(requested_snippets, snippet_roots) -> Snippets:
+    '''Process snippet.yml files under each *snippet_root*
+    by recursive search. Return a Snippets object describing
+    the results of the search.
+    '''
+    # This will contain information about all the snippets
+    # we discover in each snippet_root element.
+    snippets = Snippets(requested=requested_snippets)
+
+    # Process each path in snippet_root in order, adjusting
+    # snippets as needed for each one.
+    for root in snippet_roots:
         process_snippets_in(root, snippets)
 
     return snippets

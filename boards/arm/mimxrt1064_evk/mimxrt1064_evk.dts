@@ -9,6 +9,7 @@
 #include <nxp/nxp_rt1064.dtsi>
 #include "mimxrt1064_evk-pinctrl.dtsi"
 #include <zephyr/dt-bindings/display/panel.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
 	model = "NXP MIMXRT1064-EVK board";
@@ -18,7 +19,6 @@
 		led0 = &green_led;
 		pwm-led0 = &green_pwm_led;
 		sw0 = &user_button;
-		kscan0 = &kscan_input;
 		watchdog0 = &wdog0;
 		sdhc0 = &usdhc1;
 	};
@@ -34,7 +34,6 @@
 		zephyr,shell-uart = &lpuart1;
 		zephyr,canbus = &flexcan2;
 		zephyr,display = &lcdif;
-		zephyr,keyboard-scan = &kscan_input;
 	};
 
 	sdram0: memory@80000000 {
@@ -64,7 +63,13 @@
 		user_button: button-1 {
 			label = "User SW8";
 			gpios = <&gpio5 0 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_0>;
 		};
+	};
+
+	lvgl_pointer {
+		compatible = "zephyr,lvgl-pointer-input";
+		input = <&ft5336>;
 	};
 
 	arduino_header: connector {
@@ -104,25 +109,6 @@
 			};
 		};
 	};
-
-	power-states {
-		idle: idle {
-			compatible = "zephyr,power-state";
-			power-state-name = "runtime-idle";
-			exit-latency-us = <4000>;
-			min-residency-us = <5000>;
-		};
-		suspend: suspend {
-			compatible = "zephyr,power-state";
-			power-state-name = "suspend-to-idle";
-			exit-latency-us = <5000>;
-			min-residency-us = <10000>;
-		};
-	};
-};
-
-&cpu0 {
-	cpu-power-states = <&idle &suspend>;
 };
 
 arduino_i2c: &lpi2c1 {};
@@ -175,14 +161,10 @@ arduino_i2c: &lpi2c1 {};
 		};
 	};
 
-	ft5336@38 {
+	ft5336: ft5336@38 {
 		compatible = "focaltech,ft5336";
 		reg = <0x38>;
 		int-gpios = <&gpio1 11 GPIO_ACTIVE_LOW>;
-
-		kscan_input: kscan-input {
-			compatible = "zephyr,kscan-input";
-		};
 	};
 };
 

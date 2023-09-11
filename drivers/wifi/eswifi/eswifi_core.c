@@ -520,9 +520,13 @@ int eswifi_mgmt_iface_status(const struct device *dev,
 	return 0;
 }
 
-static int eswifi_mgmt_scan(const struct device *dev, scan_result_cb_t cb)
+static int eswifi_mgmt_scan(const struct device *dev,
+			    struct wifi_scan_params *params,
+			    scan_result_cb_t cb)
 {
 	struct eswifi_dev *eswifi = dev->data;
+
+	ARG_UNUSED(params);
 
 	LOG_DBG("");
 
@@ -751,14 +755,14 @@ static int eswifi_init(const struct device *dev)
 	eswifi->bus = eswifi_get_bus();
 	eswifi->bus->init(eswifi);
 
-	if (!device_is_ready(cfg->resetn.port)) {
+	if (!gpio_is_ready_dt(&cfg->resetn)) {
 		LOG_ERR("%s: device %s is not ready", dev->name,
 				cfg->resetn.port->name);
 		return -ENODEV;
 	}
 	gpio_pin_configure_dt(&cfg->resetn, GPIO_OUTPUT_INACTIVE);
 
-	if (!device_is_ready(cfg->wakeup.port)) {
+	if (!gpio_is_ready_dt(&cfg->wakeup)) {
 		LOG_ERR("%s: device %s is not ready", dev->name,
 				cfg->wakeup.port->name);
 		return -ENODEV;
@@ -777,14 +781,24 @@ static int eswifi_init(const struct device *dev)
 	return 0;
 }
 
+static enum offloaded_net_if_types eswifi_get_type(void)
+{
+	return L2_OFFLOADED_NET_IF_TYPE_WIFI;
+}
+
+static const struct wifi_mgmt_ops eswifi_mgmt_api = {
+	.scan		= eswifi_mgmt_scan,
+	.connect	= eswifi_mgmt_connect,
+	.disconnect	= eswifi_mgmt_disconnect,
+	.ap_enable	= eswifi_mgmt_ap_enable,
+	.ap_disable	= eswifi_mgmt_ap_disable,
+	.iface_status	= eswifi_mgmt_iface_status,
+};
+
 static const struct net_wifi_mgmt_offload eswifi_offload_api = {
 	.wifi_iface.iface_api.init = eswifi_iface_init,
-	.scan			   = eswifi_mgmt_scan,
-	.connect		   = eswifi_mgmt_connect,
-	.disconnect		   = eswifi_mgmt_disconnect,
-	.ap_enable		   = eswifi_mgmt_ap_enable,
-	.ap_disable		   = eswifi_mgmt_ap_disable,
-	.iface_status		   = eswifi_mgmt_iface_status,
+	.wifi_iface.get_type = eswifi_get_type,
+	.wifi_mgmt_api = &eswifi_mgmt_api,
 };
 
 NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, eswifi_init, NULL,

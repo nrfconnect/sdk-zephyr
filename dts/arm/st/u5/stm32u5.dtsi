@@ -36,11 +36,33 @@
 			reg = <0>;
 			#address-cells = <1>;
 			#size-cells = <1>;
+			cpu-power-states = <&stop0 &stop1 &stop2>;
 
 			mpu: mpu@e000ed90 {
 				compatible = "arm,armv8m-mpu";
 				reg = <0xe000ed90 0x40>;
 				arm,num-mpu-regions = <8>;
+			};
+		};
+
+		power-states {
+			stop0: state0 {
+				compatible = "zephyr,power-state";
+				power-state-name = "suspend-to-idle";
+				substate-id = <1>;
+				min-residency-us = <100>;
+			};
+			stop1: state1 {
+				compatible = "zephyr,power-state";
+				power-state-name = "suspend-to-idle";
+				substate-id = <2>;
+				min-residency-us = <500>;
+			};
+			stop2: state2 {
+				compatible = "zephyr,power-state";
+				power-state-name = "suspend-to-idle";
+				substate-id = <3>;
+				min-residency-us = <900>;
 			};
 		};
 	};
@@ -115,27 +137,6 @@
 			#clock-cells = <0>;
 			compatible = "st,stm32u5-pll-clock";
 			status = "disabled";
-		};
-	};
-
-	power-states {
-		stop0: state0 {
-			compatible = "zephyr,power-state";
-			power-state-name = "suspend-to-idle";
-			substate-id = <1>;
-			min-residency-us = <100>;
-		};
-		stop1: state1 {
-			compatible = "zephyr,power-state";
-			power-state-name = "suspend-to-idle";
-			substate-id = <2>;
-			min-residency-us = <500>;
-		};
-		stop2: state2 {
-			compatible = "zephyr,power-state";
-			power-state-name = "suspend-to-idle";
-			substate-id = <3>;
-			min-residency-us = <900>;
 		};
 	};
 
@@ -750,6 +751,7 @@
 				       STM32_ADC_RES(10, 0x02)
 				       STM32_ADC_RES(8, 0x03)>;
 			sampling-times = <5 6 12 20 36 68 391 814>;
+			st,adc-clock-source = <ASYNC>;
 		};
 
 		adc4: adc@46021000 {
@@ -768,9 +770,10 @@
 				       STM32_ADC_RES(6, 0x03)>;
 			sampling-times = <2 4 8 13 20 40 80 815>;
 			num-sampling-time-common-channels = <2>;
+			st,adc-clock-source = <ASYNC>;
 		};
 
-		can1: can@4000a400 {
+		fdcan1: can@4000a400 {
 			compatible = "st,stm32-fdcan";
 			reg = <0x4000a400 0x400>, <0x4000ac00 0x350>;
 			reg-names = "m_can", "message_ram";
