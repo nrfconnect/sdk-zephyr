@@ -6,7 +6,7 @@
 
 #include <zephyr/kernel.h>
 #include <soc.h>
-#include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/hci_types.h>
 #include <zephyr/sys/byteorder.h>
 
 #include "util/util.h"
@@ -441,8 +441,8 @@ void ull_periph_setup(struct node_rx_hdr *rx, struct node_rx_ftr *ftr,
 		 * Deferred attempt to stop can fail as it would have
 		 * expired, hence ignore failure.
 		 */
-		ticker_stop(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_ULL_HIGH,
-			    TICKER_ID_ADV_STOP, NULL, NULL);
+		(void)ticker_stop(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_ULL_HIGH,
+				  TICKER_ID_ADV_STOP, NULL, NULL);
 	}
 
 	/* Start Peripheral */
@@ -523,7 +523,7 @@ void ull_periph_ticker_cb(uint32_t ticks_at_expire, uint32_t ticks_drift,
 		int ret;
 
 		/* Handle any LL Control Procedures */
-		ret = ull_conn_llcp(conn, ticks_at_expire, lazy);
+		ret = ull_conn_llcp(conn, ticks_at_expire, remainder, lazy);
 		if (ret) {
 			/* NOTE: Under BT_CTLR_LOW_LAT, ULL_LOW context is
 			 *       disabled inside radio events, hence, abort any

@@ -5,7 +5,9 @@
  */
 
 #include <zephyr/sys/byteorder.h>
-#include <zephyr/bluetooth/hci.h>
+#include <zephyr/sys/slist.h>
+
+#include <zephyr/bluetooth/hci_types.h>
 
 #include "hal/ccm.h"
 #include "hal/radio.h"
@@ -32,6 +34,7 @@
 #include "lll_scan.h"
 #include "lll/lll_df_types.h"
 #include "lll_conn.h"
+#include "lll_conn_iso.h"
 
 #include "ll_sw/ull_tx_queue.h"
 
@@ -39,9 +42,14 @@
 #include "ull_scan_types.h"
 #include "ull_conn_types.h"
 
+#include "isoal.h"
+#include "ull_iso_types.h"
+#include "ull_conn_iso_types.h"
+
 #include "ull_internal.h"
 #include "ull_adv_internal.h"
 #include "ull_conn_internal.h"
+#include "ull_conn_iso_internal.h"
 
 #include "ll_feat.h"
 
@@ -60,7 +68,7 @@ typedef struct ull_hdr *(*ull_hdr_get_func)(uint8_t ticker_id,
 					    uint32_t *ticks_slot);
 static uint8_t after_match_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 				    ticker_op_match_func ticker_match_op_cb,
-				    ull_hdr_get_func ull_hdr_get_cb,
+				    ull_hdr_get_func ull_hdr_get_cb_fn,
 				    uint32_t *ticks_anchor,
 				    uint32_t *ticks_to_expire_match,
 				    uint32_t *remainder_match,
@@ -68,111 +76,49 @@ static uint8_t after_match_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 static void ticker_op_cb(uint32_t status, void *param);
 static struct ull_hdr *ull_hdr_get_cb(uint8_t ticker_id, uint32_t *ticks_slot);
 
-#if defined(CONFIG_BT_CTLR_ADV_EXT) && defined(CONFIG_BT_BROADCASTER)
+#if (defined(CONFIG_BT_CTLR_ADV_EXT) && defined(CONFIG_BT_BROADCASTER)) || \
+	defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+static int group_free_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
+			       uint32_t *ticks_to_expire_prev,
+			       uint32_t *ticks_slot_prev,
+			       uint32_t *ticks_anchor);
 static bool ticker_match_any_op_cb(uint8_t ticker_id, uint32_t ticks_slot,
 				   uint32_t ticks_to_expire, void *op_context);
+#endif /* (CONFIG_BT_CTLR_ADV_EXT && CONFIG_BT_BROADCASTER) ||
+	* CONFIG_BT_CTLR_CENTRAL_ISO
+	*/
 
-int ull_sched_adv_aux_sync_free_slot_get(uint8_t user_id,
-					 uint32_t ticks_slot_abs,
-					 uint32_t *ticks_anchor)
+#if defined(CONFIG_BT_CTLR_ADV_EXT) && defined(CONFIG_BT_BROADCASTER)
+int ull_sched_adv_aux_sync_free_anchor_get(uint32_t ticks_slot_abs,
+					   uint32_t *ticks_anchor)
 {
 	uint32_t ticks_to_expire;
 	uint32_t ticks_slot;
-	uint32_t remainder;
-	uint8_t ticker_id;
 
-	ticker_id = after_match_slot_get(user_id, ticks_slot_abs,
-					 ticker_match_any_op_cb, ull_hdr_get_cb,
-					 ticks_anchor, &ticks_to_expire,
-					 &remainder, &ticks_slot);
-	if (ticker_id != TICKER_NULL) {
-		if (false) {
-
-		} else if (IN_RANGE(ticker_id, TICKER_ID_ADV_AUX_BASE,
-				    TICKER_ID_ADV_AUX_LAST)) {
-			const struct ll_adv_aux_set *aux;
-
-			*ticks_anchor += ticks_to_expire;
-			*ticks_anchor += ticks_slot;
-
-			aux = ull_adv_aux_get(ticker_id -
-					      TICKER_ID_ADV_AUX_BASE);
-
-#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
-			if (aux->lll.adv->sync) {
-				const struct ll_adv_sync_set *sync;
-
-				sync = HDR_LLL2ULL(aux->lll.adv->sync);
-				if (sync->is_started) {
-					*ticks_anchor += sync->ull.ticks_slot;
-					*ticks_anchor += HAL_TICKER_US_TO_TICKS(
-						EVENT_TICKER_RES_MARGIN_US << 1);
-				}
-			}
-#endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
-
-			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
-				*ticks_anchor +=
-					MAX(aux->ull.ticks_active_to_start,
-					    aux->ull.ticks_prepare_to_start);
-			}
-
-			return 0;
-
-#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
-		} else if (IN_RANGE(ticker_id, TICKER_ID_ADV_SYNC_BASE,
-				    TICKER_ID_ADV_SYNC_LAST)) {
-			*ticks_anchor += ticks_to_expire;
-			*ticks_anchor += ticks_slot;
-
-			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
-				const struct ll_adv_sync_set *sync;
-
-				sync = ull_adv_sync_get(ticker_id -
-							TICKER_ID_ADV_SYNC_BASE);
-				*ticks_anchor +=
-					MAX(sync->ull.ticks_active_to_start,
-					    sync->ull.ticks_prepare_to_start);
-			}
-
-			return 0;
-
-#if defined(CONFIG_BT_CTLR_ADV_ISO)
-		} else if (IN_RANGE(ticker_id, TICKER_ID_ADV_ISO_BASE,
-				    TICKER_ID_ADV_ISO_LAST)) {
-			*ticks_anchor += ticks_to_expire;
-			*ticks_anchor += ticks_slot;
-
-			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
-				const struct ll_adv_iso_set *iso;
-
-				iso = ull_adv_iso_get(ticker_id -
-						      TICKER_ID_ADV_ISO_BASE);
-				*ticks_anchor +=
-					MAX(iso->ull.ticks_active_to_start,
-					    iso->ull.ticks_prepare_to_start);
-			}
-
-			return 0;
-
-#endif /* CONFIG_BT_CTLR_ADV_ISO */
-#endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
-
-#if defined(CONFIG_BT_CONN)
-		} else if (IN_RANGE(ticker_id, TICKER_ID_CONN_BASE,
-				    TICKER_ID_CONN_LAST)) {
-			*ticks_anchor += ticks_to_expire;
-			*ticks_anchor += ticks_slot;
-
-			return 0;
-#endif /* CONFIG_BT_CONN */
-
-		}
-	}
-
-	return -ECHILD;
+	return group_free_slot_get(TICKER_USER_ID_THREAD, ticks_slot_abs,
+				   &ticks_to_expire, &ticks_slot, ticks_anchor);
 }
 #endif /* CONFIG_BT_CTLR_ADV_EXT && CONFIG_BT_BROADCASTER */
+
+#if defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+int ull_sched_conn_iso_free_offset_get(uint32_t ticks_slot_abs,
+				       uint32_t *ticks_to_expire)
+{
+	uint32_t ticks_anchor;
+	uint32_t ticks_slot;
+	int err;
+
+	err = group_free_slot_get(TICKER_USER_ID_ULL_LOW, ticks_slot_abs,
+				  ticks_to_expire, &ticks_slot, &ticks_anchor);
+	if (err) {
+		return err;
+	}
+
+	*ticks_to_expire += ticks_slot;
+
+	return err;
+}
+#endif /* CONFIG_BT_CTLR_CENTRAL_ISO */
 
 #if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_CENTRAL)
@@ -352,9 +298,122 @@ static void after_cen_offset_get(uint16_t conn_interval, uint32_t ticks_slot,
 #endif /* CONFIG_BT_CENTRAL */
 #endif /* CONFIG_BT_CONN */
 
+#if (defined(CONFIG_BT_CTLR_ADV_EXT) && defined(CONFIG_BT_BROADCASTER)) || \
+	defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+static int group_free_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
+			       uint32_t *ticks_to_expire_prev,
+			       uint32_t *ticks_slot_prev,
+			       uint32_t *ticks_anchor)
+{
+	uint32_t remainder_prev;
+	uint8_t ticker_id;
+
+	ticker_id = after_match_slot_get(user_id, ticks_slot_abs,
+					 ticker_match_any_op_cb, ull_hdr_get_cb,
+					 ticks_anchor, ticks_to_expire_prev,
+					 &remainder_prev, ticks_slot_prev);
+	if (ticker_id != TICKER_NULL) {
+		uint32_t ticks_to_expire;
+		uint32_t ticks_slot;
+
+		ticks_to_expire = *ticks_to_expire_prev;
+		ticks_slot = *ticks_slot_prev;
+
+		if (false) {
+
+#if defined(CONFIG_BT_BROADCASTER)
+		} else if (IN_RANGE(ticker_id, TICKER_ID_ADV_AUX_BASE,
+				    TICKER_ID_ADV_AUX_LAST)) {
+			const struct ll_adv_aux_set *aux;
+
+			*ticks_anchor += ticks_to_expire;
+			*ticks_anchor += ticks_slot;
+
+			aux = ull_adv_aux_get(ticker_id -
+					      TICKER_ID_ADV_AUX_BASE);
+
+#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
+			if (aux->lll.adv->sync) {
+				const struct ll_adv_sync_set *sync;
+
+				sync = HDR_LLL2ULL(aux->lll.adv->sync);
+				if (sync->is_started) {
+					*ticks_anchor += sync->ull.ticks_slot;
+					*ticks_anchor += HAL_TICKER_US_TO_TICKS(
+						EVENT_TICKER_RES_MARGIN_US << 1);
+				}
+			}
+#endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
+
+			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
+				*ticks_anchor +=
+					MAX(aux->ull.ticks_active_to_start,
+					    aux->ull.ticks_prepare_to_start);
+			}
+
+			return 0;
+
+#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
+		} else if (IN_RANGE(ticker_id, TICKER_ID_ADV_SYNC_BASE,
+				    TICKER_ID_ADV_SYNC_LAST)) {
+			*ticks_anchor += ticks_to_expire;
+			*ticks_anchor += ticks_slot;
+
+			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
+				const struct ll_adv_sync_set *sync;
+
+				sync = ull_adv_sync_get(ticker_id -
+							TICKER_ID_ADV_SYNC_BASE);
+				*ticks_anchor +=
+					MAX(sync->ull.ticks_active_to_start,
+					    sync->ull.ticks_prepare_to_start);
+			}
+
+			return 0;
+
+#if defined(CONFIG_BT_CTLR_ADV_ISO)
+		} else if (IN_RANGE(ticker_id, TICKER_ID_ADV_ISO_BASE,
+				    TICKER_ID_ADV_ISO_LAST)) {
+			*ticks_anchor += ticks_to_expire;
+			*ticks_anchor += ticks_slot;
+
+			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
+				const struct ll_adv_iso_set *iso;
+
+				iso = ull_adv_iso_get(ticker_id -
+						      TICKER_ID_ADV_ISO_BASE);
+				*ticks_anchor +=
+					MAX(iso->ull.ticks_active_to_start,
+					    iso->ull.ticks_prepare_to_start);
+			}
+
+			return 0;
+
+#endif /* CONFIG_BT_CTLR_ADV_ISO */
+#endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
+#endif /* CONFIG_BT_BROADCASTER */
+
+#if defined(CONFIG_BT_CONN)
+		} else if (IN_RANGE(ticker_id, TICKER_ID_CONN_BASE,
+				    TICKER_ID_CONN_LAST)) {
+			*ticks_anchor += ticks_to_expire;
+			*ticks_anchor += ticks_slot;
+
+			return 0;
+#endif /* CONFIG_BT_CONN */
+
+		}
+	}
+
+	return -ECHILD;
+}
+#endif /* (CONFIG_BT_CTLR_ADV_EXT && CONFIG_BT_BROADCASTER) ||
+	* CONFIG_BT_CTLR_CENTRAL_ISO
+	*/
+
 static uint8_t after_match_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 				    ticker_op_match_func ticker_match_op_cb,
-				    ull_hdr_get_func ull_hdr_get_cb,
+				    ull_hdr_get_func ull_hdr_get_cb_fn,
 				    uint32_t *ticks_anchor,
 				    uint32_t *ticks_to_expire_match,
 				    uint32_t *remainder_match,
@@ -459,7 +518,7 @@ static uint8_t after_match_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 		}
 #endif /* CONFIG_BT_TICKER_NEXT_SLOT_GET_MATCH */
 
-		hdr = ull_hdr_get_cb(ticker_id, &ticks_slot);
+		hdr = ull_hdr_get_cb_fn(ticker_id, &ticks_slot);
 		if (!hdr) {
 			continue;
 		}
@@ -518,7 +577,8 @@ static void ticker_op_cb(uint32_t status, void *param)
 	*((uint32_t volatile *)param) = status;
 }
 
-#if defined(CONFIG_BT_CTLR_ADV_EXT) && defined(CONFIG_BT_BROADCASTER)
+#if (defined(CONFIG_BT_CTLR_ADV_EXT) && defined(CONFIG_BT_BROADCASTER)) || \
+	defined(CONFIG_BT_CTLR_CENTRAL_ISO)
 static bool ticker_match_any_op_cb(uint8_t ticker_id, uint32_t ticks_slot,
 				   uint32_t ticks_to_expire, void *op_context)
 {
@@ -546,11 +606,18 @@ static bool ticker_match_any_op_cb(uint8_t ticker_id, uint32_t ticks_slot,
 #if defined(CONFIG_BT_CONN)
 	       IN_RANGE(ticker_id, TICKER_ID_CONN_BASE,
 			TICKER_ID_CONN_LAST) ||
+
+#if defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	       IN_RANGE(ticker_id, TICKER_ID_CONN_ISO_BASE,
+			TICKER_ID_CONN_ISO_LAST) ||
+#endif /* CONFIG_BT_CTLR_CENTRAL_ISO */
 #endif /* CONFIG_BT_CONN */
 
 	       false;
 }
-#endif /* CONFIG_BT_CTLR_ADV_EXT && CONFIG_BT_BROADCASTER */
+#endif /* (CONFIG_BT_CTLR_ADV_EXT && CONFIG_BT_BROADCASTER) ||
+	* CONFIG_BT_CTLR_CENTRAL_ISO
+	*/
 
 #if defined(CONFIG_BT_CENTRAL)
 static bool ticker_match_cen_op_cb(uint8_t ticker_id, uint32_t ticks_slot,
@@ -561,7 +628,15 @@ static bool ticker_match_cen_op_cb(uint8_t ticker_id, uint32_t ticks_slot,
 	ARG_UNUSED(op_context);
 
 	return IN_RANGE(ticker_id, TICKER_ID_CONN_BASE,
-			TICKER_ID_CONN_LAST);
+			TICKER_ID_CONN_LAST) ||
+#if defined(CONFIG_BT_CTLR_CENTRAL_ISO) && \
+		(CONFIG_BT_CTLR_CENTRAL_SPACING == 0)
+	       IN_RANGE(ticker_id, TICKER_ID_CONN_ISO_BASE,
+			TICKER_ID_CONN_ISO_LAST) ||
+#endif /* CONFIG_BT_CTLR_CENTRAL_ISO &&
+	*  (CONFIG_BT_CTLR_CENTRAL_SPACING == 0)
+	*/
+	       false;
 }
 #endif /* CONFIG_BT_CENTRAL */
 
@@ -677,13 +752,27 @@ static struct ull_hdr *ull_hdr_get_cb(uint8_t ticker_id, uint32_t *ticks_slot)
 				*ticks_slot = conn->ull.ticks_slot;
 			}
 
-			if (*ticks_slot < CONFIG_BT_CTLR_CENTRAL_SPACING) {
+			if (*ticks_slot < HAL_TICKER_US_TO_TICKS(CONFIG_BT_CTLR_CENTRAL_SPACING)) {
 				*ticks_slot =
 					HAL_TICKER_US_TO_TICKS(CONFIG_BT_CTLR_CENTRAL_SPACING);
 			}
 
 			return &conn->ull;
 		}
+
+#if defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	} else if (IN_RANGE(ticker_id, TICKER_ID_CONN_ISO_BASE,
+			    TICKER_ID_CONN_ISO_LAST)) {
+		struct ll_conn_iso_group *cig;
+
+		cig = ll_conn_iso_group_get(ticker_id - TICKER_ID_CONN_ISO_BASE);
+		if (cig) {
+			*ticks_slot = cig->ull.ticks_slot;
+
+			return &cig->ull;
+		}
+
+#endif /* CONFIG_BT_CTLR_CENTRAL_ISO */
 #endif /* CONFIG_BT_CONN */
 
 	}
