@@ -79,3 +79,10 @@
   platforms:
     - nrf52dk_nrf52832
   comment: "Ram overflows, also in the upstream"
+
+- scenarios:
+    - sample.psa_crypto
+  platforms:
+    - nrf5340dk_nrf5340_cpuapp_ns
+    - nrf9160dk_nrf9160_ns
+  comment: "Due to using sdk-zephyr manifest instead of nrf. Should be fixed after the change"
