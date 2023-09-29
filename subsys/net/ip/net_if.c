@@ -3262,11 +3262,11 @@ static struct in_addr *if_ipv4_get_addr(struct net_if *iface,
 	struct net_if_ipv4 *ipv4;
 	int i;
 
-	if (!iface) {
-		return NULL;
-	}
-
 	net_if_lock(iface);
+
+	if (!iface) {
+		goto out;
+	}
 
 	ipv4 = iface->config.ip.ipv4;
 	if (!ipv4) {
