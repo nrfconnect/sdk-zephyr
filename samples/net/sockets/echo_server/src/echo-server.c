@@ -135,13 +135,16 @@ static void init_app(void)
 	ARG_UNUSED(ret);
 #endif
 
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS) || \
+	defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED)
+	int err;
+#endif
+
 	k_sem_init(&quit_lock, 0, K_SEM_MAX_LIMIT);
 
 	LOG_INF(APP_BANNER);
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-	int err;
-
 #if defined(CONFIG_NET_SAMPLE_CERTS_WITH_SC)
 	err = tls_credential_add(SERVER_CERTIFICATE_TAG,
 				 TLS_CREDENTIAL_CA_CERTIFICATE,
@@ -150,7 +153,7 @@ static void init_app(void)
 	if (err < 0) {
 		LOG_ERR("Failed to register CA certificate: %d", err);
 	}
-#endif /* defined(CONFIG_NET_SAMPLE_CERTS_WITH_SC) */
+#endif
 
 	err = tls_credential_add(SERVER_CERTIFICATE_TAG,
 				 TLS_CREDENTIAL_SERVER_CERTIFICATE,
@@ -167,6 +170,7 @@ static void init_app(void)
 	if (err < 0) {
 		LOG_ERR("Failed to register private key: %d", err);
 	}
+#endif
 
 #if defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED)
 	err = tls_credential_add(PSK_TAG,
@@ -183,8 +187,7 @@ static void init_app(void)
 	if (err < 0) {
 		LOG_ERR("Failed to register PSK ID: %d", err);
 	}
-#endif /* defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED) */
-#endif /* defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS) */
+#endif
 
 	if (IS_ENABLED(CONFIG_NET_CONNECTION_MANAGER)) {
 		net_mgmt_init_event_callback(&mgmt_cb,
