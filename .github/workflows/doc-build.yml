@@ -22,7 +22,7 @@ on:
     - 'west.yml'
     - '.github/workflows/doc-build.yml'
     - 'scripts/dts/**'
-    - 'doc/requirements.txt'
+    - 'scripts/requirements-doc.txt'
 
 env:
   # NOTE: west docstrings will be extracted from the version listed here
@@ -57,12 +57,12 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/pip
-        key: pip-${{ hashFiles('doc/requirements.txt') }}
+        key: pip-${{ hashFiles('scripts/requirements-doc.txt') }}
 
     - name: install-pip
       run: |
         sudo pip3 install -U setuptools wheel pip
-        pip3 install -r doc/requirements.txt
+        pip3 install -r scripts/requirements-doc.txt
         pip3 install west==${WEST_VERSION}
         pip3 install cmake==${CMAKE_VERSION}
 
@@ -136,7 +136,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/pip
-        key: pip-${{ hashFiles('doc/requirements.txt') }}
+        key: pip-${{ hashFiles('scripts/requirements-doc.txt') }}
 
     - name: setup-venv
       run: |
@@ -147,7 +147,7 @@ jobs:
     - name: install-pip
       run: |
         pip3 install -U setuptools wheel pip
-        pip3 install -r doc/requirements.txt
+        pip3 install -r scripts/requirements-doc.txt
         pip3 install west==${WEST_VERSION}
         pip3 install cmake==${CMAKE_VERSION}
 
