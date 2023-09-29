@@ -1,6 +1,0 @@
-common:
-  depends_on: netif
-tests:
-  net.wifi:
-    min_ram: 32
-    tags: wifi
