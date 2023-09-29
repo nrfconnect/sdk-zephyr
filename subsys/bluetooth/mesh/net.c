@@ -35,7 +35,6 @@
 #include "settings.h"
 #include "prov.h"
 #include "cfg.h"
-#include "statistic.h"
 
 #ifdef CONFIG_BT_MESH_V1d1
 #include "sar_cfg_internal.h"
@@ -850,10 +849,6 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 
 	if (bt_mesh_net_decode(data, net_if, &rx, &buf)) {
 		return;
-	}
-
-	if (IS_ENABLED(CONFIG_BT_MESH_STATISTIC)) {
-		bt_mesh_stat_rx(net_if);
 	}
 
 	/* Save the state so the buffer can later be relayed */

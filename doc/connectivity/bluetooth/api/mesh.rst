@@ -21,5 +21,4 @@ Read more about Bluetooth mesh on the
    mesh/proxy.rst
    mesh/heartbeat.rst
    mesh/cfg.rst
-   mesh/statistic.rst
    mesh/shell.rst
