@@ -155,26 +155,28 @@ int lwm2m_open_socket(struct lwm2m_ctx *client_ctx)
 
 int lwm2m_close_socket(struct lwm2m_ctx *client_ctx)
 {
-	if (client_ctx->sock_fd >= 0) {
-		int ret = zsock_close(client_ctx->sock_fd);
+	int ret = 0;
 
+	if (client_ctx->sock_fd >= 0) {
+		ret = zsock_close(client_ctx->sock_fd);
 		if (ret) {
 			LOG_ERR("Failed to close socket: %d", errno);
 			ret = -errno;
 			return ret;
 		}
+
+		client_ctx->sock_fd = -1;
+		client_ctx->connection_suspended = true;
+#if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED)
+		/* Enable Queue mode buffer store */
+		client_ctx->buffer_client_messages = true;
+#endif
+		lwm2m_socket_update(client_ctx);
 	}
 
-	client_ctx->sock_fd = -1;
-	client_ctx->connection_suspended = true;
-#if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED)
-	/* Enable Queue mode buffer store */
-	client_ctx->buffer_client_messages = true;
-#endif
-	lwm2m_socket_update(client_ctx);
-
-	return 0;
+	return ret;
 }
+
 
 int lwm2m_socket_suspend(struct lwm2m_ctx *client_ctx)
 {
@@ -183,11 +185,13 @@ int lwm2m_socket_suspend(struct lwm2m_ctx *client_ctx)
 	if (client_ctx->sock_fd >= 0 && !client_ctx->connection_suspended) {
 		int socket_temp_id = client_ctx->sock_fd;
 
-		/* Prevent closing */
 		client_ctx->sock_fd = -1;
-		/* Just mark as suspended */
-		lwm2m_close_socket(client_ctx);
-		/* store back the socket handle */
+		client_ctx->connection_suspended = true;
+#if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED)
+		/* Enable Queue mode buffer store */
+		client_ctx->buffer_client_messages = true;
+#endif
+		lwm2m_socket_update(client_ctx);
 		client_ctx->sock_fd = socket_temp_id;
 	}
 
@@ -199,19 +203,16 @@ int lwm2m_engine_connection_resume(struct lwm2m_ctx *client_ctx)
 	int ret;
 
 	if (client_ctx->connection_suspended) {
-		if (IS_ENABLED(CONFIG_LWM2M_RD_CLIENT_STOP_POLLING_AT_IDLE) ||
-		    IS_ENABLED(CONFIG_LWM2M_RD_CLIENT_LISTEN_AT_IDLE)) {
-			LOG_DBG("Resume suspended connection");
+		if (IS_ENABLED(CONFIG_LWM2M_RD_CLIENT_STOP_POLLING_AT_IDLE)) {
 			lwm2m_socket_update(client_ctx);
-			client_ctx->connection_suspended = false;
 		} else {
-			LOG_DBG("Close and resume a new connection");
 			lwm2m_close_socket(client_ctx);
+			client_ctx->connection_suspended = false;
 			ret = lwm2m_open_socket(client_ctx);
 			if (ret) {
 				return ret;
 			}
-			client_ctx->connection_suspended = false;
+			LOG_DBG("Resume suspended connection");
 			return lwm2m_socket_start(client_ctx);
 		}
 	}
