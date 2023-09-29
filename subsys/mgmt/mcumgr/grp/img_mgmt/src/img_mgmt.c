@@ -155,20 +155,16 @@ static int img_mgmt_find_tlvs(int slot, size_t *start_off, size_t *end_off, uint
 
 int img_mgmt_active_slot(int image)
 {
-	int slot = 0;
-
-	/* Multi image does not support DirectXIP currently */
-#if CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER > 1
-	slot = (image << 1);
-#else
-	/* This covers single image, including DirectXiP */
-	if (FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot1_partition)) {
-		slot = 1;
+#if CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER == 2
+	if (image == 1) {
+		return 2;
 	}
 #endif
-	LOG_DBG("(%d) => %d", image, slot);
-
-	return slot;
+	/* Image 0 */
+	if (FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot1_partition)) {
+		return 1;
+	}
+	return 0;
 }
 
 int img_mgmt_active_image(void)
