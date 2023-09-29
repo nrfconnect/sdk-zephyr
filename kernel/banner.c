@@ -29,7 +29,7 @@ void boot_banner(void)
 	k_busy_wait(CONFIG_BOOT_DELAY * USEC_PER_MSEC);
 #endif /* defined(CONFIG_BOOT_DELAY) && (CONFIG_BOOT_DELAY > 0) */
 
-#ifdef CONFIG_BOOT_BANNER
-	printk("*** " CONFIG_BOOT_BANNER_STRING " " BANNER_VERSION BANNER_POSTFIX " ***\n");
+#if CONFIG_BOOT_BANNER
+	printk("*** Booting Zephyr OS build " BANNER_VERSION BANNER_POSTFIX " ***\n");
 #endif /* CONFIG_BOOT_BANNER */
 }
