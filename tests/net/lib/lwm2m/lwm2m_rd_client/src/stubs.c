@@ -94,11 +94,10 @@ int lwm2m_engine_call_at(k_work_handler_t work, int64_t timestamp)
 uint16_t counter = RD_CLIENT_MAX_SERVICE_ITERATIONS;
 struct lwm2m_message *pending_message;
 void *(*pending_message_cb)();
-static bool running;
 
 static void service_work_fn(struct k_work *work)
 {
-	while (running) {
+	while (true) {
 		if (pending_message != NULL && pending_message_cb != NULL) {
 			pending_message_cb(pending_message);
 			pending_message = NULL;
@@ -133,7 +132,6 @@ K_WORK_DEFINE(service_work, service_work_fn);
 
 void test_lwm2m_engine_start_service(void)
 {
-	running = true;
 	counter = RD_CLIENT_MAX_SERVICE_ITERATIONS;
 	k_work_submit(&service_work);
 }
@@ -141,7 +139,6 @@ void test_lwm2m_engine_start_service(void)
 void test_lwm2m_engine_stop_service(void)
 {
 	pending_message_cb = NULL;
-	running = false;
 	k_work_cancel(&service_work);
 }
 
