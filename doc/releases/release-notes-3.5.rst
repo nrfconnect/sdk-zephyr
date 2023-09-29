@@ -232,6 +232,58 @@ Devicetree
 Libraries / Subsystems
 **********************
 
+* Management
+
+  * Introduced MCUmgr client support with handlers for img_mgmt and os_mgmt.
+
+  * Added response checking to MCUmgr's :c:enumerator:`MGMT_EVT_OP_CMD_RECV`
+    notification callback to allow applications to reject MCUmgr commands.
+
+  * MCUmgr SMP version 2 error translation (to legacy MCUmgr error code) is now
+    supported in function handlers by setting ``mg_translate_error`` of
+    :c:struct:`mgmt_group` when registering a transport. See
+    :c:type:`smp_translate_error_fn` for function details.
+* shell
+
+  * Added an application shell module with helpers common to all applications.
+
+  * Fixed an issue with MCUmgr img_mgmt group whereby the size of the upload in
+    the initial packet was not checked.
+
+  * Fixed an issue with MCUmgr fs_mgmt group whereby some status codes were not
+    checked properly, this meant that the error returned might not be the
+    correct error, but would only occur in situations where an error was
+    already present.
+
+  * Fixed an issue whereby the SMP response function did not check to see if
+    the initial zcbor map was created successfully.
+
+  * Fixes an issue with MCUmgr shell_mgmt group whereby the length of a
+    received command was not properly checked.
+
+  * Added optional mutex locking support to MCUmgr img_mgmt group, which can
+    be enabled with :kconfig:option:`CONFIG_MCUMGR_GRP_IMG_MUTEX`.
+
+  * Added MCUmgr settings management group, which allows for manipulation of
+    zephyr settings from a remote device, see :ref:`mcumgr_smp_group_3` for
+    details.
+
+  * Added :kconfig:option:`CONFIG_MCUMGR_GRP_IMG_ALLOW_CONFIRM_NON_ACTIVE_IMAGE_SECONDARY`
+    and :kconfig:option:`CONFIG_MCUMGR_GRP_IMG_ALLOW_CONFIRM_NON_ACTIVE_IMAGE_ANY`
+    that allow to control whether MCUmgr client will be allowed to confirm
+    non-active images.
+
+  * Added :kconfig:option:`CONFIG_MCUMGR_GRP_IMG_ALLOW_ERASE_PENDING` that allows
+    to erase slots pending for next boot, that are not revert slots.
+
+* File systems
+
+  * Added support for ext2 file system.
+  * Added support of mounting littlefs on the block device from the shell/fs.
+  * Added alignment parameter to FS_LITTLEFS_DECLARE_CUSTOM_CONFIG macro, it can speed up read/write
+    operation for SDMMC devices in case when we align buffers on CONFIG_SDHC_BUFFER_ALIGNMENT,
+    because we can avoid extra copy of data from card bffer to read/prog buffer.
+
 HALs
 ****
 

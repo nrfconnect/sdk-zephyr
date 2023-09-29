@@ -1195,6 +1195,61 @@ ZTEST(test_c_lib, test_rand_reproducibility)
 }
 
 /**
+ * @brief Test mallinfo2 function
+ *
+*/
+ZTEST(test_c_lib, test_mallinfo2)
+{
+#ifdef CONFIG_MINIMAL_LIBC
+	struct mallinfo2 info;
+
+	info = mallinfo2();
+	zassert_equal(info.arena, 0, "mallinfo2 failed");
+	zassert_equal(info.ordblks, 0, "mallinfo2 failed");
+	zassert_equal(info.smblks, 0, "mallinfo2 failed");
+	zassert_equal(info.hblks, 0, "mallinfo2 failed");
+	zassert_equal(info.hblkhd, 0, "mallinfo2 failed");
+	zassert_equal(info.usmblks, 0, "mallinfo2 failed");
+	zassert_equal(info.fsmblks, 0, "mallinfo2 failed");
+	zassert_equal(info.uordblks, 0, "mallinfo2 failed");
+	zassert_equal(info.fordblks, 0, "mallinfo2 failed");
+	zassert_equal(info.keepcost, 0, "mallinfo2 failed");
+
+	/* Allocate and verify */
+	char *ptr = malloc(10);
+	zassert_not_null(ptr, "malloc failed");
+	info = mallinfo2();
+	zassert_equal(info.arena, 4096, "mallinfo2 failed");
+	zassert_equal(info.ordblks, 1, "mallinfo2 failed");
+	zassert_equal(info.smblks, 0, "mallinfo2 failed");
+	zassert_equal(info.hblks, 0, "mallinfo2 failed");
+	zassert_equal(info.hblkhd, 4096, "mallinfo2 failed");
+	zassert_equal(info.usmblks, 0, "mallinfo2 failed");
+	zassert_equal(info.fsmblks, 0, "mallinfo2 failed");
+	zassert_equal(info.uordblks, 0, "mallinfo2 failed");
+	zassert_equal(info.fordblks, 4086, "mallinfo2 failed");
+	zassert_equal(info.keepcost, 10, "mallinfo2 failed");
+
+	/* Free and verify */
+	free(ptr);
+	info = mallinfo2();
+	zassert_equal(info.arena, 4096, "mallinfo2 failed");
+	zassert_equal(info.ordblks, 0, "mallinfo2 failed");
+	zassert_equal(info.smblks, 0, "mallinfo2 failed");
+	zassert_equal(info.hblks, 0, "mallinfo2 failed");
+	zassert_equal(info.hblkhd, 4096, "mallinfo2 failed");
+	zassert_equal(info.usmblks, 0, "mallinfo2 failed");
+	zassert_equal(info.fsmblks, 0, "mallinfo2 failed");
+	zassert_equal(info.uordblks, 0, "mallinfo2 failed");
+	zassert_equal(info.fordblks, 4096, "mallinfo2 failed");
+	zassert_equal(info.keepcost, 0, "mallinfo2 failed");
+#else
+	ztest_test_skip();
+#endif /* CONFIG_MINIMAL_LIBC */
+}
+
+
+/**
  *
  * @brief test abort functions
  *
