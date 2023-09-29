@@ -74,7 +74,7 @@ class SectionKind(Enum):
 
         >>> SectionKind.for_section_with_name(".rodata.str1.4")
         <SectionKind.RODATA: 'rodata'>
-        >>> SectionKind.for_section_with_name(".device_handles")
+        >>> SectionKind.for_section_with_name(".device_deps")
         None
         """
         if ".text." in name:
@@ -101,7 +101,7 @@ PRINT_TEMPLATE = """
 """
 
 SECTION_LOAD_MEMORY_SEQ = """
-        __{0}_{1}_rom_start = LOADADDR(_{2}_{3}_SECTION_NAME);
+        __{0}_{1}_rom_start = LOADADDR(.{0}_{1}_reloc);
 """
 
 LOAD_ADDRESS_LOCATION_FLASH = """
@@ -135,33 +135,33 @@ LINKER_SECTION_SEQ = """
 
 /* Linker section for memory region {2} for  {3} section  */
 
-	SECTION_PROLOGUE(_{2}_{3}_SECTION_NAME,,)
+	SECTION_PROLOGUE(.{0}_{1}_reloc,,)
         {{
                 . = ALIGN(4);
                 {4}
                 . = ALIGN(4);
 	}} {5}
-        __{0}_{1}_end = .;
-        __{0}_{1}_start = ADDR(_{2}_{3}_SECTION_NAME);
-        __{0}_{1}_size = SIZEOF(_{2}_{3}_SECTION_NAME);
+        __{0}_{1}_reloc_end = .;
+        __{0}_{1}_reloc_start = ADDR(.{0}_{1}_reloc);
+        __{0}_{1}_reloc_size = __{0}_{1}_reloc_end - __{0}_{1}_reloc_start;
 """
 
 LINKER_SECTION_SEQ_MPU = """
 
 /* Linker section for memory region {2} for {3} section  */
 
-	SECTION_PROLOGUE(_{2}_{3}_SECTION_NAME,,)
+	SECTION_PROLOGUE(.{0}_{1}_reloc,,)
         {{
-                __{0}_{1}_start = .;
+                __{0}_{1}_reloc_start = .;
                 {4}
 #if {6}
                 . = ALIGN({6});
 #else
-                MPU_ALIGN(__{0}_{1}_size);
+                MPU_ALIGN(__{0}_{1}_reloc_size);
 #endif
-                __{0}_{1}_end = .;
+                __{0}_{1}_reloc_end = .;
 	}} {5}
-        __{0}_{1}_size = __{0}_{1}_end - __{0}_{1}_start;
+        __{0}_{1}_reloc_size = __{0}_{1}_reloc_end - __{0}_{1}_reloc_start;
 """
 
 SOURCE_CODE_INCLUDES = """
@@ -173,9 +173,9 @@ SOURCE_CODE_INCLUDES = """
 """
 
 EXTERN_LINKER_VAR_DECLARATION = """
-extern char __{0}_{1}_start[];
+extern char __{0}_{1}_reloc_start[];
 extern char __{0}_{1}_rom_start[];
-extern char __{0}_{1}_size[];
+extern char __{0}_{1}_reloc_size[];
 """
 
 
@@ -194,14 +194,14 @@ void bss_zeroing_relocation(void)
 """
 
 MEMCPY_TEMPLATE = """
-	z_early_memcpy(&__{0}_{1}_start, &__{0}_{1}_rom_start,
-		           (size_t) &__{0}_{1}_size);
+	z_early_memcpy(&__{0}_{1}_reloc_start, &__{0}_{1}_rom_start,
+		           (size_t) &__{0}_{1}_reloc_size);
 
 """
 
 MEMSET_TEMPLATE = """
- 	z_early_memset(&__{0}_bss_start, 0,
-		           (size_t) &__{0}_bss_size);
+	z_early_memset(&__{0}_bss_reloc_start, 0,
+		           (size_t) &__{0}_bss_reloc_size);
 """
 
 
@@ -456,8 +456,8 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
     parser.add_argument("-d", "--directory", required=True,
                         help="obj file's directory")
-    parser.add_argument("-i", "--input_rel_dict", required=True,
-                        help="input src:memory type(sram2 or ccm or aon etc) string")
+    parser.add_argument("-i", "--input_rel_dict", required=True, type=argparse.FileType('r'),
+                        help="input file with dict src:memory type(sram2 or ccm or aon etc)")
     parser.add_argument("-o", "--output", required=False, help="Output ld file")
     parser.add_argument("-s", "--output_sram_data", required=False,
                         help="Output sram data ld file")
@@ -490,7 +490,7 @@ def get_obj_filename(searchpath, filename):
 # Returns a 4-tuple with them: (mem_region, program_header, flag, file_name)
 # If no `program_header` is defined, returns an empty string
 def parse_input_string(line):
-    line = line.replace('\\ :', ':')
+    line = line.replace(' :', ':')
 
     flag_sep = ':NOCOPY:' if ':NOCOPY' in line else ':COPY:'
     mem_region_phdr, copy_flag, file_name = line.partition(flag_sep)
@@ -508,9 +508,10 @@ def create_dict_wrt_mem():
     rel_dict = dict()
     phdrs = dict()
 
-    if args.input_rel_dict == '':
+    input_rel_dict = args.input_rel_dict.read()
+    if input_rel_dict == '':
         sys.exit("Disable CONFIG_CODE_DATA_RELOCATION if no file needs relocation")
-    for line in args.input_rel_dict.split('|'):
+    for line in input_rel_dict.split('|'):
         if ':' not in line:
             continue
 

@@ -22,6 +22,9 @@
 #include <zcbor_common.h>
 #include <zcbor_encode.h>
 #include <zcbor_decode.h>
+
+#include <mgmt/mcumgr/util/zcbor_bulk.h>
+
 #ifdef CONFIG_REBOOT
 #include <zephyr/sys/reboot.h>
 #endif
@@ -89,35 +92,24 @@ extern uint8_t *MCUMGR_GRP_OS_INFO_BUILD_DATE_TIME;
 #ifdef CONFIG_MCUMGR_GRP_OS_ECHO
 static int os_mgmt_echo(struct smp_streamer *ctxt)
 {
-	struct zcbor_string value = { 0 };
-	struct zcbor_string key;
 	bool ok;
 	zcbor_state_t *zsd = ctxt->reader->zs;
 	zcbor_state_t *zse = ctxt->writer->zs;
+	struct zcbor_string data = { 0 };
+	size_t decoded;
 
-	if (!zcbor_map_start_decode(zsd)) {
-		return MGMT_ERR_EUNKNOWN;
+	struct zcbor_map_decode_key_val echo_decode[] = {
+		ZCBOR_MAP_DECODE_KEY_DECODER("d", zcbor_tstr_decode, &data),
+	};
+
+	ok = zcbor_map_decode_bulk(zsd, echo_decode, ARRAY_SIZE(echo_decode), &decoded) == 0;
+
+	if (!ok) {
+		return MGMT_ERR_EINVAL;
 	}
 
-	do {
-		ok = zcbor_tstr_decode(zsd, &key);
-
-		if (ok) {
-			if (key.len == 1 && *key.value == 'd') {
-				ok = zcbor_tstr_decode(zsd, &value);
-				break;
-			}
-
-			ok = zcbor_any_skip(zsd, NULL);
-		}
-	} while (ok);
-
-	if (!ok || !zcbor_map_end_decode(zsd)) {
-		return MGMT_ERR_EUNKNOWN;
-	}
-
-	ok = zcbor_tstr_put_lit(zse, "r")		&&
-	     zcbor_tstr_encode(zse, &value);
+	ok = zcbor_tstr_put_lit(zse, "r")	&&
+	     zcbor_tstr_encode(zse, &data);
 
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 }
@@ -322,21 +314,36 @@ static void os_mgmt_reset_cb(struct k_timer *timer)
 static int os_mgmt_reset(struct smp_streamer *ctxt)
 {
 #if defined(CONFIG_MCUMGR_GRP_OS_RESET_HOOK)
+	zcbor_state_t *zsd = ctxt->reader->zs;
 	zcbor_state_t *zse = ctxt->writer->zs;
-	int32_t ret_rc;
-	uint16_t ret_group;
+	size_t decoded;
 	enum mgmt_cb_return status;
+	int32_t err_rc;
+	uint16_t err_group;
 
-	status = mgmt_callback_notify(MGMT_EVT_OP_OS_MGMT_RESET, NULL, 0, &ret_rc, &ret_group);
+	struct os_mgmt_reset_data reboot_data = {
+		.force = false
+	};
+
+	struct zcbor_map_decode_key_val reset_decode[] = {
+		ZCBOR_MAP_DECODE_KEY_DECODER("force", zcbor_bool_decode, &reboot_data.force),
+	};
+
+	/* Since this is a core command, if we fail to decode the data, ignore the error and
+	 * continue with the default parameter of force being false.
+	 */
+	(void)zcbor_map_decode_bulk(zsd, reset_decode, ARRAY_SIZE(reset_decode), &decoded);
+	status = mgmt_callback_notify(MGMT_EVT_OP_OS_MGMT_RESET, &reboot_data,
+				      sizeof(reboot_data), &err_rc, &err_group);
 
 	if (status != MGMT_CB_OK) {
 		bool ok;
 
 		if (status == MGMT_CB_ERROR_RC) {
-			return ret_rc;
+			return err_rc;
 		}
 
-		ok = smp_add_cmd_ret(zse, ret_group, (uint16_t)ret_rc);
+		ok = smp_add_cmd_err(zse, err_group, (uint16_t)err_rc);
 		return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 	}
 #endif
@@ -406,8 +413,8 @@ static int os_mgmt_info(struct smp_streamer *ctxt)
 
 #ifdef CONFIG_MCUMGR_GRP_OS_INFO_CUSTOM_HOOKS
 	enum mgmt_cb_return status;
-	int32_t ret_rc;
-	uint16_t ret_group;
+	int32_t err_rc;
+	uint16_t err_group;
 #endif
 
 	if (zcbor_map_decode_bulk(zsd, fs_info_decode, ARRAY_SIZE(fs_info_decode), &decoded)) {
@@ -484,12 +491,12 @@ static int os_mgmt_info(struct smp_streamer *ctxt)
 #ifdef CONFIG_MCUMGR_GRP_OS_INFO_CUSTOM_HOOKS
 	/* Run callbacks to see if any additional handlers will add options */
 	(void)mgmt_callback_notify(MGMT_EVT_OP_OS_MGMT_INFO_CHECK, &check_data,
-				   sizeof(check_data), &ret_rc, &ret_group);
+				   sizeof(check_data), &err_rc, &err_group);
 #endif
 
 	if (valid_formats != format.len) {
 		/* A provided format specifier is not valid */
-		bool ok = smp_add_cmd_ret(zse, MGMT_GROUP_ID_OS, OS_MGMT_RET_RC_INVALID_FORMAT);
+		bool ok = smp_add_cmd_err(zse, MGMT_GROUP_ID_OS, OS_MGMT_ERR_INVALID_FORMAT);
 
 		return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 	} else if (format_bitmask == 0) {
@@ -650,16 +657,16 @@ static int os_mgmt_info(struct smp_streamer *ctxt)
 #ifdef CONFIG_MCUMGR_GRP_OS_INFO_CUSTOM_HOOKS
 	/* Call custom handler command for additional output/processing */
 	status = mgmt_callback_notify(MGMT_EVT_OP_OS_MGMT_INFO_APPEND, &append_data,
-				      sizeof(append_data), &ret_rc, &ret_group);
+				      sizeof(append_data), &err_rc, &err_group);
 
 	if (status != MGMT_CB_OK) {
 		bool ok;
 
 		if (status == MGMT_CB_ERROR_RC) {
-			return ret_rc;
+			return err_rc;
 		}
 
-		ok = smp_add_cmd_ret(zse, ret_group, (uint16_t)ret_rc);
+		ok = smp_add_cmd_err(zse, err_group, (uint16_t)err_rc);
 		return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 	}
 #endif
@@ -671,6 +678,32 @@ static int os_mgmt_info(struct smp_streamer *ctxt)
 
 fail:
 	return MGMT_ERR_EMSGSIZE;
+}
+#endif
+
+#ifdef CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
+/*
+ * @brief	Translate OS mgmt group error code into MCUmgr error code
+ *
+ * @param ret	#os_mgmt_err_code_t error code
+ *
+ * @return	#mcumgr_err_t error code
+ */
+static int os_mgmt_translate_error_code(uint16_t err)
+{
+	int rc;
+
+	switch (err) {
+	case OS_MGMT_ERR_INVALID_FORMAT:
+		rc = MGMT_ERR_EINVAL;
+		break;
+
+	case OS_MGMT_ERR_UNKNOWN:
+	default:
+		rc = MGMT_ERR_EUNKNOWN;
+	}
+
+	return rc;
 }
 #endif
 
@@ -708,30 +741,14 @@ static struct mgmt_group os_mgmt_group = {
 	.mg_handlers = os_mgmt_group_handlers,
 	.mg_handlers_count = OS_MGMT_GROUP_SZ,
 	.mg_group_id = MGMT_GROUP_ID_OS,
+#ifdef CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
+	.mg_translate_error = os_mgmt_translate_error_code,
+#endif
 };
 
 static void os_mgmt_register_group(void)
 {
 	mgmt_register_group(&os_mgmt_group);
 }
-
-#ifdef CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
-int os_mgmt_translate_error_code(uint16_t ret)
-{
-	int rc;
-
-	switch (ret) {
-	case OS_MGMT_RET_RC_INVALID_FORMAT:
-	rc = MGMT_ERR_EINVAL;
-	break;
-
-	case OS_MGMT_RET_RC_UNKNOWN:
-	default:
-	rc = MGMT_ERR_EUNKNOWN;
-	}
-
-	return rc;
-}
-#endif
 
 MCUMGR_HANDLER_DEFINE(os_mgmt, os_mgmt_register_group);

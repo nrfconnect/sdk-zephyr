@@ -38,29 +38,35 @@ config BT_BAP_UNICAST_CLIENT
 	  This option enables support for Bluetooth Unicast Audio Client
 	  using Isochronous channels.
 
-config BT_CODEC_MAX_DATA_COUNT
-	int "Codec Capabilities Data Count"
-	default 5
-	range 1 128
+config BT_AUDIO_CODEC_CFG_MAX_DATA_SIZE
+	int "Codec Specific Configuration Data Size"
+	default 19
+	range 0 255
 	help
-	  This option defines the maximum number of LTV entries a codec can
-	  store.
+	  Number of octets to support for Codec Specific Configuration data.
+	  The default value 19 matches the required fields for the LC3 codec.
 
-config BT_CODEC_MAX_DATA_LEN
-	int "Codec Capabilities Data Length"
+config BT_AUDIO_CODEC_CFG_MAX_METADATA_SIZE
+	int "Codec Specific Configuration Metadata Size"
 	default 4
-	range 1 128
+	range 0 255
 	help
-	  This option defines the maximum value length of an LTV entry a codec
-	  can store.
+	  Number of octets to support for Codec Specific Configuration metadata.
 
-config BT_CODEC_MAX_METADATA_COUNT
-	int "Codec Metadata Count"
-	default 2
-	range 1 128
+config BT_AUDIO_CODEC_CAP_MAX_DATA_SIZE
+	int "Codec Capabilities Data Size"
+	default 19
+	range 0 255
 	help
-	  This option defines the maximum number of LTV entries a metadata can
-	  store.
+	  Number of octets to support for Codec Specific Capabilities data.
+	  The default value 19 matches the required fields for the LC3 codec.
+
+config BT_AUDIO_CODEC_CAP_MAX_METADATA_SIZE
+	int "Codec Capabilities Metadata Size"
+	default 4
+	range 0 255
+	help
+	  Number of octets to support for Codec Specific Capabilities metadata.
 
 if BT_BAP_UNICAST_CLIENT
 config BT_BAP_UNICAST_CLIENT_GROUP_COUNT
@@ -93,7 +99,7 @@ config BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT
 
 config BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT
 	int "Basic Audio Profile ASE Source count"
-	default 1
+	default 2
 	range 0 255
 	help
 	  This option enables caching a number of Audio Stream Endpoint Source

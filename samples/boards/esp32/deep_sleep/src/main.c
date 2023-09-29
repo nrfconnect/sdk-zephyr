@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <zephyr/kernel.h>
-#include <zephyr/pm/pm.h>
-#include <zephyr/pm/device.h>
-#include <zephyr/pm/policy.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/sys/poweroff.h>
 #include "esp_sleep.h"
 
 #define WAKEUP_TIME_SEC		(20)
@@ -85,7 +83,7 @@ int main(void)
 			ESP_EXT1_WAKEUP_ANY_HIGH);
 #endif /* CONFIG_EXAMPLE_EXT1_WAKEUP */
 #ifdef CONFIG_EXAMPLE_GPIO_WAKEUP
-	if (!device_is_ready(wakeup_button.port)) {
+	if (!gpio_is_ready_dt(&wakeup_button)) {
 		printk("Error: wakeup button device %s is not ready\n", wakeup_button.port->name);
 		return 0;
 	}
@@ -101,18 +99,9 @@ int main(void)
 	esp_deep_sleep_enable_gpio_wakeup(BIT(wakeup_button.pin), ESP_GPIO_WAKEUP_GPIO_HIGH);
 	printk("Enabling GPIO wakeup on pins GPIO%d\n", wakeup_button.pin);
 #endif /* CONFIG_EXAMPLE_GPIO_WAKEUP */
-	printk("Entering deep sleep\n");
 
-	/* Sleep triggers the idle thread, which makes the pm subsystem apply the selected
-	 * power state. Deep sleep is forced here because power states' timings differ for
-	 * different SoCs.
-	 */
-	pm_state_force(0u, &(struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});
-	k_sleep(K_SECONDS(2));
+	printk("Powering off\n");
+	sys_poweroff();
 
-	printk("ERROR: Deep Sleep failed\n");
-
-	while (true) {
-		/* Never reaches here. Spins to avoid fall-off behavior */
-	}
+	return 0;
 }

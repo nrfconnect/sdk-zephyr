@@ -14,8 +14,6 @@
 #include <fsl_gpc.h>
 #include <fsl_pmu.h>
 #include <fsl_dcdc.h>
-#include <zephyr/arch/cpu.h>
-#include <zephyr/arch/arm/aarch32/cortex_m/cmsis.h>
 #ifdef CONFIG_NXP_IMX_RT_BOOT_HEADER
 #include <fsl_flexspi_nor_boot.h>
 #endif
@@ -35,6 +33,8 @@
 #include "usb_phy.h"
 #include "usb.h"
 #endif
+
+#include <cmsis_core.h>
 
 #define DUAL_CORE_MU_ENABLED \
 	(CONFIG_SECOND_CORE_MCUX && CONFIG_IPM && CONFIG_IPM_IMX_REV2)
@@ -120,8 +120,13 @@ static const clock_video_pll_config_t videoPllConfig = {
 
 #ifdef CONFIG_NXP_IMX_RT_BOOT_HEADER
 const __imx_boot_data_section BOOT_DATA_T boot_data = {
+#ifdef CONFIG_XIP
 	.start = CONFIG_FLASH_BASE_ADDRESS,
-	.size = KB(CONFIG_FLASH_SIZE),
+	.size = (uint32_t)&_flash_used,
+#else
+	.start = CONFIG_SRAM_BASE_ADDRESS,
+	.size = (uint32_t)&_image_ram_size,
+#endif
 	.plugin = PLUGIN_FLAG,
 	.placeholder = 0xFFFFFFFF,
 };
@@ -630,13 +635,6 @@ void imxrt_post_init_display_interface(void)
 
 static int imxrt_init(void)
 {
-
-	unsigned int oldLevel; /* old interrupt lock level */
-
-	/* disable interrupts */
-	oldLevel = irq_lock();
-
-
 #if  defined(CONFIG_SECOND_CORE_MCUX) && defined(CONFIG_CPU_CORTEX_M7)
 	/**
 	 * Copy CM4 core from flash to memory. Note that depending on where the
@@ -684,28 +682,12 @@ static int imxrt_init(void)
 	/* Initialize system clock */
 	clock_init();
 
-	/*
-	 * install default handler that simply resets the CPU
-	 * if configured in the kernel, NOP otherwise
-	 */
-	NMI_INIT();
-
-	/* restore interrupt state */
-	irq_unlock(oldLevel);
 	return 0;
 }
 
 #ifdef CONFIG_PLATFORM_SPECIFIC_INIT
 void z_arm_platform_init(void)
 {
-#if (DT_DEP_ORD(DT_NODELABEL(ocram)) != DT_DEP_ORD(DT_CHOSEN(zephyr_sram))) && \
-	CONFIG_OCRAM_NOCACHE
-	/* Copy data from flash to OCRAM */
-	memcpy(&__ocram_data_start, &__ocram_data_load_start,
-		(&__ocram_data_end - &__ocram_data_start));
-	/* Zero BSS region */
-	memset(&__ocram_bss_start, 0, (&__ocram_bss_end - &__ocram_bss_start));
-#endif
 	SystemInit();
 }
 #endif

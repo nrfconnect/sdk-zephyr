@@ -17,7 +17,6 @@ LOG_MODULE_REGISTER(net_l2_ppp, CONFIG_NET_L2_PPP_LOG_LEVEL);
 #include <zephyr/sys/iterable_sections.h>
 
 #include "net_private.h"
-#include "ipv4_autoconf_internal.h"
 
 #include "ppp_stats.h"
 #include "ppp_internal.h"
@@ -26,9 +25,9 @@ static K_FIFO_DEFINE(tx_queue);
 
 #if defined(CONFIG_NET_TC_THREAD_COOPERATIVE)
 /* Lowest priority cooperative thread */
-#define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
+#define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NET_L2_PPP_THREAD_PRIO)
 #else
-#define THREAD_PRIORITY K_PRIO_PREEMPT(CONFIG_NUM_PREEMPT_PRIORITIES - 1)
+#define THREAD_PRIORITY K_PRIO_PREEMPT(CONFIG_NET_L2_PPP_THREAD_PRIO)
 #endif
 
 static void tx_handler(void);
@@ -218,7 +217,31 @@ static enum net_l2_flags ppp_flags(struct net_if *iface)
 	return ctx->ppp_l2_flags;
 }
 
-NET_L2_INIT(PPP_L2, ppp_recv, ppp_send, NULL, ppp_flags);
+static int ppp_enable(struct net_if *iface, bool state)
+{
+	const struct ppp_api *ppp =
+		net_if_get_device(iface)->api;
+	struct ppp_context *ctx = net_if_l2_data(iface);
+
+	if (ctx->is_enabled == state) {
+		return 0;
+	}
+
+	ctx->is_enabled = state;
+
+	if (!state) {
+		if (ppp->stop) {
+			ppp->stop(net_if_get_device(iface));
+		}
+	} else {
+		if (ppp->start) {
+			ppp->start(net_if_get_device(iface));
+		}
+	}
+	return 0;
+}
+
+NET_L2_INIT(PPP_L2, ppp_recv, ppp_send, ppp_enable, ppp_flags);
 
 #if defined(CONFIG_NET_SHELL)
 static int get_ppp_context(int idx, struct ppp_context **ctx,

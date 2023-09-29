@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2018-2021 mcumgr authors
  * Copyright (c) 2022 Laird Connectivity
+ * Copyright (c) 2023 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -27,15 +28,15 @@ extern "C" {
 /**
  * Command result codes for OS management group.
  */
-enum os_mgmt_ret_code_t {
+enum os_mgmt_err_code_t {
 	/** No error, this is implied if there is no ret value in the response */
-	OS_MGMT_RET_RC_OK = 0,
+	OS_MGMT_ERR_OK = 0,
 
 	/** Unknown error occurred. */
-	OS_MGMT_RET_RC_UNKNOWN,
+	OS_MGMT_ERR_UNKNOWN,
 
 	/** The provided format value is not valid. */
-	OS_MGMT_RET_RC_INVALID_FORMAT,
+	OS_MGMT_ERR_INVALID_FORMAT,
 };
 
 /* Bitmask values used by the os info command handler. Note that the width of this variable is
@@ -96,17 +97,6 @@ struct os_mgmt_info_append {
 	/* If there has been prior output, must be set to true if a response has been output */
 	bool *prior_output;
 };
-
-#ifdef CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
-/*
- * @brief	Translate OS mgmt group error code into MCUmgr error code
- *
- * @param ret	#os_mgmt_ret_code_t error code
- *
- * @return	#mcumgr_err_t error code
- */
-int os_mgmt_translate_error_code(uint16_t ret);
-#endif
 
 #ifdef __cplusplus
 }

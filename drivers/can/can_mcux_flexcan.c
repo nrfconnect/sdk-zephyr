@@ -49,14 +49,19 @@ LOG_MODULE_REGISTER(can_mcux_flexcan, CONFIG_CAN_LOG_LEVEL);
 #define RX_START_IDX 0
 #endif
 
+/* The maximum number of message buffers for concurrent active instances */
+#ifdef CONFIG_CAN_MAX_MB
+#define MCUX_FLEXCAN_MAX_MB CONFIG_CAN_MAX_MB
+#else
+#define MCUX_FLEXCAN_MAX_MB FSL_FEATURE_FLEXCAN_HAS_MESSAGE_BUFFER_MAX_NUMBERn(0)
+#endif
+
 /*
  * RX message buffers (filters) will take up the first N message
  * buffers. The rest are available for TX use.
  */
 #define MCUX_FLEXCAN_MAX_RX (CONFIG_CAN_MAX_FILTER + RX_START_IDX)
-#define MCUX_FLEXCAN_MAX_TX \
-	(FSL_FEATURE_FLEXCAN_HAS_MESSAGE_BUFFER_MAX_NUMBERn(0) \
-	- MCUX_FLEXCAN_MAX_RX)
+#define MCUX_FLEXCAN_MAX_TX (MCUX_FLEXCAN_MAX_MB - MCUX_FLEXCAN_MAX_RX)
 
 /*
  * Convert from RX message buffer index to allocated filter ID and
@@ -426,7 +431,7 @@ static int mcux_flexcan_stop(const struct device *dev)
 
 static int mcux_flexcan_set_mode(const struct device *dev, can_mode_t mode)
 {
-	can_mode_t supported = CAN_MODE_LOOPBACK | CAN_MODE_LISTENONLY;
+	can_mode_t supported = CAN_MODE_LOOPBACK | CAN_MODE_LISTENONLY | CAN_MODE_3_SAMPLES;
 	const struct mcux_flexcan_config *config = dev->config;
 	struct mcux_flexcan_data *data = dev->data;
 	uint32_t ctrl1;
@@ -1246,7 +1251,7 @@ static int mcux_flexcan_init(const struct device *dev)
 	data->dev = dev;
 
 	FLEXCAN_GetDefaultConfig(&flexcan_config);
-	flexcan_config.maxMbNum = FSL_FEATURE_FLEXCAN_HAS_MESSAGE_BUFFER_MAX_NUMBERn(0);
+	flexcan_config.maxMbNum = MCUX_FLEXCAN_MAX_MB;
 	flexcan_config.clkSrc = config->clk_source;
 	flexcan_config.baudRate = clock_freq /
 	      (1U + data->timing.prop_seg + data->timing.phase_seg1 +

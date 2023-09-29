@@ -39,7 +39,7 @@ struct mcux_flexcomm_config {
 	clock_control_subsys_t clock_subsys;
 	uint32_t baud_rate;
 	uint8_t parity;
-#ifdef CONFIG_UART_INTERRUPT_DRIVEN
+#ifdef CONFIG_UART_MCUX_FLEXCOMM_ISR_SUPPORT
 	void (*irq_config_func)(const struct device *dev);
 #endif
 	const struct pinctrl_dev_config *pincfg;
@@ -279,6 +279,11 @@ static void mcux_flexcomm_irq_callback_set(const struct device *dev,
 
 	data->irq_callback = cb;
 	data->irq_cb_data = cb_data;
+
+#if defined(CONFIG_UART_EXCLUSIVE_API_CALLBACKS)
+	data->async_callback = NULL;
+	data->async_cb_data = NULL;
+#endif
 }
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 
@@ -399,6 +404,12 @@ static int mcux_flexcomm_uart_callback_set(const struct device *dev,
 
 	data->async_callback = callback;
 	data->async_cb_data = user_data;
+
+
+#if defined(CONFIG_UART_EXCLUSIVE_API_CALLBACKS)
+	data->irq_callback = NULL;
+	data->irq_cb_data = NULL;
+#endif
 
 	return 0;
 }
@@ -916,7 +927,7 @@ static int flexcomm_uart_async_init(const struct device *dev)
 
 #endif /* CONFIG_UART_ASYNC_API */
 
-
+#ifdef CONFIG_UART_MCUX_FLEXCOMM_ISR_SUPPORT
 static void mcux_flexcomm_isr(const struct device *dev)
 {
 	struct mcux_flexcomm_data *data = dev->data;
@@ -985,8 +996,9 @@ static void mcux_flexcomm_isr(const struct device *dev)
 		}
 
 	}
-#endif
+#endif /* CONFIG_UART_ASYNC_API */
 }
+#endif /* CONFIG_UART_MCUX_FLEXCOMM_ISR_SUPPORT */
 
 
 static int mcux_flexcomm_init(const struct device *dev)
@@ -1041,7 +1053,7 @@ static int mcux_flexcomm_init(const struct device *dev)
 
 	USART_Init(config->base, &usart_config, clock_freq);
 
-#ifdef CONFIG_UART_INTERRUPT_DRIVEN
+#ifdef CONFIG_UART_MCUX_FLEXCOMM_ISR_SUPPORT
 	config->irq_config_func(dev);
 #endif
 
@@ -1090,7 +1102,7 @@ static const struct uart_driver_api mcux_flexcomm_driver_api = {
 };
 
 
-#ifdef CONFIG_UART_INTERRUPT_DRIVEN
+#ifdef CONFIG_UART_MCUX_FLEXCOMM_ISR_SUPPORT
 #define UART_MCUX_FLEXCOMM_IRQ_CFG_FUNC(n)					\
 	static void mcux_flexcomm_irq_config_func_##n(const struct device *dev)	\
 	{									\
@@ -1105,7 +1117,7 @@ static const struct uart_driver_api mcux_flexcomm_driver_api = {
 #else
 #define UART_MCUX_FLEXCOMM_IRQ_CFG_FUNC(n)
 #define UART_MCUX_FLEXCOMM_IRQ_CFG_FUNC_INIT(n)
-#endif /* CONFIG_UART_INTERRUPT_DRIVEN */
+#endif /* CONFIG_UART_MCUX_FLEXCOMM_ISR_SUPPORT */
 
 #ifdef CONFIG_UART_ASYNC_API
 #define UART_MCUX_FLEXCOMM_TX_TIMEOUT_FUNC(n)					\

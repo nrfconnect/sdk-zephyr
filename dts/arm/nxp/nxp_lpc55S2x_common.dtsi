@@ -75,7 +75,7 @@
 		compatible = "zephyr,memory-region", "mmio-sram";
 		reg = <0x40100000  DT_SIZE_K(16)>;
 		zephyr,memory-region = "USB_SRAM";
-		zephyr,memory-region-mpu = "RAM";
+		zephyr,memory-attr = "RAM";
 	};
 };
 
@@ -159,6 +159,7 @@
 		compatible = "nxp,lpc-dma";
 		reg = <0x82000 0x1000>;
 		interrupts = <1 0>;
+		dma-channels = <23>;
 		status = "disabled";
 		#dma-cells = <1>;
 	};
@@ -167,6 +168,7 @@
 		compatible = "nxp,lpc-dma";
 		reg = <0xa7000 0x1000>;
 		interrupts = <58 0>;
+		dma-channels = <10>;
 		status = "disabled";
 		#dma-cells = <1>;
 	};

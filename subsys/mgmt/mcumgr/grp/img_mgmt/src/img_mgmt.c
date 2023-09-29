@@ -21,7 +21,6 @@
 #include <zephyr/mgmt/mcumgr/smp/smp.h>
 #include <zephyr/mgmt/mcumgr/mgmt/handlers.h>
 #include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt.h>
-#include <zephyr/mgmt/mcumgr/grp/img_mgmt/image.h>
 
 #include <mgmt/mcumgr/util/zcbor_bulk.h>
 #include <mgmt/mcumgr/grp/img_mgmt/img_mgmt_priv.h>
@@ -40,18 +39,52 @@
 #endif
 
 #define FIXED_PARTITION_IS_RUNNING_APP_PARTITION(label)	\
-	(FIXED_PARTITION_OFFSET(label) == CONFIG_FLASH_LOAD_OFFSET)
+	 (FIXED_PARTITION_OFFSET(label) == CONFIG_FLASH_LOAD_OFFSET)
 
-#if !(FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot0_partition) ||	\
-	FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot0_ns_partition) ||	\
-	FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot1_partition) ||	\
-	FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot2_partition))
-#error "Unsupported chosen zephyr,code-partition for boot application."
+#if FIXED_PARTITION_EXISTS(slot0_partition)
+#if FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot0_partition)
+#define NUMBER_OF_ACTIVE_IMAGE 0
 #endif
+#endif
+
+#if !defined(NUMBER_OF_ACTIVE_IMAGE) && FIXED_PARTITION_EXISTS(slot0_ns_partition)
+#if FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot0_ns_partition)
+#define NUMBER_OF_ACTIVE_IMAGE 0
+#endif
+#endif
+
+#if !defined(NUMBER_OF_ACTIVE_IMAGE) && FIXED_PARTITION_EXISTS(slot1_partition)
+#if FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot1_partition)
+#define NUMBER_OF_ACTIVE_IMAGE 0
+#endif
+#endif
+
+#if !defined(NUMBER_OF_ACTIVE_IMAGE) && FIXED_PARTITION_EXISTS(slot2_partition)
+#if FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot2_partition)
+#define NUMBER_OF_ACTIVE_IMAGE 1
+#endif
+#endif
+
+#if !defined(NUMBER_OF_ACTIVE_IMAGE) && FIXED_PARTITION_EXISTS(slot3_partition)
+#if FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot3_partition)
+#define NUMBER_OF_ACTIVE_IMAGE 1
+#endif
+#endif
+
+#ifndef NUMBER_OF_ACTIVE_IMAGE
+#error "Unsupported code parition is set as active application partition"
+#endif
+
+_Static_assert(sizeof(struct image_header) == IMAGE_HEADER_SIZE,
+		"struct image_header not required size");
 
 LOG_MODULE_REGISTER(mcumgr_img_grp, CONFIG_MCUMGR_GRP_IMG_LOG_LEVEL);
 
 struct img_mgmt_state g_img_mgmt_state;
+
+#ifdef CONFIG_MCUMGR_GRP_IMG_MUTEX
+static K_MUTEX_DEFINE(img_mgmt_mutex);
+#endif
 
 #ifdef CONFIG_MCUMGR_GRP_IMG_VERBOSE_ERR
 const char *img_mgmt_err_str_app_reject = "app reject";
@@ -63,7 +96,23 @@ const char *img_mgmt_err_str_flash_erase_failed = "fa erase fail";
 const char *img_mgmt_err_str_flash_write_failed = "fa write fail";
 const char *img_mgmt_err_str_downgrade = "downgrade";
 const char *img_mgmt_err_str_image_bad_flash_addr = "img addr mismatch";
+const char *img_mgmt_err_str_image_too_large = "img too large";
+const char *img_mgmt_err_str_data_overrun = "data overrun";
 #endif
+
+void img_mgmt_take_lock(void)
+{
+#ifdef CONFIG_MCUMGR_GRP_IMG_MUTEX
+	k_mutex_lock(&img_mgmt_mutex, K_FOREVER);
+#endif
+}
+
+void img_mgmt_release_lock(void)
+{
+#ifdef CONFIG_MCUMGR_GRP_IMG_MUTEX
+	k_mutex_unlock(&img_mgmt_mutex);
+#endif
+}
 
 /**
  * Finds the TLVs in the specified image slot, if any.
@@ -81,40 +130,38 @@ static int img_mgmt_find_tlvs(int slot, size_t *start_off, size_t *end_off, uint
 
 	if (tlv_info.it_magic != magic) {
 		/* No TLVs. */
-		return IMG_MGMT_RET_RC_NO_TLVS;
+		return IMG_MGMT_ERR_NO_TLVS;
 	}
 
 	*start_off += sizeof(tlv_info);
 	*end_off = *start_off + tlv_info.it_tlv_tot;
 
-	return IMG_MGMT_RET_RC_OK;
+	return IMG_MGMT_ERR_OK;
 }
 
 int img_mgmt_active_slot(int image)
 {
-#if CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER == 2
-	if (image == 1) {
-		return 2;
+	int slot = 0;
+
+	/* Multi image does not support DirectXIP currently */
+#if CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER > 1
+	slot = (image << 1);
+#else
+	/* This covers single image, including DirectXiP */
+	if (FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot1_partition)) {
+		slot = 1;
 	}
 #endif
-	/* Image 0 */
-	if (FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot1_partition)) {
-		return 1;
-	}
-	return 0;
+	LOG_DBG("(%d) => %d", image, slot);
+
+	return slot;
 }
 
 int img_mgmt_active_image(void)
 {
-#if CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER == 2
-	if (!(FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot0_partition) ||
-	      FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot0_ns_partition) ||
-	      FIXED_PARTITION_IS_RUNNING_APP_PARTITION(slot1_partition))) {
-		return 1;
-	}
-#endif
-	return 0;
+	return NUMBER_OF_ACTIVE_IMAGE;
 }
+
 /*
  * Reads the version and build hash from the specified image slot.
  */
@@ -132,7 +179,7 @@ int img_mgmt_read_info(int image_slot, struct image_version *ver, uint8_t *hash,
 
 	rc = img_mgmt_erased_val(image_slot, &erased_val);
 	if (rc != 0) {
-		return IMG_MGMT_RET_RC_FLASH_CONFIG_QUERY_FAIL;
+		return IMG_MGMT_ERR_FLASH_CONFIG_QUERY_FAIL;
 	}
 
 	rc = img_mgmt_read(image_slot, 0, &hdr, sizeof(hdr));
@@ -149,9 +196,9 @@ int img_mgmt_read_info(int image_slot, struct image_version *ver, uint8_t *hash,
 			memcpy(ver, &hdr.ih_ver, sizeof(*ver));
 		}
 	} else if (hdr.ih_magic == erased_val_32) {
-		return IMG_MGMT_RET_RC_NO_IMAGE;
+		return IMG_MGMT_ERR_NO_IMAGE;
 	} else {
-		return IMG_MGMT_RET_RC_INVALID_IMAGE_HEADER_MAGIC;
+		return IMG_MGMT_ERR_INVALID_IMAGE_HEADER_MAGIC;
 	}
 
 	if (flags != NULL) {
@@ -175,7 +222,7 @@ int img_mgmt_read_info(int image_slot, struct image_version *ver, uint8_t *hash,
 
 	rc = img_mgmt_find_tlvs(image_slot, &data_off, &data_end, IMAGE_TLV_INFO_MAGIC);
 	if (rc != 0) {
-		return IMG_MGMT_RET_RC_NO_TLVS;
+		return IMG_MGMT_ERR_NO_TLVS;
 	}
 
 	hash_found = false;
@@ -185,7 +232,7 @@ int img_mgmt_read_info(int image_slot, struct image_version *ver, uint8_t *hash,
 			return rc;
 		}
 		if (tlv.it_type == 0xff && tlv.it_len == 0xffff) {
-			return IMG_MGMT_RET_RC_INVALID_TLV;
+			return IMG_MGMT_ERR_INVALID_TLV;
 		}
 		if (tlv.it_type != IMAGE_TLV_SHA256 || tlv.it_len != IMAGE_HASH_LEN) {
 			/* Non-hash TLV.  Skip it. */
@@ -195,14 +242,14 @@ int img_mgmt_read_info(int image_slot, struct image_version *ver, uint8_t *hash,
 
 		if (hash_found) {
 			/* More than one hash. */
-			return IMG_MGMT_RET_RC_TLV_MULTIPLE_HASHES_FOUND;
+			return IMG_MGMT_ERR_TLV_MULTIPLE_HASHES_FOUND;
 		}
 		hash_found = true;
 
 		data_off += sizeof(tlv);
 		if (hash != NULL) {
 			if (data_off + IMAGE_HASH_LEN > data_end) {
-				return IMG_MGMT_RET_RC_TLV_INVALID_SIZE;
+				return IMG_MGMT_ERR_TLV_INVALID_SIZE;
 			}
 			rc = img_mgmt_read(image_slot, data_off, hash, IMAGE_HASH_LEN);
 			if (rc != 0) {
@@ -212,7 +259,7 @@ int img_mgmt_read_info(int image_slot, struct image_version *ver, uint8_t *hash,
 	}
 
 	if (!hash_found) {
-		return IMG_MGMT_RET_RC_HASH_NOT_FOUND;
+		return IMG_MGMT_ERR_HASH_NOT_FOUND;
 	}
 
 	return 0;
@@ -263,28 +310,16 @@ img_mgmt_find_by_hash(uint8_t *find, struct image_version *ver)
 /*
  * Resets upload status to defaults (no upload in progress)
  */
+#ifdef CONFIG_MCUMGR_GRP_IMG_MUTEX
 void img_mgmt_reset_upload(void)
+#else
+static void img_mgmt_reset_upload(void)
+#endif
 {
+	img_mgmt_take_lock();
 	memset(&g_img_mgmt_state, 0, sizeof(g_img_mgmt_state));
 	g_img_mgmt_state.area_id = -1;
-}
-
-static int
-img_mgmt_get_other_slot(void)
-{
-	int slot = img_mgmt_active_slot(img_mgmt_active_image());
-
-	switch (slot) {
-	case 1:
-		return 0;
-#if CONFIG_MCUMGR_GRP_IMG_UPDATABLE_IMAGE_NUMBER
-	case 2:
-		return 3;
-	case 3:
-		return 2;
-	}
-#endif
-	return 1;
+	img_mgmt_release_lock();
 }
 
 /**
@@ -298,7 +333,7 @@ img_mgmt_erase(struct smp_streamer *ctxt)
 	zcbor_state_t *zse = ctxt->writer->zs;
 	zcbor_state_t *zsd = ctxt->reader->zs;
 	bool ok;
-	uint32_t slot = img_mgmt_get_other_slot();
+	uint32_t slot = img_mgmt_get_opposite_slot(img_mgmt_active_slot(img_mgmt_active_image()));
 	size_t decoded = 0;
 
 	struct zcbor_map_decode_key_val image_erase_decode[] = {
@@ -312,6 +347,8 @@ img_mgmt_erase(struct smp_streamer *ctxt)
 		return MGMT_ERR_EINVAL;
 	}
 
+	img_mgmt_take_lock();
+
 	/*
 	 * First check if image info is valid.
 	 * This check is done incase the flash area has a corrupted image.
@@ -322,8 +359,8 @@ img_mgmt_erase(struct smp_streamer *ctxt)
 		/* Image info is valid. */
 		if (img_mgmt_slot_in_use(slot)) {
 			/* No free slot. */
-			ok = smp_add_cmd_ret(zse, MGMT_GROUP_ID_IMAGE,
-					     IMG_MGMT_RET_RC_NO_FREE_SLOT);
+			ok = smp_add_cmd_err(zse, MGMT_GROUP_ID_IMAGE,
+					     IMG_MGMT_ERR_NO_FREE_SLOT);
 			goto end;
 		}
 	}
@@ -333,23 +370,26 @@ img_mgmt_erase(struct smp_streamer *ctxt)
 
 	if (rc != 0) {
 #if defined(CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS)
-		int32_t ret_rc;
-		uint16_t ret_group;
+		int32_t err_rc;
+		uint16_t err_group;
 
-		(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED, NULL, 0, &ret_rc,
-					   &ret_group);
+		(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED, NULL, 0, &err_rc,
+					   &err_group);
 #endif
-		ok = smp_add_cmd_ret(zse, MGMT_GROUP_ID_IMAGE, rc);
+		ok = smp_add_cmd_err(zse, MGMT_GROUP_ID_IMAGE, rc);
 		goto end;
 	}
 
 	if (IS_ENABLED(CONFIG_MCUMGR_SMP_LEGACY_RC_BEHAVIOUR)) {
 		if (!zcbor_tstr_put_lit(zse, "rc") || !zcbor_int32_put(zse, 0)) {
+			img_mgmt_release_lock();
 			return MGMT_ERR_EMSGSIZE;
 		}
 	}
 
 end:
+	img_mgmt_release_lock();
+
 	return MGMT_ERR_EOK;
 }
 
@@ -426,10 +466,15 @@ img_mgmt_upload(struct smp_streamer *ctxt)
 	bool data_match = false;
 #endif
 
-#if defined(CONFIG_MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK) || defined(CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS)
+#if defined(CONFIG_MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK)
 	enum mgmt_cb_return status;
-	int32_t ret_rc;
-	uint16_t ret_group;
+#endif
+
+#if defined(CONFIG_MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK) ||	\
+defined(CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS) ||		\
+defined(CONFIG_MCUMGR_SMP_COMMAND_STATUS_HOOKS)
+	int32_t err_rc;
+	uint16_t err_group;
 #endif
 
 	struct zcbor_map_decode_key_val image_upload_decode[] = {
@@ -464,17 +509,19 @@ img_mgmt_upload(struct smp_streamer *ctxt)
 		return MGMT_ERR_EINVAL;
 	}
 
+	img_mgmt_take_lock();
+
 	/* Determine what actions to take as a result of this request. */
 	rc = img_mgmt_upload_inspect(&req, &action);
 	if (rc != 0) {
 #if defined(CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS)
-		(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED, NULL, 0, &ret_rc,
-					   &ret_group);
+		(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED, NULL, 0, &err_rc,
+					   &err_group);
 #endif
 
 		MGMT_CTXT_SET_RC_RSN(ctxt, IMG_MGMT_UPLOAD_ACTION_RC_RSN(&action));
 		LOG_ERR("Image upload inspect failed: %d", rc);
-		ok = smp_add_cmd_ret(zse, MGMT_GROUP_ID_IMAGE, rc);
+		ok = smp_add_cmd_err(zse, MGMT_GROUP_ID_IMAGE, rc);
 		goto end;
 	}
 
@@ -482,7 +529,9 @@ img_mgmt_upload(struct smp_streamer *ctxt)
 		/* Request specifies incorrect offset.  Respond with a success code and
 		 * the correct offset.
 		 */
-		return img_mgmt_upload_good_rsp(ctxt);
+		rc = img_mgmt_upload_good_rsp(ctxt);
+		img_mgmt_release_lock();
+		return rc;
 	}
 
 #if defined(CONFIG_MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK)
@@ -490,17 +539,17 @@ img_mgmt_upload(struct smp_streamer *ctxt)
 	 * request.
 	 */
 	status = mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_CHUNK, &upload_check_data,
-				      sizeof(upload_check_data), &ret_rc, &ret_group);
+				      sizeof(upload_check_data), &err_rc, &err_group);
 
 	if (status != MGMT_CB_OK) {
 		IMG_MGMT_UPLOAD_ACTION_SET_RC_RSN(&action, img_mgmt_err_str_app_reject);
 
 		if (status == MGMT_CB_ERROR_RC) {
-			rc = ret_rc;
+			rc = err_rc;
 			ok = zcbor_tstr_put_lit(zse, "rc")	&&
 			     zcbor_int32_put(zse, rc);
 		} else {
-			ok = smp_add_cmd_ret(zse, ret_group, (uint16_t)ret_rc);
+			ok = smp_add_cmd_err(zse, err_group, (uint16_t)err_rc);
 		}
 
 		goto end;
@@ -523,8 +572,8 @@ img_mgmt_upload(struct smp_streamer *ctxt)
 		g_img_mgmt_state.off = 0;
 
 #if defined(CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS)
-		(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_STARTED, NULL, 0, &ret_rc,
-					   &ret_group);
+		(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_STARTED, NULL, 0, &err_rc,
+					   &err_group);
 #endif
 
 #if defined(CONFIG_MCUMGR_SMP_COMMAND_STATUS_HOOKS)
@@ -576,7 +625,7 @@ img_mgmt_upload(struct smp_streamer *ctxt)
 			if (rc != 0) {
 				IMG_MGMT_UPLOAD_ACTION_SET_RC_RSN(&action,
 					img_mgmt_err_str_flash_erase_failed);
-				ok = smp_add_cmd_ret(zse, MGMT_GROUP_ID_IMAGE, rc);
+				ok = smp_add_cmd_err(zse, MGMT_GROUP_ID_IMAGE, rc);
 				goto end;
 			}
 		}
@@ -612,7 +661,7 @@ img_mgmt_upload(struct smp_streamer *ctxt)
 
 			LOG_ERR("Irrecoverable error: flash write failed: %d", rc);
 
-			ok = smp_add_cmd_ret(zse, MGMT_GROUP_ID_IMAGE, rc);
+			ok = smp_add_cmd_err(zse, MGMT_GROUP_ID_IMAGE, rc);
 			goto end;
 		}
 
@@ -641,7 +690,11 @@ img_mgmt_upload(struct smp_streamer *ctxt)
 
 #if defined(CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS)
 			(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_PENDING, NULL, 0,
-						   &ret_rc, &ret_group);
+						   &err_rc, &err_group);
+		} else {
+			/* Notify that the write has completed */
+			(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_CHUNK_WRITE_COMPLETE,
+						   NULL, 0, &err_rc, &err_group);
 #endif
 		}
 	}
@@ -651,13 +704,13 @@ end:
 
 #if defined(CONFIG_MCUMGR_SMP_COMMAND_STATUS_HOOKS)
 	(void)mgmt_callback_notify(MGMT_EVT_OP_CMD_STATUS, &cmd_status_arg,
-				   sizeof(cmd_status_arg), &ret_rc, &ret_group);
+				   sizeof(cmd_status_arg), &err_rc, &err_group);
 #endif
 
 	if (rc != 0) {
 #if defined(CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS)
-		(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED, NULL, 0, &ret_rc,
-					   &ret_group);
+		(void)mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED, NULL, 0, &err_rc,
+					   &err_group);
 #endif
 
 		img_mgmt_reset_upload();
@@ -678,6 +731,8 @@ end:
 		}
 	}
 
+	img_mgmt_release_lock();
+
 	if (!ok) {
 		return MGMT_ERR_EMSGSIZE;
 	}
@@ -690,6 +745,70 @@ int img_mgmt_my_version(struct image_version *ver)
 	return img_mgmt_read_info(img_mgmt_active_slot(img_mgmt_active_image()),
 				  ver, NULL, NULL);
 }
+
+#ifdef CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
+/*
+ * @brief	Translate IMG mgmt group error code into MCUmgr error code
+ *
+ * @param ret	#img_mgmt_err_code_t error code
+ *
+ * @return	#mcumgr_err_t error code
+ */
+static int img_mgmt_translate_error_code(uint16_t err)
+{
+	int rc;
+
+	switch (err) {
+	case IMG_MGMT_ERR_NO_IMAGE:
+	case IMG_MGMT_ERR_NO_TLVS:
+		rc = MGMT_ERR_ENOENT;
+		break;
+
+	case IMG_MGMT_ERR_NO_FREE_SLOT:
+	case IMG_MGMT_ERR_CURRENT_VERSION_IS_NEWER:
+	case IMG_MGMT_ERR_IMAGE_ALREADY_PENDING:
+		rc = MGMT_ERR_EBADSTATE;
+		break;
+
+	case IMG_MGMT_ERR_NO_FREE_MEMORY:
+		rc = MGMT_ERR_ENOMEM;
+		break;
+
+	case IMG_MGMT_ERR_INVALID_SLOT:
+	case IMG_MGMT_ERR_INVALID_PAGE_OFFSET:
+	case IMG_MGMT_ERR_INVALID_OFFSET:
+	case IMG_MGMT_ERR_INVALID_LENGTH:
+	case IMG_MGMT_ERR_INVALID_IMAGE_HEADER:
+	case IMG_MGMT_ERR_INVALID_HASH:
+	case IMG_MGMT_ERR_INVALID_FLASH_ADDRESS:
+		rc = MGMT_ERR_EINVAL;
+		break;
+
+	case IMG_MGMT_ERR_FLASH_CONFIG_QUERY_FAIL:
+	case IMG_MGMT_ERR_VERSION_GET_FAILED:
+	case IMG_MGMT_ERR_TLV_MULTIPLE_HASHES_FOUND:
+	case IMG_MGMT_ERR_TLV_INVALID_SIZE:
+	case IMG_MGMT_ERR_HASH_NOT_FOUND:
+	case IMG_MGMT_ERR_INVALID_TLV:
+	case IMG_MGMT_ERR_FLASH_OPEN_FAILED:
+	case IMG_MGMT_ERR_FLASH_READ_FAILED:
+	case IMG_MGMT_ERR_FLASH_WRITE_FAILED:
+	case IMG_MGMT_ERR_FLASH_ERASE_FAILED:
+	case IMG_MGMT_ERR_FLASH_CONTEXT_ALREADY_SET:
+	case IMG_MGMT_ERR_FLASH_CONTEXT_NOT_SET:
+	case IMG_MGMT_ERR_FLASH_AREA_DEVICE_NULL:
+	case IMG_MGMT_ERR_INVALID_IMAGE_HEADER_MAGIC:
+	case IMG_MGMT_ERR_INVALID_IMAGE_VECTOR_TABLE:
+	case IMG_MGMT_ERR_INVALID_IMAGE_TOO_LARGE:
+	case IMG_MGMT_ERR_INVALID_IMAGE_DATA_OVERRUN:
+	case IMG_MGMT_ERR_UNKNOWN:
+	default:
+		rc = MGMT_ERR_EUNKNOWN;
+	}
+
+	return rc;
+}
+#endif
 
 static const struct mgmt_handler img_mgmt_handlers[] = {
 	[IMG_MGMT_ID_STATE] = {
@@ -718,66 +837,14 @@ static struct mgmt_group img_mgmt_group = {
 	.mg_handlers = (struct mgmt_handler *)img_mgmt_handlers,
 	.mg_handlers_count = IMG_MGMT_HANDLER_CNT,
 	.mg_group_id = MGMT_GROUP_ID_IMAGE,
+#ifdef CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
+	.mg_translate_error = img_mgmt_translate_error_code,
+#endif
 };
 
 static void img_mgmt_register_group(void)
 {
 	mgmt_register_group(&img_mgmt_group);
 }
-
-#ifdef CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
-int img_mgmt_translate_error_code(uint16_t ret)
-{
-	int rc;
-
-	switch (ret) {
-	case IMG_MGMT_RET_RC_NO_IMAGE:
-	case IMG_MGMT_RET_RC_NO_TLVS:
-	rc = MGMT_ERR_ENOENT;
-	break;
-
-	case IMG_MGMT_RET_RC_NO_FREE_SLOT:
-	case IMG_MGMT_RET_RC_CURRENT_VERSION_IS_NEWER:
-	case IMG_MGMT_RET_RC_IMAGE_ALREADY_PENDING:
-	rc = MGMT_ERR_EBADSTATE;
-	break;
-
-	case IMG_MGMT_RET_RC_NO_FREE_MEMORY:
-	rc = MGMT_ERR_ENOMEM;
-	break;
-
-	case IMG_MGMT_RET_RC_INVALID_SLOT:
-	case IMG_MGMT_RET_RC_INVALID_PAGE_OFFSET:
-	case IMG_MGMT_RET_RC_INVALID_OFFSET:
-	case IMG_MGMT_RET_RC_INVALID_LENGTH:
-	case IMG_MGMT_RET_RC_INVALID_IMAGE_HEADER:
-	case IMG_MGMT_RET_RC_INVALID_HASH:
-	case IMG_MGMT_RET_RC_INVALID_FLASH_ADDRESS:
-	rc = MGMT_ERR_EINVAL;
-	break;
-
-	case IMG_MGMT_RET_RC_FLASH_CONFIG_QUERY_FAIL:
-	case IMG_MGMT_RET_RC_VERSION_GET_FAILED:
-	case IMG_MGMT_RET_RC_TLV_MULTIPLE_HASHES_FOUND:
-	case IMG_MGMT_RET_RC_TLV_INVALID_SIZE:
-	case IMG_MGMT_RET_RC_HASH_NOT_FOUND:
-	case IMG_MGMT_RET_RC_INVALID_TLV:
-	case IMG_MGMT_RET_RC_FLASH_OPEN_FAILED:
-	case IMG_MGMT_RET_RC_FLASH_READ_FAILED:
-	case IMG_MGMT_RET_RC_FLASH_WRITE_FAILED:
-	case IMG_MGMT_RET_RC_FLASH_ERASE_FAILED:
-	case IMG_MGMT_RET_RC_FLASH_CONTEXT_ALREADY_SET:
-	case IMG_MGMT_RET_RC_FLASH_CONTEXT_NOT_SET:
-	case IMG_MGMT_RET_RC_FLASH_AREA_DEVICE_NULL:
-	case IMG_MGMT_RET_RC_INVALID_IMAGE_HEADER_MAGIC:
-	case IMG_MGMT_RET_RC_INVALID_IMAGE_VECTOR_TABLE:
-	case IMG_MGMT_RET_RC_UNKNOWN:
-	default:
-	rc = MGMT_ERR_EUNKNOWN;
-	}
-
-	return rc;
-}
-#endif
 
 MCUMGR_HANDLER_DEFINE(img_mgmt, img_mgmt_register_group);

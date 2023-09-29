@@ -510,9 +510,9 @@ uint8_t ll_adv_aux_ad_data_set(uint8_t handle, uint8_t op, uint8_t frag_pref,
 
 			/* Reduce the AD data in the previous PDU */
 			err = ull_adv_aux_pdu_set_clear(adv, pdu_prev, pdu,
-						(ULL_ADV_PDU_HDR_FIELD_AD_DATA |
-						 ULL_ADV_PDU_HDR_FIELD_AUX_PTR),
-						0, hdr_data);
+							(ULL_ADV_PDU_HDR_FIELD_AD_DATA |
+							 ULL_ADV_PDU_HDR_FIELD_AUX_PTR),
+							0U, hdr_data);
 			if (err) {
 				/* NOTE: latest PDU was not consumed by LLL and
 				 * as ull_adv_sync_pdu_alloc() has reverted back
@@ -582,7 +582,7 @@ uint8_t ll_adv_aux_ad_data_set(uint8_t handle, uint8_t op, uint8_t frag_pref,
 
 	if (adv->is_enabled) {
 		struct ll_adv_aux_set *aux;
-		struct pdu_adv *pdu;
+		struct pdu_adv *chan_res_pdu;
 		uint8_t tmp_idx;
 
 		aux = HDR_LLL2ULL(adv->lll.aux);
@@ -634,8 +634,8 @@ uint8_t ll_adv_aux_ad_data_set(uint8_t handle, uint8_t op, uint8_t frag_pref,
 		}
 
 		/* Update primary channel reservation */
-		pdu = lll_adv_data_alloc(&adv->lll, &tmp_idx);
-		err = ull_adv_time_update(adv, pdu, NULL);
+		chan_res_pdu = lll_adv_data_alloc(&adv->lll, &tmp_idx);
+		err = ull_adv_time_update(adv, chan_res_pdu, NULL);
 		if (err) {
 			return err;
 		}
@@ -833,7 +833,7 @@ uint8_t ll_adv_aux_sr_data_set(uint8_t handle, uint8_t op, uint8_t frag_pref,
 					  ULL_ADV_PDU_HDR_FIELD_AD_DATA_APPEND;
 			err = ull_adv_aux_pdu_set_clear(adv, sr_pdu_prev, sr_pdu,
 							hdr_add_fields,
-							0,
+							0U,
 							hdr_data);
 		} else {
 			/* Add AD Data and remove any prior presence of Aux Ptr */
@@ -2993,15 +2993,18 @@ static uint32_t aux_time_min_get(const struct ll_adv_aux_set *aux)
 static uint8_t aux_time_update(struct ll_adv_aux_set *aux, struct pdu_adv *pdu,
 			       struct pdu_adv *pdu_scan)
 {
-	uint32_t volatile ret_cb;
-	uint32_t ticks_minus;
-	uint32_t ticks_plus;
 	uint32_t time_ticks;
 	uint32_t time_us;
-	uint32_t ret;
 
 	time_us = aux_time_min_get(aux);
 	time_ticks = HAL_TICKER_US_TO_TICKS(time_us);
+
+#if !defined(CONFIG_BT_CTLR_JIT_SCHEDULING)
+	uint32_t volatile ret_cb;
+	uint32_t ticks_minus;
+	uint32_t ticks_plus;
+	uint32_t ret;
+
 	if (aux->ull.ticks_slot > time_ticks) {
 		ticks_minus = aux->ull.ticks_slot - time_ticks;
 		ticks_plus = 0U;
@@ -3023,6 +3026,7 @@ static uint8_t aux_time_update(struct ll_adv_aux_set *aux, struct pdu_adv *pdu,
 	if (ret != TICKER_STATUS_SUCCESS) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
+#endif /* !CONFIG_BT_CTLR_JIT_SCHEDULING */
 
 	aux->ull.ticks_slot = time_ticks;
 
@@ -3053,7 +3057,6 @@ void ull_adv_aux_lll_auxptr_fill(struct pdu_adv *pdu, struct lll_adv *adv)
 	offset_us = HAL_TICKER_TICKS_TO_US(lll_aux->ticks_pri_pdu_offset) +
 		    lll_aux->us_pri_pdu_offset;
 	if ((offset_us/OFFS_UNIT_30_US)*OFFS_UNIT_30_US < EVENT_MAFS_US + pdu_us) {
-		struct ll_adv_aux_set *aux = HDR_LLL2ULL(lll_aux);
 		uint32_t interval_us;
 
 		/* Offset too small, point to next aux packet instead */

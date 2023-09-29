@@ -25,13 +25,15 @@ LOG_MODULE_REGISTER(main);
 #define CRYPTO_DEV_COMPAT st_stm32_cryp
 #elif DT_HAS_COMPAT_STATUS_OKAY(st_stm32_aes)
 #define CRYPTO_DEV_COMPAT st_stm32_aes
+#elif DT_HAS_COMPAT_STATUS_OKAY(nxp_mcux_dcp)
+#define CRYPTO_DEV_COMPAT nxp_mcux_dcp
 #elif CONFIG_CRYPTO_NRF_ECB
 #define CRYPTO_DEV_COMPAT nordic_nrf_ecb
 #else
 #error "You need to enable one crypto device"
 #endif
 
-static uint8_t key[16] = {
+static uint8_t key[16] __aligned(32) = {
 	0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88,
 	0x09, 0xcf, 0x4f, 0x3c
 };

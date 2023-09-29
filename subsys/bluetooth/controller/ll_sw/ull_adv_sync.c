@@ -99,8 +99,6 @@ uint8_t ll_adv_sync_param_set(uint8_t handle, uint16_t interval, uint16_t flags)
 	}
 
 	if (IS_ENABLED(CONFIG_BT_CTLR_PARAM_CHECK)) {
-		uint8_t err;
-
 		err = adv_type_check(adv);
 		if (err) {
 			return err;
@@ -112,7 +110,6 @@ uint8_t ll_adv_sync_param_set(uint8_t handle, uint16_t interval, uint16_t flags)
 		struct pdu_adv *ter_pdu;
 		struct lll_adv *lll;
 		uint8_t chm_last;
-		int err;
 
 		sync = sync_acquire();
 		if (!sync) {
@@ -268,8 +265,6 @@ uint8_t ll_adv_sync_ad_data_set(uint8_t handle, uint8_t op, uint8_t len,
 
 	/* Check for advertising set type */
 	if (IS_ENABLED(CONFIG_BT_CTLR_PARAM_CHECK)) {
-		uint8_t err;
-
 		err = adv_type_check(adv);
 		if (err) {
 			return err;
@@ -757,8 +752,6 @@ uint8_t ll_adv_sync_enable(uint8_t handle, uint8_t enable)
 
 	/* Check for advertising set type */
 	if (IS_ENABLED(CONFIG_BT_CTLR_PARAM_CHECK)) {
-		uint8_t err;
-
 		err = adv_type_check(adv);
 		if (err) {
 			return BT_HCI_ERR_CMD_DISALLOWED;
@@ -1210,15 +1203,18 @@ uint32_t ull_adv_sync_start(struct ll_adv_set *adv,
 uint8_t ull_adv_sync_time_update(struct ll_adv_sync_set *sync,
 				 struct pdu_adv *pdu)
 {
-	uint32_t volatile ret_cb;
-	uint32_t ticks_minus;
-	uint32_t ticks_plus;
 	uint32_t time_ticks;
 	uint32_t time_us;
-	uint32_t ret;
 
 	time_us = sync_time_get(sync, pdu);
 	time_ticks = HAL_TICKER_US_TO_TICKS(time_us);
+
+#if !defined(CONFIG_BT_CTLR_JIT_SCHEDULING)
+	uint32_t volatile ret_cb;
+	uint32_t ticks_minus;
+	uint32_t ticks_plus;
+	uint32_t ret;
+
 	if (sync->ull.ticks_slot > time_ticks) {
 		ticks_minus = sync->ull.ticks_slot - time_ticks;
 		ticks_plus = 0U;
@@ -1239,6 +1235,7 @@ uint8_t ull_adv_sync_time_update(struct ll_adv_sync_set *sync,
 	if (ret != TICKER_STATUS_SUCCESS) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
+#endif /* !CONFIG_BT_CTLR_JIT_SCHEDULING */
 
 	sync->ull.ticks_slot = time_ticks;
 

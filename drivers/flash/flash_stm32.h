@@ -105,6 +105,17 @@ struct flash_stm32_priv {
 #define FLASH_STM32_NSPNB_POS FLASH_NSCR_NSPNB_Pos
 #define FLASH_STM32_NSPNB FLASH_NSCR_NSPNB
 #define FLASH_STM32_NSSTRT FLASH_NSCR_NSSTRT
+#elif defined(CONFIG_SOC_SERIES_STM32WBAX)
+#define NSCR NSCR1
+#define FLASH_STM32_NSLOCK FLASH_NSCR1_LOCK
+#define FLASH_STM32_NSPG FLASH_NSCR1_PG
+#define FLASH_STM32_NSBKER_MSK FLASH_NSCR1_BKER_Msk
+#define FLASH_STM32_NSBKER FLASH_NSCR1_BKER
+#define FLASH_STM32_NSPER FLASH_NSCR1_PER
+#define FLASH_STM32_NSPNB_MSK FLASH_NSCR1_PNB_Msk
+#define FLASH_STM32_NSPNB_POS FLASH_NSCR1_PNB_Pos
+#define FLASH_STM32_NSPNB FLASH_NSCR1_PNB
+#define FLASH_STM32_NSSTRT FLASH_NSCR1_STRT
 #endif /* CONFIG_SOC_SERIES_STM32U5X */
 #if defined(FLASH_OPTR_DBANK)
 #define FLASH_STM32_DBANK FLASH_OPTR_DBANK
@@ -245,6 +256,12 @@ static inline bool flash_stm32_range_exists(const struct device *dev,
 		 flash_get_page_info_by_offs(dev, offset + len - 1, &info));
 }
 #endif	/* CONFIG_FLASH_PAGE_LAYOUT */
+
+static inline bool flash_stm32_valid_write(off_t offset, uint32_t len)
+{
+	return ((offset % FLASH_STM32_WRITE_BLOCK_SIZE == 0) &&
+		(len % FLASH_STM32_WRITE_BLOCK_SIZE == 0U));
+}
 
 bool flash_stm32_valid_range(const struct device *dev, off_t offset,
 			     uint32_t len, bool write);

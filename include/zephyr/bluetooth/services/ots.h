@@ -749,7 +749,7 @@ struct bt_ots_cb {
 };
 
 /** @brief Descriptor for OTS initialization. */
-struct bt_ots_init {
+struct bt_ots_init_param {
 	/* OTS features */
 	struct bt_ots_feat features;
 
@@ -803,7 +803,7 @@ void *bt_ots_svc_decl_get(struct bt_ots *ots);
  *
  *  @return 0 in case of success or negative value in case of error.
  */
-int bt_ots_init(struct bt_ots *ots, struct bt_ots_init *ots_init);
+int bt_ots_init(struct bt_ots *ots, struct bt_ots_init_param *ots_init);
 
 /** @brief Get a free instance of OTS from the pool.
  *
@@ -1146,10 +1146,12 @@ void bt_ots_metadata_display(struct bt_ots_obj_metadata *metadata,
  * @return CRC32 value.
  *
  */
+#if defined(CONFIG_BT_OTS_OACP_CHECKSUM_SUPPORT)
 static inline uint32_t bt_ots_client_calc_checksum(const uint8_t *data, size_t len)
 {
 	return crc32_ieee(data, len);
 }
+#endif
 
 #ifdef __cplusplus
 }

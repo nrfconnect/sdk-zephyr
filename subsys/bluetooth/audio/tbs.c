@@ -426,9 +426,8 @@ static void net_buf_put_current_calls(const void *inst_p)
 			}
 
 			uri_length = strlen(call->remote_uri);
-			item_len = sizeof(call->index != BT_TBS_FREE_CALL_INDEX) +
-					sizeof(call->state) +
-					sizeof(call->flags) + uri_length;
+			item_len = sizeof(call->index) + sizeof(call->state) +
+				   sizeof(call->flags) + uri_length;
 			net_buf_simple_add_u8(&read_buf, item_len);
 			net_buf_simple_add_u8(&read_buf, call->index);
 			net_buf_simple_add_u8(&read_buf, call->state);
@@ -601,17 +600,15 @@ static ssize_t read_uri_scheme_list(struct bt_conn *conn,
 					       svc_insts[i].uri_scheme_list,
 					       uri_len);
 		}
-		/* Add null terminator for printing */
-		read_buf.data[read_buf.len] = '\0';
-		LOG_DBG("GTBS: URI scheme %s", read_buf.data);
+
+		LOG_DBG("GTBS: URI scheme %.*s", read_buf.len, read_buf.data);
 	} else {
 		const struct tbs_service_inst *inst = BT_AUDIO_CHRC_USER_DATA(attr);
 
 		net_buf_simple_add_mem(&read_buf, inst->uri_scheme_list,
 				       strlen(inst->uri_scheme_list));
-		/* Add null terminator for printing */
-		read_buf.data[read_buf.len] = '\0';
-		LOG_DBG("Index %u: URI scheme %s", inst->index, read_buf.data);
+
+		LOG_DBG("Index %u: URI scheme %.*s", inst->index, read_buf.len, read_buf.data);
 	}
 
 	return bt_gatt_attr_read(conn, attr, buf, len, offset,
@@ -1686,44 +1683,26 @@ static void in_call_cfg_changed(const struct bt_gatt_attr *attr,
 		      read_friendly_name, NULL, inst), \
 	BT_AUDIO_CCC(friendly_name_cfg_changed)
 
-#define BT_TBS_SERVICE_DEFINITION(inst) {\
-	BT_GATT_PRIMARY_SERVICE(BT_UUID_TBS), \
-	BT_TBS_CHR_PROVIDER_NAME(&inst), \
-	BT_TBS_CHR_UCI(&inst), \
-	BT_TBS_CHR_TECHNOLOGY(&inst), \
-	BT_TBS_CHR_URI_LIST(&inst), \
-	BT_TBS_CHR_SIGNAL_STRENGTH(&inst), \
-	BT_TBS_CHR_SIGNAL_INTERVAL(&inst), \
-	BT_TBS_CHR_CURRENT_CALLS(&inst), \
-	BT_TBS_CHR_CCID(&inst), \
-	BT_TBS_CHR_STATUS_FLAGS(&inst), \
-	BT_TBS_CHR_INCOMING_URI(&inst), \
-	BT_TBS_CHR_CALL_STATE(&inst), \
-	BT_TBS_CHR_CONTROL_POINT(&inst), \
-	BT_TBS_CHR_OPTIONAL_OPCODES(&inst), \
-	BT_TBS_CHR_TERMINATE_REASON(&inst), \
-	BT_TBS_CHR_INCOMING_CALL(&inst), \
-	BT_TBS_CHR_FRIENDLY_NAME(&inst) \
-	}
+#define BT_TBS_SERVICE_DEFINE(_uuid, _inst)                                                        \
+	BT_GATT_PRIMARY_SERVICE(_uuid),                                                            \
+	BT_TBS_CHR_PROVIDER_NAME(_inst),                                                           \
+	BT_TBS_CHR_UCI(_inst),                                                                     \
+	BT_TBS_CHR_TECHNOLOGY(_inst),                                                              \
+	BT_TBS_CHR_URI_LIST(_inst),                                                                \
+	BT_TBS_CHR_SIGNAL_STRENGTH(_inst),                                                         \
+	BT_TBS_CHR_SIGNAL_INTERVAL(_inst),                                                         \
+	BT_TBS_CHR_CURRENT_CALLS(_inst),                                                           \
+	BT_TBS_CHR_CCID(_inst),                                                                    \
+	BT_TBS_CHR_STATUS_FLAGS(_inst),                                                            \
+	BT_TBS_CHR_INCOMING_URI(_inst),                                                            \
+	BT_TBS_CHR_CALL_STATE(_inst),                                                              \
+	BT_TBS_CHR_CONTROL_POINT(_inst),                                                           \
+	BT_TBS_CHR_OPTIONAL_OPCODES(_inst),                                                        \
+	BT_TBS_CHR_TERMINATE_REASON(_inst),                                                        \
+	BT_TBS_CHR_INCOMING_CALL(_inst),                                                           \
+	BT_TBS_CHR_FRIENDLY_NAME(_inst)
 
-#define BT_GTBS_SERVICE_DEFINITION(inst) \
-	BT_GATT_PRIMARY_SERVICE(BT_UUID_GTBS), \
-	BT_TBS_CHR_PROVIDER_NAME(inst), \
-	BT_TBS_CHR_UCI(inst), \
-	BT_TBS_CHR_TECHNOLOGY(inst), \
-	BT_TBS_CHR_URI_LIST(inst), \
-	BT_TBS_CHR_SIGNAL_STRENGTH(inst), \
-	BT_TBS_CHR_SIGNAL_INTERVAL(inst), \
-	BT_TBS_CHR_CURRENT_CALLS(inst), \
-	BT_TBS_CHR_CCID(inst), \
-	BT_TBS_CHR_STATUS_FLAGS(inst), \
-	BT_TBS_CHR_INCOMING_URI(inst), \
-	BT_TBS_CHR_CALL_STATE(inst), \
-	BT_TBS_CHR_CONTROL_POINT(inst), \
-	BT_TBS_CHR_OPTIONAL_OPCODES(inst), \
-	BT_TBS_CHR_TERMINATE_REASON(inst), \
-	BT_TBS_CHR_INCOMING_CALL(inst), \
-	BT_TBS_CHR_FRIENDLY_NAME(inst)
+#define BT_TBS_SERVICE_DEFINITION(_inst) { BT_TBS_SERVICE_DEFINE(BT_UUID_TBS, &(_inst)) }
 
 /*
  * Defining this as extern make it possible to link code that otherwise would
@@ -1733,7 +1712,7 @@ extern const struct bt_gatt_service_static gtbs_svc;
 
 /* TODO: Can we make the multiple service instance more generic? */
 #if CONFIG_BT_GTBS
-BT_GATT_SERVICE_DEFINE(gtbs_svc, BT_GTBS_SERVICE_DEFINITION(&gtbs_inst));
+BT_GATT_SERVICE_DEFINE(gtbs_svc, BT_TBS_SERVICE_DEFINE(BT_UUID_GTBS, &gtbs_inst));
 #endif /* CONFIG_BT_GTBS */
 
 BT_GATT_SERVICE_INSTANCE_DEFINE(tbs_service_list, svc_insts, CONFIG_BT_TBS_BEARER_COUNT,
@@ -2405,9 +2384,7 @@ int bt_tbs_set_uri_scheme_list(uint8_t bearer_index, const char **uri_list,
 					       uri_len);
 		}
 
-		/* Add null terminator for printing */
-		uri_scheme_buf.data[uri_scheme_buf.len] = '\0';
-		LOG_DBG("GTBS: URI scheme %s", uri_scheme_buf.data);
+		LOG_DBG("GTBS: URI scheme %.*s", uri_scheme_buf.len, uri_scheme_buf.data);
 
 		bt_gatt_notify_uuid(NULL, BT_UUID_TBS_URI_LIST,
 				    gtbs_inst.service_p->attrs,

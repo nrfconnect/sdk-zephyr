@@ -104,6 +104,16 @@ static struct mod_relation mod_rel_list[MOD_REL_LIST_SIZE];
 
 #define RELATION_TYPE_EXT 0xFF
 
+static const struct {
+	uint8_t *path;
+	uint8_t page;
+} comp_data_pages[] = {
+	{ "bt/mesh/cmp/0", 0, },
+#if IS_ENABLED(CONFIG_BT_MESH_COMP_PAGE_1)
+	{ "bt/mesh/cmp/1", 1, },
+#endif
+};
+
 void bt_mesh_model_foreach(void (*func)(struct bt_mesh_model *mod,
 					struct bt_mesh_elem *elem,
 					bool vnd, bool primary,
@@ -478,7 +488,10 @@ static uint8_t count_mod_ext(struct bt_mesh_model *mod, uint8_t *max_offset)
 			}
 		}
 	}
-	memcpy(max_offset, &offset_record, sizeof(uint8_t));
+
+	if (max_offset) {
+		memcpy(max_offset, &offset_record, sizeof(uint8_t));
+	}
 	return extensions;
 }
 
@@ -487,10 +500,12 @@ static bool is_cor_present(struct bt_mesh_model *mod, uint8_t *cor_id)
 	int i;
 
 	MOD_REL_LIST_FOR_EACH(i) {
-		if ((IS_MOD_BASE(mod, i) ||
-		     IS_MOD_EXTENSION(mod, i)) &&
-		     mod_rel_list[i].type < RELATION_TYPE_EXT) {
-			memcpy(cor_id, &mod_rel_list[i].type, sizeof(uint8_t));
+		if ((IS_MOD_BASE(mod, i) || IS_MOD_EXTENSION(mod, i)) &&
+		    mod_rel_list[i].type < RELATION_TYPE_EXT) {
+			if (cor_id) {
+				memcpy(cor_id, &mod_rel_list[i].type, sizeof(uint8_t));
+			}
+
 			return true;
 		}
 	}
@@ -557,6 +572,43 @@ static void add_items_to_page(struct net_buf_simple *buf, struct bt_mesh_model *
 	}
 }
 
+static size_t mod_items_size(struct bt_mesh_model *mod)
+{
+	int i, offset;
+	size_t temp_size = 0;
+	int ext_mod_cnt = count_mod_ext(mod, NULL);
+
+	if (!ext_mod_cnt) {
+		return 0;
+	}
+
+	MOD_REL_LIST_FOR_EACH(i) {
+		if (IS_MOD_EXTENSION(mod, i)) {
+			offset = mod->elem_idx - mod_rel_list[i].elem_base;
+			temp_size += (ext_mod_cnt < 32 && offset < 4 && offset > -5) ? 1 : 2;
+		}
+	}
+
+	return temp_size;
+}
+
+static size_t page1_elem_size(struct bt_mesh_elem *elem)
+{
+	size_t temp_size = 2;
+
+	for (int i = 0; i < elem->model_count; i++) {
+		temp_size += is_cor_present(&elem->models[i], NULL) ? 2 : 1;
+		temp_size += mod_items_size(&elem->models[i]);
+	}
+
+	for (int i = 0; i < elem->vnd_model_count; i++) {
+		temp_size += is_cor_present(&elem->vnd_models[i], NULL) ? 2 : 1;
+		temp_size += mod_items_size(&elem->vnd_models[i]);
+	}
+
+	return temp_size;
+}
+
 int bt_mesh_comp_data_get_page_1(struct net_buf_simple *buf)
 {
 	const struct bt_mesh_comp *comp;
@@ -567,6 +619,22 @@ int bt_mesh_comp_data_get_page_1(struct net_buf_simple *buf)
 	comp = bt_mesh_comp_get();
 
 	for (i = 0; i < comp->elem_count; i++) {
+		if (net_buf_simple_tailroom(buf) <
+		    (page1_elem_size(&comp->elem[i]) + BT_MESH_MIC_SHORT)) {
+			if (IS_ENABLED(CONFIG_BT_MESH_LARGE_COMP_DATA_SRV)) {
+				/* Mesh Profile 1.1 Section 4.4.1.2.2:
+				 * If the complete list of models does not fit in the Data field,
+				 * the element shall not be reported.
+				 */
+				LOG_DBG("Element 0x%04x didn't fit in the Data field",
+					comp->elem[i].addr);
+				return 0;
+			}
+
+			LOG_ERR("Too large device composition");
+			return -E2BIG;
+		}
+
 		net_buf_simple_add_u8(buf, comp->elem[i].model_count);
 		net_buf_simple_add_u8(buf, comp->elem[i].vnd_model_count);
 		for (j = 0; j < comp->elem[i].model_count; j++) {
@@ -949,6 +1017,12 @@ void bt_mesh_comp_unprovision(void)
 	LOG_DBG("");
 
 	dev_primary_addr = BT_MESH_ADDR_UNASSIGNED;
+
+	for (int i = 0; i < dev_comp->elem_count; i++) {
+		struct bt_mesh_elem *elem = &dev_comp->elem[i];
+
+		elem->addr = BT_MESH_ADDR_UNASSIGNED;
+	}
 }
 
 uint16_t bt_mesh_primary_addr(void)
@@ -2073,25 +2147,41 @@ void bt_mesh_model_pub_store(struct bt_mesh_model *mod)
 	bt_mesh_settings_store_schedule(BT_MESH_SETTINGS_MOD_PENDING);
 }
 
+int bt_mesh_comp_data_get_page(struct net_buf_simple *buf, size_t page, size_t offset)
+{
+	if (page == 0 || page == 128) {
+		return bt_mesh_comp_data_get_page_0(buf, offset);
+	} else if (page == 1 || page == 129) {
+		return bt_mesh_comp_data_get_page_1(buf);
+	}
+
+	return -EINVAL;
+}
+
 int bt_mesh_comp_store(void)
 {
 	NET_BUF_SIMPLE_DEFINE(buf, BT_MESH_TX_SDU_MAX);
 	int err;
 
-	err = bt_mesh_comp_data_get_page_0(&buf, 0);
-	if (err) {
-		LOG_ERR("Failed to read composition data: %d", err);
-		return err;
+	for (int i = 0; i < ARRAY_SIZE(comp_data_pages); i++) {
+		net_buf_simple_reset(&buf);
+
+		err = bt_mesh_comp_data_get_page(&buf, comp_data_pages[i].page, 0);
+		if (err) {
+			LOG_ERR("Failed to read CDP%d: %d", comp_data_pages[i].page, err);
+			return err;
+		}
+
+		err = settings_save_one(comp_data_pages[i].path, buf.data, buf.len);
+		if (err) {
+			LOG_ERR("Failed to store CDP%d: %d", comp_data_pages[i].page, err);
+			return err;
+		}
+
+		LOG_DBG("Stored CDP%d", comp_data_pages[i].page);
 	}
 
-	err = settings_save_one("bt/mesh/cmp", buf.data, buf.len);
-	if (err) {
-		LOG_ERR("Failed to store composition data: %d", err);
-	} else {
-		LOG_DBG("Stored composition data");
-	}
-
-	return err;
+	return 0;
 }
 
 int bt_mesh_comp_change_prepare(void)
@@ -2107,11 +2197,12 @@ static void comp_data_clear(void)
 {
 	int err;
 
-	err = settings_delete("bt/mesh/cmp");
-	if (err) {
-		LOG_ERR("Failed to clear composition data: %d", err);
-	} else {
-		LOG_DBG("Cleared composition data page 128");
+	for (int i = 0; i < ARRAY_SIZE(comp_data_pages); i++) {
+		err = settings_delete(comp_data_pages[i].path);
+		if (err) {
+			LOG_ERR("Failed to clear CDP%d: %d", comp_data_pages[i].page,
+				err);
+		}
 	}
 
 	atomic_clear_bit(bt_mesh.flags, BT_MESH_COMP_DIRTY);
@@ -2134,25 +2225,35 @@ static int read_comp_cb(const char *key, size_t len, settings_read_cb read_cb,
 	return -EALREADY;
 }
 
-int bt_mesh_comp_read(struct net_buf_simple *buf)
+int bt_mesh_comp_read(struct net_buf_simple *buf, uint8_t page)
 {
 	size_t original_len = buf->len;
+	int i;
 	int err;
 
 	if (!IS_ENABLED(CONFIG_BT_SETTINGS)) {
 		return -ENOTSUP;
 	}
 
-	err = settings_load_subtree_direct("bt/mesh/cmp", read_comp_cb, buf);
+	for (i = 0; i < ARRAY_SIZE(comp_data_pages); i++) {
+		if (comp_data_pages[i].page == page) {
+			break;
+		}
+	}
+
+	if (i == ARRAY_SIZE(comp_data_pages)) {
+		return -ENOENT;
+	}
+
+	err = settings_load_subtree_direct(comp_data_pages[i].path, read_comp_cb, buf);
+
 	if (err) {
 		LOG_ERR("Failed reading composition data: %d", err);
 		return err;
 	}
-
 	if (buf->len == original_len) {
 		return -ENOENT;
 	}
-
 	return 0;
 }
 

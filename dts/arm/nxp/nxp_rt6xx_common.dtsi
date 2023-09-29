@@ -23,6 +23,7 @@
 		cpu0: cpu@0 {
 			compatible = "arm,cortex-m33f";
 			reg = <0>;
+			cpu-power-states = <&idle &suspend>;
 			#address-cells = <1>;
 			#size-cells = <1>;
 
@@ -30,6 +31,19 @@
 				compatible = "arm,armv8m-mpu";
 				reg = <0xe000ed90 0x40>;
 				arm,num-mpu-regions = <8>;
+			};
+		};
+
+		power-states {
+			idle: idle {
+				compatible = "zephyr,power-state";
+				power-state-name = "runtime-idle";
+				min-residency-us = <10>;
+			};
+			suspend: suspend {
+				compatible = "zephyr,power-state";
+				power-state-name = "suspend-to-idle";
+				min-residency-us = <1000>;
 			};
 		};
 	};
@@ -48,7 +62,7 @@
 		compatible =  "zephyr,memory-region", "mmio-sram";
 		reg = <0x40140000 DT_SIZE_K(16)>;
 		zephyr,memory-region = "SRAM1";
-		zephyr,memory-region-mpu = "RAM";
+		zephyr,memory-attr = "RAM";
 	};
 };
 
@@ -258,6 +272,7 @@
 		compatible = "nxp,lpc-dma";
 		reg = <0x104000 0x1000>;
 		interrupts = <1 0>;
+		dma-channels = <33>;
 		status = "disabled";
 		#dma-cells = <1>;
 	};
@@ -266,6 +281,7 @@
 		compatible = "nxp,lpc-dma";
 		reg = <0x105000 0x1000>;
 		interrupts = <54 0>;
+		dma-channels = <33>;
 		status = "disabled";
 		#dma-cells = <1>;
 	};

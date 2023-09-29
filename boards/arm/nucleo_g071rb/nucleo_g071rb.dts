@@ -9,6 +9,7 @@
 #include <st/g0/stm32g071Xb.dtsi>
 #include <st/g0/stm32g071r(6-8-b)tx-pinctrl.dtsi>
 #include "arduino_r3_connector.dtsi"
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
 	model = "STMicroelectronics STM32G071RB-NUCLEO board";
@@ -22,7 +23,7 @@
 	};
 
 
-	leds {
+	leds: leds {
 		compatible = "gpio-leds";
 		green_led_1: led_4 {
 			gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>;
@@ -35,6 +36,7 @@
 		user_button: button {
 			label = "User";
 			gpios = <&gpioc 13 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_0>;
 		};
 	};
 
@@ -138,6 +140,8 @@
 &adc1 {
 	pinctrl-0 = <&adc1_in0_pa0 &adc1_in1_pa1>;
 	pinctrl-names = "default";
+	st,adc-clock-source = <SYNC>;
+	st,adc-prescaler = <4>;
 	status = "okay";
 	vref-mv = <3300>;
 };
@@ -164,10 +168,6 @@
 			reg = <0x0001f800 DT_SIZE_K(2)>;
 		};
 	};
-};
-
-&cpu0 {
-	cpu-power-states = <&stop0 &stop1>;
 };
 
 &lptim1 {

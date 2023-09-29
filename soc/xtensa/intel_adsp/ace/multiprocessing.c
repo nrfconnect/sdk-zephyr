@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/check.h>
 #include <zephyr/arch/cpu.h>
@@ -19,6 +20,9 @@
 #include <zephyr/cache.h>
 
 #define CORE_POWER_CHECK_NUM 128
+
+#define CPU_POWERUP_TIMEOUT_USEC 10000
+
 #define ACE_INTC_IRQ DT_IRQN(DT_NODELABEL(ace_intc))
 
 static void ipc_isr(void *arg)
@@ -79,6 +83,17 @@ void soc_mp_init(void)
 	soc_cpus_active[0] = true;
 }
 
+#ifdef CONFIG_ADSP_IMR_CONTEXT_SAVE
+/*
+ * Called after exiting D3 state when context restore is enabled.
+ * Re-enables IDC interrupt again for all cores. Called once from core 0.
+ */
+void soc_mp_on_d3_exit(void)
+{
+	soc_mp_init();
+}
+#endif
+
 void soc_start_core(int cpu_num)
 {
 	int retry = CORE_POWER_CHECK_NUM;
@@ -104,10 +119,11 @@ void soc_start_core(int cpu_num)
 #endif
 
 		sys_cache_data_flush_range(rom_jump_vector, sizeof(*rom_jump_vector));
-		ACE_PWRCTL->wpdsphpxpg |= BIT(cpu_num);
+		soc_cpu_power_up(cpu_num);
 
-		while ((ACE_PWRSTS->dsphpxpgs & BIT(cpu_num)) == 0) {
-			k_busy_wait(HW_STATE_CHECK_DELAY);
+		if (!WAIT_FOR(soc_cpu_is_powered(cpu_num),
+			      CPU_POWERUP_TIMEOUT_USEC, k_busy_wait(HW_STATE_CHECK_DELAY))) {
+			k_panic();
 		}
 
 		/* Tell the ACE ROM that it should use secondary core flow */
@@ -121,8 +137,9 @@ void soc_start_core(int cpu_num)
 	DSPCS.capctl[cpu_num].ctl &= ~DSPCS_CTL_SPA;
 
 	/* Checking current power status of the core. */
-	while (((DSPCS.capctl[cpu_num].ctl & DSPCS_CTL_CPA) == DSPCS_CTL_CPA)) {
-		k_busy_wait(HW_STATE_CHECK_DELAY);
+	if (!WAIT_FOR((DSPCS.capctl[cpu_num].ctl & DSPCS_CTL_CPA) != DSPCS_CTL_CPA,
+		      CPU_POWERUP_TIMEOUT_USEC, k_busy_wait(HW_STATE_CHECK_DELAY))) {
+		k_panic();
 	}
 
 	DSPCS.capctl[cpu_num].ctl |= DSPCS_CTL_SPA;
@@ -194,7 +211,7 @@ int soc_adsp_halt_cpu(int id)
 		return -EINVAL;
 	}
 
-	ACE_PWRCTL->wpdsphpxpg &= ~BIT(id);
+	soc_cpu_power_down(id);
 	return 0;
 }
 #endif

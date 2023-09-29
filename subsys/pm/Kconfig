@@ -4,9 +4,15 @@
 
 menu "Power Management"
 
-menuconfig PM
+config HAS_PM
+	bool
+	help
+	  This option must be selected by SoCs that provide PM hooks, that is,
+	  calls to configure low-power states.
+
+config PM
 	bool "System Power Management"
-	depends on SYS_CLOCK_EXISTS && !HAS_NO_PM
+	depends on SYS_CLOCK_EXISTS && HAS_PM
 	help
 	  This option enables the board to implement extra power management
 	  policies whenever the kernel becomes idle. The kernel informs the
@@ -54,14 +60,6 @@ endchoice
 
 endif # PM
 
-config HAS_NO_PM
-	bool
-	help
-	  This option blocks selection of PM.  It can be selected in SOC
-	  targets where system power management is not supported, for example
-	  on support core of a multi-core device where SoC power management is
-	  the responsibility of a different core.
-
 config PM_DEVICE
 	bool "Device Power Management"
 	help
@@ -90,8 +88,7 @@ config PM_DEVICE_POWER_DOMAIN
 
 config PM_DEVICE_POWER_DOMAIN_DYNAMIC
 	bool "Dynamically bind devices to a Power Pomain"
-	depends on PM_DEVICE_POWER_DOMAIN
-	select HAS_DYNAMIC_DEVICE_HANDLES
+	depends on PM_DEVICE_POWER_DOMAIN && DEVICE_DEPS_DYNAMIC
 	help
 	  Enable support for dynamically bind devices to a Power Domain.
 

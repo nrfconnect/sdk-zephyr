@@ -8,6 +8,7 @@
 #include <st/h5/stm32h573Xi.dtsi>
 #include <st/h5/stm32h573iikxq-pinctrl.dtsi>
 #include "arduino_r3_connector.dtsi"
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
 	model = "STMicroelectronics STM32H573I DISCOVERY KIT board";
@@ -16,10 +17,10 @@
 	chosen {
 		zephyr,console = &usart1;
 		zephyr,shell-uart = &usart1;
-		zephyr,sram = &sram0;
+		zephyr,sram = &sram1;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
-		zephyr,canbus = &can1;
+		zephyr,canbus = &fdcan1;
 	};
 
 	leds {
@@ -47,6 +48,7 @@
 		user_button: button {
 			label = "User";
 			gpios = <&gpioc 13 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_0>;
 		};
 	};
 
@@ -131,6 +133,20 @@
 	status = "okay";
 };
 
+&mac {
+	status = "okay";
+	pinctrl-0 = <&eth_mdc_pc1
+		     &eth_rxd0_pc4
+		     &eth_rxd1_pc5
+		     &eth_ref_clk_pa1
+		     &eth_mdio_pa2
+		     &eth_crs_dv_pa7
+		     &eth_tx_en_pg11
+		     &eth_txd0_pg13
+		     &eth_txd1_pg12>;
+	pinctrl-names = "default";
+};
+
 &flash0 {
 	partitions {
 		compatible = "fixed-partitions";
@@ -190,6 +206,8 @@
 &adc1 {
 	pinctrl-0 = <&adc1_inp6_pf12>; /* Arduino A5 */
 	pinctrl-names = "default";
+	st,adc-clock-source = <ASYNC>;
+	st,adc-prescaler = <6>;
 	status = "okay";
 };
 
@@ -200,7 +218,7 @@
 	status = "okay";
 };
 
-&can1 {
+&fdcan1 {
 	clocks = <&rcc STM32_CLOCK_BUS_APB1_2 0x00000200>,
 		<&rcc STM32_SRC_PLL1_Q FDCAN_SEL(1)>;
 	pinctrl-0 = <&fdcan1_rx_pa11 &fdcan1_tx_pa12>;
@@ -242,6 +260,12 @@
 			   };
 		};
 	};
+};
+
+zephyr_udc0: &usb {
+	pinctrl-0 = <&usb_dm_pa11 &usb_dp_pa12>;
+	pinctrl-names = "default";
+	status = "okay";
 };
 
 &die_temp {

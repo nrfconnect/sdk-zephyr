@@ -72,7 +72,7 @@ static inline void ieee802154_acknowledge(struct net_if *iface, struct ieee80215
 {
 	struct net_pkt *pkt;
 
-	if (ieee802154_get_hw_capabilities(iface) & IEEE802154_HW_RX_TX_ACK) {
+	if (ieee802154_radio_get_hw_capabilities(iface) & IEEE802154_HW_RX_TX_ACK) {
 		return;
 	}
 
@@ -87,7 +87,8 @@ static inline void ieee802154_acknowledge(struct net_if *iface, struct ieee80215
 	}
 
 	if (ieee802154_create_ack_frame(iface, pkt, mpdu->mhr.fs->sequence)) {
-		ieee802154_tx(iface, IEEE802154_TX_MODE_DIRECT, pkt, pkt->buffer);
+		/* ACK frames must not use the CSMA/CA procedure, see section 6.2.5.1. */
+		ieee802154_radio_tx(iface, IEEE802154_TX_MODE_DIRECT, pkt, pkt->buffer);
 	}
 
 	net_pkt_unref(pkt);
@@ -100,7 +101,7 @@ inline bool ieee802154_prepare_for_ack(struct net_if *iface, struct net_pkt *pkt
 {
 	bool ack_required = ieee802154_is_ar_flag_set(frag);
 
-	if (ieee802154_get_hw_capabilities(iface) & IEEE802154_HW_TX_RX_ACK) {
+	if (ieee802154_radio_get_hw_capabilities(iface) & IEEE802154_HW_TX_RX_ACK) {
 		return ack_required;
 	}
 
@@ -109,8 +110,9 @@ inline bool ieee802154_prepare_for_ack(struct net_if *iface, struct net_pkt *pkt
 		struct ieee802154_context *ctx = net_if_l2_data(iface);
 
 		ctx->ack_seq = fs->sequence;
-		ctx->ack_received = false;
-		k_sem_init(&ctx->ack_lock, 0, K_SEM_MAX_LIMIT);
+		if (k_sem_count_get(&ctx->ack_lock) == 1U) {
+			k_sem_take(&ctx->ack_lock, K_NO_WAIT);
+		}
 
 		return true;
 	}
@@ -122,7 +124,7 @@ enum net_verdict ieee802154_handle_ack(struct net_if *iface, struct net_pkt *pkt
 {
 	struct ieee802154_context *ctx = net_if_l2_data(iface);
 
-	if (ieee802154_get_hw_capabilities(iface) & IEEE802154_HW_TX_RX_ACK) {
+	if (ieee802154_radio_get_hw_capabilities(iface) & IEEE802154_HW_TX_RX_ACK) {
 		__ASSERT_NO_MSG(ctx->ack_seq == 0U);
 		/* TODO: Release packet in L2 as we're taking ownership. */
 		return NET_OK;
@@ -138,7 +140,6 @@ enum net_verdict ieee802154_handle_ack(struct net_if *iface, struct net_pkt *pkt
 			return NET_CONTINUE;
 		}
 
-		ctx->ack_received = true;
 		k_sem_give(&ctx->ack_lock);
 
 		/* TODO: Release packet in L2 as we're taking ownership. */
@@ -151,22 +152,26 @@ enum net_verdict ieee802154_handle_ack(struct net_if *iface, struct net_pkt *pkt
 inline int ieee802154_wait_for_ack(struct net_if *iface, bool ack_required)
 {
 	struct ieee802154_context *ctx = net_if_l2_data(iface);
+	int ret;
 
-	if (!ack_required || (ieee802154_get_hw_capabilities(iface) & IEEE802154_HW_TX_RX_ACK)) {
+	if (!ack_required ||
+	    (ieee802154_radio_get_hw_capabilities(iface) & IEEE802154_HW_TX_RX_ACK)) {
 		__ASSERT_NO_MSG(ctx->ack_seq == 0U);
 		return 0;
 	}
 
-	if (k_sem_take(&ctx->ack_lock, K_MSEC(10)) == 0) {
-		/* We reinit the semaphore in case ieee802154_handle_ack()
-		 * got called multiple times.
-		 */
-		k_sem_init(&ctx->ack_lock, 0, K_SEM_MAX_LIMIT);
+	ret = k_sem_take(&ctx->ack_lock, K_MSEC(10));
+	if (ret == 0) {
+		/* no-op */
+	} else if (ret == -EAGAIN) {
+		ret = -ETIME;
+	} else {
+		NET_ERR("Error while waiting for ACK.");
+		ret = -EFAULT;
 	}
 
 	ctx->ack_seq = 0U;
-
-	return ctx->ack_received ? 0 : -ETIME;
+	return ret;
 }
 
 int ieee802154_radio_send(struct net_if *iface, struct net_pkt *pkt, struct net_buf *frag)
@@ -177,17 +182,18 @@ int ieee802154_radio_send(struct net_if *iface, struct net_pkt *pkt, struct net_
 
 	NET_DBG("frag %p", frag);
 
-	if (ieee802154_get_hw_capabilities(iface) & IEEE802154_HW_RETRANSMISSION) {
+	if (ieee802154_radio_get_hw_capabilities(iface) & IEEE802154_HW_RETRANSMISSION) {
 		/* A driver that claims retransmission capability must also be able
 		 * to wait for ACK frames otherwise it could not decide whether or
 		 * not retransmission is required in a standard conforming way.
 		 */
-		__ASSERT_NO_MSG(ieee802154_get_hw_capabilities(iface) & IEEE802154_HW_TX_RX_ACK);
+		__ASSERT_NO_MSG(ieee802154_radio_get_hw_capabilities(iface) &
+				IEEE802154_HW_TX_RX_ACK);
 		remaining_attempts = 1;
 	}
 
 	hw_csma = IS_ENABLED(CONFIG_NET_L2_IEEE802154_RADIO_CSMA_CA) &&
-		  ieee802154_get_hw_capabilities(iface) & IEEE802154_HW_CSMA;
+		  ieee802154_radio_get_hw_capabilities(iface) & IEEE802154_HW_CSMA;
 
 	/* Media access (CSMA, ALOHA, ...) and retransmission, see section 6.7.4.4. */
 	while (remaining_attempts) {
@@ -210,7 +216,7 @@ int ieee802154_radio_send(struct net_if *iface, struct net_pkt *pkt, struct net_
 		 *  - retransmission on ACK timeout in case the driver has
 		 *    IEEE802154_HW_RETRANSMISSION capability.
 		 */
-		ret = ieee802154_tx(
+		ret = ieee802154_radio_tx(
 			iface, hw_csma ? IEEE802154_TX_MODE_CSMA_CA : IEEE802154_TX_MODE_DIRECT,
 			pkt, frag);
 		if (ret) {
@@ -241,7 +247,7 @@ int ieee802154_radio_send(struct net_if *iface, struct net_pkt *pkt, struct net_
 	return -EIO;
 }
 
-static inline void swap_and_set_pkt_ll_addr(struct net_linkaddr *addr, bool comp,
+static inline void swap_and_set_pkt_ll_addr(struct net_linkaddr *addr, bool has_pan_id,
 					    enum ieee802154_addressing_mode mode,
 					    struct ieee802154_address_field *ll)
 {
@@ -250,22 +256,13 @@ static inline void swap_and_set_pkt_ll_addr(struct net_linkaddr *addr, bool comp
 	switch (mode) {
 	case IEEE802154_ADDR_MODE_EXTENDED:
 		addr->len = IEEE802154_EXT_ADDR_LENGTH;
-
-		if (comp) {
-			addr->addr = ll->comp.addr.ext_addr;
-		} else {
-			addr->addr = ll->plain.addr.ext_addr;
-		}
+		addr->addr = has_pan_id ? ll->plain.addr.ext_addr : ll->comp.addr.ext_addr;
 		break;
 
 	case IEEE802154_ADDR_MODE_SHORT:
 		addr->len = IEEE802154_SHORT_ADDR_LENGTH;
-
-		if (comp) {
-			addr->addr = (uint8_t *)&ll->comp.addr.short_addr;
-		} else {
-			addr->addr = (uint8_t *)&ll->plain.addr.short_addr;
-		}
+		addr->addr = (uint8_t *)(has_pan_id ? &ll->plain.addr.short_addr
+						    : &ll->comp.addr.short_addr);
 		break;
 
 	case IEEE802154_ADDR_MODE_NONE:
@@ -367,7 +364,7 @@ static enum net_verdict ieee802154_recv(struct net_if *iface, struct net_pkt *pk
 	struct ieee802154_fcf_seq *fs;
 	struct ieee802154_mpdu mpdu;
 	bool is_broadcast;
-	size_t hdr_len;
+	size_t ll_hdr_len;
 
 	/* The IEEE 802.15.4 stack assumes that drivers provide a single-fragment package. */
 	__ASSERT_NO_MSG(pkt->buffer && pkt->buffer->frags == NULL);
@@ -441,18 +438,18 @@ static enum net_verdict ieee802154_recv(struct net_if *iface, struct net_pkt *pk
 	 * packet handling as it will mangle the package header to comply with upper
 	 * network layers' (POSIX) requirement to represent network addresses in big endian.
 	 */
-	swap_and_set_pkt_ll_addr(net_pkt_lladdr_src(pkt), fs->fc.pan_id_comp, fs->fc.src_addr_mode,
-				 mpdu.mhr.src_addr);
+	swap_and_set_pkt_ll_addr(net_pkt_lladdr_src(pkt), !fs->fc.pan_id_comp,
+				 fs->fc.src_addr_mode, mpdu.mhr.src_addr);
 
-	swap_and_set_pkt_ll_addr(net_pkt_lladdr_dst(pkt), false, fs->fc.dst_addr_mode,
+	swap_and_set_pkt_ll_addr(net_pkt_lladdr_dst(pkt), true, fs->fc.dst_addr_mode,
 				 mpdu.mhr.dst_addr);
 
 	net_pkt_set_ll_proto_type(pkt, ETH_P_IEEE802154);
 
 	pkt_hexdump(RX_PKT_TITLE " (with ll)", pkt, true);
 
-	hdr_len = (uint8_t *)mpdu.payload - net_pkt_data(pkt);
-	net_buf_pull(pkt->buffer, hdr_len);
+	ll_hdr_len = (uint8_t *)mpdu.payload - net_pkt_data(pkt);
+	net_buf_pull(pkt->buffer, ll_hdr_len);
 
 #ifdef CONFIG_NET_6LO
 	verdict = ieee802154_6lo_decode_pkt(iface, pkt);
@@ -476,11 +473,11 @@ static int ieee802154_send(struct net_if *iface, struct net_pkt *pkt)
 	struct ieee802154_context *ctx = net_if_l2_data(iface);
 	uint8_t ll_hdr_len = 0, authtag_len = 0;
 	static struct net_buf *frame_buf;
-	static struct net_buf *buf;
+	static struct net_buf *pkt_buf;
 	bool send_raw = false;
 	int len;
 #ifdef CONFIG_NET_L2_IEEE802154_FRAGMENT
-	struct ieee802154_6lo_fragment_ctx f_ctx;
+	struct ieee802154_6lo_fragment_ctx frag_ctx;
 	int requires_fragmentation = 0;
 #endif
 
@@ -523,7 +520,7 @@ static int ieee802154_send(struct net_if *iface, struct net_pkt *pkt)
 #ifdef CONFIG_NET_6LO
 #ifdef CONFIG_NET_L2_IEEE802154_FRAGMENT
 		requires_fragmentation =
-			ieee802154_6lo_encode_pkt(iface, pkt, &f_ctx, ll_hdr_len, authtag_len);
+			ieee802154_6lo_encode_pkt(iface, pkt, &frag_ctx, ll_hdr_len, authtag_len);
 		if (requires_fragmentation < 0) {
 			return requires_fragmentation;
 		}
@@ -536,8 +533,8 @@ static int ieee802154_send(struct net_if *iface, struct net_pkt *pkt)
 	net_capture_pkt(iface, pkt);
 
 	len = 0;
-	buf = pkt->buffer;
-	while (buf) {
+	pkt_buf = pkt->buffer;
+	while (pkt_buf) {
 		int ret;
 
 		/* Reinitializing frame_buf */
@@ -546,18 +543,18 @@ static int ieee802154_send(struct net_if *iface, struct net_pkt *pkt)
 
 #ifdef CONFIG_NET_L2_IEEE802154_FRAGMENT
 		if (requires_fragmentation) {
-			buf = ieee802154_6lo_fragment(&f_ctx, frame_buf, true);
+			pkt_buf = ieee802154_6lo_fragment(&frag_ctx, frame_buf, true);
 		} else {
-			net_buf_add_mem(frame_buf, buf->data, buf->len);
-			buf = buf->frags;
+			net_buf_add_mem(frame_buf, pkt_buf->data, pkt_buf->len);
+			pkt_buf = pkt_buf->frags;
 		}
 #else
-		if (ll_hdr_len + buf->len + authtag_len > IEEE802154_MTU) {
-			NET_ERR("Frame too long: %d", buf->len);
+		if (ll_hdr_len + pkt_buf->len + authtag_len > IEEE802154_MTU) {
+			NET_ERR("Frame too long: %d", pkt_buf->len);
 			return -EINVAL;
 		}
-		net_buf_add_mem(frame_buf, buf->data, buf->len);
-		buf = buf->frags;
+		net_buf_add_mem(frame_buf, pkt_buf->data, pkt_buf->len);
+		pkt_buf = pkt_buf->frags;
 #endif /* CONFIG_NET_L2_IEEE802154_FRAGMENT */
 
 		__ASSERT_NO_MSG(authtag_len <= net_buf_tailroom(frame_buf));
@@ -598,10 +595,10 @@ static int ieee802154_enable(struct net_if *iface, bool state)
 	k_sem_give(&ctx->ctx_lock);
 
 	if (state) {
-		return ieee802154_start(iface);
+		return ieee802154_radio_start(iface);
 	}
 
-	return ieee802154_stop(iface);
+	return ieee802154_radio_stop(iface);
 }
 
 static enum net_l2_flags ieee802154_flags(struct net_if *iface)
@@ -625,6 +622,7 @@ void ieee802154_init(struct net_if *iface)
 	NET_DBG("Initializing IEEE 802.15.4 stack on iface %p", iface);
 
 	k_sem_init(&ctx->ctx_lock, 1, 1);
+	k_sem_init(&ctx->ack_lock, 0, 1);
 
 	/* no need to lock the context here as it has
 	 * not been published yet.
@@ -638,11 +636,13 @@ void ieee802154_init(struct net_if *iface)
 
 	ctx->channel = IEEE802154_NO_CHANNEL;
 	ctx->flags = NET_L2_MULTICAST;
-	if (ieee802154_get_hw_capabilities(iface) & IEEE802154_HW_PROMISC) {
+	if (ieee802154_radio_get_hw_capabilities(iface) & IEEE802154_HW_PROMISC) {
 		ctx->flags |= NET_L2_PROMISC_MODE;
 	}
 
+	ctx->pan_id = IEEE802154_PAN_ID_NOT_ASSOCIATED;
 	ctx->short_addr = IEEE802154_SHORT_ADDRESS_NOT_ASSOCIATED;
+	ctx->coord_short_addr = IEEE802154_SHORT_ADDRESS_NOT_ASSOCIATED;
 	sys_memcpy_swap(ctx->ext_addr, eui64_be, IEEE802154_EXT_ADDR_LENGTH);
 
 	/* We switch to a link address store that we
@@ -669,9 +669,9 @@ void ieee802154_init(struct net_if *iface)
 #endif
 
 	sys_memcpy_swap(ctx->ext_addr, eui64_be, IEEE802154_EXT_ADDR_LENGTH);
-	ieee802154_filter_ieee_addr(iface, ctx->ext_addr);
+	ieee802154_radio_filter_ieee_addr(iface, ctx->ext_addr);
 
-	if (!ieee802154_set_tx_power(iface, tx_power)) {
+	if (!ieee802154_radio_set_tx_power(iface, tx_power)) {
 		ctx->tx_power = tx_power;
 	}
 }

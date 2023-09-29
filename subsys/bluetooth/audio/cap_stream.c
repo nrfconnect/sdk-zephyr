@@ -1,10 +1,11 @@
 /*
- * Copyright (c) 2022 Nordic Semiconductor ASA
+ * Copyright (c) 2022-2023 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <zephyr/bluetooth/audio/cap.h>
+#include <zephyr/sys/check.h>
 
 #include "cap_internal.h"
 
@@ -14,7 +15,7 @@ LOG_MODULE_REGISTER(bt_cap_stream, CONFIG_BT_CAP_STREAM_LOG_LEVEL);
 
 #if defined(CONFIG_BT_BAP_UNICAST)
 static void cap_stream_configured_cb(struct bt_bap_stream *bap_stream,
-				     const struct bt_codec_qos_pref *pref)
+				     const struct bt_audio_codec_qos_pref *pref)
 {
 	struct bt_cap_stream *cap_stream = CONTAINER_OF(bap_stream,
 							struct bt_cap_stream,
@@ -129,7 +130,7 @@ static void cap_stream_started_cb(struct bt_bap_stream *bap_stream)
 
 	LOG_DBG("%p", cap_stream);
 
-	if (IS_ENABLED(CONFIG_BT_CAP_INITIATOR)) {
+	if (IS_ENABLED(CONFIG_BT_CAP_INITIATOR) && IS_ENABLED(CONFIG_BT_BAP_UNICAST)) {
 		bt_cap_initiator_started(cap_stream);
 	}
 
@@ -210,11 +211,38 @@ void bt_cap_stream_ops_register(struct bt_cap_stream *stream,
 {
 	stream->ops = ops;
 
-	/* For the broadcast sink role, this is the only way we can ensure that
-	 * the BAP callbacks are registered, as there are no CAP broadcast sink
-	 * procedures that we can use to register the callbacks in other ways.
+	/* CAP basically just forwards the BAP callbacks after doing what it (CAP) needs to do,
+	 * so we can just always register the BAP callbacks here
+	 *
+	 * It is, however, only the CAP Initiator Unicast that depend on the callbacks being set in
+	 * order to work, so for the CAP Initiator Unicast we need an additional register to ensure
+	 * correctness.
 	 */
-	if (IS_ENABLED(CONFIG_BT_BAP_BROADCAST_SINK)) {
-		bt_cap_stream_ops_register_bap(stream);
-	}
+
+	bt_cap_stream_ops_register_bap(stream);
 }
+
+#if defined(CONFIG_BT_AUDIO_TX)
+int bt_cap_stream_send(struct bt_cap_stream *stream, struct net_buf *buf, uint16_t seq_num,
+		       uint32_t ts)
+{
+	CHECKIF(stream == NULL) {
+		LOG_DBG("stream is NULL");
+
+		return -EINVAL;
+	}
+
+	return bt_bap_stream_send(&stream->bap_stream, buf, seq_num, ts);
+}
+
+int bt_cap_stream_get_tx_sync(struct bt_cap_stream *stream, struct bt_iso_tx_info *info)
+{
+	CHECKIF(stream == NULL) {
+		LOG_DBG("stream is NULL");
+
+		return -EINVAL;
+	}
+
+	return bt_bap_stream_get_tx_sync(&stream->bap_stream, info);
+}
+#endif /* CONFIG_BT_AUDIO_TX */

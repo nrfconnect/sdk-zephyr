@@ -1381,9 +1381,9 @@ static void eth_rx(struct gmac_queue *queue)
 		 * the used VLAN tag.
 		 */
 		{
-			struct net_eth_hdr *hdr = NET_ETH_HDR(rx_frame);
+			struct net_eth_hdr *p_hdr = NET_ETH_HDR(rx_frame);
 
-			if (ntohs(hdr->type) == NET_ETH_PTYPE_VLAN) {
+			if (ntohs(p_hdr->type) == NET_ETH_PTYPE_VLAN) {
 				struct net_eth_vlan_hdr *hdr_vlan =
 					(struct net_eth_vlan_hdr *)
 					NET_ETH_HDR(rx_frame);
@@ -2222,11 +2222,7 @@ static const struct eth_sam_dev_cfg eth0_config = {
 	.clock_cfg = SAM_DT_INST_CLOCK_PMC_CFG(0),
 #endif
 	.config_func = eth0_irq_config,
-#if DT_NODE_EXISTS(DT_INST_CHILD(0, phy))
-	.phy_dev = DEVICE_DT_GET(DT_INST_CHILD(0, phy))
-#else
-#error "No PHY driver specified"
-#endif
+	.phy_dev = DEVICE_DT_GET(DT_INST_PHANDLE(0, phy_handle))
 };
 
 static struct eth_sam_dev_data eth0_data = {

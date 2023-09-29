@@ -14,6 +14,7 @@
 #include <stm32_ll_tim.h>
 #include <zephyr/drivers/pwm.h>
 #include <zephyr/drivers/pinctrl.h>
+#include <zephyr/drivers/reset.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/init.h>
@@ -53,6 +54,8 @@ struct pwm_stm32_capture_data {
 struct pwm_stm32_data {
 	/** Timer clock (Hz). */
 	uint32_t tim_clk;
+	/* Reset controller device configuration */
+	const struct reset_dt_spec reset;
 #ifdef CONFIG_PWM_CAPTURE
 	struct pwm_stm32_capture_data capture;
 #endif /* CONFIG_PWM_CAPTURE */
@@ -172,12 +175,20 @@ static int get_tim_clk(const struct stm32_pclken *pclken, uint32_t *tim_clk)
 	}
 #else
 	if (pclken->bus == STM32_CLOCK_BUS_APB1) {
+#if defined(CONFIG_SOC_SERIES_STM32MP1X)
+		apb_psc = (uint32_t)(READ_BIT(RCC->APB1DIVR, RCC_APB1DIVR_APB1DIV));
+#else
 		apb_psc = STM32_APB1_PRESCALER;
+#endif
 	}
 #if !defined(CONFIG_SOC_SERIES_STM32C0X) && !defined(CONFIG_SOC_SERIES_STM32F0X) &&                \
 	!defined(CONFIG_SOC_SERIES_STM32G0X)
 	else {
+#if defined(CONFIG_SOC_SERIES_STM32MP1X)
+		apb_psc = (uint32_t)(READ_BIT(RCC->APB2DIVR, RCC_APB2DIVR_APB2DIV));
+#else
 		apb_psc = STM32_APB2_PRESCALER;
+#endif
 	}
 #endif
 #endif
@@ -678,6 +689,9 @@ static int pwm_stm32_init(const struct device *dev)
 		return r;
 	}
 
+	/* Reset timer to default state using RCC */
+	(void)reset_line_toggle_dt(&data->reset);
+
 	/* configure pinmux */
 	r = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
 	if (r < 0) {
@@ -714,27 +728,29 @@ static int pwm_stm32_init(const struct device *dev)
 	return 0;
 }
 
+#define PWM(index) DT_INST_PARENT(index)
+
 #ifdef CONFIG_PWM_CAPTURE
 #define IRQ_CONNECT_AND_ENABLE_BY_NAME(index, name)				\
 {										\
-	IRQ_CONNECT(DT_IRQ_BY_NAME(DT_INST_PARENT(index), name, irq),		\
-			DT_IRQ_BY_NAME(DT_INST_PARENT(index), name, priority),	\
+	IRQ_CONNECT(DT_IRQ_BY_NAME(PWM(index), name, irq),			\
+			DT_IRQ_BY_NAME(PWM(index), name, priority),		\
 			pwm_stm32_isr, DEVICE_DT_INST_GET(index), 0);		\
-	irq_enable(DT_IRQ_BY_NAME(DT_INST_PARENT(index), name, irq));		\
+	irq_enable(DT_IRQ_BY_NAME(PWM(index), name, irq));			\
 }
 
 #define IRQ_CONNECT_AND_ENABLE_DEFAULT(index)					\
 {										\
-	IRQ_CONNECT(DT_IRQN(DT_INST_PARENT(index)),				\
-			DT_IRQ(DT_INST_PARENT(index), priority),		\
+	IRQ_CONNECT(DT_IRQN(PWM(index)),					\
+			DT_IRQ(PWM(index), priority),				\
 			pwm_stm32_isr, DEVICE_DT_INST_GET(index), 0);		\
-	irq_enable(DT_IRQN(DT_INST_PARENT(index)));				\
+	irq_enable(DT_IRQN(PWM(index)));					\
 }
 
 #define IRQ_CONFIG_FUNC(index)                                                  \
 static void pwm_stm32_irq_config_func_##index(const struct device *dev)		\
 {										\
-	COND_CODE_1(DT_IRQ_HAS_NAME(DT_INST_PARENT(index), cc),			\
+	COND_CODE_1(DT_IRQ_HAS_NAME(PWM(index), cc),				\
 		(IRQ_CONNECT_AND_ENABLE_BY_NAME(index, cc)),			\
 		(IRQ_CONNECT_AND_ENABLE_DEFAULT(index))				\
 	);									\
@@ -748,20 +764,24 @@ static void pwm_stm32_irq_config_func_##index(const struct device *dev)		\
 
 #define DT_INST_CLK(index, inst)                                               \
 	{                                                                      \
-		.bus = DT_CLOCKS_CELL(DT_INST_PARENT(index), bus),             \
-		.enr = DT_CLOCKS_CELL(DT_INST_PARENT(index), bits)             \
+		.bus = DT_CLOCKS_CELL(PWM(index), bus),				\
+		.enr = DT_CLOCKS_CELL(PWM(index), bits)				\
 	}
 
+
 #define PWM_DEVICE_INIT(index)                                                 \
-	static struct pwm_stm32_data pwm_stm32_data_##index;                   \
+	static struct pwm_stm32_data pwm_stm32_data_##index = {		       \
+		.reset = RESET_DT_SPEC_GET(PWM(index)),			       \
+	};								       \
+									       \
 	IRQ_CONFIG_FUNC(index)						       \
 									       \
 	PINCTRL_DT_INST_DEFINE(index);					       \
 									       \
 	static const struct pwm_stm32_config pwm_stm32_config_##index = {      \
-		.timer = (TIM_TypeDef *)DT_REG_ADDR(DT_INST_PARENT(index)),    \
-		.prescaler = DT_PROP(DT_INST_PARENT(index), st_prescaler),     \
-		.countermode = DT_PROP(DT_INST_PARENT(index), st_countermode), \
+		.timer = (TIM_TypeDef *)DT_REG_ADDR(PWM(index)),	       \
+		.prescaler = DT_PROP(PWM(index), st_prescaler),		       \
+		.countermode = DT_PROP(PWM(index), st_countermode),	       \
 		.pclken = DT_INST_CLK(index, timer),                           \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(index),		       \
 		CAPTURE_INIT(index)					       \

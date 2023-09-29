@@ -65,7 +65,6 @@ static int ntc_thermistor_channel_get(const struct device *dev, enum sensor_chan
 		temp = ntc_get_temp_mc(&cfg->ntc_cfg.type, ohm);
 		val->val1 = temp / 1000;
 		val->val2 = (temp % 1000) * 1000;
-		LOG_INF("ntc temp says %u", val->val1);
 		break;
 	default:
 		return -ENOTSUP;
@@ -83,7 +82,7 @@ static int ntc_thermistor_init(const struct device *dev)
 	const struct ntc_thermistor_config *cfg = dev->config;
 	int err;
 
-	if (!device_is_ready(cfg->adc_channel.dev)) {
+	if (!adc_is_ready_dt(&cfg->adc_channel)) {
 		LOG_ERR("ADC controller device is not ready\n");
 		return -ENODEV;
 	}

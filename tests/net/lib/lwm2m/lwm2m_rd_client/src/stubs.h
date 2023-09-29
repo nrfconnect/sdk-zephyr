@@ -25,6 +25,8 @@ static const uint16_t RD_CLIENT_MAX_SERVICE_ITERATIONS = UINT16_MAX;
 DECLARE_FAKE_VALUE_FUNC(uint8_t, coap_header_get_code, const struct coap_packet *);
 uint8_t coap_header_get_code_fake_created(const struct coap_packet *cpkt);
 uint8_t coap_header_get_code_fake_deleted(const struct coap_packet *cpkt);
+uint8_t coap_header_get_code_fake_changed(const struct coap_packet *cpkt);
+uint8_t coap_header_get_code_fake_bad_request(const struct coap_packet *cpkt);
 DECLARE_FAKE_VALUE_FUNC(int, coap_append_option_int, struct coap_packet *, uint16_t, unsigned int);
 DECLARE_FAKE_VALUE_FUNC(int, coap_packet_append_option, struct coap_packet *, uint16_t,
 			const uint8_t *, uint16_t);
@@ -46,11 +48,15 @@ DECLARE_FAKE_VALUE_FUNC(int, lwm2m_get_u16, const struct lwm2m_obj_path *, uint1
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_get_bool, const struct lwm2m_obj_path *, bool *);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_set_u32, const struct lwm2m_obj_path *, uint32_t);
 int lwm2m_get_bool_fake_default(const struct lwm2m_obj_path *path, bool *value);
+int lwm2m_get_bool_fake_true(const struct lwm2m_obj_path *path, bool *value);
+extern uint32_t get_u32_val;
+int lwm2m_get_u32_val(const struct lwm2m_obj_path *path, uint32_t *val);
 
 /* subsys/net/lib/lwm2m/lwm2m_engine.h */
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_socket_start, struct lwm2m_ctx *);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_socket_close, struct lwm2m_ctx *);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_close_socket, struct lwm2m_ctx *);
+DECLARE_FAKE_VALUE_FUNC(int, lwm2m_socket_suspend, struct lwm2m_ctx *);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_security_inst_id_to_index, uint16_t);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_engine_connection_resume, struct lwm2m_ctx *);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_push_queued_buffers, struct lwm2m_ctx *);
@@ -60,8 +66,6 @@ DECLARE_FAKE_VALUE_FUNC(char *, lwm2m_sprint_ip_addr, const struct sockaddr *);
 char *lwm2m_sprint_ip_addr_fake_default(const struct sockaddr *addr);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_server_short_id_to_inst, uint16_t);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_security_index_to_inst_id, int);
-DECLARE_FAKE_VALUE_FUNC(int, lwm2m_engine_add_service, k_work_handler_t, uint32_t);
-int lwm2m_engine_add_service_fake_default(k_work_handler_t service, uint32_t period_ms);
 void wait_for_service(uint16_t cycles);
 void test_lwm2m_engine_start_service(void);
 void test_lwm2m_engine_stop_service(void);
@@ -106,7 +110,6 @@ DECLARE_FAKE_VALUE_FUNC(int, do_register_op_link_format, struct lwm2m_message *)
 		FUNC(lwm2m_sprint_ip_addr)                                                         \
 		FUNC(lwm2m_server_short_id_to_inst)                                                \
 		FUNC(lwm2m_security_index_to_inst_id)                                              \
-		FUNC(lwm2m_engine_add_service)                                                     \
 		FUNC(lwm2m_init_message)                                                           \
 		FUNC(lwm2m_reset_message)                                                          \
 		FUNC(lwm2m_send_message_async)                                                     \

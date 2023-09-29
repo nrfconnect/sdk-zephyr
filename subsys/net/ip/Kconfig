@@ -72,7 +72,7 @@ config NET_RAW_MODE
 
 if !NET_RAW_MODE
 
-choice
+choice NET_QEMU_NETWORKING
 	prompt "Qemu networking"
 	default NET_QEMU_PPP if NET_PPP
 	default NET_QEMU_SLIP
@@ -462,6 +462,14 @@ config NET_TCP_FAST_RETRANSMIT
 	  In that case a retransmission is triggerd to avoid having to wait for
 	  the retransmit timer to elapse.
 
+config NET_TCP_CONGESTION_AVOIDANCE
+	bool "Implement a congestion avoidance algorithm in TCP"
+	depends on NET_TCP
+	default y
+	help
+	  To avoid overstressing a link reduce the transmission rate as soon as
+	  packets are starting to drop.
+
 config NET_TCP_MAX_SEND_WINDOW_SIZE
 	int "Maximum sending window size to use"
 	depends on NET_TCP
@@ -514,6 +522,7 @@ config NET_TCP_PKT_ALLOC_TIMEOUT
 
 config NET_TCP_WORKQ_STACK_SIZE
 	int "TCP work queue thread stack size"
+	default 1200 if X86
 	default 1024
 	depends on NET_TCP
 	help
@@ -530,6 +539,22 @@ config NET_TCP_ISN_RFC6528
 	  Implement Initial Sequence Number calculation as described in
 	  RFC 6528 chapter 3. https://tools.ietf.org/html/rfc6528
 	  If this is not set, then sys_rand32_get() is used for ISN value.
+
+config NET_TCP_WORKER_PRIO
+	int "Priority of the TCP work queue"
+	default 2
+	depends on NET_TCP
+	help
+	  Set the priority of the the TCP worker queue, that handles all
+	  transmission and maintenance within the TCP stack.
+	  Value 0 = highest priortity.
+	  When CONFIG_NET_TC_THREAD_COOPERATIVE = y, lowest priority is
+	  CONFIG_NUM_COOP_PRIORITIES-1 else lowest priority is
+	  CONFIG_NUM_PREEMPT_PRIORITIES-1.
+	  Make sure the priority is lower than lower layer TX threads to
+	  avoid the TCP stack consume all net_bufs before transferring
+	  execution to the lower layer network stack, with a high risk of
+	  running out of net_bufs.
 
 config NET_TEST_PROTOCOL
 	bool "JSON based test protocol (UDP)"
@@ -834,14 +859,34 @@ config NET_DEFAULT_IF_PPP
 	bool "PPP interface"
 	depends on NET_L2_PPP
 
+config NET_DEFAULT_IF_WIFI
+	bool "WiFi interface"
+	depends on NET_L2_ETHERNET
+
 endchoice
+
+config NET_INTERFACE_NAME
+	bool "Allow setting a name to a network interface"
+	default y
+	help
+	  Allow application to set a name to the network interface in order
+	  to simplify network interface management.
+
+config NET_INTERFACE_NAME_LEN
+	int "Network interface max name length"
+	default 8
+	range 1 15
+	depends on NET_INTERFACE_NAME
+	help
+	  Maximum length of the network interface name.
 
 config NET_PKT_TIMESTAMP
 	bool "Network packet timestamp support"
 	help
 	  Enable network packet timestamp support. This is needed for
 	  example in gPTP which needs to know how long it takes to send
-	  a network packet.
+	  a network packet or for timed radio protocols like IEEE 802.15.4
+	  CSL and TSCH.
 
 config NET_PKT_TIMESTAMP_THREAD
 	bool "Create TX timestamp thread"

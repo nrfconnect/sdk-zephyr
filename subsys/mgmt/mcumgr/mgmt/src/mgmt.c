@@ -1,10 +1,11 @@
 /*
  * Copyright (c) 2018-2021 mcumgr authors
- * Copyright (c) 2022 Nordic Semiconductor ASA
+ * Copyright (c) 2022-2023 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <assert.h>
 #include <zephyr/sys/slist.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/device.h>
@@ -68,6 +69,30 @@ mgmt_find_handler(uint16_t group_id, uint16_t command_id)
 	return &group->mg_handlers[command_id];
 }
 
+#if IS_ENABLED(CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL)
+smp_translate_error_fn mgmt_find_error_translation_function(uint16_t group_id)
+{
+	struct mgmt_group *group = NULL;
+	sys_snode_t *snp, *sns;
+
+	/* Find the group with the specified group ID. */
+	SYS_SLIST_FOR_EACH_NODE_SAFE(&mgmt_group_list, snp, sns) {
+		struct mgmt_group *loop_group =
+			CONTAINER_OF(snp, struct mgmt_group, node);
+		if (loop_group->mg_group_id == group_id) {
+			group = loop_group;
+			break;
+		}
+	}
+
+	if (group == NULL) {
+		return NULL;
+	}
+
+	return group->mg_translate_error;
+}
+#endif
+
 void
 mgmt_register_group(struct mgmt_group *group)
 {
@@ -86,7 +111,7 @@ void mgmt_callback_unregister(struct mgmt_callback *callback)
 }
 
 enum mgmt_cb_return mgmt_callback_notify(uint32_t event, void *data, size_t data_size,
-					 int32_t *ret_rc, uint16_t *ret_group)
+					 int32_t *err_rc, uint16_t *err_group)
 {
 	sys_snode_t *snp, *sns;
 	bool failed = false;
@@ -94,8 +119,8 @@ enum mgmt_cb_return mgmt_callback_notify(uint32_t event, void *data, size_t data
 	uint16_t group = MGMT_EVT_GET_GROUP(event);
 	enum mgmt_cb_return return_status = MGMT_CB_OK;
 
-	*ret_rc = MGMT_ERR_EOK;
-	*ret_group = 0;
+	*err_rc = MGMT_ERR_EOK;
+	*err_group = 0;
 
 	/*
 	 * Search through the linked list for entries that have registered for this event and
@@ -114,24 +139,24 @@ enum mgmt_cb_return mgmt_callback_notify(uint32_t event, void *data, size_t data
 		    (MGMT_EVT_GET_GROUP(loop_group->event_id) == group &&
 		     (MGMT_EVT_GET_ID(event) & MGMT_EVT_GET_ID(loop_group->event_id)) ==
 		     MGMT_EVT_GET_ID(event))) {
-			int32_t cached_rc = *ret_rc;
-			uint16_t cached_group = *ret_group;
+			int32_t cached_rc = *err_rc;
+			uint16_t cached_group = *err_group;
 			enum mgmt_cb_return status;
 
 			status = loop_group->callback(event, return_status, &cached_rc,
 						      &cached_group, &abort_more, data,
 						      data_size);
 
-			__ASSERT((status <= MGMT_CB_ERROR_RET),
+			__ASSERT((status <= MGMT_CB_ERROR_ERR),
 				 "Invalid status returned by MCUmgr handler: %d", status);
 
 			if (status != MGMT_CB_OK && failed == false) {
 				failed = true;
 				return_status = status;
-				*ret_rc = cached_rc;
+				*err_rc = cached_rc;
 
-				if (status == MGMT_CB_ERROR_RET) {
-					*ret_group = cached_group;
+				if (status == MGMT_CB_ERROR_ERR) {
+					*err_group = cached_group;
 				}
 			}
 
@@ -142,6 +167,28 @@ enum mgmt_cb_return mgmt_callback_notify(uint32_t event, void *data, size_t data
 	}
 
 	return return_status;
+}
+
+uint8_t mgmt_evt_get_index(uint32_t event)
+{
+	uint8_t index = 0;
+
+	event &= MGMT_EVT_OP_ID_ALL;
+	__ASSERT((event != 0), "Event cannot be 0.");
+
+	while (index < 16) {
+		if (event & 0x1) {
+			break;
+		}
+
+		++index;
+		event = event >> 1;
+	}
+
+	event = event >> 1;
+	__ASSERT((event == 0), "Event cannot contain multiple values.");
+
+	return index;
 }
 #endif
 

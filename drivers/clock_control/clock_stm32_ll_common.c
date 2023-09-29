@@ -17,6 +17,7 @@
 #include <zephyr/sys/__assert.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
 #include "clock_stm32_ll_common.h"
+#include "clock_stm32_ll_mco.h"
 #include "stm32_hsem.h"
 
 /* Macros to fill up prescaler values */
@@ -33,12 +34,6 @@
 #define fn_apb2_prescaler(v) LL_RCC_APB2_DIV_ ## v
 #define apb2_prescaler(v) fn_apb2_prescaler(v)
 #endif
-
-#define fn_mco1_prescaler(v) LL_RCC_MCO1_DIV_ ## v
-#define mco1_prescaler(v) fn_mco1_prescaler(v)
-
-#define fn_mco2_prescaler(v) LL_RCC_MCO2_DIV_ ## v
-#define mco2_prescaler(v) fn_mco2_prescaler(v)
 
 #if DT_NODE_HAS_PROP(DT_NODELABEL(rcc), ahb4_prescaler)
 #define RCC_CALC_FLASH_FREQ __LL_RCC_CALC_HCLK4_FREQ
@@ -138,6 +133,13 @@ static int enabled_clock(uint32_t src_clk)
 		}
 		break;
 #endif /* STM32_SRC_LSI */
+#if defined(STM32_SRC_HSI14)
+	case STM32_SRC_HSI14:
+		if (!IS_ENABLED(STM32_HSI14_ENABLED)) {
+			r = -ENOTSUP;
+		}
+		break;
+#endif /* STM32_SRC_HSI14 */
 #if defined(STM32_SRC_HSI48)
 	case STM32_SRC_HSI48:
 		if (!IS_ENABLED(STM32_HSI48_ENABLED)) {
@@ -472,27 +474,6 @@ static void stm32_clock_switch_to_hsi(void)
 	}
 }
 
-/*
- * MCO configure doesn't active requested clock source,
- * so please make sure the clock source was enabled.
- */
-static inline void stm32_clock_control_mco_init(void)
-{
-#ifndef CONFIG_CLOCK_STM32_MCO1_SRC_NOCLOCK
-#ifdef CONFIG_SOC_SERIES_STM32F1X
-	LL_RCC_ConfigMCO(MCO1_SOURCE);
-#else
-	LL_RCC_ConfigMCO(MCO1_SOURCE,
-			 mco1_prescaler(CONFIG_CLOCK_STM32_MCO1_DIV));
-#endif
-#endif /* CONFIG_CLOCK_STM32_MCO1_SRC_NOCLOCK */
-
-#ifndef CONFIG_CLOCK_STM32_MCO2_SRC_NOCLOCK
-	LL_RCC_ConfigMCO(MCO2_SOURCE,
-			 mco2_prescaler(CONFIG_CLOCK_STM32_MCO2_DIV));
-#endif /* CONFIG_CLOCK_STM32_MCO2_SRC_NOCLOCK */
-}
-
 __unused
 static void set_up_plls(void)
 {
@@ -688,6 +669,15 @@ static void set_up_fixed_clock_sources(void)
 		z_stm32_hsem_unlock(CFG_HW_RCC_SEMID);
 	}
 
+#if defined(STM32_HSI14_ENABLED)
+	/* For all series with HSI 14 clock support */
+	if (IS_ENABLED(STM32_HSI14_ENABLED)) {
+		LL_RCC_HSI14_Enable();
+		while (LL_RCC_HSI14_IsReady() != 1) {
+		}
+	}
+#endif /* STM32_HSI48_ENABLED */
+
 #if defined(STM32_HSI48_ENABLED)
 	/* For all series with HSI 48 clock support */
 	if (IS_ENABLED(STM32_HSI48_ENABLED)) {
@@ -825,6 +815,15 @@ int stm32_clock_control_init(const struct device *dev)
 #endif
 #if DT_NODE_HAS_PROP(DT_NODELABEL(rcc), ahb4_prescaler)
 	LL_RCC_SetAHB4Prescaler(ahb_prescaler(STM32_AHB4_PRESCALER));
+#endif
+#if DT_NODE_HAS_PROP(DT_NODELABEL(rcc), adc_prescaler)
+	LL_RCC_SetADCClockSource(adc_prescaler(STM32_ADC_PRESCALER));
+#endif
+#if DT_NODE_HAS_PROP(DT_NODELABEL(rcc), adc12_prescaler)
+	LL_RCC_SetADCClockSource(adc_prescaler(STM32_ADC12_PRESCALER));
+#endif
+#if DT_NODE_HAS_PROP(DT_NODELABEL(rcc), adc34_prescaler)
+	LL_RCC_SetADCClockSource(adc_prescaler(STM32_ADC34_PRESCALER));
 #endif
 
 	/* configure MCO1/MCO2 based on Kconfig */

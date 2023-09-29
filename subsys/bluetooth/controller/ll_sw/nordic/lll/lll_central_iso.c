@@ -155,6 +155,7 @@ static int prepare_cb(struct lll_prepare_param *p)
 	uint16_t lazy;
 	uint32_t ret;
 	uint8_t phy;
+	int err = 0;
 
 	DEBUG_RADIO_START_M(1);
 
@@ -311,20 +312,21 @@ static int prepare_cb(struct lll_prepare_param *p)
 
 		cis_lll->tx.ccm.counter = payload_count;
 
-		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_DC,
+		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_CIS,
 						 phy,
 						 RADIO_PKT_CONF_CTE_DISABLED);
 		radio_pkt_configure(RADIO_PKT_CONF_LENGTH_8BIT,
 				    (cis_lll->tx.max_pdu + PDU_MIC_SIZE),
 				    pkt_flags);
-		radio_pkt_tx_set(radio_ccm_tx_pkt_set(&cis_lll->tx.ccm,
+		radio_pkt_tx_set(radio_ccm_iso_tx_pkt_set(&cis_lll->tx.ccm,
+						      RADIO_PKT_CONF_PDU_TYPE_CIS,
 						      pdu_tx));
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
 	} else {
 		uint8_t pkt_flags;
 
-		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_DC,
+		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_CIS,
 						 phy,
 						 RADIO_PKT_CONF_CTE_DISABLED);
 		radio_pkt_configure(RADIO_PKT_CONF_LENGTH_8BIT,
@@ -375,21 +377,22 @@ static int prepare_cb(struct lll_prepare_param *p)
 	ARG_UNUSED(start_us);
 #endif /* !HAL_RADIO_GPIO_HAVE_PA_PIN */
 
-	if (false) {
-
 #if defined(CONFIG_BT_CTLR_XTAL_ADVANCED) && \
 	(EVENT_OVERHEAD_PREEMPT_US <= EVENT_OVERHEAD_PREEMPT_MIN_US)
+	uint32_t overhead;
+
+	overhead = lll_preempt_calc(ull, (TICKER_ID_CONN_ISO_BASE + cig_lll->handle),
+				    ticks_at_event);
 	/* check if preempt to start has changed */
-	} else if (lll_preempt_calc(ull,
-				    (TICKER_ID_CONN_ISO_BASE + cig_lll->handle),
-				    ticks_at_event)) {
-		radio_isr_set(lll_isr_abort, cig_lll);
+	if (overhead) {
+		LL_ASSERT_OVERHEAD(overhead);
+
+		radio_isr_set(isr_done, cis_lll);
 		radio_disable();
 
-		return -ECANCELED;
-#endif /* CONFIG_BT_CTLR_XTAL_ADVANCED */
-
+		err = -ECANCELED;
 	}
+#endif /* CONFIG_BT_CTLR_XTAL_ADVANCED */
 
 	/* Adjust the SN and NESN for skipped CIG events */
 	cis_handle = cis_handle_curr;
@@ -408,9 +411,29 @@ static int prepare_cb(struct lll_prepare_param *p)
 				/* sn and nesn are 1-bit, only Least Significant bit is needed */
 				cis_lll->sn += cis_lll->tx.bn * cis_lazy;
 				cis_lll->nesn += cis_lll->rx.bn * cis_lazy;
+
+				/* Adjust sn and nesn for canceled events */
+				if (err) {
+					/* Adjust sn when flushing Tx */
+					/* FIXME: When Flush Timeout is implemented */
+					if (cis_lll->tx.bn_curr <= cis_lll->tx.bn) {
+						lll_flush_tx(cis_lll);
+					}
+
+					/* Adjust nesn when flushing Rx */
+					/* FIXME: When Flush Timeout is implemented */
+					if (cis_lll->rx.bn_curr <= cis_lll->rx.bn) {
+						lll_flush_rx(cis_lll);
+					}
+				}
 			}
 		}
 	} while (cis_lll);
+
+	/* Return if prepare callback cancelled */
+	if (err) {
+		return err;
+	}
 
 	/* Prepare is done */
 	ret = lll_prepare_done(cig_lll);
@@ -484,23 +507,25 @@ static void isr_tx(void *param)
 
 		payload_count = (cis_lll->event_count * cis_lll->rx.bn) +
 				(cis_lll->rx.bn_curr - 1U);
+
 		cis_lll->rx.ccm.counter = payload_count;
 
-		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_DC,
+		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_CIS,
 						 cis_lll->rx.phy,
 						 RADIO_PKT_CONF_CTE_DISABLED);
 		radio_pkt_configure(RADIO_PKT_CONF_LENGTH_8BIT,
 				    (cis_lll->rx.max_pdu + PDU_MIC_SIZE),
 				    pkt_flags);
-		radio_pkt_rx_set(radio_ccm_rx_pkt_set(&cis_lll->rx.ccm,
-						      cis_lll->rx.phy,
-						      node_rx->pdu));
+		radio_pkt_rx_set(radio_ccm_iso_rx_pkt_set(&cis_lll->rx.ccm,
+							  cis_lll->rx.phy,
+							  RADIO_PKT_CONF_PDU_TYPE_CIS,
+							  node_rx->pdu));
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
 	} else {
 		uint8_t pkt_flags;
 
-		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_DC,
+		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_CIS,
 						 cis_lll->rx.phy,
 						 RADIO_PKT_CONF_CTE_DISABLED);
 		radio_pkt_configure(RADIO_PKT_CONF_LENGTH_8BIT,
@@ -555,7 +580,7 @@ static void isr_tx(void *param)
 
 	/* Schedule next subevent */
 	if (se_curr < cis_lll->nse) {
-		const struct lll_conn *conn_lll;
+		const struct lll_conn *evt_conn_lll;
 		uint16_t data_chan_id;
 		uint32_t subevent_us;
 		uint32_t start_us;
@@ -568,13 +593,13 @@ static void isr_tx(void *param)
 		LL_ASSERT(start_us == (subevent_us + 1U));
 
 		/* Get reference to ACL context */
-		conn_lll = ull_conn_lll_get(cis_lll->acl_handle);
+		evt_conn_lll = ull_conn_lll_get(cis_lll->acl_handle);
 
 		/* Calculate the radio channel to use for next subevent */
 		data_chan_id = lll_chan_id(cis_lll->access_addr);
 		next_chan_use = lll_chan_iso_subevent(data_chan_id,
-						      conn_lll->data_chan_map,
-						      conn_lll->data_chan_count,
+						      evt_conn_lll->data_chan_map,
+						      evt_conn_lll->data_chan_count,
 						      &data_chan_prn_s,
 						      &data_chan_remap_idx);
 	} else {
@@ -841,7 +866,7 @@ isr_rx_next_subevent:
 
 		/* Adjust nesn when flushing Rx */
 		/* FIXME: When Flush Timeout is implemented */
-		if (cis_lll->tx.bn_curr <= cis_lll->rx.bn) {
+		if (cis_lll->rx.bn_curr <= cis_lll->rx.bn) {
 			lll_flush_rx(cis_lll);
 		}
 
@@ -916,21 +941,21 @@ isr_rx_next_subevent:
 		bn = cis_lll->rx.bn_curr;
 		while (bn <= cis_lll->rx.bn) {
 			struct node_rx_iso_meta *iso_meta;
-			struct node_rx_pdu *node_rx;
+			struct node_rx_pdu *status_node_rx;
 
 			/* Ensure there is always one free for reception
 			 * of ISO PDU by the radio h/w DMA, hence peek
 			 * for two available ISO PDU when using one for
 			 * generating invalid ISO data.
 			 */
-			node_rx = ull_iso_pdu_rx_alloc_peek(2U);
-			if (!node_rx) {
+			status_node_rx = ull_iso_pdu_rx_alloc_peek(2U);
+			if (!status_node_rx) {
 				break;
 			}
 
-			node_rx->hdr.type = NODE_RX_TYPE_ISO_PDU;
-			node_rx->hdr.handle = cis_lll->handle;
-			iso_meta = &node_rx->hdr.rx_iso_meta;
+			status_node_rx->hdr.type = NODE_RX_TYPE_ISO_PDU;
+			status_node_rx->hdr.handle = cis_lll->handle;
+			iso_meta = &status_node_rx->hdr.rx_iso_meta;
 			iso_meta->payload_number = (cis_lll->event_count *
 						    cis_lll->rx.bn) + (bn - 1U);
 			iso_meta->timestamp =
@@ -941,7 +966,7 @@ isr_rx_next_subevent:
 			iso_meta->status = 1U;
 
 			ull_iso_pdu_rx_alloc();
-			iso_rx_put(node_rx->hdr.link, node_rx);
+			iso_rx_put(status_node_rx->hdr.link, status_node_rx);
 
 			bn++;
 		}
@@ -1071,19 +1096,20 @@ static void isr_prepare_subevent(void *param)
 
 		cis_lll->tx.ccm.counter = payload_count;
 
-		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_DC,
+		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_CIS,
 						 cis_lll->tx.phy,
 						 RADIO_PKT_CONF_CTE_DISABLED);
 		radio_pkt_configure(RADIO_PKT_CONF_LENGTH_8BIT,
 				    (cis_lll->tx.max_pdu + PDU_MIC_SIZE), pkt_flags);
-		radio_pkt_tx_set(radio_ccm_tx_pkt_set(&cis_lll->tx.ccm,
+		radio_pkt_tx_set(radio_ccm_iso_tx_pkt_set(&cis_lll->tx.ccm,
+						      RADIO_PKT_CONF_PDU_TYPE_CIS,
 						      pdu_tx));
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
 	} else {
 		uint8_t pkt_flags;
 
-		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_DC,
+		pkt_flags = RADIO_PKT_CONF_FLAGS(RADIO_PKT_CONF_PDU_TYPE_CIS,
 						 cis_lll->tx.phy,
 						 RADIO_PKT_CONF_CTE_DISABLED);
 		radio_pkt_configure(RADIO_PKT_CONF_LENGTH_8BIT,

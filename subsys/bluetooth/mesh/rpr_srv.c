@@ -237,9 +237,9 @@ static void scan_report_send(void)
 		bt_mesh_model_msg_init(&buf, RPR_OP_SCAN_REPORT);
 		net_buf_simple_add_u8(&buf, dev->rssi);
 		net_buf_simple_add_mem(&buf, dev->uuid, 16);
-		net_buf_simple_add_be16(&buf, dev->oob);
+		net_buf_simple_add_le16(&buf, dev->oob);
 		if (dev->flags & BT_MESH_RPR_UNPROV_HASH) {
-			net_buf_simple_add_be32(&buf, dev->hash);
+			net_buf_simple_add_mem(&buf, &dev->hash, 4);
 		}
 
 		atomic_set_bit(srv.flags, SCAN_REPORT_PENDING);
@@ -874,7 +874,7 @@ static int handle_link_open(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *c
 
 		if (refresh == BT_MESH_RPR_NODE_REFRESH_COMPOSITION &&
 		    !atomic_test_bit(bt_mesh.flags, BT_MESH_COMP_DIRTY)) {
-			LOG_WRN("Composition data page 128 missing");
+			LOG_WRN("Composition data page 128 is equal to page 0");
 			status = BT_MESH_RPR_ERR_LINK_CANNOT_OPEN;
 			goto rsp;
 		}
@@ -1066,7 +1066,7 @@ adv_handle_beacon(const struct bt_le_scan_recv_info *info,
 	dev->rssi = info->rssi;
 
 	if (ad->data_len == 23) {
-		dev->hash = sys_get_le32(&ad->data[19]);
+		memcpy(&dev->hash, &ad->data[19], 4);
 		dev->flags |= BT_MESH_RPR_UNPROV_HASH;
 	}
 

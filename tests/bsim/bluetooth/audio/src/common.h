@@ -41,6 +41,11 @@
 	while (!(bool)atomic_get(&flag)) { \
 		(void)k_sleep(K_MSEC(1)); \
 	}
+#define WAIT_FOR_UNSET_FLAG(flag) \
+	while (atomic_get(&flag) != (atomic_t)false) { \
+		(void)k_sleep(K_MSEC(1)); \
+	}
+
 
 #define FAIL(...) \
 	do { \
@@ -55,6 +60,11 @@
 	} while (0)
 
 #define AD_SIZE 1
+
+#define INVALID_BROADCAST_ID (BT_AUDIO_BROADCAST_ID_MAX + 1)
+#define SYNC_RETRY_COUNT     6 /* similar to retries for connections */
+#define PA_SYNC_SKIP         5
+
 extern const struct bt_data ad[AD_SIZE];
 extern struct bt_conn *default_conn;
 extern atomic_t flag_connected;

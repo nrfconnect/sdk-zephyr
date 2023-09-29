@@ -108,4 +108,10 @@ source "drivers/adc/Kconfig.ifx_cat1"
 
 source "drivers/adc/Kconfig.smartbond"
 
+source "drivers/adc/Kconfig.tla2021"
+
+source "drivers/adc/Kconfig.nxp_s32"
+
+source "drivers/adc/Kconfig.max1125x"
+
 endif # ADC

@@ -424,6 +424,14 @@ struct net_if_config {
 	 */
 	sys_slist_t virtual_interfaces;
 #endif /* CONFIG_NET_L2_VIRTUAL */
+
+#if defined(CONFIG_NET_INTERFACE_NAME)
+	/**
+	 * Network interface can have a name and it is possible
+	 * to search a network interface using this name.
+	 */
+	char name[CONFIG_NET_INTERFACE_NAME_LEN + 1];
+#endif
 };
 
 /**
@@ -465,7 +473,8 @@ typedef int (*net_socket_create_t)(int, int, int);
  * and the network device.
  *
  * Because of the strong relationship between a device driver and such
- * network interface, each net_if_dev should be instantiated by
+ * network interface, each net_if_dev should be instantiated by one of the
+ * network device init macros found in net_if.h.
  */
 struct net_if_dev {
 	/** The actually device driver instance the net_if is related to */
@@ -755,10 +764,8 @@ void net_if_queue_tx(struct net_if *iface, struct net_pkt *pkt);
 static inline bool net_if_is_ip_offloaded(struct net_if *iface)
 {
 #if defined(CONFIG_NET_OFFLOAD)
-	NET_ASSERT(iface);
-	NET_ASSERT(iface->if_dev);
-
-	return (iface->if_dev->offload != NULL);
+	return (iface != NULL && iface->if_dev != NULL &&
+		iface->if_dev->offload != NULL);
 #else
 	ARG_UNUSED(iface);
 
@@ -1207,6 +1214,29 @@ bool net_if_ipv6_addr_rm(struct net_if *iface, const struct in6_addr *addr);
  */
 __syscall bool net_if_ipv6_addr_rm_by_index(int index,
 					    const struct in6_addr *addr);
+
+/**
+ * @typedef net_if_ip_addr_cb_t
+ * @brief Callback used while iterating over network interface IP addresses
+ *
+ * @param iface Pointer to the network interface the address belongs to
+ * @param addr Pointer to current IP address
+ * @param user_data A valid pointer to user data or NULL
+ */
+typedef void (*net_if_ip_addr_cb_t)(struct net_if *iface,
+				    struct net_if_addr *addr,
+				    void *user_data);
+
+/**
+ * @brief Go through all IPv6 addresses on a network interface and call callback
+ * for each used address.
+ *
+ * @param iface Pointer to the network interface
+ * @param cb User-supplied callback function to call
+ * @param user_data User specified data
+ */
+void net_if_ipv6_addr_foreach(struct net_if *iface, net_if_ip_addr_cb_t cb,
+			      void *user_data);
 
 /**
  * @brief Add a IPv6 multicast address to an interface
@@ -1838,6 +1868,17 @@ __syscall bool net_if_ipv4_addr_add_by_index(int index,
  */
 __syscall bool net_if_ipv4_addr_rm_by_index(int index,
 					    const struct in_addr *addr);
+
+/**
+ * @brief Go through all IPv4 addresses on a network interface and call callback
+ * for each used address.
+ *
+ * @param iface Pointer to the network interface
+ * @param cb User-supplied callback function to call
+ * @param user_data User specified data
+ */
+void net_if_ipv4_addr_foreach(struct net_if *iface, net_if_ip_addr_cb_t cb,
+			      void *user_data);
 
 /**
  * @brief Add a IPv4 multicast address to an interface
@@ -2526,6 +2567,63 @@ int net_if_resume(struct net_if *iface);
 bool net_if_is_suspended(struct net_if *iface);
 #endif /* CONFIG_NET_POWER_MANAGEMENT */
 
+/**
+ * @brief Check if the network interface supports Wi-Fi.
+ *
+ * @param iface Pointer to network interface
+ *
+ * @return True if interface supports Wi-Fi, False otherwise.
+ */
+bool net_if_is_wifi(struct net_if *iface);
+
+/**
+ * @brief Get first Wi-Fi network interface.
+ *
+ * @return Pointer to network interface, NULL if not found.
+ */
+struct net_if *net_if_get_first_wifi(void);
+
+/**
+ * @brief Get network interface name.
+ *
+ * @details If interface name support is not enabled, empty string is returned.
+ *
+ * @param iface Pointer to network interface
+ * @param buf User supplied buffer
+ * @param len Length of the user supplied buffer
+ *
+ * @return Length of the interface name copied to buf,
+ *         -EINVAL if invalid parameters,
+ *         -ERANGE if name cannot be copied to the user supplied buffer,
+ *         -ENOTSUP if interface name support is disabled,
+ */
+int net_if_get_name(struct net_if *iface, char *buf, int len);
+
+/**
+ * @brief Set network interface name.
+ *
+ * @details Normally this function is not needed to call as the system
+ *          will automatically assign a name to the network interface.
+ *
+ * @param iface Pointer to network interface
+ * @param buf User supplied name
+ *
+ * @return 0 name is set correctly
+ *         -ENOTSUP interface name support is disabled
+ *         -EINVAL if invalid parameters are given,
+ *         -ENAMETOOLONG if name is too long
+ */
+int net_if_set_name(struct net_if *iface, const char *buf);
+
+/**
+ * @brief Get interface index according to its name
+ *
+ * @param name Name of the network interface
+ *
+ * @return Interface index
+ */
+int net_if_get_by_name(const char *name);
+
 /** @cond INTERNAL_HIDDEN */
 struct net_if_api {
 	void (*init)(struct net_if *iface);
@@ -2562,6 +2660,7 @@ struct net_if_api {
 		.l2 = &(NET_L2_GET_NAME(_l2)),				\
 		.l2_data = &(NET_L2_GET_DATA(dev_id, sfx)),		\
 		.mtu = _mtu,						\
+		.flags = {BIT(NET_IF_LOWER_UP)},			\
 	};								\
 	static Z_DECL_ALIGN(struct net_if)				\
 		       NET_IF_GET_NAME(dev_id, sfx)[_num_configs]	\
@@ -2579,6 +2678,7 @@ struct net_if_api {
 		.dev = &(DEVICE_NAME_GET(dev_id)),			\
 		.mtu = _mtu,						\
 		.l2 = &(NET_L2_GET_NAME(OFFLOADED_NETDEV)),		\
+		.flags = {BIT(NET_IF_LOWER_UP)},			\
 	};								\
 	static Z_DECL_ALIGN(struct net_if)				\
 		NET_IF_GET_NAME(dev_id, sfx)[NET_IF_MAX_CONFIGS]	\

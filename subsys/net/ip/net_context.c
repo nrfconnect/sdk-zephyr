@@ -337,6 +337,8 @@ int net_context_get(sa_family_t family, enum net_sock_type type, uint16_t proto,
 			*context = NULL;
 			return ret;
 		}
+
+		net_context_set_iface(*context, net_if_get_default());
 	}
 
 	return 0;
@@ -1457,9 +1459,10 @@ static void set_pkt_txtime(struct net_pkt *pkt, const struct msghdr *msghdr)
 		if (cmsg->cmsg_len == CMSG_LEN(sizeof(uint64_t)) &&
 		    cmsg->cmsg_level == SOL_SOCKET &&
 		    cmsg->cmsg_type == SCM_TXTIME) {
-			uint64_t txtime = *(uint64_t *)CMSG_DATA(cmsg);
+			struct net_ptp_time txtime =
+				ns_to_net_ptp_time(*(net_time_t *)CMSG_DATA(cmsg));
 
-			net_pkt_set_txtime(pkt, txtime);
+			net_pkt_set_timestamp(pkt, &txtime);
 			break;
 		}
 	}
@@ -2167,8 +2170,6 @@ int net_context_recv(struct net_context *context,
 
 #if defined(CONFIG_NET_CONTEXT_SYNC_RECV)
 	if (!K_TIMEOUT_EQ(timeout, K_NO_WAIT)) {
-		int ret;
-
 		/* Make sure we have the lock, then the
 		 * net_context_packet_received() callback will release the
 		 * semaphore when data has been received.
@@ -2177,14 +2178,11 @@ int net_context_recv(struct net_context *context,
 
 		k_mutex_unlock(&context->lock);
 
-		ret = k_sem_take(&context->recv_data_wait, timeout);
+		if (k_sem_take(&context->recv_data_wait, timeout) == -EAGAIN) {
+			ret = -ETIMEDOUT;
+		}
 
 		k_mutex_lock(&context->lock, K_FOREVER);
-
-		if (ret == -EAGAIN) {
-			ret = -ETIMEDOUT;
-			goto unlock;
-		}
 	}
 #endif /* CONFIG_NET_CONTEXT_SYNC_RECV */
 

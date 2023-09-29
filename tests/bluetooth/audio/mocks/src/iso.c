@@ -13,11 +13,15 @@
 /* List of fakes used by this unit tester */
 #define FFF_FAKES_LIST(FAKE)                                                                       \
 	FAKE(bt_iso_chan_send)                                                                     \
+	FAKE(bt_iso_chan_get_tx_sync)
 
 static struct bt_iso_server *iso_server;
 
 DEFINE_FAKE_VALUE_FUNC(int, bt_iso_chan_send, struct bt_iso_chan *, struct net_buf *, uint16_t,
 		       uint32_t);
+
+DEFINE_FAKE_VALUE_FUNC(int, bt_iso_chan_get_tx_sync, const struct bt_iso_chan *,
+		       struct bt_iso_tx_info *);
 
 int bt_iso_server_register(struct bt_iso_server *server)
 {
@@ -42,11 +46,7 @@ int bt_iso_server_unregister(struct bt_iso_server *server)
 
 int bt_iso_chan_disconnect(struct bt_iso_chan *chan)
 {
-	chan->state = BT_ISO_STATE_DISCONNECTED;
-	chan->ops->disconnected(chan, 0x13);
-	free(chan->iso);
-
-	return 0;
+	return mock_bt_iso_disconnected(chan, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 }
 
 void mock_bt_iso_init(void)
@@ -87,7 +87,12 @@ int mock_bt_iso_accept(struct bt_conn *conn, uint8_t cig_id, uint8_t cis_id,
 	return 0;
 }
 
-int mock_bt_iso_disconnect(struct bt_iso_chan *chan)
+int mock_bt_iso_disconnected(struct bt_iso_chan *chan, uint8_t err)
 {
-	return bt_iso_chan_disconnect(chan);
+	chan->state = BT_ISO_STATE_DISCONNECTED;
+	chan->ops->disconnected(chan, err);
+	free(chan->iso);
+	chan->iso = NULL;
+
+	return 0;
 }

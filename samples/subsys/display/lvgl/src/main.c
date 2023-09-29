@@ -50,7 +50,7 @@ int main(void)
 	}
 
 #ifdef CONFIG_GPIO
-	if (device_is_ready(button_gpio.port)) {
+	if (gpio_is_ready_dt(&button_gpio)) {
 		int err;
 
 		err = gpio_pin_configure_dt(&button_gpio, GPIO_INPUT);
@@ -77,7 +77,7 @@ int main(void)
 	}
 #endif
 
-	if (IS_ENABLED(CONFIG_LV_Z_POINTER_KSCAN)) {
+	if (IS_ENABLED(CONFIG_LV_Z_POINTER_KSCAN) || IS_ENABLED(CONFIG_LV_Z_POINTER_INPUT)) {
 		lv_obj_t *hello_world_button;
 
 		hello_world_button = lv_btn_create(lv_scr_act());

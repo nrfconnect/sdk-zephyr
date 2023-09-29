@@ -197,7 +197,7 @@ bool bt_mesh_tx_in_progress(void)
 
 static void seg_tx_done(struct seg_tx *tx, uint8_t seg_idx)
 {
-	k_mem_slab_free(&segs, (void **)&tx->seg[seg_idx]);
+	k_mem_slab_free(&segs, (void *)tx->seg[seg_idx]);
 	tx->seg[seg_idx] = NULL;
 	tx->nack_count--;
 }
@@ -255,6 +255,7 @@ static void seg_tx_reset(struct seg_tx *tx)
 
 	tx->nack_count = 0;
 	tx->seg_send_started = 0;
+	tx->ack_received = 0;
 
 	if (atomic_test_and_clear_bit(bt_mesh.flags, BT_MESH_IVU_PENDING)) {
 		LOG_DBG("Proceeding with pending IV Update");
@@ -589,7 +590,7 @@ static int send_seg(struct bt_mesh_net_tx *net_tx, struct net_buf_simple *sdu,
 				/* PDUs for a specific Friend should only go
 				 * out through the Friend Queue.
 				 */
-				k_mem_slab_free(&segs, &buf);
+				k_mem_slab_free(&segs, buf);
 				tx->seg[seg_o] = NULL;
 			}
 
@@ -918,27 +919,36 @@ static int trans_ack(struct bt_mesh_net_rx *rx, uint8_t hdr,
 		/* If transmission is not in progress it means
 		 * that Retransmission Timer is running
 		 */
-		if (new_seg_ack) {
-			if (tx->seg_o == 0) {
-				uint32_t delta_ms = (uint32_t)(k_uptime_get() -
-							       tx->adv_start_timestamp);
-				k_timeout_t timeout = K_NO_WAIT;
+		if (tx->seg_o == 0) {
+			k_timeout_t timeout = K_NO_WAIT;
 
-				/* According to the Bluetooth Mesh Profile specification,
-				 * section 3.5.3.3, we should reset the retransmit timer and
-				 * retransmit immediately when receiving a valid ack message
-				 * while Retransmisison timer is running. However, transport should
-				 * still keep segment transmission interval time between
-				 * transmission of each segment.
-				 */
-				if (delta_ms < BT_MESH_SAR_TX_SEG_INT_MS) {
-					timeout = K_MSEC(BT_MESH_SAR_TX_SEG_INT_MS - delta_ms);
-				}
-
-				k_work_reschedule(&tx->retransmit, timeout);
-			} else {
-				tx->ack_received = 1U;
+			/* If there are no retransmission attempts left we
+			 * immediately trigger the retransmit call that will
+			 * end the transmission.
+			 */
+			if ((BT_MESH_ADDR_IS_UNICAST(tx->dst) &&
+			     !tx->attempts_left_without_progress) ||
+			    !tx->attempts_left) {
+				goto reschedule;
 			}
+
+			uint32_t delta_ms = (uint32_t)(k_uptime_get() - tx->adv_start_timestamp);
+
+			/* According to the Bluetooth Mesh Profile specification,
+			 * section 3.5.3.3, we should reset the retransmit timer and
+			 * retransmit immediately when receiving a valid ack message
+			 * while Retransmisison timer is running. However, transport should
+			 * still keep segment transmission interval time between
+			 * transmission of each segment.
+			 */
+			if (delta_ms < BT_MESH_SAR_TX_SEG_INT_MS) {
+				timeout = K_MSEC(BT_MESH_SAR_TX_SEG_INT_MS - delta_ms);
+			}
+
+reschedule:
+			k_work_reschedule(&tx->retransmit, timeout);
+		} else {
+			tx->ack_received = 1U;
 		}
 	} else {
 		LOG_DBG("SDU TX complete");
@@ -1151,7 +1161,7 @@ static void seg_rx_reset(struct seg_rx *rx, bool full_reset)
 			continue;
 		}
 
-		k_mem_slab_free(&segs, &rx->seg[i]);
+		k_mem_slab_free(&segs, rx->seg[i]);
 		rx->seg[i] = NULL;
 	}
 
@@ -1171,7 +1181,8 @@ static void seg_rx_reset(struct seg_rx *rx, bool full_reset)
 
 static void seg_discard(struct k_work *work)
 {
-	struct seg_rx *rx = CONTAINER_OF(work, struct seg_rx, discard);
+	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+	struct seg_rx *rx = CONTAINER_OF(dwork, struct seg_rx, discard);
 
 	LOG_WRN("SAR Discard timeout expired");
 	seg_rx_reset(rx, false);

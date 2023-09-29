@@ -4,8 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
 / {
 	chosen {
+		zephyr,bt-c2h-uart = &usart1;
 		zephyr,console = &usart1;
 		zephyr,shell-uart = &usart1;
 		zephyr,sram = &sram0;
@@ -25,6 +28,7 @@
 		button0: button_0 {
 			gpios = <&gpiob GECKO_PIN(1) GPIO_ACTIVE_LOW>;
 			label = "User Push Button 0";
+			zephyr,code = <INPUT_KEY_0>;
 		};
 	};
 
@@ -61,10 +65,10 @@
 
 &cpu0 {
 	clock-frequency = <76800000>;
-	/* Enable EM1,2. This means BURTC has to be used as sys_clock
-	 * or the system won't wake up
-	 */
-	cpu-power-states = <&pstate_em1 &pstate_em2>;
+};
+
+&pstate_em3 {
+	status = "disabled";
 };
 
 &usart0 {

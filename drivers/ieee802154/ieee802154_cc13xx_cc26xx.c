@@ -527,7 +527,7 @@ static void ieee802154_cc13xx_cc26xx_data_init(const struct device *dev)
 		mac = (uint8_t *)(FCFG1_BASE + FCFG1_O_MAC_15_4_0);
 	}
 
-	memcpy(&drv_data->mac, mac, sizeof(drv_data->mac));
+	sys_memcpy_swap(&drv_data->mac, mac, sizeof(drv_data->mac));
 
 	/* Setup circular RX queue (TRM 25.3.2.7) */
 	memset(&drv_data->rx_entry[0], 0, sizeof(drv_data->rx_entry[0]));
@@ -637,11 +637,6 @@ static struct ieee802154_cc13xx_cc26xx_data ieee802154_cc13xx_cc26xx_data = {
 		.commandNo = CMD_IEEE_CCA_REQ,
 	},
 
-	.cmd_clear_rx = {
-		.commandNo = CMD_CLEAR_RX,
-		.pQueue = &ieee802154_cc13xx_cc26xx_data.rx_queue,
-	},
-
 	.cmd_ieee_rx = {
 		.commandNo = CMD_IEEE_RX,
 		.status = IDLE,
@@ -713,10 +708,6 @@ static struct ieee802154_cc13xx_cc26xx_data ieee802154_cc13xx_cc26xx_data = {
 		.localShortAddr = 0x0000,
 		.localPanID = 0x0000,
 		.endTrigger.triggerType = TRIG_NEVER
-	},
-
-	.cmd_set_tx_power = {
-		.commandNo = CMD_SET_TX_POWER
 	},
 
 	.cmd_ieee_csma = {

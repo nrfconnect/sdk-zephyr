@@ -290,10 +290,10 @@ skip: <True|False> (default False)
     skip testcase unconditionally. This can be used for broken tests.
 
 slow: <True|False> (default False)
-    Don't run this test case unless --enable-slow was passed in on the
-    command line. Intended for time-consuming test cases that are only
-    run under certain circumstances, like daily builds. These test cases
-    are still compiled.
+    Don't run this test case unless --enable-slow or --enable-slow-only was
+    passed in on the command line. Intended for time-consuming test cases that
+    are only run under certain circumstances, like daily builds. These test
+    cases are still compiled.
 
 extra_args: <list of extra arguments>
     Extra arguments to pass to Make when building or running the
@@ -561,7 +561,7 @@ filter: <expression>
     Twister will first evaluate the expression to find if a "limited" cmake call, i.e. using package_helper cmake script,
     can be done. Existence of "dt_*" entries indicates devicetree is needed.
     Existence of "CONFIG*" entries indicates kconfig is needed.
-    If there are no other types of entries in the expression a filtration can be done wihout creating a complete build system.
+    If there are no other types of entries in the expression a filtration can be done without creating a complete build system.
     If there are entries of other types a full cmake is required.
 
     The grammar for the expression language is as follows:
@@ -642,6 +642,42 @@ the scope of builds and tests if applicable to platforms defined under the
 integration keyword in the testcase definition file (testcase.yaml and
 sample.yaml).
 
+
+Running tests on custom emulator
+********************************
+
+Apart from the already supported QEMU and other simulated environments, Twister
+supports running any out-of-tree custom emulator defined in the board's :file:`board.cmake`.
+To use this type of simulation, add the following properties to
+:file:`custom_board/custom_board.yaml`:
+
+::
+
+   simulation: custom
+   simulation_exec: <name_of_emu_binary>
+
+This tells Twister that the board is using a custom emulator called ``<name_of_emu_binary>``,
+make sure this binary exists in the PATH.
+
+Then, in :file:`custom_board/board.cmake`, set the supported emulation platforms to ``custom``:
+
+::
+
+   set(SUPPORTED_EMU_PLATFORMS custom)
+
+Finally, implement the ``run_custom`` target in :file:`custom_board/board.cmake`.
+It should look something like this:
+
+::
+
+   add_custom_target(run_custom
+     COMMAND
+     <name_of_emu_binary to invoke during 'run'>
+     <any args to be passed to the command, i.e. ${BOARD}, ${APPLICATION_BINARY_DIR}/zephyr/zephyr.elf>
+     WORKING_DIRECTORY ${APPLICATION_BINARY_DIR}
+     DEPENDS ${logical_target_for_zephyr_elf}
+     USES_TERMINAL
+     )
 
 Running Tests on Hardware
 *************************
@@ -1044,9 +1080,9 @@ locally. As of now, those options are available:
   CI)
 - Option to specify your own list of default platforms overriding what
   upstream defines.
-- Ability to override `build_onl_all` options used in some testscases.
+- Ability to override `build_onl_all` options used in some testcases.
   This will treat tests or sample as any other just build for default
-  platforms you specify in the configuation file or on the command line.
+  platforms you specify in the configuration file or on the command line.
 - Ignore some logic in twister to expand platform coverage in cases where
   default platforms are not in scope.
 
@@ -1103,7 +1139,7 @@ And example test level configuration::
 Combined configuration
 ======================
 
-To mix the Platform and level confgiuration, you can take an example as below:
+To mix the Platform and level configuration, you can take an example as below:
 
 And example platforms plus level configuration::
 

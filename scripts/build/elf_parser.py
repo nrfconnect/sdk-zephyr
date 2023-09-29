@@ -100,8 +100,11 @@ class Device(_Symbol):
         # Point to the handles instance associated with the device;
         # assigned by correlating the device struct handles pointer
         # value with the addr of a Handles instance.
-        ordinal_offset = self.elf.ld_consts['_DEVICE_STRUCT_HANDLES_OFFSET']
-        self.obj_ordinals = self._data_native_read(ordinal_offset)
+        self.obj_ordinals = None
+        if '_DEVICE_STRUCT_HANDLES_OFFSET' in self.elf.ld_consts:
+            ordinal_offset = self.elf.ld_consts['_DEVICE_STRUCT_HANDLES_OFFSET']
+            self.obj_ordinals = self._data_native_read(ordinal_offset)
+
         self.obj_pm = None
         if '_DEVICE_STRUCT_PM_OFFSET' in self.elf.ld_consts:
             pm_offset = self.elf.ld_consts['_DEVICE_STRUCT_PM_OFFSET']
@@ -228,7 +231,7 @@ class ZephyrElf:
         ordinal_arrays = {}
         def _on_ordinal(sym):
             ordinal_arrays[sym.entry.st_value] = DeviceOrdinals(self, sym)
-        self._object_find_named('__devicehdl_', _on_ordinal)
+        self._object_find_named('__devicedeps_', _on_ordinal)
 
         # Find all device structs
         def _on_device(sym):

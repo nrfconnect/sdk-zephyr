@@ -477,6 +477,7 @@ static void can_mcan_tx_event_handler(const struct device *dev)
 	struct can_mcan_data *data = dev->data;
 	struct can_mcan_tx_event_fifo tx_event;
 	can_tx_callback_t tx_cb;
+	void *user_data;
 	uint32_t event_idx;
 	uint32_t tx_idx;
 	uint32_t txefs;
@@ -507,12 +508,14 @@ static void can_mcan_tx_event_handler(const struct device *dev)
 			return;
 		}
 
-		k_sem_give(&data->tx_sem);
-
 		__ASSERT_NO_MSG(tx_idx <= cbs->num_tx);
 		tx_cb = cbs->tx[tx_idx].function;
+		user_data = cbs->tx[tx_idx].user_data;
 		cbs->tx[tx_idx].function = NULL;
-		tx_cb(dev, 0, cbs->tx[tx_idx].user_data);
+
+		k_sem_give(&data->tx_sem);
+
+		tx_cb(dev, 0, user_data);
 
 		err = can_mcan_read_reg(dev, CAN_MCAN_TXEFS, &txefs);
 		if (err != 0) {
@@ -822,11 +825,11 @@ int can_mcan_send(const struct device *dev, const struct can_frame *frame, k_tim
 #endif /* !CONFIG_CAN_FD_MODE */
 		.efc = 1U,
 	};
-	uint32_t put_idx;
+	uint32_t put_idx = -1;
 	uint32_t reg;
 	int err;
 
-	LOG_DBG("Sending %d bytes. Id: 0x%x, ID type: %s %s %s %s", data_length, frame->id,
+	LOG_DBG("Sending %zu bytes. Id: 0x%x, ID type: %s %s %s %s", data_length, frame->id,
 		(frame->flags & CAN_FRAME_IDE) != 0U ? "extended" : "standard",
 		(frame->flags & CAN_FRAME_RTR) != 0U ? "RTR" : "",
 		(frame->flags & CAN_FRAME_FDF) != 0U ? "FD frame" : "",
@@ -888,16 +891,16 @@ int can_mcan_send(const struct device *dev, const struct can_frame *frame, k_tim
 		return -EAGAIN;
 	}
 
-	err = can_mcan_read_reg(dev, CAN_MCAN_TXFQS, &reg);
-	if (err != 0) {
-		return err;
-	}
-
-	__ASSERT_NO_MSG((reg & CAN_MCAN_TXFQS_TFQF) != CAN_MCAN_TXFQS_TFQF);
-
 	k_mutex_lock(&data->tx_mtx, K_FOREVER);
 
-	put_idx = FIELD_GET(CAN_MCAN_TXFQS_TFQPI, reg);
+	/* Acquire a free TX buffer */
+	for (int i = 0; i < cbs->num_tx; i++) {
+		if (cbs->tx[i].function == NULL) {
+			put_idx = i;
+			break;
+		}
+	}
+
 	tx_hdr.mm = put_idx;
 
 	if ((frame->flags & CAN_FRAME_IDE) != 0U) {
@@ -912,7 +915,7 @@ int can_mcan_send(const struct device *dev, const struct can_frame *frame, k_tim
 				  &tx_hdr, sizeof(struct can_mcan_tx_buffer_hdr));
 	if (err != 0) {
 		LOG_ERR("failed to write Tx Buffer header (err %d)", err);
-		return err;
+		goto err_unlock;
 	}
 
 	err = can_mcan_write_mram(dev, config->mram_offsets[CAN_MCAN_MRAM_CFG_TX_BUFFER] + put_idx *
@@ -921,20 +924,25 @@ int can_mcan_send(const struct device *dev, const struct can_frame *frame, k_tim
 				  &frame->data_32, ROUND_UP(data_length, sizeof(uint32_t)));
 	if (err != 0) {
 		LOG_ERR("failed to write Tx Buffer data (err %d)", err);
-		return err;
+		goto err_unlock;
 	}
 
-	__ASSERT_NO_MSG(put_idx <= cbs->num_tx);
+	__ASSERT_NO_MSG(put_idx < cbs->num_tx);
 	cbs->tx[put_idx].function = callback;
 	cbs->tx[put_idx].user_data = user_data;
 
 	err = can_mcan_write_reg(dev, CAN_MCAN_TXBAR, BIT(put_idx));
 	if (err != 0) {
-		goto unlock;
+		cbs->tx[put_idx].function = NULL;
+		goto err_unlock;
 	}
 
-unlock:
 	k_mutex_unlock(&data->tx_mtx);
+	return 0;
+
+err_unlock:
+	k_mutex_unlock(&data->tx_mtx);
+	k_sem_give(&data->tx_sem);
 
 	return err;
 }

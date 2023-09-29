@@ -38,9 +38,13 @@ target_link_libraries(kernel INTERFACE ${libkernel})
 
 else()
 
+# FIXME: SHADOW_VARS: Remove this once we have enabled -Wshadow globally.
+add_compile_options($<TARGET_PROPERTY:compiler,warning_shadow_variables>)
+
 list(APPEND kernel_files
   main_weak.c
   banner.c
+  busy_wait.c
   device.c
   errno.c
   fatal.c
@@ -121,6 +125,12 @@ target_sources_ifdef(
   userspace_handler.c
   userspace.c
   )
+
+if(${CONFIG_DYNAMIC_THREAD})
+  target_sources(kernel PRIVATE dynamic.c)
+else()
+  target_sources(kernel PRIVATE dynamic_disabled.c)
+endif()
 
 target_include_directories(kernel PRIVATE
   ${ZEPHYR_BASE}/kernel/include

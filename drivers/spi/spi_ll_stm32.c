@@ -26,6 +26,10 @@ LOG_MODULE_REGISTER(spi_ll_stm32);
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/irq.h>
 
+#ifdef CONFIG_NOCACHE_MEMORY
+#include <zephyr/linker/linker-defs.h>
+#endif /* CONFIG_NOCACHE_MEMORY */
+
 #include "spi_ll_stm32.h"
 
 #define WAIT_1US	1U
@@ -51,6 +55,36 @@ LOG_MODULE_REGISTER(spi_ll_stm32);
 #endif /* CONFIG_SOC_SERIES_STM32MP1X */
 
 #ifdef CONFIG_SPI_STM32_DMA
+
+#ifdef CONFIG_SOC_SERIES_STM32H7X
+
+#define IS_NOCACHE_MEM_REGION(node_id)                                          \
+	COND_CODE_1(DT_ENUM_HAS_VALUE(node_id, zephyr_memory_attr, RAM_NOCACHE),    \
+			(1),                                                                \
+			(0))
+
+#define GET_MEM_REGION(node_id)                                                 \
+	{                                                                           \
+		.start = DT_REG_ADDR(node_id),                                          \
+		.end = (DT_REG_ADDR(node_id) + DT_REG_SIZE(node_id)) - 1,               \
+	},
+
+#define GET_MEM_REGION_IF_NOCACHE(node_id)                                      \
+	COND_CODE_1(IS_NOCACHE_MEM_REGION(node_id),                                 \
+	(                                                                           \
+		GET_MEM_REGION(node_id)                                                 \
+	), ())
+
+struct mem_region {
+	uintptr_t start;
+	uintptr_t end;
+};
+
+static const struct mem_region nocache_mem_regions[] = {
+	DT_MEMORY_ATTR_FOREACH_NODE(GET_MEM_REGION_IF_NOCACHE)
+};
+#endif /* CONFIG_SOC_SERIES_STM32H7X */
+
 /* dummy value used for transferring NOP when tx buf is null
  * and use as dummy sink for when rx buf is null
  */
@@ -693,9 +727,20 @@ static int wait_dma_rx_tx_done(const struct device *dev)
 {
 	struct spi_stm32_data *data = dev->data;
 	int res = -1;
+	k_timeout_t timeout;
+
+	/*
+	 * In slave mode we do not know when the transaction will start. Hence,
+	 * it doesn't make sense to have timeout in this case.
+	 */
+	if (IS_ENABLED(CONFIG_SPI_SLAVE) && spi_context_is_slave(&data->ctx)) {
+		timeout = K_FOREVER;
+	} else {
+		timeout = K_MSEC(1000);
+	}
 
 	while (1) {
-		res = k_sem_take(&data->status_sem, K_MSEC(1000));
+		res = k_sem_take(&data->status_sem, timeout);
 		if (res != 0) {
 			return res;
 		}
@@ -711,6 +756,50 @@ static int wait_dma_rx_tx_done(const struct device *dev)
 
 	return res;
 }
+
+#ifdef CONFIG_SOC_SERIES_STM32H7X
+static bool buf_in_nocache(uintptr_t buf, size_t len_bytes)
+{
+	bool buf_within_nocache = false;
+
+#ifdef CONFIG_NOCACHE_MEMORY
+	buf_within_nocache = (buf >= ((uintptr_t)_nocache_ram_start)) &&
+		((buf + len_bytes - 1) <= ((uintptr_t)_nocache_ram_end));
+	if (buf_within_nocache) {
+		return true;
+	}
+#endif /* CONFIG_NOCACHE_MEMORY */
+
+	for (size_t i = 0; i < ARRAY_SIZE(nocache_mem_regions); i++) {
+		const struct mem_region *mem_reg = &nocache_mem_regions[i];
+
+		buf_within_nocache =
+			(buf >= mem_reg->start) && ((buf + len_bytes - 1) <= mem_reg->end);
+		if (buf_within_nocache) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool is_dummy_buffer(const struct spi_buf *buf)
+{
+	return buf->buf == NULL;
+}
+
+static bool spi_buf_set_in_nocache(const struct spi_buf_set *bufs)
+{
+	for (size_t i = 0; i < bufs->count; i++) {
+		const struct spi_buf *buf = &bufs->buffers[i];
+
+		if (!is_dummy_buffer(buf) &&
+				!buf_in_nocache((uintptr_t)buf->buf, buf->len)) {
+			return false;
+		}
+	}
+	return true;
+}
+#endif /* CONFIG_SOC_SERIES_STM32H7X */
 
 static int transceive_dma(const struct device *dev,
 		      const struct spi_config *config,
@@ -732,6 +821,13 @@ static int transceive_dma(const struct device *dev,
 	if (asynchronous) {
 		return -ENOTSUP;
 	}
+
+#ifdef CONFIG_SOC_SERIES_STM32H7X
+	if ((tx_bufs != NULL && !spi_buf_set_in_nocache(tx_bufs)) ||
+		(rx_bufs != NULL && !spi_buf_set_in_nocache(rx_bufs))) {
+		return -EFAULT;
+	}
+#endif /* CONFIG_SOC_SERIES_STM32H7X */
 
 	spi_context_lock(&data->ctx, asynchronous, cb, userdata, config);
 

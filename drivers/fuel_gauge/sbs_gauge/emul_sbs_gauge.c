@@ -16,12 +16,17 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(sbs_sbs_gauge);
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/emul.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/i2c_emul.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/drivers/emul_fuel_gauge.h>
 #include <zephyr/drivers/fuel_gauge.h>
+#include <zephyr/sys/util.h>
 
 #include "sbs_gauge.h"
 
@@ -32,13 +37,65 @@ struct sbs_gauge_emul_data {
 	uint16_t remaining_time_alarm;
 	uint16_t mode;
 	int16_t at_rate;
+	/* Whether the battery cutoff or not */
+	bool is_cutoff;
+	/*
+	 * Counts the number of times the cutoff payload has been sent to the designated
+	 * register
+	 */
+	uint8_t cutoff_writes;
+	struct {
+		/* Non-register values associated with the state of the battery */
+		/* Battery terminal voltage */
+		uint32_t uV;
+		/* Battery terminal current - Pos is charging, Neg is discharging */
+		int uA;
+	} batt_state;
 };
 
 /** Static configuration for the emulator */
 struct sbs_gauge_emul_cfg {
 	/** I2C address of emulator */
 	uint16_t addr;
+	bool cutoff_support;
+	uint32_t cutoff_reg_addr;
+	uint16_t cutoff_payload[SBS_GAUGE_CUTOFF_PAYLOAD_MAX_SIZE];
 };
+
+static void emul_sbs_gauge_maybe_do_battery_cutoff(const struct emul *target, int reg, int val)
+{
+	struct sbs_gauge_emul_data *data = target->data;
+	const struct sbs_gauge_emul_cfg *cfg = target->cfg;
+
+	/* Check if this is a cutoff write */
+	if (cfg->cutoff_support && reg == cfg->cutoff_reg_addr) {
+		__ASSERT_NO_MSG(ARRAY_SIZE(cfg->cutoff_payload) > 0);
+		/*
+		 * Calculate the next payload element value for a battery cutoff.
+		 *
+		 * We thoroughly check bounds elsewhere, so we can be confident we're not indexing
+		 * past the end of the array.
+		 */
+		uint16_t target_payload_elem_val = cfg->cutoff_payload[data->cutoff_writes];
+
+		if (target_payload_elem_val == val) {
+			data->cutoff_writes++;
+			__ASSERT_NO_MSG(data->cutoff_writes <= ARRAY_SIZE(cfg->cutoff_payload));
+		} else {
+			/* Wrong payload target value, reset cutoff sequence detection. */
+			data->cutoff_writes = 0;
+		}
+
+		if (data->cutoff_writes == ARRAY_SIZE(cfg->cutoff_payload)) {
+			data->is_cutoff = true;
+			data->cutoff_writes = 0;
+		}
+	}
+	/* Not a cutoff write, reset payload counter  */
+	else {
+		data->cutoff_writes = 0;
+	}
+}
 
 static int emul_sbs_gauge_reg_write(const struct emul *target, int reg, int val)
 {
@@ -66,6 +123,12 @@ static int emul_sbs_gauge_reg_write(const struct emul *target, int reg, int val)
 		return -EIO;
 	}
 
+	/*
+	 * One of the above registers is always designated as a "cutoff" register, usually it's
+	 * MANUFACTURER ACCESS, but not always.
+	 */
+	emul_sbs_gauge_maybe_do_battery_cutoff(target, reg, val);
+
 	return 0;
 }
 
@@ -90,6 +153,11 @@ static int emul_sbs_gauge_reg_read(const struct emul *target, int reg, int *val)
 		*val = data->at_rate;
 		break;
 	case SBS_GAUGE_CMD_VOLTAGE:
+		*val = data->batt_state.uV / 1000;
+		break;
+	case SBS_GAUGE_CMD_CURRENT:
+		*val = data->batt_state.uA / 1000;
+		break;
 	case SBS_GAUGE_CMD_AVG_CURRENT:
 	case SBS_GAUGE_CMD_TEMP:
 	case SBS_GAUGE_CMD_ASOC:
@@ -102,7 +170,6 @@ static int emul_sbs_gauge_reg_read(const struct emul *target, int reg, int *val)
 	case SBS_GAUGE_CMD_RUNTIME2EMPTY:
 	case SBS_GAUGE_CMD_CYCLE_COUNT:
 	case SBS_GAUGE_CMD_DESIGN_VOLTAGE:
-	case SBS_GAUGE_CMD_CURRENT:
 	case SBS_GAUGE_CMD_CHG_CURRENT:
 	case SBS_GAUGE_CMD_CHG_VOLTAGE:
 	case SBS_GAUGE_CMD_FLAGS:
@@ -220,9 +287,65 @@ static int sbs_gauge_emul_transfer_i2c(const struct emul *target, struct i2c_msg
 	return rc;
 }
 
+static int emul_sbs_fuel_gauge_set_battery_charging(const struct emul *target, uint32_t uV, int uA)
+{
+	struct sbs_gauge_emul_data *data = target->data;
+
+	if (uV == 0 || uA == 0)
+		return -EINVAL;
+
+	data->batt_state.uA = uA;
+	data->batt_state.uV = uV;
+
+	return 0;
+}
+
+static int emul_sbs_fuel_gauge_is_battery_cutoff(const struct emul *target, bool *cutoff)
+{
+	struct sbs_gauge_emul_data *data = target->data;
+
+	__ASSERT_NO_MSG(cutoff != NULL);
+
+	*cutoff = data->is_cutoff;
+
+	return 0;
+}
+
+static const struct fuel_gauge_emul_driver_api sbs_gauge_backend_api = {
+	.set_battery_charging = emul_sbs_fuel_gauge_set_battery_charging,
+	.is_battery_cutoff = emul_sbs_fuel_gauge_is_battery_cutoff,
+};
+
 static const struct i2c_emul_api sbs_gauge_emul_api_i2c = {
 	.transfer = sbs_gauge_emul_transfer_i2c,
 };
+
+static void sbs_gauge_emul_reset(const struct emul *target)
+{
+	struct sbs_gauge_emul_data *data = target->data;
+
+	memset(data, 0, sizeof(*data));
+}
+
+#ifdef CONFIG_ZTEST
+#include <zephyr/ztest.h>
+
+/* Add test reset handlers in when using emulators with tests */
+#define SBS_GAUGE_EMUL_RESET_RULE_BEFORE(inst)                                                     \
+	sbs_gauge_emul_reset(EMUL_DT_GET(DT_DRV_INST(inst)));
+
+static void emul_sbs_gauge_reset_rule_after(const struct ztest_unit_test *test, void *data)
+{
+	ARG_UNUSED(test);
+	ARG_UNUSED(data);
+
+	DT_INST_FOREACH_STATUS_OKAY(SBS_GAUGE_EMUL_RESET_RULE_BEFORE)
+}
+ZTEST_RULE(emul_sbs_gauge_reset, NULL, emul_sbs_gauge_reset_rule_after);
+#else /* !CONFIG_ZTEST */
+/* Stub ZTEST_DMEM in case emulator is not used in a testing environment. */
+#define ZTEST_DMEM
+#endif /* CONFIG_ZTEST */
 
 /**
  * Set up a new SBS_GAUGE emulator (I2C)
@@ -233,8 +356,9 @@ static const struct i2c_emul_api sbs_gauge_emul_api_i2c = {
  */
 static int emul_sbs_sbs_gauge_init(const struct emul *target, const struct device *parent)
 {
-	ARG_UNUSED(target);
 	ARG_UNUSED(parent);
+
+	sbs_gauge_emul_reset(target);
 
 	return 0;
 }
@@ -246,8 +370,12 @@ static int emul_sbs_sbs_gauge_init(const struct emul *target, const struct devic
 	static struct sbs_gauge_emul_data sbs_gauge_emul_data_##n;                                 \
 	static const struct sbs_gauge_emul_cfg sbs_gauge_emul_cfg_##n = {                          \
 		.addr = DT_INST_REG_ADDR(n),                                                       \
+		.cutoff_support = DT_PROP_OR(DT_DRV_INST(n), battery_cutoff_support, false),       \
+		.cutoff_reg_addr = DT_PROP_OR(DT_DRV_INST(n), battery_cutoff_reg_addr, 0),         \
+		.cutoff_payload = DT_PROP_OR(DT_DRV_INST(n), battery_cutoff_payload, {}),          \
 	};                                                                                         \
 	EMUL_DT_INST_DEFINE(n, emul_sbs_sbs_gauge_init, &sbs_gauge_emul_data_##n,                  \
-			    &sbs_gauge_emul_cfg_##n, &sbs_gauge_emul_api_i2c, NULL)
+			    &sbs_gauge_emul_cfg_##n, &sbs_gauge_emul_api_i2c,                      \
+			    &sbs_gauge_backend_api)
 
 DT_INST_FOREACH_STATUS_OKAY(SBS_GAUGE_EMUL)

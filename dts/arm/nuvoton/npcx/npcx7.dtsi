@@ -94,6 +94,13 @@
 			apb2-prescaler = <6>; /* APB2_CLK runs at 15MHz */
 			apb3-prescaler = <6>; /* APB3_CLK runs at 15MHz */
 			ram-pd-depth = <12>; /* Valid bit-depth of RAM_PDn reg */
+			pwdwn-ctl-val = <0xfb /* No FIU_PD */
+					 0xff
+					 0x1f /* No GDMA_PD */
+					 0xff
+					 0xfa
+					 0x7f /* No ESPI_PD */
+					 0xe7>;
 		};
 
 		/* Wake-up input source mapping for GPIOs in npcx7 series */
@@ -230,6 +237,11 @@
 			channel-count = <10>;
 			threshold-reg-offset = <0x14>;
 			threshold-count = <3>;
+		};
+
+		/* FIU0 configuration in npcx7 series */
+		qspi_fiu0: quadspi@40020000 {
+			clocks = <&pcc NPCX_CLOCK_BUS_FIU NPCX_PWDWN_CTL1 2>;
 		};
 	};
 

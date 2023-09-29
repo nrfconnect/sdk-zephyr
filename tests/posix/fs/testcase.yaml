@@ -1,10 +1,11 @@
 common:
+  filter: not (CONFIG_NATIVE_BUILD and CONFIG_EXTERNAL_LIBC)
   arch_exclude:
     - nios2
-    - posix
   tags:
     - posix
     - filesystem
+    - fatfs
   min_ram: 128
   modules:
     - fatfs

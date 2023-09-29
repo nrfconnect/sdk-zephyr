@@ -2067,9 +2067,12 @@ static struct bt_conn *bt_gatt_ccc_cfg_conn_lookup(const struct bt_gatt_ccc_cfg 
 	struct bt_conn *conn;
 
 	conn = bt_conn_lookup_addr_le(cfg->id, &cfg->peer);
+	if (conn) {
+		if (bt_gatt_ccc_cfg_is_matching_conn(conn, cfg)) {
+			return conn;
+		}
 
-	if (bt_gatt_ccc_cfg_is_matching_conn(conn, cfg)) {
-		return conn;
+		bt_conn_unref(conn);
 	}
 
 	return NULL;
@@ -2758,11 +2761,11 @@ static uint8_t notify_cb(const struct bt_gatt_attr *attr, uint16_t handle,
 
 		bt_conn_unref(conn);
 
+		data->err = err;
+
 		if (err < 0) {
 			return BT_GATT_ITER_STOP;
 		}
-
-		data->err = 0;
 	}
 
 	return BT_GATT_ITER_CONTINUE;
@@ -3187,10 +3190,10 @@ static void sc_restore_rsp(struct bt_conn *conn,
 #endif /* CONFIG_BT_GATT_CACHING */
 
 	if (!err && IS_ENABLED(CONFIG_BT_GATT_SERVICE_CHANGED)) {
-		struct gatt_sc_cfg *sc_cfg = find_sc_cfg(conn->id, &conn->le.dst);
+		struct gatt_sc_cfg *gsc_cfg = find_sc_cfg(conn->id, &conn->le.dst);
 
-		if (sc_cfg) {
-			sc_reset(sc_cfg);
+		if (gsc_cfg) {
+			sc_reset(gsc_cfg);
 		}
 	}
 }

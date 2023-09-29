@@ -751,11 +751,11 @@ static int mipi_catalog_formatter(cbprintf_cb out, void *ctx,
 		}
 
 		if (arg_sz == sizeof(mipi_syst_u64)) {
-			*((mipi_syst_u64 *)argp) =
-				(mipi_syst_u64)MIPI_SYST_HTOLE64(val.v64);
+			val.v64 = MIPI_SYST_HTOLE64(val.v64);
+			memcpy(argp, &val.v64, sizeof(val.v64));
 		} else {
-			*((mipi_syst_u32 *)argp) =
-				(mipi_syst_u32)MIPI_SYST_HTOLE32(val.v32);
+			val.v32 = MIPI_SYST_HTOLE32(val.v32);
+			memcpy(argp, &val.v32, sizeof(val.v32));
 		}
 		argp += arg_sz;
 	}
@@ -847,9 +847,9 @@ void log_output_msg_syst_process(const struct log_output *output,
 #endif
 		{
 #ifdef CONFIG_CBPRINTF_PACKAGE_HEADER_STORE_CREATION_FLAGS
-			struct cbprintf_package_desc *pkg_hdr = (void *)data;
+			struct cbprintf_package_desc *pkg_desc = (void *)data;
 
-			CHECKIF((pkg_hdr->pkg_flags & CBPRINTF_PACKAGE_ARGS_ARE_TAGGED) ==
+			CHECKIF((pkg_desc->pkg_flags & CBPRINTF_PACKAGE_ARGS_ARE_TAGGED) ==
 				CBPRINTF_PACKAGE_ARGS_ARE_TAGGED) {
 				/*
 				 * Tagged arguments are to be used with catalog messages,

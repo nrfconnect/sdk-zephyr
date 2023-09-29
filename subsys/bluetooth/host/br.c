@@ -598,11 +598,11 @@ void bt_hci_remote_name_request_complete(struct net_buf *buf)
 check_names:
 	/* if still waiting for names */
 	for (i = 0; i < discovery_results_count; i++) {
-		struct discovery_priv *priv;
+		struct discovery_priv *dpriv;
 
-		priv = (struct discovery_priv *)&discovery_results[i]._priv;
+		dpriv = (struct discovery_priv *)&discovery_results[i]._priv;
 
-		if (priv->resolving) {
+		if (dpriv->resolving) {
 			return;
 		}
 	}
@@ -625,7 +625,7 @@ void bt_hci_read_remote_features_complete(struct net_buf *buf)
 
 	LOG_DBG("status 0x%02x handle %u", evt->status, handle);
 
-	conn = bt_conn_lookup_handle(handle);
+	conn = bt_conn_lookup_handle(handle, BT_CONN_TYPE_BR);
 	if (!conn) {
 		LOG_ERR("Can't find conn for handle %u", handle);
 		return;
@@ -666,7 +666,7 @@ void bt_hci_read_remote_ext_features_complete(struct net_buf *buf)
 
 	LOG_DBG("status 0x%02x handle %u", evt->status, handle);
 
-	conn = bt_conn_lookup_handle(handle);
+	conn = bt_conn_lookup_handle(handle, BT_CONN_TYPE_BR);
 	if (!conn) {
 		LOG_ERR("Can't find conn for handle %u", handle);
 		return;

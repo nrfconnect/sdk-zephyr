@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <adsp_interrupt.h>
 #include <zephyr/drivers/dma.h>
 #include <zephyr/cache.h>
 
@@ -11,7 +12,7 @@
 
 #define GPDMA_CTL_OFFSET 0x0004
 #define GPDMA_CTL_FDCGB BIT(0)
-#define GPDMA_CTL_DGCD BIT(30)
+#define GPDMA_CTL_DCGD BIT(30)
 
 /* TODO make device tree defined? */
 #define GPDMA_CHLLPC_OFFSET(channel) (0x0010 + channel*0x10)
@@ -247,7 +248,7 @@ static void intel_adsp_gpdma_clock_enable(const struct device *dev)
 	uint32_t val;
 
 	if (IS_ENABLED(CONFIG_SOC_SERIES_INTEL_ACE)) {
-		val = sys_read32(reg) | GPDMA_CTL_DGCD;
+		val = sys_read32(reg) | GPDMA_CTL_DCGD;
 	} else {
 		val = GPDMA_CTL_FDCGB;
 	}
@@ -261,7 +262,7 @@ static void intel_adsp_gpdma_clock_disable(const struct device *dev)
 #ifdef CONFIG_SOC_SERIES_INTEL_ACE
 	const struct intel_adsp_gpdma_cfg *const dev_cfg = dev->config;
 	uint32_t reg = dev_cfg->shim + GPDMA_CTL_OFFSET;
-	uint32_t val = sys_read32(reg) & ~GPDMA_CTL_DGCD;
+	uint32_t val = sys_read32(reg) & ~GPDMA_CTL_DCGD;
 
 	sys_write32(val, reg);
 #endif
@@ -292,7 +293,7 @@ static void intel_adsp_gpdma_release_ownership(const struct device *dev)
 #ifdef CONFIG_SOC_SERIES_INTEL_ACE
 	const struct intel_adsp_gpdma_cfg *const dev_cfg = dev->config;
 	uint32_t reg = dev_cfg->shim + GPDMA_CTL_OFFSET;
-	uint32_t val = sys_read32(reg) & ~GPDMA_OSEL(0x0);
+	uint32_t val = sys_read32(reg) & ~GPDMA_OSEL(0x3);
 
 	sys_write32(val, reg);
 	/* CHECKME: Do CAVS platforms set ownership over DMA,
@@ -425,6 +426,16 @@ int intel_adsp_gpdma_get_attribute(const struct device *dev, uint32_t type, uint
 	return 0;
 }
 
+#ifdef CONFIG_SOC_SERIES_INTEL_ACE
+static inline void ace_gpdma_intc_unmask(void)
+{
+	ACE_DINT[0].ie[ACE_INTL_GPDMA] = BIT(0);
+}
+#else
+static inline void ace_gpdma_intc_unmask(void) {}
+#endif
+
+
 int intel_adsp_gpdma_init(const struct device *dev)
 {
 	struct dw_dma_dev_data *const dev_data = dev->data;
@@ -433,6 +444,9 @@ int intel_adsp_gpdma_init(const struct device *dev)
 	dev_data->dma_ctx.magic = DMA_MAGIC;
 	dev_data->dma_ctx.dma_channels = DW_MAX_CHAN;
 	dev_data->dma_ctx.atomic = dev_data->channels_atomic;
+
+	ace_gpdma_intc_unmask();
+
 #if CONFIG_PM_DEVICE && CONFIG_SOC_SERIES_INTEL_ACE
 	if (pm_device_on_power_domain(dev)) {
 		pm_device_init_off(dev);

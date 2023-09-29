@@ -7,6 +7,7 @@
 #include <st/l5/stm32l562Xe.dtsi>
 #include <st/l5/stm32l562qeixq-pinctrl.dtsi>
 #include "arduino_r3_connector.dtsi"
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
 	leds {
@@ -26,6 +27,7 @@
 		user_button: button {
 			label = "User";
 			gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
+			zephyr,code = <INPUT_KEY_0>;
 		};
 	};
 
@@ -35,10 +37,6 @@
 		volt-sensor0 = &vref;
 		volt-sensor1 = &vbat;
 	};
-};
-
-&cpu0 {
-	cpu-power-states = <&stop0 &stop1 &stop2>;
 };
 
 &clk_hsi48 {
@@ -204,6 +202,8 @@
 &adc1 {
 	pinctrl-0 = <&adc1_in13_pc4>;
 	pinctrl-names = "default";
+	st,adc-clock-source = <SYNC>;
+	st,adc-prescaler = <4>;
 	status = "okay";
 };
 

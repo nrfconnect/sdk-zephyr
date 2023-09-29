@@ -6,7 +6,7 @@
 
 #include <errno.h>
 
-#include <zephyr/device.h>
+#include <zephyr/init.h>
 #include <zephyr/mgmt/ec_host_cmd/backend.h>
 #include <zephyr/mgmt/ec_host_cmd/ec_host_cmd.h>
 #include <string.h>
@@ -71,7 +71,7 @@ int ec_host_cmd_backend_sim_data_received(const uint8_t *buffer, size_t len)
 	memcpy(hc_sim->rx_ctx->buf, buffer, len);
 	hc_sim->rx_ctx->len = len;
 
-	k_sem_give(&hc_sim->rx_ctx->handler_owns);
+	ec_host_cmd_rx_notify();
 
 	return 0;
 }

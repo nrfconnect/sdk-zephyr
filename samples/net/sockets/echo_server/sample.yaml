@@ -17,6 +17,7 @@ tests:
       - frdm_k64f
       - qemu_cortex_m3
       - frdm_kw41z
+      - qemu_cortex_a53
     integration_platforms:
       - qemu_x86
   sample.net.sockets.echo_server.802154:
@@ -81,15 +82,6 @@ tests:
     depends_on: usb_device
     harness: net
     extra_args: OVERLAY_CONFIG="overlay-netusb.conf"
-    tags:
-      - net
-      - usb
-  sample.net.sockets.echo_server.usbnet_composite:
-    depends_on: usb_device
-    harness: net
-    extra_args: OVERLAY_CONFIG="overlay-netusb.conf"
-    extra_configs:
-      - CONFIG_USB_COMPOSITE_DEVICE=y
     tags:
       - net
       - usb

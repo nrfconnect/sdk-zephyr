@@ -24,14 +24,6 @@ zephyr_sources(
 
 zephyr_sources_ifdef(CONFIG_ONOFF onoff.c)
 zephyr_sources_ifdef(CONFIG_NOTIFY notify.c)
-zephyr_sources_ifdef(CONFIG_CRC
-  crc32c_sw.c
-  crc32_sw.c
-  crc16_sw.c
-  crc8_sw.c
-  crc7_sw.c
-  )
-zephyr_sources_ifdef(CONFIG_CRC_SHELL crc_shell.c)
 
 zephyr_sources_ifdef(CONFIG_CBPRINTF_COMPLETE cbprintf_complete.c)
 zephyr_sources_ifdef(CONFIG_CBPRINTF_NANO cbprintf_nano.c)
@@ -67,6 +59,8 @@ zephyr_sources_ifdef(CONFIG_UTF8 utf8.c)
 zephyr_sources_ifdef(CONFIG_SYS_MEM_BLOCKS mem_blocks.c)
 
 zephyr_sources_ifdef(CONFIG_WINSTREAM winstream.c)
+
+zephyr_sources_ifdef(CONFIG_POWEROFF poweroff.c)
 
 zephyr_library_include_directories(
   ${ZEPHYR_BASE}/kernel/include

@@ -30,9 +30,18 @@
 
 	intc: ioapic@fec00000  {
 		compatible = "intel,ioapic";
+		#address-cells = <1>;
+		#interrupt-cells = <3>;
 		reg = <0xfec00000 0x1000>;
 		interrupt-controller;
+	};
+
+	intc_loapic: loapic@fee00000  {
+		compatible = "intel,loapic";
+		reg = <0xfee00000 0x1000>;
+		interrupt-controller;
 		#interrupt-cells = <3>;
+		#address-cells = <1>;
 	};
 
 	pcie0: pcie0 {
@@ -496,6 +505,16 @@
 			status = "okay";
 		};
 
+		pwm0: pwm@e06a0000 {
+			compatible = "intel,blinky-pwm";
+			reg = <0xe06a0000 0x400>;
+			reg-offset = <0x304>;
+			clock-frequency = <32768>;
+			max-pins = <1>;
+			#pwm-cells = <2>;
+			status = "okay";
+		};
+
 		rtc: counter: rtc@70 {
 			compatible = "motorola,mc146818";
 			reg = <0x70 0x0D 0x71 0x0D>;
@@ -518,6 +537,8 @@
 		tco_wdt: tco_wdt@400 {
 			compatible = "intel,tco-wdt";
 			reg = <0x0400 0x20>;
+
+			status = "disabled";
 		};
 	};
 };

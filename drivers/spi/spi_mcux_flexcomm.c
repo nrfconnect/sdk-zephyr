@@ -590,6 +590,7 @@ static int transceive_dma(const struct device *dev,
 	SPI_Type *base = config->base;
 	int ret;
 	uint32_t word_size;
+	uint16_t data_size;
 
 	spi_context_lock(&data->ctx, asynchronous, cb, userdata, spi_cfg);
 
@@ -604,12 +605,18 @@ static int transceive_dma(const struct device *dev,
 
 	word_size = SPI_WORD_SIZE_GET(spi_cfg->operation);
 
-	data->dma_rx.dma_cfg.dest_data_size = (word_size > 8) ?
-				(sizeof(uint16_t)) : (sizeof(uint8_t));
-	data->dma_tx.dma_cfg.dest_data_size = data->dma_rx.dma_cfg.dest_data_size;
+	data_size = (word_size > 8) ? (sizeof(uint16_t)) : (sizeof(uint8_t));
+	data->dma_rx.dma_cfg.source_data_size = data_size;
+	data->dma_rx.dma_cfg.dest_data_size = data_size;
+	data->dma_tx.dma_cfg.source_data_size = data_size;
+	data->dma_tx.dma_cfg.dest_data_size = data_size;
 
 	while (data->ctx.rx_len > 0 || data->ctx.tx_len > 0) {
 		size_t dma_len;
+
+		/* last is used to deassert chip select if this
+		 * is the last transfer in the set.
+		 */
 		bool last = false;
 
 		if (data->ctx.rx_len == 0) {
@@ -624,6 +631,34 @@ static int transceive_dma(const struct device *dev,
 		} else {
 			dma_len = MIN(data->ctx.tx_len, data->ctx.rx_len);
 			last = false;
+		}
+
+		/* at this point, last just means whether or not
+		 * this transfer will completely cover
+		 * the current tx/rx buffer in data->ctx
+		 * or require additional transfers because the
+		 * the two buffers are not the same size.
+		 *
+		 * if it covers the current ctx tx/rx buffers, then
+		 * we'll move to the next pair of buffers (if any)
+		 * after the transfer, but if there are
+		 * no more buffer pairs, then this is the last
+		 * transfer in the set and we need to deassert CS.
+		 */
+		if (last) {
+			/* this dma transfer should cover
+			 * the entire current data->ctx set
+			 * of buffers. if there are more
+			 * buffers in the set, then we don't
+			 * want to deassert CS.
+			 */
+			if ((data->ctx.tx_count > 1) ||
+			    (data->ctx.rx_count > 1)) {
+				/* more buffers to transfer so
+				 * this isn't last
+				 */
+				last = false;
+			}
 		}
 
 		data->status_flags = 0;
@@ -798,7 +833,6 @@ static void spi_mcux_config_func_##id(const struct device *dev) \
 		.dma_cfg = {					\
 			.channel_direction = MEMORY_TO_PERIPHERAL,	\
 			.dma_callback = spi_mcux_dma_callback,		\
-			.source_data_size = 1,				\
 			.block_count = 2,		\
 		}							\
 	},								\
@@ -809,7 +843,6 @@ static void spi_mcux_config_func_##id(const struct device *dev) \
 		.dma_cfg = {				\
 			.channel_direction = PERIPHERAL_TO_MEMORY,	\
 			.dma_callback = spi_mcux_dma_callback,		\
-			.source_data_size = 1,				\
 			.block_count = 1,		\
 		}							\
 	}

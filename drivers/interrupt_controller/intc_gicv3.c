@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/arch/cpu.h>
 #include <zephyr/sys/__assert.h>
@@ -296,6 +297,16 @@ static void gicv3_rdist_enable(mem_addr_t rdist)
 {
 	if (!(sys_read32(rdist + GICR_WAKER) & BIT(GICR_WAKER_CA))) {
 		return;
+	}
+
+	if (GICR_IIDR_PRODUCT_ID_GET(sys_read32(rdist + GICR_IIDR)) >= 0x2) {
+		if (sys_read32(rdist + GICR_PWRR) & BIT(GICR_PWRR_RDPD)) {
+			sys_set_bit(rdist + GICR_PWRR, GICR_PWRR_RDAG);
+			sys_clear_bit(rdist + GICR_PWRR, GICR_PWRR_RDPD);
+			while (sys_read32(rdist + GICR_PWRR) & BIT(GICR_PWRR_RDPD)) {
+				;
+			}
+		}
 	}
 
 	sys_clear_bit(rdist + GICR_WAKER, GICR_WAKER_PS);

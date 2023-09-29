@@ -102,13 +102,13 @@ static int setup_broadcast_source(struct bt_bap_broadcast_source **source)
 	for (size_t i = 0U; i < ARRAY_SIZE(subgroup_param); i++) {
 		subgroup_param[i].params_count = streams_per_subgroup;
 		subgroup_param[i].params = stream_params + i * streams_per_subgroup;
-		subgroup_param[i].codec = &preset_16_2_1.codec;
+		subgroup_param[i].codec_cfg = &preset_16_2_1.codec_cfg;
 	}
 
 	for (size_t j = 0U; j < ARRAY_SIZE(stream_params); j++) {
 		stream_params[j].stream = &streams[j];
 		stream_params[j].data = NULL;
-		stream_params[j].data_count = 0U;
+		stream_params[j].data_len = 0U;
 		bt_bap_stream_cb_register(stream_params[j].stream, &stream_ops);
 	}
 

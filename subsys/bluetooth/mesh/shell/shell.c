@@ -492,32 +492,41 @@ static void prov_node_added(uint16_t net_idx, uint8_t uuid[16], uint16_t addr,
 }
 
 #if defined(CONFIG_BT_MESH_PROVISIONER)
-static enum {
-	AUTH_NO_OOB,
-	AUTH_STATIC_OOB,
-	AUTH_OUTPUT_OOB,
-	AUTH_INPUT_OOB
-} auth_type;
+static const char * const output_meth_string[] = {
+	"Blink",
+	"Beep",
+	"Vibrate",
+	"Display Number",
+	"Display String",
+};
+
+static const char *const input_meth_string[] = {
+	"Push",
+	"Twist",
+	"Enter Number",
+	"Enter String",
+};
 
 static void capabilities(const struct bt_mesh_dev_capabilities *cap)
 {
-	if (cap->oob_type && auth_type == AUTH_STATIC_OOB) {
-		bt_mesh_auth_method_set_static(bt_mesh_shell_prov.static_val,
-					       bt_mesh_shell_prov.static_val_len);
-		return;
+	shell_print_ctx("Provisionee capabilities:");
+	shell_print_ctx("\tStatic OOB is %ssupported", cap->oob_type & 1 ? "" : "not ");
+
+	shell_print_ctx("\tAvailable output actions (%d bytes max):%s", cap->output_size,
+			cap->output_actions ? "" : "\n\t\tNone");
+	for (int i = 0; i < ARRAY_SIZE(output_meth_string); i++) {
+		if (cap->output_actions & BIT(i)) {
+			shell_print_ctx("\t\t%s", output_meth_string[i]);
+		}
 	}
 
-	if (cap->output_actions && auth_type == AUTH_OUTPUT_OOB) {
-		bt_mesh_auth_method_set_output(BT_MESH_DISPLAY_NUMBER, 6);
-		return;
+	shell_print_ctx("\tAvailable input actions (%d bytes max):%s", cap->input_size,
+			cap->input_actions ? "" : "\n\t\tNone");
+	for (int i = 0; i < ARRAY_SIZE(input_meth_string); i++) {
+		if (cap->input_actions & BIT(i)) {
+			shell_print_ctx("\t\t%s", input_meth_string[i]);
+		}
 	}
-
-	if (cap->input_actions && auth_type == AUTH_INPUT_OOB) {
-		bt_mesh_auth_method_set_input(BT_MESH_ENTER_NUMBER, 6);
-		return;
-	}
-
-	bt_mesh_auth_method_set_none();
 }
 #endif
 
@@ -877,16 +886,16 @@ static int cmd_auth_method_set_output(const struct shell *sh, size_t argc, char 
 static int cmd_auth_method_set_static(const struct shell *sh, size_t argc, char *argv[])
 {
 	size_t len;
-	uint8_t static_val[16];
+	uint8_t static_oob_auth[16];
 	int err = 0;
 
-	len = hex2bin(argv[1], strlen(argv[1]), static_val, sizeof(static_val));
+	len = hex2bin(argv[1], strlen(argv[1]), static_oob_auth, sizeof(static_oob_auth));
 	if (len < 1) {
 		shell_warn(sh, "Unable to parse input string argument");
 		return -EINVAL;
 	}
 
-	err = bt_mesh_auth_method_set_static(static_val, len);
+	err = bt_mesh_auth_method_set_static(static_oob_auth, len);
 	if (err) {
 		shell_error(sh, "Setting static OOB authentication failed (err %d)", err);
 	}
@@ -1595,6 +1604,35 @@ static int cmd_appidx(const struct shell *sh, size_t argc, char *argv[])
 	return 0;
 }
 
+#if defined(CONFIG_BT_MESH_STATISTIC)
+static int cmd_stat_get(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct bt_mesh_statistic st;
+
+	bt_mesh_stat_get(&st);
+
+	shell_print(sh, "Received frames over:");
+	shell_print(sh, "adv:       %d", st.rx_adv);
+	shell_print(sh, "loopback:  %d", st.rx_loopback);
+	shell_print(sh, "proxy:     %d", st.rx_proxy);
+	shell_print(sh, "unknown:   %d", st.rx_uknown);
+
+	shell_print(sh, "Transmitted frames: <planned> - <succeeded>");
+	shell_print(sh, "relay adv:   %d - %d", st.tx_adv_relay_planned, st.tx_adv_relay_succeeded);
+	shell_print(sh, "local adv:   %d - %d", st.tx_local_planned, st.tx_local_succeeded);
+	shell_print(sh, "friend:      %d - %d", st.tx_friend_planned, st.tx_friend_succeeded);
+
+	return 0;
+}
+
+static int cmd_stat_clear(const struct shell *sh, size_t argc, char *argv[])
+{
+	bt_mesh_stat_reset();
+
+	return 0;
+}
+#endif
+
 #if defined(CONFIG_BT_MESH_SHELL_CDB)
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	cdb_cmds,
@@ -1624,7 +1662,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(auth_cmds,
 		      cmd_auth_method_set_output, 3, 0),
 	SHELL_CMD_ARG(static, NULL, "<Val(1-16 hex)>", cmd_auth_method_set_static, 2,
 		      0),
-	SHELL_CMD_ARG(none, NULL, NULL, cmd_auth_method_set_none, 2, 0),
+	SHELL_CMD_ARG(none, NULL, NULL, cmd_auth_method_set_none, 1, 0),
 	SHELL_SUBCMD_SET_END);
 #endif
 
@@ -1723,6 +1761,13 @@ SHELL_STATIC_SUBCMD_SET_CREATE(target_cmds,
 	SHELL_CMD_ARG(app, NULL, "[AppKeyIdx]", cmd_appidx, 1, 1),
 	SHELL_SUBCMD_SET_END);
 
+#if defined(CONFIG_BT_MESH_STATISTIC)
+SHELL_STATIC_SUBCMD_SET_CREATE(stat_cmds,
+	SHELL_CMD_ARG(get, NULL, NULL, cmd_stat_get, 1, 0),
+	SHELL_CMD_ARG(clear, NULL, NULL, cmd_stat_clear, 1, 0),
+	SHELL_SUBCMD_SET_END);
+#endif
+
 /* Placeholder for model shell modules that is configured in the application */
 SHELL_SUBCMD_SET_CREATE(model_cmds, (mesh, models));
 
@@ -1759,6 +1804,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(mesh_cmds,
 	SHELL_CMD(test, &test_cmds, "Test commands", bt_mesh_shell_mdl_cmds_help),
 #endif
 	SHELL_CMD(target, &target_cmds, "Target commands", bt_mesh_shell_mdl_cmds_help),
+
+#if defined(CONFIG_BT_MESH_STATISTIC)
+	SHELL_CMD(stat, &stat_cmds, "Statistic commands", bt_mesh_shell_mdl_cmds_help),
+#endif
 
 	SHELL_SUBCMD_SET_END
 );
