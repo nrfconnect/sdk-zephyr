@@ -3,6 +3,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+
+# Forward declare config symbol to pass Kconfig compliance
+config PSA_PROMPTLESS
+	bool
+
 menu "PSA RNG support"
 
 config PSA_WANT_GENERATE_RANDOM
