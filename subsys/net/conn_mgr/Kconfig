@@ -1,6 +1,10 @@
 # Copyright (c) 2019 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
+# Forward declare config symbol to pass Kconfig compliance
+config WPA_SUPP
+	bool
+
 menuconfig NET_CONNECTION_MANAGER
 	bool "Network connection manager [EXPERIMENTAL]"
 	depends on NET_IPV6 || NET_IPV4
