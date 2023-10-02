@@ -65,6 +65,13 @@ LOG_MODULE_REGISTER(uart_nrfx_uarte, CONFIG_UART_LOG_LEVEL);
 #define UARTE_ANY_ASYNC 1
 #endif
 
+#if (defined(CONFIG_UART_0_NRF_HW_ASYNC) && defined(CONFIG_UART_0_NRF_HW_ASYNC_TIMER)) || \
+	(defined(CONFIG_UART_1_NRF_HW_ASYNC) && defined(CONFIG_UART_1_NRF_HW_ASYNC_TIMER)) || \
+	(defined(CONFIG_UART_2_NRF_HW_ASYNC) && defined(CONFIG_UART_2_NRF_HW_ASYNC_TIMER)) || \
+	(defined(CONFIG_UART_3_NRF_HW_ASYNC) && defined(CONFIG_UART_3_NRF_HW_ASYNC_TIMER))
+#define UARTE_HW_ASYNC 1
+#endif
+
 /*
  * RX timeout is divided into time slabs, this define tells how many divisions
  * should be made. More divisions - higher timeout accuracy and processor usage.
@@ -850,9 +857,14 @@ static int uarte_nrfx_rx_enable(const struct device *dev, uint8_t *buf,
 	 * way but timeouts would always occur later than expected,  most likely
 	 * after ~3 ticks.
 	 */
+#ifdef UARTE_HW_ASYNC
+	data->async->rx_timeout_slab = timeout / RX_TIMEOUT_DIV;
+#else
 	data->async->rx_timeout_slab =
 		MAX(timeout / RX_TIMEOUT_DIV,
 		    NRFX_CEIL_DIV(3 * 1000000, CONFIG_SYS_CLOCK_TICKS_PER_SEC));
+#endif
+
 
 	data->async->rx_buf = buf;
 	data->async->rx_buf_len = len;
