@@ -6,6 +6,14 @@
 config ZEPHYR_MBEDTLS_MODULE
 	bool
 
+# Forward declare config symbols to pass Kconfig compliance
+config NORDIC_SECURITY_BACKEND
+	bool
+	depends on SOC_FAMILY_NRF
+config NRF_SECURITY
+	bool
+	depends on SOC_FAMILY_NRF
+
 config MBEDTLS_PROMPTLESS
 	bool
 	help
