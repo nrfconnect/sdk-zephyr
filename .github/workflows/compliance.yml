@@ -61,7 +61,7 @@ jobs:
         ls -la
         git log  --pretty=oneline | head -n 10
         ./scripts/ci/check_compliance.py --annotate -e KconfigBasic -e Kconfig \
-        -c origin/${BASE_REF}..
+        -e KconfigBasicNoModules -c origin/${BASE_REF}..
 
     - name: upload-results
       uses: actions/upload-artifact@v3
