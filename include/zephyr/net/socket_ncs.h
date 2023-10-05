@@ -69,6 +69,9 @@ extern "C" {
 
 /* NCS specific socket options */
 
+/** sockopt: Release Assistance Indication feature: This will indicate that
+ *  there will be no upcoming data transmission anymore (no data included).
+ */
 #define SO_RAI_NO_DATA 50
 /** sockopt: Release Assistance Indication feature: This will indicate that the
  *  next call to send/sendto will be the last one for some time.
