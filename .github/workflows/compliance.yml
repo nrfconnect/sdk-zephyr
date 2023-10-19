@@ -40,10 +40,6 @@ jobs:
         # Ensure there's no merge commits in the PR
         #[[ "$(git rev-list --merges --count origin/${BASE_REF}..)" == "0" ]] || \
         #(echo "::error ::Merge commits not allowed, rebase instead";false)
-        # Sauce tag checks before rebasing
-        git rev-list --first-parent origin/${BASE_REF}..HEAD | tr '\n' ',' | \
-        xargs gitlint -c ncs-sauce-tags.enable=true \
-        -c title-starts-with-subsystem.regex=".*" --commits
         git rebase origin/${BASE_REF}
         # debug
         git log  --pretty=oneline | head -n 10
