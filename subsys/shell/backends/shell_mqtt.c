@@ -12,6 +12,14 @@
 #include <stdio.h>
 #include <zephyr/drivers/hwinfo.h>
 
+#if defined(CONFIG_SHELL_BACKEND_MQTT_PROVISION_CERTIFICATES)
+#include "mqtt-shell-certs.h"
+#endif /* CONFIG_SHELL_BACKEND_MQTT_PROVISION_CERTIFICATES */
+
+#if defined(CONFIG_SHELL_BACKEND_MQTT_TLS)
+BUILD_ASSERT((CONFIG_SHELL_BACKEND_MQTT_TLS_SEC_TAG != -1), "Security tag must be configured");
+#endif /* CONFIG_SHELL_BACKEND_MQTT_TLS */
+
 SHELL_MQTT_DEFINE(shell_transport_mqtt);
 SHELL_DEFINE(shell_mqtt, "", &shell_transport_mqtt,
 	     CONFIG_SHELL_BACKEND_MQTT_LOG_MESSAGE_QUEUE_SIZE,
@@ -24,7 +32,6 @@ LOG_MODULE_REGISTER(shell_mqtt, CONFIG_SHELL_MQTT_LOG_LEVEL);
 #define LISTEN_TIMEOUT_MS 500
 #define MQTT_SEND_DELAY_MS K_MSEC(100)
 #define PROCESS_INTERVAL K_SECONDS(2)
-#define SHELL_MQTT_WORKQ_STACK_SIZE 2048
 
 #ifdef CONFIG_SHELL_MQTT_SERVER_USERNAME
 #define MQTT_USERNAME CONFIG_SHELL_MQTT_SERVER_USERNAME
@@ -39,7 +46,7 @@ LOG_MODULE_REGISTER(shell_mqtt, CONFIG_SHELL_MQTT_LOG_LEVEL);
 #endif /*SHELL_MQTT_SERVER_PASSWORD */
 
 struct shell_mqtt *sh_mqtt;
-K_KERNEL_STACK_DEFINE(sh_mqtt_workq_stack, SHELL_MQTT_WORKQ_STACK_SIZE);
+K_KERNEL_STACK_DEFINE(sh_mqtt_workq_stack, CONFIG_SHELL_BACKEND_MQTT_WORKQ_STACK_SIZE);
 
 static void mqtt_evt_handler(struct mqtt_client *const client, const struct mqtt_evt *evt);
 
@@ -93,9 +100,11 @@ bool __weak shell_mqtt_get_devid(char *id, int id_max_len)
 
 static void prepare_fds(void)
 {
-	if (sh_mqtt->mqtt_cli.transport.type == MQTT_TRANSPORT_NON_SECURE) {
-		sh_mqtt->fds[0].fd = sh_mqtt->mqtt_cli.transport.tcp.sock;
-	}
+#if defined(CONFIG_SHELL_BACKEND_MQTT_TLS)
+	sh_mqtt->fds[0].fd = sh_mqtt->mqtt_cli.transport.tls.sock;
+#else
+	sh_mqtt->fds[0].fd = sh_mqtt->mqtt_cli.transport.tcp.sock;
+#endif
 
 	sh_mqtt->fds[0].events = ZSOCK_POLLIN;
 	sh_mqtt->nfds = 1;
@@ -142,14 +151,15 @@ static int get_mqtt_broker_addrinfo(void)
 	rc = zsock_getaddrinfo(CONFIG_SHELL_MQTT_SERVER_ADDR,
 			       STRINGIFY(CONFIG_SHELL_MQTT_SERVER_PORT), &hints, &sh_mqtt->haddr);
 	if (rc == 0) {
-		LOG_INF("DNS%s resolved for %s:%d", "", CONFIG_SHELL_MQTT_SERVER_ADDR,
-			CONFIG_SHELL_MQTT_SERVER_PORT);
+		LOG_INF("DNS resolved for %s:%d", CONFIG_SHELL_MQTT_SERVER_ADDR,
+						  CONFIG_SHELL_MQTT_SERVER_PORT);
 
 		return 0;
 	}
 
-	LOG_ERR("DNS%s resolved for %s:%d, retrying", " not", CONFIG_SHELL_MQTT_SERVER_ADDR,
-		CONFIG_SHELL_MQTT_SERVER_PORT);
+	LOG_ERR("DNS not resolved for %s:%d, error: %d, retrying", CONFIG_SHELL_MQTT_SERVER_ADDR,
+								   CONFIG_SHELL_MQTT_SERVER_PORT,
+								   rc);
 
 	return rc;
 }
@@ -192,6 +202,55 @@ static void broker_init(void)
 	net_ipaddr_copy(&broker4->sin_addr, &net_sin(sh_mqtt->haddr->ai_addr)->sin_addr);
 }
 
+
+#if defined(CONFIG_SHELL_BACKEND_MQTT_PROVISION_CERTIFICATES)
+static int certificates_provision(void)
+{
+	int err;
+	static bool certs_added;
+
+	if (certs_added) {
+		return 0;
+	}
+
+	if (sizeof(ca_certificate) > 1) {
+		err = tls_credential_add(CONFIG_SHELL_BACKEND_MQTT_TLS_SEC_TAG,
+					 TLS_CREDENTIAL_CA_CERTIFICATE,
+					 ca_certificate,
+					 sizeof(ca_certificate));
+		if (err < 0) {
+			LOG_ERR("Failed to register CA certificate: %d", err);
+			return err;
+		}
+	}
+
+	if (sizeof(private_key) > 1) {
+		err = tls_credential_add(CONFIG_SHELL_BACKEND_MQTT_TLS_SEC_TAG,
+					 TLS_CREDENTIAL_PRIVATE_KEY,
+					 private_key,
+					 sizeof(private_key));
+		if (err < 0) {
+			LOG_ERR("Failed to register private key: %d", err);
+			return err;
+		}
+	}
+
+	if (sizeof(device_certificate) > 1) {
+		err = tls_credential_add(CONFIG_SHELL_BACKEND_MQTT_TLS_SEC_TAG,
+					 TLS_CREDENTIAL_SERVER_CERTIFICATE,
+					 device_certificate,
+					 sizeof(device_certificate));
+		if (err < 0) {
+			LOG_ERR("Failed to register public certificate: %d", err);
+			return err;
+		}
+	}
+
+	certs_added = true;
+	return 0;
+}
+#endif /* CONFIG_SHELL_BACKEND_MQTT_PROVISION_CERTIFICATES */
+
 static void client_init(void)
 {
 	static struct mqtt_utf8 password;
@@ -221,6 +280,27 @@ static void client_init(void)
 
 	/* MQTT transport configuration */
 	sh_mqtt->mqtt_cli.transport.type = MQTT_TRANSPORT_NON_SECURE;
+
+#if defined(CONFIG_SHELL_BACKEND_MQTT_TLS)
+	sec_tag_t sec_tag_list[] = { CONFIG_SHELL_BACKEND_MQTT_TLS_SEC_TAG };
+
+	sh_mqtt->mqtt_cli.transport.type = MQTT_TRANSPORT_SECURE;
+	sh_mqtt->mqtt_cli.transport.tls.config.peer_verify = TLS_PEER_VERIFY_REQUIRED;
+	sh_mqtt->mqtt_cli.transport.tls.config.cipher_count = 0;
+	sh_mqtt->mqtt_cli.transport.tls.config.cipher_list = NULL;
+	sh_mqtt->mqtt_cli.transport.tls.config.sec_tag_count = ARRAY_SIZE(sec_tag_list);
+	sh_mqtt->mqtt_cli.transport.tls.config.sec_tag_list = sec_tag_list;
+	sh_mqtt->mqtt_cli.transport.tls.config.session_cache = TLS_SESSION_CACHE_DISABLED;
+	sh_mqtt->mqtt_cli.transport.tls.config.hostname = CONFIG_SHELL_MQTT_SERVER_ADDR;
+
+#if defined(CONFIG_SHELL_BACKEND_MQTT_PROVISION_CERTIFICATES)
+	int err = certificates_provision();
+
+	if (err) {
+		LOG_ERR("Could not provision certificates, error: %d", err);
+	}
+#endif /* CONFIG_SHELL_BACKEND_MQTT_PROVISION_CERTIFICATES */
+#endif /* CONFIG_SHELL_BACKEND_MQTT_TLS */
 }
 
 /* Work routine to process MQTT packet and keep alive MQTT connection */
@@ -389,9 +469,8 @@ static void sh_mqtt_connect_handler(struct k_work *work)
 	LOG_DBG("Resolving DNS");
 	rc = get_mqtt_broker_addrinfo();
 	if (rc != 0) {
-		(void)sh_mqtt_work_reschedule(&sh_mqtt->connect_dwork, K_SECONDS(1));
-		sh_mqtt_context_unlock();
-		return;
+		LOG_ERR("get_mqtt_broker_addrinfo, error: %d", rc);
+		goto connect_error;
 	}
 
 	LOG_DBG("Initializing MQTT client");
@@ -437,7 +516,8 @@ static void sh_mqtt_connect_handler(struct k_work *work)
 connect_error:
 	LOG_DBG("%s: close MQTT, cleanup socket & reconnect", "connect");
 	sh_mqtt_close_and_cleanup();
-	(void)sh_mqtt_work_reschedule(&sh_mqtt->connect_dwork, K_SECONDS(2));
+	(void)sh_mqtt_work_reschedule(&sh_mqtt->connect_dwork,
+				      K_SECONDS(CONFIG_SHELL_MQTT_RECONNECT_TIMEOUT_SECONDS));
 	sh_mqtt_context_unlock();
 }
 
@@ -650,9 +730,15 @@ static int init(const struct shell_transport *transport, const void *config,
 
 	(void)k_mutex_init(&sh_mqtt->lock);
 
-	if (!shell_mqtt_get_devid(sh_mqtt->device_id, DEVICE_ID_HEX_MAX_SIZE)) {
-		LOG_ERR("Unable to get device identity, using dummy value");
-		(void)snprintf(sh_mqtt->device_id, sizeof("dummy"), "dummy");
+
+	if (sizeof(CONFIG_SHELL_BACKEND_MQTT_CLIENT_ID) > 0) {
+		(void)snprintf(sh_mqtt->device_id, DEVICE_ID_HEX_MAX_SIZE, "%s",
+			       CONFIG_SHELL_BACKEND_MQTT_CLIENT_ID);
+	} else {
+		if (!shell_mqtt_get_devid(sh_mqtt->device_id, DEVICE_ID_HEX_MAX_SIZE)) {
+			LOG_ERR("Unable to get device identity, using dummy value");
+			(void)snprintf(sh_mqtt->device_id, sizeof("dummy"), "dummy");
+		}
 	}
 
 	LOG_DBG("Client ID is %s", sh_mqtt->device_id);
@@ -677,7 +763,8 @@ static int init(const struct shell_transport *transport, const void *config,
 	/* Initialize the work queue */
 	k_work_queue_init(&sh_mqtt->workq);
 	k_work_queue_start(&sh_mqtt->workq, sh_mqtt_workq_stack,
-			   K_KERNEL_STACK_SIZEOF(sh_mqtt_workq_stack), K_PRIO_COOP(7), NULL);
+			   K_KERNEL_STACK_SIZEOF(sh_mqtt_workq_stack),
+			   K_LOWEST_APPLICATION_THREAD_PRIO, NULL);
 	(void)k_thread_name_set(&sh_mqtt->workq.thread, "sh_mqtt_workq");
 	k_work_init(&sh_mqtt->net_disconnected_work, net_disconnect_handler);
 	k_work_init_delayable(&sh_mqtt->connect_dwork, sh_mqtt_connect_handler);

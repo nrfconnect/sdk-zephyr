@@ -207,15 +207,44 @@ config SHELL_BACKEND_MQTT
 	depends on NET_TCP
 	depends on NET_IPV4
 	depends on NETWORKING
+	select NET_CONNECTION_MANAGER
 	select DNS_RESOLVER
 	select HWINFO
 	select MQTT_LIB
 	select NET_MGMT
 	select NET_MGMT_EVENT
+	select RING_BUFFER
 	help
 	  Enable MQTT backend.
 
 if SHELL_BACKEND_MQTT
+
+config SHELL_MQTT_RECONNECT_TIMEOUT_SECONDS
+	int "Reconnect timeout in seconds"
+	default 30
+
+config SHELL_BACKEND_MQTT_CLIENT_ID
+	string "MQTT client ID"
+
+config MQTT_SHELL_BACKEND_CLIENT_ID_SIZE_MAX
+	int "Client ID buffer size"
+	default 50
+
+config SHELL_BACKEND_MQTT_TLS
+	bool "Enable TLS support"
+	select MQTT_LIB_TLS
+
+config SHELL_BACKEND_MQTT_TLS_SEC_TAG
+	int "TLS sec tag"
+	depends on SHELL_BACKEND_MQTT_TLS
+	default -1
+	help
+	  Security tag where TLS credentials are stored.
+
+config SHELL_BACKEND_MQTT_PROVISION_CERTIFICATES
+	bool "Run-time provisioning of certificates"
+	depends on SHELL_BACKEND_MQTT_TLS
+	select TLS_CREDENTIALS
 
 config SHELL_MQTT_SERVER_ADDR
 	string "MQTT server address"
@@ -225,6 +254,7 @@ config SHELL_MQTT_SERVER_ADDR
 
 config SHELL_MQTT_SERVER_PORT
 	int "MQTT server port"
+	default 8883 if SHELL_BACKEND_MQTT_TLS
 	default 1883
 	help
 	  MQTT server port.
@@ -251,6 +281,10 @@ config SHELL_MQTT_TX_BUF_SIZE
 	default 256
 	help
 	  Buffer size for the MQTT data transmission.
+
+config SHELL_BACKEND_MQTT_WORKQ_STACK_SIZE
+	int "Stack size for the MQTT work queue"
+	default 4096
 
 module = SHELL_BACKEND_MQTT
 default-timeout = 100
