@@ -1,5 +1,7 @@
 @Library("CI_LIB") _
 
-def pipeline = new ncs.sdk_zephyr.Main()
+// def pipeline_zephyr = new ncs.sdk_zephyr.Main()
+// pipeline_zephyr.run(JOB_NAME)
 
-pipeline.run(JOB_NAME)
+def pipeline_nrf = new ncs.sdk_nrf.Main()
+pipeline_nrf.run(JOB_NAME)
