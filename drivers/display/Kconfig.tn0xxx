@@ -1,0 +1,27 @@
+# Copyright (c) 2023 Alen Daniel
+# SPDX-License-Identifier: Apache-2.0
+
+config TN0XXX
+	bool "Kyocera TN0XXX memory display controller driver"
+	default y
+	depends on DT_HAS_KYO_TN0XXX_ENABLED
+	select SPI
+	help
+	  Enable driver for kyocera memory in pixel tft display series TN0XXX
+
+if TN0XXX
+
+config TN0XXX_VERTICAL_BIT_MAPPING
+	bool "TN0XXX uses bitmaps with bits aligned vertically"
+	default n
+	help
+	  Initialize display in portrait orientation using bitmaps aligned vertically
+
+config TN0XXX_ROTATED_180_DEGREE
+	bool "TN0XXX display rotated 180 degrees and bits aligned vertically"
+	default n
+	help
+	  Initialize display in portrait orientation using bitmaps aligned vertically,
+	  except that the display orientation is flipped by 180 degrees
+
+endif # TN0XXX
