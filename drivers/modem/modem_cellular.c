@@ -2398,6 +2398,35 @@ MODEM_CHAT_SCRIPT_DEFINE(sqn_gm02s_periodic_chat_script,
 			      &MODEM_CELLULAR_INST_NAME(config, inst), POST_KERNEL, 99,            \
 			      &modem_cellular_api);
 
+#define MODEM_CELLULAR_DEVICE_U_BLOX_SARA_R5(inst)                                                 \
+	MODEM_PPP_DEFINE(MODEM_CELLULAR_INST_NAME(ppp, inst), NULL, 98, 1500, 64);                 \
+                                                                                                   \
+	static struct modem_cellular_data MODEM_CELLULAR_INST_NAME(data, inst) = {                 \
+		.chat_delimiter = {'\r'},                                                          \
+		.chat_filter = {'\n'},                                                             \
+		.ppp = &MODEM_CELLULAR_INST_NAME(ppp, inst),                                       \
+	};                                                                                         \
+                                                                                                   \
+	static struct modem_cellular_config MODEM_CELLULAR_INST_NAME(config, inst) = {             \
+		.uart = DEVICE_DT_GET(DT_INST_BUS(inst)),                                          \
+		.power_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, mdm_power_gpios, {}),                 \
+		.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, mdm_reset_gpios, {}),                 \
+		.autostarts = true,                                                                \
+		.power_pulse_duration_ms = 1500,                                                   \
+		.reset_pulse_duration_ms = 100,                                                    \
+		.startup_time_ms = 1500,                                                           \
+		.shutdown_time_ms = 13000,                                                         \
+		.init_chat_script = &u_blox_sara_r5_init_chat_script,                              \
+		.dial_chat_script = &u_blox_sara_r5_dial_chat_script,                              \
+		.periodic_chat_script = &u_blox_sara_r5_periodic_chat_script,                      \
+	};                                                                                         \
+                                                                                                   \
+	PM_DEVICE_DT_INST_DEFINE(inst, modem_cellular_pm_action);                                  \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(inst, modem_cellular_init, PM_DEVICE_DT_INST_GET(inst),              \
+			      &MODEM_CELLULAR_INST_NAME(data, inst),                               \
+			      &MODEM_CELLULAR_INST_NAME(config, inst), POST_KERNEL, 99, NULL);
+
 #define MODEM_CELLULAR_DEVICE_SWIR_HL7800(inst)                                                    \
 	MODEM_PPP_DEFINE(MODEM_CELLULAR_INST_NAME(ppp, inst), NULL, 98, 1500, 64);                 \
                                                                                                    \
