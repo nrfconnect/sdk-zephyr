@@ -1250,10 +1250,6 @@ static int modem_cellular_on_state_leave(struct modem_cellular_data *data)
 		ret = modem_cellular_on_carrier_on_state_leave(data);
 		break;
 
-	case MODEM_CELLULAR_STATE_INIT_POWER_OFF:
-		ret = modem_cellular_on_init_power_off_state_leave(data);
-		break;
-
 	case MODEM_CELLULAR_STATE_POWER_OFF_PULSE:
 		ret = modem_cellular_on_power_off_pulse_state_leave(data);
 		break;
@@ -1808,7 +1804,7 @@ MODEM_CHAT_SCRIPT_DEFINE(quectel_eg25_g_dial_chat_script, quectel_eg25_g_dial_ch
 			 dial_abort_matches, modem_cellular_chat_callback_handler, 10);
 
 MODEM_CHAT_SCRIPT_CMDS_DEFINE(quectel_eg25_g_power_down_script_cmds,
-			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CFUN=0", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CFUN=4", ok_match),
 			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+QSCLK=1", ok_match),);
 
 MODEM_CHAT_SCRIPT_DEFINE(quectel_eg25_g_power_down_script, quectel_eg25_g_power_down_script_cmds,
