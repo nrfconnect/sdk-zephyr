@@ -13,6 +13,11 @@
 #include <dt-bindings/pinctrl/esp32s3-pinctrl.h>
 
 / {
+
+	aliases {
+		die-temp0 = &coretemp;
+	};
+
 	chosen {
 		zephyr,canbus = &twai;
 		zephyr,entropy = &trng0;
@@ -56,6 +61,16 @@
 		sram0: memory@3fc88000 {
 			compatible = "mmio-sram";
 			reg = <0x3fc88000 0x77FFF>;
+		};
+
+		ipmmem0: memory@3fcbd000 {
+			compatible = "mmio-sram";
+			reg = <0x3fcbd000 0x400>;
+		};
+
+		shm0: memory@3fcbd400 {
+			compatible = "mmio-sram";
+			reg = <0x3fcbd400 0x4000>;
 		};
 
 		intc: interrupt-controller@600c2000 {
@@ -105,6 +120,16 @@
 			/* PSRAM size is specified in SOC/SIP dtsi */
 			reg = <0x3c000000 DT_SIZE_M(2)>;
 			status = "disabled";
+		};
+
+		ipm0: ipm@3fcc1400 {
+			compatible = "espressif,esp32-ipm";
+			reg = <0x3fcc1400 0x8>;
+			status = "disabled";
+			shared-memory = <&ipmmem0>;
+			shared-memory-size = <0x400>;
+			interrupts = <FROM_CPU_INTR0_SOURCE FROM_CPU_INTR1_SOURCE>;
+			interrupt-parent = <&intc>;
 		};
 
 		uart0: uart@60000000 {
@@ -173,6 +198,14 @@
 			};
 		};
 
+		touch: touch@6000885c {
+			compatible = "espressif,esp32-touch";
+			reg = <0x6000885c 0x88 0x60008908 0x18>;
+			interrupts = <RTC_CORE_INTR_SOURCE>;
+			interrupt-parent = <&intc>;
+			status = "disabled";
+		};
+
 		i2c0: i2c@60013000 {
 			compatible = "espressif,esp32-i2c";
 			#address-cells = <1>;
@@ -217,6 +250,13 @@
 			status = "disabled";
 		};
 
+		coretemp: coretemp@60008800 {
+			compatible = "espressif,esp32-temp";
+			friendly-name = "coretemp";
+			reg = <0x60008800 0x4>;
+			status = "disabled";
+		};
+
 		adc0: adc@60040000 {
 			compatible = "espressif,esp32-adc";
 			reg = <0x60040000 4>;
@@ -241,7 +281,6 @@
 			interrupts = <TWAI_INTR_SOURCE>;
 			interrupt-parent = <&intc>;
 			clocks = <&rtc ESP32_TWAI_MODULE>;
-			sjw = <1>;
 			sample-point = <875>;
 			status = "disabled";
 		};

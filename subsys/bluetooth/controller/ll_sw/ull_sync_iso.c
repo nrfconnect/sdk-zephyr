@@ -91,6 +91,16 @@ uint8_t ll_big_sync_create(uint8_t big_handle, uint16_t sync_handle,
 	}
 
 	sync_iso = sync_iso_get(big_handle);
+	if (!sync_iso) {
+		/* Host requested more than supported number of ISO Synchronized
+		 * Receivers.
+		 * Or probably HCI handles where not translated to zero-indexed
+		 * controller handles?
+		 */
+		return BT_HCI_ERR_MEM_CAPACITY_EXCEEDED;
+	}
+
+	/* Check if this ISO already is associated with a Periodic Sync */
 	if (sync_iso->sync) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
@@ -454,10 +464,9 @@ void ull_sync_iso_setup(struct ll_sync_iso_set *sync_iso,
 
 	/* Initialize payload pointers */
 	lll->payload_count_max = PDU_BIG_PAYLOAD_COUNT_MAX;
-	lll->payload_head = 0U;
 	lll->payload_tail = 0U;
 	for (int i = 0; i < CONFIG_BT_CTLR_SYNC_ISO_STREAM_MAX; i++) {
-		for (int j = 0; j < PDU_BIG_PAYLOAD_COUNT_MAX; j++) {
+		for (int j = 0; j < lll->payload_count_max; j++) {
 			lll->payload[i][j] = NULL;
 		}
 	}
@@ -509,11 +518,11 @@ void ull_sync_iso_setup(struct ll_sync_iso_set *sync_iso,
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
 	sync_iso->ull.ticks_preempt_to_start =
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
-	sync_iso->ull.ticks_slot = HAL_TICKER_US_TO_TICKS(
-			EVENT_OVERHEAD_START_US + ready_delay_us +
-			PDU_BIS_MAX_US(PDU_AC_EXT_PAYLOAD_SIZE_MAX, lll->enc,
-				       lll->phy) +
-			EVENT_OVERHEAD_END_US);
+	sync_iso->ull.ticks_slot = HAL_TICKER_US_TO_TICKS_CEIL(
+		EVENT_OVERHEAD_START_US + ready_delay_us +
+		PDU_BIS_MAX_US(PDU_AC_EXT_PAYLOAD_SIZE_MAX, lll->enc,
+			       lll->phy) +
+		EVENT_OVERHEAD_END_US);
 
 	ticks_slot_offset = MAX(sync_iso->ull.ticks_active_to_start,
 				sync_iso->ull.ticks_prepare_to_start);

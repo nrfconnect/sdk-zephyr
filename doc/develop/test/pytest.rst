@@ -49,28 +49,64 @@ How to create a pytest test
 An example of a pytest test is given at :zephyr_file:`samples/subsys/testsuite/pytest/shell/pytest/test_shell.py`.
 Twister calls pytest for each configuration from the .yaml file which uses ``harness: pytest``.
 By default, it points to ``pytest`` directory, located next to a directory with binary sources.
-A keyword ``pytest_root`` placed under ``harness_config`` section can be used to point to another
-location.
+A keyword ``pytest_root`` placed under ``harness_config`` section can be used to point to other
+files, directories or subtests.
 
-Pytest scans the given folder looking for tests, following its default
+Pytest scans the given locations looking for tests, following its default
 `discovery rules <https://docs.pytest.org/en/7.1.x/explanation/goodpractices.html#conventions-for-python-test-discovery>`_
 One can also pass some extra arguments to the pytest from yaml file using ``pytest_args`` keyword
 under ``harness_config``, e.g.: ``pytest_args: [‘-k=test_method’, ‘--log-level=DEBUG’]``.
+There is also an option to pass ``--pytest-args`` through Twister command line parameters.
+This can be particularly useful when one wants to select a specific testcase from a test suite.
+For instance, one can use a command:
 
-Following import is required to include in .py sources:
+.. code-block:: console
 
-.. code-block:: python
+   $ ./scripts/twister --platform native_sim -T samples/subsys/testsuite/pytest/shell \
+   -s samples/subsys/testsuite/pytest/shell/sample.pytest.shell \
+   --pytest-args='-k test_shell_print_version'
 
-   from twister_harness import Device
 
-It is important for type checking and enabling IDE hints for ``dut`` s (objects representing
-Devices Under Test). The ``dut`` fixture is the core of pytest harness plugin. When used as an
-argument of a test function it gives access to a DeviceAbstract type object. The fixture yields a
-device prepared according to the requested type (native posix, qemu, hardware, etc.). All types of
-devices share the same API. This allows for writing tests which are device-type-agnostic.
+Note that ``--pytest-args`` can be passed multiple times to pass several arguments to the pytest.
 
 Helpers & fixtures
 ==================
+
+dut
+---
+
+Give access to a DeviceAdapter type object, that represents Device Under Test.
+This fixture is the core of pytest harness plugin. It is required to launch
+DUT (initialize logging, flash device, connect serial etc).
+This fixture yields a device prepared according to the requested type
+(``native``, ``qemu``, ``hardware``, etc.). All types of devices share the same API.
+This allows for writing tests which are device-type-agnostic.
+Scope of this fixture is determined by the ``pytest_dut_scope``
+keyword placed under ``harness_config`` section.
+
+
+.. code-block:: python
+
+   from twister_harness import DeviceAdapter
+
+   def test_sample(dut: DeviceAdapter):
+      dut.readlines_until('Hello world')
+
+shell
+-----
+
+Provide an object with methods used to interact with shell application.
+It calls ``wait_for_promt`` method, to not start scenario until DUT is ready.
+Note that it uses ``dut`` fixture, so ``dut`` can be skipped when ``shell`` is used.
+Scope of this fixture is determined by the ``pytest_dut_scope``
+keyword placed under ``harness_config`` section.
+
+.. code-block:: python
+
+   from twister_harness import Shell
+
+   def test_shell(shell: Shell):
+      shell.exec_command('help')
 
 mcumgr
 ------
@@ -82,16 +118,15 @@ More information about MCUmgr can be found here :ref:`mcu_mgr`.
    This fixture requires the ``mcumgr`` available in the system PATH
 
 Only selected functionality of MCUmgr is wrapped by this fixture.
-
 For example, here is a test with a fixture ``mcumgr``
 
 .. code-block:: python
 
-   from twister_harness import Device, McuMgr
+   from twister_harness import DeviceAdapter, Shell, McuMgr
 
-   def test_upgrade(dut: Device, mcumgr: McuMgr):
-      # wait for dut is up
-      time.sleep(2)
+   def test_upgrade(dut: DeviceAdapter, shell: Shell, mcumgr: McuMgr):
+      # free the serial port for mcumgr
+      dut.disconnect()
       # upload the signed image
       mcumgr.image_upload('path/to/zephyr.signed.bin')
       # obtain the hash of uploaded image from the device
@@ -105,7 +140,4 @@ For example, here is a test with a fixture ``mcumgr``
 Limitations
 ***********
 
-* Device adapters in pytest plugin provide `iter_stdout` method to read from devices. In some
-  cases, it is not the most convenient way, and it will be considered how to improve this
-  (for example replace it with a simple read function with a given byte size and timeout arguments).
 * Not every platform type is supported in the plugin (yet).

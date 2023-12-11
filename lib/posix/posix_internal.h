@@ -12,6 +12,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/posix/pthread.h>
+#include <zephyr/posix/signal.h>
 #include <zephyr/sys/dlist.h>
 #include <zephyr/sys/slist.h>
 
@@ -23,6 +24,9 @@
 
 struct posix_thread {
 	struct k_thread thread;
+
+	/* List nodes for pthread_cleanup_push() / pthread_cleanup_pop() */
+	sys_slist_t cleanup_list;
 
 	/* List node for ready_q, run_q, or done_q */
 	sys_dnode_t q_node;
@@ -36,8 +40,12 @@ struct posix_thread {
 	/* Exit status */
 	void *retval;
 
+	/* Signal mask */
+	sigset_t sigset;
+
 	/* Pthread cancellation */
 	uint8_t cancel_state;
+	uint8_t cancel_type;
 	bool cancel_pending;
 
 	/* Detach state */

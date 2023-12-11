@@ -10,6 +10,8 @@ toolchain:
   - llvm
 supported:
   - can
+  - counter
+  - dma
   - eeprom
   - netif:eth
   - usb_device
@@ -18,5 +20,4 @@ supported:
   - spi
   - gpio
   - rtc
-testing:
-  default: true
+vendor: zephyr

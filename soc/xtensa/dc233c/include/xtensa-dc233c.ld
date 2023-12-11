@@ -20,7 +20,7 @@
 #include <zephyr/linker/linker-tool.h>
 
 #define RAMABLE_REGION RAM :sram0_phdr
-#define ROMABLE_REGION rom0_seg :rom0_phdr
+#define ROMABLE_REGION RAM :sram0_phdr
 
 #ifdef CONFIG_MMU
 #define MMU_PAGE_ALIGN . = ALIGN(CONFIG_MMU_PAGE_SIZE);
@@ -287,6 +287,9 @@ SECTIONS
     _DoubleExceptionVector_text_end = ABSOLUTE(.);
   } >sram0_18_seg :sram0_18_phdr
 
+#define LIB_OBJ_FUNC_IN_SECT(library, obj_file, func)		\
+	*##library##:##obj_file##(.literal.##func .text.##func)	\
+
 #ifdef CONFIG_XTENSA_MMU
   .vec_helpers :
   {
@@ -301,44 +304,51 @@ SECTIONS
      *       TLB multi-hit exception.
      */
 
-    *libarch__xtensa__core.a:xtensa-asm2-util.S.obj(.literal)
-    *libarch__xtensa__core.a:xtensa-asm2-util.S.obj(.text)
-    *libarch__xtensa__core.a:xtensa-asm2-util.S.obj(.iram.text)
-    *libarch__xtensa__core.a:xtensa-asm2-util.S.obj(.iram0.text)
+    *libarch__xtensa__core.a:xtensa-asm2-util.S.obj(.literal .text)
+    *libarch__xtensa__core.a:xtensa-asm2-util.S.obj(.iram.text .iram0.text)
 
     *libarch__xtensa__core.a:window_vectors.S.obj(.iram.text)
 
-    *libarch__xtensa__core.a:xtensa-asm2.c.obj(.literal.*)
-    *libarch__xtensa__core.a:xtensa-asm2.c.obj(.text.*)
+    *libarch__xtensa__core.a:crt1.S.obj(.literal .text)
 
-    *libarch__xtensa__core.a:fatal.c.obj(.literal.*)
-    *libarch__xtensa__core.a:fatal.c.obj(.text.*)
-
-    *libarch__xtensa__core.a:crt1.S.obj(.literal)
-    *libarch__xtensa__core.a:crt1.S.obj(.text)
-
-    *libarch__xtensa__core.a:cpu_idle.c.obj(.literal.*)
-    *libarch__xtensa__core.a:cpu_idle.c.obj(.text.*)
+    LIB_OBJ_FUNC_IN_SECT(libarch__xtensa__core.a,xtensa-asm2.c.obj,*)
+    LIB_OBJ_FUNC_IN_SECT(libarch__xtensa__core.a,fatal.c.obj,*)
+    LIB_OBJ_FUNC_IN_SECT(libarch__xtensa__core.a,cpu_idle.c.obj,*)
 
     *(.text.arch_is_in_isr)
 
-    *libkernel.a:fatal.c.obj(.literal.*)
-    *libkernel.a:fatal.c.obj(.text.*)
+    /* To support backtracing */
+    LIB_OBJ_FUNC_IN_SECT(libarch__xtensa__core.a,xtensa_backtrace.c.obj,*)
+
+    *libarch__xtensa__core.a:debug_helpers_asm.S.obj(.iram1.literal .iram1)
+
+    /* Userspace related stuff */
+    LIB_OBJ_FUNC_IN_SECT(libarch__xtensa__core.a,userspace.S.obj,z_xtensa_do_syscall)
+    LIB_OBJ_FUNC_IN_SECT(libarch__xtensa__core.a,ptables.c.obj,z_xtensa_swap_update_page_tables)
 
     /* Below are to speed up execution by avoiding TLB misses
      * on frequently used functions.
+     *
+     * There is almost 1MB space (due to TLB pinning) so we can
+     * be generous.
      */
-    *libkernel.a:sched.c.obj(.literal.*)
-    *libkernel.a:sched.c.obj(.text.*)
-    *libkernel.a:timeout.c.obj(.literal.*)
-    *libkernel.a:timeout.c.obj(.text.*)
+    LIB_OBJ_FUNC_IN_SECT(libkernel.a,,*)
 
-    *libdrivers__console.a:(.literal.*)
-    *libdrivers__console.a:(.text.*)
-    *libdrivers__timer.a:(.literal.*)
-    *libdrivers__timer.a:(.text.*)
+    LIB_OBJ_FUNC_IN_SECT(libdrivers__console.a,,*)
+    LIB_OBJ_FUNC_IN_SECT(libdrivers__timer.a,,*)
+
+    *(.literal.z_vrfy_* .text.z_vrfy_*)
+    *(.literal.z_mrsh_* .text.z_mrsh_*)
+    *(.literal.z_impl_* .text.z_impl_*)
+    *(.literal.z_obj_*  .text.z_obj_*)
+
+    *(.literal.k_sys_fatal_error_handler .text.k_sys_fatal_error_handler)
   } >vec_helpers :vec_helpers_phdr
 #endif /* CONFIG_XTENSA_MMU */
+
+#ifdef CONFIG_CODE_DATA_RELOCATION
+#include <linker_relocate.ld>
+#endif
 
   .ResetVector.text : ALIGN(4)
   {
@@ -357,6 +367,7 @@ SECTIONS
     *(.entry.text)
     *(.init.literal)
     *(.iram0.literal .iram.literal .iram.text.literal .iram0.text .iram.text)
+    *(.iram1.literal .iram1)
     KEEP(*(.init))
     *(.literal .text .literal.* .text.* .stub .gnu.warning .gnu.linkonce.literal.* .gnu.linkonce.t.*.literal .gnu.linkonce.t.*)
     *(.fini.literal)
@@ -369,7 +380,7 @@ SECTIONS
 
     _text_end = ABSOLUTE(.);
     _etext = .;
-  } >RAM :sram0_phdr
+  } >RAMABLE_REGION
   __text_region_end = .;
 
   .rodata : HDR_MMU_PAGE_ALIGN
@@ -383,7 +394,16 @@ SECTIONS
     . = ALIGN(4);
     #include <snippets-rodata.ld>
     #include <zephyr/linker/kobject-rom.ld>
+  } >RAMABLE_REGION
 
+#include <zephyr/linker/common-rom.ld>
+
+#include <zephyr/linker/thread-local-storage.ld>
+
+#include <zephyr/linker/cplusplus-rom.ld>
+
+  .rodata_end : ALIGN(4)
+  {
     . = ALIGN(4);		/* this table MUST be 4-byte aligned */
     _bss_table_start = ABSOLUTE(.);
     LONG(_bss_start)
@@ -393,17 +413,26 @@ SECTIONS
     MMU_PAGE_ALIGN
 
     __rodata_region_end = ABSOLUTE(.);
-  } >RAM :sram0_phdr
+  } >RAMABLE_REGION
 
-#include <zephyr/linker/common-rom.ld>
+#ifdef CONFIG_USERSPACE
+#define SMEM_PARTITION_ALIGN(size) MMU_PAGE_ALIGN
+#define APP_SHARED_ALIGN  MMU_PAGE_ALIGN
 
-#include <zephyr/linker/cplusplus-rom.ld>
+#include <app_smem.ld>
 
-#include <snippets-sections.ld>
+  _image_ram_start = _app_smem_start;
+  _app_smem_size = _app_smem_end - _app_smem_start;
+  _app_smem_num_words = _app_smem_size >> 2;
+  _app_smem_rom_start = LOADADDR(_APP_SMEM_SECTION_NAME);
+  _app_smem_num_words = _app_smem_size >> 2;
+#endif /* CONFIG_USERSPACE */
 
   .data : HDR_MMU_PAGE_ALIGN
   {
+#ifndef CONFIG_USERSPACE
     _image_ram_start = ABSOLUTE(.);
+#endif
     __data_start = ABSOLUTE(.);
     *(.data)
     *(.data.*)
@@ -425,7 +454,9 @@ SECTIONS
     MMU_PAGE_ALIGN
 
     __data_end = ABSOLUTE(.);
-  } >RAM :sram0_phdr
+  } >RAMABLE_REGION
+
+#include <snippets-sections.ld>
 
 #include <snippets-data-sections.ld>
 

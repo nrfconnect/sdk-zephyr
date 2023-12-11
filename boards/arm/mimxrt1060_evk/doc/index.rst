@@ -11,7 +11,7 @@ processor series and expands the i.MX RT series to three scalable families.
 
 The i.MX RT1060 doubles the On-Chip SRAM to 1MB while keeping pin-to-pin
 compatibility with i.MX RT1050. This series introduces additional features
-ideal for real-time applications such as High-Speed GPIO, CAN-FD, and
+ideal for real-time applications such as High-Speed GPIO, CAN FD, and
 synchronous parallel NAND/NOR/PSRAM controller. The i.MX RT1060 runs on the
 Arm® Cortex-M7® core up to 600 MHz.
 
@@ -472,3 +472,13 @@ connected to the EVK properly. See :ref:`Using J-Link RT1060` for more details.
 
 .. _Using J-Link with MIMXRT1060-EVKB:
    https://community.nxp.com/t5/i-MX-RT-Knowledge-Base/Using-J-Link-with-MIMXRT1060-EVKB/ta-p/1452717
+
+Experimental ENET Driver
+========================
+
+Current default ethernet driver is eth_mcux, with binding `nxp,kinetis-ethernet`. There is a new
+driver with binding `nxp,enet`, which is experimental and undergoing development, but will have
+enhanced capability, such as not hardcoding code for only one phy in the driver like eth_mcux.
+
+To build for this EVK with the new driver, include the experimental overlay to west build with
+the option `-DEXTRA_DTC_OVERLAY_FILE=nxp,enet-experimental.overlay`.

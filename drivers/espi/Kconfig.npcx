@@ -5,7 +5,9 @@
 
 config ESPI_NPCX
 	bool "Nuvoton NPCX embedded controller (EC) ESPI driver"
+	default y
 	depends on SOC_FAMILY_NPCX
+	depends on DT_HAS_NUVOTON_NPCX_ESPI_ENABLED
 	help
 	  This option enables the Intel Enhanced Serial Peripheral Interface
 	  (eSPI) for NPCX family of processors.
@@ -79,5 +81,11 @@ config ESPI_PERIPHERAL_ACPI_SHM_REGION
 
 config ESPI_PERIPHERAL_CUSTOM_OPCODE
 	default y
+
+config ESPI_NPCX_SUPP_VW_GPIO
+	bool "Indicates that the eSPI hardware supports virtual wire GPIOs"
+	default y if SOC_SERIES_NPCX9 || SOC_SERIES_NPCX4
+	help
+	  Selected if NPCX series supports virtual wire GPIOs in eSPI module.
 
 endif #ESPI_NPCX

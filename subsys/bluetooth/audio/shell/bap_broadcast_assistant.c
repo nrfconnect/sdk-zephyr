@@ -25,8 +25,11 @@
 #include "audio.h"
 
 #define INVALID_BROADCAST_ID 0xFFFFFFFFU
+/* BIS sync is a 32-bit bitfield where BIT(0) is not allowed */
+#define VALID_BIS_SYNC(_bis_sync) ((bis_sync & BIT(0)) == 0U && bis_sync < UINT32_MAX)
 
-static struct bt_bap_base received_base;
+static uint8_t received_base[UINT8_MAX];
+static uint8_t received_base_size;
 
 static struct bt_auto_scan {
 	uint32_t broadcast_id;
@@ -38,31 +41,20 @@ static struct bt_auto_scan {
 
 static bool pa_decode_base(struct bt_data *data, void *user_data)
 {
-	struct bt_bap_base base = { 0 };
-	int err;
+	const struct bt_bap_base *base = bt_bap_base_get_base_from_ad(data);
 
-	if (data->type != BT_DATA_SVC_DATA16) {
+	/* Base is NULL if the data does not contain a valid BASE */
+	if (base == NULL) {
 		return true;
-	}
-
-	if (data->data_len < BT_BAP_BASE_MIN_SIZE) {
-		return true;
-	}
-
-	err = bt_bap_decode_base(data, &base);
-	if (err != 0 && err != -ENOMSG) {
-		shell_error(ctx_shell, "Failed to decode BASE: %d", err);
-
-		return false;
 	}
 
 	/* Compare BASE and print if different */
-	if (memcmp(&base, &received_base, sizeof(base)) != 0) {
-		(void)memcpy(&received_base, &base, sizeof(base));
+	if (data->data_len != received_base_size ||
+	    memcmp(data->data, received_base, data->data_len) != 0) {
+		(void)memcpy(&received_base, data->data, data->data_len);
+		received_base_size = data->data_len;
 
-#if BROADCAST_SNK_SUBGROUP_CNT > 0
-		print_base(ctx_shell, &received_base);
-#endif /* BROADCAST_SNK_SUBGROUP_CNT > 0 */
+		print_base(base);
 	}
 
 	return false;
@@ -161,7 +153,7 @@ static void bap_broadcast_assistant_recv_state_cb(
 			}
 		}
 
-		if (per_adv_sync) {
+		if (per_adv_sync && IS_ENABLED(CONFIG_BT_PER_ADV_SYNC_TRANSFER_SENDER)) {
 			shell_print(ctx_shell, "Sending PAST");
 
 			err = bt_le_per_adv_sync_transfer(per_adv_sync,
@@ -200,7 +192,8 @@ static void bap_broadcast_assistant_recv_state_cb(
 			}
 		}
 
-		if (ext_adv != NULL && IS_ENABLED(CONFIG_BT_PER_ADV)) {
+		if (ext_adv != NULL && IS_ENABLED(CONFIG_BT_PER_ADV) &&
+		    IS_ENABLED(CONFIG_BT_PER_ADV_SYNC_TRANSFER_SENDER)) {
 			shell_print(ctx_shell, "Sending local PAST");
 
 			err = bt_le_per_adv_set_info_transfer(ext_adv, conn,
@@ -453,7 +446,7 @@ static int cmd_bap_broadcast_assistant_add_src(const struct shell *sh,
 			return -ENOEXEC;
 		}
 
-		if (bis_sync > UINT32_MAX) {
+		if (!VALID_BIS_SYNC(bis_sync)) {
 			shell_error(sh, "Invalid bis_sync: %lu", bis_sync);
 
 			return -ENOEXEC;
@@ -640,7 +633,7 @@ static int cmd_bap_broadcast_assistant_add_broadcast_id(const struct shell *sh,
 			shell_error(sh, "failed to parse bis_sync: %d", err);
 
 			return -ENOEXEC;
-		} else if (bis_sync > UINT32_MAX) {
+		} else if (!VALID_BIS_SYNC(bis_sync)) {
 			shell_error(sh, "Invalid bis_sync: %lu", bis_sync);
 
 			return -ENOEXEC;
@@ -738,7 +731,7 @@ static int cmd_bap_broadcast_assistant_mod_src(const struct shell *sh,
 			return -ENOEXEC;
 		}
 
-		if (bis_sync > UINT32_MAX) {
+		if (!VALID_BIS_SYNC(bis_sync)) {
 			shell_error(sh, "Invalid bis_sync: %lu", bis_sync);
 
 			return -ENOEXEC;
@@ -776,10 +769,51 @@ static int cmd_bap_broadcast_assistant_mod_src(const struct shell *sh,
 	return result;
 }
 
+static inline bool add_pa_sync_base_subgroup_bis_cb(const struct bt_bap_base_subgroup_bis *bis,
+						    void *user_data)
+{
+	struct bt_bap_scan_delegator_subgroup *subgroup_param = user_data;
+
+	subgroup_param->bis_sync |= BIT(bis->index);
+
+	return true;
+}
+
+static inline bool add_pa_sync_base_subgroup_cb(const struct bt_bap_base_subgroup *subgroup,
+						void *user_data)
+{
+	struct bt_bap_broadcast_assistant_add_src_param *param = user_data;
+	struct bt_bap_scan_delegator_subgroup *subgroup_param;
+	uint8_t *data;
+	int ret;
+
+	ret = bt_bap_base_get_subgroup_codec_meta(subgroup, &data);
+	if (ret < 0) {
+		return false;
+	}
+
+	subgroup_param = &param->subgroups[param->num_subgroups];
+
+	if (ret > ARRAY_SIZE(subgroup_param->metadata)) {
+		shell_info(ctx_shell, "Cannot fit %d octets into subgroup param with size %zu", ret,
+			   ARRAY_SIZE(subgroup_param->metadata));
+		return false;
+	}
+
+	ret = bt_bap_base_subgroup_foreach_bis(subgroup, add_pa_sync_base_subgroup_bis_cb,
+					       subgroup_param);
+	if (ret < 0) {
+		return false;
+	}
+
+	param->num_subgroups++;
+
+	return true;
+}
+
 static int cmd_bap_broadcast_assistant_add_pa_sync(const struct shell *sh,
 						   size_t argc, char **argv)
 {
-	struct bt_bap_scan_delegator_subgroup subgroup_params[BT_ISO_MAX_GROUP_ISO_COUNT] = { 0 };
 	struct bt_bap_broadcast_assistant_add_src_param param = { 0 };
 	/* TODO: Add support to select which PA sync to BIG sync to */
 	struct bt_le_per_adv_sync *pa_sync = per_adv_syncs[0];
@@ -853,31 +887,11 @@ static int cmd_bap_broadcast_assistant_add_pa_sync(const struct shell *sh,
 		bis_bitfield_req |= BIT(index);
 	}
 
-	/* The MIN is used to handle `array-bounds` error on some compilers */
-	param.num_subgroups = MIN(received_base.subgroup_count, BROADCAST_SNK_SUBGROUP_CNT);
-	param.subgroups = subgroup_params;
-	for (size_t i = 0; i < param.num_subgroups; i++) {
-		struct bt_bap_scan_delegator_subgroup *subgroup_param = &subgroup_params[i];
-		const struct bt_bap_base_subgroup *subgroup = &received_base.subgroups[i];
-		uint32_t subgroup_bis_indexes = 0U;
-		ssize_t metadata_len;
-
-		for (size_t j = 0U; j < MIN(subgroup->bis_count, ARRAY_SIZE(subgroup->bis_data));
-		     j++) {
-			const struct bt_bap_base_bis_data *bis_data = &subgroup->bis_data[j];
-
-			subgroup_bis_indexes |= BIT(bis_data->index);
-		}
-
-		subgroup_param->bis_sync = subgroup_bis_indexes & bis_bitfield_req;
-
-#if CONFIG_BT_AUDIO_CODEC_CFG_MAX_METADATA_SIZE > 0
-		metadata_len = subgroup->codec_cfg.meta_len;
-		memcpy(subgroup_param->metadata, subgroup->codec_cfg.meta, metadata_len);
-#else
-		metadata_len = 0U;
-#endif /* CONFIG_BT_AUDIO_CODEC_CFG_MAX_METADATA_SIZE > 0 */
-		subgroup_param->metadata_len = metadata_len;
+	err = bt_bap_base_foreach_subgroup((const struct bt_bap_base *)received_base,
+					   add_pa_sync_base_subgroup_cb, &param);
+	if (err < 0) {
+		shell_error(ctx_shell, "Could not add BASE to params %d", err);
+		return -ENOEXEC;
 	}
 
 	err = bt_bap_broadcast_assistant_add_src(default_conn, &param);

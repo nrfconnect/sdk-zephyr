@@ -96,8 +96,8 @@ struct bt_mesh_cfg_cli_cb {
 	 *  @param buf       Message buffer containing subscription addresses.
 	 */
 	void (*mod_sub_list)(struct bt_mesh_cfg_cli *cli, uint16_t addr, uint8_t status,
-			       uint16_t elem_addr, uint16_t mod_id, uint16_t cid,
-			       struct net_buf_simple *buf);
+			     uint16_t elem_addr, uint16_t mod_id, uint16_t cid,
+			     struct net_buf_simple *buf);
 
 	/** @brief Optional callback for Node Reset Status messages.
 	 *
@@ -128,7 +128,7 @@ struct bt_mesh_cfg_cli_cb {
 	 *  @param status      Status Code for requesting message.
 	 */
 	void (*ttl_status)(struct bt_mesh_cfg_cli *cli, uint16_t addr,
-				uint8_t status);
+			   uint8_t status);
 
 	/** @brief Optional callback for Friend Status messages.
 	 *
@@ -139,7 +139,7 @@ struct bt_mesh_cfg_cli_cb {
 	 *  @param status      Status Code for requesting message.
 	 */
 	void (*friend_status)(struct bt_mesh_cfg_cli *cli, uint16_t addr,
-				uint8_t status);
+			      uint8_t status);
 
 	/** @brief Optional callback for GATT Proxy Status messages.
 	 *
@@ -150,7 +150,7 @@ struct bt_mesh_cfg_cli_cb {
 	 *  @param status      Status Code for requesting message.
 	 */
 	void (*gatt_proxy_status)(struct bt_mesh_cfg_cli *cli, uint16_t addr,
-				uint8_t status);
+				  uint8_t status);
 
 	/** @brief Optional callback for Network Transmit Status messages.
 	 *
@@ -199,7 +199,7 @@ struct bt_mesh_cfg_cli_cb {
 	 *  @param buf	Message buffer containing key indexes.
 	 */
 	void (*net_key_list)(struct bt_mesh_cfg_cli *cli, uint16_t addr,
-			    struct net_buf_simple *buf);
+			     struct net_buf_simple *buf);
 
 	/** @brief Optional callback for AppKey Status messages.
 	 *
@@ -229,7 +229,7 @@ struct bt_mesh_cfg_cli_cb {
 	 *  @param buf     Message buffer containing key indexes.
 	 */
 	void (*app_key_list)(struct bt_mesh_cfg_cli *cli, uint16_t addr, uint8_t status,
-			    uint16_t net_idx, struct net_buf_simple *buf);
+			     uint16_t net_idx, struct net_buf_simple *buf);
 
 	/** @brief Optional callback for Model App Status messages.
 	 *
@@ -262,8 +262,8 @@ struct bt_mesh_cfg_cli_cb {
 	 *  @param buf       Message buffer containing key indexes.
 	 */
 	void (*mod_app_list)(struct bt_mesh_cfg_cli *cli, uint16_t addr, uint8_t status,
-			       uint16_t elem_addr, uint16_t mod_id, uint16_t cid,
-			       struct net_buf_simple *buf);
+			     uint16_t elem_addr, uint16_t mod_id, uint16_t cid,
+			     struct net_buf_simple *buf);
 
 	/** @brief Optional callback for Node Identity Status messages.
 	 *
@@ -326,13 +326,13 @@ struct bt_mesh_cfg_cli_cb {
 	 *  @param sub    HB subscription configuration parameters.
 	 */
 	void (*hb_sub_status)(struct bt_mesh_cfg_cli *cli, uint16_t addr, uint8_t status,
-				 struct bt_mesh_cfg_cli_hb_sub *sub);
+			      struct bt_mesh_cfg_cli_hb_sub *sub);
 };
 
 /** Mesh Configuration Client Model Context */
 struct bt_mesh_cfg_cli {
 	/** Composition data model entry pointer. */
-	struct bt_mesh_model *model;
+	const struct bt_mesh_model *model;
 
 	/** Optional callback for Mesh Configuration Client Status messages. */
 	const struct bt_mesh_cfg_cli_cb *cb;
@@ -1690,6 +1690,7 @@ uint16_t bt_mesh_comp_p0_elem_mod(struct bt_mesh_comp_p0_elem *elem, int idx);
  */
 struct bt_mesh_mod_id_vnd bt_mesh_comp_p0_elem_mod_vnd(struct bt_mesh_comp_p0_elem *elem, int idx);
 
+/** Composition data page 1 element representation */
 struct bt_mesh_comp_p1_elem {
 	/** The number of SIG models in this element */
 	size_t nsig;
@@ -1785,6 +1786,40 @@ struct bt_mesh_comp_p1_model_item *bt_mesh_comp_p1_item_pull(
  */
 struct bt_mesh_comp_p1_ext_item *bt_mesh_comp_p1_pull_ext_item(
 	struct bt_mesh_comp_p1_model_item *item, struct bt_mesh_comp_p1_ext_item *ext_item);
+
+/** Composition data page 2 record parsing structure. */
+struct bt_mesh_comp_p2_record {
+	/** Mesh profile ID. */
+	uint16_t id;
+	/** Mesh Profile Version. */
+	struct {
+		/** Major version. */
+		uint8_t x;
+		/** Minor version. */
+		uint8_t y;
+		/** Z version. */
+		uint8_t z;
+	} version;
+	/** Element offset buffer. */
+	struct net_buf_simple *elem_buf;
+	/** Additional data buffer. */
+	struct net_buf_simple *data_buf;
+};
+
+/** @brief Pull a Composition Data Page 2 Record from a composition data page 2
+ *         instance.
+ *
+ *  Each call to this function will pull out a new element from the composition
+ *  data page, until all elements have been pulled.
+ *
+ *  @param buf Composition data page 2 buffer
+ *  @param record Record to fill.
+ *
+ *  @return A pointer to @c record on success, or NULL if no more elements could
+ *          be pulled.
+ */
+struct bt_mesh_comp_p2_record *bt_mesh_comp_p2_record_pull(struct net_buf_simple *buf,
+							   struct bt_mesh_comp_p2_record *record);
 
 /** @brief Unpack a list of key index entries from a buffer.
  *

@@ -23,20 +23,17 @@
 #include <zephyr/arch/common/sys_io.h>
 #include <zephyr/arch/common/ffs.h>
 #include <zephyr/sw_isr_table.h>
+#include <zephyr/arch/xtensa/syscall.h>
 #include <zephyr/arch/xtensa/thread.h>
 #include <zephyr/arch/xtensa/irq.h>
 #include <xtensa/config/core.h>
 #include <zephyr/arch/common/addr_types.h>
 #include <zephyr/arch/xtensa/gdbstub.h>
 #include <zephyr/debug/sparse.h>
+#include <zephyr/arch/xtensa/thread_stack.h>
+#include <zephyr/sys/slist.h>
 
 #include <zephyr/arch/xtensa/xtensa_mmu.h>
-
-#ifdef CONFIG_KERNEL_COHERENCE
-#define ARCH_STACK_PTR_ALIGN XCHAL_DCACHE_LINESIZE
-#else
-#define ARCH_STACK_PTR_ALIGN 16
-#endif
 
 /* Xtensa GPRs are often designated by two different names */
 #define sys_define_gpr_with_alias(name1, name2) union { uint32_t name1, name2; }
@@ -47,12 +44,42 @@
 extern "C" {
 #endif
 
+struct arch_mem_domain {
+#ifdef CONFIG_XTENSA_MMU
+	uint32_t *ptables __aligned(CONFIG_MMU_PAGE_SIZE);
+	uint8_t asid;
+	bool dirty;
+#endif
+	sys_snode_t node;
+};
+
 extern void xtensa_arch_except(int reason_p);
+extern void xtensa_arch_kernel_oops(int reason_p, void *ssf);
+
+#ifdef CONFIG_USERSPACE
+
+#define ARCH_EXCEPT(reason_p) do { \
+	if (k_is_user_context()) { \
+		arch_syscall_invoke1(reason_p, \
+			K_SYSCALL_XTENSA_USER_FAULT); \
+	} else { \
+		xtensa_arch_except(reason_p); \
+	} \
+	CODE_UNREACHABLE; \
+} while (false)
+
+#else
 
 #define ARCH_EXCEPT(reason_p) do { \
 	xtensa_arch_except(reason_p); \
 	CODE_UNREACHABLE; \
 } while (false)
+
+#endif
+
+__syscall void xtensa_user_fault(unsigned int reason);
+
+#include <syscalls/arch.h>
 
 /* internal routine documented in C file, needed by IRQ_CONNECT() macro */
 extern void z_irq_priority_set(uint32_t irq, uint32_t prio, uint32_t flags);
@@ -243,7 +270,33 @@ static inline void *arch_xtensa_uncached_ptr(void __sparse_cache *ptr)
 	FOR_EACH(_SET_ONE_TLB, (;), 0, 1, 2, 3, 4, 5, 6, 7);	\
 } while (0)
 
-#endif
+#else /* CONFIG_XTENSA_RPO_CACHE */
+
+static inline bool arch_xtensa_is_ptr_cached(void *ptr)
+{
+	ARG_UNUSED(ptr);
+
+	return false;
+}
+
+static inline bool arch_xtensa_is_ptr_uncached(void *ptr)
+{
+	ARG_UNUSED(ptr);
+
+	return false;
+}
+
+static inline void *arch_xtensa_cached_ptr(void *ptr)
+{
+	return ptr;
+}
+
+static inline void *arch_xtensa_uncached_ptr(void *ptr)
+{
+	return ptr;
+}
+
+#endif /* CONFIG_XTENSA_RPO_CACHE */
 
 #ifdef CONFIG_XTENSA_MMU
 extern void arch_xtensa_mmu_post_init(bool is_core0);

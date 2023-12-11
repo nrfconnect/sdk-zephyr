@@ -8,13 +8,9 @@
 #include <zephyr/kernel_structs.h>
 #include <inttypes.h>
 #include <xtensa/config/specreg.h>
-#include <xtensa-asm2-context.h>
-#if defined(CONFIG_XTENSA_ENABLE_BACKTRACE)
-#if XCHAL_HAVE_WINDOWED
 #include <xtensa_backtrace.h>
-#endif
-#endif
 #include <zephyr/debug/coredump.h>
+#include <zephyr/arch/common/exc_handle.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
@@ -86,6 +82,8 @@ char *z_xtensa_exccause(unsigned int cause_code)
 	case 63:
 		/* i.e. z_except_reason */
 		return "zephyr exception";
+	case 64:
+		return "kernel oops";
 	default:
 		return "unknown/reserved";
 	}
@@ -113,7 +111,6 @@ void z_xtensa_fatal_error(unsigned int reason, const z_arch_esf_t *esf)
 		z_xtensa_backtrace_print(100, (int *)esf);
 #endif
 #endif
-
 		arch_irq_unlock(key);
 	}
 
@@ -140,3 +137,33 @@ FUNC_NORETURN void z_system_halt(unsigned int reason)
 	CODE_UNREACHABLE;
 }
 #endif
+
+FUNC_NORETURN void arch_syscall_oops(void *ssf)
+{
+	ARG_UNUSED(ssf);
+
+	xtensa_arch_kernel_oops(K_ERR_KERNEL_OOPS, ssf);
+
+	CODE_UNREACHABLE;
+}
+
+#ifdef CONFIG_USERSPACE
+void z_impl_xtensa_user_fault(unsigned int reason)
+{
+	if ((_current->base.user_options & K_USER) != 0) {
+		if ((reason != K_ERR_KERNEL_OOPS) &&
+				(reason != K_ERR_STACK_CHK_FAIL)) {
+			reason = K_ERR_KERNEL_OOPS;
+		}
+	}
+	xtensa_arch_except(reason);
+}
+
+static void z_vrfy_xtensa_user_fault(unsigned int reason)
+{
+	z_impl_xtensa_user_fault(reason);
+}
+
+#include <syscalls/xtensa_user_fault_mrsh.c>
+
+#endif /* CONFIG_USERSPACE */

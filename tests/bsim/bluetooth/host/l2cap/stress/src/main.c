@@ -26,12 +26,12 @@ CREATE_FLAG(flag_l2cap_connected);
 /* Only one SDU per link will be transmitted at a time */
 NET_BUF_POOL_DEFINE(sdu_tx_pool,
 		    CONFIG_BT_MAX_CONN, BT_L2CAP_SDU_BUF_SIZE(SDU_LEN),
-		    8, NULL);
+		    CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 
 NET_BUF_POOL_DEFINE(segment_pool,
 		    /* MTU + 4 l2cap hdr + 4 ACL hdr */
 		    NUM_SEGMENTS, BT_L2CAP_BUF_SIZE(CONFIG_BT_L2CAP_TX_MTU),
-		    8, NULL);
+		    CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 
 /* Only one SDU per link will be received at a time */
 NET_BUF_POOL_DEFINE(sdu_rx_pool,
@@ -206,7 +206,8 @@ struct test_ctx *alloc_test_context(void)
 	return NULL;
 }
 
-int server_accept_cb(struct bt_conn *conn, struct bt_l2cap_chan **chan)
+int server_accept_cb(struct bt_conn *conn, struct bt_l2cap_server *server,
+		     struct bt_l2cap_chan **chan)
 {
 	struct test_ctx *ctx = NULL;
 

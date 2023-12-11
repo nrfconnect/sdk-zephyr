@@ -21,4 +21,12 @@ if(CONFIG_BUILD_WITH_TFM)
   set_property(TARGET zephyr_property_target
     APPEND PROPERTY TFM_CMAKE_OPTIONS -DHAL_NORDIC_PATH=${ZEPHYR_HAL_NORDIC_MODULE_DIR}
     )
+
+  set_property(TARGET zephyr_property_target
+    APPEND PROPERTY TFM_CMAKE_OPTIONS -DZEPHYR_BASE=${ZEPHYR_BASE}
+    )
+
+  set_property(TARGET zephyr_property_target
+    APPEND PROPERTY TFM_CMAKE_OPTIONS -DNRF_NS_STORAGE=${CONFIG_TFM_NRF_NS_STORAGE}
+    )
 endif()

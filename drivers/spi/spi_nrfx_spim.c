@@ -12,8 +12,10 @@
 #include <nrfx_gpiote.h>
 #include <nrfx_ppi.h>
 #endif
-#include <nrfx_spim.h>
+#ifdef CONFIG_SOC_NRF5340_CPUAPP
 #include <hal/nrf_clock.h>
+#endif
+#include <nrfx_spim.h>
 #include <string.h>
 #include <zephyr/linker/devicetree_regions.h>
 
@@ -69,9 +71,9 @@ static inline uint32_t get_nrf_spim_frequency(uint32_t frequency)
 {
 	/* Get the highest supported frequency not exceeding the requested one.
 	 */
-	if (frequency >= MHZ(32) && NRF_SPIM_HAS_32_MHZ_FREQ) {
+	if (frequency >= MHZ(32) && (NRF_SPIM_HAS_32_MHZ_FREQ || NRF_SPIM_HAS_PRESCALER)) {
 		return MHZ(32);
-	} else if (frequency >= MHZ(16) && NRF_SPIM_HAS_16_MHZ_FREQ) {
+	} else if (frequency >= MHZ(16) && (NRF_SPIM_HAS_16_MHZ_FREQ || NRF_SPIM_HAS_PRESCALER)) {
 		return MHZ(16);
 	} else if (frequency >= MHZ(8)) {
 		return MHZ(8);
@@ -310,8 +312,14 @@ static void transfer_next_chunk(const struct device *dev)
 		nrfx_spim_xfer_desc_t xfer;
 		nrfx_err_t result;
 		const uint8_t *tx_buf = ctx->tx_buf;
+
+		if (chunk_len > dev_config->max_chunk_len) {
+			chunk_len = dev_config->max_chunk_len;
+		}
+
 #if (CONFIG_SPI_NRFX_RAM_BUFFER_SIZE > 0)
-		if (spi_context_tx_buf_on(ctx) && !nrfx_is_in_ram(tx_buf)) {
+		if (spi_context_tx_buf_on(ctx) &&
+		    !nrf_dma_accessible_check(&dev_config->spim.p_reg, tx_buf)) {
 			if (chunk_len > CONFIG_SPI_NRFX_RAM_BUFFER_SIZE) {
 				chunk_len = CONFIG_SPI_NRFX_RAM_BUFFER_SIZE;
 			}
@@ -320,10 +328,6 @@ static void transfer_next_chunk(const struct device *dev)
 			tx_buf = dev_data->buffer;
 		}
 #endif
-		if (chunk_len > dev_config->max_chunk_len) {
-			chunk_len = dev_config->max_chunk_len;
-		}
-
 		dev_data->chunk_len = chunk_len;
 
 		xfer.p_tx_buffer = tx_buf;
@@ -671,4 +675,64 @@ SPI_NRFX_SPIM_DEFINE(3);
 
 #ifdef CONFIG_HAS_HW_NRF_SPIM4
 SPI_NRFX_SPIM_DEFINE(4);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM00
+SPI_NRFX_SPIM_DEFINE(00);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM20
+SPI_NRFX_SPIM_DEFINE(20);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM21
+SPI_NRFX_SPIM_DEFINE(21);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM22
+SPI_NRFX_SPIM_DEFINE(22);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM30
+SPI_NRFX_SPIM_DEFINE(30);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM120
+SPI_NRFX_SPIM_DEFINE(120);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM121
+SPI_NRFX_SPIM_DEFINE(121);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM130
+SPI_NRFX_SPIM_DEFINE(130);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM131
+SPI_NRFX_SPIM_DEFINE(131);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM132
+SPI_NRFX_SPIM_DEFINE(132);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM133
+SPI_NRFX_SPIM_DEFINE(133);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM134
+SPI_NRFX_SPIM_DEFINE(134);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM135
+SPI_NRFX_SPIM_DEFINE(135);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM136
+SPI_NRFX_SPIM_DEFINE(136);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_SPIM137
+SPI_NRFX_SPIM_DEFINE(137);
 #endif

@@ -3,7 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/kernel.h>
 #include <zephyr/drivers/regulator.h>
+
+static void regulator_delay(uint32_t delay_us)
+{
+	if (delay_us > 0U) {
+#ifdef CONFIG_MULTITHREADING
+		k_sleep(K_USEC(delay_us));
+#else
+		k_busy_wait(delay_us);
+#endif
+	}
+}
 
 void regulator_common_data_init(const struct device *dev)
 {
@@ -67,6 +79,7 @@ int regulator_common_init(const struct device *dev, bool is_enabled)
 			return ret;
 		}
 
+		regulator_delay(config->startup_delay_us);
 		data->refcnt++;
 	}
 
@@ -100,6 +113,8 @@ int regulator_enable(const struct device *dev)
 		ret = api->enable(dev);
 		if (ret < 0) {
 			data->refcnt--;
+		} else {
+			regulator_delay(config->off_on_delay_us);
 		}
 	}
 

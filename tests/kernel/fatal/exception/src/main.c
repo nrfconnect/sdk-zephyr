@@ -13,9 +13,13 @@
 #include <assert.h>
 
 #if defined(CONFIG_USERSPACE)
-#include <zephyr/sys/mem_manage.h>
-#include <zephyr/syscall_handler.h>
+#include <zephyr/kernel/mm.h>
+#include <zephyr/internal/syscall_handler.h>
 #include "test_syscalls.h"
+#endif
+
+#if defined(CONFIG_DEMAND_PAGING)
+#include <zephyr/kernel/mm/demand_paging.h>
 #endif
 
 #if defined(CONFIG_X86) && defined(CONFIG_X86_MMU)

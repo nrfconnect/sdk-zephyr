@@ -112,14 +112,23 @@ static int capacity_to_max17055(unsigned int rsense_mohms, uint16_t val_mha)
 }
 
 /**
- * @brief Convert voltage in millivolts to MAX17055 units
+ * @brief Update empty voltage target in v_empty
  *
+ * @param v_empty The register value to update
  * @param val_mv Value in millivolts to convert
- * @return corresponding value in MAX17055 units, ready to write to a register
+ * @return 0 on success, -EINVAL on invalid val_mv
  */
-static int voltage_mV_to_max17055(uint16_t val_mv)
+static int max17055_update_vempty(uint16_t *v_empty, uint16_t val_mv)
 {
-	return (val_mv * 16) * 10 / 8; /* * 1.25 */
+	uint32_t val = (val_mv / 10) << 7;
+
+	if (val & ~VEMPTY_VE) {
+		return -EINVAL;
+	}
+
+	*v_empty = (*v_empty & ~VEMPTY_VE) | (uint16_t)val;
+
+	return 0;
 }
 
 static void set_millis(struct sensor_value *val, int val_millis)
@@ -338,27 +347,39 @@ static int max17055_write_config(const struct device *dev)
 	uint16_t d_qacc = design_capacity / 32;
 	uint16_t d_pacc = d_qacc * 44138 / design_capacity;
 	uint16_t i_chg_term = current_ma_to_max17055(config->rsense_mohms, config->i_chg_term);
-	uint16_t v_empty = voltage_mV_to_max17055(config->v_empty);
+	uint16_t v_empty;
+	int ret;
 
 	LOG_DBG("Writing configuration parameters");
-	LOG_DBG("DesignCap: %u, dQAcc: %u, IChgTerm: %u, VEmpty: %u, dPAcc: %u",
-		design_capacity, d_qacc, i_chg_term, v_empty, d_pacc);
+	LOG_DBG("DesignCap: %u, dQAcc: %u, IChgTerm: %u, dPAcc: %u",
+		design_capacity, d_qacc, i_chg_term, d_pacc);
 
 	if (max17055_reg_write(dev, DESIGN_CAP, design_capacity)) {
 		return -EIO;
 	}
+
 	if (max17055_reg_write(dev, D_QACC, d_qacc)) {
 		return -EIO;
 	}
+
 	if (max17055_reg_write(dev, ICHG_TERM, i_chg_term)) {
 		return -EIO;
+	}
+
+	if (max17055_reg_read(dev, V_EMPTY, &v_empty)) {
+		return -EIO;
+	}
+	if (max17055_update_vempty(&v_empty, config->v_empty)) {
+		return -EINVAL;
 	}
 	if (max17055_reg_write(dev, V_EMPTY, v_empty)) {
 		return -EIO;
 	}
+
 	if (max17055_reg_write(dev, D_PACC, d_pacc)) {
 		return -EIO;
 	}
+
 	if (max17055_reg_write(dev, MODEL_CFG, MODELCFG_REFRESH)) {
 		return -EIO;
 	}
@@ -366,7 +387,10 @@ static int max17055_write_config(const struct device *dev)
 	uint16_t model_cfg = MODELCFG_REFRESH;
 
 	while (model_cfg & MODELCFG_REFRESH) {
-		max17055_reg_read(dev, MODEL_CFG, &model_cfg);
+		ret = max17055_reg_read(dev, MODEL_CFG, &model_cfg);
+		if (ret) {
+			return ret;
+		}
 		k_sleep(K_MSEC(10));
 	}
 
@@ -407,6 +431,7 @@ static int max17055_gauge_init(const struct device *dev)
 {
 	int16_t tmp;
 	const struct max17055_config *const config = dev->config;
+	int ret;
 
 	if (!device_is_ready(config->i2c.bus)) {
 		LOG_ERR("Bus device is not ready");
@@ -425,7 +450,10 @@ static int max17055_gauge_init(const struct device *dev)
 	/* Wait for FSTAT_DNR to be cleared */
 	tmp = FSTAT_DNR;
 	while (tmp & FSTAT_DNR) {
-		max17055_reg_read(dev, FSTAT, &tmp);
+		ret = max17055_reg_read(dev, FSTAT, &tmp);
+		if (ret) {
+			return ret;
+		}
 	}
 
 	if (max17055_init_config(dev)) {

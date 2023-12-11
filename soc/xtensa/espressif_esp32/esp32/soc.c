@@ -14,7 +14,7 @@
 
 #include <zephyr/kernel_structs.h>
 #include <string.h>
-#include <zephyr/toolchain/gcc.h>
+#include <zephyr/toolchain.h>
 #include <zephyr/types.h>
 #include <zephyr/linker/linker-defs.h>
 #include <kernel_internal.h>
@@ -41,6 +41,7 @@
 #include <zephyr/sys/printk.h>
 
 extern void z_cstart(void);
+extern void esp_reset_reason_init(void);
 
 #ifdef CONFIG_ESP32_NETWORK_CORE
 extern const unsigned char esp32_net_fw_array[];
@@ -118,6 +119,8 @@ void __attribute__((section(".iram1"))) __esp_platform_start(void)
 	 * arch_kernel_init() is invoked.
 	 */
 	__asm__ volatile("wsr.MISC0 %0; rsync" : : "r"(&_kernel.cpus[0]));
+
+	esp_reset_reason_init();
 
 #ifdef CONFIG_MCUBOOT
 	/* MCUboot early initialisation. */

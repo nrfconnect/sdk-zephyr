@@ -6,10 +6,14 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/speculation.h>
-#include <zephyr/syscall_handler.h>
+#include <zephyr/internal/syscall_handler.h>
 #include <kernel_arch_func.h>
 #include <ksched.h>
 #include <x86_mmu.h>
+
+#ifdef CONFIG_DEMAND_PAGING
+#include <zephyr/kernel/mm/demand_paging.h>
+#endif
 
 #ifndef CONFIG_X86_KPTI
 /* Update the to the incoming thread's page table, and update the location of

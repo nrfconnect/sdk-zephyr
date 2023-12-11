@@ -7,7 +7,7 @@ Overview
 ********
 
 The nRF9161 DK (PCA10153) is a single-board development kit for evaluation and
-development on the nRF9161 SiP for LTE-M and NB-IoT. The nrf9161dk_nrf9161
+development on the nRF9161 SiP for DECT NR+ and LTE-M/NB-IoT with GNSS. The nrf9161dk_nrf9161
 board configuration provides support for the Nordic Semiconductor nRF9161 ARM
 Cortex-M33F CPU with ARMv8-M Security Extension and the following devices:
 
@@ -184,8 +184,8 @@ Testing the LEDs and buttons in the nRF9161 DK
 There are 2 samples that allow you to test that the buttons (switches) and LEDs on
 the board are working properly with Zephyr:
 
-* :ref:`blinky-sample`
-* :ref:`button-sample`
+* :zephyr:code-sample:`blinky`
+* :zephyr:code-sample:`button`
 
 You can build and flash the examples to make sure Zephyr is running correctly on
 your board. The button and LED definitions can be found in

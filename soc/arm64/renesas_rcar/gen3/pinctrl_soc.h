@@ -103,9 +103,6 @@ struct pfc_bias_reg {
 	const uint16_t pins[32];
 };
 
-const struct pfc_bias_reg *pfc_rcar_get_bias_regs(void);
-const struct pfc_drive_reg *pfc_rcar_get_drive_regs(void);
-
 /**
  * @brief Utility macro to check if a pin is GPIO capable
  *

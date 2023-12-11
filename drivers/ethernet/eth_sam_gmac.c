@@ -133,6 +133,8 @@ static inline void dcache_clean(uint32_t addr, uint32_t size)
 #endif
 #endif /* !CONFIG_NET_TEST */
 
+BUILD_ASSERT(DT_INST_ENUM_IDX(0, phy_connection_type) <= 1, "Invalid PHY connection");
+
 /* RX descriptors list */
 static struct gmac_desc rx_desc_que0[MAIN_QUEUE_RX_DESC_COUNT]
 	__nocache __aligned(GMAC_DESC_ALIGNMENT);
@@ -1113,7 +1115,20 @@ static int gmac_init(Gmac *gmac, uint32_t gmac_ncfgr_val)
 	/* Setup Network Configuration Register */
 	gmac->GMAC_NCFGR = gmac_ncfgr_val | mck_divisor;
 
-	gmac->GMAC_UR = DT_INST_ENUM_IDX(0, phy_connection_type);
+	/* Default (RMII) is defined at atmel,gmac-common.yaml file */
+	switch (DT_INST_ENUM_IDX(0, phy_connection_type)) {
+	case 0: /* mii */
+		gmac->GMAC_UR = 0x1;
+		break;
+	case 1: /* rmii */
+		gmac->GMAC_UR = 0x0;
+		break;
+	default:
+		/* Build assert at top of file should catch this case */
+		LOG_ERR("The phy connection type is invalid");
+
+		return -EINVAL;
+	}
 
 #if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 	/* Initialize PTP Clock Registers */
@@ -1973,7 +1988,9 @@ static void eth0_iface_init(struct net_if *iface)
 	}
 
 	/* Do not start the interface until PHY link is up */
-	net_if_carrier_off(iface);
+	if (!(dev_data->link_up)) {
+		net_if_carrier_off(iface);
+	}
 
 	init_done = true;
 }
@@ -2437,7 +2454,7 @@ static int ptp_clock_sam_gmac_adjust(const struct device *dev, int increment)
 	const struct eth_sam_dev_cfg *const cfg = ptp_context->eth_dev->config;
 	Gmac *gmac = cfg->regs;
 
-	if ((increment <= -NSEC_PER_SEC) || (increment >= NSEC_PER_SEC)) {
+	if ((increment <= -(int)NSEC_PER_SEC) || (increment >= (int)NSEC_PER_SEC)) {
 		return -EINVAL;
 	}
 

@@ -1,0 +1,40 @@
+# Copyright (c) 2023 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig LLEXT
+	bool "Linkable loadable extensions"
+	help
+	  Enable the linkable loadable extension subsystem
+
+if LLEXT
+
+config LLEXT_HEAP_SIZE
+	int "llext heap memory size in kilobytes"
+	default 8
+	help
+	  Heap size in kilobytes available to llext for dynamic allocation
+
+config LLEXT_SHELL
+	bool "llext shell commands"
+	depends on SHELL
+	help
+	  Manage llext with shell commands for loading, unloading, and introspection
+
+config LLEXT_SHELL_MAX_SIZE
+	int "Maximum size of llext in bytes"
+	depends on LLEXT_SHELL
+	default 8192
+	help
+	  When loading llext with shell it is stored in a temporary buffer of this size
+
+config LLEXT_STORAGE_WRITABLE
+	bool "llext storage is writable"
+	help
+	  Select if LLEXT storage is writable, i.e. if extensions are stored in
+	  RAM and can be modified in place
+
+module = LLEXT
+module-str = llext
+source "subsys/logging/Kconfig.template.log_config"
+
+endif

@@ -61,6 +61,18 @@
 #endif
 
 /**
+ * @def CONFIG_OPENTHREAD_TMF_ADDRESS_CACHE_MAX_SNOOP_ENTRIES
+ *
+ * The maximum number of EID-to-RLOC cache entries that can be used for
+ * "snoop optimization" where an entry is created by inspecting a received message.
+ *
+ */
+#ifdef CONFIG_OPENTHREAD_TMF_ADDRESS_CACHE_MAX_SNOOP_ENTRIES
+#define OPENTHREAD_CONFIG_TMF_ADDRESS_CACHE_MAX_SNOOP_ENTRIES                  \
+	CONFIG_OPENTHREAD_TMF_ADDRESS_CACHE_MAX_SNOOP_ENTRIES
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_LOG_PREPEND_LEVEL
  *
  * Define to prepend the log level to all log messages.
@@ -382,16 +394,6 @@
  */
 #ifdef CONFIG_OPENTHREAD_CRYPTO_PSA
 #define OPENTHREAD_CONFIG_CRYPTO_LIB OPENTHREAD_CONFIG_CRYPTO_LIB_PSA
-#endif
-
-/**
- * @def OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
- *
- * Set to 1 if you want to enable key reference usage support.
- *
- */
-#ifdef CONFIG_OPENTHREAD_PLATFORM_KEY_REFERENCES_ENABLE
-#define OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE 1
 #endif
 
 /**

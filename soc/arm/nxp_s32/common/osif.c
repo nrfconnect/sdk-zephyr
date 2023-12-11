@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <soc.h>
 #include <OsIf.h>
 #include <OsIf_Cfg_TypesDef.h>
 
-#if defined(CONFIG_SOC_S32Z27_R52)
-#include <S32Z2_MSCM.h>
-#elif defined(CONFIG_SOC_S32K344_M7)
-#include <S32K344_MSCM.h>
+#if defined(CONFIG_SOC_SERIES_S32K1XX)
+/* Aliases needed to build with different SoC-specific HAL versions */
+#define CPXNUM                  CPxNUM
+#define MSCM_CPXNUM_CPN_MASK    MSCM_CPxNUM_CPN_MASK
 #endif
 
 /* Required by OsIf timer initialization but not used with Zephyr, so no values configured */

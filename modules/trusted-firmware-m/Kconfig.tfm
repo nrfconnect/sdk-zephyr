@@ -9,9 +9,6 @@ config ZEPHYR_TRUSTED_FIRMWARE_M_MODULE
 
 config TFM_BOARD
 	string
-	default "nordic_nrf/nrf9160dk_nrf9160" if BOARD_NRF9160DK_NRF9160_NS
-	default "nordic_nrf/nrf9161dk_nrf9161" if BOARD_NRF9161DK_NRF9161_NS
-	default "nordic_nrf/nrf5340dk_nrf5340_cpuapp" if BOARD_NRF5340DK_NRF5340_CPUAPP_NS
 	default "nxp/lpcxpresso55s69" if BOARD_LPCXPRESSO55S69_CPU0
 	default "arm/mps2/an521" if BOARD_MPS2_AN521_CPU0_NS
 	default "arm/mps3/an547" if BOARD_MPS3_AN547
@@ -20,7 +17,9 @@ config TFM_BOARD
 	default "stm/stm32l562e_dk" if BOARD_STM32L562E_DK
 	default "arm/musca_b1" if BOARD_MUSCA_B1
 	default "arm/musca_s1" if BOARD_MUSCA_S1
-	default "lairdconnectivity/bl5340_dvk_cpuapp" if BOARD_BL5340_DVK_CPUAPP_NS
+	default "${ZEPHYR_BASE}/modules/trusted-firmware-m/nordic_nrf/nrf9160" if SOC_NRF9160
+	default "${ZEPHYR_BASE}/modules/trusted-firmware-m/nordic_nrf/nrf9120" if SOC_NRF9120
+	default "${ZEPHYR_BASE}/modules/trusted-firmware-m/nordic_nrf/nrf5340_cpuapp" if SOC_NRF5340_CPUAPP
 	help
 	  The board name used for building TFM. Building with TFM requires that
 	  TFM has been ported to the given board/SoC.
@@ -45,7 +44,7 @@ menuconfig BUILD_WITH_TFM
 
 	  Notes:
 	    Building with the "_ns" BOARD variant (e.g. "mps2_an521_ns")
-		ensures that CONFIG_TRUSTED_EXECUTION_NONSECURE is enabled.
+	    ensures that CONFIG_TRUSTED_EXECUTION_NONSECURE is enabled.
 
 	    By default we allow Zephyr preemptible threads be preempted
 	    while performing a secure function call.
@@ -75,6 +74,7 @@ config TFM_PROFILE
 	depends on BUILD_WITH_TFM
 	default "profile_small" if TFM_PROFILE_TYPE_SMALL
 	default "profile_medium" if TFM_PROFILE_TYPE_MEDIUM
+	default "profile_medium_arotless" if TFM_PROFILE_TYPE_AROTLESS
 	default "profile_large" if TFM_PROFILE_TYPE_LARGE
 	help
 	  Build profile used to build tfm_s image. The available values are
@@ -92,13 +92,16 @@ choice TFM_PROFILE_TYPE
 	  isolation level.
 
 config TFM_PROFILE_TYPE_NOT_SET
-	bool "TF-M build profile is not set"
+	bool "TF-M build profile: not set (base)"
 
 config TFM_PROFILE_TYPE_SMALL
 	bool "TF-M build profile: small"
 
 config TFM_PROFILE_TYPE_MEDIUM
 	bool "TF-M build profile: medium"
+
+config TFM_PROFILE_TYPE_AROTLESS
+	bool "TF-M build profile: ARoT-less"
 
 config TFM_PROFILE_TYPE_LARGE
 	bool "TF-M build profile: large"
@@ -302,6 +305,7 @@ endif # TFM_BL2
 
 choice TFM_MODEL
 	prompt "TF-M Firmware Framework model"
+	default TFM_SFN if TFM_PROFILE_TYPE_SMALL
 	default TFM_IPC
 	help
 	  The Firmware Framework M (FF-M) provides different programming models
@@ -397,6 +401,21 @@ config ROM_START_OFFSET
 	  needs to be updated if TF-M switches to use a different header
 	  size for BL2.
 
+choice TFM_BL2_LOG_LEVEL
+	prompt "BL2 Log Level" if !TFM_LOG_LEVEL_SILENCE
+	default TFM_BL2_LOG_LEVEL_INFO
+	config TFM_BL2_LOG_LEVEL_DEBUG
+		bool "Debug"
+	config TFM_BL2_LOG_LEVEL_INFO
+		bool "Info"
+	config TFM_BL2_LOG_LEVEL_WARNING
+		bool "Warning"
+	config TFM_BL2_LOG_LEVEL_ERROR
+		bool "Error"
+	config TFM_BL2_LOG_LEVEL_OFF
+		bool "Off"
+endchoice
+
 endif # !TFM_BL2
 
 # Option to instruct flashing a merged binary consisting of BL2 (optionally),
@@ -431,6 +450,7 @@ endchoice
 
 config TFM_EXCEPTION_INFO_DUMP
 	bool "TF-M exception info dump"
+	default y
 	help
 	  On fatal errors in the secure firmware, capture info about the exception.
 	  Print the info if the SPM log level is sufficient.

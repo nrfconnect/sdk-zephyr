@@ -9,6 +9,7 @@
 #include <zephyr/dt-bindings/clock/mcux_lpc_syscon_clock.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
+#include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
 #include <mem.h>
 
 / {
@@ -33,7 +34,6 @@
 			mpu: mpu@e000ed90 {
 				compatible = "arm,armv8m-mpu";
 				reg = <0xe000ed90 0x40>;
-				arm,num-mpu-regions = <8>;
 			};
 		};
 	};
@@ -75,7 +75,7 @@
 		compatible = "zephyr,memory-region", "mmio-sram";
 		reg = <0x40100000  DT_SIZE_K(16)>;
 		zephyr,memory-region = "USB_SRAM";
-		zephyr,memory-attr = "RAM";
+		zephyr,memory-attr = <( DT_MEM_ARM(ATTR_MPU_RAM) )>;
 	};
 };
 
@@ -283,11 +283,10 @@
 	};
 
 	usbhs: usbhs@144000 {
-		compatible = "nxp,mcux-usbd";
+		compatible = "nxp,lpcip3511";
 		reg = <0x94000 0x1000>;
 		interrupts = <47 1>;
 		num-bidir-endpoints = <6>;
-		usb-controller-index = "LpcIp3511Hs0";
 		status = "disabled";
 	};
 };

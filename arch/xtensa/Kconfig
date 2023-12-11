@@ -46,21 +46,9 @@ config XTENSA_USE_CORE_CRT1
 config XTENSA_ENABLE_BACKTRACE
 	bool "Backtrace on panic exception"
 	default y
-	depends on SOC_SERIES_ESP32 || SOC_FAMILY_INTEL_ADSP
+	depends on SOC_SERIES_ESP32 || SOC_FAMILY_INTEL_ADSP || SOC_XTENSA_DC233C
 	help
 	  Enable this config option to print backtrace on panic exception
-
-config XTENSA_CPU_IDLE_SPIN
-	bool "Use busy loop for k_cpu_idle"
-	help
-	  Use a spin loop instead of WAITI for the CPU idle state.
-
-config XTENSA_WAITI_BUG
-	bool "Workaround sequence for WAITI bug on LX6"
-	help
-	  SOF traditionally contains this workaround on its ADSP
-	  platforms which prefixes a WAITI entry with 128 NOP
-	  instructions followed by an ISYNC and EXTW.
 
 config XTENSA_SMALL_VECTOR_TABLE_ENTRY
 	bool "Workaround for small vector table entries"
@@ -125,7 +113,10 @@ config XTENSA_MMU
 	bool "Xtensa MMU Support"
 	default n
 	select MMU
+	select ARCH_MEM_DOMAIN_SYNCHRONOUS_API if USERSPACE
 	select XTENSA_SMALL_VECTOR_TABLE_ENTRY
+	select KERNEL_VM_USE_CUSTOM_MEM_RANGE_CHECK if XTENSA_RPO_CACHE
+	select CURRENT_THREAD_USE_NO_TLS if USERSPACE
 	help
 	  Enable support for Xtensa Memory Management Unit.
 
@@ -155,8 +146,18 @@ if XTENSA_MMU
 		  The bit shift number for the virtual address for Xtensa
 		  page table (PTEVADDR).
 
+	config XTENSA_MMU_NUM_L1_TABLES
+		int "Number of L1 page tables"
+		default 1 if !USERSPACE
+		default 4
+		help
+		  This option specifies the maximum number of traslation tables.
+		  Translation tables are directly related to the number of
+		  memory domains in the target, considering the kernel itself requires one.
+
 	config XTENSA_MMU_NUM_L2_TABLES
 		int "Number of L2 page tables"
+		default 20 if USERSPACE
 		default 10
 		help
 		  Each table can address up to 4MB memory address.
@@ -169,6 +170,20 @@ if XTENSA_MMU
 			distinct region, cached and uncached.
 
 endif # XTENSA_MMU
+
+config XTENSA_SYSCALL_USE_HELPER
+	bool "Use userspace syscall helper"
+	default y if "$(ZEPHYR_TOOLCHAIN_VARIANT)" = "xcc-clang"
+	depends on USERSPACE
+	help
+	  Use syscall helpers for passing more then 3 arguments.
+	  This is a workaround for toolchains where they have
+	  issue modeling register usage.
+
+config XTENSA_INSECURE_USERSPACE
+	bool
+	default y if USERSPACE
+	depends on XTENSA_MMU
 
 endif # CPU_HAS_MMU
 

@@ -16,10 +16,11 @@ tests:
       - qemu_x86_64
       - qemu_xtensa
       - native_posix
+      - native_sim
     integration_platforms:
-      - native_posix
+      - native_sim
 
-  libraries.mpsc_pbuf_concurrent:
+  libraries.mpsc_pbuf.concurrent:
     tags: mpsc_pbuf
     platform_allow:
       - qemu_cortex_m3

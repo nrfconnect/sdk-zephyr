@@ -51,8 +51,7 @@ LOG_MODULE_REGISTER(uart_stm32, CONFIG_UART_LOG_LEVEL);
 #define STM32_UART_DOMAIN_CLOCK_SUPPORT 0
 #endif
 
-#define HAS_LPUART_1 (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(lpuart1), \
-					 st_stm32_lpuart, okay))
+#define HAS_LPUART DT_HAS_COMPAT_STATUS_OKAY(st_stm32_lpuart)
 
 /* Available everywhere except l1, f1, f2, f4. */
 #ifdef USART_CR3_DEM
@@ -61,7 +60,7 @@ LOG_MODULE_REGISTER(uart_stm32, CONFIG_UART_LOG_LEVEL);
 #define HAS_DRIVER_ENABLE 0
 #endif
 
-#if HAS_LPUART_1
+#if HAS_LPUART
 #ifdef USART_PRESC_PRESCALER
 uint32_t lpuartdiv_calc(const uint64_t clock_rate, const uint16_t presc_idx,
 			const uint32_t baud_rate)
@@ -87,7 +86,7 @@ uint32_t lpuartdiv_calc(const uint64_t clock_rate, const uint32_t baud_rate)
 	return (uint32_t)lpuartdiv;
 }
 #endif /* USART_PRESC_PRESCALER */
-#endif /* HAS_LPUART_1 */
+#endif /* HAS_LPUART */
 
 #ifdef CONFIG_PM
 static void uart_stm32_pm_policy_state_lock_get(const struct device *dev)
@@ -135,7 +134,7 @@ static inline void uart_stm32_set_baudrate(const struct device *dev, uint32_t ba
 		}
 	}
 
-#if HAS_LPUART_1
+#if HAS_LPUART
 	if (IS_LPUART_INSTANCE(config->usart)) {
 		uint32_t lpuartdiv;
 #ifdef USART_PRESC_PRESCALER
@@ -178,7 +177,7 @@ static inline void uart_stm32_set_baudrate(const struct device *dev, uint32_t ba
 		__ASSERT(LL_LPUART_ReadReg(config->usart, BRR) < 0x000FFFFFU,
 			 "BaudRateReg < 0xFFFF");
 	} else {
-#endif /* HAS_LPUART_1 */
+#endif /* HAS_LPUART */
 #ifdef USART_CR1_OVER8
 		LL_USART_SetOverSampling(config->usart,
 					 LL_USART_OVERSAMPLING_16);
@@ -196,9 +195,9 @@ static inline void uart_stm32_set_baudrate(const struct device *dev, uint32_t ba
 		__ASSERT(LL_USART_ReadReg(config->usart, BRR) >= 16,
 			 "BaudRateReg >= 16");
 
-#if HAS_LPUART_1
+#if HAS_LPUART
 	}
-#endif /* HAS_LPUART_1 */
+#endif /* HAS_LPUART */
 }
 
 static inline void uart_stm32_set_parity(const struct device *dev,
@@ -315,12 +314,12 @@ static inline uint32_t uart_stm32_cfg2ll_stopbits(const struct uart_stm32_config
 /* Some MCU's don't support 0.5 stop bits */
 #ifdef LL_USART_STOPBITS_0_5
 	case UART_CFG_STOP_BITS_0_5:
-#if HAS_LPUART_1
+#if HAS_LPUART
 		if (IS_LPUART_INSTANCE(config->usart)) {
 			/* return the default */
 			return LL_USART_STOPBITS_1;
 		}
-#endif /* HAS_LPUART_1 */
+#endif /* HAS_LPUART */
 		return LL_USART_STOPBITS_0_5;
 #endif	/* LL_USART_STOPBITS_0_5 */
 	case UART_CFG_STOP_BITS_1:
@@ -328,7 +327,7 @@ static inline uint32_t uart_stm32_cfg2ll_stopbits(const struct uart_stm32_config
 /* Some MCU's don't support 1.5 stop bits */
 #ifdef LL_USART_STOPBITS_1_5
 	case UART_CFG_STOP_BITS_1_5:
-#if HAS_LPUART_1
+#if HAS_LPUART
 		if (IS_LPUART_INSTANCE(config->usart)) {
 			/* return the default */
 			return LL_USART_STOPBITS_2;
@@ -1258,7 +1257,6 @@ static void uart_stm32_isr(const struct device *dev)
 			LL_USART_IsActiveFlag_TC(config->usart)) {
 
 		LL_USART_DisableIT_TC(config->usart);
-		LL_USART_ClearFlag_TC(config->usart);
 		/* Generate TX_DONE event when transmission is done */
 		async_evt_tx_done(data);
 
@@ -1279,6 +1277,19 @@ static void uart_stm32_isr(const struct device *dev)
 	/* Clear errors */
 	uart_stm32_err_check(dev);
 #endif /* CONFIG_UART_ASYNC_API */
+
+#if defined(CONFIG_PM) && defined(IS_UART_WAKEUP_FROMSTOP_INSTANCE) \
+	&& defined(USART_CR3_WUFIE)
+	if (LL_USART_IsEnabledIT_WKUP(config->usart) &&
+		LL_USART_IsActiveFlag_WKUP(config->usart)) {
+
+		LL_USART_ClearFlag_WKUP(config->usart);
+#ifdef USART_ISR_REACK
+		while (LL_USART_IsActiveFlag_REACK(config->usart) == 0) {
+		}
+#endif
+	}
+#endif
 }
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN || CONFIG_UART_ASYNC_API || CONFIG_PM */
 
@@ -1310,7 +1321,7 @@ static inline void uart_stm32_dma_tx_enable(const struct device *dev)
 
 static inline void uart_stm32_dma_tx_disable(const struct device *dev)
 {
-#if DT_HAS_COMPAT_STATUS_OKAY(st_stm32u5_dma)
+#ifdef CONFIG_UART_STM32U5_ERRATA_DMAT
 	ARG_UNUSED(dev);
 
 	/*
@@ -1322,7 +1333,7 @@ static inline void uart_stm32_dma_tx_disable(const struct device *dev)
 	const struct uart_stm32_config *config = dev->config;
 
 	LL_USART_DisableDMAReq_TX(config->usart);
-#endif /* ! st_stm32u5_dma */
+#endif
 }
 
 static inline void uart_stm32_dma_rx_enable(const struct device *dev)
@@ -1580,6 +1591,13 @@ static int uart_stm32_async_rx_enable(const struct device *dev,
 		return -EFAULT;
 	}
 
+	/* Flush RX data buffer */
+#ifdef USART_SR_RXNE
+	LL_USART_ClearFlag_RXNE(config->usart);
+#else
+	LL_USART_RequestRxDataFlush(config->usart);
+#endif /* USART_SR_RXNE */
+
 	/* Enable RX DMA requests */
 	uart_stm32_dma_rx_enable(dev);
 
@@ -1617,7 +1635,7 @@ static int uart_stm32_async_tx_abort(const struct device *dev)
 
 #if DT_HAS_COMPAT_STATUS_OKAY(st_stm32u5_dma)
 	dma_suspend(data->dma_tx.dma_dev, data->dma_tx.dma_channel);
-#endif /* st_stm32u5_dma */
+#endif
 	dma_stop(data->dma_tx.dma_dev, data->dma_tx.dma_channel);
 	async_evt_tx_abort(data);
 
@@ -1938,6 +1956,33 @@ static int uart_stm32_registers_configure(const struct device *dev)
 	}
 #endif
 
+#ifdef USART_CR1_FIFOEN
+	if (config->fifo_enable) {
+		LL_USART_EnableFIFO(config->usart);
+	}
+#endif
+
+#if defined(CONFIG_PM) && defined(IS_UART_WAKEUP_FROMSTOP_INSTANCE)
+	if (config->wakeup_source) {
+		/* Enable ability to wakeup device in Stop mode
+		 * Effect depends on CONFIG_PM_DEVICE status:
+		 * CONFIG_PM_DEVICE=n : Always active
+		 * CONFIG_PM_DEVICE=y : Controlled by pm_device_wakeup_enable()
+		 */
+#ifdef USART_CR3_WUFIE
+		LL_USART_SetWKUPType(config->usart, LL_USART_WAKEUP_ON_RXNE);
+		LL_USART_EnableIT_WKUP(config->usart);
+		LL_USART_ClearFlag_WKUP(config->usart);
+#endif
+		LL_USART_EnableInStopMode(config->usart);
+
+		if (config->wakeup_line != STM32_EXTI_LINE_NONE) {
+			/* Prepare the WAKEUP with the expected EXTI line */
+			LL_EXTI_EnableIT_0_31(BIT(config->wakeup_line));
+		}
+	}
+#endif /* CONFIG_PM */
+
 	LL_USART_Enable(config->usart);
 
 #ifdef USART_ISR_TEACK
@@ -1991,21 +2036,6 @@ static int uart_stm32_init(const struct device *dev)
 	defined(CONFIG_UART_ASYNC_API)
 	config->irq_config_func(dev);
 #endif /* CONFIG_PM || CONFIG_UART_INTERRUPT_DRIVEN || CONFIG_UART_ASYNC_API */
-
-#if defined(CONFIG_PM) && defined(IS_UART_WAKEUP_FROMSTOP_INSTANCE)
-	if (config->wakeup_source) {
-		/* Enable ability to wakeup device in Stop mode
-		 * Effect depends on CONFIG_PM_DEVICE status:
-		 * CONFIG_PM_DEVICE=n : Always active
-		 * CONFIG_PM_DEVICE=y : Controlled by pm_device_wakeup_enable()
-		 */
-		LL_USART_EnableInStopMode(config->usart);
-		if (config->wakeup_line != STM32_EXTI_LINE_NONE) {
-			/* Prepare the WAKEUP with the expected EXTI line */
-			LL_EXTI_EnableIT_0_31(BIT(config->wakeup_line));
-		}
-	}
-#endif /* CONFIG_PM */
 
 #ifdef CONFIG_UART_ASYNC_API
 	return uart_stm32_async_init(dev);
@@ -2308,6 +2338,7 @@ static const struct uart_stm32_config uart_stm32_cfg_##index = {	\
 	.de_assert_time = DT_INST_PROP(index, de_assert_time),		\
 	.de_deassert_time = DT_INST_PROP(index, de_deassert_time),	\
 	.de_invert = DT_INST_PROP(index, de_invert),			\
+	.fifo_enable = DT_INST_PROP(index, fifo_enable),		\
 	STM32_UART_IRQ_HANDLER_FUNC(index)				\
 	STM32_UART_PM_WAKEUP(index)					\
 };									\

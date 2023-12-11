@@ -1,13 +1,13 @@
-# Bluetooth mesh configuration options
+# Bluetooth Mesh configuration options
 
 # Copyright (c) 2017 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 menuconfig BT_MESH
-	bool "Bluetooth mesh support"
+	bool "Bluetooth Mesh support"
 	depends on BT_OBSERVER && BT_BROADCASTER
 	help
-	  This option enables Bluetooth mesh support. The specific
+	  This option enables Bluetooth Mesh support. The specific
 	  features that are available may depend on other features
 	  that have been enabled in the stack, such as GATT support.
 
@@ -191,6 +191,38 @@ config BT_MESH_UNPROV_BEACON_INT
 	  device sends unprovisioned beacon.
 
 if BT_MESH_PB_ADV
+
+config BT_MESH_PB_ADV_USE_RELAY_SETS
+	bool "Use relay advertising sets to send provisioning PDUs"
+	depends on BT_MESH_RELAY_ADV_SETS > 0
+	help
+	  Use relay advertising sets to send provisioning PDUs
+
+config BT_MESH_PB_ADV_TRANS_PDU_RETRANSMIT_COUNT
+	int "Link Open and Transaction PDU retransmit count"
+	default 7 if BT_MESH_PB_ADV_USE_RELAY_SETS
+	default 0
+	range 0 7
+	help
+	  Controls the number of retransmissions of original Link Open and Transaction PDU,
+	  in addition to the first transmission.
+
+config BT_MESH_PB_ADV_TRANS_ACK_RETRANSMIT_COUNT
+	int "Link Ack and Transaction Ack retransmit count"
+	default 2
+	range 0 7
+	help
+	  Controls the number of retransmissions of original Link Ack and Transaction Acknowledgment PDU,
+	  in addition to the first transmission.
+
+config BT_MESH_PB_ADV_LINK_CLOSE_RETRANSMIT_COUNT
+	int "Link Close retransmit count"
+	default 7 if BT_MESH_PB_ADV_USE_RELAY_SETS
+	default 2
+	range 0 7
+	help
+	  Controls the number of retransmissions of original Link Close,
+	  in addition to the first transmission.
 
 config BT_MESH_PB_ADV_RETRANS_TIMEOUT
 	int "Timeout value of retransmit provisioning PDUs"
@@ -566,7 +598,7 @@ config BT_MESH_ACCESS_LAYER_MSG
 	help
 	  This option allows the application to directly access
 	  Bluetooth access layer messages without the need to
-	  instantiate Bluetooth mesh models.
+	  instantiate Bluetooth Mesh models.
 
 config BT_MESH_MODEL_VND_MSG_CID_FORCE
 	bool "Force vendor model to use the corresponding CID field message"
@@ -595,6 +627,41 @@ config BT_MESH_LABEL_NO_RECOVER
 	  virtual address support wasn't enabled before this option was added, or the devices were
 	  unprovisioned before upgrading to the version with this option). The option is marked as
 	  deprecated to remove the recovery code eventually.
+
+menuconfig BT_MESH_ACCESS_DELAYABLE_MSG
+	bool "Access layer tx delayable message"
+	help
+	  Enable following of the message transmitting recommendations, the Access layer
+	  specification. The recommendations are optional.
+	  However, they are strictly recommended if the device participates in the network with
+	  intensive communication where the device receives a lot of requests that require responses.
+
+if BT_MESH_ACCESS_DELAYABLE_MSG
+
+config BT_MESH_ACCESS_DELAYABLE_MSG_COUNT
+	int "Number of simultaneously delayed messages"
+	default 4
+	help
+	  The maximum number of messages the Access layer can manage to delay
+	  at the same time. The number of messages can be handled only if the Access layer
+	  has a sufficient amount of memory to store the model payload for them.
+
+config BT_MESH_ACCESS_DELAYABLE_MSG_CHUNK_SIZE
+	int "Maximum delayable message storage chunk"
+	default 20
+	help
+	  Size of memory that Access layer uses to split model message to. It allocates
+	  a sufficient number of these chunks from the pool to store the full model payload.
+
+config BT_MESH_ACCESS_DELAYABLE_MSG_CHUNK_COUNT
+	int "Maximum number of available chunks"
+	default 20
+	help
+	  The maximum number of available chunks the Access layer allocates to store model payload.
+	  It is recommended to keep chunk size equal to the reasonable small value to prevent
+	  unnecessary memory wasting.
+
+endif # BT_MESH_ACCESS_DELAYABLE_MSG
 
 endmenu # Access layer
 
@@ -1017,13 +1084,10 @@ config BT_MESH_FRIEND_ADV_LATENCY
 endif # BT_MESH_FRIEND
 
 menuconfig BT_MESH_V1d1
-	bool "Bluetooth mesh v1.1 support [EXPERIMENTAL]"
-	select EXPERIMENTAL
+	bool "Bluetooth Mesh v1.1 support"
 	help
-	  This option enables Bluetooth mesh v1.1 support. Bluetooth mesh v1.1
-	  is backward compatible with v1.0.1. The stack cannot be qualified
-	  with this option enabled because the Bluetooth mesh v1.1 specification
-	  is in a draft state.
+	  This option enables Bluetooth Mesh v1.1 support. Bluetooth Mesh v1.1
+	  is backward compatible with v1.0.1.
 
 config BT_MESH_ECDH_P256_CMAC_AES128_AES_CCM
 	bool "Support CMAC AES128 for OOB authentication" if BT_MESH_V1d1
@@ -1172,7 +1236,7 @@ config BT_MESH_DFU_METADATA
 	bool "Support for the default metadata format"
 	help
 	  This option adds a set of functions that can be used to encode and decode a firmware
-	  metadata using the format defined in the Bluetooth mesh DFU subsystem.
+	  metadata using the format defined in the Bluetooth Mesh DFU subsystem.
 
 config BT_MESH_DFU_URI_MAXLEN
 	int "DFU URI max length"
@@ -1234,6 +1298,14 @@ config BT_MESH_DFD_SRV_TARGETS_MAX
 	help
 	  This value defines the maximum number of Target nodes the Firmware
 	  Distribution Server can target simultaneously.
+
+config BT_MESH_DFD_SRV_OOB_UPLOAD
+	bool "Support for DFU image OOB upload"
+	help
+	  This enables support for OOB upload of firmware images for
+	  distribution. This makes several callbacks and use of the init
+	  macro BT_MESH_DFD_SRV_INIT_OOB mandatory. See the API documentation
+	  for bt_mesh_dfd_srv_cb for details about the mandatory callbacks.
 
 endif
 
@@ -1367,16 +1439,31 @@ config BT_MESH_PRIV_BEACON_CLI
 
 endif # BT_MESH_PRIV_BEACONS
 
+config BT_MESH_COMP_PST_BUF_SIZE
+	int "Composition Data Page persistence buffer size"
+	default 100
+	help
+	  Stack allocated buffer used to temporarily hold Composition
+	  Data Pages during flash operations. Should reflect the size
+	  of the largest Composition Data Page present in the application.
+	  Note that this buffer should still be large enough to restore previously stored
+	  pages after a performed device firmware update.
+
 config BT_MESH_COMP_PAGE_1
 	bool "Support for Composition Data Page 1"
 	depends on BT_MESH_MODEL_EXTENSIONS
 	help
 	  Enable support for Composition Data Page 1.
 
+config BT_MESH_COMP_PAGE_2
+	bool "Support for Composition Data Page 2"
+	help
+	  Enable support for Composition Data Page 2.
+
 config BT_MESH_MODEL_EXTENSION_LIST_SIZE
 	int "Model extensions list size"
 	depends on BT_MESH_COMP_PAGE_1
-	range 1 255
+	range 0 255
 	default 10
 	help
 	  This option specifies how many models relations can be saved.
@@ -1387,11 +1474,10 @@ config BT_MESH_SOLICITATION
 	bool
 
 config BT_MESH_PROXY_SOLICITATION
-	bool "Proxy solicitation feature for Proxy Client support"
-	depends on BT_MESH_PROXY_CLIENT
+	bool "Proxy solicitation feature"
 	select BT_MESH_SOLICITATION
 	help
-	  This option enables support for sending Solicitation PDUs for Proxy Client.
+	  This option enables support for sending Solicitation PDUs.
 
 config BT_MESH_SOL_ADV_XMIT
 	int "Solicitation PDU retransmission count"
@@ -1683,16 +1769,16 @@ config BT_MESH_RPL_STORE_TIMEOUT
 endif # BT_MESH_RPL_STORAGE_MODE_SETTINGS && BT_SETTINGS
 
 config BT_MESH_SETTINGS_WORKQ
-	bool "Store the Bluetooth mesh settings in a separate work queue"
+	bool "Store the Bluetooth Mesh settings in a separate work queue"
 	default y
 	help
 	  This option enables a separate cooperative thread which is used to
-	  store Bluetooth mesh configuration. When this option is disabled,
+	  store Bluetooth Mesh configuration. When this option is disabled,
 	  the stack's configuration is stored in the system workqueue. This
 	  means that the system workqueue will be blocked for the time needed
 	  to store the pending data. This time may significantly increase if
 	  the flash driver does the erase operation. Enabling this option
-	  allows Bluetooth mesh not to block the system workqueue, and thus
+	  allows Bluetooth Mesh not to block the system workqueue, and thus
 	  process the incoming and outgoing messages while the flash driver
 	  waits for the controller to allocate the time needed to write the
 	  data and/or erase the required flash pages.
@@ -1705,6 +1791,7 @@ config BT_MESH_SETTINGS_WORKQ_PRIO
 
 config BT_MESH_SETTINGS_WORKQ_STACK_SIZE
 	int "Stack size of the settings workq"
+	default 1200 if BT_MESH_RPR_SRV
 	default 880
 	help
 	  Size of the settings workqueue stack.

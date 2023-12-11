@@ -4,7 +4,7 @@ sample:
 tests:
   sample.logger.basic:
     integration_platforms:
-      - native_posix
+      - native_sim
     tags: logging
     harness: console
     harness_config:
@@ -22,6 +22,8 @@ tests:
       - frdm_k64f
     tags: logging
     filter: CONFIG_HAS_SEGGER_RTT
+    arch_exclude:
+      - posix
     harness: keyboard
     extra_configs:
       - CONFIG_LOG_BACKEND_RTT=y
@@ -30,6 +32,14 @@ tests:
   sample.logger.usermode:
     integration_platforms:
       - mps2_an385
+    platform_exclude:
+      - ip_k66f
+      - bl652_dvk
+      - bl654_dvk
+      - decawave_dwm1001_dev
+      - segger_trb_stm32f407
+    arch_exclude:
+      - posix
     tags:
       - logging
       - usermode

@@ -16,8 +16,10 @@ supported:
   - counter
   - dac
   - dma
+  - flash
   - gpio
   - pwm
   - spi
   - uart
   - watchdog
+vendor: gd

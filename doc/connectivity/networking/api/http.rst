@@ -13,6 +13,7 @@ Overview
 The HTTP client library allows you to send HTTP requests and
 parse HTTP responses. The library communicates over the sockets
 API but it does not create sockets on its own.
+It can be enabled with :kconfig:option:`CONFIG_HTTP_CLIENT` Kconfig option.
 
 The application must be responsible for creating a socket and passing it to the library.
 Therefore, depending on the application's needs, the library can communicate over
@@ -68,7 +69,7 @@ The following is an example of a very simple response handling function:
         LOG_INF("Response status %s", rsp->http_status);
     }
 
-See :ref:`HTTP client sample application <sockets-http-client-sample>` for
+See :zephyr:code-sample:`HTTP client sample application <sockets-http-client>` for
 more information about the library usage.
 
 API Reference

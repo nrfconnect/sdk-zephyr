@@ -67,6 +67,8 @@ static struct bt_conn_auth_info_cb auth_info_cb;
 
 #define ADV_DATA_DELIMITER ", "
 
+#define AD_SIZE 9
+
 /*
  * Based on the maximum number of parameters for HCI_LE_Generate_DHKey
  * See BT Core Spec V5.2 Vol. 4, Part E, section 7.8.37
@@ -97,10 +99,14 @@ static const char *phy2str(uint8_t phy)
 {
 	switch (phy) {
 	case 0: return "No packets";
-	case BT_GAP_LE_PHY_1M: return "LE 1M";
-	case BT_GAP_LE_PHY_2M: return "LE 2M";
-	case BT_GAP_LE_PHY_CODED: return "LE Coded";
-	default: return "Unknown";
+	case BT_GAP_LE_PHY_1M:
+		return "LE 1M";
+	case BT_GAP_LE_PHY_2M:
+		return "LE 2M";
+	case BT_GAP_LE_PHY_CODED:
+		return "LE Coded";
+	default:
+		return "Unknown";
 	}
 }
 #endif
@@ -120,6 +126,67 @@ static void print_le_addr(const char *desc, const bt_addr_le_t *addr)
 		    addr_desc);
 }
 #endif /* CONFIG_BT_CONN || (CONFIG_BT_BROADCASTER && CONFIG_BT_EXT_ADV) */
+
+#if defined(CONFIG_BT_TRANSMIT_POWER_CONTROL)
+static const char *tx_power_flag2str(int8_t flag)
+{
+	switch (flag) {
+	case 0:
+		return "Neither Max nor Min Tx Power";
+	case 1:
+		return "Tx Power Level is at minimum";
+	case 2:
+		return "Tx Power Level is at maximum";
+	/* Current Tx Power Level is the only available one*/
+	case 3:
+		return "Tx Power Level is at minimum & maximum.";
+	default:
+		return "Unknown";
+	}
+}
+
+static const char *tx_power_report_reason2str(uint8_t reason)
+{
+	switch (reason) {
+	case BT_HCI_LE_TX_POWER_REPORT_REASON_LOCAL_CHANGED:
+		return "Local Tx Power changed";
+	case BT_HCI_LE_TX_POWER_REPORT_REASON_REMOTE_CHANGED:
+		return "Remote Tx Power changed";
+	case BT_HCI_LE_TX_POWER_REPORT_REASON_READ_REMOTE_COMPLETED:
+		return "Completed to read remote Tx Power";
+	default:
+		return "Unknown";
+	}
+}
+
+static const char *tx_pwr_ctrl_phy2str(enum bt_conn_le_tx_power_phy phy)
+{
+	switch (phy) {
+	case BT_CONN_LE_TX_POWER_PHY_NONE:
+		return "None";
+	case BT_CONN_LE_TX_POWER_PHY_1M:
+		return "LE 1M";
+	case BT_CONN_LE_TX_POWER_PHY_2M:
+		return "LE 2M";
+	case BT_CONN_LE_TX_POWER_PHY_CODED_S8:
+		return "LE Coded S8";
+	case BT_CONN_LE_TX_POWER_PHY_CODED_S2:
+		return "LE Coded S2";
+	default:
+		return "Unknown";
+	}
+}
+
+static const char *enabled2str(bool enabled)
+{
+	if (enabled) {
+		return "Enabled";
+	} else {
+		return "Disabled";
+	}
+}
+
+#endif /* CONFIG_BT_TRANSMIT_POWER_CONTROL */
 
 #if defined(CONFIG_BT_CENTRAL)
 static int cmd_scan_off(const struct shell *sh);
@@ -167,14 +234,12 @@ static bool is_substring(const char *substr, const char *str)
 	}
 
 	for (size_t pos = 0; pos < str_len; pos++) {
-		if (tolower(substr[0]) == tolower(str[pos])) {
-			if (pos + sub_str_len > str_len) {
-				return false;
-			}
+		if (pos + sub_str_len > str_len) {
+			return false;
+		}
 
-			if (strncasecmp(substr, &str[pos], sub_str_len) == 0) {
-				return true;
-			}
+		if (strncasecmp(substr, &str[pos], sub_str_len) == 0) {
+			return true;
 		}
 	}
 
@@ -428,22 +493,31 @@ static void scan_recv(const struct bt_le_scan_recv_info *info, struct net_buf_si
 		shell_info(ctx_shell, "%*s[SCAN DATA END]", strlen(scan_response_label), "");
 	}
 
-	/* Store address for later use */
 #if defined(CONFIG_BT_CENTRAL)
-	auto_connect.addr_set = true;
-	bt_addr_le_copy(&auto_connect.addr, info->addr);
+	if ((info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE) != 0U) {
+		struct bt_conn *conn = bt_conn_lookup_addr_le(selected_id, info->addr);
 
-	/* Use the above auto_connect.addr address to automatically connect */
-	if ((info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE) != 0U && auto_connect.connect_name) {
-		auto_connect.connect_name = false;
+		/* Only store auto-connect address for devices we are not already connected to */
+		if (conn == NULL) {
+			/* Store address for later use */
+			auto_connect.addr_set = true;
+			bt_addr_le_copy(&auto_connect.addr, info->addr);
 
-		cmd_scan_off(ctx_shell);
+			/* Use the above auto_connect.addr address to automatically connect */
+			if (auto_connect.connect_name) {
+				auto_connect.connect_name = false;
 
-		/* "name" is what would be in argv[0] normally */
-		cmd_scan_filter_clear_name(ctx_shell, 1, (char *[]){ "name" });
+				cmd_scan_off(ctx_shell);
 
-		/* "connect" is what would be in argv[0] normally */
-		cmd_connect_le(ctx_shell, 1, (char *[]){ "connect" });
+				/* "name" is what would be in argv[0] normally */
+				cmd_scan_filter_clear_name(ctx_shell, 1, (char *[]){"name"});
+
+				/* "connect" is what would be in argv[0] normally */
+				cmd_connect_le(ctx_shell, 1, (char *[]){"connect"});
+			}
+		} else {
+			bt_conn_unref(conn);
+		}
 	}
 #endif /* CONFIG_BT_CENTRAL */
 }
@@ -619,6 +693,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 			default_conn = bt_conn_ref(conn);
 		}
 	}
+
+	default_conn = bt_conn_ref(conn);
 
 done:
 	/* clear connection reference for sec mode 3 pairing */
@@ -807,6 +883,19 @@ void le_phy_updated(struct bt_conn *conn,
 }
 #endif
 
+#if defined(CONFIG_BT_TRANSMIT_POWER_CONTROL)
+void tx_power_report(struct bt_conn *conn,
+		    const struct bt_conn_le_tx_power_report *report)
+{
+	shell_print(ctx_shell, "Tx Power Report: Reason: %s, PHY: %s, Tx Power Level: %d",
+		    tx_power_report_reason2str(report->reason), tx_pwr_ctrl_phy2str(report->phy),
+		    report->tx_power_level);
+	shell_print(ctx_shell, "Tx Power Level Flag Info: %s, Delta: %d",
+		    tx_power_flag2str(report->tx_power_level_flag), report->delta);
+}
+#endif
+
+
 static struct bt_conn_cb conn_callbacks = {
 	.connected = connected,
 	.disconnected = disconnected,
@@ -826,6 +915,9 @@ static struct bt_conn_cb conn_callbacks = {
 #endif
 #if defined(CONFIG_BT_USER_PHY_UPDATE)
 	.le_phy_updated = le_phy_updated,
+#endif
+#if defined(CONFIG_BT_TRANSMIT_POWER_CONTROL)
+	.tx_power_report = tx_power_report,
 #endif
 };
 #endif /* CONFIG_BT_CONN */
@@ -1113,17 +1205,21 @@ static int cmd_appearance(const struct shell *sh, size_t argc, char *argv[])
 
 #if defined(CONFIG_BT_DEVICE_APPEARANCE_DYNAMIC)
 	uint16_t app;
-	int err;
+	int err = 0;
 	const char *val;
 
 	val = argv[1];
-	if (strlen(val) != 6 || strncmp(val, "0x", 2) ||
-	    !hex2bin(&val[2], strlen(&val[2]), ((uint8_t *)&app), sizeof(app))) {
+
+	if (strlen(val) != 6 || strncmp(val, "0x", 2)) {
 		shell_error(sh, "Argument must be 0x followed by exactly 4 hex digits.");
 		return -EINVAL;
 	}
 
-	app = sys_be16_to_cpu(app);
+	app = shell_strtoul(val, 16, &err);
+	if (err) {
+		shell_error(sh, "Argument must be 0x followed by exactly 4 hex digits.");
+		return -EINVAL;
+	}
 
 	err = bt_set_appearance(app);
 	if (err) {
@@ -1902,11 +1998,12 @@ static int cmd_adv_data(const struct shell *sh, size_t argc, char *argv[])
 	static uint8_t hex_data[1650];
 	bool appearance = false;
 	struct bt_data *data;
-	struct bt_data ad[9];
-	struct bt_data sd[9];
+	struct bt_data ad[AD_SIZE];
+	struct bt_data sd[AD_SIZE];
 	size_t hex_data_len;
 	size_t ad_len = 0;
 	size_t sd_len = 0;
+	size_t len = 0;
 	bool discoverable = false;
 	size_t *data_len;
 	int err;
@@ -1947,8 +2044,6 @@ static int cmd_adv_data(const struct shell *sh, size_t argc, char *argv[])
 			data = sd;
 			data_len = &sd_len;
 		} else {
-			size_t len;
-
 			len = hex2bin(arg, strlen(arg), &hex_data[hex_data_len],
 				      sizeof(hex_data) - hex_data_len);
 
@@ -1970,15 +2065,18 @@ static int cmd_adv_data(const struct shell *sh, size_t argc, char *argv[])
 	atomic_set_bit_to(adv_set_opt[selected_adv], SHELL_ADV_OPT_APPEARANCE,
 			  appearance);
 
-	ad_len = ad_init(&ad[*data_len], ARRAY_SIZE(ad) - *data_len,
-			 adv_set_opt[selected_adv]);
-	if (ad_len < 0) {
+	len = ad_init(&data[*data_len], AD_SIZE - *data_len, adv_set_opt[selected_adv]);
+	if (len < 0) {
 		shell_error(sh, "Failed to initialize stack advertising data");
 
 		return -ENOEXEC;
 	}
 
-	ad_len += *data_len;
+	if (data == ad) {
+		ad_len += len;
+	} else {
+		sd_len += len;
+	}
 
 	err = bt_le_ext_adv_set_data(adv, ad_len > 0 ? ad : NULL, ad_len,
 					  sd_len > 0 ? sd : NULL, sd_len);
@@ -2604,6 +2702,102 @@ static int cmd_per_adv_set_info_transfer(const struct shell *sh, size_t argc,
 }
 #endif /* CONFIG_BT_PER_ADV_SYNC_TRANSFER_SENDER && CONFIG_BT_PER_ADV */
 
+#if defined(CONFIG_BT_TRANSMIT_POWER_CONTROL)
+static int cmd_read_remote_tx_power(const struct shell *sh, size_t argc, char *argv[])
+{
+	if (argc < 3) {
+		int err = 0;
+		enum bt_conn_le_tx_power_phy phy = strtoul(argv[1], NULL, 16);
+
+		err = bt_conn_le_get_remote_tx_power_level(default_conn, phy);
+
+		if (!err) {
+			shell_print(sh, "Read Remote TX Power for PHY %s",
+				    tx_pwr_ctrl_phy2str(phy));
+		} else {
+			shell_print(sh, "error %d", err);
+		}
+	} else {
+		shell_help(sh);
+		return SHELL_CMD_HELP_PRINTED;
+	}
+	return 0;
+}
+
+static int cmd_read_local_tx_power(const struct shell *sh, size_t argc, char *argv[])
+{
+	int err = 0;
+
+	if (argc < 3) {
+		struct bt_conn_le_tx_power tx_power_level;
+
+		tx_power_level.phy = strtoul(argv[1], NULL, 16);
+
+		int8_t unachievable_current_level = -100;
+		/* Arbitrary, these are output parameters.*/
+		tx_power_level.current_level = unachievable_current_level;
+		tx_power_level.max_level = 6;
+
+		if (default_conn == NULL) {
+			shell_error(sh, "Conn handle error, at least one connection is required.");
+			return -ENOEXEC;
+		}
+		err = bt_conn_le_get_tx_power_level(default_conn, &tx_power_level);
+		if (err) {
+			shell_print(sh, "Commad returned error error %d", err);
+			return err;
+		}
+		if (tx_power_level.current_level == unachievable_current_level) {
+			shell_print(sh, "We received no current tx power level.");
+			return -EIO;
+		}
+		shell_print(sh, "Read local TX Power: current level: %d, PHY: %s, Max Level: %d",
+			    tx_power_level.current_level,
+			    tx_pwr_ctrl_phy2str((enum bt_conn_le_tx_power_phy)tx_power_level.phy),
+			    tx_power_level.max_level);
+	} else {
+		shell_help(sh);
+		return SHELL_CMD_HELP_PRINTED;
+	}
+
+	return err;
+}
+
+static int cmd_set_power_report_enable(const struct shell *sh, size_t argc, char *argv[])
+{
+	if (argc < 4) {
+		int err = 0;
+		bool local_enable = 0;
+		bool remote_enable = 0;
+
+		if (*argv[1] == '1') {
+			local_enable = 1;
+		}
+		if (*argv[2] == '1') {
+			remote_enable = 1;
+		}
+		if (default_conn == NULL) {
+			shell_error(sh, "Conn handle error, at least one connection is required.");
+			return -ENOEXEC;
+		}
+		err = bt_conn_le_set_tx_power_report_enable(default_conn, local_enable,
+							     remote_enable);
+		if (!err) {
+			shell_print(sh, "Tx Power Report: local: %s, remote: %s",
+				    enabled2str(local_enable), enabled2str(remote_enable));
+		} else {
+			shell_print(sh, "error %d", err);
+		}
+	} else {
+		shell_help(sh);
+		return SHELL_CMD_HELP_PRINTED;
+	}
+	return 0;
+}
+
+#endif
+
+
 #if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_CENTRAL)
 static int cmd_connect_le(const struct shell *sh, size_t argc, char *argv[])
@@ -2651,8 +2845,10 @@ static int cmd_connect_le(const struct shell *sh, size_t argc, char *argv[])
 					BT_GAP_SCAN_FAST_INTERVAL,
 					BT_GAP_SCAN_FAST_INTERVAL);
 
-	err = bt_conn_le_create(&addr, create_params, BT_LE_CONN_PARAM_DEFAULT,
-				&conn);
+	err = bt_conn_le_create(
+		&addr, create_params,
+		BT_LE_CONN_PARAM(BT_GAP_INIT_CONN_INT_MIN, BT_GAP_INIT_CONN_INT_MIN, 0, 400),
+		&conn);
 	if (err) {
 		shell_error(sh, "Connection failed (%d)", err);
 		return -ENOEXEC;
@@ -3890,9 +4086,12 @@ static int cmd_auth_passkey_notify(const struct shell *sh,
 
 	err = 0;
 	type = shell_strtoul(argv[1], 0, &err);
-	if (err || !IN_RANGE(type, BT_CONN_AUTH_KEYPRESS_ENTRY_STARTED,
-			     BT_CONN_AUTH_KEYPRESS_ENTRY_COMPLETED)) {
-		shell_error(sh, "<type> must be a value in range of enum bt_conn_auth_keypress");
+	if (err ||
+	    (type != BT_CONN_AUTH_KEYPRESS_ENTRY_STARTED &&
+	     type != BT_CONN_AUTH_KEYPRESS_DIGIT_ENTERED &&
+	     type != BT_CONN_AUTH_KEYPRESS_DIGIT_ERASED && type != BT_CONN_AUTH_KEYPRESS_CLEARED &&
+	     type != BT_CONN_AUTH_KEYPRESS_ENTRY_COMPLETED)) {
+		shell_error(sh, "<type> must be a value of enum bt_conn_auth_keypress");
 		return -EINVAL;
 	}
 
@@ -4011,6 +4210,11 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 		      cmd_default_handler),
 	SHELL_CMD_ARG(scan-verbose-output, NULL, "<value: on, off>", cmd_scan_verbose_output, 2, 0),
 #endif /* CONFIG_BT_OBSERVER */
+#if defined(CONFIG_BT_TRANSMIT_POWER_CONTROL)
+	SHELL_CMD_ARG(read-remote-tx-power, NULL, HELP_NONE, cmd_read_remote_tx_power, 2, 0),
+	SHELL_CMD_ARG(read-local-tx-power, NULL, HELP_NONE, cmd_read_local_tx_power, 2, 0),
+	SHELL_CMD_ARG(set-power-report-enable, NULL, HELP_NONE, cmd_set_power_report_enable, 3, 0),
+#endif
 #if defined(CONFIG_BT_BROADCASTER)
 	SHELL_CMD_ARG(advertise, NULL,
 		      "<type: off, on, scan, nconn> [mode: discov, non_discov] "
@@ -4100,7 +4304,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 	SHELL_CMD_ARG(phy-update, NULL, "<tx_phy> [rx_phy] [s2] [s8]",
 		      cmd_conn_phy_update, 2, 3),
 #endif
-#if defined(CONFIG_BT_CENTRAL)
+#if defined(CONFIG_BT_CENTRAL) || defined(CONFIG_BT_BROADCASTER)
 	SHELL_CMD_ARG(channel-map, NULL, "<channel-map: XXXXXXXXXX> (36-0)",
 		      cmd_chan_map, 2, 1),
 #endif /* CONFIG_BT_CENTRAL */

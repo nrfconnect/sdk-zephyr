@@ -33,8 +33,10 @@ static const struct bt_data ad[] = {
 #define SHORT_MSG_CHAN_IDX 1
 
 NET_BUF_POOL_FIXED_DEFINE(rx_data_pool, L2CAP_CHANNELS, BT_L2CAP_BUF_SIZE(DATA_BUF_SIZE), 8, NULL);
-NET_BUF_POOL_FIXED_DEFINE(tx_data_pool_0, 1, BT_L2CAP_BUF_SIZE(DATA_MTU), 8, NULL);
-NET_BUF_POOL_FIXED_DEFINE(tx_data_pool_1, 1, BT_L2CAP_BUF_SIZE(DATA_MTU), 8, NULL);
+NET_BUF_POOL_FIXED_DEFINE(tx_data_pool_0, 1, BT_L2CAP_BUF_SIZE(DATA_MTU),
+			  CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
+NET_BUF_POOL_FIXED_DEFINE(tx_data_pool_1, 1, BT_L2CAP_BUF_SIZE(DATA_MTU),
+			  CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 
 static struct bt_l2cap_server servers[SERVERS];
 void send_sdu_chan_worker(struct k_work *item);
@@ -261,7 +263,8 @@ static void disconnect_all_channels(void)
 	}
 }
 
-static int accept(struct bt_conn *conn, struct bt_l2cap_chan **l2cap_chan)
+static int accept(struct bt_conn *conn, struct bt_l2cap_server *server,
+		  struct bt_l2cap_chan **l2cap_chan)
 {
 	struct channel *chan;
 

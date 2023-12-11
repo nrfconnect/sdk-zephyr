@@ -14,13 +14,13 @@ LOG_MODULE_REGISTER(net_ethernet, CONFIG_NET_L2_ETHERNET_LOG_LEVEL);
 #include <zephyr/net/ethernet.h>
 #include <zephyr/net/ethernet_mgmt.h>
 #include <zephyr/net/gptp.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 
 #if defined(CONFIG_NET_LLDP)
 #include <zephyr/net/lldp.h>
 #endif
 
-#include <zephyr/syscall_handler.h>
+#include <zephyr/internal/syscall_handler.h>
 
 #include "arp.h"
 #include "eth_stats.h"
@@ -518,7 +518,8 @@ static struct net_buf *ethernet_fill_header(struct ethernet_context *ctx,
 	}
 
 	if (IS_ENABLED(CONFIG_NET_VLAN) &&
-	    net_eth_is_vlan_enabled(ctx, net_pkt_iface(pkt))) {
+	    net_eth_is_vlan_enabled(ctx, net_pkt_iface(pkt)) &&
+	    (IS_ENABLED(CONFIG_NET_GPTP_VLAN) || ptype != htons(NET_ETH_PTYPE_PTP))) {
 		struct net_eth_vlan_hdr *hdr_vlan;
 
 		hdr_vlan = (struct net_eth_vlan_hdr *)(hdr_frag->data);
@@ -695,10 +696,11 @@ static int ethernet_send(struct net_if *iface, struct net_pkt *pkt)
 	}
 
 	if (IS_ENABLED(CONFIG_NET_VLAN) &&
-	    net_eth_is_vlan_enabled(ctx, iface)) {
+	    net_eth_is_vlan_enabled(ctx, iface) &&
+	    (IS_ENABLED(CONFIG_NET_GPTP_VLAN) || ptype != htons(NET_ETH_PTYPE_PTP))) {
 		if (set_vlan_tag(ctx, iface, pkt) == NET_DROP) {
 			ret = -EINVAL;
-			goto error;
+			goto arp_error;
 		}
 
 		set_vlan_priority(ctx, pkt);
@@ -708,7 +710,7 @@ static int ethernet_send(struct net_if *iface, struct net_pkt *pkt)
 	 */
 	if (!ethernet_fill_header(ctx, pkt, ptype)) {
 		ret = -ENOMEM;
-		goto error;
+		goto arp_error;
 	}
 
 	net_pkt_cursor_init(pkt);
@@ -718,20 +720,7 @@ send:
 	if (ret != 0) {
 		eth_stats_update_errors_tx(iface);
 		ethernet_remove_l2_header(pkt);
-		if (IS_ENABLED(CONFIG_NET_ARP) && ptype == htons(NET_ETH_PTYPE_ARP)) {
-			/* Original packet was added to ARP's pending Q, so, to avoid it
-			 * being freed, take a reference, the reference is dropped when we
-			 * clear the pending Q in ARP and then it will be freed by net_if.
-			 */
-			net_pkt_ref(orig_pkt);
-			if (net_arp_clear_pending(iface,
-				(struct in_addr *)NET_IPV4_HDR(pkt)->dst)) {
-				NET_DBG("Could not find pending ARP entry");
-			}
-			/* Free the ARP request */
-			net_pkt_unref(pkt);
-		}
-		goto error;
+		goto arp_error;
 	}
 
 	ethernet_update_tx_stats(iface, pkt);
@@ -741,6 +730,23 @@ send:
 
 	net_pkt_unref(pkt);
 error:
+	return ret;
+
+arp_error:
+	if (IS_ENABLED(CONFIG_NET_ARP) && ptype == htons(NET_ETH_PTYPE_ARP)) {
+		/* Original packet was added to ARP's pending Q, so, to avoid it
+		 * being freed, take a reference, the reference is dropped when we
+		 * clear the pending Q in ARP and then it will be freed by net_if.
+		 */
+		net_pkt_ref(orig_pkt);
+		if (net_arp_clear_pending(
+			    iface, (struct in_addr *)NET_IPV4_HDR(pkt)->dst)) {
+			NET_DBG("Could not find pending ARP entry");
+		}
+		/* Free the ARP request */
+		net_pkt_unref(pkt);
+	}
+
 	return ret;
 }
 

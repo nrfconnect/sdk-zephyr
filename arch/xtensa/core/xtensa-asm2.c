@@ -15,10 +15,28 @@
 #include <zephyr/logging/log.h>
 #include <offsets.h>
 #include <zsr.h>
+#include <zephyr/arch/common/exc_handle.h>
 
 LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
 extern char xtensa_arch_except_epc[];
+extern char xtensa_arch_kernel_oops_epc[];
+
+#ifdef CONFIG_USERSPACE
+Z_EXC_DECLARE(z_xtensa_user_string_nlen);
+
+static const struct z_exc_handle exceptions[] = {
+	Z_EXC_HANDLE(z_xtensa_user_string_nlen)
+};
+
+#ifdef CONFIG_THREAD_LOCAL_STORAGE
+/*
+ * Per-thread (TLS) variable indicating whether execution is in user mode.
+ */
+__thread uint32_t is_user_mode;
+#endif
+
+#endif /* CONFIG_USERSPACE */
 
 void *xtensa_init_stack(struct k_thread *thread, int *stack_top,
 			void (*entry)(void *, void *, void *),
@@ -26,6 +44,13 @@ void *xtensa_init_stack(struct k_thread *thread, int *stack_top,
 {
 	void *ret;
 	_xtensa_irq_stack_frame_a11_t *frame;
+#ifdef CONFIG_USERSPACE
+	struct z_xtensa_thread_stack_header *header =
+		(struct z_xtensa_thread_stack_header *)thread->stack_obj;
+
+	thread->arch.psp = header->privilege_stack +
+		sizeof(header->privilege_stack);
+#endif
 
 	/* Not-a-cpu ID Ensures that the first time this is run, the
 	 * stack will be invalidated.  That covers the edge case of
@@ -48,11 +73,23 @@ void *xtensa_init_stack(struct k_thread *thread, int *stack_top,
 
 	(void)memset(frame, 0, bsasz);
 
-	frame->bsa.pc = (uintptr_t)z_thread_entry;
 	frame->bsa.ps = PS_WOE | PS_UM | PS_CALLINC(1);
+#ifdef CONFIG_USERSPACE
+	if ((thread->base.user_options & K_USER) == K_USER) {
+		frame->bsa.pc = (uintptr_t)arch_user_mode_enter;
+	} else {
+		frame->bsa.pc = (uintptr_t)z_thread_entry;
+	}
+#else
+	frame->bsa.pc = (uintptr_t)z_thread_entry;
+#endif
 
-#if XCHAL_HAVE_THREADPTR && defined(CONFIG_THREAD_LOCAL_STORAGE)
+#if XCHAL_HAVE_THREADPTR
+#ifdef CONFIG_THREAD_LOCAL_STORAGE
 	frame->bsa.threadptr = thread->tls;
+#elif CONFIG_USERSPACE
+	frame->bsa.threadptr = (uintptr_t)((thread->base.user_options & K_USER) ? thread : NULL);
+#endif
 #endif
 
 	/* Arguments to z_thread_entry().  Remember these start at A6,
@@ -122,7 +159,7 @@ void z_xtensa_dump_stack(const z_arch_esf_t *stack)
 
 	LOG_ERR(" **  A0 %p  SP %p  A2 %p  A3 %p",
 		(void *)bsa->a0,
-		((char *)bsa + sizeof(*bsa)),
+		(void *)((char *)bsa + sizeof(*bsa)),
 		(void *)bsa->a2, (void *)bsa->a3);
 
 	if (reg_blks_remaining > 0) {
@@ -172,6 +209,40 @@ static inline unsigned int get_bits(int offset, int num_bits, unsigned int val)
 	mask = BIT(num_bits) - 1;
 	val = val >> offset;
 	return val & mask;
+}
+
+static void print_fatal_exception(void *print_stack, int cause,
+				  bool is_dblexc, uint32_t depc)
+{
+	void *pc;
+	uint32_t ps, vaddr;
+	_xtensa_irq_bsa_t *bsa = (void *)*(int **)print_stack;
+
+	ps = bsa->ps;
+	pc = (void *)bsa->pc;
+
+	__asm__ volatile("rsr.excvaddr %0" : "=r"(vaddr));
+
+	LOG_ERR(" ** FATAL EXCEPTION%s", (is_dblexc ? " (DOUBLE)" : ""));
+	LOG_ERR(" ** CPU %d EXCCAUSE %d (%s)",
+		arch_curr_cpu()->id, cause,
+		z_xtensa_exccause(cause));
+	LOG_ERR(" **  PC %p VADDR %p", pc, (void *)vaddr);
+
+	if (is_dblexc) {
+		LOG_ERR(" **  DEPC %p", (void *)depc);
+	}
+
+#ifdef CONFIG_USERSPACE
+	LOG_ERR(" **  THREADPTR %p", (void *)bsa->threadptr);
+#endif /* CONFIG_USERSPACE */
+
+	LOG_ERR(" **  PS %p", (void *)bsa->ps);
+	LOG_ERR(" **    (INTLEVEL:%d EXCM: %d UM:%d RING:%d WOE:%d OWB:%d CALLINC:%d)",
+		get_bits(0, 4, ps), get_bits(4, 1, ps),
+		get_bits(5, 1, ps), get_bits(6, 2, ps),
+		get_bits(18, 1, ps),
+		get_bits(8, 4, ps), get_bits(16, 2, ps));
 }
 
 static ALWAYS_INLINE void usage_stop(void)
@@ -268,40 +339,32 @@ static inline DEF_INT_C_HANDLER(1)
  */
 void *xtensa_excint1_c(int *interrupted_stack)
 {
-	int cause, vaddr;
+	int cause;
 	_xtensa_irq_bsa_t *bsa = (void *)*(int **)interrupted_stack;
 	bool is_fatal_error = false;
+	bool is_dblexc = false;
 	uint32_t ps;
-	void *pc;
+	void *pc, *print_stack = (void *)interrupted_stack;
+	uint32_t depc = 0;
 
 	__asm__ volatile("rsr.exccause %0" : "=r"(cause));
 
 #ifdef CONFIG_XTENSA_MMU
-	/* TLB miss exception comes through level 1 interrupt also.
-	 * We need to preserve execution context after we have handled
-	 * the TLB miss, so we cannot unconditionally unmask interrupts.
-	 * For other cause, we can unmask interrupts so this would act
-	 * the same as if there is no MMU.
-	 */
-	switch (cause) {
-	case EXCCAUSE_ITLB_MISS:
-		/* Instruction TLB miss */
-		__fallthrough;
-	case EXCCAUSE_DTLB_MISS:
-		/* Data TLB miss */
+	__asm__ volatile("rsr.depc %0" : "=r"(depc));
 
-		/* Do not unmask interrupt while handling TLB misses. */
-		break;
-	default:
-		/* For others, we can unmask interrupts. */
-		bsa->ps &= ~PS_INTLEVEL_MASK;
-		break;
-	}
+	is_dblexc = (depc != 0U);
 #endif /* CONFIG_XTENSA_MMU */
 
 	switch (cause) {
 	case EXCCAUSE_LEVEL1_INTERRUPT:
-		return xtensa_int1_c(interrupted_stack);
+		if (!is_dblexc) {
+			return xtensa_int1_c(interrupted_stack);
+		}
+		break;
+#ifndef CONFIG_USERSPACE
+	/* Syscalls are handled earlier in assembly if MMU is enabled.
+	 * So we don't need this here.
+	 */
 	case EXCCAUSE_SYSCALL:
 		/* Just report it to the console for now */
 		LOG_ERR(" ** SYSCALL PS %p PC %p",
@@ -314,46 +377,29 @@ void *xtensa_excint1_c(int *interrupted_stack)
 		 */
 		bsa->pc += 3;
 		break;
-#ifdef CONFIG_XTENSA_MMU
-	case EXCCAUSE_ITLB_MISS:
-		/* Instruction TLB miss */
-		__fallthrough;
-	case EXCCAUSE_DTLB_MISS:
-		/* Data TLB miss */
-
-		/**
-		 * The way it works is, when we try to access an address
-		 * that is not mapped, we will have a miss. The HW then
-		 * will try to get the correspondent memory in the page
-		 * table. As the page table is not mapped in memory we will
-		 * have a second miss, which will trigger an exception.
-		 * In the exception (here) what we do is to exploit this
-		 * hardware capability just trying to load the page table
-		 * (not mapped address), which will cause a miss, but then
-		 * the hardware will automatically map it again from
-		 * the page table. This time it will work since the page
-		 * necessary to map the page table itself are wired map.
-		 */
-		__asm__ volatile("wsr a0, " ZSR_EXTRA0_STR "\n\t"
-				 "rsr.ptevaddr a0\n\t"
-				 "l32i a0, a0, 0\n\t"
-				 "rsr a0, " ZSR_EXTRA0_STR "\n\t"
-				 "rsync"
-				 : : : "a0", "memory");
-
-		/* Since we are dealing with TLB misses, we will probably not
-		 * want to switch to another thread.
-		 */
-		return interrupted_stack;
-#endif /* CONFIG_XTENSA_MMU */
+#endif /* !CONFIG_USERSPACE */
 	default:
 		ps = bsa->ps;
 		pc = (void *)bsa->pc;
 
-		__asm__ volatile("rsr.excvaddr %0" : "=r"(vaddr));
+#ifdef CONFIG_USERSPACE
+		/* If the faulting address is from one of the known
+		 * exceptions that should not be fatal, return to
+		 * the fixup address.
+		 */
+		for (int i = 0; i < ARRAY_SIZE(exceptions); i++) {
+			if ((pc >= exceptions[i].start) &&
+			    (pc < exceptions[i].end)) {
+				bsa->pc = (uintptr_t)exceptions[i].fixup;
+
+				goto fixup_out;
+			}
+		}
+#endif /* CONFIG_USERSPACE */
 
 		/* Default for exception */
 		int reason = K_ERR_CPU_EXCEPTION;
+		is_fatal_error = true;
 
 		/* We need to distinguish between an ill in xtensa_arch_except,
 		 * e.g for k_panic, and any other ill. For exceptions caused by
@@ -363,25 +409,32 @@ void *xtensa_excint1_c(int *interrupted_stack)
 		 * We assign EXCCAUSE the unused, reserved code 63; this may be
 		 * problematic if the app or new boards also decide to repurpose
 		 * this code.
+		 *
+		 * Another intentionally ill is from xtensa_arch_kernel_oops.
+		 * Kernel OOPS has to be explicity raised so we can simply
+		 * set the reason and continue.
 		 */
-		if ((pc ==  (void *) &xtensa_arch_except_epc) && (cause == 0)) {
-			cause = 63;
-			__asm__ volatile("wsr.exccause %0" : : "r"(cause));
-			reason = bsa->a2;
+		if (cause == EXCCAUSE_ILLEGAL) {
+			if (pc == (void *)&xtensa_arch_except_epc) {
+				cause = 63;
+				__asm__ volatile("wsr.exccause %0" : : "r"(cause));
+				reason = bsa->a2;
+			} else if (pc == (void *)&xtensa_arch_kernel_oops_epc) {
+				cause = 64; /* kernel oops */
+				reason = K_ERR_KERNEL_OOPS;
+
+				/* A3 contains the second argument to
+				 * xtensa_arch_kernel_oops(reason, ssf)
+				 * where ssf is the stack frame causing
+				 * the kernel oops.
+				 */
+				print_stack = (void *)bsa->a3;
+			}
 		}
 
-		LOG_ERR(" ** FATAL EXCEPTION");
-		LOG_ERR(" ** CPU %d EXCCAUSE %d (%s)",
-			arch_curr_cpu()->id, cause,
-			z_xtensa_exccause(cause));
-		LOG_ERR(" **  PC %p VADDR %p",
-			pc, (void *)vaddr);
-		LOG_ERR(" **  PS %p", (void *)bsa->ps);
-		LOG_ERR(" **    (INTLEVEL:%d EXCM: %d UM:%d RING:%d WOE:%d OWB:%d CALLINC:%d)",
-			get_bits(0, 4, ps), get_bits(4, 1, ps),
-			get_bits(5, 1, ps), get_bits(6, 2, ps),
-			get_bits(18, 1, ps),
-			get_bits(8, 4, ps), get_bits(16, 2, ps));
+		if (reason != K_ERR_KERNEL_OOPS) {
+			print_fatal_exception(print_stack, cause, is_dblexc, depc);
+		}
 
 		/* FIXME: legacy xtensa port reported "HW" exception
 		 * for all unhandled exceptions, which seems incorrect
@@ -389,25 +442,25 @@ void *xtensa_excint1_c(int *interrupted_stack)
 		 * up.
 		 */
 		z_xtensa_fatal_error(reason,
-				     (void *)interrupted_stack);
+				     (void *)print_stack);
 		break;
 	}
 
-
+#ifdef CONFIG_XTENSA_MMU
 	switch (cause) {
-	case EXCCAUSE_SYSCALL:
 	case EXCCAUSE_LEVEL1_INTERRUPT:
-	case EXCCAUSE_ALLOCA:
-	case EXCCAUSE_ITLB_MISS:
-	case EXCCAUSE_DTLB_MISS:
+#ifndef CONFIG_USERSPACE
+	case EXCCAUSE_SYSCALL:
+#endif /* !CONFIG_USERSPACE */
 		is_fatal_error = false;
 		break;
 	default:
 		is_fatal_error = true;
 		break;
 	}
+#endif /* CONFIG_XTENSA_MMU */
 
-	if (is_fatal_error) {
+	if (is_dblexc || is_fatal_error) {
 		uint32_t ignore;
 
 		/* We are going to manipulate _current_cpu->nested manually.
@@ -435,6 +488,16 @@ void *xtensa_excint1_c(int *interrupted_stack)
 
 		_current_cpu->nested = 1;
 	}
+
+#ifdef CONFIG_XTENSA_MMU
+#ifdef CONFIG_USERSPACE
+fixup_out:
+#endif
+	if (is_dblexc) {
+		__asm__ volatile("wsr.depc %0" : : "r"(0));
+	}
+#endif /* CONFIG_XTENSA_MMU */
+
 
 	return return_to(interrupted_stack);
 }
@@ -471,3 +534,24 @@ void arch_spin_relax(void)
 #undef NOP1
 }
 #endif /* CONFIG_XTENSA_MORE_SPIN_RELAX_NOPS */
+
+#ifdef CONFIG_USERSPACE
+FUNC_NORETURN void arch_user_mode_enter(k_thread_entry_t user_entry,
+					void *p1, void *p2, void *p3)
+{
+	struct k_thread *current = _current;
+	size_t stack_end;
+
+	/* Transition will reset stack pointer to initial, discarding
+	 * any old context since this is a one-way operation
+	 */
+	stack_end = Z_STACK_PTR_ALIGN(current->stack_info.start +
+				      current->stack_info.size -
+				      current->stack_info.delta);
+
+	z_xtensa_userspace_enter(user_entry, p1, p2, p3,
+				 stack_end, current->stack_info.start);
+
+	CODE_UNREACHABLE;
+}
+#endif /* CONFIG_USERSPACE */

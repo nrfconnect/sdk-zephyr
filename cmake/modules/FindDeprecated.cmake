@@ -107,13 +107,6 @@ if("SOURCES" IN_LIST Deprecated_FIND_COMPONENTS)
   endif()
 endif()
 
-if("PRJ_BOARD" IN_LIST Deprecated_FIND_COMPONENTS)
-  # This code was deprecated after Zephyr v3.3.0
-  list(REMOVE_ITEM Deprecated_FIND_COMPONENTS PRJ_BOARD)
-  message(DEPRECATION "'prj_<board>.conf' files are deprecated and should be "
-                      "replaced with board Kconfig fragments instead.")
-endif()
-
 if("PYTHON_PREFER" IN_LIST Deprecated_FIND_COMPONENTS)
   # This code was deprecated after Zephyr v3.4.0
   list(REMOVE_ITEM Deprecated_FIND_COMPONENTS PYTHON_PREFER)
@@ -129,6 +122,24 @@ endif()
 if(NOT "${Deprecated_FIND_COMPONENTS}" STREQUAL "")
   message(STATUS "The following deprecated component(s) could not be found: "
                  "${Deprecated_FIND_COMPONENTS}")
+endif()
+
+if("SEARCHED_LINKER_SCRIPT" IN_LIST Deprecated_FIND_COMPONENTS)
+  # This code was deprecated after Zephyr v3.5.0
+  list(REMOVE_ITEM Deprecated_FIND_COMPONENTS SEARCHED_LINKER_SCRIPT)
+
+  # Try a board specific linker file
+  set(LINKER_SCRIPT ${BOARD_DIR}/linker.ld)
+  if(NOT EXISTS ${LINKER_SCRIPT})
+    # If not available, try an SoC specific linker file
+    set(LINKER_SCRIPT ${SOC_DIR}/${ARCH}/${SOC_PATH}/linker.ld)
+  endif()
+  message(DEPRECATION
+      "Pre-defined `linker.ld` script is deprecated. Please set "
+      "BOARD_LINKER_SCRIPT or SOC_LINKER_SCRIPT to point to ${LINKER_SCRIPT} "
+      "or one of the Zephyr provided common linker scripts for the ${ARCH} "
+      "architecture."
+  )
 endif()
 
 set(Deprecated_FOUND True)

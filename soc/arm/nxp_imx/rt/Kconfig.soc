@@ -1,6 +1,6 @@
 # i.MX RT series
 
-# Copyright (c) 2017-2021, NXP
+# Copyright 2017-2021,2023 NXP
 # SPDX-License-Identifier: Apache-2.0
 
 choice
@@ -21,7 +21,10 @@ config SOC_MIMXRT1011
 	select HAS_MCUX_LPUART
 	select HAS_MCUX_GPT
 	select HAS_MCUX_TRNG
+	select CPU_HAS_FPU
 	select CPU_HAS_ARM_MPU
+	select CPU_HAS_ICACHE
+	select CPU_HAS_DCACHE
 	select INIT_ENET_PLL
 	select HAS_MCUX_USB_EHCI
 	select HAS_MCUX_EDMA
@@ -45,6 +48,7 @@ config SOC_MIMXRT1015
 	select HAS_MCUX_LPUART
 	select HAS_MCUX_GPT
 	select HAS_MCUX_TRNG
+	select CPU_HAS_FPU
 	select CPU_HAS_FPU_DOUBLE_PRECISION
 	select CPU_HAS_ARM_MPU
 	select INIT_ENET_PLL
@@ -338,8 +342,9 @@ config SOC_MIMXRT1176_CM7
 	select INIT_ENET_PLL if NET_L2_ETHERNET && ETH_DRIVER
 	select INIT_VIDEO_PLL
 	select HAS_MCUX_EDMA
+	select CPU_HAS_ICACHE
+	select CPU_HAS_DCACHE
 	select CPU_HAS_FPU_DOUBLE_PRECISION
-	select ADJUST_DCDC
 	select BYPASS_LDO_LPSR
 	select ADJUST_LDO
 	select HAS_MCUX_PWM
@@ -369,6 +374,7 @@ config SOC_MIMXRT1176_CM4
 	select HAS_MCUX_FLEXSPI
 	select HAS_MCUX_LPUART
 	select HAS_MCUX_GPT
+	select CPU_HAS_FPU
 	select CPU_HAS_ARM_MPU
 	select INIT_ARM_PLL
 	select INIT_ENET_PLL if NET_L2_ETHERNET && ETH_DRIVER
@@ -403,12 +409,13 @@ config SOC_MIMXRT1166_CM7
 	select HAS_MCUX_GPT
 	select HAS_MCUX_FLEXCAN
 	select CPU_HAS_ARM_MPU
+	select CPU_HAS_ICACHE
+	select CPU_HAS_DCACHE
 	select INIT_ARM_PLL
 	select INIT_ENET_PLL if NET_L2_ETHERNET && ETH_DRIVER
 	select INIT_VIDEO_PLL
 	select HAS_MCUX_EDMA
 	select CPU_HAS_FPU_DOUBLE_PRECISION
-	select ADJUST_DCDC
 	select BYPASS_LDO_LPSR
 	select ADJUST_LDO
 	select HAS_MCUX_PWM
@@ -437,6 +444,7 @@ config SOC_MIMXRT1166_CM4
 	select HAS_MCUX_FLEXSPI
 	select HAS_MCUX_GPT
 	select CPU_HAS_ARM_MPU
+	select CPU_HAS_FPU
 	select INIT_ARM_PLL
 	select INIT_ENET_PLL if NET_L2_ETHERNET && ETH_DRIVER
 	select INIT_VIDEO_PLL
@@ -661,6 +669,8 @@ config SOC_SERIES_IMX_RT10XX
 	bool "i.MX RT 10XX Series"
 	select CPU_CORTEX_M7
 	select CPU_CORTEX_M_HAS_DWT
+	select CPU_HAS_ICACHE
+	select CPU_HAS_DCACHE
 	select PLATFORM_SPECIFIC_INIT
 
 config SOC_SERIES_IMX_RT11XX
@@ -686,6 +696,7 @@ config DCDC_VALUE
 
 config ADJUST_DCDC
 	bool "Adjust internal DCDC output"
+	default y if SOC_SERIES_IMX_RT11XX
 
 config BYPASS_LDO_LPSR
 	bool "Bypass LDO lpsr"
@@ -794,6 +805,23 @@ config NXP_IMX_EXTERNAL_SDRAM
 	  setting should be enabled when the application uses SDRAM, or
 	  an MPU region will be defined to disable cached access to the
 	  SDRAM memory space.
+
+config NXP_IMX_RT_ROM_RAMLOADER
+	depends on !FLASH_MCUX_FLEXSPI_XIP && NXP_IMX_RT_BOOT_HEADER
+	# Required so that debugger will load image to correct offset
+	select BUILD_OUTPUT_HEX
+	bool "Create output image that IMX RT ROM can load from FlexSPI to ram"
+	help
+	  Builds an output image that the IMX RT BootROM can load from the
+	  FlexSPI boot device into RAM region. The image will be loaded
+	  from FLEXSPI into the region specified by `zephyr,flash` node.
+
+# Setup LMA adjustment if using the RAMLOADER feature of ROM
+FLASH_CHOSEN := zephyr,flash
+FLASH_BASE := $(dt_chosen_reg_addr_hex,$(FLASH_CHOSEN))
+FLEXSPI_BASE := $(dt_node_reg_addr_hex,/soc/spi@402a8000,1)
+config BUILD_OUTPUT_ADJUST_LMA
+	default "$(FLEXSPI_BASE) - $(FLASH_BASE)" if NXP_IMX_RT_ROM_RAMLOADER
 
 config SECOND_CORE_MCUX
 	bool "Dual core operation on the RT11xx series"

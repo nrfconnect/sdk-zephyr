@@ -1,14 +1,14 @@
 common:
   integration_platforms:
-    - native_posix
+    - native_sim
 
 tests:
-  logging.log_output_default_timestamp:
+  logging.output.default_timestamp:
     tags:
       - log_output
       - logging
       - timestamp
-  logging.log_output_custom_timestamp:
+  logging.output.custom_timestamp:
     tags:
       - log_output
       - logging

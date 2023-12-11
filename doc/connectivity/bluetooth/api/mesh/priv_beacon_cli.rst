@@ -7,11 +7,11 @@ The Private Beacon Client model is a foundation model defined by the Bluetooth
 mesh specification. It is enabled with the
 :kconfig:option:`CONFIG_BT_MESH_PRIV_BEACON_CLI` option.
 
-The Private Beacon Client model is introduced in the Bluetooth Mesh Profile
+The Private Beacon Client model is introduced in the Bluetooth Mesh Protocol
 Specification version 1.1, and provides functionality for configuring the
 :ref:`bluetooth_mesh_models_priv_beacon_srv` models.
 
-The Private Beacons feature adds privacy to the different Bluetooth mesh
+The Private Beacons feature adds privacy to the different Bluetooth Mesh
 beacons by periodically randomizing the beacon input data. This protects the
 mesh node from being tracked by devices outside the mesh network, and hides the
 network's IV index, IV update and the Key Refresh state.
@@ -25,8 +25,7 @@ All configuration functions in the Private Beacon Client API have ``net_idx``
 and ``addr`` as their first parameters. These should be set to the network
 index and the primary unicast address the target node was provisioned with.
 
-The Private Beacon Client model is optional, and can be instantiated on any
-element.
+If present, the Private Beacon Client model must only be instantiated on the primary element.
 
 API reference
 *************

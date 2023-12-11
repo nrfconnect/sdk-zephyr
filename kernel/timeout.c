@@ -7,8 +7,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/spinlock.h>
 #include <ksched.h>
-#include <zephyr/timeout_q.h>
-#include <zephyr/syscall_handler.h>
+#include <timeout_q.h>
+#include <zephyr/internal/syscall_handler.h>
 #include <zephyr/drivers/timer/system_timer.h>
 #include <zephyr/sys_clock.h>
 
@@ -190,7 +190,7 @@ k_ticks_t z_timeout_expires(const struct _timeout *timeout)
 	k_ticks_t ticks = 0;
 
 	K_SPINLOCK(&timeout_lock) {
-		ticks = curr_tick + timeout_rem(timeout);
+		ticks = curr_tick + timeout_rem(timeout) + elapsed();
 	}
 
 	return ticks;

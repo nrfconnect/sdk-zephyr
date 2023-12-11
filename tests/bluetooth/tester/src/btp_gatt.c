@@ -1651,11 +1651,11 @@ static uint8_t read_multiple(const void *cmd, uint16_t cmd_len,
 		return BTP_STATUS_FAILED;
 	}
 
-	if (cp->handles_count > ARRAY_SIZE(handles)) {
+	if (cp->handles_count == 0 || cp->handles_count > ARRAY_SIZE(handles)) {
 		return BTP_STATUS_FAILED;
 	}
 
-	for (i = 0; i < ARRAY_SIZE(handles); i++) {
+	for (i = 0; i < cp->handles_count; i++) {
 		handles[i] = sys_le16_to_cpu(cp->handles[i]);
 	}
 
@@ -1670,7 +1670,7 @@ static uint8_t read_multiple(const void *cmd, uint16_t cmd_len,
 	}
 
 	read_params.func = read_cb;
-	read_params.handle_count = i;
+	read_params.handle_count = cp->handles_count;
 	read_params.multiple.handles = handles; /* not used in read func */
 	read_params.multiple.variable = false;
 	read_params.chan_opt = BT_ATT_CHAN_OPT_NONE;
@@ -2164,7 +2164,7 @@ static uint8_t notify_mult(const void *cmd, uint16_t cmd_len,
 
 struct get_attrs_foreach_data {
 	struct net_buf_simple *buf;
-	struct bt_uuid *uuid;
+	const struct bt_uuid *uuid;
 	uint8_t count;
 };
 
@@ -2353,7 +2353,7 @@ static uint8_t get_attr_val(const void *cmd, uint16_t cmd_len,
 	return BTP_STATUS_FAILED;
 }
 
-static struct bt_uuid_128 test_uuid = BT_UUID_INIT_128(
+static const struct bt_uuid_128 test_uuid = BT_UUID_INIT_128(
 	0x94, 0x99, 0xb6, 0xa9, 0xcd, 0x1c, 0x42, 0x95,
 	0xb2, 0x07, 0x2f, 0x7f, 0xec, 0xc0, 0xc7, 0x5b);
 

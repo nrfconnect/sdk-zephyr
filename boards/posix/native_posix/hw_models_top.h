@@ -7,7 +7,7 @@
 #ifndef _NATIVE_POSIX_HW_MODELS_H
 #define _NATIVE_POSIX_HW_MODELS_H
 
-#include "zephyr/types.h"
+#include <zephyr/types.h>
 #include <inttypes.h>
 
 #ifdef __cplusplus
@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 #define NEVER UINT64_MAX
+#define NSI_NEVER UINT64_MAX
 
 void hwm_one_event(void);
 void hwm_init(void);

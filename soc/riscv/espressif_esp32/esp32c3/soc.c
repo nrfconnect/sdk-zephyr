@@ -23,12 +23,14 @@
 #include <zephyr/kernel_structs.h>
 #include <kernel_internal.h>
 #include <string.h>
-#include <zephyr/toolchain/gcc.h>
+#include <zephyr/toolchain.h>
 #include <soc.h>
 
 #ifdef CONFIG_MCUBOOT
 #include "bootloader_init.h"
 #endif /* CONFIG_MCUBOOT */
+
+extern void esp_reset_reason_init(void);
 
 /*
  * This is written in C rather than assembly since, during the port bring up,
@@ -55,6 +57,8 @@ void __attribute__((section(".iram1"))) __esp_platform_start(void)
 
 	/* Disable normal interrupts. */
 	csr_read_clear(mstatus, MSTATUS_MIE);
+
+	esp_reset_reason_init();
 
 #ifdef CONFIG_MCUBOOT
 	/* MCUboot early initialisation.

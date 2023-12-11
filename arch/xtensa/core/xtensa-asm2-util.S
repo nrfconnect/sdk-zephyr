@@ -174,7 +174,8 @@ _restore_context:
 	l32i a0, a1, ___xtensa_irq_bsa_t_scompare1_OFFSET
 	wsr a0, SCOMPARE1
 #endif
-#if XCHAL_HAVE_THREADPTR && defined(CONFIG_THREAD_LOCAL_STORAGE)
+#if XCHAL_HAVE_THREADPTR && \
+	(defined(CONFIG_USERSPACE) || defined(CONFIG_THREAD_LOCAL_STORAGE))
 	l32i a0, a1, ___xtensa_irq_bsa_t_threadptr_OFFSET
 	wur a0, THREADPTR
 #endif
@@ -200,6 +201,20 @@ _restore_context:
 xtensa_arch_except:
 	entry a1, 16
 xtensa_arch_except_epc:
+	ill
+	retw
+
+/*
+ * void xtensa_arch_kernel_oops(int reason_p, void *ssf);
+ *
+ * Simply to raise hardware exception for Kernel OOPS.
+ */
+.global xtensa_arch_kernel_oops
+.global xtensa_arch_kernel_oops_epc
+.align 4
+xtensa_arch_kernel_oops:
+	entry a1, 16
+xtensa_arch_kernel_oops_epc:
 	ill
 	retw
 
@@ -257,6 +272,16 @@ noflush:
 	l32i a2, a1, 0
 	l32i a3, a2, ___xtensa_irq_bsa_t_a3_OFFSET
 	s32i a1, a3, 0
+
+#ifdef CONFIG_USERSPACE
+	/* Switch page tables */
+	rsr a6, ZSR_CPU
+	l32i a6, a6, ___cpu_t_current_OFFSET
+	call4 z_xtensa_swap_update_page_tables
+
+	l32i a2, a3, 0
+	l32i a2, a2, 0
+#endif
 
 	/* Switch stack pointer and restore.  The jump to
 	 * _restore_context does not return as such, but we arrange
@@ -342,11 +367,14 @@ DEF_EXCINT XCHAL_DEBUGLEVEL, _handle_excint, xtensa_debugint_c
 .pushsection .UserExceptionVector.text, "ax"
 .global _Level1RealVector
 _Level1RealVector:
-	wsr a0, ZSR_ALLOCA
+	wsr a0, ZSR_A0SAVE
 	rsync
 	rsr.exccause a0
 #ifdef CONFIG_XTENSA_MMU
 	beqi a0, EXCCAUSE_ITLB_MISS, _handle_tlb_miss_user
+#ifdef CONFIG_USERSPACE
+	beqi a0, EXCCAUSE_SYSCALL, _syscall
+#endif /* CONFIG_USERSPACE */
 	addi a0, a0, -EXCCAUSE_DTLB_MISS
 	beqz a0, _handle_tlb_miss_user
 	rsr.exccause a0
@@ -355,7 +383,7 @@ _Level1RealVector:
 
 	j _xt_alloca_exc
 _not_alloca:
-	rsr a0, ZSR_ALLOCA
+	rsr a0, ZSR_A0SAVE
 	j _Level1Vector
 #ifdef CONFIG_XTENSA_MMU
 _handle_tlb_miss_user:
@@ -374,8 +402,13 @@ _handle_tlb_miss_user:
 	 */
 	rsr.ptevaddr a0
 	l32i a0, a0, 0
-	rsr a0, ZSR_ALLOCA
+	rsr a0, ZSR_A0SAVE
 	rfe
+#ifdef CONFIG_USERSPACE
+_syscall:
+	rsr a0, ZSR_A0SAVE
+	j z_xtensa_do_syscall
+#endif /* CONFIG_USERSPACE */
 #endif /* CONFIG_XTENSA_MMU */
 .popsection
 
@@ -391,12 +424,12 @@ _handle_tlb_miss_user:
 .global _KernelExceptionVector
 _KernelExceptionVector:
 #ifdef CONFIG_XTENSA_MMU
-	wsr a0, ZSR_ALLOCA
+	wsr a0, ZSR_A0SAVE
 	rsr.exccause a0
 	beqi a0, EXCCAUSE_ITLB_MISS, _handle_tlb_miss_kernel
 	addi a0, a0, -EXCCAUSE_DTLB_MISS
 	beqz a0, _handle_tlb_miss_kernel
-	rsr a0, ZSR_ALLOCA
+	rsr a0, ZSR_A0SAVE
 #endif
 	j _Level1Vector
 #ifdef CONFIG_XTENSA_MMU
@@ -410,7 +443,7 @@ _handle_tlb_miss_kernel:
 	 */
 	rsr.ptevaddr a0
 	l32i a0, a0, 0
-	rsr a0, ZSR_ALLOCA
+	rsr a0, ZSR_A0SAVE
 	rfe
 #endif
 .popsection
@@ -420,15 +453,18 @@ _handle_tlb_miss_kernel:
 .global _DoubleExceptionVector
 _DoubleExceptionVector:
 #ifdef CONFIG_XTENSA_MMU
-	wsr a0, ZSR_ALLOCA
+	wsr a0, ZSR_DBLEXC
 	rsync
 
 	rsr.exccause a0
 	addi a0, a0, -EXCCAUSE_DTLB_MISS
 	beqz a0, _handle_tlb_miss_dblexc
 
-	rsr a0, ZSR_ALLOCA
-#endif
+	rsr a0, ZSR_DBLEXC
+
+	j _Level1Vector
+#else
+
 #if defined(CONFIG_SIMULATOR_XTENSA) || defined(XT_SIMULATOR)
 1:
 /* Tell simulator to stop executing here, instead of trying to do
@@ -446,6 +482,7 @@ _DoubleExceptionVector:
 1:
 #endif
 	j	1b
+#endif /* CONFIG_XTENSA_MMU */
 
 #ifdef CONFIG_XTENSA_MMU
 _handle_tlb_miss_dblexc:
@@ -459,7 +496,7 @@ _handle_tlb_miss_dblexc:
 	rsr.ptevaddr a0
 	l32i a0, a0, 0
 
-	rsr a0, ZSR_ALLOCA
+	rsr a0, ZSR_DBLEXC
 	rfde
 #endif
 .popsection

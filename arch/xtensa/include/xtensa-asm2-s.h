@@ -176,7 +176,8 @@
 	rsr.SCOMPARE1 a0
 	s32i a0, a1, ___xtensa_irq_bsa_t_scompare1_OFFSET
 #endif
-#if XCHAL_HAVE_THREADPTR && defined(CONFIG_THREAD_LOCAL_STORAGE)
+#if XCHAL_HAVE_THREADPTR && \
+	(defined(CONFIG_USERSPACE) || defined(CONFIG_THREAD_LOCAL_STORAGE))
 	rur.THREADPTR a0
 	s32i a0, a1, ___xtensa_irq_bsa_t_threadptr_OFFSET
 #endif
@@ -409,6 +410,16 @@ _xstack_returned_\@:
 	l32i a2, a1, 0
 	l32i a2, a2, ___xtensa_irq_bsa_t_scratch_OFFSET
 
+#if XCHAL_HAVE_THREADPTR && defined(CONFIG_USERSPACE)
+	/* Clear up the threadptr because it is used
+	 * to check if a thread is runnig on user mode. Since
+	 * we are in a interruption we don't want the system
+	 * thinking it is possbly running in user mode.
+	 */
+	movi.n a0, 0
+	wur.THREADPTR a0
+#endif /* XCHAL_HAVE_THREADPTR && CONFIG_USERSPACE */
+
 	/* There's a gotcha with level 1 handlers: the INTLEVEL field
 	 * gets left at zero and not set like high priority interrupts
 	 * do.  That works fine for exceptions, but for L1 interrupts,
@@ -496,6 +507,8 @@ _do_call_\@:
 	 * spills to the right place.
 	 */
 	beq a6, a1, _restore_\@
+
+#ifndef CONFIG_USERSPACE
 	l32i a1, a1, 0
 	l32i a0, a1, ___xtensa_irq_bsa_t_a0_OFFSET
 	addi a1, a1, ___xtensa_irq_bsa_t_SIZEOF
@@ -505,7 +518,37 @@ _do_call_\@:
 	 */
 	SPILL_ALL_WINDOWS
 #endif
+
+	/* Restore A1 stack pointer from "next" handle. */
 	mov a1, a6
+#else
+	/* With userspace, we cannot simply restore A1 stack pointer
+	 * at this pointer because we need to swap page tables to
+	 * the incoming thread, and we do not want to call that
+	 * function with thread's stack. So we stash the new stack
+	 * pointer into A2 first, then move it to A1 after we have
+	 * swapped the page table.
+	 */
+	mov a2, a6
+
+	/* Need to switch page tables because the "next" handle
+	 * returned above is not the same handle as we started
+	 * with. This means we are being restored to another
+	 * thread.
+	 */
+	rsr a6, ZSR_CPU
+	l32i a6, a6, ___cpu_t_current_OFFSET
+
+	call4 z_xtensa_swap_update_page_tables
+	l32i a1, a1, 0
+	l32i a0, a1, ___xtensa_irq_bsa_t_a0_OFFSET
+	addi a1, a1, ___xtensa_irq_bsa_t_SIZEOF
+
+	SPILL_ALL_WINDOWS
+
+	/* Moved stashed stack pointer to A1 to restore stack. */
+	mov a1, a2
+#endif
 
 _restore_\@:
 	j _restore_context
@@ -546,31 +589,6 @@ _Level\LVL\()VectorHelper :
 .global _Level\LVL\()Vector
 _Level\LVL\()Vector:
 #endif
-#ifdef CONFIG_XTENSA_MMU
-	wsr.ZSR_EXTRA0 a2
-	wsr.ZSR_EXTRA1 a3
-	rsync
-
-	/* Calculations below will clobber registers used.
-	 * So we make a copy of the stack pointer to avoid
-	 * changing it.
-	 */
-	mov a3, a1
-
-	CALC_PTEVADDR_BASE a2
-
-	/* Preload PTE entry page of current stack. */
-	PRELOAD_PTEVADDR a3, a2
-
-	/* Preload PTE entry page of new stack, where
-	 * it will be used later (in EXCINT_HANDLER above).
-	 */
-	rsr.ZSR_CPU a3
-	PRELOAD_PTEVADDR a3, a2
-
-	rsr.ZSR_EXTRA1 a3
-	rsr.ZSR_EXTRA0 a2
-#endif /* CONFIG_XTENSA_MMU */
 	addi a1, a1, -___xtensa_irq_bsa_t_SIZEOF
 	s32i a0, a1, ___xtensa_irq_bsa_t_a0_OFFSET
 	s32i a2, a1, ___xtensa_irq_bsa_t_a2_OFFSET

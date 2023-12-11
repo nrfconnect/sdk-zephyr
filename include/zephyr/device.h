@@ -41,6 +41,10 @@ extern "C" {
  */
 #define Z_DEVICE_DEPS_ENDS INT16_MAX
 
+/** @brief Determine if a DT node is mutable */
+#define Z_DEVICE_IS_MUTABLE(node_id)                                                               \
+	COND_CODE_1(IS_ENABLED(CONFIG_DEVICE_MUTABLE), (DT_PROP(node_id, zephyr_mutable)), (0))
+
 /** @endcond */
 
 /**
@@ -118,8 +122,8 @@ typedef int16_t device_handle_t;
  * stored in @ref device.data.
  * @param config Pointer to the device's private constant data, which will be
  * stored in @ref device.config.
- * @param level The device's initialization level. See @ref sys_init for
- * details.
+ * @param level The device's initialization level (PRE_KERNEL_1, PRE_KERNEL_2 or
+ * POST_KERNEL).
  * @param prio The device's priority within its initialization level. See
  * SYS_INIT() for details.
  * @param api Pointer to the device's API structure. Can be `NULL`.
@@ -169,7 +173,8 @@ typedef int16_t device_handle_t;
  * stored in @ref device.data.
  * @param config Pointer to the device's private constant data, which will be
  * stored in @ref device.config field.
- * @param level The device's initialization level. See SYS_INIT() for details.
+ * @param level The device's initialization level (PRE_KERNEL_1, PRE_KERNEL_2 or
+ * POST_KERNEL).
  * @param prio The device's priority within its initialization level. See
  * SYS_INIT() for details.
  * @param api Pointer to the device's API structure. Can be `NULL`.
@@ -923,13 +928,33 @@ static inline bool z_impl_device_is_ready(const struct device *dev)
  * @param api Reference to device API.
  * @param ... Optional dependencies, manually specified.
  */
-#define Z_DEVICE_BASE_DEFINE(node_id, dev_id, name, pm, data, config, level,   \
-			     prio, api, state, deps)                           \
-	COND_CODE_1(DT_NODE_EXISTS(node_id), (), (static))                     \
-	const STRUCT_SECTION_ITERABLE_NAMED(device,                            \
-		Z_DEVICE_SECTION_NAME(level, prio),                            \
-		DEVICE_NAME_GET(dev_id)) =                                     \
+#define Z_DEVICE_BASE_DEFINE(node_id, dev_id, name, pm, data, config, level, prio, api, state,     \
+			     deps)                                                                 \
+	COND_CODE_1(DT_NODE_EXISTS(node_id), (), (static))                                         \
+	COND_CODE_1(Z_DEVICE_IS_MUTABLE(node_id), (), (const))                                     \
+	STRUCT_SECTION_ITERABLE_NAMED_ALTERNATE(                                                   \
+		device, COND_CODE_1(Z_DEVICE_IS_MUTABLE(node_id), (device_mutable), (device)),     \
+		Z_DEVICE_SECTION_NAME(level, prio), DEVICE_NAME_GET(dev_id)) =                     \
 		Z_DEVICE_INIT(name, pm, data, config, api, state, deps)
+
+/* deprecated device initialization levels */
+#define Z_DEVICE_LEVEL_DEPRECATED_EARLY                                        \
+	__WARN("EARLY device driver level is deprecated")
+#define Z_DEVICE_LEVEL_DEPRECATED_PRE_KERNEL_1
+#define Z_DEVICE_LEVEL_DEPRECATED_PRE_KERNEL_2
+#define Z_DEVICE_LEVEL_DEPRECATED_POST_KERNEL
+#define Z_DEVICE_LEVEL_DEPRECATED_APPLICATION                                  \
+	__WARN("APPLICATION device driver level is deprecated")
+#define Z_DEVICE_LEVEL_DEPRECATED_SMP                                          \
+	__WARN("SMP device driver level is deprecated")
+
+/**
+ * @brief Issue a warning if the given init level is deprecated.
+ *
+ * @param level Init level
+ */
+#define Z_DEVICE_LEVEL_CHECK_DEPRECATED_LEVEL(level)                           \
+	Z_DEVICE_LEVEL_DEPRECATED_##level
 
 /**
  * @brief Define the init entry for a device.
@@ -941,13 +966,18 @@ static inline bool z_impl_device_is_ready(const struct device *dev)
  * @param level Initialization level.
  * @param prio Initialization priority.
  */
-#define Z_DEVICE_INIT_ENTRY_DEFINE(node_id, dev_id, init_fn_, level, prio)     \
-	static const Z_DECL_ALIGN(struct init_entry) __used __noasan           \
-		Z_INIT_ENTRY_SECTION(level, prio,                              \
-				     Z_DEVICE_INIT_SUB_PRIO(node_id))          \
-		Z_INIT_ENTRY_NAME(DEVICE_NAME_GET(dev_id)) = {                 \
-			.init_fn = {.dev = (init_fn_)},                        \
-			.dev = &DEVICE_NAME_GET(dev_id),                       \
+#define Z_DEVICE_INIT_ENTRY_DEFINE(node_id, dev_id, init_fn_, level, prio)                         \
+	Z_DEVICE_LEVEL_CHECK_DEPRECATED_LEVEL(level)                                               \
+                                                                                                   \
+	static const Z_DECL_ALIGN(struct init_entry) __used __noasan Z_INIT_ENTRY_SECTION(         \
+		level, prio, Z_DEVICE_INIT_SUB_PRIO(node_id))                                      \
+		Z_INIT_ENTRY_NAME(DEVICE_NAME_GET(dev_id)) = {                                     \
+			.init_fn = {COND_CODE_1(Z_DEVICE_IS_MUTABLE(node_id), (.dev_rw), (.dev)) = \
+					    (init_fn_)},                                           \
+			{                                                                          \
+				COND_CODE_1(Z_DEVICE_IS_MUTABLE(node_id), (.dev_rw), (.dev)) =     \
+					&DEVICE_NAME_GET(dev_id),                                  \
+			},                                                                         \
 	}
 
 /**
@@ -983,7 +1013,6 @@ static inline bool z_impl_device_is_ready(const struct device *dev)
                                                                                \
 	Z_DEVICE_INIT_ENTRY_DEFINE(node_id, dev_id, init_fn, level, prio)
 
-#if defined(CONFIG_HAS_DTS) || defined(__DOXYGEN__)
 /**
  * @brief Declare a device for each status "okay" devicetree node.
  *
@@ -994,11 +1023,11 @@ static inline bool z_impl_device_is_ready(const struct device *dev)
  * don't have a corresponding @ref device allocated. There's no way to figure
  * that out until after we've built the zephyr image, though.
  */
-#define Z_MAYBE_DEVICE_DECLARE_INTERNAL(node_id)                               \
-	extern const struct device DEVICE_DT_NAME_GET(node_id);
+#define Z_MAYBE_DEVICE_DECLARE_INTERNAL(node_id)                                                   \
+	extern COND_CODE_1(Z_DEVICE_IS_MUTABLE(node_id), (),                                       \
+			   (const)) struct device DEVICE_DT_NAME_GET(node_id);
 
 DT_FOREACH_STATUS_OKAY_NODE(Z_MAYBE_DEVICE_DECLARE_INTERNAL)
-#endif /* CONFIG_HAS_DTS */
 
 /** @endcond */
 

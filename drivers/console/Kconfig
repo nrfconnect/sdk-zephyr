@@ -222,6 +222,7 @@ endif # UART_MCUMGR
 config XTENSA_SIM_CONSOLE
 	bool "Use Xtensa simulator console"
 	depends on SIMULATOR_XTENSA
+	depends on !WINSTREAM_CONSOLE
 	select CONSOLE_HAS_DRIVER
 	default y
 	help
@@ -256,10 +257,11 @@ source "subsys/logging/Kconfig.template.log_config"
 source "drivers/console/Kconfig.gsm_mux"
 
 config UART_MUX
-	bool "UART muxing (GSM 07.10) support [EXPERIMENTAL]"
+	bool "[DEPRECATED] UART muxing (GSM 07.10) support [EXPERIMENTAL]"
 	depends on SERIAL_SUPPORT_INTERRUPT && GSM_MUX
 	select UART_INTERRUPT_DRIVEN
 	select EXPERIMENTAL
+	select DEPRECATED
 	help
 	  Enable this option to create UART muxer that run over a physical
 	  UART. The GSM 07.10 muxing protocol is used to separate the data
@@ -339,6 +341,7 @@ config EFI_CONSOLE
 config WINSTREAM_CONSOLE
 	bool "Use Winstream console"
 	depends on WINSTREAM
+	select CONSOLE_HAS_DRIVER
 	help
 	  Use winstream as a console.
 

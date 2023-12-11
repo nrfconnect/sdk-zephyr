@@ -18,6 +18,7 @@
 #include <zephyr/sys/barrier.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
+#include <zephyr/drivers/dma/dma_mcux_lpc.h>
 
 #define DT_DRV_COMPAT nxp_lpc_dma
 
@@ -92,7 +93,9 @@ static void nxp_lpc_dma_callback(dma_handle_t *handle, void *param,
 
 	data->busy = DMA_ChannelIsBusy(data->dma_handle.base, channel);
 
-	data->dma_callback(data->dev, data->user_data, channel, ret);
+	if (data->dma_callback) {
+		data->dma_callback(data->dev, data->user_data, channel, ret);
+	}
 }
 
 /* Handles DMA interrupts and dispatches to the individual channel */
@@ -256,6 +259,15 @@ static int dma_mcux_lpc_queue_descriptors(struct channel_data *data,
 	return 0;
 }
 
+static void dma_mcux_lpc_clear_channel_data(struct channel_data *data)
+{
+	data->dma_callback = NULL;
+	data->dir = 0;
+	data->descriptors_queued = false;
+	data->num_of_descriptors = 0;
+	data->curr_descriptor = NULL;
+	data->width = 0;
+}
 
 /* Configure a channel */
 static int dma_mcux_lpc_configure(const struct device *dev, uint32_t channel,
@@ -373,6 +385,8 @@ static int dma_mcux_lpc_configure(const struct device *dev, uint32_t channel,
 		data = DEV_CHANNEL_DATA(dev, virtual_channel);
 	}
 
+	dma_mcux_lpc_clear_channel_data(data);
+
 	data->dir = config->channel_direction;
 
 	if (data->busy) {
@@ -383,10 +397,8 @@ static int dma_mcux_lpc_configure(const struct device *dev, uint32_t channel,
 
 	k_spinlock_key_t otrigs_key = k_spin_lock(&configuring_otrigs);
 
-	data->descriptors_queued = false;
-	data->num_of_descriptors = 0;
 	data->width = width;
-	data->curr_descriptor = NULL;
+
 	if (config->source_chaining_en || config->dest_chaining_en) {
 		/* Chaining is enabled */
 		if (!dev_config->otrig_base_address || !dev_config->itrig_base_address) {
@@ -554,11 +566,35 @@ static int dma_mcux_lpc_configure(const struct device *dev, uint32_t channel,
 		data->descriptors_queued = true;
 	}
 
-	if (is_periph) {
+	if (config->dma_slot) {
+		uint32_t cfg_reg = 0;
+
+		/* User supplied manual trigger configuration */
+		if (config->dma_slot & LPC_DMA_PERIPH_REQ_EN) {
+			cfg_reg |= DMA_CHANNEL_CFG_PERIPHREQEN_MASK;
+		}
+		if (config->dma_slot & LPC_DMA_HWTRIG_EN) {
+			/* Setup hardware trigger */
+			cfg_reg |= DMA_CHANNEL_CFG_HWTRIGEN_MASK;
+			if (config->dma_slot & LPC_DMA_TRIGTYPE_LEVEL) {
+				cfg_reg |= DMA_CHANNEL_CFG_TRIGTYPE_MASK;
+			}
+			if (config->dma_slot & LPC_DMA_TRIGPOL_HIGH_RISING) {
+				cfg_reg |= DMA_CHANNEL_CFG_TRIGPOL_MASK;
+			}
+			if (config->dma_slot & LPC_DMA_TRIGBURST) {
+				cfg_reg |= DMA_CHANNEL_CFG_TRIGBURST_MASK;
+				cfg_reg |= DMA_CHANNEL_CFG_BURSTPOWER(
+					LPC_DMA_GET_BURSTPOWER(config->dma_slot));
+			}
+		}
+		p_handle->base->CHANNEL[p_handle->channel].CFG = cfg_reg;
+	} else if (is_periph) {
 		DMA_EnableChannelPeriphRq(p_handle->base, p_handle->channel);
 	} else {
 		DMA_DisableChannelPeriphRq(p_handle->base, p_handle->channel);
 	}
+	DMA_SetChannelPriority(p_handle->base, p_handle->channel, config->channel_priority);
 
 	data->busy = false;
 	if (config->dma_callback) {

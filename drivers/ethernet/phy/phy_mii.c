@@ -39,6 +39,8 @@ struct phy_mii_dev_data {
 /* Offset to align capabilities bits of 1000BASE-T Control and Status regs */
 #define MII_1KSTSR_OFFSET 2
 
+#define MII_INVALID_PHY_ID UINT32_MAX
+
 static int phy_mii_get_link_state(const struct device *dev,
 				  struct phy_link_state *state);
 
@@ -118,13 +120,13 @@ static int get_id(const struct device *dev, uint32_t *phy_id)
 		return -EIO;
 	}
 
-	*phy_id = (value & 0xFFFF) << 16;
+	*phy_id = value << 16;
 
 	if (reg_read(dev, MII_PHYID2R, &value) < 0) {
 		return -EIO;
 	}
 
-	*phy_id |= (value & 0xFFFF);
+	*phy_id |= value;
 
 	return 0;
 }
@@ -436,7 +438,7 @@ static int phy_mii_initialize(const struct device *dev)
 		}
 
 		if (get_id(dev, &phy_id) == 0) {
-			if (phy_id == 0xFFFFFF) {
+			if (phy_id == MII_INVALID_PHY_ID) {
 				LOG_ERR("No PHY found at address %d",
 					cfg->phy_addr);
 
@@ -477,7 +479,7 @@ static const struct ethphy_driver_api phy_mii_driver_api = {
 
 #define PHY_MII_CONFIG(n)						 \
 static const struct phy_mii_dev_config phy_mii_dev_config_##n = {	 \
-	.phy_addr = DT_INST_PROP(n, address),				 \
+	.phy_addr = DT_INST_REG_ADDR(n),				 \
 	.fixed = IS_FIXED_LINK(n),					 \
 	.fixed_speed = DT_INST_ENUM_IDX_OR(n, fixed_link, 0),		 \
 	.mdio = UTIL_AND(UTIL_NOT(IS_FIXED_LINK(n)),			 \

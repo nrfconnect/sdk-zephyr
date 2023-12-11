@@ -49,6 +49,13 @@
 		};
 	};
 
+	en-sd-switch {
+		compatible = "regulator-fixed";
+		regulator-name = "en_sd_switch";
+		enable-gpios = <&gpio0 4 GPIO_ACTIVE_HIGH>;
+		regulator-boot-on;
+	};
+
 	/* These aliases are provided for compatibility with samples */
 	aliases {
 		led0 = &led1;
@@ -58,11 +65,16 @@
 		mcuboot-button0 = &button1;
 		mcuboot-led0 = &led1;
 		watchdog0 = &wdt0;
+		spi-flash0 = &mx25r64;
 	};
 };
 
 &adc {
 	status = "okay";
+};
+
+&uicr {
+	gpio-as-nreset;
 };
 
 &gpiote {

@@ -73,6 +73,17 @@ union init_function {
 	 * @retval -errno If device initialization fails.
 	 */
 	int (*dev)(const struct device *dev);
+#ifdef CONFIG_DEVICE_MUTABLE
+	/**
+	 * Device initialization function (rw).
+	 *
+	 * @param dev Device instance.
+	 *
+	 * @retval 0 On success
+	 * @retval -errno If device initialization fails.
+	 */
+	int (*dev_rw)(struct device *dev);
+#endif
 };
 
 /**
@@ -96,7 +107,12 @@ struct init_entry {
 	 * If the init entry belongs to a device, this fields stores a
 	 * reference to it, otherwise it is set to NULL.
 	 */
-	const struct device *dev;
+	union {
+		const struct device *dev;
+#ifdef CONFIG_DEVICE_MUTABLE
+		struct device *dev_rw;
+#endif
+	};
 };
 
 /** @cond INTERNAL_HIDDEN */
@@ -189,10 +205,7 @@ struct init_entry {
 #define SYS_INIT_NAMED(name, init_fn_, level, prio)                            \
 	static const Z_DECL_ALIGN(struct init_entry)                           \
 		Z_INIT_ENTRY_SECTION(level, prio, 0) __used __noasan           \
-		Z_INIT_ENTRY_NAME(name) = {                                    \
-			.init_fn = {.sys = (init_fn_)},                        \
-			.dev = NULL,                                           \
-	}
+		Z_INIT_ENTRY_NAME(name) = {.init_fn = {.sys = (init_fn_)}}
 
 /** @} */
 

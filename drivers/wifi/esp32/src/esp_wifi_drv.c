@@ -61,7 +61,7 @@ struct esp32_wifi_runtime {
 	uint8_t state;
 };
 
-static void esp_wifi_event_task(void);
+static void esp_wifi_event_task(void *, void *, void *);
 
 K_MSGQ_DEFINE(esp_wifi_msgq, sizeof(system_event_t), 10, 4);
 K_THREAD_STACK_DEFINE(esp_wifi_event_stack, CONFIG_ESP32_WIFI_EVENT_TASK_STACK_SIZE);
@@ -236,25 +236,44 @@ out:
 static void esp_wifi_handle_connect_event(void)
 {
 	esp32_data.state = ESP32_STA_CONNECTED;
-	if (IS_ENABLED(CONFIG_ESP32_WIFI_STA_AUTO_DHCPV4)) {
-		net_dhcpv4_start(esp32_wifi_iface);
-	} else {
-		wifi_mgmt_raise_connect_result_event(esp32_wifi_iface, 0);
-	}
+#if defined(CONFIG_ESP32_WIFI_STA_AUTO_DHCPV4)
+	net_dhcpv4_start(esp32_wifi_iface);
+#else
+	wifi_mgmt_raise_connect_result_event(esp32_wifi_iface, 0);
+#endif
 }
 
-static void esp_wifi_handle_disconnect_event(void)
+static void esp_wifi_handle_disconnect_event(void *event_data)
 {
+	wifi_event_sta_disconnected_t *event = (wifi_event_sta_disconnected_t *)event_data;
+
 	if (esp32_data.state == ESP32_STA_CONNECTED) {
-		if (IS_ENABLED(CONFIG_ESP32_WIFI_STA_AUTO_DHCPV4)) {
-			net_dhcpv4_stop(esp32_wifi_iface);
-		}
+#if defined(CONFIG_ESP32_WIFI_STA_AUTO_DHCPV4)
+		net_dhcpv4_stop(esp32_wifi_iface);
+#endif
 		wifi_mgmt_raise_disconnect_result_event(esp32_wifi_iface, 0);
 	} else {
 		wifi_mgmt_raise_disconnect_result_event(esp32_wifi_iface, -1);
 	}
 
-	if (IS_ENABLED(CONFIG_ESP32_WIFI_STA_RECONNECT)) {
+	LOG_DBG("Disconnect reason: %d", event->reason);
+	switch (event->reason) {
+	case WIFI_REASON_AUTH_EXPIRE:
+	case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
+	case WIFI_REASON_AUTH_FAIL:
+	case WIFI_REASON_HANDSHAKE_TIMEOUT:
+	case WIFI_REASON_MIC_FAILURE:
+		LOG_DBG("STA Auth Error");
+		break;
+	case WIFI_REASON_NO_AP_FOUND:
+		LOG_DBG("AP Not found");
+		break;
+	default:
+		break;
+	}
+
+	if (IS_ENABLED(CONFIG_ESP32_WIFI_STA_RECONNECT) &&
+	    (event->reason != WIFI_REASON_ASSOC_LEAVE)) {
 		esp32_data.state = ESP32_STA_CONNECTING;
 		esp_wifi_connect();
 	} else {
@@ -262,8 +281,11 @@ static void esp_wifi_handle_disconnect_event(void)
 	}
 }
 
-static void esp_wifi_event_task(void)
+static void esp_wifi_event_task(void *p1, void *p2, void *p3)
 {
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
 	system_event_t evt;
 	uint8_t s_con_cnt = 0;
 
@@ -283,7 +305,7 @@ static void esp_wifi_event_task(void)
 			esp_wifi_handle_connect_event();
 			break;
 		case ESP32_WIFI_EVENT_STA_DISCONNECTED:
-			esp_wifi_handle_disconnect_event();
+			esp_wifi_handle_disconnect_event(&evt.event_info);
 			break;
 		case ESP32_WIFI_EVENT_SCAN_DONE:
 			scan_done_handler();
@@ -615,7 +637,7 @@ static int esp32_wifi_dev_init(const struct device *dev)
 
 	k_tid_t tid = k_thread_create(&esp_wifi_event_thread, esp_wifi_event_stack,
 			CONFIG_ESP32_WIFI_EVENT_TASK_STACK_SIZE,
-			(k_thread_entry_t)esp_wifi_event_task, NULL, NULL, NULL,
+			esp_wifi_event_task, NULL, NULL, NULL,
 			CONFIG_ESP32_WIFI_EVENT_TASK_PRIO, K_INHERIT_PERMS,
 			K_NO_WAIT);
 

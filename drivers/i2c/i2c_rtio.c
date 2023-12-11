@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "zephyr/rtio/rtio.h"
+#include <zephyr/rtio/rtio.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/rtio/rtio_spsc.h>
 #include <zephyr/sys/__assert.h>
@@ -26,7 +26,7 @@ struct rtio_sqe *i2c_rtio_copy(struct rtio *r,
 		sqe = rtio_sqe_acquire(r);
 
 		if (sqe == NULL) {
-			rtio_spsc_drop_all(r->sq);
+			rtio_sqe_drop_all(r);
 			return NULL;
 		}
 

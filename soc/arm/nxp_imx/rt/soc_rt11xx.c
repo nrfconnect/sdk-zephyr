@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, NXP
+ * Copyright 2021-2023 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -33,17 +33,18 @@
 #include "usb_phy.h"
 #include "usb.h"
 #endif
+#include "memc_nxp_flexram.h"
 
 #include <cmsis_core.h>
 
 #define DUAL_CORE_MU_ENABLED \
-	(CONFIG_SECOND_CORE_MCUX && CONFIG_IPM && CONFIG_IPM_IMX_REV2)
+	(CONFIG_SECOND_CORE_MCUX && CONFIG_IPM && CONFIG_IPM_IMX)
 
 #if DUAL_CORE_MU_ENABLED
 /* Dual core mode is enabled, and messaging unit is present */
 #include <fsl_mu.h>
 #define BOOT_FLAG 0x1U
-#define MU_BASE (MU_Type *)DT_REG_ADDR(DT_INST(0, nxp_imx_mu_rev2))
+#define MU_BASE (MU_Type *)DT_REG_ADDR(DT_INST(0, nxp_imx_mu))
 #endif
 
 #if CONFIG_USB_DC_NXP_EHCI /* USB PHY configuration */
@@ -276,7 +277,7 @@ static ALWAYS_INLINE void clock_init(void)
 	CLOCK_InitPfd(kCLOCK_PllSys2, kCLOCK_Pfd2, 24);
 
 	/* Init System Pll2 pfd3. */
-#ifdef CONFIG_ETH_MCUX
+#if CONFIG_ETH_MCUX || CONFIG_ETH_NXP_ENET
 	CLOCK_InitPfd(kCLOCK_PllSys2, kCLOCK_Pfd3, 24);
 #else
 	CLOCK_InitPfd(kCLOCK_PllSys2, kCLOCK_Pfd3, 32);
@@ -323,7 +324,7 @@ static ALWAYS_INLINE void clock_init(void)
 #endif
 
 	/* Configure BUS using SYS_PLL3_CLK */
-#ifdef CONFIG_ETH_MCUX
+#if CONFIG_ETH_MCUX || CONFIG_ETH_NXP_ENET
 	/* Configure root bus clock at 198M */
 	rootCfg.mux = kCLOCK_BUS_ClockRoot_MuxSysPll2Pfd3;
 	rootCfg.div = 2;
@@ -395,15 +396,21 @@ static ALWAYS_INLINE void clock_init(void)
 #endif
 
 
-#ifdef CONFIG_ETH_MCUX
+#if CONFIG_ETH_MCUX || CONFIG_ETH_NXP_ENET
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(enet), okay)
 	/* 50 MHz ENET clock */
 	rootCfg.mux = kCLOCK_ENET1_ClockRoot_MuxSysPll1Div2;
 	rootCfg.div = 10;
 	CLOCK_SetRootClock(kCLOCK_Root_Enet1, &rootCfg);
+#if CONFIG_ETH_MCUX_RMII_EXT_CLK
+	/* Set ENET_REF_CLK as an input driven by PHY */
+	IOMUXC_GPR->GPR4 &= ~IOMUXC_GPR_GPR4_ENET_REF_CLK_DIR(0x01U);
+	IOMUXC_GPR->GPR4 |= IOMUXC_GPR_GPR4_ENET_TX_CLK_SEL(0x1U);
+#else
 	/* Set ENET_REF_CLK as an output driven by ENET1_CLK_ROOT */
 	IOMUXC_GPR->GPR4 |= (IOMUXC_GPR_GPR4_ENET_REF_CLK_DIR(0x01U) |
 		IOMUXC_GPR_GPR4_ENET_TX_CLK_SEL(0x1U));
+#endif
 #endif
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(enet1g), okay)
 	/*
@@ -413,9 +420,15 @@ static ALWAYS_INLINE void clock_init(void)
 	rootCfg.mux = kCLOCK_ENET2_ClockRoot_MuxSysPll1Div2;
 	rootCfg.div = 10;
 	CLOCK_SetRootClock(kCLOCK_Root_Enet2, &rootCfg);
+#if CONFIG_ETH_MCUX_RMII_EXT_CLK
+	/* Set ENET1G_REF_CLK as an input driven by PHY */
+	IOMUXC_GPR->GPR5 &= ~IOMUXC_GPR_GPR5_ENET1G_REF_CLK_DIR(0x01U);
+	IOMUXC_GPR->GPR5 |= IOMUXC_GPR_GPR5_ENET1G_TX_CLK_SEL(0x1U);
+#else
 	/* Set ENET1G_REF_CLK as an output driven by ENET2_CLK_ROOT */
 	IOMUXC_GPR->GPR5 |= (IOMUXC_GPR_GPR5_ENET1G_REF_CLK_DIR(0x01U) |
 		IOMUXC_GPR_GPR5_ENET1G_TX_CLK_SEL(0x1U));
+#endif
 #endif
 #endif
 
@@ -689,6 +702,11 @@ static int imxrt_init(void)
 void z_arm_platform_init(void)
 {
 	SystemInit();
+
+#if defined(FLEXRAM_RUNTIME_BANKS_USED)
+	/* Configure flexram if not running from RAM */
+	memc_flexram_dt_partition();
+#endif
 }
 #endif
 

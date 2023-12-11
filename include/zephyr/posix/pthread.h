@@ -30,9 +30,11 @@ extern "C" {
 #define PTHREAD_PROCESS_SHARED  1
 
 /* Pthread cancellation */
-#define _PTHREAD_CANCEL_POS	0
-#define PTHREAD_CANCEL_ENABLE	(0U << _PTHREAD_CANCEL_POS)
-#define PTHREAD_CANCEL_DISABLE	BIT(_PTHREAD_CANCEL_POS)
+#define PTHREAD_CANCELED       ((void *)-1)
+#define PTHREAD_CANCEL_ENABLE  0
+#define PTHREAD_CANCEL_DISABLE 1
+#define PTHREAD_CANCEL_DEFERRED     0
+#define PTHREAD_CANCEL_ASYNCHRONOUS 1
 
 /* Passed to pthread_once */
 #define PTHREAD_ONCE_INIT                                                                          \
@@ -442,7 +444,9 @@ int pthread_attr_getstack(const pthread_attr_t *attr,
 			  void **stackaddr, size_t *stacksize);
 int pthread_attr_setstack(pthread_attr_t *attr, void *stackaddr,
 			  size_t stacksize);
+#ifdef CONFIG_PTHREAD_IPC
 int pthread_once(pthread_once_t *once, void (*initFunc)(void));
+#endif
 void pthread_exit(void *retval);
 int pthread_join(pthread_t thread, void **status);
 int pthread_cancel(pthread_t pthread);
@@ -450,6 +454,7 @@ int pthread_detach(pthread_t thread);
 int pthread_create(pthread_t *newthread, const pthread_attr_t *attr,
 		   void *(*threadroutine)(void *), void *arg);
 int pthread_setcancelstate(int state, int *oldstate);
+int pthread_setcanceltype(int type, int *oldtype);
 int pthread_attr_setschedparam(pthread_attr_t *attr,
 			       const struct sched_param *schedparam);
 int pthread_setschedparam(pthread_t pthread, int policy,
@@ -471,6 +476,21 @@ int pthread_key_create(pthread_key_t *key,
 int pthread_key_delete(pthread_key_t key);
 int pthread_setspecific(pthread_key_t key, const void *value);
 void *pthread_getspecific(pthread_key_t key);
+int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void));
+int pthread_getconcurrency(void);
+int pthread_setconcurrency(int new_level);
+
+void __z_pthread_cleanup_push(void *cleanup[3], void (*routine)(void *arg), void *arg);
+void __z_pthread_cleanup_pop(int execute);
+
+#define pthread_cleanup_push(_rtn, _arg)                                                           \
+	do /* enforce '{'-like behaviour */ {                                                      \
+		void *_z_pthread_cleanup[3];                                                       \
+		__z_pthread_cleanup_push(_z_pthread_cleanup, _rtn, _arg)
+
+#define pthread_cleanup_pop(_ex)                                                                   \
+		__z_pthread_cleanup_pop(_ex);                                                      \
+	} /* enforce '}'-like behaviour */ while (0)
 
 /* Glibc / Oracle Extension Functions */
 

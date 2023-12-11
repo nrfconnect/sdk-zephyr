@@ -1,17 +1,17 @@
 tests:
   libraries.cmsis_dsp.transform:
-    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and TOOLCHAIN_HAS_NEWLIB
-      == 1) or CONFIG_ARCH_POSIX
+    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_FULL_LIBC_SUPPORTED
+      ) or CONFIG_ARCH_POSIX
     tags: cmsis_dsp
     skip: true
   libraries.cmsis_dsp.transform.cq15:
-    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and TOOLCHAIN_HAS_NEWLIB
-      == 1) or CONFIG_ARCH_POSIX
+    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_FULL_LIBC_SUPPORTED
+      ) or CONFIG_ARCH_POSIX
     integration_platforms:
       - frdm_k64f
       - sam_e70_xplained
       - mps2_an521
-      - native_posix
+      - native_sim
     tags: cmsis_dsp
     min_flash: 512
     min_ram: 64
@@ -20,7 +20,7 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_CQ15=y
   libraries.cmsis_dsp.transform.cq15.fpu:
     filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_CPU_HAS_FPU
-      and TOOLCHAIN_HAS_NEWLIB == 1) or CONFIG_ARCH_POSIX
+      and CONFIG_FULL_LIBC_SUPPORTED) or CONFIG_ARCH_POSIX
     integration_platforms:
       - mps3_an547
     tags:
@@ -33,13 +33,13 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_CQ15=y
       - CONFIG_FPU=y
   libraries.cmsis_dsp.transform.rq15:
-    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and TOOLCHAIN_HAS_NEWLIB
-      == 1) or CONFIG_ARCH_POSIX
+    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_FULL_LIBC_SUPPORTED
+      ) or CONFIG_ARCH_POSIX
     integration_platforms:
       - frdm_k64f
       - sam_e70_xplained
       - mps2_an521
-      - native_posix
+      - native_sim
     tags: cmsis_dsp
     min_flash: 512
     min_ram: 64
@@ -48,7 +48,7 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_RQ15=y
   libraries.cmsis_dsp.transform.rq15.fpu:
     filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_CPU_HAS_FPU
-      and TOOLCHAIN_HAS_NEWLIB == 1) or CONFIG_ARCH_POSIX
+      and CONFIG_FULL_LIBC_SUPPORTED) or CONFIG_ARCH_POSIX
     integration_platforms:
       - mps3_an547
     tags:
@@ -61,13 +61,13 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_RQ15=y
       - CONFIG_FPU=y
   libraries.cmsis_dsp.transform.cq31:
-    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and TOOLCHAIN_HAS_NEWLIB
-      == 1) or CONFIG_ARCH_POSIX
+    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_FULL_LIBC_SUPPORTED
+      ) or CONFIG_ARCH_POSIX
     integration_platforms:
       - frdm_k64f
       - sam_e70_xplained
       - mps2_an521
-      - native_posix
+      - native_sim
     tags: cmsis_dsp
     min_flash: 1024
     min_ram: 64
@@ -76,7 +76,7 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_CQ31=y
   libraries.cmsis_dsp.transform.cq31.fpu:
     filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_CPU_HAS_FPU
-      and TOOLCHAIN_HAS_NEWLIB == 1) or CONFIG_ARCH_POSIX
+      and CONFIG_FULL_LIBC_SUPPORTED) or CONFIG_ARCH_POSIX
     tags:
       - cmsis_dsp
       - fpu
@@ -87,13 +87,13 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_CQ31=y
       - CONFIG_FPU=y
   libraries.cmsis_dsp.transform.rq31:
-    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and TOOLCHAIN_HAS_NEWLIB
-      == 1) or CONFIG_ARCH_POSIX
+    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_FULL_LIBC_SUPPORTED
+      ) or CONFIG_ARCH_POSIX
     integration_platforms:
       - frdm_k64f
       - sam_e70_xplained
       - mps2_an521
-      - native_posix
+      - native_sim
     tags: cmsis_dsp
     min_flash: 1024
     min_ram: 64
@@ -102,7 +102,7 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_RQ31=y
   libraries.cmsis_dsp.transform.rq31.fpu:
     filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_CPU_HAS_FPU
-      and TOOLCHAIN_HAS_NEWLIB == 1) or CONFIG_ARCH_POSIX
+      and CONFIG_FULL_LIBC_SUPPORTED) or CONFIG_ARCH_POSIX
     tags:
       - cmsis_dsp
       - fpu
@@ -114,7 +114,7 @@ tests:
       - CONFIG_FPU=y
   libraries.cmsis_dsp.transform.cf16:
     filter: (CMSIS_DSP_FLOAT16 and (CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M)
-      and TOOLCHAIN_HAS_NEWLIB == 1)
+      and CONFIG_FULL_LIBC_SUPPORTED)
     integration_platforms:
       - frdm_k64f
       - sam_e70_xplained
@@ -127,7 +127,7 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_CF16=y
   libraries.cmsis_dsp.transform.cf16.fpu:
     filter: (CMSIS_DSP_FLOAT16 and (CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M)
-      and CONFIG_CPU_HAS_FPU and TOOLCHAIN_HAS_NEWLIB == 1)
+      and CONFIG_CPU_HAS_FPU and CONFIG_FULL_LIBC_SUPPORTED)
     integration_platforms:
       - mps3_an547
     tags:
@@ -141,7 +141,7 @@ tests:
       - CONFIG_FPU=y
   libraries.cmsis_dsp.transform.rf16:
     filter: (CMSIS_DSP_FLOAT16 and (CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M)
-      and TOOLCHAIN_HAS_NEWLIB == 1)
+      and CONFIG_FULL_LIBC_SUPPORTED)
     integration_platforms:
       - frdm_k64f
       - sam_e70_xplained
@@ -154,7 +154,7 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_RF16=y
   libraries.cmsis_dsp.transform.rf16.fpu:
     filter: (CMSIS_DSP_FLOAT16 and (CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M)
-      and CONFIG_CPU_HAS_FPU and TOOLCHAIN_HAS_NEWLIB == 1)
+      and CONFIG_CPU_HAS_FPU and CONFIG_FULL_LIBC_SUPPORTED)
     integration_platforms:
       - mps3_an547
     tags:
@@ -167,13 +167,13 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_RF16=y
       - CONFIG_FPU=y
   libraries.cmsis_dsp.transform.cf32:
-    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and TOOLCHAIN_HAS_NEWLIB
-      == 1) or CONFIG_ARCH_POSIX
+    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_FULL_LIBC_SUPPORTED
+      ) or CONFIG_ARCH_POSIX
     integration_platforms:
       - frdm_k64f
       - sam_e70_xplained
       - mps2_an521
-      - native_posix
+      - native_sim
     tags: cmsis_dsp
     min_flash: 1024
     min_ram: 64
@@ -182,7 +182,7 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_CF32=y
   libraries.cmsis_dsp.transform.cf32.fpu:
     filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_CPU_HAS_FPU
-      and TOOLCHAIN_HAS_NEWLIB == 1) or CONFIG_ARCH_POSIX
+      and CONFIG_FULL_LIBC_SUPPORTED) or CONFIG_ARCH_POSIX
     tags:
       - cmsis_dsp
       - fpu
@@ -193,13 +193,13 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_CF32=y
       - CONFIG_FPU=y
   libraries.cmsis_dsp.transform.rf32:
-    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and TOOLCHAIN_HAS_NEWLIB
-      == 1) or CONFIG_ARCH_POSIX
+    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_FULL_LIBC_SUPPORTED
+      ) or CONFIG_ARCH_POSIX
     integration_platforms:
       - frdm_k64f
       - sam_e70_xplained
       - mps2_an521
-      - native_posix
+      - native_sim
     tags: cmsis_dsp
     min_flash: 512
     min_ram: 64
@@ -208,7 +208,7 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_RF32=y
   libraries.cmsis_dsp.transform.rf32.fpu:
     filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_CPU_HAS_FPU
-      and TOOLCHAIN_HAS_NEWLIB == 1) or CONFIG_ARCH_POSIX
+      and CONFIG_FULL_LIBC_SUPPORTED) or CONFIG_ARCH_POSIX
     integration_platforms:
       - mps3_an547
     tags:
@@ -221,13 +221,13 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_RF32=y
       - CONFIG_FPU=y
   libraries.cmsis_dsp.transform.cf64:
-    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and TOOLCHAIN_HAS_NEWLIB
-      == 1) or CONFIG_ARCH_POSIX
+    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_FULL_LIBC_SUPPORTED
+      ) or CONFIG_ARCH_POSIX
     integration_platforms:
       - frdm_k64f
       - sam_e70_xplained
       - mps2_an521
-      - native_posix
+      - native_sim
     tags: cmsis_dsp
     min_flash: 1024
     min_ram: 160
@@ -236,7 +236,7 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_CF64=y
   libraries.cmsis_dsp.transform.cf64.fpu:
     filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_CPU_HAS_FPU
-      and TOOLCHAIN_HAS_NEWLIB == 1) or CONFIG_ARCH_POSIX
+      and CONFIG_FULL_LIBC_SUPPORTED) or CONFIG_ARCH_POSIX
     tags:
       - cmsis_dsp
       - fpu
@@ -247,13 +247,13 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_CF64=y
       - CONFIG_FPU=y
   libraries.cmsis_dsp.transform.rf64:
-    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and TOOLCHAIN_HAS_NEWLIB
-      == 1) or CONFIG_ARCH_POSIX
+    filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_FULL_LIBC_SUPPORTED
+      ) or CONFIG_ARCH_POSIX
     integration_platforms:
       - frdm_k64f
       - sam_e70_xplained
       - mps2_an521
-      - native_posix
+      - native_sim
     tags: cmsis_dsp
     min_flash: 1024
     min_ram: 64
@@ -262,7 +262,7 @@ tests:
       - CONFIG_CMSIS_DSP_TEST_TRANSFORM_RF64=y
   libraries.cmsis_dsp.transform.rf64.fpu:
     filter: ((CONFIG_CPU_AARCH32_CORTEX_R or CONFIG_CPU_CORTEX_M) and CONFIG_CPU_HAS_FPU
-      and TOOLCHAIN_HAS_NEWLIB == 1) or CONFIG_ARCH_POSIX
+      and CONFIG_FULL_LIBC_SUPPORTED) or CONFIG_ARCH_POSIX
     tags:
       - cmsis_dsp
       - fpu

@@ -13,10 +13,13 @@
 #include <soc.h>
 #include <zephyr/sys/byteorder.h>
 #include "display_sdl_bottom.h"
+#include "cmdline.h"
 
 #define LOG_LEVEL CONFIG_DISPLAY_LOG_LEVEL
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(display_sdl);
+
+static uint32_t sdl_display_zoom_pct;
 
 struct sdl_display_config {
 	uint16_t height;
@@ -54,8 +57,14 @@ static int sdl_display_init(const struct device *dev)
 #endif /* SDL_DISPLAY_DEFAULT_PIXEL_FORMAT */
 		;
 
-	int rc = sdl_display_init_bottom(config->height, config->width, &disp_data->window,
-					 &disp_data->renderer, &disp_data->texture);
+	if (sdl_display_zoom_pct == UINT32_MAX) {
+		sdl_display_zoom_pct = CONFIG_SDL_DISPLAY_ZOOM_PCT;
+	}
+
+	int rc = sdl_display_init_bottom(config->height, config->width,
+					 sdl_display_zoom_pct,
+					 &disp_data->window, &disp_data->renderer,
+					 &disp_data->texture);
 
 	if (rc != 0) {
 		LOG_ERR("Failed to create SDL display");
@@ -260,11 +269,6 @@ static int sdl_display_read(const struct device *dev, const uint16_t x,
 				       disp_data->renderer, buf, desc->pitch);
 }
 
-static void *sdl_display_get_framebuffer(const struct device *dev)
-{
-	return NULL;
-}
-
 static int sdl_display_blanking_off(const struct device *dev)
 {
 	struct sdl_display_data *disp_data = dev->data;
@@ -288,18 +292,6 @@ static int sdl_display_blanking_on(const struct device *dev)
 
 	sdl_display_blanking_on_bottom(disp_data->renderer);
 	return 0;
-}
-
-static int sdl_display_set_brightness(const struct device *dev,
-		const uint8_t brightness)
-{
-	return -ENOTSUP;
-}
-
-static int sdl_display_set_contrast(const struct device *dev,
-		const uint8_t contrast)
-{
-	return -ENOTSUP;
 }
 
 static void sdl_display_get_capabilities(
@@ -352,9 +344,6 @@ static const struct display_driver_api sdl_display_api = {
 	.blanking_off = sdl_display_blanking_off,
 	.write = sdl_display_write,
 	.read = sdl_display_read,
-	.get_framebuffer = sdl_display_get_framebuffer,
-	.set_brightness = sdl_display_set_brightness,
-	.set_contrast = sdl_display_set_contrast,
 	.get_capabilities = sdl_display_get_capabilities,
 	.set_pixel_format = sdl_display_set_pixel_format,
 };
@@ -374,7 +363,7 @@ static const struct display_driver_api sdl_display_api = {
 	DEVICE_DT_INST_DEFINE(n, &sdl_display_init, NULL,		\
 			      &sdl_data_##n,				\
 			      &sdl_config_##n,				\
-			      APPLICATION,				\
+			      POST_KERNEL,				\
 			      CONFIG_DISPLAY_INIT_PRIORITY,		\
 			      &sdl_display_api);			\
 									\
@@ -386,3 +375,22 @@ static const struct display_driver_api sdl_display_api = {
 	NATIVE_TASK(sdl_display_cleanup_##n, ON_EXIT, 1);
 
 DT_INST_FOREACH_STATUS_OKAY(DISPLAY_SDL_DEFINE)
+
+static void display_sdl_native_posix_options(void)
+{
+	static struct args_struct_t sdl_display_options[] = {
+		{ .option = "display_zoom_pct",
+		  .name = "pct",
+		  .type = 'u',
+		  .dest = (void *)&sdl_display_zoom_pct,
+		  .descript = "Display zoom percentage (100 == 1:1 scale), "
+			      "by default " STRINGIFY(CONFIG_SDL_DISPLAY_ZOOM_PCT)
+			      " = CONFIG_SDL_DISPLAY_ZOOM_PCT"
+		},
+		ARG_TABLE_ENDMARKER
+	};
+
+	native_add_command_line_opts(sdl_display_options);
+}
+
+NATIVE_TASK(display_sdl_native_posix_options, PRE_BOOT_1, 1);

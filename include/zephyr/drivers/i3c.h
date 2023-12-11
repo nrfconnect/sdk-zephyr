@@ -1,5 +1,6 @@
 /*
  * Copyright 2022 Intel Corporation
+ * Copyright 2023 Meta Platforms, Inc. and its affiliates
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -27,52 +28,118 @@
 extern "C" {
 #endif
 
-/*
- * Bus Characteristic Register (BCR)
+/**
+ * @name Bus Characteristic Register (BCR)
+ *
  * - BCR[7:6]: Device Role
  *   - 0: I3C Target
  *   - 1: I3C Controller capable
  *   - 2: Reserved
  *   - 3: Reserved
+ *   .
  * - BCR[5]: Advanced Capabilities
  *   - 0: Does not support optional advanced capabilities.
  *   - 1: Supports optional advanced capabilities which
  *        can be viewed via GETCAPS CCC.
- * - BCR[4}: Virtual Target Support
+ *   .
+ * - BCR[4]: Virtual Target Support
  *   - 0: Is not a virtual target.
  *   - 1: Is a virtual target.
+ *   .
  * - BCR[3]: Offline Capable
  *   - 0: Will always response to I3C commands.
  *   - 1: Will not always response to I3C commands.
+ *   .
  * - BCR[2]: IBI Payload
  *   - 0: No data bytes following the accepted IBI.
  *   - 1: One data byte (MDB, Mandatory Data Byte) follows
  *        the accepted IBI. Additional data bytes may also
  *        follows.
+ *   .
  * - BCR[1]: IBI Request Capable
  *   - 0: Not capable
  *   - 1: Capable
+ *   .
  * - BCR[0]: Max Data Speed Limitation
  *   - 0: No Limitation
  *   - 1: Limitation obtained via GETMXDS CCC.
+ *   .
+ *
+ * @{
+ */
+
+/**
+ * @brief Max Data Speed Limitation bit.
+ *
+ * 0 - No Limitation.
+ * 1 - Limitation obtained via GETMXDS CCC.
  */
 #define I3C_BCR_MAX_DATA_SPEED_LIMIT			BIT(0)
+
+/** @brief IBI Request Capable bit. */
 #define I3C_BCR_IBI_REQUEST_CAPABLE			BIT(1)
+
+/**
+ * @brief IBI Payload bit.
+ *
+ * 0 - No data bytes following the accepted IBI.
+ * 1 - One data byte (MDB, Mandatory Data Byte) follows the accepted IBI.
+ *     Additional data bytes may also follows.
+ */
 #define I3C_BCR_IBI_PAYLOAD_HAS_DATA_BYTE		BIT(2)
+
+/**
+ * @brief Offline Capable bit.
+ *
+ * 0 - Will always respond to I3C commands.
+ * 1 - Will not always respond to I3C commands.
+ */
 #define I3C_BCR_OFFLINE_CAPABLE				BIT(3)
+
+/**
+ * @brief Virtual Target Support bit.
+ *
+ * 0 - Is not a virtual target.
+ * 1 - Is a virtual target.
+ */
 #define I3C_BCR_VIRTUAL_TARGET				BIT(4)
+
+/**
+ * @brief Advanced Capabilities bit.
+ *
+ * 0 - Does not support optional advanced capabilities.
+ * 1 - Supports optional advanced capabilities which can be viewed via
+ *     GETCAPS CCC.
+ */
 #define I3C_BCR_ADV_CAPABILITIES			BIT(5)
 
+/** Device Role - I3C Target. */
 #define I3C_BCR_DEVICE_ROLE_I3C_TARGET			0U
+
+/** Device Role - I3C Controller Capable. */
 #define I3C_BCR_DEVICE_ROLE_I3C_CONTROLLER_CAPABLE	1U
 
+/** Device Role bit shift value. */
 #define I3C_BCR_DEVICE_ROLE_SHIFT			6U
+
+/** Device Role bit shift mask. */
 #define I3C_BCR_DEVICE_ROLE_MASK			(0x03U << I3C_BCR_DEVICE_ROLE_SHIFT)
 
+/**
+ * @brief Device Role
+ *
+ * Obtain Device Role value from the BCR value obtained via GETBCR.
+ *
+ * @param bcr BCR value
+ */
 #define I3C_BCR_DEVICE_ROLE(bcr)			\
 	(((bcr) & I3C_BCR_DEVICE_ROLE_MASK) >> I3C_BCR_DEVICE_ROLE_SHIFT)
 
-/*
+/** @} */
+
+/**
+ * @name Legacy Virtual Register (LVR)
+ *
  * Legacy Virtual Register (LVR)
  * - LVR[7:5]: I2C device index:
  *   - 0: I2C device has a 50 ns spike filter where
@@ -85,25 +152,73 @@ extern "C" {
  *   - 0: FM+ mode
  *   - 1: FM mode
  * - LVR[3:0]: Reserved.
+ *
+ * @{
  */
-#define I3C_DCR_I2C_FM_PLUS_MODE			0
-#define I3C_DCR_I2C_FM_MODE				1
 
-#define I3C_DCR_I2C_MODE_SHIFT				4
-#define I3C_DCR_I2C_MODE_MASK				BIT(4)
+/** I2C FM+ Mode. */
+#define I3C_LVR_I2C_FM_PLUS_MODE			0
 
-#define I3C_DCR_I2C_MODE(dcr)				\
-	(((mode) & I3C_DCR_I2C_MODE_MASK) >> I3C_DCR_I2C_MODE_SHIFT)
+/** I2C FM Mode. */
+#define I3C_LVR_I2C_FM_MODE				1
 
-#define I3C_DCR_I2C_DEV_IDX_0				0
-#define I3C_DCR_I2C_DEV_IDX_1				1
-#define I3C_DCR_I2C_DEV_IDX_2				2
+/** I2C Mode Indicator bit shift value. */
+#define I3C_LVR_I2C_MODE_SHIFT				4
 
-#define I3C_DCR_I2C_DEV_IDX_SHIFT			5
-#define I3C_DCR_I2C_DEV_IDX_MASK			(0x07U << I3C_DCR_I2C_DEV_IDX_SHIFT)
+/** I2C Mode Indicator bitmask. */
+#define I3C_LVR_I2C_MODE_MASK				BIT(4)
 
-#define I3C_DCR_I2C_DEV_IDX(dcr)			\
-	(((dcr) & I3C_DCR_I2C_DEV_IDX_MASK) >> I3C_DCR_I2C_DEV_IDX_SHIFT)
+/**
+ * @brief I2C Mode
+ *
+ * Obtain I2C Mode value from the LVR value.
+ *
+ * @param lvr LVR value
+ */
+#define I3C_LVR_I2C_MODE(lvr)				\
+	(((lvr) & I3C_LVR_I2C_MODE_MASK) >> I3C_LVR_I2C_MODE_SHIFT)
+
+/**
+ * @brief I2C Device Index 0.
+ *
+ * I2C device has a 50 ns spike filter where it is not affected by high
+ * frequency on SCL.
+ */
+#define I3C_LVR_I2C_DEV_IDX_0				0
+
+/**
+ * @brief I2C Device Index 1.
+ *
+ * I2C device does not have a 50 ns spike filter but can work with high
+ * frequency on SCL.
+ */
+#define I3C_LVR_I2C_DEV_IDX_1				1
+
+/**
+ * @brief I2C Device Index 2.
+ *
+ * I2C device does not have a 50 ns spike filter and cannot work with high
+ * frequency on SCL.
+ */
+#define I3C_LVR_I2C_DEV_IDX_2				2
+
+/** I2C Device Index bit shift value. */
+#define I3C_LVR_I2C_DEV_IDX_SHIFT			5
+
+/** I2C Device Index bitmask. */
+#define I3C_LVR_I2C_DEV_IDX_MASK			(0x07U << I3C_LVR_I2C_DEV_IDX_SHIFT)
+
+/**
+ * @brief I2C Device Index
+ *
+ * Obtain I2C Device Index value from the LVR value.
+ *
+ * @param lvr LVR value
+ */
+#define I3C_LVR_I2C_DEV_IDX(lvr)			\
+	(((lvr) & I3C_LVR_I2C_DEV_IDX_MASK) >> I3C_LVR_I2C_DEV_IDX_SHIFT)
+
+/** @} */
 
 /**
  * @brief I3C bus mode
@@ -258,6 +373,12 @@ enum i3c_sdr_target_error_codes {
 	I3C_ERROR_TE_INVALID,
 };
 
+/**
+ * @brief I3C Transfer API
+ * @defgroup i3c_transfer_api I3C Transfer API
+ * @{
+ */
+
 /*
  * I3C_MSG_* are I3C Message flags.
  */
@@ -328,6 +449,13 @@ enum i3c_sdr_target_error_codes {
 /** I3C HDR-BT (Bulk Transport) */
 #define I3C_MSG_HDR_BT			I3C_MSG_HDR_MODE3
 
+/** @} */
+
+/**
+ * @addtogroup i3c_transfer_api
+ * @{
+ */
+
 /**
  * @brief One I3C Message.
  *
@@ -349,6 +477,15 @@ struct i3c_msg {
 	/** Length of buffer in bytes */
 	uint32_t		len;
 
+	/**
+	 * Total number of bytes transferred
+	 *
+	 * A Target can issue an EoD or the Controller can abort a transfer
+	 * before the length of the buffer. It is expected for the driver to
+	 * write to this after the transfer.
+	 */
+	uint32_t		num_xfer;
+
 	/** Flags for this message */
 	uint8_t			flags;
 
@@ -360,6 +497,8 @@ struct i3c_msg {
 	 */
 	uint8_t			hdr_mode;
 };
+
+/** @} */
 
 /**
  * @brief Type of configuration being passed to configure function.
@@ -770,8 +909,13 @@ struct i3c_device_id {
  * Field @c node should not be initialized or modified manually.
  */
 struct i3c_device_desc {
-	/** Private, do not modify */
+	/**
+	 * Used to attach this node onto a linked list.
+	 *
+	 * @cond INTERNAL_HIDDEN
+	 */
 	sys_snode_t node;
+	/** @endcond */
 
 	/** I3C bus to which this target device is attached */
 	const struct device * const bus;
@@ -894,8 +1038,13 @@ struct i3c_device_desc {
 		uint8_t max_ibi;
 	} data_length;
 
-	/** Private data by the controller to aid in transactions. Do not modify. */
+	/**
+	 * Private data by the controller to aid in transactions. Do not modify.
+	 *
+	 * @cond INTERNAL_HIDDEN
+	 */
 	void *controller_priv;
+	/** @endcond */
 
 #if defined(CONFIG_I3C_USE_IBI) || defined(__DOXYGEN__)
 	/**
@@ -919,8 +1068,13 @@ struct i3c_device_desc {
  * reference to I3C controller device APIs.
  */
 struct i3c_i2c_device_desc {
-	/** Private, do not modify */
+	/**
+	 * Used to attach this node onto a linked list.
+	 *
+	 * @cond INTERNAL_HIDDEN
+	 */
 	sys_snode_t node;
+	/** @endcond */
 
 	/** I3C bus to which this I2C device is attached */
 	const struct device *bus;
@@ -944,8 +1098,13 @@ struct i3c_i2c_device_desc {
 	 */
 	const uint8_t lvr;
 
-	/** Private data by the controller to aid in transactions. Do not modify. */
+	/**
+	 * Private data by the controller to aid in transactions. Do not modify.
+	 *
+	 * @cond INTERNAL_HIDDEN
+	 */
 	void *controller_priv;
+	/** @endcond */
 };
 
 /**
@@ -1401,6 +1560,11 @@ static inline int z_impl_i3c_do_ccc(const struct device *dev,
 }
 
 /**
+ * @addtogroup i3c_transfer_api
+ * @{
+ */
+
+/**
  * @brief Perform data transfer from the controller to a I3C target device.
  *
  * This routine provides a generic interface to perform data transfer
@@ -1438,6 +1602,8 @@ static inline int z_impl_i3c_transfer(struct i3c_device_desc *target,
 	return api->i3c_xfers(target->bus, target, msgs, num_msgs);
 }
 
+/** @} */
+
 /**
  * Find a registered I3C target device.
  *
@@ -1465,6 +1631,11 @@ struct i3c_device_desc *i3c_device_find(const struct device *dev,
 
 	return api->i3c_device_find(dev, id);
 }
+
+/**
+ * @addtogroup i3c_ibi
+ * @{
+ */
 
 /**
  * @brief Raise an In-Band Interrupt (IBI).
@@ -1573,6 +1744,13 @@ static inline int i3c_device_is_ibi_capable(struct i3c_device_desc *target)
 	return (target->bcr & I3C_BCR_IBI_REQUEST_CAPABLE)
 		== I3C_BCR_IBI_REQUEST_CAPABLE;
 }
+
+/** @} */
+
+/**
+ * @addtogroup i3c_transfer_api
+ * @{
+ */
 
 /**
  * @brief Write a set amount of data to an I3C target device.
@@ -1834,6 +2012,8 @@ static inline int i3c_reg_update_byte(struct i3c_device_desc *target,
  */
 void i3c_dump_msgs(const char *name, const struct i3c_msg *msgs,
 		   uint8_t num_msgs, struct i3c_device_desc *target);
+
+/** @} */
 
 /**
  * @brief Generic helper function to perform bus initialization.

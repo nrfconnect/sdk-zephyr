@@ -232,7 +232,7 @@ class Reporting:
         with open(filename, 'wb') as report:
             report.write(result)
 
-    def json_report(self, filename, version="NA"):
+    def json_report(self, filename, version="NA", platform=None):
         logger.info(f"Writing JSON report {filename}")
         report = {}
         report["environment"] = {"os": os.name,
@@ -244,8 +244,11 @@ class Reporting:
         suites = []
 
         for instance in self.instances.values():
+            if platform and platform != instance.platform.name:
+                continue
             suite = {}
             handler_log = os.path.join(instance.build_dir, "handler.log")
+            pytest_log = os.path.join(instance.build_dir, "twister_harness.log")
             build_log = os.path.join(instance.build_dir, "build.log")
             device_log = os.path.join(instance.build_dir, "device.log")
 
@@ -258,6 +261,7 @@ class Reporting:
                 "name": instance.testsuite.name,
                 "arch": instance.platform.arch,
                 "platform": instance.platform.name,
+                "path": instance.testsuite.source_dir_rel
             }
             if instance.run_id:
                 suite['run_id'] = instance.run_id
@@ -283,7 +287,9 @@ class Reporting:
                 suite['status'] = instance.status
                 suite["reason"] = instance.reason
                 # FIXME
-                if os.path.exists(handler_log):
+                if os.path.exists(pytest_log):
+                    suite["log"] = self.process_log(pytest_log)
+                elif os.path.exists(handler_log):
                     suite["log"] = self.process_log(handler_log)
                 elif os.path.exists(device_log):
                     suite["log"] = self.process_log(device_log)
@@ -300,6 +306,7 @@ class Reporting:
 
             if instance.status is not None:
                 suite["execution_time"] =  f"{float(handler_time):.2f}"
+            suite["build_time"] =  f"{float(instance.build_time):.2f}"
 
             testcases = []
 
@@ -340,6 +347,10 @@ class Reporting:
                 testcases.append(testcase)
 
             suite['testcases'] = testcases
+
+            if instance.recording is not None:
+                suite['recording'] = instance.recording
+
             suites.append(suite)
 
         report["testsuites"] = suites
@@ -419,6 +430,7 @@ class Reporting:
     def synopsis(self):
         cnt = 0
         example_instance = None
+        detailed_test_id = self.env.options.detailed_test_id
         for instance in self.instances.values():
             if instance.status not in ["passed", "filtered", "skipped"]:
                 cnt = cnt + 1
@@ -434,11 +446,14 @@ class Reporting:
         if cnt and example_instance:
             logger.info("")
             logger.info("To rerun the tests, call twister using the following commandline:")
-            logger.info("west twister -p <PLATFORM> -s <TEST ID>, for example:")
+            extra_parameters = '' if detailed_test_id else ' --no-detailed-test-id'
+            logger.info(f"west twister -p <PLATFORM> -s <TEST ID>{extra_parameters}, for example:")
             logger.info("")
-            logger.info(f"west twister -p {example_instance.platform.name} -s {example_instance.testsuite.name}")
+            logger.info(f"west twister -p {example_instance.platform.name} -s {example_instance.testsuite.name}"
+                        f"{extra_parameters}")
             logger.info(f"or with west:")
-            logger.info(f"west build -p -b {example_instance.platform.name} -T {example_instance.testsuite.name}")
+            logger.info(f"west build -p -b {example_instance.platform.name} "
+                        f"{example_instance.testsuite.source_dir_rel} -T {example_instance.testsuite.id}")
             logger.info("-+" * 40)
 
     def summary(self, results, unrecognized_sections, duration):
@@ -534,6 +549,9 @@ class Reporting:
         for platform in platforms:
             if suffix:
                 filename = os.path.join(outdir,"{}_{}.xml".format(platform, suffix))
+                json_platform_file = os.path.join(outdir,"{}_{}.json".format(platform, suffix))
             else:
                 filename = os.path.join(outdir,"{}.xml".format(platform))
+                json_platform_file = os.path.join(outdir,"{}.json".format(platform))
             self.xunit_report(json_file, filename, platform, full_report=True)
+            self.json_report(json_platform_file, version=self.env.version, platform=platform)
