@@ -39,3 +39,8 @@ properties:
 
   pinctrl-0:
     required: true
+
+  timeout:
+    type: int
+    default: 500
+    description: Typically, it equals to max timeout of chip erase in ms.
