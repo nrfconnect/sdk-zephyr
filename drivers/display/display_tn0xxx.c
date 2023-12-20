@@ -188,7 +188,7 @@ static int update_display(const struct device *dev, uint16_t start_line, uint16_
 	}
 
 	k_sleep(K_USEC(10)); // SCS low width time per datasheet
-	LOG_INF("Display update complete");
+	LOG_DBG("Display update complete");
 
 	return 0;
 }
@@ -202,7 +202,7 @@ static int tn0xxx_write(const struct device *dev, const uint16_t x, const uint16
 	struct lvgl_disp_data *disp_data = disp->driver->user_data;
 	struct display_capabilities *caps = &disp_data->cap;
 
-	LOG_INF("X: %d, Y: %d, W: %d, H: %d, pitch: %d, buf_size: %d", x, y, desc->width,
+	LOG_DBG("X: %d, Y: %d, W: %d, H: %d, pitch: %d, buf_size: %d", x, y, desc->width,
 		desc->height, desc->pitch, desc->buf_size);
 
 	if (buf == NULL) {
