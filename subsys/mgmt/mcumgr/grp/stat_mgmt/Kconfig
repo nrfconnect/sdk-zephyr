@@ -32,6 +32,14 @@ config MCUMGR_GRP_STAT_MAX_NAME_LEN
 	  stat read commands.  If a stat group's name exceeds this limit, it will
 	  be impossible to retrieve its values with a stat show command.
 
+config MCUMGR_STAT_MAX_NAME_LEN
+	int "Maximum stat name length"
+	default MCUMGR_GRP_STAT_MAX_NAME_LEN
+	depends on MCUMGR_GRP_STAT
+	help
+	  Limits the maximum length of stat names in MCUmgr requests, in bytes.
+	  This applies to both s_name and snm_name.
+
 module = MCUMGR_GRP_STAT
 module-str = mcumgr_grp_stat
 source "subsys/logging/Kconfig.template.log_config"
