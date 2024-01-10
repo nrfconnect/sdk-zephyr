@@ -333,7 +333,8 @@ manifest:
       groups:
         - tee
     - name: uoscore-uedhoc
-      revision: 5fe2cb613bd7e4590bd1b00c2adf181ac0229379
+      revision: pull/61/head
+      url: https://github.com/eriptic/uoscore-uedhoc
       path: modules/lib/uoscore-uedhoc
     - name: zcbor
       revision: 0.8.0
