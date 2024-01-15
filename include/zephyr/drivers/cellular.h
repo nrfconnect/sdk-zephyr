@@ -76,6 +76,15 @@ enum cellular_modem_info_type {
 	CELLULAR_MODEM_INFO_SIM_ICCID,
 };
 
+enum cellular_registration_status {
+	CELLULAR_REGISTRATION_NOT_REGISTERED = 0,
+	CELLULAR_REGISTRATION_REGISTERED_HOME,
+	CELLULAR_REGISTRATION_SEARCHING,
+	CELLULAR_REGISTRATION_DENIED,
+	CELLULAR_REGISTRATION_UNKNOWN,
+	CELLULAR_REGISTRATION_REGISTERED_ROAMING,
+};
+
 /** API for configuring networks */
 typedef int (*cellular_api_configure_networks)(const struct device *dev,
 					       const struct cellular_network *networks,
@@ -95,12 +104,18 @@ typedef int (*cellular_api_get_modem_info)(const struct device *dev,
 					   const enum cellular_modem_info_type type,
 					   char *info, size_t size);
 
+/** API for getting registration status */
+typedef int (*cellular_api_get_registration_status)(const struct device *dev,
+						    enum cellular_access_technology tech,
+						    enum cellular_registration_status *status);
+
 /** Cellular driver API */
 __subsystem struct cellular_driver_api {
 	cellular_api_configure_networks configure_networks;
 	cellular_api_get_supported_networks get_supported_networks;
 	cellular_api_get_signal get_signal;
 	cellular_api_get_modem_info get_modem_info;
+	cellular_api_get_registration_status get_registration_status;
 };
 
 /**
