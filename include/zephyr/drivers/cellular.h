@@ -143,6 +143,31 @@ int cellular_get_signal(const struct device *dev, const enum cellular_signal_typ
 int cellular_get_modem_info(const struct device *dev, const enum cellular_modem_info_type type,
 			    char *info, size_t size);
 
+/**
+ * @brief Get network registration status for the device
+ *
+ * @param dev Cellular network device instance
+ * @param tech Which access technology to get status for
+ * @param status Registration status for given access technology
+ *
+ * @retval 0 if successful.
+ * @retval -ENOSYS if API is not supported by cellular network device.
+ * @retval -ENODATA if modem does not provide info requested
+ * @retval Negative errno-code from chat module otherwise.
+ */
+static inline int cellular_get_registration_status(const struct device *dev,
+						   enum cellular_access_technology tech,
+						   enum cellular_registration_status *status)
+{
+	const struct cellular_driver_api *api = (const struct cellular_driver_api *)dev->api;
+
+	if (api->get_registration_status == NULL) {
+		return -ENOSYS;
+	}
+
+	return api->get_registration_status(dev, tech, status);
+}
+
 #ifdef __cplusplus
 }
 #endif
