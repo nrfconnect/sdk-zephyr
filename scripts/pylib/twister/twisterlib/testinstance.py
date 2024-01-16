@@ -10,11 +10,13 @@ import random
 import logging
 import shutil
 import glob
+import pathlib
 
 from twisterlib.testsuite import TestCase, TestSuite
 from twisterlib.platform import Platform
 from twisterlib.error import BuildError
 from twisterlib.size_calc import SizeCalculator
+from twisterlib.feature_extract import LocalSample, FeatureDB
 from twisterlib.handlers import (
     Handler,
     SimulationHandler,
@@ -294,6 +296,30 @@ class TestInstance:
                             extra_sections=self.testsuite.extra_sections,
                             buildlog_filepath=buildlog_filepath,
                             generate_warning=generate_warning)
+
+    def get_features(self, db: FeatureDB) -> LocalSample:
+        config_filepath = self.get_config_file()
+
+        return LocalSample(name=self.name, kconfig_file=config_filepath, db=db)
+
+    def get_config_file(self) -> str:
+        if self.testsuite.sysbuild:
+            build_dir = pathlib.Path(self.domains.get_default_domain().build_dir)
+        else:
+            build_dir = pathlib.Path(self.build_dir)
+
+        fns = list(build_dir.rglob(".config"))
+        blocklist = [
+                'remapped', # used for xtensa plaforms
+                'zefi', # EFI for Zephyr
+                'qemu', # elf files generated after running in qemu
+                '_pre']
+        fns = [x for x in fns if not any(bad in os.path.basename(x) for bad in blocklist)]
+        if not fns:
+            raise BuildError("Missing output binary")
+        elif len(fns) > 1:
+            logger.warning(f"multiple config files detected: {', '.join(fns)}")
+        return str(fns[0])
 
     def get_elf_file(self) -> str:
 

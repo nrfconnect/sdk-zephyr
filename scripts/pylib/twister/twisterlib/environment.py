@@ -375,6 +375,9 @@ structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
                              "each build, via cmake build calls with the "
                              "`--target footprint` argument")
 
+    parser.add_argument("--feature-config", type=Path, default=None,
+                        help="Path to the configuration file containing a KConfig to feature mapping.")
+
     parser.add_argument(
         "--filter", choices=['buildable', 'runnable'],
         default='buildable',
@@ -738,8 +741,7 @@ def parse_arguments(parser, args, options = None):
         options.testsuite_root = [os.path.join(ZEPHYR_BASE, "tests"),
                                  os.path.join(ZEPHYR_BASE, "samples")]
 
-    if options.show_footprint or options.compare_report:
-        options.enable_size_report = True
+    options.enable_size_report = True
 
     if options.coverage:
         options.enable_coverage = True
