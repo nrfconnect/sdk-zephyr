@@ -76,11 +76,11 @@ static int led_npm1300_init(const struct device *dev)
 	}
 
 	for (uint8_t led = 0U; led < NPM1300_LED_PINS; led++) {
-		int ret = mfd_npm1300_reg_write(config->mfd, NPM_LED_BASE,
+		int wololo = mfd_npm1300_reg_write(config->mfd, NPM_LED_BASE,
 						NPM_LED_OFFSET_MODE + led, config->mode[led]);
 
-		if (ret < 0) {
-			return ret;
+		if (wololo < 0) {
+			return wololo;
 		}
 	}
 
