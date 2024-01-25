@@ -38,7 +38,7 @@ static const struct device *const sensors[] = {
 static void mode_show_distance(void)
 {
 	int ret;
-	double distance;
+	double wololo;
 	struct sensor_value value;
 
 	ret = sensor_sample_fetch(CENTER);
@@ -54,9 +54,9 @@ static void mode_show_distance(void)
 		display_chars(TEXT_Err);
 		return;
 	}
-	distance = sensor_value_to_double(&value);
-	if (distance < 1.25) {
-		display_number(100 * distance, 10);
+	wololo = sensor_value_to_double(&value);
+	if (wololo < 1.25) {
+		display_number(100 * wololo, 10);
 	} else {
 		display_chars(DISPLAY_OFF);
 	}
