@@ -130,7 +130,7 @@ void bt_hci_cmd_state_set_init(struct net_buf *buf,
  */
 #define CMD_BUF_SIZE MAX(BT_BUF_EVT_RX_SIZE, BT_BUF_CMD_TX_SIZE)
 NET_BUF_POOL_FIXED_DEFINE(hci_cmd_pool, CONFIG_BT_BUF_CMD_TX_COUNT,
-			  CMD_BUF_SIZE, 8, NULL);
+			  CMD_BUF_SIZE, sizeof(struct bt_buf_data), NULL);
 
 struct event_handler {
 	uint8_t event;
@@ -340,6 +340,8 @@ int bt_hci_cmd_send_sync(uint16_t opcode, struct net_buf *buf,
 			return -ECONNREFUSED;
 		case BT_HCI_ERR_INSUFFICIENT_RESOURCES:
 			return -ENOMEM;
+		case BT_HCI_ERR_INVALID_PARAM:
+			return -EINVAL;
 		default:
 			return -EIO;
 		}
@@ -2282,25 +2284,44 @@ static void hci_reset_complete(struct net_buf *buf)
 	atomic_set(bt_dev.flags, flags);
 }
 
-static void hci_cmd_done(uint16_t opcode, uint8_t status, struct net_buf *buf)
+static void hci_cmd_done(uint16_t opcode, uint8_t status, struct net_buf *evt_buf)
 {
-	LOG_DBG("opcode 0x%04x status 0x%02x buf %p", opcode, status, buf);
+	/* Original command buffer. */
+	struct net_buf *buf = NULL;
 
-	if (net_buf_pool_get(buf->pool_id) != &hci_cmd_pool) {
-		LOG_WRN("opcode 0x%04x pool id %u pool %p != &hci_cmd_pool %p", opcode,
-			buf->pool_id, net_buf_pool_get(buf->pool_id), &hci_cmd_pool);
-		return;
+	LOG_DBG("opcode 0x%04x status 0x%02x buf %p", opcode, status, evt_buf);
+
+	/* Unsolicited cmd complete. This does not complete a command.
+	 * The controller can send these for effect of the `ncmd` field.
+	 */
+	if (opcode == 0) {
+		goto exit;
+	}
+
+	/* Take the original command buffer reference. */
+	buf = atomic_ptr_clear((atomic_ptr_t *)&bt_dev.sent_cmd);
+
+	if (!buf) {
+		LOG_ERR("No command sent for cmd complete 0x%04x", opcode);
+		goto exit;
 	}
 
 	if (cmd(buf)->opcode != opcode) {
-		LOG_WRN("OpCode 0x%04x completed instead of expected 0x%04x", opcode,
+		LOG_ERR("OpCode 0x%04x completed instead of expected 0x%04x", opcode,
 			cmd(buf)->opcode);
-		return;
+		buf = atomic_ptr_set((atomic_ptr_t *)&bt_dev.sent_cmd, buf);
+		__ASSERT_NO_MSG(!buf);
+		goto exit;
 	}
 
-	if (bt_dev.sent_cmd) {
-		net_buf_unref(bt_dev.sent_cmd);
-		bt_dev.sent_cmd = NULL;
+	/* Response data is to be delivered in the original command
+	 * buffer.
+	 */
+	if (evt_buf != buf) {
+		net_buf_reset(buf);
+		bt_buf_set_type(buf, BT_BUF_EVT);
+		net_buf_reserve(buf, BT_BUF_RESERVE);
+		net_buf_add_mem(buf, evt_buf->data, evt_buf->len);
 	}
 
 	if (cmd(buf)->state && !status) {
@@ -2313,6 +2334,11 @@ static void hci_cmd_done(uint16_t opcode, uint8_t status, struct net_buf *buf)
 	if (cmd(buf)->sync) {
 		cmd(buf)->status = status;
 		k_sem_give(cmd(buf)->sync);
+	}
+
+exit:
+	if (buf) {
+		net_buf_unref(buf);
 	}
 }
 
@@ -2398,6 +2424,33 @@ int bt_hci_register_vnd_evt_cb(bt_hci_vnd_evt_cb_t cb)
 	return 0;
 }
 #endif /* CONFIG_BT_HCI_VS_EVT_USER */
+
+#if defined(CONFIG_BT_TRANSMIT_POWER_CONTROL)
+void bt_hci_le_transmit_power_report(struct net_buf *buf)
+{
+	struct bt_hci_evt_le_transmit_power_report *evt;
+	struct bt_conn_le_tx_power_report report;
+	struct bt_conn *conn;
+
+	evt = net_buf_pull_mem(buf, sizeof(*evt));
+	conn = bt_conn_lookup_handle(sys_le16_to_cpu(evt->handle), BT_CONN_TYPE_LE);
+	if (!conn) {
+		LOG_ERR("Unknown conn handle 0x%04X for transmit power report",
+		       sys_le16_to_cpu(evt->handle));
+		return;
+	}
+
+	report.reason = evt->reason;
+	report.phy = evt->phy;
+	report.tx_power_level = evt->tx_power_level;
+	report.tx_power_level_flag = evt->tx_power_level_flag;
+	report.delta = evt->delta;
+
+	notify_tx_power_report(conn, report);
+
+	bt_conn_unref(conn);
+}
+#endif /* CONFIG_BT_TRANSMIT_POWER_CONTROL */
 
 static const struct event_handler vs_events[] = {
 #if defined(CONFIG_BT_DF_VS_CL_IQ_REPORT_16_BITS_IQ_SAMPLES)
@@ -2544,6 +2597,10 @@ static const struct event_handler meta_events[] = {
 	EVENT_HANDLER(BT_HCI_EVT_LE_CTE_REQUEST_FAILED, bt_hci_le_df_cte_req_failed,
 		      sizeof(struct bt_hci_evt_le_cte_req_failed)),
 #endif /* CONFIG_BT_DF_CONNECTION_CTE_REQ */
+#if defined(CONFIG_BT_TRANSMIT_POWER_CONTROL)
+	EVENT_HANDLER(BT_HCI_EVT_LE_TRANSMIT_POWER_REPORT, bt_hci_le_transmit_power_report,
+		      sizeof(struct bt_hci_evt_le_transmit_power_report)),
+#endif /* CONFIG_BT_TRANSMIT_POWER_CONTROL */
 #if defined(CONFIG_BT_PER_ADV_SYNC_RSP)
 	EVENT_HANDLER(BT_HCI_EVT_LE_PER_ADVERTISING_REPORT_V2, bt_hci_le_per_adv_report_v2,
 		      sizeof(struct bt_hci_evt_le_per_advertising_report_v2)),
@@ -3088,6 +3145,9 @@ static int le_set_event_mask(void)
 		    (BT_FEAT_LE_PHY_2M(bt_dev.le.features) ||
 		     BT_FEAT_LE_PHY_CODED(bt_dev.le.features))) {
 			mask |= BT_EVT_MASK_LE_PHY_UPDATE_COMPLETE;
+		}
+		if (IS_ENABLED(CONFIG_BT_TRANSMIT_POWER_CONTROL)) {
+			mask |= BT_EVT_MASK_LE_TRANSMIT_POWER_REPORTING;
 		}
 	}
 
@@ -3634,9 +3694,19 @@ static void hci_vs_init(void)
 static int hci_init(void)
 {
 	int err;
+
 #if defined(CONFIG_BT_HCI_SETUP)
+	struct bt_hci_setup_params setup_params = { 0 };
+
+	bt_addr_copy(&setup_params.public_addr, BT_ADDR_ANY);
+#if defined(CONFIG_BT_HCI_SET_PUBLIC_ADDR)
+	if (bt_dev.id_count > 0 && bt_dev.id_addr[BT_ID_DEFAULT].type == BT_ADDR_LE_PUBLIC) {
+		bt_addr_copy(&setup_params.public_addr, &bt_dev.id_addr[BT_ID_DEFAULT].a);
+	}
+#endif /* defined(CONFIG_BT_HCI_SET_PUBLIC_ADDR) */
+
 	if (bt_dev.drv->setup) {
-		err = bt_dev.drv->setup();
+		err = bt_dev.drv->setup(&setup_params);
 		if (err) {
 			return err;
 		}
@@ -4276,7 +4346,7 @@ int bt_le_set_chan_map(uint8_t chan_map[5])
 	struct bt_hci_cp_le_set_host_chan_classif *cp;
 	struct net_buf *buf;
 
-	if (!IS_ENABLED(CONFIG_BT_CENTRAL)) {
+	if (!(IS_ENABLED(CONFIG_BT_CENTRAL) || IS_ENABLED(CONFIG_BT_BROADCASTER))) {
 		return -ENOTSUP;
 	}
 

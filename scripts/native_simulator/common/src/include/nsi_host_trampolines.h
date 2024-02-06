@@ -11,7 +11,7 @@
  * to the embedded side, for example due to non-basic types being used in
  * function calls, as that would break the include path isolation
  *
- * Naming convention: nsi_hots_<fun>() where <func> is the name of the equivalent
+ * Naming convention: nsi_host_<fun>() where <func> is the name of the equivalent
  * C library call we call thru.
  */
 
@@ -33,6 +33,7 @@ int nsi_host_open(const char *pathname, int flags);
 /* int nsi_host_printf (const char *fmt, ...); Use the nsi_tracing.h equivalents */
 long nsi_host_random(void);
 long nsi_host_read(int fd, void *buffer, unsigned long size);
+void *nsi_host_realloc(void *ptr, unsigned long size);
 void nsi_host_srandom(unsigned int seed);
 char *nsi_host_strdup(const char *s);
 long nsi_host_write(int fd, void *buffer, unsigned long size);

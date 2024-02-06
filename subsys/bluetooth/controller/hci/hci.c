@@ -4953,7 +4953,8 @@ static void vs_read_tx_power_level(struct net_buf *buf, struct net_buf **evt)
 
 #if defined(CONFIG_BT_HCI_VS_FATAL_ERROR)
 /* A memory pool for vandor specific events for fatal error reporting purposes. */
-NET_BUF_POOL_FIXED_DEFINE(vs_err_tx_pool, 1, BT_BUF_EVT_RX_SIZE, 8, NULL);
+NET_BUF_POOL_FIXED_DEFINE(vs_err_tx_pool, 1, BT_BUF_EVT_RX_SIZE,
+			  sizeof(struct bt_buf_data), NULL);
 
 /* The alias for convenience of Controller HCI implementation. Controller is build for
  * a particular architecture hence the alias will allow to avoid conditional compilation.
@@ -5867,16 +5868,6 @@ int hci_iso_handle(struct net_buf *buf, struct net_buf **evt)
 		struct ll_adv_iso_set *adv_iso;
 		struct lll_adv_iso *lll_iso;
 		uint16_t stream_handle;
-		uint16_t slen;
-
-		/* FIXME: Code only expects header present */
-		slen = iso_data_hdr ? iso_data_hdr->slen : 0;
-
-		/* Check invalid BIS PDU length */
-		if (slen > LL_BIS_OCTETS_TX_MAX) {
-			LOG_ERR("Invalid HCI ISO Data length");
-			return -EINVAL;
-		}
 
 		/* Get BIS stream handle and stream context */
 		stream_handle = LL_BIS_ADV_IDX_FROM_HANDLE(handle);
@@ -7009,6 +7000,11 @@ static void le_ext_adv_report(struct pdu_data *pdu_data,
 			}
 
 			ptr += BDADDR_SIZE;
+		}
+
+		if (h->cte_info) {
+			/* CTEInfo is RFU */
+			ptr += 1;
 		}
 
 		if (h->adi) {

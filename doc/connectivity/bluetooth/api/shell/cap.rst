@@ -137,3 +137,94 @@ used.
 
    uart:~$ cap_initiator unicast-stop
    Unicast stopped for group 0x81e41c0 completed
+
+CAP Commander
+*************
+
+The Commander will typically be a either co-located with a CAP Initiator or be on a separate
+resource-rich mobile device, such as a phone or smartwatch. The Commander can
+discover CAP Acceptors's CAS and optional CSIS services. The CSIS service can be read to provide
+information about other CAP Acceptors in the same Coordinated Set. The Commander can provide
+information about broadcast sources to CAP Acceptors or coordinate capture and rendering information
+such as mute or volume states.
+
+Using the CAP Commander
+=======================
+
+When the Bluetooth stack has been initialized (:code:`bt init`), the Commander can discover CAS and
+the optionally included CSIS instance by calling (:code:`cap_commander discover`).
+
+.. code-block:: console
+
+   cap_commander --help
+   cap_commander - Bluetooth CAP commander shell commands
+   Subcommands:
+     discover              :Discover CAS
+     change_volume         :Change volume on all connections <volume>
+     change_volume_offset  :Change volume offset per connection <volume_offset
+                            [volume_offset [...]]>
+
+
+Before being able to perform any stream operation, the device must also perform the
+:code:`bap discover` operation to discover the ASEs and PAC records. The :code:`bap init`
+command also needs to be called.
+
+When connected
+--------------
+
+Discovering CAS and CSIS on a device:
+
+.. code-block:: console
+
+   uart:~$ cap_commander discover
+   discovery completed with CSIS
+
+
+Setting the volume on all connected devices:
+
+.. code-block:: console
+
+   uart:~$ vcp_vol_ctlr discover
+   VCP discover done with 1 VOCS and 1 AICS
+   uart:~$ cap_commander change_volume 15
+   uart:~$ cap_commander change_volume 15
+   Setting volume to 15 on 2 connections
+   VCP volume 15, mute 0
+   VCP vol_set done
+   VCP volume 15, mute 0
+   VCP flags 0x01
+   VCP vol_set done
+   Volume change completed
+
+
+Setting the volume offset on one or more connected devices. The offsets are set by connection index,
+so connection index 0 gets the first offset, and index 1 gets the second offset, etc.:
+
+.. code-block:: console
+
+   uart:~$ bt connect <device A>
+   Connected: <device A>
+   uart:~$ cap_commander discover
+   discovery completed with CSIS
+   uart:~$ vcp_vol_ctlr discover
+   VCP discover done with 1 VOCS and 1 AICS
+   uart:~$
+   uart:~$ bt connect <device B>
+   Connected: <device B>
+   uart:~$ cap_commander discover
+   discovery completed with CSIS
+   uart:~$ vcp_vol_ctlr discover
+   VCP discover done with 1 VOCS and 1 AICS
+   uart:~$
+   uart:~$ cap_commander change_volume_offset 10
+   Setting volume offset on 1 connections
+   VOCS inst 0x200140a4 offset 10
+   Offset set for inst 0x200140a4
+   Volume offset change completed
+   uart:~$
+   uart:~$ cap_commander change_volume_offset 10 15
+   Setting volume offset on 2 connections
+   Offset set for inst 0x200140a4
+   VOCS inst 0x20014188 offset 15
+   Offset set for inst 0x20014188
+   Volume offset change completed

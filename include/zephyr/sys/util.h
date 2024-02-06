@@ -203,6 +203,24 @@ extern "C" {
 	})
 
 /**
+ * @brief Iterate over members of an array using an index variable
+ *
+ * @param array the array in question
+ * @param idx name of array index variable
+ */
+#define ARRAY_FOR_EACH(array, idx) for (size_t idx = 0; (idx) < ARRAY_SIZE(array); ++(idx))
+
+/**
+ * @brief Iterate over members of an array using a pointer
+ *
+ * @param array the array in question
+ * @param ptr pointer to an element of @p array
+ */
+#define ARRAY_FOR_EACH_PTR(array, ptr)                                                             \
+	for (__typeof__(*(array)) *ptr = (array); (size_t)((ptr) - (array)) < ARRAY_SIZE(array);   \
+	     ++(ptr))
+
+/**
  * @brief Validate if two entities have a compatible type
  *
  * @param a the first entity to be compared
@@ -251,13 +269,18 @@ extern "C" {
 	})
 
 /**
- * @brief Concatenate two tokens into one
+ * @brief Concatenate input arguments
  *
- * Concatenate two tokens,  @p x and @p y, into a combined token during the preprocessor pass.
- * This can be used to, for ex., build an identifier out of two parts,
+ * Concatenate provided tokens into a combined token during the preprocessor pass.
+ * This can be used to, for ex., build an identifier out of multiple parts,
  * where one of those parts may be, for ex, a number, another macro, or a macro argument.
+ *
+ * @param ... Tokens to concatencate
+ *
+ * @return Concatenated token.
  */
-#define CONCAT(x, y) _DO_CONCAT(x, y)
+#define CONCAT(...) \
+	UTIL_CAT(_CONCAT_, NUM_VA_ARGS_LESS_1(__VA_ARGS__))(__VA_ARGS__)
 
 /**
  * @brief Value of @p x rounded up to the next multiple of @p align.
@@ -638,6 +661,45 @@ char *utf8_lcpy(char *dst, const char *src, size_t n);
 #define Z_DETECT_POINTER_OVERFLOW(addr, buflen)  \
 	(((buflen) != 0) &&                        \
 	((UINTPTR_MAX - (uintptr_t)(addr)) <= ((uintptr_t)((buflen) - 1))))
+
+/**
+ * @brief XOR n bytes
+ *
+ * @param dst  Destination of where to store result. Shall be @p len bytes.
+ * @param src1 First source. Shall be @p len bytes.
+ * @param src2 Second source. Shall be @p len bytes.
+ * @param len  Number of bytes to XOR.
+ */
+static inline void mem_xor_n(uint8_t *dst, const uint8_t *src1, const uint8_t *src2, size_t len)
+{
+	while (len--) {
+		*dst++ = *src1++ ^ *src2++;
+	}
+}
+
+/**
+ * @brief XOR 32 bits
+ *
+ * @param dst  Destination of where to store result. Shall be 32 bits.
+ * @param src1 First source. Shall be 32 bits.
+ * @param src2 Second source. Shall be 32 bits.
+ */
+static inline void mem_xor_32(uint8_t dst[4], const uint8_t src1[4], const uint8_t src2[4])
+{
+	mem_xor_n(dst, src1, src2, 4U);
+}
+
+/**
+ * @brief XOR 128 bits
+ *
+ * @param dst  Destination of where to store result. Shall be 128 bits.
+ * @param src1 First source. Shall be 128 bits.
+ * @param src2 Second source. Shall be 128 bits.
+ */
+static inline void mem_xor_128(uint8_t dst[16], const uint8_t src1[16], const uint8_t src2[16])
+{
+	mem_xor_n(dst, src1, src2, 16);
+}
 
 #ifdef __cplusplus
 }

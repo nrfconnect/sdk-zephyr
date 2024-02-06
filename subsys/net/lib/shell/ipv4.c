@@ -10,7 +10,7 @@ LOG_MODULE_DECLARE(net_shell);
 
 #include <zephyr/net/igmp.h>
 
-#include "common.h"
+#include "net_shell_private.h"
 #include "../ip/ipv4.h"
 
 #if defined(CONFIG_NET_NATIVE_IPV4)
@@ -118,7 +118,7 @@ static int cmd_net_ip_add(const struct shell *sh, size_t argc, char *argv[])
 	if (net_ipv4_is_addr_mcast(&addr)) {
 		int ret;
 
-		ret = net_ipv4_igmp_join(iface, &addr);
+		ret = net_ipv4_igmp_join(iface, &addr, NULL);
 		if (ret < 0) {
 			PR_ERROR("Cannot %s multicast group %s for interface %d (%d)\n",
 				 "join", net_sprint_ipv4_addr(&addr), idx, ret);

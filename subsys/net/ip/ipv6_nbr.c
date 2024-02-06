@@ -1536,6 +1536,27 @@ void net_ipv6_nbr_set_reachable_timer(struct net_if *iface,
 
 	ipv6_nd_restart_reachable_timer(nbr, time);
 }
+
+void net_ipv6_nbr_reachability_hint(struct net_if *iface,
+				    const struct in6_addr *ipv6_addr)
+{
+	struct net_nbr *nbr = NULL;
+
+	nbr = nbr_lookup(&net_neighbor.table, iface, ipv6_addr);
+
+	NET_DBG("nbr %p got rechability hint", nbr);
+
+	if (nbr && net_ipv6_nbr_data(nbr)->state != NET_IPV6_NBR_STATE_INCOMPLETE &&
+	    net_ipv6_nbr_data(nbr)->state != NET_IPV6_NBR_STATE_STATIC) {
+		ipv6_nbr_set_state(nbr, NET_IPV6_NBR_STATE_REACHABLE);
+
+		/* We might have active timer from PROBE */
+		net_ipv6_nbr_data(nbr)->reachable = 0;
+		net_ipv6_nbr_data(nbr)->reachable_timeout = 0;
+
+		net_ipv6_nbr_set_reachable_timer(iface, nbr);
+	}
+}
 #endif /* CONFIG_NET_IPV6_ND */
 
 #if defined(CONFIG_NET_IPV6_NBR_CACHE)
@@ -1818,7 +1839,12 @@ static int handle_na_input(struct net_icmp_ctx *ctx,
 	}
 
 	if (!handle_na_neighbor(pkt, na_hdr, tllao_offset)) {
-		goto drop;
+		/* Update the statistics but silently drop NA msg if the sender
+		 * is not known or if there was an error in the message.
+		 * Returning <0 will cause error message to be printed which
+		 * is too much for this non error.
+		 */
+		net_stats_update_ipv6_nd_drop(net_pkt_iface(pkt));
 	}
 
 	return 0;
@@ -2438,8 +2464,8 @@ static int handle_ra_input(struct net_icmp_ctx *ctx,
 	retrans_timer = ntohl(ra_hdr->retrans_timer);
 
 	if (ra_hdr->cur_hop_limit) {
-		net_ipv6_set_hop_limit(net_pkt_iface(pkt),
-				       ra_hdr->cur_hop_limit);
+		net_if_ipv6_set_hop_limit(net_pkt_iface(pkt),
+					  ra_hdr->cur_hop_limit);
 		NET_DBG("New hop limit %d",
 			net_if_ipv6_get_hop_limit(net_pkt_iface(pkt)));
 	}

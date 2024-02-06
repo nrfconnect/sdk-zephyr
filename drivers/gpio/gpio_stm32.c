@@ -524,9 +524,11 @@ static int gpio_stm32_config(const struct device *dev,
 	}
 
 	/* Enable device clock before configuration (requires bank writes) */
-	err = pm_device_runtime_get(dev);
-	if (err < 0) {
-		return err;
+	if (((flags & GPIO_OUTPUT) != 0) || ((flags & GPIO_INPUT) != 0)) {
+		err = pm_device_runtime_get(dev);
+		if (err < 0) {
+			return err;
+		}
 	}
 
 	if ((flags & GPIO_OUTPUT) != 0) {
@@ -719,7 +721,9 @@ static int gpio_stm32_init(const struct device *dev)
 		return ret;
 	}
 
-	pm_device_init_suspended(dev);
+	if (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME)) {
+		pm_device_init_suspended(dev);
+	}
 	(void)pm_device_runtime_enable(dev);
 
 	return 0;

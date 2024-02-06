@@ -142,6 +142,8 @@ static bool parse_cb(struct bt_data *data, void *user_data)
 static int ltv_set_val(struct net_buf_simple *buf, uint8_t type, const uint8_t *data,
 		       size_t data_len)
 {
+	size_t new_buf_len;
+
 	for (uint16_t i = 0U; i < buf->len;) {
 		uint8_t *len = &buf->data[i++];
 		const uint8_t data_type = buf->data[i++];
@@ -162,8 +164,8 @@ static int ltv_set_val(struct net_buf_simple *buf, uint8_t type, const uint8_t *
 				if (value + value_len == buf->data + buf->len) {
 					data_len_to_move = 0U;
 				} else {
-					old_next_data_start = value + value_len + 1;
-					new_next_data_start = value + data_len + 1;
+					old_next_data_start = value + value_len;
+					new_next_data_start = value + data_len;
 					data_len_to_move =
 						buf->len - (old_next_data_start - buf->data);
 				}
@@ -207,16 +209,55 @@ static int ltv_set_val(struct net_buf_simple *buf, uint8_t type, const uint8_t *
 	}
 
 	/* If we reach here, we did not find the data in the buffer, so we simply add it */
-	if ((buf->len + data_len) <= buf->size) {
-		net_buf_simple_add_u8(buf, data_len + sizeof(type));
-		net_buf_simple_add_u8(buf, type);
+	new_buf_len = buf->len + 1 /* len */ + sizeof(type) + data_len;
+	if (new_buf_len <= buf->size) {
+		net_buf_simple_add_u8(buf, data_len + sizeof(type)); /* len */
+		net_buf_simple_add_u8(buf, type); /* type */
 		if (data_len > 0) {
-			net_buf_simple_add_mem(buf, data, data_len);
+			net_buf_simple_add_mem(buf, data, data_len); /* value */
 		}
 	} else {
 		LOG_DBG("Cannot fit data_len %zu in codec_cfg with len %u and size %u", data_len,
 			buf->len, buf->size);
 		return -ENOMEM;
+	}
+
+	return buf->len;
+}
+
+static int ltv_unset_val(struct net_buf_simple *buf, uint8_t type)
+{
+	for (uint16_t i = 0U; i < buf->len;) {
+		uint8_t *ltv_start = &buf->data[i];
+		const uint8_t len = buf->data[i++];
+		const uint8_t data_type = buf->data[i++];
+		const uint8_t value_len = len - sizeof(data_type);
+
+		if (data_type == type) {
+			const uint8_t ltv_size = value_len + sizeof(data_type) + sizeof(len);
+			uint8_t *value = &buf->data[i];
+
+			/* Check if this is not the last value in the buffer */
+			if (value + value_len != buf->data + buf->len) {
+				uint8_t *next_data_start;
+				uint8_t data_len_to_move;
+
+				next_data_start = value + value_len;
+				data_len_to_move = buf->len - (next_data_start - buf->data);
+				memmove(ltv_start, next_data_start, data_len_to_move);
+
+				LOG_ERR("buf->data %p, ltv_start %p, value_len %u next_data_start "
+					"%p data_len_to_move %u",
+					buf->data, ltv_start, value_len, next_data_start,
+					data_len_to_move);
+			} /* else just reduce the length of the buffer */
+
+			buf->len -= ltv_size;
+
+			return buf->len;
+		}
+
+		i += value_len;
 	}
 
 	return buf->len;
@@ -238,8 +279,8 @@ static void init_net_buf_simple_from_codec_cfg(struct net_buf_simple *buf,
 	buf->len = codec_cfg->data_len;
 }
 
-uint8_t bt_audio_codec_cfg_get_val(const struct bt_audio_codec_cfg *codec_cfg,
-				   enum bt_audio_codec_config_type type, const uint8_t **data)
+int bt_audio_codec_cfg_get_val(const struct bt_audio_codec_cfg *codec_cfg,
+			       enum bt_audio_codec_config_type type, const uint8_t **data)
 {
 	struct search_type_param param = {
 		.found = false,
@@ -251,12 +292,12 @@ uint8_t bt_audio_codec_cfg_get_val(const struct bt_audio_codec_cfg *codec_cfg,
 
 	CHECKIF(codec_cfg == NULL) {
 		LOG_DBG("codec is NULL");
-		return 0;
+		return -EINVAL;
 	}
 
 	CHECKIF(data == NULL) {
 		LOG_DBG("data is NULL");
-		return 0;
+		return -EINVAL;
 	}
 
 	*data = NULL;
@@ -264,12 +305,12 @@ uint8_t bt_audio_codec_cfg_get_val(const struct bt_audio_codec_cfg *codec_cfg,
 	err = bt_audio_data_parse(codec_cfg->data, codec_cfg->data_len, parse_cb, &param);
 	if (err != 0 && err != -ECANCELED) {
 		LOG_DBG("Could not parse the data: %d", err);
-		return 0;
+		return err;
 	}
 
-	if (param.data == NULL) {
+	if (!param.found) {
 		LOG_DBG("Could not find the type %u", type);
-		return 0;
+		return -ENODATA;
 	}
 
 	return param.data_len;
@@ -300,6 +341,27 @@ int bt_audio_codec_cfg_set_val(struct bt_audio_codec_cfg *codec_cfg,
 	init_net_buf_simple_from_codec_cfg(&buf, codec_cfg);
 
 	ret = ltv_set_val(&buf, type, data, data_len);
+	if (ret >= 0) {
+		codec_cfg->data_len = ret;
+	}
+
+	return ret;
+}
+
+int bt_audio_codec_cfg_unset_val(struct bt_audio_codec_cfg *codec_cfg,
+				 enum bt_audio_codec_config_type type)
+{
+	struct net_buf_simple buf;
+	int ret;
+
+	CHECKIF(codec_cfg == NULL) {
+		LOG_DBG("codec_cfg is NULL");
+		return -EINVAL;
+	}
+
+	init_net_buf_simple_from_codec_cfg(&buf, codec_cfg);
+
+	ret = ltv_unset_val(&buf, type);
 	if (ret >= 0) {
 		codec_cfg->data_len = ret;
 	}
@@ -529,12 +591,12 @@ static void init_net_buf_simple_from_meta(struct net_buf_simple *buf, uint8_t me
 	buf->len = meta_len;
 }
 
-static int codec_meta_get_val(const uint8_t meta[], size_t meta_len, uint8_t type,
-			      const uint8_t **data)
+static int codec_meta_get_val(const uint8_t meta[], size_t meta_len,
+			      enum bt_audio_metadata_type type, const uint8_t **data)
 {
 	struct search_type_param param = {
 		.found = false,
-		.type = type,
+		.type = (uint8_t)type,
 		.data_len = 0,
 		.data = data,
 	};
@@ -590,6 +652,21 @@ static int codec_meta_set_val(uint8_t meta[], size_t meta_len, size_t meta_size,
 	init_net_buf_simple_from_meta(&buf, meta, meta_len, meta_size);
 
 	return ltv_set_val(&buf, (uint8_t)type, data, data_len);
+}
+
+static int codec_meta_unset_val(uint8_t meta[], size_t meta_len, size_t meta_size,
+				enum bt_audio_metadata_type type)
+{
+	struct net_buf_simple buf;
+
+	CHECKIF(meta == NULL) {
+		LOG_DBG("meta is NULL");
+		return -EINVAL;
+	}
+
+	init_net_buf_simple_from_meta(&buf, meta, meta_len, meta_size);
+
+	return ltv_unset_val(&buf, type);
 }
 
 static int codec_meta_get_pref_context(const uint8_t meta[], size_t meta_len)
@@ -1080,6 +1157,25 @@ int bt_audio_codec_cfg_meta_set_val(struct bt_audio_codec_cfg *codec_cfg,
 	return ret;
 }
 
+int bt_audio_codec_cfg_meta_unset_val(struct bt_audio_codec_cfg *codec_cfg,
+				      enum bt_audio_metadata_type type)
+{
+	int ret;
+
+	CHECKIF(codec_cfg == NULL) {
+		LOG_DBG("codec_cfg is NULL");
+		return -EINVAL;
+	}
+
+	ret = codec_meta_unset_val(codec_cfg->meta, codec_cfg->meta_len,
+				   ARRAY_SIZE(codec_cfg->meta), type);
+	if (ret >= 0) {
+		codec_cfg->meta_len = ret;
+	}
+
+	return ret;
+}
+
 int bt_audio_codec_cfg_meta_get_pref_context(const struct bt_audio_codec_cfg *codec_cfg)
 {
 	CHECKIF(codec_cfg == NULL) {
@@ -1388,6 +1484,25 @@ int bt_audio_codec_cap_meta_set_val(struct bt_audio_codec_cap *codec_cap,
 	return ret;
 }
 
+int bt_audio_codec_cap_meta_unset_val(struct bt_audio_codec_cap *codec_cap,
+				      enum bt_audio_metadata_type type)
+{
+	int ret;
+
+	CHECKIF(codec_cap == NULL) {
+		LOG_DBG("codec_cap is NULL");
+		return -EINVAL;
+	}
+
+	ret = codec_meta_unset_val(codec_cap->meta, codec_cap->meta_len,
+				   ARRAY_SIZE(codec_cap->meta), type);
+	if (ret >= 0) {
+		codec_cap->meta_len = ret;
+	}
+
+	return ret;
+}
+
 int bt_audio_codec_cap_meta_get_pref_context(const struct bt_audio_codec_cap *codec_cap)
 {
 	CHECKIF(codec_cap == NULL) {
@@ -1678,8 +1793,8 @@ static void init_net_buf_simple_from_codec_cap(struct net_buf_simple *buf,
 	buf->len = codec_cap->data_len;
 }
 
-uint8_t bt_audio_codec_cap_get_val(const struct bt_audio_codec_cap *codec_cap,
-				   enum bt_audio_codec_capability_type type, const uint8_t **data)
+int bt_audio_codec_cap_get_val(const struct bt_audio_codec_cap *codec_cap,
+			       enum bt_audio_codec_capability_type type, const uint8_t **data)
 {
 	struct search_type_param param = {
 		.found = false,
@@ -1691,12 +1806,12 @@ uint8_t bt_audio_codec_cap_get_val(const struct bt_audio_codec_cap *codec_cap,
 
 	CHECKIF(codec_cap == NULL) {
 		LOG_DBG("codec_cap is NULL");
-		return 0;
+		return -EINVAL;
 	}
 
 	CHECKIF(data == NULL) {
 		LOG_DBG("data is NULL");
-		return 0;
+		return -EINVAL;
 	}
 
 	*data = NULL;
@@ -1704,12 +1819,12 @@ uint8_t bt_audio_codec_cap_get_val(const struct bt_audio_codec_cap *codec_cap,
 	err = bt_audio_data_parse(codec_cap->data, codec_cap->data_len, parse_cb, &param);
 	if (err != 0 && err != -ECANCELED) {
 		LOG_DBG("Could not parse the data: %d", err);
-		return 0;
+		return err;
 	}
 
-	if (param.data == NULL) {
+	if (!param.found) {
 		LOG_DBG("Could not find the type %u", type);
-		return 0;
+		return -ENODATA;
 	}
 
 	return param.data_len;
@@ -1740,6 +1855,27 @@ int bt_audio_codec_cap_set_val(struct bt_audio_codec_cap *codec_cap,
 	init_net_buf_simple_from_codec_cap(&buf, codec_cap);
 
 	ret = ltv_set_val(&buf, type, data, data_len);
+	if (ret >= 0) {
+		codec_cap->data_len = ret;
+	}
+
+	return ret;
+}
+
+int bt_audio_codec_cap_unset_val(struct bt_audio_codec_cap *codec_cap,
+				 enum bt_audio_codec_capability_type type)
+{
+	struct net_buf_simple buf;
+	int ret;
+
+	CHECKIF(codec_cap == NULL) {
+		LOG_DBG("codec_cap is NULL");
+		return -EINVAL;
+	}
+
+	init_net_buf_simple_from_codec_cap(&buf, codec_cap);
+
+	ret = ltv_unset_val(&buf, type);
 	if (ret >= 0) {
 		codec_cap->data_len = ret;
 	}

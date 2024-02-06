@@ -174,12 +174,14 @@ enum bt_audio_metadata_type {
 };
 
 /**
- * Helper to check whether metadata type is known by the stack.
+ * @brief Helper to check whether metadata type is known by the stack.
+ *
+ * @note @p _type is evaluated thrice.
  */
-#define BT_AUDIO_METADATA_TYPE_IS_KNOWN(_type) \
-	(IN_RANGE(_type, BT_AUDIO_METADATA_TYPE_PREF_CONTEXT, \
-			 BT_AUDIO_METADATA_TYPE_BROADCAST_IMMEDIATE) || \
-	 IN_RANGE(_type, BT_AUDIO_METADATA_TYPE_EXTENDED, BT_AUDIO_METADATA_TYPE_VENDOR))
+#define BT_AUDIO_METADATA_TYPE_IS_KNOWN(_type)                                                     \
+	(IN_RANGE((_type), BT_AUDIO_METADATA_TYPE_PREF_CONTEXT,                                    \
+		  BT_AUDIO_METADATA_TYPE_BROADCAST_IMMEDIATE) ||                                   \
+	 (_type) == BT_AUDIO_METADATA_TYPE_EXTENDED || (_type) == BT_AUDIO_METADATA_TYPE_VENDOR)
 
 /* Unicast Announcement Type, Generic Audio */
 #define BT_AUDIO_UNICAST_ANNOUNCEMENT_GENERAL    0x00
@@ -209,6 +211,7 @@ enum bt_audio_metadata_type {
 	((struct bt_audio_codec_cfg){                                                              \
 		/* Use HCI data path as default, can be overwritten by application */              \
 		.path_id = BT_ISO_DATA_PATH_HCI,                                                   \
+		.ctlr_transcode = false,                                                           \
 		.id = _id,                                                                         \
 		.cid = _cid,                                                                       \
 		.vid = _vid,                                                                       \
@@ -231,6 +234,7 @@ enum bt_audio_metadata_type {
 	((struct bt_audio_codec_cap){                                                              \
 		/* Use HCI data path as default, can be overwritten by application */              \
 		.path_id = BT_ISO_DATA_PATH_HCI,                                                   \
+		.ctlr_transcode = false,                                                           \
 		.id = (_id),                                                                       \
 		.cid = (_cid),                                                                     \
 		.vid = (_vid),                                                                     \
@@ -245,7 +249,7 @@ enum bt_audio_metadata_type {
  * These values are defined by the Generic Audio Assigned Numbers, bluetooth.com
  */
 enum bt_audio_location {
-	BT_AUDIO_LOCATION_PROHIBITED = 0,
+	BT_AUDIO_LOCATION_MONO_AUDIO = 0,
 	BT_AUDIO_LOCATION_FRONT_LEFT = BIT(0),
 	BT_AUDIO_LOCATION_FRONT_RIGHT = BIT(1),
 	BT_AUDIO_LOCATION_FRONT_CENTER = BIT(2),
@@ -316,6 +320,12 @@ struct bt_audio_codec_cap {
 	 * vendor specific ID.
 	 */
 	uint8_t path_id;
+	/** Whether or not the local controller should transcode
+	 *
+	 * This effectively sets the coding format for the ISO data path to @ref
+	 * BT_HCI_CODING_FORMAT_TRANSPARENT if false, else uses the @ref bt_audio_codec_cfg.id.
+	 */
+	bool ctlr_transcode;
 	/** Codec ID */
 	uint8_t id;
 	/** Codec Company ID */
@@ -344,6 +354,12 @@ struct bt_audio_codec_cfg {
 	 * vendor specific ID.
 	 */
 	uint8_t path_id;
+	/** Whether or not the local controller should transcode
+	 *
+	 * This effectively sets the coding format for the ISO data path to @ref
+	 * BT_HCI_CODING_FORMAT_TRANSPARENT if false, else uses the @ref bt_audio_codec_cfg.id.
+	 */
+	bool ctlr_transcode;
 	/** Codec ID */
 	uint8_t  id;
 	/** Codec Company ID */
@@ -786,10 +802,13 @@ int bt_audio_codec_cfg_set_frame_blocks_per_sdu(struct bt_audio_codec_cfg *codec
  *  @param[in] codec_cfg The codec data to search in.
  *  @param[in] type The type id to look for
  *  @param[out] data Pointer to the data-pointer to update when item is found
- *  @return Length of found @p data or 0 if not found
+ *
+ *  @retval Length of found @p data (may be 0)
+ *  @retval -EINVAL if arguments are invalid
+ *  @retval -ENODATA if not found
  */
-uint8_t bt_audio_codec_cfg_get_val(const struct bt_audio_codec_cfg *codec_cfg,
-				   enum bt_audio_codec_config_type type, const uint8_t **data);
+int bt_audio_codec_cfg_get_val(const struct bt_audio_codec_cfg *codec_cfg,
+			       enum bt_audio_codec_config_type type, const uint8_t **data);
 
 /**
  * @brief Set or add a specific codec configuration value
@@ -806,6 +825,20 @@ uint8_t bt_audio_codec_cfg_get_val(const struct bt_audio_codec_cfg *codec_cfg,
 int bt_audio_codec_cfg_set_val(struct bt_audio_codec_cfg *codec_cfg,
 			       enum bt_audio_codec_config_type type, const uint8_t *data,
 			       size_t data_len);
+
+/**
+ * @brief Unset a specific codec configuration value
+ *
+ * The type and the value will be removed from the codec configuration.
+ *
+ * @param codec_cfg  The codec data to set the value in.
+ * @param type       The type id to unset.
+ *
+ * @retval The data_len of @p codec_cfg on success
+ * @retval -EINVAL if arguments are invalid
+ */
+int bt_audio_codec_cfg_unset_val(struct bt_audio_codec_cfg *codec_cfg,
+				 enum bt_audio_codec_config_type type);
 
 /** @brief Lookup a specific metadata value based on type
  *
@@ -837,6 +870,19 @@ int bt_audio_codec_cfg_meta_set_val(struct bt_audio_codec_cfg *codec_cfg,
 				    enum bt_audio_metadata_type type, const uint8_t *data,
 				    size_t data_len);
 
+/**
+ * @brief Unset a specific codec configuration metadata value
+ *
+ * The type and the value will be removed from the codec configuration metadata.
+ *
+ * @param codec_cfg  The codec data to set the value in.
+ * @param type       The type id to unset.
+ *
+ * @retval The meta_len of @p codec_cfg on success
+ * @retval -EINVAL if arguments are invalid
+ */
+int bt_audio_codec_cfg_meta_unset_val(struct bt_audio_codec_cfg *codec_cfg,
+				      enum bt_audio_metadata_type type);
 /** @brief Extract preferred contexts
  *
  *  See @ref BT_AUDIO_METADATA_TYPE_PREF_CONTEXT for more information about this value.
@@ -1151,10 +1197,12 @@ int bt_audio_codec_cfg_meta_set_vendor(struct bt_audio_codec_cfg *codec_cfg,
  * @param[in]  type The type id to look for
  * @param[out] data Pointer to the data-pointer to update when item is found
  *
- * @return Length of found @p data or 0 if not found
+ *  @retval Length of found @p data (may be 0)
+ *  @retval -EINVAL if arguments are invalid
+ *  @retval -ENODATA if not found
  */
-uint8_t bt_audio_codec_cap_get_val(const struct bt_audio_codec_cap *codec_cap,
-				   enum bt_audio_codec_capability_type type, const uint8_t **data);
+int bt_audio_codec_cap_get_val(const struct bt_audio_codec_cap *codec_cap,
+			       enum bt_audio_codec_capability_type type, const uint8_t **data);
 
 /**
  * @brief Set or add a specific codec capability value
@@ -1171,6 +1219,20 @@ uint8_t bt_audio_codec_cap_get_val(const struct bt_audio_codec_cap *codec_cap,
 int bt_audio_codec_cap_set_val(struct bt_audio_codec_cap *codec_cap,
 			       enum bt_audio_codec_capability_type type, const uint8_t *data,
 			       size_t data_len);
+
+/**
+ * @brief Unset a specific codec capability value
+ *
+ * The type and the value will be removed from the codec capability.
+ *
+ * @param codec_cap  The codec data to set the value in.
+ * @param type       The type id to unset.
+ *
+ * @retval The data_len of @p codec_cap on success
+ * @retval -EINVAL if arguments are invalid
+ */
+int bt_audio_codec_cap_unset_val(struct bt_audio_codec_cap *codec_cap,
+				 enum bt_audio_codec_capability_type type);
 
 /**
  * @brief Extract the frequency from a codec capability.
@@ -1329,6 +1391,20 @@ int bt_audio_codec_cap_meta_get_val(const struct bt_audio_codec_cap *codec_cap, 
 int bt_audio_codec_cap_meta_set_val(struct bt_audio_codec_cap *codec_cap,
 				    enum bt_audio_metadata_type type, const uint8_t *data,
 				    size_t data_len);
+
+/**
+ * @brief Unset a specific codec capability metadata value
+ *
+ * The type and the value will be removed from the codec capability metadata.
+ *
+ * @param codec_cap  The codec data to set the value in.
+ * @param type       The type id to unset.
+ *
+ * @retval The meta_len of @p codec_cap on success
+ * @retval -EINVAL if arguments are invalid
+ */
+int bt_audio_codec_cap_meta_unset_val(struct bt_audio_codec_cap *codec_cap,
+				      enum bt_audio_metadata_type type);
 
 /** @brief Extract preferred contexts
  *

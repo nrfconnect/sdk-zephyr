@@ -31,18 +31,6 @@
 
 LOG_MODULE_REGISTER(bt_bap_stream, CONFIG_BT_BAP_STREAM_LOG_LEVEL);
 
-void bt_audio_codec_cfg_to_iso_path(struct bt_iso_chan_path *path,
-				    struct bt_audio_codec_cfg *codec_cfg)
-{
-	path->pid = codec_cfg->path_id;
-	path->format = codec_cfg->id;
-	path->cid = codec_cfg->cid;
-	path->vid = codec_cfg->vid;
-	path->delay = 0; /* TODO: Add to bt_audio_codec_cfg? Use presentation delay? */
-	path->cc_len = codec_cfg->data_len;
-	path->cc = codec_cfg->data;
-}
-
 #if defined(CONFIG_BT_BAP_UNICAST_CLIENT) || defined(CONFIG_BT_BAP_BROADCAST_SOURCE) ||            \
 	defined(CONFIG_BT_BAP_BROADCAST_SINK)
 void bt_audio_codec_qos_to_iso_qos(struct bt_iso_chan_io_qos *io,
@@ -257,6 +245,7 @@ static bool bt_bap_stream_can_send(const struct bt_bap_stream *stream)
 int bt_bap_stream_send(struct bt_bap_stream *stream, struct net_buf *buf,
 			 uint16_t seq_num, uint32_t ts)
 {
+	int ret;
 	struct bt_bap_ep *ep;
 
 	if (stream == NULL || stream->ep == NULL) {
@@ -277,6 +266,12 @@ int bt_bap_stream_send(struct bt_bap_stream *stream, struct net_buf *buf,
 		return -EBADMSG;
 	}
 
+	ret = bt_iso_chan_send(bt_bap_stream_iso_chan_get(stream),
+			       buf, seq_num, ts);
+	if (ret) {
+		return ret;
+	}
+
 #if defined(CONFIG_BT_BAP_DEBUG_STREAM_SEQ_NUM)
 	if (stream->_prev_seq_num != 0U && seq_num != 0U &&
 	    (stream->_prev_seq_num + 1U) != seq_num) {
@@ -289,8 +284,7 @@ int bt_bap_stream_send(struct bt_bap_stream *stream, struct net_buf *buf,
 
 	/* TODO: Add checks for broadcast sink */
 
-	return bt_iso_chan_send(bt_bap_stream_iso_chan_get(stream),
-				buf, seq_num, ts);
+	return ret;
 }
 
 int bt_bap_stream_get_tx_sync(struct bt_bap_stream *stream, struct bt_iso_tx_info *info)
@@ -406,20 +400,25 @@ void bt_bap_stream_detach(struct bt_bap_stream *stream)
 	stream->ep = NULL;
 
 	if (!is_broadcast) {
-		bt_bap_stream_disconnect(stream);
+		const int err = bt_bap_stream_disconnect(stream);
+
+		if (err != 0) {
+			LOG_DBG("Failed to disconnect stream %p: %d", stream, err);
+		}
 	}
 }
 
 int bt_bap_stream_disconnect(struct bt_bap_stream *stream)
 {
-	struct bt_iso_chan *iso_chan = bt_bap_stream_iso_chan_get(stream);
+	struct bt_iso_chan *iso_chan;
 
-	LOG_DBG("stream %p iso %p", stream, iso_chan);
+	LOG_DBG("stream %p", stream);
 
 	if (stream == NULL) {
 		return -EINVAL;
 	}
 
+	iso_chan = bt_bap_stream_iso_chan_get(stream);
 	if (iso_chan == NULL || iso_chan->iso == NULL) {
 		return -ENOTCONN;
 	}

@@ -17,6 +17,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/bluetooth/buf.h>
 
 #include <zephyr/logging/log.h>
@@ -32,6 +33,8 @@ LOG_MODULE_REGISTER(bt_bap_scan_delegator, CONFIG_BT_BAP_SCAN_DELEGATOR_LOG_LEVE
 
 #define PAST_TIMEOUT              K_SECONDS(10)
 
+#define SCAN_DELEGATOR_BUF_SEM_TIMEOUT K_MSEC(CONFIG_BT_BAP_SCAN_DELEGATOR_BUF_TIMEOUT)
+static K_SEM_DEFINE(read_buf_sem, 1, 1);
 NET_BUF_SIMPLE_DEFINE_STATIC(read_buf, BT_ATT_MAX_ATTRIBUTE_LEN);
 
 enum bass_recv_state_internal_flag {
@@ -137,11 +140,29 @@ static void bt_debug_dump_recv_state(const struct bass_recv_state_internal *recv
 	}
 }
 
-static void bass_notify_receive_state(const struct bass_recv_state_internal *internal_state)
+static void bass_notify_receive_state(struct bt_conn *conn,
+				      const struct bass_recv_state_internal *internal_state)
 {
-	int err = bt_gatt_notify_uuid(NULL, BT_UUID_BASS_RECV_STATE,
-				      internal_state->attr, read_buf.data,
-				      read_buf.len);
+	const uint8_t att_ntf_header_size = 3; /* opcode (1) + handle (2) */
+	uint16_t max_ntf_size;
+	uint16_t ntf_size;
+	int err;
+
+	if (conn != NULL) {
+		max_ntf_size = bt_gatt_get_mtu(conn) - att_ntf_header_size;
+	} else {
+		max_ntf_size = MIN(BT_L2CAP_RX_MTU, BT_L2CAP_TX_MTU) - att_ntf_header_size;
+	}
+
+	ntf_size = MIN(max_ntf_size, read_buf.len);
+	if (ntf_size < read_buf.len) {
+		LOG_DBG("Sending truncated notification (%u/%u)", ntf_size, read_buf.len);
+	}
+
+	LOG_DBG("Sending bytes %d", ntf_size);
+	err = bt_gatt_notify_uuid(NULL, BT_UUID_BASS_RECV_STATE,
+				  internal_state->attr, read_buf.data,
+				  ntf_size);
 
 	if (err != 0 && err != -ENOTCONN) {
 		LOG_DBG("Could not notify receive state: %d", err);
@@ -158,6 +179,7 @@ static void net_buf_put_recv_state(const struct bass_recv_state_internal *recv_s
 
 	if (!recv_state->active) {
 		/* Notify empty */
+
 		return;
 	}
 
@@ -177,7 +199,7 @@ static void net_buf_put_recv_state(const struct bass_recv_state_internal *recv_s
 	for (int i = 0; i < state->num_subgroups; i++) {
 		const struct bt_bap_scan_delegator_subgroup *subgroup = &state->subgroups[i];
 
-		(void)net_buf_simple_add_le32(&read_buf, subgroup->bis_sync);
+		(void)net_buf_simple_add_le32(&read_buf, subgroup->bis_sync >> 1);
 		(void)net_buf_simple_add_u8(&read_buf, subgroup->metadata_len);
 		(void)net_buf_simple_add_mem(&read_buf, subgroup->metadata,
 					     subgroup->metadata_len);
@@ -187,21 +209,31 @@ static void net_buf_put_recv_state(const struct bass_recv_state_internal *recv_s
 static void receive_state_updated(struct bt_conn *conn,
 				  const struct bass_recv_state_internal *internal_state)
 {
+	int err;
+
 	/* If something is holding the NOTIFY_PEND flag we should not notify now */
 	if (atomic_test_bit(internal_state->flags,
 			    BASS_RECV_STATE_INTERNAL_FLAG_NOTIFY_PEND)) {
 		return;
 	}
 
+	err = k_sem_take(&read_buf_sem, SCAN_DELEGATOR_BUF_SEM_TIMEOUT);
+	if (err != 0) {
+		LOG_DBG("Failed to take read_buf_sem: %d", err);
+
+		return;
+	}
+
 	bt_debug_dump_recv_state(internal_state);
 	net_buf_put_recv_state(internal_state);
-	bass_notify_receive_state(internal_state);
-
+	bass_notify_receive_state(conn, internal_state);
 	if (scan_delegator_cbs != NULL &&
 	    scan_delegator_cbs->recv_state_updated != NULL) {
 		scan_delegator_cbs->recv_state_updated(conn,
 						       &internal_state->state);
 	}
+
+	k_sem_give(&read_buf_sem);
 }
 
 static void bis_sync_request_updated(struct bt_conn *conn,
@@ -254,11 +286,21 @@ static void scan_delegator_security_changed(struct bt_conn *conn,
 			continue;
 		}
 
+		err = k_sem_take(&read_buf_sem, SCAN_DELEGATOR_BUF_SEM_TIMEOUT);
+		if (err != 0) {
+			LOG_DBG("Failed to take read_buf_sem: %d", err);
+
+			return;
+		}
+
 		net_buf_put_recv_state(internal_state);
 
 		gatt_err = bt_gatt_notify_uuid(conn, BT_UUID_BASS_RECV_STATE,
 					       internal_state->attr, read_buf.data,
 					       read_buf.len);
+
+		k_sem_give(&read_buf_sem);
+
 		if (gatt_err != 0) {
 			LOG_WRN("Could not notify receive state[%d] to reconnecting assistant: %d",
 				i, gatt_err);
@@ -514,6 +556,10 @@ static int scan_delegator_add_source(struct bt_conn *conn,
 		}
 
 		internal_state->requested_bis_sync[i] = net_buf_simple_pull_le32(buf);
+		if (internal_state->requested_bis_sync[i] != BT_BAP_BIS_SYNC_NO_PREF) {
+			/* Received BIS Index bitfield uses BIT(0) for BIS Index 1 */
+			internal_state->requested_bis_sync[i] <<= 1;
+		}
 
 		if (internal_state->requested_bis_sync[i] &&
 		    pa_sync == BT_BAP_BASS_PA_REQ_NO_SYNC) {
@@ -581,10 +627,10 @@ static int scan_delegator_add_source(struct bt_conn *conn,
 		if (err != 0) {
 			(void)memset(state, 0, sizeof(*state));
 
-			LOG_DBG("PA sync %u from %p was reject with reason %d",
-				pa_sync, conn, err);
+			LOG_DBG("PA sync %u from %p was rejected with reason %d", pa_sync, conn,
+				err);
 
-			return err;
+			return BT_GATT_ERR(BT_ATT_ERR_WRITE_REQ_REJECTED);
 		}
 	}
 
@@ -670,6 +716,11 @@ static int scan_delegator_mod_src(struct bt_conn *conn,
 		old_bis_sync_req = internal_state->requested_bis_sync[i];
 
 		internal_state->requested_bis_sync[i] = net_buf_simple_pull_le32(buf);
+		if (internal_state->requested_bis_sync[i] != BT_BAP_BIS_SYNC_NO_PREF) {
+			/* Received BIS Index bitfield uses BIT(0) for BIS Index 1 */
+			internal_state->requested_bis_sync[i] <<= 1;
+		}
+
 		if (internal_state->requested_bis_sync[i] &&
 		    pa_sync == BT_BAP_BASS_PA_REQ_NO_SYNC) {
 			LOG_DBG("Cannot sync to BIS without PA");
@@ -756,7 +807,7 @@ static int scan_delegator_mod_src(struct bt_conn *conn,
 	 * we are not already synced to the device
 	 */
 	if (pa_sync != BT_BAP_BASS_PA_REQ_NO_SYNC &&
-	    (state_changed || state->pa_sync_state != BT_BAP_PA_STATE_SYNCED)) {
+	    state->pa_sync_state != BT_BAP_PA_STATE_SYNCED) {
 		const int err = pa_sync_request(conn, state, pa_sync,
 						pa_interval);
 
@@ -765,10 +816,10 @@ static int scan_delegator_mod_src(struct bt_conn *conn,
 			(void)memcpy(state, &backup_state,
 				     sizeof(backup_state));
 
-			LOG_DBG("PA sync %u from %p was reject with reason %d",
-				pa_sync, conn, err);
+			LOG_DBG("PA sync %u from %p was rejected with reason %d", pa_sync, conn,
+				err);
 
-			return err;
+			return BT_GATT_ERR(BT_ATT_ERR_WRITE_REQ_REJECTED);
 		}
 	} else if (pa_sync == BT_BAP_BASS_PA_REQ_NO_SYNC &&
 		   (state->pa_sync_state == BT_BAP_PA_STATE_INFO_REQ ||
@@ -777,10 +828,9 @@ static int scan_delegator_mod_src(struct bt_conn *conn,
 		const int err = pa_sync_term_request(conn, &internal_state->state);
 
 		if (err != 0) {
-			LOG_DBG("PA sync term from %p was reject with reason %d",
-				conn, err);
+			LOG_DBG("PA sync term from %p was rejected with reason %d", conn, err);
 
-			return err;
+			return BT_GATT_ERR(BT_ATT_ERR_WRITE_REQ_REJECTED);
 		}
 
 		state_changed = true;
@@ -870,10 +920,9 @@ static int scan_delegator_rem_src(struct bt_conn *conn,
 		/* Terminate PA sync */
 		err = pa_sync_term_request(conn, &internal_state->state);
 		if (err != 0) {
-			LOG_DBG("PA sync term from %p was reject with reason %d",
-				conn, err);
+			LOG_DBG("PA sync term from %p was rejected with reason %d", conn, err);
 
-			return err;
+			return BT_GATT_ERR(BT_ATT_ERR_WRITE_REQ_REJECTED);
 		}
 	}
 
@@ -1018,14 +1067,27 @@ static ssize_t read_recv_state(struct bt_conn *conn,
 	struct bt_bap_scan_delegator_recv_state *state = &recv_state->state;
 
 	if (recv_state->active) {
+		ssize_t ret_val;
+		int err;
+
 		LOG_DBG("Index %u: Source ID 0x%02x", idx, state->src_id);
 
-		bt_debug_dump_recv_state(recv_state);
+		err = k_sem_take(&read_buf_sem, SCAN_DELEGATOR_BUF_SEM_TIMEOUT);
+		if (err != 0) {
+			LOG_DBG("Failed to take read_buf_sem: %d", err);
 
+			return err;
+		}
+
+		bt_debug_dump_recv_state(recv_state);
 		net_buf_put_recv_state(recv_state);
 
-		return bt_gatt_attr_read(conn, attr, buf, len, offset,
-					 read_buf.data, read_buf.len);
+		ret_val = bt_gatt_attr_read(conn, attr, buf, len, offset,
+					    read_buf.data, read_buf.len);
+
+		k_sem_give(&read_buf_sem);
+
+		return ret_val;
 	} else {
 		LOG_DBG("Index %u: Not active", idx);
 

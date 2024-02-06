@@ -469,6 +469,18 @@ static inline bool i2c_is_ready_dt(const struct i2c_dt_spec *spec)
 }
 
 /**
+ * @brief Check if the current message is a read operation
+ *
+ * @param msg The message to check
+ * @return true if the I2C message is sa read operation
+ * @return false if the I2C message is a write operation
+ */
+static inline bool i2c_is_read_op(struct i2c_msg *msg)
+{
+	return (msg->flags & I2C_MSG_READ) == I2C_MSG_READ;
+}
+
+/**
  * @brief Dump out an I2C message
  *
  * Dumps out a list of I2C messages. For any that are writes (W), the data is
@@ -972,7 +984,7 @@ static inline int i2c_transfer_signal(const struct device *dev,
  */
 static inline void i2c_iodev_submit(struct rtio_iodev_sqe *iodev_sqe)
 {
-	const struct i2c_dt_spec *dt_spec = iodev_sqe->sqe->iodev->data;
+	const struct i2c_dt_spec *dt_spec = (const struct i2c_dt_spec *)iodev_sqe->sqe.iodev->data;
 	const struct device *dev = dt_spec->bus;
 	const struct i2c_driver_api *api = (const struct i2c_driver_api *)dev->api;
 

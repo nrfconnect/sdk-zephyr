@@ -37,6 +37,8 @@ Architectures
 
 * Xtensa
 
+  * Removed the unused Kconfig option ``CONFIG_XTENSA_NO_IPC``.
+
 * x86
 
 * POSIX
@@ -50,7 +52,17 @@ Bluetooth
 
 * Host
 
+  * Added ``recycled()`` callback to :c:struct:`bt_conn_cb`, which notifies listeners when a
+    connection object has been freed, so it can be utilized for different purposes. No guarantees
+    are made to what listener will be granted the object, as only the first claim is served.
+
 * Mesh
+
+  * Added the delayable messages functionality to apply random delays for
+    the transmitted responses on the Access layer.
+    The functionality is enabled by the :kconfig:option:`CONFIG_BT_MESH_ACCESS_DELAYABLE_MSG`
+    Kconfig option.
+  * The Bluetooth Mesh Protocol 1.1 is now supported by default.
 
 * Controller
 
@@ -59,13 +71,20 @@ Boards & SoC Support
 
 * Added support for these SoC series:
 
+  * Added support for Renesas R-Car Gen4 series
+
 * Removed support for these SoC series:
 
 * Made these changes in other SoC series:
 
+  * Nordic SoCs now imply :kconfig:option:`CONFIG_XIP` instead of selecting it, this allows for
+    creating RAM-based applications by disabling it.
+
 * Added support for these ARC boards:
 
 * Added support for these ARM boards:
+
+  * Added support for Renesas R-Car Spider board CR52: ``rcar_spider_cr52``
 
 * Added support for these ARM64 boards:
 
@@ -89,7 +108,27 @@ Boards & SoC Support
 
 * Made these changes for Xtensa boards:
 
-* Made these changes for POSIX boards:
+* Made these changes for native/POSIX boards:
+
+  * The :ref:`simulated nrf5340 targets<nrf5340bsim>` now include the IPC and MUTEX peripherals,
+    and support OpenAMP to communicate between the cores.
+    It is now possible to run the BLE controller or 802.15.4 driver in the net core, and application
+    and BT host in the app core.
+
+  * The nrf*_bsim simulated targets now include models of the UART peripheral. It is now possible
+    to connect a :ref:`nrf52_bsim<nrf52_bsim>` UART to another, or a UART in loopback, utilizing
+    both the new and legacy nRFx UART drivers, in any mode.
+
+  * For the native simulator based targets it is now possible to set via Kconfig command line
+    options which will be handled by the executable as if they were provided from the invoking
+    shell.
+
+  * For all native boards boards, the native logger backend will also be used even if the UART is
+    enabled.
+
+  * Several bugfixes and other minor additions to the nRF5x HW models.
+
+  * Multiple documentation updates and fixes for all native boards.
 
 * Removed support for these ARC boards:
 
@@ -110,7 +149,41 @@ Boards & SoC Support
 Build system and infrastructure
 *******************************
 
-- Dropped the ``COMPAT_INCLUDES`` option, it was unused since 3.0.
+* Dropped the ``COMPAT_INCLUDES`` option, it was unused since 3.0.
+
+* Fixed an issue whereby board revision ``0`` did not include overlay files for that revision.
+
+* Added ``PRE_IMAGE_CMAKE`` and ``POST_IMAGE_CMAKE`` hooks to sysbuild modules, which allows for
+  modules to run code after and before each image's cmake invocation.
+
+* Added :kconfig:option:`CONFIG_ROM_END_OFFSET` option which allows reducing the size of an image,
+  this is intended for use with firmware signing scripts which add additional data to the end of
+  images outside of the build itself.
+
+* Added MCUboot image size reduction to sysbuild images which include MCUboot which prevents
+  issues with building firmware images that are too large for MCUboot to swap.
+
+* Deprecated :kconfig:option:`CONFIG_BOOTLOADER_SRAM_SIZE`, users of this should transition to
+  having RAM set up properly in their board devicetree files.
+
+* Fixed an issue whereby shields were processed in order of the root they resided in rather than
+  the order they were supplied to cmake in.
+
+* Fixed an issue whereby using some shields with sysbuild would cause a cmake Kconfig error.
+
+* Fixed an issue where the macros ``_POSIX_C_SOURCE`` and ``_XOPEN_SOURCE`` would be defined
+  globally when building with Picolibc or for the native (``ARCH_POSIX``) targets.
+  After this change users may need to define them for their own applications or libraries if they
+  require them.
+
+* Added support for sysbuild setting a signing script (``SIGNING_SCRIPT``), see
+  :ref:`west-extending-signing` for details.
+
+* Added support for ``FILE_SUFFIX`` in the build system which allows for adding suffixes to
+  application Kconfig fragment file names and devicetree overlay file names, see
+  :ref:`application-file-suffixes` and :ref:`sysbuild_file_suffixes` for details.
+
+* Deprecated ``CONF_FILE`` ``prj_<build>.conf`` build type.
 
 Drivers and Sensors
 *******************
@@ -119,9 +192,24 @@ Drivers and Sensors
 
 * CAN
 
+  * Added system call :c:func:`can_get_mode()` for getting the current operation mode of a CAN
+    controller.
+
+  * Add system call :c:func:`can_get_transceiver()` for getting the CAN transceiver associated with
+    a CAN controller.
+
+  * The "native linux" driver now supports being built with embedded C libraries.
+
 * Clock control
 
+  * Renesas R-Car clock control driver now supports Gen4 SoCs
+  * Renamed ``CONFIG_CLOCK_CONTROL_RA`` to :kconfig:option:`CONFIG_CLOCK_CONTROL_RENESAS_RA`
+
 * Counter
+
+  * The nRFx counter driver now works with simulated nrf*_bsim targets.
+
+  * counter_native_posix driver: Added support for top value configuration, and a bugfix.
 
 * DAC
 
@@ -135,11 +223,23 @@ Drivers and Sensors
 
 * Entropy
 
+  * The "native_posix" entropy driver now accepts a new command line option ``seed-random``.
+    When used, the random generator will be seeded from ``/dev/urandom``
+
 * Ethernet
+
+  * The "native_posix" ethernet driver now supports being built with embedded C libraries.
 
 * Flash
 
+  * ``spi_nor`` driver now sleeps between polls in ``spi_nor_wait_until_ready``. If this is not
+    desired (For example due to ROM constraints in a bootloader),
+    :kconfig:option:`CONFIG_SPI_NOR_SLEEP_WHILE_WAITING_UNTIL_READY` can be disabled.
+
 * GPIO
+
+  * Renesas R-Car GPIO driver now supports Gen4 SoCs
+  * Renamed ``CONFIG_GPIO_RA`` to :kconfig:option:`CONFIG_GPIO_RENESAS_RA`
 
 * I2C
 
@@ -147,7 +247,12 @@ Drivers and Sensors
 
 * I3C
 
+  * The Legacy Virtual Register defines have been renamed from ``I3C_DCR_I2C_*``
+    to ``I3C_LVR_I2C_*``.
+
 * IEEE 802.15.4
+
+  * Removed :kconfig:option:`CONFIG_IEEE802154_SELECTIVE_TXPOWER` Kconfig option.
 
 * Interrupt Controller
 
@@ -159,6 +264,9 @@ Drivers and Sensors
 
 * Pin control
 
+  * Renesas R-Car pinctrl driver now supports Gen4 SoCs
+  * Renamed ``CONFIG_PINCTRL_RA`` to :kconfig:option:`CONFIG_PINCTRL_RENESAS_RA`
+
 * PWM
 
 * Regulators
@@ -167,6 +275,10 @@ Drivers and Sensors
 
 * Retained memory
 
+  * Retained memory driver backend for registers has been added.
+
+  * Retained memory API status changed from experimental to unstable.
+
 * RTC
 
 * SDHC
@@ -174,6 +286,8 @@ Drivers and Sensors
 * Sensor
 
 * Serial
+
+  * Renamed ``CONFIG_UART_RA`` to :kconfig:option:`CONFIG_UART_RENESAS_RA`
 
 * SPI
 
@@ -187,6 +301,13 @@ Networking
 **********
 
 * CoAP:
+
+  * Emit observer/service network events using the Network Event subsystem.
+
+  * Added new API functions:
+
+    * :c:func:`coap_get_transmission_parameters`
+    * :c:func:`coap_set_transmission_parameters`
 
 * Connection Manager:
 
@@ -204,6 +325,16 @@ Networking
 
 * Misc:
 
+  * It is now possible to have separate IPv4 TTL value and IPv6 hop limit value for
+    unicast and multicast packets. This can be controlled in each socket via
+    :c:func:`setsockopt` API.
+
+  * Added support for compile time network event handlers using the macro
+    :c:macro:`NET_MGMT_REGISTER_EVENT_HANDLER`.
+
+  * The :kconfig:option:`CONFIG_NET_MGMT_EVENT_WORKER` choice is added to
+    allow emitting network events using the system work queue or synchronously.
+
 * MQTT-SN:
 
 * OpenThread:
@@ -211,6 +342,9 @@ Networking
 * PPP:
 
 * Sockets:
+
+  * Added support for IPv4 multicast ``IP_ADD_MEMBERSHIP`` and ``IP_DROP_MEMBERSHIP`` socket options.
+  * Added support for IPv6 multicast ``IPV6_ADD_MEMBERSHIP`` and ``IPV6_DROP_MEMBERSHIP`` socket options.
 
 * TCP:
 
@@ -250,6 +384,15 @@ Libraries / Subsystems
   * Implemented datetime functionality in MCUmgr OS management group, this makes use of the RTC
     driver API.
 
+  * Fixed an issue in MCUmgr console UART input whereby the FIFO would be read outside of an ISR,
+    which is not supported in the next USB stack.
+
+  * Fixed an issue whereby the ``mcuboot erase`` DFU shell command could be used to erase the
+    MCUboot or currently running application slot.
+
+  * Fixed an issue whereby messages that were too large to be sent over the UDP transport would
+    wrongly return :c:enum:`MGMT_ERR_EINVAL` instead of :c:enum:`MGMT_ERR_EMSGSIZE`.
+
 * File systems
 
 * Modem modules
@@ -259,6 +402,17 @@ Libraries / Subsystems
 * Random
 
 * Retention
+
+  * Fixed issue whereby :kconfig:option:`CONFIG_RETENTION_BUFFER_SIZE` values over 256 would cause
+    an infinite loop due to use of 8-bit variables.
+
+* Storage
+
+  * File systems: LittleFS module has been updated to version 2.8.1.
+
+  * Following Flash Map API macros, marked in 3.2 as deprecated, have been removed:
+    ``FLASH_AREA_ID``, ``FLASH_AREA_OFFSET``, ``FLASH_AREA_SIZE``,
+    ``FLASH_AREA_LABEL_EXISTS`` and ``FLASH_AREA_DEVICE``.
 
 * Binary descriptors
 
@@ -272,6 +426,11 @@ Libraries / Subsystems
 
 * ZBus
 
+  * Renamed :kconfig:option:`ZBUS_MSG_SUBSCRIBER_NET_BUF_DYNAMIC` and
+    :kconfig:option:`ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC`
+    with :kconfig:option:`ZBUS_MSG_SUBSCRIBER_BUF_ALLOC_DYNAMIC` and
+    :kconfig:option:`ZBUS_MSG_SUBSCRIBER_BUF_ALLOC_STATIC`
+
 HALs
 ****
 
@@ -280,6 +439,21 @@ MCUboot
 
 Nanopb
 ******
+
+zcbor
+*****
+
+zcbor has been updated from 0.7.0 to 0.8.1.
+Full release notes can be found at:
+https://github.com/zephyrproject-rtos/zcbor/blob/0.8.0/RELEASE_NOTES.md and
+https://github.com/zephyrproject-rtos/zcbor/blob/0.8.1/RELEASE_NOTES.md
+
+Highlights:
+
+* Add support for unordered maps
+* Performance improvements
+* Naming improvements for generated code
+* Bugfixes
 
 LVGL
 ****
@@ -292,6 +466,20 @@ Documentation
 
 Tests and Samples
 *****************
+
+* :ref:`native_sim<native_sim>` has replaced :ref:`native_posix<native_posix>` as the default
+  test platform.
+  :ref:`native_posix<native_posix>` remains supported and used in testing but will be deprecated
+  in a future release.
+
+* Bluetooth split stacks tests, where the BT host and controller are run in separate MCUs, are
+  now run in CI based on the :ref:`nrf5340_bsim<nrf5340bsim>` targets.
+  Several other runtime AMP tests based on these targets have been added to CI, including tests
+  of OpenAMP, the mbox and IPC drivers/subsystem, and the logger multidomain functionality.
+
+* Runtime UART tests have been added to CI based on the :ref:`nrf52_bsim<nrf52_bsim>` target.
+  These include tests of the nRFx UART driver and networked BT stack tests with the host and
+  controller in separate devices communicating over the HCI UART driver.
 
 * Fixed an issue in :zephyr:code-sample:`smp-svr` sample whereby if USB was already initialised,
   application would fail to boot properly.
