@@ -254,8 +254,6 @@ static int nrf5_cca(const struct device *dev)
 {
 	struct nrf5_802154_data *nrf5_radio = NRF5_802154_DATA(dev);
 
-	nrf_802154_channel_set(nrf5_data.channel);
-
 	if (!nrf_802154_cca()) {
 		LOG_DBG("CCA failed");
 		return -EBUSY;
@@ -281,7 +279,7 @@ static int nrf5_set_channel(const struct device *dev, uint16_t channel)
 		return channel < 11 ? -ENOTSUP : -EINVAL;
 	}
 
-	nrf5_data.channel = channel;
+	nrf_802154_channel_set(channel);
 
 	return 0;
 }
@@ -293,8 +291,6 @@ static int nrf5_energy_scan_start(const struct device *dev,
 	int err = 0;
 
 	ARG_UNUSED(dev);
-
-	nrf_802154_channel_set(nrf5_data.channel);
 
 	if (nrf5_data.energy_scan_done == NULL) {
 		nrf5_data.energy_scan_done = done_cb;
@@ -461,10 +457,6 @@ static bool nrf5_tx_immediate(struct net_pkt *pkt, uint8_t *payload, bool cca)
 			.use_metadata_value = true,
 			.power = nrf5_data.txpwr,
 		},
-		.tx_channel = {
-			.use_metadata_value = true,
-			.channel = nrf5_data.channel,
-		},
 	};
 
 	return nrf_802154_transmit_raw(payload, &metadata);
@@ -481,10 +473,6 @@ static bool nrf5_tx_csma_ca(struct net_pkt *pkt, uint8_t *payload)
 		.tx_power = {
 			.use_metadata_value = true,
 			.power = nrf5_data.txpwr,
-		},
-		.tx_channel = {
-			.use_metadata_value = true,
-			.channel = nrf5_data.channel,
 		},
 	};
 
@@ -525,7 +513,7 @@ static bool nrf5_tx_at(struct nrf5_802154_data *nrf5_radio, struct net_pkt *pkt,
 			.dynamic_data_is_set = net_pkt_ieee802154_mac_hdr_rdy(pkt),
 		},
 		.cca = cca,
-		.channel = nrf5_data.channel,
+		.channel = nrf_802154_channel_get(),
 		.tx_power = {
 			.use_metadata_value = true,
 			.power = nrf5_data.txpwr,
@@ -667,7 +655,6 @@ static int nrf5_start(const struct device *dev)
 	ARG_UNUSED(dev);
 
 	nrf_802154_tx_power_set(nrf5_data.txpwr);
-	nrf_802154_channel_set(nrf5_data.channel);
 
 	if (!nrf_802154_receive()) {
 		LOG_ERR("Failed to enter receive state");
@@ -712,7 +699,6 @@ static int nrf5_continuous_carrier(const struct device *dev)
 	ARG_UNUSED(dev);
 
 	nrf_802154_tx_power_set(nrf5_data.txpwr);
-	nrf_802154_channel_set(nrf5_data.channel);
 
 	if (!nrf_802154_continuous_carrier()) {
 		LOG_ERR("Failed to enter continuous carrier state");
