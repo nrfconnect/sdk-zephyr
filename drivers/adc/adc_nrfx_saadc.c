@@ -8,6 +8,7 @@
 #include "adc_context.h"
 #include <nrfx_saadc.h>
 #include <zephyr/dt-bindings/adc/nrf-adc.h>
+#include <zephyr/linker/devicetree_regions.h>
 
 #define LOG_LEVEL CONFIG_ADC_LOG_LEVEL
 #include <zephyr/logging/log.h>
@@ -49,16 +50,43 @@ BUILD_ASSERT((NRF_SAADC_AIN0 == NRF_SAADC_INPUT_AIN0) &&
 	     "Definitions from nrf-adc.h do not match those from nrf_saadc.h");
 #endif
 
+#ifdef CONFIG_SOC_NRF54H20
+
+/* Haltium always uses bounce buffers in RAM */
+
+#define SAADC_MEMORY_SECTION					                     \
+	COND_CODE_1(DT_NODE_HAS_PROP(DT_NODELABEL(adc), memory_regions), \
+		(__attribute__((__section__(LINKER_DT_NODE_REGION_NAME(	     \
+			DT_PHANDLE(DT_NODELABEL(adc), memory_regions)))))),	     \
+		())
+
+#define SAADC_BUFFER_SIZE SAADC_CH_NUM
+
+static uint8_t adc_samples_buffer[SAADC_BUFFER_SIZE] SAADC_MEMORY_SECTION;
+
+#define ADC_BUFFER_IN_RAM 1
+
+#endif /* CONFIG_SOC_NRF54H20 */
+
 struct driver_data {
 	struct adc_context ctx;
 
 	uint8_t positive_inputs[SAADC_CH_NUM];
+
+#if ADC_BUFFER_IN_RAM
+	void *samples_buffer;
+	void *user_buffer;
+#endif
 };
 
 static struct driver_data m_data = {
 	ADC_CONTEXT_INIT_TIMER(m_data, ctx),
 	ADC_CONTEXT_INIT_LOCK(m_data, ctx),
 	ADC_CONTEXT_INIT_SYNC(m_data, ctx),
+#if ADC_BUFFER_IN_RAM
+	.samples_buffer = adc_samples_buffer,
+	.user_buffer = NULL,
+#endif
 };
 
 /* Helper function to convert acquisition time to register TACQ value. */
@@ -454,13 +482,34 @@ static int start_read(const struct device *dev,
 		return error;
 	}
 
+#if ADC_BUFFER_IN_RAM
+	m_data.user_buffer = sequence->buffer;
+
+	nrf_saadc_buffer_init(NRF_SAADC,
+			      (nrf_saadc_value_t *)m_data.samples_buffer,
+			      active_channels);
+#else
 	nrf_saadc_buffer_init(NRF_SAADC,
 			      (nrf_saadc_value_t *)sequence->buffer,
 			      active_channels);
+#endif
 
 	adc_context_start_read(&m_data.ctx, sequence);
 
 	error = adc_context_wait_for_completion(&m_data.ctx);
+
+#if ADC_BUFFER_IN_RAM
+	if (!error)
+	{
+#ifdef CONFIG_ADC_ASYNC
+		if (!m_data.ctx.asynchronous)
+#endif
+		{
+			memcpy(m_data.user_buffer, m_data.samples_buffer, sequence->buffer_size);
+		}
+	}
+#endif
+
 	return error;
 }
 
@@ -500,6 +549,10 @@ static void saadc_irq_handler(const struct device *dev)
 
 		nrf_saadc_task_trigger(NRF_SAADC, NRF_SAADC_TASK_STOP);
 		nrf_saadc_disable(NRF_SAADC);
+
+#if ADC_BUFFER_IN_RAM
+		memcpy(m_data.user_buffer, m_data.samples_buffer, m_data.ctx.sequence.buffer_size);
+#endif
 
 		adc_context_on_sampling_done(&m_data.ctx, dev);
 	} else if (nrf_saadc_event_check(NRF_SAADC,
