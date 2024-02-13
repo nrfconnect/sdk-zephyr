@@ -265,6 +265,14 @@
 				current-speed = <115200>;
 				interrupts = <469 NRF_DEFAULT_IRQ_PRIORITY>;
 			};
+
+			adc: adc@982000 {
+				compatible = "nordic,nrf-saadc";
+				reg = <0x982000 0x1000>;
+				interrupts = <386 NRF_DEFAULT_IRQ_PRIORITY>;
+				status = "disabled";
+				#io-channel-cells = <1>;
+			};
 		};
 	};
 
