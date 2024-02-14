@@ -60,3 +60,9 @@ test_gsm_ppp: gsm_ppp {
 test_esp_at: esp_at {
 	compatible = "espressif,esp-at";
 };
+
+test_nordic_nrf91_slm: nordic_nrf91_slm {
+	compatible = "nordic,nrf91-slm";
+
+	mdm-power-gpios = <&test_gpio 0 0>;
+};
