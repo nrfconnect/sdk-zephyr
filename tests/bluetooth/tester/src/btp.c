@@ -299,7 +299,7 @@ static void tester_rsp_with_index(uint8_t service, uint8_t opcode, uint8_t index
 	}
 
 	s.code = status;
-	tester_send_with_index(service, BTP_STATUS, index, (uint8_t *) &s, sizeof(s));
+	tester_send_with_index(service, BTP_STATUS, index, (uint8_t *) &s, status);
 }
 
 void tester_event(uint8_t service, uint8_t opcode, const void *data, size_t len)

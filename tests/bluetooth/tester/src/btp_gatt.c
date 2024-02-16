@@ -124,7 +124,8 @@ static void *gatt_buf_add(const void *data, size_t len)
 	void *ptr = gatt_buf.buf + gatt_buf.len;
 
 	if ((len + gatt_buf.len) > MAX_BUFFER_SIZE) {
-		return NULL;
+		gatt_buf.len = 0;
+		ptr = gatt_buf.buf;
 	}
 
 	if (data) {
@@ -1467,7 +1468,7 @@ static uint8_t read_cb(struct bt_conn *conn, uint8_t err,
 	}
 
 	if (!gatt_buf_add(data, length)) {
-		tester_rsp(BTP_SERVICE_ID_GATT, btp_opcode, BTP_STATUS_FAILED);
+		tester_rsp(BTP_SERVICE_ID_GATT, btp_opcode, 0x06);
 		read_destroy(params);
 		return BT_GATT_ITER_STOP;
 	}
@@ -2593,6 +2594,7 @@ static const struct btp_handler handlers[] = {
 
 uint8_t tester_init_gatt(void)
 {
+	gatt_buf_clear();
 	server_buf = net_buf_alloc(&server_pool, K_NO_WAIT);
 	if (!server_buf) {
 		return BTP_STATUS_FAILED;
