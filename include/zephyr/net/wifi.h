@@ -30,6 +30,21 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+/**
+ * @brief - Wi-Fi rate flags
+ */
+enum wifi_rate_flags {
+	/* Legacy */
+	LEGACY = 0,
+	/* High Throuput (11n) */
+	FORMAT_11N,
+	/* Very hight throughput(11ac) */
+	FORMAT_VHT,
+	/* HE SU */
+	HE_SU,
+	/** HE ER SU */
+	HE_ER_SU
+};
 
 /** IEEE 802.11 security types. */
 enum wifi_security_type {
