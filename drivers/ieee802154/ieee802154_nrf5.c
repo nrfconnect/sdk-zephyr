@@ -415,6 +415,11 @@ static int handle_ack(struct nrf5_802154_data *nrf5_radio)
 	net_pkt_set_ieee802154_rssi_dbm(ack_pkt, nrf5_radio->ack_frame.rssi);
 
 #if defined(CONFIG_NET_PKT_TIMESTAMP)
+	if (nrf5_radio->ack_frame.time == NRF_802154_NO_TIMESTAMP) {
+		LOG_WRN("Invalid ACK timestamp.");
+		err = -ENOMSG;
+		goto free_net_ack;
+	}
 	net_pkt_set_timestamp_ns(ack_pkt, nrf5_radio->ack_frame.time * NSEC_PER_USEC);
 #endif
 
@@ -1130,8 +1135,12 @@ void nrf_802154_transmitted_raw(uint8_t *frame,
 		nrf5_data.ack_frame.lqi = metadata->data.transmitted.lqi;
 
 #if defined(CONFIG_NET_PKT_TIMESTAMP)
-		nrf5_data.ack_frame.time = nrf_802154_timestamp_end_to_phr_convert(
-			metadata->data.transmitted.time, nrf5_data.ack_frame.psdu[0]);
+		if (metadata->data.transmitted.time == NRF_802154_NO_TIMESTAMP) {
+			nrf5_data.ack_frame.time = NRF_802154_NO_TIMESTAMP;
+		} else {
+			nrf5_data.ack_frame.time = nrf_802154_timestamp_end_to_phr_convert(
+				metadata->data.transmitted.time, nrf5_data.ack_frame.psdu[0]);
+		}
 #endif
 	}
 
