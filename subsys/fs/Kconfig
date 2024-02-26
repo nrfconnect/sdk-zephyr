@@ -99,5 +99,6 @@ endif # FILE_SYSTEM
 
 rsource "fcb/Kconfig"
 rsource "nvs/Kconfig"
+rsource "zms/Kconfig"
 
 endmenu
