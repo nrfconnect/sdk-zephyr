@@ -16,7 +16,8 @@ set(TFM_VALID_PARTITIONS
   )
 
 # List of all crypto modules that can be enabled/disabled
-# Corresponds to the *_MODULE_DISABLED configs in 'trusted-firmware-m/secure_fw/partitions/crypto/Kconfig'
+# Corresponds to the *_MODULE_ENABLED configs in
+# 'trusted-firmware-m/secure_fw/partitions/crypto/Kconfig.comp'
 set(TFM_CRYPTO_MODULES
   CRYPTO_RNG_MODULE
   CRYPTO_KEY_MODULE
@@ -146,14 +147,6 @@ if (CONFIG_BUILD_WITH_TFM)
       set(val "OFF")
     endif()
     list(APPEND TFM_CMAKE_ARGS -D${partition}=${val})
-  endforeach()
-
-  # Enable TFM crypto modules as specified in Kconfig
-  foreach(module ${TFM_CRYPTO_MODULES})
-    if (CONFIG_TFM_${module}_ENABLED)
-      # list(APPEND TFM_ENABLED_CRYPTO_MODULES_ARG ${module})
-      list(APPEND TFM_CMAKE_ARGS -D${module}_ENABLED=True)
-    endif()
   endforeach()
 
   set(TFM_BINARY_DIR ${CMAKE_BINARY_DIR}/tfm)
