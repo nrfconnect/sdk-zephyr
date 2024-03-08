@@ -255,6 +255,9 @@ class Reporting:
             used_rom  = instance.metrics.get("used_rom",0)
             available_ram = instance.metrics.get("available_ram", 0)
             available_rom = instance.metrics.get("available_rom", 0)
+
+            features = instance.metrics.get("features", "")
+
             suite = {
                 "name": instance.testsuite.name,
                 "arch": instance.platform.arch,
@@ -274,6 +277,9 @@ class Reporting:
                 suite["used_rom"] = used_rom
 
             suite['retries'] = instance.retries
+
+            if features:
+                suite["features"] = features
 
             if instance.dut:
                 suite["dut"] = instance.dut

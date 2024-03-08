@@ -23,6 +23,7 @@ from packaging import version
 
 from colorama import Fore
 from domains import Domains
+from twisterlib.feature_extract import FeatureDB
 from twisterlib.cmakecache import CMakeCache
 from twisterlib.environment import canonical_zephyr_base
 from twisterlib.error import BuildError, ConfigurationError
@@ -1096,8 +1097,7 @@ class ProjectBuilder(FilterBuilder):
             instance.metrics["available_ram"] = 0
             instance.metrics["unrecognized"] = []
 
-    @staticmethod
-    def calc_size(instance: TestInstance, from_buildlog: bool):
+    def calc_size(self, instance: TestInstance, from_buildlog: bool):
         if instance.status not in ["error", "failed", "skipped"]:
             if not instance.platform.type in ["native", "qemu", "unit"]:
                 generate_warning = bool(instance.platform.type == "mcu")
@@ -1107,12 +1107,19 @@ class ProjectBuilder(FilterBuilder):
                 instance.metrics["available_rom"] = size_calc.get_available_rom()
                 instance.metrics["available_ram"] = size_calc.get_available_ram()
                 instance.metrics["unrecognized"] = size_calc.unrecognized_sections()
+
+                #TODO: where to get config file from
+                if self.options.feature_config:
+                    db = FeatureDB(config_file=self.options.feature_config)
+                    feature_extract = instance.get_features(db)
+                    instance.metrics["features"] = str(feature_extract.features)
             else:
                 instance.metrics["used_ram"] = 0
                 instance.metrics["used_rom"] = 0
                 instance.metrics["available_rom"] = 0
                 instance.metrics["available_ram"] = 0
                 instance.metrics["unrecognized"] = []
+
             instance.metrics["handler_time"] = instance.execution_time
 
 class TwisterRunner:
