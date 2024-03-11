@@ -99,6 +99,25 @@ Networking
   the long-duration zperf test show with correct throughput result.
   (:github:`69500`)
 
+* Each IPv4 address assigned to a network interface has an IPv4 netmask
+  tied to it instead of being set for the whole interface.
+  If there is only one IPv4 address specified for a network interface,
+  nothing changes from the user point of view. But, if there is more than
+  one IPv4 address / network interface, the netmask must be specified
+  for each IPv4 address separately. (:github:`68419`)
+
+* Virtual network interface API no longer has the `input` callback. The input callback was
+  used to read the inner IPv4/IPv6 packets in an IP tunnel. This incoming tunnel read is now
+  implemented in `recv` callback. (:github:`70549`)
+
+* Modified the ``wifi connect`` command to use key-value format for the arguments. In the
+  previous implementation, we were identifying an option using its position in the argument string.
+  This made it difficult to deal with optional arguments or extending the support
+  for other options. Having this key-value format makes it easier to extend the options that
+  can be passed to the connect command.
+  ``wifi -h`` will give more information about the usage of connect command.
+  (:github:`70024`)
+
 Other Subsystems
 ****************
 
