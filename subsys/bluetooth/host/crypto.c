@@ -17,10 +17,17 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/crypto.h>
 
+#ifdef CONFIG_WOLFSSL
+#include <user_settings.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/random.h>
+#else
 #include <tinycrypt/constants.h>
 #include <tinycrypt/hmac_prng.h>
 #include <tinycrypt/aes.h>
 #include <tinycrypt/utils.h>
+#endif
 
 #include "common/bt_str.h"
 
@@ -29,6 +36,19 @@
 #define LOG_LEVEL CONFIG_BT_HCI_CORE_LOG_LEVEL
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_host_crypto);
+
+#ifdef CONFIG_WOLFSSL
+
+static WC_RNG rng;
+int prng_init(void)
+{
+	return wc_InitRng(&rng);
+}
+int bt_rand(void *buf, size_t len)
+{
+	return wc_RNG_GenerateBlock(&rng, buf, len);
+}
+#else
 
 static struct tc_hmac_prng_struct prng;
 
@@ -174,3 +194,5 @@ struct tc_hmac_prng_struct *bt_crypto_get_hmac_prng_instance(void)
 	return &prng;
 }
 #endif /* ZTEST_UNITTEST */
+
+#endif /* WOLFSSL_ZEPHYR */
