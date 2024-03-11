@@ -20,11 +20,18 @@
 #include <zephyr/settings/settings.h>
 
 #if defined(CONFIG_BT_GATT_CACHING)
+#ifdef CONFIG_WOLFSSL
+#include <user_settings.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/aes.h>
+#include <wolfssl/wolfcrypt/cmac.h>
+#else
 #include <tinycrypt/constants.h>
 #include <tinycrypt/utils.h>
 #include <tinycrypt/aes.h>
 #include <tinycrypt/cmac_mode.h>
 #include <tinycrypt/ccm_mode.h>
+#endif
 #endif /* CONFIG_BT_GATT_CACHING */
 
 #include <zephyr/bluetooth/hci.h>
@@ -693,7 +700,11 @@ static ssize_t cf_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 }
 
 struct gen_hash_state {
+#ifdef CONFIG_WOLFSSL
+	Cmac state;
+#else
 	struct tc_cmac_struct state;
+#endif
 	int err;
 };
 
@@ -754,15 +765,27 @@ static uint8_t gen_hash_m(const struct bt_gatt_attr *attr, uint16_t handle,
 	case BT_UUID_GATT_CHRC_VAL:
 	case BT_UUID_GATT_CEP_VAL:
 		value = sys_cpu_to_le16(handle);
+	#ifdef CONFIG_WOLFSSL
+		if (wc_CmacUpdate(&state->state, (uint8_t *)&value,
+				   sizeof(handle)) != 0)
+	#else
 		if (tc_cmac_update(&state->state, (uint8_t *)&value,
-				   sizeof(handle)) == TC_CRYPTO_FAIL) {
+				   sizeof(handle)) == TC_CRYPTO_FAIL)
+	#endif
+		{
 			state->err = -EINVAL;
 			return BT_GATT_ITER_STOP;
 		}
 
 		value = sys_cpu_to_le16(u16->val);
+	#ifdef CONFIG_WOLFSSL
+		if (wc_CmacUpdate(&state->state, (uint8_t *)&value,
+				   sizeof(u16->val)) != 0)
+	#else
 		if (tc_cmac_update(&state->state, (uint8_t *)&value,
-				   sizeof(u16->val)) == TC_CRYPTO_FAIL) {
+				   sizeof(u16->val)) == TC_CRYPTO_FAIL)
+	#endif
+		{
 			state->err = -EINVAL;
 			return BT_GATT_ITER_STOP;
 		}
@@ -773,8 +796,12 @@ static uint8_t gen_hash_m(const struct bt_gatt_attr *attr, uint16_t handle,
 			return BT_GATT_ITER_STOP;
 		}
 
-		if (tc_cmac_update(&state->state, data, len) ==
-		    TC_CRYPTO_FAIL) {
+	#ifdef CONFIG_WOLFSSL
+		if (wc_CmacUpdate(&state->state, data, len) != 0)
+	#else
+		if (tc_cmac_update(&state->state, data, len) == TC_CRYPTO_FAIL)
+	#endif
+		{
 			state->err = -EINVAL;
 			return BT_GATT_ITER_STOP;
 		}
@@ -787,15 +814,27 @@ static uint8_t gen_hash_m(const struct bt_gatt_attr *attr, uint16_t handle,
 	case BT_UUID_GATT_CPF_VAL:
 	case BT_UUID_GATT_CAF_VAL:
 		value = sys_cpu_to_le16(handle);
+	#ifdef CONFIG_WOLFSSL
+		if (wc_CmacUpdate(&state->state, (uint8_t *)&value,
+				   sizeof(handle)) != 0)
+	#else
 		if (tc_cmac_update(&state->state, (uint8_t *)&value,
-				   sizeof(handle)) == TC_CRYPTO_FAIL) {
+				   sizeof(handle)) == TC_CRYPTO_FAIL)
+	#endif
+		{
 			state->err = -EINVAL;
 			return BT_GATT_ITER_STOP;
 		}
 
 		value = sys_cpu_to_le16(u16->val);
+	#ifdef CONFIG_WOLFSSL
+		if (wc_CmacUpdate(&state->state, (uint8_t *)&value,
+				   sizeof(u16->val)) != 0)
+	#else
 		if (tc_cmac_update(&state->state, (uint8_t *)&value,
-				   sizeof(u16->val)) == TC_CRYPTO_FAIL) {
+				   sizeof(u16->val)) == TC_CRYPTO_FAIL)
+	#endif
+		{
 			state->err = -EINVAL;
 			return BT_GATT_ITER_STOP;
 		}
@@ -824,17 +863,30 @@ static void db_hash_store(void)
 static void db_hash_gen(void)
 {
 	uint8_t key[16] = {};
+	uint32_t hashSz = (uint32_t)sizeof(db_hash.hash);
+#ifndef CONFIG_WOLFSSL
 	struct tc_aes_key_sched_struct sched;
+#endif
 	struct gen_hash_state state;
 
-	if (tc_cmac_setup(&state.state, key, &sched) == TC_CRYPTO_FAIL) {
+#ifdef CONFIG_WOLFSSL
+	if (wc_InitCmac(&state.state, key, sizeof(key), WC_CMAC_AES, NULL) != 0)
+#else
+	if (tc_cmac_setup(&state.state, key, &sched) == TC_CRYPTO_FAIL)
+#endif
+	{
 		LOG_ERR("Unable to setup AES CMAC");
 		return;
 	}
 
 	bt_gatt_foreach_attr(0x0001, 0xffff, gen_hash_m, &state);
 
-	if (tc_cmac_final(db_hash.hash, &state.state) == TC_CRYPTO_FAIL) {
+#ifdef CONFIG_WOLFSSL
+	if (wc_CmacFinal(&state.state, db_hash.hash, &hashSz) != 0)
+#else
+	if (tc_cmac_final(db_hash.hash, &state.state) == TC_CRYPTO_FAIL)
+#endif
+	{
 		LOG_ERR("Unable to calculate hash");
 		return;
 	}
@@ -846,9 +898,9 @@ static void db_hash_gen(void)
 	 * in little endianess as well. bt_smp_aes_cmac calculates the hash in
 	 * big endianess so we have to swap.
 	 */
-	sys_mem_swap(db_hash.hash, sizeof(db_hash.hash));
+	sys_mem_swap(db_hash.hash, hashSz);
 
-	LOG_HEXDUMP_DBG(db_hash.hash, sizeof(db_hash.hash), "Hash: ");
+	LOG_HEXDUMP_DBG(db_hash.hash, hashSz, "Hash: ");
 
 	atomic_set_bit(gatt_sc.flags, DB_HASH_VALID);
 }
