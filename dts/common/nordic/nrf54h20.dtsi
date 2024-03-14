@@ -187,6 +187,11 @@
 				compatible = "nordic,nrf-resetinfo";
 				reg = <0x1e000 0x1000>;
 			};
+
+			cpuapp_ieee802154: ieee802154 {
+				compatible = "nordic,nrf-ieee802154";
+				status = "disabled";
+			};
 		};
 
 		cpurad_peripherals: peripheral@53000000 {
