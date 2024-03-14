@@ -4,6 +4,7 @@
 config SOC_SERIES_NRF54HX
 	bool "Nordic Semiconductor nRF54H series MCU"
 	select SOC_FAMILY_NRF
+	select HAS_NRFS
 	select HAS_NRFX
 	select HAS_NORDIC_DRIVERS
 	help
