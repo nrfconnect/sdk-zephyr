@@ -298,13 +298,24 @@ static int nrf_rram_init(const struct device *dev)
 	nrf_flash_sync_init();
 #endif /* !CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE */
 
+#ifdef CONFIG_TRUSTED_EXECUTION_NONSECURE
+	/* non-secure images cannot call nrf_rramc_ready_next_timeout_set
+	 * because NRF_RRAMC_NS does not exist.
+	 *
+	 * TF-M will configure RRAMC according to these Kconfig's before
+	 * booting the non-secure image.
+	 */
+#else
 #if CONFIG_NRF_RRAM_READYNEXT_TIMEOUT_VALUE > 0
 	nrf_rramc_ready_next_timeout_t params = {
 		.value = CONFIG_NRF_RRAM_READYNEXT_TIMEOUT_VALUE,
 		.enable = true,
 	};
+
 	nrf_rramc_ready_next_timeout_set(NRF_RRAMC, &params);
-#endif
+#endif /* CONFIG_NRF_RRAM_READYNEXT_TIMEOUT_VALUE > 0 */
+
+#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 	return 0;
 }
