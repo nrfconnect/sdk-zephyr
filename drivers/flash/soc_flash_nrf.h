@@ -12,6 +12,7 @@
 
 #define FLASH_OP_DONE    (0) /* 0 for compliance with the driver API. */
 #define FLASH_OP_ONGOING  1
+#define FLASH_OP_ERROR 2
 
 struct flash_context {
 	uint32_t data_addr;  /* Address of data to write. */
