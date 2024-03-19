@@ -9,6 +9,7 @@
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/misc/nordic_spu/spu.h>
 
 #include <hal/nrf_hsfll.h>
 #include <hal/nrf_lrcconf.h>
@@ -102,3 +103,33 @@ void arch_busy_wait(uint32_t time_us)
 }
 
 SYS_INIT(nordicsemi_nrf54h_init, PRE_KERNEL_1, 0);
+
+#if defined(CONFIG_NORDIC_SPU) && defined(NRF_RADIOCORE)
+static int local_spu_configure(void)
+{
+	int err = -ENODEV;
+	const struct device *spu = DEVICE_DT_GET(DT_NODELABEL(cpurad_spu030));
+
+	if (!device_is_ready(spu)) {
+		return -ENODEV;
+	}
+
+	const struct spu_periph_cfg axi3_periphs[] = {
+		SPU_PERIPH_CFG_INIT_DEFAULT(DT_REG_ADDR(DT_NODELABEL(ecb030))),
+		SPU_PERIPH_CFG_INIT_DEFAULT(DT_REG_ADDR(DT_NODELABEL(ccm030))),
+		SPU_PERIPH_CFG_INIT_DEFAULT(NRF_RADIOCORE_AAR030_S_BASE),
+	};
+
+	for (int i = 0; i < ARRAY_SIZE(axi3_periphs); i++) {
+		err = spu_configure_peripheral(spu, &axi3_periphs[i]);
+		if (err) {
+			__ASSERT(err == 0, "Failed to configure SPU at boot");
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+SYS_INIT(local_spu_configure, PRE_KERNEL_2, CONFIG_APPLICATION_INIT_PRIORITY);
+#endif /* CONFIG_NORDIC_SPU && NRF_RADIOCORE */

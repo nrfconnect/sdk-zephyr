@@ -1,0 +1,24 @@
+description: Nordic SPU (System Protection Unit)
+
+compatible: "nordic,nrf-spu-v2"
+
+include: base.yaml
+
+properties:
+    reg:
+      required: true
+
+    interrupts:
+      required: true
+
+    remapped-periph-ids:
+      type: array
+      description: |
+        Array of index pairs that denote bus peripherals that should use a
+        different ID on the same bus for configurations. The indices are
+        represented as a pair of numbers:
+
+          {periph_id_0, remapped_id_0, ..., periph_id_n, remapped_id_n}
+
+        where each pair denotes that configuration for PERIPH.PERM[periph_id_n]
+        should instead be written to PERIPH.PERM[remapped_id_n].

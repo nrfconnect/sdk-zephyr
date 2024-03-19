@@ -82,3 +82,20 @@
 	pinctrl-1 = <&uart136_sleep>;
 	pinctrl-names = "default", "sleep";
 };
+
+&cpurad_spu000 {
+	status = "okay";
+};
+
+&cpurad_spu010 {
+	status = "okay";
+};
+
+&cpurad_spu020 {
+/* Enabling this will crash Radiocore samples that use IPC (NCSDK-23108) */
+	status = "disabled";
+};
+
+&cpurad_spu030 {
+	status = "okay";
+};

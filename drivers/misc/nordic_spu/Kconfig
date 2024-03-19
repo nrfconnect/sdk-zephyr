@@ -1,0 +1,83 @@
+#
+# Copyright (c) 2023 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+config NORDIC_SPU
+	bool "SPU driver"
+	depends on !TRUSTED_EXECUTION_NONSECURE
+	depends on DT_HAS_NORDIC_NRF_SPU_V2_ENABLED
+	default y
+	help
+	  This library provides functions for configuring SPU instances in
+	  Haltium MCUs.
+
+if NORDIC_SPU
+
+config SPU_DEVICE_INIT_PRIORITY
+	int "SPU device driver init priority"
+	default KERNEL_INIT_PRIORITY_DEVICE
+	help
+	  Device priority to use for initializing the SPU driver. This can be set
+	  to something other than the default kernel priority for CPUs that must
+	  configure their SPU in a specific order.
+
+config SPU_PERIPHERAL_DEFAULT_LOCK_STATE
+	bool "Default peripheral lock state"
+	help
+	  Lock all peripherals configured through the device driver. Peripherals
+	  locked this way will remain locked until the next reset of the SPU's
+	  domain.
+
+config SPU_FEATURE_DEFAULT_LOCK_STATE
+	bool "Default feature lock state"
+	help
+	  Lock all features configured through the device driver. Features locked
+	  this way will remain locked until the next reset of the SPU's domain.
+
+module = SPU
+module-str = SPU Configuration
+source "subsys/logging/Kconfig.template.log_config"
+
+config SPU_LOG_PERIPH_CONFIGS
+	bool "Log peripheral configurations"
+	depends on SPU_LOG_LEVEL_INF || SPU_LOG_LEVEL_DBG
+	default y
+	help
+	  Enable logging for peripheral configurations. Can help reduce log
+	  flooding, such as during debugging feature configurations and peripheral
+	  configuration is do-not-care.
+
+config SPU_LOG_REMAPPED_PERIPH_IDS
+	bool "Log peripheral ID remapping"
+	depends on SPU_LOG_PERIPH_CONFIGS
+	depends on SPU_LOG_LEVEL_DBG
+	default y
+	help
+	  Internal switch for logging extra debugging information for peripherals
+	  that have remapped IDs for their SPU configuration.
+
+config SPU_LOG_FEATURE_CONFIGS
+	bool "Log feature configurations"
+	depends on SPU_LOG_LEVEL_INF || SPU_LOG_LEVEL_DBG
+	default y
+	help
+	  Enable logging for feature configurations. As there are many of these,
+	  they can easily flood the logging output and cause more important logging
+	  messages to be dropped.
+
+feature=BELLBOARD
+rsource "Kconfig.template.log_feature"
+feature=DPPI
+rsource "Kconfig.template.log_feature"
+feature=GPIO
+rsource "Kconfig.template.log_feature"
+feature=GPIOTE
+rsource "Kconfig.template.log_feature"
+feature=GRTC
+rsource "Kconfig.template.log_feature"
+feature=IPCT
+rsource "Kconfig.template.log_feature"
+
+endif # SPU

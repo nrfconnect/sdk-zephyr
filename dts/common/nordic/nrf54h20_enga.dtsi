@@ -147,6 +147,13 @@
 			#size-cells = <1>;
 			ranges = <0x0 0x52000000 0x1000000>;
 
+			cpuapp_spu000: spu@0 {
+				compatible = "nordic,nrf-spu-v2";
+				reg = <0x0 0x1000>;
+				interrupts = <0 NRF_DEFAULT_IRQ_PRIORITY>;
+				status = "disabled";
+			};
+
 			cpuapp_hsfll: clock@d000 {
 				compatible = "nordic,nrf-hsfll";
 				#clock-cells = <0>;
@@ -158,6 +165,13 @@
 					<&ficr NRF_FICR_TRIM_APPLICATION_HSFLL_TRIM_COARSE_0>,
 					<&ficr NRF_FICR_TRIM_APPLICATION_HSFLL_TRIM_FINE_0>;
 				nordic,ficr-names = "vsup", "coarse", "fine";
+			};
+
+			cpuapp_spu010: spu@10000 {
+				compatible = "nordic,nrf-spu-v2";
+				reg = <0x10000 0x1000>;
+				interrupts = <16 NRF_DEFAULT_IRQ_PRIORITY>;
+				status = "disabled";
 			};
 
 			cpuapp_ipct: ipct@13000 {
@@ -175,6 +189,13 @@
 			#size-cells = <1>;
 			ranges = <0x0 0x53000000 0x1000000>;
 
+			cpurad_spu000: spu@0 {
+				compatible = "nordic,nrf-spu-v2";
+				reg = <0x0 0x1000>;
+				interrupts = <0 NRF_DEFAULT_IRQ_PRIORITY>;
+				status = "disabled";
+			};
+
 			cpurad_hsfll: clock@d000 {
 				compatible = "nordic,nrf-hsfll";
 				#clock-cells = <0>;
@@ -186,6 +207,20 @@
 					<&ficr NRF_FICR_TRIM_RADIOCORE_HSFLL_TRIM_COARSE_1>,
 					<&ficr NRF_FICR_TRIM_RADIOCORE_HSFLL_TRIM_FINE_1>;
 				nordic,ficr-names = "vsup", "coarse", "fine";
+			};
+
+			cpurad_spu010: spu@10000 {
+				compatible = "nordic,nrf-spu-v2";
+				reg = <0x10000 0x1000>;
+				interrupts = <16 NRF_DEFAULT_IRQ_PRIORITY>;
+				status = "disabled";
+			};
+
+			cpurad_spu020: spu@20000 {
+				compatible = "nordic,nrf-spu-v2";
+				reg = <0x20000 0x1000>;
+				interrupts = <32 NRF_DEFAULT_IRQ_PRIORITY>;
+				status = "disabled";
 			};
 
 			dppic020: dppic@22000 {
@@ -273,11 +308,33 @@
 				};
 			};
 
+			cpurad_spu030: spu@30000 {
+				compatible = "nordic,nrf-spu-v2";
+				reg = <0x30000 0x1000>;
+				interrupts = <48 NRF_DEFAULT_IRQ_PRIORITY>;
+				status = "disabled";
+				remapped-periph-ids = <0xb 0xa 0xd 0xc>;
+			};
+
+			ccm030: ccm@3a000 {
+				compatible = "nordic,nrf-ccm";
+				status = "disabled";
+				reg = <0x3a000 0x1000>;
+				interrupts = <58 NRF_DEFAULT_IRQ_PRIORITY>;
+			};
+
 			ecb030: ecb@3b000 {
 				compatible = "nordic,nrf-ecb";
 				reg = <0x3b000 0x1000>;
 				interrupts = <59 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
+			};
+
+			ccm031: ccm@3c000 {
+				compatible = "nordic,nrf-ccm";
+				status = "disabled";
+				reg = <0x3c000 0x1000>;
+				interrupts = <60 NRF_DEFAULT_IRQ_PRIORITY>;
 			};
 		};
 
