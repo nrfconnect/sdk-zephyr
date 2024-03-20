@@ -2509,6 +2509,7 @@ next_state:
 
 			conn_ack(conn, + 1);
 			tcp_out(conn, FIN | ACK);
+			conn_seq(conn, + 1);
 			next = TCP_LAST_ACK;
 			verdict = NET_OK;
 			tcp_setup_last_ack_timer(conn);
@@ -2533,6 +2534,7 @@ next_state:
 
 			conn_ack(conn, + len + 1);
 			tcp_out(conn, FIN | ACK);
+			conn_seq(conn, + 1);
 			next = TCP_LAST_ACK;
 			tcp_setup_last_ack_timer(conn);
 			break;
@@ -2712,11 +2714,12 @@ next_state:
 		break;
 	case TCP_CLOSE_WAIT:
 		tcp_out(conn, FIN);
+		conn_seq(conn, + 1);
 		next = TCP_LAST_ACK;
 		tcp_setup_last_ack_timer(conn);
 		break;
 	case TCP_LAST_ACK:
-		if (th && FL(&fl, ==, ACK, th_seq(th) == conn->ack)) {
+		if (th && FL(&fl, ==, ACK, th_ack(th) == conn->seq)) {
 			tcp_send_timer_cancel(conn);
 			do_close = true;
 			verdict = NET_OK;
