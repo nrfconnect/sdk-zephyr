@@ -1,0 +1,12 @@
+#
+# Copyright (c) 2023 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+config SPU_LOG_FEATURE_$(feature)
+	bool "Log $(feature) feature configs"
+	depends on SPU_LOG_FEATURE_CONFIGS
+	default y
+	help
+	  Enable logging output for configurations of the SPU feature.
