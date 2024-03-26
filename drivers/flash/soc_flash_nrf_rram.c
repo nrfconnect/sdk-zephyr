@@ -15,6 +15,10 @@
 #include <zephyr/sys/barrier.h>
 #include <hal/nrf_rramc.h>
 
+#if CONFIG_BUILD_WITH_TFM
+#include <tfm/tfm_ioctl_api.h>
+#endif
+
 #include <zephyr/../../drivers/flash/soc_flash_nrf.h>
 
 LOG_MODULE_REGISTER(flash_nrf_rram, CONFIG_FLASH_LOG_LEVEL);
@@ -103,11 +107,20 @@ static void commit_changes(size_t len)
 }
 #endif
 
-static void rram_write(off_t addr, const void *data, size_t len)
+static int rram_write(off_t addr, const void *data, size_t len)
 {
 	nrf_rramc_config_t config = {.mode_write = true, .write_buff_size = WRITE_BUFFER_SIZE};
+	int err = 0;
 
+#ifdef CONFIG_BUILD_WITH_TFM
+	err = tfm_platform_nrf_rramc_config_set(config.mode_write, config.write_buff_size);
+	if(err) {
+		return err;
+	}
+#else
+	(void)err;
 	nrf_rramc_config_set(NRF_RRAMC, &config);
+#endif
 
 	if (data) {
 		memcpy((void *)addr, data, len);
@@ -122,7 +135,17 @@ static void rram_write(off_t addr, const void *data, size_t len)
 #endif
 
 	config.mode_write = false;
+
+#ifdef CONFIG_BUILD_WITH_TFM
+	err = tfm_platform_nrf_rramc_config_set(config.mode_write, config.write_buff_size);
+	if(err) {
+		return err;
+	}
+#else
 	nrf_rramc_config_set(NRF_RRAMC, &config);
+#endif
+
+	return 0;
 }
 
 #ifndef CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE
@@ -152,7 +175,10 @@ static int write_op(void *context)
 	while (w_ctx->len > 0) {
 		len = (WRITE_BUFFER_MAX_SIZE < w_ctx->len) ? WRITE_BUFFER_MAX_SIZE : w_ctx->len;
 
-		rram_write(w_ctx->flash_addr, (const void *)w_ctx->data_addr, len);
+		int err = rram_write(w_ctx->flash_addr, (const void *)w_ctx->data_addr, len);
+		if(err) {
+			return FLASH_OP_ERROR;
+		}
 
 		shift_write_context(len, w_ctx);
 
@@ -210,7 +236,7 @@ static int nrf_write(off_t addr, const void *data, size_t len)
 	} else
 #endif /* !CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE */
 	{
-		rram_write(addr, data, len);
+		ret = rram_write(addr, data, len);
 	}
 
 	SYNC_UNLOCK();
@@ -298,13 +324,24 @@ static int nrf_rram_init(const struct device *dev)
 	nrf_flash_sync_init();
 #endif /* !CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE */
 
+#ifdef CONFIG_TRUSTED_EXECUTION_NONSECURE
+	/* non-secure images cannot call nrf_rramc_ready_next_timeout_set
+	 * because NRF_RRAMC_NS does not exist.
+	 *
+	 * TF-M will configure RRAMC according to these Kconfig's before
+	 * booting the non-secure image.
+	 */
+#else
 #if CONFIG_NRF_RRAM_READYNEXT_TIMEOUT_VALUE > 0
 	nrf_rramc_ready_next_timeout_t params = {
 		.value = CONFIG_NRF_RRAM_READYNEXT_TIMEOUT_VALUE,
 		.enable = true,
 	};
+
 	nrf_rramc_ready_next_timeout_set(NRF_RRAMC, &params);
-#endif
+#endif /* CONFIG_NRF_RRAM_READYNEXT_TIMEOUT_VALUE > 0 */
+
+#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 	return 0;
 }
