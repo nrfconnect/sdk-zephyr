@@ -295,7 +295,14 @@ int main(void)
 	}
 
 	while (num_synced < MAX_SYNCS) {
-		err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
+		struct bt_le_scan_param scan_param = {
+			.type = BT_LE_SCAN_TYPE_PASSIVE,
+			.options = BT_LE_SCAN_OPT_FILTER_DUPLICATE,
+			.interval = per_adv_params.interval_min * 2,
+			.window = per_adv_params.interval_min * 2,
+		};
+
+		err = bt_le_scan_start(&scan_param, device_found);
 		if (err) {
 			printk("Scanning failed to start (err %d)\n", err);
 			return 0;
