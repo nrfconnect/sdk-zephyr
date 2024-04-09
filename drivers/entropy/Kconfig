@@ -42,6 +42,7 @@ source "drivers/entropy/Kconfig.npcx"
 source "drivers/entropy/Kconfig.max32"
 source "drivers/entropy/Kconfig.renesas_ra"
 source "drivers/entropy/Kconfig.sy1xx"
+source "drivers/entropy/Kconfig.nrf_prng"
 
 config ENTROPY_HAS_DRIVER
 	bool
