@@ -245,5 +245,7 @@ if("${CMAKE_EXTRA_GENERATOR}" STREQUAL "Eclipse CDT4")
 endif()
 
 if(ZEPHYR_NRF_MODULE_DIR)
-  include(${ZEPHYR_NRF_MODULE_DIR}/cmake/partition_manager.cmake)
+  if (NOT SYSBUILD OR (SYSBUILD AND SB_CONFIG_PARTITION_MANAGER))
+    include(${ZEPHYR_NRF_MODULE_DIR}/cmake/partition_manager.cmake)
+  endif()
 endif()
