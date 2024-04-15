@@ -19,6 +19,13 @@
 #include <mbedtls/asn1.h>
 #endif
 
+#if defined(CONFIG_OPENTHREAD_FTD) && defined(CONFIG_PSA_WANT_ALG_CMAC) && \
+	!defined(CONFIG_BUILD_WITH_TFM)
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/byteorder.h>
+#include <mbedtls/cmac.h>
+#endif
+
 static otError psaToOtError(psa_status_t aStatus)
 {
 	switch (aStatus) {
@@ -604,3 +611,86 @@ out:
 }
 
 #endif /* #if CONFIG_OPENTHREAD_ECDSA */
+
+#if defined(CONFIG_OPENTHREAD_FTD) && defined(CONFIG_PSA_WANT_ALG_CMAC) && \
+	!defined(CONFIG_BUILD_WITH_TFM)
+
+otError otPlatCryptoPbkdf2GenerateKey(const uint8_t *aPassword, uint16_t aPasswordLen,
+				      const uint8_t *aSalt, uint16_t aSaltLen,
+				      uint32_t aIterationCounter, uint16_t aKeyLen, uint8_t *aKey)
+{
+	/*
+	 * This is a fallback for legacy MbedTLS implementation for PBKDF2 generation,
+	 * as PSA support for these operations is not yet available.
+	 * Openthread requires platform to implement PBKDF2 generation if PSA Crypto API is used.
+	 */
+	const size_t block_size = MBEDTLS_CMAC_MAX_BLOCK_SIZE;
+	uint8_t prf_input[OT_CRYPTO_PBDKF2_MAX_SALT_SIZE + sizeof(uint32_t)];
+	uint32_t prf_one[block_size / sizeof(uint32_t)];
+	uint32_t prf_two[block_size / sizeof(uint32_t)];
+	uint32_t key_block[block_size / sizeof(uint32_t)];
+	uint32_t block_counter = 0;
+	uint8_t *key = aKey;
+	uint16_t key_len = aKeyLen;
+	uint16_t use_len = 0;
+	int ret;
+
+	__ASSERT_NO_MSG(aSaltLen <= sizeof(prf_input));
+	memcpy(prf_input, aSalt, aSaltLen);
+	__ASSERT_NO_MSG(aIterationCounter % 2 == 0);
+	aIterationCounter /= 2;
+
+	while (key_len) {
+		block_counter++;
+		sys_put_be32(block_counter, &prf_input[aSaltLen]);
+
+		/* Calculate U_1 */
+		ret = mbedtls_aes_cmac_prf_128(aPassword, aPasswordLen, (const uint8_t *)prf_input,
+					       aSaltLen + sizeof(uint32_t), (uint8_t *)key_block);
+		if (ret != 0) {
+			return OT_ERROR_FAILED;
+		}
+
+		/* Calculate U_2 */
+		ret = mbedtls_aes_cmac_prf_128(aPassword, aPasswordLen, (const uint8_t *)key_block,
+					       block_size, (uint8_t *)prf_one);
+		if (ret != 0) {
+			return OT_ERROR_FAILED;
+		}
+
+		for (uint32_t j = 0; j < block_size / sizeof(uint32_t); j++) {
+			key_block[j] ^= prf_one[j];
+		}
+
+		for (uint32_t i = 1; i < aIterationCounter; i++) {
+			/* Calculate U_{2 * i - 1} */
+			ret = mbedtls_aes_cmac_prf_128(aPassword, aPasswordLen,
+						       (const uint8_t *)prf_one,
+						       block_size, (uint8_t *)prf_two);
+			if (ret != 0) {
+				return OT_ERROR_FAILED;
+			}
+
+			/* Calculate U_{2 * i} */
+			ret = mbedtls_aes_cmac_prf_128(aPassword, aPasswordLen,
+						       (const uint8_t *)prf_two,
+						       block_size, (uint8_t *)prf_one);
+			if (ret != 0) {
+				return OT_ERROR_FAILED;
+			}
+
+			for (uint32_t j = 0; j < block_size / sizeof(uint32_t); j++) {
+				key_block[j] ^= prf_one[j] ^ prf_two[j];
+			}
+		}
+
+		use_len = MIN(key_len, (uint16_t)block_size);
+		memcpy(key, key_block, use_len);
+		key += use_len;
+		key_len -= use_len;
+	}
+
+	return OT_ERROR_NONE;
+}
+
+#endif /* #if CONFIG_OPENTHREAD_FTD && CONFIG_PSA_WANT_ALG_CMAC && !CONFIG_BUILD_WITH_TFM */
