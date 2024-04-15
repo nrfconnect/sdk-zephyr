@@ -28,6 +28,7 @@
 		zephyr,ieee802154 = &cpurad_ieee802154;
 		zephyr,bt-hci-ipc = &ipc0;
 		zephyr,entropy = &prng;
+		nordic,802154-spinel-ipc = &ipc0;
 	};
 
 	prng: prng {
