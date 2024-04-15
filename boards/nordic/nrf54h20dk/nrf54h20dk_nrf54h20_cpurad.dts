@@ -26,6 +26,7 @@
 		zephyr,shell-uart = &uart135;
 		zephyr,bt-hci-ipc = &ipc0;
 		zephyr,entropy = &prng;
+		zephyr,shell-uart = &uart135;
 	};
 
 	prng: prng {
