@@ -28,6 +28,10 @@
 		zephyr,bt-hci-ipc = &ipc0;
 	};
 
+	aliases {
+		resetinfo = &cpurad_resetinfo;
+	};
+
 	prng: prng {
 		compatible = "nordic,entropy-prng";
 		status = "okay";
