@@ -21,6 +21,7 @@ extern "C" {
 #endif
 
 typedef void (*spi_dw_config_t)(void);
+typedef void (*spi_dw_irq_ack_t)(void);
 typedef uint32_t (*spi_dw_read_t)(uint8_t size, mm_reg_t addr, uint32_t off);
 typedef void (*spi_dw_write_t)(uint8_t size, uint32_t data, mm_reg_t addr, uint32_t off);
 typedef void (*spi_dw_set_bit_t)(uint8_t bit, mm_reg_t addr, uint32_t off);
@@ -43,6 +44,7 @@ struct spi_dw_config {
 	spi_dw_set_bit_t set_bit_func;
 	spi_dw_clear_bit_t clear_bit_func;
 	spi_dw_test_bit_t test_bit_func;
+	spi_dw_irq_ack_t irq_ack_func;
 };
 
 struct spi_dw_data {
@@ -179,24 +181,25 @@ static int reg_test_bit(uint8_t bit, mm_reg_t addr, uint32_t off)
 /* Common registers settings, bits etc... */
 
 /* CTRLR0 settings */
+#if !IS_ENABLED(CONFIG_SPI_DW_HSSI)
 #define DW_SPI_CTRLR0_SCPH_BIT		(6)
 #define DW_SPI_CTRLR0_SCPOL_BIT		(7)
+#define DW_SPI_CTRLR0_TMOD_SHIFT	(8)
+#define DW_SPI_CTRLR0_SLV_OE_BIT	(10)
 #define DW_SPI_CTRLR0_SRL_BIT		(11)
+#else
+/* Bit fields in CTRLR0 (DWC SSI with AHB interface) */
+#define DW_SPI_CTRLR0_SCPH_BIT		8
+#define DW_SPI_CTRLR0_SCPOL_BIT		9
+#define DW_SPI_CTRLR0_TMOD_SHIFT	10
+#define DW_SPI_CTRLR0_SLV_OE_BIT	12
+#define DW_SPI_CTRLR0_SRL_BIT		13
+#endif
 
 #define DW_SPI_CTRLR0_SCPH		BIT(DW_SPI_CTRLR0_SCPH_BIT)
 #define DW_SPI_CTRLR0_SCPOL		BIT(DW_SPI_CTRLR0_SCPOL_BIT)
 #define DW_SPI_CTRLR0_SRL		BIT(DW_SPI_CTRLR0_SRL_BIT)
-
-#define DW_SPI_CTRLR0_SLV_OE_BIT	(10)
 #define DW_SPI_CTRLR0_SLV_OE		BIT(DW_SPI_CTRLR0_SLV_OE_BIT)
-
-#define DW_SPI_CTRLR0_TMOD_SHIFT	(8)
-
-#define DW_SPI_CTRLR0_TMOD_TX_RX	(0)
-#define DW_SPI_CTRLR0_TMOD_TX		(1 << DW_SPI_CTRLR0_TMOD_SHIFT)
-#define DW_SPI_CTRLR0_TMOD_RX		(2 << DW_SPI_CTRLR0_TMOD_SHIFT)
-#define DW_SPI_CTRLR0_TMOD_EEPROM	(3 << DW_SPI_CTRLR0_TMOD_SHIFT)
-#define DW_SPI_CTRLR0_TMOD_RESET	(3 << DW_SPI_CTRLR0_TMOD_SHIFT)
 
 #define DW_SPI_CTRLR0_DFS_16(__bpw)	((__bpw) - 1)
 #define DW_SPI_CTRLR0_DFS_32(__bpw)	(((__bpw) - 1) << 16)

@@ -40,6 +40,10 @@ LOG_MODULE_REGISTER(spi_dw);
 #include <zephyr/drivers/pinctrl.h>
 #endif
 
+#ifdef CONFIG_HAS_NRFX
+#include <nrfx.h>
+#endif
+
 static inline bool spi_dw_is_slave(struct spi_dw_data *spi)
 {
 	return (IS_ENABLED(CONFIG_SPI_SLAVE) &&
@@ -499,6 +503,10 @@ void spi_dw_isr(const struct device *dev)
 	uint32_t int_status;
 	int error;
 
+	if (info->irq_ack_func) {
+		info->irq_ack_func();
+	}
+
 	int_status = read_isr(dev);
 
 	LOG_DBG("SPI %p int_status 0x%x - (tx: %d, rx: %d)", dev, int_status,
@@ -562,7 +570,37 @@ int spi_dw_init(const struct device *dev)
 	return 0;
 }
 
+#define REG_ADDR(inst) \
+	COND_CODE_1(DT_INST_REG_HAS_IDX(inst, 1), \
+		    (DT_INST_REG_ADDR_BY_NAME(inst, core)), \
+		    (DT_INST_REG_ADDR(inst)))
+
+#define IS_HSSI(inst) \
+	COND_CODE_1(DT_NODE_HAS_COMPAT(DT_DRV_INST(inst), nordic_nrf_exmif), \
+		(true), \
+		(false))
+
+#define EXTRA_CONFIG(inst) \
+	COND_CODE_1(DT_NODE_HAS_COMPAT(DT_DRV_INST(inst), nordic_nrf_exmif), \
+		(NRF_EXMIF->INTENSET = BIT(0); \
+		 NRF_EXMIF->TASKS_START = 1;), \
+		())
+
+#define IRQ_ACK_DEFINE(inst) \
+	COND_CODE_1(DT_NODE_HAS_COMPAT(DT_DRV_INST(inst), nordic_nrf_exmif), \
+		(static void irq_ack_##inst(void) \
+		 { NRF_EXMIF->EVENTS_CORE = 0; }), \
+		())
+
+#define IRQ_ACK(inst) \
+	COND_CODE_1(DT_NODE_HAS_COMPAT(DT_DRV_INST(inst), nordic_nrf_exmif), \
+		    (irq_ack_##inst), \
+		    (NULL))
+
+IRQ_ACK_DEFINE(0);
+
 #define SPI_CFG_IRQS_SINGLE_ERR_LINE(inst)					\
+		EXTRA_CONFIG(inst);						\
 		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(inst, rx_avail, irq),		\
 			    DT_INST_IRQ_BY_NAME(inst, rx_avail, priority),	\
 			    spi_dw_isr, DEVICE_DT_INST_GET(inst),		\
@@ -643,6 +681,7 @@ COND_CODE_1(IS_EQ(DT_NUM_IRQS(DT_DRV_INST(inst)), 1),              \
 		.serial_target = DT_INST_PROP(inst, serial_target),                         \
 		.fifo_depth = DT_INST_PROP(inst, fifo_depth),                               \
 		.max_xfer_size = DT_INST_PROP(inst, max_xfer_size),                         \
+		.irq_ack_func = IRQ_ACK(inst),                                              \
 		IF_ENABLED(CONFIG_PINCTRL, (.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),)) \
 		COND_CODE_1(DT_INST_PROP(inst, aux_reg),                                    \
 			(.read_func = aux_reg_read,                                         \
