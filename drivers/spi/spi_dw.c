@@ -500,6 +500,7 @@ static int spi_dw_release(const struct device *dev,
 
 void spi_dw_isr(const struct device *dev)
 {
+	const struct spi_dw_config *info = dev->config;
 	uint32_t int_status;
 	int error;
 
