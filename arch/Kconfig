@@ -588,6 +588,11 @@ config INIT_ARCH_HW_AT_BOOT
 
 endmenu
 
+config PRE_S2RAM_INIT_HOOK
+	bool "Run setup function before RAM is accessed"
+	help
+	  Execute a setup function before RAM is accessed.
+
 #
 # Architecture Capabilities
 #
