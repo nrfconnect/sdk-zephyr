@@ -30,6 +30,14 @@
 			reg = <2>;
 			device_type = "cpu";
 			clock-frequency = <DT_FREQ_M(320)>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			mpu: mpu@e000ed90 {
+				compatible = "arm,armv8m-mpu";
+				reg = <0xe000ed90 0x40>;
+				arm,num-mpu-regions = <16>;
+			};
 		};
 
 		cpurad: cpu@3 {
@@ -37,6 +45,14 @@
 			reg = <3>;
 			device_type = "cpu";
 			clock-frequency = <DT_FREQ_M(256)>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			mpu: mpu@e000ed90 {
+				compatible = "arm,armv8m-mpu";
+				reg = <0xe000ed90 0x40>;
+				arm,num-mpu-regions = <16>;
+			};
 		};
 
 		cpuppr: cpu@d {
