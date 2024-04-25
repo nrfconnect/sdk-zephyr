@@ -7,13 +7,8 @@ config SOC_NRF54H20
 
 if SOC_NRF54H20
 
-choice
-	prompt "nRF54Hx MCU Selection"
-
 config SOC_NRF54H20_CPUPPR
 	bool "nRF54H20 CPUPPR"
 	select RISCV
-
-endchoice
 
 endif # SOC_NRF54H20
