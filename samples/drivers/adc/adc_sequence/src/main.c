@@ -56,7 +56,7 @@ int main(void)
 		}
 	}
 
-	while (1) {
+	for (int i = 0; i<15; i++) {
 		printf("ADC sequence reading [%u]:\n", count++);
 		k_msleep(1000);
 

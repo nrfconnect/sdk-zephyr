@@ -29,6 +29,7 @@ tests:
       - mr_canhubk3
       - longan_nano
       - longan_nano_lite
+      - nrf54l15pdk_nrf54l15_cpuapp
     integration_platforms:
       - nucleo_l073rz
       - nrf52840dk_nrf52840
