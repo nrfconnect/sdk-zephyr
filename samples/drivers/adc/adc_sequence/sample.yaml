@@ -8,9 +8,9 @@ tests:
     platform_allow:
       - cy8cproto_063_ble
       - cy8cproto_062_4343w
-      - nrf52840dk/nrf52840
+      - nrf54l15pdk_nrf54l15_cpuapp
     integration_platforms:
-      - nrf52840dk/nrf52840
+      - nrf52840dk_nrf52840
     harness: console
     timeout: 10
     harness_config:
