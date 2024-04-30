@@ -171,6 +171,7 @@ REDIRECTS = [
     ('reference/usermode/overview', 'kernel/usermode/overview'),
     ('reference/usermode/syscalls', 'kernel/usermode/syscalls'),
     ('reference/util/index', 'kernel/util/index'),
+    ('samples/drivers/adc/README', 'samples/drivers/adc/adc_dt/README'),
     ('samples/drivers/kscan_touch', 'samples/subsys/input/input'),
     ('samples/net/cloud/google_iot_mqtt/README', 'samples/net/cloud/cloud'),
     ('samples/sensor/wsen_hids/README', 'samples/sensor/sensor'),

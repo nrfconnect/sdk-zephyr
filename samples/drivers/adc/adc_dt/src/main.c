@@ -54,7 +54,7 @@ int main(void)
 		}
 	}
 
-	while (1) {
+	for (int i = 1; i<15;i++) {
 		printk("ADC reading[%u]:\n", count++);
 		for (size_t i = 0U; i < ARRAY_SIZE(adc_channels); i++) {
 			int32_t val_mv;
