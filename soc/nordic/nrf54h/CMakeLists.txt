@@ -4,6 +4,7 @@
 if(CONFIG_ARM)
   zephyr_include_directories(.)
   zephyr_library_sources(soc.c)
+  zephyr_sources_ifdef(CONFIG_POWEROFF poweroff.c)
 endif()
 
 # Ensure that image size aligns with 16 bytes so that MRAMC finalizes all writes
