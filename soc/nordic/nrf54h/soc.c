@@ -46,8 +46,9 @@ static void power_domain_init(void)
 	 *  WFI the power domain will be correctly retained.
 	 */
 
-	nrf_lrcconf_poweron_force_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_MAIN, true);
-	nrf_lrcconf_poweron_force_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, true);
+	nrf_lrcconf_poweron_force_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_MAIN,
+			!IS_ENABLED(CONFIG_HALTIUM_CPURAD));
+	nrf_lrcconf_poweron_force_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, false);
 
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_MAIN, true);
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, true);
@@ -82,9 +83,8 @@ static int trim_hsfll(void)
 
 static int nordicsemi_nrf54h_init(void)
 {
-#if defined(CONFIG_NRF_ENABLE_ICACHE)
 	sys_cache_instr_enable();
-#endif
+	sys_cache_data_enable();
 
 	power_domain_init();
 

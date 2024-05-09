@@ -7,7 +7,6 @@
  *
  * @brief public S2RAM APIs.
  * @defgroup pm_s2ram S2RAM APIs
- * @ingroup subsys_pm
  * @{
  */
 
@@ -57,6 +56,48 @@ typedef int (*pm_s2ram_system_off_fn_t)(void);
  */
 int arch_pm_s2ram_suspend(pm_s2ram_system_off_fn_t system_off);
 
+/**
+ * @brief Save CPU state on suspend
+ *
+ * This function is used on suspend-to-RAM (S2RAM) to save the CPU state in
+ * (retained) RAM before powering the system off using the provided function.
+ * This function is usually called from the PM subsystem / hooks.
+ *
+ * The CPU state consist of internal registers and peripherals like
+ * interrupt controller, memory controllers, etc.
+ *
+ * @param system_off	Function to power off the system.
+ *
+ * @retval 0		The CPU context was successfully saved and restored.
+ * @retval -EBUSY	The system is busy and cannot be suspended at this time.
+ * @retval -errno	Negative errno code in case of failure.
+ */
+int pm_s2ram_suspend(pm_s2ram_system_off_fn_t system_off);
+
+/**
+ * @brief Mark that core is entering suspend-to-RAM state.
+ *
+ * Function is called when system state is stored to RAM, just before going to system
+ * off.
+ *
+ * Default implementation is setting a magic word in RAM. CONFIG_PM_S2RAM_CUSTOM_MARKING
+ * allows custom implementation.
+ */
+void pm_s2ram_mark_set(void);
+
+/**
+ * @brief Check suspend-to-RAM marking and clear its state.
+ *
+ * Function is used to determine if resuming after suspend-to-RAM shall be performed
+ * or standard boot code shall be executed.
+ *
+ * Default implementation is checking a magic word in RAM. CONFIG_PM_S2RAM_CUSTOM_MARKING
+ * allows custom implementation.
+ *
+ * @retval true if marking is found which indicates resuming after suspend-to-RAM.
+ * @retval false if marking is not found which indicates standard boot.
+ */
+bool pm_s2ram_mark_check_and_clear(void);
 /**
  * @}
  */

@@ -6,6 +6,7 @@
 #include <zephyr/sys/poweroff.h>
 #include <zephyr/toolchain.h>
 
+#if !defined(CONFIG_SOC_SERIES_NRF54HX)
 #if defined(CONFIG_SOC_SERIES_NRF51X) || defined(CONFIG_SOC_SERIES_NRF52X)
 #include <hal/nrf_power.h>
 #else
@@ -22,3 +23,4 @@ void z_sys_poweroff(void)
 
 	CODE_UNREACHABLE;
 }
+#endif /* !defined(CONFIG_SOC_SERIES_NRF54HX) */
