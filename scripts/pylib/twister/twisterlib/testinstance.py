@@ -103,6 +103,9 @@ class TestInstance:
                 fp.write(run_id)
         return run_id
 
+    def set_clean_run_id(self):
+        self.run_id = '0' * len(hashlib.md5(self.name.encode()).hexdigest())
+
     def add_missing_case_status(self, status, reason=None):
         for case in self.testcases:
             if case.status == 'started':

@@ -720,6 +720,10 @@ class TestPlan:
                 else:
                     tfilter = 'buildable'
 
+                if "1" == os.getenv("USE_CCACHE", "0"):
+                    # if ccache is used, there should not be random elements in build command
+                    instance.set_clean_run_id()
+
                 instance.run = instance.check_runnable(
                     self.options.enable_slow,
                     tfilter,
