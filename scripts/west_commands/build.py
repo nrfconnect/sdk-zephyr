@@ -9,6 +9,11 @@ import shlex
 import sys
 import yaml
 
+from pathlib import Path
+from zephyr_ext_common import ZEPHYR_BASE
+sys.path.append(os.fspath(Path(__file__).parent.parent))
+import zephyr_module
+
 from west import log
 from west.configuration import config
 from zcmake import DEFAULT_CMAKE_GENERATOR, run_cmake, run_build, CMakeCache
@@ -678,5 +683,14 @@ class Build(Forceable):
         config_sysbuild = config_getboolean('sysbuild', None)
         if config_sysbuild is not None:
             return config_sysbuild, 'default, based on west config'
+
+        # Check if this is an ncs-repo directory
+        allow_list = { 'mcuboot', 'sidewalk', 'find-my', 'nrf', 'matter', 'suit-processor',
+                       'memfault-firmware-sdk', 'zscilib', 'uoscore-uedhoc', 'zcbor',
+                       'hal_nordic', 'ncs-example-application' }
+
+        for module in zephyr_module.parse_modules(ZEPHYR_BASE, self._manifest):
+            if module.meta['name'] in allow_list and Path.cwd().is_relative_to(module.project):
+                return True, 'default for NCS repositories'
 
         return False, 'default'
