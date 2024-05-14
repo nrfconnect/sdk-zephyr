@@ -698,7 +698,8 @@ class Build(Forceable):
         if user_args:
             cmake_opts.extend(shlex.split(user_args))
 
-        config_sysbuild = self.config.getboolean('build.sysbuild', default=False)
+        config_sysbuild = self.config.getboolean('build.sysbuild', default=True)
+
         if self.args.sysbuild is True or (config_sysbuild and self.args.sysbuild is not False):
             cmake_opts.extend([f'-S{SYSBUILD_PROJ_DIR}'])
             cmake_env = os.environ.copy()
