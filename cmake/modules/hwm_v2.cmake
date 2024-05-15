@@ -73,7 +73,7 @@ while(TRUE)
     string(TOUPPER "${ARCH_V2_NAME}" ARCH_V2_NAME_UPPER)
     set(ARCH_V2_${ARCH_V2_NAME_UPPER}_DIR ${ARCH_V2_DIR})
   elseif(HWM_TYPE MATCHES "^soc|^series|^family")
-    cmake_parse_arguments(SOC_V2 "" "NAME;DIR;HWM" "" ${line})
+    cmake_parse_arguments(SOC_V2 "" "NAME;HWM" "DIR" ${line})
 
     list(APPEND kconfig_soc_source_dir "${SOC_V2_DIR}")
 
@@ -83,9 +83,9 @@ while(TRUE)
       set(setting_name SOC_${HWM_TYPE}_${SOC_V2_NAME}_DIR)
     endif()
     # We support both SOC_foo_DIR and SOC_FOO_DIR.
-    set(${setting_name} ${SOC_V2_DIR})
+    list(GET SOC_V2_DIR 0 ${setting_name})
     string(TOUPPER ${setting_name} setting_name)
-    set(${setting_name} ${SOC_V2_DIR})
+    list(GET SOC_V2_DIR 0 ${setting_name})
   endif()
 
   if(idx EQUAL -1)
