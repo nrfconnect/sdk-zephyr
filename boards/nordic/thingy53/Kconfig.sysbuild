@@ -11,17 +11,14 @@ choice MCUBOOT_MODE
 	default MCUBOOT_MODE_OVERWRITE_ONLY
 endchoice
 
-config SECURE_BOOT
-	default y
-
 config SECURE_BOOT_NETCORE
-	default y if SECURE_BOOT
+	default y
 
 config NETCORE_APP_UPDATE
-	default y if SECURE_BOOT
+	default y if SECURE_BOOT_NETCORE
 
 config NRF_DEFAULT_EMPTY
-	default y
+	default y if SECURE_BOOT_NETCORE
 
 endif # BOARD_THINGY53_NRF5340_CPUAPP || BOARD_THINGY53_NRF5340_CPUAPP_NS
 
