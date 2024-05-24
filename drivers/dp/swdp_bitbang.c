@@ -252,8 +252,8 @@ static ALWAYS_INLINE void pin_swdio_out_disable(const struct device *dev)
 		pin_delay_asm(delay);			\
 	} while (0)
 
-static int sw_output_sequence(const struct device *dev, uint32_t count,
-			      const uint8_t *data)
+static void sw_output_sequence(const struct device *dev, uint32_t count,
+			       const uint8_t *data)
 {
 	struct sw_cfg_data *sw_data = dev->data;
 	unsigned int key;
@@ -281,12 +281,10 @@ static int sw_output_sequence(const struct device *dev, uint32_t count,
 	}
 
 	irq_unlock(key);
-
-	return 0;
 }
 
-static int sw_input_sequence(const struct device *dev, uint32_t count,
-			     uint8_t *data)
+static void sw_input_sequence(const struct device *dev, uint32_t count,
+			      uint8_t *data)
 {
 	struct sw_cfg_data *sw_data = dev->data;
 	unsigned int key;
@@ -312,8 +310,6 @@ static int sw_input_sequence(const struct device *dev, uint32_t count,
 
 	*data = val; /* write last byte */
 	irq_unlock(key);
-
-	return 0;
 }
 
 static ALWAYS_INLINE void sw_cycle_turnaround(const struct device *dev)
@@ -326,9 +322,9 @@ static ALWAYS_INLINE void sw_cycle_turnaround(const struct device *dev)
 	}
 }
 
-static int sw_transfer(const struct device *dev,
-		       const uint8_t request, uint32_t *const data,
-		       const uint8_t idle_cycles, uint8_t *const response)
+static void sw_transfer(const struct device *dev,
+			const uint8_t request, uint32_t *const data,
+			const uint8_t idle_cycles, uint8_t *const response)
 {
 	struct sw_cfg_data *sw_data = dev->data;
 	unsigned int key;
@@ -423,7 +419,7 @@ static int sw_transfer(const struct device *dev,
 			*response = (uint8_t)ack;
 		}
 
-		return 0;
+		return;
 	}
 
 	if ((ack == SWDP_ACK_WAIT) || (ack == SWDP_ACK_FAULT)) {
@@ -445,7 +441,7 @@ static int sw_transfer(const struct device *dev,
 			*response = (uint8_t)ack;
 		}
 
-		return 0;
+		return;
 	}
 
 	/* Protocol error */
@@ -461,12 +457,10 @@ static int sw_transfer(const struct device *dev,
 	if (response) {
 		*response = (uint8_t)ack;
 	}
-
-	return 0;
 }
 
-static int sw_set_pins(const struct device *dev,
-		       const uint8_t pins, const uint8_t value)
+static void sw_set_pins(const struct device *dev,
+			const uint8_t pins, const uint8_t value)
 {
 	const struct sw_config *config = dev->config;
 
@@ -507,11 +501,9 @@ static int sw_set_pins(const struct device *dev,
 			}
 		}
 	}
-
-	return 0;
 }
 
-static int sw_get_pins(const struct device *dev, uint8_t *const state)
+static void sw_get_pins(const struct device *dev, uint8_t *const state)
 {
 	const struct sw_config *config = dev->config;
 	uint32_t val;
@@ -528,11 +520,9 @@ static int sw_get_pins(const struct device *dev, uint8_t *const state)
 	*state |= val ? BIT(SWDP_SWCLK_PIN) : 0;
 
 	LOG_DBG("pins state 0x%02x", *state);
-
-	return 0;
 }
 
-static int sw_set_clock(const struct device *dev, const uint32_t clock)
+static void sw_set_clock(const struct device *dev, const uint32_t clock)
 {
 	const struct sw_config *config = dev->config;
 	struct sw_cfg_data *sw_data = dev->data;
@@ -551,12 +541,10 @@ static int sw_set_clock(const struct device *dev, const uint32_t clock)
 	sw_data->clock_delay = delay;
 
 	LOG_WRN("cpu_clock %d, delay %d", CPU_CLOCK, sw_data->clock_delay);
-
-	return 0;
 }
 
-static int sw_configure(const struct device *dev,
-			const uint8_t turnaround, const bool data_phase)
+static void sw_configure(const struct device *dev,
+			 const uint8_t turnaround, const bool data_phase)
 {
 	struct sw_cfg_data *sw_data = dev->data;
 
@@ -566,7 +554,6 @@ static int sw_configure(const struct device *dev,
 	LOG_INF("turnaround %d, data_phase %d",
 		sw_data->turnaround, sw_data->data_phase);
 
-	return 0;
 }
 
 static int sw_port_on(const struct device *dev)

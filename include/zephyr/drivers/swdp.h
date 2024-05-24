@@ -42,51 +42,98 @@ extern "C" {
  * This is the mandatory API any Serial Wire driver needs to expose.
  */
 struct swdp_api {
-	/* Generate SWJ Sequence according to sequence bit count and bit data */
-	int (*swdp_output_sequence)(const struct device *dev,
+	/**
+	 * @brief Write count bits to SWDIO from data LSB first
+	 *
+	 * @param dev SWDP device
+	 * @param count Number of bits to write
+	 * @param data Bits to write
+	 */
+	void (*swdp_output_sequence)(const struct device *dev,
+				     uint32_t count,
+				     const uint8_t *data);
+
+	/**
+	 * @brief Read count bits from SWDIO into data LSB first
+	 *
+	 * @param dev SWDP device
+	 * @param count Number of bits to read
+	 * @param data Buffer to store bits read
+	 */
+	void (*swdp_input_sequence)(const struct device *dev,
 				    uint32_t count,
-				    const uint8_t *data);
+				    uint8_t *data);
 
-	/* Read count bits from SWDIO into data LSB first */
-	int (*swdp_input_sequence)(const struct device *dev,
-				   uint32_t count,
-				   uint8_t *data);
-
-	/*
-	 * Perform SWDP transfer based on host request value and store
-	 * acknowledge response bits ACK[0:2].
+	/**
+	 * @brief Perform SWDP transfer and store response
+	 *
+	 * @param dev SWDP device
+	 * @param request SWDP request bits
+	 * @param data Data to be transferred with request
+	 * @param idle_cycles Idle cycles between request and response
+	 * @param response Buffer to store response (ACK/WAIT/FAULT)
 	 */
-	int (*swdp_transfer)(const struct device *dev,
-			     uint8_t request,
-			     uint32_t *data,
-			     uint8_t idle_cycles,
-			     uint8_t *response);
+	void (*swdp_transfer)(const struct device *dev,
+			      uint8_t request,
+			      uint32_t *data,
+			      uint8_t idle_cycles,
+			      uint8_t *response);
 
-	/* Set SWCLK, SWDPIO, and nRESET pins state */
-	int (*swdp_set_pins)(const struct device *dev,
-			     uint8_t pins, uint8_t value);
-
-	/* Get SWCLK, SWDPIO, and nRESET pins state */
-	int (*swdp_get_pins)(const struct device *dev, uint8_t *state);
-
-	/* Set SWCLK frequency */
-	int (*swdp_set_clock)(const struct device *dev, uint32_t clock);
-
-	/*
-	 * Configure interface, line turnaround and whether data phase is
-	 * forced after WAIN and FAULT response.
+	/**
+	 * @brief Set SWCLK, SWDPIO, and nRESET pins state
+	 * @note The bit positions are defined by the SWDP_*_PIN macros.
+	 *
+	 * @param dev SWDP device
+	 * @param pins Bitmask of pins to set
+	 * @param value Value to set pins to
 	 */
-	int (*swdp_configure)(const struct device *dev,
-			      uint8_t turnaround,
-			      bool data_phase);
+	void (*swdp_set_pins)(const struct device *dev,
+			      uint8_t pins, uint8_t value);
 
-	/*
-	 * Enable interface, set SWDPIO to output mode
-	 * and set SWCLK and nRESET to default high level.
+	/**
+	 * @brief Get SWCLK, SWDPIO, and nRESET pins state
+	 * @note The bit positions are defined by the SWDP_*_PIN macros.
+	 *
+	 * @param dev SWDP device
+	 * @param state Place to store pins state
+	 */
+	void (*swdp_get_pins)(const struct device *dev, uint8_t *state);
+
+	/**
+	 * @brief Set SWDP clock frequency
+	 *
+	 * @param dev SWDP device
+	 * @param clock Clock frequency in Hz
+	 */
+	void (*swdp_set_clock)(const struct device *dev, uint32_t clock);
+
+	/**
+	 * @brief Configure SWDP interface
+	 *
+	 * @param dev SWDP device
+	 * @param turnaround Line turnaround cycles
+	 * @param data_phase Always generate Data Phase (also on WAIT/FAULT)
+	*/
+	void (*swdp_configure)(const struct device *dev,
+			       uint8_t turnaround,
+			       bool data_phase);
+
+	/**
+	 * @brief Enable interface, set pins to default state
+	 *
+	 * @note SWDPIO is set to output mode, SWCLK and nRESET are set to high level.
+	 *
+	 * @param dev SWDP device
+	 * @return 0 on success, or error code from gpio_pin_configure_dt()
 	 */
 	int (*swdp_port_on)(const struct device *dev);
 
-	/* Disables interface, set SWCLK, SWDPIO, nRESET to High-Z mode. */
+	/**
+	 * @brief Disable interface, set pins to High-Z mode
+	 *
+	 * @param dev SWDP device
+	 * @return 0 on success, or error code from gpio_pin_configure_dt()
+	 */
 	int (*swdp_port_off)(const struct device *dev);
 };
 
