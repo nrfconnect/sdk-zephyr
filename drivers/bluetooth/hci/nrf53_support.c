@@ -35,13 +35,6 @@ int bt_hci_transport_setup(const struct device *dev)
 	DEBUG_SETUP();
 #endif /* !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) || defined(CONFIG_BUILD_WITH_TFM) */
 
-#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
-	/* Retain nRF5340 Network MCU in Secure domain (bus
-	 * accesses by Network MCU will have Secure attribute set).
-	 */
-	NRF_SPU->EXTDOMAIN[0].PERM = 1 << 4;
-#endif /* !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) */
-
 	/* Release the Network MCU, 'Release force off signal' */
 	nrf53_cpunet_enable(true);
 

@@ -563,6 +563,17 @@ static int nordicsemi_nrf53_init(void)
 	nrf_regulators_vreg_enable_set(NRF_REGULATORS, NRF_REGULATORS_VREG_HIGH, true);
 #endif
 
+#if defined(NRF_SPU) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+	/* Retain nRF5340 Network MCU in Secure domain (bus
+	 * accesses by Network MCU will have Secure attribute set).
+	 *
+	 * Note that this source file is also used for the network core,
+	 * which doesn't have an SPU, so we ifdef on NRF_SPU being
+	 * available.
+	 */
+	NRF_SPU->EXTDOMAIN[0].PERM = 1 << 4;
+#endif /* !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) */
+
 #if defined(CONFIG_SOC_NRF_GPIO_FORWARDER_FOR_NRF5340)
 	static const uint8_t forwarded_psels[] = {
 		DT_FOREACH_STATUS_OKAY(nordic_nrf_gpio_forwarder, ALL_GPIOS_IN_FORWARDER)

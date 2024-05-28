@@ -36,13 +36,6 @@ BUILD_ASSERT(CONFIG_THINGY53_INIT_PRIORITY < CONFIG_SENSOR_INIT_PRIORITY,
 
 static void enable_cpunet(void)
 {
-#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
-	/* Retain nRF5340 Network MCU in Secure domain (bus
-	 * accesses by Network MCU will have Secure attribute set).
-	 */
-	NRF_SPU->EXTDOMAIN[0].PERM = 1 << 4;
-#endif /* !CONFIG_TRUSTED_EXECUTION_NONSECURE */
-
 #if !defined(CONFIG_TRUSTED_EXECUTION_SECURE)
 	/*
 	 * Building Zephyr with CONFIG_TRUSTED_EXECUTION_SECURE=y implies
