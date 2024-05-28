@@ -8,6 +8,8 @@ tests:
       - mcu
     simulation_exclude:
       - renode
+    platform_exclude:
+      - nrf54h20dk/nrf54h20/cpuppr
     harness_config:
       record:
         regex: "RECORD:(?P<metrics>.*)"
