@@ -158,10 +158,10 @@ class Build(Forceable):
 
         group = parser.add_mutually_exclusive_group()
         group.add_argument('--sysbuild', action='store_true',
-                           help='''create multi domain build system''')
-        group.add_argument('--no-sysbuild', action='store_true',
-                           help='''do not create multi domain build system
+                           help='''create multi domain build system
                                    (default)''')
+        group.add_argument('--no-sysbuild', action='store_true',
+                           help='''do not create multi domain build system''')
 
         group = parser.add_argument_group('pristine builds',
                                           PRISTINE_DESCRIPTION)
