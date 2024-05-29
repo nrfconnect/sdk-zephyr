@@ -271,7 +271,7 @@ config NO_CONFIG_WRITE
 
 config NO_CONFIG_BLOBS
 	bool
-	default y
+	default y if !WIFI_NM_WPA_SUPPLICANT_DPP && !WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
 
 config CTRL_IFACE
 	bool
@@ -294,7 +294,7 @@ config NO_WPA
 
 config NO_PBKDF2
 	bool
-	default y
+	default y if WIFI_NM_WPA_SUPPLICANT_CRYPTO_NONE
 
 config SAE_PK
 	bool
