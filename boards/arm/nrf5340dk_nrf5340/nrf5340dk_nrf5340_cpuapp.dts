@@ -20,3 +20,41 @@
 		zephyr,sram-non-secure-partition = &sram0_ns;
 	};
 };
+
+&led0 {
+	gpios = <&gpio0 26 0>;
+};
+
+&led1 {
+	gpios = <&gpio0 29 0>;
+};
+/delete-node/ &{/pin-controller/pwm0_sleep/group1/};
+/delete-node/ &{/pin-controller/pwm0_default/group1/};
+
+&button0 {
+	gpios = <&gpio0 28 0>;
+};
+
+&button1 {
+	gpios = <&gpio0 30 0>;
+};
+
+&led2 {
+	gpios = <&gpio0 27 0>;
+};
+
+&gpio_fwd {
+	uart {
+		gpios = <&gpio0 31 0>, <&gpio0 25 0>;
+	};
+
+	status = "okay";
+};
+
+&led3 {
+	gpios = <&gpio0 11 0>;
+};
+
+&button2 {
+	gpios = <&gpio0 10 0>;
+};
