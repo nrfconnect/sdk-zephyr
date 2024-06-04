@@ -86,6 +86,19 @@ config NET_IPV4_IGMPV3
 	help
 	  Use IGMPv3 for managing the multicast groups.
 
+config NET_DHCPV4
+	bool "DHCPv4 client"
+	select NET_MGMT
+	select NET_MGMT_EVENT
+	select NET_MGMT_EVENT_INFO if NET_IPV4_ACD
+	depends on NET_UDP
+
+config NET_DHCPV4_INITIAL_DELAY_MAX
+	int "Maximum time out for initial discover request"
+	depends on NET_DHCPV4
+	default 10
+	range 2 10
+
 config NET_IPV4_ACD
 	bool "Activate IPv4 address conflict detection (RFC 5227)"
 	depends on NET_ARP
