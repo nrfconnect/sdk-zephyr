@@ -52,35 +52,37 @@ static inline bool services_are_ready(int flags)
 	return (atomic_get(&services_flags) & flags) == flags;
 }
 
-#if defined(CONFIG_NET_DHCPV4) && defined(CONFIG_NET_NATIVE_IPV4)
-static struct net_mgmt_event_callback mgmt4_cb;
+#if defined(CONFIG_NET_NATIVE_IPV4)
 
-static void ipv4_addr_add_handler(struct net_mgmt_event_callback *cb,
-				  uint32_t mgmt_event,
-				  struct net_if *iface)
+#if defined(CONFIG_NET_DHCPV4)
+
+static void setup_dhcpv4(struct net_if *iface)
+{
+	NET_INFO("Running dhcpv4 client...");
+
+	net_dhcpv4_start(iface);
+}
+
+static void print_dhcpv4_info(struct net_if *iface)
 {
 #if CONFIG_NET_CONFIG_LOG_LEVEL >= LOG_LEVEL_INF
 	char hr_addr[NET_IPV4_ADDR_LEN];
 #endif
 	int i;
 
-	if (mgmt_event != NET_EVENT_IPV4_ADDR_ADD) {
-		return;
-	}
-
 	for (i = 0; i < NET_IF_MAX_IPV4_ADDR; i++) {
 		struct net_if_addr *if_addr =
 					&iface->config.ip.ipv4->unicast[i];
 
-		if (if_addr->addr_type != NET_ADDR_DHCP || !if_addr->is_used) {
+		if (if_addr->addr_type != NET_ADDR_DHCP ||
+		    !if_addr->is_used) {
 			continue;
 		}
 
 #if CONFIG_NET_CONFIG_LOG_LEVEL >= LOG_LEVEL_INF
 		NET_INFO("IPv4 address: %s",
-			 net_addr_ntop(AF_INET,
-					&if_addr->address.in_addr,
-					hr_addr, sizeof(hr_addr)));
+			 net_addr_ntop(AF_INET, &if_addr->address.in_addr,
+				       hr_addr, sizeof(hr_addr)));
 		NET_INFO("Lease time: %u seconds",
 			 iface->config.dhcpv4.lease_time);
 		NET_INFO("Subnet: %s",
@@ -88,30 +90,36 @@ static void ipv4_addr_add_handler(struct net_mgmt_event_callback *cb,
 				       &iface->config.ip.ipv4->netmask,
 				       hr_addr, sizeof(hr_addr)));
 		NET_INFO("Router: %s",
-			 net_addr_ntop(AF_INET,
-					&iface->config.ip.ipv4->gw,
-					hr_addr, sizeof(hr_addr)));
+			 net_addr_ntop(AF_INET, &iface->config.ip.ipv4->gw,
+				       hr_addr, sizeof(hr_addr)));
 #endif
 		break;
 	}
-
-	services_notify_ready(NET_CONFIG_NEED_IPV4);
-}
-
-static void setup_dhcpv4(struct net_if *iface)
-{
-	NET_INFO("Running dhcpv4 client...");
-
-	net_mgmt_init_event_callback(&mgmt4_cb, ipv4_addr_add_handler,
-				     NET_EVENT_IPV4_ADDR_ADD);
-	net_mgmt_add_event_callback(&mgmt4_cb);
-
-	net_dhcpv4_start(iface);
 }
 
 #else
 #define setup_dhcpv4(...)
+#define print_dhcpv4_info(...)
 #endif /* CONFIG_NET_DHCPV4 */
+
+static struct net_mgmt_event_callback mgmt4_cb;
+
+static void ipv4_addr_add_handler(struct net_mgmt_event_callback *cb,
+				  uint32_t mgmt_event,
+				  struct net_if *iface)
+{
+	if (mgmt_event == NET_EVENT_IPV4_ADDR_ADD) {
+		print_dhcpv4_info(iface);
+
+		if (!IS_ENABLED(CONFIG_NET_IPV4_ACD)) {
+			services_notify_ready(NET_CONFIG_NEED_IPV4);
+		}
+	}
+
+	if (mgmt_event == NET_EVENT_IPV4_ACD_SUCCEED) {
+		services_notify_ready(NET_CONFIG_NEED_IPV4);
+	}
+}
 
 #if defined(CONFIG_NET_VLAN) && (CONFIG_NET_CONFIG_MY_VLAN_ID > 0)
 
@@ -134,14 +142,19 @@ static void setup_vlan(struct net_if *iface)
 #error "You need to define an IPv4 address or enable DHCPv4!"
 #endif
 
-#if defined(CONFIG_NET_NATIVE_IPV4) && defined(CONFIG_NET_CONFIG_MY_IPV4_ADDR)
-
 static void setup_ipv4(struct net_if *iface)
 {
 #if CONFIG_NET_CONFIG_LOG_LEVEL >= LOG_LEVEL_INF
 	char hr_addr[NET_IPV4_ADDR_LEN];
 #endif
 	struct in_addr addr;
+
+	if (IS_ENABLED(CONFIG_NET_IPV4_ACD) || IS_ENABLED(CONFIG_NET_DHCPV4)) {
+		net_mgmt_init_event_callback(&mgmt4_cb, ipv4_addr_add_handler,
+					     NET_EVENT_IPV4_ADDR_ADD |
+					     NET_EVENT_IPV4_ACD_SUCCEED);
+		net_mgmt_add_event_callback(&mgmt4_cb);
+	}
 
 	if (sizeof(CONFIG_NET_CONFIG_MY_IPV4_ADDR) == 1) {
 		/* Empty address, skip setting ANY address in this case */
@@ -196,12 +209,16 @@ static void setup_ipv4(struct net_if *iface)
 		}
 	}
 
-	services_notify_ready(NET_CONFIG_NEED_IPV4);
+	if (!IS_ENABLED(CONFIG_NET_IPV4_ACD)) {
+		services_notify_ready(NET_CONFIG_NEED_IPV4);
+	}
 }
 
 #else
 #define setup_ipv4(...)
-#endif /* CONFIG_NET_IPV4 && !CONFIG_NET_DHCPV4 */
+#define setup_dhcpv4(...)
+#define setup_vlan(...)
+#endif /* CONFIG_NET_NATIVE_IPV4*/
 
 #if defined(CONFIG_NET_NATIVE_IPV6)
 
