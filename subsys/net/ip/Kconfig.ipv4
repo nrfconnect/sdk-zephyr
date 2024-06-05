@@ -90,10 +90,18 @@ config NET_DHCPV4_ACCEPT_UNICAST
 	  If set, the network stack will accept unicast DHCPv4 responses from
 	  servers, before the assigned address is configured on the interface.
 
+config NET_IPV4_ACD
+	bool "Activate IPv4 address conflict detection (RFC 5227)"
+	depends on NET_ARP
+	help
+	  Activate IPv4 address conflict detection specified in RFC 5227.
+	  The conflict detection is based on ARP probes/announcements.
+
 config NET_IPV4_AUTO
 	bool "IPv4 autoconfiguration [EXPERIMENTAL]"
 	depends on NET_ARP
 	select EXPERIMENTAL
+	select NET_IPV4_ACD
 	help
 	  Enables IPv4 auto IP address configuration (see RFC 3927)
 
@@ -161,6 +169,14 @@ module-str = Log level for DHCPv4 client
 module-help = Enable debug diagnostic from DHCPV4 client.
 source "subsys/net/Kconfig.template.log_config.net"
 endif # NET_DHCPV4
+
+#if NET_IPV4_ACD
+module = NET_IPV4_ACD
+module-dep = NET_LOG
+module-str = Log level for IPv4 address conflict detection
+module-help = Enables IPv4 address conflict detection debug messages.
+source "subsys/net/Kconfig.template.log_config.net"
+#endif
 
 if NET_IPV4_AUTO
 module = NET_IPV4_AUTO
