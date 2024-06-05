@@ -23,6 +23,7 @@ static K_SEM_DEFINE(dvfs_service_idle_sem, 0, 1);
 
 static atomic_t dvfs_service_handler_state_bits;
 static enum dvfs_frequency_setting current_freq_setting;
+static dvfs_service_handler_callback dvfs_frequency_change_applied_clb;
 
 static void dvfs_service_handler_set_state_bit(uint32_t bit_pos)
 {
@@ -83,7 +84,6 @@ static bool dvfs_service_handler_freq_setting_allowed(enum dvfs_frequency_settin
 
 static enum dvfs_frequency_setting dvfs_service_handler_get_current_oppoint(void)
 {
-	LOG_INF("Current LD freq setting: %d", current_freq_setting);
 	return current_freq_setting;
 }
 
@@ -143,7 +143,12 @@ static void dvfs_service_handler_scaling_finish(enum dvfs_frequency_setting oppo
 			dvfs_service_handler_error(err);
 		}
 	}
+	dvfs_service_handler_clear_state_bit(DVFS_SERV_HDL_FREQ_CHANGE_IN_PROGRESS_BIT_POS);
 	current_freq_setting = oppoint_freq;
+	LOG_INF("Current LD freq setting: %d", current_freq_setting);
+	if (dvfs_frequency_change_applied_clb) {
+		dvfs_frequency_change_applied_clb((void *)&current_freq_setting);
+	}
 }
 
 /* Function to set hsfll to highest frequency when switched to ABB. */
@@ -196,7 +201,7 @@ static void nrfs_dvfs_evt_handler(nrfs_dvfs_evt_t const *p_evt, void *context)
 			dvfs_service_handler_scaling_background_job(p_evt->freq);
 			LOG_INF("DVFS handler EVT_OPPOINT_SCALING_PREPARE handled");
 #if !defined(NRF_SECURE)
-			current_freq_setting = p_evt->freq;
+			dvfs_service_handler_scaling_finish(p_evt->freq);
 		} else {
 			LOG_ERR("DVFS handler - unexpected EVT_OPPOINT_SCALING_PREPARE");
 		}
@@ -204,7 +209,6 @@ static void nrfs_dvfs_evt_handler(nrfs_dvfs_evt_t const *p_evt, void *context)
 		break;
 	case NRFS_DVFS_EVT_OPPOINT_SCALING_DONE:
 		LOG_INF("DVFS handler EVT_OPPOINT_SCALING_DONE");
-		dvfs_service_handler_clear_state_bit(DVFS_SERV_HDL_FREQ_CHANGE_IN_PROGRESS_BIT_POS);
 		dvfs_service_handler_scaling_finish(p_evt->freq);
 		LOG_INF("DVFS handler EVT_OPPOINT_SCALING_DONE handled");
 		break;
@@ -271,22 +275,44 @@ K_THREAD_DEFINE(dvfs_service_handler_task_id,
 int32_t dvfs_service_handler_change_freq_setting(enum dvfs_frequency_setting freq_setting)
 {
 	if (!dvfs_service_handler_init_done()) {
-		LOG_INF("Init not done!");
+		LOG_ERR("Init not done!");
 		return -EAGAIN;
 	}
 
-	if (dvfs_service_handler_freq_change_in_progress()) {
-		LOG_INF("Frequency change in progress.");
-		return -EBUSY;
-	}
-
 	if (!dvfs_service_handler_freq_setting_allowed(freq_setting)) {
+		LOG_ERR("Requested frequency setting %d not supported.", freq_setting);
 		return -ENXIO;
 	}
 
+	if (freq_setting == current_freq_setting) {
+		LOG_DBG("Requested frequency setting %d same as current setting.", freq_setting);
+		return -EEXIST;
+	}
+
+	if (dvfs_service_handler_freq_change_in_progress()) {
+		LOG_DBG("Frequency change in progress.");
+		return -EBUSY;
+	}
+
+	dvfs_service_handler_set_state_bit(DVFS_SERV_HDL_FREQ_CHANGE_IN_PROGRESS_BIT_POS);
+
 	nrfs_err_t status = nrfs_dvfs_oppoint_request(freq_setting, get_next_context());
+
+	if (status != NRFS_SUCCESS) {
+		dvfs_service_handler_clear_state_bit(DVFS_SERV_HDL_FREQ_CHANGE_IN_PROGRESS_BIT_POS);
+	}
 
 	dvfs_service_handler_nrfs_error_check(status);
 
 	return status;
+}
+
+void dvfs_service_handler_register_freq_setting_applied_callback(dvfs_service_handler_callback clb)
+{
+	if (clb) {
+		LOG_DBG("Registered frequency applied callback");
+		dvfs_frequency_change_applied_clb = clb;
+	} else {
+		LOG_ERR("Invalid callback function provided!");
+	}
 }
