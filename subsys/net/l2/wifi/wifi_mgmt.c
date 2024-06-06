@@ -590,7 +590,7 @@ static int wifi_set_twt(uint32_t mgmt_request, struct net_if *iface,
 
 	if (wifi_mgmt_api == NULL || wifi_mgmt_api->set_twt == NULL) {
 		twt_params->fail_reason =
-			WIFI_TWT_FAIL_OPERATION_NOT_SUPPORTED;
+			WIFI_FAIL_OPERATION_NOT_SUPPORTED;
 		return -ENOTSUP;
 	}
 
@@ -601,13 +601,13 @@ static int wifi_set_twt(uint32_t mgmt_request, struct net_if *iface,
 	if (net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &info,
 			sizeof(struct wifi_iface_status))) {
 		twt_params->fail_reason =
-			WIFI_TWT_FAIL_UNABLE_TO_GET_IFACE_STATUS;
+			WIFI_FAIL_UNABLE_TO_GET_IFACE_STATUS;
 		goto fail;
 	}
 
 	if (info.state != WIFI_STATE_COMPLETED) {
 		twt_params->fail_reason =
-			WIFI_TWT_FAIL_DEVICE_NOT_CONNECTED;
+			WIFI_FAIL_DEVICE_NOT_CONNECTED;
 		goto fail;
 	}
 
@@ -615,7 +615,7 @@ static int wifi_set_twt(uint32_t mgmt_request, struct net_if *iface,
 	if ((!net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED)) &&
 	    (!net_if_ipv6_get_global_addr(NET_ADDR_PREFERRED, &iface))) {
 		twt_params->fail_reason =
-			WIFI_TWT_FAIL_IP_NOT_ASSIGNED;
+			WIFI_FAIL_IP_NOT_ASSIGNED;
 		goto fail;
 	}
 #else
@@ -625,13 +625,13 @@ static int wifi_set_twt(uint32_t mgmt_request, struct net_if *iface,
 
 	if (info.link_mode < WIFI_6) {
 		twt_params->fail_reason =
-			WIFI_TWT_FAIL_PEER_NOT_HE_CAPAB;
+			WIFI_FAIL_PEER_NOT_HE_CAPAB;
 		goto fail;
 	}
 
 	if (!info.twt_capable) {
 		twt_params->fail_reason =
-			WIFI_TWT_FAIL_PEER_NOT_TWT_CAPAB;
+			WIFI_FAIL_PEER_NOT_CAPAB;
 		goto fail;
 	}
 
@@ -794,6 +794,66 @@ static int wifi_set_bss_max_idle_period(uint32_t mgmt_request, struct net_if *if
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_BSS_MAX_IDLE_PERIOD,
 				  wifi_set_bss_max_idle_period);
+
+const char *wifi_dms_operation_txt(enum wifi_dms_operation dms_operation)
+{
+	switch (dms_operation) {
+	case WIFI_DMS_REQ_ADD:
+		return "DMS add request";
+	case WIFI_DMS_REQ_REMOVE:
+		return "DMS remove request";
+	case WIFI_DMS_REQ_CHANGE:
+		return "DMS change request";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+static int wifi_req_dms(uint32_t mgmt_request, struct net_if *iface, void *data, size_t len)
+{
+	const struct device *dev = net_if_get_device(iface);
+	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_api(iface);
+	struct wifi_dms_params *dms_params = data;
+	struct wifi_iface_status info = {0};
+
+	if (wifi_mgmt_api == NULL || wifi_mgmt_api->req_dms == NULL) {
+		dms_params->fail_reason = WIFI_FAIL_OPERATION_NOT_SUPPORTED;
+		return -ENOTSUP;
+	}
+
+	if (net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &info,
+		     sizeof(struct wifi_iface_status))) {
+		dms_params->fail_reason = WIFI_FAIL_UNABLE_TO_GET_IFACE_STATUS;
+		goto fail;
+	}
+
+	if (info.state != WIFI_STATE_COMPLETED) {
+		dms_params->fail_reason = WIFI_FAIL_DEVICE_NOT_CONNECTED;
+		goto fail;
+	}
+	if (info.link_mode < WIFI_3) {
+		dms_params->fail_reason = WIFI_FAIL_PEER_NOT_HT_CAPAB;
+		goto fail;
+	}
+
+#if 0
+	if (!info.dms_capable) {
+		dms_params->fail_reason = WIFI_FAIL_PEER_NOT_CAPAB;
+		goto fail;
+	}
+#endif
+	return wifi_mgmt_api->req_dms(dev, dms_params);
+fail:
+	return -ENOEXEC;
+}
+
+NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_DMS, wifi_req_dms);
+
+void wifi_mgmt_raise_dms_event(struct net_if *iface, struct wifi_dms_params *dms_params)
+{
+	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_DMS, iface, dms_params,
+					sizeof(struct wifi_dms_params));
+}
 
 #ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS
 void wifi_mgmt_raise_raw_scan_result_event(struct net_if *iface,

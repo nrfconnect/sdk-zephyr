@@ -131,3 +131,11 @@ config WIFI_MGMT_BSS_MAX_IDLE_TIME
 	  timeout by including BSS max idle period in the association request.
 	  AP may choose to consider or ignore the STA's preferred value.
 	  Ref: Sec 11.21.13 of IEEE Std 802.11™-2020
+
+config WIFI_MGMT_DMS
+	bool "Wi-Fi Directed Multicast Service"
+	default n
+	help
+	  It enables the clients to request access points to transmit multicast packets
+	  as unicast packets. Thus enabling the STA to receive multicast packets
+	  it had lost while in sleep.
