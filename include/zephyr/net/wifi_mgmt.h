@@ -85,6 +85,8 @@ enum net_request_wifi_cmd {
 	NET_REQUEST_WIFI_CMD_AP_STA_DISCONNECT,
 	/** Get Wi-Fi driver and Firmware versions */
 	NET_REQUEST_WIFI_CMD_VERSION,
+	/** Configure BSS maximum idle period */
+	NET_REQUEST_WIFI_CMD_BSS_MAX_IDLE_PERIOD,
 	NET_REQUEST_WIFI_CMD_MAX
 };
 
@@ -171,6 +173,12 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_AP_STA_DISCONNECT);
 	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_VERSION)
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_VERSION);
+
+/** Request a Wi-Fi BSS max idle period */
+#define NET_REQUEST_WIFI_BSS_MAX_IDLE_PERIOD                           \
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_BSS_MAX_IDLE_PERIOD)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_BSS_MAX_IDLE_PERIOD);
 
 /** Wi-Fi management events */
 enum net_event_wifi_cmd {
@@ -852,6 +860,14 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*get_version)(const struct device *dev, struct wifi_version *params);
+	/** Set BSS max idle period
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 * @param BSS max idle period value
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*set_bss_max_idle_period)(const struct device *dev, unsigned short bss_max_idle_period);
 };
 
 /** Wi-Fi management offload API */
