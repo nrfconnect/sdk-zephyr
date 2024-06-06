@@ -91,6 +91,8 @@ enum net_request_wifi_cmd {
 	NET_REQUEST_WIFI_CMD_RTS_THRESHOLD,
 	/** Configure AP parameter */
 	NET_REQUEST_WIFI_CMD_AP_CONFIG_PARAM,
+	/** Configure BSS maximum idle period */
+	NET_REQUEST_WIFI_CMD_BSS_MAX_IDLE_PERIOD,
 /** @cond INTERNAL_HIDDEN */
 	NET_REQUEST_WIFI_CMD_MAX
 /** @endcond */
@@ -197,6 +199,12 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_RTS_THRESHOLD);
 	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_AP_CONFIG_PARAM)
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_AP_CONFIG_PARAM);
+
+/** Request a Wi-Fi BSS max idle period */
+#define NET_REQUEST_WIFI_BSS_MAX_IDLE_PERIOD                           \
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_BSS_MAX_IDLE_PERIOD)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_BSS_MAX_IDLE_PERIOD);
 
 /** @brief Wi-Fi management events */
 enum net_event_wifi_cmd {
@@ -949,6 +957,14 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*ap_config_params)(const struct device *dev, struct wifi_ap_config_params *params);
+	/** Set BSS max idle period
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 * @param BSS max idle period value
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*set_bss_max_idle_period)(const struct device *dev, unsigned short bss_max_idle_period);
 };
 
 /** Wi-Fi management offload API */
