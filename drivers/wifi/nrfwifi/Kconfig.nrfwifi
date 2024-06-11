@@ -727,4 +727,10 @@ config NRF_WIFI_PATCHES_EXT_FLASH_XIP
 	help
 	  Select this option to enable external flash XIP for nRF70 firmware patches
 
+config NRF_WIFI_FEAT_WMM
+	bool "WMM/QoS support"
+	default y
+	help
+	  This option controls disable/enable of the WMM(Wireless Multi-Media) feature.
+
 endif # WIFI_NRF70
