@@ -689,4 +689,10 @@ config NRF_WIFI_FW_FLASH_CHUNK_SIZE
 	help
 	  Select this option to set the flash chunk size for nRF700x firmware patches
 
+config NRF_WIFI_FEAT_WMM
+	bool "WMM/QoS support"
+	default y
+	help
+	  This option controls disable/enable of the WMM(Wireless Multi-Media) feature.
+
 endif # WIFI_NRF70
