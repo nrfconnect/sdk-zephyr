@@ -667,6 +667,12 @@ config NRF_WIFI_COMBINED_BUCKEN_IOVDD_GPIO
 	  there will be a internal hardware switch to add delay between the two operations. This
 	  is typically 4ms delay for nRF70.
 
+config NRF_WIFI_FEAT_WMM
+	bool "WMM/QoS support"
+	default y
+	help
+	  This option controls disable/enable of the WMM(Wireless Multi-Media) feature.
+
 # TODO: Temporary WAR, implement these options in the future
 config NRF_WIFI_PATCHES_EXT_FLASH_DISABLED
 	bool "nRF70 firmware patch external flash support"
@@ -693,11 +699,5 @@ config NRF_WIFI_PATCHES_EXT_FLASH_XIP
 	bool "nRF70 firmware patch external flash XIP"
 	help
 	  Select this option to enable external flash XIP for nRF70 firmware patches
-
-config NRF_WIFI_FEAT_WMM
-	bool "WMM/QoS support"
-	default y
-	help
-	  This option controls disable/enable of the WMM(Wireless Multi-Media) feature.
 
 endif # WIFI_NRF70
