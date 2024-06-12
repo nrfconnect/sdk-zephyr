@@ -13,3 +13,10 @@ ExternalZephyrProject_Add(
 
 add_dependencies(${DEFAULT_IMAGE} remote)
 sysbuild_add_dependencies(FLASH ${DEFAULT_IMAGE} remote)
+
+if(SB_CONFIG_SOC_SERIES_NRF53X)
+  set_property(GLOBAL APPEND PROPERTY PM_DOMAINS CPUNET)
+  set_property(GLOBAL APPEND PROPERTY PM_CPUNET_IMAGES remote)
+  set_property(GLOBAL PROPERTY DOMAIN_APP_CPUNET remote)
+  set(CPUNET_PM_DOMAIN_DYNAMIC_PARTITION remote CACHE INTERNAL "")
+endif()
