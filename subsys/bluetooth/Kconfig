@@ -180,12 +180,13 @@ rsource "Kconfig.iso"
 rsource "common/Kconfig"
 rsource "host/Kconfig"
 rsource "controller/Kconfig"
-rsource "shell/Kconfig"
 rsource "crypto/Kconfig"
 rsource "lib/Kconfig"
 rsource "Kconfig.logging"
 
 endif # BT_HCI
+
+rsource "shell/Kconfig"
 
 config BT_COMPANY_ID
 	hex "Company Id"
