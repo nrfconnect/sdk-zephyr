@@ -7,7 +7,11 @@
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
+#ifdef CONFIG_PWM_CAPTURE
 #include "test_pwm_loopback.h"
+#else
+#include "test_pwm_to_gpio_loopback.h"
+#endif
 
 static void *pwm_loopback_setup(void)
 {
