@@ -133,6 +133,9 @@ extern "C" {
 /** sockopt: enable IPv6 ICMP replies */
 #define SO_IPV6_ECHO_REPLY 32
 
+/** sockopt: Delay IPv6 address refresh during power saving mode  */
+#define SO_IPV6_DELAYED_ADDR_REFRESH 62
+
 /* NCS specific TCP level socket options */
 
 /** sockopt: Configurable TCP server session timeout in minutes.
