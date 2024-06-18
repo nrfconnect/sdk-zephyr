@@ -1,0 +1,8 @@
+tests:
+  tests.subsys.stm_nrfutil:
+    tags: stm
+    harness: pytest
+    harness_config:
+      pytest_dut_scope: session
+      fixture: nrfutil_trace
+
