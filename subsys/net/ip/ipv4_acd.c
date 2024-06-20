@@ -323,7 +323,7 @@ enum net_verdict net_ipv4_acd_input(struct net_if *iface, struct net_pkt *pkt)
 	 * addresses.
 	 */
 	for (int i = 0; i < NET_IF_MAX_IPV4_ADDR; i++) {
-		struct net_if_addr *ifaddr = &ipv4->unicast[i];
+		struct net_if_addr *ifaddr = &ipv4->unicast[i].ipv4;
 		struct net_linkaddr *ll_addr = net_if_get_link_addr(iface);
 
 		if (!ifaddr->is_used) {

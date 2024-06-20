@@ -4242,14 +4242,14 @@ void net_if_start_acd(struct net_if *iface)
 	 * the interface was down.
 	 */
 	for (int i = 0; i < NET_IF_MAX_IPV4_ADDR; i++) {
-		if (!ipv4->unicast[i].is_used ||
-		    ipv4->unicast[i].address.family != AF_INET ||
+		if (!ipv4->unicast[i].ipv4.is_used ||
+		    ipv4->unicast[i].ipv4.address.family != AF_INET ||
 		    net_ipv4_is_addr_loopback(
-			    &ipv4->unicast[i].address.in_addr)) {
+			    &ipv4->unicast[i].ipv4.address.in_addr)) {
 			continue;
 		}
 
-		net_if_ipv4_start_acd(iface, &ipv4->unicast[i]);
+		net_if_ipv4_start_acd(iface, &ipv4->unicast[i].ipv4);
 	}
 
 out:
@@ -4384,7 +4384,7 @@ bool net_if_ipv4_addr_rm(struct net_if *iface, const struct in_addr *addr)
 			i, iface, net_sprint_ipv4_addr(addr));
 
 #if defined(CONFIG_NET_IPV4_ACD)
-		net_ipv4_acd_cancel(iface, &ipv4->unicast[i]);
+		net_ipv4_acd_cancel(iface, &ipv4->unicast[i].ipv4);
 #endif
 	}
 
