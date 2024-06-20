@@ -1764,13 +1764,6 @@ MODEM_CHAT_SCRIPT_CMDS_DEFINE(quectel_eg25_g_periodic_chat_script_cmds,
 MODEM_CHAT_SCRIPT_DEFINE(quectel_eg25_g_periodic_chat_script,
 			 quectel_eg25_g_periodic_chat_script_cmds, abort_matches,
 			 modem_cellular_chat_callback_handler, 4);
-
-MODEM_CHAT_SCRIPT_CMDS_DEFINE(quectel_eg25_g_get_signal_chat_script_cmds,
-			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CSQ", csq_match));
-
-MODEM_CHAT_SCRIPT_DEFINE(quectel_eg25_g_get_signal_chat_script,
-			 quectel_eg25_g_get_signal_chat_script_cmds, abort_matches,
-			 modem_cellular_chat_callback_handler, 4);
 #endif
 
 #if DT_HAS_COMPAT_STATUS_OKAY(simcom_sim7080)
