@@ -1503,35 +1503,6 @@ static int modem_cellular_get_registration_status(const struct device *dev,
 
 	return ret;
 }
-static int modem_cellular_get_registration_status(const struct device *dev,
-						  enum cellular_access_technology tech,
-						  enum cellular_registration_status *status)
-{
-	int ret = 0;
-	struct modem_cellular_data *data = (struct modem_cellular_data *)dev->data;
-
-	switch (tech) {
-	case CELLULAR_ACCESS_TECHNOLOGY_GSM:
-		*status = data->registration_status_gsm;
-		break;
-	case CELLULAR_ACCESS_TECHNOLOGY_GPRS:
-	case CELLULAR_ACCESS_TECHNOLOGY_UMTS:
-	case CELLULAR_ACCESS_TECHNOLOGY_EDGE:
-		*status = data->registration_status_gprs;
-		break;
-	case CELLULAR_ACCESS_TECHNOLOGY_LTE:
-	case CELLULAR_ACCESS_TECHNOLOGY_LTE_CAT_M1:
-	case CELLULAR_ACCESS_TECHNOLOGY_LTE_CAT_M2:
-	case CELLULAR_ACCESS_TECHNOLOGY_NB_IOT:
-		*status = data->registration_status_lte;
-		break;
-	default:
-		ret = -ENODATA;
-		break;
-	}
-
-	return ret;
-}
 
 const static struct cellular_driver_api modem_cellular_api = {
 	.get_signal = modem_cellular_get_signal,
