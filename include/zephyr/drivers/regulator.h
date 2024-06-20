@@ -422,6 +422,7 @@ bool regulator_is_enabled(const struct device *dev);
  * @retval 0 If regulator has been successfully disabled.
  * @retval -errno Negative errno in case of failure.
  * @retval -ENOTSUP If regulator disablement can not be controlled.
+ * @retval -EALREADY If regulator is already disabled.
  */
 int regulator_disable(const struct device *dev);
 
