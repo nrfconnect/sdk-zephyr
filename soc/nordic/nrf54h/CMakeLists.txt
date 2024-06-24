@@ -12,6 +12,8 @@ zephyr_library_sources_ifdef(CONFIG_PM_S2RAM pm_s2ram.c)
 
 zephyr_include_directories(.)
 
+zephyr_library_sources_ifdef(CONFIG_SOC_NRF54H20_NO_MRAM_LATENCY mram.c)
+
 # Ensure that image size aligns with 16 bytes so that MRAMC finalizes all writes
 # for the image correctly
 zephyr_linker_sources(SECTIONS SORT_KEY zzz_place_align_at_end align.ld)
