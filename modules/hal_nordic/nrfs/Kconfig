@@ -72,6 +72,7 @@ config NRFS_RESET_SERVICE_ENABLED
 config NRFS_MRAM_SERVICE_ENABLED
 	bool "MRAM latency service"
 	depends on NRFS_HAS_MRAM_SERVICE
+	default y
 
 config NRFS_TEMP_SERVICE_ENABLED
 	bool "Temperature service"
