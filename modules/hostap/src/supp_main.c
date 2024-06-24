@@ -416,7 +416,7 @@ static void iface_cb(struct net_if *iface, void *user_data)
 		return;
 	}
 
-	if (!net_if_is_up(iface)) {
+	if (!net_if_is_admin_up(iface)) {
 		return;
 	}
 
