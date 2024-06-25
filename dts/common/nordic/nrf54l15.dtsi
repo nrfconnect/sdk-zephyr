@@ -138,6 +138,7 @@
 				interrupts = <74 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
 				endtx-stoptx-supported;
+				frame-timeout-supported;
 			};
 
 			cpuflpr_vpr: vpr@4c000 {
@@ -271,6 +272,7 @@
 				interrupts = <198 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
 				endtx-stoptx-supported;
+				frame-timeout-supported;
 			};
 
 			i2c21: i2c@c7000 {
@@ -309,6 +311,7 @@
 				interrupts = <199 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
 				endtx-stoptx-supported;
+				frame-timeout-supported;
 			};
 
 			i2c22: i2c@c8000 {
@@ -347,6 +350,7 @@
 				interrupts = <200 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
 				endtx-stoptx-supported;
+				frame-timeout-supported;
 			};
 
 			egu20: egu@c9000 {
@@ -556,6 +560,7 @@
 				interrupts = <260 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
 				endtx-stoptx-supported;
+				frame-timeout-supported;
 			};
 
 #ifdef USE_NON_SECURE_ADDRESS_MAP
