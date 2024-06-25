@@ -38,6 +38,8 @@ config NRFS
 	bool "nRF Services Support"
 	select NRFS_LOCAL_DOMAIN if (SOC_NRF54H20_CPUAPP || SOC_NRF54H20_CPURAD)
 	depends on HAS_NRFS
+	depends on !MISRA_SANE
+	default y
 	help
 	  This option enables the nRF Services library.
 
