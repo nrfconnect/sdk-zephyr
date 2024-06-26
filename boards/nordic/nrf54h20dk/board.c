@@ -19,7 +19,7 @@ void mram_latency_handler(nrfs_mram_latency_evt_t const *p_evt, void *context)
 {
 	switch (p_evt->type) {
 	case NRFS_MRAM_LATENCY_REQ_APPLIED:
-		LOG_INF("MRAM latency handler: response received");
+		LOG_DBG("MRAM latency handler: response received");
 		break;
 	case NRFS_MRAM_LATENCY_REQ_REJECTED:
 		LOG_ERR("MRAM latency handler - request rejected!");
@@ -43,10 +43,10 @@ static int turn_off_suspend_mram(void)
 	if (err != NRFS_SUCCESS) {
 		LOG_ERR("MRAM service init failed: %d", err);
 	} else {
-		LOG_INF("MRAM service initialized");
+		LOG_DBG("MRAM service initialized");
 	}
 
-	LOG_INF("MRAM: set latency: NOT ALLOWED");
+	LOG_DBG("MRAM: set latency: NOT ALLOWED");
 	err = nrfs_mram_set_latency(MRAM_LATENCY_NOT_ALLOWED, NULL);
 	if (err) {
 		LOG_ERR("MRAM: set latency failed (%d)", err);
