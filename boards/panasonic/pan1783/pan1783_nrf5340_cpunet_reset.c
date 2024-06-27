@@ -31,9 +31,6 @@ static void remoteproc_mgr_config(void)
 {
 	/* Route Bluetooth Controller Debug Pins */
 	DEBUG_SETUP();
-
-	/* Retain nRF5340 Network MCU */
-	NRF_SPU->EXTDOMAIN[0].PERM = 1 << 4;
 }
 
 static int remoteproc_mgr_boot(void)

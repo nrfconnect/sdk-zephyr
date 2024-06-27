@@ -25,13 +25,6 @@ static void remoteproc_mgr_config(void)
 	/* Route Bluetooth Controller Debug Pins */
 	DEBUG_SETUP();
 #endif /* !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) || defined(CONFIG_BUILD_WITH_TFM) */
-
-#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
-	/* Retain nRF5340 Network MCU in Secure domain (bus
-	 * accesses by Network MCU will have Secure attribute set).
-	 */
-	NRF_SPU->EXTDOMAIN[0].PERM = 1 << 4;
-#endif /* !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) */
 }
 
 static int remoteproc_mgr_boot(const struct device *dev)
