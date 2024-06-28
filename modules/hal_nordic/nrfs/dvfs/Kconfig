@@ -37,4 +37,9 @@ config NRFS_LOCAL_DOMAIN_DVFS_HANDLER_TASK_PRIORITY
 	range -16 NUM_PREEMPT_PRIORITIES
 	default 0
 
+config NRFS_LOCAL_DOMAIN_DVFS_HANDLER_TASK_DELAY_MS
+	int "Delay in [ms] before DVFS handling task will be started"
+	range 0 100000
+	default 0
+
 endmenu
