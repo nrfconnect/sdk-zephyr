@@ -586,7 +586,7 @@ class Build(Forceable):
             # Check if this is an ncs-repo directory
             allow_list = [ 'mcuboot', 'sidewalk', 'find-my', 'nrf', 'matter', 'suit-processor',
                            'memfault-firmware-sdk', 'zscilib', 'uoscore-uedhoc', 'zcbor',
-                           'hal_nordic', 'ncs-example-application' ]
+                           'hal_nordic', 'ncs-example-application', 'ant' ]
             config_sysbuild = False
 
             for module in zephyr_module.parse_modules(ZEPHYR_BASE, self.manifest):
