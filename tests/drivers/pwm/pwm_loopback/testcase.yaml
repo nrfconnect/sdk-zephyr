@@ -5,7 +5,7 @@ tests:
       - drivers
       - userspace
     depends_on: pwm
-    filter: dt_compat_enabled("test-pwm-loopback")
+    filter: dt_compat_enabled("test-pwm-loopback") | dt_compat_enabled("test-pwm-to-gpio-loopback")
     harness: ztest
     harness_config:
       fixture: pwm_loopback

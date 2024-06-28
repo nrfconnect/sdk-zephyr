@@ -8,6 +8,7 @@
 #define __TEST_PWM_LOOPBACK_H__
 
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/pwm.h>
 #include <zephyr/ztest.h>
 
@@ -23,12 +24,9 @@
 #define PWM_LOOPBACK_OUT_FLAGS \
 	DT_PWMS_FLAGS_BY_IDX(PWM_LOOPBACK_NODE, PWM_LOOPBACK_OUT_IDX)
 
-#define PWM_LOOPBACK_IN_CTLR \
-	DT_PWMS_CTLR_BY_IDX(PWM_LOOPBACK_NODE, PWM_LOOPBACK_IN_IDX)
-#define PWM_LOOPBACK_IN_CHANNEL \
-	DT_PWMS_CHANNEL_BY_IDX(PWM_LOOPBACK_NODE, PWM_LOOPBACK_IN_IDX)
-#define PWM_LOOPBACK_IN_FLAGS \
-	DT_PWMS_FLAGS_BY_IDX(PWM_LOOPBACK_NODE, PWM_LOOPBACK_IN_IDX)
+#define GPIO_LOOPBACK_IN \
+	DT_GPIO_CTLR(PWM_LOOPBACK_NODE, gpios)
+
 
 struct test_pwm {
 	const struct device *dev;
