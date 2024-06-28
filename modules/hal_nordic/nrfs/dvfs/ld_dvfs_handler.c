@@ -266,7 +266,7 @@ K_THREAD_DEFINE(dvfs_service_handler_task_id,
 		NULL,
 		CONFIG_NRFS_LOCAL_DOMAIN_DVFS_HANDLER_TASK_PRIORITY,
 		0,
-		0);
+		CONFIG_NRFS_LOCAL_DOMAIN_DVFS_HANDLER_TASK_DELAY_MS);
 
 int32_t dvfs_service_handler_change_freq_setting(enum dvfs_frequency_setting freq_setting)
 {
