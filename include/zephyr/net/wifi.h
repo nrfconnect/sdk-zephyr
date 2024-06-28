@@ -126,6 +126,23 @@ const char *wifi_band_txt(enum wifi_frequency_bands band);
 /** Any channel number */
 #define WIFI_CHANNEL_ANY 255
 
+/** Minimum Dialog token */
+#define WIFI_DMS_MIN_DIALOG_TOKEN    1
+/** Maximum Dialog token */
+#define WIFI_DMS_MAX_DIALOG_TOKEN    0xFF
+/** Minimum DMSID */
+#define WIFI_DMS_MIN_ID              0
+/** Maximum DMSID */
+#define WIFI_DMS_MAX_ID              0xFF
+/** Minimum classifier Mask */
+#define WIFI_DMS_MIN_CLASSIFIER_MASK 0
+/** Maximum classifier Mask */
+#define WIFI_DMS_MAX_CLASSIFIER_MASK 0x7F
+/** Minimum protocol val */
+#define WIFI_DMS_MIN_PROTOCOL        0
+/** Maxinimum protocol val */
+#define WIFI_DMS_MAX_PROTOCOL        0xFF
+
 /** @brief Wi-Fi interface states.
  *
  * Based on https://w1.fi/wpa_supplicant/devel/defs_8h.html#a4aeb27c1e4abd046df3064ea9756f0bc
@@ -357,30 +374,34 @@ enum wifi_twt_setup_resp_status {
 	WIFI_TWT_RESP_NOT_RECEIVED,
 };
 
-/** @brief Target Wake Time (TWT) error codes. */
-enum wifi_twt_fail_reason {
+/** @brief Target Wake Time (TWT) or Directed Multicast Serivce (DMS)  error codes. */
+enum wifi_fail_reason {
 	/** Unspecified error */
-	WIFI_TWT_FAIL_UNSPECIFIED,
+	WIFI_FAIL_UNSPECIFIED,
 	/** Command execution failed */
-	WIFI_TWT_FAIL_CMD_EXEC_FAIL,
+	WIFI_FAIL_CMD_EXEC_FAIL,
 	/** Operation not supported */
-	WIFI_TWT_FAIL_OPERATION_NOT_SUPPORTED,
+	WIFI_FAIL_OPERATION_NOT_SUPPORTED,
 	/** Unable to get interface status */
-	WIFI_TWT_FAIL_UNABLE_TO_GET_IFACE_STATUS,
+	WIFI_FAIL_UNABLE_TO_GET_IFACE_STATUS,
 	/** Device not connected to AP */
-	WIFI_TWT_FAIL_DEVICE_NOT_CONNECTED,
+	WIFI_FAIL_DEVICE_NOT_CONNECTED,
 	/** Peer not HE (802.11ax/Wi-Fi 6) capable */
-	WIFI_TWT_FAIL_PEER_NOT_HE_CAPAB,
-	/** Peer not TWT capable */
-	WIFI_TWT_FAIL_PEER_NOT_TWT_CAPAB,
-	/** A TWT flow is already in progress */
-	WIFI_TWT_FAIL_OPERATION_IN_PROGRESS,
-	/** Invalid negotiated flow id */
-	WIFI_TWT_FAIL_INVALID_FLOW_ID,
+	WIFI_FAIL_PEER_NOT_HE_CAPAB,
+	/** Peer not capable */
+	WIFI_FAIL_PEER_NOT_CAPAB,
+	/** A flow is already in progress */
+	WIFI_FAIL_OPERATION_IN_PROGRESS,
+	/** Invalid negotiated flow id (applicable for TWT operation)*/
+	WIFI_FAIL_INVALID_FLOW_ID,
 	/** IP address not assigned or configured */
-	WIFI_TWT_FAIL_IP_NOT_ASSIGNED,
+	WIFI_FAIL_IP_NOT_ASSIGNED,
 	/** Flow already exists */
-	WIFI_TWT_FAIL_FLOW_ALREADY_EXISTS,
+	WIFI_FAIL_FLOW_ALREADY_EXISTS,
+	/** Peer not HT (802.11n) capable */
+	WIFI_FAIL_PEER_NOT_HT_CAPAB,
+	/** Invalid dms id (applicable for DMS operation) */
+	WIFI_FAIL_INVALID_DMS_ID,
 };
 
 /** @brief Wi-Fi Target Wake Time (TWT) teradown status. */
@@ -392,33 +413,35 @@ enum wifi_twt_teardown_status {
 };
 
 /** @cond INTERNAL_HIDDEN */
-static const char * const wifi_twt_err_code_tbl[] = {
-	[WIFI_TWT_FAIL_UNSPECIFIED] = "Unspecified",
-	[WIFI_TWT_FAIL_CMD_EXEC_FAIL] = "Command Execution failed",
-	[WIFI_TWT_FAIL_OPERATION_NOT_SUPPORTED] =
+static const char * const wifi_err_code_tbl[] = {
+	[WIFI_FAIL_UNSPECIFIED] = "Unspecified",
+	[WIFI_FAIL_CMD_EXEC_FAIL] = "Command Execution failed",
+	[WIFI_FAIL_OPERATION_NOT_SUPPORTED] =
 		"Operation not supported",
-	[WIFI_TWT_FAIL_UNABLE_TO_GET_IFACE_STATUS] =
+	[WIFI_FAIL_UNABLE_TO_GET_IFACE_STATUS] =
 		"Unable to get iface status",
-	[WIFI_TWT_FAIL_DEVICE_NOT_CONNECTED] =
+	[WIFI_FAIL_DEVICE_NOT_CONNECTED] =
 		"Device not connected",
-	[WIFI_TWT_FAIL_PEER_NOT_HE_CAPAB] = "Peer not HE capable",
-	[WIFI_TWT_FAIL_PEER_NOT_TWT_CAPAB] = "Peer not TWT capable",
-	[WIFI_TWT_FAIL_OPERATION_IN_PROGRESS] =
+	[WIFI_FAIL_PEER_NOT_HE_CAPAB] = "Peer not HE capable",
+	[WIFI_FAIL_PEER_NOT_CAPAB] = "Peer not capable",
+	[WIFI_FAIL_OPERATION_IN_PROGRESS] =
 		"Operation already in progress",
-	[WIFI_TWT_FAIL_INVALID_FLOW_ID] =
+	[WIFI_FAIL_INVALID_FLOW_ID] =
 		"Invalid negotiated flow id",
-	[WIFI_TWT_FAIL_IP_NOT_ASSIGNED] =
+	[WIFI_FAIL_IP_NOT_ASSIGNED] =
 		"IP address not assigned",
-	[WIFI_TWT_FAIL_FLOW_ALREADY_EXISTS] =
+	[WIFI_FAIL_FLOW_ALREADY_EXISTS] =
 		"Flow already exists",
+	[WIFI_FAIL_INVALID_DMS_ID] =
+		"Invalid DMS Id. Not assigned by AP\n",	
 };
 /** @endcond */
 
-/** Helper function to get user-friendly TWT error code name. */
-static inline const char *wifi_twt_get_err_code_str(int16_t err_no)
+/** Helper function to get user-friendly error code name. */
+static inline const char *wifi_get_err_code_str(int16_t err_no)
 {
-	if ((err_no) < (int16_t)ARRAY_SIZE(wifi_twt_err_code_tbl)) {
-		return wifi_twt_err_code_tbl[err_no];
+	if ((err_no) < (int16_t)ARRAY_SIZE(wifi_err_code_tbl)) {
+		return wifi_err_code_tbl[err_no];
 	}
 
 	return "<unknown>";
@@ -500,6 +523,37 @@ enum wifi_ap_config_param {
 	WIFI_AP_CONFIG_PARAM_MAX_INACTIVITY = BIT(0),
 	/** Used for AP mode configuration parameter max_num_sta */
 	WIFI_AP_CONFIG_PARAM_MAX_NUM_STA = BIT(1),
+};
+
+/** @brief Wi-Fi Directed Multicast Serive (DMS) operations. */
+enum wifi_dms_operation {
+	/** DMS operation add */
+	WIFI_DMS_REQ_ADD = 0,
+	/** DMS operation remove */
+	WIFI_DMS_REQ_REMOVE,
+	/** DMS operation change */
+	WIFI_DMS_REQ_CHANGE,
+	/** DMS operation type invalid */
+	WIFI_DMS_REQ_INVALID
+};
+
+/** Helper function to get user-friendly twt operation name. */
+const char *wifi_dms_operation_txt(enum wifi_dms_operation dms_operation);
+
+/** @brief Wi-Fi Directed Multicast Service (DMS) negotiation status. */
+enum wifi_dms_req_add_resp_status {
+	/** DMS response received for DMS request */
+	WIFI_DMS_RESP_RECEIVED = 0,
+	/** DMS response not received for DMS request */
+	WIFI_DMS_RESP_NOT_RECEIVED,
+};
+
+/** @brief Wi-Fi Directed Multicast (DMS) remove status. */
+enum wifi_dms_req_remove_resp_status {
+	/** DMS remove success */
+	WIFI_DMS_REMOVE_SUCCESS = 0,
+	/** DMS remove failure */
+	WIFI_DMS_REMOVE_FAILED,
 };
 
 #ifdef __cplusplus

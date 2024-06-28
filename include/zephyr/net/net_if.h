@@ -62,11 +62,6 @@ struct net_if_addr {
 	struct net_timeout lifetime;
 #endif
 
-#if defined(CONFIG_NET_IPV6_DAD) && defined(CONFIG_NET_NATIVE_IPV6)
-	/** Duplicate address detection (DAD) timer */
-	sys_snode_t dad_node;
-	uint32_t dad_start;
-#endif
 	/** How the IP address was set */
 	enum net_addr_type addr_type;
 
@@ -91,10 +86,34 @@ struct net_if_addr {
 	int32_t addr_timeout;
 #endif
 
+	union {
 #if defined(CONFIG_NET_IPV6_DAD)
-	/** How many times we have done DAD */
-	uint8_t dad_count;
-	/* What interface the DAD is running */
+		struct {
+			/** Duplicate address detection (DAD) timer */
+			sys_snode_t dad_node;
+			uint32_t dad_start;
+
+			/** How many times we have done DAD */
+			uint8_t dad_count;
+		};
+#endif /* CONFIG_NET_IPV6_DAD */
+#if defined(CONFIG_NET_IPV4_ACD)
+		struct {
+			/** Address conflict detection (ACD) timer. */
+			sys_snode_t acd_node;
+			k_timepoint_t acd_timeout;
+
+			/** ACD probe/announcement counter. */
+			uint8_t acd_count;
+
+			/** ACD status. */
+			uint8_t acd_state;
+		};
+#endif /* CONFIG_NET_IPV4_ACD */
+	};
+
+#if defined(CONFIG_NET_IPV6_DAD) || defined(CONFIG_NET_IPV4_ACD)
+	/** What interface the conflict detection is running */
 	uint8_t ifindex;
 #endif
 #endif /* CONFIG_NET_NATIVE_IPV6 */
@@ -438,6 +457,10 @@ struct net_if_ipv4 {
 
 	/** IPv4 time-to-live for multicast packets */
 	uint8_t mcast_ttl;
+#if defined(CONFIG_NET_IPV4_ACD)
+	/** IPv4 conflict count.  */
+	uint8_t conflict_cnt;
+#endif
 };
 
 #if defined(CONFIG_NET_DHCPV4) && defined(CONFIG_NET_NATIVE_IPV4)
@@ -495,20 +518,8 @@ struct net_if_dhcpv4 {
 
 #if defined(CONFIG_NET_IPV4_AUTO) && defined(CONFIG_NET_NATIVE_IPV4)
 struct net_if_ipv4_autoconf {
-	/** Used for timer lists */
-	sys_snode_t node;
-
 	/** Backpointer to correct network interface */
 	struct net_if *iface;
-
-	/** Timer start */
-	int64_t timer_start;
-
-	/** Time for INIT, DISCOVER, REQUESTING, RENEWAL */
-	uint32_t timer_timeout;
-
-	/** Current IP addr */
-	struct in_addr current_ip;
 
 	/** Requested IP addr */
 	struct in_addr requested_ip;
@@ -516,15 +527,6 @@ struct net_if_ipv4_autoconf {
 	/** IPV4 Autoconf state in the process of network address allocation.
 	 */
 	enum net_ipv4_autoconf_state state;
-
-	/** Number of sent probe requests */
-	uint8_t probe_cnt;
-
-	/** Number of sent announcements */
-	uint8_t announce_cnt;
-
-	/** Incoming conflict count */
-	uint8_t conflict_cnt;
 };
 #endif /* CONFIG_NET_IPV4_AUTO */
 

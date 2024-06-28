@@ -91,6 +91,10 @@ enum net_request_wifi_cmd {
 	NET_REQUEST_WIFI_CMD_RTS_THRESHOLD,
 	/** Configure AP parameter */
 	NET_REQUEST_WIFI_CMD_AP_CONFIG_PARAM,
+	/** Configure BSS maximum idle period */
+	NET_REQUEST_WIFI_CMD_BSS_MAX_IDLE_PERIOD,
+	/** Set DMS(Directed Multicast Service) */
+	NET_REQUEST_WIFI_CMD_DMS,
 /** @cond INTERNAL_HIDDEN */
 	NET_REQUEST_WIFI_CMD_MAX
 /** @endcond */
@@ -198,6 +202,16 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_RTS_THRESHOLD);
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_AP_CONFIG_PARAM);
 
+/** Request a Wi-Fi BSS max idle period */
+#define NET_REQUEST_WIFI_BSS_MAX_IDLE_PERIOD                           \
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_BSS_MAX_IDLE_PERIOD)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_BSS_MAX_IDLE_PERIOD);
+
+#define NET_REQUEST_WIFI_DMS                           \
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_DMS)
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_DMS);
+
 /** @brief Wi-Fi management events */
 enum net_event_wifi_cmd {
 	/** Scan results available */
@@ -228,6 +242,8 @@ enum net_event_wifi_cmd {
 	NET_EVENT_WIFI_CMD_AP_STA_CONNECTED,
 	/** STA disconnected from AP */
 	NET_EVENT_WIFI_CMD_AP_STA_DISCONNECTED,
+	/** DMS events */
+	NET_EVENT_WIFI_CMD_DMS,
 };
 
 /** Event emitted for Wi-Fi scan result */
@@ -281,6 +297,10 @@ enum net_event_wifi_cmd {
 /** Event emitted Wi-Fi station is disconnected from AP */
 #define NET_EVENT_WIFI_AP_STA_DISCONNECTED			\
 	(_NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_AP_STA_DISCONNECTED)
+
+/** Event emitted for Wi-Fi DMS operation */
+#define NET_EVENT_WIFI_DMS                                     \
+	(_NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_DMS)
 
 /** @brief Wi-Fi version */
 struct wifi_version {
@@ -513,6 +533,8 @@ struct wifi_iface_status {
 	unsigned short beacon_interval;
 	/** is TWT capable? */
 	bool twt_capable;
+	/** is DMS capable? */
+	bool dms_capable;
 };
 
 /** @brief Wi-Fi power save parameters */
@@ -584,8 +606,8 @@ struct wifi_twt_params {
 			bool teardown_all;
 		} teardown;
 	};
-	/** TWT fail reason, see enum wifi_twt_fail_reason */
-	enum wifi_twt_fail_reason fail_reason;
+	/** TWT fail reason, see enum wifi_fail_reason */
+	enum wifi_fail_reason fail_reason;
 };
 
 /** @cond INTERNAL_HIDDEN */
@@ -707,6 +729,99 @@ struct wifi_ap_sta_info {
 };
 
 /** @cond INTERNAL_HIDDEN */
+struct wifi_dms_tclas_classifier_type_4_info {
+	uint8_t version;
+	uint32_t src_ip_addr;
+	uint32_t dest_ip_addr;
+	unsigned short src_port;
+	unsigned short dest_port;
+	uint8_t dscp;
+	uint8_t protocol;
+};
+
+struct wifi_dms_tclas_params {
+	uint8_t params[80];
+	uint8_t len;
+};
+
+#define MAX_DMS_TCLAS_CLASSIFIER_MASK_LEN 3
+
+/** @brief Wi-Fi DMS TCLAS category type */
+enum wifi_dms_tclas_type {
+	WIFI_DMS_TCLAS_TYPE_0 = 0,
+	WIFI_DMS_TCLAS_TYPE_1 = 1,
+	WIFI_DMS_TCLAS_TYPE_4 = 4,
+	WIFI_DMS_TCLAS_TYPE_INVALID,
+};
+
+/** @brief Wi-Fi DMS TCLAS frame classifer info */
+struct wifi_dms_tclas_frame_classifier {
+	/** Frame classifier type */
+	enum wifi_dms_tclas_type type;
+	/** Frame classifier mask */
+	uint8_t mask;
+	/** Classifier type 4 information */
+	struct wifi_dms_tclas_classifier_type_4_info param_info;
+};
+
+/** @brief Wi-Fi DMS CLAS User priority */
+enum wifi_dms_tclas_up {
+	/** 0 - 7 The User Priority value of an MSDU. */
+	WIFI_DMS_TCLAS_UP_MSDU,
+	/** 8 The AC value of an MPDU is AC-VO. */
+	WIFI_DMS_TCLAS_UP_AC_VO = 8,
+	/** 9 The AC value of an MPDU is AC-VI. */
+	WIFI_DMS_TCLAS_UP_AC_VI,
+	/** 10 The AC value of an MPDU is AC-BE. */
+	WIFI_DMS_TCLAS_UP_AC_BE,
+	/** 10 The AC value of an MPDU is AC-BK. */
+	WIFI_DMS_TCLAS_UP_AC_BK,
+	/* 12�254 Reserved.
+	 * 255 The User Priority field is not used for comparison.
+	 */
+	WIFI_DMS_TCLAS_UP_INVALID=255,
+};
+
+struct wifi_dms_tclas_elements {
+	/** User priority */
+	enum wifi_dms_tclas_up up;
+	struct wifi_dms_tclas_frame_classifier classifier_info;
+};
+
+#define MAX_DMS_TSPEC_ELEMENT_LEN 57
+struct wifi_dms_tspec {
+	uint8_t element[MAX_DMS_TSPEC_ELEMENT_LEN];
+	uint8_t len;
+};
+
+#define MAX_DMS_SUB_ELEMENT_LEN 100
+struct wifi_dms_sub_element {
+	uint8_t element[MAX_DMS_SUB_ELEMENT_LEN];
+	uint8_t len;
+};
+
+/** @brief Wi-Fi DMS parameters */
+struct wifi_dms_params {
+	/** DMS request operation, see enum wifi_dms_request_operation */
+	enum wifi_dms_operation operation;
+	/** DMS add request response status, see enum wifi_dms_req_add_resp_status */
+	enum wifi_dms_req_add_resp_status add_req_resp_status;
+	/** DMS remove request cmd status, see enum wifi_dms_req_remove_status */
+	enum wifi_dms_req_remove_resp_status remove_req_resp_status;
+	/** Dialog token, used to map requests to responses */
+	uint8_t dialog_token;
+	/** DMSID, used to identifying the DMS for the group addressed frame */
+	uint8_t dmsid;
+	/** TCLAS elements */
+	struct wifi_dms_tclas_elements tclas_elem;
+	/** TCLAS procssing element */
+	uint8_t tclas_processing_element;
+	struct wifi_dms_tspec tspec_elem;
+	struct wifi_dms_sub_element sub_elem;
+
+	/** DMS fail reason, see enum wifi_dms_fail_reason */
+	enum wifi_fail_reason fail_reason;
+};
 
 /* for use in max info size calculations */
 union wifi_mgmt_events {
@@ -718,6 +833,7 @@ union wifi_mgmt_events {
 #endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS */
 	struct wifi_twt_params twt_params;
 	struct wifi_ap_sta_info ap_sta_info;
+	struct wifi_dms_params dms_params;
 };
 
 /** @endcond */
@@ -949,6 +1065,22 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*ap_config_params)(const struct device *dev, struct wifi_ap_config_params *params);
+	/** Set BSS max idle period
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 * @param BSS max idle period value
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*set_bss_max_idle_period)(const struct device *dev, unsigned short bss_max_idle_period);
+	/** Request to add, remove or change Directed Multicast Service
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 * @param params DMS parameters
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*req_dms)(const struct device *dev, struct wifi_dms_params *params);
 };
 
 /** Wi-Fi management offload API */
@@ -1068,6 +1200,12 @@ void wifi_mgmt_raise_ap_sta_connected_event(struct net_if *iface,
  */
 void wifi_mgmt_raise_ap_sta_disconnected_event(struct net_if *iface,
 		struct wifi_ap_sta_info *sta_info);
+
+/** Wi-Fi management DMS event
+ * @param iface Network interface
+ * @param dms_params DMS parameters
+ */
+void wifi_mgmt_raise_dms_event(struct net_if *iface, struct wifi_dms_params *dms_params);
 
 /**
  * @}
