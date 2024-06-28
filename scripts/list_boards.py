@@ -91,7 +91,7 @@ class Soc:
 @dataclass(frozen=True)
 class Board:
     name: str
-    dir: Path
+    dir: List[Path]
     hwm: str
     arch: str = None
     vendor: str = None
@@ -101,6 +101,41 @@ class Board:
     revisions: List[str] = field(default_factory=list, compare=False)
     socs: List[Soc] = field(default_factory=list, compare=False)
     variants: List[str] = field(default_factory=list, compare=False)
+
+    def from_qualifier(self, qualifiers):
+        qualifiers_list = qualifiers.split('/')
+
+        node = Soc(None)
+        n = len(qualifiers_list)
+        if n > 0:
+            soc_qualifier = qualifiers_list.pop(0)
+            for s in self.socs:
+                if s.name == soc_qualifier:
+                    node = s
+                    break
+
+        if n > 1:
+            if node.cpuclusters:
+                cpu_qualifier = qualifiers_list.pop(0)
+                for c in node.cpuclusters:
+                    if c.name == cpu_qualifier:
+                        node = c
+                        break
+                else:
+                    node = Variant(None)
+
+        for q in qualifiers_list:
+            for v in node.variants:
+                if v.name == q:
+                    node = v
+                    break
+            else:
+                node = Variant(None)
+
+        if node == Variant(None):
+            sys.exit(f'ERROR: qualifiers {qualifiers} not found when extending board {self.name}')
+
+        return node
 
 
 def board_key(board):
@@ -180,7 +215,8 @@ def find_arch2board_set_in(root, arches, board_dir):
 
 
 def load_v2_boards(board_name, board_yml, systems):
-    boards = []
+    boards = {}
+    board_extensions = []
     if board_yml.is_file():
         with board_yml.open('r') as f:
             b = yaml.load(f.read(), Loader=SafeLoader)
@@ -198,6 +234,18 @@ def load_v2_boards(board_name, board_yml, systems):
 
         board_array = b.get('boards', [b.get('board', None)])
         for board in board_array:
+            mutual_exclusive = {'name', 'extend'}
+            if len(mutual_exclusive - board.keys()) < 1:
+                sys.exit(f'ERROR: Malformed "board" section in file: {board_yml.as_posix()}\n'
+                         f'{mutual_exclusive} are mutual exclusive at this level.')
+
+            # This is a extending an exsisting board, place in array to allow later processing.
+            if 'extend' in board:
+                board.update({'dir': board_yml.parent})
+                board_extensions.append(board)
+                continue
+
+            # Create board
             if board_name is not None:
                 if board['name'] != board_name:
                     # Not the board we're looking for, ignore.
@@ -219,9 +267,9 @@ def load_v2_boards(board_name, board_yml, systems):
             socs = [Soc.from_soc(systems.get_soc(s['name']), s.get('variants', []))
                     for s in board.get('socs', {})]
 
-            board = Board(
+            boards.update({board['name']: Board(
                 name=board['name'],
-                dir=board_yml.parent,
+                dir=[board_yml.parent],
                 vendor=board.get('vendor'),
                 revision_format=board.get('revision', {}).get('format'),
                 revision_default=board.get('revision', {}).get('default'),
@@ -231,9 +279,20 @@ def load_v2_boards(board_name, board_yml, systems):
                 socs=socs,
                 variants=[Variant.from_dict(v) for v in board.get('variants', [])],
                 hwm='v2',
-            )
-            boards.append(board)
-    return boards
+            )})
+    return boards, board_extensions
+
+
+def extend_v2_boards(boards, board_extensions):
+    for e in board_extensions:
+        board = boards.get(e['extend'])
+        if board is None:
+            continue
+        board.dir.append(e['dir'])
+
+        for v in e.get('variants', []):
+            node = board.from_qualifier(v['qualifier'])
+            node.variants.append(Variant.from_dict(v))
 
 
 # Note that this does not share the args.board functionality of find_v2_boards
@@ -251,14 +310,21 @@ def find_v2_boards(args):
     root_args = argparse.Namespace(**{'soc_roots': args.soc_roots})
     systems = list_hardware.find_v2_systems(root_args)
 
-    boards = []
+    boards = {}
+    board_extensions = []
     board_files = []
-    for root in unique_paths(args.board_roots):
-        board_files.extend((root / 'boards').rglob(BOARD_YML))
+    if args.board_dir:
+        board_files = [d / BOARD_YML for d in args.board_dir]
+    else:
+        for root in unique_paths(args.board_roots):
+            board_files.extend((root / 'boards').rglob(BOARD_YML))
 
     for board_yml in board_files:
-        b = load_v2_boards(args.board, board_yml, systems)
-        boards.extend(b)
+        b, e = load_v2_boards(args.board, board_yml, systems)
+        boards.update(b)
+        board_extensions.extend(e)
+
+    extend_v2_boards(boards, board_extensions)
     return boards
 
 
@@ -283,7 +349,7 @@ def add_args(parser):
                         help='add a soc root, may be given more than once')
     parser.add_argument("--board", dest='board', default=None,
                         help='lookup the specific board, fail if not found')
-    parser.add_argument("--board-dir", default=None, type=Path,
+    parser.add_argument("--board-dir", default=[], type=Path, action='append',
                         help='Only look for boards at the specific location')
 
 
@@ -325,20 +391,16 @@ def board_v2_qualifiers_csv(board):
 
 
 def dump_v2_boards(args):
-    if args.board_dir:
-        root_args = argparse.Namespace(**{'soc_roots': args.soc_roots})
-        systems = list_hardware.find_v2_systems(root_args)
-        boards = load_v2_boards(args.board, args.board_dir / BOARD_YML, systems)
-    else:
-        boards = find_v2_boards(args)
+    boards = find_v2_boards(args)
 
-    for b in boards:
+    for b in boards.values():
         qualifiers_list = board_v2_qualifiers(b)
         if args.cmakeformat is not None:
             notfound = lambda x: x or 'NOTFOUND'
             info = args.cmakeformat.format(
                 NAME='NAME;' + b.name,
-                DIR='DIR;' + str(b.dir.as_posix()),
+                DIR='DIR;' + ';'.join(
+                    [str(x.as_posix()) for x in b.dir]),
                 VENDOR='VENDOR;' + notfound(b.vendor),
                 HWM='HWM;' + b.hwm,
                 REVISION_DEFAULT='REVISION_DEFAULT;' + notfound(b.revision_default),
