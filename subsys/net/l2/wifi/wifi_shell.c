@@ -1933,6 +1933,310 @@ static int cmd_wifi_version(const struct shell *sh, size_t argc, char *argv[])
 	return 0;
 }
 
+static int wifi_dms_args_to_params(const struct shell *sh, size_t argc, char *argv[],
+				   struct wifi_dms_params *params)
+{
+	struct getopt_state *state;
+	int opt;
+	long val;
+	struct in_addr addr;
+	static struct option long_options[] = {{"dialog_token", required_argument, 0, 't'},
+					       {"up", optional_argument, 0, 'u'},
+					       {"tclass_type", required_argument, 0, 'Q'},
+					       {"tclass_mask", required_argument, 0, 'M'},
+					       {"version", required_argument, 0, 'v'},
+					       {"src_ip", optional_argument, 0, 'S'},
+					       {"src_port", optional_argument, 0, 's'},
+					       {"dest_ip", required_argument, 0, 'D'},
+					       {"dest_port", optional_argument, 0, 'd'},
+					       {"dscp", required_argument, 0, 'q'},
+					       {"protocol", required_argument, 0, 'p'},
+					       {"help", no_argument, 0, 'h'},
+					       {0, 0, 0, 0}};
+	int opt_index = 0;
+	int err = 0;
+
+	while ((opt = getopt_long(argc, argv, "t:Q:M:v:S:s:D:d:q:p:h", long_options, &opt_index)) !=
+	       -1) {
+		state = getopt_state_get();
+		switch (opt) {
+		case 't':
+			val = shell_strtol(optarg, 10, &err);
+			if (err) {
+				shell_error(sh, "Unable to parse input for dialog_token (err %d)",
+					    err);
+				return err;
+			}
+			if (val < WIFI_DMS_MIN_DIALOG_TOKEN || val > WIFI_DMS_MAX_DIALOG_TOKEN) {
+				PR_ERROR("Invalid value for dialog_token %ld", val);
+				return -EINVAL;
+			}
+			params->dialog_token = (uint8_t)val;
+			break;
+		case 'u':
+			val = shell_strtol(optarg, 10, &err);
+			if (err) {
+				shell_error(sh,
+					    "Unable to parse input for "
+					    "'user priority (err %d)",
+					    err);
+				return err;
+			}
+			if (val < WIFI_DMS_TCLAS_UP_MSDU || val > WIFI_DMS_TCLAS_UP_AC_BK) {
+				PR_ERROR("Invalid value for user prority %ld", val);
+				return -EINVAL;
+			}
+			params->tclas_elem.up = (uint8_t)val;
+			break;
+		case 'Q':
+			val = shell_strtol(optarg, 10, &err);
+			if (err) {
+				shell_error(sh,
+					    "Unable to parse input for frame"
+					    " classifier type (err %d)",
+					    err);
+				return err;
+			}
+			if (val != WIFI_DMS_TCLAS_TYPE_4) {
+				PR_ERROR("Invalid value for classifier type %ld", val);
+				return -EINVAL;
+			}
+			params->tclas_elem.classifier_info.type = WIFI_DMS_TCLAS_TYPE_4;
+			break;
+		case 'M':
+			val = shell_strtol(optarg, 10, &err);
+			if (err) {
+				shell_error(sh,
+					    "Unable to parse input for frame"
+					    " classifier mask (err %d)",
+					    err);
+				return err;
+			}
+			if (val < WIFI_DMS_MIN_CLASSIFIER_MASK ||
+			    val > WIFI_DMS_MAX_CLASSIFIER_MASK) {
+				PR_ERROR("Invalid value for classifier mask %ld", val);
+				return -EINVAL;
+			}
+			params->tclas_elem.classifier_info.mask = val;
+			break;
+		case 'v':
+			val = shell_strtol(optarg, 10, &err);
+			if (err) {
+				shell_error(sh, "Unable to parse input for version (err %d)", err);
+				return err;
+			}
+			if (val != 4 || val != 6) {
+				PR_ERROR("Invalid value for version %ld", val);
+				return -EINVAL;
+			}
+			params->tclas_elem.classifier_info.param_info.version = val;
+			break;
+		case 'S':
+			if (net_addr_pton(AF_INET, optarg, &addr)) {
+				PR_ERROR("Invalid address: %s\n", optarg);
+				return -EINVAL;
+			}
+
+			params->tclas_elem.classifier_info.param_info.src_ip_addr = addr.s_addr;
+
+			break;
+		case 'D':
+			if (net_addr_pton(AF_INET, optarg, &addr)) {
+				PR_ERROR("Invalid address: %s\n", optarg);
+				return -EINVAL;
+			}
+			if (!net_ipv4_is_addr_mcast(&addr)) {
+				PR_ERROR("Invalid multicast address %s\n",
+					 net_sprint_ipv4_addr(&addr));
+				return -EINVAL;
+			}
+
+			params->tclas_elem.classifier_info.param_info.dest_ip_addr = addr.s_addr;
+			break;
+		case 's':
+			val = shell_strtol(optarg, 10, &err);
+			if (err) {
+				shell_error(sh,
+					    "Unable to parse input for frame"
+					    " classifier source port (err %d)",
+					    err);
+				return err;
+			}
+			if (val < 1 || val > 65536) {
+				PR_ERROR("Invalid value for source port %ld", val);
+				return -EINVAL;
+			}
+			params->tclas_elem.classifier_info.param_info.src_port =
+				(unsigned short)val;
+			break;
+		case 'd':
+			val = shell_strtol(optarg, 10, &err);
+			if (err) {
+				shell_error(sh,
+					    "Unable to parse input for frame"
+					    " classifier destination port (err %d)",
+					    err);
+				return err;
+			}
+			if (val < 1 || val > 65536) {
+				PR_ERROR("Invalid value for destination port %ld", val);
+				return -EINVAL;
+			}
+			params->tclas_elem.classifier_info.param_info.dest_port =
+				(unsigned short)val;
+			break;
+		case 'q':
+			val = shell_strtol(optarg, 10, &err);
+			if (err) {
+				shell_error(sh,
+					    "Unable to parse input for frame "
+					    " classifier dscp (err %d)",
+					    err);
+				return err;
+			}
+			if (val < 1 || val > 63) {
+				PR_ERROR("Invalid value for dscp %ld", val);
+				return -EINVAL;
+			}
+			params->tclas_elem.classifier_info.param_info.dscp = (uint8_t)(val << 2);
+			break;
+		case 'p':
+			val = shell_strtol(optarg, 10, &err);
+			if (err) {
+				shell_error(sh,
+					    "Unable to parse input for frame"
+					    " classifier protocol (err %d)",
+					    err);
+				return err;
+			}
+			if (val < WIFI_DMS_MIN_PROTOCOL || val > WIFI_DMS_MAX_PROTOCOL) {
+				PR_ERROR("Invalid value for protocol %ld", val);
+				return -EINVAL;
+			}
+			params->tclas_elem.classifier_info.param_info.protocol = (uint8_t)val;
+			break;
+		case 'h':
+			shell_help(sh);
+			return SHELL_CMD_HELP_PRINTED;
+		default:
+			PR_ERROR("Invalid option %c\n", optopt);
+			shell_help(sh);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+static int cmd_wifi_dms_add(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_first_wifi();
+	struct wifi_dms_params params = {0};
+
+	context.sh = sh;
+	params.operation = WIFI_DMS_REQ_ADD;
+
+	if (wifi_dms_args_to_params(sh, argc, argv, &params)) {
+		return -ENOEXEC;
+	}
+
+	if (net_mgmt(NET_REQUEST_WIFI_DMS, iface, &params, sizeof(params))) {
+		PR_WARNING("%s failed. reason : %s\n", wifi_dms_operation_txt(params.operation),
+			   wifi_dms_get_err_code_str(params.fail_reason));
+		return -ENOEXEC;
+	}
+
+	PR("DMS add operation %s with dg: %d, dmsid: %d requested\n",
+	   wifi_dms_operation_txt(params.operation), params.dialog_token, params.dmsid);
+
+	return 0;
+}
+
+static int cmd_wifi_dms_remove(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_first_wifi();
+	struct wifi_dms_params params = {0};
+	long val;
+	int idx = 1;
+
+	context.sh = sh;
+	params.operation = WIFI_DMS_REQ_REMOVE;
+
+	if (!parse_number(sh, &val, argv[idx], NULL, 1, 255)) {
+		PR_ERROR("Invalid value for dialog token %ld", val);
+		return -EINVAL;
+	}
+	params.dialog_token = (uint8_t)val;
+
+	if (!parse_number(sh, &val, argv[idx], NULL, WIFI_DMS_MIN_ID, WIFI_DMS_MAX_ID)) {
+		PR_ERROR("Invalid value for dms id %ld", val);
+		return -EINVAL;
+	}
+	params.dmsid = (uint8_t)val;
+
+	if (net_mgmt(NET_REQUEST_WIFI_DMS, iface, &params, sizeof(params))) {
+		PR_WARNING("%s with failed, reason : %s\n",
+			   wifi_dms_operation_txt(params.operation),
+			   wifi_dms_get_err_code_str(params.fail_reason));
+		return -ENOEXEC;
+	}
+
+	PR("DMS operation %s with dmsid: %d success\n", wifi_dms_operation_txt(params.operation),
+	   params.dmsid);
+	return 0;
+}
+
+static int cmd_wifi_dms_change(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_first_wifi();
+	struct wifi_dms_params params = {0};
+	int idx = 1;
+	long val;
+
+	context.sh = sh;
+	params.operation = WIFI_DMS_REQ_CHANGE;
+
+	if (!parse_number(sh, &val, argv[idx], NULL, WIFI_DMS_MIN_ID, WIFI_DMS_MAX_ID)) {
+		PR_ERROR("Invalid value for dms id %ld", val);
+		return -EINVAL;
+	}
+	params.dmsid = (uint8_t)val;
+
+	if (wifi_dms_args_to_params(sh, argc, argv, &params)) {
+		return -ENOEXEC;
+	}
+
+	if (net_mgmt(NET_REQUEST_WIFI_DMS, iface, &params, sizeof(params))) {
+		PR_WARNING("%s failed. reason : %s\n", wifi_dms_operation_txt(params.operation),
+			   wifi_dms_get_err_code_str(params.fail_reason));
+		return -ENOEXEC;
+	}
+	PR("DMS change operation %s with dg: %d, dmsid: %d requested\n",
+	   wifi_dms_operation_txt(params.operation), params.dialog_token, params.dmsid);
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	wifi_dms_ops,
+	SHELL_CMD_ARG(add, NULL,
+		      "Start a DMS operation:\n"
+		      "<dialog_token: 1-255> <user_priority> "
+		      "<classifier_type> <classifier_mask> "
+		      "<src_ip_addr> <src_port> <dst_ip_addr> <dst_port> <dscp>"
+		      "<protocol>\n",
+		      cmd_wifi_dms_add, 5, 5),
+	SHELL_CMD_ARG(remove, NULL,
+		      "Remove a DMS operation:\n"
+		      "<dialog_token: 0-255> <dmsid: 0-255>\n",
+		      cmd_wifi_dms_remove, 3, 0),
+	SHELL_CMD_ARG(change, NULL,
+		      "Change a DMS session parameters:\n"
+		      "<dialog_token: 1-255> <dmsid: 0-255> <user_priority> "
+		      "<classifier_type> <classifier_mask> "
+		      "<src_ip_addr> <src_port> <dst_ip_addr> <dst_port> <dscp>"
+		      "<protocol>\n",
+		      cmd_wifi_dms_change, 3, 0),
+	SHELL_SUBCMD_SET_END);
+
 SHELL_STATIC_SUBCMD_SET_CREATE(wifi_cmd_ap,
 	SHELL_CMD_ARG(disable, NULL,
 		  "Disable Access Point mode.\n",
@@ -2122,6 +2426,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(wifi_commands,
 		     cmd_wifi_set_rts_threshold,
 		     2,
 		     0),
+	SHELL_CMD(dms,
+		  &wifi_dms_ops,
+		  "Manage Directed Multicast Services(DMS).\n",
+		  NULL),
 	SHELL_SUBCMD_SET_END
 );
 
