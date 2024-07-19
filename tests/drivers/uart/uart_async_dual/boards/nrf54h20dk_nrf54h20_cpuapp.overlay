@@ -9,3 +9,11 @@
 &dut_aux {
 	memory-regions = <&cpuapp_dma_region>;
 };
+
+&dma_fast_region {
+	status = "okay";
+};
+
+&dut2 {
+	memory-regions = <&dma_fast_region>;
+};
