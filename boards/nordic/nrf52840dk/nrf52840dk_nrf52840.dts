@@ -203,6 +203,13 @@ arduino_i2c: &i2c0 {
 	pinctrl-names = "default", "sleep";
 };
 
+&pwm1 {
+	status = "disabled";
+	pinctrl-0 = <&pwm1_default>;
+	pinctrl-1 = <&pwm1_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+
 &spi0 {
 	compatible = "nordic,nrf-spi";
 	/* Cannot be used together with i2c0. */
