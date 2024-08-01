@@ -17,6 +17,7 @@
 #include <zephyr/net/ppp.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/drivers/uart.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(modem_cellular, CONFIG_MODEM_LOG_LEVEL);
@@ -34,6 +35,7 @@ LOG_MODULE_REGISTER(modem_cellular, CONFIG_MODEM_LOG_LEVEL);
 #define MODEM_CELLULAR_DATA_MANUFACTURER_LEN (65)
 #define MODEM_CELLULAR_DATA_FW_VERSION_LEN   (65)
 
+#define MODEM_CELLULAR_DEFAULT_BAUDRATE	(115200)
 #define MODEM_CELLULAR_RESERVED_DLCIS        (2)
 
 /* Magic constants */
@@ -237,6 +239,18 @@ static const char *modem_cellular_event_str(enum modem_cellular_event event)
 static bool modem_cellular_gpio_is_enabled(const struct gpio_dt_spec *gpio)
 {
 	return gpio->port != NULL;
+}
+
+static int modem_cellular_set_baudrate(const struct device * uart, uint32_t baudrate) {
+	struct uart_config config;
+	int rc = uart_config_get(uart, &config);
+	if (rc != 0) {
+		return rc;
+	}
+
+	config.baudrate = baudrate;
+
+	return uart_configure(uart, &config);
 }
 
 static void modem_cellular_notify_user_pipes_connected(struct modem_cellular_data *data)
@@ -477,7 +491,22 @@ static void modem_cellular_chat_on_cxreg(struct modem_chat *chat, char **argv, u
 	}
 }
 
+
+static void modem_cellular_chat_on_ipr(struct modem_chat *chat, char **argv, uint16_t argc, void *user_data){
+	int rc;
+	struct modem_cellular_data *data = (struct modem_cellular_data *)user_data;
+
+	const struct device * uart = data->uart_backend.uart;
+
+	rc = modem_cellular_set_baudrate(uart, CONFIG_MODEM_CELLULAR_UART_BAUDRATE);
+
+	if (rc != 0) {
+		LOG_DBG("Configure UART to %d", CONFIG_MODEM_CELLULAR_UART_BAUDRATE);
+	}
+}
+
 MODEM_CHAT_MATCH_DEFINE(ok_match, "OK", "", NULL);
+MODEM_CHAT_MATCH_DEFINE(ipr_match, "OK", "", modem_cellular_chat_on_ipr);
 MODEM_CHAT_MATCHES_DEFINE(allow_match,
 			  MODEM_CHAT_MATCH("OK", "", NULL),
 			  MODEM_CHAT_MATCH("ERROR", "", NULL));
@@ -651,6 +680,10 @@ static int modem_cellular_on_reset_pulse_state_enter(struct modem_cellular_data 
 		(const struct modem_cellular_config *)data->dev->config;
 
 	gpio_pin_set_dt(&config->reset_gpio, 1);
+
+	const struct device * uart = data->uart_backend.uart;
+	modem_cellular_set_baudrate(uart, MODEM_CELLULAR_DEFAULT_BAUDRATE);
+
 	modem_cellular_start_timer(data, K_MSEC(config->reset_pulse_duration_ms));
 	return 0;
 }
@@ -1772,7 +1805,16 @@ MODEM_CHAT_SCRIPT_DEFINE(quectel_bg95_get_signal_chat_script,
 
 #if DT_HAS_COMPAT_STATUS_OKAY(quectel_eg25_g)
 MODEM_CHAT_SCRIPT_CMDS_DEFINE(
-	quectel_eg25_g_init_chat_script_cmds, MODEM_CHAT_SCRIPT_CMD_RESP("ATE0", ok_match),
+	quectel_eg25_g_init_chat_script_cmds,
+	MODEM_CHAT_SCRIPT_CMD_RESP("AT+IPR=" STRINGIFY(CONFIG_MODEM_CELLULAR_UART_BAUDRATE), ipr_match),
+	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("ATE0", 100),
+	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("ATE0", 100),
+	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("ATE0", 100),
+	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("ATE0", 100),
+	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("ATE0", 100),
+	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("ATE0", 100),
+	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("ATE0", 100),
+	MODEM_CHAT_SCRIPT_CMD_RESP("ATE0", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CFUN=4", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CMEE=1", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CREG=1", ok_match),
@@ -1791,7 +1833,7 @@ MODEM_CHAT_SCRIPT_CMDS_DEFINE(
 	MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CIMI", cimi_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
-	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT+CMUX=0,0,5,127,10,3,30,10,2", 100));
+	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT+CMUX=0,0," STRINGIFY(CONFIG_MODEM_CELLULAR_CMUX_BAUDRATE) ",127,10,3,30,10,2", 100));
 
 MODEM_CHAT_SCRIPT_DEFINE(quectel_eg25_g_init_chat_script, quectel_eg25_g_init_chat_script_cmds,
 			 abort_matches, modem_cellular_chat_callback_handler, 10);
