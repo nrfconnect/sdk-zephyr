@@ -331,6 +331,9 @@
 #ifdef CONFIG_NRFX_RTC2
 #define NRFX_RTC2_ENABLED 1
 #endif
+#ifdef CONFIG_NRFX_RTC30
+#define NRFX_RTC30_ENABLED 1
+#endif
 #ifdef CONFIG_NRFX_RTC130
 #define NRFX_RTC130_ENABLED 1
 #endif
