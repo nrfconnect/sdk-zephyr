@@ -435,8 +435,10 @@ zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 	${HOSTAP_SRC_BASE}/tls/asn1.c
 )
 
-# crypto mbedtls related
-if(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO)
+# crypto mbedtls related CRYPTO OR LEGACY_NCS
+if(DEFINED CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO OR
+   DEFINED CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_LEGACY_NCS OR
+   DEFINED CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_LEGACY_NCS_PSA)
 zephyr_library_sources(
 	${HOSTAP_SRC_BASE}/crypto/crypto_mbedtls-bignum.c
 	${HOSTAP_SRC_BASE}/crypto/crypto_mbedtls-ec.c
@@ -513,5 +515,9 @@ if(CONFIG_SAE_PWE_EARLY_EXIT)
 	"this is not secure and is a workaround for low resource systems, "
 	"please use it carefully and do not use it production.")
 endif()
+
+zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ALT
+	MBEDTLS_NIST_KW_C
+)
 
 endif()
