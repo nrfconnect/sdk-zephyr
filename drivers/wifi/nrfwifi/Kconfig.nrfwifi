@@ -667,4 +667,26 @@ config NRF_WIFI_COMBINED_BUCKEN_IOVDD_GPIO
 	  there will be a internal hardware switch to add delay between the two operations. This
 	  is typically 4ms delay for nRF70.
 
+# TODO: Temporary WAR, implement these options in the future
+config NRF_WIFI_PATCHES_EXT_FLASH_DISABLED
+	bool "nRF700x firmware patch external flash support"
+	help
+	  Select this option to disable external flash support for nRF700x firmware patches
+
+config NRF_WIFI_FW_PATCH_DFU
+	bool "nRF700x firmware patch DFU"
+	help
+	  Select this option to enable DFU for nRF700x firmware patches
+
+config NRF_WIFI_PATCHES_EXT_FLASH_STORE
+	bool "nRF700x firmware patch external flash store"
+	help
+	  Select this option to enable external flash store for nRF700x firmware patches
+
+config NRF_WIFI_FW_FLASH_CHUNK_SIZE
+	int "nRF700x firmware patch flash chunk size"
+	default 8192
+	help
+	  Select this option to set the flash chunk size for nRF700x firmware patches
+
 endif # WIFI_NRF70
