@@ -700,4 +700,31 @@ config NRF_WIFI_BUILD_ONLY_MODE
 	  dependency on firmware binary and patches.
 	  This is useful to check the build and link errors.
 
+# TODO: Temporary WAR, implement these options in the future
+config NRF_WIFI_PATCHES_EXT_FLASH_DISABLED
+	bool "nRF70 firmware patch external flash support"
+	help
+	  Select this option to disable external flash support for nRF70 firmware patches
+
+config NRF_WIFI_FW_PATCH_DFU
+	bool "nRF70 firmware patch DFU"
+	help
+	  Select this option to enable DFU for nRF70 firmware patches
+
+config NRF_WIFI_PATCHES_EXT_FLASH_STORE
+	bool "nRF70 firmware patch external flash store"
+	help
+	  Select this option to enable external flash store for nRF70 firmware patches
+
+config NRF_WIFI_FW_FLASH_CHUNK_SIZE
+	int "nRF70 firmware patch flash chunk size"
+	default 8192
+	help
+	  Select this option to set the flash chunk size for nRF70 firmware patches
+
+config NRF_WIFI_PATCHES_EXT_FLASH_XIP
+	bool "nRF70 firmware patch external flash XIP"
+	help
+	  Select this option to enable external flash XIP for nRF70 firmware patches
+
 endif # WIFI_NRF70
