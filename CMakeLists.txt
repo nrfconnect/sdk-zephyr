@@ -2233,6 +2233,8 @@ add_subdirectory_ifdef(
   cmake/makefile_exports
   )
 
+toolchain_linker_finalize()
+
 yaml_context(EXISTS NAME build_info result)
 if(result)
   build_info(zephyr version VALUE ${PROJECT_VERSION_STR})
