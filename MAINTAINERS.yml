@@ -1956,6 +1956,8 @@ Release Notes:
   maintainers:
     - krish2718
     - jukkar
+  collaborators:
+    - sachinthegreen
   files:
     - drivers/wifi/nrfwifi/
     - dts/bindings/wifi/nordic,nrf70.yaml
@@ -4336,6 +4338,11 @@ West:
   collaborators:
     - hubertmis
     - nordic-krch
+    - krish2718
+    - sachinthegreen
+    - udaynordic
+    - rajb9
+    - srkanordic
   files:
     - modules/hal_nordic/
   labels:
