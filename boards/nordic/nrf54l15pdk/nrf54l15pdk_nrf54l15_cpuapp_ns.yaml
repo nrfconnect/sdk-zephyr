@@ -20,3 +20,7 @@ supported:
   - watchdog
   - adc
   - i2s
+testing:
+  default: true
+  ignore_tags:
+    - ci_samples_wifi

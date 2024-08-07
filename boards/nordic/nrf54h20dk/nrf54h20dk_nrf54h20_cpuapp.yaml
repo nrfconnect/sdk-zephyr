@@ -22,3 +22,7 @@ supported:
   - spi
   - watchdog
   - usbd
+testing:
+  default: true
+  ignore_tags:
+    - ci_samples_wifi
