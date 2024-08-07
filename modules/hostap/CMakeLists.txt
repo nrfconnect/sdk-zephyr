@@ -20,15 +20,6 @@ zephyr_include_directories(
 	${HOSTAP_BASE}/
 	${WIFI_NM_WPA_SUPPLICANT_BASE}/
 	${HOSTAP_SRC_BASE}/
-	${HOSTAP_SRC_BASE}/utils/
-	${HOSTAP_SRC_BASE}/common/
-	${HOSTAP_SRC_BASE}/eap_common
-	${HOSTAP_SRC_BASE}/eap_server
-	${HOSTAP_SRC_BASE}/radius
-	${HOSTAP_SRC_BASE}/crypto/
-	${HOSTAP_SRC_BASE}/ap/
-	${HOSTAP_SRC_BASE}/drivers/
-	${HOSTAP_SRC_BASE}/rsn_supp
 )
 
 zephyr_library_compile_definitions(
