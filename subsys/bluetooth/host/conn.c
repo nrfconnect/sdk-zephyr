@@ -1095,6 +1095,8 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 		case BT_CONN_DISCONNECT_COMPLETE:
 			tx_notify(conn);
 
+			bt_conn_reset_rx_state(conn);
+
 			/* Cancel Connection Update if it is pending */
 			if ((conn->type == BT_CONN_TYPE_LE) &&
 			    (k_work_delayable_busy_get(&conn->deferred_work) &
