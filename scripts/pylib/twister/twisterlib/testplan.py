@@ -512,7 +512,7 @@ class TestPlan:
 
     def add_testsuites(self, testsuite_filter=[]):
         for root in self.env.test_roots:
-            root = os.path.abspath(root)
+            #root = os.path.abspath(root)
 
             logger.debug("Reading test case configuration files under %s..." % root)
 

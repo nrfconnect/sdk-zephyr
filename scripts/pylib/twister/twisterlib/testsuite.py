@@ -454,7 +454,7 @@ class TestSuite(DisablePyTestCollectionMixin):
             relative_ts_root = os.path.relpath(canonical_testsuite_root,
                                                start=canonical_zephyr_base)
         else:
-            relative_ts_root = ""
+            relative_ts_root = testsuite_root
 
         # workdir can be "."
         unique = os.path.normpath(os.path.join(relative_ts_root, workdir, name)).replace(os.sep, '/')
