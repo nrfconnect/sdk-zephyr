@@ -848,6 +848,7 @@ static int cmd_wifi_status(const struct shell *sh, size_t argc, char *argv[])
 		PR("DTIM: %d\n", status.dtim_period);
 		PR("TWT: %s\n",
 		   status.twt_capable ? "Supported" : "Not supported");
+		PR("Current PHY rate : %d\n", status.current_phy_rate);
 	}
 
 	return 0;
@@ -875,6 +876,7 @@ static void print_wifi_stats(struct net_if *iface, struct net_stats_wifi *data,
 	PR("Beacons missed   : %u\n", data->sta_mgmt.beacons_miss);
 	PR("Unicast received : %u\n", data->unicast.rx);
 	PR("Unicast sent     : %u\n", data->unicast.tx);
+	PR("Overrun count    : %u\n", data->overrun_count);
 }
 #endif /* CONFIG_NET_STATISTICS_WIFI && CONFIG_NET_STATISTICS_USER_API */
 
