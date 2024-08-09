@@ -10,3 +10,47 @@ tests:
     harness: led
     integration_platforms:
       - frdm_k64f
+
+  sample.basic.blinky.egpio_icmsg:
+    tags:
+      - LED
+      - gpio
+    filter: dt_enabled_alias_with_parent_compat("led0", "gpio-leds")
+    depends_on: gpio
+    integration_platforms:
+      - nrf54l15pdk/nrf54l15/cpuapp
+    sysbuild: true
+    harness: console
+    harness_config:
+      type: multi_line
+      ordered: true
+      regex:
+        - "LED state: ON"
+        - "LED state: OFF"
+    extra_args:
+      blinky_SNIPPET=emulated-gpio-icmsg
+    extra_configs:
+      SB_CONFIG_SW_IO_DEVICES=y
+      SB_CONFIG_EGPIO_FLPR_APPLICATION=y
+
+  sample.basic.blinky.egpio_mbox:
+    tags:
+      - LED
+      - gpio
+    filter: dt_enabled_alias_with_parent_compat("led0", "gpio-leds")
+    depends_on: gpio
+    integration_platforms:
+      - nrf54l15pdk/nrf54l15/cpuapp
+    sysbuild: true
+    harness: console
+    harness_config:
+      type: multi_line
+      ordered: true
+      regex:
+        - "LED state: ON"
+        - "LED state: OFF"
+    extra_args:
+      blinky_SNIPPET=emulated-gpio-mbox
+    extra_configs:
+      SB_CONFIG_SW_IO_DEVICES=y
+      SB_CONFIG_EGPIO_FLPR_APPLICATION=y
