@@ -13,6 +13,11 @@ config MPSL
 	bool
 	# Dummy kconfig to allow compiling outside of NCS
 
+config NRFE
+	bool
+	default y if GPIO_NRFE
+	# Temporary kconfig to include DPPI channel allocation for NRFE
+
 config NRFX_ADC
 	bool "ADC driver"
 	depends on $(dt_has_compat,$(DT_COMPAT_NORDIC_NRF_ADC))
