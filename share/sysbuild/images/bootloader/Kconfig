@@ -44,6 +44,9 @@ choice BOOT_SIGNATURE_TYPE
 config BOOT_SIGNATURE_TYPE_NONE
 	bool "No signature; use only hash check"
 
+config BOOT_SIGNATURE_TYPE_NONE_SHA512
+	bool "No signature; use only hash check"
+
 config BOOT_SIGNATURE_TYPE_RSA
 	bool "RSA signatures"
 
