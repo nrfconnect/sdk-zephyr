@@ -10,6 +10,10 @@ function(nrf_regtool_generate_hex_from_dts peripheral)
   list(TRANSFORM CACHED_DTS_ROOT_BINDINGS PREPEND "--bindings-dir;" OUTPUT_VARIABLE bindings_dirs)
   separate_arguments(extra_args UNIX_COMMAND "${CONFIG_NRF_REGTOOL_EXTRA_GENERATE_ARGS}")
 
+  if(NOT peripheral STREQUAL "UICR")
+    unset(extra_args)
+  endif()
+
   set(generated_hex_file ${PROJECT_BINARY_DIR}/${generated_hex_name})
   execute_process(
     COMMAND ${NRF_REGTOOL} ${verbosity} generate
