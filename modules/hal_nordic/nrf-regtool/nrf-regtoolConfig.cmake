@@ -28,14 +28,7 @@ function(nrf_regtool_generate_hex_from_dts peripheral)
     return()
   endif()
 
-  set(merged_hex_file ${PROJECT_BINARY_DIR}/${merged_hex_name})
-  set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
-    COMMAND ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/build/mergehex.py
-    -o ${merged_hex_file}
-    ${generated_hex_file}
-    ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}
-  )
-  set_property(TARGET runners_yaml_props_target PROPERTY hex_file ${merged_hex_file})
+  ncs_merge_file(FILES ${generated_hex_file})
 endfunction()
 
 
