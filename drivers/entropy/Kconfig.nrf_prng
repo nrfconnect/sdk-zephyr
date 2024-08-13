@@ -9,7 +9,7 @@ config FAKE_ENTROPY_NRF_PRNG
 	bool "A fake nRF entropy driver"
 	default y
 	depends on DT_HAS_NORDIC_ENTROPY_PRNG_ENABLED
-	depends on SOC_SERIES_NRF54HX
+	depends on (SOC_SERIES_NRF54HX || SOC_SERIES_NRF92X)
 	select ENTROPY_HAS_DRIVER
 	help
 	  This is a super simple PRNG driver that can be used on nRF platforms that
