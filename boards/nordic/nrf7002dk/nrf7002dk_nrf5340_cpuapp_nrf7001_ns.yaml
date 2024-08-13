@@ -17,3 +17,7 @@ supported:
   - usb_device
   - netif:openthread
 vendor: nordic
+testing:
+  default: true
+  ignore_tags:
+    - ci_samples_wifi
