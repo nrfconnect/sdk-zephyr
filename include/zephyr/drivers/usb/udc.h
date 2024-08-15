@@ -705,6 +705,18 @@ static inline struct udc_buf_info *udc_get_buf_info(const struct net_buf *const 
 }
 
 /**
+ * @brief Get endpoint size from UDC endpoint configuration
+ *
+ * @param[in] cfg Pointer to UDC endpoint configuration
+ *
+ * @return Endpoint size
+ */
+static inline uint16_t udc_mps_ep_size(const struct udc_ep_config *const cfg)
+{
+	return USB_MPS_EP_SIZE(cfg->mps);
+}
+
+/**
  * @}
  */
 
