@@ -43,6 +43,17 @@
 #define PIN_XL1 0
 #define PIN_XL2 1
 
+
+/** @brief Symbol specifying maximum number of available compare channels. */
+#define NRF_RTC_CC_COUNT_MAX NRFX_ARRAY_SIZE(((NRF_RTC_Type *)0)->EVENTS_COMPARE)
+
+/** @brief Macro for creating the interrupt bitmask for the specified compare channel. */
+#define NRF_RTC_CHANNEL_INT_MASK(ch)    ((uint32_t)(NRF_RTC_INT_COMPARE0_MASK) << (ch))
+
+/** @brief Macro for obtaining the compare event for the specified channel. */
+#define NRF_RTC_CHANNEL_EVENT_ADDR(ch) \
+	(nrf_rtc_event_t)((NRF_RTC_EVENT_COMPARE_0) + (ch) * sizeof(uint32_t))
+
 #define RTC1_PRETICK_CC_CHAN (RTC1_CC_NUM - 1)
 
 /* Mask of CC channels capable of generating interrupts, see nrf_rtc_timer.c */
