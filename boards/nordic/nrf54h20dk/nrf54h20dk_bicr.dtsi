@@ -16,7 +16,7 @@
 		power-vddao0v8 = "internal";
 		power-vddvs0v8 = "internal";
 
-		inductor-present;
+		//inductor-present;
 
 		ioport-power-rails = <&gpio1 2>, <&gpio2 2>, <&gpio6 2>, <&gpio7 2>, <&gpio9 4>;
 		ioport-drivectrls = <&gpio6 50>, <&gpio7 50>;
