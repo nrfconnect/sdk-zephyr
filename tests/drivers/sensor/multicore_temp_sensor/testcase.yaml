@@ -1,0 +1,29 @@
+common:
+  sysbuild: true
+  tags:
+    - drivers
+    - sensors
+  filter: dt_nodelabel_enabled("temp_sensor")
+  harness: console
+  harness_config:
+    type: multi_line
+    ordered: false
+    regex:
+      - "Temperature was successfully read 1000 times"
+
+tests:
+  drivers.sensor.multicore_temp_sensor.nrf54h20dk_cpuapp_cpurad:
+    platform_allow:
+      - nrf54h20dk/nrf54h20/cpuapp
+    integration_platforms:
+      - nrf54h20dk/nrf54h20/cpuapp
+    extra_args:
+      SB_CONF_FILE=sysbuild/nrf54h20dk_nrf54h20_cpurad.conf
+
+  drivers.sensor.multicore_temp_sensor.nrf54h20dk_cpurad_cpuapp:
+    platform_allow:
+      - nrf54h20dk/nrf54h20/cpurad
+    integration_platforms:
+      - nrf54h20dk/nrf54h20/cpurad
+    extra_args:
+      SB_CONF_FILE=sysbuild/nrf54h20dk_nrf54h20_cpuapp.conf
