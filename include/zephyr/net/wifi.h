@@ -384,6 +384,8 @@ enum wifi_ps_param_type {
 	WIFI_PS_PARAM_WAKEUP_MODE,
 	/** Power save mode. */
 	WIFI_PS_PARAM_MODE,
+	/** Power save exit strategy. */
+	WIFI_PS_PARAM_EXIT_STRATEGY,
 	/** Power save timeout. */
 	WIFI_PS_PARAM_TIMEOUT,
 };
@@ -398,6 +400,24 @@ enum wifi_ps_wakeup_mode {
 
 /** Helper function to get user-friendly ps wakeup mode name. */
 const char * const wifi_ps_wakeup_mode_txt(enum wifi_ps_wakeup_mode ps_wakeup_mode);
+
+/**
+ * Wi-Fi power save exit strategy
+ */
+enum wifi_ps_exit_strategy {
+	/** PS-Poll frame based */
+	WIFI_PS_EXIT_EVERY_TIM = 0,
+	/** QoS NULL frame based */
+	WIFI_PS_EXIT_CUSTOM_ALGO,
+
+	/** Last value */
+	WIFI_PS_EXIT_LAST,
+	/** Maximum value */
+	WIFI_PS_EXIT_MAX = WIFI_PS_EXIT_LAST - 1,
+};
+
+/** Helper function to get user-friendly ps exit strategy name. */
+const char * const wifi_ps_exit_strategy_txt(enum wifi_ps_exit_strategy ps_exit_strategy);
 
 /** Wi-Fi power save error codes. */
 enum wifi_config_ps_param_fail_reason {
@@ -415,6 +435,8 @@ enum wifi_config_ps_param_fail_reason {
 	WIFI_PS_PARAM_FAIL_DEVICE_CONNECTED,
 	/** Listen interval out of range */
 	WIFI_PS_PARAM_LISTEN_INTERVAL_RANGE_INVALID,
+	/** Invalid exit strategy */
+	WIFI_PS_PARAM_FAIL_INVALID_EXIT_STRATEGY,
 };
 
 /** @cond INTERNAL_HIDDEN */
