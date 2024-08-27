@@ -33,6 +33,7 @@
 #endif
 
 const uint8_t erased[] = { 0xff, 0xff, 0xff, 0xff };
+struct flash_pages_info test_page_info;
 
 void single_sector_test(const struct device *flash_dev)
 {
@@ -47,6 +48,28 @@ void single_sector_test(const struct device *flash_dev)
 	 * automatically after completion of write and erase
 	 * operations.
 	 */
+
+	printf("Pre test info\n");
+
+	rc = flash_get_page_count(flash_dev);
+	if (rc == 0) {
+		printf("Get flash pages count returned 0\n");
+		return;
+	}
+	printf("Flash device page count: %d\n", rc);
+
+	rc = flash_get_page_info_by_offs(flash_dev, SPI_FLASH_TEST_REGION_OFFSET,
+						 &test_page_info);
+	if (rc != 0) {
+		printf("Get flash page info by offset failed: %d\n", rc);
+	}
+	rc = flash_get_page_info_by_idx(flash_dev, test_page_info.index, &test_page_info);
+	if (rc != 0) {
+		printf("Get flash page info by ID failed: %d\n", rc);
+	}
+	printf("Test page info: start_offset %ld, size: %d, index: %d\n",
+	       test_page_info.start_offset, (uint32_t)test_page_info.size, test_page_info.index);
+
 	printf("\nTest 1: Flash erase\n");
 
 	/* Full flash erase if SPI_FLASH_TEST_REGION_OFFSET = 0 and
