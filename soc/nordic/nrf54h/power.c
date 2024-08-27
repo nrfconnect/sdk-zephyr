@@ -60,9 +60,19 @@ void nrf_poweroff(void)
 }
 
 #if IS_ENABLED(CONFIG_PM_S2RAM)
+
+static void nop_delay(volatile uint32_t loop) {
+	while (loop--) {
+		__NOP();
+	}
+}
+
 /* Resume domain after local suspend to RAM. */
 static void sys_resume(void)
 {
+#if defined(CONFIG_NOP_DELAY_AFTER_WAKEUP)
+	nop_delay(500);
+#endif
 	if (IS_ENABLED(CONFIG_ICACHE)) {
 		/* Power up and re-enable ICACHE */
 		nrf_memconf_ramblock_control_enable_set(NRF_MEMCONF, RAMBLOCK_POWER_ID,
