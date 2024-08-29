@@ -38,6 +38,10 @@
 #endif
 #include <soc/nrfx_coredep.h>
 
+#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) || defined(__NRF_TFM__)
+#include <hal/nrf_memconf.h>
+#endif
+
 #include <system_nrf54l.h>
 
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
@@ -171,6 +175,22 @@ int nordicsemi_nrf54l_init(void)
 #if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) || defined(__NRF_TFM__)
 	/* Currently not supported for non-secure */
 	SystemCoreClockUpdate();
+
+	/* Don't retain CRACEN RAMs during System OFF
+	 * Cracen RAMs are:
+	 * Cracen PKEcode with ID 34 which corresponds to the bit (1 << 2) in memconf[1] register
+	 * Cracen KeyRam with ID 35 which corresponds to the bit (1 << 3) in memconf[1] register
+	 * TODO: Replace these with HAL defines when these are available
+	 */
+	nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 1, (1 << 2), false);
+	nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 1, (1 << 3), false);
+
+	/* Don't retain CRACEN RAMs during System ON idle when CRACEN is not used */
+#if !defined(CONFIG_PSA_CRYPTO_DRIVER_CRACEN)
+	nrf_memconf_ramblock_control_mask_enable_set(NRF_MEMCONF, 1, (1 << 2), false);
+	nrf_memconf_ramblock_control_mask_enable_set(NRF_MEMCONF, 1, (1 << 3), false);
+#endif
+
 #endif
 
 #ifdef __NRF_TFM__
