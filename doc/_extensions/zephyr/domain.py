@@ -339,7 +339,7 @@ def setup(app):
     app.add_post_transform(ProcessRelatedCodeSamplesNode)
 
     # monkey-patching of the DoxygenGroupDirective
-    app.add_directive("doxygengroup", CustomDoxygenGroupDirective, override=True)
+    # app.add_directive("doxygengroup", CustomDoxygenGroupDirective, override=True)
 
     return {
         "version": __version__,
