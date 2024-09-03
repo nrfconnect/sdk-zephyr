@@ -63,6 +63,7 @@ void nrf_poweroff(void)
 /* Resume domain after local suspend to RAM. */
 static void sys_resume(void)
 {
+	k_busy_wait(100);
 	if (IS_ENABLED(CONFIG_ICACHE)) {
 		/* Power up and re-enable ICACHE */
 		nrf_memconf_ramblock_control_enable_set(NRF_MEMCONF, RAMBLOCK_POWER_ID,
