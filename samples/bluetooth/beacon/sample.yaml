@@ -16,7 +16,9 @@ tests:
       - nrf52dk/nrf52832
       - nrf54l15dk/nrf54l15/cpuapp
   sample.bluetooth.beacon-coex:
-    extra_args: CONF_FILE="prj-coex.conf"
+    extra_args:
+      - CONF_FILE="prj-coex.conf"
+      - SNIPPET="bt-ll-sw-split"
     harness: bluetooth
     platform_allow:
       - nrf52840dk/nrf52840
