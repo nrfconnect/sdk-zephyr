@@ -27,7 +27,7 @@
 		zephyr,bt-hci = &bt_hci_ipc0;
 		nordic,802154-spinel-ipc = &ipc0;
 		zephyr,canbus = &can120;
-		zephyr,entropy = &prng;
+		zephyr,entropy = &psa_rng;
 	};
 
 	aliases {
@@ -113,6 +113,11 @@
 
 	prng: prng {
 		compatible = "nordic,entropy-prng";
+		status = "disabled";
+	};
+
+	psa_rng: psa-rng {
+		compatible = "zephyr,psa-crypto-rng";
 		status = "okay";
 	};
 };
