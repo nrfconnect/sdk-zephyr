@@ -14,6 +14,8 @@ config MBEDTLS_PROMPTLESS
 	  dependent sub-configurations and thus prevent stuck symbol behavior.
 
 rsource "Kconfig.psa"
+# Add nordic additions to Kconfigs
+rsource "Kconfig.psa.nordic"
 
 menuconfig MBEDTLS
 	bool "mbed TLS Support" if !MBEDTLS_PROMPTLESS
