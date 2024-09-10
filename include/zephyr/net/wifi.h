@@ -419,10 +419,10 @@ const char *wifi_ps_wakeup_mode_txt(enum wifi_ps_wakeup_mode ps_wakeup_mode);
  * Wi-Fi power save exit strategy
  */
 enum wifi_ps_exit_strategy {
-	/** PS-Poll frame based */
-	WIFI_PS_EXIT_CUSTOM_ALGO = 0,
 	/** QoS NULL frame based */
-	WIFI_PS_EXIT_EVERY_TIM,
+	WIFI_PS_EXIT_EVERY_TIM = 0,
+	/** Uses a proprietary combination of PS-Poll and QoS-Null/Null */
+	WIFI_PS_EXIT_CUSTOM_ALGO,
 
 	/** Last value */
 	WIFI_PS_EXIT_LAST,
