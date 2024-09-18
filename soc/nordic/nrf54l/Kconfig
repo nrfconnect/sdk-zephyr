@@ -77,6 +77,9 @@ config SOC_NRF_FORCE_CONSTLAT
 	  and predictable latency will be at the cost of having increased power consumption.
 
 config SOC_NRF54L_NORMAL_VOLTAGE_MODE
+	select DEPRECATED
+	help
+	  This mode is deprecated and shall no longer be used.
 	bool "NRF54L Normal Voltage Mode."
 
 if NRF_GRTC_TIMER
