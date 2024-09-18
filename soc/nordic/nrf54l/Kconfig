@@ -59,6 +59,9 @@ config SOC_NRF54L_VREG_MAIN_DCDC
 	  To enable, an inductor must be connected to the DC/DC converter pin.
 
 config SOC_NRF54L_NORMAL_VOLTAGE_MODE
+	select DEPRECATED
+	help
+	  This mode is deprecated and shall no longer be used.
 	bool "NRF54L Normal Voltage Mode."
 
 if NRF_GRTC_TIMER
