@@ -35,6 +35,7 @@ def test_runner_imports():
                     'nios2',
                     'nrfjprog',
                     'nrfutil',
+                    'nrfutil_dfu',
                     'nxp_s32dbg',
                     'openocd',
                     'pyocd',

@@ -44,6 +44,7 @@ _names = [
     'nios2',
     'nrfjprog',
     'nrfutil',
+    'nrfutil_dfu',
     'nsim',
     'nxp_s32dbg',
     'openocd',
