@@ -20,7 +20,6 @@ LOG_MODULE_REGISTER(pwm_nrfx, CONFIG_PWM_LOG_LEVEL);
  * to 0 or 1, hence the use of #if IS_ENABLED().
  */
 #if IS_ENABLED(NRFX_PWM_NRF52_ANOMALY_109_WORKAROUND_ENABLED)
-#define ANOMALY_109_IRQ_CONNECT(...) IRQ_CONNECT(__VA_ARGS__)
 #define ANOMALY_109_EGU_IRQ_CONNECT(idx) _EGU_IRQ_CONNECT(idx)
 #define _EGU_IRQ_CONNECT(idx) \
 	extern void nrfx_egu_##idx##_irq_handler(void); \
@@ -28,7 +27,6 @@ LOG_MODULE_REGISTER(pwm_nrfx, CONFIG_PWM_LOG_LEVEL);
 		    DT_IRQ(DT_NODELABEL(egu##idx), priority), \
 		    nrfx_isr, nrfx_egu_##idx##_irq_handler, 0)
 #else
-#define ANOMALY_109_IRQ_CONNECT(...)
 #define ANOMALY_109_EGU_IRQ_CONNECT(idx)
 #endif
 
@@ -49,7 +47,8 @@ struct pwm_nrfx_data {
 	/* Bit mask indicating channels that need the PWM generation. */
 	uint8_t  pwm_needed;
 	uint8_t  prescaler;
-	bool     stop_requested;
+	volatile bool stop_requested;
+	volatile bool active;
 };
 /* Ensure the pwm_needed bit mask can accommodate all available channels. */
 #if (NRF_PWM_CHANNEL_COUNT > 8)
@@ -61,6 +60,15 @@ static uint16_t *seq_values_ptr_get(const struct device *dev)
 	const struct pwm_nrfx_config *config = dev->config;
 
 	return (uint16_t *)config->seq.values.p_raw;
+}
+
+static void pwm_handler(nrfx_pwm_evt_type_t event_type, void *p_context)
+{
+	__ASSERT_NO_MSG(event_type == NRFX_PWM_EVT_STOPPED);
+	struct pwm_nrfx_data *data = p_context;
+
+	data->stop_requested = false;
+	data->active = false;
 }
 
 static bool pwm_period_check_and_set(const struct device *dev,
@@ -209,19 +217,17 @@ static int pwm_nrfx_set_cycles(const struct device *dev, uint32_t channel,
 		/* Don't wait here for the peripheral to actually stop. Instead,
 		 * ensure it is stopped before starting the next playback.
 		 */
-		nrfx_pwm_stop(&config->pwm, false);
-		data->stop_requested = true;
+		if (data->active && !data->stop_requested) {
+			data->stop_requested = true;
+			nrfx_pwm_stop(&config->pwm, false);
+		}
 	} else {
-		if (data->stop_requested) {
-			data->stop_requested = false;
-
-			/* After a stop is requested, the PWM peripheral stops
-			 * pulse generation at the end of the current period,
-			 * and till that moment, it ignores any start requests,
-			 * so ensure here that it is stopped.
-			 */
-			while (!nrfx_pwm_stopped_check(&config->pwm)) {
-			}
+		/* After a stop is requested, the PWM peripheral stops
+		 * pulse generation at the end of the current period,
+		 * and till that moment, it ignores any start requests,
+		 * so ensure here that it is stopped.
+		 */
+		while (data->stop_requested) {
 		}
 
 		/* It is sufficient to play the sequence once without looping.
@@ -229,7 +235,9 @@ static int pwm_nrfx_set_cycles(const struct device *dev, uint32_t channel,
 		 * until another playback is requested (new values will be
 		 * loaded then) or the PWM peripheral is stopped.
 		 */
-		nrfx_pwm_simple_playback(&config->pwm, &config->seq, 1, 0);
+		data->active = true;
+		nrfx_pwm_simple_playback(&config->pwm, &config->seq, 1,
+					 NRFX_PWM_FLAG_NO_EVT_FINISHED);
 	}
 
 	return 0;
@@ -256,6 +264,7 @@ static int pwm_nrfx_init(const struct device *dev)
 {
 	const struct pwm_nrfx_config *config = dev->config;
 	uint8_t initially_inverted = 0;
+	nrfx_err_t result;
 
 	int ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
 
@@ -284,10 +293,7 @@ static int pwm_nrfx_init(const struct device *dev)
 		seq_values_ptr_get(dev)[i] = PWM_NRFX_CH_VALUE(0, inverted);
 	}
 
-	nrfx_err_t result = nrfx_pwm_init(&config->pwm,
-					  &config->initial_config,
-					  NULL,
-					  NULL);
+	result = nrfx_pwm_init(&config->pwm, &config->initial_config, pwm_handler, dev->data);
 	if (result != NRFX_SUCCESS) {
 		LOG_ERR("Failed to initialize device: %s", dev->name);
 		return -EBUSY;
@@ -377,9 +383,8 @@ static int pwm_nrfx_pm_action(const struct device *dev,
 	};								      \
 	static int pwm_nrfx_init##idx(const struct device *dev)		      \
 	{								      \
-		ANOMALY_109_IRQ_CONNECT(				      \
-			DT_IRQN(PWM(idx)), DT_IRQ(PWM(idx), priority),	      \
-			nrfx_isr, nrfx_pwm_##idx##_irq_handler, 0);	      \
+		IRQ_CONNECT(DT_IRQN(PWM(idx)), DT_IRQ(PWM(idx), priority),    \
+			    nrfx_isr, nrfx_pwm_##idx##_irq_handler, 0);	      \
 		return pwm_nrfx_init(dev);				      \
 	};								      \
 	PM_DEVICE_DT_DEFINE(PWM(idx), pwm_nrfx_pm_action);		      \
