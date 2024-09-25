@@ -262,9 +262,7 @@ void gcov_coverage_dump(void)
 	struct gcov_info *gcov_list = gcov_info_head;
 
 	if (!k_is_in_isr()) {
-#ifdef CONFIG_MULTITHREADING
 		k_sched_lock();
-#endif
 	}
 	printk("\nGCOV_COVERAGE_DUMP_START");
 	while (gcov_list) {
@@ -295,9 +293,7 @@ void gcov_coverage_dump(void)
 coverage_dump_end:
 	printk("\nGCOV_COVERAGE_DUMP_END\n");
 	if (!k_is_in_isr()) {
-#ifdef CONFIG_MULTITHREADING
 		k_sched_unlock();
-#endif
 	}
 	return;
 }
