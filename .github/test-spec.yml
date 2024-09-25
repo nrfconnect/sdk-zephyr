@@ -202,9 +202,10 @@
       - "!tests/bluetooth/**/*"
 
 "CI-rpc-test":
-  - "subsys/ipc/ipc_service/**/*"
-  - "subsys/random/**/*"
-  - "soc/nordic/nrf53/**/*"
+  - any:
+      - "**/*"
+      - "!samples/bluetooth/**/*"
+      - "!tests/bluetooth/**/*"
 
 "CI-modemshell-test":
   - "include/net/**/*"
