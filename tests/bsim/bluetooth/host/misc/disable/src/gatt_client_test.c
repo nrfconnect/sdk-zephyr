@@ -60,7 +60,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	UNSET_FLAG(flag_is_connected);
 }
 
-static struct bt_conn_cb conn_callbacks = {
+BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.connected = connected,
 	.disconnected = disconnected,
 };
@@ -262,8 +262,6 @@ static void gatt_read(uint16_t handle)
 static void test_main(void)
 {
 	int err;
-
-	bt_conn_cb_register(&conn_callbacks);
 
 	for (int i = 0; i < NUM_ITERATIONS; i++) {
 
