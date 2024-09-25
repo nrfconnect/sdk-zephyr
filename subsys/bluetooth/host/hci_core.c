@@ -1159,7 +1159,6 @@ static void conn_auto_initiate(struct bt_conn *conn)
 
 static void le_conn_complete_cancel(uint8_t err)
 {
-	int ret;
 	struct bt_conn *conn;
 
 	/* Handle create connection cancel.
@@ -1173,30 +1172,27 @@ static void le_conn_complete_cancel(uint8_t err)
 		return;
 	}
 
-	if (atomic_test_bit(conn->flags, BT_CONN_AUTO_CONNECT)) {
-		if (!IS_ENABLED(CONFIG_BT_FILTER_ACCEPT_LIST)) {
+	conn->err = err;
+
+	/* Handle cancellation of outgoing connection attempt. */
+	if (!IS_ENABLED(CONFIG_BT_FILTER_ACCEPT_LIST)) {
+		/* We notify before checking autoconnect flag
+		 * as application may choose to change it from
+		 * callback.
+		 */
+		bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
+		/* Check if device is marked for autoconnect. */
+		if (atomic_test_bit(conn->flags, BT_CONN_AUTO_CONNECT)) {
 			/* Restart passive scanner for device */
 			bt_conn_set_state(conn, BT_CONN_SCAN_BEFORE_INITIATING);
-		} else {
-			/* Restart FAL initiator after RPA timeout. */
-			ret = bt_le_create_conn(conn);
-			if (ret) {
-				LOG_ERR("Failed to restart initiator");
-			}
 		}
 	} else {
-		int busy_status = k_work_delayable_busy_get(&conn->deferred_work);
-
-		if (!(busy_status & (K_WORK_QUEUED | K_WORK_DELAYED))) {
-			/* Connection initiation timeout triggered. */
-			conn->err = err;
-			bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
+		if (atomic_test_bit(conn->flags, BT_CONN_AUTO_CONNECT)) {
+			/* Restart FAL initiator after RPA timeout. */
+			bt_le_create_conn(conn);
 		} else {
-			/* Restart initiator after RPA timeout. */
-			ret = bt_le_create_conn(conn);
-			if (ret) {
-				LOG_ERR("Failed to restart initiator");
-			}
+			/* Create connection canceled by timeout */
+			bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
 		}
 	}
 
