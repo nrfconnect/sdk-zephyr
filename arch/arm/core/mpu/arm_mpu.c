@@ -130,10 +130,12 @@ static int mpu_configure_regions_from_dt(uint8_t *reg_index)
 			break;
 #endif
 		default:
-			/* Attribute other than ARM-specific is set.
-			 * This region should not be configured in MPU.
+			/* Either the specified `ATTR_MPU_*` attribute does not
+			 * exists or the `REGION_*_ATTR` macro is not defined
+			 * for that attribute.
 			 */
-			continue;
+			LOG_ERR("Invalid attribute for the region\n");
+			return -EINVAL;
 		}
 #if defined(CONFIG_ARMV7_R)
 		region_conf.size = size_to_mpu_rasr_size(region[idx].dt_size);
