@@ -18,15 +18,6 @@ VerifyError = 55
 class NrfJprogBinaryRunner(NrfBinaryRunner):
     '''Runner front-end for nrfjprog.'''
 
-    def __init__(self, cfg, family, softreset, dev_id, erase=False,
-                 reset=True, tool_opt=[], force=False, recover=False,
-                 qspi_ini=None):
-
-        super().__init__(cfg, family, softreset, dev_id, erase, reset,
-                         tool_opt, force, recover)
-
-        self.qspi_ini = qspi_ini
-
     @classmethod
     def name(cls):
         return 'nrfjprog'
@@ -41,12 +32,7 @@ class NrfJprogBinaryRunner(NrfBinaryRunner):
                                     args.dev_id, erase=args.erase,
                                     reset=args.reset,
                                     tool_opt=args.tool_opt, force=args.force,
-                                    recover=args.recover, qspi_ini=args.qspi_ini)
-    @classmethod
-    def do_add_parser(cls, parser):
-        super().do_add_parser(parser)
-        parser.add_argument('--qspiini', required=False, dest='qspi_ini',
-                            help='path to an .ini file with qspi configuration')
+                                    recover=args.recover)
 
     def do_get_boards(self):
         snrs = self.check_output(['nrfjprog', '--ids'])
@@ -95,9 +81,6 @@ class NrfJprogBinaryRunner(NrfBinaryRunner):
             if _op.get('verify'):
                 # In the future there might be multiple verify modes
                 cmd.append('--verify')
-            if self.qspi_ini:
-                cmd.append('--qspiini')
-                cmd.append(self.qspi_ini)
         elif op_type == 'recover':
             cmd.append('--recover')
         elif op_type == 'reset':
