@@ -24,13 +24,9 @@
  */
 
 /** Position of the function field. */
-#define NRF_FUN_POS 18U
+#define NRF_FUN_POS 17U
 /** Mask for the function field. */
-#define NRF_FUN_MSK 0x3FFFU
-/** Position of the clock enable field. */
-#define NRF_CLOCK_ENABLE_POS 17U
-/** Mask for the clock enable field. */
-#define NRF_CLOCK_ENABLE_MSK 0x1U
+#define NRF_FUN_MSK 0x7FFFU
 /** Position of the invert field. */
 #define NRF_INVERT_POS 16U
 /** Mask for the invert field. */
