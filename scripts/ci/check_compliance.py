@@ -479,7 +479,8 @@ class KconfigCheck(ComplianceTest):
 
         with open(kconfig_defconfig_file, 'w') as fp:
             for board in v2_boards:
-                fp.write('osource "' + (Path(board.dir) / 'Kconfig.defconfig').as_posix() + '"\n')
+                fp.write('osource "' +
+                         (board.directories[0] / 'Kconfig.defconfig').as_posix() + '"\n')
 
         with open(kconfig_boards_file, 'w') as fp:
             for board in v2_boards:
@@ -492,7 +493,8 @@ class KconfigCheck(ComplianceTest):
                     fp.write('config  ' + board_str + '\n')
                     fp.write('\t bool\n')
                 fp.write(
-                    'source "' + (Path(board.dir) / ('Kconfig.' + board.name)).as_posix() + '"\n\n'
+                    'source "' +
+                    (board.directories[0] / ('Kconfig.' + board.name)).as_posix() + '"\n\n'
                 )
 
         with open(kconfig_file, 'w') as fp:
@@ -500,7 +502,7 @@ class KconfigCheck(ComplianceTest):
                 'osource "' + (Path(kconfig_dir) / 'boards' / 'Kconfig.syms.v1').as_posix() + '"\n'
             )
             for board in v2_boards:
-                fp.write('osource "' + (Path(board.dir) / 'Kconfig').as_posix() + '"\n')
+                fp.write('osource "' + (Path(board.directories[0]) / 'Kconfig').as_posix() + '"\n')
 
         kconfig_defconfig_file = os.path.join(kconfig_dir, 'soc', 'Kconfig.defconfig')
         kconfig_soc_file = os.path.join(kconfig_dir, 'soc', 'Kconfig.soc')
