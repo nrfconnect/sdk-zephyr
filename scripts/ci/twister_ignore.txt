@@ -31,8 +31,6 @@ doc/*
 # GH action have no impact on code
 .github/*
 *.rst
-*.jpg
-*.png
 *.md
 # if we change this file or associated script, it should not trigger a full
 # twister.
