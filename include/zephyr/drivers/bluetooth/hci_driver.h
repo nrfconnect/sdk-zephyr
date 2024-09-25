@@ -12,9 +12,6 @@
 
 /**
  * @brief HCI drivers
- *
- * @deprecated This is the old HCI driver API. Drivers should use @ref bt_hci_api instead.
- *
  * @defgroup bt_hci_driver HCI drivers
  * @ingroup bluetooth
  * @{

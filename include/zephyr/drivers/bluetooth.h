@@ -11,10 +11,6 @@
 /**
  * @brief Bluetooth HCI APIs
  * @defgroup bt_hci_api Bluetooth HCI APIs
- *
- * @since 3.7
- * @version 0.2.0
- *
  * @ingroup bluetooth
  * @{
  */
