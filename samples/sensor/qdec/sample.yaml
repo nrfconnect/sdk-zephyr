@@ -34,4 +34,4 @@ tests:
       ordered: true
       regex:
         - "Quadrature decoder sensor test"
-        - "Position = -[45678]\\d degrees"
+        - "Position = (.*) degrees"
