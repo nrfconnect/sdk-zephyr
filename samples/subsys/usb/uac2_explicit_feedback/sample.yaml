@@ -3,7 +3,7 @@ sample:
 tests:
   sample.subsys.usb.uac2_explicit_feedback:
     depends_on:
-      - usbd
+      - usb_device
       - i2s
     tags: usb i2s
     platform_allow: nrf5340dk/nrf5340/cpuapp
