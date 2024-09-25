@@ -86,7 +86,13 @@ struct dhcp_msg {
 					 DHCPV4_OLV_END_SIZE)
 
 
-/* Maximum number of REQUEST retransmits before reverting to DISCOVER. */
+/* TODO:
+ * 1) Support T2(Rebind) timer.
+ */
+
+/* Maximum number of REQUEST or RENEWAL retransmits before reverting
+ * to DISCOVER.
+ */
 #define DHCPV4_MAX_NUMBER_OF_ATTEMPTS	3
 
 /* Initial message retry timeout (s).  This timeout increases
@@ -102,11 +108,6 @@ struct dhcp_msg {
  * RFC2131 4.1.1
  */
 #define DHCPV4_INITIAL_DELAY_MIN 1
-
-/* Minimum retransmission timeout in RENEW and REBIND states (in seconds).
- * RFC2131 4.4.5
- */
-#define DHCPV4_RENEW_REBIND_TIMEOUT_MIN 60
 
 #if defined(CONFIG_NET_DHCPV4)
 
