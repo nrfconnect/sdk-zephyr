@@ -2465,15 +2465,11 @@ bt_security_t bt_conn_get_security(const struct bt_conn *conn)
 }
 #endif /* CONFIG_BT_SMP */
 
-int bt_conn_cb_register(struct bt_conn_cb *cb)
+void bt_conn_cb_register(struct bt_conn_cb *cb)
 {
-	if (sys_slist_find(&conn_cbs, &cb->_node, NULL)) {
-		return -EEXIST;
+	if (!sys_slist_find(&conn_cbs, &cb->_node, NULL)) {
+		sys_slist_append(&conn_cbs, &cb->_node);
 	}
-
-	sys_slist_append(&conn_cbs, &cb->_node);
-
-	return 0;
 }
 
 int bt_conn_cb_unregister(struct bt_conn_cb *cb)

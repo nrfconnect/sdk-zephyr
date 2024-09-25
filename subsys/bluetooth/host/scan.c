@@ -1586,15 +1586,11 @@ int bt_le_scan_stop(void)
 	return bt_le_scan_update(false);
 }
 
-int bt_le_scan_cb_register(struct bt_le_scan_cb *cb)
+void bt_le_scan_cb_register(struct bt_le_scan_cb *cb)
 {
-	if (sys_slist_find(&scan_cbs, &cb->node, NULL)) {
-		return -EEXIST;
+	if (!sys_slist_find(&scan_cbs, &cb->node, NULL)) {
+		sys_slist_append(&scan_cbs, &cb->node);
 	}
-
-	sys_slist_append(&scan_cbs, &cb->node);
-
-	return 0;
 }
 
 void bt_le_scan_cb_unregister(struct bt_le_scan_cb *cb)
@@ -1837,15 +1833,11 @@ int bt_le_per_adv_sync_delete(struct bt_le_per_adv_sync *per_adv_sync)
 	return err;
 }
 
-int bt_le_per_adv_sync_cb_register(struct bt_le_per_adv_sync_cb *cb)
+void bt_le_per_adv_sync_cb_register(struct bt_le_per_adv_sync_cb *cb)
 {
-	if (sys_slist_find(&pa_sync_cbs, &cb->node, NULL)) {
-		return -EEXIST;
+	if (!sys_slist_find(&pa_sync_cbs, &cb->node, NULL)) {
+		sys_slist_append(&pa_sync_cbs, &cb->node);
 	}
-
-	sys_slist_append(&pa_sync_cbs, &cb->node);
-
-	return 0;
 }
 
 static int bt_le_set_per_adv_recv_enable(
