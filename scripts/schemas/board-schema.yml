@@ -23,29 +23,13 @@ schema;variant-schema:
           required: false
           include: variant-schema
 
-schema;extend-variant-schema:
-  required: false
-  type: seq
-  sequence:
-    - type: map
-      mapping:
-        name:
-          required: true
-          type: str
-        qualifier:
-          required: true
-          type: str
-
 schema;board-schema:
   type: map
   mapping:
     name:
-      required: false # Note: either name or extend is required, but that is handled in python
+      required: true
       type: str
       desc: Name of the board
-    extend:
-      required: false # Note: either name or extend is required, but that is handled in python
-      type: str
     vendor:
       required: false
       type: str
@@ -75,7 +59,7 @@ schema;board-schema:
                   required: true
                   type: str
     socs:
-      required: false # Required for name:, but not for extend.
+      required: true
       type: seq
       sequence:
         - type: map
@@ -85,8 +69,6 @@ schema;board-schema:
               type: str
             variants:
               include: variant-schema
-    variants:
-      include: extend-variant-schema
 
 type: map
 mapping:
