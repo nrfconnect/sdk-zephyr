@@ -77,7 +77,7 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
         for o in out:
             if o['type'] == 'task_end':
                 devs = o['data']['data']['devices']
-        snrs = [dev['serialNumber'] for dev in devs if dev['traits']['jlink']]
+        snrs = [dev['serialNumber'] for dev in devs]
 
         self.logger.debug(f'Found boards: {snrs}')
         return snrs
