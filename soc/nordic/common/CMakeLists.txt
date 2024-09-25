@@ -7,10 +7,6 @@ zephyr_linker_sources_ifdef(CONFIG_ARM SECTIONS arm_platform_init.ld)
 
 zephyr_library_sources_ifdef(CONFIG_POWEROFF poweroff.c)
 
-if((CONFIG_SOC_SERIES_NRF54HX OR CONFIG_SOC_SERIES_NRF92X) AND CONFIG_CPU_HAS_CUSTOM_FIXED_SOC_MPU_REGIONS)
-  zephyr_library_sources(nrf54hx_nrf92x_mpu_regions.c)
-endif()
-
 zephyr_include_directories(.)
 
 if(CONFIG_HAS_NORDIC_DMM)
