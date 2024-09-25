@@ -66,7 +66,7 @@
   - any:
       - "include/zephyr/bluetooth/**/*"
       - "!include/zephyr/bluetooth/mesh/**/*"
-  - "samples/bluetooth/hci_ipc/**/*"
+  - "samples/bluetooth/hci_rpc/**/*"
 
 "CI-ble-samples-test":
   - any:
@@ -183,7 +183,7 @@
   - "subsys/net/**/*"
   - "subsys/mgmt/mcumgr/**/*"
   - "drivers/net/**/*"
-  - "samples/bluetooth/hci_ipc/**/*"
+  - "samples/bluetooth/hci_rpc/**/*"
   - any:
       - "subsys/bluetooth/**/*"
       - "!subsys/bluetooth/mesh/**/*"
@@ -253,7 +253,7 @@
   - "subsys/dfu/**/*"
   - "subsys/settings/**/*"
   - "subsys/mgmt/mcumgr/**/*"
-  - "samples/bluetooth/hci_ipc/**/*"
+  - "samples/bluetooth/hci_rpc/**/*"
   - any:
       - "subsys/bluetooth/**/*"
       - "!subsys/bluetooth/mesh/**/*"
@@ -268,7 +268,7 @@
   - "drivers/watchdog/**/*"
   - "include/dfu/**/*"
   - "include/mgmt/mcumgr/**/*"
-  - "samples/bluetooth/hci_ipc/**/*"
+  - "samples/bluetooth/hci_rpc/**/*"
   - "soc/nordic/**/*"
   - "subsys/bluetooth/audio/**/*"
   - "subsys/bluetooth/host/**/*"
