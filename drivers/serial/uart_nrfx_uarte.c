@@ -25,12 +25,12 @@ LOG_MODULE_REGISTER(uart_nrfx_uarte, CONFIG_UART_LOG_LEVEL);
 #include <zephyr/drivers/pinctrl.h>
 
 /* Generalize PPI or DPPI channel management */
-#if defined(PPI_PRESENT)
+#if defined(CONFIG_HAS_HW_NRF_PPI)
 #include <nrfx_ppi.h>
 #define gppi_channel_t nrf_ppi_channel_t
 #define gppi_channel_alloc nrfx_ppi_channel_alloc
 #define gppi_channel_enable nrfx_ppi_channel_enable
-#elif defined(DPPI_PRESENT)
+#elif defined(CONFIG_HAS_HW_NRF_DPPIC)
 #include <nrfx_dppi.h>
 #define gppi_channel_t uint8_t
 #define gppi_channel_alloc nrfx_dppi_channel_alloc
@@ -39,49 +39,39 @@ LOG_MODULE_REGISTER(uart_nrfx_uarte, CONFIG_UART_LOG_LEVEL);
 #error "No PPI or DPPI"
 #endif
 
-/* Execute macro f(x) for all instances. */
-#define UARTE_FOR_EACH_INSTANCE(f, sep, off_code) \
-	NRFX_FOREACH_PRESENT(UARTE, f, sep, off_code, _)
 
-/* Determine if any instance is using interrupt driven API. */
-#define IS_INT_DRIVEN(unused, prefix, i, _) \
-	(IS_ENABLED(CONFIG_HAS_HW_NRF_UARTE##prefix##i) && \
-	 IS_ENABLED(CONFIG_UART_##prefix##i##_INTERRUPT_DRIVEN))
-
-#if UARTE_FOR_EACH_INSTANCE(IS_INT_DRIVEN, (||), (0))
+#if	(defined(CONFIG_HAS_HW_NRF_UARTE0) &&         \
+	 defined(CONFIG_UART_0_INTERRUPT_DRIVEN)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE1) &&         \
+	 defined(CONFIG_UART_1_INTERRUPT_DRIVEN)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE2) &&         \
+	 defined(CONFIG_UART_2_INTERRUPT_DRIVEN)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE3) &&         \
+	 defined(CONFIG_UART_3_INTERRUPT_DRIVEN))
 	#define UARTE_INTERRUPT_DRIVEN	1
 #endif
 
-/* Determine if any instance is not using asynchronous API. */
-#define IS_NOT_ASYNC(unused, prefix, i, _) \
-	(IS_ENABLED(CONFIG_HAS_HW_NRF_UARTE##prefix##i) && \
-	 !IS_ENABLED(CONFIG_UART_##prefix##i##_ASYNC))
-
-#if UARTE_FOR_EACH_INSTANCE(IS_NOT_ASYNC, (||), (0))
+#if	(defined(CONFIG_HAS_HW_NRF_UARTE0) && !defined(CONFIG_UART_0_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE1) && !defined(CONFIG_UART_1_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE2) && !defined(CONFIG_UART_2_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE3) && !defined(CONFIG_UART_3_ASYNC))
 #define UARTE_ANY_NONE_ASYNC 1
 #endif
 
-/* Determine if any instance is using asynchronous API. */
-#define IS_ASYNC(unused, prefix, i, _) \
-	(IS_ENABLED(CONFIG_HAS_HW_NRF_UARTE##prefix##i) && \
-	 IS_ENABLED(CONFIG_UART_##prefix##i##_ASYNC))
-
-#if UARTE_FOR_EACH_INSTANCE(IS_ASYNC, (||), (0))
+#if	(defined(CONFIG_HAS_HW_NRF_UARTE0) && defined(CONFIG_UART_0_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE1) && defined(CONFIG_UART_1_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE2) && defined(CONFIG_UART_2_ASYNC)) || \
+	(defined(CONFIG_HAS_HW_NRF_UARTE3) && defined(CONFIG_UART_3_ASYNC))
 #define UARTE_ANY_ASYNC 1
 #endif
 
-/* Determine if any instance is using asynchronous API with HW byte counting. */
-#define IS_HW_ASYNC(unused, prefix, i, _) IS_ENABLED(CONFIG_UART_##prefix##i##_NRF_HW_ASYNC)
-
-#if UARTE_FOR_EACH_INSTANCE(IS_HW_ASYNC, (||), (0))
+#if	defined(CONFIG_UART_0_NRF_HW_ASYNC) || defined(CONFIG_UART_1_NRF_HW_ASYNC) || \
+	defined(CONFIG_UART_2_NRF_HW_ASYNC) || defined(CONFIG_UART_3_NRF_HW_ASYNC)
 #define UARTE_HW_ASYNC 1
 #endif
 
-/* Determine if any instance is using enhanced poll_out feature. */
-#define IS_ENHANCED_POLL_OUT(unused, prefix, i, _) \
-	IS_ENABLED(CONFIG_UART_##prefix##i##_ENHANCED_POLL_OUT)
-
-#if UARTE_FOR_EACH_INSTANCE(IS_ENHANCED_POLL_OUT, (||), (0))
+#if	defined(CONFIG_UART_0_ENHANCED_POLL_OUT) || defined(CONFIG_UART_1_ENHANCED_POLL_OUT) || \
+	defined(CONFIG_UART_2_ENHANCED_POLL_OUT) || defined(CONFIG_UART_3_ENHANCED_POLL_OUT)
 #define UARTE_ENHANCED_POLL_OUT 1
 #endif
 
@@ -2084,7 +2074,18 @@ static int uarte_nrfx_pm_action(const struct device *dev,
 			DT_PHANDLE(UARTE(idx), memory_regions)))))),	       \
 		())
 
-#define COND_UART_NRF_UARTE_DEVICE(unused, prefix, i, _) \
-	IF_ENABLED(CONFIG_HAS_HW_NRF_UARTE##prefix##i, (UART_NRF_UARTE_DEVICE(prefix##i);))
+#ifdef CONFIG_HAS_HW_NRF_UARTE0
+UART_NRF_UARTE_DEVICE(0);
+#endif
 
-UARTE_FOR_EACH_INSTANCE(COND_UART_NRF_UARTE_DEVICE, (), ())
+#ifdef CONFIG_HAS_HW_NRF_UARTE1
+UART_NRF_UARTE_DEVICE(1);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_UARTE2
+UART_NRF_UARTE_DEVICE(2);
+#endif
+
+#ifdef CONFIG_HAS_HW_NRF_UARTE3
+UART_NRF_UARTE_DEVICE(3);
+#endif
