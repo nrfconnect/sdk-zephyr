@@ -6,6 +6,7 @@
 
 if BOARD_CY8CPROTO_063_BLE
 
-# No defaults to change for now
+config BT_PSOC6_BLESS
+	default y if BT
 
 endif # BOARD_CY8CPROTO_063_BLE
