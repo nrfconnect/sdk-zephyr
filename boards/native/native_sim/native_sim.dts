@@ -24,7 +24,6 @@
 		zephyr,display = &sdl_dc;
 		zephyr,canbus = &can_loopback0;
 		zephyr,code-partition = &slot0_partition;
-		zephyr,bt-hci = &bt_hci_userchan;
 	};
 
 	aliases {
@@ -218,10 +217,5 @@
 		compatible = "zephyr,dma-emul";
 		#dma-cells = <1>;
 		stack-size = <4096>;
-	};
-
-	bt_hci_userchan: bt_hci_userchan {
-		compatible = "zephyr,bt-hci-userchan";
-		status = "okay";
 	};
 };
