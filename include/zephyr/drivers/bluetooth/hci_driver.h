@@ -37,6 +37,8 @@ enum {
 	BT_QUIRK_NO_AUTO_DLE = BIT(1),
 };
 
+#define IS_BT_QUIRK_NO_AUTO_DLE(bt_dev) ((bt_dev)->drv->quirks & BT_QUIRK_NO_AUTO_DLE)
+
 /**
  * @brief Receive data from the controller/HCI driver.
  *
