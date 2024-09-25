@@ -20,7 +20,6 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
-		zephyr,bt-hci = &hci_spi;
 	};
 
 	leds {
@@ -125,7 +124,7 @@
 	pinctrl-names = "default";
 
 	/* Nordic nRF51822-QFAC */
-	hci_spi: bt-hci@0 {
+	bt-hci@0 {
 		compatible = "zephyr,bt-hci-spi";
 		reg = <0>;
 		reset-gpios = <&gpiob 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;

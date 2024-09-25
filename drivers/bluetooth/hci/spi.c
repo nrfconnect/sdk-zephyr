@@ -15,7 +15,7 @@
 #include <zephyr/sys/util.h>
 
 #include <zephyr/bluetooth/hci.h>
-#include <zephyr/drivers/bluetooth.h>
+#include <zephyr/drivers/bluetooth/hci_driver.h>
 
 #define LOG_LEVEL CONFIG_BT_HCI_DRIVER_LOG_LEVEL
 #include <zephyr/logging/log.h>
@@ -65,10 +65,6 @@ LOG_MODULE_REGISTER(bt_driver);
 #warning CONFIG_BT_L2CAP_TX_MTU is too large and can result in packets that cannot \
 	be transmitted across this HCI link
 #endif /* CONFIG_BT_L2CAP_TX_MTU > MAX_MTU */
-
-struct bt_spi_data {
-	bt_hci_recv_t recv;
-};
 
 static uint8_t __noinit rxmsg[SPI_MAX_MSG_LEN];
 static uint8_t __noinit txmsg[SPI_MAX_MSG_LEN];
@@ -240,9 +236,7 @@ static struct net_buf *bt_spi_rx_buf_construct(uint8_t *msg)
 
 static void bt_spi_rx_thread(void *p1, void *p2, void *p3)
 {
-	const struct device *dev = p1;
-	struct bt_spi_data *hci = dev->data;
-
+	ARG_UNUSED(p1);
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
 
@@ -294,18 +288,16 @@ static void bt_spi_rx_thread(void *p1, void *p2, void *p3)
 		buf = bt_spi_rx_buf_construct(rxmsg);
 		if (buf) {
 			/* Handle the received HCI data */
-			hci->recv(dev, buf);
+			bt_recv(buf);
 		}
 	}
 }
 
-static int bt_spi_send(const struct device *dev, struct net_buf *buf)
+static int bt_spi_send(struct net_buf *buf)
 {
 	uint16_t size;
 	uint8_t rx_first[1];
 	int ret;
-
-	ARG_UNUSED(dev);
 
 	LOG_DBG("");
 
@@ -372,9 +364,8 @@ out:
 	return ret;
 }
 
-static int bt_spi_open(const struct device *dev, bt_hci_recv_t recv)
+static int bt_spi_open(void)
 {
-	struct bt_spi_data *hci = dev->data;
 	int err;
 
 	/* Configure RST pin and hold BLE in Reset */
@@ -401,8 +392,6 @@ static int bt_spi_open(const struct device *dev, bt_hci_recv_t recv)
 		return err;
 	}
 
-	hci->recv = recv;
-
 	/* Take BLE out of reset */
 	k_sleep(K_MSEC(DT_INST_PROP_OR(0, reset_assert_duration_ms, 0)));
 	gpio_pin_set_dt(&rst_gpio, 0);
@@ -410,7 +399,7 @@ static int bt_spi_open(const struct device *dev, bt_hci_recv_t recv)
 	/* Start RX thread */
 	k_thread_create(&spi_rx_thread_data, spi_rx_stack,
 			K_KERNEL_STACK_SIZEOF(spi_rx_stack),
-			bt_spi_rx_thread, (void *)dev, NULL, NULL,
+			bt_spi_rx_thread, NULL, NULL, NULL,
 			K_PRIO_COOP(CONFIG_BT_DRIVER_RX_HIGH_PRIO),
 			0, K_NO_WAIT);
 
@@ -420,14 +409,15 @@ static int bt_spi_open(const struct device *dev, bt_hci_recv_t recv)
 	return 0;
 }
 
-static const struct bt_hci_driver_api drv = {
+static const struct bt_hci_driver drv = {
+	.name		= DEVICE_DT_NAME(DT_DRV_INST(0)),
+	.bus		= BT_HCI_DRIVER_BUS_SPI,
 	.open		= bt_spi_open,
 	.send		= bt_spi_send,
 };
 
-static int bt_spi_init(const struct device *dev)
+static int bt_spi_init(void)
 {
-	ARG_UNUSED(dev);
 
 	if (!spi_is_ready_dt(&bus)) {
 		LOG_ERR("SPI device not ready");
@@ -444,16 +434,12 @@ static int bt_spi_init(const struct device *dev)
 		return -ENODEV;
 	}
 
+	bt_hci_driver_register(&drv);
+
+
 	LOG_DBG("BT SPI initialized");
 
 	return 0;
 }
 
-#define HCI_DEVICE_INIT(inst) \
-	static struct bt_spi_data hci_data_##inst = { \
-	}; \
-	DEVICE_DT_INST_DEFINE(inst, bt_spi_init, NULL, &hci_data_##inst, NULL, \
-			      POST_KERNEL, CONFIG_BT_SPI_INIT_PRIORITY, &drv)
-
-/* Only one instance supported right now */
-HCI_DEVICE_INIT(0)
+SYS_INIT(bt_spi_init, POST_KERNEL, CONFIG_BT_SPI_INIT_PRIORITY);
