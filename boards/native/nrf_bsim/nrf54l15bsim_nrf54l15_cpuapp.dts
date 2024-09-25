@@ -66,10 +66,6 @@
 		status = "okay";
 		compatible = "zephyr,native-posix-rng";
 	};
-
-	psa_rng: psa-rng {
-		status = "disabled";
-	};
 };
 
 &grtc {
