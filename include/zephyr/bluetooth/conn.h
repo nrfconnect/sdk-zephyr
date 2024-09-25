@@ -1247,8 +1247,7 @@ struct bt_conn_cb {
 				const struct bt_conn_le_path_loss_threshold_report *report);
 #endif /* CONFIG_BT_PATH_LOSS_MONITORING */
 
-	/** @internal Internally used field for list handling */
-	sys_snode_t _node;
+	struct bt_conn_cb *_next;
 };
 
 /** @brief Register connection callbacks.
