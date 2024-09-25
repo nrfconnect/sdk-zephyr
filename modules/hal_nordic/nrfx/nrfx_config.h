@@ -1026,7 +1026,7 @@
 #elif defined(NRF9120_XXAA) || defined(NRF9160_XXAA)
     #include <nrfx_config_nrf91.h>
 #else
-    #include <nrfx_config_ext.h>
+    #error "Unknown device."
 #endif
 
 #endif // NRFX_CONFIG_H__
