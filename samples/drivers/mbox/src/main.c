@@ -46,11 +46,7 @@ int main(void)
 	printk("Maximum bytes of data in the TX message: %d\n", mbox_mtu_get_dt(&tx_channel));
 	printk("Maximum TX channels: %d\n", mbox_max_channels_get_dt(&tx_channel));
 
-#ifndef CONFIG_COVERAGE
 	while (1) {
-#else
-	for (int i = 0; i < 5; i++) {
-#endif
 #if defined(CONFIG_MULTITHREADING)
 		k_sleep(K_MSEC(2000));
 #else
@@ -66,13 +62,5 @@ int main(void)
 		}
 	}
 #endif /* CONFIG_TX_ENABLED */
-
-#ifdef CONFIG_RX_ENABLED
-	ret = mbox_set_enabled_dt(&rx_channel, false);
-	if (ret < 0) {
-		printk("Could not disable RX channel %d (%d)\n", rx_channel.channel_id, ret);
-		return 0;
-	}
-#endif /* CONFIG_RX_ENABLED */
 	return 0;
 }
