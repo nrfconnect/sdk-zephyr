@@ -8,8 +8,9 @@ config MBOX_NRFX_IPC
 
 if SOC_NRF5340_CPUAPP_QKAA
 
-config BT_HCI_IPC
-	default y if BT
+choice BT_HCI_BUS_TYPE
+	default BT_HCI_IPC if BT
+endchoice
 
 config HEAP_MEM_POOL_ADD_SIZE_BOARD
 	int

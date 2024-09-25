@@ -5,8 +5,9 @@
 
 if BOARD_NUCLEO_WB55RG
 
-config BT_STM32_IPM
-	default y
+choice BT_HCI_BUS_TYPE
+	default BT_STM32_IPM
 	depends on BT
+endchoice
 
 endif
