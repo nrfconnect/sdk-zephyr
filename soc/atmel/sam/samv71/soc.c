@@ -102,7 +102,7 @@ static ALWAYS_INLINE void clock_init(void)
 	}
 }
 
-void z_arm_platform_init(void)
+void soc_reset_hook(void)
 {
 	if (IS_ENABLED(CONFIG_SOC_ATMEL_SAM_WAIT_MODE)) {
 		/*
@@ -119,6 +119,7 @@ void z_arm_platform_init(void)
 	 * sys_cache*-functions can enable them, if requested by the
 	 * configuration.
 	 */
+	SCB_InvalidateDCache();
 	SCB_DisableDCache();
 
 	/*

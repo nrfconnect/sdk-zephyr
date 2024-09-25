@@ -30,6 +30,23 @@ static unsigned int div_round_closest(uint32_t dividend, uint32_t divisor)
 	return (dividend + (divisor / 2U)) / divisor;
 }
 
+static bool queue_is_empty(struct ring_buf *rb)
+{
+	unsigned int key;
+
+	key = irq_lock();
+
+	if (rb->tail != rb->head) {
+		/* Ring buffer is not empty */
+		irq_unlock(key);
+		return false;
+	}
+
+	irq_unlock(key);
+
+	return true;
+}
+
 /*
  * Get data from the queue
  */
@@ -39,8 +56,7 @@ static int queue_get(struct ring_buf *rb, void **mem_block, size_t *size)
 
 	key = irq_lock();
 
-	if (rb->tail == rb->head) {
-		/* Ring buffer is empty */
+	if (queue_is_empty(rb) == true) {
 		irq_unlock(key);
 		return -ENOMEM;
 	}
@@ -123,10 +139,19 @@ static int i2s_stm32_set_clock(const struct device *dev,
 	uint8_t i2s_div, i2s_odd;
 
 	if (cfg->pclk_len > 1) {
+		/* Handle multiple clock sources */
 		if (clock_control_get_rate(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
 					   (clock_control_subsys_t)&cfg->pclken[1],
 					   &freq_in) < 0) {
 			LOG_ERR("Failed call clock_control_get_rate(pclken[1])");
+			return -EIO;
+		}
+	} else {
+		/* Handle single clock source */
+		if (clock_control_get_rate(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
+					   (clock_control_subsys_t)&cfg->pclken[0],
+					   &freq_in) < 0) {
+			LOG_ERR("Failed call clock_control_get_rate(pclken[0])");
 			return -EIO;
 		}
 	}
@@ -166,17 +191,16 @@ static int i2s_stm32_configure(const struct device *dev, enum i2s_dir dir,
 	 * When I2S data format is selected parameter channels is ignored,
 	 * number of words in a frame is always 2.
 	 */
-	const uint32_t num_channels = i2s_cfg->format & I2S_FMT_DATA_FORMAT_MASK
-				      ? 2U : i2s_cfg->channels;
+	const uint32_t num_channels =
+		((i2s_cfg->format & I2S_FMT_DATA_FORMAT_MASK) == I2S_FMT_DATA_FORMAT_I2S)
+			? 2U
+			: i2s_cfg->channels;
 	struct stream *stream;
 	uint32_t bit_clk_freq;
 	bool enable_mck;
 	int ret;
 
 	if (dir == I2S_DIR_RX) {
-#if DT_HAS_COMPAT_STATUS_OKAY(st_stm32h7_i2s)
-		return -ENOSYS;
-#endif
 		stream = &dev_data->rx;
 	} else if (dir == I2S_DIR_TX) {
 		stream = &dev_data->tx;
@@ -293,6 +317,7 @@ static int i2s_stm32_trigger(const struct device *dev, enum i2s_dir dir,
 			     enum i2s_trigger_cmd cmd)
 {
 	struct i2s_stm32_data *const dev_data = dev->data;
+	const struct i2s_stm32_cfg *const cfg = dev->config;
 	struct stream *stream;
 	unsigned int key;
 	int ret;
@@ -335,11 +360,20 @@ static int i2s_stm32_trigger(const struct device *dev, enum i2s_dir dir,
 			LOG_ERR("STOP trigger: invalid state");
 			return -EIO;
 		}
+do_trigger_stop:
+		if (ll_func_i2s_dma_busy(cfg->i2s)) {
+			stream->state = I2S_STATE_STOPPING;
+			/*
+			 * Indicate that the transition to I2S_STATE_STOPPING
+			 * is triggered by STOP command
+			 */
+			stream->tx_stop_for_drain = false;
+		} else {
+			stream->stream_disable(stream, dev);
+			stream->state = I2S_STATE_READY;
+			stream->last_block = true;
+		}
 		irq_unlock(key);
-		stream->stream_disable(stream, dev);
-		stream->queue_drop(stream);
-		stream->state = I2S_STATE_READY;
-		stream->last_block = true;
 		break;
 
 	case I2S_TRIGGER_DRAIN:
@@ -349,9 +383,26 @@ static int i2s_stm32_trigger(const struct device *dev, enum i2s_dir dir,
 			LOG_ERR("DRAIN trigger: invalid state");
 			return -EIO;
 		}
-		stream->stream_disable(stream, dev);
-		stream->queue_drop(stream);
-		stream->state = I2S_STATE_READY;
+
+		if (dir == I2S_DIR_TX) {
+			if ((queue_is_empty(&stream->mem_block_queue) == false) ||
+						(ll_func_i2s_dma_busy(cfg->i2s))) {
+				stream->state = I2S_STATE_STOPPING;
+				/*
+				 * Indicate that the transition to I2S_STATE_STOPPING
+				 * is triggered by DRAIN command
+				 */
+				stream->tx_stop_for_drain = true;
+			} else {
+				stream->stream_disable(stream, dev);
+				stream->state = I2S_STATE_READY;
+			}
+		} else if (dir == I2S_DIR_RX) {
+			goto do_trigger_stop;
+		} else {
+			LOG_ERR("Unavailable direction");
+			return -EINVAL;
+		}
 		irq_unlock(key);
 		break;
 
@@ -429,9 +480,7 @@ static int i2s_stm32_write(const struct device *dev, void *mem_block,
 	}
 
 	/* Add data to the end of the TX queue */
-	queue_put(&dev_data->tx.mem_block_queue, mem_block, size);
-
-	return 0;
+	return queue_put(&dev_data->tx.mem_block_queue, mem_block, size);
 }
 
 static const struct i2s_driver_api i2s_stm32_driver_api = {
@@ -603,6 +652,28 @@ static void dma_tx_callback(const struct device *dma_dev, void *arg,
 		goto tx_disable;
 	}
 
+	/* Check if we finished transferring one block and stopping is requested */
+	if ((stream->state == I2S_STATE_STOPPING) && (status == DMA_STATUS_COMPLETE)) {
+		/*
+		 * Check if all tx samples have been completely handled
+		 * as stated in zephyr i2s specification, in case of DRAIN command
+		 * send all data in the transmit queue and stop the transmission.
+		 */
+		if (queue_is_empty(&stream->mem_block_queue) == true) {
+			stream->queue_drop(stream);
+			stream->state = I2S_STATE_READY;
+			goto tx_disable;
+		} else if (stream->tx_stop_for_drain == false) {
+			/*
+			 * In case of STOP command, just stop the transmission
+			 * at the current. The transmission can be resumed.
+			 */
+			stream->state = I2S_STATE_READY;
+			goto tx_disable;
+		}
+		/* else: DRAIN trigger -> continue TX normally until queue is empty */
+	}
+
 	/* Stop transmission if we were requested */
 	if (stream->last_block) {
 		stream->state = I2S_STATE_READY;
@@ -652,11 +723,6 @@ static uint32_t i2s_stm32_irq_udr_count;
 static void i2s_stm32_isr(const struct device *dev)
 {
 	const struct i2s_stm32_cfg *cfg = dev->config;
-	struct i2s_stm32_data *const dev_data = dev->data;
-	struct stream *stream = &dev_data->rx;
-
-	LOG_ERR("%s: err=%d", __func__, (int)LL_I2S_ReadReg(cfg->i2s, SR));
-	stream->state = I2S_STATE_ERROR;
 
 	/* OVR error must be explicitly cleared */
 	if (LL_I2S_IsActiveFlag_OVR(cfg->i2s)) {
@@ -677,7 +743,11 @@ static int i2s_stm32_initialize(const struct device *dev)
 {
 	const struct i2s_stm32_cfg *cfg = dev->config;
 	struct i2s_stm32_data *const dev_data = dev->data;
+	struct stream *stream = &dev_data->tx;
 	int ret, i;
+
+	/* Initialize the variable used to handle the TX */
+	stream->tx_stop_for_drain = false;
 
 	/* Enable I2S clock propagation */
 	ret = i2s_stm32_enable_clock(dev);
@@ -871,6 +941,8 @@ static void tx_stream_disable(struct stream *stream, const struct device *dev)
 		stream->mem_block = NULL;
 	}
 
+	/* Wait for TX queue to drain before disabling */
+	k_busy_wait(100);
 	LL_I2S_Disable(cfg->i2s);
 
 	active_dma_tx_channel[stream->dma_channel] = NULL;

@@ -294,9 +294,9 @@ class Build(Forceable):
             tests = y.get('tests')
             if not tests:
                 log.die(f"No tests found in {yf}")
-            item = tests.get(test_item)
-            if not item:
+            if test_item not in tests:
                 log.die(f"Test item {test_item} not found in {yf}")
+            item = tests.get(test_item)
 
             sysbuild = False
             extra_dtc_overlay_files = []
@@ -424,7 +424,14 @@ class Build(Forceable):
         if self.args.source_dir:
             source_dir = self.args.source_dir
         elif self.cmake_cache:
-            source_dir = self.cmake_cache.get('CMAKE_HOME_DIRECTORY')
+            source_dir = self.cmake_cache.get('APP_DIR')
+
+            if not source_dir:
+                source_dir = self.cmake_cache.get('APPLICATION_SOURCE_DIR')
+
+            if not source_dir:
+                source_dir = self.cmake_cache.get('CMAKE_HOME_DIRECTORY')
+
             if not source_dir:
                 # This really ought to be there. The build directory
                 # must be corrupted somehow. Let's see what we can do.

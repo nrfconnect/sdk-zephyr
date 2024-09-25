@@ -121,6 +121,8 @@ The Zephyr STM32WB5MM-DK board configuration supports the following hardware fea
 | UART      | on-chip    | serial port-polling;                |
 |           |            | serial port-interrupt               |
 +-----------+------------+-------------------------------------+
+| I2C       | on-chip    | i2c                                 |
++-----------+------------+-------------------------------------+
 
 
 Other hardware features are not yet supported on this Zephyr port.
@@ -140,8 +142,8 @@ For compatibility information with the various versions of these binaries,
 please check `modules/hal/stm32/lib/stm32wb/hci/README`_
 in the ``hal_stm32`` repo.
 
-Note that since STM32WB Cube package V1.13.2, `"full stack"` binaries are not
-compatible anymore for a use in Zephyr and only `"HCI Only"` versions should be
+Note that since STM32WB Cube package V1.13.2, "full stack" binaries are not
+compatible anymore for a use in Zephyr and only "HCI Only" versions should be
 used on the M0 side.
 
 Connections and IOs
@@ -157,6 +159,7 @@ Default Zephyr Peripheral Mapping:
 - LPUART_1 TX/RX : PA3/PA2
 - USB : PA11/PA12
 - SWD : PA13/PA14
+- I2C3: SDA/SCL PB11/PB13 (Sensor I2C bus)
 
 System Clock
 ------------
@@ -178,9 +181,15 @@ simultaneously. The selection is done by JP4 and JP5 jumpers.
 To use the RGB LED, JP5 must be ON and JP4 OFF. In this configuration,
 GPIO_SELECT2 (PH1) is the chip select for this RGB device on SPI1.
 
+Buttons
+-------
+STM32WB5MM-DK has two user buttons. The first button is mapped to PC12,
+and the second to PC13. They have the aliases sw0 and sw1 respectively.
 
 Programming and Debugging
 *************************
+
+STM32WB5MM-DK has an on-board ST-Link to flash and debug the firmware on the module.
 
 Applications for the ``stm32wb5mm_dk`` board configuration can be built the
 usual way (see :ref:`build_an_application`).
@@ -188,9 +197,16 @@ usual way (see :ref:`build_an_application`).
 Flashing
 ========
 
-STM32WB5MM-DK has an on-board ST-Link to flash and debug the firmware on the
-module.
+The board is configured to be flashed using west `STM32CubeProgrammer`_ runner,
+so its :ref:`installation <stm32cubeprog-flash-host-tools>` is required.
 
+Alternatively, OpenOCD or pyOCD can also be used to flash the board using
+the ``--runner`` (or ``-r``) option:
+
+.. code-block:: console
+
+   $ west flash --runner openocd
+   $ west flash --runner pyocd
 
 Flashing ``hello_world`` application to STM32WB5MM-DK
 ------------------------------------------------------
@@ -232,9 +248,15 @@ You can debug an application in the usual way.  Here is an example for the
 
 .. _STM32WB5MM-DK on www.st.com:
    https://www.st.com/en/evaluation-tools/stm32wb5mm-dk.html
+
 .. _STM32WB5MMG datasheet:
    https://www.st.com/resource/en/datasheet/stm32wb5mmg.pdf
+
 .. _modules/hal/stm32/lib/stm32wb/hci/README:
    https://github.com/zephyrproject-rtos/hal_stm32/blob/main/lib/stm32wb/hci/README
+
 .. _Hello_World:
    https://docs.zephyrproject.org/latest/samples/hello_world/README.html
+
+.. _STM32CubeProgrammer:
+   https://www.st.com/en/development-tools/stm32cubeprog.html

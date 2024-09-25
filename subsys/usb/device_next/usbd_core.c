@@ -37,7 +37,7 @@ static int usbd_event_carrier(const struct device *dev,
 	return k_msgq_put(&usbd_msgq, event, K_NO_WAIT);
 }
 
-static int event_handler_ep_request(struct usbd_contex *const uds_ctx,
+static int event_handler_ep_request(struct usbd_context *const uds_ctx,
 				    const struct udc_event *const event)
 {
 	struct udc_buf_info *bi;
@@ -59,7 +59,7 @@ static int event_handler_ep_request(struct usbd_contex *const uds_ctx,
 	return ret;
 }
 
-static void usbd_class_bcast_event(struct usbd_contex *const uds_ctx,
+static void usbd_class_bcast_event(struct usbd_context *const uds_ctx,
 				   struct udc_event *const event)
 {
 	struct usbd_config_node *cfg_nd;
@@ -92,7 +92,7 @@ static void usbd_class_bcast_event(struct usbd_contex *const uds_ctx,
 	}
 }
 
-static int event_handler_bus_reset(struct usbd_contex *const uds_ctx)
+static int event_handler_bus_reset(struct usbd_context *const uds_ctx)
 {
 	enum udc_bus_speed udc_speed;
 	int ret;
@@ -131,7 +131,7 @@ static int event_handler_bus_reset(struct usbd_contex *const uds_ctx)
 }
 
 
-static ALWAYS_INLINE void usbd_event_handler(struct usbd_contex *const uds_ctx,
+static ALWAYS_INLINE void usbd_event_handler(struct usbd_context *const uds_ctx,
 					     struct udc_event *const event)
 {
 	int err = 0;
@@ -187,24 +187,24 @@ static void usbd_thread(void *p1, void *p2, void *p3)
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
 
+	struct usbd_context *uds_ctx;
 	struct udc_event event;
 
 	while (true) {
 		k_msgq_get(&usbd_msgq, &event, K_FOREVER);
 
-		STRUCT_SECTION_FOREACH(usbd_contex, uds_ctx) {
-			if (uds_ctx->dev == event.dev) {
-				usbd_event_handler(uds_ctx, &event);
-			}
-		}
+		uds_ctx = (void *)udc_get_event_ctx(event.dev);
+		__ASSERT(uds_ctx != NULL && usbd_is_initialized(uds_ctx),
+			 "USB device is not initialized");
+		usbd_event_handler(uds_ctx, &event);
 	}
 }
 
-int usbd_device_init_core(struct usbd_contex *const uds_ctx)
+int usbd_device_init_core(struct usbd_context *const uds_ctx)
 {
 	int ret;
 
-	ret = udc_init(uds_ctx->dev, usbd_event_carrier);
+	ret = udc_init(uds_ctx->dev, usbd_event_carrier, uds_ctx);
 	if (ret != 0) {
 		LOG_ERR("Failed to init device driver");
 		return ret;
@@ -221,7 +221,7 @@ int usbd_device_init_core(struct usbd_contex *const uds_ctx)
 	return ret;
 }
 
-int usbd_device_shutdown_core(struct usbd_contex *const uds_ctx)
+int usbd_device_shutdown_core(struct usbd_context *const uds_ctx)
 {
 	struct usbd_config_node *cfg_nd;
 	int ret;

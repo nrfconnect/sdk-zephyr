@@ -22,7 +22,7 @@
 #include <string.h>
 
 #include <zephyr/sys/util.h>
-#include <zephyr/net/buf.h>
+#include <zephyr/net_buf.h>
 #include <zephyr/bluetooth/gap.h>
 #include <zephyr/bluetooth/addr.h>
 #include <zephyr/bluetooth/crypto.h>
@@ -220,7 +220,7 @@ typedef void (*bt_ready_cb_t)(int err);
  * earlier.
  *
  * @param cb Callback to notify completion or NULL to perform the
- * enabling synchronously.
+ * enabling synchronously. The callback is called from the system workqueue.
  *
  * @return Zero on success or (negative) error code otherwise.
  */
@@ -230,6 +230,15 @@ int bt_enable(bt_ready_cb_t cb);
  * @brief Disable Bluetooth
  *
  * Disable Bluetooth. Can't be called before bt_enable has completed.
+ *
+ * This API will clear all configured identities and keys that are not persistently
+ * stored with @kconfig{CONFIG_BT_SETTINGS}. These can be restored
+ * with settings_load() before reenabling the stack.
+ *
+ * This API does _not_ clear previously registered callbacks
+ * like @ref bt_le_scan_cb_register and @ref bt_conn_cb_register.
+ * That is, the application shall not re-register them when
+ * the Bluetooth subsystem is re-enabled later.
  *
  * Close and release HCI resources. Result is architecture dependent.
  *
@@ -899,7 +908,7 @@ struct bt_le_per_adv_param {
  *                   address of peer for directed advertising.
  */
 #define BT_LE_ADV_PARAM(_options, _int_min, _int_max, _peer) \
-	((struct bt_le_adv_param[]) { \
+	((const struct bt_le_adv_param[]) { \
 		BT_LE_ADV_PARAM_INIT(_options, _int_min, _int_max, _peer) \
 	 })
 
@@ -1082,7 +1091,7 @@ struct bt_le_per_adv_param {
  * @param _n_evts  Number of advertising events
  */
 #define BT_LE_EXT_ADV_START_PARAM(_timeout, _n_evts) \
-	((struct bt_le_ext_adv_start_param[]) { \
+	((const struct bt_le_ext_adv_start_param[]) { \
 		BT_LE_EXT_ADV_START_PARAM_INIT((_timeout), (_n_evts)) \
 	})
 
@@ -1232,7 +1241,7 @@ struct bt_le_ext_adv_start_param {
  * @param param  Advertise start parameters.
  */
 int bt_le_ext_adv_start(struct bt_le_ext_adv *adv,
-			struct bt_le_ext_adv_start_param *param);
+			const struct bt_le_ext_adv_start_param *param);
 
 /**
  * @brief Stop advertising with the given advertising set
@@ -1813,8 +1822,11 @@ int bt_le_per_adv_sync_delete(struct bt_le_per_adv_sync *per_adv_sync);
  * such as synced, terminated and when data is received.
  *
  * @param cb Callback struct. Must point to memory that remains valid.
+ *
+ * @retval 0 Success.
+ * @retval -EEXIST if @p cb was already registered.
  */
-void bt_le_per_adv_sync_cb_register(struct bt_le_per_adv_sync_cb *cb);
+int bt_le_per_adv_sync_cb_register(struct bt_le_per_adv_sync_cb *cb);
 
 /**
  * @brief Enables receiving periodic advertising reports for a sync.
@@ -2055,10 +2067,24 @@ struct bt_le_scan_param {
 	/** Bit-field of scanning options. */
 	uint32_t options;
 
-	/** Scan interval (N * 0.625 ms) */
+	/** Scan interval (N * 0.625 ms).
+	 *
+	 * @note When @kconfig{CONFIG_BT_SCAN_AND_INITIATE_IN_PARALLEL} is enabled
+	 *       and the application wants to scan and connect in parallel,
+	 *       the Bluetooth Controller may require the scan interval used
+	 *       for scanning and connection establishment to be equal to
+	 *       obtain the best performance.
+	 */
 	uint16_t interval;
 
-	/** Scan window (N * 0.625 ms) */
+	/** Scan window (N * 0.625 ms)
+	 *
+	 * @note When @kconfig{CONFIG_BT_SCAN_AND_INITIATE_IN_PARALLEL} is enabled
+	 *       and the application wants to scan and connect in parallel,
+	 *       the Bluetooth Controller may require the scan window used
+	 *       for scanning and connection establishment to be equal to
+	 *       obtain the best performance.
+	 */
 	uint16_t window;
 
 	/**
@@ -2271,12 +2297,18 @@ BUILD_ASSERT(BT_GAP_SCAN_FAST_WINDOW == BT_GAP_SCAN_FAST_INTERVAL_MIN,
  *       In order to enable directed advertiser reports then
  *       @kconfig{CONFIG_BT_SCAN_WITH_IDENTITY} must be enabled.
  *
+ * @note Setting the `param.timeout` parameter is not supported when
+ *       @kconfig{CONFIG_BT_PRIVACY} is enabled, when the param.type is @ref
+ *       BT_LE_SCAN_TYPE_ACTIVE. Supplying a non-zero timeout will result in an
+ *       -EINVAL error code.
+ *
  * @param param Scan parameters.
  * @param cb Callback to notify scan results. May be NULL if callback
  *           registration through @ref bt_le_scan_cb_register is preferred.
  *
  * @return Zero on success or error code otherwise, positive in case of
  *         protocol error or negative (POSIX) in case of stack internal error.
+ * @retval -EBUSY if the scanner is already being started in a different thread.
  */
 int bt_le_scan_start(const struct bt_le_scan_param *param, bt_le_scan_cb_t cb);
 
@@ -2300,8 +2332,11 @@ int bt_le_scan_stop(void);
  * API was used to start the scanner.
  *
  * @param cb Callback struct. Must point to memory that remains valid.
+ *
+ * @retval 0 Success.
+ * @retval -EEXIST if @p cb was already registered.
  */
-void bt_le_scan_cb_register(struct bt_le_scan_cb *cb);
+int bt_le_scan_cb_register(struct bt_le_scan_cb *cb);
 
 /**
  * @brief Unregister scanner packet callbacks.
@@ -2327,11 +2362,6 @@ void bt_le_scan_cb_unregister(struct bt_le_scan_cb *cb);
  *         protocol error or negative (POSIX) in case of stack internal error.
  */
 int bt_le_filter_accept_list_add(const bt_addr_le_t *addr);
-__deprecated
-static inline int bt_le_whitelist_add(const bt_addr_le_t *addr)
-{
-	return bt_le_filter_accept_list_add(addr);
-}
 
 /**
  * @brief Remove device (LE) from filter accept list.
@@ -2348,11 +2378,6 @@ static inline int bt_le_whitelist_add(const bt_addr_le_t *addr)
  *         protocol error or negative (POSIX) in case of stack internal error.
  */
 int bt_le_filter_accept_list_remove(const bt_addr_le_t *addr);
-__deprecated
-static inline int bt_le_whitelist_rem(const bt_addr_le_t *addr)
-{
-	return bt_le_filter_accept_list_remove(addr);
-}
 
 /**
  * @brief Clear filter accept list.
@@ -2367,11 +2392,6 @@ static inline int bt_le_whitelist_rem(const bt_addr_le_t *addr)
  *         protocol error or negative (POSIX) in case of stack internal error.
  */
 int bt_le_filter_accept_list_clear(void);
-__deprecated
-static inline int bt_le_whitelist_clear(void)
-{
-	return bt_le_filter_accept_list_clear();
-}
 
 /**
  * @brief Set (LE) channel map.

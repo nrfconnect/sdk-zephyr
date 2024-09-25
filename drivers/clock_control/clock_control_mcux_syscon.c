@@ -16,7 +16,7 @@
 LOG_MODULE_REGISTER(clock_control);
 
 static int mcux_lpc_syscon_clock_control_on(const struct device *dev,
-			      clock_control_subsys_t sub_system)
+					    clock_control_subsys_t sub_system)
 {
 #if defined(CONFIG_CAN_MCUX_MCAN)
 	if ((uint32_t)sub_system == MCUX_MCAN_CLK) {
@@ -45,6 +45,23 @@ static int mcux_lpc_syscon_clock_control_on(const struct device *dev,
 
 #if defined(CONFIG_PINCTRL_NXP_KINETIS)
 	switch ((uint32_t)sub_system) {
+#if defined(CONFIG_SOC_SERIES_MCXA)
+	case MCUX_PORT0_CLK:
+		CLOCK_EnableClock(kCLOCK_GatePORT0);
+		break;
+	case MCUX_PORT1_CLK:
+		CLOCK_EnableClock(kCLOCK_GatePORT1);
+		break;
+	case MCUX_PORT2_CLK:
+		CLOCK_EnableClock(kCLOCK_GatePORT2);
+		break;
+	case MCUX_PORT3_CLK:
+		CLOCK_EnableClock(kCLOCK_GatePORT3);
+		break;
+	case MCUX_PORT4_CLK:
+		CLOCK_EnableClock(kCLOCK_GatePORT4);
+		break;
+#else
 	case MCUX_PORT0_CLK:
 		CLOCK_EnableClock(kCLOCK_Port0);
 		break;
@@ -60,6 +77,7 @@ static int mcux_lpc_syscon_clock_control_on(const struct device *dev,
 	case MCUX_PORT4_CLK:
 		CLOCK_EnableClock(kCLOCK_Port4);
 		break;
+#endif /* defined(CONFIG_SOC_SERIES_MCXA) */
 	default:
 		break;
 	}
@@ -71,27 +89,48 @@ static int mcux_lpc_syscon_clock_control_on(const struct device *dev,
 	}
 #endif
 
+#if defined(CONFIG_CAN_MCUX_FLEXCAN)
+	switch ((uint32_t)sub_system) {
+	case MCUX_FLEXCAN0_CLK:
+		CLOCK_EnableClock(kCLOCK_Flexcan0);
+		break;
+	case MCUX_FLEXCAN1_CLK:
+		CLOCK_EnableClock(kCLOCK_Flexcan1);
+		break;
+	default:
+		break;
+	}
+#endif /* defined(CONFIG_CAN_MCUX_MCAN) */
+
+#ifdef CONFIG_ETH_NXP_ENET
+	if ((uint32_t)sub_system == MCUX_ENET_CLK) {
+#ifdef CONFIG_SOC_SERIES_RW6XX
+		CLOCK_EnableClock(kCLOCK_TddrMciEnetClk);
+		CLOCK_EnableClock(kCLOCK_EnetIpg);
+		CLOCK_EnableClock(kCLOCK_EnetIpgS);
+#endif
+	}
+#endif
+
 	return 0;
 }
 
 static int mcux_lpc_syscon_clock_control_off(const struct device *dev,
-			       clock_control_subsys_t sub_system)
+					     clock_control_subsys_t sub_system)
 {
 	return 0;
 }
 
-static int mcux_lpc_syscon_clock_control_get_subsys_rate(
-					const struct device *dev,
-				    clock_control_subsys_t sub_system,
-				    uint32_t *rate)
+static int mcux_lpc_syscon_clock_control_get_subsys_rate(const struct device *dev,
+							 clock_control_subsys_t sub_system,
+							 uint32_t *rate)
 {
-	uint32_t clock_name = (uint32_t) sub_system;
+	uint32_t clock_name = (uint32_t)sub_system;
 
 	switch (clock_name) {
 
-#if defined(CONFIG_I2C_MCUX_FLEXCOMM) || \
-		defined(CONFIG_SPI_MCUX_FLEXCOMM) || \
-		defined(CONFIG_UART_MCUX_FLEXCOMM)
+#if defined(CONFIG_I2C_MCUX_FLEXCOMM) || defined(CONFIG_SPI_MCUX_FLEXCOMM) ||                      \
+	defined(CONFIG_UART_MCUX_FLEXCOMM)
 	case MCUX_FLEXCOMM0_CLK:
 		*rate = CLOCK_GetFlexCommClkFreq(0);
 		break;
@@ -183,7 +222,7 @@ static int mcux_lpc_syscon_clock_control_get_subsys_rate(
 
 #if (defined(FSL_FEATURE_SOC_USDHC_COUNT) && FSL_FEATURE_SOC_USDHC_COUNT)
 
-#if CONFIG_SOC_FAMILY_NXP_MCX
+#if CONFIG_SOC_SERIES_MCXN
 	case MCUX_USDHC1_CLK:
 		*rate = CLOCK_GetUsdhcClkFreq();
 		break;
@@ -198,9 +237,7 @@ static int mcux_lpc_syscon_clock_control_get_subsys_rate(
 
 #endif
 
-#if (defined(FSL_FEATURE_SOC_SDIF_COUNT) && \
-	(FSL_FEATURE_SOC_SDIF_COUNT)) && \
-	CONFIG_MCUX_SDIF
+#if (defined(FSL_FEATURE_SOC_SDIF_COUNT) && (FSL_FEATURE_SOC_SDIF_COUNT)) && CONFIG_MCUX_SDIF
 	case MCUX_SDIF_CLK:
 		*rate = CLOCK_GetSdioClkFreq();
 		break;
@@ -292,6 +329,14 @@ static int mcux_lpc_syscon_clock_control_get_subsys_rate(
 		break;
 #endif
 
+#ifdef CONFIG_ETH_NXP_ENET
+	case MCUX_ENET_CLK:
+#ifdef CONFIG_SOC_SERIES_RW6XX
+		*rate = CLOCK_GetTddrMciEnetClkFreq();
+#endif
+		break;
+#endif
+
 #if defined(CONFIG_MIPI_DBI_NXP_LCDIC)
 	case MCUX_LCDIC_CLK:
 		*rate = CLOCK_GetLcdClkFreq();
@@ -312,6 +357,45 @@ static int mcux_lpc_syscon_clock_control_get_subsys_rate(
 		break;
 #endif
 #endif /* CONFIG_ADC_MCUX_LPADC */
+
+#if defined(CONFIG_CAN_MCUX_FLEXCAN)
+	case MCUX_FLEXCAN0_CLK:
+		*rate = CLOCK_GetFlexcanClkFreq(0);
+		break;
+	case MCUX_FLEXCAN1_CLK:
+		*rate = CLOCK_GetFlexcanClkFreq(1);
+		break;
+#endif /* defined(CONFIG_CAN_MCUX_FLEXCAN) */
+
+#if defined(CONFIG_MCUX_FLEXIO)
+	case MCUX_FLEXIO0_CLK:
+		*rate = CLOCK_GetFlexioClkFreq();
+		break;
+#endif /* defined(CONFIG_MCUX_FLEXIO) */
+
+#if defined(CONFIG_I2S_MCUX_FLEXCOMM)
+	case MCUX_AUDIO_MCLK:
+		*rate = CLOCK_GetMclkClkFreq();
+		break;
+#endif /* defined(CONFIG_I2S_MCUX_FLEXCOMM) */
+
+#if (defined(CONFIG_UART_MCUX_LPUART) && CONFIG_SOC_SERIES_MCXA)
+	case MCUX_LPUART0_CLK:
+		*rate = CLOCK_GetLpuartClkFreq(0);
+		break;
+	case MCUX_LPUART1_CLK:
+		*rate = CLOCK_GetLpuartClkFreq(1);
+		break;
+	case MCUX_LPUART2_CLK:
+		*rate = CLOCK_GetLpuartClkFreq(2);
+		break;
+	case MCUX_LPUART3_CLK:
+		*rate = CLOCK_GetLpuartClkFreq(3);
+		break;
+	case MCUX_LPUART4_CLK:
+		*rate = CLOCK_GetLpuartClkFreq(4);
+		break;
+#endif /* defined(CONFIG_UART_MCUX_LPUART) */
 	}
 
 	return 0;
@@ -340,10 +424,8 @@ __weak int flexspi_clock_set_freq(uint32_t clock_name, uint32_t freq)
 #define SYSCON_SET_FUNC_ATTR
 #endif
 
-static int SYSCON_SET_FUNC_ATTR
-	mcux_lpc_syscon_clock_control_set_subsys_rate(const struct device *dev,
-			clock_control_subsys_t subsys,
-			clock_control_subsys_rate_t rate)
+static int SYSCON_SET_FUNC_ATTR mcux_lpc_syscon_clock_control_set_subsys_rate(
+	const struct device *dev, clock_control_subsys_t subsys, clock_control_subsys_rate_t rate)
 {
 	uint32_t clock_name = (uintptr_t)subsys;
 	uint32_t clock_rate = (uintptr_t)rate;
@@ -361,7 +443,7 @@ static int SYSCON_SET_FUNC_ATTR
 	case MCUX_LCDIC_CLK:
 		/* Set LCDIC clock div */
 		uint32_t root_rate = (CLOCK_GetLcdClkFreq() *
-			((CLKCTL0->LCDFCLKDIV & CLKCTL0_LCDFCLKDIV_DIV_MASK) + 1));
+				      ((CLKCTL0->LCDFCLKDIV & CLKCTL0_LCDFCLKDIV_DIV_MASK) + 1));
 		CLOCK_SetClkDiv(kCLOCK_DivLcdClk, (root_rate / clock_rate));
 		return 0;
 #endif
@@ -379,13 +461,9 @@ static const struct clock_control_driver_api mcux_lpc_syscon_api = {
 	.set_rate = mcux_lpc_syscon_clock_control_set_subsys_rate,
 };
 
-#define LPC_CLOCK_INIT(n) \
-	\
-DEVICE_DT_INST_DEFINE(n, \
-		    NULL, \
-		    NULL, \
-		    NULL, NULL, \
-		    PRE_KERNEL_1, CONFIG_CLOCK_CONTROL_INIT_PRIORITY, \
-		    &mcux_lpc_syscon_api);
+#define LPC_CLOCK_INIT(n)                                                                          \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(n, NULL, NULL, NULL, NULL, PRE_KERNEL_1,                             \
+			      CONFIG_CLOCK_CONTROL_INIT_PRIORITY, &mcux_lpc_syscon_api);
 
 DT_INST_FOREACH_STATUS_OKAY(LPC_CLOCK_INIT)

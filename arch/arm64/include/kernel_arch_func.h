@@ -28,8 +28,13 @@ extern "C" {
 
 #ifndef _ASMLANGUAGE
 
+extern void xen_enlighten_init(void);
+
 static ALWAYS_INLINE void arch_kernel_init(void)
 {
+#ifdef CONFIG_XEN
+	xen_enlighten_init();
+#endif
 }
 
 static inline void arch_switch(void *switch_to, void **switched_from)
@@ -43,7 +48,7 @@ static inline void arch_switch(void *switch_to, void **switched_from)
 	z_arm64_context_switch(new, old);
 }
 
-extern void z_arm64_fatal_error(unsigned int reason, z_arch_esf_t *esf);
+extern void z_arm64_fatal_error(unsigned int reason, struct arch_esf *esf);
 extern void z_arm64_set_ttbr0(uint64_t ttbr0);
 extern void z_arm64_mem_cfg_ipi(void);
 

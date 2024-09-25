@@ -536,8 +536,8 @@ files for a board named ``plank``:
      config BOARD_PLANK
              select SOC_SOC1
 
-  The Kconfig symbols :kconfig:option:`BOARD_<board>` and
-  :kconfig:option:`BOARD_<normalized_board_target>` are constructed by the build
+  The Kconfig symbols :samp:`BOARD_{board}` and
+  :samp:`BOARD_{normalized_board_target}` are constructed by the build
   system, therefore no type shall be defined in above code snippet.
 
 :file:`Kconfig`
@@ -570,13 +570,6 @@ files for a board named ``plank``:
   .. code-block:: kconfig
 
      if BOARD_PLANK
-
-     # Always set CONFIG_BOARD here. This isn't meant to be customized,
-     # but is set as a "default" due to Kconfig language restrictions.
-     config BOARD
-             default "plank"
-
-     # Other options you want enabled by default go next. Examples:
 
      config FOO
              default y

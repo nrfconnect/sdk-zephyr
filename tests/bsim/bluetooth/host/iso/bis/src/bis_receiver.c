@@ -223,7 +223,7 @@ static void sync_big(struct bt_le_per_adv_sync *sync, uint8_t cnt, struct bt_iso
 	struct bt_iso_chan *bis_channels[CONFIG_BT_ISO_MAX_CHAN];
 	struct bt_iso_big_sync_param param = {
 		.sync_timeout = interval_to_sync_timeout(broadcaster_info.interval),
-		.bis_bitfield = BIT_MASK(cnt) << 1U, /* BIS indexes start from 1, thus shift by 1 */
+		.bis_bitfield = BIT_MASK(cnt),
 		.bis_channels = bis_channels,
 		.mse = BT_ISO_SYNC_MSE_MIN,
 		.encryption = false,
@@ -267,7 +267,7 @@ static const struct bst_test_instance test_def[] = {
 	{
 		.test_id = "receiver",
 		.test_descr = "receiver",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main,
 	},

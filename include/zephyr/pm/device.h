@@ -242,9 +242,9 @@ BUILD_ASSERT(offsetof(struct pm_device_isr, base) == 0);
  */
 #define Z_PM_DEVICE_BASE_INIT(obj, node_id, pm_action_cb, _flags)	     \
 	{								     \
-		.action_cb = pm_action_cb,				     \
-		.state = PM_DEVICE_STATE_ACTIVE,			     \
 		.flags = ATOMIC_INIT(Z_PM_DEVICE_FLAGS(node_id) | (_flags)), \
+		.state = PM_DEVICE_STATE_ACTIVE,			     \
+		.action_cb = pm_action_cb,				     \
 		Z_PM_DEVICE_POWER_DOMAIN_INIT(node_id)			     \
 	}
 
@@ -718,10 +718,16 @@ static inline int pm_device_driver_init(const struct device *dev, pm_device_acti
 
 	/* When power management is not enabled, all drivers should initialise to active state */
 	rc = action_cb(dev, PM_DEVICE_ACTION_TURN_ON);
-	if (rc == 0) {
-		rc = action_cb(dev, PM_DEVICE_ACTION_RESUME);
+	if (rc < 0) {
+		return rc;
 	}
-	return rc;
+
+	rc = action_cb(dev, PM_DEVICE_ACTION_RESUME);
+	if (rc < 0) {
+		return rc;
+	}
+
+	return 0;
 }
 
 #endif /* CONFIG_PM_DEVICE */

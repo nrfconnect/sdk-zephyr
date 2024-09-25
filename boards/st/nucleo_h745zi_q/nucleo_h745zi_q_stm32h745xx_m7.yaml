@@ -17,6 +17,6 @@ supported:
   - i2c
   - pwm
   - netif:eth
-  - usb_cdc
+  - spi
   - usb_device
 vendor: st

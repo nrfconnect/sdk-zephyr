@@ -71,6 +71,12 @@ extern int net_icmp_call_ipv6_handlers(struct net_pkt *pkt,
 
 extern struct net_if *net_ipip_get_virtual_interface(struct net_if *input_iface);
 
+#if defined(CONFIG_NET_SOCKETS_SERVICE)
+extern void socket_service_init(void);
+#else
+static inline void socket_service_init(void) { }
+#endif
+
 #if defined(CONFIG_NET_NATIVE) || defined(CONFIG_NET_OFFLOAD)
 extern void net_context_init(void);
 extern const char *net_context_state(struct net_context *context);
@@ -78,6 +84,7 @@ extern bool net_context_is_reuseaddr_set(struct net_context *context);
 extern bool net_context_is_reuseport_set(struct net_context *context);
 extern bool net_context_is_v6only_set(struct net_context *context);
 extern bool net_context_is_recv_pktinfo_set(struct net_context *context);
+extern bool net_context_is_timestamping_set(struct net_context *context);
 extern void net_pkt_init(void);
 extern void net_tc_tx_init(void);
 extern void net_tc_rx_init(void);
@@ -109,6 +116,11 @@ static inline bool net_context_is_recv_pktinfo_set(struct net_context *context)
 	ARG_UNUSED(context);
 	return false;
 }
+static inline bool net_context_is_timestamping_set(struct net_context *context)
+{
+	ARG_UNUSED(context);
+	return false;
+}
 
 static inline int net_context_get_local_addr(struct net_context *context,
 					     struct sockaddr *addr,
@@ -121,6 +133,18 @@ static inline int net_context_get_local_addr(struct net_context *context,
 	return -ENOTSUP;
 }
 #endif
+
+#if defined(CONFIG_DNS_SOCKET_DISPATCHER)
+extern void dns_dispatcher_init(void);
+#else
+static inline void dns_dispatcher_init(void) { }
+#endif
+
+#if defined(CONFIG_MDNS_RESPONDER)
+extern void mdns_init_responder(void);
+#else
+static inline void mdns_init_responder(void) { }
+#endif /* CONFIG_MDNS_RESPONDER */
 
 #if defined(CONFIG_NET_NATIVE)
 enum net_verdict net_ipv4_input(struct net_pkt *pkt, bool is_loopback);

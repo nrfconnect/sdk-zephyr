@@ -65,7 +65,7 @@ static int vcnl36825t_update(const struct i2c_dt_spec *spec, uint8_t reg_addr, u
 static int vcnl36825t_pm_action(const struct device *dev, enum pm_device_action action)
 {
 	const struct vcnl36825t_config *config = dev->config;
-	int rc = 0;
+	int rc;
 
 	switch (action) {
 	case PM_DEVICE_ACTION_RESUME:
@@ -74,6 +74,24 @@ static int vcnl36825t_pm_action(const struct device *dev, enum pm_device_action 
 		if (rc < 0) {
 			return rc;
 		}
+
+		if (config->low_power) {
+			rc = vcnl36825t_update(&config->i2c, VCNL36825T_REG_PS_CONF4,
+					       VCNL36825T_PS_LPEN_MSK, VCNL36825T_PS_LPEN_ENABLED);
+			if (rc < 0) {
+				return rc;
+			}
+		}
+
+		if (config->operation_mode == VCNL36825T_OPERATION_MODE_AUTO) {
+			rc = vcnl36825t_update(&config->i2c, VCNL36825T_REG_PS_CONF3,
+					       VCNL36825T_PS_AF_MSK, VCNL36825T_PS_AF_AUTO);
+			if (rc < 0) {
+				return rc;
+			}
+		}
+
+		k_usleep(VCNL36825T_POWER_UP_US);
 
 		rc = vcnl36825t_update(&config->i2c, VCNL36825T_REG_PS_CONF2, VCNL36825T_PS_ST_MSK,
 				       VCNL36825T_PS_ST_START);
@@ -86,6 +104,23 @@ static int vcnl36825t_pm_action(const struct device *dev, enum pm_device_action 
 				       VCNL36825T_PS_ST_STOP);
 		if (rc < 0) {
 			return rc;
+		}
+
+		if (config->operation_mode == VCNL36825T_OPERATION_MODE_AUTO) {
+			rc = vcnl36825t_update(&config->i2c, VCNL36825T_REG_PS_CONF3,
+					       VCNL36825T_PS_AF_MSK, VCNL36825T_PS_AF_FORCE);
+			if (rc < 0) {
+				return rc;
+			}
+		}
+
+		/* unset LPEN-bit if active, otherwise high current draw can be observed */
+		if (config->low_power) {
+			rc = vcnl36825t_update(&config->i2c, VCNL36825T_REG_PS_CONF4,
+					       VCNL36825T_PS_LPEN_MSK, VCNL36825T_PS_LPEN_DISABLED);
+			if (rc < 0) {
+				return rc;
+			}
 		}
 
 		rc = vcnl36825t_update(&config->i2c, VCNL36825T_REG_PS_CONF1, VCNL36825T_PS_ON_MSK,
@@ -207,12 +242,14 @@ static int vcnl36825t_init_registers(const struct device *dev)
 	}
 
 	reg_value |= VCNL36825T_PS_CAL;
-	reg_value |= FIELD_PREP(1 << 9, 1); /* reserved, must be set by datasheet */
+	reg_value |= 1 << 9; /* reserved, must be set by datasheet */
 
 	rc = vcnl36825t_write(&config->i2c, VCNL36825T_REG_PS_CONF1, reg_value);
 	if (rc < 0) {
 		LOG_ERR("I2C for PS_CAL returned %d", rc);
 	}
+
+	k_usleep(VCNL36825T_POWER_UP_US);
 
 	/* PS_CONF2 */
 	reg_value = 0;
@@ -240,37 +277,21 @@ static int vcnl36825t_init_registers(const struct device *dev)
 	switch (config->proximity_it) {
 	case VCNL36825T_PROXIMITY_INTEGRATION_1T:
 		reg_value |= VCNL36825T_PS_IT_1T;
-		data->meas_timeout_us *= 1 * VCNL36825T_FORCED_FACTOR_SCALE;
-		break;
-	case VCNL36825T_PROXIMITY_INTEGRATION_1_5T:
-		reg_value |= VCNL36825T_PS_IT_1_5T;
-		data->meas_timeout_us *= 1.5 * VCNL36825T_FORCED_FACTOR_SCALE;
+		data->meas_timeout_us *= 1;
 		break;
 	case VCNL36825T_PROXIMITY_INTEGRATION_2T:
 		reg_value |= VCNL36825T_PS_IT_2T;
-		data->meas_timeout_us *= 2 * VCNL36825T_FORCED_FACTOR_SCALE;
-		break;
-	case VCNL36825T_PROXIMITY_INTEGRATION_2_5T:
-		reg_value |= VCNL36825T_PS_IT_2_5T;
-		data->meas_timeout_us *= 2.5 * VCNL36825T_FORCED_FACTOR_SCALE;
-		break;
-	case VCNL36825T_PROXIMITY_INTEGRATION_3T:
-		reg_value |= VCNL36825T_PS_IT_3T;
-		data->meas_timeout_us *= 3 * VCNL36825T_FORCED_FACTOR_SCALE;
-		break;
-	case VCNL36825T_PROXIMITY_INTEGRATION_3_5T:
-		reg_value |= VCNL36825T_PS_IT_3_5T;
-		data->meas_timeout_us *= 3.5 * VCNL36825T_FORCED_FACTOR_SCALE;
+		data->meas_timeout_us *= 2;
 		break;
 	case VCNL36825T_PROXIMITY_INTEGRATION_4T:
 		reg_value |= VCNL36825T_PS_IT_4T;
-		data->meas_timeout_us *= 4 * VCNL36825T_FORCED_FACTOR_SCALE;
+		data->meas_timeout_us *= 4;
 		break;
 	case VCNL36825T_PROXIMITY_INTEGRATION_8T:
 		__fallthrough;
 	default:
 		reg_value |= VCNL36825T_PS_IT_8T;
-		data->meas_timeout_us *= 8 * VCNL36825T_FORCED_FACTOR_SCALE;
+		data->meas_timeout_us *= 8;
 		break;
 	}
 
@@ -393,7 +414,7 @@ static int vcnl36825t_init_registers(const struct device *dev)
 	 */
 	data->meas_timeout_us =
 		(data->meas_timeout_us * VCNL36825T_FORCED_FACTOR_SUM) /
-			(VCNL36825T_FORCED_FACTOR_SCALE * VCNL36825T_FORCED_FACTOR_SCALE) +
+			(VCNL36825T_FORCED_FACTOR_SCALE) +
 		1;
 
 	return 0;
@@ -429,13 +450,11 @@ static int vcnl36825t_init(const struct device *dev)
 		return rc;
 	}
 
-	if (config->operation_mode == VCNL36825T_OPERATION_MODE_AUTO) {
-		rc = vcnl36825t_update(&config->i2c, VCNL36825T_REG_PS_CONF2, VCNL36825T_PS_ST_MSK,
-				       VCNL36825T_PS_ST_START);
-		if (rc < 0) {
-			LOG_ERR("error starting measurement");
-			return -EIO;
-		}
+	rc = vcnl36825t_update(&config->i2c, VCNL36825T_REG_PS_CONF2, VCNL36825T_PS_ST_MSK,
+			       VCNL36825T_PS_ST_START);
+	if (rc < 0) {
+		LOG_ERR("error starting measurement");
+		return -EIO;
 	}
 
 	return 0;
@@ -454,6 +473,9 @@ static const struct sensor_driver_api vcnl36825t_driver_api = {
 		DT_INST_PROP(inst, low_power) || (DT_INST_PROP(inst, measurement_period) <=        \
 						  VCNL36825T_PS_PERIOD_VALUE_MAX_MS),              \
 		"measurement-period must be less/equal 80 ms with deactivated low-power mode");    \
+	BUILD_ASSERT(!DT_INST_PROP(inst, low_power) || (DT_INST_ENUM_IDX(inst, operation_mode) ==  \
+							VCNL36825T_OPERATION_MODE_AUTO),           \
+		     "operation-mode \"force\" only available if low-power mode deactivated");     \
 	static struct vcnl36825t_data vcnl36825t_data_##inst;                                      \
 	static const struct vcnl36825t_config vcnl36825t_config_##inst = {                         \
 		.i2c = I2C_DT_SPEC_INST_GET(inst),                                                 \

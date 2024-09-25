@@ -163,8 +163,6 @@ Motion and environmental sensors
     (`lps22df datasheet`_)
   - **LIS2DU12** 3-axis accelerometer
     (`lis2du12 datasheet`_)
-  - **HTS221** Humidity sensor
-    (`hts221 datasheet`_)
   - **STTS22H** Digital temperature sensor
     (`stts22hh datasheet`_)
   - **MP23db01HP** Microphone / audio sensor
@@ -219,43 +217,8 @@ Console
 
 There are two possible options for Zephyr console output:
 
-- through UART4 which is available on SWD connector (JP2). In this case a JTAG adapter
-  can be used to connect SensorTile.box PRO and have both SWD and console lines available.
-
-  To enable console and shell over UART
-
-  - switch the console lines from cdc_acm to uart4
-    (:file:`boards/st/sensortile_box_pro/sensortile_box_pro.dts`)
-
-  - comment out the USB configuration macros
-    (:file:`boards/st/sensortile_box_pro/sensortile_box_pro_defconfig`)
-
-.. code-block:: dts
-   :caption: boards/st/sensortile_box_pro/sensortile_box_pro.dts
-
-   / {
-       chosen {
-          zephyr,console = &uart4;
-          zephyr,shell-uart = &uart4;
-          //zephyr,console = &cdc_acm_uart0;
-          //zephyr,shell-uart = &cdc_acm_uart0;
-        };
-     };
-
-.. code-block:: Kconfig
-   :caption: boards/st/sensortile_box_pro/sensortile_box_pro_defconfig
-
-   # Comment out following USB config lines when
-   # switching console to UART
-   #CONFIG_USB_DEVICE_STACK=y
-   #CONFIG_USB_DEVICE_VID=0x0483
-   #CONFIG_USB_DEVICE_PID=0x1235
-   #CONFIG_USB_DEVICE_PRODUCT="Zephyr CDC SensorTile.box PRO"
-   #CONFIG_USB_CDC_ACM_LOG_LEVEL_OFF=y
-   #CONFIG_USB_DEVICE_INITIALIZE_AT_BOOT=n
-
-
-- through USB as USB CDC/ACM class. This is the default case present in the board dts file.
+- through USB as USB CDC/ACM class. This is the default case present in the board dts file
+  and is enabled by :kconfig:option:`CONFIG_BOARD_SERIAL_BACKEND_CDC_ACM`.
 
 .. code-block:: dts
    :caption: boards/st/sensortile_box_pro/sensortile_box_pro.dts
@@ -272,6 +235,24 @@ There are two possible options for Zephyr console output:
         };
      };
 
+
+- through UART4 which is available on SWD connector (JP2). In this case a JTAG adapter
+  can be used to connect SensorTile.box PRO and have both SWD and console lines available.
+
+  To enable console and shell over UART:
+
+  - in your prj.conf, override the board's default configuration by setting :code:`CONFIG_BOARD_SERIAL_BACKEND_CDC_ACM=n`
+
+  - add an overlay file named ``<board>.overlay``:
+
+.. code-block:: dts
+
+   / {
+       chosen {
+          zephyr,console = &uart4;
+          zephyr,shell-uart = &uart4;
+        };
+     };
 
 
 Console default settings are 115200 8N1.
@@ -341,7 +322,7 @@ You should see following confirmation on your Linux host:
    usb 2-2: SerialNumber: 204A325D574D
 
 You can build and flash the provided sample application
-(:ref:`sensortile_box_pro_sample_sensors`) that reads sensors data and outputs
+(:zephyr:code-sample:`sensortile_box_pro_sensors`) that reads sensors data and outputs
 values on the console.
 
 References
@@ -369,9 +350,6 @@ References
 
 .. _lis2du12 datasheet:
    https://www.st.com/en/mems-and-sensors/lis2du12.html
-
-.. _hts221 datasheet:
-   https://www.st.com/en/mems-and-sensors/hts221.html
 
 .. _stts22hh datasheet:
    https://www.st.com/en/mems-and-sensors/stts22h.html

@@ -40,6 +40,8 @@ enum usbd_msg_type {
 	USBD_MSG_SUSPEND,
 	/** Bus reset detected */
 	USBD_MSG_RESET,
+	/** Device changed configuration */
+	USBD_MSG_CONFIGURATION,
 	/** Non-correctable UDC error message  */
 	USBD_MSG_UDC_ERROR,
 	/** Unrecoverable device stack error message  */
@@ -52,13 +54,16 @@ enum usbd_msg_type {
 	USBD_MSG_MAX_NUMBER,
 };
 
-
+/**
+ * @cond INTERNAL_HIDDEN
+ */
 static const char *const usbd_msg_type_list[] = {
 	"VBUS ready",
 	"VBUS removed",
 	"Device resumed",
 	"Device suspended",
 	"Bus reset",
+	"New device configuration",
 	"Controller error",
 	"Stack error",
 	"CDC ACM line coding",
@@ -67,6 +72,7 @@ static const char *const usbd_msg_type_list[] = {
 
 BUILD_ASSERT(ARRAY_SIZE(usbd_msg_type_list) == USBD_MSG_MAX_NUMBER,
 	     "Number of entries in usbd_msg_type_list is not equal to USBD_MSG_MAX_NUMBER");
+/** @endcond */
 
 /**
  * @brief USB device message

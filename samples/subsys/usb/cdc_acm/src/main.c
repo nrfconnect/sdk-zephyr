@@ -49,10 +49,10 @@ static inline void print_baudrate(const struct device *dev)
 }
 
 #if defined(CONFIG_USB_DEVICE_STACK_NEXT)
-static struct usbd_contex *sample_usbd;
+static struct usbd_context *sample_usbd;
 K_SEM_DEFINE(dtr_sem, 0, 1);
 
-static void sample_msg_cb(struct usbd_contex *const ctx, const struct usbd_msg *msg)
+static void sample_msg_cb(struct usbd_context *const ctx, const struct usbd_msg *msg)
 {
 	LOG_INF("USBD message: %s", usbd_msg_type_string(msg->type));
 
@@ -106,7 +106,7 @@ static int enable_usb_device_next(void)
 
 	return 0;
 }
-#endif /* IS_ENABLED(CONFIG_USB_DEVICE_STACK_NEXT) */
+#endif /* defined(CONFIG_USB_DEVICE_STACK_NEXT) */
 
 static void interrupt_handler(const struct device *dev, void *user_data)
 {

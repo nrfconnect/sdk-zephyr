@@ -308,6 +308,7 @@ static int element_token(enum json_tokens token)
 	case JSON_TOK_ARRAY_START:
 	case JSON_TOK_STRING:
 	case JSON_TOK_NUMBER:
+	case JSON_TOK_INT64:
 	case JSON_TOK_FLOAT:
 	case JSON_TOK_OPAQUE:
 	case JSON_TOK_OBJ_ARRAY:
@@ -444,6 +445,30 @@ static int decode_num(const struct json_token *token, int32_t *num)
 	return 0;
 }
 
+static int decode_int64(const struct json_token *token, int64_t *num)
+{
+	char *endptr;
+	char prev_end;
+
+	prev_end = *token->end;
+	*token->end = '\0';
+
+	errno = 0;
+	*num = strtoll(token->start, &endptr, 10);
+
+	*token->end = prev_end;
+
+	if (errno != 0) {
+		return -errno;
+	}
+
+	if (endptr != token->end) {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static bool equivalent_types(enum json_tokens type1, enum json_tokens type2)
 {
 	if (type1 == JSON_TOK_TRUE || type1 == JSON_TOK_FALSE) {
@@ -451,6 +476,10 @@ static bool equivalent_types(enum json_tokens type1, enum json_tokens type2)
 	}
 
 	if (type1 == JSON_TOK_NUMBER && type2 == JSON_TOK_FLOAT) {
+		return true;
+	}
+
+	if (type1 == JSON_TOK_NUMBER && type2 == JSON_TOK_INT64) {
 		return true;
 	}
 
@@ -511,6 +540,11 @@ static int64_t decode_value(struct json_obj *obj,
 
 		return decode_num(value, num);
 	}
+	case JSON_TOK_INT64: {
+		int64_t *num = field;
+
+		return decode_int64(value, num);
+	}
 	case JSON_TOK_OPAQUE:
 	case JSON_TOK_FLOAT: {
 		struct json_obj_token *obj_token = field;
@@ -537,6 +571,8 @@ static ptrdiff_t get_elem_size(const struct json_obj_descr *descr)
 	switch (descr->type) {
 	case JSON_TOK_NUMBER:
 		return sizeof(int32_t);
+	case JSON_TOK_INT64:
+		return sizeof(int64_t);
 	case JSON_TOK_OPAQUE:
 	case JSON_TOK_FLOAT:
 	case JSON_TOK_OBJ_ARRAY:
@@ -559,13 +595,18 @@ static ptrdiff_t get_elem_size(const struct json_obj_descr *descr)
 	}
 	case JSON_TOK_OBJECT_START: {
 		ptrdiff_t total = 0;
+		uint32_t align_shift = 0;
 		size_t i;
 
 		for (i = 0; i < descr->object.sub_descr_len; i++) {
 			total += get_elem_size(&descr->object.sub_descr[i]);
+
+			if (descr->object.sub_descr[i].align_shift > align_shift) {
+				align_shift = descr->object.sub_descr[i].align_shift;
+			}
 		}
 
-		return ROUND_UP(total, 1 << descr->align_shift);
+		return ROUND_UP(total, 1 << align_shift);
 	}
 	default:
 		return -EINVAL;
@@ -977,6 +1018,23 @@ static int num_encode(const int32_t *num, json_append_bytes_t append_bytes,
 	return append_bytes(buf, (size_t)ret, data);
 }
 
+static int int64_encode(const int64_t *num, json_append_bytes_t append_bytes,
+			void *data)
+{
+	char buf[sizeof("-9223372036854775808")];
+	int ret;
+
+	ret = snprintk(buf, sizeof(buf), "%" PRId64, *num);
+	if (ret < 0) {
+		return ret;
+	}
+	if (ret >= (int)sizeof(buf)) {
+		return -ENOMEM;
+	}
+
+	return append_bytes(buf, (size_t)ret, data);
+}
+
 static int float_ascii_encode(struct json_obj_token *num, json_append_bytes_t append_bytes,
 		      void *data)
 {
@@ -1000,6 +1058,13 @@ static int opaque_string_encode(struct json_obj_token *opaque, json_append_bytes
 	}
 
 	return append_bytes("\"", 1, data);
+}
+
+static int encoded_obj_encode(const char **str, json_append_bytes_t append_bytes, void *data)
+{
+	size_t len = strlen(*str);
+
+	return append_bytes(*str, len, data);
 }
 
 static int bool_encode(const bool *value, json_append_bytes_t append_bytes,
@@ -1032,10 +1097,14 @@ static int encode(const struct json_obj_descr *descr, const void *val,
 				       ptr, append_bytes, data);
 	case JSON_TOK_NUMBER:
 		return num_encode(ptr, append_bytes, data);
+	case JSON_TOK_INT64:
+		return int64_encode(ptr, append_bytes, data);
 	case JSON_TOK_FLOAT:
 		return float_ascii_encode(ptr, append_bytes, data);
 	case JSON_TOK_OPAQUE:
 		return opaque_string_encode(ptr, append_bytes, data);
+	case JSON_TOK_ENCODED_OBJ:
+		return encoded_obj_encode(ptr, append_bytes, data);
 	default:
 		return -EINVAL;
 	}

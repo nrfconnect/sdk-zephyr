@@ -3,15 +3,34 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include <errno.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
-#if defined(CONFIG_BT_BAP_UNICAST_SERVER)
-
-#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/autoconf.h>
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/audio/bap.h>
 #include <zephyr/bluetooth/audio/pacs.h>
-#include "common.h"
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/byteorder.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/hci_types.h>
+#include <zephyr/bluetooth/iso.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
+
 #include "bap_common.h"
+#include "bstests.h"
+#include "common.h"
+
+#if defined(CONFIG_BT_BAP_UNICAST_SERVER)
 
 extern enum bst_result_t bst_result;
 
@@ -49,7 +68,7 @@ static const struct bt_audio_codec_cap lc3_codec_cap = {
 };
 
 static struct audio_test_stream
-	test_streams[CONFIG_BT_ASCS_ASE_SNK_COUNT + CONFIG_BT_ASCS_ASE_SRC_COUNT];
+	test_streams[CONFIG_BT_ASCS_MAX_ASE_SNK_COUNT + CONFIG_BT_ASCS_MAX_ASE_SRC_COUNT];
 
 static const struct bt_audio_codec_qos_pref qos_pref =
 	BT_AUDIO_CODEC_QOS_PREF(true, BT_GAP_LE_PHY_2M, 0x02, 10, 40000, 40000, 40000, 40000);
@@ -205,6 +224,11 @@ static int lc3_release(struct bt_bap_stream *stream, struct bt_bap_ascs_rsp *rsp
 
 	return 0;
 }
+
+static struct bt_bap_unicast_server_register_param param = {
+	CONFIG_BT_ASCS_MAX_ASE_SNK_COUNT,
+	CONFIG_BT_ASCS_MAX_ASE_SRC_COUNT
+};
 
 static const struct bt_bap_unicast_server_cb unicast_server_cb = {
 	.config = lc3_config,
@@ -468,6 +492,13 @@ static void init(void)
 
 	printk("Bluetooth initialized\n");
 
+	err = bt_bap_unicast_server_register(&param);
+	if (err != 0) {
+		FAIL("Failed to register unicast server (err %d)\n", err);
+
+		return;
+	}
+
 	bt_bap_unicast_server_register_cb(&unicast_server_cb);
 
 	err = bt_pacs_cap_register(BT_AUDIO_DIR_SINK, &cap);
@@ -490,7 +521,7 @@ static void init(void)
 					  &stream_ops);
 	}
 
-	/* Create a non-connectable non-scannable advertising set */
+	/* Create a connectable advertising set */
 	err = bt_le_ext_adv_create(BT_LE_EXT_ADV_CONN, NULL, &ext_adv);
 	if (err != 0) {
 		FAIL("Failed to create advertising set (err %d)\n", err);
@@ -536,8 +567,10 @@ static void restart_adv_cb(struct k_work *work)
 
 	err = bt_le_ext_adv_start(ext_adv, BT_LE_EXT_ADV_START_DEFAULT);
 	if (err != 0) {
-		FAIL("Failed to start advertising set (err %d)\n", err);
-		return;
+		if (err != -EALREADY) {
+			FAIL("Failed to start advertising set (err %d)\n", err);
+			return;
+		}
 	}
 }
 
@@ -600,13 +633,13 @@ static void test_main_acl_disconnect(void)
 static const struct bst_test_instance test_unicast_server[] = {
 	{
 		.test_id = "unicast_server",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main,
 	},
 	{
 		.test_id = "unicast_server_acl_disconnect",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main_acl_disconnect,
 	},

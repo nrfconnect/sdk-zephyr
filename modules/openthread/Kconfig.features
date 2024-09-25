@@ -17,6 +17,8 @@ config OPENTHREAD_THREAD_VERSION_1_3
 	bool "Version 1.3"
 config OPENTHREAD_THREAD_VERSION_1_3_1
 	bool "Version 1.3.1"
+config OPENTHREAD_THREAD_VERSION_1_4
+	bool "Version 1.4"
 endchoice # OPENTHREAD_STACK_VERSION
 
 config OPENTHREAD_THREAD_VERSION
@@ -25,6 +27,7 @@ config OPENTHREAD_THREAD_VERSION
 	default "1.2" if OPENTHREAD_THREAD_VERSION_1_2
 	default "1.3" if OPENTHREAD_THREAD_VERSION_1_3
 	default "1.3.1" if OPENTHREAD_THREAD_VERSION_1_3_1
+	default "1.4" if OPENTHREAD_THREAD_VERSION_1_4
 	default "unknown"
 
 config OPENTHREAD_ANYCAST_LOCATOR
@@ -46,6 +49,9 @@ config OPENTHREAD_BLE_TCAT
 config OPENTHREAD_BORDER_AGENT
 	bool "Border Agent support"
 
+config OPENTHREAD_BORDER_AGENT_EPHEMERAL_KEY_ENABLE
+	bool "Border agent ephemeral PSKc"
+
 config OPENTHREAD_BORDER_ROUTER
 	bool "Border Router support"
 
@@ -64,6 +70,9 @@ config OPENTHREAD_CHANNEL_MONITOR
 config OPENTHREAD_CHANNEL_MANAGER
 	bool "Channel manager support"
 	depends on OPENTHREAD_CHANNEL_MONITOR
+
+config OPENTHREAD_CHANNEL_MANAGER_CSL
+	bool "Channel manager for CSL channel"
 
 config OPENTHREAD_COAP
 	bool "OpenThread CoAP support"
@@ -192,11 +201,17 @@ config OPENTHREAD_LINK_METRICS_MANAGER
 config OPENTHREAD_LINK_METRICS_SUBJECT
 	bool "Link Metrics subject"
 
+config OPENTHREAD_PLATFORM_LOG_CRASH_DUMP
+	bool "Platform log crash dump"
+
 config OPENTHREAD_LOG_LEVEL_DYNAMIC
 	bool "Dynamic log level control"
 
 config OPENTHREAD_MAC_FILTER
 	bool "MAC filter support"
+
+config OPENTHREAD_MULTICAST_DNS
+	bool "Multicast DNS (mDNS)"
 
 config OPENTHREAD_MESH_DIAG
 	bool "Mesh Diagnostics"
@@ -359,3 +374,6 @@ config OPENTHREAD_UDP_FORWARD
 config OPENTHREAD_UPTIME
 	bool "Openthread uptime counter"
 	default y if OPENTHREAD_FTD
+
+config OPENTHREAD_VERHOEFF_CHECKSUM
+	bool "Verhoeff checksum"

@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from twister_harness.helpers.domains_helper import get_default_domain_name
 
 import pytest
 
@@ -18,6 +19,7 @@ class DeviceConfig:
     type: str
     build_dir: Path
     base_timeout: float = 60.0  # [s]
+    flash_timeout: float = 60.0  # [s]
     platform: str = ''
     serial: str = ''
     baud: int = 115200
@@ -32,6 +34,15 @@ class DeviceConfig:
     pre_script: Path | None = None
     post_script: Path | None = None
     post_flash_script: Path | None = None
+    fixtures: list[str] = None
+    app_build_dir: Path | None = None
+
+    def __post_init__(self):
+        domains = self.build_dir / 'domains.yaml'
+        if domains.exists():
+            self.app_build_dir = self.build_dir / get_default_domain_name(domains)
+        else:
+            self.app_build_dir = self.build_dir
 
 
 @dataclass
@@ -55,6 +66,7 @@ class TwisterHarnessConfig:
             type=config.option.device_type,
             build_dir=_cast_to_path(config.option.build_dir),
             base_timeout=config.option.base_timeout,
+            flash_timeout=config.option.flash_timeout,
             platform=config.option.platform,
             serial=config.option.device_serial,
             baud=config.option.device_serial_baud,
@@ -68,6 +80,7 @@ class TwisterHarnessConfig:
             pre_script=_cast_to_path(config.option.pre_script),
             post_script=_cast_to_path(config.option.post_script),
             post_flash_script=_cast_to_path(config.option.post_flash_script),
+            fixtures=config.option.fixtures,
         )
 
         devices.append(device_from_cli)

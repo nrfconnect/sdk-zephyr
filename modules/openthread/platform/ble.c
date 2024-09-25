@@ -23,7 +23,9 @@
 #include <zephyr/net/openthread.h>
 
 /* OpenThread BLE driver API */
+#include <openthread/error.h>
 #include <openthread/platform/ble.h>
+#include <openthread/tcat.h>
 
 /* Zephyr Logging */
 
@@ -31,9 +33,6 @@
 #define LOG_LEVEL       CONFIG_OPENTHREAD_LOG_LEVEL
 
 LOG_MODULE_REGISTER(LOG_MODULE_NAME);
-
-#define DEVICE_NAME     CONFIG_BT_DEVICE_NAME
-#define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
 
 /* BLE connection constants as defined in thread specification. */
 #define TOBLE_SERVICE_UUID 0xfffb
@@ -100,13 +99,17 @@ static struct bt_conn_cb conn_callbacks = {.connected = connected,
 					   .le_param_req = le_param_req,
 					   .le_param_updated = le_param_updated};
 
-static const struct bt_data ad[] = {
+static uint8_t service_data[OT_TCAT_ADVERTISEMENT_MAX_LEN] = {0};
+static const uint8_t service_data_size = ARRAY_SIZE(service_data);
+
+static struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
+	BT_DATA(BT_DATA_SVC_DATA16, service_data, service_data_size),
 };
 
-static const struct bt_data sd[] = {
+static struct bt_data sd[] = {
 	BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(TOBLE_SERVICE_UUID)),
+	BT_DATA(BT_DATA_SVC_DATA16, service_data, service_data_size),
 };
 
 /* Zephyr BLE Message Queue and Thread */
@@ -316,7 +319,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	ot_plat_ble_connection = bt_conn_ref(conn);
 
 	if (err) {
-		LOG_WRN("Connection failed (err %u)", err);
+		LOG_WRN("Connection failed err %u %s",
+			err, bt_hci_err_to_str(err));
 		return;
 	} else if (bt_conn_get_info(conn, &info)) {
 		LOG_WRN("Could not parse connection info");
@@ -336,7 +340,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	otError error = OT_ERROR_NONE;
 
-	LOG_INF("Disconnected (reason %" PRIu8 ")", reason);
+	LOG_INF("Disconnected, reason 0x%02x %s", reason, bt_hci_err_to_str(reason));
 
 	if (ot_plat_ble_connection) {
 		bt_conn_unref(ot_plat_ble_connection);
@@ -388,12 +392,52 @@ static void bt_ready(int err)
 	k_sem_give(&ot_plat_ble_init_semaphore); /* BLE stack up an running */
 }
 
+void otPlatBleGetLinkCapabilities(otInstance *aInstance,
+				  otBleLinkCapabilities *aBleLinkCapabilities)
+{
+	ARG_UNUSED(aInstance);
+
+	aBleLinkCapabilities->mGattNotifications = 1;
+	aBleLinkCapabilities->mL2CapDirect = 0;
+	aBleLinkCapabilities->mRsv = 0;
+}
+
+bool otPlatBleSupportsMultiRadio(otInstance *aInstance)
+{
+	OT_UNUSED_VARIABLE(aInstance);
+
+	return false;
+}
+
+otError otPlatBleGetAdvertisementBuffer(otInstance *aInstance, uint8_t **aAdvertisementBuffer)
+{
+	ARG_UNUSED(aInstance);
+
+	*aAdvertisementBuffer = service_data;
+
+	return OT_ERROR_NONE;
+}
+
+otError otPlatBleGapAdvSetData(otInstance *aInstance, uint8_t *aAdvertisementData,
+			       uint16_t aAdvertisementLen)
+{
+	ARG_UNUSED(aInstance);
+
+	if (aAdvertisementLen > OT_TCAT_ADVERTISEMENT_MAX_LEN || aAdvertisementData == NULL) {
+		LOG_ERR("Invalid TCAT Advertisement parameters advlen: %d", aAdvertisementLen);
+		return OT_ERROR_INVALID_ARGS;
+	}
+
+	ad[1].data_len = (uint8_t)aAdvertisementLen;
+	sd[1].data_len = (uint8_t)aAdvertisementLen;
+	return OT_ERROR_NONE;
+}
+
 otError otPlatBleGapAdvStart(otInstance *aInstance, uint16_t aInterval)
 {
 	ARG_UNUSED(aInstance);
 	ARG_UNUSED(aInterval);
 
-	/* TO DO advertisement format change */
 	int err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 
 	if (err != 0 && err != -EALREADY) {

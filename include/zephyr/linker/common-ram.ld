@@ -12,6 +12,10 @@
 #endif
 #endif /* NETWORKING */
 
+#ifdef CONFIG_ARM_SCMI
+ITERABLE_SECTION_RAM(scmi_protocol, Z_LINK_ITERABLE_SUBALIGN)
+#endif /* CONFIG_ARM_SCMI */
+
 #if defined(CONFIG_GEN_SW_ISR_TABLE) && defined(CONFIG_DYNAMIC_INTERRUPTS)
 	SECTION_DATA_PROLOGUE(sw_isr_table,,)
 	{
@@ -94,10 +98,6 @@
 #if defined(CONFIG_PCIE)
 	ITERABLE_SECTION_RAM(pcie_dev, Z_LINK_ITERABLE_SUBALIGN)
 #endif /* PCIE */
-
-#if defined(CONFIG_UART_MUX)
-	ITERABLE_SECTION_RAM(uart_mux, Z_LINK_ITERABLE_SUBALIGN)
-#endif
 
 #if defined(CONFIG_USB_DEVICE_STACK)
 	SECTION_DATA_PROLOGUE(usb_descriptor,,SUBALIGN(1))

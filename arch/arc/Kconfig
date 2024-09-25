@@ -18,6 +18,7 @@ config CPU_ARCEM
 config CPU_ARCHS
 	bool
 	select ATOMIC_OPERATIONS_BUILTIN
+	select BARRIER_OPERATIONS_BUILTIN
 	help
 	  This option signifies the use of an ARC HS CPU
 
@@ -373,7 +374,9 @@ config ARC_EXCEPTION_STACK_SIZE
 endmenu
 
 config ARC_EARLY_SOC_INIT
-	bool "Make early stage SoC-specific initialization"
+	bool "Make early stage SoC-specific initialization [DEPRECATED]"
+	select SOC_RESET_HOOK
+	select DEPRECATED
 	help
 	  Call SoC per-core setup code on early stage initialization
 	  (before C runtime initialization). Setup code is called in form of

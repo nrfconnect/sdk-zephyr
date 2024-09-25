@@ -5,9 +5,7 @@
  */
 #include <soc/soc_caps.h>
 #include <soc/soc.h>
-#include <soc/interrupt_core0_reg.h>
-#include <soc/periph_defs.h>
-#include <soc/system_reg.h>
+
 #include <hal/systimer_hal.h>
 #include <hal/systimer_ll.h>
 #include <esp_private/systimer.h>
@@ -136,14 +134,27 @@ uint64_t sys_clock_cycle_get_64(void)
 	return get_systimer_alarm();
 }
 
+void sys_clock_disable(void)
+{
+	systimer_ll_enable_alarm(systimer_hal.dev, SYSTIMER_ALARM_OS_TICK_CORE0, false);
+	systimer_ll_enable_alarm_int(systimer_hal.dev, SYSTIMER_ALARM_OS_TICK_CORE0, false);
+	systimer_hal_deinit(&systimer_hal);
+}
+
 static int sys_clock_driver_init(void)
 {
+	int ret;
 
-	esp_intr_alloc(DT_IRQN(DT_NODELABEL(systimer0)),
-		0,
+	ret = esp_intr_alloc(DT_IRQ_BY_IDX(DT_NODELABEL(systimer0), 0, irq),
+		ESP_PRIO_TO_FLAGS(DT_IRQ_BY_IDX(DT_NODELABEL(systimer0), 0, priority)) |
+		ESP_INT_FLAGS_CHECK(DT_IRQ_BY_IDX(DT_NODELABEL(systimer0), 0, flags)),
 		sys_timer_isr,
 		NULL,
 		NULL);
+
+	if (ret != 0) {
+		return ret;
+	}
 
 	systimer_hal_init(&systimer_hal);
 	systimer_hal_connect_alarm_counter(&systimer_hal,
@@ -156,5 +167,5 @@ static int sys_clock_driver_init(void)
 	return 0;
 }
 
-SYS_INIT(sys_clock_driver_init, PRE_KERNEL_2,
+SYS_INIT(sys_clock_driver_init, PRE_KERNEL_1,
 	 CONFIG_SYSTEM_CLOCK_INIT_PRIORITY);

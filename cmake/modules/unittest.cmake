@@ -59,7 +59,7 @@ add_dependencies(test_interface ${KOBJ_TYPES_H_TARGET})
 gen_kobj(KOBJ_GEN_DIR)
 
 # Generates empty header files to build
-set(INCL_GENERATED_DIR ${APPLICATION_BINARY_DIR}/zephyr/include/generated)
+set(INCL_GENERATED_DIR ${APPLICATION_BINARY_DIR}/zephyr/include/generated/zephyr)
 set(INCL_GENERATED_SYSCALL_DIR ${INCL_GENERATED_DIR}/syscalls)
 list(APPEND INCL_GENERATED_HEADERS
   ${INCL_GENERATED_DIR}/devicetree_generated.h
@@ -120,6 +120,8 @@ target_link_options(testbinary PRIVATE
 target_link_libraries(testbinary PRIVATE
   ${EXTRA_LDFLAGS_AS_LIST}
   )
+
+target_compile_options(test_interface INTERFACE $<TARGET_PROPERTY:compiler,debug>)
 
 if(CONFIG_COVERAGE)
   target_compile_options(test_interface INTERFACE $<TARGET_PROPERTY:compiler,coverage>)

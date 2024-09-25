@@ -122,6 +122,8 @@ remaining time until the next scheduled timeout.
 An example of an application that defines its own policy can be found in
 :zephyr_file:`tests/subsys/pm/power_mgmt/`.
 
+.. _pm-policy-power-states:
+
 Policy and Power States
 ------------------------
 
@@ -136,8 +138,8 @@ Examples
 
 Some helpful examples showing different power management features:
 
-* :zephyr_file:`samples/boards/stm32/power_mgmt/blinky/`
-* :zephyr_file:`samples/boards/esp32/deep_sleep/`
+* :zephyr_file:`samples/boards/st/power_mgmt/blinky/`
+* :zephyr_file:`samples/boards/espressif/deep_sleep/`
 * :zephyr_file:`samples/subsys/pm/device_pm/`
 * :zephyr_file:`tests/subsys/pm/power_mgmt/`
 * :zephyr_file:`tests/subsys/pm/power_mgmt_soc/`

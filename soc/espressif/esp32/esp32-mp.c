@@ -12,6 +12,7 @@
 #include <zephyr/drivers/interrupt_controller/intc_esp32.h>
 #include <soc.h>
 #include <ksched.h>
+#include <ipi.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/spinlock.h>
@@ -42,8 +43,6 @@ volatile struct cpustart_rec *start_rec;
 static void *appcpu_top;
 static bool cpus_active[CONFIG_MP_MAX_NUM_CPUS];
 #endif
-static struct k_spinlock loglock;
-
 
 /* Note that the logging done here is ACTUALLY REQUIRED FOR RELIABLE
  * OPERATION!  At least one particular board will experience spurious
@@ -275,14 +274,18 @@ void arch_cpu_start(int cpu_num, k_thread_stack_t *stack, int sz,
 	cpus_active[0] = true;
 	cpus_active[cpu_num] = true;
 
-	esp_intr_alloc(DT_IRQN(DT_NODELABEL(ipi0)),
-		ESP_INTR_FLAG_IRAM,
+	esp_intr_alloc(DT_IRQ_BY_IDX(DT_NODELABEL(ipi0), 0, irq),
+		ESP_PRIO_TO_FLAGS(DT_IRQ_BY_IDX(DT_NODELABEL(ipi0), 0, priority)) |
+		ESP_INT_FLAGS_CHECK(DT_IRQ_BY_IDX(DT_NODELABEL(ipi0), 0, flags)) |
+			ESP_INTR_FLAG_IRAM,
 		esp_crosscore_isr,
 		NULL,
 		NULL);
 
-	esp_intr_alloc(DT_IRQN(DT_NODELABEL(ipi1)),
-		ESP_INTR_FLAG_IRAM,
+	esp_intr_alloc(DT_IRQ_BY_IDX(DT_NODELABEL(ipi1), 0, irq),
+		ESP_PRIO_TO_FLAGS(DT_IRQ_BY_IDX(DT_NODELABEL(ipi1), 0, priority)) |
+		ESP_INT_FLAGS_CHECK(DT_IRQ_BY_IDX(DT_NODELABEL(ipi1), 0, flags)) |
+			ESP_INTR_FLAG_IRAM,
 		esp_crosscore_isr,
 		NULL,
 		NULL);
@@ -290,15 +293,22 @@ void arch_cpu_start(int cpu_num, k_thread_stack_t *stack, int sz,
 	smp_log("ESP32: APPCPU initialized");
 }
 
-void arch_sched_ipi(void)
+void arch_sched_directed_ipi(uint32_t cpu_bitmap)
 {
 	const int core_id = esp_core_id();
+
+	ARG_UNUSED(cpu_bitmap);
 
 	if (core_id == 0) {
 		DPORT_WRITE_PERI_REG(DPORT_CPU_INTR_FROM_CPU_0_REG, DPORT_CPU_INTR_FROM_CPU_0);
 	} else {
 		DPORT_WRITE_PERI_REG(DPORT_CPU_INTR_FROM_CPU_1_REG, DPORT_CPU_INTR_FROM_CPU_1);
 	}
+}
+
+void arch_sched_broadcast_ipi(void)
+{
+	arch_sched_directed_ipi(IPI_ALL_CPUS_MASK);
 }
 
 IRAM_ATTR bool arch_cpu_active(int cpu_num)

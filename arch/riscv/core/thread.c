@@ -23,15 +23,15 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 		     void *p1, void *p2, void *p3)
 {
 	extern void z_riscv_thread_start(void);
-	struct __esf *stack_init;
+	struct arch_esf *stack_init;
 
 #ifdef CONFIG_RISCV_SOC_CONTEXT_SAVE
 	const struct soc_esf soc_esf_init = {SOC_ESF_INIT};
 #endif
 
 	/* Initial stack frame for thread */
-	stack_init = (struct __esf *)Z_STACK_PTR_ALIGN(
-				Z_STACK_PTR_TO_FRAME(struct __esf, stack_ptr)
+	stack_init = (struct arch_esf *)Z_STACK_PTR_ALIGN(
+				Z_STACK_PTR_TO_FRAME(struct arch_esf, stack_ptr)
 				);
 
 	/* Setup the initial stack frame */
@@ -144,6 +144,12 @@ FUNC_NORETURN void arch_user_mode_enter(k_thread_entry_t user_entry,
 					      K_KERNEL_STACK_RESERVED +
 					      CONFIG_PRIVILEGED_STACK_SIZE);
 
+#ifdef CONFIG_INIT_STACKS
+	/* Initialize the privileged stack */
+	(void)memset((void *)_current->arch.priv_stack_start, 0xaa,
+		     Z_STACK_PTR_ALIGN(K_KERNEL_STACK_RESERVED + CONFIG_PRIVILEGED_STACK_SIZE));
+#endif /* CONFIG_INIT_STACKS */
+
 	top_of_user_stack = Z_STACK_PTR_ALIGN(
 				_current->stack_info.start +
 				_current->stack_info.size -
@@ -189,6 +195,18 @@ FUNC_NORETURN void arch_user_mode_enter(k_thread_entry_t user_entry,
 	CODE_UNREACHABLE;
 }
 
+int arch_thread_priv_stack_space_get(const struct k_thread *thread, size_t *stack_size,
+				     size_t *unused_ptr)
+{
+	if ((thread->base.user_options & K_USER) != K_USER) {
+		return -EINVAL;
+	}
+
+	*stack_size = Z_STACK_PTR_ALIGN(K_KERNEL_STACK_RESERVED + CONFIG_PRIVILEGED_STACK_SIZE);
+
+	return z_stack_space_get((void *)thread->arch.priv_stack_start, *stack_size, unused_ptr);
+}
+
 #endif /* CONFIG_USERSPACE */
 
 #ifndef CONFIG_MULTITHREADING
@@ -211,6 +229,8 @@ FUNC_NORETURN void z_riscv_switch_to_main_no_multithreading(k_thread_entry_t mai
 
 	main_stack = (K_THREAD_STACK_BUFFER(z_main_stack) +
 		      K_THREAD_STACK_SIZEOF(z_main_stack));
+
+	irq_unlock(MSTATUS_IEN);
 
 	__asm__ volatile (
 	"mv sp, %0; jalr ra, %1, 0"

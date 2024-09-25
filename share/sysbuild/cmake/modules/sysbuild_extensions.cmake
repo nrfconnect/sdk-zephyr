@@ -20,7 +20,7 @@ function(load_cache)
   if(NOT TARGET ${LOAD_CACHE_IMAGE}_cache)
     add_custom_target(${LOAD_CACHE_IMAGE}_cache)
   endif()
-  file(STRINGS "${LOAD_CACHE_BINARY_DIR}/CMakeCache.txt" cache_strings)
+  file(STRINGS "${LOAD_CACHE_BINARY_DIR}/CMakeCache.txt" cache_strings ENCODING UTF-8)
   foreach(str ${cache_strings})
     # Using a regex for matching whole 'VAR_NAME:TYPE=VALUE' will strip semi-colons
     # thus resulting in lists to become strings.
@@ -332,7 +332,7 @@ function(ExternalZephyrProject_Add)
       menuconfig
       hardenconfig
       guiconfig
-      ${EXTRA_KCONFIG_TARGETS}
+      $CACHE{EXTRA_KCONFIG_TARGETS}
       )
 
     if(NOT ZBUILD_APP_TYPE STREQUAL "MAIN")
@@ -345,6 +345,16 @@ function(ExternalZephyrProject_Add)
       USES_TERMINAL
       )
   endforeach()
+
+  set(list_separator ",")
+  set(image_extra_kconfig_targets "-DEXTRA_KCONFIG_TARGETS=$CACHE{EXTRA_KCONFIG_TARGETS}")
+  string(REPLACE ";" "${list_separator}" image_extra_kconfig_targets "${image_extra_kconfig_targets}")
+  foreach(target $CACHE{EXTRA_KCONFIG_TARGETS})
+    list(APPEND image_extra_kconfig_targets
+         -DEXTRA_KCONFIG_TARGET_COMMAND_FOR_${target}=$CACHE{EXTRA_KCONFIG_TARGET_COMMAND_FOR_${target}}
+    )
+  endforeach()
+
   include(ExternalProject)
   set(application_binary_dir ${CMAKE_BINARY_DIR}/${ZBUILD_APPLICATION})
   ExternalProject_Add(
@@ -352,9 +362,11 @@ function(ExternalZephyrProject_Add)
     SOURCE_DIR ${ZBUILD_SOURCE_DIR}
     BINARY_DIR ${application_binary_dir}
     CONFIGURE_COMMAND ""
+    LIST_SEPARATOR "${list_separator}"
     CMAKE_ARGS -DSYSBUILD:BOOL=True
                -DSYSBUILD_CACHE:FILEPATH=${sysbuild_cache_file}
                ${shared_cmake_vars_argument}
+               ${image_extra_kconfig_targets}
     BUILD_COMMAND ${CMAKE_COMMAND} --build .
     INSTALL_COMMAND ""
     BUILD_ALWAYS True
@@ -453,22 +465,12 @@ function(ExternalZephyrProject_Cmake)
                  "   ${image_banner_header}\n"
   )
 
-  ExternalProject_Get_Property(${ZCMAKE_APPLICATION} SOURCE_DIR BINARY_DIR CMAKE_ARGS)
+  ExternalProject_Get_Property(${ZCMAKE_APPLICATION} SOURCE_DIR BINARY_DIR CMAKE_ARGS LIST_SEPARATOR)
   get_target_property(${ZCMAKE_APPLICATION}_BOARD      ${ZCMAKE_APPLICATION} BOARD)
 
   get_property(${ZCMAKE_APPLICATION}_CONF_SCRIPT TARGET ${ZCMAKE_APPLICATION}
                PROPERTY IMAGE_CONF_SCRIPT
   )
-
-  # Update ROOT variables with relative paths to use absolute paths based on
-  # the source application directory.
-  foreach(type MODULE_EXT BOARD SOC ARCH SCA)
-    if(DEFINED CACHE{${type}_ROOT} AND NOT IS_ABSOLUTE $CACHE{${type}_ROOT})
-      set(rel_path $CACHE{${type}_ROOT})
-      cmake_path(ABSOLUTE_PATH rel_path BASE_DIRECTORY "${APP_DIR}" NORMALIZE OUTPUT_VARIABLE abs_path)
-      set(${type}_ROOT ${abs_path} CACHE PATH "Sysbuild adjusted absolute path" FORCE)
-    endif()
-  endforeach()
 
   sysbuild_cache(CREATE APPLICATION ${ZCMAKE_APPLICATION})
 
@@ -481,6 +483,7 @@ function(ExternalZephyrProject_Cmake)
   string(CONFIGURE "${config_content}" config_content)
   file(WRITE ${dotconfigsysbuild} ${config_content})
 
+  string(REPLACE "${LIST_SEPARATOR}" "\\;" CMAKE_ARGS "${CMAKE_ARGS}")
   execute_process(
     COMMAND ${CMAKE_COMMAND}
       -G${CMAKE_GENERATOR}
@@ -661,7 +664,7 @@ function(sysbuild_add_subdirectory source_dir)
       " (expected at most 2, got ${ARGC})"
     )
   endif()
-  set(binary_dir ${ARGV1})
+  set(binary_dir ${ARGN})
 
   # Update SYSBUILD_CURRENT_SOURCE_DIR in this scope, to support nesting
   # of sysbuild_add_subdirectory() and even regular add_subdirectory().

@@ -54,6 +54,7 @@ static uint8_t static_regions_num;
 #elif defined(CONFIG_CPU_CORTEX_M23) || \
 	defined(CONFIG_CPU_CORTEX_M33) || \
 	defined(CONFIG_CPU_CORTEX_M55) || \
+	defined(CONFIG_CPU_CORTEX_M85) || \
 	defined(CONFIG_AARCH32_ARMV8_R)
 #include "arm_mpu_v8_internal.h"
 #else
@@ -130,12 +131,10 @@ static int mpu_configure_regions_from_dt(uint8_t *reg_index)
 			break;
 #endif
 		default:
-			/* Either the specified `ATTR_MPU_*` attribute does not
-			 * exists or the `REGION_*_ATTR` macro is not defined
-			 * for that attribute.
+			/* Attribute other than ARM-specific is set.
+			 * This region should not be configured in MPU.
 			 */
-			LOG_ERR("Invalid attribute for the region\n");
-			return -EINVAL;
+			continue;
 		}
 #if defined(CONFIG_ARMV7_R)
 		region_conf.size = size_to_mpu_rasr_size(region[idx].dt_size);

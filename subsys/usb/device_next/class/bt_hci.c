@@ -26,7 +26,7 @@
 #include <zephyr/usb/usb_ch9.h>
 #include <zephyr/drivers/usb/udc.h>
 
-#include <zephyr/net/buf.h>
+#include <zephyr/net_buf.h>
 
 #include <zephyr/bluetooth/buf.h>
 #include <zephyr/bluetooth/hci_raw.h>
@@ -73,9 +73,9 @@ static K_FIFO_DEFINE(bt_hci_tx_queue);
  * REVISE: global (bulk, interrupt, iso) specific pools would be more
  * RAM usage efficient.
  */
-NET_BUF_POOL_FIXED_DEFINE(bt_hci_ep_pool,
-			  3, 512,
-			  sizeof(struct udc_buf_info), NULL);
+UDC_BUF_POOL_DEFINE(bt_hci_ep_pool,
+		    3, 512,
+		    sizeof(struct udc_buf_info), NULL);
 /* HCI RX/TX threads */
 static K_KERNEL_STACK_DEFINE(rx_thread_stack, CONFIG_BT_HCI_TX_STACK_SIZE);
 static struct k_thread rx_thread_data;
@@ -134,7 +134,7 @@ static uint8_t bt_hci_get_int_in(struct usbd_class_data *const c_data)
 
 static uint8_t bt_hci_get_bulk_in(struct usbd_class_data *const c_data)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	struct bt_hci_data *data = usbd_class_get_private(c_data);
 	struct usbd_bt_hci_desc *desc = data->desc;
 
@@ -147,7 +147,7 @@ static uint8_t bt_hci_get_bulk_in(struct usbd_class_data *const c_data)
 
 static uint8_t bt_hci_get_bulk_out(struct usbd_class_data *const c_data)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	struct bt_hci_data *data = usbd_class_get_private(c_data);
 	struct usbd_bt_hci_desc *desc = data->desc;
 
@@ -204,7 +204,7 @@ static void bt_hci_tx_thread(void *p1, void *p2, void *p3)
 		struct net_buf *bt_buf;
 		uint8_t ep;
 
-		bt_buf = net_buf_get(&bt_hci_tx_queue, K_FOREVER);
+		bt_buf = k_fifo_get(&bt_hci_tx_queue, K_FOREVER);
 
 		switch (bt_buf_get_type(bt_buf)) {
 		case BT_BUF_EVT:
@@ -231,7 +231,7 @@ static void bt_hci_rx_thread(void *a, void *b, void *c)
 		int err;
 
 		/* FIXME: Do we need a separate thread for bt_send()? */
-		buf = net_buf_get(&bt_hci_rx_queue, K_FOREVER);
+		buf = k_fifo_get(&bt_hci_rx_queue, K_FOREVER);
 
 		err = bt_send(buf);
 		if (err) {
@@ -354,7 +354,7 @@ static int bt_hci_acl_out_cb(struct usbd_class_data *const c_data,
 	}
 
 	if (hci_data->acl_buf != NULL && hci_data->acl_len == hci_data->acl_buf->len) {
-		net_buf_put(&bt_hci_rx_queue, hci_data->acl_buf);
+		k_fifo_put(&bt_hci_rx_queue, hci_data->acl_buf);
 		hci_data->acl_buf = NULL;
 		hci_data->acl_len = 0;
 	}
@@ -370,7 +370,7 @@ restart_out_transfer:
 static int bt_hci_request(struct usbd_class_data *const c_data,
 			  struct net_buf *buf, int err)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	struct bt_hci_data *hci_data = usbd_class_get_private(c_data);
 	struct udc_buf_info *bi;
 
@@ -440,7 +440,7 @@ static int bt_hci_ctd(struct usbd_class_data *const c_data,
 		return -ENOMEM;
 	}
 
-	net_buf_put(&bt_hci_rx_queue, cmd_buf);
+	k_fifo_put(&bt_hci_rx_queue, cmd_buf);
 
 	return 0;
 }
@@ -564,7 +564,7 @@ static struct usbd_bt_hci_desc bt_hci_desc_##n = {				\
 		.bDescriptorType = USB_DESC_ENDPOINT,				\
 		.bEndpointAddress = BT_HCI_EP_VOICE_IN,				\
 		.bmAttributes = USB_EP_TYPE_ISO,				\
-		.wMaxPacketSize = 0,						\
+		.wMaxPacketSize = sys_cpu_to_le16(0),				\
 		.bInterval = BT_HCI_EP_INTERVAL_VOICE,				\
 	},									\
 										\
@@ -573,7 +573,7 @@ static struct usbd_bt_hci_desc bt_hci_desc_##n = {				\
 		.bDescriptorType = USB_DESC_ENDPOINT,				\
 		.bEndpointAddress = BT_HCI_EP_VOICE_OUT,			\
 		.bmAttributes = USB_EP_TYPE_ISO,				\
-		.wMaxPacketSize = 0,						\
+		.wMaxPacketSize = sys_cpu_to_le16(0),				\
 		.bInterval = BT_HCI_EP_INTERVAL_VOICE,				\
 	},									\
 										\
@@ -594,7 +594,7 @@ static struct usbd_bt_hci_desc bt_hci_desc_##n = {				\
 		.bDescriptorType = USB_DESC_ENDPOINT,				\
 		.bEndpointAddress = BT_HCI_EP_VOICE_IN,				\
 		.bmAttributes = USB_EP_TYPE_ISO,				\
-		.wMaxPacketSize = BT_HCI_EP_MPS_VOICE,				\
+		.wMaxPacketSize = sys_cpu_to_le16(BT_HCI_EP_MPS_VOICE),		\
 		.bInterval = BT_HCI_EP_INTERVAL_VOICE,				\
 	},									\
 										\
@@ -603,7 +603,7 @@ static struct usbd_bt_hci_desc bt_hci_desc_##n = {				\
 		.bDescriptorType = USB_DESC_ENDPOINT,				\
 		.bEndpointAddress = BT_HCI_EP_VOICE_OUT,			\
 		.bmAttributes = USB_EP_TYPE_ISO,				\
-		.wMaxPacketSize = BT_HCI_EP_MPS_VOICE,				\
+		.wMaxPacketSize = sys_cpu_to_le16(BT_HCI_EP_MPS_VOICE),		\
 		.bInterval = BT_HCI_EP_INTERVAL_VOICE,				\
 	},									\
 										\

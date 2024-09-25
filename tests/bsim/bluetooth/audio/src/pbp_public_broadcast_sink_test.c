@@ -3,21 +3,34 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#if defined(CONFIG_BT_PBP)
-
-#include <zephyr/sys/byteorder.h>
-
-#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/autoconf.h>
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/audio/bap.h>
 #include <zephyr/bluetooth/audio/cap.h>
 #include <zephyr/bluetooth/audio/bap_lc3_preset.h>
 #include <zephyr/bluetooth/audio/pacs.h>
 #include <zephyr/bluetooth/audio/pbp.h>
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/bluetooth/audio/lc3.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/iso.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
 
+#include "bstests.h"
 #include "common.h"
 
+#if defined(CONFIG_BT_PBP)
 #define SEM_TIMEOUT K_SECONDS(30)
 
 extern enum bst_result_t bst_result;
@@ -99,21 +112,6 @@ static void recv_cb(struct bt_bap_stream *stream,
 		k_sem_give(&sem_data_received);
 	}
 	printk("Receiving ISO packets\n");
-}
-
-static uint16_t interval_to_sync_timeout(uint16_t interval)
-{
-	uint32_t interval_ms;
-	uint32_t timeout;
-
-	/* Add retries and convert to unit in 10's of ms */
-	interval_ms = BT_GAP_PER_ADV_INTERVAL_TO_MS(interval);
-	timeout = (interval_ms * PA_SYNC_INTERVAL_TO_TIMEOUT_RATIO) / 10;
-
-	/* Enforce restraints */
-	timeout = CLAMP(timeout, BT_GAP_PER_ADV_MIN_TIMEOUT, BT_GAP_PER_ADV_MAX_TIMEOUT);
-
-	return (uint16_t)timeout;
 }
 
 static bool pa_decode_base(struct bt_data *data, void *user_data)
@@ -414,7 +412,7 @@ static void test_main(void)
 static const struct bst_test_instance test_public_broadcast_sink[] = {
 	{
 		.test_id = "public_broadcast_sink",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main
 	},

@@ -5,7 +5,9 @@
  */
 
 #include <app_api.h>
-#include <app_api.h>
+
+#include <zephyr/llext/symbol.h>
+#include <zephyr/internal/syscall_handler.h>
 
 int z_impl_foo(int bar)
 {
@@ -19,5 +21,5 @@ static inline int z_vrfy_foo(int bar)
 	/* Nothing to verify */
 	return z_impl_foo(bar);
 }
-#include <syscalls/foo_mrsh.c>
+#include <zephyr/syscalls/foo_mrsh.c>
 #endif

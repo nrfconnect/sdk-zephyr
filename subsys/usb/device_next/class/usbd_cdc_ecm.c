@@ -36,10 +36,10 @@ enum {
  * Transfers through two endpoints proceed in a synchronous manner,
  * with maximum block of NET_ETH_MAX_FRAME_SIZE.
  */
-NET_BUF_POOL_FIXED_DEFINE(cdc_ecm_ep_pool,
-			  DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) * 2,
-			  NET_ETH_MAX_FRAME_SIZE,
-			  sizeof(struct udc_buf_info), NULL);
+UDC_BUF_POOL_DEFINE(cdc_ecm_ep_pool,
+		    DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) * 2,
+		    NET_ETH_MAX_FRAME_SIZE,
+		    sizeof(struct udc_buf_info), NULL);
 
 struct cdc_ecm_notification {
 	union {
@@ -102,7 +102,7 @@ static uint8_t cdc_ecm_get_ctrl_if(struct cdc_ecm_eth_data *const data)
 
 static uint8_t cdc_ecm_get_int_in(struct usbd_class_data *const c_data)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	const struct device *dev = usbd_class_get_private(c_data);
 	struct cdc_ecm_eth_data *data = dev->data;
 	struct usbd_cdc_ecm_desc *desc = data->desc;
@@ -116,7 +116,7 @@ static uint8_t cdc_ecm_get_int_in(struct usbd_class_data *const c_data)
 
 static uint8_t cdc_ecm_get_bulk_in(struct usbd_class_data *const c_data)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	const struct device *dev = usbd_class_get_private(c_data);
 	struct cdc_ecm_eth_data *data = dev->data;
 	struct usbd_cdc_ecm_desc *desc = data->desc;
@@ -130,7 +130,7 @@ static uint8_t cdc_ecm_get_bulk_in(struct usbd_class_data *const c_data)
 
 static uint16_t cdc_ecm_get_bulk_in_mps(struct usbd_class_data *const c_data)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 
 	if (usbd_bus_speed(uds_ctx) == USBD_SPEED_HS) {
 		return 512U;
@@ -141,7 +141,7 @@ static uint16_t cdc_ecm_get_bulk_in_mps(struct usbd_class_data *const c_data)
 
 static uint8_t cdc_ecm_get_bulk_out(struct usbd_class_data *const c_data)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	const struct device *dev = usbd_class_get_private(c_data);
 	struct cdc_ecm_eth_data *data = dev->data;
 	struct usbd_cdc_ecm_desc *desc = data->desc;
@@ -283,7 +283,7 @@ restart_out_transfer:
 static int usbd_cdc_ecm_request(struct usbd_class_data *const c_data,
 				struct net_buf *buf, int err)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	const struct device *dev = usbd_class_get_private(c_data);
 	struct cdc_ecm_eth_data *data = dev->data;
 	struct udc_buf_info *bi;
@@ -442,7 +442,7 @@ static int usbd_cdc_ecm_ctd(struct usbd_class_data *const c_data,
 
 static int usbd_cdc_ecm_init(struct usbd_class_data *const c_data)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	const struct device *dev = usbd_class_get_private(c_data);
 	struct cdc_ecm_eth_data *const data = dev->data;
 	struct usbd_cdc_ecm_desc *desc = data->desc;

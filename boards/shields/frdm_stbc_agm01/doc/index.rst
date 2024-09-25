@@ -43,8 +43,8 @@ Pin Assignment of the FRDM-STBC-AGM01 Shield
 For more information about the FXOS8700, FXAS21002, and FRDM-STBC-AGM01
 board:
 
-- :ref:`fxos8700`
-- :ref:`fxas21002`
+- :zephyr:code-sample:`fxos8700`
+- :zephyr:code-sample:`fxas21002`
 - `FRDM-STBC-AGM01 Website`_
 - `FRDM-STBC-AGM01 Quick Reference Card`_
 - `FRDM-STBC-AGM01 Schematics`_
@@ -52,7 +52,7 @@ board:
 Programming
 ***********
 
-Set ``-DSHIELD=frdm_stbc_agm01`` when you invoke ``west build``. For example:
+Set ``--shield frdm_stbc_agm01`` when you invoke ``west build``. For example:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/sensor/fxas21002

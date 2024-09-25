@@ -31,12 +31,12 @@
 #include <zephyr/app_memory/app_memdomain.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
-#include <zephyr/rtio/rtio_mpsc.h>
 #include <zephyr/sys/__assert.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/mem_blocks.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/iterable_sections.h>
+#include <zephyr/sys/mpsc_lockfree.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,7 +53,7 @@ extern "C" {
  */
 
 /**
- * @brief RTIO Predefined Priorties
+ * @brief RTIO Predefined Priorities
  * @defgroup rtio_sqe_prio RTIO Priorities
  * @ingroup rtio
  * @{
@@ -253,30 +253,36 @@ struct rtio_sqe {
 
 	union {
 
-		/** OP_TX, OP_RX */
+		/** OP_TX */
 		struct {
 			uint32_t buf_len; /**< Length of buffer */
-			uint8_t *buf; /**< Buffer to use*/
-		};
+			const uint8_t *buf; /**< Buffer to write from */
+		} tx;
+
+		/** OP_RX */
+		struct {
+			uint32_t buf_len; /**< Length of buffer */
+			uint8_t *buf; /**< Buffer to read into */
+		} rx;
 
 		/** OP_TINY_TX */
 		struct {
-			uint8_t tiny_buf_len; /**< Length of tiny buffer */
-			uint8_t tiny_buf[7]; /**< Tiny buffer */
-		};
+			uint8_t buf_len; /**< Length of tiny buffer */
+			uint8_t buf[7]; /**< Tiny buffer */
+		} tiny_tx;
 
 		/** OP_CALLBACK */
 		struct {
 			rtio_callback_t callback;
 			void *arg0; /**< Last argument given to callback */
-		};
+		} callback;
 
 		/** OP_TXRX */
 		struct {
-			uint32_t txrx_buf_len;
-			uint8_t *tx_buf;
-			uint8_t *rx_buf;
-		};
+			uint32_t buf_len; /**< Length of tx and rx buffers */
+			const uint8_t *tx_buf; /**< Buffer to write from */
+			uint8_t *rx_buf; /**< Buffer to read into */
+		} txrx;
 
 		/** OP_I2C_CONFIGURE */
 		uint32_t i2c_config;
@@ -292,7 +298,7 @@ BUILD_ASSERT(sizeof(struct rtio_sqe) <= 64);
  * @brief A completion queue event
  */
 struct rtio_cqe {
-	struct rtio_mpsc_node q;
+	struct mpsc_node q;
 
 	int32_t result; /**< Result from operation */
 	void *userdata; /**< Associated userdata with operation */
@@ -300,14 +306,14 @@ struct rtio_cqe {
 };
 
 struct rtio_sqe_pool {
-	struct rtio_mpsc free_q;
+	struct mpsc free_q;
 	const uint16_t pool_size;
 	uint16_t pool_free;
 	struct rtio_iodev_sqe *pool;
 };
 
 struct rtio_cqe_pool {
-	struct rtio_mpsc free_q;
+	struct mpsc free_q;
 	const uint16_t pool_size;
 	uint16_t pool_free;
 	struct rtio_cqe *pool;
@@ -362,10 +368,10 @@ struct rtio {
 #endif
 
 	/* Submission queue */
-	struct rtio_mpsc sq;
+	struct mpsc sq;
 
 	/* Completion queue */
-	struct rtio_mpsc cq;
+	struct mpsc cq;
 };
 
 /** The memory partition associated with all RTIO context information */
@@ -422,7 +428,7 @@ static inline uint16_t __rtio_compute_mempool_block_index(const struct rtio *r, 
  */
 struct rtio_iodev_sqe {
 	struct rtio_sqe sqe;
-	struct rtio_mpsc_node q;
+	struct mpsc_node q;
 	struct rtio_iodev_sqe *next;
 	struct rtio *r;
 };
@@ -448,9 +454,6 @@ struct rtio_iodev_api {
 struct rtio_iodev {
 	/* Function pointer table */
 	const struct rtio_iodev_api *api;
-
-	/* Queue of RTIO contexts with requests */
-	struct rtio_mpsc iodev_sq;
 
 	/* Data associated with this iodev */
 	void *data;
@@ -507,8 +510,8 @@ static inline void rtio_sqe_prep_read(struct rtio_sqe *sqe,
 	sqe->op = RTIO_OP_RX;
 	sqe->prio = prio;
 	sqe->iodev = iodev;
-	sqe->buf_len = len;
-	sqe->buf = buf;
+	sqe->rx.buf_len = len;
+	sqe->rx.buf = buf;
 	sqe->userdata = userdata;
 }
 
@@ -539,7 +542,7 @@ static inline void rtio_sqe_prep_read_multishot(struct rtio_sqe *sqe,
 static inline void rtio_sqe_prep_write(struct rtio_sqe *sqe,
 				       const struct rtio_iodev *iodev,
 				       int8_t prio,
-				       uint8_t *buf,
+				       const uint8_t *buf,
 				       uint32_t len,
 				       void *userdata)
 {
@@ -547,8 +550,8 @@ static inline void rtio_sqe_prep_write(struct rtio_sqe *sqe,
 	sqe->op = RTIO_OP_TX;
 	sqe->prio = prio;
 	sqe->iodev = iodev;
-	sqe->buf_len = len;
-	sqe->buf = buf;
+	sqe->tx.buf_len = len;
+	sqe->tx.buf = buf;
 	sqe->userdata = userdata;
 }
 
@@ -569,14 +572,14 @@ static inline void rtio_sqe_prep_tiny_write(struct rtio_sqe *sqe,
 					    uint8_t tiny_write_len,
 					    void *userdata)
 {
-	__ASSERT_NO_MSG(tiny_write_len <= sizeof(sqe->tiny_buf));
+	__ASSERT_NO_MSG(tiny_write_len <= sizeof(sqe->tiny_tx.buf));
 
 	memset(sqe, 0, sizeof(struct rtio_sqe));
 	sqe->op = RTIO_OP_TINY_TX;
 	sqe->prio = prio;
 	sqe->iodev = iodev;
-	sqe->tiny_buf_len = tiny_write_len;
-	memcpy(sqe->tiny_buf, tiny_write_data, tiny_write_len);
+	sqe->tiny_tx.buf_len = tiny_write_len;
+	memcpy(sqe->tiny_tx.buf, tiny_write_data, tiny_write_len);
 	sqe->userdata = userdata;
 }
 
@@ -597,9 +600,28 @@ static inline void rtio_sqe_prep_callback(struct rtio_sqe *sqe,
 	sqe->op = RTIO_OP_CALLBACK;
 	sqe->prio = 0;
 	sqe->iodev = NULL;
-	sqe->callback = callback;
-	sqe->arg0 = arg0;
+	sqe->callback.callback = callback;
+	sqe->callback.arg0 = arg0;
 	sqe->userdata = userdata;
+}
+
+/**
+ * @brief Prepare a callback op submission that does not create a CQE
+ *
+ * Similar to @ref rtio_sqe_prep_callback, but the @ref RTIO_SQE_NO_RESPONSE
+ * flag is set on the SQE to prevent the generation of a CQE upon completion.
+ *
+ * This can be useful when the callback is the last operation in a sequence
+ * whose job is to clean up all the previous CQE's. Without @ref RTIO_SQE_NO_RESPONSE
+ * the completion itself will result in a CQE that cannot be consumed in the callback.
+ */
+static inline void rtio_sqe_prep_callback_no_cqe(struct rtio_sqe *sqe,
+						 rtio_callback_t callback,
+						 void *arg0,
+						 void *userdata)
+{
+	rtio_sqe_prep_callback(sqe, callback, arg0, userdata);
+	sqe->flags |= RTIO_SQE_NO_RESPONSE;
 }
 
 /**
@@ -608,7 +630,7 @@ static inline void rtio_sqe_prep_callback(struct rtio_sqe *sqe,
 static inline void rtio_sqe_prep_transceive(struct rtio_sqe *sqe,
 					    const struct rtio_iodev *iodev,
 					    int8_t prio,
-					    uint8_t *tx_buf,
+					    const uint8_t *tx_buf,
 					    uint8_t *rx_buf,
 					    uint32_t buf_len,
 					    void *userdata)
@@ -617,15 +639,15 @@ static inline void rtio_sqe_prep_transceive(struct rtio_sqe *sqe,
 	sqe->op = RTIO_OP_TXRX;
 	sqe->prio = prio;
 	sqe->iodev = iodev;
-	sqe->txrx_buf_len = buf_len;
-	sqe->tx_buf = tx_buf;
-	sqe->rx_buf = rx_buf;
+	sqe->txrx.buf_len = buf_len;
+	sqe->txrx.tx_buf = tx_buf;
+	sqe->txrx.rx_buf = rx_buf;
 	sqe->userdata = userdata;
 }
 
 static inline struct rtio_iodev_sqe *rtio_sqe_pool_alloc(struct rtio_sqe_pool *pool)
 {
-	struct rtio_mpsc_node *node = rtio_mpsc_pop(&pool->free_q);
+	struct mpsc_node *node = mpsc_pop(&pool->free_q);
 
 	if (node == NULL) {
 		return NULL;
@@ -640,14 +662,14 @@ static inline struct rtio_iodev_sqe *rtio_sqe_pool_alloc(struct rtio_sqe_pool *p
 
 static inline void rtio_sqe_pool_free(struct rtio_sqe_pool *pool, struct rtio_iodev_sqe *iodev_sqe)
 {
-	rtio_mpsc_push(&pool->free_q, &iodev_sqe->q);
+	mpsc_push(&pool->free_q, &iodev_sqe->q);
 
 	pool->pool_free++;
 }
 
 static inline struct rtio_cqe *rtio_cqe_pool_alloc(struct rtio_cqe_pool *pool)
 {
-	struct rtio_mpsc_node *node = rtio_mpsc_pop(&pool->free_q);
+	struct mpsc_node *node = mpsc_pop(&pool->free_q);
 
 	if (node == NULL) {
 		return NULL;
@@ -664,7 +686,7 @@ static inline struct rtio_cqe *rtio_cqe_pool_alloc(struct rtio_cqe_pool *pool)
 
 static inline void rtio_cqe_pool_free(struct rtio_cqe_pool *pool, struct rtio_cqe *cqe)
 {
-	rtio_mpsc_push(&pool->free_q, &cqe->q);
+	mpsc_push(&pool->free_q, &cqe->q);
 
 	pool->pool_free++;
 }
@@ -697,6 +719,10 @@ static inline int rtio_block_pool_alloc(struct rtio *r, size_t min_sz,
 		if (rc == 0) {
 			*buf_len = num_blks * block_size;
 			return 0;
+		}
+
+		if (bytes <= block_size) {
+			break;
 		}
 
 		bytes -= block_size;
@@ -732,14 +758,13 @@ static inline void rtio_block_pool_free(struct rtio *r, void *buf, uint32_t buf_
 #define RTIO_IODEV_DEFINE(name, iodev_api, iodev_data)		\
 	STRUCT_SECTION_ITERABLE(rtio_iodev, name) = {		\
 		.api = (iodev_api),				\
-		.iodev_sq = RTIO_MPSC_INIT((name.iodev_sq)),	\
 		.data = (iodev_data),				\
 	}
 
 #define Z_RTIO_SQE_POOL_DEFINE(name, sz)			\
 	static struct rtio_iodev_sqe CONCAT(_sqe_pool_, name)[sz];	\
 	STRUCT_SECTION_ITERABLE(rtio_sqe_pool, name) = {	\
-		.free_q = RTIO_MPSC_INIT((name.free_q)),	\
+		.free_q = MPSC_INIT((name.free_q)),	\
 		.pool_size = sz,				\
 		.pool_free = sz,				\
 		.pool = CONCAT(_sqe_pool_, name),		\
@@ -749,7 +774,7 @@ static inline void rtio_block_pool_free(struct rtio *r, void *buf, uint32_t buf_
 #define Z_RTIO_CQE_POOL_DEFINE(name, sz)			\
 	static struct rtio_cqe CONCAT(_cqe_pool_, name)[sz];	\
 	STRUCT_SECTION_ITERABLE(rtio_cqe_pool, name) = {	\
-		.free_q = RTIO_MPSC_INIT((name.free_q)),	\
+		.free_q = MPSC_INIT((name.free_q)),	\
 		.pool_size = sz,				\
 		.pool_free = sz,				\
 		.pool = CONCAT(_cqe_pool_, name),		\
@@ -797,8 +822,8 @@ static inline void rtio_block_pool_free(struct rtio *r, void *buf, uint32_t buf_
 		.sqe_pool = _sqe_pool,                                                             \
 		.cqe_pool = _cqe_pool,                                                             \
 		IF_ENABLED(CONFIG_RTIO_SYS_MEM_BLOCKS, (.block_pool = _block_pool,))               \
-		.sq = RTIO_MPSC_INIT((name.sq)),                                                   \
-		.cq = RTIO_MPSC_INIT((name.cq)),                                                   \
+		.sq = MPSC_INIT((name.sq)),                                                        \
+		.cq = MPSC_INIT((name.cq)),                                                        \
 	}
 
 /**
@@ -910,7 +935,7 @@ static inline struct rtio_sqe *rtio_sqe_acquire(struct rtio *r)
 		return NULL;
 	}
 
-	rtio_mpsc_push(&r->sq, &iodev_sqe->q);
+	mpsc_push(&r->sq, &iodev_sqe->q);
 
 	return &iodev_sqe->sqe;
 }
@@ -923,12 +948,12 @@ static inline struct rtio_sqe *rtio_sqe_acquire(struct rtio *r)
 static inline void rtio_sqe_drop_all(struct rtio *r)
 {
 	struct rtio_iodev_sqe *iodev_sqe;
-	struct rtio_mpsc_node *node = rtio_mpsc_pop(&r->sq);
+	struct mpsc_node *node = mpsc_pop(&r->sq);
 
 	while (node != NULL) {
 		iodev_sqe = CONTAINER_OF(node, struct rtio_iodev_sqe, q);
 		rtio_sqe_pool_free(r->sqe_pool, iodev_sqe);
-		node = rtio_mpsc_pop(&r->sq);
+		node = mpsc_pop(&r->sq);
 	}
 }
 
@@ -953,7 +978,7 @@ static inline struct rtio_cqe *rtio_cqe_acquire(struct rtio *r)
  */
 static inline void rtio_cqe_produce(struct rtio *r, struct rtio_cqe *cqe)
 {
-	rtio_mpsc_push(&r->cq, &cqe->q);
+	mpsc_push(&r->cq, &cqe->q);
 }
 
 /**
@@ -969,7 +994,7 @@ static inline void rtio_cqe_produce(struct rtio *r, struct rtio_cqe *cqe)
  */
 static inline struct rtio_cqe *rtio_cqe_consume(struct rtio *r)
 {
-	struct rtio_mpsc_node *node;
+	struct mpsc_node *node;
 	struct rtio_cqe *cqe = NULL;
 
 #ifdef CONFIG_RTIO_CONSUME_SEM
@@ -978,7 +1003,7 @@ static inline struct rtio_cqe *rtio_cqe_consume(struct rtio *r)
 	}
 #endif
 
-	node = rtio_mpsc_pop(&r->cq);
+	node = mpsc_pop(&r->cq);
 	if (node == NULL) {
 		return NULL;
 	}
@@ -999,16 +1024,16 @@ static inline struct rtio_cqe *rtio_cqe_consume(struct rtio *r)
  */
 static inline struct rtio_cqe *rtio_cqe_consume_block(struct rtio *r)
 {
-	struct rtio_mpsc_node *node;
+	struct mpsc_node *node;
 	struct rtio_cqe *cqe;
 
 #ifdef CONFIG_RTIO_CONSUME_SEM
 	k_sem_take(r->consume_sem, K_FOREVER);
 #endif
-	node = rtio_mpsc_pop(&r->cq);
+	node = mpsc_pop(&r->cq);
 	while (node == NULL) {
 		Z_SPIN_DELAY(1);
-		node = rtio_mpsc_pop(&r->cq);
+		node = mpsc_pop(&r->cq);
 	}
 	cqe = CONTAINER_OF(node, struct rtio_cqe, q);
 
@@ -1040,9 +1065,9 @@ static inline uint32_t rtio_cqe_compute_flags(struct rtio_iodev_sqe *iodev_sqe)
 	if (iodev_sqe->sqe.op == RTIO_OP_RX && iodev_sqe->sqe.flags & RTIO_SQE_MEMPOOL_BUFFER) {
 		struct rtio *r = iodev_sqe->r;
 		struct sys_mem_blocks *mem_pool = r->block_pool;
-		int blk_index = (iodev_sqe->sqe.buf - mem_pool->buffer) >>
+		int blk_index = (iodev_sqe->sqe.rx.buf - mem_pool->buffer) >>
 				mem_pool->info.blk_sz_shift;
-		int blk_count = iodev_sqe->sqe.buf_len >> mem_pool->info.blk_sz_shift;
+		int blk_count = iodev_sqe->sqe.rx.buf_len >> mem_pool->info.blk_sz_shift;
 
 		flags = RTIO_CQE_FLAG_PREP_MEMPOOL(blk_index, blk_count);
 	}
@@ -1129,24 +1154,6 @@ static inline void rtio_iodev_sqe_err(struct rtio_iodev_sqe *iodev_sqe, int resu
 }
 
 /**
- * @brief Cancel all requests that are pending for the iodev
- *
- * @param iodev IODev to cancel all requests for
- */
-static inline void rtio_iodev_cancel_all(struct rtio_iodev *iodev)
-{
-	/* Clear pending requests as -ENODATA */
-	struct rtio_mpsc_node *node = rtio_mpsc_pop(&iodev->iodev_sq);
-
-	while (node != NULL) {
-		struct rtio_iodev_sqe *iodev_sqe = CONTAINER_OF(node, struct rtio_iodev_sqe, q);
-
-		rtio_iodev_sqe_err(iodev_sqe, -ECANCELED);
-		node = rtio_mpsc_pop(&iodev->iodev_sq);
-	}
-}
-
-/**
  * Submit a completion queue event with a given result and userdata
  *
  * Called by the executor to produce a completion queue event, no inherent
@@ -1207,19 +1214,19 @@ static inline int rtio_sqe_rx_buf(const struct rtio_iodev_sqe *iodev_sqe, uint32
 	if (sqe->op == RTIO_OP_RX && sqe->flags & RTIO_SQE_MEMPOOL_BUFFER) {
 		struct rtio *r = iodev_sqe->r;
 
-		if (sqe->buf != NULL) {
-			if (sqe->buf_len < min_buf_len) {
+		if (sqe->rx.buf != NULL) {
+			if (sqe->rx.buf_len < min_buf_len) {
 				return -ENOMEM;
 			}
-			*buf = sqe->buf;
-			*buf_len = sqe->buf_len;
+			*buf = sqe->rx.buf;
+			*buf_len = sqe->rx.buf_len;
 			return 0;
 		}
 
 		int rc = rtio_block_pool_alloc(r, min_buf_len, max_buf_len, buf, buf_len);
 		if (rc == 0) {
-			sqe->buf = *buf;
-			sqe->buf_len = *buf_len;
+			sqe->rx.buf = *buf;
+			sqe->rx.buf_len = *buf_len;
 			return 0;
 		}
 
@@ -1229,12 +1236,12 @@ static inline int rtio_sqe_rx_buf(const struct rtio_iodev_sqe *iodev_sqe, uint32
 	ARG_UNUSED(max_buf_len);
 #endif
 
-	if (sqe->buf_len < min_buf_len) {
+	if (sqe->rx.buf_len < min_buf_len) {
 		return -ENOMEM;
 	}
 
-	*buf = sqe->buf;
-	*buf_len = sqe->buf_len;
+	*buf = sqe->rx.buf;
+	*buf_len = sqe->rx.buf_len;
 	return 0;
 }
 
@@ -1403,12 +1410,7 @@ static inline int z_impl_rtio_cqe_copy_out(struct rtio *r,
 		cqe = K_TIMEOUT_EQ(timeout, K_FOREVER) ? rtio_cqe_consume_block(r)
 						       : rtio_cqe_consume(r);
 		if (cqe == NULL) {
-#ifdef CONFIG_BOARD_NATIVE_POSIX
-			/* Native posix fakes the clock and only moves it forward when sleeping. */
-			k_sleep(K_TICKS(1));
-#else
-			Z_SPIN_DELAY(1);
-#endif
+			Z_SPIN_DELAY(25);
 			continue;
 		}
 		cqes[copied++] = *cqe;
@@ -1485,6 +1487,6 @@ static inline int z_impl_rtio_submit(struct rtio *r, uint32_t wait_count)
 }
 #endif
 
-#include <syscalls/rtio.h>
+#include <zephyr/syscalls/rtio.h>
 
 #endif /* ZEPHYR_INCLUDE_RTIO_RTIO_H_ */

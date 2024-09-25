@@ -32,8 +32,8 @@ Cortex-M33F CPU with ARMv8-M Security Extension and the following devices:
 
      nRF9131 EK (Credit: Nordic Semiconductor)
 
-The `Nordic Semiconductor Infocenter`_
-contains the processor's information and the datasheet.
+The `Nordic Semiconductor TechDocs`_ will soon
+contain the processor's information and the datasheet.
 
 
 Hardware
@@ -180,7 +180,7 @@ found in :ref:`nordic_segger_flashing`. Then build and flash
 applications as usual (see :ref:`build_an_application` and
 :ref:`application_run` for more details).
 
-Here is an example for the :ref:`hello_world` application.
+Here is an example for the :zephyr:code-sample:`hello_world` application.
 
 First, run your favorite terminal program to listen for output.
 
@@ -225,5 +225,5 @@ References
 
 .. _IDAU:
    https://developer.arm.com/docs/100690/latest/attribution-units-sau-and-idau
-.. _Nordic Semiconductor Infocenter: https://infocenter.nordicsemi.com
+.. _Nordic Semiconductor TechDocs: https://docs.nordicsemi.com/
 .. _Trusted Firmware M: https://www.trustedfirmware.org/projects/tf-m/

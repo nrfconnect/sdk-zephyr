@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2023 Google LLC.
+ * Copyright (c) 2024 Croxel Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,6 +10,7 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/dsp/types.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/rtio/work.h>
 
 LOG_MODULE_REGISTER(sensor_compat, CONFIG_SENSOR_LOG_LEVEL);
 
@@ -106,14 +108,14 @@ static inline int check_header_contains_channel(const struct sensor_data_generic
 }
 
 /**
- * @brief Fallback function for retrofiting old drivers to rtio
+ * @brief Fallback function for retrofiting old drivers to rtio (sync)
  *
- * @param[in] dev The sensor device to read
  * @param[in] iodev_sqe The read submission queue event
  */
-static void sensor_submit_fallback(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
+static void sensor_submit_fallback_sync(struct rtio_iodev_sqe *iodev_sqe)
 {
 	const struct sensor_read_config *cfg = iodev_sqe->sqe.iodev->data;
+	const struct device *dev = cfg->sensor;
 	const struct sensor_chan_spec *const channels = cfg->channels;
 	const int num_output_samples = compute_num_samples(channels, cfg->count);
 	uint32_t min_buf_len = compute_min_buf_len(num_output_samples);
@@ -253,6 +255,21 @@ static void sensor_submit_fallback(const struct device *dev, struct rtio_iodev_s
 	rtio_iodev_sqe_ok(iodev_sqe, 0);
 }
 
+/**
+ * @brief Fallback function for retrofiting old drivers to rtio
+ *
+ * @param[in] dev The sensor device to read
+ * @param[in] iodev_sqe The read submission queue event
+ */
+static void sensor_submit_fallback(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
+{
+	struct rtio_work_req *req = rtio_work_req_alloc();
+
+	__ASSERT_NO_MSG(req);
+
+	rtio_work_req_submit(req, iodev_sqe, sensor_submit_fallback_sync);
+}
+
 void sensor_processing_with_callback(struct rtio *ctx, sensor_processing_callback_t cb)
 {
 	void *userdata = NULL;
@@ -304,6 +321,9 @@ static int get_frame_count(const uint8_t *buffer, struct sensor_chan_spec channe
 	case SENSOR_CHAN_MAGN_XYZ:
 		channel.chan_type = SENSOR_CHAN_MAGN_X;
 		break;
+	case SENSOR_CHAN_POS_DXYZ:
+		channel.chan_type = SENSOR_CHAN_POS_DX;
+		break;
 	default:
 		break;
 	}
@@ -343,6 +363,7 @@ int sensor_natively_supported_channel_size_info(struct sensor_chan_spec channel,
 	case SENSOR_CHAN_POS_DX:
 	case SENSOR_CHAN_POS_DY:
 	case SENSOR_CHAN_POS_DZ:
+	case SENSOR_CHAN_POS_DXYZ:
 		*base_size = sizeof(struct sensor_three_axis_data);
 		*frame_size = sizeof(struct sensor_three_axis_sample_data);
 		return 0;
@@ -481,6 +502,7 @@ static int decode(const uint8_t *buffer, struct sensor_chan_spec chan_spec,
 	case SENSOR_CHAN_POS_DX:
 	case SENSOR_CHAN_POS_DY:
 	case SENSOR_CHAN_POS_DZ:
+	case SENSOR_CHAN_POS_DXYZ:
 		count = decode_three_axis(header, q, data_out, SENSOR_CHAN_POS_DX,
 					  SENSOR_CHAN_POS_DY, SENSOR_CHAN_POS_DZ,
 					  chan_spec.chan_idx);

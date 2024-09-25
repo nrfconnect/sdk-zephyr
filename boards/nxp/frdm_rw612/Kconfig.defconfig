@@ -1,0 +1,11 @@
+# FRDM_RW612 board
+
+# Copyright 2024 NXP
+# SPDX-License-Identifier: Apache-2.0
+
+if BOARD_FRDM_RW612
+
+config NET_L2_ETHERNET
+	default y if DT_HAS_NXP_ENET_MAC_ENABLED && NETWORKING
+
+endif # BOARD_FRDM_RW612

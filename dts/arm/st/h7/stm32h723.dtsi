@@ -88,6 +88,7 @@
 			interrupts = <88 0>, <89 0>;
 			interrupt-names = "ltdc", "ltdc_er";
 			clocks = <&rcc STM32_CLOCK_BUS_APB3 0x00000008>;
+			resets = <&rctl STM32_RESET(APB3, 4U)>;
 			status = "disabled";
 		};
 
@@ -176,6 +177,15 @@
 				compatible = "st,stm32-counter";
 				status = "disabled";
 			};
+		};
+
+		digi_die_temp: digi_dietemp@58006800 {
+			compatible = "st,stm32-digi-temp";
+			reg = <0x58006800 0x400>;
+			interrupts = <147 0>;
+			interrupt-names = "digi_temp";
+			clocks = <&rcc STM32_CLOCK_BUS_APB4 0x04000000>;
+			status = "disabled";
 		};
 	};
 

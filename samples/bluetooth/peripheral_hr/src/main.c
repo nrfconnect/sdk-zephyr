@@ -46,7 +46,7 @@ static ATOMIC_DEFINE(state, 2U);
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
-		printk("Connection failed (err 0x%02x)\n", err);
+		printk("Connection failed, err 0x%02x %s\n", err, bt_hci_err_to_str(err));
 	} else {
 		printk("Connected\n");
 
@@ -56,7 +56,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
-	printk("Disconnected (reason 0x%02x)\n", reason);
+	printk("Disconnected, reason 0x%02x %s\n", reason, bt_hci_err_to_str(reason));
 
 	(void)atomic_set_bit(state, STATE_DISCONNECTED);
 }
@@ -204,7 +204,7 @@ int main(void)
 
 #if !defined(CONFIG_BT_EXT_ADV)
 	printk("Starting Legacy Advertising (connectable and scannable)\n");
-	err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+	err = bt_le_adv_start(BT_LE_ADV_CONN_ONE_TIME, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 	if (err) {
 		printk("Advertising failed to start (err %d)\n", err);
 		return 0;
@@ -281,7 +281,16 @@ int main(void)
 			blink_stop();
 #endif /* HAS_LED */
 		} else if (atomic_test_and_clear_bit(state, STATE_DISCONNECTED)) {
-#if defined(CONFIG_BT_EXT_ADV)
+#if !defined(CONFIG_BT_EXT_ADV)
+			printk("Starting Legacy Advertising (connectable and scannable)\n");
+			err = bt_le_adv_start(BT_LE_ADV_CONN_ONE_TIME, ad, ARRAY_SIZE(ad), sd,
+					      ARRAY_SIZE(sd));
+			if (err) {
+				printk("Advertising failed to start (err %d)\n", err);
+				return 0;
+			}
+
+#else /* CONFIG_BT_EXT_ADV */
 			printk("Starting Extended Advertising (connectable and non-scannable)\n");
 			err = bt_le_ext_adv_start(adv, BT_LE_EXT_ADV_START_DEFAULT);
 			if (err) {

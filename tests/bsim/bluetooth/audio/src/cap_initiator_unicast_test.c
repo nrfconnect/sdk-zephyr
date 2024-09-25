@@ -3,18 +3,41 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include <errno.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
-#if defined(CONFIG_BT_CAP_INITIATOR_UNICAST)
-
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/byteorder.h>
+#include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/audio/bap_lc3_preset.h>
 #include <zephyr/bluetooth/audio/cap.h>
 #include <zephyr/bluetooth/audio/bap.h>
+#include <zephyr/bluetooth/audio/csip.h>
+#include <zephyr/bluetooth/audio/lc3.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/byteorder.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/hci_types.h>
+#include <zephyr/bluetooth/iso.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
+#include <zephyr/sys_clock.h>
+
+#include "bstests.h"
 #include "common.h"
 #include "bap_common.h"
 
+#if defined(CONFIG_BT_CAP_INITIATOR_UNICAST)
 #define UNICAST_SINK_SUPPORTED (CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT > 0)
 #define UNICAST_SRC_SUPPORTED  (CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT > 0)
 
@@ -487,12 +510,6 @@ static void discover_cas_inval(struct bt_conn *conn)
 {
 	int err;
 
-	err = bt_cap_initiator_unicast_discover(NULL);
-	if (err == 0) {
-		FAIL("bt_cap_initiator_unicast_discover with NULL conn did not fail\n");
-		return;
-	}
-
 	/* Test if it handles concurrent request for same connection */
 	UNSET_FLAG(flag_discovered);
 
@@ -549,111 +566,6 @@ static void unicast_group_create(struct bt_bap_unicast_group **out_unicast_group
 	err = bt_bap_unicast_group_create(&group_param, out_unicast_group);
 	if (err != 0) {
 		FAIL("Failed to create group: %d\n", err);
-		return;
-	}
-}
-
-static void unicast_audio_start_inval(struct bt_bap_unicast_group *unicast_group)
-{
-	struct bt_audio_codec_cfg invalid_codec = BT_AUDIO_CODEC_LC3_CONFIG(
-		BT_AUDIO_CODEC_CFG_FREQ_16KHZ, BT_AUDIO_CODEC_CFG_DURATION_10,
-		BT_AUDIO_LOCATION_FRONT_LEFT, 40U, 1, BT_AUDIO_CONTEXT_TYPE_MEDIA);
-	struct bt_cap_unicast_audio_start_stream_param invalid_stream_param;
-	struct bt_cap_unicast_audio_start_stream_param valid_stream_param;
-	struct bt_cap_unicast_audio_start_param invalid_start_param;
-	struct bt_cap_unicast_audio_start_param valid_start_param;
-	int err;
-
-	valid_start_param.type = BT_CAP_SET_TYPE_AD_HOC;
-	valid_start_param.count = 1u;
-	valid_start_param.stream_params = &valid_stream_param;
-
-	valid_stream_param.member.member = default_conn;
-	valid_stream_param.stream = &unicast_client_sink_streams[0];
-	valid_stream_param.ep = unicast_sink_eps[bt_conn_index(default_conn)][0];
-	valid_stream_param.codec_cfg = &unicast_preset_16_2_1.codec_cfg;
-
-	/* Test NULL parameters */
-	err = bt_cap_initiator_unicast_audio_start(NULL);
-	if (err == 0) {
-		FAIL("bt_cap_initiator_unicast_audio_start with NULL param did not fail\n");
-		return;
-	}
-
-	/* Test invalid parameters */
-	memcpy(&invalid_stream_param, &valid_stream_param, sizeof(valid_stream_param));
-	memcpy(&invalid_start_param, &valid_start_param, sizeof(valid_start_param));
-	invalid_start_param.stream_params = &invalid_stream_param;
-
-	/* Test invalid stream_start parameters */
-	invalid_start_param.count = 0U;
-	err = bt_cap_initiator_unicast_audio_start(&invalid_start_param);
-	if (err == 0) {
-		FAIL("bt_cap_initiator_unicast_audio_start with 0 count did not fail\n");
-		return;
-	}
-
-	memcpy(&invalid_start_param, &valid_start_param, sizeof(valid_start_param));
-	invalid_start_param.stream_params = &invalid_stream_param;
-
-	invalid_start_param.stream_params = NULL;
-	err = bt_cap_initiator_unicast_audio_start(&invalid_start_param);
-	if (err == 0) {
-		FAIL("bt_cap_initiator_unicast_audio_start with NULL stream params did not fail\n");
-		return;
-	}
-
-	memcpy(&invalid_start_param, &valid_start_param, sizeof(valid_start_param));
-	invalid_start_param.stream_params = &invalid_stream_param;
-
-	/* Test invalid stream_param parameters */
-	invalid_stream_param.member.member = NULL;
-	err = bt_cap_initiator_unicast_audio_start(&invalid_start_param);
-	if (err == 0) {
-		FAIL("bt_cap_initiator_unicast_audio_start with NULL stream params member did not "
-		     "fail\n");
-		return;
-	}
-
-	memcpy(&invalid_stream_param, &valid_stream_param, sizeof(valid_stream_param));
-
-	invalid_stream_param.stream = NULL;
-	err = bt_cap_initiator_unicast_audio_start(&invalid_start_param);
-	if (err == 0) {
-		FAIL("bt_cap_initiator_unicast_audio_start with NULL stream params stream did not "
-		     "fail\n");
-		return;
-	}
-
-	memcpy(&invalid_stream_param, &valid_stream_param, sizeof(valid_stream_param));
-
-	invalid_stream_param.ep = NULL;
-	err = bt_cap_initiator_unicast_audio_start(&invalid_start_param);
-	if (err == 0) {
-		FAIL("bt_cap_initiator_unicast_audio_start with NULL stream params ep did not "
-		     "fail\n");
-		return;
-	}
-
-	memcpy(&invalid_stream_param, &valid_stream_param, sizeof(valid_stream_param));
-
-	invalid_stream_param.codec_cfg = NULL;
-	err = bt_cap_initiator_unicast_audio_start(&invalid_start_param);
-	if (err == 0) {
-		FAIL("bt_cap_initiator_unicast_audio_start with NULL stream params codec did not "
-		     "fail\n");
-		return;
-	}
-
-	/* Clear metadata so that it does not contain the mandatory stream context */
-	memcpy(&invalid_stream_param, &valid_stream_param, sizeof(valid_stream_param));
-	memset(&invalid_codec.meta, 0, sizeof(invalid_codec.meta));
-
-	invalid_stream_param.codec_cfg = &invalid_codec;
-	err = bt_cap_initiator_unicast_audio_start(&invalid_start_param);
-	if (err == 0) {
-		FAIL("bt_cap_initiator_unicast_audio_start with invalid Codec metadata did not "
-		     "fail\n");
 		return;
 	}
 }
@@ -903,7 +815,6 @@ static void test_main_cap_initiator_unicast_inval(void)
 
 	unicast_group_create(&unicast_group);
 
-	unicast_audio_start_inval(unicast_group);
 	unicast_audio_start(unicast_group, true);
 
 	unicast_audio_update_inval();
@@ -1632,130 +1543,130 @@ static void test_args(int argc, char *argv[])
 static const struct bst_test_instance test_cap_initiator_unicast[] = {
 	{
 		.test_id = "cap_initiator_unicast",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main_cap_initiator_unicast,
 	},
 	{
 		.test_id = "cap_initiator_unicast_timeout",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_unicast_timeout,
 	},
 	{
 		.test_id = "cap_initiator_unicast_inval",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main_cap_initiator_unicast_inval,
 	},
 	{
 		.test_id = "cap_initiator_ac_1",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_1,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_2",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_2,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_3",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_3,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_4",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_4,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_5",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_5,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_6_i",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_6_i,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_6_ii",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_6_ii,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_7_i",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_7_i,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_7_ii",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_7_ii,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_8_i",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_8_i,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_8_ii",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_8_ii,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_9_i",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_9_i,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_9_ii",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_9_ii,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_10",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_10,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_11_i",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_11_i,
 		.test_args_f = test_args,
 	},
 	{
 		.test_id = "cap_initiator_ac_11_ii",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_cap_initiator_ac_11_ii,
 		.test_args_f = test_args,

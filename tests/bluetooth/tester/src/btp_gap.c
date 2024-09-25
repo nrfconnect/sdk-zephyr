@@ -17,7 +17,7 @@
 #include <zephyr/bluetooth/hci.h>
 
 #include <zephyr/sys/byteorder.h>
-#include <zephyr/net/buf.h>
+#include <zephyr/net_buf.h>
 
 #include <hci_core.h>
 
@@ -30,7 +30,11 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_BTTESTER_LOG_LEVEL);
 #define CONTROLLER_NAME "btp_tester"
 
 #define BT_LE_AD_DISCOV_MASK (BT_LE_AD_LIMITED | BT_LE_AD_GENERAL)
+#if defined(CONFIG_BT_EXT_ADV)
+#define ADV_BUF_LEN (sizeof(struct btp_gap_device_found_ev) + 2 * CONFIG_BT_EXT_SCAN_BUF_SIZE)
+#else
 #define ADV_BUF_LEN (sizeof(struct btp_gap_device_found_ev) + 2 * 31)
+#endif
 
 static atomic_t current_settings;
 struct bt_conn_auth_cb cb;
@@ -628,7 +632,7 @@ int tester_gap_create_adv_instance(struct bt_le_adv_param *param, uint8_t own_ad
 		break;
 #if defined(CONFIG_BT_PRIVACY)
 	case BTP_GAP_ADDR_TYPE_RESOLVABLE_PRIVATE:
-		/* RPA usage is is controlled via privacy settings */
+		/* RPA usage is controlled via privacy settings */
 		if (!atomic_test_bit(&current_settings, BTP_GAP_SETTINGS_PRIVACY)) {
 			return -EINVAL;
 		}

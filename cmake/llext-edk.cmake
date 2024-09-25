@@ -17,9 +17,8 @@
 # - INTERFACE_INCLUDE_DIRECTORIES: List of include directories to copy headers
 #   from. It should simply be the INTERFACE_INCLUDE_DIRECTORIES property of the
 #   zephyr_interface target.
-# - AUTOCONF_H: Name of the autoconf.h file, used to generate the imacros flag.
 # - llext_edk_file: Output file name for the tarball.
-# - llext_cflags: Additional flags to be added to the generated flags.
+# - llext_edk_cflags: Flags to be used for source compile commands.
 # - ZEPHYR_BASE: Path to the zephyr base directory.
 # - WEST_TOPDIR: Path to the west top directory.
 # - APPLICATION_SOURCE_DIR: Path to the application source directory.
@@ -30,6 +29,11 @@
 #   directory.
 
 cmake_minimum_required(VERSION 3.20.0)
+
+if (CONFIG_LLEXT_EXPORT_BUILTINS_BY_SLID)
+  message(FATAL_ERROR
+    "The LLEXT EDK is not compatible with CONFIG_LLEXT_EXPORT_BUILTINS_BY_SLID.")
+endif()
 
 set(llext_edk ${PROJECT_BINARY_DIR}/${llext_edk_name})
 set(llext_edk_inc ${llext_edk}/include)
@@ -89,10 +93,10 @@ string(REGEX REPLACE "[^a-zA-Z0-9]" "_" llext_edk_name_sane ${llext_edk_name})
 string(TOUPPER ${llext_edk_name_sane} llext_edk_name_sane)
 set(install_dir_var "${llext_edk_name_sane}_INSTALL_DIR")
 
-separate_arguments(LLEXT_CFLAGS NATIVE_COMMAND ${llext_cflags})
+separate_arguments(llext_edk_cflags NATIVE_COMMAND ${llext_edk_cflags})
 
 set(make_relative FALSE)
-foreach(flag ${llext_cflags})
+foreach(flag ${llext_edk_cflags})
     if (flag STREQUAL "-imacros")
         set(make_relative TRUE)
     elseif (make_relative)
@@ -112,16 +116,12 @@ foreach(flag ${llext_cflags})
         list(APPEND new_cflags ${flag})
     endif()
 endforeach()
-set(LLEXT_CFLAGS ${new_cflags})
+set(llext_edk_cflags ${new_cflags})
 
-cmake_path(CONVERT "${INTERFACE_INCLUDE_DIRECTORIES}" TO_CMAKE_PATH_LIST include_dirs)
+list(APPEND base_flags_make ${llext_edk_cflags} ${imacros_make})
+list(APPEND base_flags_cmake ${llext_edk_cflags} ${imacros_cmake})
 
-set(autoconf_h_edk ${llext_edk_inc}/${AUTOCONF_H})
-cmake_path(RELATIVE_PATH AUTOCONF_H BASE_DIRECTORY ${PROJECT_BINARY_DIR} OUTPUT_VARIABLE autoconf_h_rel)
-
-list(APPEND base_flags_make ${llext_cflags} ${imacros_make})
-list(APPEND base_flags_cmake ${llext_cflags} ${imacros_cmake})
-
+separate_arguments(include_dirs NATIVE_COMMAND ${INTERFACE_INCLUDE_DIRECTORIES})
 file(MAKE_DIRECTORY ${llext_edk_inc})
 foreach(dir ${include_dirs})
     if (NOT EXISTS ${dir})
@@ -173,7 +173,7 @@ list(JOIN imacros_gen_make " " imacros_gen_str)
 file(APPEND ${llext_edk}/Makefile.cflags "\n\nLLEXT_GENERATED_IMACROS_CFLAGS = ${imacros_gen_str}")
 
 # Generate flags for CMake
-list(APPEND all_flags_cmake ${base_flags_cmake} ${imacros_gen_make} ${all_inc_flags_cmake})
+list(APPEND all_flags_cmake ${base_flags_cmake} ${imacros_gen_cmake} ${all_inc_flags_cmake})
 file(WRITE ${llext_edk}/cmake.cflags "set(LLEXT_CFLAGS ${all_flags_cmake})")
 
 file(APPEND ${llext_edk}/cmake.cflags "\n\nset(LLEXT_ALL_INCLUDE_CFLAGS ${all_inc_flags_cmake})")

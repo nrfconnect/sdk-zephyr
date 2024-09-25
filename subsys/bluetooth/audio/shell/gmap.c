@@ -9,14 +9,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <stdlib.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
+#include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/audio/gmap_lc3_preset.h>
 #include <zephyr/bluetooth/audio/gmap.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/uuid.h>
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
+#include <zephyr/sys/__assert.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
 
 #include "shell/bt.h"
 #include "audio.h"
@@ -85,18 +96,18 @@ static void set_gmap_features(struct bt_gmap_feat *features)
 	}
 
 	if (IS_ENABLED(CONFIG_BT_GMAP_UGT_SUPPORTED)) {
-#if CONFIG_BT_ASCS_ASE_SRC_COUNT > 0
+#if CONFIG_BT_ASCS_MAX_ASE_SRC_COUNT > 0
 		features->ugt_feat |= (BT_GMAP_UGT_FEAT_SOURCE | BT_GMAP_UGT_FEAT_80KBPS_SOURCE);
-#if CONFIG_BT_ASCS_ASE_SRC_COUNT > 1
+#if CONFIG_BT_ASCS_MAX_ASE_SRC_COUNT > 1
 		features->ugt_feat |= BT_GMAP_UGT_FEAT_MULTISOURCE;
-#endif /* CONFIG_BT_ASCS_ASE_SRC_COUNT > 1 */
-#endif /* CONFIG_BT_ASCS_ASE_SRC_COUNT > 0 */
-#if CONFIG_BT_ASCS_ASE_SNK_COUNT > 0
+#endif /* CONFIG_BT_ASCS_MAX_ASE_SRC_COUNT > 1 */
+#endif /* CONFIG_BT_ASCS_MAX_ASE_SRC_COUNT > 0 */
+#if CONFIG_BT_ASCS_MAX_ASE_SNK_COUNT > 0
 		features->ugt_feat |= (BT_GMAP_UGT_FEAT_SINK | BT_GMAP_UGT_FEAT_64KBPS_SINK);
-#if CONFIG_BT_ASCS_ASE_SNK_COUNT > 1
+#if CONFIG_BT_ASCS_MAX_ASE_SNK_COUNT > 1
 		features->ugt_feat |= BT_GMAP_UGT_FEAT_MULTISINK;
-#endif /* CONFIG_BT_ASCS_ASE_SNK_COUNT > 1 */
-#endif /* CONFIG_BT_ASCS_ASE_SNK_COUNT > 0 */
+#endif /* CONFIG_BT_ASCS_MAX_ASE_SNK_COUNT > 1 */
+#endif /* CONFIG_BT_ASCS_MAX_ASE_SNK_COUNT > 0 */
 	}
 
 	if (IS_ENABLED(CONFIG_BT_GMAP_BGS_SUPPORTED)) {

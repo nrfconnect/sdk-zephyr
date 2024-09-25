@@ -1,7 +1,7 @@
-.. _canopennode-sample:
+.. zephyr:code-sample:: canopennode
+   :name: CANopenNode
 
-CANopenNode
-###########
+   Use the CANopenNode CANopen protocol stack in Zephyr.
 
 Overview
 ********
@@ -405,11 +405,11 @@ for the FRDM-K64F as follows:
 
    .. zephyr-app-commands::
       :tool: west
-      :app: samples/modules/canopennode
+      :zephyr-app: samples/modules/canopennode
       :board: frdm_k64f
       :goals: build
       :west-args: --sysbuild
-      :gen-args: -Dcanopennode_CONF_FILE=prj_img_mgmt.conf
+      :gen-args: -Dcanopennode_CONF_FILE=prj_img_mgmt.conf -DSB_CONFIG_BOOTLOADER_MCUBOOT=y
       :compact:
 
 #. Flash the newly built MCUboot and CANopen sample binaries using west:
@@ -452,10 +452,10 @@ Sheet (EDS) file
    https://github.com/CANopenNode/CANopenNode
 
 .. _EN 50325-4:
-   https://can-cia.org/groups/international-standardization/
+   https://can-cia.org/cia-groups/international-standardization/
 
 .. _CiA 301:
-   https://can-cia.org/groups/specifications/
+   https://can-cia.org/cia-groups/technical-documents/
 
 .. _CANopen for Python:
    https://github.com/christiansandberg/canopen

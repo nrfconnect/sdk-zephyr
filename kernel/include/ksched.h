@@ -57,7 +57,6 @@ void *z_get_next_switch_handle(void *interrupted);
 
 void z_time_slice(void);
 void z_reset_time_slice(struct k_thread *curr);
-void z_sched_abort(struct k_thread *thread);
 void z_sched_ipi(void);
 void z_sched_start(struct k_thread *thread);
 void z_ready_thread(struct k_thread *thread);
@@ -277,7 +276,7 @@ int z_sched_waitq_walk(_wait_q_t *wait_q,
  *
  * This function assumes local interrupts are masked (so that the
  * current CPU pointer and current thread are safe to modify), but
- * requires no other synchronizaton.  Architecture layers don't need
+ * requires no other synchronization.  Architecture layers don't need
  * to do anything more.
  */
 void z_sched_usage_stop(void);

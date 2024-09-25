@@ -19,6 +19,18 @@
 
 #include <zephyr/device.h>
 
+/**
+ * @brief USB Audio Class 2 device API
+ * @defgroup uac2_device USB Audio Class 2 device API
+ * @ingroup usb
+ * @{
+ */
+
+/**
+ * @brief Get entity ID
+ *
+ * @param node node identifier
+ */
 #define UAC2_ENTITY_ID(node)							\
 	({									\
 		BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_PARENT(node), zephyr_uac2));	\
@@ -58,7 +70,7 @@ struct uac2_ops {
 	 * USB stack calls this function to obtain receive buffer address for
 	 * AudioStreaming interface. The buffer is owned by USB stack until
 	 * @ref data_recv_cb callback is called. The buffer must be sufficiently
-	 * aligned for use by UDC driver.
+	 * aligned and otherwise suitable for use by UDC driver.
 	 *
 	 * @param dev USB Audio 2 device
 	 * @param terminal Input Terminal ID linked to AudioStreaming interface
@@ -111,6 +123,39 @@ struct uac2_ops {
 	 */
 	uint32_t (*feedback_cb)(const struct device *dev, uint8_t terminal,
 				void *user_data);
+	/**
+	 * @brief Get active sample rate
+	 *
+	 * USB stack calls this function when the host asks for active sample
+	 * rate if the Clock Source entity supports more than one sample rate.
+	 * This function won't ever be called (should be NULL) if all Clock
+	 * Source entities support only one sample rate.
+	 *
+	 * @param dev USB Audio 2 device
+	 * @param clock_id Clock Source ID whose sample rate should be returned
+	 * @param user_data Opaque user data pointer
+	 *
+	 * @return Active sample rate in Hz
+	 */
+	uint32_t (*get_sample_rate)(const struct device *dev, uint8_t clock_id,
+				    void *user_data);
+	/**
+	 * @brief Set active sample rate
+	 *
+	 * USB stack calls this function when the host sets active sample rate.
+	 * This callback may be NULL if all Clock Source entities have only one
+	 * sample rate. USB stack sanitizes the sample rate to closest valid
+	 * rate for given Clock Source entity.
+	 *
+	 * @param dev USB Audio 2 device
+	 * @param clock_id Clock Source ID whose sample rate should be set
+	 * @param rate Sample rate in Hz
+	 * @param user_data Opaque user data pointer
+	 *
+	 * @return 0 on success, negative value on error
+	 */
+	int (*set_sample_rate)(const struct device *dev, uint8_t clock_id,
+			       uint32_t rate, void *user_data);
 };
 
 /**
@@ -126,6 +171,9 @@ void usbd_uac2_set_ops(const struct device *dev,
 /**
  * @brief Send audio data to output terminal
  *
+ * Data buffer must be sufficiently aligned and otherwise suitable for use by
+ * UDC driver.
+ *
  * @param dev USB Audio 2 device
  * @param terminal Output Terminal ID linked to AudioStreaming interface
  * @param data Buffer containing outgoing data
@@ -135,5 +183,9 @@ void usbd_uac2_set_ops(const struct device *dev,
  */
 int usbd_uac2_send(const struct device *dev, uint8_t terminal,
 		   void *data, uint16_t size);
+
+/**
+ * @}
+ */
 
 #endif /* ZEPHYR_INCLUDE_USB_CLASS_USBD_UAC2_H_ */

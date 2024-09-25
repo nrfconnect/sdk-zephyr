@@ -110,7 +110,7 @@ already supported, which can also be re-used on this mimxrt685_evk board:
 +-----------+------------+-------------------------------------+
 
 The default configuration can be found in
-:zephyr_file:`boards/nxp/mimxrt685_evk/mimxrt685_evk_defconfig`
+:zephyr_file:`boards/nxp/mimxrt685_evk/mimxrt685_evk_mimxrt685s_cm33_defconfig`
 
 Other hardware features are not currently supported by the port.
 
@@ -285,7 +285,7 @@ Connect a USB cable from your PC to J16, and use the serial terminal of your cho
 Flashing
 ========
 
-Here is an example for the :ref:`hello_world` application. This example uses the
+Here is an example for the :zephyr:code-sample:`hello_world` application. This example uses the
 :ref:`linkserver-debug-host-tools` as default.
 
 .. zephyr-app-commands::
@@ -304,7 +304,7 @@ see the following message in the terminal:
 Debugging
 =========
 
-Here is an example for the :ref:`hello_world` application. This example uses the
+Here is an example for the :zephyr:code-sample:`hello_world` application. This example uses the
 :ref:`linkserver-debug-host-tools` as default.
 
 .. zephyr-app-commands::
@@ -363,7 +363,7 @@ steps:
    https://www.nxp.com/products/processors-and-microcontrollers/arm-microcontrollers/i-mx-rt-crossover-mcus/i-mx-rt600-crossover-mcu-with-arm-cortex-m33-and-dsp-cores:i.MX-RT600
 
 .. _i.MX RT685 Datasheet:
-   https://www.nxp.com/docs/en/data-sheet/DS-RT600.pdf
+   https://www.nxp.com/docs/en/data-sheet/RT600.pdf
 
 .. _i.MX RT685 Reference Manual:
    https://www.nxp.com/webapp/Download?colCode=UM11147

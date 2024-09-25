@@ -14,8 +14,13 @@
 #include <zephyr/init.h>
 #include <zephyr/sys/barrier.h>
 #include <soc.h>
+#if defined(CONFIG_SOC_SERIES_STM32H7RSX)
+#include <stm32h7rsxx_ll_bus.h>
+#include <stm32h7rsxx_ll_utils.h>
+#else
 #include <stm32h7xx_ll_bus.h>
 #include <stm32h7xx_ll_utils.h>
+#endif /* CONFIG_SOC_SERIES_STM32H7RSX */
 
 #include "flash_stm32.h"
 #include "stm32_hsem.h"
@@ -31,11 +36,16 @@ LOG_MODULE_REGISTER(LOG_DOMAIN);
 #define STM32H7_FLASH_TIMEOUT	\
 	(2 * DT_PROP(DT_INST(0, st_stm32_nv_flash), max_erase_time))
 
+#define STM32H7_M4_FLASH_SIZE DT_PROP_OR(DT_INST(0, st_stm32_nv_flash), bank2_flash_size, 0)
 #ifdef CONFIG_CPU_CORTEX_M4
-#error Flash driver on M4 core is not supported yet
+#if STM32H7_M4_FLASH_SIZE == 0
+#error Flash driver on M4 requires the DT property bank2-flash-size
+#else
+#define REAL_FLASH_SIZE_KB (KB(STM32H7_M4_FLASH_SIZE * 2))
 #endif
-
-#define REAL_FLASH_SIZE_KB	KB(LL_GetFlashSize())
+#else
+#define REAL_FLASH_SIZE_KB KB(LL_GetFlashSize())
+#endif
 #define SECTOR_PER_BANK		((REAL_FLASH_SIZE_KB / FLASH_SECTOR_SIZE) / 2)
 #if defined(DUAL_BANK)
 #define STM32H7_SERIES_MAX_FLASH_KB	KB(2048)
@@ -117,13 +127,40 @@ static int flash_stm32_check_status(const struct device *dev)
 	 * ECC errors. Corrected data is returned for single ECC
 	 * errors, so in this case we just log a warning.
 	 */
-	uint32_t const error_bank1 = (FLASH_FLAG_ALL_ERRORS_BANK1
-				      & ~FLASH_FLAG_SNECCERR_BANK1);
 #ifdef DUAL_BANK
 	uint32_t const error_bank2 = (FLASH_FLAG_ALL_ERRORS_BANK2
 				      & ~FLASH_FLAG_SNECCERR_BANK2);
 #endif
 	uint32_t sr;
+
+#if defined(CONFIG_SOC_SERIES_STM32H7RSX)
+	uint32_t const error_bank = (FLASH_FLAG_ECC_ERRORS
+				      & ~FLASH_FLAG_SNECCERR
+				      & ~FLASH_FLAG_DBECCERR);
+
+
+	/* Read the Interrupt status flags. */
+	sr = regs->ISR;
+	if (sr & (FLASH_FLAG_SNECCERR)) {
+		uint32_t word = regs->ECCSFADDR & FLASH_ECCSFADDR_SEC_FADD;
+
+		LOG_WRN("Bank%d ECC error at 0x%08x", 1,
+			word * 4 * FLASH_NB_32BITWORD_IN_FLASHWORD);
+	}
+
+	if (sr & (FLASH_FLAG_DBECCERR)) {
+		uint32_t word = regs->ECCDFADDR & FLASH_ECCDFADDR_DED_FADD;
+
+		LOG_WRN("Bank%d ECC error at 0x%08x", 1,
+			word * 4 * FLASH_NB_32BITWORD_IN_FLASHWORD);
+	}
+
+	/* Clear the ECC flags (including FA) */
+	regs->ICR = FLASH_FLAG_ECC_ERRORS;
+	if (sr & error_bank) {
+#else
+	uint32_t const error_bank1 = (FLASH_FLAG_ALL_ERRORS_BANK1
+				      & ~FLASH_FLAG_SNECCERR_BANK1);
 
 	/* Read the status flags. */
 	sr = regs->SR1;
@@ -135,7 +172,9 @@ static int flash_stm32_check_status(const struct device *dev)
 	}
 	/* Clear the flags (including FA1R) */
 	regs->CCR1 = FLASH_FLAG_ALL_BANK1;
+
 	if (sr & error_bank1) {
+#endif /* CONFIG_SOC_SERIES_STM32H7RSX */
 		LOG_ERR("Status Bank%d: 0x%08x", 1, sr);
 		return -EIO;
 	}
@@ -150,6 +189,18 @@ static int flash_stm32_check_status(const struct device *dev)
 	}
 	regs->CCR2 = FLASH_FLAG_ALL_BANK2;
 	if (sr & error_bank2) {
+		/* Sometimes the STRBERR is seen when writing to flash
+		 * from M4 (upper 128KiB) with code running from lower
+		 * 896KiB. Don't know why it happens, but technical
+		 * reference manual (section 4.7.4) says application can
+		 * ignore this error and continue with normal write. So
+		 * check and return here if the error is STRBERR and clear
+		 * the error by setting CCR2 bit.
+		 */
+		if (sr & FLASH_FLAG_STRBERR_BANK2) {
+			regs->CCR2 |= FLASH_FLAG_STRBERR_BANK2;
+			return 0;
+		}
 		LOG_ERR("Status Bank%d: 0x%08x", 2, sr);
 		return -EIO;
 	}
@@ -191,25 +242,27 @@ static struct flash_stm32_sector_t get_sector(const struct device *dev,
 	FLASH_TypeDef *regs = FLASH_STM32_REGS(dev);
 
 #ifdef DUAL_BANK
+	off_t temp_offset = offset + (CONFIG_FLASH_BASE_ADDRESS & 0xffffff);
+
 	bool bank_swap;
 	/* Check whether bank1/2 are swapped */
 	bank_swap = (READ_BIT(FLASH->OPTCR, FLASH_OPTCR_SWAP_BANK)
 			== FLASH_OPTCR_SWAP_BANK);
 	sector.sector_index = offset / FLASH_SECTOR_SIZE;
-	if ((offset < (REAL_FLASH_SIZE_KB / 2)) && !bank_swap) {
+	if ((temp_offset < (REAL_FLASH_SIZE_KB / 2)) && !bank_swap) {
 		sector.bank = 1;
 		sector.cr = &regs->CR1;
 		sector.sr = &regs->SR1;
-	} else if ((offset >= BANK2_OFFSET) && bank_swap) {
+	} else if ((temp_offset >= BANK2_OFFSET) && bank_swap) {
 		sector.sector_index -= BANK2_OFFSET / FLASH_SECTOR_SIZE;
 		sector.bank = 1;
 		sector.cr = &regs->CR2;
 		sector.sr = &regs->SR2;
-	} else if ((offset < (REAL_FLASH_SIZE_KB / 2)) && bank_swap) {
+	} else if ((temp_offset < (REAL_FLASH_SIZE_KB / 2)) && bank_swap) {
 		sector.bank = 2;
 		sector.cr = &regs->CR1;
 		sector.sr = &regs->SR1;
-	} else if ((offset >= BANK2_OFFSET) && !bank_swap) {
+	} else if ((temp_offset >= BANK2_OFFSET) && !bank_swap) {
 		sector.sector_index -= BANK2_OFFSET / FLASH_SECTOR_SIZE;
 		sector.bank = 2;
 		sector.cr = &regs->CR2;

@@ -45,6 +45,7 @@
 
 /**
  * @defgroup xtensa_apis Xtensa APIs
+ * @ingroup arch-interface
  * @{
  * @}
  *
@@ -114,7 +115,7 @@ void xtensa_arch_kernel_oops(int reason_p, void *ssf);
 
 __syscall void xtensa_user_fault(unsigned int reason);
 
-#include <syscalls/arch.h>
+#include <zephyr/syscalls/arch.h>
 
 /* internal routine documented in C file, needed by IRQ_CONNECT() macro */
 void z_irq_priority_set(uint32_t irq, uint32_t prio, uint32_t flags);
@@ -228,7 +229,7 @@ static inline bool arch_mem_coherent(void *ptr)
 
 #if defined(CONFIG_XTENSA_MMU) || defined(__DOXYGEN__)
 /**
- * @brief Peform additional steps after MMU initialization.
+ * @brief Perform additional steps after MMU initialization.
  *
  * This performs additional steps related to memory management
  * after the main MMU initialization code. This needs to defined
