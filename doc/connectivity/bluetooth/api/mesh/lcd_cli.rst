@@ -22,3 +22,5 @@ API reference
 *************
 
 .. doxygengroup:: bt_mesh_large_comp_data_cli
+   :project: Zephyr
+   :members:
