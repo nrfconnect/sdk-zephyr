@@ -1,7 +1,5 @@
 tests:
   bluetooth.hci_uart_async:
-    extra_args:
-      - EXTRA_DTC_OVERLAY_FILE="test.overlay"
     tags:
       - bluetooth
       - uart
