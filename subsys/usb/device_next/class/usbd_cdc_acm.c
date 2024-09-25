@@ -268,13 +268,7 @@ static void usbd_cdc_acm_enable(struct usbd_class_data *const c_data)
 	}
 
 	if (atomic_test_bit(&data->state, CDC_ACM_IRQ_TX_ENABLED)) {
-		if (ring_buf_is_empty(data->tx_fifo.rb)) {
-			/* Raise TX ready interrupt */
-			cdc_acm_work_submit(&data->irq_cb_work);
-		} else {
-			/* Queue pending TX data on IN endpoint */
-			cdc_acm_work_submit(&data->tx_fifo_work);
-		}
+		/* TODO */
 	}
 }
 
