@@ -13,13 +13,7 @@ LOG_MODULE_REGISTER(net_sock_svc, CONFIG_NET_SOCKETS_LOG_LEVEL);
 #include <zephyr/posix/sys/eventfd.h>
 
 static int init_socket_service(void);
-enum SOCKET_SERVICE_THREAD_STATUS {
-	SOCKET_SERVICE_THREAD_UNINITIALIZED = 0,
-	SOCKET_SERVICE_THREAD_FAILED,
-	SOCKET_SERVICE_THREAD_STOPPED,
-	SOCKET_SERVICE_THREAD_RUNNING,
-};
-static enum SOCKET_SERVICE_THREAD_STATUS thread_status;
+static bool init_done;
 
 static K_MUTEX_DEFINE(lock);
 static K_CONDVAR_DEFINE(wait_start);
@@ -58,11 +52,8 @@ int z_impl_net_socket_service_register(const struct net_socket_service_desc *svc
 
 	k_mutex_lock(&lock, K_FOREVER);
 
-	if (thread_status == SOCKET_SERVICE_THREAD_UNINITIALIZED) {
+	if (!init_done) {
 		(void)k_condvar_wait(&wait_start, &lock, K_FOREVER);
-	} else if (thread_status != SOCKET_SERVICE_THREAD_RUNNING) {
-		ret = -EIO;
-		goto out;
 	}
 
 	if (STRUCT_SECTION_START(net_socket_service_desc) > svc ||
@@ -229,7 +220,7 @@ static void socket_service_thread(void)
 		goto out;
 	}
 
-	thread_status = SOCKET_SERVICE_THREAD_RUNNING;
+	init_done = true;
 	k_condvar_broadcast(&wait_start);
 
 	ctx.events[0].fd = fd;
@@ -298,12 +289,11 @@ restart:
 
 out:
 	NET_DBG("Socket service thread stopped");
-	thread_status = SOCKET_SERVICE_THREAD_STOPPED;
+	init_done = false;
 
 	return;
 
 fail:
-	thread_status = SOCKET_SERVICE_THREAD_FAILED;
 	k_condvar_broadcast(&wait_start);
 }
 
