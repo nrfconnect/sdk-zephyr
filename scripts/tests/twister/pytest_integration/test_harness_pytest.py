@@ -19,7 +19,6 @@ def testinstance() -> TestInstance:
     testsuite = TestSuite('.', 'samples/hello', 'unit.test')
     testsuite.harness_config = {}
     testsuite.ignore_faults = False
-    testsuite.sysbuild = False
     platform = Platform()
 
     testinstance = TestInstance(testsuite, platform, 'outdir')

@@ -66,8 +66,6 @@ mapping:
     type: seq
     seq:
       - type: str
-  "sysbuild":
-    type: bool
   "env":
     type: seq
     seq:
