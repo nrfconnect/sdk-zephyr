@@ -105,7 +105,6 @@ zephyr_library_sources(
 	${HOSTAP_SRC_BASE}/drivers/driver_common.c
 	${HOSTAP_SRC_BASE}/drivers/drivers.c
 	${HOSTAP_SRC_BASE}/utils/crc32.c
-	${HOSTAP_SRC_BASE}/utils/base64.c
 	${HOSTAP_SRC_BASE}/utils/common.c
 	${HOSTAP_SRC_BASE}/utils/wpabuf.c
 	${HOSTAP_SRC_BASE}/utils/bitfield.c
