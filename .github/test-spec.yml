@@ -38,15 +38,12 @@
 "CI-lwm2m-test": null
 # Not necessary to run tests on changes to this repo.
 
-"CI-boot-test":
+"CI-boot-dfu-test":
   - "subsys/mgmt/mcumgr/**/*"
   - "subsys/dfu/**/*"
   - "include/mgmt/mcumgr/**/*"
   - "include/dfu/**/*"
   - "samples/subsys/mgmt/mcumgr/smp_svr/**/*"
-  - "tests/boot/**/*"
-  - "tests/subsys/dfu/**/*"
-  - "tests/subsys/mgmt/mcumgr/**/*"
 
 "CI-tfm-test":
   - "boards/nordic/nrf5340dk/**/*"
