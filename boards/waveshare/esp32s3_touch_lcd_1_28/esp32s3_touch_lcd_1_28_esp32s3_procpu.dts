@@ -30,7 +30,6 @@
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
 		zephyr,display = &gc9a01;
-		zephyr,bt-hci = &esp32_bt_hci;
 	};
 
 	/* Buttons */
@@ -181,9 +180,5 @@
 };
 
 &wdt0 {
-	status = "okay";
-};
-
-&esp32_bt_hci {
 	status = "okay";
 };

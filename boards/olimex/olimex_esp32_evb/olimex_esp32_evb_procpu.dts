@@ -20,7 +20,6 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
-		zephyr,bt-hci = &esp32_bt_hci;
 	};
 
 	aliases {
@@ -172,8 +171,4 @@ uext_spi: &spi2 {};
 			reg = <0x00250000 DT_SIZE_K(24)>;
 		};
 	};
-};
-
-&esp32_bt_hci {
-	status = "okay";
 };
