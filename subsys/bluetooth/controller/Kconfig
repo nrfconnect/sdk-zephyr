@@ -104,6 +104,13 @@ config BT_CTLR_READ_ISO_LINK_QUALITY_SUPPORT
 config BT_CTLR_LE_POWER_CONTROL_SUPPORT
 	bool
 
+config BT_CTLR_LE_PATH_LOSS_MONITORING_SUPPORT
+	depends on BT_CTLR_LE_POWER_CONTROL_SUPPORT
+	bool
+
+config BT_CTLR_SUBRATING_SUPPORT
+	bool
+
 config BT_CTLR
 	bool "Bluetooth Controller"
 	help
@@ -115,6 +122,9 @@ choice BT_LL_CHOICE
 	prompt "Bluetooth Link Layer Selection"
 	help
 	  Select the Bluetooth Link Layer to compile.
+	  The link layer choice list can be extended out of tree.
+	  In the nRF Connect SDK, the SoftDevice Controller is selected
+	  and set as the default Bluetooth Controller.
 
 config BT_LL_SW_SPLIT
 	bool "Software-based BLE Link Layer [EXPERIMENTAL]"
@@ -128,6 +138,7 @@ endchoice
 config BT_CTLR_HCI
 	bool "Host Controller Interface (HCI)"
 	default y
+	depends on DT_HAS_ZEPHYR_BT_HCI_LL_SW_SPLIT_ENABLED
 	help
 	  Enable the Host Controller interface (HCI) in the Controller.
 	  This should almost always be enabled, except in a few special
@@ -281,83 +292,83 @@ config BT_CTLR_TX_PWR_PLUS_9
 
 config BT_CTLR_TX_PWR_PLUS_8
 	bool "+8 dBm"
-	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_PLUS_7
 	bool "+7 dBm"
-	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_PLUS_6
 	bool "+6 dBm"
-	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_PLUS_5
 	bool "+5 dBm"
-	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_PLUS_4
 	bool "+4 dBm"
-	depends on SOC_SERIES_NRF51X || SOC_COMPATIBLE_NRF52X || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on SOC_SERIES_NRF51X || SOC_COMPATIBLE_NRF52X || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_PLUS_3
 	bool "+3 dBm"
-	depends on SOC_COMPATIBLE_NRF52X || SOC_SERIES_NRF53X || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF52X || SOC_COMPATIBLE_NRF53X || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_PLUS_2
 	bool "+2 dBm"
-	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH || SOC_SERIES_NRF53X || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on HAS_HW_NRF_RADIO_TX_PWR_HIGH || SOC_COMPATIBLE_NRF53X || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_PLUS_1
 	bool "+1 dBm"
-	depends on SOC_SERIES_NRF53X || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF53X || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_0
 	bool "0 dBm"
 
 config BT_CTLR_TX_PWR_MINUS_1
 	bool "-1 dBm"
-	depends on SOC_SERIES_NRF53X || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF53X || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_2
 	bool "-2 dBm"
-	depends on SOC_SERIES_NRF53X || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF53X || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_3
 	bool "-3 dBm"
-	depends on SOC_SERIES_NRF53X || SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF53X || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_4
 	bool "-4 dBm"
 
 config BT_CTLR_TX_PWR_MINUS_5
 	bool "-5 dBm"
-	depends on SOC_SERIES_NRF53X || SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF53X || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_6
 	bool "-6 dBm"
-	depends on SOC_SERIES_NRF53X || SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF53X || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_7
 	bool "-7 dBm"
-	depends on SOC_SERIES_NRF53X || SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF53X || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_8
 	bool "-8 dBm"
 
 config BT_CTLR_TX_PWR_MINUS_9
 	bool "-9 dBm"
-	depends on SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_10
 	bool "-10 dBm"
-	depends on SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_12
 	bool "-12 dBm"
 
 config BT_CTLR_TX_PWR_MINUS_14
 	bool "-14 dBm"
-	depends on SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_16
 	bool "-16 dBm"
@@ -367,7 +378,7 @@ config BT_CTLR_TX_PWR_MINUS_20
 
 config BT_CTLR_TX_PWR_MINUS_26
 	bool "-26 dBm"
-	depends on SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_30
 	bool "-30 dBm"
@@ -375,11 +386,11 @@ config BT_CTLR_TX_PWR_MINUS_30
 
 config BT_CTLR_TX_PWR_MINUS_40
 	bool "-40 dBm"
-	depends on SOC_COMPATIBLE_NRF52X || SOC_SERIES_NRF53X || SOC_SERIES_NRF54HX || SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF52X || SOC_COMPATIBLE_NRF53X || SOC_SERIES_NRF54HX || SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_46
 	bool "-46 dBm"
-	depends on SOC_SERIES_NRF54LX
+	depends on SOC_COMPATIBLE_NRF54LX
 
 config BT_CTLR_TX_PWR_MINUS_70
 	bool "-70 dBm"
@@ -550,6 +561,15 @@ config BT_CTLR_LE_POWER_CONTROL
 	help
 	  Enable support for LE Power Control Request feature that is defined in the
 	  Bluetooth Core specification, Version 5.4 | Vol 6, Part B, Section 4.6.31.
+
+config BT_CTLR_LE_PATH_LOSS_MONITORING
+	bool "LE Path Loss Monitoring Feature"
+	depends on BT_CTLR_LE_PATH_LOSS_MONITORING_SUPPORT
+	default y if BT_PATH_LOSS_MONITORING
+	select BT_CTLR_LE_POWER_CONTROL
+	help
+	  Enable support for LE Path Loss Monitoring feature that is defined in the
+	  Bluetooth Core specification, Version 5.4 | Vol 6, Part B, Section 4.6.32.
 
 endif # BT_CONN
 
@@ -1001,6 +1021,15 @@ config BT_CTLR_HCI_CODEC_AND_DELAY_INFO
 	help
 	  Enable HCI commands to read information about supported
 	  codecs, codec capabilities, and controller delay.
+
+config BT_CTLR_SUBRATING
+	bool "LE Connection Subrating"
+	depends on BT_CTLR_SUBRATING_SUPPORT
+	select BT_CTLR_SET_HOST_FEATURE
+	default y if BT_SUBRATING
+	help
+	  Enable support for Bluetooth v5.3 LE Connection Subrating
+	  in the Controller.
 
 rsource "Kconfig.df"
 rsource "Kconfig.ll_sw_split"

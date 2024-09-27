@@ -169,6 +169,7 @@ typedef ssize_t (*bt_gatt_attr_write_func_t)(struct bt_conn *conn,
 struct bt_gatt_attr {
 	/** Attribute UUID */
 	const struct bt_uuid *uuid;
+	/** Attribute read callback */
 	bt_gatt_attr_read_func_t read;
 	/** Attribute write callback */
 	bt_gatt_attr_write_func_t write;
@@ -398,6 +399,27 @@ struct bt_gatt_cpf {
  * @ingroup bt_gatt
  * @{
  */
+
+/** Converts a GATT error to string.
+ *
+ * The GATT errors are created with @ref BT_GATT_ERR.
+ *
+ * The error codes are described in the Bluetooth Core specification,
+ * Vol 3, Part F, Section 3.4.1.1.
+ *
+ * The ATT and GATT documentation found in Vol 4, Part F and
+ * Part G describe when the different error codes are used.
+ *
+ * See also the defined BT_ATT_ERR_* macros.
+ *
+ * @return The string representation of the GATT error code.
+ *         If @kconfig{CONFIG_BT_ATT_ERR_TO_STR} is not enabled,
+ *         this just returns the empty string.
+ */
+static inline const char *bt_gatt_err_to_str(int gatt_err)
+{
+	return bt_att_err_to_str((gatt_err) < 0 ? -(gatt_err) : (gatt_err));
+}
 
 /** @brief Register GATT callbacks.
  *

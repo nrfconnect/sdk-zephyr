@@ -20,10 +20,12 @@ int main(void)
 {
 	int ret;
 
-	printk("Hello from APP\n");
+	printk("Hello from HOST - %s\n", CONFIG_BOARD_TARGET);
 
 #ifdef CONFIG_RX_ENABLED
 	const struct mbox_dt_spec rx_channel = MBOX_DT_SPEC_GET(DT_PATH(mbox_consumer), rx);
+
+	printk("Maximum RX channels: %d\n", mbox_max_channels_get_dt(&rx_channel));
 
 	ret = mbox_register_callback_dt(&rx_channel, callback, NULL);
 	if (ret < 0) {
@@ -41,8 +43,19 @@ int main(void)
 #ifdef CONFIG_TX_ENABLED
 	const struct mbox_dt_spec tx_channel = MBOX_DT_SPEC_GET(DT_PATH(mbox_consumer), tx);
 
+	printk("Maximum bytes of data in the TX message: %d\n", mbox_mtu_get_dt(&tx_channel));
+	printk("Maximum TX channels: %d\n", mbox_max_channels_get_dt(&tx_channel));
+
+#ifndef CONFIG_COVERAGE
 	while (1) {
+#else
+	for (int i = 0; i < 5; i++) {
+#endif
+#if defined(CONFIG_MULTITHREADING)
 		k_sleep(K_MSEC(2000));
+#else
+		k_busy_wait(2000000);
+#endif
 
 		printk("Ping (on channel %d)\n", tx_channel.channel_id);
 
@@ -53,5 +66,13 @@ int main(void)
 		}
 	}
 #endif /* CONFIG_TX_ENABLED */
+
+#ifdef CONFIG_RX_ENABLED
+	ret = mbox_set_enabled_dt(&rx_channel, false);
+	if (ret < 0) {
+		printk("Could not disable RX channel %d (%d)\n", rx_channel.channel_id, ret);
+		return 0;
+	}
+#endif /* CONFIG_RX_ENABLED */
 	return 0;
 }

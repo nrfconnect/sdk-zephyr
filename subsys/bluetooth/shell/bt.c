@@ -189,6 +189,24 @@ static const char *enabled2str(bool enabled)
 
 #endif /* CONFIG_BT_TRANSMIT_POWER_CONTROL */
 
+#if defined(CONFIG_BT_PATH_LOSS_MONITORING)
+static const char *plm_report_zone_str(enum bt_conn_le_path_loss_zone zone)
+{
+	switch (zone) {
+	case BT_CONN_LE_PATH_LOSS_ZONE_ENTERED_LOW:
+		return "Entered low zone";
+	case BT_CONN_LE_PATH_LOSS_ZONE_ENTERED_MIDDLE:
+		return "Entered middle zone";
+	case BT_CONN_LE_PATH_LOSS_ZONE_ENTERED_HIGH:
+		return "Entered high zone";
+	case BT_CONN_LE_PATH_LOSS_ZONE_UNAVAILABLE:
+		return "Path loss unavailable";
+	default:
+		return "Unknown";
+	}
+}
+#endif /* CONFIG_BT_PATH_LOSS_MONITORING */
+
 #if defined(CONFIG_BT_CENTRAL)
 static int cmd_scan_off(const struct shell *sh);
 static int cmd_connect_le(const struct shell *sh, size_t argc, char *argv[]);
@@ -955,6 +973,35 @@ void tx_power_report(struct bt_conn *conn,
 }
 #endif
 
+#if defined(CONFIG_BT_PATH_LOSS_MONITORING)
+void path_loss_threshold_report(struct bt_conn *conn,
+				const struct bt_conn_le_path_loss_threshold_report *report)
+{
+	shell_print(ctx_shell, "Path Loss Threshold event: Zone: %s, Path loss dbm: %d",
+		    plm_report_zone_str(report->zone), report->path_loss);
+}
+#endif
+
+#if defined(CONFIG_BT_SUBRATING)
+void subrate_changed(struct bt_conn *conn,
+		     const struct bt_conn_le_subrate_changed *params)
+{
+	if (params->status == BT_HCI_ERR_SUCCESS) {
+		shell_print(ctx_shell, "Subrate parameters changed: "
+			    "Subrate Factor: %d "
+			    "Continuation Number: %d "
+			    "Peripheral latency: 0x%04x "
+			    "Supervision timeout: 0x%04x (%d ms)",
+			    params->factor,
+			    params->continuation_number,
+			    params->peripheral_latency,
+			    params->supervision_timeout,
+			    params->supervision_timeout * 10);
+	} else {
+		shell_print(ctx_shell, "Subrate change failed (HCI status 0x%02x)", params->status);
+	}
+}
+#endif
 
 static struct bt_conn_cb conn_callbacks = {
 	.connected = connected,
@@ -978,6 +1025,12 @@ static struct bt_conn_cb conn_callbacks = {
 #endif
 #if defined(CONFIG_BT_TRANSMIT_POWER_CONTROL)
 	.tx_power_report = tx_power_report,
+#endif
+#if defined(CONFIG_BT_PATH_LOSS_MONITORING)
+	.path_loss_threshold_report = path_loss_threshold_report,
+#endif
+#if defined(CONFIG_BT_SUBRATING)
+	.subrate_changed = subrate_changed,
 #endif
 };
 #endif /* CONFIG_BT_CONN */
@@ -2929,6 +2982,138 @@ static int cmd_set_power_report_enable(const struct shell *sh, size_t argc, char
 
 #endif
 
+#if defined(CONFIG_BT_PATH_LOSS_MONITORING)
+static int cmd_set_path_loss_reporting_parameters(const struct shell *sh, size_t argc, char *argv[])
+{
+	int err = 0;
+
+	if (default_conn == NULL) {
+		shell_error(sh, "Conn handle error, at least one connection is required.");
+		return -ENOEXEC;
+	}
+
+	for (size_t argn = 1; argn < argc; argn++) {
+		(void)shell_strtoul(argv[argn], 10, &err);
+
+		if (err) {
+			shell_help(sh);
+			shell_error(sh, "Could not parse input number %d", argn);
+			return SHELL_CMD_HELP_PRINTED;
+		}
+	}
+
+	const struct bt_conn_le_path_loss_reporting_param params = {
+		.high_threshold = shell_strtoul(argv[1], 10, &err),
+		.high_hysteresis = shell_strtoul(argv[2], 10, &err),
+		.low_threshold = shell_strtoul(argv[3], 10, &err),
+		.low_hysteresis = shell_strtoul(argv[4], 10, &err),
+		.min_time_spent = shell_strtoul(argv[5], 10, &err),
+	};
+
+	err = bt_conn_le_set_path_loss_mon_param(default_conn, &params);
+	if (err) {
+		shell_error(sh, "bt_conn_le_set_path_loss_mon_param returned error %d", err);
+		return -ENOEXEC;
+	}
+
+	return 0;
+}
+
+static int cmd_set_path_loss_reporting_enable(const struct shell *sh, size_t argc, char *argv[])
+{
+	bool enable;
+	int err = 0;
+
+	if (default_conn == NULL) {
+		shell_error(sh, "Conn handle error, at least one connection is required.");
+		return -ENOEXEC;
+	}
+
+	enable = shell_strtobool(argv[1], 10, &err);
+	if (err) {
+		shell_help(sh);
+		return SHELL_CMD_HELP_PRINTED;
+	}
+
+	err = bt_conn_le_set_path_loss_mon_enable(default_conn, enable);
+
+	if (err) {
+		shell_error(sh, "bt_conn_le_set_path_loss_mon_enable returned error %d", err);
+		return -ENOEXEC;
+	}
+
+	return 0;
+}
+#endif
+
+#if defined(CONFIG_BT_SUBRATING)
+static int cmd_subrate_set_defaults(const struct shell *sh, size_t argc, char *argv[])
+{
+	int err = 0;
+
+	for (size_t argn = 1; argn < argc; argn++) {
+		(void)shell_strtoul(argv[argn], 10, &err);
+
+		if (err) {
+			shell_help(sh);
+			shell_error(sh, "Could not parse input number %d", argn);
+			return SHELL_CMD_HELP_PRINTED;
+		}
+	}
+
+	const struct bt_conn_le_subrate_param params = {
+		.subrate_min = shell_strtoul(argv[1], 10, &err),
+		.subrate_max = shell_strtoul(argv[2], 10, &err),
+		.max_latency = shell_strtoul(argv[3], 10, &err),
+		.continuation_number = shell_strtoul(argv[4], 10, &err),
+		.supervision_timeout = shell_strtoul(argv[5], 10, &err) * 100, /* 10ms units */
+	};
+
+	err = bt_conn_le_subrate_set_defaults(&params);
+	if (err) {
+		shell_error(sh, "bt_conn_le_subrate_set_defaults returned error %d", err);
+		return -ENOEXEC;
+	}
+
+	return 0;
+}
+
+static int cmd_subrate_request(const struct shell *sh, size_t argc, char *argv[])
+{
+	int err = 0;
+
+	if (default_conn == NULL) {
+		shell_error(sh, "Conn handle error, at least one connection is required.");
+		return -ENOEXEC;
+	}
+
+	for (size_t argn = 1; argn < argc; argn++) {
+		(void)shell_strtoul(argv[argn], 10, &err);
+
+		if (err) {
+			shell_help(sh);
+			shell_error(sh, "Could not parse input number %d", argn);
+			return SHELL_CMD_HELP_PRINTED;
+		}
+	}
+
+	const struct bt_conn_le_subrate_param params = {
+		.subrate_min = shell_strtoul(argv[1], 10, &err),
+		.subrate_max = shell_strtoul(argv[2], 10, &err),
+		.max_latency = shell_strtoul(argv[3], 10, &err),
+		.continuation_number = shell_strtoul(argv[4], 10, &err),
+		.supervision_timeout = shell_strtoul(argv[5], 10, &err) * 100, /* 10ms units */
+	};
+
+	err = bt_conn_le_subrate_request(default_conn, &params);
+	if (err) {
+		shell_error(sh, "bt_conn_le_subrate_request returned error %d", err);
+		return -ENOEXEC;
+	}
+
+	return 0;
+}
+#endif
 
 #if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_CENTRAL)
@@ -3225,6 +3410,12 @@ static int cmd_info(const struct shell *sh, size_t argc, char *argv[])
 			    info.le.data_len->tx_max_time,
 			    info.le.data_len->rx_max_len,
 			    info.le.data_len->rx_max_time);
+#endif
+#if defined(CONFIG_BT_SUBRATING)
+		shell_print(ctx_shell, "LE Subrating: Subrate Factor: %d"
+			    " Continuation Number: %d",
+			    info.le.subrate->factor,
+			    info.le.subrate->continuation_number);
 #endif
 	}
 
@@ -4618,6 +4809,23 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 	SHELL_CMD_ARG(read-remote-tx-power, NULL, HELP_NONE, cmd_read_remote_tx_power, 2, 0),
 	SHELL_CMD_ARG(read-local-tx-power, NULL, HELP_NONE, cmd_read_local_tx_power, 2, 0),
 	SHELL_CMD_ARG(set-power-report-enable, NULL, HELP_NONE, cmd_set_power_report_enable, 3, 0),
+#endif
+#if defined(CONFIG_BT_PATH_LOSS_MONITORING)
+	SHELL_CMD_ARG(path-loss-monitoring-set-params, NULL,
+		      "<high threshold> <high hysteresis> <low threshold> <low hysteresis> <min time spent>",
+		      cmd_set_path_loss_reporting_parameters, 6, 0),
+	SHELL_CMD_ARG(path-loss-monitoring-enable, NULL, "<enable: true, false>",
+		      cmd_set_path_loss_reporting_enable, 2, 0),
+#endif
+#if defined(CONFIG_BT_SUBRATING)
+	SHELL_CMD_ARG(subrate-set-defaults, NULL,
+		"<min subrate factor> <max subrate factor> <max peripheral latency> "
+		"<min continuation number> <supervision timeout (seconds)>",
+		cmd_subrate_set_defaults, 6, 0),
+	SHELL_CMD_ARG(subrate-request, NULL,
+		"<min subrate factor> <max subrate factor> <max peripheral latency> "
+		"<min continuation number> <supervision timeout (seconds)>",
+		cmd_subrate_request, 6, 0),
 #endif
 #if defined(CONFIG_BT_BROADCASTER)
 	SHELL_CMD_ARG(advertise, NULL,

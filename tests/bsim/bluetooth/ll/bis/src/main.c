@@ -153,7 +153,8 @@ bool ll_data_path_sink_create(uint16_t handle, struct ll_iso_datapath *datapath,
 
 #define BUF_ALLOC_TIMEOUT_MS (30) /* milliseconds */
 NET_BUF_POOL_FIXED_DEFINE(tx_pool, CONFIG_BT_ISO_TX_BUF_COUNT,
-			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU), 8, NULL);
+			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU),
+			  CONFIG_BT_CONN_TX_USER_DATA_SIZE, NULL);
 
 static struct k_work_delayable iso_send_work;
 
@@ -752,7 +753,7 @@ static struct bt_le_scan_cb scan_callbacks = {
 static void test_iso_recv_main(void)
 {
 	struct bt_le_scan_param scan_param = {
-		.type       = BT_HCI_LE_SCAN_ACTIVE,
+		.type       = BT_LE_SCAN_TYPE_ACTIVE,
 		.options    = BT_LE_SCAN_OPT_NONE,
 		.interval   = 0x0004,
 		.window     = 0x0004,
@@ -1027,7 +1028,7 @@ static void test_iso_recv_main(void)
 static void test_iso_recv_vs_dp_main(void)
 {
 	struct bt_le_scan_param scan_param = {
-		.type       = BT_HCI_LE_SCAN_ACTIVE,
+		.type       = BT_LE_SCAN_TYPE_ACTIVE,
 		.options    = BT_LE_SCAN_OPT_NONE,
 		.interval   = 0x0004,
 		.window     = 0x0004,
@@ -1205,14 +1206,14 @@ static const struct bst_test_instance test_def[] = {
 	{
 		.test_id = "broadcast",
 		.test_descr = "ISO broadcast",
-		.test_post_init_f = test_iso_init,
+		.test_pre_init_f = test_iso_init,
 		.test_tick_f = test_iso_tick,
 		.test_main_f = test_iso_main
 	},
 	{
 		.test_id = "receive",
 		.test_descr = "ISO receive",
-		.test_post_init_f = test_iso_init,
+		.test_pre_init_f = test_iso_init,
 		.test_tick_f = test_iso_tick,
 		.test_main_f = test_iso_recv_main
 	},
@@ -1220,7 +1221,7 @@ static const struct bst_test_instance test_def[] = {
 	{
 		.test_id = "receive_vs_dp",
 		.test_descr = "ISO receive VS",
-		.test_post_init_f = test_iso_init,
+		.test_pre_init_f = test_iso_init,
 		.test_tick_f = test_iso_tick,
 		.test_main_f = test_iso_recv_vs_dp_main
 	},

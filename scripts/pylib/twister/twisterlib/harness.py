@@ -386,6 +386,9 @@ class Pytest(Harness):
                 f'--device-serial-baud={hardware.baud}'
             ])
 
+        if hardware.flash_timeout:
+            command.append(f'--flash-timeout={hardware.flash_timeout}')
+
         options = handler.options
         if runner := hardware.runner or options.west_runner:
             command.append(f'--runner={runner}')
@@ -624,6 +627,7 @@ class Gtest(Harness):
 
 
 class Test(Harness):
+    __test__ = False  # for pytest to skip this class when collects tests
     RUN_PASSED = "PROJECT EXECUTION SUCCESSFUL"
     RUN_FAILED = "PROJECT EXECUTION FAILED"
     test_suite_start_pattern = r"Running TESTSUITE (?P<suite_name>.*)"

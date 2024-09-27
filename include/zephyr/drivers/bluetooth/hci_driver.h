@@ -12,6 +12,9 @@
 
 /**
  * @brief HCI drivers
+ *
+ * @deprecated This is the old HCI driver API. Drivers should use @ref bt_hci_api instead.
+ *
  * @defgroup bt_hci_driver HCI drivers
  * @ingroup bluetooth
  * @{
@@ -36,8 +39,6 @@ enum {
 	 * the DLE procedure after connection establishment. */
 	BT_QUIRK_NO_AUTO_DLE = BIT(1),
 };
-
-#define IS_BT_QUIRK_NO_AUTO_DLE(bt_dev) ((bt_dev)->drv->quirks & BT_QUIRK_NO_AUTO_DLE)
 
 /**
  * @brief Receive data from the controller/HCI driver.
