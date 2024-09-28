@@ -56,9 +56,27 @@ int flash_img_buffered_write(struct flash_img_context *ctx, const uint8_t *data,
 #ifdef CONFIG_IMG_ERASE_PROGRESSIVELY
 	ssize_t status_offset = boot_get_trailer_status_offset(
 		ctx->flash_area->fa_size);
-	rc = stream_flash_erase_page(&ctx->stream,
-				ctx->flash_area->fa_off +
-				status_offset);
+
+#ifdef CONFIG_STREAM_FLASH_ERASE
+	const struct flash_parameters *fparams =
+		flash_get_parameters(flash_area_get_device(ctx->flash_area));
+
+	if ((flash_params_get_erase_cap(fparams) & FLASH_ERASE_C_EXPLICIT)) {
+		/* use pistine-page-erase procedure for a device which needs it */
+		rc = stream_flash_erase_page(&ctx->stream,
+					ctx->flash_area->fa_off +
+					status_offset);
+	} else
+#endif
+	{
+		if (status_offset > stream_flash_bytes_written(&ctx->stream)) {
+			rc = flash_area_flatten(ctx->flash_area, status_offset,
+						ctx->flash_area->fa_off - status_offset);
+		} else {
+			rc = 0;
+		}
+	}
+
 	if (rc) {
 		return rc;
 	}
