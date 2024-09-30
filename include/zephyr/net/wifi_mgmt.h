@@ -219,11 +219,13 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_RTS_THRESHOLD);
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_AP_CONFIG_PARAM);
 
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 /** Request a Wi-Fi DPP operation */
 #define NET_REQUEST_WIFI_DPP			\
 	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_DPP)
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_DPP);
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
 
 #ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_WNM
 /** Request a Wi-Fi BTM query */
@@ -846,6 +848,7 @@ struct wifi_ap_config_params {
 	uint32_t max_num_sta;
 };
 
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 /** @brief Wi-Fi DPP configuration parameter */
 /** Wi-Fi DPP QR-CODE in string max len for SHA512 */
 #define WIFI_DPP_QRCODE_MAX_LEN 255
@@ -1021,6 +1024,8 @@ struct wifi_dpp_params {
 		char resp[WIFI_DPP_QRCODE_MAX_LEN + 1];
 	};
 };
+
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
 
 #include <zephyr/net/net_if.h>
 
@@ -1228,6 +1233,8 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*ap_config_params)(const struct device *dev, struct wifi_ap_config_params *params);
+
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 	/** Dispatch DPP operations by action enum, with or without arguments in string format
 	 *
 	 * @param dev Pointer to the device structure for the driver instance
@@ -1236,6 +1243,7 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*dpp_dispatch)(const struct device *dev, struct wifi_dpp_params *params);
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
 	/** Flush PMKSA cache entries
 	 *
 	 * @param dev Pointer to the device structure for the driver instance.
