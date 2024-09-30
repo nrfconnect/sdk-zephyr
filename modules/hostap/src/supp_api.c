@@ -1767,6 +1767,7 @@ out:
 }
 #endif /* CONFIG_AP */
 
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 static const char *dpp_params_to_args_curve(int curve)
 {
 	switch (curve) {
@@ -2056,6 +2057,7 @@ int supplicant_dpp_dispatch(const struct device *dev, struct wifi_dpp_params *pa
 	os_free(cmd);
 	return 0;
 }
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
 
 #ifdef CONFIG_WIFI_NM_HOSTAPD_AP
 int hapd_dpp_dispatch(const struct device *dev, struct wifi_dpp_params *params)
