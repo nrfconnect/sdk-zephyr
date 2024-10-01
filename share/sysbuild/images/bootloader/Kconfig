@@ -55,6 +55,35 @@ config BOOT_SIGNATURE_TYPE_ED25519
 
 endchoice
 
+choice BOOT_CRYPTO_LIBRARY
+	prompt "Library used by cryptographic functions of MCUboot"
+	default BOOT_CRYPTO_LIBRARY_DEFAULT
+
+config BOOT_CRYPTO_LIBRARY_PSA
+	bool "Enforce use of PSA as cryptographic library"
+
+config BOOT_CRYPTO_LIBRARY_DEFAULT
+	bool "Use whatever library used, by default, to support selected algorithm"
+
+endchoice
+
+# Dependencies that are required by BOOT_CRYPTO_LIBRARY_PSA in contest of sdk-nrf
+if BOOT_CRYPTO_LIBRARY_PSA
+
+config MBEDTLS
+	bool
+	default n
+
+config MBEDTLS_PSA_CRYPTO_C
+	bool
+	default y
+
+config NRF_SECURITY
+	bool
+	default y
+
+endif
+
 config BOOT_SIGNATURE_KEY_FILE
 	string "Signing PEM key file" if !BOOT_SIGNATURE_TYPE_NONE
 	default "$(ZEPHYR_MCUBOOT_MODULE_DIR)/root-ec-p256.pem" if BOOT_SIGNATURE_TYPE_ECDSA_P256
