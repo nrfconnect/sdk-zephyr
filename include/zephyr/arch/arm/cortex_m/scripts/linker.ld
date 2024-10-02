@@ -58,7 +58,11 @@ _image_1_primary_slot_id = PM_S1_ID;
 #define ROM_ADDR PM_ADDRESS
 #define ROM_SIZE PM_SIZE
 
+#if defined(CONFIG_PM_USE_CONFIG_SRAM_SIZE)
+#define RAM_SIZE CONFIG_PM_SRAM_SIZE
+#else
 #define RAM_SIZE PM_SRAM_SIZE
+#endif
 #define RAM_ADDR PM_SRAM_ADDRESS
 
 #else /* ! USE_PARTITION_MANAGER */
