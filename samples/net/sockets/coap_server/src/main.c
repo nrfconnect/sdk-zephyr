@@ -15,6 +15,8 @@ LOG_MODULE_REGISTER(net_coap_service_sample, LOG_LEVEL_DBG);
 #include "ipv6.h"
 #endif
 
+#include "net_sample_common.h"
+
 static const uint16_t coap_port = 5683;
 
 #ifdef CONFIG_NET_IPV6
@@ -71,6 +73,8 @@ static int join_coap_multicast_group(void)
 
 int main(void)
 {
+	wait_for_network();
+
 	return join_coap_multicast_group();
 }
 
@@ -78,6 +82,8 @@ int main(void)
 
 int main(void)
 {
+	wait_for_network();
+
 	return 0;
 }
 
