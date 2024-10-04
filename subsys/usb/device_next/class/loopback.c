@@ -112,7 +112,7 @@ static int lb_control_to_dev(struct usbd_class_data *c_data,
 static int lb_request_handler(struct usbd_class_data *c_data,
 			      struct net_buf *buf, int err)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	struct udc_buf_info *bi = NULL;
 
 	bi = (struct udc_buf_info *)net_buf_user_data(buf);
@@ -270,7 +270,7 @@ static struct loopback_desc lb_desc_##x = {					\
 		.bDescriptorType = USB_DESC_ENDPOINT,				\
 		.bEndpointAddress = 0x83,					\
 		.bmAttributes = USB_EP_TYPE_ISO,				\
-		.wMaxPacketSize = 0,						\
+		.wMaxPacketSize = sys_cpu_to_le16(0),				\
 		.bInterval = LB_ISO_EP_INTERVAL,				\
 	},									\
 										\
@@ -279,7 +279,7 @@ static struct loopback_desc lb_desc_##x = {					\
 		.bDescriptorType = USB_DESC_ENDPOINT,				\
 		.bEndpointAddress = 0x03,					\
 		.bmAttributes = USB_EP_TYPE_ISO,				\
-		.wMaxPacketSize = 0,						\
+		.wMaxPacketSize = sys_cpu_to_le16(0),				\
 		.bInterval = LB_ISO_EP_INTERVAL,				\
 	},									\
 										\

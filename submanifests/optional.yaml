@@ -16,13 +16,13 @@ manifest:
       groups:
         - optional
     - name: lz4
-      revision: 8e303c264fc21c2116dc612658003a22e933124d
+      revision: 11b8a1e22fa651b524494e55d22b69d3d9cebcfd
       path: modules/lib/lz4
       remote: upstream
       groups:
         - optional
     - name: nanopb
-      revision: 7f88274070afa5edfaf608f4d8e32f3d3c1de139
+      revision: 4474bd35bd39de067f0532a1b19ce3aed9ed9807
       path: modules/lib/nanopb
       remote: upstream
       groups:
@@ -34,19 +34,19 @@ manifest:
       groups:
         - optional
     - name: sof
-      revision: c11a3185afbc8e1b2a79916de3dfefaf326d9ad1
+      revision: 0e4c4efcaae858036027607e88406d59bd2a31d8
       path: modules/audio/sof
       remote: upstream
       groups:
         - optional
     - name: tf-m-tests
-      revision: 85f533a4aa5b4fe31247676a923db7453eb4429c
+      revision: d552e4f18b92032bd335d5e3aa312f6acd82a83b
       path: modules/tee/tf-m/tf-m-tests
       remote: upstream
       groups:
         - optional
     - name: tflite-micro
-      revision: 1a34dcab41e7e0e667db72d6a40999c1ec9c510c
+      revision: 48613f7ba1ffbda46ad771a77a35408f48f922e9
       path: optional/modules/lib/tflite-micro
       repo-path: tflite-micro
       remote: upstream

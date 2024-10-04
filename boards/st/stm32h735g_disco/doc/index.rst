@@ -69,10 +69,12 @@ The current Zephyr stm32h735g_disco board configuration supports the following h
 +-----------+------------+-------------------------------------+
 | FDCAN2    | on-chip    | CAN-FD Controller                   |
 +-----------+------------+-------------------------------------+
-| FDCAN2    | on-chip    | CAN-FD Controller (disabled by      |
+| FDCAN3    | on-chip    | CAN-FD Controller (disabled by      |
 |           |            | default. Solder bridges SB29 and    |
 |           |            | SB30 need to be closed for FDCAN3   |
 |           |            | to work)                            |
++-----------+------------+-------------------------------------+
+| USB       | on-chip    | usb_device                          |
 +-----------+------------+-------------------------------------+
 
 Other hardware features are not yet supported on Zephyr porting.
@@ -112,23 +114,33 @@ COM port interface. Default communication settings are 115200 8N1.
 Programming and Debugging
 *************************
 
+STM32H735G-DISCO board includes an ST-LINK/V3 embedded debug tool interface.
+
 See :ref:`build_an_application` for more information about application builds.
 
 
 Flashing
 ========
 
-Flashing operation will depend on the target to be flashed and the SoC
-option bytes configuration.
-It is advised to use `STM32CubeProgrammer`_ to check and update option bytes
-configuration and flash the ``stm32h735g_disco`` target.
+The board is configured to be flashed using west `STM32CubeProgrammer`_ runner,
+so its :ref:`installation <stm32cubeprog-flash-host-tools>` is required.
 
+Alternatively, OpenOCD or JLink can also be used to flash the board using
+the ``--runner`` (or ``-r``) option:
+
+.. code-block:: console
+
+   $ west flash --runner openocd
+   $ west flash --runner jlink
+
+It is advised to use `STM32CubeProgrammer`_ to check and update option bytes
+configuration.
 
 Debugging
 =========
 
 You can debug an application in the usual way.  Here is an example for the
-:ref:`hello_world` application.
+:zephyr:code-sample:`hello_world` application.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world

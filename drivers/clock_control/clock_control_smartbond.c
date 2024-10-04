@@ -13,6 +13,10 @@
 #include <zephyr/pm/device.h>
 #include <da1469x_clock.h>
 #include <da1469x_qspic.h>
+#if defined(CONFIG_BT_DA1469X)
+#include <shm.h>
+#endif
+#include <zephyr/drivers/regulator.h>
 
 LOG_MODULE_REGISTER(clock_control, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
@@ -45,6 +49,14 @@ static enum smartbond_clock smartbond_source_clock(enum smartbond_clock clk);
 static K_WORK_DELAYABLE_DEFINE(calibration_work, calibration_work_cb);
 static K_WORK_DELAYABLE_DEFINE(xtal32k_settle_work, xtal32k_settle_work_cb);
 
+/* PLL can be turned on by requesting it explicitly or when USB is attached */
+/* PLL requested in DT or manually by application */
+#define PLL_REQUEST_PLL		1
+/* PLL requested indirectly by USB driver */
+#define PLL_REQUEST_USB		2
+/* Keeps information about blocks that requested PLL */
+static uint8_t pll_requests;
+
 static void calibration_work_cb(struct k_work *work)
 {
 	if (lpc_clock_state.rcx_started) {
@@ -53,6 +65,14 @@ static void calibration_work_cb(struct k_work *work)
 		lpc_clock_state.rcx_freq = da1469x_clock_lp_rcx_freq_get();
 		LOG_DBG("RCX calibration done, RCX freq: %d",
 			(int)lpc_clock_state.rcx_freq);
+
+#if defined(CONFIG_BT_DA1469X)
+		/* Update CMAC sleep clock with calculated frequency if RCX is set as lp_clk */
+		if ((CRG_TOP->CLK_CTRL_REG & CRG_TOP_CLK_CTRL_REG_LP_CLK_SEL_Msk) ==
+		    (1 << CRG_TOP_CLK_CTRL_REG_LP_CLK_SEL_Pos)) {
+			cmac_request_lp_clock_freq_set(lpc_clock_state.rcx_freq);
+		}
+#endif
 	}
 	if (lpc_clock_state.rc32k_started) {
 		da1469x_clock_lp_rc32k_calibrate();
@@ -82,6 +102,14 @@ static void xtal32k_settle_work_cb(struct k_work *work)
 	if (lpc_clock_state.xtal32k_started && !lpc_clock_state.xtal32k_ready) {
 		LOG_DBG("XTAL32K settled.");
 		lpc_clock_state.xtal32k_ready = true;
+
+#if defined(CONFIG_BT_DA1469X)
+		/* Update CMAC sleep clock if XTAL32K is set as lp_clk */
+		if ((CRG_TOP->CLK_CTRL_REG & CRG_TOP_CLK_CTRL_REG_LP_CLK_SEL_Msk) ==
+		    (2 << CRG_TOP_CLK_CTRL_REG_LP_CLK_SEL_Pos)) {
+			cmac_request_lp_clock_freq_set(32768);
+		}
+#endif
 	}
 }
 
@@ -126,10 +154,59 @@ static void smartbond_start_xtal32k(void)
 	}
 }
 
+#ifdef CONFIG_REGULATOR
+/*
+ * Should be used to control PLL when the regulator driver is available.
+ * If the latter is available, then the VDD level should be changed when
+ * switching to/from PLL. Otherwise, the VDD level is considered to
+ * be fixed @1.2V which should support both XTAL32M and PLL system clocks.
+ */
+static int smartbond_clock_set_pll_status(bool status)
+{
+	const struct device *dev  = DEVICE_DT_GET(DT_NODELABEL(vdd));
+	int ret;
+
+	if (!device_is_ready(dev)) {
+		LOG_ERR("Regulator device is not ready");
+		return -ENODEV;
+	}
+
+	if (status) {
+		/* Enabling PLL requires that VDD be raised to 1.2V */
+		if (regulator_set_voltage(dev, 1200000, 1200000) == 0) {
+			da1469x_clock_sys_pll_enable();
+
+			/* QSPIC read pipe delay should be updated when switching to PLL */
+		} else {
+			LOG_ERR("Failed to set VDD_LEVEL to 1.2V");
+			return -EIO;
+		}
+	} else {
+		/* Disable PLL and switch back to XTAL32M */
+		da1469x_clock_sys_pll_disable();
+
+		/* VDD level can now be switched back to 0.9V */
+		ret = regulator_set_voltage(dev, 900000, 900000);
+		if (ret < 0) {
+			LOG_WRN("Failed to set VDD_LEVEL to 0.9V");
+		} else {
+			/*
+			 * System clock should be switched to XTAL32M and VDD should be set to 0.9.
+			 * The QSPIC read pipe delay should be updated.
+			 */
+			da1469x_qspi_set_read_pipe_delay(QSPIC_ID, 2);
+		}
+	}
+
+	return 0;
+}
+#endif
+
 static inline int smartbond_clock_control_on(const struct device *dev,
 					     clock_control_subsys_t sub_system)
 {
 	enum smartbond_clock clk = (enum smartbond_clock)(sub_system);
+	int ret = 0;
 
 	ARG_UNUSED(dev);
 
@@ -150,7 +227,9 @@ static inline int smartbond_clock_control_on(const struct device *dev,
 		da1469x_clock_sys_xtal32m_init();
 		da1469x_clock_sys_xtal32m_enable();
 		break;
+	case SMARTBOND_CLK_USB:
 	case SMARTBOND_CLK_PLL96M:
+		pll_requests = 1 << (clk - SMARTBOND_CLK_PLL96M);
 		if ((CRG_TOP->CLK_CTRL_REG & CRG_TOP_CLK_CTRL_REG_RUNNING_AT_PLL96M_Msk) == 0) {
 			if ((CRG_TOP->CLK_CTRL_REG &
 			     CRG_TOP_CLK_CTRL_REG_RUNNING_AT_XTAL32M_Msk) == 0) {
@@ -158,33 +237,37 @@ static inline int smartbond_clock_control_on(const struct device *dev,
 				da1469x_clock_sys_xtal32m_enable();
 				da1469x_clock_sys_xtal32m_wait_to_settle();
 			}
+#if CONFIG_REGULATOR
+			ret = smartbond_clock_set_pll_status(true);
+#else
 			da1469x_clock_sys_pll_enable();
+#endif
+			if (pll_requests & PLL_REQUEST_USB) {
+				CRG_TOP->CLK_CTRL_REG &= ~CRG_TOP_CLK_CTRL_REG_USB_CLK_SRC_Msk;
+			}
 		}
 		break;
 	default:
 		return -ENOTSUP;
 	}
 
-	return 0;
+	return ret;
 }
 
 static inline int smartbond_clock_control_off(const struct device *dev,
 					      clock_control_subsys_t sub_system)
 {
 	enum smartbond_clock clk = (enum smartbond_clock)(sub_system);
+	int ret = 0;
 
 	ARG_UNUSED(dev);
 
 	switch (clk) {
 	case SMARTBOND_CLK_RC32K:
+		/* RC32K is used by POWERUP and WAKEUP HW FSM */
 		BUILD_ASSERT(DT_NODE_HAS_STATUS(DT_NODELABEL(rc32k), okay),
 				"RC32K is not allowed to be turned off");
-		if (((CRG_TOP->CLK_CTRL_REG & CRG_TOP_CLK_CTRL_REG_LP_CLK_SEL_Msk) >>
-			   CRG_TOP_CLK_CTRL_REG_LP_CLK_SEL_Pos) != 0) {
-			CRG_TOP->CLK_RC32K_REG &= ~CRG_TOP_CLK_RC32K_REG_RC32K_ENABLE_Msk;
-			lpc_clock_state.rc32k_ready = false;
-			lpc_clock_state.rc32k_started = false;
-		}
+		ret = -EPERM;
 		break;
 	case SMARTBOND_CLK_RCX:
 		if (((CRG_TOP->CLK_CTRL_REG & CRG_TOP_CLK_CTRL_REG_LP_CLK_SEL_Msk) >>
@@ -212,14 +295,33 @@ static inline int smartbond_clock_control_off(const struct device *dev,
 		da1469x_clock_sys_xtal32m_init();
 		da1469x_clock_sys_xtal32m_enable();
 		break;
+	case SMARTBOND_CLK_USB:
+		/* Switch USB clock to HCLK to allow for resume */
+		CRG_TOP->CLK_CTRL_REG |= CRG_TOP_CLK_CTRL_REG_USB_CLK_SRC_Msk;
+		__fallthrough;
 	case SMARTBOND_CLK_PLL96M:
-		da1469x_clock_sys_pll_disable();
+		pll_requests &= ~(1 << (clk - SMARTBOND_CLK_PLL96M));
+		if (pll_requests == 0) {
+			/*
+			 * PLL must not be disabled as long as a peripheral e.g. LCDC is enabled
+			 * and clocked by PLL.
+			 */
+			if (!da1469x_clock_check_device_div1_clock()) {
+#if CONFIG_REGULATOR
+				ret = smartbond_clock_set_pll_status(false);
+#else
+				da1469x_clock_sys_pll_disable();
+#endif
+			} else {
+				ret = -EPERM;
+			}
+		}
 		break;
 	default:
 		return -ENOTSUP;
 	}
 
-	return 0;
+	return ret;
 }
 
 static enum smartbond_clock smartbond_source_clock(enum smartbond_clock clk)
@@ -271,6 +373,9 @@ static int smartbond_clock_get_rate(enum smartbond_clock clk, uint32_t *rate)
 		break;
 	case SMARTBOND_CLK_PLL96M:
 		*rate = DT_PROP(DT_NODELABEL(pll), clock_frequency);
+		break;
+	case SMARTBOND_CLK_USB:
+		*rate = 48000000;
 		break;
 	default:
 		return -ENOTSUP;
@@ -395,7 +500,7 @@ int z_smartbond_select_sys_clk(enum smartbond_clock sys_clk)
 	uint32_t sys_clock_freq;
 	uint32_t clk_sel;
 	uint32_t clk_sel_msk = CRG_TOP_CLK_CTRL_REG_SYS_CLK_SEL_Msk;
-	int res;
+	int res = 0;
 
 	res = smartbond_clock_get_rate(sys_clk, &sys_clock_freq);
 	if (res != 0) {
@@ -412,10 +517,26 @@ int z_smartbond_select_sys_clk(enum smartbond_clock sys_clk)
 		CRG_TOP->CLK_CTRL_REG = (CRG_TOP->CLK_CTRL_REG & ~clk_sel_msk) | clk_sel;
 		SystemCoreClock = sys_clock_freq;
 	} else if (sys_clk == SMARTBOND_CLK_PLL96M) {
-		da1469x_clock_pll_wait_to_lock();
+		/* Check that PLL is already enabled, otherwise enable it. */
+		if (!da1469x_clock_sys_pll_is_enabled()) {
+#if CONFIG_REGULATOR
+			res = smartbond_clock_set_pll_status(true);
+			if (res != 0) {
+				return -EIO;
+			}
+#else
+			da1469x_clock_sys_pll_enable();
+#endif
+		}
 		da1469x_clock_sys_pll_switch();
 	} else if (sys_clk == SMARTBOND_CLK_XTAL32M) {
+		/*
+		 * XTAL32M should be enabled eitherway as it's not allowed
+		 * to be turned off by application.
+		 */
 		da1469x_clock_sys_xtal32m_switch_safe();
+	} else {
+		return -EINVAL;
 	}
 
 	/* When switching back from PLL to 32MHz read pipe delay may be set to 2 */
@@ -423,7 +544,7 @@ int z_smartbond_select_sys_clk(enum smartbond_clock sys_clk)
 		smartbond_clock_control_update_memory_settings(SystemCoreClock);
 	}
 
-	return 0;
+	return res;
 }
 
 /**
@@ -482,7 +603,7 @@ int smartbond_clocks_init(const struct device *dev)
 	return 0;
 }
 
-static struct clock_control_driver_api smartbond_clock_control_api = {
+static const struct clock_control_driver_api smartbond_clock_control_api = {
 	.on = smartbond_clock_control_on,
 	.off = smartbond_clock_control_off,
 	.get_rate = smartbond_clock_control_get_rate,
@@ -516,7 +637,7 @@ static int smartbond_clocks_pm_action(const struct device *dev, enum pm_device_a
 PM_DEVICE_DT_DEFINE(DT_NODELABEL(osc), smartbond_clocks_pm_action);
 
 DEVICE_DT_DEFINE(DT_NODELABEL(osc),
-		 &smartbond_clocks_init,
+		 smartbond_clocks_init,
 		 PM_DEVICE_DT_GET(DT_NODELABEL(osc)),
 		 NULL, NULL,
 		 PRE_KERNEL_1,

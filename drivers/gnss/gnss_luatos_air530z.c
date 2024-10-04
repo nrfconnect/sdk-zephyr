@@ -188,21 +188,21 @@ static int gnss_luatos_air530z_init(const struct device *dev)
 
 	luatos_air530z_init_dynamic_script(dev);
 
-	ret = modem_pipe_open(data->uart_pipe);
+	ret = modem_pipe_open(data->uart_pipe, K_SECONDS(10));
 	if (ret < 0) {
 		return ret;
 	}
 
 	ret = modem_chat_attach(&data->chat, data->uart_pipe);
 	if (ret < 0) {
-		modem_pipe_close(data->uart_pipe);
+		modem_pipe_close(data->uart_pipe, K_SECONDS(10));
 		return ret;
 	}
 
 	ret = modem_chat_run_script(&data->chat, &init_script);
 	if (ret < 0) {
 		LOG_ERR("Failed to run init_script");
-		modem_pipe_close(data->uart_pipe);
+		modem_pipe_close(data->uart_pipe, K_SECONDS(10));
 		return ret;
 	}
 
@@ -222,20 +222,20 @@ static int luatos_air530z_pm_resume(const struct device *dev)
 	struct gnss_luatos_air530z_data *data = dev->data;
 	int ret;
 
-	ret = modem_pipe_open(data->uart_pipe);
+	ret = modem_pipe_open(data->uart_pipe, K_SECONDS(10));
 	if (ret < 0) {
 		return ret;
 	}
 
 	ret = modem_chat_attach(&data->chat, data->uart_pipe);
 	if (ret < 0) {
-		modem_pipe_close(data->uart_pipe);
+		modem_pipe_close(data->uart_pipe, K_SECONDS(10));
 		return ret;
 	}
 
 	ret = modem_chat_run_script(&data->chat, &init_script);
 	if (ret < 0) {
-		modem_pipe_close(data->uart_pipe);
+		modem_pipe_close(data->uart_pipe, K_SECONDS(10));
 		return ret;
 	}
 
@@ -251,7 +251,7 @@ static int luatos_air530z_pm_action(const struct device *dev, enum pm_device_act
 	switch (action) {
 	case PM_DEVICE_ACTION_SUSPEND:
 		gpio_pin_set_dt(&config->on_off_gpio, 0);
-		ret = modem_pipe_close(data->uart_pipe);
+		ret = modem_pipe_close(data->uart_pipe, K_SECONDS(10));
 		break;
 
 	case PM_DEVICE_ACTION_RESUME:
@@ -336,28 +336,28 @@ static int luatos_air530z_get_supported_systems(const struct device *dev, gnss_s
 	return 0;
 }
 
-static struct gnss_driver_api gnss_api = {
+static const struct gnss_driver_api gnss_api = {
 	.set_fix_rate = luatos_air530z_set_fix_rate,
 	.set_enabled_systems = luatos_air530z_set_enabled_systems,
 	.get_supported_systems = luatos_air530z_get_supported_systems,
 };
 
-#define LUATOS_AIR530Z(inst)								\
-	static struct gnss_luatos_air530z_config gnss_luatos_air530z_cfg_##inst = {	\
-		.uart = DEVICE_DT_GET(DT_INST_BUS(inst)),				\
-		.on_off_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, on_off_gpios, { 0 }),	\
-	};										\
-											\
-	static struct gnss_luatos_air530z_data gnss_luatos_air530z_data_##inst = {	\
-		.chat_delimiter = {'\r', '\n'},						\
-		.dynamic_separators_buf = {',', '*'},					\
-	};										\
-											\
-	PM_DEVICE_DT_INST_DEFINE(inst, luatos_air530z_pm_action);			\
-											\
-	DEVICE_DT_INST_DEFINE(inst, gnss_luatos_air530z_init,				\
-		PM_DEVICE_DT_INST_GET(inst),						\
-		&gnss_luatos_air530z_data_##inst,					\
+#define LUATOS_AIR530Z(inst)									\
+	static const struct gnss_luatos_air530z_config gnss_luatos_air530z_cfg_##inst = {	\
+		.uart = DEVICE_DT_GET(DT_INST_BUS(inst)),					\
+		.on_off_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, on_off_gpios, { 0 }),		\
+	};											\
+												\
+	static struct gnss_luatos_air530z_data gnss_luatos_air530z_data_##inst = {		\
+		.chat_delimiter = {'\r', '\n'},							\
+		.dynamic_separators_buf = {',', '*'},						\
+	};											\
+												\
+	PM_DEVICE_DT_INST_DEFINE(inst, luatos_air530z_pm_action);				\
+												\
+	DEVICE_DT_INST_DEFINE(inst, gnss_luatos_air530z_init,					\
+		PM_DEVICE_DT_INST_GET(inst),							\
+		&gnss_luatos_air530z_data_##inst,						\
 		&gnss_luatos_air530z_cfg_##inst,						\
 		POST_KERNEL, CONFIG_GNSS_INIT_PRIORITY, &gnss_api);
 

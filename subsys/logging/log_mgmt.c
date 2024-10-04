@@ -243,6 +243,9 @@ static const char *link_source_name_get(uint8_t domain_id, uint32_t source_id)
 const char *log_source_name_get(uint32_t domain_id, uint32_t source_id)
 {
 	if (z_log_is_local_domain(domain_id)) {
+		if (IS_ENABLED(CONFIG_LOG_FMT_SECTION_STRIP)) {
+			return "unknown";
+		}
 		if (source_id < log_src_cnt_get(domain_id)) {
 			return TYPE_SECTION_START(log_const)[source_id].name;
 		} else {
@@ -362,6 +365,10 @@ void z_log_runtime_filters_init(void)
 
 int log_source_id_get(const char *name)
 {
+	if (IS_ENABLED(CONFIG_LOG_FMT_SECTION_STRIP)) {
+		return -1;
+	}
+
 	for (int i = 0; i < log_src_cnt_get(Z_LOG_LOCAL_DOMAIN_ID); i++) {
 		const char *sname = log_source_name_get(Z_LOG_LOCAL_DOMAIN_ID, i);
 
@@ -498,7 +505,7 @@ uint32_t z_vrfy_log_filter_set(struct log_backend const *const backend,
 
 	return z_impl_log_filter_set(NULL, domain_id, src_id, level);
 }
-#include <syscalls/log_filter_set_mrsh.c>
+#include <zephyr/syscalls/log_filter_set_mrsh.c>
 #endif
 
 static void link_filter_set(const struct log_link *link,

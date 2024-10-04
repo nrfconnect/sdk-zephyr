@@ -76,7 +76,7 @@ find_package(Dtc 1.4.6)
 # - DTC_OVERLAY_FILE: list of devicetree overlay files which will be
 #   used to modify or extend the base devicetree.
 # - EXTRA_DTC_OVERLAY_FILE: list of extra devicetree overlay files.
-#   This variable is is similar to DTC_OVERLAY_FILE but the files in
+#   This variable is similar to DTC_OVERLAY_FILE but the files in
 #   EXTRA_DTC_OVERLAY_FILE will be applied after DTC_OVERLAY_FILE and
 #   thus files specified by EXTRA_DTC_OVERLAY_FILE have higher precedence.
 # - EXTRA_DTC_FLAGS: list of extra command line options to pass to
@@ -289,18 +289,13 @@ ${EXTRA_GEN_DEFINES_ARGS}
 execute_process(
   COMMAND ${CMD_GEN_DEFINES}
   WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-  RESULT_VARIABLE ret
+  COMMAND_ERROR_IS_FATAL ANY
   )
-if(NOT "${ret}" STREQUAL "0")
-  message(STATUS "In: ${PROJECT_BINARY_DIR}, command: ${CMD_GEN_DEFINES}")
-  message(FATAL_ERROR "gen_defines.py failed with return code: ${ret}")
-else()
-  zephyr_file_copy(${ZEPHYR_DTS}.new ${ZEPHYR_DTS} ONLY_IF_DIFFERENT)
-  zephyr_file_copy(${DEVICETREE_GENERATED_H}.new ${DEVICETREE_GENERATED_H} ONLY_IF_DIFFERENT)
-  file(REMOVE ${ZEPHYR_DTS}.new ${DEVICETREE_GENERATED_H}.new)
-  message(STATUS "Generated zephyr.dts: ${ZEPHYR_DTS}")
-  message(STATUS "Generated devicetree_generated.h: ${DEVICETREE_GENERATED_H}")
-endif()
+zephyr_file_copy(${ZEPHYR_DTS}.new ${ZEPHYR_DTS} ONLY_IF_DIFFERENT)
+zephyr_file_copy(${DEVICETREE_GENERATED_H}.new ${DEVICETREE_GENERATED_H} ONLY_IF_DIFFERENT)
+file(REMOVE ${ZEPHYR_DTS}.new ${DEVICETREE_GENERATED_H}.new)
+message(STATUS "Generated zephyr.dts: ${ZEPHYR_DTS}")
+message(STATUS "Generated devicetree_generated.h: ${DEVICETREE_GENERATED_H}")
 
 #
 # Run GEN_DRIVER_KCONFIG_SCRIPT.
@@ -377,9 +372,14 @@ execute_process(
   OUTPUT_QUIET # Discard stdout
   WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
   RESULT_VARIABLE ret
+  ERROR_VARIABLE stderr
   )
 
 if(NOT "${ret}" STREQUAL "0")
-  message(FATAL_ERROR "command failed with return code: ${ret}")
+  message(FATAL_ERROR "dtc failed with return code: ${ret}")
+elseif(stderr)
+  # dtc printed warnings on stderr but did not fail.
+  # Display them as CMake warnings to draw attention.
+  message(WARNING "dtc raised one or more warnings:\n${stderr}")
 endif()
 endif(DTC)

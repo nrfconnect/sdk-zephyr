@@ -36,6 +36,23 @@ ZTEST(framework_tests, test_assert_mem_equal)
 	zassert_mem_equal(actual, expected, sizeof(expected), NULL);
 }
 
+ZTEST(framework_tests, test_assert_str_equal)
+{
+	const char *s1 = "asdf";
+	const char s2[] = {'a', 's', 'd', 'f', '\0'};
+
+	zassert_str_equal(s1, s2);
+}
+
+ZTEST_EXPECT_FAIL(framework_tests, test_assert_str_equal_fail);
+ZTEST(framework_tests, test_assert_str_equal_fail)
+{
+	const char *s1 = "asdf";
+	const char s2[] = {'a', 's', 'd', 'f', 'q', '\0'};
+
+	zassert_str_equal(s1, s2);
+}
+
 ZTEST_EXPECT_SKIP(framework_tests, test_skip_config);
 ZTEST(framework_tests, test_skip_config)
 {
@@ -136,8 +153,8 @@ static void rule_test_teardown(void *data)
 	 * after_each function was called.
 	 */
 	zassert_equal(fixture->state, RULE_STATE_AFTER_EACH, "Unexpected state");
-#ifdef CONFIG_ZTEST_SHUFFLE
-	zassert_equal(fixture->run_count, CONFIG_ZTEST_SHUFFLE_TEST_REPEAT_COUNT);
+#ifdef CONFIG_ZTEST_REPEAT
+	zassert_equal(fixture->run_count, CONFIG_ZTEST_TEST_REPEAT_COUNT);
 #endif
 }
 

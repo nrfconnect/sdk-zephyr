@@ -63,9 +63,9 @@ struct CSW {
 /* Can be 64 if device is not High-Speed capable */
 #define MSC_BUF_SIZE 512
 
-NET_BUF_POOL_FIXED_DEFINE(msc_ep_pool,
-			  MSC_NUM_INSTANCES * 2, MSC_BUF_SIZE,
-			  sizeof(struct udc_buf_info), NULL);
+UDC_BUF_POOL_DEFINE(msc_ep_pool,
+		    MSC_NUM_INSTANCES * 2, MSC_BUF_SIZE,
+		    sizeof(struct udc_buf_info), NULL);
 
 struct msc_event {
 	struct usbd_class_data *c_data;
@@ -146,7 +146,7 @@ static struct net_buf *msc_buf_alloc(const uint8_t ep)
 
 static uint8_t msc_get_bulk_in(struct usbd_class_data *const c_data)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	struct msc_bot_ctx *ctx = usbd_class_get_private(c_data);
 	struct msc_bot_desc *desc = ctx->desc;
 
@@ -159,7 +159,7 @@ static uint8_t msc_get_bulk_in(struct usbd_class_data *const c_data)
 
 static uint8_t msc_get_bulk_out(struct usbd_class_data *const c_data)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	struct msc_bot_ctx *ctx = usbd_class_get_private(c_data);
 	struct msc_bot_desc *desc = ctx->desc;
 
@@ -566,7 +566,7 @@ static void msc_send_csw(struct msc_bot_ctx *ctx)
 static void usbd_msc_handle_request(struct usbd_class_data *c_data,
 				    struct net_buf *buf, int err)
 {
-	struct usbd_contex *uds_ctx = usbd_class_get_ctx(c_data);
+	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
 	struct msc_bot_ctx *ctx = usbd_class_get_private(c_data);
 	struct udc_buf_info *bi;
 

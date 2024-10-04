@@ -45,6 +45,13 @@ config THREAD_ANALYZER_ISR_STACK_USAGE
 	bool "Analyze interrupt stacks usage"
 	default y
 
+config THREAD_ANALYZER_PRIV_STACK_USAGE
+	bool "Analyze privileged stacks usage"
+	depends on USERSPACE
+	depends on ARCH_HAS_THREAD_PRIV_STACK_SPACE_GET
+	help
+	  Print privileged stack usage for user threads.
+
 config THREAD_ANALYZER_RUN_UNLOCKED
 	bool "Run analysis with interrupts unlocked"
 	default y
@@ -72,6 +79,15 @@ config THREAD_ANALYZER_AUTO
 	  Thread analysis would be called periodically.
 
 if THREAD_ANALYZER_AUTO
+
+config THREAD_ANALYZER_AUTO_SEPARATE_CORES
+	bool "Run thread analyzer separately on each core"
+	default y if KERNEL_COHERENCE
+	depends on SCHED_CPU_MASK
+	help
+	  Run the thread analyzer auto thread on each core and report
+	  cores separately. This feature is needed for platforms running
+	  on cache-incoherent architectures.
 
 config THREAD_ANALYZER_AUTO_INTERVAL
 	int "Thread analysis interval"
@@ -345,6 +361,7 @@ config OVERRIDE_FRAME_POINTER_DEFAULT
 
 config OMIT_FRAME_POINTER
 	bool "Omit frame pointer"
+	depends on !FRAME_POINTER
 	depends on OVERRIDE_FRAME_POINTER_DEFAULT
 	help
 	  Choose Y for best performance. On some architectures (including x86)
@@ -371,9 +388,7 @@ config DEBUG_INFO
 config EXCEPTION_STACK_TRACE
 	bool "Attempt to print stack traces upon exceptions"
 	default y
-	depends on PRINTK
-	depends on DEBUG_INFO
-	depends on !OMIT_FRAME_POINTER
+	depends on ARCH_STACKWALK
 	help
 	  If the architecture fatal handling code supports it, attempt to
 	  print a stack trace of function memory addresses when an
@@ -392,50 +407,10 @@ config DEBUG_THREAD_INFO
 	  for debugger RTOS plugins to determine the state of running threads.
 
 rsource "coredump/Kconfig"
+rsource "symtab/Kconfig"
 endmenu
 
-config GDBSTUB
-	bool "GDB remote serial protocol support [EXPERIMENTAL]"
-	depends on ARCH_HAS_GDBSTUB
-	select UART_USE_RUNTIME_CONFIGURE
-	select EXPERIMENTAL
-	help
-	  This option enable support the target using GDB, or any other
-	  application that supports GDB protocol.
-
-if GDBSTUB
-
-choice
-	prompt "GDB backend"
-
-config GDBSTUB_SERIAL_BACKEND
-	bool "Use serial backend"
-	depends on SERIAL
-	help
-	  Use serial as backend for GDB
-
-config GDBSTUB_CUSTOM_BACKEND
-	bool "Use a custom backend"
-	help
-	  Use a custom backend for GDB
-
-endchoice
-
-config GDBSTUB_BUF_SZ
-	int "GDB backend send/receive buffer size (in bytes)"
-	default 256
-	help
-	  This specifies the size (in bytes) of the send/receive buffer
-	  for GDB backend. This needs to be big enough to hold one
-	  full GDB packet at a time.
-
-config GDBSTUB_TRACE
-	bool "GDB backend extra logging"
-	help
-	  Enable extra debug logging for the GDB backend, including
-	  breakpoint interrupts and remote commands it receives.
-
-endif
+rsource "gdbstub/Kconfig"
 
 config SEGGER_DEBUGMON
 	bool "Use Segger's J-Link debug monitor implementation"
@@ -450,3 +425,9 @@ config MIPI_STP_DECODER
 	depends on !BIG_ENDIAN
 	help
 	  Module decodes a stream of STPv2 data.
+
+config CS_TRACE_DEFMT
+	bool "Coresight Trace Deformatter"
+	help
+	  Module is decoding data which is formatted using Coresight
+	  Trace Formatter, e.g. when data is put into ETR (Embedded Trace Router).

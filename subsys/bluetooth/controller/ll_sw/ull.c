@@ -74,6 +74,7 @@
 #include "ull_conn_internal.h"
 #include "ull_conn_iso_types.h"
 #include "ull_central_iso_internal.h"
+#include "ull_llcp_internal.h"
 #include "ull_llcp.h"
 
 #include "ull_conn_iso_internal.h"
@@ -511,13 +512,13 @@ static void *mark_update;
 
 #if defined(CONFIG_BT_CONN) || defined(CONFIG_BT_CTLR_ADV_ISO)
 #if defined(CONFIG_BT_CONN)
-#define BT_BUF_ACL_TX_COUNT CONFIG_BT_BUF_ACL_TX_COUNT
+#define BT_CTLR_TX_BUFFERS (CONFIG_BT_BUF_ACL_TX_COUNT + LLCP_TX_CTRL_BUF_COUNT)
 #else
-#define BT_BUF_ACL_TX_COUNT 0
+#define BT_CTLR_TX_BUFFERS 0
 #endif /* CONFIG_BT_CONN */
 
 static MFIFO_DEFINE(tx_ack, sizeof(struct lll_tx),
-		    BT_BUF_ACL_TX_COUNT + BT_CTLR_ISO_TX_BUFFERS);
+		    BT_CTLR_TX_BUFFERS + BT_CTLR_ISO_TX_BUFFERS);
 #endif /* CONFIG_BT_CONN || CONFIG_BT_CTLR_ADV_ISO */
 
 static void *mark_disable;
@@ -573,7 +574,7 @@ int ll_init(struct k_sem *sem_rx)
 	 * On init mayfly memq head and tail is assigned with a link instance
 	 * that is used during enqueue operation. New link provided by enqueue
 	 * is added as a tail and will be used in future enqueue. While dequeue,
-	 * the link that was used for storage of the job is relesed and stored
+	 * the link that was used for storage of the job is released and stored
 	 * in a job it was related to. The job may store initial link. If mayfly
 	 * is re-initialized but job objects were not re-initialized there is a
 	 * risk that enqueued job will point to the same link as it is in a memq
@@ -1052,6 +1053,7 @@ void ll_rx_dequeue(void)
 	{
 		struct node_rx_pdu *rx_curr;
 		struct pdu_adv *adv;
+		uint8_t loop = PDU_RX_POOL_SIZE / PDU_RX_NODE_POOL_ELEMENT_SIZE;
 
 		adv = (struct pdu_adv *)rx->pdu;
 		if (adv->type != PDU_ADV_TYPE_EXT_IND) {
@@ -1061,6 +1063,9 @@ void ll_rx_dequeue(void)
 		rx_curr = rx->rx_ftr.extra;
 		while (rx_curr) {
 			memq_link_t *link_free;
+
+			LL_ASSERT(loop);
+			loop--;
 
 			link_free = rx_curr->hdr.link;
 			rx_curr = rx_curr->rx_ftr.extra;
@@ -1849,7 +1854,7 @@ uint32_t ull_ticker_status_take(uint32_t ret, uint32_t volatile *ret_cb)
 {
 	if ((ret == TICKER_STATUS_BUSY) || (*ret_cb != TICKER_STATUS_BUSY)) {
 		/* Operation is either pending of completed via callback
-		 * prior to this function call. Take the sempaphore and wait,
+		 * prior to this function call. Take the semaphore and wait,
 		 * or take it to balance take/give counting.
 		 */
 		k_sem_take(&sem_ticker_api_cb, K_FOREVER);

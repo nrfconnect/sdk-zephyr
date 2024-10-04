@@ -24,6 +24,7 @@
 		zephyr,display = &sdl_dc;
 		zephyr,canbus = &can_loopback0;
 		zephyr,code-partition = &slot0_partition;
+		zephyr,bt-hci = &bt_hci_userchan;
 	};
 
 	aliases {
@@ -113,6 +114,7 @@
 		clock-frequency = <I2C_BITRATE_STANDARD>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		#forward-cells = <1>;
 		reg = <0x100 4>;
 	};
 
@@ -129,6 +131,15 @@
 		status = "okay";
 		compatible = "zephyr,espi-emul-controller";
 		reg = <0x300 4>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
+
+	mspi0: mspi@400 {
+		status = "okay";
+		compatible = "zephyr,mspi-emul-controller";
+		clock-frequency = <250000000>;
+		reg = <0x400 4>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 	};
@@ -217,5 +228,10 @@
 		compatible = "zephyr,dma-emul";
 		#dma-cells = <1>;
 		stack-size = <4096>;
+	};
+
+	bt_hci_userchan: bt_hci_userchan {
+		compatible = "zephyr,bt-hci-userchan";
+		status = "okay";
 	};
 };

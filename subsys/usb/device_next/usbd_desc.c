@@ -28,7 +28,7 @@ static inline bool desc_type_equal(const struct usbd_desc_node *const a,
  * does not care about index zero for the language string descriptor,
  * so if it is not added first, the device will be non-compliant.
  */
-static int desc_add_and_update_idx(struct usbd_contex *const uds_ctx,
+static int desc_add_and_update_idx(struct usbd_context *const uds_ctx,
 				   struct usbd_desc_node *const new_nd)
 {
 	struct usbd_desc_node *tmp_nd;
@@ -80,7 +80,7 @@ static int desc_add_and_update_idx(struct usbd_contex *const uds_ctx,
 	return 0;
 }
 
-struct usbd_desc_node *usbd_get_descriptor(struct usbd_contex *const uds_ctx,
+struct usbd_desc_node *usbd_get_descriptor(struct usbd_context *const uds_ctx,
 					   const uint8_t type, const uint8_t idx)
 {
 	struct usbd_desc_node *desc_nd;
@@ -102,20 +102,21 @@ struct usbd_desc_node *usbd_get_descriptor(struct usbd_contex *const uds_ctx,
 	return NULL;
 }
 
-int usbd_desc_remove_all(struct usbd_contex *const uds_ctx)
+int usbd_desc_remove_all(struct usbd_context *const uds_ctx)
 {
 	struct usbd_desc_node *tmp;
 	sys_dnode_t *node;
 
 	while ((node = sys_dlist_get(&uds_ctx->descriptors))) {
 		tmp = CONTAINER_OF(node, struct usbd_desc_node, node);
-		LOG_DBG("Remove descriptor node %p", tmp);
+		LOG_DBG("Remove descriptor node %p type %u",
+			(void *)tmp, tmp->str.utype);
 	}
 
 	return 0;
 }
 
-int usbd_add_descriptor(struct usbd_contex *const uds_ctx,
+int usbd_add_descriptor(struct usbd_context *const uds_ctx,
 			struct usbd_desc_node *const desc_nd)
 {
 	struct usb_device_descriptor *hs_desc, *fs_desc;

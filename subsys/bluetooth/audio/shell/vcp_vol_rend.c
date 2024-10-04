@@ -7,19 +7,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/types.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+#include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/audio/aics.h>
+#include <zephyr/bluetooth/audio/vocs.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/audio/vcp.h>
 #include <zephyr/shell/shell.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#include <zephyr/shell/shell_string_conv.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
 
 #include "shell/bt.h"
 
 static struct bt_vcp_included vcp_included;
 
-static void vcp_vol_rend_state_cb(int err, uint8_t volume, uint8_t mute)
+static void vcp_vol_rend_state_cb(struct bt_conn *conn, int err, uint8_t volume, uint8_t mute)
 {
 	if (err) {
 		shell_error(ctx_shell, "VCP state get failed (%d)", err);
@@ -28,7 +37,7 @@ static void vcp_vol_rend_state_cb(int err, uint8_t volume, uint8_t mute)
 	}
 }
 
-static void vcp_vol_rend_flags_cb(int err, uint8_t flags)
+static void vcp_vol_rend_flags_cb(struct bt_conn *conn, int err, uint8_t flags)
 {
 	if (err) {
 		shell_error(ctx_shell, "VCP flags get failed (%d)", err);
@@ -90,6 +99,7 @@ static void aics_status_cb(struct bt_aics *inst, int err, bool active)
 	}
 
 }
+
 static void aics_description_cb(struct bt_aics *inst, int err,
 				char *description)
 {
@@ -102,6 +112,7 @@ static void aics_description_cb(struct bt_aics *inst, int err,
 			    inst, description);
 	}
 }
+
 static void vocs_state_cb(struct bt_vocs *inst, int err, int16_t offset)
 {
 	if (err) {

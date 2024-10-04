@@ -28,7 +28,7 @@ static int assign_ep_addr(const struct device *dev,
 	int ret = -ENODEV;
 
 	for (unsigned int idx = 1; idx < 16U; idx++) {
-		uint16_t mps = ed->wMaxPacketSize;
+		uint16_t mps = sys_le16_to_cpu(ed->wMaxPacketSize);
 		uint8_t ep;
 
 		if (USB_EP_DIR_IS_IN(ed->bEndpointAddress)) {
@@ -50,7 +50,7 @@ static int assign_ep_addr(const struct device *dev,
 		if (ret == 0) {
 			LOG_DBG("ep 0x%02x -> 0x%02x", ed->bEndpointAddress, ep);
 			ed->bEndpointAddress = ep;
-			ed->wMaxPacketSize = mps;
+			ed->wMaxPacketSize = sys_cpu_to_le16(mps);
 			usbd_ep_bm_set(class_ep_bm, ed->bEndpointAddress);
 			usbd_ep_bm_set(config_ep_bm, ed->bEndpointAddress);
 
@@ -62,7 +62,7 @@ static int assign_ep_addr(const struct device *dev,
 }
 
 /* Unassign all endpoint of a class instance based on class_ep_bm */
-static int unassign_eps(struct usbd_contex *const uds_ctx,
+static int unassign_eps(struct usbd_context *const uds_ctx,
 			uint32_t *const config_ep_bm,
 			uint32_t *const class_ep_bm)
 {
@@ -108,7 +108,7 @@ static int unassign_eps(struct usbd_contex *const uds_ctx,
  * We use config_ep_bm variable as map for assigned endpoint for an
  * USB device configuration.
  */
-static int init_configuration_inst(struct usbd_contex *const uds_ctx,
+static int init_configuration_inst(struct usbd_context *const uds_ctx,
 				   const enum usbd_speed speed,
 				   struct usbd_class_node *const c_nd,
 				   uint32_t *const config_ep_bm,
@@ -166,8 +166,10 @@ static int init_configuration_inst(struct usbd_contex *const uds_ctx,
 				return ret;
 			}
 
-			LOG_INF("\tep 0x%02x mps %u interface ep-bm 0x%08x",
-				ed->bEndpointAddress, ed->wMaxPacketSize, class_ep_bm);
+			LOG_INF("\tep 0x%02x mps 0x%04x interface ep-bm 0x%08x",
+				ed->bEndpointAddress,
+				sys_le16_to_cpu(ed->wMaxPacketSize),
+				class_ep_bm);
 		}
 
 		dhp++;
@@ -191,7 +193,7 @@ static int init_configuration_inst(struct usbd_contex *const uds_ctx,
  *
  * Iterate on a list of all classes in a configuration
  */
-static int init_configuration(struct usbd_contex *const uds_ctx,
+static int init_configuration(struct usbd_context *const uds_ctx,
 			      const enum usbd_speed speed,
 			      struct usbd_config_node *const cfg_nd)
 {
@@ -243,7 +245,7 @@ static int init_configuration(struct usbd_contex *const uds_ctx,
 	return 0;
 }
 
-static void usbd_init_update_fs_mps0(struct usbd_contex *const uds_ctx)
+static void usbd_init_update_fs_mps0(struct usbd_context *const uds_ctx)
 {
 	struct udc_device_caps caps = udc_caps(uds_ctx->dev);
 	struct usb_device_descriptor *desc = uds_ctx->fs_desc;
@@ -264,7 +266,7 @@ static void usbd_init_update_fs_mps0(struct usbd_contex *const uds_ctx)
 	}
 }
 
-int usbd_init_configurations(struct usbd_contex *const uds_ctx)
+int usbd_init_configurations(struct usbd_context *const uds_ctx)
 {
 	struct usbd_config_node *cfg_nd;
 

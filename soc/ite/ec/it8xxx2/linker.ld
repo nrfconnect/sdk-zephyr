@@ -91,6 +91,10 @@ SECTIONS
 
 #include <zephyr/linker/rel-sections.ld>
 
+#ifdef CONFIG_LLEXT
+#include <zephyr/linker/llext-sections.ld>
+#endif
+
     /*
      * The .plt and .iplt are here according to
      * 'riscv32-zephyr-elf-ld --verbose', before text section.
@@ -161,9 +165,46 @@ SECTIONS
 		KEEP(*(".openocd_debug.*"))
 
 		__text_region_start = .;
-
+#ifndef CONFIG_SOC_IT8XXX2_LIBRARY_TO_RAM
 		*(.text)
 		*(".text.*")
+#endif
+
+#ifdef CONFIG_SOC_IT8XXX2_LIBRARY_TO_RAM
+		*(EXCLUDE_FILE (
+#endif
+#ifdef CONFIG_SOC_IT8XXX2_SERIAL_IN_RAM
+			*libdrivers__serial.a:*
+#endif
+#ifdef CONFIG_SOC_IT8XXX2_KERNEL_IN_RAM
+			*libkernel.a:*
+#endif
+#ifdef CONFIG_SOC_IT8XXX2_ZEPHYR_IN_RAM
+			*libzephyr.a:*
+#endif
+#ifdef CONFIG_SOC_IT8XXX2_LIBRARY_TO_RAM
+		)
+			.text
+		)
+#endif
+
+#ifdef CONFIG_SOC_IT8XXX2_LIBRARY_TO_RAM
+		*(EXCLUDE_FILE (
+#endif
+#ifdef CONFIG_SOC_IT8XXX2_SERIAL_IN_RAM
+			*libdrivers__serial.a:*
+#endif
+#ifdef CONFIG_SOC_IT8XXX2_KERNEL_IN_RAM
+			*libkernel.a:*
+#endif
+#ifdef CONFIG_SOC_IT8XXX2_ZEPHYR_IN_RAM
+			*libzephyr.a:*
+#endif
+#ifdef CONFIG_SOC_IT8XXX2_LIBRARY_TO_RAM
+		)
+			.text.*
+		)
+#endif
 		*(.gnu.linkonce.t.*)
 #include <zephyr/linker/kobject-text.ld>
 
@@ -186,6 +227,21 @@ SECTIONS
 		KEEP(*(".exception.entry.*"))
 		*(".exception.other.*")
 #endif
+#ifdef CONFIG_SOC_IT8XXX2_SERIAL_IN_RAM
+		*libdrivers__serial.a:*(.text .text.*)
+		*libdrivers__serial.a:*(.rodata .rodata.*)
+		*libdrivers__serial.a:*(.srodata .srodata.*)
+#endif
+#ifdef CONFIG_SOC_IT8XXX2_KERNEL_IN_RAM
+		*libkernel.a:*(.text .text.*)
+		*libkernel.a:*(.rodata .rodata.*)
+		*libkernel.a:*(.srodata .srodata.*)
+#endif
+#ifdef CONFIG_SOC_IT8XXX2_ZEPHYR_IN_RAM
+		*libzephyr.a:*(.text .text.*)
+		*libzephyr.a:*(.rodata .rodata.*)
+		*libzephyr.a:*(.srodata .srodata.*)
+#endif
 		__ilm_flash_end = .;
 		/* ILM mapping is always a multiple of 4k size; ensure following
 		 * sections won't incorrectly redirect to RAM. */
@@ -197,6 +253,10 @@ SECTIONS
 
 	__rodata_region_start = .;
 #include <zephyr/linker/common-rom.ld>
+/* Located in generated directory. This file is populated by calling
+ * zephyr_linker_sources(ROM_SECTIONS ...). Useful for grouping iterable RO structs.
+ */
+#include <snippets-rom-sections.ld>
 #include <zephyr/linker/thread-local-storage.ld>
 
     SECTION_PROLOGUE(_RODATA_SECTION_NAME,,)

@@ -23,7 +23,7 @@
 #include <zephyr/toolchain/common.h>
 #include <zephyr/linker/sections.h>
 #include <zephyr/sys/util.h>
-#include <offsets.h>
+#include <zephyr/offsets.h>
 
 /* We need to dummy out DT_NODE_HAS_STATUS when building the unittests.
  * Including devicetree.h would require generating dummy header files
@@ -292,7 +292,7 @@ extern char lnkr_boot_noinit_size[];
 /* lnkr_pinned_start[] and lnkr_pinned_end[] must encapsulate
  * all the pinned sections as these are used by
  * the MMU code to mark the physical page frames with
- * Z_PAGE_FRAME_PINNED.
+ * K_MEM_PAGE_FRAME_PINNED.
  */
 extern char lnkr_pinned_start[];
 extern char lnkr_pinned_end[];
@@ -337,6 +337,24 @@ static inline bool lnkr_is_region_pinned(uint8_t *addr, size_t sz)
 
 #endif /* CONFIG_LINKER_USE_PINNED_SECTION */
 
+#ifdef CONFIG_LINKER_USE_ONDEMAND_SECTION
+/* lnkr_ondemand_start[] and lnkr_ondemand_end[] must encapsulate
+ * all the on-demand sections as these are used by
+ * the MMU code to mark the virtual pages with the appropriate backing store
+ * location token to have them be paged in on demand.
+ */
+extern char lnkr_ondemand_start[];
+extern char lnkr_ondemand_end[];
+extern char lnkr_ondemand_load_start[];
+
+extern char lnkr_ondemand_text_start[];
+extern char lnkr_ondemand_text_end[];
+extern char lnkr_ondemand_text_size[];
+extern char lnkr_ondemand_rodata_start[];
+extern char lnkr_ondemand_rodata_end[];
+extern char lnkr_ondemand_rodata_size[];
+
+#endif /* CONFIG_LINKER_USE_ONDEMAND_SECTION */
 #endif /* ! _ASMLANGUAGE */
 
 #endif /* ZEPHYR_INCLUDE_LINKER_LINKER_DEFS_H_ */

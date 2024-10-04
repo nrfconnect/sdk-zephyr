@@ -19,9 +19,9 @@
 
 			channel@0 {
 				reg = <0>;
-                                zephyr,gain = "ADC_GAIN_1";
-                                zephyr,reference = "ADC_REF_VDD_1";
-                                zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+				zephyr,gain = "ADC_GAIN_1";
+				zephyr,reference = "ADC_REF_VDD_1";
+				zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 			};
 		};
 
@@ -140,7 +140,8 @@
 				in-min = <(-100)>;
 				in-max = <100>;
 				zephyr,axis = <0>;
-				invert;
+				invert-input;
+				invert-output;
 			};
 		};
 
@@ -151,6 +152,14 @@
 			short-codes = <0>;
 			long-codes = <0>;
 			long-delay-ms = <100>;
+		};
+
+		double_tap: doubletap {
+			input = <&double_tap>;
+			compatible = "zephyr,input-double-tap";
+			input-codes = <0>;
+			double-tap-codes = <0>;
+			double-tap-delay-ms = <0>;
 		};
 
 		i2c@1 {
@@ -288,17 +297,17 @@
 				invert-y;
 			};
 
-                        paw32xx@3 {
-                                compatible = "pixart,paw32xx";
-                                reg = <3>;
-                                spi-max-frequency = <0>;
-                                motion-gpios = <&test_gpio 0 0>;
-                                zephyr,axis-x = <0>;
-                                zephyr,axis-y = <1>;
-                                invert-x;
-                                invert-y;
-                                res-cpi = <800>;
-                        };
+			paw32xx@3 {
+				compatible = "pixart,paw32xx";
+				reg = <3>;
+				spi-max-frequency = <0>;
+				motion-gpios = <&test_gpio 0 0>;
+				zephyr,axis-x = <0>;
+				zephyr,axis-y = <1>;
+				invert-x;
+				invert-y;
+				res-cpi = <800>;
+			};
 		};
 	};
 };

@@ -1,12 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# This file contains boards in Zephyr which has been replaced with a new board
+# This file contains boards in Zephyr which have been replaced with a new board
 # name.
 # This allows the system to automatically change the board while at the same
 # time prints a warning to the user, that the board name is deprecated.
 #
 # To add a board rename, add a line in following format:
 # set(<old_board_name>_DEPRECATED <new_board_name>)
+#
+# When adding board aliases here, remember to add a mention in the corresponding GitHub issue
+# tracking the removal of API/options
+# https://docs.zephyrproject.org/latest/develop/api/api_lifecycle.html#deprecated,
+# so these aliases are eventually removed
 
 set(96b_carbon_DEPRECATED
     96b_carbon/stm32f401xe
@@ -29,8 +34,11 @@ set(actinius_icarus_som_dk_ns_DEPRECATED
 set(actinius_icarus_som_ns_DEPRECATED
     actinius_icarus_som/nrf9160/ns
 )
+set(adafruit_feather_DEPRECATED
+    adafruit_feather_nrf52840/nrf52840
+)
 set(adafruit_feather_nrf52840_DEPRECATED
-    adafruit_feather
+    adafruit_feather_nrf52840/nrf52840
 )
 set(adafruit_itsybitsy_nrf52840_DEPRECATED
     adafruit_itsybitsy
@@ -138,31 +146,61 @@ set(ebyte_e73_tbb_nrf52832_DEPRECATED
     ebyte_e73_tbb
 )
 set(efm32pg_stk3402a_DEPRECATED
-    efm32pg_stk3402a/efm32pg12b500f1024gl125
+    slstk3402a/efm32pg12b500f1024gl125
 )
 set(efm32pg_stk3402a_jg_DEPRECATED
-    efm32pg_stk3402a/efm32jg12b500f1024gl125
+    slstk3402a/efm32jg12b500f1024gl125
+)
+set(efm32hg_slstk3400a_DEPRECATED
+    slstk3400a
+)
+set(efm32pg_stk3401a_DEPRECATED
+    slstk3401a
+)
+set(efm32gg_stk3701a_DEPRECATED
+    slstk3701a
+)
+set(efm32gg_slwstk6121a_DEPRECATED
+    slwrb4321a
 )
 set(efr32_radio_brd4104a_DEPRECATED
-    efr32_radio/efr32bg13p632f512gm48
+    slwrb4104a
 )
 set(efr32_radio_brd4161a_DEPRECATED
-    efr32_radio/efr32mg12p432f1024gl125
+    slwrb4161a
 )
 set(efr32_radio_brd4170a_DEPRECATED
-    efr32_radio/efr32mg12p433f1024gm68
+    slwrb4170a
 )
 set(efr32_radio_brd4180a_DEPRECATED
-    efr32_radio/efr32mg21a020f1024im32
+    slwrb4180a
 )
 set(efr32_radio_brd4187c_DEPRECATED
-    efr32_radio/efr32mg24b220f1536im48
+    xg24_rb4187c
 )
 set(efr32_radio_brd4250b_DEPRECATED
-    efr32_radio/efr32fg1p133f256gm48
+    slwrb4250b
 )
 set(efr32_radio_brd4255a_DEPRECATED
-    efr32_radio/efr32fg13p233f512gm48
+    slwrb4255a
+)
+set(efm32gg_sltb009a_DEPRECATED
+    sltb009a
+)
+set(efr32mg_sltb004a_DEPRECATED
+    sltb004a
+)
+set(efr32bg22_brd4184a_DEPRECATED
+    sltb010a@0
+)
+set(efr32bg22_brd4184b_DEPRECATED
+    sltb010a@2
+)
+set(efr32xg24_dk2601b_DEPRECATED
+    xg24_dk2601b
+)
+set(efr32bg27_brd2602a_DEPRECATED
+    xg27_dk2602a
 )
 set(em_starterkit_DEPRECATED
     em_starterkit/emsk_em9d

@@ -31,6 +31,8 @@ if(NOT "${ARCH}" STREQUAL "posix")
       )
 
     include(${ZEPHYR_BASE}/cmake/compiler/clang/target_arm.cmake)
+  elseif("${ARCH}" STREQUAL "arm64")
+    include(${ZEPHYR_BASE}/cmake/compiler/clang/target_arm64.cmake)
   elseif("${ARCH}" STREQUAL "riscv")
     include(${ZEPHYR_BASE}/cmake/compiler/gcc/target_riscv.cmake)
   endif()
@@ -81,11 +83,3 @@ if(NOT "${ARCH}" STREQUAL "posix")
   string(REPLACE ";" " " CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
 
 endif()
-
-# Load toolchain_cc-family macros
-
-macro(toolchain_cc_nostdinc)
-  if(NOT "${ARCH}" STREQUAL "posix")
-    zephyr_compile_options( -nostdinc)
-  endif()
-endmacro()

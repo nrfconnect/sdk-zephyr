@@ -35,7 +35,7 @@
 #define STM32_QSPI_BASE_ADDRESS DT_INST_REG_ADDR(0)
 
 #define STM32_QSPI_RESET_GPIO DT_INST_NODE_HAS_PROP(0, reset_gpios)
-#define STM32_QSPI_RESET_CMD DT_INST_NODE_HAS_PROP(0, reset_cmd)
+#define STM32_QSPI_RESET_CMD  DT_INST_PROP(0, reset_cmd)
 
 #include <stm32_ll_dma.h>
 
@@ -54,6 +54,9 @@ LOG_MODULE_REGISTER(flash_stm32_qspi, CONFIG_FLASH_LOG_LEVEL);
 #define STM32_QSPI_USE_DMA DT_NODE_HAS_PROP(DT_INST_PARENT(0), dmas)
 
 #if DT_HAS_COMPAT_STATUS_OKAY(st_stm32_qspi_nor)
+
+/* In dual-flash mode, total size is twice the size of one flash component */
+#define STM32_QSPI_DOUBLE_FLASH	DT_PROP(DT_NODELABEL(quadspi), dual_flash)
 
 #if STM32_QSPI_USE_DMA
 static const uint32_t table_m_size[] = {
@@ -125,6 +128,11 @@ struct flash_stm32_qspi_data {
 	bool flag_access_32bit: 1;
 };
 
+static const QSPI_CommandTypeDef cmd_write_en = {
+	.Instruction = SPI_NOR_CMD_WREN,
+	.InstructionMode = QSPI_INSTRUCTION_1_LINE
+};
+
 static inline void qspi_lock_thread(const struct device *dev)
 {
 	struct flash_stm32_qspi_data *dev_data = dev->data;
@@ -191,7 +199,7 @@ static inline int qspi_prepare_quad_program(const struct device *dev,
 /*
  * Send a command over QSPI bus.
  */
-static int qspi_send_cmd(const struct device *dev, QSPI_CommandTypeDef *cmd)
+static int qspi_send_cmd(const struct device *dev, const QSPI_CommandTypeDef *cmd)
 {
 	const struct flash_stm32_qspi_config *dev_cfg = dev->config;
 	struct flash_stm32_qspi_data *dev_data = dev->data;
@@ -203,7 +211,7 @@ static int qspi_send_cmd(const struct device *dev, QSPI_CommandTypeDef *cmd)
 
 	dev_data->cmd_status = 0;
 
-	hal_ret = HAL_QSPI_Command_IT(&dev_data->hqspi, cmd);
+	hal_ret = HAL_QSPI_Command_IT(&dev_data->hqspi, (QSPI_CommandTypeDef *)cmd);
 	if (hal_ret != HAL_OK) {
 		LOG_ERR("%d: Failed to send QSPI instruction", hal_ret);
 		return -EIO;
@@ -328,8 +336,10 @@ static int qspi_read_jedec_id(const struct device *dev, uint8_t *id)
 		return -EIO;
 	}
 
+	LOG_DBG("Read JESD216-ID");
+
 	dev_data->cmd_status = 0;
-	id = &data[0];
+	memcpy(id, data, JESD216_READ_ID_LEN);
 
 	return 0;
 }
@@ -546,11 +556,6 @@ static int flash_stm32_qspi_write(const struct device *dev, off_t addr,
 		return 0;
 	}
 
-	QSPI_CommandTypeDef cmd_write_en = {
-		.Instruction = SPI_NOR_CMD_WREN,
-		.InstructionMode = QSPI_INSTRUCTION_1_LINE,
-	};
-
 	QSPI_CommandTypeDef cmd_pp = {
 		.Instruction = SPI_NOR_CMD_PP,
 		.InstructionMode = QSPI_INSTRUCTION_1_LINE,
@@ -639,11 +644,6 @@ static int flash_stm32_qspi_erase(const struct device *dev, off_t addr,
 	if (size == 0) {
 		return 0;
 	}
-
-	QSPI_CommandTypeDef cmd_write_en = {
-		.Instruction = SPI_NOR_CMD_WREN,
-		.InstructionMode = QSPI_INSTRUCTION_1_LINE,
-	};
 
 	QSPI_CommandTypeDef cmd_erase = {
 		.Instruction = 0,
@@ -886,7 +886,7 @@ static int setup_pages_layout(const struct device *dev)
 		return -ENOTSUP;
 	}
 
-	uint32_t erase_size = BIT(exp);
+	uint32_t erase_size = BIT(exp) << STM32_QSPI_DOUBLE_FLASH;
 
 	/* We need layout page size to be compatible with erase size */
 	if ((layout_page_size % erase_size) != 0) {
@@ -919,10 +919,6 @@ static int qspi_program_addr_4b(const struct device *dev, bool write_enable)
 
 	/* Send write enable command, if required */
 	if (write_enable) {
-		QSPI_CommandTypeDef cmd_write_en = {
-			.Instruction = SPI_NOR_CMD_WREN,
-			.InstructionMode = QSPI_INSTRUCTION_1_LINE,
-		};
 		ret = qspi_send_cmd(dev, &cmd_write_en);
 		if (ret != 0) {
 			return ret;
@@ -1030,11 +1026,6 @@ static int qspi_write_enable(const struct device *dev)
 	uint8_t reg;
 	int ret;
 
-	QSPI_CommandTypeDef cmd_write_en = {
-		.Instruction = SPI_NOR_CMD_WREN,
-		.InstructionMode = QSPI_INSTRUCTION_1_LINE,
-	};
-
 	ret = qspi_send_cmd(dev, &cmd_write_en);
 	if (ret) {
 		return ret;
@@ -1129,8 +1120,8 @@ static int spi_nor_process_bfp(const struct device *dev,
 	const struct flash_stm32_qspi_config *dev_cfg = dev->config;
 	struct flash_stm32_qspi_data *data = dev->data;
 	struct jesd216_erase_type *etp = data->erase_types;
-	const size_t flash_size = jesd216_bfp_density(bfp) / 8U;
 	uint8_t addr_mode;
+	const size_t flash_size = (jesd216_bfp_density(bfp) / 8U) << STM32_QSPI_DOUBLE_FLASH;
 	int rc;
 
 	if (flash_size != dev_cfg->flash_size) {
@@ -1281,6 +1272,9 @@ static int flash_stm32_qspi_send_reset(const struct device *dev)
 		LOG_ERR("%d: Failed to send RESET_MEM", ret);
 		return ret;
 	}
+
+	LOG_DBG("Send Reset command");
+
 	return 0;
 }
 #endif
@@ -1392,6 +1386,19 @@ static int flash_stm32_qspi_init(const struct device *dev)
 	dev_data->hqspi.Init.ClockPrescaler = prescaler;
 	/* Give a bit position from 0 to 31 to the HAL init minus 1 for the DCR1 reg */
 	dev_data->hqspi.Init.FlashSize = find_lsb_set(dev_cfg->flash_size) - 2;
+#if DT_PROP(DT_NODELABEL(quadspi), dual_flash) && defined(QUADSPI_CR_DFM)
+	/*
+	 * When the DTS has <dual-flash>, it means Dual Flash Mode
+	 * Even in DUAL flash config, the SDFP is read from one single quad-NOR
+	 * else the magic nb is wrong (0x46465353)
+	 * That means that the Dual Flash config is set after the SFDP sequence
+	 */
+	dev_data->hqspi.Init.SampleShifting = QSPI_SAMPLE_SHIFTING_HALFCYCLE;
+	dev_data->hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_3_CYCLE;
+	dev_data->hqspi.Init.DualFlash = QSPI_DUALFLASH_DISABLE;
+	/* Set Dual Flash Mode only on MemoryMapped */
+	dev_data->hqspi.Init.FlashID = QSPI_FLASH_ID_1;
+#endif /* dual_flash */
 
 	HAL_QSPI_Init(&dev_data->hqspi);
 
@@ -1485,6 +1492,16 @@ static int flash_stm32_qspi_init(const struct device *dev)
 #endif /* CONFIG_FLASH_PAGE_LAYOUT */
 
 #ifdef CONFIG_STM32_MEMMAP
+#if DT_PROP(DT_NODELABEL(quadspi), dual_flash) && defined(QUADSPI_CR_DFM)
+	/*
+	 * When the DTS has dual_flash, it means Dual Flash Mode for Memory MAPPED
+	 * Force Dual Flash mode now, after the SFDP sequence which is reading
+	 * one quad-NOR only
+	 */
+	MODIFY_REG(dev_data->hqspi.Instance->CR, (QUADSPI_CR_DFM), QSPI_DUALFLASH_ENABLE);
+	LOG_DBG("Dual Flash Mode");
+#endif /* dual_flash */
+
 	ret = stm32_qspi_set_memory_mapped(dev);
 	if (ret != 0) {
 		LOG_ERR("Failed to enable memory-mapped mode: %d", ret);
@@ -1555,7 +1572,7 @@ static const struct flash_stm32_qspi_config flash_stm32_qspi_cfg = {
 		.bus = DT_CLOCKS_CELL(STM32_QSPI_NODE, bus)
 	},
 	.irq_config = flash_stm32_qspi_irq_config_func,
-	.flash_size = DT_INST_REG_ADDR_BY_IDX(0, 1),
+	.flash_size = DT_INST_REG_ADDR_BY_IDX(0, 1) << STM32_QSPI_DOUBLE_FLASH,
 	.max_frequency = DT_INST_PROP(0, qspi_max_frequency),
 	.pcfg = PINCTRL_DT_DEV_CONFIG_GET(STM32_QSPI_NODE),
 #if STM32_QSPI_RESET_GPIO

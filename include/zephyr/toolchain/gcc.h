@@ -84,7 +84,7 @@
 #elif !defined(__cplusplus) && \
 	(((__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 6))) ||	\
 	 (__STDC_VERSION__) >= 201100)
-#define BUILD_ASSERT(EXPR, MSG...) _Static_assert(EXPR, "" MSG)
+#define BUILD_ASSERT(EXPR, MSG...) _Static_assert((EXPR), "" MSG)
 #else
 #define BUILD_ASSERT(EXPR, MSG...)
 #endif
@@ -250,6 +250,9 @@ do {                                                                    \
 
 #ifndef __deprecated
 #define __deprecated	__attribute__((deprecated))
+/* When adding this, remember to follow the instructions in
+ * https://docs.zephyrproject.org/latest/develop/api/api_lifecycle.html#deprecated
+ */
 #endif
 
 #ifndef __attribute_const__
@@ -312,6 +315,9 @@ do {                                                                    \
 /* Generic message */
 #ifndef __DEPRECATED_MACRO
 #define __DEPRECATED_MACRO __WARN("Macro is deprecated")
+/* When adding this, remember to follow the instructions in
+ * https://docs.zephyrproject.org/latest/develop/api/api_lifecycle.html#deprecated
+ */
 #endif
 
 /* These macros allow having ARM asm functions callable from thumb */

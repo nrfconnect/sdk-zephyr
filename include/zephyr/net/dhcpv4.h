@@ -21,6 +21,8 @@ extern "C" {
 /**
  * @brief DHCPv4
  * @defgroup dhcpv4 DHCPv4
+ * @since 1.7
+ * @version 0.8.0
  * @ingroup networking
  * @{
  */
@@ -40,6 +42,7 @@ enum net_dhcpv4_state {
 	NET_DHCPV4_RENEWING,
 	NET_DHCPV4_REBINDING,
 	NET_DHCPV4_BOUND,
+	NET_DHCPV4_DECLINE,
 } __packed;
 
 /** @endcond */

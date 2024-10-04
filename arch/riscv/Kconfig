@@ -30,7 +30,6 @@ config RISCV_GP
 config RISCV_ALWAYS_SWITCH_THROUGH_ECALL
 	bool "Do not use mret outside a trap handler context"
 	depends on MULTITHREADING
-	depends on !RISCV_PMP
 	help
 	  Use mret instruction only when in a trap handler.
 	  This is for RISC-V implementations that require every mret to be
@@ -38,30 +37,14 @@ config RISCV_ALWAYS_SWITCH_THROUGH_ECALL
 	  and most people should say n here to minimize context switching
 	  overhead.
 
-config RISCV_ENABLE_FRAME_POINTER
-	bool
-	default y
-	depends on OVERRIDE_FRAME_POINTER_DEFAULT && !OMIT_FRAME_POINTER
-	help
-	  Hidden option to simplify access to OVERRIDE_FRAME_POINTER_DEFAULT
-	  and OMIT_FRAME_POINTER. It is automatically enabled when the frame
-	  pointer unwinding is enabled.
-
-config RISCV_EXCEPTION_STACK_TRACE
-	bool
-	default y
-	depends on EXCEPTION_STACK_TRACE
-	imply THREAD_STACK_INFO
-	help
-	  Internal config to enable runtime stack traces on fatal exceptions.
-
 menu "RISCV Processor Options"
 
 config INCLUDE_RESET_VECTOR
-	bool "Include Reset vector"
+	bool "Jumps to __initialize directly"
 	help
-	  Include the reset vector stub, which initializes the stack and
-	  prepares for running C code.
+	  Select 'y' here to use the Zephyr provided default implementation that
+	  jumps to `__initialize` directly. Otherwise a SOC needs to provide its
+	  custom `__reset` routine.
 
 config RISCV_PRIVILEGED
 	bool
@@ -98,7 +81,7 @@ config RISCV_SOC_HAS_ISR_STACKING
 	    guarded by !_ASMLANGUAGE. The ESF should be defined to account for
 	    the hardware stacked registers in the proper order as they are
 	    saved on the stack by the hardware, and the registers saved by the
-	    software macros. The structure must be called '__esf'.
+	    software macros. The structure must be called 'struct arch_esf'.
 
 config RISCV_SOC_HAS_CUSTOM_IRQ_HANDLING
 	bool
@@ -255,6 +238,14 @@ config RISCV_HART_MASK
 	  i.e. 128, 129, ..(0x80, 8x81, ..), this can be configured to 63 (0x7f)
 	  such that we can extract the bits that start from 0.
 
+config EXTRA_EXCEPTION_INFO
+	bool "Collect extra exception info"
+	depends on EXCEPTION_DEBUG
+	help
+	  This option enables the collection of extra information, such as
+	  register state, when a fault occurs. This information can be useful
+	  to collect for post-mortem analysis and debug of issues.
+
 config RISCV_PMP
 	bool "RISC-V PMP Support"
 	select THREAD_STACK_INFO
@@ -379,6 +370,7 @@ config ARCH_IRQ_VECTOR_TABLE_ALIGN
 
 config RISCV_TRAP_HANDLER_ALIGNMENT
 	int "Alignment of RISC-V trap handler in bytes"
+	default 64 if RISCV_HAS_CLIC
 	default 4
 	help
 	  This value configures the alignment of RISC-V trap handling
@@ -391,6 +383,14 @@ config GEN_IRQ_VECTOR_TABLE
 
 config ARCH_HAS_SINGLE_THREAD_SUPPORT
 	default y if !SMP
+
+config ARCH_HAS_STACKWALK
+	bool
+	default y
+	imply THREAD_STACK_INFO
+	help
+	  Internal config to indicate that the arch_stack_walk() API is implemented
+	  and it can be enabled.
 
 rsource "Kconfig.isa"
 

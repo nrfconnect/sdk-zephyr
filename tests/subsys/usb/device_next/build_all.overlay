@@ -12,6 +12,7 @@
 	uac2_headphones: usb_audio2 {
 		compatible = "zephyr,uac2";
 		status = "okay";
+		full-speed;
 		audio-function = <AUDIO_FUNCTION_OTHER>;
 
 		uac_aclk: aclk {
@@ -48,7 +49,7 @@
 		compatible = "zephyr,ram-disk";
 		disk-name = "RAM";
 		sector-size = <512>;
-		sector-count = <192>;
+		sector-count = <1>;
 	};
 
 	cdc_ecm_eth0: cdc_ecm_eth0 {

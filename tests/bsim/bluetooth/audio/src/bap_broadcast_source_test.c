@@ -3,15 +3,37 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
-#if defined(CONFIG_BT_BAP_BROADCAST_SOURCE)
-
-#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/autoconf.h>
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/audio/bap.h>
 #include <zephyr/bluetooth/audio/bap_lc3_preset.h>
+#include <zephyr/bluetooth/audio/lc3.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/byteorder.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/iso.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/toolchain.h>
+
+#include "bap_common.h"
+#include "bstests.h"
 #include "common.h"
 
+#define SUPPORTED_CHAN_COUNTS          BT_AUDIO_CODEC_CAP_CHAN_COUNT_SUPPORT(1, 2)
+#define SUPPORTED_MIN_OCTETS_PER_FRAME 30
+#define SUPPORTED_MAX_OCTETS_PER_FRAME 155
+#define SUPPORTED_MAX_FRAMES_PER_SDU   1
+
+#if defined(CONFIG_BT_BAP_BROADCAST_SOURCE)
 /* When BROADCAST_ENQUEUE_COUNT > 1 we can enqueue enough buffers to ensure that
  * the controller is never idle
  */
@@ -34,8 +56,122 @@ static struct bt_bap_lc3_preset preset_16_2_1 = BT_BAP_LC3_BROADCAST_PRESET_16_2
 static struct bt_bap_lc3_preset preset_16_1_1 = BT_BAP_LC3_BROADCAST_PRESET_16_1_1(
 	BT_AUDIO_LOCATION_FRONT_LEFT, BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
 
+static uint8_t bis_codec_data[] = {
+	BT_AUDIO_CODEC_DATA(BT_AUDIO_CODEC_CFG_CHAN_ALLOC,
+			    BT_BYTES_LIST_LE32(BT_AUDIO_LOCATION_FRONT_CENTER)),
+};
+
 static K_SEM_DEFINE(sem_started, 0U, ARRAY_SIZE(broadcast_source_streams));
 static K_SEM_DEFINE(sem_stopped, 0U, ARRAY_SIZE(broadcast_source_streams));
+
+static void validate_stream_codec_cfg(const struct bt_bap_stream *stream)
+{
+	const struct bt_audio_codec_cfg *codec_cfg = stream->codec_cfg;
+	const struct bt_audio_codec_cfg *exp_codec_cfg = &preset_16_1_1.codec_cfg;
+	enum bt_audio_location chan_allocation;
+	uint8_t frames_blocks_per_sdu;
+	size_t min_sdu_size_required;
+	uint16_t octets_per_frame;
+	uint8_t chan_cnt;
+	int ret;
+	int exp_ret;
+
+	ret = bt_audio_codec_cfg_get_freq(codec_cfg);
+	exp_ret = bt_audio_codec_cfg_get_freq(exp_codec_cfg);
+	if (ret >= 0) {
+		const int freq = bt_audio_codec_cfg_freq_to_freq_hz(ret);
+		const int exp_freq = bt_audio_codec_cfg_freq_to_freq_hz(exp_ret);
+
+		if (freq != exp_freq) {
+			FAIL("Invalid frequency: %d Expected: %d\n", freq, exp_freq);
+
+			return;
+		}
+	} else {
+		FAIL("Could not get frequency: %d\n", ret);
+
+		return;
+	}
+
+	ret = bt_audio_codec_cfg_get_frame_dur(codec_cfg);
+	exp_ret = bt_audio_codec_cfg_get_frame_dur(exp_codec_cfg);
+	if (ret >= 0) {
+		const int frm_dur_us = bt_audio_codec_cfg_frame_dur_to_frame_dur_us(ret);
+		const int exp_frm_dur_us = bt_audio_codec_cfg_frame_dur_to_frame_dur_us(exp_ret);
+
+		if (frm_dur_us != exp_frm_dur_us) {
+			FAIL("Invalid frame duration: %d Exp: %d\n", frm_dur_us, exp_frm_dur_us);
+
+			return;
+		}
+	} else {
+		FAIL("Could not get frame duration: %d\n", ret);
+
+		return;
+	}
+
+	/* The broadcast source sets the channel allocation in the BIS to
+	 * BT_AUDIO_LOCATION_FRONT_CENTER
+	 */
+	ret = bt_audio_codec_cfg_get_chan_allocation(codec_cfg, &chan_allocation, true);
+	if (ret == 0) {
+		if (chan_allocation != BT_AUDIO_LOCATION_FRONT_CENTER) {
+			FAIL("Unexpected channel allocation: 0x%08X", chan_allocation);
+
+			return;
+		}
+
+		chan_cnt = bt_audio_get_chan_count(chan_allocation);
+	} else {
+		FAIL("Could not get subgroup channel allocation: %d\n", ret);
+
+		return;
+	}
+
+	if (chan_cnt == 0 || (BIT(chan_cnt - 1) & SUPPORTED_CHAN_COUNTS) == 0) {
+		FAIL("Unsupported channel count: %u\n", chan_cnt);
+
+		return;
+	}
+
+	ret = bt_audio_codec_cfg_get_octets_per_frame(codec_cfg);
+	if (ret > 0) {
+		octets_per_frame = (uint16_t)ret;
+	} else {
+		FAIL("Could not get subgroup octets per frame: %d\n", ret);
+
+		return;
+	}
+
+	if (!IN_RANGE(octets_per_frame, SUPPORTED_MIN_OCTETS_PER_FRAME,
+		      SUPPORTED_MAX_OCTETS_PER_FRAME)) {
+		FAIL("Unsupported octets per frame: %u\n", octets_per_frame);
+
+		return;
+	}
+
+	ret = bt_audio_codec_cfg_get_frame_blocks_per_sdu(codec_cfg, true);
+	if (ret > 0) {
+		frames_blocks_per_sdu = (uint8_t)ret;
+	} else {
+		FAIL("Could not get frame blocks per SDU: %d\n", ret);
+
+		return;
+	}
+
+	/* An SDU can consist of X frame blocks, each with Y frames (one per channel) of size Z in
+	 * them. The minimum SDU size required for this is X * Y * Z.
+	 */
+	min_sdu_size_required = chan_cnt * octets_per_frame * frames_blocks_per_sdu;
+	if (min_sdu_size_required > stream->qos->sdu) {
+		FAIL("With %zu channels and %u octets per frame and %u frames per block, SDUs "
+		     "shall be at minimum %zu, but the stream has been configured for %u\n",
+		     chan_cnt, octets_per_frame, frames_blocks_per_sdu, min_sdu_size_required,
+		     stream->qos->sdu);
+
+		return;
+	}
+}
 
 static void started_cb(struct bt_bap_stream *stream)
 {
@@ -74,6 +210,7 @@ static void started_cb(struct bt_bap_stream *stream)
 	}
 
 	printk("Stream %p started\n", stream);
+	validate_stream_codec_cfg(stream);
 	k_sem_give(&sem_started);
 }
 
@@ -128,12 +265,8 @@ static struct bt_bap_stream_ops stream_ops = {
 	.sent = stream_sent_cb,
 };
 
-static int setup_broadcast_source(struct bt_bap_broadcast_source **source)
+static int setup_broadcast_source(struct bt_bap_broadcast_source **source, bool encryption)
 {
-	uint8_t bis_codec_data[] = {
-		BT_AUDIO_CODEC_DATA(BT_AUDIO_CODEC_CFG_CHAN_ALLOC,
-				    BT_BYTES_LIST_LE32(BT_AUDIO_LOCATION_FRONT_LEFT)),
-	};
 	struct bt_bap_broadcast_source_stream_param
 		stream_params[ARRAY_SIZE(broadcast_source_streams)];
 	struct bt_bap_broadcast_source_subgroup_param
@@ -165,7 +298,10 @@ static int setup_broadcast_source(struct bt_bap_broadcast_source **source)
 	create_param.params = subgroup_params;
 	create_param.qos = &preset_16_2_1.qos;
 	create_param.packing = BT_ISO_PACKING_SEQUENTIAL;
-	create_param.encryption = false;
+	create_param.encryption = encryption;
+	if (encryption) {
+		memcpy(create_param.broadcast_code, BROADCAST_CODE, sizeof(BROADCAST_CODE));
+	}
 
 	printk("Creating broadcast source with %zu subgroups and %zu streams\n",
 	       ARRAY_SIZE(subgroup_params), ARRAY_SIZE(stream_params));
@@ -221,7 +357,7 @@ static int setup_extended_adv(struct bt_bap_broadcast_source *source, struct bt_
 	uint32_t broadcast_id;
 	int err;
 
-	/* Create a non-connectable non-scannable advertising set */
+	/* Create a non-connectable advertising set */
 	err = bt_le_ext_adv_create(&adv_param, NULL, adv);
 	if (err != 0) {
 		printk("Unable to create extended advertising set: %d\n", err);
@@ -281,10 +417,6 @@ static int setup_extended_adv(struct bt_bap_broadcast_source *source, struct bt_
 
 static void test_broadcast_source_reconfig(struct bt_bap_broadcast_source *source)
 {
-	uint8_t bis_codec_data[] = {
-		BT_AUDIO_CODEC_DATA(BT_AUDIO_CODEC_CFG_FREQ,
-				    BT_BYTES_LIST_LE16(BT_AUDIO_CODEC_CFG_FREQ_16KHZ)),
-	};
 	struct bt_bap_broadcast_source_stream_param
 		stream_params[ARRAY_SIZE(broadcast_source_streams)];
 	struct bt_bap_broadcast_source_subgroup_param
@@ -449,7 +581,7 @@ static void test_main(void)
 
 	printk("Bluetooth initialized\n");
 
-	err = setup_broadcast_source(&source);
+	err = setup_broadcast_source(&source, false);
 	if (err != 0) {
 		FAIL("Unable to setup broadcast source: %d\n", err);
 		return;
@@ -502,7 +634,7 @@ static void test_main(void)
 
 	/* Recreate broadcast source to verify that it's possible */
 	printk("Recreating broadcast source\n");
-	err = setup_broadcast_source(&source);
+	err = setup_broadcast_source(&source, false);
 	if (err != 0) {
 		FAIL("Unable to setup broadcast source: %d\n", err);
 		return;
@@ -515,14 +647,80 @@ static void test_main(void)
 	PASS("Broadcast source passed\n");
 }
 
+static void test_main_encrypted(void)
+{
+	struct bt_bap_broadcast_source *source;
+	struct bt_le_ext_adv *adv;
+	int err;
+
+	err = bt_enable(NULL);
+	if (err) {
+		FAIL("Bluetooth init failed (err %d)\n", err);
+		return;
+	}
+
+	printk("Bluetooth initialized\n");
+
+	err = setup_broadcast_source(&source, true);
+	if (err != 0) {
+		FAIL("Unable to setup broadcast source: %d\n", err);
+		return;
+	}
+
+	err = setup_extended_adv(source, &adv);
+	if (err != 0) {
+		FAIL("Failed to setup extended advertising: %d\n", err);
+		return;
+	}
+
+	test_broadcast_source_start(source, adv);
+
+	/* Initialize sending */
+	printk("Sending data\n");
+	for (size_t i = 0U; i < ARRAY_SIZE(broadcast_source_streams); i++) {
+		for (unsigned int j = 0U; j < BROADCAST_ENQUEUE_COUNT; j++) {
+			struct audio_test_stream *test_stream = &broadcast_source_streams[i];
+
+			test_stream->tx_active = true;
+			stream_sent_cb(&test_stream->stream.bap_stream);
+		}
+	}
+
+	/* Wait for other devices to have received data */
+	backchannel_sync_wait_any();
+
+	/* Wait for other devices to let us know when we can stop the source */
+	backchannel_sync_wait_any();
+
+	test_broadcast_source_stop(source);
+
+	test_broadcast_source_delete(source);
+	source = NULL;
+
+	err = stop_extended_adv(adv);
+	if (err != 0) {
+		FAIL("Unable to stop extended advertising: %d\n", err);
+		return;
+	}
+	adv = NULL;
+
+	PASS("Broadcast source encrypted passed\n");
+}
+
 static const struct bst_test_instance test_broadcast_source[] = {
 	{
 		.test_id = "broadcast_source",
-		.test_post_init_f = test_init,
+		.test_pre_init_f = test_init,
 		.test_tick_f = test_tick,
-		.test_main_f = test_main
+		.test_main_f = test_main,
 	},
-	BSTEST_END_MARKER
+	{
+		.test_id = "broadcast_source_encrypted",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
+		.test_main_f = test_main_encrypted,
+	},
+	BSTEST_END_MARKER,
 };
 
 struct bst_test_list *test_broadcast_source_install(struct bst_test_list *tests)

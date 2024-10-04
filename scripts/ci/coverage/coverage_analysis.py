@@ -52,7 +52,7 @@ class Json_report:
             for element in parser:
                 for testsuite in element:
                     for testcase in testsuite['testcases']:
-                        if testcase['status'] is None:
+                        if testcase['status'] == 'None':
                             testcase_name = testcase['identifier']
                             component_name = testcase_name[:testcase_name.find('.')]
                             component = {
@@ -274,7 +274,9 @@ class Json_report:
                                                 "Name":i_fun['name']
                                             }
                                             json_file['Uncovered_Functions'].append(json_uncovered_funciton)
-                                    json_files.append(json_file)
+                                    comp_exists = [x for x in json_files if x['Path'] == json_file['Path']]
+                                    if not comp_exists:
+                                        json_files.append(json_file)
                         json_component['files']=json_files
                         output_json['components'].append(json_component)
                     else:

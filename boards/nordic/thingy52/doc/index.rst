@@ -41,7 +41,7 @@ processor, a set of environmental sensors, a pushbutton, and two RGB LEDs.
      nRF52 Thingy:52 (Credit: Nordic Semiconductor)
 
 More information about the board can be found at the `nRF52 DK website`_. The
-`Nordic Semiconductor Infocenter`_ contains the processor's information and the
+`Nordic Thingy:52 guide`_ contains the processor's information and the
 datasheet.
 
 
@@ -376,7 +376,7 @@ The green lightwell LED can be tested with the :zephyr:code-sample:`blinky` exam
 
 
 
-Also the temperature and humidity sensor can be tested with the :ref:`hts221`
+Also the temperature and humidity sensor can be tested with the :zephyr:code-sample:`hts221`
 sample.
 
 .. zephyr-app-commands::
@@ -390,4 +390,4 @@ References
 .. target-notes::
 
 .. _nRF52 DK website: https://www.nordicsemi.com/Software-and-Tools/Development-Kits/Nordic-Thingy-52
-.. _Nordic Semiconductor Infocenter: http://infocenter.nordicsemi.com/
+.. _Nordic Thingy:52 guide: https://docs.nordicsemi.com/bundle/ug_thingy52/page/UG/thingy52/intro/frontpage.html

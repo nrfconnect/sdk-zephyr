@@ -5,7 +5,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/irq_offload.h>
-#include <zsr.h>
+#include <zephyr/zsr.h>
 #include <zephyr/irq.h>
 
 static struct {
@@ -36,4 +36,8 @@ void arch_irq_offload(irq_offload_routine_t routine, const void *parameter)
 	__asm__ volatile("wsr %0, INTENABLE; wsr %0, INTSET; rsync"
 			 :: "r"(intenable), "r"(BIT(ZSR_IRQ_OFFLOAD_INT)));
 	arch_irq_unlock(key);
+}
+
+void arch_irq_offload_init(void)
+{
 }

@@ -5,9 +5,14 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/types.h>
 
-#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/autoconf.h>
 #include <zephyr/bluetooth/audio/audio.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gatt.h>
 
 #define BT_AUDIO_NOTIFY_RETRY_DELAY_US ((CONFIG_BT_AUDIO_NOTIFY_RETRY_DELAY) * 1250U)
 
@@ -72,3 +77,5 @@ static inline const char *bt_audio_dir_str(enum bt_audio_dir dir)
 
 	return "Unknown";
 }
+
+bool bt_audio_valid_ltv(const uint8_t *data, uint8_t data_len);

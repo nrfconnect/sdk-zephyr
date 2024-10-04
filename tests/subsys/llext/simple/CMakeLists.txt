@@ -15,12 +15,34 @@ target_include_directories(app PRIVATE
   ${ZEPHYR_BASE}/arch/${ARCH}/include
 )
 
-set(ext_names hello_world logging relative_jump object syscalls threads_kernel_objects)
+set(ext_names
+	hello_world
+	logging
+	relative_jump
+	object
+	syscalls
+	threads_kernel_objects
+	export_dependent
+	export_dependency
+)
 
 if(CONFIG_ARM)
   if(NOT CONFIG_CPU_CORTEX_M0 AND NOT CONFIG_CPU_CORTEX_M0PLUS AND NOT CONFIG_CPU_CORTEX_M1)
     list(APPEND ext_names movwmovt)
   endif()
+endif()
+
+if (CONFIG_LLEXT_TYPE_ELF_RELOCATABLE AND NOT CONFIG_ARM)
+    list(APPEND ext_names pre_located)
+endif()
+
+if (CONFIG_LLEXT_STORAGE_WRITABLE)
+    list(APPEND ext_names find_section)
+endif()
+
+if (NOT CONFIG_LLEXT_TYPE_ELF_SHAREDLIB)
+    # ELF shared libraries do not support init sections
+    list(APPEND ext_names init_fini)
 endif()
 
 # generate extension targets foreach extension given by 'ext_names'
@@ -45,12 +67,15 @@ if(NOT CONFIG_LLEXT_TYPE_ELF_OBJECT)
   )
 endif()
 
-# Add a dummy custom processing command to test add_llext_command
-get_target_property(proc_in_file hello_world_ext lib_output)
-get_target_property(proc_out_file hello_world_ext pkg_input)
-add_llext_command(
-  TARGET hello_world_ext
-  POST_BUILD
-  COMMAND echo "dummy patching ${proc_in_file} to create ${proc_out_file}"
-  COMMAND ${CMAKE_COMMAND} -E copy ${proc_in_file} ${proc_out_file}
-)
+if (CONFIG_LLEXT_TYPE_ELF_RELOCATABLE AND NOT CONFIG_ARM)
+  # Manually fix the pre_located extension's text address at a multiple of 4
+  get_target_property(pre_located_target pre_located_ext lib_target)
+  get_target_property(pre_located_file pre_located_ext pkg_input)
+  add_llext_command(
+    TARGET pre_located_ext
+    POST_BUILD
+    COMMAND ${CMAKE_C_COMPILER}
+    -Wl,-r -Wl,-Ttext=0xbada110c -nostdlib -nodefaultlibs -nostartfiles
+    $<TARGET_OBJECTS:${pre_located_target}> -o ${pre_located_file}
+  )
+endif()

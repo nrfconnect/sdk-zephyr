@@ -195,7 +195,7 @@ static inline int z_impl_sys_clock_hw_cycles_per_sec_runtime_get(void)
 					     __round_up, __round_off)) / \
 	z_tmcvt_divisor(__from_hz, __to_hz))
 
-/* Integer multiplcation 64-bit conversion */
+/* Integer multiplication 64-bit conversion */
 #define z_tmcvt_int_mul_64(__t, __from_hz, __to_hz)	\
 	(uint64_t) (__t)*((__to_hz) / (__from_hz))
 
@@ -2070,7 +2070,7 @@ static inline int z_impl_sys_clock_hw_cycles_per_sec_runtime_get(void)
 	z_tmcvt_64(t, Z_HZ_ticks, Z_HZ_cyc, Z_CCYC, true, false)
 
 #if defined(CONFIG_TIMER_READS_ITS_FREQUENCY_AT_RUNTIME)
-#include <syscalls/time_units.h>
+#include <zephyr/syscalls/time_units.h>
 #endif
 
 #undef TIME_CONSTEXPR

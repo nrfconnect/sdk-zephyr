@@ -11,13 +11,38 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <zephyr/net/buf.h>
+#include <zephyr/net_buf.h>
 #include <zephyr/bluetooth/addr.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/hci_types.h>
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+/** Converts a HCI error to string.
+ *
+ * The error codes are described in the Bluetooth Core specification,
+ * Vol 1, Part F, Section 2.
+ *
+ * The HCI documentation found in Vol 4, Part E,
+ * describes when the different error codes are used.
+ *
+ * See also the defined BT_HCI_ERR_* macros.
+ *
+ * @return The string representation of the HCI error code.
+ *         If @kconfig{CONFIG_BT_HCI_ERR_TO_STR} is not enabled,
+ *         this just returns the empty string
+ */
+#if defined(CONFIG_BT_HCI_ERR_TO_STR)
+const char *bt_hci_err_to_str(uint8_t hci_err);
+#else
+static inline const char *bt_hci_err_to_str(uint8_t hci_err)
+{
+	ARG_UNUSED(hci_err);
+
+	return "";
+}
 #endif
 
 /** Allocate a HCI command buffer.
@@ -88,6 +113,18 @@ int bt_hci_cmd_send_sync(uint16_t opcode, struct net_buf *buf,
  */
 int bt_hci_get_conn_handle(const struct bt_conn *conn, uint16_t *conn_handle);
 
+/** @brief Get connection given a connection handle.
+ *
+ * The caller gets a new reference to the connection object which must be
+ * released with bt_conn_unref() once done using the object.
+ *
+ * @param handle The connection handle
+ *
+ * @returns The corresponding connection object on success.
+ *          NULL if it does not exist.
+ */
+struct bt_conn *bt_hci_conn_lookup_handle(uint16_t handle);
+
 /** @brief Get advertising handle for an advertising set.
  *
  * @param adv Advertising set.
@@ -96,6 +133,33 @@ int bt_hci_get_conn_handle(const struct bt_conn *conn, uint16_t *conn_handle);
  * @return 0 on success or negative error value on failure.
  */
 int bt_hci_get_adv_handle(const struct bt_le_ext_adv *adv, uint8_t *adv_handle);
+
+/** @brief Get advertising set given an advertising handle
+ *
+ * @param handle The advertising handle
+ *
+ * @returns The corresponding advertising set on success,
+ *          NULL if it does not exist.
+ */
+struct bt_le_ext_adv *bt_hci_adv_lookup_handle(uint8_t handle);
+
+/** @brief Get periodic advertising sync handle.
+ *
+ * @param sync Periodic advertising sync set.
+ * @param sync_handle Place to store the periodic advertising sync handle.
+ *
+ * @return 0 on success or negative error value on failure.
+ */
+int bt_hci_get_adv_sync_handle(const struct bt_le_per_adv_sync *sync, uint16_t *sync_handle);
+
+/** @brief Get periodic advertising sync given an periodic advertising sync handle.
+ *
+ * @param handle The periodic sync set handle
+ *
+ * @retval The corresponding periodic advertising sync set object on success,
+ *         NULL if it does not exist.
+ */
+struct bt_le_per_adv_sync *bt_hci_per_adv_sync_lookup_handle(uint16_t handle);
 
 /** @brief Obtain the version string given a core version number.
  *

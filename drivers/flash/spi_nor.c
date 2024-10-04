@@ -19,6 +19,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys_clock.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
 
 #include "spi_nor.h"
 #include "jesd216.h"
@@ -35,15 +36,10 @@ LOG_MODULE_REGISTER(spi_nor, CONFIG_FLASH_LOG_LEVEL);
  * * Some devices support a Deep Power-Down mode which reduces current
  *   to as little as 0.1% of standby.
  *
- * The power reduction from DPD is sufficient to warrant allowing its
- * use even in cases where Zephyr's device power management is not
- * available.  This is selected through the SPI_NOR_IDLE_IN_DPD
- * Kconfig option.
- *
  * When mapped to the Zephyr Device Power Management states:
  * * PM_DEVICE_STATE_ACTIVE covers both active and standby modes;
- * * PM_DEVICE_STATE_SUSPENDED, and PM_DEVICE_STATE_OFF all correspond to
- *   deep-power-down mode.
+ * * PM_DEVICE_STATE_SUSPENDED corresponds to deep-power-down mode;
+ * * PM_DEVICE_STATE_OFF covers the powered off state;
  */
 
 #define SPI_NOR_MAX_ADDR_WIDTH 4
@@ -69,6 +65,12 @@ LOG_MODULE_REGISTER(spi_nor, CONFIG_FLASH_LOG_LEVEL);
 #define ANY_INST_HAS_RESET_GPIOS ANY_INST_HAS_PROP(reset_gpios)
 #define ANY_INST_HAS_WP_GPIOS ANY_INST_HAS_PROP(wp_gpios)
 #define ANY_INST_HAS_HOLD_GPIOS ANY_INST_HAS_PROP(hold_gpios)
+
+#ifdef CONFIG_SPI_NOR_ACTIVE_DWELL_MS
+#define ACTIVE_DWELL_MS CONFIG_SPI_NOR_ACTIVE_DWELL_MS
+#else
+#define ACTIVE_DWELL_MS 0
+#endif
 
 #define DEV_CFG(_dev_) ((const struct spi_nor_config * const) (_dev_)->config)
 
@@ -135,16 +137,16 @@ struct spi_nor_config {
 #endif
 
 #if ANY_INST_HAS_DPD
-	uint16_t t_enter_dpd; /* in microseconds */
-	uint16_t t_dpdd_ms;   /* in microseconds */
+	uint16_t t_enter_dpd; /* in milliseconds */
+	uint16_t t_dpdd_ms;   /* in milliseconds */
 #if ANY_INST_HAS_T_EXIT_DPD
-	uint16_t t_exit_dpd;  /* in microseconds */
+	uint16_t t_exit_dpd;  /* in milliseconds */
 #endif
 #endif
 
 #if ANY_INST_HAS_DPD_WAKEUP_SEQUENCE
-	uint16_t t_crdp_ms; /* in microseconds */
-	uint16_t t_rdp_ms;  /* in microseconds */
+	uint16_t t_crdp_ms; /* in milliseconds */
+	uint16_t t_rdp_ms;  /* in milliseconds */
 #endif
 
 #if ANY_INST_HAS_MXICY_MX25R_POWER_MODE
@@ -155,7 +157,6 @@ struct spi_nor_config {
 	bool dpd_exist:1;
 	bool dpd_wakeup_sequence_exist:1;
 	bool mxicy_mx25r_power_mode_exist:1;
-	bool enter_4byte_addr_exist:1;
 	bool reset_gpios_exist:1;
 	bool requires_ulbpr_exist:1;
 	bool wp_gpios_exist:1;
@@ -516,13 +517,14 @@ static int enter_dpd(const struct device *const dev)
 static int exit_dpd(const struct device *const dev)
 {
 	int ret = 0;
+#if ANY_INST_HAS_DPD
 	const struct spi_nor_config *cfg = dev->config;
 
 	if (cfg->dpd_exist) {
 		delay_until_exit_dpd_ok(dev);
 
-#if ANY_INST_HAS_DPD_WAKEUP_SEQUENCE
 		if (cfg->dpd_wakeup_sequence_exist) {
+#if ANY_INST_HAS_DPD_WAKEUP_SEQUENCE
 			/* Assert CSn and wait for tCRDP.
 			 *
 			 * Unfortunately the SPI API doesn't allow us to
@@ -535,6 +537,7 @@ static int exit_dpd(const struct device *const dev)
 
 			/* Deassert CSn and wait for tRDP */
 			k_sleep(K_MSEC(cfg->t_rdp_ms));
+#endif /* ANY_INST_HAS_DPD_WAKEUP_SEQUENCE */
 		} else {
 			ret = spi_nor_cmd_write(dev, SPI_NOR_CMD_RDPD);
 
@@ -546,39 +549,31 @@ static int exit_dpd(const struct device *const dev)
 			}
 #endif /* T_EXIT_DPD */
 		}
-#endif /* DPD_WAKEUP_SEQUENCE */
 	}
+#endif /* ANY_INST_HAS_DPD */
 	return ret;
 }
 
-/* Everything necessary to acquire owning access to the device.
- *
- * This means taking the lock and, if necessary, waking the device
- * from deep power-down mode.
- */
+/* Everything necessary to acquire owning access to the device. */
 static void acquire_device(const struct device *dev)
 {
+	const struct spi_nor_config *cfg = dev->config;
+
 	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
 		struct spi_nor_data *const driver_data = dev->data;
 
 		k_sem_take(&driver_data->sem, K_FOREVER);
 	}
 
-	if (IS_ENABLED(CONFIG_SPI_NOR_IDLE_IN_DPD)) {
-		exit_dpd(dev);
-	}
+	(void)pm_device_runtime_get(cfg->spi.bus);
 }
 
-/* Everything necessary to release access to the device.
- *
- * This means (optionally) putting the device into deep power-down
- * mode, and releasing the lock.
- */
+/* Everything necessary to release access to the device. */
 static void release_device(const struct device *dev)
 {
-	if (IS_ENABLED(CONFIG_SPI_NOR_IDLE_IN_DPD)) {
-		enter_dpd(dev);
-	}
+	const struct spi_nor_config *cfg = dev->config;
+
+	(void)pm_device_runtime_put(cfg->spi.bus);
 
 	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
 		struct spi_nor_data *const driver_data = dev->data;
@@ -625,13 +620,15 @@ static int spi_nor_wrsr(const struct device *dev,
 {
 	int ret = spi_nor_cmd_write(dev, SPI_NOR_CMD_WREN);
 
-	if (ret == 0) {
-		ret = spi_nor_access(dev, SPI_NOR_CMD_WRSR, NOR_ACCESS_WRITE, 0, &sr,
-				     sizeof(sr));
-		spi_nor_wait_until_ready(dev, WAIT_READY_REGISTER);
+	if (ret != 0) {
+		return ret;
 	}
-
-	return ret;
+	ret = spi_nor_access(dev, SPI_NOR_CMD_WRSR, NOR_ACCESS_WRITE, 0, &sr,
+					sizeof(sr));
+	if (ret != 0) {
+		return ret;
+	}
+	return spi_nor_wait_until_ready(dev, WAIT_READY_REGISTER);
 }
 
 #if ANY_INST_HAS_MXICY_MX25R_POWER_MODE
@@ -693,18 +690,23 @@ static int mxicy_wrcr(const struct device *dev,
 		}
 
 		ret = spi_nor_cmd_write(dev, SPI_NOR_CMD_WREN);
-
-		if (ret == 0) {
-			uint8_t data[] = {
-				sr,
-				cr & 0xFF,	/* Configuration register 1 */
-				cr >> 8		/* Configuration register 2 */
-			};
-
-			ret = spi_nor_access(dev, SPI_NOR_CMD_WRSR, NOR_ACCESS_WRITE, 0,
-				data, sizeof(data));
-			spi_nor_wait_until_ready(dev, WAIT_READY_REGISTER);
+		if (ret != 0) {
+			return ret;
 		}
+
+		uint8_t data[] = {
+			sr,
+			cr & 0xFF,	/* Configuration register 1 */
+			cr >> 8		/* Configuration register 2 */
+		};
+
+		ret = spi_nor_access(dev, SPI_NOR_CMD_WRSR, NOR_ACCESS_WRITE, 0,
+			data, sizeof(data));
+		if (ret != 0) {
+			return ret;
+		}
+
+		ret = spi_nor_wait_until_ready(dev, WAIT_READY_REGISTER);
 	}
 
 	return ret;
@@ -775,11 +777,19 @@ static int spi_nor_read(const struct device *dev, off_t addr, void *dest,
 		return -EINVAL;
 	}
 
+	/* Ensure flash is powered before read */
+	if (pm_device_runtime_get(dev) < 0) {
+		return -EIO;
+	}
+
 	acquire_device(dev);
 
 	ret = spi_nor_cmd_addr_read(dev, SPI_NOR_CMD_READ, addr, dest, size);
 
 	release_device(dev);
+
+	/* Release flash power requirement */
+	(void)pm_device_runtime_put_async(dev, K_MSEC(ACTIVE_DWELL_MS));
 	return ret;
 }
 
@@ -791,6 +801,10 @@ static int flash_spi_nor_ex_op(const struct device *dev, uint16_t code,
 
 	ARG_UNUSED(in);
 	ARG_UNUSED(out);
+
+	if (pm_device_runtime_get(dev) < 0) {
+		return -EIO;
+	}
 
 	acquire_device(dev);
 
@@ -807,6 +821,7 @@ static int flash_spi_nor_ex_op(const struct device *dev, uint16_t code,
 	}
 
 	release_device(dev);
+	(void)pm_device_runtime_put_async(dev, K_MSEC(ACTIVE_DWELL_MS));
 	return ret;
 }
 #endif
@@ -822,6 +837,11 @@ static int spi_nor_write(const struct device *dev, off_t addr,
 	/* should be between 0 and flash size */
 	if ((addr < 0) || ((size + addr) > flash_size)) {
 		return -EINVAL;
+	}
+
+	/* Ensure flash is powered before write */
+	if (pm_device_runtime_get(dev) < 0) {
+		return -EIO;
 	}
 
 	acquire_device(dev);
@@ -841,7 +861,12 @@ static int spi_nor_write(const struct device *dev, off_t addr,
 				to_write = page_size - (addr % page_size);
 			}
 
-			spi_nor_cmd_write(dev, SPI_NOR_CMD_WREN);
+			ret = spi_nor_cmd_write(dev, SPI_NOR_CMD_WREN);
+
+			if (ret != 0) {
+				break;
+			}
+
 			ret = spi_nor_cmd_addr_write(dev, SPI_NOR_CMD_PP, addr,
 						src, to_write);
 			if (ret != 0) {
@@ -852,7 +877,10 @@ static int spi_nor_write(const struct device *dev, off_t addr,
 			src = (const uint8_t *)src + to_write;
 			addr += to_write;
 
-			spi_nor_wait_until_ready(dev, WAIT_READY_WRITE);
+			ret = spi_nor_wait_until_ready(dev, WAIT_READY_WRITE);
+			if (ret != 0) {
+				break;
+			}
 		}
 	}
 
@@ -863,6 +891,9 @@ static int spi_nor_write(const struct device *dev, off_t addr,
 	}
 
 	release_device(dev);
+
+	/* Release flash power requirement */
+	(void)pm_device_runtime_put_async(dev, K_MSEC(ACTIVE_DWELL_MS));
 	return ret;
 }
 
@@ -886,15 +917,23 @@ static int spi_nor_erase(const struct device *dev, off_t addr, size_t size)
 		return -EINVAL;
 	}
 
+	/* Ensure flash is powered before erase */
+	if (pm_device_runtime_get(dev) < 0) {
+		return -EIO;
+	}
+
 	acquire_device(dev);
 	ret = spi_nor_write_protection_set(dev, false);
 
 	while ((size > 0) && (ret == 0)) {
-		spi_nor_cmd_write(dev, SPI_NOR_CMD_WREN);
+		ret = spi_nor_cmd_write(dev, SPI_NOR_CMD_WREN);
+		if (ret) {
+			break;
+		}
 
 		if (size == flash_size) {
 			/* chip erase */
-			spi_nor_cmd_write(dev, SPI_NOR_CMD_CE);
+			ret = spi_nor_cmd_write(dev, SPI_NOR_CMD_CE);
 			size -= flash_size;
 		} else {
 			const struct jesd216_erase_type *erase_types =
@@ -914,7 +953,7 @@ static int spi_nor_erase(const struct device *dev, off_t addr, size_t size)
 				}
 			}
 			if (bet != NULL) {
-				spi_nor_cmd_addr_write(dev, bet->cmd, addr, NULL, 0);
+				ret = spi_nor_cmd_addr_write(dev, bet->cmd, addr, NULL, 0);
 				addr += BIT(bet->exp);
 				size -= BIT(bet->exp);
 			} else {
@@ -923,18 +962,11 @@ static int spi_nor_erase(const struct device *dev, off_t addr, size_t size)
 				ret = -EINVAL;
 			}
 		}
+		if (ret != 0) {
+			break;
+		}
 
-#ifdef __XCC__
-		/*
-		 * FIXME: remove this hack once XCC is fixed.
-		 *
-		 * Without this volatile return value, XCC would segfault
-		 * compiling this file complaining about failure in CGPREP
-		 * phase.
-		 */
-		volatile int xcc_ret =
-#endif
-		spi_nor_wait_until_ready(dev, WAIT_READY_ERASE);
+		ret = spi_nor_wait_until_ready(dev, WAIT_READY_ERASE);
 	}
 
 	int ret2 = spi_nor_write_protection_set(dev, true);
@@ -945,6 +977,8 @@ static int spi_nor_erase(const struct device *dev, off_t addr, size_t size)
 
 	release_device(dev);
 
+	/* Release flash power requirement */
+	(void)pm_device_runtime_put_async(dev, K_MSEC(ACTIVE_DWELL_MS));
 	return ret;
 }
 
@@ -986,11 +1020,17 @@ static int spi_nor_write_protection_set(const struct device *dev,
 static int spi_nor_sfdp_read(const struct device *dev, off_t addr,
 			     void *dest, size_t size)
 {
+	if (pm_device_runtime_get(dev) < 0) {
+		return -EIO;
+	}
+
 	acquire_device(dev);
 
 	int ret = read_sfdp(dev, addr, dest, size);
 
 	release_device(dev);
+
+	(void)pm_device_runtime_put_async(dev, K_MSEC(ACTIVE_DWELL_MS));
 
 	return ret;
 }
@@ -1004,11 +1044,17 @@ static int spi_nor_read_jedec_id(const struct device *dev,
 		return -EINVAL;
 	}
 
+	if (pm_device_runtime_get(dev) < 0) {
+		return -EIO;
+	}
+
 	acquire_device(dev);
 
 	int ret = spi_nor_cmd_read(dev, SPI_NOR_CMD_RDID, id, SPI_NOR_MAX_ID_LEN);
 
 	release_device(dev);
+
+	(void)pm_device_runtime_put_async(dev, K_MSEC(ACTIVE_DWELL_MS));
 
 	return ret;
 }
@@ -1034,10 +1080,10 @@ static int spi_nor_read_jedec_id(const struct device *dev,
 static int spi_nor_set_address_mode(const struct device *dev,
 				    uint8_t enter_4byte_addr)
 {
-	const struct spi_nor_config *cfg = dev->config;
-	int ret = -ENOSYS;
+	int ret = 0;
 
-	if (cfg->enter_4byte_addr_exist) {
+	LOG_DBG("Checking enter-4byte-addr %02x", enter_4byte_addr);
+
 	/* Do nothing if not provided (either no bits or all bits
 	 * set).
 	 */
@@ -1045,8 +1091,6 @@ static int spi_nor_set_address_mode(const struct device *dev,
 	    || (enter_4byte_addr == 0xff)) {
 		return 0;
 	}
-
-	LOG_DBG("Checking enter-4byte-addr %02x", enter_4byte_addr);
 
 	/* This currently only supports command 0xB7 (Enter 4-Byte
 	 * Address Mode), with or without preceding WREN.
@@ -1061,18 +1105,18 @@ static int spi_nor_set_address_mode(const struct device *dev,
 		/* Enter after WREN. */
 		ret = spi_nor_cmd_write(dev, SPI_NOR_CMD_WREN);
 	}
+
 	if (ret == 0) {
 		ret = spi_nor_cmd_write(dev, SPI_NOR_CMD_4BA);
-	}
 
-	if (ret == 0) {
-		struct spi_nor_data *data = dev->data;
+		if (ret == 0) {
+			struct spi_nor_data *data = dev->data;
 
-		data->flag_access_32bit = true;
+			data->flag_access_32bit = true;
+		}
 	}
 
 	release_device(dev);
-	}
 
 	return ret;
 }
@@ -1087,7 +1131,10 @@ static int spi_nor_process_bfp(const struct device *dev,
 	struct jesd216_erase_type *etp = data->erase_types;
 	const size_t flash_size = jesd216_bfp_density(bfp) / 8U;
 
-	LOG_INF("%s: %u MiBy flash", dev->name, (uint32_t)(flash_size >> 20));
+	LOG_INF("%s: %u %ciBy flash", dev->name,
+		(flash_size < (1024U * 1024U)) ? (uint32_t)(flash_size >> 10)
+					       : (uint32_t)(flash_size >> 20),
+		(flash_size < (1024U * 1024U)) ? 'k' : 'M');
 
 	/* Copy over the erase types, preserving their order.  (The
 	 * Sector Map Parameter table references them by index.)
@@ -1324,9 +1371,13 @@ static int spi_nor_configure(const struct device *dev)
 	rc = spi_nor_rdsr(dev);
 	if (rc > 0 && (rc & SPI_NOR_WIP_BIT)) {
 		LOG_WRN("Waiting until flash is ready");
-		spi_nor_wait_until_ready(dev, WAIT_READY_REGISTER);
+		rc = spi_nor_wait_until_ready(dev, WAIT_READY_REGISTER);
 	}
 	release_device(dev);
+	if (rc < 0) {
+		LOG_ERR("Failed to wait until flash is ready (%d)", rc);
+		return -ENODEV;
+	}
 
 	/* now the spi bus is configured, we can verify SPI
 	 * connectivity by reading the JEDEC ID.
@@ -1414,11 +1465,6 @@ static int spi_nor_configure(const struct device *dev)
 	}
 #endif /* ANY_INST_HAS_MXICY_MX25R_POWER_MODE */
 
-	if (IS_ENABLED(CONFIG_SPI_NOR_IDLE_IN_DPD)
-	    && (enter_dpd(dev) != 0)) {
-		return -ENODEV;
-	}
-
 	return 0;
 }
 
@@ -1427,11 +1473,6 @@ static int spi_nor_pm_control(const struct device *dev, enum pm_device_action ac
 	int rc = 0;
 
 	switch (action) {
-#ifdef CONFIG_SPI_NOR_IDLE_IN_DPD
-	case PM_DEVICE_ACTION_SUSPEND:
-	case PM_DEVICE_ACTION_RESUME:
-		break;
-#else
 	case PM_DEVICE_ACTION_SUSPEND:
 		acquire_device(dev);
 		rc = enter_dpd(dev);
@@ -1442,11 +1483,9 @@ static int spi_nor_pm_control(const struct device *dev, enum pm_device_action ac
 		rc = exit_dpd(dev);
 		release_device(dev);
 		break;
-#endif /* CONFIG_SPI_NOR_IDLE_IN_DPD */
 	case PM_DEVICE_ACTION_TURN_ON:
 		/* Coming out of power off */
 		rc = spi_nor_configure(dev);
-#ifndef CONFIG_SPI_NOR_IDLE_IN_DPD
 		if (rc == 0) {
 			/* Move to DPD, the correct device state
 			 * for PM_DEVICE_STATE_SUSPENDED
@@ -1455,7 +1494,6 @@ static int spi_nor_pm_control(const struct device *dev, enum pm_device_action ac
 			rc = enter_dpd(dev);
 			release_device(dev);
 		}
-#endif /* CONFIG_SPI_NOR_IDLE_IN_DPD */
 		break;
 	case PM_DEVICE_ACTION_TURN_OFF:
 		break;
@@ -1660,7 +1698,6 @@ static const struct flash_driver_api spi_nor_api = {
 	.dpd_exist = DT_INST_PROP(idx, has_dpd),						\
 	.dpd_wakeup_sequence_exist = DT_INST_NODE_HAS_PROP(idx, dpd_wakeup_sequence),		\
 	.mxicy_mx25r_power_mode_exist = DT_INST_NODE_HAS_PROP(idx, mxicy_mx25r_power_mode),	\
-	.enter_4byte_addr_exist = DT_INST_NODE_HAS_PROP(idx, enter_4byte_addr),			\
 	.reset_gpios_exist = DT_INST_NODE_HAS_PROP(idx, reset_gpios),				\
 	.requires_ulbpr_exist = DT_INST_PROP(idx, requires_ulbpr),				\
 	.wp_gpios_exist = DT_INST_NODE_HAS_PROP(idx, wp_gpios),					\

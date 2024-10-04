@@ -9,10 +9,13 @@
 #ifndef ZEPHYR_TEST_BSIM_BT_AUDIO_TEST_COMMON_
 #define ZEPHYR_TEST_BSIM_BT_AUDIO_TEST_COMMON_
 
-#include <zephyr/bluetooth/bluetooth.h>
+#include <stdbool.h>
+#include <stdint.h>
+
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/audio/bap_lc3_preset.h>
 #include <zephyr/bluetooth/audio/cap.h>
+#include <zephyr/bluetooth/bluetooth.h>
 
 #define LONG_META 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, \
 		  0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, \
@@ -34,6 +37,12 @@
 
 #define LONG_META_LEN (sizeof((uint8_t []){LONG_META}) + 1U) /* Size of data + type */
 
+#define BROADCAST_CODE                                                                             \
+	((uint8_t[]){0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, \
+		     0xdd, 0xee, 0xff})
+#define INCORRECT_BROADCAST_CODE                                                                   \
+	((uint8_t[]){0xDE, 0xAD, 0xBE, 0xEF, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, \
+		     0xdd, 0xee, 0xff})
 struct unicast_stream {
 	struct bt_cap_stream stream;
 	struct bt_audio_codec_cfg codec_cfg;
@@ -62,8 +71,8 @@ static inline bool valid_metadata_type(uint8_t type, uint8_t len)
 		}
 
 		return true;
-	case BT_AUDIO_METADATA_TYPE_STREAM_LANG:
-		if (len != 3) {
+	case BT_AUDIO_METADATA_TYPE_LANG:
+		if (len != BT_AUDIO_LANG_SIZE) {
 			return false;
 		}
 

@@ -1,6 +1,7 @@
 /* Bosch BMA4xx 3-axis accelerometer driver
  *
  * Copyright (c) 2023 Google LLC
+ * Copyright (c) 2024 Croxel Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,6 +13,7 @@
 #include <zephyr/sys/__assert.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/rtio/work.h>
 
 LOG_MODULE_REGISTER(bma4xx, CONFIG_SENSOR_LOG_LEVEL);
 #include "bma4xx.h"
@@ -338,7 +340,7 @@ static int bma4xx_temp_fetch(const struct device *dev, int8_t *temp)
  * RTIO submit and encoding
  */
 
-static int bma4xx_submit_one_shot(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
+static void bma4xx_submit_one_shot(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
 {
 	struct bma4xx_data *bma4xx = dev->data;
 
@@ -357,7 +359,7 @@ static int bma4xx_submit_one_shot(const struct device *dev, struct rtio_iodev_sq
 	if (rc != 0) {
 		LOG_ERR("Failed to get a read buffer of size %u bytes", min_buf_len);
 		rtio_iodev_sqe_err(iodev_sqe, rc);
-		return rc;
+		return;
 	}
 
 	/* Prepare response */
@@ -372,7 +374,8 @@ static int bma4xx_submit_one_shot(const struct device *dev, struct rtio_iodev_sq
 	for (int i = 0; i < num_channels; i++) {
 		if (channels[i].chan_idx != 0) {
 			LOG_ERR("Only channel index 0 supported");
-			return -ENOTSUP;
+			rtio_iodev_sqe_err(iodev_sqe, -ENOTSUP);
+			return;
 		}
 		switch (channels[i].chan_type) {
 		case SENSOR_CHAN_ALL:
@@ -395,7 +398,8 @@ static int bma4xx_submit_one_shot(const struct device *dev, struct rtio_iodev_sq
 		default:
 			LOG_ERR("Requested unsupported channel type %d, idx %d",
 				channels[i].chan_type, channels[i].chan_idx);
-			return -ENOTSUP;
+			rtio_iodev_sqe_err(iodev_sqe, -ENOTSUP);
+			return;
 		}
 	}
 
@@ -405,7 +409,7 @@ static int bma4xx_submit_one_shot(const struct device *dev, struct rtio_iodev_sq
 		if (rc != 0) {
 			LOG_ERR("Failed to fetch accel samples");
 			rtio_iodev_sqe_err(iodev_sqe, rc);
-			return rc;
+			return;
 		}
 	}
 
@@ -415,26 +419,34 @@ static int bma4xx_submit_one_shot(const struct device *dev, struct rtio_iodev_sq
 		if (rc != 0) {
 			LOG_ERR("Failed to fetch temp sample");
 			rtio_iodev_sqe_err(iodev_sqe, rc);
-			return rc;
+			return;
 		}
 	}
 #endif /* CONFIG_BMA4XX_TEMPERATURE */
 
 	rtio_iodev_sqe_ok(iodev_sqe, 0);
-
-	return 0;
 }
 
-static int bma4xx_submit(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
+static void bma4xx_submit_sync(struct rtio_iodev_sqe *iodev_sqe)
 {
 	const struct sensor_read_config *cfg = iodev_sqe->sqe.iodev->data;
+	const struct device *dev = cfg->sensor;
 
-	if (!cfg->is_streaming) {
-		return bma4xx_submit_one_shot(dev, iodev_sqe);
-	}
 	/* TODO: Add streaming support */
+	if (!cfg->is_streaming) {
+		bma4xx_submit_one_shot(dev, iodev_sqe);
+	} else {
+		rtio_iodev_sqe_err(iodev_sqe, -ENOTSUP);
+	}
+}
 
-	return -ENOTSUP;
+static void bma4xx_submit(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
+{
+	struct rtio_work_req *req = rtio_work_req_alloc();
+
+	__ASSERT_NO_MSG(req);
+
+	rtio_work_req_submit(req, iodev_sqe, bma4xx_submit_sync);
 }
 
 /*

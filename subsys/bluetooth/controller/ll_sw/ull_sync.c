@@ -726,7 +726,7 @@ void ull_sync_setup(struct ll_scan_set *scan, struct ll_scan_aux_set *aux,
 	interval = sys_le16_to_cpu(si->interval);
 	interval_us = interval * PERIODIC_INT_UNIT_US;
 
-	/* Convert fromm 10ms units to interval units */
+	/* Convert from 10ms units to interval units */
 	sync->timeout_reload = RADIO_SYNC_EVENTS((sync->timeout * 10U *
 						  USEC_PER_MSEC), interval_us);
 
@@ -1445,6 +1445,24 @@ static void sync_lost(void *param)
 
 	/* Enqueue the sync lost towards ULL context */
 	ll_rx_put_sched(rx->hdr.link, rx);
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO)
+	if (sync->iso.sync_iso) {
+		/* ISO create BIG flag in the periodic advertising context is still set */
+		struct ll_sync_iso_set *sync_iso;
+
+		sync_iso = sync->iso.sync_iso;
+
+		rx = (void *)&sync_iso->node_rx_lost;
+		rx->hdr.handle = sync_iso->big_handle;
+		rx->hdr.type = NODE_RX_TYPE_SYNC_ISO;
+		rx->rx_ftr.param = sync_iso;
+		*((uint8_t *)rx->pdu) = BT_HCI_ERR_CONN_FAIL_TO_ESTAB;
+
+		/* Enqueue the sync iso lost towards ULL context */
+		ll_rx_put_sched(rx->hdr.link, rx);
+	}
+#endif /* CONFIG_BT_CTLR_SYNC_ISO */
 }
 
 #if defined(CONFIG_BT_CTLR_CHECK_SAME_PEER_SYNC)
@@ -1504,7 +1522,7 @@ static struct pdu_cte_info *pdu_cte_info_get(struct pdu_adv *pdu)
 		return NULL;
 	}
 
-	/* Make sure there are no fields that are not allowd for AUX_SYNC_IND and AUX_CHAIN_IND */
+	/* Make sure there are no fields that are not allowed for AUX_SYNC_IND and AUX_CHAIN_IND */
 	LL_ASSERT(!hdr->adv_addr);
 	LL_ASSERT(!hdr->tgt_addr);
 

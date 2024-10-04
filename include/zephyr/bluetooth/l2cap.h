@@ -190,13 +190,9 @@ struct bt_l2cap_le_chan {
 	 * L2CAP_LE_CREDIT_BASED_CONNECTION_REQ/RSP or L2CAP_CONFIGURATION_REQ.
 	 */
 	struct bt_l2cap_le_endpoint	tx;
-#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
-	/** Channel Transmission queue */
+	/** Channel Transmission queue (for SDUs) */
 	struct k_fifo                   tx_queue;
-	/** Channel Pending Transmission buffer  */
-	struct net_buf                  *tx_buf;
-	/** Channel Transmission work  */
-	struct k_work_delayable		tx_work;
+#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
 	/** Segment SDU packet from upper layer */
 	struct net_buf			*_sdu;
 	uint16_t			_sdu_len;
@@ -218,6 +214,13 @@ struct bt_l2cap_le_chan {
 	struct k_work_delayable		rtx_work;
 	struct k_work_sync		rtx_sync;
 #endif
+
+	/** @internal To be used with @ref bt_conn.upper_data_ready */
+	sys_snode_t			_pdu_ready;
+	/** @internal To be used with @ref bt_conn.upper_data_ready */
+	atomic_t			_pdu_ready_lock;
+	/** @internal Holds the length of the current PDU/segment */
+	size_t				_pdu_remaining;
 };
 
 /**
@@ -260,9 +263,19 @@ struct bt_l2cap_br_chan {
 	/* Response Timeout eXpired (RTX) timer */
 	struct k_work_delayable		rtx_work;
 	struct k_work_sync		rtx_sync;
+
+	/** @internal To be used with @ref bt_conn.upper_data_ready */
+	sys_snode_t			_pdu_ready;
+	/** @internal To be used with @ref bt_conn.upper_data_ready */
+	atomic_t			_pdu_ready_lock;
+	/** @internal Queue of net bufs not yet sent to lower layer */
+	struct k_fifo			_pdu_tx_queue;
 };
 
-/** @brief L2CAP Channel operations structure. */
+/** @brief L2CAP Channel operations structure.
+ *
+ * The object has to stay valid and constant for the lifetime of the channel.
+ */
 struct bt_l2cap_chan_ops {
 	/** @brief Channel connected callback
 	 *
@@ -331,6 +344,10 @@ struct bt_l2cap_chan_ops {
 	 *
 	 *  @param chan The channel receiving data.
 	 *  @param buf Buffer containing incoming data.
+	 *
+	 *  @note This callback is mandatory, unless
+	 *  @kconfig{CONFIG_BT_L2CAP_SEG_RECV} is enabled and seg_recv is
+	 *  supplied.
 	 *
 	 *  @return 0 in case of success or negative value in case of error.
 	 *  @return -EINPROGRESS in case where user has to confirm once the data
@@ -452,6 +469,9 @@ struct bt_l2cap_server {
 	 *  This callback is called whenever a new incoming connection requires
 	 *  authorization.
 	 *
+	 *  @warning It is the responsibility of this callback to zero out the
+	 *  parent of the chan object.
+	 *
 	 *  @param conn The connection that is requesting authorization
 	 *  @param server Pointer to the server structure this callback relates to
 	 *  @param chan Pointer to received the allocated channel
@@ -506,6 +526,9 @@ int bt_l2cap_br_server_register(struct bt_l2cap_server *server);
  *  each channel connected() callback will be called. If the connection is
  *  rejected disconnected() callback is called instead.
  *
+ *  @warning It is the responsibility of the caller to zero out the
+ *  parents of the chan objects.
+ *
  *  @param conn Connection object.
  *  @param chans Array of channel objects.
  *  @param psm Channel PSM to connect to.
@@ -540,6 +563,9 @@ int bt_l2cap_ecred_chan_reconfigure(struct bt_l2cap_chan **chans, uint16_t mtu);
  *  LE and/or type of bt_l2cap_br_chan for BR/EDR. Then pass to this API
  *  the location (address) of bt_l2cap_chan type object which is a member
  *  of both transport dedicated objects.
+ *
+ *  @warning It is the responsibility of the caller to zero out the
+ *  parent of the chan object.
  *
  *  @param conn Connection object.
  *  @param chan Channel object.
@@ -590,6 +616,10 @@ int bt_l2cap_chan_disconnect(struct bt_l2cap_chan *chan);
  *  on the stack's global buffer pool (sized
  *  @kconfig{CONFIG_BT_L2CAP_TX_BUF_COUNT}).
  *
+ *  @warning The buffer's user_data _will_ be overwritten by this function. Do
+ *  not store anything in it. As soon as a call to this function has been made,
+ *  consider ownership of user_data transferred into the stack.
+ *
  *  @note Buffer ownership is transferred to the stack in case of success, in
  *  case of an error the caller retains the ownership of the buffer.
  *
@@ -597,6 +627,7 @@ int bt_l2cap_chan_disconnect(struct bt_l2cap_chan *chan);
  *  @return -EINVAL if `buf` or `chan` is NULL.
  *  @return -EINVAL if `chan` is not either BR/EDR or LE credit-based.
  *  @return -EINVAL if buffer doesn't have enough bytes reserved to fit header.
+ *  @return -EINVAL if buffer's reference counter != 1
  *  @return -EMSGSIZE if `buf` is larger than `chan`'s MTU.
  *  @return -ENOTCONN if underlying conn is disconnected.
  *  @return -ESHUTDOWN if L2CAP channel is disconnected.

@@ -113,7 +113,14 @@ endfunction()
 
 # https://cmake.org/cmake/help/latest/command/target_link_libraries.html
 function(zephyr_link_libraries)
-  target_link_libraries(zephyr_interface INTERFACE ${ARGV})
+  if(ARGV0 STREQUAL "PROPERTY")
+    if(ARGC GREATER 2)
+      message(FATAL_ERROR "zephyr_link_libraries(PROPERTY <prop>) only allows a single property.")
+    endif()
+    target_link_libraries(zephyr_interface INTERFACE $<TARGET_PROPERTY:linker,${ARGV1}>)
+  else()
+    target_link_libraries(zephyr_interface INTERFACE ${ARGV})
+  endif()
 endfunction()
 
 function(zephyr_libc_link_libraries)
@@ -505,7 +512,7 @@ function(zephyr_library_compile_options item)
   # library and link with it to obtain the flags.
   #
   # Linking with a dummy interface library will place flags later on
-  # the command line than the the flags from zephyr_interface because
+  # the command line than the flags from zephyr_interface because
   # zephyr_interface will be the first interface library that flags
   # are taken from.
 
@@ -705,9 +712,10 @@ endfunction()
 # This section provides glue between CMake and the Python code that
 # manages the runners.
 
+set(TYPES "FLASH" "DEBUG" "SIM" "ROBOT")
 function(_board_check_runner_type type) # private helper
-  if (NOT (("${type}" STREQUAL "FLASH") OR ("${type}" STREQUAL "DEBUG")))
-    message(FATAL_ERROR "invalid type ${type}; should be FLASH or DEBUG")
+  if (NOT "${type}" IN_LIST TYPES)
+    message(FATAL_ERROR "invalid type ${type}; should be one of: ${TYPES}")
   endif()
 endfunction()
 
@@ -723,8 +731,8 @@ endfunction()
 #
 # This would set the board's flash runner to "pyocd".
 #
-# In general, "type" is FLASH or DEBUG, and "runner" is the name of a
-# runner.
+# In general, "type" is FLASH, DEBUG, SIM or ROBOT and "runner" is
+# the name of a runner.
 function(board_set_runner type runner)
   _board_check_runner_type(${type})
   if (DEFINED BOARD_${type}_RUNNER)
@@ -763,6 +771,16 @@ endmacro()
 # A convenience macro for board_set_runner_ifnset(DEBUG ${runner}).
 macro(board_set_debugger_ifnset runner)
   board_set_runner_ifnset(DEBUG ${runner})
+endmacro()
+
+# A convenience macro for board_set_runner_ifnset(ROBOT ${runner}).
+macro(board_set_robot_runner_ifnset runner)
+  board_set_runner_ifnset(ROBOT ${runner})
+endmacro()
+
+# A convenience macro for board_set_runner_ifnset(SIM ${runner}).
+macro(board_set_sim_runner_ifnset runner)
+  board_set_runner_ifnset(SIM ${runner})
 endmacro()
 
 # This function is intended for board.cmake files and application
@@ -840,6 +858,39 @@ endfunction()
 function(board_set_rimage_target target)
   set(RIMAGE_TARGET ${target} CACHE STRING "rimage target")
   zephyr_check_cache(RIMAGE_TARGET)
+endfunction()
+
+function(board_emu_args emu)
+  string(MAKE_C_IDENTIFIER ${emu} emu_id)
+  # Note the "_EXPLICIT_" here, and see below.
+  set_property(GLOBAL APPEND PROPERTY BOARD_EMU_ARGS_EXPLICIT_${emu_id} ${ARGN})
+endfunction()
+
+function(board_finalize_emu_args emu)
+  # If the application provided a macro to add additional emu
+  # arguments, handle them.
+  if(COMMAND app_set_emu_args)
+    app_set_emu_args()
+  endif()
+
+  # Retrieve the list of explicitly set arguments.
+  string(MAKE_C_IDENTIFIER ${emu} emu_id)
+  get_property(explicit GLOBAL PROPERTY "BOARD_EMU_ARGS_EXPLICIT_${emu_id}")
+
+  # Note no _EXPLICIT_ here. This property contains the final list.
+  set_property(GLOBAL APPEND PROPERTY BOARD_EMU_ARGS_${emu_id}
+    # Default arguments from the common emu file come first.
+    ${ARGN}
+    # Arguments explicitly given with board_emu_args() come
+    # next, so they take precedence over the common emu file.
+    ${explicit}
+    # Arguments given via the CMake cache come last of all. Users
+    # can provide variables in this way from the CMake command line.
+    ${BOARD_EMU_ARGS_${emu_id}}
+    )
+
+  # Add the finalized emu to the global property list.
+  set_property(GLOBAL APPEND PROPERTY ZEPHYR_EMUS ${emu})
 endfunction()
 
 # Zephyr board revision:
@@ -1171,6 +1222,7 @@ endfunction(zephyr_check_compiler_flag_hardcoded)
 #    ROM_START     Inside the first output section of the image. This option is
 #                  currently only available on ARM Cortex-M, ARM Cortex-R,
 #                  x86, ARC, openisa_rv32m1, and RISC-V.
+#    ROM_SECTIONS  Inside the ROMABLE_REGION GROUP, not initialized.
 #    RAM_SECTIONS  Inside the RAMABLE_REGION GROUP, not initialized.
 #    DATA_SECTIONS Inside the RAMABLE_REGION GROUP, initialized.
 #    RAMFUNC_SECTION Inside the RAMFUNC RAMABLE_REGION GROUP, not initialized.
@@ -1199,8 +1251,8 @@ endfunction(zephyr_check_compiler_flag_hardcoded)
 #    _mysection_end = .;
 #    _mysection_size = ABSOLUTE(_mysection_end - _mysection_start);
 #
-# When placing into SECTIONS, RAM_SECTIONS or DATA_SECTIONS, the files must
-# instead define their own output sections to achieve the same thing:
+# When placing into SECTIONS, ROM_SECTIONS, RAM_SECTIONS or DATA_SECTIONS, the
+# files must instead define their own output sections to achieve the same thing:
 #    SECTION_PROLOGUE(.mysection,,)
 #    {
 #        _mysection_start = .;
@@ -1220,6 +1272,7 @@ function(zephyr_linker_sources location)
   # the global linker.ld.
   set(snippet_base       "${__build_dir}/include/generated")
   set(sections_path      "${snippet_base}/snippets-sections.ld")
+  set(rom_sections_path  "${snippet_base}/snippets-rom-sections.ld")
   set(ram_sections_path  "${snippet_base}/snippets-ram-sections.ld")
   set(data_sections_path "${snippet_base}/snippets-data-sections.ld")
   set(rom_start_path     "${snippet_base}/snippets-rom-start.ld")
@@ -1239,6 +1292,7 @@ function(zephyr_linker_sources location)
   get_property(cleared GLOBAL PROPERTY snippet_files_cleared)
   if (NOT DEFINED cleared)
     file(WRITE ${sections_path} "")
+    file(WRITE ${rom_sections_path} "")
     file(WRITE ${ram_sections_path} "")
     file(WRITE ${data_sections_path} "")
     file(WRITE ${rom_start_path} "")
@@ -1258,6 +1312,8 @@ function(zephyr_linker_sources location)
   # Choose destination file, based on the <location> argument.
   if ("${location}" STREQUAL "SECTIONS")
     set(snippet_path "${sections_path}")
+  elseif("${location}" STREQUAL "ROM_SECTIONS")
+    set(snippet_path "${rom_sections_path}")
   elseif("${location}" STREQUAL "RAM_SECTIONS")
     set(snippet_path "${ram_sections_path}")
   elseif("${location}" STREQUAL "DATA_SECTIONS")
@@ -2336,16 +2392,12 @@ function(toolchain_parse_make_rule input_file include_files)
   # the element separator, so let's get the pure `;` back.
   string(REPLACE "\;" ";" input_as_list ${input})
 
-  # Pop the first line and treat it specially
-  list(POP_FRONT input_as_list first_input_line)
-  string(FIND ${first_input_line} ": " index)
-  math(EXPR j "${index} + 2")
-  string(SUBSTRING ${first_input_line} ${j} -1 first_include_file)
+  # The file might also contain multiple files on one line if one or both of
+  # the file paths are short, split these up into multiple elements using regex
+  string(REGEX REPLACE "([^ ])[ ]([^ ])" "\\1;\\2" input_as_list "${input_as_list}")
 
-  # Remove whitespace before and after filename and convert to CMake path.
-  string(STRIP "${first_include_file}" first_include_file)
-  file(TO_CMAKE_PATH "${first_include_file}" first_include_file)
-  set(result "${first_include_file}")
+  # Pop the first item containing "empty_file.o:"
+  list(POP_FRONT input_as_list first_input_line)
 
   # Remove whitespace before and after filename and convert to CMake path.
   foreach(file ${input_as_list})
@@ -2381,18 +2433,20 @@ function(check_set_linker_property)
 
   list(GET LINKER_PROPERTY_PROPERTY 0 property)
   list(REMOVE_AT LINKER_PROPERTY_PROPERTY 0)
-  set(option ${LINKER_PROPERTY_PROPERTY})
 
-  string(MAKE_C_IDENTIFIER check${option} check)
+  foreach(option ${LINKER_PROPERTY_PROPERTY})
+    string(MAKE_C_IDENTIFIER check${option} check)
 
-  set(SAVED_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
-  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${option}")
-  zephyr_check_compiler_flag(C "" ${check})
-  set(CMAKE_REQUIRED_FLAGS ${SAVED_CMAKE_REQUIRED_FLAGS})
+    set(SAVED_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
+    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${option}")
+    zephyr_check_compiler_flag(C "" ${check})
+    set(CMAKE_REQUIRED_FLAGS ${SAVED_CMAKE_REQUIRED_FLAGS})
 
-  if(${${check}})
-    set_property(TARGET ${LINKER_PROPERTY_TARGET} ${APPEND} PROPERTY ${property} ${option})
-  endif()
+    if(${${check}})
+      set_property(TARGET ${LINKER_PROPERTY_TARGET} ${APPEND} PROPERTY ${property} ${option})
+      set(APPEND "APPEND")
+    endif()
+  endforeach()
 endfunction()
 
 # 'set_compiler_property' is a function that sets the property for the C and
@@ -2538,6 +2592,8 @@ endfunction()
 #                          to absolute path, relative from `APPLICATION_SOURCE_DIR`
 #                          Issue an error for any relative path not specified
 #                          by user with `-D<path>`
+#                          BASE_DIR <base-dir>: convert paths relative to <base-dir>
+#                                               instead of `APPLICATION_SOURCE_DIR`
 #
 # returns an updated list of absolute paths
 #
@@ -2591,7 +2647,7 @@ Please provide one of following: APPLICATION_ROOT, CONF_FILES")
   endif()
 
   if(${ARGV0} STREQUAL APPLICATION_ROOT)
-    set(single_args APPLICATION_ROOT)
+    set(single_args APPLICATION_ROOT BASE_DIR)
   elseif(${ARGV0} STREQUAL CONF_FILES)
     set(options QUALIFIERS REQUIRED)
     set(single_args BOARD BOARD_REVISION BOARD_QUALIFIERS DTS KCONF DEFCONFIG BUILD SUFFIX)
@@ -2604,6 +2660,10 @@ Please provide one of following: APPLICATION_ROOT, CONF_FILES")
   endif()
 
   if(ZFILE_APPLICATION_ROOT)
+    if(NOT DEFINED ZFILE_BASE_DIR)
+      set(ZFILE_BASE_DIR ${APPLICATION_SOURCE_DIR})
+    endif()
+
     # Note: user can do: `-D<var>=<relative-path>` and app can at same
     # time specify `list(APPEND <var> <abs-path>)`
     # Thus need to check and update only CACHED variables (-D<var>).
@@ -2613,11 +2673,11 @@ Please provide one of following: APPLICATION_ROOT, CONF_FILES")
       # `set(<var> CACHE)`, so let's update current scope variable to absolute
       # path from  `APPLICATION_SOURCE_DIR`.
       if(NOT IS_ABSOLUTE ${path})
-        set(abs_path ${APPLICATION_SOURCE_DIR}/${path})
         list(FIND ${ZFILE_APPLICATION_ROOT} ${path} index)
+        cmake_path(ABSOLUTE_PATH path BASE_DIRECTORY ${ZFILE_BASE_DIR} NORMALIZE)
         if(NOT ${index} LESS 0)
           list(REMOVE_AT ${ZFILE_APPLICATION_ROOT} ${index})
-          list(INSERT ${ZFILE_APPLICATION_ROOT} ${index} ${abs_path})
+          list(INSERT ${ZFILE_APPLICATION_ROOT} ${index} ${path})
         endif()
       endif()
     endforeach()
@@ -2634,6 +2694,7 @@ Relative paths are only allowed with `-D${ARGV1}=<path>`")
       endif()
     endforeach()
 
+    list(REMOVE_DUPLICATES ${ZFILE_APPLICATION_ROOT})
     # This updates the provided argument in parent scope (callers scope)
     set(${ZFILE_APPLICATION_ROOT} ${${ZFILE_APPLICATION_ROOT}} PARENT_SCOPE)
   endif()
@@ -3575,9 +3636,11 @@ endfunction()
 #
 # <var>              : Return variable where the node path will be stored
 # NODELABEL <label>  : Node label
+# REQUIRED           : Generate a fatal error if the node-label is not found
 function(dt_nodelabel var)
+  set(options "REQUIRED")
   set(req_single_args "NODELABEL")
-  cmake_parse_arguments(DT_LABEL "" "${req_single_args}" "" ${ARGN})
+  cmake_parse_arguments(DT_LABEL "${options}" "${req_single_args}" "" ${ARGN})
 
   if(${ARGV0} IN_LIST req_single_args)
     message(FATAL_ERROR "dt_nodelabel(${ARGV0} ...) missing return parameter.")
@@ -3593,6 +3656,9 @@ function(dt_nodelabel var)
 
   get_target_property(${var} devicetree_target "DT_NODELABEL|${DT_LABEL_NODELABEL}")
   if(${${var}} STREQUAL ${var}-NOTFOUND)
+    if(DT_LABEL_REQUIRED)
+      message(FATAL_ERROR "required nodelabel not found: ${DT_LABEL_NODELABEL}")
+    endif()
     set(${var})
   endif()
 
@@ -3618,9 +3684,11 @@ endfunction()
 #
 # <var>           : Return variable where the node path will be stored
 # PROPERTY <prop> : The alias to check
+# REQUIRED        : Generate a fatal error if the alias is not found
 function(dt_alias var)
+  set(options "REQUIRED")
   set(req_single_args "PROPERTY")
-  cmake_parse_arguments(DT_ALIAS "" "${req_single_args}" "" ${ARGN})
+  cmake_parse_arguments(DT_ALIAS "${options}" "${req_single_args}" "" ${ARGN})
 
   if(${ARGV0} IN_LIST req_single_args)
     message(FATAL_ERROR "dt_alias(${ARGV0} ...) missing return parameter.")
@@ -3636,6 +3704,9 @@ function(dt_alias var)
 
   get_target_property(${var} devicetree_target "DT_ALIAS|${DT_ALIAS_PROPERTY}")
   if(${${var}} STREQUAL ${var}-NOTFOUND)
+    if(DT_ALIAS_REQUIRED)
+      message(FATAL_ERROR "required alias not found: ${DT_ALIAS_PROPERTY}")
+    endif()
     set(${var})
   endif()
 
@@ -3788,10 +3859,12 @@ endfunction()
 # PROPERTY <prop>: Property for which a value should be returned, as it
 #                  appears in the DTS source
 # INDEX <idx>    : Optional index when retrieving a value in an array property
+# REQUIRED       : Generate a fatal error if the property is not found
 function(dt_prop var)
+  set(options "REQUIRED")
   set(req_single_args "PATH;PROPERTY")
   set(single_args "INDEX")
-  cmake_parse_arguments(DT_PROP "" "${req_single_args};${single_args}" "" ${ARGN})
+  cmake_parse_arguments(DT_PROP "${options}" "${req_single_args};${single_args}" "" ${ARGN})
 
   if(${ARGV0} IN_LIST req_single_args)
     message(FATAL_ERROR "dt_prop(${ARGV0} ...) missing return parameter.")
@@ -3813,6 +3886,9 @@ function(dt_prop var)
 
   if(NOT exists)
     set(${var} PARENT_SCOPE)
+    if(DT_PROP_REQUIRED)
+      message(FATAL_ERROR "required property not found: ${canonical}/${DT_PROP_PROPERTY}")
+    endif()
     return()
   endif()
 
@@ -5150,6 +5226,24 @@ macro(zephyr_check_arguments_required function prefix)
 endmacro()
 
 #
+# Helper macro for verifying that at least one of the required arguments has
+# been provided by the caller. Arguments with empty values are allowed.
+#
+# A FATAL_ERROR will be raised if not one of the required arguments has been
+# passed by the caller.
+#
+# Usage:
+#   zephyr_check_arguments_required_allow_empty(<function_name> <prefix> <arg1> [<arg2> ...])
+#
+macro(zephyr_check_arguments_required_allow_empty function prefix)
+  set(check_defined DEFINED)
+  set(allow_empty TRUE)
+  zephyr_check_flags_required(${function} ${prefix} ${ARGN})
+  set(allow_empty)
+  set(check_defined)
+endmacro()
+
+#
 # Helper macro for verifying that at least one of the required flags has
 # been provided by the caller.
 #
@@ -5163,6 +5257,8 @@ macro(zephyr_check_flags_required function prefix)
   set(required_found FALSE)
   foreach(required ${ARGN})
     if(${check_defined} ${prefix}_${required})
+      set(required_found TRUE)
+    elseif("${allow_empty}" AND ${required} IN_LIST ${prefix}_KEYWORDS_MISSING_VALUES)
       set(required_found TRUE)
     endif()
   endforeach()
@@ -5376,6 +5472,7 @@ function(add_llext_target target_name)
 
   target_compile_definitions(${llext_lib_target} PRIVATE
     $<TARGET_PROPERTY:zephyr_interface,INTERFACE_COMPILE_DEFINITIONS>
+    LL_EXTENSION_BUILD
   )
   target_compile_options(${llext_lib_target} PRIVATE
     ${zephyr_filtered_flags}
@@ -5413,6 +5510,22 @@ function(add_llext_target target_name)
     COMMAND_EXPAND_LISTS
   )
 
+  # LLEXT ELF processing for importing via SLID
+  #
+  # This command must be executed as last step of the packaging process,
+  # to ensure that the ELF processed for binary generation contains SLIDs.
+  # If executed too early, it is possible that some tools executed to modify
+  # the ELF file (e.g., strip) undo the work performed here.
+  if (CONFIG_LLEXT_EXPORT_BUILTINS_BY_SLID)
+    set(slid_inject_cmd
+      ${PYTHON_EXECUTABLE}
+      ${ZEPHYR_BASE}/scripts/build/llext_inject_slids.py
+      --elf-file ${llext_pkg_output}
+    )
+  else()
+    set(slid_inject_cmd ${CMAKE_COMMAND} -E true)
+  endif()
+
   # Type-specific packaging of the built binary file into an .llext file
   if(CONFIG_LLEXT_TYPE_ELF_OBJECT)
 
@@ -5420,6 +5533,7 @@ function(add_llext_target target_name)
     add_custom_command(
       OUTPUT ${llext_pkg_output}
       COMMAND ${CMAKE_COMMAND} -E copy ${llext_pkg_input} ${llext_pkg_output}
+      COMMAND ${slid_inject_cmd}
       DEPENDS ${llext_proc_target} ${llext_pkg_input}
     )
 
@@ -5435,6 +5549,7 @@ function(add_llext_target target_name)
               $<TARGET_PROPERTY:bintools,elfconvert_flag_infile>${llext_pkg_input}
               $<TARGET_PROPERTY:bintools,elfconvert_flag_outfile>${llext_pkg_output}
               $<TARGET_PROPERTY:bintools,elfconvert_flag_final>
+      COMMAND ${slid_inject_cmd}
       DEPENDS ${llext_proc_target} ${llext_pkg_input}
     )
 
@@ -5449,6 +5564,7 @@ function(add_llext_target target_name)
               $<TARGET_PROPERTY:bintools,strip_flag_infile>${llext_pkg_input}
               $<TARGET_PROPERTY:bintools,strip_flag_outfile>${llext_pkg_output}
               $<TARGET_PROPERTY:bintools,strip_flag_final>
+      COMMAND ${slid_inject_cmd}
       DEPENDS ${llext_proc_target} ${llext_pkg_input}
     )
 

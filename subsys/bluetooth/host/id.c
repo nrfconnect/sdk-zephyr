@@ -241,7 +241,7 @@ static void adv_rpa_expired(struct bt_le_ext_adv *adv, void *data)
 
 static void adv_rpa_invalidate(struct bt_le_ext_adv *adv, void *data)
 {
-	/* RPA of Advertisers limited by timeot or number of packets only expire
+	/* RPA of Advertisers limited by timeout or number of packets only expire
 	 * when they are stopped.
 	 */
 	if (!atomic_test_bit(adv->flags, BT_ADV_LIMITED) &&
@@ -606,7 +606,6 @@ static void le_update_private_addr(void)
 	}
 #endif
 	if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
-	    IS_ENABLED(CONFIG_BT_FILTER_ACCEPT_LIST) &&
 	    atomic_test_bit(bt_dev.flags, BT_DEV_INITIATING)) {
 		/* Canceled initiating procedure will be restarted by
 		 * connection complete event.
@@ -690,11 +689,11 @@ static void rpa_timeout(struct k_work *work)
 	le_rpa_invalidate();
 
 	/* IF no roles using the RPA is running we can stop the RPA timer */
-	if (!(adv_enabled ||
-	      atomic_test_bit(bt_dev.flags, BT_DEV_INITIATING) ||
-	      (atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING) &&
-	       atomic_test_bit(bt_dev.flags, BT_DEV_ACTIVE_SCAN)))) {
-		return;
+	if (IS_ENABLED(CONFIG_BT_CENTRAL)) {
+		if (!(adv_enabled || atomic_test_bit(bt_dev.flags, BT_DEV_INITIATING) ||
+		      bt_le_scan_active_scanner_running())) {
+			return;
+		}
 	}
 
 	le_update_private_addr();
@@ -1416,7 +1415,7 @@ int bt_id_reset(uint8_t id, bt_addr_le_t *addr, uint8_t *irk)
 		}
 	}
 
-	if (IS_ENABLED(CONFIG_BT_CONN) &&
+	if (IS_ENABLED(CONFIG_BT_SMP) &&
 	    !bt_addr_le_eq(&bt_dev.id_addr[id], BT_ADDR_LE_ANY)) {
 		err = bt_unpair(id, NULL);
 		if (err) {
@@ -1454,7 +1453,7 @@ int bt_id_delete(uint8_t id)
 		}
 	}
 
-	if (IS_ENABLED(CONFIG_BT_CONN)) {
+	if (IS_ENABLED(CONFIG_BT_SMP)) {
 		int err;
 
 		err = bt_unpair(id, NULL);
@@ -1787,7 +1786,12 @@ int bt_id_set_scan_own_addr(bool active_scan, uint8_t *own_addr_type)
 
 	if (IS_ENABLED(CONFIG_BT_PRIVACY)) {
 		err = bt_id_set_private_addr(BT_ID_DEFAULT);
-		if (err) {
+		if (err == -EACCES && (atomic_test_bit(bt_dev.flags, BT_DEV_SCANNING) ||
+				       atomic_test_bit(bt_dev.flags, BT_DEV_INITIATING))) {
+			LOG_WRN("Set random addr failure ignored in scan/init state");
+
+			return 0;
+		} else if (err) {
 			return err;
 		}
 

@@ -6,6 +6,7 @@
 
 #include <mem.h>
 #include <nordic/nrf_common.dtsi>
+#include <zephyr/dt-bindings/regulator/nrf5x.h>
 
 /delete-node/ &sw_pwm;
 
@@ -42,47 +43,6 @@
 			clock-frequency = <DT_FREQ_M(128)>;
 			riscv,isa = "rv32emc";
 			nordic,bus-width = <32>;
-
-			cpuflpr_vevif_local: mailbox {
-				compatible = "nordic,nrf-vevif-local";
-				status = "disabled";
-				interrupt-parent = <&cpuflpr_clic>;
-				interrupts = <0 NRF_DEFAULT_IRQ_PRIORITY>,
-							<1 NRF_DEFAULT_IRQ_PRIORITY>,
-							<2 NRF_DEFAULT_IRQ_PRIORITY>,
-							<3 NRF_DEFAULT_IRQ_PRIORITY>,
-							<4 NRF_DEFAULT_IRQ_PRIORITY>,
-							<5 NRF_DEFAULT_IRQ_PRIORITY>,
-							<6 NRF_DEFAULT_IRQ_PRIORITY>,
-							<7 NRF_DEFAULT_IRQ_PRIORITY>,
-							<8 NRF_DEFAULT_IRQ_PRIORITY>,
-							<9 NRF_DEFAULT_IRQ_PRIORITY>,
-							<10 NRF_DEFAULT_IRQ_PRIORITY>,
-							<11 NRF_DEFAULT_IRQ_PRIORITY>,
-							<12 NRF_DEFAULT_IRQ_PRIORITY>,
-							<13 NRF_DEFAULT_IRQ_PRIORITY>,
-							<14 NRF_DEFAULT_IRQ_PRIORITY>,
-							<15 NRF_DEFAULT_IRQ_PRIORITY>,
-							<16 NRF_DEFAULT_IRQ_PRIORITY>,
-							<17 NRF_DEFAULT_IRQ_PRIORITY>,
-							<18 NRF_DEFAULT_IRQ_PRIORITY>,
-							<19 NRF_DEFAULT_IRQ_PRIORITY>,
-							<20 NRF_DEFAULT_IRQ_PRIORITY>,
-							<21 NRF_DEFAULT_IRQ_PRIORITY>,
-							<22 NRF_DEFAULT_IRQ_PRIORITY>,
-							<23 NRF_DEFAULT_IRQ_PRIORITY>,
-							<24 NRF_DEFAULT_IRQ_PRIORITY>,
-							<25 NRF_DEFAULT_IRQ_PRIORITY>,
-							<26 NRF_DEFAULT_IRQ_PRIORITY>,
-							<27 NRF_DEFAULT_IRQ_PRIORITY>,
-							<28 NRF_DEFAULT_IRQ_PRIORITY>,
-							<29 NRF_DEFAULT_IRQ_PRIORITY>,
-							<30 NRF_DEFAULT_IRQ_PRIORITY>,
-							<31 NRF_DEFAULT_IRQ_PRIORITY>;
-				#mbox-cells = <1>;
-				nordic,tasks = <18>;
-				nordic,tasks-mask = <0x007f0000>;
-			};
 		};
 	};
 
@@ -104,11 +64,14 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 
+#ifdef USE_NON_SECURE_ADDRESS_MAP
+		/* intentionally empty because UICR is hardware fixed to Secure */
+#else
 		uicr: uicr@ffd000 {
 			compatible = "nordic,nrf-uicr";
 			reg = <0xffd000 0x1000>;
 		};
-
+#endif
 		ficr: ficr@ffc000 {
 			compatible = "nordic,nrf-ficr";
 			reg = <0xffc000 0x1000>;
@@ -131,10 +94,17 @@
 			ranges = <0x0 0x2002f000 0x11000>;
 		};
 
+#ifdef USE_NON_SECURE_ADDRESS_MAP
+		global_peripherals: peripheral@40000000 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0x0 0x40000000 0x10000000>;
+#else
 		global_peripherals: peripheral@50000000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges = <0x0 0x50000000 0x10000000>;
+#endif
 
 			dppic00: dppic@42000 {
 				compatible = "nordic,nrf-dppic";
@@ -166,6 +136,7 @@
 				reg = <0x4a000 0x1000>;
 				interrupts = <74 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
+				endtx-stoptx-supported;
 			};
 
 			cpuflpr_vpr: vpr@4c000 {
@@ -175,15 +146,6 @@
 				#address-cells = <1>;
 				#size-cells = <1>;
 				status = "disabled";
-
-				cpuflpr_vevif_remote: mailbox@0 {
-					compatible = "nordic,nrf-vevif-remote";
-					reg = <0x0 0x1000>;
-					#mbox-cells = <1>;
-					nordic,tasks = <18>;
-					nordic,tasks-mask = <0x007f0000>;
-					status = "disabled";
-				};
 
 				cpuflpr_clic: interrupt-controller@f0000000 {
 					compatible = "nordic,nrf-clic";
@@ -254,6 +216,14 @@
 					compatible = "nordic,nrf-ieee802154";
 					status = "disabled";
 				};
+
+				/* Note: In the nRF Connect SDK the SoftDevice Controller
+				 * is added and set as the default Bluetooth Controller.
+				 */
+				bt_hci_controller: bt_hci_controller {
+					compatible = "zephyr,bt-hci-ll-sw-split";
+					status = "disabled";
+				};
 			};
 
 			dppic20: dppic@c2000 {
@@ -297,6 +267,7 @@
 				reg = <0xc6000 0x1000>;
 				interrupts = <198 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
+				endtx-stoptx-supported;
 			};
 
 			i2c21: i2c@c7000 {
@@ -334,6 +305,7 @@
 				reg = <0xc7000 0x1000>;
 				interrupts = <199 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
+				endtx-stoptx-supported;
 			};
 
 			i2c22: i2c@c8000 {
@@ -371,6 +343,7 @@
 				reg = <0xc8000 0x1000>;
 				interrupts = <200 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
+				endtx-stoptx-supported;
 			};
 
 			egu20: egu@c9000 {
@@ -428,6 +401,20 @@
 				max-bit-width = <32>;
 				interrupts = <206 NRF_DEFAULT_IRQ_PRIORITY>;
 				prescaler = <0>;
+			};
+
+			pdm20: pdm@d0000 {
+				compatible = "nordic,nrf-pdm";
+				status = "disabled";
+				reg = <0xd0000 0x1000>;
+				interrupts = <208 NRF_DEFAULT_IRQ_PRIORITY>;
+			};
+
+			pdm21: pdm@d1000 {
+				compatible = "nordic,nrf-pdm";
+				status = "disabled";
+				reg = <0xd1000 0x1000>;
+				interrupts = <209 NRF_DEFAULT_IRQ_PRIORITY>;
 			};
 
 			pwm20: pwm@d2000 {
@@ -565,14 +552,19 @@
 				reg = <0x104000 0x1000>;
 				interrupts = <260 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
+				endtx-stoptx-supported;
 			};
 
+#ifdef USE_NON_SECURE_ADDRESS_MAP
+			/* intentionally empty because WDT30 is hardware fixed to Secure */
+#else
 			wdt30: watchdog@108000 {
 				compatible = "nordic,nrf-wdt";
 				reg = <0x108000 0x620>;
 				interrupts = <264 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
 			};
+#endif
 
 			wdt31: watchdog@109000 {
 				compatible = "nordic,nrf-wdt";
@@ -604,6 +596,22 @@
 				reg = <0x10e000 0x1000>;
 				interrupts = <270 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
+			};
+
+			regulators: regulator@120000 {
+				compatible = "nordic,nrf54l-regulators";
+				reg = <0x120000 0x1000>;
+				status = "disabled";
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				vregmain: regulator@120600 {
+					compatible = "nordic,nrf5x-regulator";
+					reg = <0x120600 0x1>;
+					status = "disabled";
+					regulator-name = "VREGMAIN";
+					regulator-initial-mode = <NRF5X_REG_MODE_LDO>;
+				};
 			};
 		};
 

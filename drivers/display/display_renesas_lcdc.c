@@ -21,7 +21,7 @@
 #include <da1469x_pd.h>
 #include <zephyr/linker/devicetree_regions.h>
 #include <zephyr/pm/device.h>
-#include <zephyr/pm/device_runtime.h>
+#include <zephyr/pm/policy.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(smartbond_display, CONFIG_DISPLAY_LOG_LEVEL);
@@ -74,9 +74,8 @@ struct display_smartbond_data {
 	struct k_sem dma_sync_sem;
 	/* Granted DMA channel used for memory transfers */
 	int dma_channel;
-#if defined(CONFIG_PM_DEVICE) || defined(CONFIG_PM_DEVICE_RUNTIME)
-	/* Flag to determine if device suspension is allowed */
-	bool is_sleep_allowed;
+#if defined(CONFIG_PM_DEVICE)
+	ATOMIC_DEFINE(pm_policy_state_flag, 1);
 #endif
 };
 
@@ -98,6 +97,29 @@ struct display_smartbond_config {
 	uint8_t pixel_size;
 	enum display_pixel_format pixel_format;
 };
+
+static inline void lcdc_smartbond_pm_policy_state_lock_get(struct display_smartbond_data *data)
+{
+#ifdef CONFIG_PM_DEVICE
+	if (atomic_test_and_set_bit(data->pm_policy_state_flag, 0) == 0) {
+		/*
+		 * Prevent the SoC from etering the normal sleep state as PDC does not support
+		 * waking up the application core following LCDC events.
+		 */
+		pm_policy_state_lock_get(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
+	}
+#endif
+}
+
+static inline void lcdc_smartbond_pm_policy_state_lock_put(struct display_smartbond_data *data)
+{
+#ifdef CONFIG_PM_DEVICE
+	if (atomic_test_and_clear_bit(data->pm_policy_state_flag, 0) == 1) {
+		/* Allow the SoC to enter the nornmal sleep state once LCDC is inactive */
+		pm_policy_state_lock_put(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
+	}
+#endif
+}
 
 /* Display pixel to layer color format translation */
 static uint8_t lcdc_smartbond_pixel_to_lcm(enum display_pixel_format pixel_format)
@@ -213,6 +235,7 @@ static int display_smartbond_dma_config(const struct device *dev)
 	data->dma_cfg.dma_callback = display_smartbond_dma_cb;
 	data->dma_cfg.block_count = 1;
 	data->dma_cfg.head_block = &data->dma_block_cfg;
+	data->dma_cfg.error_callback_dis = 1;
 
 	/* Request an arbitrary DMA channel */
 	data->dma_channel = dma_request_channel(data->dma, NULL);
@@ -259,7 +282,7 @@ static int display_smartbond_resume(const struct device *dev)
 	return display_smartbond_configure(dev);
 }
 
-#if defined(CONFIG_PM_DEVICE) || defined(CONFIG_PM_DEVICE_RUNTIME)
+#if defined(CONFIG_PM_DEVICE)
 static void display_smartbond_dma_deconfig(const struct device *dev)
 {
 	struct display_smartbond_data *data = dev->data;
@@ -314,20 +337,27 @@ static int display_smartbond_init(const struct device *dev)
 	IRQ_CONNECT(SMARTBOND_IRQN, SMARTBOND_IRQ_PRIO, smartbond_display_isr,
 								DEVICE_DT_INST_GET(0), 0);
 
-#ifdef CONFIG_PM_DEVICE_RUNTIME
-	/* Make sure device state is marked as suspended */
-	pm_device_init_suspended(dev);
-
-	ret = pm_device_runtime_enable(dev);
-
-	/* Sleep is allowed until the device is explicitly resumed on application level. */
-	if (ret == 0) {
-		data->is_sleep_allowed = true;
-	}
-#else
-	/* Resume if either PM is not used at all or if PM without runtime is used. */
+	/*
+	 * Currently, there is no API to explicitly enable/disable the display controller.
+	 * At the same time, the controller is set to continuous mode meaning that
+	 * as long as a display panel is turned on, frame updates should happen all
+	 * the time (otherwise contents on the display pane will be lost as the latter
+	 * does not integrate an SDRAM memory to keep its frame).
+	 * As such, resume/suspend operations are bound to blanking operations.
+	 * That is, when the display is blanked on we can safely consider that display
+	 * is no longer functional and thus, the controller can be suspended (allowing the
+	 * SoC to enter the sleep state). Once the display is blanked off, then we consider
+	 * that the controller should be resumed and sleep should be prevented at all
+	 * (this is because the controller is powered by the same power domain used to
+	 * power the application core). Side effect of the above is that the controller
+	 * should be configured at initialization phase as display operations might
+	 * be requested before the display is blanked off for the very first time.
+	 */
 	ret = display_smartbond_resume(dev);
-#endif
+	if (ret == 0) {
+		/* Display port should be enabled at this moment and so sleep is not allowed. */
+		lcdc_smartbond_pm_policy_state_lock_get(data);
+	}
 
 	return ret;
 }
@@ -355,13 +385,11 @@ static int display_smartbond_blanking_on(const struct device *dev)
 		}
 	}
 
-#if defined(CONFIG_PM_DEVICE) || defined(CONFIG_PM_DEVICE_RUNTIME)
 	/*
 	 * At this moment the display panel should be turned off and so the device
 	 * can enter the suspend state.
 	 */
-	data->is_sleep_allowed = true;
-#endif
+	lcdc_smartbond_pm_policy_state_lock_put(data);
 
 	k_sem_give(&data->device_sem);
 
@@ -391,13 +419,11 @@ static int display_smartbond_blanking_off(const struct device *dev)
 	 */
 	LCDC->LCDC_MODE_REG &= ~LCDC_LCDC_MODE_REG_LCDC_FORCE_BLANK_Msk;
 
-#if defined(CONFIG_PM_DEVICE) || defined(CONFIG_PM_DEVICE_RUNTIME)
 	/*
 	 * At this moment the display should be turned on and so the device
 	 * cannot enter the suspend state.
 	 */
-	data->is_sleep_allowed = false;
-#endif
+	lcdc_smartbond_pm_policy_state_lock_get(data);
 
 	k_sem_give(&data->device_sem);
 
@@ -563,23 +589,17 @@ static int display_smartbond_write(const struct device *dev,
 	return 0;
 }
 
-#if defined(CONFIG_PM_DEVICE) || defined(CONFIG_PM_DEVICE_RUNTIME)
+#if defined(CONFIG_PM_DEVICE)
 static int display_smartbond_pm_action(const struct device *dev, enum pm_device_action action)
 {
-	/* Initialize with an error code that should abort sleeping */
-	int ret = -EBUSY;
-	struct display_smartbond_data *data = dev->data;
+	int ret = 0;
 
 	switch (action) {
 	case PM_DEVICE_ACTION_SUSPEND:
-		/* Sleep is only allowed whne display blanking is activated */
-		if (data->is_sleep_allowed) {
-			(void)display_smartbond_suspend(dev);
-			ret = 0;
-		}
+		/* A non-zero value should not affect sleep */
+		(void)display_smartbond_suspend(dev);
 		break;
 	case PM_DEVICE_ACTION_RESUME:
-		__ASSERT_NO_MSG(data->is_sleep_allowed);
 		/*
 		 * The resume error code should not be taken into consideration
 		 * by the PM subsystem
@@ -594,7 +614,7 @@ static int display_smartbond_pm_action(const struct device *dev, enum pm_device_
 }
 #endif
 
-static struct display_driver_api display_smartbond_driver_api = {
+static const struct display_driver_api display_smartbond_driver_api = {
 	.write =  display_smartbond_write,
 	.read = display_smartbond_read,
 	.get_framebuffer = display_smartbond_get_framebuffer,

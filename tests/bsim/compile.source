@@ -23,7 +23,7 @@ function _compile(){
   local conf_overlay="${conf_overlay:-""}"
 
   default_cmake_args=(-DCONFIG_COVERAGE=y -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-    -DCONFIG_COMPILER_WARNINGS_AS_ERRORS=y)
+    -DCONFIG_COMPILER_WARNINGS_AS_ERRORS=y -DCONFIG_ASSERT=y)
   local cmake_args=(${cmake_args:-"${default_cmake_args[@]}"})
   local cmake_extra_args="${cmake_extra_args:-""}"
   local ninja_args="${ninja_args:-""}"
@@ -42,6 +42,10 @@ function _compile(){
   local map_file_name=${exe_name}.Tsymbols
 
   local this_dir=${WORK_DIR}/${app}/${exe_basename}
+  local app_absolute=$(realpath "${app_root}/${app}")
+  if [[ "${app_absolute}" != "${app_root}"* ]]; then
+    this_dir=${WORK_DIR}/${app_absolute}/${exe_basename}
+  fi
 
   local modules_arg="${ZEPHYR_MODULES:+-DZEPHYR_MODULES=${ZEPHYR_MODULES}}"
 
