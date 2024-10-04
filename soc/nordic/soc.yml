@@ -48,7 +48,6 @@ runners:
     '--recover':
       - runners:
           - nrfjprog
-          - nrfutil
         run: first
         groups:
           - qualifiers:
@@ -65,10 +64,6 @@ runners:
           - qualifiers:
               - nrf54l15/cpuapp
               - nrf54l15/cpuflpr
-          - qualifiers:
-              - nrf54h20/cpuapp
-              - nrf54h20/cpurad
-              - nrf54h20/cpuppr
     '--erase':
       - runners:
           - nrfjprog
