@@ -14,7 +14,7 @@
 #include <zephyr/ztest_assert.h>
 #include <zephyr/ztest_test.h>
 
-#include <zephyr/drivers/bluetooth.h>
+#include <zephyr/drivers/bluetooth/hci_driver.h>
 #include <zephyr/drivers/uart/serial_test.h>
 
 LOG_MODULE_REGISTER(test, LOG_LEVEL_DBG);
@@ -27,35 +27,22 @@ static const struct device *const zephyr_bt_c2h_uart = DEVICE_DT_GET(DT_CHOSEN(z
 /* The DUT is Sandwiched between the mock serial interface and a mock
  * controller. {{{
  */
-#define DT_DRV_COMPAT zephyr_bt_hci_test
-
-struct drv_data {
-	bt_hci_recv_t recv;
-};
-
 static void serial_vnd_data_callback(const struct device *dev, void *user_data);
-static int drv_send(const struct device *dev, struct net_buf *buf);
-static int drv_open(const struct device *dev, bt_hci_recv_t recv);
-
-static const struct bt_hci_driver_api drv_api = {
+static int drv_send(struct net_buf *buf);
+static int drv_open(void);
+static const struct bt_hci_driver drv = {
+	.name = "Mock Controller",
+	.bus = BT_HCI_DRIVER_BUS_VIRTUAL,
 	.open = drv_open,
 	.send = drv_send,
 };
-
-static int drv_init(const struct device *dev)
+static int sys_init_hci_driver_register(void)
 {
 	serial_vnd_set_callback(zephyr_bt_c2h_uart, serial_vnd_data_callback, NULL);
+	bt_hci_driver_register(&drv);
 	return 0;
 }
-
-#define TEST_DEVICE_INIT(inst) \
-	static struct drv_data drv_data_##inst = { \
-	}; \
-	DEVICE_DT_INST_DEFINE(inst, drv_init, NULL, &drv_data_##inst, NULL, \
-			      POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &drv_api)
-
-DT_INST_FOREACH_STATUS_OKAY(TEST_DEVICE_INIT)
-
+SYS_INIT(sys_init_hci_driver_register, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
 /* }}} */
 
 /* Start the DUT "main thread". The settings for this thread are selected as
@@ -81,14 +68,9 @@ SYS_INIT(sys_init_spawn_hci_uart, POST_KERNEL, 64);
 
 /* Mock controller callbacks. {{{ */
 
-static int drv_open(const struct device *dev, bt_hci_recv_t recv)
+static int drv_open(void)
 {
-	struct drv_data *drv = dev->data;
-
 	LOG_DBG("drv_open");
-
-	drv->recv = recv;
-
 	return 0;
 }
 
@@ -100,7 +82,7 @@ static int drv_open(const struct device *dev, bt_hci_recv_t recv)
  *  should use #bt_recv to send c2h packets to the DUT.
  */
 K_FIFO_DEFINE(drv_send_fifo); /* elem T: net_buf */
-static int drv_send(const struct device *dev, struct net_buf *buf)
+static int drv_send(struct net_buf *buf)
 {
 	LOG_DBG("buf %p type %d len %u", buf, bt_buf_get_type(buf), buf->len);
 	LOG_HEXDUMP_DBG(buf->data, buf->len, "buf");
@@ -224,15 +206,13 @@ ZTEST(hci_uart, test_h2c_cmd_flow_control)
 
 		/* The controller sends a HCI Command Complete response. */
 		{
-			const struct device *dev = DEVICE_DT_GET(DT_DRV_INST(0));
-			struct drv_data *drv = dev->data;
 			int err;
 			struct net_buf *buf = bt_buf_get_rx(BT_BUF_EVT, K_NO_WAIT);
 
 			zassert_not_null(buf);
 			net_buf_add_mem(buf, hci_msg_rx_evt_cmd_complete,
 					sizeof(hci_msg_rx_evt_cmd_complete));
-			err = drv->recv(dev, buf);
+			err = bt_recv(buf);
 			zassert_equal(err, 0, "bt_recv failed");
 		}
 	}
