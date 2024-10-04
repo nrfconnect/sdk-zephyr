@@ -50,9 +50,7 @@
 LOG_MODULE_REGISTER(bt_conn);
 
 struct tx_meta {
-	bt_conn_tx_cb_t cb;
-	void *cb_user_data;
-
+	struct bt_conn_tx *tx;
 	/* This flag indicates if the current buffer has already been partially
 	 * sent to the controller (ie, the next fragments should be sent as
 	 * continuations).
@@ -208,7 +206,6 @@ static inline const char *state2str(bt_conn_state_t state)
 
 static void tx_free(struct bt_conn_tx *tx)
 {
-	LOG_DBG("%p", tx);
 	tx->cb = NULL;
 	tx->user_data = NULL;
 	tx->pending_no_cb = 0U;
@@ -430,11 +427,25 @@ void bt_conn_recv(struct bt_conn *conn, struct net_buf *buf, uint8_t flags)
 
 static struct bt_conn_tx *conn_tx_alloc(void)
 {
-	struct bt_conn_tx *ret = k_fifo_get(&free_tx, K_NO_WAIT);
+	/* The TX context always get freed in the system workqueue,
+	 * so if we're in the same workqueue but there are no immediate
+	 * contexts available, there's no chance we'll get one by waiting.
+	 */
+	if (k_current_get() == &k_sys_work_q.thread) {
+		return k_fifo_get(&free_tx, K_NO_WAIT);
+	}
 
-	LOG_DBG("%p", ret);
+	if (IS_ENABLED(CONFIG_BT_CONN_LOG_LEVEL_DBG)) {
+		struct bt_conn_tx *tx = k_fifo_get(&free_tx, K_NO_WAIT);
 
-	return ret;
+		if (tx) {
+			return tx;
+		}
+
+		LOG_WRN("Unable to get an immediate free conn_tx");
+	}
+
+	return k_fifo_get(&free_tx, K_FOREVER);
 }
 
 int bt_conn_send_iso_cb(struct bt_conn *conn, struct net_buf *buf,
@@ -464,6 +475,8 @@ int bt_conn_send_iso_cb(struct bt_conn *conn, struct net_buf *buf,
 int bt_conn_send_cb(struct bt_conn *conn, struct net_buf *buf,
 		    bt_conn_tx_cb_t cb, void *user_data)
 {
+	struct bt_conn_tx *tx;
+
 	LOG_DBG("conn handle %u buf len %u cb %p user_data %p", conn->handle, buf->len, cb,
 		user_data);
 
@@ -478,10 +491,7 @@ int bt_conn_send_cb(struct bt_conn *conn, struct net_buf *buf,
 	}
 
 	if (buf->user_data_size < CONFIG_BT_CONN_TX_USER_DATA_SIZE) {
-		/* To find the pool:
-		 *     gdb --batch -ex 'b main' -ex 'r' -ex 'p net_buf_pool_get(pool_id)'
-		 */
-		LOG_ERR("not enough room in user_data %d < %d (pool id %u)",
+		LOG_ERR("not enough room in user_data %d < %d pool %u",
 			buf->user_data_size,
 			CONFIG_BT_CONN_TX_USER_DATA_SIZE,
 			buf->pool_id);
@@ -493,8 +503,29 @@ int bt_conn_send_cb(struct bt_conn *conn, struct net_buf *buf,
 		return -ENOTCONN;
 	}
 
-	tx_data(buf)->cb = cb;
-	tx_data(buf)->cb_user_data = user_data;
+	if (cb) {
+		tx = conn_tx_alloc();
+		if (!tx) {
+			LOG_DBG("Unable to allocate TX context");
+			return -ENOBUFS;
+		}
+
+		/* Verify that we're still connected after blocking */
+		if (conn->state != BT_CONN_CONNECTED) {
+			LOG_WRN("Disconnected while allocating context");
+			tx_free(tx);
+			return -ENOTCONN;
+		}
+
+		tx->cb = cb;
+		tx->user_data = user_data;
+		tx->pending_no_cb = 0U;
+
+		tx_data(buf)->tx = tx;
+	} else {
+		tx_data(buf)->tx = NULL;
+	}
+
 	tx_data(buf)->is_cont = false;
 
 	net_buf_put(&conn->tx_queue, buf);
@@ -590,9 +621,9 @@ static inline uint16_t conn_mtu(struct bt_conn *conn)
 #endif /* CONFIG_BT_CONN */
 }
 
-static int do_send_frag(struct bt_conn *conn, struct net_buf *buf, uint8_t flags,
-			struct bt_conn_tx *tx)
+static int do_send_frag(struct bt_conn *conn, struct net_buf *buf, uint8_t flags)
 {
+	struct bt_conn_tx *tx = tx_data(buf)->tx;
 	uint32_t *pending_no_cb = NULL;
 	unsigned int key;
 	int err = 0;
@@ -657,6 +688,7 @@ fail:
 		/* `buf` might not get destroyed, and its `tx` pointer will still be reachable.
 		 * Make sure that we don't try to use the destroyed context later.
 		 */
+		tx_data(buf)->tx = NULL;
 		conn_tx_destroy(conn, tx);
 	}
 
@@ -667,8 +699,6 @@ static int send_frag(struct bt_conn *conn,
 		     struct net_buf *buf, struct net_buf *frag,
 		     uint8_t flags)
 {
-	struct bt_conn_tx *tx = NULL;
-
 	/* Check if the controller can accept ACL packets */
 	if (k_sem_take(bt_conn_get_pkts(conn), K_NO_WAIT)) {
 		LOG_DBG("no controller bufs");
@@ -690,20 +720,6 @@ static int send_frag(struct bt_conn *conn,
 		net_buf_add_mem(frag, buf->data, frag_len);
 		net_buf_pull(buf, frag_len);
 	} else {
-		if (tx_data(buf)->cb) {
-			tx = conn_tx_alloc();
-			atomic_set_bit_to(conn->flags, BT_CONN_TX_WOULDBLOCK_FREE_TX, !tx);
-			if (!tx) {
-				LOG_DBG("No available tx context");
-				k_sem_give(bt_conn_get_pkts(conn));
-				return -EWOULDBLOCK;
-			}
-
-			tx->cb = tx_data(buf)->cb;
-			tx->user_data = tx_data(buf)->cb_user_data;
-			tx->pending_no_cb = 0U;
-		}
-
 		/* De-queue the buffer now that we know we can send it.
 		 * Only applies if the buffer to be sent is the original buffer,
 		 * and not one of its fragments.
@@ -713,7 +729,7 @@ static int send_frag(struct bt_conn *conn,
 		frag = buf;
 	}
 
-	return do_send_frag(conn, frag, flags, tx);
+	return do_send_frag(conn, frag, flags);
 }
 
 static struct net_buf *create_frag(struct bt_conn *conn, struct net_buf *buf)
@@ -741,7 +757,7 @@ static struct net_buf *create_frag(struct bt_conn *conn, struct net_buf *buf)
 	}
 
 	/* Fragments never have a TX completion callback */
-	tx_data(frag)->cb = NULL;
+	tx_data(frag)->tx = NULL;
 	tx_data(frag)->is_cont = false;
 	tx_data(frag)->iso_has_ts = tx_data(buf)->iso_has_ts;
 
@@ -820,11 +836,17 @@ static void conn_cleanup(struct bt_conn *conn)
 
 	/* Give back any allocated buffers */
 	while ((buf = net_buf_get(&conn->tx_queue, K_NO_WAIT))) {
-		bt_conn_tx_cb_t cb = tx_data(buf)->cb;
-		void *cb_user_data = tx_data(buf)->cb_user_data;
+		struct bt_conn_tx *tx = tx_data(buf)->tx;
 
+		tx_data(buf)->tx = NULL;
+
+		/* destroy the buffer */
 		net_buf_unref(buf);
-		cb(conn, cb_user_data, -ESHUTDOWN);
+
+		/* destroy the tx context (and any associated meta-data) */
+		if (tx) {
+			conn_tx_destroy(conn, tx);
+		}
 	}
 
 	__ASSERT(sys_slist_is_empty(&conn->tx_pending), "Pending TX packets");
@@ -892,26 +914,15 @@ static int conn_prepare_events(struct bt_conn *conn,
 				  K_POLL_TYPE_SEM_AVAILABLE,
 				  K_POLL_MODE_NOTIFY_ONLY,
 				  conn_pkts);
-	} else if (atomic_test_bit(conn->flags, BT_CONN_TX_WOULDBLOCK_FREE_TX) &&
-		   k_fifo_is_empty(&free_tx)) {
-		LOG_DBG("wait on tx contexts");
-		k_poll_event_init(&events[0],
-				  K_POLL_TYPE_FIFO_DATA_AVAILABLE,
-				  K_POLL_MODE_NOTIFY_ONLY,
-				  &free_tx);
-		events[0].tag = BT_EVENT_CONN_FREE_TX;
 	} else {
-		/* This must be the last thing to be waited on, since
-		 * only this event triggers processing.
-		 */
 		/* Wait until there is more data to send. */
 		LOG_DBG("wait on host fifo");
 		k_poll_event_init(&events[0],
 				  K_POLL_TYPE_FIFO_DATA_AVAILABLE,
 				  K_POLL_MODE_NOTIFY_ONLY,
 				  &conn->tx_queue);
-		events[0].tag = BT_EVENT_CONN_TX_QUEUE;
 	}
+	events[0].tag = BT_EVENT_CONN_TX_QUEUE;
 
 	return 0;
 }
@@ -988,12 +999,17 @@ void bt_conn_process_tx(struct bt_conn *conn)
 	 * least tear down the connection.
 	 */
 	if (err  == -EIO) {
-		bt_conn_tx_cb_t cb = tx_data(buf)->cb;
-		void *cb_user_data = tx_data(buf)->cb_user_data;
+		struct bt_conn_tx *tx = tx_data(buf)->tx;
+
+		tx_data(buf)->tx = NULL;
 
 		/* destroy the buffer */
 		net_buf_unref(buf);
-		cb(conn, cb_user_data, -ESHUTDOWN);
+
+		/* destroy the tx context (and any associated meta-data) */
+		if (tx) {
+			conn_tx_destroy(conn, tx);
+		}
 	}
 }
 
