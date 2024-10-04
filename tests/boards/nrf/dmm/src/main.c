@@ -74,7 +74,7 @@ static bool dmm_buffer_in_region_check(struct dmm_test_region *dtr, void *buf, s
 }
 
 static void dmm_check_output_buffer(struct dmm_test_region *dtr, uint32_t *fill_value,
-				    void *data, size_t size, bool was_prealloc, bool is_cached)
+				    void *data, size_t size, bool was_prealloc)
 {
 	void *buf;
 	int retval;
@@ -82,9 +82,7 @@ static void dmm_check_output_buffer(struct dmm_test_region *dtr, uint32_t *fill_
 	memset(data, (*fill_value)++, size);
 	retval = dmm_buffer_out_prepare(dtr->mem_reg, data, size, &buf);
 	zassert_ok(retval);
-	if (IS_ENABLED(CONFIG_DCACHE) && is_cached) {
-		zassert_true(IS_ALIGNED(buf, CONFIG_DCACHE_LINE_SIZE));
-	}
+	zassert_true(IS_ALIGNED(buf, DMM_DCACHE_LINE_SIZE));
 
 	if (IS_ENABLED(CONFIG_HAS_NORDIC_DMM)) {
 		if (was_prealloc) {
@@ -114,9 +112,7 @@ static void dmm_check_input_buffer(struct dmm_test_region *dtr, uint32_t *fill_v
 
 	retval = dmm_buffer_in_prepare(dtr->mem_reg, data, size, &buf);
 	zassert_ok(retval);
-	if (IS_ENABLED(CONFIG_DCACHE) && is_cached) {
-		zassert_true(IS_ALIGNED(buf, CONFIG_DCACHE_LINE_SIZE));
-	}
+	zassert_true(IS_ALIGNED(buf, DMM_DCACHE_LINE_SIZE));
 
 	if (IS_ENABLED(CONFIG_HAS_NORDIC_DMM)) {
 		if (was_prealloc) {
@@ -166,7 +162,7 @@ ZTEST_USER_F(dmm, test_check_dev_cache_out_allocate)
 	uint8_t user_data[16];
 
 	dmm_check_output_buffer(&fixture->regions[DMM_TEST_REGION_CACHE], &fixture->fill_value,
-				user_data, sizeof(user_data), false, true);
+				user_data, sizeof(user_data), false);
 }
 
 ZTEST_USER_F(dmm, test_check_dev_cache_out_preallocate)
@@ -174,7 +170,7 @@ ZTEST_USER_F(dmm, test_check_dev_cache_out_preallocate)
 	static uint8_t user_data[16] DMM_MEMORY_SECTION(DUT_CACHE);
 
 	dmm_check_output_buffer(&fixture->regions[DMM_TEST_REGION_CACHE], &fixture->fill_value,
-				user_data, sizeof(user_data), true, true);
+				user_data, sizeof(user_data), true);
 }
 
 ZTEST_USER_F(dmm, test_check_dev_nocache_in_allocate)
@@ -198,7 +194,7 @@ ZTEST_USER_F(dmm, test_check_dev_nocache_out_allocate)
 	uint8_t user_data[16];
 
 	dmm_check_output_buffer(&fixture->regions[DMM_TEST_REGION_NOCACHE], &fixture->fill_value,
-				user_data, sizeof(user_data), false, false);
+				user_data, sizeof(user_data), false);
 }
 
 ZTEST_USER_F(dmm, test_check_dev_nocache_out_preallocate)
@@ -206,7 +202,7 @@ ZTEST_USER_F(dmm, test_check_dev_nocache_out_preallocate)
 	static uint8_t user_data[16] DMM_MEMORY_SECTION(DUT_NOCACHE);
 
 	dmm_check_output_buffer(&fixture->regions[DMM_TEST_REGION_NOCACHE], &fixture->fill_value,
-				user_data, sizeof(user_data), true, false);
+				user_data, sizeof(user_data), true);
 }
 
 ZTEST_SUITE(dmm, NULL, test_setup, NULL, test_cleanup, NULL);
