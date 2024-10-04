@@ -729,9 +729,9 @@ static bool iso_has_data(struct bt_conn *conn)
 {
 #if defined(CONFIG_BT_ISO_TX)
 	return !k_fifo_is_empty(&conn->iso.txq);
-#else  /* !CONFIG_BT_ISO_TX */
+#else
 	return false;
-#endif	/* CONFIG_BT_ISO_TX */
+#endif
 }
 
 static struct net_buf *iso_data_pull(struct bt_conn *conn, size_t amount)
