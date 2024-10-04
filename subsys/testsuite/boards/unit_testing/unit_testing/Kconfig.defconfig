@@ -7,6 +7,5 @@
 config BT_CTLR_HCI
 	default n
 
-# Bluetooth unit tests assume HCI vendor extensions are available
-config BT_HAS_HCI_VS
+config BT_NO_DRIVER
 	default y
