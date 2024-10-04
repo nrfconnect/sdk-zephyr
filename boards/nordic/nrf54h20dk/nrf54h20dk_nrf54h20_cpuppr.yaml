@@ -12,4 +12,3 @@ flash: 62
 supported:
   - gpio
   - pwm
-  - spi
