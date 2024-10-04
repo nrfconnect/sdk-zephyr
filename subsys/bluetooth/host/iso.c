@@ -754,11 +754,10 @@ static struct net_buf *iso_data_pull(struct bt_conn *conn,
 	}
 
 	if (conn->iso.chan->state != BT_ISO_STATE_CONNECTED) {
-		__maybe_unused struct net_buf *b = k_fifo_get(&conn->iso.txq, K_NO_WAIT);
-
 		LOG_DBG("channel has been disconnected");
+		struct net_buf *b = k_fifo_get(&conn->iso.txq, K_NO_WAIT);
+		(void)b;
 		__ASSERT_NO_MSG(b == frag);
-
 		return NULL;
 	}
 
@@ -773,9 +772,9 @@ static struct net_buf *iso_data_pull(struct bt_conn *conn,
 	bool last_frag = amount >= frag->len;
 
 	if (last_frag) {
-		__maybe_unused struct net_buf *b = k_fifo_get(&conn->iso.txq, K_NO_WAIT);
-
 		LOG_DBG("last frag, pop buf");
+		struct net_buf *b = k_fifo_get(&conn->iso.txq, K_NO_WAIT);
+		(void)b;
 		__ASSERT_NO_MSG(b == frag);
 	}
 

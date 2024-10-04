@@ -674,15 +674,17 @@ static void raise_data_ready(struct bt_l2cap_le_chan *le_chan)
 static void lower_data_ready(struct bt_l2cap_le_chan *le_chan)
 {
 	struct bt_conn *conn = le_chan->chan.conn;
-	__maybe_unused sys_snode_t *s = sys_slist_get(&conn->l2cap_data_ready);
+	sys_snode_t *s = sys_slist_get(&conn->l2cap_data_ready);
 
 	LOG_DBG("%p", le_chan);
 
 	__ASSERT_NO_MSG(s == &le_chan->_pdu_ready);
+	(void)s;
 
-	__maybe_unused atomic_t old = atomic_set(&le_chan->_pdu_ready_lock, 0);
+	atomic_t old = atomic_set(&le_chan->_pdu_ready_lock, 0);
 
 	__ASSERT_NO_MSG(old);
+	(void)old;
 }
 
 static void cancel_data_ready(struct bt_l2cap_le_chan *le_chan)
@@ -921,9 +923,10 @@ struct net_buf *l2cap_data_pull(struct bt_conn *conn,
 
 	if (last_frag && last_seg) {
 		LOG_DBG("last frag of last seg, dequeuing %p", pdu);
-		__maybe_unused struct net_buf *b = k_fifo_get(&lechan->tx_queue, K_NO_WAIT);
+		struct net_buf *b = k_fifo_get(&lechan->tx_queue, K_NO_WAIT);
 
 		__ASSERT_NO_MSG(b == pdu);
+		(void)b;
 
 		if (L2CAP_LE_CID_IS_DYN(lechan->tx.cid)) {
 			LOG_DBG("adding `sdu_sent` callback");
