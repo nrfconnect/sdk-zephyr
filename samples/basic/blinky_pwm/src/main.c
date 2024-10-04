@@ -63,7 +63,6 @@ int main(void)
 			printk("Error %d: failed to set pulse width\n", ret);
 			return 0;
 		}
-		printk("Using period %d\n", period);
 
 		period = dir ? (period * 2U) : (period / 2U);
 		if (period > max_period) {
