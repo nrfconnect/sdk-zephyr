@@ -226,27 +226,26 @@ static size_t gatt_prov_adv_create(struct bt_data prov_sd[2])
 	sys_put_be16(prov->oob_info, prov_svc_data + 18);
 
 	if (!prov->uri) {
-		goto dev_name;
+		return 0;
 	}
 
 	uri_len = strlen(prov->uri);
 	if (uri_len > 29) {
 		/* There's no way to shorten an URI */
 		LOG_WRN("Too long URI to fit advertising packet");
-		goto dev_name;
+		return 0;
 	}
 
-	prov_sd[prov_sd_len].type = BT_DATA_URI;
-	prov_sd[prov_sd_len].data_len = uri_len;
-	prov_sd[prov_sd_len].data = (const uint8_t *)prov->uri;
+	prov_sd[0].type = BT_DATA_URI;
+	prov_sd[0].data_len = uri_len;
+	prov_sd[0].data = (const uint8_t *)prov->uri;
 
 	prov_sd_len += 1;
 
-dev_name:
 #if defined(CONFIG_BT_MESH_PB_GATT_USE_DEVICE_NAME)
-	prov_sd[prov_sd_len].type = BT_DATA_NAME_COMPLETE;
-	prov_sd[prov_sd_len].data_len = sizeof(CONFIG_BT_DEVICE_NAME) - 1;
-	prov_sd[prov_sd_len].data = CONFIG_BT_DEVICE_NAME;
+	prov_sd[1].type = BT_DATA_NAME_COMPLETE;
+	prov_sd[1].data_len = sizeof(CONFIG_BT_DEVICE_NAME) - 1;
+	prov_sd[1].data = CONFIG_BT_DEVICE_NAME;
 
 	prov_sd_len += 1;
 #endif
