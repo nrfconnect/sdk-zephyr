@@ -88,7 +88,6 @@ extensions = [
     "sphinx_sitemap",
     "zephyr.warnings_filter",
     "zephyr.doxyrunner",
-    "zephyr.doxybridge",
     "zephyr.gh_utils",
     "zephyr.manifest_projects_table",
     "notfound.extension",
@@ -244,10 +243,6 @@ doxyrunner_outdir = ZEPHYR_BUILD / "doxygen"
 doxyrunner_fmt = True
 doxyrunner_fmt_vars = {"ZEPHYR_BASE": str(ZEPHYR_BASE), "ZEPHYR_VERSION": version}
 doxyrunner_outdir_var = "DOXY_OUT"
-
-# -- Options for zephyr.doxybridge plugin ---------------------------------
-
-doxybridge_dir = doxyrunner_outdir
 
 # -- Options for html_redirect plugin -------------------------------------
 
