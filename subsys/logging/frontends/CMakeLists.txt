@@ -4,8 +4,3 @@ zephyr_sources_ifdef(
   CONFIG_LOG_FRONTEND_DICT_UART
   log_frontend_dict_uart.c
 )
-
-zephyr_sources_ifdef(
-  CONFIG_LOG_FRONTEND_STMESP
-  log_frontend_stmesp.c
-)
