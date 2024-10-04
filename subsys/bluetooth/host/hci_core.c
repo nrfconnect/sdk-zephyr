@@ -1200,7 +1200,7 @@ static void le_conn_complete_cancel(uint8_t err)
 		int busy_status = k_work_delayable_busy_get(&conn->deferred_work);
 
 		if (!(busy_status & (K_WORK_QUEUED | K_WORK_DELAYED))) {
-			LOG_WRN("Connection creation timeout triggered");
+			/* Connection initiation timeout triggered. */
 			conn->err = err;
 			bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
 		} else {
