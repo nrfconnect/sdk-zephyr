@@ -65,7 +65,9 @@ static void read_conn_rssi(uint16_t handle, int8_t *rssi)
 
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
 	if (err) {
-		printk("Read RSSI err: %d\n", err);
+		uint8_t reason = rsp ?
+			((struct bt_hci_rp_read_rssi *)rsp->data)->status : 0;
+		printk("Read RSSI err: %d reason 0x%02x\n", err, reason);
 		return;
 	}
 
@@ -98,7 +100,10 @@ static void set_tx_power(uint8_t handle_type, uint16_t handle, int8_t tx_pwr_lvl
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_VS_WRITE_TX_POWER_LEVEL,
 				   buf, &rsp);
 	if (err) {
-		printk("Set Tx power err: %d\n", err);
+		uint8_t reason = rsp ?
+			((struct bt_hci_rp_vs_write_tx_power_level *)
+			  rsp->data)->status : 0;
+		printk("Set Tx power err: %d reason 0x%02x\n", err, reason);
 		return;
 	}
 
@@ -130,7 +135,10 @@ static void get_tx_power(uint8_t handle_type, uint16_t handle, int8_t *tx_pwr_lv
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_VS_READ_TX_POWER_LEVEL,
 				   buf, &rsp);
 	if (err) {
-		printk("Read Tx power err: %d\n", err);
+		uint8_t reason = rsp ?
+			((struct bt_hci_rp_vs_read_tx_power_level *)
+			  rsp->data)->status : 0;
+		printk("Read Tx power err: %d reason 0x%02x\n", err, reason);
 		return;
 	}
 
