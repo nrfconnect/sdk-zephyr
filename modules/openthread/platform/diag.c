@@ -16,39 +16,19 @@
  *
  */
 static bool sDiagMode;
-static void *sDiagCallbackContext;
-static otPlatDiagOutputCallback sDiagOutputCallback;
 
-static void diag_output(const char *aFormat, ...)
+otError otPlatDiagProcess(otInstance *aInstance,
+			  uint8_t argc,
+			  char   *argv[],
+			  char   *aOutput,
+			  size_t  aOutputMaxLen)
 {
-	va_list args;
-
-	va_start(args, aFormat);
-
-	if (sDiagOutputCallback != NULL) {
-		sDiagOutputCallback(aFormat, args, sDiagCallbackContext);
-	}
-
-	va_end(args);
-}
-
-void otPlatDiagSetOutputCallback(otInstance *aInstance,
-				 otPlatDiagOutputCallback aCallback,
-				 void *aContext)
-{
-	OT_UNUSED_VARIABLE(aInstance);
-
-	sDiagOutputCallback  = aCallback;
-	sDiagCallbackContext = aContext;
-}
-
-otError otPlatDiagProcess(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[])
-{
+	ARG_UNUSED(argc);
 	ARG_UNUSED(aInstance);
-	ARG_UNUSED(aArgsLength);
 
 	/* Add more platform specific diagnostics features here. */
-	diag_output("diag feature '%s' is not supported\r\n", aArgs[0]);
+	snprintk(aOutput, aOutputMaxLen,
+		 "diag feature '%s' is not supported\r\n", argv[0]);
 
 	return OT_ERROR_NOT_IMPLEMENTED;
 }
