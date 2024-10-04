@@ -25,7 +25,7 @@
 		zephyr,flash = &flash0;
 		zephyr,console = &uart5;
 		zephyr,shell-uart = &uart5;
-		zephyr,bt-hci = &bt_hci_uart;
+		zephyr,bt_uart = &uart2;
 	};
 };
 
@@ -58,22 +58,17 @@ uart2: &scb2 {
 	/* HW Flow control must be enabled for HCI H4 */
 	hw-flow-control;
 
-	bt_hci_uart: bt_hci_uart {
-		compatible = "zephyr,bt-hci-uart";
+	bt-hci {
+		status = "okay";
+		compatible = "infineon,cyw43xxx-bt-hci";
+		bt-reg-on-gpios = <&gpio_prt3 4 (GPIO_ACTIVE_HIGH)>;
 
-		murata-1dx {
-			status = "okay";
-			compatible = "infineon,cyw43xxx-bt-hci";
-			bt-reg-on-gpios = <&gpio_prt3 4 (GPIO_ACTIVE_HIGH)>;
-
-			/* Configuration UART speeds for firmware download (fw-download-speed)
-			 * and HCI operation (hci-operation-speed).
-			 * If hci-operation-speed or fw-download-speed are not defined in
-			 * bt-hci{...} node, cyw43xx driver will use bus/current-speed as
-			 * default speed.
-			 */
-			fw-download-speed = <3000000>;
-		};
+		/* Configuration UART speeds for firmware download (fw-download-speed) and
+		 * HCI operation (hci-operation-speed).
+		 * If hci-operation-speed or fw-download-speed are not defined in bt-hci{...}
+		 * node, cyw43xx driver will use bus/current-speed as default speed.
+		 */
+		fw-download-speed = <3000000>;
 	};
 };
 
