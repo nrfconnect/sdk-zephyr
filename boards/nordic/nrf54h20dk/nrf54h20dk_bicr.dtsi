@@ -22,7 +22,7 @@
 		ioport-drivectrls = <&gpio6 50>, <&gpio7 50>;
 
 		lfosc-mode = "crystal";
-		lfosc-loadcap = <15>;
+		lfosc-loadcap = <14>;
 
 		lfrc-autocalibration = <20 40 3>;
 
