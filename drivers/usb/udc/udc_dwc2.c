@@ -469,10 +469,7 @@ static int dwc2_handle_evt_setup(const struct device *dev)
 		/*  Allocate and feed buffer for data OUT stage */
 		LOG_DBG("s:%p|feed for -out-", buf);
 
-		/* Allocate at least 8 bytes in case the host decides to send
-		 * SETUP DATA instead of OUT DATA packet.
-		 */
-		err = dwc2_ctrl_feed_dout(dev, MAX(udc_data_stage_length(buf), 8));
+		err = dwc2_ctrl_feed_dout(dev, udc_data_stage_length(buf));
 		if (err == -ENOMEM) {
 			err = udc_submit_ep_event(dev, buf, err);
 		}
