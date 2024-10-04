@@ -10,7 +10,7 @@ toolchain:
   - xtools
   - zephyr
 ram: 256
-flash: 296
+flash: 512
 supported:
   - can
   - counter
