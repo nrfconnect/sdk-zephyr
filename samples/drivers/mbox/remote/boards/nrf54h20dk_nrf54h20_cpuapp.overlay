@@ -18,7 +18,3 @@
 &cpurad_bellboard {
 	status = "okay";
 };
-
-&uart136 {
-	/delete-property/ hw-flow-control;
-};

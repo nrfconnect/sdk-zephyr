@@ -18,7 +18,3 @@
 &cpuppr_vevif {
 	status = "okay";
 };
-
-&uart135 {
-	/delete-property/ hw-flow-control;
-};
