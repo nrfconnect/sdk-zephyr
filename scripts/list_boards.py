@@ -94,6 +94,7 @@ class Board:
     # HWMv1 only supports a single Path, and requires Board dataclass to be hashable.
     directories: Union[Path, List[Path]]
     hwm: str
+    full_name: str = None
     arch: str = None
     vendor: str = None
     revision_format: str = None
@@ -278,6 +279,7 @@ def load_v2_boards(board_name, board_yml, systems):
                 name=board['name'],
                 directories=[board_yml.parent],
                 vendor=board.get('vendor'),
+                full_name=board.get('full_name'),
                 revision_format=board.get('revision', {}).get('format'),
                 revision_default=board.get('revision', {}).get('default'),
                 revision_exact=board.get('revision', {}).get('exact', False),
