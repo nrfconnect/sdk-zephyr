@@ -661,7 +661,7 @@ function(sysbuild_add_subdirectory source_dir)
       " (expected at most 2, got ${ARGC})"
     )
   endif()
-  set(binary_dir ${ARGN})
+  set(binary_dir ${ARGV1})
 
   # Update SYSBUILD_CURRENT_SOURCE_DIR in this scope, to support nesting
   # of sysbuild_add_subdirectory() and even regular add_subdirectory().
