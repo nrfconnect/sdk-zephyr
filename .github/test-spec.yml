@@ -131,9 +131,10 @@
   - "subsys/tracing/**/*"
 
 "CI-desktop-test":
-  - "drivers/bluetooth/*"
-  - "subsys/bluetooth/*"
-  - "include/zephyr/bluetooth/*"
+  - any:
+      - "**/*"
+      - "!samples/bluetooth/**/*"
+      - "!tests/bluetooth/**/*"
 
 "CI-crypto-test":
   - "boards/nordic/nrf52840dk/**/*"
