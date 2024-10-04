@@ -487,8 +487,6 @@ particular source will be buffered.
 | INF  | ERR  | INF  | OFF  | ... | OFF  |
 +------+------+------+------+-----+------+
 
-.. _log_frontend:
-
 Custom Frontend
 ===============
 
@@ -501,11 +499,6 @@ backends.
 In some cases, logs need to be redirected at the macro level. For these cases,
 :kconfig:option:`CONFIG_LOG_CUSTOM_HEADER` can be used to inject an application provided
 header named `zephyr_custom_log.h` at the end of :zephyr_file:`include/zephyr/logging/log.h`.
-
-Frontend using ARM Coresight STM (System Trace Macrocell)
----------------------------------------------------------
-
-For more details about logging using ARM Coresight STM see :ref:`logging_cs_stm`.
 
 .. _logging_strings:
 
@@ -674,8 +667,6 @@ specific.
 :c:func:`log_backend_msg_process` is used for processing message. It is common for
 standard and hexdump messages because log message hold string with arguments
 and data. It is also common for deferred and immediate logging.
-
-.. _log_output:
 
 Message formatting
 ------------------
@@ -855,10 +846,6 @@ Some of the platforms characterization for log message with two ``integer`` argu
 | x86_64        | 32       | 528                        | 1088      | 1440                        |
 +---------------+----------+----------------------------+-----------+-----------------------------+
 
-Logging using ARM Coresight STM
-*******************************
-
-For logging on NRF54H20 using ARM Coresight STM see :ref:`logging_cs_stm`.
 
 API Reference
 *************
@@ -887,8 +874,3 @@ Logger output formatting
 ========================
 
 .. doxygengroup:: log_output
-
-.. toctree::
-   :maxdepth: 1
-
-   cs_stm.rst
