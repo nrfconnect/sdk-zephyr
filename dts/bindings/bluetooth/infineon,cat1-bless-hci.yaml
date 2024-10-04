@@ -8,14 +8,8 @@ description: |
 
 compatible: "infineon,cat1-bless-hci"
 
-include: bt-hci.yaml
+include: base.yaml
 
 properties:
-  bt-hci-name:
-    default: "PSoC 6 BLESS"
-  bt-hci-bus:
-    default: "BT_HCI_BUS_VIRTUAL"
-  bt-hci-quirks:
-    default: ["BT_HCI_QUIRK_NO_RESET"]
   interrupts:
     required: true
