@@ -138,3 +138,5 @@ API reference
 *************
 
 .. doxygengroup:: bt_mesh_rpr_cli
+   :project: Zephyr
+   :members:

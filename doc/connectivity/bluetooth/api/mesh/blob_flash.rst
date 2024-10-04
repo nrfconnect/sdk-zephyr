@@ -32,3 +32,4 @@ API Reference
 *************
 
 .. doxygengroup:: bt_mesh_blob_io_flash
+   :project: Zephyr

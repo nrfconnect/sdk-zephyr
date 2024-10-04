@@ -28,3 +28,5 @@ API reference
 *************
 
 .. doxygengroup:: bt_mesh_op_agg_srv
+   :project: Zephyr
+   :members:

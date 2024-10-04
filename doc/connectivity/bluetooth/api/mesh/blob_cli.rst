@@ -126,3 +126,5 @@ API reference
 *************
 
 .. doxygengroup:: bt_mesh_blob_cli
+   :project: Zephyr
+   :members:
