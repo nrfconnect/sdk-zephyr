@@ -9,8 +9,3 @@ zephyr_sources_ifdef(
   CONFIG_LOG_FRONTEND_STMESP
   log_frontend_stmesp.c
 )
-
-zephyr_sources_ifdef(
-  CONFIG_LOG_FRONTEND_STMESP_DEMUX
-  log_frontend_stmesp_demux.c
-)
