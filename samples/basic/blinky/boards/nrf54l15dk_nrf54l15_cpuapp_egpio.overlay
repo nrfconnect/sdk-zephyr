@@ -5,5 +5,5 @@
  */
 
 &led0 {
-	gpios = <&egpio 7 GPIO_ACTIVE_HIGH>;
+	gpios = <&egpio 9 GPIO_ACTIVE_HIGH>;
 };
