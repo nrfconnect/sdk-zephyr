@@ -67,8 +67,6 @@ class TestInstance:
             self.build_dir = os.path.join(outdir, platform.normalized_name, source_dir_rel, testsuite.name)
         self.run_id = self._get_run_id()
         self.domains = None
-        # Instance need to use sysbuild if a given suite or a platform requires it
-        self.sysbuild = testsuite.sysbuild or platform.sysbuild
 
         self.run = False
         self.testcases: list[TestCase] = []
@@ -337,7 +335,7 @@ class TestInstance:
 
     def get_elf_file(self) -> str:
 
-        if self.sysbuild:
+        if self.testsuite.sysbuild:
             build_dir = self.domains.get_default_domain().build_dir
         else:
             build_dir = self.build_dir

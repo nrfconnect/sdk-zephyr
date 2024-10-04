@@ -152,7 +152,7 @@ class Handler:
         self.instance.record(harness.recording)
 
     def get_default_domain_build_dir(self):
-        if self.instance.sysbuild:
+        if self.instance.testsuite.sysbuild:
             # Load domain yaml to get default domain build directory
             # Note: for targets using QEMU, we assume that the target will
             # have added any additional images to the run target manually
