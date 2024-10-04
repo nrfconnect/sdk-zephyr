@@ -73,21 +73,16 @@ class Boards(WestCommand):
         else:
             name_re = None
 
-        module_settings = {
-            'arch_root': [ZEPHYR_BASE],
-            'board_root': [ZEPHYR_BASE],
-            'soc_root': [ZEPHYR_BASE],
-        }
+        args.arch_roots = [ZEPHYR_BASE]
+        args.soc_roots = [ZEPHYR_BASE]
+        modules_board_roots = [ZEPHYR_BASE]
 
         for module in zephyr_module.parse_modules(ZEPHYR_BASE, self.manifest):
-            for key in module_settings:
-                root = module.meta.get('build', {}).get('settings', {}).get(key)
-                if root is not None:
-                    module_settings[key].append(Path(module.project) / root)
+            board_root = module.meta.get('build', {}).get('settings', {}).get('board_root')
+            if board_root is not None:
+                modules_board_roots.append(Path(module.project) / board_root)
 
-        args.arch_roots += module_settings['arch_root']
-        args.board_roots += module_settings['board_root']
-        args.soc_roots += module_settings['soc_root']
+        args.board_roots += modules_board_roots
 
         for board in list_boards.find_boards(args):
             if name_re is not None and not name_re.search(board.name):
