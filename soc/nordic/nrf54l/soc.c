@@ -20,7 +20,6 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/init.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/dt-bindings/regulator/nrf5x.h>
 
 #ifndef __NRF_TFM__
 #include <zephyr/cache.h>
