@@ -148,40 +148,16 @@
   - "modules/mbedtls/**/*"
 
 "CI-fem-test":
-  - "samples/net/sockets/echo_*/**/*"
   - any:
-      - "!.github/**/*"
-      - "!doc/**/*"
-      - "!CODEOWNERS"
-      - "!LICENSE"
-      - "!**/*.rst"
-      - "!VERSION"
-      - "!SDK_VERSION"
-      - "!MAINTAINERS.yml"
-      - "!version.h.in"
-      - "!Jenkinsfile"
-      - "!**/*.md"
-      - "!tests/**/*"
-      - "!samples/**/*"
-      - "!scripts/**/*"
+      - "**/*"
+      - "!samples/bluetooth/**/*"
+      - "!tests/bluetooth/**/*"
 
 "CI-rs-test":
-  - "samples/net/sockets/echo_*/**/*"
   - any:
-      - "!.github/**/*"
-      - "!doc/**/*"
-      - "!CODEOWNERS"
-      - "!LICENSE"
-      - "!**/*.rst"
-      - "!VERSION"
-      - "!SDK_VERSION"
-      - "!MAINTAINERS.yml"
-      - "!version.h.in"
-      - "!Jenkinsfile"
-      - "!**/*.md"
-      - "!tests/**/*"
-      - "!samples/**/*"
-      - "!scripts/**/*"
+      - "**/*"
+      - "!samples/bluetooth/**/*"
+      - "!tests/bluetooth/**/*"
 
 "CI-thread-test":
   - "include/zephyr/net/**/*"
