@@ -9,8 +9,7 @@
 from west.commands import WestCommand
 
 from run_common import add_parser_common, do_run_common, get_build_dir
-
-from pathlib import Path
+from build_helpers import load_domains
 
 
 class Flash(WestCommand):
@@ -29,5 +28,6 @@ class Flash(WestCommand):
 
     def do_run(self, my_args, runner_args):
         build_dir = get_build_dir(my_args)
-        domains_file = Path(build_dir) / 'domains.yaml'
-        do_run_common(self, my_args, runner_args, domain_file=domains_file)
+        domains = load_domains(build_dir).get_domains(my_args.domain,
+                                                      default_flash_order=True)
+        do_run_common(self, my_args, runner_args, domains=domains)
