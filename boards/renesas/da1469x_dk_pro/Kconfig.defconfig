@@ -50,8 +50,9 @@ config SERIAL_INIT_PRIORITY
 
 if BT
 
-config BT_DA1469X
-	default y
+choice BT_HCI_BUS_TYPE
+	default BT_DA1469X
+endchoice
 
 config BT_WAIT_NOP
 	default y

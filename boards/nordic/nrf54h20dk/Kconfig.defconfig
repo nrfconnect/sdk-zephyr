@@ -3,8 +3,9 @@
 
 if BOARD_NRF54H20DK_NRF54H20_CPUAPP
 
-config BT_HCI_IPC
-	default y if BT
+choice BT_HCI_BUS_TYPE
+	default BT_HCI_IPC if BT
+endchoice
 
 endif # BOARD_NRF54H20DK_NRF54H20_CPUAPP
 
