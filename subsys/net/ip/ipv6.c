@@ -346,8 +346,7 @@ static enum net_verdict ipv6_route_packet(struct net_pkt *pkt,
 		}
 
 		if (IS_ENABLED(CONFIG_NET_ROUTING) &&
-		    net_pkt_orig_iface(pkt) != net_pkt_iface(pkt) &&
-		    !net_if_flag_is_set(net_pkt_orig_iface(pkt), NET_IF_IPV6_NO_ND)) {
+		    net_pkt_orig_iface(pkt) != net_pkt_iface(pkt)) {
 			/* If the route interface to destination is
 			 * different than the original route, then add
 			 * route to original source.
