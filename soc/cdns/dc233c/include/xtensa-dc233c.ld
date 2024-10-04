@@ -113,6 +113,10 @@ SECTIONS
 
 #include <zephyr/linker/rel-sections.ld>
 
+#ifdef CONFIG_LLEXT
+#include <zephyr/linker/llext-sections.ld>
+#endif
+
 #ifdef CONFIG_GEN_ISR_TABLES
 #include <zephyr/linker/intlist.ld>
 #endif
@@ -231,6 +235,10 @@ SECTIONS
   } >RAMABLE_REGION
 
 #include <zephyr/linker/common-rom.ld>
+/* Located in generated directory. This file is populated by calling
+ * zephyr_linker_sources(ROM_SECTIONS ...). Useful for grouping iterable RO structs.
+ */
+#include <snippets-rom-sections.ld>
 
 #include <zephyr/linker/thread-local-storage.ld>
 

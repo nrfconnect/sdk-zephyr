@@ -206,10 +206,6 @@
 	};
 };
 
-&vbat {
-	status = "okay";
-};
-
 &fdcan1 {
 	pinctrl-0 = <&fdcan1_rx_ph14 &fdcan1_tx_ph13>;
 	pinctrl-names = "default";
@@ -245,4 +241,10 @@
 	can-transceiver {
 		max-bitrate = <8000000>;
 	};
+};
+
+zephyr_udc0: &usbotg_hs {
+	status = "okay";
+	pinctrl-0 = <&usb_otg_hs_dm_pa11 &usb_otg_hs_dp_pa12>;
+	pinctrl-names = "default";
 };

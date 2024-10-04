@@ -83,6 +83,7 @@ static int send_for_time(struct ipc_ept *ep, const int64_t sending_time_ms)
 		ret = ipc_service_send(ep, &msg, mlen);
 		if (ret == -ENOMEM) {
 			/* No space in the buffer. Retry. */
+			ret = 0;
 			continue;
 		} else if (ret < 0) {
 			LOG_ERR("Failed to send (%c) failed with ret %d", msg.data[0], ret);
@@ -133,6 +134,11 @@ int main(void)
 	int ret;
 
 	LOG_INF("IPC-service HOST demo started");
+
+#if defined(CONFIG_SOC_NRF5340_CPUAPP)
+	LOG_INF("Run network core");
+	nrf53_cpunet_enable(true);
+#endif
 
 	ipc0_instance = DEVICE_DT_GET(DT_NODELABEL(ipc0));
 

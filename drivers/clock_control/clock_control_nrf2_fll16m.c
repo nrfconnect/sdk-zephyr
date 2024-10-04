@@ -62,9 +62,9 @@ static const struct clock_options {
 };
 
 struct fll16m_dev_data {
-	NRF2_STRUCT_CLOCK_CONFIG(fll16m, ARRAY_SIZE(clock_options)) clk_cfg;
+	STRUCT_CLOCK_CONFIG(fll16m, ARRAY_SIZE(clock_options)) clk_cfg;
 	struct onoff_client hfxo_cli;
-	struct nrf2_clock_lrcconf_sink lrcconf_sink;
+	struct clock_lrcconf_sink lrcconf_sink;
 };
 
 struct fll16m_dev_config {
@@ -76,18 +76,18 @@ static void activate_fll16m_mode(struct fll16m_dev_data *dev_data, uint8_t mode)
 	/* TODO: change to nrf_lrcconf_* function when such is available. */
 
 	if (mode != FLL16M_MODE_DEFAULT) {
-		nrf2_clock_request_lrcconf_poweron_main(&dev_data->lrcconf_sink);
+		clock_request_lrcconf_poweron_main(&dev_data->lrcconf_sink);
 	}
 
 	NRF_LRCCONF010->CLKCTRL[0].SRC = mode;
 
 	if (mode == FLL16M_MODE_DEFAULT) {
-		nrf2_clock_release_lrcconf_poweron_main(&dev_data->lrcconf_sink);
+		clock_release_lrcconf_poweron_main(&dev_data->lrcconf_sink);
 	}
 
 	nrf_lrcconf_task_trigger(NRF_LRCCONF010, NRF_LRCCONF_TASK_CLKSTART_0);
 
-	nrf2_clock_config_update_end(&dev_data->clk_cfg, 0);
+	clock_config_update_end(&dev_data->clk_cfg, 0);
 }
 
 static void hfxo_cb(struct onoff_manager *mgr,
@@ -102,7 +102,7 @@ static void hfxo_cb(struct onoff_manager *mgr,
 		CONTAINER_OF(cli, struct fll16m_dev_data, hfxo_cli);
 
 	if (res < 0) {
-		nrf2_clock_config_update_end(&dev_data->clk_cfg, res);
+		clock_config_update_end(&dev_data->clk_cfg, res);
 	} else {
 		(void)atomic_or(&dev_data->clk_cfg.flags, FLAG_HFXO_STARTED);
 
@@ -117,7 +117,7 @@ static void fll16m_work_handler(struct k_work *work)
 		CONTAINER_OF(work, struct fll16m_dev_data, clk_cfg.work);
 	uint8_t to_activate_idx;
 
-	to_activate_idx = nrf2_clock_config_update_begin(work);
+	to_activate_idx = clock_config_update_begin(work);
 	if (clock_options[to_activate_idx].mode == FLL16M_MODE_BYPASS) {
 		int rc;
 
@@ -125,7 +125,7 @@ static void fll16m_work_handler(struct k_work *work)
 		sys_notify_init_callback(&dev_data->hfxo_cli.notify, hfxo_cb);
 		rc = nrf_clock_control_request(hfxo, NULL, &dev_data->hfxo_cli);
 		if (rc < 0) {
-			nrf2_clock_config_update_end(&dev_data->clk_cfg, rc);
+			clock_config_update_end(&dev_data->clk_cfg, rc);
 		}
 	} else {
 		atomic_val_t prev_flags;
@@ -234,9 +234,9 @@ static int fll16m_init(const struct device *dev)
 {
 	struct fll16m_dev_data *dev_data = dev->data;
 
-	return nrf2_clock_config_init(&dev_data->clk_cfg,
-				      ARRAY_SIZE(dev_data->clk_cfg.onoff),
-				      fll16m_work_handler);
+	return clock_config_init(&dev_data->clk_cfg,
+				 ARRAY_SIZE(dev_data->clk_cfg.onoff),
+				 fll16m_work_handler);
 }
 
 static struct nrf_clock_control_driver_api fll16m_drv_api = {

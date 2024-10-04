@@ -45,10 +45,16 @@ struct soc_esf {
 };
 #endif
 
+#ifdef CONFIG_EXTRA_EXCEPTION_INFO
+/* Forward declaration */
+struct _callee_saved;
+typedef struct _callee_saved _callee_saved_t;
+#endif /* CONFIG_EXTRA_EXCEPTION_INFO */
+
 #if defined(CONFIG_RISCV_SOC_HAS_ISR_STACKING)
 	SOC_ISR_STACKING_ESF_DECLARE;
 #else
-struct __esf {
+struct arch_esf {
 	unsigned long ra;		/* return address */
 
 	unsigned long t0;		/* Caller-saved temporary register */
@@ -81,13 +87,16 @@ struct __esf {
 	unsigned long sp;		/* preserved (user or kernel) stack pointer */
 #endif
 
+#ifdef CONFIG_EXTRA_EXCEPTION_INFO
+	_callee_saved_t *csf;		/* pointer to callee-saved-registers */
+#endif /* CONFIG_EXTRA_EXCEPTION_INFO */
+
 #ifdef CONFIG_RISCV_SOC_CONTEXT_SAVE
 	struct soc_esf soc_context;
 #endif
 } __aligned(16);
 #endif /* CONFIG_RISCV_SOC_HAS_ISR_STACKING */
 
-typedef struct __esf z_arch_esf_t;
 #ifdef CONFIG_RISCV_SOC_CONTEXT_SAVE
 typedef struct soc_esf soc_esf_t;
 #endif

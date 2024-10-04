@@ -1,8 +1,8 @@
 # Copyright (c) 2024 Nordic Semiconductor ASA
-# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+# SPDX-License-Identifier: Apache-2.0
 
 description: |
-  nRF FLL16M
+  Nordic FLL16M
 
   The FLL16M can use the following clocks as clock sources:
 

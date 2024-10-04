@@ -23,10 +23,10 @@ application and open the :file:`zephyr.dts` file in the build directory.
 
 .. tip::
 
-   You can build :ref:`hello_world` to see the "base" devicetree for your board
+   You can build :zephyr:code-sample:`hello_world` to see the "base" devicetree for your board
    without any additional changes from :ref:`overlay files <dt-input-files>`.
 
-For example, using the :ref:`qemu_cortex_m3` board to build :ref:`hello_world`:
+For example, using the :ref:`qemu_cortex_m3` board to build :zephyr:code-sample:`hello_world`:
 
 .. code-block:: sh
 
@@ -42,7 +42,7 @@ CMake prints the input and output file locations like this:
 
    -- Found BOARD.dts: .../zephyr/boards/arm/qemu_cortex_m3/qemu_cortex_m3.dts
    -- Generated zephyr.dts: .../zephyr/build/zephyr/zephyr.dts
-   -- Generated devicetree_generated.h: .../zephyr/build/zephyr/include/generated/devicetree_generated.h
+   -- Generated devicetree_generated.h: .../zephyr/build/zephyr/include/generated/zephyr/devicetree_generated.h
 
 The :file:`zephyr.dts` file is the final devicetree in DTS format.
 

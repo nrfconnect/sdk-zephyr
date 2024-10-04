@@ -5,11 +5,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/sys/atomic_types.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
+
+#include "bs_cmd_line.h"
 #include "bs_dynargs.h"
 #include "bs_pc_backchannel.h"
-#include <argparse.h>
-#include <posix_native_task.h>
-
+#include "posix_native_task.h"
+#include "bs_types.h"
+#include "bsim_args_runner.h"
+#include "bstests.h"
 #include "common.h"
 
 extern enum bst_result_t bst_result;
@@ -193,6 +210,38 @@ static uint get_chan_num(uint16_t dev)
 	}
 
 	return channel_id;
+}
+
+/**
+ * @brief Calculate the sync timeout based on the PA interval
+ *
+ * Calculates the sync timeout, based on the PA interval and a pre-defined ratio.
+ * The return value is in N*10ms, conform the parameter for bt_le_per_adv_sync_create
+ *
+ * @param pa_interval PA interval
+ *
+ * @return uint16_t synchronization timeout (N * 10 ms)
+ */
+uint16_t interval_to_sync_timeout(uint16_t pa_interval)
+{
+	uint16_t pa_timeout;
+
+	if (pa_interval == BT_BAP_PA_INTERVAL_UNKNOWN) {
+		/* Use maximum value to maximize chance of success */
+		pa_timeout = BT_GAP_PER_ADV_MAX_TIMEOUT;
+	} else {
+		uint32_t interval_ms;
+		uint32_t timeout;
+
+		/* Add retries and convert to unit in 10's of ms */
+		interval_ms = BT_GAP_PER_ADV_INTERVAL_TO_MS(pa_interval);
+		timeout = (interval_ms * PA_SYNC_INTERVAL_TO_TIMEOUT_RATIO) / 10;
+
+		/* Enforce restraints */
+		pa_timeout = CLAMP(timeout, BT_GAP_PER_ADV_MIN_TIMEOUT, BT_GAP_PER_ADV_MAX_TIMEOUT);
+	}
+
+	return pa_timeout;
 }
 
 /**

@@ -8,11 +8,12 @@
  * This test is designed to be run using flash-simulator which provide
  * functionality for flash property customization and emulating errors in
  * flash operation in parallel to regular flash API.
- * Test should be run on qemu_x86 or native_sim target.
+ * Test should be run on qemu_x86, mps2_an385 or native_sim target.
  */
 
-#if !defined(CONFIG_BOARD_QEMU_X86) && !defined(CONFIG_ARCH_POSIX)
-#error "Run only on qemu_x86 or a posix architecture based target (for ex. native_sim)"
+#if !defined(CONFIG_BOARD_QEMU_X86) && !defined(CONFIG_ARCH_POSIX) &&                              \
+	!defined(CONFIG_BOARD_MPS2_AN385)
+#error "Run only on qemu_x86, mps2_an385, or a posix architecture based target (for ex. native_sim)"
 #endif
 
 #include <stdio.h>
@@ -207,7 +208,18 @@ ZTEST_F(nvs, test_nvs_corrupted_write)
 		   &flash_max_write_calls);
 	stats_walk(fixture->sim_stats, flash_sim_write_calls_find, &flash_write_stat);
 
+#if defined(CONFIG_FLASH_SIMULATOR_EXPLICIT_ERASE)
 	*flash_max_write_calls = *flash_write_stat - 1;
+#else
+	/* When there is no explicit erase, erase is done with write, which means
+	 * that there are more writes needed. The nvs_write here will cause erase
+	 * to be called, which in turn calls the flash_fill; flash_fill will
+	 * overwrite data using buffer of size CONFIG_FLASH_FILL_BUFFER_SIZE,
+	 * and then two additional real writes are allowed.
+	 */
+	*flash_max_write_calls = (fixture->fs.sector_size /
+				  CONFIG_FLASH_FILL_BUFFER_SIZE) + 2;
+#endif
 	*flash_write_stat = 0;
 
 	/* Flash simulator will lose part of the data at the end of this write.

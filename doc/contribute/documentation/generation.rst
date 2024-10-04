@@ -52,7 +52,7 @@ The project's documentation contains the following items:
       header [shape="rectangle" label="c header\ncomments"]
       xml [shape="rectangle" label="XML"]
       html [shape="rectangle" label="HTML\nweb site"]
-      sphinx[shape="ellipse" label="sphinx +\nbreathe,\ndocutils"]
+      sphinx[shape="ellipse" label="sphinx +\ndocutils"]
       images -> sphinx
       rst -> sphinx
       conf -> sphinx
@@ -65,8 +65,8 @@ The project's documentation contains the following items:
 
 
 The reStructuredText files are processed by the Sphinx documentation system,
-and make use of the breathe extension for including the doxygen-generated API
-material.  Additional tools are required to generate the
+and make use of the doxygen-generated API material.
+Additional tools are required to generate the
 documentation locally, as described in the following sections.
 
 .. _documentation-processors:
@@ -98,34 +98,34 @@ as described below:
 
       .. code-block:: console
 
-         pip install -r ~/zephyrproject/zephyr/doc/requirements.txt
+         pip install -U -r ~/zephyrproject/zephyr/doc/requirements.txt
 
       On Ubuntu Linux:
 
       .. code-block:: console
 
          sudo apt-get install --no-install-recommends doxygen graphviz librsvg2-bin \
-         texlive-latex-base texlive-latex-extra latexmk texlive-fonts-recommended
+         texlive-latex-base texlive-latex-extra latexmk texlive-fonts-recommended imagemagick
 
       On Fedora Linux:
 
       .. code-block:: console
 
          sudo dnf install doxygen graphviz texlive-latex latexmk \
-         texlive-collection-fontsrecommended librsvg2-tools
+         texlive-collection-fontsrecommended librsvg2-tools ImageMagick
 
       On Clear Linux:
 
       .. code-block:: console
 
-         sudo swupd bundle-add texlive graphviz
+         sudo swupd bundle-add texlive graphviz ImageMagick
 
       On Arch Linux:
 
       .. code-block:: console
 
          sudo pacman -S graphviz doxygen librsvg texlive-core texlive-bin \
-         texlive-latexextra texlive-fontsextra
+         texlive-latexextra texlive-fontsextra imagemagick
 
    .. group-tab:: macOS
 
@@ -133,13 +133,13 @@ as described below:
 
       .. code-block:: console
 
-         pip install -r ~/zephyrproject/zephyr/doc/requirements.txt
+         pip install -U -r ~/zephyrproject/zephyr/doc/requirements.txt
 
       Use ``brew`` and ``tlmgr`` to install the tools:
 
       .. code-block:: console
 
-         brew install doxygen graphviz mactex librsvg
+         brew install doxygen graphviz mactex librsvg imagemagick
          tlmgr install latexmk
          tlmgr install collection-fontsrecommended
 
@@ -149,13 +149,13 @@ as described below:
 
       .. code-block:: console
 
-         pip install -r %HOMEPATH$\zephyrproject\zephyr\doc\requirements.txt
+         pip install -U -r %HOMEPATH$\zephyrproject\zephyr\doc\requirements.txt
 
       Open a ``cmd.exe`` window as **Administrator** and run the following command:
 
       .. code-block:: console
 
-         choco install doxygen.install graphviz strawberryperl miktex rsvg-convert
+         choco install doxygen.install graphviz strawberryperl miktex rsvg-convert imagemagick
 
       .. note::
          On Windows, the Sphinx executable ``sphinx-build.exe`` is placed in
@@ -242,24 +242,6 @@ build the documentation directly from there:
    # To generate PDF output
    make pdf
 
-Filtering expected warnings
-***************************
-
-There are some known issues with Sphinx/Breathe that generate Sphinx warnings
-even though the input is valid C code. While these issues are being considered
-for fixing we have created a Sphinx extension that allows to filter them out
-based on a set of regular expressions. The extension is named
-``zephyr.warnings_filter`` and it is located at
-``doc/_extensions/zephyr/warnings_filter.py``. The warnings to be filtered out
-can be added to the ``doc/known-warnings.txt`` file.
-
-The most common warning reported by Sphinx/Breathe is related to duplicate C
-declarations. This warning may be caused by different Sphinx/Breathe issues:
-
-- Multiple declarations of the same object are not supported
-- Different objects (e.g. a struct and a function) can not share the same name
-- Nested elements (e.g. in a struct or union) can not share the same name
-
 Developer-mode Document Building
 ********************************
 
@@ -297,12 +279,18 @@ with a web browser:
 
       $ python3 -m http.server -d _build/html --bind 127.0.0.1
 
+Alternatively, the documentation can be built with the ``make html-live``
+(or ``make html-live-fast``) command, which will build the documentation, host
+it locally, and watch the documentation directory for changes. When changes are
+observed, it will automatically rebuild the documentation and refresh the hosted
+files.
+
 Linking external Doxygen projects against Zephyr
 ************************************************
 
 External projects that build upon Zephyr functionality and wish to refer to
 Zephyr documentation in Doxygen (through the use of @ref), can utilize the
-tag file exported at `zephyr.tag </doxygen/html/zephyr.tag>`_
+tag file exported at `zephyr.tag <../../doxygen/html/zephyr.tag>`_
 
 Once downloaded, the tag file can be used in a custom ``doxyfile.in`` as follows::
 

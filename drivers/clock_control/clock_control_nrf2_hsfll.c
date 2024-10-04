@@ -22,6 +22,10 @@ BUILD_ASSERT(DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) == 1,
 
 #define FLAG_FREQ_CHANGE_CB_EXPECTED BIT(FLAGS_COMMON_BITS)
 
+#define HSFLL_FREQ_LOW    MHZ(64)
+#define HSFLL_FREQ_MEDLOW MHZ(128)
+#define HSFLL_FREQ_HIGH   MHZ(320)
+
 #define NRFS_DVFS_TIMEOUT K_MSEC(CONFIG_CLOCK_CONTROL_NRF2_NRFS_DVFS_TIMEOUT_MS)
 
 /* Clock options sorted from lowest to highest frequency */
@@ -30,21 +34,21 @@ static const struct clock_options {
 	enum dvfs_frequency_setting setting;
 } clock_options[] = {
 	{
-		.frequency = MHZ(64),
+		.frequency = HSFLL_FREQ_LOW,
 		.setting = DVFS_FREQ_LOW,
 	},
 	{
-		.frequency = MHZ(128),
+		.frequency = HSFLL_FREQ_MEDLOW,
 		.setting = DVFS_FREQ_MEDLOW,
 	},
 	{
-		.frequency = MHZ(320),
+		.frequency = HSFLL_FREQ_HIGH,
 		.setting = DVFS_FREQ_HIGH,
 	},
 };
 
 struct hsfll_dev_data {
-	NRF2_STRUCT_CLOCK_CONFIG(hsfll, ARRAY_SIZE(clock_options)) clk_cfg;
+	STRUCT_CLOCK_CONFIG(hsfll, ARRAY_SIZE(clock_options)) clk_cfg;
 	struct k_timer timer;
 };
 
@@ -62,7 +66,7 @@ static void freq_setting_applied_cb(enum dvfs_frequency_setting new_setting)
 	if (prev_flags & FLAG_FREQ_CHANGE_CB_EXPECTED) {
 		k_timer_stop(&dev_data->timer);
 
-		nrf2_clock_config_update_end(&dev_data->clk_cfg, 0);
+		clock_config_update_end(&dev_data->clk_cfg, 0);
 	}
 }
 
@@ -71,7 +75,7 @@ static void hsfll_update_timeout_handler(struct k_timer *timer)
 	struct hsfll_dev_data *dev_data =
 		CONTAINER_OF(timer, struct hsfll_dev_data, timer);
 
-	nrf2_clock_config_update_end(&dev_data->clk_cfg, -ETIMEDOUT);
+	clock_config_update_end(&dev_data->clk_cfg, -ETIMEDOUT);
 }
 
 static void hsfll_work_handler(struct k_work *work)
@@ -82,13 +86,13 @@ static void hsfll_work_handler(struct k_work *work)
 	uint8_t to_activate_idx;
 	int rc;
 
-	to_activate_idx = nrf2_clock_config_update_begin(work);
+	to_activate_idx = clock_config_update_begin(work);
 	required_setting = clock_options[to_activate_idx].setting;
 
 	/* Notify the DVFS service about the required setting. */
 	rc = dvfs_service_handler_change_freq_setting(required_setting);
 	if (rc < 0) {
-		nrf2_clock_config_update_end(&dev_data->clk_cfg, rc);
+		clock_config_update_end(&dev_data->clk_cfg, rc);
 		return;
 	}
 
@@ -113,7 +117,7 @@ static struct onoff_manager *hsfll_find_mgr(const struct device *dev,
 	}
 
 	frequency = spec->frequency == NRF_CLOCK_CONTROL_FREQUENCY_MAX
-		  ? MHZ(320)
+		  ? HSFLL_FREQ_HIGH
 		  : spec->frequency;
 
 	for (int i = 0; i < ARRAY_SIZE(clock_options); ++i) {
@@ -197,9 +201,9 @@ static int hsfll_init(const struct device *dev)
 	struct hsfll_dev_data *dev_data = dev->data;
 	int rc;
 
-	rc = nrf2_clock_config_init(&dev_data->clk_cfg,
-				    ARRAY_SIZE(dev_data->clk_cfg.onoff),
-				    hsfll_work_handler);
+	rc = clock_config_init(&dev_data->clk_cfg,
+			       ARRAY_SIZE(dev_data->clk_cfg.onoff),
+			       hsfll_work_handler);
 	if (rc < 0) {
 		return rc;
 	}

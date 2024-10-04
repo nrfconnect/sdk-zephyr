@@ -127,7 +127,8 @@ def kconfig_load(app: Sphinx) -> Tuple[kconfiglib.Kconfig, Dict[str, str]]:
                     board_str = 'BOARD_' + re.sub(r"[^a-zA-Z0-9_]", "_", qualifier).upper()
                     f.write('config  ' + board_str + '\n')
                     f.write('\t bool\n')
-                f.write('source "' + (board.dir / ('Kconfig.' + board.name)).as_posix() + '"\n\n')
+                f.write('source "' +
+                        (board.directories[0] / ('Kconfig.' + board.name)).as_posix() + '"\n\n')
 
         # base environment
         os.environ["ZEPHYR_BASE"] = str(ZEPHYR_BASE)
@@ -232,14 +233,14 @@ class KconfigDomain(Domain):
     object_types = {"option": ObjType("option", "option")}
     roles = {"option": XRefRole()}
     directives = {"search": KconfigSearch}
-    initial_data: Dict[str, Any] = {"options": []}
+    initial_data: Dict[str, Any] = {"options": set()}
 
     def get_objects(self) -> Iterable[Tuple[str, str, str, str, str, int]]:
         for obj in self.data["options"]:
             yield obj
 
     def merge_domaindata(self, docnames: List[str], otherdata: Dict) -> None:
-        self.data["options"] += otherdata["options"]
+        self.data["options"].update(otherdata["options"])
 
     def resolve_xref(
         self,
@@ -269,7 +270,7 @@ class KconfigDomain(Domain):
     def add_option(self, option):
         """Register a new Kconfig option to the domain."""
 
-        self.data["options"].append(
+        self.data["options"].add(
             (option, option, "option", self.env.docname, option, 1)
         )
 

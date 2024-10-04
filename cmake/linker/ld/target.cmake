@@ -56,7 +56,6 @@ macro(configure_linker_script linker_script_gen linker_pass_define)
     endif()
 
     zephyr_get_include_directories_for_lang(C current_includes)
-    get_property(current_defines GLOBAL PROPERTY PROPERTY_LINKER_SCRIPT_DEFINES)
     if(DEFINED SOC_LINKER_SCRIPT)
       cmake_path(GET SOC_LINKER_SCRIPT PARENT_PATH soc_linker_script_includes)
       set(soc_linker_script_includes -I${soc_linker_script_includes})
@@ -76,11 +75,12 @@ macro(configure_linker_script linker_script_gen linker_pass_define)
       -MD -MF ${linker_script_gen}.dep -MT ${linker_script_gen}
       -D_LINKER
       -D_ASMLANGUAGE
+      -D__GCC_LINKER_CMD__
       -imacros ${AUTOCONF_H}
       ${current_includes}
       ${soc_linker_script_includes}
-      ${current_defines}
       ${template_script_defines}
+      -DUSE_PARTITION_MANAGER=$<OR:$<BOOL:${CONFIG_PARTITION_MANAGER_ENABLED}>,$<BOOL:${IMAGE_NAME}>,$<TARGET_EXISTS:partition_manager>>
       -E ${LINKER_SCRIPT}
       -P # Prevent generation of debug `#line' directives.
       -o ${linker_script_gen}
@@ -147,8 +147,5 @@ function(toolchain_ld_link_elf)
 endfunction(toolchain_ld_link_elf)
 
 # Load toolchain_ld-family macros
-include(${ZEPHYR_BASE}/cmake/linker/${LINKER}/target_base.cmake)
-include(${ZEPHYR_BASE}/cmake/linker/${LINKER}/target_baremetal.cmake)
-include(${ZEPHYR_BASE}/cmake/linker/${LINKER}/target_cpp.cmake)
 include(${ZEPHYR_BASE}/cmake/linker/${LINKER}/target_relocation.cmake)
 include(${ZEPHYR_BASE}/cmake/linker/${LINKER}/target_configure.cmake)

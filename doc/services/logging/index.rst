@@ -53,7 +53,7 @@ For each level the following set of macros are available:
 - ``LOG_INST_X`` for standard printf-like message associated with the
   particular instance, e.g. :c:macro:`LOG_INST_INF`.
 - ``LOG_INST_HEXDUMP_X`` for dumping data associated with the particular
-  instance, e.g. :c:macro:`LOG_HEXDUMP_INST_DBG`
+  instance, e.g. :c:macro:`LOG_INST_HEXDUMP_DBG`
 
 The warning level also exposes the following additional macro:
 
@@ -500,7 +500,7 @@ backends.
 
 In some cases, logs need to be redirected at the macro level. For these cases,
 :kconfig:option:`CONFIG_LOG_CUSTOM_HEADER` can be used to inject an application provided
-header named `zephyr_custom_log.h` at the end of :zephyr_file:`include/zephyr/logging/log.h`.
+header named :file:`zephyr_custom_log.h` at the end of :zephyr_file:`include/zephyr/logging/log.h`.
 
 Frontend using ARM Coresight STM (System Trace Macrocell)
 ---------------------------------------------------------

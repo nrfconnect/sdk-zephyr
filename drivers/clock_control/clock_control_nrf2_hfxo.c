@@ -20,7 +20,7 @@ struct dev_data_hfxo {
 	struct onoff_manager mgr;
 	onoff_notify_fn notify;
 	struct k_timer timer;
-	struct nrf2_clock_lrcconf_sink lrcconf_sink;
+	struct clock_lrcconf_sink lrcconf_sink;
 };
 
 struct dev_config_hfxo {
@@ -58,7 +58,7 @@ static void onoff_start_hfxo(struct onoff_manager *mgr, onoff_notify_fn notify)
 	dev_data->notify = notify;
 
 	nrf_lrcconf_event_clear(NRF_LRCCONF010, NRF_LRCCONF_EVENT_HFXOSTARTED);
-	nrf2_clock_request_lrcconf_poweron_main(&dev_data->lrcconf_sink);
+	clock_request_lrcconf_poweron_main(&dev_data->lrcconf_sink);
 	nrf_lrcconf_task_trigger(NRF_LRCCONF010, NRF_LRCCONF_TASK_REQHFXO);
 
 	/* Due to a hardware issue, the HFXOSTARTED event is currently
@@ -74,7 +74,7 @@ static void onoff_stop_hfxo(struct onoff_manager *mgr, onoff_notify_fn notify)
 		CONTAINER_OF(mgr, struct dev_data_hfxo, mgr);
 
 	nrf_lrcconf_task_trigger(NRF_LRCCONF010, NRF_LRCCONF_TASK_STOPREQHFXO);
-	nrf2_clock_release_lrcconf_poweron_main(&dev_data->lrcconf_sink);
+	clock_release_lrcconf_poweron_main(&dev_data->lrcconf_sink);
 	notify(mgr, 0);
 }
 

@@ -91,7 +91,7 @@ static const struct clock_options {
 };
 
 struct lfclk_dev_data {
-	NRF2_STRUCT_CLOCK_CONFIG(lfclk, ARRAY_SIZE(clock_options)) clk_cfg;
+	STRUCT_CLOCK_CONFIG(lfclk, ARRAY_SIZE(clock_options)) clk_cfg;
 	struct k_timer timer;
 };
 
@@ -110,7 +110,7 @@ static void clock_evt_handler(nrfs_clock_evt_t const *p_evt, void *context)
 		status = -ENXIO;
 	}
 
-	nrf2_clock_config_update_end(&dev_data->clk_cfg, status);
+	clock_config_update_end(&dev_data->clk_cfg, status);
 }
 
 static void lfclk_update_timeout_handler(struct k_timer *timer)
@@ -118,7 +118,7 @@ static void lfclk_update_timeout_handler(struct k_timer *timer)
 	struct lfclk_dev_data *dev_data =
 		CONTAINER_OF(timer, struct lfclk_dev_data, timer);
 
-	nrf2_clock_config_update_end(&dev_data->clk_cfg, -ETIMEDOUT);
+	clock_config_update_end(&dev_data->clk_cfg, -ETIMEDOUT);
 }
 
 static void lfclk_work_handler(struct k_work *work)
@@ -128,12 +128,12 @@ static void lfclk_work_handler(struct k_work *work)
 	uint8_t to_activate_idx;
 	nrfs_err_t err;
 
-	to_activate_idx = nrf2_clock_config_update_begin(work);
+	to_activate_idx = clock_config_update_begin(work);
 
 	err = nrfs_clock_lfclk_src_set(clock_options[to_activate_idx].src,
 				       dev_data);
 	if (err != NRFS_SUCCESS) {
-		nrf2_clock_config_update_end(&dev_data->clk_cfg, -EIO);
+		clock_config_update_end(&dev_data->clk_cfg, -EIO);
 	} else {
 		k_timer_start(&dev_data->timer, NRFS_CLOCK_TIMEOUT, K_NO_WAIT);
 	}
@@ -236,9 +236,9 @@ static int lfclk_init(const struct device *dev)
 
 	k_timer_init(&dev_data->timer, lfclk_update_timeout_handler, NULL);
 
-	return nrf2_clock_config_init(&dev_data->clk_cfg,
-				      ARRAY_SIZE(dev_data->clk_cfg.onoff),
-				      lfclk_work_handler);
+	return clock_config_init(&dev_data->clk_cfg,
+				 ARRAY_SIZE(dev_data->clk_cfg.onoff),
+				 lfclk_work_handler);
 }
 
 static struct nrf_clock_control_driver_api lfclk_drv_api = {

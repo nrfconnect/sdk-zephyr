@@ -37,6 +37,8 @@ logging.getLogger("pykwalify.core").setLevel(50)
 sys.path.append(os.path.join(zephyr_base, 'scripts'))
 import list_boards
 
+from pylib.twister.twisterlib.statuses import TwisterStatus
+
 
 def _get_match_fn(globs, regexes):
     # Constructs a single regex that tests for matches against the globs in
@@ -242,7 +244,7 @@ class Filters:
         for changed in changed_boards:
             for board in known_boards:
                 c = (zephyr_base / changed).resolve()
-                if c.is_relative_to(board.dir.resolve()):
+                if c.is_relative_to(board.directories[0].resolve()):
                     for file in glob.glob(os.path.join(board.dir, f"{board.name}*.yaml")):
                         with open(file, 'r') as f:
                             b = yaml.load(f.read(), Loader=SafeLoader)
@@ -313,8 +315,6 @@ class Filters:
             if self.platforms:
                 for platform in self.platforms:
                     _options.extend(["-p", platform])
-            else:
-                _options.append("--all")
             self.get_plan(_options, use_testsuite_root=False)
 
     def find_tags(self):
@@ -471,12 +471,12 @@ if __name__ == "__main__":
     dup_free_set = set()
     logging.info(f'Total tests gathered: {len(f.all_tests)}')
     for ts in f.all_tests:
-        if ts.get('status') == 'filtered':
+        if TwisterStatus(ts.get('status')) == TwisterStatus.FILTER:
             continue
         n = ts.get("name")
         a = ts.get("arch")
         p = ts.get("platform")
-        if ts.get('status') == 'error':
+        if TwisterStatus(ts.get('status')) == TwisterStatus.ERROR:
             logging.info(f"Error found: {n} on {p} ({ts.get('reason')})")
             errors += 1
         if (n, a, p,) not in dup_free_set:

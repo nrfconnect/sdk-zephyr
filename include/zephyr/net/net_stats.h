@@ -25,6 +25,8 @@ extern "C" {
 /**
  * @brief Network statistics library
  * @defgroup net_stats Network Statistics Library
+ * @since 1.5
+ * @version 0.8.0
  * @ingroup networking
  * @{
  */
@@ -621,6 +623,9 @@ struct net_stats_wifi {
 
 	/** Total number of unicast packets received and sent */
 	struct net_stats_pkts unicast;
+
+	/** Total number of dropped packets at received and sent*/
+	net_stats_t overrun_count;
 };
 
 #if defined(CONFIG_NET_STATISTICS_USER_API)

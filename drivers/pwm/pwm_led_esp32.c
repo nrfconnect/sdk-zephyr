@@ -62,7 +62,6 @@ static struct pwm_ledc_esp32_channel_config *get_channel_config(const struct dev
 
 static void pwm_led_esp32_low_speed_update(const struct device *dev, int speed_mode, int channel)
 {
-	uint32_t reg_addr;
 	struct pwm_ledc_esp32_data *data = (struct pwm_ledc_esp32_data *const)(dev)->data;
 
 	if (speed_mode == LEDC_LOW_SPEED_MODE) {
@@ -124,7 +123,11 @@ static int pwm_led_esp32_calculate_max_resolution(struct pwm_ledc_esp32_channel_
 	 * Max duty resolution can be obtained with
 	 * max_res = log2(CLK_FREQ/FREQ)
 	 */
+#if SOC_LEDC_SUPPORT_APB_CLOCK
 	uint64_t clock_freq = channel->clock_src == LEDC_APB_CLK ? APB_CLK_FREQ : REF_CLK_FREQ;
+#elif SOC_LEDC_SUPPORT_PLL_DIV_CLOCK
+	uint64_t clock_freq = SCLK_CLK_FREQ;
+#endif
 	uint32_t max_precision_n = clock_freq/channel->freq;
 
 	for (uint8_t i = 0; i <= SOC_LEDC_TIMER_BIT_WIDTH; i++) {
@@ -159,7 +162,9 @@ static int pwm_led_esp32_timer_config(struct pwm_ledc_esp32_channel_config *chan
 	 * If the given frequency doesn't support it, we move to the next clock source.
 	 */
 
+#if SOC_LEDC_SUPPORT_APB_CLOCK
 	channel->clock_src = LEDC_APB_CLK;
+#endif
 	if (!pwm_led_esp32_calculate_max_resolution(channel)) {
 		return 0;
 	}
@@ -194,6 +199,7 @@ static int pwm_led_esp32_timer_set(const struct device *dev,
 	__ASSERT_NO_MSG(channel->freq > 0);
 
 	switch (channel->clock_src) {
+#if SOC_LEDC_SUPPORT_APB_CLOCK
 	case LEDC_APB_CLK:
 		/** This expression comes from ESP32 Espressif's Technical Reference
 		 * Manual chapter 13.2.2 Timers.
@@ -201,6 +207,12 @@ static int pwm_led_esp32_timer_set(const struct device *dev,
 		 */
 		prescaler = ((uint64_t) APB_CLK_FREQ << 8) / channel->freq / precision;
 	break;
+#endif
+#if SOC_LEDC_SUPPORT_PLL_DIV_CLOCK
+	case LEDC_SCLK:
+		prescaler = ((uint64_t) SCLK_CLK_FREQ << 8) / channel->freq / precision;
+	break;
+#endif
 #if SOC_LEDC_SUPPORT_REF_TICK
 	case LEDC_REF_TICK:
 		prescaler = ((uint64_t) REF_CLK_FREQ << 8) / channel->freq / precision;
@@ -237,7 +249,6 @@ static int pwm_led_esp32_timer_set(const struct device *dev,
 static int pwm_led_esp32_get_cycles_per_sec(const struct device *dev,
 					    uint32_t channel_idx, uint64_t *cycles)
 {
-	struct pwm_ledc_esp32_config *config = (struct pwm_ledc_esp32_config *) dev->config;
 	struct pwm_ledc_esp32_channel_config *channel = get_channel_config(dev, channel_idx);
 
 	if (!channel) {
@@ -245,7 +256,11 @@ static int pwm_led_esp32_get_cycles_per_sec(const struct device *dev,
 		return -EINVAL;
 	}
 
+#if SOC_LEDC_SUPPORT_APB_CLOCK
 	*cycles = channel->clock_src == LEDC_APB_CLK ? APB_CLK_FREQ : REF_CLK_FREQ;
+#elif SOC_LEDC_SUPPORT_PLL_DIV_CLOCK
+	*cycles = SCLK_CLK_FREQ;
+#endif
 
 	return 0;
 }
@@ -256,7 +271,6 @@ static int pwm_led_esp32_set_cycles(const struct device *dev, uint32_t channel_i
 {
 	int ret;
 	uint64_t clk_freq;
-	struct pwm_ledc_esp32_config *config = (struct pwm_ledc_esp32_config *) dev->config;
 	struct pwm_ledc_esp32_data *data = (struct pwm_ledc_esp32_data *const)(dev)->data;
 	struct pwm_ledc_esp32_channel_config *channel = get_channel_config(dev, channel_idx);
 
@@ -316,9 +330,7 @@ static int pwm_led_esp32_set_cycles(const struct device *dev, uint32_t channel_i
 
 int pwm_led_esp32_init(const struct device *dev)
 {
-	int ret;
 	const struct pwm_ledc_esp32_config *config = dev->config;
-	struct pwm_ledc_esp32_data *data = (struct pwm_ledc_esp32_data *const)(dev)->data;
 
 	if (!device_is_ready(config->clock_dev)) {
 		LOG_ERR("clock control device not ready");
@@ -338,6 +350,12 @@ static const struct pwm_driver_api pwm_led_esp32_api = {
 
 PINCTRL_DT_INST_DEFINE(0);
 
+#if SOC_LEDC_SUPPORT_APB_CLOCK
+	#define CLOCK_SOURCE	LEDC_APB_CLK
+#elif SOC_LEDC_SUPPORT_PLL_DIV_CLOCK
+	#define CLOCK_SOURCE	LEDC_SCLK
+#endif
+
 #define CHANNEL_CONFIG(node_id)                                                \
 	{                                                                      \
 		.idx = DT_REG_ADDR(node_id),                                   \
@@ -346,7 +364,7 @@ PINCTRL_DT_INST_DEFINE(0);
 		.speed_mode = DT_REG_ADDR(node_id) < SOC_LEDC_CHANNEL_NUM      \
 				      ? LEDC_LOW_SPEED_MODE                    \
 				      : !LEDC_LOW_SPEED_MODE,                  \
-		.clock_src = LEDC_APB_CLK,                                     \
+		.clock_src = CLOCK_SOURCE,                                     \
 	},
 
 static struct pwm_ledc_esp32_channel_config channel_config[] = {

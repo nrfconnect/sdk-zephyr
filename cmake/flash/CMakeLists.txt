@@ -77,8 +77,7 @@ function(runners_yaml_append_config)
   runners_yaml_append("")
 endfunction()
 
-# Save runner state in a YAML file, and put that YAML file's location
-# in the cache.
+# Save runner state in a YAML file.
 function(create_runners_yaml)
   set(runners ${ARGV})
 
@@ -96,6 +95,14 @@ function(create_runners_yaml)
   if(DEFINED BOARD_DEBUG_RUNNER)
     runners_yaml_append("\n# Default debug runner if --runner is not given.")
     runners_yaml_append("debug-runner: ${BOARD_DEBUG_RUNNER}")
+  endif()
+  if(DEFINED BOARD_SIM_RUNNER)
+    runners_yaml_append("\n# Default simulation runner if --runner is not given.")
+    runners_yaml_append("sim-runner: ${BOARD_SIM_RUNNER}")
+  endif()
+  if(DEFINED BOARD_ROBOT_RUNNER)
+    runners_yaml_append("\n# Default test runner if --runner is not given.")
+    runners_yaml_append("robot-runner: ${BOARD_ROBOT_RUNNER}")
   endif()
 
   # Sets up common runner configuration values.
@@ -120,11 +127,9 @@ function(create_runners_yaml)
     endif()
   endforeach()
 
-  # Write the final contents and set its location in the cache.
+  # Write the final contents.
   file(GENERATE OUTPUT "${runners_yaml}" CONTENT
     $<TARGET_PROPERTY:runners_yaml_props_target,yaml_contents>)
-  set(ZEPHYR_RUNNERS_YAML "${runners_yaml}" CACHE INTERNAL
-    "a configuration file for the runners Python package")
 endfunction()
 
 get_property(RUNNERS GLOBAL PROPERTY ZEPHYR_RUNNERS)

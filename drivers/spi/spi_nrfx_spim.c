@@ -5,6 +5,7 @@
  */
 
 #include <zephyr/drivers/spi.h>
+#include <zephyr/drivers/spi/rtio.h>
 #include <zephyr/cache.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/device_runtime.h>
@@ -581,6 +582,9 @@ static const struct spi_driver_api spi_nrfx_driver_api = {
 	.transceive = spi_nrfx_transceive,
 #ifdef CONFIG_SPI_ASYNC
 	.transceive_async = spi_nrfx_transceive_async,
+#endif
+#ifdef CONFIG_SPI_RTIO
+	.iodev_submit = spi_rtio_iodev_default_submit,
 #endif
 	.release = spi_nrfx_release,
 };

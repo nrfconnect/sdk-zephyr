@@ -1139,6 +1139,7 @@ static int le_ext_adv_param_set(struct bt_le_ext_adv *adv,
 	err = bt_id_set_adv_own_addr(adv, param->options, dir_adv,
 				     &cp->own_addr_type);
 	if (err) {
+		net_buf_unref(buf);
 		return err;
 	}
 
@@ -1215,6 +1216,8 @@ static int le_ext_adv_param_set(struct bt_le_ext_adv *adv,
 	}
 
 	cp->sid = param->sid;
+
+	cp->sec_adv_max_skip = param->secondary_max_skip;
 
 	cp->props = sys_cpu_to_le16(props);
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_LE_SET_EXT_ADV_PARAM, buf, &rsp);
@@ -2153,7 +2156,8 @@ void bt_hci_le_adv_set_terminated(struct net_buf *buf)
 	adv = bt_hci_adv_lookup_handle(evt->adv_handle);
 	conn_handle = sys_le16_to_cpu(evt->conn_handle);
 
-	LOG_DBG("status 0x%02x adv_handle %u conn_handle 0x%02x num %u", evt->status,
+	LOG_DBG("status 0x%02x %s adv_handle %u conn_handle 0x%02x num %u",
+		evt->status, bt_hci_err_to_str(evt->status),
 		evt->adv_handle, conn_handle, evt->num_completed_ext_adv_evts);
 
 	if (!adv) {

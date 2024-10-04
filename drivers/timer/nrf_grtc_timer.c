@@ -49,6 +49,8 @@
 
 #define MAX_CYCLES (MAX_TICKS * CYC_PER_TICK)
 
+#define LFCLK_FREQUENCY_HZ 32768
+
 #if defined(CONFIG_TEST)
 const int32_t z_sys_timer_irq_for_test = DT_IRQN(GRTC_NODE);
 #endif
@@ -378,8 +380,9 @@ int z_nrf_grtc_wakeup_prepare(uint64_t wake_time_us)
 	int ret;
 
 	nrfx_grtc_sleep_configuration_get(&sleep_cfg);
-	minimum_latency_us = (sleep_cfg.waketime + sleep_cfg.timeout) * USEC_PER_SEC / 32768 +
-			     CONFIG_NRF_GRTC_SYSCOUNTER_SLEEP_MINIMUM_LATENCY;
+	minimum_latency_us = (sleep_cfg.waketime + sleep_cfg.timeout) *
+		USEC_PER_SEC / LFCLK_FREQUENCY_HZ +
+		CONFIG_NRF_GRTC_SYSCOUNTER_SLEEP_MINIMUM_LATENCY;
 	sleep_cfg.auto_mode = false;
 	nrfx_grtc_sleep_configure(&sleep_cfg);
 

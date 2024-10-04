@@ -48,6 +48,7 @@ static struct {
 
 	bool     have_hdr;
 	bool     discardable;
+	bool     deferred;
 
 	uint8_t     hdr_len;
 
@@ -193,6 +194,21 @@ static struct net_buf *get_rx(k_timeout_t timeout)
 	return NULL;
 }
 
+static void rx_isr_start(void)
+{
+	if (rx.deferred) {
+		rx.deferred = false;
+		NVIC_SetPendingIRQ(CMAC2SYS_IRQn);
+	}
+
+	irq_enable(CMAC2SYS_IRQn);
+}
+
+static void rx_isr_stop(void)
+{
+	irq_disable(CMAC2SYS_IRQn);
+}
+
 static void rx_thread(void *p1, void *p2, void *p3)
 {
 	const struct device *dev = p1;
@@ -224,11 +240,11 @@ static void rx_thread(void *p1, void *p2, void *p3)
 		}
 
 		/* Let the ISR continue receiving new packets */
-		irq_enable(CMAC2SYS_IRQn);
+		rx_isr_start();
 
-		buf = net_buf_get(&rx.fifo, K_FOREVER);
+		buf = k_fifo_get(&rx.fifo, K_FOREVER);
 		do {
-			irq_enable(CMAC2SYS_IRQn);
+			rx_isr_start();
 
 			LOG_DBG("Calling bt_recv(%p)", buf);
 			hci->recv(dev, buf);
@@ -239,8 +255,9 @@ static void rx_thread(void *p1, void *p2, void *p3)
 			 */
 			k_yield();
 
-			irq_disable(CMAC2SYS_IRQn);
-			buf = net_buf_get(&rx.fifo, K_NO_WAIT);
+			rx_isr_stop();
+
+			buf = k_fifo_get(&rx.fifo, K_NO_WAIT);
 		} while (buf);
 	}
 }
@@ -277,7 +294,7 @@ static inline void read_payload(void)
 			}
 
 			LOG_WRN("Failed to allocate, deferring to rx_thread");
-			irq_disable(CMAC2SYS_IRQn);
+			rx.deferred = true;
 			return;
 		}
 
@@ -322,7 +339,7 @@ static inline void read_payload(void)
 	reset_rx();
 
 	LOG_DBG("Putting buf %p to rx fifo", buf);
-	net_buf_put(&rx.fifo, buf);
+	k_fifo_put(&rx.fifo, buf);
 }
 
 static inline void read_header(void)
@@ -379,7 +396,7 @@ static inline void process_rx(void)
 /* Called by HAL when data in CMAC mailbox is available to read */
 void cmac_read_req(void)
 {
-	while (cmac_mbox_has_data()) {
+	while (!rx.deferred && cmac_mbox_has_data()) {
 		process_rx();
 	}
 }

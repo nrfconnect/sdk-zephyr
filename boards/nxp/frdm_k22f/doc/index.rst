@@ -26,7 +26,7 @@ MCUs.
 Hardware
 ********
 
-- MK22FN512VLH12 (120 MHz, 1 MB flash memory, 256 KB RAM, low-power,
+- MK22FN512VLH12 (120 MHz, 512 KB flash memory, 128 KB RAM, low-power,
   crystal-less USB, and 64 pin Low profile Quad Flat Package (LQFP))
 - Dual role USB interface with micro-B USB connector
 - RGB LED
@@ -237,7 +237,7 @@ etc.):
 Flashing
 ========
 
-Here is an example for the :ref:`hello_world` application.
+Here is an example for the :zephyr:code-sample:`hello_world` application.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world
@@ -255,7 +255,7 @@ see the following message in the terminal:
 Debugging
 =========
 
-Here is an example for the :ref:`hello_world` application.
+Here is an example for the :zephyr:code-sample:`hello_world` application.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world

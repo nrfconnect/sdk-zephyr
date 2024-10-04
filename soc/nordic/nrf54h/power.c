@@ -22,13 +22,13 @@ static void suspend_common(void)
 	sys_cache_data_flush_all();
 	sys_cache_data_disable();
 	nrf_memconf_ramblock_control_enable_set(NRF_MEMCONF, RAMBLOCK_POWER_ID,
-					RAMBLOCK_CONTROL_BIT_DCACHE, false);
+						RAMBLOCK_CONTROL_BIT_DCACHE, false);
 
 	if (IS_ENABLED(CONFIG_ICACHE)) {
 		/* Disable and power down ICACHE */
 		sys_cache_instr_disable();
 		nrf_memconf_ramblock_control_enable_set(NRF_MEMCONF, RAMBLOCK_POWER_ID,
-						RAMBLOCK_CONTROL_BIT_ICACHE, false);
+							RAMBLOCK_CONTROL_BIT_ICACHE, false);
 	}
 
 	/* Disable retention */
@@ -82,7 +82,7 @@ static void sys_resume(void)
 
 	/* TODO: Move it around k_cpu_idle() implementation. */
 	nrf_lrcconf_poweron_force_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_MAIN,
-			!IS_ENABLED(CONFIG_SOC_NRF54H20_CPURAD));
+				      !IS_ENABLED(CONFIG_SOC_NRF54H20_CPURAD));
 }
 
 /* Function called during local domain suspend to RAM. */

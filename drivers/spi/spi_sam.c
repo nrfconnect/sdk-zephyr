@@ -17,6 +17,7 @@ LOG_MODULE_REGISTER(spi_sam);
 #include <zephyr/spinlock.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
+#include <zephyr/drivers/spi/rtio.h>
 #include <zephyr/drivers/dma.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/drivers/clock_control/atmel_sam_pmc.h>
@@ -53,6 +54,7 @@ struct spi_sam_data {
 
 #ifdef CONFIG_SPI_RTIO
 	struct rtio *r; /* context for thread calls */
+	struct mpsc io_q;
 	struct rtio_iodev iodev;
 	struct rtio_iodev_sqe *txn_head;
 	struct rtio_iodev_sqe *txn_curr;
@@ -656,16 +658,17 @@ static void spi_sam_iodev_start(const struct device *dev)
 
 	switch (sqe->op) {
 	case RTIO_OP_RX:
-		ret = spi_sam_rx(dev, cfg->regs, sqe->buf, sqe->buf_len);
+		ret = spi_sam_rx(dev, cfg->regs, sqe->rx.buf, sqe->rx.buf_len);
 		break;
 	case RTIO_OP_TX:
-		ret = spi_sam_tx(dev, cfg->regs, sqe->buf, sqe->buf_len);
+		ret = spi_sam_tx(dev, cfg->regs, sqe->tx.buf, sqe->tx.buf_len);
 		break;
 	case RTIO_OP_TINY_TX:
-		ret = spi_sam_tx(dev, cfg->regs, sqe->tiny_buf, sqe->tiny_buf_len);
+		ret = spi_sam_tx(dev, cfg->regs, sqe->tiny_tx.buf, sqe->tiny_tx.buf_len);
 		break;
 	case RTIO_OP_TXRX:
-		ret = spi_sam_txrx(dev, cfg->regs, sqe->tx_buf, sqe->rx_buf, sqe->txrx_buf_len);
+		ret = spi_sam_txrx(dev, cfg->regs, sqe->txrx.tx_buf, sqe->txrx.rx_buf,
+			sqe->txrx.buf_len);
 		break;
 	default:
 		LOG_ERR("Invalid op code %d for submission %p\n", sqe->op, (void *)sqe);
@@ -691,7 +694,7 @@ static void spi_sam_iodev_next(const struct device *dev, bool completion)
 		return;
 	}
 
-	struct rtio_mpsc_node *next = rtio_mpsc_pop(&data->iodev.iodev_sq);
+	struct mpsc_node *next = mpsc_pop(&data->io_q);
 
 	if (next != NULL) {
 		struct rtio_iodev_sqe *next_sqe = CONTAINER_OF(next, struct rtio_iodev_sqe, q);
@@ -736,7 +739,7 @@ static void spi_sam_iodev_submit(const struct device *dev,
 {
 	struct spi_sam_data *data = dev->data;
 
-	rtio_mpsc_push(&data->iodev.iodev_sq, &iodev_sqe->q);
+	mpsc_push(&data->io_q, &iodev_sqe->q);
 	spi_sam_iodev_next(dev, false);
 }
 #endif
@@ -866,7 +869,7 @@ static int spi_sam_init(const struct device *dev)
 	data->dt_spec.bus = dev;
 	data->iodev.api = &spi_iodev_api;
 	data->iodev.data = &data->dt_spec;
-	rtio_mpsc_init(&data->iodev.iodev_sq);
+	mpsc_init(&data->io_q);
 #endif
 
 	spi_context_unlock_unconditionally(&data->ctx);

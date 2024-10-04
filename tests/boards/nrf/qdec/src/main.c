@@ -9,9 +9,8 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/sys/printk.h>
 
-K_SEM_DEFINE(sem, 0, 1);
+static K_SEM_DEFINE(sem, 0, 1);
 static const struct gpio_dt_spec phase_a = GPIO_DT_SPEC_GET(DT_ALIAS(qenca), gpios);
 static const struct gpio_dt_spec phase_b = GPIO_DT_SPEC_GET(DT_ALIAS(qencb), gpios);
 static const struct device *const qdec_dev = DEVICE_DT_GET(DT_ALIAS(qdec0));
@@ -33,7 +32,7 @@ static void qdec_trigger_handler(const struct device *dev, const struct sensor_t
 	k_sem_give(&sem);
 }
 
-void qenc_emulate_work_handler(struct k_work *work)
+static void qenc_emulate_work_handler(struct k_work *work)
 {
 	if (toggle_a) {
 		gpio_pin_toggle_dt(&phase_a);
@@ -113,7 +112,7 @@ static void qenc_emulate_verify_reading(int emulator_period_ms, int emulation_du
 	rc = sensor_channel_get(qdec_dev, SENSOR_CHAN_ROTATION, &val);
 	zassert_true(rc == 0, "Failed to get sample (%d)", rc);
 
-	printk("QDEC reading: %d\n", val.val1);
+	TC_PRINT("QDEC reading: %d\n", val.val1);
 	if (!overflow_possible) {
 		zassert_within(val.val1, expected_reading, delta,
 			       "Expected reading: %d,  but got: %d", expected_reading, val.val1);
@@ -201,7 +200,7 @@ ZTEST(qdec_sensor, test_sensor_trigger_set)
 	rc = sensor_channel_get(qdec_dev, SENSOR_CHAN_ROTATION, &val);
 	zassert_true(rc == 0, "Failed to fetch sample (%d)", rc);
 
-	printk("QDEC reading: %d\n", val.val1);
+	TC_PRINT("QDEC reading: %d\n", val.val1);
 	zassert_true(val.val1 != 0, "No readings from QDEC");
 }
 
@@ -319,11 +318,13 @@ ZTEST(qdec_sensor, test_sensor_channel_get)
 	 *				val_first.val1,
 	 *				val_second.val1);
 	 */
-	printk("Expected the same readings: %d vs %d - ignore!\n", val_first.val1, val_second.val1);
+	TC_PRINT("Expected the same readings: %d vs %d - ignore!\n", val_first.val1,
+		 val_second.val1);
 	/* zassert_true(val_first.val2 == val_second.val2, "Expected the same readings: %d vs %d",
 	 *	     val_first.val2, val_second.val2);
 	 */
-	printk("Expected the same readings: %d vs %d - ignore!\n", val_first.val2, val_second.val2);
+	TC_PRINT("Expected the same readings: %d vs %d - ignore!\n", val_first.val2,
+		 val_second.val2);
 }
 
 /**

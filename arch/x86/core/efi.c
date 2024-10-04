@@ -18,6 +18,10 @@ static uint64_t __aligned(64) efi_stack[1024];
 
 struct efi_boot_arg *efi;
 
+#ifdef CONFIG_DYNAMIC_BOOTARGS
+__pinned_noinit char efi_bootargs[CONFIG_BOOTARGS_ARGS_BUFFER_SIZE];
+#endif
+
 void *efi_get_acpi_rsdp(void)
 {
 	if (efi == NULL) {
@@ -33,8 +37,8 @@ void efi_init(struct efi_boot_arg *efi_arg)
 		return;
 	}
 
-	z_phys_map((uint8_t **)&efi, (uintptr_t)efi_arg,
-		   sizeof(struct efi_boot_arg), 0);
+	k_mem_map_phys_bare((uint8_t **)&efi, (uintptr_t)efi_arg,
+			    sizeof(struct efi_boot_arg), 0);
 }
 
 /* EFI thunk.  Not a lot of code, but lots of context:
@@ -169,3 +173,10 @@ int arch_printk_char_out(int c)
 	return efi_console_putchar(c);
 }
 #endif
+
+#ifdef CONFIG_DYNAMIC_BOOTARGS
+const char *get_bootargs(void)
+{
+	return efi_bootargs;
+}
+#endif /* CONFIG_DYNAMIC_BOOTARGS */

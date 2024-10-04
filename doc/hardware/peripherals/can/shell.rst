@@ -35,7 +35,7 @@ The following :ref:`Kconfig <kconfig>` options enable additional subcommands and
   well.
 * :kconfig:option:`CONFIG_CAN_MANUAL_RECOVERY_MODE` enables the ``can recover`` subcommand.
 
-For example, building the :ref:`hello_world` sample for the :ref:`frdm_k64f` with the CAN shell and
+For example, building the :zephyr:code-sample:`hello_world` sample for the :ref:`frdm_k64f` with the CAN shell and
 CAN statistics enabled:
 
 .. zephyr-app-commands::
@@ -101,7 +101,7 @@ stopping the processing of CAN frames.
 .. note::
    The CAN controller mode and timing can only be changed while the CAN controller is stopped, which
    is the initial setting upon boot-up. The initial CAN controller mode is set to ``normal`` and the
-   initial timing is set according to the ``bus-speed``, ``sample-point``, ``bus-speed-data``, and
+   initial timing is set according to the ``bitrate``, ``sample-point``, ``bitrate-data``, and
    ``sample-point-data`` :ref:`devicetree` properties.
 
 Timing

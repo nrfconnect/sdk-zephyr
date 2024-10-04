@@ -22,7 +22,7 @@
 #include <string.h>
 
 #include <zephyr/sys/util.h>
-#include <zephyr/net/buf.h>
+#include <zephyr/net_buf.h>
 #include <zephyr/bluetooth/gap.h>
 #include <zephyr/bluetooth/addr.h>
 #include <zephyr/bluetooth/crypto.h>
@@ -220,7 +220,7 @@ typedef void (*bt_ready_cb_t)(int err);
  * earlier.
  *
  * @param cb Callback to notify completion or NULL to perform the
- * enabling synchronously.
+ * enabling synchronously. The callback is called from the system workqueue.
  *
  * @return Zero on success or (negative) error code otherwise.
  */
@@ -908,7 +908,7 @@ struct bt_le_per_adv_param {
  *                   address of peer for directed advertising.
  */
 #define BT_LE_ADV_PARAM(_options, _int_min, _int_max, _peer) \
-	((struct bt_le_adv_param[]) { \
+	((const struct bt_le_adv_param[]) { \
 		BT_LE_ADV_PARAM_INIT(_options, _int_min, _int_max, _peer) \
 	 })
 
@@ -1091,7 +1091,7 @@ struct bt_le_per_adv_param {
  * @param _n_evts  Number of advertising events
  */
 #define BT_LE_EXT_ADV_START_PARAM(_timeout, _n_evts) \
-	((struct bt_le_ext_adv_start_param[]) { \
+	((const struct bt_le_ext_adv_start_param[]) { \
 		BT_LE_EXT_ADV_START_PARAM_INIT((_timeout), (_n_evts)) \
 	})
 
@@ -2067,10 +2067,24 @@ struct bt_le_scan_param {
 	/** Bit-field of scanning options. */
 	uint32_t options;
 
-	/** Scan interval (N * 0.625 ms) */
+	/** Scan interval (N * 0.625 ms).
+	 *
+	 * @note When @kconfig{CONFIG_BT_SCAN_AND_INITIATE_IN_PARALLEL} is enabled
+	 *       and the application wants to scan and connect in parallel,
+	 *       the Bluetooth Controller may require the scan interval used
+	 *       for scanning and connection establishment to be equal to
+	 *       obtain the best performance.
+	 */
 	uint16_t interval;
 
-	/** Scan window (N * 0.625 ms) */
+	/** Scan window (N * 0.625 ms)
+	 *
+	 * @note When @kconfig{CONFIG_BT_SCAN_AND_INITIATE_IN_PARALLEL} is enabled
+	 *       and the application wants to scan and connect in parallel,
+	 *       the Bluetooth Controller may require the scan window used
+	 *       for scanning and connection establishment to be equal to
+	 *       obtain the best performance.
+	 */
 	uint16_t window;
 
 	/**
@@ -2348,11 +2362,6 @@ void bt_le_scan_cb_unregister(struct bt_le_scan_cb *cb);
  *         protocol error or negative (POSIX) in case of stack internal error.
  */
 int bt_le_filter_accept_list_add(const bt_addr_le_t *addr);
-__deprecated
-static inline int bt_le_whitelist_add(const bt_addr_le_t *addr)
-{
-	return bt_le_filter_accept_list_add(addr);
-}
 
 /**
  * @brief Remove device (LE) from filter accept list.
@@ -2369,11 +2378,6 @@ static inline int bt_le_whitelist_add(const bt_addr_le_t *addr)
  *         protocol error or negative (POSIX) in case of stack internal error.
  */
 int bt_le_filter_accept_list_remove(const bt_addr_le_t *addr);
-__deprecated
-static inline int bt_le_whitelist_rem(const bt_addr_le_t *addr)
-{
-	return bt_le_filter_accept_list_remove(addr);
-}
 
 /**
  * @brief Clear filter accept list.
@@ -2388,11 +2392,6 @@ static inline int bt_le_whitelist_rem(const bt_addr_le_t *addr)
  *         protocol error or negative (POSIX) in case of stack internal error.
  */
 int bt_le_filter_accept_list_clear(void);
-__deprecated
-static inline int bt_le_whitelist_clear(void)
-{
-	return bt_le_filter_accept_list_clear();
-}
 
 /**
  * @brief Set (LE) channel map.

@@ -3,6 +3,8 @@
 #
 # Copyright (c) 2018 Intel Corporation
 # Copyright 2022 NXP
+# Copyright (c) 2024 Arm Limited (or its affiliates). All rights reserved.
+#
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
@@ -79,6 +81,13 @@ Artificially long but functional example:
                                  __/fifo_api/testcase.yaml
     """)
 
+    test_plan_report = parser.add_argument_group(
+        title="Test plan reporting",
+        description="Report the composed test plan details and exit (dry-run)."
+    )
+
+    test_plan_report_xor = test_plan_report.add_mutually_exclusive_group()
+
     platform_group_option = parser.add_mutually_exclusive_group()
 
     run_group_option = parser.add_mutually_exclusive_group()
@@ -97,19 +106,20 @@ Artificially long but functional example:
        title="Memory footprint",
        description="Collect and report ROM/RAM size footprint for the test instance images built.")
 
-    case_select.add_argument(
+    test_plan_report_xor.add_argument(
         "-E",
         "--save-tests",
         metavar="FILENAME",
         action="store",
-        help="Write a list of tests and platforms to be run to file.")
+        help="Write a list of tests and platforms to be run to %(metavar)s file and stop execution. "
+             "The resulting file will have the same content as 'testplan.json'.")
 
     case_select.add_argument(
         "-F",
         "--load-tests",
         metavar="FILENAME",
         action="store",
-        help="Load a list of tests and platforms to be run from file.")
+        help="Load a list of tests and platforms to be run from a JSON file ('testplan.json' schema).")
 
     case_select.add_argument(
         "-T", "--testsuite-root", action="append", default=[], type = norm_path,
@@ -125,7 +135,7 @@ Artificially long but functional example:
         help="Run only those tests that failed the previous twister run "
              "invocation.")
 
-    case_select.add_argument("--list-tests", action="store_true",
+    test_plan_report_xor.add_argument("--list-tests", action="store_true",
                              help="""List of all sub-test functions recursively found in
         all --testsuite-root arguments. Note different sub-tests can share
         the same section name and come from different directories.
@@ -134,8 +144,8 @@ Artificially long but functional example:
         and net.socket.fd_set belong to different directories.
         """)
 
-    case_select.add_argument("--test-tree", action="store_true",
-                             help="""Output the test plan in a tree form""")
+    test_plan_report_xor.add_argument("--test-tree", action="store_true",
+                             help="""Output the test plan in a tree form.""")
 
     platform_group_option.add_argument(
         "-G",
@@ -234,7 +244,7 @@ Artificially long but functional example:
     parser.add_argument(
         "--pytest-args", action="append",
         help="""Pass additional arguments to the pytest subprocess. This parameter
-        will override the pytest_args from the harness_config in YAML file.
+        will extend the pytest_args from the harness_config in YAML file.
         """)
 
     valgrind_asan_group.add_argument(
@@ -268,7 +278,7 @@ Artificially long but functional example:
         "-A", "--board-root", action="append", default=board_root_list,
         help="""Directory to search for board configuration files. All .yaml
 files in the directory will be processed. The directory should have the same
-structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
+structure in the main Zephyr tree: boards/<vendor>/<board_name>/""")
 
     parser.add_argument(
         "--allow-installed-plugin", action="store_true", default=None,
@@ -397,6 +407,18 @@ structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
              "using additional build option `--target footprint`.")
 
     footprint_group.add_argument(
+        "--footprint-report",
+        nargs="?",
+        default=None,
+        choices=['all', 'ROM', 'RAM'],
+        const="all",
+        help="Select which memory area symbols' data to collect as 'footprint' property "
+             "of each test suite built, and report in 'twister_footprint.json' together "
+             "with the relevant execution metadata the same way as in `twister.json`. "
+             "Implies '--create-rom-ram-report' to generate the footprint data files. "
+             "No value means '%(const)s'. Default: %(default)s""")
+
+    footprint_group.add_argument(
         "--enable-size-report",
         action="store_true",
         help="Collect and report ROM/RAM section sizes for each test image built.")
@@ -412,7 +434,8 @@ structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
         action = "store_true",
         help="Take ROM/RAM sections footprint summary values from the 'build.log' "
              "instead of 'objdump' results used otherwise."
-             "Requires --enable-size-report or one of the baseline comparison modes.")
+             "Requires --enable-size-report or one of the baseline comparison modes."
+             "Warning: the feature will not work correctly with sysbuild.")
 
     compare_group_option = footprint_group.add_mutually_exclusive_group()
 
@@ -482,7 +505,7 @@ structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
         help="Build/test on all platforms. Any --platform arguments "
              "ignored.")
 
-    parser.add_argument("--list-tags", action="store_true",
+    test_plan_report_xor.add_argument("--list-tags", action="store_true",
                         help="List all tags occurring in selected tests.")
 
     parser.add_argument("--log-file", metavar="FILENAME", action="store",
@@ -558,6 +581,8 @@ structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
     parser.add_argument("--overflow-as-errors", action="store_true",
                         help="Treat RAM/SRAM overflows as errors.")
 
+    parser.add_argument("--report-filtered", action="store_true",
+                        help="Include filtered tests in the reports.")
 
     parser.add_argument("-P", "--exclude-platform", action="append", default=[],
             help="""Exclude platforms and do not build or run any tests
@@ -799,6 +824,9 @@ def parse_arguments(parser, args, options = None, on_init=True):
     if options.last_metrics or options.compare_report:
         options.enable_size_report = True
 
+    if options.footprint_report:
+        options.create_rom_ram_report = True
+
     if options.aggressive_no_clean:
         options.no_clean = True
 
@@ -856,9 +884,13 @@ def parse_arguments(parser, args, options = None, on_init=True):
             sc.size_report()
         sys.exit(0)
 
-    if options.footprint_from_buildlog and not options.enable_size_report:
-        logger.error("--footprint-from-buildlog requires --enable-size-report")
-        sys.exit(1)
+    if options.footprint_from_buildlog:
+        logger.warning("WARNING: Using --footprint-from-buildlog will give inconsistent results "
+                       "for configurations using sysbuild. It is recommended to not use this flag "
+                       "when building configurations using sysbuild.")
+        if not options.enable_size_report:
+            logger.error("--footprint-from-buildlog requires --enable-size-report")
+            sys.exit(1)
 
     if len(options.extra_test_args) > 0:
         # extra_test_args is a list of CLI args that Twister did not recognize
@@ -901,7 +933,7 @@ def strip_ansi_sequences(s: str) -> str:
 
 class TwisterEnv:
 
-    def __init__(self, options=None, default_options=None) -> None:
+    def __init__(self, options, default_options=None) -> None:
         self.version = "Unknown"
         self.toolchain = None
         self.commit_date = "Unknown"
@@ -909,7 +941,7 @@ class TwisterEnv:
         self.options = options
         self.default_options = default_options
 
-        if options and options.ninja:
+        if options.ninja:
             self.generator_cmd = "ninja"
             self.generator = "Ninja"
         else:
@@ -917,17 +949,13 @@ class TwisterEnv:
             self.generator = "Unix Makefiles"
         logger.info(f"Using {self.generator}..")
 
-        self.test_roots = options.testsuite_root if options else None
+        self.test_roots = options.testsuite_root
 
-        if options:
-            if not isinstance(options.board_root, list):
-                self.board_roots = [self.options.board_root]
-            else:
-                self.board_roots = self.options.board_root
-            self.outdir = os.path.abspath(options.outdir)
+        if not isinstance(options.board_root, list):
+            self.board_roots = [options.board_root]
         else:
-            self.board_roots = None
-            self.outdir = None
+            self.board_roots = options.board_root
+        self.outdir = os.path.abspath(options.outdir)
 
         self.snippet_roots = [Path(ZEPHYR_BASE)]
         modules = zephyr_module.parse_modules(ZEPHYR_BASE)
@@ -936,16 +964,32 @@ class TwisterEnv:
             if snippet_root:
                 self.snippet_roots.append(Path(module.project) / snippet_root)
 
+
+        self.soc_roots = [Path(ZEPHYR_BASE), Path(ZEPHYR_BASE) / 'subsys' / 'testsuite']
+        self.dts_roots = [Path(ZEPHYR_BASE)]
+        self.arch_roots = [Path(ZEPHYR_BASE)]
+
+        for module in modules:
+            soc_root = module.meta.get("build", {}).get("settings", {}).get("soc_root")
+            if soc_root:
+                self.soc_roots.append(os.path.join(module.project, soc_root))
+            dts_root = module.meta.get("build", {}).get("settings", {}).get("dts_root")
+            if dts_root:
+                self.dts_roots.append(os.path.join(module.project, dts_root))
+            arch_root = module.meta.get("build", {}).get("settings", {}).get("arch_root")
+            if arch_root:
+                self.arch_roots.append(os.path.join(module.project, arch_root))
+
         self.hwm = None
 
-        self.test_config = options.test_config if options else None
+        self.test_config = options.test_config
 
-        self.alt_config_root = options.alt_config_root if options else None
+        self.alt_config_root = options.alt_config_root
 
     def non_default_options(self) -> dict:
         """Returns current command line options which are set to non-default values."""
         diff = {}
-        if not self.options or not self.default_options:
+        if not self.default_options:
             return diff
         dict_options = vars(self.options)
         dict_default = vars(self.default_options)

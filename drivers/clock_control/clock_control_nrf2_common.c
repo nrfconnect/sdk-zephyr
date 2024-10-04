@@ -4,7 +4,6 @@
  */
 
 #include "clock_control_nrf2_common.h"
-#include <zephyr/kernel.h>
 #include <hal/nrf_lrcconf.h>
 
 #include <zephyr/logging/log.h>
@@ -24,7 +23,7 @@ LOG_MODULE_REGISTER(clock_control_nrf2, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
  * Definition of `struct clock_config_generic`.
  * Used to access `clock_config_*` structures in a common way.
  */
-NRF2_STRUCT_CLOCK_CONFIG(generic, ONOFF_CNT_MAX);
+STRUCT_CLOCK_CONFIG(generic, ONOFF_CNT_MAX);
 
 static sys_slist_t poweron_main_list;
 static struct k_spinlock poweron_main_lock;
@@ -36,7 +35,7 @@ static void update_config(struct clock_config_generic *cfg)
 	/* If the update work is already scheduled (FLAG_UPDATE_NEEDED was
 	 * set before the above OR operation) or is currently being executed,
 	 * it is not to be submitted again. In the latter case, it will be
-	 * submitted by nrf2_clock_config_update_end().
+	 * submitted by clock_config_update_end().
 	 */
 	if (prev_flags & (FLAG_UPDATE_NEEDED | FLAG_UPDATE_IN_PROGRESS)) {
 		return;
@@ -80,8 +79,7 @@ static inline uint8_t get_index_of_highest_bit(uint32_t value)
 	return value ? (uint8_t)(31 - __builtin_clz(value)) : 0;
 }
 
-int nrf2_clock_config_init(void *clk_cfg, uint8_t onoff_cnt,
-			   k_work_handler_t update_work_handler)
+int clock_config_init(void *clk_cfg, uint8_t onoff_cnt, k_work_handler_t update_work_handler)
 {
 	struct clock_config_generic *cfg = clk_cfg;
 
@@ -109,7 +107,7 @@ int nrf2_clock_config_init(void *clk_cfg, uint8_t onoff_cnt,
 	return 0;
 }
 
-uint8_t nrf2_clock_config_update_begin(struct k_work *work)
+uint8_t clock_config_update_begin(struct k_work *work)
 {
 	struct clock_config_generic *cfg =
 		CONTAINER_OF(work, struct clock_config_generic, work);
@@ -122,7 +120,7 @@ uint8_t nrf2_clock_config_update_begin(struct k_work *work)
 	return get_index_of_highest_bit(active_options);
 }
 
-void nrf2_clock_config_update_end(void *clk_cfg, int status)
+void clock_config_update_end(void *clk_cfg, int status)
 {
 	struct clock_config_generic *cfg = clk_cfg;
 	atomic_val_t prev_flags;
@@ -166,7 +164,7 @@ int api_nosys_on_off(const struct device *dev, clock_control_subsys_t sys)
 	return -ENOSYS;
 }
 
-void nrf2_clock_request_lrcconf_poweron_main(struct nrf2_clock_lrcconf_sink *sink)
+void clock_request_lrcconf_poweron_main(struct clock_lrcconf_sink *sink)
 {
 	K_SPINLOCK(&poweron_main_lock) {
 		if (sys_slist_len(&poweron_main_list) == 0) {
@@ -180,7 +178,7 @@ void nrf2_clock_request_lrcconf_poweron_main(struct nrf2_clock_lrcconf_sink *sin
 	}
 }
 
-void nrf2_clock_release_lrcconf_poweron_main(struct nrf2_clock_lrcconf_sink *sink)
+void clock_release_lrcconf_poweron_main(struct clock_lrcconf_sink *sink)
 {
 	K_SPINLOCK(&poweron_main_lock) {
 		if (!sys_slist_find_and_remove(&poweron_main_list, &sink->node)) {

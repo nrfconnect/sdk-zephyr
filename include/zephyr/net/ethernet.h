@@ -41,6 +41,8 @@ extern "C" {
 /**
  * @brief Ethernet support functions
  * @defgroup ethernet Ethernet Support Functions
+ * @since 1.0
+ * @version 0.8.0
  * @ingroup networking
  * @{
  */
@@ -91,6 +93,9 @@ struct net_eth_addr {
 #endif
 #if !defined(ETH_P_ECAT)
 #define  ETH_P_ECAT	NET_ETH_PTYPE_ECAT
+#endif
+#if !defined(ETH_P_EAPOL)
+#define ETH_P_EAPOL	NET_ETH_PTYPE_EAPOL
 #endif
 #if !defined(ETH_P_IEEE802154)
 #define  ETH_P_IEEE802154 NET_ETH_PTYPE_IEEE802154
@@ -218,6 +223,8 @@ enum ethernet_config_type {
 	ETHERNET_CONFIG_TYPE_PORTS_NUM,
 	ETHERNET_CONFIG_TYPE_T1S_PARAM,
 	ETHERNET_CONFIG_TYPE_TXINJECTION_MODE,
+	ETHERNET_CONFIG_TYPE_RX_CHECKSUM_SUPPORT,
+	ETHERNET_CONFIG_TYPE_TX_CHECKSUM_SUPPORT
 };
 
 enum ethernet_qav_param_type {
@@ -465,6 +472,24 @@ struct ethernet_txtime_param {
 	bool enable_txtime;
 };
 
+/** Protocols that are supported by checksum offloading */
+enum ethernet_checksum_support {
+	/** Device does not support any L3/L4 checksum offloading */
+	ETHERNET_CHECKSUM_SUPPORT_NONE			= NET_IF_CHECKSUM_NONE_BIT,
+	/** Device supports checksum offloading for the IPv4 header */
+	ETHERNET_CHECKSUM_SUPPORT_IPV4_HEADER		= NET_IF_CHECKSUM_IPV4_HEADER_BIT,
+	/** Device supports checksum offloading for ICMPv4 payload (implies IPv4 header) */
+	ETHERNET_CHECKSUM_SUPPORT_IPV4_ICMP		= NET_IF_CHECKSUM_IPV4_ICMP_BIT,
+	/** Device supports checksum offloading for the IPv6 header */
+	ETHERNET_CHECKSUM_SUPPORT_IPV6_HEADER		= NET_IF_CHECKSUM_IPV6_HEADER_BIT,
+	/** Device supports checksum offloading for ICMPv6 payload (implies IPv6 header) */
+	ETHERNET_CHECKSUM_SUPPORT_IPV6_ICMP		= NET_IF_CHECKSUM_IPV6_ICMP_BIT,
+	/** Device supports TCP checksum offloading for all supported IP protocols */
+	ETHERNET_CHECKSUM_SUPPORT_TCP			= NET_IF_CHECKSUM_TCP_BIT,
+	/** Device supports UDP checksum offloading for all supported IP protocols */
+	ETHERNET_CHECKSUM_SUPPORT_UDP			= NET_IF_CHECKSUM_UDP_BIT,
+};
+
 /** @cond INTERNAL_HIDDEN */
 
 struct ethernet_config {
@@ -490,6 +515,8 @@ struct ethernet_config {
 
 		int priority_queues_num;
 		int ports_num;
+
+		enum ethernet_checksum_support chksum_support;
 
 		struct ethernet_filter filter;
 	};
@@ -546,6 +573,9 @@ struct ethernet_api {
 #if defined(CONFIG_PTP_CLOCK)
 	const struct device *(*get_ptp_clock)(const struct device *dev);
 #endif /* CONFIG_PTP_CLOCK */
+
+	/** Return PHY device that is tied to this ethernet device */
+	const struct device *(*get_phy)(const struct device *dev);
 
 	/** Send a network packet */
 	int (*send)(const struct device *dev, struct net_pkt *pkt);
@@ -623,7 +653,7 @@ struct ethernet_context {
 	atomic_t flags;
 
 #if defined(CONFIG_NET_ETHERNET_BRIDGE)
-	struct eth_bridge_iface_context bridge;
+	struct net_if *bridge;
 #endif
 
 	/** Carrier ON/OFF handler worker. This is used to create
@@ -719,6 +749,27 @@ static inline bool net_eth_is_addr_broadcast(struct net_eth_addr *addr)
 	    addr->addr[3] == 0xff &&
 	    addr->addr[4] == 0xff &&
 	    addr->addr[5] == 0xff) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * @brief Check if the Ethernet MAC address is a all zeroes address.
+ *
+ * @param addr A valid pointer to an Ethernet MAC address.
+ *
+ * @return true if address is an all zeroes address, false if not
+ */
+static inline bool net_eth_is_addr_all_zeroes(struct net_eth_addr *addr)
+{
+	if (addr->addr[0] == 0x00 &&
+	    addr->addr[1] == 0x00 &&
+	    addr->addr[2] == 0x00 &&
+	    addr->addr[3] == 0x00 &&
+	    addr->addr[4] == 0x00 &&
+	    addr->addr[5] == 0x00) {
 		return true;
 	}
 
@@ -882,15 +933,39 @@ void net_eth_ipv6_mcast_to_mac_addr(const struct in6_addr *ipv6_addr,
 static inline
 enum ethernet_hw_caps net_eth_get_hw_capabilities(struct net_if *iface)
 {
-	const struct ethernet_api *eth =
-		(struct ethernet_api *)net_if_get_device(iface)->api;
+	const struct device *dev = net_if_get_device(iface);
+	const struct ethernet_api *api = (struct ethernet_api *)dev->api;
 
-	if (!eth->get_capabilities) {
+	if (!api || !api->get_capabilities) {
 		return (enum ethernet_hw_caps)0;
 	}
 
-	return eth->get_capabilities(net_if_get_device(iface));
+	return api->get_capabilities(dev);
 }
+
+/**
+ * @brief Return ethernet device hardware configuration information.
+ *
+ * @param iface Network interface
+ * @param type configuration type
+ * @param config Ethernet configuration
+ *
+ * @return 0 if ok, <0 if error
+ */
+static inline
+int net_eth_get_hw_config(struct net_if *iface, enum ethernet_config_type type,
+			 struct ethernet_config *config)
+{
+	const struct ethernet_api *eth =
+		(struct ethernet_api *)net_if_get_device(iface)->api;
+
+	if (!eth->get_config) {
+		return -ENOTSUP;
+	}
+
+	return eth->get_config(net_if_get_device(iface), type, config);
+}
+
 
 /**
  * @brief Add VLAN tag to the interface.
@@ -1226,6 +1301,16 @@ int net_eth_txinjection_mode(struct net_if *iface, bool enable);
  */
 int net_eth_mac_filter(struct net_if *iface, struct net_eth_addr *mac,
 		       enum ethernet_filter_type type, bool enable);
+
+/**
+ * @brief Return the PHY device that is tied to this ethernet network interface.
+ *
+ * @param iface Network interface
+ *
+ * @return Pointer to PHY device if found, NULL if not found.
+ */
+const struct device *net_eth_get_phy(struct net_if *iface);
+
 /**
  * @brief Return PTP clock that is tied to this ethernet network interface.
  *
@@ -1313,6 +1398,6 @@ static inline bool net_eth_type_is_wifi(struct net_if *iface)
 }
 #endif
 
-#include <syscalls/ethernet.h>
+#include <zephyr/syscalls/ethernet.h>
 
 #endif /* ZEPHYR_INCLUDE_NET_ETHERNET_H_ */

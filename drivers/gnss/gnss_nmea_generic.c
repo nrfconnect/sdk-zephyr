@@ -64,7 +64,7 @@ static int gnss_nmea_generic_resume(const struct device *dev)
 	struct gnss_nmea_generic_data *data = dev->data;
 	int ret;
 
-	ret = modem_pipe_open(data->uart_pipe);
+	ret = modem_pipe_open(data->uart_pipe, K_SECONDS(10));
 	if (ret < 0) {
 		return ret;
 	}
@@ -76,12 +76,12 @@ static int gnss_nmea_generic_resume(const struct device *dev)
 	}
 
 	if (ret < 0) {
-		modem_pipe_close(data->uart_pipe);
+		modem_pipe_close(data->uart_pipe, K_SECONDS(10));
 	}
 	return ret;
 }
 
-static struct gnss_driver_api gnss_api = {
+static const struct gnss_driver_api gnss_api = {
 };
 
 static int gnss_nmea_generic_init_nmea0183_match(const struct device *dev)
@@ -183,7 +183,7 @@ MODEM_CHAT_SCRIPT_EMPTY_DEFINE(gnss_nmea_generic_init_chat_script);
 #endif
 
 #define GNSS_NMEA_GENERIC(inst)								\
-	static struct gnss_nmea_generic_config gnss_nmea_generic_cfg_##inst = {		\
+	static const struct gnss_nmea_generic_config gnss_nmea_generic_cfg_##inst = {	\
 		.uart = DEVICE_DT_GET(DT_INST_BUS(inst)),				\
 		.init_chat_script = &_CONCAT(DT_DRV_COMPAT, _init_chat_script),         \
 	};										\

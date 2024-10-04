@@ -10,10 +10,6 @@
 
 #include "memory.h"
 
-#ifdef CONFIG_XIP
-#error "Xtensa bootloader cannot use XIP"
-#endif /* CONFIG_XIP */
-
 /* Disable all romable LMA */
 #undef GROUP_DATA_LINK_IN
 #define GROUP_DATA_LINK_IN(vregion, lregion) > vregion
@@ -23,14 +19,17 @@
 #define RODATA_REGION     dram_seg
 #define ROMABLE_REGION    dram_seg
 
-_bootloader_dram_seg_end = BOOTLOADER_DRAM_SEG_END;
+_bootloader_dram_seg_start = BOOTLOADER_DRAM_SEG_START;
 _bootloader_iram_loader_seg_start = BOOTLOADER_IRAM_LOADER_SEG_START;
 
 MEMORY
 {
-  iram_seg (RWX) :        org = BOOTLOADER_IRAM_SEG_START,        len = BOOTLOADER_IRAM_SEG_LEN
-  iram_loader_seg (RWX) : org = BOOTLOADER_IRAM_LOADER_SEG_START, len = BOOTLOADER_IRAM_LOADER_SEG_LEN
-  dram_seg (RW) :         org = BOOTLOADER_DRAM_SEG_START,        len = BOOTLOADER_DRAM_SEG_LEN
+  iram_seg (RWX) :        org = BOOTLOADER_IRAM_SEG_START,
+                          len = BOOTLOADER_IRAM_SEG_LEN
+  iram_loader_seg (RWX) : org = BOOTLOADER_IRAM_LOADER_SEG_START,
+                          len = BOOTLOADER_IRAM_LOADER_SEG_LEN
+  dram_seg (RW) :         org = BOOTLOADER_DRAM_SEG_START,
+                          len = BOOTLOADER_DRAM_SEG_LEN
 
 #ifdef CONFIG_GEN_ISR_TABLES
   IDT_LIST(RW): org = 0x3ebfe010, len = 0x2000

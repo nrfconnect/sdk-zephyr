@@ -134,7 +134,7 @@ static void nvs_lookup_cache_invalidate(struct nvs_fs *fs, uint32_t sector)
 /* nvs_al_size returns size aligned to fs->write_block_size */
 static inline size_t nvs_al_size(struct nvs_fs *fs, size_t len)
 {
-	uint8_t write_block_size = fs->flash_parameters->write_block_size;
+	size_t write_block_size = fs->flash_parameters->write_block_size;
 
 	if (write_block_size <= 1U) {
 		return len;
@@ -390,7 +390,7 @@ static int nvs_flash_erase_sector(struct nvs_fs *fs, uint32_t addr)
 #ifdef CONFIG_NVS_LOOKUP_CACHE
 	nvs_lookup_cache_invalidate(fs, addr >> ADDR_SECT_SHIFT);
 #endif
-	rc = flash_erase(fs->flash_device, offset, fs->sector_size);
+	rc = flash_flatten(fs->flash_device, offset, fs->sector_size);
 
 	if (rc) {
 		return rc;
@@ -445,17 +445,19 @@ static int nvs_ate_cmp_const(const struct nvs_ate *entry, uint8_t value)
 }
 
 /* nvs_ate_valid validates an ate:
- *     return 1 if crc8 and offset valid,
+ *     return 1 if crc8, offset and length are valid,
  *            0 otherwise
  */
 static int nvs_ate_valid(struct nvs_fs *fs, const struct nvs_ate *entry)
 {
 	size_t ate_size;
+	uint32_t position;
 
 	ate_size = nvs_al_size(fs, sizeof(struct nvs_ate));
+	position = entry->offset + entry->len;
 
 	if ((nvs_ate_crc8_check(entry)) ||
-	    (entry->offset >= (fs->sector_size - ate_size))) {
+	    (position >= (fs->sector_size - ate_size))) {
 		return 0;
 	}
 
@@ -1355,7 +1357,11 @@ ssize_t nvs_calc_free_space(struct nvs_fs *fs)
 
 	free_space = 0;
 	for (uint16_t i = 1; i < fs->sector_count; i++) {
-		free_space += (fs->sector_size - ate_size);
+		/*
+		 * There is always a closing ATE and a reserved ATE for
+		 * deletion in each sector
+		 */
+		free_space += (fs->sector_size - (2 * ate_size));
 	}
 
 	step_addr = fs->ate_wra;
@@ -1379,11 +1385,17 @@ ssize_t nvs_calc_free_space(struct nvs_fs *fs)
 			}
 		}
 
-		if ((wlk_addr == step_addr) && step_ate.len &&
-		    (nvs_ate_valid(fs, &step_ate))) {
-			/* count needed */
-			free_space -= nvs_al_size(fs, step_ate.len);
-			free_space -= ate_size;
+		if (nvs_ate_valid(fs, &step_ate)) {
+			/* Take into account the GC done ATE if it is present */
+			if (step_ate.len == 0) {
+				if (step_ate.id == 0xFFFF) {
+					free_space -= ate_size;
+				}
+			} else if (wlk_addr == step_addr) {
+				/* count needed */
+				free_space -= nvs_al_size(fs, step_ate.len);
+				free_space -= ate_size;
+			}
 		}
 
 		if (step_addr == fs->ate_wra) {
@@ -1391,4 +1403,41 @@ ssize_t nvs_calc_free_space(struct nvs_fs *fs)
 		}
 	}
 	return free_space;
+}
+
+size_t nvs_sector_max_data_size(struct nvs_fs *fs)
+{
+	size_t ate_size;
+
+	if (!fs->ready) {
+		LOG_ERR("NVS not initialized");
+		return -EACCES;
+	}
+
+	ate_size = nvs_al_size(fs, sizeof(struct nvs_ate));
+
+	return fs->ate_wra - fs->data_wra - ate_size - NVS_DATA_CRC_SIZE;
+}
+
+int nvs_sector_use_next(struct nvs_fs *fs)
+{
+	int ret;
+
+	if (!fs->ready) {
+		LOG_ERR("NVS not initialized");
+		return -EACCES;
+	}
+
+	k_mutex_lock(&fs->nvs_lock, K_FOREVER);
+
+	ret = nvs_sector_close(fs);
+	if (ret != 0) {
+		goto end;
+	}
+
+	ret = nvs_gc(fs);
+
+end:
+	k_mutex_unlock(&fs->nvs_lock);
+	return ret;
 }

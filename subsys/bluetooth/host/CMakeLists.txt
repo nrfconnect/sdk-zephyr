@@ -8,7 +8,6 @@ add_subdirectory_ifdef(CONFIG_BT_CLASSIC classic)
 zephyr_library_sources_ifdef(CONFIG_BT_HCI_RAW          hci_raw.c hci_common.c)
 zephyr_library_sources_ifdef(CONFIG_BT_MONITOR          monitor.c)
 zephyr_library_sources_ifdef(CONFIG_BT_TINYCRYPT_ECC    hci_ecc.c)
-zephyr_library_sources_ifdef(CONFIG_BT_TESTING          testing.c)
 zephyr_library_sources_ifdef(CONFIG_BT_SETTINGS         settings.c)
 zephyr_library_sources_ifdef(CONFIG_BT_HOST_CCM         aes_ccm.c)
 zephyr_library_sources_ifdef(CONFIG_BT_LONG_WQ          long_wq.c)
@@ -31,10 +30,13 @@ if(CONFIG_BT_HCI_HOST)
     CONFIG_BT_OBSERVER
     scan.c
     )
-  zephyr_library_sources_ifdef(
-    CONFIG_BT_HOST_CRYPTO
-    crypto.c
-    )
+
+  if(CONFIG_BT_USE_PSA_API)
+    zephyr_library_sources_ifdef(CONFIG_BT_HOST_CRYPTO    crypto_psa.c)
+  else()
+    zephyr_library_sources_ifdef(CONFIG_BT_HOST_CRYPTO    crypto_tc.c)
+  endif()
+
   zephyr_library_sources_ifdef(
     CONFIG_BT_ECC
     ecc.c
@@ -64,6 +66,11 @@ if(CONFIG_BT_HCI_HOST)
     CONFIG_BT_ISO
     iso.c
     conn.c
+    )
+
+  zephyr_library_sources_ifdef(
+    CONFIG_BT_CHANNEL_SOUNDING
+    cs.c
     )
 
   if(CONFIG_BT_DF)
@@ -105,6 +112,13 @@ if(CONFIG_BT_CONN_DISABLE_SECURITY)
   channels that would otherwise require encryption/authentication in order to
   be accessed.
   Do not use in production."
+    )
+endif()
+
+if(CONFIG_BT_USE_PSA_API)
+    zephyr_library_link_libraries_ifdef(CONFIG_MBEDTLS mbedTLS)
+    zephyr_library_include_directories_ifdef(CONFIG_BUILD_WITH_TFM
+      $<TARGET_PROPERTY:tfm,TFM_BINARY_DIR>/api_ns/interface/include
     )
 endif()
 

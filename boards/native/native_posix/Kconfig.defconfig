@@ -3,6 +3,9 @@
 
 if BOARD_NATIVE_POSIX
 
+config BOARD_DEPRECATED_RELEASE
+	default "v4.2.0"
+
 config BUILD_OUTPUT_BIN
 	default n
 
@@ -31,12 +34,5 @@ config UART_CONSOLE
 	default y if SERIAL
 
 endif # CONSOLE
-
-if I2C
-
-config EMUL
-	default y
-
-endif # I2C
 
 endif # BOARD_NATIVE_POSIX

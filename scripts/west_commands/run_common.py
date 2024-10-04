@@ -539,9 +539,9 @@ def rebuild(command, build_dir, args):
 def runners_yaml_path(build_dir, board):
     ret = Path(build_dir) / 'zephyr' / 'runners.yaml'
     if not ret.is_file():
-        log.die(f'either a pristine build is needed, or board {board} '
-                "doesn't support west flash/debug "
-                '(no ZEPHYR_RUNNERS_YAML in CMake cache)')
+        log.die(f'no runners.yaml found in {build_dir}/zephyr. '
+        f"Either board {board} doesn't support west flash/debug/simulate,"
+        ' or a pristine build is needed.')
     return ret
 
 def load_runners_yaml(path):
@@ -653,7 +653,8 @@ def get_runner_config(build_dir, yaml_path, runners_yaml, args=None):
                         filetype('file_type'),
                         config('gdb'),
                         config('openocd'),
-                        config('openocd_search', []))
+                        config('openocd_search', []),
+                        config('rtt_address'))
 
 def dump_traceback():
     # Save the current exception to a file and return its path.

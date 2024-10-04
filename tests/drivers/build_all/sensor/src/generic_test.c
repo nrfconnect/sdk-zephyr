@@ -63,8 +63,9 @@ static void before(void *args)
 
 	/* Flush the SQ and CQ */
 	rtio_sqe_drop_all(&sensor_read_rtio_ctx);
-	while (rtio_cqe_consume(&sensor_read_rtio_ctx))
+	while (rtio_cqe_consume(&sensor_read_rtio_ctx)) {
 		;
+	}
 }
 
 /**
@@ -171,7 +172,7 @@ static void run_generic_test(const struct device *dev)
 		}
 
 		/* Perform the actual sensor read */
-		rv = sensor_read(&iodev_read, &sensor_read_rtio_ctx, NULL);
+		rv = sensor_read_async_mempool(&iodev_read, &sensor_read_rtio_ctx, NULL);
 		zassert_ok(rv, "Could not read sensor (error %d, iteration %d/%d)", rv,
 			   iteration + 1, CONFIG_GENERIC_SENSOR_TEST_NUM_EXPECTED_VALS);
 

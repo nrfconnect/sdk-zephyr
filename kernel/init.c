@@ -11,6 +11,9 @@
  * This module contains routines that are used to initialize the kernel.
  */
 
+#include <ctype.h>
+#include <stdbool.h>
+#include <string.h>
 #include <offsets_short.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
@@ -22,15 +25,14 @@
 #include <zephyr/device.h>
 #include <zephyr/init.h>
 #include <zephyr/linker/linker-defs.h>
+#include <zephyr/platform/hooks.h>
 #include <ksched.h>
 #include <kthread.h>
-#include <string.h>
 #include <zephyr/sys/dlist.h>
 #include <kernel_internal.h>
 #include <zephyr/drivers/entropy.h>
 #include <zephyr/logging/log_ctrl.h>
 #include <zephyr/tracing/tracing.h>
-#include <stdbool.h>
 #include <zephyr/debug/gcov.h>
 #include <kswap.h>
 #include <zephyr/timing/timing.h>
@@ -363,12 +365,15 @@ static void z_sys_init_run_level(enum init_level level)
 
 	for (entry = levels[level]; entry < levels[level+1]; entry++) {
 		const struct device *dev = entry->dev;
+		int result;
 
+		sys_trace_sys_init_enter(entry, level);
 		if (dev != NULL) {
-			do_device_init(entry);
+			result = do_device_init(entry);
 		} else {
-			(void)entry->init_fn.sys();
+			result = entry->init_fn.sys();
 		}
+		sys_trace_sys_init_exit(entry, level, result);
 	}
 }
 
@@ -395,11 +400,98 @@ static inline int z_vrfy_device_init(const struct device *dev)
 
 	return z_impl_device_init(dev);
 }
-#include <syscalls/device_init_mrsh.c>
+#include <zephyr/syscalls/device_init_mrsh.c>
 #endif
 
 extern void boot_banner(void);
 
+#ifdef CONFIG_BOOTARGS
+extern const char *get_bootargs(void);
+static char **prepare_main_args(int *argc)
+{
+#ifdef CONFIG_DYNAMIC_BOOTARGS
+	const char *bootargs = get_bootargs();
+#else
+	const char bootargs[] = CONFIG_BOOTARGS_STRING;
+#endif
+
+	/* beginning of the buffer contains argument's strings, end of it contains argvs */
+	static char args_buf[CONFIG_BOOTARGS_ARGS_BUFFER_SIZE];
+	char *strings_end = (char *)args_buf;
+	char **argv_begin = (char **)WB_DN(
+		args_buf + CONFIG_BOOTARGS_ARGS_BUFFER_SIZE - sizeof(char *));
+	int i = 0;
+
+	*argc = 0;
+	*argv_begin = NULL;
+
+#ifdef CONFIG_DYNAMIC_BOOTARGS
+	if (!bootargs) {
+		return argv_begin;
+	}
+#endif
+
+	while (1) {
+		while (isspace(bootargs[i])) {
+			i++;
+		}
+
+		if (bootargs[i] == '\0') {
+			return argv_begin;
+		}
+
+		if (strings_end + sizeof(char *) >= (char *)argv_begin) {
+			LOG_WRN("not enough space in args buffer to accommodate all bootargs"
+				" - bootargs truncated");
+			return argv_begin;
+		}
+
+		argv_begin--;
+		memmove(argv_begin, argv_begin + 1, *argc * sizeof(char *));
+		argv_begin[*argc] = strings_end;
+
+		bool quoted = false;
+
+		if (bootargs[i] == '\"' || bootargs[i] == '\'') {
+			char delimiter = bootargs[i];
+
+			for (int j = i + 1; bootargs[j] != '\0'; j++) {
+				if (bootargs[j] == delimiter) {
+					quoted = true;
+					break;
+				}
+			}
+		}
+
+		if (quoted) {
+			char delimiter  = bootargs[i];
+
+			i++; /* strip quotes */
+			while (bootargs[i] != delimiter
+				&& strings_end < (char *)argv_begin) {
+				*strings_end++ = bootargs[i++];
+			}
+			i++; /* strip quotes */
+		} else {
+			while (!isspace(bootargs[i])
+				&& bootargs[i] != '\0'
+				&& strings_end < (char *)argv_begin) {
+				*strings_end++ = bootargs[i++];
+			}
+		}
+
+		if (strings_end < (char *)argv_begin) {
+			*strings_end++ = '\0';
+		} else {
+			LOG_WRN("not enough space in args buffer to accommodate all bootargs"
+				" - bootargs truncated");
+			argv_begin[*argc] = NULL;
+			return argv_begin;
+		}
+		(*argc)++;
+	}
+}
+#endif
 
 /**
  * @brief Mainline for kernel's background thread
@@ -417,23 +509,31 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 #ifdef CONFIG_MMU
 	/* Invoked here such that backing store or eviction algorithms may
 	 * initialize kernel objects, and that all POST_KERNEL and later tasks
-	 * may perform memory management tasks (except for z_phys_map() which
-	 * is allowed at any time)
+	 * may perform memory management tasks (except for
+	 * k_mem_map_phys_bare() which is allowed at any time)
 	 */
 	z_mem_manage_init();
 #endif /* CONFIG_MMU */
 	z_sys_post_kernel = true;
 
+#if CONFIG_IRQ_OFFLOAD
+	arch_irq_offload_init();
+#endif
 	z_sys_init_run_level(INIT_LEVEL_POST_KERNEL);
+#if CONFIG_SOC_LATE_INIT_HOOK
+	soc_late_init_hook();
+#endif
+#if CONFIG_BOARD_LATE_INIT_HOOK
+	board_late_init_hook();
+#endif
+
 #if defined(CONFIG_STACK_POINTER_RANDOM) && (CONFIG_STACK_POINTER_RANDOM != 0)
 	z_stack_adjust_initialized = 1;
 #endif /* CONFIG_STACK_POINTER_RANDOM */
 	boot_banner();
 
-#if defined(CONFIG_CPP)
-	void z_cpp_init_static(void);
-	z_cpp_init_static();
-#endif /* CONFIG_CPP */
+	void z_init_static(void);
+	z_init_static();
 
 	/* Final init level before app starts */
 	z_sys_init_run_level(INIT_LEVEL_APPLICATION);
@@ -455,9 +555,17 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 	z_mem_manage_boot_finish();
 #endif /* CONFIG_MMU */
 
+#ifdef CONFIG_BOOTARGS
+	extern int main(int, char **);
+
+	int argc = 0;
+	char **argv = prepare_main_args(&argc);
+	(void)main(argc, argv);
+#else
 	extern int main(void);
 
 	(void)main();
+#endif /* CONFIG_BOOTARGS */
 
 	/* Mark non-essential since main() has no more work to do */
 	z_thread_essential_clear(&z_main_thread);
@@ -474,6 +582,7 @@ static void init_idle_thread(int i)
 {
 	struct k_thread *thread = &z_idle_threads[i];
 	k_thread_stack_t *stack = z_idle_stacks[i];
+	size_t stack_size = K_KERNEL_STACK_SIZEOF(z_idle_stacks[i]);
 
 #ifdef CONFIG_THREAD_NAME
 
@@ -489,7 +598,7 @@ static void init_idle_thread(int i)
 #endif /* CONFIG_THREAD_NAME */
 
 	z_setup_new_thread(thread, stack,
-			  CONFIG_IDLE_STACK_SIZE, idle, &_kernel.cpus[i],
+			  stack_size, idle, &_kernel.cpus[i],
 			  NULL, NULL, K_IDLE_PRIO, K_ESSENTIAL,
 			  tname);
 	z_mark_thread_as_started(thread);
@@ -564,7 +673,8 @@ static char *prepare_multithreading(void)
 	_kernel.ready_q.cache = &z_main_thread;
 #endif /* CONFIG_SMP */
 	stack_ptr = z_setup_new_thread(&z_main_thread, z_main_stack,
-				       CONFIG_MAIN_STACK_SIZE, bg_thread_main,
+				       K_THREAD_STACK_SIZEOF(z_main_stack),
+				       bg_thread_main,
 				       NULL, NULL, NULL,
 				       CONFIG_MAIN_THREAD_PRIORITY,
 				       K_ESSENTIAL, "main");
@@ -658,8 +768,17 @@ FUNC_NORETURN void z_cstart(void)
 	/* do any necessary initialization of static devices */
 	z_device_state_init();
 
+#if CONFIG_SOC_EARLY_INIT_HOOK
+	soc_early_init_hook();
+#endif
+#if CONFIG_BOARD_EARLY_INIT_HOOK
+	board_early_init_hook();
+#endif
 	/* perform basic hardware initialization */
 	z_sys_init_run_level(INIT_LEVEL_PRE_KERNEL_1);
+#if defined(CONFIG_SMP)
+	arch_smp_init();
+#endif
 	z_sys_init_run_level(INIT_LEVEL_PRE_KERNEL_2);
 
 #ifdef CONFIG_STACK_CANARIES

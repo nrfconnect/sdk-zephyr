@@ -94,7 +94,7 @@ built, flashed, and debugged in the usual way. See
 building and running.
 
 Applications for the ``nrf54l15dk/nrf54l15/cpuflpr`` board target need
-to be build as multicore configuration with code snippet called ``vpr_launcher``
+to be built as multicore configuration with code snippet called ``vpr_launcher``
 for the application core.
 
 Enter the following command to compile ``hello_world`` for the FLPR core::
@@ -103,7 +103,7 @@ Enter the following command to compile ``hello_world`` for the FLPR core::
 Flashing
 ========
 
-As an example, this section shows how to build and flash the :ref:`hello_world`
+As an example, this section shows how to build and flash the :zephyr:code-sample:`hello_world`
 application.
 
 .. warning::

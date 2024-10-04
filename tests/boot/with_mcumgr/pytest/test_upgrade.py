@@ -8,20 +8,18 @@ import logging
 
 from pathlib import Path
 from twister_harness import DeviceAdapter, Shell, MCUmgr
-from west_sign_wrapper import west_sign_with_imgtool
-from utils import (
+from twister_harness.helpers.utils import (
     find_in_config,
     match_lines,
-    match_no_lines,
-    check_with_shell_command,
-    check_with_mcumgr_command,
+    match_no_lines
 )
+from utils import check_with_shell_command, check_with_mcumgr_command
+from west_sign_wrapper import west_sign_with_imgtool
 
 logger = logging.getLogger(__name__)
-PROJECT_NAME = 'with_mcumgr'
 
 
-def create_signed_image(build_dir: Path, version: str) -> Path:
+def create_signed_image(build_dir: Path, app_build_dir: Path, version: str) -> Path:
     image_to_test = Path(build_dir) / 'test_{}.signed.bin'.format(
         version.replace('.', '_').replace('+', '_'))
     origin_key_file = find_in_config(
@@ -29,7 +27,7 @@ def create_signed_image(build_dir: Path, version: str) -> Path:
         'CONFIG_BOOT_SIGNATURE_KEY_FILE'
     )
     west_sign_with_imgtool(
-        build_dir=Path(build_dir) / PROJECT_NAME,
+        build_dir=Path(app_build_dir),
         output_bin=image_to_test,
         key_file=Path(origin_key_file),
         version=version
@@ -62,7 +60,8 @@ def test_upgrade_with_confirm(dut: DeviceAdapter, shell: Shell, mcumgr: MCUmgr):
     """
     logger.info('Prepare upgrade image')
     new_version = '0.0.2+0'
-    image_to_test = create_signed_image(dut.device_config.build_dir, new_version)
+    image_to_test = create_signed_image(dut.device_config.build_dir,
+                                        dut.device_config.app_build_dir, new_version)
 
     logger.info('Upload image with mcumgr')
     dut.disconnect()
@@ -111,12 +110,13 @@ def test_upgrade_with_revert(dut: DeviceAdapter, shell: Shell, mcumgr: MCUmgr):
     8) Verify that MCUboot reverts update
     """
     origin_version = find_in_config(
-        Path(dut.device_config.build_dir) / PROJECT_NAME / 'zephyr' / '.config',
+        Path(dut.device_config.app_build_dir) / 'zephyr' / '.config',
         'CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION'
     )
     logger.info('Prepare upgrade image')
     new_version = '0.0.3+0'
-    image_to_test = create_signed_image(dut.device_config.build_dir, new_version)
+    image_to_test = create_signed_image(dut.device_config.build_dir,
+                                        dut.device_config.app_build_dir, new_version)
 
     logger.info('Upload image with mcumgr')
     dut.disconnect()
@@ -178,14 +178,14 @@ def test_upgrade_signature(dut: DeviceAdapter, shell: Shell, mcumgr: MCUmgr, key
         key_file = Path(origin_key_file).parent / key_file
         assert key_file.is_file()
         assert not key_file.samefile(origin_key_file)
-        image_to_test = image_to_test = Path(dut.device_config.build_dir) / 'test_invalid_key.bin'
+        image_to_test = Path(dut.device_config.build_dir) / 'test_invalid_key.bin'
         logger.info('Sign second image with an invalid key')
     else:
-        image_to_test = image_to_test = Path(dut.device_config.build_dir) / 'test_no_key.bin'
+        image_to_test = Path(dut.device_config.build_dir) / 'test_no_key.bin'
         logger.info('Sign second imagewith no key')
 
     west_sign_with_imgtool(
-        build_dir=Path(dut.device_config.build_dir) / PROJECT_NAME,
+        build_dir=Path(dut.device_config.app_build_dir),
         output_bin=image_to_test,
         key_file=key_file,
         version='0.0.3+4'  # must differ from the origin version, if not then hash is not updated

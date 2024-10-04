@@ -13,18 +13,21 @@
  */
 
 #ifdef __NRF_TFM__
-#include <autoconf.h>
+#include <zephyr/autoconf.h>
 #endif
 
+#include <zephyr/devicetree.h>
+#include <zephyr/dt-bindings/regulator/nrf5x.h>
 #include <zephyr/kernel.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/init.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/dt-bindings/regulator/nrf5x.h>
 
 #ifndef __NRF_TFM__
 #include <zephyr/cache.h>
 #endif
+
+#include <zephyr/dt-bindings/regulator/nrf5x.h>
 
 #if defined(NRF_APPLICATION)
 #include <cmsis_core.h>

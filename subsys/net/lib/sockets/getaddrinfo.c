@@ -346,7 +346,7 @@ out:
 
 	return ret;
 }
-#include <syscalls/z_zsock_getaddrinfo_internal_mrsh.c>
+#include <zephyr/syscalls/z_zsock_getaddrinfo_internal_mrsh.c>
 #endif /* CONFIG_USERSPACE */
 
 #endif /* defined(CONFIG_DNS_RESOLVER) */
@@ -487,9 +487,18 @@ const char *zsock_gai_strerror(int errcode)
 	ERR(EAI_AGAIN);
 	ERR(EAI_FAIL);
 	ERR(EAI_NODATA);
+	ERR(EAI_FAMILY);
+	ERR(EAI_SOCKTYPE);
+	ERR(EAI_SERVICE);
+	ERR(EAI_ADDRFAMILY);
 	ERR(EAI_MEMORY);
 	ERR(EAI_SYSTEM);
-	ERR(EAI_SERVICE);
+	ERR(EAI_OVERFLOW);
+	ERR(EAI_INPROGRESS);
+	ERR(EAI_CANCELED);
+	ERR(EAI_NOTCANCELED);
+	ERR(EAI_ALLDONE);
+	ERR(EAI_IDN_ENCODE);
 
 	default:
 		return "EAI_UNKNOWN";

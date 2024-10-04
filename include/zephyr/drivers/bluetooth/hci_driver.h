@@ -21,7 +21,7 @@
  */
 
 #include <stdbool.h>
-#include <zephyr/net/buf.h>
+#include <zephyr/net_buf.h>
 #include <zephyr/bluetooth/buf.h>
 #include <zephyr/bluetooth/hci_vs.h>
 #include <zephyr/device.h>
@@ -50,8 +50,10 @@ enum {
  * @param buf Network buffer containing data from the controller.
  *
  * @return 0 on success or negative error number on failure.
+ *
+ * @deprecated Use the new HCI driver interface instead: @ref bt_hci_api
  */
-int bt_recv(struct net_buf *buf);
+__deprecated int bt_recv(struct net_buf *buf);
 
 /** Possible values for the 'bus' member of the bt_hci_driver struct */
 enum bt_hci_driver_bus {
@@ -157,8 +159,10 @@ struct bt_hci_driver {
  * @param drv A bt_hci_driver struct representing the driver.
  *
  * @return 0 on success or negative error number on failure.
+ *
+ * @deprecated Use the new HCI driver interface instead: @ref bt_hci_api
  */
-int bt_hci_driver_register(const struct bt_hci_driver *drv);
+__deprecated int bt_hci_driver_register(const struct bt_hci_driver *drv);
 
 /**
  * @brief Setup the HCI transport, which usually means to reset the
@@ -182,7 +186,7 @@ int bt_hci_transport_setup(const struct device *dev);
  *
  * @param dev The device structure for the bus connecting to the IC
  *
- * @return 0 on success, negative error value on faulure
+ * @return 0 on success, negative error value on failure
  */
 int bt_hci_transport_teardown(const struct device *dev);
 

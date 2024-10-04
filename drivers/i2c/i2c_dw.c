@@ -466,10 +466,13 @@ static void i2c_dw_isr(const struct device *port)
 					slave_cb->write_requested(dw->slave_cfg);
 				}
 			}
-			data = i2c_dw_read_byte_non_blocking(port);
-			if (slave_cb->write_received) {
-				slave_cb->write_received(dw->slave_cfg, data);
-			}
+			/* FIFO needs to be drained here so we don't miss the next interrupt */
+			do {
+				data = i2c_dw_read_byte_non_blocking(port);
+				if (slave_cb->write_received) {
+					slave_cb->write_received(dw->slave_cfg, data);
+				}
+			} while (test_bit_status_rfne(reg_base));
 		}
 
 		if (intr_stat.bits.rd_req) {
@@ -632,6 +635,7 @@ static int i2c_dw_transfer(const struct device *dev,
 	uint8_t pflags;
 	int ret;
 	uint32_t reg_base = get_regs(dev);
+	uint32_t value = 0;
 
 	__ASSERT_NO_MSG(msgs);
 	if (!num_msgs) {
@@ -675,6 +679,11 @@ static int i2c_dw_transfer(const struct device *dev,
 
 		/* Process all the messages */
 	while (msg_left > 0) {
+		/* Workaround for I2C scanner as DW HW does not support 0 byte transfers.*/
+		if ((cur_msg->len == 0) && (cur_msg->buf != NULL)) {
+			cur_msg->len = 1;
+		}
+
 		pflags = dw->xfr_flags;
 
 		dw->xfr_buf = cur_msg->buf;
@@ -686,11 +695,6 @@ static int i2c_dw_transfer(const struct device *dev,
 		if ((pflags & I2C_MSG_RW_MASK)
 		    != (dw->xfr_flags & I2C_MSG_RW_MASK)) {
 			dw->xfr_flags |= I2C_MSG_RESTART;
-		}
-
-		/* Send STOP if this is the last message */
-		if (msg_left == 1U) {
-			dw->xfr_flags |= I2C_MSG_STOP;
 		}
 
 		dw->state &= ~(I2C_DW_CMD_SEND | I2C_DW_CMD_RECV);
@@ -714,7 +718,12 @@ static int i2c_dw_transfer(const struct device *dev,
 		}
 
 		/* Wait for transfer to be done */
-		k_sem_take(&dw->device_sync_sem, K_FOREVER);
+		ret = k_sem_take(&dw->device_sync_sem, K_MSEC(CONFIG_I2C_DW_RW_TIMEOUT_MS));
+		if (ret != 0) {
+			write_intr_mask(DW_DISABLE_ALL_I2C_INT, reg_base);
+			value = read_clr_intr(reg_base);
+			break;
+		}
 
 		if (dw->state & I2C_DW_CMD_ERROR) {
 			ret = -EIO;
@@ -930,8 +939,7 @@ static int i2c_dw_slave_register(const struct device *dev,
 	write_intr_mask(DW_INTR_MASK_RX_FULL |
 			DW_INTR_MASK_RD_REQ |
 			DW_INTR_MASK_TX_ABRT |
-			DW_INTR_MASK_STOP_DET |
-			DW_INTR_MASK_START_DET, reg_base);
+			DW_INTR_MASK_STOP_DET, reg_base);
 
 	return ret;
 }
@@ -1015,6 +1023,9 @@ static const struct i2c_driver_api funcs = {
 	.target_register = i2c_dw_slave_register,
 	.target_unregister = i2c_dw_slave_unregister,
 #endif /* CONFIG_I2C_TARGET */
+#ifdef CONFIG_I2C_RTIO
+	.iodev_submit = i2c_iodev_submit_fallback,
+#endif
 };
 
 static int i2c_dw_initialize(const struct device *dev)

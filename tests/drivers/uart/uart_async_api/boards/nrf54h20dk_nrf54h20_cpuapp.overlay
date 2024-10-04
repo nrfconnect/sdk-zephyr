@@ -2,10 +2,6 @@
 
 #include "nrf54h20dk_nrf54h20_common.dtsi"
 
-&cpuapp_dma_region {
-	status = "okay";
-};
-
 &dut {
 	memory-regions = <&cpuapp_dma_region>;
 };

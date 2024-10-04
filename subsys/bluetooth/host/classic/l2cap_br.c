@@ -300,7 +300,7 @@ int bt_l2cap_br_send_cb(struct bt_conn *conn, uint16_t cid, struct net_buf *buf,
 	LOG_DBG("push PDU: cb %p userdata %p", cb, user_data);
 
 	make_closure(buf->user_data, cb, user_data);
-	net_buf_put(&br_chan->_pdu_tx_queue, buf);
+	k_fifo_put(&br_chan->_pdu_tx_queue, buf);
 	raise_data_ready(br_chan);
 
 	return 0;
@@ -506,6 +506,11 @@ static int l2cap_br_info_rsp(struct bt_l2cap_br *l2cap, uint8_t ident,
 
 	switch (type) {
 	case BT_L2CAP_INFO_FEAT_MASK:
+		if (buf->len < sizeof(uint32_t)) {
+			LOG_ERR("Invalid remote info feat mask");
+			err = -EINVAL;
+			break;
+		}
 		l2cap->info_feat_mask = net_buf_pull_le32(buf);
 		LOG_DBG("remote info mask 0x%08x", l2cap->info_feat_mask);
 
@@ -516,6 +521,11 @@ static int l2cap_br_info_rsp(struct bt_l2cap_br *l2cap, uint8_t ident,
 		l2cap_br_get_info(l2cap, BT_L2CAP_INFO_FIXED_CHAN);
 		return 0;
 	case BT_L2CAP_INFO_FIXED_CHAN:
+		if (buf->len < sizeof(uint8_t)) {
+			LOG_ERR("Invalid remote info fixed chan");
+			err = -EINVAL;
+			break;
+		}
 		l2cap->info_fixed_chan = net_buf_pull_u8(buf);
 		LOG_DBG("remote fixed channel mask 0x%02x", l2cap->info_fixed_chan);
 
@@ -900,7 +910,7 @@ void bt_l2cap_br_chan_del(struct bt_l2cap_chan *chan)
 
 	/* Remove buffers on the PDU TX queue. */
 	while (chan_has_data(br_chan)) {
-		struct net_buf *buf = net_buf_get(&br_chan->_pdu_tx_queue, K_NO_WAIT);
+		struct net_buf *buf = k_fifo_get(&br_chan->_pdu_tx_queue, K_NO_WAIT);
 
 		net_buf_unref(buf);
 	}

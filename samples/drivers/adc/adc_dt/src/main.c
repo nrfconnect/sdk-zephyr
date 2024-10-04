@@ -53,6 +53,7 @@ int main(void)
 			return 0;
 		}
 	}
+
 #ifndef CONFIG_COVERAGE
 	while (1) {
 #else

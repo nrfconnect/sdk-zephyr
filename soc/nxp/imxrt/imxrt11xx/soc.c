@@ -7,6 +7,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/init.h>
+#include <zephyr/logging/log.h>
 #include <soc.h>
 #include <zephyr/linker/sections.h>
 #include <zephyr/linker/linker-defs.h>
@@ -15,20 +16,22 @@
 #include <fsl_gpc.h>
 #include <fsl_pmu.h>
 #include <fsl_dcdc.h>
+
+LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
+
 #ifdef CONFIG_NXP_IMXRT_BOOT_HEADER
 #include <fsl_flexspi_nor_boot.h>
 #endif
 #include <zephyr/dt-bindings/clock/imx_ccm_rev2.h>
-#if  defined(CONFIG_SECOND_CORE_MCUX) && defined(CONFIG_CPU_CORTEX_M7)
+#if defined(CONFIG_SECOND_CORE_MCUX) && defined(CONFIG_CPU_CORTEX_M7)
 #include <zephyr_image_info.h>
 /* Memcpy macro to copy segments from secondary core image stored in flash
  * to RAM section that secondary core boots from.
  * n is the segment number, as defined in zephyr_image_info.h
  */
-#define MEMCPY_SEGMENT(n, _)							\
-	memcpy((uint32_t *)((SEGMENT_LMA_ADDRESS_ ## n) - ADJUSTED_LMA),	\
-		(uint32_t *)(SEGMENT_LMA_ADDRESS_ ## n),			\
-		(SEGMENT_SIZE_ ## n))
+#define MEMCPY_SEGMENT(n, _)                                                                       \
+	memcpy((uint32_t *)((SEGMENT_LMA_ADDRESS_##n) - ADJUSTED_LMA),                             \
+	       (uint32_t *)(SEGMENT_LMA_ADDRESS_##n), (SEGMENT_SIZE_##n))
 #endif
 #if CONFIG_USB_DC_NXP_EHCI
 #include "usb_phy.h"
@@ -38,39 +41,43 @@
 
 #include <cmsis_core.h>
 
-#define DUAL_CORE_MU_ENABLED \
-	(CONFIG_SECOND_CORE_MCUX && CONFIG_IPM && CONFIG_IPM_IMX)
+#define DUAL_CORE_MU_ENABLED (CONFIG_SECOND_CORE_MCUX && CONFIG_IPM && CONFIG_IPM_IMX)
 
 #if DUAL_CORE_MU_ENABLED
 /* Dual core mode is enabled, and messaging unit is present */
 #include <fsl_mu.h>
 #define BOOT_FLAG 0x1U
-#define MU_BASE (MU_Type *)DT_REG_ADDR(DT_INST(0, nxp_imx_mu))
+#define MU_BASE   (MU_Type *)DT_REG_ADDR(DT_INST(0, nxp_imx_mu))
 #endif
 
 #if CONFIG_USB_DC_NXP_EHCI /* USB PHY configuration */
-#define BOARD_USB_PHY_D_CAL (0x07U)
+#define BOARD_USB_PHY_D_CAL     (0x07U)
 #define BOARD_USB_PHY_TXCAL45DP (0x06U)
 #define BOARD_USB_PHY_TXCAL45DM (0x06U)
 #endif
 
 #ifdef CONFIG_INIT_ARM_PLL
-static const clock_arm_pll_config_t armPllConfig = {
-#if defined(CONFIG_SOC_MIMXRT1176_CM4) || defined(CONFIG_SOC_MIMXRT1176_CM7)
-	/* resulting frequency: 24 * (166/(2* 2)) = 984MHz */
-	/* Post divider, 0 - DIV by 2, 1 - DIV by 4, 2 - DIV by 8, 3 - DIV by 1 */
-	.postDivider = kCLOCK_PllPostDiv2,
-	/* PLL Loop divider, Fout = Fin * ( loopDivider / ( 2 * postDivider ) ) */
-	.loopDivider = 166,
-#elif defined(CONFIG_SOC_MIMXRT1166_CM4) || defined(CONFIG_SOC_MIMXRT1166_CM7)
-	/* resulting frequency: 24 * (200/(2 * 4)) = 600MHz */
-	/* Post divider, 0 - DIV by 2, 1 - DIV by 4, 2 - DIV by 8, 3 - DIV by 1 */
-	.postDivider = kCLOCK_PllPostDiv4,
-	/* PLL Loop divider, Fout = Fin * ( loopDivider / ( 2 * postDivider ) ) */
-	.loopDivider = 200,
+
+#if defined(CONFIG_SOC_MIMXRT1176)
+#define DEFAULT_LOOPDIV 83
+#define DEFAULT_POSTDIV 2
+#elif defined(CONFIG_SOC_MIMXRT1166)
+#define DEFAULT_LOOPDIV 100
+#define DEFAULT_POSTDIV 4
 #else
-	#error "Unknown SOC, no pll configuration defined"
+/*
+ * Check that the ARM PLL has a multiplier and divider set
+ */
+BUILD_ASSERT(DT_NODE_HAS_PROP(DT_NODELABEL(arm_pll), clock_mult),
+	     "ARM PLL must have clock-mult property");
+BUILD_ASSERT(DT_NODE_HAS_PROP(DT_NODELABEL(arm_pll), clock_div),
+	     "ARM PLL must have clock-div property");
 #endif
+
+static const clock_arm_pll_config_t armPllConfig = {
+	.postDivider = CONCAT(kCLOCK_PllPostDiv,
+			      DT_PROP_OR(DT_NODELABEL(arm_pll), clock_div, DEFAULT_POSTDIV)),
+	.loopDivider = DT_PROP_OR(DT_NODELABEL(arm_pll), clock_mult, DEFAULT_LOOPDIV) * 2,
 };
 #endif
 
@@ -113,11 +120,11 @@ static const clock_video_pll_config_t videoPllConfig = {
 #endif
 
 #if CONFIG_USB_DC_NXP_EHCI
-	usb_phy_config_struct_t usbPhyConfig = {
-		BOARD_USB_PHY_D_CAL,
-		BOARD_USB_PHY_TXCAL45DP,
-		BOARD_USB_PHY_TXCAL45DM,
-	};
+usb_phy_config_struct_t usbPhyConfig = {
+	BOARD_USB_PHY_D_CAL,
+	BOARD_USB_PHY_TXCAL45DP,
+	BOARD_USB_PHY_TXCAL45DM,
+};
 #endif
 
 #ifdef CONFIG_NXP_IMXRT_BOOT_HEADER
@@ -136,15 +143,15 @@ const __imx_boot_data_section BOOT_DATA_T boot_data = {
 extern char __start[];
 const __imx_boot_ivt_section ivt image_vector_table = {
 	.hdr = IVT_HEADER,
-	.entry = (uint32_t) __start,
+	.entry = (uint32_t)__start,
 	.reserved1 = IVT_RSVD,
 #ifdef CONFIG_DEVICE_CONFIGURATION_DATA
-	.dcd = (uint32_t) dcd_data,
+	.dcd = (uint32_t)dcd_data,
 #else
-	.dcd = (uint32_t) NULL,
+	.dcd = (uint32_t)NULL,
 #endif
-	.boot_data = (uint32_t) &boot_data,
-	.self = (uint32_t) &image_vector_table,
+	.boot_data = (uint32_t)&boot_data,
+	.self = (uint32_t)&image_vector_table,
 	.csf = (uint32_t)CSF_ADDRESS,
 	.reserved2 = IVT_RSVD,
 };
@@ -181,13 +188,13 @@ static ALWAYS_INLINE void clock_init(void)
 	pmu_static_lpsr_dig_config_t lpsrDigConfig;
 
 	if ((ANADIG_LDO_SNVS->PMU_LDO_LPSR_ANA &
-		ANADIG_LDO_SNVS_PMU_LDO_LPSR_ANA_BYPASS_MODE_EN_MASK) == 0UL) {
+	     ANADIG_LDO_SNVS_PMU_LDO_LPSR_ANA_BYPASS_MODE_EN_MASK) == 0UL) {
 		PMU_StaticGetLpsrAnaLdoDefaultConfig(&lpsrAnaConfig);
 		PMU_StaticLpsrAnaLdoInit(ANADIG_LDO_SNVS, &lpsrAnaConfig);
 	}
 
 	if ((ANADIG_LDO_SNVS->PMU_LDO_LPSR_DIG &
-		ANADIG_LDO_SNVS_PMU_LDO_LPSR_DIG_BYPASS_MODE_MASK) == 0UL) {
+	     ANADIG_LDO_SNVS_PMU_LDO_LPSR_DIG_BYPASS_MODE_MASK) == 0UL) {
 		PMU_StaticGetLpsrDigLdoDefaultConfig(&lpsrDigConfig);
 		lpsrDigConfig.targetVoltage = kPMU_LpsrDigTargetStableVoltage1P117V;
 		PMU_StaticLpsrDigLdoInit(ANADIG_LDO_SNVS, &lpsrDigConfig);
@@ -211,15 +218,14 @@ static ALWAYS_INLINE void clock_init(void)
 	CLOCK_OSC_EnableOsc48MDiv2(true);
 
 	/* Config OSC 24M */
-	ANADIG_OSC->OSC_24M_CTRL |= ANADIG_OSC_OSC_24M_CTRL_OSC_EN(1) |
-				    ANADIG_OSC_OSC_24M_CTRL_BYPASS_EN(0) |
-				    ANADIG_OSC_OSC_24M_CTRL_BYPASS_CLK(0) |
-				    ANADIG_OSC_OSC_24M_CTRL_LP_EN(1) |
-				    ANADIG_OSC_OSC_24M_CTRL_OSC_24M_GATE(0);
+	ANADIG_OSC->OSC_24M_CTRL |=
+		ANADIG_OSC_OSC_24M_CTRL_OSC_EN(1) | ANADIG_OSC_OSC_24M_CTRL_BYPASS_EN(0) |
+		ANADIG_OSC_OSC_24M_CTRL_BYPASS_CLK(0) | ANADIG_OSC_OSC_24M_CTRL_LP_EN(1) |
+		ANADIG_OSC_OSC_24M_CTRL_OSC_24M_GATE(0);
 
 	/* Wait for 24M OSC to be stable. */
 	while (ANADIG_OSC_OSC_24M_CTRL_OSC_24M_STABLE_MASK !=
-		(ANADIG_OSC->OSC_24M_CTRL & ANADIG_OSC_OSC_24M_CTRL_OSC_24M_STABLE_MASK)) {
+	       (ANADIG_OSC->OSC_24M_CTRL & ANADIG_OSC_OSC_24M_CTRL_OSC_24M_STABLE_MASK)) {
 	}
 
 	rootCfg.div = 1;
@@ -258,11 +264,13 @@ static ALWAYS_INLINE void clock_init(void)
 #ifdef CONFIG_INIT_ENET_PLL
 	CLOCK_InitSysPll1(&sysPll1Config);
 #else
+#ifndef CONFIG_SECOND_CORE_MCUX
 	/* Bypass Sys Pll1. */
 	CLOCK_SetPllBypass(kCLOCK_PllSys1, true);
 
 	/* DeInit Sys Pll1. */
 	CLOCK_DeinitSysPll1();
+#endif
 #endif
 
 	/* Init Sys Pll2. */
@@ -278,11 +286,7 @@ static ALWAYS_INLINE void clock_init(void)
 	CLOCK_InitPfd(kCLOCK_PllSys2, kCLOCK_Pfd2, 24);
 
 	/* Init System Pll2 pfd3. */
-#if CONFIG_ETH_MCUX || CONFIG_ETH_NXP_ENET
-	CLOCK_InitPfd(kCLOCK_PllSys2, kCLOCK_Pfd3, 24);
-#else
 	CLOCK_InitPfd(kCLOCK_PllSys2, kCLOCK_Pfd3, 32);
-#endif
 
 	/* Init Sys Pll3. */
 	CLOCK_InitSysPll3();
@@ -324,16 +328,15 @@ static ALWAYS_INLINE void clock_init(void)
 	CLOCK_SetRootClock(kCLOCK_Root_M4, &rootCfg);
 #endif
 
-	/* Configure BUS using SYS_PLL3_CLK */
-#if CONFIG_ETH_MCUX || CONFIG_ETH_NXP_ENET
-	/* Configure root bus clock at 198M */
-	rootCfg.mux = kCLOCK_BUS_ClockRoot_MuxSysPll2Pfd3;
-	rootCfg.div = 2;
-	CLOCK_SetRootClock(kCLOCK_Root_Bus, &rootCfg);
-#elif defined(CONFIG_SOC_MIMXRT1176_CM7) || defined(CONFIG_SOC_MIMXRT1166_CM7)
+#if CONFIG_SOC_MIMXRT1176_CM7
 	/* Keep root bus clock at default 240M */
 	rootCfg.mux = kCLOCK_BUS_ClockRoot_MuxSysPll3Out;
 	rootCfg.div = 2;
+	CLOCK_SetRootClock(kCLOCK_Root_Bus, &rootCfg);
+#elif defined(CONFIG_SOC_MIMXRT1166_CM7)
+	/* Configure root bus clock at 200M */
+	rootCfg.mux = kCLOCK_BUS_ClockRoot_MuxSysPll1Div5;
+	rootCfg.div = 1;
 	CLOCK_SetRootClock(kCLOCK_Root_Bus, &rootCfg);
 #endif
 
@@ -405,7 +408,6 @@ static ALWAYS_INLINE void clock_init(void)
 	CLOCK_SetRootClock(kCLOCK_Root_Lpi2c6, &rootCfg);
 #endif
 
-
 #if CONFIG_ETH_MCUX || CONFIG_ETH_NXP_ENET
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(enet), okay)
 	/* 50 MHz ENET clock */
@@ -418,16 +420,26 @@ static ALWAYS_INLINE void clock_init(void)
 	IOMUXC_GPR->GPR4 |= IOMUXC_GPR_GPR4_ENET_TX_CLK_SEL(0x1U);
 #else
 	/* Set ENET_REF_CLK as an output driven by ENET1_CLK_ROOT */
-	IOMUXC_GPR->GPR4 |= (IOMUXC_GPR_GPR4_ENET_REF_CLK_DIR(0x01U) |
-		IOMUXC_GPR_GPR4_ENET_TX_CLK_SEL(0x1U));
+	IOMUXC_GPR->GPR4 |=
+		(IOMUXC_GPR_GPR4_ENET_REF_CLK_DIR(0x01U) | IOMUXC_GPR_GPR4_ENET_TX_CLK_SEL(0x1U));
 #endif
 #endif
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(enet1g), okay)
+	rootCfg.mux = kCLOCK_ENET2_ClockRoot_MuxSysPll1Div2;
+#if DT_ENUM_HAS_VALUE(DT_CHILD(DT_NODELABEL(enet1g), ethernet), phy_connection_type, rgmii)
+	/* 125 MHz ENET1G clock */
+	rootCfg.div = 4;
+	CLOCK_SetRootClock(kCLOCK_Root_Enet2, &rootCfg);
+	/* Set ENET1G TX_CLK to be driven by ENET2_CLK_ROOT and output on TX_CLK_IO pad */
+	IOMUXC_GPR->GPR5 = (IOMUXC_GPR_GPR5_ENET1G_RGMII_EN(0x01U) |
+			    (IOMUXC_GPR->GPR5 & ~IOMUXC_GPR_GPR5_ENET1G_TX_CLK_SEL(0x01U)));
+	/* Set ENET1G_REF_CLK as an input driven by PHY */
+	IOMUXC_GPR->GPR5 &= ~IOMUXC_GPR_GPR5_ENET1G_REF_CLK_DIR(0x01U);
+#else
 	/*
 	 * 50 MHz clock for 10/100Mbit RMII PHY -
 	 * operate ENET1G just like ENET peripheral
 	 */
-	rootCfg.mux = kCLOCK_ENET2_ClockRoot_MuxSysPll1Div2;
 	rootCfg.div = 10;
 	CLOCK_SetRootClock(kCLOCK_Root_Enet2, &rootCfg);
 #if CONFIG_ETH_MCUX_RMII_EXT_CLK
@@ -437,7 +449,8 @@ static ALWAYS_INLINE void clock_init(void)
 #else
 	/* Set ENET1G_REF_CLK as an output driven by ENET2_CLK_ROOT */
 	IOMUXC_GPR->GPR5 |= (IOMUXC_GPR_GPR5_ENET1G_REF_CLK_DIR(0x01U) |
-		IOMUXC_GPR_GPR5_ENET1G_TX_CLK_SEL(0x1U));
+			     IOMUXC_GPR_GPR5_ENET1G_TX_CLK_SEL(0x1U));
+#endif
 #endif
 #endif
 #endif
@@ -508,8 +521,8 @@ static ALWAYS_INLINE void clock_init(void)
 	 * calculate LCDIF clock.
 	 */
 	rootCfg.div = ((SYS_PLL2_FREQ /
-			DT_PROP(DT_CHILD(DT_NODELABEL(lcdif), display_timings),
-			clock_frequency)) + 1);
+			DT_PROP(DT_CHILD(DT_NODELABEL(lcdif), display_timings), clock_frequency)) +
+		       1);
 	CLOCK_SetRootClock(kCLOCK_Root_Lcdif, &rootCfg);
 #endif
 
@@ -519,20 +532,24 @@ static ALWAYS_INLINE void clock_init(void)
 	CLOCK_SetRootClock(kCLOCK_Root_Gpt1, &rootCfg);
 #endif
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb1), okay) && CONFIG_USB_DC_NXP_EHCI
-	CLOCK_EnableUsbhs0PhyPllClock(kCLOCK_Usb480M,
-		DT_PROP_BY_PHANDLE(DT_NODELABEL(usb1), clocks, clock_frequency));
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb1), okay) && (CONFIG_USB_DC_NXP_EHCI || CONFIG_UDC_NXP_EHCI)
+	CLOCK_EnableUsbhs0PhyPllClock(
+		kCLOCK_Usb480M, DT_PROP_BY_PHANDLE(DT_NODELABEL(usb1), clocks, clock_frequency));
 	CLOCK_EnableUsbhs0Clock(kCLOCK_Usb480M,
-		DT_PROP_BY_PHANDLE(DT_NODELABEL(usb1), clocks, clock_frequency));
+				DT_PROP_BY_PHANDLE(DT_NODELABEL(usb1), clocks, clock_frequency));
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb1), okay) && CONFIG_USB_DC_NXP_EHCI
 	USB_EhciPhyInit(kUSB_ControllerEhci0, CPU_XTAL_CLK_HZ, &usbPhyConfig);
 #endif
+#endif
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb2), okay) && CONFIG_USB_DC_NXP_EHCI
-	CLOCK_EnableUsbhs1PhyPllClock(kCLOCK_Usb480M,
-		DT_PROP_BY_PHANDLE(DT_NODELABEL(usb2), clocks, clock_frequency));
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb2), okay) && (CONFIG_USB_DC_NXP_EHCI || CONFIG_UDC_NXP_EHCI)
+	CLOCK_EnableUsbhs1PhyPllClock(
+		kCLOCK_Usb480M, DT_PROP_BY_PHANDLE(DT_NODELABEL(usb2), clocks, clock_frequency));
 	CLOCK_EnableUsbhs1Clock(kCLOCK_Usb480M,
-		DT_PROP_BY_PHANDLE(DT_NODELABEL(usb2), clocks, clock_frequency));
+				DT_PROP_BY_PHANDLE(DT_NODELABEL(usb2), clocks, clock_frequency));
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb1), okay) && CONFIG_USB_DC_NXP_EHCI
 	USB_EhciPhyInit(kUSB_ControllerEhci1, CPU_XTAL_CLK_HZ, &usbPhyConfig);
+#endif
 #endif
 
 #if CONFIG_IMX_USDHC
@@ -553,9 +570,8 @@ static ALWAYS_INLINE void clock_init(void)
 #endif
 #endif
 
-#if !(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_flash), nxp_imx_flexspi)) && \
-	defined(CONFIG_MEMC_MCUX_FLEXSPI) && \
-	DT_NODE_HAS_STATUS(DT_NODELABEL(flexspi), okay)
+#if !(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_flash), nxp_imx_flexspi)) &&                             \
+	defined(CONFIG_MEMC_MCUX_FLEXSPI) && DT_NODE_HAS_STATUS(DT_NODELABEL(flexspi), okay)
 	/* Configure FLEXSPI1 using OSC_RC_48M_DIV2 */
 	rootCfg.mux = kCLOCK_FLEXSPI1_ClockRoot_MuxOscRc48MDiv2;
 	rootCfg.div = 1;
@@ -581,8 +597,8 @@ static ALWAYS_INLINE void clock_init(void)
 }
 
 #if CONFIG_I2S_MCUX_SAI
-void imxrt_audio_codec_pll_init(uint32_t clock_name, uint32_t clk_src,
-					uint32_t clk_pre_div, uint32_t clk_src_div)
+void imxrt_audio_codec_pll_init(uint32_t clock_name, uint32_t clk_src, uint32_t clk_pre_div,
+				uint32_t clk_src_div)
 {
 	ARG_UNUSED(clk_pre_div);
 
@@ -618,13 +634,13 @@ void imxrt_pre_init_display_interface(void)
 
 	/* Power on and isolation off. */
 	PGMC_BPC4->BPC_POWER_CTRL |= (PGMC_BPC_BPC_POWER_CTRL_PSW_ON_SOFT_MASK |
-				PGMC_BPC_BPC_POWER_CTRL_ISO_OFF_SOFT_MASK);
+				      PGMC_BPC_BPC_POWER_CTRL_ISO_OFF_SOFT_MASK);
 
 	/* Assert MIPI reset. */
 	IOMUXC_GPR->GPR62 &= ~(IOMUXC_GPR_GPR62_MIPI_DSI_PCLK_SOFT_RESET_N_MASK |
-			IOMUXC_GPR_GPR62_MIPI_DSI_ESC_SOFT_RESET_N_MASK |
-			IOMUXC_GPR_GPR62_MIPI_DSI_BYTE_SOFT_RESET_N_MASK |
-			IOMUXC_GPR_GPR62_MIPI_DSI_DPI_SOFT_RESET_N_MASK);
+			       IOMUXC_GPR_GPR62_MIPI_DSI_ESC_SOFT_RESET_N_MASK |
+			       IOMUXC_GPR_GPR62_MIPI_DSI_BYTE_SOFT_RESET_N_MASK |
+			       IOMUXC_GPR_GPR62_MIPI_DSI_DPI_SOFT_RESET_N_MASK);
 
 	/* setup clock */
 	const clock_root_config_t mipiEscClockConfig = {
@@ -654,14 +670,14 @@ void imxrt_pre_init_display_interface(void)
 
 	/* Deassert PCLK and ESC reset. */
 	IOMUXC_GPR->GPR62 |= (IOMUXC_GPR_GPR62_MIPI_DSI_PCLK_SOFT_RESET_N_MASK |
-			IOMUXC_GPR_GPR62_MIPI_DSI_ESC_SOFT_RESET_N_MASK);
+			      IOMUXC_GPR_GPR62_MIPI_DSI_ESC_SOFT_RESET_N_MASK);
 }
 
 void imxrt_post_init_display_interface(void)
 {
 	/* deassert BYTE and DBI reset */
 	IOMUXC_GPR->GPR62 |= (IOMUXC_GPR_GPR62_MIPI_DSI_BYTE_SOFT_RESET_N_MASK |
-			IOMUXC_GPR_GPR62_MIPI_DSI_DPI_SOFT_RESET_N_MASK);
+			      IOMUXC_GPR_GPR62_MIPI_DSI_DPI_SOFT_RESET_N_MASK);
 }
 
 #endif
@@ -679,7 +695,7 @@ void imxrt_post_init_display_interface(void)
 
 static int imxrt_init(void)
 {
-#if  defined(CONFIG_SECOND_CORE_MCUX) && defined(CONFIG_CPU_CORTEX_M7)
+#if defined(CONFIG_SECOND_CORE_MCUX) && defined(CONFIG_CPU_CORTEX_M7)
 	/**
 	 * Copy CM4 core from flash to memory. Note that depending on where the
 	 * user decided to store CM4 code, this is likely going to read from the
@@ -702,7 +718,6 @@ static int imxrt_init(void)
 	MU_SetFlags(MU_BASE, BOOT_FLAG);
 #endif
 
-
 #if defined(CONFIG_SOC_MIMXRT1176_CM7) || defined(CONFIG_SOC_MIMXRT1166_CM7)
 	sys_cache_instr_enable();
 	sys_cache_data_enable();
@@ -714,8 +729,8 @@ static int imxrt_init(void)
 	return 0;
 }
 
-#ifdef CONFIG_PLATFORM_SPECIFIC_INIT
-void z_arm_platform_init(void)
+#ifdef CONFIG_SOC_RESET_HOOK
+void soc_reset_hook(void)
 {
 	SystemInit();
 
@@ -728,7 +743,7 @@ void z_arm_platform_init(void)
 
 SYS_INIT(imxrt_init, PRE_KERNEL_1, 0);
 
-#if  defined(CONFIG_SECOND_CORE_MCUX) && defined(CONFIG_CPU_CORTEX_M7)
+#if defined(CONFIG_SECOND_CORE_MCUX) && defined(CONFIG_CPU_CORTEX_M7)
 /**
  * @brief Kickoff secondary core.
  *

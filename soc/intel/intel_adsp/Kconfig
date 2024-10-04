@@ -8,11 +8,28 @@ config SOC_FAMILY_INTEL_ADSP
 	select ARCH_SUPPORTS_COREDUMP
 	select CPU_HAS_DCACHE
 	select ARCH_HAS_USERSPACE if XTENSA_MMU
+	imply XTENSA_MMU_DOUBLE_MAP
 	select CPU_CACHE_INCOHERENT
 
 if SOC_FAMILY_INTEL_ADSP
 
 rsource "*/Kconfig"
+
+config INTEL_ADSP_SIM
+	bool "Intel ADSP Simulator"
+	select SIMULATOR_XTENSA
+	help
+	  Running this SoC family in a simulator.
+
+if INTEL_ADSP_SIM
+
+config INTEL_ADSP_SIM_NO_SECONDARY_CORE_FLOW
+	bool "No secondary core flow."
+	help
+	  Select if simulator doesn't use the normal secondary core flow
+	  to initialise secondary clocks.
+
+endif # INTEL_ADSP_SIM
 
 DT_COMPAT_INTEL_ADSP_HOST_IPC := intel,adsp-host-ipc
 DT_COMPAT_INTEL_ADSP_IDC := intel,adsp-idc
@@ -92,11 +109,11 @@ config ADSP_INIT_HPSRAM
 	  Need to init HP SRAM.
 
 config ADSP_POWER_DOWN_HPSRAM
-	bool
+	bool "Switch off HP SRAM during power down"
 	default n if ZTEST
 	default y
 	help
-	 Switch off HP SRAM during power down.
+	 Switch off HP SRAM during power down. Platform-configurable.
 
 config ADSP_DISABLE_L2CACHE_AT_BOOT
 	bool

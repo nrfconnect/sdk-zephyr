@@ -27,7 +27,7 @@ struct clock_onoff {
  * @param _onoff_cnt number of clock configuration options to be handled;
  *                   for each one a separate onoff manager instance is used.
  */
-#define NRF2_STRUCT_CLOCK_CONFIG(type, _onoff_cnt) \
+#define STRUCT_CLOCK_CONFIG(type, _onoff_cnt) \
 	struct clock_config_##type { \
 		atomic_t flags; \
 		uint32_t flags_snapshot; \
@@ -47,8 +47,7 @@ struct clock_onoff {
  *
  * @return 0 on success, negative value when onoff initialization fails.
  */
-int nrf2_clock_config_init(void *clk_cfg, uint8_t onoff_cnt,
-			   k_work_handler_t update_work_handler);
+int clock_config_init(void *clk_cfg, uint8_t onoff_cnt, k_work_handler_t update_work_handler);
 
 /**
  * @brief Starts a clock configuration update.
@@ -60,30 +59,30 @@ int nrf2_clock_config_init(void *clk_cfg, uint8_t onoff_cnt,
  *
  * @return index of the clock configuration onoff option to be activated.
  */
-uint8_t nrf2_clock_config_update_begin(struct k_work *work);
+uint8_t clock_config_update_begin(struct k_work *work);
 
 /**
  * @brief Finalizes a clock configuration update.
  *
  * Notifies all relevant onoff managers about the update result.
- * Only the first call after each nrf2_clock_config_update_begin() performs
+ * Only the first call after each clock_config_update_begin() performs
  * the actual operation. Any further calls are simply no-ops.
  *
  * @param clk_cfg pointer to the clock configuration structure.
  * @param status result to be passed to onoff managers.
  */
-void nrf2_clock_config_update_end(void *clk_cfg, int status);
+void clock_config_update_end(void *clk_cfg, int status);
 
 int api_nosys_on_off(const struct device *dev, clock_control_subsys_t sys);
 
-struct nrf2_clock_lrcconf_sink {
+struct clock_lrcconf_sink {
 	sys_snode_t node;
 };
 
 /**
  * @brief Request or release lrcconf main power domain
  */
-void nrf2_clock_request_lrcconf_poweron_main(struct nrf2_clock_lrcconf_sink *sink);
-void nrf2_clock_release_lrcconf_poweron_main(struct nrf2_clock_lrcconf_sink *sink);
+void clock_request_lrcconf_poweron_main(struct clock_lrcconf_sink *sink);
+void clock_release_lrcconf_poweron_main(struct clock_lrcconf_sink *sink);
 
 #endif /* ZEPHYR_DRIVERS_CLOCK_CONTROL_NRF2_COMMON_H_ */

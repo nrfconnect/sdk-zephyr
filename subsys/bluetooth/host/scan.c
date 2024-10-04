@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <zephyr/sys/atomic.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/check.h>
@@ -475,7 +476,7 @@ static int scan_update(void)
 	return err;
 }
 
-static uint32_t scan_check_if_state_allowed(enum bt_le_scan_user flag)
+static int scan_check_if_state_allowed(enum bt_le_scan_user flag)
 {
 	/* check if state is already set */
 	if (atomic_test_bit(scan_state.scan_flags, flag)) {
@@ -498,16 +499,22 @@ int bt_le_scan_user_add(enum bt_le_scan_user flag)
 		/* Only check if the scanner parameters should be updated / the scanner should be
 		 * started. This is mainly triggered once connections are established.
 		 */
-	} else {
-		/* Check if it can be enabled */
-		err = scan_check_if_state_allowed(flag);
-		if (err) {
-			return err;
-		}
-		atomic_set_bit(scan_state.scan_flags, flag);
+		return scan_update();
 	}
 
-	return scan_update();
+	err = scan_check_if_state_allowed(flag);
+	if (err) {
+		return err;
+	}
+
+	atomic_set_bit(scan_state.scan_flags, flag);
+
+	err = scan_update();
+	if (err) {
+		atomic_clear_bit(scan_state.scan_flags, flag);
+	}
+
+	return err;
 }
 
 int bt_le_scan_user_remove(enum bt_le_scan_user flag)
@@ -772,6 +779,21 @@ void bt_hci_le_adv_ext_report(struct net_buf *buf)
 		bool is_report_complete;
 		bool more_to_come;
 		bool is_new_advertiser;
+
+		if (!atomic_test_bit(scan_state.scan_flags, BT_LE_SCAN_USER_EXPLICIT_SCAN)) {
+			/* The application has not requested explicit scan, so it is not expecting
+			 * advertising reports. Discard, and reset the reassembler if not inactive
+			 * This is done in the loop as this flag can change between each iteration,
+			 * and it is not uncommon that scanning is disabled in the callback called
+			 * from le_adv_recv
+			 */
+
+			if (reassembling_advertiser.state != FRAG_ADV_INACTIVE) {
+				reset_reassembling_advertiser();
+			}
+
+			break;
+		}
 
 		if (buf->len < sizeof(*evt)) {
 			LOG_ERR("Unexpected end of buffer");
@@ -1410,7 +1432,8 @@ static void bt_hci_le_past_received_common(struct net_buf *buf)
 
 	if (evt->status) {
 		/* No sync created, don't notify app */
-		LOG_DBG("PAST receive failed with status 0x%02X", evt->status);
+		LOG_DBG("PAST receive failed with status 0x%02X %s",
+			evt->status, bt_hci_err_to_str(evt->status));
 		return;
 	}
 
@@ -1619,6 +1642,17 @@ void bt_hci_le_adv_report(struct net_buf *buf)
 
 	while (num_reports--) {
 		struct bt_le_scan_recv_info adv_info;
+
+		if (!atomic_test_bit(scan_state.scan_flags, BT_LE_SCAN_USER_EXPLICIT_SCAN)) {
+			/* The application has not requested explicit scan, so it is not expecting
+			 * advertising reports. Discard.
+			 * This is done in the loop as this flag can change between each iteration,
+			 * and it is not uncommon that scanning is disabled in the callback called
+			 * from le_adv_recv
+			 */
+
+			break;
+		}
 
 		if (buf->len < sizeof(*evt)) {
 			LOG_ERR("Unexpected end of buffer");

@@ -32,7 +32,7 @@
 #endif
 
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC
-#if defined(CONFIG_SOC_SERIES_NRF91X) || defined(CONFIG_SOC_SERIES_NRF53X)
+#if defined(CONFIG_SOC_SERIES_NRF91X) || defined(CONFIG_SOC_COMPATIBLE_NRF53X)
 #define NRFX_CLOCK_CONFIG_LF_SRC 1
 #else
 #define NRFX_CLOCK_CONFIG_LF_SRC 0
@@ -40,7 +40,7 @@
 #endif // CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC
 
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL
-#if defined(CONFIG_SOC_SERIES_NRF91X) || defined(CONFIG_SOC_SERIES_NRF53X)
+#if defined(CONFIG_SOC_SERIES_NRF91X) || defined(CONFIG_SOC_COMPATIBLE_NRF53X)
 #define NRFX_CLOCK_CONFIG_LF_SRC 2
 #else
 #define NRFX_CLOCK_CONFIG_LF_SRC 1
@@ -48,7 +48,7 @@
 #endif // CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL
 
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH
-#ifdef CONFIG_SOC_SERIES_NRF53X
+#ifdef CONFIG_SOC_COMPATIBLE_NRF53X
 #define NRFX_CLOCK_CONFIG_LF_SRC 3
 #else
 #define NRFX_CLOCK_CONFIG_LF_SRC 2
@@ -127,6 +127,19 @@
 #endif
 #ifdef CONFIG_NRFX_GRTC_LOG
 #define NRFX_GRTC_CONFIG_LOG_ENABLED 1
+#endif
+
+#ifdef CONFIG_NRF_GRTC_TIMER_CLOCK_MANAGEMENT
+#define NRF_GRTC_HAS_EXTENDED 1
+#endif
+#ifdef CONFIG_NRF_GRTC_SLEEP_ALLOWED
+#define NRFX_GRTC_CONFIG_SLEEP_ALLOWED 1
+#endif
+#ifdef CONFIG_NRF_GRTC_TIMER_AUTO_KEEP_ALIVE
+#define NRFX_GRTC_CONFIG_AUTOEN 1
+#endif
+#ifdef CONFIG_NRF_GRTC_START_SYSCOUNTER
+#define NRFX_GRTC_CONFIG_AUTOSTART 1
 #endif
 
 #ifdef CONFIG_NRFX_GPIOTE
@@ -504,7 +517,7 @@
 #define NRFX_SPIS136_ENABLED 1
 #endif
 #ifdef CONFIG_NRFX_SPIS137
-#define NRFX_SPIS130_ENABLED 1
+#define NRFX_SPIS137_ENABLED 1
 #endif
 
 #ifdef CONFIG_NRFX_SYSTICK
@@ -1035,10 +1048,14 @@
     #include <nrfx_config_nrf54h20_radiocore.h>
 #elif defined(NRF54H20_XXAA) && defined(NRF_PPR)
     #include <nrfx_config_nrf54h20_ppr.h>
+#elif defined(NRF54H20_XXAA) && defined(NRF_FLPR)
+    #include <nrfx_config_nrf54h20_flpr.h>
 #elif (defined(NRF54L15_XXAA) || defined(NRF54L15_ENGA_XXAA)) && defined(NRF_APPLICATION)
     #include <nrfx_config_nrf54l15_enga_application.h>
 #elif (defined(NRF54L15_XXAA) || defined(NRF54L15_ENGA_XXAA)) && defined(NRF_FLPR)
     #include <nrfx_config_nrf54l15_enga_flpr.h>
+#elif (defined(NRF54L20_XXAA) || defined(NRF54L20_ENGA_XXAA)) && defined(NRF_APPLICATION)
+    #include <nrfx_config_nrf54l20_enga_application.h>
 #elif defined(NRF9120_XXAA) || defined(NRF9160_XXAA)
     #include <nrfx_config_nrf91.h>
 #elif defined(NRF9230_ENGB_XXAA) && defined(NRF_APPLICATION)

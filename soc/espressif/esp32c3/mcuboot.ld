@@ -10,12 +10,8 @@
 
 #include "memory.h"
 
-#ifdef CONFIG_XIP
-#error "ESP32C3 bootloader cannot use XIP"
-#endif /* CONFIG_XIP */
-
 /* Disable all romable LMA */
-#udef GROUP_DATA_LINK_IN
+#undef GROUP_DATA_LINK_IN
 #define GROUP_DATA_LINK_IN(vregion, lregion) > vregion
 
 #define RAMABLE_REGION dram_seg
@@ -87,6 +83,7 @@ SECTIONS
     /* Vectors go to IRAM */
     _iram_start = ABSOLUTE(.);
     _init_start = ABSOLUTE(.);
+    __text_region_start = ABSOLUTE(.);
 
     KEEP(*(.exception_vectors.text));
     . = ALIGN(256);
@@ -133,6 +130,7 @@ SECTIONS
     . += 16;
 
     _text_end = ABSOLUTE(.);
+    __text_region_end = ABSOLUTE(.);
     _etext = .;
 
     /* Similar to _iram_start, this symbol goes here so it is
@@ -223,7 +221,7 @@ SECTIONS
     . = ALIGN(4);
   } > dram_seg
 
-  #include <zephyr/linker/common-rom/common-rom-cpp.ld>
+  #include <zephyr/linker/common-rom/common-rom-init.ld>
   #include <zephyr/linker/common-rom/common-rom-kernel-devices.ld>
   #include <zephyr/linker/common-rom/common-rom-debug.ld>
   #include <zephyr/linker/common-rom/common-rom-misc.ld>

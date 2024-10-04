@@ -470,7 +470,7 @@ static int dns_read(int sock,
 		}
 
 		NET_DBG("[%d] query %s/%s label %s (%d bytes)", queries,
-			qtype == DNS_RR_TYPE_A ? "A" : "AAAA", "IN",
+			dns_qtype_to_str(qtype), "IN",
 			result->data, ret);
 
 		/* If the query matches to our hostname, then send reply */
@@ -503,7 +503,7 @@ static int recv_data(struct net_socket_service_event *pev)
 	struct net_buf *dns_data = NULL;
 	struct dns_addrinfo info = { 0 };
 	size_t addrlen = sizeof(addr);
-	int ret, family, sock_error, len;
+	int ret, family = AF_UNSPEC, sock_error, len;
 	socklen_t optlen;
 
 	if ((pev->event.revents & ZSOCK_POLLERR) ||

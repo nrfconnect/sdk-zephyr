@@ -7,11 +7,8 @@ from pathlib import Path
 import re
 import textwrap
 
-from sphinx.cmd.build import get_parser
-
-args = get_parser().parse_args()
 ZEPHYR_BASE = Path(__file__).resolve().parents[1]
-ZEPHYR_BUILD = Path(args.outputdir).resolve()
+ZEPHYR_BUILD = Path(os.environ.get("DOCS_HTML_DIR")).resolve()
 
 # Add the '_extensions' directory to sys.path, to enable finding Sphinx
 # extensions within.
@@ -86,9 +83,9 @@ extensions = [
     "zephyr.link-roles",
     "sphinx_tabs.tabs",
     "sphinx_sitemap",
-    "zephyr.warnings_filter",
     "zephyr.doxyrunner",
     "zephyr.doxybridge",
+    "zephyr.doxytooltip",
     "zephyr.gh_utils",
     "zephyr.manifest_projects_table",
     "notfound.extension",
@@ -99,9 +96,13 @@ extensions = [
     "zephyr.api_overview",
 ]
 
-# Only use SVG converter when it is really needed, e.g. LaTeX.
-if tags.has("svgconvert"):  # pylint: disable=undefined-variable
+# Only use image conversion when it is really needed, e.g. LaTeX build.
+# Ensure "sphinxcontrib.rsvgconverter" is added before "sphinx.ext.imgconverter"
+# as it's better at converting SVG with extended features (like the ones from
+# draw.io) to PDF format).
+if tags.has("convertimages"):  # pylint: disable=undefined-variable
     extensions.append("sphinxcontrib.rsvgconverter")
+    extensions.append("sphinx.ext.imgconverter")
 
 templates_path = ["_templates"]
 
@@ -160,7 +161,8 @@ rst_epilog = f"""
 html_theme = "sphinx_rtd_theme"
 html_theme_options = {
     "logo_only": True,
-    "prev_next_buttons_location": None
+    "prev_next_buttons_location": None,
+    "navigation_depth": 5,
 }
 html_baseurl = "https://docs.zephyrproject.org/latest/"
 html_title = "Zephyr Project Documentation"
@@ -189,8 +191,8 @@ html_context = {
     "current_version": version,
     "versions": (
         ("latest", "/"),
+        ("3.7.0 (LTS)", "/3.7.0/"),
         ("3.6.0", "/3.6.0/"),
-        ("3.5.0", "/3.5.0/"),
         ("2.7.6 (LTS)", "/2.7.6/"),
     ),
     "display_gh_links": True,
@@ -253,10 +255,6 @@ doxybridge_dir = doxyrunner_outdir
 
 html_redirect_pages = redirects.REDIRECTS
 
-# -- Options for zephyr.warnings_filter -----------------------------------
-
-warnings_filter_config = str(ZEPHYR_BASE / "doc" / "known-warnings.txt")
-
 # -- Options for zephyr.link-roles ----------------------------------------
 
 link_roles_manifest_project = "zephyr"
@@ -298,6 +296,7 @@ external_content_contents = [
     (ZEPHYR_BASE, "samples/**/doc"),
     (ZEPHYR_BASE, "snippets/**/*.rst"),
     (ZEPHYR_BASE, "snippets/**/doc"),
+    (ZEPHYR_BASE, "tests/**/*.pts"),
 ]
 external_content_keep = [
     "reference/kconfig/*",

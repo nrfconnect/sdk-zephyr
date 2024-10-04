@@ -802,6 +802,14 @@ void can_mcan_line_1_isr(const struct device *dev)
 		return;
 	}
 
+	if ((ir & CAN_MCAN_IR_PEA) != 0U) {
+		LOG_DBG("Protocol error in arbitration phase: ir: 0x%x", ir);
+	}
+
+	if ((ir & CAN_MCAN_IR_PED) != 0U) {
+		LOG_DBG("Protocol error in data phase: ir: 0x%x", ir);
+	}
+
 	while ((ir & events) != 0U) {
 		err = can_mcan_write_reg(dev, CAN_MCAN_IR, events & ir);
 		if (err != 0) {
@@ -1458,7 +1466,7 @@ int can_mcan_init(const struct device *dev)
 		return err;
 	}
 
-	err = can_calc_timing(dev, &timing, config->common.bus_speed,
+	err = can_calc_timing(dev, &timing, config->common.bitrate,
 			      config->common.sample_point);
 	if (err == -EINVAL) {
 		LOG_ERR("Can't find timing for given param");
@@ -1469,7 +1477,7 @@ int can_mcan_init(const struct device *dev)
 		timing.phase_seg2);
 	LOG_DBG("Sample-point err : %d", err);
 #ifdef CONFIG_CAN_FD_MODE
-	err = can_calc_timing_data(dev, &timing_data, config->common.bus_speed_data,
+	err = can_calc_timing_data(dev, &timing_data, config->common.bitrate_data,
 				   config->common.sample_point_data);
 	if (err == -EINVAL) {
 		LOG_ERR("Can't find timing for given dataphase param");

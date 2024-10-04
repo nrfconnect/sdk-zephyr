@@ -8,6 +8,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/hci.h>
 #include <zephyr/mgmt/mcumgr/transport/smp_bt.h>
 
 #define LOG_LEVEL LOG_LEVEL_DBG
@@ -31,9 +32,7 @@ static void advertise(struct k_work *work)
 {
 	int rc;
 
-	bt_le_adv_stop();
-
-	rc = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+	rc = bt_le_adv_start(BT_LE_ADV_CONN_ONE_TIME, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 	if (rc) {
 		LOG_ERR("Advertising failed to start (rc %d)", rc);
 		return;
@@ -45,21 +44,28 @@ static void advertise(struct k_work *work)
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
-		LOG_ERR("Connection failed (err 0x%02x)", err);
+		LOG_ERR("Connection failed, err 0x%02x %s", err, bt_hci_err_to_str(err));
 	} else {
 		LOG_INF("Connected");
 	}
+
+	k_work_submit(&advertise_work);
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
-	LOG_INF("Disconnected (reason 0x%02x)", reason);
+	LOG_INF("Disconnected, reason 0x%02x %s", reason, bt_hci_err_to_str(reason));
+}
+
+static void on_conn_recycled(void)
+{
 	k_work_submit(&advertise_work);
 }
 
 BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.connected = connected,
 	.disconnected = disconnected,
+	.recycled = on_conn_recycled,
 };
 
 static void bt_ready(int err)

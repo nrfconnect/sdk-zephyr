@@ -19,7 +19,7 @@ static const uint8_t magic[] = {0x45, 0x6d, 0x31, 0x6c, 0x31, 0x4b,
 				0x30, 0x72, 0x6e, 0x33, 0x6c, 0x69, 0x34};
 
 #ifdef CONFIG_MULTITHREADING
-#if IS_ENABLED(CONFIG_IPC_SERVICE_BACKEND_ICMSG_WQ_ENABLE)
+#if defined(CONFIG_IPC_SERVICE_BACKEND_ICMSG_WQ_ENABLE)
 static K_THREAD_STACK_DEFINE(icmsg_stack, CONFIG_IPC_SERVICE_BACKEND_ICMSG_WQ_STACK_SIZE);
 static struct k_work_q icmsg_workq;
 static struct k_work_q *const workq = &icmsg_workq;
@@ -176,6 +176,7 @@ static void mbox_callback_process(struct icmsg_data_t *dev_data)
 #ifdef CONFIG_MULTITHREADING
 	struct icmsg_data_t *dev_data = CONTAINER_OF(item, struct icmsg_data_t, mbox_work);
 #endif
+	uint8_t rx_buffer[CONFIG_PBUF_RX_READ_BUF_SIZE] __aligned(4);
 
 	atomic_t state = atomic_get(&dev_data->state);
 
@@ -186,9 +187,13 @@ static void mbox_callback_process(struct icmsg_data_t *dev_data)
 		return;
 	}
 
-	uint8_t rx_buffer[len];
+	__ASSERT_NO_MSG(len <= sizeof(rx_buffer));
 
-	len = pbuf_read(dev_data->rx_pb, rx_buffer, len);
+	if (sizeof(rx_buffer) < len) {
+		return;
+	}
+
+	len = pbuf_read(dev_data->rx_pb, rx_buffer, sizeof(rx_buffer));
 
 	if (state == ICMSG_STATE_READY) {
 		if (dev_data->cb->received) {
@@ -369,7 +374,7 @@ int icmsg_send(const struct icmsg_config_t *conf,
 	return sent_bytes;
 }
 
-#if IS_ENABLED(CONFIG_IPC_SERVICE_BACKEND_ICMSG_WQ_ENABLE)
+#if defined(CONFIG_IPC_SERVICE_BACKEND_ICMSG_WQ_ENABLE)
 
 static int work_q_init(void)
 {

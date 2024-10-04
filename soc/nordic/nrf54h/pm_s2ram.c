@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 #include <zephyr/arch/cpu.h>
 #include <zephyr/arch/common/pm_s2ram.h>
 #include <zephyr/linker/sections.h>
@@ -29,7 +28,7 @@ typedef struct {
 	/* NVIC components stored into RAM. */
 	uint32_t ISER[NVIC_MEMBER_SIZE(ISER)];
 	uint32_t ISPR[NVIC_MEMBER_SIZE(ISPR)];
-	uint8_t  IPR[NVIC_MEMBER_SIZE(IPR)];
+	uint8_t IPR[NVIC_MEMBER_SIZE(IPR)];
 } _nvic_context_t;
 
 typedef struct {
@@ -43,7 +42,7 @@ typedef struct {
 
 struct backup {
 	_nvic_context_t nvic_context;
-	_mpu_context_t  mpu_context;
+	_mpu_context_t mpu_context;
 };
 
 static __noinit struct backup backup_data;
@@ -142,8 +141,7 @@ bool pm_s2ram_mark_check_and_clear(void)
 	if (reset_reason != NRF_RESETINFO_RESETREAS_LOCAL_UNRETAINED_MASK) {
 		return false;
 	}
-	unretained_wake = reset_reason &
-			  NRF_RESETINFO_RESETREAS_LOCAL_UNRETAINED_MASK;
+	unretained_wake = reset_reason & NRF_RESETINFO_RESETREAS_LOCAL_UNRETAINED_MASK;
 	nrf_resetinfo_resetreas_local_set(NRF_RESETINFO, 0);
 
 	restore_valid = nrf_resetinfo_restore_valid_check(NRF_RESETINFO);

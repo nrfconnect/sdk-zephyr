@@ -15,6 +15,7 @@
 		zephyr,shell-uart = &uart0;
 		zephyr,uart-pipe = &uart0;
 		zephyr,flash-controller = &flash;
+		zephyr,bt-hci = &bt_hci_apollo;
 	};
 
 	aliases {
@@ -70,7 +71,7 @@
 	status = "okay";
 };
 
-&iom0 {
+&i2c0 {
 	compatible = "ambiq,i2c";
 	pinctrl-0 = <&i2c0_default>;
 	pinctrl-names = "default";
@@ -78,15 +79,16 @@
 	status = "okay";
 };
 
-&iom1 {
+&spi1 {
 	compatible = "ambiq,spi";
 	pinctrl-0 = <&spi1_default>;
 	pinctrl-names = "default";
+	cs-gpios = <&gpio0_31 11 GPIO_ACTIVE_LOW>;
 	clock-frequency = <DT_FREQ_M(1)>;
 	status = "okay";
 };
 
-&iom4 {
+&spi4 {
 	pinctrl-0 = <&spi4_default>;
 	pinctrl-names = "default";
 	status = "okay";

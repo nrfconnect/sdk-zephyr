@@ -259,15 +259,7 @@ int ead_update_ad(void);
 
 static bool bt_shell_ead_decrypt_scan;
 
-/**
- * @brief Compares two strings without case sensitivy
- *
- * @param substr The substring
- * @param str The string to find the substring in
- *
- * @return true if @substr is a substring of @p, else false
- */
-static bool is_substring(const char *substr, const char *str)
+bool is_substring(const char *substr, const char *str)
 {
 	const size_t str_len = strlen(str);
 	const size_t sub_str_len = strlen(substr);
@@ -306,8 +298,9 @@ static bool data_cb(struct bt_data *data, void *user_data)
 
 static void print_data_hex(const uint8_t *data, uint8_t len, enum shell_vt100_color color)
 {
-	if (len == 0)
+	if (len == 0) {
 		return;
+	}
 
 	shell_fprintf(ctx_shell, color, "0x");
 	/* Reverse the byte order when printing as advertising data is LE
@@ -749,8 +742,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	conn_addr_str(conn, addr, sizeof(addr));
 
 	if (err) {
-		shell_error(ctx_shell, "Failed to connect to %s (0x%02x)", addr,
-			     err);
+		shell_error(ctx_shell, "Failed to connect to %s 0x%02x %s", addr,
+			    err, bt_hci_err_to_str(err));
 		goto done;
 	}
 
@@ -899,20 +892,6 @@ static void security_changed(struct bt_conn *conn, bt_security_t level,
 #endif
 
 #if defined(CONFIG_BT_REMOTE_INFO)
-static const char *ver_str(uint8_t ver)
-{
-	const char * const str[] = {
-		"1.0b", "1.1", "1.2", "2.0", "2.1", "3.0", "4.0", "4.1", "4.2",
-		"5.0", "5.1", "5.2", "5.3", "5.4"
-	};
-
-	if (ver < ARRAY_SIZE(str)) {
-		return str[ver];
-	}
-
-	return "unknown";
-}
-
 static void remote_info_available(struct bt_conn *conn,
 				  struct bt_conn_remote_info *remote_info)
 {
@@ -923,7 +902,7 @@ static void remote_info_available(struct bt_conn *conn,
 	if (IS_ENABLED(CONFIG_BT_REMOTE_VERSION)) {
 		shell_print(ctx_shell,
 			    "Remote LMP version %s (0x%02x) subversion 0x%04x "
-			    "manufacturer 0x%04x", ver_str(remote_info->version),
+			    "manufacturer 0x%04x", bt_hci_get_ver_str(remote_info->version),
 			    remote_info->version, remote_info->subversion,
 			    remote_info->manufacturer);
 	}
@@ -1003,6 +982,78 @@ void subrate_changed(struct bt_conn *conn,
 }
 #endif
 
+#if defined(CONFIG_BT_CHANNEL_SOUNDING)
+void print_remote_cs_capabilities(struct bt_conn *conn, struct bt_conn_le_cs_capabilities *params)
+{
+	shell_print(
+		ctx_shell,
+		"Received remote channel sounding capabilities:\n"
+		"- Num CS configurations: %d\n"
+		"- Max consecutive CS procedures: %d\n"
+		"- Num antennas supported: %d\n"
+		"- Max antenna paths supported: %d\n"
+		"- Initiator role supported: %s\n"
+		"- Reflector role supported: %s\n"
+		"- Mode 3 supported: %s\n"
+		"- RTT AA only supported: %s\n"
+		"- RTT AA only is 10ns precise: %s\n"
+		"- RTT AA only N: %d\n"
+		"- RTT sounding supported: %s\n"
+		"- RTT sounding is 10ns precise: %s\n"
+		"- RTT sounding N: %d\n"
+		"- RTT random payload supported: %s\n"
+		"- RTT random payload is 10ns precise: %s\n"
+		"- RTT random payload N: %d\n"
+		"- Phase-based NADM with sounding sequences supported: %s\n"
+		"- Phase-based NADM with random sequences supported: %s\n"
+		"- CS Sync 2M PHY supported: %s\n"
+		"- CS Sync 2M 2BT PHY supported: %s\n"
+		"- CS without transmitter FAE supported: %s\n"
+		"- Channel selection algorithm #3c supported: %s\n"
+		"- Phase-based ranging from RTT sounding sequence supported: %s\n"
+		"- T_IP1 times supported: 0x%04x\n"
+		"- T_IP2 times supported: 0x%04x\n"
+		"- T_FCS times supported: 0x%04x\n"
+		"- T_PM times supported: 0x%04x\n"
+		"- T_SW time supported: %d us\n"
+		"- TX SNR capability: 0x%02x",
+		params->num_config_supported, params->max_consecutive_procedures_supported,
+		params->num_antennas_supported, params->max_antenna_paths_supported,
+		params->initiator_supported ? "Yes" : "No",
+		params->reflector_supported ? "Yes" : "No", params->mode_3_supported ? "Yes" : "No",
+		params->rtt_aa_only_precision == BT_CONN_LE_CS_RTT_AA_ONLY_NOT_SUPP ? "No" : "Yes",
+		params->rtt_aa_only_precision == BT_CONN_LE_CS_RTT_AA_ONLY_10NS ? "Yes" : "No",
+		params->rtt_aa_only_n,
+		params->rtt_sounding_precision == BT_CONN_LE_CS_RTT_SOUNDING_NOT_SUPP ? "No"
+										      : "Yes",
+		params->rtt_sounding_precision == BT_CONN_LE_CS_RTT_SOUNDING_10NS ? "Yes" : "No",
+		params->rtt_sounding_n,
+		params->rtt_random_payload_precision == BT_CONN_LE_CS_RTT_RANDOM_PAYLOAD_NOT_SUPP
+			? "No"
+			: "Yes",
+		params->rtt_random_payload_precision == BT_CONN_LE_CS_RTT_RANDOM_PAYLOAD_10NS
+			? "Yes"
+			: "No",
+		params->rtt_random_payload_n,
+		params->phase_based_nadm_sounding_supported ? "Yes" : "No",
+		params->phase_based_nadm_random_supported ? "Yes" : "No",
+		params->cs_sync_2m_phy_supported ? "Yes" : "No",
+		params->cs_sync_2m_2bt_phy_supported ? "Yes" : "No",
+		params->cs_without_fae_supported ? "Yes" : "No",
+		params->chsel_alg_3c_supported ? "Yes" : "No",
+		params->pbr_from_rtt_sounding_seq_supported ? "Yes" : "No",
+		params->t_ip1_times_supported, params->t_ip2_times_supported,
+		params->t_fcs_times_supported, params->t_pm_times_supported, params->t_sw_time,
+		params->tx_snr_capability);
+}
+
+void print_remote_cs_fae_table(struct bt_conn *conn, struct bt_conn_le_cs_fae_table *params)
+{
+	shell_print(ctx_shell, "Received FAE Table: ");
+	shell_hexdump(ctx_shell, params->remote_fae_table, 72);
+}
+#endif
+
 static struct bt_conn_cb conn_callbacks = {
 	.connected = connected,
 	.disconnected = disconnected,
@@ -1031,6 +1082,10 @@ static struct bt_conn_cb conn_callbacks = {
 #endif
 #if defined(CONFIG_BT_SUBRATING)
 	.subrate_changed = subrate_changed,
+#endif
+#if defined(CONFIG_BT_CHANNEL_SOUNDING)
+	.remote_cs_capabilities_available = print_remote_cs_capabilities,
+	.remote_cs_fae_table_available = print_remote_cs_fae_table,
 #endif
 };
 #endif /* CONFIG_BT_CONN */
@@ -1276,6 +1331,11 @@ static int cmd_hci_cmd(const struct shell *sh, size_t argc, char *argv[])
 		}
 
 		buf = bt_hci_cmd_create(BT_OP(ogf, ocf), len);
+		if (buf == NULL) {
+			shell_error(sh, "Unable to allocate HCI buffer");
+			return -ENOMEM;
+		}
+
 		net_buf_add_mem(buf, hex_data, len);
 	}
 
@@ -2929,7 +2989,7 @@ static int cmd_read_local_tx_power(const struct shell *sh, size_t argc, char *ar
 		}
 		err = bt_conn_le_get_tx_power_level(default_conn, &tx_power_level);
 		if (err) {
-			shell_print(sh, "Commad returned error error %d", err);
+			shell_print(sh, "Command returned error %d", err);
 			return err;
 		}
 		if (tx_power_level.current_level == unachievable_current_level) {
@@ -4594,7 +4654,7 @@ static int cmd_encrypted_ad_add_ad(const struct shell *sh, size_t argc, char *ar
 	 */
 	if (len != ad_len + 2) {
 		shell_error(sh,
-			    "Failed to add data. Data need to be formated as specified in the "
+			    "Failed to add data. Data need to be formatted as specified in the "
 			    "Core Spec. Only one non-encrypted AD payload can be added at a time.");
 		return -ENOEXEC;
 	}
