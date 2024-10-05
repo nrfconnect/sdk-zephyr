@@ -174,6 +174,22 @@ elseif(CONFIG_NRF_WIFI_PATCHES_BUILTIN)
     ${NRF70_PATCH}
     ${gen_dir}/nrf70.bin.inc
   )
+
+  # Rebuild fw_load.c whenever the firmware binary changes
+  # a bit crude way to do it, but it works
+  add_custom_command(
+    OUTPUT ${CMAKE_SOURCE_DIR}/src/fw_load.c
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_SOURCE_DIR}/src/fw_load.c
+    DEPENDS ${NRF70_PATCH}
+    COMMENT "Checking firmware blobs ${NRF70_PATCH}"
+  )
+
+  add_custom_target(
+    check_firmware_blobs ALL
+    DEPENDS ${CMAKE_SOURCE_DIR}/src/fw_load.c
+  )
+
+  add_dependencies(nrfwifi check_firmware_blobs)
 endif()
 
 
