@@ -1357,7 +1357,7 @@ int hapd_config_network(struct hostapd_iface *iface,
 			if (!hostapd_cli_cmd_v("set wpa_key_mgmt WPA-PSK")) {
 				goto out;
 			}
-			if (!hostapd_cli_cmd_v("set wpa_passphrase \"%s\"", params->psk)) {
+			if (!hostapd_cli_cmd_v("set wpa_passphrase %s", params->psk)) {
 				goto out;
 			}
 			if (!hostapd_cli_cmd_v("set wpa_pairwise CCMP")) {
@@ -1370,7 +1370,7 @@ int hapd_config_network(struct hostapd_iface *iface,
 			if (!hostapd_cli_cmd_v("set wpa_key_mgmt WPA-PSK")) {
 				goto out;
 			}
-			if (!hostapd_cli_cmd_v("set wpa_passphrase \"%s\"", params->psk)) {
+			if (!hostapd_cli_cmd_v("set wpa_passphrase %s", params->psk)) {
 				goto out;
 			}
 			if (!hostapd_cli_cmd_v("set rsn_pairwise CCMP")) {
@@ -1383,7 +1383,7 @@ int hapd_config_network(struct hostapd_iface *iface,
 			if (!hostapd_cli_cmd_v("set wpa_key_mgmt WPA-PSK-SHA256")) {
 				goto out;
 			}
-			if (!hostapd_cli_cmd_v("set wpa_passphrase \"%s\"", params->psk)) {
+			if (!hostapd_cli_cmd_v("set wpa_passphrase %s", params->psk)) {
 				goto out;
 			}
 			if (!hostapd_cli_cmd_v("set rsn_pairwise CCMP")) {
@@ -1396,7 +1396,7 @@ int hapd_config_network(struct hostapd_iface *iface,
 			if (!hostapd_cli_cmd_v("set wpa_key_mgmt SAE")) {
 				goto out;
 			}
-			if (!hostapd_cli_cmd_v("set sae_password \"%s\"",
+			if (!hostapd_cli_cmd_v("set sae_password %s",
 					       params->sae_password ? params->sae_password :
 					       params->psk)) {
 				goto out;
