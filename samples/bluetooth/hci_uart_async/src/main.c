@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-extern int hci_uart_main(void);
+extern void hci_uart_main(void);
 
 int main(void)
 {
