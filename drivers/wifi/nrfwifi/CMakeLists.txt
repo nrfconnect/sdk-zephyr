@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-zephyr_library_named(nrfwifi)
+zephyr_library()
 
 set(OS_AGNOSTIC_BASE ${ZEPHYR_HAL_NORDIC_MODULE_DIR}/drivers/nrf_wifi)
 set(FW_BINS_BASE ${ZEPHYR_HAL_NORDIC_MODULE_DIR}/zephyr/blobs/wifi_fw_bins)
