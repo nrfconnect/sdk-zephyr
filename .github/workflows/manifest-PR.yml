@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: handle manifest PR
+        if: >
+          !(contains(github.event.pull_request.title, 'manifest-pr-skip') ||
+            contains(github.event.pull_request.body, 'manifest-pr-skip'))
         uses: nrfconnect/action-manifest-pr@main
         with:
           token: ${{ secrets.NCS_GITHUB_TOKEN }}
