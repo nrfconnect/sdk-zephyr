@@ -10,11 +10,11 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			sram_tx: memory@20018000 {
+			sram_rx: memory@20018000 {
 				reg = <0x20018000 0x0800>;
 			};
 
-			sram_rx: memory@20020000 {
+			sram_tx: memory@20020000 {
 				reg = <0x20020000 0x0800>;
 			};
 		};
@@ -25,21 +25,17 @@
 			compatible = "zephyr,ipc-icmsg";
 			tx-region = <&sram_tx>;
 			rx-region = <&sram_rx>;
-			mboxes = <&cpuflpr_vevif_rx 16>, <&cpuflpr_vevif_tx 15>;
+			mboxes = <&cpuapp_vevif_rx 20>, <&cpuapp_vevif_tx 21>;
 			mbox-names = "rx", "tx";
 			status = "okay";
 		};
 	};
 };
 
-&cpuflpr_vevif_rx {
+&cpuapp_vevif_rx {
 	status = "okay";
 };
 
-&cpuflpr_vevif_tx {
+&cpuapp_vevif_tx {
 	status = "okay";
-};
-
-&uart30 {
-	/delete-property/ hw-flow-control;
 };
