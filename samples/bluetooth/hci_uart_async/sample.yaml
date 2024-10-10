@@ -17,3 +17,11 @@ tests:
     tags:
       - uart
       - bluetooth
+  sample.bluetooth.hci_uart.nrf54l15.all:
+    harness: bluetooth
+    platform_allow: nrf54l15pdk/nrf54l15/cpuapp
+    integration_platforms:
+      - nrf54l15pdk/nrf54l15/cpuapp
+    tags:
+      - uart
+      - bluetooth
