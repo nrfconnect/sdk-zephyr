@@ -192,6 +192,7 @@
 				interrupts = <198 NRF_DEFAULT_IRQ_PRIORITY>;
 				easydma-maxcnt-bits = <16>;
 				status = "disabled";
+				zephyr,pm-device-runtime-auto;
 			};
 
 			spi20: spi@c6000 {
@@ -230,6 +231,7 @@
 				interrupts = <199 NRF_DEFAULT_IRQ_PRIORITY>;
 				easydma-maxcnt-bits = <16>;
 				status = "disabled";
+				zephyr,pm-device-runtime-auto;
 			};
 
 			spi21: spi@c7000 {
@@ -268,6 +270,7 @@
 				interrupts = <200 NRF_DEFAULT_IRQ_PRIORITY>;
 				easydma-maxcnt-bits = <16>;
 				status = "disabled";
+				zephyr,pm-device-runtime-auto;
 			};
 
 			spi22: spi@c8000 {
@@ -468,6 +471,7 @@
 				interrupts = <260 NRF_DEFAULT_IRQ_PRIORITY>;
 				easydma-maxcnt-bits = <16>;
 				status = "disabled";
+				zephyr,pm-device-runtime-auto;
 			};
 
 			spi30: spi@104000 {
