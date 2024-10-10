@@ -214,6 +214,22 @@ config PSA_WANT_ALG_XTS
 	bool "PSA XTS block cipher mode support" if !PSA_PROMPTLESS
 	default y if PSA_CRYPTO_ENABLE_ALL
 
+config PSA_WANT_ALG_CFB
+	bool "PSA stream cipher using CFB mode support" if !PSA_PROMPTLESS
+	default y if PSA_CRYPTO_ENABLE_ALL
+
+config PSA_WANT_ALG_OFB
+	bool "PSA stream cipher using OFB mode support" if !PSA_PROMPTLESS
+	default y if PSA_CRYPTO_ENABLE_ALL
+
+config PSA_WANT_ALG_CHACHA20
+	bool "PSA CHACHA20 stream cipher support" if !PSA_PROMPTLESS
+	default y if PSA_CRYPTO_ENABLE_ALL
+
+config PSA_WANT_ALG_SHAKE256_512
+	bool "PSA SHAKE256 512 bits support" if !PSA_PROMPTLESS
+	default y if PSA_CRYPTO_ENABLE_ALL
+
 comment "Nordic added ECC curve types"
 
 config PSA_WANT_ECC_BRAINPOOL_P_R1_160
