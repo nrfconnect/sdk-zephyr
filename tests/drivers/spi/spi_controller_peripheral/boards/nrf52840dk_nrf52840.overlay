@@ -53,6 +53,7 @@
 	zephyr,pm-device-runtime-auto;
 	dut_spi_dt: test-spi-dev@0 {
 		compatible = "vnd,spi-device";
+		spi-max-frequency = <DT_FREQ_M(8)>;
 		reg = <0>;
 	};
 };
