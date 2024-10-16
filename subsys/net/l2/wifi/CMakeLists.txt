@@ -34,18 +34,18 @@ zephyr_include_directories(${gen_inc_dir})
 
 generate_inc_file_for_target(
     app
-    ${ZEPHYR_BASE}/samples/net/wifi/test_certs/client.pem
+    ${NRF_DIR}/samples/wifi/shell/test_certs/client.pem
     ${gen_dir}/client.pem.inc
     )
 
 generate_inc_file_for_target(
     app
-    ${ZEPHYR_BASE}/samples/net/wifi/test_certs/client-key.pem
+    ${NRF_DIR}/samples/wifi/shell/test_certs/client-key.pem
     ${gen_dir}/client-key.pem.inc
     )
 
 generate_inc_file_for_target(
     app
-    ${ZEPHYR_BASE}/samples/net/wifi/test_certs/ca.pem
+    ${NRF_DIR}/samples/wifi/shell/test_certs/ca.pem
     ${gen_dir}/ca.pem.inc
     )
