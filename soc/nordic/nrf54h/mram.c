@@ -5,36 +5,36 @@
  */
 
 #include <zephyr/init.h>
-
-#define MODULE mram_suspend_off
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(MODULE);
+#include <zephyr/toolchain.h>
 
 #include <services/nrfs_mram.h>
 #include <nrfs_backend_ipc_service.h>
 
-#define MRAM_SUSPEND_OFF_INIT_PRIO 90
+LOG_MODULE_REGISTER(mram, CONFIG_SOC_LOG_LEVEL);
 
 void mram_latency_handler(nrfs_mram_latency_evt_t const *p_evt, void *context)
 {
+	ARG_UNUSED(context);
+
 	switch (p_evt->type) {
 	case NRFS_MRAM_LATENCY_REQ_APPLIED:
-		LOG_DBG("MRAM latency handler: response received");
+		LOG_DBG("MRAM latency not allowed setting applied");
 		break;
 	case NRFS_MRAM_LATENCY_REQ_REJECTED:
-		LOG_ERR("MRAM latency handler - request rejected!");
+		LOG_ERR("MRAM latency not allowed setting rejected");
+		k_panic();
 		break;
 	default:
-		LOG_ERR("MRAM latency handler - unexpected event: 0x%x", p_evt->type);
-		break;
+		LOG_WRN("Unexpected event: %d", p_evt->type);
 	}
 }
 
+/* Turn off mram automatic suspend as it causes delays in time depended code sections. */
 static int turn_off_suspend_mram(void)
 {
-	/* Turn off mram automatic suspend as it causes delays in time depended code sections. */
-
-	nrfs_err_t err = NRFS_SUCCESS;
+	nrfs_err_t err;
 
 	/* Wait for ipc initialization */
 	nrfs_backend_wait_for_connection(K_FOREVER);
@@ -42,17 +42,18 @@ static int turn_off_suspend_mram(void)
 	err = nrfs_mram_init(mram_latency_handler);
 	if (err != NRFS_SUCCESS) {
 		LOG_ERR("MRAM service init failed: %d", err);
-	} else {
-		LOG_DBG("MRAM service initialized");
+		return -EIO;
 	}
 
-	LOG_DBG("MRAM: set latency: NOT ALLOWED");
+	LOG_DBG("MRAM service initialized, disallow latency");
+
 	err = nrfs_mram_set_latency(MRAM_LATENCY_NOT_ALLOWED, NULL);
-	if (err) {
+	if (err != NRFS_SUCCESS) {
 		LOG_ERR("MRAM: set latency failed (%d)", err);
+		return -EIO;
 	}
 
-	return err;
+	return 0;
 }
 
-SYS_INIT(turn_off_suspend_mram, APPLICATION, MRAM_SUSPEND_OFF_INIT_PRIO);
+SYS_INIT(turn_off_suspend_mram, APPLICATION, 90);
