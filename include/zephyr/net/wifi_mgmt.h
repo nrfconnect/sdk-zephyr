@@ -31,6 +31,23 @@ extern "C" {
 
 /** @cond INTERNAL_HIDDEN */
 
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
+static const char ca_cert_test[] = {
+	#include <wifi_enterprise_test_certs/ca.pem.inc>
+	'\0'
+};
+
+static const char client_cert_test[] = {
+	#include <wifi_enterprise_test_certs/client.pem.inc>
+	'\0'
+};
+
+static const char client_key_test[] = {
+	#include <wifi_enterprise_test_certs/client-key.pem.inc>
+	'\0'
+};
+#endif
+
 #define _NET_WIFI_LAYER	NET_MGMT_LAYER_L2
 #define _NET_WIFI_CODE	0x156
 #define _NET_WIFI_BASE	(NET_MGMT_IFACE_BIT |			\

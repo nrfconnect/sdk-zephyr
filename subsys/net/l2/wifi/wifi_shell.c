@@ -29,22 +29,6 @@ LOG_MODULE_REGISTER(net_wifi_shell, LOG_LEVEL_INF);
 #include <zephyr/sys/slist.h>
 
 #include "net_shell_private.h"
-#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
-static const char ca_cert_test[] = {
-	#include <wifi_enterprise_test_certs/ca.pem.inc>
-	'\0'
-};
-
-static const char client_cert_test[] = {
-	#include <wifi_enterprise_test_certs/client.pem.inc>
-	'\0'
-};
-
-static const char client_key_test[] = {
-	#include <wifi_enterprise_test_certs/client-key.pem.inc>
-	'\0'
-};
-#endif
 
 #define WIFI_SHELL_MODULE "wifi"
 
