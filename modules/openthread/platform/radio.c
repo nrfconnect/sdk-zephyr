@@ -381,6 +381,12 @@ void platformRadioInit(void)
 	radio_api->configure(radio_dev, IEEE802154_CONFIG_EVENT_HANDLER, &cfg);
 }
 
+static void radio_set_channel(uint16_t ch)
+{
+	channel = ch;
+	radio_api->set_channel(radio_dev, ch);
+}
+
 void transmit_message(struct k_work *tx_job)
 {
 	int tx_err;
@@ -396,10 +402,7 @@ void transmit_message(struct k_work *tx_job)
 	 */
 	tx_payload->len = sTransmitFrame.mLength - FCS_SIZE;
 
-	channel = sTransmitFrame.mChannel;
-
-	radio_api->set_channel(radio_dev, channel);
-	radio_api->set_txpower(radio_dev, get_transmit_power_for_channel(channel));
+	radio_api->set_txpower(radio_dev, get_transmit_power_for_channel(sTransmitFrame.mChannel));
 
 #if defined(CONFIG_OPENTHREAD_TIME_SYNC)
 	if (sTransmitFrame.mInfo.mTxInfo.mIeInfo->mTimeIeOffset != 0) {
@@ -424,9 +427,19 @@ void transmit_message(struct k_work *tx_job)
 				 sTransmitFrame.mInfo.mTxInfo.mTxDelay;
 		net_pkt_set_timestamp_ns(tx_pkt, convert_32bit_us_wrapped_to_64bit_ns(tx_at));
 #endif
+#if defined(CONFIG_IEEE802154_SELECTIVE_TXCHANNEL)
+		if (radio_caps & IEEE802154_HW_SELECTIVE_TXCHANNEL) {
+			net_pkt_set_ieee802154_txchannel(tx_pkt, sTransmitFrame.mChannel);
+		} else {
+			radio_set_channel(sTransmitFrame.mChannel);
+		}
+#else
+		radio_set_channel(sTransmitFrame.mChannel);
+#endif
 		tx_err =
 			radio_api->tx(radio_dev, IEEE802154_TX_MODE_TXTIME_CCA, tx_pkt, tx_payload);
 	} else if (sTransmitFrame.mInfo.mTxInfo.mCsmaCaEnabled) {
+		radio_set_channel(sTransmitFrame.mChannel);
 		if (radio_caps & IEEE802154_HW_CSMA) {
 			tx_err = radio_api->tx(radio_dev, IEEE802154_TX_MODE_CSMA_CA, tx_pkt,
 					       tx_payload);
@@ -438,6 +451,7 @@ void transmit_message(struct k_work *tx_job)
 			}
 		}
 	} else {
+		radio_set_channel(sTransmitFrame.mChannel);
 		tx_err = radio_api->tx(radio_dev, IEEE802154_TX_MODE_DIRECT, tx_pkt, tx_payload);
 	}
 
