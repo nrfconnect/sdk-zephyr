@@ -128,16 +128,29 @@ config NRF_WIFI_IF_AUTO_START
 	bool "Wi-Fi interface auto start on boot"
 	default y
 
+choice NRF_WIFI_FW_BLOB_HANDLING
+	prompt "nRF70 Firmware blob handling"
+	default NRF_WIFI_PATCHES_BUILTIN
+
+config NRF_WIFI_BUILD_ONLY_MODE
+	bool "Build only mode"
+	help
+	  Enable this option to build the driver without firmware loading, removes
+	  dependency on firmware binary and patches.
+	  This is useful to check the build and link errors.
+
 config NRF_WIFI_PATCHES_BUILTIN
 	bool "Store nRF70 FW patches as part of the driver"
-	default y
 	help
 	  Select this option to store nRF70 FW patches as part of the driver.
 	  This option impacts the code memory footprint of the driver.
 
-config CUSTOM_LINKER_SCRIPT
-	string "Custom linker script for nRF70 FW patches"
-	default "${ZEPHYR_BASE}/../nrf/drivers/wifi/nrf70/rpu_fw_patches.ld"
+config NRF_WIFI_PATCHES_EXTERNAL
+	bool "Load nRF70 FW patches from external binary"
+	help
+	  Select this option to load nRF70 FW patches from an external tooling.
+	  Please do not enable this option in vanilla Zephyr builds.
+endchoice
 
 config NRF_WIFI_LOW_POWER
 	bool "low power mode in nRF Wi-Fi chipsets"
@@ -692,45 +705,5 @@ config NRF_WIFI_QOS_NULL_BASED_RETRIEVAL
 	  depending on the delay. Ideal for heavy buffered traffic.
 
 endchoice
-
-config NRF_WIFI_BUILD_ONLY_MODE
-	bool "Build only mode"
-	help
-	  Enable this option to build the driver without firmware loading, removes
-	  dependency on firmware binary and patches.
-	  This is useful to check the build and link errors.
-
-# TODO: Temporary WAR, implement these options in the future
-config NRF_WIFI_PATCHES_EXT_FLASH_DISABLED
-	bool "nRF70 firmware patch external flash support"
-	help
-	  Select this option to disable external flash support for nRF70 firmware patches
-
-config NRF_WIFI_FW_PATCH_DFU
-	bool "nRF70 firmware patch DFU"
-	help
-	  Select this option to enable DFU for nRF70 firmware patches
-
-config NRF_WIFI_PATCHES_EXT_FLASH_STORE
-	bool "nRF70 firmware patch external flash store"
-	help
-	  Select this option to enable external flash store for nRF70 firmware patches
-
-config NRF_WIFI_FW_FLASH_CHUNK_SIZE
-	int "nRF70 firmware patch flash chunk size"
-	default 8192
-	help
-	  Select this option to set the flash chunk size for nRF70 firmware patches
-
-config NRF_WIFI_PATCHES_EXT_FLASH_XIP
-	bool "nRF70 firmware patch external flash XIP"
-	help
-	  Select this option to enable external flash XIP for nRF70 firmware patches
-
-config NRF_WIFI_FEAT_WMM
-	bool "WMM/QoS support"
-	default y
-	help
-	  This option controls disable/enable of the WMM(Wireless Multi-Media) feature.
 
 endif # WIFI_NRF70
