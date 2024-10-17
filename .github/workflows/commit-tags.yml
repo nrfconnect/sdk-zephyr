@@ -1,6 +1,10 @@
 name: Commit tags
 
-on: pull_request
+on:
+  pull_request:
+    types: [synchronize, opened, reopened, edited, labeled, unlabeled,
+            milestoned, demilestoned, assigned, unassigned, ready_for_review,
+            review_requested]
 
 jobs:
   commit_tags:
@@ -17,15 +21,8 @@ jobs:
         ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
 
-    - name: Install python dependencies
-      run: |
-        pip3 install setuptools
-        pip3 install wheel
-        pip3 install gitlint
-
     - name: Run the commit tags
       uses: nrfconnect/action-commit-tags@main
       with:
-        target: '.'
-        baserev: origin/${{ github.base_ref }}
-        revrange: 'none'
+        target: .
+        upstream: zephyrproject-rtos/zephyr/main
