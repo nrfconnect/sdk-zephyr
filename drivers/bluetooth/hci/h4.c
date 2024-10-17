@@ -564,9 +564,19 @@ static int h4_setup(const struct device *dev, const struct bt_hci_setup_params *
 }
 #endif
 
-static const struct bt_hci_driver_api h4_driver_api = {
-	.open = h4_open,
-	.send = h4_send,
+static int h4_close(void)
+{
+	/* NOTE: dummy implementition to make bt_disable not fail – ESP32 is
+	 * turned off after that anyways */
+	return 0;
+}
+
+static const struct bt_hci_driver drv = {
+	.name		= "H:4",
+	.bus		= BT_HCI_DRIVER_BUS_UART,
+	.open		= h4_open,
+	.close		= h4_close,
+	.send		= h4_send,
 #if defined(CONFIG_BT_HCI_SETUP)
 	.setup = h4_setup,
 #endif
