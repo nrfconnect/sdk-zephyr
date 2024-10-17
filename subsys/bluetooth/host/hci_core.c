@@ -2337,7 +2337,7 @@ static void send_cmd(void)
 
 	/* Wait until ncmd > 0 */
 	BT_DBG("calling sem_take_wait");
-	k_sem_take(&bt_dev.ncmd_sem, K_FOREVER);
+	k_sem_take(&bt_dev.ncmd_sem, K_NO_WAIT);
 
 	/* Clear out any existing sent command */
 	if (bt_dev.sent_cmd) {
