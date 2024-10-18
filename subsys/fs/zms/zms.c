@@ -169,17 +169,13 @@ static inline size_t zms_al_size(struct zms_fs *fs, size_t len)
 /* Helper to get empty ATE address */
 static inline uint64_t zms_empty_ate_addr(struct zms_fs *fs, uint64_t addr)
 {
-	size_t ate_size = zms_al_size(fs, sizeof(struct zms_ate));
-
-	return (addr & ADDR_SECT_MASK) + fs->sector_size - ate_size;
+	return (addr & ADDR_SECT_MASK) + fs->sector_size - fs->ate_size;
 }
 
 /* Helper to get close ATE address */
 static inline uint64_t zms_close_ate_addr(struct zms_fs *fs, uint64_t addr)
 {
-	size_t ate_size = zms_al_size(fs, sizeof(struct zms_ate));
-
-	return (addr & ADDR_SECT_MASK) + fs->sector_size - 2 * ate_size;
+	return (addr & ADDR_SECT_MASK) + fs->sector_size - 2 * fs->ate_size;
 }
 
 /* Aligned memory write */
@@ -426,10 +422,6 @@ static int zms_ate_crc8_check(const struct zms_ate *entry)
  */
 static int zms_ate_valid(struct zms_fs *fs, const struct zms_ate *entry)
 {
-	size_t ate_size;
-
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
-
 	if ((fs->sector_cycle != entry->cycle_cnt) || zms_ate_crc8_check(entry)) {
 		return 0;
 	}
@@ -446,10 +438,6 @@ static int zms_ate_valid(struct zms_fs *fs, const struct zms_ate *entry)
 static int zms_ate_valid_different_sector(struct zms_fs *fs, const struct zms_ate *entry,
 					  uint8_t cycle_cnt)
 {
-	size_t ate_size;
-
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
-
 	if ((cycle_cnt != entry->cycle_cnt) || zms_ate_crc8_check(entry)) {
 		return 0;
 	}
@@ -487,10 +475,8 @@ static inline int zms_get_cycle_on_sector_change(struct zms_fs *fs, uint64_t add
  */
 static bool zms_close_ate_valid(struct zms_fs *fs, const struct zms_ate *entry)
 {
-	size_t ate_size = zms_al_size(fs, sizeof(struct zms_ate));
-
 	return (zms_ate_valid_different_sector(fs, entry, entry->cycle_cnt) && (!entry->len) &&
-		(entry->id == ZMS_HEAD_ID) && !((fs->sector_size - entry->offset) % ate_size));
+		(entry->id == ZMS_HEAD_ID) && !((fs->sector_size - entry->offset) % fs->ate_size));
 }
 
 /* zms_empty_ate_valid validates an sector empty ate: a valid sector empty ate:
@@ -592,15 +578,12 @@ static int zms_recover_last_ate(struct zms_fs *fs, uint64_t *addr, uint64_t *dat
 {
 	uint64_t data_end_addr, ate_end_addr;
 	struct zms_ate end_ate;
-	size_t ate_size;
 	int rc;
 
 	LOG_DBG("Recovering last ate from sector %llu", SECTOR_NUM(*addr));
 
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
-
 	/* skip close and empty ATE */
-	*addr -= 2 * ate_size;
+	*addr -= 2 * fs->ate_size;
 
 	ate_end_addr = *addr;
 	data_end_addr = *addr & ADDR_SECT_MASK;
@@ -621,7 +604,7 @@ static int zms_recover_last_ate(struct zms_fs *fs, uint64_t *addr, uint64_t *dat
 			}
 			*addr = ate_end_addr;
 		}
-		ate_end_addr -= ate_size;
+		ate_end_addr -= fs->ate_size;
 	}
 
 	return 0;
@@ -632,12 +615,9 @@ static int zms_compute_prev_addr(struct zms_fs *fs, uint64_t *addr)
 {
 	int sec_closed;
 	struct zms_ate empty_ate, close_ate;
-	size_t ate_size;
 
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
-
-	*addr += ate_size;
-	if ((SECTOR_OFFSET(*addr)) != (fs->sector_size - 2 * ate_size)) {
+	*addr += fs->ate_size;
+	if ((SECTOR_OFFSET(*addr)) != (fs->sector_size - 2 * fs->ate_size)) {
 		return 0;
 	}
 
@@ -698,13 +678,10 @@ static int zms_sector_close(struct zms_fs *fs)
 {
 	int rc;
 	struct zms_ate close_ate, garbage_ate;
-	size_t ate_size;
-
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
 
 	close_ate.id = ZMS_HEAD_ID;
 	close_ate.len = 0U;
-	close_ate.offset = (uint32_t)SECTOR_OFFSET(fs->ate_wra + ate_size);
+	close_ate.offset = (uint32_t)SECTOR_OFFSET(fs->ate_wra + fs->ate_size);
 	close_ate.metadata = 0xffffffff;
 	close_ate.cycle_cnt = fs->sector_cycle;
 
@@ -769,16 +746,13 @@ static int zms_add_gc_done_ate(struct zms_fs *fs)
 static int zms_add_empty_ate(struct zms_fs *fs, uint64_t addr)
 {
 	struct zms_ate empty_ate;
-	size_t ate_size;
 	uint8_t cycle_cnt;
 	int rc = 0;
 	uint64_t previous_ate_wra;
 
 	addr &= ADDR_SECT_MASK;
 
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
-
-	LOG_DBG("Adding empty ate at %llx", (uint64_t)(addr + fs->sector_size - ate_size));
+	LOG_DBG("Adding empty ate at %llx", (uint64_t)(addr + fs->sector_size - fs->ate_size));
 	empty_ate.id = ZMS_HEAD_ID;
 	empty_ate.len = 0xffff;
 	empty_ate.offset = 0U;
@@ -815,11 +789,8 @@ static int zms_add_empty_ate(struct zms_fs *fs, uint64_t addr)
 static int zms_get_sector_cycle(struct zms_fs *fs, uint64_t addr, uint8_t *cycle_cnt)
 {
 	int rc;
-	size_t ate_size;
 	struct zms_ate empty_ate;
 	uint64_t empty_addr;
-
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
 
 	empty_addr = zms_empty_ate_addr(fs, addr);
 
@@ -843,10 +814,7 @@ static int zms_get_sector_header(struct zms_fs *fs, uint64_t addr, struct zms_at
 				 struct zms_ate *close_ate)
 {
 	int rc;
-	size_t ate_size;
 	uint64_t close_addr;
-
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
 
 	close_addr = zms_close_ate_addr(fs, addr);
 	/* read the second ate in the sector to get the close ATE */
@@ -856,7 +824,7 @@ static int zms_get_sector_header(struct zms_fs *fs, uint64_t addr, struct zms_at
 	}
 
 	/* read the first ate in the sector to get the empty ATE */
-	rc = zms_flash_ate_rd(fs, close_addr + ate_size, empty_ate);
+	rc = zms_flash_ate_rd(fs, close_addr + fs->ate_size, empty_ate);
 	if (rc) {
 		return rc;
 	}
@@ -929,9 +897,6 @@ static int zms_gc(struct zms_fs *fs)
 	struct zms_ate close_ate, gc_ate, wlk_ate, empty_ate;
 	uint64_t sec_addr, gc_addr, gc_prev_addr, wlk_addr, wlk_prev_addr, data_addr, stop_addr;
 	uint8_t previous_cycle = 0;
-	size_t ate_size;
-
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
 
 	rc = zms_get_sector_cycle(fs, fs->ate_wra, &fs->sector_cycle);
 	if (rc == -ENOENT) {
@@ -960,9 +925,7 @@ static int zms_gc(struct zms_fs *fs)
 
 	sec_addr = (fs->ate_wra & ADDR_SECT_MASK);
 	zms_sector_advance(fs, &sec_addr);
-	gc_addr = sec_addr + fs->sector_size - ate_size;
-	/* skip header ATEs */
-	stop_addr = gc_addr - 2 * ate_size;
+	gc_addr = sec_addr + fs->sector_size - fs->ate_size;
 
 	/* verify if the sector is closed */
 	sec_closed = zms_validate_closed_sector(fs, gc_addr, &empty_ate, &close_ate);
@@ -978,6 +941,8 @@ static int zms_gc(struct zms_fs *fs)
 	/* update sector_cycle */
 	fs->sector_cycle = empty_ate.cycle_cnt;
 
+	/* stop_addr points to the first ATE before the header ATEs */
+	stop_addr = gc_addr - 2 * fs->ate_size;
 	/* At this step empty & close ATEs are valid.
 	 * let's start the GC
 	 */
@@ -1057,7 +1022,7 @@ gc_done:
 	 * situations avoid adding the gc done ate.
 	 */
 
-	if (fs->ate_wra >= (fs->data_wra + ate_size)) {
+	if (fs->ate_wra >= (fs->data_wra + fs->ate_size)) {
 		rc = zms_add_gc_done_ate(fs);
 		if (rc) {
 			return rc;
@@ -1114,7 +1079,6 @@ static int zms_init(struct zms_fs *fs)
 {
 	int rc, sec_closed;
 	struct zms_ate last_ate, first_ate, close_ate, empty_ate;
-	size_t ate_size;
 	/* Initialize addr to 0 for the case fs->sector_count == 0. This
 	 * should never happen as this is verified in zms_mount() but both
 	 * Coverity and GCC believe the contrary.
@@ -1125,7 +1089,6 @@ static int zms_init(struct zms_fs *fs)
 
 	k_mutex_lock(&fs->zms_lock, K_FOREVER);
 
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
 	/* step through the sectors to find a open sector following
 	 * a closed sector, this is where zms can write.
 	 */
@@ -1188,7 +1151,7 @@ static int zms_init(struct zms_fs *fs)
 		 * Let's check if the last sector has valid ATEs otherwise set
 		 * the open sector to the first one.
 		 */
-		rc = zms_flash_ate_rd(fs, addr - ate_size, &first_ate);
+		rc = zms_flash_ate_rd(fs, addr - fs->ate_size, &first_ate);
 		if (rc) {
 			goto end;
 		}
@@ -1270,7 +1233,7 @@ static int zms_init(struct zms_fs *fs)
 			goto end;
 		}
 
-		fs->ate_wra -= ate_size;
+		fs->ate_wra -= fs->ate_size;
 	}
 
 	/* The sector after the write sector is either empty with a valid empty ATE (regular case)
@@ -1300,8 +1263,8 @@ static int zms_init(struct zms_fs *fs)
 		struct zms_ate gc_done_ate;
 
 		fs->sector_cycle = empty_ate.cycle_cnt;
-		addr = fs->ate_wra + ate_size;
-		while (SECTOR_OFFSET(addr) < (fs->sector_size - 2 * ate_size)) {
+		addr = fs->ate_wra + fs->ate_size;
+		while (SECTOR_OFFSET(addr) < (fs->sector_size - 2 * fs->ate_size)) {
 			rc = zms_flash_ate_rd(fs, addr, &gc_done_ate);
 			if (rc) {
 				goto end;
@@ -1310,7 +1273,7 @@ static int zms_init(struct zms_fs *fs)
 			if (zms_gc_done_ate_valid(fs, &gc_done_ate)) {
 				break;
 			}
-			addr += ate_size;
+			addr += fs->ate_size;
 		}
 
 		if (gc_done_marker) {
@@ -1337,7 +1300,7 @@ static int zms_init(struct zms_fs *fs)
 
 		/* Let's point to the first writable position */
 		fs->ate_wra &= ADDR_SECT_MASK;
-		fs->ate_wra += (fs->sector_size - 3 * ate_size);
+		fs->ate_wra += (fs->sector_size - 3 * fs->ate_size);
 		fs->data_wra = (fs->ate_wra & ADDR_SECT_MASK);
 #ifdef CONFIG_ZMS_LOOKUP_CACHE
 		/**
@@ -1362,7 +1325,7 @@ end:
 	/* If the sector is empty add a gc done ate to avoid having insufficient
 	 * space when doing gc.
 	 */
-	if ((!rc) && (SECTOR_OFFSET(fs->ate_wra) == (fs->sector_size - 3 * ate_size))) {
+	if ((!rc) && (SECTOR_OFFSET(fs->ate_wra) == (fs->sector_size - 3 * fs->ate_size))) {
 		rc = zms_add_gc_done_ate(fs);
 	}
 	k_mutex_unlock(&fs->zms_lock);
@@ -1376,7 +1339,6 @@ int zms_mount(struct zms_fs *fs)
 	int rc;
 	struct flash_pages_info info;
 	size_t write_block_size;
-	size_t ate_size;
 
 	k_mutex_init(&fs->zms_lock);
 
@@ -1386,7 +1348,7 @@ int zms_mount(struct zms_fs *fs)
 		return -EINVAL;
 	}
 
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
+	fs->ate_size = zms_al_size(fs, sizeof(struct zms_ate));
 	write_block_size = flash_get_write_block_size(fs->flash_device);
 
 	/* check that the write block size is supported */
@@ -1413,8 +1375,9 @@ int zms_mount(struct zms_fs *fs)
 	/* we need at least 5 aligned ATEs size as the minimum sector size
 	 * 1 close ATE, 1 empty ATE, 1 GC done ATE, 1 Delete ATE, 1 ID/Value ATE
 	 */
-	if (fs->sector_size < ZMS_MIN_ATE_NUM * ate_size) {
-		LOG_ERR("Invalid sector size, should be at least %u", ZMS_MIN_ATE_NUM * ate_size);
+	if (fs->sector_size < ZMS_MIN_ATE_NUM * fs->ate_size) {
+		LOG_ERR("Invalid sector size, should be at least %u",
+			ZMS_MIN_ATE_NUM * fs->ate_size);
 	}
 
 	/* check the number of sectors, it should be at least 2 */
@@ -1442,7 +1405,7 @@ int zms_mount(struct zms_fs *fs)
 ssize_t zms_write(struct zms_fs *fs, uint32_t id, const void *data, size_t len)
 {
 	int rc;
-	size_t ate_size, data_size;
+	size_t data_size;
 	struct zms_ate wlk_ate;
 	uint64_t wlk_addr, rd_addr;
 	uint32_t gc_count, required_space = 0U; /* no space, appropriate for delete ate */
@@ -1453,7 +1416,6 @@ ssize_t zms_write(struct zms_fs *fs, uint32_t id, const void *data, size_t len)
 		return -EACCES;
 	}
 
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
 	data_size = zms_al_size(fs, len);
 
 	/* The maximum data size is sector size - 5 ate
@@ -1461,7 +1423,7 @@ ssize_t zms_write(struct zms_fs *fs, uint32_t id, const void *data, size_t len)
 	 * 1 ate for gc done, and 1 ate to always allow a delete.
 	 * We cannot also store more than 64 KB of data
 	 */
-	if ((len > (fs->sector_size - 5 * ate_size)) || (len > UINT16_MAX) ||
+	if ((len > (fs->sector_size - 5 * fs->ate_size)) || (len > UINT16_MAX) ||
 	    ((len > 0) && (data == NULL))) {
 		return -EINVAL;
 	}
@@ -1528,9 +1490,9 @@ no_cached_entry:
 	if (data_size) {
 		/* Leave space for delete ate */
 		if (len > ZMS_DATA_IN_ATE_SIZE) {
-			required_space = data_size + ate_size;
+			required_space = data_size + fs->ate_size;
 		} else {
-			required_space = ate_size;
+			required_space = fs->ate_size;
 		}
 	}
 
@@ -1554,7 +1516,7 @@ no_cached_entry:
 		 */
 		if ((SECTOR_OFFSET(fs->ate_wra)) &&
 		    (fs->ate_wra >= (fs->data_wra + required_space)) &&
-		    (SECTOR_OFFSET(fs->ate_wra - ate_size) || !len)) {
+		    (SECTOR_OFFSET(fs->ate_wra - fs->ate_size) || !len)) {
 			rc = zms_flash_write_entry(fs, id, data, len);
 			if (rc) {
 				goto end;
@@ -1586,11 +1548,10 @@ int zms_delete(struct zms_fs *fs, uint32_t id)
 
 ssize_t zms_read_hist(struct zms_fs *fs, uint32_t id, void *data, size_t len, uint32_t cnt)
 {
-	int rc, prev_found;
-	uint64_t wlk_addr, rd_addr, wlk_prev_addr;
+	int rc, prev_found = 0;
+	uint64_t wlk_addr, rd_addr = 0, wlk_prev_addr = 0;
 	uint32_t cnt_his;
 	struct zms_ate wlk_ate;
-	size_t ate_size;
 #ifdef CONFIG_ZMS_DATA_CRC
 	uint32_t computed_data_crc;
 #endif
@@ -1599,8 +1560,6 @@ ssize_t zms_read_hist(struct zms_fs *fs, uint32_t id, void *data, size_t len, ui
 		LOG_ERR("zms not initialized");
 		return -EACCES;
 	}
-
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
 
 	cnt_his = 0U;
 
@@ -1710,7 +1669,6 @@ ssize_t zms_calc_free_space(struct zms_fs *fs)
 	struct zms_ate step_ate, wlk_ate, empty_ate, close_ate;
 	uint64_t step_addr, wlk_addr, step_prev_addr, wlk_prev_addr, data_wra = 0U;
 	uint8_t current_cycle;
-	size_t ate_size;
 	ssize_t free_space = 0;
 
 	if (!fs->ready) {
@@ -1718,13 +1676,12 @@ ssize_t zms_calc_free_space(struct zms_fs *fs)
 		return -EACCES;
 	}
 
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
 	/*
 	 * There is always a closing ATE , an empty ATE, a GC_done ATE and a reserved ATE for
 	 * deletion in each sector.
 	 * And there is always one reserved Sector for garbage collection operations
 	 */
-	free_space = (fs->sector_count - 1) * (fs->sector_size - 4 * ate_size);
+	free_space = (fs->sector_count - 1) * (fs->sector_size - 4 * fs->ate_size);
 
 	step_addr = fs->ate_wra;
 
@@ -1766,7 +1723,7 @@ ssize_t zms_calc_free_space(struct zms_fs *fs)
 			if (step_ate.len > ZMS_DATA_IN_ATE_SIZE) {
 				free_space -= zms_al_size(fs, step_ate.len);
 			}
-			free_space -= ate_size;
+			free_space -= fs->ate_size;
 		}
 	} while (step_addr != fs->ate_wra);
 
@@ -1776,7 +1733,7 @@ ssize_t zms_calc_free_space(struct zms_fs *fs)
 	/* Let's look now for special cases where some sectors have only ATEs with
 	 * small data size.
 	 */
-	const uint32_t second_to_last_offset = (2 * ate_size);
+	const uint32_t second_to_last_offset = (2 * fs->ate_size);
 
 	for (uint32_t i = 0; i < fs->sector_count; i++) {
 		step_addr = zms_close_ate_addr(fs, ((uint64_t)i << ADDR_SECT_SHIFT));
@@ -1792,7 +1749,7 @@ ssize_t zms_calc_free_space(struct zms_fs *fs)
 		 * to last ATE empty.
 		 */
 		if ((sec_closed == 1) && (close_ate.offset <= second_to_last_offset)) {
-			free_space -= ate_size;
+			free_space -= fs->ate_size;
 		} else if (!sec_closed) {
 			/* sector is open, let's recover the last ATE */
 			fs->sector_cycle = empty_ate.cycle_cnt;
@@ -1801,7 +1758,7 @@ ssize_t zms_calc_free_space(struct zms_fs *fs)
 				return rc;
 			}
 			if (SECTOR_OFFSET(step_addr) <= second_to_last_offset) {
-				free_space -= ate_size;
+				free_space -= fs->ate_size;
 			}
 		}
 	}
@@ -1813,16 +1770,12 @@ ssize_t zms_calc_free_space(struct zms_fs *fs)
 
 size_t zms_sector_max_data_size(struct zms_fs *fs)
 {
-	size_t ate_size;
-
 	if (!fs->ready) {
 		LOG_ERR("ZMS not initialized");
 		return -EACCES;
 	}
 
-	ate_size = zms_al_size(fs, sizeof(struct zms_ate));
-
-	return fs->ate_wra - fs->data_wra - ate_size;
+	return fs->ate_wra - fs->data_wra - fs->ate_size;
 }
 
 int zms_sector_use_next(struct zms_fs *fs)

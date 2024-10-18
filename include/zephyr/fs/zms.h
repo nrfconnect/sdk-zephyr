@@ -62,7 +62,10 @@ struct zms_fs {
 	const struct device *flash_device;
 	/** Flash memory parameters structure */
 	const struct flash_parameters *flash_parameters;
+	/** Size of an Allocation Table Entry */
+	size_t ate_size;
 #if CONFIG_ZMS_LOOKUP_CACHE
+	/** Lookup table used to cache ATE address of a written ID */
 	uint64_t lookup_cache[CONFIG_ZMS_LOOKUP_CACHE_SIZE];
 #endif
 };
