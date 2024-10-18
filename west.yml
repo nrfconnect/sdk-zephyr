@@ -23,8 +23,6 @@ manifest:
       url-base: https://github.com/zephyrproject-rtos
     - name: babblesim
       url-base: https://github.com/BabbleSim
-    - name: raku
-      url-base: https://github.com/e-rk
 
   group-filter: [-babblesim, -optional]
 
@@ -190,11 +188,10 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: pull/232/head
+      revision: pull/229/head
       path: modules/hal/nordic
       groups:
         - hal
-      remote: raku
     - name: hal_nuvoton
       revision: 466c3eed9c98453fb23953bf0e0427fea01924be
       path: modules/hal/nuvoton
