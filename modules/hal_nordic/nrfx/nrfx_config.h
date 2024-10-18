@@ -84,6 +84,48 @@
 #ifdef CONFIG_NRFX_DPPI_LOG
 #define NRFX_DPPI_CONFIG_LOG_ENABLED 1
 #endif
+#ifdef CONFIG_NRFX_DPPI0
+#define NRFX_DPPI0_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI00
+#define NRFX_DPPI00_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI10
+#define NRFX_DPPI10_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI20
+#define NRFX_DPPI20_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI30
+#define NRFX_DPPI30_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI020
+#define NRFX_DPPI020_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI120
+#define NRFX_DPPI120_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI130
+#define NRFX_DPPI130_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI131
+#define NRFX_DPPI131_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI132
+#define NRFX_DPPI132_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI133
+#define NRFX_DPPI133_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI134
+#define NRFX_DPPI134_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI135
+#define NRFX_DPPI135_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_DPPI136
+#define NRFX_DPPI136_ENABLED 1
+#endif
 
 #ifdef CONFIG_NRFX_EGU
 #define NRFX_EGU_ENABLED 1
@@ -209,11 +251,17 @@
 #ifdef CONFIG_NRFX_PDM
 #define NRFX_PDM_ENABLED 1
 #endif
+#ifdef CONFIG_NRFX_PDM_LOG
+#define NRFX_PDM_CONFIG_LOG_ENABLED 1
+#endif
 #ifdef CONFIG_NRFX_PDM0
 #define NRFX_PDM0_ENABLED 1
 #endif
-#ifdef CONFIG_NRFX_PDM_LOG
-#define NRFX_PDM_CONFIG_LOG_ENABLED 1
+#ifdef CONFIG_NRFX_PDM20
+#define NRFX_PDM20_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_PDM21
+#define NRFX_PDM21_ENABLED 1
 #endif
 
 #ifdef CONFIG_NRFX_POWER
@@ -228,6 +276,37 @@
 #endif
 #ifdef CONFIG_NRFX_PPI_LOG
 #define NRFX_PPI_CONFIG_LOG_ENABLED 1
+#endif
+
+#ifdef CONFIG_NRFX_PPIB
+#define NRFX_PPIB_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_PPIB_LOG
+#define NRFX_PPIB_CONFIG_LOG_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_PPIB00
+#define NRFX_PPIB00_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_PPIB01
+#define NRFX_PPIB01_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_PPIB10
+#define NRFX_PPIB10_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_PPIB11
+#define NRFX_PPIB11_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_PPIB20
+#define NRFX_PPIB20_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_PPIB21
+#define NRFX_PPIB21_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_PPIB22
+#define NRFX_PPIB22_ENABLED 1
+#endif
+#ifdef CONFIG_NRFX_PPIB30
+#define NRFX_PPIB30_ENABLED 1
 #endif
 
 #ifdef CONFIG_NRFX_PRS
@@ -1050,10 +1129,14 @@
     #include <nrfx_config_nrf54h20_ppr.h>
 #elif (defined(NRF54H20_XXAA) || defined(NRF54H20_ENGB_XXAA)) && defined(NRF_FLPR)
     #include <nrfx_config_nrf54h20_flpr.h>
-#elif (defined(NRF54L15_XXAA) || defined(NRF54L15_ENGA_XXAA)) && defined(NRF_APPLICATION)
+#elif defined(NRF54L15_ENGA_XXAA) && defined(NRF_APPLICATION)
     #include <nrfx_config_nrf54l15_enga_application.h>
-#elif (defined(NRF54L15_XXAA) || defined(NRF54L15_ENGA_XXAA)) && defined(NRF_FLPR)
+#elif defined(NRF54L15_ENGA_XXAA) && defined(NRF_FLPR)
     #include <nrfx_config_nrf54l15_enga_flpr.h>
+#elif defined(NRF54L15_XXAA) && defined(NRF_APPLICATION)
+    #include <nrfx_config_nrf54l15_application.h>
+#elif defined(NRF54L15_XXAA) && defined(NRF_FLPR)
+    #include <nrfx_config_nrf54l15_flpr.h>
 #elif (defined(NRF54L20_XXAA) || defined(NRF54L20_ENGA_XXAA)) && defined(NRF_APPLICATION)
     #include <nrfx_config_nrf54l20_enga_application.h>
 #elif defined(NRF9120_XXAA) || defined(NRF9160_XXAA)
