@@ -10,6 +10,21 @@ config ROM_START_OFFSET
 	default 0 if PARTITION_MANAGER_ENABLED
 	default 0x800 if BOOTLOADER_MCUBOOT
 
+# What MCUboot requires is here
+if MCUBOOT
+
+# Within sdk-nrf NRF security is default
+config NRF_SECURITY
+	default y
+	select NRF_OBERON
+
+# NRF_SECURITY enforces PSA crypt
+config MBEDTLS
+	default n
+
+endif # MCUBOOT
+
+
 endif # BOARD_NRF54L15PDK_NRF54L15_CPUAPP
 
 if BOARD_NRF54L15PDK_NRF54L15_CPUAPP_NS
