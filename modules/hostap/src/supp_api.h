@@ -269,7 +269,6 @@ int supplicant_ap_sta_disconnect(const struct device *dev,
 
 #endif /* CONFIG_AP */
 
-#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 /**
  * @brief Dispatch DPP operations for STA
  *
