@@ -166,13 +166,8 @@ elseif(CONFIG_NRF_WIFI_PATCHES_BUILTIN)
       ------------------------------------------------------------------------")
   endif()
 
-  set(gen_inc_dir ${ZEPHYR_BINARY_DIR}/misc/generated)
-  zephyr_include_directories(${gen_inc_dir})
-  set(gen_dir ${gen_inc_dir}/nrf70_fw_patch)
-  generate_inc_file_for_target(
-    nrfwifi
-    ${NRF70_PATCH}
-    ${gen_dir}/nrf70.bin.inc
+  zephyr_compile_definitions(
+    -DCONFIG_NRF_WIFI_FW_BIN=${NRF70_PATCH}
   )
 endif()
 
