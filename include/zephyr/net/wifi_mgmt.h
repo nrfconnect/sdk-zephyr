@@ -31,6 +31,23 @@ extern "C" {
 
 /** @cond INTERNAL_HIDDEN */
 
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
+static const char ca_cert_test[] = {
+	#include <wifi_enterprise_test_certs/ca.pem.inc>
+	'\0'
+};
+
+static const char client_cert_test[] = {
+	#include <wifi_enterprise_test_certs/client.pem.inc>
+	'\0'
+};
+
+static const char client_key_test[] = {
+	#include <wifi_enterprise_test_certs/client-key.pem.inc>
+	'\0'
+};
+#endif
+
 #define _NET_WIFI_LAYER	NET_MGMT_LAYER_L2
 #define _NET_WIFI_CODE	0x156
 #define _NET_WIFI_BASE	(NET_MGMT_IFACE_BIT |			\
@@ -106,7 +123,9 @@ enum net_request_wifi_cmd {
 	NET_REQUEST_WIFI_CMD_ENTERPRISE_CREDS,
 	/** Get RTS threshold */
 	NET_REQUEST_WIFI_CMD_RTS_THRESHOLD_CONFIG,
-/** @cond INTERNAL_HIDDEN */
+	/** WPS config */
+	NET_REQUEST_WIFI_CMD_WPS_CONFIG,
+	/** @cond INTERNAL_HIDDEN */
 	NET_REQUEST_WIFI_CMD_MAX
 /** @endcond */
 };
@@ -252,6 +271,10 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_ENTERPRISE_CREDS);
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_RTS_THRESHOLD_CONFIG);
 
+#define NET_REQUEST_WIFI_WPS_CONFIG (_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_WPS_CONFIG)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_WPS_CONFIG);
+
 /** @brief Wi-Fi management events */
 enum net_event_wifi_cmd {
 	/** Scan results available */
@@ -282,6 +305,8 @@ enum net_event_wifi_cmd {
 	NET_EVENT_WIFI_CMD_AP_STA_CONNECTED,
 	/** STA disconnected from AP */
 	NET_EVENT_WIFI_CMD_AP_STA_DISCONNECTED,
+	/** Supplicant specific event */
+	NET_EVENT_WIFI_CMD_SUPPLICANT,
 };
 
 /** Event emitted for Wi-Fi scan result */
@@ -602,6 +627,8 @@ struct wifi_ps_params {
 	enum wifi_ps_param_type type;
 	/** Wi-Fi power save fail reason */
 	enum wifi_config_ps_param_fail_reason fail_reason;
+	/** Wi-Fi power save exit strategy */
+	enum wifi_ps_exit_strategy exit_strategy;
 };
 
 /** @brief Wi-Fi TWT parameters */
@@ -939,6 +966,76 @@ enum wifi_dpp_bootstrap_type {
 	WIFI_DPP_BOOTSTRAP_TYPE_NFC_URI
 };
 
+/** Params to add DPP configurator */
+struct wifi_dpp_configurator_add_params {
+	/** ECP curves for private key */
+	int curve;
+	/** ECP curves for net access key */
+	int net_access_key_curve;
+};
+
+/** Params to initiate a DPP auth procedure */
+struct wifi_dpp_auth_init_params {
+	/** Peer bootstrap id */
+	int peer;
+	/** Configuration parameter id */
+	int configurator;
+	/** Role configurator or enrollee */
+	int role;
+	/** Security type */
+	int conf;
+	/** SSID in string */
+	char ssid[WIFI_SSID_MAX_LEN + 1];
+};
+
+/** Params to do DPP chirp */
+struct wifi_dpp_chirp_params {
+	/** Own bootstrap id */
+	int id;
+	/** Chirp on frequency */
+	int freq;
+};
+
+/** Params to do DPP listen */
+struct wifi_dpp_listen_params {
+	/** Listen on frequency */
+	int freq;
+	/** Role configurator or enrollee */
+	int role;
+};
+
+/** Params to generate a DPP bootstrap */
+struct wifi_dpp_bootstrap_gen_params {
+	/** Bootstrap type */
+	int type;
+	/** Own operating class */
+	int op_class;
+	/** Own working channel */
+	int chan;
+	/** ECP curves */
+	int curve;
+	/** Own mac address */
+	uint8_t mac[WIFI_MAC_ADDR_LEN];
+};
+
+/** Params to set specific DPP configurator */
+struct wifi_dpp_configurator_set_params {
+	/** Peer bootstrap id */
+	int peer;
+	/** Configuration parameter id */
+	int configurator;
+	/** Role configurator or enrollee */
+	int role;
+	/** Security type */
+	int conf;
+	/** ECP curves for private key */
+	int curve;
+	/** ECP curves for net access key */
+	int net_access_key_curve;
+	/** Own mac address */
+	char ssid[WIFI_SSID_MAX_LEN + 1];
+};
+
 /** Wi-Fi DPP params for various operations
  */
 struct wifi_dpp_params {
@@ -946,69 +1043,17 @@ struct wifi_dpp_params {
 	int action;
 	union {
 		/** Params to add DPP configurator */
-		struct wifi_dpp_configurator_add_params {
-			/** ECP curves for private key */
-			int curve;
-			/** ECP curves for net access key */
-			int net_access_key_curve;
-		} configurator_add;
+		struct wifi_dpp_configurator_add_params configurator_add;
 		/** Params to initiate a DPP auth procedure */
-		struct wifi_dpp_auth_init_params {
-			/** Peer bootstrap id */
-			int peer;
-			/** Configuration parameter id */
-			int configurator;
-			/** Role configurator or enrollee */
-			int role;
-			/** Security type */
-			int conf;
-			/** SSID in string */
-			char ssid[WIFI_SSID_MAX_LEN + 1];
-		} auth_init;
+		struct wifi_dpp_auth_init_params auth_init;
 		/** Params to do DPP chirp */
-		struct wifi_dpp_chirp_params {
-			/** Own bootstrap id */
-			int id;
-			/** Chirp on frequency */
-			int freq;
-		} chirp;
+		struct wifi_dpp_chirp_params chirp;
 		/** Params to do DPP listen */
-		struct wifi_dpp_listen_params {
-			/** Listen on frequency */
-			int freq;
-			/** Role configurator or enrollee */
-			int role;
-		} listen;
+		struct wifi_dpp_listen_params listen;
 		/** Params to generate a DPP bootstrap */
-		struct wifi_dpp_bootstrap_gen_params {
-			/** Bootstrap type */
-			int type;
-			/** Own operating class */
-			int op_class;
-			/** Own working channel */
-			int chan;
-			/** ECP curves */
-			int curve;
-			/** Own mac address */
-			uint8_t mac[WIFI_MAC_ADDR_LEN];
-		} bootstrap_gen;
+		struct wifi_dpp_bootstrap_gen_params bootstrap_gen;
 		/** Params to set specific DPP configurator */
-		struct wifi_dpp_configurator_set_params {
-			/** Peer bootstrap id */
-			int peer;
-			/** Configuration parameter id */
-			int configurator;
-			/** Role configurator or enrollee */
-			int role;
-			/** Security type */
-			int conf;
-			/** ECP curves for private key */
-			int curve;
-			/** ECP curves for net access key */
-			int net_access_key_curve;
-			/** Own mac address */
-			char ssid[WIFI_SSID_MAX_LEN + 1];
-		} configurator_set;
+		struct wifi_dpp_configurator_set_params configurator_set;
 		/** Bootstrap get uri id */
 		int id;
 		/** Timeout for DPP frame response rx */
@@ -1024,8 +1069,39 @@ struct wifi_dpp_params {
 		char resp[WIFI_DPP_QRCODE_MAX_LEN + 1];
 	};
 };
-
 #endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
+
+#define WIFI_WPS_PIN_MAX_LEN 8
+
+/** Operation for WPS */
+enum wifi_wps_op {
+	/** WPS pbc */
+	WIFI_WPS_PBC = 0,
+	/** Get WPS pin number */
+	WIFI_WPS_PIN_GET = 1,
+	/** Set WPS pin number */
+	WIFI_WPS_PIN_SET = 2,
+};
+
+/** Wi-Fi wps setup */
+struct wifi_wps_config_params {
+	/** wps operation */
+	enum wifi_wps_op oper;
+	/** pin value*/
+	char pin[WIFI_WPS_PIN_MAX_LEN + 1];
+};
+
+/** Wi-Fi AP status
+ */
+enum wifi_hostapd_iface_state {
+	WIFI_HAPD_IFACE_UNINITIALIZED,
+	WIFI_HAPD_IFACE_DISABLED,
+	WIFI_HAPD_IFACE_COUNTRY_UPDATE,
+	WIFI_HAPD_IFACE_ACS,
+	WIFI_HAPD_IFACE_HT_SCAN,
+	WIFI_HAPD_IFACE_DFS,
+	WIFI_HAPD_IFACE_ENABLED
+};
 
 #include <zephyr/net/net_if.h>
 
@@ -1270,6 +1346,14 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*get_rts_threshold)(const struct device *dev, unsigned int *rts_threshold);
+	/** Start a WPS PBC/PIN connection
+	 *
+	 * @param dev Pointer to the device structure for the driver instance
+	 * @param params wps operarion parameters
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*wps_config)(const struct device *dev, struct wifi_wps_config_params *params);
 };
 
 /** Wi-Fi management offload API */

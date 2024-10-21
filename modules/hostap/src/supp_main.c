@@ -75,6 +75,7 @@ static const struct wifi_mgmt_ops mgmt_ops = {
 	.btm_query = supplicant_btm_query,
 #endif
 	.get_conn_params = supplicant_get_wifi_conn_params,
+	.wps_config = supplicant_wps_config,
 #ifdef CONFIG_AP
 	.ap_enable = supplicant_ap_enable,
 	.ap_disable = supplicant_ap_disable,
@@ -98,9 +99,11 @@ static const struct wifi_mgmt_ops mgmt_ap_ops = {
 	.ap_disable = supplicant_ap_disable,
 	.ap_sta_disconnect = supplicant_ap_sta_disconnect,
 	.ap_bandwidth = supplicant_ap_bandwidth,
+	.iface_status = supplicant_ap_status,
 #ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 	.dpp_dispatch = hapd_dpp_dispatch,
 #endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
+	.ap_config_params = supplicant_ap_config_params,
 };
 
 DEFINE_WIFI_NM_INSTANCE(hostapd, &mgmt_ap_ops);
@@ -508,6 +511,12 @@ static void iface_cb(struct net_if *iface, void *user_data)
 		return;
 	}
 
+#ifdef CONFIG_WIFI_NM_HOSTAPD_AP
+	if (wifi_nm_iface_is_sap(iface)) {
+		return;
+	}
+#endif
+
 	if (!net_if_is_admin_up(iface)) {
 		return;
 	}
@@ -866,7 +875,7 @@ struct hostapd_config *hostapd_config_read2(const char *fname)
 
 	bss                 = conf->last_bss;
 	bss->start_disabled = 1;
-	bss->max_num_sta    = 8;
+	bss->max_num_sta    = CONFIG_WIFI_MGMT_AP_MAX_NUM_STA;
 	bss->dtim_period    = 1;
 	os_strlcpy(conf->bss[0]->iface, ifname, sizeof(conf->bss[0]->iface));
 	bss->logger_stdout_level = HOSTAPD_LEVEL_INFO;

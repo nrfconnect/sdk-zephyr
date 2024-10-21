@@ -29,19 +29,6 @@ LOG_MODULE_REGISTER(net_wifi_shell, LOG_LEVEL_INF);
 #include <zephyr/sys/slist.h>
 
 #include "net_shell_private.h"
-#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
-static const char ca_cert_test[] = {
-	#include <wifi_enterprise_test_certs/ca.pem.inc>
-};
-
-static const char client_cert_test[] = {
-	#include <wifi_enterprise_test_certs/client.pem.inc>
-};
-
-static const char client_key_test[] = {
-	#include <wifi_enterprise_test_certs/client-key.pem.inc>
-};
-#endif
 
 #define WIFI_SHELL_MODULE "wifi"
 
@@ -125,16 +112,16 @@ static bool parse_number(const struct shell *sh, long *param, char *str,
 	}
 
 	if (*endptr != '\0') {
-		PR_ERROR("Invalid number: %s", str_tmp);
+		PR_ERROR("Invalid number: %s\n", str_tmp);
 		return false;
 	}
 
 	if ((num) < (min) || (num) > (max)) {
 		if (pname) {
-			PR_WARNING("%s value out of range: %s, (%ld-%ld)",
+			PR_WARNING("%s value out of range: %s, (%ld-%ld)\n",
 				   pname, str_tmp, min, max);
 		} else {
-			PR_WARNING("Value out of range: %s, (%ld-%ld)",
+			PR_WARNING("Value out of range: %s, (%ld-%ld)\n",
 				   str_tmp, min, max);
 		}
 		return false;
@@ -584,7 +571,8 @@ static int __wifi_args_to_params(const struct shell *sh, size_t argc, char *argv
 			params->channel = channel;
 			break;
 		case 'b':
-			if (iface_mode == WIFI_MODE_INFRA) {
+			if (iface_mode == WIFI_MODE_INFRA ||
+				iface_mode == WIFI_MODE_AP) {
 				switch (atoi(state->optarg)) {
 				case 2:
 					params->band = WIFI_FREQ_BAND_2_4_GHZ;
@@ -950,6 +938,65 @@ static int cmd_wifi_status(const struct shell *sh, size_t argc, char *argv[])
 	return 0;
 }
 
+static int cmd_wifi_ap_status(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_wifi_sap();
+	struct wifi_iface_status status = {0};
+	uint8_t mac_string_buf[sizeof("xx:xx:xx:xx:xx:xx")];
+
+	context.sh = sh;
+
+	if (net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &status,
+		     sizeof(struct wifi_iface_status))) {
+		PR_WARNING("Status request failed\n");
+
+		return -ENOEXEC;
+	}
+
+	switch (status.state) {
+	case WIFI_HAPD_IFACE_UNINITIALIZED:
+		PR("State: %s\n", "HAPD_IFACE_UNINITIALIZED");
+		return 0;
+	case WIFI_HAPD_IFACE_DISABLED:
+		PR("State: %s\n", "HAPD_IFACE_DISABLED");
+		return 0;
+	case WIFI_HAPD_IFACE_COUNTRY_UPDATE:
+		PR("State: %s\n", "HAPD_IFACE_DISABLED");
+		return 0;
+	case WIFI_HAPD_IFACE_ACS:
+		PR("State: %s\n", "HAPD_IFACE_DISABLED");
+		return 0;
+	case WIFI_HAPD_IFACE_HT_SCAN:
+		PR("State: %s\n", "HAPD_IFACE_DISABLED");
+		return 0;
+	case WIFI_HAPD_IFACE_DFS:
+		PR("State: %s\n", "HAPD_IFACE_DISABLED");
+		break;
+	case WIFI_HAPD_IFACE_ENABLED:
+		break;
+	default:
+		return 0;
+	}
+
+	PR("Interface Mode: %s\n", wifi_mode_txt(status.iface_mode));
+	PR("Link Mode: %s\n", wifi_link_mode_txt(status.link_mode));
+	PR("SSID: %.32s\n", status.ssid);
+	PR("BSSID: %s\n", net_sprint_ll_addr_buf(status.bssid, WIFI_MAC_ADDR_LEN, mac_string_buf,
+						 sizeof(mac_string_buf)));
+	PR("Band: %s\n", wifi_band_txt(status.band));
+	PR("Channel: %d\n", status.channel);
+	PR("Security: %s\n", wifi_security_txt(status.security));
+	PR("MFP: %s\n", wifi_mfp_txt(status.mfp));
+	if (status.iface_mode == WIFI_MODE_INFRA) {
+		PR("RSSI: %d\n", status.rssi);
+	}
+	PR("Beacon Interval: %d\n", status.beacon_interval);
+	PR("DTIM: %d\n", status.dtim_period);
+	PR("TWT: %s\n", status.twt_capable ? "Supported" : "Not supported");
+
+	return 0;
+}
+
 #if defined(CONFIG_NET_STATISTICS_WIFI) && \
 					defined(CONFIG_NET_STATISTICS_USER_API)
 static void print_wifi_stats(struct net_if *iface, struct net_stats_wifi *data,
@@ -1061,6 +1108,9 @@ static int cmd_wifi_ps(const struct shell *sh, size_t argc, char *argv[])
 		} else {
 			PR("PS timeout: disabled\n");
 		}
+
+		shell_fprintf(sh, SHELL_NORMAL, "PS exit strategy: %s\n",
+				wifi_ps_exit_strategy_txt(config.ps_params.exit_strategy));
 
 		if (config.num_twt_flows == 0) {
 			PR("No TWT flows\n");
@@ -1671,16 +1721,19 @@ static int cmd_wifi_btm_query(const struct shell *sh, size_t argc, char *argv[])
 {
 	struct net_if *iface = net_if_get_first_wifi();
 	uint8_t query_reason = 0;
+	long tmp = 0;
 
 	context.sh = sh;
 
-	if (!parse_number(sh, (long *)&query_reason, argv[1], NULL,
+	if (!parse_number(sh, &tmp, argv[1], NULL,
 			  WIFI_BTM_QUERY_REASON_UNSPECIFIED, WIFI_BTM_QUERY_REASON_LEAVING_ESS)) {
 		return -EINVAL;
 	}
 
+	query_reason = tmp;
+
 	if (net_mgmt(NET_REQUEST_WIFI_BTM_QUERY, iface, &query_reason, sizeof(query_reason))) {
-		PR_WARNING("Setting BTM query Reason failed..Reason :%d\n", query_reason);
+		PR_WARNING("Setting BTM query Reason failed. Reason : %d\n", query_reason);
 		return -ENOEXEC;
 	}
 
@@ -1689,6 +1742,57 @@ static int cmd_wifi_btm_query(const struct shell *sh, size_t argc, char *argv[])
 	return 0;
 }
 #endif
+
+static int cmd_wifi_wps_pbc(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_first_wifi();
+	struct wifi_wps_config_params params = {0};
+
+	context.sh = sh;
+
+	if (argc == 1) {
+		params.oper = WIFI_WPS_PBC;
+	} else {
+		shell_help(sh);
+		return -ENOEXEC;
+	}
+
+	if (net_mgmt(NET_REQUEST_WIFI_WPS_CONFIG, iface, &params, sizeof(params))) {
+		PR_WARNING("Start wps pbc connection failed\n");
+		return -ENOEXEC;
+	}
+
+	return 0;
+}
+
+static int cmd_wifi_wps_pin(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_first_wifi();
+	struct wifi_wps_config_params params = {0};
+
+	context.sh = sh;
+
+	if (argc == 1) {
+		params.oper = WIFI_WPS_PIN_GET;
+	} else if (argc == 2) {
+		params.oper = WIFI_WPS_PIN_SET;
+		strncpy(params.pin, argv[1], WIFI_WPS_PIN_MAX_LEN);
+	} else {
+		shell_help(sh);
+		return -ENOEXEC;
+	}
+
+	if (net_mgmt(NET_REQUEST_WIFI_WPS_CONFIG, iface, &params, sizeof(params))) {
+		PR_WARNING("Start wps pin connection failed\n");
+		return -ENOEXEC;
+	}
+
+	if (params.oper == WIFI_WPS_PIN_GET) {
+		PR("WPS PIN is: %s\n", params.pin);
+	}
+
+	return 0;
+}
 
 static int cmd_wifi_ps_wakeup_mode(const struct shell *sh, size_t argc, char *argv[])
 {
@@ -1773,6 +1877,40 @@ static int cmd_wifi_set_rts_threshold(const struct shell *sh, size_t argc, char 
 			shell_fprintf(sh, SHELL_NORMAL, "RTS threshold is off\n");
 		}
 	}
+
+	return 0;
+}
+
+static int cmd_wifi_ps_exit_strategy(const struct shell *sh, size_t argc,
+			    char *argv[])
+{
+	struct net_if *iface = net_if_get_first_wifi();
+	struct wifi_ps_params params = { 0 };
+
+	context.sh = sh;
+
+	if (!strncmp(argv[1], "tim", 3)) {
+		params.exit_strategy = WIFI_PS_EXIT_EVERY_TIM;
+	} else if (!strncmp(argv[1], "custom", 6)) {
+		params.exit_strategy = WIFI_PS_EXIT_CUSTOM_ALGO;
+	} else {
+		shell_fprintf(sh, SHELL_WARNING, "Invalid argument\n");
+		shell_fprintf(sh, SHELL_INFO, "Valid argument : <tim> / <custom>\n");
+		return -ENOEXEC;
+	}
+
+	params.type = WIFI_PS_PARAM_EXIT_STRATEGY;
+
+	if (net_mgmt(NET_REQUEST_WIFI_PS, iface, &params, sizeof(params))) {
+		shell_fprintf(sh, SHELL_WARNING,
+			      "Setting PS exit strategy to %s failed..Reason :%s\n",
+			      wifi_ps_exit_strategy_txt(params.exit_strategy),
+			      wifi_ps_get_config_err_code_str(params.fail_reason));
+		return -ENOEXEC;
+	}
+
+	shell_fprintf(sh, SHELL_NORMAL, "%s\n",
+		      wifi_ps_exit_strategy_txt(params.exit_strategy));
 
 	return 0;
 }
@@ -2580,24 +2718,27 @@ static int cmd_wifi_dpp_ap_qr_code(const struct shell *sh, size_t argc, char *ar
 
 static int cmd_wifi_dpp_ap_auth_init(const struct shell *sh, size_t argc, char *argv[])
 {
-	int ret = 0;
-	struct net_if *iface = net_if_get_wifi_sap();
-	struct wifi_dpp_params params = {0};
 	int opt;
 	int opt_index = 0;
 	struct getopt_state *state;
-	static struct option long_options[] = {{"peer", required_argument, 0, 'p'}, {0, 0, 0, 0}};
+	static const struct option long_options[] = {
+		{"peer", required_argument, 0, 'p'},
+		{0, 0, 0, 0}};
+	int ret = 0;
+	struct net_if *iface = net_if_get_wifi_sap();
+	struct wifi_dpp_params params = {0};
 
 	params.action = WIFI_DPP_AUTH_INIT;
 
-	while ((opt = getopt_long(argc, argv, "p:", long_options, &opt_index)) != -1) {
+	while ((opt = getopt_long(argc, argv, "p:",
+				  long_options, &opt_index)) != -1) {
 		state = getopt_state_get();
 		switch (opt) {
 		case 'p':
-			params.auth_init.peer = shell_strtol(optarg, 10, &ret);
+			params.auth_init.peer = shell_strtol(state->optarg, 10, &ret);
 			break;
 		default:
-			PR_ERROR("Invalid option %c\n", optopt);
+			PR_ERROR("Invalid option %c\n", state->optopt);
 			return -EINVAL;
 		}
 
@@ -2656,43 +2797,36 @@ static int cmd_wifi_pmksa_flush(const struct shell *sh, size_t argc, char *argv[
 	return 0;
 }
 
-SHELL_STATIC_SUBCMD_SET_CREATE(wifi_cmd_ap,
-	SHELL_CMD_ARG(disable, NULL,
-		  "Disable Access Point mode.\n",
-		  cmd_wifi_ap_disable,
-		  1, 0),
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	wifi_cmd_ap,
+	SHELL_CMD_ARG(disable, NULL, "Disable Access Point mode.\n", cmd_wifi_ap_disable, 1, 0),
 	SHELL_CMD_ARG(enable, NULL,
-		  "-s --ssid=<SSID>\n"
-		  "-c --channel=<channel number>\n"
-		  "-p --passphrase=<PSK> (valid only for secure SSIDs)\n"
-		  "-k --key-mgmt=<Security type> (valid only for secure SSIDs)\n"
-		  "0:None, 1:WPA2-PSK, 2:WPA2-PSK-256, 3:SAE, 4:WAPI, 5:EAP-TLS, 6:WEP\n"
-		  "7: WPA-PSK, 11: DPP\n"
-		  "-w --ieee-80211w=<MFP> (optional: needs security type to be specified)\n"
-		  "0:Disable, 1:Optional, 2:Required\n"
-		  "-b --band=<band> (2 -2.6GHz, 5 - 5Ghz, 6 - 6GHz)\n"
-		  "-m --bssid=<BSSID>\n"
-		  "-h --help (prints help)",
-		  cmd_wifi_ap_enable,
-		  2, 13),
-	SHELL_CMD_ARG(stations, NULL,
-		  "List stations connected to the AP",
-		  cmd_wifi_ap_stations,
-		  1, 0),
+		      "-s --ssid=<SSID>\n"
+		      "-c --channel=<channel number>\n"
+		      "-p --passphrase=<PSK> (valid only for secure SSIDs)\n"
+		      "-k --key-mgmt=<Security type> (valid only for secure SSIDs)\n"
+		      "0:None, 1:WPA2-PSK, 2:WPA2-PSK-256, 3:SAE, 4:WAPI, 5:EAP-TLS, 6:WEP\n"
+		      "7: WPA-PSK, 11: DPP\n"
+		      "-w --ieee-80211w=<MFP> (optional: needs security type to be specified)\n"
+		      "0:Disable, 1:Optional, 2:Required\n"
+		      "-b --band=<band> (2 -2.6GHz, 5 - 5Ghz, 6 - 6GHz)\n"
+		      "-m --bssid=<BSSID>\n"
+		      "-h --help (prints help)",
+		      cmd_wifi_ap_enable, 2, 13),
+	SHELL_CMD_ARG(stations, NULL, "List stations connected to the AP", cmd_wifi_ap_stations, 1,
+		      0),
 	SHELL_CMD_ARG(disconnect, NULL,
-		  "Disconnect a station from the AP\n"
-		  "<MAC address of the station>\n",
-		  cmd_wifi_ap_sta_disconnect,
-		  2, 0),
+		      "Disconnect a station from the AP\n"
+		      "<MAC address of the station>\n",
+		      cmd_wifi_ap_sta_disconnect, 2, 0),
 	SHELL_CMD_ARG(config, NULL,
-		  "Configure AP parameters.\n"
-		  "-i --max_inactivity=<time duration (in seconds)>\n"
-		  "-s --max_num_sta=<maximum number of stations>\n"
-		  "-h --help (prints help)",
-		  cmd_wifi_ap_config_params,
-		  2, 5),
-	SHELL_SUBCMD_SET_END
-);
+		      "Configure AP parameters.\n"
+		      "-i --max_inactivity=<time duration (in seconds)>\n"
+		      "-s --max_num_sta=<maximum number of stations>\n"
+		      "-h --help (prints help)",
+		      cmd_wifi_ap_config_params, 2, 5),
+	SHELL_CMD_ARG(status, NULL, "Status of Wi-Fi SAP\n", cmd_wifi_ap_status, 1, 0),
+	SHELL_SUBCMD_SET_END);
 
 SHELL_STATIC_SUBCMD_SET_CREATE(wifi_twt_ops,
 	SHELL_CMD_ARG(quick_setup, NULL, " Start a TWT flow with defaults:\n"
@@ -2913,6 +3047,13 @@ SHELL_STATIC_SUBCMD_SET_CREATE(wifi_commands,
 		cmd_wifi_btm_query,
 		2, 0),
 #endif
+	SHELL_CMD_ARG(wps_pbc, NULL,
+		"Start a WPS PBC connection.\n",
+		cmd_wifi_wps_pbc, 1, 0),
+	SHELL_CMD_ARG(wps_pin, NULL,
+		"Set and get WPS pin.\n"
+		"[pin] Only applicable for set.\n",
+		cmd_wifi_wps_pin, 1, 1),
 	SHELL_CMD_ARG(ps_timeout,
 		      NULL,
 		      "<val> - PS inactivity timer(in ms).\n",
@@ -2941,6 +3082,12 @@ SHELL_STATIC_SUBCMD_SET_CREATE(wifi_commands,
 		     cmd_wifi_pmksa_flush, 1, 0),
 	SHELL_SUBCMD_SET_END
 );
+
+SHELL_SUBCMD_ADD((wifi), ps_exit_strategy, &wifi_commands,
+		 "<tim> : Set PS exit strategy to Every TIM\n"
+		 "<custom> : Set PS exit strategy to Custom",
+		 cmd_wifi_ps_exit_strategy,
+		 2, 0);
 
 SHELL_CMD_REGISTER(wifi, &wifi_commands, "Wi-Fi commands", NULL);
 
