@@ -2143,7 +2143,6 @@ static int cmd_wifi_version(const struct shell *sh, size_t argc, char *argv[])
 	return 0;
 }
 
-#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 static int parse_dpp_args_auth_init(const struct shell *sh, size_t argc, char *argv[],
 				    struct wifi_dpp_params *params)
 {
@@ -2681,7 +2680,6 @@ static int cmd_wifi_dpp_reconfig(const struct shell *sh, size_t argc, char *argv
 	return 0;
 }
 
-#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
 static int cmd_wifi_pmksa_flush(const struct shell *sh, size_t argc, char *argv[])
 {
 	struct net_if *iface = net_if_get_wifi_sta();
@@ -2759,7 +2757,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(wifi_twt_ops,
 	SHELL_SUBCMD_SET_END
 );
 
-#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	wifi_cmd_dpp,
 	SHELL_CMD_ARG(configurator_add, NULL,
@@ -2836,7 +2833,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		      cmd_wifi_dpp_reconfig, 2, 0),
 	SHELL_SUBCMD_SET_END
 );
-#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
 
 SHELL_STATIC_SUBCMD_SET_CREATE(wifi_commands,
 	SHELL_CMD_ARG(version, NULL, "Print Wi-Fi Driver and Firmware versions\n",
@@ -2973,9 +2969,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(wifi_commands,
 		      "<rts_threshold: rts threshold/off>.\n",
 		      cmd_wifi_set_rts_threshold,
 		      1, 1),
-#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 	SHELL_CMD(dpp, &wifi_cmd_dpp, "DPP actions\n", NULL),
-#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
 	SHELL_CMD_ARG(pmksa_flush, NULL,
 		     "Flush PMKSA cache entries.\n",
 		     cmd_wifi_pmksa_flush, 1, 0),

@@ -1767,7 +1767,6 @@ out:
 }
 #endif /* CONFIG_AP */
 
-#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
 static const char *dpp_params_to_args_curve(int curve)
 {
 	switch (curve) {
