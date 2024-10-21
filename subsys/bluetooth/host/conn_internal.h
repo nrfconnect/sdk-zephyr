@@ -60,6 +60,7 @@ enum {
 	BT_CONN_USER,                         /* user I/O when pairing */
 	BT_CONN_BR_PAIRING,                   /* BR connection in pairing context */
 	BT_CONN_BR_NOBOND,                    /* SSP no bond pairing tracker */
+	BT_CONN_BR_GENERAL_BONDING,           /* BR general bonding */
 	BT_CONN_BR_PAIRING_INITIATOR,         /* local host starts authentication */
 	BT_CONN_CLEANUP,                      /* Disconnected, pending cleanup */
 	BT_CONN_AUTO_INIT_PROCEDURES_DONE,    /* Auto-initiated procedures have run */
@@ -505,6 +506,11 @@ void notify_cs_config_created(struct bt_conn *conn, struct bt_conn_le_cs_config 
 void notify_cs_config_removed(struct bt_conn *conn, uint8_t config_id);
 
 void notify_cs_subevent_result(struct bt_conn *conn, struct bt_conn_le_cs_subevent_result *result);
+
+void notify_cs_security_enable_available(struct bt_conn *conn);
+
+void notify_cs_procedure_enable_available(struct bt_conn *conn,
+					  struct bt_conn_le_cs_procedure_enable_complete *params);
 
 #if defined(CONFIG_BT_SMP)
 /* If role specific LTK is present */
