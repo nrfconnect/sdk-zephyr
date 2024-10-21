@@ -191,8 +191,8 @@ BUILD_ASSERT((NRFX_PPIB_{{ppib[0]}}_{{ppib[1]}}_CHANNELS_USED_BY_802154_DRV &
 	NRFX_PPI_CHANNELS_USED_BY_802154_DRV | \
 	NRFX_PPI_CHANNELS_USED_BY_MPSL)
 
-#define NRFX_DPPI_CHANNELS_USED 0
-#define NRFX_DPPI_GROUPS_USED   0
+#define NRFX_DPPI_CHANNELS_USED NRFX_DPPI0_CHANNELS_USED
+#define NRFX_DPPI_GROUPS_USED   NRFX_DPPI0_GROUPS_USED
 
 /** @brief Bitmask that defines PPI groups that are reserved for use outside
  *         of the nrfx library.
