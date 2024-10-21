@@ -20,6 +20,47 @@ GTEXT(pm_s2ram_mark_set)
 GTEXT(pm_s2ram_mark_check_and_clear)
 GDATA(_cpu_context)
 
+#if !(CONFIG_PM_S2RAM_CUSTOM_MARKING)
+#define MAGIC (0xDABBAD00)
+GDATA(marker)
+
+SECTION_FUNC(TEXT, pm_s2ram_mark_set)
+	/*
+	 * Set the marker to MAGIC value
+	 */
+	ldr	r0, =marker
+	ldr	r2, =MAGIC
+	str	r2, [r0]
+
+	bx lr
+
+SECTION_FUNC(TEXT, pm_s2ram_mark_check_and_clear)
+	/* Set return value to 0 */
+	mov	r0, #0
+
+	/*
+	 * Check the marker
+	 */
+	ldr	r2, =marker
+	ldr	r5, [r2]
+	ldr	r3, =MAGIC
+	cmp	r5, r3
+	bne	exit
+
+	/*
+	 * Reset the marker
+	 */
+	str	r0, [r2]
+
+	/*
+	 * Set return value to 1
+	 */
+	mov	r0, #1
+
+exit:
+	bx lr
+#endif
+
 SECTION_FUNC(TEXT, arch_pm_s2ram_suspend)
 	/*
 	 * Save the CPU context
@@ -70,7 +111,9 @@ SECTION_FUNC(TEXT, arch_pm_s2ram_suspend)
 	/*
 	 * Mark entering suspend to RAM.
 	 */
-	bl pm_s2ram_mark_set
+	mov 	r1, lr
+	bl 	pm_s2ram_mark_set
+	mov	lr, r1
 
 	/*
 	 * Call the system_off function passed as parameter. This should never
@@ -86,7 +129,9 @@ SECTION_FUNC(TEXT, arch_pm_s2ram_suspend)
 	/*
 	 * Reset the marking of suspend to RAM, return is ignored.
 	 */
-	bl pm_s2ram_mark_check_and_clear
+	mov 	r1, lr
+	bl	pm_s2ram_mark_check_and_clear
+	mov 	lr, r1
 
 	/* Move system_off back to r0 as return value */
 	mov	r0, r4
@@ -99,16 +144,13 @@ GTEXT(arch_pm_s2ram_resume)
 SECTION_FUNC(TEXT, arch_pm_s2ram_resume)
 	/*
 	 * Check if reset occurred after suspending to RAM.
-	 * Store LR to ensure we can continue boot when we are not suspended
-	 * to RAM. In addition to LR, R0 is pushed too, to ensure "SP mod 8 = 0",
-	 * as stated by ARM rule 6.2.1.2 for AAPCS32.
 	 */
-	push    {r0, lr}
-	bl      pm_s2ram_mark_check_and_clear
-	cmp	r0, #0x1
-	pop     {r0, lr}
-	beq	resume
-	bx	lr
+	mov 	r1, lr
+	bl 	pm_s2ram_mark_check_and_clear
+	mov 	lr, r1
+	cmp     r0, #0x1
+	beq     resume
+	bx      lr
 
 resume:
 	/*
