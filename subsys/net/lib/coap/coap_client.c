@@ -458,13 +458,17 @@ static int resend_request(struct coap_client *client,
 static int coap_client_resend_handler(void)
 {
 	int ret = 0;
+	int err;
 
 	for (int i = 0; i < num_clients; i++) {
 		k_mutex_lock(&clients[i]->lock, K_FOREVER);
 
 		for (int j = 0; j < CONFIG_COAP_CLIENT_MAX_REQUESTS; j++) {
 			if (timeout_expired(&clients[i]->requests[j])) {
-				ret = resend_request(clients[i], &clients[i]->requests[j]);
+				err = resend_request(clients[i], &clients[i]->requests[j]);
+				if (err) {
+					ret = err;
+				}
 			}
 		}
 
@@ -505,7 +509,8 @@ static int handle_poll(void)
 			}
 
 			if (!has_ongoing_requests()) {
-				return ret;
+				/* Resend errors should not be considered poll errors */
+				return 0;
 			}
 
 		} else {
