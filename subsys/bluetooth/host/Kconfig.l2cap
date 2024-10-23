@@ -70,4 +70,12 @@ config BT_L2CAP_SEG_RECV
 	  This API enforces conformance with L2CAP TS, but is otherwise as
 	  flexible and semantically simple as possible.
 
+config BT_L2CAP_RECONFIGURE_EXPLICIT
+	bool "L2CAP Explicit reconfigure API [EXPERIMENTAL]"
+	select EXPERIMENTAL
+	help
+
+	  Enable API for explicit reconfiguration of an L2CAP channel's MTU and
+	  MPS.
+
 endmenu
