@@ -18,6 +18,7 @@
  * @{
  */
 
+#include <stdint.h>
 #include <sys/types.h>
 
 #include <zephyr/sys/atomic.h>
@@ -551,6 +552,26 @@ int bt_l2cap_ecred_chan_connect(struct bt_conn *conn,
  *  @return 0 in case of success or negative value in case of error.
  */
 int bt_l2cap_ecred_chan_reconfigure(struct bt_l2cap_chan **chans, uint16_t mtu);
+
+/** @brief Reconfigure Enhanced Credit Based L2CAP channels
+ *
+ *  Experimental API to reconfigure with explicit MPS and MTU values.
+ *
+ *  Reconfigure up to 5 L2CAP channels. Channels must be from the same bt_conn.
+ *  Once reconfiguration is completed each channel reconfigured() callback will
+ *  be called. MTU cannot be decreased on any of provided channels.
+ *
+ *  @kconfig_dep{CONFIG_BT_L2CAP_RECONFIGURE_EXPLICIT}
+ *
+ *  @param chans Array of channel objects. Null-terminated. Elements after the
+ *               first 5 are silently ignored.
+ *  @param mtu Channel MTU to reconfigure to.
+ *  @param mps Channel MPS to reconfigure to.
+ *
+ *  @return 0 in case of success or negative value in case of error.
+ */
+int bt_l2cap_ecred_chan_reconfigure_explicit(struct bt_l2cap_chan **chans, uint16_t mtu,
+					     uint16_t mps);
 
 /** @brief Connect L2CAP channel
  *
