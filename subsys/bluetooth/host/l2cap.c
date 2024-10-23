@@ -41,6 +41,7 @@ LOG_MODULE_REGISTER(bt_l2cap, CONFIG_BT_L2CAP_LOG_LEVEL);
 
 #define L2CAP_LE_MIN_MTU		23
 #define L2CAP_ECRED_MIN_MTU		64
+#define L2CAP_ECRED_MIN_MPS             64
 
 #define L2CAP_LE_MAX_CREDITS		(CONFIG_BT_BUF_ACL_RX_COUNT - 1)
 
@@ -3031,6 +3032,105 @@ int bt_l2cap_ecred_chan_reconfigure(struct bt_l2cap_chan **chans, uint16_t mtu)
 
 	return 0;
 }
+
+#if defined(CONFIG_BT_L2CAP_RECONFIGURE_EXPLICIT)
+int bt_l2cap_ecred_chan_reconfigure_explicit(struct bt_l2cap_chan **chans, uint16_t mtu,
+					     uint16_t mps)
+{
+	struct bt_l2cap_ecred_reconf_req *req;
+	struct bt_conn *conn = NULL;
+	struct bt_l2cap_le_chan *ch;
+	struct net_buf *buf;
+	bool multiple_chan;
+	uint8_t ident;
+	int i;
+
+	LOG_DBG("chans %p mtu 0x%04x mps 0x%04x", chans, mtu, mps);
+
+	if (!chans) {
+		return -EINVAL;
+	}
+
+	if (chans[0] == NULL) {
+		return -EINVAL;
+	}
+
+	if (mps < L2CAP_ECRED_MIN_MPS || mps > BT_L2CAP_RX_MTU) {
+		return -EINVAL;
+	}
+
+	multiple_chan = chans[1] != NULL;
+
+	for (i = 0; i < L2CAP_ECRED_CHAN_MAX_PER_REQ; i++) {
+		if (!chans[i]) {
+			break;
+		}
+
+		/* validate that all channels are from same connection */
+		if (conn) {
+			if (conn != chans[i]->conn) {
+				return -EINVAL;
+			}
+		} else {
+			conn = chans[i]->conn;
+		}
+
+		/* validate MTU is not decreased */
+		if (mtu < BT_L2CAP_LE_CHAN(chans[i])->rx.mtu) {
+			return -EINVAL;
+		}
+
+		/* MPS is not allowed to decrease when reconfiguring multiple channels.
+		 * Core Specification 3.A.4.27 v6.0
+		 */
+		if (multiple_chan && mps < BT_L2CAP_LE_CHAN(chans[i])->rx.mps) {
+			return -EINVAL;
+		}
+	}
+
+	if (!conn) {
+		return -ENOTCONN;
+	}
+
+	if (conn->type != BT_CONN_TYPE_LE) {
+		return -EINVAL;
+	}
+
+	/* allow only 1 request at time */
+	if (l2cap_find_pending_reconf(conn)) {
+		return -EBUSY;
+	}
+
+	ident = get_ident();
+
+	buf = l2cap_create_le_sig_pdu(BT_L2CAP_ECRED_RECONF_REQ, ident,
+				      sizeof(*req) + (i * sizeof(uint16_t)));
+	if (!buf) {
+		return -ENOMEM;
+	}
+
+	req = net_buf_add(buf, sizeof(*req));
+	req->mtu = sys_cpu_to_le16(mtu);
+	req->mps = sys_cpu_to_le16(mps);
+
+	for (int j = 0; j < i; j++) {
+		ch = BT_L2CAP_LE_CHAN(chans[j]);
+
+		ch->ident = ident;
+		ch->pending_rx_mtu = mtu;
+
+		net_buf_add_le16(buf, ch->rx.cid);
+	};
+
+	/* We set the RTX timer on one of the supplied channels, but when the
+	 * request resolves or times out we will act on all the channels in the
+	 * supplied array, using the ident field to find them.
+	 */
+	l2cap_chan_send_req(chans[0], buf, L2CAP_CONN_TIMEOUT);
+
+	return 0;
+}
+#endif /* defined(CONFIG_BT_L2CAP_RECONFIGURE_EXPLICIT) */
 
 #endif /* defined(CONFIG_BT_L2CAP_ECRED) */
 
