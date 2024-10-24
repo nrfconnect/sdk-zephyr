@@ -1336,7 +1336,9 @@ struct bt_conn_le_create_param {
  *  Allows initiate new LE link to remote peer using its address.
  *
  *  The caller gets a new reference to the connection object which must be
- *  released with bt_conn_unref() once done using the object.
+ *  released with bt_conn_unref() once done using the object. If
+ *  @kconfig{CONFIG_BT_CONN_CHECK_NULL_BEFORE_CREATE} is enabled, this function
+ *  will return -EINVAL if dereferenced @p conn is not NULL.
  *
  *  This uses the General Connection Establishment procedure.
  *
@@ -1375,7 +1377,9 @@ struct bt_conn_le_create_synced_param {
  *  with Responses (PAwR) train.
  *
  *  The caller gets a new reference to the connection object which must be
- *  released with bt_conn_unref() once done using the object.
+ *  released with bt_conn_unref() once done using the object. If
+ *  @kconfig{CONFIG_BT_CONN_CHECK_NULL_BEFORE_CREATE} is enabled, this function
+ *  will return -EINVAL if dereferenced @p conn is not NULL.
  *
  *  This uses the Periodic Advertising Connection Procedure.
  *
@@ -1979,6 +1983,17 @@ static inline const char *bt_security_err_to_str(enum bt_security_err err)
  *  @param enable Value allowing/disallowing to be bondable.
  */
 void bt_set_bondable(bool enable);
+
+/** @brief Get bonding flag.
+ *
+ *  Get current bonding flag.
+ *  The initial value of this flag depends on @kconfig{CONFIG_BT_BONDABLE} Kconfig
+ *  setting.
+ *  The Bonding flag can be updated using bt_set_bondable().
+ *
+ *  @return Current bonding flag.
+ */
+bool bt_get_bondable(void);
 
 /** @brief Set/clear the bonding flag for a given connection.
  *

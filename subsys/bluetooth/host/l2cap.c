@@ -717,6 +717,10 @@ static void cancel_data_ready(struct bt_l2cap_le_chan *le_chan)
 int bt_l2cap_send_pdu(struct bt_l2cap_le_chan *le_chan, struct net_buf *pdu,
 		      bt_conn_tx_cb_t cb, void *user_data)
 {
+	if (!le_chan->chan.conn || le_chan->chan.conn->state != BT_CONN_CONNECTED) {
+		return -ENOTCONN;
+	}
+
 	/* Allow for an additional buffer reference if callback is provided. This can be used to
 	 * extend lifetime of the net buffer until the data transmission is confirmed by ACK of the
 	 * remote.
@@ -937,7 +941,7 @@ struct net_buf *l2cap_data_pull(struct bt_conn *conn,
 		struct bt_l2cap_hdr *hdr;
 		uint16_t pdu_len = get_pdu_len(lechan, pdu);
 
-		LOG_DBG("Adding L2CAP PDU header: buf %p chan %p len %zu / %zu",
+		LOG_DBG("Adding L2CAP PDU header: buf %p chan %p len %u / %u",
 			pdu, lechan, pdu_len, pdu->len);
 
 		LOG_HEXDUMP_DBG(pdu->data, pdu->len, "PDU payload");
