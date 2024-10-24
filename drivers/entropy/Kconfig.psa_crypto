@@ -8,6 +8,9 @@ config ENTROPY_PSA_CRYPTO_RNG
 	depends on DT_HAS_ZEPHYR_PSA_CRYPTO_RNG_ENABLED
 	select ENTROPY_HAS_DRIVER
 	select PSA_WANT_GENERATE_RANDOM
+	select SSF_PSA_CRYPTO_SERVICE_ENABLED if SOC_SERIES_NRF54HX
+	depends on ZCBOR || !SOC_SERIES_NRF54HX
+	depends on !DCACHE || !SOC_SERIES_NRF54HX
 	default y
 	help
 	  Enable the PSA Crypto source Entropy driver.
