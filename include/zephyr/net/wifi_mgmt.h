@@ -106,7 +106,9 @@ enum net_request_wifi_cmd {
 	NET_REQUEST_WIFI_CMD_ENTERPRISE_CREDS,
 	/** Get RTS threshold */
 	NET_REQUEST_WIFI_CMD_RTS_THRESHOLD_CONFIG,
-/** @cond INTERNAL_HIDDEN */
+	/** WPS config */
+	NET_REQUEST_WIFI_CMD_WPS_CONFIG,
+	/** @cond INTERNAL_HIDDEN */
 	NET_REQUEST_WIFI_CMD_MAX
 /** @endcond */
 };
@@ -252,6 +254,10 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_ENTERPRISE_CREDS);
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_RTS_THRESHOLD_CONFIG);
 
+#define NET_REQUEST_WIFI_WPS_CONFIG (_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_WPS_CONFIG)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_WPS_CONFIG);
+
 /** @brief Wi-Fi management events */
 enum net_event_wifi_cmd {
 	/** Scan results available */
@@ -282,6 +288,8 @@ enum net_event_wifi_cmd {
 	NET_EVENT_WIFI_CMD_AP_STA_CONNECTED,
 	/** STA disconnected from AP */
 	NET_EVENT_WIFI_CMD_AP_STA_DISCONNECTED,
+	/** Supplicant specific event */
+	NET_EVENT_WIFI_CMD_SUPPLICANT,
 };
 
 /** Event emitted for Wi-Fi scan result */
@@ -458,12 +466,28 @@ struct wifi_connect_req_params {
 	int timeout;
 	/** anonymous identity */
 	const uint8_t *anon_id;
-	/** anon_id length */
-	uint8_t aid_length; /* Max 64 */
+	/** anon_id length, max 64 */
+	uint8_t aid_length;
 	/** Private key passwd for enterprise mode */
 	const uint8_t *key_passwd;
-	/** Private key passwd length */
-	uint8_t key_passwd_length; /* Max 128 */
+	/** Private key passwd length, max 128 */
+	uint8_t key_passwd_length;
+	/** private key2 passwd */
+	const uint8_t *key2_passwd;
+	/** key2 passwd length, max 128 */
+	uint8_t key2_passwd_length;
+	/** suiteb or suiteb-192 */
+	uint8_t suiteb_type;
+	/** eap version */
+	uint8_t eap_ver;
+	/** Identity for EAP */
+	const uint8_t *eap_identity;
+	/** eap identity length, max 64 */
+	uint8_t eap_id_length;
+	/** Password string for EAP. */
+	const uint8_t *eap_password;
+	/** eap passwd length, max 128 */
+	uint8_t eap_passwd_length;
 };
 
 /** @brief Wi-Fi connect result codes. To be overlaid on top of \ref wifi_status
@@ -602,6 +626,8 @@ struct wifi_ps_params {
 	enum wifi_ps_param_type type;
 	/** Wi-Fi power save fail reason */
 	enum wifi_config_ps_param_fail_reason fail_reason;
+	/** Wi-Fi power save exit strategy */
+	enum wifi_ps_exit_strategy exit_strategy;
 };
 
 /** @brief Wi-Fi TWT parameters */
@@ -701,6 +727,18 @@ struct wifi_enterprise_creds_params {
 	uint8_t *client_key;
 	/** Client key length */
 	uint32_t client_key_len;
+	/** CA certification of phase2*/
+	uint8_t *ca_cert2;
+	/** Phase2 CA certification length */
+	uint32_t ca_cert2_len;
+	/** Client certification of phase2*/
+	uint8_t *client_cert2;
+	/** Phase2 Client certification length */
+	uint32_t client_cert2_len;
+	/** Client key of phase2*/
+	uint8_t *client_key2;
+	/** Phase2 Client key length */
+	uint32_t client_key2_len;
 };
 
 /** @brief Wi-Fi power save configuration */
@@ -939,6 +977,76 @@ enum wifi_dpp_bootstrap_type {
 	WIFI_DPP_BOOTSTRAP_TYPE_NFC_URI
 };
 
+/** Params to add DPP configurator */
+struct wifi_dpp_configurator_add_params {
+	/** ECP curves for private key */
+	int curve;
+	/** ECP curves for net access key */
+	int net_access_key_curve;
+};
+
+/** Params to initiate a DPP auth procedure */
+struct wifi_dpp_auth_init_params {
+	/** Peer bootstrap id */
+	int peer;
+	/** Configuration parameter id */
+	int configurator;
+	/** Role configurator or enrollee */
+	int role;
+	/** Security type */
+	int conf;
+	/** SSID in string */
+	char ssid[WIFI_SSID_MAX_LEN + 1];
+};
+
+/** Params to do DPP chirp */
+struct wifi_dpp_chirp_params {
+	/** Own bootstrap id */
+	int id;
+	/** Chirp on frequency */
+	int freq;
+};
+
+/** Params to do DPP listen */
+struct wifi_dpp_listen_params {
+	/** Listen on frequency */
+	int freq;
+	/** Role configurator or enrollee */
+	int role;
+};
+
+/** Params to generate a DPP bootstrap */
+struct wifi_dpp_bootstrap_gen_params {
+	/** Bootstrap type */
+	int type;
+	/** Own operating class */
+	int op_class;
+	/** Own working channel */
+	int chan;
+	/** ECP curves */
+	int curve;
+	/** Own mac address */
+	uint8_t mac[WIFI_MAC_ADDR_LEN];
+};
+
+/** Params to set specific DPP configurator */
+struct wifi_dpp_configurator_set_params {
+	/** Peer bootstrap id */
+	int peer;
+	/** Configuration parameter id */
+	int configurator;
+	/** Role configurator or enrollee */
+	int role;
+	/** Security type */
+	int conf;
+	/** ECP curves for private key */
+	int curve;
+	/** ECP curves for net access key */
+	int net_access_key_curve;
+	/** Own mac address */
+	char ssid[WIFI_SSID_MAX_LEN + 1];
+};
+
 /** Wi-Fi DPP params for various operations
  */
 struct wifi_dpp_params {
@@ -946,69 +1054,17 @@ struct wifi_dpp_params {
 	int action;
 	union {
 		/** Params to add DPP configurator */
-		struct wifi_dpp_configurator_add_params {
-			/** ECP curves for private key */
-			int curve;
-			/** ECP curves for net access key */
-			int net_access_key_curve;
-		} configurator_add;
+		struct wifi_dpp_configurator_add_params configurator_add;
 		/** Params to initiate a DPP auth procedure */
-		struct wifi_dpp_auth_init_params {
-			/** Peer bootstrap id */
-			int peer;
-			/** Configuration parameter id */
-			int configurator;
-			/** Role configurator or enrollee */
-			int role;
-			/** Security type */
-			int conf;
-			/** SSID in string */
-			char ssid[WIFI_SSID_MAX_LEN + 1];
-		} auth_init;
+		struct wifi_dpp_auth_init_params auth_init;
 		/** Params to do DPP chirp */
-		struct wifi_dpp_chirp_params {
-			/** Own bootstrap id */
-			int id;
-			/** Chirp on frequency */
-			int freq;
-		} chirp;
+		struct wifi_dpp_chirp_params chirp;
 		/** Params to do DPP listen */
-		struct wifi_dpp_listen_params {
-			/** Listen on frequency */
-			int freq;
-			/** Role configurator or enrollee */
-			int role;
-		} listen;
+		struct wifi_dpp_listen_params listen;
 		/** Params to generate a DPP bootstrap */
-		struct wifi_dpp_bootstrap_gen_params {
-			/** Bootstrap type */
-			int type;
-			/** Own operating class */
-			int op_class;
-			/** Own working channel */
-			int chan;
-			/** ECP curves */
-			int curve;
-			/** Own mac address */
-			uint8_t mac[WIFI_MAC_ADDR_LEN];
-		} bootstrap_gen;
+		struct wifi_dpp_bootstrap_gen_params bootstrap_gen;
 		/** Params to set specific DPP configurator */
-		struct wifi_dpp_configurator_set_params {
-			/** Peer bootstrap id */
-			int peer;
-			/** Configuration parameter id */
-			int configurator;
-			/** Role configurator or enrollee */
-			int role;
-			/** Security type */
-			int conf;
-			/** ECP curves for private key */
-			int curve;
-			/** ECP curves for net access key */
-			int net_access_key_curve;
-			/** Own mac address */
-			char ssid[WIFI_SSID_MAX_LEN + 1];
-		} configurator_set;
+		struct wifi_dpp_configurator_set_params configurator_set;
 		/** Bootstrap get uri id */
 		int id;
 		/** Timeout for DPP frame response rx */
@@ -1024,8 +1080,39 @@ struct wifi_dpp_params {
 		char resp[WIFI_DPP_QRCODE_MAX_LEN + 1];
 	};
 };
-
 #endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
+
+#define WIFI_WPS_PIN_MAX_LEN 8
+
+/** Operation for WPS */
+enum wifi_wps_op {
+	/** WPS pbc */
+	WIFI_WPS_PBC = 0,
+	/** Get WPS pin number */
+	WIFI_WPS_PIN_GET = 1,
+	/** Set WPS pin number */
+	WIFI_WPS_PIN_SET = 2,
+};
+
+/** Wi-Fi wps setup */
+struct wifi_wps_config_params {
+	/** wps operation */
+	enum wifi_wps_op oper;
+	/** pin value*/
+	char pin[WIFI_WPS_PIN_MAX_LEN + 1];
+};
+
+/** Wi-Fi AP status
+ */
+enum wifi_hostapd_iface_state {
+	WIFI_HAPD_IFACE_UNINITIALIZED,
+	WIFI_HAPD_IFACE_DISABLED,
+	WIFI_HAPD_IFACE_COUNTRY_UPDATE,
+	WIFI_HAPD_IFACE_ACS,
+	WIFI_HAPD_IFACE_HT_SCAN,
+	WIFI_HAPD_IFACE_DFS,
+	WIFI_HAPD_IFACE_ENABLED
+};
 
 #include <zephyr/net/net_if.h>
 
@@ -1270,6 +1357,14 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*get_rts_threshold)(const struct device *dev, unsigned int *rts_threshold);
+	/** Start a WPS PBC/PIN connection
+	 *
+	 * @param dev Pointer to the device structure for the driver instance
+	 * @param params wps operarion parameters
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*wps_config)(const struct device *dev, struct wifi_wps_config_params *params);
 };
 
 /** Wi-Fi management offload API */
