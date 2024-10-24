@@ -158,11 +158,13 @@ int tls_credential_get(sec_tag_t tag, enum tls_credential_type type,
 	credential = credential_get(tag, type);
 	if (credential == NULL) {
 		ret = -ENOENT;
+		*credlen = 0;
 		goto exit;
 	}
 
 	if (credential->len > *credlen) {
 		ret = -EFBIG;
+		*credlen = credential->len;
 		goto exit;
 	}
 
