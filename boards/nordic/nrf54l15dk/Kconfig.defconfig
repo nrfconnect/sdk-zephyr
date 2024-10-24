@@ -12,6 +12,20 @@ config ROM_START_OFFSET
 
 endif # BOARD_NRF54L15DK_NRF54L15_CPUAPP
 
+# What MCUboot requires is here
+if MCUBOOT
+
+# Within sdk-nrf NRF security is default
+config NRF_SECURITY
+	default y
+	select NRF_OBERON
+
+# NRF_SECURITY enforces PSA crypt
+config MBEDTLS
+	default n
+
+endif # MCUBOOT
+
 if BOARD_NRF54L15DK_NRF54L15_CPUAPP_NS
 
 config BT_CTLR
