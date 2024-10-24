@@ -88,15 +88,14 @@ static void clock_init(void)
 	/* Set SystemCoreClock variable. */
 	SystemCoreClock = DT_PROP(DT_NODELABEL(cpu0), clock_frequency);
 	/* Set LPUART0 clock source. */
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart0), okay)
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpuart0))
 	CLOCK_SetLpuart0Clock(LPUART_CLOCK_SEL(lpuart0));
 #endif
 }
 
-static int mcxc_init(void)
+void soc_early_init_hook(void)
 {
 	clock_init();
-	return 0;
 }
 
 #ifdef CONFIG_SOC_RESET_HOOK
@@ -107,5 +106,3 @@ void soc_reset_hook(void)
 }
 
 #endif /* CONFIG_SOC_RESET_HOOK */
-
-SYS_INIT(mcxc_init, PRE_KERNEL_1, 0);

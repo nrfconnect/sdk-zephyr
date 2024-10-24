@@ -351,7 +351,7 @@ void __weak rt5xx_clock_init(void)
 	/* Switch CLKOUT to FRO_DIV2 */
 	CLOCK_AttachClk(kFRO_DIV2_to_CLKOUT);
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(usdhc0), okay) && CONFIG_IMX_USDHC
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(usdhc0)) && CONFIG_IMX_USDHC
 	/* Make sure USDHC ram buffer has been power up*/
 	POWER_DisablePD(kPDRUNCFG_APD_USDHC0_SRAM);
 	POWER_DisablePD(kPDRUNCFG_PPD_USDHC0_SRAM);
@@ -366,7 +366,7 @@ void __weak rt5xx_clock_init(void)
 	RESET_PeripheralReset(kSDIO0_RST_SHIFT_RSTn);
 #endif
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(smartdma), okay) && CONFIG_DMA_MCUX_SMARTDMA
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(smartdma)) && CONFIG_DMA_MCUX_SMARTDMA
 	/* Power up SMARTDMA ram */
 	POWER_DisablePD(kPDRUNCFG_APD_SMARTDMA_SRAM);
 	POWER_DisablePD(kPDRUNCFG_PPD_SMARTDMA_SRAM);
@@ -511,16 +511,16 @@ void __weak imxrt_deinit_display_interface(void)
 
 #endif
 
+extern void rt5xx_power_init(void);
+
 /**
  *
  * @brief Perform basic hardware initialization
  *
  * Initialize the interrupt controller device drivers.
  * Also initialize the timer device driver, if required.
- *
- * @return 0
  */
-static int nxp_rt500_init(void)
+void soc_early_init_hook(void)
 {
 	/* Initialize clocks with tool generated code */
 	rt5xx_clock_init();
@@ -536,8 +536,8 @@ static int nxp_rt500_init(void)
 	IOPCTL->PIO[1][15] = 0;
 	IOPCTL->PIO[3][28] = 0;
 	IOPCTL->PIO[3][29] = 0;
+#ifdef CONFIG_PM
+	rt5xx_power_init();
+#endif
 
-	return 0;
 }
-
-SYS_INIT(nxp_rt500_init, PRE_KERNEL_1, 0);
