@@ -73,11 +73,9 @@ config OSDP_SC_ENABLED
 	bool "OSDP Secure Channel"
 	depends on CSPRNG_ENABLED
 	default y
-	select CRYPTO
-	select CRYPTO_MBEDTLS_SHIM
 	select MBEDTLS
-	select MBEDTLS_CIPHER_AES_ENABLED
-	select MBEDTLS_CIPHER_CCM_ENABLED
+	select MBEDTLS_CIPHER_AES_ENABLED if MBEDTLS_BUILTIN
+	select MBEDTLS_CIPHER_CCM_ENABLED if MBEDTLS_BUILTIN
 	help
 	  Secure the OSDP communication channel with encryption and mutual
 	  authentication.
