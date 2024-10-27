@@ -4,6 +4,7 @@ on:
     types: [opened, synchronize, closed]
     branches:
       - main
+      - v3.7.99-ncs1-branch
 
 
 jobs:
@@ -15,3 +16,4 @@ jobs:
         with:
           token: ${{ secrets.NCS_GITHUB_TOKEN }}
           manifest-pr-title-details: ${{ github.event.pull_request.title }}
+          base-branch: ${{ github.event.pull_request.base.ref == 'v3.7.99-ncs1-branch' && 'v2.8-branch' || 'main' }}
