@@ -83,8 +83,7 @@ int main(void)
 	int rc = 0;
 	char buf[16];
 	uint8_t key[8] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF}, longarray[128];
-	uint32_t i_cnt = 0U;
-	uint32_t i;
+	uint32_t i_cnt = 0U, i;
 	uint32_t id = 0;
 	ssize_t free_space = 0;
 	struct flash_pages_info info;
@@ -145,7 +144,7 @@ int main(void)
 		rc = zms_read(&fs, KEY_VALUE_ID, &key, sizeof(key));
 		if (rc > 0) { /* item was found, show it */
 			printk("Id: %x, Key: ", KEY_VALUE_ID);
-			for (uint8_t n = 0; n < 8; n++) {
+			for (int n = 0; n < 8; n++) {
 				printk("%x ", key[n]);
 			}
 			printk("\n");
@@ -182,7 +181,7 @@ int main(void)
 		if (rc > 0) {
 			/* item was found, show it */
 			printk("Id: %d, Longarray: ", LONG_DATA_ID);
-			for (uint16_t n = 0; n < sizeof(longarray); n++) {
+			for (int n = 0; n < sizeof(longarray); n++) {
 				printk("%x ", longarray[n]);
 			}
 			printk("\n");
@@ -205,7 +204,7 @@ int main(void)
 	}
 
 	if (i != MAX_ITERATIONS) {
-		printk("Error: Something went wrong at iteration %u rc=%d\n", i, rc);
+		printk("Error: Something went wrong at iteration %u rc=%d\n", i - 1, rc);
 		return 0;
 	}
 
@@ -250,7 +249,7 @@ int main(void)
 	 * Let's compute free space in storage. But before doing that let's Garbage collect
 	 * all sectors where we deleted all entries and then compute the free space
 	 */
-	for (i = 0; i < fs.sector_count; i++) {
+	for (uint32_t i = 0; i < fs.sector_count; i++) {
 		rc = zms_sector_use_next(&fs);
 		if (rc) {
 			printk("Error while changing sector rc=%d\n", rc);
@@ -262,13 +261,6 @@ int main(void)
 		return 0;
 	}
 	printk("Free space in storage is %u bytes\n", free_space);
-
-	/* Let's clean the storage now */
-	rc = zms_clear(&fs);
-	if (rc < 0) {
-		printk("Error while cleaning the storage, rc=%d\n", rc);
-	}
-
 	printk("Sample code finished Successfully\n");
 
 	return 0;
