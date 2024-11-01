@@ -668,9 +668,9 @@ zephyr_library_sources(
 	${HOSTAP_SRC_BASE}/crypto/aes-internal-enc.c
 	${HOSTAP_SRC_BASE}/crypto/rc4.c
 	${HOSTAP_SRC_BASE}/crypto/crypto_mbedtls_alt.c
-	${HOSTAP_SRC_BASE}/crypto/tls_mbedtls_alt.c
 	${HOSTAP_SRC_BASE}/crypto/sha256-kdf.c
 	${HOSTAP_BASE}/port/mbedtls/supp_psa_api.c
+	${HOSTAP_SRC_BASE}/crypto/tls_none.c
 )
 endif()
 
