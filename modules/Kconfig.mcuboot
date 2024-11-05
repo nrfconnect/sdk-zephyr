@@ -260,6 +260,16 @@ endmenu # On board MCUboot operation mode
 
 endif # BOOTLOADER_MCUBOOT
 
+menu "Sysbuild passed options"
+
+config MCUBOOT_BOOTLOADER_SIGNATURE_TYPE_ED25519
+	bool "Use ED25519 signature"
+
+config MCUBOOT_BOOTLOADER_SIGNATURE_TYPE_PURE
+	bool "Signature is verified over an image rather than sha of an image"
+
+endmenu # Sysbuild passed options
+
 menuconfig MCUBOOT_BOOTUTIL_LIB
 	bool "MCUboot utility library"
 	help
