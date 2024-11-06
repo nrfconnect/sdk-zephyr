@@ -32,7 +32,7 @@ nvic: &cpuapp_nvic {};
 	};
 };
 
-&bt_hci_sdc {
+&bt_hci_controller {
 	status = "okay";
 };
 
