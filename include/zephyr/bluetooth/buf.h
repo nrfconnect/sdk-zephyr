@@ -146,6 +146,27 @@ BUILD_ASSERT(CONFIG_BT_BUF_EVT_RX_COUNT > CONFIG_BT_BUF_ACL_TX_COUNT,
  */
 struct net_buf *bt_buf_get_rx(enum bt_buf_type type, k_timeout_t timeout);
 
+/** A callback to notify about freed buffer in the incoming data pool.
+ *
+ * This callback is called when a buffer of a given type is freed and can be requested through the
+ * @ref bt_buf_get_rx function. However, this callback is called from the context of the buffer
+ * freeing operation and must not attempt to allocate a new buffer from the same pool.
+ *
+ * @warning When this callback is called, the scheduler is locked and the callee must not perform
+ * any action that makes the current thread unready. This callback must only be used for very
+ * short non-blocking operation (e.g. submitting a work item).
+ *
+ * @param type_mask A bit mask of buffer types that have been freed.
+ */
+typedef void (*bt_buf_rx_freed_cb_t)(enum bt_buf_type type_mask);
+
+/** Set the callback to notify about freed buffer in the incoming data pool.
+ *
+ * @param cb Callback to notify about freed buffer in the incoming data pool. If NULL, the callback
+ *           is disabled.
+ */
+void bt_buf_rx_freed_cb_set(bt_buf_rx_freed_cb_t cb);
+
 /** Allocate a buffer for outgoing data
  *
  *  This will set the buffer type so bt_buf_set_type() does not need to
