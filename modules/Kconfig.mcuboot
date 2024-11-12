@@ -256,6 +256,11 @@ config MCUBOOT_BOOTLOADER_NO_DOWNGRADE
 	  MCUBOOT_DOWNGRADE_PREVENTION option enabled.
 endif
 
+config MCUBOOT_BOOTLOADER_USES_SHA512
+	bool "MCUboot uses SHA512 for image hash"
+	help
+	  MCUboot has been compiled to verify images using SHA512.
+
 endmenu # On board MCUboot operation mode
 
 endif # BOOTLOADER_MCUBOOT
