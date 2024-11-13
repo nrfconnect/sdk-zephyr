@@ -132,3 +132,11 @@ tests:
       - nrf54l15dk/nrf54l05/cpuapp
     integration_platforms:
       - nrf54l15dk/nrf54l15/cpuapp
+  sample.mcumgr.smp_svr.bt.nrf5340dk.ext_flash:
+    sysbuild: true
+    extra_args:
+      - FILE_SUFFIX=nrf5340_bt
+    platform_allow:
+      - nrf5340dk/nrf5340/cpuapp
+    integration_platforms:
+      - nrf5340dk/nrf5340/cpuapp
