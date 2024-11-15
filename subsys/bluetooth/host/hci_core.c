@@ -817,6 +817,8 @@ static void conn_handle_disconnected(uint16_t handle)
 			 * handle 0 can be used as a valid non-zero handle.
 			 */
 			disconnected_handles[i] = ~BT_ACL_HANDLE_MASK | handle;
+
+			return;
 		}
 	}
 }
