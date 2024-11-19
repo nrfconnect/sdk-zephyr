@@ -167,5 +167,5 @@ bool __attribute__((naked)) pm_s2ram_mark_check_and_clear(void)
 		  [restorevalid_offs] "r"(offsetof(NRF_RESETINFO_Type, RESTOREVALID)),
 		  [restorevalid_present_mask] "r"(RESETINFO_RESTOREVALID_RESTOREVALID_Msk)
 
-		: "r0", "r1", "r3", "r4", "memory");
+		: "r0", "r1", "r3", "r4", "ip", "lr", "memory");
 }
