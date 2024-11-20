@@ -125,8 +125,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                             help='custom gdb host, defaults to the empty string '
                             'and runs a gdb server')
         parser.add_argument('--gdb-port', default=DEFAULT_JLINK_GDB_PORT,
-                            help='pyocd gdb port, defaults to {}'.format(
-                                DEFAULT_JLINK_GDB_PORT))
+                            help=f'pyocd gdb port, defaults to {DEFAULT_JLINK_GDB_PORT}')
         parser.add_argument('--commander', default=DEFAULT_JLINK_EXE,
                             help=f'''J-Link Commander, default is
                             {DEFAULT_JLINK_EXE}''')
@@ -307,7 +306,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
             client_cmd = (self.gdb_cmd +
                           self.tui_arg +
                           [elf_name] +
-                          ['-ex', 'target remote {}:{}'.format(self.gdb_host, self.gdb_port)])
+                          ['-ex', f'target remote {self.gdb_host}:{self.gdb_port}'])
             if command == 'debug':
                 client_cmd += ['-ex', 'monitor halt',
                                '-ex', 'monitor reset',
@@ -416,7 +415,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                    (['-nogui', '1'] if self.supports_nogui else []) +
                    self.tool_opt)
 
-            self.logger.info('Flashing file: {}'.format(flash_file))
+            self.logger.info(f'Flashing file: {flash_file}')
             kwargs = {}
             if not self.logger.isEnabledFor(logging.DEBUG):
                 kwargs['stdout'] = subprocess.DEVNULL
