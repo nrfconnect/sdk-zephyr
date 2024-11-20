@@ -427,17 +427,20 @@ SHELL_SUBCMD_ADD((section_cmd), cmd1, &sub_section_cmd1, "help for cmd1", cmd1_h
 SHELL_CMD_REGISTER(section_cmd, &sub_section_cmd,
 		   "Demo command using section for subcommand registration", NULL);
 
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
 int main(void)
 {
 	if (IS_ENABLED(CONFIG_SHELL_START_OBSCURED)) {
 		login_init();
 	}
 
-#if DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_shell_uart), zephyr_cdc_acm_uart)
 	const struct device *dev;
+	dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_shell_uart));
+	pm_device_runtime_get(dev);
+#if DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_shell_uart), zephyr_cdc_acm_uart)
 	uint32_t dtr = 0;
 
-	dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_shell_uart));
 	if (!device_is_ready(dev) || usb_enable(NULL)) {
 		return 0;
 	}
