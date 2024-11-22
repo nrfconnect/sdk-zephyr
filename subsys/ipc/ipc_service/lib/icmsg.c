@@ -259,7 +259,7 @@ static bool mbox_callback_process(struct icmsg_data_t *dev_data)
 			remote_sid_req = REMOTE_SID_REQ_FROM_TX(pbuf_handshake_read(dev_data->tx_pb));
 
 			if (remote_sid_req != dev_data->remote_session) {
-				atomic_set(&dev_data->state, ICMSG_STATE_CONNECTED_SID_ENABLED);
+				atomic_set(&dev_data->state, ICMSG_STATE_DISCONNECTED);
 				if (dev_data->cb->unbound) {
 					dev_data->cb->unbound(dev_data->ctx);
 				}
