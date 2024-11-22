@@ -8,8 +8,13 @@
 #include <zephyr/drivers/hwinfo.h>
 #include <string.h>
 #include <zephyr/sys/byteorder.h>
-#if !defined(CONFIG_SOC_SERIES_NRF54HX) && !defined(CONFIG_BOARD_QEMU_CORTEX_M0)
+#if defined(CONFIG_BOARD_QEMU_CORTEX_M0) || \
+	(defined(CONFIG_NRF_PLATFORM_HALTIUM) && \
+	 defined(CONFIG_RISCV_CORE_NORDIC_VPR))
+#define RESET_CAUSE_AVAILABLE 0
+#else
 #include <helpers/nrfx_reset_reason.h>
+#define RESET_CAUSE_AVAILABLE 1
 #endif
 
 #if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) && defined(NRF_FICR_S)
@@ -63,7 +68,7 @@ ssize_t z_impl_hwinfo_get_device_id(uint8_t *buffer, size_t length)
 	return length;
 }
 
-#if !defined(CONFIG_SOC_SERIES_NRF54HX) && !defined(CONFIG_BOARD_QEMU_CORTEX_M0)
+#if RESET_CAUSE_AVAILABLE
 int z_impl_hwinfo_get_reset_cause(uint32_t *cause)
 {
 	uint32_t flags = 0;
@@ -76,16 +81,37 @@ int z_impl_hwinfo_get_reset_cause(uint32_t *cause)
 	if (reason & NRFX_RESET_REASON_DOG_MASK) {
 		flags |= RESET_WATCHDOG;
 	}
-	if (reason & NRFX_RESET_REASON_LOCKUP_MASK) {
+
+#if defined(NRF_RESETINFO)
+	if (reason & NRFX_RESET_REASON_LOCAL_DOG0_MASK) {
+		flags |= RESET_WATCHDOG;
+	}
+#endif
+
+#if defined(NRF_RESETINFO)
+	if ((reason & NRFX_RESET_REASON_LOCKUP)
+		|| (reason & NRFX_RESET_REASON_LOCAL_LOCKUP_MASK))
+#else
+	if (reason & NRFX_RESET_REASON_LOCKUP_MASK)
+#endif
+	{
 		flags |= RESET_CPU_LOCKUP;
 	}
+
 	if (reason & NRFX_RESET_REASON_OFF_MASK) {
 		flags |= RESET_LOW_POWER_WAKE;
 	}
 	if (reason & NRFX_RESET_REASON_DIF_MASK) {
 		flags |= RESET_DEBUG;
 	}
-	if (reason & NRFX_RESET_REASON_SREQ_MASK) {
+
+#if defined(NRF_RESETINFO)
+	if ((reason & NRFX_RESET_REASON_SREQ)
+		|| (reason & NRFX_RESET_REASON_LOCAL_SREQ_MASK))
+#else
+	if (reason & NRFX_RESET_REASON_SREQ_MASK)
+#endif
+	{
 		flags |= RESET_SOFTWARE;
 	}
 
@@ -124,11 +150,18 @@ int z_impl_hwinfo_get_reset_cause(uint32_t *cause)
 		flags |= RESET_DEBUG;
 	}
 #endif
+
 #if !NRF_POWER_HAS_RESETREAS
-	if (reason & NRFX_RESET_REASON_DOG1_MASK) {
+#if defined(NRF_RESETINFO)
+	if (reason & NRFX_RESET_REASON_LOCAL_DOG1_MASK)
+#else
+	if (reason & NRFX_RESET_REASON_DOG1_MASK)
+#endif
+	{
 		flags |= RESET_WATCHDOG;
 	}
-#endif
+#endif /* !NRF_POWER_HAS_RESETREAS */
+
 #if NRFX_RESET_REASON_HAS_GRTC
 	if (reason & NRFX_RESET_REASON_GRTC_MASK) {
 		flags |= RESET_CLOCK;
@@ -184,4 +217,4 @@ int z_impl_hwinfo_get_supported_reset_cause(uint32_t *supported)
 
 	return 0;
 }
-#endif
+#endif /* RESET_CAUSE_AVAILABLE */
