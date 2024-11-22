@@ -179,6 +179,29 @@ int pbuf_write(struct pbuf *pb, const char *data, uint16_t len)
 	return len;
 }
 
+int pbuf_get_initial_buf(struct pbuf *pb, volatile char **buf, uint16_t *len)
+{
+	uint32_t wr_idx;
+
+	if (pb == NULL || pb->data.rd_idx != 0) {
+		/* Incorrect call. */
+		return -EINVAL;
+	}
+
+	sys_cache_data_invd_range((void *)(pb->cfg->wr_idx_loc), sizeof(*(pb->cfg->wr_idx_loc)));
+	__sync_synchronize();
+
+	wr_idx = *(pb->cfg->wr_idx_loc);
+	if (wr_idx >= pb->cfg->len || wr_idx > 0xFFFF || wr_idx == 0) {
+		/* Incorrect index - probably pbuf was not initialized or message was not send yet. */
+		return -EINVAL;
+	}
+	*buf = pb->cfg->data_loc; // TODO: What about header???
+	*len = wr_idx; // TODO: len depends on len field in header
+
+	return 0;
+}
+
 int pbuf_read(struct pbuf *pb, char *buf, uint16_t len)
 {
 	if (pb == NULL) {

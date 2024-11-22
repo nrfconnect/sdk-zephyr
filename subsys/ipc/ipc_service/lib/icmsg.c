@@ -19,15 +19,13 @@
 #define MAKE_RX_HANDSHAKE(local_sid_req, remote_sid_ack) ((local_sid_req) | ((remote_sid_ack) << 16))
 #define MAKE_TX_HANDSHAKE(remote_sid_req, local_sid_ack) ((remote_sid_req) | ((local_sid_ack) << 16))
 
-#define SID_DISCONNECTED_BIT 0x8000
+#define SID_DISCONNECTED 0
 
 #define BOND_NOTIFY_REPEAT_TO	K_MSEC(CONFIG_IPC_SERVICE_ICMSG_BOND_NOTIFY_REPEAT_TO_MS)
 #define SHMEM_ACCESS_TO		K_MSEC(CONFIG_IPC_SERVICE_ICMSG_SHMEM_ACCESS_TO_MS)
 
 static const uint8_t magic[] = {0x45, 0x6d, 0x31, 0x6c, 0x31, 0x4b, 0x30,
-				0x72, 0x6e, 0x33, 0x6c, 0x69, 0x34, 0x01 };
-
-#define OLD_MAGIC_LENGTH (sizeof(magic) - 1)
+				0x72, 0x6e, 0x33, 0x6c, 0x69, 0x34,};
 
 #ifdef CONFIG_MULTITHREADING
 #if defined(CONFIG_IPC_SERVICE_BACKEND_ICMSG_WQ_ENABLE)
@@ -187,47 +185,184 @@ static void mbox_callback_process(struct icmsg_data_t *dev_data)
 #ifdef CONFIG_MULTITHREADING
 	struct icmsg_data_t *dev_data = CONTAINER_OF(item, struct icmsg_data_t, mbox_work);
 #endif
+	int ret;
 	uint8_t rx_buffer[CONFIG_PBUF_RX_READ_BUF_SIZE] __aligned(4);
-
+	uint32_t len;
+	bool rerun = false;
+	bool notify_remote = false;
 	atomic_t state = atomic_get(&dev_data->state);
 
-	uint32_t len = data_available(dev_data);
+	uint32_t tx_handshake = pbuf_handshake_read(dev_data->tx_pb);
+	uint32_t remote_sid_req = REMOTE_SID_REQ_FROM_TX(tx_handshake);
+	uint32_t local_sid_ack = LOCAL_SID_ACK_FROM_TX(tx_handshake);
 
-	if (len == 0) {
-		/* Unlikely, no data in buffer. */
-		return;
-	}
+	volatile char *magic_buf;
+	uint16_t *magic_len;
 
-	__ASSERT_NO_MSG(len <= sizeof(rx_buffer));
+	switch (state) {
+	case ICMSG_STATE_INITIALIZING_SID_COMPAT:
+		// Initialization with detection of remote session awareness
 
-	if (sizeof(rx_buffer) < len) {
-		return;
-	}
+		ret = pbuf_get_initial_buf(dev_data->rx_pb, &buf, &len); // TODO: You forget about header!!!
 
-	len = pbuf_read(dev_data->rx_pb, rx_buffer, sizeof(rx_buffer));
-
-	if (state == ICMSG_STATE_READY) {
-		if (dev_data->cb->received) {
-			dev_data->cb->received(rx_buffer, len, dev_data->ctx);
+		if (ret == 0 && len == sizeof(magic) && memcmp((void*)buf, magic, sizeof(magic)) == 0) {
+			// Remote initalized in session-unaware mode, so we do old way of initialization.
+			ret = pbuf_tx_init(dev_data->tx_pb); // TODO: maybe extract to common function with "open".
+			if (ret < 0) {
+				if (dev_data->cb->error) { // TODO: goto cleanup
+					dev_data->cb->error("Incorrect Tx configuration", dev_data->ctx);
+				}
+				__ASSERT(false, "Incorrect Tx configuration");
+				atomic_set(&dev_data->state, ICMSG_STATE_DISCONNECTED);
+				return;
+			}
+			ret = pbuf_write(dev_data->tx_pb, magic, sizeof(magic));
+			if (ret < 0) {
+				if (dev_data->cb->error) { // TODO: goto cleanup
+					dev_data->cb->error("Incorrect Tx configuration", dev_data->ctx);
+				}
+				__ASSERT(false, "Incorrect Tx configuration");
+				atomic_set(&dev_data->state, ICMSG_STATE_DISCONNECTED);
+				return;
+			}
+			// We got magic data, so we can handle it later.
+			notify_remote = true;
+			rerun = true;
+			atomic_set(&dev_data->state, ICMSG_STATE_INITIALIZING_SID_DISABLED);
+			break;
 		}
-	} else {
-		__ASSERT_NO_MSG(state == ICMSG_STATE_BUSY);
+		// If remote did not initialize the RX in session-unaware mode, we can try
+		// with session-aware initialization.
+		__fallthrough;
 
-		/* Allow magic number longer than sizeof(magic) for future protocol version. */
-		bool endpoint_invalid = (len < sizeof(magic) ||
-					memcmp(magic, rx_buffer, sizeof(magic)));
+	case ICMSG_STATE_INITIALIZING_SID_ENABLED:
+		if (remote_sid_req != dev_data->remote_session && remote_sid_req != SID_DISCONNECTED) {
+			// We can now initialize TX, since we know that remote, during receiving,
+			// will first read FIFO indexes and later, it will check if session has changed
+			// before using indexes to receive the message. Additionally, we know that
+			// remote after session request change will no try to receive more data.
+			ret = pbuf_tx_init(dev_data->tx_pb);
+			if (ret < 0) {
+				if (dev_data->cb->error) {
+					dev_data->cb->error("Incorrect Tx configuration", dev_data->ctx);
+				}
+				__ASSERT(false, "Incorrect Tx configuration");
+				atomic_set(&dev_data->state, ICMSG_STATE_DISCONNECTED);
+				return;
+			}
+			// Acknowledge the remote session.
+			dev_data->remote_session = remote_sid_req;
+			pbuf_handshake_write(dev_data->rx_pb, MAKE_RX_HANDSHAKE(dev_data->local_session, dev_data->remote_session));
+			notify_remote = true;
+		}
 
-		if (endpoint_invalid) {
-			__ASSERT_NO_MSG(false);
+		if (local_sid_ack == dev_data->local_session &&
+		    dev_data->remote_session != SID_DISCONNECTED) {
+			// We send acknowledge to remote, receive acknowledge from remote,
+			// so we are ready.
+			atomic_set(&dev_data->state, ICMSG_STATE_CONNECTED);
+
+			if (dev_data->cb->bound) {
+				dev_data->cb->bound(dev_data->ctx);
+			}
+			// Re-run this handler, because remote may already send something.
+			rerun = true;
+			notify_remote = true;
+		}
+
+		break;
+
+	case ICMSG_STATE_CONNECTED_SID_ENABLED: { // TODO: Later, consider combining with ICMSG_STATE_CONNECTED_SID_DISABLED
+		uint32_t read_index;
+		uint32_t write_index;
+
+		// Get RX indexes and save for later
+		len = pbuf_read_indexes(dev_data->rx_pb, &read_index, &write_index);
+
+		// The indexes are valid only if remote session is as expected, so we need
+		// to check remote session now.
+		remote_sid_req = REMOTE_SID_REQ_FROM_TX(pbuf_handshake_read(dev_data->tx_pb));
+
+		if (remote_sid_req != dev_data->remote_session) {
+			atomic_set(&dev_data->state, ICMSG_STATE_DISCONNECTED_SID_ENABLED);
+			if (dev_data->cb->unbound) {
+				dev_data->cb->unbound(dev_data->ctx);
+			}
 			return;
 		}
 
-		if (dev_data->cb->bound) {
-			dev_data->cb->bound(dev_data->ctx);
+		if (len == 0) {
+			/* Unlikely, no data in buffer. */
+			return;
 		}
 
-		atomic_set(&dev_data->state, ICMSG_STATE_READY);
+		__ASSERT_NO_MSG(len <= sizeof(rx_buffer));
+
+		if (sizeof(rx_buffer) < len) {
+			return;
+		}
+
+		len = pbuf_read_from_indexes(dev_data->rx_pb, read_index, write_index, rx_buffer, sizeof(rx_buffer));
+
+		if (dev_data->cb->received) {
+			dev_data->cb->received(rx_buffer, len, dev_data->ctx);
+		}
+
+		// TODO: 
+		break;
 	}
+
+	case ICMSG_STATE_INITIALIZING_SID_DISABLED:
+	case ICMSG_STATE_CONNECTED_SID_DISABLED:
+
+		len = data_available(dev_data);
+
+		if (len == 0) {
+			/* Unlikely, no data in buffer. */
+			return;
+		}
+
+		__ASSERT_NO_MSG(len <= sizeof(rx_buffer));
+
+		if (sizeof(rx_buffer) < len) {
+			return;
+		}
+
+		len = pbuf_read(dev_data->rx_pb, rx_buffer, sizeof(rx_buffer));
+
+		if (state == ICMSG_STATE_CONNECTED_SID_DISABLED) {
+			if (dev_data->cb->received) {
+				dev_data->cb->received(rx_buffer, len, dev_data->ctx);
+			}
+		} else {
+			/* Allow magic number longer than sizeof(magic) for future protocol version. */
+			bool endpoint_invalid = (len < sizeof(magic) ||
+						memcmp(magic, rx_buffer, sizeof(magic)));
+
+			if (endpoint_invalid) {
+				__ASSERT_NO_MSG(false);
+				return;
+			}
+
+			if (dev_data->cb->bound) {
+				dev_data->cb->bound(dev_data->ctx);
+			}
+
+			atomic_set(&dev_data->state, ICMSG_STATE_CONNECTED_SID_DISABLED);
+		}
+		break;
+
+	case ICMSG_STATE_UNINITIALIZED:
+	case ICMSG_STATE_DISCONNECTED_SID_ENABLED:
+	default:
+		// Nothing to do in this state.
+		return;
+	}
+
+	if (notify_remote) {
+		(void)mbox_send_dt(&dev_data->conf->mbox_tx, NULL);
+	}
+
 #ifdef CONFIG_MULTITHREADING
 	submit_work_if_buffer_free_and_data_available(dev_data);
 #else
@@ -281,18 +416,25 @@ int icmsg_open(const struct icmsg_config_t *conf,
 	k_mutex_init(&dev_data->tx_lock);
 #endif
 
+	ret = pbuf_rx_init(dev_data->rx_pb);
+
+	if (ret < 0) {
+		__ASSERT(false, "Incorrect Rx configuration");
+		return ret;
+	}
+
 	if (conf->unbound_mode != ICMSG_UNBOUND_MODE_DISABLE) {
 		// Increment local session id without conflicts with forbidden values.
 		uint32_t local_session_ack =
 			LOCAL_SID_ACK_FROM_TX(pbuf_handshake_read(dev_data->tx_pb));
 		dev_data->local_session =
 			LOCAL_SID_REQ_FROM_RX(pbuf_handshake_read(dev_data->tx_pb));
-		dev_data->remote_session = 0;
+		dev_data->remote_session = SID_DISCONNECTED;
 		do {
-			dev_data->local_session = (dev_data->local_session + 1) & 0x8FFF;
-		} while (dev_data->local_session == local_session_ack || dev_data->local_session == 0);
+			dev_data->local_session = (dev_data->local_session + 1) & 0xFFFF;
+		} while (dev_data->local_session == local_session_ack || dev_data->local_session == SID_DISCONNECTED);
 		// Write local session id request without remote acknowledge
-		pbuf_handshake_write(MAKE_RX_HANDSHAKE(dev_data->local_session, 0));
+		pbuf_handshake_write(dev_data->rx_pb, MAKE_RX_HANDSHAKE(dev_data->local_session, SID_DISCONNECTED));
 		// We can now initialize TX, since we know that remote, during receiving,
 		// will first read FIFO indexes and later, it will check if session has changed
 		// before using indexes to receive the message.
@@ -307,13 +449,6 @@ int icmsg_open(const struct icmsg_config_t *conf,
 
 		if (ret < 0) {
 			__ASSERT(false, "Incorrect Tx configuration");
-			return ret;
-		}
-
-		ret = pbuf_rx_init(dev_data->rx_pb);
-
-		if (ret < 0) {
-			__ASSERT(false, "Incorrect Rx configuration");
 			return ret;
 		}
 
@@ -362,6 +497,10 @@ int icmsg_close(const struct icmsg_config_t *conf,
 	int ret = 0;
 
 	enum icmsg_state old_state;
+
+	pbuf_handshake_write(dev_data->rx_pb, MAKE_RX_HANDSHAKE(SID_DISCONNECTED, SID_DISCONNECTED));
+
+	(void)mbox_send_dt(&conf->mbox_tx, NULL);
 
 	old_state = atomic_set(&dev_data->state, ICMSG_STATE_UNINITIALIZED);
 
