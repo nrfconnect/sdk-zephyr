@@ -15,8 +15,10 @@
 #define BOND_NOTIFY_REPEAT_TO	K_MSEC(CONFIG_IPC_SERVICE_ICMSG_BOND_NOTIFY_REPEAT_TO_MS)
 #define SHMEM_ACCESS_TO		K_MSEC(CONFIG_IPC_SERVICE_ICMSG_SHMEM_ACCESS_TO_MS)
 
-static const uint8_t magic[] = {0x45, 0x6d, 0x31, 0x6c, 0x31, 0x4b,
-				0x30, 0x72, 0x6e, 0x33, 0x6c, 0x69, 0x34};
+static const uint8_t magic[] = {0x45, 0x6d, 0x31, 0x6c, 0x31, 0x4b, 0x30,
+				0x72, 0x6e, 0x33, 0x6c, 0x69, 0x34, 0x01 };
+
+#define OLD_MAGIC_LENGTH (sizeof(magic) - 1)
 
 #ifdef CONFIG_MULTITHREADING
 #if defined(CONFIG_IPC_SERVICE_BACKEND_ICMSG_WQ_ENABLE)

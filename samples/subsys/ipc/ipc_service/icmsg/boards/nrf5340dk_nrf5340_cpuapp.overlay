@@ -26,6 +26,7 @@
 
 		ipc0: ipc0 {
 			compatible = "zephyr,ipc-icmsg";
+			unbound = "enable";
 			tx-region = <&sram_tx>;
 			rx-region = <&sram_rx>;
 			mboxes = <&mbox 0>, <&mbox 1>;
