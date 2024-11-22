@@ -12,6 +12,15 @@
 #include <zephyr/ipc/pbuf.h>
 #include <zephyr/init.h>
 
+#define LOCAL_SID_REQ_FROM_RX(rx_handshake) ((rx_handshake) & 0xFFFF)
+#define REMOTE_SID_ACK_FROM_RX(rx_handshake) ((rx_handshake) >> 16)
+#define REMOTE_SID_REQ_FROM_TX(tx_handshake) ((tx_handshake) & 0xFFFF)
+#define LOCAL_SID_ACK_FROM_TX(tx_handshake) ((tx_handshake) >> 16)
+#define MAKE_RX_HANDSHAKE(local_sid_req, remote_sid_ack) ((local_sid_req) | ((remote_sid_ack) << 16))
+#define MAKE_TX_HANDSHAKE(remote_sid_req, local_sid_ack) ((remote_sid_req) | ((local_sid_ack) << 16))
+
+#define SID_DISCONNECTED_BIT 0x8000
+
 #define BOND_NOTIFY_REPEAT_TO	K_MSEC(CONFIG_IPC_SERVICE_ICMSG_BOND_NOTIFY_REPEAT_TO_MS)
 #define SHMEM_ACCESS_TO		K_MSEC(CONFIG_IPC_SERVICE_ICMSG_SHMEM_ACCESS_TO_MS)
 
@@ -259,10 +268,10 @@ int icmsg_open(const struct icmsg_config_t *conf,
 	       struct icmsg_data_t *dev_data,
 	       const struct ipc_service_cb *cb, void *ctx)
 {
-	if (!atomic_cas(&dev_data->state, ICMSG_STATE_OFF, ICMSG_STATE_BUSY)) {
-		/* Already opened. */
-		return -EALREADY;
-	}
+	int ret;
+	enum icmsg_state old_state;
+
+	old_state = atomic_set(&dev_data->state, ICMSG_STATE_INITIALIZING);
 
 	dev_data->cb = cb;
 	dev_data->ctx = ctx;
@@ -272,55 +281,95 @@ int icmsg_open(const struct icmsg_config_t *conf,
 	k_mutex_init(&dev_data->tx_lock);
 #endif
 
-	int ret = pbuf_tx_init(dev_data->tx_pb);
+	if (conf->unbound_mode != ICMSG_UNBOUND_MODE_DISABLE) {
+		// Increment local session id without conflicts with forbidden values.
+		uint32_t local_session_ack =
+			LOCAL_SID_ACK_FROM_TX(pbuf_handshake_read(dev_data->tx_pb));
+		dev_data->local_session =
+			LOCAL_SID_REQ_FROM_RX(pbuf_handshake_read(dev_data->tx_pb));
+		dev_data->remote_session = 0;
+		do {
+			dev_data->local_session = (dev_data->local_session + 1) & 0x8FFF;
+		} while (dev_data->local_session == local_session_ack || dev_data->local_session == 0);
+		// Write local session id request without remote acknowledge
+		pbuf_handshake_write(MAKE_RX_HANDSHAKE(dev_data->local_session, 0));
+		// We can now initialize TX, since we know that remote, during receiving,
+		// will first read FIFO indexes and later, it will check if session has changed
+		// before using indexes to receive the message.
+		// TODO: above not treue, We should reinit TX just before sending remote acknowledgement, because
+		// remote may change read index!
+		// Sending magic packet should be after local acknowledgement.
+	} else {
+		// Initialization of RX and sending magic bytes must be postponed
+		// if unbound mode enabled. We need to wait until remote is ready.
 
-	if (ret < 0) {
-		__ASSERT(false, "Incorrect configuration");
-		return ret;
+		ret = pbuf_tx_init(dev_data->tx_pb);
+
+		if (ret < 0) {
+			__ASSERT(false, "Incorrect Tx configuration");
+			return ret;
+		}
+
+		ret = pbuf_rx_init(dev_data->rx_pb);
+
+		if (ret < 0) {
+			__ASSERT(false, "Incorrect Rx configuration");
+			return ret;
+		}
+
+		ret = pbuf_write(dev_data->tx_pb, magic, sizeof(magic));
+
+		if (ret < 0) {
+			__ASSERT_NO_MSG(false);
+			return ret;
+		}
+
+		if (ret < (int)sizeof(magic)) {
+			__ASSERT_NO_MSG(ret == sizeof(magic));
+			return ret;
+		}
 	}
 
-	(void)pbuf_rx_init(dev_data->rx_pb);
-
-	ret = pbuf_write(dev_data->tx_pb, magic, sizeof(magic));
-
-	if (ret < 0) {
-		__ASSERT_NO_MSG(false);
-		return ret;
+	if (old_state == ICMSG_STATE_UNINITIALIZED) {
+		// Initialize mbox only if we are doing first-time open (not re-open after unbound)
+		ret = mbox_init(conf, dev_data);
+		if (ret) {
+			return ret;
+		}
 	}
 
-	if (ret < (int)sizeof(magic)) {
-		__ASSERT_NO_MSG(ret == sizeof(magic));
-		return ret;
-	}
-
-	ret = mbox_init(conf, dev_data);
-	if (ret) {
-		return ret;
-	}
+	if (conf->unbound_mode == ICMSG_UNBOUND_MODE_DISABLE) {
+		// Polling is only when unbound mode is disabled.
 #ifdef CONFIG_MULTITHREADING
 	ret = k_work_schedule_for_queue(workq, &dev_data->notify_work, K_NO_WAIT);
-	if (ret < 0) {
-		return ret;
-	}
 #else
 	notify_process(dev_data);
+	ret = 0;
 #endif
-	return 0;
+	} else {
+		// We need to send a notification to remote, it may not be delivered
+		// since it may be uninitialized yet, but when it finishes the initialization
+		// we get a notification from it. We need to send this notification in callback
+		// again to make sure that it arrived.
+		ret = mbox_send_dt(&conf->mbox_tx, NULL);
+	}
+	return ret;
 }
 
 int icmsg_close(const struct icmsg_config_t *conf,
 		struct icmsg_data_t *dev_data)
 {
-	int ret;
+	int ret = 0;
 
-	ret = mbox_deinit(conf, dev_data);
-	if (ret) {
-		return ret;
+	enum icmsg_state old_state;
+
+	old_state = atomic_set(&dev_data->state, ICMSG_STATE_UNINITIALIZED);
+
+	if (old_state != ICMSG_STATE_UNINITIALIZED) {
+		ret = mbox_deinit(conf, dev_data);
 	}
 
-	atomic_set(&dev_data->state, ICMSG_STATE_OFF);
-
-	return 0;
+	return ret;
 }
 
 int icmsg_send(const struct icmsg_config_t *conf,

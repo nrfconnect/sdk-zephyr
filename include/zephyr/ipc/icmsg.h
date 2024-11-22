@@ -27,9 +27,11 @@ extern "C" {
  */
 
 enum icmsg_state {
-	ICMSG_STATE_OFF,
-	ICMSG_STATE_BUSY,
-	ICMSG_STATE_READY,
+	// TODO: rename as it was before
+	ICMSG_STATE_UNINITIALIZED, /**< Instance is not initialized yet. Sending will fail. Opening allowed. */
+	ICMSG_STATE_INITIALIZING, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
+	ICMSG_STATE_CONNECTED, /**< Instance is connected. Sending will be successful. Opening allowed, session will change and remote will get unbound() callback. */
+	ICMSG_STATE_DISCONNECTED, /**< Instance was connected, but get disconnected. Sending will be silently discarded, because it there may be old sends. Opening allowed. */
 };
 
 enum icmsg_unbound_mode {
@@ -41,6 +43,7 @@ enum icmsg_unbound_mode {
 struct icmsg_config_t {
 	struct mbox_dt_spec mbox_tx;
 	struct mbox_dt_spec mbox_rx;
+	enum icmsg_unbound_mode unbound_mode;
 };
 
 struct icmsg_data_t {
@@ -61,6 +64,8 @@ struct icmsg_data_t {
 	struct k_work_delayable notify_work;
 	struct k_work mbox_work;
 #endif
+	uint16_t remote_session;
+	uint16_t local_session;
 	atomic_t state;
 };
 

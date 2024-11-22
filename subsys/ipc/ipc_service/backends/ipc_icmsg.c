@@ -60,6 +60,7 @@ static int backend_init(const struct device *instance)
 	static const struct icmsg_config_t backend_config_##i = {	\
 		.mbox_tx = MBOX_DT_SPEC_INST_GET(i, tx),		\
 		.mbox_rx = MBOX_DT_SPEC_INST_GET(i, rx),		\
+		.unbound_mode = UNBOUND_MODE(i),			\
 	};								\
 									\
 	PBUF_DEFINE(tx_pb_##i,						\
