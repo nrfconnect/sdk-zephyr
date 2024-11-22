@@ -29,9 +29,13 @@ extern "C" {
 enum icmsg_state {
 	// TODO: rename as it was before
 	ICMSG_STATE_UNINITIALIZED, /**< Instance is not initialized yet. Sending will fail. Opening allowed. */
-	ICMSG_STATE_INITIALIZING, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
-	ICMSG_STATE_CONNECTED, /**< Instance is connected. Sending will be successful. Opening allowed, session will change and remote will get unbound() callback. */
-	ICMSG_STATE_DISCONNECTED, /**< Instance was connected, but get disconnected. Sending will be silently discarded, because it there may be old sends. Opening allowed. */
+	ICMSG_STATE_INITIALIZING_SID_DISABLED, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
+	ICMSG_STATE_INITIALIZING_SID_ENABLED, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
+	ICMSG_STATE_INITIALIZING_SID_COMPAT, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
+	ICMSG_STATE_CONNECTED_SID_DISABLED, /**< Instance is connected. Sending will be successful. Opening allowed, session will change and remote will get unbound() callback. */
+	ICMSG_STATE_CONNECTED_SID_ENABLED, /**< Instance is connected. Sending will be successful. Opening allowed, session will change and remote will get unbound() callback. */
+	ICMSG_STATE_DISCONNECTED_SID_ENABLED, /**< Instance was connected, but get disconnected. Sending will be silently discarded, because it there may be old sends. Opening allowed. */
+	// TODO: ICMSG_STATE_COMPATIBILITY
 };
 
 enum icmsg_unbound_mode {

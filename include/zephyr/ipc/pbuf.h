@@ -233,6 +233,8 @@ int pbuf_read(struct pbuf *pb, char *buf, uint16_t len);
 uint32_t pbuf_handshake_read(struct pbuf *pb);
 void pbuf_handshake_write(struct pbuf *pb, uint32_t value);
 
+int pbuf_get_initial_buf(struct pbuf *pb, volatile char **buf, uint16_t *len);
+
 /**
  * @}
  */
