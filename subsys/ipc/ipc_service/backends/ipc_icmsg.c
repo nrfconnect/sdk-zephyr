@@ -54,6 +54,8 @@ static int backend_init(const struct device *instance)
 	return 0;
 }
 
+#define UNBOUND_MODE(i) CONCAT(ICMSG_UNBOUND_MODE_, DT_INST_STRING_UPPER_TOKEN(i, unbound))
+
 #define DEFINE_BACKEND_DEVICE(i)					\
 	static const struct icmsg_config_t backend_config_##i = {	\
 		.mbox_tx = MBOX_DT_SPEC_INST_GET(i, tx),		\
@@ -63,11 +65,15 @@ static int backend_init(const struct device *instance)
 	PBUF_DEFINE(tx_pb_##i,						\
 			DT_REG_ADDR(DT_INST_PHANDLE(i, tx_region)),	\
 			DT_REG_SIZE(DT_INST_PHANDLE(i, tx_region)),	\
-			DT_INST_PROP_OR(i, dcache_alignment, 0));	\
+			DT_INST_PROP_OR(i, dcache_alignment, 0),	\
+			UNBOUND_MODE(i) != ICMSG_UNBOUND_MODE_DISABLE,	\
+			UNBOUND_MODE(i) == ICMSG_UNBOUND_MODE_COMPATIBILITY);	\
 	PBUF_DEFINE(rx_pb_##i,						\
 			DT_REG_ADDR(DT_INST_PHANDLE(i, rx_region)),	\
 			DT_REG_SIZE(DT_INST_PHANDLE(i, rx_region)),	\
-			DT_INST_PROP_OR(i, dcache_alignment, 0));	\
+			DT_INST_PROP_OR(i, dcache_alignment, 0),	\
+			UNBOUND_MODE(i) != ICMSG_UNBOUND_MODE_DISABLE,	\
+			UNBOUND_MODE(i) == ICMSG_UNBOUND_MODE_COMPATIBILITY);	\
 									\
 	static struct icmsg_data_t backend_data_##i = {			\
 		.tx_pb = &tx_pb_##i,					\

@@ -32,6 +32,12 @@ enum icmsg_state {
 	ICMSG_STATE_READY,
 };
 
+enum icmsg_unbound_mode {
+	ICMSG_UNBOUND_MODE_DISABLE,
+	ICMSG_UNBOUND_MODE_ENABLE,
+	ICMSG_UNBOUND_MODE_COMPATIBILITY,
+};
+
 struct icmsg_config_t {
 	struct mbox_dt_spec mbox_tx;
 	struct mbox_dt_spec mbox_rx;
