@@ -24,8 +24,8 @@
 #define BOND_NOTIFY_REPEAT_TO	K_MSEC(CONFIG_IPC_SERVICE_ICMSG_BOND_NOTIFY_REPEAT_TO_MS)
 #define SHMEM_ACCESS_TO		K_MSEC(CONFIG_IPC_SERVICE_ICMSG_SHMEM_ACCESS_TO_MS)
 
-static const uint8_t magic[] = {0x45, 0x6d, 0x31, 0x6c, 0x31, 0x4b, 0x30,
-				0x72, 0x6e, 0x33, 0x6c, 0x69, 0x34,};
+static const uint8_t magic[] = {0x45, 0x6d, 0x31, 0x6c, 0x31, 0x4b,
+				0x30, 0x72, 0x6e, 0x33, 0x6c, 0x69, 0x34};
 
 #ifdef CONFIG_MULTITHREADING
 #if defined(CONFIG_IPC_SERVICE_BACKEND_ICMSG_WQ_ENABLE)
@@ -37,7 +37,7 @@ static struct k_work_q *const workq = &k_sys_work_q;
 #endif
 static void mbox_callback_process(struct k_work *item);
 #else
-static void mbox_callback_process(struct icmsg_data_t *dev_data);
+static bool mbox_callback_process(struct icmsg_data_t *dev_data);
 #endif
 
 static int mbox_deinit(const struct icmsg_config_t *conf,
@@ -63,9 +63,9 @@ static int mbox_deinit(const struct icmsg_config_t *conf,
 	return 0;
 }
 
-static bool is_endpoint_ready(struct icmsg_data_t *dev_data)
+static bool is_endpoint_ready(atomic_t state)
 {
-	return atomic_get(&dev_data->state) == ICMSG_STATE_READY;
+	return (state >= MIN(ICMSG_STATE_CONNECTED_SID_DISABLED, ICMSG_STATE_CONNECTED_SID_ENABLED));
 }
 
 #ifdef CONFIG_MULTITHREADING
@@ -79,7 +79,7 @@ static void notify_process(struct k_work *item)
 
 	atomic_t state = atomic_get(&dev_data->state);
 
-	if (state != ICMSG_STATE_READY) {
+	if (!is_endpoint_ready(state)) {
 		int ret;
 
 		ret = k_work_reschedule_for_queue(workq, dwork, BOND_NOTIFY_REPEAT_TO);
@@ -95,7 +95,7 @@ static void notify_process(struct icmsg_data_t *dev_data)
 	int64_t start = k_uptime_get();
 #endif
 
-	while (false == is_endpoint_ready(dev_data)) {
+	while (!is_endpoint_ready(atomic_get(&dev_data->state))) {
 		mbox_callback_process(dev_data);
 
 #if defined(CONFIG_SYS_CLOCK_EXISTS)
@@ -110,23 +110,23 @@ static void notify_process(struct icmsg_data_t *dev_data)
 }
 #endif
 
+static inline int reserve_tx_buffer_if_unused(struct icmsg_data_t *dev_data)
+{
 #ifdef CONFIG_IPC_SERVICE_ICMSG_SHMEM_ACCESS_SYNC
-static int reserve_tx_buffer_if_unused(struct icmsg_data_t *dev_data)
-{
-	int ret = k_mutex_lock(&dev_data->tx_lock, SHMEM_ACCESS_TO);
-
-	if (ret < 0) {
-		return ret;
-	}
-
+	return k_mutex_lock(&dev_data->tx_lock, SHMEM_ACCESS_TO);
+#else
 	return 0;
+#endif
 }
 
-static int release_tx_buffer(struct icmsg_data_t *dev_data)
+static inline int release_tx_buffer(struct icmsg_data_t *dev_data)
 {
+#ifdef CONFIG_IPC_SERVICE_ICMSG_SHMEM_ACCESS_SYNC
 	return k_mutex_unlock(&dev_data->tx_lock);
-}
+#else
+	return 0;
 #endif
+}
 
 static uint32_t data_available(struct icmsg_data_t *dev_data)
 {
@@ -144,42 +144,12 @@ static void submit_mbox_work(struct icmsg_data_t *dev_data)
 	}
 }
 
-static void submit_work_if_buffer_free(struct icmsg_data_t *dev_data)
-{
-	submit_mbox_work(dev_data);
-}
-
-static void submit_work_if_buffer_free_and_data_available(
-		struct icmsg_data_t *dev_data)
-{
-	if (!data_available(dev_data)) {
-		return;
-	}
-
-	submit_mbox_work(dev_data);
-}
-#else
-static void submit_if_buffer_free(struct icmsg_data_t *dev_data)
-{
-	mbox_callback_process(dev_data);
-}
-
-static void submit_if_buffer_free_and_data_available(
-		struct icmsg_data_t *dev_data)
-{
-
-	if (!data_available(dev_data)) {
-		return;
-	}
-
-	mbox_callback_process(dev_data);
-}
 #endif
 
 #ifdef CONFIG_MULTITHREADING
 static void mbox_callback_process(struct k_work *item)
 #else
-static void mbox_callback_process(struct icmsg_data_t *dev_data)
+static bool mbox_callback_process(struct icmsg_data_t *dev_data)
 #endif
 {
 #ifdef CONFIG_MULTITHREADING
@@ -187,7 +157,8 @@ static void mbox_callback_process(struct icmsg_data_t *dev_data)
 #endif
 	int ret;
 	uint8_t rx_buffer[CONFIG_PBUF_RX_READ_BUF_SIZE] __aligned(4);
-	uint32_t len;
+	uint32_t len = 0;
+	uint32_t len_available;
 	bool rerun = false;
 	bool notify_remote = false;
 	atomic_t state = atomic_get(&dev_data->state);
@@ -197,15 +168,15 @@ static void mbox_callback_process(struct icmsg_data_t *dev_data)
 	uint32_t local_sid_ack = LOCAL_SID_ACK_FROM_TX(tx_handshake);
 
 	volatile char *magic_buf;
-	uint16_t *magic_len;
+	uint16_t magic_len;
 
 	switch (state) {
 	case ICMSG_STATE_INITIALIZING_SID_COMPAT:
 		// Initialization with detection of remote session awareness
 
-		ret = pbuf_get_initial_buf(dev_data->rx_pb, &buf, &len); // TODO: You forget about header!!!
+		ret = pbuf_get_initial_buf(dev_data->rx_pb, &magic_buf, &magic_len);
 
-		if (ret == 0 && len == sizeof(magic) && memcmp((void*)buf, magic, sizeof(magic)) == 0) {
+		if (ret == 0 && magic_len == sizeof(magic) && memcmp((void*)magic_buf, magic, sizeof(magic)) == 0) {
 			// Remote initalized in session-unaware mode, so we do old way of initialization.
 			ret = pbuf_tx_init(dev_data->tx_pb); // TODO: maybe extract to common function with "open".
 			if (ret < 0) {
@@ -260,7 +231,7 @@ static void mbox_callback_process(struct icmsg_data_t *dev_data)
 		    dev_data->remote_session != SID_DISCONNECTED) {
 			// We send acknowledge to remote, receive acknowledge from remote,
 			// so we are ready.
-			atomic_set(&dev_data->state, ICMSG_STATE_CONNECTED);
+			atomic_set(&dev_data->state, ICMSG_STATE_CONNECTED_SID_ENABLED);
 
 			if (dev_data->cb->bound) {
 				dev_data->cb->bound(dev_data->ctx);
@@ -272,65 +243,42 @@ static void mbox_callback_process(struct icmsg_data_t *dev_data)
 
 		break;
 
-	case ICMSG_STATE_CONNECTED_SID_ENABLED: { // TODO: Later, consider combining with ICMSG_STATE_CONNECTED_SID_DISABLED
-		uint32_t read_index;
-		uint32_t write_index;
-
-		// Get RX indexes and save for later
-		len = pbuf_read_indexes(dev_data->rx_pb, &read_index, &write_index);
-
-		// The indexes are valid only if remote session is as expected, so we need
-		// to check remote session now.
-		remote_sid_req = REMOTE_SID_REQ_FROM_TX(pbuf_handshake_read(dev_data->tx_pb));
-
-		if (remote_sid_req != dev_data->remote_session) {
-			atomic_set(&dev_data->state, ICMSG_STATE_DISCONNECTED_SID_ENABLED);
-			if (dev_data->cb->unbound) {
-				dev_data->cb->unbound(dev_data->ctx);
-			}
-			return;
-		}
-
-		if (len == 0) {
-			/* Unlikely, no data in buffer. */
-			return;
-		}
-
-		__ASSERT_NO_MSG(len <= sizeof(rx_buffer));
-
-		if (sizeof(rx_buffer) < len) {
-			return;
-		}
-
-		len = pbuf_read_from_indexes(dev_data->rx_pb, read_index, write_index, rx_buffer, sizeof(rx_buffer));
-
-		if (dev_data->cb->received) {
-			dev_data->cb->received(rx_buffer, len, dev_data->ctx);
-		}
-
-		// TODO: 
-		break;
-	}
-
 	case ICMSG_STATE_INITIALIZING_SID_DISABLED:
+	case ICMSG_STATE_CONNECTED_SID_ENABLED:
 	case ICMSG_STATE_CONNECTED_SID_DISABLED:
 
-		len = data_available(dev_data);
+		len_available = data_available(dev_data);
 
-		if (len == 0) {
+		if (len_available > 0 && sizeof(rx_buffer) >= len_available) {
+			len = pbuf_read(dev_data->rx_pb, rx_buffer, sizeof(rx_buffer));
+		}
+
+		if (state == ICMSG_STATE_CONNECTED_SID_ENABLED) {
+			// The incoming message is valid only if remote session is as expected, so we need
+			// to check remote session now.
+			remote_sid_req = REMOTE_SID_REQ_FROM_TX(pbuf_handshake_read(dev_data->tx_pb));
+
+			if (remote_sid_req != dev_data->remote_session) {
+				atomic_set(&dev_data->state, ICMSG_STATE_CONNECTED_SID_ENABLED);
+				if (dev_data->cb->unbound) {
+					dev_data->cb->unbound(dev_data->ctx);
+				}
+				return;
+			}
+		}
+
+		if (len_available == 0) {
 			/* Unlikely, no data in buffer. */
 			return;
 		}
 
-		__ASSERT_NO_MSG(len <= sizeof(rx_buffer));
+		__ASSERT_NO_MSG(len_available <= sizeof(rx_buffer));
 
-		if (sizeof(rx_buffer) < len) {
+		if (sizeof(rx_buffer) < len_available) {
 			return;
 		}
 
-		len = pbuf_read(dev_data->rx_pb, rx_buffer, sizeof(rx_buffer));
-
-		if (state == ICMSG_STATE_CONNECTED_SID_DISABLED) {
+		if (state != ICMSG_STATE_INITIALIZING_SID_DISABLED) {
 			if (dev_data->cb->received) {
 				dev_data->cb->received(rx_buffer, len, dev_data->ctx);
 			}
@@ -349,35 +297,45 @@ static void mbox_callback_process(struct icmsg_data_t *dev_data)
 			}
 
 			atomic_set(&dev_data->state, ICMSG_STATE_CONNECTED_SID_DISABLED);
+			notify_remote = true;
 		}
+
+		rerun = (data_available(dev_data) > 0);
 		break;
 
 	case ICMSG_STATE_UNINITIALIZED:
-	case ICMSG_STATE_DISCONNECTED_SID_ENABLED:
+	case ICMSG_STATE_DISCONNECTED:
 	default:
 		// Nothing to do in this state.
 		return;
 	}
 
 	if (notify_remote) {
-		(void)mbox_send_dt(&dev_data->conf->mbox_tx, NULL);
+		(void)mbox_send_dt(&dev_data->cfg->mbox_tx, NULL);
 	}
 
 #ifdef CONFIG_MULTITHREADING
-	submit_work_if_buffer_free_and_data_available(dev_data);
+	if (rerun) {
+		submit_mbox_work(dev_data);
+	}
 #else
-	submit_if_buffer_free_and_data_available(dev_data);
+	return rerun;
 #endif
 }
 
 static void mbox_callback(const struct device *instance, uint32_t channel,
 			  void *user_data, struct mbox_msg *msg_data)
 {
+	bool rerun;
 	struct icmsg_data_t *dev_data = user_data;
+
 #ifdef CONFIG_MULTITHREADING
-	submit_work_if_buffer_free(dev_data);
+	ARG_UNUSED(rerun);
+	submit_mbox_work(dev_data);
 #else
-	submit_if_buffer_free(dev_data);
+	do {
+		rerun = mbox_callback_process(dev_data);
+	} while (rerun);
 #endif
 }
 
@@ -406,7 +364,8 @@ int icmsg_open(const struct icmsg_config_t *conf,
 	int ret;
 	enum icmsg_state old_state;
 
-	old_state = atomic_set(&dev_data->state, ICMSG_STATE_INITIALIZING);
+	// Unbound mode has the same values as ICMSG_STATE_INITIALIZING_*
+	old_state = atomic_set(&dev_data->state, conf->unbound_mode);
 
 	dev_data->cb = cb;
 	dev_data->ctx = ctx;
@@ -435,12 +394,6 @@ int icmsg_open(const struct icmsg_config_t *conf,
 		} while (dev_data->local_session == local_session_ack || dev_data->local_session == SID_DISCONNECTED);
 		// Write local session id request without remote acknowledge
 		pbuf_handshake_write(dev_data->rx_pb, MAKE_RX_HANDSHAKE(dev_data->local_session, SID_DISCONNECTED));
-		// We can now initialize TX, since we know that remote, during receiving,
-		// will first read FIFO indexes and later, it will check if session has changed
-		// before using indexes to receive the message.
-		// TODO: above not treue, We should reinit TX just before sending remote acknowledgement, because
-		// remote may change read index!
-		// Sending magic packet should be after local acknowledgement.
 	} else {
 		// Initialization of RX and sending magic bytes must be postponed
 		// if unbound mode enabled. We need to wait until remote is ready.
@@ -473,20 +426,20 @@ int icmsg_open(const struct icmsg_config_t *conf,
 		}
 	}
 
-	if (conf->unbound_mode == ICMSG_UNBOUND_MODE_DISABLE) {
-		// Polling is only when unbound mode is disabled.
-#ifdef CONFIG_MULTITHREADING
-	ret = k_work_schedule_for_queue(workq, &dev_data->notify_work, K_NO_WAIT);
-#else
-	notify_process(dev_data);
-	ret = 0;
-#endif
-	} else {
+	if (conf->unbound_mode == ICMSG_UNBOUND_MODE_ENABLE) {
 		// We need to send a notification to remote, it may not be delivered
 		// since it may be uninitialized yet, but when it finishes the initialization
 		// we get a notification from it. We need to send this notification in callback
 		// again to make sure that it arrived.
 		ret = mbox_send_dt(&conf->mbox_tx, NULL);
+	} else {
+		// Polling is only when unbound mode is disabled.
+#ifdef CONFIG_MULTITHREADING
+		ret = k_work_schedule_for_queue(workq, &dev_data->notify_work, K_NO_WAIT);
+#else
+		notify_process(dev_data);
+		ret = 0;
+#endif
 	}
 	return ret;
 }
@@ -521,9 +474,12 @@ int icmsg_send(const struct icmsg_config_t *conf,
 	int release_ret;
 #endif
 	int sent_bytes;
+	uint32_t state = atomic_get(&dev_data->state);
 
-	if (!is_endpoint_ready(dev_data)) {
-		return -EBUSY;
+	if (!is_endpoint_ready(state)) {
+		// If instance was disconnected on the remote side, some threads may still
+		// don't know it yet and still may try to send messages.
+		return (state == ICMSG_STATE_DISCONNECTED) ? len : -EBUSY;
 	}
 
 	/* Empty message is not allowed */
@@ -531,19 +487,15 @@ int icmsg_send(const struct icmsg_config_t *conf,
 		return -ENODATA;
 	}
 
-#ifdef CONFIG_IPC_SERVICE_ICMSG_SHMEM_ACCESS_SYNC
 	ret = reserve_tx_buffer_if_unused(dev_data);
 	if (ret < 0) {
 		return -ENOBUFS;
 	}
-#endif
 
 	write_ret = pbuf_write(dev_data->tx_pb, msg, len);
 
-#ifdef CONFIG_IPC_SERVICE_ICMSG_SHMEM_ACCESS_SYNC
 	release_ret = release_tx_buffer(dev_data);
 	__ASSERT_NO_MSG(!release_ret);
-#endif
 
 	if (write_ret < 0) {
 		return write_ret;

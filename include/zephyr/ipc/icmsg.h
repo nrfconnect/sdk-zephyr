@@ -32,16 +32,16 @@ enum icmsg_state {
 	ICMSG_STATE_INITIALIZING_SID_DISABLED, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
 	ICMSG_STATE_INITIALIZING_SID_ENABLED, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
 	ICMSG_STATE_INITIALIZING_SID_COMPAT, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
+	ICMSG_STATE_DISCONNECTED, /**< Instance was connected, but get disconnected. Sending will be silently discarded, because it there may be old sends. Opening allowed. */
+	// Connected states must be at the end
 	ICMSG_STATE_CONNECTED_SID_DISABLED, /**< Instance is connected. Sending will be successful. Opening allowed, session will change and remote will get unbound() callback. */
 	ICMSG_STATE_CONNECTED_SID_ENABLED, /**< Instance is connected. Sending will be successful. Opening allowed, session will change and remote will get unbound() callback. */
-	ICMSG_STATE_DISCONNECTED_SID_ENABLED, /**< Instance was connected, but get disconnected. Sending will be silently discarded, because it there may be old sends. Opening allowed. */
-	// TODO: ICMSG_STATE_COMPATIBILITY
 };
 
 enum icmsg_unbound_mode {
-	ICMSG_UNBOUND_MODE_DISABLE,
-	ICMSG_UNBOUND_MODE_ENABLE,
-	ICMSG_UNBOUND_MODE_COMPATIBILITY,
+	ICMSG_UNBOUND_MODE_DISABLE = ICMSG_STATE_INITIALIZING_SID_DISABLED,
+	ICMSG_UNBOUND_MODE_ENABLE = ICMSG_STATE_INITIALIZING_SID_ENABLED,
+	ICMSG_UNBOUND_MODE_COMPATIBILITY = ICMSG_STATE_INITIALIZING_SID_COMPAT,
 };
 
 struct icmsg_config_t {
@@ -65,7 +65,7 @@ struct icmsg_data_t {
 	/* General */
 	const struct icmsg_config_t *cfg;
 #ifdef CONFIG_MULTITHREADING
-	struct k_work_delayable notify_work;
+	struct k_work_delayable notify_work; // TODO: Not needed if no compatibility needed
 	struct k_work mbox_work;
 #endif
 	uint16_t remote_session;
