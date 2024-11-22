@@ -32,6 +32,7 @@
 			mboxes = <&mbox 0>, <&mbox 1>;
 			mbox-names = "rx", "tx";
 			status = "okay";
+			dcache-alignment = <8>;
 		};
 	};
 };
