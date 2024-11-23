@@ -68,13 +68,13 @@ static int backend_init(const struct device *instance)
 			DT_REG_SIZE(DT_INST_PHANDLE(i, tx_region)),	\
 			DT_INST_PROP_OR(i, dcache_alignment, 0),	\
 			UNBOUND_MODE(i) != ICMSG_UNBOUND_MODE_DISABLE,	\
-			UNBOUND_MODE(i) == ICMSG_UNBOUND_MODE_COMPATIBILITY);	\
+			UNBOUND_MODE(i) == ICMSG_UNBOUND_MODE_DETECT);	\
 	PBUF_DEFINE(rx_pb_##i,						\
 			DT_REG_ADDR(DT_INST_PHANDLE(i, rx_region)),	\
 			DT_REG_SIZE(DT_INST_PHANDLE(i, rx_region)),	\
 			DT_INST_PROP_OR(i, dcache_alignment, 0),	\
 			UNBOUND_MODE(i) != ICMSG_UNBOUND_MODE_DISABLE,	\
-			UNBOUND_MODE(i) == ICMSG_UNBOUND_MODE_COMPATIBILITY);	\
+			UNBOUND_MODE(i) == ICMSG_UNBOUND_MODE_DETECT);	\
 									\
 	static struct icmsg_data_t backend_data_##i = {			\
 		.tx_pb = &tx_pb_##i,					\
