@@ -27,21 +27,52 @@ extern "C" {
  */
 
 enum icmsg_state {
-	// TODO: rename as it was before
-	ICMSG_STATE_UNINITIALIZED, /**< Instance is not initialized yet. Sending will fail. Opening allowed. */
-	ICMSG_STATE_INITIALIZING_SID_DISABLED, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
-	ICMSG_STATE_INITIALIZING_SID_ENABLED, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
-	ICMSG_STATE_INITIALIZING_SID_COMPAT, /**< Instance is initializing - waiting for remote to acknowledge. Sending will fail. Opening allowed, session will change and remote may or may not get unbound() callback. */
-	ICMSG_STATE_DISCONNECTED, /**< Instance was connected, but get disconnected. Sending will be silently discarded, because it there may be old sends. Opening allowed. */
-	// Connected states must be at the end
-	ICMSG_STATE_CONNECTED_SID_DISABLED, /**< Instance is connected. Sending will be successful. Opening allowed, session will change and remote will get unbound() callback. */
-	ICMSG_STATE_CONNECTED_SID_ENABLED, /**< Instance is connected. Sending will be successful. Opening allowed, session will change and remote will get unbound() callback. */
+	/** Instance is not initialized yet. In this state: sending will fail, opening allowed.
+	 */
+	ICMSG_STATE_OFF,
+
+	/** Instance is initializing without session handshake. In this state: sending will fail,
+	 * opening will fail.
+	 */
+	ICMSG_STATE_INITIALIZING_SID_DISABLED,
+
+	/** Instance is initializing with session handshake. It is waiting for remote to acknowledge
+	 * local session id. In this state: sending will fail, opening is allowed (local session id
+	 * will change, so the remote may get unbound() callback).
+	 */
+	ICMSG_STATE_INITIALIZING_SID_ENABLED,
+
+	/** Instance is initializing with detection of session handshake support on remote side.
+	 * It is waiting for remote to acknowledge local session id or to send magic bytes.
+	 * In this state: sending will fail, opening is allowed (local session id
+	 * will change, so the remote may get unbound() callback if it supports it).
+	 */
+	ICMSG_STATE_INITIALIZING_SID_DETECT,
+
+	/** Instance was closed on remote side. The unbound() callback was send on local side.
+	 * In this state: sending will be silently discarded (there may be outdated sends),
+	 * opening is allowed.
+	 */
+	ICMSG_STATE_DISCONNECTED,
+
+	/* Connected states must be at the end. */
+
+	/** Instance is connected without session handshake support. In this state: sending will be
+	 * successful, opening will fail.
+	 */
+	ICMSG_STATE_CONNECTED_SID_DISABLED,
+
+	/** Instance is connected with session handshake support. In this state: sending will be
+	 * successful, opening is allowed (session will change and remote will get unbound()
+	 * callback).
+	 */
+	ICMSG_STATE_CONNECTED_SID_ENABLED,
 };
 
 enum icmsg_unbound_mode {
 	ICMSG_UNBOUND_MODE_DISABLE = ICMSG_STATE_INITIALIZING_SID_DISABLED,
 	ICMSG_UNBOUND_MODE_ENABLE = ICMSG_STATE_INITIALIZING_SID_ENABLED,
-	ICMSG_UNBOUND_MODE_COMPATIBILITY = ICMSG_STATE_INITIALIZING_SID_COMPAT,
+	ICMSG_UNBOUND_MODE_DETECT = ICMSG_STATE_INITIALIZING_SID_DETECT,
 };
 
 struct icmsg_config_t {
@@ -65,11 +96,10 @@ struct icmsg_data_t {
 	/* General */
 	const struct icmsg_config_t *cfg;
 #ifdef CONFIG_MULTITHREADING
-	struct k_work_delayable notify_work; // TODO: Not needed if no compatibility needed
 	struct k_work mbox_work;
 #endif
-	uint16_t remote_session;
-	uint16_t local_session;
+	uint16_t remote_sid;
+	uint16_t local_sid;
 	atomic_t state;
 };
 
