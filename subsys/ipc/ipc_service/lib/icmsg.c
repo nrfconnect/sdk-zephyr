@@ -13,8 +13,8 @@
 #include <zephyr/init.h>
 
 
-#define UNBOUND_ENABLED IS_ENABLED(CONFIG_IPC_SERVICE_ICMSG_UNBOUND_ENABLED_ALLOWED)
 #define UNBOUND_DISABLED IS_ENABLED(CONFIG_IPC_SERVICE_ICMSG_UNBOUND_DISABLED_ALLOWED)
+#define UNBOUND_ENABLED IS_ENABLED(CONFIG_IPC_SERVICE_ICMSG_UNBOUND_ENABLED_ALLOWED)
 #define UNBOUND_DETECT IS_ENABLED(CONFIG_IPC_SERVICE_ICMSG_UNBOUND_DETECT_ALLOWED)
 
 /** Get local session id request from RX handshake word.
@@ -383,6 +383,13 @@ int icmsg_open(const struct icmsg_config_t *conf,
 {
 	int ret;
 	enum icmsg_state old_state;
+
+	__ASSERT(conf->unbound_mode != ICMSG_UNBOUND_MODE_DISABLE || UNBOUND_DISABLED,
+		 "Unbound mode \"disabled\" is was forbidden in Kconfig.");
+	__ASSERT(conf->unbound_mode != ICMSG_UNBOUND_MODE_ENABLE || UNBOUND_ENABLED,
+		 "Unbound mode \"enabled\" is was forbidden in Kconfig.");
+	__ASSERT(conf->unbound_mode != ICMSG_UNBOUND_MODE_DETECT || UNBOUND_DETECT,
+		 "Unbound mode \"detect\" is was forbidden in Kconfig.");
 
 	if (conf->unbound_mode == ICMSG_UNBOUND_MODE_DISABLE ||
 	    !(UNBOUND_ENABLED || UNBOUND_DETECT)) {

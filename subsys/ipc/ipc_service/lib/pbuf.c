@@ -32,7 +32,6 @@ static int validate_cfg(const struct pbuf_cfg *cfg)
 {
 	/* Validate pointers. */
 	if (!cfg || !cfg->rd_idx_loc || !cfg->wr_idx_loc || !cfg->data_loc) {
-		printk("Invalid pointers\n");
 		return -EINVAL;
 	}
 
@@ -41,13 +40,11 @@ static int validate_cfg(const struct pbuf_cfg *cfg)
 	    !IS_PTR_ALIGNED_BYTES(cfg->wr_idx_loc, MAX(cfg->dcache_alignment, _PBUF_IDX_SIZE)) ||
 	    !IS_PTR_ALIGNED_BYTES(cfg->handshake_loc, _PBUF_IDX_SIZE) ||
 	    !IS_PTR_ALIGNED_BYTES(cfg->data_loc, _PBUF_IDX_SIZE)) {
-		printk("Invalid alignment\n");
 		return -EINVAL;
 	}
 
 	/* Validate len. */
 	if (cfg->len < _PBUF_MIN_DATA_LEN || !IS_PTR_ALIGNED_BYTES(cfg->len, _PBUF_IDX_SIZE)) {
-		printk("Invalid length\n");
 		return -EINVAL;
 	}
 
@@ -58,12 +55,6 @@ static int validate_cfg(const struct pbuf_cfg *cfg)
 	    !((uint8_t *)cfg->wr_idx_loc < cfg->data_loc) ||
 	    !(((uint8_t *)cfg->rd_idx_loc + MAX(_PBUF_IDX_SIZE, cfg->dcache_alignment)) ==
 	    (uint8_t *)cfg->wr_idx_loc)) {
-		printk("Invalid pointer values\n");
-		printk("rd_idx_loc: 0x%08X\n", (uintptr_t)cfg->rd_idx_loc);
-		printk("wr_idx_loc: 0x%08X\n", (uintptr_t)cfg->wr_idx_loc);
-		printk("handshake_loc: 0x%08X\n", (uintptr_t)cfg->handshake_loc);
-		printk("data_loc: 0x%08X\n", (uintptr_t)cfg->data_loc);
-		printk("dcache_alignment: 0x%08X\n", (uintptr_t)cfg->dcache_alignment);
 		return -EINVAL;
 	}
 
@@ -203,7 +194,7 @@ int pbuf_get_initial_buf(struct pbuf *pb, volatile char **buf, uint16_t *len)
 
 	wr_idx = *(pb->cfg->wr_idx_loc);
 	if (wr_idx >= pb->cfg->len || wr_idx > 0xFFFF || wr_idx == 0) {
-		/* Incorrect index - probably pbuf was not initialized or message was not send yet. */
+		/* Wrong index - probably pbuf was not initialized or message was not send yet. */
 		return -EINVAL;
 	}
 
@@ -213,7 +204,7 @@ int pbuf_get_initial_buf(struct pbuf *pb, volatile char **buf, uint16_t *len)
 	plen = sys_get_be16(&pb->cfg->data_loc[0]);
 
 	if (plen + 4 > wr_idx) {
-		/* Incorrect length - probably pbuf was not initialized or message was not send yet. */
+		/* Wrong length - probably pbuf was not initialized or message was not send yet. */
 		return -EINVAL;
 	}
 
