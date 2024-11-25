@@ -1,0 +1,24 @@
+/*
+ * Copyright (c) 2024 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/ {
+	aliases {
+		mspi0 = &sdp_mspi;
+	};
+};
+
+&cpuflpr_vpr {
+	status = "okay";
+
+	sdp_mspi: sdp_mspi {
+		mspi_device: mspi_device@0 {
+			status = "okay";
+			compatible = "zephyr,mspi-emul-device";
+			reg = <0x0>;
+			mspi-max-frequency = <48000000>;
+		};
+	};
+};
