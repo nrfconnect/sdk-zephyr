@@ -111,95 +111,17 @@ static const nrf_gpio_pin_drive_t drive_modes[NRF_DRIVE_COUNT] = {
 #define NRF_PSEL_TDM(reg, line) ((NRF_TDM_Type *)reg)->PSEL.line
 #endif
 
-#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_gpio_pad_group)
-#define GPIO_HAS_PAD_GROUP 1
-#else
-#define GPIO_HAS_PAD_GROUP 0
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_hpf_mspi_controller) || \
+	defined(CONFIG_MSPI_HPF) || \
+	DT_ANY_COMPAT_HAS_PROP_STATUS_OKAY(nordic_nrf_vpr_coprocessor, pinctrl_0)
+#if defined(CONFIG_SOC_SERIES_NRF54LX)
+#define NRF_PSEL_SDP_MSPI(psel) \
+	nrf_gpio_pin_control_select(psel, NRF_GPIO_PIN_SEL_VPR);
+#elif defined(CONFIG_SOC_SERIES_NRF54HX)
+/* On nRF54H, pin routing is controlled by secure domain, via UICR. */
+#define NRF_PSEL_SDP_MSPI(psel)
 #endif
-
-#if GPIO_HAS_PAD_GROUP
-
-#define GPIO_PAD_GROUP_GET_OR_NULL(idx, _) \
-	DEVICE_DT_GET_OR_NULL(DT_NODELABEL(_CONCAT(gpio_pad_group, idx)))
-
-static const struct device *const pad_groups[] = {
-	LISTIFY(10, GPIO_PAD_GROUP_GET_OR_NULL, (,))
-};
-
-static atomic_t pad_group_masks[ARRAY_SIZE(pad_groups)];
-
-static int pad_group_request_pin(uint16_t pin_number)
-{
-	uint8_t port_number = NRF_GET_PORT(pin_number);
-	uint8_t port_pin_number = NRF_GET_PORT_PIN(pin_number);
-	const struct device *pad_group = pad_groups[port_number];
-	atomic_t *pad_group_mask = &pad_group_masks[port_number];
-
-	if (atomic_test_and_set_bit(pad_group_mask, port_pin_number)) {
-		/* already requested */
-		return 0;
-	}
-
-	if (pm_device_runtime_get(pad_group)) {
-		atomic_clear_bit(pad_group_mask, port_pin_number);
-		return -EIO;
-	}
-
-	return 0;
-}
-
-static int pad_group_release_pin(uint16_t pin_number)
-{
-	uint8_t port_number = NRF_GET_PORT(pin_number);
-	uint8_t port_pin_number = NRF_GET_PORT_PIN(pin_number);
-	const struct device *pad_group = pad_groups[port_number];
-	atomic_t *pad_group_mask = &pad_group_masks[port_number];
-
-	if (!atomic_test_and_clear_bit(pad_group_mask, port_pin_number)) {
-		/* already released */
-		return 0;
-	}
-
-	if (pm_device_runtime_put(pad_group)) {
-		atomic_set_bit(pad_group_mask, port_pin_number);
-		return -EIO;
-	}
-
-	return 0;
-}
-
-#else
-
-static int pad_group_request_pin(uint16_t pin_number)
-{
-	ARG_UNUSED(pin_number);
-	return 0;
-}
-
-static int pad_group_release_pin(uint16_t pin_number)
-{
-	ARG_UNUSED(pin_number);
-	return 0;
-}
-
-#endif
-
-#if NRF_GPIO_HAS_CLOCKPIN
-
-static void port_pin_clock_set(uint16_t pin_number, bool enable)
-{
-	nrf_gpio_pin_clock_set(pin_number, enable);
-}
-
-#else
-
-static void port_pin_clock_set(uint16_t pin_number, bool enable)
-{
-	ARG_UNUSED(pin_number);
-	ARG_UNUSED(enable);
-}
-
-#endif
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_hpf_mspi_controller) || ... */
 
 int pinctrl_configure_pins(const pinctrl_soc_pin_t *pins, uint8_t pin_cnt,
 			   uintptr_t reg)
@@ -550,6 +472,26 @@ int pinctrl_configure_pins(const pinctrl_soc_pin_t *pins, uint8_t pin_cnt,
 			input = NRF_GPIO_PIN_INPUT_CONNECT;
 			break;
 #endif /* defined(NRF_PSEL_TWIS) */
+#if defined(NRF_PSEL_SDP_MSPI)
+		case NRF_FUN_SDP_MSPI_CS0:
+		case NRF_FUN_SDP_MSPI_CS1:
+		case NRF_FUN_SDP_MSPI_CS2:
+		case NRF_FUN_SDP_MSPI_CS3:
+		case NRF_FUN_SDP_MSPI_CS4:
+		case NRF_FUN_SDP_MSPI_SCK:
+		case NRF_FUN_SDP_MSPI_DQ0:
+		case NRF_FUN_SDP_MSPI_DQ1:
+		case NRF_FUN_SDP_MSPI_DQ2:
+		case NRF_FUN_SDP_MSPI_DQ3:
+		case NRF_FUN_SDP_MSPI_DQ4:
+		case NRF_FUN_SDP_MSPI_DQ5:
+		case NRF_FUN_SDP_MSPI_DQ6:
+		case NRF_FUN_SDP_MSPI_DQ7:
+			NRF_PSEL_SDP_MSPI(psel);
+			dir = NRF_GPIO_PIN_DIR_OUTPUT;
+			input = NRF_GPIO_PIN_INPUT_CONNECT;
+			break;
+#endif /* defined(NRF_PSEL_SDP_MSPI) */
 		default:
 			return -ENOTSUP;
 		}
