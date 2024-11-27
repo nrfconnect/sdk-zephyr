@@ -612,20 +612,15 @@ zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
 )
 endif()
 
-if(DEFINED ONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ALT OR
-   DEFINED CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ALT_LEGACY_NCS)
+if(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ALT)
 zephyr_include_directories(
 	${HOSTAP_BASE}/port/mbedtls
 )
 
 zephyr_library_sources(
 	${HOSTAP_SRC_BASE}/crypto/crypto_mbedtls_alt.c
+	${HOSTAP_SRC_BASE}/crypto/tls_mbedtls_alt.c
 	${HOSTAP_SRC_BASE}/crypto/rc4.c
-	${HOSTAP_SRC_BASE}/crypto/aes-wrap.c
-	${HOSTAP_SRC_BASE}/crypto/aes-unwrap.c
-	${HOSTAP_SRC_BASE}/crypto/aes-internal-dec.c
-	${HOSTAP_SRC_BASE}/crypto/aes-internal.c
-	${HOSTAP_SRC_BASE}/crypto/aes-internal-enc.c
 )
 
 zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_MBEDTLS_PSA
@@ -639,13 +634,7 @@ zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
 	${HOSTAP_SRC_BASE}/crypto/sha1-internal.c
 	${HOSTAP_SRC_BASE}/crypto/fips_prf_internal.c
 	${HOSTAP_SRC_BASE}/crypto/milenage.c
-	${HOSTAP_SRC_BASE}/crypto/tls_mbedtls_alt.c
 )
-
-zephyr_library_sources_ifndef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
-  ${HOSTAP_SRC_BASE}/crypto/tls_none.c
-)
-
 
 zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_TEST
 	${HOSTAP_SRC_BASE}/crypto/crypto_module_tests.c
