@@ -148,7 +148,7 @@ endchoice
 
 config NRF_WIFI_LOW_POWER
 	bool "Low power mode in nRF Wi-Fi chipsets"
-	default y
+	default y if !NRF71_ON_IPC
 
 config NRF70_TCP_IP_CHECKSUM_OFFLOAD
 	bool "TCP/IP checksum offload"
@@ -191,6 +191,14 @@ config NRF70_ON_SPI
 			 DT_HAS_NORDIC_NRF7001_SPI_ENABLED || \
 			 DT_HAS_NORDIC_NRF7000_SPI_ENABLED
 	select SPI
+
+config NRF71_ON_IPC
+        # TODO: Do this properly from DTS
+        # def_bool NRF71_HAS_IPC
+        bool "Enable IPC"
+ 	# select IPC_SERVICE
+        # select IPC_SERVICE_BACKEND_ICMSG
+        # select MBOX
 
 config NRF70_2_4G_ONLY
 	def_bool y if WIFI_NRF7001

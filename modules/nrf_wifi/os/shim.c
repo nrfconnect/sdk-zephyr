@@ -18,8 +18,12 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/__assert.h>
+#ifdef CONFIG_NRF71_ON_IPC
+#include "ipc_if.h"
+#else
 #include <zephyr/drivers/wifi/nrf_wifi/bus/rpu_hw_if.h>
 #include <zephyr/drivers/wifi/nrf_wifi/bus/qspi_if.h>
+#endif /* CONFIG_NRF71_ON_IPC */
 
 #include "shim.h"
 #include "work.h"
@@ -61,6 +65,7 @@ static int zep_shim_mem_cmp(const void *addr1,
 	return memcmp(addr1, addr2, size);
 }
 
+#ifndef CONFIG_NRF71_ON_IPC
 static unsigned int zep_shim_qspi_read_reg32(void *priv, unsigned long addr)
 {
 	unsigned int val;
@@ -113,6 +118,7 @@ static void zep_shim_qspi_cpy_to(void *priv, unsigned long addr, const void *src
 
 	dev->write(addr, src, count_aligned);
 }
+#endif /* !CONFIG_NRF71_ON_IPC */
 
 static void *zep_shim_spinlock_alloc(void)
 {
@@ -648,14 +654,19 @@ static enum nrf_wifi_status zep_shim_bus_qspi_dev_init(void *os_qspi_dev_ctx)
 static void zep_shim_bus_qspi_dev_deinit(void *priv)
 {
 	struct zep_shim_bus_qspi_priv *qspi_priv = priv;
+#ifndef CONFIG_NRF71_ON_IPC
 	volatile struct qspi_dev *dev = qspi_priv->qspi_dev;
-
 	dev->deinit();
+#else
+	volatile struct rpu_dev *dev = qspi_priv->qspi_dev;
+	dev->deinit();
+#endif /* !CONFIG_NRF71_ON_IPC */
 }
 
 static void *zep_shim_bus_qspi_dev_add(void *os_qspi_priv, void *osal_qspi_dev_ctx)
 {
 	struct zep_shim_bus_qspi_priv *zep_qspi_priv = os_qspi_priv;
+#ifndef CONFIG_NRF71_ON_IPC
 	struct qspi_dev *dev = qspi_dev();
 	int ret;
 	enum nrf_wifi_status status;
@@ -671,12 +682,17 @@ static void *zep_shim_bus_qspi_dev_add(void *os_qspi_priv, void *osal_qspi_dev_c
 		LOG_ERR("%s: QSPI device init failed", __func__);
 		return NULL;
 	}
-
 	ret = rpu_enable();
 	if (ret) {
 		LOG_ERR("%s: RPU enable failed with error %d", __func__, ret);
 		return NULL;
 	}
+#else
+	struct rpu_dev *dev = rpu_dev();
+
+	dev->init();
+
+#endif /* !CONFIG_NRF71_ON_IPC */
 	zep_qspi_priv->qspi_dev = dev;
 	zep_qspi_priv->dev_added = true;
 
@@ -788,7 +804,14 @@ static enum nrf_wifi_status zep_shim_bus_qspi_intr_reg(void *os_dev_ctx, void *c
 	int ret = -1;
 
 	ARG_UNUSED(os_dev_ctx);
-
+#ifdef CONFIG_NRF71_ON_IPC
+        ret = ipc_register_rx_cb(callbk_fn, callbk_data);
+        if (ret) {
+                LOG_ERR("%s: ipc_register_rx_cb failed\n", __func__);
+                goto out;
+        }
+        status = NRF_WIFI_STATUS_SUCCESS;
+#else
 	intr_priv = k_calloc(sizeof(*intr_priv), sizeof(char));
 
 	if (!intr_priv) {
@@ -811,7 +834,7 @@ static enum nrf_wifi_status zep_shim_bus_qspi_intr_reg(void *os_dev_ctx, void *c
 	}
 
 	status = NRF_WIFI_STATUS_SUCCESS;
-
+#endif /* CONFIG_NRF71_ON_IPC */
 out:
 	return status;
 }
@@ -911,12 +934,12 @@ const struct nrf_wifi_osal_ops nrf_wifi_os_zep_ops = {
 	.mem_cpy = zep_shim_mem_cpy,
 	.mem_set = zep_shim_mem_set,
 	.mem_cmp = zep_shim_mem_cmp,
-
+#ifndef CONFIG_NRF71_ON_IPC
 	.qspi_read_reg32 = zep_shim_qspi_read_reg32,
 	.qspi_write_reg32 = zep_shim_qspi_write_reg32,
 	.qspi_cpy_from = zep_shim_qspi_cpy_from,
 	.qspi_cpy_to = zep_shim_qspi_cpy_to,
-
+#endif /* CONFIG_NRF71_ON_IPC */
 	.spinlock_alloc = zep_shim_spinlock_alloc,
 	.spinlock_free = zep_shim_spinlock_free,
 	.spinlock_init = zep_shim_spinlock_init,
