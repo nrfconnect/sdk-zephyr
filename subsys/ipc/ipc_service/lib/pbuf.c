@@ -211,7 +211,7 @@ int pbuf_get_initial_buf(struct pbuf *pb, volatile char **buf, uint16_t *len)
 	*buf = &pb->cfg->data_loc[PBUF_PACKET_LEN_SZ];
 	*len = plen;
 
-	sys_cache_data_invd_range((void *)buf, plen);
+	sys_cache_data_invd_range((void *)*buf, plen);
 	__sync_synchronize();
 
 	return 0;
