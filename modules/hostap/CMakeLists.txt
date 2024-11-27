@@ -655,25 +655,6 @@ zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_TEST
 )
 endif()
 
-if(DEFINED CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ALT_NCS_PSA)
-zephyr_include_directories(
-	${HOSTAP_BASE}/port/mbedtls
-)
-
-zephyr_library_sources(
-	${HOSTAP_SRC_BASE}/crypto/aes-wrap.c
-	${HOSTAP_SRC_BASE}/crypto/aes-unwrap.c
-	${HOSTAP_SRC_BASE}/crypto/aes-internal-dec.c
-	${HOSTAP_SRC_BASE}/crypto/aes-internal.c
-	${HOSTAP_SRC_BASE}/crypto/aes-internal-enc.c
-	${HOSTAP_SRC_BASE}/crypto/rc4.c
-	${HOSTAP_SRC_BASE}/crypto/crypto_mbedtls_alt.c
-	${HOSTAP_SRC_BASE}/crypto/tls_mbedtls_alt.c
-	${HOSTAP_SRC_BASE}/crypto/sha256-kdf.c
-	${HOSTAP_BASE}/port/mbedtls/supp_psa_api.c
-)
-endif()
-
 zephyr_library_link_libraries_ifndef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_NONE
 	mbedTLS)
 
