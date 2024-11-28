@@ -68,7 +68,7 @@ void nrf_poweroff(void)
 	nrf_resetinfo_resetreas_local_set(NRF_RESETINFO, 0);
 	nrf_resetinfo_restore_valid_set(NRF_RESETINFO, false);
 
-#if !defined(NRF_RADIOCORE)
+#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
 	/* Disable retention */
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_MAIN, false);
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, false);
@@ -98,7 +98,7 @@ static void s2idle_enter(uint8_t substate_id)
 	case 1: /* Substate for idle with cache retained - not implemented yet. */
 		break;
 	case 2: /* Substate for idle with cache disabled. */
-#if !defined(NRF_RADIOCORE)
+#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
 		soc_lrcconf_poweron_request(node, NRF_LRCCONF_POWER_MAIN);
 #endif
 		common_suspend();
@@ -127,7 +127,7 @@ static void s2idle_exit(uint8_t substate_id)
 		break;
 	case 2: /* Substate for idle with cache disabled. */
 		common_resume();
-#if !defined(NRF_RADIOCORE)
+#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
 		soc_lrcconf_poweron_release(node, NRF_LRCCONF_POWER_MAIN);
 #endif
 	default: /* Unknown substate. */
@@ -140,7 +140,7 @@ static void s2idle_exit(uint8_t substate_id)
 static void s2ram_exit(void)
 {
 	common_resume();
-#if !defined(NRF_RADIOCORE)
+#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
 	/* Re-enable domain retention. */
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, true);
 #endif
@@ -156,7 +156,7 @@ static int sys_suspend_to_ram(void)
 					  NRF_RESETINFO_RESETREAS_LOCAL_UNRETAINED_MASK);
 	nrf_resetinfo_restore_valid_set(NRF_RESETINFO, true);
 
-#if !defined(NRF_RADIOCORE)
+#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
 	/* Disable retention */
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, false);
 #endif
