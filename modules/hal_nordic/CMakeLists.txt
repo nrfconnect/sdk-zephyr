@@ -11,9 +11,6 @@ add_subdirectory_ifdef(CONFIG_HAS_NRFS nrfs)
 if(CONFIG_NRF_REGTOOL_GENERATE_UICR)
   list(APPEND nrf_regtool_components GENERATE:UICR)
 endif()
-if(CONFIG_NRF_REGTOOL_GENERATE_BICR)
-  list(APPEND nrf_regtool_components GENERATE:BICR)
-endif()
 if(DEFINED nrf_regtool_components)
   find_package(nrf-regtool 8.0.0 REQUIRED
     COMPONENTS ${nrf_regtool_components}
