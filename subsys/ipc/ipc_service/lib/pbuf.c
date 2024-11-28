@@ -298,6 +298,8 @@ int pbuf_read(struct pbuf *pb, char *buf, uint16_t len)
 uint32_t pbuf_handshake_read(struct pbuf *pb)
 {
 	volatile uint32_t *ptr = pb->cfg->handshake_loc;
+
+	__ASSERT_NO_MSG(ptr);
 	sys_cache_data_invd_range((void *)ptr, sizeof(*ptr));
 	__sync_synchronize();
 	return *ptr;
@@ -306,6 +308,8 @@ uint32_t pbuf_handshake_read(struct pbuf *pb)
 void pbuf_handshake_write(struct pbuf *pb, uint32_t value)
 {
 	volatile uint32_t *ptr = pb->cfg->handshake_loc;
+
+	__ASSERT_NO_MSG(ptr);
 	*ptr = value;
 	__sync_synchronize();
 	sys_cache_data_flush_range((void *)ptr, sizeof(*ptr));
