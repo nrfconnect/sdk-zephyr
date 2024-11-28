@@ -103,3 +103,16 @@ static int backend_init(const struct device *instance)
 			 &backend_ops);
 
 DT_INST_FOREACH_STATUS_OKAY(DEFINE_BACKEND_DEVICE)
+
+/* TODO: REMOVE THIS WORKAROUND!!! */
+
+static int workaround_ppr_reset(void)
+{
+#define _FIX_RESET_MEM(i) \
+	memset(&backend_data_##i, 0, sizeof(backend_data_##i)); \
+	backend_data_##i.tx_pb = &tx_pb_##i; \
+	backend_data_##i.rx_pb = &rx_pb_##i;
+	DT_INST_FOREACH_STATUS_OKAY(_FIX_RESET_MEM);
+}
+
+SYS_INIT(workaround_ppr_reset, PRE_KERNEL_1, 0);
