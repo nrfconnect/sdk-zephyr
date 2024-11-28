@@ -9,6 +9,7 @@
 #include <zephyr/ztest.h>
 #include <zephyr/drivers/i2s.h>
 #include <zephyr/sys/iterable_sections.h>
+#include <zephyr/linker/devicetree_regions.h>
 
 #define I2S_DEV_NODE_RX DT_ALIAS(i2s_node0)
 #ifdef CONFIG_I2S_TEST_SEPARATE_DEVICES
@@ -17,7 +18,7 @@
 #define I2S_DEV_NODE_TX DT_ALIAS(i2s_node0)
 #endif
 
-#define NUM_BLOCKS 20
+#define NUM_BLOCKS 5
 #define SAMPLE_NO 64
 
 /* The data_l represent a sine wave */
@@ -58,14 +59,27 @@ static int16_t data_r[SAMPLE_NO] = {
  * RX blocks to satisfy this requirement
  */
 
+#define TDM(idx)                       DT_NODELABEL(tdm##idx)
+#define TDM_PROP(idx, prop)            DT_PROP(TDM(idx), prop)
+#define TDM_HAS_PROP(idx, prop)        DT_NODE_HAS_PROP(TDM(idx), prop)
+
+
+#define TDM_MEMORY_SECTION(idx)                                               \
+       COND_CODE_1(TDM_HAS_PROP(idx, memory_regions),                         \
+               (__attribute__((__section__(LINKER_DT_NODE_REGION_NAME(        \
+                       DT_PHANDLE(TDM(idx), memory_regions)))))),             \
+               ())
+
+#define BUFFER_MEM_REGION __attribute__((__section__("cpuapp_dma_region")))
+
 char MEM_SLAB_CACHE_ATTR __aligned(WB_UP(32))
-	_k_mem_slab_buf_rx_0_mem_slab[(NUM_BLOCKS + 2) * WB_UP(BLOCK_SIZE)];
+	_k_mem_slab_buf_rx_0_mem_slab[(NUM_BLOCKS + 2) * WB_UP(BLOCK_SIZE)] TDM_MEMORY_SECTION(130);
 STRUCT_SECTION_ITERABLE(k_mem_slab, rx_0_mem_slab) =
 	Z_MEM_SLAB_INITIALIZER(rx_0_mem_slab, _k_mem_slab_buf_rx_0_mem_slab,
 				WB_UP(BLOCK_SIZE), NUM_BLOCKS + 2);
 
 char MEM_SLAB_CACHE_ATTR __aligned(WB_UP(32))
-	_k_mem_slab_buf_tx_0_mem_slab[(NUM_BLOCKS) * WB_UP(BLOCK_SIZE)];
+	_k_mem_slab_buf_tx_0_mem_slab[(NUM_BLOCKS) * WB_UP(BLOCK_SIZE)] TDM_MEMORY_SECTION(130);
 STRUCT_SECTION_ITERABLE(k_mem_slab, tx_0_mem_slab) =
 	Z_MEM_SLAB_INITIALIZER(tx_0_mem_slab, _k_mem_slab_buf_tx_0_mem_slab,
 				WB_UP(BLOCK_SIZE), NUM_BLOCKS);
