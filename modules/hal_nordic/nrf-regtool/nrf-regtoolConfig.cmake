@@ -58,8 +58,6 @@ foreach(component IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS)
     )
     set_property(TARGET runners_yaml_props_target PROPERTY hex_file ${merged_hex_file})
 
-  elseif(component STREQUAL "GENERATE:BICR")
-    nrf_regtool_generate_peripheral(BICR ${PROJECT_BINARY_DIR}/bicr.hex)
   else()
     message(FATAL_ERROR "Unrecognized package component: \"${component}\"")
   endif()
