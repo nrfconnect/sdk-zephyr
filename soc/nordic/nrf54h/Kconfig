@@ -67,9 +67,3 @@ config SOC_NRF54H20_CPUFLPR
 	depends on RISCV_CORE_NORDIC_VPR
 
 rsource "gpd/Kconfig"
-
-config SOC_NRF54H20_NO_MRAM_LATENCY
-	bool "Disallow MRAM latency"
-	imply NRFS
-	imply NRFS_MRAM_SERVICE_ENABLED
-	default y if SOC_NRF54H20_CPUAPP
