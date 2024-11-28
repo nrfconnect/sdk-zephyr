@@ -180,6 +180,8 @@ ZTEST(ipc_sessions, test_echo)
 
 ZTEST(ipc_sessions, test_reboot)
 {
+	zassume_false(IS_ENABLED(CONFIG_IPC_TEST_SKIP_CORE_RESET));
+
 	int ret;
 	struct test_ipc_event_state ev;
 	static const struct ipc_test_cmd_reboot cmd_rebond = { { IPC_TEST_CMD_REBOOT }, 10 };

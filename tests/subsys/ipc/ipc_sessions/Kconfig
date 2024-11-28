@@ -14,3 +14,9 @@ config IPC_TEST_MSG_HEAP_SIZE
 	help
 		Internal heap where all the message data would be copied to be processed
 		linearry in tests.
+
+config IPC_TEST_SKIP_CORE_RESET
+	bool "Skip the tests that includes core resetting"
+	help
+		Some of the cores cannot be safely restarted.
+		Skip the tests that require it in such a cases.
