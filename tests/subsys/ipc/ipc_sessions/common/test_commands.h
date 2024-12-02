@@ -17,6 +17,14 @@ enum ipc_test_commands {
 	IPC_TEST_CMD_ECHO_RSP, /**< Echo respond */
 	IPC_TEST_CMD_REBOND,   /**< Unbond and rebond back whole interface */
 	IPC_TEST_CMD_REBOOT,   /**< Restart remote CPU after a given delay */
+	/* Commands used for data transfer test */
+	IPC_TEST_CMD_RXSTART,  /**< Start receiving data */
+	IPC_TEST_CMD_TXSTART,  /**< Start sending data */
+	IPC_TEST_CMD_RXGET,    /**< Get rx status */
+	IPC_TEST_CMD_TXGET,    /**< Get tx status */
+	IPC_TEST_CMD_XSTAT,    /**< rx/tx status response */
+	IPC_TEST_CMD_XDATA,    /**< Transfer data block */
+	/* End of commands used for data transfer test */
 };
 
 /**
@@ -41,6 +49,33 @@ struct ipc_test_cmd_rebond {
 struct ipc_test_cmd_reboot {
 	struct ipc_test_cmd base;
 	uint32_t timeout_ms;
+};
+
+/**
+ * @brief Start the rx or tx transfer
+ */
+struct ipc_test_cmd_xstart {
+	struct ipc_test_cmd base;
+	uint32_t blk_size;
+	uint32_t blk_cnt;
+	uint32_t seed;
+};
+
+/**
+ * @brief Get the status of rx or tx transfer
+ */
+struct ipc_test_cmd_xstat {
+	struct ipc_test_cmd base;
+	uint32_t blk_cnt; /**< Transfers left */
+	int32_t  result;  /**< Current result */
+};
+
+/**
+ * @brief The result of rx or tx transfer
+ */
+struct ipc_test_cmd_xrsp {
+	struct ipc_test_cmd base;
+	int32_t result;
 };
 
 #endif /* TEST_COMMANDS_H */

@@ -20,3 +20,11 @@ config IPC_TEST_SKIP_CORE_RESET
 	help
 		Some of the cores cannot be safely restarted.
 		Skip the tests that require it in such a cases.
+
+config IPC_TEST_BLOCK_SIZE
+	int "Block size for multiple transfers test"
+	default 32
+
+config IPC_TEST_BLOCK_CNT
+	int "Number of blocks for multiple transfers test"
+	default 8000

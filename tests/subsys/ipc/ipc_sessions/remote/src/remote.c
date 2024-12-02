@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
@@ -18,11 +19,22 @@ LOG_MODULE_REGISTER(remote, LOG_LEVEL_INF);
 
 #define IPC_TEST_EV_REBOND 0x01
 #define IPC_TEST_EV_BOND   0x02
+#define IPC_TEST_EV_TXTEST 0x04
 
 static const struct device *ipc0_instance = DEVICE_DT_GET(DT_NODELABEL(ipc0));
 static volatile bool ipc0_bounded;
 K_SEM_DEFINE(bound_sem, 0, 1);
 K_EVENT_DEFINE(ipc_ev_req);
+
+struct ipc_xfer_params {
+	uint32_t blk_size;
+	uint32_t blk_cnt;
+	unsigned int seed;
+	int result;
+};
+
+static struct ipc_xfer_params ipc_rx_params;
+static struct ipc_xfer_params ipc_tx_params;
 
 static struct k_timer timer_reboot;
 static struct k_timer timer_rebond;
@@ -136,8 +148,6 @@ static void ep_recv(const void *data, size_t len, void *priv)
 		return;
 	}
 
-	LOG_INF("Command received: %u", cmd->cmd);
-
 	switch (cmd->cmd) {
 	case IPC_TEST_CMD_NONE:
 		LOG_INF("Command processing: NONE");
@@ -187,6 +197,99 @@ static void ep_recv(const void *data, size_t len, void *priv)
 		struct ipc_test_cmd_reboot *cmd_reboot = (struct ipc_test_cmd_reboot *)cmd;
 
 		k_timer_start(&timer_reboot, K_MSEC(cmd_reboot->timeout_ms), K_FOREVER);
+		break;
+	}
+	case IPC_TEST_CMD_RXSTART: {
+		LOG_INF("Command processing: RXSTART");
+
+		struct ipc_test_cmd_xstart *cmd_rxstart = (struct ipc_test_cmd_xstart *)cmd;
+
+		ipc_rx_params.blk_size = cmd_rxstart->blk_size;
+		ipc_rx_params.blk_cnt = cmd_rxstart->blk_cnt;
+		ipc_rx_params.seed = cmd_rxstart->seed;
+		ipc_rx_params.result = 0;
+		break;
+	}
+	case IPC_TEST_CMD_TXSTART: {
+		LOG_INF("Command processing: TXSTART");
+
+		struct ipc_test_cmd_xstart *cmd_txstart = (struct ipc_test_cmd_xstart *)cmd;
+
+		ipc_tx_params.blk_size = cmd_txstart->blk_size;
+		ipc_tx_params.blk_cnt = cmd_txstart->blk_cnt;
+		ipc_tx_params.seed = cmd_txstart->seed;
+		ipc_tx_params.result = 0;
+		k_event_set(&ipc_ev_req, IPC_TEST_EV_TXTEST);
+		break;
+	}
+	case IPC_TEST_CMD_RXGET: {
+		LOG_INF("Command processing: RXGET");
+
+		int ret;
+		struct ipc_test_cmd_xstat cmd_stat = {
+			.base.cmd = IPC_TEST_CMD_XSTAT,
+			.blk_cnt = ipc_rx_params.blk_cnt,
+			.result = ipc_rx_params.result
+		};
+
+		ret = ipc_service_send(ep, &cmd_stat, sizeof(cmd_stat));
+		if (ret < 0) {
+			LOG_ERR("RXGET response send failed");
+		}
+		break;
+	}
+	case IPC_TEST_CMD_TXGET: {
+		LOG_INF("Command processing: TXGET");
+
+		int ret;
+		struct ipc_test_cmd_xstat cmd_stat = {
+			.base.cmd = IPC_TEST_CMD_XSTAT,
+			.blk_cnt = ipc_tx_params.blk_cnt,
+			.result = ipc_tx_params.result
+		};
+
+		ret = ipc_service_send(ep, &cmd_stat, sizeof(cmd_stat));
+		if (ret < 0) {
+			LOG_ERR("TXGET response send failed");
+		}
+		break;
+	}
+	case IPC_TEST_CMD_XDATA: {
+		if ((ipc_rx_params.blk_cnt % 1000) == 0) {
+			/* Logging only every N-th command not to slowdown the transfer too much */
+			LOG_INF("Command processing: XDATA (left: %u)", ipc_rx_params.blk_cnt);
+		}
+
+		/* Ignore if there is an error */
+		if (ipc_rx_params.result) {
+			LOG_ERR("There is error in Rx transfer already");
+			break;
+		}
+
+		if (len != ipc_rx_params.blk_size + offsetof(struct ipc_test_cmd, data)) {
+			LOG_ERR("Size mismatch");
+			ipc_rx_params.result = -EMSGSIZE;
+			break;
+		}
+
+		if (ipc_rx_params.blk_cnt <= 0) {
+			LOG_ERR("Data not expected");
+			ipc_rx_params.result = -EFAULT;
+			break;
+		}
+
+		/* Check the data */
+		for (size_t n = 0; n < ipc_rx_params.blk_size; ++n) {
+			uint8_t expected = (uint8_t)rand_r(&ipc_rx_params.seed);
+
+			if (cmd->data[n] != expected) {
+				LOG_ERR("Data value error at %u", n);
+				ipc_rx_params.result = -EINVAL;
+				break;
+			}
+		}
+
+		ipc_rx_params.blk_cnt -= 1;
 		break;
 	}
 	default:
@@ -298,6 +401,45 @@ int main(void)
 				} while (!ipc0_bounded);
 			}
 			LOG_INF("Bonding done");
+		}
+		if (ev & IPC_TEST_EV_TXTEST) {
+			LOG_INF("Transfer TX test started");
+
+			size_t cmd_size = ipc_tx_params.blk_size + offsetof(struct ipc_test_cmd, data);
+			struct ipc_test_cmd *cmd_data = k_malloc(cmd_size);
+
+			if (!cmd_data) {
+				LOG_ERR("Cannot create TX test buffer");
+				ipc_tx_params.result = -ENOMEM;
+				continue;
+			}
+
+			LOG_INF("Initial seed: %u", ipc_tx_params.seed);
+
+			cmd_data->cmd = IPC_TEST_CMD_XDATA;
+			for (/* No init */; ipc_tx_params.blk_cnt > 0; --ipc_tx_params.blk_cnt) {
+				int ret;
+
+				if (ipc_tx_params.blk_cnt % 1000 == 0) {
+					LOG_INF("Sending: %u blocks left", ipc_tx_params.blk_cnt);
+				}
+				/* Generate the block data */
+				for (size_t n = 0; n < ipc_tx_params.blk_size; ++n) {
+					cmd_data->data[n] = (uint8_t)rand_r(&ipc_tx_params.seed);
+				}
+				do {
+					ret = ipc_service_send(ep_cfg.priv, cmd_data, cmd_size);
+				} while (ret == -ENOMEM);
+				if (ret < 0) {
+					LOG_ERR("Cannot send TX test buffer: %d", ret);
+					ipc_tx_params.result = -EIO;
+					continue;
+				}
+			}
+
+			k_free(cmd_data);
+
+			LOG_INF("Transfer TX test finished");
 		}
 
 
