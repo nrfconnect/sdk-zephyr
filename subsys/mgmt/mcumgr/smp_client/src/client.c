@@ -45,7 +45,7 @@ static struct smp_client_data_base smp_client_data;
 
 static void smp_read_hdr(const struct net_buf *nb, struct smp_hdr *dst_hdr);
 static void smp_client_cmd_req_free(struct smp_client_cmd_req *cmd_req);
-
+K_MUTEX_DEFINE(cmd_mutex);
 /**
  * Send all SMP client request packets.
  */
@@ -57,10 +57,12 @@ static void smp_client_handle_reqs(struct k_work *work)
 
 	smp_client = (void *)work;
 	smpt = smp_client->smpt;
+	k_mutex_lock(&cmd_mutex, K_FOREVER);
 
 	while ((nb = net_buf_get(&smp_client->tx_fifo, K_NO_WAIT)) != NULL) {
 		smpt->functions.output(nb);
 	}
+	k_mutex_unlock(&cmd_mutex);
 }
 
 static void smp_header_init(struct smp_hdr *header, uint16_t group, uint8_t id, uint8_t op,
@@ -87,47 +89,46 @@ static void smp_client_transport_work_fn(struct k_work *work)
 	int64_t time_stamp_delta;
 
 	ARG_UNUSED(work);
-
-	if (sys_slist_is_empty(&smp_client_data.cmd_list)) {
-		/* No more packet for Transport */
-		return;
-	}
-
-	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&smp_client_data.cmd_list, entry, tmp, node) {
-		time_stamp_ref = entry->timestamp;
-		/* Check Time delta and get current time to reference */
-		time_stamp_delta = k_uptime_delta(&time_stamp_ref);
-
-		if (time_stamp_delta < 0) {
-			time_stamp_cmp = entry->timestamp - time_stamp_ref;
-			if (time_stamp_cmp < CONFIG_SMP_CMD_RETRY_TIME &&
-			    time_stamp_cmp < backoff_ms) {
-				/* Update new shorter shedule */
-				backoff_ms = time_stamp_cmp;
-			}
-			continue;
-		} else if (entry->retry_cnt) {
-			/* Increment reference for re-transmission */
-			entry->nb = net_buf_ref(entry->nb);
-			entry->retry_cnt--;
-			entry->timestamp = time_stamp_ref + CONFIG_SMP_CMD_RETRY_TIME;
-			net_buf_put(&entry->smp_client->tx_fifo, entry->nb);
-			smp_tx_req(&entry->smp_client->work);
-			continue;
-		}
-
-		cb = entry->cb;
-		user_data = entry->user_data;
-		smp_client_cmd_req_free(entry);
-		if (cb) {
-			cb(NULL, user_data);
-		}
-	}
-
+	k_mutex_lock(&cmd_mutex, K_FOREVER);
 	if (!sys_slist_is_empty(&smp_client_data.cmd_list)) {
-		/* Re-schedule new timeout to next */
-		k_work_reschedule(&smp_client_data.work_delay, K_MSEC(backoff_ms));
+
+		SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&smp_client_data.cmd_list, entry, tmp, node) {
+			time_stamp_ref = entry->timestamp;
+			/* Check Time delta and get current time to reference */
+			time_stamp_delta = k_uptime_delta(&time_stamp_ref);
+
+			if (time_stamp_delta < 0) {
+				time_stamp_cmp = entry->timestamp - time_stamp_ref;
+				if (time_stamp_cmp < CONFIG_SMP_CMD_RETRY_TIME &&
+				    time_stamp_cmp < backoff_ms) {
+					/* Update new shorter shedule */
+					backoff_ms = time_stamp_cmp;
+				}
+				continue;
+			} else if (entry->retry_cnt) {
+				/* Increment reference for re-transmission */
+				entry->nb = net_buf_ref(entry->nb);
+				entry->retry_cnt--;
+				entry->timestamp = time_stamp_ref + CONFIG_SMP_CMD_RETRY_TIME;
+				net_buf_put(&entry->smp_client->tx_fifo, entry->nb);
+				smp_tx_req(&entry->smp_client->work);
+				continue;
+			}
+
+			cb = entry->cb;
+			user_data = entry->user_data;
+			smp_client_cmd_req_free(entry);
+			if (cb) {
+				cb(NULL, user_data);
+			}
+		}
+
+		if (!sys_slist_is_empty(&smp_client_data.cmd_list)) {
+			/* Re-schedule new timeout to next */
+			k_work_reschedule(&smp_client_data.work_delay, K_MSEC(backoff_ms));
+		}
 	}
+	k_mutex_unlock(&cmd_mutex);
 }
 
 static int smp_client_init(void)
@@ -224,9 +225,11 @@ int smp_client_object_init(struct smp_client_object *smp_client, int smp_type)
 
 int smp_client_single_response(struct net_buf *nb, const struct smp_hdr *res_hdr)
 {
+	int ret = MGMT_ERR_ENOENT;
 	struct smp_client_cmd_req *cmd_req;
 	smp_client_res_fn cb;
 	void *user_data;
+	k_mutex_lock(&cmd_mutex, K_FOREVER);
 
 	/* Discover request for incoming response */
 	cmd_req = smp_client_response_discover(res_hdr);
@@ -240,11 +243,12 @@ int smp_client_single_response(struct net_buf *nb, const struct smp_hdr *res_hdr
 		smp_client_cmd_req_free(cmd_req);
 		if (cb) {
 			cb(nb, user_data);
-			return MGMT_ERR_EOK;
+			ret = MGMT_ERR_EOK;
 		}
 	}
 
-	return MGMT_ERR_ENOENT;
+	k_mutex_unlock(&cmd_mutex);
+	return ret;
 }
 
 struct net_buf *smp_client_buf_allocation(struct smp_client_object *smp_client, uint16_t group,
@@ -281,6 +285,7 @@ static void smp_read_hdr(const struct net_buf *nb, struct smp_hdr *dst_hdr)
 int smp_client_send_cmd(struct smp_client_object *smp_client, struct net_buf *nb,
 			smp_client_res_fn cb, void *user_data, int timeout_in_sec)
 {
+	int ret = MGMT_ERR_ENOMEM;
 	struct smp_hdr smp_header;
 	struct smp_client_cmd_req *cmd_req;
 
@@ -301,27 +306,30 @@ int smp_client_send_cmd(struct smp_client_object *smp_client, struct net_buf *nb
 	smp_header.nh_len = sys_cpu_to_be16(nb->len - sizeof(smp_header));
 	smp_header.nh_group = sys_cpu_to_be16(smp_header.nh_group),
 	memcpy(nb->data, &smp_header, sizeof(smp_header));
+	k_mutex_lock(&cmd_mutex, K_FOREVER);
 
 	cmd_req = smp_client_cmd_req_allocate();
-	if (!cmd_req) {
-		return MGMT_ERR_ENOMEM;
-	}
+	if (cmd_req) {
 
-	LOG_DBG("Command send Header flags %d OP: %d group %d id %d seq %d", smp_header.nh_flags,
-		smp_header.nh_op, sys_be16_to_cpu(smp_header.nh_group), smp_header.nh_id,
-		smp_header.nh_seq);
-	cmd_req->nb = nb;
-	cmd_req->cb = cb;
-	cmd_req->smp_client = smp_client;
-	cmd_req->user_data = user_data;
-	cmd_req->retry_cnt = timeout_in_sec * (1000 / CONFIG_SMP_CMD_RETRY_TIME);
-	cmd_req->timestamp = k_uptime_get() + CONFIG_SMP_CMD_RETRY_TIME;
-	/* Increment reference for re-transmission and read smp header */
-	nb = net_buf_ref(nb);
-	smp_cmd_add_to_list(cmd_req);
-	net_buf_put(&smp_client->tx_fifo, nb);
-	smp_tx_req(&smp_client->work);
-	return MGMT_ERR_EOK;
+		LOG_DBG("Command send Header flags %d OP: %d group %d id %d seq %d",
+			smp_header.nh_flags, smp_header.nh_op, sys_be16_to_cpu(smp_header.nh_group),
+			smp_header.nh_id, smp_header.nh_seq);
+		cmd_req->nb = nb;
+		cmd_req->cb = cb;
+		cmd_req->smp_client = smp_client;
+		cmd_req->user_data = user_data;
+		cmd_req->retry_cnt = timeout_in_sec * (1000 / CONFIG_SMP_CMD_RETRY_TIME);
+		cmd_req->timestamp = k_uptime_get() + CONFIG_SMP_CMD_RETRY_TIME;
+		/* Increment reference for re-transmission and read smp header */
+		nb = net_buf_ref(nb);
+		smp_cmd_add_to_list(cmd_req);
+		net_buf_put(&smp_client->tx_fifo, nb);
+		smp_tx_req(&smp_client->work);
+		ret = MGMT_ERR_EOK;
+	}
+	k_mutex_unlock(&cmd_mutex);
+
+	return ret;
 }
 
 SYS_INIT(smp_client_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
