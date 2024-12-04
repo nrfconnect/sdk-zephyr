@@ -2232,10 +2232,3 @@ add_subdirectory_ifdef(
   CONFIG_MAKEFILE_EXPORTS
   cmake/makefile_exports
   )
-
-yaml_context(EXISTS NAME build_info result)
-if(result)
-  build_info(zephyr version VALUE ${PROJECT_VERSION_STR})
-  build_info(zephyr zephyr-base VALUE ${ZEPHYR_BASE})
-  yaml_save(NAME build_info)
-endif()
