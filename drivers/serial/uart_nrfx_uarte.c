@@ -302,6 +302,13 @@ struct uarte_nrfx_config {
 	uint8_t *poll_in_byte;
 };
 
+/* Using Macro instead of static inline function to handle NO_OPTIMIZATIONS case
+ * where static inline fails on linking.
+ */
+#define HW_RX_COUNTING_ENABLED(config)    \
+	(IS_ENABLED(UARTE_ANY_HW_ASYNC) ? \
+	 (config->flags & UARTE_CFG_FLAG_HW_BYTE_COUNTING) : false)
+
 static inline NRF_UARTE_Type *get_uarte_instance(const struct device *dev)
 {
 	const struct uarte_nrfx_config *config = dev->config;
@@ -322,6 +329,39 @@ static void endtx_isr(const struct device *dev)
 
 	irq_unlock(key);
 
+}
+
+/** @brief Disable UARTE peripheral is not used by RX or TX.
+ *
+ * It must be called with interrupts locked so that deciding if no direction is
+ * using the UARTE is atomically performed with UARTE peripheral disabling. Otherwise
+ * it would be possible that after clearing flags we get preempted and UARTE is
+ * enabled from the higher priority context and when we come back UARTE is disabled
+ * here.
+ * @param dev Device.
+ * @param dis_mask Mask of direction (RX or TX) which now longer uses the UARTE instance.
+ */
+static void uarte_disable_locked(const struct device *dev, uint32_t dis_mask)
+{
+	struct uarte_nrfx_data *data = dev->data;
+
+	data->flags &= ~dis_mask;
+	if (data->flags & UARTE_FLAG_LOW_POWER) {
+		return;
+	}
+
+#if defined(UARTE_ANY_ASYNC) && !defined(CONFIG_UART_NRFX_UARTE_ENHANCED_RX)
+	const struct uarte_nrfx_config *config = dev->config;
+
+	if (data->async && HW_RX_COUNTING_ENABLED(config)) {
+		nrfx_timer_disable(&config->timer);
+		/* Timer/counter value is reset when disabled. */
+		data->async->rx.total_byte_cnt = 0;
+		data->async->rx.total_user_byte_cnt = 0;
+	}
+#endif
+
+	nrf_uarte_disable(get_uarte_instance(dev));
 }
 
 #ifdef UARTE_ANY_NONE_ASYNC
@@ -358,7 +398,7 @@ static void uarte_nrfx_isr_int(const void *arg)
 			data->flags &= ~UARTE_FLAG_POLL_OUT;
 			pm_device_runtime_put(dev);
 		} else {
-			nrf_uarte_disable(uarte);
+			uarte_disable_locked(dev, UARTE_FLAG_LOW_POWER_TX);
 		}
 
 #ifdef UARTE_INTERRUPT_DRIVEN
@@ -575,13 +615,6 @@ static int wait_tx_ready(const struct device *dev)
 	return key;
 }
 
-/* Using Macro instead of static inline function to handle NO_OPTIMIZATIONS case
- * where static inline fails on linking.
- */
-#define HW_RX_COUNTING_ENABLED(config)    \
-	(IS_ENABLED(UARTE_ANY_HW_ASYNC) ? \
-	 (config->flags & UARTE_CFG_FLAG_HW_BYTE_COUNTING) : false)
-
 static void uarte_periph_enable(const struct device *dev)
 {
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
@@ -672,39 +705,6 @@ static void tx_start(const struct device *dev, const uint8_t *buf, size_t len)
 }
 
 #if defined(UARTE_ANY_ASYNC)
-/** @brief Disable UARTE peripheral is not used by RX or TX.
- *
- * It must be called with interrupts locked so that deciding if no direction is
- * using the UARTE is atomically performed with UARTE peripheral disabling. Otherwise
- * it would be possible that after clearing flags we get preempted and UARTE is
- * enabled from the higher priority context and when we come back UARTE is disabled
- * here.
- * @param dev Device.
- * @param dis_mask Mask of direction (RX or TX) which now longer uses the UARTE instance.
- */
-static void uarte_disable_locked(const struct device *dev, uint32_t dis_mask)
-{
-	struct uarte_nrfx_data *data = dev->data;
-
-	data->flags &= ~dis_mask;
-	if (data->flags & UARTE_FLAG_LOW_POWER) {
-		return;
-	}
-
-#if !defined(CONFIG_UART_NRFX_UARTE_ENHANCED_RX)
-	const struct uarte_nrfx_config *config = dev->config;
-
-	if (data->async && HW_RX_COUNTING_ENABLED(config)) {
-		nrfx_timer_disable(&config->timer);
-		/* Timer/counter value is reset when disabled. */
-		data->async->rx.total_byte_cnt = 0;
-		data->async->rx.total_user_byte_cnt = 0;
-	}
-#endif
-
-	nrf_uarte_disable(get_uarte_instance(dev));
-}
-
 static void rx_timeout(struct k_timer *timer);
 static void tx_timeout(struct k_timer *timer);
 
