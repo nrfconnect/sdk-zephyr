@@ -7,10 +7,6 @@ zephyr_library_sources(
   )
 zephyr_include_directories(.)
 
-if(CONFIG_ELV_GRTC_LFXO_ALLOWED)
-  message(WARNING "WARNING! ELV mode feature is EXPERIMENTAL and may brick your device!")
-endif()
-
 # We need a buffer in memory in a static location which can be used by
 # the KMU peripheral. The KMU has a static destination address, we chose
 # this address to be 0x20000000, which is the first address in the SRAM.
