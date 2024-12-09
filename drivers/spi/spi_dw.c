@@ -45,10 +45,6 @@ LOG_MODULE_REGISTER(spi_dw);
 #include <nrfx.h>
 #endif
 
-#ifdef CONFIG_SOC_NRF54H20_GPD
-#include <nrf/gpd.h>
-#endif
-
 static inline bool spi_dw_is_slave(struct spi_dw_data *spi)
 {
 	return (IS_ENABLED(CONFIG_SPI_SLAVE) &&
@@ -564,13 +560,6 @@ int spi_dw_init(const struct device *dev)
 #ifdef CONFIG_HAS_NRFX
 	NRF_EXMIF->INTENSET = BIT(0);
 	NRF_EXMIF->TASKS_START = 1;
-
-#ifdef CONFIG_SOC_NRF54H20_GPD
-	err = nrf_gpd_request(NRF_GPD_FAST_ACTIVE1);
-	if (err < 0) {
-		return err;
-	}
-#endif
 #endif
 
 	info->config_func();
