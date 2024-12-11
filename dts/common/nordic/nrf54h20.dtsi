@@ -623,6 +623,7 @@
 				power-domains = <&gpd NRF_GPD_FAST_ACTIVE1>;
 				max-bit-width = <32>;
 				max-frequency = <DT_FREQ_M(320)>;
+				clocks = <&hsfll120>;
 				prescaler = <0>;
 			};
 
@@ -635,6 +636,7 @@
 				power-domains = <&gpd NRF_GPD_FAST_ACTIVE1>;
 				max-bit-width = <32>;
 				max-frequency = <DT_FREQ_M(320)>;
+				clocks = <&hsfll120>;
 				prescaler = <0>;
 			};
 
