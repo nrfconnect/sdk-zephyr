@@ -13,7 +13,7 @@
  */
 
 #ifdef __NRF_TFM__
-#include <zephyr/autoconf.h>
+#include <autoconf.h>
 #endif
 
 #include <zephyr/devicetree.h>
