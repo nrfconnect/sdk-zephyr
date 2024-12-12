@@ -188,7 +188,7 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: 54bde38c6f6ffb3780b26ae728cf79426184384e
+      revision: fae15426c6b5a1f67362d508cf51b691ae5ab4b4
       path: modules/hal/nordic
       groups:
         - hal
