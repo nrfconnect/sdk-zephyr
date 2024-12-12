@@ -17,6 +17,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/math_extras.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/net_buf.h>
 
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -43,7 +44,7 @@ LOG_MODULE_REGISTER(bt_l2cap, CONFIG_BT_L2CAP_LOG_LEVEL);
 #define L2CAP_ECRED_MIN_MTU		64
 #define L2CAP_ECRED_MIN_MPS             64
 
-#define L2CAP_LE_MAX_CREDITS		(CONFIG_BT_BUF_ACL_RX_COUNT - 1)
+#define L2CAP_LE_MAX_CREDITS		(BT_BUF_ACL_RX_COUNT - 1)
 
 #define L2CAP_LE_CID_DYN_START	0x0040
 #define L2CAP_LE_CID_DYN_END	0x007f
@@ -2572,6 +2573,7 @@ static void l2cap_chan_le_recv_seg_direct(struct bt_l2cap_le_chan *chan, struct 
 static void l2cap_chan_le_recv(struct bt_l2cap_le_chan *chan,
 			       struct net_buf *buf)
 {
+	struct net_buf *owned_ref;
 	uint16_t sdu_len;
 	int err;
 
@@ -2645,7 +2647,13 @@ static void l2cap_chan_le_recv(struct bt_l2cap_le_chan *chan,
 		return;
 	}
 
-	err = chan->chan.ops->recv(&chan->chan, buf);
+	owned_ref = net_buf_ref(buf);
+	err = chan->chan.ops->recv(&chan->chan, owned_ref);
+	if (err != -EINPROGRESS) {
+		net_buf_unref(owned_ref);
+		owned_ref = NULL;
+	}
+
 	if (err < 0) {
 		if (err != -EINPROGRESS) {
 			LOG_ERR("err %d", err);
@@ -3244,7 +3252,7 @@ static int bt_l2cap_dyn_chan_send(struct bt_l2cap_le_chan *le_chan, struct net_b
 		/* Call `net_buf_reserve(buf, BT_L2CAP_SDU_CHAN_SEND_RESERVE)`
 		 * when allocating buffers intended for bt_l2cap_chan_send().
 		 */
-		LOG_DBG("Not enough headroom in buf %p", buf);
+		LOG_ERR("Not enough headroom in buf %p", buf);
 		return -EINVAL;
 	}
 
@@ -3292,7 +3300,7 @@ int bt_l2cap_chan_send(struct bt_l2cap_chan *chan, struct net_buf *buf)
 	LOG_DBG("chan %p buf %p len %zu", chan, buf, buf->len);
 
 	if (buf->ref != 1) {
-		LOG_DBG("Expecting 1 ref, got %d", buf->ref);
+		LOG_WRN("Expecting 1 ref, got %d", buf->ref);
 		return -EINVAL;
 	}
 
