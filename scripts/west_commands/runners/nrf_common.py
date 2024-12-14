@@ -270,11 +270,6 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
             if self.erase:
                 self.exec_op('erase', core='NRFDL_DEVICE_CORE_APPLICATION')
                 self.exec_op('erase', core='NRFDL_DEVICE_CORE_NETWORK')
-                # A reset is needed if repartitioning the device memory
-                self.reset_target()
-            else:
-                # Ensure that firmware is not executing while erasing/programming
-                self.exec_op("reset", option="RESET_VIA_SECDOM")
 
             # Manage SUIT artifacts.
             # This logic should be executed only once per build.
@@ -326,8 +321,16 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                         )
 
             if cpuapp:
+                if not self.erase and self.build_conf.getboolean('CONFIG_NRF_REGTOOL_GENERATE_UICR'):
+                    self.exec_op('erase', core='NRFDL_DEVICE_CORE_APPLICATION',
+                                 option={'chip_erase_mode': 'ERASE_UICR',
+                                         'qspi_erase_mode': 'ERASE_NONE'})
                 core = 'NRFDL_DEVICE_CORE_APPLICATION'
             elif cpurad:
+                if not self.erase and self.build_conf.getboolean('CONFIG_NRF_REGTOOL_GENERATE_UICR'):
+                    self.exec_op('erase', core='NRFDL_DEVICE_CORE_NETWORK',
+                                 option={'chip_erase_mode': 'ERASE_UICR',
+                                         'qspi_erase_mode': 'ERASE_NONE'})
                 core = 'NRFDL_DEVICE_CORE_NETWORK'
         else:
             if self.erase:
