@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(flash_nrf_mram, CONFIG_FLASH_LOG_LEVEL);
 
 #define ERASE_VALUE 0xff
 
-BUILD_ASSERT(MRAM_START > 0, "nordic,mram: start address expected to be non-zero");
+BUILD_ASSERT(MRAM_START >= 0, "nordic,mram: start address expected to be non-zero");
 BUILD_ASSERT((ERASE_BLOCK_SIZE % WRITE_BLOCK_SIZE) == 0,
 	     "erase-block-size expected to be a multiple of write-block-size");
 
