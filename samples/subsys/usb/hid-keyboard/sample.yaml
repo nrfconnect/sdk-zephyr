@@ -1,6 +1,7 @@
 sample:
   name: USB HID keyboard sample
 common:
+  sysbuild: true
   harness: button
   filter: dt_alias_exists("sw0") and dt_alias_exists("led0")
   depends_on:
@@ -17,6 +18,8 @@ common:
 tests:
   sample.usbd.hid-keyboard:
     tags: usb
+    extra_args:
+      - SB_CONF_FILE=sysbuild/nrf54h20dk_nrf54h20_cpurad.conf
   sample.usbd.hid-keyboard.out-report:
     tags: usb
     extra_args:
