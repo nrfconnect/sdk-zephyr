@@ -11,10 +11,12 @@
 
 #include <compiler_abstraction.h>
 #include <zephyr/kernel.h>
-#if defined(CONFIG_CLOCK_CONTROL_NRF)
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
+#if defined(CONFIG_CLOCK_CONTROL_NRF)
 #include <zephyr/drivers/clock_control.h>
-#elif !defined(NRF54H_SERIES)
+#elif (defined(CONFIG_CLOCK_CONTROL_NRF2) && defined(NRF54H_SERIES))
+#define NRF_802154_HFCLK_CLOCK_FREQUENCY 32000000
+#else
 #error No implementation to start or stop HFCLK due to missing clock_control.
 #endif
 
@@ -35,7 +37,6 @@ bool nrf_802154_clock_hfclk_is_running(void)
 	return hfclk_is_running;
 }
 
-#if defined(CONFIG_CLOCK_CONTROL_NRF)
 
 static struct onoff_client hfclk_cli;
 
@@ -48,6 +49,7 @@ static void hfclk_on_callback(struct onoff_manager *mgr,
 	nrf_802154_clock_hfclk_ready();
 }
 
+#if defined(CONFIG_CLOCK_CONTROL_NRF)
 void nrf_802154_clock_hfclk_start(void)
 {
 	int ret;
@@ -77,38 +79,26 @@ void nrf_802154_clock_hfclk_stop(void)
 
 #elif defined(NRF54H_SERIES)
 
-#define NRF_LRCCONF_RADIO_PD NRF_LRCCONF010
-/* HF clock time to ramp-up. */
-#define MAX_HFXO_RAMP_UP_TIME_US 550
-
-static void hfclk_started_timer_handler(struct k_timer *dummy)
-{
-	hfclk_is_running = true;
-	nrf_802154_clock_hfclk_ready();
-}
-
-K_TIMER_DEFINE(hfclk_started_timer, hfclk_started_timer_handler, NULL);
+const struct nrf_clock_spec spec = {
+	.frequency = NRF_802154_HFCLK_CLOCK_FREQUENCY,
+	.accuracy = NRF_CLOCK_CONTROL_ACCURACY_MAX,
+	.precision = NRF_CLOCK_CONTROL_PRECISION_HIGH,
+};
 
 void nrf_802154_clock_hfclk_start(void)
 {
-	/* Use register directly, there is no support for that task in nrf_lrcconf_task_trigger.
-	 * This code might cause troubles if there are other HFXO users in this CPU.
-	 */
-	NRF_LRCCONF_RADIO_PD->EVENTS_HFXOSTARTED = 0x0;
-	NRF_LRCCONF_RADIO_PD->TASKS_REQHFXO = 0x1;
+	sys_notify_init_callback(&hfclk_cli.notify, hfclk_on_callback);
+	int ret = nrf_clock_control_request(DEVICE_DT_GET(DT_NODELABEL(hfxo)), &spec, &hfclk_cli);
 
-	k_timer_start(&hfclk_started_timer, K_USEC(MAX_HFXO_RAMP_UP_TIME_US), K_NO_WAIT);
+	__ASSERT_NO_MSG(ret >= 0);
 }
 
 void nrf_802154_clock_hfclk_stop(void)
 {
-	/* Use register directly, there is no support for that task in nrf_lrcconf_task_trigger.
-	 * This code might cause troubles if there are other HFXO users in this CPU.
-	 */
-	NRF_LRCCONF_RADIO_PD->TASKS_STOPREQHFXO = 0x1;
-	NRF_LRCCONF_RADIO_PD->EVENTS_HFXOSTARTED = 0x0;
+	int ret = nrf_clock_control_cancel_or_release(DEVICE_DT_GET(DT_NODELABEL(hfxo)),
+						      &spec, &hfclk_cli);
 
-	hfclk_is_running = false;
+	__ASSERT_NO_MSG(ret >= 0);
 }
 
 #endif
