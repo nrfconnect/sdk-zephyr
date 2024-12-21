@@ -476,8 +476,12 @@ void reg_change_callbk_fn(void *vif_ctx,
 }
 #endif /* !CONFIG_NRF70_RADIO_TEST */
 
+#ifdef CONFIG_DT_HAS_NORDIC_WIFI_ENABLED
+#define MAX_TX_PWR(label) DT_PROP(DT_NODELABEL(wifi), label) * 4
+#else
 /* DTS uses 1dBm as the unit for TX power, while the RPU uses 0.25dBm */
 #define MAX_TX_PWR(label) DT_PROP(DT_NODELABEL(nrf70), label) * 4
+#endif /* CONFIG_DT_HAS_NORDIC_WIFI_ENABLED */
 
 void configure_tx_pwr_settings(struct nrf_wifi_tx_pwr_ctrl_params *tx_pwr_ctrl_params,
 				struct nrf_wifi_tx_pwr_ceil_params *tx_pwr_ceil_params)

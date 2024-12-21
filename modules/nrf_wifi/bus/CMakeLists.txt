@@ -15,13 +15,17 @@ if (CONFIG_NRF70_BUSLIB)
     inc
   )
   zephyr_library_sources(
-    rpu_hw_if.c
     device.c
   )
   zephyr_library_sources_ifdef(CONFIG_NRF70_ON_QSPI
+    rpu_hw_if.c
     qspi_if.c
   )
   zephyr_library_sources_ifdef(CONFIG_NRF70_ON_SPI
+    rpu_hw_if.c
     spi_if.c
+  )
+  zephyr_library_sources_ifdef(CONFIG_NRF71_ON_IPC
+    ipc_if.c
   )
 endif()

@@ -114,7 +114,7 @@ else()
   )
 endif()
 
-zephyr_library_sources(
+zephyr_library_sources_ifndef(CONFIG_NRF71_ON_IPC
   ${NRF_WIFI_DIR}/os_if/src/osal.c
   ${NRF_WIFI_DIR}/utils/src/list.c
   ${NRF_WIFI_DIR}/utils/src/queue.c
@@ -126,6 +126,25 @@ zephyr_library_sources(
   ${NRF_WIFI_DIR}/hw_if/hal/src/hal_reg.c
   ${NRF_WIFI_DIR}/hw_if/hal/src/hpqm.c
   ${NRF_WIFI_DIR}/hw_if/hal/src/pal.c
+  ${NRF_WIFI_DIR}/bus_if/bal/src/bal.c
+  ${NRF_WIFI_DIR}/bus_if/bus/qspi/src/qspi.c
+  ${NRF_WIFI_DIR}/fw_if/umac_if/src/cmd.c
+  ${NRF_WIFI_DIR}/fw_if/umac_if/src/event.c
+  ${NRF_WIFI_DIR}/fw_if/umac_if/src/fmac_api_common.c
+)
+
+zephyr_library_sources_ifdef(CONFIG_NRF71_ON_IPC
+  ${NRF_WIFI_DIR}/os_if/src/osal.c
+  ${NRF_WIFI_DIR}/utils/src/list.c
+  ${NRF_WIFI_DIR}/utils/src/queue.c
+  ${NRF_WIFI_DIR}/utils/src/util.c
+  ${NRF_WIFI_DIR}/hw_if/hal/src/hal_api.c
+  ${NRF_WIFI_DIR}/hw_if/hal/src/hal_mem.c
+  ${NRF_WIFI_DIR}/hw_if/hal/src/hal_reg.c
+  ${NRF_WIFI_DIR}/hw_if/hal/src/hpqm.c
+  ${NRF_WIFI_DIR}/hw_if/hal/src/pal.c
+  ${NRF_WIFI_DIR}/hw_if/hal/src/spsc_qm.c
+  ${NRF_WIFI_DIR}/hw_if/hal/src/wifi_ipc_service.c
   ${NRF_WIFI_DIR}/bus_if/bal/src/bal.c
   ${NRF_WIFI_DIR}/bus_if/bus/qspi/src/qspi.c
   ${NRF_WIFI_DIR}/fw_if/umac_if/src/cmd.c
