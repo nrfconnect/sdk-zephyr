@@ -12,7 +12,6 @@ LOG_MODULE_DECLARE(net_zperf, CONFIG_NET_ZPERF_LOG_LEVEL);
 
 #include <zephyr/kernel.h>
 
-#include <zephyr/net/mld.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/socket_service.h>
 #include <zephyr/net/zperf.h>
