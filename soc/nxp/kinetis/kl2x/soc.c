@@ -79,10 +79,12 @@ static ALWAYS_INLINE void clock_init(void)
 #endif
 }
 
-void soc_early_init_hook(void)
+static int kl2x_init(void)
 {
 	/* Initialize system clock to 48 MHz */
 	clock_init();
+
+	return 0;
 }
 
 #ifdef CONFIG_SOC_RESET_HOOK
@@ -93,3 +95,5 @@ void soc_reset_hook(void)
 }
 
 #endif /* CONFIG_SOC_RESET_HOOK */
+
+SYS_INIT(kl2x_init, PRE_KERNEL_1, 0);
