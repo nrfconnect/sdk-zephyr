@@ -25,4 +25,4 @@ Use the sample found under :zephyr_file:`samples/bluetooth/central_past` on
 another board that will connect to this and transfer a periodic advertisement
 sync.
 
-See :zephyr:code-sample-category:`bluetooth` samples for details.
+See :ref:`bluetooth samples section <bluetooth-samples>` for details.

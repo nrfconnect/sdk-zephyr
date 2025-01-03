@@ -1,5 +1,3 @@
-:orphan:
-
 .. _samples_kernel_simple_condition_variables:
 
 Condition Variables

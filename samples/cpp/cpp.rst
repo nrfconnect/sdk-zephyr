@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: cpp
-   :name: C++
-   :show-listing:
+.. _cpp-samples:
 
-   These samples demonstrate how to write Zephyr applications in C++.
+C++ Samples
+###########
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

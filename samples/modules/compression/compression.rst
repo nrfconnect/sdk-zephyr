@@ -1,3 +1,10 @@
-.. zephyr:code-sample-category:: compression
-   :name: Compression
-   :show-listing:
+.. _compression-samples:
+
+Compression Samples
+###################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

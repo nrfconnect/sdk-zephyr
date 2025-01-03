@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: sysbuild
-   :name: Sysbuild
-   :show-listing:
+.. _sysbuild-samples:
 
-   Samples that demonstrate how to use :ref:`sysbuild`.
+Sysbuild samples
+################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

@@ -1,7 +1,7 @@
-.. zephyr:code-sample:: with_mcuboot
-   :name: MCUboot with sysbuild
+.. _with_mcuboot:
 
-   Build a Zephyr application + MCUboot using sysbuild.
+Sample with MCUboot
+###################
 
 Overview
 ********
