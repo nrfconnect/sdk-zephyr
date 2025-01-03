@@ -7,11 +7,13 @@ if SOC_FAMILY_NORDIC_NRF
 
 rsource "*/Kconfig.defconfig"
 
-# If the kernel has timer support, enable clock control, except for SoCs
-# based on the Haltium platform SoCs where clock control is not needed
-# for the system timer
+# If the kernel has timer support, enable clock control
+if SYS_CLOCK_EXISTS
+
 config CLOCK_CONTROL
-	default y if SYS_CLOCK_EXISTS && !NRF_PLATFORM_HALTIUM
+	default y if !SOC_SERIES_NRF92X
+
+endif # SYS_CLOCK_EXISTS
 
 config SYS_CLOCK_HW_CYCLES_PER_SEC
 	default 1000000 if NRF_GRTC_TIMER
