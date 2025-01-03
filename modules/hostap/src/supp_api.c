@@ -2056,6 +2056,7 @@ int supplicant_dpp_dispatch(const struct device *dev, struct wifi_dpp_params *pa
 	os_free(cmd);
 	return 0;
 }
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
 
 #ifdef CONFIG_WIFI_NM_HOSTAPD_AP
 int hapd_dpp_dispatch(const struct device *dev, struct wifi_dpp_params *params)
@@ -2089,4 +2090,3 @@ int hapd_dpp_dispatch(const struct device *dev, struct wifi_dpp_params *params)
 	return 0;
 }
 #endif /* CONFIG_WIFI_NM_HOSTAPD_AP */
-#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
