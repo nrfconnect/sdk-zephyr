@@ -104,5 +104,3 @@ mapping:
         type: str
       topdir:
         type: str
-      version:
-        type: str
