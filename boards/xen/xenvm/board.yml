@@ -1,6 +1,5 @@
 board:
   name: xenvm
-  full_name: ARMv8 Xen Virtual Machine Example
   vendor: xen
   socs:
   - name: xenvm
