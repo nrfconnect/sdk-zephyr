@@ -190,9 +190,6 @@ config EAP_PEAP
 config EAP_MD5
 	bool "EAP-MD5 support"
 
-config EAP_GTC
-	bool "EAP-GTC support"
-
 config EAP_MSCHAPV2
 	bool "EAP-MSCHAPv2 support"
 
@@ -467,9 +464,6 @@ config SHA512
 	bool
 
 config SUITEB192
-	bool
-
-config SUITEB
 	bool
 
 config WEP
