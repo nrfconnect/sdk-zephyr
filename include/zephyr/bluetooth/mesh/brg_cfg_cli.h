@@ -42,8 +42,8 @@ struct bt_mesh_brg_cfg_cli_cb {
 	 *  @param addr     Address of the sender.
 	 *  @param status   Status received from the server.
 	 */
-	void (*bridge_status)(struct bt_mesh_brg_cfg_cli *cli, uint16_t addr,
-			      enum bt_mesh_brg_cfg_state status);
+	void (*subnet_bridge_status)(struct bt_mesh_brg_cfg_cli *cli, uint16_t addr,
+				     enum bt_mesh_subnet_bridge_state status);
 
 	/** @brief Optional callback for Bridging Table Size Status message.
 	 *
@@ -54,7 +54,8 @@ struct bt_mesh_brg_cfg_cli_cb {
 	 *  @param addr     Address of the sender.
 	 *  @param size     Size received from the server.
 	 */
-	void (*table_size_status)(struct bt_mesh_brg_cfg_cli *cli, uint16_t addr, uint16_t size);
+	void (*bridging_table_size_status)(struct bt_mesh_brg_cfg_cli *cli, uint16_t addr,
+					   uint16_t size);
 
 	/** @brief Optional callback for Bridging Table Status message.
 	 *
@@ -65,8 +66,8 @@ struct bt_mesh_brg_cfg_cli_cb {
 	 *  @param addr     Address of the sender.
 	 *  @param rsp      Response received from the Bridging Configuration Server.
 	 */
-	void (*table_status)(struct bt_mesh_brg_cfg_cli *cli, uint16_t addr,
-			     struct bt_mesh_brg_cfg_table_status *rsp);
+	void (*bridging_table_status)(struct bt_mesh_brg_cfg_cli *cli, uint16_t addr,
+				      struct bt_mesh_bridging_table_status *rsp);
 
 	/** @brief Optional callback for Bridged Subnets List message.
 	 *
@@ -77,8 +78,8 @@ struct bt_mesh_brg_cfg_cli_cb {
 	 *  @param addr     Address of the sender.
 	 *  @param rsp      Response received from the Bridging Configuration Server.
 	 */
-	void (*subnets_list)(struct bt_mesh_brg_cfg_cli *cli, uint16_t addr,
-			     struct bt_mesh_brg_cfg_subnets_list *rsp);
+	void (*bridged_subnets_list)(struct bt_mesh_brg_cfg_cli *cli, uint16_t addr,
+				     struct bt_mesh_bridged_subnets_list *rsp);
 
 	/** @brief Optional callback for Bridging Table List message.
 	 *
@@ -89,8 +90,8 @@ struct bt_mesh_brg_cfg_cli_cb {
 	 *  @param addr     Address of the sender.
 	 *  @param rsp      Response received from the Bridging Configuration Server.
 	 */
-	void (*table_list)(struct bt_mesh_brg_cfg_cli *cli, uint16_t addr,
-			   struct bt_mesh_brg_cfg_table_list *rsp);
+	void (*bridging_table_list)(struct bt_mesh_brg_cfg_cli *cli, uint16_t addr,
+				    struct bt_mesh_bridging_table_list *rsp);
 };
 
 /** Bridge Configuration Client Model Context */
@@ -120,12 +121,13 @@ struct bt_mesh_brg_cfg_cli {
  *  @param net_idx Network index to encrypt the message with.
  *  @param addr    Target node address.
  *  @param status  Status response parameter, returns one of
- *                 @ref BT_MESH_BRG_CFG_DISABLED or
- *                 @ref BT_MESH_BRG_CFG_ENABLED on success.
+ *                 @ref BT_MESH_SUBNET_BRIDGE_DISABLED or
+ *                 @ref BT_MESH_SUBNET_BRIDGE_ENABLED on success.
  *
  *  @return 0 on success, or (negative) error code on failure.
  */
-int bt_mesh_brg_cfg_cli_get(uint16_t net_idx, uint16_t addr, enum bt_mesh_brg_cfg_state *status);
+int bt_mesh_brg_cfg_cli_subnet_bridge_get(uint16_t net_idx, uint16_t addr,
+					  enum bt_mesh_subnet_bridge_state *status);
 
 /** @brief Sends a Subnet Bridge Set message to the given destination address
  *  with the given parameters
@@ -143,16 +145,17 @@ int bt_mesh_brg_cfg_cli_get(uint16_t net_idx, uint16_t addr, enum bt_mesh_brg_cf
  *  @param net_idx Network index to encrypt the message with.
  *  @param addr    Target node address.
  *  @param val     Value to set the Subnet Bridge state to. Must be one of
- *                 @ref BT_MESH_BRG_CFG_DISABLED or
- *                 @ref BT_MESH_BRG_CFG_ENABLED.
+ *                 @ref BT_MESH_SUBNET_BRIDGE_DISABLED or
+ *                 @ref BT_MESH_SUBNET_BRIDGE_ENABLED.
  *  @param status  Status response parameter, returns one of
- *                 @ref BT_MESH_BRG_CFG_DISABLED or
- *                 @ref BT_MESH_BRG_CFG_ENABLED on success.
+ *                 @ref BT_MESH_SUBNET_BRIDGE_DISABLED or
+ *                 @ref BT_MESH_SUBNET_BRIDGE_ENABLED on success.
  *
  *  @return 0 on success, or (negative) error code on failure.
  */
-int bt_mesh_brg_cfg_cli_set(uint16_t net_idx, uint16_t addr, enum bt_mesh_brg_cfg_state val,
-			    enum bt_mesh_brg_cfg_state *status);
+int bt_mesh_brg_cfg_cli_subnet_bridge_set(uint16_t net_idx, uint16_t addr,
+					  enum bt_mesh_subnet_bridge_state val,
+					  enum bt_mesh_subnet_bridge_state *status);
 
 /** @brief Sends a Bridging Table Size Get message to the given destination
  *  address with the given parameters
@@ -173,7 +176,7 @@ int bt_mesh_brg_cfg_cli_set(uint16_t net_idx, uint16_t addr, enum bt_mesh_brg_cf
  *
  *  @return 0 on success, or (negative) error code on failure.
  */
-int bt_mesh_brg_cfg_cli_table_size_get(uint16_t net_idx, uint16_t addr, uint16_t *size);
+int bt_mesh_brg_cfg_cli_bridging_table_size_get(uint16_t net_idx, uint16_t addr, uint16_t *size);
 
 /** @brief Sends a Bridging Table Add message to the given destination address
  *  with the given parameters
@@ -195,9 +198,9 @@ int bt_mesh_brg_cfg_cli_table_size_get(uint16_t net_idx, uint16_t addr, uint16_t
  *
  *  @return 0 on success, or (negative) error code on failure.
  */
-int bt_mesh_brg_cfg_cli_table_add(uint16_t net_idx, uint16_t addr,
-				  struct bt_mesh_brg_cfg_table_entry *entry,
-				  struct bt_mesh_brg_cfg_table_status *rsp);
+int bt_mesh_brg_cfg_cli_bridging_table_add(uint16_t net_idx, uint16_t addr,
+					   struct bt_mesh_bridging_table_entry *entry,
+					   struct bt_mesh_bridging_table_status *rsp);
 
 /** @brief Sends a Bridging Table Remove message to the given destination
  *  address with the given parameters
@@ -223,9 +226,9 @@ int bt_mesh_brg_cfg_cli_table_add(uint16_t net_idx, uint16_t addr,
  *
  *  @return 0 on success, or (negative) error code on failure.
  */
-int bt_mesh_brg_cfg_cli_table_remove(uint16_t net_idx, uint16_t addr, uint16_t net_idx1,
-				     uint16_t net_idx2, uint16_t addr1, uint16_t addr2,
-				     struct bt_mesh_brg_cfg_table_status *rsp);
+int bt_mesh_brg_cfg_cli_bridging_table_remove(uint16_t net_idx, uint16_t addr, uint16_t net_idx1,
+					      uint16_t net_idx2, uint16_t addr1, uint16_t addr2,
+					      struct bt_mesh_bridging_table_status *rsp);
 
 /** @brief Sends a Bridged Subnets Get message to the given destination address
  *  with the given parameters
@@ -241,7 +244,7 @@ int bt_mesh_brg_cfg_cli_table_remove(uint16_t net_idx, uint16_t addr, uint16_t n
  *
  *  When @c rsp is set, the user is responsible for providing a buffer for the
  *  filtered set of N pairs of NetKey Indexes in
- *  @ref bt_mesh_brg_cfg_subnets_list::list. If a buffer is not provided, the
+ *  @ref bt_mesh_bridged_subnets_list::list. If a buffer is not provided, the
  *  bridged subnets won't be copied.
 
  *  @param net_idx          Network index to encrypt the message with.
@@ -253,9 +256,10 @@ int bt_mesh_brg_cfg_cli_table_remove(uint16_t net_idx, uint16_t addr, uint16_t n
  *
  *  @return 0 on success, or (negative) error code on failure.
  */
-int bt_mesh_brg_cfg_cli_subnets_get(uint16_t net_idx, uint16_t addr,
-				    struct bt_mesh_brg_cfg_filter_netkey filter_net_idx,
-				    uint8_t start_idx, struct bt_mesh_brg_cfg_subnets_list *rsp);
+int bt_mesh_brg_cfg_cli_bridged_subnets_get(uint16_t net_idx, uint16_t addr,
+					    struct bt_mesh_filter_netkey filter_net_idx,
+					    uint8_t start_idx,
+					    struct bt_mesh_bridged_subnets_list *rsp);
 
 /** @brief Sends a Bridging Table Get message to the given destination address
  *  with the given parameters
@@ -272,10 +276,10 @@ int bt_mesh_brg_cfg_cli_subnets_get(uint16_t net_idx, uint16_t addr,
  *
  *  When @c rsp is set, the user is responsible for providing a buffer for the
  *   filtered set of N pairs of NetKey Indexes in
- *  @ref bt_mesh_brg_cfg_table_list::list. If a buffer is not provided,
- *  the bridged addresses won't be copied. If a buffer size is shorter than
- *  received list, only those many entries that fit in the buffer will be copied
- *  from the list, and rest will be discarded.
+ *  @ref bt_mesh_bridging_table_list::list. If a buffer is not provided, the
+ *  bridged addresses won't be copied. If a buffer size is shorter than received
+ *  list, only those many entries that fit in the buffer will be copied from the
+ *  list, and rest will be discarded.
  *
  *  @param net_idx   Network index to encrypt the message with.
  *  @param addr      Target node address.
@@ -287,9 +291,9 @@ int bt_mesh_brg_cfg_cli_subnets_get(uint16_t net_idx, uint16_t addr,
  *
  *  @return 0 on success, or (negative) error code on failure.
  */
-int bt_mesh_brg_cfg_cli_table_get(uint16_t net_idx, uint16_t addr, uint16_t net_idx1,
-				  uint16_t net_idx2, uint16_t start_idx,
-				  struct bt_mesh_brg_cfg_table_list *rsp);
+int bt_mesh_brg_cfg_cli_bridging_table_get(uint16_t net_idx, uint16_t addr, uint16_t net_idx1,
+					   uint16_t net_idx2, uint16_t start_idx,
+					   struct bt_mesh_bridging_table_list *rsp);
 
 /** @brief Get the current transmission timeout value.
  *
