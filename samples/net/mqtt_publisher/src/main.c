@@ -16,7 +16,6 @@ LOG_MODULE_REGISTER(net_mqtt_publisher_sample, LOG_LEVEL_DBG);
 #include <errno.h>
 
 #include "config.h"
-#include "net_sample_common.h"
 
 #if defined(CONFIG_USERSPACE)
 #include <zephyr/app_memory/app_memdomain.h>
@@ -517,8 +516,6 @@ static K_HEAP_DEFINE(app_mem_pool, 1024 * 2);
 
 int main(void)
 {
-	wait_for_network();
-
 #if defined(CONFIG_MQTT_LIB_TLS)
 	int rc;
 
