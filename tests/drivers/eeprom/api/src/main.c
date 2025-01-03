@@ -185,9 +185,9 @@ void test_main(void)
 {
 	run_tests_on_eeprom(DEVICE_DT_GET(DT_ALIAS(eeprom_0)));
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_ALIAS(eeprom_1))
+#if DT_NODE_HAS_STATUS(DT_ALIAS(eeprom_1), okay)
 	run_tests_on_eeprom(DEVICE_DT_GET(DT_ALIAS(eeprom_1)));
-#endif /* DT_NODE_HAS_STATUS_OKAY(DT_ALIAS(eeprom_1)) */
+#endif /* DT_NODE_HAS_STATUS(DT_ALIAS(eeprom_1), okay) */
 
 	ztest_verify_all_test_suites_ran();
 }

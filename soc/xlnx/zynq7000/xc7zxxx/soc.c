@@ -39,13 +39,13 @@ static const struct arm_mmu_region mmu_regions[] = {
 	/* ARM Arch timer, GIC are covered by the MPCore mapping */
 
 /* GEMs */
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gem0))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(gem0), okay)
 	MMU_REGION_FLAT_ENTRY("gem0",
 			      DT_REG_ADDR(DT_NODELABEL(gem0)),
 			      DT_REG_SIZE(DT_NODELABEL(gem0)),
 			      MT_DEVICE | MATTR_SHARED | MPERM_R | MPERM_W),
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gem1))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(gem1), okay)
 	MMU_REGION_FLAT_ENTRY("gem1",
 			      DT_REG_ADDR(DT_NODELABEL(gem1)),
 			      DT_REG_SIZE(DT_NODELABEL(gem1)),
@@ -53,7 +53,7 @@ static const struct arm_mmu_region mmu_regions[] = {
 #endif
 
 /* GPIO controller */
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(psgpio))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(psgpio), okay)
 	MMU_REGION_FLAT_ENTRY("psgpio",
 			      DT_REG_ADDR(DT_NODELABEL(psgpio)),
 			      DT_REG_SIZE(DT_NODELABEL(psgpio)),
@@ -106,7 +106,7 @@ void soc_reset_hook(void)
 	sctlr &= ~SCTLR_A_Msk;
 	__set_SCTLR(sctlr);
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(slcr))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(slcr), okay)
 	mm_reg_t addr = DT_REG_ADDR(DT_NODELABEL(slcr));
 
 	/* Unlock System Level Control Registers (SLCR) */
