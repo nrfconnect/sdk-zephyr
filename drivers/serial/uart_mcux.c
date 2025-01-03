@@ -179,7 +179,7 @@ static int uart_mcux_fifo_fill(const struct device *dev,
 			       int len)
 {
 	const struct uart_mcux_config *config = dev->config;
-	uint8_t num_tx = 0U;
+	int num_tx = 0U;
 
 	while ((len - num_tx > 0) &&
 	       (UART_GetStatusFlags(config->base) & kUART_TxDataRegEmptyFlag)) {
@@ -194,7 +194,7 @@ static int uart_mcux_fifo_read(const struct device *dev, uint8_t *rx_data,
 			       const int len)
 {
 	const struct uart_mcux_config *config = dev->config;
-	uint8_t num_rx = 0U;
+	int num_rx = 0U;
 
 	while ((len - num_rx > 0) &&
 	       (UART_GetStatusFlags(config->base) & kUART_RxDataRegFullFlag)) {
@@ -367,7 +367,7 @@ static int uart_mcux_pm_action(const struct device *dev, enum pm_device_action a
 }
 #endif /*CONFIG_PM_DEVICE*/
 
-static const struct uart_driver_api uart_mcux_driver_api = {
+static DEVICE_API(uart, uart_mcux_driver_api) = {
 	.poll_in = uart_mcux_poll_in,
 	.poll_out = uart_mcux_poll_out,
 	.err_check = uart_mcux_err_check,

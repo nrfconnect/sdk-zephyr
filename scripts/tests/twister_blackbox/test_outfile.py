@@ -15,6 +15,7 @@ import pytest
 import sys
 import tarfile
 
+# pylint: disable=no-name-in-module
 from conftest import ZEPHYR_BASE, TEST_DATA, sample_filename_mock, testsuite_filename_mock
 from twisterlib.testplan import TestPlan
 
@@ -96,7 +97,7 @@ class TestOutfile:
         assert str(sys_exit.value) == '0'
 
         relpath = os.path.relpath(path, ZEPHYR_BASE)
-        sample_path = os.path.join(out_path, 'qemu_x86', relpath, 'sample.basic.helloworld')
+        sample_path = os.path.join(out_path, 'qemu_x86_atom', relpath, 'sample.basic.helloworld')
         listdir = os.listdir(sample_path)
         zephyr_listdir = os.listdir(os.path.join(sample_path, 'zephyr'))
 
@@ -121,7 +122,7 @@ class TestOutfile:
                ) for val in pair]
 
         relative_test_path = os.path.relpath(path, ZEPHYR_BASE)
-        test_result_path = os.path.join(out_path, 'qemu_x86',
+        test_result_path = os.path.join(out_path, 'qemu_x86_atom',
                                         relative_test_path, 'dummy.agnostic.group2')
 
         with mock.patch.object(sys, 'argv', [sys.argv[0]] + args), \
@@ -133,7 +134,7 @@ class TestOutfile:
         with open(os.path.join(out_path, 'twister.log')) as f:
             twister_log = f.read()
 
-        pattern_running = r'Running\s+cmake\s+on\s+(?P<full_path>[\\\/].*)\s+for\s+qemu_x86\s*\n'
+        pattern_running = r'Running\s+cmake\s+on\s+(?P<full_path>[\\\/].*)\s+for\s+qemu_x86/atom\s*\n'
         res_running = re.search(pattern_running, twister_log)
         assert res_running
 
@@ -149,7 +150,7 @@ class TestOutfile:
         flag_pattern = r'(?:\S+(?: \\)?)+- '
         cmake_path = shutil.which('cmake')
         if not cmake_path:
-            assert False, 'Cmake not found.'
+            assert False, 'CMake not found.'
 
         cmake_call_section = r'^Calling cmake: ' + re.escape(cmake_path)
         calling_line = re.sub(cmake_call_section, '', calling_line)
@@ -180,7 +181,7 @@ class TestOutfile:
         test_platforms = ['qemu_x86', 'intel_adl_crb']
         path = os.path.join(TEST_DATA, 'samples', 'hello_world')
         relative_test_path = os.path.relpath(path, ZEPHYR_BASE)
-        zephyr_out_path = os.path.join(out_path, 'qemu_x86', relative_test_path,
+        zephyr_out_path = os.path.join(out_path, 'qemu_x86_atom', relative_test_path,
                                        'sample.basic.helloworld', 'zephyr')
         args = ['-i', '--outdir', out_path, '-T', path] + \
                ['--prep-artifacts-for-testing'] + \

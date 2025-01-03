@@ -1,7 +1,4 @@
-.. _slwrb4321a:
-
-WGM160P Wi-Fi Module (SLWRB4321A)
-#################################
+.. zephyr:board:: slwrb4321a
 
 Overview
 ********
@@ -9,12 +6,6 @@ Overview
 The WGM160P Starter Kit SLWSTK6121A comes with the BRD4321A radio board.
 This radio boards contains a WGM160P module, which combines the WF200 Wi-Fi
 transceiver with an EFM32GG11 microcontroller.
-
-.. figure:: wgm160p-starter-kit.jpg
-   :align: center
-   :alt: SLWSTK6121A
-
-   SLWSTK6121A (image courtesy of Silicon Labs)
 
 Hardware
 ********
@@ -69,7 +60,7 @@ features:
 +-----------+------------+-------------------------------------+
 
 The default configuration can be found in
-:zephyr_file:`boards/silabs/slwrb4321a/slwrb4321a_defconfig`
+:zephyr_file:`boards/silabs/radio_boards/slwrb4321a/slwrb4321a_defconfig`
 
 Other hardware features, including the WF200 WiFi transceiver, are
 currently not supported by the port.
@@ -121,7 +112,7 @@ Programming and Debugging
 
 .. note::
    Before using the kit the first time, you should update the J-Link firmware
-   from `J-Link-Downloads`_
+   in Simplicity Studio.
 
 Flashing
 ========
@@ -181,6 +172,3 @@ terminal session:
 
 .. _J-Link:
    https://www.segger.com/jlink-debug-probes.html
-
-.. _J-Link-Downloads:
-   https://www.segger.com/downloads/jlink

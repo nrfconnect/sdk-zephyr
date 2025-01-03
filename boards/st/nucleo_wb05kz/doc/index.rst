@@ -1,7 +1,4 @@
-.. _nucleo_wb05kz_board:
-
-ST Nucleo WB05KZ
-################
+.. zephyr:board:: nucleo_wb05kz
 
 Overview
 ********
@@ -10,10 +7,6 @@ The Nucleo WB05KZ board is a Bluetooth |reg| Low Energy wireless and ultra-low-p
 board featuring an ARM Cortex |reg|-M0+ based STM32WB05KZV MCU, embedding a
 powerful and ultra-low-power radio compliant with the Bluetooth® Low Energy
 SIG specification v5.4.
-
-.. image:: img/nucleo_wb05kz.webp
-   :align: center
-   :alt: Nucleo WB05KZ
 
 More information about the board can be found on the `Nucleo WB05KZ webpage`_.
 
@@ -53,6 +46,14 @@ The Zephyr ``nucleo_wb05kz`` board target supports the following hardware featur
 +-----------+------------+-------------------------------------+
 | FLASH     | on-chip    | internal flash memory               |
 +-----------+------------+-------------------------------------+
+| I2C       | on-chip    | i2c                                 |
++-----------+------------+-------------------------------------+
+| SPI       | on-chip    | spi                                 |
++-----------+------------+-------------------------------------+
+| ADC       | on-chip    | adc                                 |
++-----------+------------+-------------------------------------+
+| RADIO     | on-chip    | Bluetooth Low Energy                |
++-----------+------------+-------------------------------------+
 
 
 Other hardware features are not yet supported on this Zephyr port.
@@ -60,6 +61,17 @@ Other hardware features are not yet supported on this Zephyr port.
 The default configuration can be found in the defconfig file:
 :zephyr_file:`boards/st/nucleo_wb09ke/nucleo_wb09ke_defconfig`
 
+Bluetooh support
+----------------
+
+BLE support is enabled; however, to build a Zephyr sample using this board,
+you first need to fetch the Bluetooth controller library into Zephyr as a binary BLOB.
+
+To fetch binary BLOBs:
+
+.. code-block:: console
+
+   west blobs fetch hal_stm32
 
 Connections and IOs
 ===================

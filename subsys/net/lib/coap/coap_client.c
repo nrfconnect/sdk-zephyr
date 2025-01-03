@@ -654,8 +654,8 @@ static int recv_response(struct coap_client *client, struct coap_packet *respons
 	}
 
 	memset(client->recv_buf, 0, sizeof(client->recv_buf));
-	total_len = receive(client->fd, client->recv_buf, sizeof(client->recv_buf),
-			    flags, &client->address, &client->socklen);
+	total_len = receive(client->fd, client->recv_buf, sizeof(client->recv_buf), flags,
+			    &client->address, &client->socklen);
 
 	if (total_len < 0) {
 		ret = -errno;

@@ -6,3 +6,6 @@ board:
   - name: dc233c
     variants:
     - name: mmu
+  - name: sample_controller32
+    variants:
+    - name: mpu

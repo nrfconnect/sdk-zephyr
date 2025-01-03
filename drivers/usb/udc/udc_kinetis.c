@@ -882,6 +882,8 @@ static int usbfsotg_ep_enable(const struct device *dev,
 	if (cfg->addr == USB_CONTROL_EP_OUT) {
 		struct net_buf *buf;
 
+		priv->busy[0] = false;
+		priv->busy[1] = false;
 		buf = udc_ctrl_alloc(dev, USB_CONTROL_EP_OUT, USBFSOTG_EP0_SIZE);
 		usbfsotg_bd_set_ctrl(bd_even, buf->size, buf->data, false);
 		priv->out_buf[0] = buf;
@@ -976,8 +978,10 @@ static int usbfsotg_init(const struct device *dev)
 	const struct usbfsotg_config *config = dev->config;
 	USB_Type *base = config->base;
 
+#if !DT_ANY_INST_HAS_PROP_STATUS_OKAY(no_voltage_regulator)
 	/* (FIXME) Enable USB voltage regulator */
 	SIM->SOPT1 |= SIM_SOPT1_USBREGEN_MASK;
+#endif
 
 	/* Reset USB module */
 	base->USBTRC0 |= USB_USBTRC0_USBRESET_MASK;
@@ -1057,8 +1061,10 @@ static int usbfsotg_shutdown(const struct device *dev)
 	/* Disable USB module */
 	config->base->CTL = 0;
 
+#if !DT_ANY_INST_HAS_PROP_STATUS_OKAY(no_voltage_regulator)
 	/* Disable USB voltage regulator */
 	SIM->SOPT1 &= ~SIM_SOPT1_USBREGEN_MASK;
+#endif
 
 	return 0;
 }

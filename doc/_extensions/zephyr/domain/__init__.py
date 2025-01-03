@@ -14,23 +14,29 @@ Directives
 - ``zephyr:code-sample::`` - Defines a code sample.
 - ``zephyr:code-sample-category::`` - Defines a category for grouping code samples.
 - ``zephyr:code-sample-listing::`` - Shows a listing of code samples found in a given category.
+- ``zephyr:board-catalog::`` - Shows a listing of boards supported by Zephyr.
+- ``zephyr:board::`` - Flags a document as being the documentation page for a board.
 
 Roles
 -----
 
 - ``:zephyr:code-sample:`` - References a code sample.
 - ``:zephyr:code-sample-category:`` - References a code sample category.
+- ``:zephyr:board:`` - References a board.
 
 """
 
+import json
+import sys
+from collections.abc import Iterator
 from os import path
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any
 
+from anytree import ChildResolverError, Node, PreOrderIter, Resolver, search
 from docutils import nodes
-from docutils.parsers.rst import Directive, directives
+from docutils.parsers.rst import directives
 from docutils.statemachine import StringList
-
 from sphinx import addnodes
 from sphinx.application import Sphinx
 from sphinx.domains import Domain, ObjType
@@ -42,17 +48,21 @@ from sphinx.util import logging
 from sphinx.util.docutils import SphinxDirective, switch_source_input
 from sphinx.util.nodes import NodeMatcher, make_refnode
 from sphinx.util.parsing import nested_parse_to_nodes
+from sphinx.util.template import SphinxRenderer
 
 from zephyr.doxybridge import DoxygenGroupDirective
 from zephyr.gh_utils import gh_link_get_url
 
-
-import json
-
-from anytree import Node, Resolver, ChildResolverError, PreOrderIter, search
-
 __version__ = "0.2.0"
 
+
+sys.path.insert(0, str(Path(__file__).parents[4] / "scripts/dts/python-devicetree/src"))
+sys.path.insert(0, str(Path(__file__).parents[3] / "_scripts"))
+
+from gen_boards_catalog import get_catalog
+
+ZEPHYR_BASE = Path(__file__).parents[4]
+TEMPLATES_DIR = Path(__file__).parent / "templates"
 RESOURCES_DIR = Path(__file__).parent / "static"
 
 logger = logging.getLogger(__name__)
@@ -71,6 +81,10 @@ class CodeSampleCategoryNode(nodes.Element):
 
 
 class CodeSampleListingNode(nodes.Element):
+    pass
+
+
+class BoardNode(nodes.Element):
     pass
 
 
@@ -101,6 +115,19 @@ class ConvertCodeSampleNode(SphinxTransform):
             # Create a new section
             new_section = nodes.section(ids=[node["id"]])
             new_section += nodes.title(text=node["name"])
+
+            gh_link = gh_link_get_url(self.app, self.env.docname)
+            gh_link_button = nodes.raw(
+                "",
+                f"""
+                <a href="{gh_link}/.." class="btn btn-info fa fa-github"
+                    target="_blank" style="text-align: center;">
+                    Browse source code on GitHub
+                </a>
+                """,
+                format="html",
+            )
+            new_section += nodes.paragraph("", "", gh_link_button)
 
             # Move the sibling nodes under the new section
             new_section.extend(siblings_to_move)
@@ -189,6 +216,69 @@ class ConvertCodeSampleCategoryNode(SphinxTransform):
         node.replace_self(node.children[0])
 
 
+class ConvertBoardNode(SphinxTransform):
+    default_priority = 100
+
+    def apply(self):
+        matcher = NodeMatcher(BoardNode)
+        for node in self.document.traverse(matcher):
+            self.convert_node(node)
+
+    def convert_node(self, node):
+        parent = node.parent
+        siblings_to_move = []
+        if parent is not None:
+            index = parent.index(node)
+            siblings_to_move = parent.children[index + 1 :]
+
+            new_section = nodes.section(ids=[node["id"]])
+            new_section += nodes.title(text=node["full_name"])
+
+            # create a sidebar with all the board details
+            sidebar = nodes.sidebar(classes=["board-overview"])
+            new_section += sidebar
+            sidebar += nodes.title(text="Board Overview")
+
+            if node["image"] is not None:
+                figure = nodes.figure()
+                # set a scale of 100% to indicate we want a link to the full-size image
+                figure += nodes.image(uri=f"/{node['image']}", scale=100)
+                figure += nodes.caption(text=node["full_name"])
+                sidebar += figure
+
+            field_list = nodes.field_list()
+            sidebar += field_list
+
+            details = [
+                ("Name", nodes.literal(text=node["id"])),
+                ("Vendor", node["vendor"]),
+                ("Architecture", ", ".join(node["archs"])),
+                ("SoC", ", ".join(node["socs"])),
+            ]
+
+            for property_name, value in details:
+                field = nodes.field()
+                field_name = nodes.field_name(text=property_name)
+                field_body = nodes.field_body()
+                if isinstance(value, nodes.Node):
+                    field_body += value
+                else:
+                    field_body += nodes.paragraph(text=value)
+                field += field_name
+                field += field_body
+                field_list += field
+
+            # Move the sibling nodes under the new section
+            new_section.extend(siblings_to_move)
+
+            # Replace the custom node with the new section
+            node.replace_self(new_section)
+
+            # Remove the moved siblings from their original parent
+            for sibling in siblings_to_move:
+                parent.remove(sibling)
+
+
 class CodeSampleCategoriesTocPatching(SphinxPostTransform):
     default_priority = 5  # needs to run *before* ReferencesResolver
 
@@ -202,10 +292,10 @@ class CodeSampleCategoriesTocPatching(SphinxPostTransform):
         reference = nodes.reference(
             "",
             "",
+            *[nodes.Text(tree.category["name"])],
             internal=True,
             refuri=docname,
             anchorname="",
-            *[nodes.Text(tree.category["name"])],
             classes=["category-link"],
         )
         compact_paragraph += reference
@@ -235,10 +325,10 @@ class CodeSampleCategoriesTocPatching(SphinxPostTransform):
                 sample_xref = nodes.reference(
                     "",
                     "",
+                    *[nodes.Text(code_sample["name"])],
                     internal=True,
                     refuri=code_sample["docname"],
                     anchorname="",
-                    *[nodes.Text(code_sample["name"])],
                     classes=["code-sample-link"],
                 )
                 sample_xref["reftitle"] = code_sample["description"].astext()
@@ -306,6 +396,8 @@ class ProcessCodeSampleListingNode(SphinxPostTransform):
         matcher = NodeMatcher(CodeSampleListingNode)
 
         for node in self.document.traverse(matcher):
+            self.env.domaindata["zephyr"]["has_code_sample_listing"][self.env.docname] = True
+
             code_samples_categories = self.env.domaindata["zephyr"]["code-samples-categories"]
             code_samples_categories_tree = self.env.domaindata["zephyr"][
                 "code-samples-categories-tree"
@@ -319,7 +411,8 @@ class ProcessCodeSampleListingNode(SphinxPostTransform):
                     "",
                     """
                     <div class="cs-search-bar">
-                      <input type="text" class="cs-search-input" placeholder="Filter code samples..." onkeyup="filterSamples(this)">
+                      <input type="text" class="cs-search-input"
+                             placeholder="Filter code samples..." onkeyup="filterSamples(this)">
                       <i class="fa fa-search"></i>
                     </div>
                     """,
@@ -337,7 +430,8 @@ class ProcessCodeSampleListingNode(SphinxPostTransform):
 
                 category_node = search.find(
                     code_samples_categories_tree,
-                    lambda node: hasattr(node, "category") and node.category["id"] == category,
+                    lambda node, category=category: hasattr(node, "category")
+                    and node.category["id"] == category,
                 )
                 self.output_sample_categories_sections(category_node, container)
 
@@ -408,7 +502,7 @@ class ProcessRelatedCodeSamplesNode(SphinxPostTransform):
                 node.replace_self([])
 
 
-class CodeSampleDirective(Directive):
+class CodeSampleDirective(SphinxDirective):
     """
     A directive for creating a code sample node in the Zephyr documentation.
     """
@@ -543,6 +637,69 @@ class CodeSampleListingDirective(SphinxDirective):
         return [code_sample_listing_node]
 
 
+class BoardDirective(SphinxDirective):
+    has_content = False
+    required_arguments = 1
+    optional_arguments = 0
+
+    def run(self):
+        # board_name is passed as the directive argument
+        board_name = self.arguments[0]
+
+        boards = self.env.domaindata["zephyr"]["boards"]
+        vendors = self.env.domaindata["zephyr"]["vendors"]
+
+        if board_name not in boards:
+            logger.warning(
+                f"Board {board_name} does not seem to be a valid board name.",
+                location=(self.env.docname, self.lineno),
+            )
+            return []
+        elif "docname" in boards[board_name]:
+            logger.warning(
+                f"Board {board_name} is already documented in {boards[board_name]['docname']}.",
+                location=(self.env.docname, self.lineno),
+            )
+            return []
+        else:
+            board = boards[board_name]
+            # flag board in the domain data as now having a documentation page so that it can be
+            # cross-referenced etc.
+            board["docname"] = self.env.docname
+
+            board_node = BoardNode(id=board_name)
+            board_node["full_name"] = board["full_name"]
+            board_node["vendor"] = vendors.get(board["vendor"], board["vendor"])
+            board_node["archs"] = board["archs"]
+            board_node["socs"] = board["socs"]
+            board_node["image"] = board["image"]
+            return [board_node]
+
+
+class BoardCatalogDirective(SphinxDirective):
+    has_content = False
+    required_arguments = 0
+    optional_arguments = 0
+
+    def run(self):
+        if self.env.app.builder.format == "html":
+            self.env.domaindata["zephyr"]["has_board_catalog"][self.env.docname] = True
+
+            domain_data = self.env.domaindata["zephyr"]
+            renderer = SphinxRenderer([TEMPLATES_DIR])
+            rendered = renderer.render(
+                "board-catalog.html",
+                {
+                    "boards": domain_data["boards"],
+                    "vendors": domain_data["vendors"],
+                    "socs": domain_data["socs"],
+                },
+            )
+            return [nodes.raw("", rendered, format="html")]
+        else:
+            return [nodes.paragraph(text="Board catalog is only available in HTML.")]
+
+
 class ZephyrDomain(Domain):
     """Zephyr domain"""
 
@@ -552,23 +709,30 @@ class ZephyrDomain(Domain):
     roles = {
         "code-sample": XRefRole(innernodeclass=nodes.inline, warn_dangling=True),
         "code-sample-category": XRefRole(innernodeclass=nodes.inline, warn_dangling=True),
+        "board": XRefRole(innernodeclass=nodes.inline, warn_dangling=True),
     }
 
     directives = {
         "code-sample": CodeSampleDirective,
         "code-sample-listing": CodeSampleListingDirective,
         "code-sample-category": CodeSampleCategoryDirective,
+        "board-catalog": BoardCatalogDirective,
+        "board": BoardDirective,
     }
 
-    object_types: Dict[str, ObjType] = {
+    object_types: dict[str, ObjType] = {
         "code-sample": ObjType("code sample", "code-sample"),
         "code-sample-category": ObjType("code sample category", "code-sample-category"),
+        "board": ObjType("board", "board"),
     }
 
-    initial_data: Dict[str, Any] = {
+    initial_data: dict[str, Any] = {
         "code-samples": {},  # id -> code sample data
         "code-samples-categories": {},  # id -> code sample category data
         "code-samples-categories-tree": Node("samples"),
+        # keep track of documents containing special directives
+        "has_code_sample_listing": {},  # docname -> bool
+        "has_board_catalog": {},  # docname -> bool
     }
 
     def clear_doc(self, docname: str) -> None:
@@ -586,9 +750,19 @@ class ZephyrDomain(Domain):
 
         # TODO clean up the anytree as well
 
-    def merge_domaindata(self, docnames: List[str], otherdata: Dict) -> None:
+        self.data["has_code_sample_listing"].pop(docname, None)
+        self.data["has_board_catalog"].pop(docname, None)
+
+    def merge_domaindata(self, docnames: list[str], otherdata: dict) -> None:
         self.data["code-samples"].update(otherdata["code-samples"])
         self.data["code-samples-categories"].update(otherdata["code-samples-categories"])
+
+        # self.data["boards"] contains all the boards right from builder-inited time, but it still
+        # potentially needs merging since a board's docname property is set by BoardDirective to
+        # indicate the board is documented in a specific document.
+        for board_name, board in otherdata["boards"].items():
+            if "docname" in board:
+                self.data["boards"][board_name]["docname"] = board["docname"]
 
         # merge category trees by adding all the categories found in the "other" tree that to
         # self tree
@@ -601,6 +775,14 @@ class ZephyrDomain(Domain):
                 category.category["id"],
                 category.category["name"],
                 category.category["docname"],
+            )
+
+        for docname in docnames:
+            self.data["has_code_sample_listing"][docname] = otherdata[
+                "has_code_sample_listing"
+            ].get(docname, False)
+            self.data["has_board_catalog"][docname] = otherdata["has_board_catalog"].get(
+                docname, False
             )
 
     def get_objects(self):
@@ -624,8 +806,20 @@ class ZephyrDomain(Domain):
                 1,
             )
 
+        for _, board in self.data["boards"].items():
+            # only boards that do have a documentation page are to be considered as valid objects
+            if "docname" in board:
+                yield (
+                    board["name"],
+                    board["full_name"],
+                    "board",
+                    board["docname"],
+                    board["name"],
+                    1,
+                )
+
     # used by Sphinx Immaterial theme
-    def get_object_synopses(self) -> Iterator[Tuple[Tuple[str, str], str]]:
+    def get_object_synopses(self) -> Iterator[tuple[tuple[str, str], str]]:
         for _, code_sample in self.data["code-samples"].items():
             yield (
                 (code_sample["docname"], code_sample["id"]),
@@ -637,18 +831,20 @@ class ZephyrDomain(Domain):
             elem = self.data["code-samples"].get(target)
         elif type == "code-sample-category":
             elem = self.data["code-samples-categories"].get(target)
+        elif type == "board":
+            elem = self.data["boards"].get(target)
         else:
             return
 
         if elem:
             if not node.get("refexplicit"):
-                contnode = [nodes.Text(elem["name"])]
+                contnode = [nodes.Text(elem["name"] if type != "board" else elem["full_name"])]
 
             return make_refnode(
                 builder,
                 fromdocname,
                 elem["docname"],
-                elem["id"],
+                elem["id"] if type != "board" else elem["name"],
                 contnode,
                 elem["description"].astext() if type == "code-sample" else None,
             )
@@ -703,7 +899,7 @@ class ZephyrDomain(Domain):
 class CustomDoxygenGroupDirective(DoxygenGroupDirective):
     """Monkey patch for Breathe's DoxygenGroupDirective."""
 
-    def run(self) -> List[Node]:
+    def run(self) -> list[Node]:
         nodes = super().run()
 
         if self.config.zephyr_breathe_insert_related_samples:
@@ -730,13 +926,23 @@ def compute_sample_categories_hierarchy(app: Sphinx, env: BuildEnvironment) -> N
             code_sample["category"] = node.category["id"]
 
 
-def install_codesample_livesearch(
-    app: Sphinx, pagename: str, templatename: str, context: dict[str, Any], event_arg: Any
+def install_static_assets_as_needed(
+    app: Sphinx, pagename: str, templatename: str, context: dict[str, Any], doctree: nodes.Node
 ) -> None:
-    # TODO only add the CSS/JS if the page contains a code sample listing
-    # As these resources are really small, it's not a big deal to include them on every page for now
-    app.add_css_file("css/codesample-livesearch.css")
-    app.add_js_file("js/codesample-livesearch.js")
+    if app.env.domaindata["zephyr"]["has_code_sample_listing"].get(pagename, False):
+        app.add_css_file("css/codesample-livesearch.css")
+        app.add_js_file("js/codesample-livesearch.js")
+
+    if app.env.domaindata["zephyr"]["has_board_catalog"].get(pagename, False):
+        app.add_css_file("css/board-catalog.css")
+        app.add_js_file("js/board-catalog.js")
+
+
+def load_board_catalog_into_domain(app: Sphinx) -> None:
+    board_catalog = get_catalog()
+    app.env.domaindata["zephyr"]["boards"] = board_catalog["boards"]
+    app.env.domaindata["zephyr"]["vendors"] = board_catalog["vendors"]
+    app.env.domaindata["zephyr"]["socs"] = board_catalog["socs"]
 
 
 def setup(app):
@@ -746,6 +952,7 @@ def setup(app):
 
     app.add_transform(ConvertCodeSampleNode)
     app.add_transform(ConvertCodeSampleCategoryNode)
+    app.add_transform(ConvertBoardNode)
 
     app.add_post_transform(ProcessCodeSampleListingNode)
     app.add_post_transform(CodeSampleCategoriesTocPatching)
@@ -755,7 +962,9 @@ def setup(app):
         "builder-inited",
         (lambda app: app.config.html_static_path.append(RESOURCES_DIR.as_posix())),
     )
-    app.connect("html-page-context", install_codesample_livesearch)
+    app.connect("builder-inited", load_board_catalog_into_domain)
+
+    app.connect("html-page-context", install_static_assets_as_needed)
     app.connect("env-updated", compute_sample_categories_hierarchy)
 
     # monkey-patching of the DoxygenGroupDirective

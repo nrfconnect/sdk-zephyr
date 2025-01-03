@@ -5,7 +5,7 @@ config HAS_NORDIC_DMM
 	bool
 
 config HAS_NORDIC_RAM_CTRL
-	bool "nRF RAM control helper support"
+	bool
 
 config NRF_SYS_EVENT
 	bool "nRF system event support"

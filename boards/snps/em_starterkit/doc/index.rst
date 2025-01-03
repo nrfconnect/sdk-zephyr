@@ -1,7 +1,4 @@
-.. _em_starterkit:
-
-DesignWare(R) ARC(R) EM Starter Kit
-###################################
+.. zephyr:board:: em_starterkit
 
 Overview
 ********
@@ -11,10 +8,6 @@ enabling rapid software development and software debugging, and profiling
 for the ARC EM Family of processors. The EM Family includes the EM4, EM6,
 EM5D, EM7D, EM9D, and EM11D cores. The Zephyr RTOS can be used with the
 EM Starter Kit.
-
-.. image:: em_starterkit.jpg
-   :align: center
-   :alt: DesignWare(R) ARC(R) EM Starter Kit (synopsys.com)
 
 The ARC EM Starter Kit consists of a hardware platform, including pre-installed
 FPGA images of different ARC EM processor configurations with peripherals.
@@ -26,7 +19,7 @@ See also this URL for details about the board:
 The latest version of EM Starter Kit is 2.3, developer can upgrade from
 2.0/2.1/2.2 to 2.3 using latest firmware.
 The default configuration for EM Starter Kit boards can be found in
-:zephyr_file:`boards/snps/em_starterkit/em_starterkit_defconfig`.
+:zephyr_file:`boards/snps/em_starterkit/`.
 
 The default SoC for this board supported in Zephyr is the EM9D.
 This configuration is a Harvard Architecture, with a separate
@@ -306,6 +299,8 @@ The following is a list of TODO items:
 
 References
 **********
+
+.. target-notes::
 
 .. _embARC website: https://www.embarc.org
 

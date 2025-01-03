@@ -5,11 +5,13 @@
  */
 
 #include <zephyr/ztest.h>
+#include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/fs/fs.h>
 #if defined(CONFIG_FILE_SYSTEM_LITTLEFS)
 #include <zephyr/fs/littlefs.h>
 #endif
+#include <zephyr/llext/elf.h>
 #include <zephyr/llext/llext.h>
 #include <zephyr/llext/symbol.h>
 #include <zephyr/llext/buf_loader.h>
@@ -108,6 +110,9 @@ static void threads_objects_test_setup(struct llext *, struct k_thread *llext_th
 	k_object_access_grant(&my_sem, llext_thread);
 	k_object_access_grant(&my_thread, llext_thread);
 	k_object_access_grant(&my_thread_stack, llext_thread);
+#if DT_HAS_CHOSEN(zephyr_console) && DT_NODE_HAS_STATUS_OKAY(DT_CHOSEN(zephyr_console))
+	k_object_access_grant(DEVICE_DT_GET(DT_CHOSEN(zephyr_console)), llext_thread);
+#endif
 }
 #else
 /* No need to set up permissions for supervisor mode */
@@ -299,7 +304,6 @@ static LLEXT_CONST uint8_t object_ext[] ELF_ALIGN = {
 };
 LLEXT_LOAD_UNLOAD(object)
 
-#ifndef CONFIG_LLEXT_TYPE_ELF_RELOCATABLE
 static LLEXT_CONST uint8_t syscalls_ext[] ELF_ALIGN = {
 	#include "syscalls.inc"
 };
@@ -311,7 +315,6 @@ static LLEXT_CONST uint8_t threads_kernel_objects_ext[] ELF_ALIGN = {
 LLEXT_LOAD_UNLOAD(threads_kernel_objects,
 	.test_setup = threads_objects_test_setup,
 )
-#endif
 
 #ifndef CONFIG_LLEXT_TYPE_ELF_OBJECT
 static LLEXT_CONST uint8_t multi_file_ext[] ELF_ALIGN = {
@@ -407,6 +410,7 @@ ZTEST(llext, test_find_section)
 	struct llext_loader *loader = &buf_loader.loader;
 	struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
 	struct llext *ext = NULL;
+	elf_shdr_t shdr;
 
 	res = llext_load(loader, "find_section", &ext, &ldr_parm);
 	zassert_ok(res, "load should succeed");
@@ -414,12 +418,81 @@ ZTEST(llext, test_find_section)
 	section_ofs = llext_find_section(loader, ".data");
 	zassert_true(section_ofs > 0, "find_section returned %zd", section_ofs);
 
+	res = llext_get_section_header(loader, ext, ".data", &shdr);
+	zassert_ok(res, "get_section_header() should succeed");
+	zassert_equal(shdr.sh_offset, section_ofs,
+		     "different section offset %zd from get_section_header", shdr.sh_offset);
+
 	uintptr_t symbol_ptr = (uintptr_t)llext_find_sym(&ext->exp_tab, "number");
 	uintptr_t section_ptr = (uintptr_t)find_section_ext + section_ofs;
+
+	/*
+	 * FIXME on RISC-V, at least for GCC, the symbols aren't always at the beginning
+	 * of the section when CONFIG_LLEXT_TYPE_ELF_OBJECT is used, breaking this assertion.
+	 * Currently, CONFIG_LLEXT_TYPE_ELF_OBJECT is not supported on RISC-V.
+	 */
 
 	zassert_equal(symbol_ptr, section_ptr,
 		      "symbol at %p != .data section at %p (%zd bytes in the ELF)",
 		      symbol_ptr, section_ptr, section_ofs);
+
+	llext_unload(&ext);
+}
+
+static LLEXT_CONST uint8_t test_detached_ext[] ELF_ALIGN = {
+	#include "detached_fn.inc"
+};
+
+static struct llext_loader *detached_loader;
+static struct llext *detached_llext;
+static elf_shdr_t detached_shdr;
+
+static bool test_section_detached(const elf_shdr_t *shdr)
+{
+	if (!detached_shdr.sh_addr) {
+		int res = llext_get_section_header(detached_loader, detached_llext,
+						   ".detach", &detached_shdr);
+
+		zassert_ok(res, "get_section_header should succeed");
+	}
+
+	return shdr->sh_name == detached_shdr.sh_name;
+}
+
+ZTEST(llext, test_detached)
+{
+	struct llext_buf_loader buf_loader =
+		LLEXT_BUF_LOADER(test_detached_ext, sizeof(test_detached_ext));
+	struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
+	int res;
+
+	ldr_parm.section_detached = test_section_detached;
+	detached_loader = &buf_loader.loader;
+
+	res = llext_load(detached_loader, "test_detached", &detached_llext, &ldr_parm);
+	zassert_ok(res, "load should succeed");
+
+	/*
+	 * Verify that the detached section is outside of the .text region.
+	 * This only works with the shared ELF type, because with other types
+	 * section addresses aren't "real," e.g. they can be 0.
+	 */
+	elf_shdr_t *text_region = detached_loader->sects + LLEXT_MEM_TEXT;
+
+	zassert_true(text_region->sh_offset >= detached_shdr.sh_offset + detached_shdr.sh_size ||
+		     detached_shdr.sh_offset >= text_region->sh_offset + text_region->sh_size);
+
+	void (*test_entry_fn)() = llext_find_sym(&detached_llext->exp_tab, "test_entry");
+
+	zassert_not_null(test_entry_fn, "test_entry should be an exported symbol");
+	test_entry_fn();
+
+	test_entry_fn = llext_find_sym(&detached_llext->exp_tab, "detached_entry");
+
+	zassert_not_null(test_entry_fn, "detached_entry should be an exported symbol");
+	test_entry_fn();
+
+	llext_unload(&detached_llext);
 }
 #endif
 
@@ -486,17 +559,16 @@ ZTEST(llext, test_printk_exported)
 }
 
 /*
- * Ensure ext_syscall_fail is exported - as it is picked up by the syscall
- * build machinery - but points to NULL as it is not implemented.
+ * The syscalls test above verifies that custom syscalls defined by extensions
+ * are properly exported. Since `ext_syscalls.h` declares ext_syscall_fail, we
+ * know it is picked up by the syscall build machinery, but the implementation
+ * for it is missing. Make sure the exported symbol for it is NULL.
  */
 ZTEST(llext, test_ext_syscall_fail)
 {
 	const void * const esf_fn = LLEXT_FIND_BUILTIN_SYM(z_impl_ext_syscall_fail);
 
-	zassert_not_null(esf_fn, "est_fn should not be NULL");
-
-	zassert_is_null(*(uintptr_t **)esf_fn, NULL,
-			"ext_syscall_fail should be NULL");
+	zassert_is_null(esf_fn, "est_fn should be NULL");
 }
 
 ZTEST_SUITE(llext, NULL, NULL, NULL, NULL, NULL);

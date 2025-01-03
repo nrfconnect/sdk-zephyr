@@ -9,6 +9,7 @@ import subprocess
 
 from runners.core import ZephyrBinaryRunner
 
+
 class TeensyBinaryRunner(ZephyrBinaryRunner):
     '''Runner front-end for teensy.'''
 
@@ -59,4 +60,4 @@ class TeensyBinaryRunner(ZephyrBinaryRunner):
             self.check_output(cmd)
             self.logger.info('Success')
         except subprocess.CalledProcessError as grepexc:
-            self.logger.error("Failure %i" % grepexc.returncode)
+            self.logger.error(f"Failure {grepexc.returncode}")

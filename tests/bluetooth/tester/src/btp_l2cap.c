@@ -369,7 +369,7 @@ static uint8_t reconfigure(const void *cmd, uint16_t cmd_len,
 	}
 
 	mps = MIN(L2CAP_MPS, BT_L2CAP_RX_MTU);
-	err = bt_l2cap_ecred_chan_reconfigure_explicit(reconf_channels, mtu, mps);
+	err = bt_l2cap_ecred_chan_reconfigure_explicit(reconf_channels, cp->num, mtu, mps);
 	if (err) {
 		bt_conn_unref(conn);
 		return BTP_STATUS_FAILED;

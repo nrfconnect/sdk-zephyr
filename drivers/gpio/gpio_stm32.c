@@ -469,6 +469,7 @@ static int gpio_stm32_config(const struct device *dev,
 {
 	int err;
 	uint32_t pincfg;
+	struct gpio_stm32_data *data = dev->data;
 
 	/* figure out if we can map the requested GPIO
 	 * configuration
@@ -479,11 +480,13 @@ static int gpio_stm32_config(const struct device *dev,
 	}
 
 	/* Enable device clock before configuration (requires bank writes) */
-	if (((flags & GPIO_OUTPUT) != 0) || ((flags & GPIO_INPUT) != 0)) {
+	if ((((flags & GPIO_OUTPUT) != 0) || ((flags & GPIO_INPUT) != 0)) &&
+	    !(data->pin_has_clock_enabled & BIT(pin))) {
 		err = pm_device_runtime_get(dev);
 		if (err < 0) {
 			return err;
 		}
+		data->pin_has_clock_enabled |= BIT(pin);
 	}
 
 	if ((flags & GPIO_OUTPUT) != 0) {
@@ -515,12 +518,14 @@ static int gpio_stm32_config(const struct device *dev,
 	}
 #endif /* CONFIG_STM32_WKUP_PINS */
 
-	/* Release clock only if pin is disconnected */
-	if (((flags & GPIO_OUTPUT) == 0) && ((flags & GPIO_INPUT) == 0)) {
+	/* Decrement GPIO usage count only if pin is now disconnected after being connected */
+	if (((flags & GPIO_OUTPUT) == 0) && ((flags & GPIO_INPUT) == 0) &&
+	    (data->pin_has_clock_enabled & BIT(pin))) {
 		err = pm_device_runtime_put(dev);
 		if (err < 0) {
 			return err;
 		}
+		data->pin_has_clock_enabled &= ~BIT(pin);
 	}
 
 	return 0;
@@ -643,7 +648,7 @@ static int gpio_stm32_manage_callback(const struct device *dev,
 	return gpio_manage_callback(&data->cb, callback, set);
 }
 
-static const struct gpio_driver_api gpio_stm32_driver = {
+static DEVICE_API(gpio, gpio_stm32_driver) = {
 	.pin_configure = gpio_stm32_config,
 #if defined(CONFIG_GPIO_GET_CONFIG) && !defined(CONFIG_SOC_SERIES_STM32F1X)
 	.pin_get_config = gpio_stm32_get_config,

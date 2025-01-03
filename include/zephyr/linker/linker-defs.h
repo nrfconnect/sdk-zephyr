@@ -28,7 +28,7 @@
 /* We need to dummy out DT_NODE_HAS_STATUS when building the unittests.
  * Including devicetree.h would require generating dummy header files
  * to match what gen_defines creates, so it's easier to just dummy out
- * DT_NODE_HAS_STATUS.
+ * DT_NODE_HAS_STATUS. These are undefined at the end of the file.
  */
 #ifdef ZTEST_UNITTEST
 #define DT_NODE_HAS_STATUS(node, status) 0
@@ -231,6 +231,7 @@ extern char _nocache_ram_size[];
  * section, stored in RAM instead of FLASH.
  */
 #ifdef CONFIG_ARCH_HAS_RAMFUNC_SUPPORT
+extern char __ramfunc_region_start[];
 extern char __ramfunc_start[];
 extern char __ramfunc_end[];
 extern char __ramfunc_size[];
@@ -357,5 +358,10 @@ extern char lnkr_ondemand_rodata_size[];
 
 #endif /* CONFIG_LINKER_USE_ONDEMAND_SECTION */
 #endif /* ! _ASMLANGUAGE */
+
+#ifdef ZTEST_UNITTEST
+#undef DT_NODE_HAS_STATUS
+#undef DT_NODE_HAS_STATUS_OKAY
+#endif
 
 #endif /* ZEPHYR_INCLUDE_LINKER_LINKER_DEFS_H_ */

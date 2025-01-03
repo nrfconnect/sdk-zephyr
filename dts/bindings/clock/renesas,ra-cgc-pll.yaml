@@ -8,27 +8,14 @@ compatible: "renesas,ra-cgc-pll"
 include: [clock-controller.yaml, base.yaml]
 
 properties:
-  source:
+  clocks:
     required: true
-    type: int
   div:
     required: true
     type: int
   mul:
     required: true
     type: array
-  divp:
-    type: int
-  freqp:
-    type: int
-  divq:
-    type: int
-  freqq:
-    type: int
-  divr:
-    type: int
-  freqr:
-    type: int
 
   "#clock-cells":
     const: 0

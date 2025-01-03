@@ -18,7 +18,6 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
-#include "clock_stm32_ll_mco.h"
 
 /* Macros to fill up prescaler values */
 #define z_hsi_divider(v) LL_RCC_HSI_DIV_ ## v
@@ -120,6 +119,10 @@ static uint32_t get_sysclk_frequency(void)
 int enabled_clock(uint32_t src_clk)
 {
 	if ((src_clk == STM32_SRC_SYSCLK) ||
+	    (src_clk == STM32_SRC_HCLK) ||
+	    (src_clk == STM32_SRC_PCLK1) ||
+	    (src_clk == STM32_SRC_PCLK2) ||
+	    (src_clk == STM32_SRC_PCLK3) ||
 	    ((src_clk == STM32_SRC_HSE) && IS_ENABLED(STM32_HSE_ENABLED)) ||
 	    ((src_clk == STM32_SRC_HSI) && IS_ENABLED(STM32_HSI_ENABLED)) ||
 	    ((src_clk == STM32_SRC_HSI48) && IS_ENABLED(STM32_HSI48_ENABLED)) ||
@@ -226,16 +229,20 @@ static int stm32_clock_control_get_subsys_rate(const struct device *dev,
 	case STM32_CLOCK_BUS_AHB1:
 	case STM32_CLOCK_BUS_AHB2:
 	case STM32_CLOCK_BUS_AHB4:
+	case STM32_SRC_HCLK:
 		*rate = ahb_clock;
 		break;
 	case STM32_CLOCK_BUS_APB1:
 	case STM32_CLOCK_BUS_APB1_2:
+	case STM32_SRC_PCLK1:
 		*rate = apb1_clock;
 		break;
 	case STM32_CLOCK_BUS_APB2:
+	case STM32_SRC_PCLK2:
 		*rate = apb2_clock;
 		break;
 	case STM32_CLOCK_BUS_APB3:
+	case STM32_SRC_PCLK3:
 		*rate = apb3_clock;
 		break;
 	case STM32_SRC_SYSCLK:
@@ -335,10 +342,14 @@ static int stm32_clock_control_get_subsys_rate(const struct device *dev,
 		return -ENOTSUP;
 	}
 
+	if (pclken->div) {
+		*rate /= (pclken->div + 1);
+	}
+
 	return 0;
 }
 
-static const struct clock_control_driver_api stm32_clock_control_api = {
+static DEVICE_API(clock_control, stm32_clock_control_api) = {
 	.on = stm32_clock_control_on,
 	.off = stm32_clock_control_off,
 	.get_rate = stm32_clock_control_get_subsys_rate,
@@ -760,9 +771,6 @@ int stm32_clock_control_init(const struct device *dev)
 
 	/* Update CMSIS variable */
 	SystemCoreClock = CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC;
-
-	/* configure MCO1/MCO2 based on Kconfig */
-	stm32_clock_control_mco_init();
 
 	return 0;
 }

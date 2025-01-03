@@ -5,7 +5,8 @@
 flashing (running) a native application."""
 
 import argparse
-from runners.core import ZephyrBinaryRunner, RunnerCaps, RunnerConfig
+
+from runners.core import RunnerCaps, RunnerConfig, ZephyrBinaryRunner
 
 DEFAULT_GDB_PORT = 3333
 
@@ -59,7 +60,7 @@ class NativeSimBinaryRunner(ZephyrBinaryRunner):
         elif command == 'debugserver':
             self.do_debugserver(**kwargs)
         else:
-            assert False
+            raise AssertionError
 
     def do_flash(self, **kwargs):
         cmd = [self.cfg.exe_file]

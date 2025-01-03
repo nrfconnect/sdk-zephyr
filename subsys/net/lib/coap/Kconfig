@@ -153,9 +153,12 @@ config COAP_CLIENT_MAX_REQUESTS
 	  Maximum number of CoAP requests a single client can handle at a time
 
 config COAP_CLIENT_TRUNCATE_MSGS
-	bool "Truncate blocks larger than the buffer size"
+	bool "Receive notification when blocks are truncated"
+	default y
 	help
-	  Include ZSOCK_MSG_TRUNC in flags passed to zsock_recvfrom()
+	  Include ZSOCK_MSG_TRUNC in flags passed to zsock_recvfrom() to
+	  receive network stack notifications about block truncation.
+	  Otherwise it happens silently.
 
 endif # COAP_CLIENT
 

@@ -116,6 +116,8 @@ static inline int request_clock(const struct device *dev)
 	}
 
 	dev_data->clock_requested = true;
+#else
+	ARG_UNUSED(dev);
 #endif
 
 	return 0;
@@ -134,6 +136,8 @@ static inline void release_clock(const struct device *dev)
 	dev_data->clock_requested = false;
 
 	nrf_clock_control_release(dev_config->clk_dev, &dev_config->clk_spec);
+#else
+	ARG_UNUSED(dev);
 #endif
 }
 
@@ -634,7 +638,7 @@ static int spi_nrfx_release(const struct device *dev,
 	return 0;
 }
 
-static const struct spi_driver_api spi_nrfx_driver_api = {
+static DEVICE_API(spi, spi_nrfx_driver_api) = {
 	.transceive = spi_nrfx_transceive,
 #ifdef CONFIG_SPI_ASYNC
 	.transceive_async = spi_nrfx_transceive_async,
@@ -685,11 +689,7 @@ static void spim_suspend(const struct device *dev)
 static int spim_nrfx_pm_action(const struct device *dev, enum pm_device_action action)
 {
 	if (action == PM_DEVICE_ACTION_RESUME) {
-		int error = spim_resume(dev);
-
-		if (error < 0) {
-			return error;
-		}
+		return spim_resume(dev);
 	} else if (IS_ENABLED(CONFIG_PM_DEVICE) && (action == PM_DEVICE_ACTION_SUSPEND)) {
 		spim_suspend(dev);
 	} else {
@@ -765,13 +765,20 @@ static int spi_nrfx_init(const struct device *dev)
 			(0))),								 \
 		(0))
 
-#define SPIM_INIT_LEVEL(idx) \
-	COND_CODE_1(SPIM_REQUESTS_CLOCK(idx), (POST_KERNEL), (PRE_KERNEL_1))
-
-#define SPIM_INIT_PRIO(idx) \
+/* Fast instances depend on the global HSFLL clock controller (as they need
+ * to request the highest frequency from it to operate correctly), so they
+ * must be initialized after that controller driver, hence the default SPI
+ * initialization priority may be too early for them.
+ */
+#if defined(CONFIG_CLOCK_CONTROL_NRF2_GLOBAL_HSFLL_INIT_PRIORITY) && \
+	CONFIG_SPI_INIT_PRIORITY < CONFIG_CLOCK_CONTROL_NRF2_GLOBAL_HSFLL_INIT_PRIORITY
+#define SPIM_INIT_PRIORITY(idx) \
 	COND_CODE_1(SPIM_REQUESTS_CLOCK(idx), \
 		(UTIL_INC(CONFIG_CLOCK_CONTROL_NRF2_GLOBAL_HSFLL_INIT_PRIORITY)), \
 		(CONFIG_SPI_INIT_PRIORITY))
+#else
+#define SPIM_INIT_PRIORITY(idx) CONFIG_SPI_INIT_PRIORITY
+#endif
 
 #define SPI_NRFX_SPIM_DEFINE(idx)					       \
 	NRF_DT_CHECK_NODE_HAS_PINCTRL_SLEEP(SPIM(idx));			       \
@@ -835,12 +842,12 @@ static int spi_nrfx_init(const struct device *dev)
 		     !(DT_GPIO_FLAGS(SPIM(idx), wake_gpios) & GPIO_ACTIVE_LOW),\
 		     "WAKE line must be configured as active high");	       \
 	PM_DEVICE_DT_DEFINE(SPIM(idx), spim_nrfx_pm_action);		       \
-	DEVICE_DT_DEFINE(SPIM(idx),					       \
+	SPI_DEVICE_DT_DEFINE(SPIM(idx),					       \
 		      spi_nrfx_init,					       \
 		      PM_DEVICE_DT_GET(SPIM(idx)),			       \
 		      &spi_##idx##_data,				       \
 		      &spi_##idx##z_config,				       \
-		      SPIM_INIT_LEVEL(idx), SPIM_INIT_PRIO(idx),	       \
+		      POST_KERNEL, SPIM_INIT_PRIORITY(idx),		       \
 		      &spi_nrfx_driver_api)
 
 #define SPIM_MEMORY_SECTION(idx)					       \

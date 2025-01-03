@@ -287,7 +287,7 @@ static void uart_nrfx_poll_out(const struct device *dev, unsigned char c)
 	/* Wait until the transmitter is ready, i.e. the character is sent. */
 	bool res;
 
-	NRFX_WAIT_FOR(event_txdrdy_check(), 1000, 1, res);
+	NRFX_WAIT_FOR(event_txdrdy_check(), 10000, 1, res);
 
 	/* Deactivate the transmitter so that it does not needlessly
 	 * consume power.
@@ -786,7 +786,7 @@ static int uart_nrfx_fifo_fill(const struct device *dev,
 			       const uint8_t *tx_data,
 			       int len)
 {
-	uint8_t num_tx = 0U;
+	int num_tx = 0U;
 
 	while ((len - num_tx > 0) &&
 	       event_txdrdy_check()) {
@@ -806,7 +806,7 @@ static int uart_nrfx_fifo_read(const struct device *dev,
 			       uint8_t *rx_data,
 			       const int size)
 {
-	uint8_t num_rx = 0U;
+	int num_rx = 0U;
 
 	while ((size - num_rx > 0) &&
 	       nrf_uart_event_check(uart0_addr, NRF_UART_EVENT_RXDRDY)) {
@@ -1044,7 +1044,7 @@ static int uart_nrfx_init(const struct device *dev)
 /* Common function: uart_nrfx_irq_tx_ready_complete is used for two API entries
  * because Nordic hardware does not distinguish between them.
  */
-static const struct uart_driver_api uart_nrfx_uart_driver_api = {
+static DEVICE_API(uart, uart_nrfx_uart_driver_api) = {
 #ifdef CONFIG_UART_0_ASYNC
 	.callback_set	  = uart_nrfx_callback_set,
 	.tx		  = uart_nrfx_tx,
