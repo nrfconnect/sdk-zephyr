@@ -29,7 +29,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
         os: [ubuntu-22.04, macos-14, windows-2022]
     steps:
     - name: checkout
@@ -65,8 +65,7 @@ jobs:
           ${{ runner.os }}-pip-${{ matrix.python-version }}
     - name: install pytest
       run: |
-        pip3 install wheel
-        pip3 install pytest west pyelftools canopen natsort progress mypy intelhex psutil ply pyserial
+        pip install pytest west pyelftools canopen natsort progress mypy intelhex psutil ply pyserial anytree
     - name: run pytest-win
       if: runner.os == 'Windows'
       run: |

@@ -1,7 +1,4 @@
-.. _esp32s3_devkitm:
-
-ESP32-S3-DevKitM
-################
+.. zephyr:board:: esp32s3_devkitm
 
 Overview
 ********
@@ -76,7 +73,7 @@ Asymmetric Multiprocessing (AMP)
 
 ESP32S3-DevKitM allows 2 different applications to be executed in ESP32-S3 SoC. Due to its dual-core
 architecture, each core can be enabled to execute customized tasks in stand-alone mode
-and/or exchanging data over OpenAMP framework. See :ref:`ipc_samples` folder as code reference.
+and/or exchanging data over OpenAMP framework. See :zephyr:code-sample-category:`ipc` folder as code reference.
 
 For more information, check the datasheet at `ESP32-S3 Datasheet`_ or the technical reference
 manual at `ESP32-S3 Technical Reference Manual`_.
@@ -278,6 +275,8 @@ You can debug an application in the usual way. Here is an example for the :zephy
 
 References
 **********
+
+.. target-notes::
 
 .. _`ESP32-S3-DevKitM User Guide`: https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/hw-reference/esp32s3/user-guide-devkitm-1.html
 .. _`ESP32-S3 Datasheet`: https://www.espressif.com/sites/default/files/documentation/esp32-s3-mini-1_mini-1u_datasheet_en.pdf

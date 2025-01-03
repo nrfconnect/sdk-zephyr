@@ -79,6 +79,12 @@ int stream_flash_erase_page(struct stream_flash_ctx *ctx, off_t off)
 #if defined(CONFIG_FLASH_HAS_EXPLICIT_ERASE)
 	int rc;
 	struct flash_pages_info page;
+
+	if (off < ctx->offset || (off - ctx->offset) >= ctx->available) {
+		LOG_ERR("Offset out of designated range");
+		return -ERANGE;
+	}
+
 #if defined(CONFIG_FLASH_HAS_NO_EXPLICIT_ERASE)
 	/* There are both types of devices */
 	const struct flash_parameters *fparams = flash_get_parameters(ctx->fdev);
@@ -159,6 +165,8 @@ static int flash_sync(struct stream_flash_ctx *ctx)
 		return rc;
 	}
 
+#if defined(CONFIG_STREAM_FLASH_POST_WRITE_CALLBACK)
+
 	if (ctx->callback) {
 		/* Invert to ensure that caller is able to discover a faulty
 		 * flash_read() even if no error code is returned.
@@ -180,6 +188,8 @@ static int flash_sync(struct stream_flash_ctx *ctx)
 			return rc;
 		}
 	}
+
+#endif
 
 	ctx->bytes_written += ctx->buf_bytes;
 	ctx->buf_bytes = 0U;
@@ -231,7 +241,7 @@ int stream_flash_buffered_write(struct stream_flash_ctx *ctx, const uint8_t *dat
 	return rc;
 }
 
-size_t stream_flash_bytes_written(struct stream_flash_ctx *ctx)
+size_t stream_flash_bytes_written(const struct stream_flash_ctx *ctx)
 {
 	return ctx->bytes_written;
 }
@@ -311,7 +321,12 @@ int stream_flash_init(struct stream_flash_ctx *ctx, const struct device *fdev,
 	ctx->offset = offset;
 	ctx->available = (size == 0 ? inspect_flash_ctx.total_size - offset :
 				      size);
+
+#if !defined(CONFIG_STREAM_FLASH_POST_WRITE_CALLBACK)
+	ARG_UNUSED(cb);
+#else
 	ctx->callback = cb;
+#endif
 
 #ifdef CONFIG_STREAM_FLASH_ERASE
 	ctx->last_erased_page_start_offset = -1;
@@ -342,7 +357,7 @@ int stream_flash_progress_load(struct stream_flash_ctx *ctx,
 	return rc;
 }
 
-int stream_flash_progress_save(struct stream_flash_ctx *ctx,
+int stream_flash_progress_save(const struct stream_flash_ctx *ctx,
 			       const char *settings_key)
 {
 	if (!ctx || !settings_key) {
@@ -361,7 +376,7 @@ int stream_flash_progress_save(struct stream_flash_ctx *ctx,
 	return rc;
 }
 
-int stream_flash_progress_clear(struct stream_flash_ctx *ctx,
+int stream_flash_progress_clear(const struct stream_flash_ctx *ctx,
 				const char *settings_key)
 {
 	if (!ctx || !settings_key) {

@@ -231,7 +231,7 @@ static int uart_emul_fifo_read(const struct device *dev, uint8_t *rx_data, int s
 
 static int uart_emul_irq_tx_ready(const struct device *dev)
 {
-	bool ready = false;
+	int available = 0;
 	struct uart_emul_data *data = dev->data;
 
 	K_SPINLOCK(&data->tx_lock) {
@@ -239,10 +239,10 @@ static int uart_emul_irq_tx_ready(const struct device *dev)
 			K_SPINLOCK_BREAK;
 		}
 
-		ready = ring_buf_space_get(data->tx_rb) > 0;
+		available = ring_buf_space_get(data->tx_rb);
 	}
 
-	return ready;
+	return available;
 }
 
 static int uart_emul_irq_rx_ready(const struct device *dev)
@@ -870,7 +870,7 @@ static int uart_emul_rx_disable(const struct device *dev)
 }
 #endif /* CONFIG_UART_ASYNC_API */
 
-static const struct uart_driver_api uart_emul_api = {
+static DEVICE_API(uart, uart_emul_api) = {
 	.poll_in = uart_emul_poll_in,
 	.poll_out = uart_emul_poll_out,
 #ifdef CONFIG_UART_USE_RUNTIME_CONFIGURE

@@ -12,7 +12,8 @@ zephyr_interface_library_named(mbedTLS)
     endif()
 
     if(CONFIG_MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
-      if(CONFIG_MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG_ALLOW_NON_CSPRNG)
+      if(CONFIG_MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG_ALLOW_NON_CSPRNG OR
+         CONFIG_TEST_CSPRNG_GENERATOR)
         message(WARNING "
           Non cryptographycally secure sources are enabled for psa_generate_random().
           This is meant to be used only for tests, not in production!")
@@ -136,7 +137,7 @@ zephyr_interface_library_named(mbedTLS)
 
     zephyr_library_named(mbedTLSCrypto)
 
-    if (CONFIG_MBEDTLS_PSA_CRYPTO_C AND NOT CONFIG_BUILD_WITH_TFM)
+    if (CONFIG_MBEDTLS_PSA_CRYPTO_C)
       list(APPEND crypto_source
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_aead.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_cipher.c
@@ -145,6 +146,7 @@ zephyr_interface_library_named(mbedTLS)
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_ffdh.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_hash.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_mac.c
+        ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_pake.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_rsa.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_se.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_storage.c
@@ -175,6 +177,9 @@ zephyr_interface_library_named(mbedTLS)
     )
 
     zephyr_library_sources(${crypto_source})
+
+    # Custom macro to tell that an mbedTLSCrypto source file is being compiled.
+    zephyr_library_compile_definitions(BUILDING_MBEDTLS_CRYPTO)
 
     zephyr_library_link_libraries(mbedTLS)
 

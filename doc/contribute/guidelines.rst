@@ -351,6 +351,15 @@ address is ``z.developer@example.com``:
    git config --global user.name "Zephyr Developer"
    git config --global user.email "z.developer@example.com"
 
+.. note::
+   ``user.name`` must be your full name (first and last at minimum), not a
+   pseudonym or hacker handle. The email address that you use in your Git configuration must match the email
+   address you use to sign your commits. If they don't match, the CI system will
+   fail your pull request.
+
+   If you intend to edit commits using the Github.com UI, ensure that your github profile
+   ``email address`` and profile ``name`` also match those used in your git configuration
+   (``user.name`` & ``user.email``).
 
 Pull Request Guidelines
 ***********************
@@ -536,8 +545,7 @@ exceptions:
 * The line length is 100 columns or fewer. In the documentation, longer lines
   for URL references are an allowed exception.
 * Add braces to every ``if``, ``else``, ``do``, ``while``, ``for`` and
-  ``switch`` body, even for single-line code blocks. Use the ``--ignore BRACES``
-  flag to make *checkpatch* stop complaining.
+  ``switch`` body, even for single-line code blocks.
 * Use spaces instead of tabs to align comments after declarations, as needed.
 * Use C89-style single line comments, ``/*  */``. The C99-style single line
   comment, ``//``, is not allowed.

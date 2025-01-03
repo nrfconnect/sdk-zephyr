@@ -1,6 +1,6 @@
 .. zephyr:code-sample:: bluetooth_cap_initiator
-   :name: Common Audio Profile Initiator
-   :relevant-api: bt_cap bt_bap bluetooth
+   :name: Common Audio Profile (CAP) Initiator
+   :relevant-api: bluetooth bt_bap bt_cap bt_conn
 
    Connect to CAP Acceptors and setup unicast audio streaming or broadcast audio streams.
 
@@ -13,7 +13,7 @@ audio streams, sets up a broadcast audio stream, or both.
 
 This sample can be found under :zephyr_file:`samples/bluetooth/cap_initiator` in the Zephyr tree.
 
-Check the :ref:`bluetooth samples section <bluetooth-samples>` for general information.
+Check the :zephyr:code-sample-category:`bluetooth` samples for general information.
 
 Requirements
 ************
@@ -25,7 +25,7 @@ Building and Running
 ********************
 
 When building targeting an nrf52 series board with the Zephyr Bluetooth Controller,
-use ``-DOVERLAY_CONFIG=overlay-bt_ll_sw_split.conf`` to enable the required ISO
+use ``-DEXTRA_CONF_FILE=overlay-bt_ll_sw_split.conf`` to enable the required ISO
 feature support.
 
 Building for an nrf5340dk
@@ -72,4 +72,4 @@ Building for a simulated nrf52_bsim
    :zephyr-app: samples/bluetooth/cap_initiator/
    :board: nrf52_bsim
    :goals: build
-   :gen-args: -DOVERLAY_CONFIG=overlay-bt_ll_sw_split.conf
+   :gen-args: -DEXTRA_CONF_FILE=overlay-bt_ll_sw_split.conf

@@ -216,9 +216,9 @@ static int esp32_ipm_init(const struct device *dev)
 	data->other_core_id = (data->this_core_id  == 0) ? 1 : 0;
 
 	LOG_DBG("Size of IPM shared memory: %d", data->shm_size);
-	LOG_DBG("Address of PRO_CPU IPM shared memory: %p", data->shm.pro_cpu_shm);
-	LOG_DBG("Address of APP_CPU IPM shared memory: %p", data->shm.app_cpu_shm);
-	LOG_DBG("Address of IPM control structure: %p", data->control);
+	LOG_DBG("Address of PRO_CPU IPM shared memory: %p", (void *)data->shm.pro_cpu_shm);
+	LOG_DBG("Address of APP_CPU IPM shared memory: %p", (void *)data->shm.app_cpu_shm);
+	LOG_DBG("Address of IPM control structure: %p", (void *)data->control);
 
 	/* pro_cpu is responsible to initialize the lock of shared memory */
 	if (data->this_core_id == 0) {
@@ -268,7 +268,7 @@ static int esp32_ipm_init(const struct device *dev)
 	return 0;
 }
 
-static const struct ipm_driver_api esp32_ipm_driver_api = {
+static DEVICE_API(ipm, esp32_ipm_driver_api) = {
 	.send = esp32_ipm_send,
 	.register_callback = esp32_ipm_register_callback,
 	.max_data_size_get = esp32_ipm_max_data_size_get,

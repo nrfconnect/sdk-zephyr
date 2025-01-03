@@ -1,17 +1,18 @@
 /*
  * SPDX-FileCopyrightText: Copyright (c) 2024 Carl Zeiss Meditec AG
+ * SPDX-FileCopyrightText: Copyright (c) 2024 Jilay Sandeep Pandya
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define DT_DRV_COMPAT gpio_steppers
+#define DT_DRV_COMPAT zephyr_gpio_stepper
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys_clock.h>
 #include <zephyr/drivers/stepper.h>
-#include <zephyr/logging/log.h>
 #include <zephyr/sys/__assert.h>
 
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(gpio_stepper_motor_controller, CONFIG_STEPPER_LOG_LEVEL);
 
 #define MAX_MICRO_STEP_RES STEPPER_MICRO_STEP_2
@@ -24,6 +25,7 @@ static const uint8_t
 
 struct gpio_stepper_config {
 	const struct gpio_dt_spec *control_pins;
+	bool invert_direction;
 };
 
 struct gpio_stepper_data {
@@ -34,10 +36,12 @@ struct gpio_stepper_data {
 	uint8_t step_gap;
 	uint8_t coil_charge;
 	struct k_work_delayable stepper_dwork;
-	struct k_poll_signal *async_signal;
 	int32_t actual_position;
 	uint32_t delay_in_us;
 	int32_t step_count;
+	bool is_enabled;
+	stepper_event_callback_t callback;
+	void *event_cb_user_data;
 };
 
 static int stepper_motor_set_coil_charge(const struct device *dev)
@@ -52,20 +56,53 @@ static int stepper_motor_set_coil_charge(const struct device *dev)
 	return 0;
 }
 
-static void update_coil_charge(const struct device *dev)
+static void increment_coil_charge(const struct device *dev)
 {
 	struct gpio_stepper_data *data = dev->data;
 
+	if (data->coil_charge == NUM_CONTROL_PINS * MAX_MICRO_STEP_RES - data->step_gap) {
+		data->coil_charge = 0;
+	} else {
+		data->coil_charge = data->coil_charge + data->step_gap;
+	}
+}
+
+static void decrement_coil_charge(const struct device *dev)
+{
+	struct gpio_stepper_data *data = dev->data;
+
+	if (data->coil_charge == 0) {
+		data->coil_charge = NUM_CONTROL_PINS * MAX_MICRO_STEP_RES - data->step_gap;
+	} else {
+		data->coil_charge = data->coil_charge - data->step_gap;
+	}
+}
+
+static int power_down_coils(const struct device *dev)
+{
+	const struct gpio_stepper_config *config = dev->config;
+
+	for (int i = 0; i < NUM_CONTROL_PINS; i++) {
+		const int err = gpio_pin_set_dt(&config->control_pins[i], 0u);
+
+		if (err != 0) {
+			LOG_ERR("Failed to power down coil %d", i);
+			return err;
+		}
+	}
+	return 0;
+}
+
+static void update_coil_charge(const struct device *dev)
+{
+	const struct gpio_stepper_config *config = dev->config;
+	struct gpio_stepper_data *data = dev->data;
+
 	if (data->direction == STEPPER_DIRECTION_POSITIVE) {
-		data->coil_charge = data->coil_charge == 0
-					    ? NUM_CONTROL_PINS * MAX_MICRO_STEP_RES - data->step_gap
-					    : data->coil_charge - data->step_gap;
+		config->invert_direction ? decrement_coil_charge(dev) : increment_coil_charge(dev);
 		data->actual_position++;
 	} else if (data->direction == STEPPER_DIRECTION_NEGATIVE) {
-		data->coil_charge =
-			data->coil_charge == NUM_CONTROL_PINS * MAX_MICRO_STEP_RES - data->step_gap
-				? 0
-				: data->coil_charge + data->step_gap;
+		config->invert_direction ? increment_coil_charge(dev) : decrement_coil_charge(dev);
 		data->actual_position--;
 	}
 }
@@ -79,15 +116,18 @@ static void update_remaining_steps(struct gpio_stepper_data *data)
 		data->step_count++;
 		(void)k_work_reschedule(&data->stepper_dwork, K_USEC(data->delay_in_us));
 	} else {
-		if (data->async_signal) {
-			(void)k_poll_signal_raise(data->async_signal,
-						  STEPPER_SIGNAL_STEPS_COMPLETED);
+		if (!data->callback) {
+			LOG_WRN_ONCE("No callback set");
+			return;
 		}
+		data->callback(data->dev, STEPPER_EVENT_STEPS_COMPLETED, data->event_cb_user_data);
 	}
 }
 
-static void update_direction_from_step_count(struct gpio_stepper_data *data)
+static void update_direction_from_step_count(const struct device *dev)
 {
+	struct gpio_stepper_data *data = dev->data;
+
 	if (data->step_count > 0) {
 		data->direction = STEPPER_DIRECTION_POSITIVE;
 	} else if (data->step_count < 0) {
@@ -125,10 +165,10 @@ static void stepper_work_step_handler(struct k_work *work)
 
 	K_SPINLOCK(&data->lock) {
 		switch (data->run_mode) {
-		case STEPPER_POSITION_MODE:
+		case STEPPER_RUN_MODE_POSITION:
 			position_mode_task(data->dev);
 			break;
-		case STEPPER_VELOCITY_MODE:
+		case STEPPER_RUN_MODE_VELOCITY:
 			velocity_mode_task(data->dev);
 			break;
 		default:
@@ -138,29 +178,29 @@ static void stepper_work_step_handler(struct k_work *work)
 	}
 }
 
-static int gpio_stepper_move(const struct device *dev, int32_t micro_steps,
-			     struct k_poll_signal *async)
+static int gpio_stepper_move_by(const struct device *dev, int32_t micro_steps)
 {
 	struct gpio_stepper_data *data = dev->data;
+
+	if (!data->is_enabled) {
+		LOG_ERR("Stepper motor is not enabled");
+		return -ECANCELED;
+	}
 
 	if (data->delay_in_us == 0) {
 		LOG_ERR("Velocity not set or invalid velocity set");
 		return -EINVAL;
 	}
 	K_SPINLOCK(&data->lock) {
-		if (data->async_signal) {
-			k_poll_signal_reset(data->async_signal);
-		}
-		data->async_signal = async;
-		data->run_mode = STEPPER_POSITION_MODE;
+		data->run_mode = STEPPER_RUN_MODE_POSITION;
 		data->step_count = micro_steps;
-		update_direction_from_step_count(data);
+		update_direction_from_step_count(dev);
 		(void)k_work_reschedule(&data->stepper_dwork, K_NO_WAIT);
 	}
 	return 0;
 }
 
-static int gpio_stepper_set_actual_position(const struct device *dev, int32_t position)
+static int gpio_stepper_set_reference_position(const struct device *dev, int32_t position)
 {
 	struct gpio_stepper_data *data = dev->data;
 
@@ -180,23 +220,23 @@ static int gpio_stepper_get_actual_position(const struct device *dev, int32_t *p
 	return 0;
 }
 
-static int gpio_stepper_set_target_position(const struct device *dev, int32_t position,
-					    struct k_poll_signal *async)
+static int gpio_stepper_move_to(const struct device *dev, int32_t micro_steps)
 {
 	struct gpio_stepper_data *data = dev->data;
+
+	if (!data->is_enabled) {
+		LOG_ERR("Stepper motor is not enabled");
+		return -ECANCELED;
+	}
 
 	if (data->delay_in_us == 0) {
 		LOG_ERR("Velocity not set or invalid velocity set");
 		return -EINVAL;
 	}
 	K_SPINLOCK(&data->lock) {
-		if (data->async_signal) {
-			k_poll_signal_reset(data->async_signal);
-		}
-		data->async_signal = async;
-		data->run_mode = STEPPER_POSITION_MODE;
-		data->step_count = position - data->actual_position;
-		update_direction_from_step_count(data);
+		data->run_mode = STEPPER_RUN_MODE_POSITION;
+		data->step_count = micro_steps - data->actual_position;
+		update_direction_from_step_count(dev);
 		(void)k_work_reschedule(&data->stepper_dwork, K_NO_WAIT);
 	}
 	return 0;
@@ -232,17 +272,21 @@ static int gpio_stepper_set_max_velocity(const struct device *dev, uint32_t velo
 	return 0;
 }
 
-static int gpio_stepper_enable_constant_velocity_mode(const struct device *dev,
-						      const enum stepper_direction direction,
-						      const uint32_t value)
+static int gpio_stepper_run(const struct device *dev, const enum stepper_direction direction,
+			    const uint32_t velocity)
 {
 	struct gpio_stepper_data *data = dev->data;
 
+	if (!data->is_enabled) {
+		LOG_ERR("Stepper motor is not enabled");
+		return -ECANCELED;
+	}
+
 	K_SPINLOCK(&data->lock) {
-		data->run_mode = STEPPER_VELOCITY_MODE;
+		data->run_mode = STEPPER_RUN_MODE_VELOCITY;
 		data->direction = direction;
-		if (value != 0) {
-			data->delay_in_us = USEC_PER_SEC / value;
+		if (velocity != 0) {
+			data->delay_in_us = USEC_PER_SEC / velocity;
 			(void)k_work_reschedule(&data->stepper_dwork, K_NO_WAIT);
 		} else {
 			(void)k_work_cancel_delayable(&data->stepper_dwork);
@@ -252,13 +296,13 @@ static int gpio_stepper_enable_constant_velocity_mode(const struct device *dev,
 }
 
 static int gpio_stepper_set_micro_step_res(const struct device *dev,
-					   enum micro_step_resolution micro_step_res)
+					   enum stepper_micro_step_resolution micro_step_res)
 {
 	struct gpio_stepper_data *data = dev->data;
 
 	K_SPINLOCK(&data->lock) {
 		switch (micro_step_res) {
-		case STEPPER_FULL_STEP:
+		case STEPPER_MICRO_STEP_1:
 		case STEPPER_MICRO_STEP_2:
 			data->step_gap = MAX_MICRO_STEP_RES >> (micro_step_res - 1);
 			break;
@@ -271,10 +315,22 @@ static int gpio_stepper_set_micro_step_res(const struct device *dev,
 }
 
 static int gpio_stepper_get_micro_step_res(const struct device *dev,
-					   enum micro_step_resolution *micro_step_res)
+					   enum stepper_micro_step_resolution *micro_step_res)
 {
 	struct gpio_stepper_data *data = dev->data;
 	*micro_step_res = MAX_MICRO_STEP_RES >> (data->step_gap - 1);
+	return 0;
+}
+
+static int gpio_stepper_set_event_callback(const struct device *dev,
+					   stepper_event_callback_t callback, void *user_data)
+{
+	struct gpio_stepper_data *data = dev->data;
+
+	K_SPINLOCK(&data->lock) {
+		data->callback = callback;
+	}
+	data->event_cb_user_data = user_data;
 	return 0;
 }
 
@@ -283,23 +339,30 @@ static int gpio_stepper_enable(const struct device *dev, bool enable)
 	struct gpio_stepper_data *data = dev->data;
 
 	K_SPINLOCK(&data->lock) {
+
+		data->is_enabled = enable;
+
 		if (enable) {
 			(void)k_work_reschedule(&data->stepper_dwork, K_NO_WAIT);
 		} else {
 			(void)k_work_cancel_delayable(&data->stepper_dwork);
+			const int err = power_down_coils(dev);
+
+			if (err != 0) {
+				return -EIO;
+			}
 		}
 	}
 	return 0;
 }
 
-static int gpio_stepper_motor_controller_init(const struct device *dev)
+static int gpio_stepper_init(const struct device *dev)
 {
 	struct gpio_stepper_data *data = dev->data;
 	const struct gpio_stepper_config *config = dev->config;
 
 	data->dev = dev;
-	LOG_DBG("Initializing %s gpio_stepper_motor_controller with %d pin", dev->name,
-		NUM_CONTROL_PINS);
+	LOG_DBG("Initializing %s gpio_stepper with %d pin", dev->name, NUM_CONTROL_PINS);
 	for (uint8_t n_pin = 0; n_pin < NUM_CONTROL_PINS; n_pin++) {
 		(void)gpio_pin_configure_dt(&config->control_pins[n_pin], GPIO_OUTPUT_INACTIVE);
 	}
@@ -307,45 +370,36 @@ static int gpio_stepper_motor_controller_init(const struct device *dev)
 	return 0;
 }
 
-#define GPIO_STEPPER_DEVICE_DATA_DEFINE(child)                                                     \
-	static struct gpio_stepper_data gpio_stepper_data_##child = {                              \
-		.step_gap = MAX_MICRO_STEP_RES >> (DT_PROP(child, micro_step_res) - 1),            \
-	};                                                                                         \
-	BUILD_ASSERT(DT_PROP(child, micro_step_res) <= STEPPER_MICRO_STEP_2,                       \
-		     "gpio_stepper_controller driver supports up to 2 micro steps");
+static DEVICE_API(stepper, gpio_stepper_api) = {
+	.enable = gpio_stepper_enable,
+	.move_by = gpio_stepper_move_by,
+	.is_moving = gpio_stepper_is_moving,
+	.set_reference_position = gpio_stepper_set_reference_position,
+	.get_actual_position = gpio_stepper_get_actual_position,
+	.move_to = gpio_stepper_move_to,
+	.set_max_velocity = gpio_stepper_set_max_velocity,
+	.run = gpio_stepper_run,
+	.set_micro_step_res = gpio_stepper_set_micro_step_res,
+	.get_micro_step_res = gpio_stepper_get_micro_step_res,
+	.set_event_callback = gpio_stepper_set_event_callback,
+};
 
-#define GPIO_STEPPER_DEVICE_CONFIG_DEFINE(child)                                                   \
-	static const struct gpio_dt_spec gpio_stepper_motor_control_pins_##child[] = {             \
-		DT_FOREACH_PROP_ELEM_SEP(child, gpios, GPIO_DT_SPEC_GET_BY_IDX, (,)),              \
-	};                                                                                         \
-	BUILD_ASSERT(                                                                              \
-		ARRAY_SIZE(gpio_stepper_motor_control_pins_##child) == 4,                          \
-		"gpio_stepper_controller driver currently supports only 4 wire configuration");    \
-	static const struct gpio_stepper_config gpio_stepper_config_##child = {                    \
-		.control_pins = gpio_stepper_motor_control_pins_##child};
+#define GPIO_STEPPER_DEFINE(inst)								\
+	static const struct gpio_dt_spec gpio_stepper_motor_control_pins_##inst[] = {		\
+		DT_INST_FOREACH_PROP_ELEM_SEP(inst, gpios, GPIO_DT_SPEC_GET_BY_IDX, (,)),	\
+	};											\
+	BUILD_ASSERT(ARRAY_SIZE(gpio_stepper_motor_control_pins_##inst) == 4,			\
+		"gpio_stepper_controller driver currently supports only 4 wire configuration");	\
+	static const struct gpio_stepper_config gpio_stepper_config_##inst = {			\
+		.invert_direction = DT_INST_PROP(inst, invert_direction),			\
+		.control_pins = gpio_stepper_motor_control_pins_##inst};			\
+	static struct gpio_stepper_data gpio_stepper_data_##inst = {				\
+		.step_gap = MAX_MICRO_STEP_RES >> (DT_INST_PROP(inst, micro_step_res) - 1),	\
+	};											\
+	BUILD_ASSERT(DT_INST_PROP(inst, micro_step_res) <= STEPPER_MICRO_STEP_2,		\
+		     "gpio_stepper_controller driver supports up to 2 micro steps");		\
+	DEVICE_DT_INST_DEFINE(inst, gpio_stepper_init, NULL, &gpio_stepper_data_##inst,		\
+			      &gpio_stepper_config_##inst, POST_KERNEL,				\
+			      CONFIG_STEPPER_INIT_PRIORITY, &gpio_stepper_api);
 
-#define GPIO_STEPPER_API_DEFINE(child)                                                             \
-	static const struct stepper_driver_api gpio_stepper_api_##child = {                        \
-		.enable = gpio_stepper_enable,                                                     \
-		.move = gpio_stepper_move,                                                         \
-		.is_moving = gpio_stepper_is_moving,                                               \
-		.set_actual_position = gpio_stepper_set_actual_position,                           \
-		.get_actual_position = gpio_stepper_get_actual_position,                           \
-		.set_target_position = gpio_stepper_set_target_position,                           \
-		.set_max_velocity = gpio_stepper_set_max_velocity,                                 \
-		.enable_constant_velocity_mode = gpio_stepper_enable_constant_velocity_mode,       \
-		.set_micro_step_res = gpio_stepper_set_micro_step_res,                             \
-		.get_micro_step_res = gpio_stepper_get_micro_step_res};
-
-#define GPIO_STEPPER_DEVICE_DEFINE(child)                                                          \
-	DEVICE_DT_DEFINE(child, gpio_stepper_motor_controller_init, NULL,                          \
-			 &gpio_stepper_data_##child, &gpio_stepper_config_##child, POST_KERNEL,    \
-			 CONFIG_STEPPER_INIT_PRIORITY, &gpio_stepper_api_##child);
-
-#define GPIO_STEPPER_CONTROLLER_DEFINE(inst)                                                       \
-	DT_INST_FOREACH_CHILD(inst, GPIO_STEPPER_DEVICE_CONFIG_DEFINE);                            \
-	DT_INST_FOREACH_CHILD(inst, GPIO_STEPPER_DEVICE_DATA_DEFINE);                              \
-	DT_INST_FOREACH_CHILD(inst, GPIO_STEPPER_API_DEFINE);                                      \
-	DT_INST_FOREACH_CHILD(inst, GPIO_STEPPER_DEVICE_DEFINE);
-
-DT_INST_FOREACH_STATUS_OKAY(GPIO_STEPPER_CONTROLLER_DEFINE)
+DT_INST_FOREACH_STATUS_OKAY(GPIO_STEPPER_DEFINE)

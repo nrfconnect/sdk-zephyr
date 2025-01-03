@@ -25,7 +25,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
         os: [ubuntu-22.04]
     steps:
     - name: checkout
@@ -44,7 +44,7 @@ jobs:
           ${{ runner.os }}-pip-${{ matrix.python-version }}
     - name: install-packages
       run: |
-        pip3 install -r scripts/requirements-base.txt -r scripts/requirements-build-test.txt
+        pip install -r scripts/requirements-base.txt -r scripts/requirements-build-test.txt
     - name: Run pytest for build_helpers
       env:
         ZEPHYR_BASE: ./

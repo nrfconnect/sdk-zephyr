@@ -25,6 +25,11 @@ config SHELL_MINIMAL
 	  defaults which favor reduced flash or memory requirements over extra
 	  features.
 
+config SHELL_DEVICE_HELPERS
+	bool "Shell device helpers"
+	imply DEVICE_DT_METADATA
+	default y if !SHELL_MINIMAL
+
 config SHELL_THREAD_PRIORITY_OVERRIDE
 	bool "Override default shell thread priority"
 	help
@@ -91,6 +96,7 @@ config SHELL_PRINTF_BUFF_SIZE
 
 config SHELL_DEFAULT_TERMINAL_WIDTH
 	int "Default terminal width"
+	range 1 $(UINT16_MAX)
 	default 80
 	help
 	  Default terminal width is used to break lines.
@@ -108,7 +114,7 @@ config SHELL_ARGC_MAX
 
 config SHELL_TAB
 	bool "The Tab button support in shell"
-	default y if !SHELL_MINIMAL && !SHELL_BACKEND_RTT
+	default y if !SHELL_MINIMAL
 	help
 	  Enable using the Tab button in the shell. The button
 	  can be used for prompting commands, or for autocompletion.
@@ -163,7 +169,7 @@ config SHELL_START_OBSCURED
 
 config SHELL_VT100_COMMANDS
 	bool "VT100 commands in shell"
-	default y if !SHELL_BACKEND_RTT
+	default y
 	help
 	  Enables VT100 commands in shell (e.g. cursor position, clear screen etc.).
 
@@ -275,6 +281,13 @@ config SHELL_LOG_BACKEND
 	  Disabling log output to a specific shell backend can be achieved
 	  using the shell backend's LOG_LEVEL option
 	  (e.g. CONFIG_SHELL_TELNET_INIT_LOG_LEVEL_NONE=y).
+
+config SHELL_LOG_BACKEND_CUSTOM
+	bool "Use custom backend implementation"
+	help
+	  When enabled, standard implementation of shell log backend is not included.
+	  It allows to provide custom implementation of multiplexing logging messages
+	  with shell data.
 
 config SHELL_LOG_FORMAT_TIMESTAMP
 	bool "Format timestamp"

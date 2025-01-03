@@ -130,6 +130,9 @@ void radio_bc_configure(uint32_t n);
 void radio_bc_status_reset(void);
 uint32_t radio_bc_has_match(void);
 
+void isr_radio_tmr(void);
+uint32_t radio_tmr_isr_set(uint32_t start_us, radio_isr_cb_t cb, void *param);
+
 void radio_tmr_status_reset(void);
 void radio_tmr_tx_status_reset(void);
 void radio_tmr_rx_status_reset(void);
@@ -163,7 +166,6 @@ void radio_gpio_pa_lna_deinit(void);
 void radio_gpio_pa_setup(void);
 void radio_gpio_lna_setup(void);
 void radio_gpio_pdn_setup(void);
-void radio_gpio_csn_setup(void);
 void radio_gpio_lna_on(void);
 void radio_gpio_lna_off(void);
 void radio_gpio_pa_lna_enable(uint32_t trx_us);
