@@ -212,9 +212,6 @@
 #ifdef CONFIG_NRFX_PDM
 #define NRFX_PDM_ENABLED 1
 #endif
-#ifdef CONFIG_NRFX_PDM0
-#define NRFX_PDM0_ENABLED 1
-#endif
 #ifdef CONFIG_NRFX_PDM_LOG
 #define NRFX_PDM_CONFIG_LOG_ENABLED 1
 #endif
