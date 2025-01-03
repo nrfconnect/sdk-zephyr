@@ -71,6 +71,6 @@ def get_runner_cls(runner):
     for cls in ZephyrBinaryRunner.get_runners():
         if cls.name() == runner:
             return cls
-    raise ValueError(f'unknown runner "{runner}"')
+    raise ValueError('unknown runner "{}"'.format(runner))
 
 __all__ = ['ZephyrBinaryRunner', 'get_runner_cls']

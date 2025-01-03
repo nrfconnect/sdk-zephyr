@@ -132,5 +132,6 @@ class Esp32BinaryRunner(ZephyrBinaryRunner):
         else:
             cmd_flash.extend([self.app_address, self.app_bin])
 
-        self.logger.info(f"Flashing esp32 chip on {self.device} ({self.baud}bps)")
+        self.logger.info("Flashing esp32 chip on {} ({}bps)".
+                         format(self.device, self.baud))
         self.check_call(cmd_flash)
