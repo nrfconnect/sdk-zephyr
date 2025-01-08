@@ -23,6 +23,9 @@ manifest:
       url-base: https://github.com/zephyrproject-rtos
     - name: babblesim
       url-base: https://github.com/BabbleSim
+    - name: ajay
+      url-base: https://github.com/ajayparida
+
 
   group-filter: [-babblesim, -optional]
 
@@ -303,7 +306,8 @@ manifest:
       revision: 3cfca0192ff84da919e9bc7978bcc2239cd6a395
       path: modules/bsim_hw_models/nrf_hw_models
     - name: nrf_wifi
-      revision: pull/12/head
+      revision: ipc_support_work
+      remote: ajay
       path: modules/lib/nrf_wifi
     - name: open-amp
       revision: b735edbc739ad59156eb55bb8ce2583d74537719
