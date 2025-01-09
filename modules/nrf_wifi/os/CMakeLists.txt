@@ -204,3 +204,7 @@ zephyr_library_sources(
 
 target_link_libraries(zephyr_interface INTERFACE nrf-wifi-interface)
 target_link_libraries(nrf_wifi PRIVATE nrf70-buslib)
+
+target_compile_definitions(nrf_wifi PRIVATE
+  CONFIG_NRF_WIFI_CMD_EVENT_LOG
+)
