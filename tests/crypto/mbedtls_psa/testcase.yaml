@@ -17,8 +17,7 @@
 #   latter case will allow to test
 #   CONFIG_MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG_ALLOW_NON_CSPRNG.
 common:
-  filter: not CONFIG_BUILD_WITH_TFM and
-          not CONFIG_PSA_SSF_CRYPTO_CLIENT
+  filter: not CONFIG_BUILD_WITH_TFM
   tags:
     - mbedtls
     - psa
