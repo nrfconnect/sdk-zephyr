@@ -67,7 +67,7 @@ int ipc_send(ipc_ctx_t ctx, const void *data, int len) {
 			} while (ret == WIFI_IPC_STATUS_BUSYQ_NOTREADY);
 
 			/* Critical error during IPC service transfer. Should never happen. */
-			if (ret == WIFI_IPC_STATUS_BUSYQ_CRITICAL_ERR) {
+			if (ret) {
 				return -1;
 			}
 			break;
@@ -78,7 +78,7 @@ int ipc_send(ipc_ctx_t ctx, const void *data, int len) {
 		   } while (ret == WIFI_IPC_STATUS_BUSYQ_NOTREADY);
 
 			/* Critical error during IPC service transfer. Should never happen. */
-			if (ret == WIFI_IPC_STATUS_BUSYQ_CRITICAL_ERR) {
+			if (ret) {
 				return -1;
 			}
 		case IPC_INSTANCE_RX:
