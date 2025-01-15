@@ -11,8 +11,8 @@
 #include "hal_structs.h"
 
 /* Define addresses to use for the free queues */
-#define EVENT_FREEQ_ADDR        0x20008000
-#define CMD_FREEQ_ADDR          0x20005000
+#define EVENT_FREEQ_ADDR        0x200C2000
+#define CMD_FREEQ_ADDR          0x200C3000
 
 #define NUM_INSTANCES 3
 #define NUM_ENDPOINTS 1
