@@ -105,6 +105,7 @@ static int backend_init(const struct device *instance)
 DT_INST_FOREACH_STATUS_OKAY(DEFINE_BACKEND_DEVICE)
 
 /* TODO: REMOVE THIS WORKAROUND!!! */
+#ifdef NRF_PPR
 #include <string.h>
 static int workaround_ppr_reset(void)
 {
@@ -117,3 +118,4 @@ static int workaround_ppr_reset(void)
 }
 
 SYS_INIT(workaround_ppr_reset, PRE_KERNEL_1, 0);
+#endif

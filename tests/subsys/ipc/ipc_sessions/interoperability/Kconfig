@@ -12,7 +12,6 @@ config IPC_SERVICE_ICMSG
 
 config IPC_SERVICE_BACKEND_ICMSG_V1
 	bool "ICMSG backend with SPSC packet buffer (old implementation)"
-	default y
 	depends on MBOX
 	select IPC_SERVICE_ICMSG_V1
 	help
