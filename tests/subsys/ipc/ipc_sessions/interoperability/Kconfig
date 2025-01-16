@@ -1,0 +1,30 @@
+#
+# Copyright (c) 2024 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+config IPC_SERVICE_BACKEND_ICMSG
+	default n if IPC_SERVICE_BACKEND_ICMSG_V1
+
+config IPC_SERVICE_ICMSG
+	default n if IPC_SERVICE_ICMSG_V1
+
+config IPC_SERVICE_BACKEND_ICMSG_V1
+	bool "ICMSG backend with SPSC packet buffer (old implementation)"
+	default y
+	depends on MBOX
+	select IPC_SERVICE_ICMSG_V1
+	help
+	  Chosing this backend results in single endpoint implementation based
+	  on circular packet buffer.
+
+menuconfig IPC_SERVICE_ICMSG_V1
+	bool "icmsg IPC library (old implementation)"
+	select PBUF_V1
+	help
+	  Icmsg library
+
+if IPC_SERVICE_ICMSG_V1
+	rsource "Kconfig.icmsg_v1"
+endif

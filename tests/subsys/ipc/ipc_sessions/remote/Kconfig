@@ -4,4 +4,8 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
+rsource "../interoperability/Kconfig"
+
+menu "Zephyr"
 source "Kconfig.zephyr"
+endmenu

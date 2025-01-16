@@ -4,6 +4,8 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
+rsource "interoperability/Kconfig"
+
 menu "Zephyr"
 source "Kconfig.zephyr"
 endmenu
@@ -28,3 +30,8 @@ config IPC_TEST_BLOCK_SIZE
 config IPC_TEST_BLOCK_CNT
 	int "Number of blocks for multiple transfers test"
 	default 8000
+
+config IPC_TEST_SKIP_UNBOUND
+	bool "Skip unbound tests"
+	help
+		Whether to skip tests that requires unbound callback functionality.

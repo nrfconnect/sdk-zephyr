@@ -10,3 +10,7 @@ zephyr_include_directories(./common)
 
 FILE(GLOB app_sources src/*.c)
 target_sources(app PRIVATE ${app_sources})
+
+zephyr_sources_ifdef(CONFIG_IPC_SERVICE_ICMSG_V1		interoperability/icmsg_v1.c)
+zephyr_sources_ifdef(CONFIG_PBUF_V1				interoperability/pbuf_v1.c)
+zephyr_sources_ifdef(CONFIG_IPC_SERVICE_BACKEND_ICMSG_V1	interoperability/ipc_icmsg_v1.c)
