@@ -904,7 +904,7 @@ static void dwc2_backup_registers(const struct device *dev)
 }
 
 static void dwc2_restore_essential_registers(const struct device *dev,
-					     bool rwup, bool bus_reset)
+					     bool rwup)
 {
 	const struct udc_dwc2_config *const config = dev->config;
 	struct usb_dwc2_reg *const base = config->base;
@@ -924,10 +924,6 @@ static void dwc2_restore_essential_registers(const struct device *dev,
 
 	sys_write32(backup->gusbcfg, (mem_addr_t)&base->gusbcfg);
 	sys_write32(backup->dcfg, (mem_addr_t)&base->dcfg);
-
-	if (bus_reset) {
-		sys_write32(backup->dcfg, (mem_addr_t)&base->dcfg);
-	}
 
 	if (!rwup) {
 		pcgcctl |= USB_DWC2_PCGCCTL_RESTOREMODE | USB_DWC2_PCGCCTL_RSTPDWNMODULE;
@@ -1030,8 +1026,7 @@ static void dwc2_enter_hibernation(const struct device *dev)
 	LOG_DBG("Hibernated");
 }
 
-static void dwc2_exit_hibernation(const struct device *dev,
-				  bool rwup, bool bus_reset)
+static void dwc2_exit_hibernation(const struct device *dev, bool rwup)
 {
 	const struct udc_dwc2_config *const config = dev->config;
 	struct usb_dwc2_reg *const base = config->base;
@@ -1071,15 +1066,13 @@ static void dwc2_exit_hibernation(const struct device *dev,
 	/* Disable PMU interrupt */
 	sys_clear_bits(gpwrdn_reg, USB_DWC2_GPWRDN_PMUINTSEL);
 
-	dwc2_restore_essential_registers(dev, rwup, bus_reset);
+	dwc2_restore_essential_registers(dev, rwup);
 
 	/* Note: in Remote Wakeup case 15 ms max signaling time starts now */
 
 	/* Wait for Restore Done Interrupt */
 	dwc2_wait_for_bit(dev, (mem_addr_t)&base->gintsts, USB_DWC2_GINTSTS_RSTRDONEINT);
-	if (!bus_reset) {
-		sys_write32(0xFFFFFFFFUL, (mem_addr_t)&base->gintsts);
-	}
+	sys_write32(0xFFFFFFFFUL, (mem_addr_t)&base->gintsts);
 
 	/* Disable restore from PMU */
 	sys_clear_bits(gpwrdn_reg, USB_DWC2_GPWRDN_RESTORE);
@@ -2034,7 +2027,7 @@ static int udc_dwc2_disable(const struct device *dev)
 	config->irq_disable_func(dev);
 
 	if (priv->hibernated) {
-		dwc2_exit_hibernation(dev, false, true);
+		dwc2_exit_hibernation(dev, false);
 		priv->hibernated = 0;
 	}
 
@@ -2751,7 +2744,7 @@ static void dwc2_handle_hibernation_exit(const struct device *dev,
 	struct usb_dwc2_reg *const base = dwc2_get_base(dev);
 	struct udc_dwc2_data *const priv = udc_get_private(dev);
 
-	dwc2_exit_hibernation(dev, rwup, bus_reset);
+	dwc2_exit_hibernation(dev, rwup);
 	dwc2_restore_device_registers(dev, rwup);
 
 	priv->hibernated = 0;
