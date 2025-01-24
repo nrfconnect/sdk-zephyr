@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: 96b_argonkey
-   :name: 96Boards ArgonKey
-   :show-listing:
+.. _argonkey-samples:
 
-   Samples that demonstrate some board-specific features on 96Boards ArgonKey.
+Argonkey Samples
+################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   */*

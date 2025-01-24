@@ -1,5 +1,3 @@
-:orphan:
-
 .. _i2s_litex_example:
 
 #####################
