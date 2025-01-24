@@ -294,8 +294,3 @@ int z_nrf_clock_calibration_skips_count(void)
 
 	return total_skips_cnt;
 }
-
-bool z_nrf_clock_calibration_is_in_progress(void)
-{
-	return cal_process_in_progress ? true : false;
-}
