@@ -29,5 +29,3 @@ if(CONFIG_TFM_PARTITION_PLATFORM)
     $<TARGET_PROPERTY:tfm,TFM_BINARY_DIR>/api_ns/interface/include
   )
 endif()
-
-zephyr_library_sources_ifdef(CONFIG_NRF_SYS_EVENT nrf_sys_event.c)
