@@ -106,27 +106,27 @@ static void setup_fixed_clocks(void)
 	MXC_SYS_ClockSourceDisable(ADI_MAX32_CLK_EXTCLK);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(clk_ipo))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_ipo), okay)
 	MXC_SYS_ClockSourceEnable(ADI_MAX32_CLK_IPO);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(clk_erfo))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_erfo), okay)
 	MXC_SYS_ClockSourceEnable(ADI_MAX32_CLK_ERFO);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(clk_ibro))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_ibro), okay)
 	MXC_SYS_ClockSourceEnable(ADI_MAX32_CLK_IBRO);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(clk_iso))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_iso), okay)
 	MXC_SYS_ClockSourceEnable(ADI_MAX32_CLK_ISO);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(clk_inro))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_inro), okay)
 	MXC_SYS_ClockSourceEnable(ADI_MAX32_CLK_INRO);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(clk_ertco))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_ertco), okay)
 	MXC_SYS_ClockSourceEnable(ADI_MAX32_CLK_ERTCO);
 #endif
 

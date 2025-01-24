@@ -475,7 +475,7 @@ static const struct uart_driver_api uart_cmsdk_apb_driver_api = {
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 };
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_DRV_INST(0))
+#if DT_NODE_HAS_STATUS(DT_DRV_INST(0), okay)
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 static void uart_cmsdk_apb_irq_config_func_0(const struct device *dev);
@@ -538,9 +538,9 @@ static void uart_cmsdk_apb_irq_config_func_0(const struct device *dev)
 #endif
 #endif
 
-#endif /* DT_NODE_HAS_STATUS_OKAY(DT_DRV_INST(0)) */
+#endif /* DT_NODE_HAS_STATUS(DT_DRV_INST(0), okay) */
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_DRV_INST(1))
+#if DT_NODE_HAS_STATUS(DT_DRV_INST(1), okay)
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 static void uart_cmsdk_apb_irq_config_func_1(const struct device *dev);
@@ -603,9 +603,9 @@ static void uart_cmsdk_apb_irq_config_func_1(const struct device *dev)
 #endif
 #endif
 
-#endif /* DT_NODE_HAS_STATUS_OKAY(DT_DRV_INST(1)) */
+#endif /* DT_NODE_HAS_STATUS(DT_DRV_INST(1), okay) */
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_DRV_INST(2))
+#if DT_NODE_HAS_STATUS(DT_DRV_INST(2), okay)
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 static void uart_cmsdk_apb_irq_config_func_2(const struct device *dev);
@@ -668,9 +668,9 @@ static void uart_cmsdk_apb_irq_config_func_2(const struct device *dev)
 #endif
 #endif
 
-#endif /* DT_NODE_HAS_STATUS_OKAY(DT_DRV_INST(2)) */
+#endif /* DT_NODE_HAS_STATUS(DT_DRV_INST(2), okay) */
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_DRV_INST(3))
+#if DT_NODE_HAS_STATUS(DT_DRV_INST(3), okay)
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 static void uart_cmsdk_apb_irq_config_func_3(const struct device *dev);
@@ -733,9 +733,9 @@ static void uart_cmsdk_apb_irq_config_func_3(const struct device *dev)
 #endif
 #endif
 
-#endif /* DT_NODE_HAS_STATUS_OKAY(DT_DRV_INST(3)) */
+#endif /* DT_NODE_HAS_STATUS(DT_DRV_INST(3), okay) */
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_DRV_INST(4))
+#if DT_NODE_HAS_STATUS(DT_DRV_INST(4), okay)
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 static void uart_cmsdk_apb_irq_config_func_4(const struct device *dev);
@@ -798,4 +798,4 @@ static void uart_cmsdk_apb_irq_config_func_4(const struct device *dev)
 #endif
 #endif
 
-#endif /* DT_NODE_HAS_STATUS_OKAY(DT_DRV_INST(4)) */
+#endif /* DT_NODE_HAS_STATUS(DT_DRV_INST(4), okay) */
