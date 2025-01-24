@@ -395,12 +395,21 @@
 #endif
 
 /**
+ * @brief NRFX_GRTC_CONFIG_SLEEP_ALLOWED
+ *
+ * Boolean. Accepted values: 0 and 1.
+ */
+#ifndef NRFX_GRTC_CONFIG_SLEEP_ALLOWED
+#define NRFX_GRTC_CONFIG_SLEEP_ALLOWED 0
+#endif
+
+/**
  * @brief NRFX_GRTC_CONFIG_AUTOEN
  *
  * Boolean. Accepted values: 0 and 1.
  */
 #ifndef NRFX_GRTC_CONFIG_AUTOEN
-#define NRFX_GRTC_CONFIG_AUTOEN 1
+#define NRFX_GRTC_CONFIG_AUTOEN 0
 #endif
 
 /**
@@ -410,15 +419,6 @@
  */
 #ifndef NRFX_GRTC_CONFIG_AUTOSTART
 #define NRFX_GRTC_CONFIG_AUTOSTART 0
-#endif
-
-/**
- * @brief NRFX_GRTC_CONFIG_CLEAR_AT_INIT
- *
- * Boolean. Accepted values: 0 and 1.
- */
-#ifndef NRFX_GRTC_CONFIG_CLEAR_AT_INIT
-#define NRFX_GRTC_CONFIG_CLEAR_AT_INIT 0
 #endif
 
 /**
