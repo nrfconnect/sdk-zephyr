@@ -62,7 +62,7 @@ The key features of the EK-RA6M5 board are categorized in three groups as follow
 - 64 Mb (512 Mb) External Octo-SPI Flash
 - CAN (3-pin header)
 
-.. figure:: ek-ra6m5-board.webp
+.. figure:: ek_ra6m5.webp
 	:align: center
 	:alt: RA6M5 Evaluation Kit
 
@@ -72,7 +72,7 @@ Hardware
 ********
 Detailed hardware feature for the RA6M5 MCU group can be found at `RA6M5 Group User's Manual Hardware`_
 
-.. figure:: ra6m5-block-diagram.webp
+.. figure:: ra6m5_block_diagram.webp
 	:width: 442px
 	:align: center
 	:alt: RA6M5 MCU group feature
@@ -98,6 +98,20 @@ The below features are currently supported on Zephyr OS for EK-RA6M5 board:
 | UART      | on-chip    | serial               |
 +-----------+------------+----------------------+
 | CLOCK     | on-chip    | clock control        |
++-----------+------------+----------------------+
+| I2C       | on-chip    | i2c                  |
++-----------+------------+----------------------+
+| SPI       | on-chip    | spi                  |
++-----------+------------+----------------------+
+| COUNTER   | on-chip    | counter              |
++-----------+------------+----------------------+
+| USBHS     | on-chip    | udc                  |
++-----------+------------+----------------------+
+| ADC       | on-chip    | adc                  |
++-----------+------------+----------------------+
+| PWM       | on-chip    | pwm                  |
++-----------+------------+----------------------+
+| FLASH     | on-chip    | flash                |
 +-----------+------------+----------------------+
 
 Other hardware features are currently not supported by the port.

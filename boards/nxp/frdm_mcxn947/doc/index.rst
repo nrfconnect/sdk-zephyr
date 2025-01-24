@@ -1,7 +1,4 @@
-.. _frdm_mcxn947:
-
-NXP FRDM-MCXN947
-################
+.. zephyr:board:: frdm_mcxn947
 
 Overview
 ********
@@ -12,10 +9,6 @@ MCUs I/Os, integrated open-standard serial interfaces, external flash memory and
 an on-board MCU-Link debugger. MCX N Series are high-performance, low-power
 microcontrollers with intelligent peripherals and accelerators providing multi-tasking
 capabilities and performance efficiency.
-
-.. image:: frdm_mcxn947.webp
-   :align: center
-   :alt: FRDM-MCXN947
 
 Hardware
 ********
@@ -66,6 +59,8 @@ The FRDM-MCXN947 board configuration supports the following hardware features:
 +-----------+------------+-------------------------------------+
 | I2C       | on-chip    | i2c                                 |
 +-----------+------------+-------------------------------------+
+| I3C       | on-chip    | i3c                                 |
++-----------+------------+-------------------------------------+
 | CLOCK     | on-chip    | clock_control                       |
 +-----------+------------+-------------------------------------+
 | FLASH     | on-chip    | soc flash                           |
@@ -80,6 +75,8 @@ The FRDM-MCXN947 board configuration supports the following hardware features:
 +-----------+------------+-------------------------------------+
 | PWM       | on-chip    | pwm                                 |
 +-----------+------------+-------------------------------------+
+| SCTimer   | on-chip    | pwm                                 |
++-----------+------------+-------------------------------------+
 | CTIMER    | on-chip    | counter                             |
 +-----------+------------+-------------------------------------+
 | USDHC     | on-chip    | sdhc                                |
@@ -87,6 +84,8 @@ The FRDM-MCXN947 board configuration supports the following hardware features:
 | VREF      | on-chip    | regulator                           |
 +-----------+------------+-------------------------------------+
 | ADC       | on-chip    | adc                                 |
++-----------+------------+-------------------------------------+
+| HWINFO    | on-chip    | Unique device serial number         |
 +-----------+------------+-------------------------------------+
 | USBHS     | on-chip    | USB device                          |
 +-----------+------------+-------------------------------------+
@@ -100,6 +99,8 @@ The FRDM-MCXN947 board configuration supports the following hardware features:
 +-----------+------------+-------------------------------------+
 | DISPLAY   | on-chip    | flexio; MIPI-DBI. Tested with       |
 |           |            | :ref:`lcd_par_s035`                 |
++-----------+------------+-------------------------------------+
+| MRT       | on-chip    | counter                             |
 +-----------+------------+-------------------------------------+
 
 Targets available
@@ -259,6 +260,12 @@ should see the following message in the terminal:
 
    *** Booting Zephyr OS build v3.6.0-479-g91faa20c6741 ***
    Hello World! frdm_mcxn947/mcxn947/cpu0
+
+Troubleshooting
+===============
+
+.. include:: ../../common/segger-ecc-systemview.rst
+   :start-after: segger-ecc-systemview
 
 .. _MCX-N947 SoC Website:
    https://www.nxp.com/products/processors-and-microcontrollers/arm-microcontrollers/general-purpose-mcus/mcx-arm-cortex-m/mcx-n-series-microcontrollers/mcx-n94x-54x-highly-integrated-multicore-mcus-with-on-chip-accelerators-intelligent-peripherals-and-advanced-security:MCX-N94X-N54X

@@ -54,22 +54,6 @@ struct video_stm32_dcmi_config {
 	const struct stream dma;
 };
 
-static inline unsigned int video_pix_fmt_bpp(uint32_t pixelformat)
-{
-	switch (pixelformat) {
-	case VIDEO_PIX_FMT_BGGR8:
-	case VIDEO_PIX_FMT_GBRG8:
-	case VIDEO_PIX_FMT_GRBG8:
-	case VIDEO_PIX_FMT_RGGB8:
-		return 1;
-	case VIDEO_PIX_FMT_RGB565:
-	case VIDEO_PIX_FMT_YUYV:
-		return 2;
-	default:
-		return 0;
-	}
-}
-
 void HAL_DCMI_ErrorCallback(DCMI_HandleTypeDef *hdcmi)
 {
 	LOG_WRN("%s", __func__);
@@ -320,6 +304,7 @@ static int video_stm32_dcmi_enqueue(const struct device *dev,
 	}
 
 	vbuf->bytesused = buffer_size;
+	vbuf->line_offset = 0;
 
 	k_fifo_put(&data->fifo_in, vbuf);
 
@@ -356,6 +341,9 @@ static int video_stm32_dcmi_get_caps(const struct device *dev,
 		return -EINVAL;
 	}
 
+	/* DCMI produces full frames */
+	caps->min_line_count = caps->max_line_count = LINE_COUNT_HEIGHT;
+
 	/* Forward the message to the sensor device */
 	ret = video_get_caps(config->sensor_dev, ep, caps);
 
@@ -384,7 +372,7 @@ static inline int video_stm32_dcmi_get_ctrl(const struct device *dev, unsigned i
 	return ret;
 }
 
-static const struct video_driver_api video_stm32_dcmi_driver_api = {
+static DEVICE_API(video, video_stm32_dcmi_driver_api) = {
 	.set_format = video_stm32_dcmi_set_fmt,
 	.get_format = video_stm32_dcmi_get_fmt,
 	.stream_start = video_stm32_dcmi_stream_start,

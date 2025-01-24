@@ -16,8 +16,5 @@ supported:
   - pwm
   - dma
   - input
-testing:
-  ignore_tags:
-    - net
-    - bluetooth
+  - video
 vendor: espressif

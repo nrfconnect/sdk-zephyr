@@ -1,7 +1,4 @@
-.. _stm32u083c_dk_board:
-
-ST STM32U083C_DK
-################
+.. zephyr:board:: stm32u083c_dk
 
 Overview
 ********
@@ -35,6 +32,8 @@ board:
 - User joystick
 - Touchkey
 - Temperature sensor
+
+More information about the board can be found at the `STM32U083_DK website`_.
 
 Hardware
 ********
@@ -159,9 +158,13 @@ The Zephyr stm32u083c_dk board configuration supports the following hardware fea
 | UART      | on-chip    | serial port-polling;                |
 |           |            | serial port-interrupt               |
 +-----------+------------+-------------------------------------+
+| ADC       | on-chip    | adc                                 |
++-----------+------------+-------------------------------------+
 | DAC       | on-chip    | DAC Controller                      |
 +-----------+------------+-------------------------------------+
 | I2C       | on-chip    | i2c                                 |
++-----------+------------+-------------------------------------+
+| PWM       | on-chip    | pwm                                 |
 +-----------+------------+-------------------------------------+
 
 Other hardware features are not yet supported on this Zephyr port.
@@ -238,7 +241,7 @@ This can be done by executing the following commands.
 
 
 Flashing an application to STM32U083C_DK
-------------------------------------------
+----------------------------------------
 
 Connect the STM32U083C_DK to your host computer using the USB port.
 Then build and flash an application. Here is an example for the

@@ -74,6 +74,13 @@ static int mcux_ccm_get_subsys_rate(const struct device *dev,
 #endif
 #endif
 
+#ifdef CONFIG_I3C_MCUX
+	case IMX_CCM_I3C1_CLK:
+	case IMX_CCM_I3C2_CLK:
+		clock_root = kCLOCK_Root_I3c1 + instance;
+		break;
+#endif
+
 #ifdef CONFIG_SPI_MCUX_LPSPI
 	case IMX_CCM_LPSPI1_CLK:
 		clock_root = kCLOCK_Root_Lpspi1 + instance;
@@ -111,10 +118,16 @@ static int mcux_ccm_get_subsys_rate(const struct device *dev,
 #endif
 
 #ifdef CONFIG_PWM_MCUX
+#if defined(CONFIG_SOC_SERIES_IMXRT118X)
+	case IMX_CCM_PWM_CLK:
+		clock_root = kCLOCK_Root_Bus_Aon;
+		break;
+#else
 	case IMX_CCM_PWM_CLK:
 		clock_root = kCLOCK_Root_Bus;
 		break;
-#endif
+#endif /* CONFIG_SOC_SERIES_IMXRT118X */
+#endif /* CONFIG_PWM_MCUX */
 
 #ifdef CONFIG_CAN_MCUX_FLEXCAN
 	case IMX_CCM_CAN1_CLK:
@@ -172,10 +185,28 @@ static int mcux_ccm_get_subsys_rate(const struct device *dev,
 
 		return 0;
 #endif
-#ifdef CONFIG_COUNTER_MCUX_TPM
+#if defined(CONFIG_COUNTER_MCUX_TPM) || defined(CONFIG_PWM_MCUX_TPM)
+#if defined(CONFIG_SOC_SERIES_IMXRT118X)
+	case IMX_CCM_TPM_CLK:
+		switch (instance) {
+		case 0:
+			clock_root = kCLOCK_Root_Bus_Aon;
+			break;
+		case 1:
+			clock_root = kCLOCK_Root_Tpm2;
+			break;
+		case 2:
+			clock_root = kCLOCK_Root_Bus_Wakeup;
+			break;
+		default:
+			clock_root = (kCLOCK_Root_Tpm4 + instance - 3);
+		}
+		break;
+#else
 	case IMX_CCM_TPM_CLK:
 		clock_root = kCLOCK_Root_Tpm1 + instance;
 		break;
+#endif
 #endif
 
 #ifdef CONFIG_MCUX_FLEXIO
@@ -187,21 +218,25 @@ static int mcux_ccm_get_subsys_rate(const struct device *dev,
 		break;
 #endif
 
-#ifdef CONFIG_PWM_MCUX_QTMR
+#if defined(CONFIG_PWM_MCUX_QTMR) || defined(CONFIG_COUNTER_MCUX_QTMR)
+#if defined(CONFIG_SOC_SERIES_IMXRT118X)
+	case IMX_CCM_QTMR_CLK:
+		clock_root = kCLOCK_Root_Bus_Aon;
+		break;
+#else
 	case IMX_CCM_QTMR1_CLK:
 	case IMX_CCM_QTMR2_CLK:
 	case IMX_CCM_QTMR3_CLK:
 	case IMX_CCM_QTMR4_CLK:
 		clock_root = kCLOCK_Root_Bus;
 		break;
-#endif
+#endif /* CONFIG_SOC_SERIES_IMXRT118X */
+#endif /* CONFIG_PWM_MCUX_QTMR || CONFIG_COUNTER_MCUX_QTMR */
 
 #ifdef CONFIG_MEMC_MCUX_FLEXSPI
 	case IMX_CCM_FLEXSPI_CLK:
-		clock_root = kCLOCK_Root_Flexspi1;
-		break;
 	case IMX_CCM_FLEXSPI2_CLK:
-		clock_root = kCLOCK_Root_Flexspi2;
+		clock_root = kCLOCK_Root_Flexspi1 + instance;
 		break;
 #endif
 #ifdef CONFIG_COUNTER_NXP_PIT
@@ -215,6 +250,25 @@ static int mcux_ccm_get_subsys_rate(const struct device *dev,
 		clock_root = kCLOCK_Root_Adc1 + instance;
 		break;
 #endif
+
+#if defined(CONFIG_ETH_NXP_IMX_NETC)
+	case IMX_CCM_NETC_CLK:
+		clock_root = kCLOCK_Root_Netc;
+		break;
+#endif
+
+#if defined(CONFIG_VIDEO_MCUX_MIPI_CSI2RX)
+	case IMX_CCM_MIPI_CSI2RX_ROOT_CLK:
+		clock_root = kCLOCK_Root_Csi2;
+		break;
+	case IMX_CCM_MIPI_CSI2RX_ESC_CLK:
+		clock_root = kCLOCK_Root_Csi2_Esc;
+		break;
+	case IMX_CCM_MIPI_CSI2RX_UI_CLK:
+		clock_root = kCLOCK_Root_Csi2_Ui;
+		break;
+#endif
+
 	default:
 		return -EINVAL;
 	}
@@ -247,13 +301,24 @@ static int CCM_SET_FUNC_ATTR mcux_ccm_set_subsys_rate(const struct device *dev,
 	case IMX_CCM_FLEXSPI_CLK:
 		__fallthrough;
 	case IMX_CCM_FLEXSPI2_CLK:
-#if defined(CONFIG_SOC_SERIES_IMXRT11XX) && defined(CONFIG_MEMC_MCUX_FLEXSPI)
+#if (defined(CONFIG_SOC_SERIES_IMXRT11XX) || defined(CONFIG_SOC_SERIES_IMXRT118X)) \
+		&& defined(CONFIG_MEMC_MCUX_FLEXSPI)
 		/* The SOC is using the FlexSPI for XIP. Therefore,
 		 * the FlexSPI itself must be managed within the function,
 		 * which is SOC specific.
 		 */
 		return flexspi_clock_set_freq(clock_name, clock_rate);
 #endif
+
+#if defined(CONFIG_VIDEO_MCUX_MIPI_CSI2RX)
+	case IMX_CCM_MIPI_CSI2RX_ROOT_CLK:
+		return mipi_csi2rx_clock_set_freq(kCLOCK_Root_Csi2, clock_rate);
+	case IMX_CCM_MIPI_CSI2RX_UI_CLK:
+		return mipi_csi2rx_clock_set_freq(kCLOCK_Root_Csi2_Ui, clock_rate);
+	case IMX_CCM_MIPI_CSI2RX_ESC_CLK:
+		return mipi_csi2rx_clock_set_freq(kCLOCK_Root_Csi2_Esc, clock_rate);
+#endif
+
 	default:
 		/* Silence unused variable warning */
 		ARG_UNUSED(clock_rate);
@@ -261,7 +326,7 @@ static int CCM_SET_FUNC_ATTR mcux_ccm_set_subsys_rate(const struct device *dev,
 	}
 }
 
-static const struct clock_control_driver_api mcux_ccm_driver_api = {
+static DEVICE_API(clock_control, mcux_ccm_driver_api) = {
 	.on = mcux_ccm_on,
 	.off = mcux_ccm_off,
 	.get_rate = mcux_ccm_get_subsys_rate,

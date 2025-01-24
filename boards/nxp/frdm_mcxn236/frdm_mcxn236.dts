@@ -21,11 +21,13 @@
 		zephyr,uart-mcumgr = &flexcomm4_lpuart4;
 		zephyr,console = &flexcomm4_lpuart4;
 		zephyr,shell-uart = &flexcomm4_lpuart4;
+		zephyr,canbus = &flexcan1;
 	};
 
 	aliases{
 		watchdog0 = &wwdt0;
 		pwm-0 = &flexpwm1_pwm0;
+		rtc = &rtc;
 	};
 };
 
@@ -110,6 +112,46 @@
 	status = "okay";
 };
 
+&flexcan1 {
+	status = "okay";
+};
+
 &ctimer0 {
+	status = "okay";
+};
+
+&vref {
+	status = "okay";
+};
+
+&lpadc0 {
+	status = "okay";
+};
+
+zephyr_udc0: &usb1 {
+	status = "okay";
+};
+
+&lpcmp0 {
+	status = "okay";
+};
+
+&i3c1 {
+	status = "okay";
+};
+
+&flexio0 {
+	status = "okay";
+};
+
+&lptmr0 {
+	status = "okay";
+};
+
+&mrt0_channel0 {
+	status = "okay";
+};
+
+&rtc {
 	status = "okay";
 };

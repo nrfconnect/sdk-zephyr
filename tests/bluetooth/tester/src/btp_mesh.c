@@ -290,7 +290,7 @@ static void oob_store_handler(struct k_work *work)
 #endif /* CONFIG_BT_MESH_DFD_SRV_OOB_UPLOAD */
 #endif
 
-#if defined(CONFIG_BT_MESH_BLOB_CLI) && !defined(CONFIG_BT_MESH_DFD_SRV)
+#if defined(CONFIG_BT_MESH_BLOB_CLI)
 static struct {
 	struct bt_mesh_blob_cli_inputs inputs;
 	struct bt_mesh_blob_target targets[32];
@@ -1023,7 +1023,7 @@ static uint8_t proxy_solicit(const void *cmd, uint16_t cmd_len,
 static struct bt_mesh_brg_cfg_cli brg_cfg_cli;
 #endif /* CONFIG_BT_MESH_BRG_CFG_CLI */
 
-static const struct bt_mesh_model root_models[] = {
+static const struct bt_mesh_model primary_models[] = {
 	BT_MESH_MODEL_CFG_SRV,
 	BT_MESH_MODEL_CFG_CLI(&cfg_cli),
 	BT_MESH_MODEL_HEALTH_SRV(&health_srv, &health_pub, health_srv_meta),
@@ -1052,15 +1052,6 @@ static const struct bt_mesh_model root_models[] = {
 #if defined(CONFIG_BT_MESH_RPR_SRV)
 	BT_MESH_MODEL_RPR_SRV,
 #endif
-#if defined(CONFIG_BT_MESH_DFD_SRV)
-	BT_MESH_MODEL_DFD_SRV(&dfd_srv),
-#endif
-#if defined(CONFIG_BT_MESH_DFU_SRV)
-	BT_MESH_MODEL_DFU_SRV(&dfu_srv),
-#endif
-#if defined(CONFIG_BT_MESH_BLOB_CLI) && !defined(CONFIG_BT_MESH_DFD_SRV)
-	BT_MESH_MODEL_BLOB_CLI(&blob_cli),
-#endif
 #if defined(CONFIG_BT_MESH_PRIV_BEACON_SRV)
 	BT_MESH_MODEL_PRIV_BEACON_SRV,
 #endif
@@ -1085,7 +1076,23 @@ static const struct bt_mesh_model root_models[] = {
 
 };
 
-static const struct bt_mesh_model root_models_alt[] = {
+#if defined(CONFIG_BT_MESH_DFD_SRV)
+static const struct bt_mesh_model dfu_distributor_models[] = {BT_MESH_MODEL_DFD_SRV(&dfd_srv)};
+#endif
+
+#if defined(CONFIG_BT_MESH_DFU_SRV)
+static const struct bt_mesh_model dfu_target_models[] = {
+	BT_MESH_MODEL_DFU_SRV(&dfu_srv),
+};
+#endif
+
+#if defined(CONFIG_BT_MESH_BLOB_CLI)
+static const struct bt_mesh_model blob_client_models[] = {
+	BT_MESH_MODEL_BLOB_CLI(&blob_cli),
+};
+#endif
+
+static const struct bt_mesh_model primary_models_alt[] = {
 	BT_MESH_MODEL_CFG_SRV,
 	BT_MESH_MODEL_CFG_CLI(&cfg_cli),
 	BT_MESH_MODEL_HEALTH_SRV(&health_srv, &health_pub, health_srv_meta_alt),
@@ -1114,15 +1121,6 @@ static const struct bt_mesh_model root_models_alt[] = {
 #if defined(CONFIG_BT_MESH_RPR_SRV)
 	BT_MESH_MODEL_RPR_SRV,
 #endif
-#if defined(CONFIG_BT_MESH_DFD_SRV)
-	BT_MESH_MODEL_DFD_SRV(&dfd_srv),
-#endif
-#if defined(CONFIG_BT_MESH_DFU_SRV)
-	BT_MESH_MODEL_DFU_SRV(&dfu_srv),
-#endif
-#if defined(CONFIG_BT_MESH_BLOB_CLI) && !defined(CONFIG_BT_MESH_DFD_SRV)
-	BT_MESH_MODEL_BLOB_CLI(&blob_cli),
-#endif
 #if defined(CONFIG_BT_MESH_PRIV_BEACON_SRV)
 	BT_MESH_MODEL_PRIV_BEACON_SRV,
 #endif
@@ -1146,6 +1144,7 @@ static const struct bt_mesh_model root_models_alt[] = {
 #endif
 
 };
+
 struct model_data *lookup_model_bound(uint16_t id)
 {
 	int i;
@@ -1164,11 +1163,29 @@ static const struct bt_mesh_model vnd_models[] = {
 };
 
 static const struct bt_mesh_elem elements[] = {
-	BT_MESH_ELEM(0, root_models, vnd_models),
+	BT_MESH_ELEM(0, primary_models, vnd_models),
+#if defined(CONFIG_BT_MESH_DFD_SRV)
+	BT_MESH_ELEM(0, dfu_distributor_models, BT_MESH_MODEL_NONE),
+#endif
+#if defined(CONFIG_BT_MESH_DFU_SRV)
+	BT_MESH_ELEM(0, dfu_target_models, BT_MESH_MODEL_NONE),
+#endif
+#if defined(CONFIG_BT_MESH_BLOB_CLI)
+	BT_MESH_ELEM(0, blob_client_models, BT_MESH_MODEL_NONE),
+#endif
 };
 
 static const struct bt_mesh_elem elements_alt[] = {
-	BT_MESH_ELEM(0, root_models_alt, vnd_models),
+	BT_MESH_ELEM(0, primary_models_alt, vnd_models),
+#if defined(CONFIG_BT_MESH_DFD_SRV)
+	BT_MESH_ELEM(0, dfu_distributor_models, BT_MESH_MODEL_NONE),
+#endif
+#if defined(CONFIG_BT_MESH_DFU_SRV)
+	BT_MESH_ELEM(0, dfu_target_models, BT_MESH_MODEL_NONE),
+#endif
+#if defined(CONFIG_BT_MESH_BLOB_CLI)
+	BT_MESH_ELEM(0, blob_client_models, BT_MESH_MODEL_NONE),
+#endif
 };
 
 static void link_open(bt_mesh_prov_bearer_t bearer)
@@ -2086,10 +2103,10 @@ static uint8_t models_metadata_get(const void *cmd, uint16_t cmd_len,
 static uint8_t subnet_bridge_get(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t *rsp_len)
 {
 	const struct btp_mesh_subnet_bridge_get_cmd *cp = cmd;
-	enum bt_mesh_subnet_bridge_state state;
+	enum bt_mesh_brg_cfg_state state;
 	int err;
 
-	err = bt_mesh_brg_cfg_cli_subnet_bridge_get(net.net_idx, sys_le16_to_cpu(cp->addr), &state);
+	err = bt_mesh_brg_cfg_cli_get(net.net_idx, sys_le16_to_cpu(cp->addr), &state);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		return BTP_STATUS_FAILED;
@@ -2103,13 +2120,12 @@ static uint8_t subnet_bridge_get(const void *cmd, uint16_t cmd_len, void *rsp, u
 static uint8_t subnet_bridge_set(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t *rsp_len)
 {
 	const struct btp_mesh_subnet_bridge_set_cmd *cp = cmd;
-	enum bt_mesh_subnet_bridge_state state;
+	enum bt_mesh_brg_cfg_state state;
 	int err;
 
 	state = cp->val;
 
-	err = bt_mesh_brg_cfg_cli_subnet_bridge_set(net.net_idx, sys_le16_to_cpu(cp->addr), state,
-						    &state);
+	err = bt_mesh_brg_cfg_cli_set(net.net_idx, sys_le16_to_cpu(cp->addr), state, &state);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		return BTP_STATUS_FAILED;
@@ -2123,8 +2139,8 @@ static uint8_t subnet_bridge_set(const void *cmd, uint16_t cmd_len, void *rsp, u
 static uint8_t bridging_table_add(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t *rsp_len)
 {
 	const struct btp_mesh_bridging_table_add_cmd *cp = cmd;
-	struct bt_mesh_bridging_table_entry entry;
-	struct bt_mesh_bridging_table_status rp;
+	struct bt_mesh_brg_cfg_table_entry entry;
+	struct bt_mesh_brg_cfg_table_status rp;
 	int err;
 
 	LOG_DBG("");
@@ -2135,8 +2151,7 @@ static uint8_t bridging_table_add(const void *cmd, uint16_t cmd_len, void *rsp, 
 	entry.addr1 = sys_le16_to_cpu(cp->addr1);
 	entry.addr2 = sys_le16_to_cpu(cp->addr2);
 
-	err = bt_mesh_brg_cfg_cli_bridging_table_add(net_key_idx, sys_le16_to_cpu(cp->addr), &entry,
-						     &rp);
+	err = bt_mesh_brg_cfg_cli_table_add(net_key_idx, sys_le16_to_cpu(cp->addr), &entry, &rp);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		return BTP_STATUS_FAILED;
@@ -2149,12 +2164,12 @@ static uint8_t bridging_table_remove(const void *cmd, uint16_t cmd_len, void *rs
 				     uint16_t *rsp_len)
 {
 	const struct btp_mesh_bridging_table_remove_cmd *cp = cmd;
-	struct bt_mesh_bridging_table_status rp;
+	struct bt_mesh_brg_cfg_table_status rp;
 	int err;
 
 	LOG_DBG("");
 
-	err = bt_mesh_brg_cfg_cli_bridging_table_remove(
+	err = bt_mesh_brg_cfg_cli_table_remove(
 		net_key_idx, sys_le16_to_cpu(cp->addr), sys_le16_to_cpu(cp->net_idx1),
 		sys_le16_to_cpu(cp->net_idx2), sys_le16_to_cpu(cp->addr1),
 		sys_le16_to_cpu(cp->addr2), &rp);
@@ -2170,8 +2185,8 @@ static uint8_t bridging_table_remove(const void *cmd, uint16_t cmd_len, void *rs
 static uint8_t bridged_subnets_get(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t *rsp_len)
 {
 	const struct btp_mesh_bridged_subnets_get_cmd *cp = cmd;
-	struct bt_mesh_filter_netkey filter_net_idx;
-	struct bt_mesh_bridged_subnets_list rp;
+	struct bt_mesh_brg_cfg_filter_netkey filter_net_idx;
+	struct bt_mesh_brg_cfg_subnets_list rp;
 	int err;
 
 	LOG_DBG("");
@@ -2184,8 +2199,8 @@ static uint8_t bridged_subnets_get(const void *cmd, uint16_t cmd_len, void *rsp,
 	filter_net_idx.filter = cp->filter;
 	filter_net_idx.net_idx = sys_le16_to_cpu(cp->net_idx);
 
-	err = bt_mesh_brg_cfg_cli_bridged_subnets_get(net_key_idx, sys_le16_to_cpu(cp->addr),
-						      filter_net_idx, cp->start_idx, &rp);
+	err = bt_mesh_brg_cfg_cli_subnets_get(net_key_idx, sys_le16_to_cpu(cp->addr),
+					      filter_net_idx, cp->start_idx, &rp);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		return BTP_STATUS_FAILED;
@@ -2197,7 +2212,7 @@ static uint8_t bridged_subnets_get(const void *cmd, uint16_t cmd_len, void *rsp,
 static uint8_t bridging_table_get(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t *rsp_len)
 {
 	const struct btp_mesh_bridging_table_get_cmd *cp = cmd;
-	struct bt_mesh_bridging_table_list rp;
+	struct bt_mesh_brg_cfg_table_list rp;
 	int err;
 
 	LOG_DBG("");
@@ -2207,7 +2222,7 @@ static uint8_t bridging_table_get(const void *cmd, uint16_t cmd_len, void *rsp, 
 	 */
 	rp.list = NULL;
 
-	err = bt_mesh_brg_cfg_cli_bridging_table_get(
+	err = bt_mesh_brg_cfg_cli_table_get(
 		net_key_idx, sys_le16_to_cpu(cp->addr), sys_le16_to_cpu(cp->net_idx1),
 		sys_le16_to_cpu(cp->net_idx2), sys_le16_to_cpu(cp->start_idx), &rp);
 	if (err) {
@@ -2227,8 +2242,7 @@ static uint8_t bridging_table_size_get(const void *cmd, uint16_t cmd_len, void *
 
 	LOG_DBG("");
 
-	err = bt_mesh_brg_cfg_cli_bridging_table_size_get(net_key_idx, sys_le16_to_cpu(cp->addr),
-							  &size);
+	err = bt_mesh_brg_cfg_cli_table_size_get(net_key_idx, sys_le16_to_cpu(cp->addr), &size);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		return BTP_STATUS_FAILED;
@@ -4495,7 +4509,7 @@ static uint8_t dfu_firmware_update_apply(const void *cmd, uint16_t cmd_len,
 }
 #endif
 
-#if defined(CONFIG_BT_MESH_BLOB_CLI) && !defined(CONFIG_BT_MESH_DFD_SRV)
+#if defined(CONFIG_BT_MESH_BLOB_CLI)
 static void blob_cli_inputs_prepare(uint16_t group, uint16_t app_idx)
 {
 	int i;
@@ -5318,7 +5332,7 @@ static const struct btp_handler mdl_handlers[] = {
 		.func = dfu_firmware_update_apply,
 	},
 #endif
-#if defined(CONFIG_BT_MESH_BLOB_CLI) && !defined(CONFIG_BT_MESH_DFD_SRV)
+#if defined(CONFIG_BT_MESH_BLOB_CLI)
 	{
 		.opcode = BTP_MMDL_BLOB_INFO_GET,
 		.expect_len = BTP_HANDLER_LENGTH_VARIABLE,

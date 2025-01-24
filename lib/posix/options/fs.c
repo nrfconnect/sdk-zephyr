@@ -6,6 +6,9 @@
 
 #undef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+
+#include "fs_priv.h"
+
 #include <errno.h>
 #include <zephyr/kernel.h>
 #include <limits.h>
@@ -20,15 +23,6 @@
 int zvfs_fstat(int fd, struct stat *buf);
 
 BUILD_ASSERT(PATH_MAX >= MAX_FILE_NAME, "PATH_MAX is less than MAX_FILE_NAME");
-
-struct posix_fs_desc {
-	union {
-		struct fs_file_t file;
-		struct fs_dir_t dir;
-	};
-	bool is_dir;
-	bool used;
-};
 
 static struct posix_fs_desc desc_array[CONFIG_POSIX_OPEN_MAX];
 
@@ -85,7 +79,7 @@ static int posix_mode_to_zephyr(int mf)
 	return mode;
 }
 
-int zvfs_open(const char *name, int flags)
+int zvfs_open(const char *name, int flags, int mode)
 {
 	int rc, fd;
 	struct posix_fs_desc *ptr = NULL;
@@ -102,24 +96,44 @@ int zvfs_open(const char *name, int flags)
 
 	ptr = posix_fs_alloc_obj(false);
 	if (ptr == NULL) {
-		zvfs_free_fd(fd);
-		errno = EMFILE;
-		return -1;
+		rc = -EMFILE;
+		goto out_err;
 	}
 
 	fs_file_t_init(&ptr->file);
 
-	rc = fs_open(&ptr->file, name, zmode);
+	if (flags & O_CREAT) {
+		flags &= ~O_CREAT;
 
+		rc = fs_open(&ptr->file, name, FS_O_CREATE | (mode & O_ACCMODE));
+		if (rc < 0) {
+			goto out_err;
+		}
+		rc = fs_close(&ptr->file);
+		if (rc < 0) {
+			goto out_err;
+		}
+	}
+
+	rc = fs_open(&ptr->file, name, zmode);
 	if (rc < 0) {
-		posix_fs_free_obj(ptr);
-		zvfs_free_fd(fd);
-		errno = -rc;
-		return -1;
+		goto out_err;
 	}
 
 	zvfs_finalize_fd(fd, ptr, &fs_fd_op_vtable);
 
+	goto out;
+
+out_err:
+	if (ptr != NULL) {
+		posix_fs_free_obj(ptr);
+	}
+
+	zvfs_free_fd(fd);
+	errno = -rc;
+	return -1;
+
+out:
 	return fd;
 }
 
@@ -316,40 +330,6 @@ struct dirent *readdir(DIR *dirp)
 	pdirent.d_name[rc] = '\0';
 	return &pdirent;
 }
-
-#ifdef CONFIG_POSIX_FILE_SYSTEM_R
-int readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result)
-{
-	struct dirent *dir;
-
-	errno = 0;
-
-	dir = readdir(dirp);
-	if (dir == NULL) {
-		int error = errno;
-
-		if (error != 0) {
-			if (result != NULL) {
-				*result = NULL;
-			}
-
-			return 0;
-		} else {
-			return error;
-		}
-	}
-
-	if (entry != NULL) {
-		memcpy(entry, dir, sizeof(struct dirent));
-	}
-
-	if (result != NULL) {
-		*result = entry;
-	}
-
-	return 0;
-}
-#endif /* CONFIG_POSIX_FILE_SYSTEM_R */
 
 /**
  * @brief Rename a file.

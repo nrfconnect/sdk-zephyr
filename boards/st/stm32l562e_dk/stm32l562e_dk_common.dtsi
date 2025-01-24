@@ -42,6 +42,12 @@
 	chosen {
 		zephyr,bt-hci = &hci_spi;
 	};
+
+	lvgl_pointer {
+		compatible = "zephyr,lvgl-pointer-input";
+		input = <&ft5336>;
+		invert-y;
+	};
 };
 
 &fmc {
@@ -87,7 +93,7 @@
 				st7789v: lcd-panel@0 {
 					compatible = "sitronix,st7789v";
 					reg = <0>;
-					mipi-mode = <MIPI_DBI_MODE_8080_BUS_16_BIT>;
+					mipi-mode = "MIPI_DBI_MODE_8080_BUS_16_BIT";
 					/* A write cycle should be 68ns */
 					mipi-max-frequency = <14705882>;
 					width = <240>;
@@ -176,6 +182,13 @@ stm32_lp_tick_source: &lptim1 {
 		compatible = "st,lsm6dso";
 		reg = <0x6a>;
 		irq-gpios = <&gpiof 3 GPIO_ACTIVE_HIGH>;
+	};
+
+	ft5336: ft5336@38 {
+		compatible = "focaltech,ft5336";
+		reg = <0x38>;
+		int-gpios = <&gpiof 1 GPIO_ACTIVE_LOW>;
+		reset-gpios = <&gpiof 15 GPIO_ACTIVE_LOW>;
 	};
 };
 
@@ -277,7 +290,7 @@ stm32_lp_tick_source: &lptim1 {
 &adc1 {
 	pinctrl-0 = <&adc1_in13_pc4>;
 	pinctrl-names = "default";
-	st,adc-clock-source = <SYNC>;
+	st,adc-clock-source = "SYNC";
 	st,adc-prescaler = <4>;
 	status = "okay";
 };

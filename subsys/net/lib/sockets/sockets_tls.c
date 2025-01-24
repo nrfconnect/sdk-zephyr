@@ -2108,7 +2108,7 @@ free_fd:
 	return -1;
 }
 
-int ztls_close_ctx(struct tls_context *ctx)
+int ztls_close_ctx(struct tls_context *ctx, int sock)
 {
 	int ret, err = 0;
 
@@ -2119,6 +2119,10 @@ int ztls_close_ctx(struct tls_context *ctx)
 
 	err = tls_release(ctx);
 	ret = zsock_close(ctx->sock);
+
+	if (ret == 0) {
+		(void)sock_obj_core_dealloc(sock);
+	}
 
 	/* In case close fails, we propagate errno value set by close.
 	 * In case close succeeds, but tls_release fails, set errno
@@ -2137,13 +2141,15 @@ int ztls_connect_ctx(struct tls_context *ctx, const struct sockaddr *addr,
 {
 	int ret;
 	int sock_flags;
+	bool is_non_block;
 
 	sock_flags = zsock_fcntl(ctx->sock, F_GETFL, 0);
 	if (sock_flags < 0) {
 		return -EIO;
 	}
 
-	if (sock_flags & O_NONBLOCK) {
+	is_non_block = sock_flags & O_NONBLOCK;
+	if (is_non_block) {
 		(void)zsock_fcntl(ctx->sock, F_SETFL,
 				  sock_flags & ~O_NONBLOCK);
 	}
@@ -2153,7 +2159,7 @@ int ztls_connect_ctx(struct tls_context *ctx, const struct sockaddr *addr,
 		return ret;
 	}
 
-	if (sock_flags & O_NONBLOCK) {
+	if (is_non_block) {
 		(void)zsock_fcntl(ctx->sock, F_SETFL, sock_flags);
 	}
 
@@ -2184,6 +2190,10 @@ int ztls_connect_ctx(struct tls_context *ctx, const struct sockaddr *addr,
 		ret = tls_mbedtls_handshake(
 			ctx, K_MSEC(CONFIG_NET_SOCKETS_CONNECT_TIMEOUT));
 		if (ret < 0) {
+			if ((ret == -EAGAIN) && !is_non_block) {
+				ret = -ETIMEDOUT;
+			}
+
 			goto error;
 		}
 
@@ -3310,7 +3320,7 @@ static bool poll_offload_dtls_client_retry(struct tls_context *ctx,
 
 static int ztls_poll_offload(struct zsock_pollfd *fds, int nfds, int timeout)
 {
-	int fd_backup[CONFIG_NET_SOCKETS_POLL_MAX];
+	int fd_backup[CONFIG_ZVFS_POLL_MAX];
 	const struct fd_op_vtable *vtable;
 	void *ctx;
 	int ret = 0;
@@ -3826,9 +3836,9 @@ static int tls_sock_setsockopt_vmeth(void *obj, int level, int optname,
 	return ztls_setsockopt_ctx(obj, level, optname, optval, optlen);
 }
 
-static int tls_sock_close_vmeth(void *obj)
+static int tls_sock_close2_vmeth(void *obj, int sock)
 {
-	return ztls_close_ctx(obj);
+	return ztls_close_ctx(obj, sock);
 }
 
 static int tls_sock_getpeername_vmeth(void *obj, struct sockaddr *addr,
@@ -3851,7 +3861,7 @@ static const struct socket_op_vtable tls_sock_fd_op_vtable = {
 	.fd_vtable = {
 		.read = tls_sock_read_vmeth,
 		.write = tls_sock_write_vmeth,
-		.close = tls_sock_close_vmeth,
+		.close2 = tls_sock_close2_vmeth,
 		.ioctl = tls_sock_ioctl_vmeth,
 	},
 	.shutdown = tls_sock_shutdown_vmeth,

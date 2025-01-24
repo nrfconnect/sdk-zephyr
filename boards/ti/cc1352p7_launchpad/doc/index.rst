@@ -1,7 +1,4 @@
-.. _cc1352p7_lp:
-
-CC1352P7 LaunchPad
-##################
+.. zephyr:board:: cc1352p7_lp
 
 Overview
 ********
@@ -11,12 +8,6 @@ development kit for the SimpleLink |trade| multi-Standard CC1352P7 wireless MCU.
 
 See the `TI CC1352P7 LaunchPad Product Page`_ for details.
 
-.. figure:: img/lp-cc1352p7-top.jpg
-   :width: 400px
-   :align: center
-   :alt: TI CC1352P7 LaunchPad
-
-   Texas Instruments CC1352P7 LaunchPad |trade|
 
 Hardware
 ********
@@ -151,15 +142,20 @@ Prerequisites:
 
 #. Install OpenOCD
 
-   You can obtain OpenOCD by following these
-   :ref:`installing the latest Zephyr SDK instructions <toolchain_zephyr_sdk>`.
+   Currently, OpenOCD doesn't support the CC1352P7.
+   Until its support get merged, we have to builld a downstream version that could found `here <https://github.com/anobli/openocd>`_.
+   Please refer to OpenOCD documentation to build and install OpenOCD.
 
-   After the installation, add the directory containing the OpenOCD executable
-   to your environment's PATH variable. For example, use this command in Linux:
+   For your convenience, we provide a `prebuilt binary <https://github.com/anobli/openocd/actions/runs/10566225265>`_.
 
-   .. code-block:: console
+.. code-block:: console
 
-      export PATH=$ZEPHYR_SDK_INSTALL_DIR/sysroots/x86_64-pokysdk-linux/usr/bin/openocd:$PATH
+   $ unzip openocd-810cb5b21-x86_64-linux-gnu.zip
+   $ chmod +x openocd-x86_64-linux-gnu/bin/openocd
+   $ export OPENOCD_DIST=$PWD/openocd-x86_64-linux-gnu
+
+By default, zephyr will try to use the OpenOCD binary from SDK.
+You will have to define :code:`OPENOCD` and :code:`OPENOCD_DEFAULT_PATH` to use the custom OpenOCD binary.
 
 Flashing
 ========
@@ -185,6 +181,7 @@ Then build and flash the application in the usual way.
    :zephyr-app: samples/hello_world
    :board: cc1352p7_lp
    :goals: build flash
+   :gen-args: -DOPENOCD=$OPENOCD_DIST/bin/openocd -DOPENOCD_DEFAULT_PATH=$OPENOCD_DIST/share/openocd
 
 Debugging
 =========
@@ -197,6 +194,7 @@ You can debug an application in the usual way.  Here is an example for the
    :board: cc1352p7_lp
    :maybe-skip-config:
    :goals: debug
+   :gen-args: -DOPENOCD=$OPENOCD_DIST/bin/openocd -DOPENOCD_DEFAULT_PATH=$OPENOCD_DIST/share/openocd
 
 Bootloader
 ==========

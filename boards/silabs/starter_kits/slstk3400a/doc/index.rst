@@ -1,7 +1,4 @@
-.. _slstk3400a:
-
-EFM32 Happy Gecko (SLSTK3400A)
-##############################
+.. zephyr:board:: slstk3400a
 
 Overview
 ********
@@ -9,12 +6,6 @@ Overview
 The EFM32 Happy Gecko Starter Kit SLSTK3400A contains a MCU from the
 EFM32HG family built on ARM® Cortex®-M0+ processor with excellent low
 power capabilities.
-
-.. figure:: slstk3400a.jpg
-   :align: center
-   :alt: SLSTK3400A
-
-   SLSTK3400A (image courtesy of Silicon Labs)
 
 Hardware
 ********
@@ -60,7 +51,7 @@ The efm32hg_slstk3400 board configuration supports the following hardware featur
 +-----------+------------+-------------------------------------+
 
 The default configuration can be found in
-:zephyr_file:`boards/silabs/starter_kit/slstk3400a/slstk3400a_defconfig`
+:zephyr_file:`boards/silabs/starter_kits/slstk3400a/slstk3400a_defconfig`
 
 Other hardware features are currently not supported by the port.
 
@@ -109,7 +100,7 @@ Programming and Debugging
 
 .. note::
    Before using the kit the first time, you should update the J-Link firmware
-   from `J-Link-Downloads`_
+   in Simplicity Studio.
 
 Flashing
 ========
@@ -171,6 +162,3 @@ Reset the board and you will see this message written to the serial port:
 
 .. _J-Link:
    https://www.segger.com/jlink-debug-probes.html
-
-.. _J-Link-Downloads:
-   https://www.segger.com/downloads/jlink

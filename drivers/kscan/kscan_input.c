@@ -94,16 +94,17 @@ static int kscan_input_init(const struct device *dev)
 	return 0;
 }
 
-static const struct kscan_driver_api kscan_input_driver_api = {
+static DEVICE_API(kscan, kscan_input_driver_api) = {
 	.config = kscan_input_configure,
 	.enable_callback = kscan_input_enable_callback,
 	.disable_callback = kscan_input_disable_callback,
 };
 
 #define KSCAN_INPUT_INIT(index) \
-	INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_INST_PARENT(index)),            \
-			      kscan_input_cb,                                  \
-			      (void *)DEVICE_DT_INST_GET(index));              \
+	INPUT_CALLBACK_DEFINE_NAMED(DEVICE_DT_GET(DT_INST_PARENT(index)),      \
+				    kscan_input_cb,                            \
+				    (void *)DEVICE_DT_INST_GET(index),         \
+				    kscan_input_cb_##index);                   \
 	static const struct kscan_input_config kscan_input_config_##index = {  \
 		.input_dev = DEVICE_DT_GET(DT_INST_PARENT(index)),             \
 	};                                                                     \

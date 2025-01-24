@@ -93,6 +93,22 @@ extern "C" {
  */
 #define IS_BIT_MASK(m) IS_SHIFTED_BIT_MASK(m, 0)
 
+/** @brief Extract the Least Significant Bit from @p value. */
+#define LSB_GET(value) ((value) & -(value))
+
+/**
+ * @brief Extract a bitfield element from @p value corresponding to
+ *	  the field mask @p mask.
+ */
+#define FIELD_GET(mask, value)  (((value) & (mask)) / LSB_GET(mask))
+
+/**
+ * @brief Prepare a bitfield element using @p value with @p mask representing
+ *	  its field position and width. The result should be combined
+ *	  with other fields using a logical OR.
+ */
+#define FIELD_PREP(mask, value) (((value) * LSB_GET(mask)) & (mask))
+
 /**
  * @brief Check for macro definition in compiler-visible expressions
  *
@@ -280,7 +296,19 @@ extern "C" {
  * @brief Like <tt>a == b</tt>, but does evaluation and
  * short-circuiting at C preprocessor time.
  *
- * This however only works for integer literal from 0 to 4095.
+ * This however only works for integer literal from 0 to 4096 (literals with U suffix,
+ * e.g. 0U are also included).
+ *
+ * Examples:
+ *
+ *   IS_EQ(1, 1)   -> 1
+ *   IS_EQ(1U, 1U) -> 1
+ *   IS_EQ(1U, 1)  -> 1
+ *   IS_EQ(1, 1U)  -> 1
+ *   IS_EQ(1, 0)   -> 0
+ *
+ * @param a Integer literal (can be with U suffix)
+ * @param b Integer literal
  *
  */
 #define IS_EQ(a, b) Z_IS_EQ(a, b)

@@ -1,36 +1,39 @@
 # vim: set syntax=python ts=4 :
 #
-# Copyright (c) 2018-2022 Intel Corporation
+# Copyright (c) 2018-2024 Intel Corporation
 # Copyright 2022 NXP
 # Copyright (c) 2024 Arm Limited (or its affiliates). All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
-from enum import Enum
-import os
-import hashlib
-import random
-import logging
-import shutil
-import glob
-import csv
 
-from twisterlib.environment import TwisterEnv
-from twisterlib.testsuite import TestCase, TestSuite
-from twisterlib.platform import Platform
-from twisterlib.error import BuildError, StatusAttributeError
-from twisterlib.size_calc import SizeCalculator
-from twisterlib.statuses import TwisterStatus
-from twisterlib.handlers import (
-    Handler,
-    SimulationHandler,
-    BinaryHandler,
-    QEMUHandler,
-    QEMUWinHandler,
-    DeviceHandler,
+import csv
+import glob
+import hashlib
+import logging
+import os
+import random
+from enum import Enum
+
+from twisterlib.constants import (
     SUPPORTED_SIMS,
     SUPPORTED_SIMS_IN_PYTEST,
+    SUPPORTED_SIMS_WITH_EXEC,
 )
+from twisterlib.environment import TwisterEnv
+from twisterlib.error import BuildError, StatusAttributeError
+from twisterlib.handlers import (
+    BinaryHandler,
+    DeviceHandler,
+    Handler,
+    QEMUHandler,
+    QEMUWinHandler,
+    SimulationHandler,
+)
+from twisterlib.platform import Platform
+from twisterlib.size_calc import SizeCalculator
+from twisterlib.statuses import TwisterStatus
+from twisterlib.testsuite import TestCase, TestSuite
 
 logger = logging.getLogger('twister')
 logger.setLevel(logging.DEBUG)
@@ -46,7 +49,7 @@ class TestInstance:
 
     __test__ = False
 
-    def __init__(self, testsuite, platform, outdir):
+    def __init__(self, testsuite, platform, toolchain, outdir):
 
         self.testsuite: TestSuite = testsuite
         self.platform: Platform = platform
@@ -60,17 +63,27 @@ class TestInstance:
         self.execution_time = 0
         self.build_time = 0
         self.retries = 0
+        self.toolchain = toolchain
 
-        self.name = os.path.join(platform.name, testsuite.name)
+        self.name = os.path.join(platform.name, toolchain, testsuite.name)
         self.dut = None
 
         if testsuite.detailed_test_id:
-            self.build_dir = os.path.join(outdir, platform.normalized_name, testsuite.name)
+            self.build_dir = os.path.join(
+                outdir, platform.normalized_name, self.toolchain, testsuite.name
+            )
         else:
-            # if suite is not in zephyr, keep only the part after ".." in reconstructed dir structure
+            # if suite is not in zephyr,
+            # keep only the part after ".." in reconstructed dir structure
             source_dir_rel = testsuite.source_dir_rel.rsplit(os.pardir+os.path.sep, 1)[-1]
-            self.build_dir = os.path.join(outdir, platform.normalized_name, source_dir_rel, testsuite.name)
-        self.run_id = self._get_run_id()
+            self.build_dir = os.path.join(
+                outdir,
+                platform.normalized_name,
+                self.toolchain,
+                source_dir_rel,
+                testsuite.name
+            )
+        self.run_id = None
         self.domains = None
         # Instance need to use sysbuild if a given suite or a platform requires it
         self.sysbuild = testsuite.sysbuild or platform.sysbuild
@@ -81,6 +94,9 @@ class TestInstance:
         self.filters = []
         self.filter_type = None
 
+    def setup_run_id(self):
+        self.run_id = self._get_run_id()
+
     def record(self, recording, fname_csv="recording.csv"):
         if recording:
             if self.recording is None:
@@ -89,7 +105,7 @@ class TestInstance:
                 self.recording.extend(recording)
 
             filename = os.path.join(self.build_dir, fname_csv)
-            with open(filename, "wt") as csvfile:
+            with open(filename, 'w') as csvfile:
                 cw = csv.DictWriter(csvfile,
                                     fieldnames = self.recording[0].keys(),
                                     lineterminator = os.linesep,
@@ -107,8 +123,8 @@ class TestInstance:
         try:
             key = value.name if isinstance(value, Enum) else value
             self._status = TwisterStatus[key]
-        except KeyError:
-            raise StatusAttributeError(self.__class__, value)
+        except KeyError as err:
+            raise StatusAttributeError(self.__class__, value) from err
 
     def add_filter(self, reason, filter_type):
         self.filters.append({'type': filter_type, 'reason': reason })
@@ -128,7 +144,7 @@ class TestInstance:
         run_id = ""
         run_id_file = os.path.join(self.build_dir, "run_id.txt")
         if os.path.exists(run_id_file):
-            with open(run_id_file, "r") as fp:
+            with open(run_id_file) as fp:
                 run_id = fp.read()
         else:
             hash_object = hashlib.md5(self.name.encode())
@@ -160,6 +176,9 @@ class TestInstance:
 
     def __lt__(self, other):
         return self.name < other.name
+
+    def compose_case_name(self, tc_name) -> str:
+        return self.testsuite.compose_case_name(tc_name)
 
     def set_case_status_by_name(self, name, status, reason=None):
         tc = self.get_case_or_create(name)
@@ -211,12 +230,13 @@ class TestInstance:
 
         options = env.options
         common_args = (options, env.generator_cmd, not options.disable_suite_name_check)
+        simulator = self.platform.simulator_by_name(options.sim_name)
         if options.device_testing:
             handler = DeviceHandler(self, "device", *common_args)
             handler.call_make_run = False
             handler.ready = True
-        elif self.platform.simulation != "na":
-            if self.platform.simulation == "qemu":
+        elif simulator:
+            if simulator.name == "qemu":
                 if os.name != "nt":
                     handler = QEMUHandler(self, "qemu", *common_args)
                 else:
@@ -224,10 +244,9 @@ class TestInstance:
                 handler.args.append(f"QEMU_PIPE={handler.get_fifo()}")
                 handler.ready = True
             else:
-                handler = SimulationHandler(self, self.platform.simulation, *common_args)
+                handler = SimulationHandler(self, simulator.name, *common_args)
+                handler.ready = simulator.is_runnable()
 
-            if self.platform.simulation_exec and shutil.which(self.platform.simulation_exec):
-                handler.ready = True
         elif self.testsuite.type == "unit":
             handler = BinaryHandler(self, "unit", *common_args)
             handler.binary = os.path.join(self.build_dir, "testbinary")
@@ -241,15 +260,24 @@ class TestInstance:
         self.handler = handler
 
     # Global testsuite parameters
-    def check_runnable(self, enable_slow=False, filter='buildable', fixtures=[], hardware_map=None):
+    def check_runnable(self,
+                       options: TwisterEnv,
+                       hardware_map=None):
 
-        if os.name == 'nt':
+        enable_slow = options.enable_slow
+        filter = options.filter
+        fixtures = options.fixture
+        device_testing = options.device_testing
+        simulation = options.sim_name
+
+        simulator = self.platform.simulator_by_name(simulation)
+        if os.name == 'nt' and simulator:
             # running on simulators is currently supported only for QEMU on Windows
-            if self.platform.simulation not in ('na', 'qemu'):
+            if simulator.name not in ('na', 'qemu'):
                 return False
 
             # check presence of QEMU on Windows
-            if self.platform.simulation == 'qemu' and 'QEMU_BIN_PATH' not in os.environ:
+            if simulator.name == 'qemu' and 'QEMU_BIN_PATH' not in os.environ:
                 return False
 
         # we asked for build-only on the command line
@@ -262,21 +290,22 @@ class TestInstance:
             return False
 
         target_ready = bool(self.testsuite.type == "unit" or \
-                        self.platform.type == "native" or \
-                        (self.platform.simulation in SUPPORTED_SIMS and \
-                         self.platform.simulation not in self.testsuite.simulation_exclude) or \
-                        filter == 'runnable')
+                            self.platform.type == "native" or \
+                            (simulator and simulator.name in SUPPORTED_SIMS and \
+                             simulator.name not in self.testsuite.simulation_exclude) or \
+                            device_testing)
 
         # check if test is runnable in pytest
         if self.testsuite.harness == 'pytest':
-            target_ready = bool(filter == 'runnable' or self.platform.simulation in SUPPORTED_SIMS_IN_PYTEST)
+            target_ready = bool(
+                filter == 'runnable' or simulator and simulator.name in SUPPORTED_SIMS_IN_PYTEST
+            )
 
-        SUPPORTED_SIMS_WITH_EXEC = ['nsim', 'mdb-nsim', 'renode', 'tsim', 'native', 'simics']
         if filter != 'runnable' and \
-                self.platform.simulation in SUPPORTED_SIMS_WITH_EXEC and \
-                self.platform.simulation_exec:
-            if not shutil.which(self.platform.simulation_exec):
-                target_ready = False
+                simulator and \
+                simulator.name in SUPPORTED_SIMS_WITH_EXEC and \
+                not simulator.is_runnable():
+            target_ready = False
 
         testsuite_runnable = self.testsuite_runnable(self.testsuite, fixtures)
 
@@ -289,7 +318,16 @@ class TestInstance:
 
         return testsuite_runnable and target_ready
 
-    def create_overlay(self, platform, enable_asan=False, enable_ubsan=False, enable_coverage=False, coverage_platform=[]):
+    def create_overlay(
+        self,
+        platform,
+        enable_asan=False,
+        enable_ubsan=False,
+        enable_coverage=False,
+        coverage_platform=None
+    ):
+        if coverage_platform is None:
+            coverage_platform = []
         # Create this in a "twister/" subdirectory otherwise this
         # will pass this overlay to kconfig.py *twice* and kconfig.cmake
         # will silently give that second time precedence over any
@@ -317,16 +355,15 @@ class TestInstance:
             content = "\n".join(new_config_list)
 
         if enable_coverage:
-            if platform.name in coverage_platform:
-                content = content + "\nCONFIG_COVERAGE=y"
-                content = content + "\nCONFIG_COVERAGE_DUMP=y"
+            for cp in coverage_platform:
+                if cp in platform.aliases:
+                    content = content + "\nCONFIG_COVERAGE=y"
+                    content = content + "\nCONFIG_COVERAGE_DUMP=y"
 
-        if enable_asan:
-            if platform.type == "native":
+        if platform.type == "native":
+            if enable_asan:
                 content = content + "\nCONFIG_ASAN=y"
-
-        if enable_ubsan:
-            if platform.type == "native":
+            if enable_ubsan:
                 content = content + "\nCONFIG_UBSAN=y"
 
         if content:
@@ -337,7 +374,11 @@ class TestInstance:
 
         return content
 
-    def calculate_sizes(self, from_buildlog: bool = False, generate_warning: bool = True) -> SizeCalculator:
+    def calculate_sizes(
+        self,
+        from_buildlog: bool = False,
+        generate_warning: bool = True
+    ) -> SizeCalculator:
         """Get the RAM/ROM sizes of a test case.
 
         This can only be run after the instance has been executed by
@@ -385,4 +426,4 @@ class TestInstance:
         return buildlog_paths[0]
 
     def __repr__(self):
-        return "<TestSuite %s on %s>" % (self.testsuite.name, self.platform.name)
+        return f"<TestSuite {self.testsuite.name} on {self.platform.name}>"

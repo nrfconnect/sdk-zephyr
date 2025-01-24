@@ -77,7 +77,7 @@ recreated.
 Block device (e.g. SD card)
 ---------------------------
 
-This example has been devised and initially tested on :ref:`Nucleo H743ZI <nucleo_h743zi_board>`
+This example has been devised and initially tested on :zephyr:board:`nucleo_h743zi`
 board. It can be also run on any other board with SD/MMC card connected to it.
 
 To build the test:
@@ -96,12 +96,12 @@ present and enabled in the final board dts and configuration files simultaneousl
 point name for the ``littlefs`` file system block device will be determined based on the
 following logic:
 
-* if the :kconfig:option:`CONFIG_SDMMC_VOLUME_NAME` configuration is defined, it will be used
-  as the mount point name;
-* if the :kconfig:option:`CONFIG_SDMMC_VOLUME_NAME` configuration is not defined, but the
-  :kconfig:option:`CONFIG_MMC_VOLUME_NAME` configuration is defined,
-  :kconfig:option:`CONFIG_MMC_VOLUME_NAME` will be used as the mount point name;
-* if neither :kconfig:option:`CONFIG_SDMMC_VOLUME_NAME` nor :kconfig:option:`CONFIG_MMC_VOLUME_NAME`
+* if the :kconfig:option:`CONFIG_DISK_DRIVER_SDMMC` configuration is defined, ``"SD"``
+  will be used as the mount point name;
+* if the :kconfig:option:`CONFIG_DISK_DRIVER_SDMMC` configuration is not defined, but the
+  :kconfig:option:`CONFIG_DISK_DRIVER_MMC` configuration is defined, ``"SD2"`` will
+  be used as the mount point name;
+* if neither :kconfig:option:`CONFIG_DISK_DRIVER_SDMMC` nor :kconfig:option:`CONFIG_DISK_DRIVER_MMC`
   configurations are defined, the mount point name will not be determined, and an appropriate error
   will appear during the sample build.
 

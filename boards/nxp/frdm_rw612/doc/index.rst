@@ -1,7 +1,4 @@
-.. _frdm_rw612:
-
-NXP FRDM_RW612
-##############
+.. zephyr:board:: frdm_rw612
 
 Overview
 ********
@@ -39,8 +36,6 @@ Supported Features
 +-----------+------------+-----------------------------------+
 | USART     | on-chip    | serial                            |
 +-----------+------------+-----------------------------------+
-| BLE       | on-chip    | Bluetooth                         |
-+-----------+------------+-----------------------------------+
 | DMA       | on-chip    | dma                               |
 +-----------+------------+-----------------------------------+
 | SPI       | on-chip    | spi                               |
@@ -55,9 +50,24 @@ Supported Features
 +-----------+------------+-----------------------------------+
 | CTIMER    | on-chip    | counter                           |
 +-----------+------------+-----------------------------------+
+| SCTIMER   | on-chip    | pwm                               |
++-----------+------------+-----------------------------------+
 | MRT       | on-chip    | counter                           |
 +-----------+------------+-----------------------------------+
 | OS_TIMER  | on-chip    | os timer                          |
++-----------+------------+-----------------------------------+
+| PM        | on-chip    | power management; uses SoC Power  |
+|           |            | Modes 1 and 2                     |
++-----------+------------+-----------------------------------+
+| BLE       | on-chip    | Bluetooth                         |
++-----------+------------+-----------------------------------+
+| ADC       | on-chip    | adc                               |
++-----------+------------+-----------------------------------+
+| DAC       | on-chip    | dac                               |
++-----------+------------+-----------------------------------+
+| ENET      | on-chip    | ethernet                          |
++-----------+------------+-----------------------------------+
+| Wi-Fi     | on-chip    | Wi-Fi                             |
 +-----------+------------+-----------------------------------+
 
 The default configuration can be found in the defconfig file:
@@ -69,7 +79,7 @@ Other hardware features are not currently supported
 Fetch Binary Blobs
 ******************
 
-To support Bluetooth, frdm_rw612 requires fetching binary blobs, which can be
+To support Bluetooth or Wi-Fi, frdm_rw612 requires fetching binary blobs, which can be
 achieved by running the following command:
 
 .. code-block:: console
@@ -143,20 +153,19 @@ Bluetooth
 BLE functionality requires to fetch binary blobs, so make sure to follow
 the ``Fetch Binary Blobs`` section first.
 
-Those binary blobs can be used in two different ways, depending if :kconfig:option:`CONFIG_NXP_MONOLITHIC_BT`
-is enabled or not:
+frdm_rw612 platform supports the monolithic feature. The required binary blob
+``<zephyr workspace>/modules/hal/nxp/zephyr/blobs/rw61x_sb_ble_a2.bin`` will be linked
+with the application image directly, forming one single monolithic image.
 
-- :kconfig:option:`CONFIG_NXP_MONOLITHIC_BT` is enabled (default):
+Wi-Fi
+=====
 
-The required binary blob will be linked with the application image directly, forming
-one single monolithic image.
-The user has nothing else to do other than flashing the application to the board.
+Wi-Fi functionality requires to fetch binary blobs, so make sure to follow
+the ``Fetch Binary Blobs`` section first.
 
-- :kconfig:option:`CONFIG_NXP_MONOLITHIC_BT` is disabled:
-
-In this case, the BLE blob won't be linked with the application, so the user needs to manually
-flash the BLE binary blob to the board at the address ``0x18540000``.
-The binary blob will be located here: ``<zephyr workspace>/modules/hal/nxp/zephyr/blobs/rw61x/rw61x_sb_ble_a2.bin``
+frdm_rw612 platform supports the monolithic feature. The required binary blob
+``<zephyr workspace>/modules/hal/nxp/zephyr/blobs/rw61x_sb_wifi_a2.bin`` will be linked
+with the application image directly, forming one single monolithic image.
 
 Resources
 =========

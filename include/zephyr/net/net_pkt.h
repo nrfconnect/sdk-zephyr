@@ -50,6 +50,28 @@ struct net_context;
 
 /** @cond INTERNAL_HIDDEN */
 
+#if defined(CONFIG_NET_PKT_ALLOC_STATS)
+struct net_pkt_alloc_stats {
+	uint64_t alloc_sum;
+	uint64_t time_sum;
+	uint32_t count;
+};
+
+struct net_pkt_alloc_stats_slab {
+	struct net_pkt_alloc_stats ok;
+	struct net_pkt_alloc_stats fail;
+	struct k_mem_slab *slab;
+};
+
+#define NET_PKT_ALLOC_STATS_DEFINE(alloc_name, slab_name)		  \
+	STRUCT_SECTION_ITERABLE(net_pkt_alloc_stats_slab, alloc_name) = { \
+		.slab = &slab_name,					  \
+	}
+
+#else
+#define NET_PKT_ALLOC_STATS_DEFINE(name, slab)
+#endif /* CONFIG_NET_PKT_ALLOC_STATS */
+
 /* buffer cursor used in net_pkt */
 struct net_pkt_cursor {
 	/** Current net_buf pointer by the cursor */
@@ -144,6 +166,10 @@ struct net_pkt {
 	  CONFIG_NET_PKT_RXTIME_STATS_DETAIL */
 	};
 #endif /* CONFIG_NET_PKT_RXTIME_STATS || CONFIG_NET_PKT_TXTIME_STATS */
+
+#if defined(CONFIG_NET_PKT_ALLOC_STATS)
+	struct net_pkt_alloc_stats_slab *alloc_stats;
+#endif /* CONFIG_NET_PKT_ALLOC_STATS */
 
 	/** Reference counter */
 	atomic_t atomic_ref;
@@ -315,6 +341,11 @@ struct net_pkt {
 	/* Tell the capture api that this is a captured packet */
 	uint8_t cooked_mode_pkt : 1;
 #endif /* CONFIG_NET_CAPTURE_COOKED_MODE */
+
+#if defined(CONFIG_NET_IPV4_PMTU)
+	/* Path MTU needed for this destination address */
+	uint8_t ipv4_pmtu : 1;
+#endif /* CONFIG_NET_IPV4_PMTU */
 
 	/* @endcond */
 };
@@ -757,6 +788,31 @@ static inline uint16_t net_pkt_ip_opts_len(struct net_pkt *pkt)
 #endif
 }
 
+#if defined(CONFIG_NET_IPV4_PMTU)
+static inline bool net_pkt_ipv4_pmtu(struct net_pkt *pkt)
+{
+	return !!pkt->ipv4_pmtu;
+}
+
+static inline void net_pkt_set_ipv4_pmtu(struct net_pkt *pkt, bool value)
+{
+	pkt->ipv4_pmtu = value;
+}
+#else
+static inline bool net_pkt_ipv4_pmtu(struct net_pkt *pkt)
+{
+	ARG_UNUSED(pkt);
+
+	return false;
+}
+
+static inline void net_pkt_set_ipv4_pmtu(struct net_pkt *pkt, bool value)
+{
+	ARG_UNUSED(pkt);
+	ARG_UNUSED(value);
+}
+#endif /* CONFIG_NET_IPV4_PMTU */
+
 #if defined(CONFIG_NET_IPV4_FRAGMENT)
 static inline uint16_t net_pkt_ipv4_fragment_offset(struct net_pkt *pkt)
 {
@@ -1139,35 +1195,6 @@ static inline void net_pkt_set_create_time(struct net_pkt *pkt,
 	* CONFIG_TRACING_NET_CORE
 	*/
 
-/**
- * @deprecated Use @ref net_pkt_timestamp or @ref net_pkt_timestamp_ns instead.
- */
-static inline uint64_t net_pkt_txtime(struct net_pkt *pkt)
-{
-#if defined(CONFIG_NET_PKT_TXTIME)
-	return pkt->timestamp.second * NSEC_PER_SEC + pkt->timestamp.nanosecond;
-#else
-	ARG_UNUSED(pkt);
-
-	return 0;
-#endif /* CONFIG_NET_PKT_TXTIME */
-}
-
-/**
- * @deprecated Use @ref net_pkt_set_timestamp or @ref net_pkt_set_timestamp_ns
- * instead.
- */
-static inline void net_pkt_set_txtime(struct net_pkt *pkt, uint64_t txtime)
-{
-#if defined(CONFIG_NET_PKT_TXTIME)
-	pkt->timestamp.second = txtime / NSEC_PER_SEC;
-	pkt->timestamp.nanosecond = txtime % NSEC_PER_SEC;
-#else
-	ARG_UNUSED(pkt);
-	ARG_UNUSED(txtime);
-#endif /* CONFIG_NET_PKT_TXTIME */
-}
-
 #if defined(CONFIG_NET_PKT_TXTIME_STATS_DETAIL) || \
 	defined(CONFIG_NET_PKT_RXTIME_STATS_DETAIL)
 static inline uint32_t *net_pkt_stats_tick(struct net_pkt *pkt)
@@ -1481,7 +1508,8 @@ static inline void net_pkt_set_remote_address(struct net_pkt *pkt,
  * @param count Number of net_pkt in this slab.
  */
 #define NET_PKT_SLAB_DEFINE(name, count)				\
-	K_MEM_SLAB_DEFINE(name, sizeof(struct net_pkt), count, 4)
+	K_MEM_SLAB_DEFINE(name, sizeof(struct net_pkt), count, 4);      \
+	NET_PKT_ALLOC_STATS_DEFINE(pkt_alloc_stats_##name, name)
 
 /** @cond INTERNAL_HIDDEN */
 
@@ -1879,6 +1907,18 @@ struct net_pkt *net_pkt_rx_alloc_with_buffer_debug(struct net_if *iface,
 	net_pkt_rx_alloc_with_buffer_debug(_iface, _size, _family,	\
 					   _proto, _timeout,		\
 					   __func__, __LINE__)
+
+int net_pkt_alloc_buffer_with_reserve_debug(struct net_pkt *pkt,
+					    size_t size,
+					    size_t reserve,
+					    enum net_ip_protocol proto,
+					    k_timeout_t timeout,
+					    const char *caller,
+					    int line);
+#define net_pkt_alloc_buffer_with_reserve(_pkt, _size, _reserve, _proto, _timeout) \
+	net_pkt_alloc_buffer_with_reserve_debug(_pkt, _size, _reserve, _proto, \
+						_timeout, __func__, __LINE__)
+
 #endif /* NET_PKT_DEBUG_ENABLED */
 /** @endcond */
 
@@ -1973,6 +2013,31 @@ int net_pkt_alloc_buffer(struct net_pkt *pkt,
 #endif
 
 #if !defined(NET_PKT_DEBUG_ENABLED)
+/**
+ * @brief Allocate buffer for a net_pkt and reserve some space in the first net_buf.
+ *
+ * @details: such allocator will take into account space necessary for headers,
+ *           MTU, and existing buffer (if any). Beware that, due to all these
+ *           criteria, the allocated size might be smaller/bigger than
+ *           requested one.
+ *
+ * @param pkt     The network packet requiring buffer to be allocated.
+ * @param size    The size of buffer being requested.
+ * @param reserve The L2 header size to reserve. This can be 0, in which case
+ *                the L2 header is placed into a separate net_buf.
+ * @param proto   The IP protocol type (can be 0 for none).
+ * @param timeout Maximum time to wait for an allocation.
+ *
+ * @return 0 on success, negative errno code otherwise.
+ */
+#if !defined(NET_PKT_DEBUG_ENABLED)
+int net_pkt_alloc_buffer_with_reserve(struct net_pkt *pkt,
+				      size_t size,
+				      size_t reserve,
+				      enum net_ip_protocol proto,
+				      k_timeout_t timeout);
+#endif
+
 /**
  * @brief Allocate buffer for a net_pkt, of specified size, w/o any additional
  *        preconditions

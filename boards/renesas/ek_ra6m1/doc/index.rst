@@ -57,7 +57,7 @@ all of which are controlled by the Main MCU firmware
 
 - USB Full Speed Debug and Device (micro-AB connector)
 
-.. figure:: ek-ra6m1-board.webp
+.. figure:: ek_ra6m1.webp
 	:align: center
 	:alt: RA6M1 Evaluation Kit
 
@@ -67,7 +67,7 @@ Hardware
 ********
 Detailed hardware feature for the RA6M1 MCU group can be found at `RA6M1 Group User's Manual Hardware`_
 
-.. figure:: ra6m1-block-diagram.webp
+.. figure:: ra6m1_block_diagram.webp
 	:width: 442px
 	:align: center
 	:alt: RA6M1 MCU group feature
@@ -93,6 +93,18 @@ The below features are currently supported on Zephyr OS for EK-RA6M1 board:
 | UART      | on-chip    | serial               |
 +-----------+------------+----------------------+
 | CLOCK     | on-chip    | clock control        |
++-----------+------------+----------------------+
+| I2C       | on-chip    | i2c                  |
++-----------+------------+----------------------+
+| SPI       | on-chip    | spi                  |
++-----------+------------+----------------------+
+| COUNTER   | on-chip    | counter              |
++-----------+------------+----------------------+
+| ADC       | on-chip    | adc                  |
++-----------+------------+----------------------+
+| PWM       | on-chip    | pwm                  |
++-----------+------------+----------------------+
+| FLASH     | on-chip    | flash                |
 +-----------+------------+----------------------+
 
 Other hardware features are currently not supported by the port.

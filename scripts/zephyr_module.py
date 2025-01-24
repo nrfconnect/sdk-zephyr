@@ -161,6 +161,28 @@ mapping:
          type: seq
          sequence:
             - type: str
+  package-managers:
+    required: false
+    type: map
+    mapping:
+      pip:
+        required: false
+        type: map
+        mapping:
+          requirement-files:
+            required: false
+            type: seq
+            sequence:
+              - type: str
+  runners:
+    required: false
+    type: seq
+    sequence:
+      - type: map
+        mapping:
+          file:
+            required: true
+            type: str
 '''
 
 MODULE_YML_PATH = PurePath('zephyr/module.yml')
@@ -193,7 +215,7 @@ def process_module(module):
     for module_yml in [module_path / MODULE_YML_PATH,
                        module_path / MODULE_YML_PATH.with_suffix('.yaml')]:
         if Path(module_yml).is_file():
-            with Path(module_yml).open('r') as f:
+            with Path(module_yml).open('r', encoding='utf-8') as f:
                 meta = yaml.load(f.read(), Loader=SafeLoader)
 
             try:

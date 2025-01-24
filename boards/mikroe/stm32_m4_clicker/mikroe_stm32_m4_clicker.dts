@@ -14,8 +14,6 @@
 	compatible = "st,stm32f415rg";
 
 	chosen {
-		zephyr,console = &usb_cdc_acm_uart;
-		zephyr,shell-uart = &usb_cdc_acm_uart;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 	};
@@ -62,7 +60,7 @@
 				<6 0 &gpiob 0 0>,	/* PWM  */
 				<7 0 &gpiob 1 0>,	/* INT  */
 				<8 0 &gpioc 11 0>,	/* RX   */
-				<9 0 &gpioc 12 0>,	/* TX   */
+				<9 0 &gpioc 10 0>,	/* TX   */
 				<10 0 &gpiob 10 0>,	/* SCL  */
 				<11 0 &gpiob 11 0>;	/* SDA  */
 							/* +5V */
@@ -126,11 +124,9 @@ zephyr_udc0: &usbotg_fs {
 	pinctrl-0 = <&usb_otg_fs_dm_pa11 &usb_otg_fs_dp_pa12>;
 	pinctrl-names = "default";
 	status = "okay";
-
-	usb_cdc_acm_uart: cdc_acm_uart {
-		compatible = "zephyr,cdc-acm-uart";
-	};
 };
+
+#include <../boards/common/usb/cdc_acm_serial.dtsi>
 
 mikrobus_spi: &spi2 {};
 mikrobus_serial: &usart3 {};

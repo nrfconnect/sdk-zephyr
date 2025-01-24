@@ -45,6 +45,8 @@ tests:
     filter: dt_compat_enabled("st,stm32-window-watchdog") or dt_compat_enabled("st,stm32-watchdog")
     extra_args: DTC_OVERLAY_FILE="boards/stm32_wwdg_h7.overlay"
     platform_allow:
+      - nucleo_h7s3l8
+      - stm32h7s78_dk
       - nucleo_h753zi
       - nucleo_h743zi
   drivers.watchdog.stm32iwdg:
@@ -71,6 +73,8 @@ tests:
       - nucleo_h743zi
       - nucleo_c031c6
       - nucleo_h753zi
+      - nucleo_h7s3l8
+      - stm32h7s78_dk
       - nucleo_wba52cg
     integration_platforms:
       - nucleo_f091rc
@@ -80,7 +84,7 @@ tests:
   drivers.watchdog.counter_watchdog:
     platform_allow: nrf52840dk/nrf52840
     extra_args:
-      - OVERLAY_CONFIG="boards/nrf52840dk_nrf52840_counter.conf"
+      - EXTRA_CONF_FILE="boards/nrf52840dk_nrf52840_counter.conf"
       - DTC_OVERLAY_FILE="boards/nrf52840dk_nrf52840_counter.overlay"
   drivers.watchdog.gd32fwdgt:
     filter: dt_compat_enabled("gd,gd32-fwdgt")
@@ -122,7 +126,9 @@ tests:
       - s32z2xxdc2@D/s32z270/rtu0
       - s32z2xxdc2@D/s32z270/rtu1
       - mr_canhubk3
+    integration_platforms:
+      - s32z2xxdc2/s32z270/rtu0
   drivers.watchdog.mimxrt1050_evk_ti_tps382x:
     filter: dt_compat_enabled("ti,tps382x")
-    platform_allow: mimxrt1050_evk
+    platform_allow: mimxrt1050_evk/mimxrt1052/hyperflash
     extra_args: DTC_OVERLAY_FILE="boards/mimxrt1050_evk_ti_tps382x.overlay"

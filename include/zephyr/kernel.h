@@ -542,8 +542,6 @@ __syscall int k_thread_join(struct k_thread *thread, k_timeout_t timeout);
  * This routine puts the current thread to sleep for @a duration,
  * specified as a k_timeout_t object.
  *
- * @note if @a timeout is set to K_FOREVER then the thread is suspended.
- *
  * @param timeout Desired duration of sleep.
  *
  * @return Zero if the requested time has elapsed or if the thread was woken up
@@ -665,7 +663,7 @@ static inline k_tid_t k_current_get(void)
 #ifdef CONFIG_CURRENT_THREAD_USE_TLS
 
 	/* Thread-local cache of current thread ID, set in z_thread_entry() */
-	extern __thread k_tid_t z_tls_current;
+	extern Z_THREAD_LOCAL k_tid_t z_tls_current;
 
 	return z_tls_current;
 #else
@@ -693,18 +691,6 @@ static inline k_tid_t k_current_get(void)
  * @param thread ID of thread to abort.
  */
 __syscall void k_thread_abort(k_tid_t thread);
-
-
-/**
- * @brief Start an inactive thread
- *
- * If a thread was created with K_FOREVER in the delay parameter, it will
- * not be added to the scheduling queue until this function is called
- * on it.
- *
- * @param thread thread to start
- */
-__syscall void k_thread_start(k_tid_t thread);
 
 k_ticks_t z_timeout_expires(const struct _timeout *timeout);
 k_ticks_t z_timeout_remaining(const struct _timeout *timeout);
@@ -960,6 +946,26 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
 __syscall void k_thread_deadline_set(k_tid_t thread, int deadline);
 #endif
 
+/**
+ * @brief Invoke the scheduler
+ *
+ * This routine invokes the scheduler to force a schedule point on the current
+ * CPU. If invoked from within a thread, the scheduler will be invoked
+ * immediately (provided interrupts were not locked when invoked). If invoked
+ * from within an ISR, the scheduler will be invoked upon exiting the ISR.
+ *
+ * Invoking the scheduler allows the kernel to make an immediate determination
+ * as to what the next thread to execute should be. Unlike yielding, this
+ * routine is not guaranteed to switch to a thread of equal or higher priority
+ * if any are available. For example, if the current thread is cooperative and
+ * there is a still higher priority cooperative thread that is ready, then
+ * yielding will switch to that higher priority thread whereas this routine
+ * will not.
+ *
+ * Most applications will never use this routine.
+ */
+__syscall void k_reschedule(void);
+
 #ifdef CONFIG_SCHED_CPU_MASK
 /**
  * @brief Sets all CPU enable masks to zero
@@ -1036,10 +1042,11 @@ int k_thread_cpu_pin(k_tid_t thread, int cpu);
  * This routine prevents the kernel scheduler from making @a thread
  * the current thread. All other internal operations on @a thread are
  * still performed; for example, kernel objects it is waiting on are
- * still handed to it.  Note that any existing timeouts
- * (e.g. k_sleep(), or a timeout argument to k_sem_take() et. al.)
- * will be canceled.  On resume, the thread will begin running
- * immediately and return from the blocked call.
+ * still handed to it. Thread suspension does not impact any timeout
+ * upon which the thread may be waiting (such as a timeout from a call
+ * to k_sem_take() or k_sleep()). Thus if the timeout expires while the
+ * thread is suspended, it is still suspended until k_thread_resume()
+ * is called.
  *
  * When the target thread is active on another CPU, the caller will block until
  * the target thread is halted (suspended or aborted).  But if the caller is in
@@ -1055,14 +1062,33 @@ __syscall void k_thread_suspend(k_tid_t thread);
 /**
  * @brief Resume a suspended thread.
  *
- * This routine allows the kernel scheduler to make @a thread the current
- * thread, when it is next eligible for that role.
+ * This routine reverses the thread suspension from k_thread_suspend()
+ * and allows the kernel scheduler to make @a thread the current thread
+ * when it is next eligible for that role.
  *
  * If @a thread is not currently suspended, the routine has no effect.
  *
  * @param thread ID of thread to resume.
  */
 __syscall void k_thread_resume(k_tid_t thread);
+
+/**
+ * @brief Start an inactive thread
+ *
+ * If a thread was created with K_FOREVER in the delay parameter, it will
+ * not be added to the scheduling queue until this function is called
+ * on it.
+ *
+ * @note This is a legacy API for compatibility.  Modern Zephyr
+ * threads are initialized in the "sleeping" state and do not need
+ * special handling for "start".
+ *
+ * @param thread thread to start
+ */
+static inline void k_thread_start(k_tid_t thread)
+{
+	k_wakeup(thread);
+}
 
 /**
  * @brief Set time-slicing period and scope.
@@ -2538,9 +2564,10 @@ struct k_fifo {
  */
 #define k_fifo_put(fifo, data) \
 	({ \
-	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_fifo, put, fifo, data); \
-	k_queue_append(&(fifo)->_queue, data); \
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_fifo, put, fifo, data); \
+	void *_data = data; \
+	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_fifo, put, fifo, _data); \
+	k_queue_append(&(fifo)->_queue, _data); \
+	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_fifo, put, fifo, _data); \
 	})
 
 /**
@@ -2561,9 +2588,10 @@ struct k_fifo {
  */
 #define k_fifo_alloc_put(fifo, data) \
 	({ \
-	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_fifo, alloc_put, fifo, data); \
-	int fap_ret = k_queue_alloc_append(&(fifo)->_queue, data); \
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_fifo, alloc_put, fifo, data, fap_ret); \
+	void *_data = data; \
+	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_fifo, alloc_put, fifo, _data); \
+	int fap_ret = k_queue_alloc_append(&(fifo)->_queue, _data); \
+	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_fifo, alloc_put, fifo, _data, fap_ret); \
 	fap_ret; \
 	})
 
@@ -2760,9 +2788,10 @@ struct k_lifo {
  */
 #define k_lifo_put(lifo, data) \
 	({ \
-	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_lifo, put, lifo, data); \
-	k_queue_prepend(&(lifo)->_queue, data); \
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_lifo, put, lifo, data); \
+	void *_data = data; \
+	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_lifo, put, lifo, _data); \
+	k_queue_prepend(&(lifo)->_queue, _data); \
+	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_lifo, put, lifo, _data); \
 	})
 
 /**
@@ -2783,9 +2812,10 @@ struct k_lifo {
  */
 #define k_lifo_alloc_put(lifo, data) \
 	({ \
-	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_lifo, alloc_put, lifo, data); \
-	int lap_ret = k_queue_alloc_prepend(&(lifo)->_queue, data); \
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_lifo, alloc_put, lifo, data, lap_ret); \
+	void *_data = data; \
+	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_lifo, alloc_put, lifo, _data); \
+	int lap_ret = k_queue_alloc_prepend(&(lifo)->_queue, _data); \
+	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_lifo, alloc_put, lifo, _data, lap_ret); \
 	lap_ret; \
 	})
 
@@ -3321,12 +3351,12 @@ static inline unsigned int z_impl_k_sem_count_get(struct k_sem *sem)
  * @param initial_count Initial semaphore count.
  * @param count_limit Maximum permitted semaphore count.
  */
-#define K_SEM_DEFINE(name, initial_count, count_limit) \
-	STRUCT_SECTION_ITERABLE(k_sem, name) = \
-		Z_SEM_INITIALIZER(name, initial_count, count_limit); \
-	BUILD_ASSERT(((count_limit) != 0) && \
-		     ((initial_count) <= (count_limit)) && \
-			 ((count_limit) <= K_SEM_MAX_LIMIT));
+#define K_SEM_DEFINE(name, initial_count, count_limit)                                             \
+	STRUCT_SECTION_ITERABLE(k_sem, name) =                                                     \
+		Z_SEM_INITIALIZER(name, initial_count, count_limit);                               \
+	BUILD_ASSERT(((count_limit) != 0) &&                                                       \
+		     (((initial_count) < (count_limit)) || ((initial_count) == (count_limit))) &&  \
+		     ((count_limit) <= K_SEM_MAX_LIMIT));
 
 /** @} */
 
@@ -3599,6 +3629,22 @@ int k_work_queue_drain(struct k_work_q *queue, bool plug);
  * @retval -EALREADY if the work queue was not plugged.
  */
 int k_work_queue_unplug(struct k_work_q *queue);
+
+/** @brief Stop a work queue.
+ *
+ * Stops the work queue thread and ensures that no further work will be processed.
+ * This call is blocking and guarantees that the work queue thread has terminated
+ * cleanly if successful, no work will be processed past this point.
+ *
+ * @param queue Pointer to the queue structure.
+ * @param timeout Maximum time to wait for the work queue to stop.
+ *
+ * @retval 0 if the work queue was stopped
+ * @retval -EALREADY if the work queue was not started (or already stopped)
+ * @retval -EBUSY if the work queue is actively processing work items
+ * @retval -ETIMEDOUT if the work queue did not stop within the stipulated timeout
+ */
+int k_work_queue_stop(struct k_work_q *queue, k_timeout_t timeout);
 
 /** @brief Initialize a delayable work structure.
  *
@@ -3909,6 +3955,8 @@ enum {
 	K_WORK_QUEUE_DRAIN = BIT(K_WORK_QUEUE_DRAIN_BIT),
 	K_WORK_QUEUE_PLUGGED_BIT = 3,
 	K_WORK_QUEUE_PLUGGED = BIT(K_WORK_QUEUE_PLUGGED_BIT),
+	K_WORK_QUEUE_STOP_BIT = 4,
+	K_WORK_QUEUE_STOP = BIT(K_WORK_QUEUE_STOP_BIT),
 
 	/* Static work queue flags */
 	K_WORK_QUEUE_NO_YIELD_BIT = 8,
@@ -4684,7 +4732,7 @@ __syscall int k_msgq_put(struct k_msgq *msgq, const void *data, k_timeout_t time
  *                K_FOREVER.
  *
  * @retval 0 Message received.
- * @retval -ENOMSG Returned without waiting.
+ * @retval -ENOMSG Returned without waiting or queue purged.
  * @retval -EAGAIN Waiting period timed out.
  */
 __syscall int k_msgq_get(struct k_msgq *msgq, void *data, k_timeout_t timeout);
@@ -5462,6 +5510,31 @@ void *k_heap_aligned_alloc(struct k_heap *h, size_t align, size_t bytes,
  */
 void *k_heap_alloc(struct k_heap *h, size_t bytes,
 		k_timeout_t timeout) __attribute_nonnull(1);
+
+/**
+ * @brief Allocate and initialize memory for an array of objects from a k_heap
+ *
+ * Allocates memory for an array of num objects of size and initializes all
+ * bytes in the allocated storage to zero.  If no memory is available
+ * immediately, the call will block for the specified timeout (constructed
+ * via the standard timeout API, or K_NO_WAIT or K_FOREVER) waiting for memory
+ * to be freed.  If the allocation cannot be performed by the expiration of
+ * the timeout, NULL will be returned.
+ * Allocated memory is aligned on a multiple of pointer sizes.
+ *
+ * @note @a timeout must be set to K_NO_WAIT if called from ISR.
+ * @note When CONFIG_MULTITHREADING=n any @a timeout is treated as K_NO_WAIT.
+ *
+ * @funcprops \isr_ok
+ *
+ * @param h Heap from which to allocate
+ * @param num Number of objects to allocate
+ * @param size Desired size of each object to allocate
+ * @param timeout How long to wait, or K_NO_WAIT
+ * @return A pointer to valid heap memory, or NULL
+ */
+void *k_heap_calloc(struct k_heap *h, size_t num, size_t size, k_timeout_t timeout)
+	__attribute_nonnull(1);
 
 /**
  * @brief Reallocate memory from a k_heap

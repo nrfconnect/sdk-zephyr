@@ -9,6 +9,12 @@ toolchain:
 ram: 24
 flash: 192
 supported:
+  - adc
+  - arduino_i2c
+  - arduino_spi
+  - dma
   - gpio
-  - arduino_gpio
+  - i2c
+  - spi
+  - bluetooth
 vendor: st

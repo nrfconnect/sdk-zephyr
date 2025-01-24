@@ -19,8 +19,10 @@ complete code tree buildable.
 
 When using (at least) one ``-v`` option, twister's console output
 shows for every test application how the test is run (qemu, native_sim, etc.) or
-whether the binary was just built.  There are a few reasons why twister
-only builds a test and doesn't run it:
+whether the binary was just built. The resultant
+:ref:`status <twister_statuses>`
+of a test is likewise reported in the ``twister.json`` and other report files.
+There are a few reasons why twister only builds a test and doesn't run it:
 
 - The test is marked as ``build_only: true`` in its ``.yaml``
   configuration file.
@@ -149,7 +151,23 @@ name:
 type:
   Type of the board or configuration, currently we support 2 types: mcu, qemu
 simulation:
-  Simulator used to simulate the platform, e.g. qemu.
+  Simulator(s) used to simulate the platform, e.g. qemu.
+
+  .. code-block:: yaml
+
+      simulation:
+        - name: qemu
+        - name: armfvp
+          exec: FVP_Some_Platform
+        - name: custom
+          exec: AnotherBinary
+
+  By default, tests will be executed using the first entry in the simulation array. Another
+  simulation can be selected with ``--simulation <simulation_name>``.
+  The ``exec`` attribute is optional. If it is set but the required simulator is not available, the
+  tests will be built only.
+  If it is not set and the required simulator is not available the tests will fail to run.
+  The simulation name must match one of the element of ``SUPPORTED_EMU_PLATFORMS``.
 arch:
   Architecture of the board
 toolchain:
@@ -188,6 +206,8 @@ testing:
 
 .. _twister_default_testing_board:
 
+  binaries:
+    A list of custom binaries to be kept for device testing.
   default: [True|False]:
     This is a default board, it will tested with the highest priority and is
     covered when invoking the simplified twister without any additional
@@ -212,62 +232,79 @@ env:
   used, for example, only if some required software or hardware is present, and to signal that
   presence to twister using these environment variables.
 
+.. _twister_tests_long_version:
+
 Tests
 ******
 
 Tests are detected by the presence of a ``testcase.yaml`` or a ``sample.yaml``
 files in the application's project directory. This test application
-configuration file may contain one or more entries in the tests section each
-identifying a test scenario.
+configuration file may contain one or more entries in the ``tests:`` section each
+identifying a Test Scenario.
 
 .. _twister_test_project_diagram:
 
 .. figure:: figures/twister_test_project.svg
-   :alt: Twister and a Test applications' project.
+   :alt: Twister and a Test application project.
    :figclass: align-center
 
-   Twister and a Test applications' project.
+   Twister and a Test application project.
 
 
 Test application configurations are written using the YAML syntax and share the
 same structure as samples.
 
-A test scenario is a set of conditions or variables, defined in test scenario
-entry, under which a set of test suites will be executed. Can be used
-interchangeably with test scenario entry.
+A Test Scenario is a set of conditions and variables defined in a Test Scenario
+entry, under which a set of Test Suites will be built and executed.
 
-A test suite is a collection of test cases that are intended to be used to test
-a software program to ensure it meets certain requirements. The test cases in a
-test suite are often related or meant to be executed together.
+A Test Suite is a collection of Test Cases which are intended to be used to test
+a software program to ensure it meets certain requirements. The Test Cases in a
+Test Suite are either related or meant to be executed together.
 
-The name of each test scenario needs to be unique in the context of the overall
-test application and has to follow basic rules:
+Test Scenario, Test Suite, and Test Case names must follow to these basic rules:
 
-#. The format of the test scenario identifier shall be a string without any spaces or
+#. The format of the Test Scenario identifier shall be a string without any spaces or
    special characters (allowed characters: alphanumeric and [\_=]) consisting
-   of multiple sections delimited with a dot (.).
+   of multiple sections delimited with a dot (``.``).
 
-#. Each test scenario identifier shall start with a section followed by a
-   subsection separated by a dot. For example, a test scenario that covers
-   semaphores in the kernel shall start with ``kernel.semaphore``.
+#. Each Test Scenario identifier shall start with a section name followed by a
+   subsection names delimited with a dot (``.``). For example, a test scenario
+   that covers semaphores in the kernel shall start with ``kernel.semaphore``.
 
-#. All test scenario identifiers within a ``testcase.yaml`` file need to be unique. For
-   example a ``testcase.yaml`` file covering semaphores in the kernel can have:
+#. All Test Scenario identifiers within a Test Configuration (``testcase.yaml`` file)
+   need to be unique.
+   For example a ``testcase.yaml`` file covering semaphores in the kernel can have:
 
    * ``kernel.semaphore``: For general semaphore tests
    * ``kernel.semaphore.stress``: Stress testing semaphores in the kernel.
 
-#. Depending on the nature of the test, an identifier can consist of at least
-   two sections:
+#. The full canonical name of a Test Suite is:
+   ``<Test Application Project path>/<Test Scenario identifier>``
 
-   * Ztest tests: The individual test cases in the ztest testsuite will be
-     concatenated by dot (``.``) to the identifier in the ``testcase.yaml`` file
-     generating unique identifiers for every test case in the suite.
+#. Depending on the Test Suite implementation, its Test Case identifiers consist
+   of **at least three sections** delimited with a dot (``.``):
 
-   * Standalone tests and samples: This type of test should at least have 3
-     sections concatnated by dot (``.``) in the test scenario identifier in the
-     ``testcase.yaml`` (or ``sample.yaml``) file.
-     The last section of the name shall signify the test case itself.
+   * **Ztest tests**:
+     a Test Scenario identifier from the corresponding ``testcase.yaml`` file,
+     a Ztest suite name, and a Ztest test name:
+     ``<Test Scenario identifier>.<Ztest suite name>.<Ztest test name>``
+
+   * **Standalone tests and samples**:
+     a Test Scenario identifier from the corresponding ``testcase.yaml`` (or
+     ``sample.yaml``) file where the last section signifies the standalone
+     Test Case name, for example: ``debug.coredump.logging_backend``.
+
+
+The ``--no-detailed-test-id`` command line option modifies the above rules in this way:
+
+#. A Test Suite name has only ``<Test Scenario identifier>`` component.
+   Its Application Project path can be found in ``twister.json`` report as ``path:`` property.
+
+#. With short Test Suite names in this mode, all corresponding Test Scenario names
+   must be unique for the Twister execution scope.
+
+#. **Ztest** Test Case names have only Ztest components ``<Ztest suite name>.<Ztest test name>``.
+   Its parent Test Suite name equals to the corresponding Test Scenario identifier.
 
 
 The following is an example test configuration with a few options that are
@@ -310,12 +347,10 @@ related to the sample and what is being demonstrated:
             tags: tests
             min_ram: 16
 
-The full canonical name for each test scenario is:``<path to test application>/<test scenario identifier>``
+A Test Scenario entry in the ``tests:`` YAML dictionary has its Test Scenario
+identifier as a key.
 
-A test scenario entry is a a block or entry starting with test scenario
-identifier in the YAML files.
-
-Each test scenario entry in the test application configuration can define the
+Each Test Scenario entry in the Test Application configuration can define the
 following key/value pairs:
 
 ..  _test_config_args:
@@ -338,6 +373,23 @@ slow: <True|False> (default False)
 extra_args: <list of extra arguments>
     Extra arguments to pass to build tool when building or running the
     test scenario.
+
+    Using namespacing, it is possible to apply extra_args only to some
+    hardware. Currently architectures/platforms/simulation are supported:
+
+    .. code-block:: yaml
+
+        common:
+          tags: drivers adc
+        tests:
+          test:
+            depends_on: adc
+          test_async:
+            extra_args:
+              - arch:x86:CONFIG_ADC_ASYNC=y
+              - platform:qemu_x86:CONFIG_DEBUG=y
+              - platform:mimxrt1060_evk:SHIELD=rk043fn66hs_ctg
+              - simulation:qemu:CONFIG_MPU=y
 
 extra_configs: <list of extra configurations>
     Extra configuration options to be merged with a main prj.conf
@@ -396,11 +448,11 @@ levels: <list of levels>
     test will be selectable using the command line option ``--level <level name>``
 
 min_ram: <integer>
-    minimum amount of RAM in KB needed for this test to build and run. This is
+    estimated minimum amount of RAM in KB needed for this test to build and run. This is
     compared with information provided by the board metadata.
 
 min_flash: <integer>
-    minimum amount of ROM in KB needed for this test to build and run. This is
+    estimated minimum amount of ROM in KB needed for this test to build and run. This is
     compared with information provided by the board metadata.
 
 .. _twister_test_case_timeout:
@@ -415,6 +467,17 @@ arch_allow: <list of arches, such as x86, arm, arc>
 arch_exclude: <list of arches, such as x86, arm, arc>
     Set of architectures that this test scenario should not run on.
 
+vendor_allow: <list of vendors>
+    Set of platform vendors that this test scenario should only be run for.  The
+    vendor is defined as part of the board definition. Boards associated with
+    this vendors will be included. Other boards, including those without a
+    vendor will be excluded.
+
+vendor_exclude: <list of vendors>
+    Set of platform vendors that this test scenario should not run on.
+    The vendor is defined as part of the board. Boards associated with this
+    vendors will be excluded.
+
 platform_allow: <list of platforms>
     Set of platforms that this test scenario should only be run for. Do not use
     this option to limit testing or building in CI due to time or resource
@@ -426,6 +489,40 @@ integration_platforms: <YML list of platforms/boards>
     invoked with the ``--integration`` option. Use this instead of
     platform_allow if the goal is to limit scope due to timing or
     resource constraints.
+
+integration_toolchains: <YML list of toolchain variants>
+    This option expands the scope to all the listed toolchains variants and
+    adds another vector of testing where desired. By default, test
+    configurations are generated based on the toolchain configured in the environment:
+
+    test scenario -> platforms1 -> toolchain1
+    test scenario -> platforms2 -> toolchain1
+
+
+    When a platform supports multiple toolchains that are available during the
+    twister run, it is possible to expand the test configurations to include
+    additional tests for each toolchain. For example, if a platform supports
+    toolchains ``toolchain1`` and ``toolchain2``, and the test scenario
+    includes:
+
+    .. code-block:: yaml
+
+      integration_toolchains:
+        - toolchain1
+        - toolchain2
+
+    the following configurations are generated:
+
+    test scenario -> platforms1 -> toolchain1
+    test scenario -> platforms1 -> toolchain2
+    test scenario -> platforms2 -> toolchain1
+    test scenario -> platforms2 -> toolchain2
+
+
+    .. note::
+
+      This functionality is evaluated always and is not limited to the
+      ``--integration`` option.
 
 platform_exclude: <list of platforms>
     Set of platforms that this test scenario should not run on.
@@ -895,8 +992,9 @@ To use this type of simulation, add the following properties to
 
 .. code-block:: yaml
 
-   simulation: custom
-   simulation_exec: <name_of_emu_binary>
+   simulation:
+     - name: custom
+       exec: <name_of_emu_binary>
 
 This tells Twister that the board is using a custom emulator called ``<name_of_emu_binary>``,
 make sure this binary exists in the PATH.
@@ -1254,6 +1352,25 @@ using an external J-Link probe.  The ``probe_id`` keyword overrides the
       product: DAPLink CMSIS-DAP
       runner: jlink
       serial: null
+
+Using Single Board For Multiple Variants
+++++++++++++++++++++++++++++++++++++++++
+
+  The ``platform`` attribute can be a list of names or a string
+  with names separated by spaces. This allows to run tests for
+  different platform variants on the same physical board, without
+  re-configuring the hardware map file for each variant. For example:
+
+.. code-block:: yaml
+
+    - connected: true
+      id: '001234567890'
+      platform:
+      - nrf5340dk/nrf5340/cpuapp
+      - nrf5340dk/nrf5340/cpuapp/ns
+      product: J-Link
+      runner: nrfjprog
+      serial: /dev/ttyACM1
 
 Quarantine
 ++++++++++

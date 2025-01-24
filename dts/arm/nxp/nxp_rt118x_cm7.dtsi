@@ -19,15 +19,20 @@
 			reg = <0x20000000 DT_SIZE_K(256)>;
 		};
 
-		memory: memory@20000000 {
-			ranges = <0x0 0x20000000 0x10000000>;
+		memory: memory@20484000 {
+			ranges = <0x0 0x20484000 0x10000000>;
 		};
 
 		peripheral: peripheral@40000000 {
 			ranges = <0x0 0x40000000 0x10000000>;
 		};
-		flexspi1: spi@425e0000 {
-			reg = <0x425e0000 0x4000>,<0x28000000 DT_SIZE_M(128)>;
+
+		flexspi: spi@425e0000 {
+			reg = <0x425e0000 0x4000>, <0x28000000 DT_SIZE_M(128)>;
+		};
+
+		flexspi2: spi@445e0000 {
+			reg = <0x445e0000 0x4000>, <0x04000000 DT_SIZE_M(64)>;
 		};
 	};
 };
