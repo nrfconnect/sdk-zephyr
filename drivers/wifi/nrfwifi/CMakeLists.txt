@@ -63,7 +63,7 @@ zephyr_library_sources(
   src/qspi/src/ficr_prog.c
 )
 
-zephyr_library_sources_ifdef(CONFIG_NRF_WIFI_PATCHES_BUILTIN
+zephyr_library_sources_ifndef(CONFIG_NRF_WIFI_BUILD_ONLY_MODE
   src/fw_load.c
 )
 
