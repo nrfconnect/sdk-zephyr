@@ -237,7 +237,7 @@ static ALWAYS_INLINE void clk_init(void)
 #endif
 }
 
-void soc_early_init_hook(void)
+static int ke1xf_init(void)
 
 {
 #if !defined(CONFIG_ARM_MPU)
@@ -264,6 +264,8 @@ void soc_early_init_hook(void)
 	/* SystemInit will have enabled the code cache. Disable it here */
 	L1CACHE_DisableCodeCache();
 #endif
+
+	return 0;
 }
 
 #ifdef CONFIG_SOC_RESET_HOOK
@@ -312,3 +314,5 @@ void soc_reset_hook(void)
 }
 
 #endif /* CONFIG_SOC_RESET_HOOK */
+
+SYS_INIT(ke1xf_init, PRE_KERNEL_1, 0);
