@@ -231,7 +231,7 @@ static int uart_emul_fifo_read(const struct device *dev, uint8_t *rx_data, int s
 
 static int uart_emul_irq_tx_ready(const struct device *dev)
 {
-	int available = 0;
+	bool ready = false;
 	struct uart_emul_data *data = dev->data;
 
 	K_SPINLOCK(&data->tx_lock) {
@@ -239,10 +239,10 @@ static int uart_emul_irq_tx_ready(const struct device *dev)
 			K_SPINLOCK_BREAK;
 		}
 
-		available = ring_buf_space_get(data->tx_rb);
+		ready = ring_buf_space_get(data->tx_rb) > 0;
 	}
 
-	return available;
+	return ready;
 }
 
 static int uart_emul_irq_rx_ready(const struct device *dev)
