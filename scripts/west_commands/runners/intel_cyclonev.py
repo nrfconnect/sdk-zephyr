@@ -107,8 +107,7 @@ class IntelCycloneVBinaryRunner(ZephyrBinaryRunner):
                             help='''if given, override default config file;
                             may be given multiple times''')
         parser.add_argument('--serial', default="",
-                            help='''if given, selects FTDI instance by its serial number,
-                            defaults to empty''')
+                            help='if given, selects FTDI instance by its serial number, defaults to empty')
         parser.add_argument('--use-elf', default=False, action='store_true',
                             help='if given, Elf file will be used for loading instead of HEX image')
         # Options for flashing:
@@ -243,12 +242,11 @@ class IntelCycloneVBinaryRunner(ZephyrBinaryRunner):
         server_cmd = (self.openocd_cmd + self.serial + self.cfg_cmd +        #added mevalver
                       pre_init_cmd)
         temp_str = '--cd=' + os.environ.get('ZEPHYR_BASE') #Go to Zephyr base Dir
-        # Execute First Script in Zephyr Base Dir
         gdb_cmd = (self.gdb_cmd + self.tui_arg +
-                   [temp_str,'-ex', f'target extended-remote localhost:{self.gdb_port}' , '-batch'])
-        # Execute Second Script in Build Dir
+                   [temp_str,'-ex', f'target extended-remote localhost:{self.gdb_port}' , '-batch']) #Execute First Script in Zephyr Base Dir
+
         gdb_cmd2 = (self.gdb_cmd + self.tui_arg +
-                   ['-ex', f'target extended-remote localhost:{self.gdb_port}' , '-batch'])
+                   ['-ex', f'target extended-remote localhost:{self.gdb_port}' , '-batch'])	#Execute Second Script in Build Dir
         echo = ['echo']
         if self.gdb_init is not None:
             for i in self.gdb_init:
@@ -305,13 +303,11 @@ class IntelCycloneVBinaryRunner(ZephyrBinaryRunner):
 
         temp_str = '--cd=' + os.environ.get('ZEPHYR_BASE') #Go to Zephyr base Dir
 
-        # Execute First Script in Zephyr Base Dir
         gdb_cmd = (self.gdb_cmd + self.tui_arg +
-                   [temp_str,'-ex', f'target extended-remote localhost:{self.gdb_port}' , '-batch'])
+                   [temp_str,'-ex', f'target extended-remote localhost:{self.gdb_port}' , '-batch']) #Execute First Script in Zephyr Base Dir
 
-        # Execute Second Script in Build Dir
         gdb_cmd2 = (self.gdb_cmd + self.tui_arg +
-                   ['-ex', f'target extended-remote :{self.gdb_port}' , '-batch'])
+                   ['-ex', f'target extended-remote :{self.gdb_port}' , '-batch'])	#Execute Second Script in Build Dir
 
 
         if self.gdb_init is not None:
