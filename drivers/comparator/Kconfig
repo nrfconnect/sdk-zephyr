@@ -21,6 +21,5 @@ config COMPARATOR_INIT_PRIORITY
 rsource "Kconfig.mcux_acmp"
 rsource "Kconfig.nrf_comp"
 rsource "Kconfig.nrf_lpcomp"
-rsource "Kconfig.shell"
 
 endif # COMPARATOR
