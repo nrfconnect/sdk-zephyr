@@ -209,7 +209,7 @@ def init_kconfig():
         ZEPHYR_BASE=TOP_DIR,
         SOC_DIR="soc",
         ARCH_DIR="arch",
-        KCONFIG_BOARD_DIR="boards/*/*",
+        BOARD_DIR="boards/*/*",
         ARCH="*")
 
     kconf = kconfiglib.Kconfig(suppress_traceback=True)
