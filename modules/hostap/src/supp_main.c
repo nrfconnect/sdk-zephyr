@@ -473,6 +473,9 @@ static void submit_iface_work(struct supplicant_context *ctx,
 static void interface_handler(struct net_mgmt_event_callback *cb,
 			      uint32_t mgmt_event, struct net_if *iface)
 {
+	struct supplicant_context *ctx = CONTAINER_OF(cb, struct supplicant_context,
+						      cb);
+
 	if ((mgmt_event & INTERFACE_EVENT_MASK) != mgmt_event) {
 		return;
 	}
@@ -485,13 +488,13 @@ static void interface_handler(struct net_mgmt_event_callback *cb,
 
 	if (mgmt_event == NET_EVENT_IF_ADMIN_UP) {
 		LOG_INF("Network interface %d (%p) up", net_if_get_by_iface(iface), iface);
-		add_interface(get_default_context(), iface);
+		submit_iface_work(ctx, iface, add_interface);
 		return;
 	}
 
 	if (mgmt_event == NET_EVENT_IF_ADMIN_DOWN) {
 		LOG_INF("Network interface %d (%p) down", net_if_get_by_iface(iface), iface);
-		del_interface(get_default_context(), iface);
+		submit_iface_work(ctx, iface, del_interface);
 		return;
 	}
 }
