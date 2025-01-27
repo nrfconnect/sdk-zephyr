@@ -220,6 +220,7 @@ static void generate_dh_key(struct k_work *work)
 	if (ret != PSA_SUCCESS) {
 		LOG_ERR("Failed to destroy the key %d", ret);
 		err = -EIO;
+		goto exit;
 	}
 
 	err = 0;
