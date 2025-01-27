@@ -24,7 +24,7 @@ tests:
     depends_on: gpio
     extra_args: DTC_OVERLAY_FILE="altera.overlay"
 
-  drivers.gpio.build.adc_ads1145s0x_gpio:
+  drivers.gpio.build.adc_ads1x4s0x_gpio:
     min_ram: 32
     platform_allow: m5stack_core2/esp32/procpu nrf52840dk/nrf52840
     depends_on:
