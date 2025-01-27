@@ -718,7 +718,7 @@ int bt_le_cs_remove_config(struct bt_conn *conn, uint8_t config_id);
  */
 int bt_le_cs_stop_test(void);
 
-/** @brief Parse CS Subevent Step Data
+/** @brief Parse CS Test Subevent Results
  *
  * A helper for parsing HCI-formatted step data found in channel sounding subevent results.
  *
