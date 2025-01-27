@@ -259,13 +259,7 @@ class HardwareMap:
             flash_before = dut.get('flash_before')
             if flash_before is None:
                 flash_before = self.options.flash_before and (not (flash_with_test or serial_pty))
-            platform = dut.get('platform')
-            if isinstance(platform, str):
-                platforms = platform.split()
-            elif isinstance(platform, list):
-                platforms = platform
-            else:
-                raise ValueError(f"Invalid platform value: {platform}")
+            platform  = dut.get('platform')
             id = dut.get('id')
             runner = dut.get('runner')
             runner_params = dut.get('runner_params')
@@ -274,29 +268,28 @@ class HardwareMap:
             baud = dut.get('baud', None)
             product = dut.get('product')
             fixtures = dut.get('fixtures', [])
-            connected = dut.get('connected') and ((serial or serial_pty) is not None)
+            connected= dut.get('connected') and ((serial or serial_pty) is not None)
             if not connected:
                 continue
-            for plat in platforms:
-                new_dut = DUT(platform=plat,
-                              product=product,
-                              runner=runner,
-                              runner_params=runner_params,
-                              id=id,
-                              serial_pty=serial_pty,
-                              serial=serial,
-                              serial_baud=baud,
-                              connected=connected,
-                              pre_script=pre_script,
-                              flash_before=flash_before,
-                              post_script=post_script,
-                              post_flash_script=post_flash_script,
-                              script_param=script_param,
-                              flash_timeout=flash_timeout,
-                              flash_with_test=flash_with_test)
-                new_dut.fixtures = fixtures
-                new_dut.counter = 0
-                self.duts.append(new_dut)
+            new_dut = DUT(platform=platform,
+                          product=product,
+                          runner=runner,
+                          runner_params=runner_params,
+                          id=id,
+                          serial_pty=serial_pty,
+                          serial=serial,
+                          serial_baud=baud,
+                          connected=connected,
+                          pre_script=pre_script,
+                          flash_before=flash_before,
+                          post_script=post_script,
+                          post_flash_script=post_flash_script,
+                          script_param=script_param,
+                          flash_timeout=flash_timeout,
+                          flash_with_test=flash_with_test)
+            new_dut.fixtures = fixtures
+            new_dut.counter = 0
+            self.duts.append(new_dut)
 
     def scan(self, persistent=False):
         from serial.tools import list_ports
