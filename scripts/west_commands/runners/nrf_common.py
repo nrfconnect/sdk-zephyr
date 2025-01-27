@@ -273,11 +273,8 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
 
             # Manage SUIT artifacts.
             # This logic should be executed only once per build.
-            # Use sysbuild board qualifiers to select the context,
-            # with which the artifacts will be programmed.
-            if self.build_conf.get('CONFIG_BOARD_QUALIFIERS') == self.sysbuild_conf.get(
-                'SB_CONFIG_BOARD_QUALIFIERS'
-            ):
+            # Use sysbuild board qualifiers to select the context, with which the artifacts will be programmed.
+            if self.build_conf.get('CONFIG_BOARD_QUALIFIERS') == self.sysbuild_conf.get('SB_CONFIG_BOARD_QUALIFIERS'):
                 mpi_hex_dir = Path(os.path.join(self.cfg.build_dir, 'zephyr'))
 
                 # Handle Manifest Provisioning Information
@@ -285,37 +282,17 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                     app_mpi_hex_file = os.fspath(
                         mpi_hex_dir / self.build_conf.get('CONFIG_SUIT_MPI_APP_AREA_PATH'))
                     rad_mpi_hex_file = os.fspath(
-                        mpi_hex_dir / self.build_conf.get('CONFIG_SUIT_MPI_RAD_AREA_PATH')
-                    )
-                    self.op_program(
-                        app_mpi_hex_file,
-                        'ERASE_NONE',
-                        None,
-                        defer=True,
-                        core='NRFDL_DEVICE_CORE_APPLICATION',
-                    )
-                    self.op_program(
-                        rad_mpi_hex_file,
-                        'ERASE_NONE',
-                        None,
-                        defer=True,
-                        core='NRFDL_DEVICE_CORE_NETWORK',
-                    )
+                        mpi_hex_dir / self.build_conf.get('CONFIG_SUIT_MPI_RAD_AREA_PATH'))
+                    self.op_program(app_mpi_hex_file, 'ERASE_NONE', None, defer=True, core='NRFDL_DEVICE_CORE_APPLICATION')
+                    self.op_program(rad_mpi_hex_file, 'ERASE_NONE', None, defer=True, core='NRFDL_DEVICE_CORE_NETWORK')
 
                 # Handle SUIT root manifest if application manifests are not used.
-                # If an application firmware is built, the root envelope is merged
-                # with other application manifests as well as the output HEX file.
+                # If an application firmware is built, the root envelope is merged with other application manifests
+                # as well as the output HEX file.
                 if not cpuapp and self.sysbuild_conf.get('SB_CONFIG_SUIT_ENVELOPE'):
                     app_root_envelope_hex_file = os.fspath(
-                        mpi_hex_dir / 'suit_installed_envelopes_application_merged.hex'
-                    )
-                    self.op_program(
-                        app_root_envelope_hex_file,
-                        'ERASE_NONE',
-                        None,
-                        defer=True,
-                        core='NRFDL_DEVICE_CORE_APPLICATION',
-                    )
+                        mpi_hex_dir / 'suit_installed_envelopes_application_merged.hex')
+                    self.op_program(app_root_envelope_hex_file, 'ERASE_NONE', None, defer=True, core='NRFDL_DEVICE_CORE_APPLICATION')
 
             if cpuapp:
                 if not self.erase and self.build_conf.getboolean('CONFIG_NRF_REGTOOL_GENERATE_UICR'):
