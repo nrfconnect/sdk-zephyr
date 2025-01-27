@@ -24,7 +24,8 @@ description: |
 
         rx-partitions {
             compatible = "nordic,owned-partitions";
-            nordic,access = <NRF_OWNER_ID_APPLICATION NRF_PERM_RX>;
+            perm-read;
+            perm-execute;
             #address-cells = <1>;
             #size-cells = <1>;
 
@@ -36,7 +37,8 @@ description: |
 
         rw-partitions {
             compatible = "nordic,owned-partitions";
-            nordic,access = <NRF_OWNER_ID_APPLICATION NRF_PERM_RW>;
+            perm-read;
+            perm-write;
             #address-cells = <1>;
             #size-cells = <1>;
 
