@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: debug
-   :name: Debug
-   :show-listing:
+.. _debug-samples:
 
-   Samples that demonstrate advanced debugging features.
+Debug Samples
+#################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

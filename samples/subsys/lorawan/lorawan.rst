@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: lorawan
-   :name: LoRaWAN
-   :show-listing:
+.. _lorawan-samples:
 
-   Samples that demonstrate the :ref:`LoRaWAN <lorawan_api>` subsystem.
+LoRaWAN Samples
+###############
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

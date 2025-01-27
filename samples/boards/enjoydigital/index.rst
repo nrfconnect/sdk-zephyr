@@ -1,6 +1,10 @@
-.. zephyr:code-sample-category:: enjoydigital
-   :name: EnjoyDigital
-   :show-listing:
-   :glob: **/*
+.. _enjoydigital_samples:
 
-   These samples showcase the use of EnjoyDigital boards in Zephyr.
+EnjoyDigital
+============
+
+.. toctree::
+   :titlesonly:
+   :glob:
+
+   **/*
