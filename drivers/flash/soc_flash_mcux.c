@@ -22,19 +22,19 @@
 LOG_MODULE_REGISTER(flash_mcux);
 
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_INST(0, nxp_kinetis_ftfa))
+#if DT_NODE_HAS_STATUS(DT_INST(0, nxp_kinetis_ftfa), okay)
 #define DT_DRV_COMPAT nxp_kinetis_ftfa
-#elif DT_NODE_HAS_STATUS_OKAY(DT_INST(0, nxp_kinetis_ftfe))
+#elif DT_NODE_HAS_STATUS(DT_INST(0, nxp_kinetis_ftfe), okay)
 #define DT_DRV_COMPAT nxp_kinetis_ftfe
-#elif DT_NODE_HAS_STATUS_OKAY(DT_INST(0, nxp_kinetis_ftfl))
+#elif DT_NODE_HAS_STATUS(DT_INST(0, nxp_kinetis_ftfl), okay)
 #define DT_DRV_COMPAT nxp_kinetis_ftfl
-#elif DT_NODE_HAS_STATUS_OKAY(DT_INST(0, nxp_iap_fmc55))
+#elif DT_NODE_HAS_STATUS(DT_INST(0, nxp_iap_fmc55), okay)
 #define DT_DRV_COMPAT nxp_iap_fmc55
 #define SOC_HAS_IAP 1
-#elif DT_NODE_HAS_STATUS_OKAY(DT_INST(0, nxp_iap_fmc553))
+#elif DT_NODE_HAS_STATUS(DT_INST(0, nxp_iap_fmc553), okay)
 #define DT_DRV_COMPAT nxp_iap_fmc553
 #define SOC_HAS_IAP 1
-#elif DT_NODE_HAS_STATUS_OKAY(DT_INST(0, nxp_iap_msf1))
+#elif DT_NODE_HAS_STATUS(DT_INST(0, nxp_iap_msf1), okay)
 #define DT_DRV_COMPAT nxp_iap_msf1
 #define SOC_HAS_IAP_MSF1 1
 #else

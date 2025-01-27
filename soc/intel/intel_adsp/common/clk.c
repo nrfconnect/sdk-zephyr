@@ -129,10 +129,10 @@ struct adsp_clock_source_desc adsp_clk_src_info[ADSP_CLOCK_SOURCE_COUNT] = {
 	 */
 	[ADSP_CLOCK_SOURCE_XTAL_OSC] = { CONFIG_DAI_DMIC_HW_IOCLK },
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(audioclk))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(audioclk), okay)
 	[ADSP_CLOCK_SOURCE_AUDIO_CARDINAL] = { DT_PROP(DT_NODELABEL(audioclk), clock_frequency) },
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(pllclk))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(pllclk), okay)
 	[ADSP_CLOCK_SOURCE_AUDIO_PLL_FIXED] = { DT_PROP(DT_NODELABEL(pllclk), clock_frequency) },
 #endif
 	[ADSP_CLOCK_SOURCE_MLCK_INPUT] = { 0 },
