@@ -71,7 +71,7 @@ static void eth_enc28j60_set_bank(const struct device *dev, uint16_t reg_addr)
 
 	if (!spi_transceive_dt(&config->spi, &tx, &rx)) {
 		buf[0] = ENC28J60_SPI_WCR | ENC28J60_REG_ECON1;
-		buf[1] = (buf[1] & 0xFC) | ((reg_addr >> 8) & 0x0F);
+		buf[1] = (buf[1] & 0xFC) | ((reg_addr >> 8) & 0x03);
 
 		spi_write_dt(&config->spi, &tx);
 	} else {
@@ -683,6 +683,13 @@ static int eth_enc28j60_rx(const struct device *dev)
 
 	k_sem_give(&context->tx_rx_sem);
 
+	/* Clear a potential Receive Error Interrupt Flag bit (RX buffer full).
+	 * PKTIF was automatically cleared in eth_enc28j60_rx() when EPKTCNT
+	 * reached zero, so no need to clear it.
+	 */
+	eth_enc28j60_clear_eth_reg(dev, ENC28J60_REG_EIR,
+				   ENC28J60_BIT_EIR_RXERIF);
+
 	return 0;
 }
 
@@ -698,14 +705,13 @@ static void eth_enc28j60_rx_thread(void *p1, void *p2, void *p3)
 	while (true) {
 		k_sem_take(&context->int_sem, K_FOREVER);
 
+		/* Disable interrupts during processing, otherwise there's a small race
+		 * window where we can miss one!
+		 */
+		eth_enc28j60_clear_eth_reg(dev, ENC28J60_REG_EIE, ENC28J60_BIT_EIE_INTIE);
+
 		eth_enc28j60_read_reg(dev, ENC28J60_REG_EIR, &int_stat);
-		if (int_stat & ENC28J60_BIT_EIR_PKTIF) {
-			eth_enc28j60_rx(dev);
-			/* Clear rx interruption flag */
-			eth_enc28j60_clear_eth_reg(dev, ENC28J60_REG_EIR,
-						   ENC28J60_BIT_EIR_PKTIF
-						   | ENC28J60_BIT_EIR_RXERIF);
-		} else if (int_stat & ENC28J60_BIT_EIR_LINKIF) {
+		if (int_stat & ENC28J60_BIT_EIR_LINKIF) {
 			uint16_t phir;
 			uint16_t phstat2;
 			/* Clear link change interrupt flag by PHIR reg read */
@@ -713,7 +719,14 @@ static void eth_enc28j60_rx_thread(void *p1, void *p2, void *p3)
 			eth_enc28j60_read_phy(dev, ENC28J60_PHY_PHSTAT2, &phstat2);
 			if (phstat2 & ENC28J60_BIT_PHSTAT2_LSTAT) {
 				LOG_INF("%s: Link up", dev->name);
-				net_eth_carrier_on(context->iface);
+				/* We may have been interrupted before L2 init complete
+				 * If so flag that the carrier should be set on in init
+				 */
+				if (context->iface_initialized) {
+					net_eth_carrier_on(context->iface);
+				} else {
+					context->iface_carrier_on_init = true;
+				}
 			} else {
 				LOG_INF("%s: Link down", dev->name);
 
@@ -722,6 +735,14 @@ static void eth_enc28j60_rx_thread(void *p1, void *p2, void *p3)
 				}
 			}
 		}
+
+		/* We cannot rely on the PKTIF flag because of errata 6. Call
+		 * eth_enc28j60_rx() unconditionally. It will check EPKTCNT instead.
+		 */
+		eth_enc28j60_rx(dev);
+
+		/* Now that the IRQ line was released, enable interrupts back */
+		eth_enc28j60_set_eth_reg(dev, ENC28J60_REG_EIE, ENC28J60_BIT_EIE_INTIE);
 	}
 }
 
@@ -751,7 +772,12 @@ static void eth_enc28j60_iface_init(struct net_if *iface)
 
 	ethernet_init(iface);
 
-	net_if_carrier_off(iface);
+	/* The device may have already interrupted us to flag link UP */
+	if (context->iface_carrier_on_init) {
+		net_if_carrier_on(iface);
+	} else {
+		net_if_carrier_off(iface);
+	}
 	context->iface_initialized = true;
 }
 

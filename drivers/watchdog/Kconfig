@@ -20,6 +20,11 @@ config WDT_DISABLE_AT_BOOT
 	help
 	  Disable watchdog at Zephyr system startup.
 
+config HAS_WDT_NO_CALLBACKS
+	bool
+	help
+	  Watchdog driver does not support callbacks.
+
 module = WDT
 module-str = watchdog
 source "subsys/logging/Kconfig.template.log_config"
@@ -95,6 +100,8 @@ source "drivers/watchdog/Kconfig.rpi_pico"
 source "drivers/watchdog/Kconfig.gd32"
 
 source "drivers/watchdog/Kconfig.npm1300"
+
+source "drivers/watchdog/Kconfig.npm2100"
 
 source "drivers/watchdog/Kconfig.npm6001"
 

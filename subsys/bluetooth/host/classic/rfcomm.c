@@ -17,7 +17,6 @@
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/drivers/bluetooth/hci_driver.h>
 #include <zephyr/bluetooth/l2cap.h>
 
 #include <zephyr/bluetooth/classic/rfcomm.h>
@@ -37,7 +36,7 @@ LOG_MODULE_REGISTER(bt_rfcomm);
 #define RFCOMM_MIN_MTU		BT_RFCOMM_SIG_MIN_MTU
 #define RFCOMM_DEFAULT_MTU	127
 
-#define RFCOMM_MAX_CREDITS		(CONFIG_BT_BUF_ACL_RX_COUNT - 1)
+#define RFCOMM_MAX_CREDITS		(BT_BUF_ACL_RX_COUNT - 1)
 #define RFCOMM_CREDITS_THRESHOLD	(RFCOMM_MAX_CREDITS / 2)
 #define RFCOMM_DEFAULT_CREDIT		RFCOMM_MAX_CREDITS
 
@@ -829,6 +828,13 @@ static enum security_result rfcomm_dlc_security(struct bt_rfcomm_dlc *dlc)
 	}
 
 	if (!bt_conn_set_security(conn, dlc->required_sec_level)) {
+		/*
+		 * General Bonding refers to the process of performing bonding
+		 * during connection setup or channel establishment procedures
+		 * as a precursor to accessing a service.
+		 * For current case, it is dedicated bonding.
+		 */
+		atomic_set_bit(conn->flags, BT_CONN_BR_GENERAL_BONDING);
 		/* If Security elevation is initiated or in progress */
 		return RFCOMM_SECURITY_PENDING;
 	}

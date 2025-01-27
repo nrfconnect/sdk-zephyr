@@ -7,10 +7,14 @@ toolchain:
   - gnuarmemb
   - xtools
 supported:
+  - adc
   - arduino_gpio
+  - arduino_serial
+  - arduino_i2c
   - dac
   - gpio
   - i2c
+  - pwm
   - usart
 ram: 40
 flash: 256

@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <errno.h>
 
+#include <zephyr/bluetooth/iso.h>
 #include <zephyr/types.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/ring_buffer.h>
@@ -25,8 +26,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_BTTESTER_LOG_LEVEL);
 #include "btp_bap_audio_stream.h"
 #include "btp_bap_unicast.h"
 
-static struct bt_audio_codec_qos_pref qos_pref =
-	BT_AUDIO_CODEC_QOS_PREF(true, BT_GAP_LE_PHY_2M, 0x02, 10, 10000, 40000, 10000, 40000);
+static struct bt_bap_qos_cfg_pref qos_pref =
+	BT_BAP_QOS_CFG_PREF(true, BT_GAP_LE_PHY_2M, 0x02, 10, 10000, 40000, 10000, 40000);
 
 static struct btp_bap_unicast_connection connections[CONFIG_BT_MAX_CONN];
 static struct btp_bap_unicast_group cigs[CONFIG_BT_ISO_MAX_CIG];
@@ -268,7 +269,7 @@ static void btp_send_ase_found_ev(struct bt_conn *conn, struct bt_bap_ep *ep)
 	tester_event(BTP_SERVICE_ID_BAP, BTP_BAP_EV_ASE_FOUND, &ev, sizeof(ev));
 }
 
-static inline void print_qos(const struct bt_audio_codec_qos *qos)
+static inline void print_qos(const struct bt_bap_qos_cfg *qos)
 {
 	LOG_DBG("QoS: interval %u framing 0x%02x phy 0x%02x sdu %u rtn %u latency %u pd %u",
 		qos->interval, qos->framing, qos->phy, qos->sdu, qos->rtn, qos->latency, qos->pd);
@@ -323,7 +324,7 @@ static int validate_codec_parameters(const struct bt_audio_codec_cfg *codec_cfg)
 
 static int lc3_config(struct bt_conn *conn, const struct bt_bap_ep *ep, enum bt_audio_dir dir,
 		      const struct bt_audio_codec_cfg *codec_cfg, struct bt_bap_stream **stream,
-		      struct bt_audio_codec_qos_pref *const pref, struct bt_bap_ascs_rsp *rsp)
+		      struct bt_bap_qos_cfg_pref *const pref, struct bt_bap_ascs_rsp *rsp)
 {
 	struct bt_bap_ep_info info;
 	struct btp_bap_unicast_connection *u_conn;
@@ -372,7 +373,7 @@ static int lc3_config(struct bt_conn *conn, const struct bt_bap_ep *ep, enum bt_
 
 static int lc3_reconfig(struct bt_bap_stream *stream, enum bt_audio_dir dir,
 			const struct bt_audio_codec_cfg *codec_cfg,
-			struct bt_audio_codec_qos_pref *const pref, struct bt_bap_ascs_rsp *rsp)
+			struct bt_bap_qos_cfg_pref *const pref, struct bt_bap_ascs_rsp *rsp)
 {
 	LOG_DBG("ASE Codec Reconfig: stream %p", stream);
 
@@ -381,7 +382,7 @@ static int lc3_reconfig(struct bt_bap_stream *stream, enum bt_audio_dir dir,
 	return 0;
 }
 
-static int lc3_qos(struct bt_bap_stream *stream, const struct bt_audio_codec_qos *qos,
+static int lc3_qos(struct bt_bap_stream *stream, const struct bt_bap_qos_cfg *qos,
 		   struct bt_bap_ascs_rsp *rsp)
 {
 	LOG_DBG("QoS: stream %p qos %p", stream, qos);
@@ -500,8 +501,7 @@ static const struct bt_bap_unicast_server_cb unicast_server_cb = {
 	.release = lc3_release,
 };
 
-static void stream_configured(struct bt_bap_stream *stream,
-			      const struct bt_audio_codec_qos_pref *pref)
+static void stream_configured(struct bt_bap_stream *stream, const struct bt_bap_qos_cfg_pref *pref)
 {
 	struct bt_bap_ep_info info;
 	struct btp_bap_unicast_connection *u_conn;
@@ -570,9 +570,6 @@ static void stream_disabled(struct bt_bap_stream *stream)
 
 	LOG_DBG("Disabled stream %p", stream);
 
-	/* Stop send timer */
-	btp_bap_audio_stream_stopped(&u_stream->audio_stream);
-
 	btp_send_ascs_operation_completed_ev(stream->conn, u_stream->ase_id,
 					     BT_ASCS_DISABLE_OP, BTP_ASCS_STATUS_SUCCESS);
 }
@@ -587,9 +584,6 @@ static void stream_released(struct bt_bap_stream *stream)
 	LOG_DBG("Released stream %p", stream);
 
 	u_conn = &connections[u_stream->conn_id];
-
-	/* Stop send timer */
-	btp_bap_audio_stream_stopped(&u_stream->audio_stream);
 
 	if (stream->ep != NULL) {
 		(void)bt_bap_ep_get_info(stream->ep, &info);
@@ -632,7 +626,15 @@ static void stream_started(struct bt_bap_stream *stream)
 
 	LOG_DBG("Started stream %p", stream);
 
-	btp_bap_audio_stream_started(&u_stream->audio_stream);
+	/* Start TX */
+	if (btp_bap_audio_stream_can_send(&u_stream->audio_stream)) {
+		int err;
+
+		err = btp_bap_audio_stream_tx_register(&u_stream->audio_stream);
+		if (err != 0) {
+			LOG_ERR("Failed to register stream: %d", err);
+		}
+	}
 
 	(void)bt_bap_ep_get_info(stream->ep, &info);
 	btp_send_ascs_ase_state_changed_ev(stream->conn, u_stream->ase_id, info.state);
@@ -664,7 +666,14 @@ static void stream_stopped(struct bt_bap_stream *stream, uint8_t reason)
 
 	LOG_DBG("Stopped stream %p with reason 0x%02X", stream, reason);
 
-	btp_bap_audio_stream_stopped(&u_stream->audio_stream);
+	if (btp_bap_audio_stream_can_send(&u_stream->audio_stream)) {
+		int err;
+
+		err = btp_bap_audio_stream_tx_unregister(&u_stream->audio_stream);
+		if (err != 0) {
+			LOG_ERR("Failed to unregister stream: %d", err);
+		}
+	}
 
 	btp_send_ascs_operation_completed_ev(stream->conn, u_stream->ase_id,
 					     BT_ASCS_STOP_OP, BTP_STATUS_SUCCESS);
@@ -703,15 +712,14 @@ static void stream_recv(struct bt_bap_stream *stream,
 		/* For now, send just a first packet, to limit the number
 		 * of logs and not unnecessarily spam through btp.
 		 */
-		LOG_DBG("Incoming audio on stream %p len %u", stream, buf->len);
-		u_stream->already_sent = true;
-		send_stream_received_ev(stream->conn, stream->ep, buf->len, buf->data);
-	}
-}
+		LOG_DBG("Incoming audio on stream %p len %u flags 0x%02X seq_num %u and ts %u",
+			stream, buf->len, info->flags, info->seq_num, info->ts);
 
-static void stream_sent(struct bt_bap_stream *stream)
-{
-	LOG_DBG("Stream %p sent", stream);
+		if ((info->flags & BT_ISO_FLAGS_VALID) == 0) {
+			u_stream->already_sent = true;
+			send_stream_received_ev(stream->conn, stream->ep, buf->len, buf->data);
+		}
+	}
 }
 
 static struct bt_bap_stream_ops stream_ops = {
@@ -724,7 +732,7 @@ static struct bt_bap_stream_ops stream_ops = {
 	.started = stream_started,
 	.stopped = stream_stopped,
 	.recv = stream_recv,
-	.sent = stream_sent,
+	.sent = btp_bap_audio_stream_sent_cb,
 	.connected = stream_connected,
 };
 
@@ -957,7 +965,7 @@ uint8_t btp_bap_discover(const void *cmd, uint16_t cmd_len,
 
 static int server_stream_config(struct bt_conn *conn, struct bt_bap_stream *stream,
 				struct bt_audio_codec_cfg *codec_cfg,
-				struct bt_audio_codec_qos_pref *qos)
+				struct bt_bap_qos_cfg_pref *qos)
 {
 	int err;
 	struct bt_bap_ep_info info;
@@ -1131,6 +1139,7 @@ int btp_bap_unicast_group_create(uint8_t cig_id,
 	}
 
 	cigs[cig_id].in_use = true;
+	cigs[cig_id].cig_id = cig_id;
 	*out_unicast_group = &cigs[cig_id];
 
 	return 0;
@@ -1276,14 +1285,14 @@ uint8_t btp_ascs_preconfigure_qos(const void *cmd, uint16_t cmd_len,
 				  void *rsp, uint16_t *rsp_len)
 {
 	const struct btp_ascs_preconfigure_qos_cmd *cp = cmd;
-	struct bt_audio_codec_qos *qos;
+	struct bt_bap_qos_cfg *qos;
 
 	LOG_DBG("");
 
 	qos = &cigs[cp->cig_id].qos[cp->cis_id];
 	memset(qos, 0, sizeof(*qos));
 
-	qos->phy = BT_AUDIO_CODEC_QOS_2M;
+	qos->phy = BT_BAP_QOS_CFG_2M;
 	qos->framing = cp->framing;
 	qos->rtn = cp->retransmission_num;
 	qos->sdu = sys_le16_to_cpu(cp->max_sdu);

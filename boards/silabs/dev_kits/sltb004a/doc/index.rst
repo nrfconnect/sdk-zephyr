@@ -1,7 +1,4 @@
-.. _sltb004a:
-
-EFR32MG12 Thunderboard (SLTB004A)
-#################################
+.. zephyr:board:: sltb004a
 
 Overview
 ********
@@ -9,10 +6,6 @@ Overview
 The EFR32MG12 Thunderboard (a.k.a Thunderboard Sense 2) contains an MCU
 from the EFR32MG12 family built on ARM® Cortex®-M4F processor with low
 power capabilities.
-
-.. image:: sltb004a.jpg
-   :align: center
-   :alt: EFR32MG12 SLTB004A
 
 Hardware
 ********
@@ -149,7 +142,7 @@ Programming and Debugging
 
 .. note::
    Before using the kit the first time, you should update the J-Link firmware
-   from `J-Link-Downloads`_
+   in Simplicity Studio.
 
 Flashing
 ========
@@ -206,6 +199,3 @@ the following message:
 
 .. _J-Link:
    https://www.segger.com/jlink-debug-probes.html
-
-.. _J-Link-Downloads:
-   https://www.segger.com/downloads/jlink
