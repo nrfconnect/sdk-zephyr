@@ -1,5 +1,7 @@
 sample:
   name: IPC Service example integration (icmsg backend)
+common:
+  timeout: 30
 tests:
   sample.ipc.icmsg:
     platform_allow:
@@ -27,8 +29,7 @@ tests:
     integration_platforms:
       - nrf54l15dk/nrf54l15/cpuapp
     tags: ipc
-    extra_args:
-      icmsg_SNIPPET=nordic-flpr
+    extra_args: icmsg_SNIPPET=nordic-flpr
     sysbuild: true
     harness: console
     harness_config:
@@ -48,11 +49,11 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
     tags: ipc
     extra_args:
-      icmsg_SNIPPET=nordic-flpr
-      icmsg_CONFIG_MULTITHREADING=n
-      icmsg_CONFIG_LOG_MODE_MINIMAL=y
-      remote_CONFIG_MULTITHREADING=n
-      remote_CONFIG_LOG_MODE_MINIMAL=y
+      - icmsg_SNIPPET=nordic-flpr
+      - icmsg_CONFIG_MULTITHREADING=n
+      - icmsg_CONFIG_LOG_MODE_MINIMAL=y
+      - remote_CONFIG_MULTITHREADING=n
+      - remote_CONFIG_LOG_MODE_MINIMAL=y
     sysbuild: true
     harness: console
     harness_config:
@@ -72,9 +73,9 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
     tags: ipc
     extra_args:
-      icmsg_SNIPPET=nordic-flpr
-      remote_CONFIG_MULTITHREADING=n
-      remote_CONFIG_LOG_MODE_MINIMAL=y
+      - icmsg_SNIPPET=nordic-flpr
+      - remote_CONFIG_MULTITHREADING=n
+      - remote_CONFIG_LOG_MODE_MINIMAL=y
     sysbuild: true
     harness: console
     harness_config:
@@ -94,11 +95,11 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
     tags: ipc
     extra_args:
-      icmsg_SNIPPET=nordic-flpr
-      icmsg_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
-      icmsg_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_icbmsg.overlay"
-      remote_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
-      remote_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuflpr_icbmsg.overlay"
+      - icmsg_SNIPPET=nordic-flpr
+      - icmsg_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
+      - icmsg_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_icbmsg.overlay"
+      - remote_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
+      - remote_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuflpr_icbmsg.overlay"
     sysbuild: true
     harness: console
     harness_config:
@@ -118,15 +119,15 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
     tags: ipc
     extra_args:
-      icmsg_SNIPPET=nordic-flpr
-      icmsg_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
-      icmsg_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_icbmsg.overlay"
-      icmsg_CONFIG_MULTITHREADING=n
-      icmsg_CONFIG_LOG_MODE_MINIMAL=y
-      remote_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
-      remote_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuflpr_icbmsg.overlay"
-      remote_CONFIG_MULTITHREADING=n
-      remote_CONFIG_LOG_MODE_MINIMAL=y
+      - icmsg_SNIPPET=nordic-flpr
+      - icmsg_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
+      - icmsg_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_icbmsg.overlay"
+      - icmsg_CONFIG_MULTITHREADING=n
+      - icmsg_CONFIG_LOG_MODE_MINIMAL=y
+      - remote_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
+      - remote_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuflpr_icbmsg.overlay"
+      - remote_CONFIG_MULTITHREADING=n
+      - remote_CONFIG_LOG_MODE_MINIMAL=y
     sysbuild: true
     harness: console
     harness_config:
@@ -146,13 +147,13 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
     tags: ipc
     extra_args:
-      icmsg_SNIPPET=nordic-flpr
-      icmsg_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
-      icmsg_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_icbmsg.overlay"
-      remote_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
-      remote_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuflpr_icbmsg.overlay"
-      remote_CONFIG_MULTITHREADING=n
-      remote_CONFIG_LOG_MODE_MINIMAL=y
+      - icmsg_SNIPPET=nordic-flpr
+      - icmsg_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
+      - icmsg_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_icbmsg.overlay"
+      - remote_CONFIG_IPC_SERVICE_BACKEND_ICBMSG_NUM_EP=1
+      - remote_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuflpr_icbmsg.overlay"
+      - remote_CONFIG_MULTITHREADING=n
+      - remote_CONFIG_LOG_MODE_MINIMAL=y
     sysbuild: true
     harness: console
     harness_config:

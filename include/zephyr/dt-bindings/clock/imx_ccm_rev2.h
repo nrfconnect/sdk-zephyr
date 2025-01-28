@@ -131,6 +131,19 @@
 #define IMX_CCM_FLEXIO1_CLK            0x1700UL
 #define IMX_CCM_FLEXIO2_CLK            0x1701UL
 
+/* NETC */
+#define IMX_CCM_NETC_CLK 0x1800UL
+
+/* MIPI CSI2RX */
+#define IMX_CCM_MIPI_CSI2RX_ROOT_CLK 0x1900UL
+#define IMX_CCM_MIPI_CSI2RX_UI_CLK   0x2000UL
+#define IMX_CCM_MIPI_CSI2RX_ESC_CLK  0x2100UL
+
+/* I3C */
+#define IMX_CCM_I3C_CLK                0x2200UL
+#define IMX_CCM_I3C1_CLK               0x2200UL
+#define IMX_CCM_I3C2_CLK               0x2201UL
+
 /* QTMR */
 #define IMX_CCM_QTMR_CLK               0x6000UL
 #define IMX_CCM_QTMR1_CLK              0x6000UL

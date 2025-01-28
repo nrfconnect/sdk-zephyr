@@ -16,11 +16,12 @@
 
 #define EVENT_PIPELINE_MAX 7
 
-#define ADV_INT_UNIT_US      625U
-#define SCAN_INT_UNIT_US     625U
-#define CONN_INT_UNIT_US     1250U
-#define ISO_INT_UNIT_US      CONN_INT_UNIT_US
-#define PERIODIC_INT_UNIT_US CONN_INT_UNIT_US
+#define ADV_INT_UNIT_US          625U
+#define SCAN_INT_UNIT_US         625U
+#define CONN_INT_UNIT_US         1250U
+#define ISO_INT_UNIT_US          CONN_INT_UNIT_US
+#define PERIODIC_INT_UNIT_US     CONN_INT_UNIT_US
+#define CONN_LOW_LAT_INT_UNIT_US 500U
 
 #define ISO_INTERVAL_TO_US(interval) ((interval) * ISO_INT_UNIT_US)
 
@@ -92,9 +93,13 @@ enum {
 	TICKER_ID_SCAN_BASE,
 	TICKER_ID_SCAN_LAST = ((TICKER_ID_SCAN_BASE) + (BT_CTLR_SCAN_SET) - 1),
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
+#if defined(CONFIG_BT_CTLR_SCAN_AUX_USE_CHAINS)
+	TICKER_ID_SCAN_AUX,
+#else /* !CONFIG_BT_CTLR_SCAN_AUX_USE_CHAINS */
 	TICKER_ID_SCAN_AUX_BASE,
 	TICKER_ID_SCAN_AUX_LAST = ((TICKER_ID_SCAN_AUX_BASE) +
 				   (CONFIG_BT_CTLR_SCAN_AUX_SET) - 1),
+#endif /* !CONFIG_BT_CTLR_SCAN_AUX_USE_CHAINS */
 #if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
 	TICKER_ID_SCAN_SYNC_BASE,
 	TICKER_ID_SCAN_SYNC_LAST = ((TICKER_ID_SCAN_SYNC_BASE) +
@@ -103,6 +108,9 @@ enum {
 	TICKER_ID_SCAN_SYNC_ISO_BASE,
 	TICKER_ID_SCAN_SYNC_ISO_LAST = ((TICKER_ID_SCAN_SYNC_ISO_BASE) +
 					(CONFIG_BT_CTLR_SCAN_SYNC_ISO_SET) - 1),
+	TICKER_ID_SCAN_SYNC_ISO_RESUME_BASE,
+	TICKER_ID_SCAN_SYNC_ISO_RESUME_LAST = ((TICKER_ID_SCAN_SYNC_ISO_RESUME_BASE) +
+					       (CONFIG_BT_CTLR_SCAN_SYNC_ISO_SET) - 1),
 #endif /* CONFIG_BT_CTLR_SYNC_ISO */
 #endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
@@ -316,6 +324,7 @@ enum node_rx_type {
 	NODE_RX_TYPE_DTM_IQ_SAMPLE_REPORT,
 	NODE_RX_TYPE_IQ_SAMPLE_REPORT_ULL_RELEASE,
 	NODE_RX_TYPE_IQ_SAMPLE_REPORT_LLL_RELEASE,
+	NODE_RX_TYPE_SYNC_TRANSFER_RECEIVED,
 	/* Signals retention (ie non-release) of rx node */
 	NODE_RX_TYPE_RETAIN,
 
@@ -342,8 +351,18 @@ struct node_rx_ftr {
 				* chaining, to reserve node_rx for CSA#2 event
 				* generation etc.
 				*/
-		void *aux_ptr;
-		uint8_t aux_phy;
+		void *lll_aux; /* LLL scheduled auxiliary context associated to
+				* the scan context when enqueuing the node rx.
+				* This does not overlap the below aux_ptr or
+				* aux_phy which are used before enqueue when
+				* setting up LLL scheduling.
+				*/
+		void *aux_ptr; /* aux pointer stored when LLL scheduling the
+				* auxiliary PDU reception by scan context.
+				*/
+		uint8_t aux_phy; /* aux phy stored when LLL scheduling the
+				  * auxiliary PDU reception by scan context.
+				  */
 		struct cte_conn_iq_report *iq_report;
 	};
 	uint32_t ticks_anchor;
@@ -393,6 +412,7 @@ struct node_rx_iso_meta {
 	uint64_t payload_number:39; /* cisPayloadNumber */
 	uint64_t status:8;          /* Status of reception (OK/not OK) */
 	uint32_t timestamp;         /* Time of reception */
+	void     *next;             /* Pointer to next pre-transmission rx_node (BIS) */
 };
 
 /* Define invalid/unassigned Controller state/role instance handle */
@@ -505,6 +525,7 @@ struct event_done_extra {
 				struct {
 					uint16_t trx_cnt;
 					uint8_t  crc_valid:1;
+					uint8_t  is_aborted:1;
 #if defined(CONFIG_BT_CTLR_SYNC_ISO)
 					uint8_t  estab_failed:1;
 #endif /* CONFIG_BT_CTLR_SYNC_ISO */
@@ -519,6 +540,10 @@ struct event_done_extra {
 	* CONFIG_BT_CTLR_CTEINLINE_SUPPORT
 	*/
 				};
+
+#if defined(CONFIG_BT_CTLR_SCAN_AUX_USE_CHAINS)
+				void *lll;
+#endif /* CONFIG_BT_CTLR_SCAN_AUX_USE_CHAINS */
 			};
 
 #if defined(CONFIG_BT_CTLR_LE_ENC)
