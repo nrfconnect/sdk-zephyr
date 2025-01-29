@@ -1,5 +1,4 @@
 board:
   name: ctcc
-  full_name: Connectivity Card nRF52840
   socs:
     - name: nrf52840

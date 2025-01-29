@@ -1,6 +1,5 @@
 boards:
 - name: native_sim
-  full_name: Native simulator - native_sim
   vendor: zephyr
   socs:
   - name: native

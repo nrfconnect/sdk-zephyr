@@ -1,6 +1,5 @@
 boards:
 - name: native_posix
-  full_name: Native POSIX execution (native_posix)
   vendor: zephyr
   socs:
   - name: native
