@@ -122,9 +122,8 @@ class CoverageTool:
 
             try:
                 hexdump_val = self.merge_hexdumps(hexdumps)
-                hex_bytes = bytes.fromhex(hexdump_val)
                 with open(filename, 'wb') as fp:
-                    fp.write(hex_bytes)
+                    fp.write(bytes.fromhex(hexdump_val))
             except ValueError:
                 logger.exception("Unable to convert hex data for file: {}".format(filename))
                 gcda_created = False
