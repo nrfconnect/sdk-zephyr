@@ -20,4 +20,3 @@ tests:
       - frdm_kl25z
       - ek_ra8m1
       - frdm_mcxc242
-      - nrf52840dk/nrf52840
