@@ -43,7 +43,8 @@ class NativeSimBinaryRunner(ZephyrBinaryRunner):
         parser.add_argument('--tui', default=False, action='store_true',
                             help='if given, GDB uses -tui')
         parser.add_argument('--gdb-port', default=DEFAULT_GDB_PORT,
-                            help=f'gdb port, defaults to {DEFAULT_GDB_PORT}')
+                            help='gdb port, defaults to {}'.format(
+                                DEFAULT_GDB_PORT))
 
     @classmethod
     def do_create(cls, cfg: RunnerConfig, args: argparse.Namespace) -> ZephyrBinaryRunner:
@@ -75,6 +76,6 @@ class NativeSimBinaryRunner(ZephyrBinaryRunner):
         self.check_call(cmd)
 
     def do_debugserver(self, **kwargs):
-        cmd = (['gdbserver', f':{self.gdb_port}', self.cfg.exe_file])
+        cmd = (['gdbserver', ':{}'.format(self.gdb_port), self.cfg.exe_file])
 
         self.check_call(cmd)
