@@ -76,7 +76,7 @@ macro(configure_linker_script linker_script_gen linker_pass_define)
       ${current_includes}
       ${soc_linker_script_includes}
       ${template_script_defines}
-      -DUSE_PARTITION_MANAGER=$<BOOL:${CONFIG_PARTITION_MANAGER_ENABLED}>
+      -DUSE_PARTITION_MANAGER=$<OR:$<BOOL:${CONFIG_PARTITION_MANAGER_ENABLED}>,$<BOOL:${IMAGE_NAME}>,$<TARGET_EXISTS:partition_manager>>
       -E ${LINKER_SCRIPT}
       -P # Prevent generation of debug `#line' directives.
       -o ${linker_script_gen}
