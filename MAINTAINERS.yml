@@ -4980,16 +4980,6 @@ West:
   labels:
     - "area: native port"
 
-"West project: nrf_wifi":
-  status: maintained
-  maintainers:
-    - krish2718
-    - sachinthegreen
-  files:
-    - modules/nrf_wifi/
-  labels:
-    - "area: Wi-Fi"
-
 "West project: open-amp":
   status: odd fixes
   collaborators:
