@@ -22,8 +22,7 @@
 #define NRF_WIFI_OFF_RAW_TX_FRAME_SIZE_MIN 26
 /*  Maximum frame size for raw packet transmission */
 #define NRF_WIFI_OFF_RAW_TX_FRAME_SIZE_MAX 600
-/* Maximum length of country code*/
-#define NRF_WIFI_COUNTRY_CODE_LEN 2
+
 /**
  * @brief- Transmission rates
  * Rate to be used for transmitting a packet.
@@ -168,7 +167,6 @@ struct nrf_wifi_off_raw_tx_conf {
 /**
  * @brief Initialize the nRF70 for operating in the offloaded raw TX mode.
  * @param mac_addr MAC address to be used for the nRF70 device.
- * @param country_code Country code to be set for regularity domain.
  *
  * This function is initializes the nRF70 device for offloaded raw TX mode by:
  *  - Powering it up,
@@ -186,7 +184,7 @@ struct nrf_wifi_off_raw_tx_conf {
  * @retval 0 If the operation was successful.
  * @retval -1 If the operation failed.
  */
-int nrf70_off_raw_tx_init(uint8_t *mac_addr, unsigned char *country_code);
+int nrf70_off_raw_tx_init(uint8_t *mac_addr);
 
 /**
  * @brief Initialize the nRF70 for operating in the offloaded raw TX mode.
