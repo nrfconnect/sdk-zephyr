@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: posix
-   :name: POSIX API
-   :show-listing:
+.. _posix-samples:
 
-   These samples demonstrate how to use the :ref:`POSIX API <posix_support>` in Zephyr.
+POSIX API Samples
+#################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

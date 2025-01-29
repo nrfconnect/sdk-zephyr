@@ -1,7 +1,7 @@
-.. zephyr:code-sample:: max17048
-   :name: MAX17048 Li-Ion battery fuel gauge
+.. _MAX17048_sample:
 
-   Read battery percentage and power status using MAX17048 fuel gauge.
+MAX17048 Li-Ion battery fuel gauge
+###################################
 
 Overview
 ********

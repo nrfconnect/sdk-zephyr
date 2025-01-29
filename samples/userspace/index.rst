@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: userspace
-   :name: Userspace
-   :show-listing:
+.. _userspace-samples:
 
-   Samples that demonstrate how to run code in :ref:`usermode_api`.
+Userspace Samples
+#################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: console
-   :name: Console
-   :show-listing:
+.. _console-samples:
 
-   Samples that demonstrate the :ref:`console` subsystem.
+Console Samples
+###############
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

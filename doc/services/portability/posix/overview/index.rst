@@ -113,8 +113,7 @@ leverages the ``nanosleep()`` and ``perror()`` POSIX functions.
         return 0;
     }
 
-For more examples of POSIX applications, please see the
-:zephyr:code-sample-category:`POSIX sample applications<posix>`.
+For more examples of POSIX applications, please see the :ref:`POSIX sample applications<posix-samples>`.
 
 .. _posix_config:
 

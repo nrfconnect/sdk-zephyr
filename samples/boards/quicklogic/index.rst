@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: quicklogic
-   :name: QuickLogic
-   :show-listing:
+.. _quicklogic_samples:
 
-   These samples showcase the use of QuickLogic boards in Zephyr.
+QuickLogic Corp.
+================
+
+.. toctree::
+   :titlesonly:
+   :glob:
+
+   **/*

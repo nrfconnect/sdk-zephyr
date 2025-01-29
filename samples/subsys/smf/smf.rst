@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: smf
-   :name: State Machine Framework
-   :show-listing:
+.. _smf-samples:
 
-   These samples demonstrate how to use the :ref:`State Machine Framework <smf>` subsystem.
+State Machine Framework Samples
+###############################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

@@ -1,7 +1,7 @@
-.. zephyr:code-sample-category:: bluetooth
-   :name: Bluetooth
+.. _bluetooth-samples:
 
-   These samples demonstrate the use of Bluetooth in Zephyr.
+Bluetooth samples
+#################
 
 To build any of the Bluetooth samples, follow the same steps as building
 any other Zephyr application. Refer to :ref:`bluetooth-dev` for more information.
@@ -29,6 +29,8 @@ documentation and are prefixed with :literal:`hci_` in their folder names.
    connections will fail. You can force a re-paring and new key to be created
    by removing the device from the associated devices list on the host.
 
-.. zephyr:code-sample-listing::
-   :categories: bluetooth
-   :live-search:
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

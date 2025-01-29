@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: zbus
-   :name: zbus
-   :show-listing:
+.. _zbus_samples:
 
-   These samples demonstrate how to use the :ref:`zbus <zbus>` subsystem.
+zbus Samples
+############
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

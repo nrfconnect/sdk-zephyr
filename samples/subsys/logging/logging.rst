@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: logging
-   :name: Logging
-   :show-listing:
+.. _logging-samples:
 
-   Samples that demonstrate the :ref:`logging_api` subsystem.
+Logging Sample
+################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

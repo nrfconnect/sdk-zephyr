@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: microchip
-   :name: Microchip
-   :show-listing:
+.. _microchip_samples:
 
-   These samples showcase the use of Microchip boards in Zephyr.
+Microchip
+=========
+
+.. toctree::
+   :titlesonly:
+   :glob:
+
+   **/*
