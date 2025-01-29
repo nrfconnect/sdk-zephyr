@@ -483,6 +483,12 @@ static const struct bt_data net_id_ad[] = {
 	BT_DATA(BT_DATA_SVC_DATA16, proxy_svc_data, NET_ID_LEN),
 };
 
+static const struct bt_data sd[] = {
+#if defined(CONFIG_BT_MESH_PROXY_USE_DEVICE_NAME)
+	BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
+#endif
+};
+
 static int randomize_bt_addr(void)
 {
 	/* TODO: There appears to be no way to force an RPA/NRPA refresh. */
@@ -504,7 +510,6 @@ static int enc_id_adv(struct bt_mesh_subnet *sub, uint8_t type,
 					 type == BT_MESH_ID_TYPE_PRIV_NODE),
 		ADV_FAST_INT,
 	};
-	struct bt_data sd[1];
 	int err;
 
 	err = bt_mesh_encrypt(&sub->keys[SUBNET_KEY_TX_IDX(sub)].identity, hash, hash);
@@ -524,17 +529,9 @@ static int enc_id_adv(struct bt_mesh_subnet *sub, uint8_t type,
 	proxy_svc_data[2] = type;
 	memcpy(&proxy_svc_data[3], &hash[8], 8);
 
-	if (IS_ENABLED(CONFIG_BT_MESH_PROXY_USE_DEVICE_NAME)) {
-		sd[0].type = BT_DATA_NAME_COMPLETE;
-		sd[0].data_len = BT_DEVICE_NAME_LEN;
-		sd[0].data = BT_DEVICE_NAME;
-	}
-
 	err = bt_mesh_adv_gatt_start(
 		type == BT_MESH_ID_TYPE_PRIV_NET ? &slow_adv_param : &fast_adv_param,
-		duration, enc_id_ad, ARRAY_SIZE(enc_id_ad),
-		IS_ENABLED(CONFIG_BT_MESH_PROXY_USE_DEVICE_NAME) ? sd : NULL,
-		IS_ENABLED(CONFIG_BT_MESH_PROXY_USE_DEVICE_NAME) ? ARRAY_SIZE(sd) : 0);
+		duration, enc_id_ad, ARRAY_SIZE(enc_id_ad), sd, ARRAY_SIZE(sd));
 	if (err) {
 		LOG_WRN("Failed to advertise using type 0x%02x (err %d)", type, err);
 		return err;
@@ -610,7 +607,6 @@ static int net_id_adv(struct bt_mesh_subnet *sub, int32_t duration)
 		.options = ADV_OPT_PROXY(false),
 		ADV_SLOW_INT,
 	};
-	struct bt_data sd[1];
 	int err;
 
 	proxy_svc_data[2] = BT_MESH_ID_TYPE_NET;
@@ -619,17 +615,8 @@ static int net_id_adv(struct bt_mesh_subnet *sub, int32_t duration)
 
 	memcpy(proxy_svc_data + 3, sub->keys[SUBNET_KEY_TX_IDX(sub)].net_id, 8);
 
-	if (IS_ENABLED(CONFIG_BT_MESH_PROXY_USE_DEVICE_NAME)) {
-		sd[0].type = BT_DATA_NAME_COMPLETE;
-		sd[0].data_len = BT_DEVICE_NAME_LEN;
-		sd[0].data = BT_DEVICE_NAME;
-	}
-
 	err = bt_mesh_adv_gatt_start(&slow_adv_param, duration, net_id_ad,
-				     ARRAY_SIZE(net_id_ad),
-				     IS_ENABLED(CONFIG_BT_MESH_PROXY_USE_DEVICE_NAME) ? sd : NULL,
-				     IS_ENABLED(CONFIG_BT_MESH_PROXY_USE_DEVICE_NAME) ?
-					ARRAY_SIZE(sd) : 0);
+				     ARRAY_SIZE(net_id_ad), sd, ARRAY_SIZE(sd));
 	if (err) {
 		LOG_WRN("Failed to advertise using Network ID (err %d)", err);
 		return err;
