@@ -403,12 +403,7 @@ struct bt_dev {
 	/* Queue for outgoing HCI commands */
 	struct k_fifo		cmd_tx_queue;
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
 	const struct device *hci;
-#else
-	/* Registered HCI driver */
-	const struct bt_hci_driver *drv;
-#endif
 
 #if defined(CONFIG_BT_PRIVACY)
 	/* Local Identity Resolving Key */
@@ -443,9 +438,7 @@ extern sys_slist_t bt_auth_info_cbs;
 enum bt_security_err bt_security_err_get(uint8_t hci_err);
 #endif /* CONFIG_BT_SMP || CONFIG_BT_CLASSIC */
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
 int bt_hci_recv(const struct device *dev, struct net_buf *buf);
-#endif
 
 /* Data type to store state related with command to be updated
  * when command completes successfully.
@@ -537,6 +530,16 @@ void bt_hci_le_df_connectionless_iq_report(struct net_buf *buf);
 void bt_hci_le_vs_df_connectionless_iq_report(struct net_buf *buf);
 void bt_hci_le_past_received(struct net_buf *buf);
 void bt_hci_le_past_received_v2(struct net_buf *buf);
+
+/* CS HCI event handlers */
+void bt_hci_le_cs_read_remote_supported_capabilities_complete(struct net_buf *buf);
+void bt_hci_le_cs_read_remote_fae_table_complete(struct net_buf *buf);
+void bt_hci_le_cs_config_complete_event(struct net_buf *buf);
+void bt_hci_le_cs_security_enable_complete(struct net_buf *buf);
+void bt_hci_le_cs_procedure_enable_complete(struct net_buf *buf);
+void bt_hci_le_cs_subevent_result(struct net_buf *buf);
+void bt_hci_le_cs_subevent_result_continue(struct net_buf *buf);
+void bt_hci_le_cs_test_end_complete(struct net_buf *buf);
 
 /* Adv HCI event handlers */
 void bt_hci_le_adv_set_terminated(struct net_buf *buf);

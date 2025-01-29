@@ -1,7 +1,4 @@
-.. _efm32wg_stk3800:
-
-EFM32 Wonder Gecko (EFM32WG-STK3800)
-####################################
+.. zephyr:board:: efm32wg_stk3800
 
 Overview
 ********
@@ -9,13 +6,6 @@ Overview
 The EFM32 Wonder Gecko Starter Kit EFM32WG-STK3800 contains a MCU from the
 EFM32WG family built on ARM® Cortex®-M4F processor with excellent low
 power capabilities.
-
-.. figure:: efm32wg_stk3800.jpg
-   :align: center
-   :alt: EFM32WG-STK3800
-
-   EFM32WG-STK3800 (image courtesy of Silicon Labs)
-
 
 Hardware
 ********
@@ -60,7 +50,7 @@ The efm32wg_stk3800 board configuration supports the following hardware features
 +-----------+------------+-------------------------------------+
 
 The default configuration can be found in
-:zephyr_file:`boards/silabs/starter_kit/efm32wg_stk3800/efm32wg_stk3800_defconfig`
+:zephyr_file:`boards/silabs/starter_kits/efm32wg_stk3800/efm32wg_stk3800_defconfig`
 
 Other hardware features are currently not supported by the port.
 
@@ -109,7 +99,7 @@ Programming and Debugging
 
 .. note::
    Before using the kit the first time, you should update the J-Link firmware
-   from `J-Link-Downloads`_
+   in Simplicity Studio.
 
 Flashing
 ========
@@ -172,6 +162,3 @@ the following message:
 
 .. _J-Link:
    https://www.segger.com/jlink-debug-probes.html
-
-.. _J-Link-Downloads:
-   https://www.segger.com/downloads/jlink

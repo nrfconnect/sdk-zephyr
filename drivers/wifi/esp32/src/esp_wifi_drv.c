@@ -27,6 +27,10 @@ LOG_MODULE_REGISTER(esp32_wifi, CONFIG_WIFI_LOG_LEVEL);
 #include <esp_mac.h>
 #include "wifi/wifi_event.h"
 
+#if CONFIG_SOC_SERIES_ESP32S2 || CONFIG_SOC_SERIES_ESP32C3
+#include <esp_private/adc_share_hw_ctrl.h>
+#endif /* CONFIG_SOC_SERIES_ESP32S2 || CONFIG_SOC_SERIES_ESP32C3 */
+
 #define DHCPV4_MASK (NET_EVENT_IPV4_DHCP_BOUND | NET_EVENT_IPV4_DHCP_STOP)
 
 /* use global iface pointer to support any ethernet driver */
@@ -350,10 +354,35 @@ static void esp_wifi_handle_ap_connect_event(void *event_data)
 
 	LOG_DBG("Station " MACSTR " join, AID=%d", MAC2STR(event->mac), event->aid);
 
+	wifi_sta_list_t sta_list;
 	struct wifi_ap_sta_info sta_info;
 
+	sta_info.link_mode = WIFI_LINK_MODE_UNKNOWN;
+	sta_info.twt_capable = false; /* Only support in 802.11ax */
 	sta_info.mac_length = WIFI_MAC_ADDR_LEN;
 	memcpy(sta_info.mac, event->mac, WIFI_MAC_ADDR_LEN);
+
+	/* Expect the return value to always be ESP_OK,
+	 * since it is called in esp_wifi_event_handler()
+	 */
+	(void)esp_wifi_ap_get_sta_list(&sta_list);
+	for (int i = 0; i < sta_list.num; i++) {
+		wifi_sta_info_t *sta = &sta_list.sta[i];
+
+		if (memcmp(event->mac, sta->mac, 6) == 0) {
+			if (sta->phy_11n) {
+				sta_info.link_mode = WIFI_4;
+			} else if (sta->phy_11g) {
+				sta_info.link_mode = WIFI_3;
+			} else if (sta->phy_11b) {
+				sta_info.link_mode = WIFI_1;
+			} else {
+				sta_info.link_mode = WIFI_LINK_MODE_UNKNOWN;
+			}
+			break;
+		}
+	}
+
 	wifi_mgmt_raise_ap_sta_connected_event(iface, &sta_info);
 
 	if (!(esp32_data.ap_connection_cnt++)) {
@@ -373,6 +402,8 @@ static void esp_wifi_handle_ap_disconnect_event(void *event_data)
 	LOG_DBG("station " MACSTR " leave, AID=%d", MAC2STR(event->mac), event->aid);
 	struct wifi_ap_sta_info sta_info;
 
+	sta_info.link_mode = WIFI_LINK_MODE_UNKNOWN;
+	sta_info.twt_capable = false; /* Only support in 802.11ax */
 	sta_info.mac_length = WIFI_MAC_ADDR_LEN;
 	memcpy(sta_info.mac, event->mac, WIFI_MAC_ADDR_LEN);
 	wifi_mgmt_raise_ap_sta_disconnected_event(iface, &sta_info);
@@ -731,6 +762,7 @@ static int esp32_wifi_status(const struct device *dev, struct wifi_iface_status 
 
 	strncpy(status->ssid, data->status.ssid, WIFI_SSID_MAX_LEN);
 	status->ssid_len = strnlen(data->status.ssid, WIFI_SSID_MAX_LEN);
+	status->ssid[status->ssid_len] = '\0';
 	status->band = WIFI_FREQ_BAND_2_4_GHZ;
 	status->link_mode = WIFI_LINK_MODE_UNKNOWN;
 	status->mfp = WIFI_MFP_DISABLE;
@@ -862,14 +894,21 @@ static int esp32_wifi_stats(const struct device *dev, struct net_stats_wifi *sta
 
 static int esp32_wifi_dev_init(const struct device *dev)
 {
-	esp_timer_init();
+#if CONFIG_SOC_SERIES_ESP32S2 || CONFIG_SOC_SERIES_ESP32C3
+	adc2_init_code_calibration();
+#endif /* CONFIG_SOC_SERIES_ESP32S2 || CONFIG_SOC_SERIES_ESP32C3 */
+
 	wifi_init_config_t config = WIFI_INIT_CONFIG_DEFAULT();
 	esp_err_t ret = esp_wifi_init(&config);
 
-	if (ret != ESP_OK) {
-		LOG_ERR("Unable to initialize the wifi");
+	if (ret == ESP_ERR_NO_MEM) {
+		LOG_ERR("Not enough memory to initialize Wi-Fi.");
+		LOG_ERR("Consider increasing CONFIG_HEAP_MEM_POOL_SIZE value.");
+		return -ENOMEM;
+	} else if (ret != ESP_OK) {
+		LOG_ERR("Unable to initialize the Wi-Fi: %d", ret);
+		return -EIO;
 	}
-
 	if (IS_ENABLED(CONFIG_ESP32_WIFI_STA_AUTO_DHCPV4)) {
 		net_mgmt_init_event_callback(&esp32_dhcp_cb, wifi_event_handler, DHCPV4_MASK);
 		net_mgmt_add_event_callback(&esp32_dhcp_cb);

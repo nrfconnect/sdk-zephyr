@@ -31,7 +31,7 @@ test_current: current_amp {
 	compatible = "current-sense-amplifier";
 	io-channels = <&test_adc 2>;
 	io-channel-names = "CURRENT_AMP";
-	sense-resistor-micro-ohms = <10>;
+	sense-resistor-milli-ohms = <1>;
 	sense-gain-mult = <1>;
 	sense-gain-div = <1>;
 };
@@ -105,4 +105,24 @@ test_murata_ncp15xh103: murata-ncp15xh103 {
 	pullup-ohm = <0>;
 	pulldown-ohm = <10000>;
 	connected-positive;
+};
+
+test_seeed_grove_light: seeed-grove-light {
+	compatible = "seeed,grove-light";
+	io-channels = <&test_adc 0>;
+};
+
+test_seeed_grove_temperature: seeed-grove-temperature {
+	compatible = "seeed,grove-temperature";
+	io-channels = <&test_adc 0>;
+};
+
+test_veaa_x_3: test_veaa_x_3 {
+	status = "okay";
+	compatible = "festo,veaa-x-3";
+	io-channels = <&test_adc 3>;
+	dac = <&test_dac>;
+	dac-channel-id = <2>;
+	dac-resolution = <12>;
+	pressure-range-type = "D2";
 };

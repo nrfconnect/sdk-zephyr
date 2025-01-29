@@ -3,12 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define DT_DRV_COMPAT nordic_nrf_hsfll
+#define DT_DRV_COMPAT nordic_nrf_hsfll_local
 
 #include "clock_control_nrf2_common.h"
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
-#include <hal/nrf_hsfll.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(clock_control_nrf2, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
@@ -17,7 +16,7 @@ LOG_MODULE_DECLARE(clock_control_nrf2, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 BUILD_ASSERT(DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) == 1,
 	     "multiple instances not supported");
 
-#ifdef CONFIG_NRFS_HAS_DVFS_SERVICE
+#ifdef CONFIG_NRFS_DVFS_LOCAL_DOMAIN
 #include <ld_dvfs_handler.h>
 
 #define FLAG_FREQ_CHANGE_CB_EXPECTED BIT(FLAGS_COMMON_BITS)
@@ -131,13 +130,13 @@ static struct onoff_manager *hsfll_find_mgr(const struct device *dev,
 	LOG_ERR("invalid frequency");
 	return NULL;
 }
-#endif /* CONFIG_NRFS_HAS_DVFS_SERVICE */
+#endif /* CONFIG_NRFS_DVFS_LOCAL_DOMAIN */
 
 static int api_request_hsfll(const struct device *dev,
 			     const struct nrf_clock_spec *spec,
 			     struct onoff_client *cli)
 {
-#ifdef CONFIG_NRFS_HAS_DVFS_SERVICE
+#ifdef CONFIG_NRFS_DVFS_LOCAL_DOMAIN
 	struct onoff_manager *mgr = hsfll_find_mgr(dev, spec);
 
 	if (mgr) {
@@ -153,7 +152,7 @@ static int api_request_hsfll(const struct device *dev,
 static int api_release_hsfll(const struct device *dev,
 			     const struct nrf_clock_spec *spec)
 {
-#ifdef CONFIG_NRFS_HAS_DVFS_SERVICE
+#ifdef CONFIG_NRFS_DVFS_LOCAL_DOMAIN
 	struct onoff_manager *mgr = hsfll_find_mgr(dev, spec);
 
 	if (mgr) {
@@ -170,7 +169,7 @@ static int api_cancel_or_release_hsfll(const struct device *dev,
 				       const struct nrf_clock_spec *spec,
 				       struct onoff_client *cli)
 {
-#ifdef CONFIG_NRFS_HAS_DVFS_SERVICE
+#ifdef CONFIG_NRFS_DVFS_LOCAL_DOMAIN
 	struct onoff_manager *mgr = hsfll_find_mgr(dev, spec);
 
 	if (mgr) {
@@ -183,21 +182,9 @@ static int api_cancel_or_release_hsfll(const struct device *dev,
 #endif
 }
 
-static int api_get_rate_hsfll(const struct device *dev,
-			      clock_control_subsys_t sys,
-			      uint32_t *rate)
-{
-	ARG_UNUSED(dev);
-	ARG_UNUSED(sys);
-
-	*rate = nrf_hsfll_clkctrl_mult_get(NRF_HSFLL) * MHZ(16);
-
-	return 0;
-}
-
 static int hsfll_init(const struct device *dev)
 {
-#ifdef CONFIG_NRFS_HAS_DVFS_SERVICE
+#ifdef CONFIG_NRFS_DVFS_LOCAL_DOMAIN
 	struct hsfll_dev_data *dev_data = dev->data;
 	int rc;
 
@@ -217,23 +204,22 @@ static int hsfll_init(const struct device *dev)
 	return 0;
 }
 
-static struct nrf_clock_control_driver_api hsfll_drv_api = {
+static DEVICE_API(nrf_clock_control, hsfll_drv_api) = {
 	.std_api = {
 		.on = api_nosys_on_off,
 		.off = api_nosys_on_off,
-		.get_rate = api_get_rate_hsfll,
 	},
 	.request = api_request_hsfll,
 	.release = api_release_hsfll,
 	.cancel_or_release = api_cancel_or_release_hsfll,
 };
 
-#ifdef CONFIG_NRFS_HAS_DVFS_SERVICE
+#ifdef CONFIG_NRFS_DVFS_LOCAL_DOMAIN
 static struct hsfll_dev_data hsfll_data;
 #endif
 
 DEVICE_DT_INST_DEFINE(0, hsfll_init, NULL,
-		      COND_CODE_1(CONFIG_NRFS_HAS_DVFS_SERVICE,
+		      COND_CODE_1(CONFIG_NRFS_DVFS_LOCAL_DOMAIN,
 				  (&hsfll_data),
 				  (NULL)),
 		      NULL,
