@@ -29,9 +29,9 @@ void set_socket_events(short events)
 	my_events |= events;
 }
 
-void clear_socket_events(short events)
+void clear_socket_events(void)
 {
-	my_events &= ~events;
+	my_events = 0;
 }
 
 int z_impl_zsock_socket(int family, int type, int proto)
@@ -41,14 +41,13 @@ int z_impl_zsock_socket(int family, int type, int proto)
 
 int z_impl_zsock_poll(struct zsock_pollfd *fds, int nfds, int poll_timeout)
 {
-	int events = 0;
+	LOG_INF("Polling, events %d", my_events);
 	k_sleep(K_MSEC(1));
-	for (int i = 0; i < nfds; i++) {
-		fds[i].revents = my_events & (fds[i].events | ZSOCK_POLLERR | ZSOCK_POLLHUP);
-		if (fds[i].revents) {
-			events++;
-		}
+	fds->revents = my_events;
+
+	if (my_events) {
+		return 1;
 	}
 
-	return events;
+	return 0;
 }
