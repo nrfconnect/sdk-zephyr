@@ -11,9 +11,6 @@
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/mem_mgmt/mem_attr.h>
 #include <soc.h>
-#ifdef CONFIG_SOC_NRF54H20_GPD
-#include <nrf/gpd.h>
-#endif
 #ifdef CONFIG_SOC_NRF52832_ALLOW_SPIM_DESPITE_PAN_58
 #include <nrfx_ppi.h>
 #endif
@@ -589,11 +586,6 @@ static int spim_nrfx_pm_action(const struct device *dev,
 		/* nrfx_spim_init() will be called at configuration before
 		 * the next transfer.
 		 */
-
-#ifdef CONFIG_SOC_NRF54H20_GPD
-		nrf_gpd_retain_pins_set(dev_config->pcfg, false);
-#endif
-
 		break;
 
 	case PM_DEVICE_ACTION_SUSPEND:
@@ -601,10 +593,6 @@ static int spim_nrfx_pm_action(const struct device *dev,
 			nrfx_spim_uninit(&dev_config->spim);
 			dev_data->initialized = false;
 		}
-
-#ifdef CONFIG_SOC_NRF54H20_GPD
-		nrf_gpd_retain_pins_set(dev_config->pcfg, true);
-#endif
 
 		ret = pinctrl_apply_state(dev_config->pcfg,
 					  PINCTRL_STATE_SLEEP);
