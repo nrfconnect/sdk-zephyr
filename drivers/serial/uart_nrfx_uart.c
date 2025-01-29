@@ -878,11 +878,10 @@ static int uart_nrfx_irq_tx_ready_complete(const struct device *dev)
 	 * called after the TX interrupt is requested to be disabled but before
 	 * the disabling is actually performed (in the IRQ handler).
 	 */
-	bool ready = nrf_uart_int_enable_check(uart0_addr,
-					       NRF_UART_INT_MASK_TXDRDY) &&
-		     !disable_tx_irq &&
-		     event_txdrdy_check();
-	return ready ? 1 : 0;
+	return nrf_uart_int_enable_check(uart0_addr,
+					 NRF_UART_INT_MASK_TXDRDY) &&
+	       !disable_tx_irq &&
+	       event_txdrdy_check();
 }
 
 /** Interrupt driven receiver ready function */
