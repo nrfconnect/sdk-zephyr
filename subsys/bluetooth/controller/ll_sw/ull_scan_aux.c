@@ -361,19 +361,30 @@ void ull_scan_aux_setup(memq_link_t *link, struct node_rx_hdr *rx)
 
 	ptr = h->data;
 
+#if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
+	bool is_aux_addr_match = false;
+#endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
+
 	if (h->adv_addr) {
 #if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
 		/* Check if Periodic Advertising Synchronization to be created
 		 */
 		if (sync && (scan->periodic.state != LL_SYNC_STATE_CREATED)) {
-			/* Check address and update internal state */
 #if defined(CONFIG_BT_CTLR_PRIVACY)
-			ull_sync_setup_addr_check(scan, pdu->tx_addr, ptr,
-						  ftr->rl_idx);
+			uint8_t rl_idx = ftr->rl_idx;
 #else /* !CONFIG_BT_CTLR_PRIVACY */
-			ull_sync_setup_addr_check(scan, pdu->tx_addr, ptr, 0U);
+			uint8_t rl_idx = 0U;
 #endif /* !CONFIG_BT_CTLR_PRIVACY */
 
+			/* Check address and update internal state */
+			is_aux_addr_match =
+				ull_sync_setup_addr_check(scan, pdu->tx_addr,
+							  ptr, rl_idx);
+			if (is_aux_addr_match) {
+				scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
+			} else {
+				scan->periodic.state = LL_SYNC_STATE_IDLE;
+			}
 		}
 #endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
 
@@ -406,14 +417,22 @@ void ull_scan_aux_setup(memq_link_t *link, struct node_rx_hdr *rx)
 		si = (void *)ptr;
 		ptr += sizeof(*si);
 
+#if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
 		/* Check if Periodic Advertising Synchronization to be created.
 		 * Setup synchronization if address and SID match in the
 		 * Periodic Advertiser List or with the explicitly supplied.
+		 *
+		 * is_aux_addr_match, device address in auxiliary channel PDU;
+		 * scan->periodic.param has not been assigned yet.
+		 * Otherwise, address was in primary channel PDU and we are now
+		 * checking SID (in SyncInfo) in auxiliary channel PDU.
 		 */
-		if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_PERIODIC) && sync && adi &&
-		    ull_sync_setup_sid_match(scan, adi->sid)) {
+		if (sync && aux && (is_aux_addr_match ||
+				    (scan->periodic.param == aux)) &&
+		    adi && ull_sync_setup_sid_match(scan, adi->sid)) {
 			ull_sync_setup(scan, aux, rx, si);
 		}
+#endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
 	}
 
 	if (h->tx_pwr) {
@@ -522,6 +541,15 @@ void ull_scan_aux_setup(memq_link_t *link, struct node_rx_hdr *rx)
 		aux->parent = lll ? (void *)lll : (void *)sync_lll;
 
 #if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
+		/* Store the aux context that has Periodic Advertising
+		 * Synchronization address match.
+		 */
+		if (sync && (scan->periodic.state == LL_SYNC_STATE_ADDR_MATCH)) {
+			scan->periodic.param = aux;
+		}
+
+		/* Store the node rx allocated for incomplete report, if needed.
+		 */
 		aux->rx_incomplete = rx_incomplete;
 		rx_incomplete = NULL;
 #endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
@@ -708,6 +736,7 @@ ull_scan_aux_rx_flush:
 #if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
 	if (sync && (scan->periodic.state != LL_SYNC_STATE_CREATED)) {
 		scan->periodic.state = LL_SYNC_STATE_IDLE;
+		scan->periodic.param = NULL;
 	}
 #endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
 
