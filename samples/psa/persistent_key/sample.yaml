@@ -13,6 +13,9 @@ common:
 tests:
   sample.psa.persistent_key.tfm:
     filter: CONFIG_BUILD_WITH_TFM
+    extra_args:
+      - CONFIG_TFM_PROFILE_TYPE_MEDIUM=y
+      - CONFIG_PSA_WANT_GENERATE_RANDOM=y
     tags:
       - trusted-firmware-m
   sample.psa.persistent_key.secure_storage.entropy_driver:
