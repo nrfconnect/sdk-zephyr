@@ -20,4 +20,4 @@ static int _psa_crypto_init(void)
  * like entropy_psa_crypto (which has a higher priority number).
  * This is done without dependency on CONFIG_MBEDTLS_INIT.
  */
-SYS_INIT(_psa_crypto_init, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+SYS_INIT(_psa_crypto_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
