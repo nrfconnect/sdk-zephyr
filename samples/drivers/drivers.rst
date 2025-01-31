@@ -1,6 +1,13 @@
-.. zephyr:code-sample-category:: drivers
-   :name: Drivers
-   :show-listing:
-   :live-search:
+.. _driver-samples:
 
-   These samples demonstrate how to use various drivers supported by Zephyr.
+Driver Samples
+##############
+
+The following samples demonstrate how to use various drivers supported
+by Zephyr.
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

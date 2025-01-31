@@ -76,7 +76,7 @@ Building and Running
 This sample can be found under :zephyr_file:`samples/bluetooth/mtu_update` in
 the Zephyr tree.
 
-See :zephyr:code-sample-category:`bluetooth` samples for details.
+See :ref:`bluetooth samples section <bluetooth-samples>` for details.
 
 If the devices are close enough, the central should connect to the peripheral
 and send his MTU to the other device. If the MTU exchange succeeds, the central
