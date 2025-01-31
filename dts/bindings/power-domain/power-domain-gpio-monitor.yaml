@@ -20,6 +20,3 @@ properties:
     required: true
     description: |
       GPIO to use to sense if rail is powered on.
-
-  "#power-domain-cells":
-    const: 0
