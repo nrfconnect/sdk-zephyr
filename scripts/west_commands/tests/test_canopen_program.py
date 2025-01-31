@@ -22,7 +22,7 @@ TEST_ALT_CONTEXT = 'alternate'
 # Test cases
 #
 
-TEST_CASES = [(n, x, p, c, o, t, r, s, d, b)
+TEST_CASES = [(n, x, p, c, o, t, r, s, b)
               for n in range(1, 3)
               for x in (None, TEST_ALT_CONTEXT)
               for p in range(1, 3)
@@ -31,7 +31,6 @@ TEST_CASES = [(n, x, p, c, o, t, r, s, d, b)
               for t in range(1, 3)
               for r in range(1, 3)
               for s in range(1, 3)
-              for d in [256, 1024]
               for b in range(False, True)]
 
 os_path_isfile = os.path.isfile
@@ -45,7 +44,7 @@ def os_path_isfile_patch(filename):
 @patch('runners.canopen_program.CANopenProgramDownloader')
 def test_canopen_program_create(cpd, test_case, runner_config):
     '''Test CANopen runner created from command line parameters.'''
-    node_id, context, program_number, confirm, confirm_only, timeout, sdo_retries, sdo_timeout, download_buffer_size, block_transfer = test_case
+    node_id, context, program_number, confirm, confirm_only, timeout, sdo_retries, sdo_timeout, block_transfer = test_case
 
     args = ['--node-id', str(node_id)]
     if context is not None:
@@ -62,8 +61,6 @@ def test_canopen_program_create(cpd, test_case, runner_config):
         args.extend(['--sdo-retries', str(sdo_retries)])
     if sdo_timeout:
         args.extend(['--sdo-timeout', str(sdo_timeout)])
-    if download_buffer_size:
-        args.extend(['--download-buffer-size', str(download_buffer_size)])
     if block_transfer:
         args.append('--block_transfer')
 
@@ -87,7 +84,6 @@ def test_canopen_program_create(cpd, test_case, runner_config):
                                      program_number=program_number,
                                      sdo_retries=sdo_retries,
                                      sdo_timeout=sdo_timeout,
-                                     download_buffer_size=download_buffer_size,
                                      block_transfer=block_transfer)
     else:
         assert cpd.call_args == call(node_id=node_id,
@@ -96,7 +92,6 @@ def test_canopen_program_create(cpd, test_case, runner_config):
                                      program_number=program_number,
                                      sdo_retries=sdo_retries,
                                      sdo_timeout=sdo_timeout,
-                                     download_buffer_size=download_buffer_size,
                                      block_transfer=block_transfer)
 
     mock.connect.assert_called_once()
