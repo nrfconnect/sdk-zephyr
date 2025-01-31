@@ -115,7 +115,6 @@ struct coap_client {
 	struct coap_client_internal_request requests[CONFIG_COAP_CLIENT_MAX_REQUESTS];
 	struct coap_option echo_option;
 	bool send_echo;
-	int socket_error;
 };
 /** @endcond */
 
