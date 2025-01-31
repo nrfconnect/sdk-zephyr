@@ -61,7 +61,7 @@ The key features of the EK-RA6E2 board are categorized in three groups as follow
 - 16 Mb (128 Mb) External Quad-SPI Flash
 - CAN (3-pin header)
 
-.. figure:: ek-ra6e2-board.webp
+.. figure:: ek_ra6e2.webp
 	:align: center
 	:alt: RA6E2 Evaluation Kit
 
@@ -71,7 +71,7 @@ Hardware
 ********
 Detailed hardware feature for the RA6E2 MCU group can be found at `RA6E2 Group User's Manual Hardware`_
 
-.. figure:: ra6e2-block-diagram.webp
+.. figure:: ra6e2_block_diagram.webp
 	:width: 442px
 	:align: center
 	:alt: RA6E2 MCU group feature
@@ -97,6 +97,16 @@ The below features are currently supported on Zephyr OS for EK-RA6E2 board:
 | UART      | on-chip    | serial               |
 +-----------+------------+----------------------+
 | CLOCK     | on-chip    | clock control        |
++-----------+------------+----------------------+
+| SPI       | on-chip    | spi                  |
++-----------+------------+----------------------+
+| ADC       | on-chip    | adc                  |
++-----------+------------+----------------------+
+| PWM       | on-chip    | pwm                  |
++-----------+------------+----------------------+
+| ENTROPY   | on-chip    | entropy              |
++-----------+------------+----------------------+
+| FLASH     | on-chip    | flash                |
 +-----------+------------+----------------------+
 
 Other hardware features are currently not supported by the port.

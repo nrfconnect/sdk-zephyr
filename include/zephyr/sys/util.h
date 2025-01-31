@@ -30,7 +30,7 @@
 #include <stdint.h>
 
 /** @brief Number of bits that make up a type */
-#define NUM_BITS(t) (sizeof(t) * 8)
+#define NUM_BITS(t) (sizeof(t) * BITS_PER_BYTE)
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,6 +57,15 @@ extern "C" {
 #	error Missing required predefined macros for BITS_PER_LONG calculation
 #endif
 
+/** Number of bits in a byte. */
+#define BITS_PER_BYTE (__CHAR_BIT__)
+
+/** Number of bits in a nibble. */
+#define BITS_PER_NIBBLE (__CHAR_BIT__ / 2)
+
+/** Number of nibbles in a byte. */
+#define NIBBLES_PER_BYTE (BITS_PER_BYTE / BITS_PER_NIBBLE)
+
 /** Number of bits in a long int. */
 #define BITS_PER_LONG	(__CHAR_BIT__ * __SIZEOF_LONG__)
 
@@ -76,22 +85,6 @@ extern "C" {
  */
 #define GENMASK64(h, l) \
 	(((~0ULL) - (1ULL << (l)) + 1) & (~0ULL >> (BITS_PER_LONG_LONG - 1 - (h))))
-
-/** @brief Extract the Least Significant Bit from @p value. */
-#define LSB_GET(value) ((value) & -(value))
-
-/**
- * @brief Extract a bitfield element from @p value corresponding to
- *	  the field mask @p mask.
- */
-#define FIELD_GET(mask, value)  (((value) & (mask)) / LSB_GET(mask))
-
-/**
- * @brief Prepare a bitfield element using @p value with @p mask representing
- *	  its field position and width. The result should be combined
- *	  with other fields using a logical OR.
- */
-#define FIELD_PREP(mask, value) (((value) * LSB_GET(mask)) & (mask))
 
 /** @brief 0 if @p cond is true-ish; causes a compile error otherwise. */
 #define ZERO_OR_COMPILE_ERROR(cond) ((int) sizeof(char[1 - 2 * !(cond)]) - 1)
@@ -373,9 +366,10 @@ extern "C" {
  *
  * @return The result of @p n / @p d, rounded to the nearest integer.
  */
-#define DIV_ROUND_CLOSEST(n, d)	\
-	((((n) < 0) ^ ((d) < 0)) ? ((n) - ((d) / 2)) / (d) : \
-	((n) + ((d) / 2)) / (d))
+#define DIV_ROUND_CLOSEST(n, d)                                                                    \
+	(((((__typeof__(n))-1) < 0) && (((__typeof__(d))-1) < 0) && ((n) < 0) ^ ((d) < 0))         \
+		 ? ((n) - ((d) / 2)) / (d)                                                         \
+		 : ((n) + ((d) / 2)) / (d))
 
 #ifndef MAX
 /**
@@ -718,7 +712,7 @@ char *utf8_lcpy(char *dst, const char *src, size_t n);
  *
  * @return ceil(log2(x)) when 1 <= x <= max(type(x)), 0 when x < 1
  */
-#define LOG2CEIL(x) ((x) < 1 ?  0 : __z_log2((x)-1) + 1)
+#define LOG2CEIL(x) ((x) <= 1 ?  0 : __z_log2((x)-1) + 1)
 
 /**
  * @brief Compute next highest power of two

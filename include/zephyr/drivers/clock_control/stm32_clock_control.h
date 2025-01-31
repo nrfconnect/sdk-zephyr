@@ -27,6 +27,7 @@
 #elif defined(CONFIG_SOC_SERIES_STM32F2X) || \
 	defined(CONFIG_SOC_SERIES_STM32F4X)
 #include <zephyr/dt-bindings/clock/stm32f4_clock.h>
+#include <zephyr/dt-bindings/clock/stm32f410_clock.h>
 #elif defined(CONFIG_SOC_SERIES_STM32F7X)
 #include <zephyr/dt-bindings/clock/stm32f7_clock.h>
 #elif defined(CONFIG_SOC_SERIES_STM32G0X)
@@ -183,6 +184,8 @@
 #define STM32_PLLI2S_ENABLED	1
 #define STM32_PLLI2S_M_DIVISOR		DT_PROP(DT_NODELABEL(plli2s), div_m)
 #define STM32_PLLI2S_N_MULTIPLIER	DT_PROP(DT_NODELABEL(plli2s), mul_n)
+#define STM32_PLLI2S_Q_ENABLED		DT_NODE_HAS_PROP(DT_NODELABEL(plli2s), div_q)
+#define STM32_PLLI2S_Q_DIVISOR		DT_PROP_OR(DT_NODELABEL(plli2s), div_q, 1)
 #define STM32_PLLI2S_R_ENABLED		DT_NODE_HAS_PROP(DT_NODELABEL(plli2s), div_r)
 #define STM32_PLLI2S_R_DIVISOR		DT_PROP_OR(DT_NODELABEL(plli2s), div_r, 1)
 #endif
@@ -250,7 +253,7 @@
 #endif
 
 /** PLL/PLL1 clock source */
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(pll), okay) && \
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(pll)) && \
 	DT_NODE_HAS_PROP(DT_NODELABEL(pll), clocks)
 #define DT_PLL_CLOCKS_CTRL	DT_CLOCKS_CTLR(DT_NODELABEL(pll))
 #if DT_SAME_NODE(DT_PLL_CLOCKS_CTRL, DT_NODELABEL(clk_msi))
@@ -275,7 +278,7 @@
 #endif
 
 /** PLL2 clock source */
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(pll2), okay) && \
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(pll2)) && \
 	DT_NODE_HAS_PROP(DT_NODELABEL(pll2), clocks)
 #define DT_PLL2_CLOCKS_CTRL	DT_CLOCKS_CTLR(DT_NODELABEL(pll2))
 #if DT_SAME_NODE(DT_PLL2_CLOCKS_CTRL, DT_NODELABEL(clk_msis))
@@ -291,7 +294,7 @@
 #endif
 
 /** PLL3 clock source */
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(pll3), okay) && \
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(pll3)) && \
 	DT_NODE_HAS_PROP(DT_NODELABEL(pll3), clocks)
 #define DT_PLL3_CLOCKS_CTRL	DT_CLOCKS_CTLR(DT_NODELABEL(pll3))
 #if DT_SAME_NODE(DT_PLL3_CLOCKS_CTRL, DT_NODELABEL(clk_msis))
@@ -431,7 +434,8 @@
 /** Driver structure definition */
 
 struct stm32_pclken {
-	uint32_t bus;
+	uint32_t bus : STM32_CLOCK_DIV_SHIFT;
+	uint32_t div : (32 - STM32_CLOCK_DIV_SHIFT);
 	uint32_t enr;
 };
 
@@ -440,7 +444,10 @@ struct stm32_pclken {
 #define STM32_CLOCK_INFO(clk_index, node_id)				\
 	{								\
 	.enr = DT_CLOCKS_CELL_BY_IDX(node_id, clk_index, bits),		\
-	.bus = DT_CLOCKS_CELL_BY_IDX(node_id, clk_index, bus)		\
+	.bus = DT_CLOCKS_CELL_BY_IDX(node_id, clk_index, bus) &         \
+		GENMASK(STM32_CLOCK_DIV_SHIFT - 1, 0),                   \
+	.div = DT_CLOCKS_CELL_BY_IDX(node_id, clk_index, bus) >>	\
+		STM32_CLOCK_DIV_SHIFT,					\
 	}
 #define STM32_DT_CLOCKS(node_id)					\
 	{								\

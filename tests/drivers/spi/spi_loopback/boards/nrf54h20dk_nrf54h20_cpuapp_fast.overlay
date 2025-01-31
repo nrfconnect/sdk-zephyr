@@ -23,6 +23,10 @@
 	};
 };
 
+&dma_fast_region {
+	status = "okay";
+};
+
 &spi120 {
 	status = "okay";
 	pinctrl-0 = <&spi120_default>;
@@ -30,6 +34,7 @@
 	pinctrl-names = "default", "sleep";
 	overrun-character = <0x00>;
 	memory-regions = <&dma_fast_region>;
+	zephyr,pm-device-runtime-auto;
 	slow@0 {
 		compatible = "test-spi-loopback-slow";
 		reg = <0>;

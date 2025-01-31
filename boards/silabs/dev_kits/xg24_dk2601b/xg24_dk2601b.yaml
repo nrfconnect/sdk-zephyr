@@ -12,7 +12,9 @@ supported:
   - counter
   - gpio
   - uart
+  - dma
   - watchdog
+  - clock_control
 testing:
   ignore_tags:
     - pm

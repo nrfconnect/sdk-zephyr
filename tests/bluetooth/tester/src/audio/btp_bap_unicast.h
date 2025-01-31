@@ -2,9 +2,12 @@
 
 /*
  * Copyright (c) 2023 Codecoup
+ * Copyright (c) 2024 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
+#include <stdint.h>
 
 #include <zephyr/bluetooth/audio/cap.h>
 
@@ -18,8 +21,9 @@
 					     CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT
 
 struct btp_bap_unicast_group {
-	struct bt_audio_codec_qos qos[CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT];
+	struct bt_bap_qos_cfg qos[CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT];
 	struct bt_bap_unicast_group *cig;
+	uint8_t cig_id;
 	bool in_use;
 };
 
