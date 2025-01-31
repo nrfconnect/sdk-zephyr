@@ -22,7 +22,7 @@ struct ll_scan_set {
 	struct {
 		uint8_t sid;
 
-		uint8_t adv_addr_type:1;
+		uint8_t adv_addr_type:2;
 		uint8_t filter_policy:1;
 		uint8_t cancelled:1;
 		uint8_t state:2;
@@ -34,6 +34,11 @@ struct ll_scan_set {
 		 * cancelling sync create, hence the volatile keyword.
 		 */
 		struct ll_sync_set *volatile sync;
+
+		/* Non-NULL when Periodic Advertising Synchronisation address
+		 * matched.
+		 */
+		void *param;
 	} periodic;
 #endif
 };

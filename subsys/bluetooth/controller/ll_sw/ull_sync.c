@@ -157,11 +157,13 @@ uint8_t ll_sync_create(uint8_t options, uint8_t sid, uint8_t adv_addr_type,
 
 	scan->periodic.cancelled = 0U;
 	scan->periodic.state = LL_SYNC_STATE_IDLE;
+	scan->periodic.param = NULL;
 	scan->periodic.filter_policy =
 		options & BT_HCI_LE_PER_ADV_CREATE_SYNC_FP_USE_LIST;
 	if (IS_ENABLED(CONFIG_BT_CTLR_PHY_CODED)) {
 		scan_coded->periodic.cancelled = 0U;
 		scan_coded->periodic.state = LL_SYNC_STATE_IDLE;
+		scan_coded->periodic.param = NULL;
 		scan_coded->periodic.filter_policy =
 			scan->periodic.filter_policy;
 	}
@@ -591,7 +593,7 @@ void ull_sync_release(struct ll_sync_set *sync)
 	mem_release(sync, &sync_free);
 }
 
-void ull_sync_setup_addr_check(struct ll_scan_set *scan, uint8_t addr_type,
+bool ull_sync_setup_addr_check(struct ll_scan_set *scan, uint8_t addr_type,
 			       uint8_t *addr, uint8_t rl_idx)
 {
 	/* Check if Periodic Advertiser list to be used */
@@ -607,7 +609,7 @@ void ull_sync_setup_addr_check(struct ll_scan_set *scan, uint8_t addr_type,
 				     BDADDR_SIZE);
 
 			/* Address matched */
-			scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
+			return true;
 
 		/* Check in Resolving List */
 		} else if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY) &&
@@ -618,15 +620,18 @@ void ull_sync_setup_addr_check(struct ll_scan_set *scan, uint8_t addr_type,
 			 */
 			scan->periodic.adv_addr_type = addr_type;
 
+			/* Mark it as identity address from RPA (0x02, 0x03) */
+			scan->periodic.adv_addr_type += 2U;
+
 			/* Address matched */
-			scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
+			return true;
 		}
 
 	/* Check with explicitly supplied address */
 	} else if ((addr_type == scan->periodic.adv_addr_type) &&
 		   !memcmp(addr, scan->periodic.adv_addr, BDADDR_SIZE)) {
 		/* Address matched */
-		scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
+		return true;
 
 	/* Check identity address with explicitly supplied address */
 	} else if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY) &&
@@ -634,10 +639,15 @@ void ull_sync_setup_addr_check(struct ll_scan_set *scan, uint8_t addr_type,
 		ll_rl_id_addr_get(rl_idx, &addr_type, addr);
 		if ((addr_type == scan->periodic.adv_addr_type) &&
 		    !memcmp(addr, scan->periodic.adv_addr, BDADDR_SIZE)) {
+			/* Mark it as identity address from RPA (0x02, 0x03) */
+			scan->periodic.adv_addr_type += 2U;
+
 			/* Identity address matched */
-			scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
+			return true;
 		}
 	}
+
+	return false;
 }
 
 bool ull_sync_setup_sid_match(struct ll_scan_set *scan, uint8_t sid)
@@ -666,6 +676,7 @@ void ull_sync_setup(struct ll_scan_set *scan, struct ll_scan_aux_set *aux,
 	struct lll_sync *lll;
 	uint16_t sync_handle;
 	uint32_t interval_us;
+	uint32_t overhead_us;
 	struct pdu_adv *pdu;
 	uint16_t interval;
 	uint8_t chm_last;
@@ -699,7 +710,7 @@ void ull_sync_setup(struct ll_scan_set *scan, struct ll_scan_aux_set *aux,
 	/* Remember the peer address.
 	 * NOTE: Peer identity address is copied here when privacy is enable.
 	 */
-	sync->peer_id_addr_type = scan->periodic.adv_addr_type;
+	sync->peer_id_addr_type = scan->periodic.adv_addr_type & 0x01;
 	(void)memcpy(sync->peer_id_addr, scan->periodic.adv_addr,
 		     sizeof(sync->peer_id_addr));
 #endif /* CONFIG_BT_CTLR_CHECK_SAME_PEER_SYNC ||
@@ -749,6 +760,7 @@ void ull_sync_setup(struct ll_scan_set *scan, struct ll_scan_aux_set *aux,
 
 	/* Set the state to sync create */
 	scan->periodic.state = LL_SYNC_STATE_CREATED;
+	scan->periodic.param = NULL;
 	if (IS_ENABLED(CONFIG_BT_CTLR_PHY_CODED)) {
 		struct ll_scan_set *scan_1m;
 
@@ -758,8 +770,10 @@ void ull_sync_setup(struct ll_scan_set *scan, struct ll_scan_aux_set *aux,
 
 			scan_coded = ull_scan_set_get(SCAN_HANDLE_PHY_CODED);
 			scan_coded->periodic.state = LL_SYNC_STATE_CREATED;
+			scan_coded->periodic.param = NULL;
 		} else {
 			scan_1m->periodic.state = LL_SYNC_STATE_CREATED;
+			scan_1m->periodic.param = NULL;
 		}
 	}
 
@@ -792,6 +806,22 @@ void ull_sync_setup(struct ll_scan_set *scan, struct ll_scan_aux_set *aux,
 	sync_offset_us -= EVENT_TICKER_RES_MARGIN_US;
 	sync_offset_us -= EVENT_JITTER_US;
 	sync_offset_us -= ready_delay_us;
+
+	/* Minimum prepare tick offset + minimum preempt tick offset are the
+	 * overheads before ULL scheduling can setup radio for reception
+	 */
+	overhead_us = HAL_TICKER_TICKS_TO_US(HAL_TICKER_CNTR_CMP_OFFSET_MIN << 1);
+
+	/* CPU execution overhead to setup the radio for reception */
+	overhead_us += EVENT_OVERHEAD_END_US + EVENT_OVERHEAD_START_US;
+
+	/* If not sufficient CPU processing time, skip to receiving next
+	 * event.
+	 */
+	if ((sync_offset_us - ftr->radio_end_us) < overhead_us) {
+		sync_offset_us += interval_us;
+		lll->event_counter++;
+	}
 
 	interval_us -= lll->window_widening_periodic_us;
 
