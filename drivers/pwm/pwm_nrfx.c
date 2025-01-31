@@ -20,6 +20,7 @@ LOG_MODULE_REGISTER(pwm_nrfx, CONFIG_PWM_LOG_LEVEL);
  * to 0 or 1, hence the use of #if IS_ENABLED().
  */
 #if IS_ENABLED(NRFX_PWM_NRF52_ANOMALY_109_WORKAROUND_ENABLED)
+#define ANOMALY_109_IRQ_CONNECT(...) IRQ_CONNECT(__VA_ARGS__)
 #define ANOMALY_109_EGU_IRQ_CONNECT(idx) _EGU_IRQ_CONNECT(idx)
 #define _EGU_IRQ_CONNECT(idx) \
 	extern void nrfx_egu_##idx##_irq_handler(void); \
@@ -27,6 +28,7 @@ LOG_MODULE_REGISTER(pwm_nrfx, CONFIG_PWM_LOG_LEVEL);
 		    DT_IRQ(DT_NODELABEL(egu##idx), priority), \
 		    nrfx_isr, nrfx_egu_##idx##_irq_handler, 0)
 #else
+#define ANOMALY_109_IRQ_CONNECT(...)
 #define ANOMALY_109_EGU_IRQ_CONNECT(idx)
 #endif
 
@@ -59,12 +61,6 @@ static uint16_t *seq_values_ptr_get(const struct device *dev)
 	const struct pwm_nrfx_config *config = dev->config;
 
 	return (uint16_t *)config->seq.values.p_raw;
-}
-
-static void pwm_handler(nrfx_pwm_evt_type_t event_type, void *p_context)
-{
-	ARG_UNUSED(event_type);
-	ARG_UNUSED(p_context);
 }
 
 static bool pwm_period_check_and_set(const struct device *dev,
@@ -233,8 +229,7 @@ static int pwm_nrfx_set_cycles(const struct device *dev, uint32_t channel,
 		 * until another playback is requested (new values will be
 		 * loaded then) or the PWM peripheral is stopped.
 		 */
-		nrfx_pwm_simple_playback(&config->pwm, &config->seq, 1,
-					 NRFX_PWM_FLAG_NO_EVT_FINISHED);
+		nrfx_pwm_simple_playback(&config->pwm, &config->seq, 1, 0);
 	}
 
 	return 0;
@@ -261,7 +256,6 @@ static int pwm_nrfx_init(const struct device *dev)
 {
 	const struct pwm_nrfx_config *config = dev->config;
 	uint8_t initially_inverted = 0;
-	nrfx_err_t result;
 
 	int ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
 
@@ -290,7 +284,10 @@ static int pwm_nrfx_init(const struct device *dev)
 		seq_values_ptr_get(dev)[i] = PWM_NRFX_CH_VALUE(0, inverted);
 	}
 
-	result = nrfx_pwm_init(&config->pwm, &config->initial_config, pwm_handler, dev->data);
+	nrfx_err_t result = nrfx_pwm_init(&config->pwm,
+					  &config->initial_config,
+					  NULL,
+					  NULL);
 	if (result != NRFX_SUCCESS) {
 		LOG_ERR("Failed to initialize device: %s", dev->name);
 		return -EBUSY;
@@ -380,8 +377,9 @@ static int pwm_nrfx_pm_action(const struct device *dev,
 	};								      \
 	static int pwm_nrfx_init##idx(const struct device *dev)		      \
 	{								      \
-		IRQ_CONNECT(DT_IRQN(PWM(idx)), DT_IRQ(PWM(idx), priority),    \
-			    nrfx_isr, nrfx_pwm_##idx##_irq_handler, 0);	      \
+		ANOMALY_109_IRQ_CONNECT(				      \
+			DT_IRQN(PWM(idx)), DT_IRQ(PWM(idx), priority),	      \
+			nrfx_isr, nrfx_pwm_##idx##_irq_handler, 0);	      \
 		return pwm_nrfx_init(dev);				      \
 	};								      \
 	PM_DEVICE_DT_DEFINE(PWM(idx), pwm_nrfx_pm_action);		      \
