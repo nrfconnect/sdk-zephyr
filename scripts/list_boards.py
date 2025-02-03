@@ -226,7 +226,7 @@ def load_v2_boards(board_name, board_yml, systems):
     boards = {}
     board_extensions = []
     if board_yml.is_file():
-        with board_yml.open('r') as f:
+        with board_yml.open('r', encoding='utf-8') as f:
             b = yaml.load(f.read(), Loader=SafeLoader)
 
         try:
@@ -447,7 +447,7 @@ def dump_boards(args):
             if args.cmakeformat is not None:
                 info = args.cmakeformat.format(
                     NAME='NAME;' + board.name,
-                    DIR='DIR;' + str(board.directories.as_posix()),
+                    DIR='DIR;' + str(board.dir.as_posix()),
                     HWM='HWM;' + board.hwm,
                     VENDOR='VENDOR;NOTFOUND',
                     REVISION_DEFAULT='REVISION_DEFAULT;NOTFOUND',

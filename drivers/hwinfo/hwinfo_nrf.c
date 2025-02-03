@@ -8,8 +8,13 @@
 #include <zephyr/drivers/hwinfo.h>
 #include <string.h>
 #include <zephyr/sys/byteorder.h>
-#if !defined(CONFIG_BOARD_QEMU_CORTEX_M0)
+#if defined(CONFIG_BOARD_QEMU_CORTEX_M0) || \
+	(defined(CONFIG_NRF_PLATFORM_HALTIUM) && \
+	 defined(CONFIG_RISCV_CORE_NORDIC_VPR))
+#define RESET_CAUSE_AVAILABLE 0
+#else
 #include <helpers/nrfx_reset_reason.h>
+#define RESET_CAUSE_AVAILABLE 1
 #endif
 
 #if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) && defined(NRF_FICR_S)
@@ -63,7 +68,7 @@ ssize_t z_impl_hwinfo_get_device_id(uint8_t *buffer, size_t length)
 	return length;
 }
 
-#if !defined(CONFIG_BOARD_QEMU_CORTEX_M0)
+#if RESET_CAUSE_AVAILABLE
 int z_impl_hwinfo_get_reset_cause(uint32_t *cause)
 {
 	uint32_t flags = 0;
@@ -212,4 +217,4 @@ int z_impl_hwinfo_get_supported_reset_cause(uint32_t *supported)
 
 	return 0;
 }
-#endif
+#endif /* RESET_CAUSE_AVAILABLE */

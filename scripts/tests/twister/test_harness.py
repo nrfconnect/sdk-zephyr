@@ -30,6 +30,7 @@ from twisterlib.harness import (
     Test,
 )
 from twisterlib.statuses import TwisterStatus
+from twisterlib.testsuite import TestSuite
 from twisterlib.testinstance import TestInstance
 
 GTEST_START_STATE = " RUN      "
@@ -206,7 +207,7 @@ def test_robot_configure(tmp_path):
     outdir.mkdir()
 
     instance = TestInstance(
-        testsuite=mock_testsuite, platform=mock_platform, outdir=outdir
+        testsuite=mock_testsuite, platform=mock_platform, toolchain='zephyr',  outdir=outdir
     )
     instance.testsuite.harness_config = {
         "robot_testsuite": "/path/to/robot/test",
@@ -237,7 +238,7 @@ def test_robot_handle(tmp_path):
     outdir.mkdir()
 
     instance = TestInstance(
-        testsuite=mock_testsuite, platform=mock_platform, outdir=outdir
+        testsuite=mock_testsuite, platform=mock_platform, toolchain='zephyr', outdir=outdir
     )
 
     handler = Robot()
@@ -287,7 +288,7 @@ def test_robot_run_robot_test(tmp_path, caplog, exp_out, returncode, expected_st
     outdir.mkdir()
 
     instance = TestInstance(
-        testsuite=mock_testsuite, platform=mock_platform, outdir=outdir
+        testsuite=mock_testsuite, platform=mock_platform, toolchain='zephyr', outdir=outdir
     )
     instance.build_dir = "build_dir"
 
@@ -341,7 +342,7 @@ def test_console_configure(tmp_path, type, num_patterns):
     outdir.mkdir()
 
     instance = TestInstance(
-        testsuite=mock_testsuite, platform=mock_platform, outdir=outdir
+        testsuite=mock_testsuite, platform=mock_platform, toolchain='zephyr', outdir=outdir
     )
     instance.testsuite.harness_config = {
         "type": type,
@@ -402,7 +403,7 @@ def test_console_handle(
     outdir.mkdir()
 
     instance = TestInstance(
-        testsuite=mock_testsuite, platform=mock_platform, outdir=outdir
+        testsuite=mock_testsuite, platform=mock_platform, toolchain='zephyr', outdir=outdir
     )
 
     console = Console()
@@ -464,7 +465,7 @@ def test_pytest__generate_parameters_for_hardware(tmp_path, pty_value, hardware_
     outdir.mkdir()
 
     instance = TestInstance(
-        testsuite=mock_testsuite, platform=mock_platform, outdir=outdir
+        testsuite=mock_testsuite, platform=mock_platform, toolchain='zephyr', outdir=outdir
     )
 
     handler = mock.Mock()
@@ -562,7 +563,7 @@ def test_pytest_run(tmp_path, caplog):
     outdir.mkdir()
 
     instance = TestInstance(
-        testsuite=mock_testsuite, platform=mock_platform, outdir=outdir
+        testsuite=mock_testsuite, platform=mock_platform, toolchain='zephyr', outdir=outdir
     )
     instance.handler = handler
 
@@ -594,50 +595,89 @@ def test_get_harness(name):
 
 TEST_DATA_7 = [
     (
+        True,
         "",
         "Running TESTSUITE suite_name",
         ["suite_name"],
+        { 'suite_name': { 'count': 1, 'repeat': 0 } },
+        {},
         TwisterStatus.NONE,
         True,
         TwisterStatus.NONE,
     ),
-    ("", "START - test_testcase", [], TwisterStatus.STARTED, True, TwisterStatus.NONE),
     (
-        "",
+        True,
+        "TC_START: Ztest case 'testcase' is not known in {} running suite(s)",
+        "START - test_testcase",
+        [],
+        {},
+        { 'dummy.test_id.testcase': { 'count': 1 } },
+        TwisterStatus.STARTED,
+        True,
+        TwisterStatus.NONE
+    ),
+    (
+        True,
+        "TC_END: Ztest case 'example' is not known in {} running suite(s)",
         "PASS - test_example in 0 seconds",
         [],
+        {},
+        {},
         TwisterStatus.PASS,
         True,
         TwisterStatus.NONE,
     ),
     (
-        "",
+        True,
+        "TC_END: Ztest case 'example' is not known in {} running suite(s)",
         "SKIP - test_example in 0 seconds",
         [],
+        {},
+        {},
         TwisterStatus.SKIP,
         True,
         TwisterStatus.NONE,
     ),
     (
-        "",
+        True,
+        "TC_END: Ztest case 'example' is not known in {} running suite(s)",
         "FAIL - test_example in 0 seconds",
         [],
+        {},
+        {},
         TwisterStatus.FAIL,
         True,
         TwisterStatus.NONE,
     ),
     (
-        "not a ztest and no state for test_id",
+        True,
+        "not a ztest and no state for dummy.test_id",
         "START - test_testcase",
         [],
+        {},
+        { 'dummy.test_id.testcase': { 'count': 1 } },
         TwisterStatus.PASS,
         False,
         TwisterStatus.PASS,
     ),
     (
-        "not a ztest and no state for test_id",
+        False,
+        "not a ztest and no state for dummy.test_id",
         "START - test_testcase",
         [],
+        {},
+        { 'testcase': { 'count': 1 } },
+        TwisterStatus.PASS,
+        False,
+        TwisterStatus.PASS,
+    ),
+    (
+        True,
+        "not a ztest and no state for dummy.test_id",
+        "START - test_testcase",
+        [],
+        {},
+        { 'dummy.test_id.testcase': { 'count': 1 } },
         TwisterStatus.FAIL,
         False,
         TwisterStatus.FAIL,
@@ -646,12 +686,14 @@ TEST_DATA_7 = [
 
 
 @pytest.mark.parametrize(
-    "exp_out, line, exp_suite_name, exp_status, ztest, state",
+    "detailed_id, exp_out, line, exp_suite_name, exp_started_suites, exp_started_cases, exp_status, ztest, state",
     TEST_DATA_7,
-    ids=["testsuite", "testcase", "pass", "skip", "failed", "ztest pass", "ztest fail"],
+    ids=["testsuite", "testcase", "pass", "skip", "failed", "ztest pass", "ztest pass short id", "ztest fail"],
 )
 def test_test_handle(
-    tmp_path, caplog, exp_out, line, exp_suite_name, exp_status, ztest, state
+    tmp_path, caplog, detailed_id, exp_out, line,
+    exp_suite_name, exp_started_suites, exp_started_cases,
+    exp_status, ztest, state
 ):
     # Arrange
     line = line
@@ -659,28 +701,36 @@ def test_test_handle(
     mock_platform.name = "mock_platform"
     mock_platform.normalized_name = "mock_platform"
 
-    mock_testsuite = mock.Mock(id="id", testcases=[])
-    mock_testsuite.name = "mock_testsuite"
+    mock_testsuite = mock.Mock(id="dummy.test_id", testcases=[])
+    mock_testsuite.name = "dummy_suite/dummy.test_id"
     mock_testsuite.harness_config = {}
+    mock_testsuite.ztest_suite_names = []
+    mock_testsuite.detailed_test_id = detailed_id
+    mock_testsuite.source_dir_rel = "dummy_suite"
+    mock_testsuite.compose_case_name.return_value = TestSuite.compose_case_name_(mock_testsuite, "testcase")
 
-    outdir = tmp_path / "gtest_out"
-    outdir.mkdir()
-
-    instance = TestInstance(
-        testsuite=mock_testsuite, platform=mock_platform, outdir=outdir
-    )
+    outdir = tmp_path / "ztest_out"
+    with mock.patch('twisterlib.testsuite.TestSuite.get_unique', return_value="dummy_suite"):
+        instance = TestInstance(
+            testsuite=mock_testsuite, platform=mock_platform, toolchain='zephyr', outdir=outdir
+        )
+    instance.handler = mock.Mock(options=mock.Mock(verbose=0), type_str="handler_type")
 
     test_obj = Test()
     test_obj.configure(instance)
-    test_obj.id = "test_id"
+    test_obj.id = "dummy.test_id"
     test_obj.ztest = ztest
     test_obj.status = state
-    test_obj.id = "test_id"
+    test_obj.started_cases = {}
+
     # Act
     test_obj.handle(line)
 
     # Assert
     assert test_obj.detected_suite_names == exp_suite_name
+    assert test_obj.started_suites == exp_started_suites
+    assert test_obj.started_cases == exp_started_cases
+
     assert exp_out in caplog.text
     if not "Running" in line and exp_out == "":
         assert test_obj.instance.testcases[0].status == exp_status
@@ -703,7 +753,7 @@ def gtest(tmp_path):
     outdir.mkdir()
 
     instance = TestInstance(
-        testsuite=mock_testsuite, platform=mock_platform, outdir=outdir
+        testsuite=mock_testsuite, platform=mock_platform, toolchain='zephyr', outdir=outdir
     )
 
     harness = Gtest()

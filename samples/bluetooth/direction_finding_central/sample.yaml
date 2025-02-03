@@ -17,7 +17,7 @@ tests:
   sample.bluetooth.direction_finding.central.aod_with_controller:
     harness: bluetooth
     extra_args:
-      - OVERLAY_CONFIG="overlay-aod.conf"
+      - EXTRA_CONF_FILE="overlay-aod.conf"
       - SNIPPET="bt-ll-sw-split"
     platform_allow:
       - nrf52833dk/nrf52833
