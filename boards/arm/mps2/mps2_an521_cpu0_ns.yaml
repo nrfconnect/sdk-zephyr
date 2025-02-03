@@ -10,6 +10,8 @@ simulation:
 toolchain:
   - gnuarmemb
   - zephyr
+  - zephyr-gnu
+  - zephyr-llvm
   - xtools
 testing:
   default: true
