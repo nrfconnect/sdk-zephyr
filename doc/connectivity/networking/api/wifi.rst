@@ -15,7 +15,7 @@ Only personal mode security is supported with below types:
 
 * Open
 * WPA2-PSK
-* WPA3-PSK-256
+* WPA2-PSK-256
 * WPA3-SAE
 
 The Wi-Fi management API is implemented in the ``wifi_mgmt`` module as a part of the networking L2
@@ -24,6 +24,11 @@ Currently, two types of Wi-Fi drivers are supported:
 
 * Networking or socket offloaded drivers
 * Native L2 Ethernet drivers
+
+Wi-Fi PSA crypto supported build
+********************************
+
+To enable PSA crypto API supported Wi-Fi build, the :kconfig:option:`CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ALT` and the :kconfig:option:`CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_MBEDTLS_PSA` need to be set.
 
 Wi-Fi Enterprise test: X.509 Certificate header generation
 **********************************************************

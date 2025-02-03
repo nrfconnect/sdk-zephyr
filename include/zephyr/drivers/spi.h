@@ -100,10 +100,10 @@ extern "C" {
 #define SPI_WORD_SIZE_SHIFT	(5U)
 #define SPI_WORD_SIZE_MASK	(0x3FU << SPI_WORD_SIZE_SHIFT)
 /** @endcond */
-/** Get SPI word size. */
+/** Get SPI word size (data frame size) in bits. */
 #define SPI_WORD_SIZE_GET(_operation_)					\
 	(((_operation_) & SPI_WORD_SIZE_MASK) >> SPI_WORD_SIZE_SHIFT)
-/** Set SPI word size. */
+/** Set SPI word size (data frame size) in bits. */
 #define SPI_WORD_SET(_word_size_)		\
 	((_word_size_) << SPI_WORD_SIZE_SHIFT)
 /** @} */
@@ -211,7 +211,7 @@ struct spi_cs_control {
  */
 #define SPI_CS_GPIOS_DT_SPEC_GET(spi_dev)			\
 	GPIO_DT_SPEC_GET_BY_IDX_OR(DT_BUS(spi_dev), cs_gpios,	\
-				   DT_REG_ADDR(spi_dev), {})
+				   DT_REG_ADDR_RAW(spi_dev), {})
 
 /**
  * @brief Get a <tt>struct gpio_dt_spec</tt> for a SPI device's chip select pin
@@ -309,7 +309,7 @@ struct spi_config {
 	 * - 0:      Master or slave.
 	 * - 1..3:   Polarity, phase and loop mode.
 	 * - 4:      LSB or MSB first.
-	 * - 5..10:  Size of a data frame in bits.
+	 * - 5..10:  Size of a data frame (word) in bits.
 	 * - 11:     Full/half duplex.
 	 * - 12:     Hold on the CS line if possible.
 	 * - 13:     Keep resource locked for the caller.
@@ -458,7 +458,7 @@ struct spi_dt_spec {
 struct spi_buf {
 	/** Valid pointer to a data buffer, or NULL otherwise */
 	void *buf;
-	/** Length of the buffer @a buf.
+	/** Length of the buffer @a buf in bytes.
 	 * If @a buf is NULL, length which as to be sent as dummy bytes (as TX
 	 * buffer) or the length of bytes that should be skipped (as RX buffer).
 	 */
@@ -471,7 +471,7 @@ struct spi_buf {
 struct spi_buf_set {
 	/** Pointer to an array of spi_buf, or NULL */
 	const struct spi_buf *buffers;
-	/** Length of the array pointed by @a buffers */
+	/** Length of the array (number of buffers) pointed by @a buffers */
 	size_t count;
 };
 
@@ -626,6 +626,17 @@ static inline void spi_transceive_stats(const struct device *dev, int error,
 #define spi_transceive_stats(dev, error, tx_bufs, rx_bufs)
 
 #endif /*CONFIG_SPI_STATS*/
+
+/**
+ * @brief Like SPI_DEVICE_DT_DEFINE(), but uses an instance of a `DT_DRV_COMPAT`
+ * compatible instead of a node identifier.
+ *
+ * @param inst Instance number. The `node_id` argument to SPI_DEVICE_DT_DEFINE() is
+ * set to `DT_DRV_INST(inst)`.
+ * @param ... Other parameters as expected by SPI_DEVICE_DT_DEFINE().
+ */
+#define SPI_DEVICE_DT_INST_DEFINE(inst, ...)                                       \
+	SPI_DEVICE_DT_DEFINE(DT_DRV_INST(inst), __VA_ARGS__)
 
 /**
  * @typedef spi_api_io
@@ -1045,7 +1056,7 @@ static inline int spi_write_signal(const struct device *dev,
  */
 static inline void spi_iodev_submit(struct rtio_iodev_sqe *iodev_sqe)
 {
-	const struct spi_dt_spec *dt_spec = iodev_sqe->sqe.iodev->data;
+	const struct spi_dt_spec *dt_spec = (const struct spi_dt_spec *)iodev_sqe->sqe.iodev->data;
 	const struct device *dev = dt_spec->bus;
 	const struct spi_driver_api *api = (const struct spi_driver_api *)dev->api;
 
@@ -1080,7 +1091,7 @@ extern const struct rtio_iodev_api spi_iodev_api;
  */
 static inline bool spi_is_ready_iodev(const struct rtio_iodev *spi_iodev)
 {
-	struct spi_dt_spec *spec = spi_iodev->data;
+	struct spi_dt_spec *spec = (struct spi_dt_spec *)spi_iodev->data;
 
 	return spi_is_ready_dt(spec);
 }

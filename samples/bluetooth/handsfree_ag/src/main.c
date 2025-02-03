@@ -111,7 +111,8 @@ static struct bt_hfp_ag_cb ag_cb = {
 	.terminate = ag_terminate,
 };
 
-static uint8_t sdp_discover_cb(struct bt_conn *conn, struct bt_sdp_client_result *result)
+static uint8_t sdp_discover_cb(struct bt_conn *conn, struct bt_sdp_client_result *result,
+			       const struct bt_sdp_discover_params *params)
 {
 	int err;
 	uint16_t value;
@@ -136,6 +137,7 @@ static uint8_t sdp_discover_cb(struct bt_conn *conn, struct bt_sdp_client_result
 }
 
 static struct bt_sdp_discover_params sdp_discover = {
+	.type = BT_SDP_DISCOVER_SERVICE_SEARCH_ATTR,
 	.func = sdp_discover_cb,
 	.pool = &sdp_discover_pool,
 	.uuid = BT_UUID_DECLARE_16(BT_SDP_HANDSFREE_SVCLASS),
@@ -208,10 +210,15 @@ static struct bt_conn_cb conn_callbacks = {
 	.security_changed = security_changed,
 };
 
-static void scan_discovery_cb(struct bt_br_discovery_result *results, size_t count)
+static void discovery_recv_cb(const struct bt_br_discovery_result *result)
+{
+	(void)result;
+}
+
+static void discovery_timeout_cb(const struct bt_br_discovery_result *results, size_t count)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
-	uint8_t *eir;
+	const uint8_t *eir;
 	bool cod_hf = false;
 	static uint8_t temp[240];
 	size_t len = sizeof(results->eir);
@@ -275,7 +282,7 @@ static void discover_work_handler(struct k_work *work)
 	br_discover.limited = false;
 
 	err = bt_br_discovery_start(&br_discover, scan_result,
-				    CONFIG_BT_HFP_AG_DISCOVER_RESULT_COUNT, scan_discovery_cb);
+				    CONFIG_BT_HFP_AG_DISCOVER_RESULT_COUNT);
 	if (err) {
 		printk("Fail to start discovery (err %d)\n", err);
 		return;
@@ -344,6 +351,11 @@ static void call_remote_accept_work_handler(struct k_work *work)
 	}
 }
 
+static struct bt_br_discovery_cb discovery_cb = {
+	.recv = discovery_recv_cb,
+	.timeout = discovery_timeout_cb,
+};
+
 static void bt_ready(int err)
 {
 	if (err) {
@@ -358,6 +370,8 @@ static void bt_ready(int err)
 	printk("Bluetooth initialized\n");
 
 	bt_conn_cb_register(&conn_callbacks);
+
+	bt_br_discovery_cb_register(&discovery_cb);
 
 	bt_hfp_ag_register(&ag_cb);
 
