@@ -14,6 +14,7 @@
 #include <sys/types.h>
 
 #include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/audio/ccid.h>
 #include <zephyr/bluetooth/audio/mcs.h>
 #include <zephyr/bluetooth/audio/media_proxy.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -29,7 +30,6 @@
 #include <zephyr/sys/time_units.h>
 #include <zephyr/sys/util_macro.h>
 
-#include "ccid_internal.h"
 #include "media_proxy_internal.h"
 #include "mcs_internal.h"
 #include "mpl_internal.h"
@@ -2318,6 +2318,14 @@ int media_proxy_pl_init(void)
 		return -EALREADY;
 	}
 
+	/* Get a Content Control ID */
+	ret = bt_ccid_alloc_value();
+	if (ret < 0) {
+		LOG_DBG("Could not allocate CCID: %d", ret);
+		return ret;
+	}
+	media_player.content_ctrl_id = (uint8_t)ret;
+
 	/* Set up the media control service */
 	/* TODO: Fix initialization - who initializes what
 	 * https://github.com/zephyrproject-rtos/zephyr/issues/42965
@@ -2351,9 +2359,6 @@ int media_proxy_pl_init(void)
 #else
 	LOG_WRN("MCS not configured");
 #endif /* CONFIG_BT_MCS */
-
-	/* Get a Content Control ID */
-	media_player.content_ctrl_id = bt_ccid_get_value();
 
 #ifdef CONFIG_BT_MPL_OBJECTS
 	/* Initialize the object content buffer */
@@ -2521,8 +2526,7 @@ void mpl_debug_dump_state(void)
 }
 #endif /* CONFIG_BT_MPL_LOG_LEVEL_DBG */
 
-#if defined(CONFIG_BT_MPL_LOG_LEVEL_DBG) &&                                                        \
-	defined(CONFIG_BT_TESTING) /* Special commands for testing */
+#if defined(CONFIG_BT_TESTING) /* Special commands for testing */
 
 #if CONFIG_BT_MPL_OBJECTS
 void mpl_test_unset_parent_group(void)
@@ -2621,4 +2625,4 @@ void mpl_test_search_results_changed_cb(void)
 }
 #endif /* CONFIG_BT_MPL_OBJECTS */
 
-#endif /* CONFIG_BT_MPL_LOG_LEVEL_DBG && CONFIG_BT_TESTING */
+#endif /* CONFIG_BT_TESTING */

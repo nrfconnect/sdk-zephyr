@@ -24,7 +24,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/direction.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/drivers/bluetooth/hci_driver.h>
+#include <zephyr/bluetooth/hci_vs.h>
 #include <zephyr/bluetooth/att.h>
 
 #include "common/assert.h"
@@ -754,7 +754,7 @@ static int send_buf(struct bt_conn *conn, struct net_buf *buf,
 	} else if (is_acl_conn(conn)) {
 		err = send_acl(conn, frag, flags);
 	} else {
-		err = -EINVAL;	/* Some animals disable asserts (╯°□°）╯︵ ┻━┻ */
+		err = -EINVAL; /* asserts may be disabled */
 		__ASSERT(false, "Invalid connection type %u", conn->type);
 	}
 
@@ -1610,7 +1610,7 @@ struct net_buf *bt_conn_create_pdu_timeout(struct net_buf_pool *pool,
 
 	if (!K_TIMEOUT_EQ(timeout, K_NO_WAIT) &&
 	    k_current_get() == k_work_queue_thread_get(&k_sys_work_q)) {
-		LOG_DBG("Timeout discarded. No blocking in syswq.");
+		LOG_WRN("Timeout discarded. No blocking in syswq.");
 		timeout = K_NO_WAIT;
 	}
 
@@ -1731,15 +1731,12 @@ static bool can_initiate_feature_exchange(struct bt_conn *conn)
 	 * controller, as we know at compile time whether it supports or not
 	 * peripheral feature exchange.
 	 */
-	bool onboard_controller = IS_ENABLED(CONFIG_BT_CTLR);
-	bool supports_peripheral_feature_exchange = IS_ENABLED(CONFIG_BT_CTLR_PER_INIT_FEAT_XCHG);
-	bool is_central = IS_ENABLED(CONFIG_BT_CENTRAL) && conn->role == BT_HCI_ROLE_CENTRAL;
 
-	if (is_central) {
+	if (IS_ENABLED(CONFIG_BT_CENTRAL) && (conn->role == BT_HCI_ROLE_CENTRAL)) {
 		return true;
 	}
 
-	if (onboard_controller && supports_peripheral_feature_exchange) {
+	if (IS_ENABLED(CONFIG_HAS_BT_CTLR) && IS_ENABLED(CONFIG_BT_CTLR_PER_INIT_FEAT_XCHG)) {
 		return true;
 	}
 
@@ -1866,18 +1863,6 @@ static int conn_disconnect(struct bt_conn *conn, uint8_t reason)
 
 int bt_conn_disconnect(struct bt_conn *conn, uint8_t reason)
 {
-	/* Disconnection is initiated by us, so auto connection shall
-	 * be disabled. Otherwise the passive scan would be enabled
-	 * and we could send LE Create Connection as soon as the remote
-	 * starts advertising.
-	 */
-#if !defined(CONFIG_BT_FILTER_ACCEPT_LIST)
-	if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
-	    conn->type == BT_CONN_TYPE_LE) {
-		bt_le_set_auto_conn(&conn->le.dst, NULL);
-	}
-#endif /* !defined(CONFIG_BT_FILTER_ACCEPT_LIST) */
-
 	switch (conn->state) {
 	case BT_CONN_SCAN_BEFORE_INITIATING:
 		conn->err = reason;
@@ -2636,6 +2621,7 @@ static void reset_pairing(struct bt_conn *conn)
 #if defined(CONFIG_BT_CLASSIC)
 	if (conn->type == BT_CONN_TYPE_BR) {
 		atomic_clear_bit(conn->flags, BT_CONN_BR_PAIRING);
+		atomic_clear_bit(conn->flags, BT_CONN_BR_PAIRED);
 		atomic_clear_bit(conn->flags, BT_CONN_BR_PAIRING_INITIATOR);
 		atomic_clear_bit(conn->flags, BT_CONN_BR_LEGACY_SECURE);
 		atomic_clear_bit(conn->flags, BT_CONN_BR_GENERAL_BONDING);

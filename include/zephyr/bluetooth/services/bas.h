@@ -27,6 +27,20 @@ extern "C" {
 #endif
 
 /**
+ * @brief Battery Critical Status Characteristic flags.
+ *
+ * Enumeration for the flags indicating the presence
+ * of various fields in the Battery Critical Status characteristic.
+ */
+enum bt_bas_bcs_flags {
+	/**  Battery Critical Status Bit 0: Critical Power State */
+	BT_BAS_BCS_BATTERY_CRITICAL_STATE = BIT(0),
+
+	/**  Battery Critical Status Bit 1: Immediate Service Required */
+	BT_BAS_BCS_IMMEDIATE_SERVICE_REQUIRED = BIT(1),
+};
+
+/**
  * @brief Battery Level Status Characteristic flags.
  *
  * Enumeration for the flags indicating the presence
@@ -258,7 +272,7 @@ void bt_bas_bls_set_charging_fault_reason(enum bt_bas_bls_charging_fault_reason 
 /**
  * @brief Set the identifier of the battery.
  *
- * kconfig_dep{CONFIG_BT_BAS_BLS_IDENTIFIER_PRESENT}
+ * @kconfig_dep{CONFIG_BT_BAS_BLS_IDENTIFIER_PRESENT}
  *
  * @param identifier Identifier to set.
  */
@@ -267,7 +281,7 @@ void bt_bas_bls_set_identifier(uint16_t identifier);
 /**
  * @brief Set the service required status.
  *
- * kconfig_dep{CONFIG_BT_BAS_BLS_ADDITIONAL_STATUS_PRESENT}
+ * @kconfig_dep{CONFIG_BT_BAS_BLS_ADDITIONAL_STATUS_PRESENT}
  *
  * @param value Service required status to set.
  */
@@ -276,7 +290,7 @@ void bt_bas_bls_set_service_required(enum bt_bas_bls_service_required value);
 /**
  * @brief Set the battery fault status.
  *
- * kconfig_dep{CONFIG_BT_BAS_BLS_ADDITIONAL_STATUS_PRESENT}
+ * @kconfig_dep{CONFIG_BT_BAS_BLS_ADDITIONAL_STATUS_PRESENT}
  *
  * @param value Battery fault status to set.
  */

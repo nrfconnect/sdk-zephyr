@@ -9,6 +9,7 @@
 
 simulation_id="cap_unicast_test"
 verbosity_level=2
+EXECUTE_TIMEOUT=120
 
 source ${ZEPHYR_BASE}/tests/bsim/sh_common.source
 
@@ -17,7 +18,7 @@ cd ${BSIM_OUT_PATH}/bin
 Execute ./bs_${BOARD_TS}_tests_bsim_bluetooth_audio_samples_cap_initiator_unicast_prj_conf \
   -v=${verbosity_level} -s=${simulation_id} -d=0 -RealEncryption=1 -testid=cap_initiator
 
-Execute ./bs_${BOARD_TS}_tests_bsim_bluetooth_audio_samples_cap_acceptor_prj_conf \
+Execute ./bs_${BOARD_TS}_tests_bsim_bluetooth_audio_samples_cap_acceptor_unicast_prj_conf \
   -v=${verbosity_level} -s=${simulation_id} -d=1 -RealEncryption=1 -testid=cap_acceptor
 
 Execute ./bs_2G4_phy_v1 -v=${verbosity_level} -s=${simulation_id} \

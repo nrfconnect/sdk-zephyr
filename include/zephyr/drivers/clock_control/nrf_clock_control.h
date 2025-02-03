@@ -360,7 +360,7 @@ void nrf_clock_control_hfxo_release(void);
 		(COND_CODE_1(DT_NODE_HAS_PROP(DT_CLOCKS_CTLR(node), clock_frequency),		\
 			     (DT_PROP(DT_CLOCKS_CTLR(node), clock_frequency)),			\
 			     (DT_PROP_LAST(DT_CLOCKS_CTLR(node), supported_clock_frequency)))),	\
-		(DT_PROP_OR(node, max_frequency, NRFX_MHZ_TO_HZ(16))))
+		(NRFX_MHZ_TO_HZ(16)))
 
 #ifdef __cplusplus
 }
