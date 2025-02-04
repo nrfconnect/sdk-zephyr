@@ -1211,3 +1211,15 @@ test_i2c_tmag3001: tmag3001@a8 {
 	operation-mode = <TMAG5273_DT_OPER_MODE_CONTINUOUS>;
 	angle-magnitude-axis = <TMAG5273_DT_ANGLE_MAG_XY>;
 };
+
+test_i2c_bmm350: bmm350@ac {
+	compatible = "bosch,bmm350";
+	reg = <0xac>;
+	drdy-gpios = <&test_gpio 0 0>;
+};
+
+test_i2c_bmm350: bmm350@ac {
+	compatible = "bosch,bmm350";
+	reg = <0xac>;
+	drdy-gpios = <&test_gpio 0 0>;
+};
