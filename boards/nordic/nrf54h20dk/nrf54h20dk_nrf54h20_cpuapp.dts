@@ -171,6 +171,7 @@ ipc0: &cpuapp_cpurad_ipc {
 
 &cpuapp_cpusys_ipc {
 	status = "okay";
+	unbound = "detect";
 	mbox-names = "rx", "tx";
 	tx-region = <&cpuapp_cpusys_ipc_shm>;
 	rx-region = <&cpusys_cpuapp_ipc_shm>;

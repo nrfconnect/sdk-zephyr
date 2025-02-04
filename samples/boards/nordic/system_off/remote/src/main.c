@@ -12,6 +12,7 @@
 
 int main(void)
 {
+	#if 0
 	int rc;
 	const struct device *const cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
@@ -22,6 +23,7 @@ int main(void)
 		printf("Could not suspend console (%d)\n", rc);
 		return 0;
 	}
+	#endif
 
 	/* Turn off retention of the local radio domain RAM. */
 	nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 0, RAMBLOCK_RET_MASK, false);
