@@ -15,25 +15,76 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/sys/poweroff.h>
 #include <zephyr/sys/util.h>
+#include <hal/nrf_gpio.h>
+#if CONFIG_SOC_NRF54H20_CPUAPP
+#include <hal/nrf_memconf.h>
+#include <internal/nrfs_backend.h>
+#include <nrfs_backend_ipc_service.h>
+#include <nrfs_mram.h>
+#include <nrfs_temp.h>
+#include <nrfs_pmic.h>
+#include <nrfs_usb.h>
+#include <nrfs_clock.h>
+#include <nrfs_gdpwr.h>
+#include <nrfs_gdfs.h>
+#endif
 
 #if IS_ENABLED(CONFIG_GRTC_WAKEUP_ENABLE)
 #include <zephyr/drivers/timer/nrf_grtc_timer.h>
 #define DEEP_SLEEP_TIME_S 2
 #else
 static const struct gpio_dt_spec sw0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
+static const struct gpio_dt_spec sw1 = GPIO_DT_SPEC_GET(DT_ALIAS(sw1), gpios);
+static const uint32_t port_sw1 = DT_PROP(DT_GPIO_CTLR_BY_IDX(DT_ALIAS(sw1), gpios, 0), port);
 #endif
+
+void temp_handler(nrfs_temp_evt_t const *p_evt, void *context)
+{
+	int32_t temp;
+
+	switch (p_evt->type) {
+	case NRFS_TEMP_EVT_MEASURE_DONE:
+		temp = nrfs_temp_from_raw(p_evt->raw_temp);
+		printk("TEMP Measurement done: %d.%d [C]\n", temp / 100, temp % 100);
+		break;
+	case NRFS_TEMP_EVT_CHANGE:
+		temp = nrfs_temp_from_raw(p_evt->raw_temp);
+		printk("TEMP exceeded limit: %d.%d [C]\n", temp / 100, temp % 100);
+		break;
+	case NRFS_TEMP_EVT_REJECT:
+		printk("TEMP handler - request rejected\n");
+		break;
+	default:
+		printk("TEMP handler - unexpected event: 0x%x\n", p_evt->type);
+		break;
+	}
+}
 
 int main(void)
 {
 	int rc;
 	const struct device *const cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+	uint32_t nrf_pin_sw1 = 32 * port_sw1 + sw1.pin;
+	bool do_poweroff = true;
 
 	if (!device_is_ready(cons)) {
 		printf("%s: device not ready.\n", cons->name);
 		return 0;
 	}
 
+	if (nrf_gpio_pin_latch_get(nrf_pin_sw1)) {
+		nrf_gpio_pin_latch_clear(nrf_pin_sw1);
+		do_poweroff = false;
+	}
+
 	printf("\n%s system off demo\n", CONFIG_BOARD);
+
+	int status = nrfs_temp_init(temp_handler);
+	if (status != NRFS_SUCCESS) {
+		printk("TEMP service init failed: %d\n", status);
+	} else {
+		printk("Local TEMP init done\n");
+	}
 
 	if (IS_ENABLED(CONFIG_APP_USE_RETAINED_MEM)) {
 		bool retained_ok = retained_validate();
@@ -66,13 +117,29 @@ int main(void)
 		return 0;
 	}
 
+	rc = gpio_pin_configure_dt(&sw1, GPIO_INPUT);
+	if (rc < 0) {
+		printf("Could not configure sw1 GPIO (%d)\n", rc);
+		return 0;
+	}
+
 	rc = gpio_pin_interrupt_configure_dt(&sw0, GPIO_INT_LEVEL_ACTIVE);
 	if (rc < 0) {
 		printf("Could not configure sw0 GPIO interrupt (%d)\n", rc);
 		return 0;
 	}
 
-	printf("Entering system off; press sw0 to restart\n");
+	rc = gpio_pin_interrupt_configure_dt(&sw1, GPIO_INT_LEVEL_ACTIVE);
+	if (rc < 0) {
+		printf("Could not configure sw0 GPIO interrupt (%d)\n", rc);
+		return 0;
+	}
+
+	if (do_poweroff) {
+		printf("Entering system off; press sw0 or sw1 to restart\n");
+	} else {
+		printf("Button sw1 pressed, not entering system off\n");
+	}
 #endif
 
 	rc = pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
@@ -87,7 +154,22 @@ int main(void)
 		retained_update();
 	}
 
-	sys_poweroff();
+	status = nrfs_temp_subscribe(5000, nrfs_temp_to_raw(4000), nrfs_temp_to_raw(8000),
+					     (void *)NULL);
+
+	k_msleep(1000);
+
+	if (do_poweroff) {
+#if CONFIG_SOC_NRF54H20_CPUAPP
+		/* Local RAM0 (TCM) is currently not used so retention can be disabled. */
+		nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 0, RAMBLOCK_RET_MASK, false);
+		nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 1, RAMBLOCK_RET_MASK, false);
+		//nrfs_backend_close_connection();
+#endif
+		sys_poweroff();
+	} else {
+		k_sleep(K_FOREVER);
+	}
 
 	return 0;
 }
