@@ -8,7 +8,8 @@ config PWM_NRF_SW
 	default y if !PWM_NRFX
 	depends on DT_HAS_NORDIC_NRF_SW_PWM_ENABLED
 	select NRFX_GPIOTE
-	select NRFX_GPPI
+	select NRFX_PPI if HAS_HW_NRF_PPI
+	select NRFX_DPPI if HAS_HW_NRF_DPPIC
 	help
 	  Enable driver to utilize PWM on the Nordic Semiconductor nRF SoCs.
 
