@@ -917,7 +917,7 @@ static ssize_t proxy_ccc_write(struct bt_conn *conn,
 	client = find_client(conn);
 	if (client->filter_type == NONE) {
 		client->filter_type = ACCEPT;
-		bt_mesh_wq_submit(&client->send_beacons);
+		k_work_submit(&client->send_beacons);
 	}
 
 	return sizeof(value);
