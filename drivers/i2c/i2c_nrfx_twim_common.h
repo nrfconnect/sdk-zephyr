@@ -28,8 +28,7 @@ extern "C" {
 
 #define I2C(idx)                DT_NODELABEL(i2c##idx)
 #define I2C_HAS_PROP(idx, prop) DT_NODE_HAS_PROP(I2C(idx), prop)
-#define I2C_FREQUENCY(idx)      I2C_NRFX_TWIM_FREQUENCY(DT_PROP_OR(I2C(idx), clock_frequency,      \
-								   I2C_BITRATE_STANDARD))
+#define I2C_FREQUENCY(idx)      I2C_NRFX_TWIM_FREQUENCY(DT_PROP(I2C(idx), clock_frequency))
 
 struct i2c_nrfx_twim_common_config {
 	nrfx_twim_t twim;
