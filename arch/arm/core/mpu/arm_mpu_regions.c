@@ -13,6 +13,7 @@
 #endif
 
 static const struct arm_mpu_region mpu_regions[] = {
+#ifdef CONFIG_XIP
 	/* Region 0 */
 	MPU_REGION_ENTRY("FLASH_0",
 			 CONFIG_FLASH_BASE_ADDRESS,
@@ -22,6 +23,8 @@ static const struct arm_mpu_region mpu_regions[] = {
 #else
 			 REGION_FLASH_ATTR(REGION_FLASH_SIZE)),
 #endif
+#endif
+
 	/* Region 1 */
 	MPU_REGION_ENTRY("SRAM_0",
 #if USE_PARTITION_MANAGER
