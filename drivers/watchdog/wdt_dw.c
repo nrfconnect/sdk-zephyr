@@ -13,6 +13,7 @@
 #include <zephyr/math/ilog2.h>
 #include <zephyr/drivers/reset.h>
 #include <zephyr/drivers/clock_control.h>
+#include <zephyr/irq.h>
 
 #include "wdt_dw.h"
 #include "wdt_dw_common.h"
@@ -147,7 +148,7 @@ int dw_wdt_disable(const struct device *dev)
 	return ret;
 }
 
-static const struct wdt_driver_api dw_wdt_api = {
+static DEVICE_API(wdt, dw_wdt_api) = {
 	.setup = dw_wdt_setup,
 	.disable = dw_wdt_disable,
 	.install_timeout = dw_wdt_install_timeout,

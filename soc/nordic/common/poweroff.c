@@ -59,7 +59,7 @@ void z_sys_poweroff(void)
 	nrf_memconf_ramblock_ret2_mask_enable_set(NRF_MEMCONF, 0, 0x1C0, false);
 #endif
 
-#endif
+#endif /* defined(CONFIG_HAS_NORDIC_RAM_CTRL) */
 
 #if defined(CONFIG_RETAINED_MEM_NRF_RAM_CTRL)
 	/* Restore retention for retained_mem driver regions defined in devicetree */
