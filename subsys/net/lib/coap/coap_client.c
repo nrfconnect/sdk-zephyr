@@ -105,10 +105,6 @@ static bool exchange_lifetime_exceeded(struct coap_client_internal_request *inte
 		return true;
 	}
 
-	if (internal_req->pending.t0 == 0) {
-		return true;
-	}
-
 	time_since_t0 = k_uptime_get() - internal_req->pending.t0;
 	exchange_lifetime =
 		(internal_req->pending.params.ack_timeout * COAP_EXCHANGE_LIFETIME_FACTOR);
@@ -368,7 +364,7 @@ int coap_client_req(struct coap_client *client, int sock, const struct sockaddr 
 	/* Don't allow changing to a different socket if there is already request ongoing. */
 	if (client->fd != sock && has_ongoing_request(client)) {
 		ret = -EALREADY;
-		goto release;
+		goto out;
 	}
 
 	/* Don't allow changing to a different address if there is already request ongoing. */
@@ -377,7 +373,7 @@ int coap_client_req(struct coap_client *client, int sock, const struct sockaddr 
 			if (has_ongoing_request(client)) {
 				LOG_WRN("Can't change to a different socket, request ongoing.");
 				ret = -EALREADY;
-				goto release;
+				goto out;
 			}
 
 			memcpy(&client->address, addr, sizeof(*addr));
@@ -388,7 +384,7 @@ int coap_client_req(struct coap_client *client, int sock, const struct sockaddr 
 			if (has_ongoing_request(client)) {
 				LOG_WRN("Can't change to a different socket, request ongoing.");
 				ret = -EALREADY;
-				goto release;
+				goto out;
 			}
 
 			memset(&client->address, 0, sizeof(client->address));
@@ -401,7 +397,7 @@ int coap_client_req(struct coap_client *client, int sock, const struct sockaddr 
 	ret = coap_client_init_request(client, req, internal_req, false);
 	if (ret < 0) {
 		LOG_ERR("Failed to initialize coap request");
-		goto release;
+		goto out;
 	}
 
 	if (client->send_echo) {
@@ -409,7 +405,7 @@ int coap_client_req(struct coap_client *client, int sock, const struct sockaddr 
 						client->echo_option.value, client->echo_option.len);
 		if (ret < 0) {
 			LOG_ERR("Failed to append echo option");
-			goto release;
+			goto out;
 		}
 		client->send_echo = false;
 	}
@@ -417,36 +413,28 @@ int coap_client_req(struct coap_client *client, int sock, const struct sockaddr 
 	ret = coap_client_schedule_poll(client, sock, req, internal_req);
 	if (ret < 0) {
 		LOG_ERR("Failed to schedule polling");
-		goto release;
+		goto out;
 	}
 
-	ret = coap_pending_init(&internal_req->pending, &internal_req->request,
-				&client->address, params);
+	/* only TYPE_CON messages need pending tracking */
+	if (coap_header_get_type(&internal_req->request) == COAP_TYPE_CON) {
+		ret = coap_pending_init(&internal_req->pending, &internal_req->request,
+					&client->address, params);
 
-	if (ret < 0) {
-		LOG_ERR("Failed to initialize pending struct");
-		goto release;
-	}
+		if (ret < 0) {
+			LOG_ERR("Failed to initialize pending struct");
+			goto out;
+		}
 
-	/* Non-Confirmable messages are not retried, but we still track the lifetime as
-	 * replies are acceptable.
-	 */
-	if (coap_header_get_type(&internal_req->request) == COAP_TYPE_NON_CON) {
-		internal_req->pending.retries = 0;
+		coap_pending_cycle(&internal_req->pending);
+		internal_req->is_observe = coap_request_is_observe(&internal_req->request);
+		LOG_DBG("Request is_observe %d", internal_req->is_observe);
 	}
-	coap_pending_cycle(&internal_req->pending);
-	internal_req->is_observe = coap_request_is_observe(&internal_req->request);
-	LOG_DBG("Request is_observe %d", internal_req->is_observe);
 
 	ret = send_request(sock, internal_req->request.data, internal_req->request.offset, 0,
 			  &client->address, client->socklen);
 	if (ret < 0) {
-		ret = -errno;
-	}
-
-release:
-	if (ret < 0) {
-		LOG_ERR("Failed to send request: %d", ret);
+		LOG_ERR("Transmission failed: %d", errno);
 		reset_internal_request(internal_req);
 	} else {
 		/* Do not return the number of bytes sent */
@@ -533,11 +521,6 @@ static void coap_client_resend_handler(struct coap_client *client)
 
 	for (int i = 0; i < CONFIG_COAP_CLIENT_MAX_REQUESTS; i++) {
 		if (timeout_expired(&client->requests[i])) {
-			if (!client->requests[i].coap_request.confirmable) {
-				release_internal_request(&client->requests[i]);
-				continue;
-			}
-
 			ret = resend_request(client, &client->requests[i]);
 			if (ret < 0) {
 				report_callback_error(&client->requests[i], ret);
