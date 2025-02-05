@@ -54,8 +54,8 @@ extern "C" {
 /* Thread is waiting on an object */
 #define _THREAD_PENDING (BIT(1))
 
-/* Thread has not yet started */
-#define _THREAD_PRESTART (BIT(2))
+/* Thread is sleeping */
+#define _THREAD_SLEEPING (BIT(2))
 
 /* Thread has terminated */
 #define _THREAD_DEAD (BIT(3))
@@ -122,6 +122,9 @@ struct _priq_rb {
 struct _priq_mq {
 	sys_dlist_t queues[K_NUM_THREAD_PRIO];
 	unsigned long bitmask[PRIQ_BITMAP_SIZE];
+#ifndef CONFIG_SMP
+	unsigned int cached_queue_index;
+#endif
 };
 
 struct _ready_q {
@@ -257,14 +260,26 @@ extern atomic_t _cpus_active;
  * another SMP CPU.
  */
 bool z_smp_cpu_mobile(void);
-
 #define _current_cpu ({ __ASSERT_NO_MSG(!z_smp_cpu_mobile()); \
 			arch_curr_cpu(); })
-#define _current k_sched_current_thread_query()
+
+__attribute_const__ struct k_thread *z_smp_current_get(void);
+#define _current z_smp_current_get()
 
 #else
 #define _current_cpu (&_kernel.cpus[0])
 #define _current _kernel.cpus[0].current
+#endif
+
+/* This is always invoked from a context where preemption is disabled */
+#define z_current_thread_set(thread) ({ _current_cpu->current = (thread); })
+
+#ifdef CONFIG_ARCH_HAS_CUSTOM_CURRENT_IMPL
+#undef _current
+#define _current arch_current_thread()
+#undef z_current_thread_set
+#define z_current_thread_set(thread) \
+	arch_current_thread_set(({ _current_cpu->current = (thread); }))
 #endif
 
 /* kernel wait queue record */

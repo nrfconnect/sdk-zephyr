@@ -20,7 +20,6 @@ struct lvgl_common_input_config {
 };
 
 struct lvgl_common_input_data {
-	lv_indev_drv_t indev_drv;
 	lv_indev_t *indev;
 	lv_indev_data_t pending_event;
 	lv_indev_data_t previous_event;
@@ -36,8 +35,8 @@ int lvgl_init_input_devices(void);
 #define LVGL_KEY_VALID(key)     IN_RANGE(key, 0, UINT8_MAX)
 
 #define LVGL_INPUT_DEFINE(inst, type, msgq_size, process_evt_cb)                                   \
-	INPUT_CALLBACK_DEFINE(LVGL_INPUT_DEVICE(inst), process_evt_cb,                             \
-			      (void *)DEVICE_DT_INST_GET(inst));                                   \
+	INPUT_CALLBACK_DEFINE_NAMED(LVGL_INPUT_DEVICE(inst), process_evt_cb,                       \
+				    (void *)DEVICE_DT_INST_GET(inst), process_evt_cb_##inst);      \
 	K_MSGQ_DEFINE(lvgl_input_msgq_##type##_##inst, sizeof(lv_indev_data_t), msgq_size, 4)
 
 #ifdef __cplusplus

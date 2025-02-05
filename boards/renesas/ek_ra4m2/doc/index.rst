@@ -61,7 +61,7 @@ available internal to the RA MCU
 **Special Feature Access**
 - 32 MB (256 Mb) External Quad-SPI Flash
 
-.. figure:: ek-ra4m2-board.webp
+.. figure:: ek_ra4m2.webp
 	:align: center
 	:alt: RA4M2 Evaluation Kit
 
@@ -71,7 +71,7 @@ Hardware
 ********
 Detail Hardware feature for the RA4M2 MCU group can be found at `RA4M2 Group User's Manual Hardware`_
 
-.. figure:: ra4m2-block-diagram.webp
+.. figure:: ra4m2_block_diagram.webp
 	:width: 442px
 	:align: center
 	:alt: RA4M2 MCU group feature
@@ -97,6 +97,18 @@ The below features are currently supported on Zephyr OS for EK-RA4M2 board:
 | UART      | on-chip    | serial               |
 +-----------+------------+----------------------+
 | CLOCK     | on-chip    | clock control        |
++-----------+------------+----------------------+
+| SPI       | on-chip    | spi                  |
++-----------+------------+----------------------+
+| COUNTER   | on-chip    | counter              |
++-----------+------------+----------------------+
+| ADC       | on-chip    | adc                  |
++-----------+------------+----------------------+
+| PWM       | on-chip    | pwm                  |
++-----------+------------+----------------------+
+| I2C       | on-chip    | i2c                  |
++-----------+------------+----------------------+
+| FLASH     | on-chip    | flash                |
 +-----------+------------+----------------------+
 
 Other hardware features are currently not supported by the port.

@@ -334,9 +334,9 @@ static ALWAYS_INLINE void clock_init(void)
 	rootCfg.div = 2;
 	CLOCK_SetRootClock(kCLOCK_Root_Bus, &rootCfg);
 #elif defined(CONFIG_SOC_MIMXRT1166_CM7)
-	/* Configure root bus clock at 200M */
-	rootCfg.mux = kCLOCK_BUS_ClockRoot_MuxSysPll1Div5;
-	rootCfg.div = 1;
+	/* Configure root bus clock at 198M */
+	rootCfg.mux = kCLOCK_BUS_ClockRoot_MuxSysPll2Pfd3;
+	rootCfg.div = 2;
 	CLOCK_SetRootClock(kCLOCK_Root_Bus, &rootCfg);
 #endif
 
@@ -474,17 +474,6 @@ static ALWAYS_INLINE void clock_init(void)
 	CLOCK_EnableClock(kCLOCK_Video_Mux);
 	VIDEO_MUX->VID_MUX_CTRL.SET = VIDEO_MUX_VID_MUX_CTRL_CSI_SEL_MASK;
 
-	/* Configure MIPI CSI-2 Rx clocks */
-	rootCfg.div = 8;
-	rootCfg.mux = kCLOCK_CSI2_ClockRoot_MuxSysPll3Out;
-	CLOCK_SetRootClock(kCLOCK_Root_Csi2, &rootCfg);
-
-	rootCfg.mux = kCLOCK_CSI2_ESC_ClockRoot_MuxSysPll3Out;
-	CLOCK_SetRootClock(kCLOCK_Root_Csi2_Esc, &rootCfg);
-
-	rootCfg.mux = kCLOCK_CSI2_UI_ClockRoot_MuxSysPll3Out;
-	CLOCK_SetRootClock(kCLOCK_Root_Csi2_Ui, &rootCfg);
-
 	/* Enable power domain for MIPI CSI-2 */
 	PGMC_BPC4->BPC_POWER_CTRL |= (PGMC_BPC_BPC_POWER_CTRL_PSW_ON_SOFT_MASK |
 				      PGMC_BPC_BPC_POWER_CTRL_ISO_OFF_SOFT_MASK);
@@ -547,7 +536,7 @@ static ALWAYS_INLINE void clock_init(void)
 		kCLOCK_Usb480M, DT_PROP_BY_PHANDLE(DT_NODELABEL(usb2), clocks, clock_frequency));
 	CLOCK_EnableUsbhs1Clock(kCLOCK_Usb480M,
 				DT_PROP_BY_PHANDLE(DT_NODELABEL(usb2), clocks, clock_frequency));
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(usb1)) && CONFIG_USB_DC_NXP_EHCI
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(usb2)) && CONFIG_USB_DC_NXP_EHCI
 	USB_EhciPhyInit(kUSB_ControllerEhci1, CPU_XTAL_CLK_HZ, &usbPhyConfig);
 #endif
 #endif
@@ -570,7 +559,7 @@ static ALWAYS_INLINE void clock_init(void)
 #endif
 #endif
 
-#if !(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_flash), nxp_imx_flexspi)) &&                             \
+#if !(DT_NODE_HAS_COMPAT(DT_PARENT(DT_CHOSEN(zephyr_flash)), nxp_imx_flexspi)) &&  \
 	defined(CONFIG_MEMC_MCUX_FLEXSPI) && DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(flexspi))
 	/* Configure FLEXSPI1 using OSC_RC_48M_DIV2 */
 	rootCfg.mux = kCLOCK_FLEXSPI1_ClockRoot_MuxOscRc48MDiv2;
@@ -682,6 +671,41 @@ void imxrt_post_init_display_interface(void)
 
 #endif
 
+#if CONFIG_VIDEO_MCUX_MIPI_CSI2RX
+int mipi_csi2rx_clock_set_freq(clock_root_t clock_root, uint32_t rate)
+{
+	clock_root_config_t rootCfg = {0};
+	uint32_t freq;
+	clock_name_t clk_source;
+
+	switch (clock_root) {
+	case kCLOCK_Root_Csi2:
+		rootCfg.mux = kCLOCK_CSI2_ClockRoot_MuxSysPll3Out;
+		break;
+	case kCLOCK_Root_Csi2_Esc:
+		rootCfg.mux = kCLOCK_CSI2_ESC_ClockRoot_MuxSysPll3Out;
+		break;
+	case kCLOCK_Root_Csi2_Ui:
+		rootCfg.mux = kCLOCK_CSI2_UI_ClockRoot_MuxSysPll3Out;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	clk_source = CLOCK_GetRootClockSource(clock_root, rootCfg.mux);
+	freq = CLOCK_GetFreq(clk_source);
+	if (rate > freq) {
+		LOG_ERR("Requested rate is higher than the maximum clock frequency");
+		return -EINVAL;
+	}
+
+	rootCfg.div = (uint32_t)freq / rate;
+	CLOCK_SetRootClock(clock_root, &rootCfg);
+
+	return 0;
+}
+#endif
+
 /**
  *
  * @brief Perform basic hardware initialization
@@ -729,8 +753,22 @@ static int imxrt_init(void)
 	return 0;
 }
 
+/*
+ * Stack pointer is not set at this point in the early init, but we call C
+ * functions from the SOC reset.
+ * Set a stack pointer so that C functions will work correctly
+ */
+
 #ifdef CONFIG_SOC_RESET_HOOK
-void soc_reset_hook(void)
+__asm__ (
+	".global soc_reset_hook\n"
+	"soc_reset_hook:\n"
+	"ldr r0, =z_main_stack+"STRINGIFY(CONFIG_MAIN_STACK_SIZE)";\n"
+	"msr msp, r0;\n"
+	"b _soc_reset_hook;\n"
+);
+
+void __used _soc_reset_hook(void)
 {
 	SystemInit();
 
