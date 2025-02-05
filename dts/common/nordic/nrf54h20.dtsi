@@ -180,14 +180,10 @@
 		};
 
 		hsfll120: hsfll120 {
-			compatible = "nordic,nrf-hsfll-global";
+			compatible = "fixed-clock";
 			clocks = <&fll16m>;
 			#clock-cells = <0>;
-			clock-frequency = <320000000>;
-			supported-clock-frequencies = <64000000
-						       128000000
-						       256000000
-						       320000000>;
+			clock-frequency = <DT_FREQ_M(320)>;
 		};
 
 		lfclk: lfclk {
