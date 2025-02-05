@@ -125,16 +125,16 @@ static bool parse_number(const struct shell *sh, long *param, char *str,
 	}
 
 	if (*endptr != '\0') {
-		PR_ERROR("Invalid number: %s\n", str_tmp);
+		PR_ERROR("Invalid number: %s", str_tmp);
 		return false;
 	}
 
 	if ((num) < (min) || (num) > (max)) {
 		if (pname) {
-			PR_WARNING("%s value out of range: %s, (%ld-%ld)\n",
+			PR_WARNING("%s value out of range: %s, (%ld-%ld)",
 				   pname, str_tmp, min, max);
 		} else {
-			PR_WARNING("Value out of range: %s, (%ld-%ld)\n",
+			PR_WARNING("Value out of range: %s, (%ld-%ld)",
 				   str_tmp, min, max);
 		}
 		return false;
