@@ -30,8 +30,7 @@ class RenodeRunner(ZephyrBinaryRunner):
         parser.add_argument('--renode-arg',
                             metavar='ARG',
                             action='append',
-                            help='''additional argument passed to Renode;
-                            `--help` will print all possible arguments''')
+                            help='additional argument passed to Renode; `--help` will print all possible arguments')
         parser.add_argument('--renode-command',
                             metavar='COMMAND',
                             action='append',
