@@ -1847,6 +1847,7 @@ out:
 
 	return ret;
 }
+#endif
 
 int supplicant_ap_status(const struct device *dev, struct wifi_iface_status *status)
 {
@@ -1921,7 +1922,6 @@ out:
 	k_mutex_unlock(&wpa_supplicant_mutex);
 	return ret;
 }
-#endif /* CONFIG_WIFI_NM_HOSTAPD_AP */
 
 int supplicant_ap_enable(const struct device *dev,
 			 struct wifi_connect_req_params *params)
