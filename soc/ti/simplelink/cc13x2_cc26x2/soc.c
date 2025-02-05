@@ -8,9 +8,13 @@
 
 #include <driverlib/setup.h>
 
-void soc_early_init_hook(void)
+static int ti_cc13x2_cc26x2_init(void)
 {
 
 	/* Performs necessary trim of the device. */
 	SetupTrimDevice();
+
+	return 0;
 }
+
+SYS_INIT(ti_cc13x2_cc26x2_init, PRE_KERNEL_1, 0);
