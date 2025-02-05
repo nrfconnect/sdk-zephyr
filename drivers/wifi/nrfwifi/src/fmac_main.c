@@ -644,8 +644,7 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_add_zep(struct nrf_wifi_drv_priv_zep *drv
 					IS_ENABLED(CONFIG_NRF_WIFI_BEAMFORMING),
 					&tx_pwr_ctrl_params,
 					&tx_pwr_ceil_params,
-					&board_params,
-					STRINGIFY(CONFIG_NRF70_REG_DOMAIN));
+					&board_params);
 #else
 	status = nrf_wifi_fmac_dev_init(rpu_ctx_zep->rpu_ctx,
 #ifdef CONFIG_NRF_WIFI_LOW_POWER
@@ -656,8 +655,7 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_add_zep(struct nrf_wifi_drv_priv_zep *drv
 					IS_ENABLED(CONFIG_NRF_WIFI_BEAMFORMING),
 					&tx_pwr_ctrl_params,
 					&tx_pwr_ceil_params,
-					&board_params,
-					STRINGIFY(CONFIG_NRF70_REG_DOMAIN));
+					&board_params);
 #endif /* CONFIG_NRF70_RADIO_TEST */
 
 
