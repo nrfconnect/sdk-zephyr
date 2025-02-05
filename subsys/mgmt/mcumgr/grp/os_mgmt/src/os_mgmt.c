@@ -423,7 +423,6 @@ os_mgmt_mcumgr_params(struct smp_streamer *ctxt)
 
 #if defined(CONFIG_MCUMGR_GRP_OS_BOOTLOADER_INFO)
 
-#if defined(CONFIG_BOOTLOADER_MCUBOOT)
 #if defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SINGLE_APP)
 #define BOOTLOADER_MODE MCUBOOT_MODE_SINGLE_SLOT
 #elif defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_SCRATCH)
@@ -440,7 +439,6 @@ os_mgmt_mcumgr_params(struct smp_streamer *ctxt)
 #define BOOTLOADER_MODE MCUBOOT_MODE_FIRMWARE_LOADER
 #else
 #define BOOTLOADER_MODE -1
-#endif
 #endif
 
 static int
@@ -487,7 +485,6 @@ os_mgmt_bootloader_info(struct smp_streamer *ctxt)
 #endif
 
 	/* If no parameter is recognized then just introduce the bootloader. */
-#if defined(CONFIG_BOOTLOADER_MCUBOOT)
 	if (decoded == 0) {
 		ok = zcbor_tstr_put_lit(zse, "bootloader") &&
 		     zcbor_tstr_put_lit(zse, "MCUboot");
@@ -502,9 +499,7 @@ os_mgmt_bootloader_info(struct smp_streamer *ctxt)
 		ok = ok && zcbor_tstr_put_lit(zse, "no-downgrade") &&
 		     zcbor_bool_encode(zse, &(bool){true});
 #endif
-	} else
-#endif
-	{
+	} else {
 		return OS_MGMT_ERR_QUERY_YIELDS_NO_ANSWER;
 	}
 
