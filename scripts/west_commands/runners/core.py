@@ -482,7 +482,7 @@ class ZephyrBinaryRunner(abc.ABC):
         self.cfg = cfg
         '''RunnerConfig for this instance.'''
 
-        self.logger = logging.getLogger(f'runners.{self.name()}')
+        self.logger = logging.getLogger('runners.{}'.format(self.name()))
         '''logging.Logger for this instance.'''
 
     @staticmethod
@@ -701,7 +701,8 @@ class ZephyrBinaryRunner(abc.ABC):
         This is the main entry point to this runner.'''
         caps = self.capabilities()
         if command not in caps.commands:
-            raise ValueError(f'runner {self.name()} does not implement command {command}')
+            raise ValueError('runner {} does not implement command {}'.format(
+                self.name(), command))
         self.do_run(command, **kwargs)
 
     @abc.abstractmethod
