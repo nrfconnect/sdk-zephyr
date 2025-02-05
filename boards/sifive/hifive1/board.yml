@@ -1,6 +1,5 @@
 board:
   name: hifive1
-  full_name: HiFive1
   vendor: sifive
   socs:
     - name: fe310

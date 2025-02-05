@@ -1,6 +1,5 @@
 board:
   name: legend
-  full_name: Legend
   vendor: seagate
   revision:
     format: custom

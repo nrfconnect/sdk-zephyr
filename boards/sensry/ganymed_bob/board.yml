@@ -3,7 +3,6 @@
 
 board:
   name: ganymed_bob
-  full_name: Ganymed Break-Out-Board (BOB)
   vendor: sensry
   socs:
     - name: sy120_gbm
