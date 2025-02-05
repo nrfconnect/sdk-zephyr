@@ -666,17 +666,9 @@ void bt_hci_io_capa_req(struct net_buf *buf)
 	 */
 	if (atomic_test_bit(conn->flags, BT_CONN_BR_PAIRING_INITIATOR)) {
 		if (get_io_capa() != BT_IO_NO_INPUT_OUTPUT) {
-			if (atomic_test_bit(conn->flags, BT_CONN_BR_GENERAL_BONDING)) {
-				auth = BT_HCI_GENERAL_BONDING_MITM;
-			} else {
-				auth = BT_HCI_DEDICATED_BONDING_MITM;
-			}
+			auth = BT_HCI_DEDICATED_BONDING_MITM;
 		} else {
-			if (atomic_test_bit(conn->flags, BT_CONN_BR_GENERAL_BONDING)) {
-				auth = BT_HCI_GENERAL_BONDING;
-			} else {
-				auth = BT_HCI_DEDICATED_BONDING;
-			}
+			auth = BT_HCI_DEDICATED_BONDING;
 		}
 	} else {
 		auth = ssp_get_auth(conn);
