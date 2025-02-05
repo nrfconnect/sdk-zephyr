@@ -40,6 +40,8 @@ LOG_MODULE_REGISTER(net_core, CONFIG_NET_CORE_LOG_LEVEL);
 #include "net_private.h"
 #include "shell/net_shell.h"
 
+#include "pmtu.h"
+
 #include "icmpv6.h"
 #include "ipv6.h"
 
@@ -60,6 +62,7 @@ LOG_MODULE_REGISTER(net_core, CONFIG_NET_CORE_LOG_LEVEL);
 
 #include "net_stats.h"
 
+#if defined(CONFIG_NET_NATIVE)
 static inline enum net_verdict process_data(struct net_pkt *pkt,
 					    bool is_loopback)
 {
@@ -186,22 +189,6 @@ static void net_post_init(void)
 #if defined(CONFIG_NET_GPTP)
 	net_gptp_init();
 #endif
-}
-
-static void init_rx_queues(void)
-{
-	/* Starting TX side. The ordering is important here and the TX
-	 * can only be started when RX side is ready to receive packets.
-	 */
-	net_if_init();
-
-	net_tc_rx_init();
-
-	/* This will take the interface up and start everything. */
-	net_if_post_init();
-
-	/* Things to init after network interface is working */
-	net_post_init();
 }
 
 static inline void copy_ll_addr(struct net_pkt *pkt)
@@ -551,6 +538,7 @@ err:
 
 static inline void l3_init(void)
 {
+	net_pmtu_init();
 	net_icmpv4_init();
 	net_icmpv6_init();
 	net_ipv4_init();
@@ -570,6 +558,39 @@ static inline void l3_init(void)
 	net_route_init();
 
 	NET_DBG("Network L3 init done");
+}
+#else /* CONFIG_NET_NATIVE */
+#define l3_init(...)
+#define net_post_init(...)
+int net_send_data(struct net_pkt *pkt)
+{
+	ARG_UNUSED(pkt);
+
+	return -ENOTSUP;
+}
+int net_recv_data(struct net_if *iface, struct net_pkt *pkt)
+{
+	ARG_UNUSED(iface);
+	ARG_UNUSED(pkt);
+
+	return -ENOTSUP;
+}
+#endif /* CONFIG_NET_NATIVE */
+
+static void init_rx_queues(void)
+{
+	/* Starting TX side. The ordering is important here and the TX
+	 * can only be started when RX side is ready to receive packets.
+	 */
+	net_if_init();
+
+	net_tc_rx_init();
+
+	/* This will take the interface up and start everything. */
+	net_if_post_init();
+
+	/* Things to init after network interface is working */
+	net_post_init();
 }
 
 static inline int services_init(void)

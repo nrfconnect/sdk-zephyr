@@ -1118,7 +1118,7 @@ static int spi_smartbond_release(const struct device *dev, const struct spi_conf
 	return 0;
 }
 
-static const struct spi_driver_api spi_smartbond_driver_api = {
+static DEVICE_API(spi, spi_smartbond_driver_api) = {
 	.transceive = spi_smartbond_transceive,
 #ifdef CONFIG_SPI_ASYNC
 	.transceive_async = spi_smartbond_transceive_async,
@@ -1227,11 +1227,11 @@ static int spi_smartbond_isr_connect(const struct device *dev)
 
 	switch ((uint32_t)cfg->regs) {
 	case (uint32_t)SPI:
-		COND_CODE_1(DT_NODE_HAS_STATUS(DT_NODELABEL(spi), okay),
+		COND_CODE_1(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(spi)),
 			(SPI_SMARTBOND_ISR_CONNECT), (NULL));
 		break;
 	case (uint32_t)SPI2:
-		COND_CODE_1(DT_NODE_HAS_STATUS(DT_NODELABEL(spi2), okay),
+		COND_CODE_1(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(spi2)),
 			(SPI2_SMARTBOND_ISR_CONNECT), (NULL));
 		break;
 	default:
@@ -1328,7 +1328,7 @@ static int spi_smartbond_init(const struct device *dev)
 		SPI_CONTEXT_INIT_SYNC(spi_smartbond_##id##_data, ctx),                             \
 		SPI_CONTEXT_CS_GPIOS_INITIALIZE(DT_DRV_INST(id), ctx)};                            \
 	PM_DEVICE_DT_INST_DEFINE(id, spi_smartbond_pm_action);                                     \
-	DEVICE_DT_INST_DEFINE(id,                                                                  \
+	SPI_DEVICE_DT_INST_DEFINE(id,                                                              \
 			      spi_smartbond_init,                                                  \
 			      PM_DEVICE_DT_INST_GET(id),                                           \
 			      &spi_smartbond_##id##_data,                                          \

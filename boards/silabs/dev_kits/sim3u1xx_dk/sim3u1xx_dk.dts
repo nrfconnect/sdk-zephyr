@@ -24,6 +24,7 @@
 		zephyr,console = &usart0;
 		zephyr,flash = &flash0;
 		zephyr,shell-uart = &usart0;
+		zephyr,uart-pipe = &usart0;
 		zephyr,sram = &sram0;
 	};
 
@@ -108,4 +109,13 @@
 			reg = <0x00030000 DT_SIZE_K(64)>;
 		};
 	};
+};
+
+&dma {
+	status = "okay";
+	dma-channels = <8>; /* Crypto DMA channels have ID 5, 6, and 7 */
+};
+
+&crypto {
+	status = "okay";
 };

@@ -398,7 +398,22 @@ function(ExternalZephyrProject_Add)
     # unless <image>_BOARD is defined.
     if(DEFINED ZBUILD_BOARD_REVISION)
       # Use provided board revision
-      set_target_properties(${ZBUILD_APPLICATION} PROPERTIES BOARD ${ZBUILD_BOARD}@${ZBUILD_BOARD_REVISION})
+      if(ZBUILD_BOARD MATCHES "/")
+        # HWMv2 requires adding version to the board, split elements up, attach version, then
+        # reassemble into a complete string
+        string(REPLACE "/" ";" split_board_qualifiers "${ZBUILD_BOARD}")
+        list(GET split_board_qualifiers 0 target_board)
+        set(target_board ${target_board}@${ZBUILD_BOARD_REVISION})
+        list(REMOVE_AT split_board_qualifiers 0)
+        list(PREPEND split_board_qualifiers ${target_board})
+        string(REPLACE ";" "/" board_qualifiers "${split_board_qualifiers}")
+        set_target_properties(${ZBUILD_APPLICATION} PROPERTIES BOARD ${board_qualifiers})
+        set(split_board_qualifiers)
+        set(board_qualifiers)
+      else()
+        # Legacy HWMv1 support, version goes at end
+        set_target_properties(${ZBUILD_APPLICATION} PROPERTIES BOARD ${ZBUILD_BOARD}@${ZBUILD_BOARD_REVISION})
+      endif()
     else()
       set_target_properties(${ZBUILD_APPLICATION} PROPERTIES BOARD ${ZBUILD_BOARD})
     endif()
@@ -644,6 +659,10 @@ endfunction()
 
 function(set_config_string image setting value)
   set_property(TARGET ${image} APPEND_STRING PROPERTY CONFIG "${setting}=\"${value}\"\n")
+endfunction()
+
+function(set_config_int image setting value)
+  set_property(TARGET ${image} APPEND_STRING PROPERTY CONFIG "${setting}=${value}\n")
 endfunction()
 
 # Usage:

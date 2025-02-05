@@ -23,7 +23,7 @@ set_compiler_property(PROPERTY optimization_size  -Os)
 set_compiler_property(PROPERTY optimization_size_aggressive -Oz)
 
 if(CMAKE_C_COMPILER_VERSION GREATER_EQUAL "4.5.0")
-  set_compiler_property(PROPERTY optimization_lto -flto)
+  set_compiler_property(PROPERTY optimization_lto -flto=auto)
   set_compiler_property(PROPERTY prohibit_lto -fno-lto)
 endif()
 
@@ -59,7 +59,7 @@ set_compiler_property(PROPERTY warning_dw_1
 )
 check_set_compiler_property(APPEND PROPERTY warning_dw_1
                             -Wlogical-op
-                            -Wmissing-field-initializers
+                            -Wno-missing-field-initializers
 )
 
 set_compiler_property(PROPERTY warning_dw_2
@@ -71,6 +71,7 @@ set_compiler_property(PROPERTY warning_dw_2
                       -Wpointer-arith
                       -Wredundant-decls
                       -Wswitch-default
+                      -Wmissing-field-initializers
 )
 check_set_compiler_property(APPEND PROPERTY warning_dw_2
                             -Wpacked-bitfield-compat
@@ -166,13 +167,22 @@ set_property(TARGET compiler-cpp PROPERTY no_rtti "-fno-rtti")
 set_compiler_property(PROPERTY coverage -fprofile-arcs -ftest-coverage -fno-inline)
 
 # Security canaries.
-set_compiler_property(PROPERTY security_canaries -fstack-protector-all)
+set_compiler_property(PROPERTY security_canaries -fstack-protector)
+set_compiler_property(PROPERTY security_canaries_strong -fstack-protector-strong)
+set_compiler_property(PROPERTY security_canaries_all -fstack-protector-all)
+set_compiler_property(PROPERTY security_canaries_explicit -fstack-protector-explicit)
 
 # Only a valid option with GCC 7.x and above, so let's do check and set.
 if(CONFIG_STACK_CANARIES_TLS)
   check_set_compiler_property(APPEND PROPERTY security_canaries -mstack-protector-guard=tls)
+  check_set_compiler_property(APPEND PROPERTY security_canaries_strong -mstack-protector-guard=tls)
+  check_set_compiler_property(APPEND PROPERTY security_canaries_all -mstack-protector-guard=tls)
+  check_set_compiler_property(APPEND PROPERTY security_canaries_explicit -mstack-protector-guard=tls)
 else()
   check_set_compiler_property(APPEND PROPERTY security_canaries -mstack-protector-guard=global)
+  check_set_compiler_property(APPEND PROPERTY security_canaries_global -mstack-protector-guard=global)
+  check_set_compiler_property(APPEND PROPERTY security_canaries_all -mstack-protector-guard=global)
+  check_set_compiler_property(APPEND PROPERTY security_canaries_explicit -mstack-protector-guard=global)
 endif()
 
 
@@ -241,3 +251,7 @@ set_compiler_property(PROPERTY warning_shadow_variables -Wshadow)
 
 set_compiler_property(PROPERTY no_builtin -fno-builtin)
 set_compiler_property(PROPERTY no_builtin_malloc -fno-builtin-malloc)
+
+set_compiler_property(PROPERTY specs -specs=)
+
+set_compiler_property(PROPERTY include_file -include)

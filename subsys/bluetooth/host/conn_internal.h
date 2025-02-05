@@ -49,7 +49,7 @@ typedef enum __packed {
 enum {
 	/** The connection context is used for automatic connection establishment
 	 *
-	 * That is, with @ref bt_conn_le_create_auto() or bt_le_set_auto_conn().
+	 * That is, with @ref bt_conn_le_create_auto().
 	 * This flag is set even after the connection has been established so
 	 * that the connection can be reestablished once disconnected.
 	 * The connection establishment may be performed with or without the filter
@@ -57,9 +57,12 @@ enum {
 	 */
 	BT_CONN_AUTO_CONNECT,
 	BT_CONN_BR_LEGACY_SECURE,             /* 16 digits legacy PIN tracker */
+	BT_CONN_BR_BONDABLE,                  /* BR connection is bondable */
 	BT_CONN_USER,                         /* user I/O when pairing */
 	BT_CONN_BR_PAIRING,                   /* BR connection in pairing context */
+	BT_CONN_BR_PAIRED,                    /* BR connection pairing is done */
 	BT_CONN_BR_NOBOND,                    /* SSP no bond pairing tracker */
+	BT_CONN_BR_GENERAL_BONDING,           /* BR general bonding */
 	BT_CONN_BR_PAIRING_INITIATOR,         /* local host starts authentication */
 	BT_CONN_CLEANUP,                      /* Disconnected, pending cleanup */
 	BT_CONN_AUTO_INIT_PROCEDURES_DONE,    /* Auto-initiated procedures have run */
@@ -358,6 +361,8 @@ static inline void *closure_data(void *storage)
 	return ((struct closure *)storage)->data;
 }
 
+void bt_conn_tx_notify(struct bt_conn *conn, bool wait_for_completion);
+
 void bt_conn_reset_rx_state(struct bt_conn *conn);
 
 /* Process incoming data for a connection */
@@ -491,6 +496,23 @@ void notify_path_loss_threshold_report(struct bt_conn *conn,
 
 void notify_subrate_change(struct bt_conn *conn,
 			   struct bt_conn_le_subrate_changed params);
+
+void notify_remote_cs_capabilities(struct bt_conn *conn,
+			   struct bt_conn_le_cs_capabilities params);
+
+void notify_remote_cs_fae_table(struct bt_conn *conn,
+			   struct bt_conn_le_cs_fae_table params);
+
+void notify_cs_config_created(struct bt_conn *conn, struct bt_conn_le_cs_config *params);
+
+void notify_cs_config_removed(struct bt_conn *conn, uint8_t config_id);
+
+void notify_cs_subevent_result(struct bt_conn *conn, struct bt_conn_le_cs_subevent_result *result);
+
+void notify_cs_security_enable_available(struct bt_conn *conn);
+
+void notify_cs_procedure_enable_available(struct bt_conn *conn,
+					  struct bt_conn_le_cs_procedure_enable_complete *params);
 
 #if defined(CONFIG_BT_SMP)
 /* If role specific LTK is present */
