@@ -28,7 +28,6 @@
 #define NSI_CODE_UNREACHABLE __builtin_unreachable()
 
 #define NSI_FUNC_NORETURN __attribute__((__noreturn__))
-#define NSI_WEAK __attribute__((__weak__))
 
 #if defined(__clang__)
   /* The address sanitizer in llvm adds padding (redzones) after data
