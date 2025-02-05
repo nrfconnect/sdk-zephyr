@@ -33,7 +33,7 @@ Building and running
 This sample can be found under
 :zephyr_file:`samples/bluetooth/iso_broadcast_benchmark` in the Zephyr tree.
 
-See :zephyr:code-sample-category:`bluetooth` samples for details.
+See :ref:`bluetooth samples section <bluetooth-samples>` for details.
 
 
 Testing

@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: usbc
-   :name: USB-C device support
-   :show-listing:
+.. _usbc-samples:
 
-   Samples that demonstrate the :ref:`usbc_api`.
+USB-C device support samples
+############################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

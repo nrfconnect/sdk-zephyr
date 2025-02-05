@@ -1,7 +1,7 @@
-.. zephyr:code-sample:: npm6001_ek
-   :name: nPM6001 EK
+.. _npm6001_ek_sample:
 
-   Interact with the nPM6001 PMIC using the shell interface.
+nPM6001 EK sample
+#################
 
 Overview
 ********

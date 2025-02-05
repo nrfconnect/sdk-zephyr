@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: espressif
-   :name: Espressif ESP32 boards
-   :show-listing:
+.. _espressif_samples:
 
-   Samples that demonstrate the use of Espressif ESP32 boards in Zephyr.
+Espressif
+=========
+
+.. toctree::
+   :titlesonly:
+   :glob:
+
+   **/*

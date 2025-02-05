@@ -1,5 +1,13 @@
-.. zephyr:code-sample-category:: lvgl
-   :name: LVGL
-   :show-listing:
+.. _lvgl_samples:
 
-   These samples demonstrate how to build graphical user interfaces using LVGL in Zephyr.
+LVGL
+####
+
+These samples demonstrate how to build graphical user interfaces using LVGL in Zephyr.
+
+.. toctree::
+   :titlesonly:
+   :glob:
+   :maxdepth: 1
+
+   **/*
