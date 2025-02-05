@@ -5,4 +5,8 @@ description: Nordic External Memory Interface (EXMIF)
 
 compatible: "nordic,nrf-exmif"
 
-include: snps,designware-ssi.yaml
+include: snps,designware-spi.yaml
+
+properties:
+  reg:
+    required: true
