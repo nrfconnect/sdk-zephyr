@@ -144,11 +144,13 @@ static ALWAYS_INLINE void clk_init(void)
 #endif
 }
 
-void soc_early_init_hook(void)
+static int ke1xz_init(void)
 
 {
 	/* Initialize system clocks and PLL */
 	clk_init();
+
+	return 0;
 }
 
 #ifdef CONFIG_SOC_RESET_HOOK
@@ -160,3 +162,5 @@ void soc_reset_hook(void)
 }
 
 #endif /* CONFIG_SOC_RESET_HOOK */
+
+SYS_INIT(ke1xz_init, PRE_KERNEL_1, 0);

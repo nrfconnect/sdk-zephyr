@@ -11,7 +11,7 @@
 #include <fsl_power.h>
 #include <fsl_clock.h>
 
-void soc_early_init_hook(void)
+int soc_init(void)
 {
 	POWER_DisablePD(kPDRUNCFG_PD_FRO_EN);
 	CLOCK_SetupFROClocking(12000000U);
@@ -42,11 +42,17 @@ void soc_early_init_hook(void)
 	POWER_DisablePD(kPDRUNCFG_PD_VD7_ENA);
 	POWER_DisablePD(kPDRUNCFG_PD_VREFP_SW);
 	POWER_DisablePD(kPDRUNCFG_PD_TEMPS);
+
+	return 0;
 }
 
 #ifdef CONFIG_SOC_RESET_HOOK
+
 void soc_reset_hook(void)
 {
 	SystemInit();
 }
+
 #endif /* CONFIG_SOC_RESET_HOOK */
+
+SYS_INIT(soc_init, PRE_KERNEL_1, 0);

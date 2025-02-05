@@ -287,7 +287,7 @@ static void SOC_ClockInit(void)
  *
  * @return 0
  */
-void soc_early_init_hook(void)
+static int mcimx6x_m4_init(void)
 {
 	/* Configure RDC */
 	SOC_RdcInit();
@@ -300,4 +300,8 @@ void soc_early_init_hook(void)
 
 	/* Initialize clock */
 	SOC_ClockInit();
+
+	return 0;
 }
+
+SYS_INIT(mcimx6x_m4_init, PRE_KERNEL_1, 0);
