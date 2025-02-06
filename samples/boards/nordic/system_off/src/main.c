@@ -17,6 +17,9 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/sys/poweroff.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/pm/device_runtime.h>
+#include <hal/nrf_gpio.h>
+#include <hal/nrf_memconf.h>
 
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
 #include <zephyr/drivers/timer/nrf_grtc_timer.h>
@@ -26,9 +29,11 @@
 static const struct gpio_dt_spec sw0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
 #endif
 #if defined(CONFIG_LPCOMP_WAKEUP_ENABLE)
-static const uint32_t port_sw1 = DT_PROP(DT_GPIO_CTLR_BY_IDX(DT_ALIAS(sw1), gpios, 0), port);
 static const struct device *comp_dev = DEVICE_DT_GET(DT_NODELABEL(comp));
 #endif
+
+static const struct gpio_dt_spec sw1 = GPIO_DT_SPEC_GET(DT_ALIAS(sw1), gpios);
+static const uint32_t port_sw1 = DT_PROP(DT_GPIO_CTLR_BY_IDX(DT_ALIAS(sw1), gpios, 0), port);
 
 void print_reset_cause(void)
 {
@@ -83,9 +88,9 @@ int main(void)
 	int err = z_nrf_grtc_wakeup_prepare(DEEP_SLEEP_TIME_S * USEC_PER_SEC);
 
 	if (err < 0) {
-		printk("Unable to prepare GRTC as a wake up source (err = %d).\n", err);
+		printf("Unable to prepare GRTC as a wake up source (err = %d).\n", err);
 	} else {
-		printk("Entering system off; wait %u seconds to restart\n", DEEP_SLEEP_TIME_S);
+		printf("Entering system off; wait %u seconds to restart\n", DEEP_SLEEP_TIME_S);
 	}
 #endif
 #if defined(CONFIG_GPIO_WAKEUP_ENABLE)
@@ -96,24 +101,22 @@ int main(void)
 		return 0;
 	}
 
-	rc = gpio_pin_configure_dt(&sw1, GPIO_INPUT);
-	if (rc < 0) {
-		printf("Could not configure sw1 GPIO (%d)\n", rc);
-		return 0;
-	}
-
 	rc = gpio_pin_interrupt_configure_dt(&sw0, GPIO_INT_LEVEL_ACTIVE);
 	if (rc < 0) {
 		printf("Could not configure sw0 GPIO interrupt (%d)\n", rc);
 		return 0;
 	}
-	//code reorder needed
 #endif
 #if defined(CONFIG_LPCOMP_WAKEUP_ENABLE)
 	comparator_set_trigger(comp_dev, COMPARATOR_TRIGGER_BOTH_EDGES);
 	comparator_trigger_is_pending(comp_dev);
 	printf("Entering system off; change signal level at comparator input to restart\n");
 #endif
+	rc = gpio_pin_configure_dt(&sw1, GPIO_INPUT);
+	if (rc < 0) {
+		printf("Could not configure sw1 GPIO (%d)\n", rc);
+		return 0;
+	}
 
 	rc = gpio_pin_interrupt_configure_dt(&sw1, GPIO_INT_LEVEL_ACTIVE);
 	if (rc < 0) {
@@ -139,6 +142,7 @@ int main(void)
 		retained_update();
 	}
 
+	k_sleep(K_MSEC(4000));
 	if (do_poweroff) {
 #if CONFIG_SOC_NRF54H20_CPUAPP
 		/* Local RAM0 (TCM) is currently not used so retention can be disabled. */
