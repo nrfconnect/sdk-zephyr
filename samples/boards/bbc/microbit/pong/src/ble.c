@@ -6,7 +6,6 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
-#include <zephyr/drivers/gpio.h>
 #include <zephyr/device.h>
 #include <string.h>
 
@@ -471,7 +470,7 @@ static void ble_timeout(struct k_work *work)
 		k_work_reschedule(&ble_work, K_NO_WAIT);
 		break;
 	case BLE_ADV_START:
-		err = bt_le_adv_start(BT_LE_ADV_CONN_ONE_TIME, ad, ARRAY_SIZE(ad), sd,
+		err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), sd,
 				      ARRAY_SIZE(sd));
 		if (err) {
 			printk("Advertising failed to start (err %d)\n", err);

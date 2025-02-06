@@ -191,10 +191,6 @@ ipc0: &cpuapp_cpurad_ipc {
 	status = "okay";
 };
 
-&dma_fast_region {
-	status = "okay";
-};
-
 &cpuapp_rx_partitions {
 	status = "okay";
 };
@@ -275,6 +271,8 @@ ipc0: &cpuapp_cpurad_ipc {
 		t-enter-dpd = <10000>;
 		t-exit-dpd = <30000>;
 		reset-gpios = <&gpio6 12 GPIO_ACTIVE_LOW>;
+		t-reset-pulse = <10000>;
+		t-reset-recovery = <35000>;
 
 		mspi-max-frequency = <DT_FREQ_M(50)>;
 		mspi-io-mode = "MSPI_IO_MODE_OCTAL";

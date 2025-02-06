@@ -5,11 +5,11 @@
 '''Runners for Synopsys Metaware Debugger(mdb).'''
 
 
-import shutil
 import os
+import shutil
 from os import path
 
-from runners.core import ZephyrBinaryRunner, RunnerCaps
+from runners.core import RunnerCaps, ZephyrBinaryRunner
 
 
 # normally we should create class with common functionality inherited from
@@ -27,12 +27,10 @@ def is_flash_cmd_need_exit_immediately(mdb_runner):
     if is_simulation_run(mdb_runner):
         # for nsim, we can't run and quit immediately
         return False
-    elif is_hostlink_used(mdb_runner):
-        # if hostlink is used we can't run and quit immediately, as we still need MDB process
-        # attached to process hostlink IO
-        return False
-    else:
-        return True
+
+    # if hostlink is used we can't run and quit immediately, as we still need MDB process
+    # attached to process hostlink IO
+    return not is_hostlink_used(mdb_runner)
 
 def smp_core_order(mdb_runner, id):
     if is_simulation_run(mdb_runner):
@@ -68,7 +66,8 @@ def mdb_do_run(mdb_runner, command):
     else:
         if mdb_runner.jtag == 'digilent':
             mdb_target = ['-digilent']
-            if mdb_runner.dig_device: mdb_target += [mdb_runner.dig_device]
+            if mdb_runner.dig_device:
+                mdb_target += [mdb_runner.dig_device]
         else:
             # \todo: add support of other debuggers
             raise ValueError(f'unsupported jtag adapter {mdb_runner.jtag}')
@@ -91,7 +90,8 @@ def mdb_do_run(mdb_runner, command):
             mdb_sub_cmd = [commander] + [f'-pset={i + 1}', f'-psetname=core{i}']
             # -prop=download=2 is used for SMP application debug, only the 1st core
             # will download the shared image.
-            if i > 0: mdb_sub_cmd += ['-prop=download=2']
+            if i > 0:
+                mdb_sub_cmd += ['-prop=download=2']
             mdb_sub_cmd += mdb_basic_options + mdb_target + [mdb_runner.elf_name]
             mdb_runner.check_call(mdb_sub_cmd, cwd=mdb_runner.build_dir)
             mdb_multifiles += f'{"" if i == 0 else ","}core{smp_core_order(mdb_runner, i)}'
