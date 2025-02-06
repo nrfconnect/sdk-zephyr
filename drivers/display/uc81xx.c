@@ -383,7 +383,7 @@ static int uc81xx_write(const struct device *dev, const uint16_t x, const uint16
 
 	buf_len = MIN(desc->buf_size,
 		      desc->height * desc->width / UC81XX_PIXELS_PER_BYTE);
-	__ASSERT(desc->width <= desc->pitch, "Pitch is smaller then width");
+	__ASSERT(desc->width <= desc->pitch, "Pitch is smaller than width");
 	__ASSERT(buf != NULL, "Buffer is not available");
 	__ASSERT(buf_len != 0U, "Buffer of length zero");
 	__ASSERT(!(desc->width % UC81XX_PIXELS_PER_BYTE),
@@ -710,7 +710,7 @@ static const struct uc81xx_quirks uc8179_quirks = {
 };
 #endif
 
-static const struct display_driver_api uc81xx_driver_api = {
+static DEVICE_API(display, uc81xx_driver_api) = {
 	.blanking_on = uc81xx_blanking_on,
 	.blanking_off = uc81xx_blanking_off,
 	.write = uc81xx_write,

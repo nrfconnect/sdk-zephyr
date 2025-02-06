@@ -15,6 +15,11 @@
 /** Dummy: Add a specifier when no selection is possible */
 #define NO_SEL			0xFF
 
+#define STM32_CLOCK_DIV_SHIFT	12
+
+/** Clock divider */
+#define STM32_CLOCK_DIV(div)	(((div) - 1) << STM32_CLOCK_DIV_SHIFT)
+
 /** STM32 MCO configuration values */
 #define STM32_MCO_CFGR_REG_MASK     0xFFFFU
 #define STM32_MCO_CFGR_REG_SHIFT    0U
@@ -44,5 +49,14 @@
 	 (((shift) & STM32_MCO_CFGR_SHIFT_MASK) << STM32_MCO_CFGR_SHIFT_SHIFT) |    \
 	 (((mask) & STM32_MCO_CFGR_MASK_MASK) << STM32_MCO_CFGR_MASK_SHIFT) |        \
 	 (((val) & STM32_MCO_CFGR_VAL_MASK) << STM32_MCO_CFGR_VAL_SHIFT))
+
+/**
+ * Pack RCC clock register offset and bit in two 32-bit values
+ * as expected for the Device Tree `clocks` property on STM32.
+ *
+ * @param bus STM32 bus name (expands to STM32_CLOCK_BUS_{bus})
+ * @param bit Clock bit
+ */
+#define STM32_CLOCK(bus, bit) (STM32_CLOCK_BUS_##bus) (1 << bit)
 
 #endif /* ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_STM32_COMMON_CLOCKS_H_ */

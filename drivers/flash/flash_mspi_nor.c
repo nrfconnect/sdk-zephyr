@@ -18,6 +18,10 @@
 
 LOG_MODULE_REGISTER(flash_mspi_nor, CONFIG_FLASH_LOG_LEVEL);
 
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
+#define WITH_RESET_GPIO 1
+#endif
+
 struct flash_mspi_nor_data {
 	struct k_sem acquired;
 	struct mspi_xfer_packet packet;
@@ -26,13 +30,17 @@ struct flash_mspi_nor_data {
 
 struct flash_mspi_nor_config {
 	const struct device *bus;
+	uint32_t flash_size;
 	struct mspi_dev_id mspi_id;
 	struct mspi_dev_cfg mspi_cfg;
 #if defined(CONFIG_MSPI_XIP)
 	struct mspi_xip_cfg xip_cfg;
 #endif
+#if defined(WITH_RESET_GPIO)
 	struct gpio_dt_spec reset;
-	uint32_t flash_size;
+	uint32_t reset_pulse_us;
+	uint32_t reset_recovery_us;
+#endif
 #if defined(CONFIG_FLASH_PAGE_LAYOUT)
 	struct flash_pages_layout layout;
 #endif
@@ -540,6 +548,7 @@ static int drv_init(const struct device *dev)
 		return -ENODEV;
 	}
 
+#if defined(WITH_RESET_GPIO)
 	if (dev_config->reset.port) {
 		if (!gpio_is_ready_dt(&dev_config->reset)) {
 			LOG_ERR("Device %s is not ready",
@@ -547,12 +556,28 @@ static int drv_init(const struct device *dev)
 			return -ENODEV;
 		}
 
-		if (gpio_pin_configure_dt(&dev_config->reset,
-					  GPIO_OUTPUT_ACTIVE) < 0 ||
-		    gpio_pin_set_dt(&dev_config->reset, 0) < 0) {
+		rc = gpio_pin_configure_dt(&dev_config->reset,
+					   GPIO_OUTPUT_ACTIVE);
+		if (rc < 0) {
+			LOG_ERR("Failed to activate RESET: %d", rc);
 			return -EIO;
 		}
+
+		if (dev_config->reset_pulse_us != 0) {
+			k_busy_wait(dev_config->reset_pulse_us);
+		}
+
+		rc = gpio_pin_set_dt(&dev_config->reset, 0);
+		if (rc < 0) {
+			LOG_ERR("Failed to deactivate RESET: %d", rc);
+			return -EIO;
+		}
+
+		if (dev_config->reset_recovery_us != 0) {
+			k_busy_wait(dev_config->reset_recovery_us);
+		}
 	}
+#endif
 
 	rc = pm_device_runtime_get(dev_config->bus);
 	if (rc < 0) {
@@ -581,7 +606,7 @@ static int drv_init(const struct device *dev)
 	return pm_device_driver_init(dev, dev_pm_action_cb);
 }
 
-static const struct flash_driver_api drv_api = {
+static DEVICE_API(flash, drv_api) = {
 	.read = api_read,
 	.write = api_write,
 	.erase = api_erase,
@@ -597,33 +622,37 @@ static const struct flash_driver_api drv_api = {
 
 #define FLASH_SIZE_INST(inst) (DT_INST_PROP(inst, size) / 8)
 
-#define FLASH_MSPI_NOR_INST(inst)					\
-	BUILD_ASSERT(DT_INST_ENUM_IDX(inst, mspi_io_mode) ==		\
-		     MSPI_IO_MODE_OCTAL,				\
-		"Only Octal I/O mode is supported for now");		\
-	PM_DEVICE_DT_INST_DEFINE(inst, dev_pm_action_cb);		\
-	static struct flash_mspi_nor_data dev##inst##_data;		\
-	static const struct flash_mspi_nor_config dev##inst##_config = {\
-		.bus = DEVICE_DT_GET(DT_INST_BUS(inst)),		\
-		.mspi_id = MSPI_DEVICE_ID_DT_INST(inst),		\
-		.mspi_cfg = MSPI_DEVICE_CONFIG_DT_INST(inst),		\
-	IF_ENABLED(CONFIG_MSPI_XIP,					\
-		(.xip_cfg = MSPI_XIP_CONFIG_DT_INST(inst),))		\
-		.reset = GPIO_DT_SPEC_INST_GET_OR(inst,			\
-						  reset_gpios, {0}),	\
-		.flash_size = FLASH_SIZE_INST(inst),			\
-	IF_ENABLED(CONFIG_FLASH_PAGE_LAYOUT,				\
-		(.layout = {						\
-			/* TODO: make this size configurable */		\
-			.pages_size = 65536,				\
-			.pages_count = FLASH_SIZE_INST(inst) / 65536,	\
-		},))							\
-		.jedec_id = DT_INST_PROP(inst, jedec_id),		\
-	};								\
-	DEVICE_DT_INST_DEFINE(inst,					\
-		drv_init, PM_DEVICE_DT_INST_GET(inst),			\
-		&dev##inst##_data, &dev##inst##_config,			\
-		POST_KERNEL, CONFIG_FLASH_MSPI_NOR_INIT_PRIORITY,	\
+#define FLASH_MSPI_NOR_INST(inst)						\
+	BUILD_ASSERT(DT_INST_ENUM_IDX(inst, mspi_io_mode) ==			\
+		     MSPI_IO_MODE_OCTAL,					\
+		"Only Octal I/O mode is supported for now");			\
+	PM_DEVICE_DT_INST_DEFINE(inst, dev_pm_action_cb);			\
+	static struct flash_mspi_nor_data dev##inst##_data;			\
+	static const struct flash_mspi_nor_config dev##inst##_config = {	\
+		.bus = DEVICE_DT_GET(DT_INST_BUS(inst)),			\
+		.flash_size = FLASH_SIZE_INST(inst),				\
+		.mspi_id = MSPI_DEVICE_ID_DT_INST(inst),			\
+		.mspi_cfg = MSPI_DEVICE_CONFIG_DT_INST(inst),			\
+	IF_ENABLED(CONFIG_MSPI_XIP,						\
+		(.xip_cfg = MSPI_XIP_CONFIG_DT_INST(inst),))			\
+	IF_ENABLED(WITH_RESET_GPIO,						\
+		(.reset = GPIO_DT_SPEC_INST_GET_OR(inst, reset_gpios, {0}),	\
+		.reset_pulse_us = DT_INST_PROP_OR(inst, t_reset_pulse, 0)	\
+				/ 1000,						\
+		.reset_recovery_us = DT_INST_PROP_OR(inst, t_reset_recovery, 0)	\
+				   / 1000,))					\
+	IF_ENABLED(CONFIG_FLASH_PAGE_LAYOUT,					\
+		(.layout = {							\
+			.pages_size = CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE,	\
+			.pages_count = FLASH_SIZE_INST(inst)			\
+				     / CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE,	\
+		},))								\
+		.jedec_id = DT_INST_PROP(inst, jedec_id),			\
+	};									\
+	DEVICE_DT_INST_DEFINE(inst,						\
+		drv_init, PM_DEVICE_DT_INST_GET(inst),				\
+		&dev##inst##_data, &dev##inst##_config,				\
+		POST_KERNEL, CONFIG_FLASH_MSPI_NOR_INIT_PRIORITY,		\
 		&drv_api);
 
 DT_INST_FOREACH_STATUS_OKAY(FLASH_MSPI_NOR_INST)

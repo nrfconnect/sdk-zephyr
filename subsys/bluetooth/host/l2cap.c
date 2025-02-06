@@ -23,7 +23,6 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/l2cap.h>
-#include <zephyr/drivers/bluetooth/hci_driver.h>
 
 #define LOG_DBG_ENABLED IS_ENABLED(CONFIG_BT_L2CAP_LOG_LEVEL_DBG)
 
@@ -41,8 +40,6 @@ LOG_MODULE_REGISTER(bt_l2cap, CONFIG_BT_L2CAP_LOG_LEVEL);
 #define CHAN_RX(_w) CONTAINER_OF(_w, struct bt_l2cap_le_chan, rx_work)
 
 #define L2CAP_LE_MIN_MTU		23
-#define L2CAP_ECRED_MIN_MTU		64
-#define L2CAP_ECRED_MIN_MPS             64
 
 #define L2CAP_LE_MAX_CREDITS		(BT_BUF_ACL_RX_COUNT - 1)
 
@@ -60,6 +57,10 @@ LOG_MODULE_REGISTER(bt_l2cap, CONFIG_BT_L2CAP_LOG_LEVEL);
 
 #define L2CAP_CONN_TIMEOUT	K_SECONDS(40)
 #define L2CAP_DISC_TIMEOUT	K_SECONDS(2)
+/** @brief Local L2CAP RTX (Response Timeout eXpired)
+ *
+ *  Specification-allowed range for the value of RTX is 1 to 60 seconds.
+ */
 #define L2CAP_RTX_TIMEOUT	K_SECONDS(2)
 
 #if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
@@ -615,15 +616,15 @@ static void l2cap_le_encrypt_change(struct bt_l2cap_chan *chan, uint8_t status)
 
 #if defined(CONFIG_BT_L2CAP_ECRED)
 	if (le->ident) {
-		struct bt_l2cap_chan *echan[L2CAP_ECRED_CHAN_MAX_PER_REQ];
+		struct bt_l2cap_chan *echan[BT_L2CAP_ECRED_CHAN_MAX_PER_REQ];
 		struct bt_l2cap_chan *ch;
 		int i = 0;
 
 		SYS_SLIST_FOR_EACH_CONTAINER(&chan->conn->channels, ch, node) {
 			if (le->ident == BT_L2CAP_LE_CHAN(ch)->ident) {
-				__ASSERT(i < L2CAP_ECRED_CHAN_MAX_PER_REQ,
-					 "There can only be L2CAP_ECRED_CHAN_MAX_PER_REQ channels "
-					 "from the same request.");
+				__ASSERT(i < BT_L2CAP_ECRED_CHAN_MAX_PER_REQ,
+					 "There can only be BT_L2CAP_ECRED_CHAN_MAX_PER_REQ "
+					 "channels from the same request.");
 				atomic_clear_bit(ch->status, BT_L2CAP_STATUS_ENCRYPT_PENDING);
 				echan[i++] = ch;
 			}
@@ -1524,14 +1525,14 @@ static void le_ecred_conn_req(struct bt_l2cap *l2cap, uint8_t ident,
 			      struct net_buf *buf)
 {
 	struct bt_conn *conn = l2cap->chan.chan.conn;
-	struct bt_l2cap_chan *chan[L2CAP_ECRED_CHAN_MAX_PER_REQ];
+	struct bt_l2cap_chan *chan[BT_L2CAP_ECRED_CHAN_MAX_PER_REQ];
 	struct bt_l2cap_le_chan *ch = NULL;
 	struct bt_l2cap_server *server;
 	struct bt_l2cap_ecred_conn_req *req;
 	struct bt_l2cap_ecred_conn_rsp *rsp;
 	uint16_t mtu, mps, credits, result = BT_L2CAP_LE_SUCCESS;
 	uint16_t psm = 0x0000;
-	uint16_t scid, dcid[L2CAP_ECRED_CHAN_MAX_PER_REQ];
+	uint16_t scid, dcid[BT_L2CAP_ECRED_CHAN_MAX_PER_REQ];
 	int i = 0;
 	uint8_t req_cid_count;
 	bool rsp_queued = false;
@@ -1550,7 +1551,7 @@ static void le_ecred_conn_req(struct bt_l2cap *l2cap, uint8_t ident,
 
 	if (buf->len > sizeof(dcid)) {
 		LOG_ERR("Too large LE conn req packet size");
-		req_cid_count = L2CAP_ECRED_CHAN_MAX_PER_REQ;
+		req_cid_count = BT_L2CAP_ECRED_CHAN_MAX_PER_REQ;
 		result = BT_L2CAP_LE_ERR_INVALID_PARAMS;
 		goto response;
 	}
@@ -1562,7 +1563,7 @@ static void le_ecred_conn_req(struct bt_l2cap *l2cap, uint8_t ident,
 
 	LOG_DBG("psm 0x%02x mtu %u mps %u credits %u", psm, mtu, mps, credits);
 
-	if (mtu < L2CAP_ECRED_MIN_MTU || mps < L2CAP_ECRED_MIN_MTU) {
+	if (mtu < BT_L2CAP_ECRED_MIN_MTU || mps < BT_L2CAP_ECRED_MIN_MTU) {
 		LOG_ERR("Invalid ecred conn req params. mtu %u mps %u", mtu, mps);
 		result = BT_L2CAP_LE_ERR_INVALID_PARAMS;
 		goto response;
@@ -1652,7 +1653,7 @@ static void le_ecred_reconf_req(struct bt_l2cap *l2cap, uint8_t ident,
 				struct net_buf *buf)
 {
 	struct bt_conn *conn = l2cap->chan.chan.conn;
-	struct bt_l2cap_chan *chans[L2CAP_ECRED_CHAN_MAX_PER_REQ];
+	struct bt_l2cap_chan *chans[BT_L2CAP_ECRED_CHAN_MAX_PER_REQ];
 	struct bt_l2cap_ecred_reconf_req *req;
 	struct bt_l2cap_ecred_reconf_rsp *rsp;
 	uint16_t mtu, mps;
@@ -1670,18 +1671,18 @@ static void le_ecred_reconf_req(struct bt_l2cap *l2cap, uint8_t ident,
 	mtu = sys_le16_to_cpu(req->mtu);
 	mps = sys_le16_to_cpu(req->mps);
 
-	if (mps < L2CAP_ECRED_MIN_MTU) {
+	if (mps < BT_L2CAP_ECRED_MIN_MTU) {
 		result = BT_L2CAP_RECONF_OTHER_UNACCEPT;
 		goto response;
 	}
 
-	if (mtu < L2CAP_ECRED_MIN_MTU) {
+	if (mtu < BT_L2CAP_ECRED_MIN_MTU) {
 		result = BT_L2CAP_RECONF_INVALID_MTU;
 		goto response;
 	}
 
 	/* The specification only allows up to 5 CIDs in this packet */
-	if (buf->len > (L2CAP_ECRED_CHAN_MAX_PER_REQ * sizeof(scid))) {
+	if (buf->len > (BT_L2CAP_ECRED_CHAN_MAX_PER_REQ * sizeof(scid))) {
 		result = BT_L2CAP_RECONF_OTHER_UNACCEPT;
 		goto response;
 	}
@@ -2914,7 +2915,7 @@ int bt_l2cap_ecred_chan_connect(struct bt_conn *conn,
 	}
 
 	/* Init non-null channels */
-	for (i = 0; i < L2CAP_ECRED_CHAN_MAX_PER_REQ; i++) {
+	for (i = 0; i < BT_L2CAP_ECRED_CHAN_MAX_PER_REQ; i++) {
 		if (!chan[i]) {
 			break;
 		}
@@ -2968,7 +2969,7 @@ int bt_l2cap_ecred_chan_reconfigure(struct bt_l2cap_chan **chans, uint16_t mtu)
 		return -EINVAL;
 	}
 
-	for (i = 0; i < L2CAP_ECRED_CHAN_MAX_PER_REQ; i++) {
+	for (i = 0; i < BT_L2CAP_ECRED_CHAN_MAX_PER_REQ; i++) {
 		if (!chans[i]) {
 			break;
 		}
@@ -3042,38 +3043,25 @@ int bt_l2cap_ecred_chan_reconfigure(struct bt_l2cap_chan **chans, uint16_t mtu)
 }
 
 #if defined(CONFIG_BT_L2CAP_RECONFIGURE_EXPLICIT)
-int bt_l2cap_ecred_chan_reconfigure_explicit(struct bt_l2cap_chan **chans, uint16_t mtu,
-					     uint16_t mps)
+int bt_l2cap_ecred_chan_reconfigure_explicit(struct bt_l2cap_chan **chans, size_t chan_count,
+					     uint16_t mtu, uint16_t mps)
 {
 	struct bt_l2cap_ecred_reconf_req *req;
 	struct bt_conn *conn = NULL;
-	struct bt_l2cap_le_chan *ch;
 	struct net_buf *buf;
-	bool multiple_chan;
 	uint8_t ident;
-	int i;
 
-	LOG_DBG("chans %p mtu 0x%04x mps 0x%04x", chans, mtu, mps);
+	LOG_DBG("chans %p chan_count %u mtu 0x%04x mps 0x%04x", chans, chan_count, mtu, mps);
 
-	if (!chans) {
+	if (!chans || !IN_RANGE(chan_count, 1, BT_L2CAP_ECRED_CHAN_MAX_PER_REQ)) {
 		return -EINVAL;
 	}
 
-	if (chans[0] == NULL) {
+	if (!IN_RANGE(mps, BT_L2CAP_ECRED_MIN_MPS, BT_L2CAP_RX_MTU)) {
 		return -EINVAL;
 	}
 
-	if (mps < L2CAP_ECRED_MIN_MPS || mps > BT_L2CAP_RX_MTU) {
-		return -EINVAL;
-	}
-
-	multiple_chan = chans[1] != NULL;
-
-	for (i = 0; i < L2CAP_ECRED_CHAN_MAX_PER_REQ; i++) {
-		if (!chans[i]) {
-			break;
-		}
-
+	for (size_t i = 0; i < chan_count; i++) {
 		/* validate that all channels are from same connection */
 		if (conn) {
 			if (conn != chans[i]->conn) {
@@ -3091,7 +3079,7 @@ int bt_l2cap_ecred_chan_reconfigure_explicit(struct bt_l2cap_chan **chans, uint1
 		/* MPS is not allowed to decrease when reconfiguring multiple channels.
 		 * Core Specification 3.A.4.27 v6.0
 		 */
-		if (multiple_chan && mps < BT_L2CAP_LE_CHAN(chans[i])->rx.mps) {
+		if (chan_count > 1 && mps < BT_L2CAP_LE_CHAN(chans[i])->rx.mps) {
 			return -EINVAL;
 		}
 	}
@@ -3112,7 +3100,7 @@ int bt_l2cap_ecred_chan_reconfigure_explicit(struct bt_l2cap_chan **chans, uint1
 	ident = get_ident();
 
 	buf = l2cap_create_le_sig_pdu(BT_L2CAP_ECRED_RECONF_REQ, ident,
-				      sizeof(*req) + (i * sizeof(uint16_t)));
+				      sizeof(*req) + (chan_count * sizeof(uint16_t)));
 	if (!buf) {
 		return -ENOMEM;
 	}
@@ -3121,8 +3109,10 @@ int bt_l2cap_ecred_chan_reconfigure_explicit(struct bt_l2cap_chan **chans, uint1
 	req->mtu = sys_cpu_to_le16(mtu);
 	req->mps = sys_cpu_to_le16(mps);
 
-	for (int j = 0; j < i; j++) {
-		ch = BT_L2CAP_LE_CHAN(chans[j]);
+	for (size_t i = 0; i < chan_count; i++) {
+		struct bt_l2cap_le_chan *ch;
+
+		ch = BT_L2CAP_LE_CHAN(chans[i]);
 
 		ch->ident = ident;
 		ch->pending_rx_mtu = mtu;

@@ -13,8 +13,7 @@ import shlex
 import subprocess
 import sys
 
-from runners.core import ZephyrBinaryRunner, RunnerCaps
-
+from runners.core import RunnerCaps, ZephyrBinaryRunner
 
 DEFAULT_LINKSERVER_EXE = 'Linkserver.exe' if sys.platform == 'win32' else 'LinkServer'
 DEFAULT_LINKSERVER_GDB_PORT =  3333
@@ -29,8 +28,8 @@ class LinkServerBinaryRunner(ZephyrBinaryRunner):
                  gdb_host='',
                  gdb_port=DEFAULT_LINKSERVER_GDB_PORT,
                  semihost_port=DEFAULT_LINKSERVER_SEMIHOST_PORT,
-                 override=[],
-                 tui=False, tool_opt=[]):
+                 override=None,
+                 tui=False, tool_opt=None):
         super().__init__(cfg)
         self.file = cfg.file
         self.file_type = cfg.file_type
@@ -48,12 +47,13 @@ class LinkServerBinaryRunner(ZephyrBinaryRunner):
         self.gdb_port = gdb_port
         self.semihost_port = semihost_port
         self.tui_arg = ['-tui'] if tui else []
-        self.override = override
+        self.override = override if override else []
         self.override_cli = self._build_override_cli()
 
         self.tool_opt = []
-        for opts in [shlex.split(opt) for opt in tool_opt]:
-            self.tool_opt += opts
+        if tool_opt is not None:
+            for opts in [shlex.split(opt) for opt in tool_opt]:
+                self.tool_opt += opts
 
     @classmethod
     def name(cls):
@@ -194,7 +194,7 @@ class LinkServerBinaryRunner(ZephyrBinaryRunner):
 
         # Use hex, bin or elf file provided by the buildsystem.
         # Preferring .hex over .bin and .elf
-        if self.supports_hex and self.hex_name is not None and os.path.isfile(self.hex_name):
+        if self.supports_hex() and self.hex_name is not None and os.path.isfile(self.hex_name):
             flash_cmd = (["load", self.hex_name])
         # Preferring .bin over .elf
         elif self.bin_name is not None and os.path.isfile(self.bin_name):

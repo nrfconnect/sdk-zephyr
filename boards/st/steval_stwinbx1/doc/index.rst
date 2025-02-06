@@ -1,7 +1,4 @@
-.. _steval_stwinbx1_board:
-
-STEVAL STWINBX1 Development kit
-###############################
+.. zephyr:board:: steval_stwinbx1
 
 Overview
 ********
@@ -12,10 +9,6 @@ IoT contexts such as condition monitoring and predictive maintenance.
 
 The STEVAL-STWINBX1 kit consists of an STWIN.box core system, a 480mAh LiPo battery, an adapter for the ST-LINK debugger,
 a plastic case, an adapter board for DIL 24 sensors and a flexible cable.
-
-.. image:: img/steval_stwinbx1.jpg
-     :align: center
-     :alt: STEVAL-STWINBX1 Development kit
 
 More information about the board can be found at the `STEVAL-STWINBX1 Development kit website`_.
 
@@ -237,23 +230,7 @@ Console
 There are two possible options for Zephyr console output:
 
 
-- through USB as USB CDC/ACM class. This is the default case present in the board dts file
-  and is enabled by :kconfig:option:`CONFIG_BOARD_SERIAL_BACKEND_CDC_ACM`.
-
-.. code-block:: dts
-   :caption: boards/st/steval_stwinbx1/steval_stwinbx1.dts
-
-   / {
-       chosen {
-          zephyr,console = &cdc_acm_uart0;
-        };
-     };
-
-     &zephyr_udc0 {
-        cdc_acm_uart0: cdc_acm_uart0 {
-                compatible = "zephyr,cdc-acm-uart";
-        };
-     };
+- through common CDC ACM UART backend configuration for all boards
 
 - through USART2 which is available on SWD connector (CN4). In this case a JTAG adapter
   can be used to connect STEVAL-STWINBX1 and have both SWD and console lines available.

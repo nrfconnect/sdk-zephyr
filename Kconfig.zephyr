@@ -448,6 +448,7 @@ config CODING_GUIDELINE_CHECK
 config NATIVE_LIBC
 	bool
 	select FULL_LIBC_SUPPORTED
+	select TC_PROVIDES_POSIX_C_LANG_SUPPORT_R
 	help
 	  Zephyr will use the host system C library.
 
@@ -470,9 +471,11 @@ config NATIVE_APPLICATION
 	default y if ARCH_POSIX
 	depends on !NATIVE_LIBRARY
 	select NATIVE_BUILD
+	select DEPRECATED
 	help
 	  Build as a native application that can run on the host and using
-	  resources and libraries provided by the host.
+	  resources and libraries provided by the host. This option is deprecated
+	  and will be removed in Zephyr v4.3
 
 config NATIVE_LIBRARY
 	bool
@@ -790,7 +793,8 @@ config BUILD_OUTPUT_UF2_FAMILY_ID
 	default "0xada52840" if SOC_NRF52840_QIAA
 	default "0x4fb2d5bd" if SOC_SERIES_IMXRT10XX || SOC_SERIES_IMXRT11XX
 	default "0x2abc77ec" if SOC_SERIES_LPC55XXX
-	default "0xe48bff56" if SOC_SERIES_RP2XXX
+	default "0xe48bff56" if SOC_SERIES_RP2040
+	default "0xe48bff57" if SOC_SERIES_RP2350
 	default "0x68ed2b88" if SOC_SERIES_SAMD21
 	default "0x55114460" if SOC_SERIES_SAMD51
 	default "0x647824b6" if SOC_SERIES_STM32F0X
@@ -1045,32 +1049,6 @@ config IS_BOOTLOADER
 	help
 	  This option indicates that Zephyr will act as a bootloader to execute
 	  a separate Zephyr image payload.
-
-config BOOTLOADER_SRAM_SIZE
-	int "SRAM reserved for bootloader [DEPRECATED]"
-	default 0
-	depends on !XIP || IS_BOOTLOADER
-	depends on ARM || XTENSA
-	help
-	  This option specifies the amount of SRAM (measure in kB) reserved for
-	  a bootloader image, when either:
-	  - the Zephyr image itself is to act as the bootloader, or
-	  - Zephyr is a !XIP image, which implicitly assumes existence of a
-	  bootloader that loads the Zephyr !XIP image onto SRAM.
-
-	  This option is deprecated, users should transition to using DTS to set this, if needed.
-	  To be removed after Zephyr 3.7 release.
-
-config BOOTLOADER_SRAM_SIZE_DEPRECATED
-	bool
-	default y
-	select DEPRECATED
-	depends on BOOTLOADER_SRAM_SIZE != 0
-	depends on !XIP || IS_BOOTLOADER
-	depends on ARM || XTENSA
-	help
-	  Non-prompt symbol to indicate that the deprecated BOOTLOADER_SRAM_SIZE Kconfig has a
-	  non-0 value. Please transition to using devicetree.
 
 config BOOTLOADER_BOSSA
 	bool "BOSSA bootloader support"

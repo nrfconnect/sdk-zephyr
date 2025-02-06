@@ -1,7 +1,4 @@
-.. _rpi_pico:
-
-Raspberry Pi Pico
-#################
+.. zephyr:board:: rpi_pico
 
 Overview
 ********
@@ -99,6 +96,8 @@ hardware features:
      - :kconfig:option:`CONFIG_SPI`
      - :dtcompatible:`raspberrypi,pico-spi-pio`
 
+.. _rpi_pico_pin_mapping:
+
 Pin Mapping
 ===========
 
@@ -155,6 +154,23 @@ devices as well as both PIO devices).
 
 Programming and Debugging
 *************************
+
+System requirements
+===================
+
+Prerequisites for the Pico W
+----------------------------
+
+Building for the Raspberry Pi Pico W requires the AIROC binary blobs
+provided by Infineon. Run the command below to retrieve those files:
+
+.. code-block:: console
+
+   west blobs fetch hal_infineon
+
+.. note::
+
+   It is recommended running the command above after :file:`west update`.
 
 Flashing
 ========
