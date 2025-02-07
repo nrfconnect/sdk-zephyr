@@ -6,9 +6,8 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
-#include <soc.h>
 
-#if defined(CONFIG_SOC_SERIES_NRF52X) || defined(CONFIG_SOC_SERIES_NRF53X)
+#if defined(CONFIG_SOC_SERIES_NRF52X)
 #define CPU_CLOCK		64000000U
 #else
 #define CPU_CLOCK		CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC
