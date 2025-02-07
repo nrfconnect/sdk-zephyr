@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 #
 # Copyright (c) 2021 Intel Corporation
-# Copyright (c) 2024 Nordic Semiconductor ASA
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -18,7 +17,8 @@ import logging
 import sys
 
 import dictionary_parser
-import parserlib
+from dictionary_parser.log_database import LogDatabase
+
 
 LOGGER_FORMAT = "%(message)s"
 logger = logging.getLogger("parser")
@@ -47,7 +47,6 @@ def read_log_file(args):
     Read the log from file
     """
     logdata = None
-    hexdata = ''
 
     # Open log data file for reading
     if args.hex:
@@ -101,6 +100,7 @@ def read_log_file(args):
 
     return logdata
 
+
 def main():
     """Main function of log parser"""
     args = parse_args()
@@ -112,12 +112,36 @@ def main():
     else:
         logger.setLevel(logging.INFO)
 
+    # Read from database file
+    database = LogDatabase.read_json_database(args.dbfile)
+    if database is None:
+        logger.error("ERROR: Cannot open database file: %s, exiting...", args.dbfile)
+        sys.exit(1)
+
     logdata = read_log_file(args)
     if logdata is None:
         logger.error("ERROR: cannot read log from file: %s, exiting...", args.logfile)
         sys.exit(1)
 
-    parserlib.parser(logdata, args.dbfile, logger)
+    log_parser = dictionary_parser.get_parser(database)
+    if log_parser is not None:
+        logger.debug("# Build ID: %s", database.get_build_id())
+        logger.debug("# Target: %s, %d-bit", database.get_arch(), database.get_tgt_bits())
+        if database.is_tgt_little_endian():
+            logger.debug("# Endianness: Little")
+        else:
+            logger.debug("# Endianness: Big")
+
+        logger.debug("# Database version: %d", database.get_version())
+
+        ret = log_parser.parse_log_data(logdata, debug=args.debug)
+        if not ret:
+            logger.error("ERROR: there were error(s) parsing log data")
+            sys.exit(1)
+    else:
+        logger.error("ERROR: Cannot find a suitable parser matching database version!")
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
