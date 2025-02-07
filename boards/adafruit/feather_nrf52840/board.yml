@@ -1,6 +1,5 @@
 board:
   name: adafruit_feather_nrf52840
-  full_name: Feather nRF52840 (Express, Sense)
   vendor: adafruit
   socs:
     - name: nrf52840
