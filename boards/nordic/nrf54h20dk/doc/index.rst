@@ -39,7 +39,6 @@ nRF54H20 SoC provides support for the following devices:
 * :abbr:`GPIO (General Purpose Input Output)`
 * :abbr:`GRTC (Global real-time counter)`
 * :abbr:`I2C (Inter-Integrated Circuit)`
-* MEMCONF
 * MRAM
 * :abbr:`PWM (Pulse Width Modulation)`
 * RADIO (Bluetooth Low Energy and 802.15.4)
@@ -71,8 +70,6 @@ hardware features:
 +-----------+------------+----------------------+
 | I2C(M)    | on-chip    | i2c                  |
 +-----------+------------+----------------------+
-| MEMCONF   | on-chip    | retained_mem         |
-+-----------+------------+----------------------+
 | SPI(M/S)  | on-chip    | spi                  |
 +-----------+------------+----------------------+
 | UART      | on-chip    | serial               |
@@ -91,8 +88,6 @@ hardware features:
 | GRTC      | on-chip    | system clock         |
 +-----------+------------+----------------------+
 | I2C(M)    | on-chip    | i2c                  |
-+-----------+------------+----------------------+
-| MEMCONF   | on-chip    | retained_mem         |
 +-----------+------------+----------------------+
 | SPI(M/S)  | on-chip    | spi                  |
 +-----------+------------+----------------------+
