@@ -1,7 +1,4 @@
-.. _cc3235sf_launchxl:
-
-CC3235SF LaunchXL
-#################
+.. zephyr:board:: cc3235sf_launchxl
 
 Overview
 ********
@@ -218,7 +215,7 @@ Usage:
 
 Set :kconfig:option:`CONFIG_WIFI_SIMPLELINK` and :kconfig:option:`CONFIG_WIFI` to ``y``
 to enable Wi-Fi.
-See :zephyr_file:`samples/net/wifi/boards/cc3235sf_launchxl.conf`.
+See :zephyr_file:`samples/net/wifi/shell/boards/cc3235sf_launchxl.conf`.
 
 Provisioning:
 =============
@@ -265,6 +262,8 @@ using the TI UniFlash tool for certificate programming.
 
 References
 **********
+
+.. target-notes::
 
 TI SimpleLink MCUs:
     http://www.ti.com/microcontrollers/simplelink-mcus/overview.html

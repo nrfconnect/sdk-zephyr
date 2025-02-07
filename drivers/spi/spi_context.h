@@ -92,14 +92,14 @@ static inline void spi_context_lock(struct spi_context *ctx,
 				    void *callback_data,
 				    const struct spi_config *spi_cfg)
 {
-	if ((spi_cfg->operation & SPI_LOCK_ON) &&
-		(k_sem_count_get(&ctx->lock) == 0) &&
-		(ctx->owner == spi_cfg)) {
-			return;
-	}
+	bool already_locked = (spi_cfg->operation & SPI_LOCK_ON) &&
+			      (k_sem_count_get(&ctx->lock) == 0) &&
+			      (ctx->owner == spi_cfg);
 
-	k_sem_take(&ctx->lock, K_FOREVER);
-	ctx->owner = spi_cfg;
+	if (!already_locked) {
+		k_sem_take(&ctx->lock, K_FOREVER);
+		ctx->owner = spi_cfg;
+	}
 
 #ifdef CONFIG_SPI_ASYNC
 	ctx->asynchronous = asynchronous;
@@ -321,6 +321,10 @@ void spi_context_buffers_setup(struct spi_context *ctx,
 		(void *)ctx->rx_buf, ctx->rx_len);
 }
 
+/*
+ * Note: dfs is the number of bytes needed to store a data frame,
+ * while len is the number of data frames sent.
+ */
 static ALWAYS_INLINE
 void spi_context_update_tx(struct spi_context *ctx, uint8_t dfs, uint32_t len)
 {
@@ -361,6 +365,10 @@ bool spi_context_tx_buf_on(struct spi_context *ctx)
 	return !!(ctx->tx_buf && ctx->tx_len);
 }
 
+/*
+ * Note: dfs is the number of bytes needed to store a data frame,
+ * while len is the number of data frames received.
+ */
 static ALWAYS_INLINE
 void spi_context_update_rx(struct spi_context *ctx, uint8_t dfs, uint32_t len)
 {

@@ -59,7 +59,7 @@ The key features of the EK-RA6M3 board are categorized in three groups as follow
 - USB High Speed Host and Device (micro-AB connector)
 - 32 Mb (256 Mb) External Quad-SPI Flash
 
-.. figure:: ek-ra6m3-board.webp
+.. figure:: ek_ra6m3.webp
 	:align: center
 	:alt: RA6M3 Evaluation Kit
 
@@ -69,7 +69,7 @@ Hardware
 ********
 Detailed hardware feature for the RA6M3 MCU group can be found at `RA6M3 Group User's Manual Hardware`_
 
-.. figure:: ra6m3-block-diagram.webp
+.. figure:: ra6m3_block_diagram.webp
 	:width: 442px
 	:align: center
 	:alt: RA6M3 MCU group feature
@@ -95,6 +95,20 @@ The below features are currently supported on Zephyr OS for EK-RA6M3 board:
 | UART      | on-chip    | serial               |
 +-----------+------------+----------------------+
 | CLOCK     | on-chip    | clock control        |
++-----------+------------+----------------------+
+| I2C       | on-chip    | i2c                  |
++-----------+------------+----------------------+
+| SPI       | on-chip    | spi                  |
++-----------+------------+----------------------+
+| COUNTER   | on-chip    | counter              |
++-----------+------------+----------------------+
+| USBHS     | on-chip    | udc                  |
++-----------+------------+----------------------+
+| ADC       | on-chip    | adc                  |
++-----------+------------+----------------------+
+| PWM       | on-chip    | pwm                  |
++-----------+------------+----------------------+
+| FLASH     | on-chip    | flash                |
 +-----------+------------+----------------------+
 
 Other hardware features are currently not supported by the port.

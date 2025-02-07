@@ -10,6 +10,8 @@ zephyr_sources(
 
 zephyr_include_directories(.)
 
+zephyr_sources_ifndef(CONFIG_BOOTLOADER_MCUBOOT hw_init.c)
+
 # get flash size to use in esptool as string
 math(EXPR esptoolpy_flashsize "${CONFIG_FLASH_SIZE} / 0x100000")
 
@@ -53,10 +55,10 @@ dt_prop(monitor_baud PATH ${dts_shell_uart} PROPERTY "current-speed")
 board_runner_args(esp32 "--esp-flash-freq=60m")
 board_runner_args(esp32 "--esp-monitor-baud=${monitor_baud}")
 
-if(CONFIG_ESP_SIMPLE_BOOT)
-  board_finalize_runner_args(esp32 "--esp-app-address=${boot_off}")
-else()
+if(CONFIG_BOOTLOADER_MCUBOOT)
   board_finalize_runner_args(esp32 "--esp-app-address=${img_0_off}")
+else()
+  board_finalize_runner_args(esp32 "--esp-app-address=${boot_off}")
 endif()
 
 if(CONFIG_MCUBOOT)

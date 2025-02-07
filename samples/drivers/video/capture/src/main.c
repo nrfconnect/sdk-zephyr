@@ -9,10 +9,18 @@
 
 #include <zephyr/drivers/display.h>
 #include <zephyr/drivers/video.h>
+#include <zephyr/drivers/video-controls.h>
 
-#define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main);
+
+#ifdef CONFIG_TEST
+#include "check_test_pattern.h"
+
+#define LOG_LEVEL LOG_LEVEL_DBG
+#else
+#define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
+#endif
 
 #define VIDEO_DEV_SW "VIDEO_SW_GENERATOR"
 
@@ -22,18 +30,13 @@ static inline int display_setup(const struct device *const display_dev, const ui
 	struct display_capabilities capabilities;
 	int ret = 0;
 
-	if (!device_is_ready(display_dev)) {
-		LOG_ERR("Device %s not found", display_dev->name);
-		return -ENODEV;
-	}
-
-	printk("\nDisplay device: %s\n", display_dev->name);
+	LOG_INF("Display device: %s", display_dev->name);
 
 	display_get_capabilities(display_dev, &capabilities);
 
-	printk("- Capabilities:\n");
-	printk("  x_resolution = %u, y_resolution = %u, supported_pixel_formats = %u\n"
-	       "  current_pixel_format = %u, current_orientation = %u\n\n",
+	LOG_INF("- Capabilities:");
+	LOG_INF("  x_resolution = %u, y_resolution = %u, supported_pixel_formats = %u"
+	       "  current_pixel_format = %u, current_orientation = %u",
 	       capabilities.x_resolution, capabilities.y_resolution,
 	       capabilities.supported_pixel_formats, capabilities.current_pixel_format,
 	       capabilities.current_orientation);
@@ -41,10 +44,14 @@ static inline int display_setup(const struct device *const display_dev, const ui
 	/* Set display pixel format to match the one in use by the camera */
 	switch (pixfmt) {
 	case VIDEO_PIX_FMT_RGB565:
-		ret = display_set_pixel_format(display_dev, PIXEL_FORMAT_BGR_565);
+		if (capabilities.current_pixel_format != PIXEL_FORMAT_BGR_565) {
+			ret = display_set_pixel_format(display_dev, PIXEL_FORMAT_BGR_565);
+		}
 		break;
 	case VIDEO_PIX_FMT_XRGB32:
-		ret = display_set_pixel_format(display_dev, PIXEL_FORMAT_ARGB_8888);
+		if (capabilities.current_pixel_format != PIXEL_FORMAT_ARGB_8888) {
+			ret = display_set_pixel_format(display_dev, PIXEL_FORMAT_ARGB_8888);
+		}
 		break;
 	default:
 		return -ENOTSUP;
@@ -62,22 +69,24 @@ static inline void video_display_frame(const struct device *const display_dev,
 				       const struct video_buffer *const vbuf,
 				       const struct video_format fmt)
 {
-	struct display_buffer_descriptor buf_desc;
+	struct display_buffer_descriptor buf_desc = {
+		.buf_size = vbuf->bytesused,
+		.width = fmt.width,
+		.pitch = buf_desc.width,
+		.height = vbuf->bytesused / fmt.pitch,
+	};
 
-	buf_desc.buf_size = vbuf->bytesused;
-	buf_desc.width = fmt.width;
-	buf_desc.pitch = buf_desc.width;
-	buf_desc.height = fmt.height;
-
-	display_write(display_dev, 0, 0, &buf_desc, vbuf->buffer);
+	display_write(display_dev, 0, vbuf->line_offset, &buf_desc, vbuf->buffer);
 }
 #endif
 
 int main(void)
 {
-	struct video_buffer *buffers[2], *vbuf;
+	struct video_buffer *buffers[CONFIG_VIDEO_BUFFER_POOL_NUM_MAX], *vbuf;
 	struct video_format fmt;
 	struct video_caps caps;
+	struct video_frmival frmival;
+	struct video_frmival_enum fie;
 	unsigned int frame = 0;
 	size_t bsize;
 	int i = 0;
@@ -99,7 +108,7 @@ int main(void)
 	}
 #endif
 
-	printk("Video device: %s\n", video_dev->name);
+	LOG_INF("Video device: %s", video_dev->name);
 
 	/* Get capabilities */
 	if (video_get_caps(video_dev, VIDEO_EP_OUT, &caps)) {
@@ -107,11 +116,11 @@ int main(void)
 		return 0;
 	}
 
-	printk("- Capabilities:\n");
+	LOG_INF("- Capabilities:");
 	while (caps.format_caps[i].pixelformat) {
 		const struct video_format_cap *fcap = &caps.format_caps[i];
 		/* fourcc to string */
-		printk("  %c%c%c%c width [%u; %u; %u] height [%u; %u; %u]\n",
+		LOG_INF("  %c%c%c%c width [%u; %u; %u] height [%u; %u; %u]",
 		       (char)fcap->pixelformat, (char)(fcap->pixelformat >> 8),
 		       (char)(fcap->pixelformat >> 16), (char)(fcap->pixelformat >> 24),
 		       fcap->width_min, fcap->width_max, fcap->width_step, fcap->height_min,
@@ -125,9 +134,58 @@ int main(void)
 		return 0;
 	}
 
-	printk("- Default format: %c%c%c%c %ux%u\n", (char)fmt.pixelformat,
+#if CONFIG_VIDEO_FRAME_HEIGHT
+	fmt.height = CONFIG_VIDEO_FRAME_HEIGHT;
+#endif
+
+#if CONFIG_VIDEO_FRAME_WIDTH
+	fmt.width = CONFIG_VIDEO_FRAME_WIDTH;
+	fmt.pitch = fmt.width * 2;
+#endif
+
+	if (strcmp(CONFIG_VIDEO_PIXEL_FORMAT, "")) {
+		fmt.pixelformat =
+			video_fourcc(CONFIG_VIDEO_PIXEL_FORMAT[0], CONFIG_VIDEO_PIXEL_FORMAT[1],
+				     CONFIG_VIDEO_PIXEL_FORMAT[2], CONFIG_VIDEO_PIXEL_FORMAT[3]);
+	}
+
+	LOG_INF("- Video format: %c%c%c%c %ux%u", (char)fmt.pixelformat,
 	       (char)(fmt.pixelformat >> 8), (char)(fmt.pixelformat >> 16),
 	       (char)(fmt.pixelformat >> 24), fmt.width, fmt.height);
+
+	if (video_set_format(video_dev, VIDEO_EP_OUT, &fmt)) {
+		LOG_ERR("Unable to set format");
+		return 0;
+	}
+
+	if (!video_get_frmival(video_dev, VIDEO_EP_OUT, &frmival)) {
+		LOG_INF("- Default frame rate : %f fps",
+		       1.0 * frmival.denominator / frmival.numerator);
+	}
+
+	LOG_INF("- Supported frame intervals for the default format:");
+	memset(&fie, 0, sizeof(fie));
+	fie.format = &fmt;
+	while (video_enum_frmival(video_dev, VIDEO_EP_OUT, &fie) == 0) {
+		if (fie.type == VIDEO_FRMIVAL_TYPE_DISCRETE) {
+			LOG_INF("   %u/%u ", fie.discrete.numerator, fie.discrete.denominator);
+		} else {
+			LOG_INF("   [min = %u/%u; max = %u/%u; step = %u/%u]",
+			       fie.stepwise.min.numerator, fie.stepwise.min.denominator,
+			       fie.stepwise.max.numerator, fie.stepwise.max.denominator,
+			       fie.stepwise.step.numerator, fie.stepwise.step.denominator);
+		}
+		fie.index++;
+	}
+
+	/* Set controls */
+	if (IS_ENABLED(CONFIG_VIDEO_CTRL_HFLIP)) {
+		video_set_ctrl(video_dev, VIDEO_CID_HFLIP, (void *)1);
+	}
+
+#ifdef CONFIG_TEST
+	video_set_ctrl(video_dev, VIDEO_CID_TEST_PATTERN, (void *)1);
+#endif
 
 #if DT_HAS_CHOSEN(zephyr_display)
 	const struct device *const display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
@@ -145,7 +203,11 @@ int main(void)
 #endif
 
 	/* Size to allocate for each buffer */
-	bsize = fmt.pitch * fmt.height;
+	if (caps.min_line_count == LINE_COUNT_HEIGHT) {
+		bsize = fmt.pitch * fmt.height;
+	} else {
+		bsize = fmt.pitch * caps.min_line_count;
+	}
 
 	/* Alloc video buffers and enqueue for capture */
 	for (i = 0; i < ARRAY_SIZE(buffers); i++) {
@@ -153,7 +215,8 @@ int main(void)
 		 * For some hardwares, such as the PxP used on i.MX RT1170 to do image rotation,
 		 * buffer alignment is needed in order to achieve the best performance
 		 */
-		buffers[i] = video_buffer_aligned_alloc(bsize, CONFIG_VIDEO_BUFFER_POOL_ALIGN);
+		buffers[i] = video_buffer_aligned_alloc(bsize, CONFIG_VIDEO_BUFFER_POOL_ALIGN,
+							K_FOREVER);
 		if (buffers[i] == NULL) {
 			LOG_ERR("Unable to alloc video buffer");
 			return 0;
@@ -168,7 +231,7 @@ int main(void)
 		return 0;
 	}
 
-	printk("Capture started\n");
+	LOG_INF("Capture started");
 
 	/* Grab video frames */
 	while (1) {
@@ -178,8 +241,14 @@ int main(void)
 			return 0;
 		}
 
-		printk("Got frame %u! size: %u; timestamp %u ms\n", frame++, vbuf->bytesused,
+		LOG_DBG("Got frame %u! size: %u; timestamp %u ms", frame++, vbuf->bytesused,
 		       vbuf->timestamp);
+
+#ifdef CONFIG_TEST
+		if (is_colorbar_ok(vbuf->buffer, fmt)) {
+			LOG_DBG("Pattern OK!\n");
+		}
+#endif
 
 #if DT_HAS_CHOSEN(zephyr_display)
 		video_display_frame(display_dev, vbuf, fmt);

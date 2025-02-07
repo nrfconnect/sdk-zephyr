@@ -7,8 +7,9 @@ Status classes to be used instead of str statuses.
 """
 from __future__ import annotations
 
-from colorama import Fore
 from enum import Enum
+
+from colorama import Fore
 
 
 class TwisterStatus(str, Enum):
@@ -23,18 +24,18 @@ class TwisterStatus(str, Enum):
 
     @staticmethod
     def get_color(status: TwisterStatus) -> str:
-        match(status):
-            case TwisterStatus.PASS:
-                color = Fore.GREEN
-            case TwisterStatus.SKIP | TwisterStatus.FILTER | TwisterStatus.BLOCK:
-                color = Fore.YELLOW
-            case TwisterStatus.FAIL | TwisterStatus.ERROR:
-                color = Fore.RED
-            case TwisterStatus.STARTED | TwisterStatus.NONE:
-                color = Fore.MAGENTA
-            case _:
-                color = Fore.RESET
-        return color
+        status2color = {
+            TwisterStatus.PASS: Fore.GREEN,
+            TwisterStatus.NOTRUN: Fore.CYAN,
+            TwisterStatus.SKIP: Fore.YELLOW,
+            TwisterStatus.FILTER: Fore.YELLOW,
+            TwisterStatus.BLOCK: Fore.YELLOW,
+            TwisterStatus.FAIL: Fore.RED,
+            TwisterStatus.ERROR: Fore.RED,
+            TwisterStatus.STARTED: Fore.MAGENTA,
+            TwisterStatus.NONE: Fore.MAGENTA
+        }
+        return status2color.get(status, Fore.RESET)
 
     # All statuses below this comment can be used for TestCase
     BLOCK = 'blocked'
@@ -43,6 +44,7 @@ class TwisterStatus(str, Enum):
     # All statuses below this comment can be used for TestSuite
     # All statuses below this comment can be used for TestInstance
     FILTER = 'filtered'
+    NOTRUN = 'not run'
 
     # All statuses below this comment can be used for Harness
     NONE = None

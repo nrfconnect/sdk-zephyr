@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020 Intel Corporation
+# Copyright (c) 2020-2024 Intel Corporation
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -63,7 +63,8 @@ def test_add_configurations_short(test_data, class_env, board_root_dir):
     plan.parse_configuration(config_file=class_env.test_config)
     if board_root_dir == "board_config":
         plan.add_configurations()
-        assert sorted(plan.default_platforms) == sorted(['demo_board_1', 'demo_board_3'])
+        print(sorted(plan.default_platforms))
+        assert sorted(plan.default_platforms) == sorted(['demo_board_1/unit_testing', 'demo_board_3/unit_testing'])
     elif board_root_dir == "board_config_file_not_exist":
         plan.add_configurations()
         assert sorted(plan.default_platforms) != sorted(['demo_board_1'])
@@ -84,7 +85,8 @@ def test_get_all_testsuites_short(class_testplan, all_testsuites_dict):
                       'test_b.check_1', 'test_b.check_2', 'test_c.check_1',
                       'test_c.check_2', 'test_d.check_1.unit_1a',
                       'test_d.check_1.unit_1b',
-                      'test_e.check_1.1a', 'test_e.check_1.1b',
+                      'test_e.check_1.feature5.1a',
+                      'test_e.check_1.feature5.1b',
                       'test_config.main']
 
     assert sorted(plan.get_all_tests()) == sorted(expected_tests)
@@ -95,11 +97,11 @@ def test_get_platforms_short(class_testplan, platforms_list):
     plan.platforms = platforms_list
     platform = plan.get_platform("demo_board_1")
     assert isinstance(platform, Platform)
-    assert platform.name == "demo_board_1"
+    assert platform.name == "demo_board_1/unit_testing"
 
 TESTDATA_PART1 = [
     ("toolchain_allow", ['gcc'], None, None, "Not in testsuite toolchain allow list"),
-    ("platform_allow", ['demo_board_1'], None, None, "Not in testsuite platform allow list"),
+    ("platform_allow", ['demo_board_1/unit_testing'], None, None, "Not in testsuite platform allow list"),
     ("toolchain_exclude", ['zephyr'], None, None, "In test case toolchain exclude"),
     ("platform_exclude", ['demo_board_2'], None, None, "In test case platform exclude"),
     ("arch_exclude", ['x86'], None, None, "In test case arch exclude"),
@@ -174,12 +176,12 @@ def test_apply_filters_part1(class_testplan, all_testsuites_dict, platforms_list
     elif plat_attribute == "supported_toolchains":
         plan.apply_filters(force_toolchain=False,
                                                  exclude_platform=['demo_board_1'],
-                                                 platform=['demo_board_2'])
+                                                 platform=['demo_board_2/unit_testing'])
     elif tc_attribute is None and plat_attribute is None:
         plan.apply_filters()
     else:
         plan.apply_filters(exclude_platform=['demo_board_1'],
-                                                 platform=['demo_board_2'])
+                                                 platform=['demo_board_2/unit_testing'])
 
     filtered_instances = list(filter(lambda item:  item.status == TwisterStatus.FILTER, plan.instances.values()))
     for d in filtered_instances:
@@ -262,38 +264,38 @@ def test_add_instances_short(tmp_path, class_env, all_testsuites_dict, platforms
     platform = plan.get_platform("demo_board_2")
     instance_list = []
     for _, testcase in all_testsuites_dict.items():
-        instance = TestInstance(testcase, platform, class_env.outdir)
+        instance = TestInstance(testcase, platform, 'zephyr', class_env.outdir)
         instance_list.append(instance)
     plan.add_instances(instance_list)
     assert list(plan.instances.keys()) == \
-		   [platform.name + '/' + s for s in list(all_testsuites_dict.keys())]
+		   [platform.name + '/zephyr/' + s for s in list(all_testsuites_dict.keys())]
     assert all(isinstance(n, TestInstance) for n in list(plan.instances.values()))
     assert list(plan.instances.values()) == instance_list
 
 
 QUARANTINE_BASIC = {
-    'demo_board_1/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'a1 on board_1 and board_3',
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'a1 on board_1 and board_3'
+    'demo_board_1/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'a1 on board_1 and board_3',
+    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'a1 on board_1 and board_3'
 }
 
 QUARANTINE_WITH_REGEXP = {
-    'demo_board_2/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_2' : 'a2 and c2 on x86',
-    'demo_board_1/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
-    'demo_board_2/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
-    'demo_board_2/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_2' : 'a2 and c2 on x86'
+    'demo_board_2/unit_testing/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_2' : 'a2 and c2 on x86',
+    'demo_board_1/unit_testing/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
+    'demo_board_3/unit_testing/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
+    'demo_board_2/unit_testing/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all test_d',
+    'demo_board_2/unit_testing/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_2' : 'a2 and c2 on x86'
 }
 
 QUARANTINE_PLATFORM = {
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'all on board_3',
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_2' : 'all on board_3',
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all on board_3',
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_b/test_b.check_1' : 'all on board_3',
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_b/test_b.check_2' : 'all on board_3',
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_1' : 'all on board_3',
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_2' : 'all on board_3',
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_e/test_e.check_1' : 'all on board_3',
-    'demo_board_3/scripts/tests/twister/test_data/testsuites/tests/test_config/test_config.main' : 'all on board_3'
+    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_1' : 'all on board_3',
+    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_a/test_a.check_2' : 'all on board_3',
+    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_d/test_d.check_1' : 'all on board_3',
+    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_b/test_b.check_1' : 'all on board_3',
+    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_b/test_b.check_2' : 'all on board_3',
+    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_1' : 'all on board_3',
+    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_c/test_c.check_2' : 'all on board_3',
+    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_e/test_e.check_1' : 'all on board_3',
+    'demo_board_3/zephyr/scripts/tests/twister/test_data/testsuites/tests/test_config/test_config.main' : 'all on board_3'
 }
 
 QUARANTINE_MULTIFILES = {
@@ -335,7 +337,6 @@ def test_quarantine_short(class_testplan, platforms_list, test_data,
     class_testplan.quarantine = Quarantine(quarantine_list)
     class_testplan.options.quarantine_verify = quarantine_verify
     class_testplan.apply_filters()
-
     for testname, instance in class_testplan.instances.items():
         if quarantine_verify:
             if testname in expected_val:
@@ -382,8 +383,6 @@ def test_required_snippets_short(
     plan.platforms = platforms_list
     plan.platform_names = [p.name for p in platforms_list]
     plan.testsuites = {testpath: testsuite}
-
-    print(plan.testsuites)
 
     for _, testcase in plan.testsuites.items():
         testcase.exclude_platform = []
@@ -595,7 +594,7 @@ TESTDATA_4 = [
     (None, None, 'load_tests.json', None, '0/4',
      TwisterRuntimeError, set(['lt-p1', 'lt-p3', 'lt-p4', 'lt-p2']), []),
     ('suffix', None, None, True, '2/4',
-     None, set(['ts-p4', 'ts-p2', 'ts-p3']), [2, 4]),
+     None, set(['ts-p4', 'ts-p2', 'ts-p1', 'ts-p3']), [2, 4]),
 ]
 
 @pytest.mark.parametrize(
@@ -621,21 +620,25 @@ def test_testplan_load(
         {
             "name": "ts1",
             "platform": "t-p1",
+            "toolchain": "zephyr",
             "testcases": []
         },
         {
             "name": "ts1",
             "platform": "t-p2",
+            "toolchain": "zephyr",
             "testcases": []
         },
         {
             "name": "ts2",
             "platform": "t-p3",
+            "toolchain": "zephyr",
             "testcases": []
         },
         {
             "name": "ts2",
             "platform": "t-p4",
+            "toolchain": "zephyr",
             "testcases": []
         }
     ]
@@ -650,21 +653,25 @@ def test_testplan_load(
         {
             "name": "ts1",
             "platform": "ts-p1",
+            "toolchain": "zephyr",
             "testcases": []
         },
         {
             "name": "ts1",
             "platform": "ts-p2",
+            "toolchain": "zephyr",
             "testcases": []
         },
         {
             "name": "ts2",
             "platform": "ts-p3",
+            "toolchain": "zephyr",
             "testcases": []
         },
         {
             "name": "ts2",
             "platform": "ts-p4",
+            "toolchain": "zephyr",
             "testcases": []
         }
     ]
@@ -679,21 +686,25 @@ def test_testplan_load(
         {
             "name": "ts1",
             "platform": "lt-p1",
+            "toolchain": "zephyr",
             "testcases": []
         },
         {
             "name": "ts1",
             "platform": "lt-p2",
+            "toolchain": "zephyr",
             "testcases": []
         },
         {
             "name": "ts2",
             "platform": "lt-p3",
+            "toolchain": "zephyr",
             \"testcases": []
         },
         {
             "name": "ts2",
             "platform": "lt-p4",
+            "toolchain": "zephyr",
             "testcases": []
         }
     ]
@@ -739,6 +750,18 @@ def test_testplan_load(
     testplan.platforms[9].name = 'lt-p2'
     testplan.platforms[10].name = 'lt-p3'
     testplan.platforms[11].name = 'lt-p4'
+    testplan.platforms[0].aliases = ['t-p1']
+    testplan.platforms[1].aliases = ['t-p2']
+    testplan.platforms[2].aliases = ['t-p3']
+    testplan.platforms[3].aliases = ['t-p4']
+    testplan.platforms[4].aliases = ['ts-p1']
+    testplan.platforms[5].aliases = ['ts-p2']
+    testplan.platforms[6].aliases = ['ts-p3']
+    testplan.platforms[7].aliases = ['ts-p4']
+    testplan.platforms[8].aliases = ['lt-p1']
+    testplan.platforms[9].aliases = ['lt-p2']
+    testplan.platforms[10].aliases = ['lt-p3']
+    testplan.platforms[11].aliases = ['lt-p4']
     testplan.platforms[0].normalized_name = 't-p1'
     testplan.platforms[1].normalized_name = 't-p2'
     testplan.platforms[2].normalized_name = 't-p3'
@@ -755,6 +778,7 @@ def test_testplan_load(
     testplan.apply_filters = mock.Mock()
 
     with mock.patch('twisterlib.testinstance.TestInstance.create_overlay', mock.Mock()), \
+         mock.patch('twisterlib.testinstance.TestInstance.check_runnable', return_value=True), \
          pytest.raises(exception) if exception else nullcontext():
         testplan.load()
 
@@ -1071,26 +1095,24 @@ def test_testplan_info(capfd):
 
 
 TESTDATA_8 = [
-    (False, False, ['p1e2', 'p2', 'p3', 'p3@B'], ['p2']),
-    (False, True, None, None),
-    (True, False, ['p1e2', 'p2', 'p3', 'p3@B'], ['p3']),
+    (False, ['p1e2/unit_testing', 'p2/unit_testing', 'p3/unit_testing'], ['p2/unit_testing', 'p3/unit_testing']),
+    (True, ['p1e2/unit_testing', 'p2/unit_testing', 'p3/unit_testing'], ['p3/unit_testing']),
 ]
 
 @pytest.mark.parametrize(
-    'override_default_platforms, create_duplicate, expected_platform_names, expected_defaults',
+    'override_default_platforms, expected_platform_names, expected_defaults',
     TESTDATA_8,
-    ids=['no override defaults', 'create duplicate', 'override defaults']
+    ids=['no override defaults', 'override defaults']
 )
 def test_testplan_add_configurations(
     tmp_path,
     override_default_platforms,
-    create_duplicate,
     expected_platform_names,
     expected_defaults
 ):
     # tmp_path
     # └ boards  <- board root
-    #   ├ x86
+    #   ├ zephyr
     #   │ ├ p1
     #   │ | ├ p1e1.yaml
     #   │ | └ p1e2.yaml
@@ -1102,24 +1124,43 @@ def test_testplan_add_configurations(
     #     └ p3
     #       ├ p3.yaml
     #       └ p3_B.conf
+    tmp_soc_root_dir = tmp_path / 'soc'
+    tmp_soc_root_dir.mkdir()
+
+    tmp_vend1_dir = tmp_soc_root_dir / 'zephyr'
+    tmp_vend1_dir.mkdir()
+
+    tmp_soc1_dir = tmp_vend1_dir / 's1'
+    tmp_soc1_dir.mkdir()
+
+    soc1_yaml = """\
+family:
+  - name: zephyr
+    series:
+      - name: zephyr_testing
+        socs:
+          - name: unit_testing
+"""
+    soc1_yamlfile = tmp_soc1_dir / 'soc.yml'
+    soc1_yamlfile.write_text(soc1_yaml)
 
     tmp_board_root_dir = tmp_path / 'boards'
     tmp_board_root_dir.mkdir()
 
-    tmp_arch1_dir = tmp_board_root_dir / 'x86'
-    tmp_arch1_dir.mkdir()
+    tmp_vend1_dir = tmp_board_root_dir / 'zephyr'
+    tmp_vend1_dir.mkdir()
 
-    tmp_p1_dir = tmp_arch1_dir / 'p1'
+    tmp_p1_dir = tmp_vend1_dir / 'p1'
     tmp_p1_dir.mkdir()
 
     p1e1_bs_yaml = """\
 boards:
 
-  - name: ple1
+  - name: p1e1
     vendor: zephyr
     socs:
       - name: unit_testing
-  - name: ple2
+  - name: p1e2
     vendor: zephyr
     socs:
       - name: unit_testing
@@ -1132,7 +1173,7 @@ identifier: p1e1
 name: Platform 1 Edition 1
 type: native
 arch: x86
-vendor: vendor1
+vendor: zephyr
 toolchain:
   - zephyr
 twister: False
@@ -1145,14 +1186,14 @@ identifier: p1e2
 name: Platform 1 Edition 2
 type: native
 arch: x86
-vendor: vendor1
+vendor: zephyr
 toolchain:
   - zephyr
 """
     p1e2_yamlfile = tmp_p1_dir / 'p1e2.yaml'
     p1e2_yamlfile.write_text(p1e2_yaml)
 
-    tmp_p2_dir = tmp_arch1_dir / 'p2'
+    tmp_p2_dir = tmp_vend1_dir / 'p2'
     tmp_p2_dir.mkdir()
 
     p2_bs_yaml = """\
@@ -1171,7 +1212,7 @@ boards:
     p2_yamlfile.write_text(p2_bs_yaml)
 
     p2_yaml = """\
-identifier: p2
+identifier: p2/unit_testing
 name: Platform 2
 type: sim
 arch: x86
@@ -1184,9 +1225,6 @@ testing:
     p2_yamlfile = tmp_p2_dir / 'p2.yaml'
     p2_yamlfile.write_text(p2_yaml)
 
-    if create_duplicate:
-        p2_yamlfile = tmp_p2_dir / 'p2-1.yaml'
-        p2_yamlfile.write_text(p2_yaml)
 
     p2_2_yaml = """\
 testing:
@@ -1202,15 +1240,14 @@ toolchain:
     p2_2_yamlfile = tmp_p2_dir / 'p2-2.yaml'
     p2_2_yamlfile.write_text(p2_2_yaml)
 
-    tmp_arch2_dir = tmp_board_root_dir / 'arm'
-    tmp_arch2_dir.mkdir()
+    tmp_vend2_dir = tmp_board_root_dir / 'arm'
+    tmp_vend2_dir.mkdir()
 
-    tmp_p3_dir = tmp_arch2_dir / 'p3'
+    tmp_p3_dir = tmp_vend2_dir / 'p3'
     tmp_p3_dir.mkdir()
 
     p3_bs_yaml = """\
 boards:
-
   - name: p3
     vendor: zephyr
     socs:
@@ -1227,11 +1264,11 @@ arch: arm
 vendor: vendor3
 toolchain:
   - zephyr
+testing:
+  default: True
 """
     p3_yamlfile = tmp_p3_dir / 'p3.yaml'
     p3_yamlfile.write_text(p3_yaml)
-    p3_yamlfile = tmp_p3_dir / 'p3_B.conf'
-    p3_yamlfile.write_text('')
 
     env = mock.Mock(board_roots=[tmp_board_root_dir],soc_roots=[tmp_path], arch_roots=[tmp_path])
 
@@ -1244,13 +1281,18 @@ toolchain:
         }
     }
 
-    with pytest.raises(Exception) if create_duplicate else nullcontext():
-        testplan.add_configurations()
+
+    testplan.add_configurations()
 
     if expected_defaults is not None:
+        print(expected_defaults)
+        print(testplan.default_platforms)
         assert sorted(expected_defaults) == sorted(testplan.default_platforms)
     if expected_platform_names is not None:
-        assert sorted(expected_platform_names) == sorted(testplan.platform_names)
+        print(expected_platform_names)
+        print(testplan.platform_names)
+        platform_names = [p.name for p in testplan.platforms]
+        assert sorted(expected_platform_names) == sorted(platform_names)
 
 
 def test_testplan_get_all_tests():
@@ -1278,19 +1320,35 @@ def test_testplan_get_all_tests():
 
 
 TESTDATA_9 = [
-    ([], False, 7),
-    ([], True, 5),
-    (['good_test/dummy.common.1', 'good_test/dummy.common.2', 'good_test/dummy.common.3'], False, 3),
-    (['good_test/dummy.common.1', 'good_test/dummy.common.2', 'good_test/dummy.common.3'], True, 0),
+    ([], False, True, 11, 1),
+    ([], False, False, 7, 2),
+    ([], True, False, 9, 1),
+    ([], True, True, 9, 1),
+    ([], True, False, 9, 1),
+    (['good_test/dummy.common.1', 'good_test/dummy.common.2', 'good_test/dummy.common.3'], False, True, 3, 1),
+    (['good_test/dummy.common.1', 'good_test/dummy.common.2',
+      'duplicate_test/dummy.common.1', 'duplicate_test/dummy.common.2'], False, True, 4, 1),
+    (['dummy.common.1', 'dummy.common.2'], False, False, 2, 1),
+    (['good_test/dummy.common.1', 'good_test/dummy.common.2', 'good_test/dummy.common.3'], True, True, 0, 1),
 ]
 
 @pytest.mark.parametrize(
-    'testsuite_filter, use_alt_root, expected_suite_count',
+    'testsuite_filter, use_alt_root, detailed_id, expected_suite_count, expected_errors',
     TESTDATA_9,
-    ids=['no testsuite filter', 'no testsuite filter, alt root',
-         'testsuite filter', 'testsuite filter, alt root']
+    ids=[
+        'no testsuite filter, detailed id',
+        'no testsuite filter, short id',
+        'no testsuite filter, alt root, detailed id',
+        'no filter, alt root, detailed id',
+        'no filter, alt root, short id',
+        'testsuite filter',
+        'testsuite filter and valid duplicate',
+        'testsuite filter, short id and duplicate',
+        'testsuite filter, alt root',
+    ]
 )
-def test_testplan_add_testsuites(tmp_path, testsuite_filter, use_alt_root, expected_suite_count):
+def test_testplan_add_testsuites(tmp_path, testsuite_filter, use_alt_root, detailed_id,
+                                 expected_errors, expected_suite_count):
     # tmp_path
     # ├ tests  <- test root
     # │ ├ good_test
@@ -1299,6 +1357,8 @@ def test_testplan_add_testsuites(tmp_path, testsuite_filter, use_alt_root, expec
     # │ │ └ testcase.yaml
     # │ ├ good_sample
     # │ │ └ sample.yaml
+    # │ ├ duplicate_test
+    # │ │ └ testcase.yaml
     # │ └ others
     # │   └ other.txt
     # └ other_tests  <- alternate test root
@@ -1350,6 +1410,25 @@ tests:
     samplefile_1 = tmp_good_sample_dir / 'sample.yaml'
     samplefile_1.write_text(samplecase_yaml_1)
 
+    tmp_duplicate_test_dir = tmp_test_root_dir / 'duplicate_test'
+    tmp_duplicate_test_dir.mkdir()
+    # The duplicate needs to have the same number of tests as these configurations
+    # can be read either with duplicate_test first, or good_test first, so number
+    # of selected tests needs to be the same in both situations.
+    testcase_yaml_4 = """\
+tests:
+  dummy.common.1:
+    build_on_all: true
+  dummy.common.2:
+    build_on_all: true
+  dummy.common.3:
+    build_on_all: true
+  dummy.special:
+    build_on_all: false
+"""
+    testfile_4 = tmp_duplicate_test_dir / 'testcase.yaml'
+    testfile_4.write_text(testcase_yaml_4)
+
     tmp_other_dir = tmp_test_root_dir / 'others'
     tmp_other_dir.mkdir()
     _ = tmp_other_dir / 'other.txt'
@@ -1371,6 +1450,7 @@ tests:
 
     env = mock.Mock(
         test_roots=[tmp_test_root_dir],
+        options=mock.Mock(detailed_test_id=detailed_id),
         alt_config_root=[tmp_alt_test_root_dir] if use_alt_root else []
     )
 
@@ -1379,6 +1459,7 @@ tests:
     res = testplan.add_testsuites(testsuite_filter)
 
     assert res == expected_suite_count
+    assert testplan.load_errors == expected_errors
 
 
 def test_testplan_str():
@@ -1404,8 +1485,10 @@ def test_testplan_get_platform(name, expect_found):
     testplan = TestPlan(env=mock.Mock())
     p1 = mock.Mock()
     p1.name = 'some platform'
+    p1.aliases = [p1.name]
     p2 = mock.Mock()
     p2.name = 'a platform'
+    p2.aliases = [p2.name]
     testplan.platforms = [p1, p2]
 
     res = testplan.get_platform(name)
@@ -1437,20 +1520,25 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
     ts1tc1.name = 'TS1.tc1'
     ts1 = mock.Mock(testcases=[ts1tc1])
     ts1.name = 'TestSuite 1'
+    ts1.toolchain = 'zephyr'
     ts2 = mock.Mock(testcases=[])
     ts2.name = 'TestSuite 2'
+    ts2.toolchain = 'zephyr'
     ts3tc1 = mock.Mock()
     ts3tc1.name = 'TS3.tc1'
     ts3tc2 = mock.Mock()
     ts3tc2.name = 'TS3.tc2'
     ts3 = mock.Mock(testcases=[ts3tc1, ts3tc2])
     ts3.name = 'TestSuite 3'
+    ts3.toolchain = 'zephyr'
     ts4tc1 = mock.Mock()
     ts4tc1.name = 'TS4.tc1'
     ts4 = mock.Mock(testcases=[ts4tc1])
     ts4.name = 'TestSuite 4'
+    ts4.toolchain = 'zephyr'
     ts5 = mock.Mock(testcases=[])
     ts5.name = 'TestSuite 5'
+    ts5.toolchain = 'zephyr'
 
     testplan = TestPlan(env=mock.Mock(outdir=os.path.join('out', 'dir')))
     testplan.options = mock.Mock(device_testing=device_testing, test_only=True, report_summary=None)
@@ -1477,6 +1565,7 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
             "used_rom": 1024,
             "available_rom": 1047552,
             "status": "passed",
+            "toolchain": "zephyr",
             "reason": "OK",
             "testcases": [
                 {
@@ -1490,7 +1579,8 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
         },
         {
             "name": "TestSuite 2",
-            "platform": "Platform 1"
+            "platform": "Platform 1",
+            "toolchain": "zephyr"
         },
         {
             "name": "TestSuite 3",
@@ -1502,6 +1592,7 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
             "used_rom": 1024,
             "available_rom": 1047552,
             "status": "error",
+            "toolchain": "zephyr",
             "reason": "File Not Found Error",
             "testcases": [
                 {
@@ -1525,6 +1616,7 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
             "used_rom": 1024,
             "available_rom": 1047552,
             "status": "skipped",
+            "toolchain": "zephyr",
             "reason": "Not in requested test list.",
             "testcases": [
                 {
@@ -1541,7 +1633,8 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
         },
         {
             "name": "TestSuite 5",
-            "platform": "Platform 2"
+            "platform": "Platform 2",
+            "toolchain": "zephyr"
         }
     ]
 }
@@ -1557,7 +1650,7 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
         testplan.load_from_file('dummy.yaml', filter_platform)
 
     expected_instances = {
-        'Platform 1/TestSuite 1': {
+        'Platform 1/zephyr/TestSuite 1': {
             'metrics': {
                 'handler_time': 60.0,
                 'used_ram': 4096,
@@ -1566,16 +1659,17 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
                 'available_rom': 1047552
             },
             'retries': 0,
+            'toolchain': 'zephyr',
             'testcases': {
                 'TS1.tc1': {
                     'status': TwisterStatus.PASS,
-                    'reason': None,
+                    'reason': 'passed',
                     'duration': 60.0,
                     'output': ''
                 }
             }
         },
-        'Platform 1/TestSuite 2': {
+        'Platform 1/zephyr/TestSuite 2': {
             'metrics': {
                 'handler_time': 0,
                 'used_ram': 0,
@@ -1584,9 +1678,10 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
                 'available_rom': 0
             },
             'retries': 0,
+            'toolchain': 'zephyr',
             'testcases': []
         },
-        'Platform 1/TestSuite 3': {
+        'Platform 1/zephyr/TestSuite 3': {
             'metrics': {
                 'handler_time': 360.0,
                 'used_ram': 4096,
@@ -1595,6 +1690,7 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
                 'available_rom': 1047552
             },
             'retries': 1,
+            'toolchain': 'zephyr',
             'testcases': {
                     'TS3.tc1': {
                         'status': TwisterStatus.ERROR,
@@ -1610,7 +1706,7 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
                     }
             }
         },
-        'Platform 1/TestSuite 4': {
+        'Platform 1/zephyr/TestSuite 4': {
             'metrics': {
                 'handler_time': 360.0,
                 'used_ram': 4096,
@@ -1619,6 +1715,7 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
                 'available_rom': 1047552
             },
             'retries': 0,
+            'toolchain': 'zephyr',
             'testcases': {
                 'TS4.tc1': {
                     'status': TwisterStatus.SKIP,
@@ -1639,7 +1736,7 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
             assert expected_instances[n]['testcases'][str(t)]['duration'] == t.duration
             assert expected_instances[n]['testcases'][str(t)]['output'] == t.output
 
-    check_runnable_mock.assert_called_with(mock.ANY, expected_tfilter, mock.ANY, mock.ANY)
+    check_runnable_mock.assert_called_with(mock.ANY, mock.ANY)
 
     expected_logs = [
         'loading TestSuite 1...',
@@ -1666,27 +1763,31 @@ def test_testplan_add_instances():
     }
 
 
-def test_testplan_get_testsuite():
+def test_testplan_get_testcase():
     testplan = TestPlan(env=mock.Mock())
     testplan.testsuites = {
-        'testsuite0': mock.Mock(testcases=[mock.Mock(), mock.Mock()]),
-        'testsuite1': mock.Mock(testcases=[mock.Mock()]),
-        'testsuite2': mock.Mock(testcases=[mock.Mock(), mock.Mock()]),
-        'testsuite3': mock.Mock(testcases=[])
+        'test1.suite0': mock.Mock(testcases=[mock.Mock(), mock.Mock()]),
+        'test1.suite1': mock.Mock(testcases=[mock.Mock(), mock.Mock()]),
+        'test1.suite2': mock.Mock(testcases=[mock.Mock(), mock.Mock()]),
+        'test1.suite3': mock.Mock(testcases=[])
     }
-    testplan.testsuites['testsuite0'].testcases[0].name = 'testcase name 0'
-    testplan.testsuites['testsuite0'].testcases[1].name = 'testcase name 1'
-    testplan.testsuites['testsuite1'].testcases[0].name = 'sample id'
-    testplan.testsuites['testsuite2'].testcases[0].name = 'dummy id'
-    testplan.testsuites['testsuite2'].testcases[1].name = 'sample id'
 
-    id = 'sample id'
+    testplan.testsuites['test1.suite0'].testcases[0].name = 'test1.suite0.case0'
+    testplan.testsuites['test1.suite0'].testcases[1].name = 'test1.suite0.case1'
+    #
+    testplan.testsuites['test1.suite1'].testcases[0].name = 'test1.suite1.case0'
+    testplan.testsuites['test1.suite1'].testcases[1].name = 'test1.suite1.case0'  # in suite duplicate
+    #
+    testplan.testsuites['test1.suite2'].testcases[0].name = 'test1.suite2.case0'
+    testplan.testsuites['test1.suite2'].testcases[1].name = 'test1.suite1.case0'  # out suite duplicate
 
-    res = testplan.get_testsuite(id)
+    id = 'test1.suite1.case0'
 
-    assert len(res) == 2
-    assert testplan.testsuites['testsuite1'] in res
-    assert testplan.testsuites['testsuite2'] in res
+    res = testplan.get_testcase(id)
+
+    assert len(res) == 3
+    assert testplan.testsuites['test1.suite1'] in res
+    assert testplan.testsuites['test1.suite2'] in res
 
 
 def test_testplan_verify_platforms_existence(caplog):

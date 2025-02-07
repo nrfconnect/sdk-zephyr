@@ -444,7 +444,12 @@ static void bma4xx_submit(const struct device *dev, struct rtio_iodev_sqe *iodev
 {
 	struct rtio_work_req *req = rtio_work_req_alloc();
 
-	__ASSERT_NO_MSG(req);
+	if (req == NULL) {
+		LOG_ERR("RTIO work item allocation failed. Consider to increase "
+			"CONFIG_RTIO_WORKQ_POOL_ITEMS.");
+		rtio_iodev_sqe_err(iodev_sqe, -ENOMEM);
+		return;
+	}
 
 	rtio_work_req_submit(req, iodev_sqe, bma4xx_submit_sync);
 }
@@ -678,7 +683,7 @@ static int bma4xx_get_decoder(const struct device *dev, const struct sensor_deco
  * Sensor driver API
  */
 
-static const struct sensor_driver_api bma4xx_driver_api = {
+static DEVICE_API(sensor, bma4xx_driver_api) = {
 	.attr_set = bma4xx_attr_set,
 	.submit = bma4xx_submit,
 	.get_decoder = bma4xx_get_decoder,

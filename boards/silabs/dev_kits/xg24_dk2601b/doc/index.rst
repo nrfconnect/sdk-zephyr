@@ -1,7 +1,4 @@
-.. _efr32mg24_dk2601b:
-
-EFR32xG24 Dev Kit (xG24-DK2601B)
-################################
+.. zephyr:board:: xg24_dk2601b
 
 Overview
 ********
@@ -9,13 +6,6 @@ Overview
 The EFR32MG24 Mighty Gecko Board dev kit contains
 a Wireless System-On-Chip from the EFR32MG24 family built on an
 ARM Cortex®-M33F processor with excellent low power capabilities.
-
-.. figure:: ./img/xg24_dk2601b.jpg
-   :height: 260px
-   :align: center
-   :alt: xG24-DK2601B Dev Kit board
-
-   xG24-DK2601B (image courtesy of Silicon Labs)
 
 Hardware
 ********
@@ -65,6 +55,8 @@ The board configuration supports the following hardware features:
 | GPIO      | on-chip    | gpio                                |
 +-----------+------------+-------------------------------------+
 | UART      | on-chip    | serial                              |
++-----------+------------+-------------------------------------+
+| DMA       | on-chip    | ldma                                |
 +-----------+------------+-------------------------------------+
 | TRNG      | on-chip    | semailbox                           |
 +-----------+------------+-------------------------------------+
@@ -119,7 +111,7 @@ Programming and Debugging
 
 .. note::
    Before using the kit the first time, you should update the J-Link firmware
-   from `J-Link-Downloads`_
+   in Simplicity Studio.
 
 Flashing
 ========
@@ -179,6 +171,3 @@ this example.
 
 .. _BRD2601B User Guide:
    https://www.silabs.com/documents/public/user-guides/ug524-brd2601b-user-guide.pdf
-
-.. _J-Link-Downloads:
-   https://www.segger.com/downloads/jlink

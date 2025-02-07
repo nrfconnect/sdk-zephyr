@@ -15,7 +15,7 @@ Only personal mode security is supported with below types:
 
 * Open
 * WPA2-PSK
-* WPA3-PSK-256
+* WPA2-PSK-256
 * WPA3-SAE
 
 The Wi-Fi management API is implemented in the ``wifi_mgmt`` module as a part of the networking L2
@@ -24,6 +24,11 @@ Currently, two types of Wi-Fi drivers are supported:
 
 * Networking or socket offloaded drivers
 * Native L2 Ethernet drivers
+
+Wi-Fi PSA crypto supported build
+********************************
+
+To enable PSA crypto API supported Wi-Fi build, the :kconfig:option:`CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ALT` and the :kconfig:option:`CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_MBEDTLS_PSA` need to be set.
 
 Wi-Fi Enterprise test: X.509 Certificate header generation
 **********************************************************
@@ -38,20 +43,27 @@ module.
     $ cp client.pem samples/net/wifi/test_certs/
     $ cp client-key.pem samples/net/wifi/test_certs/
     $ cp ca.pem samples/net/wifi/test_certs/
-    $ west build -p -b <board> samples/net/wifi
+    $ cp client2.pem samples/net/wifi/test_certs/
+    $ cp client-key2.pem samples/net/wifi/test_certs/
+    $ cp ca2.pem samples/net/wifi/test_certs/
+    $ west build -p -b <board> samples/net/wifi -- -DEXTRA_CONF_FILE=overlay-enterprise.conf
+
+For using variable size network buffer, the following overlay file can be used:
+
+.. code-block:: bash
+
+    $ west build -p -b <board> samples/net/wifi -- -DEXTRA_CONF_FILE=overlay-enterprise-variable-bufs.conf
+
+
 
 To initiate Wi-Fi connection, the following command can be used:
 
 .. code-block:: console
 
-    uart:~$ wifi connect -s <SSID> -k 5 -a anon -K whatever
+    uart:~$ wifi connect -s <SSID> -c 149 -k 17 -w 2 -a client1 --key1-pwd whatever --key2-pwd whatever --eap-id1 id1 --eap-pwd1 pwd1
 
 Server certificate is also provided in the same directory for testing purposes.
 Any AAA server can be used for testing purposes, for example, ``FreeRADIUS`` or ``hostapd``.
-
-.. important::
-
-    The passphrase for the :file:`client-key.pem`` and the :file:`server-key.pem` is ``whatever``.
 
 .. note::
 

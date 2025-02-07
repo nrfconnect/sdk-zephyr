@@ -297,6 +297,8 @@ struct udc_data {
  * @brief New USB device controller (UDC) driver API
  * @defgroup udc_api USB device controller driver API
  * @ingroup io_interfaces
+ * @since 3.3
+ * @version 0.1.0
  * @{
  */
 
@@ -371,6 +373,7 @@ int udc_init(const struct device *dev,
  * @return 0 on success, all other values should be treated as error.
  * @retval -EPERM controller is not initialized
  * @retval -EALREADY already enabled
+ * @retval -ETIMEDOUT enable operation timed out
  */
 int udc_enable(const struct device *dev);
 

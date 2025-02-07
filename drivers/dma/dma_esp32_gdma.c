@@ -33,11 +33,7 @@ LOG_MODULE_REGISTER(dma_esp32_gdma, CONFIG_DMA_LOG_LEVEL);
 #define ISR_HANDLER intr_handler_t
 #endif
 
-#if defined(CONFIG_SOC_SERIES_ESP32C6)
-#define DMA_MAX_CHANNEL SOC_GDMA_PAIRS_PER_GROUP_MAX
-#else
 #define DMA_MAX_CHANNEL SOC_GDMA_PAIRS_PER_GROUP
-#endif
 
 #define ESP_DMA_M2M_ON  0
 #define ESP_DMA_M2M_OFF 1
@@ -609,7 +605,7 @@ static int dma_esp32_init(const struct device *dev)
 	return 0;
 }
 
-static const struct dma_driver_api dma_esp32_api = {
+static DEVICE_API(dma, dma_esp32_api) = {
 	.config = dma_esp32_config,
 	.start = dma_esp32_start,
 	.stop = dma_esp32_stop,

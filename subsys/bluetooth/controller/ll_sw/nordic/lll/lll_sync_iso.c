@@ -46,6 +46,7 @@ static void prepare_bh(void *param);
 static int create_prepare_cb(struct lll_prepare_param *p);
 static int prepare_cb(struct lll_prepare_param *p);
 static int prepare_cb_common(struct lll_prepare_param *p);
+static int is_abort_cb(void *next, void *curr, lll_prepare_cb_t *resume_cb);
 static void abort_cb(struct lll_prepare_param *prepare_param, void *param);
 static void isr_rx_estab(void *param);
 static void isr_rx(void *param);
@@ -56,7 +57,8 @@ static void next_chan_calc(struct lll_sync_iso *lll, uint16_t event_counter,
 static void isr_rx_iso_data_valid(const struct lll_sync_iso *const lll,
 				  uint16_t handle, struct node_rx_pdu *node_rx);
 static void isr_rx_iso_data_invalid(const struct lll_sync_iso *const lll,
-				    uint8_t bn, uint16_t handle,
+				    uint16_t latency, uint8_t bn,
+				    uint16_t handle,
 				    struct node_rx_pdu *node_rx);
 static void isr_rx_ctrl_recv(struct lll_sync_iso *lll, struct pdu_bis *pdu);
 
@@ -146,7 +148,7 @@ static void create_prepare_bh(void *param)
 	int err;
 
 	/* Invoke common pipeline handling of prepare */
-	err = lll_prepare(lll_is_abort_cb, abort_cb, create_prepare_cb, 0U,
+	err = lll_prepare(is_abort_cb, abort_cb, create_prepare_cb, 0U,
 			  param);
 	LL_ASSERT(!err || err == -EINPROGRESS);
 }
@@ -156,7 +158,7 @@ static void prepare_bh(void *param)
 	int err;
 
 	/* Invoke common pipeline handling of prepare */
-	err = lll_prepare(lll_is_abort_cb, abort_cb, prepare_cb, 0U, param);
+	err = lll_prepare(is_abort_cb, abort_cb, prepare_cb, 0U, param);
 	LL_ASSERT(!err || err == -EINPROGRESS);
 }
 
@@ -404,6 +406,20 @@ static int prepare_cb_common(struct lll_prepare_param *p)
 	return 0;
 }
 
+static int is_abort_cb(void *next, void *curr, lll_prepare_cb_t *resume_cb)
+{
+	if (next != curr) {
+		struct lll_sync_iso *lll;
+
+		lll = curr;
+		if (lll->bn_curr <= lll->bn) {
+			return 0;
+		}
+	}
+
+	return -ECANCELED;
+}
+
 static void abort_cb(struct lll_prepare_param *prepare_param, void *param)
 {
 	struct event_done_extra *e;
@@ -427,6 +443,7 @@ static void abort_cb(struct lll_prepare_param *prepare_param, void *param)
 	LL_ASSERT(e);
 
 	e->type = EVENT_DONE_EXTRA_TYPE_SYNC_ISO;
+	e->estab_failed = 0U;
 	e->trx_cnt = 0U;
 	e->crc_valid = 0U;
 
@@ -526,6 +543,7 @@ static void isr_rx(void *param)
 	uint16_t data_chan_id;
 	uint8_t data_chan_use;
 	uint8_t crc_init[3];
+	uint8_t stream_curr;
 	uint8_t rssi_ready;
 	uint32_t start_us;
 	uint8_t new_burst;
@@ -552,6 +570,9 @@ static void isr_rx(void *param)
 
 		/* BIS index */
 		bis_idx = lll->bis_curr - 1U;
+
+		/* Current stream */
+		stream_curr = lll->stream_curr;
 
 		goto isr_rx_done;
 	}
@@ -586,6 +607,9 @@ static void isr_rx(void *param)
 
 	/* BIS index */
 	bis_idx = lll->bis_curr - 1U;
+
+	/* Current stream */
+	stream_curr = lll->stream_curr;
 
 	/* Check CRC and generate ISO Data PDU */
 	if (crc_ok) {
@@ -648,14 +672,14 @@ static void isr_rx(void *param)
 		}
 
 		/* Get reference to stream context */
-		stream_handle = lll->stream_handle[lll->stream_curr];
+		stream_handle = lll->stream_handle[stream_curr];
 		sync_stream = ull_sync_iso_lll_stream_get(stream_handle);
 
 		/* Store the received PDU if selected stream and not already
 		 * received (say in previous event as pre-transmitted PDU.
 		 */
 		if ((lll->bis_curr == sync_stream->bis_index) && pdu->len &&
-		    !lll->payload[bis_idx][payload_index]) {
+		    !lll->payload[stream_curr][payload_index]) {
 			uint16_t handle;
 
 			if (IS_ENABLED(CONFIG_BT_CTLR_BROADCAST_ISO_ENC) &&
@@ -679,7 +703,7 @@ static void isr_rx(void *param)
 			handle = LL_BIS_SYNC_HANDLE_FROM_IDX(stream_handle);
 			isr_rx_iso_data_valid(lll, handle, node_rx);
 
-			lll->payload[bis_idx][payload_index] = node_rx;
+			lll->payload[stream_curr][payload_index] = node_rx;
 		}
 	}
 
@@ -724,7 +748,7 @@ isr_rx_find_subevent:
 		}
 
 		/* Check if (bn_curr)th Rx PDU has been received */
-		if (!lll->payload[bis_idx][payload_index]) {
+		if (!lll->payload[stream_curr][payload_index]) {
 			/* Receive the (bn_curr)th Rx PDU of bis_curr */
 			bis = lll->bis_curr;
 
@@ -767,7 +791,7 @@ isr_rx_find_subevent:
 			/* Check if (irc_curr)th bn = 1 Rx PDU has been
 			 * received.
 			 */
-			if (!lll->payload[bis_idx][payload_index]) {
+			if (!lll->payload[stream_curr][payload_index]) {
 				/* Receive the (irc_curr)th bn = 1 Rx PDU of
 				 * bis_curr.
 				 */
@@ -816,14 +840,13 @@ isr_rx_find_subevent:
 
 	/* Next BIS */
 	if (lll->bis_curr < lll->num_bis) {
-		const uint8_t stream_curr = lll->stream_curr + 1U;
 		struct lll_sync_iso_stream *sync_stream;
 		uint16_t stream_handle;
 
 		/* Next selected stream */
-		if (stream_curr < lll->stream_count) {
-			lll->stream_curr = stream_curr;
-			stream_handle = lll->stream_handle[lll->stream_curr];
+		if ((lll->stream_curr + 1U) < lll->stream_count) {
+			stream_curr = ++lll->stream_curr;
+			stream_handle = lll->stream_handle[stream_curr];
 			sync_stream = ull_sync_iso_lll_stream_get(stream_handle);
 			if (sync_stream->bis_index <= lll->num_bis) {
 				uint32_t payload_offset;
@@ -859,7 +882,7 @@ isr_rx_find_subevent:
 				/* Check if (irc_curr)th bn = 1 Rx PDU has been
 				 * received.
 				 */
-				if (!lll->payload[bis_idx_new][payload_index]) {
+				if (!lll->payload[stream_curr][payload_index]) {
 					/* bn = 1 Rx PDU not received */
 					skipped = (bis_idx_new - bis_idx) *
 						  ((lll->bn * lll->irc) +
@@ -1153,7 +1176,6 @@ static void isr_rx_done(void *param)
 	uint16_t latency_event;
 	uint16_t payload_index;
 	uint8_t bis_idx;
-	uint8_t bn;
 
 	/* Enqueue PDUs to ULL */
 	node_rx = NULL;
@@ -1165,14 +1187,16 @@ static void isr_rx_done(void *param)
 	/* Catchup with ISO event latencies */
 	latency_event = lll->latency_event;
 	do {
-		lll->stream_curr = 0U;
+		uint8_t stream_curr;
+
+		stream_curr = 0U;
 		for (bis_idx = 0U; bis_idx < lll->num_bis; bis_idx++) {
 			struct lll_sync_iso_stream *stream;
-			uint8_t payload_tail;
-			uint8_t stream_curr;
+			uint8_t stream_curr_inc;
 			uint16_t stream_handle;
+			uint8_t payload_tail;
 
-			stream_handle = lll->stream_handle[lll->stream_curr];
+			stream_handle = lll->stream_handle[stream_curr];
 			stream = ull_sync_iso_lll_stream_get(stream_handle);
 			/* Skip BIS indices not synchronized. bis_index is 0x01 to 0x1F,
 			 * where as bis_idx is 0 indexed.
@@ -1182,11 +1206,10 @@ static void isr_rx_done(void *param)
 			}
 
 			payload_tail = lll->payload_tail;
-			bn = lll->bn;
-			while (bn--) {
-				if (lll->payload[bis_idx][payload_tail]) {
-					node_rx = lll->payload[bis_idx][payload_tail];
-					lll->payload[bis_idx][payload_tail] = NULL;
+			for (uint8_t bn = 0U; bn < lll->bn; bn++) {
+				if (lll->payload[stream_curr][payload_tail]) {
+					node_rx = lll->payload[stream_curr][payload_tail];
+					lll->payload[stream_curr][payload_tail] = NULL;
 
 					iso_rx_put(node_rx->hdr.link, node_rx);
 				} else {
@@ -1208,7 +1231,8 @@ static void isr_rx_done(void *param)
 						pdu->len = 0U;
 
 						handle = LL_BIS_SYNC_HANDLE_FROM_IDX(stream_handle);
-						isr_rx_iso_data_invalid(lll, bn, handle, node_rx);
+						isr_rx_iso_data_invalid(lll, latency_event, bn,
+									handle, node_rx);
 
 						iso_rx_put(node_rx->hdr.link, node_rx);
 					}
@@ -1221,9 +1245,9 @@ static void isr_rx_done(void *param)
 				payload_tail = payload_index;
 			}
 
-			stream_curr = lll->stream_curr + 1U;
-			if (stream_curr < lll->stream_count) {
-				lll->stream_curr = stream_curr;
+			stream_curr_inc = stream_curr + 1U;
+			if (stream_curr_inc < lll->stream_count) {
+				stream_curr = stream_curr_inc;
 			}
 		}
 		lll->payload_tail = payload_index;
@@ -1273,6 +1297,7 @@ static void isr_rx_done(void *param)
 
 	/* Calculate and place the drift information in done event */
 	e->type = EVENT_DONE_EXTRA_TYPE_SYNC_ISO;
+	e->estab_failed = 0U;
 	e->trx_cnt = trx_cnt;
 	e->crc_valid = crc_ok_anchor;
 
@@ -1353,7 +1378,9 @@ static void isr_rx_iso_data_valid(const struct lll_sync_iso *const lll,
 
 	iso_meta = &node_rx->rx_iso_meta;
 	iso_meta->payload_number = lll->payload_count + (lll->bn_curr - 1U) +
-				   (lll->ptc_curr * lll->pto) - lll->bn;
+				   (lll->ptc_curr * lll->pto);
+	/* Decrement BN as payload_count was pre-incremented */
+	iso_meta->payload_number -= lll->bn;
 
 	stream = ull_sync_iso_lll_stream_get(lll->stream_handle[0]);
 	iso_meta->timestamp = HAL_TICKER_TICKS_TO_US(radio_tmr_start_get()) +
@@ -1371,7 +1398,8 @@ static void isr_rx_iso_data_valid(const struct lll_sync_iso *const lll,
 }
 
 static void isr_rx_iso_data_invalid(const struct lll_sync_iso *const lll,
-				    uint8_t bn, uint16_t handle,
+				    uint16_t latency, uint8_t bn,
+				    uint16_t handle,
 				    struct node_rx_pdu *node_rx)
 {
 	struct lll_sync_iso_stream *stream;
@@ -1381,7 +1409,9 @@ static void isr_rx_iso_data_invalid(const struct lll_sync_iso *const lll,
 	node_rx->hdr.handle = handle;
 
 	iso_meta = &node_rx->rx_iso_meta;
-	iso_meta->payload_number = lll->payload_count - bn - 1U;
+	iso_meta->payload_number = lll->payload_count + bn;
+	/* Decrement BN as payload_count was pre-incremented */
+	iso_meta->payload_number -= (latency + 1U) * lll->bn;
 
 	stream = ull_sync_iso_lll_stream_get(lll->stream_handle[0]);
 	iso_meta->timestamp = HAL_TICKER_TICKS_TO_US(radio_tmr_start_get()) +
@@ -1389,6 +1419,8 @@ static void isr_rx_iso_data_invalid(const struct lll_sync_iso *const lll,
 			      ((stream->bis_index - 1U) *
 			       lll->sub_interval * ((lll->irc * lll->bn) +
 						    lll->ptc));
+	iso_meta->timestamp -= (latency * lll->iso_interval *
+				PERIODIC_INT_UNIT_US);
 	iso_meta->timestamp %=
 		HAL_TICKER_TICKS_TO_US_64BIT(BIT64(HAL_TICKER_CNTR_MSBIT + 1U));
 	iso_meta->status = 1U;
