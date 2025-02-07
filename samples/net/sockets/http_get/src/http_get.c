@@ -25,8 +25,6 @@
 #include "ca_certificate.h"
 #endif
 
-#include "net_sample_common.h"
-
 #endif
 
 /* HTTP server to connect to */
@@ -62,8 +60,6 @@ int main(void)
 	static struct addrinfo hints;
 	struct addrinfo *res;
 	int st, sock;
-
-	wait_for_network();
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 	tls_credential_add(CA_CERTIFICATE_TAG, TLS_CREDENTIAL_CA_CERTIFICATE,
