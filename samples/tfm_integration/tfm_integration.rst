@@ -1,12 +1,18 @@
-.. zephyr:code-sample-category:: tfm_integration
-   :name: TF-M Integration
-   :show-listing:
+.. _tfm_integration-samples:
 
-   These TF-M integration examples can be used with a supported Armv8-M board, and demonstrate how
-   the TF-M APIs can be used with Zephyr.
+TF-M Integration Samples
+########################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   */*
 
 Overview
 ********
+These TF-M integration examples can be used with a supported Armv8-M board, and
+demonstrate how the TF-M APIs can be used with Zephyr.
 
 Trusted Firmware Platform Security Architecture (PSA) APIs are used for the
 secure processing environment (S), with Zephyr running in the non-secure

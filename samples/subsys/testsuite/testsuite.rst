@@ -1,4 +1,10 @@
-.. zephyr:code-sample-category:: testsuite
-   :name: Test suites
-   :show-listing:
-   :glob: **/*
+.. _testsuite-samples:
+
+Testsuite samples
+#################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/README

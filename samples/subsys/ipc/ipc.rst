@@ -1,6 +1,10 @@
-.. zephyr:code-sample-category:: ipc
-   :name: Inter-Processor Communication (IPC)
-   :show-listing:
-   :glob: **/*
+.. _ipc_samples:
 
-   Samples that demonstrate :ref:`Inter-Processor Communication (IPC) <ipc_service>` features.
+IPC Samples
+###########
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*
