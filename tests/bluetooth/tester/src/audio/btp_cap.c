@@ -542,30 +542,33 @@ static int cap_broadcast_source_adv_setup(struct btp_bap_broadcast_local_source 
 	struct bt_data base_ad[2];
 	struct bt_data per_ad;
 
-	err = bt_cap_initiator_broadcast_get_id(source->cap_broadcast, &source->broadcast_id);
-	if (err != 0) {
-		LOG_DBG("Unable to get broadcast ID: %d", err);
+	if (tester_gap_ext_adv_get() == NULL) {
+		err = bt_cap_initiator_broadcast_get_id(source->cap_broadcast, &source->broadcast_id);
+		if (err != 0) {
+			LOG_DBG("Unable to get broadcast ID: %d", err);
 
-		return -EINVAL;
-	}
+			return -EINVAL;
+		}
 
-	*gap_settings = BIT(BTP_GAP_SETTINGS_DISCOVERABLE) |
-			BIT(BTP_GAP_SETTINGS_EXTENDED_ADVERTISING);
-	/* Setup extended advertising data */
-	net_buf_simple_add_le16(&ad_buf, BT_UUID_BROADCAST_AUDIO_VAL);
-	net_buf_simple_add_le24(&ad_buf, source->broadcast_id);
-	base_ad[0].type = BT_DATA_SVC_DATA16;
-	base_ad[0].data_len = ad_buf.len;
-	base_ad[0].data = ad_buf.data;
-	base_ad[1].type = BT_DATA_NAME_COMPLETE;
-	base_ad[1].data_len = sizeof(CONFIG_BT_DEVICE_NAME) - 1;
-	base_ad[1].data = CONFIG_BT_DEVICE_NAME;
-	err = tester_gap_create_adv_instance(&param, BTP_GAP_ADDR_TYPE_IDENTITY, base_ad, 2, NULL,
-					     0, gap_settings);
-	if (err != 0) {
-		LOG_DBG("Failed to create extended advertising instance: %d", err);
+		*gap_settings = BIT(BTP_GAP_SETTINGS_DISCOVERABLE) |
+				BIT(BTP_GAP_SETTINGS_EXTENDED_ADVERTISING);
+		/* Setup extended advertising data */
+		net_buf_simple_add_le16(&ad_buf, BT_UUID_BROADCAST_AUDIO_VAL);
+		net_buf_simple_add_le24(&ad_buf, source->broadcast_id);
+		base_ad[0].type = BT_DATA_SVC_DATA16;
+		base_ad[0].data_len = ad_buf.len;
+		base_ad[0].data = ad_buf.data;
+		base_ad[1].type = BT_DATA_NAME_COMPLETE;
+		base_ad[1].data_len = sizeof(CONFIG_BT_DEVICE_NAME) - 1;
+		base_ad[1].data = CONFIG_BT_DEVICE_NAME;
 
-		return -EINVAL;
+		err = tester_gap_create_adv_instance(&param, BTP_GAP_ADDR_TYPE_IDENTITY, base_ad,
+						     2, NULL, 0, gap_settings);
+		if (err != 0) {
+			LOG_DBG("Failed to create extended advertising instance: %d", err);
+
+			return -EINVAL;
+		}
 	}
 
 	err = tester_gap_padv_configure(BT_LE_PER_ADV_PARAM(BT_GAP_PER_ADV_FAST_INT_MIN_2,
