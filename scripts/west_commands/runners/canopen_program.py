@@ -214,8 +214,8 @@ class CANopenProgramDownloader(object):
         '''Connect to CAN network'''
         try:
             self.network.connect(context=self.can_context)
-        except Exception as err:
-            raise ValueError('Unable to connect to CAN network') from err
+        except:
+            raise ValueError('Unable to connect to CAN network')
 
     def disconnect(self):
         '''Disconnect from CAN network'''
@@ -226,15 +226,15 @@ class CANopenProgramDownloader(object):
         self.logger.info("Entering pre-operational mode")
         try:
             self.node.nmt.state = 'PRE-OPERATIONAL'
-        except Exception as err:
-            raise ValueError('Failed to enter pre-operational mode') from err
+        except:
+            raise ValueError('Failed to enter pre-operational mode')
 
     def _ctrl_program(self, cmd):
         '''Write program control command to CANopen object dictionary (0x1f51)'''
         try:
             self.ctrl_sdo.raw = cmd
-        except Exception as err:
-            raise ValueError('Unable to write control command 0x{:02x}'.format(cmd)) from err
+        except:
+            raise ValueError('Unable to write control command 0x{:02x}'.format(cmd))
 
     def stop_program(self):
         '''Write stop control command to CANopen object dictionary (0x1f51)'''
@@ -260,8 +260,8 @@ class CANopenProgramDownloader(object):
         '''Read software identification from CANopen object dictionary (0x1f56)'''
         try:
             swid = self.swid_sdo.raw
-        except Exception as err:
-            raise ValueError('Failed to read software identification') from err
+        except:
+            raise ValueError('Failed to read software identification')
         self.logger.info('Program software identification: 0x{:08x}'.format(swid))
         return swid
 
@@ -269,8 +269,8 @@ class CANopenProgramDownloader(object):
         '''Read flash status identification'''
         try:
             status = self.flash_sdo.raw
-        except Exception as err:
-            raise ValueError('Failed to read flash status identification') from err
+        except:
+            raise ValueError('Failed to read flash status identification')
         return status
 
     def download(self, bin_file):
@@ -289,8 +289,8 @@ class CANopenProgramDownloader(object):
                     break
                 outfile.write(chunk)
                 progress.next(n=len(chunk))
-        except Exception as err:
-            raise ValueError('Failed to download program') from err
+        except:
+            raise ValueError('Failed to download program')
         finally:
             progress.finish()
             infile.close()
@@ -301,8 +301,8 @@ class CANopenProgramDownloader(object):
         self.logger.info('Waiting for boot-up message...')
         try:
             self.node.nmt.wait_for_bootup(timeout=timeout)
-        except Exception as err:
-            raise ValueError('Timeout waiting for boot-up message') from err
+        except:
+            raise ValueError('Timeout waiting for boot-up message')
 
     def wait_for_flash_status_ok(self, timeout=DEFAULT_TIMEOUT):
         '''Wait for flash status ok'''
