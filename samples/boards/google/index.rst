@@ -1,6 +1,10 @@
-.. zephyr:code-sample-category:: Google
-   :name: Google
-   :show-listing:
-   :glob: **/*
+.. _google_samples:
 
-   These samples showcase the use of Google boards in Zephyr.
+Google
+======
+
+.. toctree::
+   :titlesonly:
+   :glob:
+
+   **/*

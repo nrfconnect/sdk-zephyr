@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: 96boards
-   :name: 96Boards
-   :show-listing:
+.. _96boards_samples:
 
-   These samples showcase the use of 96Boards in Zephyr.
+96Boards
+========
+
+.. toctree::
+   :titlesonly:
+   :glob:
+
+   */*
