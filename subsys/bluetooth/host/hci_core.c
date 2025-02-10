@@ -7,6 +7,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/bluetooth/hci_types.h>
 #include <zephyr/kernel.h>
 #include <string.h>
 #include <stdio.h>
@@ -14,6 +15,7 @@
 #include <zephyr/net_buf.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/check.h>
+#include <zephyr/sys/util_macro.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/slist.h>
 #include <zephyr/sys/byteorder.h>
@@ -28,11 +30,8 @@
 #include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/hci_vs.h>
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
+#include <zephyr/bluetooth/testing.h>
 #include <zephyr/drivers/bluetooth.h>
-#else
-#include <zephyr/drivers/bluetooth/hci_driver.h>
-#endif
 
 #include "common/bt_str.h"
 #include "common/assert.h"
@@ -68,9 +67,20 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_hci_core);
 
-#define BT_HCI_DEV  DT_CHOSEN(zephyr_bt_hci)
-#define BT_HCI_BUS  BT_DT_HCI_BUS_GET(BT_HCI_DEV)
-#define BT_HCI_NAME BT_DT_HCI_NAME_GET(BT_HCI_DEV)
+#if DT_HAS_CHOSEN(zephyr_bt_hci)
+#define BT_HCI_NODE   DT_CHOSEN(zephyr_bt_hci)
+#define BT_HCI_DEV    DEVICE_DT_GET(BT_HCI_NODE)
+#define BT_HCI_BUS    BT_DT_HCI_BUS_GET(BT_HCI_NODE)
+#define BT_HCI_NAME   BT_DT_HCI_NAME_GET(BT_HCI_NODE)
+#define BT_HCI_QUIRKS BT_DT_HCI_QUIRKS_GET(BT_HCI_NODE)
+#else
+/* The zephyr,bt-hci chosen property is mandatory, except for unit tests */
+BUILD_ASSERT(IS_ENABLED(CONFIG_ZTEST), "Missing DT chosen property for HCI");
+#define BT_HCI_DEV    NULL
+#define BT_HCI_BUS    0
+#define BT_HCI_NAME   ""
+#define BT_HCI_QUIRKS 0
+#endif
 
 void bt_tx_irq_raise(void);
 
@@ -94,9 +104,7 @@ struct bt_dev bt_dev = {
 #if defined(CONFIG_BT_DEVICE_APPEARANCE_DYNAMIC)
 	.appearance = CONFIG_BT_DEVICE_APPEARANCE,
 #endif
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
-	.hci = DEVICE_DT_GET(BT_HCI_DEV),
-#endif
+	.hci = BT_HCI_DEV,
 };
 
 static bt_ready_cb_t ready_cb;
@@ -124,27 +132,15 @@ static struct cmd_data cmd_data[CONFIG_BT_BUF_CMD_TX_COUNT];
 #define cmd(buf) (&cmd_data[net_buf_id(buf)])
 #define acl(buf) ((struct acl_data *)net_buf_user_data(buf))
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
 static bool drv_quirk_no_reset(void)
 {
-	return  ((BT_DT_HCI_QUIRKS_GET(DT_CHOSEN(zephyr_bt_hci)) & BT_HCI_QUIRK_NO_RESET) != 0);
+	return ((BT_HCI_QUIRKS & BT_HCI_QUIRK_NO_RESET) != 0);
 }
 
 bool bt_drv_quirk_no_auto_dle(void)
 {
-	return  ((BT_DT_HCI_QUIRKS_GET(DT_CHOSEN(zephyr_bt_hci)) & BT_HCI_QUIRK_NO_AUTO_DLE) != 0);
+	return ((BT_HCI_QUIRKS & BT_HCI_QUIRK_NO_AUTO_DLE) != 0);
 }
-#else
-static bool drv_quirk_no_reset(void)
-{
-	return  ((bt_dev.drv->quirks & BT_QUIRK_NO_RESET) != 0);
-}
-
-bool bt_drv_quirk_no_auto_dle(void)
-{
-	return  ((bt_dev.drv->quirks & BT_QUIRK_NO_AUTO_DLE) != 0);
-}
-#endif
 
 void bt_hci_cmd_state_set_init(struct net_buf *buf,
 			       struct bt_hci_cmd_state_set *state,
@@ -253,7 +249,7 @@ void bt_send_one_host_num_completed_packets(uint16_t handle)
 	BT_ASSERT_MSG(buf, "Unable to alloc for Host NCP");
 
 	cp = net_buf_add(buf, sizeof(*cp));
-	cp->num_handles = sys_cpu_to_le16(1);
+	cp->num_handles = 1;
 
 	hc = net_buf_add(buf, sizeof(*hc));
 	hc->handle = sys_cpu_to_le16(handle);
@@ -263,12 +259,22 @@ void bt_send_one_host_num_completed_packets(uint16_t handle)
 	BT_ASSERT_MSG(err == 0, "Unable to send Host NCP (err %d)", err);
 }
 
+#if defined(CONFIG_BT_TESTING)
+__weak void bt_testing_trace_event_acl_pool_destroy(struct net_buf *buf)
+{
+}
+#endif
+
 #if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
 void bt_hci_host_num_completed_packets(struct net_buf *buf)
 {
 	uint16_t handle = acl(buf)->handle;
 	struct bt_conn *conn;
 	uint8_t index = acl(buf)->index;
+
+	if (IS_ENABLED(CONFIG_BT_TESTING)) {
+		bt_testing_trace_event_acl_pool_destroy(buf);
+	}
 
 	net_buf_destroy(buf);
 
@@ -605,7 +611,7 @@ static void hci_num_completed_packets(struct net_buf *buf)
 			atomic_dec(&conn->in_ll);
 
 			/* TX context free + callback happens in there */
-			k_work_submit(&conn->tx_complete_work);
+			bt_conn_tx_notify(conn, false);
 		}
 
 		bt_conn_unref(conn);
@@ -921,6 +927,8 @@ static void conn_handle_disconnected(uint16_t handle, uint8_t disconnect_reason)
 			 */
 			disconnected_handles[i] = ~BT_ACL_HANDLE_MASK | handle;
 			disconnected_handles_reason[i] = disconnect_reason;
+
+			return;
 		}
 	}
 }
@@ -1929,6 +1937,23 @@ static void le_conn_update_complete(struct net_buf *buf)
 			conn->le.latency = sys_le16_to_cpu(evt->latency);
 			conn->le.timeout = sys_le16_to_cpu(evt->supv_timeout);
 
+			if (!IS_ENABLED(CONFIG_BT_CONN_PARAM_ANY)) {
+				if (!IN_RANGE(conn->le.interval, BT_HCI_LE_INTERVAL_MIN,
+					      BT_HCI_LE_INTERVAL_MAX)) {
+					LOG_WRN("interval exceeds the valid range 0x%04x",
+						conn->le.interval);
+				}
+				if (conn->le.latency > BT_HCI_LE_PERIPHERAL_LATENCY_MAX) {
+					LOG_WRN("latency exceeds the valid range 0x%04x",
+						conn->le.latency);
+				}
+				if (!IN_RANGE(conn->le.timeout, BT_HCI_LE_SUPERVISON_TIMEOUT_MIN,
+					      BT_HCI_LE_SUPERVISON_TIMEOUT_MAX)) {
+					LOG_WRN("supv_timeout exceeds the valid range 0x%04x",
+						conn->le.timeout);
+				}
+			}
+
 #if defined(CONFIG_BT_GAP_AUTO_UPDATE_CONN_PARAMS)
 			atomic_clear_bit(conn->flags,
 					 BT_CONN_PERIPHERAL_PARAM_AUTO_UPDATE);
@@ -1974,7 +1999,7 @@ static int set_flow_control(void)
 	hbs = net_buf_add(buf, sizeof(*hbs));
 	(void)memset(hbs, 0, sizeof(*hbs));
 	hbs->acl_mtu = sys_cpu_to_le16(CONFIG_BT_BUF_ACL_RX_SIZE);
-	hbs->acl_pkts = sys_cpu_to_le16(CONFIG_BT_BUF_ACL_RX_COUNT);
+	hbs->acl_pkts = sys_cpu_to_le16(BT_BUF_ACL_RX_COUNT);
 
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_HOST_BUFFER_SIZE, buf, NULL);
 	if (err) {
@@ -2177,7 +2202,7 @@ static void hci_encrypt_change(struct net_buf *buf)
 			 * Start SMP over BR/EDR if we are pairing and are
 			 * central on the link
 			 */
-			if (atomic_test_bit(conn->flags, BT_CONN_BR_PAIRING) &&
+			if (atomic_test_bit(conn->flags, BT_CONN_BR_PAIRED) &&
 			    conn->role == BT_CONN_ROLE_CENTRAL) {
 				bt_smp_br_send_pairing_req(conn);
 			}
@@ -2626,6 +2651,27 @@ void bt_hci_le_subrate_change_event(struct net_buf *buf)
 		conn->le.subrate.continuation_number = sys_le16_to_cpu(evt->continuation_number);
 		conn->le.latency = sys_le16_to_cpu(evt->peripheral_latency);
 		conn->le.timeout = sys_le16_to_cpu(evt->supervision_timeout);
+
+		if (!IS_ENABLED(CONFIG_BT_CONN_PARAM_ANY)) {
+			if (!IN_RANGE(conn->le.subrate.factor, BT_HCI_LE_SUBRATE_FACTOR_MIN,
+				      BT_HCI_LE_SUBRATE_FACTOR_MAX)) {
+				LOG_WRN("subrate_factor exceeds the valid range %d",
+					conn->le.subrate.factor);
+			}
+			if (conn->le.latency > BT_HCI_LE_PERIPHERAL_LATENCY_MAX) {
+				LOG_WRN("peripheral_latency exceeds the valid range 0x%04x",
+					conn->le.latency);
+			}
+			if (conn->le.subrate.continuation_number > BT_HCI_LE_CONTINUATION_NUM_MAX) {
+				LOG_WRN("continuation_number exceeds the valid range %d",
+					conn->le.subrate.continuation_number);
+			}
+			if (!IN_RANGE(conn->le.timeout, BT_HCI_LE_SUPERVISON_TIMEOUT_MIN,
+				      BT_HCI_LE_SUPERVISON_TIMEOUT_MAX)) {
+				LOG_WRN("supervision_timeout exceeds the valid range 0x%04x",
+					conn->le.timeout);
+			}
+		}
 	}
 
 	params.status = evt->status;
@@ -2749,6 +2795,8 @@ static const struct event_handler meta_events[] = {
 #if defined(CONFIG_BT_ISO_UNICAST)
 	EVENT_HANDLER(BT_HCI_EVT_LE_CIS_ESTABLISHED, hci_le_cis_established,
 		      sizeof(struct bt_hci_evt_le_cis_established)),
+	EVENT_HANDLER(BT_HCI_EVT_LE_CIS_ESTABLISHED_V2, hci_le_cis_established_v2,
+		      sizeof(struct bt_hci_evt_le_cis_established_v2)),
 #if defined(CONFIG_BT_ISO_PERIPHERAL)
 	EVENT_HANDLER(BT_HCI_EVT_LE_CIS_REQ, hci_le_cis_req,
 		      sizeof(struct bt_hci_evt_le_cis_req)),
@@ -2821,6 +2869,33 @@ static const struct event_handler meta_events[] = {
 		      sizeof(struct bt_hci_evt_le_enh_conn_complete_v2)),
 #endif /* CONFIG_BT_PER_ADV_RSP || CONFIG_BT_PER_ADV_SYNC_RSP */
 #endif /* CONFIG_BT_CONN */
+#if defined(CONFIG_BT_CHANNEL_SOUNDING)
+	EVENT_HANDLER(BT_HCI_EVT_LE_CS_READ_REMOTE_SUPPORTED_CAPABILITIES_COMPLETE,
+		      bt_hci_le_cs_read_remote_supported_capabilities_complete,
+		      sizeof(struct bt_hci_evt_le_cs_read_remote_supported_capabilities_complete)),
+	EVENT_HANDLER(BT_HCI_EVT_LE_CS_READ_REMOTE_FAE_TABLE_COMPLETE,
+		      bt_hci_le_cs_read_remote_fae_table_complete,
+		      sizeof(struct bt_hci_evt_le_cs_read_remote_fae_table_complete)),
+	EVENT_HANDLER(BT_HCI_EVT_LE_CS_CONFIG_COMPLETE, bt_hci_le_cs_config_complete_event,
+		      sizeof(struct bt_hci_evt_le_cs_config_complete)),
+	EVENT_HANDLER(BT_HCI_EVT_LE_CS_SECURITY_ENABLE_COMPLETE,
+			  bt_hci_le_cs_security_enable_complete,
+			  sizeof(struct bt_hci_evt_le_cs_security_enable_complete)),
+	EVENT_HANDLER(BT_HCI_EVT_LE_CS_PROCEDURE_ENABLE_COMPLETE,
+			  bt_hci_le_cs_procedure_enable_complete,
+			  sizeof(struct bt_hci_evt_le_cs_procedure_enable_complete)),
+	EVENT_HANDLER(BT_HCI_EVT_LE_CS_SUBEVENT_RESULT,
+		      bt_hci_le_cs_subevent_result,
+		      sizeof(struct bt_hci_evt_le_cs_subevent_result)),
+	EVENT_HANDLER(BT_HCI_EVT_LE_CS_SUBEVENT_RESULT_CONTINUE,
+		      bt_hci_le_cs_subevent_result_continue,
+		      sizeof(struct bt_hci_evt_le_cs_subevent_result_continue)),
+#if defined(CONFIG_BT_CHANNEL_SOUNDING_TEST)
+	EVENT_HANDLER(BT_HCI_EVT_LE_CS_TEST_END_COMPLETE,
+		      bt_hci_le_cs_test_end_complete,
+		      sizeof(struct bt_hci_evt_le_cs_test_end_complete)),
+#endif /* CONFIG_BT_CHANNEL_SOUNDING_TEST */
+#endif /* CONFIG_BT_CHANNEL_SOUNDING */
 
 };
 
@@ -3138,9 +3213,9 @@ static void read_supported_commands_complete(struct net_buf *buf)
 	       sizeof(bt_dev.supported_commands));
 
 	/* Report additional HCI commands used for ECDH as
-	 * supported if TinyCrypt ECC is used for emulation.
+	 * supported if PSA Crypto API ECC is used for emulation.
 	 */
-	if (IS_ENABLED(CONFIG_BT_TINYCRYPT_ECC)) {
+	if (IS_ENABLED(CONFIG_BT_SEND_ECC_EMULATION)) {
 		bt_hci_ecc_supported_commands(bt_dev.supported_commands);
 	}
 }
@@ -3345,6 +3420,7 @@ static int le_set_event_mask(void)
 	if (IS_ENABLED(CONFIG_BT_ISO) &&
 	    BT_FEAT_LE_CIS(bt_dev.le.features)) {
 		mask |= BT_EVT_MASK_LE_CIS_ESTABLISHED;
+		mask |= BT_EVT_MASK_LE_CIS_ESTABLISHED_V2;
 		if (BT_FEAT_LE_CIS_PERIPHERAL(bt_dev.le.features)) {
 			mask |= BT_EVT_MASK_LE_CIS_REQ;
 		}
@@ -3389,6 +3465,19 @@ static int le_set_event_mask(void)
 	if (IS_ENABLED(CONFIG_BT_CONN) &&
 	    (IS_ENABLED(CONFIG_BT_PER_ADV_RSP) || IS_ENABLED(CONFIG_BT_PER_ADV_SYNC_RSP))) {
 		mask |= BT_EVT_MASK_LE_ENH_CONN_COMPLETE_V2;
+	}
+
+
+	if (IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING) &&
+	    BT_FEAT_LE_CHANNEL_SOUNDING(bt_dev.le.features)) {
+		mask |= BT_EVT_MASK_LE_CS_READ_REMOTE_SUPPORTED_CAPABILITIES_COMPLETE;
+		mask |= BT_EVT_MASK_LE_CS_READ_REMOTE_FAE_TABLE_COMPLETE;
+		mask |= BT_EVT_MASK_LE_CS_CONFIG_COMPLETE;
+		mask |= BT_EVT_MASK_LE_CS_SECURITY_ENABLE_COMPLETE;
+		mask |= BT_EVT_MASK_LE_CS_PROCEDURE_ENABLE_COMPLETE;
+		mask |= BT_EVT_MASK_LE_CS_SUBEVENT_RESULT;
+		mask |= BT_EVT_MASK_LE_CS_SUBEVENT_RESULT_CONTINUE;
+		mask |= BT_EVT_MASK_LE_CS_TEST_END_COMPLETE;
 	}
 
 	sys_put_le64(mask, cp_mask->events);
@@ -3608,6 +3697,14 @@ static int le_init(void)
 	    BT_FEAT_LE_CONN_SUBRATING(bt_dev.le.features)) {
 		/* Connection Subrating (Host Support) */
 		err = le_set_host_feature(BT_LE_FEAT_BIT_CONN_SUBRATING_HOST_SUPP, 1);
+		if (err) {
+			return err;
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING) &&
+	    BT_FEAT_LE_CHANNEL_SOUNDING(bt_dev.le.features)) {
+		err = le_set_host_feature(BT_LE_FEAT_BIT_CHANNEL_SOUNDING_HOST, 1);
 		if (err) {
 			return err;
 		}
@@ -3908,19 +4005,10 @@ static int hci_init(void)
 	}
 #endif /* defined(CONFIG_BT_HCI_SET_PUBLIC_ADDR) */
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
 	err = bt_hci_setup(bt_dev.hci, &setup_params);
 	if (err && err != -ENOSYS) {
 		return err;
 	}
-#else
-	if (bt_dev.drv->setup) {
-		err = bt_dev.drv->setup(&setup_params);
-		if (err) {
-			return err;
-		}
-	}
-#endif
 #endif /* defined(CONFIG_BT_HCI_SETUP) */
 
 	err = common_init();
@@ -3971,15 +4059,11 @@ int bt_send(struct net_buf *buf)
 
 	bt_monitor_send(bt_monitor_opcode(buf), buf->data, buf->len);
 
-	if (IS_ENABLED(CONFIG_BT_TINYCRYPT_ECC)) {
+	if (IS_ENABLED(CONFIG_BT_SEND_ECC_EMULATION)) {
 		return bt_hci_ecc_send(buf);
 	}
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
 	return bt_hci_send(bt_dev.hci, buf);
-#else
-	return bt_dev.drv->send(buf);
-#endif
 }
 
 static const struct event_handler prio_events[] = {
@@ -4081,14 +4165,9 @@ static int bt_recv_unsafe(struct net_buf *buf)
 	}
 }
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
 int bt_hci_recv(const struct device *dev, struct net_buf *buf)
 {
 	ARG_UNUSED(dev);
-#else
-int bt_recv(struct net_buf *buf)
-{
-#endif
 	int err;
 
 	k_sched_lock();
@@ -4097,29 +4176,6 @@ int bt_recv(struct net_buf *buf)
 
 	return err;
 }
-
-/* Old-style HCI driver registration */
-#if !DT_HAS_CHOSEN(zephyr_bt_hci)
-int bt_hci_driver_register(const struct bt_hci_driver *drv)
-{
-	if (bt_dev.drv) {
-		return -EALREADY;
-	}
-
-	if (!drv->open || !drv->send) {
-		return -EINVAL;
-	}
-
-	bt_dev.drv = drv;
-
-	LOG_DBG("Registered %s", drv->name ? drv->name : "");
-
-	bt_monitor_new_index(BT_MONITOR_TYPE_PRIMARY, drv->bus,
-			     BT_ADDR_ANY, drv->name ? drv->name : "bt0");
-
-	return 0;
-}
-#endif /* !DT_HAS_CHOSEN(zephyr_bt_hci) */
 
 void bt_finalize_init(void)
 {
@@ -4249,19 +4305,17 @@ int bt_enable(bt_ready_cb_t cb)
 {
 	int err;
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
+	if (IS_ENABLED(CONFIG_ZTEST) && bt_dev.hci == NULL) {
+		LOG_ERR("No DT chosen property for HCI");
+		return -ENODEV;
+	}
+
 	if (!device_is_ready(bt_dev.hci)) {
 		LOG_ERR("HCI driver is not ready");
 		return -ENODEV;
 	}
 
 	bt_monitor_new_index(BT_MONITOR_TYPE_PRIMARY, BT_HCI_BUS, BT_ADDR_ANY, BT_HCI_NAME);
-#else /* !DT_HAS_CHONSEN(zephyr_bt_hci) */
-	if (!bt_dev.drv) {
-		LOG_ERR("No HCI driver registered");
-		return -ENODEV;
-	}
-#endif
 
 	atomic_clear_bit(bt_dev.flags, BT_DEV_DISABLE);
 
@@ -4303,11 +4357,7 @@ int bt_enable(bt_ready_cb_t cb)
 	k_thread_name_set(&bt_workq.thread, "BT RX WQ");
 #endif
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
 	err = bt_hci_open(bt_dev.hci, bt_hci_recv);
-#else
-	err = bt_dev.drv->open();
-#endif
 	if (err) {
 		LOG_ERR("HCI driver open failed (%d)", err);
 		return err;
@@ -4326,17 +4376,6 @@ int bt_enable(bt_ready_cb_t cb)
 int bt_disable(void)
 {
 	int err;
-
-#if !DT_HAS_CHOSEN(zephyr_bt_hci)
-	if (!bt_dev.drv) {
-		LOG_ERR("No HCI driver registered");
-		return -ENODEV;
-	}
-
-	if (!bt_dev.drv->close) {
-		return -ENOTSUP;
-	}
-#endif
 
 	if (atomic_test_and_set_bit(bt_dev.flags, BT_DEV_DISABLE)) {
 		return -EALREADY;
@@ -4365,16 +4404,13 @@ int bt_disable(void)
 	disconnected_handles_reset();
 #endif /* CONFIG_BT_CONN */
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
 	err = bt_hci_close(bt_dev.hci);
 	if (err == -ENOSYS) {
 		atomic_clear_bit(bt_dev.flags, BT_DEV_DISABLE);
 		atomic_set_bit(bt_dev.flags, BT_DEV_READY);
 		return -ENOTSUP;
 	}
-#else
-	err = bt_dev.drv->close();
-#endif
+
 	if (err) {
 		LOG_ERR("HCI driver close failed (%d)", err);
 

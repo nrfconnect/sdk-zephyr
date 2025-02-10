@@ -1,7 +1,4 @@
-.. _esp32c6_devkitc:
-
-ESP32-C6-DevKitC
-################
+.. zephyr:board:: esp32c6_devkitc
 
 Overview
 ********
@@ -102,9 +99,15 @@ Current Zephyr's ESP32-C6-DevKitC board supports the following features:
 +------------+------------+-------------------------------------+
 | SPI Master | on-chip    | spi                                 |
 +------------+------------+-------------------------------------+
+| I2C        | on-chip    | i2c                                 |
++------------+------------+-------------------------------------+
+| Timers     | on-chip    | counter                             |
++------------+------------+-------------------------------------+
 | Watchdog   | on-chip    | watchdog                            |
 +------------+------------+-------------------------------------+
 | LEDC       | on-chip    | pwm                                 |
++------------+------------+-------------------------------------+
+| MCPWM      | on-chip    | pwm                                 |
 +------------+------------+-------------------------------------+
 | SPI DMA    | on-chip    | spi                                 |
 +------------+------------+-------------------------------------+
@@ -113,6 +116,8 @@ Current Zephyr's ESP32-C6-DevKitC board supports the following features:
 | TRNG       | on-chip    | entropy                             |
 +------------+------------+-------------------------------------+
 | USB-CDC    | on-chip    | serial                              |
++------------+------------+-------------------------------------+
+| Wi-Fi      | on-chip    |                                     |
 +------------+------------+-------------------------------------+
 
 System requirements
@@ -280,6 +285,8 @@ You can debug an application in the usual way. Here is an example for the :zephy
 
 References
 **********
+
+.. target-notes::
 
 .. _`ESP32-C6-DevKitC`: https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32c6/esp32-c6-devkitc-1/user_guide.html
 .. _`ESP32-C6 Datasheet`: https://www.espressif.com/sites/default/files/documentation/esp32-c6_datasheet_en.pdf

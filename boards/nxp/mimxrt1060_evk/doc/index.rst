@@ -1,7 +1,4 @@
-.. _mimxrt1060_evk:
-
-NXP MIMXRT1060-EVK
-##################
+.. zephyr:board:: mimxrt1060_evk
 
 Overview
 ********
@@ -15,9 +12,6 @@ ideal for real-time applications such as High-Speed GPIO, CAN FD, and
 synchronous parallel NAND/NOR/PSRAM controller. The i.MX RT1060 runs on the
 Arm® Cortex-M7® core up to 600 MHz.
 
-.. image:: mimxrt1060_evk.jpg
-   :align: center
-   :alt: MIMXRT1060-EVK
 
 Hardware
 ********
@@ -103,7 +97,7 @@ Supported Features
 
 The mimxrt1060_evk board configuration supports the hardware features listed
 below.  For additional features not yet supported, please also refer to the
-:ref:`mimxrt1064_evk` , which is the superset board in NXP's i.MX RT10xx family.
+:zephyr:board:`mimxrt1064_evk` , which is the superset board in NXP's i.MX RT10xx family.
 NXP prioritizes enabling the superset board with NXP's Full Platform Support for
 Zephyr.  Therefore, the mimxrt1064_evk board may have additional features
 already supported, which can also be re-used on this mimxrt1060_evk board:
@@ -156,7 +150,7 @@ already supported, which can also be re-used on this mimxrt1060_evk board:
 +-----------+------------+-------------------------------------+
 
 The default configuration can be found in
-:zephyr_file:`boards/nxp/mimxrt1060_evk/mimxrt1060_evk_defconfig`
+:zephyr_file:`boards/nxp/mimxrt1060_evk/mimxrt1060_evk_mimxrt1062_qspi_defconfig`
 
 Other hardware features are not currently supported by the port.
 
@@ -322,6 +316,19 @@ The MIMXRT1060 SoC has eight UARTs. ``LPUART1`` is configured for the console,
 ``LPUART3`` for the Bluetooth Host Controller Interface (BT HCI), and the
 remaining are not used.
 
+Board Targets
+*************
+
+This board has two variants that can be targeted,
+depending on which flash to set as ``zephyr,flash``:
+
+* ``mimxrt1060_evk/mimxrt1062/qspi`` is the default variant for the out of box
+  setup of the board using the qspi flash.
+* ``mimxrt1060_evk/mimxrt1062/hyperflash`` is for a board that has been reworked to use the
+  hyperflash instead of the qspi flash.
+* This board also has two revisions, the EVKA and EVKB. EVKA is the default target for this board.
+  To target EVKB, the board target string would become ``mimxrt1060_evk@B//qspi``, for example.
+
 Programming and Debugging
 *************************
 
@@ -382,7 +389,7 @@ Here is an example for the :zephyr:code-sample:`hello_world` application.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world
-   :board: mimxrt1060_evk
+   :board: mimxrt1060_evk//qspi
    :goals: flash
 
 Open a serial terminal, reset the board (press the SW9 button), and you should
@@ -391,7 +398,7 @@ see the following message in the terminal:
 .. code-block:: console
 
    ***** Booting Zephyr OS v1.14.0-rc1 *****
-   Hello World! mimxrt1060_evk
+   Hello World! mimxrt1060_evk//qspi
 
 Debugging
 =========
@@ -400,7 +407,7 @@ Here is an example for the :zephyr:code-sample:`hello_world` application.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world
-   :board: mimxrt1060_evk
+   :board: mimxrt1060_evk//qspi
    :goals: debug
 
 Open a serial terminal, step through the application in your debugger, and you
@@ -409,7 +416,7 @@ should see the following message in the terminal:
 .. code-block:: console
 
    ***** Booting Zephyr OS v1.14.0-rc1 *****
-   Hello World! mimxrt1060_evk
+   Hello World! mimxrt1060_evk//qspi
 
 Troubleshooting
 ===============

@@ -1,7 +1,4 @@
-.. _nucleo_h753zi_board:
-
-ST Nucleo H753ZI
-################
+.. zephyr:board:: nucleo_h753zi
 
 Overview
 ********
@@ -43,10 +40,6 @@ Key Features
 - Comprehensive free software libraries and examples available with the
   STM32Cube MCU package.
 - Arm* Mbed Enabled* compliant (only for some Nucleo part numbers)
-
-.. image:: img/nucleo_h753zi.jpg
-   :align: center
-   :alt: Nucleo H753ZI
 
 More information about the board can be found at the `Nucleo H753ZI website`_.
 
@@ -140,12 +133,12 @@ and a ST morpho connector. Board is configured as follows:
 - UART_3 TX/RX : PD8/PD9 (ST-Link Virtual Port Com)
 - USER_PB : PC13
 - LD1 : PB0
-- LD2 : PB7
+- LD2 : PE1
 - LD3 : PB14
 - I2C : PB8, PB9
 - ADC1_INP15 : PA3
 - ETH : PA1, PA2, PA7, PB13, PC1, PC4, PC5, PG11, PG13
-- SPI1 NSS/SCK/MISO/MOSI : PD14PA5/PA6/PB5 (Arduino SPI)
+- SPI1 NSS/SCK/MISO/MOSI : PD14/PA5/PA6/PB5 (Arduino SPI)
 - CAN/CANFD : PD0, PD1
 
 System Clock

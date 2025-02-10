@@ -82,8 +82,6 @@ static int dht_sample_fetch(const struct device *dev,
 
 	k_busy_wait(DHT_START_SIGNAL_DURATION);
 
-	gpio_pin_set_dt(&cfg->dio_gpio, false);
-
 	/* switch to DIR_IN to read sensor signals */
 	gpio_pin_configure_dt(&cfg->dio_gpio, GPIO_INPUT);
 
@@ -230,7 +228,7 @@ static int dht_channel_get(const struct device *dev,
 	return 0;
 }
 
-static const struct sensor_driver_api dht_api = {
+static DEVICE_API(sensor, dht_api) = {
 	.sample_fetch = &dht_sample_fetch,
 	.channel_get = &dht_channel_get,
 };

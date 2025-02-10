@@ -53,7 +53,7 @@ embedded RAM and low power consumption.
 
 - Emulator reset switch
 
-.. figure:: ek-ra4w1-board.webp
+.. figure:: ek_ra4w1.webp
 	:align: center
 	:alt: RA4W1 Evaluation Kit
 
@@ -63,7 +63,7 @@ Hardware
 ********
 Detail Hardware feature for the RA4W1 MCU group can be found at `RA4W1 Group User's Manual Hardware`_
 
-.. figure:: ra4w1-block-diagram.webp
+.. figure:: ra4w1_block_diagram.webp
 	:width: 442px
 	:align: center
 	:alt: RA4W1 MCU group feature
@@ -89,6 +89,18 @@ The below features are currently supported on Zephyr OS for EK-RA4W1 board:
 | UART      | on-chip    | serial               |
 +-----------+------------+----------------------+
 | CLOCK     | on-chip    | clock control        |
++-----------+------------+----------------------+
+| SPI       | on-chip    | spi                  |
++-----------+------------+----------------------+
+| COUNTER   | on-chip    | counter              |
++-----------+------------+----------------------+
+| ENTROPY   | on-chip    | entropy              |
++-----------+------------+----------------------+
+| ADC       | on-chip    | adc                  |
++-----------+------------+----------------------+
+| PWM       | on-chip    | pwm                  |
++-----------+------------+----------------------+
+| I2C       | on-chip    | i2c                  |
 +-----------+------------+----------------------+
 
 Other hardware features are currently not supported by the port.

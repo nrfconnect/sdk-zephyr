@@ -47,18 +47,18 @@
 #include <zephyr/sys/check.h>
 #include <zephyr/sys/byteorder.h>
 
-#include "../host/conn_internal.h"
-#include "../host/keys.h"
-
 #include "csip_crypto.h"
 #include "csip_internal.h"
 #include "common/bt_str.h"
+#include "host/conn_internal.h"
+#include "host/keys.h"
+#include "host/hci_core.h"
 
 LOG_MODULE_REGISTER(bt_csip_set_coordinator, CONFIG_BT_CSIP_SET_COORDINATOR_LOG_LEVEL);
 
 static struct active_members {
 	struct bt_csip_set_coordinator_set_member *members[CONFIG_BT_MAX_CONN];
-	const struct bt_csip_set_coordinator_set_info *info;
+	struct bt_csip_set_coordinator_set_info info;
 	uint8_t members_count;
 	uint8_t members_handled;
 	uint8_t members_restored;
@@ -169,7 +169,7 @@ static struct bt_csip_set_coordinator_svc_inst *lookup_instance_by_set_info(
 
 		member_set_info = &member->insts[i].info;
 		if (member_set_info->set_size == set_info->set_size &&
-		    memcmp(&member_set_info->sirk, &set_info->sirk, sizeof(set_info->sirk)) == 0) {
+		    memcmp(member_set_info->sirk, set_info->sirk, sizeof(set_info->sirk)) == 0) {
 			return bt_csip_set_coordinator_lookup_instance_by_index(inst->conn, i);
 		}
 	}
@@ -184,9 +184,9 @@ static struct bt_csip_set_coordinator_svc_inst *get_next_active_instance(void)
 
 	member = active.members[active.members_handled];
 
-	svc_inst =  lookup_instance_by_set_info(member, active.info);
+	svc_inst = lookup_instance_by_set_info(member, &active.info);
 	if (svc_inst == NULL) {
-		LOG_DBG("Failed to lookup instance by set_info %p", active.info);
+		LOG_DBG("Failed to lookup instance by set_info");
 	}
 
 	return svc_inst;
@@ -201,8 +201,8 @@ static int member_rank_compare_asc(const void *m1, const void *m2)
 	struct bt_csip_set_coordinator_svc_inst *svc_inst_1;
 	struct bt_csip_set_coordinator_svc_inst *svc_inst_2;
 
-	svc_inst_1 = lookup_instance_by_set_info(member_1, active.info);
-	svc_inst_2 = lookup_instance_by_set_info(member_2, active.info);
+	svc_inst_1 = lookup_instance_by_set_info(member_1, &active.info);
+	svc_inst_2 = lookup_instance_by_set_info(member_2, &active.info);
 
 	if (svc_inst_1 == NULL) {
 		LOG_ERR("svc_inst_1 was NULL for member %p", member_1);
@@ -232,7 +232,7 @@ static void active_members_store_ordered(const struct bt_csip_set_coordinator_se
 {
 	(void)memcpy(active.members, members, count * sizeof(members[0U]));
 	active.members_count = count;
-	active.info = info;
+	memcpy(&active.info, info, sizeof(active.info));
 
 	if (count > 1U && CONFIG_BT_MAX_CONN > 1) {
 		qsort(active.members, count, sizeof(members[0U]),
@@ -764,8 +764,7 @@ static uint8_t discover_func(struct bt_conn *conn,
 			if (sub_params->value != 0) {
 				int err;
 
-				/* With ccc_handle == 0 it will use auto discovery */
-				sub_params->ccc_handle = 0;
+				sub_params->ccc_handle = BT_GATT_AUTO_DISCOVER_CCC_HANDLE;
 				sub_params->end_handle = client->cur_inst->end_handle;
 				sub_params->value_handle = chrc->value_handle;
 				sub_params->notify = notify_handler;
@@ -1080,7 +1079,7 @@ static void csip_set_coordinator_write_restore_cb(struct bt_conn *conn,
 		int csip_err;
 
 		member = active.members[active.members_handled - active.members_restored - 1];
-		client->cur_inst = lookup_instance_by_set_info(member, active.info);
+		client->cur_inst = lookup_instance_by_set_info(member, &active.info);
 		if (client->cur_inst == NULL) {
 			release_set_complete(-ENOENT);
 
@@ -1114,10 +1113,10 @@ static void csip_set_coordinator_write_lock_cb(struct bt_conn *conn,
 
 			active.members_restored = 0;
 
-			member = active.members[active.members_handled - active.members_restored];
-			client->cur_inst = lookup_instance_by_set_info(member, active.info);
+			member = active.members[active.members_handled - 1];
+			client->cur_inst = lookup_instance_by_set_info(member, &active.info);
 			if (client->cur_inst == NULL) {
-				LOG_DBG("Failed to lookup instance by set_info %p", active.info);
+				LOG_DBG("Failed to lookup instance by set_info");
 
 				lock_set_complete(-ENOENT);
 				return;
@@ -1131,9 +1130,9 @@ static void csip_set_coordinator_write_lock_cb(struct bt_conn *conn,
 				active_members_reset();
 				return;
 			}
+		} else {
+			lock_set_complete(err);
 		}
-
-		lock_set_complete(err);
 
 		return;
 	}
@@ -1215,7 +1214,7 @@ static void csip_set_coordinator_write_release_cb(struct bt_conn *conn, uint8_t 
 
 static void csip_set_coordinator_lock_state_read_cb(int err, bool locked)
 {
-	const struct bt_csip_set_coordinator_set_info *info = active.info;
+	const struct bt_csip_set_coordinator_set_info *info = &active.info;
 	struct bt_csip_set_coordinator_set_member *cur_member = NULL;
 
 	if (err || locked) {
@@ -1607,9 +1606,9 @@ csip_set_coordinator_get_lock_state(const struct bt_csip_set_coordinator_set_mem
 	for (uint8_t i = 0U; i < count; i++) {
 		struct bt_csip_set_coordinator_svc_inst *svc_inst;
 
-		svc_inst = lookup_instance_by_set_info(active.members[i], active.info);
+		svc_inst = lookup_instance_by_set_info(active.members[i], &active.info);
 		if (svc_inst == NULL) {
-			LOG_DBG("Failed to lookup instance by set_info %p", active.info);
+			LOG_DBG("Failed to lookup instance by set_info");
 
 			active_members_reset();
 			return -ENOENT;
@@ -1633,11 +1632,11 @@ csip_set_coordinator_get_lock_state(const struct bt_csip_set_coordinator_set_mem
 		 * here.
 		 */
 		if (active.oap_cb == NULL ||
-		    !active.oap_cb(active.info, active.members, active.members_count)) {
+		    !active.oap_cb(&active.info, active.members, active.members_count)) {
 			err = -ECANCELED;
 		}
 
-		ordered_access_complete(active.info, err, false, NULL);
+		ordered_access_complete(&active.info, err, false, NULL);
 	}
 
 	return err;
@@ -1664,6 +1663,31 @@ int bt_csip_set_coordinator_ordered_access(
 	return 0;
 }
 
+/* As per CSIP, locking and releasing sets can only be done by bonded devices, so it does not makes
+ * sense to have these functions available if we do not support bonding
+ */
+#if defined(CONFIG_BT_BONDABLE)
+static bool all_members_bonded(const struct bt_csip_set_coordinator_set_member *members[],
+			       size_t count)
+{
+	for (size_t i = 0U; i < count; i++) {
+		const struct bt_csip_set_coordinator_set_member *member = members[i];
+		const struct bt_csip_set_coordinator_inst *client =
+			CONTAINER_OF(member, struct bt_csip_set_coordinator_inst, set_member);
+		struct bt_conn_info info;
+		int err;
+
+		err = bt_conn_get_info(client->conn, &info);
+		if (err != 0 || !bt_addr_le_is_bonded(info.id, info.le.dst)) {
+			LOG_DBG("Member[%zu] is not bonded", i);
+
+			return false;
+		}
+	}
+
+	return true;
+}
+
 int bt_csip_set_coordinator_lock(
 	const struct bt_csip_set_coordinator_set_member **members,
 	uint8_t count,
@@ -1683,6 +1707,10 @@ int bt_csip_set_coordinator_lock(
 		return err;
 	}
 
+	if (!all_members_bonded(members, count)) {
+		return -EINVAL;
+	}
+
 	if (!check_and_set_members_busy(members, count)) {
 		LOG_DBG("One or more members are busy");
 		return -EBUSY;
@@ -1690,9 +1718,9 @@ int bt_csip_set_coordinator_lock(
 
 	active_members_store_ordered(members, count, set_info, true);
 
-	svc_inst = lookup_instance_by_set_info(active.members[0], active.info);
+	svc_inst = lookup_instance_by_set_info(active.members[0], &active.info);
 	if (svc_inst == NULL) {
-		LOG_DBG("Failed to lookup instance by set_info %p", active.info);
+		LOG_DBG("Failed to lookup instance by set_info");
 
 		active_members_reset();
 		return -ENOENT;
@@ -1725,6 +1753,10 @@ int bt_csip_set_coordinator_release(const struct bt_csip_set_coordinator_set_mem
 		return err;
 	}
 
+	if (!all_members_bonded(members, count)) {
+		return -EINVAL;
+	}
+
 	if (!check_and_set_members_busy(members, count)) {
 		LOG_DBG("One or more members are busy");
 		return -EBUSY;
@@ -1732,9 +1764,9 @@ int bt_csip_set_coordinator_release(const struct bt_csip_set_coordinator_set_mem
 
 	active_members_store_ordered(members, count, set_info, false);
 
-	svc_inst = lookup_instance_by_set_info(active.members[0], active.info);
+	svc_inst = lookup_instance_by_set_info(active.members[0], &active.info);
 	if (svc_inst == NULL) {
-		LOG_DBG("Failed to lookup instance by set_info %p", active.info);
+		LOG_DBG("Failed to lookup instance by set_info");
 
 		active_members_reset();
 		return -ENOENT;
@@ -1748,3 +1780,4 @@ int bt_csip_set_coordinator_release(const struct bt_csip_set_coordinator_set_mem
 
 	return err;
 }
+#endif /* CONFIG_BT_BONDABLE */

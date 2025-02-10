@@ -26,7 +26,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
         os: [ubuntu-22.04, macos-14, windows-2022]
     steps:
     - name: checkout
@@ -62,8 +62,7 @@ jobs:
           ${{ runner.os }}-pip-${{ matrix.python-version }}
     - name: install python dependencies
       run: |
-        pip3 install wheel
-        pip3 install pytest pyyaml tox
+        pip install pytest pyyaml tox
     - name: run tox
       working-directory: scripts/dts/python-devicetree
       run: |
