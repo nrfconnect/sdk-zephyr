@@ -24,22 +24,7 @@ schema;soc-schema:
     - type: map
       mapping:
         name:
-          required: true # Note: either name or extend is required, but that is handled in python
-          type: str
-        cpuclusters:
-          include: cpucluster-schema
-
-schema;soc-extend-schema:
-  required: false
-  type: seq
-  sequence:
-    - type: map
-      mapping:
-        name:
-          required: false # Note: either name or extend is required, but that is handled in python
-          type: str
-        extend:
-          required: false # Note: either name or extend is required, but that is handled in python
+          required: true
           type: str
         cpuclusters:
           include: cpucluster-schema
@@ -75,7 +60,7 @@ mapping:
   series:
     include: series-schema
   socs:
-    include: soc-extend-schema
+    include: soc-schema
   vendor:
     required: false
     type: str
