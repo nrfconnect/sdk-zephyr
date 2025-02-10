@@ -394,7 +394,7 @@ static ALWAYS_INLINE void trdc_enable_all_access(void)
  * @return 0
  */
 
-void soc_early_init_hook(void)
+static int imxrt_init(void)
 {
 	/* Initialize system clock */
 	clock_init();
@@ -409,6 +409,8 @@ void soc_early_init_hook(void)
 #endif
 	__ISB();
 	__DSB();
+
+	return 0;
 }
 
 #ifdef CONFIG_SOC_RESET_HOOK
@@ -417,3 +419,5 @@ void soc_reset_hook(void)
 	SystemInit();
 }
 #endif
+
+SYS_INIT(imxrt_init, PRE_KERNEL_1, 0);
