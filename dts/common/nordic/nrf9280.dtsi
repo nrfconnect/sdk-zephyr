@@ -6,7 +6,7 @@
 
 #include <mem.h>
 #include <nordic/nrf_common.dtsi>
-#include <zephyr/dt-bindings/adc/nrf-saadc-haltium.h>
+#include <zephyr/dt-bindings/adc/nrf-saadc.h>
 #include <zephyr/dt-bindings/misc/nordic-nrf-ficr-nrf9230-engb.h>
 #include <zephyr/dt-bindings/misc/nordic-domain-id-nrf9230.h>
 #include <zephyr/dt-bindings/misc/nordic-owner-id-nrf9230.h>
@@ -103,39 +103,10 @@
 			clock-frequency = <DT_FREQ_M(32)>;
 		};
 
-		lfxo: lfxo {
-			compatible = "nordic,nrf54h-lfxo";
-			status = "disabled";
-			#clock-cells = <0>;
-			clock-frequency = <32768>;
-		};
-
 		fll16m: fll16m {
-			compatible = "nordic,nrf-fll16m";
+			compatible = "fixed-clock";
 			#clock-cells = <0>;
 			clock-frequency = <DT_FREQ_M(16)>;
-			open-loop-accuracy-ppm = <20000>;
-			closed-loop-base-accuracy-ppm = <5000>;
-			clocks = <&hfxo>, <&lfxo>;
-			clock-names = "hfxo", "lfxo";
-		};
-
-		hsfll120: hsfll120 {
-			compatible = "fixed-clock";
-			clocks = <&fll16m>;
-			#clock-cells = <0>;
-			clock-frequency = <DT_FREQ_M(320)>;
-		};
-
-		lfclk: lfclk {
-			compatible = "nordic,nrf-lfclk";
-			#clock-cells = <0>;
-			clock-frequency = <32768>;
-			status = "okay";
-			lfrc-accuracy-ppm = <500>;
-			lflprc-accuracy-ppm = <1000>;
-			clocks = <&hfxo>, <&lfxo>;
-			clock-names = "hfxo", "lfxo";
 		};
 
 		hsfll120: hsfll120 {
@@ -751,7 +722,6 @@
 				interrupts = <386 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
 				#io-channel-cells = <1>;
-				zephyr,pm-device-runtime-auto;
 			};
 
 			comp: comparator@983000 {
@@ -797,8 +767,6 @@
 				reg = <0x99c000 0x1000>;
 				status = "disabled";
 				cc-num = <16>;
-				clocks = <&lfclk>, <&fll16m>;
-				clock-names = "lfclock", "hfclock";
 			};
 
 			dppic133: dppic@9a1000 {
