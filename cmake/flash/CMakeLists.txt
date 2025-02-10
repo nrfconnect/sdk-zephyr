@@ -61,6 +61,8 @@ function(runners_yaml_append_config)
     runners_yaml_append("  uf2_file: ${uf2}")
   endif()
 
+  zephyr_get(OPENOCD)
+  zephyr_get(OPENOCD_DEFAULT_PATH)
   if(CMAKE_GDB OR OPENOCD OR OPENOCD_DEFAULT_PATH)
     runners_yaml_append("  # Host tools:")
   endif()
@@ -152,7 +154,7 @@ endif()
 
 # Generate the flash, debug, debugserver, attach targets within the build
 # system itself.
-foreach(target flash debug debugserver attach)
+foreach(target flash debug debugserver attach rtt)
   if(target STREQUAL flash)
     set(comment "Flashing ${BOARD}")
   elseif(target STREQUAL debug)
@@ -166,6 +168,8 @@ foreach(target flash debug debugserver attach)
     endif()
   elseif(target STREQUAL attach)
     set(comment "Debugging ${BOARD}")
+  elseif(target STREQUAL rtt)
+    set(comment "RTT ${BOARD}")
   endif()
   string(TOUPPER ${target} TARGET_UPPER)
 

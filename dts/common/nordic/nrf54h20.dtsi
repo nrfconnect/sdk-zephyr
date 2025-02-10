@@ -135,12 +135,14 @@
 				compatible = "zephyr,power-state";
 				power-state-name = "suspend-to-idle";
 				substate-id = <2>;
-				min-residency-us = <100000>;
+				min-residency-us = <1000>;
+				exit-latency-us = <30>;
 			};
 			s2ram: s2ram {
 				compatible = "zephyr,power-state";
 				power-state-name = "suspend-to-ram";
-				min-residency-us = <800000>;
+				min-residency-us = <2000>;
+				exit-latency-us = <260>;
 			};
 		};
 	};
@@ -222,7 +224,15 @@
 		cpuapp_uicr: uicr@fff8000 {
 			compatible = "nordic,nrf-uicr-v2";
 			reg = <0xfff8000 DT_SIZE_K(2)>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0x0 0xfff8000 DT_SIZE_K(2)>;
 			domain = <2>;
+
+			bicr: bicr@7b0 {
+				compatible = "nordic,nrf-bicr";
+				reg = <0x7b0 48>;
+			};
 		};
 
 		cpurad_uicr: uicr@fffa000 {
@@ -256,6 +266,7 @@
 		cpuapp_peripherals: peripheral@52000000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
+			reg = <0x52000000 0x1000000>;
 			ranges = <0x0 0x52000000 0x1000000>;
 
 			cpuapp_hsfll: clock@d000 {
@@ -474,6 +485,7 @@
 		tdd_peripherals: peripheral@bf000000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
+			reg = <0xbf000000 0x1000000>;
 			ranges = <0x0 0xbf000000 0x1000000>;
 
 			tbm: tbm@3000 {
@@ -493,6 +505,7 @@
 		global_peripherals: peripheral@5f000000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
+			reg = <0x5f000000 0x1000000>;
 			ranges = <0x0 0x5f000000 0x1000000>;
 
 			usbhs: usbhs@86000 {

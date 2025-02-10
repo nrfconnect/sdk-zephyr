@@ -157,6 +157,33 @@ static bool channel_psel_get(uint32_t channel, uint32_t *psel,
 		== PWM_PSEL_OUT_CONNECT_Connected);
 }
 
+static int stop_pwm(const struct device *dev)
+{
+	const struct pwm_nrfx_config *config = dev->config;
+
+	/* Don't wait here for the peripheral to actually stop. Instead,
+	 * ensure it is stopped before starting the next playback.
+	 */
+	nrfx_pwm_stop(&config->pwm, false);
+
+#if PWM_NRFX_USE_CLOCK_CONTROL
+	struct pwm_nrfx_data *data = dev->data;
+
+	if (data->clock_requested) {
+		int ret = nrf_clock_control_release(config->clk_dev, &config->clk_spec);
+
+		if (ret < 0) {
+			LOG_ERR("Global HSFLL release failed: %d", ret);
+			return ret;
+		}
+
+		data->clock_requested = false;
+	}
+#endif
+
+	return 0;
+}
+
 static int pwm_nrfx_set_cycles(const struct device *dev, uint32_t channel,
 			       uint32_t period_cycles, uint32_t pulse_cycles,
 			       pwm_flags_t flags)
@@ -248,22 +275,13 @@ static int pwm_nrfx_set_cycles(const struct device *dev, uint32_t channel,
 	 * registers and drives its outputs accordingly.
 	 */
 	if (data->pwm_needed == 0) {
-		/* Don't wait here for the peripheral to actually stop. Instead,
-		 * ensure it is stopped before starting the next playback.
-		 */
-		nrfx_pwm_stop(&config->pwm, false);
-#if PWM_NRFX_USE_CLOCK_CONTROL
-		if (data->clock_requested && config->clk_dev) {
-			int ret = nrf_clock_control_release(config->clk_dev, &config->clk_spec);
+		int ret = stop_pwm(dev);
 
-			if (ret < 0) {
-				LOG_ERR("Global HSFLL release failed: %d", ret);
-				return ret;
-			}
-
-			data->clock_requested = false;
+		if (ret < 0) {
+			LOG_ERR("PWM stop failed: %d", ret);
+			return ret;
 		}
-#endif
+
 		data->stop_requested = true;
 	} else {
 		if (data->stop_requested) {
@@ -284,7 +302,7 @@ static int pwm_nrfx_set_cycles(const struct device *dev, uint32_t channel,
 		 * loaded then) or the PWM peripheral is stopped.
 		 */
 #if PWM_NRFX_USE_CLOCK_CONTROL
-		if (!data->clock_requested && config->clk_dev) {
+		if (config->clk_dev && !data->clock_requested) {
 			int ret = nrf_clock_control_request_sync(config->clk_dev,
 								 &config->clk_spec,
 								 K_FOREVER);
@@ -314,7 +332,7 @@ static int pwm_nrfx_get_cycles_per_sec(const struct device *dev, uint32_t channe
 	return 0;
 }
 
-static const struct pwm_driver_api pwm_nrfx_drv_api_funcs = {
+static DEVICE_API(pwm, pwm_nrfx_drv_api_funcs) = {
 	.set_cycles = pwm_nrfx_set_cycles,
 	.get_cycles_per_sec = pwm_nrfx_get_cycles_per_sec,
 };
@@ -356,21 +374,13 @@ static int pwm_suspend(const struct device *dev)
 {
 	const struct pwm_nrfx_config *config = dev->config;
 
-	nrfx_pwm_stop(&config->pwm, false);
-#if PWM_NRFX_USE_CLOCK_CONTROL
-	struct pwm_nrfx_data *data = dev->data;
+	int ret = stop_pwm(dev);
 
-	if (data->clock_requested) {
-		int ret = nrf_clock_control_release(config->clk_dev, &config->clk_spec);
-
-		if (ret < 0) {
-			LOG_ERR("Global HSFLL release failed: %d", ret);
-			return ret;
-		}
-
-		data->clock_requested = false;
+	if (ret < 0) {
+		LOG_ERR("PWM stop failed: %d", ret);
+		return ret;
 	}
-#endif
+
 	while (!nrfx_pwm_stopped_check(&config->pwm)) {
 	}
 
@@ -430,10 +440,20 @@ static int pwm_nrfx_init(const struct device *dev)
 	COND_CODE_1(PWM_HAS_PROP(idx, memory_regions),			      \
 		(DT_PROP_OR(PWM_MEM_REGION(idx), zephyr_memory_attr, 0)), (0))
 
+/* Fast instances depend on the global HSFLL clock controller (as they need
+ * to request the highest frequency from it to operate correctly), so they
+ * must be initialized after that controller driver, hence the default PWM
+ * initialization priority may be too early for them.
+ */
+#if defined(CONFIG_CLOCK_CONTROL_NRF2_GLOBAL_HSFLL_INIT_PRIORITY) && \
+	CONFIG_PWM_INIT_PRIORITY < CONFIG_CLOCK_CONTROL_NRF2_GLOBAL_HSFLL_INIT_PRIORITY
 #define PWM_INIT_PRIORITY(idx)								\
 	COND_CODE_1(PWM_NRFX_IS_FAST(_, /*empty*/, idx, _),				\
 		    (UTIL_INC(CONFIG_CLOCK_CONTROL_NRF2_GLOBAL_HSFLL_INIT_PRIORITY)),	\
 		    (CONFIG_PWM_INIT_PRIORITY))
+#else
+#define PWM_INIT_PRIORITY(idx) CONFIG_PWM_INIT_PRIORITY
+#endif
 
 #define PWM_NRFX_DEVICE(idx)						      \
 	NRF_DT_CHECK_NODE_HAS_PINCTRL_SLEEP(PWM(idx));			      \

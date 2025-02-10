@@ -1,22 +1,36 @@
 /*
- * Copyright (c) 2021-2023 Nordic Semiconductor ASA
+ * Copyright (c) 2021-2024 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/types.h>
-#include <stddef.h>
 #include <errno.h>
-#include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/bluetooth/audio/audio.h>
+#include <zephyr/bluetooth/audio/bap.h>
+#include <zephyr/bluetooth/audio/lc3.h>
+#include <zephyr/bluetooth/audio/pacs.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/byteorder.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/audio/audio.h>
-#include <zephyr/bluetooth/audio/bap.h>
-#include <zephyr/bluetooth/audio/pacs.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/hci_types.h>
+#include <zephyr/bluetooth/iso.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/__assert.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
+#include <zephyr/sys_clock.h>
+#include <zephyr/types.h>
 
 #define AVAILABLE_SINK_CONTEXT  (BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED | \
 				 BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL | \
@@ -49,8 +63,8 @@ static struct audio_source {
 } source_streams[CONFIG_BT_ASCS_MAX_ASE_SRC_COUNT];
 static size_t configured_source_stream_count;
 
-static const struct bt_audio_codec_qos_pref qos_pref =
-	BT_AUDIO_CODEC_QOS_PREF(true, BT_GAP_LE_PHY_2M, 0x02, 10, 40000, 40000, 40000, 40000);
+static const struct bt_bap_qos_cfg_pref qos_pref =
+	BT_BAP_QOS_CFG_PREF(true, BT_GAP_LE_PHY_2M, 0x02, 10, 40000, 40000, 40000, 40000);
 
 static K_SEM_DEFINE(sem_disconnected, 0, 1);
 
@@ -170,7 +184,7 @@ static void print_codec_cfg(const struct bt_audio_codec_cfg *codec_cfg)
 	bt_audio_data_parse(codec_cfg->meta, codec_cfg->meta_len, print_cb, "meta");
 }
 
-static void print_qos(const struct bt_audio_codec_qos *qos)
+static void print_qos(const struct bt_bap_qos_cfg *qos)
 {
 	printk("QoS: interval %u framing 0x%02x phy 0x%02x sdu %u "
 	       "rtn %u latency %u pd %u\n",
@@ -215,7 +229,12 @@ static void audio_timer_timeout(struct k_work *work)
 	for (size_t i = 0; i < configured_source_stream_count; i++) {
 		struct bt_bap_stream *stream = &source_streams[i].stream;
 
-		buf = net_buf_alloc(&tx_pool, K_FOREVER);
+		buf = net_buf_alloc(&tx_pool, K_NO_WAIT);
+		if (buf == NULL) {
+			printk("Failed to allocate TX buffer\n");
+			/* Break and retry later */
+			break;
+		}
 		net_buf_reserve(buf, BT_ISO_CHAN_SEND_RESERVE);
 
 		net_buf_add_mem(buf, buf_data, ++source_streams[i].len_to_send);
@@ -285,7 +304,7 @@ static struct bt_bap_stream *stream_alloc(enum bt_audio_dir dir)
 
 static int lc3_config(struct bt_conn *conn, const struct bt_bap_ep *ep, enum bt_audio_dir dir,
 		      const struct bt_audio_codec_cfg *codec_cfg, struct bt_bap_stream **stream,
-		      struct bt_audio_codec_qos_pref *const pref, struct bt_bap_ascs_rsp *rsp)
+		      struct bt_bap_qos_cfg_pref *const pref, struct bt_bap_ascs_rsp *rsp)
 {
 	printk("ASE Codec Config: conn %p ep %p dir %u\n", conn, ep, dir);
 
@@ -317,7 +336,7 @@ static int lc3_config(struct bt_conn *conn, const struct bt_bap_ep *ep, enum bt_
 
 static int lc3_reconfig(struct bt_bap_stream *stream, enum bt_audio_dir dir,
 			const struct bt_audio_codec_cfg *codec_cfg,
-			struct bt_audio_codec_qos_pref *const pref, struct bt_bap_ascs_rsp *rsp)
+			struct bt_bap_qos_cfg_pref *const pref, struct bt_bap_ascs_rsp *rsp)
 {
 	printk("ASE Codec Reconfig: stream %p\n", stream);
 
@@ -334,7 +353,7 @@ static int lc3_reconfig(struct bt_bap_stream *stream, enum bt_audio_dir dir,
 	return -ENOEXEC;
 }
 
-static int lc3_qos(struct bt_bap_stream *stream, const struct bt_audio_codec_qos *qos,
+static int lc3_qos(struct bt_bap_stream *stream, const struct bt_bap_qos_cfg *qos,
 		   struct bt_bap_ascs_rsp *rsp)
 {
 	printk("QoS: stream %p qos %p\n", stream, qos);
@@ -490,8 +509,7 @@ static void stream_recv_lc3_codec(struct bt_bap_stream *stream,
 				  const struct bt_iso_recv_info *info,
 				  struct net_buf *buf)
 {
-	const uint8_t *in_buf;
-	uint8_t err = -1;
+	const bool valid_data = (info->flags & BT_ISO_FLAGS_VALID) == 0;
 	const int octets_per_frame = buf->len / frames_per_sdu;
 
 	if (lc3_decoder == NULL) {
@@ -499,40 +517,24 @@ static void stream_recv_lc3_codec(struct bt_bap_stream *stream,
 		return;
 	}
 
-	if ((info->flags & BT_ISO_FLAGS_VALID) == 0) {
+	if (!valid_data) {
 		printk("Bad packet: 0x%02X\n", info->flags);
-
-		in_buf = NULL;
-	} else {
-		in_buf = buf->data;
 	}
 
-	/* This code is to demonstrate the use of the LC3 codec. On an actual implementation
-	 * it might be required to offload the processing to another task to avoid blocking the
-	 * BT stack.
-	 */
 	for (int i = 0; i < frames_per_sdu; i++) {
+		/* Passing NULL performs PLC */
+		const int err = lc3_decode(
+			lc3_decoder, valid_data ? net_buf_pull_mem(buf, octets_per_frame) : NULL,
+			octets_per_frame, LC3_PCM_FORMAT_S16, audio_buf, 1);
 
-		int offset = 0;
-
-		err = lc3_decode(lc3_decoder, in_buf + offset, octets_per_frame,
-				 LC3_PCM_FORMAT_S16, audio_buf, 1);
-
-		if (in_buf != NULL) {
-			offset += octets_per_frame;
+		if (err == 1) {
+			printk("[%d]: Decoder performed PLC\n", i);
+		} else if (err < 0) {
+			printk("[%d]: Decoder failed - wrong parameters?: %d\n", i, err);
 		}
 	}
 
 	printk("RX stream %p len %u\n", stream, buf->len);
-
-	if (err == 1) {
-		printk("  decoder performed PLC\n");
-		return;
-
-	} else if (err < 0) {
-		printk("  decoder failed - wrong parameters?\n");
-		return;
-	}
 }
 
 #else

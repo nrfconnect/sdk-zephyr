@@ -101,7 +101,7 @@ static int leuart_gecko_fifo_fill(const struct device *dev,
 				  int len)
 {
 	LEUART_TypeDef *base = DEV_BASE(dev);
-	uint8_t num_tx = 0U;
+	int num_tx = 0U;
 
 	while ((len - num_tx > 0) &&
 	       (base->STATUS & LEUART_STATUS_TXBL)) {
@@ -116,7 +116,7 @@ static int leuart_gecko_fifo_read(const struct device *dev, uint8_t *rx_data,
 				  const int len)
 {
 	LEUART_TypeDef *base = DEV_BASE(dev);
-	uint8_t num_rx = 0U;
+	int num_rx = 0U;
 
 	while ((len - num_rx > 0) &&
 	       (base->STATUS & LEUART_STATUS_RXDATAV)) {
@@ -295,7 +295,7 @@ static int leuart_gecko_init(const struct device *dev)
 	return 0;
 }
 
-static const struct uart_driver_api leuart_gecko_driver_api = {
+static DEVICE_API(uart, leuart_gecko_driver_api) = {
 	.poll_in = leuart_gecko_poll_in,
 	.poll_out = leuart_gecko_poll_out,
 	.err_check = leuart_gecko_err_check,

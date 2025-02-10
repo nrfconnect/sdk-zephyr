@@ -46,16 +46,16 @@ The shield can be used in any application by setting ``--shield nrf7002eb`` when
 Shield Variants
 ###############
 
-The nRF7002 EK has a variant which includes the COEX pins. These pins are not be routed to the
+The nRF7002 EB has a variant which includes the COEX pins. These pins are not be routed to the
 edge-connector on some boards, like earlier revisions of the Thingy53 than v1.0.0.
 
-- ``nrf7002ek``: The default variant.
-- ``nrf7002ek_coex``: Variant which includes the COEX pins.
+- ``nrf7002eb``: The default variant.
+- ``nrf7002eb_coex``: Variant which includes the COEX pins.
 
 SR Co-existence
 ###############
 
-The nRF7002 EK supports SR co-existence provided the host board supports it. The SR co-existence
+The nRF7002 EB supports SR co-existence provided the host board supports it. The SR co-existence
 pins are connected to the host board's GPIO pins.
 
 Two Kconfig options are available to enable SR co-existence:

@@ -228,19 +228,22 @@ const char *k_thread_state_str(k_tid_t thread_id, char *buf, size_t buf_size)
 	size_t      off = 0;
 	uint8_t     bit;
 	uint8_t     thread_state = thread_id->base.thread_state;
+#define SS_ENT(s) { Z_STATE_STR_##s, _THREAD_##s, sizeof(Z_STATE_STR_##s) - 1 }
 	static const struct {
 		const char *str;
-		size_t      len;
+		uint16_t    bit;
+		uint16_t    len;
 	} state_string[] = {
-		{ Z_STATE_STR_DUMMY, sizeof(Z_STATE_STR_DUMMY) - 1},
-		{ Z_STATE_STR_PENDING, sizeof(Z_STATE_STR_PENDING) - 1},
-		{ Z_STATE_STR_PRESTART, sizeof(Z_STATE_STR_PRESTART) - 1},
-		{ Z_STATE_STR_DEAD, sizeof(Z_STATE_STR_DEAD) - 1},
-		{ Z_STATE_STR_SUSPENDED, sizeof(Z_STATE_STR_SUSPENDED) - 1},
-		{ Z_STATE_STR_ABORTING, sizeof(Z_STATE_STR_ABORTING) - 1},
-		{ Z_STATE_STR_SUSPENDING, sizeof(Z_STATE_STR_SUSPENDING) - 1},
-		{ Z_STATE_STR_QUEUED, sizeof(Z_STATE_STR_QUEUED) - 1},
+		SS_ENT(DUMMY),
+		SS_ENT(PENDING),
+		SS_ENT(SLEEPING),
+		SS_ENT(DEAD),
+		SS_ENT(SUSPENDED),
+		SS_ENT(ABORTING),
+		SS_ENT(SUSPENDING),
+		SS_ENT(QUEUED),
 	};
+#undef SS_ENT
 
 	if ((buf == NULL) || (buf_size == 0)) {
 		return "";
@@ -256,7 +259,7 @@ const char *k_thread_state_str(k_tid_t thread_id, char *buf, size_t buf_size)
 
 
 	for (unsigned int index = 0; thread_state != 0; index++) {
-		bit = BIT(index);
+		bit = state_string[index].bit;
 		if ((thread_state & bit) == 0) {
 			continue;
 		}
@@ -343,22 +346,6 @@ void z_check_stack_sentinel(void)
 	}
 }
 #endif /* CONFIG_STACK_SENTINEL */
-
-void z_impl_k_thread_start(k_tid_t thread)
-{
-	SYS_PORT_TRACING_OBJ_FUNC(k_thread, start, thread);
-
-	z_sched_start(thread);
-}
-
-#ifdef CONFIG_USERSPACE
-static inline void z_vrfy_k_thread_start(k_tid_t thread)
-{
-	K_OOPS(K_SYSCALL_OBJ(thread, K_OBJ_THREAD));
-	return z_impl_k_thread_start(thread);
-}
-#include <zephyr/syscalls/k_thread_start_mrsh.c>
-#endif /* CONFIG_USERSPACE */
 
 #if defined(CONFIG_STACK_POINTER_RANDOM) && (CONFIG_STACK_POINTER_RANDOM != 0)
 int z_stack_adjust_initialized;
@@ -556,7 +543,7 @@ char *z_setup_new_thread(struct k_thread *new_thread,
 	z_waitq_init(&new_thread->join_queue);
 
 	/* Initialize various struct k_thread members */
-	z_init_thread_base(&new_thread->base, prio, _THREAD_PRESTART, options);
+	z_init_thread_base(&new_thread->base, prio, _THREAD_SLEEPING, options);
 	stack_ptr = setup_thread_stack(new_thread, stack, stack_size);
 
 #ifdef CONFIG_KERNEL_COHERENCE
@@ -946,9 +933,10 @@ void z_thread_mark_switched_out(void)
 #ifdef CONFIG_TRACING
 #ifdef CONFIG_THREAD_LOCAL_STORAGE
 	/* Dummy thread won't have TLS set up to run arbitrary code */
-	if (!_current_cpu->current ||
-	    (_current_cpu->current->base.thread_state & _THREAD_DUMMY) != 0)
+	if (!_current ||
+	    (_current->base.thread_state & _THREAD_DUMMY) != 0) {
 		return;
+	}
 #endif /* CONFIG_THREAD_LOCAL_STORAGE */
 	SYS_PORT_TRACING_FUNC(k_thread, switched_out);
 #endif /* CONFIG_TRACING */

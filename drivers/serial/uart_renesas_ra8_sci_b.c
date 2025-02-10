@@ -256,7 +256,7 @@ static int uart_ra_sci_b_fifo_fill(const struct device *dev, const uint8_t *tx_d
 {
 	struct uart_ra_sci_b_data *data = dev->data;
 	const struct uart_ra_sci_b_config *cfg = dev->config;
-	uint8_t num_tx = 0U;
+	int num_tx = 0U;
 
 	if (IS_ENABLED(CONFIG_UART_RA_SCI_B_UART_FIFO_ENABLE) && data->sci.fifo_depth > 0) {
 		while ((size - num_tx > 0) && cfg->regs->FTSR != 0x10U) {
@@ -281,7 +281,7 @@ static int uart_ra_sci_b_fifo_read(const struct device *dev, uint8_t *rx_data, c
 {
 	struct uart_ra_sci_b_data *data = dev->data;
 	const struct uart_ra_sci_b_config *cfg = dev->config;
-	uint8_t num_rx = 0U;
+	int num_rx = 0U;
 
 	if (IS_ENABLED(CONFIG_UART_RA_SCI_B_UART_FIFO_ENABLE) && data->sci.fifo_depth > 0) {
 		while ((size - num_rx > 0) && cfg->regs->FRSR_b.R > 0U) {
@@ -458,7 +458,7 @@ static inline void async_rx_disabled(const struct device *dev)
 	struct uart_event event = {
 		.type = UART_RX_DISABLED,
 	};
-	return async_user_callback(dev, &event);
+	async_user_callback(dev, &event);
 }
 
 static inline void async_request_rx_buffer(const struct device *dev)
@@ -466,7 +466,7 @@ static inline void async_request_rx_buffer(const struct device *dev)
 	struct uart_event event = {
 		.type = UART_RX_BUF_REQUEST,
 	};
-	return async_user_callback(dev, &event);
+	async_user_callback(dev, &event);
 }
 
 static inline void async_rx_ready(const struct device *dev)
@@ -803,7 +803,7 @@ static void uart_ra_sci_b_callback_adapter(struct st_uart_callback_arg *fsp_args
 	case UART_EVENT_TX_COMPLETE: {
 		data->tx_buffer_len = data->tx_buffer_cap;
 		async_update_tx_buffer(dev);
-		return;
+		break;
 	}
 	case UART_EVENT_RX_COMPLETE: {
 		data->rx_buffer_len =
@@ -811,16 +811,20 @@ static void uart_ra_sci_b_callback_adapter(struct st_uart_callback_arg *fsp_args
 		async_rx_ready(dev);
 		async_release_rx_buffer(dev);
 		async_replace_rx_buffer(dev);
-		return;
+		break;
 	}
 	case UART_EVENT_ERR_PARITY:
-		return async_rx_error(dev, UART_ERROR_PARITY);
+		async_rx_error(dev, UART_ERROR_PARITY);
+		break;
 	case UART_EVENT_ERR_FRAMING:
-		return async_rx_error(dev, UART_ERROR_FRAMING);
+		async_rx_error(dev, UART_ERROR_FRAMING);
+		break;
 	case UART_EVENT_ERR_OVERFLOW:
-		return async_rx_error(dev, UART_ERROR_OVERRUN);
+		async_rx_error(dev, UART_ERROR_OVERRUN);
+		break;
 	case UART_EVENT_BREAK_DETECT:
-		return async_rx_error(dev, UART_BREAK);
+		async_rx_error(dev, UART_BREAK);
+		break;
 	case UART_EVENT_TX_DATA_EMPTY:
 	case UART_EVENT_RX_CHAR:
 		break;
@@ -829,7 +833,7 @@ static void uart_ra_sci_b_callback_adapter(struct st_uart_callback_arg *fsp_args
 
 #endif /* CONFIG_UART_ASYNC_API */
 
-static const struct uart_driver_api uart_ra_sci_b_driver_api = {
+static DEVICE_API(uart, uart_ra_sci_b_driver_api) = {
 	.poll_in = uart_ra_sci_b_poll_in,
 	.poll_out = uart_ra_sci_b_poll_out,
 	.err_check = uart_ra_sci_b_err_check,
@@ -1119,7 +1123,7 @@ static void uart_ra_sci_b_eri_isr(const struct device *dev)
 				.parity = UART_CFG_PARITY_NONE,                                    \
 				.stop_bits = UART_CFG_STOP_BITS_1,                                 \
 				.data_bits = UART_CFG_DATA_BITS_8,                                 \
-				.flow_ctrl = COND_CODE_1(DT_NODE_HAS_PROP(idx, hw_flow_control),   \
+				.flow_ctrl = COND_CODE_1(DT_INST_PROP(index, hw_flow_control),     \
 							 (UART_CFG_FLOW_CTRL_RTS_CTS),             \
 							 (UART_CFG_FLOW_CTRL_NONE)),               \
 			},                                                                         \

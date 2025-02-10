@@ -34,6 +34,8 @@ void bt_cap_initiator_disabled(struct bt_cap_stream *cap_stream);
 void bt_cap_initiator_stopped(struct bt_cap_stream *cap_stream);
 void bt_cap_initiator_released(struct bt_cap_stream *cap_stream);
 void bt_cap_stream_ops_register_bap(struct bt_cap_stream *cap_stream);
+void bt_cap_initiator_cp_cb(struct bt_cap_stream *cap_stream, enum bt_bap_ascs_rsp_code rsp_code,
+			    enum bt_bap_ascs_reason reason);
 
 enum bt_cap_common_proc_state {
 	BT_CAP_COMMON_PROC_STATE_ACTIVE,
@@ -48,6 +50,8 @@ enum bt_cap_common_proc_type {
 	BT_CAP_COMMON_PROC_TYPE_UPDATE,
 	BT_CAP_COMMON_PROC_TYPE_STOP,
 	BT_CAP_COMMON_PROC_TYPE_BROADCAST_RECEPTION_START,
+	BT_CAP_COMMON_PROC_TYPE_BROADCAST_RECEPTION_STOP,
+	BT_CAP_COMMON_PROC_TYPE_DISTRIBUTE_BROADCAST_CODE,
 	BT_CAP_COMMON_PROC_TYPE_VOLUME_CHANGE,
 	BT_CAP_COMMON_PROC_TYPE_VOLUME_OFFSET_CHANGE,
 	BT_CAP_COMMON_PROC_TYPE_VOLUME_MUTE_CHANGE,
@@ -87,6 +91,7 @@ struct bt_cap_initiator_proc_param {
 			bool release;
 		} stop;
 	};
+	bool in_progress;
 };
 
 #if defined(CONFIG_BT_BAP_BROADCAST_ASSISTANT)
@@ -98,6 +103,24 @@ struct cap_broadcast_reception_start {
 	uint16_t pa_interval;
 	uint8_t num_subgroups;
 	struct bt_bap_bass_subgroup subgroups[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS];
+};
+
+struct cap_broadcast_reception_stop {
+	uint8_t src_id;
+	uint8_t num_subgroups;
+	struct bt_bap_bass_subgroup subgroups[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS];
+};
+
+/* Note that although the broadcast_code will be the same for all
+ * we nevertheless store a separate copy for each sink, for
+ * consistensy in the struct bt_cap_commander_proc_param
+ * There is no memory savings by not having broadcast_code part of the
+ * union: struct cap_broadcast_reception_start uses minimum 20 bytes
+ * and struct cap_distribute_broadcast_code uses 17 bytes
+ */
+struct cap_distribute_broadcast_code {
+	uint8_t src_id;
+	uint8_t broadcast_code[BT_ISO_BROADCAST_CODE_SIZE];
 };
 #endif /* CONFIG_BT_BAP_BROADCAST_ASSISTANT */
 
@@ -120,6 +143,8 @@ struct bt_cap_commander_proc_param {
 #endif /* CONFIG_BT_VCP_VOL_CTLR_VOCS */
 #if defined(CONFIG_BT_BAP_BROADCAST_ASSISTANT)
 		struct cap_broadcast_reception_start broadcast_reception_start;
+		struct cap_broadcast_reception_stop broadcast_reception_stop;
+		struct cap_distribute_broadcast_code distribute_broadcast_code;
 #endif /* CONFIG_BT_BAP_BROADCAST_ASSISTANT */
 #if defined(CONFIG_BT_MICP_MIC_CTLR)
 		struct {

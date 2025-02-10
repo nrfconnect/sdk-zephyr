@@ -5,6 +5,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#ifdef CONFIG_SOC_POSIX
+#undef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L /* Required for gmtime_r */
+#endif
+
 #define DT_DRV_COMPAT microchip_mcp7940n
 
 #include <zephyr/device.h>
@@ -707,7 +712,7 @@ static int mcp7940n_init(const struct device *dev)
 		gpio_init_callback(&data->int_callback, mcp7940n_init_cb,
 				   BIT(cfg->int_gpios.pin));
 
-		gpio_add_callback(cfg->int_gpios.port, &data->int_callback);
+		(void)gpio_add_callback(cfg->int_gpios.port, &data->int_callback);
 
 		/* Configure interrupt polarity */
 		if ((cfg->int_gpios.dt_flags & GPIO_ACTIVE_LOW) == GPIO_ACTIVE_LOW) {
@@ -728,7 +733,7 @@ out:
 	return rc;
 }
 
-static const struct counter_driver_api mcp7940n_api = {
+static DEVICE_API(counter, mcp7940n_api) = {
 	.start = mcp7940n_counter_start,
 	.stop = mcp7940n_counter_stop,
 	.get_value = mcp7940n_counter_get_value,

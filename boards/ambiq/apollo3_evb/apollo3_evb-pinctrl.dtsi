@@ -17,6 +17,11 @@
 			input-enable;
 		};
 	};
+	itm_default: itm_default {
+		group1 {
+			pinmux = <SWO_P41>;
+		};
+	};
 	i2c0_default: i2c0_default {
 		group1 {
 			pinmux = <M0SCL_P5>, <M0SDAWIR3_P6>;
@@ -65,7 +70,11 @@
 			bias-pull-up;
 		};
 	};
-
+	spid0_default: spid0_default {
+		group1 {
+			pinmux = <SLSCK_P0>, <SLMISO_P2>, <SLMOSI_P1>, <SLNCE_P3>;
+		};
+	};
 	spi0_default: spi0_default {
 		group1 {
 			pinmux = <M0SCK_P5>, <M0MISO_P6>, <M0MOSI_P7>;

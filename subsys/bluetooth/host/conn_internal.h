@@ -49,7 +49,7 @@ typedef enum __packed {
 enum {
 	/** The connection context is used for automatic connection establishment
 	 *
-	 * That is, with @ref bt_conn_le_create_auto() or bt_le_set_auto_conn().
+	 * That is, with @ref bt_conn_le_create_auto().
 	 * This flag is set even after the connection has been established so
 	 * that the connection can be reestablished once disconnected.
 	 * The connection establishment may be performed with or without the filter
@@ -57,8 +57,10 @@ enum {
 	 */
 	BT_CONN_AUTO_CONNECT,
 	BT_CONN_BR_LEGACY_SECURE,             /* 16 digits legacy PIN tracker */
+	BT_CONN_BR_BONDABLE,                  /* BR connection is bondable */
 	BT_CONN_USER,                         /* user I/O when pairing */
 	BT_CONN_BR_PAIRING,                   /* BR connection in pairing context */
+	BT_CONN_BR_PAIRED,                    /* BR connection pairing is done */
 	BT_CONN_BR_NOBOND,                    /* SSP no bond pairing tracker */
 	BT_CONN_BR_GENERAL_BONDING,           /* BR general bonding */
 	BT_CONN_BR_PAIRING_INITIATOR,         /* local host starts authentication */
