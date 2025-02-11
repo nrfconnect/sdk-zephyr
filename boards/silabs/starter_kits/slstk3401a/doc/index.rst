@@ -1,7 +1,4 @@
-.. _slstk3401a:
-
-EFM32 Pearl Gecko (SLSTK3401A)
-##############################
+.. zephyr:board:: slstk3401a
 
 Overview
 ********
@@ -9,12 +6,6 @@ Overview
 The EFM32 Pearl Gecko Starter Kit SLSTK3401A contains an MCU from the
 EFM32PG family built on an ARM® Cortex®-M4F processor with excellent low
 power capabilities.
-
-.. figure:: slstk3401a.jpg
-   :align: center
-   :alt: EFM32PG-SLSTK3401A
-
-   EFM32PG-SLSTK3401A (image courtesy of Silicon Labs)
 
 Hardware
 ********
@@ -120,7 +111,7 @@ Programming and Debugging
 
 .. note::
    Before using the kit the first time, you should update the J-Link firmware
-   from `J-Link-Downloads`_
+   in Simplicity Studio.
 
 Flashing
 ========
@@ -183,6 +174,3 @@ terminal session:
 
 .. _J-Link:
    https://www.segger.com/jlink-debug-probes.html
-
-.. _J-Link-Downloads:
-   https://www.segger.com/downloads/jlink

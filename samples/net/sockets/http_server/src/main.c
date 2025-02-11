@@ -45,10 +45,6 @@ static uint8_t main_js_gz[] = {
 #include "main.js.gz.inc"
 };
 
-static uint8_t uptime_buf[256];
-static uint8_t led_buf[256];
-static uint8_t echo_buf[1024];
-
 static struct http_resource_detail_static index_html_gz_resource_detail = {
 	.common = {
 			.type = HTTP_RESOURCE_TYPE_STATIC,
@@ -72,14 +68,13 @@ static struct http_resource_detail_static main_js_gz_resource_detail = {
 };
 
 static int echo_handler(struct http_client_ctx *client, enum http_data_status status,
-			uint8_t *buffer, size_t len, void *user_data)
+			const struct http_request_ctx *request_ctx,
+			struct http_response_ctx *response_ctx, void *user_data)
 {
 #define MAX_TEMP_PRINT_LEN 32
 	static char print_str[MAX_TEMP_PRINT_LEN];
 	enum http_method method = client->method;
 	static size_t processed;
-
-	__ASSERT_NO_MSG(buffer != NULL);
 
 	if (status == HTTP_SERVER_DATA_ABORTED) {
 		LOG_DBG("Transaction aborted after %zd bytes.", processed);
@@ -87,21 +82,25 @@ static int echo_handler(struct http_client_ctx *client, enum http_data_status st
 		return 0;
 	}
 
-	processed += len;
+	__ASSERT_NO_MSG(buffer != NULL);
 
-	snprintf(print_str, sizeof(print_str), "%s received (%zd bytes)",
-		 http_method_str(method), len);
-	LOG_HEXDUMP_DBG(buffer, len, print_str);
+	processed += request_ctx->data_len;
+
+	snprintf(print_str, sizeof(print_str), "%s received (%zd bytes)", http_method_str(method),
+		 request_ctx->data_len);
+	LOG_HEXDUMP_DBG(request_ctx->data, request_ctx->data_len, print_str);
 
 	if (status == HTTP_SERVER_DATA_FINAL) {
 		LOG_DBG("All data received (%zd bytes).", processed);
 		processed = 0;
 	}
 
-	/* This will echo data back to client as the buffer and recv_buffer
-	 * point to same area.
-	 */
-	return len;
+	/* Echo data back to client */
+	response_ctx->body = request_ctx->data;
+	response_ctx->body_len = request_ctx->data_len;
+	response_ctx->final_chunk = (status == HTTP_SERVER_DATA_FINAL);
+
+	return 0;
 }
 
 static struct http_resource_detail_dynamic echo_resource_detail = {
@@ -110,48 +109,34 @@ static struct http_resource_detail_dynamic echo_resource_detail = {
 			.bitmask_of_supported_http_methods = BIT(HTTP_GET) | BIT(HTTP_POST),
 		},
 	.cb = echo_handler,
-	.data_buffer = echo_buf,
-	.data_buffer_len = sizeof(echo_buf),
 	.user_data = NULL,
 };
 
 static int uptime_handler(struct http_client_ctx *client, enum http_data_status status,
-			  uint8_t *buffer, size_t len, void *user_data)
+			  const struct http_request_ctx *request_ctx,
+			  struct http_response_ctx *response_ctx, void *user_data)
 {
-	static bool response_sent;
+	int ret;
+	static uint8_t uptime_buf[sizeof(STRINGIFY(INT64_MAX))];
 
-	LOG_DBG("Uptime handler status %d, response_sent %d", status, response_sent);
+	LOG_DBG("Uptime handler status %d", status);
 
-	switch (status) {
-	case HTTP_SERVER_DATA_ABORTED: {
-		response_sent = false;
-		return 0;
-	}
-
-	case HTTP_SERVER_DATA_MORE: {
-		/* A payload is not expected with the GET request. Ignore any data and wait until
-		 * final callback before sending response
-		 */
-		return 0;
-	}
-
-	case HTTP_SERVER_DATA_FINAL: {
-		if (response_sent) {
-			/* Response already sent, return 0 to indicate to server that the callback
-			 * does not need to be called again.
-			 */
-			response_sent = false;
-			return 0;
+	/* A payload is not expected with the GET request. Ignore any data and wait until
+	 * final callback before sending response
+	 */
+	if (status == HTTP_SERVER_DATA_FINAL) {
+		ret = snprintf(uptime_buf, sizeof(uptime_buf), "%" PRId64, k_uptime_get());
+		if (ret < 0) {
+			LOG_ERR("Failed to snprintf uptime, err %d", ret);
+			return ret;
 		}
 
-		response_sent = true;
-		return snprintf(buffer, sizeof(uptime_buf), "%" PRId64, k_uptime_get());
+		response_ctx->body = uptime_buf;
+		response_ctx->body_len = ret;
+		response_ctx->final_chunk = true;
 	}
-	default: {
-		LOG_WRN("Unexpected status %d", status);
-		return -1;
-	}
-	}
+
+	return 0;
 }
 
 static struct http_resource_detail_dynamic uptime_resource_detail = {
@@ -160,8 +145,6 @@ static struct http_resource_detail_dynamic uptime_resource_detail = {
 			.bitmask_of_supported_http_methods = BIT(HTTP_GET),
 		},
 	.cb = uptime_handler,
-	.data_buffer = uptime_buf,
-	.data_buffer_len = sizeof(uptime_buf),
 	.user_data = NULL,
 };
 
@@ -189,19 +172,20 @@ static void parse_led_post(uint8_t *buf, size_t len)
 }
 
 static int led_handler(struct http_client_ctx *client, enum http_data_status status,
-		       uint8_t *buffer, size_t len, void *user_data)
+		       const struct http_request_ctx *request_ctx,
+		       struct http_response_ctx *response_ctx, void *user_data)
 {
 	static uint8_t post_payload_buf[32];
 	static size_t cursor;
 
-	LOG_DBG("LED handler status %d, size %zu", status, len);
+	LOG_DBG("LED handler status %d, size %zu", status, request_ctx->data_len);
 
 	if (status == HTTP_SERVER_DATA_ABORTED) {
 		cursor = 0;
 		return 0;
 	}
 
-	if (len + cursor > sizeof(post_payload_buf)) {
+	if (request_ctx->data_len + cursor > sizeof(post_payload_buf)) {
 		cursor = 0;
 		return -ENOMEM;
 	}
@@ -210,8 +194,8 @@ static int led_handler(struct http_client_ctx *client, enum http_data_status sta
 	 * chunks (e.g. if the header size was such that the whole HTTP request exceeds the size of
 	 * the client buffer).
 	 */
-	memcpy(post_payload_buf + cursor, buffer, len);
-	cursor += len;
+	memcpy(post_payload_buf + cursor, request_ctx->data, request_ctx->data_len);
+	cursor += request_ctx->data_len;
 
 	if (status == HTTP_SERVER_DATA_FINAL) {
 		parse_led_post(post_payload_buf, cursor);
@@ -227,8 +211,6 @@ static struct http_resource_detail_dynamic led_resource_detail = {
 			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
 		},
 	.cb = led_handler,
-	.data_buffer = led_buf,
-	.data_buffer_len = sizeof(led_buf),
 	.user_data = NULL,
 };
 
@@ -328,16 +310,6 @@ static void setup_tls(void)
 #if defined(CONFIG_NET_SAMPLE_HTTPS_SERVICE)
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 	int err;
-
-#if defined(CONFIG_NET_SAMPLE_CERTS_WITH_SC)
-	err = tls_credential_add(HTTP_SERVER_CERTIFICATE_TAG,
-				 TLS_CREDENTIAL_CA_CERTIFICATE,
-				 ca_certificate,
-				 sizeof(ca_certificate));
-	if (err < 0) {
-		LOG_ERR("Failed to register CA certificate: %d", err);
-	}
-#endif /* defined(CONFIG_NET_SAMPLE_CERTS_WITH_SC) */
 
 	err = tls_credential_add(HTTP_SERVER_CERTIFICATE_TAG,
 				 TLS_CREDENTIAL_SERVER_CERTIFICATE,

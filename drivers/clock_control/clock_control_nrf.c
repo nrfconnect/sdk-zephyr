@@ -622,6 +622,16 @@ static void clock_event_handler(nrfx_clock_evt_type_t event)
 			__ASSERT_NO_MSG(false);
 		}
 		break;
+	case NRFX_CLOCK_EVT_PLL_STARTED:
+#if NRF_CLOCK_HAS_XO_TUNE
+	case NRFX_CLOCK_EVT_XO_TUNED:
+	case NRFX_CLOCK_EVT_XO_TUNE_ERROR:
+	case NRFX_CLOCK_EVT_XO_TUNE_FAILED:
+#endif
+	{
+		/* unhandled event */
+		break;
+	}
 	default:
 		__ASSERT_NO_MSG(0);
 		break;
@@ -692,7 +702,7 @@ static int clk_init(const struct device *dev)
 	return 0;
 }
 
-static const struct clock_control_driver_api clock_control_api = {
+static DEVICE_API(clock_control, clock_control_api) = {
 	.on = api_blocking_start,
 	.off = api_stop,
 	.async_on = api_start,
