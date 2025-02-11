@@ -3,11 +3,15 @@
 
 description: Stepper Controller
 
-include: base.yaml
-
 properties:
+  invert-direction:
+    type: boolean
+    description: |
+      Invert motor direction.
+
   micro-step-res:
     type: int
+    default: 1
     enum:
       - 1
       - 2
@@ -20,3 +24,23 @@ properties:
       - 256
     description: |
       micro-step resolution to be set while initializing the device driver.
+
+  en-gpios:
+    type: phandle-array
+    description: |
+      GPIO pins used to control the enable signal of the motor driver.
+
+  step-gpios:
+    type: phandle-array
+    description: |
+      The GPIO pins used to send step signals to the stepper motor.
+
+  dir-gpios:
+    type: phandle-array
+    description: |
+      The GPIO pins used to send direction signals to the stepper motor.
+      Pin will be driven high for forward direction and low for reverse direction.
+
+  counter:
+    type: phandle
+    description: Counter used for generating step-accurate pulse signals.

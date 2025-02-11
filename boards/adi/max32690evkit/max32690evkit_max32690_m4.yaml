@@ -17,5 +17,9 @@ supported:
   - watchdog
   - adc
   - counter
+  - rtc_counter
+  - pwm
+  - w1
+  - flash
 ram: 1024
 flash: 3072

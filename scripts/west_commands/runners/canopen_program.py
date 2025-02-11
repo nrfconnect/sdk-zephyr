@@ -8,7 +8,7 @@ import argparse
 import os
 import time
 
-from runners.core import ZephyrBinaryRunner, RunnerCaps
+from runners.core import RunnerCaps, ZephyrBinaryRunner
 
 try:
     import canopen
@@ -187,13 +187,13 @@ class CANopenBinaryRunner(ZephyrBinaryRunner):
 
         self.downloader.disconnect()
 
-class CANopenProgramDownloader(object):
+class CANopenProgramDownloader:
     '''CANopen program downloader'''
     def __init__(self, logger, node_id, can_context=DEFAULT_CAN_CONTEXT,
                  program_number=DEFAULT_PROGRAM_NUMBER,
                  sdo_retries=DEFAULT_SDO_RETRIES, sdo_timeout=DEFAULT_SDO_TIMEOUT,
                  download_buffer_size=DEFAULT_PROGRAM_DOWNLOAD_BUFFER_SIZE, block_transfer=False):
-        super(CANopenProgramDownloader, self).__init__()
+        super().__init__()
         self.logger = logger
         self.node_id = node_id
         self.can_context = can_context
@@ -280,7 +280,7 @@ class CANopenProgramDownloader(object):
         self.logger.info('Downloading program: %s', bin_file)
         try:
             size = os.path.getsize(bin_file)
-            infile = open(bin_file, 'rb')
+            infile = open(bin_file, 'rb')  # noqa: SIM115
             outfile = self.data_sdo.open('wb', buffering=self.download_buffer_size,
                                          size=size, block_transfer=self.block_transfer)
 

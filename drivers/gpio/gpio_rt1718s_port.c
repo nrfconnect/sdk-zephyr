@@ -15,7 +15,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/gpio/gpio_utils.h>
 #include <zephyr/logging/log.h>
-LOG_MODULE_DECLARE(gpio_rt1718s_port, CONFIG_GPIO_LOG_LEVEL);
+LOG_MODULE_REGISTER(gpio_rt1718s_port, CONFIG_GPIO_LOG_LEVEL);
 
 /* Driver config */
 struct gpio_rt1718s_port_config {
@@ -338,7 +338,7 @@ void rt1718s_gpio_alert_handler(const struct device *dev)
 	}
 }
 
-static const struct gpio_driver_api gpio_rt1718s_driver = {
+static DEVICE_API(gpio, gpio_rt1718s_driver) = {
 	.pin_configure = gpio_rt1718s_pin_config,
 	.port_get_raw = gpio_rt1718s_port_get_raw,
 	.port_set_masked_raw = gpio_rt1718s_port_set_masked_raw,

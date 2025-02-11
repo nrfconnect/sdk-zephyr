@@ -1,7 +1,4 @@
-.. _mimxrt1160_evk:
-
-NXP MIMXRT1160-EVK
-##################
+.. zephyr:board:: mimxrt1160_evk
 
 Overview
 ********
@@ -10,10 +7,6 @@ The dual core i.MX RT1160 runs on the Cortex-M7 core at 600 MHz and on the
 Cortex-M4 at 240 MHz. The i.MX RT1160 MCU offers support over a wide
 temperature range and is qualified for consumer, industrial and automotive
 markets.
-
-.. image:: mimxrt1160_evk.jpg
-   :align: center
-   :alt: MIMXRT1160-EVK
 
 Hardware
 ********
@@ -100,7 +93,7 @@ Supported Features
 
 The mimxrt1160_evk board configuration supports the hardware features listed
 below.  For additional features not yet supported, please also refer to the
-:ref:`mimxrt1170_evk` , which is the superset board in NXP's i.MX RT11xx family.
+:zephyr:board:`mimxrt1170_evk` , which is the superset board in NXP's i.MX RT11xx family.
 NXP prioritizes enabling the superset board with NXP's Full Platform Support for
 Zephyr.  Therefore, the mimxrt1170_evk board may have additional features
 already supported, which can also be re-used on this mimxrt1160_evk board:
@@ -271,6 +264,25 @@ configured by default to use the :ref:`opensda-daplink-onboard-debug-probe`,
 however the :ref:`pyocd-debug-host-tools` do not yet support programming the
 external flashes on this board so you must reconfigure the board for one of the
 following debug probes instead.
+
+Launching Images Targeting M4 Core
+==================================
+If building targeting the M4 core, the M7 core must first run code to launch
+the M4 image, by copying it into the ``ocram`` region then kicking off the M4
+core. When building using sysbuild targeting the M4 core, a minimal "launcher"
+image will be built and flashed to the M7 core, which loads and kicks off
+the M4 core. Therefore when developing an application intended to run
+standalone on the M4 core, it is recommended to build with sysbuild, like
+so:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: mimxrt1160_evk/mimxrt1166/cm4
+   :west-args: --sysbuild
+   :goals: flash
+
+If desired, this behavior can be disabled by building with
+``-DSB_CONFIG_SECOND_CORE_MCUX_LAUNCHER=n``
 
 Using J-Link
 ------------

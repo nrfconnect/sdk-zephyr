@@ -6,7 +6,8 @@
 #ifndef ZEPHYR_INCLUDE_POSIX_SIGNAL_H_
 #define ZEPHYR_INCLUDE_POSIX_SIGNAL_H_
 
-#include "posix_types.h"
+/* include posix_types.h before posix_features.h (here) to avoid build errors against newlib */
+#include <zephyr/posix/posix_types.h>
 #include "posix_features.h"
 
 #ifdef __cplusplus
@@ -121,7 +122,9 @@ unsigned int alarm(unsigned int seconds);
 int kill(pid_t pid, int sig);
 int pause(void);
 int raise(int signo);
+TOOLCHAIN_IGNORE_WSHADOW_BEGIN;
 int sigaction(int sig, const struct sigaction *ZRESTRICT act, struct sigaction *ZRESTRICT oact);
+TOOLCHAIN_IGNORE_WSHADOW_END;
 int sigpending(sigset_t *set);
 int sigsuspend(const sigset_t *sigmask);
 int sigwait(const sigset_t *ZRESTRICT set, int *ZRESTRICT signo);

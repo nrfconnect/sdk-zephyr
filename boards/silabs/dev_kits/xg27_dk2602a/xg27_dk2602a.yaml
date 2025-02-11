@@ -13,4 +13,6 @@ supported:
   - counter
   - gpio
   - uart
+  - dma
+  - clock_control
 vendor: silabs

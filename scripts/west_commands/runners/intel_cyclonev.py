@@ -4,14 +4,13 @@
 
 '''Modified openocd and gdb runner for Cyclone V SoC DevKit.'''
 
-import subprocess
-import re
 import os
-
+import re
+import subprocess
 from os import path
 from pathlib import Path
 
-from runners.core import ZephyrBinaryRunner, RunnerCaps
+from runners.core import RunnerCaps, ZephyrBinaryRunner
 
 DEFAULT_OPENOCD_TCL_PORT = 6333
 DEFAULT_OPENOCD_TELNET_PORT = 4444
@@ -181,7 +180,7 @@ class IntelCycloneVBinaryRunner(ZephyrBinaryRunner):
 
     def to_num(self, number):
         dev_match = re.search(r"^\d*\+dev", number)
-        dev_version = not dev_match is None
+        dev_version = dev_match is not None
 
         num_match = re.search(r"^\d*", number)
         num = int(num_match.group(0))
@@ -217,9 +216,7 @@ class IntelCycloneVBinaryRunner(ZephyrBinaryRunner):
                 self.cfg_cmd.append('-f')
                 self.cfg_cmd.append(i)
 
-        if command == 'flash' and self.use_elf:
-            self.do_flash_elf(**kwargs)
-        elif command == 'flash':
+        if command == 'flash':
             self.do_flash_elf(**kwargs)
         elif command in ('attach', 'debug'):
             self.do_attach_debug(command, **kwargs)

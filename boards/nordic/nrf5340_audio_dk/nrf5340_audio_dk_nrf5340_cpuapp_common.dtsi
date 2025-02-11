@@ -84,6 +84,11 @@
 	status = "okay";
 };
 
+&lfxo {
+	load-capacitors = "internal";
+	load-capacitance-picofarad = <7>;
+};
+
 &adc {
 	status = "okay";
 	#address-cells = <1>;
@@ -209,6 +214,7 @@ arduino_spi: &spi4 {
 		status = "okay";
 		sdmmc {
 			compatible = "zephyr,sdmmc-disk";
+			disk-name = "SD";
 			status = "okay";
 		};
 

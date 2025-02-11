@@ -1,7 +1,4 @@
-.. _nucleo_h745zi_q_board:
-
-ST Nucleo H745ZI-Q
-###################
+.. zephyr:board:: nucleo_h745zi_q
 
 Overview
 ********
@@ -44,10 +41,6 @@ Key Features
 - Comprehensive free software libraries and examples available with the
   STM32Cube MCU package.
 - Arm* Mbed Enabled* compliant (only for some Nucleo part numbers)
-
-.. image:: img/nucleo_h745zi_q.jpg
-   :align: center
-   :alt: Nucleo H745ZI-Q
 
 More information about the board can be found at the `Nucleo H745ZI-Q website`_.
 
@@ -119,6 +112,8 @@ features:
 +-------------+------------+-------------------------------------+
 | SPI         | on-chip    | spi                                 |
 +-------------+------------+-------------------------------------+
+| FDCAN       | on-chip    | CAN-FD Control Area Network         |
++-------------+------------+-------------------------------------+
 
 Other hardware features are not yet supported on this Zephyr port.
 
@@ -137,7 +132,7 @@ and a ST morpho connector. Board is configured as follows:
 - UART_3 TX/RX : PD8/PD9 (ST-Link Virtual Port Com)
 - USER_PB : PC13
 - LD1 : PB0
-- LD2 : PB7
+- LD2 : PE1
 - LD3 : PB14
 - I2C : PB8, PB9
 - SPI : PA5, PA6, PB5, PD14

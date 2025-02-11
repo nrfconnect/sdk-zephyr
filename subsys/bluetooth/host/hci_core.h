@@ -36,7 +36,6 @@ enum {
 	BT_DEV_READY,
 	BT_DEV_PRESET_ID,
 	BT_DEV_HAS_PUB_KEY,
-	BT_DEV_PUB_KEY_BUSY,
 
 	/** The application either explicitly or implicitly instructed the stack to scan
 	 * for advertisers.
@@ -403,12 +402,7 @@ struct bt_dev {
 	/* Queue for outgoing HCI commands */
 	struct k_fifo		cmd_tx_queue;
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
 	const struct device *hci;
-#else
-	/* Registered HCI driver */
-	const struct bt_hci_driver *drv;
-#endif
 
 #if defined(CONFIG_BT_PRIVACY)
 	/* Local Identity Resolving Key */
@@ -443,9 +437,7 @@ extern sys_slist_t bt_auth_info_cbs;
 enum bt_security_err bt_security_err_get(uint8_t hci_err);
 #endif /* CONFIG_BT_SMP || CONFIG_BT_CLASSIC */
 
-#if DT_HAS_CHOSEN(zephyr_bt_hci)
 int bt_hci_recv(const struct device *dev, struct net_buf *buf);
-#endif
 
 /* Data type to store state related with command to be updated
  * when command completes successfully.
@@ -515,10 +507,6 @@ void bt_hci_user_confirm_req(struct net_buf *buf);
 void bt_hci_user_passkey_notify(struct net_buf *buf);
 void bt_hci_user_passkey_req(struct net_buf *buf);
 void bt_hci_auth_complete(struct net_buf *buf);
-
-/* ECC HCI event handlers */
-void bt_hci_evt_le_pkey_complete(struct net_buf *buf);
-void bt_hci_evt_le_dhkey_complete(struct net_buf *buf);
 
 /* Common HCI event handlers */
 void bt_hci_le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt);

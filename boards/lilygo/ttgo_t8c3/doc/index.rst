@@ -1,7 +1,4 @@
-.. _ttgo_t8c3:
-
-Lilygo TTGO T8-C3
-#################
+.. zephyr:board:: ttgo_t8c3
 
 Overview
 ********
@@ -17,12 +14,6 @@ It features the following integrated components:
 - JST GH 2-pin battery connector
 - LED
 
-.. figure:: img/ttgo_t8c3.webp
-   :align: center
-   :alt: TTGO T8-C3
-
-   Lilygo TTGO T8-C3
-
 Functional Description
 **********************
 This board is based on the ESP32-C3 with 4MB of flash, WiFi and BLE support. It
@@ -33,7 +24,7 @@ enabled by moving a 0-ohm resistor.
 Connections and IOs
 ===================
 
-The TTGO T8-C3 board configuration supports the following hardware features:
+The ``ttgo_t8c3`` board target supports the following hardware features:
 
 +-----------+------------+------------------+
 | Interface | Controller | Driver/Component |
@@ -176,9 +167,8 @@ Build and flash applications as usual (see :ref:`build_an_application` and
    :board: ttgo_t8c3
    :goals: build
 
-The usual ``flash`` target will work with the ``ttgo_t8c3`` board
-configuration. Here is an example for the :zephyr:code-sample:`hello_world`
-application.
+The usual ``flash`` target will work with the ``ttgo_t8c3`` board target.
+Here is an example for the :zephyr:code-sample:`hello_world` application.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world

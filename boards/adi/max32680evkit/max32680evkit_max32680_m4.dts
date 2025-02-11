@@ -72,7 +72,7 @@
 		st7735: st7735@0 {
 			compatible = "sitronix,st7735r";
 			mipi-max-frequency = <DT_FREQ_M(6)>;
-			mipi-mode = <MIPI_DBI_MODE_SPI_3WIRE>;
+			mipi-mode = "MIPI_DBI_MODE_SPI_3WIRE";
 
 			reg = <0>;
 			width = <130>;
@@ -164,4 +164,9 @@
 	pinctrl-0 = <&spi0a_mosi_p0_5 &spi0a_miso_p0_6 &spi0a_sck_p0_7>;
 	pinctrl-names = "default";
 	cs-gpios = <&gpio0 4 (GPIO_ACTIVE_LOW | MAX32_VSEL_VDDIOH)>;
+};
+
+&w1 {
+	pinctrl-0 = <&owm_io_p0_6 &owm_pe_p0_7>;
+	pinctrl-names = "default";
 };

@@ -1526,9 +1526,9 @@ function(zephyr_code_relocate)
   # each directive can embed multiple CMake lists, representing flags and files,
   # the latter of which can come from generator expressions.
   get_property(code_rel_str TARGET code_data_relocation_target
-    PROPERTY COMPILE_DEFINITIONS)
+    PROPERTY INTERFACE_SOURCES)
   set_property(TARGET code_data_relocation_target
-    PROPERTY COMPILE_DEFINITIONS
+    PROPERTY INTERFACE_SOURCES
     "${code_rel_str}|${CODE_REL_LOCATION}:${flag_list}:${file_list}")
 endfunction()
 
@@ -3251,8 +3251,9 @@ function(zephyr_get variable)
       set(sysbuild_global_${var})
     endif()
 
-    if(TARGET snippets_scope)
-      get_property(snippets_${var} TARGET snippets_scope PROPERTY ${var})
+    zephyr_scope_exists(scope_defined snippets)
+    if(scope_defined)
+      zephyr_get_scoped(snippets_${var} snippets ${var})
     endif()
   endforeach()
 
@@ -3317,11 +3318,54 @@ endfunction(zephyr_get variable)
 # <scope>: Name of new scope.
 #
 function(zephyr_create_scope scope)
-  if(TARGET ${scope}_scope)
+  zephyr_scope_exists(scope_defined ${scope})
+  if(scope_defined)
     message(FATAL_ERROR "zephyr_create_scope(${scope}) already exists.")
   endif()
 
-  add_custom_target(${scope}_scope)
+  set_property(GLOBAL PROPERTY scope:${scope} TRUE)
+endfunction()
+
+# Usage:
+#   zephyr_scope_exists(<result> <scope>)
+#
+# Check if <scope> exists.
+#
+# <result>: Variable to set with result.
+#           TRUE if scope exists, FALSE otherwise.
+# <scope> : Name of scope.
+#
+function(zephyr_scope_exists result scope)
+  get_property(scope_defined GLOBAL PROPERTY scope:${scope})
+  if(scope_defined)
+    set(${result} TRUE PARENT_SCOPE)
+  else()
+    set(${result} FALSE PARENT_SCOPE)
+  endif()
+endfunction()
+
+# Usage:
+#   zephyr_get_scoped(<output> <scope> <var>)
+#
+# Get the current value of <var> in a specific <scope>, as defined by a
+# previous zephyr_set() call. The value will be stored in the <output> var.
+#
+# <output> : Variable to store the value in
+# <scope>  : Scope for the variable look up
+# <var>    : Name to look up in the specific scope
+#
+function(zephyr_get_scoped output scope var)
+  zephyr_scope_exists(scope_defined ${scope})
+  if(NOT scope_defined)
+    message(FATAL_ERROR "zephyr_get_scoped(): scope ${scope} doesn't exists.")
+  endif()
+
+  get_property(value GLOBAL PROPERTY ${scope}_scope:${var})
+  if(DEFINED value)
+    set(${output} "${value}" PARENT_SCOPE)
+  else()
+    unset(${output} PARENT_SCOPE)
+  endif()
 endfunction()
 
 # Usage:
@@ -3342,7 +3386,8 @@ function(zephyr_set variable)
 
   zephyr_check_arguments_required_all(zephyr_set SET_VAR SCOPE)
 
-  if(NOT TARGET ${SET_VAR_SCOPE}_scope)
+  zephyr_scope_exists(scope_defined ${SET_VAR_SCOPE})
+  if(NOT scope_defined)
     message(FATAL_ERROR "zephyr_set(... SCOPE ${SET_VAR_SCOPE}) doesn't exists.")
   endif()
 
@@ -3350,8 +3395,8 @@ function(zephyr_set variable)
     set(property_args APPEND)
   endif()
 
-  set_property(TARGET ${SET_VAR_SCOPE}_scope ${property_args}
-               PROPERTY ${variable} ${SET_VAR_UNPARSED_ARGUMENTS}
+  set_property(GLOBAL ${property_args} PROPERTY
+               ${SET_VAR_SCOPE}_scope:${variable} ${SET_VAR_UNPARSED_ARGUMENTS}
   )
 endfunction()
 
@@ -4680,7 +4725,7 @@ function(zephyr_linker)
 endfunction()
 
 # Usage:
-#   zephyr_linker_memory(NAME <name> START <address> SIZE <size> FLAGS <flags>)
+#   zephyr_linker_memory(NAME <name> START <address> SIZE <size> [FLAGS <flags>])
 #
 # Zephyr linker memory.
 # This function specifies a memory region for the platform in use.
@@ -4697,14 +4742,18 @@ endfunction()
 #                  All the following are valid values:
 #                    1048576, 0x10000, 1024k, 1024K, 1m, and 1M.
 # FLAGS <flags>  : Flags describing properties of the memory region.
-#                  Currently supported:
 #                  r: Read-only region
 #                  w: Read-write region
 #                  x: Executable region
-#                  The flags r and x, or w and x may be combined like: rx, wx.
+#                  a: Allocatable region
+#                  i: Initialized region
+#                  l: Same as ‘i’
+#                  !: Invert the sense of any of the attributes that follow
+#                  The flags may be combined like: rx, rx!w.
 function(zephyr_linker_memory)
-  set(single_args "FLAGS;NAME;SIZE;START")
-  cmake_parse_arguments(MEMORY "" "${single_args}" "" ${ARGN})
+  set(req_single_args "NAME;SIZE;START")
+  set(single_args "FLAGS")
+  cmake_parse_arguments(MEMORY "" "${req_single_args};${single_args}" "" ${ARGN})
 
   if(MEMORY_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR "zephyr_linker_memory(${ARGV0} ...) given unknown "
@@ -4712,7 +4761,7 @@ function(zephyr_linker_memory)
     )
   endif()
 
-  foreach(arg ${single_args})
+  foreach(arg ${req_single_args})
     if(NOT DEFINED MEMORY_${arg})
       message(FATAL_ERROR "zephyr_linker_memory(${ARGV0} ...) missing required "
                           "argument: ${arg}"
@@ -4721,6 +4770,7 @@ function(zephyr_linker_memory)
   endforeach()
 
   set(MEMORY)
+  zephyr_linker_arg_val_list(MEMORY "${req_single_args}")
   zephyr_linker_arg_val_list(MEMORY "${single_args}")
 
   string(REPLACE ";" "\;" MEMORY "${MEMORY}")
@@ -4730,7 +4780,7 @@ function(zephyr_linker_memory)
 endfunction()
 
 # Usage:
-#   zephyr_linker_memory_ifdef(<setting> NAME <name> START <address> SIZE <size> FLAGS <flags>)
+#   zephyr_linker_memory_ifdef(<setting> NAME <name> START <address> SIZE <size> [FLAGS <flags>])
 #
 # Will create memory region if <setting> is enabled.
 #
@@ -4793,9 +4843,9 @@ function(zephyr_linker_dts_section)
 endfunction()
 
 # Usage:
-#   zephyr_linker_dts_memory(PATH <path> FLAGS <flags>)
-#   zephyr_linker_dts_memory(NODELABEL <nodelabel> FLAGS <flags>)
-#   zephyr_linker_dts_memory(CHOSEN <prop> FLAGS <flags>)
+#   zephyr_linker_dts_memory(PATH <path>)
+#   zephyr_linker_dts_memory(NODELABEL <nodelabel>)
+#   zephyr_linker_dts_memory(CHOSEN <prop>)
 #
 # Zephyr linker devicetree memory.
 # This function specifies a memory region for the platform in use based on its
@@ -4810,15 +4860,9 @@ endfunction()
 # NODELABEL <label>: Node label
 # CHOSEN <prop>    : Chosen property, add memory section described by the
 #                    /chosen property if it exists.
-# FLAGS <flags>  : Flags describing properties of the memory region.
-#                  Currently supported:
-#                  r: Read-only region
-#                  w: Read-write region
-#                  x: Executable region
-#                  The flags r and x, or w and x may be combined like: rx, wx.
 #
 function(zephyr_linker_dts_memory)
-  set(single_args "CHOSEN;FLAGS;PATH;NODELABEL")
+  set(single_args "CHOSEN;PATH;NODELABEL")
   cmake_parse_arguments(DTS_MEMORY "" "${single_args}" "" ${ARGN})
 
   if(DTS_MEMORY_UNPARSED_ARGUMENTS)
@@ -4861,12 +4905,28 @@ function(zephyr_linker_dts_memory)
   endif()
   zephyr_string(SANITIZE name ${name})
 
-  zephyr_linker_memory(
-    NAME  ${name}
-    START ${addr}
-    SIZE  ${size}
-    FLAGS ${DTS_MEMORY_FLAGS}
-  )
+  dt_prop(flags PATH ${DTS_MEMORY_PATH} PROPERTY "zephyr,memory-region-flags")
+  if(NOT DEFINED flags)
+    zephyr_linker_memory(
+      NAME  ${name}
+      START ${addr}
+      SIZE  ${size}
+      FLAGS "rw"
+    )
+  elseif("${flags}" STREQUAL "")
+    zephyr_linker_memory(
+      NAME  ${name}
+      START ${addr}
+      SIZE  ${size}
+    )
+  else()
+    zephyr_linker_memory(
+      NAME  ${name}
+      START ${addr}
+      SIZE  ${size}
+      FLAGS ${flags}
+    )
+  endif()
 endfunction()
 
 # Usage:
@@ -5918,16 +5978,11 @@ if(CMAKE_SCRIPT_MODE_FILE)
     # This silence the error: 'set_target_properties command is not scriptable'
   endfunction()
 
-  function(zephyr_set variable)
-    # This silence the error: zephyr_set(...  SCOPE <scope>) doesn't exists.
-  endfunction()
-
   # Build info creates a custom target for handling of build info.
   # build_info is not needed in script mode but still called by Zephyr CMake
   # modules. Therefore disable build_info(...) in when including
   # extensions.cmake in script mode.
   function(build_info)
-    # This silence the error: 'YAML context 'build_info' does not exist.'
-    #                         'Remember to create a YAML context'
+    # This silence the error: 'Unknown CMake command "yaml_context"'
   endfunction()
 endif()

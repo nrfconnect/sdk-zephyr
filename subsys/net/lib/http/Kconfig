@@ -107,6 +107,17 @@ config HTTP_SERVER_MAX_HEADER_LEN
 	  internal header processing, and only needs to be increased if the
 	  application wishes to access headers of a greater length.
 
+config HTTP_SERVER_HTTP2_MAX_HEADER_FRAME_LEN
+	int "Maximum HTTP/2 response header frame length"
+	default 64
+	range 64 2048
+	help
+	  This setting determines the maximum length of an HTTP/2 header frame
+	  (applies to response headers only, not request headers). The default
+	  value is sufficient for the standard headers included with a response,
+	  and only needs to be increased if the application wishes to send
+	  additional response headers.
+
 config HTTP_SERVER_CAPTURE_HEADERS
 	bool "Allow capturing HTTP headers for application use"
 	help
@@ -168,6 +179,21 @@ config HTTP_SERVER_RESTART_DELAY
 	  allow any existing connections to finalize to avoid binding errors
 	  during initialization.
 
+config HTTP_SERVER_TLS_USE_ALPN
+	bool "ALPN support for HTTPS server"
+	depends on NET_SOCKETS_SOCKOPT_TLS
+	depends on MBEDTLS_SSL_ALPN
+	help
+	  Use ALPN (application layer protocol negotiation) to negotiate HTTP2
+	  protocol for TLS connections. Web browsers use this mechanism to determine
+	  whether HTTP2 is supported.
+
+config WEBSOCKET_CONSOLE
+	bool
+	default y if HTTP_SERVER_WEBSOCKET && SHELL_BACKEND_WEBSOCKET
+	help
+	  Hidden option that is enabled only when all the necessary options
+	  needed by websocket console are set.
 endif
 
 # Hidden option to avoid having multiple individual options that are ORed together
