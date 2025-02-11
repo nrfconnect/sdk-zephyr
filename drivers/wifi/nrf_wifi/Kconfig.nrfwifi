@@ -816,4 +816,8 @@ config NRF70_PASSIVE_SCAN_ONLY
 	help
 	  Enable this configuration to force passive scan on all channels.
 	  This will override application-specified scan type.
+
+config NRF_WIFI_RX_BUFF_PROG_UMAC
+	bool "RX buffers programming through UMAC"
+	default y
 endif # WIFI_NRF70
