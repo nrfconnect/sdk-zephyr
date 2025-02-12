@@ -106,39 +106,39 @@ static ALWAYS_INLINE void clk_init(void)
 		CLOCK_GetCurSysClkConfig(&current);
 	} while (current.src != scg_sys_clk_config.src);
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpuart0))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart0), okay)
 	CLOCK_SetIpSrc(kCLOCK_Lpuart0,
 		       DT_CLOCKS_CELL(DT_NODELABEL(lpuart0), ip_source));
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpuart1))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart1), okay)
 	CLOCK_SetIpSrc(kCLOCK_Lpuart1,
 		       DT_CLOCKS_CELL(DT_NODELABEL(lpuart1), ip_source));
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpuart2))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart2), okay)
 	CLOCK_SetIpSrc(kCLOCK_Lpuart2,
 		       DT_CLOCKS_CELL(DT_NODELABEL(lpuart2), ip_source));
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpi2c0))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpi2c0), okay)
 	CLOCK_SetIpSrc(kCLOCK_Lpi2c0,
 		       DT_CLOCKS_CELL(DT_NODELABEL(lpi2c0), ip_source));
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpi2c1))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpi2c1), okay)
 	CLOCK_SetIpSrc(kCLOCK_Lpi2c1,
 		       DT_CLOCKS_CELL(DT_NODELABEL(lpi2c1), ip_source));
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(flexio))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(flexio), okay)
 	CLOCK_SetIpSrc(kCLOCK_Flexio0,
 		       DT_CLOCKS_CELL(DT_NODELABEL(flexio), ip_source));
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpspi0))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay)
 	CLOCK_SetIpSrc(kCLOCK_Lpspi0,
 		       DT_CLOCKS_CELL(DT_NODELABEL(lpspi0), ip_source));
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpspi1))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi1), okay)
 	CLOCK_SetIpSrc(kCLOCK_Lpspi1,
 		       DT_CLOCKS_CELL(DT_NODELABEL(lpspi1), ip_source));
 #endif
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(adc0))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(adc0), okay)
 	CLOCK_SetIpSrc(kCLOCK_Adc0,
 		       DT_CLOCKS_CELL(DT_NODELABEL(adc0), ip_source));
 #endif
