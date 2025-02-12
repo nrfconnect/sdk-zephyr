@@ -47,6 +47,7 @@ UDC_BUF_POOL_DEFINE(cdc_acm_ep_pool,
 #define CDC_ACM_IRQ_RX_ENABLED		2
 #define CDC_ACM_IRQ_TX_ENABLED		3
 #define CDC_ACM_RX_FIFO_BUSY		4
+#define CDC_ACM_LOCK			5
 
 static struct k_work_q cdc_acm_work_q;
 static K_KERNEL_STACK_DEFINE(cdc_acm_stack,
@@ -539,10 +540,15 @@ static void cdc_acm_tx_fifo_handler(struct k_work *work)
 		return;
 	}
 
+	if (atomic_test_and_set_bit(&data->state, CDC_ACM_LOCK)) {
+		cdc_acm_work_submit(&data->tx_fifo_work);
+		return;
+	}
+
 	buf = cdc_acm_buf_alloc(cdc_acm_get_bulk_in(c_data));
 	if (buf == NULL) {
 		cdc_acm_work_submit(&data->tx_fifo_work);
-		return;
+		goto tx_fifo_handler_exit;
 	}
 
 	len = ring_buf_get(data->tx_fifo.rb, buf->data, buf->size);
@@ -553,6 +559,9 @@ static void cdc_acm_tx_fifo_handler(struct k_work *work)
 		LOG_ERR("Failed to enqueue");
 		net_buf_unref(buf);
 	}
+
+tx_fifo_handler_exit:
+	atomic_clear_bit(&data->state, CDC_ACM_LOCK);
 }
 
 /*
@@ -799,6 +808,12 @@ static void cdc_acm_irq_cb_handler(struct k_work *work)
 		return;
 	}
 
+	if (atomic_test_and_set_bit(&data->state, CDC_ACM_LOCK)) {
+		LOG_ERR("Polling is in progress");
+		cdc_acm_work_submit(&data->irq_cb_work);
+		return;
+	}
+
 	data->tx_fifo.altered = false;
 	data->rx_fifo.altered = false;
 	data->rx_fifo.irq = false;
@@ -830,6 +845,8 @@ static void cdc_acm_irq_cb_handler(struct k_work *work)
 		LOG_DBG("tx irq pending, submit irq_cb_work");
 		cdc_acm_work_submit(&data->irq_cb_work);
 	}
+
+	atomic_clear_bit(&data->state, CDC_ACM_LOCK);
 }
 
 static void cdc_acm_irq_callback_set(const struct device *dev,
@@ -848,8 +865,13 @@ static int cdc_acm_poll_in(const struct device *dev, unsigned char *const c)
 	uint32_t len;
 	int ret = -1;
 
+	if (atomic_test_and_set_bit(&data->state, CDC_ACM_LOCK)) {
+		LOG_ERR("IRQ callback is used");
+		return -1;
+	}
+
 	if (ring_buf_is_empty(data->rx_fifo.rb)) {
-		return ret;
+		goto poll_in_exit;
 	}
 
 	len = ring_buf_get(data->rx_fifo.rb, c, 1);
@@ -858,20 +880,24 @@ static int cdc_acm_poll_in(const struct device *dev, unsigned char *const c)
 		ret = 0;
 	}
 
+poll_in_exit:
+	atomic_clear_bit(&data->state, CDC_ACM_LOCK);
+
 	return ret;
 }
 
 static void cdc_acm_poll_out(const struct device *dev, const unsigned char c)
 {
 	struct cdc_acm_uart_data *const data = dev->data;
-	unsigned int lock;
 	uint32_t wrote;
 
-	while (true) {
-		lock = irq_lock();
-		wrote = ring_buf_put(data->tx_fifo.rb, &c, 1);
-		irq_unlock(lock);
+	if (atomic_test_and_set_bit(&data->state, CDC_ACM_LOCK)) {
+		LOG_ERR("IRQ callback is used");
+		return;
+	}
 
+	while (true) {
+		wrote = ring_buf_put(data->tx_fifo.rb, &c, 1);
 		if (wrote == 1) {
 			break;
 		}
@@ -884,6 +910,7 @@ static void cdc_acm_poll_out(const struct device *dev, const unsigned char c)
 		k_msleep(1);
 	}
 
+	atomic_clear_bit(&data->state, CDC_ACM_LOCK);
 	cdc_acm_work_submit(&data->tx_fifo_work);
 }
 
