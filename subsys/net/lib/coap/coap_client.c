@@ -24,6 +24,7 @@ static K_MUTEX_DEFINE(coap_client_mutex);
 static struct coap_client *clients[CONFIG_COAP_CLIENT_MAX_INSTANCES];
 static int num_clients;
 static K_SEM_DEFINE(coap_client_recv_sem, 0, 1);
+static atomic_t coap_client_recv_active;
 
 static bool timeout_expired(struct coap_client_internal_request *internal_req);
 static void cancel_requests_with(struct coap_client *client, int error);
@@ -81,7 +82,10 @@ static int coap_client_schedule_poll(struct coap_client *client, int sock,
 	memcpy(&internal_req->coap_request, req, sizeof(struct coap_client_request));
 	internal_req->request_ongoing = true;
 
-	k_sem_give(&coap_client_recv_sem);
+	if (!coap_client_recv_active) {
+		k_sem_give(&coap_client_recv_sem);
+	}
+	atomic_set(&coap_client_recv_active, 1);
 
 	return 0;
 }
@@ -952,6 +956,7 @@ static void cancel_requests_with(struct coap_client *client, int error)
 			reset_internal_request(&client->requests[i]);
 		}
 	}
+	atomic_clear(&coap_client_recv_active);
 	k_mutex_unlock(&client->lock);
 
 }
@@ -969,6 +974,7 @@ void coap_client_recv(void *coap_cl, void *a, void *b)
 
 	k_sem_take(&coap_client_recv_sem, K_FOREVER);
 	while (true) {
+		atomic_set(&coap_client_recv_active, 1);
 		ret = handle_poll();
 		if (ret < 0) {
 			/* Error in polling */
@@ -981,6 +987,7 @@ void coap_client_recv(void *coap_cl, void *a, void *b)
 			continue;
 		} else {
 idle:
+			atomic_set(&coap_client_recv_active, 0);
 			k_sem_take(&coap_client_recv_sem, K_FOREVER);
 		}
 	}
