@@ -54,6 +54,8 @@ void ipv6_frag_cb(struct net_ipv6_reassembly *reass, void *user_data)
 }
 #endif /* CONFIG_NET_IPV6_FRAGMENT */
 
+#if defined(CONFIG_NET_NATIVE_IPV6)
+
 #if defined(CONFIG_NET_IPV6_PE)
 static void ipv6_pe_filter_cb(struct in6_addr *prefix, bool is_denylist,
 			      void *user_data)
@@ -76,7 +78,6 @@ static void ipv6_pe_filter_cb(struct in6_addr *prefix, bool is_denylist,
 }
 #endif /* CONFIG_NET_IPV6_PE */
 
-#if defined(CONFIG_NET_IPV6)
 static void address_lifetime_cb(struct net_if *iface, void *user_data)
 {
 	struct net_shell_user_data *data = user_data;
@@ -98,17 +99,15 @@ static void address_lifetime_cb(struct net_if *iface, void *user_data)
 	PR("Type      \tState    \tLifetime (sec)\tRef\tAddress\n");
 
 	ARRAY_FOR_EACH(ipv6->unicast, i) {
+		struct net_if_ipv6_prefix *prefix;
 		char remaining_str[sizeof("01234567890")];
-		uint8_t prefix_len = 128U;
+		uint32_t remaining;
+		uint8_t prefix_len;
 
 		if (!ipv6->unicast[i].is_used ||
 		    ipv6->unicast[i].address.family != AF_INET6) {
 			continue;
 		}
-
-#if defined(CONFIG_NET_NATIVE_IPV6)
-		struct net_if_ipv6_prefix *prefix;
-		uint32_t remaining;
 
 		remaining = net_timeout_remaining(&ipv6->unicast[i].lifetime,
 						  k_uptime_get_32());
@@ -117,6 +116,8 @@ static void address_lifetime_cb(struct net_if *iface, void *user_data)
 					   &ipv6->unicast[i].address.in6_addr);
 		if (prefix) {
 			prefix_len = prefix->len;
+		} else {
+			prefix_len = 128U;
 		}
 
 		if (ipv6->unicast[i].is_infinite) {
@@ -126,9 +127,6 @@ static void address_lifetime_cb(struct net_if *iface, void *user_data)
 			snprintk(remaining_str, sizeof(remaining_str) - 1,
 				 "%u", remaining);
 		}
-#else
-	snprintk(remaining_str, sizeof(remaining_str) - 1, "infinite");
-#endif /* CONFIG_NET_NATIVE_IPV6 */
 
 		PR("%s  \t%s\t%14s\t%ld\t%s/%d%s\n",
 		   addrtype2str(ipv6->unicast[i].addr_type),
@@ -139,13 +137,13 @@ static void address_lifetime_cb(struct net_if *iface, void *user_data)
 		   ipv6->unicast[i].is_temporary ? " (temporary)" : "");
 	}
 }
-#endif /* CONFIG_NET_IPV6 */
+#endif /* CONFIG_NET_NATIVE_IPV6 */
 
 static int cmd_net_ipv6(const struct shell *sh, size_t argc, char *argv[])
 {
-#if defined(CONFIG_NET_IPV6)
+#if defined(CONFIG_NET_NATIVE_IPV6)
 	struct net_shell_user_data user_data;
-#endif /* CONFIG_NET_IPV6 */
+#endif
 
 	PR("IPv6 support                              : %s\n",
 	   IS_ENABLED(CONFIG_NET_IPV6) ?
@@ -191,10 +189,8 @@ static int cmd_net_ipv6(const struct shell *sh, size_t argc, char *argv[])
 	PR("Max number of IPv6 privacy extension filters "
 	   "                : %d\n",
 	   CONFIG_NET_IPV6_PE_FILTER_PREFIX_COUNT);
-#endif /* CONFIG_NET_IPV6_PE */
-#endif /* CONFIG_NET_NATIVE_IPV6 */
+#endif
 
-#if defined(CONFIG_NET_IPV6)
 	PR("Max number of IPv6 network interfaces "
 	   "in the system          : %d\n",
 	   CONFIG_NET_IF_MAX_IPV6_COUNT);
@@ -213,14 +209,15 @@ static int cmd_net_ipv6(const struct shell *sh, size_t argc, char *argv[])
 
 	/* Print information about address lifetime */
 	net_if_foreach(address_lifetime_cb, &user_data);
-#endif /* CONFIG_NET_IPV6 */
+
+#endif /* CONFIG_NET_NATIVE_IPV6 */
 
 	return 0;
 }
 
 static int cmd_net_ip6_add(const struct shell *sh, size_t argc, char *argv[])
 {
-#if defined(CONFIG_NET_IPV6)
+#if defined(CONFIG_NET_NATIVE_IPV6)
 	struct net_if *iface = NULL;
 	int idx;
 	struct in6_addr addr;
@@ -265,15 +262,16 @@ static int cmd_net_ip6_add(const struct shell *sh, size_t argc, char *argv[])
 		}
 	}
 
-#else /* CONFIG_NET_IPV6 */
-	PR_INFO("Set %s to enable %s support.\n", "CONFIG_NET_IPV6", "IPv6");
-#endif /* CONFIG_NET_IPV6 */
+#else /* CONFIG_NET_NATIVE_IPV6 */
+	PR_INFO("Set %s and %s to enable native %s support.\n",
+			"CONFIG_NET_NATIVE", "CONFIG_NET_IPV6", "IPv6");
+#endif /* CONFIG_NET_NATIVE_IPV6 */
 	return 0;
 }
 
 static int cmd_net_ip6_del(const struct shell *sh, size_t argc, char *argv[])
 {
-#if defined(CONFIG_NET_IPV6)
+#if defined(CONFIG_NET_NATIVE_IPV6)
 	struct net_if *iface = NULL;
 	int idx;
 	struct in6_addr addr;
@@ -319,9 +317,10 @@ static int cmd_net_ip6_del(const struct shell *sh, size_t argc, char *argv[])
 		}
 	}
 
-#else /* CONFIG_NET_IPV6 */
-	PR_INFO("Set %s to enable %s support.\n", "CONFIG_NET_IPV6", "IPv6");
-#endif /* CONFIG_NET_IPV6 */
+#else /* CONFIG_NET_NATIVE_IPV6 */
+	PR_INFO("Set %s and %s to enable native %s support.\n",
+			"CONFIG_NET_NATIVE", "CONFIG_NET_IPV6", "IPv6");
+#endif /* CONFIG_NET_NATIVE_IPV6 */
 	return 0;
 }
 
