@@ -1,5 +1,3 @@
-:orphan:
-
 .. zephyr:code-sample:: coprocessor
    :name: OpenThread co-processor
    :relevant-api: openthread

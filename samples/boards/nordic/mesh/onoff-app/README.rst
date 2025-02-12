@@ -97,4 +97,4 @@ Group addresses are not supported.
 This application was derived from the sample mesh skeleton at
 :zephyr_file:`samples/bluetooth/mesh`.
 
-See :zephyr:code-sample-category:`bluetooth` samples for details.
+See :ref:`bluetooth samples section <bluetooth-samples>` for details.

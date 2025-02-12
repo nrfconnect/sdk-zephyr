@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: mec15xxevb_assy6853
-   :name: MEC15xxEVB Reference Board
-   :show-listing:
+.. _mec15xxevb_assy6853-samples:
 
-   These samples showcase the use of MEC15xxEVB Reference Board in Zephyr.
+MEC15xxEVB Reference Board Samples
+##################################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

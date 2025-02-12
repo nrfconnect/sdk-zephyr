@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: profiling
-   :name: Profiling
-   :show-listing:
+.. _profiling-samples:
 
-   Samples that demonstrate the :ref:`profiling` subsystem.
+Profiling subsystem samples
+###########################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

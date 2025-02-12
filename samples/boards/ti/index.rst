@@ -1,6 +1,10 @@
-.. zephyr:code-sample-category:: ti
-   :name: Texas Instruments
-   :show-listing:
-   :glob: **/*
+.. _ti_samples:
 
-   These samples showcase the use of Texas Instruments boards in Zephyr.
+Texas Instruments
+=================
+
+.. toctree::
+   :titlesonly:
+   :glob:
+
+   **/*

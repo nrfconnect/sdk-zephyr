@@ -1,5 +1,11 @@
-.. zephyr:code-sample-category:: modules
-   :name: External modules
-   :show-listing:
+.. _module-samples:
 
-   These samples demonstrate the use of external modules in Zephyr.
+External Module Samples
+#######################
+
+.. toctree::
+   :titlesonly:
+   :maxdepth: 2
+   :glob:
+
+   */*

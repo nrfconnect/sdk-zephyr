@@ -1,5 +1,11 @@
-.. zephyr:code-sample-category:: bbc
-   :name: BBC
-   :show-listing:
+.. _bbc_samples:
 
-   These samples showcase the use of BBC boards in Zephyr.
+BBC
+===
+
+.. toctree::
+   :titlesonly:
+   :maxdepth: 1
+   :glob:
+
+   */*

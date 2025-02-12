@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: sensing
-   :name: Sensing
-   :show-listing:
+.. _sensing-subsystem-samples:
 
-   Samples that demonstrate the :ref:`sensing` subsystem.
+Sensing Subsystem Samples
+#########################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*
