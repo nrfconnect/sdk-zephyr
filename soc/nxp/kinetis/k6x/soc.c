@@ -124,9 +124,10 @@ static ALWAYS_INLINE void clock_init(void)
  * Initialize the interrupt controller device drivers.
  * Also initialize the timer device driver, if required.
  *
+ * @return 0
  */
 
-void soc_early_init_hook(void)
+static int k6x_init(void)
 {
 #if !defined(CONFIG_ARM_MPU)
 	uint32_t temp_reg;
@@ -161,6 +162,8 @@ void soc_early_init_hook(void)
 #endif
 	/* Initialize PLL/system clock up to 180 MHz */
 	clock_init();
+
+	return 0;
 }
 
 #ifdef CONFIG_SOC_RESET_HOOK
@@ -171,3 +174,5 @@ void soc_reset_hook(void)
 }
 
 #endif /* CONFIG_SOC_RESET_HOOK */
+
+SYS_INIT(k6x_init, PRE_KERNEL_1, 0);

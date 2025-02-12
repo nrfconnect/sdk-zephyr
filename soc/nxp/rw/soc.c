@@ -268,16 +268,17 @@ __ramfunc void clock_init(void)
 
 }
 
-extern void nxp_rw6xx_power_init(void);
 /**
  *
  * @brief Perform basic hardware initialization
  *
  * Initialize the interrupt controller device drivers.
  * Also initialize the timer device driver, if required.
+ *
+ * @return 0
  */
 
-void soc_early_init_hook(void)
+static int nxp_rw600_init(void)
 {
 #if (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(wwdt), nxp_lpc_wwdt, okay))
 	POWER_EnableResetSource(kPOWER_ResetSourceWdt);
@@ -304,9 +305,8 @@ void soc_early_init_hook(void)
 #if defined(CONFIG_ADC_MCUX_GAU) ||  defined(CONFIG_DAC_MCUX_GAU)
 	POWER_PowerOnGau();
 #endif
-#if CONFIG_PM
-	nxp_rw6xx_power_init();
-#endif
+
+	return 0;
 }
 
 void soc_reset_hook(void)
@@ -314,3 +314,5 @@ void soc_reset_hook(void)
 	/* This is provided by the SDK */
 	SystemInit();
 }
+
+SYS_INIT(nxp_rw600_init, PRE_KERNEL_1, 0);
