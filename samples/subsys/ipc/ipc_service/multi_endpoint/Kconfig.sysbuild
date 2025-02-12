@@ -7,4 +7,3 @@ source "share/sysbuild/Kconfig"
 config NET_CORE_BOARD
 string
 	default "nrf5340dk/nrf5340/cpunet" if $(BOARD) = "nrf5340dk"
-	default "nrf5340bsim/nrf5340/cpunet" if $(BOARD) = "nrf5340bsim"
