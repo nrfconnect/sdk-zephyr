@@ -1,7 +1,4 @@
-.. _esp32_devkitc_wroom:
-
-ESP32-DevKitC-WROOM
-###################
+.. zephyr:board:: esp32_devkitc_wroom
 
 Overview
 ********
@@ -41,12 +38,6 @@ The features include the following:
 - Cryptographic hardware acceleration (RNG, ECC, RSA, SHA-2, AES)
 - 5uA deep sleep current
 
-.. figure:: img/esp32_devkitc_wroom.jpg
-    :align: center
-    :alt: ESP32-DevKitC-WROOM
-
-    ESP32-DevKitC-WROOM-32D DK
-
 For more information, check the datasheet at `ESP32 Datasheet`_ or the technical reference
 manual at `ESP32 Technical Reference Manual`_.
 
@@ -54,7 +45,7 @@ Asymmetric Multiprocessing (AMP)
 ********************************
 
 ESP32-DevKitC-WROOM allows 2 different applications to be executed in ESP32 SoC. Due to its dual-core architecture, each core can be enabled to execute customized tasks in stand-alone mode
-and/or exchanging data over OpenAMP framework. See :ref:`ipc_samples` folder as code reference.
+and/or exchanging data over OpenAMP framework. See :zephyr:code-sample-category:`ipc` folder as code reference.
 
 Supported Features
 ==================
@@ -291,6 +282,8 @@ GDB stub is enabled on ESP32.
 
 References
 **********
+
+.. target-notes::
 
 .. _`ESP32-DevKitC-WROOM`: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/hw-reference/esp32/get-started-devkitc.html#
 .. _`ESP32 Datasheet`: https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf

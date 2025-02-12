@@ -92,7 +92,7 @@ static int stm32_vbat_channel_get(const struct device *dev, enum sensor_channel 
 	return sensor_value_from_milli(val, voltage);
 }
 
-static const struct sensor_driver_api stm32_vbat_driver_api = {
+static DEVICE_API(sensor, stm32_vbat_driver_api) = {
 	.sample_fetch = stm32_vbat_sample_fetch,
 	.channel_get = stm32_vbat_channel_get,
 };
@@ -125,7 +125,7 @@ static int stm32_vbat_init(const struct device *dev)
 }
 
 #define ASSERT_VBAT_ADC_ENABLED(inst)	\
-	BUILD_ASSERT(DT_NODE_HAS_STATUS(DT_INST_IO_CHANNELS_CTLR(inst), okay),			\
+	BUILD_ASSERT(DT_NODE_HAS_STATUS_OKAY(DT_INST_IO_CHANNELS_CTLR(inst)),			\
 		"ADC instance '" DT_NODE_FULL_NAME(DT_INST_IO_CHANNELS_CTLR(inst)) "' needed "	\
 		"by Vbat sensor '" DT_NODE_FULL_NAME(DT_DRV_INST(inst)) "' is not enabled")
 

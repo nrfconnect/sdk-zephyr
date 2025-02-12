@@ -33,6 +33,7 @@
 #include "lll_iso_tx.h"
 #include "isoal.h"
 #include "ull_iso_types.h"
+#include "ull_internal.h"
 
 #include <zephyr/logging/log.h>
 
@@ -134,12 +135,7 @@ isoal_status_t isoal_reset(void)
  */
 uint32_t isoal_get_wrapped_time_us(uint32_t time_now_us, int32_t time_diff_us)
 {
-	LL_ASSERT(time_now_us <= ISOAL_TIME_WRAPPING_POINT_US);
-
-	uint32_t result = ((uint64_t)time_now_us + ISOAL_TIME_SPAN_FULL_US + time_diff_us) %
-				((uint64_t)ISOAL_TIME_SPAN_FULL_US);
-
-	return result;
+	return ull_get_wrapped_time_us(time_now_us, time_diff_us);
 }
 
 /**
@@ -1523,7 +1519,7 @@ static isoal_status_t isoal_check_source_hdl_valid(isoal_source_handle_t hdl)
  * @param pdu_release[in]       Callback of PDU deallocator
  * @param hdl[out]              Handle to new source
  *
- * @return ISOAL_STATUS_OK if we could create a new sink; otherwise ISOAL_STATUS_ERR_SOURCE_ALLOC
+ * @return ISOAL_STATUS_OK if we could create a new source; otherwise ISOAL_STATUS_ERR_SOURCE_ALLOC
  */
 isoal_status_t isoal_source_create(
 	uint16_t                    handle,
@@ -1554,6 +1550,7 @@ isoal_status_t isoal_source_create(
 
 	session->handle = handle;
 	session->framed = framed;
+	session->bis = role == ISOAL_ROLE_BROADCAST_SOURCE;
 	session->burst_number = burst_number;
 	session->iso_interval = iso_interval;
 	session->sdu_interval = sdu_interval;
@@ -2347,6 +2344,9 @@ static uint16_t isoal_tx_framed_find_correct_tx_event(const struct isoal_source 
 		const bool time_stamp_is_valid = isoal_is_time_stamp_valid(source_ctx,
 									   tx_sdu->cntr_time_stamp,
 									   tx_sdu->time_stamp);
+		const uint16_t offset_margin = session->bis ?
+						    CONFIG_BT_CTLR_ISOAL_FRAMED_BIS_OFFSET_MARGIN :
+						    CONFIG_BT_CTLR_ISOAL_FRAMED_CIS_OFFSET_MARGIN;
 
 		/* Adjust payload number */
 		if (pp->initialized) {
@@ -2441,7 +2441,7 @@ static uint16_t isoal_tx_framed_find_correct_tx_event(const struct isoal_source 
 		 * The Time_Offset shall be a positive value.
 		 */
 		while (!isoal_get_time_diff(time_stamp_selected, actual_grp_ref_point, &time_diff)
-			|| time_diff == 0) {
+			|| time_diff <= offset_margin) {
 			/* Advance target to next event */
 			actual_event++;
 			actual_grp_ref_point = isoal_get_wrapped_time_us(actual_grp_ref_point,
@@ -2529,7 +2529,7 @@ static isoal_status_t isoal_tx_framed_produce(isoal_source_handle_t source_hdl,
 		uint64_t next_payload_number;
 		uint16_t sdus_skipped;
 		bool time_diff_valid;
-		uint32_t time_diff;
+		uint32_t time_diff = 0U;
 
 		/* Start of a new SDU */
 		time_diff_valid = isoal_get_time_diff(session->last_input_time_stamp,

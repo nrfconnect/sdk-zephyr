@@ -6,6 +6,7 @@
 '''Common code used by commands which execute runners.
 '''
 
+import importlib.util
 import re
 import argparse
 import logging
@@ -28,7 +29,8 @@ from runners.core import FileType
 from runners.core import BuildConfiguration
 import yaml
 
-from zephyr_ext_common import ZEPHYR_SCRIPTS
+import zephyr_module
+from zephyr_ext_common import ZEPHYR_BASE, ZEPHYR_SCRIPTS
 
 # Runners depend on edtlib. Make sure the copy in the tree is
 # available to them before trying to import any.
@@ -41,6 +43,10 @@ import zcmake
 # Context-sensitive help indentation.
 # Don't change this, or output from argparse won't match up.
 INDENT = ' ' * 2
+
+IGNORED_RUN_ONCE_PRIORITY = -1
+SOC_FILE_RUN_ONCE_DEFAULT_PRIORITY = 0
+BOARD_FILE_RUN_ONCE_DEFAULT_PRIORITY = 10
 
 if log.VERBOSE >= log.VERBOSE_NORMAL:
     # Using level 1 allows sub-DEBUG levels of verbosity. The
@@ -95,6 +101,20 @@ class UsedFlashCommand:
 class ImagesFlashed:
     flashed: int = 0
     total: int = 0
+
+@dataclass
+class SocBoardFilesProcessing:
+    filename: str
+    board: bool = False
+    priority: int = IGNORED_RUN_ONCE_PRIORITY
+    yaml: object = None
+
+def import_from_path(module_name, file_path):
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 def command_verb(command):
     return "flash" if command.name == "flash" else "debug"
@@ -178,9 +198,21 @@ def do_run_common(command, user_args, user_runner_args, domain_file=None):
     # images for a given board.
     board_image_count = defaultdict(ImagesFlashed)
 
+    highest_priority = IGNORED_RUN_ONCE_PRIORITY
+    highest_entry = None
+    check_files = []
+
     if user_args.context:
         dump_context(command, user_args, user_runner_args)
         return
+
+    # Import external module runners
+    for module in zephyr_module.parse_modules(ZEPHYR_BASE, command.manifest):
+        runners_ext = module.meta.get("runners", [])
+        for runner in runners_ext:
+            import_from_path(
+                module.meta.get("name", "runners_ext"), Path(module.project) / runner["file"]
+            )
 
     build_dir = get_build_dir(user_args)
     if not user_args.skip_rebuild:
@@ -223,48 +255,58 @@ def do_run_common(command, user_args, user_runner_args, domain_file=None):
             # Load board flash runner configuration (if it exists) and store
             # single-use commands in a dictionary so that they get executed
             # once per unique board name.
-            if cache['BOARD_DIR'] not in processed_boards and 'SOC_FULL_DIR' in cache:
-                soc_yaml_file = Path(cache['SOC_FULL_DIR']) / 'soc.yml'
-                board_yaml_file = Path(cache['BOARD_DIR']) / 'board.yml'
-                group_type = 'boards'
+            for directory in cache.get_list('SOC_DIRECTORIES'):
+                if directory not in processed_boards:
+                    check_files.append(SocBoardFilesProcessing(Path(directory) / 'soc.yml'))
+                    processed_boards.add(directory)
 
-                # Search for flash runner configuration, board takes priority over SoC
-                try:
-                    with open(board_yaml_file, 'r') as f:
-                        data_yaml = yaml.safe_load(f.read())
+            for directory in cache.get_list('BOARD_DIRECTORIES'):
+                if directory not in processed_boards:
+                    check_files.append(SocBoardFilesProcessing(Path(directory) / 'board.yml', True))
+                    processed_boards.add(directory)
 
-                except FileNotFoundError:
-                    continue
+        for check in check_files:
+            try:
+                with open(check.filename, 'r') as f:
+                    check.yaml = yaml.safe_load(f.read())
 
-                if 'runners' not in data_yaml:
-                    # Check SoC file
-                    group_type = 'qualifiers'
-                    try:
-                        with open(soc_yaml_file, 'r') as f:
-                            data_yaml = yaml.safe_load(f.read())
-
-                    except FileNotFoundError:
+                    if 'runners' not in check.yaml:
+                        continue
+                    elif check.board is False and 'run_once' not in check.yaml['runners']:
                         continue
 
-                processed_boards.add(cache['BOARD_DIR'])
+                    if 'priority' in check.yaml['runners']:
+                        check.priority = check.yaml['runners']['priority']
+                    else:
+                        check.priority = BOARD_FILE_RUN_ONCE_DEFAULT_PRIORITY if check.board is True else SOC_FILE_RUN_ONCE_DEFAULT_PRIORITY
 
-                if 'runners' not in data_yaml or 'run_once' not in data_yaml['runners']:
-                    continue
+                    if check.priority == highest_priority:
+                        log.die("Duplicate flash run once configuration found with equal priorities")
 
-                for cmd in data_yaml['runners']['run_once']:
-                    for data in data_yaml['runners']['run_once'][cmd]:
-                        for group in data['groups']:
-                            run_first = bool(data['run'] == 'first')
-                            if group_type == 'qualifiers':
-                                targets = []
-                                for target in group[group_type]:
-                                    # For SoC-based qualifiers, prepend to the beginning of the
-                                    # match to allow for matching any board name
-                                    targets.append('([^/]+)/' + target)
-                            else:
-                                targets = group[group_type]
+                    elif check.priority > highest_priority:
+                        highest_priority = check.priority
+                        highest_entry = check
 
-                            used_cmds.append(UsedFlashCommand(cmd, targets, data['runners'], run_first))
+            except FileNotFoundError:
+                continue
+
+        if highest_entry is not None:
+            group_type = 'boards' if highest_entry.board is True else 'qualifiers'
+
+            for cmd in highest_entry.yaml['runners']['run_once']:
+                for data in highest_entry.yaml['runners']['run_once'][cmd]:
+                    for group in data['groups']:
+                        run_first = bool(data['run'] == 'first')
+                        if group_type == 'qualifiers':
+                            targets = []
+                            for target in group[group_type]:
+                                # For SoC-based qualifiers, prepend to the beginning of the
+                                # match to allow for matching any board name
+                                targets.append('([^/]+)/' + target)
+                        else:
+                            targets = group[group_type]
+
+                        used_cmds.append(UsedFlashCommand(cmd, targets, data['runners'], run_first))
 
     # Reduce entries to only those having matching board names (either exact or with regex) and
     # remove any entries with empty board lists
@@ -284,13 +326,14 @@ def do_run_common(command, user_args, user_runner_args, domain_file=None):
         if len(entry.boards) == 0:
             del used_cmds[i]
 
+    prev_runner = None
     for d in domains:
-        do_run_common_image(command, user_args, user_runner_args,
-                            used_cmds, board_image_count, d.build_dir)
+        prev_runner = do_run_common_image(command, user_args, user_runner_args, used_cmds,
+                                          board_image_count, d.build_dir, prev_runner)
 
 
 def do_run_common_image(command, user_args, user_runner_args, used_cmds,
-                        board_image_count, build_dir=None,):
+                        board_image_count, build_dir=None, prev_runner=None):
     global re
     command_name = command.name
     if build_dir is None:
@@ -440,6 +483,10 @@ def do_run_common_image(command, user_args, user_runner_args, used_cmds,
     if unknown:
         log.die(f'runner {runner_name} received unknown arguments: {unknown}')
 
+    # Propagate useful args from previous domain invocations
+    if prev_runner is not None:
+        runner_cls.args_from_previous_runner(prev_runner, args)
+
     # Override args with any user_args. The latter must take
     # precedence, or e.g. --hex-file on the command line would be
     # ignored in favor of a board.cmake setting.
@@ -470,6 +517,7 @@ def do_run_common_image(command, user_args, user_runner_args, used_cmds,
         else:
             log.err('verbose mode enabled, dumping stack:', fatal=True)
             raise
+    return runner
 
 def get_build_dir(args, die_if_none=True):
     # Get the build directory for the given argument list and environment.

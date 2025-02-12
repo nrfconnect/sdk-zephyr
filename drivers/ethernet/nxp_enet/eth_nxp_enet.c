@@ -224,15 +224,16 @@ static int eth_nxp_enet_tx(const struct device *dev, struct net_pkt *pkt)
 
 	ret = ENET_SendFrame(data->base, &data->enet_handle, data->tx_frame_buf,
 			     total_len, RING_ID, frame_is_timestamped, pkt);
-	if (ret == kStatus_Success) {
+
+	if (ret != kStatus_Success) {
+		LOG_ERR("ENET_SendFrame error: %d", ret);
+		ENET_ReclaimTxDescriptor(data->base, &data->enet_handle, RING_ID);
+		ret = -EIO;
 		goto exit;
 	}
 
 	if (frame_is_timestamped) {
 		eth_wait_for_ptp_ts(dev, pkt);
-	} else {
-		LOG_ERR("ENET_SendFrame error: %d", ret);
-		ENET_ReclaimTxDescriptor(data->base, &data->enet_handle, RING_ID);
 	}
 
 exit:
@@ -240,32 +241,6 @@ exit:
 	k_mutex_unlock(&data->tx_frame_buf_mutex);
 
 	return ret;
-}
-
-static void eth_nxp_enet_iface_init(struct net_if *iface)
-{
-	const struct device *dev = net_if_get_device(iface);
-	struct nxp_enet_mac_data *data = dev->data;
-	const struct nxp_enet_mac_config *config = dev->config;
-
-	net_if_set_link_addr(iface, data->mac_addr,
-			     sizeof(data->mac_addr),
-			     NET_LINK_ETHERNET);
-
-	if (data->iface == NULL) {
-		data->iface = iface;
-	}
-
-#if defined(CONFIG_NET_DSA)
-	dsa_register_master_tx(iface, &eth_nxp_enet_tx);
-#endif
-
-	ethernet_init(iface);
-	net_eth_carrier_off(data->iface);
-
-	config->irq_config_func();
-
-	nxp_enet_driver_cb(config->mdio, NXP_ENET_MDIO, NXP_ENET_INTERRUPT_ENABLED, NULL);
 }
 
 static enum ethernet_hw_caps eth_nxp_enet_get_capabilities(const struct device *dev)
@@ -332,6 +307,26 @@ static int eth_nxp_enet_set_config(const struct device *dev,
 			ENET_LeaveMulticastGroup(data->base,
 						 (uint8_t *)cfg->filter.mac_address.addr);
 		}
+		return 0;
+	default:
+		break;
+	}
+
+	return -ENOTSUP;
+}
+
+static int eth_nxp_enet_get_config(const struct device *dev,
+			       enum ethernet_config_type type,
+			       struct ethernet_config *cfg)
+{
+	switch (type) {
+	case ETHERNET_CONFIG_TYPE_RX_CHECKSUM_SUPPORT:
+	case ETHERNET_CONFIG_TYPE_TX_CHECKSUM_SUPPORT:
+		cfg->chksum_support = ETHERNET_CHECKSUM_SUPPORT_IPV4_HEADER	|
+				      ETHERNET_CHECKSUM_SUPPORT_IPV4_ICMP	|
+				      ETHERNET_CHECKSUM_SUPPORT_IPV6_HEADER	|
+				      ETHERNET_CHECKSUM_SUPPORT_TCP		|
+				      ETHERNET_CHECKSUM_SUPPORT_UDP;
 		return 0;
 	default:
 		break;
@@ -522,6 +517,41 @@ static void nxp_enet_phy_cb(const struct device *phy,
 	}
 }
 
+static void eth_nxp_enet_iface_init(struct net_if *iface)
+{
+	const struct device *dev = net_if_get_device(iface);
+	struct nxp_enet_mac_data *data = dev->data;
+	const struct nxp_enet_mac_config *config = dev->config;
+	const struct device *phy_dev = config->phy_dev;
+	struct phy_link_state state;
+
+	net_if_set_link_addr(iface, data->mac_addr,
+			     sizeof(data->mac_addr),
+			     NET_LINK_ETHERNET);
+
+	if (data->iface == NULL) {
+		data->iface = iface;
+	}
+
+#if defined(CONFIG_NET_DSA)
+	dsa_register_master_tx(iface, &eth_nxp_enet_tx);
+#endif
+
+	ethernet_init(iface);
+	net_if_carrier_off(iface);
+
+	/* In case the phy driver doesn't report a state change due to link being up
+	 * before calling phy_configure, we should check the state ourself, and then do a
+	 * pseudo-callback
+	 */
+	phy_get_link_state(phy_dev, &state);
+
+	nxp_enet_phy_cb(phy_dev, &state, (void *)dev);
+
+	config->irq_config_func();
+
+	nxp_enet_driver_cb(config->mdio, NXP_ENET_MDIO, NXP_ENET_INTERRUPT_ENABLED, NULL);
+}
 
 static int nxp_enet_phy_init(const struct device *dev)
 {
@@ -835,6 +865,7 @@ static const struct ethernet_api api_funcs = {
 	.get_capabilities	= eth_nxp_enet_get_capabilities,
 	.get_phy                = eth_nxp_enet_get_phy,
 	.set_config		= eth_nxp_enet_set_config,
+	.get_config		= eth_nxp_enet_get_config,
 	.send			= NXP_ENET_SEND_FUNC,
 #if defined(CONFIG_PTP_CLOCK)
 	.get_ptp_clock		= eth_nxp_enet_get_ptp_clock,
@@ -854,7 +885,7 @@ static const struct ethernet_api api_funcs = {
 #define NXP_ENET_DT_PHY_DEV(node_id, phy_phandle, idx)						\
 	DEVICE_DT_GET(DT_PHANDLE_BY_IDX(node_id, phy_phandle, idx))
 
-#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_dtcm), okay) && \
+#if DT_NODE_HAS_STATUS_OKAY(DT_CHOSEN(zephyr_dtcm)) && \
 	CONFIG_ETH_NXP_ENET_USE_DTCM_FOR_DMA_BUFFER
 #define _nxp_enet_dma_desc_section __dtcm_bss_section
 #define _nxp_enet_dma_buffer_section __dtcm_noinit_section
@@ -862,9 +893,9 @@ static const struct ethernet_api api_funcs = {
 #define driver_cache_maintain	false
 #elif defined(CONFIG_NOCACHE_MEMORY)
 #define _nxp_enet_dma_desc_section __nocache
-#define _nxp_enet_dma_buffer_section __nocache
+#define _nxp_enet_dma_buffer_section
 #define _nxp_enet_driver_buffer_section
-#define driver_cache_maintain	false
+#define driver_cache_maintain	true
 #else
 #define _nxp_enet_dma_desc_section
 #define _nxp_enet_dma_buffer_section

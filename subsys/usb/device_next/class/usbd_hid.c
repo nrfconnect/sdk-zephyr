@@ -235,7 +235,7 @@ static int handle_get_report(const struct device *dev,
 	const uint8_t id = HID_GET_REPORT_ID(setup->wValue);
 	struct hid_device_data *const ddata = dev->data;
 	const struct hid_device_ops *ops = ddata->ops;
-	const size_t size = net_buf_tailroom(buf);
+	const size_t size = setup->wLength;
 	int ret = 0;
 
 	switch (type) {
@@ -257,8 +257,9 @@ static int handle_get_report(const struct device *dev,
 	}
 
 	if (ret > 0) {
-		__ASSERT(ret <= size, "Buffer overflow in the HID driver");
-		net_buf_add(buf, MIN(size, ret));
+		__ASSERT(ret <= net_buf_tailroom(buf),
+			 "Buffer overflow in the HID driver");
+		net_buf_add(buf, MIN(net_buf_tailroom(buf), ret));
 	} else {
 		errno = ret ? ret : -ENOTSUP;
 	}
@@ -512,7 +513,6 @@ static struct net_buf *hid_buf_alloc_ext(const struct hid_device_config *const d
 	}
 
 	bi = udc_get_buf_info(buf);
-	memset(bi, 0, sizeof(struct udc_buf_info));
 	bi->ep = ep;
 
 	return buf;
@@ -530,7 +530,6 @@ static struct net_buf *hid_buf_alloc(const struct hid_device_config *const dcfg,
 	}
 
 	bi = udc_get_buf_info(buf);
-	memset(bi, 0, sizeof(struct udc_buf_info));
 	bi->ep = ep;
 
 	return buf;

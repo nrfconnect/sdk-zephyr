@@ -34,11 +34,11 @@
 	};
 };
 
-&shared_ram3x_region {
+&cpuapp_cpurad_ram0x_region {
 	status = "okay";
 };
 
-&cpuapp_cpurad_ram0x_region {
+&cpurad_ram0x_region {
 	status = "okay";
 };
 
@@ -59,9 +59,14 @@
 };
 
 &cpusec_cpurad_ipc {
+	status = "okay";
 	mbox-names = "tx", "rx";
 	tx-region = <&cpurad_cpusec_ipc_shm>;
 	rx-region = <&cpusec_cpurad_ipc_shm>;
+};
+
+&cpusec_bellboard {
+	status = "okay";
 };
 
 ipc0: &cpuapp_cpurad_ipc {
@@ -99,7 +104,6 @@ ipc0: &cpuapp_cpurad_ipc {
 	pinctrl-0 = <&uart135_default>;
 	pinctrl-1 = <&uart135_sleep>;
 	pinctrl-names = "default", "sleep";
-	hw-flow-control;
 };
 
 &uart136 {
@@ -111,4 +115,8 @@ ipc0: &cpuapp_cpurad_ipc {
 
 &cpurad_ieee802154 {
 	status = "okay";
+};
+
+zephyr_udc0: &usbhs {
+	status = "disabled";
 };

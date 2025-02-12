@@ -1,7 +1,4 @@
-.. _rpi_5:
-
-Raspberry Pi 5 (Cortex-A76)
-###########################
+.. zephyr:board:: rpi_5
 
 Overview
 ********
@@ -44,6 +41,9 @@ The Raspberry Pi 5 board configuration supports the following hardware features:
      - N/A
      - :dtcompatible:`arm,gic-v2`
    * - GPIO
+     - :kconfig:option:`CONFIG_GPIO`
+     - :dtcompatible:`raspberrypi,rp1-gpio`
+   * - GPIO (Internal)
      - :kconfig:option:`CONFIG_GPIO`
      - :dtcompatible:`brcm,brcmstb-gpio`
    * - UART

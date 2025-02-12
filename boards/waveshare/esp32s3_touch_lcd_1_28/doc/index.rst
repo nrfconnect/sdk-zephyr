@@ -1,7 +1,4 @@
-.. _esp32s3_touch_lcd_1_28:
-
-Waveshare ESP32-S3-Touch-LCD-1.28
-#################################
+.. zephyr:board:: esp32s3_touch_lcd_1_28
 
 Overview
 ********
@@ -52,7 +49,7 @@ Asymmetric Multiprocessing (AMP)
 
 ESP32-S3 allows 2 different applications to be executed in ESP32-S3 SoC. Due to its dual-core
 architecture, each core can be enabled to execute customized tasks in stand-alone mode
-and/or exchanging data over OpenAMP framework. See :ref:`ipc_samples` folder as code reference.
+and/or exchanging data over OpenAMP framework. See :zephyr:code-sample-category:`ipc` folder as code reference.
 
 For more information, check the datasheet at `ESP32-S3 Datasheet`_ or the technical reference
 manual at `ESP32-S3 Technical Reference Manual`_.
@@ -121,6 +118,8 @@ It is the default option when building the application without additional config
 
 References
 **********
+
+.. target-notes::
 
 .. _ESP32-S3-Touch-LCD-1.28 Waveshare Wiki: https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-1.28
 .. _ESP32-S3 Datasheet: https://www.espressif.com/sites/default/files/documentation/esp32-s3-mini-1_mini-1u_datasheet_en.pdf

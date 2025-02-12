@@ -65,14 +65,14 @@
 	csa_vbus: vbusc {
 		compatible = "current-sense-amplifier";
 		io-channels = <&adc1 17>;
-		sense-resistor-micro-ohms = <3000>;
+		sense-resistor-milli-ohms = <3>;
 		sense-gain-mult = <100>;
 	};
 
 	csa_cc2: vconc {
 		compatible = "current-sense-amplifier";
 		io-channels = <&adc1 18>;
-		sense-resistor-micro-ohms = <10000>;
+		sense-resistor-milli-ohms = <10>;
 		sense-gain-mult = <25>;
 	};
 
@@ -101,7 +101,7 @@
 		     &adc1_in18_pc5	/* CSA_CC2	 */
 		    >;
 	pinctrl-names = "default";
-	st,adc-clock-source = <SYNC>;
+	st,adc-clock-source = "SYNC";
 	st,adc-prescaler = <4>;
 	status = "okay";
 

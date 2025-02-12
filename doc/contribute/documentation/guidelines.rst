@@ -655,6 +655,19 @@ you can reference it with::
    Read the `Zephyr Wikipedia Page`_ for more information about the
    project.
 
+.. tip::
+
+   When a document contains many external links, it can be useful to list them in a single
+   "References" section at the end of the document. This can be done using the
+   :rst:dir:`target-notes` directive. Example::
+
+      References
+      ==========
+
+      .. target-notes::
+
+      .. _external_link1: https://example.com
+      .. _external_link2: https://example.org
 
 Cross-referencing C documentation
 =================================
@@ -683,7 +696,6 @@ Cross-referencing C documentation
       Check out :c:func:`gpio_pin_configure` for more information.
 
    You may provide a custom link text, similar to the built-in :rst:role:`ref` role.
-
 
 Visual Elements
 ***************
@@ -784,7 +796,7 @@ Application build commands
          :board: qemu_x86
          :goals: build
 
-   This wil render as:
+   This will render as:
 
       .. zephyr-app-commands::
          :zephyr-app: samples/hello_world
@@ -994,6 +1006,15 @@ Doxygen API documentation
 
       .. doxygengroup:: can_interface
 
+
+   .. rubric:: Options
+
+   .. rst:directive:option:: project
+      :type: project name (optional)
+
+      Associated Doxygen project. This can be useful when multiple Doxygen
+      projects are configured.
+
 .. rst:role:: c:group
 
    This role is used to reference a Doxygen group in the Zephyr tree. In the HTML documentation,
@@ -1104,3 +1125,118 @@ Code samples
    Will render as:
 
       Check out :zephyr:code-sample:`blinky code sample <blinky>` for more information.
+
+.. rst:directive:: .. zephyr:code-sample-category:: id
+
+   This directive is used to define a category for grouping code samples.
+
+   For example::
+
+      .. zephyr:code-sample-category:: gpio
+         :name: GPIO
+         :show-listing:
+
+         Samples related to the GPIO subsystem.
+
+   The contents of the directive is used as the description of the category. It can contain any
+   valid reStructuredText content.
+
+   .. rubric:: Options
+
+   .. rst:directive:option:: name
+      :type: text
+
+      Indicates the human-readable name of the category.
+
+   .. rst:directive:option:: show-listing
+      :type: flag
+
+      If set, a listing of code samples in the category will be shown. The listing is automatically
+      generated based on all code samples found in the subdirectories of the current document.
+
+   .. rst:directive:option:: glob
+      :type: text
+
+      A glob pattern to match the files to include in the listing. The default is `*/*` but it can
+      be overridden e.g. when samples may be found in directories not sitting directly under the
+      category directory.
+
+.. rst:role:: zephyr:code-sample-category
+
+   This role is used to reference a code sample category described using
+   :rst:dir:`zephyr:code-sample-category`.
+
+   For example::
+
+      Check out :zephyr:code-sample-category:`cloud` samples for more information.
+
+   Will render as:
+
+      Check out :zephyr:code-sample-category:`cloud` samples for more information.
+
+.. rst:directive:: .. zephyr:code-sample-listing::
+
+   This directive is used to show a listing of all code samples found in one or more categories.
+
+   For example::
+
+      .. zephyr:code-sample-listing::
+         :categories: cloud
+
+   Will render as:
+
+      .. zephyr:code-sample-listing::
+         :categories: cloud
+
+   .. rubric:: Options
+
+   .. rst:directive:option:: categories
+      :type: text
+
+      A space-separated list of category IDs for which to show the listing.
+
+   .. rst:directive:option:: live-search
+      :type: flag
+
+      A flag to include a search box right above the listing. The search box allows users to filter
+      the listing by code sample name/description, which can be useful for categories with a large
+      number of samples. This option is only available in the HTML builder.
+
+Boards
+======
+
+.. rst:directive:: .. zephyr:board:: name
+
+   This directive is used at the beginning of a document to indicate it is the main documentation
+   page for a board whose name is given as the directive argument.
+
+   For example::
+
+      .. zephyr:board:: wio_terminal
+
+   The metadata for the board is read from various config files and used to automatically populate
+   some sections of the board documentation. A board documentation page that uses this directive
+   can be linked to using the :rst:role:`zephyr:board` role.
+
+.. rst:role:: zephyr:board
+
+   This role is used to reference a board documented using :rst:dir:`zephyr:board`.
+
+   For example::
+
+      Check out :zephyr:board:`wio_terminal` for more information.
+
+   Will render as:
+
+      Check out :zephyr:board:`wio_terminal` for more information.
+
+.. rst:directive:: .. zephyr:board-catalog::
+
+   This directive is used to generate a catalog of Zephyr-supported boards that can be used to
+   quickly browse the list of all supported boards and filter them according to various criteria.
+
+
+References
+**********
+
+.. target-notes::

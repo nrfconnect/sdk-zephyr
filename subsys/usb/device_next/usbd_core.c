@@ -127,6 +127,8 @@ static int event_handler_bus_reset(struct usbd_context *const uds_ctx)
 
 	uds_ctx->ch9_data.state = USBD_STATE_DEFAULT;
 
+	uds_ctx->status.rwup = false;
+
 	return 0;
 }
 
@@ -248,6 +250,8 @@ int usbd_device_shutdown_core(struct usbd_context *const uds_ctx)
 	if (ret) {
 		LOG_ERR("Failed to cleanup descriptors, %d", ret);
 	}
+
+	usbd_device_unregister_all_vreq(uds_ctx);
 
 	return udc_shutdown(uds_ctx->dev);
 }

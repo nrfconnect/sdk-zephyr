@@ -388,6 +388,12 @@ static int ite_it8xxx2_init(void)
 	gctrl_regs->GCTRL_WMCR |= BIT(7);
 
 	/*
+	 * Disable USB debug at default, in order to prevent SoC
+	 * from entering debug mode when there is signal toggling on GPH5/GPH6.
+	 */
+	gctrl_regs->GCTRL_MCCR &= ~IT8XXX2_GCTRL_USB_DEBUG_EN;
+
+	/*
 	 * Disable this feature that can detect pre-define hardware
 	 * target A through I2C0. This is for debugging use, so it
 	 * can be disabled to avoid illegal access.
@@ -403,7 +409,7 @@ static int ite_it8xxx2_init(void)
 	IT8XXX2_EGPIO_EGCR |= IT8XXX2_EGPIO_EEPODD;
 #endif
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart1), okay)
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(uart1))
 	/* UART1 board init */
 	/* bit2: clocks to UART1 modules are not gated. */
 	IT8XXX2_ECPM_CGCTRL3R &= ~BIT(2);
@@ -417,9 +423,9 @@ static int ite_it8xxx2_init(void)
 	/* switch UART1 on without hardware flow control */
 	gpio_regs->GPIO_GCR1 |= IT8XXX2_GPIO_U1CTRL_SIN0_SOUT0_EN;
 
-#endif /* DT_NODE_HAS_STATUS(DT_NODELABEL(uart1), okay) */
+#endif /* DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(uart1)) */
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart2), okay)
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(uart2))
 	/* UART2 board init */
 	/* setting voltage 3.3v */
 	gpio_regs->GPIO_GCR21 &= ~(IT8XXX2_GPIO_GPH1VS | IT8XXX2_GPIO_GPH2VS);
@@ -435,7 +441,7 @@ static int ite_it8xxx2_init(void)
 	/* switch UART2 on without hardware flow control */
 	gpio_regs->GPIO_GCR1 |= IT8XXX2_GPIO_U2CTRL_SIN1_SOUT1_EN;
 
-#endif /* DT_NODE_HAS_STATUS(DT_NODELABEL(uart2), okay) */
+#endif /* DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(uart2)) */
 
 #if (SOC_USBPD_ITE_PHY_PORT_COUNT > 0)
 	int port;

@@ -76,6 +76,18 @@ const clock_sys_pll2_config_t sysPll2Config_BOARD_BootClockRUN = {
 	.ssEnable = false,
 };
 
+/* Function Name : board_flexspi_clock_safe_config
+ * Description   : FLEXSPI clock source safe configuration weak function.
+ *                 Called before clock source configuration.
+ * Note          : Users need override this function to change FLEXSPI clock source to stable
+ *                 source when executing code on FLEXSPI memory(XIP). If XIP, the function
+ *                 should runs in RAM and move the FLEXSPI clock source to a stable clock
+ *                 to avoid instruction/data fetch issue during clock updating.
+ */
+__attribute__((weak)) void board_flexspi_clock_safe_config(void)
+{
+}
+
 /**
  * @brief Initialize the system clock
  */
@@ -122,6 +134,12 @@ static ALWAYS_INLINE void clock_init(void)
 	while (ANADIG_OSC_OSC_24M_CTRL_OSC_24M_STABLE_MASK !=
 			(ANADIG_OSC->OSC_24M_CTRL & ANADIG_OSC_OSC_24M_CTRL_OSC_24M_STABLE_MASK)) {
 	}
+
+	/* Call function board_flexspi_clock_safe_config() to move FlexSPI clock to a stable
+	 * clock source to avoid instruction/data fetch issue when updating PLL if XIP
+	 * (execute code on FLEXSPI memory).
+	 */
+	board_flexspi_clock_safe_config();
 
 #ifdef CONFIG_INIT_ARM_PLL
 	/* Init Arm Pll. */
@@ -208,16 +226,16 @@ static ALWAYS_INLINE void clock_init(void)
 #endif
 
 #if defined(CONFIG_UART_MCUX_LPUART) && \
-	(DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart1), okay) \
-	|| DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart2), okay))
+	(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpuart1)) \
+	|| DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpuart2)))
 	/* Configure LPUART0102 using SYS_PLL3_DIV2_CLK */
 	rootCfg.mux = kCLOCK_LPUART0102_ClockRoot_MuxSysPll3Div2;
 	rootCfg.div = 10;
 #endif
 
 #if defined(CONFIG_I2C_MCUX_LPI2C) && \
-	(DT_NODE_HAS_STATUS(DT_NODELABEL(lpi2c1), okay) \
-	|| DT_NODE_HAS_STATUS(DT_NODELABEL(lpi2c2), okay))
+	(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpi2c1)) \
+	|| DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpi2c2)))
 	/* Configure LPI2C0102 using SYS_PLL3_DIV2_CLK */
 	rootCfg.mux = kCLOCK_LPI2C0102_ClockRoot_MuxSysPll3Div2;
 	rootCfg.div = 4;
@@ -225,8 +243,8 @@ static ALWAYS_INLINE void clock_init(void)
 #endif
 
 #if defined(CONFIG_I2C_MCUX_LPI2C) && \
-	(DT_NODE_HAS_STATUS(DT_NODELABEL(lpi2c3), okay) \
-	|| DT_NODE_HAS_STATUS(DT_NODELABEL(lpi2c4), okay))
+	(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpi2c3)) \
+	|| DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpi2c4)))
 	/* Configure LPI2C0304 using SYS_PLL3_DIV2_CLK */
 	rootCfg.mux = kCLOCK_LPI2C0304_ClockRoot_MuxSysPll3Div2;
 	rootCfg.div = 4;
@@ -234,8 +252,8 @@ static ALWAYS_INLINE void clock_init(void)
 #endif
 
 #if defined(CONFIG_I2C_MCUX_LPI2C) && \
-	(DT_NODE_HAS_STATUS(DT_NODELABEL(lpi2c5), okay) \
-	|| DT_NODE_HAS_STATUS(DT_NODELABEL(lpi2c6), okay))
+	(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpi2c5)) \
+	|| DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpi2c6)))
 	/* Configure LPI2C0506 using SYS_PLL3_DIV2_CLK */
 	rootCfg.mux = kCLOCK_LPI2C0506_ClockRoot_MuxSysPll3Div2;
 	rootCfg.div = 4;
@@ -243,8 +261,8 @@ static ALWAYS_INLINE void clock_init(void)
 #endif
 
 #if defined(CONFIG_SPI_MCUX_LPSPI) && \
-	(DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi1), okay) \
-	|| DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi2), okay))
+	(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpspi1)) \
+	|| DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpspi2)))
 	/* Configure LPSPI0102 using SYS_PLL3_PFD1_CLK */
 	rootCfg.mux = kCLOCK_LPSPI0102_ClockRoot_MuxSysPll3Pfd1;
 	rootCfg.div = 2;
@@ -253,28 +271,28 @@ static ALWAYS_INLINE void clock_init(void)
 
 #if defined(CONFIG_COUNTER_MCUX_GPT)
 
-#if (DT_NODE_HAS_STATUS(DT_NODELABEL(gpt1), okay))
+#if (DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpt1)))
 	/* Configure GPT1 using SYS_PLL3_DIV2_CLK */
 	rootCfg.mux = kCLOCK_GPT1_ClockRoot_MuxSysPll3Div2;
 	rootCfg.div = 1;
 	CLOCK_SetRootClock(kCLOCK_Root_Gpt1, &rootCfg);
-#endif /* DT_NODE_HAS_STATUS(DT_NODELABEL(gpt1), okay) */
+#endif /* DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpt1)) */
 
-#if (DT_NODE_HAS_STATUS(DT_NODELABEL(gpt2), okay))
+#if (DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpt2)))
 	/* Configure GPT2 using SYS_PLL3_DIV2_CLK */
 	rootCfg.mux = kCLOCK_GPT2_ClockRoot_MuxSysPll3Div2;
 	rootCfg.div = 1;
 	CLOCK_SetRootClock(kCLOCK_Root_Gpt2, &rootCfg);
-#endif /* DT_NODE_HAS_STATUS(DT_NODELABEL(gpt2), okay) */
+#endif /* DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpt2)) */
 
 #endif /* CONFIG_COUNTER_MCUX_GPT */
 
 #ifdef CONFIG_MCUX_ACMP
 
-#if (DT_NODE_HAS_STATUS(DT_NODELABEL(acmp1), okay)  \
-	|| DT_NODE_HAS_STATUS(DT_NODELABEL(acmp2), okay) \
-	|| DT_NODE_HAS_STATUS(DT_NODELABEL(acmp3), okay) \
-	|| DT_NODE_HAS_STATUS(DT_NODELABEL(acmp4), okay))
+#if (DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(acmp1))  \
+	|| DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(acmp2)) \
+	|| DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(acmp3)) \
+	|| DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(acmp4)))
 	/* Configure ACMP using MuxSysPll3Out */
 	rootCfg.mux = kCLOCK_ACMP_ClockRoot_MuxSysPll3Out;
 	rootCfg.div = 2;
@@ -282,6 +300,172 @@ static ALWAYS_INLINE void clock_init(void)
 #endif
 
 #endif /* CONFIG_MCUX_ACMP */
+
+#if defined(CONFIG_ETH_NXP_IMX_NETC) && (DT_CHILD_NUM_STATUS_OKAY(DT_NODELABEL(netc)) != 0)
+	/* Configure ENET using SYS_PLL1_DIV2_CLK */
+	rootCfg.mux = kCLOCK_ENET_ClockRoot_MuxSysPll1Div2;
+	rootCfg.div = 4;
+	CLOCK_SetRootClock(kCLOCK_Root_Enet, &rootCfg);
+
+	/* Configure TMR_1588 using SYS_PLL3_CLK */
+	rootCfg.mux = kCLOCK_TMR_1588_ClockRoot_MuxSysPll3Out;
+	rootCfg.div = 2;
+	CLOCK_SetRootClock(kCLOCK_Root_Tmr_1588, &rootCfg);
+
+	/* Configure NETC using SYS_PLL3_PFD3_CLK */
+	rootCfg.mux = kCLOCK_NETC_ClockRoot_MuxSysPll3Pfd3;
+	rootCfg.div = 2;
+	CLOCK_SetRootClock(kCLOCK_Root_Netc, &rootCfg);
+
+	/* Configure MAC0 using SYS_PLL1_DIV2_CLK */
+	rootCfg.mux = kCLOCK_MAC0_ClockRoot_MuxSysPll1Div2;
+	rootCfg.div = 10;
+	CLOCK_SetRootClock(kCLOCK_Root_Mac0, &rootCfg);
+
+	/* Configure MAC1 using SYS_PLL1_DIV2_CLK */
+	rootCfg.mux = kCLOCK_MAC1_ClockRoot_MuxSysPll1Div2;
+	rootCfg.div = 4;
+	CLOCK_SetRootClock(kCLOCK_Root_Mac1, &rootCfg);
+
+	/* Configure MAC2 using SYS_PLL1_DIV2_CLK */
+	rootCfg.mux = kCLOCK_MAC2_ClockRoot_MuxSysPll1Div2;
+	rootCfg.div = 4;
+	CLOCK_SetRootClock(kCLOCK_Root_Mac2, &rootCfg);
+
+	/* Configure MAC3 using SYS_PLL1_DIV2_CLK */
+	rootCfg.mux = kCLOCK_MAC3_ClockRoot_MuxSysPll1Div2;
+	rootCfg.div = 4;
+	CLOCK_SetRootClock(kCLOCK_Root_Mac3, &rootCfg);
+
+	/* Configure MAC4 using SYS_PLL1_DIV2_CLK */
+	rootCfg.mux = kCLOCK_MAC4_ClockRoot_MuxSysPll1Div2;
+	rootCfg.div = 10;
+	CLOCK_SetRootClock(kCLOCK_Root_Mac4, &rootCfg);
+
+	/* Set NETC PORT Ref clock source. */
+	BLK_CTRL_WAKEUPMIX->NETC_PORT_MISC_CFG &=
+		~BLK_CTRL_WAKEUPMIX_NETC_PORT_MISC_CFG_PORT0_RMII_REF_CLK_DIR_MASK;
+	BLK_CTRL_WAKEUPMIX->NETC_PORT_MISC_CFG &=
+		~BLK_CTRL_WAKEUPMIX_NETC_PORT_MISC_CFG_PORT1_RMII_REF_CLK_DIR_MASK;
+	BLK_CTRL_WAKEUPMIX->NETC_PORT_MISC_CFG &=
+		~BLK_CTRL_WAKEUPMIX_NETC_PORT_MISC_CFG_PORT2_RMII_REF_CLK_DIR_MASK;
+	BLK_CTRL_WAKEUPMIX->NETC_PORT_MISC_CFG &=
+		~BLK_CTRL_WAKEUPMIX_NETC_PORT_MISC_CFG_PORT3_RMII_REF_CLK_DIR_MASK;
+	BLK_CTRL_WAKEUPMIX->NETC_PORT_MISC_CFG &=
+		~BLK_CTRL_WAKEUPMIX_NETC_PORT_MISC_CFG_PORT4_RMII_REF_CLK_DIR_MASK;
+
+	/* Set TMR 1588 Ref clock source. */
+	BLK_CTRL_WAKEUPMIX->NETC_PORT_MISC_CFG |=
+		BLK_CTRL_WAKEUPMIX_NETC_PORT_MISC_CFG_TMR_EXT_CLK_SEL_MASK;
+#endif
+
+#ifdef CONFIG_CAN_MCUX_FLEXCAN
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(flexcan1), okay)
+	/* Configure CAN1 using MuxSysPll3Out */
+	rootCfg.mux = kCLOCK_CAN1_ClockRoot_MuxSysPll3Out;
+	rootCfg.div = 6;
+	CLOCK_SetRootClock(kCLOCK_Root_Can1, &rootCfg);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(flexcan2), okay)
+	/* Configure CAN2 using MuxSysPll3Out */
+	rootCfg.mux = kCLOCK_CAN2_ClockRoot_MuxSysPll3Out;
+	rootCfg.div = 6;
+	CLOCK_SetRootClock(kCLOCK_Root_Can2, &rootCfg);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(flexcan3), okay)
+	/* Configure CAN3 using MuxSysPll3Out */
+	rootCfg.mux = kCLOCK_CAN3_ClockRoot_MuxSysPll3Out;
+	rootCfg.div = 6;
+	CLOCK_SetRootClock(kCLOCK_Root_Can3, &rootCfg);
+#endif
+
+#endif /* CONFIG_CAN_MCUX_FLEXCAN */
+
+#if defined(CONFIG_MCUX_LPTMR_TIMER) || defined(CONFIG_COUNTER_MCUX_LPTMR)
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lptmr1), okay)
+	/* Configure LPTIMER1 using SYS_PLL3_DIV2_CLK */
+	rootCfg.mux = kCLOCK_LPTIMER1_ClockRoot_MuxSysPll3Div2;
+	rootCfg.div = 3;
+	CLOCK_SetRootClock(kCLOCK_Root_Lptimer1, &rootCfg);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lptmr2), okay)
+	/* Configure LPTIMER2 using SYS_PLL3_DIV2_CLK */
+	rootCfg.mux = kCLOCK_LPTIMER2_ClockRoot_MuxSysPll3Div2;
+	rootCfg.div = 3;
+	CLOCK_SetRootClock(kCLOCK_Root_Lptimer2, &rootCfg);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lptmr3), okay)
+	/* Configure LPTIMER3 using SYS_PLL3_DIV2_CLK */
+	rootCfg.mux = kCLOCK_LPTIMER3_ClockRoot_MuxSysPll3Div2;
+	rootCfg.div = 3;
+	CLOCK_SetRootClock(kCLOCK_Root_Lptimer3, &rootCfg);
+#endif
+
+#endif /* CONFIG_MCUX_LPTMR_TIMER || CONFIG_COUNTER_MCUX_LPTMR */
+
+#if !(DT_NODE_HAS_COMPAT(DT_PARENT(DT_CHOSEN(zephyr_flash)), nxp_imx_flexspi_nor)) &&  \
+	defined(CONFIG_MEMC_MCUX_FLEXSPI) && DT_NODE_HAS_STATUS(DT_NODELABEL(flexspi), okay)
+	/* Configure FLEXSPI1 using SYS_PLL3_PFD0_CLK */
+	rootCfg.mux = kCLOCK_FLEXSPI1_ClockRoot_MuxSysPll3Pfd0;
+	rootCfg.div = 3;
+	CLOCK_SetRootClock(kCLOCK_Root_Flexspi1, &rootCfg);
+#endif
+
+#ifdef CONFIG_HAS_MCUX_TPM
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(tpm2), okay)
+	/* Configure TPM2 using SYS_PLL3_DIV2_CLK */
+	rootCfg.mux = kCLOCK_TPM2_ClockRoot_MuxSysPll3Div2;
+	rootCfg.div = 3;
+	CLOCK_SetRootClock(kCLOCK_Root_Tpm2, &rootCfg);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(tpm4), okay)
+	/* Configure TPM4 using SYS_PLL3_DIV2_CLK */
+	rootCfg.mux = kCLOCK_TPM4_ClockRoot_MuxSysPll3Div2;
+	rootCfg.div = 3;
+	CLOCK_SetRootClock(kCLOCK_Root_Tpm4, &rootCfg);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(tpm5), okay)
+	/* Configure TPM5 using SYS_PLL3_DIV2_CLK */
+	rootCfg.mux = kCLOCK_TPM5_ClockRoot_MuxSysPll3Div2;
+	rootCfg.div = 3;
+	CLOCK_SetRootClock(kCLOCK_Root_Tpm5, &rootCfg);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(tpm6), okay)
+	/* Configure TPM6 using SYS_PLL3_DIV2_CLK */
+	rootCfg.mux = kCLOCK_TPM6_ClockRoot_MuxSysPll3Div2;
+	rootCfg.div = 3;
+	CLOCK_SetRootClock(kCLOCK_Root_Tpm6, &rootCfg);
+#endif
+
+#endif /* CONFIG_HAS_MCUX_TPM */
+
+#ifdef CONFIG_DT_HAS_NXP_MCUX_I3C_ENABLED
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(i3c1), okay)
+	/* Configure I3C1 using SYS_PLL3_DIV2_CLK */
+	rootCfg.mux = kCLOCK_I3C1_ClockRoot_MuxSysPll3Div2;
+	rootCfg.div = 10;
+	CLOCK_SetRootClock(kCLOCK_Root_I3c1, &rootCfg);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(i3c2), okay)
+	/* Configure I3C2 using SYS_PLL3_DIV2_CLK */
+	rootCfg.mux = kCLOCK_I3C2_ClockRoot_MuxSysPll3Div2;
+	rootCfg.div = 10;
+	CLOCK_SetRootClock(kCLOCK_Root_I3c2, &rootCfg);
+#endif
+
+#endif /* CONFIG_DT_HAS_NXP_MCUX_I3C_ENABLED */
 
 	/* Keep core clock ungated during WFI */
 	CCM->LPCG[1].LPM0 = 0x33333333;
@@ -394,7 +578,7 @@ static ALWAYS_INLINE void trdc_enable_all_access(void)
  * @return 0
  */
 
-static int imxrt_init(void)
+void soc_early_init_hook(void)
 {
 	/* Initialize system clock */
 	clock_init();
@@ -403,14 +587,14 @@ static int imxrt_init(void)
 
 	/* Enable data cache */
 #if defined(CONFIG_IMXRT118X_CM33_XCACHE_PS)
+	XCACHE_EnableCache(XCACHE_PC);
 	XCACHE_EnableCache(XCACHE_PS);
 #elif defined(CONFIG_SOC_MIMXRT1189_CM7)
+	sys_cache_instr_enable();
 	sys_cache_data_enable();
 #endif
 	__ISB();
 	__DSB();
-
-	return 0;
 }
 
 #ifdef CONFIG_SOC_RESET_HOOK
@@ -419,5 +603,3 @@ void soc_reset_hook(void)
 	SystemInit();
 }
 #endif
-
-SYS_INIT(imxrt_init, PRE_KERNEL_1, 0);

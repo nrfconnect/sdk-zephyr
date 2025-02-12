@@ -7,6 +7,8 @@
 #include <dt-bindings/clock/imx_ccm_rev2.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/i2c/i2c.h>
+#include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/pwm/pwm.h>
 
 / {
 	cpus {
@@ -68,7 +70,7 @@
 	};
 
 	lpuart1: uart@4380000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x4380000 0x4000>;
 		interrupts = <19 0>;
 		clocks = <&ccm IMX_CCM_LPUART0102_CLK 0x7c 24>;
@@ -76,7 +78,7 @@
 	};
 
 	lpuart2: uart@4390000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x4390000 0x4000>;
 		interrupts = <20 0>;
 		clocks = <&ccm IMX_CCM_LPUART0102_CLK 0x68 28>;
@@ -84,7 +86,7 @@
 	};
 
 	lpuart3: uart@2570000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x2570000 0x4000>;
 		interrupts = <68 0>;
 		clocks = <&ccm IMX_CCM_LPUART0304_CLK 0x68 12>;
@@ -92,7 +94,7 @@
 	};
 
 	lpuart4: uart@2580000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x2580000 0x4000>;
 		interrupts = <69 0>;
 		clocks = <&ccm IMX_CCM_LPUART0304_CLK 0x6c 24>;
@@ -100,7 +102,7 @@
 	};
 
 	lpuart5: uart@2590000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x2590000 0x4000>;
 		interrupts = <70 0>;
 		clocks = <&ccm IMX_CCM_LPUART0506_CLK 0x74 2>;
@@ -108,7 +110,7 @@
 	};
 
 	lpuart6: uart@25A0000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x25A0000 0x4000>;
 		interrupts = <71 0>;
 		clocks = <&ccm IMX_CCM_LPUART0506_CLK 0x74 6>;
@@ -116,7 +118,7 @@
 	};
 
 	lpuart7: uart@4570000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x4570000 0x4000>;
 		interrupts = <196 0>;
 		clocks = <&ccm IMX_CCM_LPUART0708_CLK 0x7c 26>;
@@ -124,7 +126,7 @@
 	};
 
 	lpuart8: uart@2DA0000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x2DA0000 0x4000>;
 		interrupts = <197 0>;
 		clocks = <&ccm IMX_CCM_LPUART0708_CLK 0x80 14>;
@@ -132,7 +134,7 @@
 	};
 
 	lpuart9: uart@2D70000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x2D70000 0x4000>;
 		interrupts = <156 0>;
 		clocks = <&ccm IMX_CCM_LPUART0910_CLK 0x80 14>;
@@ -140,7 +142,7 @@
 	};
 
 	lpuart10: uart@2D80000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x2D80000 0x4000>;
 		interrupts = <157 0>;
 		clocks = <&ccm IMX_CCM_LPUART0910_CLK 0x80 14>;
@@ -148,7 +150,7 @@
 	};
 
 	lpuart11: uart@2D90000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x2D90000 0x4000>;
 		interrupts = <158 0>;
 		clocks = <&ccm IMX_CCM_LPUART1112_CLK 0x80 14>;
@@ -156,7 +158,7 @@
 	};
 
 	lpuart12: uart@4580000 {
-		compatible = "nxp,kinetis-lpuart";
+		compatible = "nxp,lpuart";
 		reg = <0x4580000 0x4000>;
 		interrupts = <159 0>;
 		clocks = <&ccm IMX_CCM_LPUART1112_CLK 0x80 14>;
@@ -212,7 +214,7 @@
 	};
 
 	lpi2c1: i2c@4340000 {
-		compatible = "nxp,imx-lpi2c";
+		compatible = "nxp,lpi2c";
 		clock-frequency = <I2C_BITRATE_STANDARD>;
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -223,7 +225,7 @@
 	};
 
 	lpi2c2: i2c@4350000 {
-		compatible = "nxp,imx-lpi2c";
+		compatible = "nxp,lpi2c";
 		clock-frequency = <I2C_BITRATE_STANDARD>;
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -234,7 +236,7 @@
 	};
 
 	lpi2c3: i2c@2530000 {
-		compatible = "nxp,imx-lpi2c";
+		compatible = "nxp,lpi2c";
 		clock-frequency = <I2C_BITRATE_STANDARD>;
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -245,7 +247,7 @@
 	};
 
 	lpi2c4: i2c@2540000 {
-		compatible = "nxp,imx-lpi2c";
+		compatible = "nxp,lpi2c";
 		clock-frequency = <I2C_BITRATE_STANDARD>;
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -256,7 +258,7 @@
 	};
 
 	lpi2c5: i2c@2d30000 {
-		compatible = "nxp,imx-lpi2c";
+		compatible = "nxp,lpi2c";
 		clock-frequency = <I2C_BITRATE_STANDARD>;
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -267,7 +269,7 @@
 	};
 
 	lpi2c6: i2c@2d40000 {
-		compatible = "nxp,imx-lpi2c";
+		compatible = "nxp,lpi2c";
 		clock-frequency = <I2C_BITRATE_STANDARD>;
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -299,7 +301,6 @@
 		reg = <0x2dc0000 0x4000>;
 		interrupts = <200 0>;
 		status = "disabled";
-		#io-channel-cells = <2>;
 	};
 
 	acmp2: cmp@2dd0000 {
@@ -307,7 +308,6 @@
 		reg = <0x2dd0000 0x4000>;
 		interrupts = <201 0>;
 		status = "disabled";
-		#io-channel-cells = <2>;
 	};
 
 	acmp3: cmp@2de0000 {
@@ -315,7 +315,6 @@
 		reg = <0x2de0000 0x4000>;
 		interrupts = <202 0>;
 		status = "disabled";
-		#io-channel-cells = <2>;
 	};
 
 	acmp4: cmp@2df0000 {
@@ -323,11 +322,621 @@
 		reg = <0x2df0000 0x4000>;
 		interrupts = <203 0>;
 		status = "disabled";
-		#io-channel-cells = <2>;
+	};
+
+	lpadc1: adc@2600000 {
+		compatible = "nxp,lpc-lpadc";
+		reg = <0x2600000 0x304>;
+		interrupts = <93 0>;
+		status = "disabled";
+		voltage-ref= <1>;
+		calibration-average = <128>;
+		no-power-level;
+		offset-value-a = <10>;
+		offset-value-b = <10>;
+		#io-channel-cells = <1>;
+		clocks = <&ccm IMX_CCM_LPADC1_CLK 0 0>;
+	};
+
+	lpadc2: adc@2e00000 {
+		compatible = "nxp,lpc-lpadc";
+		reg = <0x2e00000 0x304>;
+		interrupts = <189 0>;
+		status = "disabled";
+		clk-divider = <8>;
+		clk-source = <0>;
+		voltage-ref= <1>;
+		calibration-average = <128>;
+		no-power-level;
+		offset-value-a = <10>;
+		offset-value-b = <10>;
+		#io-channel-cells = <1>;
+		clocks = <&ccm IMX_CCM_LPADC2_CLK 0 0>;
+	};
+
+	qtmr1: qtmr@2690000 {
+		compatible = "nxp,imx-qtmr";
+		reg = <0x2690000 0x4000>;
+		interrupts = <0 0>;
+		clocks = <&ccm IMX_CCM_QTMR_CLK 0x0 0>;
+		qtmr1_timer0: timer0 {
+			compatible = "nxp,imx-tmr";
+			channel = <0>;
+			status = "disabled";
+		};
+		qtmr1_timer1: timer1 {
+			compatible = "nxp,imx-tmr";
+			channel = <1>;
+			status = "disabled";
+		};
+		qtmr1_timer2: timer2 {
+			compatible = "nxp,imx-tmr";
+			channel = <2>;
+			status = "disabled";
+		};
+		qtmr1_timer3: timer3 {
+			compatible = "nxp,imx-tmr";
+			channel = <3>;
+			status = "disabled";
+		};
+	};
+
+	qtmr2: qtmr@26a0000 {
+		compatible = "nxp,imx-qtmr";
+		reg = <0x26a0000 0x4000>;
+		interrupts = <233 0>;
+		clocks = <&ccm IMX_CCM_QTMR_CLK 0x0 0>;
+		qtmr2_timer0: timer0 {
+			compatible = "nxp,imx-tmr";
+			channel = <0>;
+			status = "disabled";
+		};
+		qtmr2_timer1: timer1 {
+			compatible = "nxp,imx-tmr";
+			channel = <1>;
+			status = "disabled";
+		};
+		qtmr2_timer2: timer2 {
+			compatible = "nxp,imx-tmr";
+			channel = <2>;
+			status = "disabled";
+		};
+		qtmr2_timer3: timer3 {
+			compatible = "nxp,imx-tmr";
+			channel = <3>;
+			status = "disabled";
+		};
+	};
+
+	qtmr3: qtmr@26b0000 {
+		compatible = "nxp,imx-qtmr";
+		reg = <0x26b0000 0x4000>;
+		interrupts = <164 0>;
+		clocks = <&ccm IMX_CCM_QTMR_CLK 0x0 0>;
+		qtmr3_timer0: timer0 {
+			compatible = "nxp,imx-tmr";
+			channel = <0>;
+			status = "disabled";
+		};
+		qtmr3_timer1: timer1 {
+			compatible = "nxp,imx-tmr";
+			channel = <1>;
+			status = "disabled";
+		};
+		qtmr3_timer2: timer2 {
+			compatible = "nxp,imx-tmr";
+			channel = <2>;
+			status = "disabled";
+		};
+		qtmr3_timer3: timer3 {
+			compatible = "nxp,imx-tmr";
+			channel = <3>;
+			status = "disabled";
+		};
+	};
+
+	qtmr4: qtmr@26c0000 {
+		compatible = "nxp,imx-qtmr";
+		reg = <0x26c0000 0x4000>;
+		interrupts = <151 0>;
+		clocks = <&ccm IMX_CCM_QTMR_CLK 0x0 0>;
+		qtmr4_timer0: timer0 {
+			compatible = "nxp,imx-tmr";
+			channel = <0>;
+			status = "disabled";
+		};
+		qtmr4_timer1: timer1 {
+			compatible = "nxp,imx-tmr";
+			channel = <1>;
+			status = "disabled";
+		};
+		qtmr4_timer2: timer2 {
+			compatible = "nxp,imx-tmr";
+			channel = <2>;
+			status = "disabled";
+		};
+		qtmr4_timer3: timer3 {
+			compatible = "nxp,imx-tmr";
+			channel = <3>;
+			status = "disabled";
+		};
+	};
+
+	qtmr5: qtmr@26d0000 {
+		compatible = "nxp,imx-qtmr";
+		reg = <0x26d0000 0x4000>;
+		interrupts = <4 0>;
+		clocks = <&ccm IMX_CCM_QTMR_CLK 0x0 0>;
+		qtmr5_timer0: timer0 {
+			compatible = "nxp,imx-tmr";
+			channel = <0>;
+			status = "disabled";
+		};
+		qtmr5_timer1: timer1 {
+			compatible = "nxp,imx-tmr";
+			channel = <1>;
+			status = "disabled";
+		};
+		qtmr5_timer2: timer2 {
+			compatible = "nxp,imx-tmr";
+			channel = <2>;
+			status = "disabled";
+		};
+		qtmr5_timer3: timer3 {
+			compatible = "nxp,imx-tmr";
+			channel = <3>;
+			status = "disabled";
+		};
+	};
+
+	qtmr6: qtmr@26e0000 {
+		compatible = "nxp,imx-qtmr";
+		reg = <0x26e0000 0x4000>;
+		interrupts = <5 0>;
+		clocks = <&ccm IMX_CCM_QTMR_CLK 0x0 0>;
+		qtmr6_timer0: timer0 {
+			compatible = "nxp,imx-tmr";
+			channel = <0>;
+			status = "disabled";
+		};
+		qtmr6_timer1: timer1 {
+			compatible = "nxp,imx-tmr";
+			channel = <1>;
+			status = "disabled";
+		};
+		qtmr6_timer2: timer2 {
+			compatible = "nxp,imx-tmr";
+			channel = <2>;
+			status = "disabled";
+		};
+		qtmr6_timer3: timer3 {
+			compatible = "nxp,imx-tmr";
+			channel = <3>;
+			status = "disabled";
+		};
+	};
+
+	qtmr7: qtmr@26f0000 {
+		compatible = "nxp,imx-qtmr";
+		reg = <0x26f0000 0x4000>;
+		interrupts = <6 0>;
+		clocks = <&ccm IMX_CCM_QTMR_CLK 0x0 0>;
+		qtmr7_timer0: timer0 {
+			compatible = "nxp,imx-tmr";
+			channel = <0>;
+			status = "disabled";
+		};
+		qtmr7_timer1: timer1 {
+			compatible = "nxp,imx-tmr";
+			channel = <1>;
+			status = "disabled";
+		};
+		qtmr7_timer2: timer2 {
+			compatible = "nxp,imx-tmr";
+			channel = <2>;
+			status = "disabled";
+		};
+		qtmr7_timer3: timer3 {
+			compatible = "nxp,imx-tmr";
+			channel = <3>;
+			status = "disabled";
+		};
+	};
+
+	qtmr8: qtmr@2700000 {
+		compatible = "nxp,imx-qtmr";
+		reg = <0x2700000 0x4000>;
+		interrupts = <7 0>;
+		clocks = <&ccm IMX_CCM_QTMR_CLK 0x0 0>;
+		qtmr8_timer0: timer0 {
+			compatible = "nxp,imx-tmr";
+			channel = <0>;
+			status = "disabled";
+		};
+		qtmr8_timer1: timer1 {
+			compatible = "nxp,imx-tmr";
+			channel = <1>;
+			status = "disabled";
+		};
+		qtmr8_timer2: timer2 {
+			compatible = "nxp,imx-tmr";
+			channel = <2>;
+			status = "disabled";
+		};
+		qtmr8_timer3: timer3 {
+			compatible = "nxp,imx-tmr";
+			channel = <3>;
+			status = "disabled";
+		};
+	};
+
+	netc: ethernet@60000000 {
+		reg = <0x60000000 0x1000000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		enetc_psi0: ethernet@60b00000 {
+			compatible = "nxp,imx-netc-psi";
+			reg = <0x60b00000 0x10000>;
+			mac-index = <0>;
+			si-index = <0>;
+			status = "disabled";
+		};
+
+		enetc_psi1: ethernet@60b40000 {
+			compatible = "nxp,imx-netc-psi";
+			reg = <0x60b40000 0x10000>;
+			mac-index = <1>;
+			si-index = <1>;
+			status = "disabled";
+		};
+
+		emdio: mdio@60ba0000 {
+			compatible = "nxp,imx-netc-emdio";
+			reg = <0x60ba0000 0x1c44>;
+			clocks = <&ccm IMX_CCM_NETC_CLK 0x0 0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+	};
+
+	flexcan1: can@43a0000 {
+		compatible = "nxp,flexcan-fd", "nxp,flexcan";
+		reg = <0x43a0000 0x1000>;
+		interrupts = <8 0>, <9 0>;
+		interrupt-names = "common", "error";
+		clocks = <&ccm IMX_CCM_CAN1_CLK 0x68 14>;
+		clk-source = <0>;
+		status = "disabled";
+	};
+
+	flexcan2: can@25b0000 {
+		compatible = "nxp,flexcan-fd", "nxp,flexcan";
+		reg = <0x25b0000 0x1000>;
+		interrupts = <51 0>, <52 0>;
+		interrupt-names = "common", "error";
+		clocks = <&ccm IMX_CCM_CAN2_CLK 0x68 18>;
+		clk-source = <0>;
+		status = "disabled";
+	};
+
+	flexcan3: can@45b0000 {
+		compatible = "nxp,flexcan-fd", "nxp,flexcan";
+		reg = <0x45b0000 0x1000>;
+		interrupts = <191 0>, <192 0>;
+		interrupt-names = "common", "error";
+		clocks = <&ccm IMX_CCM_CAN3_CLK 0x84 6>;
+		clk-source = <0>;
+		status = "disabled";
+	};
+
+	lptmr1: lptmr@4300000 {
+		compatible = "nxp,lptmr";
+		reg = <0x4300000 0x1000>;
+		interrupts = <18 0>;
+		clock-frequency = <80000000>;
+		prescaler = <1>;
+		clk-source = <0>;
+		resolution = <32>;
+		status = "disabled";
+	};
+
+	lptmr2: lptmr@24d0000 {
+		compatible = "nxp,lptmr";
+		reg = <0x24d0000 0x1000>;
+		interrupts = <67 0>;
+		clock-frequency = <80000000>;
+		prescaler = <1>;
+		clk-source = <0>;
+		resolution = <32>;
+		status = "disabled";
+	};
+
+	lptmr3: lptmr@2cd0000 {
+		compatible = "nxp,lptmr";
+		reg = <0x2cd0000 0x1000>;
+		interrupts = <150 0>;
+		clock-frequency = <80000000>;
+		prescaler = <1>;
+		clk-source = <0>;
+		resolution = <32>;
+		status = "disabled";
+	};
+
+	flexpwm1: flexpwm@2650000 {
+		compatible = "nxp,flexpwm";
+		reg = <0x2650000 0x4000>;
+		interrupts = <23 0>;
+
+		flexpwm1_pwm0: flexpwm1_pwm0 {
+			compatible = "nxp,imx-pwm";
+			index = <0>;
+			interrupts = <24 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm1_pwm1: flexpwm1_pwm1 {
+			compatible = "nxp,imx-pwm";
+			index = <1>;
+			interrupts = <25 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm1_pwm2: flexpwm1_pwm2 {
+			compatible = "nxp,imx-pwm";
+			index = <2>;
+			interrupts = <26 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm1_pwm3: flexpwm1_pwm3 {
+			compatible = "nxp,imx-pwm";
+			index = <3>;
+			interrupts = <27 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+	};
+
+	flexpwm2: flexpwm@2660000 {
+		compatible = "nxp,flexpwm";
+		reg = <0x2660000 0x4000>;
+		interrupts =  <170 0>;
+
+		flexpwm2_pwm0: flexpwm2_pwm0 {
+			compatible = "nxp,imx-pwm";
+			index = <0>;
+			interrupts = <171 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm2_pwm1: flexpwm2_pwm1 {
+			compatible = "nxp,imx-pwm";
+			index = <1>;
+			interrupts = <172 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm2_pwm2: flexpwm2_pwm2 {
+			compatible = "nxp,imx-pwm";
+			index = <2>;
+			interrupts = <173 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm2_pwm3: flexpwm2_pwm3 {
+			compatible = "nxp,imx-pwm";
+			index = <3>;
+			interrupts = <174 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+	};
+
+	flexpwm3: flexpwm@2670000 {
+		compatible = "nxp,flexpwm";
+		reg = <0x2670000 0x4000>;
+		interrupts =  <175 0>;
+
+		flexpwm3_pwm0: flexpwm3_pwm0 {
+			compatible = "nxp,imx-pwm";
+			index = <0>;
+			interrupts = <176 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm3_pwm1: flexpwm3_pwm1 {
+			compatible = "nxp,imx-pwm";
+			index = <1>;
+			interrupts = <177 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm3_pwm2: flexpwm3_pwm2 {
+			compatible = "nxp,imx-pwm";
+			index = <2>;
+			interrupts = <178 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm3_pwm3: flexpwm3_pwm3 {
+			compatible = "nxp,imx-pwm";
+			index = <3>;
+			interrupts = <179 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+	};
+
+	flexpwm4: flexpwm@2680000 {
+		compatible = "nxp,flexpwm";
+		reg = <0x2680000 0x4000>;
+		interrupts = <180 0>;
+
+		flexpwm4_pwm0: flexpwm4_pwm0 {
+			compatible = "nxp,imx-pwm";
+			index = <0>;
+			interrupts = <181 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm4_pwm1: flexpwm4_pwm1 {
+			compatible = "nxp,imx-pwm";
+			index = <1>;
+			interrupts = <182 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm4_pwm2: flexpwm4_pwm2 {
+			compatible = "nxp,imx-pwm";
+			index = <2>;
+			interrupts = <183 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+
+		flexpwm4_pwm3: flexpwm4_pwm3 {
+			compatible = "nxp,imx-pwm";
+			index = <3>;
+			interrupts = <184 0>;
+			#pwm-cells = <3>;
+			clocks = <&ccm IMX_CCM_PWM_CLK 0 0>;
+			nxp,prescaler = <128>;
+			status = "disabled";
+		};
+	};
+
+	tpm1: pwm@4310000 {
+		compatible = "nxp,kinetis-tpm";
+		reg = <0x4310000 0x88>;
+		interrupts = <36 0>;
+		clocks = <&ccm IMX_CCM_TPM1_CLK 0x3b 0>;
+		prescaler = <16>;
+		status = "disabled";
+		#pwm-cells = <3>;
+	};
+
+	tpm2: pwm@4320000 {
+		compatible = "nxp,kinetis-tpm";
+		reg = <0x4320000 0x88>;
+		interrupts = <37 0>;
+		clocks = <&ccm IMX_CCM_TPM2_CLK 0x3c 0>;
+		prescaler = <16>;
+		status = "disabled";
+		#pwm-cells = <3>;
+	};
+
+	tpm3: pwm@24E0000 {
+		compatible = "nxp,kinetis-tpm";
+		reg = <0x24E0000 0x88>;
+		interrupts = <75 0>;
+		clocks = <&ccm IMX_CCM_TPM3_CLK 0x3d 0>;
+		prescaler = <16>;
+		status = "disabled";
+		#pwm-cells = <3>;
+	};
+
+	tpm4: pwm@24F0000 {
+		compatible = "nxp,kinetis-tpm";
+		reg = <0x24F0000 0x88>;
+		interrupts = <76 0>;
+		clocks = <&ccm IMX_CCM_TPM4_CLK 0x3e 0>;
+		prescaler = <16>;
+		status = "disabled";
+		#pwm-cells = <3>;
+	};
+
+	tpm5: pwm@2500000 {
+		compatible = "nxp,kinetis-tpm";
+		reg = <0x2500000 0x88>;
+		interrupts = <77 0>;
+		clocks = <&ccm IMX_CCM_TPM5_CLK 0x3f 0>;
+		prescaler = <16>;
+		status = "disabled";
+		#pwm-cells = <3>;
+	};
+
+	tpm6: pwm@42510000 {
+		compatible = "nxp,kinetis-tpm";
+		reg = <0x42510000 0x88>;
+		interrupts = <78 0>;
+		clocks = <&ccm IMX_CCM_TPM6_CLK 0x40 0>;
+		prescaler = <16>;
+		status = "disabled";
+		#pwm-cells = <3>;
+	};
+
+	i3c1: i3c@4330000 {
+		compatible = "nxp,mcux-i3c";
+		reg = <0x4330000 0x1000>;
+		interrupts = <12 0>;
+		clocks = <&ccm IMX_CCM_I3C1_CLK 0x67 0>;
+		clk-divider = <2>;
+		clk-divider-slow = <1>;
+		clk-divider-tc = <1>;
+		status = "disabled";
+		#address-cells = <3>;
+		#size-cells = <0>;
+	};
+
+	i3c2: i3c@2520000 {
+		compatible = "nxp,mcux-i3c";
+		reg = <0x2520000 0x1000>;
+		interrupts = <61 0>;
+		clocks = <&ccm IMX_CCM_I3C2_CLK 0x68 0>;
+		clk-divider = <2>;
+		clk-divider-slow = <1>;
+		clk-divider-tc = <1>;
+		status = "disabled";
+		#address-cells = <3>;
+		#size-cells = <0>;
 	};
 };
 
-&flexspi1 {
+&flexspi {
 		compatible = "nxp,imx-flexspi";
 		interrupts = <55 0>;
 		#address-cells = <1>;
@@ -336,19 +945,28 @@
 		clocks = <&ccm IMX_CCM_FLEXSPI_CLK 0x0 0>;
 };
 
+&flexspi2 {
+	compatible = "nxp,imx-flexspi";
+	interrupts = <56 0>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "disabled";
+	clocks = <&ccm IMX_CCM_FLEXSPI2_CLK 0x0 0>;
+};
+
 &memory {
 	#address-cells = <1>;
 	#size-cells = <1>;
-	ocram1: ocram@484000 {
+	ocram1: ocram@0 {
 		compatible = "zephyr,memory-region", "mmio-sram";
 		zephyr,memory-region = "OCRAM1";
 		/* OCRAM1 first 16K access is blocked by TRDC */
-		reg = <0x484000 DT_SIZE_K(496)>;
+		reg = <0x0 DT_SIZE_K(496)>;
 	};
 
-	ocram2: ocram@500000 {
+	ocram2: ocram@7c000 {
 		compatible = "zephyr,memory-region", "mmio-sram";
 		zephyr,memory-region = "OCRAM2";
-		reg = <0x500000 DT_SIZE_K(256)>;
+		reg = <0x7c000 DT_SIZE_K(256)>;
 	};
 };

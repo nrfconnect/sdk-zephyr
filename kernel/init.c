@@ -41,9 +41,6 @@
 #include <zephyr/internal/syscall_handler.h>
 LOG_MODULE_REGISTER(os, CONFIG_KERNEL_LOG_LEVEL);
 
-BUILD_ASSERT(CONFIG_MP_NUM_CPUS == CONFIG_MP_MAX_NUM_CPUS,
-	     "CONFIG_MP_NUM_CPUS and CONFIG_MP_MAX_NUM_CPUS need to be set the same");
-
 /* the only struct z_kernel instance */
 __pinned_bss
 struct z_kernel _kernel;
@@ -226,17 +223,17 @@ void z_bss_zero(void)
 	}
 
 	z_early_memset(__bss_start, 0, __bss_end - __bss_start);
-#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_ccm), okay)
+#if DT_NODE_HAS_STATUS_OKAY(DT_CHOSEN(zephyr_ccm))
 	z_early_memset(&__ccm_bss_start, 0,
 		       (uintptr_t) &__ccm_bss_end
 		       - (uintptr_t) &__ccm_bss_start);
 #endif
-#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_dtcm), okay)
+#if DT_NODE_HAS_STATUS_OKAY(DT_CHOSEN(zephyr_dtcm))
 	z_early_memset(&__dtcm_bss_start, 0,
 		       (uintptr_t) &__dtcm_bss_end
 		       - (uintptr_t) &__dtcm_bss_start);
 #endif
-#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_ocm), okay)
+#if DT_NODE_HAS_STATUS_OKAY(DT_CHOSEN(zephyr_ocm))
 	z_early_memset(&__ocm_bss_start, 0,
 		       (uintptr_t) &__ocm_bss_end
 		       - (uintptr_t) &__ocm_bss_start);
@@ -292,13 +289,13 @@ void z_bss_zero_pinned(void)
 }
 #endif /* CONFIG_LINKER_USE_PINNED_SECTION */
 
-#ifdef CONFIG_STACK_CANARIES
+#ifdef CONFIG_REQUIRES_STACK_CANARIES
 #ifdef CONFIG_STACK_CANARIES_TLS
-extern __thread volatile uintptr_t __stack_chk_guard;
+extern Z_THREAD_LOCAL volatile uintptr_t __stack_chk_guard;
 #else
 extern volatile uintptr_t __stack_chk_guard;
 #endif /* CONFIG_STACK_CANARIES_TLS */
-#endif /* CONFIG_STACK_CANARIES */
+#endif /* CONFIG_REQUIRES_STACK_CANARIES */
 
 /* LCOV_EXCL_STOP */
 
@@ -601,7 +598,7 @@ static void init_idle_thread(int i)
 			  stack_size, idle, &_kernel.cpus[i],
 			  NULL, NULL, K_IDLE_PRIO, K_ESSENTIAL,
 			  tname);
-	z_mark_thread_as_started(thread);
+	z_mark_thread_as_not_sleeping(thread);
 
 #ifdef CONFIG_SMP
 	thread->base.is_idle = 1U;
@@ -678,7 +675,7 @@ static char *prepare_multithreading(void)
 				       NULL, NULL, NULL,
 				       CONFIG_MAIN_THREAD_PRIORITY,
 				       K_ESSENTIAL, "main");
-	z_mark_thread_as_started(&z_main_thread);
+	z_mark_thread_as_not_sleeping(&z_main_thread);
 	z_ready_thread(&z_main_thread);
 
 	z_init_cpu(0);
@@ -781,13 +778,13 @@ FUNC_NORETURN void z_cstart(void)
 #endif
 	z_sys_init_run_level(INIT_LEVEL_PRE_KERNEL_2);
 
-#ifdef CONFIG_STACK_CANARIES
+#ifdef CONFIG_REQUIRES_STACK_CANARIES
 	uintptr_t stack_guard;
 
 	z_early_rand_get((uint8_t *)&stack_guard, sizeof(stack_guard));
 	__stack_chk_guard = stack_guard;
 	__stack_chk_guard <<= 8;
-#endif	/* CONFIG_STACK_CANARIES */
+#endif	/* CONFIG_REQUIRES_STACK_CANARIES */
 
 #ifdef CONFIG_TIMING_FUNCTIONS_NEED_AT_BOOT
 	timing_init();

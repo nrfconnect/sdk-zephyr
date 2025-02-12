@@ -1,5 +1,6 @@
 boards:
   - name: intel_adsp
+    full_name: Intel ADSP
     vendor: intel
     socs:
       - name: cavs25
@@ -11,6 +12,8 @@ boards:
       - name: ace20_lnl
         variants:
           - name: 'sim'
-      - name: ace30_ptl
+      - name: ace30
         variants:
-          - name: 'sim'
+          - name: 'ptl'
+            variants:
+              - name: 'sim'

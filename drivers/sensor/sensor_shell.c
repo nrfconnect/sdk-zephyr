@@ -106,6 +106,9 @@ static const char *sensor_channel_name[SENSOR_CHAN_COMMON_COUNT] = {
 	[SENSOR_CHAN_GAUGE_DESIGN_VOLTAGE] = "gauge_design_voltage",
 	[SENSOR_CHAN_GAUGE_DESIRED_VOLTAGE] = "gauge_desired_voltage",
 	[SENSOR_CHAN_GAUGE_DESIRED_CHARGING_CURRENT] = "gauge_desired_charging_current",
+	[SENSOR_CHAN_GAME_ROTATION_VECTOR] = "game_rotation_vector",
+	[SENSOR_CHAN_GRAVITY_VECTOR] = "gravity_vector",
+	[SENSOR_CHAN_GBIAS_XYZ] = "gbias_xyz",
 	[SENSOR_CHAN_ALL] = "all",
 };
 
@@ -126,6 +129,8 @@ static const char *sensor_attribute_name[SENSOR_ATTR_COMMON_COUNT] = {
 	[SENSOR_ATTR_ALERT] = "alert",
 	[SENSOR_ATTR_FF_DUR] = "ff_dur",
 	[SENSOR_ATTR_BATCH_DURATION] = "batch_dur",
+	[SENSOR_ATTR_GAIN] = "gain",
+	[SENSOR_ATTR_RESOLUTION] = "resolution",
 };
 
 enum sample_stats_state {
@@ -167,6 +172,11 @@ static int find_sensor_trigger_device(const struct device *sensor)
 		}
 	}
 	return -1;
+}
+
+static bool sensor_device_check(const struct device *dev)
+{
+	return DEVICE_API_IS(sensor, dev);
 }
 
 /* Forward declaration */
@@ -543,9 +553,9 @@ static int cmd_get_sensor(const struct shell *sh, size_t argc, char *argv[])
 		return err;
 	}
 
-	dev = device_get_binding(argv[1]);
-	if (dev == NULL) {
-		shell_error(sh, "Device unknown (%s)", argv[1]);
+	dev = shell_device_get_binding(argv[1]);
+	if (dev == NULL || !sensor_device_check(dev)) {
+		shell_error(sh, "Sensor device unknown (%s)", argv[1]);
 		k_mutex_unlock(&cmd_get_mutex);
 		return -ENODEV;
 	}
@@ -612,9 +622,9 @@ static int cmd_sensor_attr_set(const struct shell *shell_ptr, size_t argc, char 
 	const struct device *dev;
 	int rc;
 
-	dev = device_get_binding(argv[1]);
-	if (dev == NULL) {
-		shell_error(shell_ptr, "Device unknown (%s)", argv[1]);
+	dev = shell_device_get_binding(argv[1]);
+	if (dev == NULL || !sensor_device_check(dev)) {
+		shell_error(shell_ptr, "Sensor device unknown (%s)", argv[1]);
 		return -ENODEV;
 	}
 
@@ -696,9 +706,9 @@ static int cmd_sensor_attr_get(const struct shell *shell_ptr, size_t argc, char 
 {
 	const struct device *dev;
 
-	dev = device_get_binding(argv[1]);
-	if (dev == NULL) {
-		shell_error(shell_ptr, "Device unknown (%s)", argv[1]);
+	dev = shell_device_get_binding(argv[1]);
+	if (dev == NULL || !sensor_device_check(dev)) {
+		shell_error(shell_ptr, "Sensor device unknown (%s)", argv[1]);
 		return -ENODEV;
 	}
 
@@ -848,7 +858,7 @@ SHELL_DYNAMIC_CMD_CREATE(dsub_device_name, device_name_get);
 
 static void device_name_get(size_t idx, struct shell_static_entry *entry)
 {
-	const struct device *dev = shell_device_lookup(idx, NULL);
+	const struct device *dev = shell_device_filter(idx, sensor_device_check);
 
 	current_cmd_ctx = CTX_GET;
 	entry->syntax = (dev != NULL) ? dev->name : NULL;
@@ -1046,9 +1056,9 @@ static int cmd_trig_sensor(const struct shell *sh, size_t argc, char **argv)
 	}
 
 	/* Parse device name */
-	dev = device_get_binding(argv[1]);
-	if (dev == NULL) {
-		shell_error(sh, "Device unknown (%s)", argv[1]);
+	dev = shell_device_get_binding(argv[1]);
+	if (dev == NULL || !sensor_device_check(dev)) {
+		shell_error(sh, "Sensor device unknown (%s)", argv[1]);
 		return -ENODEV;
 	}
 

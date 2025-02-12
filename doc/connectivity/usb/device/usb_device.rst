@@ -27,9 +27,9 @@ over time. It provides the following functionalities:
 
 .. note::
    It is planned to deprecate all APIs listed in :ref:`usb_api` and the
-   functions that depend on them between Zephyr v3.7.0 and v4.0.0, and remove
-   them in v4.2.0. The new USB device support, represented by the APIs in
-   :ref:`usb_device_next_api`, will become the default in Zephyr v4.0.0.
+   functions that depend on them between Zephyr v4.0.0 and v4.1.0, and remove
+   them in v4.3.0. The new USB device support, represented by the APIs in
+   :ref:`usb_device_next_api`, will become the default in Zephyr v4.1.0.
 
 Supported USB classes
 *********************
@@ -170,7 +170,7 @@ CDC ACM UART as backend for a subsystem or application:
 * ``zephyr,bt-c2h-uart`` used in Bluetooth,
   for example see :zephyr:code-sample:`bluetooth_hci_uart`
 * ``zephyr,ot-uart`` used in OpenThread,
-  for example see :zephyr:code-sample:`coprocessor`
+  for example see :zephyr:code-sample:`openthread-coprocessor`
 * ``zephyr,shell-uart`` used by shell for serial backend,
   for example see :zephyr_file:`samples/subsys/shell/shell_module`
 * ``zephyr,uart-mcumgr`` used by :zephyr:code-sample:`smp-svr` sample
@@ -321,11 +321,10 @@ access and expose a RAM disk, emulated block device on a flash partition,
 or SD Card to the host. Only one disk instance can be exported at a time.
 
 The disc to be used by the implementation is set by the
-:kconfig:option:`CONFIG_MASS_STORAGE_DISK_NAME` and should be the same as the name
-used by the disc access driver that the application wants to expose to the host.
-SD card disk drivers use options :kconfig:option:`CONFIG_MMC_VOLUME_NAME` or
-:kconfig:option:`CONFIG_SDMMC_VOLUME_NAME`, and flash and RAM disk drivers use
-node property ``disk-name`` to set the disk name.
+:kconfig:option:`CONFIG_MASS_STORAGE_DISK_NAME` and should be the same as the
+name used by the disc access driver that the application wants to expose to the
+host. Flash, RAM, and SDMMC/MMC disk drivers use node property ``disk-name`` to
+set the disk name.
 
 For the emulated block device on a flash partition, the flash partition and
 flash disk to be used must be described in the devicetree. If a storage partition
@@ -511,7 +510,7 @@ prevent you from implementing a hardware-clone firmware. Instead, if possible,
 the host driver implementation should be fixed to use values from the interface
 and endpoint descriptor.
 
-Testing over USPIP in native_sim
+Testing over USBIP in native_sim
 ********************************
 
 A virtual USB controller implemented through USBIP might be used to test the USB
@@ -565,7 +564,7 @@ The USB Vendor ID for the Zephyr project is ``0x2FE3``.
 This USB Vendor ID must not be used when a vendor
 integrates Zephyr USB device support into its own product.
 
-Each USB :ref:`sample<usb-samples>` has its own unique Product ID.
+Each USB :zephyr:code-sample-category:`sample<usb>` has its own unique Product ID.
 The USB maintainer, if one is assigned, or otherwise the Zephyr Technical
 Steering Committee, may allocate other USB Product IDs based on well-motivated
 and documented requests.
@@ -597,7 +596,7 @@ The following Product IDs are currently used:
 +----------------------------------------------------+--------+
 | :zephyr:code-sample:`bluetooth_hci_usb`            | 0x000B |
 +----------------------------------------------------+--------+
-| :zephyr:code-sample:`bluetooth_hci_usb_h4`         | 0x000C |
+| Reserved (previously: bluetooth_hci_usb_h4)        | 0x000C |
 +----------------------------------------------------+--------+
 | Reserved (previously: wpan-usb)                    | 0x000D |
 +----------------------------------------------------+--------+

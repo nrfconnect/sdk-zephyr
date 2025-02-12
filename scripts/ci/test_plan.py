@@ -123,8 +123,15 @@ class Filters:
         self.find_tags()
         self.find_tests()
         if not self.platforms:
-            self.find_archs()
+            # disable for now, this is generating lots of churn when changing
+            # architectures that is otherwise covered elsewhere.
+            #self.find_archs()
             self.find_boards()
+        else:
+            for file in self.modified_files:
+                if file.startswith(("boards/", "dts/")):
+                    self.resolved_files.append(file)
+
         self.find_excludes()
 
     def get_plan(self, options, integration=False, use_testsuite_root=True):
@@ -181,6 +188,8 @@ class Filters:
             logging.info(f'aprojs: {aprojs}')
             logging.info(f'project: {projs_names}')
 
+            if not projs_names:
+                return
             _options = []
             for p in projs_names:
                 _options.extend(["-t", p ])
@@ -239,14 +248,14 @@ class Filters:
         # Look for boards in monitored repositories
         lb_args = argparse.Namespace(**{'arch_roots': roots, 'board_roots': roots, 'board': None, 'soc_roots':roots,
                                         'board_dir': None})
-        known_boards = list_boards.find_v2_boards(lb_args)
+        known_boards = list_boards.find_v2_boards(lb_args).values()
 
         for changed in changed_boards:
             for board in known_boards:
                 c = (zephyr_base / changed).resolve()
                 if c.is_relative_to(board.dir.resolve()):
                     for file in glob.glob(os.path.join(board.dir, f"{board.name}*.yaml")):
-                        with open(file, 'r') as f:
+                        with open(file, 'r', encoding='utf-8') as f:
                             b = yaml.load(f.read(), Loader=SafeLoader)
                             matched_boards[b['identifier']] = board
 
