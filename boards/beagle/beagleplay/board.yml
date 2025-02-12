@@ -1,5 +1,0 @@
-board:
-  name: beagleplay
-  vendor: beagle
-  socs:
-  - name: cc1352p7
