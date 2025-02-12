@@ -61,8 +61,10 @@ void pm_state_exit_post_ops(enum pm_state state, uint8_t substate_id)
 }
 
 /* Initialize power system */
-void rt5xx_power_init(void)
+static int rt5xx_power_init(void)
 {
+	int ret = 0;
+
 	/* This function is called to set vddcore low voltage detection
 	 * falling trip voltage, this is not impacting the voltage in anyway.
 	 */
@@ -73,4 +75,7 @@ void rt5xx_power_init(void)
 	POWER_UpdatePmicRecoveryTime(1);
 #endif
 
+	return ret;
 }
+
+SYS_INIT(rt5xx_power_init, PRE_KERNEL_2, 0);

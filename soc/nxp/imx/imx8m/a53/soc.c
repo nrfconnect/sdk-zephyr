@@ -52,7 +52,11 @@ static void soc_rdc_init(void)
 
 #endif
 
-void soc_prep_hook(void)
+static int soc_init(void)
 {
 	soc_rdc_init();
+
+	return 0;
 }
+
+SYS_INIT(soc_init, EARLY, 1);

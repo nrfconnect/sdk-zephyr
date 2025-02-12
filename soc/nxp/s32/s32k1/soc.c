@@ -48,7 +48,7 @@ void z_arm_watchdog_init(void)
 }
 #endif /* CONFIG_WDOG_INIT */
 
-void soc_early_init_hook(void)
+static int soc_init(void)
 {
 #if !defined(CONFIG_ARM_MPU)
 	uint32_t tmp;
@@ -71,4 +71,8 @@ void soc_early_init_hook(void)
 #endif
 
 	OsIf_Init(NULL);
+
+	return 0;
 }
+
+SYS_INIT(soc_init, PRE_KERNEL_1, 0);
