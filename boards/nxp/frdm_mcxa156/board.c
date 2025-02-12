@@ -66,52 +66,52 @@ static int frdm_mcxa156_init(void)
 	CLOCK_SetClockDiv(kCLOCK_DivAHBCLK, 1U);     /* !< Set AHBCLKDIV divider to value 1 */
 	CLOCK_SetClockDiv(kCLOCK_DivFRO_HF_DIV, 1U); /* !< Set FROHFDIV divider to value 1 */
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(porta))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(porta), okay)
 	RESET_ReleasePeripheralReset(kPORT0_RST_SHIFT_RSTn);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(portb))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(portb), okay)
 	RESET_ReleasePeripheralReset(kPORT1_RST_SHIFT_RSTn);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(portc))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(portc), okay)
 	RESET_ReleasePeripheralReset(kPORT2_RST_SHIFT_RSTn);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(portd))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(portd), okay)
 	RESET_ReleasePeripheralReset(kPORT3_RST_SHIFT_RSTn);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(porte))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(porte), okay)
 	RESET_ReleasePeripheralReset(kPORT4_RST_SHIFT_RSTn);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpio0))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio0), okay)
 	RESET_ReleasePeripheralReset(kGPIO0_RST_SHIFT_RSTn);
 	CLOCK_EnableClock(kCLOCK_GateGPIO0);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpio1))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio1), okay)
 	RESET_ReleasePeripheralReset(kGPIO1_RST_SHIFT_RSTn);
 	CLOCK_EnableClock(kCLOCK_GateGPIO1);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpio2))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio2), okay)
 	RESET_ReleasePeripheralReset(kGPIO2_RST_SHIFT_RSTn);
 	CLOCK_EnableClock(kCLOCK_GateGPIO2);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpio3))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio3), okay)
 	RESET_ReleasePeripheralReset(kGPIO3_RST_SHIFT_RSTn);
 	CLOCK_EnableClock(kCLOCK_GateGPIO3);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpio4))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio4), okay)
 	RESET_ReleasePeripheralReset(kGPIO4_RST_SHIFT_RSTn);
 	CLOCK_EnableClock(kCLOCK_GateGPIO4);
 #endif
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lpuart0))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart0), okay)
 	CLOCK_SetClockDiv(kCLOCK_DivLPUART0, 1u);
 	CLOCK_AttachClk(kFRO12M_to_LPUART0);
 #endif
