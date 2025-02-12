@@ -43,10 +43,6 @@ schema;board-schema:
       required: false # Note: either name or extend is required, but that is handled in python
       type: str
       desc: Name of the board
-    full_name:
-      required: false
-      type: str
-      desc: Full name of the board. Typically set to the commercial name of the board.
     vendor:
       required: false
       type: str
