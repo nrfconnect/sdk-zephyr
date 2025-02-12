@@ -170,11 +170,12 @@ class BlackMagicProbeRunner(ZephyrBinaryRunner):
 
         command = (self.gdb +
                    ['-ex', "set confirm off",
-                    '-ex', f"target extended-remote {self.gdb_serial}"] +
+                    '-ex', "target extended-remote {}".format(
+                        self.gdb_serial)] +
                     self.connect_rst_enable_arg +
                    ['-ex', "monitor swdp_scan",
                     '-ex', "attach 1",
-                    '-ex', f"load {flash_file}",
+                    '-ex', "load {}".format(flash_file),
                     '-ex', "kill",
                     '-ex', "quit",
                     '-silent'])
@@ -191,18 +192,20 @@ class BlackMagicProbeRunner(ZephyrBinaryRunner):
         if self.elf_file is None:
             command = (self.gdb +
                        ['-ex', "set confirm off",
-                        '-ex', f"target extended-remote {self.gdb_serial}"] +
+                        '-ex', "target extended-remote {}".format(
+                            self.gdb_serial)] +
                         self.connect_rst_disable_arg +
                        ['-ex', "monitor swdp_scan",
                         '-ex', "attach 1"])
         else:
             command = (self.gdb +
                        ['-ex', "set confirm off",
-                        '-ex', f"target extended-remote {self.gdb_serial}"] +
+                        '-ex', "target extended-remote {}".format(
+                            self.gdb_serial)] +
                         self.connect_rst_disable_arg +
                        ['-ex', "monitor swdp_scan",
                         '-ex', "attach 1",
-                        '-ex', f"file {self.elf_file}"])
+                        '-ex', "file {}".format(self.elf_file)])
         self.check_call_ignore_sigint(command)
 
     def bmp_debug(self, command, **kwargs):
@@ -210,12 +213,13 @@ class BlackMagicProbeRunner(ZephyrBinaryRunner):
             raise ValueError('Cannot debug; elf file is missing')
         command = (self.gdb +
                    ['-ex', "set confirm off",
-                    '-ex', f"target extended-remote {self.gdb_serial}"] +
+                    '-ex', "target extended-remote {}".format(
+                        self.gdb_serial)] +
                     self.connect_rst_enable_arg +
                    ['-ex', "monitor swdp_scan",
                     '-ex', "attach 1",
-                    '-ex', f"file {self.elf_file}",
-                    '-ex', f"load {self.elf_file}"])
+                    '-ex', "file {}".format(self.elf_file),
+                    '-ex', "load {}".format(self.elf_file)])
         self.check_call_ignore_sigint(command)
 
     def do_run(self, command, **kwargs):
