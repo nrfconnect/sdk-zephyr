@@ -114,7 +114,19 @@
 	status = "okay";
 };
 
-&cpuapp_cpucell_ram0x_region {
+&cpuapp_cpurad_ram0x_region {
+	status = "okay";
+};
+
+&cpuapp_cpucell_ipc_shm {
+	status = "okay";
+};
+
+&cpucell_cpuapp_ipc_shm {
+	status = "okay";
+};
+
+&shared_ram3x_region {
 	status = "okay";
 };
 
