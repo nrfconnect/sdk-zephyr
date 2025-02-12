@@ -60,16 +60,24 @@ static int receive(int sock, void *buf, size_t max_len, int flags,
 	return err;
 }
 
+static void reset_block_contexts(struct coap_client_internal_request *request)
+{
+	request->recv_blk_ctx.block_size = 0;
+	request->recv_blk_ctx.total_size = 0;
+	request->recv_blk_ctx.current = 0;
+
+	request->send_blk_ctx.block_size = 0;
+	request->send_blk_ctx.total_size = 0;
+	request->send_blk_ctx.current = 0;
+}
+
 static void reset_internal_request(struct coap_client_internal_request *request)
 {
 	request->offset = 0;
 	request->last_id = 0;
 	request->last_response_id = -1;
 	request->request_ongoing = false;
-	request->is_observe = false;
-	request->pending.timeout = 0;
-	request->recv_blk_ctx = (struct coap_block_context){ 0 };
-	request->send_blk_ctx = (struct coap_block_context){ 0 };
+	reset_block_contexts(request);
 }
 
 static int coap_client_schedule_poll(struct coap_client *client, int sock,
@@ -904,7 +912,7 @@ static int handle_response(struct coap_client *client, const struct coap_packet 
 	}
 fail:
 	if (ret < 0 || !internal_req->is_observe) {
-		reset_internal_request(internal_req);
+		internal_req->request_ongoing = false;
 	}
 	return ret;
 }
