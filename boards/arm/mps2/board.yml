@@ -1,6 +1,5 @@
 board:
   name: mps2
-  full_name: V2M MPS2
   vendor: arm
   socs:
   - name: an385

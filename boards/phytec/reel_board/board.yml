@@ -1,6 +1,5 @@
 board:
   name: reel_board
-  full_name: reel board
   vendor: phytec
   socs:
   - name: nrf52840

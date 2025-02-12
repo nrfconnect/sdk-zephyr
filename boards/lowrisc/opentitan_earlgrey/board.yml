@@ -1,6 +1,5 @@
 board:
   name: opentitan_earlgrey
-  full_name: OpenTitan Earl Grey
   vendor: lowrisc
   socs:
   - name: opentitan
