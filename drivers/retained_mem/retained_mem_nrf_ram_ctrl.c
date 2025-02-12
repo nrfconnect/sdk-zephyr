@@ -6,7 +6,6 @@
 
 #include <zephyr/devicetree.h>
 #include <zephyr/kernel.h>
-#include <zephyr/drivers/retained_mem/nrf_retained_mem.h>
 
 #include <helpers/nrfx_ram_ctrl.h>
 
@@ -23,7 +22,7 @@ static const struct ret_mem_region ret_mem_regions[] = {
 	DT_FOREACH_STATUS_OKAY(zephyr_retained_ram, _BUILD_MEM_REGION)
 };
 
-int z_nrf_retained_mem_retention_apply(void)
+static int retained_mem_nrf_init(void)
 {
 	const struct ret_mem_region *rmr;
 
@@ -34,3 +33,5 @@ int z_nrf_retained_mem_retention_apply(void)
 
 	return 0;
 }
+
+SYS_INIT(retained_mem_nrf_init, PRE_KERNEL_1, 0);
