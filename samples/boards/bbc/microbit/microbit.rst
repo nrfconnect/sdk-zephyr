@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: bbc_microbit
-   :name: BBC micro:bit
-   :show-listing:
+.. _microbit-samples:
 
-   Samples that demonstrate some board-specific features on BBC micro:bit.
+BBC micro:bit Samples
+#####################
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

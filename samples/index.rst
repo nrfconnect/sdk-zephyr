@@ -1,23 +1,35 @@
-.. zephyr:code-sample-category:: samples
-   :name: Samples and Demos
+.. _samples-and-demos:
 
-Zephyr offers a comprehensive collection of samples and demos that highlight the features of the
-kernel and its subsystems.
+Samples and Demos
+#################
 
-These samples are crafted to be simple and easy to understand, serving as a starting point for your
-own projects.
-
-We welcome contributions of new samples to the project and you are encouraged to read more about
-the :ref:`definition_and_criteria` if you are interested in submitting your own sample.
-
-.. zephyr:code-sample-listing::
-   :categories: samples
-   :live-search:
 
 .. toctree::
    :titlesonly:
-   :maxdepth: 1
-   :hidden:
+   :maxdepth: 2
    :glob:
 
    sample_definition_and_criteria
+   classic
+   basic/*
+   userspace/*
+   sysbuild/*
+   subsys/subsys.rst
+   net/net.rst
+   bluetooth/bluetooth.rst
+   sensor/*
+   arch/*
+   boards/*
+   drivers/drivers.rst
+   application_development/*
+   shields/*
+   cpp/*
+   posix/*
+   kernel/*
+   tfm_integration/tfm_integration.rst
+   modules/*
+   fuel_gauge/*
+
+.. comment
+   To add a new sample document, please use the template available under
+   ``doc/templates/sample.tmpl``

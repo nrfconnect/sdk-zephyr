@@ -1,6 +1,10 @@
-.. zephyr:code-sample-category:: nxp
-   :name: NXP
-   :show-listing:
-   :glob: **/*
+.. _nxp_samples:
 
-   These samples showcase the use of NXP boards in Zephyr.
+NXP
+===
+
+.. toctree::
+   :titlesonly:
+   :glob:
+
+   **/*

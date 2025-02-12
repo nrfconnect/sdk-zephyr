@@ -1,7 +1,7 @@
-.. zephyr:code-sample:: npm1300_ek
-   :name: nPM1300 EK
+.. _npm1300_ek_sample:
 
-   Interact with the nPM1300 PMIC using the shell interface.
+nPM1300 EK sample
+#################
 
 Overview
 ********

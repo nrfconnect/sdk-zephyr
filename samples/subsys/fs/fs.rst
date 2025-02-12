@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: fs
-   :name: File Systems
-   :show-listing:
+.. _fs-samples:
 
-   Samples that demonstrate how to interact with :ref:`file_system_api`.
+FS Samples
+##########
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*

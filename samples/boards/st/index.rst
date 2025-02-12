@@ -1,6 +1,10 @@
-.. zephyr:code-sample-category:: st
-   :name: STMicroelectronics
-   :show-listing:
-   :glob: **/*
+.. _st_samples:
 
-   Samples that demonstrate some board-specific features on STM32 boards.
+STMicroelectronics
+==================
+
+.. toctree::
+   :titlesonly:
+   :glob:
+
+   **/*

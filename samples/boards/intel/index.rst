@@ -1,6 +1,10 @@
-.. zephyr:code-sample-category:: intel
-   :name: Intel
-   :show-listing:
-   :glob: **/*
+.. _intel_samples:
 
-   These samples showcase the use of Intel boards in Zephyr.
+Intel
+=====
+
+.. toctree::
+   :titlesonly:
+   :glob:
+
+   **/*

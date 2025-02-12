@@ -1,5 +1,10 @@
-.. zephyr:code-sample-category:: video
-   :name: Video
-   :show-listing:
+.. _video-samples:
 
-   These samples demonstrate how to use the :ref:`video <video_api>` driver API.
+Video Samples
+#############
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   **/*
