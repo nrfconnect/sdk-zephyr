@@ -46,7 +46,6 @@ zephyr_library_compile_definitions(
 	CONFIG_SHA512
 	CONFIG_CTRL_IFACE_ZEPHYR
 	CONFIG_SUITEB192
-	CONFIG_SUITEB
 )
 
 
@@ -365,14 +364,6 @@ zephyr_library_sources_ifdef(CONFIG_EAP_MD5
 
 zephyr_library_compile_definitions_ifdef(CONFIG_EAP_MD5
         EAP_MD5
-)
-
-zephyr_library_sources_ifdef(CONFIG_EAP_GTC
-	${HOSTAP_SRC_BASE}/eap_peer/eap_gtc.c
-)
-
-zephyr_library_compile_definitions_ifdef(CONFIG_EAP_GTC
-        EAP_GTC
 )
 
 zephyr_library_sources_ifdef(CONFIG_EAP_MSCHAPV2
