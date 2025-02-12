@@ -98,9 +98,9 @@ config NFCT_PINS_AS_GPIOS
 
 choice NRF_APPROTECT_HANDLING
 	bool "APPROTECT handling"
-	depends on SOC_SERIES_NRF52X || SOC_SERIES_NRF53X || SOC_NRF54L_CPUAPP_COMMON || \
+	depends on SOC_SERIES_NRF52X || SOC_SERIES_NRF53X || SOC_NRF54L15_CPUAPP || \
 		   SOC_SERIES_NRF91X
-	default NRF_APPROTECT_DISABLE if SOC_NRF54L_CPUAPP_COMMON
+	default NRF_APPROTECT_DISABLE if SOC_NRF54L15_CPUAPP
 	default NRF_APPROTECT_USE_UICR
 	help
 	  Specifies how the SystemInit() function should handle the APPROTECT
@@ -108,7 +108,7 @@ choice NRF_APPROTECT_HANDLING
 
 config NRF_APPROTECT_DISABLE
 	bool "Disable"
-	depends on SOC_NRF54L_CPUAPP_COMMON
+	depends on SOC_NRF54L15_CPUAPP
 	help
 	  When this option is selected, the SystemInit() disables
 	  the APPROTECT mechanism.
@@ -140,8 +140,8 @@ endchoice
 
 choice NRF_SECURE_APPROTECT_HANDLING
 	bool "Secure APPROTECT handling"
-	depends on SOC_NRF5340_CPUAPP || SOC_NRF54L_CPUAPP_COMMON || SOC_SERIES_NRF91X
-	default NRF_SECURE_APPROTECT_DISABLE if SOC_NRF54L_CPUAPP_COMMON
+	depends on SOC_NRF5340_CPUAPP || SOC_NRF54L15_CPUAPP || SOC_SERIES_NRF91X
+	default NRF_SECURE_APPROTECT_DISABLE if SOC_NRF54L15_CPUAPP
 	default NRF_SECURE_APPROTECT_USE_UICR
 	help
 	  Specifies how the SystemInit() function should handle the secure
@@ -149,7 +149,7 @@ choice NRF_SECURE_APPROTECT_HANDLING
 
 config NRF_SECURE_APPROTECT_DISABLE
 	bool "Disable"
-	depends on SOC_NRF54L_CPUAPP_COMMON
+	depends on SOC_NRF54L15_CPUAPP
 	help
 	  When this option is selected, the SystemInit() disables
 	  the secure APPROTECT mechanism.
