@@ -377,6 +377,7 @@ ZTEST(coap_client, test_get_request)
 	zassert_true(ret >= 0, "Sending request failed, %d", ret);
 	set_socket_events(ZSOCK_POLLIN);
 
+	k_sleep(K_MSEC(5));
 	k_sleep(K_MSEC(100));
 	zassert_equal(last_response_code, COAP_RESPONSE_CODE_OK, "Unexpected response");
 }
@@ -405,7 +406,7 @@ ZTEST(coap_client, test_resend_request)
 	LOG_INF("Send request");
 	ret = coap_client_req(&client, 0, &address, &client_request, NULL);
 	zassert_true(ret >= 0, "Sending request failed, %d", ret);
-	k_sleep(K_MSEC(15));
+	k_sleep(K_MSEC(300));
 	set_socket_events(ZSOCK_POLLIN);
 
 	k_sleep(K_MSEC(100));
@@ -439,6 +440,7 @@ ZTEST(coap_client, test_echo_option)
 	zassert_true(ret >= 0, "Sending request failed, %d", ret);
 	set_socket_events(ZSOCK_POLLIN);
 
+	k_sleep(K_MSEC(5));
 	k_sleep(K_MSEC(100));
 	zassert_equal(last_response_code, COAP_RESPONSE_CODE_OK, "Unexpected response");
 }
@@ -469,6 +471,7 @@ ZTEST(coap_client, test_echo_option_next_req)
 	zassert_true(ret >= 0, "Sending request failed, %d", ret);
 	set_socket_events(ZSOCK_POLLIN);
 
+	k_sleep(K_MSEC(5));
 	k_sleep(K_MSEC(100));
 	zassert_equal(last_response_code, COAP_RESPONSE_CODE_OK, "Unexpected response");
 
@@ -483,6 +486,7 @@ ZTEST(coap_client, test_echo_option_next_req)
 	zassert_true(ret >= 0, "Sending request failed, %d", ret);
 	set_socket_events(ZSOCK_POLLIN);
 
+	k_sleep(K_MSEC(5));
 	k_sleep(K_MSEC(100));
 	zassert_equal(last_response_code, COAP_RESPONSE_CODE_OK, "Unexpected response");
 }
@@ -536,6 +540,7 @@ ZTEST(coap_client, test_send_large_data)
 	zassert_true(ret >= 0, "Sending request failed, %d", ret);
 	set_socket_events(ZSOCK_POLLIN);
 
+	k_sleep(K_MSEC(5));
 	k_sleep(K_MSEC(100));
 	zassert_equal(last_response_code, COAP_RESPONSE_CODE_OK, "Unexpected response");
 }
@@ -569,8 +574,8 @@ ZTEST(coap_client, test_no_response)
 	ret = coap_client_req(&client, 0, &address, &client_request, &params);
 
 	zassert_true(ret >= 0, "Sending request failed, %d", ret);
+	k_sleep(K_MSEC(300));
 
-	k_sleep(K_MSEC(700));
 	zassert_equal(last_response_code, -ETIMEDOUT, "Unexpected response");
 }
 
@@ -600,7 +605,9 @@ ZTEST(coap_client, test_separate_response)
 	zassert_true(ret >= 0, "Sending request failed, %d", ret);
 	set_socket_events(ZSOCK_POLLIN);
 
+	k_sleep(K_MSEC(5));
 	k_sleep(K_MSEC(100));
+
 	zassert_equal(last_response_code, COAP_RESPONSE_CODE_OK, "Unexpected response");
 }
 
@@ -631,9 +638,11 @@ ZTEST(coap_client, test_multiple_requests)
 	ret = coap_client_req(&client, 0, &address, &client_request, NULL);
 	zassert_true(ret >= 0, "Sending request failed, %d", ret);
 
+	k_sleep(K_MSEC(5));
 	k_sleep(K_MSEC(100));
 	zassert_equal(last_response_code, COAP_RESPONSE_CODE_OK, "Unexpected response");
 
+	k_sleep(K_MSEC(5));
 	k_sleep(K_MSEC(100));
 	zassert_equal(last_response_code, COAP_RESPONSE_CODE_OK, "Unexpected response");
 }
@@ -667,8 +676,9 @@ ZTEST(coap_client, test_unmatching_tokens)
 	zassert_true(ret >= 0, "Sending request failed, %d", ret);
 	set_socket_events(ZSOCK_POLLIN);
 
-	k_sleep(K_MSEC(2));
+	k_sleep(K_MSEC(1));
+	k_sleep(K_MSEC(1));
 	clear_socket_events();
-	k_sleep(K_MSEC(700));
+	k_sleep(K_MSEC(500));
 	zassert_equal(last_response_code, -ETIMEDOUT, "Unexpected response");
 }
