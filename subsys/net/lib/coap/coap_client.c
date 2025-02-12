@@ -30,8 +30,9 @@ static void cancel_requests_with(struct coap_client *client, int error);
 static int recv_response(struct coap_client *client, struct coap_packet *response, bool *truncated);
 static int handle_response(struct coap_client *client, const struct coap_packet *response,
 			   bool response_truncated);
-static struct coap_client_internal_request *get_request_with_mid(struct coap_client *client,
-								 uint16_t mid);
+static struct coap_client_internal_request *get_request_with_mid(
+	struct coap_client *client, const struct coap_packet *resp);
+
 
 static int send_request(int sock, const void *buf, size_t len, int flags,
 			const struct sockaddr *dest_addr, socklen_t addrlen)
@@ -700,12 +701,14 @@ static struct coap_client_internal_request *get_request_with_token(
 	return NULL;
 }
 
-static struct coap_client_internal_request *get_request_with_mid(struct coap_client *client,
-								 uint16_t mid)
+static struct coap_client_internal_request *get_request_with_mid(
+	struct coap_client *client, const struct coap_packet *resp)
 {
+	uint16_t mid = coap_header_get_id(resp);
+
 	for (int i = 0; i < CONFIG_COAP_CLIENT_MAX_REQUESTS; i++) {
 		if (client->requests[i].request_ongoing) {
-			if (client->requests[i].last_id == (int)mid) {
+			if (client->requests[i].last_id == mid) {
 				return &client->requests[i];
 			}
 		}
@@ -713,6 +716,7 @@ static struct coap_client_internal_request *get_request_with_mid(struct coap_cli
 
 	return NULL;
 }
+
 
 static bool find_echo_option(const struct coap_packet *response, struct coap_option *option)
 {
@@ -744,7 +748,7 @@ static int handle_response(struct coap_client *client, const struct coap_packet 
 	const uint8_t *payload = coap_packet_get_payload(response, &payload_len);
 
 	if (response_type == COAP_TYPE_RESET) {
-		internal_req = get_request_with_mid(client, response_id);
+		internal_req = get_request_with_mid(client, response);
 		if (!internal_req) {
 			LOG_WRN("No matching request for RESET");
 			return 0;
@@ -757,7 +761,7 @@ static int handle_response(struct coap_client *client, const struct coap_packet 
 	/* Separate response coming */
 	if (payload_len == 0 && response_type == COAP_TYPE_ACK &&
 	    response_code == COAP_CODE_EMPTY) {
-		internal_req = get_request_with_mid(client, response_id);
+		internal_req = get_request_with_mid(client, response);
 		if (!internal_req) {
 			LOG_WRN("No matching request for ACK");
 			return 0;
