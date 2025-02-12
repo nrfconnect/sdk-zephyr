@@ -562,42 +562,29 @@ static int sw_configure(const struct device *dev,
 static int sw_port_on(const struct device *dev)
 {
 	const struct sw_config *config = dev->config;
-	int ret;
+
+	gpio_pin_set_dt(&config->clk, 1);
 
 	if (config->dnoe.port) {
-		ret = gpio_pin_configure_dt(&config->dnoe, GPIO_OUTPUT_ACTIVE);
-		if (ret) {
-			return ret;
-		}
+		gpio_pin_set_dt(&config->dnoe, 1);
 	}
 
 	if (config->dout.port) {
-		ret = gpio_pin_configure_dt(&config->dout, GPIO_OUTPUT_ACTIVE);
+		gpio_pin_set_dt(&config->dout, 1);
+	} else {
+		int ret;
+
+		ret = gpio_pin_configure_dt(&config->dio, GPIO_OUTPUT_ACTIVE);
 		if (ret) {
 			return ret;
 		}
-	}
-
-	ret = gpio_pin_configure_dt(&config->dio, GPIO_INPUT);
-	if (ret) {
-		return ret;
 	}
 
 	if (config->noe.port) {
-		ret = gpio_pin_configure_dt(&config->noe, GPIO_OUTPUT_ACTIVE);
-		if (ret) {
-			return ret;
-		}
+		gpio_pin_set_dt(&config->noe, 1);
 	}
-
-	ret = gpio_pin_configure_dt(&config->clk, GPIO_OUTPUT_ACTIVE);
-	if (ret) {
-		return ret;
-	}
-
-	ret = gpio_pin_configure_dt(&config->reset, GPIO_OUTPUT_ACTIVE);
-	if (ret) {
-		return ret;
+	if (config->reset.port) {
+		gpio_pin_set_dt(&config->reset, 1);
 	}
 
 	return 0;
@@ -606,64 +593,27 @@ static int sw_port_on(const struct device *dev)
 static int sw_port_off(const struct device *dev)
 {
 	const struct sw_config *config = dev->config;
-	int ret;
 
-	/* If there is a transceiver connected to IO, pins should always be driven. */
 	if (config->dnoe.port) {
-		ret = gpio_pin_configure_dt(&config->dnoe, GPIO_OUTPUT_INACTIVE);
-		if (ret) {
-			return ret;
-		}
+		gpio_pin_set_dt(&config->dnoe, 0);
+	}
 
-		if (config->dout.port) {
-			ret = gpio_pin_configure_dt(&config->dout, GPIO_OUTPUT_ACTIVE);
-			if (ret) {
-				return ret;
-			}
-		}
+	if (config->dout.port) {
+		gpio_pin_set_dt(&config->dout, 0);
+	} else {
+		int ret;
 
 		ret = gpio_pin_configure_dt(&config->dio, GPIO_INPUT);
 		if (ret) {
 			return ret;
 		}
-	} else {
-		if (config->dout.port) {
-			ret = gpio_pin_configure_dt(&config->dout, GPIO_DISCONNECTED);
-			if (ret) {
-				return ret;
-			}
-		}
-
-		ret = gpio_pin_configure_dt(&config->dio, GPIO_DISCONNECTED);
-		if (ret) {
-			return ret;
-		}
 	}
 
-	/* If there is a transceiver connected to CLK, pins should always be driven. */
 	if (config->noe.port) {
-		ret = gpio_pin_configure_dt(&config->noe, GPIO_OUTPUT_INACTIVE);
-		if (ret) {
-			return ret;
-		}
-
-		ret = gpio_pin_configure_dt(&config->clk, GPIO_OUTPUT_ACTIVE);
-		if (ret) {
-			return ret;
-		}
-
-	} else {
-		ret = gpio_pin_configure_dt(&config->clk, GPIO_DISCONNECTED);
-		if (ret) {
-			return ret;
-		}
+		gpio_pin_set_dt(&config->noe, 0);
 	}
-
 	if (config->reset.port) {
-		ret = gpio_pin_configure_dt(&config->reset, GPIO_DISCONNECTED);
-		if (ret) {
-			return ret;
-		}
+		gpio_pin_set_dt(&config->reset, 1);
 	}
 
 	return 0;
@@ -675,10 +625,42 @@ static int sw_gpio_init(const struct device *dev)
 	struct sw_cfg_data *sw_data = dev->data;
 	int ret;
 
-	/* start with the port turned off */
-	ret = sw_port_off(dev);
+	ret = gpio_pin_configure_dt(&config->clk, GPIO_OUTPUT_ACTIVE);
 	if (ret) {
 		return ret;
+	}
+
+	ret = gpio_pin_configure_dt(&config->dio, GPIO_INPUT);
+	if (ret) {
+		return ret;
+	}
+
+	if (config->dout.port) {
+		ret = gpio_pin_configure_dt(&config->dout, GPIO_OUTPUT_ACTIVE);
+		if (ret) {
+			return ret;
+		}
+	}
+
+	if (config->dnoe.port) {
+		ret = gpio_pin_configure_dt(&config->dnoe, GPIO_OUTPUT_INACTIVE);
+		if (ret) {
+			return ret;
+		}
+	}
+
+	if (config->noe.port) {
+		ret = gpio_pin_configure_dt(&config->noe, GPIO_OUTPUT_INACTIVE);
+		if (ret) {
+			return ret;
+		}
+	}
+
+	if (config->reset.port) {
+		ret = gpio_pin_configure_dt(&config->reset, GPIO_OUTPUT_ACTIVE);
+		if (ret) {
+			return ret;
+		}
 	}
 
 	sw_data->turnaround = 1U;
