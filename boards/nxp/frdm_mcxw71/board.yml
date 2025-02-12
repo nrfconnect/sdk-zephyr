@@ -1,5 +1,0 @@
-board:
-  name: frdm_mcxw71
-  vendor: nxp
-  socs:
-    - name: mcxw716c
