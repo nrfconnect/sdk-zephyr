@@ -49,7 +49,6 @@ class Boards(WestCommand):
             The following arguments are available:
 
             - name: board name
-            - full_name: board full name (typically, its commercial name)
             - qualifiers: board qualifiers (will be empty for legacy boards)
             - arch: board architecture (deprecated)
                     (arch is ambiguous for boards described in new hw model)
@@ -103,7 +102,6 @@ class Boards(WestCommand):
             log.inf(
                 args.format.format(
                     name=board.name,
-                    full_name=board.full_name,
                     dir=board.dir,
                     hwm=board.hwm,
                     vendor=board.vendor,
