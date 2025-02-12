@@ -15,8 +15,6 @@ LOG_MODULE_REGISTER(net_syslog, LOG_LEVEL_DBG);
 
 #include <stdlib.h>
 
-#include "net_sample_common.h"
-
 BUILD_ASSERT(IS_ENABLED(CONFIG_LOG_BACKEND_NET), "syslog backend not enabled");
 
 #define SLEEP_BETWEEN_PRINTS 3
@@ -26,8 +24,6 @@ int main(void)
 	int i, count, sleep;
 
 	LOG_DBG("Starting");
-
-	wait_for_network();
 
 	if (!IS_ENABLED(CONFIG_LOG_BACKEND_NET_AUTOSTART)) {
 		/* Example how to start the backend if autostart is disabled.
