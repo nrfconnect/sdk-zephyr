@@ -19,4 +19,3 @@ supported:
   - netif:modem
   - gpio
 vendor: nordic
-sysbuild: true
