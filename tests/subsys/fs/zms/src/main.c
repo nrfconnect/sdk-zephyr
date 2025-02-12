@@ -233,7 +233,8 @@ ZTEST_F(zms, test_zms_gc)
 	int len;
 	uint8_t buf[32];
 	uint8_t rd_buf[32];
-	const uint8_t max_id = 10;
+
+	const uint16_t max_id = 10;
 	/* 21st write will trigger GC. */
 	const uint16_t max_writes = 21;
 
@@ -242,7 +243,7 @@ ZTEST_F(zms, test_zms_gc)
 	err = zms_mount(&fixture->fs);
 	zassert_true(err == 0, "zms_mount call failure: %d", err);
 
-	for (int i = 0; i < max_writes; i++) {
+	for (uint32_t i = 0; i < max_writes; i++) {
 		uint8_t id = (i % max_id);
 		uint8_t id_data = id + max_id * (i / max_id);
 
@@ -252,11 +253,11 @@ ZTEST_F(zms, test_zms_gc)
 		zassert_true(len == sizeof(buf), "zms_write failed: %d", len);
 	}
 
-	for (int id = 0; id < max_id; id++) {
+	for (uint32_t id = 0; id < max_id; id++) {
 		len = zms_read(&fixture->fs, id, rd_buf, sizeof(buf));
 		zassert_true(len == sizeof(rd_buf), "zms_read unexpected failure: %d", len);
 
-		for (int i = 0; i < sizeof(rd_buf); i++) {
+		for (uint16_t i = 0; i < sizeof(rd_buf); i++) {
 			rd_buf[i] = rd_buf[i] % max_id;
 			buf[i] = id;
 		}
@@ -267,11 +268,11 @@ ZTEST_F(zms, test_zms_gc)
 	err = zms_mount(&fixture->fs);
 	zassert_true(err == 0, "zms_mount call failure: %d", err);
 
-	for (int id = 0; id < max_id; id++) {
+	for (uint32_t id = 0; id < max_id; id++) {
 		len = zms_read(&fixture->fs, id, rd_buf, sizeof(buf));
 		zassert_true(len == sizeof(rd_buf), "zms_read unexpected failure: %d", len);
 
-		for (int i = 0; i < sizeof(rd_buf); i++) {
+		for (uint16_t i = 0; i < sizeof(rd_buf); i++) {
 			rd_buf[i] = rd_buf[i] % max_id;
 			buf[i] = id;
 		}
@@ -285,7 +286,7 @@ static void write_content(uint32_t max_id, uint32_t begin, uint32_t end, struct 
 	uint8_t buf[32];
 	ssize_t len;
 
-	for (int i = begin; i < end; i++) {
+	for (uint32_t i = begin; i < end; i++) {
 		uint8_t id = (i % max_id);
 		uint8_t id_data = id + max_id * (i / max_id);
 
@@ -302,11 +303,11 @@ static void check_content(uint32_t max_id, struct zms_fs *fs)
 	uint8_t buf[32];
 	ssize_t len;
 
-	for (int id = 0; id < max_id; id++) {
+	for (uint32_t id = 0; id < max_id; id++) {
 		len = zms_read(fs, id, rd_buf, sizeof(buf));
 		zassert_true(len == sizeof(rd_buf), "zms_read unexpected failure: %d", len);
 
-		for (int i = 0; i < ARRAY_SIZE(rd_buf); i++) {
+		for (uint16_t i = 0; i < ARRAY_SIZE(rd_buf); i++) {
 			rd_buf[i] = rd_buf[i] % max_id;
 			buf[i] = id;
 		}
@@ -321,6 +322,7 @@ static void check_content(uint32_t max_id, struct zms_fs *fs)
 ZTEST_F(zms, test_zms_gc_3sectors)
 {
 	int err;
+
 	const uint16_t max_id = 10;
 	/* 41st write will trigger 1st GC. */
 	const uint16_t max_writes = 41;
@@ -408,6 +410,7 @@ ZTEST_F(zms, test_zms_corrupted_sector_close_operation)
 	uint32_t *flash_write_stat;
 	uint32_t *flash_max_write_calls;
 	uint32_t *flash_max_len;
+
 	const uint16_t max_id = 10;
 	/* 21st write will trigger GC. */
 	const uint16_t max_writes = 21;
@@ -420,7 +423,7 @@ ZTEST_F(zms, test_zms_corrupted_sector_close_operation)
 	err = zms_mount(&fixture->fs);
 	zassert_true(err == 0, "zms_mount call failure: %d", err);
 
-	for (int i = 0; i < max_writes; i++) {
+	for (uint32_t i = 0; i < max_writes; i++) {
 		uint8_t id = (i % max_id);
 		uint8_t id_data = id + max_id * (i / max_id);
 
@@ -462,7 +465,7 @@ ZTEST_F(zms, test_zms_full_sector)
 	int err;
 	ssize_t len;
 	uint32_t filling_id = 0;
-	uint32_t data_read;
+	uint32_t i, data_read;
 
 	fixture->fs.sector_count = 3;
 
@@ -490,7 +493,7 @@ ZTEST_F(zms, test_zms_full_sector)
 	zassert_true(len == sizeof(filling_id), "zms_write failed: %d", len);
 
 	/* sanitycheck on ZMS content */
-	for (int i = 0; i <= filling_id; i++) {
+	for (i = 0; i <= filling_id; i++) {
 		len = zms_read(&fixture->fs, i, &data_read, sizeof(data_read));
 		if (i == 1) {
 			zassert_true(len == -ENOENT, "zms_read shouldn't found the entry: %d", len);
@@ -508,10 +511,8 @@ ZTEST_F(zms, test_delete)
 {
 	int err;
 	ssize_t len;
-	uint32_t filling_id;
-	uint32_t data_read;
-	uint32_t ate_wra;
-	uint32_t data_wra;
+	uint32_t filling_id, data_read;
+	uint32_t ate_wra, data_wra;
 
 	fixture->fs.sector_count = 3;
 
@@ -569,9 +570,7 @@ ZTEST_F(zms, test_delete)
  */
 ZTEST_F(zms, test_zms_gc_corrupt_close_ate)
 {
-	struct zms_ate ate;
-	struct zms_ate close_ate;
-	struct zms_ate empty_ate;
+	struct zms_ate ate, close_ate, empty_ate;
 	uint32_t data;
 	ssize_t len;
 	int err;
@@ -643,8 +642,7 @@ ZTEST_F(zms, test_zms_gc_corrupt_close_ate)
  */
 ZTEST_F(zms, test_zms_gc_corrupt_ate)
 {
-	struct zms_ate corrupt_ate;
-	struct zms_ate close_ate;
+	struct zms_ate corrupt_ate, close_ate;
 	int err;
 
 	close_ate.id = 0xffffffff;
@@ -687,10 +685,10 @@ ZTEST_F(zms, test_zms_gc_corrupt_ate)
 #ifdef CONFIG_ZMS_LOOKUP_CACHE
 static size_t num_matching_cache_entries(uint64_t addr, bool compare_sector_only, struct zms_fs *fs)
 {
-	size_t num = 0;
+	size_t i, num = 0;
 	uint64_t mask = compare_sector_only ? ADDR_SECT_MASK : UINT64_MAX;
 
-	for (int i = 0; i < CONFIG_ZMS_LOOKUP_CACHE_SIZE; i++) {
+	for (i = 0; i < CONFIG_ZMS_LOOKUP_CACHE_SIZE; i++) {
 		if ((fs->lookup_cache[i] & mask) == addr) {
 			num++;
 		}
@@ -761,19 +759,20 @@ ZTEST_F(zms, test_zms_cache_collission)
 {
 #ifdef CONFIG_ZMS_LOOKUP_CACHE
 	int err;
+	uint32_t id;
 	uint16_t data;
 
 	fixture->fs.sector_count = 4;
 	err = zms_mount(&fixture->fs);
 	zassert_true(err == 0, "zms_mount call failure: %d", err);
 
-	for (int id = 0; id < CONFIG_ZMS_LOOKUP_CACHE_SIZE + 1; id++) {
+	for (id = 0; id < CONFIG_ZMS_LOOKUP_CACHE_SIZE + 1; id++) {
 		data = id;
 		err = zms_write(&fixture->fs, id, &data, sizeof(data));
 		zassert_equal(err, sizeof(data), "zms_write call failure: %d", err);
 	}
 
-	for (int id = 0; id < CONFIG_ZMS_LOOKUP_CACHE_SIZE + 1; id++) {
+	for (id = 0; id < CONFIG_ZMS_LOOKUP_CACHE_SIZE + 1; id++) {
 		err = zms_read(&fixture->fs, id, &data, sizeof(data));
 		zassert_equal(err, sizeof(data), "zms_read call failure: %d", err);
 		zassert_equal(data, id, "incorrect data read");
@@ -847,7 +846,7 @@ ZTEST_F(zms, test_zms_cache_hash_quality)
 
 	/* Write ZMS IDs from 0 to CONFIG_ZMS_LOOKUP_CACHE_SIZE - 1 */
 
-	for (int i = 0; i < CONFIG_ZMS_LOOKUP_CACHE_SIZE; i++) {
+	for (uint16_t i = 0; i < CONFIG_ZMS_LOOKUP_CACHE_SIZE; i++) {
 		id = i;
 		data = 0;
 
@@ -870,7 +869,7 @@ ZTEST_F(zms, test_zms_cache_hash_quality)
 
 	/* Write CONFIG_ZMS_LOOKUP_CACHE_SIZE ZMS IDs that form the following series: 0, 4, 8... */
 
-	for (int i = 0; i < CONFIG_ZMS_LOOKUP_CACHE_SIZE; i++) {
+	for (uint16_t i = 0; i < CONFIG_ZMS_LOOKUP_CACHE_SIZE; i++) {
 		id = i * 4;
 		data = 0;
 
