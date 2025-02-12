@@ -1,5 +1,4 @@
 common:
-  depends_on: netif
   min_ram: 40
   tags:
     - net
