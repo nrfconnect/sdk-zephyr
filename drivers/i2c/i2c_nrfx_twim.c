@@ -297,26 +297,40 @@ static const struct i2c_driver_api i2c_nrfx_twim_driver_api = {
 	.recover_bus = i2c_nrfx_twim_recover_bus,
 };
 
+#ifdef CONFIG_PM_DEVICE
 static int twim_nrfx_pm_action(const struct device *dev,
 			       enum pm_device_action action)
 {
 	const struct i2c_nrfx_twim_config *dev_config = dev->config;
+	int ret = 0;
 
 	switch (action) {
 	case PM_DEVICE_ACTION_RESUME:
-		(void)pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_DEFAULT);
+		ret = pinctrl_apply_state(dev_config->pcfg,
+					  PINCTRL_STATE_DEFAULT);
+		if (ret < 0) {
+			return ret;
+		}
 		nrfx_twim_enable(&dev_config->twim);
 		break;
+
 	case PM_DEVICE_ACTION_SUSPEND:
 		nrfx_twim_disable(&dev_config->twim);
-		(void)pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_SLEEP);
+
+		ret = pinctrl_apply_state(dev_config->pcfg,
+					  PINCTRL_STATE_SLEEP);
+		if (ret < 0) {
+			return ret;
+		}
 		break;
+
 	default:
-		return -ENOTSUP;
+		ret = -ENOTSUP;
 	}
 
-	return 0;
+	return ret;
 }
+#endif /* CONFIG_PM_DEVICE */
 
 static int i2c_nrfx_twim_init(const struct device *dev)
 {
@@ -328,7 +342,13 @@ static int i2c_nrfx_twim_init(const struct device *dev)
 	k_sem_init(&dev_data->transfer_sync, 1, 1);
 	k_sem_init(&dev_data->completion_sync, 0, 1);
 
-	(void)pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_SLEEP);
+	int err = pinctrl_apply_state(dev_config->pcfg,
+				      COND_CODE_1(CONFIG_PM_DEVICE_RUNTIME,
+						  (PINCTRL_STATE_SLEEP),
+						  (PINCTRL_STATE_DEFAULT)));
+	if (err < 0) {
+		return err;
+	}
 
 	if (nrfx_twim_init(&dev_config->twim, &dev_config->twim_config,
 			   event_handler, dev_data) != NRFX_SUCCESS) {
@@ -336,7 +356,14 @@ static int i2c_nrfx_twim_init(const struct device *dev)
 		return -EIO;
 	}
 
-	return pm_device_driver_init(dev, twim_nrfx_pm_action);
+#ifdef CONFIG_PM_DEVICE_RUNTIME
+	pm_device_init_suspended(dev);
+	pm_device_runtime_enable(dev);
+#else
+	nrfx_twim_enable(&dev_config->twim);
+#endif
+
+	return 0;
 }
 
 #define I2C_NRFX_TWIM_INVALID_FREQUENCY  ((nrf_twim_frequency_t)-1)
