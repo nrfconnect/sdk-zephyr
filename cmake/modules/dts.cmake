@@ -182,7 +182,6 @@ set(dts_files
 if(DTC_OVERLAY_FILE)
   zephyr_list(TRANSFORM DTC_OVERLAY_FILE NORMALIZE_PATHS
               OUTPUT_VARIABLE DTC_OVERLAY_FILE_AS_LIST)
-  build_info(devicetree user-files VALUE ${DTC_OVERLAY_FILE_AS_LIST})
   list(APPEND
     dts_files
     ${DTC_OVERLAY_FILE_AS_LIST}
@@ -192,7 +191,6 @@ endif()
 if(EXTRA_DTC_OVERLAY_FILE)
   zephyr_list(TRANSFORM EXTRA_DTC_OVERLAY_FILE NORMALIZE_PATHS
               OUTPUT_VARIABLE EXTRA_DTC_OVERLAY_FILE_AS_LIST)
-  build_info(devicetree extra-user-files VALUE ${EXTRA_DTC_OVERLAY_FILE_AS_LIST})
   list(APPEND
     dts_files
     ${EXTRA_DTC_OVERLAY_FILE_AS_LIST}
@@ -398,7 +396,3 @@ elseif(stderr)
   message(WARNING "dtc raised one or more warnings:\n${stderr}")
 endif()
 endif(DTC)
-
-build_info(devicetree files VALUE ${dts_files})
-build_info(devicetree include-dirs VALUE ${DTS_ROOT_SYSTEM_INCLUDE_DIRS})
-build_info(devicetree bindings-dirs VALUE ${DTS_ROOT_BINDINGS})
