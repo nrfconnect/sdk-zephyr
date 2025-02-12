@@ -2275,7 +2275,6 @@ struct bt_mesh_comp_p0_elem *bt_mesh_comp_p0_elem_pull(const struct bt_mesh_comp
 	size_t modlist_size;
 
 	if (page->_buf->len < 4) {
-		LOG_DBG("Buffer is too short");
 		return NULL;
 	}
 
@@ -2286,7 +2285,6 @@ struct bt_mesh_comp_p0_elem *bt_mesh_comp_p0_elem_pull(const struct bt_mesh_comp
 	modlist_size = elem->nsig * 2 + elem->nvnd * 4;
 
 	if (page->_buf->len < modlist_size) {
-		LOG_DBG("Buffer is shorter than number of claimed models");
 		return NULL;
 	}
 
@@ -2323,7 +2321,7 @@ struct bt_mesh_comp_p1_elem *bt_mesh_comp_p1_elem_pull(struct net_buf_simple *bu
 						       struct bt_mesh_comp_p1_elem *elem)
 {
 	if (buf->len < 4) {
-		LOG_DBG("Buffer is too short");
+		LOG_DBG("No more elements to pull or missing data");
 		return NULL;
 	}
 	size_t elem_size = 0;
@@ -2335,7 +2333,6 @@ struct bt_mesh_comp_p1_elem *bt_mesh_comp_p1_elem_pull(struct net_buf_simple *bu
 	elem->nvnd = net_buf_simple_pull_u8(buf);
 	for (i = 0; i < elem->nsig + elem->nvnd; i++) {
 		if (buf->len < elem_size + 1) {
-			LOG_DBG("Buffer is shorter than number of claimed models");
 			return NULL;
 		}
 
@@ -2354,7 +2351,6 @@ struct bt_mesh_comp_p1_elem *bt_mesh_comp_p1_elem_pull(struct net_buf_simple *bu
 	}
 
 	if (buf->len < elem_size) {
-		LOG_DBG("No more elements to pull or missing data");
 		return NULL;
 	}
 
@@ -2385,7 +2381,6 @@ struct bt_mesh_comp_p1_model_item *bt_mesh_comp_p1_item_pull(
 	item_size = item->ext_item_cnt * (item->format + 1);
 	if (item->cor_present) {
 		if (elem->_buf->len < 1) {
-			LOG_DBG("Coresponding_Present field is claimed but not present");
 			return NULL;
 		}
 
@@ -2393,7 +2388,6 @@ struct bt_mesh_comp_p1_model_item *bt_mesh_comp_p1_item_pull(
 	}
 
 	if (elem->_buf->len < item_size) {
-		LOG_DBG("No more elements to pull or missing data");
 		return NULL;
 	}
 
