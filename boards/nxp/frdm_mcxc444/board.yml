@@ -1,5 +1,0 @@
-board:
-  name: frdm_mcxc444
-  vendor: nxp
-  socs:
-    - name: mcxc444
