@@ -454,15 +454,10 @@ static void modem_cellular_chat_on_cxreg(struct modem_chat *chat, char **argv, u
 	struct modem_cellular_data *data = (struct modem_cellular_data *)user_data;
 	enum cellular_registration_status registration_status = 0;
 
-	/* This receives both +C*REG? read command answers and unsolicited notifications.
-	 * Their syntax differs in that the former has one more parameter, <n>, which is first.
-	 */
-	if (argc >= 3 && argv[2][0] != '"') {
-		/* +CEREG: <n>,<stat>[,<tac>[...]] */
-		registration_status = atoi(argv[2]);
-	} else if (argc >= 2) {
-		/* +CEREG: <stat>[,<tac>[...]] */
+	if (argc == 2) {
 		registration_status = atoi(argv[1]);
+	} else if (argc == 3 || argc == 6) {
+		registration_status = atoi(argv[2]);
 	} else {
 		return;
 	}
@@ -471,7 +466,7 @@ static void modem_cellular_chat_on_cxreg(struct modem_chat *chat, char **argv, u
 		data->registration_status_gsm = registration_status;
 	} else if (strcmp(argv[0], "+CGREG: ") == 0) {
 		data->registration_status_gprs = registration_status;
-	} else { /* CEREG */
+	} else {
 		data->registration_status_lte = registration_status;
 	}
 
