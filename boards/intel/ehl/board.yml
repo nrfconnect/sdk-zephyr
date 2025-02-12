@@ -1,6 +1,5 @@
 board:
   name: intel_ehl_crb
-  full_name: Elkhart Lake CRB
   vendor: intel
   socs:
     - name: elkhart_lake

@@ -1,6 +1,5 @@
 board:
   name: nrf9160dk
-  full_name: nRF9160 DK
   vendor: nordic
   socs:
   - name: nrf9160
