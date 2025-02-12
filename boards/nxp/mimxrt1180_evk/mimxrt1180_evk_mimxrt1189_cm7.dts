@@ -19,6 +19,7 @@
 		zephyr,flash = &itcm;
 		zephyr,console = &lpuart1;
 		zephyr,shell-uart = &lpuart1;
+		zephyr,canbus = &flexcan3;
 	};
 };
 
@@ -27,10 +28,26 @@
 	current-speed = <115200>;
 };
 
+&lpadc1 {
+	status = "okay";
+};
+
 &systick {
 	status = "okay";
 };
 
 &gpt2 {
+	status = "okay";
+};
+
+&flexcan3 {
+	status = "okay";
+};
+
+&lptmr1 {
+	status = "okay";
+};
+
+&i3c2 {
 	status = "okay";
 };

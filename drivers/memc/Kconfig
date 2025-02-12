@@ -13,6 +13,7 @@ if MEMC
 
 config MEMC_INIT_PRIORITY
 	int "Initialization priority"
+	default 80 if MSPI
 	default 0
 	help
 	  Memory controllers initialization priority.
@@ -30,6 +31,8 @@ source "drivers/memc/Kconfig.nxp_s32"
 source "drivers/memc/Kconfig.smartbond"
 
 source "drivers/memc/Kconfig.mspi"
+
+source "drivers/memc/Kconfig.renesas_ra"
 
 module = MEMC
 module-str = memc

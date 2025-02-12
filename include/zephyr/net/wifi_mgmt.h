@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2017 Intel Corporation.
  * Copyright 2024 NXP
+ * Copyright (c) 2024 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -50,6 +51,12 @@ extern "C" {
 #define WIFI_MGMT_SCAN_CHAN_MAX_MANUAL 1
 #endif /* CONFIG_WIFI_MGMT_SCAN_CHAN_MAX_MANUAL */
 
+#ifdef CONFIG_WIFI_ENT_IDENTITY_MAX_USERS
+#define WIFI_ENT_IDENTITY_MAX_USERS CONFIG_WIFI_ENT_IDENTITY_MAX_USERS
+#else
+#define WIFI_ENT_IDENTITY_MAX_USERS 1
+#endif /* CONFIG_WIFI_ENT_IDENTITY_MAX_USERS */
+
 #define WIFI_MGMT_BAND_STR_SIZE_MAX 8
 #define WIFI_MGMT_SCAN_MAX_BSS_CNT 65535
 
@@ -68,12 +75,20 @@ enum net_request_wifi_cmd {
 	NET_REQUEST_WIFI_CMD_AP_ENABLE,
 	/** Disable AP mode */
 	NET_REQUEST_WIFI_CMD_AP_DISABLE,
+	/** Set AP RTS threshold */
+	NET_REQUEST_WIFI_CMD_AP_RTS_THRESHOLD,
 	/** Get interface status */
 	NET_REQUEST_WIFI_CMD_IFACE_STATUS,
+	/** Set or get 11k status */
+	NET_REQUEST_WIFI_CMD_11K_CONFIG,
+	/** Send 11k neighbor request */
+	NET_REQUEST_WIFI_CMD_11K_NEIGHBOR_REQUEST,
 	/** Set power save status */
 	NET_REQUEST_WIFI_CMD_PS,
 	/** Setup or teardown TWT flow */
 	NET_REQUEST_WIFI_CMD_TWT,
+	/** Setup BTWT flow */
+	NET_REQUEST_WIFI_CMD_BTWT,
 	/** Get power save config */
 	NET_REQUEST_WIFI_CMD_PS_CONFIG,
 	/** Set or get regulatory domain */
@@ -108,9 +123,21 @@ enum net_request_wifi_cmd {
 	NET_REQUEST_WIFI_CMD_RTS_THRESHOLD_CONFIG,
 	/** WPS config */
 	NET_REQUEST_WIFI_CMD_WPS_CONFIG,
+#ifdef CONFIG_WIFI_CREDENTIALS_CONNECT_STORED
+	/** Connect to APs stored using wifi_credentials library. */
+	NET_REQUEST_WIFI_CMD_CONNECT_STORED,
+#endif
+	/** Start roaming */
+	NET_REQUEST_WIFI_CMD_START_ROAMING,
+	/** Neighbor report complete */
+	NET_REQUEST_WIFI_CMD_NEIGHBOR_REP_COMPLETE,
+	/** Specific scan */
+	NET_REQUEST_WIFI_CMD_CANDIDATE_SCAN,
+	/** AP WPS config */
+	NET_REQUEST_WIFI_CMD_AP_WPS_CONFIG,
 	/** @cond INTERNAL_HIDDEN */
 	NET_REQUEST_WIFI_CMD_MAX
-/** @endcond */
+	/** @endcond */
 };
 
 /** Request a Wi-Fi scan */
@@ -143,11 +170,27 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_AP_ENABLE);
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_AP_DISABLE);
 
+/** Request a Wi-Fi RTS threshold */
+#define NET_REQUEST_WIFI_AP_RTS_THRESHOLD				\
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_AP_RTS_THRESHOLD)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_AP_RTS_THRESHOLD);
+
 /** Request a Wi-Fi network interface status */
 #define NET_REQUEST_WIFI_IFACE_STATUS				\
 	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_IFACE_STATUS)
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_IFACE_STATUS);
+
+#define NET_REQUEST_WIFI_11K_CONFIG				\
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_11K_CONFIG)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_11K_CONFIG);
+
+#define NET_REQUEST_WIFI_11K_NEIGHBOR_REQUEST			\
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_11K_NEIGHBOR_REQUEST)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_11K_NEIGHBOR_REQUEST);
 
 /** Request a Wi-Fi power save */
 #define NET_REQUEST_WIFI_PS					\
@@ -160,6 +203,11 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_PS);
 	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_TWT)
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_TWT);
+
+#define NET_REQUEST_WIFI_BTWT			\
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_BTWT)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_BTWT);
 
 /** Request a Wi-Fi power save configuration */
 #define NET_REQUEST_WIFI_PS_CONFIG				\
@@ -257,6 +305,21 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_RTS_THRESHOLD_CONFIG);
 #define NET_REQUEST_WIFI_WPS_CONFIG (_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_WPS_CONFIG)
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_WPS_CONFIG);
+#ifdef CONFIG_WIFI_CREDENTIALS_CONNECT_STORED
+#define NET_REQUEST_WIFI_CONNECT_STORED (_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_CONNECT_STORED)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_CONNECT_STORED);
+#endif
+
+#define NET_REQUEST_WIFI_START_ROAMING				\
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_START_ROAMING)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_START_ROAMING);
+
+#define NET_REQUEST_WIFI_NEIGHBOR_REP_COMPLETE			\
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_NEIGHBOR_REP_COMPLETE)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_NEIGHBOR_REP_COMPLETE);
 
 /** @brief Wi-Fi management events */
 enum net_event_wifi_cmd {
@@ -280,6 +343,12 @@ enum net_event_wifi_cmd {
 	NET_EVENT_WIFI_CMD_RAW_SCAN_RESULT,
 	/** Disconnect complete */
 	NET_EVENT_WIFI_CMD_DISCONNECT_COMPLETE,
+	/** Signal change event */
+	NET_EVENT_WIFI_CMD_SIGNAL_CHANGE,
+	/** Neighbor Report */
+	NET_EVENT_WIFI_CMD_NEIGHBOR_REP_RECEIVED,
+	/** Neighbor Report complete */
+	NET_EVENT_WIFI_CMD_NEIGHBOR_REP_COMPLETE,
 	/** AP mode enable result */
 	NET_EVENT_WIFI_CMD_AP_ENABLE_RESULT,
 	/** AP mode disable result */
@@ -327,6 +396,14 @@ enum net_event_wifi_cmd {
 /** Event emitted Wi-Fi disconnect is completed */
 #define NET_EVENT_WIFI_DISCONNECT_COMPLETE			\
 	(_NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_DISCONNECT_COMPLETE)
+
+/** Event signal change of connected AP */
+#define NET_EVENT_WIFI_SIGNAL_CHANGE				\
+	(_NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_SIGNAL_CHANGE)
+
+/** Event Neighbor Report Completed */
+#define NET_EVENT_WIFI_NEIGHBOR_REP_COMP			\
+	(_NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_NEIGHBOR_REP_COMPLETE)
 
 /** Event emitted for Wi-Fi access point enable result */
 #define NET_EVENT_WIFI_AP_ENABLE_RESULT				\
@@ -419,7 +496,7 @@ struct wifi_scan_params {
  */
 struct wifi_scan_result {
 	/** SSID */
-	uint8_t ssid[WIFI_SSID_MAX_LEN];
+	uint8_t ssid[WIFI_SSID_MAX_LEN + 1];
 	/** SSID length */
 	uint8_t ssid_length;
 	/** Frequency band */
@@ -478,8 +555,10 @@ struct wifi_connect_req_params {
 	uint8_t key2_passwd_length;
 	/** suiteb or suiteb-192 */
 	uint8_t suiteb_type;
+	/** TLS cipher */
+	uint8_t TLS_cipher;
 	/** eap version */
-	uint8_t eap_ver;
+	int eap_ver;
 	/** Identity for EAP */
 	const uint8_t *eap_identity;
 	/** eap identity length, max 64 */
@@ -488,6 +567,24 @@ struct wifi_connect_req_params {
 	const uint8_t *eap_password;
 	/** eap passwd length, max 128 */
 	uint8_t eap_passwd_length;
+	/** Fast BSS Transition used */
+	bool ft_used;
+	/** Number of EAP users */
+	int nusers;
+	/** Number of EAP passwds */
+	uint8_t passwds;
+	/** User Identities */
+	const uint8_t *identities[WIFI_ENT_IDENTITY_MAX_USERS];
+	/** User Passwords */
+	const uint8_t *passwords[WIFI_ENT_IDENTITY_MAX_USERS];
+	/** Hidden SSID configure
+	 * 0: disabled (default)
+	 * 1: send empty (length=0) SSID in beacon and ignore probe request for broadcast SSID
+	 * 2: clear SSID, but keep the original length and ignore probe request for broadcast SSID
+	 */
+	uint8_t ignore_broadcast_ssid;
+	/** Parameter used for frequency band */
+	enum wifi_frequency_bandwidths bandwidth;
 };
 
 /** @brief Wi-Fi connect result codes. To be overlaid on top of \ref wifi_status
@@ -576,7 +673,7 @@ struct wifi_iface_status {
 	/** SSID length */
 	unsigned int ssid_len;
 	/** SSID */
-	char ssid[WIFI_SSID_MAX_LEN];
+	char ssid[WIFI_SSID_MAX_LEN + 1];
 	/** BSSID */
 	char bssid[WIFI_MAC_ADDR_LEN];
 	/** Frequency band */
@@ -599,8 +696,8 @@ struct wifi_iface_status {
 	unsigned short beacon_interval;
 	/** is TWT capable? */
 	bool twt_capable;
-	/** The current 802.11 PHY data rate */
-	int current_phy_rate;
+	/** The current 802.11 PHY TX data rate (in Mbps) */
+	int current_phy_tx_rate;
 };
 
 /** @brief Wi-Fi power save parameters */
@@ -667,7 +764,30 @@ struct wifi_twt_params {
 			 * prepare the data before TWT SP starts.
 			 */
 			uint32_t twt_wake_ahead_duration;
+			/** TWT info enabled or disable */
+			bool twt_info_disable;
+			/** TWT exponent */
+			uint8_t twt_exponent;
+			/** TWT Mantissa Range: [0-sizeof(UINT16)] */
+			uint16_t twt_mantissa;
 		} setup;
+		/** Setup specific parameters */
+		struct {
+			/** Broadcast TWT AP config */
+			uint16_t sub_id;
+			/** Range 64-255 */
+			uint8_t nominal_wake;
+			/** Max STA support */
+			uint8_t max_sta_support;
+			/** TWT mantissa */
+			uint16_t twt_mantissa;
+			/** TWT offset */
+			uint16_t twt_offset;
+			/** TWT exponent */
+			uint8_t twt_exponent;
+			/** SP gap */
+			uint8_t sp_gap;
+		} btwt;
 		/** Teardown specific parameters */
 		struct {
 			/** Teardown all flows */
@@ -686,6 +806,7 @@ struct wifi_twt_params {
 /* 256 (u8) * 1TU */
 #define WIFI_MAX_TWT_WAKE_INTERVAL_US 262144
 #define WIFI_MAX_TWT_WAKE_AHEAD_DURATION_US (LONG_MAX - 1)
+#define WIFI_MAX_TWT_EXPONENT 31
 
 /** @endcond */
 
@@ -739,6 +860,18 @@ struct wifi_enterprise_creds_params {
 	uint8_t *client_key2;
 	/** Phase2 Client key length */
 	uint32_t client_key2_len;
+	/** Server certification */
+	uint8_t *server_cert;
+	/** Server certification length */
+	uint32_t server_cert_len;
+	/** Server key */
+	uint8_t *server_key;
+	/** Server key length */
+	uint32_t server_key_len;
+	/** Diffie–Hellman parameter */
+	uint8_t *dh_param;
+	/** Diffie–Hellman parameter length */
+	uint32_t dh_param_len;
 };
 
 /** @brief Wi-Fi power save configuration */
@@ -757,6 +890,16 @@ enum wifi_mgmt_op {
 	WIFI_MGMT_GET = 0,
 	/** Set operation */
 	WIFI_MGMT_SET = 1,
+};
+
+/** Wi-Fi 11k parameters */
+struct wifi_11k_params {
+	/** 11k command operation */
+	enum wifi_mgmt_op oper;
+	/** 11k enable/disable */
+	bool enable_11k;
+	/** SSID */
+	uint8_t ssid[WIFI_SSID_MAX_LEN + 1];
 };
 
 /** Max regulatory channel number */
@@ -780,7 +923,9 @@ struct wifi_reg_chan_info {
 struct wifi_reg_domain {
 	/** Regulatory domain operation */
 	enum wifi_mgmt_op oper;
-	/** Ignore all other regulatory hints over this one */
+	/** Ignore all other regulatory hints over this one, the behavior is
+	 * implementation specific.
+	 */
 	bool force;
 	/** Country code: ISO/IEC 3166-1 alpha-2 */
 	uint8_t country_code[WIFI_COUNTRY_CODE_LEN];
@@ -874,6 +1019,7 @@ struct wifi_channel_info {
 
 /** @cond INTERNAL_HIDDEN */
 #define WIFI_AP_STA_MAX_INACTIVITY (LONG_MAX - 1)
+#define WIFI_AP_IEEE_80211_CAPAB_MAX_LEN 64
 /** @endcond */
 
 /** @brief Wi-Fi AP configuration parameter */
@@ -884,6 +1030,14 @@ struct wifi_ap_config_params {
 	uint32_t max_inactivity;
 	/** Parameter used for setting maximum number of stations */
 	uint32_t max_num_sta;
+	/** Parameter used for frequency band */
+	enum wifi_frequency_bandwidths bandwidth;
+#if defined(CONFIG_WIFI_NM_HOSTAPD_AP)
+	/** Parameter used for setting HT capabilities */
+	char ht_capab[WIFI_AP_IEEE_80211_CAPAB_MAX_LEN + 1];
+	/** Parameter used for setting VHT capabilities */
+	char vht_capab[WIFI_AP_IEEE_80211_CAPAB_MAX_LEN + 1];
+#endif
 };
 
 #ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
@@ -1104,14 +1258,24 @@ struct wifi_wps_config_params {
 
 /** Wi-Fi AP status
  */
-enum wifi_hostapd_iface_state {
-	WIFI_HAPD_IFACE_UNINITIALIZED,
-	WIFI_HAPD_IFACE_DISABLED,
-	WIFI_HAPD_IFACE_COUNTRY_UPDATE,
-	WIFI_HAPD_IFACE_ACS,
-	WIFI_HAPD_IFACE_HT_SCAN,
-	WIFI_HAPD_IFACE_DFS,
-	WIFI_HAPD_IFACE_ENABLED
+enum wifi_sap_iface_state {
+	WIFI_SAP_IFACE_UNINITIALIZED,
+	WIFI_SAP_IFACE_DISABLED,
+	WIFI_SAP_IFACE_COUNTRY_UPDATE,
+	WIFI_SAP_IFACE_ACS,
+	WIFI_SAP_IFACE_HT_SCAN,
+	WIFI_SAP_IFACE_DFS,
+	WIFI_SAP_IFACE_NO_IR,
+	WIFI_SAP_IFACE_ENABLED
+};
+
+/* Extended Capabilities */
+enum wifi_ext_capab {
+	WIFI_EXT_CAPAB_20_40_COEX = 0,
+	WIFI_EXT_CAPAB_GLK = 1,
+	WIFI_EXT_CAPAB_EXT_CHAN_SWITCH = 2,
+	WIFI_EXT_CAPAB_TIM_BROADCAST = 18,
+	WIFI_EXT_CAPAB_BSS_TRANSITION = 19,
 };
 
 #include <zephyr/net/net_if.h>
@@ -1217,6 +1381,22 @@ struct wifi_mgmt_ops {
 	 */
 	int (*reset_stats)(const struct device *dev);
 #endif /* CONFIG_NET_STATISTICS_WIFI */
+	/** Set or get 11K status
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 * @param params 11k parameters
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*cfg_11k)(const struct device *dev, struct wifi_11k_params *params);
+	/** Send 11k neighbor request
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 * @param params 11k parameters
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*send_11k_neighbor_request)(const struct device *dev, struct wifi_11k_params *params);
 	/** Set power save status
 	 *
 	 * @param dev Pointer to the device structure for the driver instance.
@@ -1233,6 +1413,14 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*set_twt)(const struct device *dev, struct wifi_twt_params *params);
+	/** Setup BTWT flow
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 * @param params BTWT parameters
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*set_btwt)(const struct device *dev, struct wifi_twt_params *params);
 	/** Get power save config
 	 *
 	 * @param dev Pointer to the device structure for the driver instance.
@@ -1283,6 +1471,23 @@ struct wifi_mgmt_ops {
 	 */
 	int (*btm_query)(const struct device *dev, uint8_t reason);
 #endif
+	/** Judge ap whether support the capability
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 * @param capab is the capability to judge
+	 *
+	 * @return 1 if support, 0 if not support
+	 */
+	int (*bss_ext_capab)(const struct device *dev, int capab);
+
+	/** Send legacy scan
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*legacy_roam)(const struct device *dev);
+
 	/** Get Version of WiFi driver and Firmware
 	 *
 	 * The driver that implements the get_version function must not use stack to allocate the
@@ -1365,6 +1570,21 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*wps_config)(const struct device *dev, struct wifi_wps_config_params *params);
+	/** Trigger candidate scan
+	 *
+	 * @param dev Pointer to the device structure for the driver instance
+	 * @param params Scan parameters
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*candidate_scan)(const struct device *dev, struct wifi_scan_params *params);
+	/** Start 11r roaming
+	 *
+	 * @param dev Pointer to the device structure for the driver instance
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*start_11r_roaming)(const struct device *dev);
 };
 
 /** Wi-Fi management offload API */
@@ -1455,6 +1675,17 @@ void wifi_mgmt_raise_raw_scan_result_event(struct net_if *iface,
  * @param status Disconnect complete status
  */
 void wifi_mgmt_raise_disconnect_complete_event(struct net_if *iface, int status);
+
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_ROAMING
+/** Wi-Fi management neighbor reports event
+ *
+ * @param iface Network interface
+ * @param inbuf Input buffer of neighbor reports
+ * @param buf_len Lenghth of input buffer
+ */
+void wifi_mgmt_raise_neighbor_rep_recv_event(struct net_if *iface,
+					     char *inbuf, size_t buf_len);
+#endif
 
 /** Wi-Fi management AP mode enable result event
  *

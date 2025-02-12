@@ -306,7 +306,7 @@ static int ssd1306_write(const struct device *dev, const uint16_t x, const uint1
 	size_t buf_len;
 
 	if (desc->pitch < desc->width) {
-		LOG_ERR("Pitch is smaller then width");
+		LOG_ERR("Pitch is smaller than width");
 		return -1;
 	}
 
@@ -478,7 +478,7 @@ static int ssd1306_init(const struct device *dev)
 	return 0;
 }
 
-static const struct display_driver_api ssd1306_driver_api = {
+static DEVICE_API(display, ssd1306_driver_api) = {
 	.blanking_on = ssd1306_suspend,
 	.blanking_off = ssd1306_resume,
 	.write = ssd1306_write,

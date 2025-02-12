@@ -18,8 +18,23 @@ config STEPPER_INIT_PRIORITY
 	help
 	  Stepper motor controller initialization priority.
 
+config STEPPER_SHELL
+	bool "Stepper shell"
+	depends on SHELL
+	help
+	  Enable stepper shell for testing.
+
+comment "Stepper Driver Common"
+
+rsource "step_dir/Kconfig"
+
 comment "Stepper Drivers"
 
+# zephyr-keep-sorted-start
+rsource "Kconfig.fake"
 rsource "Kconfig.gpio"
+rsource "adi_tmc/Kconfig"
+rsource "ti/Kconfig"
+# zephyr-keep-sorted-stop
 
 endif

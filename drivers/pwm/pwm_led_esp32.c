@@ -22,6 +22,17 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pwm_ledc_esp32, CONFIG_PWM_LOG_LEVEL);
 
+#if SOC_LEDC_SUPPORT_APB_CLOCK
+#define CLOCK_SOURCE LEDC_APB_CLK
+#elif SOC_LEDC_SUPPORT_PLL_DIV_CLOCK
+#define CLOCK_SOURCE LEDC_SCLK
+#if defined(CONFIG_SOC_SERIES_ESP32C2)
+#define SCLK_CLK_FREQ MHZ(60)
+#elif defined(CONFIG_SOC_SERIES_ESP32C6)
+#define SCLK_CLK_FREQ MHZ(80)
+#endif
+#endif
+
 struct pwm_ledc_esp32_data {
 	ledc_hal_context_t hal;
 	struct k_sem cmd_sem;
@@ -343,18 +354,12 @@ int pwm_led_esp32_init(const struct device *dev)
 	return 0;
 }
 
-static const struct pwm_driver_api pwm_led_esp32_api = {
+static DEVICE_API(pwm, pwm_led_esp32_api) = {
 	.set_cycles = pwm_led_esp32_set_cycles,
 	.get_cycles_per_sec = pwm_led_esp32_get_cycles_per_sec,
 };
 
 PINCTRL_DT_INST_DEFINE(0);
-
-#if SOC_LEDC_SUPPORT_APB_CLOCK
-	#define CLOCK_SOURCE	LEDC_APB_CLK
-#elif SOC_LEDC_SUPPORT_PLL_DIV_CLOCK
-	#define CLOCK_SOURCE	LEDC_SCLK
-#endif
 
 #define CHANNEL_CONFIG(node_id)                                                \
 	{                                                                      \

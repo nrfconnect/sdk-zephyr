@@ -319,7 +319,7 @@ static int counter_sam_initialize(const struct device *dev)
 
 	/* Connect pins to the peripheral */
 	retval = pinctrl_apply_state(dev_cfg->pcfg, PINCTRL_STATE_DEFAULT);
-	if (retval < 0) {
+	if (retval < 0 && retval != -ENOENT) {
 		return retval;
 	}
 
@@ -343,7 +343,7 @@ static int counter_sam_initialize(const struct device *dev)
 	return 0;
 }
 
-static const struct counter_driver_api counter_sam_driver_api = {
+static DEVICE_API(counter, counter_sam_driver_api) = {
 	.start = counter_sam_tc_start,
 	.stop = counter_sam_tc_stop,
 	.get_value = counter_sam_tc_get_value,

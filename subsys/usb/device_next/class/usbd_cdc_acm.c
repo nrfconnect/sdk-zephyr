@@ -21,14 +21,16 @@
 #include "usbd_msg.h"
 
 #include <zephyr/logging/log.h>
-#if DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart) \
-	&& defined(CONFIG_LOG_BACKEND_UART) \
-	&& defined(CONFIG_USBD_CDC_ACM_LOG_LEVEL) \
-	&& CONFIG_USBD_CDC_ACM_LOG_LEVEL != LOG_LEVEL_NONE
 /* Prevent endless recursive logging loop and warn user about it */
-#warning "USB_CDC_ACM_LOG_LEVEL forced to LOG_LEVEL_NONE"
+#if defined(CONFIG_USBD_CDC_ACM_LOG_LEVEL) && CONFIG_USBD_CDC_ACM_LOG_LEVEL != LOG_LEVEL_NONE
+#define CHOSEN_CONSOLE DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart)
+#define CHOSEN_SHELL   DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_shell_uart), zephyr_cdc_acm_uart)
+#if (CHOSEN_CONSOLE && defined(CONFIG_LOG_BACKEND_UART)) || \
+	(CHOSEN_SHELL && defined(CONFIG_SHELL_LOG_BACKEND))
+#warning "USBD_CDC_ACM_LOG_LEVEL forced to LOG_LEVEL_NONE"
 #undef CONFIG_USBD_CDC_ACM_LOG_LEVEL
 #define CONFIG_USBD_CDC_ACM_LOG_LEVEL LOG_LEVEL_NONE
+#endif
 #endif
 LOG_MODULE_REGISTER(usbd_cdc_acm, CONFIG_USBD_CDC_ACM_LOG_LEVEL);
 
@@ -47,6 +49,7 @@ UDC_BUF_POOL_DEFINE(cdc_acm_ep_pool,
 #define CDC_ACM_IRQ_RX_ENABLED		2
 #define CDC_ACM_IRQ_TX_ENABLED		3
 #define CDC_ACM_RX_FIFO_BUSY		4
+#define CDC_ACM_TX_FIFO_BUSY		5
 
 static struct k_work_q cdc_acm_work_q;
 static K_KERNEL_STACK_DEFINE(cdc_acm_stack,
@@ -129,7 +132,6 @@ struct net_buf *cdc_acm_buf_alloc(const uint8_t ep)
 	}
 
 	bi = udc_get_buf_info(buf);
-	memset(bi, 0, sizeof(struct udc_buf_info));
 	bi->ep = ep;
 
 	return buf;
@@ -226,6 +228,10 @@ static int usbd_cdc_acm_request(struct usbd_class_data *const c_data,
 			atomic_clear_bit(&data->state, CDC_ACM_RX_FIFO_BUSY);
 		}
 
+		if (bi->ep == cdc_acm_get_bulk_in(c_data)) {
+			atomic_clear_bit(&data->state, CDC_ACM_TX_FIFO_BUSY);
+		}
+
 		goto ep_request_error;
 	}
 
@@ -248,6 +254,14 @@ static int usbd_cdc_acm_request(struct usbd_class_data *const c_data,
 		if (data->cb) {
 			cdc_acm_work_submit(&data->irq_cb_work);
 		}
+
+		atomic_clear_bit(&data->state, CDC_ACM_TX_FIFO_BUSY);
+
+		if (!ring_buf_is_empty(data->tx_fifo.rb)) {
+			/* Queue pending TX data on IN endpoint */
+			cdc_acm_work_schedule(&data->tx_fifo_work, K_NO_WAIT);
+		}
+
 	}
 
 	if (bi->ep == cdc_acm_get_int_in(c_data)) {
@@ -545,8 +559,14 @@ static void cdc_acm_tx_fifo_handler(struct k_work *work)
 		return;
 	}
 
+	if (atomic_test_and_set_bit(&data->state, CDC_ACM_TX_FIFO_BUSY)) {
+		LOG_DBG("TX transfer already in progress");
+		return;
+	}
+
 	buf = cdc_acm_buf_alloc(cdc_acm_get_bulk_in(c_data));
 	if (buf == NULL) {
+		atomic_clear_bit(&data->state, CDC_ACM_TX_FIFO_BUSY);
 		cdc_acm_work_schedule(&data->tx_fifo_work, K_MSEC(1));
 		return;
 	}
@@ -558,6 +578,7 @@ static void cdc_acm_tx_fifo_handler(struct k_work *work)
 	if (ret) {
 		LOG_ERR("Failed to enqueue");
 		net_buf_unref(buf);
+		atomic_clear_bit(&data->state, CDC_ACM_TX_FIFO_BUSY);
 	}
 }
 
@@ -825,7 +846,9 @@ static void cdc_acm_irq_cb_handler(struct k_work *work)
 
 	if (data->tx_fifo.altered) {
 		LOG_DBG("tx fifo altered, submit work");
-		cdc_acm_work_schedule(&data->tx_fifo_work, K_NO_WAIT);
+		if (!atomic_test_bit(&data->state, CDC_ACM_TX_FIFO_BUSY)) {
+			cdc_acm_work_schedule(&data->tx_fifo_work, K_NO_WAIT);
+		}
 	}
 
 	if (atomic_test_bit(&data->state, CDC_ACM_IRQ_RX_ENABLED) &&
@@ -1003,6 +1026,7 @@ static int usbd_cdc_acm_init_wq(void)
 	k_work_queue_start(&cdc_acm_work_q, cdc_acm_stack,
 			   K_KERNEL_STACK_SIZEOF(cdc_acm_stack),
 			   CONFIG_SYSTEM_WORKQUEUE_PRIORITY, NULL);
+	k_thread_name_set(&cdc_acm_work_q.thread, "cdc_acm_work_q");
 
 	return 0;
 }
@@ -1014,8 +1038,6 @@ static int usbd_cdc_acm_preinit(const struct device *dev)
 	ring_buf_reset(data->tx_fifo.rb);
 	ring_buf_reset(data->rx_fifo.rb);
 
-	k_thread_name_set(&cdc_acm_work_q.thread, "cdc_acm_work_q");
-
 	k_work_init_delayable(&data->tx_fifo_work, cdc_acm_tx_fifo_handler);
 	k_work_init(&data->rx_fifo_work, cdc_acm_rx_fifo_handler);
 	k_work_init(&data->irq_cb_work, cdc_acm_irq_cb_handler);
@@ -1023,7 +1045,7 @@ static int usbd_cdc_acm_preinit(const struct device *dev)
 	return 0;
 }
 
-static const struct uart_driver_api cdc_acm_uart_api = {
+static DEVICE_API(uart, cdc_acm_uart_api) = {
 	.irq_tx_enable = cdc_acm_irq_tx_enable,
 	.irq_tx_disable = cdc_acm_irq_tx_disable,
 	.irq_tx_ready = cdc_acm_irq_tx_ready,

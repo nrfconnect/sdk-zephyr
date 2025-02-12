@@ -96,6 +96,7 @@ config NRF70_STA_MODE
 config NRF70_AP_MODE
 	bool "Access point mode"
 	depends on WIFI_NM_WPA_SUPPLICANT_AP
+	default y if WIFI_NM_WPA_SUPPLICANT_AP
 
 config NRF70_P2P_MODE
 	bool "P2P support in driver"
@@ -125,14 +126,8 @@ config NRF_WIFI_IF_AUTO_START
 
 choice NRF_WIFI_FW_BLOB_HANDLING
 	prompt "nRF70 Firmware blob handling"
+	depends on !BUILD_ONLY_NO_BLOBS
 	default NRF_WIFI_PATCHES_BUILTIN
-
-config NRF_WIFI_BUILD_ONLY_MODE
-	bool "Build only mode"
-	help
-	  Enable this option to build the driver without firmware loading, removes
-	  dependency on firmware binary and patches.
-	  This is useful to check the build and link errors.
 
 config NRF_WIFI_PATCHES_BUILTIN
 	bool "Store nRF70 FW patches as part of the driver"
@@ -813,4 +808,21 @@ config NRF70_PASSIVE_SCAN_ONLY
 	help
 	  Enable this configuration to force passive scan on all channels.
 	  This will override application-specified scan type.
+
+config NRF_WIFI_DISPLAY_SCAN_BSS_LIMIT
+	# Display scan BSS entries limit
+	# By default, the limit is 250 in scan-only mode and 150 in regular mode.
+	int "Display scan bss limit"
+	range 1 450 if NRF70_SCAN_ONLY
+	def_int 250 if NRF70_SCAN_ONLY
+	range 1 160
+	def_int 150
+	help
+	  Number of BSS entries in scan result.
+
+config NRF_WIFI_COEX_DISABLE_PRIORITY_WINDOW_FOR_SCAN
+	bool "Force disable priority window for scan in the case of coexistence with Short Range radio"
+	help
+	  Enable this configuration to disable priority window for scan
+	  in the case of coexistence with Short Range radio.
 endif # WIFI_NRF70
