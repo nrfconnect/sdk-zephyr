@@ -163,11 +163,10 @@ config NRF_SPU_RAM_REGION_SIZE
 	  RAM region size for the NRF_SPU peripheral
 
 config SOC_NRF_GPIO_FORWARDER_FOR_NRF5340
-	bool "Forward GPIO pins to network core"
+	bool
 	depends on NRF_SOC_SECURE_SUPPORTED
-	default y if $(dt_compat_enabled,$(DT_COMPAT_NORDIC_NRF_GPIO_FORWARDER))
 	help
-	  Will forward configured pins with the forwarder compatible to the network core for usage.
+	  hidden option for including the nRF GPIO pin forwarding
 
 config SOC_NRF53_CPUNET_MGMT
 	bool
