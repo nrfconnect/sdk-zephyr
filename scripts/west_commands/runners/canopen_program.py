@@ -24,7 +24,10 @@ DEFAULT_CAN_CONTEXT = 'default'
 DEFAULT_PROGRAM_NUMBER = 1
 
 # Program download buffer size in bytes
-DEFAULT_PROGRAM_DOWNLOAD_BUFFER_SIZE = 1024
+PROGRAM_DOWNLOAD_BUFFER_SIZE = 1024
+
+# Program download chunk size in bytes
+PROGRAM_DOWNLOAD_CHUNK_SIZE = PROGRAM_DOWNLOAD_BUFFER_SIZE // 2
 
 # Default timeouts and retries
 DEFAULT_TIMEOUT = 10.0 # seconds
@@ -55,7 +58,7 @@ class CANopenBinaryRunner(ZephyrBinaryRunner):
                  program_number=DEFAULT_PROGRAM_NUMBER, confirm=True,
                  confirm_only=True, timeout=DEFAULT_TIMEOUT,
                  sdo_retries=DEFAULT_SDO_RETRIES, sdo_timeout=DEFAULT_SDO_TIMEOUT,
-                 download_buffer_size=DEFAULT_PROGRAM_DOWNLOAD_BUFFER_SIZE, block_transfer=False):
+                 block_transfer=False):
         if MISSING_REQUIREMENTS:
             raise RuntimeError('one or more Python dependencies were missing; '
                                "see the getting started guide for details on "
@@ -73,9 +76,7 @@ class CANopenBinaryRunner(ZephyrBinaryRunner):
                                                    program_number=program_number,
                                                    sdo_retries=sdo_retries,
                                                    sdo_timeout=sdo_timeout,
-                                                   download_buffer_size=download_buffer_size,
-                                                   block_transfer=block_transfer,
-                                                   )
+                                                   block_transfer=block_transfer)
 
     @classmethod
     def name(cls):
@@ -112,8 +113,6 @@ class CANopenBinaryRunner(ZephyrBinaryRunner):
         parser.add_argument('--sdo-timeout', type=float, default=DEFAULT_SDO_TIMEOUT,
                             help=f'''CANopen SDO response timeout in seconds
                             (default: {DEFAULT_SDO_TIMEOUT})''')
-        parser.add_argument('--download-buffer-size', type=int, default=DEFAULT_PROGRAM_DOWNLOAD_BUFFER_SIZE,
-                            help=f'Program download buffer size in bytes (default: {DEFAULT_PROGRAM_DOWNLOAD_BUFFER_SIZE})')
         parser.add_argument('--block-transfer', default=False, action='store_true',
                             help='Use SDO block transfers (experimental, default: no)')
 
@@ -129,7 +128,6 @@ class CANopenBinaryRunner(ZephyrBinaryRunner):
                                    timeout=args.timeout,
                                    sdo_retries=args.sdo_retries,
                                    sdo_timeout=args.sdo_timeout,
-                                   download_buffer_size=args.download_buffer_size,
                                    block_transfer=args.block_transfer)
 
     def do_run(self, command, **kwargs):
@@ -190,7 +188,7 @@ class CANopenProgramDownloader(object):
     def __init__(self, logger, node_id, can_context=DEFAULT_CAN_CONTEXT,
                  program_number=DEFAULT_PROGRAM_NUMBER,
                  sdo_retries=DEFAULT_SDO_RETRIES, sdo_timeout=DEFAULT_SDO_TIMEOUT,
-                 download_buffer_size=DEFAULT_PROGRAM_DOWNLOAD_BUFFER_SIZE, block_transfer=False):
+                 block_transfer=False):
         super(CANopenProgramDownloader, self).__init__()
         self.logger = logger
         self.node_id = node_id
@@ -203,7 +201,6 @@ class CANopenProgramDownloader(object):
         self.ctrl_sdo = self.node.sdo[H1F51_PROGRAM_CTRL][self.program_number]
         self.swid_sdo = self.node.sdo[H1F56_PROGRAM_SWID][self.program_number]
         self.flash_sdo = self.node.sdo[H1F57_FLASH_STATUS][self.program_number]
-        self.download_buffer_size = download_buffer_size
 
         self.node.sdo.MAX_RETRIES = sdo_retries
         self.node.sdo.RESPONSE_TIMEOUT = sdo_timeout
@@ -279,12 +276,12 @@ class CANopenProgramDownloader(object):
         try:
             size = os.path.getsize(bin_file)
             infile = open(bin_file, 'rb')
-            outfile = self.data_sdo.open('wb', buffering=self.download_buffer_size,
+            outfile = self.data_sdo.open('wb', buffering=PROGRAM_DOWNLOAD_BUFFER_SIZE,
                                          size=size, block_transfer=self.block_transfer)
 
             progress = Bar('%(percent)d%%', max=size, suffix='%(index)d/%(max)dB')
             while True:
-                chunk = infile.read(self.download_buffer_size // 2)
+                chunk = infile.read(PROGRAM_DOWNLOAD_CHUNK_SIZE)
                 if not chunk:
                     break
                 outfile.write(chunk)
