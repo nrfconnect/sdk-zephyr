@@ -12,7 +12,6 @@ LOG_MODULE_REGISTER(net_sntp_client_sample, LOG_LEVEL_DBG);
 #include <arpa/inet.h>
 
 #include "config.h"
-#include "net_sample_common.h"
 
 #define SNTP_PORT 123
 
@@ -25,8 +24,6 @@ int main(void)
 #endif
 	struct sntp_time sntp_time;
 	int rv;
-
-	wait_for_network();
 
 	/* ipv4 */
 	memset(&addr, 0, sizeof(addr));

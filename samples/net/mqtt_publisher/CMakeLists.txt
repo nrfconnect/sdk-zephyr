@@ -7,5 +7,3 @@ project(mqtt_publisher)
 
 FILE(GLOB app_sources src/*.c)
 target_sources(app PRIVATE ${app_sources})
-
-include(${ZEPHYR_BASE}/samples/net/common/common.cmake)
