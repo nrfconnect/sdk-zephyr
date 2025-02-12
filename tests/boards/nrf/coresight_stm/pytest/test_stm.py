@@ -7,6 +7,7 @@
 import logging
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from time import sleep
 
@@ -15,10 +16,12 @@ from twister_harness import DeviceAdapter
 
 logger = logging.getLogger(__name__)
 
+
 SB_CONFIG_APP_CPUPPR_RUN = None
 SB_CONFIG_APP_CPUFLPR_RUN = None
 
-# https://github.com/zephyrproject-rtos/zephyr/blob/main/drivers/misc/coresight/nrf_etr.c#L102
+# See definition of stm_m_id[] and stm_m_name[] in
+# https://github.com/zephyrproject-rtos/zephyr/blob/main/drivers/misc/coresight/nrf_etr.c
 STM_M_ID = {
     "sec": 33,
     "app": 34,
@@ -29,6 +32,18 @@ STM_M_ID = {
     "ppr": 46,
     "hw": 128,
 }
+
+
+@dataclass
+class STMLimits:
+    log_0_arg: float | None
+    log_1_arg: float | None
+    log_2_arg: float | None
+    log_3_arg: float | None
+    log_str: float | None
+    tracepoint: float | None
+    tracepoint_d32: float | None
+    tolerance: float | None
 
 
 def _analyse_autoconf(filepath: str) -> None:
@@ -50,46 +65,53 @@ def _analyse_autoconf(filepath: str) -> None:
     logger.debug(f"{SB_CONFIG_APP_CPUFLPR_RUN=}")
 
 
-def _check_benchmark_results(output: str, core: str) -> None:
+def _check_benchmark_results(output: str, core: str, constraints: STMLimits) -> None:
     """
     Use regular expressions to parse 'output' string.
     Search for benchmark results related to 'core' coprocessor.
+    Check that benchamrk results are lower than limits provided in 'constraints'.
     """
 
-    latency_msg_0_str = re.search(
-        rf"{core}: Timing for log message with 0 arguments: (.+)us", output
-    ).group(1)
-    assert latency_msg_0_str is not None, "Timing for log message with 0 arguments NOT found"
+    cfg = {
+        "log message with 0 arguments": {
+            "regex": rf"{core}: Timing for log message with 0 arguments: (.+)us",
+            "expected": constraints.log_0_arg,
+        },
+        "log message with 1 argument": {
+            "regex": rf"{core}: Timing for log message with 1 argument: (.+)us",
+            "expected": constraints.log_1_arg,
+        },
+        "log message with 2 arguments": {
+            "regex": rf"{core}: Timing for log message with 2 arguments: (.+)us",
+            "expected": constraints.log_2_arg,
+        },
+        "log message with 3 arguments": {
+            "regex": rf"{core}: Timing for log message with 3 arguments: (.+)us",
+            "expected": constraints.log_3_arg,
+        },
+        "log message with string": {
+            "regex": rf"{core}: Timing for log_message with string: (.+)us",
+            "expected": constraints.log_str,
+        },
+        "tracepoint": {
+            "regex": rf"{core}: Timing for tracepoint: (.+)us",
+            "expected": constraints.tracepoint,
+        },
+        "tracepoint_d32": {
+            "regex": rf"{core}: Timing for tracepoint_d32: (.+)us",
+            "expected": constraints.tracepoint_d32,
+        },
+    }
 
-    latency_msg_1_str = re.search(
-        rf"{core}: Timing for log message with 1 argument: (.+)us", output
-    ).group(1)
-    assert latency_msg_1_str is not None, "Timing for log message with 1 argument NOT found"
-
-    latency_msg_2_str = re.search(
-        rf"{core}: Timing for log message with 2 arguments: (.+)us", output
-    ).group(1)
-    assert latency_msg_2_str is not None, "Timing for log message with 2 arguments NOT found"
-
-    latency_msg_3_str = re.search(
-        rf"{core}: Timing for log message with 3 arguments: (.+)us", output
-    ).group(1)
-    assert latency_msg_3_str is not None, "Timing for log message with 3 arguments NOT found"
-
-    latency_msg_string_str = re.search(
-        rf"{core}: Timing for log_message with string: (.+)us", output
-    ).group(1)
-    assert latency_msg_string_str is not None, "Timing for log_message with string NOT found"
-
-    latency_tracepoint_str = re.search(
-        rf"{core}: Timing for tracepoint: (.+)us", output
-    ).group(1)
-    assert latency_tracepoint_str is not None, "Timing for tracepoint NOT found"
-
-    latency_tracepoint_d32_str = re.search(
-        rf"{core}: Timing for tracepoint_d32: (.+)us", output
-    ).group(1)
-    assert latency_tracepoint_d32_str is not None, "Timing for tracepoint_d32 NOT found"
+    for check in cfg:
+        observed_str = re.search(cfg[check]["regex"], output).group(1)
+        assert observed_str is not None, f"Timing for {check} NOT found"
+        # check value
+        observed = float(observed_str)
+        threshold = cfg[check]["expected"] * (1 + constraints.tolerance)
+        assert (
+            observed < threshold
+        ), f"{core}: Timing for {check} - {observed} us exceeds {threshold} us"
 
 
 # nrfutil starts children processes
@@ -160,9 +182,53 @@ def test_STM_decoded(dut: DeviceAdapter):
     BUILD_DIR = str(dut.device_config.build_dir)
     autoconf_file = f"{BUILD_DIR}/_sysbuild/autoconf.h"
 
+    app_constraints = STMLimits(
+        # all values in us
+        log_0_arg=1.8,
+        log_1_arg=2.1,
+        log_2_arg=2.0,
+        log_3_arg=2.1,
+        log_str=4.5,
+        tracepoint=0.5,
+        tracepoint_d32=0.5,
+        tolerance=0.5,  # 50 %
+    )
+    rad_constraints = STMLimits(
+        # all values in us
+        log_0_arg=4.6,
+        log_1_arg=5.0,
+        log_2_arg=5.2,
+        log_3_arg=5.6,
+        log_str=6.3,
+        tracepoint=0.5,
+        tracepoint_d32=0.5,
+        tolerance=0.5,
+    )
+    ppr_constraints = STMLimits(
+        # all values in us
+        log_0_arg=25.7,
+        log_1_arg=27.1,
+        log_2_arg=27.3,
+        log_3_arg=30.4,
+        log_str=65.7,
+        tracepoint=0.55,
+        tracepoint_d32=0.25,
+        tolerance=0.5,
+    )
+    flpr_constraints = STMLimits(
+        # all values in us
+        log_0_arg=1.3,
+        log_1_arg=1.6,
+        log_2_arg=1.6,
+        log_3_arg=1.7,
+        log_str=3.0,
+        tracepoint=0.5,
+        tracepoint_d32=0.5,
+        tolerance=0.5,
+    )
     # nrf54h20 prints immediately after it is flashed.
     # Wait a bit to skipp logs from previous test.
-    sleep(4)
+    sleep(6)
 
     # Get output from serial port
     output = "\n".join(dut.readlines())
@@ -170,31 +236,19 @@ def test_STM_decoded(dut: DeviceAdapter):
     # set SB_CONFIG_APP_CPUPPR_RUN, SB_CONFIG_APP_CPUFLPR_RUN
     _analyse_autoconf(autoconf_file)
 
-    # check that LOGs from Application core are present
-    _check_benchmark_results(
-        output=output,
-        core='app',
-    )
+    # check results on Application core
+    _check_benchmark_results(output=output, core='app', constraints=app_constraints)
 
-    # check that LOGs from Radio core are present
-    _check_benchmark_results(
-        output=output,
-        core='rad',
-    )
+    # check results on Radio core
+    _check_benchmark_results(output=output, core='rad', constraints=rad_constraints)
 
     if SB_CONFIG_APP_CPUPPR_RUN:
-        # check that LOGs from PPR core are present
-        _check_benchmark_results(
-            output=output,
-            core='ppr',
-        )
+        # check results on PPR core
+        _check_benchmark_results(output=output, core='ppr', constraints=ppr_constraints)
 
     if SB_CONFIG_APP_CPUFLPR_RUN:
-        # check that LOGs from FLPR core are present
-        _check_benchmark_results(
-            output=output,
-            core='flpr',
-        )
+        # check results on FLPR core
+        _check_benchmark_results(output=output, core='flpr', constraints=flpr_constraints)
 
 
 def test_STM_dictionary_mode(dut: DeviceAdapter):
@@ -210,6 +264,51 @@ def test_STM_dictionary_mode(dut: DeviceAdapter):
     test_filename = f"{BUILD_DIR}/coresight_stm_dictionary.txt"
     autoconf_file = f"{BUILD_DIR}/_sysbuild/autoconf.h"
     COLLECT_TIMEOUT = 10.0
+
+    app_constraints = STMLimits(
+        # all values in us
+        log_0_arg=0.7,
+        log_1_arg=0.8,
+        log_2_arg=0.8,
+        log_3_arg=1.3,
+        log_str=3.2,
+        tracepoint=0.5,
+        tracepoint_d32=0.5,
+        tolerance=0.5,  # 50 %
+    )
+    rad_constraints = STMLimits(
+        # all values in us
+        log_0_arg=0.8,
+        log_1_arg=0.9,
+        log_2_arg=1.0,
+        log_3_arg=1.5,
+        log_str=3.6,
+        tracepoint=0.5,
+        tracepoint_d32=0.5,
+        tolerance=0.5,
+    )
+    ppr_constraints = STMLimits(
+        # all values in us
+        log_0_arg=7.5,
+        log_1_arg=8.5,
+        log_2_arg=8.6,
+        log_3_arg=17.4,
+        log_str=45.2,
+        tracepoint=0.5,
+        tracepoint_d32=0.5,
+        tolerance=0.5,
+    )
+    flpr_constraints = STMLimits(
+        # all values in us
+        log_0_arg=0.3,
+        log_1_arg=0.4,
+        log_2_arg=0.5,
+        log_3_arg=0.8,
+        log_str=2.6,
+        tracepoint=0.5,
+        tracepoint_d32=0.5,
+        tolerance=0.5,  # 50 %
+    )
 
     # set SB_CONFIG_APP_CPUPPR_RUN, SB_CONFIG_APP_CPUFLPR_RUN
     # this information is needed to build nrfutil database-config
@@ -227,32 +326,22 @@ def test_STM_dictionary_mode(dut: DeviceAdapter):
         decoded_file_content = decoded_file.read()
 
     # if nothing in decoded_file, stop test
-    assert(
-        len(decoded_file_content) > 0
-    ), f"File {test_filename} is empty"
+    assert len(decoded_file_content) > 0, f"File {test_filename} is empty"
 
-    # check that LOGs from Application core are present
-    _check_benchmark_results(
-        output=decoded_file_content,
-        core='app',
-    )
+    # check results on Application core
+    _check_benchmark_results(output=decoded_file_content, core='app', constraints=app_constraints)
 
-    # check that LOGs from Radio core are present
-    _check_benchmark_results(
-        output=decoded_file_content,
-        core='rad',
-    )
+    # check results on Radio core
+    _check_benchmark_results(output=decoded_file_content, core='rad', constraints=rad_constraints)
 
     if SB_CONFIG_APP_CPUPPR_RUN:
-        # check that LOGs from PPR core are present
+        # check results on PPR core
         _check_benchmark_results(
-            output=decoded_file_content,
-            core='ppr',
+            output=decoded_file_content, core='ppr', constraints=ppr_constraints
         )
 
     if SB_CONFIG_APP_CPUFLPR_RUN:
-        # check that LOGs from FLPR core are present
+        # check results on FLPR core
         _check_benchmark_results(
-            output=decoded_file_content,
-            core='flpr',
+            output=decoded_file_content, core='flpr', constraints=flpr_constraints
         )
