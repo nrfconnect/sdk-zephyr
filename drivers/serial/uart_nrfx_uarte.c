@@ -101,7 +101,16 @@ LOG_MODULE_REGISTER(uart_nrfx_uarte, CONFIG_UART_LOG_LEVEL);
 #define UARTE_ANY_CACHE 1
 #endif
 
-#define IS_LOW_POWER(unused, prefix, i, _) IS_ENABLED(CONFIG_UART_##prefix##i##_NRF_ASYNC_LOW_POWER)
+/* Determine if instance uses low power mode (alternative to PM). It can be used
+ * if asynchronous API is used or when RX is not used in polling or interrupt driven mode.
+ */
+#define IS_LOW_POWER_INST(idx)							\
+	COND_CODE_1(CONFIG_PM_DEVICE, (0),					\
+		(COND_CODE_1(CONFIG_UART_##idx##_ASYNC,				\
+			(IS_ENABLED(CONFIG_UART_##idx##_NRF_ASYNC_LOW_POWER)),	\
+			(UARTE_PROP(idx, disable_rx)))))
+
+#define IS_LOW_POWER(unused, prefix, i, _) IS_LOW_POWER_INST(prefix##i)
 
 #if UARTE_FOR_EACH_INSTANCE(IS_LOW_POWER, (||), (0))
 #define UARTE_ANY_LOW_POWER 1
@@ -280,9 +289,7 @@ struct uarte_nrfx_data {
 	(baudrate) == 1000000 ? NRF_UARTE_BAUDRATE_1000000 : 0)
 
 #define LOW_POWER_ENABLED(_config) \
-	(IS_ENABLED(UARTE_ANY_LOW_POWER) && \
-	 !IS_ENABLED(CONFIG_PM_DEVICE) && \
-	 (_config->flags & UARTE_CFG_FLAG_LOW_POWER))
+	(IS_ENABLED(UARTE_ANY_LOW_POWER) && (_config->flags & UARTE_CFG_FLAG_LOW_POWER))
 
 /** @brief Check if device has PM that works in ISR safe mode.
  *
@@ -333,12 +340,21 @@ struct uarte_nrfx_config {
 	uint8_t *poll_in_byte;
 };
 
+/* Using Macro instead of static inline function to handle NO_OPTIMIZATIONS case
+ * where static inline fails on linking.
+ */
+#define HW_RX_COUNTING_ENABLED(config)    \
+	(IS_ENABLED(UARTE_ANY_HW_ASYNC) ? \
+	 (config->flags & UARTE_CFG_FLAG_HW_BYTE_COUNTING) : false)
+
 static inline NRF_UARTE_Type *get_uarte_instance(const struct device *dev)
 {
 	const struct uarte_nrfx_config *config = dev->config;
 
 	return config->uarte_regs;
 }
+
+#if !defined(CONFIG_UART_NRFX_UARTE_NO_IRQ)
 
 static void endtx_isr(const struct device *dev)
 {
@@ -355,7 +371,47 @@ static void endtx_isr(const struct device *dev)
 
 }
 
-#ifdef UARTE_ANY_NONE_ASYNC
+#endif
+
+/** @brief Disable UARTE peripheral is not used by RX or TX.
+ *
+ * It must be called with interrupts locked so that deciding if no direction is
+ * using the UARTE is atomically performed with UARTE peripheral disabling. Otherwise
+ * it would be possible that after clearing flags we get preempted and UARTE is
+ * enabled from the higher priority context and when we come back UARTE is disabled
+ * here.
+ * @param dev Device.
+ * @param dis_mask Mask of direction (RX or TX) which now longer uses the UARTE instance.
+ */
+static void uarte_disable_locked(const struct device *dev, uint32_t dis_mask)
+{
+	struct uarte_nrfx_data *data = dev->data;
+
+	data->flags &= ~dis_mask;
+	if (data->flags & UARTE_FLAG_LOW_POWER) {
+		return;
+	}
+
+#if defined(UARTE_ANY_ASYNC) && !defined(CONFIG_UART_NRFX_UARTE_ENHANCED_RX)
+	const struct uarte_nrfx_config *config = dev->config;
+
+	if (data->async && HW_RX_COUNTING_ENABLED(config)) {
+		nrfx_timer_disable(&config->timer);
+		/* Timer/counter value is reset when disabled. */
+		data->async->rx.total_byte_cnt = 0;
+		data->async->rx.total_user_byte_cnt = 0;
+	}
+#endif
+
+#ifdef CONFIG_SOC_NRF54H20_GPD
+	const struct uarte_nrfx_config *cfg = dev->config;
+
+	nrf_gpd_retain_pins_set(cfg->pcfg, true);
+#endif
+	nrf_uarte_disable(get_uarte_instance(dev));
+}
+
+#if defined(UARTE_ANY_NONE_ASYNC) && !defined(CONFIG_UART_NRFX_UARTE_NO_IRQ)
 /**
  * @brief Interrupt service routine.
  *
@@ -390,7 +446,7 @@ static void uarte_nrfx_isr_int(const void *arg)
 				pm_device_runtime_put_async(dev, K_NO_WAIT);
 			}
 		} else {
-			nrf_uarte_disable(uarte);
+			uarte_disable_locked(dev, UARTE_FLAG_LOW_POWER_TX);
 		}
 #ifdef UARTE_INTERRUPT_DRIVEN
 		if (!data->int_driven)
@@ -432,7 +488,7 @@ static void uarte_nrfx_isr_int(const void *arg)
 	}
 #endif /* UARTE_INTERRUPT_DRIVEN */
 }
-#endif /* UARTE_ANY_NONE_ASYNC */
+#endif /* UARTE_ANY_NONE_ASYNC && !CONFIG_UART_NRFX_UARTE_NO_IRQ */
 
 #ifdef CONFIG_UART_USE_RUNTIME_CONFIGURE
 /**
@@ -610,13 +666,6 @@ static int wait_tx_ready(const struct device *dev)
 	return key;
 }
 
-/* Using Macro instead of static inline function to handle NO_OPTIMIZATIONS case
- * where static inline fails on linking.
- */
-#define HW_RX_COUNTING_ENABLED(config)    \
-	(IS_ENABLED(UARTE_ANY_HW_ASYNC) ? \
-	 (config->flags & UARTE_CFG_FLAG_HW_BYTE_COUNTING) : false)
-
 static void uarte_periph_enable(const struct device *dev)
 {
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
@@ -719,44 +768,6 @@ static void tx_start(const struct device *dev, const uint8_t *buf, size_t len)
 }
 
 #if defined(UARTE_ANY_ASYNC)
-/** @brief Disable UARTE peripheral is not used by RX or TX.
- *
- * It must be called with interrupts locked so that deciding if no direction is
- * using the UARTE is atomically performed with UARTE peripheral disabling. Otherwise
- * it would be possible that after clearing flags we get preempted and UARTE is
- * enabled from the higher priority context and when we come back UARTE is disabled
- * here.
- * @param dev Device.
- * @param dis_mask Mask of direction (RX or TX) which now longer uses the UARTE instance.
- */
-static void uarte_disable_locked(const struct device *dev, uint32_t dis_mask)
-{
-	struct uarte_nrfx_data *data = dev->data;
-
-	data->flags &= ~dis_mask;
-	if (data->flags & UARTE_FLAG_LOW_POWER) {
-		return;
-	}
-
-#if !defined(CONFIG_UART_NRFX_UARTE_ENHANCED_RX)
-	const struct uarte_nrfx_config *config = dev->config;
-
-	if (data->async && HW_RX_COUNTING_ENABLED(config)) {
-		nrfx_timer_disable(&config->timer);
-		/* Timer/counter value is reset when disabled. */
-		data->async->rx.total_byte_cnt = 0;
-		data->async->rx.total_user_byte_cnt = 0;
-	}
-#endif
-
-#ifdef CONFIG_SOC_NRF54H20_GPD
-	const struct uarte_nrfx_config *cfg = dev->config;
-
-	nrf_gpd_retain_pins_set(cfg->pcfg, true);
-#endif
-	nrf_uarte_disable(get_uarte_instance(dev));
-}
-
 static void rx_timeout(struct k_timer *timer);
 static void tx_timeout(struct k_timer *timer);
 
@@ -1920,7 +1931,8 @@ static void uarte_nrfx_poll_out(const struct device *dev, unsigned char c)
 		}
 	}
 
-	if (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME) || LOW_POWER_ENABLED(config)) {
+	if (!IS_ENABLED(CONFIG_UART_NRFX_UARTE_NO_IRQ) &&
+	    (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME) || LOW_POWER_ENABLED(config))) {
 		nrf_uarte_int_enable(uarte, NRF_UARTE_INT_TXSTOPPED_MASK);
 	}
 
@@ -1928,6 +1940,28 @@ static void uarte_nrfx_poll_out(const struct device *dev, unsigned char c)
 	tx_start(dev, config->poll_out_byte, 1);
 
 	irq_unlock(key);
+
+	if (IS_ENABLED(CONFIG_UART_NRFX_UARTE_NO_IRQ)) {
+		key = wait_tx_ready(dev);
+		if (!IS_ENABLED(UARTE_HAS_ENDTX_STOPTX_SHORT) &&
+		    !(config->flags & UARTE_CFG_FLAG_PPI_ENDTX)) {
+			nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STOPTX);
+			nrf_uarte_event_clear(uarte, NRF_UARTE_EVENT_TXSTOPPED);
+			while (!nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_TXSTOPPED)) {
+			}
+		}
+
+		if (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME)) {
+			if (!(data->flags & UARTE_FLAG_POLL_OUT)) {
+				data->flags &= ~UARTE_FLAG_POLL_OUT;
+				pm_device_runtime_put(dev);
+			}
+		} else if (LOW_POWER_ENABLED(config)) {
+			uarte_disable_locked(dev, UARTE_FLAG_LOW_POWER_TX);
+		}
+		irq_unlock(key);
+	}
+
 }
 
 
@@ -2195,7 +2229,7 @@ static void wait_for_tx_stopped(const struct device *dev)
 	NRFX_WAIT_FOR(nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_TXSTOPPED),
 		      1000, 1, res);
 
-	if (!ppi_endtx) {
+	if (!ppi_endtx && !IS_ENABLED(CONFIG_UART_NRFX_UARTE_NO_IRQ)) {
 		nrf_uarte_int_enable(uarte, NRF_UARTE_INT_ENDTX_MASK);
 	}
 }
@@ -2340,7 +2374,9 @@ static int uarte_tx_path_init(const struct device *dev)
 		}
 		nrf_uarte_event_clear(uarte, NRF_UARTE_EVENT_ENDTX);
 		nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STOPTX);
-		nrf_uarte_int_enable(uarte, NRF_UARTE_INT_ENDTX_MASK);
+		if (!IS_ENABLED(CONFIG_UART_NRFX_UARTE_NO_IRQ)) {
+			nrf_uarte_int_enable(uarte, NRF_UARTE_INT_ENDTX_MASK);
+		}
 	}
 	while (!nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_TXSTOPPED)) {
 	}
@@ -2397,16 +2433,6 @@ static int uarte_instance_init(const struct device *dev,
 			    isr_handler, DEVICE_DT_GET(UARTE(idx)), 0);	       \
 		irq_enable(DT_IRQN(UARTE(idx)));			       \
 	} while (false)
-
-/* Low power mode is used when disable_rx is not defined or in async mode if
- * kconfig option is enabled.
- */
-#define USE_LOW_POWER(idx)						       \
-	COND_CODE_1(CONFIG_PM_DEVICE, (0),				       \
-		(((!UARTE_PROP(idx, disable_rx) &&			       \
-		COND_CODE_1(CONFIG_UART_##idx##_ASYNC,			       \
-			(!IS_ENABLED(CONFIG_UART_##idx##_NRF_ASYNC_LOW_POWER)),\
-			(1))) ? 0 : UARTE_CFG_FLAG_LOW_POWER)))
 
 #define UARTE_DISABLE_RX_INIT(node_id) \
 	.disable_rx = DT_PROP(node_id, disable_rx)
@@ -2508,7 +2534,7 @@ static int uarte_instance_init(const struct device *dev,
 			(!IS_ENABLED(CONFIG_HAS_NORDIC_DMM) ? 0 :	       \
 			  (UARTE_IS_CACHEABLE(idx) ?			       \
 				UARTE_CFG_FLAG_CACHEABLE : 0)) |	       \
-			USE_LOW_POWER(idx),				       \
+			(IS_LOW_POWER_INST(idx) ? UARTE_CFG_FLAG_LOW_POWER : 0),\
 		UARTE_DISABLE_RX_INIT(UARTE(idx)),			       \
 		.poll_out_byte = &uarte##idx##_poll_out_byte,		       \
 		.poll_in_byte = &uarte##idx##_poll_in_byte,		       \
@@ -2528,9 +2554,10 @@ static int uarte_instance_init(const struct device *dev,
 	};								       \
 	static int uarte_##idx##_init(const struct device *dev)		       \
 	{								       \
-		COND_CODE_1(CONFIG_UART_##idx##_ASYNC,			       \
+		COND_CODE_1(CONFIG_UART_NRFX_UARTE_NO_IRQ, (),		       \
+			(COND_CODE_1(CONFIG_UART_##idx##_ASYNC,		       \
 			   (UARTE_IRQ_CONFIGURE(idx, uarte_nrfx_isr_async);),  \
-			   (UARTE_IRQ_CONFIGURE(idx, uarte_nrfx_isr_int);))    \
+			   (UARTE_IRQ_CONFIGURE(idx, uarte_nrfx_isr_int);))))  \
 		return uarte_instance_init(				       \
 			dev,						       \
 			IS_ENABLED(CONFIG_UART_##idx##_INTERRUPT_DRIVEN));     \

@@ -18,6 +18,14 @@
 
 extern sys_snode_t soc_node;
 
+__weak void nrf54h_custom_suspend(void)
+{
+}
+
+__weak void nrf54h_custom_resume(void)
+{
+}
+
 static void common_suspend(void)
 {
 	if (IS_ENABLED(CONFIG_DCACHE)) {
@@ -36,6 +44,7 @@ static void common_suspend(void)
 	}
 
 	soc_lrcconf_poweron_release(&soc_node, NRF_LRCCONF_POWER_DOMAIN_0);
+	nrf54h_custom_suspend();
 }
 
 static void common_resume(void)
@@ -55,6 +64,7 @@ static void common_resume(void)
 	}
 
 	soc_lrcconf_poweron_request(&soc_node, NRF_LRCCONF_POWER_DOMAIN_0);
+	nrf54h_custom_resume();
 }
 
 void nrf_poweroff(void)
