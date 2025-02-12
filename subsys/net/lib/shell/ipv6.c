@@ -8,8 +8,6 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(net_shell);
 
-#include <zephyr/net/mld.h>
-
 #include "net_shell_private.h"
 #include "../ip/ipv6.h"
 
