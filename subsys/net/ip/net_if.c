@@ -2983,8 +2983,6 @@ out:
 	net_if_unlock(iface);
 }
 
-#endif /* CONFIG_NET_NATIVE_IPV6 */
-
 static uint8_t get_diff_ipv6(const struct in6_addr *src,
 			  const struct in6_addr *dst)
 {
@@ -3209,8 +3207,6 @@ struct net_if *net_if_ipv6_select_src_iface(const struct in6_addr *dst)
 
 	return iface;
 }
-
-#if defined(CONFIG_NET_NATIVE_IPV6)
 
 uint32_t net_if_ipv6_calc_reachable_time(struct net_if_ipv6 *ipv6)
 {
