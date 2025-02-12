@@ -314,9 +314,7 @@ void nrfx_busy_wait(uint32_t usec_to_wait);
 
 /*------------------------------------------------------------------------------*/
 
-#ifdef CONFIG_NRFX_RESERVED_RESOURCES_HEADER
-#include CONFIG_NRFX_RESERVED_RESOURCES_HEADER
-#endif
+#include "nrfx_config_reserved_resources.h"
 
 //------------------------------------------------------------------------------
 
