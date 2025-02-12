@@ -18,7 +18,6 @@ void nrfbsim_WFE_model(void);
 void nrfbsim_SEV_model(void);
 
 #define IRQ_ZERO_LATENCY	BIT(1) /* Unused in this board*/
-#define IRQ_PRIO_LOWEST		UINT8_MAX
 
 #ifdef __cplusplus
 }
