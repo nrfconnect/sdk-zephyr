@@ -11,10 +11,6 @@
 #include <zephyr/fs/zms.h>
 #include <zephyr/sys/crc.h>
 #include "zms_priv.h"
-#ifdef CONFIG_ZMS_LOOKUP_CACHE_FOR_SETTINGS
-#include <zephyr/sys/util.h>
-#include <settings/settings_zms.h>
-#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(fs_zms, CONFIG_ZMS_LOG_LEVEL);
@@ -28,45 +24,6 @@ static int zms_ate_valid_different_sector(struct zms_fs *fs, const struct zms_at
 					  uint8_t cycle_cnt);
 
 #ifdef CONFIG_ZMS_LOOKUP_CACHE
-
-#ifdef CONFIG_ZMS_LOOKUP_CACHE_FOR_SETTINGS
-
-static inline size_t zms_lookup_cache_pos(uint32_t id)
-{
-	/*
-	 * 1. The ZMS settings backend uses up to (ZMS_NAME_ID_OFFSET - 1) ZMS IDs to
-	      store keys and equal number of ZMS IDs to store values.
-	 * 2. For each key-value pair, the value is stored at ZMS ID greater by exactly
-	 *    ZMS_NAME_ID_OFFSET than ZMS ID that holds the key.
-	 * 3. The backend tries to minimize the range of ZMS IDs used to store keys.
-	 *    That is, ZMS IDs are allocated sequentially, and freed ZMS IDs are reused
-	 *    before allocating new ones.
-	 *
-	 * Therefore, to assure the least number of collisions in the lookup cache,
-	 * the least significant bit of the hash indicates whether the given ZMS ID
-	 * represents a key or a value, and remaining bits of the hash are set to
-	 * the ordinal number of the key-value pair. Consequently, the hash function
-	 * provides the following mapping:
-	 *
-	 * 1st settings key   => hash 0
-	 * 1st settings value => hash 1
-	 * 2nd settings key   => hash 2
-	 * 2nd settings value => hash 3
-	 * ...
-	 */
-	BUILD_ASSERT(IS_POWER_OF_TWO(ZMS_NAMECNT_ID), "ZMS_NAMECNT_ID is not power of 2");
-	BUILD_ASSERT(IS_POWER_OF_TWO(ZMS_NAME_ID_OFFSET), "ZMS_NAME_ID_OFFSET is not power of 2");
-
-	uint32_t key_value_bit;
-	uint32_t key_value_ord;
-
-	key_value_bit = (id >> LOG2(ZMS_NAME_ID_OFFSET)) & 1;
-	key_value_ord = id & (ZMS_NAME_ID_OFFSET - 1);
-
-	return ((key_value_ord << 1) | key_value_bit) % CONFIG_ZMS_LOOKUP_CACHE_SIZE;
-}
-
-#else /* CONFIG_ZMS_LOOKUP_CACHE_FOR_SETTINGS */
 
 static inline size_t zms_lookup_cache_pos(uint32_t id)
 {
@@ -82,8 +39,6 @@ static inline size_t zms_lookup_cache_pos(uint32_t id)
 
 	return hash % CONFIG_ZMS_LOOKUP_CACHE_SIZE;
 }
-
-#endif /* CONFIG_ZMS_LOOKUP_CACHE_FOR_SETTINGS */
 
 static int zms_lookup_cache_rebuild(struct zms_fs *fs)
 {
