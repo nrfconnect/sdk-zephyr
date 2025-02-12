@@ -36,16 +36,12 @@ static struct coap_client_internal_request *get_request_with_mid(struct coap_cli
 static int send_request(int sock, const void *buf, size_t len, int flags,
 			const struct sockaddr *dest_addr, socklen_t addrlen)
 {
-	int ret;
-
 	LOG_HEXDUMP_DBG(buf, len, "Send CoAP Request:");
 	if (addrlen == 0) {
-		ret = zsock_sendto(sock, buf, len, flags, NULL, 0);
+		return zsock_sendto(sock, buf, len, flags, NULL, 0);
 	} else {
-		ret = zsock_sendto(sock, buf, len, flags, dest_addr, addrlen);
+		return zsock_sendto(sock, buf, len, flags, dest_addr, addrlen);
 	}
-
-	return ret >= 0 ? ret : -errno;
 }
 
 static int receive(int sock, void *buf, size_t max_len, int flags,
@@ -61,7 +57,7 @@ static int receive(int sock, void *buf, size_t max_len, int flags,
 	if (err > 0) {
 		LOG_HEXDUMP_DBG(buf, err, "Receive CoAP Response:");
 	}
-	return err >= 0 ? err : -errno;
+	return err;
 }
 
 /** Reset all fields to zero.
@@ -497,12 +493,13 @@ static int resend_request(struct coap_client *client,
 					client->socklen);
 		if (ret > 0) {
 			ret = 0;
-		} else if (ret == -EAGAIN) {
+		} else if (ret == -1 && errno == EAGAIN) {
 			/* Restore the pending structure, retry later */
 			internal_req->pending = tmp;
 			/* Not a fatal socket error, will trigger a retry */
 			ret = 0;
 		} else {
+			ret = -errno;
 			LOG_ERR("Failed to resend request, %d", ret);
 		}
 	} else {
