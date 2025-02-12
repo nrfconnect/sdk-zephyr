@@ -5,7 +5,7 @@
  */
 
 / {
-	nrf_radio_coex: coex {
+	nrf70: coex {
 		compatible = "nordic,nrf7002-coex";
 		status = "okay";
 
