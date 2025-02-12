@@ -12,11 +12,10 @@ verbosity_level=2
 cd ${BSIM_OUT_PATH}/bin
 
 Execute "./${test_exe}" \
-  -v=${verbosity_level} -s=${simulation_id} -d=0 -testid=central -RealEncryption=1
+  -v=${verbosity_level} -s=${simulation_id} -d=0 -testid=central
 
 Execute "./${test_exe}" \
-  -v=${verbosity_level} -s=${simulation_id} -d=1 -testid=peripheral_disconnect_in_sec_cb \
-  -RealEncryption=1
+  -v=${verbosity_level} -s=${simulation_id} -d=1 -testid=peripheral_disconnect_in_sec_cb
 
 Execute ./bs_2G4_phy_v1 -v=${verbosity_level} -s=${simulation_id} \
   -D=2 -sim_length=60e6
@@ -24,11 +23,10 @@ Execute ./bs_2G4_phy_v1 -v=${verbosity_level} -s=${simulation_id} \
 wait_for_background_jobs
 
 Execute "./${test_exe}" \
-  -v=${verbosity_level} -s=${simulation_id} -d=0 -testid=central  -RealEncryption=1
+  -v=${verbosity_level} -s=${simulation_id} -d=0 -testid=central
 
 Execute "./${test_exe}" \
-  -v=${verbosity_level} -s=${simulation_id} -d=1 -testid=peripheral_unpair_in_sec_cb \
-  -RealEncryption=1
+  -v=${verbosity_level} -s=${simulation_id} -d=1 -testid=peripheral_unpair_in_sec_cb
 
 Execute ./bs_2G4_phy_v1 -v=${verbosity_level} -s=${simulation_id} \
   -D=2 -sim_length=60e6
