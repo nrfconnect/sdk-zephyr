@@ -173,8 +173,7 @@ static int i2c_nrfx_twim_transfer(const struct device *dev,
 
 static void event_handler(nrfx_twim_evt_t const *p_event, void *p_context)
 {
-	const struct device *dev = p_context;
-	struct i2c_nrfx_twim_data *dev_data = dev->data;
+	struct i2c_nrfx_twim_data *dev_data = p_context;
 
 	switch (p_event->type) {
 	case NRFX_TWIM_EVT_DONE:
