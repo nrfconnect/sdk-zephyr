@@ -789,9 +789,6 @@ required actions from the server side.
     resume  :LwM2M engine thread resume
     lock    :Lock the LwM2M registry
     unlock  :Unlock the LwM2M registry
-    obs     : List observations
-    ls      : ls [PATH]
-            List objects, instances, resources
 
 
 
