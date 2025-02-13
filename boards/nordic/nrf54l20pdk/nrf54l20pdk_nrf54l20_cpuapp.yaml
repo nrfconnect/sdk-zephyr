@@ -14,6 +14,7 @@ ram: 512
 flash: 449
 supported:
   - counter
+  - dmic
   - gpio
   - i2c
   - watchdog
