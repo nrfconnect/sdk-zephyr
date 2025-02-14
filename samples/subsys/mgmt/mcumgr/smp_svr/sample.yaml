@@ -174,8 +174,8 @@ tests:
       - DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_ext_flash.overlay"
       - mcuboot_CONF_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_ext_flash.conf"
       - mcuboot_EXTRA_DTC_OVERLAY_FILE="boards/nrf54l15dk_nrf54l15_cpuapp_ext_flash.overlay"
-    extra_configs:
-      - CONFIG_PM_OVERRIDE_EXTERNAL_DRIVER_CHECK=y
+      - SB_CONFIG_PM_OVERRIDE_EXTERNAL_DRIVER_CHECK=y
+      - SB_CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY=y
     platform_allow:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54l15dk/nrf54l10/cpuapp
