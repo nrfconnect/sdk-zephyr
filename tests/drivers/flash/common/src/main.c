@@ -44,7 +44,11 @@
 #error "Unsupported configuraiton"
 #endif
 
+#if defined(CONFIG_SOC_NRF54L15_CPUAPP) && defined(CONFIG_MSPI_NRFE)
+#define EXPECTED_SIZE	64
+#else
 #define EXPECTED_SIZE	512
+#endif
 
 #if !defined(CONFIG_FLASH_HAS_EXPLICIT_ERASE) &&		\
 	!defined(CONFIG_FLASH_HAS_NO_EXPLICIT_ERASE)
