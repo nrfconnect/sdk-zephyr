@@ -82,8 +82,9 @@ jobs:
         git log  --pretty=oneline | head -n 10
         # Increase rename limit to allow for large PRs
         git config diff.renameLimit 10000
-        ./scripts/ci/check_compliance.py --annotate -e KconfigBasic -e ClangFormat \
-        -e Kconfig -e KconfigBasicNoModules -e ModulesMaintainers -c origin/${BASE_REF}..
+        ./scripts/ci/check_compliance.py --annotate -e KconfigBasic -e SysbuildKconfigBasic -e ClangFormat \
+        -e Kconfig -e KconfigBasicNoModules -e SysbuildKconfig -e SysbuildKconfigBasicNoModules -e ModulesMaintainers \
+        -c origin/${BASE_REF}..
 
     - name: upload-results
       uses: actions/upload-artifact@v4
