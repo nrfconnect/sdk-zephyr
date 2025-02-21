@@ -671,7 +671,11 @@ static struct net_buf *bt_att_chan_create_pdu(struct bt_att_chan *chan, uint8_t 
 		timeout = BT_ATT_TIMEOUT;
 		break;
 	default:
-		timeout = K_FOREVER;
+		if (k_current_get() == k_work_queue_thread_get(&k_sys_work_q)) {
+			timeout = K_NO_WAIT;
+		} else {
+			timeout = K_FOREVER;
+		}
 	}
 
 	buf = bt_l2cap_create_pdu_timeout(NULL, 0, timeout);
