@@ -12,52 +12,42 @@
  * for the Nordic Semiconductor nRF54L family processor.
  */
 
-#ifdef __NRF_TFM__
+/* Include autoconf for cases when this file is used in special build (e.g. TFM) */
 #include <zephyr/autoconf.h>
-#endif
 
 #include <zephyr/devicetree.h>
-#include <zephyr/dt-bindings/regulator/nrf5x.h>
 #include <zephyr/kernel.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/init.h>
 #include <zephyr/logging/log.h>
-
-#ifndef __NRF_TFM__
 #include <zephyr/cache.h>
-#endif
+#include <soc/nrfx_coredep.h>
+#include <system_nrf54l.h>
+#include <soc.h>
+LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
-#include <zephyr/dt-bindings/regulator/nrf5x.h>
+#if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
+	!defined(__ZEPHYR__)
 
-#if defined(NRF_APPLICATION)
-#include <cmsis_core.h>
+#include <nrf_erratas.h>
 #include <hal/nrf_glitchdet.h>
 #include <hal/nrf_oscillators.h>
 #include <hal/nrf_power.h>
 #include <hal/nrf_regulators.h>
-#endif
-#include <soc/nrfx_coredep.h>
+#include <zephyr/dt-bindings/regulator/nrf5x.h>
 
-#include <nrf_erratas.h>
-#include <system_nrf54l.h>
-
-LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
-
-#if defined(NRF_APPLICATION)
 #define LFXO_NODE DT_NODELABEL(lfxo)
 #define HFXO_NODE DT_NODELABEL(hfxo)
-#endif
 
-/* Building for cpuflpr with ns uses cpu_1 instead of cpu_0 */
-#if DT_PROP(DT_PATH(cpus, cpu_0), clock_frequency)
-#define DEVICE_DT_CLOCK_FREQ DT_PROP(DT_PATH(cpus, cpu_0), clock_frequency)
-#elif DT_PROP(DT_PATH(cpus, cpu_1), clock_frequency)
-#define DEVICE_DT_CLOCK_FREQ DT_PROP(DT_PATH(cpus, cpu_1), clock_frequency)
-#endif
-
-#if defined(NRF_APPLICATION)
 static inline void power_and_clock_configuration(void)
 {
+/* NRF_REGULATORS and NRF_OSCILLATORS are configured to be secure
+ * as NRF_REGULATORS.POFCON is needed by the secure image to
+ * prevent glitches when the power supply is attacked.
+ *
+ * NRF_OSCILLATORS is also configured as secure because of a HW limitation
+ * that requires them to be configured with the same security property.
+ */
 #if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal)
 	uint32_t xosc32ktrim = NRF_FICR->XOSC32KTRIM;
 
@@ -84,16 +74,16 @@ static inline void power_and_clock_configuration(void)
 	 * NOTE: The desired capacitance value is used in encoded from in INTCAP calculation formula
 	 *       That is different than in case of HFXO.
 	 */
-	uint32_t cap_val_encoded =
-		(((DT_PROP(LFXO_NODE, load_capacitance_femtofarad) - 4000UL) * 2UL) / 1000UL);
+	uint32_t cap_val_encoded = (((DT_PROP(LFXO_NODE, load_capacitance_femtofarad) - 4000UL)
+				     * 2UL) / 1000UL);
 
 	/* Calculation of INTCAP code before rounding. Min that calculations here are done on
 	 * values multiplied by 2^9, e.g. 0.765625 * 2^9 = 392.
 	 * offset_k should be divided by 2^6, but to add it to value shifted by 2^9 we have to
 	 * multiply it be 2^3.
 	 */
-	uint32_t mid_val =
-		(cap_val_encoded - 4UL) * (uint32_t)(slope_k + 392UL) + (offset_k << 3UL);
+	uint32_t mid_val = (cap_val_encoded - 4UL) * (uint32_t)(slope_k + 392UL)
+			   + (offset_k << 3UL);
 
 	/* Get integer part of the INTCAP code */
 	uint32_t lfxo_intcap = mid_val >> 9UL;
@@ -139,9 +129,8 @@ static inline void power_and_clock_configuration(void)
 	 */
 	uint32_t cap_val_femto_f = DT_PROP(HFXO_NODE, load_capacitance_femtofarad);
 
-	uint32_t mid_val_intcap = (((cap_val_femto_f - 5500UL) * (uint32_t)(slope_m + 791UL)) +
-				   (offset_m << 2UL) * 1000UL) >>
-				  8UL;
+	uint32_t mid_val_intcap = (((cap_val_femto_f - 5500UL) * (uint32_t)(slope_m + 791UL))
+		 + (offset_m << 2UL) * 1000UL) >> 8UL;
 
 	/* Convert the calculated value to piko Farads */
 	uint32_t hfxo_intcap = mid_val_intcap / 1000;
@@ -171,39 +160,21 @@ static inline void power_and_clock_configuration(void)
 #endif
 	nrf_regulators_vreg_enable_set(NRF_REGULATORS, NRF_REGULATORS_VREG_MAIN, true);
 #endif
+
 }
-#endif /* NRF_APPLICATION */
+#endif /* NRF_APPLICATION && !CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 int nordicsemi_nrf54l_init(void)
 {
 	/* Update the SystemCoreClock global variable with current core clock
-	 * retrieved from hardware state.
+	 * retrieved from the DT.
 	 */
+	SystemCoreClock = NRF_PERIPH_GET_FREQUENCY(DT_NODELABEL(cpu));
 
-#ifdef __NRF_TFM__
-	/* TF-M enables the instruction cache from target_cfg.c, so we
-	 * don't need to enable it here.
-	 */
-#else
-
-	/* Update SystemCoreClock in Zephyr based on device tree to avoid SystemCoreClock
-	 * being overwritten with default value when initializing with TF-M
-	 */
-	SystemCoreClock = DEVICE_DT_CLOCK_FREQ;
-
-	/* Enable ICACHE */
 	sys_cache_instr_enable();
-#endif
 
-	/* NRF_REGULATORS and NRF_OSCILLATORS are configured to be secure
-	 * as NRF_REGULATORS.POFCON is needed by the secure domain to
-	 * prevent glitches when the power supply is attacked.
-	 *
-	 * NRF_OSCILLATORS is also configured as secure because of a HW limitation
-	 * that requires them to be configured with the same security property.
-	 */
-#if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) ||                  \
-	defined(__NRF_TFM__)
+#if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
+	!defined(__ZEPHYR__)
 	power_and_clock_configuration();
 #endif
 
