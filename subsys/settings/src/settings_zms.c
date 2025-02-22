@@ -232,6 +232,8 @@ static int settings_zms_save(struct settings_store *cs, const char *name, const 
 	delete = ((value == NULL) || (val_len == 0));
 
 	name_hash = sys_hash32(name, strlen(name)) & ZMS_HASH_MASK;
+	/* MSB is always 1 */
+	name_hash |= BIT(31);
 
 	/* Let's find out if there is no hash collisions in the storage */
 	write_name = true;
