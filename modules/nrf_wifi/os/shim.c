@@ -282,7 +282,6 @@ static void *zep_shim_nbuf_data_put(void *nbuf, unsigned int size)
 
 	nwb->tail += size;
 	nwb->len += size;
-
 	return data;
 }
 
@@ -410,16 +409,17 @@ void *net_raw_pkt_from_nbuf(void *iface, void *frm,
 
 	nwb_len = zep_shim_nbuf_data_size(nwb);
 	nwb_data = zep_shim_nbuf_data_get(nwb);
+
 	total_len = raw_hdr_len + nwb_len;
 
 	data = (unsigned char *)k_malloc(total_len);
-	if (!data) {
+	if (data == NULL) {
 		LOG_ERR("%s: Unable to allocate memory for sniffer data packet", __func__);
 		goto out;
 	}
 
 	pkt = net_pkt_rx_alloc_with_buffer(iface, total_len, AF_PACKET, ETH_P_ALL, K_MSEC(100));
-	if (!pkt) {
+	if (pkt == NULL) {
 		LOG_ERR("%s: Unable to allocate net packet buffer", __func__);
 		goto out;
 	}

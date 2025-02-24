@@ -246,7 +246,13 @@ void nrf_wifi_if_sniffer_rx_frm(void *os_vif_ctx, void *frm,
 	pkt = net_raw_pkt_from_nbuf(iface, frm, sizeof(struct raw_rx_pkt_header),
 				    raw_rx_hdr,
 				    pkt_free);
-	if (!pkt) {
+	/* Vivek:
+	 * This is an odd error which might be related to some libraries not
+	 * configured in my WSL or mismatched. !pkt was not working but pkt check
+	 * explicitly for NULL seems to work. Will check with TLM team but might
+	 * be localized to my WSL. This change is to make the packet go up the stack.
+	 */
+	if (pkt == NULL) {
 		LOG_DBG("Failed to allocate net_pkt");
 		return;
 	}
@@ -257,6 +263,8 @@ void nrf_wifi_if_sniffer_rx_frm(void *os_vif_ctx, void *frm,
 	if (ret < 0) {
 		LOG_DBG("RCV Packet dropped by NET stack: %d", ret);
 		net_pkt_unref(pkt);
+	} else if (ret == 0) {
+		LOG_INF("net_recv_data is successful");
 	}
 }
 #endif /* CONFIG_NRF70_RAW_DATA_RX || CONFIG_NRF70_PROMISC_DATA_RX */
