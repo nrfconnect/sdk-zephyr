@@ -19,7 +19,7 @@ BUILD_ASSERT(DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) == 1,
 #define FLAG_HFXO_STARTED BIT(FLAGS_COMMON_BITS)
 
 #define FLL16M_MODE_OPEN_LOOP   0
-#define FLL16M_MODE_CLOSED_LOOP 1
+#define FLL16M_MODE_CLOSED_LOOP 1 /* <-- DO NOT IMPLEMENT, CAN CAUSE HARDWARE BUG */
 #define FLL16M_MODE_BYPASS      2
 #define FLL16M_MODE_DEFAULT     FLL16M_MODE_OPEN_LOOP
 
@@ -31,7 +31,6 @@ BUILD_ASSERT(DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) == 1,
 #define FLL16M_LFXO_ACCURACY DT_PROP(FLL16M_LFXO_NODE, accuracy_ppm)
 #define FLL16M_HFXO_ACCURACY DT_PROP(FLL16M_HFXO_NODE, accuracy_ppm)
 #define FLL16M_OPEN_LOOP_ACCURACY DT_INST_PROP(0, open_loop_accuracy_ppm)
-#define FLL16M_CLOSED_LOOP_BASE_ACCURACY DT_INST_PROP(0, closed_loop_base_accuracy_ppm)
 #define FLL16M_MAX_ACCURACY FLL16M_HFXO_ACCURACY
 
 /* Closed-loop mode uses LFXO as source if present, HFXO otherwise */
@@ -49,10 +48,6 @@ static const struct clock_options {
 	{
 		.accuracy = FLL16M_OPEN_LOOP_ACCURACY,
 		.mode = FLL16M_MODE_OPEN_LOOP,
-	},
-	{
-		.accuracy = FLL16M_CLOSED_LOOP_ACCURACY,
-		.mode = FLL16M_MODE_CLOSED_LOOP,
 	},
 	{
 		/* Bypass mode uses HFXO */
