@@ -146,6 +146,41 @@ static int settings_zms_delete(struct settings_zms *cf, uint32_t name_hash)
 	return rc;
 }
 
+#if CONFIG_SETTINGS_ZMS_NAME_CACHE
+static void settings_zms_cache_add(struct settings_zms *cf, uint32_t name_hash, bool has_collision)
+{
+	cf->cache[cf->cache_next].name_hash = name_hash;
+	cf->cache[cf->cache_next++].has_collision = has_collision;
+
+	cf->cache_next %= CONFIG_SETTINGS_ZMS_NAME_CACHE_SIZE;
+}
+
+static bool settings_zms_cache_match(struct settings_zms *cf, uint32_t name_hash)
+{
+	int cache_index;
+
+	if (!cf->cache_next) {
+		cache_index = CONFIG_SETTINGS_ZMS_NAME_CACHE_SIZE - 1;
+	} else {
+		cache_index = cf->cache_next - 1;
+	}
+
+	for (int i = 0; i < CONFIG_SETTINGS_ZMS_NAME_CACHE_SIZE; i++) {
+		/* we check cache from recent values to old values */
+		if (cf->cache[cache_index--].name_hash != name_hash) {
+			if (cache_index < 0) {
+				cache_index = CONFIG_SETTINGS_ZMS_NAME_CACHE_SIZE - 1;
+			}
+			continue;
+		}
+
+		return !cf->cache[i].has_collision;
+	}
+
+	return false;
+}
+#endif /* CONFIG_SETTINGS_ZMS_NAME_CACHE */
+
 static int settings_zms_load(struct settings_store *cs, const struct settings_load_arg *arg)
 {
 	int ret = 0;
@@ -199,6 +234,11 @@ static int settings_zms_load(struct settings_store *cs, const struct settings_lo
 			break;
 		}
 
+#if CONFIG_SETTINGS_ZMS_NAME_CACHE
+		settings_zms_cache_add(cf, ll_hash_id & ZMS_HASH_MASK,
+				       ZMS_COLLISION_NUM(ll_hash_id) > 0);
+#endif
+
 		/* update next ll_hash_id */
 		ret = zms_read(&cf->cf_zms, ll_hash_id, &settings_element,
 			       sizeof(struct settings_hash_linked_list));
@@ -235,6 +275,17 @@ static int settings_zms_save(struct settings_store *cs, const char *name, const 
 	name_hash = sys_hash32(name, strlen(name)) & ZMS_HASH_MASK;
 	/* MSB is always 1 */
 	name_hash |= BIT(31);
+
+#if CONFIG_SETTINGS_ZMS_NAME_CACHE
+	bool name_in_cache = false;
+
+	name_in_cache = settings_zms_cache_match(cf, name_hash);
+	if (name_in_cache) {
+		write_name = false;
+		hash_collision = false;
+		goto no_hash_collision;
+	}
+#endif
 
 	/* Let's find out if there is no hash collisions in the storage */
 	write_name = true;
@@ -341,6 +392,13 @@ no_hash_collision:
 		cf->second_to_last_hash_id = cf->last_hash_id;
 		cf->last_hash_id = name_hash | 1;
 	}
+
+#if CONFIG_SETTINGS_ZMS_NAME_CACHE
+	if (!name_in_cache) {
+		settings_zms_cache_add(cf, name_hash & ZMS_HASH_MASK,
+				       ZMS_COLLISION_NUM(name_hash) > 0);
+	}
+#endif
 
 	return 0;
 }

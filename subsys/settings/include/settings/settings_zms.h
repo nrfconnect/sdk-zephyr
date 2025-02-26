@@ -71,6 +71,14 @@ struct settings_zms {
 	struct settings_store cf_store;
 	struct zms_fs cf_zms;
 	const struct device *flash_dev;
+#if CONFIG_SETTINGS_ZMS_NAME_CACHE
+	struct {
+		uint32_t name_hash;
+		bool     has_collision;
+	} cache[CONFIG_SETTINGS_ZMS_NAME_CACHE_SIZE];
+
+	uint32_t cache_next;
+#endif
 	uint32_t last_hash_id;
 	uint32_t second_to_last_hash_id;
 	uint8_t hash_collision_num;
