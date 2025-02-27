@@ -61,6 +61,7 @@ static int settings_zms_dst(struct settings_zms *cf)
 	return 0;
 }
 
+#ifndef CONFIG_SETTINGS_ZMS_NO_LL_DELETE
 static int settings_zms_unlink_ll_node(struct settings_zms *cf, uint32_t name_hash)
 {
 	int rc = 0;
@@ -119,6 +120,7 @@ static int settings_zms_unlink_ll_node(struct settings_zms *cf, uint32_t name_ha
 
 	return rc;
 }
+#endif /* CONFIG_SETTINGS_ZMS_NO_LL_DELETE */
 
 static int settings_zms_delete(struct settings_zms *cf, uint32_t name_hash)
 {
@@ -131,7 +133,7 @@ static int settings_zms_delete(struct settings_zms *cf, uint32_t name_hash)
 	if (rc < 0) {
 		return rc;
 	}
-
+#ifndef CONFIG_SETTINGS_ZMS_NO_LL_DELETE
 	rc = settings_zms_unlink_ll_node(cf, name_hash);
 	if (rc < 0) {
 		return rc;
@@ -142,6 +144,7 @@ static int settings_zms_delete(struct settings_zms *cf, uint32_t name_hash)
 	if (rc < 0) {
 		return rc;
 	}
+#endif /* CONFIG_SETTINGS_ZMS_NO_LL_DELETE */
 
 	return rc;
 }
@@ -211,15 +214,19 @@ static int settings_zms_load(struct settings_store *cs, const struct settings_lo
 					  ZMS_NAME_HASH_ID(ll_hash_id) + ZMS_DATA_ID_OFFSET);
 
 		if ((rc1 <= 0) || (rc2 <= 0)) {
-			/* Settings item is not stored correctly in the ZMS.
-			 * ZMS entry for its name or value is either missing
-			 * or deleted. Clean dirty entries to make space for
-			 * future settings item.
+			/* In case we are not updating the linked list, this is an empty mode
+			 * Just continue
+			 */
+#ifndef CONFIG_SETTINGS_ZMS_NO_LL_DELETE
+			/* Otherwise, Settings item is not stored correctly in the ZMS.
+			 * ZMS entry for its name or value is either missing or deleted.
+			 * Clean dirty entries to make space for future settings item.
 			 */
 			ret = settings_zms_delete(cf, ZMS_NAME_HASH_ID(ll_hash_id));
 			if (ret < 0) {
 				return ret;
 			}
+#endif /* CONFIG_SETTINGS_ZMS_NO_LL_DELETE */
 			continue;
 		}
 
