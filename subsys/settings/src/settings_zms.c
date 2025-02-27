@@ -61,6 +61,7 @@ static int settings_zms_dst(struct settings_zms *cf)
 	return 0;
 }
 
+#ifndef CONFIG_SETTINGS_ZMS_NO_LL_DELETE
 static int settings_zms_unlink_ll_node(struct settings_zms *cf, uint32_t name_hash)
 {
 	int rc = 0;
@@ -119,6 +120,7 @@ static int settings_zms_unlink_ll_node(struct settings_zms *cf, uint32_t name_ha
 
 	return rc;
 }
+#endif /* CONFIG_SETTINGS_ZMS_NO_LL_DELETE */
 
 static int settings_zms_delete(struct settings_zms *cf, uint32_t name_hash)
 {
@@ -131,7 +133,7 @@ static int settings_zms_delete(struct settings_zms *cf, uint32_t name_hash)
 	if (rc < 0) {
 		return rc;
 	}
-
+#ifndef CONFIG_SETTINGS_ZMS_NO_LL_DELETE
 	rc = settings_zms_unlink_ll_node(cf, name_hash);
 	if (rc < 0) {
 		return rc;
@@ -142,6 +144,7 @@ static int settings_zms_delete(struct settings_zms *cf, uint32_t name_hash)
 	if (rc < 0) {
 		return rc;
 	}
+#endif /* CONFIG_SETTINGS_ZMS_NO_LL_DELETE */
 
 	return rc;
 }
@@ -211,15 +214,26 @@ static int settings_zms_load(struct settings_store *cs, const struct settings_lo
 					  ZMS_NAME_HASH_ID(ll_hash_id) + ZMS_DATA_ID_OFFSET);
 
 		if ((rc1 <= 0) || (rc2 <= 0)) {
-			/* Settings item is not stored correctly in the ZMS.
-			 * ZMS entry for its name or value is either missing
-			 * or deleted. Clean dirty entries to make space for
-			 * future settings item.
+			/* In case we are not updating the linked list, this is an empty mode
+			 * Just continue
+			 */
+#ifndef CONFIG_SETTINGS_ZMS_NO_LL_DELETE
+			/* Otherwise, Settings item is not stored correctly in the ZMS.
+			 * ZMS entry for its name or value is either missing or deleted.
+			 * Clean dirty entries to make space for future settings item.
 			 */
 			ret = settings_zms_delete(cf, ZMS_NAME_HASH_ID(ll_hash_id));
 			if (ret < 0) {
 				return ret;
 			}
+#endif /* CONFIG_SETTINGS_ZMS_NO_LL_DELETE */
+			/* update next ll_hash_id */
+			ret = zms_read(&cf->cf_zms, ll_hash_id, &settings_element,
+				       sizeof(struct settings_hash_linked_list));
+			if (ret < 0) {
+				return ret;
+			}
+			ll_hash_id = settings_element.next_hash;
 			continue;
 		}
 
@@ -287,7 +301,7 @@ static int settings_zms_save(struct settings_store *cs, const char *name, const 
 	}
 #endif
 
-	/* Let's find out if there is no hash collisions in the storage */
+	/* Let's find out if there are hash collisions in the storage */
 	write_name = true;
 	hash_collision = true;
 
@@ -363,6 +377,17 @@ no_hash_collision:
 		if (rc < 0) {
 			return rc;
 		}
+#ifdef CONFIG_SETTINGS_ZMS_NO_LL_DELETE
+		/* verify that the ll_node doesn't exist otherwise do not update it */
+		rc = zms_read(&cf->cf_zms, name_hash | 1, &settings_element,
+			      sizeof(struct settings_hash_linked_list));
+		if (rc >= 0) {
+			goto no_ll_update;
+		} else if (rc != -ENOENT) {
+			return rc;
+		}
+		/* else the LL node doesn't exist let's update it */
+#endif /* CONFIG_SETTINGS_ZMS_NO_LL_DELETE */
 		/* write linked list structure element */
 		settings_element.next_hash = 0;
 		/* Verify first that the linked list last element is not broken.
@@ -392,7 +417,9 @@ no_hash_collision:
 		cf->second_to_last_hash_id = cf->last_hash_id;
 		cf->last_hash_id = name_hash | 1;
 	}
-
+#ifdef CONFIG_SETTINGS_ZMS_NO_LL_DELETE
+no_ll_update:
+#endif /* CONFIG_SETTINGS_ZMS_NO_LL_DELETE */
 #if CONFIG_SETTINGS_ZMS_NAME_CACHE
 	if (!name_in_cache) {
 		settings_zms_cache_add(cf, name_hash & ZMS_HASH_MASK,
