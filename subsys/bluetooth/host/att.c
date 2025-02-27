@@ -721,7 +721,14 @@ static struct net_buf *bt_att_chan_create_pdu(struct bt_att_chan *chan, uint8_t 
 		timeout = BT_ATT_TIMEOUT;
 		break;
 	default:
-		timeout = K_FOREVER;
+		k_tid_t current_thread = k_current_get();
+
+		if (current_thread == att_handle_rsp_thread) {
+			/* Blocking would cause deadlock. */
+			timeout = K_NO_WAIT;
+		} else {
+			timeout = K_FOREVER;
+		}
 	}
 
 	/* This will reserve headspace for lower layers */
