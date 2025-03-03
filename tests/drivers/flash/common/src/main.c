@@ -32,7 +32,9 @@
 #elif defined(TEST_AREA_DEV_NODE)
 
 #define TEST_AREA_DEVICE	DEVICE_DT_GET(TEST_AREA_DEV_NODE)
+#ifndef TEST_AREA_OFFSET
 #define TEST_AREA_OFFSET	0xff000
+#endif
 
 #if DT_NODE_HAS_PROP(TEST_AREA_DEV_NODE, size_in_bytes)
 #define TEST_AREA_MAX DT_PROP(TEST_AREA_DEV_NODE, size_in_bytes)
