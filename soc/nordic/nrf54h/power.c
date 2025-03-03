@@ -62,7 +62,12 @@ void nrf_poweroff(void)
 	nrf_resetinfo_resetreas_local_set(NRF_RESETINFO, 0);
 	nrf_resetinfo_restore_valid_set(NRF_RESETINFO, false);
 
-#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
+#if defined(CONFIG_SOC_NRF54H20_CPURAD)
+	nrf_lrcconf_retain_set(NRF_LRCCONF010,
+			NRF_LRCCONF_POWER_DOMAIN_0 | NRF_LRCCONF_POWER_DOMAIN_1, false);
+	nrf_lrcconf_poweron_force_set(NRF_LRCCONF010,
+			NRF_LRCCONF_POWER_DOMAIN_0 | NRF_LRCCONF_POWER_DOMAIN_1, false);
+#else
 	/* Disable retention */
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_MAIN, false);
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, false);
