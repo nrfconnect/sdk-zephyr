@@ -79,7 +79,6 @@ int nrf_wifi_util_conf_init(struct rpu_conf_params *conf_params)
 	return 0;
 }
 
-
 static int nrf_wifi_util_set_he_ltf(const struct shell *sh,
 				    size_t argc,
 				    const char *argv[])
@@ -109,7 +108,6 @@ static int nrf_wifi_util_set_he_ltf(const struct shell *sh,
 
 	return 0;
 }
-
 
 static int nrf_wifi_util_set_he_gi(const struct shell *sh,
 				   size_t argc,
@@ -217,7 +215,6 @@ static int nrf_wifi_util_set_uapsd_queue(const struct shell *sh,
 }
 #endif /* CONFIG_NRF70_STA_MODE */
 
-
 static int nrf_wifi_util_show_cfg(const struct shell *sh,
 				  size_t argc,
 				  const char *argv[])
@@ -324,7 +321,6 @@ unlock:
 }
 #endif /* CONFIG_NRF70_STA_MODE */
 
-
 static int nrf_wifi_util_tx_rate(const struct shell *sh,
 				 size_t argc,
 				 const char *argv[])
@@ -389,7 +385,6 @@ static int nrf_wifi_util_tx_rate(const struct shell *sh,
 
 	return 0;
 }
-
 
 #ifdef CONFIG_NRF_WIFI_LOW_POWER
 static int nrf_wifi_util_show_host_rpu_ps_ctrl_state(const struct shell *sh,
@@ -1067,8 +1062,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		      0),
 #endif /* CONFIG_NRF_WIFI_RPU_RECOVERY */
 	SHELL_SUBCMD_SET_END);
-
-
 SHELL_CMD_REGISTER(wifi_util,
 		   &nrf_wifi_util_subcmds,
 		   "nRF Wi-Fi utility shell commands",

@@ -986,6 +986,70 @@ out:
 	return ret;
 }
 #endif /* CONFIG_NRF70_RAW_DATA_RX || CONFIG_NRF70_PROMISC_DATA_RX */
+int nrf_wifi_get_throughput(const struct device *dev,
+			    struct wifi_throughput_info *throughput_info)
+{
+	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
+	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
+	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = NULL;
+	struct nrf_wifi_fmac_dev_ctx *fmac_dev_ctx = NULL;
+	struct nrf_wifi_fmac_dev_ctx_def *def_dev_ctx = NULL;
+	int ret = -1;
+
+	if (!dev || !throughput_info) {
+		LOG_ERR("%s: Illegal input parameters", __func__);
+		goto out;
+	}
+
+	vif_ctx_zep = dev->data;
+	if (!vif_ctx_zep) {
+		LOG_ERR("%s: vif_ctx_zep is NULL\n", __func__);
+		goto out;
+	}
+
+	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
+	fmac_dev_ctx = rpu_ctx_zep->rpu_ctx;
+	def_dev_ctx = wifi_dev_priv(fmac_dev_ctx);
+
+	/* Fill throughput data here */
+out:
+	return status;
+}
+
+int nrf_wifi_set_loopback_mode(const struct device *dev,
+			       unsigned char loopback_mode)
+{
+	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
+	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
+	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = NULL;
+	int ret = -1;
+
+	if (!dev) {
+		LOG_ERR("%s: dev is NULL", __func__);
+		return ret;
+	}
+
+	vif_ctx_zep = dev->data;
+	if (!vif_ctx_zep) {
+		LOG_ERR("%s: vif_ctx_zep is NULL", __func__);
+		return ret;
+	}
+
+	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
+	if (!rpu_ctx_zep) {
+		LOG_ERR("%s: rpu_ctx_zep is NULL", __func__);
+		return ret;
+	}
+
+	status = nrf_wifi_fmac_set_loopback_mode(rpu_ctx_zep->rpu_ctx,
+						 vif_ctx_zep->vif_idx,
+						 loopback_mode);
+	if (status != NRF_WIFI_STATUS_SUCCESS) {
+		LOG_ERR("%s: Set loopback mode failed\n", __func__);
+	}
+
+	return status;
+}
 
 int nrf_wifi_set_rts_threshold(const struct device *dev,
 			       unsigned int rts_threshold)

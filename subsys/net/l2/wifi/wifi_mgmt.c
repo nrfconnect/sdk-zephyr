@@ -780,6 +780,45 @@ static int wifi_channel(uint32_t mgmt_request, struct net_if *iface,
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_CHANNEL, wifi_channel);
 
+static int wifi_loopback_mode(uint32_t mgmt_request, struct net_if *iface,
+			      void *data, size_t len)
+{
+	const struct device *dev = net_if_get_device(iface);
+	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_api(iface);
+	unsigned char *loopback_mode = data;
+	if (dev == NULL) {
+		return -ENODEV;
+	}
+
+	if (wifi_mgmt_api == NULL || wifi_mgmt_api->loopback_mode == NULL) {
+		return -ENOTSUP;
+	}
+
+	return wifi_mgmt_api->loopback_mode(dev, *loopback_mode);
+}
+
+NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_LOOPBACK_MODE, wifi_loopback_mode);
+
+static int wifi_throughput(uint32_t mgmt_request, struct net_if *iface,
+			   void *data, size_t len)
+{
+	const struct device *dev = net_if_get_device(iface);
+	struct wifi_throughput_info *throughput_info = data;
+	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_api(iface);
+
+	if (dev == NULL) {
+		return -ENODEV;
+	}
+
+	if (wifi_mgmt_api == NULL || wifi_mgmt_api->throughput == NULL) {
+		return -ENOTSUP;
+	}
+
+	return wifi_mgmt_api->throughput(dev, throughput_info);
+}
+
+NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_THROUGPUT, wifi_throughput);
+
 static int wifi_get_version(uint32_t mgmt_request, struct net_if *iface,
 			   void *data, size_t len)
 {

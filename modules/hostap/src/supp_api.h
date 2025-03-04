@@ -224,6 +224,10 @@ int supplicant_get_wifi_conn_params(const struct device *dev,
  */
 int supplicant_wps_config(const struct device *dev, struct wifi_wps_config_params *params);
 
+int supplicant_loopback(const struct device *dev, unsigned char loopback_mode);
+
+int supplicant_throughput(const struct device *dev, struct wifi_throughput_info *throughput_info);
+
 #ifdef CONFIG_AP
 #ifdef CONFIG_WIFI_NM_HOSTAPD_AP
 /**

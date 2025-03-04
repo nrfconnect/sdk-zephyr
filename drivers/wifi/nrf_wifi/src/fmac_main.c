@@ -847,6 +847,8 @@ static struct wifi_mgmt_ops nrf_wifi_mgmt_ops = {
 #if defined(CONFIG_NRF70_RAW_DATA_RX) || defined(CONFIG_NRF70_PROMISC_DATA_RX)
 	.filter = nrf_wifi_filter,
 #endif /* CONFIG_NRF70_RAW_DATA_RX || CONFIG_NRF70_PROMISC_DATA_RX */
+	.loopback_mode = nrf_wifi_set_loopback_mode,
+	.throughput = nrf_wifi_get_throughput,
 };
 #endif /* CONFIG_NET_L2_WIFI_MGMT */
 

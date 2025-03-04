@@ -1501,6 +1501,31 @@ int supplicant_channel(const struct device *dev, struct wifi_channel_info *chann
 	return wifi_mgmt_api->channel(dev, channel);
 }
 
+int supplicant_loopback(const struct device *dev, unsigned char loopback_mode)
+{
+	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_mgmt_api(dev);
+
+	if (!wifi_mgmt_api || !wifi_mgmt_api->loopback_mode) {
+		wpa_printf(MSG_ERROR, "Setting loopback mode not supported");
+		return -ENOTSUP;
+	}
+
+	return wifi_mgmt_api->loopback_mode(dev, loopback_mode);
+}
+
+int supplicant_throughput(const struct device *dev,
+			  struct wifi_throughput_info *throughput_info)
+{
+	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_mgmt_api(dev);
+
+	if (!wifi_mgmt_api || !wifi_mgmt_api->throughput) {
+		wpa_printf(MSG_ERROR, "Getting throughput not supported");
+		return -ENOTSUP;
+	}
+
+	return wifi_mgmt_api->throughput(dev, throughput_info);
+}
+
 int supplicant_set_rts_threshold(const struct device *dev, unsigned int rts_threshold)
 {
 	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_mgmt_api(dev);

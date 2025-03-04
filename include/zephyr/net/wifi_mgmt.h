@@ -108,6 +108,10 @@ enum net_request_wifi_cmd {
 	NET_REQUEST_WIFI_CMD_RTS_THRESHOLD_CONFIG,
 	/** WPS config */
 	NET_REQUEST_WIFI_CMD_WPS_CONFIG,
+	/** Wezen Loopback mode */
+	NET_REQUEST_WIFI_CMD_LOOPBACK,
+	/** Wezen get throughput API */
+	NET_REQUEST_WIFI_CMD_THROUGHPUT,
 	/** @cond INTERNAL_HIDDEN */
 	NET_REQUEST_WIFI_CMD_MAX
 /** @endcond */
@@ -190,6 +194,18 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_PACKET_FILTER);
 	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_CHANNEL)
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_CHANNEL);
+
+/** Request a Wi-Fi loopback mode setting */
+#define NET_REQUEST_WIFI_LOOPBACK_MODE				\
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_LOOPBACK)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_LOOPBACK_MODE);
+
+/** Request Wi-Fi TX burst througput setting */
+#define NET_REQUEST_WIFI_THROUGHPUT				\
+	(_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_THROUGHPUT)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_THROUGHPUT);
 
 /** Request a Wi-Fi access point to disconnect a station */
 #define NET_REQUEST_WIFI_AP_STA_DISCONNECT			\
@@ -850,6 +866,15 @@ struct wifi_mode_info {
 	enum wifi_mgmt_op oper;
 };
 
+struct wifi_throughput_info {
+	/** Previous second packet count */
+	int previous_sec_packet_count;
+	/** Current second packet count */
+	int current_sec_packet_count;
+	/** Interface index */
+	uint8_t if_index;
+};
+
 /** @brief Wi-Fi filter setting for monitor, prmoiscuous, TX-injection modes */
 struct wifi_filter_info {
 	/** Filter setting */
@@ -1365,6 +1390,10 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*wps_config)(const struct device *dev, struct wifi_wps_config_params *params);
+
+	int (*loopback_mode)(const struct device *dev, unsigned char loopback_mode);
+
+	int (*throughput)(const struct device *dev, struct wifi_throughput_info *throughput_info);
 };
 
 /** Wi-Fi management offload API */
