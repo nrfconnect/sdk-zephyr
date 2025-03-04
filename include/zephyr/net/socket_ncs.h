@@ -27,7 +27,7 @@ extern "C" {
 
 /** Define a base for NCS specific socket options to prevent overlaps with Zephyr's socket options.
  */
-#define NET_SOCKET_NCS_BASE 1000000000
+#define NET_SOCKET_NCS_BASE 1000
 
 /* NCS specific TLS level socket options */
 
