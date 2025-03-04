@@ -19,13 +19,13 @@ static struct k_work_q settings_work_q;
 static K_THREAD_STACK_DEFINE(settings_work_stack, 2024);
 static struct k_work_delayable pending_store;
 
-#define TEST_SETTINGS_COUNT (128)
-#define TEST_STORE_ITR (5)
-#define TEST_TIMEOUT_SEC (60)
+#define TEST_SETTINGS_COUNT      (128)
+#define TEST_STORE_ITR           (5)
+#define TEST_TIMEOUT_SEC         (60)
 #define TEST_SETTINGS_WORKQ_PRIO (1)
 
 static void bt_scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
-		struct net_buf_simple *buf)
+		       struct net_buf_simple *buf)
 {
 	printk("len %u\n", buf->len);
 }
@@ -48,11 +48,10 @@ static void store_pending(struct k_work *work)
 	} stats = {0, 0, 0, UINT32_MAX};
 
 	int64_t ts1 = k_uptime_get();
-
 	/* benchmark storage performance */
 	for (int j = 0; j < TEST_STORE_ITR; j++) {
 		for (int i = 0; i < TEST_SETTINGS_COUNT; i++) {
-			test_settings[i].val = TEST_SETTINGS_COUNT*j + i;
+			test_settings[i].val = TEST_SETTINGS_COUNT * j + i;
 
 			int64_t ts2 = k_uptime_get();
 
@@ -73,6 +72,27 @@ static void store_pending(struct k_work *work)
 		}
 	}
 
+	for (int i = 0; i < TEST_SETTINGS_COUNT; i++) {
+		int64_t ts2 = k_uptime_get();
+
+		snprintk(path, sizeof(path), "ab/cdef/ghi/%04x", i);
+		err = settings_load_subtree(path);
+		zassert_equal(err, 0, "settings_load subtree failed %d", err);
+
+		err = settings_delete(path);
+		zassert_equal(err, 0, "settings_delete failed %d", err);
+
+		int64_t delta2 = k_uptime_delta(&ts2);
+
+		if (stats.single_entry_max < delta2) {
+			stats.single_entry_max = delta2;
+		}
+		if (stats.single_entry_min > delta2) {
+			stats.single_entry_min = delta2;
+		}
+		stats.total_calculated += delta2;
+	}
+
 	int64_t delta1 = k_uptime_delta(&ts1);
 
 	stats.total_measured = delta1;
@@ -80,8 +100,7 @@ static void store_pending(struct k_work *work)
 	printk("*** storing of %u entries completed ***\n", ARRAY_SIZE(test_settings));
 	printk("total calculated: %u, total measured: %u\n", stats.total_calculated,
 	       stats.total_measured);
-	printk("entry max: %u, entry min: %u\n", stats.single_entry_max,
-	       stats.single_entry_min);
+	printk("entry max: %u, entry min: %u\n", stats.single_entry_max, stats.single_entry_min);
 
 	k_sem_give(&waitfor_work);
 }
@@ -99,8 +118,8 @@ ZTEST(settings_perf, test_performance)
 	}
 
 	k_work_queue_start(&settings_work_q, settings_work_stack,
-		K_THREAD_STACK_SIZEOF(settings_work_stack),
-		K_PRIO_COOP(TEST_SETTINGS_WORKQ_PRIO), NULL);
+			   K_THREAD_STACK_SIZEOF(settings_work_stack),
+			   K_PRIO_COOP(TEST_SETTINGS_WORKQ_PRIO), NULL);
 	k_thread_name_set(&settings_work_q.thread, "Settings workq");
 	k_work_init_delayable(&pending_store, store_pending);
 
