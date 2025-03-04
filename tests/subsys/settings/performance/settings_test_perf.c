@@ -60,6 +60,8 @@ static void store_pending(struct k_work *work)
 			err = settings_save_one(path, &test_settings[i],
 						sizeof(struct test_setting));
 			zassert_equal(err, 0, "settings_save_one failed %d", err);
+			err = settings_delete(path);
+			zassert_equal(err, 0, "settings_delete failed %d", err);
 
 			int64_t delta2 = k_uptime_delta(&ts2);
 
