@@ -26,6 +26,5 @@ jobs:
     - name: Run the commit tags
       uses: nrfconnect/action-commit-tags@main
       with:
-        target: '.'
-        baserev: origin/${{ github.base_ref }}
-        revrange: 'none'
+        target: .
+        upstream: zephyrproject-rtos/zephyr/main
