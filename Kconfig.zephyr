@@ -538,6 +538,9 @@ config NO_OPTIMIZATIONS
 	  default stack sizes in order to avoid stack overflows.
 endchoice
 
+config INSTRUMENTATION
+	bool "Compile instrumentation"
+
 config LTO
 	bool "Link Time Optimization"
 	depends on !(GEN_ISR_TABLES || GEN_IRQ_VECTOR_TABLE) || ISR_TABLES_LOCAL_DECLARATION

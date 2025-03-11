@@ -255,3 +255,8 @@ set_compiler_property(PROPERTY no_builtin_malloc -fno-builtin-malloc)
 set_compiler_property(PROPERTY specs -specs=)
 
 set_compiler_property(PROPERTY include_file -include)
+
+# Compiler flag to enable function instrumentation
+if(CONFIG_INSTRUMENTATION)
+set_compiler_property(PROPERTY func_instrumentation -finstrument-functions)
+endif()

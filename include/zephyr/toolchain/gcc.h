@@ -289,6 +289,8 @@ do {                                                                    \
 #define __attribute_nonnull(...) __attribute__((nonnull(__VA_ARGS__)))
 #endif
 
+#define __no_instrument_function __attribute__((__no_instrument_function__))
+
 /* Builtins with availability that depend on the compiler version. */
 #if __GNUC__ >= 5
 #define HAS_BUILTIN___builtin_add_overflow 1
