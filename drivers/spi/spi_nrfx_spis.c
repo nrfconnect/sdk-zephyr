@@ -8,14 +8,21 @@
 #include <zephyr/drivers/spi/rtio.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/drivers/gpio.h>
+#include <dmm.h>
 #include <soc.h>
 #include <nrfx_spis.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
 
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
 LOG_MODULE_REGISTER(spi_nrfx_spis, CONFIG_SPI_LOG_LEVEL);
 
 #include "spi_context.h"
+
+#ifdef CONFIG_SOC_NRF54H20_GPD
+#include <nrf/gpd.h>
+#endif
 
 struct spi_nrfx_data {
 	struct spi_context ctx;
@@ -29,8 +36,12 @@ struct spi_nrfx_config {
 	nrfx_spis_config_t config;
 	void (*irq_connect)(void);
 	uint16_t max_buf_len;
+#ifdef CONFIG_SOC_NRF54H20_GPD
+	bool gpd_ctrl;
+#endif
 	const struct pinctrl_dev_config *pcfg;
 	struct gpio_dt_spec wake_gpio;
+	void *mem_reg;
 };
 
 static inline nrf_spis_mode_t get_nrf_spis_mode(uint16_t operation)
@@ -117,6 +128,7 @@ static int prepare_for_transfer(const struct device *dev,
 {
 	const struct spi_nrfx_config *dev_config = dev->config;
 	nrfx_err_t result;
+	int err;
 
 	if (tx_buf_len > dev_config->max_buf_len ||
 	    rx_buf_len > dev_config->max_buf_len) {
@@ -125,14 +137,34 @@ static int prepare_for_transfer(const struct device *dev,
 		return -EINVAL;
 	}
 
+	err = dmm_buffer_out_prepare(dev_config->mem_reg, tx_buf, tx_buf_len, (void **)&tx_buf);
+	if (err != 0) {
+		LOG_ERR("DMM TX allocation failed err=%d", err);
+		goto out_alloc_failed;
+	}
+
+	err = dmm_buffer_in_prepare(dev_config->mem_reg, rx_buf, rx_buf_len, (void **)&rx_buf);
+	if (err != 0) {
+		LOG_ERR("DMM RX allocation failed err=%d", err);
+		goto in_alloc_failed;
+	}
+
 	result = nrfx_spis_buffers_set(&dev_config->spis,
 				       tx_buf, tx_buf_len,
 				       rx_buf, rx_buf_len);
 	if (result != NRFX_SUCCESS) {
-		return -EIO;
+		err = -EIO;
+		goto buffers_set_failed;
 	}
 
 	return 0;
+
+buffers_set_failed:
+	dmm_buffer_in_release(dev_config->mem_reg, rx_buf, rx_buf_len, rx_buf);
+in_alloc_failed:
+	dmm_buffer_out_release(dev_config->mem_reg, (void *)tx_buf);
+out_alloc_failed:
+	return err;
 }
 
 static void wake_callback(const struct device *dev, struct gpio_callback *cb,
@@ -175,6 +207,8 @@ static int transceive(const struct device *dev,
 	const struct spi_buf *rx_buf = rx_bufs ? rx_bufs->buffers : NULL;
 	int error;
 
+	pm_device_runtime_get(dev);
+
 	spi_context_lock(&dev_data->ctx, asynchronous, cb, userdata, spi_cfg);
 
 	error = configure(dev, spi_cfg);
@@ -194,6 +228,7 @@ static int transceive(const struct device *dev,
 			nrf_spis_enable(dev_config->spis.p_reg);
 		}
 
+		spi_context_buffers_setup(&dev_data->ctx, tx_bufs, rx_bufs, 1);
 		error = prepare_for_transfer(dev,
 					     tx_buf ? tx_buf->buf : NULL,
 					     tx_buf ? tx_buf->len : 0,
@@ -277,12 +312,79 @@ static DEVICE_API(spi, spi_nrfx_driver_api) = {
 
 static void event_handler(const nrfx_spis_evt_t *p_event, void *p_context)
 {
-	struct spi_nrfx_data *dev_data = p_context;
+	const struct device *dev = p_context;
+	struct spi_nrfx_data *dev_data = dev->data;
+	const struct spi_nrfx_config *dev_config = dev->config;
 
 	if (p_event->evt_type == NRFX_SPIS_XFER_DONE) {
+		int err;
+
+
+		err = dmm_buffer_out_release(dev_config->mem_reg, p_event->p_tx_buf);
+		(void)err;
+		__ASSERT_NO_MSG(err == 0);
+
+		err = dmm_buffer_in_release(dev_config->mem_reg, dev_data->ctx.rx_buf,
+				      p_event->rx_amount, p_event->p_rx_buf);
+		__ASSERT_NO_MSG(err == 0);
+
 		spi_context_complete(&dev_data->ctx, dev_data->dev,
 				     p_event->rx_amount);
+
+		pm_device_runtime_put(dev_data->dev);
 	}
+}
+
+static void spi_nrfx_suspend(const struct device *dev)
+{
+	const struct spi_nrfx_config *dev_config = dev->config;
+
+	if (dev_config->wake_gpio.port == NULL) {
+		nrf_spis_disable(dev_config->spis.p_reg);
+	}
+
+#ifdef CONFIG_SOC_NRF54H20_GPD
+	if (dev_config->gpd_ctrl) {
+		nrf_gpd_retain_pins_set(dev_config->pcfg, true);
+	}
+#endif
+
+	(void)pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_SLEEP);
+}
+
+static void spi_nrfx_resume(const struct device *dev)
+{
+	const struct spi_nrfx_config *dev_config = dev->config;
+
+	(void)pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_DEFAULT);
+
+#ifdef CONFIG_SOC_NRF54H20_GPD
+	if (dev_config->gpd_ctrl) {
+		nrf_gpd_retain_pins_set(dev_config->pcfg, false);
+	}
+#endif
+
+	if (dev_config->wake_gpio.port == NULL) {
+		nrf_spis_enable(dev_config->spis.p_reg);
+	}
+}
+
+static int spi_nrfx_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		spi_nrfx_suspend(dev);
+		return 0;
+
+	case PM_DEVICE_ACTION_RESUME:
+		spi_nrfx_resume(dev);
+		return 0;
+
+	default:
+		break;
+	}
+
+	return -ENOTSUP;
 }
 
 static int spi_nrfx_init(const struct device *dev)
@@ -292,21 +394,26 @@ static int spi_nrfx_init(const struct device *dev)
 	nrfx_err_t result;
 	int err;
 
-	err = pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_DEFAULT);
-	if (err < 0) {
-		return err;
-	}
-
 	/* This sets only default values of mode and bit order. The ones to be
 	 * actually used are set in configure() when a transfer is prepared.
 	 */
 	result = nrfx_spis_init(&dev_config->spis, &dev_config->config,
-				event_handler, dev_data);
+				event_handler, (void *)dev);
 
 	if (result != NRFX_SUCCESS) {
 		LOG_ERR("Failed to initialize device: %s", dev->name);
 		return -EBUSY;
 	}
+
+	/* When the WAKE line is used, the SPIS peripheral is enabled
+	 * only after the master signals that it wants to perform a
+	 * transfer and it is disabled right after the transfer is done.
+	 * Waiting for the WAKE line to go high, what can be done using
+	 * the GPIO PORT event, instead of just waiting for the transfer
+	 * with the SPIS peripheral enabled, significantly reduces idle
+	 * power consumption.
+	 */
+	nrf_spis_disable(dev_config->spis.p_reg);
 
 	if (dev_config->wake_gpio.port) {
 		if (!gpio_is_ready_dt(&dev_config->wake_gpio)) {
@@ -332,21 +439,11 @@ static int spi_nrfx_init(const struct device *dev)
 		if (err < 0) {
 			return err;
 		}
-
-		/* When the WAKE line is used, the SPIS peripheral is enabled
-		 * only after the master signals that it wants to perform a
-		 * transfer and it is disabled right after the transfer is done.
-		 * Waiting for the WAKE line to go high, what can be done using
-		 * the GPIO PORT event, instead of just waiting for the transfer
-		 * with the SPIS peripheral enabled, significantly reduces idle
-		 * power consumption.
-		 */
-		nrf_spis_disable(dev_config->spis.p_reg);
 	}
 
 	spi_context_unlock_unconditionally(&dev_data->ctx);
 
-	return 0;
+	return pm_device_driver_init(dev, spi_nrfx_pm_action);
 }
 
 /*
@@ -356,7 +453,13 @@ static int spi_nrfx_init(const struct device *dev)
  * - Name-based HAL IRQ handlers, e.g. nrfx_spis_0_irq_handler
  */
 
-#define SPIS(idx) DT_NODELABEL(spi##idx)
+#define SPIS_NODE(idx) \
+	COND_CODE_1(CONFIG_SOC_NRF54H20, \
+		(COND_CODE_1(IS_EQ(idx, 120), (spis##idx), (spi##idx))), \
+		(spi##idx))
+
+#define SPIS(idx) DT_NODELABEL(SPIS_NODE(idx))
+
 #define SPIS_PROP(idx, prop) DT_PROP(SPIS(idx), prop)
 
 #define SPI_NRFX_SPIS_DEFINE(idx)					       \
@@ -389,14 +492,19 @@ static int spi_nrfx_init(const struct device *dev)
 		.irq_connect = irq_connect##idx,			       \
 		.pcfg = PINCTRL_DT_DEV_CONFIG_GET(SPIS(idx)),		       \
 		.max_buf_len = BIT_MASK(SPIS_PROP(idx, easydma_maxcnt_bits)),  \
+		IF_ENABLED(CONFIG_SOC_NRF54H20_GPD,			       \
+			(.gpd_ctrl = NRF_PERIPH_GET_FREQUENCY(SPIS(idx)) >     \
+				NRFX_MHZ_TO_HZ(16UL),))			       \
 		.wake_gpio = GPIO_DT_SPEC_GET_OR(SPIS(idx), wake_gpios, {0}),  \
+		.mem_reg = DMM_DEV_TO_REG(SPIS(idx)),			       \
 	};								       \
 	BUILD_ASSERT(!DT_NODE_HAS_PROP(SPIS(idx), wake_gpios) ||	       \
 		     !(DT_GPIO_FLAGS(SPIS(idx), wake_gpios) & GPIO_ACTIVE_LOW),\
 		     "WAKE line must be configured as active high");	       \
+	PM_DEVICE_DT_DEFINE(SPIS(idx), spi_nrfx_pm_action, 1);		       \
 	SPI_DEVICE_DT_DEFINE(SPIS(idx),					       \
 			    spi_nrfx_init,				       \
-			    NULL,					       \
+			    PM_DEVICE_DT_GET(SPIS(idx)),		       \
 			    &spi_##idx##_data,				       \
 			    &spi_##idx##z_config,			       \
 			    POST_KERNEL,				       \
