@@ -193,7 +193,7 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: a1db06a2f6a1d069994d595cef563f58e44c4344
+      revision: 35bf3ca665122ddfe8c0c38cec8f19deef2ff62d
       path: modules/hal/nordic
       groups:
         - hal
@@ -315,7 +315,7 @@ manifest:
       groups:
         - tools
     - name: nrf_hw_models
-      revision: 73a5d5827a94820be65b7d276d28173ec10bab9f
+      revision: b84bd7314a239f818e78f6927f5673247816df53
       path: modules/bsim_hw_models/nrf_hw_models
     - name: nrf_wifi
       revision: 0f53c9ebab526661131d5d7e73c7a6cb3b2d2e11

@@ -61,9 +61,12 @@ struct mspi_dw_data {
 	uint8_t bytes_to_discard;
 	uint8_t bytes_per_frame_exp;
 	bool standard_spi;
+	bool suspended;
 
 	struct k_sem finished;
+	/* For synchronization of API calls made from different contexts. */
 	struct k_sem ctx_lock;
+	/* For locking of controller configuration. */
 	struct k_sem cfg_lock;
 	struct mspi_xfer xfer;
 };
@@ -81,6 +84,7 @@ struct mspi_dw_config {
 	uint8_t tx_fifo_threshold;
 	uint8_t rx_fifo_threshold;
 	DECLARE_REG_ACCESS();
+	bool sw_multi_periph;
 };
 
 /* Register access helpers. */
@@ -663,6 +667,7 @@ static int api_dev_config(const struct device *dev,
 			  const enum mspi_dev_cfg_mask param_mask,
 			  const struct mspi_dev_cfg *cfg)
 {
+	const struct mspi_dw_config *dev_config = dev->config;
 	struct mspi_dw_data *dev_data = dev->data;
 	int rc;
 
@@ -675,10 +680,11 @@ static int api_dev_config(const struct device *dev,
 		}
 
 		dev_data->dev_id = dev_id;
+	}
 
-		if (param_mask == MSPI_DEVICE_CONFIG_NONE) {
-			return 0;
-		}
+	if (param_mask == MSPI_DEVICE_CONFIG_NONE &&
+	    !dev_config->sw_multi_periph) {
+		return 0;
 	}
 
 	(void)k_sem_take(&dev_data->ctx_lock, K_FOREVER);
@@ -1024,7 +1030,11 @@ static int api_transceive(const struct device *dev,
 
 	(void)k_sem_take(&dev_data->ctx_lock, K_FOREVER);
 
-	rc = _api_transceive(dev, req);
+	if (dev_data->suspended) {
+		rc = -EFAULT;
+	} else {
+		rc = _api_transceive(dev, req);
+	}
 
 	k_sem_give(&dev_data->ctx_lock);
 
@@ -1163,7 +1173,11 @@ static int api_xip_config(const struct device *dev,
 
 	(void)k_sem_take(&dev_data->ctx_lock, K_FOREVER);
 
-	rc = _api_xip_config(dev, dev_id, cfg);
+	if (dev_data->suspended) {
+		rc = -EFAULT;
+	} else {
+		rc = _api_xip_config(dev, dev_id, cfg);
+	}
 
 	k_sem_give(&dev_data->ctx_lock);
 
@@ -1195,7 +1209,7 @@ static int dev_pm_action_cb(const struct device *dev,
 #endif
 		vendor_specific_resume(dev);
 
-		k_sem_give(&dev_data->ctx_lock);
+		dev_data->suspended = false;
 
 		return 0;
 	}
@@ -1222,7 +1236,11 @@ static int dev_pm_action_cb(const struct device *dev,
 			return -EBUSY;
 		}
 
+		dev_data->suspended = true;
+
 		vendor_specific_suspend(dev);
+
+		k_sem_give(&dev_data->ctx_lock);
 
 		return 0;
 	}
@@ -1245,8 +1263,7 @@ static int dev_init(const struct device *dev)
 
 	k_sem_init(&dev_data->finished, 0, 1);
 	k_sem_init(&dev_data->cfg_lock, 1, 1);
-	/* This semaphore will be set to 1 after the device is resumed. */
-	k_sem_init(&dev_data->ctx_lock, 0, 1);
+	k_sem_init(&dev_data->ctx_lock, 1, 1);
 
 	for (ce_gpio = dev_config->ce_gpios;
 	     ce_gpio < &dev_config->ce_gpios[dev_config->ce_gpios_len];
@@ -1345,6 +1362,8 @@ static DEVICE_API(mspi, drv_api) = {
 		(MSPI_DW_CE_GPIOS(inst),))				\
 		MSPI_DW_FIFO_PROPS(inst),				\
 		DEFINE_REG_ACCESS(inst)					\
+		.sw_multi_periph =					\
+			DT_INST_PROP(inst, software_multiperipheral),	\
 	};								\
 	DEVICE_DT_INST_DEFINE(inst,					\
 		dev_init, PM_DEVICE_DT_INST_GET(inst),			\

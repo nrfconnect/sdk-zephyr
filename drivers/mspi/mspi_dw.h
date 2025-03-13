@@ -5,7 +5,7 @@
  */
 
 /*
- * This file is a part of mspi_dw.c extracted only for clarity.
+ * This header is part of mspi_dw.c extracted only for clarity.
  * It is not supposed to be included by any file other than mspi_dw.c.
  */
 

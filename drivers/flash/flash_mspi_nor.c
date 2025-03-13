@@ -210,6 +210,7 @@ struct flash_mspi_nor_config {
 	uint32_t flash_size;
 	struct mspi_dev_id mspi_id;
 	struct mspi_dev_cfg mspi_cfg;
+	enum mspi_dev_cfg_mask mspi_cfg_mask;
 #if defined(CONFIG_MSPI_XIP)
 	struct mspi_xip_cfg xip_cfg;
 #endif
@@ -236,18 +237,24 @@ static int acquire(const struct device *dev)
 	rc = pm_device_runtime_get(dev_config->bus);
 	if (rc < 0) {
 		LOG_ERR("pm_device_runtime_get() failed: %d", rc);
-		return rc;
+	} else {
+		/* This acquires the MSPI controller and reconfigures it
+		 * if needed for the flash device.
+		 */
+		rc = mspi_dev_config(dev_config->bus, &dev_config->mspi_id,
+				     dev_config->mspi_cfg_mask,
+				     &dev_config->mspi_cfg);
+		if (rc < 0) {
+			LOG_ERR("mspi_dev_config() failed: %d", rc);
+		} else {
+			return 0;
+		}
+
+		(void)pm_device_runtime_put(dev_config->bus);
 	}
 
-	/* This acquires the MSPI controller and configures it for the flash. */
-	rc = mspi_dev_config(dev_config->bus, &dev_config->mspi_id,
-			     MSPI_DEVICE_CONFIG_ALL, &dev_config->mspi_cfg);
-	if (rc < 0) {
-		LOG_ERR("mspi_dev_config() failed: %d", rc);
-		return rc;
-	}
-
-	return 0;
+	k_sem_give(&dev_data->acquired);
+	return rc;
 }
 
 static void release(const struct device *dev)
@@ -763,15 +770,12 @@ static int drv_init(const struct device *dev)
 		return rc;
 	}
 
-	/* Acquire the MSPI controller. */
-	rc = mspi_dev_config(dev_config->bus, &dev_config->mspi_id,
-			     MSPI_DEVICE_CONFIG_NONE, NULL);
-	if (rc == 0) {
-		rc = flash_chip_init(dev);
+	rc = flash_chip_init(dev);
 
-		/* Release the MSPI controller. */
-		(void)mspi_get_channel_status(dev_config->bus, 0);
-	}
+	/* Release the MSPI controller - it was acquired by the call to
+	 * mspi_dev_config() in flash_chip_init().
+	 */
+	(void)mspi_get_channel_status(dev_config->bus, 0);
 
 	(void)pm_device_runtime_put(dev_config->bus);
 
@@ -801,6 +805,30 @@ static DEVICE_API(flash, drv_api) = {
 #define FLASH_SIZE_INST(inst) (DT_INST_PROP(inst, size) / 8)
 #define FLASH_CMDS(inst) &commands[DT_INST_ENUM_IDX(inst, mspi_io_mode)]
 
+#if defined(CONFIG_FLASH_PAGE_LAYOUT)
+BUILD_ASSERT((CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE % 4096) == 0,
+	"MSPI_NOR_FLASH_LAYOUT_PAGE_SIZE must be multiple of 4096");
+#define FLASH_PAGE_LAYOUT_DEFINE(inst) \
+	.layout = { \
+		.pages_size = CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE, \
+		.pages_count = FLASH_SIZE_INST(inst) \
+			     / CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE, \
+	},
+#define FLASH_PAGE_LAYOUT_CHECK(inst) \
+BUILD_ASSERT((FLASH_SIZE_INST(inst) % CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE) == 0, \
+	"MSPI_NOR_FLASH_LAYOUT_PAGE_SIZE incompatible with flash size, instance " #inst);
+#else
+#define FLASH_PAGE_LAYOUT_DEFINE(inst)
+#define FLASH_PAGE_LAYOUT_CHECK(inst)
+#endif
+
+/* MSPI bus must be initialized before this device. */
+#if (CONFIG_MSPI_INIT_PRIORITY < CONFIG_FLASH_INIT_PRIORITY)
+#define INIT_PRIORITY CONFIG_FLASH_INIT_PRIORITY
+#else
+#define INIT_PRIORITY UTIL_INC(CONFIG_MSPI_INIT_PRIORITY)
+#endif
+
 #define FLASH_MSPI_NOR_INST(inst)						\
 	BUILD_ASSERT((DT_INST_ENUM_IDX(inst, mspi_io_mode) ==			\
 		      MSPI_IO_MODE_SINGLE) ||					\
@@ -816,6 +844,10 @@ static DEVICE_API(flash, drv_api) = {
 		.flash_size = FLASH_SIZE_INST(inst),				\
 		.mspi_id = MSPI_DEVICE_ID_DT_INST(inst),			\
 		.mspi_cfg = MSPI_DEVICE_CONFIG_DT_INST(inst),			\
+		.mspi_cfg_mask = DT_PROP(DT_INST_BUS(inst),			\
+					 software_multiperipheral)		\
+			       ? MSPI_DEVICE_CONFIG_ALL				\
+			       : MSPI_DEVICE_CONFIG_NONE,			\
 	IF_ENABLED(CONFIG_MSPI_XIP,						\
 		(.xip_cfg = MSPI_XIP_CONFIG_DT_INST(inst),))			\
 	IF_ENABLED(WITH_RESET_GPIO,						\
@@ -824,19 +856,15 @@ static DEVICE_API(flash, drv_api) = {
 				/ 1000,						\
 		.reset_recovery_us = DT_INST_PROP_OR(inst, t_reset_recovery, 0)	\
 				   / 1000,))					\
-	IF_ENABLED(CONFIG_FLASH_PAGE_LAYOUT,					\
-		(.layout = {							\
-			.pages_size = CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE,	\
-			.pages_count = FLASH_SIZE_INST(inst)			\
-				     / CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE,	\
-		},))								\
+		FLASH_PAGE_LAYOUT_DEFINE(inst)					\
 		.jedec_id = DT_INST_PROP(inst, jedec_id),			\
 		.jedec_cmds = FLASH_CMDS(inst),					\
 	};									\
+	FLASH_PAGE_LAYOUT_CHECK(inst)						\
 	DEVICE_DT_INST_DEFINE(inst,						\
 		drv_init, PM_DEVICE_DT_INST_GET(inst),				\
 		&dev##inst##_data, &dev##inst##_config,				\
-		POST_KERNEL, CONFIG_FLASH_MSPI_NOR_INIT_PRIORITY,		\
+		POST_KERNEL, INIT_PRIORITY,					\
 		&drv_api);
 
 DT_INST_FOREACH_STATUS_OKAY(FLASH_MSPI_NOR_INST)

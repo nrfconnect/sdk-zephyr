@@ -5,7 +5,7 @@
  */
 
 /*
- * This file is a part of mspi_dw.c extracted only for clarity.
+ * This header is part of mspi_dw.c extracted only for clarity.
  * It is not supposed to be included by any file other than mspi_dw.c.
  */
 
@@ -13,7 +13,7 @@
 
 #include <nrf.h>
 
-static void vendor_specific_init(const struct device *dev)
+static inline void vendor_specific_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
@@ -21,21 +21,21 @@ static void vendor_specific_init(const struct device *dev)
 	NRF_EXMIF->INTENSET = BIT(EXMIF_INTENSET_CORE_Pos);
 }
 
-static void vendor_specific_suspend(const struct device *dev)
+static inline void vendor_specific_suspend(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
 	NRF_EXMIF->TASKS_STOP = 1;
 }
 
-static void vendor_specific_resume(const struct device *dev)
+static inline void vendor_specific_resume(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
 	NRF_EXMIF->TASKS_START = 1;
 }
 
-static void vendor_specific_irq_clear(const struct device *dev)
+static inline void vendor_specific_irq_clear(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
@@ -43,9 +43,9 @@ static void vendor_specific_irq_clear(const struct device *dev)
 }
 
 #if defined(CONFIG_MSPI_XIP)
-static int vendor_specific_xip_enable(const struct device *dev,
-				      const struct mspi_dev_id *dev_id,
-				      const struct mspi_xip_cfg *cfg)
+static inline int vendor_specific_xip_enable(const struct device *dev,
+					     const struct mspi_dev_id *dev_id,
+					     const struct mspi_xip_cfg *cfg)
 {
 	ARG_UNUSED(dev);
 
@@ -66,11 +66,12 @@ static int vendor_specific_xip_enable(const struct device *dev,
 	return 0;
 }
 
-static int vendor_specific_xip_disable(const struct device *dev,
-				       const struct mspi_dev_id *dev_id,
-				       const struct mspi_xip_cfg *cfg)
+static inline int vendor_specific_xip_disable(const struct device *dev,
+					      const struct mspi_dev_id *dev_id,
+					      const struct mspi_xip_cfg *cfg)
 {
 	ARG_UNUSED(dev);
+	ARG_UNUSED(cfg);
 
 	if (dev_id->dev_idx == 0) {
 		NRF_EXMIF->EXTCONF1.ENABLE = 0;

@@ -39,19 +39,12 @@ menuconfig FLASH_MSPI_NOR
 
 if FLASH_MSPI_NOR
 
-config FLASH_MSPI_NOR_INIT_PRIORITY
-	int
-	default 80
-	help
-	  Device driver initialization priority.
-	  Device is connected to MSPI bus, it has to
-	  be initialized after MSPI driver.
-
 config FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE
 	int "Page size to use for FLASH_LAYOUT feature"
+	depends on FLASH_PAGE_LAYOUT
 	default 65536
 	help
-	  When CONFIG_FLASH_PAGE_LAYOUT is used this driver will support that
+	  When CONFIG_FLASH_PAGE_LAYOUT is used, this driver will support that
 	  API. By default the page size corresponds to the block size (65536).
 	  Other options include the 32K-byte erase size (32768), the sector
 	  size (4096), or any non-zero multiple of the sector size.
