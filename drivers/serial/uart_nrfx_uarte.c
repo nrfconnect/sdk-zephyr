@@ -155,6 +155,15 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME));
 /* Size of hardware fifo in RX path. */
 #define UARTE_HW_RX_FIFO_SIZE 5
 
+#ifdef CONFIG_SOFTDEVICE
+#include <nrf_nvic.h>
+#define IRQ_LOCK(_key) sd_nvic_critical_region_enter((uint8_t *)&_key)
+#define IRQ_UNLOCK(_key) sd_nvic_critical_region_exit(_key)
+#else
+#define IRQ_LOCK(_key) _key = irq_lock()
+#define IRQ_UNLOCK(_key) irq_unlock(_key)
+#endif
+
 #ifdef UARTE_ANY_ASYNC
 
 struct uarte_async_tx {
@@ -373,15 +382,16 @@ static inline NRF_UARTE_Type *get_uarte_instance(const struct device *dev)
 static void endtx_isr(const struct device *dev)
 {
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
+	unsigned int key;
 
-	unsigned int key = irq_lock();
+	IRQ_LOCK(key);
 
 	if (nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_ENDTX)) {
 		nrf_uarte_event_clear(uarte, NRF_UARTE_EVENT_ENDTX);
 		nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STOPTX);
 	}
 
-	irq_unlock(key);
+	IRQ_UNLOCK(key);
 
 }
 
@@ -450,7 +460,9 @@ static void uarte_nrfx_isr_int(const void *arg)
 	bool txstopped = nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_TXSTOPPED);
 
 	if (txstopped && (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME) || LOW_POWER_ENABLED(config))) {
-		unsigned int key = irq_lock();
+		unsigned int key;
+
+		IRQ_LOCK(key);
 
 		if (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME)) {
 			if (data->flags & UARTE_FLAG_POLL_OUT) {
@@ -467,7 +479,7 @@ static void uarte_nrfx_isr_int(const void *arg)
 			nrf_uarte_int_disable(uarte, NRF_UARTE_INT_TXSTOPPED_MASK);
 		}
 
-		irq_unlock(key);
+		IRQ_UNLOCK(key);
 	}
 
 #ifdef UARTE_INTERRUPT_DRIVEN
@@ -670,12 +682,12 @@ static int wait_tx_ready(const struct device *dev)
 #endif
 
 		if (res) {
-			key = irq_lock();
+			IRQ_LOCK(key);
 			if (is_tx_ready(dev)) {
 				break;
 			}
 
-			irq_unlock(key);
+			IRQ_UNLOCK(key);
 		}
 		if (IS_ENABLED(CONFIG_MULTITHREADING)) {
 			k_msleep(1);
@@ -925,11 +937,12 @@ static int uarte_nrfx_tx(const struct device *dev, const uint8_t *buf,
 {
 	struct uarte_nrfx_data *data = dev->data;
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
+	unsigned int key;
 
-	unsigned int key = irq_lock();
+	IRQ_LOCK(key);
 
 	if (data->async->tx.len) {
-		irq_unlock(key);
+		IRQ_UNLOCK(key);
 		return -EBUSY;
 	}
 
@@ -964,7 +977,7 @@ static int uarte_nrfx_tx(const struct device *dev, const uint8_t *buf,
 
 	start_tx_locked(dev, data);
 
-	irq_unlock(key);
+	IRQ_UNLOCK(key);
 
 	if (has_hwfc(dev) && timeout != SYS_FOREVER_US) {
 		k_timer_start(&data->async->tx.timer, K_USEC(timeout), K_NO_WAIT);
@@ -1185,10 +1198,12 @@ static int uarte_nrfx_rx_enable(const struct device *dev, uint8_t *buf,
 	async_rx->enabled = true;
 
 	if (LOW_POWER_ENABLED(cfg)) {
-		unsigned int key = irq_lock();
+		unsigned int key;
+
+		IRQ_LOCK(key);
 
 		uarte_enable_locked(dev, UARTE_FLAG_LOW_POWER_RX);
-		irq_unlock(key);
+		IRQ_UNLOCK(key);
 	}
 
 	nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STARTRX);
@@ -1203,7 +1218,9 @@ static int uarte_nrfx_rx_buf_rsp(const struct device *dev, uint8_t *buf,
 	struct uarte_async_rx *async_rx = &data->async->rx;
 	int err;
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
-	unsigned int key = irq_lock();
+	unsigned int key;
+
+	IRQ_LOCK(key);
 
 	if (async_rx->buf == NULL) {
 		err = -EACCES;
@@ -1238,7 +1255,7 @@ static int uarte_nrfx_rx_buf_rsp(const struct device *dev, uint8_t *buf,
 		err = -EBUSY;
 	}
 
-	irq_unlock(key);
+	IRQ_UNLOCK(key);
 
 	return err;
 }
@@ -1543,7 +1560,9 @@ static void endrx_isr(const struct device *dev)
 		 * and here we just do the swap of which buffer the driver is following,
 		 * the next rx_timeout() will update the rx_offset.
 		 */
-		unsigned int key = irq_lock();
+		unsigned int key;
+
+		IRQ_LOCK(key);
 
 		if (async_rx->buf) {
 			/* Check is based on assumption that ISR handler handles
@@ -1559,7 +1578,7 @@ static void endrx_isr(const struct device *dev)
 			nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STOPRX);
 		}
 
-		irq_unlock(key);
+		IRQ_UNLOCK(key);
 	}
 
 #if !defined(CONFIG_UART_NRFX_UARTE_ENHANCED_RX)
@@ -1680,7 +1699,7 @@ static void txstopped_isr(const struct device *dev)
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
 	unsigned int key;
 
-	key = irq_lock();
+	IRQ_LOCK(key);
 
 	size_t amount = (data->async->tx.amount >= 0) ?
 			data->async->tx.amount : nrf_uarte_tx_amount_get(uarte);
@@ -1696,7 +1715,7 @@ static void txstopped_isr(const struct device *dev)
 		uarte_disable_locked(dev, UARTE_FLAG_LOW_POWER_TX);
 	}
 
-	irq_unlock(key);
+	IRQ_UNLOCK(key);
 
 	if (!data->async->tx.buf) {
 		return;
@@ -1707,9 +1726,9 @@ static void txstopped_isr(const struct device *dev)
 	 * TXSTOPPED interrupt means that uart_poll_out has completed.
 	 */
 	if (data->async->tx.pending) {
-		key = irq_lock();
+		IRQ_LOCK(key);
 		start_tx_locked(dev, data);
-		irq_unlock(key);
+		IRQ_UNLOCK(key);
 		return;
 	}
 
@@ -1721,9 +1740,9 @@ static void txstopped_isr(const struct device *dev)
 		if (amount == data->async->tx.xfer_len) {
 			data->async->tx.cache_offset += amount;
 			if (setup_tx_cache(dev)) {
-				key = irq_lock();
+				IRQ_LOCK(key);
 				start_tx_locked(dev, data);
-				irq_unlock(key);
+				IRQ_UNLOCK(key);
 				return;
 			}
 
@@ -1923,7 +1942,7 @@ static void uarte_nrfx_poll_out(const struct device *dev, unsigned char c)
 
 	if (isr_mode) {
 		while (1) {
-			key = irq_lock();
+			IRQ_LOCK(key);
 			if (is_tx_ready(dev)) {
 #if UARTE_ANY_ASYNC
 				if (data->async && data->async->tx.len &&
@@ -1934,7 +1953,7 @@ static void uarte_nrfx_poll_out(const struct device *dev, unsigned char c)
 				break;
 			}
 
-			irq_unlock(key);
+			IRQ_UNLOCK(key);
 			Z_SPIN_DELAY(3);
 		}
 	} else {
@@ -1971,7 +1990,7 @@ static void uarte_nrfx_poll_out(const struct device *dev, unsigned char c)
 	*config->poll_out_byte = c;
 	tx_start(dev, config->poll_out_byte, 1);
 
-	irq_unlock(key);
+	IRQ_UNLOCK(key);
 }
 
 
@@ -1982,6 +2001,7 @@ static int uarte_nrfx_fifo_fill(const struct device *dev,
 				int len)
 {
 	struct uarte_nrfx_data *data = dev->data;
+	unsigned int key;
 
 	len = MIN(len, data->int_driven->tx_buff_size);
 	if (!atomic_cas(&data->int_driven->fifo_fill_lock, 0, 1)) {
@@ -1991,7 +2011,7 @@ static int uarte_nrfx_fifo_fill(const struct device *dev,
 	/* Copy data to RAM buffer for EasyDMA transfer */
 	memcpy(data->int_driven->tx_buffer, tx_data, len);
 
-	unsigned int key = irq_lock();
+	IRQ_LOCK(key);
 
 	if (!is_tx_ready(dev)) {
 		data->int_driven->fifo_fill_lock = 0;
@@ -2000,7 +2020,7 @@ static int uarte_nrfx_fifo_fill(const struct device *dev,
 		tx_start(dev, data->int_driven->tx_buffer, len);
 	}
 
-	irq_unlock(key);
+	IRQ_UNLOCK(key);
 
 	return len;
 }
@@ -2036,18 +2056,19 @@ static void uarte_nrfx_irq_tx_enable(const struct device *dev)
 {
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
 	struct uarte_nrfx_data *data = dev->data;
+	unsigned int key;
 
 	if (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME)) {
 		pm_device_runtime_get(dev);
 	}
 
-	unsigned int key = irq_lock();
+	IRQ_LOCK(key);
 
 	data->int_driven->disable_tx_irq = false;
 	data->int_driven->tx_irq_enabled = true;
 	nrf_uarte_int_enable(uarte, NRF_UARTE_INT_TXSTOPPED_MASK);
 
-	irq_unlock(key);
+	IRQ_UNLOCK(key);
 }
 
 /** Interrupt driven transfer disabling function */
