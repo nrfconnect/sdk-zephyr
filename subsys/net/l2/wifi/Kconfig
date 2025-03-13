@@ -125,3 +125,7 @@ config WIFI_ENT_IDENTITY_MAX_USERS
 	default 8
 	help
 	  This option defines the maximum number of identity users allowed connection.
+
+config SHELL_ARGC_MAX
+	int
+	default 30
