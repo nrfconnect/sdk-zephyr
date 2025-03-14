@@ -152,13 +152,11 @@ uint8_t ll_sync_create(uint8_t options, uint8_t sid, uint8_t adv_addr_type,
 
 	scan->periodic.cancelled = 0U;
 	scan->periodic.state = LL_SYNC_STATE_IDLE;
-	scan->periodic.param = NULL;
 	scan->periodic.filter_policy =
 		options & BT_HCI_LE_PER_ADV_CREATE_SYNC_FP_USE_LIST;
 	if (IS_ENABLED(CONFIG_BT_CTLR_PHY_CODED)) {
 		scan_coded->periodic.cancelled = 0U;
 		scan_coded->periodic.state = LL_SYNC_STATE_IDLE;
-		scan_coded->periodic.param = NULL;
 		scan_coded->periodic.filter_policy =
 			scan->periodic.filter_policy;
 	}
@@ -882,12 +880,12 @@ void ull_sync_release(struct ll_sync_set *sync)
 	mem_release(sync, &sync_free);
 }
 
-bool ull_sync_setup_addr_check(struct ll_sync_set *sync, uint8_t filter_policy,
+void ull_sync_setup_addr_check(struct ll_sync_set *sync, struct ll_scan_set *scan,
 			       uint8_t addr_type, uint8_t *addr, uint8_t rl_idx)
 {
 	/* Check if Periodic Advertiser list to be used */
 	if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_PERIODIC_ADV_LIST) &&
-	    filter_policy) {
+	    scan->periodic.filter_policy) {
 		/* Check in Periodic Advertiser List */
 		if (ull_filter_ull_pal_addr_match(addr_type, addr)) {
 			/* Remember the address, to check with
@@ -898,7 +896,7 @@ bool ull_sync_setup_addr_check(struct ll_sync_set *sync, uint8_t filter_policy,
 				     BDADDR_SIZE);
 
 			/* Address matched */
-			return true;
+			scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
 
 		/* Check in Resolving List */
 		} else if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY) &&
@@ -913,14 +911,14 @@ bool ull_sync_setup_addr_check(struct ll_sync_set *sync, uint8_t filter_policy,
 			sync->peer_addr_resolved = 1U;
 
 			/* Address matched */
-			return true;
+			scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
 		}
 
 	/* Check with explicitly supplied address */
 	} else if ((addr_type == sync->peer_id_addr_type) &&
 		   !memcmp(addr, sync->peer_id_addr, BDADDR_SIZE)) {
 		/* Address matched */
-		return true;
+		scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
 
 	/* Check identity address with explicitly supplied address */
 	} else if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY) &&
@@ -932,11 +930,9 @@ bool ull_sync_setup_addr_check(struct ll_sync_set *sync, uint8_t filter_policy,
 			sync->peer_addr_resolved = 1U;
 
 			/* Identity address matched */
-			return true;
+			scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
 		}
 	}
-
-	return false;
 }
 
 bool ull_sync_setup_sid_match(struct ll_sync_set *sync, struct ll_scan_set *scan, uint8_t sid)
@@ -1064,7 +1060,6 @@ void ull_sync_setup(struct ll_scan_set *scan, uint8_t phy,
 
 	/* Set the state to sync create */
 	scan->periodic.state = LL_SYNC_STATE_CREATED;
-	scan->periodic.param = NULL;
 	if (IS_ENABLED(CONFIG_BT_CTLR_PHY_CODED)) {
 		struct ll_scan_set *scan_1m;
 
@@ -1074,10 +1069,8 @@ void ull_sync_setup(struct ll_scan_set *scan, uint8_t phy,
 
 			scan_coded = ull_scan_set_get(SCAN_HANDLE_PHY_CODED);
 			scan_coded->periodic.state = LL_SYNC_STATE_CREATED;
-			scan_coded->periodic.param = NULL;
 		} else {
 			scan_1m->periodic.state = LL_SYNC_STATE_CREATED;
-			scan_1m->periodic.param = NULL;
 		}
 	}
 
