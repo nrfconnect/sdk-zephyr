@@ -20,9 +20,6 @@ endif()
 
 zephyr_include_directories(
 	${ZEPHYR_LIBLC3_MODULE_DIR}/include
-)
-
-zephyr_library_include_directories(
 	${ZEPHYR_LIBLC3_MODULE_DIR}/src
 )
 
