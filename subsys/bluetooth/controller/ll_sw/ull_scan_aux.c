@@ -293,13 +293,7 @@ void ull_scan_aux_setup(memq_link_t *link, struct node_rx_pdu *rx)
 			 */
 			sync_lll = ftr->param;
 
-			/* We can not retrieve aux context that was stored in
-			 * lll_sync when superior PDU was handled, as it may be
-			 * reset to NULL before this node rx is processed here.
-			 * The reset happens when new Periodic Advertising chain
-			 * is being received before we process the node here.
-			 */
-			lll_aux =  ftr->lll_aux;
+			lll_aux = sync_lll->lll_aux;
 			LL_ASSERT(lll_aux);
 
 			aux = HDR_LLL2ULL(lll_aux);
