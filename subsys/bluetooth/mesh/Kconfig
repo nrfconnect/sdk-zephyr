@@ -1492,7 +1492,8 @@ config BT_MESH_USES_TINYCRYPT
 	  Use TinyCrypt library to perform crypto operations.
 
 config BT_MESH_USES_MBEDTLS_PSA
-	bool "mbed TLS PSA"
+	bool "mbed TLS PSA [EXPERIMENTAL]"
+	select EXPERIMENTAL
 	select MBEDTLS
 	select MBEDTLS_PSA_CRYPTO_C
 	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
@@ -1502,6 +1503,7 @@ config BT_MESH_USES_MBEDTLS_PSA
 	select PSA_WANT_ALG_CMAC
 	select PSA_WANT_ALG_ECB_NO_PADDING
 	select PSA_WANT_KEY_TYPE_AES
+	imply MBEDTLS_AES_ROM_TABLES
 	select PSA_WANT_ALG_CCM
 	select PSA_WANT_KEY_TYPE_HMAC
 	select PSA_WANT_ALG_HMAC
@@ -1509,9 +1511,10 @@ config BT_MESH_USES_MBEDTLS_PSA
 	select PSA_WANT_ALG_ECDH
 	select PSA_WANT_ECC_SECP_R1_256
 	select BT_MESH_SECURE_STORAGE if BT_SETTINGS
-	imply MBEDTLS_AES_ROM_TABLES
 	help
-	  Use Mbed TLS as PSA Crypto API provider.
+	  Use Mbed TLS as PSA Crypto API provider. This is useful on platforms
+	  that do not support TF-M.
+	  This feature is experimental and only BabbleSim tests were run.
 
 config BT_MESH_USES_TFM_PSA
 	bool "Use TF-M PSA [EXPERIMENTAL]"
