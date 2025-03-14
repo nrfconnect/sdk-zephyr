@@ -26,7 +26,6 @@
 #define SHPHLD_WAKEUP         0xC1U
 #define SHPHLD_SHPHLD         0xC2U
 #define HIBERNATE_TASKS_HIBER 0xC8U
-#define HIBERNATE_TASKS_HIBERPT 0xC9U
 #define RESET_TASKS_RESET     0xD0U
 #define RESET_BUTTON          0xD2U
 #define RESET_PIN             0xD3U
@@ -338,7 +337,7 @@ int mfd_npm2100_reset(const struct device *dev)
 	return i2c_reg_write_byte_dt(&config->i2c, RESET_TASKS_RESET, 1U);
 }
 
-int mfd_npm2100_hibernate(const struct device *dev, uint32_t time_ms, bool pass_through)
+int mfd_npm2100_hibernate(const struct device *dev, uint32_t time_ms)
 {
 	const struct mfd_npm2100_config *config = dev->config;
 	int ret;
@@ -366,8 +365,7 @@ int mfd_npm2100_hibernate(const struct device *dev, uint32_t time_ms, bool pass_
 		return ret;
 	}
 
-	return i2c_reg_write_byte_dt(
-		&config->i2c, pass_through ? HIBERNATE_TASKS_HIBERPT : HIBERNATE_TASKS_HIBER, 1U);
+	return i2c_reg_write_byte_dt(&config->i2c, HIBERNATE_TASKS_HIBER, 1U);
 }
 
 int mfd_npm2100_add_callback(const struct device *dev, struct gpio_callback *callback)
