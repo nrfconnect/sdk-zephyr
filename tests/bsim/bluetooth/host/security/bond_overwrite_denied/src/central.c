@@ -12,9 +12,6 @@
 
 #include <zephyr/bluetooth/bluetooth.h>
 
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
-
 void central(void)
 {
 	bs_bt_utils_setup();
@@ -33,5 +30,5 @@ void central(void)
 	wait_connected();
 	set_security(BT_SECURITY_L2);
 	wait_disconnected();
-	TEST_PASS("PASS");
+	PASS("PASS\n");
 }

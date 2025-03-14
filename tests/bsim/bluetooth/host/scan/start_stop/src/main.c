@@ -18,9 +18,24 @@
 
 LOG_MODULE_REGISTER(bt_bsim_scan_start_stop, LOG_LEVEL_DBG);
 
+#define WAIT_TIME_S 60
+#define WAIT_TIME   (WAIT_TIME_S * 1e6)
+
 static atomic_t flag_adv_report_received;
 static atomic_t flag_periodic_sync_established;
 static bt_addr_le_t adv_addr;
+
+static void test_tick(bs_time_t HW_device_time)
+{
+	if (bst_result != Passed) {
+		TEST_FAIL("Test failed (not passed after %d seconds)\n", WAIT_TIME_S);
+	}
+}
+
+static void test_init(void)
+{
+	bst_ticker_set_next_tick_absolute(WAIT_TIME);
+}
 
 static void bt_sync_established_cb(struct bt_le_per_adv_sync *sync,
 				   struct bt_le_per_adv_sync_synced_info *info)
@@ -83,7 +98,7 @@ void run_dut(void)
 	LOG_DBG("Starting DUT");
 
 	err = bt_enable(NULL);
-	TEST_ASSERT(!err, "Bluetooth init failed (err %d)", err);
+	TEST_ASSERT(!err, "Bluetooth init failed (err %d)\n", err);
 
 	LOG_DBG("Bluetooth initialised");
 
@@ -103,7 +118,7 @@ void run_dut(void)
 	bt_le_per_adv_sync_cb_register(&sync_callbacks);
 
 	err = bt_le_per_adv_sync_create(&per_sync_param, &p_per_sync);
-	TEST_ASSERT(!err, "Periodic sync setup failed (err %d)", err);
+	TEST_ASSERT(!err, "Periodic sync setup failed (err %d)\n", err);
 	LOG_DBG("Periodic sync started");
 
 	/* Start scanner. Check that we can start the scanner while it is already
@@ -119,7 +134,7 @@ void run_dut(void)
 	};
 
 	err = bt_le_scan_start(&scan_params, device_found);
-	TEST_ASSERT(!err, "Scanner setup failed (err %d)", err);
+	TEST_ASSERT(!err, "Scanner setup failed (err %d)\n", err);
 	LOG_DBG("Explicit scanner started");
 
 	LOG_DBG("Wait for an advertising report");
@@ -127,12 +142,12 @@ void run_dut(void)
 
 	/* Stop the scanner. That should not affect the periodic advertising sync. */
 	err = bt_le_scan_stop();
-	TEST_ASSERT(!err, "Scanner stop failed (err %d)", err);
+	TEST_ASSERT(!err, "Scanner stop failed (err %d)\n", err);
 	LOG_DBG("Explicit scanner stopped");
 
 	/* We should be able to stop the periodic advertising sync. */
 	err = bt_le_per_adv_sync_delete(p_per_sync);
-	TEST_ASSERT(!err, "Periodic sync stop failed (err %d)", err);
+	TEST_ASSERT(!err, "Periodic sync stop failed (err %d)\n", err);
 	LOG_DBG("Periodic sync stopped");
 
 	/* Start the periodic advertising sync. This time, provide the address of the advertiser
@@ -146,19 +161,19 @@ void run_dut(void)
 		.timeout = BT_GAP_PER_ADV_MAX_TIMEOUT
 	};
 	err = bt_le_per_adv_sync_create(&per_sync_param, &p_per_sync);
-	TEST_ASSERT(!err, "Periodic sync setup failed (err %d)", err);
+	TEST_ASSERT(!err, "Periodic sync setup failed (err %d)\n", err);
 	LOG_DBG("Periodic sync started");
 
 	/* Start the explicit scanner */
 	err = bt_le_scan_start(&scan_params, device_found);
-	TEST_ASSERT(!err, "Scanner setup failed (err %d)", err);
+	TEST_ASSERT(!err, "Scanner setup failed (err %d)\n", err);
 	LOG_DBG("Explicit scanner started");
 
 	/* Stop the explicit scanner. This should not stop scanner, since we still try to establish
 	 * a sync.
 	 */
 	err = bt_le_scan_stop();
-	TEST_ASSERT(!err, "Scanner stop failed (err %d)", err);
+	TEST_ASSERT(!err, "Scanner stop failed (err %d)\n", err);
 	LOG_DBG("Explicit scanner stopped");
 
 	/* Signal to the tester to start the periodic adv. */
@@ -171,7 +186,7 @@ void run_dut(void)
 	/* Signal to the tester to end the test. */
 	bk_sync_send();
 
-	TEST_PASS("Test passed (DUT)");
+	TEST_PASS("Test passed (DUT)\n");
 }
 
 void run_tester(void)
@@ -184,7 +199,7 @@ void run_tester(void)
 	LOG_DBG("Starting DUT");
 
 	err = bt_enable(NULL);
-	TEST_ASSERT(!err, "Bluetooth init failed (err %d)", err);
+	TEST_ASSERT(!err, "Bluetooth init failed (err %d)\n", err);
 
 	LOG_DBG("Bluetooth initialised");
 
@@ -218,18 +233,22 @@ void run_tester(void)
 
 	bt_le_per_adv_stop(per_adv);
 
-	TEST_PASS("Test passed (Tester)");
+	TEST_PASS("Test passed (Tester)\n");
 }
 
 static const struct bst_test_instance test_def[] = {
 	{
 		.test_id = "scanner",
 		.test_descr = "SCANNER",
+		.test_post_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = run_dut,
 	},
 	{
 		.test_id = "periodic_adv",
 		.test_descr = "PER_ADV",
+		.test_post_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = run_tester,
 	},
 	BSTEST_END_MARKER

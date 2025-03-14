@@ -12,8 +12,6 @@
 #include <zephyr/bluetooth/bluetooth.h>
 
 #include "bs_bt_utils.h"
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
 
 LOG_MODULE_REGISTER(test_central, LOG_LEVEL_DBG);
 
@@ -37,5 +35,5 @@ void central(void)
 
 	clear_g_conn();
 
-	TEST_PASS("PASS");
+	PASS("PASS\n");
 }
