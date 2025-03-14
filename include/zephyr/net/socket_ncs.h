@@ -49,6 +49,10 @@ extern "C" {
  */
 #define TLS_DTLS_HANDSHAKE_STATUS 21
 
+/* Valid values for TLS_SESSION_CACHE option */
+#define TLS_SESSION_CACHE_DISABLED 0 /**< Disable TLS session caching. */
+#define TLS_SESSION_CACHE_ENABLED 1 /**< Enable TLS session caching. */
+
 /* Valid values for TLS_DTLS_HANDSHAKE_TIMEO option */
 #define TLS_DTLS_HANDSHAKE_TIMEO_NONE 0 /**< No timeout */
 #define TLS_DTLS_HANDSHAKE_TIMEO_1S 1 /**< 1 second */
