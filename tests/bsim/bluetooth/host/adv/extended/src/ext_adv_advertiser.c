@@ -5,8 +5,12 @@
  */
 #include <zephyr/kernel.h>
 
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
+#include "common.h"
+
+#include "bs_types.h"
+#include "bs_tracing.h"
+#include "time_machine.h"
+#include "bstests.h"
 
 #include <zephyr/types.h>
 #include <zephyr/sys/printk.h>
@@ -18,8 +22,8 @@ extern enum bst_result_t bst_result;
 
 static struct bt_conn *g_conn;
 
-static DEFINE_FLAG(flag_connected);
-static DEFINE_FLAG(flag_conn_recycled);
+CREATE_FLAG(flag_connected);
+CREATE_FLAG(flag_conn_recycled);
 
 static void common_init(void)
 {
@@ -28,7 +32,7 @@ static void common_init(void)
 	err = bt_enable(NULL);
 
 	if (err) {
-		TEST_FAIL("Bluetooth init failed: %d", err);
+		FAIL("Bluetooth init failed: %d\n", err);
 		return;
 	}
 	printk("Bluetooth initialized\n");
@@ -99,7 +103,7 @@ static void disconnect_from_target(void)
 
 	err = bt_conn_disconnect(g_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 	if (err) {
-		TEST_FAIL("BT Disconnect failed: %d", err);
+		FAIL("BT Disconnect failed: %d\n", err);
 		return;
 	}
 }
@@ -111,13 +115,13 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	if (err != BT_HCI_ERR_SUCCESS) {
-		TEST_FAIL("Failed to connect to %s: %u", addr, err);
+		FAIL("Failed to connect to %s: %u\n", addr, err);
 		return;
 	}
 
 	printk("Connected to %s\n", addr);
 	if (g_conn != NULL) {
-		TEST_FAIL("Attempt to override connection object without clean-up");
+		FAIL("Attempt to override connection object without clean-up\n");
 		return;
 	}
 	g_conn = bt_conn_ref(conn);
@@ -178,7 +182,7 @@ static void main_ext_adv_advertiser(void)
 
 	ext_adv = NULL;
 
-	TEST_PASS("Extended advertiser passed");
+	PASS("Extended advertiser passed\n");
 }
 
 static void adv_connect_and_disconnect_cycle(void)
@@ -224,7 +228,7 @@ static void main_ext_conn_adv_advertiser(void)
 
 	ext_adv = NULL;
 
-	TEST_PASS("Extended advertiser passed");
+	PASS("Extended advertiser passed\n");
 }
 
 static void main_ext_conn_adv_advertiser_x5(void)
@@ -248,7 +252,7 @@ static void main_ext_conn_adv_advertiser_x5(void)
 	delete_adv_set(ext_adv);
 	ext_adv = NULL;
 
-	TEST_PASS("Extended advertiser passed");
+	PASS("Extended advertiser passed\n");
 }
 
 static const struct bst_test_instance ext_adv_advertiser[] = {
@@ -256,12 +260,16 @@ static const struct bst_test_instance ext_adv_advertiser[] = {
 		.test_id = "ext_adv_advertiser",
 		.test_descr = "Basic extended advertising test. "
 			      "Will just start extended advertising.",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = main_ext_adv_advertiser
 	},
 	{
 		.test_id = "ext_adv_conn_advertiser",
 		.test_descr = "Basic connectable extended advertising test. "
 			      "Starts extended advertising, and restarts it after disconnecting",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = main_ext_conn_adv_advertiser
 	},
 	{
@@ -269,6 +277,8 @@ static const struct bst_test_instance ext_adv_advertiser[] = {
 		.test_descr = "Basic connectable extended advertising test. "
 			      "Starts extended advertising, and restarts it after disconnecting, "
 			      "repeated over 5 times",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = main_ext_conn_adv_advertiser_x5
 	},
 	BSTEST_END_MARKER

@@ -4,24 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <stddef.h>
-#include <errno.h>
-#include <zephyr/kernel.h>
-#include <zephyr/types.h>
 #include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
 
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
 #include "common.h"
 
-static DEFINE_FLAG(flag_is_connected);
-static DEFINE_FLAG(flag_discover_complete);
-static DEFINE_FLAG(flag_write_complete);
-static DEFINE_FLAG(flag_read_complete);
+CREATE_FLAG(flag_is_connected);
+CREATE_FLAG(flag_discover_complete);
+CREATE_FLAG(flag_write_complete);
+CREATE_FLAG(flag_read_complete);
 
 static struct bt_conn *g_conn;
 static uint16_t chrc_handle;
@@ -41,7 +32,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	if (err != 0) {
-		TEST_FAIL("Failed to connect to %s (%u)", addr, err);
+		FAIL("Failed to connect to %s (%u)\n", addr, err);
 		return;
 	}
 
@@ -95,14 +86,14 @@ void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	printk("Stopping scan\n");
 	err = bt_le_scan_stop();
 	if (err != 0) {
-		TEST_FAIL("Could not stop scan: %d");
+		FAIL("Could not stop scan: %d");
 		return;
 	}
 
 	err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN,
 				BT_LE_CONN_PARAM_DEFAULT, &g_conn);
 	if (err != 0) {
-		TEST_FAIL("Could not connect to peer: %d", err);
+		FAIL("Could not connect to peer: %d", err);
 	}
 }
 
@@ -114,8 +105,8 @@ static uint8_t discover_func(struct bt_conn *conn,
 
 	if (attr == NULL) {
 		if (chrc_handle == 0 || long_chrc_handle == 0) {
-			TEST_FAIL("Did not discover chrc (%x) or long_chrc (%x)", chrc_handle,
-				  long_chrc_handle);
+			FAIL("Did not discover chrc (%x) or long_chrc (%x)",
+			     chrc_handle, long_chrc_handle);
 		}
 
 		(void)memset(params, 0, sizeof(*params));
@@ -136,7 +127,7 @@ static uint8_t discover_func(struct bt_conn *conn,
 
 		err = bt_gatt_discover(conn, params);
 		if (err != 0) {
-			TEST_FAIL("Discover failed (err %d)", err);
+			FAIL("Discover failed (err %d)\n", err);
 		}
 
 		return BT_GATT_ITER_STOP;
@@ -170,7 +161,7 @@ static void gatt_discover(void)
 
 	err = bt_gatt_discover(g_conn, &discover_params);
 	if (err != 0) {
-		TEST_FAIL("Discover failed(err %d)", err);
+		FAIL("Discover failed(err %d)\n", err);
 	}
 
 	WAIT_FOR_FLAG(flag_discover_complete);
@@ -181,7 +172,7 @@ static void gatt_write_cb(struct bt_conn *conn, uint8_t err,
 			  struct bt_gatt_write_params *params)
 {
 	if (err != BT_ATT_ERR_SUCCESS) {
-		TEST_FAIL("Write failed: 0x%02X\n", err);
+		FAIL("Write failed: 0x%02X\n", err);
 	}
 
 	(void)memset(params, 0, sizeof(*params));
@@ -211,7 +202,7 @@ static void gatt_write(uint16_t handle)
 
 	err = bt_gatt_write(g_conn, &write_params);
 	if (err != 0) {
-		TEST_FAIL("bt_gatt_write failed: %d", err);
+		FAIL("bt_gatt_write failed: %d\n", err);
 	}
 
 	WAIT_FOR_FLAG(flag_write_complete);
@@ -223,16 +214,18 @@ static uint8_t gatt_read_cb(struct bt_conn *conn, uint8_t err,
 			    const void *data, uint16_t length)
 {
 	if (err != BT_ATT_ERR_SUCCESS) {
-		TEST_FAIL("Read failed: 0x%02X\n", err);
+		FAIL("Read failed: 0x%02X\n", err);
 	}
 
 	if (params->single.handle == chrc_handle) {
-		if (length != CHRC_SIZE || memcmp(data, chrc_data, length) != 0) {
-			TEST_FAIL("chrc data different than expected", err);
+		if (length != CHRC_SIZE ||
+		    memcmp(data, chrc_data, length) != 0) {
+			FAIL("chrc data different than expected", err);
 		}
 	} else if (params->single.handle == chrc_handle) {
-		if (length != LONG_CHRC_SIZE || memcmp(data, long_chrc_data, length) != 0) {
-			TEST_FAIL("long_chrc data different than expected", err);
+		if (length != LONG_CHRC_SIZE ||
+		    memcmp(data, long_chrc_data, length) != 0) {
+			FAIL("long_chrc data different than expected", err);
 		}
 	}
 
@@ -259,7 +252,7 @@ static void gatt_read(uint16_t handle)
 
 	err = bt_gatt_read(g_conn, &read_params);
 	if (err != 0) {
-		TEST_FAIL("bt_gatt_read failed: %d", err);
+		FAIL("bt_gatt_read failed: %d\n", err);
 	}
 
 	WAIT_FOR_FLAG(flag_read_complete);
@@ -276,13 +269,13 @@ static void test_main(void)
 
 		err = bt_enable(NULL);
 		if (err != 0) {
-			TEST_FAIL("Bluetooth discover failed (err %d)", err);
+			FAIL("Bluetooth discover failed (err %d)\n", err);
 		}
 		printk("Bluetooth initialized\n");
 
 		err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
 		if (err != 0) {
-			TEST_FAIL("Scanning failed to start (err %d)", err);
+			FAIL("Scanning failed to start (err %d)\n", err);
 		}
 
 		printk("Scanning successfully started\n");
@@ -301,7 +294,7 @@ static void test_main(void)
 
 		err = bt_conn_disconnect(g_conn, 0x13);
 		if (err != 0) {
-			TEST_FAIL("Disconnect failed (err %d)", err);
+			FAIL("Disconnect failed (err %d)\n", err);
 			return;
 		}
 
@@ -309,17 +302,19 @@ static void test_main(void)
 
 		err = bt_disable();
 		if (err != 0) {
-			TEST_FAIL("Bluetooth disable failed (err %d)", err);
+			FAIL("Bluetooth disable failed (err %d)\n", err);
 		}
 		printk("Bluetooth successfully disabled\n");
 	}
 
-	TEST_PASS("GATT client Passed\n");
+	PASS("GATT client Passed\n");
 }
 
 static const struct bst_test_instance test_vcs[] = {
 	{
 		.test_id = "gatt_client",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = test_main
 	},
 	BSTEST_END_MARKER
