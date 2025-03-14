@@ -516,13 +516,17 @@ config WPA_CRYPTO
 config WPA_SUPP_CRYPTO
 	bool
 
-config NO_ROBUST_AV
+config ROBUST_AV
 	bool
+	default y
+	depends on WIFI_NM_WPA_SUPPLICANT_ROBUST_AV
 
-config NO_RRM
+config RRM
 	bool
+	default y
+	depends on WIFI_NM_WPA_SUPPLICANT_RRM
 
-config NO_WMM_AC
+config WMM_AC
 	bool
 
 config DPP
