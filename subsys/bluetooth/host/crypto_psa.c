@@ -27,7 +27,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_host_crypto);
 
-int bt_crypto_init(void)
+int prng_init(void)
 {
 	psa_status_t status = psa_crypto_init();
 
