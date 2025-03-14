@@ -48,10 +48,7 @@ endif
 
 if BT_NXP
 
-config BT_DIS_MANUF_NAME
-	default y
-
-config BT_DIS_MANUF_NAME_STR
+config BT_DIS_MANUF
 	default "NXP"
 
 config BT_HCI_ACL_FLOW_CONTROL
