@@ -216,7 +216,7 @@ ZTEST_USER(uart_async_single_read, test_single_read)
 	sent_bytes += 5;
 
 	zassert_equal(k_sem_take(&tx_done, K_MSEC(100)), 0, "TX_DONE timeout");
-	zassert_equal(k_sem_take(&rx_rdy, K_MSEC(100)), 0, "RX_RDY timeout");
+	zassert_equal(k_sem_take(&rx_rdy, K_MSEC(105)), 0, "RX_RDY timeout");
 	zassert_equal(k_sem_take(&rx_rdy, K_MSEC(100)), -EAGAIN,
 		      "Extra RX_RDY received");
 
@@ -345,13 +345,13 @@ ZTEST_USER(uart_async_multi_rx, test_multiple_rx_enable)
 /* To ensure 32-bit alignment of the buffer array,
  * the two arrays are defined instead using an array of arrays
  */
-static __aligned(32) uint8_t chained_read_buf_0[8] __used __NOCACHE;
-static __aligned(32) uint8_t chained_read_buf_1[8] __used __NOCACHE;
+static __aligned(32) uint8_t chained_read_buf_0[10] __used __NOCACHE;
+static __aligned(32) uint8_t chained_read_buf_1[10] __used __NOCACHE;
 static __aligned(32) uint8_t chained_cpy_buf[10] __used __NOCACHE;
 #else
-static ZTEST_BMEM uint8_t chained_read_buf_0[8];
-static ZTEST_BMEM uint8_t chained_read_buf_1[8];
-static ZTEST_BMEM uint8_t chained_cpy_buf[10];
+ZTEST_BMEM uint8_t chained_read_buf_0[10];
+ZTEST_BMEM uint8_t chained_read_buf_1[10];
+ZTEST_BMEM uint8_t chained_cpy_buf[10];
 #endif /* NOCACHE_MEM */
 static ZTEST_BMEM volatile uint8_t rx_data_idx;
 static ZTEST_BMEM uint8_t rx_buf_idx;
@@ -407,7 +407,7 @@ ZTEST_USER(uart_async_chain_read, test_chained_read)
 #if NOCACHE_MEM
 	static __aligned(32) uint8_t tx_buf[10] __used __NOCACHE;
 #else
-	uint8_t tx_buf[10];
+	 __aligned(32) uint8_t tx_buf[10];
 #endif /* NOCACHE_MEM */
 	int iter = 6;
 	uint32_t rx_timeout_ms = 50;
@@ -489,15 +489,12 @@ ZTEST_USER(uart_async_double_buf, test_double_buffer)
 #if NOCACHE_MEM
 	static __aligned(32) uint8_t tx_buf[4] __used __NOCACHE;
 #else
-	uint8_t tx_buf[4];
+	 __aligned(32) uint8_t tx_buf[4];
 #endif /* NOCACHE_MEM */
 
-	zassert_equal(uart_rx_enable(uart_dev,
-				     double_buffer[0],
-				     sizeof(double_buffer[0]),
-				     50 * USEC_PER_MSEC),
-		      0,
-		      "Failed to enable receiving");
+	zassert_equal(uart_rx_enable(uart_dev, double_buffer[0], sizeof(double_buffer[0]),
+				     25 * USEC_PER_MSEC),
+		      0, "Failed to enable receiving");
 
 	for (int i = 0; i < 100; i++) {
 		snprintf(tx_buf, sizeof(tx_buf), "%03d", i);
@@ -599,8 +596,8 @@ ZTEST_USER(uart_async_read_abort, test_read_abort)
 	static __aligned(32) uint8_t rx_buf[100] __used __NOCACHE;
 	static __aligned(32) uint8_t tx_buf[100] __used __NOCACHE;
 #else
-	uint8_t rx_buf[100];
-	uint8_t tx_buf[100];
+	 __aligned(32) uint8_t rx_buf[100];
+	 __aligned(32) uint8_t tx_buf[100];
 #endif /* NOCACHE_MEM */
 
 	memset(rx_buf, 0, sizeof(rx_buf));
@@ -704,7 +701,7 @@ ZTEST_USER(uart_async_write_abort, test_write_abort)
 #if NOCACHE_MEM
 	static __aligned(32) uint8_t tx_buf[100] __used __NOCACHE;
 #else
-	uint8_t tx_buf[100];
+	 __aligned(32) uint8_t tx_buf[100];
 #endif /* NOCACHE_MEM */
 
 	memset(test_rx_buf, 0, sizeof(test_rx_buf));
@@ -781,8 +778,8 @@ ZTEST_USER(uart_async_timeout, test_forever_timeout)
 	static __aligned(32) uint8_t rx_buf[100] __used __NOCACHE;
 	static __aligned(32) uint8_t tx_buf[100] __used __NOCACHE;
 #else
-	uint8_t rx_buf[100];
-	uint8_t tx_buf[100];
+	 __aligned(32) uint8_t rx_buf[100];
+	 __aligned(32) uint8_t tx_buf[100];
 #endif /* NOCACHE_MEM */
 
 	memset(rx_buf, 0, sizeof(rx_buf));
@@ -873,7 +870,7 @@ ZTEST_USER(uart_async_chain_write, test_chained_write)
 #if NOCACHE_MEM
 	static __aligned(32) uint8_t rx_buf[20] __used __NOCACHE;
 #else
-	uint8_t rx_buf[20];
+	 __aligned(32) uint8_t rx_buf[20];
 #endif /* NOCACHE_MEM */
 
 	memset(rx_buf, 0, sizeof(rx_buf));

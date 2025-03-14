@@ -100,10 +100,10 @@ static const nrf_gpio_pin_drive_t drive_modes[NRF_DRIVE_COUNT] = {
 #endif
 
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_grtc) || defined(CONFIG_NRFX_GRTC)
-#if DT_NODE_HAS_PROP(DT_NODELABEL(grtc), clkout_fast_frequency)
+#if DT_NODE_HAS_PROP(DT_NODELABEL(grtc), clkout_fast_frequency_hz)
 #define NRF_GRTC_CLKOUT_FAST 1
 #endif
-#if DT_NODE_HAS_PROP(DT_NODELABEL(grtc), clkout_32k_frequency)
+#if DT_NODE_HAS_PROP(DT_NODELABEL(grtc), clkout_32k)
 #define NRF_GRTC_CLKOUT_SLOW 1
 #endif
 #endif

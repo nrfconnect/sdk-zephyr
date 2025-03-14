@@ -7,6 +7,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdint.h>
+
+#include <zephyr/bluetooth/att.h>
 #include <zephyr/kernel.h>
 #include <string.h>
 #include <errno.h>
@@ -381,7 +384,7 @@ static int bt_gatt_clear_sc(uint8_t id, const bt_addr_le_t *addr)
 
 static void sc_clear(struct bt_conn *conn)
 {
-	if (bt_addr_le_is_bonded(conn->id, &conn->le.dst)) {
+	if (bt_le_bond_exists(conn->id, &conn->le.dst)) {
 		int err;
 
 		err = bt_gatt_clear_sc(conn->id, &conn->le.dst);
@@ -463,8 +466,7 @@ static void sc_save(uint8_t id, bt_addr_le_t *peer, uint16_t start, uint16_t end
 	modified = update_range(&cfg->data.start, &cfg->data.end, start, end);
 
 done:
-	if (IS_ENABLED(CONFIG_BT_SETTINGS) &&
-	    modified && bt_addr_le_is_bonded(cfg->id, &cfg->peer)) {
+	if (IS_ENABLED(CONFIG_BT_SETTINGS) && modified && bt_le_bond_exists(cfg->id, &cfg->peer)) {
 		sc_store(cfg);
 	}
 }
@@ -1027,7 +1029,7 @@ static void remove_cf_cfg(struct bt_conn *conn)
 	 * trusted relationship the characteristic value shall be set to the
 	 * default value at each connection.
 	 */
-	if (!bt_addr_le_is_bonded(conn->id, &conn->le.dst)) {
+	if (!bt_le_bond_exists(conn->id, &conn->le.dst)) {
 		clear_cf_cfg(cfg);
 	} else {
 		/* Update address in case it has changed */
@@ -1145,7 +1147,7 @@ static void bt_gatt_identity_resolved(struct bt_conn *conn, const bt_addr_le_t *
 		.private_addr = private_addr,
 		.id_addr      = id_addr
 	};
-	bool is_bonded = bt_addr_le_is_bonded(conn->id, &conn->le.dst);
+	bool is_bonded = bt_le_bond_exists(conn->id, &conn->le.dst);
 
 	bt_gatt_foreach_attr(0x0001, 0xffff, convert_to_id_on_match, &user_data);
 
@@ -1445,7 +1447,7 @@ static struct ds_peer *gatt_delayed_store_alloc(uint8_t id,
 static void gatt_delayed_store_enqueue(uint8_t id, const bt_addr_le_t *peer_addr,
 				       enum delayed_store_flags flag)
 {
-	bool bonded = bt_addr_le_is_bonded(id, peer_addr);
+	bool bonded = bt_le_bond_exists(id, peer_addr);
 	struct ds_peer *el = gatt_delayed_store_find(id, peer_addr);
 
 	if (bonded) {
@@ -1480,7 +1482,7 @@ static void gatt_store_ccc_cf(uint8_t id, const bt_addr_le_t *peer_addr)
 {
 	struct ds_peer *el = gatt_delayed_store_find(id, peer_addr);
 
-	if (bt_addr_le_is_bonded(id, peer_addr)) {
+	if (bt_le_bond_exists(id, peer_addr)) {
 		if (!IS_ENABLED(CONFIG_BT_SETTINGS_CCC_STORE_ON_WRITE) ||
 		    (IS_ENABLED(CONFIG_BT_SETTINGS_CCC_STORE_ON_WRITE) && el &&
 		     atomic_test_and_clear_bit(el->flags, DELAYED_STORE_CCC))) {
@@ -1668,7 +1670,7 @@ static void gatt_unregister_ccc(struct _bt_gatt_ccc *ccc)
 			}
 
 			if (IS_ENABLED(CONFIG_BT_SETTINGS) && store &&
-			    bt_addr_le_is_bonded(cfg->id, &cfg->peer)) {
+			    bt_le_bond_exists(cfg->id, &cfg->peer)) {
 				bt_gatt_store_ccc(cfg->id, &cfg->peer);
 			}
 
@@ -2859,12 +2861,20 @@ struct bt_gatt_attr *bt_gatt_find_by_uuid(const struct bt_gatt_attr *attr,
 					  const struct bt_uuid *uuid)
 {
 	struct bt_gatt_attr *found = NULL;
-	uint16_t start_handle = bt_gatt_attr_value_handle(attr);
-	uint16_t end_handle = start_handle && attr_count ?
-			      start_handle + attr_count : 0xffff;
+	uint16_t start_handle = bt_gatt_attr_get_handle(attr);
+	uint16_t end_handle = start_handle && attr_count
+				      ? MIN(start_handle + attr_count, BT_ATT_LAST_ATTRIBUTE_HANDLE)
+				      : BT_ATT_LAST_ATTRIBUTE_HANDLE;
 
-	bt_gatt_foreach_attr_type(start_handle, end_handle, uuid, NULL, 1,
-				  find_next, &found);
+	if (attr != NULL && start_handle == 0U) {
+		/* If start_handle is 0 then `attr` is not in our database, and should not be used
+		 * as a starting point for the search
+		 */
+		LOG_DBG("Could not find handle of attr %p", attr);
+		return NULL;
+	}
+
+	bt_gatt_foreach_attr_type(start_handle, end_handle, uuid, NULL, 1, find_next, &found);
 
 	return found;
 }
@@ -3413,7 +3423,7 @@ static uint8_t disconnected_cb(const struct bt_gatt_attr *attr, uint16_t handle,
 			}
 		} else {
 			/* Clear value if not paired */
-			if (!bt_addr_le_is_bonded(conn->id, &conn->le.dst)) {
+			if (!bt_le_bond_exists(conn->id, &conn->le.dst)) {
 				if (ccc == &sc_ccc) {
 					sc_clear(conn);
 				}
@@ -3729,9 +3739,8 @@ static void remove_subscriptions(struct bt_conn *conn)
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&sub->list, params, tmp, node) {
 		atomic_clear_bit(params->flags, BT_GATT_SUBSCRIBE_FLAG_SENT);
 
-		if (!bt_addr_le_is_bonded(conn->id, &conn->le.dst) ||
-		    (atomic_test_bit(params->flags,
-				     BT_GATT_SUBSCRIBE_FLAG_VOLATILE))) {
+		if (!bt_le_bond_exists(conn->id, &conn->le.dst) ||
+		    (atomic_test_bit(params->flags, BT_GATT_SUBSCRIBE_FLAG_VOLATILE))) {
 			/* Remove subscription */
 			params->value = 0U;
 			gatt_sub_remove(conn, sub, prev, params);
@@ -5250,10 +5259,18 @@ static int gatt_prepare_write(struct bt_conn *conn,
 			      struct bt_gatt_write_params *params)
 {
 	uint16_t len, req_len;
+	uint16_t mtu = bt_att_get_mtu(conn);
 
 	req_len = sizeof(struct bt_att_prepare_write_req);
 
-	len = bt_att_get_mtu(conn) - req_len - 1;
+	/** MTU size is bigger than the ATT_PREPARE_WRITE_REQ header (5 bytes),
+	 * unless there's no connection.
+	 */
+	if (mtu == 0) {
+		return -ENOTCONN;
+	}
+
+	len = mtu - req_len - 1;
 	len = MIN(params->length, len);
 	len += req_len;
 
@@ -5656,7 +5673,7 @@ static void add_subscriptions(struct bt_conn *conn)
 	struct gatt_sub *sub;
 	struct bt_gatt_subscribe_params *params;
 
-	if (!bt_addr_le_is_bonded(conn->id, &conn->le.dst)) {
+	if (!bt_le_bond_exists(conn->id, &conn->le.dst)) {
 		return;
 	}
 
@@ -5914,7 +5931,7 @@ void bt_gatt_connected(struct bt_conn *conn)
 
 	/* Load CCC settings from backend if bonded */
 	if (IS_ENABLED(CONFIG_BT_SETTINGS_CCC_LAZY_LOADING) &&
-	    bt_addr_le_is_bonded(conn->id, &conn->le.dst)) {
+	    bt_le_bond_exists(conn->id, &conn->le.dst)) {
 		char key[BT_SETTINGS_KEY_MAX];
 
 		if (conn->id) {
@@ -6502,7 +6519,7 @@ void bt_gatt_disconnected(struct bt_conn *conn)
 
 	/* Make sure to clear the CCC entry when using lazy loading */
 	if (IS_ENABLED(CONFIG_BT_SETTINGS_CCC_LAZY_LOADING) &&
-	    bt_addr_le_is_bonded(conn->id, &conn->le.dst)) {
+	    bt_le_bond_exists(conn->id, &conn->le.dst)) {
 		struct addr_with_id addr_with_id = {
 			.addr = &conn->le.dst,
 			.id = conn->id,

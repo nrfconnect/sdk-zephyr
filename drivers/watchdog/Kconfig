@@ -69,9 +69,11 @@ source "drivers/watchdog/Kconfig.stm32"
 
 source "drivers/watchdog/Kconfig.cmsdk_apb"
 
+source "drivers/watchdog/Kconfig.esp32"
+
 source "drivers/watchdog/Kconfig.sam"
 
-source "drivers/watchdog/Kconfig.esp32"
+source "drivers/watchdog/Kconfig.sam4l"
 
 source "drivers/watchdog/Kconfig.sam0"
 
@@ -140,5 +142,7 @@ source "drivers/watchdog/Kconfig.numaker"
 source "drivers/watchdog/Kconfig.ene"
 
 source "drivers/watchdog/Kconfig.litex"
+
+source "drivers/watchdog/Kconfig.rts5912"
 
 endif # WATCHDOG

@@ -1,4 +1,5 @@
-/* Copyright (c) 2024 BayLibre SAS
+/* Copyright (c) 2018 Laczen
+ * Copyright (c) 2024 BayLibre SAS
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -1146,7 +1147,7 @@ static int zms_init(struct zms_fs *fs)
 				/* Let's check that we support this ZMS version */
 				if (ZMS_GET_VERSION(empty_ate.metadata) != ZMS_DEFAULT_VERSION) {
 					LOG_ERR("ZMS Version is not supported");
-					rc = -ENOEXEC;
+					rc = -EPROTONOSUPPORT;
 					goto end;
 				}
 			}
@@ -1170,7 +1171,7 @@ static int zms_init(struct zms_fs *fs)
 	}
 	/* all sectors are closed, and zms magic number not found. This is not a zms fs */
 	if ((closed_sectors == fs->sector_count) && !zms_magic_exist) {
-		rc = -EDEADLK;
+		rc = -ENOTSUP;
 		goto end;
 	}
 	/* TODO: add a recovery mechanism here if the ZMS magic number exist but all
@@ -1202,7 +1203,7 @@ static int zms_init(struct zms_fs *fs)
 				/* Let's check the version */
 				if (ZMS_GET_VERSION(empty_ate.metadata) != ZMS_DEFAULT_VERSION) {
 					LOG_ERR("ZMS Version is not supported");
-					rc = -ENOEXEC;
+					rc = -EPROTONOSUPPORT;
 					goto end;
 				}
 			}
@@ -1409,6 +1410,7 @@ int zms_mount(struct zms_fs *fs)
 	if (fs->sector_size < ZMS_MIN_ATE_NUM * fs->ate_size) {
 		LOG_ERR("Invalid sector size, should be at least %zu",
 			ZMS_MIN_ATE_NUM * fs->ate_size);
+		return -EINVAL;
 	}
 
 	/* check the number of sectors, it should be at least 2 */

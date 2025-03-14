@@ -104,12 +104,10 @@
 		};
 
 		adc@40170000 {
-			channel-count = <12>;
 			channel-available-mask = <0x33ff>;
 		};
 
 		adc@40170200 {
-			channel-count = <10>;
 			channel-available-mask = <0x7f0007>;
 		};
 
@@ -150,6 +148,11 @@
 			clocks = <&pclkd MSTPE 24>;
 			reg = <0x40169700 0x100>;
 			#pwm-cells = <3>;
+			status = "disabled";
+		};
+
+		trng: trng {
+			compatible = "renesas,ra-sce9-rng";
 			status = "disabled";
 		};
 	};
@@ -221,6 +224,7 @@
 
 			iclk: iclk {
 				compatible = "renesas,ra-cgc-pclk";
+				clock-frequency = <100000000>;
 				div = <2>;
 				#clock-cells = <2>;
 				status = "okay";
@@ -382,4 +386,8 @@
 			 "port-irq11";
 	port-irq10-pins = <9>;
 	port-irq11-pins = <8>;
+};
+
+&dac_global {
+	has-output-amplifier;
 };

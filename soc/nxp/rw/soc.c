@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 NXP
+ * Copyright 2022-2025 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -20,6 +20,8 @@
 #include "soc.h"
 #include "flexspi_clock_setup.h"
 #include "fsl_ocotp.h"
+
+extern void nxp_nbu_init(void);
 #ifdef CONFIG_NXP_RW6XX_BOOT_HEADER
 extern char z_main_stack[];
 extern char _flash_used[];
@@ -36,7 +38,6 @@ extern void z_arm_debug_monitor(void);
 extern void z_arm_pendsv(void);
 extern void sys_clock_isr(void);
 extern void z_arm_exc_spurious(void);
-extern void nxp_nbu_init(void);
 
 __imx_boot_ivt_section void (*const image_vector_table[])(void) = {
 	(void (*)())(z_main_stack + CONFIG_MAIN_STACK_SIZE), /* 0x00 */
@@ -79,7 +80,7 @@ const clock_avpll_config_t avpll_config = {
  * clock needs to be re-initialized on exit from Standby mode. Hence
  * this function is relocated to RAM.
  */
-__ramfunc void clock_init(void)
+__weak __ramfunc void clock_init(void)
 {
 	POWER_DisableGDetVSensors();
 
@@ -132,6 +133,8 @@ __ramfunc void clock_init(void)
 	/* Set SYSTICKFCLKDIV divider to value 1 */
 	CLOCK_SetClkDiv(kCLOCK_DivSystickClk, 1U);
 	CLOCK_AttachClk(kSYSTICK_DIV_to_SYSTICK_CLK);
+
+	SystemCoreClockUpdate();
 
 	/* Set PLL FRG clock to 20MHz. */
 	CLOCK_SetClkDiv(kCLOCK_DivPllFrgClk, 13U);

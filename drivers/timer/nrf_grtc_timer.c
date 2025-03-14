@@ -526,23 +526,23 @@ static int sys_clock_driver_init(void)
 	nrfy_grtc_clkout_set(NRF_GRTC, NRF_GRTC_CLKOUT_32K, true);
 #endif
 
-#if DT_NODE_HAS_PROP(GRTC_NODE, clkout_fast_frequency)
+#if DT_NODE_HAS_PROP(GRTC_NODE, clkout_fast_frequency_hz)
 #if !DT_NODE_HAS_PROP(HFCLK_NODE, clock_frequency)
 #error "hfclock reference required when fast clock output is enabled."
 #endif
 
-#if DT_PROP(GRTC_NODE, clkout_fast_frequency) > (DT_PROP(HFCLK_NODE, clock_frequency) / 2)
+#if DT_PROP(GRTC_NODE, clkout_fast_frequency_hz) > (DT_PROP(HFCLK_NODE, clock_frequency) / 2)
 #error "Invalid frequency value for fast clock output."
 #endif
 	uint32_t base_frequency = DT_PROP(HFCLK_NODE, clock_frequency);
-	uint32_t requested_frequency = DT_PROP(GRTC_NODE, clkout_fast_frequency);
+	uint32_t requested_frequency = DT_PROP(GRTC_NODE, clkout_fast_frequency_hz);
 	uint32_t grtc_div = base_frequency / (requested_frequency * 2);
 
 	nrfy_grtc_clkout_divider_set(NRF_GRTC, (uint8_t)grtc_div);
 	nrfy_grtc_clkout_set(NRF_GRTC, NRF_GRTC_CLKOUT_FAST, true);
 #endif
 
-#if DT_PROP(GRTC_NODE, clkout_32k) || DT_NODE_HAS_PROP(GRTC_NODE, clkout_fast_frequency)
+#if DT_PROP(GRTC_NODE, clkout_32k) || DT_NODE_HAS_PROP(GRTC_NODE, clkout_fast_frequency_hz)
 	PINCTRL_DT_DEFINE(GRTC_NODE);
 	const struct pinctrl_dev_config *pcfg = PINCTRL_DT_DEV_CONFIG_GET(GRTC_NODE);
 

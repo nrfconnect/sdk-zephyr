@@ -532,7 +532,18 @@ void sys_trace_thread_info(struct k_thread *thread);
 #define sys_port_trace_k_mbox_get_exit(mbox, timeout, ret)
 #define sys_port_trace_k_mbox_data_get(rx_msg)
 
-#define sys_port_trace_k_pipe_init(pipe)
+#define sys_port_trace_k_pipe_init(pipe, buffer, size)
+#define sys_port_trace_k_pipe_reset_enter(pipe)
+#define sys_port_trace_k_pipe_reset_exit(pipe)
+#define sys_port_trace_k_pipe_close_enter(pipe)
+#define sys_port_trace_k_pipe_close_exit(pipe)
+#define sys_port_trace_k_pipe_write_enter(pipe, data, len, timeout)
+#define sys_port_trace_k_pipe_write_blocking(pipe, timeout)
+#define sys_port_trace_k_pipe_write_exit(pipe, ret)
+#define sys_port_trace_k_pipe_read_enter(pipe, data, len, timeout)
+#define sys_port_trace_k_pipe_read_blocking(pipe, timeout)
+#define sys_port_trace_k_pipe_read_exit(pipe, ret)
+
 #define sys_port_trace_k_pipe_cleanup_enter(pipe)
 #define sys_port_trace_k_pipe_cleanup_exit(pipe, ret)
 #define sys_port_trace_k_pipe_alloc_init_enter(pipe)
@@ -644,6 +655,7 @@ void sys_trace_thread_info(struct k_thread *thread);
 	SEGGER_SYSVIEW_RecordEndCall(TID_SYSCALL)
 
 void sys_trace_idle(void);
+void sys_trace_idle_exit(void);
 
 void sys_trace_k_thread_create(struct k_thread *new_thread, size_t stack_size, int prio);
 void sys_trace_k_thread_user_mode_enter(k_thread_entry_t entry, void *p1, void *p2, void *p3);
