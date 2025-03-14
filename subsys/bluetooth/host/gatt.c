@@ -703,23 +703,20 @@ struct gen_hash_state {
 static int db_hash_setup(struct gen_hash_state *state, uint8_t *key)
 {
 	psa_key_attributes_t key_attr = PSA_KEY_ATTRIBUTES_INIT;
-	psa_status_t ret;
 
 	psa_set_key_type(&key_attr, PSA_KEY_TYPE_AES);
 	psa_set_key_bits(&key_attr, 128);
 	psa_set_key_usage_flags(&key_attr, PSA_KEY_USAGE_SIGN_MESSAGE);
 	psa_set_key_algorithm(&key_attr, PSA_ALG_CMAC);
 
-	ret = psa_import_key(&key_attr, key, 16, &(state->key));
-	if (ret != PSA_SUCCESS) {
-		LOG_ERR("Unable to import the key for AES CMAC %d", ret);
+	if (psa_import_key(&key_attr, key, 16, &(state->key)) != PSA_SUCCESS) {
+		LOG_ERR("Unable to import the key for AES CMAC");
 		return -EIO;
 	}
 	state->operation = psa_mac_operation_init();
-
-	ret = psa_mac_sign_setup(&(state->operation), state->key, PSA_ALG_CMAC);
-	if (ret != PSA_SUCCESS) {
-		LOG_ERR("CMAC operation init failed %d", ret);
+	if (psa_mac_sign_setup(&(state->operation), state->key,
+			       PSA_ALG_CMAC) != PSA_SUCCESS) {
+		LOG_ERR("CMAC operation init failed");
 		return -EIO;
 	}
 	return 0;
@@ -727,10 +724,8 @@ static int db_hash_setup(struct gen_hash_state *state, uint8_t *key)
 
 static int db_hash_update(struct gen_hash_state *state, uint8_t *data, size_t len)
 {
-	psa_status_t ret = psa_mac_update(&(state->operation), data, len);
-
-	if (ret != PSA_SUCCESS) {
-		LOG_ERR("CMAC update failed %d", ret);
+	if (psa_mac_update(&(state->operation), data, len) != PSA_SUCCESS) {
+		LOG_ERR("CMAC update failed");
 		return -EIO;
 	}
 	return 0;
@@ -739,10 +734,10 @@ static int db_hash_update(struct gen_hash_state *state, uint8_t *data, size_t le
 static int db_hash_finish(struct gen_hash_state *state)
 {
 	size_t mac_length;
-	psa_status_t ret = psa_mac_sign_finish(&(state->operation), db_hash.hash, 16, &mac_length);
 
-	if (ret != PSA_SUCCESS) {
-		LOG_ERR("CMAC finish failed %d", ret);
+	if (psa_mac_sign_finish(&(state->operation), db_hash.hash, 16,
+				&mac_length) != PSA_SUCCESS) {
+		LOG_ERR("CMAC finish failed");
 		return -EIO;
 	}
 	return 0;
