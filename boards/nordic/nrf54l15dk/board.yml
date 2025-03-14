@@ -9,5 +9,3 @@ board:
     variants:
     - name: xip
       cpucluster: cpuflpr
-    - name: ns
-      cpucluster: cpuapp
