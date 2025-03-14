@@ -14,8 +14,6 @@
 
 #if DT_HAS_COMPAT_STATUS_OKAY(jedec_spi_nor)
 #define FLASH_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(jedec_spi_nor)
-#elif DT_HAS_COMPAT_STATUS_OKAY(jedec_mspi_nor)
-#define FLASH_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(jedec_mspi_nor)
 #elif DT_HAS_COMPAT_STATUS_OKAY(nordic_qspi_nor)
 #define FLASH_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(nordic_qspi_nor)
 #elif DT_HAS_COMPAT_STATUS_OKAY(st_stm32_qspi_nor)
@@ -203,7 +201,7 @@ static void summarize_dw15(const struct jesd216_param_header *php,
 		printf("0-4-4 Mode methods: entry 0x%01x ; exit 0x%02x\n",
 		       dw15.entry_044, dw15.exit_044);
 	} else {
-		printf("0-4-4 Mode: not supported\n");
+		printf("0-4-4 Mode: not supported");
 	}
 	printf("4-4-4 Mode sequences: enable 0x%02x ; disable 0x%01x\n",
 	       dw15.enable_444, dw15.disable_444);
