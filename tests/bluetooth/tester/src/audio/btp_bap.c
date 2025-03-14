@@ -332,6 +332,8 @@ static uint8_t btp_bap_supported_commands(const void *cmd, uint16_t cmd_len,
 
 	/* octet 0 */
 	tester_set_bit(rp->data, BTP_BAP_READ_SUPPORTED_COMMANDS);
+	tester_set_bit(rp->data, BTP_BAP_DISCOVER);
+	tester_set_bit(rp->data, BTP_BAP_SEND);
 
 	*rsp_len = sizeof(*rp) + 1;
 
@@ -369,11 +371,16 @@ static const struct btp_handler bap_handlers[] = {
 		.expect_len = BTP_HANDLER_LENGTH_VARIABLE,
 		.func = btp_bap_audio_stream_send,
 	},
-#if defined(CONFIG_BT_BAP_BROADCAST_SINK) || defined(CONFIG_BT_BAP_BROADCAST_SINK)
+#if defined(CONFIG_BT_BAP_BROADCAST_SOURCE) || defined(CONFIG_BT_BAP_BROADCAST_SINK)
 	{
 		.opcode = BTP_BAP_BROADCAST_SOURCE_SETUP,
 		.expect_len = BTP_HANDLER_LENGTH_VARIABLE,
 		.func = btp_bap_broadcast_source_setup,
+	},
+	{
+		.opcode = BTP_BAP_BROADCAST_SOURCE_SETUP_V2,
+		.expect_len = BTP_HANDLER_LENGTH_VARIABLE,
+		.func = btp_bap_broadcast_source_setup_v2,
 	},
 	{
 		.opcode = BTP_BAP_BROADCAST_SOURCE_RELEASE,
@@ -475,12 +482,33 @@ static const struct btp_handler bap_handlers[] = {
 		.expect_len = sizeof(struct btp_bap_send_past_cmd),
 		.func = btp_bap_broadcast_assistant_send_past,
 	},
-#endif /* CONFIG_BT_BAP_BROADCAST_SINK || CONFIG_BT_BAP_BROADCAST_SINK */
+#endif /* CONFIG_BT_BAP_BROADCAST_SOURCE || CONFIG_BT_BAP_BROADCAST_SINK */
 };
 
 uint8_t tester_init_pacs(void)
 {
+	const struct bt_pacs_register_param pacs_param = {
+#if defined(CONFIG_BT_PAC_SNK)
+		.snk_pac = true,
+#endif /* CONFIG_BT_PAC_SNK */
+#if defined(CONFIG_BT_PAC_SNK_LOC)
+		.snk_loc = true,
+#endif /* CONFIG_BT_PAC_SNK_LOC */
+#if defined(CONFIG_BT_PAC_SRC)
+		.src_pac = true,
+#endif /* CONFIG_BT_PAC_SRC */
+#if defined(CONFIG_BT_PAC_SRC_LOC)
+		.src_loc = true,
+#endif /* CONFIG_BT_PAC_SRC_LOC */
+	};
 	int err;
+
+	/* PACS shall be registered before ASCS in btp_bap_unicast_init */
+	err = bt_pacs_register(&pacs_param);
+	if (err != 0) {
+		LOG_DBG("Failed to register client callbacks: %d", err);
+		return BTP_STATUS_FAILED;
+	}
 
 	btp_bap_unicast_init();
 

@@ -7,7 +7,6 @@ flash: 512
 toolchain:
   - zephyr
   - gnuarmemb
-  - xtools
 supported:
   - clock_control
   - counter
@@ -21,6 +20,7 @@ supported:
   - uart
   - dma
   - watchdog
+  - comparator
 testing:
   ignore_tags:
     - pm

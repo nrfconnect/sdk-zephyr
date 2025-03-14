@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Espressif Systems (Shanghai) Co., Ltd.
+ * Copyright (c) 2025 Espressif Systems (Shanghai) Co., Ltd.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,22 +22,22 @@
 
 static struct gpio_callback gpio_cb;
 
-#define PWM_COUNT                      DT_PROP_LEN(DT_PATH(zephyr_user), pwms)
-#define PWM_CONFIG_ENTRY(idx, node_id) PWM_DT_SPEC_GET_BY_IDX(node_id, idx)
-#define PWM_CONFIG_ARRAY(node_id)                                                                  \
+#define TEST_PWM_COUNT                      DT_PROP_LEN(DT_PATH(zephyr_user), pwms)
+#define TEST_PWM_CONFIG_ENTRY(idx, node_id) PWM_DT_SPEC_GET_BY_IDX(node_id, idx)
+#define TEST_PWM_CONFIG_ARRAY(node_id)                                                             \
 	{                                                                                          \
-		LISTIFY(PWM_COUNT, PWM_CONFIG_ENTRY, (,), node_id)                                 \
+		LISTIFY(TEST_PWM_COUNT, TEST_PWM_CONFIG_ENTRY, (,), node_id)                       \
 	}
 
-#define GPIO_COUNT                      DT_PROP_LEN(DT_PATH(zephyr_user), gpios)
-#define GPIO_CONFIG_ENTRY(idx, node_id) GPIO_DT_SPEC_GET_BY_IDX(node_id, gpios, idx)
-#define GPIO_CONFIG_ARRAY(node_id)                                                                 \
+#define TEST_GPIO_COUNT                      DT_PROP_LEN(DT_PATH(zephyr_user), gpios)
+#define TEST_GPIO_CONFIG_ENTRY(idx, node_id) GPIO_DT_SPEC_GET_BY_IDX(node_id, gpios, idx)
+#define TEST_GPIO_CONFIG_ARRAY(node_id)                                                            \
 	{                                                                                          \
-		LISTIFY(GPIO_COUNT, GPIO_CONFIG_ENTRY, (,), node_id)                               \
+		LISTIFY(TEST_GPIO_COUNT, TEST_GPIO_CONFIG_ENTRY, (,), node_id)                     \
 	}
 
-static const struct pwm_dt_spec pwms_dt[] = PWM_CONFIG_ARRAY(DT_PATH(zephyr_user));
-static const struct gpio_dt_spec gpios_dt[] = GPIO_CONFIG_ARRAY(DT_PATH(zephyr_user));
+static const struct pwm_dt_spec pwms_dt[] = TEST_PWM_CONFIG_ARRAY(DT_PATH(zephyr_user));
+static const struct gpio_dt_spec gpios_dt[] = TEST_GPIO_CONFIG_ARRAY(DT_PATH(zephyr_user));
 
 static struct test_context {
 	uint32_t last_edge_time;
@@ -97,22 +97,19 @@ static void setup_edge_detect(void)
 
 static void config_gpio(const struct gpio_dt_spec *gpio_dt)
 {
-	/* Configure GPIO pin for edge detection */
 	gpio_pin_configure_dt(gpio_dt, GPIO_INPUT);
-
-	gpio_cb.pin_mask = BIT(gpio_dt->pin);
-
-	gpio_init_callback(&gpio_cb, gpio_edge_isr, gpio_cb.pin_mask);
+	gpio_init_callback(&gpio_cb, gpio_edge_isr, BIT(gpio_dt->pin));
 	gpio_add_callback(gpio_dt->port, &gpio_cb);
-	gpio_pin_interrupt_configure(gpio_dt->port, gpio_dt->pin, GPIO_INT_EDGE_BOTH);
 }
 
-static void unconfig_gpio(const struct gpio_dt_spec *gpio_dt)
+static void enable_int_gpio(const struct gpio_dt_spec *gpio_dt, bool enable)
 {
-	/* Disable interrupt for already tested channel */
-	gpio_pin_interrupt_configure(gpio_dt->port, gpio_dt->pin, GPIO_INT_DISABLE);
-
-	gpio_cb.pin_mask &= ~BIT(gpio_dt->pin);
+	if (enable) {
+		gpio_pin_interrupt_configure(gpio_dt->port, gpio_dt->pin, GPIO_INT_EDGE_BOTH);
+		gpio_cb.pin_mask = BIT(gpio_dt->pin);
+	} else {
+		gpio_pin_interrupt_configure(gpio_dt->port, gpio_dt->pin, GPIO_INT_DISABLE);
+	}
 }
 
 static bool check_range(float refval, float measval)
@@ -207,20 +204,19 @@ static void test_run(const struct pwm_dt_spec *pwm_dt, const struct gpio_dt_spec
 		zassert_false(result, "Failed on pwm_set() call");
 	}
 
-	config_gpio(gpio_dt);
+	enable_int_gpio(gpio_dt, true);
 
 	result = check_timing(pwm_dt, gpio_dt, duty);
 
-	unconfig_gpio(gpio_dt);
+	enable_int_gpio(gpio_dt, false);
 
 	zassert_equal(result, TC_PASS, "Test case failed");
 }
 
 ZTEST(pwm_gpio_loopback, test_pwm)
 {
-	for (int i = 0; i < PWM_COUNT; i++) {
+	for (int i = 0; i < TEST_PWM_COUNT; i++) {
 		zassert_true(device_is_ready(pwms_dt[i].dev), "PWM device is not ready");
-		zassert_true(device_is_ready(gpios_dt[i].port), "GPIO device is not ready");
 
 		/* Test case: [Duty: 25%] */
 		test_run(&pwms_dt[i], &gpios_dt[i], 25, true);
@@ -238,7 +234,7 @@ ZTEST(pwm_gpio_loopback, test_pwm)
 
 ZTEST(pwm_gpio_loopback, test_pwm_cross)
 {
-	for (int i = 0; i < PWM_COUNT; i++) {
+	for (int i = 0; i < TEST_PWM_COUNT; i++) {
 		/* Test case: [Duty: 40%] */
 		test_run(&pwms_dt[i], &gpios_dt[i], 40, true);
 	}
@@ -246,9 +242,23 @@ ZTEST(pwm_gpio_loopback, test_pwm_cross)
 	/* Set all channels and check if they retain the original
 	 * configuration without calling pwm_set again
 	 */
-	for (int i = 0; i < PWM_COUNT; i++) {
+	for (int i = 0; i < TEST_PWM_COUNT; i++) {
 		test_run(&pwms_dt[i], &gpios_dt[i], 40, false);
 	}
 }
 
-ZTEST_SUITE(pwm_gpio_loopback, NULL, NULL, NULL, NULL, NULL);
+static void *pwm_gpio_loopback_setup(void)
+{
+	for (int i = 0; i < TEST_GPIO_COUNT; i++) {
+		if (device_is_ready(gpios_dt[i].port)) {
+			/* Configure GPIO pin for edge detection */
+			config_gpio(&gpios_dt[i]);
+		} else {
+			TC_PRINT("GPIO device %s is not ready", gpios_dt[i].port->name);
+		}
+	}
+
+	return NULL;
+}
+
+ZTEST_SUITE(pwm_gpio_loopback, NULL, pwm_gpio_loopback_setup, NULL, NULL, NULL);

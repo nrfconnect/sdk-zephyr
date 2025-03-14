@@ -27,6 +27,9 @@
 #include "hostapd_cli_zephyr.h"
 #include "ap_drv_ops.h"
 #endif
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
+#include "eap_peer/eap.h"
+#endif
 #include "supp_events.h"
 #include "wpa_supplicant/bss.h"
 
@@ -362,13 +365,77 @@ static inline enum wifi_frequency_bands wpas_band_to_zephyr(enum wpa_radio_work_
 	}
 }
 
-static inline enum wifi_security_type wpas_key_mgmt_to_zephyr(int key_mgmt, int proto, int pwe)
+static inline enum wifi_wpa3_enterprise_type wpas_key_mgmt_to_zephyr_wpa3_ent(int key_mgmt)
 {
 	switch (key_mgmt) {
+	case WPA_KEY_MGMT_IEEE8021X_SUITE_B:
+		return WIFI_WPA3_ENTERPRISE_SUITEB;
+	case WPA_KEY_MGMT_IEEE8021X_SUITE_B_192:
+		return WIFI_WPA3_ENTERPRISE_SUITEB_192;
+	case WPA_KEY_MGMT_IEEE8021X_SHA256:
+		return WIFI_WPA3_ENTERPRISE_ONLY;
+	default:
+		return WIFI_WPA3_ENTERPRISE_NA;
+	}
+}
+
+static inline enum wifi_security_type wpas_key_mgmt_to_zephyr(bool is_hapd,
+				void *config, int key_mgmt, int proto, int pwe)
+{
+	switch (key_mgmt) {
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
 	case WPA_KEY_MGMT_IEEE8021X:
 	case WPA_KEY_MGMT_IEEE8021X_SUITE_B:
 	case WPA_KEY_MGMT_IEEE8021X_SUITE_B_192:
+	case WPA_KEY_MGMT_IEEE8021X_SHA256:
+		if (is_hapd) {
+#ifdef CONFIG_WIFI_NM_HOSTAPD_CRYPTO_ENTERPRISE
+			struct hostapd_bss_config *conf = (struct hostapd_bss_config *)config;
+
+			switch (conf->eap_user->methods[0].method) {
+			case WIFI_EAP_TYPE_PEAP:
+				if (conf->eap_user->next && conf->eap_user->next->phase2) {
+					switch (conf->eap_user->next->methods[0].method) {
+					case WIFI_EAP_TYPE_MSCHAPV2:
+						return WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2;
+					case WIFI_EAP_TYPE_GTC:
+						return WIFI_SECURITY_TYPE_EAP_PEAP_GTC;
+					case WIFI_EAP_TYPE_TLS:
+						return WIFI_SECURITY_TYPE_EAP_PEAP_TLS;
+					}
+				}
+			case WIFI_EAP_TYPE_TTLS:
+				if (conf->eap_user->next && conf->eap_user->next->phase2) {
+					if (conf->eap_user->next->ttls_auth & 0x1E) {
+						return WIFI_SECURITY_TYPE_EAP_TTLS_MSCHAPV2;
+					}
+				}
+			}
+#endif
+		} else {
+			struct wpa_ssid *ssid = (struct wpa_ssid *)config;
+
+			switch (ssid->eap.eap_methods->method) {
+			case WIFI_EAP_TYPE_TTLS:
+				if (!os_memcmp(ssid->eap.phase2, "auth=MSCHAPV2",
+							   os_strlen(ssid->eap.phase2))) {
+					return WIFI_SECURITY_TYPE_EAP_TTLS_MSCHAPV2;
+				}
+			case WIFI_EAP_TYPE_PEAP:
+				if (!os_memcmp(ssid->eap.phase2, "auth=MSCHAPV2",
+							   os_strlen(ssid->eap.phase2))) {
+					return WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2;
+				} else if (!os_memcmp(ssid->eap.phase2, "auth=GTC",
+							os_strlen(ssid->eap.phase2))) {
+					return WIFI_SECURITY_TYPE_EAP_PEAP_GTC;
+				} else if (!os_memcmp(ssid->eap.phase2, "auth=TLS",
+							os_strlen(ssid->eap.phase2))) {
+					return WIFI_SECURITY_TYPE_EAP_PEAP_TLS;
+				}
+			}
+		}
 		return WIFI_SECURITY_TYPE_EAP_TLS;
+#endif
 	case WPA_KEY_MGMT_NONE:
 		return WIFI_SECURITY_TYPE_NONE;
 	case WPA_KEY_MGMT_PSK:
@@ -397,6 +464,8 @@ static inline enum wifi_security_type wpas_key_mgmt_to_zephyr(int key_mgmt, int 
 		return WIFI_SECURITY_TYPE_FT_EAP;
 	case WPA_KEY_MGMT_FT_IEEE8021X_SHA384:
 		return WIFI_SECURITY_TYPE_FT_EAP_SHA384;
+	case WPA_KEY_MGMT_SAE_EXT_KEY:
+		return WIFI_SECURITY_TYPE_SAE_EXT_KEY;
 	default:
 		return WIFI_SECURITY_TYPE_UNKNOWN;
 	}
@@ -481,7 +550,6 @@ static struct wifi_eap_config eap_config[] = {
 	 "auth=MSCHAPV2"},
 	{WIFI_SECURITY_TYPE_EAP_PEAP_TLS, WIFI_EAP_TYPE_PEAP, WIFI_EAP_TYPE_TLS, "PEAP",
 	 "auth=TLS"},
-	{WIFI_SECURITY_TYPE_EAP_TLS_SHA256, WIFI_EAP_TYPE_TLS, WIFI_EAP_TYPE_NONE, "TLS", NULL},
 };
 
 int process_cipher_config(struct wifi_connect_req_params *params,
@@ -491,13 +559,13 @@ int process_cipher_config(struct wifi_connect_req_params *params,
 	unsigned int gropu_mgmt_cipher_capa;
 	unsigned int index;
 
-	if (params->suiteb_type == WIFI_SUITEB) {
+	if (params->wpa3_ent_mode == WIFI_WPA3_ENTERPRISE_SUITEB) {
 		cipher_capa = WPA_CAPA_ENC_GCMP;
 		gropu_mgmt_cipher_capa = WPA_CAPA_ENC_BIP_GMAC_128;
 		cipher_config->key_mgmt = "WPA-EAP-SUITE-B";
 		cipher_config->openssl_ciphers = "SUITEB128";
 		cipher_config->tls_flags = "[SUITEB]";
-	} else if (params->suiteb_type == WIFI_SUITEB_192) {
+	} else if (params->wpa3_ent_mode == WIFI_WPA3_ENTERPRISE_SUITEB_192) {
 		cipher_capa = WPA_CAPA_ENC_GCMP_256;
 		gropu_mgmt_cipher_capa = WPA_CAPA_ENC_BIP_GMAC_256;
 		if (params->ft_used) {
@@ -507,6 +575,10 @@ int process_cipher_config(struct wifi_connect_req_params *params,
 		}
 		cipher_config->openssl_ciphers = "SUITEB192";
 		cipher_config->tls_flags = "[SUITEB]";
+	} else if (params->wpa3_ent_mode == WIFI_WPA3_ENTERPRISE_ONLY) {
+		cipher_capa = WPA_CAPA_ENC_CCMP;
+		gropu_mgmt_cipher_capa = WPA_CAPA_ENC_BIP;
+		cipher_config->key_mgmt = "WPA-EAP-SHA256";
 	} else {
 		cipher_capa = WPA_CAPA_ENC_CCMP;
 		gropu_mgmt_cipher_capa = WPA_CAPA_ENC_BIP;
@@ -515,10 +587,6 @@ int process_cipher_config(struct wifi_connect_req_params *params,
 		} else {
 			cipher_config->key_mgmt = "WPA-EAP";
 		}
-	}
-
-	if (params->security == WIFI_SECURITY_TYPE_EAP_TLS_SHA256) {
-		cipher_config->key_mgmt = "WPA-EAP-SHA256";
 	}
 
 	for (index = 0; index < ARRAY_SIZE(ciphers); index++) {
@@ -557,8 +625,7 @@ static int is_eap_valid_security(int security)
 		    security == WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2 ||
 		    security == WIFI_SECURITY_TYPE_EAP_PEAP_GTC ||
 		    security == WIFI_SECURITY_TYPE_EAP_TTLS_MSCHAPV2 ||
-		    security == WIFI_SECURITY_TYPE_EAP_PEAP_TLS ||
-		    security == WIFI_SECURITY_TYPE_EAP_TLS_SHA256);
+		    security == WIFI_SECURITY_TYPE_EAP_PEAP_TLS);
 }
 #endif
 
@@ -957,7 +1024,8 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 
 		if (params->security == WIFI_SECURITY_TYPE_SAE_HNP ||
 		    params->security == WIFI_SECURITY_TYPE_SAE_H2E ||
-		    params->security == WIFI_SECURITY_TYPE_SAE_AUTO) {
+		    params->security == WIFI_SECURITY_TYPE_SAE_AUTO ||
+		    params->security == WIFI_SECURITY_TYPE_SAE_EXT_KEY) {
 			if (params->sae_password) {
 				if ((params->sae_password_length < WIFI_PSK_MIN_LEN) ||
 				    (params->sae_password_length > WIFI_SAE_PSWD_MAX_LEN)) {
@@ -980,19 +1048,26 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 				}
 			}
 
-			if (params->security == WIFI_SECURITY_TYPE_SAE_H2E ||
-			    params->security == WIFI_SECURITY_TYPE_SAE_AUTO) {
-				if (!wpa_cli_cmd_v("set sae_pwe %d",
-						   (params->security == WIFI_SECURITY_TYPE_SAE_H2E)
-							   ? 1
-							   : 2)) {
-					goto out;
-				}
+			if (!wpa_cli_cmd_v("set sae_pwe %d",
+				(params->security == WIFI_SECURITY_TYPE_SAE_H2E)
+				   ? 1
+				   : ((params->security == WIFI_SECURITY_TYPE_SAE_HNP)
+					   ? 0
+					   : 2))) {
+				goto out;
 			}
 
-			if (!wpa_cli_cmd_v("set_network %d key_mgmt SAE%s", resp.network_id,
-					   params->ft_used ? " FT-SAE" : "")) {
-				goto out;
+			if (params->security != WIFI_SECURITY_TYPE_SAE_EXT_KEY) {
+				if (!wpa_cli_cmd_v("set_network %d key_mgmt SAE%s", resp.network_id,
+						   params->ft_used ? " FT-SAE" : "")) {
+					goto out;
+				}
+			} else {
+				if (!wpa_cli_cmd_v("set_network %d key_mgmt SAE-EXT-KEY%s",
+						   resp.network_id,
+						   params->ft_used ? " FT-SAE-EXT-KEY" : "")) {
+					goto out;
+				}
 			}
 		} else if (params->security == WIFI_SECURITY_TYPE_PSK_SHA256) {
 			if (!wpa_cli_cmd_v("set_network %d psk \"%s\"",
@@ -1068,7 +1143,7 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 				goto out;
 			}
 
-			if (params->suiteb_type == WIFI_SUITEB_192) {
+			if (params->wpa3_ent_mode == WIFI_WPA3_ENTERPRISE_SUITEB_192) {
 				if (params->TLS_cipher == WIFI_EAP_TLS_ECC_P384) {
 					if (!wpa_cli_cmd_v("set_network %d openssl_ciphers \"%s\"",
 							resp.network_id,
@@ -1158,15 +1233,19 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 				goto out;
 			}
 
-			if (wpas_config_process_blob(wpa_s->conf, "ca_cert",
-					   enterprise_creds.ca_cert,
-					   enterprise_creds.ca_cert_len)) {
-				goto out;
-			}
+			if (false == ((params->security == WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2 ||
+			    params->security == WIFI_SECURITY_TYPE_EAP_TTLS_MSCHAPV2) &&
+			    (!params->verify_peer_cert))) {
+				if (wpas_config_process_blob(wpa_s->conf, "ca_cert",
+						   enterprise_creds.ca_cert,
+						   enterprise_creds.ca_cert_len)) {
+					goto out;
+				}
 
-			if (!wpa_cli_cmd_v("set_network %d ca_cert \"blob://ca_cert\"",
-					   resp.network_id)) {
-				goto out;
+				if (!wpa_cli_cmd_v("set_network %d ca_cert \"blob://ca_cert\"",
+						   resp.network_id)) {
+					goto out;
+				}
 			}
 
 			if (wpas_config_process_blob(wpa_s->conf, "client_cert",
@@ -1540,7 +1619,8 @@ int supplicant_status(const struct device *dev, struct wifi_iface_status *status
 		sae_pwe = wpa_s->conf->sae_pwe;
 		os_memcpy(status->bssid, wpa_s->bssid, WIFI_MAC_ADDR_LEN);
 		status->band = wpas_band_to_zephyr(wpas_freq_to_band(wpa_s->assoc_freq));
-		status->security = wpas_key_mgmt_to_zephyr(key_mgmt, proto, sae_pwe);
+		status->wpa3_ent_type = wpas_key_mgmt_to_zephyr_wpa3_ent(key_mgmt);
+		status->security = wpas_key_mgmt_to_zephyr(0, ssid, key_mgmt, proto, sae_pwe);
 		status->mfp = get_mfp(ssid->ieee80211w);
 		ieee80211_freq_to_chan(wpa_s->assoc_freq, &channel);
 		status->channel = channel;
@@ -2386,6 +2466,10 @@ int hapd_config_network(struct hostapd_iface *iface,
 				goto out;
 			}
 #endif
+		} else {
+			wpa_printf(MSG_ERROR, "Security type %d is not supported",
+				   params->security);
+			goto out;
 		}
 	} else {
 		if (!hostapd_cli_cmd_v("set wpa 0")) {
@@ -2529,7 +2613,8 @@ int supplicant_ap_status(const struct device *dev, struct wifi_iface_status *sta
 	key_mgmt = bss->wpa_key_mgmt;
 	proto = bss->wpa;
 	sae_pwe = bss->sae_pwe;
-	status->security = wpas_key_mgmt_to_zephyr(key_mgmt, proto, sae_pwe);
+	status->wpa3_ent_type = wpas_key_mgmt_to_zephyr_wpa3_ent(key_mgmt);
+	status->security = wpas_key_mgmt_to_zephyr(1, hapd->conf, key_mgmt, proto, sae_pwe);
 	status->mfp = get_mfp(bss->ieee80211w);
 	status->channel = conf->channel;
 	os_memcpy(status->ssid, ssid->ssid, ssid->ssid_len);

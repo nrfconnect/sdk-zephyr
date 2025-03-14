@@ -6,7 +6,8 @@ common:
 tests:
   drivers.watchdog:
     filter: >
-      not (CONFIG_WDT_SAM or dt_compat_enabled("st,stm32-window-watchdog")
+      not (CONFIG_WDT_SAM or CONFIG_WDT_SAM4L
+       or dt_compat_enabled("st,stm32-window-watchdog")
        or dt_compat_enabled("st,stm32-watchdog") or CONFIG_SOC_FAMILY_LPC or
        CONFIG_SOC_SERIES_IMXRT6XX or CONFIG_SOC_SERIES_IMXRT5XX or
        CONFIG_SOC_FAMILY_GD_GD32 or SOC_SERIES_GD32VF103)
@@ -16,6 +17,12 @@ tests:
       - s32z2xxdc2/s32z270/rtu1
       - s32z2xxdc2@D/s32z270/rtu0
       - s32z2xxdc2@D/s32z270/rtu1
+      - mps2/an383
+      - mps2/an386
+      - mps2/an500
+      - panb511evb/nrf54l15/cpuapp
+      - panb511evb/nrf54l15/cpuflpr
+      - panb511evb/nrf54l15/cpuflpr/xip
   drivers.watchdog.stm32wwdg:
     filter: dt_compat_enabled("st,stm32-window-watchdog") or dt_compat_enabled("st,stm32-watchdog")
     extra_args: DTC_OVERLAY_FILE="boards/stm32_wwdg.overlay"

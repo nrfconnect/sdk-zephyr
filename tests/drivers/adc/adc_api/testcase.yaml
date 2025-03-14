@@ -9,6 +9,7 @@ tests:
     min_flash: 40
     platform_exclude:
       - nucleo_u031r8
+      - panb511evb/nrf54l15/cpuapp
   drivers.adc.b_u585i_iot02a_adc4:
     extra_args:
       - DTC_OVERLAY_FILE="boards/b_u585i_iot02a_adc4.overlay"
@@ -66,6 +67,7 @@ tests:
       - frdm_k82f
   drivers.adc.dma_espressif:
     extra_args:
+      - DTC_OVERLAY_FILE="boards/esp32s3_devkitc_procpu.overlay"
       - EXTRA_CONF_FILE="overlay-dma-esp32.conf"
     depends_on:
       - adc

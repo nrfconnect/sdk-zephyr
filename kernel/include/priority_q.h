@@ -10,8 +10,6 @@
 #include <zephyr/sys/math_extras.h>
 #include <zephyr/sys/dlist.h>
 
-bool z_priq_rb_lessthan(struct rbnode *a, struct rbnode *b);
-
 /* Dumb Scheduling */
 #if defined(CONFIG_SCHED_DUMB)
 #define _priq_run_init		z_priq_dumb_init
@@ -131,9 +129,9 @@ static ALWAYS_INLINE void z_priq_dumb_yield(sys_dlist_t *pq)
 #ifndef CONFIG_SMP
 	sys_dnode_t *n;
 
-	n = sys_dlist_peek_next_no_check(pq, &arch_current_thread()->base.qnode_dlist);
+	n = sys_dlist_peek_next_no_check(pq, &_current->base.qnode_dlist);
 
-	sys_dlist_dequeue(&arch_current_thread()->base.qnode_dlist);
+	sys_dlist_dequeue(&_current->base.qnode_dlist);
 
 	struct k_thread *t;
 
@@ -145,15 +143,15 @@ static ALWAYS_INLINE void z_priq_dumb_yield(sys_dlist_t *pq)
 
 	while (n != NULL) {
 		t = CONTAINER_OF(n, struct k_thread, base.qnode_dlist);
-		if (z_sched_prio_cmp(arch_current_thread(), t) > 0) {
+		if (z_sched_prio_cmp(_current, t) > 0) {
 			sys_dlist_insert(&t->base.qnode_dlist,
-					 &arch_current_thread()->base.qnode_dlist);
+					 &_current->base.qnode_dlist);
 			return;
 		}
 		n = sys_dlist_peek_next_no_check(pq, n);
 	}
 
-	sys_dlist_append(pq, &arch_current_thread()->base.qnode_dlist);
+	sys_dlist_append(pq, &_current->base.qnode_dlist);
 #endif
 }
 
@@ -185,8 +183,11 @@ static ALWAYS_INLINE struct k_thread *z_priq_dumb_mask_best(sys_dlist_t *pq)
 }
 #endif /* CONFIG_SCHED_CPU_MASK */
 
+#if defined(CONFIG_SCHED_SCALABLE) || defined(CONFIG_WAITQ_SCALABLE)
 static ALWAYS_INLINE void z_priq_rb_init(struct _priq_rb *pq)
 {
+	bool z_priq_rb_lessthan(struct rbnode *a, struct rbnode *b);
+
 	*pq = (struct _priq_rb) {
 		.tree = {
 			.lessthan_fn = z_priq_rb_lessthan,
@@ -229,8 +230,8 @@ static ALWAYS_INLINE void z_priq_rb_remove(struct _priq_rb *pq, struct k_thread 
 static ALWAYS_INLINE void z_priq_rb_yield(struct _priq_rb *pq)
 {
 #ifndef CONFIG_SMP
-	z_priq_rb_remove(pq, arch_current_thread());
-	z_priq_rb_add(pq, arch_current_thread());
+	z_priq_rb_remove(pq, _current);
+	z_priq_rb_add(pq, _current);
 #endif
 }
 
@@ -244,6 +245,7 @@ static ALWAYS_INLINE struct k_thread *z_priq_rb_best(struct _priq_rb *pq)
 	}
 	return thread;
 }
+#endif
 
 struct prio_info {
 	uint8_t offset_prio;
@@ -319,11 +321,11 @@ static ALWAYS_INLINE void z_priq_mq_remove(struct _priq_mq *pq,
 static ALWAYS_INLINE void z_priq_mq_yield(struct _priq_mq *pq)
 {
 #ifndef CONFIG_SMP
-	struct prio_info pos = get_prio_info(arch_current_thread()->base.prio);
+	struct prio_info pos = get_prio_info(_current->base.prio);
 
-	sys_dlist_dequeue(&arch_current_thread()->base.qnode_dlist);
+	sys_dlist_dequeue(&_current->base.qnode_dlist);
 	sys_dlist_append(&pq->queues[pos.offset_prio],
-			 &arch_current_thread()->base.qnode_dlist);
+			 &_current->base.qnode_dlist);
 #endif
 }
 

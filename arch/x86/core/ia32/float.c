@@ -194,7 +194,7 @@ void z_float_enable(struct k_thread *thread, unsigned int options)
 	 * must be preserved).
 	 */
 
-	fp_owner = _kernel.current_fp;
+	fp_owner = _kernel.cpus[0].arch.fpu_owner;
 	if (fp_owner != NULL) {
 		if ((fp_owner->arch.flags & X86_THREAD_FLAG_ALL) != 0) {
 			FpCtxSave(fp_owner);
@@ -207,7 +207,7 @@ void z_float_enable(struct k_thread *thread, unsigned int options)
 
 	/* Associate the new FP context with the specified thread */
 
-	if (thread == arch_current_thread()) {
+	if (thread == _current) {
 		/*
 		 * When enabling FP support for the current thread, just claim
 		 * ownership of the FPU and leave CR0[TS] unset.
@@ -215,14 +215,14 @@ void z_float_enable(struct k_thread *thread, unsigned int options)
 		 * (The FP context is "live" in hardware, not saved in TCS.)
 		 */
 
-		_kernel.current_fp = thread;
+		_kernel.cpus[0].arch.fpu_owner = thread;
 	} else {
 		/*
 		 * When enabling FP support for someone else, assign ownership
 		 * of the FPU to them (unless we need it ourselves).
 		 */
 
-		if ((arch_current_thread()->base.user_options & _FP_USER_MASK) == 0) {
+		if ((_current->base.user_options & _FP_USER_MASK) == 0) {
 			/*
 			 * We are not FP-capable, so mark FPU as owned by the
 			 * thread we've just enabled FP support for, then
@@ -230,7 +230,7 @@ void z_float_enable(struct k_thread *thread, unsigned int options)
 			 * to its original state.
 			 */
 
-			_kernel.current_fp = thread;
+			_kernel.cpus[0].arch.fpu_owner = thread;
 			z_FpAccessDisable();
 		} else {
 			/*
@@ -278,12 +278,12 @@ int z_float_disable(struct k_thread *thread)
 
 	thread->base.user_options &= ~_FP_USER_MASK;
 
-	if (thread == arch_current_thread()) {
+	if (thread == _current) {
 		z_FpAccessDisable();
-		_kernel.current_fp = (struct k_thread *)0;
+		_kernel.cpus[0].arch.fpu_owner = (struct k_thread *)0;
 	} else {
-		if (_kernel.current_fp == thread) {
-			_kernel.current_fp = (struct k_thread *)0;
+		if (_kernel.cpus[0].arch.fpu_owner == thread) {
+			_kernel.cpus[0].arch.fpu_owner = (struct k_thread *)0;
 		}
 	}
 
@@ -314,7 +314,7 @@ void _FpNotAvailableExcHandler(struct arch_esf *pEsf)
 
 	/* Enable highest level of FP capability configured into the kernel */
 
-	k_float_enable(arch_current_thread(), _FP_USER_MASK);
+	k_float_enable(_current, _FP_USER_MASK);
 }
 _EXCEPTION_CONNECT_NOCODE(_FpNotAvailableExcHandler,
 		IV_DEVICE_NOT_AVAILABLE, 0);

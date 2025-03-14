@@ -5,8 +5,8 @@ arch: arm
 toolchain:
   - zephyr
   - gnuarmemb
-  - xtools
 supported:
+  - adc
   - arduino_gpio
   - counter
   - dma

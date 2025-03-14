@@ -98,6 +98,14 @@ config ESPI_TAF_NPCX_RPMC_SUPPORT
 	help
 	  This option enable the handler for eSPI TAF RPMC request.
 
+config ESPI_TAF_NPCX_STS_AWAIT_TIMEOUT
+	int "A timeout value in microseconds to wait for automatic read status"
+	depends on ESPI_TAF_NPCX
+	default 20000
+	help
+	  This option specifies the timeout value in microseconds (us) for checking
+	  automatic read status.
+
 # The default value 'y' for the existing options if ESPI_NPCX is selected.
 if ESPI_NPCX
 
@@ -133,5 +141,13 @@ config ESPI_NPCX_CAF_GLOBAL_RESET_WORKAROUND
 	default y if SOC_SERIES_NPCX4 && ESPI_FLASH_CHANNEL
 	help
 	  Workaround the issue "Global Reset" in the npcx4 SoC errata.
+
+config ESPI_NPCX_RESET_SLP_SX_VW_ON_ESPI_RST
+	bool "Reset SLP_Sx virtual wires when eSPI_RST is asserted"
+	help
+	    The SLP_S3/SLP_S4/SLP_S5/ virtual wires are automatically reset when
+	    eSPI_Reset is asserted on the global reset.
+	    Don't enable this config if the platform implements the Deep-Sx
+	    entry as EC needs to maintain these pins' states per request.
 
 endif #ESPI_NPCX

@@ -10,7 +10,6 @@ config WIFI_NM_WPA_SUPPLICANT
 	select POSIX_TIMERS
 	select POSIX_SIGNALS
 	select POSIX_API
-	select FILE_SYSTEM
 	select NET_SOCKETS
 	select NET_SOCKETS_PACKET
 	select NET_SOCKETPAIR
@@ -31,11 +30,11 @@ config HEAP_MEM_POOL_ADD_SIZE_HOSTAP
 
 config WIFI_NM_WPA_SUPPLICANT_THREAD_STACK_SIZE
 	int "Stack size for wpa_supplicant thread"
-	default 8192
+	default 5600
 
 config WIFI_NM_WPA_SUPPLICANT_WQ_STACK_SIZE
 	int "Stack size for wpa_supplicant iface workqueue"
-	default 6144
+	default 4400
 
 config WIFI_NM_WPA_SUPPLICANT_WQ_PRIO
 	int "Thread priority of wpa_supplicant iface workqueue"
@@ -85,7 +84,7 @@ endif # WIFI_NM_WPA_SUPPLICANT_LOG_LEVEL_DBG
 # Memory optimizations
 config WIFI_NM_WPA_SUPPLICANT_ADVANCED_FEATURES
 	bool "Advanced features"
-	default y
+	default y if !SOC_FAMILY_NORDIC_NRF
 
 if WIFI_NM_WPA_SUPPLICANT_ADVANCED_FEATURES
 
@@ -131,6 +130,7 @@ config WIFI_NM_WPA_SUPPLICANT_CRYPTO_ALT
 	select MBEDTLS_CIPHER_DES_ENABLED
 	select MBEDTLS_MD5
 	select MBEDTLS_SHA1
+	select MBEDTLS_SHA384
 	select MBEDTLS_ENTROPY_C
 	select MBEDTLS_CIPHER
 	select MBEDTLS_ECP_C
@@ -174,6 +174,7 @@ config WIFI_NM_WPA_SUPPLICANT_CRYPTO_MBEDTLS_PSA
 	select PSA_WANT_ALG_SHA_384
 	select PSA_WANT_ALG_SHA_512
 	select PSA_WANT_ALG_PBKDF2_HMAC
+	select PSA_WANT_ALG_CMAC
 	select PSA_WANT_ALG_PBKDF2_AES_CMAC_PRF_128
 	select PSA_WANT_KEY_TYPE_AES
 	select PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY
@@ -183,8 +184,8 @@ config WIFI_NM_WPA_SUPPLICANT_CRYPTO_MBEDTLS_PSA
 
 config WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
 	bool "Enterprise Crypto support for WiFi"
-	select MBEDTLS_PEM_CERTIFICATE_FORMAT
-	select MBEDTLS_SERVER_NAME_INDICATION
+	select MBEDTLS_PEM_CERTIFICATE_FORMAT if MBEDTLS_BUILTIN
+	select MBEDTLS_SERVER_NAME_INDICATION if MBEDTLS_BUILTIN
 	select MBEDTLS_X509_CRL_PARSE_C
 	select MBEDTLS_TLS_VERSION_1_2
 	depends on !WIFI_NM_WPA_SUPPLICANT_CRYPTO_NONE
@@ -278,7 +279,6 @@ config WIFI_NM_WPA_SUPPLICANT_EAPOL
 
 config WIFI_NM_WPA_SUPPLICANT_CLI
 	bool "CLI support for wpa_supplicant"
-	default n
 
 config WIFI_NM_WPA_SUPPLICANT_INF_MON
 	bool "Monitor the net mgmt event to add/del interface"
@@ -516,17 +516,13 @@ config WPA_CRYPTO
 config WPA_SUPP_CRYPTO
 	bool
 
-config ROBUST_AV
+config NO_ROBUST_AV
 	bool
-	default y
-	depends on WIFI_NM_WPA_SUPPLICANT_ROBUST_AV
 
-config RRM
+config NO_RRM
 	bool
-	default y
-	depends on WIFI_NM_WPA_SUPPLICANT_RRM
 
-config WMM_AC
+config NO_WMM_AC
 	bool
 
 config DPP

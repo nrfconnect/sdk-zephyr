@@ -14,8 +14,8 @@ supported:
   - uart
   - watchdog
   - clock_control
+  - comparator
 testing:
   ignore_tags:
     - pm
-    - hwinfo
 vendor: silabs

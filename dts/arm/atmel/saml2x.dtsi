@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2021 Argentum Systems Ltd.
- * Copyright (c) 2024 Gerson Fernando Budke <nandojve@gmail.com>
+ * Copyright (c) 2024-2025 Gerson Fernando Budke <nandojve@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,14 +26,16 @@
 		sercom-4 = &sercom4;
 		sercom-5 = &sercom5;
 
+		rtc = &rtc;
+
 		tc-4 = &tc4;
 
 		watchdog0 = &wdog;
 	};
 
 	chosen {
-		zephyr,flash-controller = &nvmctrl;
 		zephyr,entropy = &trng;
+		zephyr,flash-controller = &nvmctrl;
 	};
 
 	cpus {
@@ -80,26 +82,27 @@
 			};
 		};
 
-		pm: pm@40000400 {
-			compatible = "atmel,saml2x-pm";
+		mclk: mclk@40000400 {
+			compatible = "atmel,sam0-mclk";
 			reg = <0x40000400 0x400>;
-			interrupts = <0 0>;
 
 			#clock-cells = <2>;
 		};
 
-		mclk: mclk@40000400 {
-			compatible = "atmel,saml2x-mclk";
-			reg = <0x40000400 0x400>;
+		osc32kctrl: osc32kctrl@40001000 {
+			compatible = "atmel,sam0-osc32kctrl";
+			reg = <0x40001000 0x400>;
 
-			#clock-cells = <2>;
+			#clock-cells = <0>;
+			#atmel,assigned-clock-cells = <1>;
 		};
 
 		gclk: gclk@40001800 {
-			compatible = "atmel,saml2x-gclk";
+			compatible = "atmel,sam0-gclk";
 			reg = <0x40001800 0x400>;
 
 			#clock-cells = <1>;
+			#atmel,assigned-clock-cells = <1>;
 		};
 
 		dmac: dmac@44000400 {
@@ -195,11 +198,16 @@
 
 		rtc: rtc@40002000 {
 			compatible = "atmel,sam0-rtc";
-			reg = <0x40002000 0x1c>;
+			reg = <0x40002000 0x44>;
 			interrupts = <2 0>;
+			clocks = <&osc32kctrl>, <&mclk 0x14 8>;
+			clock-names = "OSC32KCTRL", "MCLK";
+			atmel,assigned-clocks = <&osc32kctrl 0>;
+			atmel,assigned-clock-names = "OSC32KCTRL";
 			status = "disabled";
 
-			clock-generator = <0>;
+			alarms-count = <1>;
+			cal-constant = <(8192 * 128)>;
 		};
 
 		adc: adc@43000c00 {
@@ -209,11 +217,6 @@
 
 			#io-channel-cells = <1>;
 
-			/*
-			 * 16 MHz max, so clock it with the
-			 * 48 MHz DFLL / 2 / 2 = 12 MHz
-			 */
-			gclk = <3>;
 			prescaler = <2>;
 		};
 
