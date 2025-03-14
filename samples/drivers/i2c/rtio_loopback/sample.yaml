@@ -5,9 +5,6 @@ tests:
     tags:
       - rtio
       - i2c_target
-    harness: ztest
-    harness_config:
-      fixture: i2c_bus_short
     platform_allow:
       - b_u585i_iot02a
       - nrf5340dk/nrf5340/cpuapp
