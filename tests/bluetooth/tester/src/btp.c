@@ -31,8 +31,11 @@ static struct k_thread cmd_thread;
 #define CMD_QUEUED 2
 struct btp_buf {
 	intptr_t _reserved;
-	uint8_t data[BTP_MTU]; /* includes btp header */
-	uint8_t rsp[BTP_DATA_MAX_SIZE];
+	uint8_t rsp[BTP_MTU];
+	union {
+		uint8_t data[BTP_MTU];
+		struct btp_hdr hdr;
+	};
 };
 
 static struct btp_buf cmd_buf[CMD_QUEUED];
@@ -87,27 +90,25 @@ static void cmd_handler(void *p1, void *p2, void *p3)
 	while (1) {
 		const struct btp_handler *btp;
 		struct btp_buf *cmd;
-		struct btp_hdr *hdr;
 		uint8_t status;
 		uint16_t rsp_len = 0;
 		uint16_t len;
 
 		cmd = k_fifo_get(&cmds_queue, K_FOREVER);
-		hdr = (struct btp_hdr *)cmd->data;
 
-		LOG_DBG("cmd service 0x%02x opcode 0x%02x index 0x%02x",
-			hdr->service, hdr->opcode, hdr->index);
+		LOG_DBG("cmd service 0x%02x opcode 0x%02x index 0x%02x", cmd->hdr.service,
+			cmd->hdr.opcode, cmd->hdr.index);
 
-		len = sys_le16_to_cpu(hdr->len);
+		len = sys_le16_to_cpu(cmd->hdr.len);
 
-		btp = find_btp_handler(hdr->service, hdr->opcode);
+		btp = find_btp_handler(cmd->hdr.service, cmd->hdr.opcode);
 		if (btp) {
-			if (btp->index != hdr->index) {
+			if (btp->index != cmd->hdr.index) {
 				status = BTP_STATUS_FAILED;
 			} else if ((btp->expect_len >= 0) && (btp->expect_len != len)) {
 				status = BTP_STATUS_FAILED;
 			} else {
-				status = btp->func(hdr->data, len,
+				status = btp->func(cmd->hdr.data, len,
 						   cmd->rsp, &rsp_len);
 			}
 
@@ -126,11 +127,11 @@ static void cmd_handler(void *p1, void *p2, void *p3)
 		}
 
 		if ((status == BTP_STATUS_SUCCESS) && rsp_len > 0) {
-			tester_send_with_index(hdr->service, hdr->opcode,
-					       hdr->index, cmd->rsp, rsp_len);
+			tester_send_with_index(cmd->hdr.service, cmd->hdr.opcode,
+					       cmd->hdr.index, cmd->rsp, rsp_len);
 		} else {
-			tester_rsp_with_index(hdr->service, hdr->opcode,
-					      hdr->index, status);
+			tester_rsp_with_index(cmd->hdr.service, cmd->hdr.opcode,
+					      cmd->hdr.index, status);
 		}
 
 		(void)memset(cmd, 0, sizeof(*cmd));
