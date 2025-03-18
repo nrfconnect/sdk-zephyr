@@ -513,10 +513,7 @@ no_hash_collision:
 
 	/* write the name if required */
 	if (write_name) {
-		rc = zms_write(&cf->cf_zms, name_hash, name, strlen(name));
-		if (rc < 0) {
-			return rc;
-		}
+		/* First let's update the linked list */
 #ifdef CONFIG_SETTINGS_ZMS_NO_LL_DELETE
 		if (ll_node_exist) {
 			goto no_ll_update;
@@ -570,10 +567,16 @@ no_hash_collision:
 			cf->ll_cache[cf->ll_cache_next - 2] = settings_element;
 		}
 #endif
-	}
 #ifdef CONFIG_SETTINGS_ZMS_NO_LL_DELETE
 no_ll_update:
 #endif /* CONFIG_SETTINGS_ZMS_NO_LL_DELETE */
+		/* Now let's write the name */
+		rc = zms_write(&cf->cf_zms, name_hash, name, strlen(name));
+		if (rc < 0) {
+			return rc;
+		}
+	}
+
 #ifdef CONFIG_SETTINGS_ZMS_NAME_CACHE
 	/* Add the flags of the written settings entry in cache */
 	cache_flags = 0;
