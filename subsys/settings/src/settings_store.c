@@ -88,6 +88,31 @@ int settings_load_subtree_direct(
 	return 0;
 }
 
+/* Load a single key/value from persistant storage */
+int settings_load_one(const char *name, void *buf, size_t buf_len)
+{
+	struct settings_store *cs;
+	int rc = 0;
+	const struct settings_load_arg arg = {
+		.subtree = name
+	};
+
+	/*
+	 * for every config store that supports this function
+	 * load config
+	 */
+	k_mutex_lock(&settings_lock, K_FOREVER);
+	SYS_SLIST_FOR_EACH_CONTAINER(&settings_load_srcs, cs, cs_next) {
+		if (cs->cs_itf->csi_load_one) {
+			rc = cs->cs_itf->csi_load_one(cs, name, (char *)buf, buf_len);
+		} else {
+			rc = cs->cs_itf->csi_load(cs, &arg);
+		}
+	}
+	k_mutex_unlock(&settings_lock);
+	return rc;
+}
+
 /*
  * Append a single value to persisted config. Don't store duplicate value.
  */
