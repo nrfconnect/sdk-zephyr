@@ -54,6 +54,8 @@ extern "C" {
  * if a settings element is deleted it won't be found.
  */
 
+#define SETTINGS_FULL_NAME_LEN SETTINGS_MAX_NAME_LEN + SETTINGS_EXTRA_LEN + 1
+
 #define ZMS_LL_HEAD_HASH_ID 0x80000000
 #define ZMS_DATA_ID_OFFSET  0x40000000
 #define ZMS_HASH_MASK       GENMASK(29, CONFIG_SETTINGS_ZMS_MAX_COLLISIONS_BITS + 1)
