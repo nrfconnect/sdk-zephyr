@@ -21,6 +21,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/byteorder.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/crypto.h>
 #include <zephyr/bluetooth/gap.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/hci_types.h>
@@ -40,18 +41,6 @@
 #include "bap_common.h"
 
 #if defined(CONFIG_BT_GMAP)
-/* Zephyr Controller works best while Extended Advertising interval to be a multiple
- * of the ISO Interval minus 10 ms (max. advertising random delay). This is
- * required to place the AUX_ADV_IND PDUs in a non-overlapping interval with the
- * Broadcast ISO radio events.
- */
-#define BT_LE_EXT_ADV_CUSTOM                                                                       \
-	BT_LE_ADV_PARAM(BT_LE_ADV_OPT_EXT_ADV, BT_GAP_MS_TO_ADV_INTERVAL(80),                      \
-			BT_GAP_MS_TO_ADV_INTERVAL(80), NULL)
-
-#define BT_LE_PER_ADV_CUSTOM                                                                       \
-	BT_LE_PER_ADV_PARAM(BT_GAP_MS_TO_PER_ADV_INTERVAL(90), BT_GAP_MS_TO_PER_ADV_INTERVAL(90),  \
-			    BT_LE_PER_ADV_OPT_NONE)
 
 #define UNICAST_SINK_SUPPORTED (CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT > 0)
 #define UNICAST_SRC_SUPPORTED  (CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT > 0)
@@ -424,6 +413,49 @@ static const struct bt_gmap_cb gmap_cb = {
 	.discover = gmap_discover_cb,
 };
 
+static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf_simple *buf)
+{
+	char addr_str[BT_ADDR_LE_STR_LEN];
+	struct bt_conn *conn;
+	int err;
+
+	/* Check for connectable, extended advertising */
+	if (((info->adv_props & BT_GAP_ADV_PROP_EXT_ADV) == 0) ||
+	    ((info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE)) == 0) {
+		/* We're only interested in connectable extended advertising */
+	}
+
+	conn = bt_conn_lookup_addr_le(BT_ID_DEFAULT, info->addr);
+	if (conn != NULL) {
+		/* Already connected to this device */
+		bt_conn_unref(conn);
+		return;
+	}
+
+	bt_addr_le_to_str(info->addr, addr_str, sizeof(addr_str));
+	printk("Device found: %s (RSSI %d)\n", addr_str, info->rssi);
+
+	/* connect only to devices in close proximity */
+	if (info->rssi < -70) {
+		FAIL("RSSI too low");
+		return;
+	}
+
+	printk("Stopping scan\n");
+	if (bt_le_scan_stop()) {
+		FAIL("Could not stop scan");
+		return;
+	}
+
+	err = bt_conn_le_create(info->addr, BT_CONN_LE_CREATE_CONN,
+				BT_LE_CONN_PARAM(BT_GAP_INIT_CONN_INT_MIN, BT_GAP_INIT_CONN_INT_MIN,
+						 0, BT_GAP_MS_TO_CONN_TIMEOUT(4000)),
+				&connected_conns[connected_conn_cnt]);
+	if (err != 0) {
+		FAIL("Could not connect to peer: %d", err);
+	}
+}
+
 static void init(void)
 {
 	const struct bt_gmap_feat features = {
@@ -431,6 +463,9 @@ static void init(void)
 			     BT_GMAP_UGG_FEAT_MULTISINK),
 	};
 	const enum bt_gmap_role role = BT_GMAP_ROLE_UGG;
+	static struct bt_le_scan_cb scan_cb = {
+		.recv = scan_recv_cb,
+	};
 	int err;
 
 	err = bt_enable(NULL);
@@ -443,6 +478,11 @@ static void init(void)
 	bap_stream_tx_init();
 
 	bt_gatt_cb_register(&gatt_callbacks);
+	err = bt_le_scan_cb_register(&scan_cb);
+	if (err != 0) {
+		FAIL("Failed to register scan callbacks (err %d)\n", err);
+		return;
+	}
 
 	err = bt_bap_unicast_client_register_cb(&unicast_client_cbs);
 	if (err != 0) {
@@ -480,56 +520,13 @@ static void init(void)
 	}
 }
 
-static void gmap_device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
-			      struct net_buf_simple *ad)
-{
-	char addr_str[BT_ADDR_LE_STR_LEN];
-	struct bt_conn *conn;
-	int err;
-
-	/* We're only interested in connectable events */
-	if (type != BT_HCI_ADV_IND && type != BT_HCI_ADV_DIRECT_IND) {
-		return;
-	}
-
-	conn = bt_conn_lookup_addr_le(BT_ID_DEFAULT, addr);
-	if (conn != NULL) {
-		/* Already connected to this device */
-		bt_conn_unref(conn);
-		return;
-	}
-
-	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
-	printk("Device found: %s (RSSI %d)\n", addr_str, rssi);
-
-	/* connect only to devices in close proximity */
-	if (rssi < -70) {
-		FAIL("RSSI too low");
-		return;
-	}
-
-	printk("Stopping scan\n");
-	if (bt_le_scan_stop()) {
-		FAIL("Could not stop scan");
-		return;
-	}
-
-	err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN,
-				BT_LE_CONN_PARAM(BT_GAP_INIT_CONN_INT_MIN, BT_GAP_INIT_CONN_INT_MIN,
-						 0, BT_GAP_MS_TO_CONN_TIMEOUT(4000)),
-				&connected_conns[connected_conn_cnt]);
-	if (err) {
-		FAIL("Could not connect to peer: %d", err);
-	}
-}
-
 static void scan_and_connect(void)
 {
 	int err;
 
 	UNSET_FLAG(flag_connected);
 
-	err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, gmap_device_found);
+	err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, NULL);
 	if (err != 0) {
 		FAIL("Scanning failed to start (err %d)\n", err);
 		return;
@@ -993,25 +990,6 @@ static void test_gmap_ugg_unicast_ac(const struct gmap_unicast_ac_param *param)
 	     param->src_named_preset != NULL ? param->src_named_preset->name : "None");
 }
 
-static void setup_extended_adv(struct bt_le_ext_adv **adv)
-{
-	int err;
-
-	/* Create a non-connectable advertising set */
-	err = bt_le_ext_adv_create(BT_LE_EXT_ADV_CUSTOM, NULL, adv);
-	if (err != 0) {
-		FAIL("Unable to create extended advertising set: %d\n", err);
-		return;
-	}
-
-	/* Set periodic advertising parameters */
-	err = bt_le_per_adv_set_param(*adv, BT_LE_PER_ADV_CUSTOM);
-	if (err) {
-		FAIL("Failed to set periodic advertising parameters: %d\n", err);
-		return;
-	}
-}
-
 static void setup_extended_adv_data(struct bt_cap_broadcast_source *source,
 				    struct bt_le_ext_adv *adv)
 {
@@ -1198,7 +1176,7 @@ static int test_gmap_ugg_broadcast_ac(const struct gmap_broadcast_ac_param *para
 	create_param.qos = &qos;
 
 	init();
-	setup_extended_adv(&adv);
+	setup_broadcast_adv(&adv);
 
 	err = bt_cap_initiator_broadcast_audio_create(&create_param, &broadcast_source);
 	if (err != 0) {

@@ -63,6 +63,26 @@ New APIs and options
   like you need to add more details, add them in the API documentation code
   instead.
 
+* Bluetooth
+
+  * Audio
+
+    * :c:macro:`BT_BAP_ADV_PARAM_CONN_QUICK`
+    * :c:macro:`BT_BAP_ADV_PARAM_CONN_REDUCED`
+    * :c:macro:`BT_BAP_CONN_PARAM_SHORT_7_5`
+    * :c:macro:`BT_BAP_CONN_PARAM_SHORT_10`
+    * :c:macro:`BT_BAP_CONN_PARAM_RELAXED`
+    * :c:macro:`BT_BAP_ADV_PARAM_BROADCAST_FAST`
+    * :c:macro:`BT_BAP_ADV_PARAM_BROADCAST_SLOW`
+    * :c:macro:`BT_BAP_PER_ADV_PARAM_BROADCAST_FAST`
+    * :c:macro:`BT_BAP_PER_ADV_PARAM_BROADCAST_SLOW`
+    * :c:func:`bt_csip_set_member_set_size_and_rank`
+    * :c:func:`bt_csip_set_member_get_info`
+
+  * Host
+
+    * :c:func:`bt_le_get_local_features`
+
 New Boards
 **********
 
