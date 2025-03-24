@@ -30,19 +30,62 @@ struct nordic_vpr_launcher_config {
 #endif
 };
 
+/** @brief Decode rom size from the VPR code.
+ *
+ * Use VPR code, which at the beginning encodes address of __relocation_region_end,
+ * to calculate code that needs to be copied. Expecting following 2 instructions:
+ *   auipc gp,val
+ *   addi gp,gp val
+ *
+ * @param src_addr Source address.
+ * @param dst_addr Destination address.
+ * @param[out] size ROM size.
+ *
+ * @retval 0 on successful size decoding.
+ * @retval -EINVAL if size decoding failed.
+ */
+static int decode_size(uintptr_t src_addr, uintptr_t dst_addr, size_t *size)
+{
+	uint32_t *instr = (uint32_t *)src_addr;
+	uint32_t i0 = instr[0];
+	uint32_t i1 = instr[1];
+	uint32_t instr0 = i0 & BIT_MASK(7);
+	uint32_t rd0 = (i0 >> 7) & BIT_MASK(5);
+	uint32_t imm0 = i0 >> 12;
+	int imm1 = (int)i1 >> 20;
+
+	if ((instr0 != 0x17) && (rd0 != 3)) {
+		return -EINVAL;
+	}
+
+	uintptr_t relocation_addr_end = dst_addr + (imm0 << 12);
+
+	relocation_addr_end += imm1;
+	*size =  (size_t)(relocation_addr_end - dst_addr)+ 0;
+
+	return 0;
+}
+
 static int nordic_vpr_launcher_init(const struct device *dev)
 {
 	const struct nordic_vpr_launcher_config *config = dev->config;
-
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(source_memory)
+	size_t size;
+	int err;
+
+	err = decode_size(config->src_addr, config->exec_addr, &size);
+	if (err < 0) {
+		size = config->size;
+	}
+
 	if (config->size > 0U) {
 		LOG_DBG("Loading VPR (%p) from %p to %p (%zu bytes)", config->vpr,
-			(void *)config->src_addr, (void *)config->exec_addr, config->size);
-		memcpy((void *)config->exec_addr, (void *)config->src_addr, config->size);
+			(void *)config->src_addr, (void *)config->exec_addr, size);
+		memcpy((void *)config->exec_addr, (void *)config->src_addr, size);
 #if defined(CONFIG_DCACHE)
 		LOG_DBG("Writing back cache with loaded VPR (from %p %zu bytes)",
-			(void *)config->exec_addr, config->size);
-		sys_cache_data_flush_range((void *)config->exec_addr, config->size);
+			(void *)config->exec_addr, size);
+		sys_cache_data_flush_range((void *)config->exec_addr, size);
 #endif
 	}
 #endif
