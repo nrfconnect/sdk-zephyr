@@ -1,5 +1,4 @@
-/*
- * Copyright (c) 2024 BayLibre SAS
+/* Copyright (c) 2024 BayLibre SAS
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -23,39 +22,78 @@ extern "C" {
  * difference between name and value ID is constant and equal to
  * ZMS_NAME_ID_OFFSET.
  *
- * Setting's name entries start from ZMS_NAMECNT_ID + 1.
- * The entry with ID == ZMS_NAMECNT_ID is used to store the largest name ID in use.
+ * Setting's name is hashed into 29 bits minus hash_collisions_bits.
+ * The 2 MSB_bits have always the same value 10, the LL_bit for the name's hash is 0
+ * and the hash_collisions_bits is configurable through CONFIG_SETTINGS_ZMS_MAX_COLLISIONS_BITS.
+ * The resulted 32 bits is the ZMS_ID of the Setting's name.
+ * If we detect a collision between ZMS_IDs we increment the value within hash_collision_bits
+ * until we find a free ZMS_ID.
+ * Separately, we store a linked list using the Setting's name ZMS_ID but setting the lsb to 1.
  *
- * Deleted records will not be found, only the last record will be read.
+ * The linked list is used to maintain a relation between all ZMS_IDs. This is necessary to load
+ * all settings at initialization.
+ * The linked list contains at least a header followed by multiple linked list elements that
+ * we can refer to as LL_x (where x is the order of that element in that list).
+ * This is a representation of the Linked List that is stored in the storage.
+ * LL_header <--> LL_0 <--> LL_1 <--> LL_2.
+ * The "next_hash" pointer of each LL element refers to the next element in the linked list.
+ * The "previous_hash" pointer is referring the previous element in the linked list.
+ *
+ * The bit representation of the 32 bits ZMS_ID is the following:
+ * --------------------------------------------------------------
+ * | MSB_bits | hash (truncated) | hash_collision_bits | LL_bit |
+ * --------------------------------------------------------------
+ * Where:
+ * MSB_bits (2 bits width) : = 10 for Name IDs
+ *			     = 11 for Data IDs
+ * hash (29 bits - hash_collision_bits) : truncated hash obtained from sys_hash32
+ * hash_collision_bits (configurable width) : used to handle hash collisions
+ * LL_bit : = 0 when this is a name's ZMS_ID
+ *	    = 1 when this is the linked list ZMS_ID corresponding to the name
+ *
+ * if a settings element is deleted it won't be found.
  */
-#define ZMS_NAMECNT_ID     0x80000000
-#define ZMS_NAME_ID_OFFSET 0x40000000
+
+#define ZMS_LL_HEAD_HASH_ID 0x80000000
+#define ZMS_DATA_ID_OFFSET  0x40000000
+#define ZMS_HASH_MASK       GENMASK(29, CONFIG_SETTINGS_ZMS_MAX_COLLISIONS_BITS + 1)
+#define ZMS_COLLISIONS_MASK GENMASK(CONFIG_SETTINGS_ZMS_MAX_COLLISIONS_BITS, 1)
+#define ZMS_HASH_TOTAL_MASK GENMASK(29, 1)
+#define ZMS_MAX_COLLISIONS  (BIT(CONFIG_SETTINGS_ZMS_MAX_COLLISIONS_BITS) - 1)
+
+#if CONFIG_SETTINGS_ZMS_NAME_CACHE
+#define ZMS_CACHE_EXIST(x)         (x & BIT(0))
+#define ZMS_CACHE_HAS_COLLISION(x) (x & BIT(1))
+#define ZMS_CACHE_IS_DELETED(x)    (x & BIT(2))
+#endif /* CONFIG_SETTINGS_ZMS_NAME_CACHE */
+
+/* some useful macros */
+#define ZMS_NAME_ID_FROM_LL_NODE(x) (x & ~BIT(0))
+#define ZMS_UPDATE_COLLISION_NUM(x, y)                                                             \
+	((x & ~ZMS_COLLISIONS_MASK) | ((y << 1) & ZMS_COLLISIONS_MASK))
+#define ZMS_COLLISION_NUM(x) ((x & ZMS_COLLISIONS_MASK) >> 1)
 
 struct settings_zms {
 	struct settings_store cf_store;
 	struct zms_fs cf_zms;
-	uint32_t last_name_id;
 	const struct device *flash_dev;
 #if CONFIG_SETTINGS_ZMS_NAME_CACHE
 	struct {
 		uint32_t name_hash;
-		uint32_t name_id;
+		uint8_t flags;
 	} cache[CONFIG_SETTINGS_ZMS_NAME_CACHE_SIZE];
 
 	uint32_t cache_next;
-	uint32_t cache_total;
-	bool loaded;
 #endif
+	uint32_t last_hash_id;
+	uint32_t second_to_last_hash_id;
+	uint8_t hash_collision_num;
 };
 
-/* register zms to be a source of settings */
-int settings_zms_src(struct settings_zms *cf);
-
-/* register zms to be the destination of settings */
-int settings_zms_dst(struct settings_zms *cf);
-
-/* Initialize a zms backend. */
-int settings_zms_backend_init(struct settings_zms *cf);
+struct settings_hash_linked_list {
+	uint32_t previous_hash;
+	uint32_t next_hash;
+};
 
 #ifdef __cplusplus
 }
