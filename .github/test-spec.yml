@@ -94,12 +94,6 @@
   - "tests/bluetooth/mesh/**/*"
   - "tests/bluetooth/mesh_shell/**/*"
 
-"CI-zigbee-test":
-  - "subsys/mgmt/mcumgr/**/*"
-  - "subsys/dfu/**/*"
-  - "include/mgmt/mcumgr/**/*"
-  - "include/dfu/**/*"
-
 "CI-thingy91-test":
   - "boards/nordic/nrf9160dk/**/*"
   - "arch/x86/core/**/*"
