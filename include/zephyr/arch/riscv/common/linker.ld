@@ -343,6 +343,10 @@ SECTIONS
  * zephyr_linker_sources() Cmake function.
  */
 #include <snippets-data-sections.ld>
+/* Tag end location of code+data that shall be copied in non-XIP execution.
+ * It must not include noinit section.
+ */
+    __relocation_region_end = .;
 
 #include <zephyr/linker/common-noinit.ld>
 
