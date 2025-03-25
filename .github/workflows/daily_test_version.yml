@@ -17,7 +17,7 @@ jobs:
 
     steps:
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
+      uses: aws-actions/configure-aws-credentials@49f33fe638c0cba4fb16037a27915a7ab7740259 # v4
       with:
         aws-access-key-id: ${{ vars.AWS_TESTING_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_TESTING_SECRET_ACCESS_KEY }}
@@ -28,7 +28,7 @@ jobs:
         pip install gitpython
 
     - name: checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       with:
         fetch-depth: 0
 
