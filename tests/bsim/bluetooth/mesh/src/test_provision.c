@@ -105,7 +105,7 @@ static void test_args_parse(int argc, char *argv[])
 			.dest = &prov_bearer,
 			.type = 'i',
 			.name = "{invalid, PB-ADV, PB-GATT}",
-			.option = "prov-brearer",
+			.option = "prov-bearer",
 			.descript = "Provisioning bearer that is to be used."
 		},
 	};
