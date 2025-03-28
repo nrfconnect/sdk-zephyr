@@ -6,6 +6,8 @@ simulation:
   - name: qemu
 toolchain:
   - zephyr
+  - zephyr-gnu
+  - zephyr-llvm
   - gnuarmemb
   - xtools
 supported:
