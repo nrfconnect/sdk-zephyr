@@ -11,6 +11,7 @@ if(CONFIG_ARM)
   zephyr_linker_sources(SECTIONS arm_platform_init.ld)
 endif()
 
+zephyr_library_sources_ifdef(CONFIG_ARM reboot.c)
 zephyr_library_sources_ifdef(CONFIG_POWEROFF poweroff.c)
 if(CONFIG_ARM)
   zephyr_library_sources_ifdef(CONFIG_NRF_PLATFORM_HALTIUM soc_lrcconf.c)
