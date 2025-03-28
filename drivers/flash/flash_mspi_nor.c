@@ -13,6 +13,10 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/device_runtime.h>
 
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios) && defined(CONFIG_MSPI_NRFE)
+#include <drivers/mspi/nrf_mspi.h>
+#endif
+
 #include "jesd216.h"
 #include "spi_nor.h"
 
@@ -20,6 +24,10 @@ LOG_MODULE_REGISTER(flash_mspi_nor, CONFIG_FLASH_LOG_LEVEL);
 
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
 #define WITH_RESET_GPIO 1
+#endif
+
+#if defined(WITH_RESET_GPIO) && defined(CONFIG_MSPI_NRFE)
+#define SDP_MSPI_WITH_RESET 1
 #endif
 
 #define FLASH_MX25R_LH_MASK BIT(1)
@@ -229,6 +237,9 @@ struct flash_mspi_nor_config {
 	struct gpio_dt_spec reset;
 	uint32_t reset_pulse_us;
 	uint32_t reset_recovery_us;
+#if defined(SDP_MSPI_WITH_RESET)
+	uint8_t reset_port_num;
+#endif
 #endif
 #if defined(CONFIG_FLASH_PAGE_LAYOUT)
 	struct flash_pages_layout layout;
@@ -799,7 +810,39 @@ static int drv_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-#if defined(WITH_RESET_GPIO)
+#if defined(SDP_MSPI_WITH_RESET)
+	if (dev_config->reset.port) {
+		if (!gpio_is_ready_dt(&dev_config->reset)) {
+			LOG_ERR("Device %s is not ready",
+				dev_config->reset.port->name);
+			return -ENODEV;
+		}
+
+		rc = nrf_mspi_reset_pin_config(dev_config->bus, &dev_config->mspi_id,
+					       &dev_config->reset, dev_config->reset_port_num,
+					       GPIO_OUTPUT_ACTIVE);
+
+		if (rc < 0) {
+			LOG_ERR("Failed to activate RESET: %d", rc);
+			return -EIO;
+		}
+
+		if (dev_config->reset_pulse_us != 0) {
+			k_busy_wait(dev_config->reset_pulse_us);
+		}
+
+		rc = nrf_mspi_reset_pin_set(dev_config->bus, &dev_config->reset,
+					    &dev_config->mspi_id, 0);
+		if (rc < 0) {
+			LOG_ERR("Failed to deactivate RESET: %d", rc);
+			return -EIO;
+		}
+
+		if (dev_config->reset_recovery_us != 0) {
+			k_busy_wait(dev_config->reset_recovery_us);
+		}
+	}
+#elif defined(WITH_RESET_GPIO)
 	if (dev_config->reset.port) {
 		if (!gpio_is_ready_dt(&dev_config->reset)) {
 			LOG_ERR("Device %s is not ready",
@@ -935,6 +978,9 @@ BUILD_ASSERT((FLASH_SIZE_INST(inst) % CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE) ==
 				/ 1000,						\
 		.reset_recovery_us = DT_INST_PROP_OR(inst, t_reset_recovery, 0)	\
 				   / 1000,))					\
+	IF_ENABLED(SDP_MSPI_WITH_RESET,				                \
+		(.reset_port_num = DT_PROP_BY_PHANDLE_IDX(DT_DRV_INST(inst),    \
+				reset_gpios, 0, port),))                        \
 		FLASH_PAGE_LAYOUT_DEFINE(inst)					\
 		.jedec_id = DT_INST_PROP(inst, jedec_id),			\
 		.jedec_cmds = FLASH_CMDS(inst),					\
