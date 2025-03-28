@@ -49,7 +49,7 @@ jobs:
           git remote set-url origin ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload Unit Test Results
         if: always() && steps.twister.outputs.report_needed != 0
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
         with:
           name: Unit Test Results (Subset ${{ matrix.platform }})
           path: twister-out/twister.xml
@@ -139,7 +139,7 @@ jobs:
     if: (success() || failure() ) && needs.clang-build.outputs.report_needed != 0
     steps:
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4
         with:
           path: artifacts
       - name: Merge Test Results
@@ -150,7 +150,7 @@ jobs:
 
       - name: Upload Unit Test Results in HTML
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
         with:
           name: HTML Unit Test Results
           if-no-files-found: ignore
@@ -158,7 +158,7 @@ jobs:
             junit-clang.html
 
       - name: Publish Unit Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: EnricoMi/publish-unit-test-result-action@78879197c58e9f9595bf33d2d9c446d344fcca57 # v2
         if: always()
         with:
           check_name: Unit Test Results
