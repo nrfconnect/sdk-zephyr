@@ -353,10 +353,11 @@ static void uarte_nrfx_isr_int(const void *arg)
 	if (txstopped && (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME) || LOW_POWER_ENABLED(config))) {
 		unsigned int key = irq_lock();
 
-		if (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME) &&
-		    (data->flags & UARTE_FLAG_POLL_OUT)) {
-			data->flags &= ~UARTE_FLAG_POLL_OUT;
-			pm_device_runtime_put(dev);
+		if (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME)) {
+			if (data->flags & UARTE_FLAG_POLL_OUT) {
+				data->flags &= ~UARTE_FLAG_POLL_OUT;
+				pm_device_runtime_put(dev);
+			}
 		} else {
 			nrf_uarte_disable(uarte);
 		}
