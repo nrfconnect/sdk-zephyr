@@ -192,6 +192,11 @@ static int cmd_add_network(const struct shell *sh, size_t argc, char *argv[])
 	while ((opt = getopt_long(argc, argv, "s:p:k:w:b:c:m:t:a:K:h", long_options, &opt_index)) !=
 	       -1) {
 		state = getopt_state_get();
+		if (!state->optarg) {
+			shell_warn(sh, "Provided argument is NULL\n");
+			return -EINVAL;
+		}
+
 		switch (opt) {
 		case 's':
 			creds.header.ssid_len = strlen(state->optarg);
@@ -201,6 +206,7 @@ static int cmd_add_network(const struct shell *sh, size_t argc, char *argv[])
 				return -EINVAL;
 			}
 			memcpy(creds.header.ssid, state->optarg, creds.header.ssid_len);
+			creds.header.ssid[creds.header.ssid_len] = '\0';
 			break;
 		case 'k':
 			creds.header.type = atoi(state->optarg);
