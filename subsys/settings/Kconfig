@@ -43,27 +43,9 @@ choice SETTINGS_BACKEND
 config SETTINGS_ZMS
 	bool "ZMS (Zephyr Memory Storage)"
 	depends on ZMS
-	help
-	  Use ZMS as settings storage backend.
-
-if SETTINGS_ZMS
-
-config SETTINGS_ZMS_NAME_CACHE
-	bool "ZMS name lookup cache"
 	select SYS_HASH_FUNC32
 	help
-	  Enable ZMS name lookup cache, used to reduce the Settings name
-	  lookup time.
-
-config SETTINGS_ZMS_NAME_CACHE_SIZE
-	int "ZMS name lookup cache size"
-	default 128
-	range 1 $(UINT32_MAX)
-	depends on SETTINGS_ZMS_NAME_CACHE
-	help
-	  Number of entries in Settings ZMS name cache.
-
-endif # SETTINGS_ZMS
+	  Use ZMS as settings storage backend.
 
 config SETTINGS_FCB
 	bool "FCB"
@@ -166,12 +148,28 @@ config SETTINGS_ZMS_SECTOR_SIZE_MULT
 	  The sector size to use for the ZMS settings area as a multiple of
 	  FLASH_ERASE_BLOCK_SIZE.
 
+config SETTINGS_ZMS_CUSTOM_SECTOR_COUNT
+	bool "Customize the sector count of the ZMS settings partition"
+	depends on SETTINGS_ZMS
+	help
+	  The number of sectors used by default is the maximum value that can
+	  fit in the settings storage partition.
+	  Enabling this config allows to customize the number of used sectors.
+
 config SETTINGS_ZMS_SECTOR_COUNT
 	int "Sector count of the ZMS settings area"
 	default 8
-	depends on SETTINGS_ZMS
+	depends on SETTINGS_ZMS && SETTINGS_ZMS_CUSTOM_SECTOR_COUNT
 	help
 	  Number of sectors used for the ZMS settings area
+
+config SETTINGS_ZMS_MAX_COLLISIONS_BITS
+	int "number of bits reserved to handle collisions between hash numbers"
+	default 4
+	depends on SETTINGS_ZMS
+	help
+	  The maximum number of hash collisions needs to be well sized depending
+	  on the data that is going to be stored in ZMS and its hash values
 
 config SETTINGS_SHELL
 	bool "Settings shell"
