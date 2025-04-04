@@ -12,7 +12,7 @@
 #include <haly/nrfy_vpr.h>
 
 #define TASKS_IDX_MAX NRF_VPR_TASKS_TRIGGER_MAX
-#define VEVIF_RETRIGGER_DELAY	12
+#define VEVIF_RETRIGGER_DELAY_USEC	12
 
 struct mbox_vevif_task_tx_conf {
 	NRF_VPR_Type *vpr;
@@ -41,9 +41,11 @@ static int vevif_task_tx_send(const struct device *dev, uint32_t id, const struc
 
 	nrfy_vpr_task_trigger(config->vpr, nrfy_vpr_trigger_task_get(id));
 
-	k_busy_wait(VEVIF_RETRIGGER_DELAY);
+#ifdef CONFIG_SOC_NRF54H20
+        k_busy_wait(VEVIF_RETRIGGER_DELAY_USEC);
 
-	nrfy_vpr_task_trigger(config->vpr, nrfy_vpr_trigger_task_get(id));
+        nrfy_vpr_task_trigger(config->vpr, nrfy_vpr_trigger_task_get(id));
+#endif /* CONFIG_SOC_NRF54H20 */
 
 	return 0;
 }
