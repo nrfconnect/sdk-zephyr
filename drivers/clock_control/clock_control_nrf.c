@@ -598,8 +598,6 @@ static void clock_event_handler(nrfx_clock_evt_type_t event)
 {
 	const struct device *dev = CLOCK_DEVICE;
 
-	printk("Clock event %d", event);
-
 	switch (event) {
 #if NRF_CLOCK_HAS_XO_TUNE
 	case NRFX_CLOCK_EVT_XO_TUNED:
