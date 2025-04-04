@@ -52,7 +52,7 @@ void *_vector_table_pointer;
 #define VTOR_MASK SCB_VTOR_TBLOFF_Msk
 #endif
 
-static inline void relocate_vector_table(void)
+void __weak relocate_vector_table(void)
 {
 	SCB->VTOR = VECTOR_ADDRESS & VTOR_MASK;
 	barrier_dsync_fence_full();
