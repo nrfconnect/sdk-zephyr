@@ -149,3 +149,6 @@ set_compiler_property(PROPERTY specs)
 
 # Compiler flag for defining preinclude files.
 set_compiler_property(PROPERTY include_file)
+
+# Compiler flag to enable function instrumentation
+set_compiler_property(PROPERTY func_instrumentation)
