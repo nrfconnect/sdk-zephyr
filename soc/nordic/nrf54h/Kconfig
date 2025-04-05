@@ -74,3 +74,4 @@ config SOC_NRF54H20_CPUFLPR
 
 rsource "bicr/Kconfig"
 rsource "gpd/Kconfig"
+rsource "ironside_boot_report/Kconfig"

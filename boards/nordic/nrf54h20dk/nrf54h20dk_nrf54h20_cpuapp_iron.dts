@@ -6,8 +6,17 @@
 
 #include "nrf54h20dk_nrf54h20_cpuapp.dts"
 
-/delete-node/&cpurad_rx_partitions;
+/* The code partitions are re-defined below, so delete the parent node. */
 /delete-node/&cpuapp_rx_partitions;
+
+/* No radio support for IRON variant, don't allocate MRAM. */
+/delete-node/&cpurad_rx_partitions;
+
+/* All of ram0x goes to cpuapp, delete these nodes to re-define below. */
+/delete-node/&cpuapp_ram0x_region;
+/delete-node/&cpurad_ram0x_region;
+
+/* IPC mechanism for IRON variant differs, delete the old node. */
 /delete-node/&cpusec_cpuapp_ipc;
 
 /* This is not yet an exhaustive memory map, and contain only a minimum required to boot
@@ -22,15 +31,40 @@
 		#size-cells = <1>;
 
 		cpuapp_slot0_partition: partition@2c000 {
-			reg = <0x2c000 DT_SIZE_K(480)>;
+			reg = <0x2c000 DT_SIZE_K(736)>;
 		};
 
-		cpuppr_code_partition: partition@a4000 {
-			reg = <0xa4000 DT_SIZE_K(64)>;
+		cpuppr_code_partition: partition@e4000 {
+			reg = <0xe4000 DT_SIZE_K(64)>;
 		};
 
-		cpuflpr_code_partition: partition@b4000 {
-			reg = <0xb4000 DT_SIZE_K(48)>;
+		cpuflpr_code_partition: partition@f4000 {
+			reg = <0xf4000 DT_SIZE_K(48)>;
+		};
+	};
+};
+
+/ {
+	reserved-memory {
+		cpuapp_ram0x_region: memory@2f000000 {
+			compatible = "nordic,owned-memory", "fixed-partitions";
+			nordic,access = <NRF_OWNER_ID_APPLICATION NRF_PERM_RWS>;
+			reg = <0x2f000000 DT_SIZE_K(768)>;
+			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0x0 0x2f000000 0xc0000>;
+			cpuapp_data: memory@0{
+				reg = <0x0 DT_SIZE_K(768)>;
+			};
+		};
+
+		sysctrl_rom_report: memory@2f88ff00 {
+			reg = <0x2f88ff00 0x100>;
+		};
+
+		cpuapp_ironside_boot_report: memory@2f88fd00 {
+			reg = <0x2f88fd00 0x200>;
 		};
 	};
 };
