@@ -33,28 +33,53 @@ if(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE AND CONFIG_NET_L2_WIFI_SHELL)
   # convert .pem files to array data at build time
   zephyr_include_directories(${gen_inc_dir})
 
-  foreach(cert_file IN ITEMS
+  generate_inc_file_for_target(
+      app
       ${ZEPHYR_BASE}/samples/net/wifi/test_certs/client.pem
-      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/client-key.pem
-      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/ca.pem
-      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/client2.pem
-      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/client-key2.pem
-      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/ca2.pem
-      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/server.pem
-      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/server-key.pem
+      ${gen_dir}/client.pem.inc
       )
-    if(EXISTS ${cert_file})
-      get_filename_component(cert_name ${cert_file} NAME)
-      generate_inc_file_for_target(
-          app
-          ${cert_file}
-          ${gen_dir}/${cert_name}.inc
-          )
-    else()
-      get_filename_component(cert_name ${cert_file} NAME)
-      file(WRITE ${gen_dir}/${cert_name}.inc "// Empty file generated because ${cert_file} does not exist\n")
-    endif()
-  endforeach()
+
+  generate_inc_file_for_target(
+      app
+      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/client-key.pem
+      ${gen_dir}/client-key.pem.inc
+      )
+
+  generate_inc_file_for_target(
+      app
+      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/ca.pem
+      ${gen_dir}/ca.pem.inc
+      )
+
+  generate_inc_file_for_target(
+      app
+      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/client2.pem
+      ${gen_dir}/client2.pem.inc
+      )
+
+  generate_inc_file_for_target(
+      app
+      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/client-key2.pem
+      ${gen_dir}/client-key2.pem.inc
+      )
+
+  generate_inc_file_for_target(
+      app
+      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/ca2.pem
+      ${gen_dir}/ca2.pem.inc
+      )
+
+  generate_inc_file_for_target(
+      app
+      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/server.pem
+      ${gen_dir}/server.pem.inc
+      )
+
+  generate_inc_file_for_target(
+      app
+      ${ZEPHYR_BASE}/samples/net/wifi/test_certs/server-key.pem
+      ${gen_dir}/server-key.pem.inc
+      )
 
   # Add explicit dependency on app target for ZEPHYR_CURRENT_LIBRARY, so these
   # headers are generated at the correct point in the build
