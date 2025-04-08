@@ -2425,28 +2425,26 @@ static void comp_data_clear(void)
 	atomic_clear_bit(bt_mesh.flags, BT_MESH_COMP_DIRTY);
 }
 
-static int read_comp_cb(const char *key, size_t len, settings_read_cb read_cb,
-			void *cb_arg, void *param)
+static ssize_t read_comp(const char *key, struct net_buf_simple *buf)
 {
-	struct net_buf_simple *buf = param;
+	ssize_t ret = 0;
+	ssize_t value_len;
 
-	if (len > net_buf_simple_tailroom(buf)) {
+	ret = settings_get_val_len(key);
+	if (ret > net_buf_simple_tailroom(buf)) {
 		return -ENOBUFS;
+	} else if (ret <= 0) {
+		return -ENOENT;
 	}
 
-	len = read_cb(cb_arg, net_buf_simple_tail(buf), len);
-	if (len > 0) {
-		net_buf_simple_add(buf, len);
-	}
-
-	return -EALREADY;
+	return settings_load_one(key, net_buf_simple_tail(buf), value_len);
 }
 
 int bt_mesh_comp_read(struct net_buf_simple *buf, uint8_t page)
 {
 	size_t original_len = buf->len;
+	ssize_t bytes_read;
 	int i;
-	int err;
 
 	if (!IS_ENABLED(CONFIG_BT_SETTINGS)) {
 		return -ENOTSUP;
@@ -2462,11 +2460,12 @@ int bt_mesh_comp_read(struct net_buf_simple *buf, uint8_t page)
 		return -ENOENT;
 	}
 
-	err = settings_load_subtree_direct(comp_data_pages[i].path, read_comp_cb, buf);
-
-	if (err) {
-		LOG_ERR("Failed reading composition data: %d", err);
-		return err;
+	bytes_read = read_comp(comp_data_pages[i].path, buf);
+	if (bytes_read > 0) {
+		net_buf_simple_add(buf, len);
+	} else {
+		LOG_ERR("Failed reading composition data: %d", bytes_read);
+		return bytes_read;
 	}
 	if (buf->len == original_len) {
 		return -ENOENT;
@@ -2553,7 +2552,7 @@ int bt_mesh_models_metadata_read(struct net_buf_simple *buf, size_t offset)
 {
 	NET_BUF_SIMPLE_DEFINE(stored_buf, CONFIG_BT_MESH_MODELS_METADATA_PAGE_LEN);
 	size_t original_len = buf->len;
-	int err;
+	ssize_t bytes_read;
 
 	if (!IS_ENABLED(CONFIG_BT_SETTINGS)) {
 		return -ENOTSUP;
@@ -2561,10 +2560,12 @@ int bt_mesh_models_metadata_read(struct net_buf_simple *buf, size_t offset)
 
 	net_buf_simple_init(&stored_buf, 0);
 
-	err = settings_load_subtree_direct("bt/mesh/metadata", read_comp_cb, &stored_buf);
-	if (err) {
+	bytes_read = read_comp("bt/mesh/metadata", &stored_buf);
+	if (bytes_read > 0) {
+		net_buf_simple_add(&stored_buf, len);
+	} else {
 		LOG_ERR("Failed reading models metadata: %d", err);
-		return err;
+		return bytes_read;
 	}
 
 	/* First two bytes are total length */
