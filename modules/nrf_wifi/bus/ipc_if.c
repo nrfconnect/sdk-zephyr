@@ -5,6 +5,11 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(wifi_nrf_bus, CONFIG_WIFI_NRF70_BUSLIB_LOG_LEVEL);
+
 #include "ipc_if.h"
 #include "bal_structs.h"
 #include "qspi.h"
@@ -44,6 +49,7 @@ static void event_recv(void *data, void *priv)
 int ipc_init() {
 	wifi_ipc_host_event_init(&wifi_event, EVENT_FREEQ_ADDR);
 	wifi_ipc_host_cmd_init(&wifi_cmd, CMD_FREEQ_ADDR);
+	LOG_INF("IPC service initialized");
 	return 0;
 }
 
