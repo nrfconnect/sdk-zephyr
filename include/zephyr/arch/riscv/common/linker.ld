@@ -290,8 +290,6 @@ SECTIONS
 		  __bss_end = ALIGN(4);
 	}  GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
 
-#include <zephyr/linker/common-noinit.ld>
-
     SECTION_DATA_PROLOGUE(_DATA_SECTION_NAME,,)
 	{
 		 . = ALIGN(4);
@@ -345,6 +343,12 @@ SECTIONS
  * zephyr_linker_sources() Cmake function.
  */
 #include <snippets-data-sections.ld>
+/* Tag end location of code+data that shall be copied in non-XIP execution.
+ * It must not include noinit section.
+ */
+    __relocation_region_end = .;
+
+#include <zephyr/linker/common-noinit.ld>
 
     __data_region_end = .;
 

@@ -21,6 +21,8 @@ SECTION_FUNC(vectors, __start)
 	/* Initialize global pointer */
 	.option push
 	.option norelax
+	/* Include end address of code+data that shall be copied in non-XIP execution. */
+	la gp, __relocation_region_end
 	la gp, __global_pointer$
 	.option pop
 #endif
