@@ -305,7 +305,7 @@ static void clear_enterprise_creds_params(struct wifi_enterprise_creds_params *p
 		params->server_cert,
 		params->server_key,
 		params->ca_cert2,
-		params->client_cert2
+		params->client_cert2,
 		params->client_key2,
 	};
 

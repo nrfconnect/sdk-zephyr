@@ -138,6 +138,7 @@ config WIFI_SHELL_RUNTIME_CERTIFICATES
 	  Uses the TLS credentials subsystem to store and manage the certificates.
 
 if WIFI_SHELL_RUNTIME_CERTIFICATES
+
 config HEAP_MEM_POOL_ADD_SIZE_WIFI_CERT
 	int "Wi-Fi enterprise security certificates memory pool size"
 	# STA - 6 certs and each assume 1500 bytes

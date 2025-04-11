@@ -46,20 +46,20 @@ If you want to use your own certificates, you can replace the existing certifica
 
 .. code-block:: bash
 
-    $ export CERTS_DIR=samples/net/wifi/test_certs/rsa3k
-    $ cp client.pem $CERTS_DIR
-    $ cp client-key.pem $CERTS_DIR
-    $ cp ca.pem $CERTS_DIR
-    $ cp client2.pem $CERTS_DIR
-    $ cp client-key2.pem $CERTS_DIR
-    $ cp ca2.pem $CERTS_DIR
+    $ export WIFI_TEST_CERTS_DIR=samples/net/wifi/test_certs/rsa3k
+    $ cp client.pem $WIFI_TEST_CERTS_DIR
+    $ cp client-key.pem $WIFI_TEST_CERTS_DIR
+    $ cp ca.pem $WIFI_TEST_CERTS_DIR
+    $ cp client2.pem $WIFI_TEST_CERTS_DIR
+    $ cp client-key2.pem $WIFI_TEST_CERTS_DIR
+    $ cp ca2.pem $WIFI_TEST_CERTS_DIR
     $ west build -p -b <board> samples/net/wifi -S wifi-enterprise
 
-or alternatively copy ``rsa2k`` certificates by changing the ``CERTS_DIR`` environment variable.
+or alternatively copy ``rsa2k`` certificates by changing the ``WIFI_TEST_CERTS_DIR`` environment variable.
 
 .. code-block:: bash
 
-    $ export CERTS_DIR=samples/net/wifi/test_certs/rsa2k
+    $ export WIFI_TEST_CERTS_DIR=samples/net/wifi/test_certs/rsa2k
 
 or you can set the :envvar:`WIFI_TEST_CERTS_DIR` environment variable to point to the directory containing your certificates.
 
@@ -77,7 +77,7 @@ To facilitate installation of the certificates, a helper script is provided in t
 
 .. code-block:: bash
 
-    $ samples/net/wifi/test_certs/install_certs.sh samples/net/wifi/test_certs/rsa2k
+    $ samples/net/wifi/test_certs/install_certs.py -p samples/net/wifi/test_certs/rsa2k
 
 The script will install the certificates in the ``rsa2k`` directory to the TLS credentials store in the device over UART and using TLS credentials shell commands.
 
