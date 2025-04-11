@@ -95,7 +95,7 @@ properties:
         This must be present to support SPI control of the FEM.
   tx-en-settle-time-us:
     type: int
-    default: 11
+    default: 26
     description: |
         Settling time in microseconds from state PG to TX.
 
