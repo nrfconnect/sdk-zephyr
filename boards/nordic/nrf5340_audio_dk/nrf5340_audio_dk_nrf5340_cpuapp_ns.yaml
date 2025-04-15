@@ -16,3 +16,4 @@ supported:
   - watchdog
   - usb_device
 vendor: nordic
+sysbuild: true

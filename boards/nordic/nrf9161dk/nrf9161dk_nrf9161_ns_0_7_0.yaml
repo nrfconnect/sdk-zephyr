@@ -18,3 +18,4 @@ supported:
   - watchdog
   - netif:modem
 vendor: nordic
+sysbuild: true
