@@ -50,3 +50,5 @@ config SOC_NRF9230_ENGB_CPURAD
 
 config SOC_NRF9230_ENGB_CPUPPR
 	select RISCV_CORE_NORDIC_VPR
+
+rsource "gpd/Kconfig"

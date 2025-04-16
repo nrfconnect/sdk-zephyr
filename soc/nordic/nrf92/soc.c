@@ -73,12 +73,8 @@ static void power_domain_init(void)
 	nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 0, RAMBLOCK_RET_MASK, true);
 	nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 1, RAMBLOCK_RET_MASK, true);
 #if defined(RAMBLOCK_RET2_MASK)
-	/*
-	 * TODO: Use nrf_memconf_ramblock_ret2_mask_enable_set() function
-	 * when will be provided by HAL.
-	 */
-	NRF_MEMCONF->POWER[0].RET2 = RAMBLOCK_RET2_MASK;
-	NRF_MEMCONF->POWER[1].RET2 = RAMBLOCK_RET2_MASK;
+	nrf_memconf_ramblock_ret2_mask_enable_set(NRF_MEMCONF, 0, RAMBLOCK_RET2_MASK, true);
+	nrf_memconf_ramblock_ret2_mask_enable_set(NRF_MEMCONF, 1, RAMBLOCK_RET2_MASK, true);
 #endif
 }
 
