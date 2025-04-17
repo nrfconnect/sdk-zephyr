@@ -22,10 +22,8 @@ LOG_MODULE_REGISTER(dmic_nrfx_pdm, CONFIG_AUDIO_DMIC_LOG_LEVEL);
 #else
 #define DMIC_NRFX_CLOCK_FREQ MHZ(32)
 #define DMIC_NRFX_CLOCK_FACTOR 4096
-#define DMIC_NRFX_AUDIO_CLOCK_FREQ \
-	COND_CODE_1(CONFIG_SOC_NRF54L20, \
-		(DT_PROP_OR(DT_NODELABEL(aclk), clock_frequency, 0)), \
-		(DT_PROP_OR(DT_NODELABEL(clock), hfclkaudio_frequency, 0)))
+#define DMIC_NRFX_AUDIO_CLOCK_FREQ DT_PROP_OR(DT_NODELABEL(aclk), clock_frequency, \
+				   DT_PROP_OR(DT_NODELABEL(clock), hfclkaudio_frequency, 0))
 #endif
 
 struct dmic_nrfx_pdm_drv_data {
@@ -80,7 +78,7 @@ static int request_clock(struct dmic_nrfx_pdm_drv_data *drv_data)
 #elif CONFIG_CLOCK_CONTROL_NRF2_AUDIOPLL
 	return nrf_clock_control_request(drv_data->audiopll_dev, NULL, &drv_data->clk_cli);
 #else
-	return 0;
+	return -ENOTSUP;
 #endif
 }
 
@@ -95,7 +93,7 @@ static int release_clock(struct dmic_nrfx_pdm_drv_data *drv_data)
 #elif CONFIG_CLOCK_CONTROL_NRF2_AUDIOPLL
 	return nrf_clock_control_release(drv_data->audiopll_dev, NULL);
 #else
-	return 0;
+	return -ENOTSUP;
 #endif
 }
 
@@ -513,8 +511,10 @@ static int dmic_nrfx_pdm_configure(const struct device *dev,
 	 * (which is always available without any additional actions),
 	 * it is required to request the proper clock to be running
 	 * before starting the transfer itself.
+	 * Targets using CLKSELECT register to select clock source
+	 * do not need to request audio clock.
 	 */
-	drv_data->request_clock = (drv_cfg->clk_src != PCLK32M);
+	drv_data->request_clock = (drv_cfg->clk_src != PCLK32M && !NRF_PDM_HAS_CLKSELECT);
 	drv_data->configured = true;
 	return 0;
 }
