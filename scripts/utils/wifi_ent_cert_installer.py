@@ -3,35 +3,16 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
+import logging
 import os
 import signal
 import subprocess
 import sys
-from importlib.metadata import PackageNotFoundError, version
-
-from packaging.version import parse as parse_version
 
 
 def signal_handler(sig, frame):
-    print('\nScript terminated by user')
+    logger.info('Script terminated by user')
     sys.exit(0)
-
-
-def check_requirements():
-    try:
-        installed_version = version('nrfcloud-utils')
-        min_required_version = "1.0.4"
-        if parse_version(installed_version) < parse_version(min_required_version):
-            print(
-                f"\033[31mError: device_credentials_installer >= {min_required_version} required. "
-                f"Installed: {installed_version}.\033[0m"
-            )
-            print("Update: pip3 install --upgrade nrfcloud-utils")
-            sys.exit(1)
-    except PackageNotFoundError:
-        print("\033[31mError: device_credentials_installer could not be found.\033[0m")
-        print("Please install it using: pip3 install nrfcloud-utils")
-        sys.exit(1)
 
 
 def main():
@@ -47,23 +28,26 @@ def main():
         default='STA',
         help='Operation mode: AP or STA (default: STA)',
     )
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
     args = parser.parse_args()
 
-    cert_path = args.path
+    # Configure logging
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
+    global logger
+    logger = logging.getLogger(__name__)
+
     cert_path = args.path
     port = args.serial_device
     mode = args.operation_mode
     if not os.path.isdir(cert_path):
-        print(f"\033[31mError: Directory {cert_path} does not exist.\033[0m")
+        logger.error(f"Directory {cert_path} does not exist.")
         sys.exit(1)
 
-    print(
-        "\033[33mWarning: Please make sure that the UART is not being used by another "
-        "application.\033[0m"
+    logger.warning(
+        "Please make sure that the Serial port is not being used by another application."
     )
     input("Press Enter to continue or Ctrl+C to exit...")
-
-    check_requirements()
 
     # TLS credential types
     TLS_CREDENTIAL_CA_CERTIFICATE = 0
@@ -90,40 +74,36 @@ def main():
 
     total_certs = len(cert_files)
     for idx, cert in enumerate(cert_files, 1):
-        print(f"Processing certificate {idx} of {total_certs}: {cert}")
+        logger.info(f"Processing certificate {idx} of {total_certs}: {cert}")
 
         cert_file_path = os.path.join(cert_path, cert)
         if not os.path.isfile(cert_file_path):
-            print(
-                f"\033[31mWarning: Certificate file {cert_file_path} does not exist. "
-                f"Skipping...\033[0m"
-            )
+            logger.warning(f"Certificate file {cert_file_path} does not exist. Skipping...")
             continue
 
         cert_type, sec_tag = WIFI_CERT_SEC_TAG_MAP[cert]
         try:
-            subprocess.run(
-                [
-                    "device_credentials_installer",
-                    "--local-cert-file",
-                    cert_file_path,
-                    "--cmd-type",
-                    "tls_cred_shell",
-                    "--delete",
-                    "--port",
-                    port,
-                    "-S",
-                    str(sec_tag),
-                    "--cert-type",
-                    str(cert_type),
-                ],
-                check=True,
-            )
-            print(f"Successfully installed {cert}.")
-        except subprocess.CalledProcessError:
-            print(f"\033[31mFailed to install {cert}.\033[0m")
+            command = [
+                "./scripts/utils/tls_creds_installer.py",
+                "-p",
+                port,
+                "-l",
+                cert_file_path,
+                "-d",
+                "-t",
+                str(cert_type),
+                "-S",
+                str(sec_tag),
+            ]
+            if args.verbose:
+                command.append("-v")
 
-    print("Certificate installation process completed.")
+            subprocess.run(command, check=True)
+            logger.info(f"Successfully installed {cert}.")
+        except subprocess.CalledProcessError:
+            logger.error(f"Failed to install {cert}.")
+
+    logger.info("Certificate installation process completed.")
 
 
 if __name__ == "__main__":

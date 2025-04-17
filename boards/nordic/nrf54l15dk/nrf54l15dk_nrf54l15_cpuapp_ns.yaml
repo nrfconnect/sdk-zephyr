@@ -9,7 +9,6 @@ toolchain:
   - gnuarmemb
   - xtools
   - zephyr
-sysbuild: true
 ram: 256
 flash: 1524
 supported:
@@ -21,3 +20,5 @@ supported:
   - watchdog
   - adc
   - i2s
+vendor: nordic
+sysbuild: true

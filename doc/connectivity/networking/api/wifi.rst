@@ -42,30 +42,15 @@ Test certificates in PEM format are committed to the repo at :zephyr_file:`sampl
 build process the certificates are converted to a C header file that is included by the Wi-Fi shell
 module.
 
-If you want to use your own certificates, you can replace the existing certificates with your own certificates in the same directory.
-
 .. code-block:: bash
 
-    $ export WIFI_TEST_CERTS_DIR=samples/net/wifi/test_certs/rsa3k
-    $ cp client.pem $WIFI_TEST_CERTS_DIR
-    $ cp client-key.pem $WIFI_TEST_CERTS_DIR
-    $ cp ca.pem $WIFI_TEST_CERTS_DIR
-    $ cp client2.pem $WIFI_TEST_CERTS_DIR
-    $ cp client-key2.pem $WIFI_TEST_CERTS_DIR
-    $ cp ca2.pem $WIFI_TEST_CERTS_DIR
+    $ cp client.pem samples/net/wifi/test_certs/
+    $ cp client-key.pem samples/net/wifi/test_certs/
+    $ cp ca.pem samples/net/wifi/test_certs/
+    $ cp client2.pem samples/net/wifi/test_certs/
+    $ cp client-key2.pem samples/net/wifi/test_certs/
+    $ cp ca2.pem samples/net/wifi/test_certs/
     $ west build -p -b <board> samples/net/wifi -S wifi-enterprise
-
-or alternatively copy ``rsa2k`` certificates by changing the ``WIFI_TEST_CERTS_DIR`` environment variable.
-
-.. code-block:: bash
-
-    $ export WIFI_TEST_CERTS_DIR=samples/net/wifi/test_certs/rsa2k
-
-or you can set the :envvar:`WIFI_TEST_CERTS_DIR` environment variable to point to the directory containing your certificates.
-
-.. code-block:: bash
-
-    $ west build -p -b <board> samples/net/wifi -S wifi-enterprise -- -DWIFI_TEST_CERTS_DIR=<path_to_your_certificates>
 
 Run time certificates
 ---------------------
@@ -77,7 +62,7 @@ To facilitate installation of the certificates, a helper script is provided in t
 
 .. code-block:: bash
 
-    $ samples/net/wifi/test_certs/install_certs.py -p samples/net/wifi/test_certs/rsa2k
+    $ ./scripts/utils/wifi_ent_cert_installer.py -p samples/net/wifi/test_certs/rsa2k
 
 The script will install the certificates in the ``rsa2k`` directory to the TLS credentials store in the device over UART and using TLS credentials shell commands.
 
