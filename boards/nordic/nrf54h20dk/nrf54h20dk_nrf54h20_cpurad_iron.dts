@@ -1,0 +1,34 @@
+/*
+ * Copyright (c) 2025 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include "nrf54h20dk_nrf54h20_cpurad.dts"
+
+/delete-node/&cpurad_rx_partitions;
+/delete-node/&cpuapp_rx_partitions;
+
+/* This is not yet an exhaustive memory map, and contain only a minimum required to boot
+ * the radio core.
+ */
+
+/ {
+	chosen {
+		zephyr,code-partition = &cpurad_slot0_partition;
+		zephyr,uart-mcumgr = &uart135;
+	};
+};
+
+&mram1x {
+	cpurad_rx_partitions: cpurad-rx-partitions {
+		compatible = "nordic,owned-partitions", "fixed-partitions";
+		nordic,access = <NRF_OWNER_ID_RADIOCORE NRF_PERM_RXS>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		cpurad_slot0_partition: partition@54000 {
+			reg = < 0x54000 0x40000 >;
+		};
+	};
+};
