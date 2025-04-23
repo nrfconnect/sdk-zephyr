@@ -11,8 +11,9 @@ static const struct device_subsys_data subsys_data[] = {
 	{
 		.subsys = CLOCK_CONTROL_NRF_SUBSYS_HF,
 		.startup_us =
-			IS_ENABLED(CONFIG_SOC_SERIES_NRF91X) ?
-				3000 : 500
+			(IS_ENABLED(CONFIG_SOC_NRF54L20_ENGA) ||
+			 IS_ENABLED(CONFIG_SOC_NRF54L09_ENGA)) ?
+				1000 : (IS_ENABLED(CONFIG_SOC_SERIES_NRF91X) ? 3000 : 500)
 	},
 #ifndef CONFIG_SOC_NRF52832
 	/* On nrf52832 LF clock cannot be stopped because it leads
