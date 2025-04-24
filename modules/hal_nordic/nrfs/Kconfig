@@ -74,6 +74,11 @@ config NRFS_DVFS_LOCAL_DOMAIN
 	depends on NRFS_DVFS_SERVICE_ENABLED
 	default y if NRFS_DVFS_SERVICE_ENABLED
 
+config NRFS_DVFS_NEW_LOCAL_DOMAIN
+	bool "Local domain that supports DVFS without sysctrl"
+	depends on NRFS_LOCAL_DOMAIN
+	default y if SOC_NRF54H20_CPUAPP
+
 menu "Enabled Services"
 
 module = NRFS
@@ -110,7 +115,7 @@ config NRFS_PMIC_SERVICE_ENABLED
 config NRFS_DVFS_SERVICE_ENABLED
 	bool "DVFS service"
 	depends on NRFS_HAS_DVFS_SERVICE
-	default y if SOC_NRF54H20_CPUAPP || SOC_NRF9280_CPUAPP
+	default y if SOC_NRF9280_CPUAPP
 
 config NRFS_DIAG_SERVICE_ENABLED
 	bool "System Diagnostics service (only for development purposes)"
@@ -147,6 +152,10 @@ rsource "backends/Kconfig"
 if NRFS_DVFS_LOCAL_DOMAIN
 rsource "dvfs/Kconfig"
 endif # NRFS_DVFS_LOCAL_DOMAIN
+
+if NRFS_DVFS_NEW_LOCAL_DOMAIN
+rsource "dvfs_new/Kconfig"
+endif # NRFS_DVFS_NEW_LOCAL_DOMAIN
 
 endif # NRFS
 endmenu
