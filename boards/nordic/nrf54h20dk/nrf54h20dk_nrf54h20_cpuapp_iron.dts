@@ -52,6 +52,10 @@
 			reg = <0xe4000 DT_SIZE_K(64)>;
 		};
 
+		cpurad_slot0_partition: partition@54000 {
+			reg = <0x54000 DT_SIZE_K(256)>;
+		};
+
 		cpuflpr_code_partition: partition@f4000 {
 			reg = <0xf4000 DT_SIZE_K(48)>;
 		};
