@@ -12,7 +12,7 @@ GTEXT(__start)
 
 /* imports */
 GTEXT(__initialize)
-#if defined(CONFIG_GEN_SW_ISR_TABLE)
+#if defined(CONFIG_GEN_SW_ISR_TABLE) || defined (CONFIG_GEN_IRQ_VECTOR_TABLE)
 GTEXT(_isr_wrapper)
 #endif
 
@@ -37,7 +37,7 @@ SECTION_FUNC(vectors, __start)
 	 * mtvec.base must be aligned to 64 bytes (this is done using
 	 * CONFIG_RISCV_TRAP_HANDLER_ALIGNMENT)
 	 */
-#if defined(CONFIG_GEN_SW_ISR_TABLE)
+#if defined(CONFIG_GEN_SW_ISR_TABLE) || defined (CONFIG_GEN_IRQ_VECTOR_TABLE)
 	la t0, _isr_wrapper
 #else
 	add t0, zero, zero

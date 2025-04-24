@@ -640,6 +640,7 @@ on_irq_stack:
 	 */
 	jal ra, __soc_handle_irq
 
+#ifdef CONFIG_GEN_SW_ISR_TABLE
 	/*
 	 * Call corresponding registered function in _sw_isr_table.
 	 * (table is 2-word wide, we should shift index accordingly)
@@ -656,7 +657,7 @@ on_irq_stack:
 
 	/* Call ISR function */
 	jalr ra, t1, 0
-
+#endif
 #ifdef CONFIG_TRACING_ISR
 	call sys_trace_isr_exit
 #endif
