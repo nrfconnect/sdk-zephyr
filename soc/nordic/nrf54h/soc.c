@@ -21,6 +21,7 @@
 #include <soc/nrfx_coredep.h>
 #include <soc_lrcconf.h>
 #include <dmm.h>
+#include <ironside/se/cpuconf.h>
 
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
@@ -147,6 +148,23 @@ void soc_early_init_hook(void)
 	NRF_SPU_Type *spu = SPU_INSTANCE_GET(ccm030_addr);
 
 	nrf_spu_periph_perm_dmasec_set(spu, nrf_address_slave_get(ccm030_addr), true);
+#endif
+}
+
+void soc_late_init_hook(void)
+{
+#if defined(CONFIG_SOC_NRF54H20_CPURAD_ENABLE)
+	int err;
+
+	/* The msg will be used for communication prior to IPC
+	 * communication being set up. But at this moment no such
+	 * communication is required.
+	 */
+	uint8_t *msg = NULL;
+	size_t msg_size = 0;
+
+	err = ironside_se_cpuconf_boot_radiocore(msg, msg_size);
+	__ASSERT_NO_MSG(err == 0);
 #endif
 }
 
