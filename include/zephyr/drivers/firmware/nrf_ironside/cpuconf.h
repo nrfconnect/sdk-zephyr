@@ -8,6 +8,7 @@
 
 #include <zephyr/drivers/firmware/nrf_ironside/call.h>
 
+#include <nrfx.h>
 #include <zephyr/toolchain/common.h>
 
 /**
