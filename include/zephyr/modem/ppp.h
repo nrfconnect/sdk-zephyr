@@ -38,13 +38,10 @@ typedef void (*modem_ppp_init_iface)(struct net_if *iface);
 enum modem_ppp_receive_state {
 	/* Searching for start of frame and header */
 	MODEM_PPP_RECEIVE_STATE_HDR_SOF = 0,
-	MODEM_PPP_RECEIVE_STATE_HDR_FF,
-	MODEM_PPP_RECEIVE_STATE_HDR_7D,
-	MODEM_PPP_RECEIVE_STATE_HDR_23,
+	MODEM_PPP_RECEIVE_STATE_HDR_ADDRESS_FIELD,
+	MODEM_PPP_RECEIVE_STATE_HDR_CONTROL_FIELD,
 	/* Writing bytes to network packet */
 	MODEM_PPP_RECEIVE_STATE_WRITING,
-	/* Unescaping next byte before writing to network packet */
-	MODEM_PPP_RECEIVE_STATE_UNESCAPING,
 };
 
 enum modem_ppp_transmit_state {
@@ -80,6 +77,9 @@ struct modem_ppp {
 	modem_ppp_init_iface init_iface;
 
 	atomic_t state;
+
+	/* Indicates whether the last read byte was 0x7D */
+	bool prev_byte_was_escape_byte;
 
 	/* Buffers used for processing partial frames */
 	uint8_t *receive_buf;

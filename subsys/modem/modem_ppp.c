@@ -203,34 +203,43 @@ static bool modem_ppp_is_byte_expected(uint8_t byte, uint8_t expected_byte)
 
 static void modem_ppp_process_received_byte(struct modem_ppp *ppp, uint8_t byte)
 {
+	// Previous bytes was 0x7D, so we need to unescape the currenty byte
+	if (ppp->prev_byte_was_escape_byte) {
+		ppp->prev_byte_was_escape_byte = false;
+		byte ^= MODEM_PPP_VALUE_ESCAPE;
+	}
+
+	// At any point between start and end of frame, we can receive an escape byte.
+	if (ppp->receive_state != MODEM_PPP_RECEIVE_STATE_HDR_SOF) {
+		if (byte == MODEM_PPP_CODE_ESCAPE) {
+			ppp->prev_byte_was_escape_byte = true;
+			return;
+		}
+	}
+
 	switch (ppp->receive_state) {
+		// Start of frame
 	case MODEM_PPP_RECEIVE_STATE_HDR_SOF:
 		if (modem_ppp_is_byte_expected(byte, MODEM_PPP_CODE_DELIMITER)) {
-			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_FF;
+			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_ADDRESS_FIELD;
 		}
 		break;
-
-	case MODEM_PPP_RECEIVE_STATE_HDR_FF:
+	case MODEM_PPP_RECEIVE_STATE_HDR_ADDRESS_FIELD:
 		if (byte == MODEM_PPP_CODE_DELIMITER) {
 			break;
 		}
 		if (modem_ppp_is_byte_expected(byte, 0xFF)) {
-			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_7D;
-		} else {
+			// address field is always 0xFF (broadcast)
+			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_CONTROL_FIELD;
+		}
+		else {
 			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_SOF;
 		}
 		break;
 
-	case MODEM_PPP_RECEIVE_STATE_HDR_7D:
-		if (modem_ppp_is_byte_expected(byte, MODEM_PPP_CODE_ESCAPE)) {
-			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_23;
-		} else {
-			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_SOF;
-		}
-		break;
-
-	case MODEM_PPP_RECEIVE_STATE_HDR_23:
-		if (modem_ppp_is_byte_expected(byte, 0x23)) {
+	case MODEM_PPP_RECEIVE_STATE_HDR_CONTROL_FIELD:
+		if (modem_ppp_is_byte_expected(byte, 0x03)) {
+			// control field is always 0x03 (Unnumbered Information frame, UI)
 			ppp->rx_pkt = net_pkt_rx_alloc_with_buffer(ppp->iface,
 				CONFIG_MODEM_PPP_NET_BUF_FRAG_SIZE, AF_UNSPEC, 0, K_NO_WAIT);
 
@@ -243,10 +252,10 @@ static void modem_ppp_process_received_byte(struct modem_ppp *ppp, uint8_t byte)
 			LOG_DBG("Receiving PPP frame");
 			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_WRITING;
 			net_pkt_cursor_init(ppp->rx_pkt);
-		} else {
+		}
+		else {
 			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_SOF;
 		}
-
 		break;
 
 	case MODEM_PPP_RECEIVE_STATE_WRITING:
@@ -264,24 +273,19 @@ static void modem_ppp_process_received_byte(struct modem_ppp *ppp, uint8_t byte)
 
 			ppp->rx_pkt = NULL;
 			/* Skip SOF because the delimiter may be omitted for successive frames. */
-			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_FF;
+			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_ADDRESS_FIELD;
 			break;
 		}
 
 		if (net_pkt_available_buffer(ppp->rx_pkt) == 1) {
 			if (net_pkt_alloc_buffer(ppp->rx_pkt, CONFIG_MODEM_PPP_NET_BUF_FRAG_SIZE,
-						 AF_INET, K_NO_WAIT) < 0) {
+						AF_INET, K_NO_WAIT) < 0) {
 				LOG_WRN("Failed to alloc buffer");
 				net_pkt_unref(ppp->rx_pkt);
 				ppp->rx_pkt = NULL;
 				ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_SOF;
 				break;
 			}
-		}
-
-		if (byte == MODEM_PPP_CODE_ESCAPE) {
-			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_UNESCAPING;
-			break;
 		}
 
 		if (net_pkt_write_u8(ppp->rx_pkt, byte) < 0) {
@@ -294,21 +298,6 @@ static void modem_ppp_process_received_byte(struct modem_ppp *ppp, uint8_t byte)
 #endif
 		}
 
-		break;
-
-	case MODEM_PPP_RECEIVE_STATE_UNESCAPING:
-		if (net_pkt_write_u8(ppp->rx_pkt, (byte ^ MODEM_PPP_VALUE_ESCAPE)) < 0) {
-			LOG_WRN("Dropped PPP frame");
-			net_pkt_unref(ppp->rx_pkt);
-			ppp->rx_pkt = NULL;
-			ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_SOF;
-#if defined(CONFIG_NET_STATISTICS_PPP)
-			ppp->stats.drop++;
-#endif
-			break;
-		}
-
-		ppp->receive_state = MODEM_PPP_RECEIVE_STATE_WRITING;
 		break;
 	}
 }
@@ -556,6 +545,7 @@ void modem_ppp_release(struct modem_ppp *ppp)
 	k_work_cancel_sync(&ppp->process_work, &sync);
 	ppp->pipe = NULL;
 	ppp->receive_state = MODEM_PPP_RECEIVE_STATE_HDR_SOF;
+	ppp->prev_byte_was_escape_byte = false;
 
 	if (ppp->rx_pkt != NULL) {
 		net_pkt_unref(ppp->rx_pkt);
