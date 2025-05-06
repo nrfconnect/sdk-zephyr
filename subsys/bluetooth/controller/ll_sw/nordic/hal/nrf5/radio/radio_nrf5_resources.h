@@ -18,7 +18,7 @@
  * or reception of a PDU on air. In case of regular PDU it is generated when last bit of CRC is
  * received or transmitted.
  */
-#define HAL_RADIO_TRX_EVENTS_END HAL_RADIO_EVENTS_END
+#define NRF_RADIO_TRX_END_EVENT EVENTS_END
 
 /* Wrapper for RADIO_SHORTS mask connecting EVENTS_END to EVENTS_DISABLE.
  * This is a default shortcut used to automatically disable Radio after end of PDU.
@@ -27,14 +27,9 @@
 
 #define HAL_EVENT_TIMER_TRX_CC_OFFSET          0
 #define HAL_EVENT_TIMER_TRX_EVENT              NRF_TIMER_EVENT_COMPARE0
-#define HAL_EVENT_TIMER_READY_TASK             NRF_TIMER_TASK_CAPTURE0
 
 #define HAL_EVENT_TIMER_HCTO_CC_OFFSET         1
-#define HAL_EVENT_TIMER_HCTO_EVENT             NRF_TIMER_EVENT_COMPARE1
-#define HAL_EVENT_TIMER_ADDRESS_TASK           NRF_TIMER_TASK_CAPTURE1
-
 #define HAL_EVENT_TIMER_TRX_END_CC_OFFSET      2
-#define HAL_EVENT_TIMER_TRX_END_TASK           NRF_TIMER_TASK_CAPTURE2
 
 #define HAL_EVENT_TIMER_DEFERRED_TRX_CC_OFFSET 2
 #define HAL_EVENT_TIMER_DEFERRED_TX_EVENT      NRF_TIMER_EVENT_COMPARE2
@@ -70,7 +65,7 @@
  * or reception of a PDU on air. In case of regular PDU it is generated when last bit of CRC is
  * received or transmitted.
  */
-#define HAL_RADIO_TRX_EVENTS_END HAL_RADIO_EVENTS_END
+#define NRF_RADIO_TRX_END_EVENT EVENTS_END
 
 /* Wrapper for RADIO_SHORTS mask connecting EVENTS_END to EVENTS_DISABLE.
  * This is a default shortcut used to automatically disable Radio after end of PDU.
@@ -79,14 +74,9 @@
 
 #define HAL_EVENT_TIMER_TRX_CC_OFFSET          0
 #define HAL_EVENT_TIMER_TRX_EVENT              NRF_TIMER_EVENT_COMPARE0
-#define HAL_EVENT_TIMER_READY_TASK             NRF_TIMER_TASK_CAPTURE0
 
 #define HAL_EVENT_TIMER_HCTO_CC_OFFSET         1
-#define HAL_EVENT_TIMER_HCTO_EVENT             NRF_TIMER_EVENT_COMPARE1
-#define HAL_EVENT_TIMER_ADDRESS_TASK           NRF_TIMER_TASK_CAPTURE1
-
 #define HAL_EVENT_TIMER_TRX_END_CC_OFFSET      2
-#define HAL_EVENT_TIMER_TRX_END_TASK           NRF_TIMER_TASK_CAPTURE2
 
 #define HAL_EVENT_TIMER_DEFERRED_TRX_CC_OFFSET 2
 #define HAL_EVENT_TIMER_DEFERRED_TX_EVENT      NRF_TIMER_EVENT_COMPARE2
@@ -104,7 +94,7 @@
  * or reception of a PDU on air. In case of regular PDU it is generated when last bit of CRC is
  * received or transmitted.
  */
-#define HAL_RADIO_TRX_EVENTS_END HAL_RADIO_EVENTS_END
+#define NRF_RADIO_TRX_END_EVENT EVENTS_END
 
 /* Wrapper for RADIO_SHORTS mask connecting EVENTS_END to EVENTS_DISABLE.
  * This is a default shortcut used to automatically disable Radio after end of PDU.
@@ -113,14 +103,9 @@
 
 #define HAL_EVENT_TIMER_TRX_CC_OFFSET          0
 #define HAL_EVENT_TIMER_TRX_EVENT              NRF_TIMER_EVENT_COMPARE0
-#define HAL_EVENT_TIMER_READY_TASK             NRF_TIMER_TASK_CAPTURE0
 
 #define HAL_EVENT_TIMER_HCTO_CC_OFFSET         1
-#define HAL_EVENT_TIMER_HCTO_EVENT             NRF_TIMER_EVENT_COMPARE1
-#define HAL_EVENT_TIMER_ADDRESS_TASK           NRF_TIMER_TASK_CAPTURE1
-
 #define HAL_EVENT_TIMER_TRX_END_CC_OFFSET      2
-#define HAL_EVENT_TIMER_TRX_END_TASK           NRF_TIMER_TASK_CAPTURE2
 
 #define HAL_EVENT_TIMER_DEFERRED_TRX_CC_OFFSET 2
 #define HAL_EVENT_TIMER_DEFERRED_TX_EVENT      NRF_TIMER_EVENT_COMPARE2
@@ -168,7 +153,7 @@
  * including CTE EVENTS_PHYEND event is generated at very end of a PDU. In case there is no CTE in
  * a PDU the EVENTS_PHYEND event is generated in the same instant as EVENTS_END event.
  */
-#define HAL_RADIO_TRX_EVENTS_END HAL_RADIO_EVENTS_PHYEND
+#define NRF_RADIO_TRX_END_EVENT EVENTS_PHYEND
 
 /* Wrapper for RADIO_SHORTS mask connecting EVENTS_PHYEND to EVENTS_DISABLE.
  * This is a mask for SOC that has Direction Finding Extension in a Radio peripheral.
@@ -189,7 +174,7 @@
  * or reception of a PDU on air. In case of regular PDU it is generated when last bit of CRC is
  * received or transmitted.
  */
-#define HAL_RADIO_TRX_EVENTS_END HAL_RADIO_EVENTS_END
+#define NRF_RADIO_TRX_END_EVENT EVENTS_END
 
 /* Wrapper for RADIO_SHORTS mask connecting EVENTS_END to EVENTS_DISABLE.
  * This is a default shortcut used to automatically disable Radio after end of PDU.
@@ -199,14 +184,9 @@
 
 #define HAL_EVENT_TIMER_TRX_CC_OFFSET          0
 #define HAL_EVENT_TIMER_TRX_EVENT              NRF_TIMER_EVENT_COMPARE0
-#define HAL_EVENT_TIMER_READY_TASK             NRF_TIMER_TASK_CAPTURE0
 
 #define HAL_EVENT_TIMER_HCTO_CC_OFFSET         1
-#define HAL_EVENT_TIMER_HCTO_EVENT             NRF_TIMER_EVENT_COMPARE1
-#define HAL_EVENT_TIMER_ADDRESS_TASK           NRF_TIMER_TASK_CAPTURE1
-
 #define HAL_EVENT_TIMER_TRX_END_CC_OFFSET      2
-#define HAL_EVENT_TIMER_TRX_END_TASK           NRF_TIMER_TASK_CAPTURE2
 
 #define HAL_EVENT_TIMER_DEFERRED_TRX_CC_OFFSET 2
 #define HAL_EVENT_TIMER_DEFERRED_TX_EVENT      NRF_TIMER_EVENT_COMPARE2
