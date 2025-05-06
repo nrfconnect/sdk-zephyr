@@ -21,17 +21,16 @@
 #include "host/conn_internal.h"
 #include "host/l2cap_internal.h"
 
+#include "utils.h"
 #include "common.h"
-
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
+#include "bstests.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_tinyhost, 3);
 
-DEFINE_FLAG_STATIC(is_connected);
-DEFINE_FLAG_STATIC(flag_l2cap_connected);
-DEFINE_FLAG_STATIC(flag_data_length_updated);
+DEFINE_FLAG(is_connected);
+DEFINE_FLAG(flag_l2cap_connected);
+DEFINE_FLAG(flag_data_length_updated);
 
 static K_FIFO_DEFINE(rx_queue);
 
@@ -204,10 +203,10 @@ static void handle_sig(struct net_buf *buf)
 		handle_l2cap_credits(buf);
 		return;
 	case BT_L2CAP_DISCONN_REQ:
-		TEST_FAIL("channel disconnected");
+		FAIL("channel disconnected\n");
 		return;
 	default:
-		TEST_FAIL("unhandled opcode %x", hdr->code);
+		FAIL("unhandled opcode %x\n", hdr->code);
 		return;
 	}
 }
@@ -232,7 +231,7 @@ static void handle_l2cap(struct net_buf *buf)
 
 	/* CoC PDU */
 	if (cid == 0x0040) {
-		TEST_FAIL("unexpected data rx");
+		FAIL("unexpected data rx");
 	}
 }
 
@@ -643,12 +642,29 @@ void test_procedure_0(void)
 	WAIT_FOR_FLAG_UNSET(is_connected);
 	LOG_DBG("disconnected");
 
-	TEST_PASS("Tester done");
+	PASS("Tester done\n");
+}
+
+void test_tick(bs_time_t HW_device_time)
+{
+	bs_trace_debug_time(0, "Simulation ends now.\n");
+	if (bst_result != Passed) {
+		bst_result = Failed;
+		bs_trace_error("Test did not pass before simulation ended.\n");
+	}
+}
+
+void test_init(void)
+{
+	bst_ticker_set_next_tick_absolute(TEST_TIMEOUT_SIMULATED);
+	bst_result = In_progress;
 }
 
 static const struct bst_test_instance test_to_add[] = {
 	{
 		.test_id = "test_0",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = test_procedure_0,
 	},
 	BSTEST_END_MARKER,

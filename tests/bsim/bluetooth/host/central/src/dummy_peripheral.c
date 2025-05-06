@@ -54,6 +54,7 @@ static const struct bst_test_instance test_def[] = {
 	{
 		.test_id = "peripheral_dummy",
 		.test_descr = "Connectable peripheral",
+		.test_tick_f = bst_tick,
 		.test_main_f = test_peripheral_dummy,
 	},
 	BSTEST_END_MARKER,

@@ -13,7 +13,6 @@
 #include <zephyr/bluetooth/bluetooth.h>
 
 #include "bs_bt_utils.h"
-#include "babblekit/testcase.h"
 
 LOG_MODULE_REGISTER(test_peripheral, LOG_LEVEL_DBG);
 
@@ -21,7 +20,7 @@ BUILD_ASSERT(CONFIG_BT_BONDABLE, "CONFIG_BT_BONDABLE must be enabled by default.
 
 static void pairing_complete_unpair(struct bt_conn *conn, bool bonded)
 {
-	TEST_FAIL("Pairing succeed");
+	FAIL("Pairing succeed\n");
 }
 
 static void peripheral_security_changed_unpair(struct bt_conn *conn,
@@ -52,7 +51,7 @@ void peripheral_unpair_in_sec_cb(void)
 
 	bt_conn_cb_register(&peripheral_cb);
 	err = bt_conn_auth_info_cb_register(&peripheral_auth_info_cb);
-	TEST_ASSERT(!err, "bt_conn_auth_info_cb_register failed.");
+	ASSERT(!err, "bt_conn_auth_info_cb_register failed.\n");
 
 	advertise_connectable(BT_ID_DEFAULT, NULL);
 	wait_connected();
@@ -61,12 +60,12 @@ void peripheral_unpair_in_sec_cb(void)
 
 	clear_g_conn();
 
-	TEST_PASS("PASS");
+	PASS("PASS\n");
 }
 
 static void pairing_failed_disconnect(struct bt_conn *conn, enum bt_security_err err)
 {
-	TEST_FAIL("Pairing failed");
+	FAIL("Pairing failed\n");
 }
 
 static void peripheral_security_changed_disconnect(struct bt_conn *conn,
@@ -96,7 +95,7 @@ void peripheral_disconnect_in_sec_cb(void)
 
 	bt_conn_cb_register(&peripheral_cb);
 	err = bt_conn_auth_info_cb_register(&peripheral_auth_info_cb);
-	TEST_ASSERT(!err, "bt_conn_auth_info_cb_register failed.");
+	ASSERT(!err, "bt_conn_auth_info_cb_register failed.\n");
 
 	advertise_connectable(BT_ID_DEFAULT, NULL);
 	wait_connected();
@@ -105,5 +104,5 @@ void peripheral_disconnect_in_sec_cb(void)
 
 	clear_g_conn();
 
-	TEST_PASS("PASS");
+	PASS("PASS\n");
 }
