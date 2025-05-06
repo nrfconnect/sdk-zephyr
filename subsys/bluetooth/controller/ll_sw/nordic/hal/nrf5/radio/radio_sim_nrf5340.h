@@ -5,6 +5,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <soc.h>
+#include <hal/nrf_vreqctrl.h>
+
 /* Use the NRF_RTC instance for coarse radio event scheduling */
 #define NRF_RTC NRF_RTC0
 
