@@ -506,12 +506,12 @@ static int it82xx2_ep_dequeue(const struct device *dev, struct udc_ep_config *co
 	}
 	irq_unlock(lock_key);
 
-	buf = udc_buf_get_all(cfg);
+	buf = udc_buf_get_all(dev, cfg->addr);
 	if (buf) {
 		udc_submit_ep_event(dev, buf, -ECONNABORTED);
 	}
 
-	udc_ep_set_busy(cfg, false);
+	udc_ep_set_busy(dev, cfg->addr, false);
 
 	return 0;
 }
@@ -861,17 +861,16 @@ static int work_handler_xfer_continue(const struct device *dev, uint8_t ep, stru
 	return ret;
 }
 
-static int work_handler_xfer_next(const struct device *dev,
-				  struct udc_ep_config *ep_cfg)
+static int work_handler_xfer_next(const struct device *dev, uint8_t ep)
 {
 	struct net_buf *buf;
 
-	buf = udc_buf_peek(ep_cfg);
+	buf = udc_buf_peek(dev, ep);
 	if (buf == NULL) {
 		return -ENODATA;
 	}
 
-	return work_handler_xfer_continue(dev, ep_cfg->addr, buf);
+	return work_handler_xfer_continue(dev, ep, buf);
 }
 
 /*
@@ -985,12 +984,11 @@ static inline int work_handler_in(const struct device *dev, uint8_t ep)
 		k_sem_give(&priv->fifo_sem[fifo_idx - 1]);
 	}
 
-	ep_cfg = udc_get_ep_cfg(dev, ep);
-
-	buf = udc_buf_peek(ep_cfg);
+	buf = udc_buf_peek(dev, ep);
 	if (buf == NULL) {
 		return -ENODATA;
 	}
+	ep_cfg = udc_get_ep_cfg(dev, ep);
 
 	net_buf_pull(buf, MIN(buf->len, udc_mps_ep_size(ep_cfg)));
 
@@ -1007,12 +1005,12 @@ static inline int work_handler_in(const struct device *dev, uint8_t ep)
 		return 0;
 	}
 
-	buf = udc_buf_get(ep_cfg);
+	buf = udc_buf_get(dev, ep);
 	if (buf == NULL) {
 		return -ENODATA;
 	}
 
-	udc_ep_set_busy(ep_cfg, false);
+	udc_ep_set_busy(dev, ep, false);
 
 	if (ep == USB_CONTROL_EP_IN) {
 		if (udc_ctrl_stage_is_status_in(dev) || udc_ctrl_stage_is_no_data(dev)) {
@@ -1044,13 +1042,10 @@ static inline int work_handler_setup(const struct device *dev, uint8_t ep)
 	int err = 0;
 
 	if (udc_ctrl_stage_is_status_out(dev)) {
-		struct udc_ep_config *cfg_out;
-
 		/* out -> setup */
-		cfg_out = udc_get_ep_cfg(dev, USB_CONTROL_EP_OUT);
-		buf = udc_buf_get(cfg_out);
+		buf = udc_buf_get(dev, USB_CONTROL_EP_OUT);
 		if (buf) {
-			udc_ep_set_busy(cfg_out, false);
+			udc_ep_set_busy(dev, USB_CONTROL_EP_OUT, false);
 			net_buf_unref(buf);
 		}
 	}
@@ -1114,8 +1109,7 @@ static inline int work_handler_out(const struct device *dev, uint8_t ep)
 		return 0;
 	}
 
-	ep_cfg = udc_get_ep_cfg(dev, ep);
-	buf = udc_buf_peek(ep_cfg);
+	buf = udc_buf_peek(dev, ep);
 	if (buf == NULL) {
 		return -ENODATA;
 	}
@@ -1127,7 +1121,7 @@ static inline int work_handler_out(const struct device *dev, uint8_t ep)
 	if (ep == USB_CONTROL_EP_OUT) {
 		if (udc_ctrl_stage_is_status_out(dev) && len != 0) {
 			LOG_DBG("Handle early setup token");
-			buf = udc_buf_get(ep_cfg);
+			buf = udc_buf_get(dev, ep);
 			/* Notify upper layer */
 			udc_ctrl_submit_status(dev, buf);
 			/* Update to next stage of control transfer */
@@ -1136,6 +1130,7 @@ static inline int work_handler_out(const struct device *dev, uint8_t ep)
 		}
 	}
 
+	ep_cfg = udc_get_ep_cfg(dev, ep);
 	if (len > udc_mps_ep_size(ep_cfg)) {
 		LOG_ERR("Failed to handle this packet due to the packet size");
 		return -ENOBUFS;
@@ -1153,12 +1148,12 @@ static inline int work_handler_out(const struct device *dev, uint8_t ep)
 		return err;
 	}
 
-	buf = udc_buf_get(ep_cfg);
+	buf = udc_buf_get(dev, ep);
 	if (buf == NULL) {
 		return -ENODATA;
 	}
 
-	udc_ep_set_busy(ep_cfg, false);
+	udc_ep_set_busy(dev, ep, false);
 
 	if (ep == USB_CONTROL_EP_OUT) {
 		if (udc_ctrl_stage_is_status_out(dev)) {
@@ -1184,13 +1179,10 @@ static inline int work_handler_out(const struct device *dev, uint8_t ep)
 static void xfer_work_handler(const struct device *dev)
 {
 	while (true) {
-		struct udc_ep_config *ep_cfg;
 		struct it82xx2_ep_event evt;
 		int err = 0;
 
 		k_msgq_get(&evt_msgq, &evt, K_FOREVER);
-
-		ep_cfg = udc_get_ep_cfg(evt.dev, evt.ep);
 
 		switch (evt.event) {
 		case IT82xx2_EVT_SETUP_TOKEN:
@@ -1214,9 +1206,9 @@ static void xfer_work_handler(const struct device *dev)
 			udc_submit_event(evt.dev, UDC_EVT_ERROR, err);
 		}
 
-		if (evt.ep != USB_CONTROL_EP_OUT && !udc_ep_is_busy(ep_cfg)) {
-			if (work_handler_xfer_next(ep_cfg) == 0) {
-				udc_ep_set_busy(ep_cfg, true);
+		if (evt.ep != USB_CONTROL_EP_OUT && !udc_ep_is_busy(evt.dev, evt.ep)) {
+			if (work_handler_xfer_next(evt.dev, evt.ep) == 0) {
+				udc_ep_set_busy(evt.dev, evt.ep, true);
 			}
 		}
 	}

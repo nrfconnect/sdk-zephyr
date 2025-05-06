@@ -97,14 +97,13 @@ static void udc_renesas_ra_interrupt_handler(void *arg)
 static void udc_event_xfer_next(const struct device *dev, const uint8_t ep)
 {
 	struct udc_renesas_ra_data *data = udc_get_private(dev);
-	struct udc_ep_config *ep_cfg = udc_get_ep_cfg(dev, ep);
 	struct net_buf *buf;
 
-	if (udc_ep_is_busy(ep_cfg)) {
+	if (udc_ep_is_busy(dev, ep)) {
 		return;
 	}
 
-	buf = udc_buf_peek(ep_cfg);
+	buf = udc_buf_peek(dev, ep);
 	if (buf != NULL) {
 		int err;
 
@@ -118,7 +117,7 @@ static void udc_event_xfer_next(const struct device *dev, const uint8_t ep)
 			LOG_ERR("ep 0x%02x error", ep);
 			udc_submit_ep_event(dev, buf, -ECONNREFUSED);
 		} else {
-			udc_ep_set_busy(ep_cfg, true);
+			udc_ep_set_busy(dev, ep, true);
 		}
 	}
 }
@@ -201,7 +200,7 @@ static void udc_event_status_in(const struct device *dev)
 	struct udc_renesas_ra_data *data = udc_get_private(dev);
 	struct net_buf *buf;
 
-	buf = udc_buf_get(udc_get_ep_cfg(dev, USB_CONTROL_EP_IN));
+	buf = udc_buf_get(dev, USB_CONTROL_EP_IN);
 	if (unlikely(buf == NULL)) {
 		LOG_DBG("ep 0x%02x queue is empty", USB_CONTROL_EP_IN);
 		return;
@@ -235,16 +234,14 @@ static void udc_event_xfer_complete(const struct device *dev, struct udc_renesas
 {
 	struct net_buf *buf;
 	struct udc_renesas_ra_data *data = udc_get_private(dev);
-	struct udc_ep_config *ep_cfg;
 
 	uint8_t ep = evt->hal_evt.xfer_complete.ep_addr;
 	usbd_xfer_result_t result = evt->hal_evt.xfer_complete.result;
 	uint32_t len = evt->hal_evt.xfer_complete.len;
 
-	ep_cfg = udc_get_ep_cfg(dev, ep);
-	udc_ep_set_busy(ep_cfg, false);
+	udc_ep_set_busy(dev, ep, false);
 
-	buf = udc_buf_peek(ep_cfg);
+	buf = udc_buf_peek(dev, ep);
 	if (buf == NULL) {
 		return;
 	}
@@ -263,7 +260,7 @@ static void udc_event_xfer_complete(const struct device *dev, struct udc_renesas
 		return;
 	}
 
-	buf = udc_buf_get(ep_cfg);
+	buf = udc_buf_get(dev, ep);
 
 	if (ep == USB_CONTROL_EP_IN) {
 		udc_event_xfer_ctrl_in(dev, buf);
@@ -354,7 +351,7 @@ static int udc_renesas_ra_ep_dequeue(const struct device *dev, struct udc_ep_con
 
 	lock_key = irq_lock();
 
-	buf = udc_buf_get_all(cfg);
+	buf = udc_buf_get_all(dev, cfg->addr);
 	if (buf != NULL) {
 		udc_submit_ep_event(dev, buf, -ECONNABORTED);
 	}
@@ -363,7 +360,7 @@ static int udc_renesas_ra_ep_dequeue(const struct device *dev, struct udc_ep_con
 		return -EIO;
 	}
 
-	udc_ep_set_busy(cfg, false);
+	udc_ep_set_busy(dev, cfg->addr, false);
 
 	irq_unlock(lock_key);
 
