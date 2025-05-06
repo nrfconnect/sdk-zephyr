@@ -201,11 +201,12 @@ static uint8_t big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bi
 				return BT_HCI_ERR_INVALID_PARAM;
 			}
 
-			if (!IN_RANGE(pto, 0x00, 0x0F)) {
+			/* FIXME: PTO is currently limited to BN */
+			if (!IN_RANGE(pto, 0x00, bn /*0x0F*/)) {
 				return BT_HCI_ERR_INVALID_PARAM;
 			}
 
-			if (pto && !(bn * irc < nse)) {
+			if (bn * irc + pto < nse) {
 				return BT_HCI_ERR_INVALID_PARAM;
 			}
 		} else {
@@ -1161,8 +1162,10 @@ static uint8_t ptc_calc(const struct lll_adv_iso *lll, uint32_t event_spacing,
 		       (lll->sub_interval * lll->bn * lll->num_bis)) *
 		      lll->bn;
 
-		/* Restrict PTC to number of available subevents */
-		ptc = MIN(ptc, lll->nse - lll->bn * lll->irc);
+		/* FIXME: Here we restrict to a maximum of BN Pre-Transmission
+		 * subevents per BIS
+		 */
+		ptc = MIN(ptc, lll->bn);
 
 		return ptc;
 	}
