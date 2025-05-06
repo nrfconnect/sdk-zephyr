@@ -970,7 +970,7 @@ static struct net_buf *pkt_alloc_buffer(struct net_pkt *pkt,
 
 				size = 0U;
 			} else {
-				size -= current->size - headroom;
+				size -= current->size;
 			}
 		} else {
 			if (current->size > size) {
