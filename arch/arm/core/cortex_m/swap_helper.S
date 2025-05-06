@@ -98,7 +98,7 @@ SECTION_FUNC(TEXT, z_arm_pendsv)
 #ifdef CONFIG_FPU_SHARING
     /* Assess whether switched-out thread had been using the FP registers. */
     tst lr, #_EXC_RETURN_FTYPE_Msk
-    bne .L_out_fp_endif
+    bne out_fp_endif
 
     /* FP context active: set FP state and store callee-saved registers.
      * Note: if Lazy FP stacking is enabled, storing the callee-saved
@@ -108,7 +108,7 @@ SECTION_FUNC(TEXT, z_arm_pendsv)
     add r0, r2, #_thread_offset_to_preempt_float
     vstmia r0, {s16-s31}
 
-.L_out_fp_endif:
+out_fp_endif:
     /* At this point FPCCR.LSPACT is guaranteed to be cleared,
      * regardless of whether the thread has an active FP context.
      */
@@ -204,9 +204,9 @@ SECTION_FUNC(TEXT, z_arm_pendsv)
      * were enabled before irq_lock was called.
      */
     cmp r0, #0
-    bne .L_thread_irq_disabled
+    bne _thread_irq_disabled
     cpsie i
-.L_thread_irq_disabled:
+_thread_irq_disabled:
 
 #if defined(CONFIG_MPU_STACK_GUARD) || defined(CONFIG_USERSPACE)
     /* Re-program dynamic memory map */
@@ -259,7 +259,7 @@ SECTION_FUNC(TEXT, z_arm_pendsv)
 #ifdef CONFIG_FPU_SHARING
     /* Assess whether switched-in thread had been using the FP registers. */
     tst lr, #_EXC_RETURN_FTYPE_Msk
-    beq .L_in_fp_active
+    beq in_fp_active
     /* FP context inactive for swapped-in thread:
      * - reset FPSCR to 0
      * - set EXC_RETURN.F_Type (prevents FP frame un-stacking when returning
@@ -267,9 +267,9 @@ SECTION_FUNC(TEXT, z_arm_pendsv)
      */
     movs.n r3, #0
     vmsr fpscr, r3
-    b .L_in_fp_endif
+    b in_fp_endif
 
-.L_in_fp_active:
+in_fp_active:
     /* FP context active:
      * - clear EXC_RETURN.F_Type
      * - FPSCR and caller-saved registers will be restored automatically
@@ -277,7 +277,7 @@ SECTION_FUNC(TEXT, z_arm_pendsv)
      */
     add r0, r2, #_thread_offset_to_preempt_float
     vldmia r0, {s16-s31}
-.L_in_fp_endif:
+in_fp_endif:
     /* Clear CONTROL.FPCA that may have been set by FP instructions */
     mrs r3, CONTROL
     bic r3, #_CONTROL_FPCA_Msk
@@ -361,12 +361,12 @@ SECTION_FUNC(TEXT, z_arm_svc)
   movs r0, #_EXC_RETURN_SPSEL_Msk
   mov r1, lr
   tst r1, r0
-  beq .L_stack_frame_msp
+  beq _stack_frame_msp
   mrs r0, PSP
-  bne .L_stack_frame_endif
-.L_stack_frame_msp:
+  bne _stack_frame_endif
+_stack_frame_msp:
   mrs r0, MSP
-.L_stack_frame_endif:
+_stack_frame_endif:
 #elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
     tst lr, #_EXC_RETURN_SPSEL_Msk /* did we come from thread mode ? */
     ite eq  /* if zero (equal), came from handler mode */
@@ -399,7 +399,7 @@ SECTION_FUNC(TEXT, z_arm_svc)
     mrs r2, CONTROL
 
     cmp r1, #3
-    beq .L_do_syscall
+    beq _do_syscall
 
     /*
      * check that we are privileged before invoking other SVCs
@@ -411,12 +411,12 @@ SECTION_FUNC(TEXT, z_arm_svc)
 #elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
     tst r2, #0x1
 #endif
-    bne .L_oops
+    bne _oops
 
 #endif /* CONFIG_USERSPACE */
 
     cmp r1, #2
-    beq .L_oops
+    beq _oops
 
 #if defined(CONFIG_IRQ_OFFLOAD)
     push {r0, lr}
@@ -434,7 +434,7 @@ SECTION_FUNC(TEXT, z_arm_svc)
 
 #endif
 
-.L_oops:
+_oops:
     push {r0, lr}
 #if defined(CONFIG_EXTRA_EXCEPTION_INFO)
 #if defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
@@ -484,7 +484,7 @@ SECTION_FUNC(TEXT, z_arm_svc)
      * r6 - call_id
      * r8 - saved link register
      */
-.L_do_syscall:
+_do_syscall:
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
     movs r3, #24
     ldr r1, [r0, r3]   /* grab address of PC from stack frame */
@@ -510,7 +510,7 @@ SECTION_FUNC(TEXT, z_arm_svc)
     /* The supplied syscall_id must be lower than the limit
      * (Requires unsigned integer comparison)
      */
-    blo .L_valid_syscall_id
+    blo valid_syscall_id
 
     /* bad syscall id.  Set arg1 to bad id and set call_id to SYSCALL_BAD */
     str r6, [r0]
@@ -518,7 +518,7 @@ SECTION_FUNC(TEXT, z_arm_svc)
 
     /* Bad syscalls treated as valid syscalls with ID K_SYSCALL_BAD. */
 
-.L_valid_syscall_id:
+valid_syscall_id:
     ldr r0, =_kernel
     ldr r0, [r0, #_kernel_offset_to_current]
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
