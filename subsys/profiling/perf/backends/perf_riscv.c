@@ -5,6 +5,7 @@
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/linker/linker-defs.h>
 
 static bool valid_stack(uintptr_t addr, k_tid_t current)
 {
@@ -14,9 +15,7 @@ static bool valid_stack(uintptr_t addr, k_tid_t current)
 
 static inline bool in_text_region(uintptr_t addr)
 {
-	extern uintptr_t __text_region_start, __text_region_end;
-
-	return (addr >= (uintptr_t)&__text_region_start) && (addr < (uintptr_t)&__text_region_end);
+	return (addr >= (uintptr_t)__text_region_start) && (addr < (uintptr_t)__text_region_end);
 }
 
 /*
@@ -34,7 +33,7 @@ size_t arch_perf_current_stack_trace(uintptr_t *buf, size_t size)
 
 	/*
 	 * In riscv (arch/riscv/core/isr.S) ra, ip($mepc) and fp($s0) are saved
-	 * at the beginning of _isr_wrapper in order, specified by z_arch_esf_t.
+	 * at the beginning of _isr_wrapper in order, specified by struct arch_esf.
 	 * Then, before calling interruption handler, core switch $sp to
 	 * _current_cpu->irq_stack and save $sp with offset -16 on irq stack
 	 *
@@ -76,10 +75,10 @@ size_t arch_perf_current_stack_trace(uintptr_t *buf, size_t size)
 	 * function prologue or epilogue.
 	 */
 	buf[idx++] = (uintptr_t)esf->ra;
-	if (valid_stack((uintptr_t)new_fp, arch_current_thread())) {
+	if (valid_stack((uintptr_t)new_fp, _current)) {
 		fp = new_fp;
 	}
-	while (valid_stack((uintptr_t)fp, arch_current_thread())) {
+	while (valid_stack((uintptr_t)fp, _current)) {
 		if (idx >= size) {
 			return 0;
 		}

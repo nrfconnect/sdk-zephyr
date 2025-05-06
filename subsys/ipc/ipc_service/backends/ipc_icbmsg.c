@@ -1087,7 +1087,6 @@ static int register_ept(const struct device *instance, void **token,
 	struct ept_data *ept = NULL;
 	bool matching_state;
 	int ept_index;
-	int r = 0;
 
 	/* Try to find endpoint to rebound */
 	for (ept_index = 0; ept_index < NUM_EPT; ept_index++) {
@@ -1134,7 +1133,7 @@ static int register_ept(const struct device *instance, void **token,
 	ept_bound_process(dev_data);
 #endif
 
-	return r;
+	return 0;
 }
 
 /**
@@ -1237,8 +1236,13 @@ static int hold_rx_buffer(const struct device *instance, void *token, void *data
 static int release_rx_buffer(const struct device *instance, void *token, void *data)
 {
 	struct backend_data *dev_data = instance->data;
+	int r;
 
-	return send_release(dev_data, (uint8_t *)data, MSG_RELEASE_DATA, 0);
+	r = send_release(dev_data, (uint8_t *)data, MSG_RELEASE_DATA, 0);
+	if (r < 0) {
+		return r;
+	}
+	return 0;
 }
 
 /**
@@ -1408,11 +1412,11 @@ const static struct ipc_service_backend backend_ops = {
 	PBUF_DEFINE(tx_icbmsg_pb_##i,							\
 			GET_MEM_ADDR_INST(i, tx),					\
 			GET_ICMSG_SIZE_INST(i, tx, rx),					\
-			GET_CACHE_ALIGNMENT(i));					\
+			GET_CACHE_ALIGNMENT(i), 0, 0);					\
 	PBUF_DEFINE(rx_icbmsg_pb_##i,							\
 			GET_MEM_ADDR_INST(i, rx),					\
 			GET_ICMSG_SIZE_INST(i, rx, tx),					\
-			GET_CACHE_ALIGNMENT(i));					\
+			GET_CACHE_ALIGNMENT(i), 0, 0);					\
 	static struct backend_data backend_data_##i = {					\
 		.control_data = {							\
 			.tx_pb = &tx_icbmsg_pb_##i,					\
@@ -1424,6 +1428,7 @@ const static struct ipc_service_backend backend_ops = {
 		.control_config = {							\
 			.mbox_tx = MBOX_DT_SPEC_INST_GET(i, tx),			\
 			.mbox_rx = MBOX_DT_SPEC_INST_GET(i, rx),			\
+			.unbound_mode = ICMSG_UNBOUND_MODE_DISABLE,			\
 		},									\
 		.tx = {									\
 			.blocks_ptr = (uint8_t *)GET_BLOCKS_ADDR_INST(i, tx, rx),	\

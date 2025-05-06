@@ -39,11 +39,9 @@
 #include <stm32_ll_exti.h>
 #endif /* CONFIG_PM */
 
-#ifdef CONFIG_DCACHE
 #include <zephyr/linker/linker-defs.h>
 #include <zephyr/mem_mgmt/mem_attr.h>
 #include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
-#endif /* CONFIG_DCACHE */
 
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
@@ -99,17 +97,34 @@ uint32_t lpuartdiv_calc(const uint64_t clock_rate, const uint32_t baud_rate)
 #endif /* USART_PRESC_PRESCALER */
 #endif /* HAS_LPUART */
 
+#ifdef CONFIG_UART_ASYNC_API
+#define STM32_ASYNC_STATUS_TIMEOUT (DMA_STATUS_BLOCK + 1)
+#endif
+
 #ifdef CONFIG_PM
+static void uart_stm32_pm_policy_state_lock_get_unconditional(void)
+{
+	pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
+	if (IS_ENABLED(CONFIG_PM_S2RAM)) {
+		pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_RAM, PM_ALL_SUBSTATES);
+	}
+}
+
 static void uart_stm32_pm_policy_state_lock_get(const struct device *dev)
 {
 	struct uart_stm32_data *data = dev->data;
 
 	if (!data->pm_policy_state_on) {
 		data->pm_policy_state_on = true;
-		pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
-		if (IS_ENABLED(CONFIG_PM_S2RAM)) {
-			pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_RAM, PM_ALL_SUBSTATES);
-		}
+		uart_stm32_pm_policy_state_lock_get_unconditional();
+	}
+}
+
+static void uart_stm32_pm_policy_state_lock_put_unconditional(void)
+{
+	pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
+	if (IS_ENABLED(CONFIG_PM_S2RAM)) {
+		pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_RAM, PM_ALL_SUBSTATES);
 	}
 }
 
@@ -119,10 +134,7 @@ static void uart_stm32_pm_policy_state_lock_put(const struct device *dev)
 
 	if (data->pm_policy_state_on) {
 		data->pm_policy_state_on = false;
-		pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
-		if (IS_ENABLED(CONFIG_PM_S2RAM)) {
-			pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_RAM, PM_ALL_SUBSTATES);
-		}
+		uart_stm32_pm_policy_state_lock_put_unconditional();
 	}
 }
 #endif /* CONFIG_PM */
@@ -1117,11 +1129,16 @@ static inline void async_evt_rx_rdy(struct uart_stm32_data *data)
 		.data.rx.offset = data->dma_rx.offset
 	};
 
-	/* update the current pos for new data */
-	data->dma_rx.offset = data->dma_rx.counter;
+	/* When cyclic DMA is used, buffer positions are not updated - call callback every time*/
+	if (data->dma_rx.dma_cfg.cyclic == 0) {
+		/* update the current pos for new data */
+		data->dma_rx.offset = data->dma_rx.counter;
 
-	/* send event only for new data */
-	if (event.data.rx.len > 0) {
+		/* send event only for new data */
+		if (event.data.rx.len > 0) {
+			async_user_callback(data, &event);
+		}
+	} else {
 		async_user_callback(data, &event);
 	}
 }
@@ -1154,6 +1171,9 @@ static inline void async_evt_tx_done(struct uart_stm32_data *data)
 	/* Reset tx buffer */
 	data->dma_tx.buffer_length = 0;
 	data->dma_tx.counter = 0;
+#ifdef CONFIG_PM
+	data->tx_int_stream_on = false;
+#endif
 
 	async_user_callback(data, &event);
 }
@@ -1171,6 +1191,9 @@ static inline void async_evt_tx_abort(struct uart_stm32_data *data)
 	/* Reset tx buffer */
 	data->dma_tx.buffer_length = 0;
 	data->dma_tx.counter = 0;
+#ifdef CONFIG_PM
+	data->tx_int_stream_on = false;
+#endif
 
 	async_user_callback(data, &event);
 }
@@ -1204,20 +1227,45 @@ static inline void async_timer_start(struct k_work_delayable *work,
 	}
 }
 
-static void uart_stm32_dma_rx_flush(const struct device *dev)
+static void uart_stm32_dma_rx_flush(const struct device *dev, int status)
 {
 	struct dma_status stat;
 	struct uart_stm32_data *data = dev->data;
 
-	if (dma_get_status(data->dma_rx.dma_dev,
-				data->dma_rx.dma_channel, &stat) == 0) {
-		size_t rx_rcv_len = data->dma_rx.buffer_length -
-					stat.pending_length;
-		if (rx_rcv_len > data->dma_rx.offset) {
-			data->dma_rx.counter = rx_rcv_len;
+	size_t rx_rcv_len = 0;
 
-			async_evt_rx_rdy(data);
+	switch (status) {
+	case DMA_STATUS_COMPLETE:
+		/* fully complete */
+		data->dma_rx.counter = data->dma_rx.buffer_length;
+		break;
+	case DMA_STATUS_BLOCK:
+		/* half complete */
+		data->dma_rx.counter = data->dma_rx.buffer_length / 2;
+
+		break;
+	default: /* likely STM32_ASYNC_STATUS_TIMEOUT */
+		if (dma_get_status(data->dma_rx.dma_dev, data->dma_rx.dma_channel, &stat) == 0) {
+			rx_rcv_len = data->dma_rx.buffer_length - stat.pending_length;
+			data->dma_rx.counter = rx_rcv_len;
 		}
+		break;
+	}
+
+	async_evt_rx_rdy(data);
+
+	switch (status) { /* update offset*/
+	case DMA_STATUS_COMPLETE:
+		/* fully complete */
+		data->dma_rx.offset = 0;
+		break;
+	case DMA_STATUS_BLOCK:
+		/* half complete */
+		data->dma_rx.offset = data->dma_rx.buffer_length / 2;
+		break;
+	default: /* likely STM32_ASYNC_STATUS_TIMEOUT */
+		data->dma_rx.offset += rx_rcv_len - data->dma_rx.offset;
+		break;
 	}
 }
 
@@ -1260,6 +1308,26 @@ static void uart_stm32_isr(const struct device *dev)
 	}
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 
+#if defined(CONFIG_PM) && defined(IS_UART_WAKEUP_FROMSTOP_INSTANCE) \
+	&& defined(USART_CR3_WUFIE)
+	if (LL_USART_IsEnabledIT_WKUP(usart) &&
+		LL_USART_IsActiveFlag_WKUP(usart)) {
+
+		LL_USART_ClearFlag_WKUP(usart);
+
+		if (!data->rx_woken) {
+			/* Prevent SoC from entering STOP mode until RX goes IDLE */
+			uart_stm32_pm_policy_state_lock_get_unconditional();
+			data->rx_woken = true;
+		}
+
+#ifdef USART_ISR_REACK
+		while (LL_USART_IsActiveFlag_REACK(usart) == 0) {
+		}
+#endif
+	}
+#endif
+
 #ifdef CONFIG_UART_ASYNC_API
 	if (LL_USART_IsEnabledIT_IDLE(usart) &&
 			LL_USART_IsActiveFlag_IDLE(usart)) {
@@ -1268,8 +1336,16 @@ static void uart_stm32_isr(const struct device *dev)
 
 		LOG_DBG("idle interrupt occurred");
 
+#ifdef CONFIG_PM
+		if (data->rx_woken) {
+			/* Allow SoC to enter STOP mode now that RX is IDLE */
+			uart_stm32_pm_policy_state_lock_put_unconditional();
+			data->rx_woken = false;
+		}
+#endif
+
 		if (data->dma_rx.timeout == 0) {
-			uart_stm32_dma_rx_flush(dev);
+			uart_stm32_dma_rx_flush(dev, STM32_ASYNC_STATUS_TIMEOUT);
 		} else {
 			/* Start the RX timer not null */
 			async_timer_start(&data->dma_rx.timeout_work,
@@ -1281,9 +1357,8 @@ static void uart_stm32_isr(const struct device *dev)
 		LL_USART_DisableIT_TC(usart);
 		/* Generate TX_DONE event when transmission is done */
 		async_evt_tx_done(data);
-
 #ifdef CONFIG_PM
-		uart_stm32_pm_policy_state_lock_put(dev);
+		uart_stm32_pm_policy_state_lock_put_unconditional();
 #endif
 	} else if (LL_USART_IsEnabledIT_RXNE(usart) &&
 			LL_USART_IsActiveFlag_RXNE(usart)) {
@@ -1300,18 +1375,6 @@ static void uart_stm32_isr(const struct device *dev)
 	uart_stm32_err_check(dev);
 #endif /* CONFIG_UART_ASYNC_API */
 
-#if defined(CONFIG_PM) && defined(IS_UART_WAKEUP_FROMSTOP_INSTANCE) \
-	&& defined(USART_CR3_WUFIE)
-	if (LL_USART_IsEnabledIT_WKUP(usart) &&
-		LL_USART_IsActiveFlag_WKUP(usart)) {
-
-		LL_USART_ClearFlag_WKUP(usart);
-#ifdef USART_ISR_REACK
-		while (LL_USART_IsActiveFlag_REACK(usart) == 0) {
-		}
-#endif
-	}
-#endif
 }
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN || CONFIG_UART_ASYNC_API || CONFIG_PM */
 
@@ -1330,11 +1393,13 @@ static bool buf_in_nocache(uintptr_t buf, size_t len_bytes)
 	}
 #endif /* CONFIG_NOCACHE_MEMORY */
 
+#ifdef CONFIG_MEM_ATTR
 	buf_within_nocache = mem_attr_check_buf(
 		(void *)buf, len_bytes, DT_MEM_ARM_MPU_RAM_NOCACHE) == 0;
 	if (buf_within_nocache) {
 		return true;
 	}
+#endif /* CONFIG_MEM_ATTR */
 
 	buf_within_nocache = (buf >= ((uintptr_t)__rodata_region_start)) &&
 		((buf + len_bytes - 1) <= ((uintptr_t)__rodata_region_end));
@@ -1417,7 +1482,7 @@ static int uart_stm32_async_rx_disable(const struct device *dev)
 
 	LL_USART_DisableIT_IDLE(usart);
 
-	uart_stm32_dma_rx_flush(dev);
+	uart_stm32_dma_rx_flush(dev, STM32_ASYNC_STATUS_TIMEOUT);
 
 	async_evt_rx_buf_release(data);
 
@@ -1517,27 +1582,32 @@ void uart_stm32_dma_rx_cb(const struct device *dma_dev, void *user_data,
 
 	(void)k_work_cancel_delayable(&data->dma_rx.timeout_work);
 
-	/* true since this functions occurs when buffer if full */
-	data->dma_rx.counter = data->dma_rx.buffer_length;
+	/* If we are in NORMAL MODE */
+	if (data->dma_rx.dma_cfg.cyclic == 0) {
 
-	async_evt_rx_rdy(data);
+		/* true since this functions occurs when buffer is full */
+		data->dma_rx.counter = data->dma_rx.buffer_length;
+		async_evt_rx_rdy(data);
+		if (data->rx_next_buffer != NULL) {
+			async_evt_rx_buf_release(data);
 
-	if (data->rx_next_buffer != NULL) {
-		async_evt_rx_buf_release(data);
-
-		/* replace the buffer when the current
-		 * is full and not the same as the next
-		 * one.
-		 */
-		uart_stm32_dma_replace_buffer(uart_dev);
+			/* replace the buffer when the current
+			 * is full and not the same as the next
+			 * one.
+			 */
+			uart_stm32_dma_replace_buffer(uart_dev);
+		} else {
+			/* Buffer full without valid next buffer,
+			 * an UART_RX_DISABLED event must be generated,
+			 * but uart_stm32_async_rx_disable() cannot be
+			 * called in ISR context. So force the RX timeout
+			 * to minimum value and let the RX timeout to do the job.
+			 */
+			k_work_reschedule(&data->dma_rx.timeout_work, K_TICKS(1));
+		}
 	} else {
-		/* Buffer full without valid next buffer,
-		 * an UART_RX_DISABLED event must be generated,
-		 * but uart_stm32_async_rx_disable() cannot be
-		 * called in ISR context. So force the RX timeout
-		 * to minimum value and let the RX timeout to do the job.
-		 */
-		k_work_reschedule(&data->dma_rx.timeout_work, K_TICKS(1));
+		/* CIRCULAR MODE */
+		uart_stm32_dma_rx_flush(data->uart_dev, status);
 	}
 }
 
@@ -1564,6 +1634,10 @@ static int uart_stm32_async_tx(const struct device *dev,
 	}
 #endif /* CONFIG_DCACHE */
 
+#ifdef CONFIG_PM
+	data->tx_poll_stream_on = false;
+	data->tx_int_stream_on = true;
+#endif
 	data->dma_tx.buffer = (uint8_t *)tx_data;
 	data->dma_tx.buffer_length = buf_size;
 	data->dma_tx.timeout = timeout;
@@ -1599,7 +1673,7 @@ static int uart_stm32_async_tx(const struct device *dev,
 #ifdef CONFIG_PM
 
 	/* Do not allow system to suspend until transmission has completed */
-	uart_stm32_pm_policy_state_lock_get(dev);
+	uart_stm32_pm_policy_state_lock_get_unconditional();
 #endif
 
 	/* Enable TX DMA requests */
@@ -1722,7 +1796,7 @@ static void uart_stm32_async_rx_timeout(struct k_work *work)
 	if (data->dma_rx.counter == data->dma_rx.buffer_length) {
 		uart_stm32_async_rx_disable(dev);
 	} else {
-		uart_stm32_dma_rx_flush(dev);
+		uart_stm32_dma_rx_flush(dev, STM32_ASYNC_STATUS_TIMEOUT);
 	}
 }
 
@@ -1829,9 +1903,10 @@ static int uart_stm32_async_init(const struct device *dev)
 		data->dma_rx.blk_cfg.dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
 	}
 
-	/* RX disable circular buffer */
-	data->dma_rx.blk_cfg.source_reload_en  = 0;
-	data->dma_rx.blk_cfg.dest_reload_en = 0;
+	/* Enable/disable RX circular buffer */
+	data->dma_rx.blk_cfg.source_reload_en = data->dma_rx.dma_cfg.cyclic;
+	data->dma_rx.blk_cfg.dest_reload_en = data->dma_rx.dma_cfg.cyclic;
+
 	data->dma_rx.blk_cfg.fifo_mode_control = data->dma_rx.fifo_threshold;
 
 	data->dma_rx.dma_cfg.head_block = &data->dma_rx.blk_cfg;
@@ -1867,6 +1942,10 @@ static int uart_stm32_async_init(const struct device *dev)
 	} else {
 		data->dma_tx.blk_cfg.dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
 	}
+
+	/* Enable/disable TX circular buffer */
+	data->dma_tx.blk_cfg.source_reload_en = data->dma_tx.dma_cfg.cyclic;
+	data->dma_tx.blk_cfg.dest_reload_en = data->dma_tx.dma_cfg.cyclic;
 
 	data->dma_tx.blk_cfg.fifo_mode_control = data->dma_tx.fifo_threshold;
 
@@ -2225,6 +2304,8 @@ static int uart_stm32_pm_action(const struct device *dev,
 		.dma_slot = STM32_DMA_SLOT(index, dir, slot),\
 		.channel_direction = STM32_DMA_CONFIG_DIRECTION(	\
 					STM32_DMA_CHANNEL_CONFIG(index, dir)),\
+		.cyclic =  STM32_DMA_CONFIG_CYCLIC(			\
+				STM32_DMA_CHANNEL_CONFIG(index, dir)),  \
 		.channel_priority = STM32_DMA_CONFIG_PRIORITY(		\
 				STM32_DMA_CHANNEL_CONFIG(index, dir)),	\
 		.source_data_size = STM32_DMA_CONFIG_##src_dev##_DATA_SIZE(\
@@ -2299,18 +2380,13 @@ static void uart_stm32_irq_config_func_##index(const struct device *dev)	\
  */
 #define STM32_UART_CHECK_DT_PARITY(index)				\
 BUILD_ASSERT(								\
-	!(DT_INST_ENUM_IDX_OR(index, parity, STM32_UART_DEFAULT_PARITY)	\
-					== UART_CFG_PARITY_MARK ||	\
-	DT_INST_ENUM_IDX_OR(index, parity, STM32_UART_DEFAULT_PARITY)	\
-					== UART_CFG_PARITY_SPACE),	\
+	!(DT_INST_ENUM_IDX(index, parity) == UART_CFG_PARITY_MARK ||	\
+	DT_INST_ENUM_IDX(index, parity) == UART_CFG_PARITY_SPACE),	\
 	"Node " DT_NODE_PATH(DT_DRV_INST(index))			\
 	" has unsupported parity configuration");			\
 BUILD_ASSERT(								\
-	!(DT_INST_ENUM_IDX_OR(index, parity, STM32_UART_DEFAULT_PARITY)	\
-					!= UART_CFG_PARITY_NONE	&&	\
-	DT_INST_ENUM_IDX_OR(index, data_bits,				\
-			    STM32_UART_DEFAULT_DATA_BITS)		\
-					== UART_CFG_DATA_BITS_9),	\
+	!(DT_INST_ENUM_IDX(index, parity) != UART_CFG_PARITY_NONE &&	\
+	DT_INST_ENUM_IDX(index, data_bits) == UART_CFG_DATA_BITS_9),	\
 	"Node " DT_NODE_PATH(DT_DRV_INST(index))			\
 		" has unsupported parity + data bits combination");
 
@@ -2321,32 +2397,18 @@ BUILD_ASSERT(								\
 #ifdef LL_USART_DATAWIDTH_7B
 #define STM32_UART_CHECK_DT_DATA_BITS(index)				\
 BUILD_ASSERT(								\
-	!(DT_INST_ENUM_IDX_OR(index, data_bits,				\
-			      STM32_UART_DEFAULT_DATA_BITS)		\
-					== UART_CFG_DATA_BITS_5 ||	\
-		(DT_INST_ENUM_IDX_OR(index, data_bits,			\
-				    STM32_UART_DEFAULT_DATA_BITS)	\
-					== UART_CFG_DATA_BITS_6 &&	\
-		DT_INST_ENUM_IDX_OR(index, parity,			\
-				    STM32_UART_DEFAULT_PARITY)		\
-					== UART_CFG_PARITY_NONE)),	\
+	!(DT_INST_ENUM_IDX(index, data_bits) == UART_CFG_DATA_BITS_5 ||	\
+	(DT_INST_ENUM_IDX(index, data_bits) == UART_CFG_DATA_BITS_6 &&	\
+	DT_INST_ENUM_IDX(index, parity) == UART_CFG_PARITY_NONE)),	\
 	"Node " DT_NODE_PATH(DT_DRV_INST(index))			\
 		" has unsupported data bits configuration");
 #else
 #define STM32_UART_CHECK_DT_DATA_BITS(index)				\
 BUILD_ASSERT(								\
-	!(DT_INST_ENUM_IDX_OR(index, data_bits,				\
-			      STM32_UART_DEFAULT_DATA_BITS)		\
-					== UART_CFG_DATA_BITS_5 ||	\
-	DT_INST_ENUM_IDX_OR(index, data_bits,				\
-			    STM32_UART_DEFAULT_DATA_BITS)		\
-					== UART_CFG_DATA_BITS_6 ||	\
-		(DT_INST_ENUM_IDX_OR(index, data_bits,			\
-			    STM32_UART_DEFAULT_DATA_BITS)		\
-					== UART_CFG_DATA_BITS_7 &&	\
-		DT_INST_ENUM_IDX_OR(index, parity,			\
-				    STM32_UART_DEFAULT_PARITY)		\
-					== UART_CFG_PARITY_NONE)),	\
+	!(DT_INST_ENUM_IDX(index, data_bits) == UART_CFG_DATA_BITS_5 ||	\
+	DT_INST_ENUM_IDX(index, data_bits) == UART_CFG_DATA_BITS_6 ||	\
+	(DT_INST_ENUM_IDX(index, data_bits) == UART_CFG_DATA_BITS_7 &&	\
+	DT_INST_ENUM_IDX(index, parity) == UART_CFG_PARITY_NONE)),	\
 	"Node " DT_NODE_PATH(DT_DRV_INST(index))			\
 		" has unsupported data bits configuration");
 #endif
@@ -2358,9 +2420,7 @@ BUILD_ASSERT(								\
 #ifndef LL_USART_STOPBITS_0_5
 #define STM32_UART_CHECK_DT_STOP_BITS_0_5(index)			\
 BUILD_ASSERT(								\
-	!(DT_INST_ENUM_IDX_OR(index, stop_bits,				\
-			      STM32_UART_DEFAULT_STOP_BITS)		\
-					== UART_CFG_STOP_BITS_0_5),	\
+	DT_INST_ENUM_IDX(index, stop_bits) != UART_CFG_STOP_BITS_0_5,	\
 	"Node " DT_NODE_PATH(DT_DRV_INST(index))			\
 		" has unsupported stop bits configuration");
 /* LPUARTs don't support 0.5 stop bits configurations */
@@ -2368,9 +2428,7 @@ BUILD_ASSERT(								\
 #define STM32_UART_CHECK_DT_STOP_BITS_0_5(index)			\
 BUILD_ASSERT(								\
 	!(DT_HAS_COMPAT_STATUS_OKAY(st_stm32_lpuart) &&			\
-	  DT_INST_ENUM_IDX_OR(index, stop_bits,				\
-			      STM32_UART_DEFAULT_STOP_BITS)		\
-					== UART_CFG_STOP_BITS_0_5),	\
+	DT_INST_ENUM_IDX(index, stop_bits) == UART_CFG_STOP_BITS_0_5),	\
 	"Node " DT_NODE_PATH(DT_DRV_INST(index))			\
 		" has unsupported stop bits configuration");
 #endif
@@ -2382,9 +2440,7 @@ BUILD_ASSERT(								\
 #ifndef LL_USART_STOPBITS_1_5
 #define STM32_UART_CHECK_DT_STOP_BITS_1_5(index)			\
 BUILD_ASSERT(								\
-	DT_INST_ENUM_IDX_OR(index, stop_bits,				\
-			    STM32_UART_DEFAULT_STOP_BITS)		\
-					!= UART_CFG_STOP_BITS_1_5,	\
+	DT_INST_ENUM_IDX(index, stop_bits) != UART_CFG_STOP_BITS_1_5,	\
 	"Node " DT_NODE_PATH(DT_DRV_INST(index))			\
 		" has unsupported stop bits configuration");
 /* LPUARTs don't support 1.5 stop bits configurations */
@@ -2392,9 +2448,7 @@ BUILD_ASSERT(								\
 #define STM32_UART_CHECK_DT_STOP_BITS_1_5(index)			\
 BUILD_ASSERT(								\
 	!(DT_HAS_COMPAT_STATUS_OKAY(st_stm32_lpuart) &&			\
-	  DT_INST_ENUM_IDX_OR(index, stop_bits,				\
-			      STM32_UART_DEFAULT_STOP_BITS)		\
-					== UART_CFG_STOP_BITS_1_5),	\
+	DT_INST_ENUM_IDX(index, stop_bits) == UART_CFG_STOP_BITS_1_5),	\
 	"Node " DT_NODE_PATH(DT_DRV_INST(index))			\
 		" has unsupported stop bits configuration");
 #endif
@@ -2408,14 +2462,10 @@ static const struct stm32_pclken pclken_##index[] =			\
 					    STM32_DT_INST_CLOCKS(index);\
 									\
 static struct uart_config uart_cfg_##index = {				\
-	.baudrate  = DT_INST_PROP_OR(index, current_speed,		\
-				     STM32_UART_DEFAULT_BAUDRATE),	\
-	.parity    = DT_INST_ENUM_IDX_OR(index, parity,			\
-					 STM32_UART_DEFAULT_PARITY),	\
-	.stop_bits = DT_INST_ENUM_IDX_OR(index, stop_bits,		\
-					 STM32_UART_DEFAULT_STOP_BITS),	\
-	.data_bits = DT_INST_ENUM_IDX_OR(index, data_bits,		\
-					 STM32_UART_DEFAULT_DATA_BITS),	\
+	.baudrate = DT_INST_PROP(index, current_speed),			\
+	.parity = DT_INST_ENUM_IDX(index, parity),			\
+	.stop_bits = DT_INST_ENUM_IDX(index, stop_bits),		\
+	.data_bits = DT_INST_ENUM_IDX(index, data_bits),		\
 	.flow_ctrl = DT_INST_PROP(index, hw_flow_control)		\
 					? UART_CFG_FLOW_CTRL_RTS_CTS	\
 					: UART_CFG_FLOW_CTRL_NONE,	\

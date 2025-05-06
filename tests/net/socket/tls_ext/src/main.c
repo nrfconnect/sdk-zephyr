@@ -399,6 +399,8 @@ static void test_common(int peer_verify)
 
 	r = k_thread_join(&server_thread, K_FOREVER);
 	zassert_equal(0, r, "k_thread_join() failed (%d)", r);
+
+	k_yield();
 }
 
 ZTEST(net_socket_tls_api_extension, test_tls_peer_verify_none)
@@ -447,7 +449,7 @@ static void *setup(void)
 		zassert_equal(r, 0, "failed to add CA Certificate (%d)", r);
 
 		r = tls_credential_add(SERVER_CERTIFICATE_TAG,
-				       TLS_CREDENTIAL_SERVER_CERTIFICATE,
+				       TLS_CREDENTIAL_PUBLIC_CERTIFICATE,
 				       server, sizeof(server));
 		zassert_equal(r, 0, "failed to add Server Certificate (%d)", r);
 
@@ -457,7 +459,7 @@ static void *setup(void)
 		zassert_equal(r, 0, "failed to add Server Private Key (%d)", r);
 
 		r = tls_credential_add(CLIENT_CERTIFICATE_TAG,
-				       TLS_CREDENTIAL_SERVER_CERTIFICATE,
+				       TLS_CREDENTIAL_PUBLIC_CERTIFICATE,
 				       client, sizeof(client));
 		zassert_equal(r, 0, "failed to add Client Certificate (%d)", r);
 

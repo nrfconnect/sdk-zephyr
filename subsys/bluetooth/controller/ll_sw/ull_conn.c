@@ -82,9 +82,9 @@
 LOG_MODULE_REGISTER(bt_ctlr_ull_conn);
 
 static int init_reset(void);
-#if !defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
+#if !defined(CONFIG_BT_CTLR_LOW_LAT)
 static void tx_demux_sched(struct ll_conn *conn);
-#endif /* CONFIG_BT_CTLR_LOW_LAT_ULL */
+#endif /* CONFIG_BT_CTLR_LOW_LAT */
 static void tx_demux(void *param);
 static struct node_tx *tx_ull_dequeue(struct ll_conn *conn, struct node_tx *tx);
 
@@ -240,7 +240,7 @@ int ll_tx_mem_enqueue(uint16_t handle, void *tx)
 
 	MFIFO_ENQUEUE(conn_tx, idx);
 
-#if !defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
+#if !defined(CONFIG_BT_CTLR_LOW_LAT)
 	if (ull_ref_get(&conn->ull)) {
 #if defined(CONFIG_BT_CTLR_FORCE_MD_AUTO)
 		if (tx_cnt >= CONFIG_BT_BUF_ACL_TX_COUNT) {
@@ -261,7 +261,7 @@ int ll_tx_mem_enqueue(uint16_t handle, void *tx)
 		lll_conn_force_md_cnt_set(0U);
 #endif /* CONFIG_BT_CTLR_FORCE_MD_AUTO */
 	}
-#endif /* !CONFIG_BT_CTLR_LOW_LAT_ULL */
+#endif /* !CONFIG_BT_CTLR_LOW_LAT */
 
 	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) && conn->lll.role) {
 		ull_periph_latency_cancel(conn, handle);
@@ -706,6 +706,12 @@ uint8_t ll_apto_get(uint16_t handle, uint16_t *apto)
 {
 	struct ll_conn *conn;
 
+#if defined(CONFIG_BT_CTLR_ISO)
+	if (IS_CIS_HANDLE(handle) || IS_SYNC_ISO_HANDLE(handle) || IS_ADV_ISO_HANDLE(handle)) {
+		return BT_HCI_ERR_CMD_DISALLOWED;
+	}
+#endif /* CONFIG_BT_CTLR_ISO */
+
 	conn = ll_connected_get(handle);
 	if (!conn) {
 		return BT_HCI_ERR_UNKNOWN_CONN_ID;
@@ -725,6 +731,12 @@ uint8_t ll_apto_get(uint16_t handle, uint16_t *apto)
 uint8_t ll_apto_set(uint16_t handle, uint16_t apto)
 {
 	struct ll_conn *conn;
+
+#if defined(CONFIG_BT_CTLR_ISO)
+	if (IS_CIS_HANDLE(handle) || IS_SYNC_ISO_HANDLE(handle) || IS_ADV_ISO_HANDLE(handle)) {
+		return BT_HCI_ERR_CMD_DISALLOWED;
+	}
+#endif /* CONFIG_BT_CTLR_ISO */
 
 	conn = ll_connected_get(handle);
 	if (!conn) {
@@ -1074,7 +1086,7 @@ void ull_conn_done(struct node_rx_event_done *done)
 	if (done->extra.trx_cnt) {
 		if (0) {
 #if defined(CONFIG_BT_PERIPHERAL)
-		} else if (lll->role) {
+		} else if (lll->role == BT_HCI_ROLE_PERIPHERAL) {
 			if (!conn->periph.drift_skip) {
 				ull_drift_ticks_get(done, &ticks_drift_plus,
 						    &ticks_drift_minus);
@@ -1103,6 +1115,12 @@ void ull_conn_done(struct node_rx_event_done *done)
 
 		/* Reset connection failed to establish countdown */
 		conn->connect_expire = 0U;
+	} else {
+#if defined(CONFIG_BT_PERIPHERAL)
+		if (lll->role == BT_HCI_ROLE_PERIPHERAL) {
+			conn->periph.drift_skip = 0U;
+		}
+#endif /* CONFIG_BT_PERIPHERAL */
 	}
 
 	elapsed_event = latency_event + lll->lazy_prepare + 1U;
@@ -1389,7 +1407,7 @@ void ull_conn_done(struct node_rx_event_done *done)
 	}
 }
 
-#if defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
+#if defined(CONFIG_BT_CTLR_LOW_LAT)
 void ull_conn_lll_tx_demux_sched(struct lll_conn *lll)
 {
 	static memq_link_t link;
@@ -1399,7 +1417,7 @@ void ull_conn_lll_tx_demux_sched(struct lll_conn *lll)
 
 	mayfly_enqueue(TICKER_USER_ID_LLL, TICKER_USER_ID_ULL_HIGH, 1U, &mfy);
 }
-#endif /* CONFIG_BT_CTLR_LOW_LAT_ULL */
+#endif /* CONFIG_BT_CTLR_LOW_LAT */
 
 void ull_conn_tx_demux(uint8_t count)
 {
@@ -1696,7 +1714,7 @@ static int init_reset(void)
 	return 0;
 }
 
-#if !defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
+#if !defined(CONFIG_BT_CTLR_LOW_LAT)
 static void tx_demux_sched(struct ll_conn *conn)
 {
 	static memq_link_t link;
@@ -1706,7 +1724,7 @@ static void tx_demux_sched(struct ll_conn *conn)
 
 	mayfly_enqueue(TICKER_USER_ID_THREAD, TICKER_USER_ID_ULL_HIGH, 0U, &mfy);
 }
-#endif /* !CONFIG_BT_CTLR_LOW_LAT_ULL */
+#endif /* !CONFIG_BT_CTLR_LOW_LAT */
 
 static void tx_demux(void *param)
 {
@@ -2179,8 +2197,9 @@ static void ull_conn_update_ticker(struct ll_conn *conn,
 
 	/* start periph/central with new timings */
 	uint8_t ticker_id_conn = TICKER_ID_CONN_BASE + ll_conn_handle_get(conn);
-	uint32_t ticker_status = ticker_stop(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_ULL_HIGH,
-				    ticker_id_conn, ticker_stop_conn_op_cb, (void *)conn);
+	uint32_t ticker_status = ticker_stop_abs(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_ULL_HIGH,
+						 ticker_id_conn, ticks_at_expire,
+						 ticker_stop_conn_op_cb, (void *)conn);
 	LL_ASSERT((ticker_status == TICKER_STATUS_SUCCESS) ||
 		  (ticker_status == TICKER_STATUS_BUSY));
 	ticker_status = ticker_start(
@@ -2220,8 +2239,8 @@ void ull_conn_update_parameters(struct ll_conn *conn, uint8_t is_cu_proc, uint8_
 	uint16_t conn_interval_unit_old;
 	uint16_t conn_interval_unit_new;
 	uint32_t ticks_win_offset = 0U;
-	uint16_t conn_interval_old_us;
-	uint16_t conn_interval_new_us;
+	uint32_t conn_interval_old_us;
+	uint32_t conn_interval_new_us;
 	uint32_t ticks_slot_overhead;
 	uint16_t conn_interval_old;
 	uint16_t conn_interval_new;
@@ -2243,18 +2262,6 @@ void ull_conn_update_parameters(struct ll_conn *conn, uint8_t is_cu_proc, uint8_
 
 
 	ticks_at_expire = conn->llcp.prep.ticks_at_expire;
-
-#if defined(CONFIG_BT_CTLR_XTAL_ADVANCED)
-	/* restore to normal prepare */
-	if (conn->ull.ticks_prepare_to_start & XON_BITMASK) {
-		uint32_t ticks_prepare_to_start =
-			MAX(conn->ull.ticks_active_to_start, conn->ull.ticks_preempt_to_start);
-
-		conn->ull.ticks_prepare_to_start &= ~XON_BITMASK;
-
-		ticks_at_expire -= (conn->ull.ticks_prepare_to_start - ticks_prepare_to_start);
-	}
-#endif /* CONFIG_BT_CTLR_XTAL_ADVANCED */
 
 #if defined(CONFIG_BT_CTLR_PHY)
 	ready_delay_us = lll_radio_tx_ready_delay_get(lll->phy_tx,
@@ -2346,10 +2353,7 @@ void ull_conn_update_parameters(struct ll_conn *conn, uint8_t is_cu_proc, uint8_
 
 	/* calculate the offset */
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
-		ticks_slot_overhead =
-			MAX(conn->ull.ticks_active_to_start,
-			    conn->ull.ticks_prepare_to_start);
-
+		ticks_slot_overhead = HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
 	} else {
 		ticks_slot_overhead = 0U;
 	}
@@ -2737,7 +2741,7 @@ static uint32_t get_ticker_offset(uint8_t ticker_id, uint16_t *lazy)
 	uint32_t ticks_to_expire;
 	uint32_t ticks_current;
 	uint32_t sync_remainder_us;
-	uint32_t remainder;
+	uint32_t remainder = 0U;
 	uint32_t start_us;
 	uint32_t ret;
 	uint8_t id;

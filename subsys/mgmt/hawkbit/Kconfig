@@ -19,7 +19,6 @@ menuconfig HAWKBIT
 	select MPU_ALLOW_FLASH_WRITE
 	select IMG_ENABLE_IMAGE_CHECK
 	select IMG_ERASE_PROGRESSIVELY
-	imply HWINFO if !HAWKBIT_CUSTOM_DEVICE_ID
 	help
 	  hawkBit is a domain independent back-end framework for polling out
 	  software updates to constrained edge devices as well as more powerful
@@ -77,18 +76,28 @@ choice HAWKBIT_DDI_SECURITY
 
 config HAWKBIT_DDI_NO_SECURITY
 	bool "No authentication security"
+	select DEPRECATED
 	help
-	  No authentication security for the hawkBit DDI API.
+	  No authentication security for the hawkBit DDI API. Support for this
+	  had been removed from the hawkBit server in version 0.8.0. Use gateway
+	  security token authentication instead, if you want something similar.
 
 config HAWKBIT_DDI_TARGET_SECURITY
 	bool "Use target security token authentication"
 	help
 	  Use target security token authentication for the hawkBit DDI API.
+	  Here the security token is unique for each device and is generated
+	  during the device registration process. The device has to be registered
+	  in the hawkBit server before using this authentication mode.
 
 config HAWKBIT_DDI_GATEWAY_SECURITY
 	bool "Use gateway security token authentication"
 	help
 	  Use gateway security token authentication for the hawkBit DDI API.
+	  Here the security token is shared between all devices in the same
+	  tenant. The device can register itself in the hawkBit server on
+	  first connection to the server. The device does not need to be registered
+	  in the hawkBit server before using this authentication mode.
 
 endchoice
 
@@ -113,11 +122,20 @@ config HAWKBIT_STATUS_BUFFER_SIZE
 	  json strings, that are sent to the hawkBit server. It might
 	  be increased if the custom attributes are used extensively.
 
+choice HAWKBIT_DEVICE_ID_SOURCE
+	prompt "Source of the Hawkbit device ID"
+
+config HAWKBIT_HWINFO_DEVICE_ID
+	bool "Device ID through HWINFO module"
+	depends on HWINFO
+
 config HAWKBIT_CUSTOM_DEVICE_ID
 	bool "Custom device id through callback function"
 	help
 	  Be able to customize the device id during runtime to a custom value,
 	  by configuring the callback function. See `hawkbit_set_device_identity_cb`
+
+endchoice
 
 config HAWKBIT_DEVICE_ID_MAX_LENGTH
 	int "Maximum length of the device id"
@@ -187,6 +205,26 @@ config HAWKBIT_EVENT_CALLBACKS
 	bool "Set hawkBit event callbacks"
 	help
 	  Be able to set event callbacks for hawkBit.
+
+config HAWKBIT_SAVE_PROGRESS
+	bool "Save the hawkBit update download progress"
+	depends on STREAM_FLASH_PROGRESS
+	help
+	  Regularly save progress of hawkBit update download operation.
+	  When enabled, the download progress is periodically saved to
+	  non-volatile storage. If a download is interrupted, it can be resumed from
+	  the last saved point rather than starting over, saving bandwidth and time.
+	  This is especially useful for large updates over unreliable networks or in
+	  resource-constrained environments.
+
+config HAWKBIT_SAVE_PROGRESS_INTERVAL
+	int "Save the hawkBit update download progress interval"
+	default 5
+	range 0 100
+	depends on HAWKBIT_SAVE_PROGRESS
+	help
+	  Set the interval (in percent) that the hawkBit update download progress will be saved.
+	  0 means that the progress will be saved every time a new chunk is downloaded.
 
 module = HAWKBIT
 module-str = Log Level for hawkbit

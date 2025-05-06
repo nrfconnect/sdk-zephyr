@@ -25,20 +25,6 @@ tests:
     platform_allow: nucleo_h743zi
     integration_platforms:
       - nucleo_h743zi
-  drivers.uart.async_api.nrf_uarte_new:
-    platform_allow:
-      - nrf52840dk/nrf52840
-      - nrf52_bsim
-      - nrf5340bsim/nrf5340/cpuapp
-      - nrf54l20pdk/nrf54l20/cpuapp
-      - nrf54l15bsim/nrf54l15/cpuapp
-    filter: CONFIG_SERIAL_SUPPORT_ASYNC
-    harness: ztest
-    harness_config:
-      fixture: gpio_loopback
-    depends_on: gpio
-    extra_configs:
-      - CONFIG_UART_NRFX_UARTE_LEGACY_SHIM=n
   drivers.uart.async_api.nrf_uart:
     filter: CONFIG_SERIAL_SUPPORT_ASYNC
     harness: ztest
@@ -66,6 +52,9 @@ tests:
     filter: CONFIG_SERIAL_SUPPORT_ASYNC and CONFIG_UART_MCUX_LPUART and not CONFIG_CPU_HAS_DCACHE
     harness: ztest
     depends_on: dma
+    extra_configs:
+      - CONFIG_USERSPACE=n
+      - CONFIG_TEST_USERSPACE=n
   drivers.uart.async_api.lpuart.rt_nocache:
     filter: CONFIG_SERIAL_SUPPORT_ASYNC and CONFIG_UART_MCUX_LPUART and CONFIG_CPU_HAS_DCACHE
     harness: ztest
@@ -74,6 +63,7 @@ tests:
       - CONFIG_DCACHE=y
       - CONFIG_NOCACHE_MEMORY=y
       - CONFIG_USERSPACE=n
+      - CONFIG_TEST_USERSPACE=n
   drivers.uart.async_api.sam0:
     filter: CONFIG_SERIAL_SUPPORT_ASYNC and CONFIG_SOC_FAMILY_ATMEL_SAM0
     platform_allow:

@@ -111,10 +111,8 @@ enum net_request_wifi_cmd {
 	NET_REQUEST_WIFI_CMD_AP_CONFIG_PARAM,
 	/** DPP actions */
 	NET_REQUEST_WIFI_CMD_DPP,
-#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_WNM
 	/** BSS transition management query */
 	NET_REQUEST_WIFI_CMD_BTM_QUERY,
-#endif
 	/** Flush PMKSA cache entries */
 	NET_REQUEST_WIFI_CMD_PMKSA_FLUSH,
 	/** Set enterprise mode credential */
@@ -277,12 +275,10 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_AP_CONFIG_PARAM);
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_DPP);
 #endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
 
-#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_WNM
 /** Request a Wi-Fi BTM query */
 #define NET_REQUEST_WIFI_BTM_QUERY (_NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_BTM_QUERY)
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_BTM_QUERY);
-#endif
 
 /** Request a Wi-Fi PMKSA cache entries flush */
 #define NET_REQUEST_WIFI_PMKSA_FLUSH                           \
@@ -505,6 +501,8 @@ struct wifi_scan_result {
 	uint8_t channel;
 	/** Security type */
 	enum wifi_security_type security;
+	/** WPA3 enterprise type */
+	enum wifi_wpa3_enterprise_type wpa3_ent_type;
 	/** MFP options */
 	enum wifi_mfp_options mfp;
 	/** RSSI */
@@ -553,8 +551,8 @@ struct wifi_connect_req_params {
 	const uint8_t *key2_passwd;
 	/** key2 passwd length, max 128 */
 	uint8_t key2_passwd_length;
-	/** suiteb or suiteb-192 */
-	uint8_t suiteb_type;
+	/** wpa3 enterprise mode */
+	enum wifi_wpa3_enterprise_type wpa3_ent_mode;
 	/** TLS cipher */
 	uint8_t TLS_cipher;
 	/** eap version */
@@ -567,6 +565,8 @@ struct wifi_connect_req_params {
 	const uint8_t *eap_password;
 	/** eap passwd length, max 128 */
 	uint8_t eap_passwd_length;
+	/** Whether verify peer with CA or not: false-not verify, true-verify. */
+	bool verify_peer_cert;
 	/** Fast BSS Transition used */
 	bool ft_used;
 	/** Number of EAP users */
@@ -585,33 +585,6 @@ struct wifi_connect_req_params {
 	uint8_t ignore_broadcast_ssid;
 	/** Parameter used for frequency band */
 	enum wifi_frequency_bandwidths bandwidth;
-};
-
-/** @brief Wi-Fi connect result codes. To be overlaid on top of \ref wifi_status
- * in the connect result event for detailed status.
- */
-enum wifi_conn_status {
-	/** Connection successful */
-	WIFI_STATUS_CONN_SUCCESS = 0,
-	/** Connection failed - generic failure */
-	WIFI_STATUS_CONN_FAIL,
-	/** Connection failed - wrong password
-	 * Few possible reasons for 4-way handshake failure that we can guess are as follows:
-	 * 1) Incorrect key
-	 * 2) EAPoL frames lost causing timeout
-	 *
-	 * #1 is the likely cause, so, we convey to the user that it is due to
-	 * Wrong passphrase/password.
-	 */
-	WIFI_STATUS_CONN_WRONG_PASSWORD,
-	/** Connection timed out */
-	WIFI_STATUS_CONN_TIMEOUT,
-	/** Connection failed - AP not found */
-	WIFI_STATUS_CONN_AP_NOT_FOUND,
-	/** Last connection status */
-	WIFI_STATUS_CONN_LAST_STATUS,
-	/** Connection disconnected status */
-	WIFI_STATUS_DISCONN_FIRST_STATUS = WIFI_STATUS_CONN_LAST_STATUS,
 };
 
 /** @brief Wi-Fi disconnect reason codes. To be overlaid on top of \ref wifi_status
@@ -684,6 +657,8 @@ struct wifi_iface_status {
 	enum wifi_iface_mode iface_mode;
 	/** Link mode, see enum wifi_link_mode */
 	enum wifi_link_mode link_mode;
+	/** WPA3 enterprise type */
+	enum wifi_wpa3_enterprise_type wpa3_ent_type;
 	/** Security type, see enum wifi_security_type */
 	enum wifi_security_type security;
 	/** MFP options, see enum wifi_mfp_options */
@@ -1461,7 +1436,7 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*channel)(const struct device *dev, struct wifi_channel_info *channel);
-#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_WNM
+
 	/** Send BTM query
 	 *
 	 * @param dev Pointer to the device structure for the driver instance.
@@ -1470,7 +1445,6 @@ struct wifi_mgmt_ops {
 	 * @return 0 if ok, < 0 if error
 	 */
 	int (*btm_query)(const struct device *dev, uint8_t reason);
-#endif
 	/** Judge ap whether support the capability
 	 *
 	 * @param dev Pointer to the device structure for the driver instance.

@@ -65,8 +65,8 @@
 				compatible = "microchip,mcp4728";
 				reg = <0x61>;
 				#io-channel-cells = <1>;
-				voltage_reference = <0>;
-				power_down_mode = <0>;
+				voltage-reference = <0>;
+				power-down-mode = <0>;
 			};
 
 			test_i2c_dacx0501:dacx0501@62 {
@@ -109,6 +109,7 @@
 
 			/* one entry for every devices at spi.dtsi */
 			cs-gpios = <&test_gpio 0 0>,
+				   <&test_gpio 0 0>,
 				   <&test_gpio 0 0>,
 				   <&test_gpio 0 0>,
 				   <&test_gpio 0 0>,
@@ -287,6 +288,27 @@
 					compatible = "adi,ad559x-dac";
 					#io-channel-cells = <1>;
 				};
+			};
+
+			test_spi_max22017_mfd: max22017_mfd@11 {
+				compatible = "adi,max22017";
+				status = "okay";
+				spi-max-frequency = <1000000>;
+				reg = <0x11>;
+
+				test_spi_max22017_dac0: dac-controller {
+					compatible = "adi,max22017-dac";
+					#io-channel-cells = <2>;
+					status = "okay";
+				};
+			};
+
+			test_spi_dac161s997: dac161s997@12 {
+				compatible = "ti,dac161s997";
+				reg = <0x12>;
+				spi-max-frequency = <0>;
+				#io-channel-cells = <1>;
+				errb-gpios = <&test_gpio 0 0>;
 			};
 		};
 	};

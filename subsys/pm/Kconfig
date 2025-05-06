@@ -53,6 +53,26 @@ config PM_NEED_ALL_DEVICES_IDLE
 	  When this option is enabled, check that no devices are busy before
 	  entering into system low power mode.
 
+choice PM_PREWAKEUP_CONV_MODE
+	prompt "Pre-wakeup microseconds to ticks conversion method"
+	default PM_PREWAKEUP_CONV_MODE_NEAR
+	help
+	  Exit latency for each power state is given in microseconds. It is converted
+	  to ticks and system clock is set to wake up the core earlier before scheduled
+	  wake up. This option specifies rounding that is used when converting exit
+	  latency from microseconds to system ticks.
+
+config PM_PREWAKEUP_CONV_MODE_NEAR
+	bool "Nearest"
+
+config PM_PREWAKEUP_CONV_MODE_CEIL
+	bool "Round up"
+
+config PM_PREWAKEUP_CONV_MODE_FLOOR
+	bool "Round down"
+
+endchoice
+
 endif # PM
 
 config PM_DEVICE
@@ -101,14 +121,6 @@ config PM_DEVICE_RUNTIME
 	  enabled, devices can be suspended or resumed based on the device
 	  usage even while the CPU or system is running.
 
-config PM_DEVICE_RUNTIME_EXCLUSIVE
-	depends on PM_DEVICE_RUNTIME
-	bool "[DEPRECATED] Use only on Runtime Power Management on system suspend / resume"
-	select DEPRECATED
-	help
-	  On system suspend / resume do not trigger the Device PM hooks but
-	  only rely on Runtime PM to manage the devices power states.
-
 config PM_DEVICE_SHELL
 	bool "Device Power Management shell"
 	depends on SHELL
@@ -118,7 +130,7 @@ config PM_DEVICE_SHELL
 
 config PM_DEVICE_SYSTEM_MANAGED
 	bool "System-Managed Device Power Management"
-	default y if !PM_DEVICE_RUNTIME_EXCLUSIVE && !PM_DEVICE_RUNTIME
+	default y if !PM_DEVICE_RUNTIME
 	help
 	  This option enables the system-managed device power
 	  management.  The power management subsystem will suspend

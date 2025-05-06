@@ -1,22 +1,34 @@
 /*
- * Copyright (c) 2023 Nordic Semiconductor
+ * Copyright (c) 2023-2025 Nordic Semiconductor
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <errno.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
 
-#include "common.h"
-
+#include <zephyr/autoconf.h>
 #include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/hci_types.h>
 #include <zephyr/bluetooth/iso.h>
+#include <zephyr/net_buf.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
 
 #include <testlib/conn.h>
 
+#include "babblekit/testcase.h"
+#include "babblekit/flags.h"
+#include "bstests.h"
+#include "common.h"
+
 extern enum bst_result_t bst_result;
 
-CREATE_FLAG(flag_data_received);
+DEFINE_FLAG_STATIC(flag_data_received);
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -72,7 +84,16 @@ static void iso_recv(struct bt_iso_chan *chan, const struct bt_iso_recv_info *in
 
 static void iso_connected(struct bt_iso_chan *chan)
 {
+	const struct bt_iso_chan_path hci_path = {
+		.pid = BT_ISO_DATA_PATH_HCI,
+		.format = BT_HCI_CODING_FORMAT_TRANSPARENT,
+	};
+	int err;
+
 	printk("ISO Channel %p connected\n", chan);
+
+	err = bt_iso_setup_data_path(chan, BT_HCI_DATAPATH_DIR_CTLR_TO_HOST, &hci_path);
+	TEST_ASSERT(err == 0, "Failed to set ISO data path: %d", err);
 }
 
 static void iso_disconnected(struct bt_iso_chan *chan, uint8_t reason)
@@ -85,7 +106,7 @@ static int iso_accept(const struct bt_iso_accept_info *info, struct bt_iso_chan 
 	printk("Incoming request from %p\n", (void *)info->acl);
 
 	if (iso_chan.iso) {
-		FAIL("No channels available\n");
+		TEST_FAIL("No channels available");
 
 		return -ENOMEM;
 	}
@@ -99,7 +120,6 @@ static void init(void)
 {
 	static struct bt_iso_chan_io_qos iso_rx = {
 		.sdu = CONFIG_BT_ISO_TX_MTU,
-		.path = NULL,
 	};
 	static struct bt_iso_server iso_server = {
 #if defined(CONFIG_BT_SMP)
@@ -120,7 +140,7 @@ static void init(void)
 
 	err = bt_enable(NULL);
 	if (err) {
-		FAIL("Bluetooth enable failed (err %d)\n", err);
+		TEST_FAIL("Bluetooth enable failed (err %d)", err);
 
 		return;
 	}
@@ -133,7 +153,7 @@ static void init(void)
 
 	err = bt_iso_server_register(&iso_server);
 	if (err) {
-		FAIL("Unable to register ISO server (err %d)\n", err);
+		TEST_FAIL("Unable to register ISO server (err %d)", err);
 
 		return;
 	}
@@ -145,14 +165,14 @@ static void adv_connect(void)
 
 	err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), NULL, 0);
 	if (err) {
-		FAIL("Advertising failed to start (err %d)\n", err);
+		TEST_FAIL("Advertising failed to start (err %d)", err);
 
 		return;
 	}
 
 	printk("Advertising successfully started\n");
 
-	WAIT_FOR_FLAG_SET(flag_connected);
+	WAIT_FOR_FLAG(flag_connected);
 }
 
 static void test_main(void)
@@ -163,8 +183,8 @@ static void test_main(void)
 		adv_connect();
 		bt_testlib_conn_wait_free();
 
-		if (TEST_FLAG(flag_data_received)) {
-			PASS("Test passed\n");
+		if (IS_FLAG_SET(flag_data_received)) {
+			TEST_PASS("Test passed");
 		}
 	}
 }
@@ -173,8 +193,6 @@ static const struct bst_test_instance test_def[] = {
 	{
 		.test_id = "peripheral",
 		.test_descr = "Peripheral",
-		.test_pre_init_f = test_init,
-		.test_tick_f = test_tick,
 		.test_main_f = test_main,
 	},
 	BSTEST_END_MARKER,

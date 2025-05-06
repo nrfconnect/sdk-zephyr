@@ -30,6 +30,7 @@ LOG_MODULE_REGISTER(net_ipv6, CONFIG_NET_IPV6_LOG_LEVEL);
 #include <zephyr/net/net_context.h>
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/virtual.h>
+#include <zephyr/net/ethernet.h>
 #include "net_private.h"
 #include "connection.h"
 #include "icmpv6.h"
@@ -141,6 +142,8 @@ int net_ipv6_finalize(struct net_pkt *pkt, uint8_t next_header_proto)
 	    net_pkt_skip(pkt, net_pkt_ipv6_ext_len(pkt))) {
 		return -ENOBUFS;
 	}
+
+	net_pkt_set_ll_proto_type(pkt, NET_ETH_PTYPE_IPV6);
 
 	if (IS_ENABLED(CONFIG_NET_UDP) &&
 	    next_header_proto == IPPROTO_UDP) {
@@ -581,6 +584,7 @@ enum net_verdict net_ipv6_input(struct net_pkt *pkt, bool is_loopback)
 	if (!net_pkt_filter_ip_recv_ok(pkt)) {
 		/* drop the packet */
 		NET_DBG("DROP: pkt filter");
+		net_stats_update_filter_rx_ipv6_drop(net_pkt_iface(pkt));
 		return NET_DROP;
 	}
 
@@ -759,6 +763,14 @@ enum net_verdict net_ipv6_input(struct net_pkt *pkt, bool is_loopback)
 
 	net_pkt_set_ipv6_ext_len(pkt, ext_len);
 
+	ip.ipv6 = hdr;
+
+	if (IS_ENABLED(CONFIG_NET_SOCKETS_INET_RAW)) {
+		if (net_conn_raw_ip_input(pkt, &ip, current_hdr) == NET_DROP) {
+			goto drop;
+		}
+	}
+
 	switch (current_hdr) {
 	case IPPROTO_ICMPV6:
 		verdict = net_icmpv6_input(pkt, hdr);
@@ -812,8 +824,6 @@ enum net_verdict net_ipv6_input(struct net_pkt *pkt, bool is_loopback)
 		NET_DBG("%s verdict %s", "ICMPv6", net_verdict2str(verdict));
 		return verdict;
 	}
-
-	ip.ipv6 = hdr;
 
 	verdict = net_conn_input(pkt, &ip, current_hdr, &proto_hdr);
 

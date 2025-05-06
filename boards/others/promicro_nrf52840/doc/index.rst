@@ -1,7 +1,4 @@
-.. _promicro_nrf52840_nrf52840:
-
-Pro Micro nRF52840
-##################
+.. zephyr:board:: promicro_nrf52840
 
 More of a board type than a unique board, It is based on Nice!Nano.
 Also referred to as Pro Micro, Promicro, SuperMini nRF52840 boards.
@@ -27,12 +24,6 @@ Semiconductor nRF52840 ARM Cortex-M4F CPU and the following devices:
 * :abbr:`USB (Universal Serial Bus)`
 * :abbr:`WDT (Watchdog Timer)`
 
-.. figure:: img/others_promicro_nrf52840.webp
-     :align: center
-     :alt: Tenstar Pro Micro nRF52840
-
-     Tenstar Pro Micro nRF5284
-
 More information about the original board can be found at the
 `Nice!Nano website`_.
 
@@ -44,41 +35,7 @@ Pinout and Schematic are available in the `Nice!Nano Documentation`_
 Supported Features
 ==================
 
-The ``promicro_nrf52840/nrf52840`` board target supports the following
-hardware features:
-
-+-----------+------------+----------------------+
-| Interface | Controller | Driver/Component     |
-+===========+============+======================+
-| ADC       | on-chip    | adc                  |
-+-----------+------------+----------------------+
-| CLOCK     | on-chip    | clock_control        |
-+-----------+------------+----------------------+
-| FLASH     | on-chip    | flash                |
-+-----------+------------+----------------------+
-| GPIO      | on-chip    | gpio                 |
-+-----------+------------+----------------------+
-| I2C(M)    | on-chip    | i2c                  |
-+-----------+------------+----------------------+
-| MPU       | on-chip    | arch/arm             |
-+-----------+------------+----------------------+
-| NVIC      | on-chip    | arch/arm             |
-+-----------+------------+----------------------+
-| PWM       | on-chip    | pwm                  |
-+-----------+------------+----------------------+
-| RADIO     | on-chip    | Bluetooth,           |
-|           |            | ieee802154           |
-+-----------+------------+----------------------+
-| RTC       | on-chip    | system clock         |
-+-----------+------------+----------------------+
-| SPI(M/S)  | on-chip    | spi                  |
-+-----------+------------+----------------------+
-| UART      | on-chip    | serial               |
-+-----------+------------+----------------------+
-| USB       | on-chip    | usb                  |
-+-----------+------------+----------------------+
-| WDT       | on-chip    | watchdog             |
-+-----------+------------+----------------------+
+.. zephyr:board-supported-hw::
 
 Connections and IOs
 ===================
@@ -90,6 +47,8 @@ LED
 
 Programming and Debugging
 *************************
+
+.. zephyr:board-supported-runners::
 
 Applications for the ``promicro_nrf52840/nrf52840`` board target can be
 built in the usual way (see :ref:`build_an_application` for more details).

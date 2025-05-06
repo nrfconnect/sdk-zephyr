@@ -118,6 +118,13 @@
 		};
 	};
 
+	mcos {
+		mco1: mco1 {
+			compatible = "st,stm32-clock-mco";
+			status = "disabled";
+		};
+	};
+
 	soc {
 		flash: flash-controller@40022000 {
 			compatible = "st,stm32-flash-controller", "st,stm32wba-flash-controller";
@@ -495,7 +502,7 @@
 		compatible = "swj-connector";
 		pinctrl-0 = <&debug_jtms_swdio_pa13 &debug_jtck_swclk_pa14
 			     &debug_jtdi_pa15 &debug_jtdo_swo_pb3
-			     &debug_jtrst_pb4>;
+			     &debug_njtrst_pb4>;
 		pinctrl-1 = <&analog_pa13 &analog_pa14 &analog_pa15
 			     &analog_pb3 &analog_pb4>;
 		pinctrl-names = "default", "sleep";

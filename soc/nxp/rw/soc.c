@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 NXP
+ * Copyright 2022-2025 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -20,6 +20,8 @@
 #include "soc.h"
 #include "flexspi_clock_setup.h"
 #include "fsl_ocotp.h"
+
+extern void nxp_nbu_init(void);
 #ifdef CONFIG_NXP_RW6XX_BOOT_HEADER
 extern char z_main_stack[];
 extern char _flash_used[];
@@ -36,7 +38,6 @@ extern void z_arm_debug_monitor(void);
 extern void z_arm_pendsv(void);
 extern void sys_clock_isr(void);
 extern void z_arm_exc_spurious(void);
-extern void nxp_nbu_init(void);
 
 __imx_boot_ivt_section void (*const image_vector_table[])(void) = {
 	(void (*)())(z_main_stack + CONFIG_MAIN_STACK_SIZE), /* 0x00 */
@@ -66,12 +67,6 @@ __imx_boot_ivt_section void (*const image_vector_table[])(void) = {
 };
 #endif /* CONFIG_NXP_RW6XX_BOOT_HEADER */
 
-const clock_avpll_config_t avpll_config = {
-	.ch1Freq = kCLOCK_AvPllChFreq12p288m,
-	.ch2Freq = kCLOCK_AvPllChFreq64m,
-	.enableCali = true
-};
-
 /**
  * @brief Initialize the system clocks and peripheral clocks
  *
@@ -79,7 +74,7 @@ const clock_avpll_config_t avpll_config = {
  * clock needs to be re-initialized on exit from Standby mode. Hence
  * this function is relocated to RAM.
  */
-__ramfunc void clock_init(void)
+__weak __ramfunc void clock_init(void)
 {
 	POWER_DisableGDetVSensors();
 
@@ -94,8 +89,6 @@ __ramfunc void clock_init(void)
 
 	/* Initialize T3 clocks and t3pll_mci_48_60m_irc configured to 48.3MHz */
 	CLOCK_InitT3RefClk(kCLOCK_T3MciIrc48m);
-	/* Enable FFRO */
-	CLOCK_EnableClock(kCLOCK_T3PllMciIrcClk);
 	/* Enable T3 256M clock and SFRO */
 	CLOCK_EnableClock(kCLOCK_T3PllMci256mClk);
 
@@ -113,16 +106,8 @@ __ramfunc void clock_init(void)
 	/* Enable tcpu_mci_clk 260MHz. Keep tcpu_mci_flexspi_clk gated. */
 	CLOCK_EnableClock(kCLOCK_TcpuMciClk);
 
-	/* tddr_mci_flexspi_clk 320MHz */
-	CLOCK_InitTddrRefClk(kCLOCK_TddrFlexspiDiv10);
-	CLOCK_EnableClock(kCLOCK_TddrMciFlexspiClk); /* 320MHz */
-
 	/* Enable AUX0 PLL to 260 MHz */
 	CLOCK_SetClkDiv(kCLOCK_DivAux0PllClk, 1U);
-
-	/* Init AVPLL and enable both channels */
-	CLOCK_InitAvPll(&avpll_config);
-	CLOCK_SetClkDiv(kCLOCK_DivAudioPllClk, 1U);
 
 	/* Configure MainPll to 260MHz, then let CM33 run on Main PLL. */
 	CLOCK_SetClkDiv(kCLOCK_DivSysCpuAhbClk, 1U);
@@ -132,6 +117,8 @@ __ramfunc void clock_init(void)
 	/* Set SYSTICKFCLKDIV divider to value 1 */
 	CLOCK_SetClkDiv(kCLOCK_DivSystickClk, 1U);
 	CLOCK_AttachClk(kSYSTICK_DIV_to_SYSTICK_CLK);
+
+	SystemCoreClockUpdate();
 
 	/* Set PLL FRG clock to 20MHz. */
 	CLOCK_SetClkDiv(kCLOCK_DivPllFrgClk, 13U);
@@ -198,6 +185,10 @@ __ramfunc void clock_init(void)
 #if (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(flexcomm14), nxp_lpc_i2c, okay)) && CONFIG_I2C
 	CLOCK_AttachClk(kSFRO_to_FLEXCOMM14);
 #endif
+#if CONFIG_XTAL32K
+	CLOCK_EnableXtal32K(true);
+	CLOCK_AttachClk(kXTAL32K_to_CLK32K);
+#endif
 
 /* Clock flexcomms when used as SPI */
 #ifdef CONFIG_SPI
@@ -222,13 +213,39 @@ __ramfunc void clock_init(void)
 #endif
 #endif /* CONFIG_SPI */
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(dmic0)) && CONFIG_AUDIO_DMIC_MCUX
+#if (DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(dmic0)) && CONFIG_AUDIO_DMIC_MCUX) || CONFIG_I2S
+	const clock_avpll_config_t avpll_config = {
+		.ch1Freq = kCLOCK_AvPllChFreq12p288m,
+		.ch2Freq = kCLOCK_AvPllChFreq64m,
+		.enableCali = true
+	};
+
+	/* Init AVPLL and enable both channels */
+	CLOCK_InitAvPll(&avpll_config);
+	CLOCK_SetClkDiv(kCLOCK_DivAudioPllClk, 1U);
+
 	/* Clock DMIC from Audio PLL. PLL output is sourced from AVPLL
 	 * channel 1, which is clocked at 12.288 MHz. We can divide this
 	 * by 4 to achieve the desired DMIC bit clk of 3.072 MHz
 	 */
 	CLOCK_AttachClk(kAUDIO_PLL_to_DMIC_CLK);
 	CLOCK_SetClkDiv(kCLOCK_DivDmicClk, 4);
+
+	#if (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(flexcomm0), nxp_lpc_i2s, okay))
+		CLOCK_AttachClk(kAUDIO_PLL_to_FLEXCOMM0);
+	#endif
+	#if (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(flexcomm1), nxp_lpc_i2s, okay))
+		CLOCK_AttachClk(kAUDIO_PLL_to_FLEXCOMM1);
+	#endif
+	#if (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(flexcomm2), nxp_lpc_i2s, okay))
+		CLOCK_AttachClk(kAUDIO_PLL_to_FLEXCOMM2);
+	#endif
+	#if (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(flexcomm3), nxp_lpc_i2s, okay))
+		CLOCK_AttachClk(kAUDIO_PLL_to_FLEXCOMM3);
+	#endif
+	#if (DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(flexcomm14), nxp_lpc_i2s, okay))
+		CLOCK_AttachClk(kAUDIO_PLL_to_FLEXCOMM14);
+	#endif
 #endif
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(lcdic)) && CONFIG_MIPI_DBI_NXP_LCDIC
@@ -251,7 +268,8 @@ __ramfunc void clock_init(void)
 #endif
 #endif /* CONFIG_COUNTER_MCUX_CTIMER */
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(usb_otg)) && CONFIG_USB_DC_NXP_EHCI
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(usb_otg)) && \
+	(CONFIG_USB_DC_NXP_EHCI || CONFIG_UDC_NXP_EHCI)
 	/* Enable system xtal from Analog */
 	SYSCTL2->ANA_GRP_CTRL |= SYSCTL2_ANA_GRP_CTRL_PU_AG_MASK;
 	/* reset USB */

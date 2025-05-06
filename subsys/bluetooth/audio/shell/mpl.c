@@ -21,8 +21,6 @@
 #include <zephyr/shell/shell.h>
 #include <zephyr/shell/shell_string_conv.h>
 
-#include "host/shell/bt.h"
-
 #include "../mpl_internal.h"
 
 LOG_MODULE_REGISTER(bt_mpl_shell, CONFIG_BT_MPL_LOG_LEVEL);
@@ -77,10 +75,6 @@ int cmd_mpl_debug_dump_state(const struct shell *sh, size_t argc,
 
 int cmd_media_proxy_pl_init(const struct shell *sh, size_t argc, char *argv[])
 {
-	if (!ctx_shell) {
-		ctx_shell = sh;
-	}
-
 	int err = media_proxy_pl_init();
 
 	if (err) {

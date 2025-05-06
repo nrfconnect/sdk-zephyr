@@ -7,7 +7,8 @@
 #include <mem.h>
 #include <nordic/nrf_common.dtsi>
 
-#include <zephyr/dt-bindings/adc/nrf-saadc.h>
+#include <zephyr/dt-bindings/adc/nrf-saadc-haltium.h>
+#include <zephyr/dt-bindings/clock/nrfs-audiopll.h>
 #include <zephyr/dt-bindings/misc/nordic-nrf-ficr-nrf54h20.h>
 #include <zephyr/dt-bindings/misc/nordic-domain-id-nrf54h20.h>
 #include <zephyr/dt-bindings/misc/nordic-owner-id-nrf54h20.h>
@@ -84,7 +85,7 @@
 			device_type = "cpu";
 			clock-frequency = <DT_FREQ_M(320)>;
 			riscv,isa = "rv32emc";
-			nordic,bus-width = <64>;
+			nordic,bus-width = <32>;
 
 			cpuflpr_vevif_rx: mailbox {
 				compatible = "nordic,nrf-vevif-task-rx";
@@ -136,13 +137,13 @@
 				power-state-name = "suspend-to-idle";
 				substate-id = <2>;
 				min-residency-us = <1000>;
-				exit-latency-us = <30>;
+				exit-latency-us = <7>;
 			};
 			s2ram: s2ram {
 				compatible = "zephyr,power-state";
 				power-state-name = "suspend-to-ram";
 				min-residency-us = <2000>;
-				exit-latency-us = <260>;
+				exit-latency-us = <33>;
 			};
 		};
 	};
@@ -201,6 +202,12 @@
 			lflprc-accuracy-ppm = <1000>;
 			clocks = <&hfxo>, <&lfxo>;
 			clock-names = "hfxo", "lfxo";
+		};
+
+		audiopll: audiopll {
+			compatible = "nordic,nrfs-audiopll";
+			frequency = <NRFS_AUDIOPLL_FREQ_AUDIO_44K1>;
+			status = "disabled";
 		};
 	};
 
@@ -385,9 +392,8 @@
 				status = "disabled";
 				cc-num = <8>;
 				interrupts = <40 NRF_DEFAULT_IRQ_PRIORITY>;
-				clocks = <&fll16m>;
+				clocks = <&hfxo>;
 				max-bit-width = <32>;
-				max-frequency = <DT_FREQ_M(32)>;
 				prescaler = <0>;
 			};
 
@@ -397,9 +403,8 @@
 				status = "disabled";
 				cc-num = <8>;
 				interrupts = <41 NRF_DEFAULT_IRQ_PRIORITY>;
-				clocks = <&fll16m>;
+				clocks = <&hfxo>;
 				max-bit-width = <32>;
-				max-frequency = <DT_FREQ_M(32)>;
 				prescaler = <0>;
 			};
 
@@ -409,9 +414,8 @@
 				status = "disabled";
 				cc-num = <8>;
 				interrupts = <42 NRF_DEFAULT_IRQ_PRIORITY>;
-				clocks = <&fll16m>;
+				clocks = <&hfxo>;
 				max-bit-width = <32>;
-				max-frequency = <DT_FREQ_M(32)>;
 				prescaler = <0>;
 			};
 
@@ -513,8 +517,8 @@
 				status = "disabled";
 			};
 
-			exmif: spi@95000 {
-				compatible = "nordic,nrf-exmif";
+			exmif: exmif@95000 {
+				compatible = "nordic,nrf-exmif", "snps,designware-ssi";
 				#address-cells = <1>;
 				#size-cells = <0>;
 				reg = <0x95000 0x500 0x95500 0xb00>;
@@ -523,7 +527,6 @@
 				power-domains = <&gpd NRF_GPD_FAST_ACTIVE0>;
 				clock-frequency = <DT_FREQ_M(400)>;
 				fifo-depth = <32>;
-				max-xfer-size = <16>;
 				status = "disabled";
 			};
 
@@ -605,7 +608,8 @@
 				reg = <0x8d8000 0x400>, <0x2fbef800 0x800>, <0x2fbe8000 0x7800>;
 				reg-names = "wrapper", "m_can", "message_ram";
 				interrupts = <216 NRF_DEFAULT_IRQ_PRIORITY>;
-				clocks = <&canpll>;
+				clocks = <&canpll>, <&hsfll120>;
+				clock-names = "auxpll", "hsfll";
 				power-domains = <&gpd NRF_GPD_FAST_ACTIVE1>;
 				bosch,mram-cfg = <0x0 28 8 3 3 0 1 1>;
 				status = "disabled";
@@ -626,7 +630,6 @@
 				interrupts = <226 NRF_DEFAULT_IRQ_PRIORITY>;
 				power-domains = <&gpd NRF_GPD_FAST_ACTIVE1>;
 				max-bit-width = <32>;
-				max-frequency = <DT_FREQ_M(320)>;
 				clocks = <&hsfll120>;
 				prescaler = <0>;
 			};
@@ -639,7 +642,6 @@
 				interrupts = <227 NRF_DEFAULT_IRQ_PRIORITY>;
 				power-domains = <&gpd NRF_GPD_FAST_ACTIVE1>;
 				max-bit-width = <32>;
-				max-frequency = <DT_FREQ_M(320)>;
 				clocks = <&hsfll120>;
 				prescaler = <0>;
 			};
@@ -652,6 +654,20 @@
 				clocks = <&hsfll120>;
 				power-domains = <&gpd NRF_GPD_FAST_ACTIVE1>;
 				#pwm-cells = <3>;
+			};
+
+			spis120: spi@8e5000 {
+				compatible = "nordic,nrf-spis";
+				reg = <0x8e5000 0x1000>;
+				status = "disabled";
+				power-domains = <&gpd NRF_GPD_FAST_ACTIVE1>;
+				easydma-maxcnt-bits = <15>;
+				interrupts = <229 NRF_DEFAULT_IRQ_PRIORITY>;
+				clocks = <&hsfll120>;
+				max-frequency = <DT_FREQ_M(32)>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				nordic,clockpin-enable = <NRF_FUN_SPIS_SCK>;
 			};
 
 			spi120: spi@8e6000 {
@@ -667,8 +683,7 @@
 				#size-cells = <0>;
 				rx-delay-supported;
 				rx-delay = <1>;
-				nordic,clockpin-enable = <NRF_FUN_SPIM_SCK>,
-							 <NRF_FUN_SPIS_SCK>;
+				nordic,clockpin-enable = <NRF_FUN_SPIM_SCK>;
 			};
 
 			uart120: uart@8e6000 {
@@ -695,8 +710,7 @@
 				#size-cells = <0>;
 				rx-delay-supported;
 				rx-delay = <1>;
-				nordic,clockpin-enable = <NRF_FUN_SPIM_SCK>,
-							 <NRF_FUN_SPIS_SCK>;
+				nordic,clockpin-enable = <NRF_FUN_SPIM_SCK>;
 			};
 
 			cpuppr_vpr: vpr@908000 {
@@ -880,6 +894,7 @@
 				status = "disabled";
 				#io-channel-cells = <1>;
 				power-domains = <&gpd NRF_GPD_SLOW_ACTIVE>;
+				zephyr,pm-device-runtime-auto;
 			};
 
 			comp: comparator@983000 {
@@ -947,11 +962,8 @@
 				reg = <0x99c000 0x1000>;
 				status = "disabled";
 				cc-num = <16>;
-				/* GRTC uses both LFCLK and FLL16M, but its accuracy and
-				 * precision are inherited from LFCLK. that's why this
-				 *  one is linked here.
-				 */
-				clocks = <&lfclk>;
+				clocks = <&lfclk>, <&fll16m>;
+				clock-names = "lfclock", "hfclock";
 				power-domains = <&gpd NRF_GPD_SLOW_ACTIVE>;
 			};
 

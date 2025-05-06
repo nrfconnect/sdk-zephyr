@@ -91,6 +91,13 @@
 			compatible = "renesas,ra-trng";
 			status = "disabled";
 		};
+
+		wdt: wdt@40044200 {
+			compatible = "renesas,ra-wdt";
+			reg = <0x40044200 0x200>;
+			clocks = <&pclkb 0 0>;
+			status = "disabled";
+		};
 	};
 
 	clocks: clocks {
@@ -141,6 +148,7 @@
 
 			iclk: iclk {
 				compatible = "renesas,ra-cgc-pclk";
+				clock-frequency = <48000000>;
 				div = <1>;
 				#clock-cells = <2>;
 				status = "okay";
@@ -173,8 +181,13 @@
 				status = "disabled";
 			};
 
-
 			sdadcclk: sdadcclk {
+				compatible = "renesas,ra-cgc-pclk";
+				#clock-cells = <2>;
+				status = "disabled";
+			};
+
+			uclk: uclk {
 				compatible = "renesas,ra-cgc-pclk";
 				#clock-cells = <2>;
 				status = "disabled";
@@ -250,4 +263,9 @@
 	port-irq1-pins = <2>;
 	port-irq2-pins = <1>;
 	port-irq3-pins = <0>;
+};
+
+&dac_global {
+	has-chargepump;
+	has-davrefcr;
 };

@@ -52,8 +52,15 @@ static void isr_rx_estab(void *param);
 static void isr_rx(void *param);
 static void isr_rx_done(void *param);
 static void isr_done(void *param);
-static void next_chan_calc(struct lll_sync_iso *lll, uint16_t event_counter,
-			   uint16_t data_chan_id);
+static uint16_t payload_index_get(const struct lll_sync_iso *lll);
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL)
+static void next_chan_calc_seq(struct lll_sync_iso *lll, uint16_t event_counter,
+			       uint16_t data_chan_id);
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL */
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED)
+static void next_chan_calc_int(struct lll_sync_iso *lll,
+			       uint16_t event_counter);
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED */
 static void isr_rx_iso_data_valid(const struct lll_sync_iso *const lll,
 				  uint16_t handle, struct node_rx_pdu *node_rx);
 static void isr_rx_iso_data_invalid(const struct lll_sync_iso *const lll,
@@ -262,11 +269,13 @@ static int prepare_cb_common(struct lll_prepare_param *p)
 	data_chan_use = lll_chan_iso_event(event_counter, data_chan_id,
 					   lll->data_chan_map,
 					   lll->data_chan_count,
-					   &lll->data_chan_prn_s,
-					   &lll->data_chan_remap_idx);
+					   &lll->data_chan.prn_s,
+					   &lll->data_chan.remap_idx);
 
 	/* Initialize stream current */
 	lll->stream_curr = 0U;
+
+	const bool is_sequential_packing = (lll->bis_spacing >= (lll->sub_interval * lll->nse));
 
 	/* Skip subevents until first selected BIS */
 	stream_handle = lll->stream_handle[lll->stream_curr];
@@ -282,12 +291,36 @@ static int prepare_cb_common(struct lll_prepare_param *p)
 		data_chan_id = lll_chan_id(access_addr);
 
 		/* Calculate the channel id for the next BIS subevent */
-		data_chan_use = lll_chan_iso_event(event_counter,
-					data_chan_id,
-					lll->data_chan_map,
-					lll->data_chan_count,
-					&lll->data_chan_prn_s,
-					&lll->data_chan_remap_idx);
+		if (false) {
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL)
+		} else if (is_sequential_packing) {
+			data_chan_use = lll_chan_iso_event(event_counter,
+							   data_chan_id,
+							   lll->data_chan_map,
+							   lll->data_chan_count,
+							   &lll->data_chan.prn_s,
+							   &lll->data_chan.remap_idx);
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL */
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED)
+		} else if (!is_sequential_packing) {
+			struct lll_sync_iso_data_chan_interleaved *interleaved_data_chan;
+
+			interleaved_data_chan =
+				&lll->interleaved_data_chan[lll->bis_curr - 1U];
+
+			data_chan_use = lll_chan_iso_event(event_counter,
+							   data_chan_id,
+							   lll->data_chan_map,
+							   lll->data_chan_count,
+							   &interleaved_data_chan->prn_s,
+							   &interleaved_data_chan->remap_idx);
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED */
+
+		} else {
+			LL_ASSERT(false);
+		}
 	}
 
 	/* Calculate the CRC init value for the BIS event,
@@ -401,7 +434,27 @@ static int prepare_cb_common(struct lll_prepare_param *p)
 	LL_ASSERT(!ret);
 
 	/* Calculate ahead the next subevent channel index */
-	next_chan_calc(lll, event_counter, data_chan_id);
+	if (false) {
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL)
+	} else if (is_sequential_packing) {
+		next_chan_calc_seq(lll, event_counter, data_chan_id);
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL */
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED)
+	} else if (!is_sequential_packing) {
+		struct lll_sync_iso_data_chan_interleaved *interleaved_data_chan;
+
+		interleaved_data_chan =
+			&lll->interleaved_data_chan[lll->bis_curr - 1U];
+		interleaved_data_chan->id = data_chan_id;
+
+		next_chan_calc_int(lll, event_counter);
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED */
+
+	} else {
+		LL_ASSERT(false);
+	}
 
 	return 0;
 }
@@ -559,14 +612,16 @@ static void isr_rx(void *param)
 		lll_prof_latency_capture();
 	}
 
+	/* initialize LLL context reference */
+	lll = param;
+
+	const bool is_sequential_packing = (lll->bis_spacing >= (lll->sub_interval * lll->nse));
+
 	/* Read radio status and events */
 	trx_done = radio_is_done();
 	if (!trx_done) {
 		/* Clear radio rx status and events */
 		lll_isr_rx_status_reset();
-
-		/* initialize LLL context reference */
-		lll = param;
 
 		/* BIS index */
 		bis_idx = lll->bis_curr - 1U;
@@ -581,23 +636,39 @@ static void isr_rx(void *param)
 	rssi_ready = radio_rssi_is_ready();
 	trx_cnt++;
 
-	/* initialize LLL context reference */
-	lll = param;
-
 	/* Save the AA captured for the first anchor point sync */
 	if (!radio_tmr_aa_restore()) {
 		const struct lll_sync_iso_stream *sync_stream;
 		uint32_t se_offset_us;
-		uint8_t se;
 
 		crc_ok_anchor = crc_ok;
 
 		sync_stream = ull_sync_iso_lll_stream_get(lll->stream_handle[0]);
-		se = ((lll->bis_curr - sync_stream->bis_index) *
-		      ((lll->bn * lll->irc) + lll->ptc)) +
-		     ((lll->irc_curr - 1U) * lll->bn) + (lll->bn_curr - 1U) +
-		     lll->ptc_curr + lll->ctrl;
-		se_offset_us = lll->sub_interval * se;
+
+		if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL) &&
+		    is_sequential_packing) {
+			uint8_t se;
+
+			se = ((lll->bis_curr - sync_stream->bis_index) *
+			      ((lll->bn * lll->irc) + lll->ptc)) +
+			     ((lll->irc_curr - 1U) * lll->bn) +
+			     (lll->bn_curr - 1U) + lll->ptc_curr + lll->ctrl;
+			se_offset_us = lll->sub_interval * se;
+		} else if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED) &&
+			   !is_sequential_packing) {
+			uint8_t se;
+
+			se = (lll->bis_curr - sync_stream->bis_index) +
+			     ((((lll->irc_curr - 1U) * lll->bn) +
+			       (lll->bn_curr - 1U) + lll->ptc_curr) *
+			      lll->num_bis) + lll->ctrl;
+			se_offset_us = lll->bis_spacing * se;
+		} else {
+			se_offset_us = 0U;
+
+			LL_ASSERT(false);
+		}
+
 		radio_tmr_aa_save(radio_tmr_aa_get() - se_offset_us);
 		radio_tmr_ready_save(radio_tmr_ready_get() - se_offset_us);
 	}
@@ -659,8 +730,7 @@ static void isr_rx(void *param)
 		 * Ensure we are not having offset values over 255 in payload_count_max, used to
 		 * allocate the buffers.
 		 */
-		payload_offset = (lll->latency_event * lll->bn) +  (lll->bn_curr - 1U) +
-				 (lll->ptc_curr * lll->pto);
+		payload_offset = (lll->latency_event * lll->bn) + payload_index_get(lll);
 		if (payload_offset >= lll->payload_count_max) {
 			goto isr_rx_done;
 		}
@@ -718,7 +788,14 @@ isr_rx_done:
 	skipped = 0U;
 
 isr_rx_find_subevent:
-	/* FIXME: Sequential or Interleaved BIS subevents decision */
+	/* Sequential or Interleaved BIS subevents decision */
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED)
+	if (!is_sequential_packing) {
+		goto isr_rx_interleaved;
+	}
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED */
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL)
 	/* NOTE: below code is for Sequential Rx only */
 
 	/* Find the next (bn_curr)th subevent to receive PDU */
@@ -840,11 +917,11 @@ isr_rx_find_subevent:
 
 	/* Next BIS */
 	if (lll->bis_curr < lll->num_bis) {
-		struct lll_sync_iso_stream *sync_stream;
-		uint16_t stream_handle;
-
 		/* Next selected stream */
 		if ((lll->stream_curr + 1U) < lll->stream_count) {
+			struct lll_sync_iso_stream *sync_stream;
+			uint16_t stream_handle;
+
 			stream_curr = ++lll->stream_curr;
 			stream_handle = lll->stream_handle[stream_curr];
 			sync_stream = ull_sync_iso_lll_stream_get(stream_handle);
@@ -854,9 +931,9 @@ isr_rx_find_subevent:
 				uint8_t bis_idx_new;
 
 				lll->bis_curr = sync_stream->bis_index;
-				lll->ptc_curr = 0U;
-				lll->irc_curr = 1U;
 				lll->bn_curr = 1U;
+				lll->irc_curr = 1U;
+				lll->ptc_curr = 0U;
 
 				/* new BIS index */
 				bis_idx_new = lll->bis_curr - 1U;
@@ -917,7 +994,159 @@ isr_rx_find_subevent:
 			lll->bis_curr = lll->num_bis;
 		}
 	}
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL */
 
+	goto isr_rx_ctrl;
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED)
+isr_rx_interleaved:
+	/* Next BIS */
+	if (lll->bis_curr < lll->num_bis) {
+		/* Next selected stream */
+		if ((lll->stream_curr + 1U) < lll->stream_count) {
+			struct lll_sync_iso_stream *sync_stream;
+			uint16_t stream_handle;
+
+			stream_curr = ++lll->stream_curr;
+			stream_handle = lll->stream_handle[stream_curr];
+			sync_stream = ull_sync_iso_lll_stream_get(stream_handle);
+			if (sync_stream->bis_index <= lll->num_bis) {
+				uint8_t payload_offset;
+				uint8_t payload_index;
+
+				lll->bis_curr = sync_stream->bis_index;
+
+				/* Check payload buffer overflow */
+				payload_offset = (lll->bn_curr - 1U) +
+						 (lll->ptc_curr * lll->pto);
+				if (payload_offset > lll->payload_count_max) {
+					const uint16_t event_counter =
+						(lll->payload_count / lll->bn) - 1U;
+
+					next_chan_calc_int(lll, event_counter);
+
+					goto isr_rx_interleaved;
+				}
+
+				/* Find the index of the (bn_curr)th Rx PDU buffer */
+				payload_index = lll->payload_tail + payload_offset;
+				if (payload_index >= lll->payload_count_max) {
+					payload_index -= lll->payload_count_max;
+				}
+
+				/* Check if (bn_curr)th Rx PDU has been received */
+				if (lll->payload[stream_curr][payload_index]) {
+					const uint16_t event_counter =
+						(lll->payload_count / lll->bn) - 1U;
+
+					next_chan_calc_int(lll, event_counter);
+
+					goto isr_rx_interleaved;
+				}
+
+				bis = lll->bis_curr;
+
+				goto isr_rx_next_subevent;
+			} else {
+				lll->bis_curr = lll->num_bis;
+			}
+		} else {
+			lll->bis_curr = lll->num_bis;
+		}
+	}
+
+	if (lll->bis_curr >= lll->num_bis) {
+		struct lll_sync_iso_stream *sync_stream;
+		uint16_t stream_handle;
+
+		lll->stream_curr = 0U;
+		stream_curr = 0U;
+		stream_handle = lll->stream_handle[stream_curr];
+		sync_stream = ull_sync_iso_lll_stream_get(stream_handle);
+		if (sync_stream->bis_index <= lll->num_bis) {
+			lll->bis_curr = sync_stream->bis_index;
+			bis_idx = lll->bis_curr - 1U;
+		} else {
+			LL_ASSERT(false);
+		}
+	}
+
+	if (lll->bn_curr < lll->bn) {
+		uint8_t payload_offset;
+		uint8_t payload_index;
+
+		lll->bn_curr++;
+
+		/* Check payload buffer overflow */
+		payload_offset = (lll->bn_curr - 1U);
+		if (payload_offset > lll->payload_count_max) {
+			const uint16_t event_counter =
+				(lll->payload_count / lll->bn) - 1U;
+
+			next_chan_calc_int(lll, event_counter);
+
+			goto isr_rx_interleaved;
+		}
+
+		/* Find the index of the (bn_curr)th Rx PDU buffer */
+		payload_index = lll->payload_tail + payload_offset;
+		if (payload_index >= lll->payload_count_max) {
+			payload_index -= lll->payload_count_max;
+		}
+
+		/* Check if (bn_curr)th Rx PDU has been received */
+		if (lll->payload[stream_curr][payload_index]) {
+			const uint16_t event_counter =
+				(lll->payload_count / lll->bn) - 1U;
+
+			next_chan_calc_int(lll, event_counter);
+
+			goto isr_rx_interleaved;
+		}
+
+		bis = lll->bis_curr;
+
+		goto isr_rx_next_subevent;
+	}
+
+	if (lll->irc_curr < lll->irc) {
+		uint8_t payload_index;
+
+		lll->irc_curr++;
+		lll->bn_curr = 1U;
+
+		/* Find the index of the (irc_curr)th bn = 1 Rx PDU
+		 * buffer.
+		 */
+		payload_index = lll->payload_tail;
+
+		/* Check if (irc_curr)th bn = 1 Rx PDU has been
+		 * received.
+		 */
+		if (lll->payload[stream_curr][payload_index]) {
+			const uint16_t event_counter =
+				(lll->payload_count / lll->bn) - 1U;
+
+			next_chan_calc_int(lll, event_counter);
+
+			goto isr_rx_interleaved;
+		}
+
+		bis = lll->bis_curr;
+
+		goto isr_rx_next_subevent;
+	}
+
+	if (lll->ptc_curr < lll->ptc) {
+		lll->ptc_curr++;
+
+		bis = lll->bis_curr;
+
+		goto isr_rx_next_subevent;
+	}
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED */
+
+isr_rx_ctrl:
 	/* Control subevent */
 	if (!lll->ctrl && (lll->cssn_next != lll->cssn_curr)) {
 		uint8_t pkt_flags;
@@ -983,8 +1212,8 @@ isr_rx_next_subevent:
 		data_chan_use = lll_chan_iso_event(event_counter, data_chan_id,
 						   lll->data_chan_map,
 						   lll->data_chan_count,
-						   &lll->data_chan_prn_s,
-						   &lll->data_chan_remap_idx);
+						   &lll->data_chan.prn_s,
+						   &lll->data_chan.remap_idx);
 	} else if (!skipped) {
 		data_chan_use = lll->next_chan_use;
 	} else {
@@ -1002,8 +1231,8 @@ isr_rx_next_subevent:
 						data_chan_id,
 						lll->data_chan_map,
 						lll->data_chan_count,
-						&lll->data_chan_prn_s,
-						&lll->data_chan_remap_idx);
+						&lll->data_chan.prn_s,
+						&lll->data_chan.remap_idx);
 
 			skipped -= (bis_idx_new - bis_idx_old) *
 				   ((lll->bn * lll->irc) + lll->ptc);
@@ -1014,8 +1243,8 @@ isr_rx_next_subevent:
 			data_chan_use = lll_chan_iso_subevent(data_chan_id,
 						lll->data_chan_map,
 						lll->data_chan_count,
-						&lll->data_chan_prn_s,
-						&lll->data_chan_remap_idx);
+						&lll->data_chan.prn_s,
+						&lll->data_chan.remap_idx);
 		}
 	}
 
@@ -1031,8 +1260,7 @@ isr_rx_next_subevent:
 		if (bis) {
 			struct node_rx_pdu *node_rx;
 
-			payload_count += (lll->bn_curr - 1U) +
-					 (lll->ptc_curr * lll->pto);
+			payload_count += payload_index_get(lll);
 
 			/* By design, there shall always be one free node rx
 			 * available for setting up radio for new PDU reception.
@@ -1083,16 +1311,34 @@ isr_rx_next_subevent:
 	 * subevent.
 	 */
 	stream = ull_sync_iso_lll_stream_get(lll->stream_handle[0]);
-	nse = ((lll->bis_curr - stream->bis_index) *
-	       ((lll->bn * lll->irc) + lll->ptc)) +
-	      ((lll->irc_curr - 1U) * lll->bn) + (lll->bn_curr - 1U) +
-	      lll->ptc_curr + lll->ctrl;
-	hcto = lll->sub_interval * nse;
+	if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL) &&
+	    is_sequential_packing) {
+		nse = ((lll->bis_curr - stream->bis_index) *
+		       ((lll->bn * lll->irc) + lll->ptc)) +
+		      ((lll->irc_curr - 1U) * lll->bn) + (lll->bn_curr - 1U) +
+		      lll->ptc_curr + lll->ctrl;
+		hcto = lll->sub_interval * nse;
+	} else if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED) &&
+		   !is_sequential_packing) {
+		nse = (lll->bis_curr - stream->bis_index) +
+		       ((((lll->irc_curr - 1U) * lll->bn) +
+			 (lll->bn_curr - 1U) + lll->ptc_curr) *
+			lll->num_bis) + lll->ctrl;
+		hcto = lll->bis_spacing * nse;
+	} else {
+		nse = 0U;
+		hcto = 0U;
+
+		LL_ASSERT(false);
+	}
 
 	if (trx_cnt) {
 		/* Setup radio packet timer header complete timeout for
 		 * subsequent subevent PDU.
 		 */
+		uint32_t jitter_max_us;
+		uint32_t overhead_us;
+		uint32_t jitter_us;
 
 		/* Calculate the radio start with consideration of the drift
 		 * based on the access address capture timestamp.
@@ -1103,7 +1349,17 @@ isr_rx_next_subevent:
 		hcto -= radio_rx_chain_delay_get(lll->phy, PHY_FLAGS_S8);
 		hcto -= addr_us_get(lll->phy);
 		hcto -= radio_rx_ready_delay_get(lll->phy, PHY_FLAGS_S8);
-		hcto -= (EVENT_CLOCK_JITTER_US << 1) * nse;
+		overhead_us = radio_rx_chain_delay_get(lll->phy, PHY_FLAGS_S8);
+		overhead_us += addr_us_get(lll->phy);
+		overhead_us += radio_rx_ready_delay_get(lll->phy, PHY_FLAGS_S8);
+		overhead_us += (EVENT_CLOCK_JITTER_US << 1);
+		jitter_max_us = (EVENT_IFS_US - overhead_us) >> 1;
+		jitter_max_us -= RANGE_DELAY_US + HAL_RADIO_TMR_START_DELAY_US;
+		jitter_us = (EVENT_CLOCK_JITTER_US << 1) * nse;
+		if (jitter_us > jitter_max_us) {
+			jitter_us = jitter_max_us;
+		}
+		hcto -= jitter_us;
 
 		start_us = hcto;
 		hcto = radio_tmr_start_us(0U, start_us);
@@ -1113,8 +1369,8 @@ isr_rx_next_subevent:
 		 * 4 us early and subevents could have a 4 us drift each until
 		 * the current subevent we are listening.
 		 */
-		hcto += (((EVENT_CLOCK_JITTER_US << 1) * nse) << 1) +
-			RANGE_DELAY_US + HAL_RADIO_TMR_START_DELAY_US;
+		hcto += (jitter_us << 1);
+		hcto += RANGE_DELAY_US + HAL_RADIO_TMR_START_DELAY_US;
 	} else {
 		/* First subevent PDU was not received, hence setup radio packet
 		 * timer header complete timeout from where the first subevent
@@ -1140,7 +1396,7 @@ isr_rx_next_subevent:
 	hcto += radio_rx_chain_delay_get(lll->phy, PHY_FLAGS_S8);
 
 	/* setup absolute PDU header reception timeout */
-	radio_tmr_hcto_configure(hcto);
+	radio_tmr_hcto_configure_abs(hcto);
 
 	/* setup capture of PDU end timestamp */
 	radio_tmr_end_capture();
@@ -1161,7 +1417,21 @@ isr_rx_next_subevent:
 	/* Calculate ahead the next subevent channel index */
 	const uint16_t event_counter = (lll->payload_count / lll->bn) - 1U;
 
-	next_chan_calc(lll, event_counter, data_chan_id);
+	if (false) {
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL)
+	} else if (is_sequential_packing) {
+		next_chan_calc_seq(lll, event_counter, data_chan_id);
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL */
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED)
+	} else if (!is_sequential_packing) {
+		next_chan_calc_int(lll, event_counter);
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED */
+
+	} else {
+		LL_ASSERT(false);
+	}
 
 	if (IS_ENABLED(CONFIG_BT_CTLR_PROFILE_ISR)) {
 		lll_prof_send();
@@ -1336,19 +1606,50 @@ static void isr_done(void *param)
 	}
 }
 
-static void next_chan_calc(struct lll_sync_iso *lll, uint16_t event_counter,
-			   uint16_t data_chan_id)
+static uint16_t payload_index_get(const struct lll_sync_iso *lll)
+{
+	uint16_t payload_index;
+
+	if (lll->ptc_curr) {
+		/* FIXME: Do not remember why ptc is 4 bits, it should be 5 bits as ptc is a
+		 *        running buffer offset related to nse.
+		 *        Fix ptc and ptc_curr definitions, until then there is an assertion
+		 *        check when ptc is calculated in ptc_calc function.
+		 */
+		uint8_t ptx_idx = lll->ptc_curr - 1U; /* max. nse 5 bits */
+		uint8_t ptx_payload_idx;
+		uint16_t ptx_group_mult;
+		uint8_t ptx_group_idx;
+
+		/* Calculate group index and multiplier for deriving
+		 * pre-transmission payload index.
+		 */
+		ptx_group_idx = ptx_idx / lll->bn; /* 5 bits */
+		ptx_payload_idx = ptx_idx - ptx_group_idx * lll->bn; /* 8 bits */
+		ptx_group_mult = (ptx_group_idx + 1U) * lll->pto; /* 9 bits */
+		payload_index = ptx_payload_idx + ptx_group_mult * lll->bn; /* 13 bits */
+	} else {
+		payload_index  = lll->bn_curr - 1U; /* 3 bits */
+	}
+
+	return payload_index;
+}
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL)
+static void next_chan_calc_seq(struct lll_sync_iso *lll, uint16_t event_counter,
+			       uint16_t data_chan_id)
 {
 	/* Calculate ahead the next subevent channel index */
 	if ((lll->bn_curr < lll->bn) ||
 	    (lll->irc_curr < lll->irc) ||
 	    (lll->ptc_curr < lll->ptc)) {
 		/* Calculate the radio channel to use for next subevent */
-		lll->next_chan_use = lll_chan_iso_subevent(data_chan_id,
-						lll->data_chan_map,
-						lll->data_chan_count,
-						&lll->data_chan_prn_s,
-						&lll->data_chan_remap_idx);
+		lll->next_chan_use =
+			lll_chan_iso_subevent(data_chan_id,
+					      lll->data_chan_map,
+					      lll->data_chan_count,
+					      &lll->data_chan.prn_s,
+					      &lll->data_chan.remap_idx);
 	} else if (lll->bis_curr < lll->num_bis) {
 		uint8_t access_addr[4];
 
@@ -1358,14 +1659,95 @@ static void next_chan_calc(struct lll_sync_iso *lll, uint16_t event_counter,
 		data_chan_id = lll_chan_id(access_addr);
 
 		/* Calculate the radio channel to use for next BIS */
-		lll->next_chan_use = lll_chan_iso_event(event_counter,
-						data_chan_id,
-						lll->data_chan_map,
-						lll->data_chan_count,
-						&lll->data_chan_prn_s,
-						&lll->data_chan_remap_idx);
+		lll->next_chan_use =
+			lll_chan_iso_event(event_counter,
+					   data_chan_id,
+					   lll->data_chan_map,
+					   lll->data_chan_count,
+					   &lll->data_chan.prn_s,
+					   &lll->data_chan.remap_idx);
 	}
 }
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_SEQUENTIAL */
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED)
+static void next_chan_calc_int(struct lll_sync_iso *lll, uint16_t event_counter)
+{
+	struct lll_sync_iso_data_chan_interleaved *interleaved_data_chan;
+	uint8_t stream_curr;
+	uint8_t bis_prev;
+
+	if ((lll->bis_curr >= lll->num_bis) &&
+	    (lll->bn_curr >= lll->bn) &&
+	    (lll->irc_curr >= lll->irc) &&
+	    (lll->ptc_curr >= lll->ptc)) {
+		return;
+	}
+
+	/* Next selected stream */
+	stream_curr = lll->stream_curr + 1U;
+	if ((stream_curr < BT_CTLR_SYNC_ISO_STREAM_MAX) &&
+	    (stream_curr < lll->stream_count)) {
+		struct lll_sync_iso_stream *sync_stream;
+		uint16_t stream_handle;
+
+		stream_handle = lll->stream_handle[stream_curr];
+		sync_stream = ull_sync_iso_lll_stream_get(stream_handle);
+		if (sync_stream->bis_index <= lll->num_bis) {
+			bis_prev = sync_stream->bis_index - 1U;
+		} else {
+			bis_prev = lll->num_bis;
+		}
+	} else {
+		bis_prev = lll->num_bis;
+	}
+
+	if ((bis_prev < lll->num_bis) &&
+	    (lll->bn_curr == 1U) &&
+	    (lll->irc_curr == 1U) &&
+	    (lll->ptc_curr == 0U)) {
+		uint8_t access_addr[4];
+
+		/* Calculate the Access Address for the next BIS subevent */
+		util_bis_aa_le32((bis_prev + 1U), lll->seed_access_addr,
+				 access_addr);
+
+		interleaved_data_chan =
+			&lll->interleaved_data_chan[bis_prev];
+		interleaved_data_chan->id = lll_chan_id(access_addr);
+
+		/* Calculate the radio channel to use for next BIS */
+		lll->next_chan_use =
+			lll_chan_iso_event(event_counter,
+					   interleaved_data_chan->id,
+					   lll->data_chan_map,
+					   lll->data_chan_count,
+					   &interleaved_data_chan->prn_s,
+					   &interleaved_data_chan->remap_idx);
+	} else {
+		uint8_t bis_idx;
+
+		if (bis_prev >= lll->num_bis) {
+			struct lll_sync_iso_stream *sync_stream;
+
+			sync_stream = ull_sync_iso_lll_stream_get(lll->stream_handle[0]);
+			bis_idx = sync_stream->bis_index - 1U;
+		} else {
+			bis_idx = bis_prev;
+		}
+
+		interleaved_data_chan = &lll->interleaved_data_chan[bis_idx];
+
+		/* Calculate the radio channel to use for next subevent */
+		lll->next_chan_use =
+			lll_chan_iso_subevent(interleaved_data_chan->id,
+					      lll->data_chan_map,
+					      lll->data_chan_count,
+					      &interleaved_data_chan->prn_s,
+					      &interleaved_data_chan->remap_idx);
+	}
+}
+#endif /* CONFIG_BT_CTLR_SYNC_ISO_INTERLEAVED */
 
 static void isr_rx_iso_data_valid(const struct lll_sync_iso *const lll,
 				  uint16_t handle, struct node_rx_pdu *node_rx)
@@ -1377,8 +1759,7 @@ static void isr_rx_iso_data_valid(const struct lll_sync_iso *const lll,
 	node_rx->hdr.handle = handle;
 
 	iso_meta = &node_rx->rx_iso_meta;
-	iso_meta->payload_number = lll->payload_count + (lll->bn_curr - 1U) +
-				   (lll->ptc_curr * lll->pto);
+	iso_meta->payload_number = lll->payload_count + payload_index_get(lll);
 	/* Decrement BN as payload_count was pre-incremented */
 	iso_meta->payload_number -= lll->bn;
 
@@ -1388,12 +1769,21 @@ static void isr_rx_iso_data_valid(const struct lll_sync_iso *const lll,
 			      (DIV_ROUND_UP(lll->ptc_curr, lll->bn) *
 			       lll->pto * lll->iso_interval *
 			       PERIODIC_INT_UNIT_US) -
-			      addr_us_get(lll->phy) -
-			      ((stream->bis_index - 1U) *
-			       lll->sub_interval * ((lll->irc * lll->bn) +
-						    lll->ptc));
+			      addr_us_get(lll->phy);
+
+	const bool is_sequential_packing = (lll->bis_spacing >= (lll->sub_interval * lll->nse));
+
+	if (is_sequential_packing) {
+		iso_meta->timestamp -= (stream->bis_index - 1U) *
+				       lll->sub_interval * lll->nse;
+	} else {
+		iso_meta->timestamp -= (stream->bis_index - 1U) *
+				       lll->bis_spacing;
+	}
+
 	iso_meta->timestamp %=
 		HAL_TICKER_TICKS_TO_US_64BIT(BIT64(HAL_TICKER_CNTR_MSBIT + 1U));
+
 	iso_meta->status = 0U;
 }
 
@@ -1415,14 +1805,24 @@ static void isr_rx_iso_data_invalid(const struct lll_sync_iso *const lll,
 
 	stream = ull_sync_iso_lll_stream_get(lll->stream_handle[0]);
 	iso_meta->timestamp = HAL_TICKER_TICKS_TO_US(radio_tmr_start_get()) +
-			      radio_tmr_aa_restore() - addr_us_get(lll->phy) -
-			      ((stream->bis_index - 1U) *
-			       lll->sub_interval * ((lll->irc * lll->bn) +
-						    lll->ptc));
-	iso_meta->timestamp -= (latency * lll->iso_interval *
-				PERIODIC_INT_UNIT_US);
+			      radio_tmr_aa_restore() - addr_us_get(lll->phy);
+
+	const bool is_sequential_packing = (lll->bis_spacing >= (lll->sub_interval * lll->nse));
+
+	if (is_sequential_packing) {
+		iso_meta->timestamp -= (stream->bis_index - 1U) *
+				       lll->sub_interval * lll->nse;
+	} else {
+		iso_meta->timestamp -= (stream->bis_index - 1U) *
+				       lll->bis_spacing;
+	}
+
+	iso_meta->timestamp -= latency * lll->iso_interval *
+			       PERIODIC_INT_UNIT_US;
+
 	iso_meta->timestamp %=
 		HAL_TICKER_TICKS_TO_US_64BIT(BIT64(HAL_TICKER_CNTR_MSBIT + 1U));
+
 	iso_meta->status = 1U;
 }
 

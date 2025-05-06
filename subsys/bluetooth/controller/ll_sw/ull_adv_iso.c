@@ -51,6 +51,17 @@
 
 #include "hal/debug.h"
 
+/* Controller implementation dependent minimum Pre-Transmission Offset and
+ * Pre-Transmission Group Count to use when there is available time space in the
+ * BIG events.
+ * The number of Pre-Transmission Group Count configure how many future ISO SDUs
+ * from the Offset will be Pre-Transmitted in advance in the current BIG event.
+ *
+ * TODO: These could be a Kconfig option.
+ */
+#define BT_CTLR_ADV_ISO_PTO_MIN         1U
+#define BT_CTLR_ADV_ISO_PTO_GROUP_COUNT 1U
+
 static int init_reset(void);
 static struct ll_adv_iso_set *adv_iso_get(uint8_t handle);
 static struct stream *adv_iso_stream_acquire(void);
@@ -201,12 +212,11 @@ static uint8_t big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bi
 				return BT_HCI_ERR_INVALID_PARAM;
 			}
 
-			/* FIXME: PTO is currently limited to BN */
-			if (!IN_RANGE(pto, 0x00, bn /*0x0F*/)) {
+			if (pto > 0x0F) {
 				return BT_HCI_ERR_INVALID_PARAM;
 			}
 
-			if (bn * irc + pto < nse) {
+			if (pto && !(bn * irc < nse)) {
 				return BT_HCI_ERR_INVALID_PARAM;
 			}
 		} else {
@@ -250,9 +260,7 @@ static uint8_t big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bi
 	if (aux && aux->is_started) {
 		ticks_slot_aux = aux->ull.ticks_slot;
 		if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
-			ticks_slot_overhead =
-				MAX(aux->ull.ticks_active_to_start,
-				    aux->ull.ticks_prepare_to_start);
+			ticks_slot_overhead = HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
 		} else {
 			ticks_slot_overhead = 0U;
 		}
@@ -265,9 +273,7 @@ static uint8_t big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bi
 		ticks_slot_aux = HAL_TICKER_US_TO_TICKS_CEIL(time_us);
 		if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
 			/* Assume primary overheads may be inherited by aux */
-			ticks_slot_overhead =
-				MAX(adv->ull.ticks_active_to_start,
-				    adv->ull.ticks_prepare_to_start);
+			ticks_slot_overhead = HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
 		} else {
 			ticks_slot_overhead = 0U;
 		}
@@ -289,8 +295,7 @@ static uint8_t big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bi
 	}
 
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
-		ticks_slot_overhead = MAX(sync->ull.ticks_active_to_start,
-					  sync->ull.ticks_prepare_to_start);
+		ticks_slot_overhead = HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
 	} else {
 		ticks_slot_overhead = 0U;
 	}
@@ -358,7 +363,12 @@ static uint8_t big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bi
 			lll_adv_iso->max_pdu = MIN(LL_BIS_OCTETS_TX_MAX, max_sdu);
 		}
 
-		/* FIXME: SDU per max latency */
+		/* FIXME: SDU per max latency, consider how to use Pre-transmission in the
+		 *        calculations.
+		 *        Take decision based on how ptc_calc function forces the use of
+		 *        Pre-Transmission when not using test command. Refer to comments in
+		 *        ptc_calc function.
+		 */
 		sdu_per_event = MAX((max_latency * USEC_PER_MSEC / sdu_interval), 2U) -
 				1U;
 
@@ -444,6 +454,9 @@ static uint8_t big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bi
 		return BT_HCI_ERR_INVALID_PARAM;
 	}
 
+	/* Decision to use requested Pre-Transmission Offset or force Pre-Transmission when
+	 * possible (Zephyr Controller decision).
+	 */
 	lll_adv_iso->ptc = ptc_calc(lll_adv_iso, event_spacing, event_spacing_max);
 
 	if (test_config) {
@@ -455,7 +468,7 @@ static uint8_t big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bi
 	} else {
 		/* Pre-Transmission Offset (PTO) */
 		if (lll_adv_iso->ptc) {
-			lll_adv_iso->pto = bn / lll_adv_iso->bn;
+			lll_adv_iso->pto = MAX((bn / lll_adv_iso->bn), BT_CTLR_ADV_ISO_PTO_MIN);
 		} else {
 			lll_adv_iso->pto = 0U;
 		}
@@ -465,15 +478,25 @@ static uint8_t big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bi
 	}
 
 	/* Based on packing requested, sequential or interleaved */
-	if (packing) {
+	if (false) {
+
+#if defined(CONFIG_BT_CTLR_ADV_ISO_INTERLEAVED)
+	} else if (packing) {
 		/* Interleaved Packing */
 		lll_adv_iso->bis_spacing = lll_adv_iso->sub_interval;
 		lll_adv_iso->sub_interval = lll_adv_iso->bis_spacing *
-					lll_adv_iso->nse;
-	} else {
+					    lll_adv_iso->num_bis;
+#endif /* CONFIG_BT_CTLR_ADV_ISO_INTERLEAVED */
+
+#if defined(CONFIG_BT_CTLR_ADV_ISO_SEQUENTIAL)
+	} else if (true) {
 		/* Sequential Packing */
 		lll_adv_iso->bis_spacing = lll_adv_iso->sub_interval *
-					lll_adv_iso->nse;
+					   lll_adv_iso->nse;
+#endif /* CONFIG_BT_CTLR_ADV_ISO_SEQUENTIAL */
+
+	} else {
+		return BT_HCI_ERR_UNSUPP_FEATURE_PARAM_VAL;
 	}
 
 	/* TODO: Group count, GC = NSE / BN; PTO = GC - IRC;
@@ -1155,17 +1178,49 @@ static uint8_t ptc_calc(const struct lll_adv_iso *lll, uint32_t event_spacing,
 			uint32_t event_spacing_max)
 {
 	if (event_spacing < event_spacing_max) {
-		uint8_t ptc;
+		uint32_t ptc;
+		uint8_t nse;
 
-		/* Possible maximum Pre-transmission Subevents per BIS */
+		/* Possible maximum Pre-transmission Subevents per BIS.
+		 * sub_interval is at least T_MSS_150 + MPT (hence a value in 8 bits or more), i.e.
+		 * the below division and the subsequent multiplication with lll->bn does not
+		 * overflow.
+		 */
 		ptc = ((event_spacing_max - event_spacing) /
 		       (lll->sub_interval * lll->bn * lll->num_bis)) *
 		      lll->bn;
 
-		/* FIXME: Here we restrict to a maximum of BN Pre-Transmission
-		 * subevents per BIS
+		/* Required NSE */
+		nse = lll->bn * lll->irc; /* 3 bits * 4 bits, total 7 bits */
+
+		/* Requested NSE is greater than Required NSE, Pre-Transmission offset has been
+		 * provided.
+		 *
+		 * NOTE: This is the case under HCI test command use to create BIG, i.e. test_config
+		 *       variable is true.
 		 */
-		ptc = MIN(ptc, lll->bn);
+		if (lll->nse > nse) {
+			/* Restrict PTC to number of available subevents */
+			ptc = MIN(ptc, lll->nse - nse);
+		} else {
+			/* No PTO requested, Zephyr Controller implementation here will try using
+			 * Pre-Transmisson offset of BT_CTLR_ADV_ISO_PTO_MIN, i.e. restrict to a
+			 * maximum of BN Pre-Transmission subevents per BIS. This allows for a
+			 * better time diversity ensuring skipped or missing reception at the ISO
+			 * Sync Receiver so it can still have another chance at receiving the ISO
+			 * PDUs within the permitted maximum transport latency.
+			 *
+			 * Usecases where BAP Broadcast Audio Assistant role device has a drifting
+			 * ACL Peripheral role active in the BAP Broadcast Audio Sink device.
+			 */
+			ptc = MIN(ptc, (lll->bn * BT_CTLR_ADV_ISO_PTO_GROUP_COUNT));
+		}
+
+		/* FIXME: Do not remember why ptc is 4 bits, it should be 5 bits as ptc is a
+		 *        running buffer offset related to nse. Fix ptc and ptc_curr definitions,
+		 *        until then lets have an assert check here.
+		 */
+		LL_ASSERT(ptc <= BIT_MASK(4));
 
 		return ptc;
 	}
@@ -1200,11 +1255,26 @@ static uint32_t adv_iso_time_get(const struct ll_adv_iso_set *adv_iso, bool max)
 	 */
 
 	if (IS_ENABLED(CONFIG_BT_CTLR_ADV_ISO_RESERVE_MAX) || max) {
+		/* Maximum time reservation for both sequential and interleaved
+		 * packing.
+		 */
 		time_us = (pdu_spacing * lll_iso->nse * lll_iso->num_bis) +
 			  ctrl_spacing;
-	} else {
+
+	} else if (lll_iso->bis_spacing >=
+		   (lll_iso->sub_interval * lll_iso->nse)) {
+		/* Time reservation omitting PTC subevents in sequetial
+		 * packing.
+		 */
 		time_us = pdu_spacing * ((lll_iso->nse * lll_iso->num_bis) -
 					 lll_iso->ptc);
+
+	} else {
+		/* Time reservation omitting PTC subevents in interleaved
+		 * packing.
+		 */
+		time_us = pdu_spacing * ((lll_iso->nse - lll_iso->ptc) *
+					 lll_iso->num_bis);
 	}
 
 	/* Add implementation defined radio event overheads */
@@ -1229,15 +1299,9 @@ static uint32_t adv_iso_start(struct ll_adv_iso_set *adv_iso,
 
 	slot_us = adv_iso_time_get(adv_iso, false);
 
-	adv_iso->ull.ticks_active_to_start = 0U;
-	adv_iso->ull.ticks_prepare_to_start =
-		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
-	adv_iso->ull.ticks_preempt_to_start =
-		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
 	adv_iso->ull.ticks_slot = HAL_TICKER_US_TO_TICKS_CEIL(slot_us);
 
-	ticks_slot_offset = MAX(adv_iso->ull.ticks_active_to_start,
-				adv_iso->ull.ticks_prepare_to_start);
+	ticks_slot_offset = HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
 		ticks_slot_overhead = ticks_slot_offset;
 	} else {
