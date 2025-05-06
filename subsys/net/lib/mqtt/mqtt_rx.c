@@ -155,17 +155,6 @@ static int mqtt_handle_packet(struct mqtt_client *client,
 		}
 
 		break;
-
-	case MQTT_PKT_TYPE_AUTH:
-		evt.type = MQTT_EVT_AUTH;
-		err_code = auth_decode(client, buf, &evt.param.auth);
-		if (err_code == 0) {
-			evt.result = evt.param.auth.reason_code;
-		} else {
-			notify_event = false;
-		}
-
-		break;
 #endif
 
 	default:
