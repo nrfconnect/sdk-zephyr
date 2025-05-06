@@ -1,8 +1,3 @@
-common:
-  build_only: true
-  tags:
-    - drivers
-    - wifi
 tests:
   nrf_wifi.bustest.nrf7002:
     sysbuild: true
