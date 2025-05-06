@@ -58,11 +58,11 @@ class NrfJprogBinaryRunner(NrfBinaryRunner):
         self.logger.debug(f'Executing op: {op}')
         # Translate the op
 
-        families = {'nrf51': 'NRF51', 'nrf52': 'NRF52',
-                    'nrf53': 'NRF53', 'nrf54l': 'NRF54L',
-                    'nrf91': 'NRF91'}
-        cores = {'Application': 'CP_APPLICATION',
-                 'Network': 'CP_NETWORK'}
+        families = {'NRF51_FAMILY': 'NRF51', 'NRF52_FAMILY': 'NRF52',
+                    'NRF53_FAMILY': 'NRF53', 'NRF54L_FAMILY': 'NRF54L',
+                    'NRF91_FAMILY': 'NRF91'}
+        cores = {'NRFDL_DEVICE_CORE_APPLICATION': 'CP_APPLICATION',
+                 'NRFDL_DEVICE_CORE_NETWORK': 'CP_NETWORK'}
 
         core_opt = ['--coprocessor', cores[op['core']]] \
                    if op.get('core') else []
@@ -76,24 +76,22 @@ class NrfJprogBinaryRunner(NrfBinaryRunner):
         elif op_type == 'program':
             cmd.append('--program')
             cmd.append(_op['firmware']['file'])
-            opts = _op['options']
-            erase = opts['chip_erase_mode']
+            erase = _op['chip_erase_mode']
             if erase == 'ERASE_ALL':
                 cmd.append('--chiperase')
-            elif erase == 'ERASE_RANGES_TOUCHED_BY_FIRMWARE':
-                if self.family == 'nrf52':
-                    cmd.append('--sectoranduicrerase')
-                else:
-                    cmd.append('--sectorerase')
+            elif erase == 'ERASE_PAGES':
+                cmd.append('--sectorerase')
+            elif erase == 'ERASE_PAGES_INCLUDING_UICR':
+                cmd.append('--sectoranduicrerase')
             elif erase == 'NO_ERASE':
                 pass
             else:
                 raise RuntimeError(f'Invalid erase mode: {erase}')
 
-            if opts.get('ext_mem_erase_mode'):
+            if _op.get('qspi_erase_mode'):
                 # In the future there might be multiple QSPI erase modes
                 cmd.append('--qspisectorerase')
-            if opts.get('verify'):
+            if _op.get('verify'):
                 # In the future there might be multiple verify modes
                 cmd.append('--verify')
             if self.qspi_ini:
@@ -102,9 +100,9 @@ class NrfJprogBinaryRunner(NrfBinaryRunner):
         elif op_type == 'recover':
             cmd.append('--recover')
         elif op_type == 'reset':
-            if _op['kind'] == 'RESET_SYSTEM':
+            if _op['option'] == 'RESET_SYSTEM':
                 cmd.append('--reset')
-            if _op['kind'] == 'RESET_PIN':
+            if _op['option'] == 'RESET_PIN':
                 cmd.append('--pinreset')
         elif op_type == 'erasepage':
             cmd.append('--erasepage')
