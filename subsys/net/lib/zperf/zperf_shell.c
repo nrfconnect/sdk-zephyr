@@ -842,7 +842,6 @@ static int shell_cmd_upload(const struct shell *sh, size_t argc,
 	int start = 0;
 	size_t opt_cnt = 0;
 	int ret;
-	int seconds;
 
 	param.options.priority = -1;
 	is_udp = proto == IPPROTO_UDP;
@@ -910,7 +909,7 @@ static int shell_cmd_upload(const struct shell *sh, size_t argc,
 			break;
 
 		case 'i':
-			seconds = parse_arg(&i, argc, argv);
+			int seconds = parse_arg(&i, argc, argv);
 
 			if (is_udp) {
 				shell_fprintf(sh, SHELL_WARNING,
@@ -1077,7 +1076,6 @@ static int shell_cmd_upload2(const struct shell *sh, size_t argc,
 	bool async = false;
 	int start = 0;
 	size_t opt_cnt = 0;
-	int seconds;
 
 	is_udp = proto == IPPROTO_UDP;
 
@@ -1144,7 +1142,7 @@ static int shell_cmd_upload2(const struct shell *sh, size_t argc,
 			break;
 
 		case 'i':
-			seconds = parse_arg(&i, argc, argv);
+			int seconds = parse_arg(&i, argc, argv);
 
 			if (is_udp) {
 				shell_fprintf(sh, SHELL_WARNING,
