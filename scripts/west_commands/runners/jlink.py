@@ -5,6 +5,7 @@
 '''Runner for debugging with J-Link.'''
 
 import argparse
+import glob
 import ipaddress
 import logging
 import os
@@ -109,25 +110,33 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         return "Additional options for JLink Commander, e.g. '-autoconnect 1'"
 
     @staticmethod
-    def default_jlink():
+    def find_jlink():
         global DEFAULT_JLINK_EXE
 
         if sys.platform == 'win32':
             # JLink.exe can collide with the JDK executable of the same name
-            # Locate the executable using the registry
-            try:
-                import winreg
-
-                # Note that when multiple JLink versions are installed on the
-                # machine this points to the one that was installed
-                # last, and not to the latest version.
-                key = winreg.OpenKeyEx(
-                    winreg.HKEY_CURRENT_USER, r"Software\SEGGER\J-Link")
-                DEFAULT_JLINK_EXE = (
-                    Path(winreg.QueryValueEx(key, "InstallPath")[0])
-                    / "JLink.exe")
-            except Exception:
-                # Not found via the registry, hope that $PATH is correct
+            # Look in the usual locations before falling back to $PATH
+            for root in [os.environ["ProgramFiles"], os.environ["ProgramFiles(x86)"], str(Path.home())]: # noqa SIM112
+                # SEGGER folder can contain a single "JLink" folder
+                _direct = Path(root) / "SEGGER" / "JLink" / "JLink.exe"
+                if _direct.exists():
+                    DEFAULT_JLINK_EXE = str(_direct)
+                else:
+                    # SEGGER folder can contain multiple versions such as:
+                    #   JLink_V796b
+                    #   JLink_V796t
+                    #   JLink_V798c
+                    # Find the latest version
+                    _versions = glob.glob(str(Path(root) / "SEGGER" / "JLink_V*"))
+                    if len(_versions) == 0:
+                        continue
+                    _expected_jlink = Path(_versions[-1]) / "JLink.exe"
+                    if not _expected_jlink.exists():
+                        continue
+                    DEFAULT_JLINK_EXE = str(_expected_jlink)
+                break
+            else:
+                # Not found in the normal locations, hope that $PATH is correct
                 DEFAULT_JLINK_EXE = "JLink.exe"
         else:
             DEFAULT_JLINK_EXE = "JLinkExe"
@@ -135,8 +144,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
     @classmethod
     def do_add_parser(cls, parser):
 
-        # Find the default JLink executable
-        cls.default_jlink()
+        cls.find_jlink()
 
         # Required:
         parser.add_argument('--device', required=True, help='device name')
@@ -279,7 +287,6 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         # version of the tools we're using.
         self.commander = os.fspath(
             Path(self.require(self.commander)).resolve())
-        self.logger.debug(f'JLink executable: {self.commander}')
         self.logger.info(f'JLink version: {self.jlink_version_str}')
 
         rtos = self.thread_info_enabled and self.supports_thread_info
