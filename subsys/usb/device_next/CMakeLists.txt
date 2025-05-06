@@ -17,8 +17,6 @@ zephyr_library_sources(
 	usbd_msg.c
 )
 
-add_subdirectory(app)
-
 zephyr_library_sources_ifdef(
 	CONFIG_USBD_SHELL
 	usbd_shell.c
