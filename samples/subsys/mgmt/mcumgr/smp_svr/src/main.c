@@ -24,6 +24,9 @@ LOG_MODULE_REGISTER(smp_sample);
 
 #include "common.h"
 
+#include <zephyr/retention/blinfo.h>
+#include <bootutil/image.h>
+
 #define STORAGE_PARTITION_LABEL	storage_partition
 #define STORAGE_PARTITION_ID	FIXED_PARTITION_ID(STORAGE_PARTITION_LABEL)
 
@@ -49,6 +52,24 @@ static struct fs_mount_t littlefs_mnt = {
 	.mnt_point = "/lfs1"
 };
 #endif
+
+static void blinfo_bootloader_version(void)
+{
+	struct image_version version = {0x00};
+
+	int ret = blinfo_lookup(BLINFO_BOOTLOADER_VERSION,
+				(char *)&version,
+				sizeof(struct image_version));
+
+	if (ret < 0) {
+		printf("blinfo_lookup error: %d\n", ret);
+	} else {
+		printf("bl iv_major: %d\n", version.iv_major);
+		printf("bl iv_minor: %d\n", version.iv_minor);
+		printf("bl iv_revision: %d\n", version.iv_revision);
+		printf("bl iv_build_num: %d\n", version.iv_build_num);
+	}
+}
 
 int main(void)
 {
@@ -84,6 +105,8 @@ int main(void)
 	 * compile which is convenient when testing firmware upgrade.
 	 */
 	LOG_INF("build time: " __DATE__ " " __TIME__);
+
+	blinfo_bootloader_version();
 
 	/* The system work queue handles all incoming mcumgr requests.  Let the
 	 * main thread idle while the mcumgr server runs.
