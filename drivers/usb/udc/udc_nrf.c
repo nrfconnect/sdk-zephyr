@@ -909,14 +909,14 @@ static int udc_nrf_driver_init(const struct device *dev)
 	return 0;
 }
 
-static void udc_nrf_lock(const struct device *dev)
+static int udc_nrf_lock(const struct device *dev)
 {
-	udc_lock_internal(dev, K_FOREVER);
+	return udc_lock_internal(dev, K_FOREVER);
 }
 
-static void udc_nrf_unlock(const struct device *dev)
+static int udc_nrf_unlock(const struct device *dev)
 {
-	udc_unlock_internal(dev);
+	return udc_unlock_internal(dev);
 }
 
 static const struct udc_nrf_config udc_nrf_cfg = {
