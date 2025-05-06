@@ -112,8 +112,8 @@ static const nrf_gpio_pin_drive_t drive_modes[NRF_DRIVE_COUNT] = {
 #define NRF_PSEL_TDM(reg, line) ((NRF_TDM_Type *)reg)->PSEL.line
 #endif
 
-#if DT_HAS_COMPAT_STATUS_OKAY(nordic_hpf_mspi_controller) || \
-	defined(CONFIG_MSPI_HPF) || \
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrfe_mspi_controller) || \
+	defined(CONFIG_MSPI_NRFE) || \
 	DT_ANY_COMPAT_HAS_PROP_STATUS_OKAY(nordic_nrf_vpr_coprocessor, pinctrl_0)
 #if defined(CONFIG_SOC_SERIES_NRF54LX)
 #define NRF_PSEL_SDP_MSPI(psel) \
@@ -122,7 +122,7 @@ static const nrf_gpio_pin_drive_t drive_modes[NRF_DRIVE_COUNT] = {
 /* On nRF54H, pin routing is controlled by secure domain, via UICR. */
 #define NRF_PSEL_SDP_MSPI(psel)
 #endif
-#endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_hpf_mspi_controller) || ... */
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_nrfe_mspi_controller) || ... */
 
 int pinctrl_configure_pins(const pinctrl_soc_pin_t *pins, uint8_t pin_cnt,
 			   uintptr_t reg)
