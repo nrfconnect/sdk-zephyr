@@ -1101,7 +1101,7 @@ static int zms_init(struct zms_fs *fs)
 				/* Let's check that we support this ZMS version */
 				if (ZMS_GET_VERSION(empty_ate.metadata) != ZMS_DEFAULT_VERSION) {
 					LOG_ERR("ZMS Version is not supported");
-					rc = -EPROTONOSUPPORT;
+					rc = -ENOEXEC;
 					goto end;
 				}
 			}
@@ -1125,7 +1125,7 @@ static int zms_init(struct zms_fs *fs)
 	}
 	/* all sectors are closed, and zms magic number not found. This is not a zms fs */
 	if ((closed_sectors == fs->sector_count) && !zms_magic_exist) {
-		rc = -ENOTSUP;
+		rc = -EDEADLK;
 		goto end;
 	}
 	/* TODO: add a recovery mechanism here if the ZMS magic number exist but all
@@ -1157,7 +1157,7 @@ static int zms_init(struct zms_fs *fs)
 				/* Let's check the version */
 				if (ZMS_GET_VERSION(empty_ate.metadata) != ZMS_DEFAULT_VERSION) {
 					LOG_ERR("ZMS Version is not supported");
-					rc = -EPROTONOSUPPORT;
+					rc = -ENOEXEC;
 					goto end;
 				}
 			}
