@@ -12,10 +12,10 @@
  *       conditionally compile them based on feature Kconfig defines in those
  *       resources header file.
  */
-#if defined(CONFIG_SOC_SERIES_NRF51X) || defined(CONFIG_SOC_COMPATIBLE_NRF52X)
-#include "../radio/radio_nrf5_ppi_resources.h"
-#else
+#ifdef DPPI_PRESENT
 #include "../radio/radio_nrf5_dppi_resources.h"
+#else
+#include "../radio/radio_nrf5_ppi_resources.h"
 #endif
 
 /* Mask with all (D)PPI channels used by the bluetooth controller. */
@@ -78,7 +78,7 @@
 #endif
 
 #if defined(CONFIG_BT_CTLR_DF_PHYEND_OFFSET_COMPENSATION_ENABLE)
-#if !defined(CONFIG_SOC_SERIES_NRF51X) && !defined(CONFIG_SOC_COMPATIBLE_NRF52X)
+#ifdef DPPI_PRESENT
 #define HAL_USED_PPI_CHANNELS_7 \
 	(BIT(HAL_SW_SWITCH_TIMER_PHYEND_DELAY_COMPENSATION_DISABLE_PPI))
 #else
