@@ -98,6 +98,7 @@ wifi:
     - include/zephyr/net/wifi_utils.h
 # zephyr-keep-sorted-stop
 
+
 # cbprintf:
 #    files:
 #        - lib/os/cbprintf*
