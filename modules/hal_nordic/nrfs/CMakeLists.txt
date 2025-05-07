@@ -18,6 +18,7 @@ if(CONFIG_NRFS)
     zephyr_include_directories(.)
     zephyr_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/backends)
     zephyr_include_directories_ifdef(CONFIG_NRFS_DVFS_LOCAL_DOMAIN ${CMAKE_CURRENT_SOURCE_DIR}/dvfs)
+    zephyr_include_directories_ifdef(CONFIG_NRFS_DVFS_NEW_LOCAL_DOMAIN ${CMAKE_CURRENT_SOURCE_DIR}/dvfs_new)
 
     zephyr_library_sources(${HELPERS_DIR}/dvfs_oppoint.c)
 
@@ -36,6 +37,7 @@ if(CONFIG_NRFS)
         zephyr_library_sources_ifdef(CONFIG_NRFS_VBUS_DETECTOR_SERVICE_ENABLED ${SRC_DIR}/services/nrfs_usb.c)
         zephyr_library_sources(${SRC_DIR}/internal/nrfs_dispatcher.c)
         add_subdirectory_ifdef(CONFIG_NRFS_DVFS_LOCAL_DOMAIN dvfs)
+        add_subdirectory_ifdef(CONFIG_NRFS_DVFS_NEW_LOCAL_DOMAIN dvfs_new)
 
         if(CONFIG_NRFS_DIAG_SERVICE_ENABLED)
             message(WARNING "This service is for Nordic Semiconductor INTERNAL purposes ONLY. Use it with caution due to risk of hardware damage!")
