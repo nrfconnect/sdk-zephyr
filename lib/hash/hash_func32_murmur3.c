@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <zephyr/toolchain.h>
 
 static inline uint32_t murmur_32_scramble(uint32_t k)
 {
@@ -24,7 +25,7 @@ uint32_t sys_hash32_murmur3(const char *str, size_t n)
 	const size_t len = n;
 
 	for (; n >= sizeof(uint32_t); n -= sizeof(uint32_t), str += sizeof(uint32_t)) {
-		k = *(const uint32_t *)str;
+		k = UNALIGNED_GET((const uint32_t *)str);
 		h ^= murmur_32_scramble(k);
 		h = (h << 13) | (h >> 19);
 		h = h * 5 + 0xe6546b64;
