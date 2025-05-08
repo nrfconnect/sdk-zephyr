@@ -1,6 +1,6 @@
-.. _snippet-uart-console:
+.. _snippet-serial-console:
 
-UART Console Snippet (uart-console)
+UART Console Snippet (serial-console)
 ###################################
 
 Overview
