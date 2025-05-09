@@ -18,18 +18,20 @@
 
 #include "testlib/att_read.h"
 
-#include "bsim_args_runner.h"
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
+#include <argparse.h>		/* For get_device_nbr() */
+#include "utils.h"
+#include "bstests.h"
+
+#define strucc struct
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
-/* Run for more than ATT_TIMEOUT */
-#define PROCEDURE_1_TIMEOUT_MS (1000 * 70)
-
-DEFINE_FLAG_STATIC(is_connected);
-DEFINE_FLAG_STATIC(flag_data_length_updated);
+DEFINE_FLAG(is_connected);
+DEFINE_FLAG(is_subscribed);
+DEFINE_FLAG(one_indication);
+DEFINE_FLAG(two_notifications);
+DEFINE_FLAG(flag_data_length_updated);
 
 static struct bt_conn *dconn;
 
@@ -43,7 +45,7 @@ static void connected(struct bt_conn *conn, uint8_t conn_err)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	if (conn_err) {
-		TEST_FAIL("Failed to connect to %s (%u)", addr, conn_err);
+		FAIL("Failed to connect to %s (%u)", addr, conn_err);
 		return;
 	}
 
@@ -83,7 +85,7 @@ static void do_dlu(struct bt_conn *conn)
 
 	LOG_INF("update DL");
 	err = bt_conn_le_data_len_update(conn, &param);
-	TEST_ASSERT(err == 0, "Can't update data length (err %d)", err);
+	ASSERT(err == 0, "Can't update data length (err %d)\n", err);
 
 	WAIT_FOR_FLAG(flag_data_length_updated);
 }
@@ -104,7 +106,7 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 
 	err = bt_le_scan_stop();
 	if (err) {
-		TEST_FAIL("Stop LE scan failed (err %d)", err);
+		FAIL("Stop LE scan failed (err %d)", err);
 		return;
 	}
 
@@ -114,12 +116,12 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	param = BT_LE_CONN_PARAM_DEFAULT;
 	err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, param, &conn);
 	if (err) {
-		TEST_FAIL("Create conn failed (err %d)", err);
+		FAIL("Create conn failed (err %d)", err);
 		return;
 	}
 }
 
-static struct bt_conn *connecc(void)
+static strucc bt_conn *connecc(void)
 {
 	int err;
 	struct bt_conn *conn;
@@ -127,12 +129,12 @@ static struct bt_conn *connecc(void)
 	UNSET_FLAG(is_connected);
 
 	err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, NULL, 0, NULL, 0);
-	TEST_ASSERT(!err, "Adving failed to start (err %d)", err);
+	ASSERT(!err, "Adving failed to start (err %d)\n", err);
 
 	LOG_DBG(" wait connecc...");
 
 	WAIT_FOR_FLAG(is_connected);
-	LOG_INF("Connected");
+	LOG_INF("conecd");
 
 	conn = dconn;
 	dconn = NULL;
@@ -148,7 +150,7 @@ static struct bt_conn *connect(void)
 	UNSET_FLAG(is_connected);
 
 	err = bt_le_scan_start(BT_LE_SCAN_ACTIVE_CONTINUOUS, device_found);
-	TEST_ASSERT(!err, "Scanning failed to start (err %d)", err);
+	ASSERT(!err, "Scanning failed to start (err %d)\n", err);
 
 	LOG_DBG("Central initiating connection...");
 	WAIT_FOR_FLAG(is_connected);
@@ -218,7 +220,7 @@ static void send_write_handle(struct bt_conn *conn)
 	sys_put_le16(handle, data);
 
 	err = bt_gatt_notify(conn, attr, data, sizeof(data));
-	TEST_ASSERT(!err, "Failed to transmit handle for write (err %d)", err);
+	ASSERT(!err, "Failed to transmit handle for write (err %d)\n", err);
 }
 
 static void gatt_read(struct bt_conn *conn, uint16_t handle)
@@ -230,11 +232,11 @@ static void gatt_read(struct bt_conn *conn, uint16_t handle)
 	NET_BUF_SIMPLE_DEFINE(buf, BT_ATT_MAX_ATTRIBUTE_LEN);
 
 	err = bt_testlib_att_read_by_handle_sync(&buf, NULL, NULL, conn, 0, handle, 0);
-	TEST_ASSERT(!err, "Failed read: err %d", err);
+	ASSERT(!err, "Failed read: err %d", err);
 
 	value = net_buf_simple_pull_le16(&buf);
 
-	TEST_ASSERT(prev_val == value, "Something's up: expected %d got %d", prev_val, value);
+	ASSERT(prev_val == value, "Something's up: expected %d got %d", prev_val, value);
 	prev_val++;
 
 	LOG_INF("Read by handle: handle %x val %d err %d", handle, value, err);
@@ -249,14 +251,14 @@ static void find_the_chrc(struct bt_conn *conn, const struct bt_uuid *svc,
 	int err;
 
 	err = bt_testlib_gatt_discover_primary(&svc_handle, &svc_end_handle, conn, svc, 1, 0xffff);
-	TEST_ASSERT(!err, "Failed to discover service %d");
+	ASSERT(!err, "Failed to discover service %d");
 
 	LOG_DBG("svc_handle: %u, svc_end_handle: %u", svc_handle, svc_end_handle);
 
 	err = bt_testlib_gatt_discover_characteristic(chrc_value_handle, &chrc_end_handle,
 						      NULL, conn, chrc, (svc_handle + 1),
 						      svc_end_handle);
-	TEST_ASSERT(!err, "Failed to get value handle %d");
+	ASSERT(!err, "Failed to get value handle %d");
 
 	LOG_DBG("chrc_value_handle: %u, chrc_end_handle: %u", *chrc_value_handle, chrc_end_handle);
 }
@@ -269,7 +271,7 @@ void good_peer_procedure(void)
 	struct bt_conn *conn;
 
 	err = bt_enable(NULL);
-	TEST_ASSERT(err == 0, "Can't enable Bluetooth (err %d)", err);
+	ASSERT(err == 0, "Can't enable Bluetooth (err %d)\n", err);
 	LOG_DBG("Central: Bluetooth initialized.");
 
 	conn = connecc();
@@ -283,7 +285,7 @@ void good_peer_procedure(void)
 		gatt_read(conn, handle);
 	}
 
-	TEST_PASS("Good peer done");
+	PASS("Good peer done\n");
 }
 
 void dut_procedure(void)
@@ -294,7 +296,7 @@ void dut_procedure(void)
 	struct bt_conn *good, *bad;
 
 	err = bt_enable(NULL);
-	TEST_ASSERT(err == 0, "Can't enable Bluetooth (err %d)", err);
+	ASSERT(err == 0, "Can't enable Bluetooth (err %d)\n", err);
 	LOG_DBG("Central: Bluetooth initialized.");
 
 	LOG_DBG("Central: Connect to good peer");
@@ -309,7 +311,7 @@ void dut_procedure(void)
 	send_write_handle(bad);
 
 	/* Pass unless some assert in callbacks fails. */
-	TEST_PASS("DUT done");
+	PASS("DUT done\n");
 }
 
 void test_procedure_0(void)
@@ -344,7 +346,7 @@ void test_procedure_0(void)
 	 * - no buffer allocation failures for responding to the good peer,
 	 * timeouts or stalls.
 	 */
-	bool dut = (bsim_args_get_global_device_nbr() == 0);
+	bool dut = (get_device_nbr() == DUT_DEVICE_NBR);
 
 	/* We use the same image for both to lighten build load. */
 	if (dut) {
@@ -374,7 +376,7 @@ static void gatt_write(struct bt_conn *conn, struct bt_gatt_write_params *params
 	LOG_INF("Queue GATT write");
 
 	err = bt_gatt_write(conn, params);
-	TEST_ASSERT(!err, "Failed write: err %d", err);
+	ASSERT(!err, "Failed write: err %d", err);
 }
 
 void test_procedure_1(void)
@@ -396,7 +398,7 @@ void test_procedure_1(void)
 	int err;
 
 	err = bt_enable(NULL);
-	TEST_ASSERT(err == 0, "Can't enable Bluetooth (err %d)", err);
+	ASSERT(err == 0, "Can't enable Bluetooth (err %d)\n", err);
 	LOG_DBG("Central: Bluetooth initialized.");
 
 	struct bt_conn *tester = connect();
@@ -413,16 +415,35 @@ void test_procedure_1(void)
 	bt_conn_unref(tester);
 
 	/* Pass unless some assert in callbacks fails. */
-	TEST_PASS("DUT done");
+	PASS("DUT done\n");
+}
+
+void test_tick(bs_time_t HW_device_time)
+{
+	bs_trace_debug_time(0, "Simulation ends now.\n");
+	if (bst_result != Passed) {
+		bst_result = Failed;
+		bs_trace_error("Test did not pass before simulation ended.\n");
+	}
+}
+
+void test_init(void)
+{
+	bst_ticker_set_next_tick_absolute(TEST_TIMEOUT_SIMULATED);
+	bst_result = In_progress;
 }
 
 static const struct bst_test_instance test_to_add[] = {
 	{
 		.test_id = "dut",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = test_procedure_0,
 	},
 	{
 		.test_id = "dut_1",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = test_procedure_1,
 	},
 	BSTEST_END_MARKER,

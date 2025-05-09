@@ -4,23 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <errno.h>
+#include "bs_bt_utils.h"
+
 #include <stdint.h>
 #include <string.h>
 
-#include <zephyr/sys/__assert.h>
 #include <zephyr/bluetooth/addr.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/kernel.h>
-#include <zephyr/types.h>
 #include <zephyr/toolchain.h>
 #include <zephyr/settings/settings.h>
-
-#include "babblekit/testcase.h"
 
 #include "common/bt_str.h"
 
@@ -96,7 +89,7 @@ static void create_adv(struct bt_le_ext_adv **adv, int id)
 
 	err = bt_le_ext_adv_create(&params, &cb_adv, adv);
 	if (err) {
-		TEST_FAIL("Failed to create advertiser (%d)", err);
+		FAIL("Failed to create advertiser (%d)\n", err);
 	}
 }
 
@@ -108,12 +101,12 @@ void start_rpa_advertising(void)
 	/* Enable bluetooth */
 	err = bt_enable(NULL);
 	if (err) {
-		TEST_FAIL("Failed to enable bluetooth (err %d)", err);
+		FAIL("Failed to enable bluetooth (err %d\n)", err);
 	}
 
 	err = settings_load();
 	if (err) {
-		TEST_FAIL("Failed to enable settings (err %d)", err);
+		FAIL("Failed to enable settings (err %d\n)", err);
 	}
 
 	bt_id_get(NULL, &bt_id_count);
@@ -126,12 +119,12 @@ void start_rpa_advertising(void)
 
 		id_a = bt_id_create(NULL, NULL);
 		if (id_a != ID_1) {
-			TEST_FAIL("bt_id_create id_a failed (err %d)", id_a);
+			FAIL("bt_id_create id_a failed (err %d)\n", id_a);
 		}
 
 		id_b = bt_id_create(NULL, NULL);
 		if (id_b != ID_2) {
-			TEST_FAIL("bt_id_create id_b failed (err %d)", id_b);
+			FAIL("bt_id_create id_b failed (err %d)\n", id_b);
 		}
 	} else {
 		printk("Extra identities loaded from settings\n");
@@ -139,7 +132,7 @@ void start_rpa_advertising(void)
 
 	bt_id_get(NULL, &bt_id_count);
 	if (bt_id_count != CONFIG_BT_ID_MAX) {
-		TEST_FAIL("bt_id_get returned incorrect number of identities %u", bt_id_count);
+		FAIL("bt_id_get returned incorrect number of identities %u\n", bt_id_count);
 	}
 
 	for (int i = 0; i < CONFIG_BT_EXT_ADV_MAX_ADV_SET; i++) {
@@ -154,12 +147,12 @@ void start_rpa_advertising(void)
 		/* Set extended advertising data */
 		err = bt_le_ext_adv_set_data(adv_set[i], &ad_id[i], 1, NULL, 0);
 		if (err) {
-			TEST_FAIL("Failed to set advertising data for set %d (err %d)", i, err);
+			FAIL("Failed to set advertising data for set %d (err %d)\n", i, err);
 		}
 
 		err = bt_le_ext_adv_start(adv_set[i], BT_LE_EXT_ADV_START_DEFAULT);
 		if (err) {
-			TEST_FAIL("Failed to start advertising (err %d)", err);
+			FAIL("Failed to start advertising (err %d)\n", err);
 		}
 	}
 }
@@ -169,5 +162,5 @@ void dut_rpa_expired_procedure(void)
 	start_rpa_advertising();
 
 	/* Nothing to do */
-	TEST_PASS("PASS");
+	PASS("PASS\n");
 }

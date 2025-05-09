@@ -14,8 +14,6 @@
 #include <zephyr/settings/settings.h>
 #include <zephyr/bluetooth/bluetooth.h>
 
-#include "babblekit/testcase.h"
-
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test_peripheral, LOG_LEVEL_DBG);
 
@@ -62,10 +60,10 @@ void peripheral(void)
 	struct bt_le_ext_adv *adv = NULL;
 
 	err = bt_enable(NULL);
-	TEST_ASSERT(!err, "bt_enable failed (%d)", err);
+	BSIM_ASSERT(!err, "bt_enable failed (%d)\n", err);
 
 	err = settings_load();
-	TEST_ASSERT(!err, "settings_load failed (%d)", err);
+	BSIM_ASSERT(!err, "settings_load failed (%d)\n", err);
 
 	create_adv(&adv);
 	start_adv(adv);
@@ -78,11 +76,11 @@ void peripheral(void)
 
 	/* add a new service to trigger the service changed indication */
 	err = bt_gatt_service_register(&svc);
-	TEST_ASSERT(!err, "bt_gatt_service_register failed (%d)", err);
+	BSIM_ASSERT(!err, "bt_gatt_service_register failed (%d)\n", err);
 	LOG_DBG("New service added");
 
 	start_adv(adv);
 	wait_connected();
 
-	TEST_PASS("Done");
+	PASS("Done\n");
 }
