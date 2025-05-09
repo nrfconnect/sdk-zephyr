@@ -4,23 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <stddef.h>
-#include <errno.h>
-#include <zephyr/kernel.h>
-#include <zephyr/types.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/bluetooth/gatt.h>
-
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
 #include "common.h"
 
 extern enum bst_result_t bst_result;
 
-static DEFINE_FLAG(flag_is_connected);
+CREATE_FLAG(flag_is_connected);
 
 #define NUM_ITERATIONS 10
 
@@ -31,7 +19,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	if (err != 0) {
-		TEST_FAIL("Failed to connect to %s (%u)", addr, err);
+		FAIL("Failed to connect to %s (%u)\n", addr, err);
 		return;
 	}
 
@@ -83,7 +71,7 @@ static ssize_t write_test_chrc(struct bt_conn *conn,
 	}
 
 	if (flags != 0) {
-		TEST_FAIL("Invalid flags %u", flags);
+		FAIL("Invalid flags %u\n", flags);
 		return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
 	}
 
@@ -150,7 +138,7 @@ static void test_main(void)
 	for (int i = 0; i < NUM_ITERATIONS; i++) {
 		err = bt_enable(NULL);
 		if (err != 0) {
-			TEST_FAIL("Bluetooth init failed (err %d)", err);
+			FAIL("Bluetooth init failed (err %d)\n", err);
 			return;
 		}
 
@@ -158,7 +146,7 @@ static void test_main(void)
 
 		err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), NULL, 0);
 		if (err != 0) {
-			TEST_FAIL("Advertising failed to start (err %d)", err);
+			FAIL("Advertising failed to start (err %d)\n", err);
 			return;
 		}
 
@@ -170,19 +158,21 @@ static void test_main(void)
 
 		err = bt_disable();
 		if (err != 0) {
-			TEST_FAIL("Bluetooth disable failed (err %d)", err);
+			FAIL("Bluetooth disable failed (err %d)\n", err);
 			return;
 		}
 
 		printk("Bluetooth disabled\n");
 	}
 
-	TEST_PASS("GATT server passed");
+	PASS("GATT server passed\n");
 }
 
 static const struct bst_test_instance test_gatt_server[] = {
 	{
 		.test_id = "gatt_server",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = test_main
 	},
 	BSTEST_END_MARKER
