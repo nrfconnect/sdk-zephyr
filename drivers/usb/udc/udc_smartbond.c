@@ -555,15 +555,14 @@ static int udc_smartbond_ep_tx(const struct device *dev, uint8_t ep)
 {
 	struct usb_smartbond_data *data = dev->data;
 	struct smartbond_ep_state *ep_state = usb_dc_get_ep_in_state(data, USB_EP_GET_IDX(ep));
-	struct udc_ep_config *ep_cfg = udc_get_ep_cfg(dev, ep);
 	struct net_buf *buf;
 
-	if (udc_ep_is_busy(ep_cfg) ||
+	if (udc_ep_is_busy(dev, ep) ||
 	    (ep_state->regs->epc_in & USB_USB_EPC1_REG_USB_STALL_Msk) != 0) {
 		return 0;
 	}
 
-	buf = udc_buf_peek(ep_cfg);
+	buf = udc_buf_peek(dev, ep);
 	LOG_DBG("TX ep 0x%02x len %u", ep, buf ? buf->len : -1);
 
 	if (buf) {
@@ -572,7 +571,7 @@ static int udc_smartbond_ep_tx(const struct device *dev, uint8_t ep)
 
 		start_tx_packet(data, ep_state);
 
-		udc_ep_set_busy(ep_cfg, true);
+		udc_ep_set_busy(dev, ep, true);
 	}
 
 	return 0;
@@ -582,14 +581,13 @@ static int udc_smartbond_ep_rx(const struct device *dev, uint8_t ep)
 {
 	struct usb_smartbond_data *data = dev->data;
 	struct smartbond_ep_state *ep_state = usb_dc_get_ep_out_state(data, USB_EP_GET_IDX(ep));
-	struct udc_ep_config *ep_cfg = udc_get_ep_cfg(dev, ep);
 	struct net_buf *buf;
 
-	if (udc_ep_is_busy(ep_cfg)) {
+	if (udc_ep_is_busy(dev, ep)) {
 		return 0;
 	}
 
-	buf = udc_buf_peek(ep_cfg);
+	buf = udc_buf_peek(dev, ep);
 
 	if (buf) {
 		LOG_DBG("RX ep 0x%02x len %u", ep, buf->size);
@@ -599,7 +597,7 @@ static int udc_smartbond_ep_rx(const struct device *dev, uint8_t ep)
 
 		start_rx_packet(data, ep_state);
 
-		udc_ep_set_busy(ep_cfg, true);
+		udc_ep_set_busy(dev, ep, true);
 	}
 
 	return 0;
@@ -650,12 +648,12 @@ static int udc_smartbond_ep_dequeue(const struct device *dev, struct udc_ep_conf
 
 	udc_smartbond_ep_abort(dev, ep_cfg);
 
-	buf = udc_buf_get_all(ep_cfg);
+	buf = udc_buf_get_all(dev, ep);
 	if (buf) {
 		udc_submit_ep_event(dev, buf, -ECONNABORTED);
 	}
 
-	udc_ep_set_busy(ep_cfg, false);
+	udc_ep_set_busy(dev, ep, false);
 
 	irq_unlock(lock_key);
 
@@ -731,7 +729,7 @@ static int udc_smartbond_ep_set_halt(const struct device *dev, struct udc_ep_con
 	if (ep_cfg->addr == USB_CONTROL_EP_IN) {
 		/* Stall in DATA IN phase, drop status OUT packet */
 		if (udc_ctrl_stage_is_data_in(dev)) {
-			buf = udc_buf_get(udc_get_ep_cfg(dev, USB_CONTROL_EP_OUT));
+			buf = udc_buf_get(dev, USB_CONTROL_EP_OUT);
 			if (buf) {
 				net_buf_unref(buf);
 			}
@@ -994,7 +992,7 @@ static void handle_epx_rx_ev(struct usb_smartbond_data *data, uint8_t ep_idx)
 				if (net_buf_tailroom(buf) == 0 ||
 				    ep_state->last_packet_size < udc_mps_ep_size(ep_cfg) ||
 				    ep_state->iso) {
-					buf = udc_buf_get(ep_cfg);
+					buf = udc_buf_get(data->dev, ep_cfg->addr);
 					if (unlikely(buf == NULL)) {
 						LOG_ERR("ep 0x%02x queue is empty", ep_cfg->addr);
 						break;
@@ -1065,8 +1063,8 @@ static void handle_epx_tx_ev(struct usb_smartbond_data *data, struct smartbond_e
 					regs->txc |= USB_USB_TXC1_REG_USB_TX_EN_Msk |
 						     USB_USB_TXC1_REG_USB_LAST_Msk;
 				} else {
-					udc_ep_set_busy(ep_cfg, false);
-					buf = udc_buf_get(ep_cfg);
+					udc_ep_set_busy(data->dev, ep, false);
+					buf = udc_buf_get(data->dev, ep);
 
 					udc_submit_ep_event(data->dev, buf, 0);
 					udc_smartbond_ep_tx(data->dev, ep);
@@ -1166,15 +1164,13 @@ static void handle_ep0_nak(struct usb_smartbond_data *data)
 
 static void empty_ep0_queues(const struct device *dev)
 {
-	struct udc_ep_config *cfg_out = udc_get_ep_cfg(dev, USB_CONTROL_EP_OUT);
-	struct udc_ep_config *cfg_in = udc_get_ep_cfg(dev, USB_CONTROL_EP_IN);
 	struct net_buf *buf;
 
-	buf = udc_buf_get_all(cfg_out);
+	buf = udc_buf_get_all(dev, USB_CONTROL_EP_OUT);
 	if (buf) {
 		net_buf_unref(buf);
 	}
-	buf = udc_buf_get_all(cfg_in);
+	buf = udc_buf_get_all(dev, USB_CONTROL_EP_IN);
 	if (buf) {
 		net_buf_unref(buf);
 	}
@@ -1456,7 +1452,6 @@ static void handle_ep0_rx_work(struct k_work *item)
 	struct usb_smartbond_data *data =
 		CONTAINER_OF(item, struct usb_smartbond_data, ep0_rx_work);
 	const uint8_t ep = USB_CONTROL_EP_OUT;
-	struct udc_ep_config *ep_cfg = udc_get_ep_cfg(ep);
 	struct net_buf *buf;
 	const struct device *dev = data->dev;
 	unsigned int lock_key;
@@ -1467,8 +1462,8 @@ static void handle_ep0_rx_work(struct k_work *item)
 	 */
 	lock_key = irq_lock();
 
-	udc_ep_set_busy(ep_cfg, false);
-	buf = udc_buf_get(ep_cfg);
+	udc_ep_set_busy(dev, ep, false);
+	buf = udc_buf_get(dev, ep);
 
 	irq_unlock(lock_key);
 	if (unlikely(buf == NULL)) {
@@ -1495,10 +1490,9 @@ static void handle_ep0_tx_work(struct k_work *item)
 	struct net_buf *buf;
 	const struct device *dev = data->dev;
 	const uint8_t ep = USB_CONTROL_EP_IN;
-	struct udc_ep_config *ep_cfg = udc_get_ep_cfg(ep);
 	unsigned int lock_key;
 
-	buf = udc_buf_peek(ep_cfg);
+	buf = udc_buf_peek(dev, ep);
 	__ASSERT(buf == EP0_IN_STATE(data)->buf, "TX work without buffer %p %p", buf,
 		 EP0_IN_STATE(data)->buf);
 
@@ -1508,10 +1502,10 @@ static void handle_ep0_tx_work(struct k_work *item)
 	 */
 	lock_key = irq_lock();
 
-	udc_ep_set_busy(ep_cfg, false);
+	udc_ep_set_busy(dev, ep, false);
 
 	/* Remove buffer from queue */
-	buf = udc_buf_get(ep_cfg);
+	buf = udc_buf_get(dev, ep);
 
 	irq_unlock(lock_key);
 
