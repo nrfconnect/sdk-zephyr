@@ -4,22 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <errno.h>
-#include <stdint.h>
-
-#include <zephyr/sys/__assert.h>
+#include "bs_bt_utils.h"
 #include <zephyr/bluetooth/addr.h>
-#include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/kernel.h>
-#include <zephyr/types.h>
+#include <stdint.h>
+#include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/settings/settings.h>
-
-#include "babblekit/testcase.h"
-#include "testlib/addr.h"
 
 #define EXPECTED_NUM_ROTATIONS 5
 
@@ -49,7 +39,7 @@ static void test_address(bt_addr_le_t *addr)
 	static int64_t rpa_timeout_ms = CONFIG_BT_RPA_TIMEOUT * MSEC_PER_SEC;
 
 	if (!BT_ADDR_IS_RPA(&addr->a)) {
-		TEST_FAIL("Bluetooth address is not RPA");
+		FAIL("Bluetooth address is not RPA\n");
 	}
 
 	/* Only save the address if this is the first scan */
@@ -65,9 +55,10 @@ static void test_address(bt_addr_le_t *addr)
 		return;
 	}
 
-	printk("Ad set %d: Old addr %s, new addr %s\n", adv_index,
-	       bt_testlib_addr_to_str(&adv_set_data[adv_index].old_addr),
-	       bt_testlib_addr_to_str(addr));
+	printk("Ad set %d Old ", adv_index);
+	print_address(&adv_set_data[adv_index].old_addr);
+	printk("Ad set %d New ", adv_index);
+	print_address(addr);
 
 	/*	For the first 2 rpa rotations, either of the first 2 adv sets returns false.
 	 *	Hence first 2 adv sets continue with old rpa in first 2 rpa rotations.
@@ -78,28 +69,28 @@ static void test_address(bt_addr_le_t *addr)
 
 		if (adv_index < 2) {
 			if (!bt_addr_le_eq(addr, &adv_set_data[adv_index].old_addr)) {
-				TEST_FAIL("Adv sets should continue with old rpa");
+				FAIL("Adv sets should continue with old rpa\n");
 			}
 		} else {
 			if (bt_addr_le_eq(addr, &adv_set_data[adv_index].old_addr)) {
-				TEST_FAIL("New RPA should have been generated");
+				FAIL("New RPA should have been generated\n");
 			}
 		}
 	} else {
 		if (adv_index < 2) {
 			if (bt_addr_le_eq(addr, &adv_set_data[adv_index].old_addr)) {
-				TEST_FAIL("New RPA should have been generated");
+				FAIL("New RPA should have been generated\n");
 			}
 		} else {
 			if (!bt_addr_le_eq(addr, &adv_set_data[adv_index].old_addr)) {
-				TEST_FAIL("Adv sets should continue with old rpa");
+				FAIL("Adv sets should continue with old rpa\n");
 			}
 		}
 	}
 
 	adv_set_data[adv_index].rpa_rotations++;
 	if (adv_set_data[adv_index].rpa_rotations > EXPECTED_NUM_ROTATIONS) {
-		TEST_PASS("PASS");
+		PASS("PASS\n");
 	}
 
 	adv_set_data[adv_index].old_time = k_uptime_get();
@@ -126,7 +117,7 @@ void start_rpa_scanning(void)
 	int err = bt_le_scan_start(&scan_param, cb_device_found);
 
 	if (err) {
-		TEST_FAIL("Failed to start scanning");
+		FAIL("Failed to start scanning");
 	}
 }
 
@@ -136,12 +127,12 @@ void tester_verify_rpa_procedure(void)
 	int err = bt_enable(NULL);
 
 	if (err) {
-		TEST_FAIL("Failed to enable bluetooth (err %d)", err);
+		FAIL("Failed to enable bluetooth (err %d\n)", err);
 	}
 
 	err = settings_load();
 	if (err) {
-		TEST_FAIL("Failed to enable settings (err %d)", err);
+		FAIL("Failed to enable settings (err %d\n)", err);
 	}
 
 	start_rpa_scanning();

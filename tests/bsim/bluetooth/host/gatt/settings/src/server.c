@@ -17,8 +17,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "babblekit/testcase.h"
-
 void set_public_addr(void)
 {
 	bt_addr_le_t addr = {BT_ADDR_LE_RANDOM,
@@ -202,7 +200,7 @@ void server_procedure(void)
 		server_round_6();
 		break;
 	default:
-		TEST_FAIL("Round %d doesn't exist", round);
+		FAIL("Round %d doesn't exist\n", round);
 		break;
 	}
 

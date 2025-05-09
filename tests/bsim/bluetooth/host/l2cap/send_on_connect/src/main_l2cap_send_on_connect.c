@@ -17,9 +17,9 @@ static struct bt_conn *default_conn;
 
 #define PSM 0x80
 
-DEFINE_FLAG_STATIC(is_connected);
-DEFINE_FLAG_STATIC(chan_connected);
-DEFINE_FLAG_STATIC(data_received);
+static DEFINE_FLAG(is_connected);
+static DEFINE_FLAG(chan_connected);
+static DEFINE_FLAG(data_received);
 
 #define DATA_BYTE_VAL  0xBB
 

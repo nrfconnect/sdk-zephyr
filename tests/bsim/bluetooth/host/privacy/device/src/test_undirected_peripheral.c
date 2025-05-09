@@ -20,14 +20,38 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(bt_bsim_privacy, LOG_LEVEL_INF);
 
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
+#include "bs_types.h"
+#include "bs_tracing.h"
+#include "bstests.h"
 #include "bs_cmd_line.h"
 
-DEFINE_FLAG_STATIC(paired_flag);
-DEFINE_FLAG_STATIC(connected_flag);
-DEFINE_FLAG_STATIC(wait_disconnection);
-DEFINE_FLAG_STATIC(wait_scanned);
+#define FAIL(...)                                                                                  \
+	do {                                                                                       \
+		bst_result = Failed;                                                               \
+		bs_trace_error_time_line(__VA_ARGS__);                                             \
+	} while (0)
+
+#define PASS(...)                                                                                  \
+	do {                                                                                       \
+		bst_result = Passed;                                                               \
+		bs_trace_info_time(1, __VA_ARGS__);                                                \
+	} while (0)
+
+extern enum bst_result_t bst_result;
+
+#define CREATE_FLAG(flag) static atomic_t flag = (atomic_t) false
+#define SET_FLAG(flag)	  (void)atomic_set(&flag, (atomic_t) true)
+#define GET_FLAG(flag)	  (bool)atomic_get(&flag)
+#define UNSET_FLAG(flag)  (void)atomic_set(&flag, (atomic_t) false)
+#define WAIT_FOR_FLAG(flag)                                                                        \
+	while (!(bool)atomic_get(&flag)) {                                                         \
+		(void)k_sleep(K_MSEC(1));                                                          \
+	}
+
+CREATE_FLAG(paired_flag);
+CREATE_FLAG(connected_flag);
+CREATE_FLAG(wait_disconnection);
+CREATE_FLAG(wait_scanned);
 
 static struct bt_conn *default_conn;
 
@@ -264,7 +288,7 @@ static void disconnect(void)
 
 	err = bt_conn_disconnect(default_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 	if (err) {
-		TEST_FAIL("Disconnection failed (err %d)", err);
+		FAIL("Disconnection failed (err %d)\n", err);
 	}
 
 	WAIT_FOR_FLAG(wait_disconnection);
@@ -294,9 +318,9 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 	default_conn = bt_conn_ref(conn);
 
-	if (!IS_FLAG_SET(paired_flag)) {
+	if (!GET_FLAG(paired_flag)) {
 		if (bt_conn_set_security(conn, BT_SECURITY_L2)) {
-			TEST_FAIL("Failed to set security");
+			FAIL("Failed to set security\n");
 		}
 	} else {
 		SET_FLAG(connected_flag);
@@ -382,7 +406,7 @@ static void test_peripheral_main(void)
 
 	err = bt_enable(NULL);
 	if (err) {
-		TEST_FAIL("Bluetooth init failed (err %d)", err);
+		FAIL("Bluetooth init failed (err %d)\n", err);
 	}
 
 	LOG_DBG("Bluetooth initialized");
@@ -436,5 +460,5 @@ void test_peripheral(void)
 
 	test_peripheral_main();
 
-	TEST_PASS("passed");
+	PASS("passed\n");
 }
