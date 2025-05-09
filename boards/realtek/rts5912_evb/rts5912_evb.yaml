@@ -10,10 +10,10 @@ arch: arm
 toolchain:
   - zephyr
   - gnuarmemb
-  - xtools
 ram: 64
 flash: 320
 supported:
   - gpio
   - pinmux
+  - adc
 vendor: realtek

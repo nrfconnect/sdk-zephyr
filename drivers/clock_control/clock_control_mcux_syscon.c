@@ -25,7 +25,7 @@ static int mcux_lpc_syscon_clock_control_on(const struct device *dev,
 #endif /* defined(CONFIG_CAN_MCUX_MCAN) */
 #if defined(CONFIG_COUNTER_NXP_MRT)
 	if ((uint32_t)sub_system == MCUX_MRT_CLK) {
-#if defined(CONFIG_SOC_FAMILY_LPC) || defined(CONFIG_SOC_SERIES_RW6XX) ||\
+#if defined(CONFIG_SOC_FAMILY_LPC) || defined(CONFIG_SOC_SERIES_RW6XX) ||                          \
 	defined(CONFIG_SOC_SERIES_MCXN)
 		CLOCK_EnableClock(kCLOCK_Mrt);
 #elif defined(CONFIG_SOC_FAMILY_NXP_IMXRT)
@@ -59,9 +59,11 @@ static int mcux_lpc_syscon_clock_control_on(const struct device *dev,
 	case MCUX_PORT3_CLK:
 		CLOCK_EnableClock(kCLOCK_GatePORT3);
 		break;
+#if (defined(FSL_FEATURE_SOC_PORT_COUNT) && (FSL_FEATURE_SOC_PORT_COUNT > 4))
 	case MCUX_PORT4_CLK:
 		CLOCK_EnableClock(kCLOCK_GatePORT4);
 		break;
+#endif /* defined(FSL_FEATURE_SOC_PORT_COUNT) */
 #else
 	case MCUX_PORT0_CLK:
 		CLOCK_EnableClock(kCLOCK_Port0);
@@ -242,13 +244,64 @@ static int mcux_lpc_syscon_clock_control_get_subsys_rate(const struct device *de
 		*rate = CLOCK_GetLPFlexCommClkFreq(9);
 		break;
 
+	case MCUX_FLEXCOMM10_CLK:
+		*rate = CLOCK_GetLPFlexCommClkFreq(10);
+		break;
+
+	case MCUX_FLEXCOMM11_CLK:
+		*rate = CLOCK_GetLPFlexCommClkFreq(11);
+		break;
+
+	case MCUX_FLEXCOMM12_CLK:
+		*rate = CLOCK_GetLPFlexCommClkFreq(12);
+		break;
+
+	case MCUX_FLEXCOMM13_CLK:
+		*rate = CLOCK_GetLPFlexCommClkFreq(13);
+		break;
+
+	case MCUX_FLEXCOMM17_CLK:
+		*rate = CLOCK_GetLPFlexCommClkFreq(17);
+		break;
+
+	case MCUX_FLEXCOMM18_CLK:
+		*rate = CLOCK_GetLPFlexCommClkFreq(18);
+		break;
+
+	case MCUX_FLEXCOMM19_CLK:
+		*rate = CLOCK_GetLPFlexCommClkFreq(19);
+		break;
+
+	case MCUX_FLEXCOMM20_CLK:
+		*rate = CLOCK_GetLPFlexCommClkFreq(20);
+		break;
+#endif
+
+		/* On RT7xx, flexcomm14 and 16 only can be LPSPI, flexcomm15 only can be I2C. */
+#if defined(CONFIG_SOC_SERIES_IMXRT7XX) && defined(CONFIG_SOC_FAMILY_NXP_IMXRT)
+	case MCUX_LPSPI14_CLK:
+		*rate = CLOCK_GetLPSpiClkFreq(14);
+		break;
+	case MCUX_LPI2C15_CLK:
+		*rate = CLOCK_GetLPI2cClkFreq(15);
+		break;
+	case MCUX_LPSPI16_CLK:
+		*rate = CLOCK_GetLPSpiClkFreq(16);
+		break;
 #endif
 
 #if (defined(FSL_FEATURE_SOC_USDHC_COUNT) && FSL_FEATURE_SOC_USDHC_COUNT)
 
-#if CONFIG_SOC_SERIES_MCXN
+#if defined(CONFIG_SOC_SERIES_MCXN)
 	case MCUX_USDHC1_CLK:
 		*rate = CLOCK_GetUsdhcClkFreq();
+		break;
+#elif defined(CONFIG_SOC_SERIES_IMXRT7XX)
+	case MCUX_USDHC1_CLK:
+		*rate = CLOCK_GetUsdhcClkFreq(0);
+		break;
+	case MCUX_USDHC2_CLK:
+		*rate = CLOCK_GetUsdhcClkFreq(1);
 		break;
 #else
 	case MCUX_USDHC1_CLK:
@@ -289,6 +342,15 @@ static int mcux_lpc_syscon_clock_control_get_subsys_rate(const struct device *de
 	case MCUX_CTIMER4_CLK:
 		*rate = CLOCK_GetCTimerClkFreq(4);
 		break;
+	case MCUX_CTIMER5_CLK:
+		*rate = CLOCK_GetCTimerClkFreq(5);
+		break;
+	case MCUX_CTIMER6_CLK:
+		*rate = CLOCK_GetCTimerClkFreq(6);
+		break;
+	case MCUX_CTIMER7_CLK:
+		*rate = CLOCK_GetCTimerClkFreq(7);
+		break;
 #endif
 
 #if defined(CONFIG_COUNTER_NXP_MRT)
@@ -314,6 +376,8 @@ static int mcux_lpc_syscon_clock_control_get_subsys_rate(const struct device *de
 	case MCUX_I3C_CLK:
 #if CONFIG_SOC_SERIES_MCXN
 		*rate = CLOCK_GetI3cClkFreq(0);
+#elif CONFIG_SOC_SERIES_MCXA
+		*rate = CLOCK_GetI3CFClkFreq();
 #else
 		*rate = CLOCK_GetI3cClkFreq();
 #endif
@@ -338,7 +402,11 @@ static int mcux_lpc_syscon_clock_control_get_subsys_rate(const struct device *de
 		*rate = CLOCK_GetMipiDphyEscTxClkFreq();
 		break;
 	case MCUX_LCDIF_PIXEL_CLK:
+#if defined(CONFIG_SOC_SERIES_IMXRT7XX) && defined(CONFIG_SOC_FAMILY_NXP_IMXRT)
+		*rate = CLOCK_GetLcdifClkFreq();
+#else
 		*rate = CLOCK_GetDcPixelClkFreq();
+#endif
 		break;
 #endif
 #if defined(CONFIG_AUDIO_DMIC_MCUX)
@@ -360,6 +428,21 @@ static int mcux_lpc_syscon_clock_control_get_subsys_rate(const struct device *de
 		break;
 #endif
 #endif /* CONFIG_MEMC_MCUX_FLEXSPI */
+
+#if defined(CONFIG_I2S_MCUX_SAI)
+	case MCUX_SAI0_CLK:
+#if (FSL_FEATURE_SOC_I2S_COUNT == 1)
+		*rate = CLOCK_GetSaiClkFreq();
+#else
+		*rate = CLOCK_GetSaiClkFreq(0);
+#endif
+		break;
+#if (FSL_FEATURE_SOC_I2S_COUNT == 2)
+	case MCUX_SAI1_CLK:
+		*rate = CLOCK_GetSaiClkFreq(1);
+		break;
+#endif
+#endif /* CONFIG_I2S_MCUX_SAI */
 
 #ifdef CONFIG_ETH_NXP_ENET_QOS
 	case MCUX_ENET_QOS_CLK:
@@ -455,6 +538,27 @@ static int mcux_lpc_syscon_clock_control_get_subsys_rate(const struct device *de
 		*rate = CLOCK_GetLpi2cClkFreq(3);
 		break;
 #endif /* defined(CONFIG_I2C_MCUX_LPI2C) */
+
+#if defined(CONFIG_DT_HAS_NXP_XSPI_ENABLED)
+	case MCUX_XSPI0_CLK:
+		*rate = CLOCK_GetXspiClkFreq(0);
+		break;
+	case MCUX_XSPI1_CLK:
+		*rate = CLOCK_GetXspiClkFreq(1);
+		break;
+	case MCUX_XSPI2_CLK:
+		*rate = CLOCK_GetXspiClkFreq(2);
+		break;
+#endif /* defined(CONFIG_DT_HAS_NXP_XSPI_ENABLED) */
+
+#if (defined(CONFIG_SPI_MCUX_LPSPI) && CONFIG_SOC_SERIES_MCXA)
+	case MCUX_LPSPI0_CLK:
+		*rate = CLOCK_GetLpspiClkFreq(0);
+		break;
+	case MCUX_LPSPI1_CLK:
+		*rate = CLOCK_GetLpspiClkFreq(1);
+		break;
+#endif /* defined(CONFIG_SPI_MCUX_LPSPI) */
 	}
 
 	return 0;

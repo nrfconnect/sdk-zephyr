@@ -119,7 +119,7 @@ static inline bool z_is_prio_lower_or_equal(int prio1, int prio2)
 	return z_is_prio1_lower_than_or_equal_to_prio2(prio1, prio2);
 }
 
-static inline bool _is_valid_prio(int prio, void *entry_point)
+static inline bool _is_valid_prio(int prio, k_thread_entry_t entry_point)
 {
 	if ((prio == K_IDLE_PRIO) && z_is_idle_thread_entry(entry_point)) {
 		return true;
@@ -180,7 +180,7 @@ static ALWAYS_INLINE struct k_thread *z_unpend_first_thread(_wait_q_t *wait_q)
 		thread = _priq_wait_best(&wait_q->waitq);
 		if (unlikely(thread != NULL)) {
 			unpend_thread_no_timeout(thread);
-			(void)z_abort_thread_timeout(thread);
+			z_abort_thread_timeout(thread);
 		}
 	}
 

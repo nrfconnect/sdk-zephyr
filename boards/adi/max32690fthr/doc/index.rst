@@ -63,30 +63,12 @@ Hardware
 Supported Features
 ==================
 
-Below interfaces are supported by Zephyr on MAX32690FTHR.
-
-+-----------+------------+-------------------------------------+
-| Interface | Controller | Driver/Component                    |
-+===========+============+=====================================+
-| NVIC      | on-chip    | nested vector interrupt controller  |
-+-----------+------------+-------------------------------------+
-| SYSTICK   | on-chip    | systick                             |
-+-----------+------------+-------------------------------------+
-| CLOCK     | on-chip    | clock and reset control             |
-+-----------+------------+-------------------------------------+
-| GPIO      | on-chip    | gpio                                |
-+-----------+------------+-------------------------------------+
-| UART      | on-chip    | serial                              |
-+-----------+------------+-------------------------------------+
-| I2C       | on-chip    | i2c                                 |
-+-----------+------------+-------------------------------------+
-| SPI       | on-chip    | spi                                 |
-+-----------+------------+-------------------------------------+
-| Flash     | on-chip    | flash                               |
-+-----------+------------+-------------------------------------+
+.. zephyr:board-supported-hw::
 
 Programming and Debugging
 *************************
+
+.. zephyr:board-supported-runners::
 
 Flashing
 ========
@@ -97,7 +79,8 @@ Logic levels are fixed to VDDIO (1.8V).
 
 Once the debug probe is connected to your host computer, then you can run the
 ``west flash`` command to write a firmware image into flash. Here is an example
-for the :zephyr:code-sample:`hello_world` application.
+for the :zephyr:code-sample:`hello_world` application. To perform a full erase,
+pass the ``--erase`` option when executing ``west flash``.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world
@@ -127,7 +110,7 @@ session. Here is an example for the :zephyr:code-sample:`hello_world` applicatio
 References
 **********
 
-- `MAX32690 product page`_
+- `MAX32690 solution center`_
 
-.. _MAX32690 product page:
-   https://www.analog.com/en/products/max32690.html
+.. _MAX32690 solution center:
+   https://developer.analog.com/solutions/max32690

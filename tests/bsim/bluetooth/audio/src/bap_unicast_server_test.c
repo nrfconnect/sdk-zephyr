@@ -407,6 +407,20 @@ static void init(void)
 	static struct bt_pacs_cap cap = {
 		.codec_cap = &lc3_codec_cap,
 	};
+	const struct bt_pacs_register_param pacs_param = {
+#if defined(CONFIG_BT_PAC_SNK)
+		.snk_pac = true,
+#endif /* CONFIG_BT_PAC_SNK */
+#if defined(CONFIG_BT_PAC_SNK_LOC)
+		.snk_loc = true,
+#endif /* CONFIG_BT_PAC_SNK_LOC */
+#if defined(CONFIG_BT_PAC_SRC)
+		.src_pac = true,
+#endif /* CONFIG_BT_PAC_SRC */
+#if defined(CONFIG_BT_PAC_SRC_LOC)
+		.src_loc = true,
+#endif /* CONFIG_BT_PAC_SRC_LOC */
+	};
 	int err;
 
 	err = bt_enable(NULL);
@@ -416,6 +430,13 @@ static void init(void)
 	}
 
 	printk("Bluetooth initialized\n");
+
+	err = bt_pacs_register(&pacs_param);
+	if (err) {
+		FAIL("Could not register PACS (err %d)\n", err);
+		return;
+	}
+
 	bap_stream_tx_init();
 
 	err = bt_bap_unicast_server_register(&param);
@@ -450,6 +471,29 @@ static void init(void)
 	setup_connectable_adv(&ext_adv);
 }
 
+static void deinit(void)
+{
+	int err;
+
+	err = bt_bap_unicast_server_unregister_cb(&unicast_server_cb);
+	if (err != 0) {
+		FAIL("Failed to unregister unicast server callbacks (err %d)\n", err);
+		return;
+	}
+
+	err = bt_bap_unicast_server_unregister();
+	if (err != 0) {
+		FAIL("Failed to unregister unicast server (err %d)\n", err);
+		return;
+	}
+
+	err = bt_pacs_unregister();
+	if (err != 0) {
+		FAIL("Failed to unregister PACS (err %d)\n", err);
+		return;
+	}
+}
+
 static void test_main(void)
 {
 	init();
@@ -463,6 +507,8 @@ static void test_main(void)
 	WAIT_FOR_FLAG(flag_stream_started);
 	transceive_test_streams();
 	WAIT_FOR_UNSET_FLAG(flag_connected);
+
+	deinit();
 	PASS("Unicast server passed\n");
 }
 
@@ -519,6 +565,8 @@ static void test_main_acl_disconnect(void)
 	/* The client will reconnect */
 	WAIT_FOR_UNSET_FLAG(flag_connected);
 	WAIT_FOR_FLAG(flag_connected);
+
+	deinit();
 	PASS("Unicast server ACL disconnect  passed\n");
 }
 

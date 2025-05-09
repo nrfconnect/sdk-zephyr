@@ -249,6 +249,11 @@ zephyr_library_sources_ifdef(CONFIG_WIFI_NM_HOSTAPD_AP
   ${WIFI_NM_HOSTAPD_BASE}/eap_register.c
   ${WIFI_NM_HOSTAPD_BASE}/hostapd_cli_cmds.c
   ${WIFI_NM_HOSTAPD_BASE}/hostapd_cli_zephyr.c
+
+  # Zephyr specific files (glue code)
+  src/hapd_main.c
+  src/hapd_api.c
+  src/hapd_events.c
 )
 
 zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_HOSTAPD_AP
@@ -383,6 +388,8 @@ zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_HOSTAPD_WPS
 
 zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
   ${HOSTAP_SRC_BASE}/eap_common/eap_common.c
+  ${HOSTAP_SRC_BASE}/eap_peer/eap_tls_common.c
+
 )
 
 zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
@@ -392,7 +399,6 @@ zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_EN
 
 zephyr_library_sources_ifdef(CONFIG_EAP_TLS
   ${HOSTAP_SRC_BASE}/eap_peer/eap_tls.c
-  ${HOSTAP_SRC_BASE}/eap_peer/eap_tls_common.c
 )
 
 zephyr_library_compile_definitions_ifdef(CONFIG_EAP_TLS
@@ -441,7 +447,7 @@ zephyr_library_compile_definitions_ifdef(CONFIG_EAP_MSCHAPV2
   EAP_MSCHAPv2
 )
 
-if(CONFIG_EAP_TTLS OR CONFIG_EAP_MSCHAPV2)
+if(CONFIG_EAP_TTLS OR CONFIG_EAP_MSCHAPV2 OR CONFIG_EAP_MD5)
   zephyr_library_sources(${HOSTAP_SRC_BASE}/eap_common/chap.c)
 endif()
 
@@ -518,9 +524,12 @@ zephyr_library_compile_definitions_ifdef(CONFIG_EAP_IKEV2
   EAP_IKEV2
 )
 
+if (CONFIG_EAP_SIM OR CONFIG_EAP_AKA)
+  zephyr_library_sources(${HOSTAP_SRC_BASE}/eap_common/eap_sim_common.c)
+endif()
+
 zephyr_library_sources_ifdef(CONFIG_EAP_SIM
   ${HOSTAP_SRC_BASE}/eap_peer/eap_sim.c
-  ${HOSTAP_SRC_BASE}/eap_common/eap_sim_common.c
 )
 
 zephyr_library_compile_definitions_ifdef(CONFIG_EAP_SIM

@@ -12,7 +12,7 @@ tabulate
 cbor>=1.0.0
 
 # use for twister
-psutil
+psutil>=5.6.6
 
 # used for CAN <=> host testing
 python-can>=4.3.0

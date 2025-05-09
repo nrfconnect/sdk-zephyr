@@ -1098,6 +1098,9 @@ struct net_buf_pool {
 	/** Total size of the pool. */
 	const uint16_t pool_size;
 
+	/** Maximum count of used buffers. */
+	uint16_t max_used;
+
 	/** Name of the pool. Used when printing pool information. */
 	const char *name;
 #endif /* CONFIG_NET_BUF_POOL_USAGE */
@@ -1115,6 +1118,7 @@ struct net_buf_pool {
 /** @cond INTERNAL_HIDDEN */
 #define NET_BUF_POOL_USAGE_INIT(_pool, _count) \
 	IF_ENABLED(CONFIG_NET_BUF_POOL_USAGE, (.avail_count = ATOMIC_INIT(_count),)) \
+	IF_ENABLED(CONFIG_NET_BUF_POOL_USAGE, (.max_used = 0,)) \
 	IF_ENABLED(CONFIG_NET_BUF_POOL_USAGE, (.name = STRINGIFY(_pool),))
 
 #define NET_BUF_POOL_INITIALIZER(_pool, _alloc, _bufs, _count, _ud_size, _destroy) \
@@ -1420,29 +1424,6 @@ struct net_buf * __must_check net_buf_alloc_with_data(struct net_buf_pool *pool,
 #endif
 
 /**
- * @brief Get a buffer from a FIFO.
- *
- * @deprecated Use @a k_fifo_get() instead.
- *
- * @param fifo Which FIFO to take the buffer from.
- * @param timeout Affects the action taken should the FIFO be empty.
- *        If K_NO_WAIT, then return immediately. If K_FOREVER, then wait as
- *        long as necessary. Otherwise, wait until the specified timeout.
- *
- * @return New buffer or NULL if the FIFO is empty.
- */
-#if defined(CONFIG_NET_BUF_LOG)
-__deprecated struct net_buf * __must_check net_buf_get_debug(struct k_fifo *fifo,
-							     k_timeout_t timeout,
-							     const char *func, int line);
-#define	net_buf_get(_fifo, _timeout) \
-	net_buf_get_debug(_fifo, _timeout, __func__, __LINE__)
-#else
-__deprecated struct net_buf * __must_check net_buf_get(struct k_fifo *fifo,
-						       k_timeout_t timeout);
-#endif
-
-/**
  * @brief Destroy buffer from custom destroy callback
  *
  * This helper is only intended to be used from custom destroy callbacks.
@@ -1500,16 +1481,6 @@ void net_buf_slist_put(sys_slist_t *list, struct net_buf *buf);
  * @return New buffer or NULL if the FIFO is empty.
  */
 struct net_buf * __must_check net_buf_slist_get(sys_slist_t *list);
-
-/**
- * @brief Put a buffer to the end of a FIFO.
- *
- * @deprecated Use @a k_fifo_put() instead.
- *
- * @param fifo Which FIFO to put the buffer to.
- * @param buf Buffer.
- */
-__deprecated void net_buf_put(struct k_fifo *fifo, struct net_buf *buf);
 
 /**
  * @brief Decrements the reference count of a buffer.

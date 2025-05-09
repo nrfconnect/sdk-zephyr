@@ -9,7 +9,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/bluetooth/buf.h>
+#include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/iso.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/slist.h>
+#include <zephyr/sys/util_macro.h>
+#include <zephyr/sys_clock.h>
+#include <zephyr/toolchain.h>
 
 typedef enum __packed {
 	BT_CONN_DISCONNECTED,         /* Disconnected, conn is completely down */
@@ -422,9 +435,6 @@ void bt_sco_cleanup(struct bt_conn *sco_conn);
 
 /* Look up an existing sco connection by BT address */
 struct bt_conn *bt_conn_lookup_addr_sco(const bt_addr_t *peer);
-
-/* Look up an existing connection by BT address */
-struct bt_conn *bt_conn_lookup_addr_br(const bt_addr_t *peer);
 
 void bt_conn_disconnect_all(uint8_t id);
 

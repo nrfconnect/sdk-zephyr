@@ -28,6 +28,7 @@
 #include <zephyr/bluetooth/addr.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/crypto.h>
 #include <zephyr/bluetooth/gap.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/hci_types.h>
@@ -47,6 +48,7 @@
 #include <zephyr/sys/util_macro.h>
 #include <zephyr/sys_clock.h>
 
+#include "common/bt_shell_private.h"
 #include "host/shell/bt.h"
 #include "audio.h"
 
@@ -3768,7 +3770,20 @@ static int cmd_init(const struct shell *sh, size_t argc, char *argv[])
 		CONFIG_BT_ASCS_MAX_ASE_SNK_COUNT,
 		CONFIG_BT_ASCS_MAX_ASE_SRC_COUNT
 	};
-
+	const struct bt_pacs_register_param pacs_param = {
+#if defined(CONFIG_BT_PAC_SNK)
+		.snk_pac = true,
+#endif /* CONFIG_BT_PAC_SNK */
+#if defined(CONFIG_BT_PAC_SNK_LOC)
+		.snk_loc = true,
+#endif /* CONFIG_BT_PAC_SNK_LOC */
+#if defined(CONFIG_BT_PAC_SRC)
+		.src_pac = true,
+#endif /* CONFIG_BT_PAC_SRC */
+#if defined(CONFIG_BT_PAC_SRC_LOC)
+		.src_loc = true,
+#endif /* CONFIG_BT_PAC_SRC_LOC */
+	};
 
 	if (argc == 3) {
 		snk_cnt = shell_strtoul(argv[1], 0, &err);
@@ -3795,8 +3810,14 @@ static int cmd_init(const struct shell *sh, size_t argc, char *argv[])
 		src_cnt = CONFIG_BT_ASCS_MAX_ASE_SRC_COUNT;
 	}
 
-	bt_bap_unicast_server_register(&unicast_server_param);
-	bt_bap_unicast_server_register_cb(&unicast_server_cb);
+	err = bt_pacs_register(&pacs_param);
+	__ASSERT(err == 0, "Failed to register PACS: %d", err);
+
+	err = bt_bap_unicast_server_register(&unicast_server_param);
+	__ASSERT(err == 0, "Failed to register Unicast Server: %d", err);
+
+	err = bt_bap_unicast_server_register_cb(&unicast_server_cb);
+	__ASSERT(err == 0, "Failed to register Unicast Server Callbacks: %d", err);
 #endif /* CONFIG_BT_BAP_UNICAST_SERVER */
 
 #if defined(CONFIG_BT_PAC_SNK)
@@ -4203,8 +4224,7 @@ static int cmd_bap(const struct shell *sh, size_t argc, char **argv)
 
 SHELL_CMD_ARG_REGISTER(bap, &bap_cmds, "Bluetooth BAP shell commands", cmd_bap, 1, 1);
 
-static ssize_t connectable_ad_data_add(struct bt_data *data_array,
-				       size_t data_array_size)
+static size_t connectable_ad_data_add(struct bt_data *data_array, size_t data_array_size)
 {
 	static const uint8_t ad_ext_uuid16[] = {
 		IF_ENABLED(CONFIG_BT_MICP_MIC_DEV, (BT_UUID_16_ENCODE(BT_UUID_MICS_VAL),))
@@ -4286,8 +4306,7 @@ static ssize_t connectable_ad_data_add(struct bt_data *data_array,
 	return ad_len;
 }
 
-static ssize_t nonconnectable_ad_data_add(struct bt_data *data_array,
-					  const size_t data_array_size)
+static size_t nonconnectable_ad_data_add(struct bt_data *data_array, const size_t data_array_size)
 {
 	static const uint8_t ad_ext_uuid16[] = {
 		IF_ENABLED(CONFIG_BT_PACS, (BT_UUID_16_ENCODE(BT_UUID_PACS_VAL),))
@@ -4318,9 +4337,9 @@ static ssize_t nonconnectable_ad_data_add(struct bt_data *data_array,
 
 		err = bt_rand(&broadcast_id, BT_AUDIO_BROADCAST_ID_SIZE);
 		if (err != 0) {
-			printk("Unable to generate broadcast ID: %d\n", err);
+			bt_shell_error("Unable to generate broadcast ID: %d\n", err);
 
-			return -1;
+			return 0;
 		}
 
 		sys_put_le24(broadcast_id, &ad_bap_broadcast_announcement[2]);
@@ -4346,10 +4365,10 @@ static ssize_t nonconnectable_ad_data_add(struct bt_data *data_array,
 	return ad_len;
 }
 
-ssize_t audio_ad_data_add(struct bt_data *data_array, const size_t data_array_size,
-			  const bool discoverable, const bool connectable)
+size_t audio_ad_data_add(struct bt_data *data_array, const size_t data_array_size,
+			 const bool discoverable, const bool connectable)
 {
-	ssize_t ad_len = 0;
+	size_t ad_len = 0;
 
 	if (!discoverable) {
 		return 0;
@@ -4369,8 +4388,7 @@ ssize_t audio_ad_data_add(struct bt_data *data_array, const size_t data_array_si
 	return ad_len;
 }
 
-ssize_t audio_pa_data_add(struct bt_data *data_array,
-			  const size_t data_array_size)
+size_t audio_pa_data_add(struct bt_data *data_array, const size_t data_array_size)
 {
 	size_t ad_len = 0;
 
@@ -4386,9 +4404,9 @@ ssize_t audio_pa_data_add(struct bt_data *data_array,
 
 		err = bt_bap_broadcast_source_get_base(default_source.bap_source, &base_buf);
 		if (err != 0) {
-			printk("Unable to get BASE: %d\n", err);
+			bt_shell_error("Unable to get BASE: %d\n", err);
 
-			return -1;
+			return 0;
 		}
 
 		data_array[ad_len].type = BT_DATA_SVC_DATA16;

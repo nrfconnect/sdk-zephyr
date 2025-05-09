@@ -5,7 +5,6 @@
  */
 
 #include <soc.h>
-#include "am_mcu_apollo.h"
 #include <string.h>
 #include <zephyr/drivers/clock_control/clock_control_ambiq.h>
 #include <zephyr/sys/util.h>
@@ -18,7 +17,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
 #include "udc_common.h"
-#include <usb_dwc2_hw.h>
 
 LOG_MODULE_REGISTER(udc_ambiq, CONFIG_UDC_DRIVER_LOG_LEVEL);
 
@@ -408,16 +406,16 @@ static int udc_ambiq_test_mode(const struct device *dev, const uint8_t mode, con
 	struct udc_ambiq_data *priv = udc_get_private(dev);
 
 	switch (mode) {
-	case USB_DWC2_DCTL_TSTCTL_TESTJ:
+	case USB_SFS_TEST_MODE_J:
 		am_usb_test_mode = AM_HAL_USB_TEST_J;
 		break;
-	case USB_DWC2_DCTL_TSTCTL_TESTK:
+	case USB_SFS_TEST_MODE_K:
 		am_usb_test_mode = AM_HAL_USB_TEST_K;
 		break;
-	case USB_DWC2_DCTL_TSTCTL_TESTSN:
+	case USB_SFS_TEST_MODE_SE0_NAK:
 		am_usb_test_mode = AM_HAL_USB_TEST_SE0_NAK;
 		break;
-	case USB_DWC2_DCTL_TSTCTL_TESTPM:
+	case USB_SFS_TEST_MODE_PACKET:
 		am_usb_test_mode = AM_HAL_USB_TEST_PACKET;
 		break;
 	default:

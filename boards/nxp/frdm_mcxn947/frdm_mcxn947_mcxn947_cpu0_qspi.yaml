@@ -13,7 +13,6 @@ flash: 8192
 toolchain:
   - zephyr
   - gnuarmemb
-  - xtools
 supported:
   - adc
   - can
@@ -26,6 +25,7 @@ supported:
   - i3c
   - pwm
   - regulator
+  - rtc
   - sdhc
   - spi
   - usb_device

@@ -99,6 +99,7 @@ int ipc_send(ipc_ctx_t ctx, const void *data, int len)
 			LOG_ERR("Critical error during IPC TX busyq transfer");
 			return -1;
 		}
+		break;
 	case IPC_INSTANCE_RX:
 		break;
 	default:

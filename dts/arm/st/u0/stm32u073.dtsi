@@ -55,14 +55,10 @@
 			interrupt-names = "usb";
 			num-bidir-endpoints = <8>;
 			ram-size = <1024>;
+			maximum-speed = "full-speed";
 			phys = <&usb_fs_phy>;
 			clocks = <&rcc STM32_CLOCK(APB1, 13U)>;
 			status = "disabled";
-		};
-
-		usb_fs_phy: usbphy {
-			compatible = "usb-nop-xceiv";
-			#phy-cells = <0>;
 		};
 	};
 
@@ -74,5 +70,10 @@
 	sram2: memory@20008000 {
 		compatible = "zephyr,memory-region", "mmio-sram";
 		zephyr,memory-region = "SRAM2";
+	};
+
+	usb_fs_phy: usbphy {
+		compatible = "usb-nop-xceiv";
+		#phy-cells = <0>;
 	};
 };

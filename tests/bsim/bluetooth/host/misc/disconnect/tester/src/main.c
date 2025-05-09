@@ -5,6 +5,7 @@
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/sys/util.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/__assert.h>
 
@@ -16,6 +17,7 @@
 #include <zephyr/bluetooth/hci_raw.h>
 #include <zephyr/bluetooth/hci_types.h>
 
+#include "common/hci_common_internal.h"
 #include "common/bt_str.h"
 
 #include "host/conn_internal.h"
@@ -47,7 +49,7 @@ DEFINE_FLAG_STATIC(flag_data_length_updated);
 static K_FIFO_DEFINE(rx_queue);
 
 #define CMD_BUF_SIZE MAX(BT_BUF_EVT_RX_SIZE, BT_BUF_CMD_TX_SIZE)
-NET_BUF_POOL_FIXED_DEFINE(hci_cmd_pool, CONFIG_BT_BUF_CMD_TX_COUNT,
+NET_BUF_POOL_FIXED_DEFINE(hci_cmd_pool, BT_BUF_CMD_TX_COUNT,
 			  CMD_BUF_SIZE, 8, NULL);
 
 static K_SEM_DEFINE(cmd_sem, 1, 1);
@@ -190,8 +192,7 @@ static void handle_att_write(struct net_buf *buf)
 
 	static uint8_t ccc_write[2] = {0x03, 0x00};
 
-	TEST_ASSERT(buf->len == 2, "unexpected write length: %d", buf->len);
-	TEST_ASSERT(memcmp(buf->data, ccc_write, sizeof(ccc_write)) == 0, "bad data");
+	TEST_ASSERT(util_eq(buf->data, buf->len, ccc_write, sizeof(ccc_write)), "bad data\n");
 
 	send_write_rsp();
 }

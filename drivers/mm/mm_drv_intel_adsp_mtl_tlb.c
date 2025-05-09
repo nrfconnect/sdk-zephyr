@@ -462,7 +462,7 @@ int sys_mm_drv_update_page_flags(void *virt, uint32_t flags)
 	tlb_entries[entry_idx] = entry;
 
 #ifdef CONFIG_MMU
-	arch_mem_map(virt, tlb_entry_to_pa(entry), CONFIG_MM_DRV_PAGE_SIZE, flags);
+	arch_mem_map(virt, va, CONFIG_MM_DRV_PAGE_SIZE, flags);
 #endif
 
 out:
@@ -850,7 +850,7 @@ static void adsp_mm_save_context(void *storage_buffer)
 
 #ifdef CONFIG_MMU
 			arch_mem_map(UINT_TO_POINTER(phys_addr), phys_addr, CONFIG_MM_DRV_PAGE_SIZE,
-				     K_MEM_CACHE_WB);
+				     K_MEM_CACHE_WB | K_MEM_PERM_RW);
 #endif
 
 			/* Invalidate cache to avoid stalled data

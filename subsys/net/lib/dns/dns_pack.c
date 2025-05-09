@@ -5,6 +5,8 @@
  */
 
 #include <string.h>
+#include <zephyr/sys/bitarray.h>
+#include <zephyr/net/dns_resolve.h>
 #include <zephyr/net_buf.h>
 
 #include "dns_pack.h"
@@ -352,8 +354,14 @@ int dns_unpack_response_query(struct dns_msg_t *dns_msg)
 		return -EINVAL;
 	}
 
-	dns_msg->answer_offset = dns_msg->query_offset + qname_size +
-				 DNS_QTYPE_LEN + DNS_QCLASS_LEN;
+	offset = dns_msg->query_offset + qname_size +
+		 DNS_QTYPE_LEN + DNS_QCLASS_LEN;
+
+	if (offset >= dns_msg->msg_size) {
+		return -ENOMEM;
+	}
+
+	dns_msg->answer_offset = offset;
 
 	return 0;
 }
@@ -361,10 +369,11 @@ int dns_unpack_response_query(struct dns_msg_t *dns_msg)
 int dns_copy_qname(uint8_t *buf, uint16_t *len, uint16_t size,
 		   struct dns_msg_t *dns_msg, uint16_t pos)
 {
+	SYS_BITARRAY_DEFINE(visited, DNS_RESOLVER_MAX_BUF_SIZE);
 	uint16_t msg_size = dns_msg->msg_size;
 	uint8_t *msg = dns_msg->msg;
 	uint16_t lb_size;
-	int rc = -EINVAL;
+	int rc = -EINVAL, ret, prev;
 
 	*len = 0U;
 
@@ -377,7 +386,7 @@ int dns_copy_qname(uint8_t *buf, uint16_t *len, uint16_t size,
 		lb_size = msg[pos];
 
 		/* pointer */
-		if (lb_size > DNS_LABEL_MAX_SIZE) {
+		if ((lb_size & NS_CMPRSFLGS) == NS_CMPRSFLGS) {
 			uint8_t mask = DNS_LABEL_MAX_SIZE;
 
 			if (pos + 1 >= msg_size) {
@@ -388,7 +397,21 @@ int dns_copy_qname(uint8_t *buf, uint16_t *len, uint16_t size,
 			/* See: RFC 1035, 4.1.4. Message compression */
 			pos = ((msg[pos] & mask) << 8) + msg[pos + 1];
 
+			ret = sys_bitarray_test_and_set_bit(&visited, pos, &prev);
+			if (ret < 0) {
+				rc = -EINVAL;
+				break;
+			}
+
+			if (prev) {
+				rc = -ELOOP;
+				break;
+			}
+
 			continue;
+		} else if (lb_size & NS_CMPRSFLGS) {
+			rc = -EINVAL;
+			break;
 		}
 
 		/* validate that the label (i.e. size + elements),
@@ -478,7 +501,7 @@ static int dns_unpack_name(const uint8_t *msg, int maxlen, const uint8_t *src,
 	}
 
 	while ((val = *curr_src++)) {
-		if (val & NS_CMPRSFLGS) {
+		if ((val & NS_CMPRSFLGS) == NS_CMPRSFLGS) {
 			/* Follow pointer */
 			int pos;
 
@@ -586,6 +609,7 @@ int dns_unpack_query(struct dns_msg_t *dns_msg, struct net_buf *buf,
 		&& query_type != DNS_RR_TYPE_PTR
 		&& query_type != DNS_RR_TYPE_SRV
 		&& query_type != DNS_RR_TYPE_TXT
+		&& query_type != DNS_RR_TYPE_HTTPS
 		&& query_type != DNS_RR_TYPE_ANY) {
 		return -EINVAL;
 	}

@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include "posix_clock.h"
 #include "posix_internal.h"
 
 #include <zephyr/init.h>
@@ -18,8 +19,6 @@ LOG_MODULE_REGISTER(pthread_mutex, CONFIG_PTHREAD_MUTEX_LOG_LEVEL);
 
 static SYS_SEM_DEFINE(lock, 1, 1);
 
-int64_t timespec_to_timeoutms(const struct timespec *abstime);
-
 #define MUTEX_MAX_REC_LOCK 32767
 
 /*
@@ -29,7 +28,9 @@ static const struct pthread_mutexattr def_attr = {
 	.type = PTHREAD_MUTEX_DEFAULT,
 };
 
+__pinned_bss
 static struct k_mutex posix_mutex_pool[CONFIG_MAX_PTHREAD_MUTEX_COUNT];
+
 static uint8_t posix_mutex_type[CONFIG_MAX_PTHREAD_MUTEX_COUNT];
 SYS_BITARRAY_DEFINE_STATIC(posix_mutex_bitarray, CONFIG_MAX_PTHREAD_MUTEX_COUNT);
 
@@ -210,8 +211,12 @@ int pthread_mutex_trylock(pthread_mutex_t *m)
 int pthread_mutex_timedlock(pthread_mutex_t *m,
 			    const struct timespec *abstime)
 {
-	int32_t timeout = (int32_t)timespec_to_timeoutms(abstime);
-	return acquire_mutex(m, K_MSEC(timeout));
+	if ((abstime == NULL) || !timespec_is_valid(abstime)) {
+		LOG_DBG("%s is invalid", "abstime");
+		return EINVAL;
+	}
+
+	return acquire_mutex(m, K_MSEC(timespec_to_timeoutms(CLOCK_REALTIME, abstime)));
 }
 
 /**
@@ -451,6 +456,7 @@ int pthread_mutexattr_setprioceiling(pthread_mutexattr_t *attr, int prioceiling)
 
 #endif /* CONFIG_POSIX_THREAD_PRIO_PROTECT */
 
+__boot_func
 static int pthread_mutex_pool_init(void)
 {
 	int err;
