@@ -1,5 +1,0 @@
-board:
-  name: rts5912_evb
-  vendor: realtek
-  socs:
-  - name: rts5912
