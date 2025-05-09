@@ -252,10 +252,14 @@ int bt_pub_key_gen(struct bt_pub_key_cb *new_cb)
 	struct bt_pub_key_cb *cb;
 
 	if (IS_ENABLED(CONFIG_BT_USE_DEBUG_KEYS)) {
-		atomic_set_bit(bt_dev.flags, BT_DEV_HAS_PUB_KEY);
-		__ASSERT_NO_MSG(new_cb->func != NULL);
-		new_cb->func(debug_public_key);
-		return 0;
+		if (!BT_CMD_TEST(bt_dev.supported_commands, 41, 2)) {
+			LOG_WRN("ECC Debug keys HCI command not available");
+		} else {
+			atomic_set_bit(bt_dev.flags, BT_DEV_HAS_PUB_KEY);
+			__ASSERT_NO_MSG(new_cb->func != NULL);
+			new_cb->func(debug_public_key);
+			return 0;
+		}
 	}
 
 	if (!new_cb) {
@@ -308,7 +312,8 @@ void bt_pub_key_hci_disrupted(void)
 
 const uint8_t *bt_pub_key_get(void)
 {
-	if (IS_ENABLED(CONFIG_BT_USE_DEBUG_KEYS)) {
+	if (IS_ENABLED(CONFIG_BT_USE_DEBUG_KEYS) &&
+	    BT_CMD_TEST(bt_dev.supported_commands, 41, 2)) {
 		return debug_public_key;
 	}
 
