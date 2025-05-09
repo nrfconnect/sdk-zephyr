@@ -1100,7 +1100,6 @@ static void isr_done_cleanup(void *param)
 		node_rx2->hdr.type = NODE_RX_TYPE_EXT_AUX_RELEASE;
 
 		node_rx2->rx_ftr.param = lll;
-		node_rx2->rx_ftr.lll_aux = lll->lll_aux;
 
 		ull_rx_put_sched(node_rx2->hdr.link, node_rx2);
 	}
