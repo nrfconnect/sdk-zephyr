@@ -6,15 +6,8 @@ source $(dirname "${BASH_SOURCE[0]}")/../../_mesh_test.sh
 
 # Test provisioning with OOB authentication and with inband public key
 RunTest mesh_prov_pb_adv_oob_auth \
-	prov_device_oob_auth prov_provisioner_oob_auth \
-	-- -argstest prov-brearer=1
-
-overlay=overlay_gatt_conf_overlay_psa_conf
-RunTest mesh_prov_pb_gatt_oob_auth \
-	prov_device_oob_auth prov_provisioner_oob_auth \
-	-- -argstest prov-brearer=2
+	prov_device_pb_adv_oob_auth prov_provisioner_pb_adv_oob_auth
 
 overlay=overlay_psa_conf
 RunTest mesh_prov_pb_adv_oob_auth_psa \
-	prov_device_oob_auth prov_provisioner_oob_auth \
-	-- -argstest prov-brearer=1
+	prov_device_pb_adv_oob_auth prov_provisioner_pb_adv_oob_auth
