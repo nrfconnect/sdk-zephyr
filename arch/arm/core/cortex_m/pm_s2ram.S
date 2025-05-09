@@ -221,10 +221,10 @@ SECTION_FUNC(TEXT, arch_pm_s2ram_resume)
 	bl 	pm_s2ram_mark_check_and_clear
 	mov 	lr, r1
 	cmp     r0, #0x1
-	beq     .L_resume
+	beq     resume
 	bx      lr
 
-.L_resume:
+resume:
 	/*
 	 * Restore the CPU context
 	 */
