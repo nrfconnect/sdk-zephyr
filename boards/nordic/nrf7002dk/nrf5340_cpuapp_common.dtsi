@@ -134,11 +134,6 @@
 	status = "okay";
 };
 
-&lfxo {
-	load-capacitors = "internal";
-	load-capacitance-picofarad = <7>;
-};
-
 &adc {
 	status = "okay";
 };
