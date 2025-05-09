@@ -13,7 +13,6 @@ sysbuild: true
 ram: 512
 flash: 449
 supported:
-  - adc
   - counter
   - gpio
   - i2c
