@@ -32,20 +32,20 @@ ErrNotAvailableBecauseProtection = 24
 ErrVerify = 25
 
 UICR_RANGES = {
-    'nrf53': {
-        'Application': (0x00FF8000, 0x00FF8800),
-        'Network': (0x01FF8000, 0x01FF8800),
+    'NRF53_FAMILY': {
+        'NRFDL_DEVICE_CORE_APPLICATION': (0x00FF8000, 0x00FF8800),
+        'NRFDL_DEVICE_CORE_NETWORK': (0x01FF8000, 0x01FF8800),
     },
-    'nrf54h': {
-        'Application': (0x0FFF8000, 0x0FFF8800),
-        'Network': (0x0FFFA000, 0x0FFFA800),
+    'NRF54H_FAMILY': {
+        'NRFDL_DEVICE_CORE_APPLICATION': (0x0FFF8000, 0x0FFF8800),
+        'NRFDL_DEVICE_CORE_NETWORK': (0x0FFFA000, 0x0FFFA800),
     },
-    'nrf91': {
-        'Application': (0x00FF8000, 0x00FF8800),
+    'NRF91_FAMILY': {
+        'NRFDL_DEVICE_CORE_APPLICATION': (0x00FF8000, 0x00FF8800),
     },
-    'nrf92': {
-        'Application': (0x0FFF8000, 0x0FFF8800),
-        'Network': (0x0FFFA000, 0x0FFFA800),
+    'NRF92_FAMILY': {
+        'NRFDL_DEVICE_CORE_APPLICATION': (0x0FFF8000, 0x0FFF8800),
+        'NRFDL_DEVICE_CORE_NETWORK': (0x0FFFA000, 0x0FFFA800),
     },
 }
 
@@ -79,8 +79,9 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                  reset=True, tool_opt=None, force=False, recover=False):
         super().__init__(cfg)
         self.hex_ = cfg.hex_file
-        # The old --nrf-family options takes upper-case family names
-        self.family = family.lower() if family else None
+        if family and not family.endswith('_FAMILY'):
+            family = f'{family}_FAMILY'
+        self.family = family
         self.softreset = softreset
         self.dev_id = dev_id
         self.erase = bool(erase)
@@ -213,19 +214,19 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
             return
 
         if self.build_conf.getboolean('CONFIG_SOC_SERIES_NRF51X'):
-            self.family = 'nrf51'
+            self.family = 'NRF51_FAMILY'
         elif self.build_conf.getboolean('CONFIG_SOC_SERIES_NRF52X'):
-            self.family = 'nrf52'
+            self.family = 'NRF52_FAMILY'
         elif self.build_conf.getboolean('CONFIG_SOC_SERIES_NRF53X'):
-            self.family = 'nrf53'
+            self.family = 'NRF53_FAMILY'
         elif self.build_conf.getboolean('CONFIG_SOC_SERIES_NRF54LX'):
-            self.family = 'nrf54l'
+            self.family = 'NRF54L_FAMILY'
         elif self.build_conf.getboolean('CONFIG_SOC_SERIES_NRF54HX'):
-            self.family = 'nrf54h'
+            self.family = 'NRF54H_FAMILY'
         elif self.build_conf.getboolean('CONFIG_SOC_SERIES_NRF91X'):
-            self.family = 'nrf91'
+            self.family = 'NRF91_FAMILY'
         elif self.build_conf.getboolean('CONFIG_SOC_SERIES_NRF92X'):
-            self.family = 'nrf92'
+            self.family = 'NRF92_FAMILY'
         else:
             raise RuntimeError(f'unknown nRF; update {__file__}')
 
@@ -250,7 +251,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
             self.flush_ops(force=force)
         except subprocess.CalledProcessError as cpe:
             if cpe.returncode == ErrNotAvailableBecauseProtection:
-                if self.family == 'nrf53':
+                if self.family == 'NRF53_FAMILY':
                     family_help = (
                         '  Note: your target is an nRF53; all flash memory '
                         'for both the network and application cores will be '
@@ -277,7 +278,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
 
 
     def recover_target(self):
-        if self.family in ('nrf53', 'nrf54h', 'nrf92'):
+        if self.family in ('NRF53_FAMILY', 'NRF54H_FAMILY', 'NRF92_FAMILY'):
             self.logger.info(
                 'Recovering and erasing flash memory for both the network '
                 'and application cores.')
@@ -290,8 +291,8 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
         # keeps the debug access port open, recovering the network core last
         # would result in that small image being deleted from the app core.
         # In the case of the 54H, the order is indifferent.
-        if self.family in ('nrf53', 'nrf54h', 'nrf92'):
-            self.exec_op('recover', core='Network')
+        if self.family in ('NRF53_FAMILY', 'NRF54H_FAMILY', 'NRF92_FAMILY'):
+            self.exec_op('recover', core='NRFDL_DEVICE_CORE_NETWORK')
 
         self.exec_op('recover')
 
@@ -302,7 +303,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
         # What type of erase/core arguments should we pass to the tool?
         core = None
 
-        if self.family in ('nrf54h', 'nrf92'):
+        if self.family in ('NRF54H_FAMILY', 'NRF92_FAMILY'):
             erase_arg = 'ERASE_NONE'
 
             cpuapp = (
@@ -316,9 +317,9 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
             generated_uicr = self.build_conf.getboolean('CONFIG_NRF_REGTOOL_GENERATE_UICR')
 
             if cpuapp:
-                core = 'Application'
+                core = 'NRFDL_DEVICE_CORE_APPLICATION'
             elif cpurad:
-                core = 'Network'
+                core = 'NRFDL_DEVICE_CORE_NETWORK'
 
             if generated_uicr and not self.hex_get_uicrs().get(core):
                 raise RuntimeError(
@@ -328,8 +329,8 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                 )
 
             if self.erase:
-                self.exec_op('erase', core='Application')
-                self.exec_op('erase', core='Network')
+                self.exec_op('erase', core='NRFDL_DEVICE_CORE_APPLICATION')
+                self.exec_op('erase', core='NRFDL_DEVICE_CORE_NETWORK')
 
             # Manage SUIT artifacts.
             # This logic should be executed only once per build.
@@ -353,7 +354,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                             'ERASE_NONE',
                             None,
                             defer=True,
-                            core='Application',
+                            core='NRFDL_DEVICE_CORE_APPLICATION',
                         )
                     if os.path.exists(rad_mpi_hex_file):
                         self.op_program(
@@ -361,7 +362,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                             'ERASE_NONE',
                             None,
                             defer=True,
-                            core='Network',
+                            core='NRFDL_DEVICE_CORE_NETWORK',
                         )
 
                 # Handle SUIT root manifest if application manifests are not used.
@@ -377,38 +378,41 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                             'ERASE_NONE',
                             None,
                             defer=True,
-                            core='Application',
+                            core='NRFDL_DEVICE_CORE_APPLICATION',
                         )
 
             if not self.erase and generated_uicr:
                 self.exec_op('erase', core=core, option={'chip_erase_mode': 'ERASE_UICR',
-                                                         'ext_mem_erase_mode': 'ERASE_NONE'})
+                                                         'qspi_erase_mode': 'ERASE_NONE'})
         else:
             if self.erase:
                 erase_arg = 'ERASE_ALL'
             else:
-                erase_arg = 'ERASE_RANGES_TOUCHED_BY_FIRMWARE'
+                if self.family == 'NRF52_FAMILY':
+                    erase_arg = 'ERASE_PAGES_INCLUDING_UICR'
+                else:
+                    erase_arg = 'ERASE_PAGES'
 
         xip_ranges = {
-            'nrf52': (0x12000000, 0x19FFFFFF),
-            'nrf53': (0x10000000, 0x1FFFFFFF),
+            'NRF52_FAMILY': (0x12000000, 0x19FFFFFF),
+            'NRF53_FAMILY': (0x10000000, 0x1FFFFFFF),
         }
-        ext_mem_erase_opt = None
+        qspi_erase_opt = None
         if self.family in xip_ranges:
             xip_start, xip_end = xip_ranges[self.family]
             if self.hex_refers_region(xip_start, xip_end):
-                ext_mem_erase_opt = 'ERASE_ALL'
+                qspi_erase_opt = 'ERASE_ALL'
 
         # What tool commands do we need to flash this target?
-        if self.family == 'nrf53':
+        if self.family == 'NRF53_FAMILY':
             # nRF53 requires special treatment due to the extra coprocessor.
-            self.program_hex_nrf53(erase_arg, ext_mem_erase_opt)
+            self.program_hex_nrf53(erase_arg, qspi_erase_opt)
         else:
-            self.op_program(self.hex_, erase_arg, ext_mem_erase_opt, defer=True, core=core)
+            self.op_program(self.hex_, erase_arg, qspi_erase_opt, defer=True, core=core)
 
         self.flush(force=False)
 
-    def program_hex_nrf53(self, erase_arg, ext_mem_erase_opt):
+    def program_hex_nrf53(self, erase_arg, qspi_erase_opt):
         # program_hex() helper for nRF53.
 
         # *********************** NOTE *******************************
@@ -438,8 +442,8 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
         # If there is nothing in the hex file for the network core,
         # only the application core is programmed.
         if not self.hex_refers_region(net_flash_start, net_flash_end):
-            self.op_program(self.hex_, erase_arg, ext_mem_erase_opt, defer=True,
-                            core='Application')
+            self.op_program(self.hex_, erase_arg, qspi_erase_opt, defer=True,
+                            core='NRFDL_DEVICE_CORE_APPLICATION')
         # If there is some content that addresses a region beyond the network
         # core flash range, two hex files are generated and the two cores
         # are programmed one by one.
@@ -469,22 +473,22 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
             app_hex.write_hex_file(app_hex_file)
 
             self.op_program(net_hex_file, erase_arg, None, defer=True,
-                            core='Network')
-            self.op_program(app_hex_file, erase_arg, ext_mem_erase_opt, defer=True,
-                            core='Application')
+                            core='NRFDL_DEVICE_CORE_NETWORK')
+            self.op_program(app_hex_file, erase_arg, qspi_erase_opt, defer=True,
+                            core='NRFDL_DEVICE_CORE_APPLICATION')
         # Otherwise, only the network core is programmed.
         else:
             self.op_program(self.hex_, erase_arg, None, defer=True,
-                            core='Network')
+                            core='NRFDL_DEVICE_CORE_NETWORK')
 
     def reset_target(self):
-        if self.family == 'nrf52' and not self.softreset:
+        if self.family == 'NRF52_FAMILY' and not self.softreset:
             self.exec_op('pinreset-enable')
 
         if self.softreset:
-            self.exec_op('reset', kind="RESET_SYSTEM")
+            self.exec_op('reset', option="RESET_SYSTEM")
         else:
-            self.exec_op('reset', kind="RESET_PIN")
+            self.exec_op('reset', option="RESET_PIN")
 
     @abc.abstractmethod
     def do_require(self):
@@ -502,15 +506,15 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
 
         return file
 
-    def op_program(self, hex_file, erase, ext_mem_erase, defer=False, core=None):
-        args = self._op_program(hex_file, erase, ext_mem_erase)
+    def op_program(self, hex_file, erase, qspi_erase, defer=False, core=None):
+        args = self._op_program(hex_file, erase, qspi_erase)
         self.exec_op('program', defer, core, **args)
 
-    def _op_program(self, hex_file, erase, ext_mem_erase):
+    def _op_program(self, hex_file, erase, qspi_erase):
         args = {'firmware': {'file': hex_file},
-                'options': {'chip_erase_mode': erase, 'verify': 'VERIFY_READ'}}
-        if ext_mem_erase:
-            args['options']['ext_mem_erase_mode'] = ext_mem_erase
+                'chip_erase_mode': erase, 'verify': 'VERIFY_READ'}
+        if qspi_erase:
+            args['qspi_erase_mode'] = qspi_erase
 
         return args
 
@@ -529,7 +533,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
 
         _op = _exec_op(op, defer, core, **kwargs)
         # Check if the suit manifest starter needs programming
-        if self.suit_starter and self.family == 'nrf54h':
+        if self.suit_starter and self.family == 'NRF54H_FAMILY':
             file = self._check_suit_starter(_op)
             if file:
                 args = self._op_program(file, 'ERASE_NONE', None)
