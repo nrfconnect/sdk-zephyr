@@ -4,6 +4,3 @@ board:
   vendor: nordic
   socs:
   - name: nrf54l20
-    variants:
-    - name: xip
-      cpucluster: cpuflpr
