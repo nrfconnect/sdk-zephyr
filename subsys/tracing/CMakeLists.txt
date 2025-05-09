@@ -48,9 +48,11 @@ zephyr_sources_ifdef(
 
 endif()
 
-zephyr_sources(
-  tracing_none.c
-  )
+if(NOT CONFIG_PERCEPIO_TRACERECORDER AND NOT CONFIG_TRACING_CTF
+  AND NOT CONFIG_SEGGER_SYSTEMVIEW AND NOT CONFIG_TRACING_TEST
+  AND NOT CONFIG_TRACING_USER)
+  zephyr_sources(tracing_none.c)
+endif()
 
 zephyr_sources_ifdef(
   CONFIG_TRACING_OBJECT_TRACKING
