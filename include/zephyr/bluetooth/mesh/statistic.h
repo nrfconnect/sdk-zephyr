@@ -1,5 +1,5 @@
 /** @file
- *  @brief Bluetooth Mesh statistic APIs.
+ *  @brief BLE mesh statistic APIs.
  */
 
 /*
@@ -51,7 +51,7 @@ struct bt_mesh_statistic {
 
 /** @brief Get mesh frame handling statistic.
  *
- *  @param st   Bluetooh Mesh statistic.
+ *  @param st   BLE mesh statistic.
  */
 void bt_mesh_stat_get(struct bt_mesh_statistic *st);
 
