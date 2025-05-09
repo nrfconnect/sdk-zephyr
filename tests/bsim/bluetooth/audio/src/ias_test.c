@@ -50,7 +50,6 @@ BT_IAS_CB_DEFINE(ias_callbacks) = {
 
 static void test_main(void)
 {
-	struct bt_le_ext_adv *ext_adv;
 	int err;
 
 	err = bt_enable(NULL);
@@ -59,7 +58,13 @@ static void test_main(void)
 		return;
 	}
 
-	setup_connectable_adv(&ext_adv);
+	err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, AD_SIZE, NULL, 0);
+	if (err) {
+		FAIL("Advertising failed to start (err %d)\n", err);
+		return;
+	}
+
+	printk("Advertising successfully started\n");
 
 	WAIT_FOR_FLAG(flag_connected);
 
