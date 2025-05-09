@@ -546,8 +546,6 @@ static void isr_tx(void *param)
 	if (se_curr < cis_lll->nse) {
 		const struct lll_conn *evt_conn_lll;
 		uint16_t data_chan_id;
-
-#if !defined(CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER)
 		uint32_t subevent_us;
 		uint32_t start_us;
 
@@ -557,7 +555,6 @@ static void isr_tx(void *param)
 
 		start_us = radio_tmr_start_us(1U, subevent_us);
 		LL_ASSERT(start_us == (subevent_us + 1U));
-#endif /* !CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER */
 
 		/* Get reference to ACL context */
 		evt_conn_lll = ull_conn_lll_get(cis_lll->acl_handle);
@@ -577,7 +574,9 @@ static void isr_tx(void *param)
 		uint64_t payload_count;
 		uint16_t event_counter;
 		uint16_t data_chan_id;
+		uint32_t subevent_us;
 		uint16_t cis_handle;
+		uint32_t start_us;
 		memq_link_t *link;
 
 		/* Calculate channel for next CIS */
@@ -591,22 +590,11 @@ static void isr_tx(void *param)
 			return;
 		}
 
-#if !defined(CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER)
-		uint32_t subevent_us;
-		uint32_t start_us;
-
-		subevent_us = radio_tmr_ready_restore();
-		subevent_us += next_cis_lll->offset - cis_offset_first;
-
-		start_us = radio_tmr_start_us(1U, subevent_us);
-		LL_ASSERT(start_us == (subevent_us + 1U));
-#endif /* !CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER */
+		/* Get reference to ACL context */
+		next_conn_lll = ull_conn_lll_get(next_cis_lll->acl_handle);
 
 		/* Event counter value,  0-15 bit of cisEventCounter */
 		event_counter = next_cis_lll->event_count;
-
-		/* Get reference to ACL context */
-		next_conn_lll = ull_conn_lll_get(next_cis_lll->acl_handle);
 
 		/* Calculate the radio channel to use for ISO event */
 		data_chan_id = lll_chan_id(next_cis_lll->access_addr);
@@ -615,6 +603,12 @@ static void isr_tx(void *param)
 						   next_conn_lll->data_chan_count,
 						   &next_cis_chan_prn_s,
 						   &next_cis_chan_remap_idx);
+
+		subevent_us = radio_tmr_ready_restore();
+		subevent_us += next_cis_lll->offset - cis_offset_first;
+
+		start_us = radio_tmr_start_us(1U, subevent_us);
+		LL_ASSERT(start_us == (subevent_us + 1U));
 
 		cis_lll = next_cis_lll;
 
@@ -844,18 +838,9 @@ isr_rx_next_subevent:
 			uint64_t payload_count;
 			uint16_t event_counter;
 			uint16_t data_chan_id;
-			memq_link_t *link;
-
-#if !defined(CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER)
 			uint32_t subevent_us;
 			uint32_t start_us;
-
-			subevent_us = radio_tmr_ready_restore();
-			subevent_us += next_cis_lll->offset - cis_offset_first;
-
-			start_us = radio_tmr_start_us(1U, subevent_us);
-			LL_ASSERT(start_us == (subevent_us + 1U));
-#endif /* !CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER */
+			memq_link_t *link;
 
 			/* Event counter value,  0-15 bit of cisEventCounter */
 			event_counter = next_cis_lll->event_count;
@@ -867,6 +852,12 @@ isr_rx_next_subevent:
 							   next_conn_lll->data_chan_count,
 							   &next_cis_chan_prn_s,
 							   &next_cis_chan_remap_idx);
+
+			subevent_us = radio_tmr_ready_restore();
+			subevent_us += next_cis_lll->offset - cis_offset_first;
+
+			start_us = radio_tmr_start_us(1U, subevent_us);
+			LL_ASSERT(start_us == (subevent_us + 1U));
 
 			old_cis_lll = cis_lll;
 			cis_lll = next_cis_lll;
@@ -944,6 +935,7 @@ static void isr_prepare_subevent(void *param)
 	struct pdu_cis *pdu_tx;
 	uint64_t payload_count;
 	uint8_t payload_index;
+	uint32_t subevent_us;
 	uint32_t start_us;
 
 	/* Get reference to CIS LLL context */
@@ -1060,26 +1052,12 @@ static void isr_prepare_subevent(void *param)
 	radio_switch_complete_and_rx(0U);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
-#if defined(HAL_RADIO_GPIO_HAVE_PA_PIN) || \
-	defined(CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER)
-	uint32_t subevent_us;
-
 	subevent_us = radio_tmr_ready_restore();
 	subevent_us += cis_lll->offset - cis_offset_first +
 		       (cis_lll->sub_interval * se_curr);
 
-#if defined(CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER)
-	start_us = radio_tmr_start_us(1U, subevent_us);
-	LL_ASSERT(start_us == (subevent_us + 1U));
-
-#else /* !CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER */
 	/* Compensate for the 1 us added by radio_tmr_start_us() */
 	start_us = subevent_us + 1U;
-#endif /* !CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER */
-
-#endif /* HAL_RADIO_GPIO_HAVE_PA_PIN ||
-	* CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER
-	*/
 
 	/* capture end of Tx-ed PDU, used to calculate HCTO. */
 	radio_tmr_end_capture();
