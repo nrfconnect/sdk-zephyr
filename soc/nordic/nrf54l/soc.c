@@ -32,7 +32,6 @@
 
 #include <nrf_erratas.h>
 #include <system_nrf54l.h>
-#include <zephyr/drivers/clock_control/nrf_clock_control.h>
 
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
@@ -44,9 +43,9 @@ LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 static int nordicsemi_nrf54l_init(void)
 {
 	/* Update the SystemCoreClock global variable with current core clock
-	 * retrieved from the DT.
+	 * retrieved from hardware state.
 	 */
-	SystemCoreClock = NRF_PERIPH_GET_FREQUENCY(DT_NODELABEL(cpu));
+	SystemCoreClockUpdate();
 
 #if defined(NRF_APPLICATION)
 	/* Enable ICACHE */
