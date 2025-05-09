@@ -476,7 +476,9 @@ function(yaml_save)
     set_property(TARGET ${save_target} PROPERTY json_file ${json_file})
 
     # comment this to keep the temporary JSON files
-    set_property(TARGET ${save_target} APPEND PROPERTY temp_files ${json_file})
+    get_property(temp_files TARGET ${save_target} PROPERTY temp_files)
+    list(APPEND temp_files ${json_file})
+    set_property(TARGET ${save_target} PROPERTY temp_files ${temp_files})
 
     FILE(GENERATE OUTPUT ${json_file}
       CONTENT "${json_content}"
