@@ -208,7 +208,8 @@ uint64_t z_nrf_rtc_timer_get_ticks(k_timeout_t t)
 	} while (curr_time != z_nrf_rtc_timer_read());
 
 	abs_ticks = Z_TICK_ABS(t.ticks);
-	if (Z_IS_TIMEOUT_RELATIVE(t)) {
+	if (abs_ticks < 0) {
+		/* relative timeout */
 		return (t.ticks > COUNTER_SPAN) ?
 			-EINVAL : (curr_time + t.ticks);
 	}

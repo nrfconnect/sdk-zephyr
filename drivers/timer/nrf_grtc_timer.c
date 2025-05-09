@@ -300,7 +300,8 @@ uint64_t z_nrf_grtc_timer_get_ticks(k_timeout_t t)
 
 	grtc_ticks = t.ticks * CYC_PER_TICK;
 	abs_ticks = Z_TICK_ABS(t.ticks);
-	if (Z_IS_TIMEOUT_RELATIVE(t)) {
+	if (abs_ticks < 0) {
+		/* relative timeout */
 		return (grtc_ticks > (int64_t)COUNTER_SPAN) ?
 			-EINVAL : (curr_time + grtc_ticks);
 	}

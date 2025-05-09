@@ -113,12 +113,13 @@ void z_add_timeout(struct _timeout *to, _timeout_func_t fn,
 	K_SPINLOCK(&timeout_lock) {
 		struct _timeout *t;
 
-		if (Z_IS_TIMEOUT_RELATIVE(timeout)) {
-			to->dticks = timeout.ticks + 1 + elapsed();
-		} else {
+		if (IS_ENABLED(CONFIG_TIMEOUT_64BIT) &&
+		    (Z_TICK_ABS(timeout.ticks) >= 0)) {
 			k_ticks_t ticks = Z_TICK_ABS(timeout.ticks) - curr_tick;
 
 			to->dticks = MAX(1, ticks);
+		} else {
+			to->dticks = timeout.ticks + 1 + elapsed();
 		}
 
 		for (t = first(); t != NULL; t = next(t)) {
@@ -305,10 +306,10 @@ k_timepoint_t sys_timepoint_calc(k_timeout_t timeout)
 	} else {
 		k_ticks_t dt = timeout.ticks;
 
-		if (Z_IS_TIMEOUT_RELATIVE(timeout)) {
-			timepoint.tick = sys_clock_tick_get() + MAX(1, dt);
-		} else {
+		if (IS_ENABLED(CONFIG_TIMEOUT_64BIT) && Z_TICK_ABS(dt) >= 0) {
 			timepoint.tick = Z_TICK_ABS(dt);
+		} else {
+			timepoint.tick = sys_clock_tick_get() + MAX(1, dt);
 		}
 	}
 
