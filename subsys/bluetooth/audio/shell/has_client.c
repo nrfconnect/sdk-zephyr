@@ -21,7 +21,6 @@
 #include <zephyr/shell/shell_string_conv.h>
 
 #include "host/shell/bt.h"
-#include "common/bt_shell_private.h"
 
 static struct bt_has *inst;
 
@@ -30,12 +29,12 @@ static void has_client_discover_cb(struct bt_conn *conn, int err, struct bt_has 
 				   enum bt_has_capabilities caps)
 {
 	if (err) {
-		bt_shell_error("HAS discovery (err %d)", err);
+		shell_error(ctx_shell, "HAS discovery (err %d)", err);
 		return;
 	}
 
-	bt_shell_print("HAS discovered %p type 0x%02x caps 0x%02x for conn %p",
-		       has, type, caps, conn);
+	shell_print(ctx_shell, "HAS discovered %p type 0x%02x caps 0x%02x for conn %p",
+		    has, type, caps, conn);
 
 	inst = has;
 }
@@ -43,9 +42,9 @@ static void has_client_discover_cb(struct bt_conn *conn, int err, struct bt_has 
 static void has_client_preset_switch_cb(struct bt_has *has, int err, uint8_t index)
 {
 	if (err != 0) {
-		bt_shell_error("HAS %p preset switch error (err %d)", has, err);
+		shell_error(ctx_shell, "HAS %p preset switch error (err %d)", has, err);
 	} else {
-		bt_shell_print("HAS %p preset switch index 0x%02x", has, index);
+		shell_print(ctx_shell, "HAS %p preset switch index 0x%02x", has, index);
 	}
 }
 
@@ -53,15 +52,15 @@ static void has_client_preset_read_rsp_cb(struct bt_has *has, int err,
 					  const struct bt_has_preset_record *record, bool is_last)
 {
 	if (err) {
-		bt_shell_error("Preset Read operation failed (err %d)", err);
+		shell_error(ctx_shell, "Preset Read operation failed (err %d)", err);
 		return;
 	}
 
-	bt_shell_print("Preset Index: 0x%02x\tProperties: 0x%02x\tName: %s",
-		       record->index, record->properties, record->name);
+	shell_print(ctx_shell, "Preset Index: 0x%02x\tProperties: 0x%02x\tName: %s",
+		    record->index, record->properties, record->name);
 
 	if (is_last) {
-		bt_shell_print("Preset Read operation complete");
+		shell_print(ctx_shell, "Preset Read operation complete");
 	}
 }
 
@@ -74,6 +73,10 @@ static const struct bt_has_client_cb has_client_cb = {
 static int cmd_has_client_init(const struct shell *sh, size_t argc, char **argv)
 {
 	int err;
+
+	if (!ctx_shell) {
+		ctx_shell = sh;
+	}
 
 	err = bt_has_client_cb_register(&has_client_cb);
 	if (err != 0) {
@@ -90,6 +93,10 @@ static int cmd_has_client_discover(const struct shell *sh, size_t argc, char **a
 	if (default_conn == NULL) {
 		shell_error(sh, "Not connected");
 		return -ENOEXEC;
+	}
+
+	if (!ctx_shell) {
+		ctx_shell = sh;
 	}
 
 	err = bt_has_client_discover(default_conn);

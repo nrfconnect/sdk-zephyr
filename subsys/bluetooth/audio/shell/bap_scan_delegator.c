@@ -33,7 +33,6 @@
 
 #include <audio/bap_internal.h>
 #include "host/shell/bt.h"
-#include "common/bt_shell_private.h"
 
 #define PA_SYNC_INTERVAL_TO_TIMEOUT_RATIO 20 /* Set the timeout relative to interval */
 #define PA_SYNC_SKIP              5
@@ -186,7 +185,7 @@ static void pa_timer_handler(struct k_work *work)
 		bt_bap_scan_delegator_set_pa_state(state->recv_state->src_id,
 						   pa_state);
 
-		bt_shell_info("PA timeout for %p", state->recv_state);
+		shell_info(ctx_shell, "PA timeout for %p", state->recv_state);
 	}
 }
 
@@ -203,9 +202,9 @@ static int pa_sync_past(struct bt_conn *conn,
 
 	err = bt_le_per_adv_sync_transfer_subscribe(conn, &param);
 	if (err != 0) {
-		bt_shell_info("Could not do PAST subscribe: %d", err);
+		shell_info(ctx_shell, "Could not do PAST subscribe: %d", err);
 	} else {
-		bt_shell_info("Syncing with PAST: %d", err);
+		shell_info(ctx_shell, "Syncing with PAST: %d", err);
 		state->pa_syncing = true;
 		k_work_init_delayable(&state->pa_timer, pa_timer_handler);
 		(void)k_work_reschedule(&state->pa_timer,
@@ -236,12 +235,12 @@ static int pa_sync_no_past(struct sync_state *state,
 	 */
 	err = bt_le_per_adv_sync_create(&param, &state->pa_sync);
 	if (err != 0) {
-		bt_shell_info("Could not sync per adv: %d", err);
+		shell_info(ctx_shell, "Could not sync per adv: %d", err);
 	} else {
 		char addr_str[BT_ADDR_LE_STR_LEN];
 
 		bt_addr_le_to_str(&recv_state->addr, addr_str, sizeof(addr_str));
-		bt_shell_info("PA sync pending for addr %s", addr_str);
+		shell_info(ctx_shell, "PA sync pending for addr %s", addr_str);
 		state->pa_syncing = true;
 		k_work_init_delayable(&state->pa_timer, pa_timer_handler);
 		(void)k_work_reschedule(&state->pa_timer,
@@ -261,11 +260,12 @@ static int pa_sync_term(struct sync_state *state)
 		return -1;
 	}
 
-	bt_shell_info("Deleting PA sync");
+	shell_info(ctx_shell, "Deleting PA sync");
 
 	err = bt_le_per_adv_sync_delete(state->pa_sync);
 	if (err != 0) {
-		bt_shell_error("Could not delete per adv sync: %d", err);
+		shell_error(ctx_shell, "Could not delete per adv sync: %d",
+			    err);
 	} else {
 		state->pa_syncing = false;
 		state->pa_sync = NULL;
@@ -277,7 +277,7 @@ static int pa_sync_term(struct sync_state *state)
 static void recv_state_updated_cb(struct bt_conn *conn,
 				  const struct bt_bap_scan_delegator_recv_state *recv_state)
 {
-	bt_shell_info("Receive state with ID %u updated", recv_state->src_id);
+	shell_info(ctx_shell, "Receive state with ID %u updated", recv_state->src_id);
 }
 
 static int pa_sync_req_cb(struct bt_conn *conn,
@@ -286,13 +286,14 @@ static int pa_sync_req_cb(struct bt_conn *conn,
 {
 	struct sync_state *state;
 
-	bt_shell_info(
-		"PA Sync request: past_avail %u, broadcast_id 0x%06X, pa_interval 0x%04x: %p",
-		past_avail, recv_state->broadcast_id, pa_interval, recv_state);
+	shell_info(ctx_shell,
+		   "PA Sync request: past_avail %u, broadcast_id 0x%06X, pa_interval 0x%04x: %p",
+		   past_avail, recv_state->broadcast_id, pa_interval,
+		   recv_state);
 
 	state = sync_state_get_or_new(recv_state);
 	if (state == NULL) {
-		bt_shell_error("Could not get state");
+		shell_error(ctx_shell, "Could not get state");
 
 		return -1;
 	}
@@ -322,11 +323,11 @@ static int pa_sync_term_req_cb(struct bt_conn *conn,
 {
 	struct sync_state *state;
 
-	bt_shell_info("PA Sync term request for %p", recv_state);
+	shell_info(ctx_shell, "PA Sync term request for %p", recv_state);
 
 	state = sync_state_get(recv_state);
 	if (state == NULL) {
-		bt_shell_error("Could not get state");
+		shell_error(ctx_shell, "Could not get state");
 
 		return -1;
 	}
@@ -340,12 +341,12 @@ static void broadcast_code_cb(struct bt_conn *conn,
 {
 	struct sync_state *state;
 
-	bt_shell_info("Broadcast code received for %p", recv_state);
-	bt_shell_hexdump(broadcast_code, BT_ISO_BROADCAST_CODE_SIZE);
+	shell_info(ctx_shell, "Broadcast code received for %p", recv_state);
+	shell_hexdump(ctx_shell, broadcast_code, BT_ISO_BROADCAST_CODE_SIZE);
 
 	state = sync_state_get(recv_state);
 	if (state == NULL) {
-		bt_shell_error("Could not get state");
+		shell_error(ctx_shell, "Could not get state");
 
 		return;
 	}
@@ -379,7 +380,7 @@ static void pa_synced_cb(struct bt_le_per_adv_sync *sync,
 {
 	struct sync_state *state;
 
-	bt_shell_info("PA %p synced", sync);
+	shell_info(ctx_shell, "PA %p synced", sync);
 
 	if (info->conn == NULL) {
 		state = sync_state_get_by_pa(sync);
@@ -389,7 +390,9 @@ static void pa_synced_cb(struct bt_le_per_adv_sync *sync,
 	}
 
 	if (state == NULL) {
-		bt_shell_info("Could not get sync state from PA sync %p", sync);
+		shell_info(ctx_shell,
+			   "Could not get sync state from PA sync %p",
+			   sync);
 		return;
 	}
 
@@ -406,11 +409,13 @@ static void pa_term_cb(struct bt_le_per_adv_sync *sync,
 {
 	struct sync_state *state;
 
-	bt_shell_info("PA %p sync terminated", sync);
+	shell_info(ctx_shell, "PA %p sync terminated", sync);
 
 	state = sync_state_get_by_pa(sync);
 	if (state == NULL) {
-		bt_shell_error("Could not get sync state from PA sync %p", sync);
+		shell_error(ctx_shell,
+			    "Could not get sync state from PA sync %p",
+			    sync);
 		return;
 	}
 
@@ -422,7 +427,7 @@ static void pa_term_cb(struct bt_le_per_adv_sync *sync,
 	k_work_cancel_delayable(&state->pa_timer);
 }
 
-static struct bt_le_per_adv_sync_cb pa_sync_cb = {
+static struct bt_le_per_adv_sync_cb pa_sync_cb =  {
 	.synced = pa_synced_cb,
 	.term = pa_term_cb,
 };
@@ -495,7 +500,7 @@ static int cmd_bap_scan_delegator_sync_pa(const struct shell *sh, size_t argc,
 
 	state = sync_state_get_by_src_id((uint8_t)src_id);
 	if (state == NULL) {
-		shell_error(sh, "Could not get state");
+		shell_error(ctx_shell, "Could not get state");
 
 		return -ENOEXEC;
 	}
@@ -558,14 +563,14 @@ static int cmd_bap_scan_delegator_term_pa(const struct shell *sh, size_t argc,
 
 	state = sync_state_get_by_src_id((uint8_t)src_id);
 	if (state == NULL) {
-		shell_error(sh, "Could not get state");
+		shell_error(ctx_shell, "Could not get state");
 
 		return -ENOEXEC;
 	}
 
 	err = pa_sync_term(state);
 	if (err != 0) {
-		shell_error(sh, "Failed to terminate PA sync: %d", err);
+		shell_error(ctx_shell, "Failed to terminate PA sync: %d", err);
 
 		return -ENOEXEC;
 	}
@@ -668,7 +673,7 @@ static int cmd_bap_scan_delegator_add_src(const struct shell *sh, size_t argc, c
 
 	state = sync_state_new();
 	if (state == NULL) {
-		shell_error(sh, "Could not get new state");
+		shell_error(ctx_shell, "Could not get new state");
 
 		return -ENOEXEC;
 	}
@@ -679,7 +684,7 @@ static int cmd_bap_scan_delegator_add_src(const struct shell *sh, size_t argc, c
 
 	err = bt_bap_scan_delegator_add_src(&param);
 	if (err < 0) {
-		shell_error(sh, "Failed to add source: %d", err);
+		shell_error(ctx_shell, "Failed to add source: %d", err);
 
 		return -ENOEXEC;
 	}
@@ -773,7 +778,7 @@ static int cmd_bap_scan_delegator_add_src_by_pa_sync(const struct shell *sh, siz
 
 	state = sync_state_new();
 	if (state == NULL) {
-		shell_error(sh, "Could not get new state");
+		shell_error(ctx_shell, "Could not get new state");
 
 		return -ENOEXEC;
 	}
@@ -784,7 +789,7 @@ static int cmd_bap_scan_delegator_add_src_by_pa_sync(const struct shell *sh, siz
 
 	err = bt_bap_scan_delegator_add_src(&param);
 	if (err < 0) {
-		shell_error(sh, "Failed to add source: %d", err);
+		shell_error(ctx_shell, "Failed to add source: %d", err);
 
 		return -ENOEXEC;
 	}
@@ -880,6 +885,7 @@ static int cmd_bap_scan_delegator_mod_src(const struct shell *sh, size_t argc,
 		subgroup_param->metadata_len = 0U;
 	}
 
+
 	param.src_id = (uint8_t)src_id;
 	param.encrypt_state = (enum bt_bap_big_enc_state)enc_state;
 	param.broadcast_id = broadcast_id;
@@ -887,7 +893,7 @@ static int cmd_bap_scan_delegator_mod_src(const struct shell *sh, size_t argc,
 
 	err = bt_bap_scan_delegator_mod_src(&param);
 	if (err < 0) {
-		shell_error(sh, "Failed to modify source: %d", err);
+		shell_error(ctx_shell, "Failed to modify source: %d", err);
 
 		return -ENOEXEC;
 	}
@@ -918,7 +924,8 @@ static int cmd_bap_scan_delegator_rem_src(const struct shell *sh, size_t argc,
 
 	err = bt_bap_scan_delegator_rem_src((uint8_t)src_id);
 	if (err < 0) {
-		shell_error(sh, "Failed to remove source source: %d", err);
+		shell_error(ctx_shell, "Failed to remove source source: %d",
+			    err);
 
 		return -ENOEXEC;
 	}
