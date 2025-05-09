@@ -964,7 +964,7 @@ unlock:
 #endif /* CONFIG_NRF_WIFI_RPU_RECOVERY */
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
-	nrf70_util,
+	nrf_wifi_util_subcmds,
 	SHELL_CMD_ARG(he_ltf,
 		      NULL,
 		      "0 - 1x HE LTF\n"
@@ -1069,7 +1069,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_SUBCMD_SET_END);
 
 
-SHELL_SUBCMD_ADD((nrf70), util, &nrf70_util, "nRF70 utility commands\n", NULL, 0, 0);
+SHELL_CMD_REGISTER(wifi_util,
+		   &nrf_wifi_util_subcmds,
+		   "nRF Wi-Fi utility shell commands",
+		   NULL);
 
 
 static int nrf_wifi_util_init(void)
