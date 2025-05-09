@@ -329,11 +329,7 @@ static void ot_joiner_start_handler(otError error, void *context)
 	switch (error) {
 	case OT_ERROR_NONE:
 		NET_INFO("Join success");
-		error = otThreadSetEnabled(ot_context->instance, true);
-		if (error != OT_ERROR_NONE) {
-			NET_ERR("Failed to start the OpenThread network [%d]", error);
-		}
-
+		otThreadSetEnabled(ot_context->instance, true);
 		break;
 	default:
 		NET_ERR("Join failed [%d]", error);
@@ -434,11 +430,7 @@ int openthread_start(struct openthread_context *ot_context)
 		goto exit;
 	}
 
-	error = otIp6SetEnabled(ot_context->instance, true);
-	if (error != OT_ERROR_NONE) {
-		NET_ERR("Failed to set %s [%d]", "IPv6 support", error);
-		goto exit;
-	}
+	otIp6SetEnabled(ot_context->instance, true);
 
 	/* Sleepy End Device specific configuration. */
 	if (IS_ENABLED(CONFIG_OPENTHREAD_MTD_SED)) {
@@ -449,17 +441,8 @@ int openthread_start(struct openthread_context *ot_context)
 		 */
 		ot_mode.mRxOnWhenIdle = false;
 
-		error = otThreadSetLinkMode(ot_context->instance, ot_mode);
-		if (error != OT_ERROR_NONE) {
-			NET_ERR("Failed to set %s [%d]", "link mode", error);
-			goto exit;
-		}
-
-		error = otLinkSetPollPeriod(ot_context->instance, OT_POLL_PERIOD);
-		if (error != OT_ERROR_NONE) {
-			NET_ERR("Failed to set %s [%d]", "poll period", error);
-			goto exit;
-		}
+		otThreadSetLinkMode(ot_context->instance, ot_mode);
+		otLinkSetPollPeriod(ot_context->instance, OT_POLL_PERIOD);
 	}
 
 	/* Configure Child Supervision and MLE Child timeouts. */
@@ -494,39 +477,16 @@ int openthread_start(struct openthread_context *ot_context)
 		otExtendedPanId xpanid;
 		otNetworkKey    networkKey;
 
-		error = otThreadSetNetworkName(ot_instance, OT_NETWORK_NAME);
-		if (error != OT_ERROR_NONE) {
-			NET_ERR("Failed to set %s [%d]", "network name", error);
-			goto exit;
-		}
-
-		error = otLinkSetChannel(ot_instance, OT_CHANNEL);
-		if (error != OT_ERROR_NONE) {
-			NET_ERR("Failed to set %s [%d]", "channel", error);
-			goto exit;
-		}
-
-		error = otLinkSetPanId(ot_instance, OT_PANID);
-		if (error != OT_ERROR_NONE) {
-			NET_ERR("Failed to set %s [%d]", "PAN ID", error);
-			goto exit;
-		}
-
+		otThreadSetNetworkName(ot_instance, OT_NETWORK_NAME);
+		otLinkSetChannel(ot_instance, OT_CHANNEL);
+		otLinkSetPanId(ot_instance, OT_PANID);
 		net_bytes_from_str(xpanid.m8, 8, (char *)OT_XPANID);
-		error = otThreadSetExtendedPanId(ot_instance, &xpanid);
-		if (error != OT_ERROR_NONE) {
-			NET_ERR("Failed to set %s [%d]", "ext PAN ID", error);
-			goto exit;
-		}
+		otThreadSetExtendedPanId(ot_instance, &xpanid);
 
 		if (strlen(OT_NETWORKKEY)) {
 			net_bytes_from_str(networkKey.m8, OT_NETWORK_KEY_SIZE,
 					   (char *)OT_NETWORKKEY);
-			error = otThreadSetNetworkKey(ot_instance, &networkKey);
-			if (error != OT_ERROR_NONE) {
-				NET_ERR("Failed to set %s [%d]", "network key", error);
-				goto exit;
-			}
+			otThreadSetNetworkKey(ot_instance, &networkKey);
 		}
 	}
 
@@ -573,7 +533,7 @@ static int openthread_init(struct net_if *iface)
 		.name = "openthread",
 		.no_yield = true,
 	};
-	otError err = OT_ERROR_NONE;
+	otError err;
 
 	NET_DBG("openthread_init");
 
@@ -596,11 +556,7 @@ static int openthread_init(struct net_if *iface)
 	}
 
 	if (IS_ENABLED(CONFIG_OPENTHREAD_COPROCESSOR)) {
-		err = otPlatUartEnable();
-		if (err != OT_ERROR_NONE) {
-			NET_ERR("Failed to enable UART: [%d]", err);
-		}
-
+		otPlatUartEnable();
 		otNcpHdlcInit(ot_context->instance, ncp_hdlc_send);
 	} else {
 		otIp6SetReceiveFilterEnabled(ot_context->instance, true);
@@ -648,7 +604,7 @@ static int openthread_init(struct net_if *iface)
 
 	(void)k_work_submit_to_queue(&ot_context->work_q, &ot_context->api_work);
 
-	return (err == OT_ERROR_NONE) ? 0 : -EIO;
+	return 0;
 }
 
 void ieee802154_init(struct net_if *iface)
