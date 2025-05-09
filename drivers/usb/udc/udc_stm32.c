@@ -60,14 +60,14 @@ struct udc_stm32_config {
 	uint16_t ep_mps;
 };
 
-static void udc_stm32_lock(const struct device *dev)
+static int udc_stm32_lock(const struct device *dev)
 {
-	udc_lock_internal(dev, K_FOREVER);
+	return udc_lock_internal(dev, K_FOREVER);
 }
 
-static void udc_stm32_unlock(const struct device *dev)
+static int udc_stm32_unlock(const struct device *dev)
 {
-	udc_unlock_internal(dev);
+	return udc_unlock_internal(dev);
 }
 
 #define hpcd2data(hpcd) CONTAINER_OF(hpcd, struct udc_stm32_data, pcd);
