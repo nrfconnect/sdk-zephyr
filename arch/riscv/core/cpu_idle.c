@@ -12,7 +12,6 @@ void arch_cpu_idle(void)
 {
 	sys_trace_idle();
 	__asm__ volatile("wfi");
-	sys_trace_idle_exit();
 	irq_unlock(MSTATUS_IEN);
 }
 #endif
@@ -22,7 +21,6 @@ void arch_cpu_atomic_idle(unsigned int key)
 {
 	sys_trace_idle();
 	__asm__ volatile("wfi");
-	sys_trace_idle_exit();
 	irq_unlock(key);
 }
 #endif
