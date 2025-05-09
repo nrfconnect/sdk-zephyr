@@ -18,7 +18,6 @@ supported:
   - dmic
   - gpio
   - i2c
-  - i2s
   - pwm
   - spi
   - watchdog
