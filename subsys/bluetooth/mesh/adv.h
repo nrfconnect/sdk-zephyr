@@ -58,11 +58,7 @@ struct bt_mesh_adv_ctx {
 };
 
 struct bt_mesh_adv {
-	void *adv_bearer;
-
-#if defined(CONFIG_BT_MESH_GATT)
-	void *gatt_bearer[CONFIG_BT_MAX_CONN];
-#endif
+	sys_snode_t node;
 
 	struct bt_mesh_adv_ctx ctx;
 

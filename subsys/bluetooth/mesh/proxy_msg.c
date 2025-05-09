@@ -56,24 +56,6 @@ static struct bt_mesh_proxy_role roles[CONFIG_BT_MAX_CONN];
 
 static int conn_count;
 
-static void proxy_queue_put(struct bt_mesh_proxy_role *role, struct bt_mesh_adv *adv)
-{
-	k_fifo_put(&role->pending, &(adv->gatt_bearer[bt_conn_index(role->conn)]));
-}
-
-static struct bt_mesh_adv *proxy_queue_get(struct bt_mesh_proxy_role *role)
-{
-	void *gatt_bearer;
-
-	gatt_bearer = k_fifo_get(&role->pending, K_NO_WAIT);
-	if (!gatt_bearer) {
-		return NULL;
-	}
-
-	return CONTAINER_OF(gatt_bearer, struct bt_mesh_adv,
-			    gatt_bearer[bt_conn_index(role->conn)]);
-}
-
 static void proxy_sar_timeout(struct k_work *work)
 {
 	struct bt_mesh_proxy_role *role;
@@ -84,7 +66,7 @@ static void proxy_sar_timeout(struct k_work *work)
 	role = CONTAINER_OF(dwork, struct bt_mesh_proxy_role, sar_timer);
 
 	while (!k_fifo_is_empty(&role->pending)) {
-		struct bt_mesh_adv *adv = proxy_queue_get(role);
+		struct bt_mesh_adv *adv = k_fifo_get(&role->pending, K_NO_WAIT);
 
 		__ASSERT_NO_MSG(adv);
 
@@ -261,7 +243,7 @@ int bt_mesh_proxy_relay_send(struct bt_conn *conn, struct bt_mesh_adv *adv)
 {
 	struct bt_mesh_proxy_role *role = &roles[bt_conn_index(conn)];
 
-	proxy_queue_put(role, bt_mesh_adv_ref(adv));
+	k_fifo_put(&role->pending, bt_mesh_adv_ref(adv));
 
 	bt_mesh_wq_submit(&role->work);
 
@@ -277,7 +259,7 @@ static void proxy_msg_send_pending(struct k_work *work)
 		return;
 	}
 
-	adv = proxy_queue_get(role);
+	adv = k_fifo_get(&role->pending, K_NO_WAIT);
 	if (!adv) {
 		return;
 	}
