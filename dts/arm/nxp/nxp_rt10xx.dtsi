@@ -14,9 +14,12 @@
 #include <zephyr/dt-bindings/memory-controller/nxp,flexram.h>
 
 / {
+	aliases {
+		die-temp0 = &tempmon;
+	};
+
 	chosen {
 		zephyr,entropy = &trng;
-		die-temp0 = &tempmon;
 	};
 
 	cpus {
@@ -458,6 +461,8 @@
 			interrupts = <32 3>;
 			status = "disabled";
 			clocks = <&ccm IMX_CCM_LPSPI_CLK 0x6c 0>;
+			rx-fifo-size = <16>;
+			tx-fifo-size = <16>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
@@ -468,6 +473,8 @@
 			interrupts = <33 3>;
 			status = "disabled";
 			clocks = <&ccm IMX_CCM_LPSPI_CLK 0x6c 2>;
+			rx-fifo-size = <16>;
+			tx-fifo-size = <16>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
@@ -478,6 +485,8 @@
 			interrupts = <34 3>;
 			status = "disabled";
 			clocks = <&ccm IMX_CCM_LPSPI_CLK 0x6c 4>;
+			rx-fifo-size = <16>;
+			tx-fifo-size = <16>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
@@ -488,6 +497,8 @@
 			interrupts = <35 3>;
 			status = "disabled";
 			clocks = <&ccm IMX_CCM_LPSPI_CLK 0x6c 6>;
+			rx-fifo-size = <16>;
+			tx-fifo-size = <16>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
@@ -885,14 +896,13 @@
 			dma-channels = <32>;
 			dma-requests = <128>;
 			nxp,mem2mem;
-			nxp,a_on;
+			nxp,a-on;
 			reg = <0x400E8000 0x4000>,
 				<0x400EC000 0x4000>;
 			interrupts = <0 0>, <1 0>, <2 0>, <3 0>,
 				<4 0>, <5 0>, <6 0>, <7 0>,
 				<8 0>, <9 0>, <10 0>, <11 0>,
-				<12 0>, <13 0>, <14 0>, <15 0>,
-				<16 0>;
+				<12 0>, <13 0>, <14 0>, <15 0>;
 			irq-shared-offset = <16>;
 			clocks = <&ccm IMX_CCM_EDMA_CLK 0x7C 0x000000C0>;
 			status = "disabled";

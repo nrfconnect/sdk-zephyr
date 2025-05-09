@@ -394,7 +394,6 @@
 				interrupts = <40 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&hfxo>;
 				max-bit-width = <32>;
-				max-frequency = <DT_FREQ_M(32)>;
 				prescaler = <0>;
 			};
 
@@ -406,7 +405,6 @@
 				interrupts = <41 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&hfxo>;
 				max-bit-width = <32>;
-				max-frequency = <DT_FREQ_M(32)>;
 				prescaler = <0>;
 			};
 
@@ -418,7 +416,6 @@
 				interrupts = <42 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&hfxo>;
 				max-bit-width = <32>;
-				max-frequency = <DT_FREQ_M(32)>;
 				prescaler = <0>;
 			};
 
@@ -620,7 +617,8 @@
 				reg = <0x8d8000 0x400>, <0x2fbef800 0x800>, <0x2fbe8000 0x7800>;
 				reg-names = "wrapper", "m_can", "message_ram";
 				interrupts = <216 NRF_DEFAULT_IRQ_PRIORITY>;
-				clocks = <&canpll>;
+				clocks = <&canpll>, <&hsfll120>;
+				clock-names = "auxpll", "hsfll";
 				power-domains = <&gpd NRF_GPD_FAST_ACTIVE1>;
 				bosch,mram-cfg = <0x0 28 8 3 3 0 1 1>;
 				status = "disabled";
@@ -641,7 +639,6 @@
 				interrupts = <226 NRF_DEFAULT_IRQ_PRIORITY>;
 				power-domains = <&gpd NRF_GPD_FAST_ACTIVE1>;
 				max-bit-width = <32>;
-				max-frequency = <DT_FREQ_M(320)>;
 				clocks = <&hsfll120>;
 				prescaler = <0>;
 			};
@@ -654,7 +651,6 @@
 				interrupts = <227 NRF_DEFAULT_IRQ_PRIORITY>;
 				power-domains = <&gpd NRF_GPD_FAST_ACTIVE1>;
 				max-bit-width = <32>;
-				max-frequency = <DT_FREQ_M(320)>;
 				clocks = <&hsfll120>;
 				prescaler = <0>;
 			};

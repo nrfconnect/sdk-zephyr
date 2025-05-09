@@ -36,7 +36,7 @@ static struct k_obj_type obj_type_pipe;
 #endif /* CONFIG_OBJ_CORE_PIPE */
 
 
-void k_pipe_init(struct k_pipe *pipe, unsigned char *buffer, size_t size)
+void z_impl_k_pipe_init(struct k_pipe *pipe, unsigned char *buffer, size_t size)
 {
 	pipe->buffer = buffer;
 	pipe->size = size;
@@ -46,7 +46,7 @@ void k_pipe_init(struct k_pipe *pipe, unsigned char *buffer, size_t size)
 	pipe->lock = (struct k_spinlock){};
 	z_waitq_init(&pipe->wait_q.writers);
 	z_waitq_init(&pipe->wait_q.readers);
-	SYS_PORT_TRACING_OBJ_INIT(k_pipe, pipe);
+	SYS_PORT_TRACING_OBJ_INIT(k_pipe, pipe, buffer, size);
 
 	pipe->flags = 0;
 
@@ -87,6 +87,15 @@ int z_impl_k_pipe_alloc_init(struct k_pipe *pipe, size_t size)
 }
 
 #ifdef CONFIG_USERSPACE
+static inline void z_vrfy_k_pipe_init(struct k_pipe *pipe, unsigned char *buffer, size_t size)
+{
+	K_OOPS(K_SYSCALL_OBJ_NEVER_INIT(pipe, K_OBJ_PIPE));
+	K_OOPS(K_SYSCALL_MEMORY_WRITE(buffer, size));
+
+	z_impl_k_pipe_init(pipe, buffer, size);
+}
+#include <zephyr/syscalls/k_pipe_init_mrsh.c>
+
 static inline int z_vrfy_k_pipe_alloc_init(struct k_pipe *pipe, size_t size)
 {
 	K_OOPS(K_SYSCALL_OBJ_NEVER_INIT(pipe, K_OBJ_PIPE));
@@ -96,12 +105,13 @@ static inline int z_vrfy_k_pipe_alloc_init(struct k_pipe *pipe, size_t size)
 #include <zephyr/syscalls/k_pipe_alloc_init_mrsh.c>
 #endif /* CONFIG_USERSPACE */
 
-static inline void handle_poll_events(struct k_pipe *pipe)
+static inline bool handle_poll_events(struct k_pipe *pipe)
 {
 #ifdef CONFIG_POLL
-	z_handle_obj_poll_events(&pipe->poll_events, K_POLL_STATE_PIPE_DATA_AVAILABLE);
+	return z_handle_obj_poll_events(&pipe->poll_events, K_POLL_STATE_PIPE_DATA_AVAILABLE);
 #else
 	ARG_UNUSED(pipe);
+	return false;
 #endif /* CONFIG_POLL */
 }
 
@@ -459,7 +469,7 @@ int z_impl_k_pipe_put(struct k_pipe *pipe, const void *data,
 	 */
 
 	if ((pipe->bytes_used != 0U) && (*bytes_written != 0U)) {
-		handle_poll_events(pipe);
+		reschedule_needed = handle_poll_events(pipe) || reschedule_needed;
 	}
 
 	/*

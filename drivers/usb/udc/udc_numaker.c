@@ -961,7 +961,7 @@ static int numaker_usbd_msg_handle_out(const struct device *dev, struct numaker_
 	__ASSERT_NO_MSG(msg->type == NUMAKER_USBD_MSG_TYPE_OUT);
 
 	ep = msg->out.ep;
-	ep_cfg = udc_get_ep_cfg(ep);
+	ep_cfg = udc_get_ep_cfg(dev, ep);
 
 	udc_ep_set_busy(ep_cfg, false);
 
@@ -1573,7 +1573,7 @@ static int udc_numaker_enable(const struct device *dev)
 
 static int udc_numaker_disable(const struct device *dev)
 {
-	LOG_DBG("Enable device %p", dev);
+	LOG_DBG("Disable device %p", dev);
 
 	/* S/W disconnect */
 	numaker_usbd_sw_disconnect(dev);

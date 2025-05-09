@@ -65,10 +65,8 @@ static uint8_t btp_ascs_supported_commands(const void *cmd, uint16_t cmd_len,
 {
 	struct btp_ascs_read_supported_commands_rp *rp = rsp;
 
-	/* octet 0 */
-	tester_set_bit(rp->data, BTP_ASCS_READ_SUPPORTED_COMMANDS);
-
-	*rsp_len = sizeof(*rp) + 1;
+	*rsp_len = tester_supported_commands(BTP_SERVICE_ID_ASCS, rp->data);
+	*rsp_len += sizeof(*rp);
 
 	return BTP_STATUS_SUCCESS;
 }
@@ -196,14 +194,8 @@ static uint8_t pacs_supported_commands(const void *cmd, uint16_t cmd_len,
 {
 	struct btp_pacs_read_supported_commands_rp *rp = rsp;
 
-	/* octet 0 */
-	tester_set_bit(rp->data, BTP_PACS_READ_SUPPORTED_COMMANDS);
-	tester_set_bit(rp->data, BTP_PACS_UPDATE_CHARACTERISTIC);
-	tester_set_bit(rp->data, BTP_PACS_SET_LOCATION);
-	tester_set_bit(rp->data, BTP_PACS_SET_AVAILABLE_CONTEXTS);
-	tester_set_bit(rp->data, BTP_PACS_SET_SUPPORTED_CONTEXTS);
-
-	*rsp_len = sizeof(*rp) + 1;
+	*rsp_len = tester_supported_commands(BTP_SERVICE_ID_PACS, rp->data);
+	*rsp_len += sizeof(*rp);
 
 	return BTP_STATUS_SUCCESS;
 }
@@ -330,12 +322,8 @@ static uint8_t btp_bap_supported_commands(const void *cmd, uint16_t cmd_len,
 {
 	struct btp_bap_read_supported_commands_rp *rp = rsp;
 
-	/* octet 0 */
-	tester_set_bit(rp->data, BTP_BAP_READ_SUPPORTED_COMMANDS);
-	tester_set_bit(rp->data, BTP_BAP_DISCOVER);
-	tester_set_bit(rp->data, BTP_BAP_SEND);
-
-	*rsp_len = sizeof(*rp) + 1;
+	*rsp_len = tester_supported_commands(BTP_SERVICE_ID_BAP, rp->data);
+	*rsp_len += sizeof(*rp);
 
 	return BTP_STATUS_SUCCESS;
 }
@@ -487,7 +475,28 @@ static const struct btp_handler bap_handlers[] = {
 
 uint8_t tester_init_pacs(void)
 {
+	const struct bt_pacs_register_param pacs_param = {
+#if defined(CONFIG_BT_PAC_SNK)
+		.snk_pac = true,
+#endif /* CONFIG_BT_PAC_SNK */
+#if defined(CONFIG_BT_PAC_SNK_LOC)
+		.snk_loc = true,
+#endif /* CONFIG_BT_PAC_SNK_LOC */
+#if defined(CONFIG_BT_PAC_SRC)
+		.src_pac = true,
+#endif /* CONFIG_BT_PAC_SRC */
+#if defined(CONFIG_BT_PAC_SRC_LOC)
+		.src_loc = true,
+#endif /* CONFIG_BT_PAC_SRC_LOC */
+	};
 	int err;
+
+	/* PACS shall be registered before ASCS in btp_bap_unicast_init */
+	err = bt_pacs_register(&pacs_param);
+	if (err != 0) {
+		LOG_DBG("Failed to register client callbacks: %d", err);
+		return BTP_STATUS_FAILED;
+	}
 
 	btp_bap_unicast_init();
 

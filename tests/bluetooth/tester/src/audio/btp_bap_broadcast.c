@@ -88,7 +88,7 @@ static int btp_bap_broadcast_local_source_free(struct btp_bap_broadcast_local_so
 		return -EINVAL;
 	}
 
-	memset(&source, 0, sizeof(*source));
+	memset(source, 0, sizeof(*source));
 
 	return 0;
 }
@@ -252,7 +252,7 @@ static void stream_recv(struct bt_bap_stream *stream,
 		LOG_DBG("Incoming audio on stream %p len %u flags 0x%02X seq_num %u and ts %u",
 			stream, buf->len, info->flags, info->seq_num, info->ts);
 
-		if ((info->flags & BT_ISO_FLAGS_VALID) == 0) {
+		if ((info->flags & BT_ISO_FLAGS_VALID) != 0) {
 			b_stream->already_sent = true;
 			broadcaster = &remote_broadcast_sources[b_stream->source_id];
 			send_bis_stream_received_ev(&broadcaster->address,
@@ -474,7 +474,7 @@ uint8_t btp_bap_broadcast_source_setup(const void *cmd, uint16_t cmd_len,
 
 	rp->gap_settings = gap_settings;
 	sys_put_le24(broadcast_id, rp->broadcast_id);
-	*rsp_len = sizeof(*rp) + 1;
+	*rsp_len = sizeof(*rp);
 
 	return BTP_STATUS_SUCCESS;
 }
@@ -589,7 +589,7 @@ uint8_t btp_bap_broadcast_source_setup_v2(const void *cmd, uint16_t cmd_len,
 	}
 
 	rp->gap_settings = gap_settings;
-	*rsp_len = sizeof(*rp) + 1;
+	*rsp_len = sizeof(*rp);
 
 	return BTP_STATUS_SUCCESS;
 }

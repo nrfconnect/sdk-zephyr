@@ -122,7 +122,7 @@ static int usbd_hid_request(struct usbd_class_data *const c_data,
 
 	if (bi->ep == hid_get_in_ep(c_data)) {
 		if (ops->input_report_done != NULL) {
-			ops->input_report_done(dev);
+			ops->input_report_done(dev, buf->__buf);
 		} else {
 			k_sem_give(&ddata->in_sem);
 		}
@@ -479,7 +479,7 @@ static void *usbd_hid_get_desc(struct usbd_class_data *const c_data,
 	const struct device *dev = usbd_class_get_private(c_data);
 	const struct hid_device_config *dcfg = dev->config;
 
-	if (speed == USBD_SPEED_HS) {
+	if (USBD_SUPPORTS_HIGH_SPEED && speed == USBD_SPEED_HS) {
 		return dcfg->hs_desc;
 	}
 

@@ -11,12 +11,12 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
 
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
 #include <zephyr/toolchain.h>
 #include <zephyr/types.h>
-#include <zephyr/sys/util.h>
-#include <zephyr/bluetooth/addr.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -592,6 +592,12 @@ struct bt_hci_rp_write_conn_accept_timeout {
 #define BT_BREDR_SCAN_INQUIRY                   0x01
 #define BT_BREDR_SCAN_PAGE                      0x02
 
+#define BT_HCI_OP_READ_CLASS_OF_DEVICE          BT_OP(BT_OGF_BASEBAND, 0x0023) /* 0x0c23 */
+struct bt_hci_rp_read_class_of_device {
+	uint8_t  status;
+	uint8_t  class_of_device[3];
+} __packed;
+
 #define BT_COD(major_service, major_device, minor_device)                         \
 	(((uint32_t)major_service << 13) | ((uint32_t)major_device << 8) |            \
 	 ((uint32_t)minor_device << 2))
@@ -764,6 +770,16 @@ struct bt_hci_handle_count {
 struct bt_hci_cp_host_num_completed_packets {
 	uint8_t  num_handles;
 	struct bt_hci_handle_count h[0];
+} __packed;
+
+#define BT_HCI_OP_WRITE_CURRENT_IAC_LAP         BT_OP(BT_OGF_BASEBAND, 0x003a) /* 0x0c3a */
+struct bt_hci_iac_lap {
+	uint8_t iac[3];
+} __packed;
+
+struct bt_hci_cp_write_current_iac_lap {
+	uint8_t  num_current_iac;
+	struct bt_hci_iac_lap lap[0];
 } __packed;
 
 #define BT_HCI_OP_WRITE_INQUIRY_MODE            BT_OP(BT_OGF_BASEBAND, 0x0045) /* 0x0c45 */
@@ -2787,6 +2803,12 @@ struct bt_hci_evt_remote_name_req_complete {
 	bt_addr_t bdaddr;
 	uint8_t   name[248];
 } __packed;
+
+/* Encryption Value */
+#define BT_HCI_ENCRYPTION_OFF           0x00
+#define BT_HCI_ENCRYPTION_ON_LE_AES_CCM 0x01
+#define BT_HCI_ENCRYPTION_ON_BR_E0      0x01
+#define BT_HCI_ENCRYPTION_ON_BR_AES_CCM 0x02
 
 #define BT_HCI_EVT_ENCRYPT_CHANGE               0x08
 struct bt_hci_evt_encrypt_change {

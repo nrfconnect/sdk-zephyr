@@ -12,43 +12,52 @@
  */
 
 #include <errno.h>
-#include <zephyr/autoconf.h>
-#include <zephyr/bluetooth/audio/bap.h>
-#include <zephyr/bluetooth/gap.h>
-#include <zephyr/types.h>
-#include <ctype.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/types.h>
+
+#include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/bluetooth/audio/bap.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/classic/rfcomm.h>
+#include <zephyr/bluetooth/classic/sdp.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/ead.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/hci_types.h>
+#include <zephyr/bluetooth/iso.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/settings/settings.h>
+#include <zephyr/shell/shell.h>
+#include <zephyr/shell/shell_string_conv.h>
+#include <zephyr/shell/shell_types.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/kernel.h>
-
-#include <zephyr/settings/settings.h>
-
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/classic/rfcomm.h>
-#include <zephyr/bluetooth/classic/sdp.h>
-#include <zephyr/bluetooth/iso.h>
-#include <zephyr/bluetooth/ead.h>
-
-#include <zephyr/shell/shell.h>
-#include "common/bt_shell_private.h"
+#include <zephyr/toolchain.h>
+#include <zephyr/types.h>
 
 #include "audio/shell/audio.h"
+#include "common/bt_shell_private.h"
+#if defined(CONFIG_BT_LL_SW_SPLIT)
 #include "controller/ll_sw/shell/ll.h"
+#endif /* CONFIG_BT_LL_SW_SPLIT */
 #include "host/shell/bt.h"
 #include "mesh/shell/hci.h"
 
 static bool no_settings_load;
 
 uint8_t selected_id = BT_ID_DEFAULT;
-const struct shell *ctx_shell;
 
 #if defined(CONFIG_BT_CONN)
 struct bt_conn *default_conn;
@@ -362,7 +371,8 @@ static void print_data_set(uint8_t set_value_len,
 
 static bool data_verbose_cb(struct bt_data *data, void *user_data)
 {
-	bt_shell_fprintf_info("%*sType 0x%02x: ", strlen(scan_response_label), "", data->type);
+	bt_shell_fprintf_info("%*sType 0x%02x: ",
+			      (int)strlen(scan_response_label), "", data->type);
 
 	switch (data->type) {
 	case BT_DATA_UUID16_SOME:
@@ -573,10 +583,10 @@ static void scan_recv(const struct bt_le_scan_recv_info *info, struct net_buf_si
 
 	if (scan_verbose_output) {
 		bt_shell_info("%*s[SCAN DATA START - %s]",
-			      strlen(scan_response_label), "",
+			      (int)strlen(scan_response_label), "",
 			      scan_response_type_txt(info->adv_type));
 		bt_data_parse(&buf_copy, data_verbose_cb, NULL);
-		bt_shell_info("%*s[SCAN DATA END]", strlen(scan_response_label), "");
+		bt_shell_info("%*s[SCAN DATA END]", (int)strlen(scan_response_label), "");
 	}
 
 #if defined(CONFIG_BT_CENTRAL)
@@ -1334,8 +1344,6 @@ static int cmd_init(const struct shell *sh, size_t argc, char *argv[])
 	int err;
 	bool sync = false;
 
-	ctx_shell = sh;
-
 	for (size_t argn = 1; argn < argc; argn++) {
 		const char *arg = argv[argn];
 
@@ -1523,7 +1531,7 @@ static int cmd_id_reset(const struct shell *sh, size_t argc, char *argv[])
 	int err;
 
 	if (argc < 2) {
-		shell_error(sh, "Identity identifier not specified");
+		shell_error(sh, "Identity handle not specified");
 		return -ENOEXEC;
 	}
 
@@ -1557,7 +1565,7 @@ static int cmd_id_delete(const struct shell *sh, size_t argc, char *argv[])
 	int err;
 
 	if (argc < 2) {
-		shell_error(sh, "Identity identifier not specified");
+		shell_error(sh, "Identity handle not specified");
 		return -ENOEXEC;
 	}
 
@@ -1959,7 +1967,7 @@ static ssize_t ad_init(struct bt_data *data_array, const size_t data_array_size,
 		csis_ad_len = csis_ad_data_add(&data_array[ad_len],
 					       data_array_size - ad_len, discoverable);
 		if (csis_ad_len < 0) {
-			bt_shell_error("Failed to add CSIS data (err %d)", csis_ad_len);
+			bt_shell_error("Failed to add CSIS data (err %zd)", csis_ad_len);
 			return ad_len;
 		}
 
@@ -1968,15 +1976,9 @@ static ssize_t ad_init(struct bt_data *data_array, const size_t data_array_size,
 
 	if (IS_ENABLED(CONFIG_BT_AUDIO) && IS_ENABLED(CONFIG_BT_EXT_ADV) && adv_ext) {
 		const bool connectable = atomic_test_bit(adv_options, SHELL_ADV_OPT_CONNECTABLE);
-		ssize_t audio_ad_len;
 
-		audio_ad_len = audio_ad_data_add(&data_array[ad_len], data_array_size - ad_len,
-						 discoverable, connectable);
-		if (audio_ad_len < 0) {
-			return audio_ad_len;
-		}
-
-		ad_len += audio_ad_len;
+		ad_len += audio_ad_data_add(&data_array[ad_len], data_array_size - ad_len,
+					    discoverable, connectable);
 	}
 
 	return ad_len;
@@ -3803,13 +3805,8 @@ static int cmd_clear(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	if (argc < 3) {
-#if defined(CONFIG_BT_CLASSIC)
-		addr.type = BT_ADDR_LE_PUBLIC;
-		err = bt_addr_from_str(argv[1], &addr.a);
-#else
 		shell_print(sh, "Both address and address type needed");
 		return -ENOEXEC;
-#endif
 	} else {
 		err = bt_addr_le_from_str(argv[1], argv[2], &addr);
 	}
@@ -4146,8 +4143,23 @@ static void auth_pairing_oob_data_request(struct bt_conn *conn,
 static void auth_pairing_complete(struct bt_conn *conn, bool bonded)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
+	struct bt_conn_info info;
 
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+	if (bt_conn_get_info(conn, &info) < 0) {
+		return;
+	}
+
+	switch (info.type) {
+	case BT_CONN_TYPE_LE:
+		bt_addr_le_to_str(info.le.dst, addr, sizeof(addr));
+		break;
+	case BT_CONN_TYPE_BR:
+		bt_addr_to_str(info.br.dst, addr, sizeof(addr));
+		break;
+	default:
+		bt_shell_print("Unrecognized conn type: %d", info.type);
+		return;
+	}
 
 	bt_shell_print("%s with %s", bonded ? "Bonded" : "Paired", addr);
 }
@@ -4155,8 +4167,23 @@ static void auth_pairing_complete(struct bt_conn *conn, bool bonded)
 static void auth_pairing_failed(struct bt_conn *conn, enum bt_security_err err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
+	struct bt_conn_info info;
 
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+	if (bt_conn_get_info(conn, &info) < 0) {
+		return;
+	}
+
+	switch (info.type) {
+	case BT_CONN_TYPE_LE:
+		bt_addr_le_to_str(info.le.dst, addr, sizeof(addr));
+		break;
+	case BT_CONN_TYPE_BR:
+		bt_addr_to_str(info.br.dst, addr, sizeof(addr));
+		break;
+	default:
+		bt_shell_print("Unrecognized conn type: %d", info.type);
+		return;
+	}
 
 	bt_shell_print("Pairing failed with %s reason: %s (%d)", addr, security_err_str(err), err);
 }
@@ -4215,6 +4242,16 @@ void bond_deleted(uint8_t id, const bt_addr_le_t *peer)
 	bt_addr_le_to_str(peer, addr, sizeof(addr));
 	bt_shell_print("Bond deleted for %s, id %u", addr, id);
 }
+
+#if defined(CONFIG_BT_CLASSIC)
+static void br_bond_deleted(const bt_addr_t *peer)
+{
+	char addr[BT_ADDR_STR_LEN];
+
+	bt_addr_to_str(peer, addr, sizeof(addr));
+	bt_shell_print("Classic bond deleted for %s", addr);
+}
+#endif /* CONFIG_BT_CLASSIC */
 
 static struct bt_conn_auth_cb auth_cb_display = {
 	.passkey_display = auth_passkey_display,
@@ -4316,6 +4353,9 @@ static struct bt_conn_auth_info_cb auth_info_cb = {
 	.pairing_failed = auth_pairing_failed,
 	.pairing_complete = auth_pairing_complete,
 	.bond_deleted = bond_deleted,
+#if defined(CONFIG_BT_CLASSIC)
+	.br_bond_deleted = br_bond_deleted,
+#endif /* CONFIG_BT_CLASSIC */
 };
 
 static int cmd_auth(const struct shell *sh, size_t argc, char *argv[])

@@ -27,11 +27,10 @@ try:
 except ImportError:
     print("Install the anytree module to use the --test-tree option")
 
-import list_boards
 import scl
 from twisterlib.config_parser import TwisterConfigParser
 from twisterlib.error import TwisterRuntimeError
-from twisterlib.platform import Platform
+from twisterlib.platform import Platform, generate_platforms
 from twisterlib.quarantine import Quarantine
 from twisterlib.statuses import TwisterStatus
 from twisterlib.testinstance import TestInstance
@@ -39,7 +38,6 @@ from twisterlib.testsuite import TestSuite, scan_testsuite_path
 from zephyr_module import parse_modules
 
 logger = logging.getLogger('twister')
-logger.setLevel(logging.DEBUG)
 
 ZEPHYR_BASE = os.getenv("ZEPHYR_BASE")
 if not ZEPHYR_BASE:
@@ -441,125 +439,16 @@ class TestPlan:
         # Note, internally in twister a board root includes the `boards` folder
         # but in Zephyr build system, the board root is without the `boards` in folder path.
         board_roots = [Path(os.path.dirname(root)) for root in self.env.board_roots]
-        lb_args = Namespace(arch_roots=self.env.arch_roots, soc_roots=self.env.soc_roots,
-                            board_roots=board_roots, board=None, board_dir=None)
+        soc_roots = self.env.soc_roots
+        arch_roots = self.env.arch_roots
 
-        known_boards = list_boards.find_v2_boards(lb_args)
         platform_config = self.test_config.get('platforms', {})
 
-        alias2target = {}
-        target2board = {}
-        target2data = {}
-        dir2data = {}
-        legacy_files = []
-
-        # helper function to initialize and add platforms
-        def init_and_add_platforms(data, board, target, aliases, src_dir):
-            platform = Platform()
-            platform.load(board, target, aliases, data)
-            if platform.name in [p.name for p in self.platforms]:
-                logger.error(f"Duplicate platform {platform.name} in {src_dir}")
-                raise Exception(f"Duplicate platform identifier {platform.name} found")
+        for platform in generate_platforms(board_roots, soc_roots, arch_roots):
             if not platform.twister:
-                return
+                continue
             self.platforms.append(platform)
 
-        for board in known_boards.values():
-            for board_dir in board.directories:
-                if board_dir in dir2data:
-                    # don't load the same board data twice
-                    continue
-                legacy_files.extend(
-                    file for file in board_dir.glob("*.yaml") if file.name != "twister.yaml"
-                )
-                data = None
-                file = board_dir / "twister.yaml"
-                if file.is_file():
-                    try:
-                        data = scl.yaml_load_verify(file, Platform.platform_schema)
-                    except Exception as e:
-                        logger.error(f"Error loading {file}: {e!r}")
-                        self.load_errors += 1
-                dir2data[board_dir] = data
-
-
-
-            for qual in list_boards.board_v2_qualifiers(board):
-
-                if board.revisions:
-                    for rev in board.revisions:
-                        if rev.name:
-                            target = f"{board.name}@{rev.name}/{qual}"
-                            alias2target[target] = target
-                            if rev.name == board.revision_default:
-                                alias2target[f"{board.name}/{qual}"] = target
-                            if '/' not in qual and len(board.socs) == 1:
-                                if rev.name == board.revision_default:
-                                    alias2target[f"{board.name}"] = target
-                                alias2target[f"{board.name}@{rev.name}"] = target
-                        else:
-                            target = f"{board.name}/{qual}"
-                            alias2target[target] = target
-                            if '/' not in qual and len(board.socs) == 1 \
-                                    and rev.name == board.revision_default:
-                                alias2target[f"{board.name}"] = target
-
-                        target2board[target] = board
-                else:
-                    target = f"{board.name}/{qual}"
-                    alias2target[target] = target
-                    if '/' not in qual and len(board.socs) == 1:
-                        alias2target[board.name] = target
-                    target2board[target] = board
-
-        for board_dir, data in dir2data.items():
-            if data is None:
-                continue
-            # Separate the default and variant information in the loaded board data.
-            # The default (top-level) data can be shared by multiple board targets;
-            # it will be overlaid by the variant data (if present) for each target.
-            variant_data = data.pop("variants", {})
-            for variant in variant_data:
-                target = alias2target.get(variant)
-                if target is None:
-                    continue
-                if target in target2data:
-                    logger.error(f"Duplicate platform {target} in {board_dir}")
-                    raise Exception(f"Duplicate platform identifier {target} found")
-                target2data[target] = variant_data[variant]
-
-        # note: this inverse mapping will only be used for loading legacy files
-        target2aliases = {}
-
-        for target, aliases in itertools.groupby(alias2target, alias2target.get):
-            aliases = list(aliases)
-            board = target2board[target]
-
-            # Default board data always comes from the primary 'board.dir'.
-            # Other 'board.directories' can only supply variant data.
-            data = dir2data[board.dir]
-            if data is not None:
-                if target in target2data:
-                    data = copy.deepcopy(data)
-                    data.update(target2data[target])
-                init_and_add_platforms(data, board, target, aliases, board.dir)
-
-            target2aliases[target] = aliases
-
-        for file in legacy_files:
-            try:
-                data = scl.yaml_load_verify(file, Platform.platform_schema)
-            except Exception as e:
-                logger.error(f"Error loading {file}: {e!r}")
-                self.load_errors += 1
-                continue
-            target = alias2target.get(data.get("identifier"))
-            if target is not None:
-                init_and_add_platforms(
-                    data, target2board[target], target, target2aliases[target], file.parent
-                )
-
-        for platform in self.platforms:
             if not platform_config.get('override_default_platforms', False):
                 if platform.default:
                     self.default_platforms.append(platform.name)
@@ -706,12 +595,14 @@ class TestPlan:
 
     def handle_quarantined_tests(self, instance: TestInstance, plat: Platform):
         if self.quarantine:
-            simulator = plat.simulator_by_name(self.options)
+            sim_name = plat.simulation
+            if sim_name != "na" and (simulator := plat.simulator_by_name(self.options.sim_name)):
+                sim_name = simulator.name
             matched_quarantine = self.quarantine.get_matched_quarantine(
                 instance.testsuite.id,
                 plat.name,
                 plat.arch,
-                simulator.name if simulator is not None else 'na'
+                sim_name
             )
             if matched_quarantine and not self.options.quarantine_verify:
                 instance.add_filter("Quarantine: " + matched_quarantine, Filters.QUARANTINE)
@@ -844,7 +735,7 @@ class TestPlan:
             logger.info("Selecting default platforms per testsuite scenario")
             default_platforms = True
         elif emu_filter:
-            logger.info("Selecting emulation platforms per testsuite scenraio")
+            logger.info("Selecting emulation platforms per testsuite scenario")
             emulation_platforms = True
         elif vendor_filter:
             vendor_platforms = True
@@ -878,29 +769,35 @@ class TestPlan:
             platforms = self.platforms
 
         platform_config = self.test_config.get('platforms', {})
+        # test configuration options
+        test_config_options = self.test_config.get('options', {})
+        integration_mode_list = test_config_options.get('integration_mode', [])
+
         logger.info("Building initial testsuite list...")
 
         keyed_tests = {}
-
         for _, ts in self.testsuites.items():
-            if (
-                ts.build_on_all
-                and not platform_filter
-                and platform_config.get('increased_platform_scope', True)
-            ):
-                platform_scope = self.platforms
-            elif ts.integration_platforms:
-                integration_platforms = list(
+            if ts.integration_platforms:
+                _integration_platforms = list(
                     filter(lambda item: item.name in ts.integration_platforms, self.platforms)
                 )
-                if self.options.integration:
-                    platform_scope = integration_platforms
+            else:
+                _integration_platforms = []
+
+            if (ts.build_on_all and not platform_filter and
+                platform_config.get('increased_platform_scope', True)):
+                # if build_on_all is set, we build on all platforms
+                platform_scope = self.platforms
+            elif ts.integration_platforms and self.options.integration:
+                # if integration is set, we build on integration platforms
+                platform_scope = _integration_platforms
+            elif ts.integration_platforms and not platform_filter:
+                # if integration platforms are set, we build on those and integration mode is set
+                # for this test suite, we build on integration platforms
+                if any(ts.id.startswith(i) for i in integration_mode_list):
+                    platform_scope = _integration_platforms
                 else:
-                    # if not in integration mode, still add integration platforms to the list
-                    if not platform_filter:
-                        platform_scope = platforms + integration_platforms
-                    else:
-                        platform_scope = platforms
+                    platform_scope = platforms + _integration_platforms
             else:
                 platform_scope = platforms
 
@@ -928,9 +825,14 @@ class TestPlan:
             ):
                 if itoolchain:
                     toolchain = itoolchain
+                elif plat.arch in ['posix', 'unit']:
+                    # workaround until toolchain variant in zephyr is overhauled and improved.
+                    if self.env.toolchain in ['llvm']:
+                        toolchain = 'llvm'
+                    else:
+                        toolchain = 'host'
                 else:
-                    default_toolchain = "zephyr" if not self.env.toolchain else self.env.toolchain
-                    toolchain = default_toolchain if plat.arch not in ['posix', 'unit'] else "host"
+                    toolchain = "zephyr" if not self.env.toolchain else self.env.toolchain
 
                 instance = TestInstance(ts, plat, toolchain, self.env.outdir)
                 instance.run = instance.check_runnable(
@@ -1038,6 +940,8 @@ class TestPlan:
                         "Environment ({}) not satisfied".format(", ".join(plat.env)),
                         Filters.ENVIRONMENT
                     )
+                if plat.type == 'native' and sys.platform != 'linux':
+                    instance.add_filter("Native platform requires Linux", Filters.ENVIRONMENT)
 
                 if not force_toolchain \
                         and toolchain and (toolchain not in plat.supported_toolchains):
@@ -1060,7 +964,10 @@ class TestPlan:
                 if ts.depends_on:
                     dep_intersection = ts.depends_on.intersection(set(plat.supported))
                     if dep_intersection != set(ts.depends_on):
-                        instance.add_filter("No hardware support", Filters.PLATFORM)
+                        instance.add_filter(
+                            f"No hardware support for {set(ts.depends_on)-dep_intersection}",
+                            Filters.PLATFORM
+                        )
 
                 if plat.flash < ts.min_flash:
                     instance.add_filter("Not enough FLASH", Filters.PLATFORM)

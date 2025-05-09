@@ -262,10 +262,9 @@ static inline char z_log_minimal_level_to_char(int level)
 			     GET_ARG_N(1, __VA_ARGS__))
 
 #define LOG_POINTERS_VALIDATE(string_ok, ...) \
-	_Pragma("GCC diagnostic push") \
-	_Pragma("GCC diagnostic ignored \"-Wpointer-arith\"") \
+	TOOLCHAIN_DISABLE_GCC_WARNING(TOOLCHAIN_WARNING_POINTER_ARITH); \
 	string_ok = Z_CBPRINTF_POINTERS_VALIDATE(__VA_ARGS__); \
-	_Pragma("GCC diagnostic pop")
+	TOOLCHAIN_ENABLE_GCC_WARNING(TOOLCHAIN_WARNING_POINTER_ARITH);
 #else
 #define LOG_POINTERS_VALIDATE(string_ok, ...) string_ok = true
 #define LOG_STRING_WARNING(_mode, _src, ...)
@@ -353,13 +352,14 @@ static inline char z_log_minimal_level_to_char(int level)
 			z_log_minimal_hexdump_print((_level), (const char *)(_data), (_len));      \
 			break;                                                                     \
 		}                                                                                  \
-		int mode;                                                                          \
-		Z_LOG_MSG_CREATE(UTIL_NOT(IS_ENABLED(CONFIG_USERSPACE)), mode,                     \
+		int _mode;                                                                         \
+		Z_LOG_MSG_CREATE(UTIL_NOT(IS_ENABLED(CONFIG_USERSPACE)), _mode,                    \
 				 Z_LOG_LOCAL_DOMAIN_ID, _source, _level, _data, _len,              \
 				 COND_CODE_0(NUM_VA_ARGS_LESS_1(_, ##__VA_ARGS__), \
 				(), \
 			  (COND_CODE_0(NUM_VA_ARGS_LESS_1(__VA_ARGS__), \
 				  ("%s", __VA_ARGS__), (__VA_ARGS__)))));   \
+		(void)_mode;                                                                       \
 	} while (false)
 
 #define Z_LOG_HEXDUMP(_level, _data, _length, ...)                                                 \
@@ -400,12 +400,12 @@ static inline char z_log_minimal_level_to_char(int level)
 #define LOG_FILTER_SLOT_GET(_filters, _id) \
 	((*(_filters) >> LOG_FILTER_SLOT_SHIFT(_id)) & LOG_FILTER_SLOT_MASK)
 
-#define LOG_FILTER_SLOT_SET(_filters, _id, _filter)		     \
-	do {							     \
-		*(_filters) &= ~(LOG_FILTER_SLOT_MASK <<	     \
-				 LOG_FILTER_SLOT_SHIFT(_id));	     \
-		*(_filters) |= ((_filter) & LOG_FILTER_SLOT_MASK) << \
-			       LOG_FILTER_SLOT_SHIFT(_id);	     \
+#define LOG_FILTER_SLOT_SET(_filters, _id, _filter)			      \
+	do {								      \
+		uint32_t others = *(_filters) & ~(LOG_FILTER_SLOT_MASK <<     \
+				 LOG_FILTER_SLOT_SHIFT(_id));		      \
+		*(_filters) = others | (((_filter) & LOG_FILTER_SLOT_MASK) << \
+			       LOG_FILTER_SLOT_SHIFT(_id));		      \
 	} while (false)
 
 #define LOG_FILTER_AGGR_SLOT_IDX 0

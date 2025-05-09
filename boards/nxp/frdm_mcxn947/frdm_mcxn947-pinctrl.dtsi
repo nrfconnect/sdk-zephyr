@@ -31,6 +31,18 @@
 		};
 	};
 
+	pinmux_flexcomm3_lpi2c: pinmux_flexcomm3_lpi2c {
+		group0 {
+			pinmux = <FC3_P0_PIO1_0>,
+				<FC3_P1_PIO1_1>;
+			slew-rate = "fast";
+			drive-strength = "low";
+			input-enable;
+			bias-pull-up;
+			drive-open-drain;
+		};
+	};
+
 	pinmux_flexcomm7_lpi2c: pimux_flexcomm7_lpi2c {
 		group0 {
 			pinmux = <FC7_P0_PIO3_2>,
@@ -89,6 +101,31 @@
 			pinmux = <DAC0_OUT_PIO4_2>;
 			drive-strength = "low";
 			slew-rate = "fast";
+		};
+	};
+
+	pinmux_sai1: pinmux_sai1 {
+		group0 {
+			pinmux = <SAI1_TX_BCLK_PIO3_16>,
+				<SAI1_TX_FS_PIO3_17>,
+				<SAI1_TXD0_PIO3_20>,
+				<SAI1_RX_FS_PIO3_19>,
+				<SAI1_RX_BCLK_PIO3_18>,
+				<SAI1_RXD0_PIO3_21>;
+			drive-strength = "high";
+			slew-rate = "fast";
+			input-enable;
+		};
+	};
+
+	pinmux_sai0: pinmux_sai0 {
+		group0 {
+			pinmux = <SAI0_TXD0_PIO2_2>,
+				<SAI0_TX_BCLK_PIO2_6>,
+				<SAI0_TX_FS_PIO2_7>;
+			drive-strength = "high";
+			slew-rate = "fast";
+			input-enable;
 		};
 	};
 

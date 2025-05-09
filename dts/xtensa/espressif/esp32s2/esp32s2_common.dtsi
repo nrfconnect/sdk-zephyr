@@ -91,6 +91,29 @@
 			zephyr,memory-region = "SRAM1";
 		};
 
+		dcache0: dcache0@3f000000 {
+			compatible = "zephyr,memory-region";
+			reg = <0x3f000000 DT_SIZE_M(4)>;
+			zephyr,memory-region = "DCACHE0";
+		};
+
+		dcache1: dcache1@3f500000 {
+			compatible = "zephyr,memory-region";
+			reg = <0x3f500000 DT_SIZE_K(10752)>;
+			zephyr,memory-region = "DCACHE1";
+
+			psram0: psram0 {
+				compatible = "espressif,esp32-psram";
+				size = <0x0>;
+			};
+		};
+
+		icache0: icache0@40080000 {
+			compatible = "zephyr,memory-region";
+			reg = <0x40080000 DT_SIZE_K(7680)>;
+			zephyr,memory-region = "ICACHE0";
+		};
+
 		intc: interrupt-controller@3f4c2000 {
 			#interrupt-cells = <3>;
 			#address-cells = <0>;
@@ -140,14 +163,6 @@
 				write-block-size = <4>;
 				/* Flash size is specified in SOC/SIP dtsi */
 			};
-		};
-
-		psram0: psram@3f500000 {
-			device_type = "memory";
-			compatible = "mmio-sram";
-			/* PSRAM size is specified in SOC/SIP dtsi */
-			reg = <0x3f500000 DT_SIZE_M(2)>;
-			status = "disabled";
 		};
 
 		uart0: uart@3f400000 {
@@ -239,6 +254,20 @@
 			interrupts = <I2C_EXT1_INTR_SOURCE IRQ_DEFAULT_PRIORITY 0>;
 			interrupt-parent = <&intc>;
 			clocks = <&rtc ESP32_I2C1_MODULE>;
+			status = "disabled";
+		};
+
+		i2s0: i2s@3f40f000 {
+			compatible = "espressif,esp32-i2s";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x3f40f000 0x1000>;
+			interrupts = <I2S0_INTR_SOURCE IRQ_DEFAULT_PRIORITY 0>,
+				     <I2S0_INTR_SOURCE IRQ_DEFAULT_PRIORITY 0>;
+			interrupt-names = "rx", "tx";
+			interrupt-parent = <&intc>;
+			clocks = <&rtc ESP32_I2S0_MODULE>;
+			unit = <0>;
 			status = "disabled";
 		};
 
@@ -350,6 +379,7 @@
 		adc0: adc@3f440018 {
 			compatible = "espressif,esp32-adc";
 			reg = <0x3f440018 100>;
+			clocks = <&rtc ESP32_PERIPH_SARADC_MODULE>;
 			unit = <1>;
 			channel-count = <10>;
 			#io-channel-cells = <1>;
@@ -359,6 +389,7 @@
 		adc1: adc@3f440028 {
 			compatible = "espressif,esp32-adc";
 			reg = <0x3f440028 100>;
+			clocks = <&rtc ESP32_PERIPH_SARADC_MODULE>;
 			unit = <2>;
 			channel-count = <10>;
 			#io-channel-cells = <1>;

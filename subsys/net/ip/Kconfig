@@ -268,6 +268,11 @@ config NET_SHELL_PKT_ALLOC_SUPPORTED
 	default y
 	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || NET_DEBUG_NET_PKT_ALLOC
 
+config NET_SHELL_PKT_FILTER_SUPPORTED
+	bool "Network packet filter related configuration"
+	default y
+	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || NET_PKT_FILTER
+
 config NET_SHELL_PMTU_SUPPORTED
 	bool "PMTU config"
 	default y
@@ -401,11 +406,31 @@ config NET_TC_RX_COUNT
 	  enable at least 1 RX thread.
 
 config NET_TC_SKIP_FOR_HIGH_PRIO
+	bool "Push high priority packets directly to network driver [DEPRECATED]"
+	select DEPRECATED
+	help
+	  Deprecated, use NET_TC_TX_SKIP_FOR_HIGH_PRIO instead.
+
+config NET_TC_TX_SKIP_FOR_HIGH_PRIO
 	bool "Push high priority packets directly to network driver"
+	default NET_TC_SKIP_FOR_HIGH_PRIO
 	help
 	  If this is set, then high priority (>= NET_PRIORITY_CA) net_pkt will
 	  be pushed directly to network driver and will skip the traffic class
 	  queues. This is currently not enabled by default.
+
+config NET_TC_RX_SKIP_FOR_HIGH_PRIO
+	bool "Push high priority packets directly to the application"
+	help
+	  If this is set, then high priority (>= NET_PRIORITY_CA) net_pkt will
+	  be pushed directly to the application and will skip the traffic class
+	  queues. If you select this option, then it means that high priority
+	  network traffic is pushed from the driver to the application thread
+	  without any intermediate RX queue. If the network device driver is
+	  running in IRQ context, it will handle the packet all the way to the
+	  application. This might cause other incoming packets to be lost if
+	  the RX processing takes long time.
+	  This is currently not enabled by default.
 
 choice NET_TC_THREAD_TYPE
 	prompt "How the network RX/TX threads should work"
@@ -641,6 +666,12 @@ config NET_MAX_CONN
 	help
 	  The value depends on your network needs. The value
 	  should include both UDP and TCP connections.
+
+config NET_CONN_PACKET_CLONE_TIMEOUT
+	int "Timeout value in milliseconds for cloning a packet"
+	default 100
+	help
+	  Maximum wait time when cloning a packet for a network connection.
 
 config NET_MAX_CONTEXTS
 	int "Number of network contexts to allocate"
@@ -929,6 +960,9 @@ config NET_DEFAULT_IF_CANBUS_RAW
 config NET_DEFAULT_IF_PPP
 	bool "PPP interface"
 	depends on NET_L2_PPP
+
+config NET_DEFAULT_IF_OFFLOADED_NETDEV
+	bool "Offloaded network device"
 
 config NET_DEFAULT_IF_WIFI
 	bool "WiFi interface"

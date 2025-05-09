@@ -10,7 +10,7 @@
     "io2": 15,
     "io3": 16
   },
-  "flash_size": 67108864,
+  "flash_size": 8388608,
   "sck_frequency": 8000000,
   "address_mode": "MODE24BIT",
   "readoc": "READ4IO",

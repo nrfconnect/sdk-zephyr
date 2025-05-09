@@ -38,6 +38,7 @@
 
 /* NPCX4 FIU register fields */
 #define NPCX_FIU_EXT_CFG_SPI1_2DEV	6
+#define NPCX_FIU_EXT_CFG_LOW_DEV_NUM	7
 
 /* NPCX4 supported group mask of DEVALT_LK */
 #define NPCX_DEVALT_LK_GROUP_MASK \
@@ -49,10 +50,9 @@
 /* NPCX4 Clock Configuration */
 #define MAX_OFMCLK 120000000
 
-#include <reg/reg_access.h>
-#include <reg/reg_def.h>
+#include "reg_def.h"
+#include "clock_def.h"
 #include <soc_dt.h>
-#include <soc_clock.h>
 #include <soc_espi_taf.h>
 #include <soc_pins.h>
 #include <soc_power.h>
