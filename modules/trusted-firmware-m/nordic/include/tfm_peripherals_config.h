@@ -12,14 +12,8 @@ extern "C" {
 #endif
 
 #ifdef SECURE_UART1
-
-#if defined(NRF54L15_XXAA)
-#define TFM_PERIPHERAL_UARTE30_SECURE 1
-#else
 #define TFM_PERIPHERAL_UARTE1_SECURE 1
 #endif
-
-#endif /* SECURE_UART1 */
 
 #if TEST_NS_SLIH_IRQ || TEST_NS_FLIH_IRQ
 #define TFM_PERIPHERAL_TIMER0_SECURE 1
@@ -35,8 +29,6 @@ extern "C" {
     #include <tfm_peripherals_config_nrf91.h>
 #elif defined(NRF5340_XXAA_APPLICATION)
     #include <tfm_peripherals_config_nrf5340_application.h>
-#elif defined(NRF54L15_XXAA)
-    #include <tfm_peripherals_config_nrf54l15.h>
 #else
     #error "Unknown device."
 #endif
