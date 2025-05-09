@@ -25,10 +25,6 @@ extern "C" {
 #define SOCK_NATIVE 0x80000000
 #define SOCK_NATIVE_TLS 0x40000000
 
-/** Define a base for NCS specific socket options to prevent overlaps with Zephyr's socket options.
- */
-#define NET_SOCKET_NCS_BASE 1000000000
-
 /* NCS specific TLS level socket options */
 
 /** Socket option to set DTLS handshake timeout, specifically for nRF sockets.
@@ -36,22 +32,22 @@ extern "C" {
  *  including retransmissions, in seconds.
  *  Accepted values for the option are: 1, 3, 7, 15, 31, 63, 123.
  */
-#define TLS_DTLS_HANDSHAKE_TIMEO (NET_SOCKET_NCS_BASE + 18)
+#define TLS_DTLS_HANDSHAKE_TIMEO 18
 
 /** Socket option to save DTLS connection, specifically for nRF sockets.
  */
-#define TLS_DTLS_CONN_SAVE (NET_SOCKET_NCS_BASE + 19)
+#define TLS_DTLS_CONN_SAVE 19
 
 /** Socket option to load DTLS connection, specifically for nRF sockets.
  */
-#define TLS_DTLS_CONN_LOAD (NET_SOCKET_NCS_BASE + 20)
+#define TLS_DTLS_CONN_LOAD 20
 
 /** Socket option to get result of latest TLS/DTLS completed handshakes end status,
  *  specifically for nRF sockets.
  *  The option accepts an integer, indicating the setting.
  *  Accepted vaules for the option are: 0 and 1.
  */
-#define TLS_DTLS_HANDSHAKE_STATUS (NET_SOCKET_NCS_BASE + 21)
+#define TLS_DTLS_HANDSHAKE_STATUS 21
 
 /* Valid values for TLS_DTLS_HANDSHAKE_TIMEO option */
 #define TLS_DTLS_HANDSHAKE_TIMEO_NONE 0 /**< No timeout */
@@ -70,20 +66,20 @@ extern "C" {
 /* NCS specific socket options */
 
 /** sockopt: enable sending data as part of exceptional events */
-#define SO_EXCEPTIONAL_DATA (NET_SOCKET_NCS_BASE + 33)
+#define SO_EXCEPTIONAL_DATA 33
 /** sockopt: Keep socket open when its PDN connection is lost
  *           or the device is put into flight mode.
  */
-#define SO_KEEPOPEN (NET_SOCKET_NCS_BASE + 34)
+#define SO_KEEPOPEN 34
 /** sockopt: bind to PDN */
-#define SO_BINDTOPDN (NET_SOCKET_NCS_BASE + 40)
+#define SO_BINDTOPDN 40
 
 /** sockopt: Release assistance indication (RAI).
  *  The option accepts an integer, indicating the type of RAI.
  *  Accepted values for the option are: @ref RAI_NO_DATA, @ref RAI_LAST, @ref RAI_ONE_RESP,
  *  @ref RAI_ONGOING, @ref RAI_WAIT_MORE.
  */
-#define SO_RAI (NET_SOCKET_NCS_BASE + 61)
+#define SO_RAI 61
 
 /** Release assistance indication (RAI).
  *  Indicate that the application does not intend to send more data.
@@ -121,27 +117,27 @@ extern "C" {
 /** IPv4 and IPv6 protocol level (pseudo-val) for nRF sockets. */
 #define IPPROTO_ALL 512
 /** sockopt: disable all replies to unexpected traffics */
-#define SO_SILENCE_ALL (NET_SOCKET_NCS_BASE + 30)
+#define SO_SILENCE_ALL 30
 
 /* NCS specific IPPROTO_IP level socket options */
 
 /** sockopt: enable IPv4 ICMP replies */
-#define SO_IP_ECHO_REPLY (NET_SOCKET_NCS_BASE + 31)
+#define SO_IP_ECHO_REPLY 31
 
 /* NCS specific IPPROTO_IPV6 level socket options */
 
 /** sockopt: enable IPv6 ICMP replies */
-#define SO_IPV6_ECHO_REPLY (NET_SOCKET_NCS_BASE + 32)
+#define SO_IPV6_ECHO_REPLY 32
 
 /** sockopt: Delay IPv6 address refresh during power saving mode  */
-#define SO_IPV6_DELAYED_ADDR_REFRESH (NET_SOCKET_NCS_BASE + 62)
+#define SO_IPV6_DELAYED_ADDR_REFRESH 62
 
 /* NCS specific TCP level socket options */
 
 /** sockopt: Configurable TCP server session timeout in minutes.
  * Range is 0 to 135. 0 is no timeout and 135 is 2 h 15 min. Default is 0 (no timeout).
  */
-#define SO_TCP_SRV_SESSTIMEO (NET_SOCKET_NCS_BASE + 55)
+#define SO_TCP_SRV_SESSTIMEO 55
 
 /* NCS specific gettaddrinfo() flags */
 
