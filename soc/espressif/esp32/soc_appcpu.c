@@ -80,14 +80,12 @@ void IRAM_ATTR __appcpu_start(void)
 		: "r"(PS_INTLEVEL(XCHAL_EXCM_LEVEL) | PS_UM | PS_WOE));
 
 	/* Initialize the architecture CPU pointer.  Some of the
-	 * initialization code wants a valid arch_current_thread() before
+	 * initialization code wants a valid _current before
 	 * z_prep_c() is invoked.
 	 */
 	__asm__ __volatile__("wsr.MISC0 %0; rsync" : : "r"(&_kernel.cpus[1]));
 
 	core_intr_matrix_clear();
-
-	esp_intr_initialize();
 
 	/* Start Zephyr */
 	z_prep_c();
@@ -104,5 +102,5 @@ int IRAM_ATTR arch_printk_char_out(int c)
 
 void sys_arch_reboot(int type)
 {
-	esp_restart_noos();
+	esp_restart();
 }

@@ -4,31 +4,42 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include <sys/types.h>
+#include <errno.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
-#include <zephyr/sys/atomic.h>
-#include <zephyr/kernel.h>
-#include <zephyr/sys/byteorder.h>
-#include <zephyr/sys/check.h>
-
+#include <zephyr/autoconf.h>
 #include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/hci_types.h>
 #include <zephyr/bluetooth/iso.h>
 #include <zephyr/bluetooth/buf.h>
 #include <zephyr/bluetooth/direction.h>
 #include <zephyr/bluetooth/addr.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/hci_vs.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/check.h>
+#include <zephyr/sys/slist.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
+#include <zephyr/toolchain.h>
+
+#include <sys/types.h>
 
 #include "addr_internal.h"
-#include "hci_core.h"
+#include "common/bt_str.h"
 #include "conn_internal.h"
 #include "direction_internal.h"
+#include "hci_core.h"
 #include "id.h"
-
-#include "common/bt_str.h"
 #include "scan.h"
 
 #define LOG_LEVEL CONFIG_BT_HCI_CORE_LOG_LEVEL
@@ -741,6 +752,28 @@ static uint8_t get_adv_type(uint8_t evt_type)
 	}
 }
 
+/* Convert Extended adv report PHY to GAP PHY */
+static uint8_t get_ext_adv_coding_sel_phy(uint8_t hci_phy)
+{
+	/* Converts from Extended adv report PHY to BT_GAP_LE_PHY_*
+	 * When Advertising Coding Selection (Host Support) is enabled
+	 * the controller will return the advertising coding scheme which
+	 * can be S=2 or S=8 data coding.
+	 */
+	switch (hci_phy) {
+	case BT_HCI_LE_ADV_EVT_PHY_1M:
+		return BT_GAP_LE_PHY_1M;
+	case BT_HCI_LE_ADV_EVT_PHY_2M:
+		return BT_GAP_LE_PHY_2M;
+	case BT_HCI_LE_ADV_EVT_PHY_CODED_S8:
+		return BT_GAP_LE_PHY_CODED_S8;
+	case BT_HCI_LE_ADV_EVT_PHY_CODED_S2:
+		return BT_GAP_LE_PHY_CODED_S2;
+	default:
+		return 0;
+	}
+}
+
 /* Convert extended adv report evt_type field to adv props */
 static uint16_t get_adv_props_extended(uint16_t evt_type)
 {
@@ -755,8 +788,15 @@ static uint16_t get_adv_props_extended(uint16_t evt_type)
 static void create_ext_adv_info(struct bt_hci_evt_le_ext_advertising_info const *const evt,
 				struct bt_le_scan_recv_info *const scan_info)
 {
-	scan_info->primary_phy = bt_get_phy(evt->prim_phy);
-	scan_info->secondary_phy = bt_get_phy(evt->sec_phy);
+	if (IS_ENABLED(CONFIG_BT_EXT_ADV_CODING_SELECTION) &&
+	    BT_FEAT_LE_ADV_CODING_SEL(bt_dev.le.features)) {
+		scan_info->primary_phy = get_ext_adv_coding_sel_phy(evt->prim_phy);
+		scan_info->secondary_phy = get_ext_adv_coding_sel_phy(evt->sec_phy);
+	} else {
+		scan_info->primary_phy = bt_get_phy(evt->prim_phy);
+		scan_info->secondary_phy = bt_get_phy(evt->sec_phy);
+	}
+
 	scan_info->tx_power = evt->tx_power;
 	scan_info->rssi = evt->rssi;
 	scan_info->sid = evt->sid;
@@ -879,7 +919,7 @@ void bt_hci_le_adv_ext_report(struct net_buf *buf)
 		}
 
 		if (evt->length + ext_scan_buf.len > ext_scan_buf.size) {
-			/* The report does not fit in the reassemby buffer
+			/* The report does not fit in the reassembly buffer
 			 * Discard this and future reports from the advertiser.
 			 */
 			reassembling_advertiser.state = FRAG_ADV_DISCARDING;
@@ -1390,7 +1430,7 @@ void bt_hci_le_per_adv_sync_lost(struct net_buf *buf)
 	per_adv_sync = bt_hci_per_adv_sync_lookup_handle(sys_le16_to_cpu(evt->handle));
 
 	if (!per_adv_sync) {
-		LOG_ERR("Unknown handle 0x%04Xfor periodic adv sync lost",
+		LOG_ERR("Unknown handle 0x%04X for periodic adv sync lost",
 			sys_le16_to_cpu(evt->handle));
 		return;
 	}

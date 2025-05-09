@@ -1,5 +1,5 @@
 /*
- * Copyright 2017,2021,2023-2024 NXP
+ * Copyright 2017,2021,2023-2025 NXP
  * Copyright (c) 2020 Softube
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -19,6 +19,7 @@
 #include <zephyr/drivers/dma.h>
 #endif
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/util_macro.h>
 
 #include <fsl_lpuart.h>
 #if CONFIG_NXP_LP_FLEXCOMM
@@ -28,6 +29,16 @@
 LOG_MODULE_REGISTER(uart_mcux_lpuart, LOG_LEVEL_ERR);
 
 #define PINCTRL_STATE_FLOWCONTROL PINCTRL_STATE_PRIV_START
+
+/* Helper macros */
+#if defined(FSL_FEATURE_LPUART_HAS_MODEM_SUPPORT) && \
+	FSL_FEATURE_LPUART_HAS_MODEM_SUPPORT
+#define LPUART_HAS_MODEM 1
+#endif
+
+#if defined(FSL_FEATURE_LPUART_HAS_MCR) && FSL_FEATURE_LPUART_HAS_MCR
+#define LPUART_HAS_MCR 1
+#endif
 
 #if defined(CONFIG_UART_ASYNC_API) && defined(CONFIG_UART_INTERRUPT_DRIVEN)
 /* there are already going to be build errors, but at least this message will
@@ -47,9 +58,6 @@ struct lpuart_dma_config {
 
 struct mcux_lpuart_config {
 	LPUART_Type *base;
-#ifdef CONFIG_NXP_LP_FLEXCOMM
-	const struct device *parent_dev;
-#endif
 	const struct device *clock_dev;
 	const struct pinctrl_dev_config *pincfg;
 	clock_control_subsys_t clock_subsys;
@@ -329,7 +337,7 @@ static int mcux_lpuart_irq_tx_ready(const struct device *dev)
 static void mcux_lpuart_irq_rx_enable(const struct device *dev)
 {
 	const struct mcux_lpuart_config *config = dev->config;
-	uint32_t mask = kLPUART_RxDataRegFullInterruptEnable;
+	uint32_t mask = kLPUART_RxDataRegFullInterruptEnable | kLPUART_RxOverrunInterruptEnable;
 
 	LPUART_EnableInterrupts(config->base, mask);
 }
@@ -337,7 +345,7 @@ static void mcux_lpuart_irq_rx_enable(const struct device *dev)
 static void mcux_lpuart_irq_rx_disable(const struct device *dev)
 {
 	const struct mcux_lpuart_config *config = dev->config;
-	uint32_t mask = kLPUART_RxDataRegFullInterruptEnable;
+	uint32_t mask = kLPUART_RxDataRegFullInterruptEnable | kLPUART_RxOverrunInterruptEnable;
 
 	LPUART_DisableInterrupts(config->base, mask);
 }
@@ -966,9 +974,43 @@ static void mcux_lpuart_isr(const struct device *dev)
 }
 #endif /* CONFIG_UART_MCUX_LPUART_ISR_SUPPORT */
 
+#if LPUART_HAS_MODEM
+static int mcux_lpuart_config_flowctrl(uint8_t flow_ctrl, lpuart_config_t *uart_config)
+{
+	switch (flow_ctrl) {
+	case UART_CFG_FLOW_CTRL_NONE:
+	case UART_CFG_FLOW_CTRL_RS485:
+		uart_config->enableTxCTS = false;
+		uart_config->enableRxRTS = false;
+		break;
+
+	case UART_CFG_FLOW_CTRL_RTS_CTS:
+		uart_config->enableTxCTS = true;
+		uart_config->enableRxRTS = true;
+		break;
+
+	default:
+		return -ENOTSUP;
+	}
+
+	return 0;
+}
+#else
+static int mcux_lpuart_config_flowctrl(uint8_t flow_ctrl, lpuart_config_t *uart_config)
+{
+	if (flow_ctrl != UART_CFG_FLOW_CTRL_NONE) {
+		return -ENOTSUP;
+	}
+
+	return 0;
+}
+#endif /* LPUART_HAS_MODEM */
+
 static int mcux_lpuart_configure_basic(const struct device *dev, const struct uart_config *cfg,
 					lpuart_config_t *uart_config)
 {
+	int ret;
+
 	/* Translate UART API enum to LPUART enum from HAL */
 	switch (cfg->parity) {
 	case UART_CFG_PARITY_NONE:
@@ -1012,22 +1054,15 @@ static int mcux_lpuart_configure_basic(const struct device *dev, const struct ua
 	}
 #endif
 
-#if defined(FSL_FEATURE_LPUART_HAS_MODEM_SUPPORT) && \
-	FSL_FEATURE_LPUART_HAS_MODEM_SUPPORT
-	switch (cfg->flow_ctrl) {
-	case UART_CFG_FLOW_CTRL_NONE:
-	case UART_CFG_FLOW_CTRL_RS485:
-		uart_config->enableTxCTS = false;
-		uart_config->enableRxRTS = false;
-		break;
-	case UART_CFG_FLOW_CTRL_RTS_CTS:
-		uart_config->enableTxCTS = true;
-		uart_config->enableRxRTS = true;
-		break;
-	default:
+	/* Configure for Flow Control option */
+	if (!IS_ENABLED(LPUART_HAS_MCR) && cfg->flow_ctrl == UART_CFG_FLOW_CTRL_DTR_DSR) {
 		return -ENOTSUP;
 	}
-#endif
+
+	ret = mcux_lpuart_config_flowctrl(cfg->flow_ctrl, uart_config);
+	if (ret) {
+		return ret;
+	}
 
 	uart_config->baudRate_Bps = cfg->baudrate;
 	uart_config->enableRx = true;
@@ -1101,8 +1136,7 @@ static int mcux_lpuart_configure_init(const struct device *dev, const struct uar
 
 	LPUART_Init(config->base, &uart_config, clock_freq);
 
-#if defined(FSL_FEATURE_LPUART_HAS_MODEM_SUPPORT) && \
-	FSL_FEATURE_LPUART_HAS_MODEM_SUPPORT
+#ifdef LPUART_HAS_MODEM
 	if (cfg->flow_ctrl == UART_CFG_FLOW_CTRL_RS485) {
 		/* Set the LPUART into RS485 mode (tx driver enable using RTS) */
 		config->base->MODIR |= LPUART_MODIR_TXRTSE(true);
@@ -1181,6 +1215,98 @@ static int mcux_lpuart_configure(const struct device *dev,
 }
 #endif /* CONFIG_UART_USE_RUNTIME_CONFIGURE */
 
+#ifdef CONFIG_UART_LINE_CTRL
+#if LPUART_HAS_MODEM
+static void mcux_lpuart_line_ctrl_set_rts(const struct device *dev, uint32_t val)
+{
+	const struct mcux_lpuart_config *config = dev->config;
+
+	/* Disable Transmitter and Receiver */
+	config->base->CTRL &= ~(LPUART_CTRL_TE_MASK | LPUART_CTRL_RE_MASK);
+
+	if (val >= 1U) {
+		/* Reset TXRTS to set RXRTSE bit, this provides high-level on RTS line */
+		config->base->MODIR &= ~(LPUART_MODIR_TXRTSPOL_MASK | LPUART_MODIR_TXRTSE_MASK);
+		config->base->MODIR |= LPUART_MODIR_RXRTSE_MASK;
+	} else {
+		/* Set TXRTSE to reset RXRTSE bit,this provide low-level on RTS line*/
+		config->base->MODIR &= ~(LPUART_MODIR_RXRTSE_MASK);
+		config->base->MODIR |= (LPUART_MODIR_TXRTSPOL_MASK | LPUART_MODIR_TXRTSE_MASK);
+	}
+}
+#else
+#define mcux_lpuart_line_ctrl_set_rts(dev, val) ret = -ENOTSUP
+#endif /* LPUART_HAS_MODEM */
+
+#if LPUART_HAS_MCR
+static void mcux_lpuart_set_dtr(const struct device *dev, uint32_t val)
+{
+	const struct mcux_lpuart_config *config = dev->config;
+
+	if (val >= 1U) {
+		/* assert DTR_b */
+		config->base->MCR &= ~LPUART_MCR_DTR_MASK;
+	} else {
+		/* deassert DTR_b */
+		config->base->MCR |= LPUART_MCR_DTR_MASK;
+	}
+}
+#else
+#define mcux_lpuart_set_dtr(dev, val) ret = -ENOTSUP
+#endif /* LPUART_HAS_MCR */
+
+static int mcux_lpuart_line_ctrl_set(const struct device *dev,
+		uint32_t ctrl, uint32_t val)
+{
+	int ret = 0;
+
+	switch (ctrl) {
+	case UART_LINE_CTRL_RTS:
+		mcux_lpuart_line_ctrl_set_rts(dev, val);
+		break;
+
+	case UART_LINE_CTRL_DTR:
+		mcux_lpuart_set_dtr(dev, val);
+		break;
+
+	default:
+		ret = -ENOTSUP;
+	}
+
+	return ret;
+}
+
+#if LPUART_HAS_MCR
+static int mcux_lpuart_line_ctrl_get(const struct device *dev,
+	uint32_t ctrl, uint32_t *val)
+{
+	const struct mcux_lpuart_config *config = dev->config;
+	int ret = 0;
+
+	switch (ctrl) {
+	case UART_LINE_CTRL_DSR:
+		*val = (config->base->MSR & LPUART_MSR_DSR_MASK) >> LPUART_MSR_DSR_SHIFT;
+		break;
+
+	case UART_LINE_CTRL_DCD:
+		*val = (config->base->MSR & LPUART_MSR_DCD_MASK) >> LPUART_MSR_DCD_SHIFT;
+		break;
+
+	default:
+		ret = -ENOTSUP;
+	}
+
+	return ret;
+}
+#else
+static int mcux_lpuart_line_ctrl_get(const struct device *dev,
+	uint32_t ctrl, uint32_t *val)
+{
+	return -ENOTSUP;
+}
+#endif /* LPUART_HAS_MCR */
+#endif /* CONFIG_UART_LINE_CTRL */
+
 static int mcux_lpuart_init(const struct device *dev)
 {
 	const struct mcux_lpuart_config *config = dev->config;
@@ -1211,19 +1337,11 @@ static int mcux_lpuart_init(const struct device *dev)
 	}
 
 #ifdef CONFIG_UART_MCUX_LPUART_ISR_SUPPORT
-#if CONFIG_NXP_LP_FLEXCOMM
-	/* When using LP Flexcomm driver, register the interrupt handler
-	 * so we receive notification from the LP Flexcomm interrupt handler.
-	 */
-	nxp_lp_flexcomm_setirqhandler(config->parent_dev, dev,
-				      LP_FLEXCOMM_PERIPH_LPUART, mcux_lpuart_isr);
-#else
-	/* Interrupt is managed by this driver */
 	config->irq_config_func(dev);
 #endif
+
 #ifdef CONFIG_UART_EXCLUSIVE_API_CALLBACKS
 	data->api_type = LPUART_NONE;
-#endif
 #endif
 
 #ifdef CONFIG_PM
@@ -1267,6 +1385,10 @@ static DEVICE_API(uart, mcux_lpuart_driver_api) = {
 	.rx_buf_rsp = mcux_lpuart_rx_buf_rsp,
 	.rx_disable = mcux_lpuart_rx_disable,
 #endif /* CONFIG_UART_ASYNC_API */
+#ifdef CONFIG_UART_LINE_CTRL
+	.line_ctrl_set = mcux_lpuart_line_ctrl_set,
+	.line_ctrl_get = mcux_lpuart_line_ctrl_get,
+#endif  /* CONFIG_UART_LINE_CTRL */
 };
 
 
@@ -1279,15 +1401,26 @@ static DEVICE_API(uart, mcux_lpuart_driver_api) = {
 									\
 		irq_enable(DT_INST_IRQ_BY_IDX(n, i, irq));		\
 	} while (false)
+#define MCUX_LPUART_IRQS_INSTALL(n)					\
+		IF_ENABLED(DT_INST_IRQ_HAS_IDX(n, 0),			\
+			   (MCUX_LPUART_IRQ_INSTALL(n, 0);))		\
+		IF_ENABLED(DT_INST_IRQ_HAS_IDX(n, 1),			\
+			   (MCUX_LPUART_IRQ_INSTALL(n, 1);))
+/* When using LP Flexcomm driver, register the interrupt handler
+ * so we receive notification from the LP Flexcomm interrupt handler.
+ */
+#define MCUX_LPUART_LPFLEXCOMM_IRQ_CONFIG(n)				\
+	nxp_lp_flexcomm_setirqhandler(DEVICE_DT_GET(DT_INST_PARENT(n)),	\
+					DEVICE_DT_INST_GET(n),		\
+					LP_FLEXCOMM_PERIPH_LPUART,	\
+					mcux_lpuart_isr)
 #define MCUX_LPUART_IRQ_INIT(n) .irq_config_func = mcux_lpuart_config_func_##n,
 #define MCUX_LPUART_IRQ_DEFINE(n)						\
 	static void mcux_lpuart_config_func_##n(const struct device *dev)	\
 	{									\
-		IF_ENABLED(DT_INST_IRQ_HAS_IDX(n, 0),			\
-			   (MCUX_LPUART_IRQ_INSTALL(n, 0);))		\
-									\
-		IF_ENABLED(DT_INST_IRQ_HAS_IDX(n, 1),			\
-			   (MCUX_LPUART_IRQ_INSTALL(n, 1);))		\
+		COND_CODE_1(DT_NODE_HAS_COMPAT(DT_INST_PARENT(n), nxp_lp_flexcomm), \
+			    (MCUX_LPUART_LPFLEXCOMM_IRQ_CONFIG(n)),		\
+			    (MCUX_LPUART_IRQS_INSTALL(n)));			\
 	}
 #else
 #define MCUX_LPUART_IRQ_INIT(n)
@@ -1353,22 +1486,15 @@ static DEVICE_API(uart, mcux_lpuart_driver_api) = {
 		: DT_INST_PROP(n, nxp_rs485_mode)\
 				? UART_CFG_FLOW_CTRL_RS485   \
 				: UART_CFG_FLOW_CTRL_NONE
-#ifdef CONFIG_NXP_LP_FLEXCOMM
-#define PARENT_DEV(n) \
-	.parent_dev = DEVICE_DT_GET(DT_INST_PARENT(n)),
-#else
-#define PARENT_DEV(n)
-#endif /* CONFIG_NXP_LP_FLEXCOMM */
 
 #define LPUART_MCUX_DECLARE_CFG(n)                                      \
 static const struct mcux_lpuart_config mcux_lpuart_##n##_config = {     \
 	.base = (LPUART_Type *) DT_INST_REG_ADDR(n),                          \
-	PARENT_DEV(n)		\
 	.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),                   \
 	.clock_subsys = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, name),	\
 	.baud_rate = DT_INST_PROP(n, current_speed),                          \
 	.flow_ctrl = FLOW_CONTROL(n),                                         \
-	.parity = DT_INST_ENUM_IDX_OR(n, parity, UART_CFG_PARITY_NONE),       \
+	.parity = DT_INST_ENUM_IDX(n, parity),                                \
 	.rs485_de_active_low = DT_INST_PROP(n, nxp_rs485_de_active_low),      \
 	.loopback_en = DT_INST_PROP(n, nxp_loopback),                         \
 	.single_wire = DT_INST_PROP(n, single_wire),	                      \

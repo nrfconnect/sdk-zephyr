@@ -21,7 +21,7 @@
 #include <zephyr/bluetooth/hci_vs.h>
 #include <zephyr/bluetooth/buf.h>
 
-#include "../host/hci_ecc.h"
+#include "common/hci_common_internal.h"
 
 #include "util/util.h"
 #include "util/memq.h"
@@ -184,13 +184,13 @@ static uint8_t sf_curr;
 #endif
 
 #if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
-int32_t    hci_hbuf_total;
-uint32_t    hci_hbuf_sent;
-uint32_t    hci_hbuf_acked;
-uint16_t    hci_hbuf_pend[CONFIG_BT_MAX_CONN];
+int32_t  hci_hbuf_total;
+uint32_t hci_hbuf_sent;
+uint32_t hci_hbuf_acked;
+uint16_t hci_hbuf_pend[CONFIG_BT_MAX_CONN];
 atomic_t hci_state_mask;
 static struct k_poll_signal *hbuf_signal;
-#endif
+#endif /* CONFIG_BT_HCI_ACL_FLOW_CONTROL */
 
 #if defined(CONFIG_BT_CONN)
 static uint32_t conn_count;
@@ -475,7 +475,7 @@ static void reset(struct net_buf *buf, struct net_buf **evt)
 		atomic_set_bit(&hci_state_mask, HCI_STATE_BIT_RESET);
 		k_poll_signal_raise(hbuf_signal, 0x0);
 	}
-#endif
+#endif /* CONFIG_BT_HCI_ACL_FLOW_CONTROL */
 
 	hci_recv_fifo_reset();
 }
@@ -523,6 +523,22 @@ static void set_ctl_to_host_flow(struct net_buf *buf, struct net_buf **evt)
 	hci_hbuf_total = -hci_hbuf_total;
 }
 
+/* Host Number of Completed Packets command does not follow normal flow
+ * control of HCI commands and the Controller side HCI drivers that
+ * allocates HCI command buffers with K_NO_WAIT can end up running out
+ * of command buffers.
+ *
+ * Host will generate up to acl_pkts number of Host Number of Completed
+ * Packets command plus a number of normal HCI commands.
+ *
+ * Normal HCI commands follow the HCI command flow control using
+ * Num_HCI_Command_Packets return in HCI command complete and status.
+ *
+ * Note: Zephyr Controller does not support Num_HCI_Command_Packets > 1.
+ */
+BUILD_ASSERT(BT_BUF_HCI_ACL_RX_COUNT < BT_BUF_CMD_TX_COUNT,
+	     "Too low HCI command buffers compare to ACL Rx buffers.");
+
 static void host_buffer_size(struct net_buf *buf, struct net_buf **evt)
 {
 	struct bt_hci_cp_host_buffer_size *cmd = (void *)buf->data;
@@ -536,15 +552,38 @@ static void host_buffer_size(struct net_buf *buf, struct net_buf **evt)
 		ccst->status = BT_HCI_ERR_CMD_DISALLOWED;
 		return;
 	}
-	/* fragmentation from controller to host not supported, require
+
+	/* Fragmentation from Controller to Host not supported, require
 	 * ACL MTU to be at least the LL MTU
 	 */
 	if (acl_mtu < LL_LENGTH_OCTETS_RX_MAX) {
+		LOG_ERR("FC: Require Host ACL MTU (%u) >= LL Max Data Length (%u)", acl_mtu,
+			LL_LENGTH_OCTETS_RX_MAX);
 		ccst->status = BT_HCI_ERR_INVALID_PARAM;
 		return;
 	}
 
-	LOG_DBG("FC: host buf size: %d", acl_pkts);
+	/* Host Number of Completed Packets command does not follow normal flow
+	 * control of HCI commands and the Controller side HCI drivers that
+	 * allocates HCI command buffers with K_NO_WAIT can end up running out
+	 * of command buffers.
+	 *
+	 * Host will generate up to acl_pkts number of Host Number of Completed
+	 * Packets command plus a number of normal HCI commands.
+	 *
+	 * Normal HCI commands follow the HCI command flow control using
+	 * Num_HCI_Command_Packets return in HCI command complete and status.
+	 *
+	 * Note: Zephyr Controller does not support Num_HCI_Command_Packets > 1.
+	 */
+	if (acl_pkts >= BT_BUF_CMD_TX_COUNT) {
+		LOG_WRN("FC: Host ACL packets (%u), BT_BUF_CMD_TX_COUNT (%u)", acl_pkts,
+			BT_BUF_CMD_TX_COUNT);
+		acl_pkts = BT_BUF_CMD_TX_COUNT - CONFIG_BT_CTLR_HCI_NUM_CMD_PKT_MAX;
+	}
+
+	LOG_DBG("FC: host buf size %u count %u", acl_mtu, acl_pkts);
+
 	hci_hbuf_total = -acl_pkts;
 }
 
@@ -586,7 +625,7 @@ static void host_num_completed_packets(struct net_buf *buf,
 	hci_hbuf_acked += count;
 	k_poll_signal_raise(hbuf_signal, 0x0);
 }
-#endif
+#endif /* CONFIG_BT_HCI_ACL_FLOW_CONTROL */
 
 #if defined(CONFIG_BT_CTLR_LE_PING)
 static void read_auth_payload_timeout(struct net_buf *buf, struct net_buf **evt)
@@ -747,7 +786,7 @@ static int ctrl_bb_cmd_handle(uint16_t  ocf, struct net_buf *cmd,
 	case BT_OCF(BT_HCI_OP_HOST_NUM_COMPLETED_PACKETS):
 		host_num_completed_packets(cmd, evt);
 		break;
-#endif
+#endif /* CONFIG_BT_HCI_ACL_FLOW_CONTROL */
 
 #if defined(CONFIG_BT_CTLR_LE_PING)
 	case BT_OCF(BT_HCI_OP_READ_AUTH_PAYLOAD_TIMEOUT):
@@ -1048,10 +1087,6 @@ static void read_supported_commands(struct net_buf *buf, struct net_buf **evt)
 	/* LE Set Default Periodic Advertising Sync Transfer Parameters */
 	rp->commands[41] |= BIT(1);
 #endif /* CONFIG_BT_CTLR_SYNC_TRANSFER_RECEIVER */
-
-#if defined(CONFIG_BT_HCI_RAW) && defined(CONFIG_BT_SEND_ECC_EMULATION)
-	bt_hci_ecc_supported_commands(rp->commands);
-#endif /* CONFIG_BT_HCI_RAW && CONFIG_BT_SEND_ECC_EMULATION */
 
 	/* LE Read TX Power. */
 	rp->commands[38] |= BIT(7);
@@ -5882,7 +5917,6 @@ int hci_iso_handle(struct net_buf *buf, struct net_buf **evt)
 	struct bt_hci_iso_sdu_hdr *iso_sdu_hdr;
 	struct isoal_sdu_tx sdu_frag_tx;
 	struct bt_hci_iso_hdr *iso_hdr;
-	uint32_t *time_stamp;
 	uint16_t handle;
 	uint8_t pb_flag;
 	uint8_t ts_flag;
@@ -5930,9 +5964,8 @@ int hci_iso_handle(struct net_buf *buf, struct net_buf **evt)
 	sdu_frag_tx.cntr_time_stamp = HAL_TICKER_TICKS_TO_US(ticker_ticks_now_get());
 	if (ts_flag) {
 		/* Use HCI provided time stamp */
-		time_stamp = net_buf_pull_mem(buf, sizeof(*time_stamp));
-		len -= sizeof(*time_stamp);
-		sdu_frag_tx.time_stamp = sys_le32_to_cpu(*time_stamp);
+		sdu_frag_tx.time_stamp = net_buf_pull_le32(buf);
+		len -= sizeof(uint32_t);
 	} else {
 		/* Use controller's capture time */
 		sdu_frag_tx.time_stamp = sdu_frag_tx.cntr_time_stamp;
@@ -5972,6 +6005,7 @@ int hci_iso_handle(struct net_buf *buf, struct net_buf **evt)
 		struct ll_conn_iso_group *cig;
 		struct ll_iso_stream_hdr *hdr;
 		struct ll_iso_datapath *dp_in;
+		uint32_t sdu_interval;
 		uint8_t event_offset;
 
 		cis = ll_iso_stream_connected_get(handle);
@@ -5982,23 +6016,35 @@ int hci_iso_handle(struct net_buf *buf, struct net_buf **evt)
 		cig = cis->group;
 
 		/* We must ensure sufficient time for ISO-AL to fragment SDU and
-		 * deliver PDUs to the TX queue. By checking ull_ref_get, we
-		 * know if we are within the subevents of an ISO event. If so,
-		 * we can assume that we have enough time to deliver in the next
-		 * ISO event. If we're not active within the ISO event, we don't
-		 * know if there is enough time to deliver in the next event,
-		 * and for safety we set the target to current event + 2.
-		 *
-		 * For FT > 1, we have the opportunity to retransmit in later
+		 * deliver PDUs to the TX queue. We don't know if there is enough
+		 * time to deliver in the next event, and for safety we set the
+		 * target to current event + 2.
+		 */
+		event_offset = 2;
+
+		if (cig->lll.role) {
+			/* peripheral */
+			sdu_interval = cig->p_sdu_interval;
+		} else {
+			/* central */
+			sdu_interval = cig->c_sdu_interval;
+		}
+
+		/* By checking ull_ref_get, we know if we are within the subevents
+		 * of an ISO event. If so, we can assume that we have enough time
+		 * to deliver in the next ISO event, provided CIG sync delay is less
+		 * than an SDU interval
+		 */
+		if (ull_ref_get(&cig->ull) && cig->sync_delay < sdu_interval) {
+			event_offset -= 1;
+		}
+
+		/* For FT > 1, we have the opportunity to retransmit in later
 		 * event(s), in which case we have the option to target an
 		 * earlier event (this or next) because being late does not
 		 * instantly flush the payload.
 		 */
-
-		event_offset = ull_ref_get(&cig->ull) ? 1 : 2;
-
 		if (cis->lll.tx.ft > 1) {
-			/* FT > 1, target an earlier event */
 			event_offset -= 1;
 		}
 
@@ -6007,7 +6053,7 @@ int hci_iso_handle(struct net_buf *buf, struct net_buf **evt)
 		uint64_t pkt_seq_num;
 
 		/* Catch up local pkt_seq_num with internal pkt_seq_num */
-		event_count = cis->lll.event_count + event_offset;
+		event_count = cis->lll.event_count_prepare + event_offset;
 		pkt_seq_num = event_count + 1U;
 
 		/* If pb_flag is BT_ISO_START (0b00) or BT_ISO_SINGLE (0b10)
@@ -6050,7 +6096,7 @@ int hci_iso_handle(struct net_buf *buf, struct net_buf **evt)
 						   ISO_INT_UNIT_US));
 
 #else /* !CONFIG_BT_CTLR_ISOAL_PSN_IGNORE */
-		sdu_frag_tx.target_event = cis->lll.event_count + event_offset;
+		sdu_frag_tx.target_event = cis->lll.event_count_prepare + event_offset;
 		sdu_frag_tx.grp_ref_point =
 			isoal_get_wrapped_time_us(cig->cig_ref_point,
 						  (event_offset *
@@ -8158,8 +8204,11 @@ static void le_big_complete(struct pdu_data *pdu_data,
 			    struct net_buf *buf)
 {
 	struct bt_hci_evt_le_big_complete *sep;
+	uint32_t transport_latency_big;
 	struct ll_adv_iso_set *adv_iso;
+	uint32_t iso_interval_us;
 	struct lll_adv_iso *lll;
+	uint32_t big_sync_delay;
 	size_t evt_size;
 
 	adv_iso = node_rx->rx_ftr.param;
@@ -8176,9 +8225,36 @@ static void le_big_complete(struct pdu_data *pdu_data,
 		return;
 	}
 
-	/* FIXME: Fill sync delay and latency */
-	sys_put_le24(0, sep->sync_delay);
-	sys_put_le24(0, sep->latency);
+	/* BT Core v5.4 - Vol 6, Part B, Section 4.4.6.4:
+	 * BIG_Sync_Delay = (Num_BIS – 1) × BIS_Spacing + (NSE – 1) × Sub_Interval + MPT.
+	 *
+	 * BT Core v5.4 - Vol 6, Part G, Section 3.2.1: (Framed)
+	 * Transport_Latenct_BIG = BIG_Sync_Delay + PTO × (NSE / BN – IRC) * ISO_Interval +
+	 *                             ISO_Interval + SDU_Interval
+	 *
+	 * BT Core v5.4 - Vol 6, Part G, Section 3.2.2: (Unframed)
+	 * Transport_Latenct_BIG = BIG_Sync_Delay + (PTO × (NSE / BN – IRC) + 1) * ISO_Interval -
+	 *                             SDU_Interval
+	 */
+	iso_interval_us = lll->iso_interval * ISO_INT_UNIT_US;
+	big_sync_delay = ull_iso_big_sync_delay(lll->num_bis, lll->bis_spacing, lll->nse,
+						lll->sub_interval, lll->phy, lll->max_pdu,
+						lll->enc);
+	sys_put_le24(big_sync_delay, sep->sync_delay);
+
+	if (lll->framing) {
+		/* Framed */
+		transport_latency_big = big_sync_delay +
+					lll->pto * (lll->nse / lll->bn - lll->irc) *
+					iso_interval_us + iso_interval_us + lll->sdu_interval;
+	} else {
+		/* Unframed */
+		transport_latency_big = big_sync_delay +
+					(lll->pto * (lll->nse / lll->bn - lll->irc) + 1) *
+					iso_interval_us - lll->sdu_interval;
+	}
+
+	sys_put_le24(transport_latency_big, sep->latency);
 
 	sep->phy = find_lsb_set(lll->phy);
 	sep->nse = lll->nse;
@@ -8186,6 +8262,7 @@ static void le_big_complete(struct pdu_data *pdu_data,
 	sep->pto = lll->pto;
 	sep->irc = lll->irc;
 	sep->max_pdu = sys_cpu_to_le16(lll->max_pdu);
+	sep->iso_interval = sys_cpu_to_le16(lll->iso_interval);
 	sep->num_bis = lll->num_bis;
 
 	/* Connection handle list of all BISes in the BIG */
@@ -8714,6 +8791,15 @@ static void encode_control(struct node_rx_pdu *node_rx,
 
 	case NODE_RX_TYPE_TERMINATE:
 		hci_disconn_complete_encode(pdu_data, handle, buf);
+
+#if !defined(CONFIG_BT_CTLR_RX_PRIO_STACK_SIZE)
+		/* Similar to the design of processing the termination when using Rx priority
+		 * thread, we process the termination event to handle Controller to Host data
+		 * flowcontrol in the Controller here.
+		 */
+		hci_disconn_complete_process(handle);
+#endif /* CONFIG_BT_CTLR_RX_PRIO_STACK_SIZE */
+
 		break;
 
 	case NODE_RX_TYPE_CONN_UPDATE:
@@ -9094,7 +9180,7 @@ void hci_acl_encode(struct node_rx_pdu *node_rx, struct net_buf *buf)
 			LL_ASSERT(handle < ARRAY_SIZE(hci_hbuf_pend));
 			hci_hbuf_pend[handle]++;
 		}
-#endif
+#endif /* CONFIG_BT_HCI_ACL_FLOW_CONTROL */
 		break;
 
 	default:
@@ -9300,6 +9386,7 @@ void hci_init(struct k_poll_signal *signal_host_buf)
 {
 #if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
 	hbuf_signal = signal_host_buf;
-#endif
+#endif /* CONFIG_BT_HCI_ACL_FLOW_CONTROL */
+
 	reset(NULL, NULL);
 }

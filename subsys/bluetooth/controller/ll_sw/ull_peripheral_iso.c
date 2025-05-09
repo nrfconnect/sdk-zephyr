@@ -257,6 +257,11 @@ uint8_t ull_peripheral_iso_acquire(struct ll_conn *acl,
 				    req->p_max_sdu[0];
 
 	cis->lll.active = 0U;
+
+#if !defined(CONFIG_BT_CTLR_JIT_SCHEDULING)
+	cis->lll.prepared = 0U;
+#endif /* !CONFIG_BT_CTLR_JIT_SCHEDULING */
+
 	cis->lll.handle = LLL_HANDLE_INVALID;
 	cis->lll.acl_handle = acl->lll.handle;
 	cis->lll.sub_interval = sys_get_le24(req->sub_interval);
@@ -333,6 +338,11 @@ uint8_t ull_peripheral_iso_setup(struct pdu_data_llctrl_cis_ind *ind,
 #if defined(CONFIG_BT_CTLR_ISOAL_PSN_IGNORE)
 	cis->pkt_seq_num = 0U;
 #endif /* CONFIG_BT_CTLR_ISOAL_PSN_IGNORE */
+	/* It is intentional to initialize to the 39 bit maximum value and rollover to 0 in the
+	 * prepare function, the event counter is pre-incremented in prepare function for the
+	 * current ISO event.
+	 */
+	cis->lll.event_count_prepare = LLL_CONN_ISO_EVENT_COUNT_MAX;
 	cis->lll.event_count = LLL_CONN_ISO_EVENT_COUNT_MAX;
 	cis->lll.next_subevent = 0U;
 	cis->lll.tifs_us = conn->lll.tifs_cis_us;

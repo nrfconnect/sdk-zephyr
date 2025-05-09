@@ -5,25 +5,33 @@
 
 /*
  * Copyright (c) 2020 Intel Corporation
- * Copyright (c) 2021 Nordic Semiconductor ASA
+ * Copyright (c) 2021-2025 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
+#include <errno.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
-#include <ctype.h>
-#include <zephyr/kernel.h>
-#include <zephyr/shell/shell.h>
-#include <zephyr/sys/byteorder.h>
-#include <zephyr/sys/util.h>
+#include <string.h>
 
+#include <zephyr/bluetooth/gap.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/hci_types.h>
 #include <zephyr/bluetooth/iso.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/shell/shell.h>
+#include <zephyr/shell/shell_string_conv.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/time_units.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
 
 #include "host/shell/bt.h"
-#include "host/shell/bt_shell_private.h"
+#include "common/bt_shell_private.h"
 
 #if defined(CONFIG_BT_ISO_TX)
 #define DEFAULT_IO_QOS                                                                             \
@@ -84,6 +92,10 @@ static void iso_recv(struct bt_iso_chan *chan, const struct bt_iso_recv_info *in
 
 static void iso_connected(struct bt_iso_chan *chan)
 {
+	const struct bt_iso_chan_path hci_path = {
+		.pid = BT_ISO_DATA_PATH_HCI,
+		.format = BT_HCI_CODING_FORMAT_TRANSPARENT,
+	};
 	struct bt_iso_info iso_info;
 	int err;
 
@@ -91,12 +103,13 @@ static void iso_connected(struct bt_iso_chan *chan)
 
 	err = bt_iso_chan_get_info(chan, &iso_info);
 	if (err != 0) {
-		printk("Failed to get ISO info: %d", err);
+		bt_shell_error("Failed to get ISO info: %d", err);
 		return;
 	}
 
 #if defined(CONFIG_BT_ISO_TX)
-	if (iso_info.type == BT_ISO_CHAN_TYPE_CONNECTED) {
+	if (iso_info.type == BT_ISO_CHAN_TYPE_CENTRAL ||
+	    iso_info.type == BT_ISO_CHAN_TYPE_PERIPHERAL) {
 		cis_sn_last = 0U;
 		cis_sn_last_updated_ticks = k_uptime_ticks();
 	} else {
@@ -104,12 +117,47 @@ static void iso_connected(struct bt_iso_chan *chan)
 		bis_sn_last_updated_ticks = k_uptime_ticks();
 	}
 #endif /* CONFIG_BT_ISO_TX */
+
+	if (iso_info.can_recv) {
+		err = bt_iso_setup_data_path(chan, BT_HCI_DATAPATH_DIR_CTLR_TO_HOST, &hci_path);
+		if (err != 0) {
+			bt_shell_error("Failed to setup ISO RX data path: %d", err);
+		}
+	}
+
+	if (iso_info.can_send) {
+		err = bt_iso_setup_data_path(chan, BT_HCI_DATAPATH_DIR_HOST_TO_CTLR, &hci_path);
+		if (err != 0) {
+			bt_shell_error("Failed to setup ISO TX data path: %d", err);
+		}
+	}
 }
 
 static void iso_disconnected(struct bt_iso_chan *chan, uint8_t reason)
 {
-	bt_shell_print("ISO Channel %p disconnected with reason 0x%02x",
-		       chan, reason);
+	struct bt_iso_info iso_info;
+	int err;
+
+	bt_shell_print("ISO Channel %p disconnected with reason 0x%02x", chan, reason);
+
+	err = bt_iso_chan_get_info(chan, &iso_info);
+	if (err != 0) {
+		bt_shell_error("Failed to get ISO info: %d", err);
+	} else if (iso_info.type == BT_ISO_CHAN_TYPE_CENTRAL) {
+		if (iso_info.can_recv) {
+			err = bt_iso_remove_data_path(chan, BT_HCI_DATAPATH_DIR_CTLR_TO_HOST);
+			if (err != 0) {
+				bt_shell_error("Failed to remove ISO RX data path: %d", err);
+			}
+		}
+
+		if (iso_info.can_send) {
+			err = bt_iso_remove_data_path(chan, BT_HCI_DATAPATH_DIR_HOST_TO_CTLR);
+			if (err != 0) {
+				bt_shell_error("Failed to remove ISO TX data path: %d", err);
+			}
+		}
+	}
 }
 
 static struct bt_iso_chan_ops iso_ops = {
@@ -557,6 +605,12 @@ static int cmd_send(const struct shell *sh, size_t argc, char *argv[])
 
 			return -ENOEXEC;
 		}
+
+		if (count < 1) {
+			shell_error(sh, "Cannot send 0 times");
+
+			return -ENOEXEC;
+		}
 	}
 
 	if (!iso_chan.iso) {
@@ -670,6 +724,12 @@ static int cmd_broadcast(const struct shell *sh, size_t argc, char *argv[])
 		count = shell_strtoul(argv[1], 0, &ret);
 		if (ret != 0) {
 			shell_error(sh, "Could not parse count: %d", ret);
+
+			return -ENOEXEC;
+		}
+
+		if (count < 1) {
+			shell_error(sh, "Cannot send 0 times");
 
 			return -ENOEXEC;
 		}

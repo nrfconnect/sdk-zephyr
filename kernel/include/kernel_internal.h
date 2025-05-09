@@ -105,10 +105,7 @@ void *z_thread_aligned_alloc(size_t align, size_t size);
  * @return A pointer to the allocated memory, or NULL if there is insufficient
  * RAM in the pool or there is no pool to draw memory from
  */
-static inline void *z_thread_malloc(size_t size)
-{
-	return z_thread_aligned_alloc(0, size);
-}
+void *z_thread_malloc(size_t size);
 
 
 #ifdef CONFIG_USE_SWITCH
@@ -221,7 +218,7 @@ void z_mem_manage_init(void);
 void z_mem_manage_boot_finish(void);
 
 
-void z_handle_obj_poll_events(sys_dlist_t *events, uint32_t state);
+bool z_handle_obj_poll_events(sys_dlist_t *events, uint32_t state);
 
 #ifdef CONFIG_PM
 
@@ -286,7 +283,7 @@ int z_kernel_stats_query(struct k_obj_core *obj_core, void *stats);
  * where these steps require that the thread is no longer running.
  * If the target thread is not the current running thread, the cleanup
  * steps will be performed immediately. However, if the target thread is
- * the current running thread (e.g. k_thread_abort(arch_current_thread())), it defers
+ * the current running thread (e.g. k_thread_abort(_current)), it defers
  * the cleanup steps to later when the work will be finished in another
  * context.
  *

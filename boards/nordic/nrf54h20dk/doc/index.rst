@@ -1,7 +1,4 @@
-.. _nrf54h20dk_nrf54h20:
-
-nRF54H20 DK
-###########
+.. zephyr:board:: nrf54h20dk
 
 Overview
 ********
@@ -59,49 +56,7 @@ nRF54H20 DK has two crystal oscillators:
 Supported Features
 ==================
 
-The ``nrf54h20dk/nrf54h20/cpuapp`` board configuration supports the following
-hardware features:
-
-+-----------+------------+----------------------+
-| Interface | Controller | Driver/Component     |
-+===========+============+======================+
-| GPIO      | on-chip    | gpio                 |
-+-----------+------------+----------------------+
-| GRTC      | on-chip    | system clock         |
-+-----------+------------+----------------------+
-| I2C(M)    | on-chip    | i2c                  |
-+-----------+------------+----------------------+
-| MEMCONF   | on-chip    | retained_mem         |
-+-----------+------------+----------------------+
-| SPI(M/S)  | on-chip    | spi                  |
-+-----------+------------+----------------------+
-| UART      | on-chip    | serial               |
-+-----------+------------+----------------------+
-| WDT       | on-chip    | watchdog             |
-+-----------+------------+----------------------+
-
-The ``nrf54h20dk/nrf54h20/cpurad`` board configuration supports the following
-hardware features:
-
-+-----------+------------+----------------------+
-| Interface | Controller | Driver/Component     |
-+===========+============+======================+
-| GPIO      | on-chip    | gpio                 |
-+-----------+------------+----------------------+
-| GRTC      | on-chip    | system clock         |
-+-----------+------------+----------------------+
-| I2C(M)    | on-chip    | i2c                  |
-+-----------+------------+----------------------+
-| MEMCONF   | on-chip    | retained_mem         |
-+-----------+------------+----------------------+
-| SPI(M/S)  | on-chip    | spi                  |
-+-----------+------------+----------------------+
-| UART      | on-chip    | serial               |
-+-----------+------------+----------------------+
-| WDT       | on-chip    | watchdog             |
-+-----------+------------+----------------------+
-
-Other hardware features have not been enabled yet for this board.
+.. zephyr:board-supported-hw::
 
 Connections and IOs
 ===================
@@ -125,6 +80,12 @@ Push buttons
 
 Programming and Debugging
 *************************
+
+.. zephyr:board-supported-runners::
+
+.. note::
+   When first using the nRF54H20 DK, you must program the `nRF54H20 SoC binaries`_ on the development kit.
+   To do so, follow the bring up steps instructions on the `Getting started with the nRF54H20 DK`_ documentation.
 
 Applications for all targets can be built and flashed the usual way.
 See :ref:`build_an_application` and :ref:`application_run` for more details on
@@ -163,3 +124,9 @@ your board. The button and LED definitions can be found in
 
 .. _nRF Util:
    https://www.nordicsemi.com/Products/Development-tools/nrf-util
+
+.. _Getting started with the nRF54H20 DK:
+   https://docs.nordicsemi.com/bundle/ncs-latest/page/nrf/app_dev/device_guides/nrf54h/ug_nrf54h20_gs.html
+
+.. _nRF54H20 SoC binaries:
+   https://docs.nordicsemi.com/bundle/ncs-latest/page/nrf/releases_and_maturity/abi_compatibility.html

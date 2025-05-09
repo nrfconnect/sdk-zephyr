@@ -7,6 +7,7 @@
 #include <zephyr/debug/symtab.h>
 #include <zephyr/kernel.h>
 #include <zephyr/kernel_structs.h>
+#include <zephyr/linker/linker-defs.h>
 #include <kernel_internal.h>
 #include <zephyr/logging/log.h>
 
@@ -90,9 +91,7 @@ static bool in_stack_bound(uintptr_t addr, const struct k_thread *const thread,
 
 static inline bool in_text_region(uintptr_t addr)
 {
-	extern uintptr_t __text_region_start, __text_region_end;
-
-	return (addr >= (uintptr_t)&__text_region_start) && (addr < (uintptr_t)&__text_region_end);
+	return (addr >= (uintptr_t)__text_region_start) && (addr < (uintptr_t)__text_region_end);
 }
 
 #ifdef CONFIG_FRAME_POINTER
@@ -108,7 +107,7 @@ static void walk_stackframe(riscv_stacktrace_cb cb, void *cookie, const struct k
 		/* Unwind the provided exception stack frame */
 		fp = esf->s0;
 		ra = esf->mepc;
-	} else if ((csf == NULL) || (csf == &arch_current_thread()->callee_saved)) {
+	} else if ((csf == NULL) || (csf == &_current->callee_saved)) {
 		/* Unwind current thread (default case when nothing is provided ) */
 		fp = (uintptr_t)__builtin_frame_address(0);
 		ra = (uintptr_t)walk_stackframe;
@@ -181,7 +180,7 @@ static void walk_stackframe(riscv_stacktrace_cb cb, void *cookie, const struct k
 		/* Unwind the provided exception stack frame */
 		sp = z_riscv_get_sp_before_exc(esf);
 		ra = esf->mepc;
-	} else if ((csf == NULL) || (csf == &arch_current_thread()->callee_saved)) {
+	} else if ((csf == NULL) || (csf == &_current->callee_saved)) {
 		/* Unwind current thread (default case when nothing is provided ) */
 		sp = current_stack_pointer;
 		ra = (uintptr_t)walk_stackframe;
@@ -215,10 +214,8 @@ void arch_stack_walk(stack_trace_callback_fn callback_fn, void *cookie,
 		     const struct k_thread *thread, const struct arch_esf *esf)
 {
 	if (thread == NULL) {
-		/* In case `thread` is NULL, default that to `arch_current_thread()`
-		 * and try to unwind
-		 */
-		thread = arch_current_thread();
+		/* In case `thread` is NULL, default that to `_current` and try to unwind */
+		thread = _current;
 	}
 
 	walk_stackframe((riscv_stacktrace_cb)callback_fn, cookie, thread, esf, in_stack_bound,
@@ -282,8 +279,7 @@ void z_riscv_unwind_stack(const struct arch_esf *esf, const _callee_saved_t *csf
 	int i = 0;
 
 	LOG_ERR("call trace:");
-	walk_stackframe(print_trace_address, &i, arch_current_thread(), esf, in_fatal_stack_bound,
-			csf);
+	walk_stackframe(print_trace_address, &i, _current, esf, in_fatal_stack_bound, csf);
 	LOG_ERR("");
 }
 #endif /* CONFIG_EXCEPTION_STACK_TRACE */

@@ -152,11 +152,13 @@ uint8_t ll_sync_create(uint8_t options, uint8_t sid, uint8_t adv_addr_type,
 
 	scan->periodic.cancelled = 0U;
 	scan->periodic.state = LL_SYNC_STATE_IDLE;
+	scan->periodic.param = NULL;
 	scan->periodic.filter_policy =
 		options & BT_HCI_LE_PER_ADV_CREATE_SYNC_FP_USE_LIST;
 	if (IS_ENABLED(CONFIG_BT_CTLR_PHY_CODED)) {
 		scan_coded->periodic.cancelled = 0U;
 		scan_coded->periodic.state = LL_SYNC_STATE_IDLE;
+		scan_coded->periodic.param = NULL;
 		scan_coded->periodic.filter_policy =
 			scan->periodic.filter_policy;
 	}
@@ -392,16 +394,9 @@ void ull_sync_setup_from_sync_transfer(struct ll_conn *conn, uint16_t service_da
 		slot_us += EVENT_OVERHEAD_START_US + EVENT_OVERHEAD_END_US;
 	}
 
-	/* TODO: active_to_start feature port */
-	sync->ull.ticks_active_to_start = 0U;
-	sync->ull.ticks_prepare_to_start =
-		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
-	sync->ull.ticks_preempt_to_start =
-		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
 	sync->ull.ticks_slot = HAL_TICKER_US_TO_TICKS_CEIL(slot_us);
 
-	ticks_slot_offset = MAX(sync->ull.ticks_active_to_start,
-				sync->ull.ticks_prepare_to_start);
+	ticks_slot_offset = HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
 		ticks_slot_overhead = ticks_slot_offset;
 	} else {
@@ -880,12 +875,12 @@ void ull_sync_release(struct ll_sync_set *sync)
 	mem_release(sync, &sync_free);
 }
 
-void ull_sync_setup_addr_check(struct ll_sync_set *sync, struct ll_scan_set *scan,
+bool ull_sync_setup_addr_check(struct ll_sync_set *sync, uint8_t filter_policy,
 			       uint8_t addr_type, uint8_t *addr, uint8_t rl_idx)
 {
 	/* Check if Periodic Advertiser list to be used */
 	if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_PERIODIC_ADV_LIST) &&
-	    scan->periodic.filter_policy) {
+	    filter_policy) {
 		/* Check in Periodic Advertiser List */
 		if (ull_filter_ull_pal_addr_match(addr_type, addr)) {
 			/* Remember the address, to check with
@@ -896,7 +891,7 @@ void ull_sync_setup_addr_check(struct ll_sync_set *sync, struct ll_scan_set *sca
 				     BDADDR_SIZE);
 
 			/* Address matched */
-			scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
+			return true;
 
 		/* Check in Resolving List */
 		} else if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY) &&
@@ -911,14 +906,14 @@ void ull_sync_setup_addr_check(struct ll_sync_set *sync, struct ll_scan_set *sca
 			sync->peer_addr_resolved = 1U;
 
 			/* Address matched */
-			scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
+			return true;
 		}
 
 	/* Check with explicitly supplied address */
 	} else if ((addr_type == sync->peer_id_addr_type) &&
 		   !memcmp(addr, sync->peer_id_addr, BDADDR_SIZE)) {
 		/* Address matched */
-		scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
+		return true;
 
 	/* Check identity address with explicitly supplied address */
 	} else if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY) &&
@@ -930,9 +925,11 @@ void ull_sync_setup_addr_check(struct ll_sync_set *sync, struct ll_scan_set *sca
 			sync->peer_addr_resolved = 1U;
 
 			/* Identity address matched */
-			scan->periodic.state = LL_SYNC_STATE_ADDR_MATCH;
+			return true;
 		}
 	}
+
+	return false;
 }
 
 bool ull_sync_setup_sid_match(struct ll_sync_set *sync, struct ll_scan_set *scan, uint8_t sid)
@@ -1060,6 +1057,7 @@ void ull_sync_setup(struct ll_scan_set *scan, uint8_t phy,
 
 	/* Set the state to sync create */
 	scan->periodic.state = LL_SYNC_STATE_CREATED;
+	scan->periodic.param = NULL;
 	if (IS_ENABLED(CONFIG_BT_CTLR_PHY_CODED)) {
 		struct ll_scan_set *scan_1m;
 
@@ -1069,8 +1067,10 @@ void ull_sync_setup(struct ll_scan_set *scan, uint8_t phy,
 
 			scan_coded = ull_scan_set_get(SCAN_HANDLE_PHY_CODED);
 			scan_coded->periodic.state = LL_SYNC_STATE_CREATED;
+			scan_coded->periodic.param = NULL;
 		} else {
 			scan_1m->periodic.state = LL_SYNC_STATE_CREATED;
+			scan_1m->periodic.param = NULL;
 		}
 	}
 
@@ -1131,16 +1131,9 @@ void ull_sync_setup(struct ll_scan_set *scan, uint8_t phy,
 		slot_us += EVENT_OVERHEAD_START_US + EVENT_OVERHEAD_END_US;
 	}
 
-	/* TODO: active_to_start feature port */
-	sync->ull.ticks_active_to_start = 0U;
-	sync->ull.ticks_prepare_to_start =
-		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
-	sync->ull.ticks_preempt_to_start =
-		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
 	sync->ull.ticks_slot = HAL_TICKER_US_TO_TICKS_CEIL(slot_us);
 
-	ticks_slot_offset = MAX(sync->ull.ticks_active_to_start,
-				sync->ull.ticks_prepare_to_start);
+	ticks_slot_offset = HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
 		ticks_slot_overhead = ticks_slot_offset;
 	} else {

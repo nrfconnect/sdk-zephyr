@@ -27,9 +27,10 @@
 			compatible = "arm,cortex-m33f";
 			reg = <0>;
 			device_type = "cpu";
-			clock-frequency = <DT_FREQ_M(64)>;
+			clocks = <&hfpll>;
 			#address-cells = <1>;
 			#size-cells = <1>;
+
 			itm: itm@e0000000 {
 				compatible = "arm,armv8m-itm";
 				reg = <0xe0000000 0x1000>;
@@ -48,6 +49,12 @@
 	};
 
 	clocks {
+		pclk: pclk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <DT_FREQ_M(16)>;
+		};
+
 		lfxo: lfxo {
 			compatible = "nordic,nrf-lfxo";
 			#clock-cells = <0>;
@@ -86,19 +93,19 @@
 		};
 
 		cpuapp_sram: memory@20000000 {
-			reg = <0x20000000 DT_SIZE_K(144)>;
-			ranges = <0x0 0x20000000 DT_SIZE_K(144)>;
+			reg = <0x20000000 DT_SIZE_K(143)>;
+			ranges = <0x0 0x20000000 DT_SIZE_K(143)>;
 			compatible = "mmio-sram";
 			#address-cells = <1>;
 			#size-cells = <1>;
 		};
 
-		cpuflpr_sram: memory@20024000 {
+		cpuflpr_sram: memory@20023c00 {
 			compatible = "mmio-sram";
-			reg = <0x20024000 DT_SIZE_K(48)>;
+			reg = <0x20023c00 DT_SIZE_K(48)>;
 			#address-cells = <1>;
 			#size-cells = <1>;
-			ranges = <0x0 0x20024000 DT_SIZE_K(48)>;
+			ranges = <0x0 0x20023c00 DT_SIZE_K(48)>;
 		};
 
  #ifdef USE_NON_SECURE_ADDRESS_MAP
@@ -156,8 +163,7 @@
 				cc-num = <6>;
 				max-bit-width = <32>;
 				interrupts = <85 NRF_DEFAULT_IRQ_PRIORITY>;
-				/* NRFX-6881: Temporary workaround for timer00 */
-				max-frequency = <DT_FREQ_M(64)>;
+				clocks = <&hfpll>;
 				prescaler = <0>;
 			};
 
@@ -186,7 +192,7 @@
 				cc-num = <8>;
 				max-bit-width = <32>;
 				interrupts = <133 NRF_DEFAULT_IRQ_PRIORITY>;
-				max-frequency = <DT_FREQ_M(32)>;
+				clocks = <&hfxo>;
 				prescaler = <0>;
 			};
 
@@ -387,6 +393,7 @@
 				interrupts = <213 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
 				#io-channel-cells = <1>;
+				zephyr,pm-device-runtime-auto;
 			};
 
 			temp: temp@d7000 {
@@ -418,6 +425,8 @@
 				compatible = "nordic,nrf-grtc";
 				reg = <0xe2000 0x1000>;
 				cc-num = <12>;
+				clocks = <&lfxo>, <&pclk>;
+				clock-names = "lfclock", "hfclock";
 				status = "disabled";
 			};
 

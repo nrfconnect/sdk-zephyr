@@ -18,6 +18,8 @@
 #include <fsl_cache.h>
 #endif
 
+#include "video_device.h"
+
 struct video_mcux_csi_config {
 	CSI_Type *base;
 	const struct device *source_dev;
@@ -123,7 +125,7 @@ static inline void video_pix_fmt_convert(struct video_format *fmt, bool isGetFmt
 		break;
 	}
 
-	fmt->pitch = fmt->width * video_pix_fmt_bpp(fmt->pixelformat);
+	fmt->pitch = fmt->width * video_bits_per_pixel(fmt->pixelformat) / BITS_PER_BYTE;
 }
 #endif
 
@@ -132,7 +134,7 @@ static int video_mcux_csi_set_fmt(const struct device *dev, enum video_endpoint_
 {
 	const struct video_mcux_csi_config *config = dev->config;
 	struct video_mcux_csi_data *data = dev->data;
-	unsigned int bpp = video_pix_fmt_bpp(fmt->pixelformat);
+	unsigned int bpp = video_bits_per_pixel(fmt->pixelformat) / BITS_PER_BYTE;
 	status_t ret;
 	struct video_format format = *fmt;
 
@@ -194,37 +196,30 @@ static int video_mcux_csi_get_fmt(const struct device *dev, enum video_endpoint_
 	return -EIO;
 }
 
-static int video_mcux_csi_stream_start(const struct device *dev)
+static int video_mcux_csi_set_stream(const struct device *dev, bool enable)
 {
 	const struct video_mcux_csi_config *config = dev->config;
 	struct video_mcux_csi_data *data = dev->data;
 	status_t ret;
 
-	ret = CSI_TransferStart(config->base, &data->csi_handle);
-	if (ret != kStatus_Success) {
-		return -EIO;
-	}
+	if (enable) {
+		ret = CSI_TransferStart(config->base, &data->csi_handle);
+		if (ret != kStatus_Success) {
+			return -EIO;
+		}
 
-	if (config->source_dev && video_stream_start(config->source_dev)) {
-		return -EIO;
-	}
+		if (config->source_dev && video_stream_start(config->source_dev)) {
+			return -EIO;
+		}
+	} else {
+		if (config->source_dev && video_stream_stop(config->source_dev)) {
+			return -EIO;
+		}
 
-	return 0;
-}
-
-static int video_mcux_csi_stream_stop(const struct device *dev)
-{
-	const struct video_mcux_csi_config *config = dev->config;
-	struct video_mcux_csi_data *data = dev->data;
-	status_t ret;
-
-	if (config->source_dev && video_stream_stop(config->source_dev)) {
-		return -EIO;
-	}
-
-	ret = CSI_TransferStop(config->base, &data->csi_handle);
-	if (ret != kStatus_Success) {
-		return -EIO;
+		ret = CSI_TransferStop(config->base, &data->csi_handle);
+		if (ret != kStatus_Success) {
+			return -EIO;
+		}
 	}
 
 	return 0;
@@ -303,32 +298,6 @@ static int video_mcux_csi_dequeue(const struct device *dev, enum video_endpoint_
 	}
 
 	return 0;
-}
-
-static inline int video_mcux_csi_set_ctrl(const struct device *dev, unsigned int cid, void *value)
-{
-	const struct video_mcux_csi_config *config = dev->config;
-	int ret = -ENOTSUP;
-
-	/* Forward to source dev if any */
-	if (config->source_dev) {
-		ret = video_set_ctrl(config->source_dev, cid, value);
-	}
-
-	return ret;
-}
-
-static inline int video_mcux_csi_get_ctrl(const struct device *dev, unsigned int cid, void *value)
-{
-	const struct video_mcux_csi_config *config = dev->config;
-	int ret = -ENOTSUP;
-
-	/* Forward to source dev if any */
-	if (config->source_dev) {
-		ret = video_get_ctrl(config->source_dev, cid, value);
-	}
-
-	return ret;
 }
 
 static int video_mcux_csi_get_caps(const struct device *dev, enum video_endpoint_id ep,
@@ -471,13 +440,10 @@ static int video_mcux_csi_enum_frmival(const struct device *dev, enum video_endp
 static DEVICE_API(video, video_mcux_csi_driver_api) = {
 	.set_format = video_mcux_csi_set_fmt,
 	.get_format = video_mcux_csi_get_fmt,
-	.stream_start = video_mcux_csi_stream_start,
-	.stream_stop = video_mcux_csi_stream_stop,
+	.set_stream = video_mcux_csi_set_stream,
 	.flush = video_mcux_csi_flush,
 	.enqueue = video_mcux_csi_enqueue,
 	.dequeue = video_mcux_csi_dequeue,
-	.set_ctrl = video_mcux_csi_set_ctrl,
-	.get_ctrl = video_mcux_csi_get_ctrl,
 	.get_caps = video_mcux_csi_get_caps,
 	.set_frmival = video_mcux_csi_set_frmival,
 	.get_frmival = video_mcux_csi_get_frmival,
@@ -490,9 +456,11 @@ static DEVICE_API(video, video_mcux_csi_driver_api) = {
 #if 1 /* Unique Instance */
 PINCTRL_DT_INST_DEFINE(0);
 
+#define SOURCE_DEV(n) DEVICE_DT_GET(DT_NODE_REMOTE_DEVICE(DT_INST_ENDPOINT_BY_ID(n, 0, 0)))
+
 static const struct video_mcux_csi_config video_mcux_csi_config_0 = {
 	.base = (CSI_Type *)DT_INST_REG_ADDR(0),
-	.source_dev = DEVICE_DT_GET(DT_NODE_REMOTE_DEVICE(DT_INST_ENDPOINT_BY_ID(0, 0, 0))),
+	.source_dev = SOURCE_DEV(0),
 	.pincfg = PINCTRL_DT_INST_DEV_CONFIG_GET(0),
 };
 
@@ -514,4 +482,7 @@ static int video_mcux_csi_init_0(const struct device *dev)
 DEVICE_DT_INST_DEFINE(0, &video_mcux_csi_init_0, NULL, &video_mcux_csi_data_0,
 		      &video_mcux_csi_config_0, POST_KERNEL, CONFIG_VIDEO_MCUX_CSI_INIT_PRIORITY,
 		      &video_mcux_csi_driver_api);
+
+VIDEO_DEVICE_DEFINE(csi, DEVICE_DT_INST_GET(0), SOURCE_DEV(0));
+
 #endif

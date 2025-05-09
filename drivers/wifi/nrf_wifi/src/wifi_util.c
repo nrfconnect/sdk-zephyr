@@ -9,10 +9,13 @@
  */
 #include <stdlib.h>
 #include "host_rpu_umac_if.h"
-#include "fmac_api.h"
-#include "fmac_util.h"
+#include "common/fmac_util.h"
+#include "system/fmac_api.h"
 #include "fmac_main.h"
 #include "wifi_util.h"
+
+#include "rpu_lmac_phy_stats.h"
+#include "rpu_umac_stats.h"
 
 extern struct nrf_wifi_drv_priv_zep rpu_drv_priv_zep;
 struct nrf_wifi_ctx_zep *ctx = &rpu_drv_priv_zep.rpu_ctx_zep;
@@ -161,10 +164,10 @@ static int nrf_wifi_util_set_he_ltf_gi(const struct shell *sh,
 		return -ENOEXEC;
 	}
 
-	status = nrf_wifi_fmac_conf_ltf_gi(ctx->rpu_ctx,
-					   ctx->conf_params.he_ltf,
-					   ctx->conf_params.he_gi,
-					   val);
+	status = nrf_wifi_sys_fmac_conf_ltf_gi(ctx->rpu_ctx,
+					       ctx->conf_params.he_ltf,
+					       ctx->conf_params.he_gi,
+					       val);
 
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
 		shell_fprintf(sh,
@@ -199,7 +202,7 @@ static int nrf_wifi_util_set_uapsd_queue(const struct shell *sh,
 	}
 
 	if (ctx->conf_params.uapsd_queue != val) {
-		status = nrf_wifi_fmac_set_uapsd_queue(ctx->rpu_ctx,
+		status = nrf_wifi_sys_fmac_set_uapsd_queue(ctx->rpu_ctx,
 						       0,
 						       val);
 
@@ -272,7 +275,7 @@ static int nrf_wifi_util_tx_stats(const struct shell *sh,
 	struct nrf_wifi_fmac_dev_ctx *fmac_dev_ctx = NULL;
 	void *queue = NULL;
 	unsigned int tx_pending_pkts = 0;
-	struct nrf_wifi_fmac_dev_ctx_def *def_dev_ctx = NULL;
+	struct nrf_wifi_sys_fmac_dev_ctx *sys_dev_ctx = NULL;
 	int ret;
 
 	vif_index = atoi(argv[1]);
@@ -295,7 +298,7 @@ static int nrf_wifi_util_tx_stats(const struct shell *sh,
 	}
 
 	fmac_dev_ctx = ctx->rpu_ctx;
-	def_dev_ctx = wifi_dev_priv(fmac_dev_ctx);
+	sys_dev_ctx = wifi_dev_priv(fmac_dev_ctx);
 
 	/* TODO: Get peer_index from shell once AP mode is supported */
 	shell_fprintf(sh,
@@ -304,7 +307,7 @@ static int nrf_wifi_util_tx_stats(const struct shell *sh,
 		vif_index);
 
 	for (int i = 0; i < NRF_WIFI_FMAC_AC_MAX ; i++) {
-		queue = def_dev_ctx->tx_config.data_pending_txq[peer_index][i];
+		queue = sys_dev_ctx->tx_config.data_pending_txq[peer_index][i];
 		tx_pending_pkts = nrf_wifi_utils_q_len(queue);
 
 		shell_fprintf(
@@ -312,7 +315,7 @@ static int nrf_wifi_util_tx_stats(const struct shell *sh,
 			SHELL_INFO,
 			"Outstanding tokens: ac: %d -> %d (pending_q_len: %d)\n",
 			i,
-			def_dev_ctx->tx_config.outstanding_descs[i],
+			sys_dev_ctx->tx_config.outstanding_descs[i],
 			tx_pending_pkts);
 	}
 
@@ -373,9 +376,9 @@ static int nrf_wifi_util_tx_rate(const struct shell *sh,
 
 	}
 
-	status = nrf_wifi_fmac_set_tx_rate(ctx->rpu_ctx,
-					   rate_flag,
-					   data_rate);
+	status = nrf_wifi_sys_fmac_set_tx_rate(ctx->rpu_ctx,
+					       rate_flag,
+					       data_rate);
 
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
 		shell_fprintf(sh,
@@ -399,8 +402,8 @@ static int nrf_wifi_util_show_host_rpu_ps_ctrl_state(const struct shell *sh,
 	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
 	int rpu_ps_state = -1;
 
-	status = nrf_wifi_fmac_get_host_rpu_ps_ctrl_state(ctx->rpu_ctx,
-							  &rpu_ps_state);
+	status = nrf_wifi_sys_fmac_get_host_rpu_ps_ctrl_state(ctx->rpu_ctx,
+							      &rpu_ps_state);
 
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
 		shell_fprintf(sh,
@@ -456,7 +459,7 @@ static int nrf_wifi_util_dump_rpu_stats(const struct shell *sh,
 {
 	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
 	struct nrf_wifi_fmac_dev_ctx *fmac_dev_ctx = NULL;
-	struct rpu_op_stats stats;
+	struct rpu_sys_op_stats stats;
 	enum rpu_stats_type stats_type = RPU_STATS_TYPE_ALL;
 	int ret;
 
@@ -490,8 +493,8 @@ static int nrf_wifi_util_dump_rpu_stats(const struct shell *sh,
 	}
 	fmac_dev_ctx = ctx->rpu_ctx;
 
-	memset(&stats, 0, sizeof(struct rpu_op_stats));
-	status = nrf_wifi_fmac_stats_get(fmac_dev_ctx, 0, &stats);
+	memset(&stats, 0, sizeof(struct rpu_sys_op_stats));
+	status = nrf_wifi_sys_fmac_stats_get(fmac_dev_ctx, 0, &stats);
 
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
 		shell_fprintf(sh,
@@ -898,7 +901,7 @@ static int nrf_wifi_util_trigger_rpu_recovery(const struct shell *sh,
 
 	fmac_dev_ctx = ctx->rpu_ctx;
 
-	status = nrf_wifi_fmac_rpu_recovery_callback(fmac_dev_ctx, NULL, 0);
+	status = nrf_wifi_sys_fmac_rpu_recovery_callback(fmac_dev_ctx, NULL, 0);
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
 		shell_fprintf(sh,
 			      SHELL_ERROR,
@@ -963,8 +966,131 @@ unlock:
 }
 #endif /* CONFIG_NRF_WIFI_RPU_RECOVERY */
 
+static int nrf_wifi_dump_stats(const struct shell *sh,
+				   struct nrf_wifi_hal_dev_ctx *hal_dev_ctx,
+				   const char *name,
+				   struct rpu_stat_global *rpu_stat_g)
+{
+	int i;
+	int j;
+	int ret = 0;
+
+	for (i = 0; rpu_stat_g[i].stats != NULL; i++) {
+		struct rpu_stat_from_mem *rpu_stat = rpu_stat_g[i].stats;
+
+		shell_fprintf(sh, SHELL_INFO, "RPU %s - %s\n", name, rpu_stat_g[i].name);
+		shell_fprintf(sh, SHELL_INFO, "======================\n");
+
+		for (j = 0; rpu_stat[j].name[0] != '\0'; j++) {
+			uint32_t value = 0;
+
+			if (hal_rpu_mem_read(hal_dev_ctx, &value,
+						 rpu_stat[j].addr, sizeof(value)) != 0) {
+				shell_fprintf(sh, SHELL_ERROR,
+						  "Failed to read stat %s\n",
+							  rpu_stat[j].name);
+				continue;
+			}
+
+			shell_fprintf(sh, SHELL_INFO, "%s: %u\n",
+					  rpu_stat[j].name,
+					  value);
+		}
+
+		shell_fprintf(sh, SHELL_INFO, "\n");
+	}
+
+	return ret;
+}
+
+static int nrf_wifi_util_dump_rpu_stats_mem(const struct shell *sh,
+					size_t argc,
+					const char *argv[])
+{
+	struct nrf_wifi_fmac_dev_ctx *fmac_dev_ctx;
+	struct nrf_wifi_hal_dev_ctx *hal_dev_ctx;
+	struct rpu_sys_op_stats stats;
+	enum rpu_stats_type stats_type = RPU_STATS_TYPE_ALL;
+	int ret;
+
+	if (argc == 2) {
+		const char *type  = argv[1];
+
+		if (!strcmp(type, "umac")) {
+			stats_type = RPU_STATS_TYPE_UMAC;
+		} else if (!strcmp(type, "lmac")) {
+			stats_type = RPU_STATS_TYPE_LMAC;
+		} else if (!strcmp(type, "all")) {
+			stats_type = RPU_STATS_TYPE_ALL;
+		} else {
+			shell_fprintf(sh,
+				      SHELL_ERROR,
+				      "Invalid stats type %s\n",
+				      type);
+			return -ENOEXEC;
+		}
+	}
+
+	k_mutex_lock(&ctx->rpu_lock, K_FOREVER);
+	if (!ctx->rpu_ctx) {
+		shell_fprintf(sh,
+			      SHELL_ERROR,
+			      "RPU context not initialized\n");
+		ret = -ENOEXEC;
+		goto unlock;
+	}
+	fmac_dev_ctx = ctx->rpu_ctx;
+	if (!fmac_dev_ctx) {
+		shell_fprintf(sh,
+			      SHELL_ERROR,
+			      "RPU context not initialized\n");
+		ret = -ENOEXEC;
+		goto unlock;
+	}
+	hal_dev_ctx = fmac_dev_ctx->hal_dev_ctx;
+	if (!hal_dev_ctx) {
+		shell_fprintf(sh,
+			      SHELL_ERROR,
+			      "HAL context not initialized\n");
+		ret = -ENOEXEC;
+		goto unlock;
+	}
+
+
+	memset(&stats, 0, sizeof(struct rpu_sys_op_stats));
+
+	if (stats_type == RPU_STATS_TYPE_UMAC || stats_type == RPU_STATS_TYPE_ALL) {
+		nrf_wifi_hal_proc_ctx_set(hal_dev_ctx, RPU_PROC_TYPE_MCU_UMAC);
+		ret = nrf_wifi_dump_stats(sh, hal_dev_ctx, "UMAC", rpu_all_umac_stats);
+		if (ret != 0) {
+			shell_fprintf(sh,
+				      SHELL_ERROR,
+				      "Failed to dump UMAC stats\n");
+			goto unlock;
+		}
+	}
+
+	if (stats_type == RPU_STATS_TYPE_LMAC || stats_type == RPU_STATS_TYPE_ALL) {
+		nrf_wifi_hal_proc_ctx_set(hal_dev_ctx, RPU_PROC_TYPE_MCU_LMAC);
+		ret = nrf_wifi_dump_stats(sh, hal_dev_ctx, "LMAC", rpu_all_lmac_stats);
+		if (ret != 0) {
+			shell_fprintf(sh,
+				      SHELL_ERROR,
+				      "Failed to dump LMAC stats\n");
+			goto unlock;
+		}
+	}
+
+	/* Reset the proc context to default */
+	nrf_wifi_hal_proc_ctx_set(hal_dev_ctx, RPU_PROC_TYPE_MCU_LMAC);
+
+unlock:
+	k_mutex_unlock(&ctx->rpu_lock);
+	return ret;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
-	nrf_wifi_util_subcmds,
+	nrf70_util,
 	SHELL_CMD_ARG(he_ltf,
 		      NULL,
 		      "0 - 1x HE LTF\n"
@@ -1066,13 +1192,17 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		      1,
 		      0),
 #endif /* CONFIG_NRF_WIFI_RPU_RECOVERY */
+	SHELL_CMD_ARG(rpu_stats_mem,
+		      NULL,
+		      "Display RPU stats by reading from memory "
+		      "Parameters: umac or lmac or or all (default)",
+		      nrf_wifi_util_dump_rpu_stats_mem,
+		      1,
+		      1),
 	SHELL_SUBCMD_SET_END);
 
 
-SHELL_CMD_REGISTER(wifi_util,
-		   &nrf_wifi_util_subcmds,
-		   "nRF Wi-Fi utility shell commands",
-		   NULL);
+SHELL_SUBCMD_ADD((nrf70), util, &nrf70_util, "nRF70 utility commands\n", NULL, 0, 0);
 
 
 static int nrf_wifi_util_init(void)
