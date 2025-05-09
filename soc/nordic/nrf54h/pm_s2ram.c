@@ -9,7 +9,6 @@
 #include <zephyr/sys/util.h>
 #include <hal/nrf_resetinfo.h>
 #include "pm_s2ram.h"
-#include "power.h"
 
 #include <cmsis_core.h>
 
@@ -170,8 +169,6 @@ int soc_s2ram_suspend(pm_s2ram_system_off_fn_t system_off)
 	if (ret < 0) {
 		return ret;
 	}
-
-	nrf_power_up_cache();
 
 	mpu_resume(&backup_data.mpu_context);
 	nvic_resume(&backup_data.nvic_context);
