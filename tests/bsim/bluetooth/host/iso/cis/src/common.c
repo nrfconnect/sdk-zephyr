@@ -10,8 +10,6 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
 #include "common.h"
 
 extern enum bst_result_t bst_result;
@@ -33,7 +31,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		bt_conn_unref(default_conn);
 		default_conn = NULL;
 
-		TEST_FAIL("Failed to connect to %s (0x%02x)", addr, err);
+		FAIL("Failed to connect to %s (0x%02x)\n", addr, err);
 
 		return;
 	}
@@ -74,3 +72,16 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.disconnected = disconnected,
 	.le_param_updated = conn_param_updated_cb,
 };
+
+void test_init(void)
+{
+	bst_result = In_progress;
+	bst_ticker_set_next_tick_absolute(WAIT_TIME);
+}
+
+void test_tick(bs_time_t HW_device_time)
+{
+	if (bst_result != Passed) {
+		FAIL("Test failed (not passed after %i us)\n", WAIT_TIME);
+	}
+}
