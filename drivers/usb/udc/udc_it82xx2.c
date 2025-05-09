@@ -1495,14 +1495,14 @@ static int it82xx2_shutdown(const struct device *dev)
 	return 0;
 }
 
-static void it82xx2_lock(const struct device *dev)
+static int it82xx2_lock(const struct device *dev)
 {
-	udc_lock_internal(dev, K_FOREVER);
+	return udc_lock_internal(dev, K_FOREVER);
 }
 
-static void it82xx2_unlock(const struct device *dev)
+static int it82xx2_unlock(const struct device *dev)
 {
-	udc_unlock_internal(dev);
+	return udc_unlock_internal(dev);
 }
 
 static const struct udc_api it82xx2_api = {
