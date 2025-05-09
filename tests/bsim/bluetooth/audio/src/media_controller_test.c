@@ -1649,14 +1649,16 @@ void test_media_controller_local_player(void)
 /* BabbleSim entry point for remote player test */
 void test_media_controller_remote_player(void)
 {
-	struct bt_le_ext_adv *ext_adv;
-
+	int err;
 	printk("Media Control remote player test application.  Board: %s\n", CONFIG_BOARD);
 
 	initialize_bluetooth();
 	initialize_media();
 
-	setup_connectable_adv(&ext_adv);
+	err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, AD_SIZE, NULL, 0);
+	if (err) {
+		FAIL("Advertising failed to start (err %d)\n", err);
+	}
 
 	WAIT_FOR_FLAG(flag_connected);
 

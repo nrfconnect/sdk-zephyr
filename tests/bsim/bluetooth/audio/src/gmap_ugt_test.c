@@ -88,6 +88,12 @@ static struct bt_bap_stream_ops unicast_stream_ops = {
 	.started = unicast_stream_started_cb,
 };
 
+/* TODO: Expand with GMAP service data */
+static const struct bt_data gmap_acceptor_ad[] = {
+	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+	BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_CAS_VAL)),
+};
+
 static struct bt_csip_set_member_svc_inst *csip_set_member;
 
 static struct bt_bap_stream *unicast_stream_alloc(void)
@@ -362,7 +368,6 @@ static void test_main(void)
 	static struct bt_pacs_cap unicast_cap = {
 		.codec_cap = &codec_cap,
 	};
-	struct bt_le_ext_adv *ext_adv;
 	int err;
 
 	err = bt_enable(NULL);
@@ -440,7 +445,12 @@ static void test_main(void)
 		return;
 	}
 
-	setup_connectable_adv(&ext_adv);
+	err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, gmap_acceptor_ad, ARRAY_SIZE(gmap_acceptor_ad),
+			      NULL, 0);
+	if (err != 0) {
+		FAIL("Advertising failed to start (err %d)\n", err);
+		return;
+	}
 
 	WAIT_FOR_FLAG(flag_connected);
 
