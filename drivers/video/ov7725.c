@@ -14,6 +14,8 @@
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
 
+#include "video_device.h"
+
 LOG_MODULE_REGISTER(video_ov7725, CONFIG_VIDEO_LOG_LEVEL);
 
 #define OV7725_REVISION  0x7721U
@@ -517,12 +519,7 @@ static int ov7725_get_fmt(const struct device *dev,
 	return 0;
 }
 
-static int ov7725_stream_start(const struct device *dev)
-{
-	return 0;
-}
-
-static int ov7725_stream_stop(const struct device *dev)
+static int ov7725_set_stream(const struct device *dev, bool enable)
 {
 	return 0;
 }
@@ -552,8 +549,7 @@ static DEVICE_API(video, ov7725_driver_api) = {
 	.set_format = ov7725_set_fmt,
 	.get_format = ov7725_get_fmt,
 	.get_caps = ov7725_get_caps,
-	.stream_start = ov7725_stream_start,
-	.stream_stop = ov7725_stream_stop,
+	.set_stream = ov7725_set_stream,
 };
 
 static int ov7725_init(const struct device *dev)
@@ -645,3 +641,5 @@ DEVICE_DT_INST_DEFINE(0, &ov7725_init_0, NULL,
 		    &ov7725_data_0, &ov7725_cfg_0,
 		    POST_KERNEL, CONFIG_VIDEO_INIT_PRIORITY,
 		    &ov7725_driver_api);
+
+VIDEO_DEVICE_DEFINE(ov7725, DEVICE_DT_INST_GET(0), NULL);

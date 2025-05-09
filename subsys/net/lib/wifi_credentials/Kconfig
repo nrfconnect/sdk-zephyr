@@ -57,6 +57,8 @@ config WIFI_CREDENTIALS_SHELL
 	bool "Shell commands to manage Wi-Fi credentials"
 	default y
 	depends on SHELL
+	select SHELL_GETOPT
+	select GETOPT_LONG
 	depends on !WIFI_CREDENTIALS_BACKEND_NONE
 
 config WIFI_CREDENTIALS_CONNECT_STORED
@@ -74,18 +76,6 @@ config WIFI_CREDENTIALS_CONNECT_STORED_CONNECTION_TIMEOUT
 endif # WIFI_CREDENTIALS_CONNECT_STORED
 
 endif # WIFI_CREDENTIALS
-
-if WIFI_CREDENTIALS_BACKEND_PSA
-
-config WIFI_CREDENTIALS_BACKEND_PSA_OFFSET
-	int "PSA_KEY_ID range offset"
-	default 0
-	help
-	  The PSA specification mandates to set key identifiers for keys
-	  with persistent lifetime. The users of the PSA API are responsible (WIFI credentials
-	  management is user of PSA API) to provide correct and unique identifiers.
-
-endif # WIFI_CREDENTIALS_BACKEND_PSA
 
 config WIFI_CREDENTIALS_STATIC
 	bool "Static Wi-Fi network configuration"

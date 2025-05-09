@@ -1,59 +1,70 @@
 /* hci_core.c - HCI core Bluetooth handling */
 
 /*
- * Copyright (c) 2017-2021 Nordic Semiconductor ASA
+ * Copyright (c) 2017-2025 Nordic Semiconductor ASA
  * Copyright (c) 2015-2016 Intel Corporation
+ * Copyright 2025 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-#include <zephyr/bluetooth/hci_types.h>
-#include <zephyr/kernel.h>
-#include <string.h>
-#include <stdio.h>
 #include <errno.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+#include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/buf.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/direction.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/l2cap.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/hci_types.h>
+#include <zephyr/bluetooth/hci_vs.h>
+#include <zephyr/bluetooth/testing.h>
+#include <zephyr/debug/stack.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/drivers/bluetooth.h>
+#include <zephyr/kernel.h>
+#include <zephyr/kernel/thread.h>
+#include <zephyr/kernel/thread_stack.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/net_buf.h>
+#include <zephyr/settings/settings.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/check.h>
 #include <zephyr/sys/util_macro.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/slist.h>
 #include <zephyr/sys/byteorder.h>
-#include <zephyr/debug/stack.h>
 #include <zephyr/sys/__assert.h>
+#include <zephyr/sys_clock.h>
+#include <zephyr/toolchain.h>
 #include <soc.h>
 
-#include <zephyr/settings/settings.h>
-
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/l2cap.h>
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/hci_vs.h>
-#include <zephyr/bluetooth/testing.h>
-#include <zephyr/drivers/bluetooth.h>
-
-#include "common/bt_str.h"
-#include "common/assert.h"
-
-#include "common/rpa.h"
-#include "keys.h"
-#include "monitor.h"
-#include "hci_core.h"
-#include "hci_ecc.h"
-#include "ecc.h"
-#include "id.h"
-#include "adv.h"
-#include "scan.h"
-
 #include "addr_internal.h"
+#include "adv.h"
+#include "common/hci_common_internal.h"
+#include "common/bt_str.h"
+#include "common/rpa.h"
+#include "common/assert.h"
 #include "conn_internal.h"
-#include "iso_internal.h"
-#include "l2cap_internal.h"
-#include "gatt_internal.h"
-#include "smp.h"
 #include "crypto.h"
+#include "ecc.h"
+#include "gatt_internal.h"
+#include "hci_core.h"
+#include "id.h"
+#include "iso_internal.h"
+#include "keys.h"
+#include "l2cap_internal.h"
+#include "monitor.h"
+#include "scan.h"
 #include "settings.h"
+#include "smp.h"
 
 #if defined(CONFIG_BT_CLASSIC)
 #include "classic/br.h"
@@ -64,7 +75,6 @@
 #endif /* CONFIG_BT_DF */
 
 #define LOG_LEVEL CONFIG_BT_HCI_CORE_LOG_LEVEL
-#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_hci_core);
 
 #if DT_HAS_CHOSEN(zephyr_bt_hci)
@@ -127,7 +137,7 @@ struct cmd_data {
 	struct k_sem *sync;
 };
 
-static struct cmd_data cmd_data[CONFIG_BT_BUF_CMD_TX_COUNT];
+static struct cmd_data cmd_data[BT_BUF_CMD_TX_COUNT];
 
 #define cmd(buf) (&cmd_data[net_buf_id(buf)])
 #define acl(buf) ((struct acl_data *)net_buf_user_data(buf))
@@ -157,7 +167,7 @@ void bt_hci_cmd_state_set_init(struct net_buf *buf,
  * command complete or command status.
  */
 #define CMD_BUF_SIZE MAX(BT_BUF_EVT_RX_SIZE, BT_BUF_CMD_TX_SIZE)
-NET_BUF_POOL_FIXED_DEFINE(hci_cmd_pool, CONFIG_BT_BUF_CMD_TX_COUNT,
+NET_BUF_POOL_FIXED_DEFINE(hci_cmd_pool, BT_BUF_CMD_TX_COUNT,
 			  CMD_BUF_SIZE, sizeof(struct bt_buf_data), NULL);
 
 struct event_handler {
@@ -564,7 +574,7 @@ static void hci_num_completed_packets(struct net_buf *buf)
 	int i;
 
 	if (sizeof(*evt) + sizeof(evt->h[0]) * evt->num_handles > buf->len) {
-		LOG_ERR("evt num_handles (=%u) too large (%u > %u)",
+		LOG_ERR("evt num_handles (=%u) too large (%zu > %u)",
 			evt->num_handles,
 			sizeof(*evt) + sizeof(evt->h[0]) * evt->num_handles,
 			buf->len);
@@ -885,6 +895,9 @@ int bt_le_create_conn_cancel(void)
 	struct bt_hci_cmd_state_set state;
 
 	buf = bt_hci_cmd_create(BT_HCI_OP_LE_CREATE_CONN_CANCEL, 0);
+	if (!buf) {
+		return -ENOBUFS;
+	}
 
 	bt_hci_cmd_state_set_init(buf, &state, bt_dev.flags,
 				  BT_DEV_INITIATING, false);
@@ -1007,7 +1020,7 @@ static void hci_disconn_complete(struct net_buf *buf)
 		 * If only for one connection session bond was set, clear keys
 		 * database row for this connection.
 		 */
-		if (conn->type == BT_CONN_TYPE_BR &&
+		if (conn->type == BT_CONN_TYPE_BR && conn->br.link_key != NULL &&
 		    atomic_test_and_clear_bit(conn->flags, BT_CONN_BR_NOBOND)) {
 			bt_keys_link_key_clear(conn->br.link_key);
 		}
@@ -1999,7 +2012,7 @@ static int set_flow_control(void)
 	hbs = net_buf_add(buf, sizeof(*hbs));
 	(void)memset(hbs, 0, sizeof(*hbs));
 	hbs->acl_mtu = sys_cpu_to_le16(CONFIG_BT_BUF_ACL_RX_SIZE);
-	hbs->acl_pkts = sys_cpu_to_le16(BT_BUF_ACL_RX_COUNT);
+	hbs->acl_pkts = sys_cpu_to_le16(BT_BUF_HCI_ACL_RX_COUNT);
 
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_HOST_BUFFER_SIZE, buf, NULL);
 	if (err) {
@@ -2033,13 +2046,6 @@ static void unpair(uint8_t id, const bt_addr_le_t *addr)
 
 		bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 		bt_conn_unref(conn);
-	}
-
-	if (IS_ENABLED(CONFIG_BT_CLASSIC)) {
-		/* LE Public may indicate BR/EDR as well */
-		if (addr->type == BT_ADDR_LE_PUBLIC) {
-			bt_keys_link_key_clear_addr(&addr->a);
-		}
 	}
 
 	if (IS_ENABLED(CONFIG_BT_SMP)) {
@@ -2266,6 +2272,17 @@ static void hci_encrypt_key_refresh_complete(struct net_buf *buf)
 			bt_conn_unref(conn);
 			return;
 		}
+
+		if (IS_ENABLED(CONFIG_BT_SMP)) {
+			/*
+			 * Start SMP over BR/EDR if we are pairing and are
+			 * central on the link
+			 */
+			if (atomic_test_bit(conn->flags, BT_CONN_BR_PAIRED) &&
+			    conn->role == BT_CONN_ROLE_CENTRAL) {
+				bt_smp_br_send_pairing_req(conn);
+			}
+		}
 	}
 #endif /* CONFIG_BT_CLASSIC */
 
@@ -2385,16 +2402,9 @@ static void le_ltk_request(struct net_buf *buf)
 }
 #endif /* CONFIG_BT_SMP */
 
-static void hci_reset_complete(struct net_buf *buf)
+static void hci_reset_complete(void)
 {
-	uint8_t status = buf->data[0];
 	atomic_t flags;
-
-	LOG_DBG("status 0x%02x %s", status, bt_hci_err_to_str(status));
-
-	if (status) {
-		return;
-	}
 
 	if (IS_ENABLED(CONFIG_BT_OBSERVER)) {
 		bt_scan_reset();
@@ -2756,14 +2766,6 @@ static const struct event_handler meta_events[] = {
 #if defined(CONFIG_BT_SMP)
 	EVENT_HANDLER(BT_HCI_EVT_LE_LTK_REQUEST, le_ltk_request,
 		      sizeof(struct bt_hci_evt_le_ltk_request)),
-#endif /* CONFIG_BT_SMP */
-#if defined(CONFIG_BT_ECC)
-	EVENT_HANDLER(BT_HCI_EVT_LE_P256_PUBLIC_KEY_COMPLETE,
-		      bt_hci_evt_le_pkey_complete,
-		      sizeof(struct bt_hci_evt_le_p256_public_key_complete)),
-	EVENT_HANDLER(BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE,
-		      bt_hci_evt_le_dhkey_complete,
-		      sizeof(struct bt_hci_evt_le_generate_dhkey_complete)),
 #endif /* CONFIG_BT_SMP */
 #if defined(CONFIG_BT_EXT_ADV)
 #if defined(CONFIG_BT_BROADCASTER)
@@ -3209,15 +3211,7 @@ static void read_supported_commands_complete(struct net_buf *buf)
 
 	LOG_DBG("status 0x%02x %s", rp->status, bt_hci_err_to_str(rp->status));
 
-	memcpy(bt_dev.supported_commands, rp->commands,
-	       sizeof(bt_dev.supported_commands));
-
-	/* Report additional HCI commands used for ECDH as
-	 * supported if PSA Crypto API ECC is used for emulation.
-	 */
-	if (IS_ENABLED(CONFIG_BT_SEND_ECC_EMULATION)) {
-		bt_hci_ecc_supported_commands(bt_dev.supported_commands);
-	}
+	memcpy(bt_dev.supported_commands, rp->commands, sizeof(bt_dev.supported_commands));
 }
 
 static void read_local_features_complete(struct net_buf *buf)
@@ -3267,12 +3261,12 @@ static int common_init(void)
 
 	if (!drv_quirk_no_reset()) {
 		/* Send HCI_RESET */
-		err = bt_hci_cmd_send_sync(BT_HCI_OP_RESET, NULL, &rsp);
+		err = bt_hci_cmd_send_sync(BT_HCI_OP_RESET, NULL, NULL);
 		if (err) {
 			return err;
 		}
-		hci_reset_complete(rsp);
-		net_buf_unref(rsp);
+
+		hci_reset_complete();
 	}
 
 	/* Read Local Supported Features */
@@ -3301,11 +3295,9 @@ static int common_init(void)
 	read_supported_commands_complete(rsp);
 	net_buf_unref(rsp);
 
-	if (IS_ENABLED(CONFIG_BT_HOST_CRYPTO_PRNG)) {
-		/* Initialize the PRNG so that it is safe to use it later
-		 * on in the initialization process.
-		 */
-		err = prng_init();
+	if (IS_ENABLED(CONFIG_BT_HOST_CRYPTO)) {
+		/* Initialize crypto for host */
+		err = bt_crypto_init();
 		if (err) {
 			return err;
 		}
@@ -3400,17 +3392,6 @@ static int le_set_event_mask(void)
 	if (IS_ENABLED(CONFIG_BT_SMP) &&
 	    BT_FEAT_LE_ENCR(bt_dev.le.features)) {
 		mask |= BT_EVT_MASK_LE_LTK_REQUEST;
-	}
-
-	/*
-	 * If "LE Read Local P-256 Public Key" and "LE Generate DH Key" are
-	 * supported we need to enable events generated by those commands.
-	 */
-	if (IS_ENABLED(CONFIG_BT_ECC) &&
-	    (BT_CMD_TEST(bt_dev.supported_commands, 34, 1)) &&
-	    (BT_CMD_TEST(bt_dev.supported_commands, 34, 2))) {
-		mask |= BT_EVT_MASK_LE_P256_PUBLIC_KEY_COMPLETE;
-		mask |= BT_EVT_MASK_LE_GENERATE_DHKEY_COMPLETE;
 	}
 
 	/*
@@ -3705,6 +3686,15 @@ static int le_init(void)
 	if (IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING) &&
 	    BT_FEAT_LE_CHANNEL_SOUNDING(bt_dev.le.features)) {
 		err = le_set_host_feature(BT_LE_FEAT_BIT_CHANNEL_SOUNDING_HOST, 1);
+		if (err) {
+			return err;
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_EXT_ADV_CODING_SELECTION) &&
+	    IS_ENABLED(CONFIG_BT_OBSERVER) &&
+	    BT_FEAT_LE_ADV_CODING_SEL(bt_dev.le.features)) {
+		err = le_set_host_feature(BT_LE_FEAT_BIT_ADV_CODING_SEL_HOST, 1);
 		if (err) {
 			return err;
 		}
@@ -4059,10 +4049,6 @@ int bt_send(struct net_buf *buf)
 
 	bt_monitor_send(bt_monitor_opcode(buf), buf->data, buf->len);
 
-	if (IS_ENABLED(CONFIG_BT_SEND_ECC_EMULATION)) {
-		return bt_hci_ecc_send(buf);
-	}
-
 	return bt_hci_send(bt_dev.hci, buf);
 }
 
@@ -4404,6 +4390,18 @@ int bt_disable(void)
 	disconnected_handles_reset();
 #endif /* CONFIG_BT_CONN */
 
+	/* Reset the Controller */
+	if (!drv_quirk_no_reset()) {
+
+		err = bt_hci_cmd_send_sync(BT_HCI_OP_RESET, NULL, NULL);
+		if (err) {
+			LOG_ERR("Failed to reset BLE controller");
+			return err;
+		}
+
+		hci_reset_complete();
+	}
+
 	err = bt_hci_close(bt_dev.hci);
 	if (err == -ENOSYS) {
 		atomic_clear_bit(bt_dev.flags, BT_DEV_DISABLE);
@@ -4531,7 +4529,30 @@ int bt_set_appearance(uint16_t appearance)
 }
 #endif
 
-bool bt_addr_le_is_bonded(uint8_t id, const bt_addr_le_t *addr)
+int bt_le_get_local_features(struct bt_le_local_features *remote_info)
+{
+	if (remote_info == NULL) {
+		return -EINVAL;
+	}
+
+	if (!atomic_test_bit(bt_dev.flags, BT_DEV_READY)) {
+		return -EAGAIN;
+	}
+
+	memcpy(remote_info->features, bt_dev.le.features, sizeof(remote_info->features));
+	remote_info->states = bt_dev.le.states;
+	remote_info->acl_mtu = COND_CODE_1(CONFIG_BT_CONN, (bt_dev.le.acl_mtu), (0));
+	remote_info->acl_pkts = COND_CODE_1(CONFIG_BT_CONN, (bt_dev.le.acl_pkts.limit), (0));
+	remote_info->iso_mtu = COND_CODE_1(CONFIG_BT_ISO, (bt_dev.le.iso_mtu), (0));
+	remote_info->iso_pkts = COND_CODE_1(CONFIG_BT_ISO, (bt_dev.le.iso_limit), (0));
+	remote_info->rl_size = COND_CODE_1(CONFIG_BT_SMP, (bt_dev.le.rl_size), (0));
+	remote_info->max_adv_data_len =
+		COND_CODE_1(CONFIG_BT_BROADCASTER, (bt_dev.le.max_adv_data_len), (0));
+
+	return 0;
+}
+
+bool bt_le_bond_exists(uint8_t id, const bt_addr_le_t *addr)
 {
 	if (IS_ENABLED(CONFIG_BT_SMP)) {
 		struct bt_keys *keys = bt_keys_find_addr(id, addr);

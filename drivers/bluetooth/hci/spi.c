@@ -377,7 +377,7 @@ static int bt_spi_open(const struct device *dev, bt_hci_recv_t recv)
 	struct bt_spi_data *hci = dev->data;
 	int err;
 
-	/* Configure RST pin and hold BLE in Reset */
+	/* Configure RST pin and hold Bluetooth LE in Reset */
 	err = gpio_pin_configure_dt(&rst_gpio, GPIO_OUTPUT_ACTIVE);
 	if (err) {
 		return err;
@@ -403,7 +403,7 @@ static int bt_spi_open(const struct device *dev, bt_hci_recv_t recv)
 
 	hci->recv = recv;
 
-	/* Take BLE out of reset */
+	/* Take Bluetooth LE out of reset */
 	k_sleep(K_MSEC(DT_INST_PROP_OR(0, reset_assert_duration_ms, 0)));
 	gpio_pin_set_dt(&rst_gpio, 0);
 
@@ -416,7 +416,9 @@ static int bt_spi_open(const struct device *dev, bt_hci_recv_t recv)
 	k_thread_name_set(&spi_rx_thread_data, "bt_spi_rx_thread");
 
 	/* Device will let us know when it's ready */
-	k_sem_take(&sem_initialised, K_FOREVER);
+	if (k_sem_take(&sem_initialised, K_SECONDS(CONFIG_BT_SPI_BOOT_TIMEOUT_SEC)) < 0) {
+		return -EIO;
+	}
 
 	return 0;
 }

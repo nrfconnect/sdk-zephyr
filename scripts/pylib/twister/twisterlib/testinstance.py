@@ -1,6 +1,6 @@
 # vim: set syntax=python ts=4 :
 #
-# Copyright (c) 2018-2024 Intel Corporation
+# Copyright (c) 2018-2025 Intel Corporation
 # Copyright 2022 NXP
 # Copyright (c) 2024 Arm Limited (or its affiliates). All rights reserved.
 #
@@ -36,7 +36,7 @@ from twisterlib.statuses import TwisterStatus
 from twisterlib.testsuite import TestCase, TestSuite
 
 logger = logging.getLogger('twister')
-logger.setLevel(logging.DEBUG)
+
 
 class TestInstance:
     """Class representing the execution of a particular TestSuite on a platform
@@ -59,6 +59,8 @@ class TestInstance:
         self.metrics = dict()
         self.handler = None
         self.recording = None
+        self.coverage = None
+        self.coverage_status = None
         self.outdir = outdir
         self.execution_time = 0
         self.build_time = 0
@@ -105,9 +107,12 @@ class TestInstance:
                 self.recording.extend(recording)
 
             filename = os.path.join(self.build_dir, fname_csv)
+            fieldnames = set()
+            for r in self.recording:
+                fieldnames.update(r)
             with open(filename, 'w') as csvfile:
                 cw = csv.DictWriter(csvfile,
-                                    fieldnames = self.recording[0].keys(),
+                                    fieldnames = sorted(list(fieldnames)),
                                     lineterminator = os.linesep,
                                     quoting = csv.QUOTE_NONNUMERIC)
                 cw.writeheader()
@@ -147,7 +152,7 @@ class TestInstance:
             with open(run_id_file) as fp:
                 run_id = fp.read()
         else:
-            hash_object = hashlib.md5(self.name.encode())
+            hash_object = hashlib.md5(self.name.encode(), usedforsecurity=False)
             random_str = f"{random.getrandbits(64)}".encode()
             hash_object.update(random_str)
             run_id = hash_object.hexdigest()
@@ -213,7 +218,17 @@ class TestInstance:
     def testsuite_runnable(testsuite, fixtures):
         can_run = False
         # console harness allows us to run the test and capture data.
-        if testsuite.harness in [ 'console', 'ztest', 'pytest', 'test', 'gtest', 'robot']:
+        if testsuite.harness in [
+            'console',
+            'ztest',
+            'pytest',
+            'power',
+            'test',
+            'gtest',
+            'robot',
+            'ctest',
+            'shell'
+            ]:
             can_run = True
             # if we have a fixture that is also being supplied on the
             # command-line, then we need to run the test, not just build it.
@@ -256,6 +271,8 @@ class TestInstance:
             handler.ready = True
         else:
             handler = Handler(self, "", *common_args)
+            if self.testsuite.harness == "ctest":
+                handler.ready = True
 
         self.handler = handler
 
@@ -291,12 +308,13 @@ class TestInstance:
 
         target_ready = bool(self.testsuite.type == "unit" or \
                             self.platform.type == "native" or \
+                            self.testsuite.harness == "ctest" or \
                             (simulator and simulator.name in SUPPORTED_SIMS and \
                              simulator.name not in self.testsuite.simulation_exclude) or \
                             device_testing)
 
         # check if test is runnable in pytest
-        if self.testsuite.harness == 'pytest':
+        if self.testsuite.harness in ['pytest', 'shell', 'power']:
             target_ready = bool(
                 filter == 'runnable' or simulator and simulator.name in SUPPORTED_SIMS_IN_PYTEST
             )
@@ -311,7 +329,7 @@ class TestInstance:
 
         if hardware_map:
             for h in hardware_map.duts:
-                if (h.platform == self.platform.name and
+                if (h.platform in self.platform.aliases and
                         self.testsuite_runnable(self.testsuite, h.fixtures)):
                     testsuite_runnable = True
                     break

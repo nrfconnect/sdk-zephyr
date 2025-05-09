@@ -25,6 +25,7 @@
 .github/workflows/issues-report-config.json
 .github/workflows/backport_issue_check.yml
 MAINTAINERS.yml
+CODEOWNERS
 LICENSE
 Makefile
 doc/*
@@ -43,6 +44,7 @@ scripts/ci/errno.py
 scripts/ci/upload_test_results_es.py
 scripts/ci/what_changed.py
 scripts/ci/version_mgr.py
+scripts/ci/twister_report_analyzer.py
 scripts/ci/stats/*
 scripts/requirements*
 scripts/checkpatch/*

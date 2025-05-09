@@ -43,7 +43,7 @@ static const sec_tag_t server_tag_list_verify[] = {
 
 static uint16_t test_http_service_port = SERVER_PORT;
 HTTPS_SERVICE_DEFINE(test_http_service, MY_IPV4_ADDR, &test_http_service_port,
-		     1, 10, NULL, server_tag_list_verify,
+		     1, 10, NULL, NULL, server_tag_list_verify,
 		     sizeof(server_tag_list_verify));
 
 static const unsigned char ca[] = {
@@ -239,7 +239,7 @@ static void *setup(void)
 		zassert_equal(ret, 0, "failed to add CA Certificate (%d)", ret);
 
 		ret = tls_credential_add(SERVER_CERTIFICATE_TAG,
-					 TLS_CREDENTIAL_SERVER_CERTIFICATE,
+					 TLS_CREDENTIAL_PUBLIC_CERTIFICATE,
 					 server, sizeof(server));
 		zassert_equal(ret, 0, "failed to add Server Certificate (%d)", ret);
 
@@ -249,7 +249,7 @@ static void *setup(void)
 		zassert_equal(ret, 0, "failed to add Server Private Key (%d)", ret);
 
 		ret = tls_credential_add(CLIENT_CERTIFICATE_TAG,
-					 TLS_CREDENTIAL_SERVER_CERTIFICATE,
+					 TLS_CREDENTIAL_PUBLIC_CERTIFICATE,
 					 client, sizeof(client));
 		zassert_equal(ret, 0, "failed to add Client Certificate (%d)", ret);
 

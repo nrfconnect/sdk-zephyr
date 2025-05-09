@@ -274,7 +274,6 @@ static int usart_wch_irq_update(const struct device *dev)
 static void usart_wch_irq_callback_set(const struct device *dev, uart_irq_callback_user_data_t cb,
 				       void *user_data)
 {
-	const struct usart_wch_config *config = dev->config;
 	struct usart_wch_data *data = dev->data;
 
 	data->cb = cb;
@@ -313,7 +312,7 @@ static DEVICE_API(uart, usart_wch_driver_api) = {
 #define USART_WCH_IRQ_HANDLER(idx)                                                                 \
 	static void usart_wch_irq_config_func_##idx(const struct device *dev)                      \
 	{                                                                                          \
-		IRQ_CONNECT(DT_INST_IRQN(idx), DT_INST_IRQ(index, priority), usart_wch_isr,        \
+		IRQ_CONNECT(DT_INST_IRQN(idx), DT_INST_IRQ(idx, priority), usart_wch_isr,        \
 			    DEVICE_DT_INST_GET(idx), 0);                                           \
 		irq_enable(DT_INST_IRQN(idx));                                                     \
 	}
@@ -330,7 +329,7 @@ static DEVICE_API(uart, usart_wch_driver_api) = {
 	static const struct usart_wch_config usart_wch_##idx##_config = {                          \
 		.regs = (USART_TypeDef *)DT_INST_REG_ADDR(idx),                                    \
 		.current_speed = DT_INST_PROP(idx, current_speed),                                 \
-		.parity = DT_INST_ENUM_IDX_OR(idx, parity, UART_CFG_PARITY_NONE),                  \
+		.parity = DT_INST_ENUM_IDX(idx, parity),                                           \
 		.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(idx)),                              \
 		.clock_id = DT_INST_CLOCKS_CELL(idx, id),                                          \
 		.pin_cfg = PINCTRL_DT_INST_DEV_CONFIG_GET(idx),                                    \

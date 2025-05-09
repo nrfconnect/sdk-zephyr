@@ -785,7 +785,11 @@ static int sm_send_bootstrap_registration(void)
 	LOG_DBG("Register ID with bootstrap server as '%s'",
 		query_buffer);
 
-	lwm2m_send_message_async(msg);
+	ret = lwm2m_send_message_async(msg);
+	if (ret < 0) {
+		LOG_ERR("Failed to send bootstrap message (err: %d)", ret);
+		goto cleanup;
+	}
 
 	return 0;
 
@@ -834,10 +838,14 @@ static void sm_do_bootstrap_reg(void)
 void engine_bootstrap_finish(void)
 {
 	LOG_INF("Bootstrap data transfer done!");
-	/* Delay the state transition, so engine have some time to send ACK
-	 * before we close the socket
+	/* Transition only if the client is bootstrapping, otherwise retransmissions of bootstrap
+	 * finish may restart an already registered client.
+	 * Delay the state transition, so engine have some time to send ACK before we close the
+	 * socket.
 	 */
-	set_sm_state_delayed(ENGINE_BOOTSTRAP_TRANS_DONE, DELAY_BEFORE_CLOSING);
+	if (get_sm_state() == ENGINE_BOOTSTRAP_REG_DONE) {
+		set_sm_state_delayed(ENGINE_BOOTSTRAP_TRANS_DONE, DELAY_BEFORE_CLOSING);
+	}
 }
 
 static int sm_bootstrap_trans_done(void)
@@ -987,7 +995,10 @@ static int sm_send_registration(bool send_obj_support_data,
 		}
 	}
 
-	lwm2m_send_message_async(msg);
+	ret = lwm2m_send_message_async(msg);
+	if (ret < 0) {
+		goto cleanup;
+	}
 
 	/* log the registration attempt */
 	LOG_DBG("registration sent [%s]",
@@ -1259,7 +1270,11 @@ static int sm_do_deregister(void)
 
 	LOG_INF("Deregister from '%s'", client.server_ep);
 
-	lwm2m_send_message_async(msg);
+	ret = lwm2m_send_message_async(msg);
+	if (ret < 0) {
+		LOG_ERR("Failed to send deregistration message (err:%d).", ret);
+		goto cleanup;
+	}
 
 	set_sm_state(ENGINE_DEREGISTER_SENT);
 	return 0;

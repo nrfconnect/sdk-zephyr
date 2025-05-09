@@ -118,7 +118,7 @@ traversed in full.  The kernel does not keep a per-CPU run queue.
 That means that the performance benefits from the
 :kconfig:option:`CONFIG_SCHED_SCALABLE` and :kconfig:option:`CONFIG_SCHED_MULTIQ`
 scheduler backends cannot be realized.  CPU mask processing is
-available only when :kconfig:option:`CONFIG_SCHED_DUMB` is the selected
+available only when :kconfig:option:`CONFIG_SCHED_SIMPLE` is the selected
 backend.  This requirement is enforced in the configuration layer.
 
 SMP Boot Process
@@ -276,7 +276,7 @@ Per-CPU data
 ============
 
 Many elements of the core kernel data need to be implemented for each
-CPU in SMP mode.  For example, the ``arch_current_thread()`` thread pointer obviously
+CPU in SMP mode.  For example, the ``_current`` thread pointer obviously
 needs to reflect what is running locally, there are many threads
 running concurrently.  Likewise a kernel-provided interrupt stack
 needs to be created and assigned for each physical CPU, as does the

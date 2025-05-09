@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Renesas Electronics Corporation
+ * Copyright (c) 2024-2025 Renesas Electronics Corporation
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,6 +22,7 @@
 		zephyr,flash = &flash0;
 		zephyr,console = &uart0;
 		zephyr,shell-uart = &uart0;
+		zephyr,entropy = &trng;
 	};
 
 	leds {
@@ -58,6 +59,7 @@
 		led0 = &led1;
 		sw0 = &button0;
 		sw1 = &button1;
+		watchdog0 = &wdt;
 	};
 };
 
@@ -110,6 +112,19 @@
 	status = "okay";
 };
 
+&pll2 {
+	clocks = <&xtal>;
+	div = <2>;
+	mul = <20 0>;
+	status = "okay";
+};
+
+&uclk {
+	clocks = <&pll2>;
+	div = <5>;
+	status = "okay";
+};
+
 &usbhs {
 	pinctrl-0 = <&usbhs_default>;
 	pinctrl-names = "default";
@@ -128,6 +143,12 @@
 	status = "okay";
 	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
+};
+
+&dac0 {
+	pinctrl-0 = <&dac0_default>;
+	pinctrl-names = "default";
+	status = "okay";
 };
 
 &port_irq9 {
@@ -159,4 +180,18 @@
 			reg = <0X0 DT_SIZE_K(8)>;
 		};
 	};
+};
+
+&trng {
+	status = "okay";
+};
+
+&usbfs {
+	pinctrl-0 = <&usbfs_default>;
+	pinctrl-names = "default";
+	maximum-speed = "full-speed";
+};
+
+&wdt {
+	status = "okay";
 };

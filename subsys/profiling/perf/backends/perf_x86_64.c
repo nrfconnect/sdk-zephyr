@@ -6,6 +6,7 @@
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/linker/linker-defs.h>
 
 static bool valid_stack(uintptr_t addr, k_tid_t current)
 {
@@ -15,9 +16,7 @@ static bool valid_stack(uintptr_t addr, k_tid_t current)
 
 static inline bool in_text_region(uintptr_t addr)
 {
-	extern uintptr_t __text_region_start, __text_region_end;
-
-	return (addr >= (uintptr_t)&__text_region_start) && (addr < (uintptr_t)&__text_region_end);
+	return (addr >= (uintptr_t)__text_region_start) && (addr < (uintptr_t)__text_region_end);
 }
 
 /*
@@ -35,13 +34,13 @@ size_t arch_perf_current_stack_trace(uintptr_t *buf, size_t size)
 
 	/*
 	 * In x86_64 (arch/x86/core/intel64/locore.S) %rip and %rbp
-	 * are always saved in arch_current_thread()->callee_saved before calling
+	 * are always saved in _current->callee_saved before calling
 	 * handler function if interrupt is not nested
 	 *
 	 * %rip points the location where interrupt was occurred
 	 */
-	buf[idx++] = (uintptr_t)arch_current_thread()->callee_saved.rip;
-	void **fp = (void **)arch_current_thread()->callee_saved.rbp;
+	buf[idx++] = (uintptr_t)_current->callee_saved.rip;
+	void **fp = (void **)_current->callee_saved.rbp;
 
 	/*
 	 * %rbp is frame pointer.
@@ -53,7 +52,7 @@ size_t arch_perf_current_stack_trace(uintptr_t *buf, size_t size)
 	 *  %rbp (next) <- %rbp (curr)
 	 *  ....
 	 */
-	while (valid_stack((uintptr_t)fp, arch_current_thread())) {
+	while (valid_stack((uintptr_t)fp, _current)) {
 		if (idx >= size) {
 			return 0;
 		}

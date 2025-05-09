@@ -94,6 +94,13 @@ config SHELL_PRINTF_BUFF_SIZE
 	  It is working like stdio buffering in Linux systems
 	  to limit number of peripheral access calls.
 
+config SHELL_PRINTF_AUTOFLUSH
+	bool "Indicate if the buffer should be automatically flushed"
+	default y
+	help
+	  Specify whether the shell's printing functions should automatically
+	  flush the printf buffer.
+
 config SHELL_DEFAULT_TERMINAL_WIDTH
 	int "Default terminal width"
 	range 1 $(UINT16_MAX)
@@ -108,6 +115,7 @@ config SHELL_DEFAULT_TERMINAL_HEIGHT
 config SHELL_ARGC_MAX
 	int "Maximum arguments in shell command"
 	range 3 $(UINT8_MAX)
+	default 30 if NET_L2_WIFI_SHELL
 	default 20
 	help
 	  Maximum number of arguments that can build a command.

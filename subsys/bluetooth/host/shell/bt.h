@@ -12,11 +12,14 @@
 
 #ifndef __BT_H
 #define __BT_H
+#include <stddef.h>
+#include <stdint.h>
 
+#include <zephyr/autoconf.h>
 #include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/net_buf.h>
 #include <sys/types.h>
 
-extern const struct shell *ctx_shell;
 extern struct bt_conn *default_conn;
 
 bool passes_scan_filter(const struct bt_le_scan_recv_info *info, const struct net_buf_simple *buf);
