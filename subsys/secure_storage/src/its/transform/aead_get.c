@@ -8,7 +8,6 @@
 #include <psa/crypto.h>
 #include <string.h>
 #include <sys/types.h>
-#include <mbedtls/platform_util.h>
 
 LOG_MODULE_DECLARE(secure_storage, CONFIG_SECURE_STORAGE_LOG_LEVEL);
 
