@@ -61,19 +61,21 @@ struct udc_ep_config *udc_get_ep_cfg(const struct device *dev,
 /**
  * @brief Checks if the endpoint is busy
  *
- * @param[in] ep_cfg Pointer to endpoint configuration
+ * @param[in] dev    Pointer to device struct of the driver instance
+ * @param[in] ep     Endpoint address
  *
  * @return true if endpoint is busy
  */
-bool udc_ep_is_busy(const struct udc_ep_config *const ep_cfg);
+bool udc_ep_is_busy(const struct device *dev, const uint8_t ep);
 
 /**
  * @brief Helper function to set endpoint busy state
  *
- * @param[in] ep_cfg Pointer to endpoint configuration
+ * @param[in] dev    Pointer to device struct of the driver instance
+ * @param[in] ep     Endpoint address
  * @param[in] busy   Busy state
  */
-void udc_ep_set_busy(struct udc_ep_config *const ep_cfg,
+void udc_ep_set_busy(const struct device *dev, const uint8_t ep,
 		     const bool busy);
 
 /**
@@ -83,11 +85,13 @@ void udc_ep_set_busy(struct udc_ep_config *const ep_cfg,
  * Use it when transfer is finished and request should
  * be passed to the higher level.
  *
- * @param[in] ep_cfg Pointer to endpoint configuration
+ * @param[in] dev     Pointer to device struct of the driver instance
+ * @param[in] ep      Endpoint address
  *
  * @return pointer to UDC request or NULL on error.
  */
-struct net_buf *udc_buf_get(struct udc_ep_config *const ep_cfg);
+struct net_buf *udc_buf_get(const struct device *dev,
+			    const uint8_t ep);
 
 /**
  * @brief Get all UDC request from endpoint FIFO.
@@ -96,11 +100,13 @@ struct net_buf *udc_buf_get(struct udc_ep_config *const ep_cfg);
  * This function removes all request from endpoint FIFO and
  * is typically used to dequeue endpoint FIFO.
  *
- * @param[in] ep_cfg Pointer to endpoint configuration
+ * @param[in] dev    Pointer to device struct of the driver instance
+ * @param[in] ep     Endpoint address
  *
  * @return pointer to UDC request or NULL on error.
  */
-struct net_buf *udc_buf_get_all(struct udc_ep_config *const ep_cfg);
+struct net_buf *udc_buf_get_all(const struct device *dev,
+				const uint8_t ep);
 
 /**
  * @brief Peek request at the head of endpoint FIFO.
@@ -108,11 +114,13 @@ struct net_buf *udc_buf_get_all(struct udc_ep_config *const ep_cfg);
  * Return request from the head of endpoint FIFO without removing.
  * Use it when request buffer is required for a transfer.
  *
- * @param[in] ep_cfg Pointer to endpoint configuration
+ * @param[in] dev     Pointer to device struct of the driver instance
+ * @param[in] ep      Endpoint address
  *
  * @return pointer to request or NULL on error.
  */
-struct net_buf *udc_buf_peek(struct udc_ep_config *const ep_cfg);
+struct net_buf *udc_buf_peek(const struct device *dev,
+			     const uint8_t ep);
 
 /**
  * @brief Put request at the tail of endpoint FIFO.
