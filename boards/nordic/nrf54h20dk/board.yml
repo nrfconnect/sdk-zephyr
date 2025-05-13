@@ -11,6 +11,10 @@ board:
       cpucluster: cpuflpr
     - name: iron
       cpucluster: cpuapp
+      variants:
+      - name: mcuboot
+        variants:
+        - name: b0
     - name: iron
       cpucluster: cpurad
   revision:
