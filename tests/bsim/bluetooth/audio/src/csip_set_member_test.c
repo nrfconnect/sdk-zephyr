@@ -53,7 +53,11 @@ static struct bt_csip_set_member_cb csip_cbs = {
 
 static void bt_ready(int err)
 {
-	struct bt_le_ext_adv *ext_adv;
+	uint8_t rsi[BT_CSIP_RSI_SIZE];
+	struct bt_data ad[] = {
+		BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+		BT_CSIP_DATA_RSI(rsi),
+	};
 
 	if (err != 0) {
 		FAIL("Bluetooth init failed (err %d)\n", err);
@@ -70,13 +74,16 @@ static void bt_ready(int err)
 		return;
 	}
 
-	err = bt_csip_set_member_generate_rsi(svc_inst, csip_rsi);
+	err = bt_csip_set_member_generate_rsi(svc_inst, rsi);
 	if (err != 0) {
 		FAIL("Failed to generate RSI (err %d)\n", err);
 		return;
 	}
 
-	setup_connectable_adv(&ext_adv);
+	err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), NULL, 0);
+	if (err != 0) {
+		FAIL("Advertising failed to start (err %d)\n", err);
+	}
 }
 
 static void test_sirk(void)

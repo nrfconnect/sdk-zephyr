@@ -385,7 +385,6 @@ static void test_main(void)
 {
 	int err;
 	struct bt_micp_mic_dev_register_param micp_param;
-	struct bt_le_ext_adv *ext_adv;
 
 	err = bt_enable(NULL);
 	if (err != 0) {
@@ -432,7 +431,14 @@ static void test_main(void)
 	}
 
 	printk("MICP initialized\n");
-	setup_connectable_adv(&ext_adv);
+
+	err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, AD_SIZE, NULL, 0);
+	if (err != 0) {
+		FAIL("Advertising failed to start (err %d)\n", err);
+		return;
+	}
+
+	printk("Advertising successfully started\n");
 
 	WAIT_FOR_FLAG(flag_connected);
 
