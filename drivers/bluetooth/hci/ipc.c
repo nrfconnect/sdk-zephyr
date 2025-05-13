@@ -20,7 +20,7 @@ LOG_MODULE_REGISTER(bt_hci_driver);
 
 #define DT_DRV_COMPAT zephyr_bt_hci_ipc
 
-#define IPC_BOUND_TIMEOUT_IN_MS K_MSEC(CONFIG_BT_HCI_IPC_ENDPOINT_BOUND_TIMEOUT_MS)
+#define IPC_BOUND_TIMEOUT_IN_MS K_MSEC(1000)
 
 /* The retry of ipc_service_send function requires a small (tens of us) delay.
  * In order to ensure proper delay k_usleep is used when the system clock is
