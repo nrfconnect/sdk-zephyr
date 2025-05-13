@@ -16,8 +16,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "babblekit/testcase.h"
-
 void client_round_0(void)
 {
 	struct bt_conn *conn;
@@ -170,5 +168,5 @@ void client_procedure(void)
 	client_round_5();
 	client_round_6();
 
-	TEST_PASS("PASS");
+	PASS("PASS\n");
 }

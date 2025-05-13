@@ -14,8 +14,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "babblekit/testcase.h"
-
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(peripheral, LOG_LEVEL_INF);
 
@@ -26,12 +24,12 @@ static void verify_equal_address(struct bt_conn *conn_a, struct bt_conn *conn_b)
 	struct bt_conn_info info_b;
 
 	err = bt_conn_get_info(conn_a, &info_a);
-	TEST_ASSERT(!err, "Unexpected info_a result.");
+	ASSERT(!err, "Unexpected info_a result.");
 
 	err = bt_conn_get_info(conn_b, &info_b);
-	TEST_ASSERT(!err, "Unexpected info_b result.");
+	ASSERT(!err, "Unexpected info_b result.");
 
-	TEST_ASSERT(bt_addr_le_eq(info_a.le.dst, info_b.le.dst),
+	ASSERT(bt_addr_le_eq(info_a.le.dst, info_b.le.dst),
 	       "Conn A address is not equal with the conn B address");
 }
 
@@ -47,10 +45,10 @@ void peripheral(void)
 
 	/* Create two identities that will simultaneously connect with the same central peer. */
 	id_a = bt_id_create(NULL, NULL);
-	TEST_ASSERT(id_a >= 0, "bt_id_create id_a failed (err %d)", id_a);
+	ASSERT(id_a >= 0, "bt_id_create id_a failed (err %d)\n", id_a);
 
 	id_b = bt_id_create(NULL, NULL);
-	TEST_ASSERT(id_b >= 0, "bt_id_create id_b failed (err %d)", id_b);
+	ASSERT(id_b >= 0, "bt_id_create id_b failed (err %d)\n", id_b);
 
 	/* Connect with the first identity. */
 	LOG_INF("adv");
@@ -84,12 +82,14 @@ void peripheral(void)
 	wait_disconnected();
 	clear_conn(conn_b);
 
-	TEST_PASS("PASS");
+	PASS("PASS\n");
 }
 
 static const struct bst_test_instance test_to_add[] = {
 	{
 		.test_id = "peripheral",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = peripheral,
 	},
 	BSTEST_END_MARKER,

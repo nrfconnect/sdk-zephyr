@@ -11,17 +11,16 @@
 
 #include "host/hci_core.h"
 #include "common.h"
-
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
+#include "utils.h"
+#include "bstests.h"
 
 #define LOG_MODULE_NAME main
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(LOG_MODULE_NAME, LOG_LEVEL_INF);
 
-DEFINE_FLAG_STATIC(is_connected);
-DEFINE_FLAG_STATIC(flag_l2cap_connected);
-DEFINE_FLAG_STATIC(flag_l2cap_rx_ok);
+DEFINE_FLAG(is_connected);
+DEFINE_FLAG(flag_l2cap_connected);
+DEFINE_FLAG(flag_l2cap_rx_ok);
 
 static struct bt_l2cap_le_chan test_chan;
 
@@ -116,7 +115,7 @@ static int l2cap_server_register(bt_security_t sec_level)
 
 	int err = bt_l2cap_server_register(&test_l2cap_server);
 
-	TEST_ASSERT(err == 0, "Failed to register l2cap server.");
+	ASSERT(err == 0, "Failed to register l2cap server.");
 
 	return test_l2cap_server.psm;
 }
@@ -128,7 +127,7 @@ static void connected(struct bt_conn *conn, uint8_t conn_err)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	if (conn_err) {
-		TEST_FAIL("Failed to connect to %s (%u)", addr, conn_err);
+		FAIL("Failed to connect to %s (%u)", addr, conn_err);
 		return;
 	}
 
@@ -162,7 +161,7 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 
 	err = bt_le_scan_stop();
 	if (err) {
-		TEST_FAIL("Stop LE scan failed (err %d)", err);
+		FAIL("Stop LE scan failed (err %d)", err);
 		return;
 	}
 
@@ -175,7 +174,7 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	param = BT_LE_CONN_PARAM_DEFAULT;
 	err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, param, &conn);
 	if (err) {
-		TEST_FAIL("Create conn failed (err %d)", err);
+		FAIL("Create conn failed (err %d)", err);
 		return;
 	}
 }
@@ -193,7 +192,7 @@ static void connect(void)
 
 	int err = bt_le_scan_start(&scan_param, device_found);
 
-	TEST_ASSERT(!err, "Scanning failed to start (err %d)", err);
+	ASSERT(!err, "Scanning failed to start (err %d)\n", err);
 
 	LOG_DBG("Central initiating connection...");
 	WAIT_FOR_FLAG(is_connected);
@@ -206,7 +205,7 @@ static void disconnect_device(struct bt_conn *conn, void *data)
 	SET_FLAG(is_connected);
 
 	err = bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-	TEST_ASSERT(!err, "Failed to initate disconnect (err %d)", err);
+	ASSERT(!err, "Failed to initate disconnect (err %d)", err);
 
 	LOG_DBG("Waiting for disconnection...");
 	WAIT_FOR_FLAG_UNSET(is_connected);
@@ -222,7 +221,7 @@ static void do_dlu(struct bt_conn *conn, void *data)
 	param.tx_max_time = 1712;
 
 	err = bt_conn_le_data_len_update(conn, &param);
-	TEST_ASSERT(err == 0, "Can't update data length (err %d)", err);
+	ASSERT(err == 0, "Can't update data length (err %d)\n", err);
 }
 
 void test_procedure_0(void)
@@ -231,7 +230,7 @@ void test_procedure_0(void)
 	int err;
 
 	err = bt_enable(NULL);
-	TEST_ASSERT(err == 0, "Can't enable Bluetooth (err %d)", err);
+	ASSERT(err == 0, "Can't enable Bluetooth (err %d)\n", err);
 	LOG_DBG("Central Bluetooth initialized.");
 
 	int psm = l2cap_server_register(BT_SECURITY_L1);
@@ -247,12 +246,29 @@ void test_procedure_0(void)
 
 	bt_conn_foreach(BT_CONN_TYPE_LE, disconnect_device, NULL);
 
-	TEST_PASS("DUT done");
+	PASS("DUT done\n");
+}
+
+void test_tick(bs_time_t HW_device_time)
+{
+	bs_trace_debug_time(0, "Simulation ends now.\n");
+	if (bst_result != Passed) {
+		bst_result = Failed;
+		bs_trace_error("Test did not pass before simulation ended.\n");
+	}
+}
+
+void test_init(void)
+{
+	bst_ticker_set_next_tick_absolute(TEST_TIMEOUT_SIMULATED);
+	bst_result = In_progress;
 }
 
 static const struct bst_test_instance test_to_add[] = {
 	{
 		.test_id = "test_0",
+		.test_pre_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = test_procedure_0,
 	},
 	BSTEST_END_MARKER,

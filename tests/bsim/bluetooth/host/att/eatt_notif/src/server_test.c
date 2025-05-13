@@ -20,11 +20,11 @@
 #include "babblekit/sync.h"
 #include "common.h"
 
-DEFINE_FLAG_STATIC(flag_discover_complete);
+static DEFINE_FLAG(flag_discover_complete);
 
 extern enum bst_result_t bst_result;
 
-DEFINE_FLAG_STATIC(flag_is_connected);
+static DEFINE_FLAG(flag_is_connected);
 
 static struct bt_conn *g_conn;
 
