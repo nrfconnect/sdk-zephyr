@@ -7,6 +7,7 @@
 
 /*
  * SPDX-FileCopyrightText: Copyright (c) 2024 Carl Zeiss Meditec AG
+ * SPDX-FileCopyrightText: Copyright (c) 2025 Prevas A/S
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,13 +18,13 @@
 extern "C" {
 #endif
 
-/** Common Registers for TMC5041 and TMC51XX */
-#if defined(CONFIG_STEPPER_ADI_TMC5041)
+/** Common Registers for TMC50XX and TMC51XX */
+#if defined(CONFIG_STEPPER_ADI_TMC50XX) || defined(CONFIG_STEPPER_ADI_TMC51XX)
 
 #define TMC5XXX_WRITE_BIT        0x80U
 #define TMC5XXX_ADDRESS_MASK     0x7FU
 
- #define TMC5XXX_CLOCK_FREQ_SHIFT 24
+#define TMC5XXX_CLOCK_FREQ_SHIFT 24
 
 #define TMC5XXX_GCONF 0x00
 #define TMC5XXX_GSTAT 0x01
@@ -79,66 +80,102 @@ extern "C" {
 #define TMC5XXX_DRV_STATUS_SG_STATUS_MASK  BIT(24)
 #define TMC5XXX_DRV_STATUS_SG_STATUS_SHIFT 24
 
+#define TMC50XX_MOTOR_ADDR(m)     (0x20 << (m))
+#define TMC50XX_MOTOR_ADDR_DRV(m) ((m) << 4)
+
+#define TMC50XX_RAMPMODE(motor)   (0x00 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_XACTUAL(motor)    (0x01 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_VACTUAL(motor)    (0x02 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_VSTART(motor)     (0x03 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_A1(motor)         (0x04 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_V1(motor)         (0x05 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_AMAX(motor)       (0x06 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_VMAX(motor)       (0x07 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_DMAX(motor)       (0x08 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_D1(motor)         (0x0A | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_VSTOP(motor)      (0x0B | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_TZEROWAIT(motor)  (0x0C | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_XTARGET(motor)    (0x0D | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_SWMODE(motor)     (0x14 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_RAMPSTAT(motor)   (0x15 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_CHOPCONF(motor)   (0x6C | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_COOLCONF(motor)   (0x6D | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_DRVSTATUS(motor)  (0x6F | TMC50XX_MOTOR_ADDR_DRV(motor))
+
 #endif
 
-#ifdef CONFIG_STEPPER_ADI_TMC5041
+#ifdef CONFIG_STEPPER_ADI_TMC50XX
 
-#define TMC5041_MOTOR_ADDR(m)     (0x20 << (m))
-#define TMC5041_MOTOR_ADDR_DRV(m) ((m) << 4)
-#define TMC5041_MOTOR_ADDR_PWM(m) ((m) << 3)
+#define TMC50XX_MOTOR_ADDR_PWM(m) ((m) << 3)
 
 /**
- * @name TMC5041 module registers
- * @anchor TMC5041_REGISTERS
+ * @name TMC50XX module registers
+ * @anchor TMC50XX_REGISTERS
  *
  * @{
  */
 
-#define TMC5041_GCONF_POSCMP_ENABLE_SHIFT 3
-#define TMC5041_GCONF_TEST_MODE_SHIFT     7
-#define TMC5041_GCONF_SHAFT_SHIFT(n)      ((n) ? 8 : 9)
-#define TMC5041_LOCK_GCONF_SHIFT          10
+#define TMC50XX_GCONF_POSCMP_ENABLE_SHIFT 3
+#define TMC50XX_GCONF_TEST_MODE_SHIFT     7
+#define TMC50XX_GCONF_SHAFT_SHIFT(n)      ((n) ? 8 : 9)
+#define TMC50XX_LOCK_GCONF_SHIFT          10
 
-#define TMC5041_PWMCONF(motor)    (0x10 | TMC5041_MOTOR_ADDR_PWM(motor))
-#define TMC5041_PWM_STATUS(motor) (0x11 | TMC5041_MOTOR_ADDR_PWM(motor))
+#define TMC50XX_PWMCONF(motor)    (0x10 | TMC50XX_MOTOR_ADDR_PWM(motor))
+#define TMC50XX_PWM_STATUS(motor) (0x11 | TMC50XX_MOTOR_ADDR_PWM(motor))
 
-#define TMC5041_RAMPMODE(motor)   (0x00 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_XACTUAL(motor)    (0x01 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_VACTUAL(motor)    (0x02 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_VSTART(motor)     (0x03 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_A1(motor)         (0x04 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_V1(motor)         (0x05 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_AMAX(motor)       (0x06 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_VMAX(motor)       (0x07 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_DMAX(motor)       (0x08 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_D1(motor)         (0x0A | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_VSTOP(motor)      (0x0B | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_TZEROWAIT(motor)  (0x0C | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_XTARGET(motor)    (0x0D | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_IHOLD_IRUN(motor) (0x10 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_VCOOLTHRS(motor)  (0x11 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_VHIGH(motor)      (0x12 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_SWMODE(motor)     (0x14 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_RAMPSTAT(motor)   (0x15 | TMC5041_MOTOR_ADDR(motor))
-#define TMC5041_XLATCH(motor)     (0x16 | TMC5041_MOTOR_ADDR(motor))
+#define TMC50XX_IHOLD_IRUN(motor) (0x10 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_VCOOLTHRS(motor)  (0x11 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_VHIGH(motor)      (0x12 | TMC50XX_MOTOR_ADDR(motor))
+#define TMC50XX_XLATCH(motor)     (0x16 | TMC50XX_MOTOR_ADDR(motor))
 
-#define TMC5041_MSLUT0(motor)     (0x60 | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSLUT1(motor)     (0x61 | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSLUT2(motor)     (0x62 | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSLUT3(motor)     (0x63 | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSLUT4(motor)     (0x64 | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSLUT5(motor)     (0x65 | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSLUT6(motor)     (0x66 | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSLUT7(motor)     (0x67 | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSLUTSEL(motor)   (0x68 | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSLUTSTART(motor) (0x69 | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSCNT(motor)      (0x6A | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_MSCURACT(motor)   (0x6B | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_CHOPCONF(motor)   (0x6C | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_COOLCONF(motor)   (0x6D | TMC5041_MOTOR_ADDR_DRV(motor))
-#define TMC5041_DRVSTATUS(motor)  (0x6F | TMC5041_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSLUT0(motor)     (0x60 | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSLUT1(motor)     (0x61 | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSLUT2(motor)     (0x62 | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSLUT3(motor)     (0x63 | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSLUT4(motor)     (0x64 | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSLUT5(motor)     (0x65 | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSLUT6(motor)     (0x66 | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSLUT7(motor)     (0x67 | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSLUTSEL(motor)   (0x68 | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSLUTSTART(motor) (0x69 | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSCNT(motor)      (0x6A | TMC50XX_MOTOR_ADDR_DRV(motor))
+#define TMC50XX_MSCURACT(motor)   (0x6B | TMC50XX_MOTOR_ADDR_DRV(motor))
 
-#endif
+#endif /* CONFIG_STEPPER_ADI_TMC50XX */
+
+#ifdef CONFIG_STEPPER_ADI_TMC51XX
+
+#define TMC51XX_GCONF_EN_PWM_MODE_SHIFT	2
+#define TMC51XX_GCONF_SHAFT_SHIFT	4
+#define TMC51XX_GCONF_TEST_MODE_SHIFT	17
+
+#define TMC51XX_IHOLD_IRUN	0x10
+#define TMC51XX_TPOWER_DOWN	0x11
+#define TMC51XX_TSTEP		0x12
+#define TMC51XX_TPWMTHRS	0x13
+#define TMC51XX_TCOOLTHRS	0x14
+#define TMC51XX_THIGH		0x15
+
+#define TMC51XX_RAMPMODE   	TMC50XX_RAMPMODE(0)
+#define TMC51XX_XACTUAL    	TMC50XX_XACTUAL(0)
+#define TMC51XX_VACTUAL    	TMC50XX_VACTUAL(0)
+#define TMC51XX_VSTART     	TMC50XX_VSTART(0)
+#define TMC51XX_A1         	TMC50XX_A1(0)
+#define TMC51XX_V1         	TMC50XX_V1(0)
+#define TMC51XX_AMAX       	TMC50XX_AMAX(0)
+#define TMC51XX_VMAX       	TMC50XX_VMAX(0)
+#define TMC51XX_DMAX       	TMC50XX_DMAX(0)
+#define TMC51XX_D1         	TMC50XX_D1(0)
+#define TMC51XX_VSTOP      	TMC50XX_VSTOP(0)
+#define TMC51XX_TZEROWAIT  	TMC50XX_TZEROWAIT(0)
+#define TMC51XX_XTARGET    	TMC50XX_XTARGET(0)
+#define TMC51XX_SWMODE     	TMC50XX_SWMODE(0)
+#define TMC51XX_RAMPSTAT   	TMC50XX_RAMPSTAT(0)
+#define TMC51XX_CHOPCONF   	TMC50XX_CHOPCONF(0)
+#define TMC51XX_COOLCONF   	TMC50XX_COOLCONF(0)
+#define TMC51XX_DRVSTATUS  	TMC50XX_DRVSTATUS(0)
+
+#endif /* CONFIG_STEPPER_ADI_TMC51XX */
 
 /**
  * @}

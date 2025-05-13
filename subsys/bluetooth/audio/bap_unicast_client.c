@@ -4,7 +4,7 @@
 
 /*
  * Copyright (c) 2020 Intel Corporation
- * Copyright (c) 2022-2023 Nordic Semiconductor ASA
+ * Copyright (c) 2022-2025 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -1019,13 +1019,6 @@ static void unicast_client_ep_qos_state(struct bt_bap_ep *ep, struct net_buf_sim
 		if (err != 0) {
 			LOG_ERR("Failed to disconnect stream: %d", err);
 		}
-	} else {
-		/* We setup the data path here, as this is the earliest where
-		 * we have the ISO <-> EP coupling completed (due to setting
-		 * the CIS ID in the QoS procedure).
-		 */
-
-		bt_bap_iso_configure_data_path(ep, stream->codec_cfg);
 	}
 
 	/* Notify upper layer */
@@ -1107,6 +1100,11 @@ static void unicast_client_ep_streaming_state(struct bt_bap_ep *ep, struct net_b
 	stream_status = net_buf_simple_pull_mem(buf, sizeof(*stream_status));
 
 	LOG_DBG("dir %s cig 0x%02x cis 0x%02x", bt_audio_dir_str(ep->dir), ep->cig_id, ep->cis_id);
+
+	/* Setup the ISO data path when the stream is started. We could do it earlier when the CIS
+	 * is connected, but then we would just receive audio data that we would then just discard
+	 */
+	bt_bap_setup_iso_data_path(stream);
 
 	/* Notify upper layer
 	 *
@@ -1220,6 +1218,13 @@ static void unicast_client_ep_set_status(struct bt_bap_ep *ep, struct net_buf_si
 			} else {
 				/* Reset reason */
 				ep->reason = BT_HCI_ERR_SUCCESS;
+			}
+
+			if (ep->iso != NULL) {
+				/* Remove the ISO data path as we no longer want to process any ISO
+				 * data for this stream.
+				 */
+				bt_bap_remove_iso_data_path(stream);
 			}
 
 			if (ops != NULL && ops->stopped != NULL) {
@@ -1747,7 +1752,6 @@ static uint8_t unicast_client_ep_notify(struct bt_conn *conn,
 {
 	struct net_buf_simple buf;
 	struct bt_bap_unicast_client_ep *client_ep;
-	const uint8_t att_ntf_header_size = 3; /* opcode (1) + handle (2) */
 	uint16_t max_ntf_size;
 	struct bt_bap_ep *ep;
 
@@ -1765,7 +1769,7 @@ static uint8_t unicast_client_ep_notify(struct bt_conn *conn,
 		return BT_GATT_ITER_STOP;
 	}
 
-	max_ntf_size = bt_gatt_get_mtu(conn) - att_ntf_header_size;
+	max_ntf_size = bt_audio_get_max_ntf_size(conn);
 
 	if (length == max_ntf_size) {
 		struct unicast_client *client = &uni_cli_insts[bt_conn_index(conn)];
@@ -2166,8 +2170,7 @@ static void gatt_write_cb(struct bt_conn *conn, uint8_t err, struct bt_gatt_writ
 int bt_bap_unicast_client_ep_send(struct bt_conn *conn, struct bt_bap_ep *ep,
 				  struct net_buf_simple *buf)
 {
-	const uint8_t att_write_header_size = 3; /* opcode (1) + handle (2) */
-	const uint16_t max_write_size = bt_gatt_get_mtu(conn) - att_write_header_size;
+	const uint16_t max_write_size = bt_audio_get_max_ntf_size(conn);
 	struct unicast_client *client = &uni_cli_insts[bt_conn_index(conn)];
 	struct bt_bap_unicast_client_ep *client_ep =
 		CONTAINER_OF(ep, struct bt_bap_unicast_client_ep, ep);

@@ -45,7 +45,8 @@ struct lll_conn_iso_stream {
 	struct lll_conn_iso_stream_rxtx tx; /* TX parameters */
 
 	/* Event and payload counters */
-	uint64_t event_count:39;    /* cisEventCount */
+	uint64_t event_count_prepare:39; /* cisEventCount in overlapping CIG prepare */
+	uint64_t event_count:39;         /* cisEventCount in current CIG event */
 
 	/* Acknowledgment and flow control */
 	uint8_t sn:1;               /* Sequence number */
@@ -57,6 +58,14 @@ struct lll_conn_iso_stream {
 	uint8_t datapath_ready_rx:1;/* 1 if datapath for RX is ready */
 
 #if !defined(CONFIG_BT_CTLR_JIT_SCHEDULING)
+	/* A CIS LLL is active and prepared in a CIG radio event when ACL instant has passed
+	 * which set the `active` flag and then when CIG event prepare in LLL has picked up the set
+	 * `active` flag.
+	 * FIXME: There is suspected possibility that ACL ULL Prepare that is processing LLCP could
+	 *        execute between CIG ULL Prepare and deferred CIG LLL Prepare say when there is
+	 *        already another state/role that the CIG tries to pre-empt.
+	 */
+	uint8_t prepared:1;
 	/* Lazy at CIS active. Number of previously skipped CIG events that is
 	 * determined when CIS is made active and subtracted from total CIG
 	 * events that where skipped when this CIS gets to use radio for the

@@ -100,6 +100,59 @@ static uint32_t dump_fault(uint32_t status, uint32_t addr)
 		reason = K_ERR_ARM_UNSUPPORTED_EXCLUSIVE_ACCESS_FAULT;
 		LOG_ERR("Unsupported Exclusive Access Fault @ 0x%08x", addr);
 		break;
+#elif defined(CONFIG_ARMV7_A)
+	case FSR_FS_PERMISSION_FAULT_2ND_LEVEL:
+		reason = K_ERR_ARM_PERMISSION_FAULT_2ND_LEVEL;
+		LOG_ERR("2nd Level Permission Fault @ 0x%08x", addr);
+		break;
+	case FSR_FS_ACCESS_FLAG_FAULT_1ST_LEVEL:
+		reason = K_ERR_ARM_ACCESS_FLAG_FAULT_1ST_LEVEL;
+		LOG_ERR("1st Level Access Flag Fault @ 0x%08x", addr);
+		break;
+	case FSR_FS_ACCESS_FLAG_FAULT_2ND_LEVEL:
+		reason = K_ERR_ARM_ACCESS_FLAG_FAULT_2ND_LEVEL;
+		LOG_ERR("2nd Level Access Flag Fault @ 0x%08x", addr);
+		break;
+	case FSR_FS_CACHE_MAINTENANCE_INSTRUCTION_FAULT:
+		reason = K_ERR_ARM_CACHE_MAINTENANCE_INSTRUCTION_FAULT;
+		LOG_ERR("Cache Maintenance Instruction Fault @ 0x%08x", addr);
+		break;
+	case FSR_FS_TRANSLATION_FAULT:
+		reason = K_ERR_ARM_TRANSLATION_FAULT;
+		LOG_ERR("1st Level Translation Fault @ 0x%08x", addr);
+		break;
+	case FSR_FS_TRANSLATION_FAULT_2ND_LEVEL:
+		reason = K_ERR_ARM_TRANSLATION_FAULT_2ND_LEVEL;
+		LOG_ERR("2nd Level Translation Fault @ 0x%08x", addr);
+		break;
+	case FSR_FS_DOMAIN_FAULT_1ST_LEVEL:
+		reason = K_ERR_ARM_DOMAIN_FAULT_1ST_LEVEL;
+		LOG_ERR("1st Level Domain Fault @ 0x%08x", addr);
+		break;
+	case FSR_FS_DOMAIN_FAULT_2ND_LEVEL:
+		reason = K_ERR_ARM_DOMAIN_FAULT_2ND_LEVEL;
+		LOG_ERR("2nd Level Domain Fault @ 0x%08x", addr);
+		break;
+	case FSR_FS_SYNC_EXTERNAL_ABORT_TRANSLATION_TABLE_1ST_LEVEL:
+		reason = K_ERR_ARM_SYNC_EXTERNAL_ABORT_TRANSLATION_TABLE_1ST_LEVEL;
+		LOG_ERR("1st Level Synchronous External Abort Translation Table @ 0x%08x", addr);
+		break;
+	case FSR_FS_SYNC_EXTERNAL_ABORT_TRANSLATION_TABLE_2ND_LEVEL:
+		reason = K_ERR_ARM_SYNC_EXTERNAL_ABORT_TRANSLATION_TABLE_2ND_LEVEL;
+		LOG_ERR("2nd Level Synchronous External Abort Translation Table @ 0x%08x", addr);
+		break;
+	case FSR_FS_TLB_CONFLICT_FAULT:
+		reason = K_ERR_ARM_TLB_CONFLICT_FAULT;
+		LOG_ERR("Table Conflict Fault @ 0x%08x", addr);
+		break;
+	case FSR_FS_SYNC_PARITY_ERROR_TRANSLATION_TABLE_1ST_LEVEL:
+		reason = K_ERR_ARM_SYNC_PARITY_ERROR_TRANSLATION_TABLE_1ST_LEVEL;
+		LOG_ERR("1st Level Synchronous Parity Error Translation Table @ 0x%08x", addr);
+		break;
+	case FSR_FS_SYNC_PARITY_ERROR_TRANSLATION_TABLE_2ND_LEVEL:
+		reason = K_ERR_ARM_SYNC_PARITY_ERROR_TRANSLATION_TABLE_2ND_LEVEL;
+		LOG_ERR("2nd Level Synchronous Parity Error Translation Table @ 0x%08x", addr);
+		break;
 #else
 	case FSR_FS_BACKGROUND_FAULT:
 		reason = K_ERR_ARM_BACKGROUND_FAULT;
@@ -178,7 +231,7 @@ bool z_arm_fault_undef_instruction_fp(void)
 		 * context because it is about to be overwritten.
 		 */
 		if (((_current_cpu->nested == 2)
-				&& (arch_current_thread()->base.user_options & K_FP_REGS))
+				&& (_current->base.user_options & K_FP_REGS))
 			|| ((_current_cpu->nested > 2)
 				&& (spill_esf->undefined & FPEXC_EN))) {
 			/*
@@ -196,7 +249,7 @@ bool z_arm_fault_undef_instruction_fp(void)
 		 * means that a thread that uses the VFP does not have to,
 		 * but should, set K_FP_REGS on thread creation.
 		 */
-		arch_current_thread()->base.user_options |= K_FP_REGS;
+		_current->base.user_options |= K_FP_REGS;
 	}
 
 	return false;

@@ -25,6 +25,7 @@ LOG_MODULE_REGISTER(net_ipv6_nd, CONFIG_NET_IPV6_ND_LOG_LEVEL);
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/dns_resolve.h>
 #include <zephyr/net/icmp.h>
+#include <zephyr/net/ethernet.h>
 #include "net_private.h"
 #include "connection.h"
 #include "icmpv6.h"
@@ -132,21 +133,6 @@ const char *net_ipv6_nbr_state2str(enum net_ipv6_nbr_state state)
 static inline struct net_nbr *get_nbr(int idx)
 {
 	return &net_neighbor_pool[idx].nbr;
-}
-
-static inline struct net_nbr *get_nbr_from_data(struct net_ipv6_nbr_data *data)
-{
-	int i;
-
-	for (i = 0; i < CONFIG_NET_IPV6_MAX_NEIGHBORS; i++) {
-		struct net_nbr *nbr = get_nbr(i);
-
-		if (nbr->data == (uint8_t *)data) {
-			return nbr;
-		}
-	}
-
-	return NULL;
 }
 
 static void ipv6_nbr_set_state(struct net_nbr *nbr,
@@ -457,7 +443,7 @@ static struct net_nbr *nbr_new(struct net_if *iface,
 }
 
 static void dbg_update_neighbor_lladdr(const struct net_linkaddr *new_lladdr,
-				       const struct net_linkaddr_storage *old_lladdr,
+				       const struct net_linkaddr *old_lladdr,
 				       const struct in6_addr *addr)
 {
 	char out[sizeof("xx:xx:xx:xx:xx:xx:xx:xx")];
@@ -472,13 +458,14 @@ static void dbg_update_neighbor_lladdr(const struct net_linkaddr *new_lladdr,
 }
 
 static void dbg_update_neighbor_lladdr_raw(uint8_t *new_lladdr,
-				       struct net_linkaddr_storage *old_lladdr,
-				       struct in6_addr *addr)
+					   struct net_linkaddr *old_lladdr,
+					   struct in6_addr *addr)
 {
 	struct net_linkaddr lladdr = {
 		.len = old_lladdr->len,
-		.addr = new_lladdr,
 	};
+
+	memcpy(lladdr.addr, new_lladdr, lladdr.len);
 
 	dbg_update_neighbor_lladdr(&lladdr, old_lladdr, addr);
 }
@@ -617,14 +604,14 @@ struct net_nbr *net_ipv6_nbr_add(struct net_if *iface,
 	if (lladdr && net_nbr_link(nbr, iface, lladdr) == -EALREADY &&
 	    net_ipv6_nbr_data(nbr)->state != NET_IPV6_NBR_STATE_STATIC) {
 		/* Update the lladdr if the node was already known */
-		struct net_linkaddr_storage *cached_lladdr;
+		struct net_linkaddr *cached_lladdr;
 
 		cached_lladdr = net_nbr_get_lladdr(nbr->idx);
 
 		if (memcmp(cached_lladdr->addr, lladdr->addr, lladdr->len)) {
 			dbg_update_neighbor_lladdr(lladdr, cached_lladdr, addr);
 
-			net_linkaddr_set(cached_lladdr, lladdr->addr,
+			net_linkaddr_set(cached_lladdr, (uint8_t *)lladdr->addr,
 					 lladdr->len);
 
 			ipv6_nbr_set_state(nbr, NET_IPV6_NBR_STATE_STALE);
@@ -860,7 +847,7 @@ use_interface_mtu:
 	 * contain public IPv6 address information so in that case we should
 	 * not enter this branch.
 	 */
-	if ((net_pkt_lladdr_dst(pkt)->addr &&
+	if ((net_pkt_lladdr_dst(pkt)->len > 0 &&
 	     ((IS_ENABLED(CONFIG_NET_ROUTING) &&
 	      (net_ipv6_is_ll_addr((struct in6_addr *)ip_hdr->dst) ||
 	       net_if_ipv6_addr_onlink(NULL, (struct in6_addr *)ip_hdr->dst) ||
@@ -954,12 +941,12 @@ try_send:
 		"-");
 
 	if (nbr && nbr->idx != NET_NBR_LLADDR_UNKNOWN) {
-		struct net_linkaddr_storage *lladdr;
+		struct net_linkaddr *lladdr;
 
 		lladdr = net_nbr_get_lladdr(nbr->idx);
 
-		net_pkt_lladdr_dst(pkt)->addr = lladdr->addr;
-		net_pkt_lladdr_dst(pkt)->len = lladdr->len;
+		(void)net_linkaddr_set(net_pkt_lladdr_dst(pkt), lladdr->addr,
+				       lladdr->len);
 
 		NET_DBG("Neighbor %p addr %s", nbr,
 			net_sprint_ll_addr(lladdr->addr, lladdr->len));
@@ -1084,20 +1071,21 @@ static inline bool set_llao(struct net_pkt *pkt,
 
 static bool read_llao(struct net_pkt *pkt,
 		      uint8_t len,
-		      struct net_linkaddr_storage *llstorage)
+		      struct net_linkaddr *lladdr)
 {
 	uint8_t padding;
 
-	llstorage->len = NET_LINK_ADDR_MAX_LENGTH;
-	if (net_pkt_lladdr_src(pkt)->len < llstorage->len) {
-		llstorage->len = net_pkt_lladdr_src(pkt)->len;
+	lladdr->len = NET_LINK_ADDR_MAX_LENGTH;
+
+	if (net_pkt_lladdr_src(pkt)->len < lladdr->len) {
+		lladdr->len = net_pkt_lladdr_src(pkt)->len;
 	}
 
-	if (net_pkt_read(pkt, llstorage->addr, llstorage->len)) {
+	if (net_pkt_read(pkt, lladdr->addr, lladdr->len)) {
 		return false;
 	}
 
-	padding = len * 8U - 2 - llstorage->len;
+	padding = len * 8U - 2 - lladdr->len;
 	if (padding) {
 		if (net_pkt_skip(pkt, padding)) {
 			return false;
@@ -1224,7 +1212,6 @@ static int handle_ns_input(struct net_icmp_ctx *ctx,
 	const struct in6_addr *na_src;
 	const struct in6_addr *na_dst;
 	struct in6_addr *tgt;
-	struct net_linkaddr_storage src_lladdr_s;
 	struct net_linkaddr src_lladdr;
 
 	src_lladdr.len = 0;
@@ -1274,13 +1261,10 @@ static int handle_ns_input(struct net_icmp_ctx *ctx,
 				goto drop;
 			}
 
-			if (!read_llao(pkt, nd_opt_hdr->len, &src_lladdr_s)) {
+			if (!read_llao(pkt, nd_opt_hdr->len, &src_lladdr)) {
 				NET_ERR("DROP: failed to read LLAO");
 				goto drop;
 			}
-
-			src_lladdr.len = src_lladdr_s.len;
-			src_lladdr.addr = src_lladdr_s.addr;
 
 			break;
 		default:
@@ -1445,7 +1429,7 @@ nexthop_found:
 	}
 
 send_na:
-	if (src_lladdr.len) {
+	if (src_lladdr.len > 0) {
 		if (!net_ipv6_nbr_add(net_pkt_iface(pkt),
 				      (struct in6_addr *)ip_hdr->src,
 				      &src_lladdr, false,
@@ -1591,7 +1575,7 @@ static void ipv6_nd_reachable_timeout(struct k_work *work)
 					data->ns_count);
 
 				ret = net_ipv6_send_ns(nbr->iface, NULL, NULL,
-						       NULL, &data->addr,
+						       &data->addr, &data->addr,
 						       false);
 				if (ret < 0) {
 					NET_DBG("Cannot send NS (%d)", ret);
@@ -1653,9 +1637,9 @@ static inline bool handle_na_neighbor(struct net_pkt *pkt,
 				      struct net_icmpv6_na_hdr *na_hdr,
 				      uint16_t tllao_offset)
 {
-	struct net_linkaddr_storage lladdr = { 0 };
+	struct net_linkaddr lladdr = { 0 };
 	bool lladdr_changed = false;
-	struct net_linkaddr_storage *cached_lladdr;
+	struct net_linkaddr *cached_lladdr;
 	struct net_pkt *pending;
 	struct net_nbr *nbr;
 
@@ -1694,8 +1678,7 @@ static inline bool handle_na_neighbor(struct net_pkt *pkt,
 			goto err;
 		}
 
-		nbr_lladdr.len = lladdr.len;
-		nbr_lladdr.addr = lladdr.addr;
+		(void)net_linkaddr_set(&nbr_lladdr, lladdr.addr, lladdr.len);
 
 		if (net_nbr_link(nbr, net_pkt_iface(pkt), &nbr_lladdr)) {
 			nbr_free(nbr);
@@ -1769,7 +1752,7 @@ static inline bool handle_na_neighbor(struct net_pkt *pkt,
 
 	if (na_hdr->flags & NET_ICMPV6_NA_FLAG_OVERRIDE ||
 	    (!(na_hdr->flags & NET_ICMPV6_NA_FLAG_OVERRIDE) &&
-	     tllao_offset && !lladdr_changed)) {
+	     !lladdr_changed)) {
 
 		if (lladdr_changed) {
 			dbg_update_neighbor_lladdr_raw(
@@ -2175,14 +2158,10 @@ int net_ipv6_start_rs(struct net_if *iface)
 static inline struct net_nbr *handle_ra_neighbor(struct net_pkt *pkt, uint8_t len)
 {
 	struct net_linkaddr lladdr;
-	struct net_linkaddr_storage llstorage;
 
-	if (!read_llao(pkt, len, &llstorage)) {
+	if (!read_llao(pkt, len, &lladdr)) {
 		return NULL;
 	}
-
-	lladdr.len = llstorage.len;
-	lladdr.addr = llstorage.addr;
 
 	return net_ipv6_nbr_add(net_pkt_iface(pkt),
 				(struct in6_addr *)NET_IPV6_HDR(pkt)->src,
@@ -2612,12 +2591,6 @@ static int handle_ra_input(struct net_icmp_ctx *ctx,
 	nd_opt_hdr = (struct net_icmpv6_nd_opt_hdr *)
 				net_pkt_get_data(pkt, &nd_access);
 
-	/* Add neighbor cache entry using link local address, regardless of link layer address
-	 * presence in Router Advertisement.
-	 */
-	nbr = net_ipv6_nbr_add(net_pkt_iface(pkt), (struct in6_addr *)NET_IPV6_HDR(pkt)->src, NULL,
-				true, NET_IPV6_NBR_STATE_INCOMPLETE);
-
 	while (nd_opt_hdr) {
 		net_pkt_acknowledge_data(pkt, &nd_access);
 
@@ -2716,6 +2689,15 @@ static int handle_ra_input(struct net_icmp_ctx *ctx,
 
 		nd_opt_hdr = (struct net_icmpv6_nd_opt_hdr *)
 					net_pkt_get_data(pkt, &nd_access);
+	}
+
+	if (nbr == NULL) {
+		/* Add neighbor cache entry using link local address, regardless
+		 * of link layer address presence in Router Advertisement.
+		 */
+		nbr = net_ipv6_nbr_add(net_pkt_iface(pkt),
+				       (struct in6_addr *)NET_IPV6_HDR(pkt)->src,
+				       NULL, true, NET_IPV6_NBR_STATE_INCOMPLETE);
 	}
 
 	router = net_if_ipv6_router_lookup(net_pkt_iface(pkt),

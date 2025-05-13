@@ -1,14 +1,14 @@
 /*
- * Copyright (c) 2024 Nordic Semiconductor
+ * Copyright (c) 2024-2025 Nordic Semiconductor
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <stdint.h>
-#include "common.h"
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/hci_types.h>
 #include <zephyr/bluetooth/iso.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
@@ -23,11 +23,11 @@ LOG_MODULE_REGISTER(bis_receiver, LOG_LEVEL_INF);
 
 extern enum bst_result_t bst_result;
 
-static DEFINE_FLAG(flag_broadcaster_found);
-static DEFINE_FLAG(flag_iso_connected);
-static DEFINE_FLAG(flag_data_received);
-static DEFINE_FLAG(flag_pa_synced);
-static DEFINE_FLAG(flag_biginfo);
+DEFINE_FLAG_STATIC(flag_broadcaster_found);
+DEFINE_FLAG_STATIC(flag_iso_connected);
+DEFINE_FLAG_STATIC(flag_data_received);
+DEFINE_FLAG_STATIC(flag_pa_synced);
+DEFINE_FLAG_STATIC(flag_biginfo);
 
 static struct bt_iso_chan iso_chans[CONFIG_BT_ISO_MAX_CHAN];
 static struct bt_le_scan_recv_info broadcaster_info;
@@ -83,9 +83,18 @@ static void iso_recv(struct bt_iso_chan *chan, const struct bt_iso_recv_info *in
 
 static void iso_connected(struct bt_iso_chan *chan)
 {
+	const struct bt_iso_chan_path hci_path = {
+		.pid = BT_ISO_DATA_PATH_HCI,
+		.format = BT_HCI_CODING_FORMAT_TRANSPARENT,
+	};
+	int err;
+
 	LOG_INF("ISO Channel %p connected", chan);
 
 	SET_FLAG(flag_iso_connected);
+
+	err = bt_iso_setup_data_path(chan, BT_HCI_DATAPATH_DIR_CTLR_TO_HOST, &hci_path);
+	TEST_ASSERT(err == 0, "Failed to setup ISO RX data path: %d\n", err);
 }
 
 static void iso_disconnected(struct bt_iso_chan *chan, uint8_t reason)
@@ -270,8 +279,6 @@ static const struct bst_test_instance test_def[] = {
 	{
 		.test_id = "receiver",
 		.test_descr = "receiver",
-		.test_pre_init_f = test_init,
-		.test_tick_f = test_tick,
 		.test_main_f = test_main,
 	},
 	BSTEST_END_MARKER,

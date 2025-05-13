@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Renesas Electronics Corporation
+ * Copyright (c) 2024-2025 Renesas Electronics Corporation
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -49,6 +49,7 @@
 		led0 = &led1;
 		led1 = &led2;
 		sw0 = &button0;
+		watchdog0 = &wdt;
 	};
 };
 
@@ -106,6 +107,12 @@
 	pinctrl-names = "default";
 };
 
+&dac0 {
+	pinctrl-0 = <&dac0_default>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
 &port_irq9 {
 	interrupts = <41 12>;
 	status = "okay";
@@ -122,4 +129,8 @@
 
 &trng {
 	status ="okay";
+};
+
+&wdt {
+	status = "okay";
 };

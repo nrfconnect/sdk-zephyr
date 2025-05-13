@@ -970,7 +970,7 @@ static struct net_buf *pkt_alloc_buffer(struct net_pkt *pkt,
 
 				size = 0U;
 			} else {
-				size -= current->size;
+				size -= current->size - headroom;
 			}
 		} else {
 			if (current->size > size) {
@@ -1033,13 +1033,12 @@ static struct net_buf *pkt_alloc_buffer(struct net_pkt *pkt,
 
 #if defined(CONFIG_NET_PKT_ALLOC_STATS)
 	uint32_t start_time = k_cycle_get_32();
-	size_t total_size = size;
+	size_t total_size = size + headroom;
 #else
 	ARG_UNUSED(pkt);
 #endif
-	ARG_UNUSED(headroom);
 
-	buf = net_buf_alloc_len(pool, size, timeout);
+	buf = net_buf_alloc_len(pool, size + headroom, timeout);
 
 #if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
 	NET_FRAG_CHECK_IF_NOT_IN_USE(buf, buf->ref + 1);
@@ -1337,6 +1336,16 @@ int net_pkt_alloc_buffer_with_reserve(struct net_pkt *pkt,
 	return 0;
 }
 
+static bool is_pkt_tx(struct net_pkt *pkt)
+{
+#if defined(CONFIG_NET_CONTEXT_NET_PKT_POOL)
+	if ((pkt->context != NULL) && (get_tx_slab(pkt->context) != NULL)) {
+		return pkt->slab == get_tx_slab(pkt->context);
+	}
+#endif
+	return pkt->slab == &tx_pkts;
+}
+
 #if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 int net_pkt_alloc_buffer_debug(struct net_pkt *pkt,
 			       size_t size,
@@ -1364,7 +1373,7 @@ int net_pkt_alloc_buffer(struct net_pkt *pkt,
 
 	iface = net_pkt_iface(pkt);
 
-	if (iface != NULL && net_if_l2(iface)->alloc != NULL) {
+	if (iface != NULL && is_pkt_tx(pkt) && net_if_l2(iface)->alloc != NULL) {
 		ret = net_if_l2(iface)->alloc(iface, pkt, size, proto, timeout);
 		if (ret != -ENOTSUP) {
 			return ret;
@@ -1998,49 +2007,6 @@ int net_pkt_copy(struct net_pkt *pkt_dst,
 	return 0;
 }
 
-static int32_t net_pkt_find_offset(struct net_pkt *pkt, uint8_t *ptr)
-{
-	struct net_buf *buf;
-	uint32_t ret = -EINVAL;
-	uint16_t offset;
-
-	if (!ptr || !pkt || !pkt->buffer) {
-		return ret;
-	}
-
-	offset = 0U;
-	buf = pkt->buffer;
-
-	while (buf) {
-		if (buf->data <= ptr && ptr < (buf->data + buf->len)) {
-			ret = offset + (ptr - buf->data);
-			break;
-		}
-		offset += buf->len;
-		buf = buf->frags;
-	}
-
-	return ret;
-}
-
-static void clone_pkt_lladdr(struct net_pkt *pkt, struct net_pkt *clone_pkt,
-			     struct net_linkaddr *lladdr)
-{
-	int32_t ll_addr_offset;
-
-	if (!lladdr->addr) {
-		return;
-	}
-
-	ll_addr_offset = net_pkt_find_offset(pkt, lladdr->addr);
-
-	if (ll_addr_offset >= 0) {
-		net_pkt_cursor_init(clone_pkt);
-		net_pkt_skip(clone_pkt, ll_addr_offset);
-		lladdr->addr = net_pkt_cursor_get_pos(clone_pkt);
-	}
-}
-
 #if defined(NET_PKT_HAS_CONTROL_BLOCK)
 static inline void clone_pkt_cb(struct net_pkt *pkt, struct net_pkt *clone_pkt)
 {
@@ -2068,32 +2034,30 @@ static void clone_pkt_attributes(struct net_pkt *pkt, struct net_pkt *clone_pkt)
 	net_pkt_set_captured(clone_pkt, net_pkt_is_captured(pkt));
 	net_pkt_set_eof(clone_pkt, net_pkt_eof(pkt));
 	net_pkt_set_ptp(clone_pkt, net_pkt_is_ptp(pkt));
+	net_pkt_set_ppp(clone_pkt, net_pkt_is_ppp(pkt));
+	net_pkt_set_lldp(clone_pkt, net_pkt_is_lldp(pkt));
+	net_pkt_set_ipv4_acd(clone_pkt, net_pkt_ipv4_acd(pkt));
 	net_pkt_set_tx_timestamping(clone_pkt, net_pkt_is_tx_timestamping(pkt));
 	net_pkt_set_rx_timestamping(clone_pkt, net_pkt_is_rx_timestamping(pkt));
 	net_pkt_set_forwarding(clone_pkt, net_pkt_forwarding(pkt));
 	net_pkt_set_chksum_done(clone_pkt, net_pkt_is_chksum_done(pkt));
 	net_pkt_set_ip_reassembled(pkt, net_pkt_is_ip_reassembled(pkt));
-
+	net_pkt_set_cooked_mode(clone_pkt, net_pkt_is_cooked_mode(pkt));
+	net_pkt_set_ipv4_pmtu(clone_pkt, net_pkt_ipv4_pmtu(pkt));
 	net_pkt_set_l2_bridged(clone_pkt, net_pkt_is_l2_bridged(pkt));
 	net_pkt_set_l2_processed(clone_pkt, net_pkt_is_l2_processed(pkt));
 	net_pkt_set_ll_proto_type(clone_pkt, net_pkt_ll_proto_type(pkt));
+
+#if defined(CONFIG_NET_OFFLOAD) || defined(CONFIG_NET_L2_IPIP)
+	net_pkt_set_remote_address(clone_pkt, net_pkt_remote_address(pkt),
+				   sizeof(struct sockaddr_storage));
+#endif
 
 	if (pkt->buffer && clone_pkt->buffer) {
 		memcpy(net_pkt_lladdr_src(clone_pkt), net_pkt_lladdr_src(pkt),
 		       sizeof(struct net_linkaddr));
 		memcpy(net_pkt_lladdr_dst(clone_pkt), net_pkt_lladdr_dst(pkt),
 		       sizeof(struct net_linkaddr));
-		/* The link header pointers are usable as-is if we
-		 * shallow-copied the buffer even if they point
-		 * into the fragment memory of the buffer,
-		 * otherwise we have to set the ll address pointer
-		 * relative to the new buffer to avoid dangling
-		 * pointers into the source packet.
-		 */
-		if (pkt->buffer != clone_pkt->buffer) {
-			clone_pkt_lladdr(pkt, clone_pkt, net_pkt_lladdr_src(clone_pkt));
-			clone_pkt_lladdr(pkt, clone_pkt, net_pkt_lladdr_dst(clone_pkt));
-		}
 	}
 
 	if (IS_ENABLED(CONFIG_NET_IPV4) && net_pkt_family(pkt) == AF_INET) {

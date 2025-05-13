@@ -3,9 +3,10 @@
 
 menuconfig WIFI_NXP
 	bool "NXP Wi-Fi driver support"
-	select NET_L2_WIFI_MGMT if NETWORKING
-	select WIFI_USE_NATIVE_NETWORKING if NETWORKING
-	select NET_L2_ETHERNET_MGMT if NETWORKING && NET_L2_ETHERNET
+	select NET_L2_WIFI_MGMT
+	select WIFI_USE_NATIVE_NETWORKING
+	select NET_L2_ETHERNET
+	select NET_L2_ETHERNET_MGMT
 	select SDHC if !SOC_SERIES_RW6XX
 	select SDIO_STACK if !SOC_SERIES_RW6XX
 	select WIFI_NM
@@ -305,7 +306,7 @@ endchoice
 
 config NXP_WIFI_SHELL
 	bool "NXP Wi-Fi shell"
-	depends on SHELL
+	default y if SHELL
 	help
 	  NXP Wi-Fi shell commands support.
 
@@ -539,7 +540,8 @@ config NXP_WIFI_SOFTAP_SUPPORT
 	bool "Wi-Fi SoftAP Support"
 	select NET_DHCPV4_SERVER
 	select WIFI_NM_HOSTAPD_AP if WIFI_NM_WPA_SUPPLICANT
-	default y
+	imply WIFI_NM_HOSTAPD_WPS if WIFI_NM_HOSTAPD_AP && WIFI_NM_WPA_SUPPLICANT_WPS
+	imply WIFI_NM_HOSTAPD_CRYPTO_ENTERPRISE if WIFI_NM_HOSTAPD_AP && WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
 	help
 	  Option to enable Wi-Fi SoftAP functions in the Wi-Fi driver.
 
@@ -688,7 +690,7 @@ config NXP_WIFI_5GHz_SUPPORT
 
 config NXP_WIFI_TX_RX_ZERO_COPY
 	bool "Zero memory copy TX/RX data packets"
-	default y if NXP_RW610
+	depends on NXP_RW610
 	imply NET_IPV4_FRAGMENT
 	help
 	  This option enables the Zero memory copy of data packets in Wi-Fi driver data path.
@@ -720,6 +722,7 @@ config NXP_WIFI_RESET
 config NXP_WIFI_ECSA
 	bool "ECSA"
 	default y
+	depends on NXP_WIFI_SOFTAP_SUPPORT
 	help
 	  This option is used to do channel switch according to spec.
 
@@ -834,6 +837,11 @@ config NXP_WIFI_WLAN_CALDATA_3ANT_DIVERSITY
 	bool "Three antenna diversity"
 	help
 	  This option is used to enable three antenna diversity.
+
+config NXP_OVERRIDE_CALIBRATION_DATA
+	bool "override default calibriation data"
+	help
+	  This option is used to override default calibration data.
 
 endif # NXP_RW610
 
@@ -992,9 +1000,9 @@ if NXP_WIFI_SMOKE_TESTS
 config NXP_WIFI_SIGMA_AGENT
 	bool "Wi-Fi Alliance Sigma Agent Support"
 	select POSIX_API
-	select PTHREAD_IPC
+	select POSIX_THREADS
 	select PTHREAD_CREATE_BARRIER
-	select TIMER
+	select POSIX_TIMERS
 	help
 	  This option is to enable Wi-Fi Alliance Sigma Agent support in the Wi-Fi driver.
 

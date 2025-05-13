@@ -11,7 +11,6 @@ config POSIX_API
 	select POSIX_NETWORKING if NETWORKING # inet_ntoa(), socket(), etc
 	imply EVENTFD # eventfd(), eventfd_read(), eventfd_write()
 	imply POSIX_FD_MGMT # open(), close(), read(), write()
-	imply POSIX_MESSAGE_PASSING # mq_open(), etc
 	imply POSIX_MULTI_PROCESS # sleep(), getpid(), etc
 	help
 	  This option enables the required POSIX System Interfaces (base definitions), all of PSE51,
@@ -102,8 +101,8 @@ config POSIX_BASE_DEFINITIONS
 	select POSIX_ASYNCHRONOUS_IO
 	select POSIX_BARRIERS
 	select POSIX_CLOCK_SELECTION
-	# select POSIX_MAPPED_FILES
-	# select POSIX_MEMORY_PROTECTION
+	select POSIX_MAPPED_FILES
+	select POSIX_MEMORY_PROTECTION
 	select POSIX_READER_WRITER_LOCKS
 	select POSIX_REALTIME_SIGNALS
 	select POSIX_SEMAPHORES
@@ -128,10 +127,10 @@ config POSIX_AEP_REALTIME_MINIMAL
 	select XSI_THREADS_EXT
 	# Options
 	select POSIX_FSYNC
-	# select POSIX_MEMLOCK
-	# select POSIX_MEMLOCK_RANGE
+	select POSIX_MEMLOCK
+	select POSIX_MEMLOCK_RANGE
 	select POSIX_MONOTONIC_CLOCK
-	# select POSIX_SHARED_MEMORY_OBJECTS
+	select POSIX_SHARED_MEMORY_OBJECTS
 	select POSIX_SYNCHRONIZED_IO
 	select POSIX_THREAD_ATTR_STACKADDR
 	select POSIX_THREAD_ATTR_STACKSIZE

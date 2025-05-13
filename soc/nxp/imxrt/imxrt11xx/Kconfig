@@ -42,7 +42,6 @@ config SOC_SERIES_IMXRT11XX
 	select HAS_MCUX_USB_EHCI
 	select HAS_MCUX_SRC_V2
 	select HAS_MCUX_IOMUXC
-	select HAS_MCUX_XBARA
 	select HAS_SWO
 	select HAS_PM
 
@@ -69,9 +68,5 @@ config BYPASS_LDO_LPSR
 
 config ADJUST_LDO
 	bool "Adjust LDO setting"
-
-config ADJUST_DCDC
-	default y
-	bool "Adjust internal DCDC output"
 
 endif # SOC_SERIES_IMXRT11XX

@@ -71,6 +71,15 @@ set(ZEPHYR_CURRENT_LINKER_PASS 0)
 set(ZEPHYR_CURRENT_LINKER_CMD    linker_zephyr_pre${ZEPHYR_CURRENT_LINKER_PASS}.cmd)
 set(ZEPHYR_LINK_STAGE_EXECUTABLE zephyr_pre${ZEPHYR_CURRENT_LINKER_PASS})
 
+# Make kconfig variables available to the linker script generator
+zephyr_linker_include_generated(KCONFIG ${CMAKE_CURRENT_BINARY_DIR}/.config)
+
+# The linker generator also needs sections.h to be able to access e.g. _APP_SMEM_SECTION_NAME
+# for linkerscripts that do not support c-preprocessing.
+zephyr_linker_include_generated(HEADER ${ZEPHYR_BASE}/include/zephyr/linker/sections.h)
+
+zephyr_linker_include_var(VAR CMAKE_VERBOSE_MAKEFILE VALUE ${CMAKE_VERBOSE_MAKEFILE})
+
 # ZEPHYR_PREBUILT_EXECUTABLE is used outside of this file, therefore keep the
 # existing variable to allow slowly cleanup of linking stage handling.
 # Three stage linking active: pre0 -> pre1 -> final, this will correspond to `pre1`
@@ -174,13 +183,17 @@ endif()
 
 # @Intent: Set compiler flags to detect general stack overflows across all functions
 if(CONFIG_STACK_CANARIES)
-  zephyr_compile_options($<TARGET_PROPERTY:compiler,security_canaries>)
+  zephyr_compile_options("$<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,security_canaries>>")
+  zephyr_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler,security_canaries>>")
 elseif(CONFIG_STACK_CANARIES_STRONG)
-  zephyr_compile_options($<TARGET_PROPERTY:compiler,security_canaries_strong>)
+  zephyr_compile_options("$<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,security_canaries_strong>>")
+  zephyr_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler,security_canaries_strong>>")
 elseif(CONFIG_STACK_CANARIES_ALL)
-  zephyr_compile_options($<TARGET_PROPERTY:compiler,security_canaries_all>)
+  zephyr_compile_options("$<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,security_canaries_all>>")
+  zephyr_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler,security_canaries_all>>")
 elseif(CONFIG_STACK_CANARIES_EXPLICIT)
-  zephyr_compile_options($<TARGET_PROPERTY:compiler,security_canaries_explicit>)
+  zephyr_compile_options("$<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,security_canaries_explicit>>")
+  zephyr_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler,security_canaries_explicit>>")
 endif()
 
 # @Intent: Obtain compiler optimizations flags and store in variables
@@ -227,7 +240,8 @@ SOC_* symbol.")
 endif()
 
 # Apply the final optimization flag(s)
-zephyr_compile_options(${OPTIMIZATION_FLAG})
+zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:${OPTIMIZATION_FLAG}>)
+zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:${OPTIMIZATION_FLAG}>)
 
 if(CONFIG_LTO)
   zephyr_compile_options($<TARGET_PROPERTY:compiler,optimization_lto>)
@@ -315,7 +329,9 @@ if(CONFIG_CODING_GUIDELINE_CHECK)
 endif()
 
 # @Intent: Set compiler specific macro inclusion of AUTOCONF_H
-zephyr_compile_options("SHELL: $<TARGET_PROPERTY:compiler,imacros> ${AUTOCONF_H}")
+zephyr_compile_options("SHELL: $<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,imacros> ${AUTOCONF_H}>")
+zephyr_compile_options("SHELL: $<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler,imacros> ${AUTOCONF_H}>")
+zephyr_compile_options("SHELL: $<$<COMPILE_LANGUAGE:ASM>:$<TARGET_PROPERTY:asm,imacros> ${AUTOCONF_H}>")
 
 if(CONFIG_COMPILER_FREESTANDING)
   # @Intent: Set compiler specific flag for bare metal freestanding option
@@ -360,7 +376,9 @@ zephyr_compile_options($<$<COMPILE_LANGUAGE:ASM>:$<TARGET_PROPERTY:asm,required>
 # @Intent: Enforce standard integer type correspondence to match Zephyr usage.
 # (must be after compiler specific flags)
 if(CONFIG_ENFORCE_ZEPHYR_STDINT)
-  zephyr_compile_options("SHELL: $<TARGET_PROPERTY:compiler,imacros> ${ZEPHYR_BASE}/include/zephyr/toolchain/zephyr_stdint.h")
+  zephyr_compile_options("SHELL:$<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,imacros> ${ZEPHYR_BASE}/include/zephyr/toolchain/zephyr_stdint.h>")
+  zephyr_compile_options("SHELL:$<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler,imacros> ${ZEPHYR_BASE}/include/zephyr/toolchain/zephyr_stdint.h>")
+  zephyr_compile_options("SHELL:$<$<COMPILE_LANGUAGE:ASM>:$<TARGET_PROPERTY:asm,imacros> ${ZEPHYR_BASE}/include/zephyr/toolchain/zephyr_stdint.h>")
 endif()
 
 # Common toolchain-agnostic assembly flags
@@ -926,6 +944,8 @@ add_custom_target(${DEVICE_API_LD_TARGET}
                           ${DEVICE_API_LINKER_SECTIONS_CMAKE}
 )
 
+zephyr_linker_include_generated(CMAKE ${DEVICE_API_LINKER_SECTIONS_CMAKE})
+
 # Add a pseudo-target that is up-to-date when all generated headers
 # are up-to-date.
 
@@ -1109,17 +1129,15 @@ set_ifndef(  TOPT "${COMPILER_TOPT}")
 set_ifndef(  TOPT -Wl,-T) # Use this if the compiler driver doesn't set a value
 
 if(CONFIG_HAVE_CUSTOM_LINKER_SCRIPT)
-  set(LINKER_SCRIPT ${APPLICATION_SOURCE_DIR}/${CONFIG_CUSTOM_LINKER_SCRIPT})
+  string(CONFIGURE ${APPLICATION_SOURCE_DIR}/${CONFIG_CUSTOM_LINKER_SCRIPT} LINKER_SCRIPT)
   if(NOT EXISTS ${LINKER_SCRIPT})
-    set(LINKER_SCRIPT ${CONFIG_CUSTOM_LINKER_SCRIPT})
-    assert_exists(CONFIG_CUSTOM_LINKER_SCRIPT)
+    string(CONFIGURE ${CONFIG_CUSTOM_LINKER_SCRIPT} LINKER_SCRIPT)
+    assert_exists(LINKER_SCRIPT)
   endif()
 elseif(DEFINED BOARD_LINKER_SCRIPT)
   set(LINKER_SCRIPT ${BOARD_LINKER_SCRIPT})
 elseif(DEFINED SOC_LINKER_SCRIPT)
   set(LINKER_SCRIPT ${SOC_LINKER_SCRIPT})
-else()
-  find_package(Deprecated COMPONENTS SEARCHED_LINKER_SCRIPT)
 endif()
 
 if(NOT EXISTS ${LINKER_SCRIPT})
@@ -1127,14 +1145,20 @@ if(NOT EXISTS ${LINKER_SCRIPT})
 endif()
 
 if(CONFIG_USERSPACE)
-  set(APP_SMEM_ALIGNED_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem_aligned.ld")
-  set(APP_SMEM_UNALIGNED_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem_unaligned.ld")
+  if(CONFIG_CMAKE_LINKER_GENERATOR)
+    set(APP_SMEM_LD_EXT "cmake")
+  else()
+    set(APP_SMEM_LD_EXT "ld")
+  endif()
+
+  set(APP_SMEM_ALIGNED_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem_aligned.${APP_SMEM_LD_EXT}")
+  set(APP_SMEM_UNALIGNED_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem_unaligned.${APP_SMEM_LD_EXT}")
 
   if(CONFIG_LINKER_USE_PINNED_SECTION)
     set(APP_SMEM_PINNED_ALIGNED_LD
-        "${PROJECT_BINARY_DIR}/include/generated/app_smem_pinned_aligned.ld")
+        "${PROJECT_BINARY_DIR}/include/generated/app_smem_pinned_aligned.${APP_SMEM_LD_EXT}")
     set(APP_SMEM_PINNED_UNALIGNED_LD
-        "${PROJECT_BINARY_DIR}/include/generated/app_smem_pinned_unaligned.ld")
+        "${PROJECT_BINARY_DIR}/include/generated/app_smem_pinned_unaligned.${APP_SMEM_LD_EXT}")
 
     if(NOT CONFIG_LINKER_GENERIC_SECTIONS_PRESENT_AT_BOOT)
       # The libc partition may hold symbols that are required during boot process,
@@ -1199,9 +1223,11 @@ if(CONFIG_USERSPACE)
 
   set(APP_SMEM_UNALIGNED_LIB app_smem_unaligned_output_obj_renamed_lib)
   list(APPEND LINKER_PASS_${ZEPHYR_CURRENT_LINKER_PASS}_DEFINE "LINKER_APP_SMEM_UNALIGNED")
-endif()
 
-if (CONFIG_USERSPACE)
+  foreach(dep ${APP_SMEM_UNALIGNED_LD} ${APP_SMEM_PINNED_UNALIGNED_LD})
+    zephyr_linker_include_generated(CMAKE ${dep} PASS LINKER_APP_SMEM_UNALIGNED)
+  endforeach()
+
   add_custom_command(
     OUTPUT ${APP_SMEM_ALIGNED_LD} ${APP_SMEM_PINNED_ALIGNED_LD}
     COMMAND ${PYTHON_EXECUTABLE}
@@ -1221,6 +1247,9 @@ if (CONFIG_USERSPACE)
     COMMAND_EXPAND_LISTS
     COMMENT "Generating app_smem_aligned linker section"
     )
+    foreach(dep ${APP_SMEM_ALIGNED_LD} ${APP_SMEM_PINNED_ALIGNED_LD})
+      zephyr_linker_include_generated(CMAKE ${dep} PASS NOT LINKER_APP_SMEM_UNALIGNED)
+    endforeach()
 endif()
 
 if(CONFIG_USERSPACE)
@@ -1328,6 +1357,13 @@ if(CONFIG_USERSPACE)
     DEPENDS
     ${KOBJECT_LINKER_HEADER_DATA}
   )
+
+  # gen_kobject_placeholders.py generates linker-kobject-prebuild-data.h,
+  # linker-kobject-prebuild-priv-stacks.h and linker-kobject-prebuild-rodata.h
+  foreach(ext "-data.h" "-priv-stacks.h" "-rodata.h")
+    string(REGEX REPLACE "-data.h$" ${ext} file ${KOBJECT_LINKER_HEADER_DATA})
+    zephyr_linker_include_generated(HEADER ${file} PASS LINKER_ZEPHYR_PREBUILT LINKER_ZEPHYR_FINAL)
+  endforeach()
 endif()
 
 if(CONFIG_USERSPACE OR CONFIG_DEVICE_DEPS)
@@ -1990,7 +2026,6 @@ if (CONFIG_LLEXT AND CONFIG_LLEXT_EXPORT_BUILTINS_BY_SLID)
     --elf-file ${PROJECT_BINARY_DIR}/${KERNEL_ELF_NAME}
     --slid-listing ${PROJECT_BINARY_DIR}/slid_listing.txt
   )
-
 endif()
 
 if(NOT CMAKE_C_COMPILER_ID STREQUAL "ARMClang")
@@ -2221,51 +2256,57 @@ if((CMAKE_BUILD_TYPE IN_LIST build_types) AND (NOT NO_BUILD_TYPE_WARNING))
 endif()
 
 # Extension Development Kit (EDK) generation.
-set(llext_edk_file ${PROJECT_BINARY_DIR}/${CONFIG_LLEXT_EDK_NAME}.tar.xz)
+if(CONFIG_LLEXT_EDK)
+  if(CONFIG_LLEXT_EDK_FORMAT_TAR_XZ)
+    set(llext_edk_extension "tar.xz")
+  elseif(CONFIG_LLEXT_EDK_FORMAT_TAR_ZSTD)
+    set(llext_edk_extension "tar.Z")
+  elseif(CONFIG_LLEXT_EDK_FORMAT_ZIP)
+    set(llext_edk_extension "zip")
+  else()
+    message(FATAL_ERROR "Unsupported LLEXT_EDK_FORMAT choice")
+  endif()
+  set(llext_edk_file ${PROJECT_BINARY_DIR}/${CONFIG_LLEXT_EDK_NAME}.${llext_edk_extension})
 
-# TODO maybe generate flags for C CXX ASM
-zephyr_get_compile_definitions_for_lang(C zephyr_defs)
-zephyr_get_compile_options_for_lang(C zephyr_flags)
+  # TODO maybe generate flags for C CXX ASM
+  zephyr_get_compile_definitions_for_lang(C zephyr_defs)
+  zephyr_get_compile_options_for_lang(C zephyr_flags)
 
-# Filter out non LLEXT and LLEXT_EDK flags - and add required ones
-llext_filter_zephyr_flags(LLEXT_REMOVE_FLAGS ${zephyr_flags} llext_filt_flags)
-llext_filter_zephyr_flags(LLEXT_EDK_REMOVE_FLAGS ${llext_filt_flags} llext_filt_flags)
+  # Filter out non LLEXT and LLEXT_EDK flags - and add required ones
+  llext_filter_zephyr_flags(LLEXT_REMOVE_FLAGS ${zephyr_flags} llext_filt_flags)
+  llext_filter_zephyr_flags(LLEXT_EDK_REMOVE_FLAGS ${llext_filt_flags} llext_filt_flags)
 
-set(llext_edk_cflags ${zephyr_defs} -DLL_EXTENSION_BUILD)
-list(APPEND llext_edk_cflags ${llext_filt_flags})
-list(APPEND llext_edk_cflags ${LLEXT_APPEND_FLAGS})
-list(APPEND llext_edk_cflags ${LLEXT_EDK_APPEND_FLAGS})
+  set(llext_edk_cflags ${zephyr_defs} -DLL_EXTENSION_BUILD)
+  list(APPEND llext_edk_cflags ${llext_filt_flags})
+  list(APPEND llext_edk_cflags ${LLEXT_APPEND_FLAGS})
+  list(APPEND llext_edk_cflags ${LLEXT_EDK_APPEND_FLAGS})
 
-add_custom_command(
+  build_info(llext-edk file PATH ${llext_edk_file})
+  build_info(llext-edk cflags VALUE ${llext_edk_cflags})
+  build_info(llext-edk include-dirs VALUE "$<TARGET_PROPERTY:zephyr_interface,INTERFACE_INCLUDE_DIRECTORIES>")
+
+  add_custom_command(
     OUTPUT ${llext_edk_file}
     # Regenerate syscalls in case CONFIG_LLEXT_EDK_USERSPACE_ONLY
     COMMAND ${CMAKE_COMMAND}
-        -E make_directory edk/include/generated/zephyr
+      -E make_directory edk/include/generated/zephyr
     COMMAND
-        ${PYTHON_EXECUTABLE}
-        ${ZEPHYR_BASE}/scripts/build/gen_syscalls.py
-        --json-file        ${syscalls_json}                     # Read this file
-        --base-output      edk/include/generated/zephyr/syscalls           # Write to this dir
-        --syscall-dispatch edk/include/generated/zephyr/syscall_dispatch.c # Write this file
-        --syscall-list     ${edk_syscall_list_h}
-        $<$<BOOL:${CONFIG_LLEXT_EDK_USERSPACE_ONLY}>:--userspace-only>
-        ${SYSCALL_LONG_REGISTERS_ARG}
-        ${SYSCALL_SPLIT_TIMEOUT_ARG}
+      ${PYTHON_EXECUTABLE}
+      ${ZEPHYR_BASE}/scripts/build/gen_syscalls.py
+      --json-file        ${syscalls_json}                     # Read this file
+      --base-output      edk/include/generated/zephyr/syscalls           # Write to this dir
+      --syscall-dispatch edk/include/generated/zephyr/syscall_dispatch.c # Write this file
+      --syscall-list     ${edk_syscall_list_h}
+      $<$<BOOL:${CONFIG_LLEXT_EDK_USERSPACE_ONLY}>:--userspace-only>
+      ${SYSCALL_LONG_REGISTERS_ARG}
+      ${SYSCALL_SPLIT_TIMEOUT_ARG}
     COMMAND ${CMAKE_COMMAND}
-        -DPROJECT_BINARY_DIR=${PROJECT_BINARY_DIR}
-        -DAPPLICATION_SOURCE_DIR=${APPLICATION_SOURCE_DIR}
-        -DINTERFACE_INCLUDE_DIRECTORIES="$<TARGET_PROPERTY:zephyr_interface,INTERFACE_INCLUDE_DIRECTORIES>"
-        -Dllext_edk_file=${llext_edk_file}
-        -Dllext_edk_cflags="${llext_edk_cflags}"
-        -Dllext_edk_name=${CONFIG_LLEXT_EDK_NAME}
-        -DWEST_TOPDIR=${WEST_TOPDIR}
-        -DZEPHYR_BASE=${ZEPHYR_BASE}
-        -DCONFIG_LLEXT_EDK_USERSPACE_ONLY=${CONFIG_LLEXT_EDK_USERSPACE_ONLY}
         -P ${ZEPHYR_BASE}/cmake/llext-edk.cmake
-    DEPENDS ${logical_target_for_zephyr_elf}
+    DEPENDS ${logical_target_for_zephyr_elf} build_info_yaml_saved
     COMMAND_EXPAND_LISTS
-)
-add_custom_target(llext-edk DEPENDS ${llext_edk_file})
+  )
+  add_custom_target(llext-edk DEPENDS ${llext_edk_file})
+endif()
 
 # @Intent: Set compiler specific flags for standard C/C++ includes
 # Done at the very end, so any other system includes which may
@@ -2286,9 +2327,8 @@ add_subdirectory_ifdef(
 
 toolchain_linker_finalize()
 
-yaml_context(EXISTS NAME build_info result)
-if(result)
-  build_info(zephyr version VALUE ${PROJECT_VERSION_STR})
-  build_info(zephyr zephyr-base VALUE ${ZEPHYR_BASE})
-  yaml_save(NAME build_info)
-endif()
+# export build information
+build_info(zephyr version VALUE ${PROJECT_VERSION_STR})
+build_info(zephyr zephyr-base VALUE ${ZEPHYR_BASE})
+
+yaml_save(NAME build_info)

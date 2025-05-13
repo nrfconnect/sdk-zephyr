@@ -16,6 +16,15 @@
 set(adafruit_feather_DEPRECATED
     adafruit_feather_nrf52840/nrf52840
 )
+set(arduino_uno_r4_minima_DEPRECATED
+    arduino_uno_r4@minima
+)
+set(arduino_uno_r4_wifi_DEPRECATED
+    arduino_uno_r4@wifi
+)
+set(esp32c6_devkitc_DEPRECATED
+    esp32c6_devkitc/esp32c6/hpcore
+)
 set(qemu_xtensa_DEPRECATED
     qemu_xtensa/dc233c
 )
@@ -36,4 +45,10 @@ set(mimxrt1060_evk_DEPRECATED
 )
 set(mimxrt1060_evkb_DEPRECATED
     mimxrt1060_evk@B/mimxrt1062/qspi
+)
+set(neorv32_DEPRECATED
+    neorv32/neorv32/up5kdemo
+)
+set(xiao_esp32c6_DEPRECATED
+    xiao_esp32c6/esp32c6/hpcore
 )

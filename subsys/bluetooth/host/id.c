@@ -1,40 +1,47 @@
 /*
- * Copyright (c) 2017-2024 Nordic Semiconductor ASA
+ * Copyright (c) 2017-2025 Nordic Semiconductor ASA
  * Copyright (c) 2015-2016 Intel Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <errno.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
-#include <zephyr/bluetooth/hci_types.h>
-#include <zephyr/settings/settings.h>
-#include <zephyr/sys/byteorder.h>
-#include <zephyr/sys/check.h>
-
+#include <zephyr/autoconf.h>
 #include <zephyr/bluetooth/addr.h>
 #include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci_vs.h>
 #include <zephyr/bluetooth/buf.h>
-#include <zephyr/sys/__assert.h>
-
-#include "hci_core.h"
-#include "id.h"
-#include "scan.h"
-#include "adv.h"
-#include "smp.h"
-#include "conn_internal.h"
-#include "keys.h"
-#include "common/rpa.h"
-
-#include "settings.h"
-
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/crypto.h>
 #include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/hci_types.h>
+#include <zephyr/bluetooth/hci_vs.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/settings/settings.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/check.h>
+#include <zephyr/sys/time_units.h>
+#include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
+#include <zephyr/sys/__assert.h>
 #include <zephyr/toolchain.h>
 
+#include "adv.h"
 #include "common/bt_str.h"
+#include "common/rpa.h"
+#include "conn_internal.h"
+#include "hci_core.h"
+#include "id.h"
+#include "keys.h"
+#include "scan.h"
+#include "settings.h"
+#include "smp.h"
 
 #define LOG_LEVEL CONFIG_BT_HCI_CORE_LOG_LEVEL
 #include <zephyr/logging/log.h>
@@ -265,7 +272,7 @@ static void adv_rpa_clear_data(struct bt_le_ext_adv *adv, void *data)
 		atomic_clear_bit(adv->flags, BT_ADV_RPA_VALID);
 		bt_addr_copy(&bt_dev.rpa[adv->id], BT_ADDR_NONE);
 	} else {
-		LOG_WRN("Adv sets rpa expired cb with id %d returns false\n", adv->id);
+		LOG_WRN("Adv sets rpa expired cb with id %d returns false", adv->id);
 	}
 }
 #endif
@@ -284,6 +291,9 @@ static void le_rpa_invalidate(void)
 			return;
 		}
 		bool rpa_expired_data[bt_dev.id_count];
+		for (uint8_t i = 0; i < bt_dev.id_count; i++) {
+			rpa_expired_data[i] = true;
+		}
 
 		bt_le_ext_adv_foreach(adv_rpa_invalidate, &rpa_expired_data);
 #if defined(CONFIG_BT_RPA_SHARING)
@@ -916,7 +926,7 @@ static void pending_id_update(struct bt_keys *keys, void *data)
 	}
 }
 
-static void bt_id_pending_keys_update_set(struct bt_keys *keys, uint8_t flag)
+void bt_id_pending_keys_update_set(struct bt_keys *keys, uint8_t flag)
 {
 	atomic_set_bit(bt_dev.flags, BT_DEV_ID_PENDING);
 	keys->state |= flag;
@@ -2133,7 +2143,12 @@ int bt_le_ext_adv_oob_get_local(struct bt_le_ext_adv *adv,
 #if !defined(CONFIG_BT_SMP_SC_PAIR_ONLY)
 int bt_le_oob_set_legacy_tk(struct bt_conn *conn, const uint8_t *tk)
 {
-	CHECKIF(conn == NULL || tk == NULL) {
+	if (!bt_conn_is_type(conn, BT_CONN_TYPE_LE)) {
+		LOG_DBG("Invalid connection type: %u for %p", conn->type, conn);
+		return -EINVAL;
+	}
+
+	CHECKIF(tk == NULL) {
 		return -EINVAL;
 	}
 
@@ -2146,7 +2161,8 @@ int bt_le_oob_set_sc_data(struct bt_conn *conn,
 			  const struct bt_le_oob_sc_data *oobd_local,
 			  const struct bt_le_oob_sc_data *oobd_remote)
 {
-	CHECKIF(conn == NULL) {
+	if (!bt_conn_is_type(conn, BT_CONN_TYPE_LE)) {
+		LOG_DBG("Invalid connection type: %u for %p", conn->type, conn);
 		return -EINVAL;
 	}
 
@@ -2161,7 +2177,9 @@ int bt_le_oob_get_sc_data(struct bt_conn *conn,
 			  const struct bt_le_oob_sc_data **oobd_local,
 			  const struct bt_le_oob_sc_data **oobd_remote)
 {
-	CHECKIF(conn == NULL) {
+	if (!bt_conn_is_type(conn, BT_CONN_TYPE_LE)) {
+		LOG_ERR("Invalid connection: %p", conn);
+		LOG_ERR("Invalid connection type: %u for %p", conn->handle, conn);
 		return -EINVAL;
 	}
 

@@ -10,7 +10,7 @@
 	leds {
 		compatible = "gpio-leds";
 		led0: led_0 {
-			gpios = <&gpio1 7 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
 			label = "Green LED 1";
 		};
 		led1: led_1 {
@@ -59,4 +59,16 @@
 	pinctrl-0 = <&uart20_default>;
 	pinctrl-1 = <&uart20_sleep>;
 	pinctrl-names = "default", "sleep";
+};
+
+&uart30 {
+	current-speed = <115200>;
+	pinctrl-0 = <&uart30_default>;
+	pinctrl-1 = <&uart30_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+
+&hfpll {
+	/* For now use 64 MHz clock for CPU and fast peripherals. */
+	clock-frequency = <DT_FREQ_M(64)>;
 };

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Renesas Electronics Corporation
+ * Copyright (c) 2024-2025 Renesas Electronics Corporation
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -47,6 +47,7 @@
 	aliases {
 		led0 = &led1;
 		sdhc0 = &sdhc0;
+		watchdog0 = &wdt;
 	};
 };
 
@@ -68,6 +69,8 @@
 	};
 
 	pllq {
+		div = <4>;
+		freq = <DT_FREQ_M(240)>;
 		status = "okay";
 	};
 
@@ -83,7 +86,13 @@
 };
 
 &canfdclk {
-	clocks = <&pll>;
+	clocks = <&pllp>;
+	div = <6>;
+	status = "okay";
+};
+
+&uclk {
+	clocks = <&pllq>;
 	div = <5>;
 	status = "okay";
 };
@@ -107,6 +116,17 @@
 	uart3: uart {
 		current-speed = <115200>;
 		status = "okay";
+	};
+};
+
+&sci9 {
+	pinctrl-0 = <&sci9_default>;
+	pinctrl-names = "default";
+
+	i2c9: i2c {
+		sda-output-delay = <300>;
+		noise-filter-clock-select = <1>;
+		bit-rate-modulation;
 	};
 };
 
@@ -184,6 +204,12 @@
 	average-count = <4>;
 };
 
+&dac0 {
+	pinctrl-0 = <&dac0_default>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
 &sdhc0 {
 	compatible = "renesas,ra-sdhc";
 	pinctrl-0 = <&sdhc0_default>;
@@ -193,6 +219,36 @@
 	sdmmc {
 		compatible = "zephyr,sdmmc-disk";
 		disk-name = "SD";
+		status = "okay";
+	};
+};
+
+&usbfs {
+	pinctrl-0 = <&usbfs_default>;
+	pinctrl-names = "default";
+	maximum-speed = "full-speed";
+	status = "okay";
+	zephyr_udc0: udc {
+		status = "okay";
+	};
+};
+
+&wdt {
+	status = "okay";
+};
+
+&ulpt0 {
+	status = "okay";
+
+	timer {
+		status = "okay";
+	};
+};
+
+&ulpt1 {
+	status = "okay";
+
+	timer {
 		status = "okay";
 	};
 };

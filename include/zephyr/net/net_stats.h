@@ -328,6 +328,8 @@ struct net_stats_tc {
 #endif
 		/** Number of packets sent for this traffic class */
 		net_stats_t pkts;
+		/** Number of packets dropped for this traffic class */
+		net_stats_t dropped;
 		/** Number of bytes sent for this traffic class */
 		net_stats_t bytes;
 		/** Priority of this traffic class */
@@ -345,6 +347,8 @@ struct net_stats_tc {
 #endif
 		/** Number of packets received for this traffic class */
 		net_stats_t pkts;
+		/** Number of packets dropped for this traffic class */
+		net_stats_t dropped;
 		/** Number of bytes received for this traffic class */
 		net_stats_t bytes;
 		/** Priority of this traffic class */
@@ -367,6 +371,34 @@ struct net_stats_pm {
 	uint32_t start_time;
 };
 
+/**
+ * @brief Network packet filter statistics
+ */
+struct net_stats_pkt_filter {
+	/** Network packet filter RX statistics */
+	struct {
+		/** Network packets dropped at network interface level */
+		net_stats_t drop;
+#if defined(CONFIG_NET_PKT_FILTER_IPV4_HOOK)
+		/** IPv4 packets dropped at network interface level */
+		net_stats_t ipv4_drop;
+#endif
+#if defined(CONFIG_NET_PKT_FILTER_IPV6_HOOK)
+		/** IPv6 packets dropped at network interface level */
+		net_stats_t ipv6_drop;
+#endif
+#if defined(CONFIG_NET_PKT_FILTER_LOCAL_IN_HOOK)
+		/** Packets dropped at connection input */
+		net_stats_t local_drop;
+#endif
+	} rx;
+
+	/** Network packet filter TX statistics */
+	struct {
+		/** Network packets dropped at network interface level */
+		net_stats_t drop;
+	} tx;
+};
 
 /**
  * @brief All network statistics in one struct.
@@ -383,6 +415,10 @@ struct net_stats {
 
 	/** IP layer errors */
 	struct net_stats_ip_errors ip_errors;
+
+#if defined(CONFIG_NET_STATISTICS_PKT_FILTER)
+	struct net_stats_pkt_filter pkt_filter;
+#endif
 
 #if defined(CONFIG_NET_STATISTICS_IPV6)
 	/** IPv6 statistics */
@@ -705,6 +741,7 @@ struct net_stats_wifi {
 enum net_request_stats_cmd {
 	NET_REQUEST_STATS_CMD_GET_ALL = 1,
 	NET_REQUEST_STATS_CMD_GET_PROCESSING_ERROR,
+	NET_REQUEST_STATS_CMD_GET_PKT_FILTER_DROP,
 	NET_REQUEST_STATS_CMD_GET_BYTES,
 	NET_REQUEST_STATS_CMD_GET_IP_ERRORS,
 	NET_REQUEST_STATS_CMD_GET_IPV4,
@@ -720,6 +757,7 @@ enum net_request_stats_cmd {
 	NET_REQUEST_STATS_CMD_GET_PM,
 	NET_REQUEST_STATS_CMD_GET_WIFI,
 	NET_REQUEST_STATS_CMD_RESET_WIFI,
+	NET_REQUEST_STATS_CMD_GET_VPN,
 };
 
 /** @endcond */
@@ -731,6 +769,10 @@ enum net_request_stats_cmd {
 /** Request all processing error statistics */
 #define NET_REQUEST_STATS_GET_PROCESSING_ERROR				\
 	(_NET_STATS_BASE | NET_REQUEST_STATS_CMD_GET_PROCESSING_ERROR)
+
+/** Request all pkt_filter drop statistics */
+#define NET_REQUEST_STATS_GET_PKT_FILTER_DROP			\
+	(_NET_STATS_BASE | NET_REQUEST_STATS_CMD_GET_PKT_FILTER_DROP)
 
 /** Request number of received and sent bytes */
 #define NET_REQUEST_STATS_GET_BYTES				\
@@ -746,6 +788,10 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_GET_ALL);
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_GET_PROCESSING_ERROR);
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_GET_BYTES);
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_GET_IP_ERRORS);
+
+#if defined(CONFIG_NET_STATISTICS_PKT_FILTER)
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_GET_PKT_FILTER_DROP);
+#endif /* CONFIG_NET_STATISTICS_PKT_FILTER */
 
 /** @endcond */
 
@@ -848,6 +894,16 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_GET_ETHERNET);
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_GET_PPP);
 /** @endcond */
 #endif /* CONFIG_NET_STATISTICS_PPP */
+
+#if defined(CONFIG_NET_STATISTICS_VPN)
+/** Request VPN statistics */
+#define NET_REQUEST_STATS_GET_VPN				\
+	(_NET_STATS_BASE | NET_REQUEST_STATS_CMD_GET_VPN)
+
+/** @cond INTERNAL_HIDDEN */
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_GET_VPN);
+/** @endcond */
+#endif /* CONFIG_NET_STATISTICS_VPN */
 
 #endif /* CONFIG_NET_STATISTICS_USER_API */
 
@@ -1358,6 +1414,55 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_RESET_WIFI);
 #define NET_STATS_PROMETHEUS_RX_TIME(iface, dev_id, sfx)
 #endif
 
+#define NET_STATS_PROMETHEUS_PKT_FILTER_IPV4(iface, dev_id, sfx)	\
+	NET_STATS_PROMETHEUS_COUNTER_DEFINE(				\
+		"Packet filter RX IPv4 drop",				\
+		NET_STATS_GET_INSTANCE(dev_id, sfx, pkt_filter_rx_ipv4_drop), \
+		"packet_count",						\
+		NET_STATS_GET_COLLECTOR_NAME(dev_id, sfx),		\
+		NET_STATS_GET_VAR(dev_id, sfx, pkt_filter_rx_ipv4_drop),\
+		&(iface)->stats.pkt_filter.rx.ipv4_drop);
+
+#define NET_STATS_PROMETHEUS_PKT_FILTER_IPV6(iface, dev_id, sfx)	\
+	NET_STATS_PROMETHEUS_COUNTER_DEFINE(				\
+		"Packet filter RX IPv6 drop",				\
+		NET_STATS_GET_INSTANCE(dev_id, sfx, pkt_filter_rx_ipv6_drop), \
+		"packet_count",						\
+		NET_STATS_GET_COLLECTOR_NAME(dev_id, sfx),		\
+		NET_STATS_GET_VAR(dev_id, sfx, pkt_filter_rx_ipv6_drop),\
+		&(iface)->stats.pkt_filter.rx.ipv6_drop);
+
+#define NET_STATS_PROMETHEUS_PKT_FILTER_LOCAL(iface, dev_id, sfx)	\
+	NET_STATS_PROMETHEUS_COUNTER_DEFINE(				\
+		"Packet filter RX local drop",				\
+		NET_STATS_GET_INSTANCE(dev_id, sfx, pkt_filter_rx_local_drop), \
+		"packet_count",						\
+		NET_STATS_GET_COLLECTOR_NAME(dev_id, sfx),		\
+		NET_STATS_GET_VAR(dev_id, sfx, pkt_filter_rx_local_drop),\
+		&(iface)->stats.pkt_filter.rx.local_drop);
+
+#define NET_STATS_PROMETHEUS_PKT_FILTER(iface, dev_id, sfx)		\
+	NET_STATS_PROMETHEUS_COUNTER_DEFINE(				\
+		"Packet filter RX drop",				\
+		NET_STATS_GET_INSTANCE(dev_id, sfx, pkt_filter_rx_drop),\
+		"packet_count",						\
+		NET_STATS_GET_COLLECTOR_NAME(dev_id, sfx),		\
+		NET_STATS_GET_VAR(dev_id, sfx, pkt_filter_rx_drop),	\
+		&(iface)->stats.pkt_filter.rx.drop);			\
+	NET_STATS_PROMETHEUS_COUNTER_DEFINE(				\
+		"Packet filter TX drop",				\
+		NET_STATS_GET_INSTANCE(dev_id, sfx, pkt_filter_tx_drop),\
+		"packet_count",						\
+		NET_STATS_GET_COLLECTOR_NAME(dev_id, sfx),		\
+		NET_STATS_GET_VAR(dev_id, sfx, pkt_filter_tx_drop),	\
+		&(iface)->stats.pkt_filter.tx.drop);			\
+	IF_ENABLED(CONFIG_NET_PKT_FILTER_IPV4_HOOK,			\
+		   (NET_STATS_PROMETHEUS_PKT_FILTER_IPV4(iface, dev_id, sfx))) \
+	IF_ENABLED(CONFIG_NET_PKT_FILTER_IPV6_HOOK,			\
+		   (NET_STATS_PROMETHEUS_PKT_FILTER_IPV6(iface, dev_id, sfx))) \
+	IF_ENABLED(CONFIG_NET_PKT_FILTER_LOCAL_IN_HOOK,			\
+		   (NET_STATS_PROMETHEUS_PKT_FILTER_LOCAL(iface, dev_id, sfx)))
+
 /* Per network interface statistics via Prometheus */
 #define NET_STATS_PROMETHEUS(iface, dev_id, sfx)			\
 	NET_STATS_PROMETHEUS_COUNTER_DEFINE(				\
@@ -1367,6 +1472,8 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_RESET_WIFI);
 		NET_STATS_GET_COLLECTOR_NAME(dev_id, sfx),		\
 		NET_STATS_GET_VAR(dev_id, sfx, processing_error),	\
 		&(iface)->stats.processing_error);			\
+	IF_ENABLED(CONFIG_NET_STATISTICS_PKT_FILTER,			\
+		   (NET_STATS_PROMETHEUS_PKT_FILTER(iface, dev_id, sfx))) \
 	/* IP layer error statistics */					\
 	NET_STATS_PROMETHEUS_COUNTER_DEFINE(				\
 		"IP proto error",					\
