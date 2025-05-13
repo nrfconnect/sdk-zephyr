@@ -1050,14 +1050,14 @@ static int udc_rpi_pico_driver_preinit(const struct device *dev)
 	return 0;
 }
 
-static void udc_rpi_pico_lock(const struct device *dev)
+static int udc_rpi_pico_lock(const struct device *dev)
 {
-	udc_lock_internal(dev, K_FOREVER);
+	return udc_lock_internal(dev, K_FOREVER);
 }
 
-static void udc_rpi_pico_unlock(const struct device *dev)
+static int udc_rpi_pico_unlock(const struct device *dev)
 {
-	udc_unlock_internal(dev);
+	return udc_unlock_internal(dev);
 }
 
 static const struct udc_api udc_rpi_pico_api = {
