@@ -402,7 +402,7 @@ void app_mqtt_run(struct mqtt_client *client)
 		}
 	}
 	/* Gracefully close connection */
-	mqtt_disconnect(client, NULL);
+	mqtt_disconnect(client);
 }
 
 void app_mqtt_connect(struct mqtt_client *client)
