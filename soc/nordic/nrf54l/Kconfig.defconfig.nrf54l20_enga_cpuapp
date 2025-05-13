@@ -6,6 +6,6 @@
 if SOC_NRF54L20_ENGA_CPUAPP
 
 config NUM_IRQS
-	default 290
+	default 274
 
 endif # SOC_NRF54L20_ENGA_CPUAPP
