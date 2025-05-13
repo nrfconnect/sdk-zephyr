@@ -302,6 +302,19 @@
   - "subsys/net/l2/wifi/**/*"
   - "subsys/net/l2/ethernet/**/*"
 
+"CI-sidewalk-test":
+  - "include/dfu/**/*"
+  - "include/mgmt/mcumgr/**/*"
+  - "soc/nordic/**/*"
+  - "subsys/dfu/**/*"
+  - "subsys/settings/**/*"
+  - "subsys/mgmt/mcumgr/**/*"
+  - "samples/bluetooth/hci_ipc/**/*"
+  - any:
+      - "subsys/bluetooth/**/*"
+      - "!subsys/bluetooth/mesh/**/*"
+      - "!subsys/bluetooth/audio/**/*"
+
 "CI-audio-test":
   - "boards/nordic/nrf5340_audio_dk/**/*"
   - "drivers/flash/**/*"
