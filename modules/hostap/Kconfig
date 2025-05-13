@@ -85,7 +85,7 @@ endif # WIFI_NM_WPA_SUPPLICANT_LOG_LEVEL_DBG
 # Memory optimizations
 config WIFI_NM_WPA_SUPPLICANT_ADVANCED_FEATURES
 	bool "Advanced features"
-	default y if !SOC_FAMILY_NORDIC_NRF
+	default y
 
 if WIFI_NM_WPA_SUPPLICANT_ADVANCED_FEATURES
 
