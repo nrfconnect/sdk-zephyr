@@ -20,17 +20,15 @@
 #include "settings.h"
 
 #include "argparse.h"
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
-#include "babblekit/sync.h"
+#include "bs_pc_backchannel.h"
 
 #define CLIENT_CHAN 0
 
-static DEFINE_FLAG(connected_flag);
-static DEFINE_FLAG(disconnected_flag);
-static DEFINE_FLAG(security_updated_flag);
+CREATE_FLAG(connected_flag);
+CREATE_FLAG(disconnected_flag);
+CREATE_FLAG(security_updated_flag);
 
-static DEFINE_FLAG(ccc_cfg_changed_flag);
+CREATE_FLAG(ccc_cfg_changed_flag);
 
 static const struct bt_uuid_128 dummy_service = BT_UUID_INIT_128(DUMMY_SERVICE_TYPE);
 
@@ -63,7 +61,7 @@ static void create_adv(struct bt_le_ext_adv **adv)
 
 	err = bt_le_ext_adv_create(BT_LE_ADV_CONN_FAST_1, NULL, adv);
 	if (err) {
-		TEST_FAIL("Failed to create advertiser (%d)", err);
+		FAIL("Failed to create advertiser (%d)\n", err);
 	}
 }
 
@@ -80,7 +78,7 @@ static void start_adv(struct bt_le_ext_adv *adv)
 
 	err = bt_le_ext_adv_start(adv, &start_params);
 	if (err) {
-		TEST_FAIL("Failed to start advertiser (err %d)", err);
+		FAIL("Failed to start advertiser (err %d)\n", err);
 	}
 
 	LOG_DBG("Advertiser started");
@@ -92,7 +90,7 @@ static void stop_adv(struct bt_le_ext_adv *adv)
 
 	err = bt_le_ext_adv_stop(adv);
 	if (err) {
-		TEST_FAIL("Failed to stop advertiser (err %d)", err);
+		FAIL("Failed to stop advertiser (err %d)\n", err);
 	}
 }
 
@@ -103,7 +101,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr_str, sizeof(addr_str));
 
 	if (err) {
-		TEST_FAIL("Failed to connect to %s (err %d)", addr_str, err);
+		FAIL("Failed to connect to %s (err %d)\n", addr_str, err);
 	}
 
 	LOG_DBG("Connected: %s", addr_str);
@@ -162,7 +160,7 @@ static void send_value_notification(void)
 
 	err = bt_gatt_notify(default_conn, attr, &value, sizeof(value));
 	if (err != 0) {
-		TEST_FAIL("Failed to send notification (err %d)", err);
+		FAIL("Failed to send notification (err %d)\n", err);
 	}
 
 	value++;
@@ -178,17 +176,17 @@ static void connect_pair_check_subscribtion(struct bt_le_ext_adv *adv)
 	UNSET_FLAG(security_updated_flag);
 
 	/* wait for confirmation of subscribtion from good client */
-	bk_sync_wait();
+	backchannel_sync_wait(CLIENT_CHAN, CLIENT_ID);
 
 	/* check that subscribtion request did not fail */
 	if (!is_peer_subscribed(default_conn)) {
-		TEST_FAIL("Client did not subscribed");
+		FAIL("Client did not subscribed\n");
 	}
 
 	stop_adv(adv);
 
 	/* confirm to client that the subscribtion has been well registered */
-	bk_sync_send();
+	backchannel_sync_send(CLIENT_CHAN, CLIENT_ID);
 
 	send_value_notification();
 }
@@ -203,22 +201,41 @@ static void connect_restore_sec_check_subscribtion(struct bt_le_ext_adv *adv)
 	UNSET_FLAG(security_updated_flag);
 
 	/* wait for client end of security update */
-	bk_sync_wait();
+	backchannel_sync_wait(CLIENT_CHAN, CLIENT_ID);
 
 	/* check that subscribtion has been restored */
 	if (!is_peer_subscribed(default_conn)) {
-		TEST_FAIL("Client is not subscribed");
+		FAIL("Client is not subscribed\n");
 	} else {
 		LOG_DBG("Client is subscribed");
 	}
 
 	/* confirm to good client that the subscribtion has been well restored */
-	bk_sync_send();
+	backchannel_sync_send(CLIENT_CHAN, CLIENT_ID);
 
 	send_value_notification();
 }
 
 /* Util functions */
+
+void peripheral_backchannel_init(void)
+{
+	uint device_number = get_device_nbr();
+	uint channel_numbers[1] = {
+		0,
+	};
+	uint device_numbers[1] = {
+		CLIENT_ID,
+	};
+	uint num_ch = 1;
+	uint *ch;
+
+	LOG_DBG("Opening back channels for device %d", device_number);
+	ch = bs_open_back_channel(device_number, device_numbers, channel_numbers, num_ch);
+	if (!ch) {
+		FAIL("Unable to open backchannel\n");
+	}
+}
 
 static void check_ccc_handle(void)
 {
@@ -252,11 +269,11 @@ void run_peripheral(int times)
 	peripheral_cb.disconnected = disconnected;
 	peripheral_cb.security_changed = security_changed;
 
-	TEST_ASSERT(bk_sync_init() == 0);
+	peripheral_backchannel_init();
 
 	err = bt_enable(NULL);
 	if (err) {
-		TEST_FAIL("Bluetooth init failed (err %d)", err);
+		FAIL("Bluetooth init failed (err %d)\n", err);
 	}
 
 	LOG_DBG("Bluetooth initialized");
@@ -267,12 +284,12 @@ void run_peripheral(int times)
 
 	err = settings_load();
 	if (err) {
-		TEST_FAIL("Settings load failed (err %d)", err);
+		FAIL("Settings load failed (err %d)\n", err);
 	}
 
 	err = bt_unpair(BT_ID_DEFAULT, BT_ADDR_LE_ANY);
 	if (err) {
-		TEST_FAIL("Unpairing failed (err %d)", err);
+		FAIL("Unpairing failed (err %d)\n", err);
 	}
 
 	create_adv(&adv);
@@ -285,5 +302,5 @@ void run_peripheral(int times)
 		WAIT_FOR_FLAG(disconnected_flag);
 	}
 
-	TEST_PASS("Peripheral test passed");
+	PASS("Peripheral test passed\n");
 }
