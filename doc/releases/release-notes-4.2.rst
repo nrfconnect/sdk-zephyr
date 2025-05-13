@@ -69,8 +69,6 @@ New APIs and options
 
     * :c:func:`bt_le_get_local_features`
 
-    * LE Connection Subrating is no longer experimental.
-
 New Boards
 **********
 
