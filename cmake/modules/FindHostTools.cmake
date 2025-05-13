@@ -61,10 +61,9 @@ find_program(OPENOCD openocd)
 # bossac is an optional dependency
 find_program(BOSSAC bossac)
 
-# imgtool is an optional dependency (prefer the version that is in the mcuboot repository, if
-# present and a user has not specified a different version)
-zephyr_get(IMGTOOL SYSBUILD LOCAL)
-find_program(IMGTOOL imgtool.py HINTS ${ZEPHYR_MCUBOOT_MODULE_DIR}/scripts/ NAMES imgtool NAMES_PER_DIR)
+# imgtool is an optional dependency (the build may also fall back to scripts/imgtool.py
+# in the mcuboot repository if that's present in some cases)
+find_program(IMGTOOL imgtool)
 
 # winpty is an optional dependency
 find_program(PTY_INTERFACE winpty)
