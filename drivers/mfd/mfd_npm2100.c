@@ -55,11 +55,9 @@
 
 #define EVENTS_SIZE 5U
 
-#define GPIO_USAGE_INTLO      0x01U
-#define GPIO_USAGE_INTHI      0x02U
-#define GPIO_CONFIG_OUTPUT    0x02U
-#define GPIO_CONFIG_OPENDRAIN 0x04U
-#define GPIO_CONFIG_PULLUP    0x10U
+#define GPIO_USAGE_INTLO   0x01U
+#define GPIO_USAGE_INTHI   0x02U
+#define GPIO_CONFIG_OUTPUT 0x02U
 
 #define RESET_STICKY_PWRBUT 0x04U
 
@@ -173,16 +171,9 @@ static int config_pmic_int(const struct device *dev)
 {
 	const struct mfd_npm2100_config *config = dev->config;
 	uint8_t usage = GPIO_USAGE_INTHI;
-	uint8_t gpio_config = GPIO_CONFIG_OUTPUT;
 
 	if (config->pmic_int_flags & GPIO_ACTIVE_LOW) {
 		usage = GPIO_USAGE_INTLO;
-	}
-	if ((config->pmic_int_flags & GPIO_SINGLE_ENDED) != 0U) {
-		gpio_config |= GPIO_CONFIG_OPENDRAIN;
-	}
-	if (config->pmic_int_flags & GPIO_PULL_UP) {
-		gpio_config |= GPIO_CONFIG_PULLUP;
 	}
 
 	/* Set specified PMIC pin to be interrupt output */
@@ -193,7 +184,8 @@ static int config_pmic_int(const struct device *dev)
 	}
 
 	/* Configure PMIC output pin */
-	return i2c_reg_write_byte_dt(&config->i2c, GPIO_CONFIG + config->pmic_int_pin, gpio_config);
+	return i2c_reg_write_byte_dt(&config->i2c, GPIO_CONFIG + config->pmic_int_pin,
+				     GPIO_CONFIG_OUTPUT);
 }
 
 static int config_shphold(const struct device *dev)
