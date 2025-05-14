@@ -204,19 +204,21 @@ endfunction()
 # BOARD <board>:             Use <board> for application build instead user defined BOARD.
 # BOARD_REVISION <revision>: Use <revision> of <board> for application (only valid if
 #                            <board> is also supplied).
-# APP_TYPE <MAIN|BOOTLOADER>: Application type.
+# APP_TYPE <MAIN|BOOTLOADER|UPDATEABLE>: Application type.
 #                             MAIN indicates this application is the main application
 #                             and where user defined settings should be passed on as-is
 #                             except for multi image build flags.
 #                             For example, -DCONF_FILES=<files> will be passed on to the
 #                             MAIN_APP unmodified.
 #                             BOOTLOADER indicates this app is a bootloader
+#                             UPDATEABLE indicates this app is updateable and the bootloader
+#                             settings should be passed on.
 # BUILD_ONLY <bool>:          Mark the application as build-only. If <bool> evaluates to
 #                             true, then this application will be excluded from flashing
 #                             and debugging.
 #
 function(ExternalZephyrProject_Add)
-  set(app_types MAIN BOOTLOADER FIRMWARE_LOADER)
+  set(app_types MAIN BOOTLOADER FIRMWARE_LOADER UPDATEABLE)
   cmake_parse_arguments(ZBUILD "" "APPLICATION;BOARD;BOARD_REVISION;SOURCE_DIR;APP_TYPE;BUILD_ONLY" "" ${ARGN})
 
   if(ZBUILD_UNPARSED_ARGUMENTS)
