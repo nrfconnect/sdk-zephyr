@@ -30,6 +30,8 @@ jobs:
       - name: Install Python packages
         run: |
           cd zephyrproject/zephyr
+          echo "here cwd"
+          pwd
           pip install -r scripts/requirements-actions.txt --require-hashes
 
       - name: west setup
