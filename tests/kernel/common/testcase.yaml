@@ -6,6 +6,7 @@ common:
   min_flash: 32
   min_ram: 32
   timeout: 120
+
 tests:
   kernel.common:
     platform_exclude:
