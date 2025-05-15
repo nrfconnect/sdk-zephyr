@@ -197,8 +197,8 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 
-		cpuapp_slot0_partition: partition@442000 {
-			reg = <0x442000 DT_SIZE_K(1024)>;
+		cpuapp_slot0_partition: partition@33000 {
+			reg = <0x33000 DT_SIZE_K(1024)>;
 		};
 
 		cpuppr_code_partition: partition@542000 {
