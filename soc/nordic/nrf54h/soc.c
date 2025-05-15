@@ -21,6 +21,7 @@
 #include <hal/nrf_nfct.h>
 #include <soc/nrfx_coredep.h>
 #include <soc_lrcconf.h>
+#include <dmm.h>
 #include <zephyr/drivers/firmware/nrf_ironside/cpuconf.h>
 
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
@@ -130,12 +131,17 @@ bool z_arm_on_enter_cpu_idle(void)
 
 void soc_early_init_hook(void)
 {
+	int err;
+
 	sys_cache_instr_enable();
 	sys_cache_data_enable();
 
 	power_domain_init();
 
 	trim_hsfll();
+
+	err = dmm_init();
+	__ASSERT_NO_MSG(err == 0);
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(ccm030))
 	/* DMASEC is set to non-secure by default, which prevents CCM from
