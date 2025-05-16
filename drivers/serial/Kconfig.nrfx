@@ -63,6 +63,9 @@ config UART_ASYNC_TX_CACHE_SIZE
 	  in RAM, because EasyDMA in UARTE peripherals can only transfer data
 	  from RAM.
 
+config UART_NRFX_UARTE_DIRECT_ISR
+	bool "Use direct ISR"
+
 config UART_NRFX_UARTE_SPURIOUS_RXTO_WORKAROUND
 	bool
 	help
