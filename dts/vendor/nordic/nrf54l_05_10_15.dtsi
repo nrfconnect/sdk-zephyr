@@ -313,6 +313,8 @@
 				rx-delay-supported;
 				rx-delay = <1>;
 				status = "disabled";
+				default-gpio-port = <&gpio1>;
+				cross-domain-pins-supported;
 			};
 
 			uart20: uart@c6000 {
@@ -354,6 +356,8 @@
 				rx-delay-supported;
 				rx-delay = <1>;
 				status = "disabled";
+				default-gpio-port = <&gpio1>;
+				cross-domain-pins-supported;
 			};
 
 			uart21: uart@c7000 {
