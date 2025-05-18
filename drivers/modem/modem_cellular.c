@@ -2641,7 +2641,7 @@ MODEM_CHAT_SCRIPT_DEFINE(sqn_gm02s_periodic_chat_script,
 						  (user_pipe_0, 3),                                \
 						  (user_pipe_1, 4))                                \
                                                                                                    \
-	MODEM_CELLULAR_DEFINE_INSTANCE(inst, 500, 100, 15000, 5000, false,                         \
+	MODEM_CELLULAR_DEFINE_INSTANCE(inst, 500, 100, 20000, 5000, false,                         \
 				       NULL,                                                       \
 				       &simcom_a76xx_init_chat_script,                             \
 				       &simcom_a76xx_dial_chat_script,                             \
