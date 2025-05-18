@@ -2073,7 +2073,7 @@ MODEM_CHAT_SCRIPT_CMDS_DEFINE(simcom_a76xx_init_chat_script_cmds,
 			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT", 100),
 			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT", 100),
 			      MODEM_CHAT_SCRIPT_CMD_RESP("ATE0", ok_match),
-			      #if CONFIG_MODEM_CELLULAR_POWER_ON_GNSS
+			      #ifdef CONFIG_MODEM_CELLULAR_POWER_ON_GNSS
 			      // Power on the GNSS module. 
 			      // We need to do this early, otherwise it does not work when
 			      // doing it later (e.g. from a user pipe).
