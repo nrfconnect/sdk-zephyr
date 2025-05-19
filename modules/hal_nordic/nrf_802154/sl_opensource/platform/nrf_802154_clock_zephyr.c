@@ -135,7 +135,7 @@ void nrf_802154_clock_hfclk_start(void)
 
 void nrf_802154_clock_hfclk_stop(void)
 {
-	if (atomic_cas(&hfclk_requested, HFCLK_NOT_REQUESTED, HFCLK_REQUESTED)) {
+	if (atomic_cas(&hfclk_requested, HFCLK_REQUESTED, HFCLK_NOT_REQUESTED) || hfclk_is_running) {
 		int ret = nrf_clock_control_cancel_or_release(DEVICE_DT_GET(DT_NODELABEL(hfxo)),
 							NULL, &hfclk_cli);
 
