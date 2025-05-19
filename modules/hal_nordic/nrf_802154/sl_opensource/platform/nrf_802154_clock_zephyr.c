@@ -35,8 +35,9 @@ bool nrf_802154_clock_hfclk_is_running(void)
 	return hfclk_is_running;
 }
 
-
+#if !defined(NRF54LM20A_ENGA_XXAA)
 static struct onoff_client hfclk_cli;
+#endif
 
 static void hfclk_on_callback(struct onoff_manager *mgr,
 			      struct onoff_client  *cli,
