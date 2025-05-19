@@ -100,6 +100,7 @@ void nrf_802154_clock_hfclk_start(void)
 void nrf_802154_clock_hfclk_stop(void)
 {
 	if (atomic_cas(&hfclk_requested, HFCLK_REQUESTED, HFCLK_NOT_REQUESTED)) {
+#if !defined(NRF54LM20A_ENGA_XXAA)
 		struct onoff_manager *mgr =
 			z_nrf_clock_control_get_onoff(CLOCK_CONTROL_NRF_SUBSYS_HF);
 
@@ -108,6 +109,7 @@ void nrf_802154_clock_hfclk_stop(void)
 		int ret = onoff_cancel_or_release(mgr, &hfclk_cli);
 		__ASSERT_NO_MSG(ret >= 0);
 		(void)ret;
+#endif // defined(NRF54LM20A_ENGA_XXAA)
 
 		if (IS_ENABLED(CONFIG_NRF_802154_CONSTLAT_CONTROL)) {
 			nrf_sys_event_release_global_constlat();
