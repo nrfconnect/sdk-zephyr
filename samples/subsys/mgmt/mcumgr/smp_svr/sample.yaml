@@ -92,6 +92,7 @@ tests:
       - rd_rw612_bga
       - nrf52840dk/nrf52840
       - nrf54h20dk/nrf54h20/cpuapp/iron
+      - nrf54h20dk/nrf54h20/cpuapp/iron/mcuboot/b0
       - pinnacle_100_dvk
       - mg100
     integration_platforms:
