@@ -14,11 +14,15 @@
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 #include <nrf_sys_event.h>
 
+#define HFCLK_NOT_REQUESTED (0u)
+#define HFCLK_REQUESTED     (1u)
+
 static bool hfclk_is_running;
+static atomic_t hfclk_requested;
 
 void nrf_802154_clock_init(void)
 {
-	/* Intentionally empty. */
+	atomic_set(&hfclk_requested, HFCLK_NOT_REQUESTED);
 }
 
 void nrf_802154_clock_deinit(void)
@@ -39,8 +43,10 @@ static void hfclk_on_callback(struct onoff_manager *mgr,
 			      uint32_t state,
 			      int res)
 {
-	hfclk_is_running = true;
-	nrf_802154_clock_hfclk_ready();
+	if (atomic_cas(&hfclk_requested, HFCLK_REQUESTED, HFCLK_NOT_REQUESTED)) {
+		hfclk_is_running = true;
+		nrf_802154_clock_hfclk_ready();
+	}
 }
 
 #if defined(CONFIG_CLOCK_CONTROL_NRF)
@@ -59,72 +65,80 @@ K_TIMER_DEFINE(hfclk_started_timer, hfclk_started_timer_handler, NULL);
 
 void nrf_802154_clock_hfclk_start(void)
 {
+	if (atomic_cas(&hfclk_requested, HFCLK_NOT_REQUESTED, HFCLK_REQUESTED)) {
 #if defined(NRF54LM20A_ENGA_XXAA)
-	/*
-	 * Right now, the power_clock_irq is not available on nRF54LM20A.
-	 * Since the onoff mechanism relies on the irq, the timer is used
-	 * to emit the hfclk_ready callback.
-	 */
-	k_timer_start(&hfclk_started_timer, K_USEC(MAX_HFXO_RAMP_UP_TIME_US), K_NO_WAIT);
+		/*
+		* Right now, the power_clock_irq is not available on nRF54LM20A.
+		* Since the onoff mechanism relies on the irq, the timer is used
+		* to emit the hfclk_ready callback.
+		*/
+		k_timer_start(&hfclk_started_timer, K_USEC(MAX_HFXO_RAMP_UP_TIME_US), K_NO_WAIT);
 #else
-	struct onoff_manager *mgr =
-		z_nrf_clock_control_get_onoff(CLOCK_CONTROL_NRF_SUBSYS_HF);
+		struct onoff_manager *mgr =
+			z_nrf_clock_control_get_onoff(CLOCK_CONTROL_NRF_SUBSYS_HF);
 
-	__ASSERT_NO_MSG(mgr != NULL);
+		__ASSERT_NO_MSG(mgr != NULL);
 
-	sys_notify_init_callback(&hfclk_cli.notify, hfclk_on_callback);
+		sys_notify_init_callback(&hfclk_cli.notify, hfclk_on_callback);
 #endif // defined(NRF54LM20A_ENGA_XXAA)
-	/*
-	 * todo: replace constlat request with PM policy API when
-	 * controlling the event latency becomes possible.
-	 */
-	if (IS_ENABLED(CONFIG_NRF_802154_CONSTLAT_CONTROL)) {
-		nrf_sys_event_request_global_constlat();
-	}
+		/*
+		* todo: replace constlat request with PM policy API when
+		* controlling the event latency becomes possible.
+		*/
+		if (IS_ENABLED(CONFIG_NRF_802154_CONSTLAT_CONTROL)) {
+			nrf_sys_event_request_global_constlat();
+		}
 
 #if !defined(NRF54LM20A_ENGA_XXAA)
-	int ret = onoff_request(mgr, &hfclk_cli);
-	__ASSERT_NO_MSG(ret >= 0);
-	(void)ret;
+		int ret = onoff_request(mgr, &hfclk_cli);
+		__ASSERT_NO_MSG(ret >= 0);
+		(void)ret;
 #endif
+	}
 }
 
 void nrf_802154_clock_hfclk_stop(void)
 {
-	struct onoff_manager *mgr =
-		z_nrf_clock_control_get_onoff(CLOCK_CONTROL_NRF_SUBSYS_HF);
+	if (atomic_cas(&hfclk_requested, HFCLK_REQUESTED, HFCLK_NOT_REQUESTED)) {
+		struct onoff_manager *mgr =
+			z_nrf_clock_control_get_onoff(CLOCK_CONTROL_NRF_SUBSYS_HF);
 
-	__ASSERT_NO_MSG(mgr != NULL);
+		__ASSERT_NO_MSG(mgr != NULL);
 
-	int ret = onoff_cancel_or_release(mgr, &hfclk_cli);
-	__ASSERT_NO_MSG(ret >= 0);
-	(void)ret;
+		int ret = onoff_cancel_or_release(mgr, &hfclk_cli);
+		__ASSERT_NO_MSG(ret >= 0);
+		(void)ret;
 
-	if (IS_ENABLED(CONFIG_NRF_802154_CONSTLAT_CONTROL)) {
-		nrf_sys_event_release_global_constlat();
+		if (IS_ENABLED(CONFIG_NRF_802154_CONSTLAT_CONTROL)) {
+			nrf_sys_event_release_global_constlat();
+		}
+
+		hfclk_is_running = false;
 	}
-
-	hfclk_is_running = false;
 }
 
 #elif defined(CONFIG_CLOCK_CONTROL_NRF2)
 
 void nrf_802154_clock_hfclk_start(void)
 {
-	sys_notify_init_callback(&hfclk_cli.notify, hfclk_on_callback);
-	int ret = nrf_clock_control_request(DEVICE_DT_GET(DT_NODELABEL(hfxo)), NULL, &hfclk_cli);
+	if (atomic_cas(&hfclk_requested, HFCLK_NOT_REQUESTED, HFCLK_REQUESTED)) {
+		sys_notify_init_callback(&hfclk_cli.notify, hfclk_on_callback);
+		int ret = nrf_clock_control_request(DEVICE_DT_GET(DT_NODELABEL(hfxo)), NULL, &hfclk_cli);
 
-	__ASSERT_NO_MSG(ret >= 0);
-	(void)ret;
+		__ASSERT_NO_MSG(ret >= 0);
+		(void)ret;
+	}
 }
 
 void nrf_802154_clock_hfclk_stop(void)
 {
-	int ret = nrf_clock_control_cancel_or_release(DEVICE_DT_GET(DT_NODELABEL(hfxo)),
-						      NULL, &hfclk_cli);
+	if (atomic_cas(&hfclk_requested, HFCLK_NOT_REQUESTED, HFCLK_REQUESTED)) {
+		int ret = nrf_clock_control_cancel_or_release(DEVICE_DT_GET(DT_NODELABEL(hfxo)),
+							NULL, &hfclk_cli);
 
-	__ASSERT_NO_MSG(ret >= 0);
-	(void)ret;
+		__ASSERT_NO_MSG(ret >= 0);
+		(void)ret;
+	}
 }
 
 #endif
