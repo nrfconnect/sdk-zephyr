@@ -19,7 +19,7 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
     def __init__(self, cfg, family, softreset, pinreset, dev_id, erase=False,
                  erase_mode=None, ext_erase_mode=None, reset=True, tool_opt=None,
                  force=False, recover=False, suit_starter=False,
-                 ext_mem_config_file=None):
+                 ext_mem_config_file=None, ncs_provision=False):
 
         super().__init__(cfg, family, softreset, pinreset, dev_id, erase,
                          erase_mode, ext_erase_mode, reset, tool_opt, force,
@@ -27,6 +27,7 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
 
         self.suit_starter = suit_starter
         self.ext_mem_config_file = ext_mem_config_file
+        self.ncs_provision = ncs_provision
 
         self._ops = []
         self._op_id = 1
@@ -57,7 +58,8 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
                                    reset=args.reset, tool_opt=args.tool_opt,
                                    force=args.force, recover=args.recover,
                                    suit_starter=args.suit_manifest_starter,
-                                   ext_mem_config_file=args.ext_mem_config_file)
+                                   ext_mem_config_file=args.ext_mem_config_file,
+                                   ncs_provision=args.ncs_provision)
 
     @classmethod
     def do_add_parser(cls, parser):
@@ -68,6 +70,9 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
         parser.add_argument('--ext-mem-config-file', required=False,
                             dest='ext_mem_config_file',
                             help='path to an JSON file with external memory configuration')
+        parser.add_argument('--ncs-provision',
+                            action='store_true',
+                            help='run ncs-provision with using default keys')
 
     def _exec(self, args):
         jout_all = []
@@ -113,6 +118,75 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
     def do_require(self):
         self.require('nrfutil')
 
+    def _generate_ncs_provision_key_file(
+        self,
+        keys: list[str] | str,
+        keyname: str,  # UROT_PUBKEY, BL_PUBKEY, APP_PUBKEY
+        output_file: Path
+    ):
+        """Generate a key file for ncs-provision.
+        Currently uses the west ncs-provision command to generate the JSON file.
+        Consider importing directly from sdk-nrf/scripts/west_commands/ncs_provision.py
+        or sdk-nrf/scripts/generate_psa_key_attributes.py to call methods directly
+        """
+        build_dir = Path(self.cfg.build_dir).parent
+        ncs_keyfile = build_dir / 'keyfile.json'
+        if ncs_keyfile.exists():
+            ncs_keyfile.unlink()
+        command = [
+            'west', 'ncs-provision', 'upload',
+            '--soc', 'nrf54l15',
+            '--keyname', keyname,
+            '--build-dir', str(build_dir),
+            '--dry-run'
+        ]
+        for key in keys:
+            command += ["--key", key]
+        self.check_call(command)
+
+        # move the generated ncs keyfile to the output_file
+        if output_file.exists():
+            output_file.unlink()
+        ncs_keyfile.rename(output_file)
+
+    def _ncs_provision_for_nsib(self):
+        if not self.sysbuild_conf.getboolean('SB_CONFIG_SECURE_BOOT_SIGNATURE_TYPE_ED25519'):
+            return
+        build_dir = Path(self.cfg.build_dir).parent
+        key_file = self.sysbuild_conf.get('SB_CONFIG_SECURE_BOOT_SIGNING_KEY_FILE') or str(
+            build_dir / 'GENERATED_NON_SECURE_SIGN_KEY_PRIVATE.pem')
+        if not Path(key_file).exists():
+            raise RuntimeError(f'Key file {key_file} does not exist')
+
+        ncs_keyfile = build_dir / 'keyfile_for_nsib.json'
+        self._generate_ncs_provision_key_file(
+            keys=[key_file],
+            keyname='BL_PUBKEY',
+            output_file=ncs_keyfile
+        )
+        self.exec_op('x-provision-keys', keyfile=str(ncs_keyfile))
+
+    def _ncs_provision_for_mcuboot(self):
+        if not self.sysbuild_conf.getboolean('SB_CONFIG_MCUBOOT_SIGNATURE_USING_KMU'):
+            return
+        key_file = self.sysbuild_conf.get('SB_CONFIG_BOOT_SIGNATURE_KEY_FILE')
+        if not Path(key_file).exists():
+            raise RuntimeError(f'Key file {key_file} does not exist')
+
+        ncs_keyfile = Path(self.cfg.build_dir).parent / 'keyfile_for_mcuboot.json'
+        self._generate_ncs_provision_key_file(
+            keys=[key_file],
+            keyname='UROT_PUBKEY',
+            output_file=ncs_keyfile
+        )
+        self.exec_op('x-provision-keys', keyfile=str(ncs_keyfile))
+
+    def do_ncs_provision(self):
+        if not self.ncs_provision:
+            return
+        self._ncs_provision_for_nsib()
+        self._ncs_provision_for_mcuboot()
+
     def _insert_op(self, op):
         op['operationId'] = f'{self._op_id}'
         self._op_id += 1
@@ -145,6 +219,8 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
             cmd += ['--reset-kind', _op['kind']]
         elif op_type == 'erase':
             cmd.append(f'--{_op["kind"]}')
+        elif op_type == 'x-provision-keys':
+            cmd += ['--key-file', _op['keyfile']]
 
         cmd += ['--core', op['core']] if op.get('core') else []
         cmd += ['--x-family', f'{self.family}']
