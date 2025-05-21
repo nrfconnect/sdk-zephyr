@@ -23,8 +23,10 @@ tests:
   sample.sysbuild.hello_world.nrf54h20dk_cpuapp_cpurad:
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     integration_platforms:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     extra_args: SB_CONF_FILE=sysbuild/nrf54h20dk_nrf54h20_cpurad.conf
 
   sample.sysbuild.hello_world.nrf54h20dk_cpuapp_cpurad.iron:
@@ -35,8 +37,10 @@ tests:
   sample.sysbuild.hello_world.nrf54h20dk_cpuapp_cpuppr:
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     integration_platforms:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     extra_args:
 
       - SB_CONF_FILE=sysbuild/nrf54h20dk_nrf54h20_cpuppr.conf
@@ -44,8 +48,10 @@ tests:
   sample.sysbuild.hello_world.nrf54h20dk_cpuapp_cpuppr_xip:
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     integration_platforms:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     extra_args:
 
       - SB_CONF_FILE=sysbuild/nrf54h20dk_nrf54h20_cpuppr_xip.conf
@@ -64,8 +70,10 @@ tests:
   sample.sysbuild.hello_world.nrf54h20dk_cpuapp_cpuflpr:
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     integration_platforms:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     extra_args:
 
       - SB_CONF_FILE=sysbuild/nrf54h20dk_nrf54h20_cpuflpr.conf
@@ -73,8 +81,10 @@ tests:
   sample.sysbuild.hello_world.nrf54h20dk_cpuapp_cpuflpr_xip:
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     integration_platforms:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     extra_args:
       - SB_CONF_FILE=sysbuild/nrf54h20dk_nrf54h20_cpuflpr_xip.conf
       - hello_world_SNIPPET=nordic-flpr-xip
