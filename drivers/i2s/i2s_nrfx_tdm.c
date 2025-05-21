@@ -498,6 +498,7 @@ static int tdm_nrfx_configure(const struct device *dev, enum i2s_dir dir,
 	if (tdm_cfg->channels == 2) {
 		nrfx_cfg.num_of_channels = NRF_TDM_CHANNELS_COUNT_2;
 	} else if (tdm_cfg->channels == 1) {
+		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_SCK;
 		nrfx_cfg.num_of_channels = NRF_TDM_CHANNELS_COUNT_1;
 	} else {
 		LOG_ERR("Unsupported number of channels: %u", tdm_cfg->channels);
