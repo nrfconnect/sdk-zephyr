@@ -4,4 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "nrf54h20dk_nrf54h20_common.dtsi"
+&cpusec_cpuapp_ipc {
+	status = "disabled";
+};
+
+&cpusec_bellboard{
+	status = "disabled";
+};
