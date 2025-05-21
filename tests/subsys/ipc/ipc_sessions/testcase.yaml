@@ -16,23 +16,29 @@ tests:
   sample.ipc.ipc_sessions.nrf54h20dk_cpuapp_cpurad:
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     integration_platforms:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     extra_args:
       - CONFIG_IPC_TEST_SKIP_CORE_RESET=y
   sample.ipc.ipc_sessions.nrf54h20dk_cpuapp_cpuppr:
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     integration_platforms:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     extra_args:
       - FILE_SUFFIX=cpuppr
       - ipc_sessions_SNIPPET=nordic-ppr
   sample.ipc.ipc_sessions.nrf54h20dk_cpuapp_no_unbound_cpuppr:
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     integration_platforms:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     extra_args:
       - FILE_SUFFIX=cpuppr
       - ipc_sessions_SNIPPET=nordic-ppr
@@ -41,8 +47,10 @@ tests:
   sample.ipc.ipc_sessions.nrf54h20dk_cpuapp_cpuppr_no_unbound:
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     integration_platforms:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
     extra_args:
       - FILE_SUFFIX=cpuppr
       - ipc_sessions_SNIPPET=nordic-ppr
