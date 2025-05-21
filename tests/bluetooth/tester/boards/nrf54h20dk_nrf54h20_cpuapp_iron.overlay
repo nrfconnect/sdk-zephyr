@@ -1,0 +1,28 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/ {
+	chosen {
+		zephyr,uart-pipe = &uart136;
+	};
+};
+
+&uart136 {
+	compatible = "nordic,nrf-uarte";
+	current-speed = <115200>;
+	status = "okay";
+	hw-flow-control;
+};
+
+// Enable PSA RNG
+/ {
+	chosen {
+		zephyr,entropy = &psa_rng;
+	};
+
+	psa_rng: psa-rng {
+		compatible = "zephyr,psa-crypto-rng";
+		status = "okay";
+	};
+
+	/delete-node/ prng;
+};
