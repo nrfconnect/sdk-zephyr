@@ -248,12 +248,14 @@ tests:
     extra_args: DTC_OVERLAY_FILE="boards/nrf54h20dk_nrf54h20_cpuapp_fast.overlay"
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
   drivers.spi.nrf54h_fast_16mhz:
     extra_args:
       - DTC_OVERLAY_FILE="boards/nrf54h20dk_nrf54h20_cpuapp_fast.overlay"
       - EXTRA_DTC_OVERLAY_FILE="boards/nrf_at_16mhz.overlay"
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
   drivers.spi.nrf54h_fast_32mhz:
     extra_args:
       - DTC_OVERLAY_FILE="boards/nrf54h20dk_nrf54h20_cpuapp_fast.overlay"
@@ -266,6 +268,7 @@ tests:
       - CONFIG_NRF_REGTOOL_VERBOSITY=2
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
   drivers.spi.nrf54l_1mhz:
     extra_args: EXTRA_DTC_OVERLAY_FILE="boards/nrf_at_1mhz.overlay"
     platform_allow:
