@@ -8,6 +8,7 @@
 
 #include <zephyr/drivers/firmware/nrf_ironside/call.h>
 
+#include <nrfx.h>
 #include <zephyr/toolchain/common.h>
 
 /**
@@ -15,6 +16,7 @@
  * @{
  */
 
+#define IRONSIDE_CPUCONF_ERROR_NO_FIRMWARE              0x5eb3
 #define IRONSIDE_CPUCONF_ERROR_WRONG_CPU                0x5eb2
 #define IRONSIDE_CPUCONF_ERROR_MEM_ACCESS_NOT_PERMITTED 0x5eb1
 

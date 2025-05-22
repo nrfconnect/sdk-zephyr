@@ -91,4 +91,3 @@ config SOC_NRF54H20_IRON
 
 rsource "bicr/Kconfig"
 rsource "gpd/Kconfig"
-rsource "ironside/se/Kconfig"
