@@ -52,6 +52,3 @@ config SOC_NRF9230_ENGB_CPUPPR
 
 config SOC_NRF9280_IRON
 	select EXPERIMENTAL if MCUBOOT
-
-# TODO : to be removed once ironside/se boot report is moved to common
-rsource "ironside/se/Kconfig"
