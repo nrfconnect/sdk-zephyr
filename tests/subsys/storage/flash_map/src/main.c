@@ -23,6 +23,10 @@
 extern int flash_map_entries;
 struct flash_sector fs_sectors[2048];
 
+/* Partition Manager does not have concept of disabled devices
+ * and so does not generate entries for them, into flash map.
+ */
+#if USE_PARTITION_MANAGER == 0
 ZTEST(flash_map, test_flash_area_disabled_device)
 {
 	const struct flash_area *fa;
@@ -54,6 +58,7 @@ ZTEST(flash_map, test_flash_area_device_is_ready)
 	zassert_true(flash_area_device_is_ready(
 			FIXED_PARTITION(SLOT1_PARTITION)));
 }
+#endif
 
 static void layout_match(const struct device *flash_dev, uint32_t sec_cnt)
 {
@@ -142,6 +147,8 @@ ZTEST(flash_map, test_flash_area_erased_val)
 		      "value different than the flash erase value");
 }
 
+/* Partition Manager does not have concept of nodes, like DTS does */
+#if USE_PARTITION_MANAGER == 0
 ZTEST(flash_map, test_fixed_partition_node_macros)
 {
 	/* Test against changes in API */
@@ -156,6 +163,7 @@ ZTEST(flash_map, test_fixed_partition_node_macros)
 	zassert_equal(FIXED_PARTITION_BY_NODE(DT_NODELABEL(SLOT1_PARTITION)),
 		      FIXED_PARTITION(SLOT1_PARTITION));
 }
+#endif
 
 ZTEST(flash_map, test_flash_area_erase_and_flatten)
 {
