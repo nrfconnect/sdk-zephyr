@@ -97,6 +97,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
 
         # Only applicable for nrfutil
         self.suit_starter = False
+        self.ncs_provision = False
 
         self.tool_opt = []
         if tool_opt is not None:
@@ -542,6 +543,10 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
             Throws subprocess.CalledProcessError with the appropriate
             returncode if a failure arises.'''
 
+    def do_ncs_provision(self):
+        ''' Provision default keys. Only applicable for nrfutil '''
+        pass
+
     def flush_ops(self, force=True):
         ''' Execute any remaining ops in the self.ops array.
             Throws subprocess.CalledProcessError with the appropriate
@@ -589,6 +594,8 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
         if self.recover:
             self.recover_target()
         self.program_hex()
+        if self.ncs_provision:
+            self.do_ncs_provision()
         if self.reset:
             self.reset_target()
         # All done, now flush any outstanding ops
