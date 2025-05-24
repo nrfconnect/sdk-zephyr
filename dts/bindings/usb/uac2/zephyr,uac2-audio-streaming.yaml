@@ -78,3 +78,9 @@ properties:
     type: int
     description: |
       Number of effectively used bits in audio subslot.
+
+  polling-period-us:
+    type: int
+    description: |
+      Input or output type reports polling period in microseconds. For USB full
+      speed this could be clamped to 1ms or 255ms depending on the value.
