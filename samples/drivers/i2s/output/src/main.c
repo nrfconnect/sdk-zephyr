@@ -8,6 +8,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/i2s.h>
 #include <zephyr/sys/iterable_sections.h>
+#include <zephyr/linker/devicetree_regions.h>
 
 #define SAMPLE_NO 64
 
@@ -40,7 +41,7 @@ static void fill_buf(int16_t *tx_block, int att)
 	}
 }
 
-#define NUM_BLOCKS 20
+#define NUM_BLOCKS 5
 #define BLOCK_SIZE (2 * sizeof(data))
 
 #ifdef CONFIG_NOCACHE_MEMORY
@@ -49,8 +50,20 @@ static void fill_buf(int16_t *tx_block, int att)
 	#define MEM_SLAB_CACHE_ATTR
 #endif /* CONFIG_NOCACHE_MEMORY */
 
+#define TDM(idx)                       DT_NODELABEL(tdm##idx)
+#define TDM_PROP(idx, prop)            DT_PROP(TDM(idx), prop)
+#define TDM_HAS_PROP(idx, prop)        DT_NODE_HAS_PROP(TDM(idx), prop)
+
+#define TDM_MEMORY_SECTION(idx)                                               \
+       COND_CODE_1(TDM_HAS_PROP(idx, memory_regions),                         \
+               (__attribute__((__section__(LINKER_DT_NODE_REGION_NAME(        \
+                       DT_PHANDLE(TDM(idx), memory_regions)))))),             \
+               ())
+
+#define BUFFER_MEM_REGION __attribute__((__section__("cpuapp_dma_region")))
+
 static char MEM_SLAB_CACHE_ATTR __aligned(WB_UP(32))
-	_k_mem_slab_buf_tx_0_mem_slab[(NUM_BLOCKS) * WB_UP(BLOCK_SIZE)];
+	_k_mem_slab_buf_tx_0_mem_slab[(NUM_BLOCKS) * WB_UP(BLOCK_SIZE)] TDM_MEMORY_SECTION(130);
 
 static STRUCT_SECTION_ITERABLE(k_mem_slab, tx_0_mem_slab) =
 	Z_MEM_SLAB_INITIALIZER(tx_0_mem_slab, _k_mem_slab_buf_tx_0_mem_slab,
@@ -70,8 +83,8 @@ int main(void)
 	}
 	/* Configure I2S stream */
 	i2s_cfg.word_size = 16U;
-	i2s_cfg.channels = 2U;
-	i2s_cfg.format = I2S_FMT_DATA_FORMAT_I2S;
+	i2s_cfg.channels = 4U;
+	i2s_cfg.format = I2S_FMT_DATA_FORMAT_PCM_SHORT;
 	i2s_cfg.frame_clk_freq = 44100;
 	i2s_cfg.block_size = BLOCK_SIZE;
 	i2s_cfg.timeout = 2000;
