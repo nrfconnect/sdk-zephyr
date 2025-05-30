@@ -4,19 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/kernel.h>
-#include <stdlib.h>
-#include <zephyr/drivers/i2s.h>
-#include <zephyr/drivers/clock_control/nrf_clock_control.h>
-#include <zephyr/drivers/pinctrl.h>
-#include <soc.h>
-#include <dmm.h>
+#if CONFIG_CLOCK_CONTROL_NRF
+#include <hal/nrf_clock.h>
+#endif
 #include <hal/nrf_tdm.h>
 #include <haly/nrfy_gpio.h>
-#include <zephyr/logging/log.h>
+#include <zephyr/drivers/clock_control/nrf_clock_control.h>
+#include <zephyr/drivers/i2s.h>
+#include <zephyr/drivers/pinctrl.h>
 #include <zephyr/irq.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <dmm.h>
+#include <stdlib.h>
 
-LOG_MODULE_REGISTER(tdm_nrfx, CONFIG_I2S_LOG_LEVEL);
+LOG_MODULE_REGISTER(tdm_nrf, CONFIG_I2S_LOG_LEVEL);
 
 /* The application must provide buffers that are to be used in the next
  * part of the transfer.
@@ -30,22 +32,26 @@ LOG_MODULE_REGISTER(tdm_nrfx, CONFIG_I2S_LOG_LEVEL);
 
 #define NRFX_TDM_NUM_OF_CHANNELS (TDM_CONFIG_CHANNEL_NUM_NUM_Max + 1)
 
-#define NRFX_TDM_TX_CHANNELS_MASK \
-	GENMASK(TDM_CONFIG_CHANNEL_MASK_Tx0Enable_Pos + TDM_CONFIG_CHANNEL_NUM_NUM_Max, \
+#define NRFX_TDM_TX_CHANNELS_MASK                                                                  \
+	GENMASK(TDM_CONFIG_CHANNEL_MASK_Tx0Enable_Pos + TDM_CONFIG_CHANNEL_NUM_NUM_Max,            \
 		TDM_CONFIG_CHANNEL_MASK_Tx0Enable_Pos)
-#define NRFX_TDM_RX_CHANNELS_MASK \
-	GENMASK(TDM_CONFIG_CHANNEL_MASK_Rx0Enable_Pos + TDM_CONFIG_CHANNEL_NUM_NUM_Max, \
+#define NRFX_TDM_RX_CHANNELS_MASK                                                                  \
+	GENMASK(TDM_CONFIG_CHANNEL_MASK_Rx0Enable_Pos + TDM_CONFIG_CHANNEL_NUM_NUM_Max,            \
 		TDM_CONFIG_CHANNEL_MASK_Rx0Enable_Pos)
 
-#define NODE_AUDIOPLL DT_NODELABEL(audiopll)
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(audiopll))
+#define NODE_ACLK      DT_NODELABEL(audiopll)
+#define ACLK_FREQUENCY DT_PROP_OR(NODE_ACLK, frequency, 0)
 
-#if DT_NODE_HAS_STATUS_OKAY(NODE_AUDIOPLL)
-static const struct device *audiopll = DEVICE_DT_GET(NODE_AUDIOPLL);
+static const struct device *audiopll = DEVICE_DT_GET(NODE_ACLK);
 static const struct nrf_clock_spec aclk_spec = {
-	.frequency = DT_PROP_OR(NODE_AUDIOPLL, frequency, 0),
-	.accuracy = 0,
-	.precision = NRF_CLOCK_CONTROL_PRECISION_DEFAULT,
+	.frequency = ACLK_FREQUENCY,
 };
+#elif DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(aclk))
+#define NODE_ACLK      DT_NODELABEL(aclk)
+#define ACLK_FREQUENCY DT_PROP_OR(NODE_ACLK, clock_frequency, 0)
+#else
+#define ACLK_FREQUENCY 0
 #endif
 
 typedef struct {
@@ -92,10 +98,13 @@ struct tdm_drv_cfg {
 	enum clock_source {
 		PCLK,
 		ACLK
-	} clk_src;
+	} sck_src, mck_src;
 };
 
 struct tdm_drv_data {
+#if CONFIG_CLOCK_CONTROL_NRF
+	struct onoff_manager *clk_mgr;
+#endif
 	struct onoff_client clk_cli;
 	struct stream_cfg tx;
 	struct k_msgq tx_queue;
@@ -116,7 +125,9 @@ struct tdm_drv_data {
 
 static int audio_clock_request(struct tdm_drv_data *drv_data)
 {
-#if DT_NODE_HAS_STATUS_OKAY(NODE_AUDIOPLL)
+#if DT_NODE_HAS_STATUS_OKAY(NODE_ACLK) && CONFIG_CLOCK_CONTROL_NRF
+	return onoff_request(drv_data->clk_mgr, &drv_data->clk_cli);
+#elif DT_NODE_HAS_STATUS_OKAY(NODE_ACLK) && CONFIG_CLOCK_CONTROL_NRF2_AUDIOPLL
 	return nrf_clock_control_request(audiopll, &aclk_spec, &drv_data->clk_cli);
 #else
 	(void)drv_data;
@@ -125,13 +136,24 @@ static int audio_clock_request(struct tdm_drv_data *drv_data)
 #endif
 }
 
-static int audio_clock_release(void)
+static int audio_clock_release(struct tdm_drv_data *drv_data)
 {
-#if DT_NODE_HAS_STATUS_OKAY(NODE_AUDIOPLL)
+#if DT_NODE_HAS_STATUS_OKAY(NODE_ACLK) && CONFIG_CLOCK_CONTROL_NRF
+	return onoff_release(drv_data->clk_mgr);
+#elif DT_NODE_HAS_STATUS_OKAY(NODE_ACLK) && CONFIG_CLOCK_CONTROL_NRF2_AUDIOPLL
+	(void)drv_data;
+
 	return nrf_clock_control_release(audiopll, &aclk_spec);
 #else
+	(void)drv_data;
+
 	return -ENOTSUP;
 #endif
+}
+
+static nrf_tdm_channels_count_t nrf_tdm_chan_num_get(uint8_t nb_of_channels)
+{
+	return (nrf_tdm_channels_count_t)(NRF_TDM_CHANNELS_COUNT_1 + nb_of_channels - 1);
 }
 
 static void tdm_irq_handler(const struct device *dev)
@@ -293,6 +315,8 @@ static void tdm_start(struct tdm_drv_data *drv_data, tdm_buffers_t const *p_init
 {
 	NRF_TDM_Type *p_reg = drv_data->drv_cfg->p_reg;
 	tdm_ctrl_t *ctrl_data = drv_data->drv_cfg->control_data;
+	nrf_tdm_rxtxen_t dir = NRF_TDM_RXTXEN_DUPLEX;
+	uint32_t rxtx_mask = NRF_TDM_INT_TXPTRUPD_MASK_MASK | NRF_TDM_INT_RXPTRUPD_MASK_MASK;
 
 	__ASSERT_NO_MSG(p_initial_buffers->p_rx_buffer != NULL ||
 			p_initial_buffers->p_tx_buffer != NULL);
@@ -311,15 +335,21 @@ static void tdm_start(struct tdm_drv_data *drv_data, tdm_buffers_t const *p_init
 	nrf_tdm_event_clear(p_reg, NRF_TDM_EVENT_RXPTRUPD);
 	nrf_tdm_event_clear(p_reg, NRF_TDM_EVENT_TXPTRUPD);
 
-	nrf_tdm_int_enable(p_reg,
-			   (p_initial_buffers->p_rx_buffer ? NRF_TDM_INT_RXPTRUPD_MASK_MASK : 0UL) |
-			   (p_initial_buffers->p_tx_buffer ? NRF_TDM_INT_TXPTRUPD_MASK_MASK : 0UL) |
-			   NRF_TDM_INT_STOPPED_MASK_MASK);
+	if (p_initial_buffers->p_tx_buffer == NULL) {
+		dir = NRF_TDM_RXTXEN_RX;
+		rxtx_mask = NRF_TDM_INT_RXPTRUPD_MASK_MASK;
+	}
+	if (p_initial_buffers->p_rx_buffer == NULL) {
+		dir = NRF_TDM_RXTXEN_TX;
+		rxtx_mask = NRF_TDM_INT_TXPTRUPD_MASK_MASK;
+	}
 
+	nrf_tdm_int_enable(p_reg, rxtx_mask | NRF_TDM_INT_STOPPED_MASK_MASK);
 	nrf_tdm_tx_count_set(p_reg, p_initial_buffers->buffer_size);
+	nrf_tdm_tx_buffer_set(p_reg, p_initial_buffers->p_tx_buffer);
 	nrf_tdm_rx_count_set(p_reg, p_initial_buffers->buffer_size);
 	nrf_tdm_rx_buffer_set(p_reg, p_initial_buffers->p_rx_buffer);
-	nrf_tdm_tx_buffer_set(p_reg, p_initial_buffers->p_tx_buffer);
+	nrf_tdm_transfer_direction_set(p_reg, dir);
 	nrf_tdm_task_trigger(p_reg, NRF_TDM_TASK_START);
 }
 
@@ -334,7 +364,6 @@ static bool next_buffers_set(struct tdm_drv_data *drv_data, tdm_buffers_t const 
 {
 	NRF_TDM_Type *p_reg = drv_data->drv_cfg->p_reg;
 	tdm_ctrl_t *ctrl_data = drv_data->drv_cfg->control_data;
-	nrf_tdm_rxtxen_t dir = NRF_TDM_RXTXEN_DUPLEX;
 
 	__ASSERT_NO_MSG(p_buffers->p_rx_buffer != NULL || p_buffers->p_tx_buffer != NULL);
 
@@ -346,13 +375,6 @@ static bool next_buffers_set(struct tdm_drv_data *drv_data, tdm_buffers_t const 
 	nrf_tdm_rx_count_set(p_reg, p_buffers->buffer_size);
 	nrf_tdm_rx_buffer_set(p_reg, p_buffers->p_rx_buffer);
 	nrf_tdm_tx_buffer_set(p_reg, p_buffers->p_tx_buffer);
-
-	if (p_buffers->p_rx_buffer == NULL) {
-		dir = NRF_TDM_RXTXEN_TX;
-	} else if (p_buffers->p_tx_buffer == NULL) {
-		dir = NRF_TDM_RXTXEN_RX;
-	}
-	nrf_tdm_transfer_direction_set(p_reg, dir);
 
 	ctrl_data->next_buffers = *p_buffers;
 	ctrl_data->buffers_needed = false;
@@ -411,13 +433,15 @@ static void tdm_uninit(struct tdm_drv_data *drv_data)
 	NRFX_IRQ_DISABLE(nrfx_get_irq_number(p_reg));
 }
 
-static int tdm_nrfx_configure(const struct device *dev, enum i2s_dir dir,
-			      const struct i2s_config *tdm_cfg)
+static int tdm_nrf_configure(const struct device *dev, enum i2s_dir dir,
+			     const struct i2s_config *tdm_cfg)
 {
+	nrf_tdm_config_t nrfx_cfg;
 	struct tdm_drv_data *drv_data = dev->data;
 	const struct tdm_drv_cfg *drv_cfg = dev->config;
-	nrf_tdm_config_t nrfx_cfg;
 	uint32_t chan_mask = 0;
+	uint8_t extra_channels = 0;
+	uint8_t max_num_of_channels = NRFX_TDM_NUM_OF_CHANNELS;
 
 	if (drv_data->state != I2S_STATE_READY) {
 		LOG_ERR("Cannot configure in state: %d", drv_data->state);
@@ -469,6 +493,7 @@ static int tdm_nrfx_configure(const struct device *dev, enum i2s_dir dir,
 		nrfx_cfg.sck_polarity = NRF_TDM_POLARITY_POSEDGE;
 		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_CHANNEL;
 		nrfx_cfg.channel_delay = NRF_TDM_CHANNEL_DELAY_1CK;
+		max_num_of_channels = 2;
 		break;
 	case I2S_FMT_DATA_FORMAT_LEFT_JUSTIFIED:
 		nrfx_cfg.alignment = NRF_TDM_ALIGN_LEFT;
@@ -476,12 +501,28 @@ static int tdm_nrfx_configure(const struct device *dev, enum i2s_dir dir,
 		nrfx_cfg.sck_polarity = NRF_TDM_POLARITY_POSEDGE;
 		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_CHANNEL;
 		nrfx_cfg.channel_delay = NRF_TDM_CHANNEL_DELAY_NONE;
+		max_num_of_channels = 2;
 		break;
 	case I2S_FMT_DATA_FORMAT_RIGHT_JUSTIFIED:
 		nrfx_cfg.alignment = NRF_TDM_ALIGN_RIGHT;
 		nrfx_cfg.fsync_polarity = NRF_TDM_POLARITY_POSEDGE;
 		nrfx_cfg.sck_polarity = NRF_TDM_POLARITY_POSEDGE;
 		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_CHANNEL;
+		nrfx_cfg.channel_delay = NRF_TDM_CHANNEL_DELAY_NONE;
+		max_num_of_channels = 2;
+		break;
+	case I2S_FMT_DATA_FORMAT_PCM_SHORT:
+		nrfx_cfg.alignment = NRF_TDM_ALIGN_LEFT;
+		nrfx_cfg.fsync_polarity = NRF_TDM_POLARITY_NEGEDGE;
+		nrfx_cfg.sck_polarity = NRF_TDM_POLARITY_NEGEDGE;
+		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_SCK;
+		nrfx_cfg.channel_delay = NRF_TDM_CHANNEL_DELAY_NONE;
+		break;
+	case I2S_FMT_DATA_FORMAT_PCM_LONG:
+		nrfx_cfg.alignment = NRF_TDM_ALIGN_LEFT;
+		nrfx_cfg.fsync_polarity = NRF_TDM_POLARITY_POSEDGE;
+		nrfx_cfg.sck_polarity = NRF_TDM_POLARITY_NEGEDGE;
+		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_SCK;
 		nrfx_cfg.channel_delay = NRF_TDM_CHANNEL_DELAY_NONE;
 		break;
 	default:
@@ -495,14 +536,17 @@ static int tdm_nrfx_configure(const struct device *dev, enum i2s_dir dir,
 		return -EINVAL;
 	}
 
-	if (tdm_cfg->channels == 2) {
-		nrfx_cfg.num_of_channels = NRF_TDM_CHANNELS_COUNT_2;
-	} else if (tdm_cfg->channels == 1) {
-		nrfx_cfg.num_of_channels = NRF_TDM_CHANNELS_COUNT_1;
-	} else {
+	if (tdm_cfg->channels == 1 && nrfx_cfg.fsync_duration == NRF_TDM_FSYNC_DURATION_CHANNEL) {
+		/* For I2S mono standard, two channels are to be sent.
+		 * The unused half period of LRCK will contain zeros.
+		 */
+		extra_channels = 1;
+	} else if (tdm_cfg->channels > max_num_of_channels) {
 		LOG_ERR("Unsupported number of channels: %u", tdm_cfg->channels);
 		return -EINVAL;
 	}
+
+	nrfx_cfg.num_of_channels = nrf_tdm_chan_num_get(tdm_cfg->channels + extra_channels);
 	chan_mask = BIT_MASK(tdm_cfg->channels);
 
 	if ((tdm_cfg->options & I2S_OPT_BIT_CLK_SLAVE) &&
@@ -517,25 +561,25 @@ static int tdm_nrfx_configure(const struct device *dev, enum i2s_dir dir,
 	}
 
 	nrfx_cfg.mck_setup = 0;
-	if (nrfx_cfg.mode == NRF_TDM_MODE_MASTER) {
-		uint32_t sck = tdm_cfg->word_size * tdm_cfg->frame_clk_freq * tdm_cfg->channels;
-		const uint32_t src_freq = (drv_cfg->clk_src == ACLK)
-						  ? DT_PROP_OR(NODE_AUDIOPLL, frequency, 0)
-						  : drv_cfg->pclk_frequency;
+	uint32_t src_freq = (drv_cfg->mck_src == ACLK) ? ACLK_FREQUENCY : drv_cfg->pclk_frequency;
 
-		/* Unless the PCLK source is used,
-		 * it is required to request the proper clock to be running
-		 * before starting the transfer itself.
-		 */
-		drv_data->request_clock = (drv_cfg->clk_src != PCLK);
-		nrfx_cfg.sck_setup = div_calculate(src_freq, sck);
-		if ((FIELD_GET(TDM_PSEL_MCK_CONNECT_Msk, nrf_tdm_mck_pin_get(drv_cfg->p_reg)) ==
-		    TDM_PSEL_MCK_CONNECT_Connected) && drv_cfg->mck_frequency != 0) {
-			nrfx_cfg.mck_setup = div_calculate(src_freq, drv_cfg->mck_frequency);
-		}
-	} else {
-		drv_data->request_clock = false;
+	if ((FIELD_GET(TDM_PSEL_MCK_CONNECT_Msk, nrf_tdm_mck_pin_get(drv_cfg->p_reg)) ==
+	     TDM_PSEL_MCK_CONNECT_Connected) &&
+	    drv_cfg->mck_frequency != 0) {
+		nrfx_cfg.mck_setup = div_calculate(src_freq, drv_cfg->mck_frequency);
 	}
+	if (nrfx_cfg.mode == NRF_TDM_MODE_MASTER) {
+		uint32_t sck_freq = tdm_cfg->word_size * tdm_cfg->frame_clk_freq *
+				    (tdm_cfg->channels + extra_channels);
+
+		src_freq = (drv_cfg->sck_src == ACLK) ? ACLK_FREQUENCY : drv_cfg->pclk_frequency;
+		nrfx_cfg.sck_setup = div_calculate(src_freq, sck_freq);
+	}
+	/* Unless the PCLK source is used,
+	 * it is required to request the proper clock to be running
+	 * before starting the transfer itself.
+	 */
+	drv_data->request_clock = (drv_cfg->sck_src != PCLK) || (drv_cfg->mck_src != PCLK);
 
 	if ((tdm_cfg->options & I2S_OPT_LOOPBACK) || (tdm_cfg->options & I2S_OPT_PINGPONG)) {
 		LOG_ERR("Unsupported options: 0x%02x", tdm_cfg->options);
@@ -557,7 +601,7 @@ static int tdm_nrfx_configure(const struct device *dev, enum i2s_dir dir,
 	return 0;
 }
 
-static const struct i2s_config *tdm_nrfx_config_get(const struct device *dev, enum i2s_dir dir)
+static const struct i2s_config *tdm_nrf_config_get(const struct device *dev, enum i2s_dir dir)
 {
 	struct tdm_drv_data *drv_data = dev->data;
 
@@ -571,7 +615,7 @@ static const struct i2s_config *tdm_nrfx_config_get(const struct device *dev, en
 	return NULL;
 }
 
-static int tdm_nrfx_read(const struct device *dev, void **mem_block, size_t *size)
+static int tdm_nrf_read(const struct device *dev, void **mem_block, size_t *size)
 {
 	struct tdm_drv_data *drv_data = dev->data;
 	const struct tdm_drv_cfg *drv_cfg = drv_data->drv_cfg;
@@ -600,7 +644,7 @@ static int tdm_nrfx_read(const struct device *dev, void **mem_block, size_t *siz
 	return ret;
 }
 
-static int tdm_nrfx_write(const struct device *dev, void *mem_block, size_t size)
+static int tdm_nrf_write(const struct device *dev, void *mem_block, size_t size)
 {
 	struct tdm_drv_data *drv_data = dev->data;
 	const struct tdm_drv_cfg *drv_cfg = dev->config;
@@ -689,7 +733,7 @@ static int start_transfer(struct tdm_drv_data *drv_data)
 	if (ret < 0) {
 		tdm_uninit(drv_data);
 		if (drv_data->request_clock) {
-			(void)audio_clock_release();
+			(void)audio_clock_release(drv_data);
 		}
 
 		if (initial_buffers.p_tx_buffer) {
@@ -714,19 +758,11 @@ static int start_transfer(struct tdm_drv_data *drv_data)
 
 static bool channels_configuration_check(uint32_t tx, uint32_t rx)
 {
-	if (tx == rx) {
-		tx = FIELD_GET(NRFX_TDM_TX_CHANNELS_MASK, tx);
-		rx = FIELD_GET(NRFX_TDM_RX_CHANNELS_MASK, rx);
-	} else {
-		return false;
-	}
-	return (tx == rx);
-}
 
-static void channels_configuration_merge(uint32_t *tx, uint32_t *rx)
-{
-	(*tx) |= (FIELD_PREP(NRFX_TDM_RX_CHANNELS_MASK, *rx));
-	(*rx) |= (FIELD_PREP(NRFX_TDM_TX_CHANNELS_MASK, *tx));
+	tx = FIELD_GET(NRFX_TDM_TX_CHANNELS_MASK, tx);
+	rx = FIELD_GET(NRFX_TDM_RX_CHANNELS_MASK, rx);
+
+	return (tx == rx);
 }
 
 static void tdm_init(struct tdm_drv_data *drv_data, nrf_tdm_config_t const *p_config,
@@ -757,7 +793,7 @@ static void clock_started_callback(struct onoff_manager *mgr, struct onoff_clien
 	 */
 	if (drv_data->state == I2S_STATE_READY) {
 		tdm_uninit(drv_data);
-		(void)audio_clock_release();
+		(void)audio_clock_release(drv_data);
 	} else {
 		(void)start_transfer(drv_data);
 	}
@@ -777,11 +813,11 @@ static int trigger_start(const struct device *dev)
 	drv_data->state = I2S_STATE_RUNNING;
 
 	nrf_tdm_sck_configure(drv_cfg->p_reg,
-			      drv_cfg->clk_src == ACLK ? NRF_TDM_SRC_ACLK : NRF_TDM_SRC_PCLK32M,
+			      drv_cfg->sck_src == ACLK ? NRF_TDM_SRC_ACLK : NRF_TDM_SRC_PCLK32M,
 			      false);
 
 	nrf_tdm_mck_configure(drv_cfg->p_reg,
-			      drv_cfg->clk_src == ACLK ? NRF_TDM_SRC_ACLK : NRF_TDM_SRC_PCLK32M,
+			      drv_cfg->mck_src == ACLK ? NRF_TDM_SRC_ACLK : NRF_TDM_SRC_PCLK32M,
 			      false);
 	/* If it is required to use certain HF clock, request it to be running
 	 * first. If not, start the transfer directly.
@@ -806,7 +842,7 @@ static int trigger_start(const struct device *dev)
 	return 0;
 }
 
-static int tdm_nrfx_trigger(const struct device *dev, enum i2s_dir dir, enum i2s_trigger_cmd cmd)
+static int tdm_nrf_trigger(const struct device *dev, enum i2s_dir dir, enum i2s_trigger_cmd cmd)
 {
 	struct tdm_drv_data *drv_data = dev->data;
 	const struct tdm_drv_cfg *drv_cfg = dev->config;
@@ -817,15 +853,8 @@ static int tdm_nrfx_trigger(const struct device *dev, enum i2s_dir dir, enum i2s
 	 * Instead, if a given stream is not configured, the respective
 	 * flag (tx_configured or rx_configured) is cleared.
 	 */
-	channels_configuration_merge(&drv_data->tx.nrfx_cfg.channels,
-				     &drv_data->rx.nrfx_cfg.channels);
-	if (dir == I2S_DIR_BOTH) {
-		if (!channels_configuration_check(drv_data->tx.nrfx_cfg.channels,
-						  drv_data->rx.nrfx_cfg.channels)) {
-			LOG_ERR("TX and RX channels configurations are different");
-			return -EIO;
-		}
 
+	if (dir == I2S_DIR_BOTH) {
 		configured = drv_data->tx_configured && drv_data->rx_configured;
 	} else if (dir == I2S_DIR_TX) {
 		configured = drv_data->tx_configured;
@@ -838,11 +867,26 @@ static int tdm_nrfx_trigger(const struct device *dev, enum i2s_dir dir, enum i2s
 		return -EIO;
 	}
 
-	if (dir == I2S_DIR_BOTH && (memcmp(&drv_data->tx.nrfx_cfg, &drv_data->rx.nrfx_cfg,
-					   sizeof(drv_data->rx.nrfx_cfg)) != 0 ||
-				    (drv_data->tx.cfg.block_size != drv_data->rx.cfg.block_size))) {
-		LOG_ERR("TX and RX configurations are different");
-		return -EIO;
+	if (dir == I2S_DIR_BOTH) {
+		if (!channels_configuration_check(drv_data->tx.nrfx_cfg.channels,
+						  drv_data->rx.nrfx_cfg.channels)) {
+			LOG_ERR("TX and RX channels configurations are different");
+			return -EIO;
+		}
+		/* The TX and RX channel masks are to be stored in a single TDM register.
+		 * In case of I2S_DIR_BOTH, only the rx.nrfx_cfg structure is used, so
+		 * it must also contain the TX channel mask.
+		 */
+		uint32_t tx_rx_merged =
+			drv_data->tx.nrfx_cfg.channels | drv_data->rx.nrfx_cfg.channels;
+		drv_data->tx.nrfx_cfg.channels = tx_rx_merged;
+		drv_data->rx.nrfx_cfg.channels = tx_rx_merged;
+		if (memcmp(&drv_data->tx.nrfx_cfg, &drv_data->rx.nrfx_cfg,
+			   sizeof(drv_data->rx.nrfx_cfg)) != 0 ||
+		    (drv_data->tx.cfg.block_size != drv_data->rx.cfg.block_size)) {
+			LOG_ERR("TX and RX configurations are different");
+			return -EIO;
+		}
 	}
 
 	switch (cmd) {
@@ -957,14 +1001,14 @@ static void data_handler(const struct device *dev, const tdm_buffers_t *released
 		}
 		tdm_uninit(drv_data);
 		if (drv_data->request_clock) {
-			(void)audio_clock_release();
+			(void)audio_clock_release(drv_data);
 		}
 	}
 
 	if (released == NULL) {
 		/* This means that buffers for the next part of the transfer
 		 * were not supplied and the previous ones cannot be released
-		 * yet, as pointers to them were latched in the I2S registers.
+		 * yet, as pointers to them were latched in the TDM registers.
 		 * It is not an error when the transfer is to be stopped (those
 		 * buffers will be released after the transfer actually stops).
 		 */
@@ -1062,6 +1106,20 @@ static void data_handler(const struct device *dev, const tdm_buffers_t *released
 	}
 }
 
+static void clock_manager_init(const struct device *dev)
+{
+#if CONFIG_CLOCK_CONTROL_NRF && NRF_CLOCK_HAS_HFCLKAUDIO
+	clock_control_subsys_t subsys;
+	struct tdm_drv_data *drv_data = dev->data;
+
+	subsys = CLOCK_CONTROL_NRF_SUBSYS_HFAUDIO;
+	drv_data->clk_mgr = z_nrf_clock_control_get_onoff(subsys);
+	__ASSERT_NO_MSG(drv_data->clk_mgr != NULL);
+#else
+	(void)dev;
+#endif
+}
+
 static int data_init(const struct device *dev)
 {
 	struct tdm_drv_data *drv_data = dev->data;
@@ -1077,22 +1135,23 @@ static int data_init(const struct device *dev)
 	return err;
 }
 
-static const struct i2s_driver_api tdm_nrf_drv_api = {
-	.configure = tdm_nrfx_configure,
-	.config_get = tdm_nrfx_config_get,
-	.read = tdm_nrfx_read,
-	.write = tdm_nrfx_write,
-	.trigger = tdm_nrfx_trigger,
+static DEVICE_API(i2s, tdm_nrf_drv_api) = {
+	.configure = tdm_nrf_configure,
+	.config_get = tdm_nrf_config_get,
+	.read = tdm_nrf_read,
+	.write = tdm_nrf_write,
+	.trigger = tdm_nrf_trigger,
 };
 
-#define TDM(idx)         DT_NODELABEL(tdm##idx)
-#define TDM_CLK_SRC(idx) DT_STRING_TOKEN(TDM(idx), clock_source)
-#define PCLK_NODE(idx)   DT_CLOCKS_CTLR(TDM(idx))
+#define TDM(idx)             DT_NODELABEL(tdm##idx)
+#define TDM_SCK_CLK_SRC(idx) DT_STRING_TOKEN(TDM(idx), sck_clock_source)
+#define TDM_MCK_CLK_SRC(idx) DT_STRING_TOKEN(TDM(idx), mck_clock_source)
+#define PCLK_NODE(idx)       DT_CLOCKS_CTLR(TDM(idx))
 
-#define TDM_NRFX_DEVICE(idx)                                                                       \
+#define TDM_NRF_DEVICE(idx)                                                                        \
 	static tdm_ctrl_t tdm##idx##data;                                                          \
-	static struct tdm_buf tx_msgs##idx[CONFIG_TDM_NRFX_TX_BLOCK_COUNT];                        \
-	static struct tdm_buf rx_msgs##idx[CONFIG_TDM_NRFX_RX_BLOCK_COUNT];                        \
+	static struct tdm_buf tx_msgs##idx[CONFIG_I2S_NRF_TDM_TX_BLOCK_COUNT];                     \
+	static struct tdm_buf rx_msgs##idx[CONFIG_I2S_NRF_TDM_RX_BLOCK_COUNT];                     \
 	static void tdm_##idx##_irq_handler(const struct device *dev)                              \
 	{                                                                                          \
 		tdm_irq_handler(dev);                                                              \
@@ -1102,18 +1161,19 @@ static const struct i2s_driver_api tdm_nrf_drv_api = {
 		data_handler(DEVICE_DT_GET(TDM(idx)), p_released, status);                         \
 	}                                                                                          \
 	PINCTRL_DT_DEFINE(TDM(idx));                                                               \
-	static const struct tdm_drv_cfg tdm_nrfx_cfg##idx = {                                      \
+	static const struct tdm_drv_cfg tdm_nrf_cfg##idx = {                                       \
 		.data_handler = tdm_##idx##data_handler,                                           \
 		.pcfg = PINCTRL_DT_DEV_CONFIG_GET(TDM(idx)),                                       \
-		.clk_src = TDM_CLK_SRC(idx),                                                       \
+		.sck_src = TDM_SCK_CLK_SRC(idx),                                                   \
+		.mck_src = TDM_MCK_CLK_SRC(idx),                                                   \
 		.mck_frequency = DT_PROP_OR(TDM(idx), mck_frequency, 0),                           \
 		.pclk_frequency = DT_PROP(PCLK_NODE(idx), clock_frequency),                        \
 		.p_reg = NRF_TDM##idx,                                                             \
 		.control_data = &tdm##idx##data,                                                   \
 		.mem_reg = DMM_DEV_TO_REG(TDM(idx)),                                               \
 	};                                                                                         \
-	static struct tdm_drv_data tdm_nrfx_data##idx;                                             \
-	static int tdm_nrfx_init##idx(const struct device *dev)                                    \
+	static struct tdm_drv_data tdm_nrf_data##idx;                                              \
+	static int tdm_nrf_init##idx(const struct device *dev)                                     \
 	{                                                                                          \
 		IRQ_CONNECT(DT_IRQN(TDM(idx)), DT_IRQ(TDM(idx), priority),                         \
 			    tdm_##idx##_irq_handler, DEVICE_DT_GET(TDM(idx)), 0);                  \
@@ -1122,23 +1182,24 @@ static const struct i2s_driver_api tdm_nrf_drv_api = {
 		if (err < 0) {                                                                     \
 			return err;                                                                \
 		}                                                                                  \
-		k_msgq_init(&tdm_nrfx_data##idx.tx_queue, (char *)tx_msgs##idx,                    \
+		k_msgq_init(&tdm_nrf_data##idx.tx_queue, (char *)tx_msgs##idx,                     \
 			    sizeof(struct tdm_buf), ARRAY_SIZE(tx_msgs##idx));                     \
-		k_msgq_init(&tdm_nrfx_data##idx.rx_queue, (char *)rx_msgs##idx,                    \
+		k_msgq_init(&tdm_nrf_data##idx.rx_queue, (char *)rx_msgs##idx,                     \
 			    sizeof(struct tdm_buf), ARRAY_SIZE(rx_msgs##idx));                     \
+		clock_manager_init(dev);                                                           \
 		return 0;                                                                          \
 	}                                                                                          \
-	BUILD_ASSERT(TDM_CLK_SRC(idx) != ACLK || DT_NODE_HAS_STATUS_OKAY(NODE_AUDIOPLL),	   \
+	BUILD_ASSERT((TDM_SCK_CLK_SRC(idx) != ACLK && TDM_MCK_CLK_SRC(idx) != ACLK) ||             \
+			     DT_NODE_HAS_STATUS_OKAY(NODE_ACLK),                                   \
 		     "Clock source ACLK requires the audiopll node.");                             \
-	DEVICE_DT_DEFINE(TDM(idx), tdm_nrfx_init##idx, NULL, &tdm_nrfx_data##idx,                  \
-			 &tdm_nrfx_cfg##idx, POST_KERNEL, CONFIG_I2S_INIT_PRIORITY,                \
-			 &tdm_nrf_drv_api);
+	DEVICE_DT_DEFINE(TDM(idx), tdm_nrf_init##idx, NULL, &tdm_nrf_data##idx, &tdm_nrf_cfg##idx, \
+			 POST_KERNEL, CONFIG_I2S_INIT_PRIORITY, &tdm_nrf_drv_api);
 
 /* Execute macro f(x) for all instances. */
 #define TDM_FOR_EACH_INSTANCE(f, sep, off_code, ...)                                               \
 	NRFX_FOREACH_PRESENT(TDM, f, sep, off_code, __VA_ARGS__)
 
-#define COND_TDM_NRFX_DEVICE(unused, prefix, i, _)                                                 \
-	IF_ENABLED(CONFIG_HAS_HW_NRF_TDM##prefix##i, (TDM_NRFX_DEVICE(prefix##i);))
+#define COND_TDM_NRF_DEVICE(unused, prefix, i, _)                                                  \
+	IF_ENABLED(CONFIG_HAS_HW_NRF_TDM##prefix##i, (TDM_NRF_DEVICE(prefix##i);))
 
-TDM_FOR_EACH_INSTANCE(COND_TDM_NRFX_DEVICE, (), ())
+TDM_FOR_EACH_INSTANCE(COND_TDM_NRF_DEVICE, (), ())
