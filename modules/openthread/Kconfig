@@ -17,6 +17,22 @@ config OPENTHREAD
 
 if OPENTHREAD
 
+config OPENTHREAD_SYS_INIT
+	bool "Initialize OpenThread stack during system initialization"
+	default y
+	depends on !NET_L2_OPENTHREAD
+	help
+	  This option initializes the OpenThread automatically by calling the openthread_init()
+	  function during system initialization.
+
+config OPENTHREAD_SYS_INIT_PRIORITY
+	int "OpenThread system initialization priority"
+	default 40
+	depends on OPENTHREAD_SYS_INIT
+	help
+	  This option sets the priority of the OpenThread system initialization.
+
+
 choice OPENTHREAD_IMPLEMENTATION
 	prompt "OpenThread origin selection"
 	help
@@ -319,6 +335,19 @@ config OPENTHREAD_INTERFACE_EARLY_UP
 	  Establishment phase.
 	  Otherwise, OpenThread interface will be marked operational UP only
 	  after the device joins a Thread network.
+
+config OPENTHREAD_PLATFORM_PKT_TXTIME
+	bool
+	default y if NET_PKT_TXTIME
+	help
+	  Enable packet TX time support. This is needed for when the application
+	  wants to set the exact time when the packet should be sent.
+
+config OPENTHREAD_PLATFORM_CARRIER_FUNCTIONS
+	bool
+	default y if OPENTHREAD_DIAG && IEEE802154_CARRIER_FUNCTIONS
+	help
+	  Enable support for functions such as modulated carrier and continuous carrier.
 
 menu "OpenThread stack features"
 rsource "Kconfig.features"
