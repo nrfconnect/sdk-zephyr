@@ -398,7 +398,7 @@ static void dwc2_ep_next_target_frame(const struct device *dev, struct udc_ep_co
 	priv->target_frames[ep_bitmap_idx] += cfg->interval;
 	if (priv->target_frames[ep_bitmap_idx] > limit) {
 		priv->target_frames[ep_bitmap_idx] &= limit;
-		priv->target_frame_overrun_mask  &= BIT(ep_bitmap_idx);
+		priv->target_frame_overrun_mask |= BIT(ep_bitmap_idx);
 	} else {
 		priv->target_frame_overrun_mask &= ~BIT(ep_bitmap_idx);
 	}
@@ -2619,6 +2619,10 @@ static inline void dwc2_handle_in_xfercompl(const struct device *dev,
 		return;
 	}
 
+	if (dwc2_ep_is_iso(ep_cfg)) {
+		dwc2_ep_next_target_frame(dev, ep_cfg);
+	}
+
 	atomic_set_bit(&priv->xfer_finished, ep_idx);
 	k_event_post(&priv->drv_evt, BIT(DWC2_DRV_EVT_EP_FINISHED));
 }
@@ -2627,6 +2631,7 @@ static inline void dwc2_handle_in_nakintrpt(const struct device *dev,
 					    const uint8_t ep_idx)
 {
 	struct udc_dwc2_data *const priv = udc_get_private(dev);
+	struct usb_dwc2_reg *const base = dwc2_get_base(dev);
 	mem_addr_t diepctl_reg = dwc2_get_dxepctl_reg(dev, ep_idx | USB_EP_DIR_IN);
 	struct udc_ep_config *ep_cfg = udc_get_ep_cfg(dev, ep_idx | USB_EP_DIR_IN);
 	const uint8_t ep_bitmap_idx = USB_EP_GET_BITMAP_IDX(ep_cfg->addr);
@@ -2650,10 +2655,22 @@ static inline void dwc2_handle_in_nakintrpt(const struct device *dev,
 		}
 	}
 
-	// TODO this holy fuck
-	//diepctl = sys_read32(diepctl_reg);
-	//if (diepctl )
-	dwc2_ep_next_target_frame(dev, ep_cfg);
+	udc_dwc2_ep_disable(dev, ep_cfg, false);
+
+	while (dwc2_target_frame_elapsed(dev, ep_cfg)) {
+		struct net_buf *buf = udc_buf_get(ep_cfg);
+
+		if (buf) {
+			if(udc_submit_ep_event(dev, buf, -ENODATA)) {
+				LOG_ERR("Failed to submit endpoint event");
+			}
+		}
+		
+		dwc2_ep_next_target_frame(dev, ep_cfg);
+		priv->sof_num = usb_dwc2_get_dsts_soffn(sys_read32((mem_addr_t)&base->dsts));
+	}
+
+	dwc2_handle_xfer_next(dev, ep_cfg);
 }
 
 static inline void dwc2_handle_iepint(const struct device *dev)
@@ -2752,15 +2769,19 @@ static inline void dwc2_handle_out_xfercompl(const struct device *dev,
 		}
 	}
 
-	if (dwc2_in_buffer_dma_mode(dev) && bcnt) {
+	if (!is_iso && dwc2_in_buffer_dma_mode(dev) && bcnt) {
 		sys_cache_data_invd_range(net_buf_tail(buf), bcnt);
 		net_buf_add(buf, bcnt);
+	}
+
+	if (is_iso) {
+		dwc2_ep_next_target_frame(dev, ep_cfg);
 	}
 
 	if (!is_iso && bcnt && (bcnt % udc_mps_ep_size(ep_cfg)) == 0 &&
 	    net_buf_tailroom(buf)) {
 		dwc2_prep_rx(dev, buf, ep_cfg);
-	} else {
+	} else if (!is_iso) {
 		atomic_set_bit(&priv->xfer_finished, 16 + ep_idx);
 		k_event_post(&priv->drv_evt, BIT(DWC2_DRV_EVT_EP_FINISHED));
 	}
@@ -2768,13 +2789,13 @@ static inline void dwc2_handle_out_xfercompl(const struct device *dev,
 
 static inline void dwc2_handle_out_token_ep_disabled(const struct device *dev, const uint8_t ep_idx) {
 	struct udc_dwc2_data *const priv = udc_get_private(dev);
+	struct usb_dwc2_reg *const base = dwc2_get_base(dev);
 	struct udc_ep_config *ep_cfg = udc_get_ep_cfg(dev, ep_idx);
 	const uint8_t ep_bitmap_idx = USB_EP_GET_BITMAP_IDX(ep_cfg->addr);
 
 	if (!USB_EP_DIR_IS_OUT(ep_cfg->addr) || !dwc2_ep_is_iso(ep_cfg)) {
 		return;
 	}
-
 
 	if (priv->target_frames[ep_bitmap_idx] == UDC_DWC2_TARGET_FRAME_INITIAL) {
 		priv->target_frames[ep_bitmap_idx] = priv->sof_num;
@@ -2790,7 +2811,20 @@ static inline void dwc2_handle_out_token_ep_disabled(const struct device *dev, c
 		}
 	}
 
-	dwc2_ep_next_target_frame(dev, ep_cfg);
+	while (dwc2_target_frame_elapsed(dev, ep_cfg)) {
+		struct net_buf *buf = udc_buf_get(ep_cfg);
+
+		if (buf) {
+			if(udc_submit_ep_event(dev, buf, -ENODATA)) {
+				LOG_ERR("Failed to submit endpoint event");
+			}
+		}
+		
+		dwc2_ep_next_target_frame(dev, ep_cfg);
+		priv->sof_num = usb_dwc2_get_dsts_soffn(sys_read32((mem_addr_t)&base->dsts));
+	}
+
+	dwc2_handle_xfer_next(dev, ep_cfg);
 }
 
 static inline void dwc2_handle_oepint(const struct device *dev)
