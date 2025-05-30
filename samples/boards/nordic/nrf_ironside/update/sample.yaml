@@ -6,7 +6,10 @@ common:
   tags: nrf_ironside
   integration_platforms:
     - nrf54h20dk/nrf54h20/cpuapp/iron
+    - nrf9280pdk/nrf9280/cpuapp/iron
 
 tests:
-  sample.boards.nordic.nrf_ironside.update:
-    platform_allow: nrf54h20dk/nrf54h20/cpuapp/iron
+  sample.drivers.firmware.nrf_ironside.update:
+    platform_allow: 
+    - nrf54h20dk/nrf54h20/cpuapp/iron
+    - nrf9280pdk/nrf9280/cpuapp/iron
