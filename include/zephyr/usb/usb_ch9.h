@@ -321,6 +321,9 @@ struct usb_association_descriptor {
 /** Get endpoint address from endpoint index and direction */
 #define USB_EP_GET_ADDR(idx, dir)	((idx) | ((dir) & USB_EP_DIR_MASK))
 
+/** Get endpoint bitmap index mapping */
+#define USB_EP_GET_BITMAP_IDX(ep) (USB_EP_GET_IDX(ep) | (((ep) & USB_EP_DIR_MASK) >> 3U))
+
 /** True if the endpoint is an IN endpoint */
 #define USB_EP_DIR_IS_IN(ep)		(USB_EP_GET_DIR(ep) == USB_EP_DIR_IN)
 
