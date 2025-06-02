@@ -14,6 +14,22 @@ function(nrf_regtool_generate_uicr generated_hex_file)
     COMMAND_ERROR_IS_FATAL ANY
   )
   message(STATUS "Generated UICR hex file: ${generated_hex_file}")
+
+  if(CONFIG_SOC_NRF54H20_IRON)
+    execute_process(
+      COMMAND
+      ${CMAKE_COMMAND} -E env PYTHONPATH=${ZEPHYR_BASE}/scripts/dts/python-devicetree/src
+      ${NRF_REGTOOL} ${verbosity} uicr-migrate
+      --uicr-hex-file ${generated_hex_file}
+      --edt-pickle-file ${EDT_PICKLE}
+      --output-periphconf-file ${PROJECT_BINARY_DIR}/periphconf_migrated.c
+      WORKING_DIRECTORY ${APPLICATION_SOURCE_DIR}
+      COMMAND_ERROR_IS_FATAL ANY
+    )
+    set_property(GLOBAL APPEND PROPERTY GENERATED_APP_SOURCE_FILES
+      ${PROJECT_BINARY_DIR}/periphconf_migrated.c
+    )
+  endif()
 endfunction()
 
 function(nrf_regtool_generate_peripheral peripheral generated_hex_file)
@@ -41,23 +57,29 @@ get_property(version GLOBAL PROPERTY nrf_regtool_version)
 
 foreach(component IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS)
   if(component STREQUAL "GENERATE:UICR")
-    set(generated_hex_file ${PROJECT_BINARY_DIR}/uicr.hex)
+    if(NOT CONFIG_SOC_NRF54H20_IRON)
+      set(generated_hex_file ${PROJECT_BINARY_DIR}/uicr.hex)
+    else()
+      # need a different name than the other one
+      set(generated_hex_file ${PROJECT_BINARY_DIR}/uicr_regtool.hex)
+    endif()
     if(version VERSION_GREATER_EQUAL 7.0.0)
       nrf_regtool_generate_uicr(${generated_hex_file})
     else()
       nrf_regtool_generate_peripheral(UICR ${generated_hex_file})
     endif()
 
-    # UICR must be flashed together with the Zephyr binary.
-    set(merged_hex_file ${PROJECT_BINARY_DIR}/uicr_merged.hex)
-    set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
-      COMMAND ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/build/mergehex.py
-      -o ${merged_hex_file}
-      ${generated_hex_file}
-      ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}
-    )
-    set_property(TARGET runners_yaml_props_target PROPERTY hex_file ${merged_hex_file})
-
+    if(NOT CONFIG_SOC_NRF54H20_IRON)
+      # UICR must be flashed together with the Zephyr binary.
+      set(merged_hex_file ${PROJECT_BINARY_DIR}/uicr_merged.hex)
+      set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
+        COMMAND ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/build/mergehex.py
+        -o ${merged_hex_file}
+        ${generated_hex_file}
+        ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}
+      )
+      set_property(TARGET runners_yaml_props_target PROPERTY hex_file ${merged_hex_file})
+    endif()
   else()
     message(FATAL_ERROR "Unrecognized package component: \"${component}\"")
   endif()
