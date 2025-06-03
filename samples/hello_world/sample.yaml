@@ -13,6 +13,7 @@ common:
     type: one_line
     regex:
       - "Hello World! (.*)"
+
 tests:
   sample.basic.helloworld:
     tags: introduction
