@@ -16,6 +16,21 @@
 #include <stdlib.h>
 #include <zephyr/drivers/gpio.h>
 
+#ifdef CONFIG_WIFI_NRF71
+enum {
+	WIFIMCU_REG = 0,
+	RAM0,
+	RAM1,
+	DATARAM,
+	CODERAM,
+	RAM2,
+	BELLBOARD,
+	GRTC,
+	WICR,
+	SECURERAM,
+	NUM_MEM_BLOCKS
+};
+#else /* CONFIG_WIFI_NRF71 */
 enum {
 	SYSBUS = 0,
 	EXT_SYS_BUS,
@@ -30,6 +45,7 @@ enum {
 	UMAC_SRC_RAM,
 	NUM_MEM_BLOCKS
 };
+#endif /* !CONFIG_WIFI_NRF71 */
 
 /* Keeping it higher to avoid changing it ofter, but modify this value
  * if rpu_7002_memmap is changed.
@@ -63,4 +79,9 @@ int sr_ant_switch(unsigned int ant_switch);
 int sr_gpio_remove(void);
 int sr_gpio_config(void);
 #endif /* CONFIG_NRF70_SR_COEX_RF_SWITCH */
+#ifdef CONFIG_WIFI_NRF71
+int rpu_validate_addr(uint32_t start_addr, uint32_t len, bool *hl_flag);
+int rpu_pwron(void);
+int rpu_gpio_config(void);
+#endif /* CONFIG_WIFI_NRF71 */
 #endif /* __RPU_HW_IF_H_ */
