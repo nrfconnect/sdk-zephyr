@@ -1,0 +1,41 @@
+/*
+ * Copyright (c) 2024 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* i2s-node0 is the transmitter/receiver */
+
+/ {
+	aliases {
+		i2s-tx = &tdm130;
+	};
+};
+
+&pinctrl {
+    tdm130_default_alt: tdm130_default_alt {
+        group1 {
+            psels = <NRF_PSEL(TDM_SCK_M, 1, 3)>,
+                <NRF_PSEL(TDM_FSYNC_M, 1, 6)>,
+                <NRF_PSEL(TDM_SDOUT, 1, 4)>,
+                <NRF_PSEL(TDM_SDIN, 1, 5)>,
+                <NRF_PSEL(TDM_MCK, 1, 2)>; /* Define MCLK pin */
+        };
+    };
+};
+
+&tdm130 {
+    status = "okay";
+    pinctrl-0 = <&tdm130_default_alt>;
+    pinctrl-names = "default";
+    memory-regions = <&cpuapp_dma_region>;
+    mck-frequency = <6144000>;
+    mck-clock-source = "ACLK";
+    sck-clock-source = "ACLK";
+};
+
+&audiopll {
+    status = "okay";
+    frequency = <NRFS_AUDIOPLL_FREQ_AUDIO_44K1>;
+};
+// #define NRFS_AUDIOPLL_FREQ_AUDIO_44K1 11289591
