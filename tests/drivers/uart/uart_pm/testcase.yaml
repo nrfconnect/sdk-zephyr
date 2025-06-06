@@ -10,6 +10,7 @@ common:
     - nrf54l20pdk/nrf54l20/cpuapp
     - nrf54l15bsim/nrf54l15/cpuapp
     - nrf54h20dk/nrf54h20/cpuapp
+    - nrf54h20dk/nrf54h20/cpuapp/iron
     - nrf52_bsim
     - nrf5340bsim/nrf5340/cpuapp
     - ophelia4ev/nrf54l15/cpuapp
@@ -37,6 +38,7 @@ tests:
       - nrf54l20pdk/nrf54l20/cpuapp
       - nrf54l15bsim/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
       - nrf52_bsim
       - nrf5340bsim/nrf5340/cpuapp
       - ophelia4ev/nrf54l15/cpuapp
@@ -51,6 +53,7 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54l20pdk/nrf54l20/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
       - ophelia4ev/nrf54l15/cpuapp
 
   drivers.uart.pm.int_driven:
@@ -71,6 +74,7 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54l20pdk/nrf54l20/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
       - ophelia4ev/nrf54l15/cpuapp
 
   drivers.uart.pm.async:
@@ -91,4 +95,5 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54l20pdk/nrf54l20/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
       - ophelia4ev/nrf54l15/cpuapp

@@ -9,3 +9,6 @@ target_sources(app PRIVATE
     src/test_uart_async.c
     )
 target_sources_ifdef(CONFIG_UART_WIDE_DATA app PRIVATE src/test_uart_wide.c)
+if(CONFIG_SOC_NRF54H20_IRON)
+  target_sources(app PRIVATE periphconf_migrated_src/periphconf_migrated_from_uicr.c)
+endif()

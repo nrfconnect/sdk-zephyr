@@ -6,7 +6,9 @@ tests:
   boards.nrf.mram_latency:
     platform_allow:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
       - nrf54h20dk/nrf54h20/cpurad
     integration_platforms:
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpuapp/iron
       - nrf54h20dk/nrf54h20/cpurad
