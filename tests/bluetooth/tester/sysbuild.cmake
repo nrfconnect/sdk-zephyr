@@ -23,7 +23,7 @@ if(SB_CONFIG_NET_CORE_IMAGE_HCI_IPC)
 	endif()
 
 	set(${NET_APP}_EXTRA_CONF_FILE
-	 ${APP_DIR}/hci_ipc_cpunet.conf
+	 ${APP_DIR}/overlay-bt_ll_sw_split.conf
 	 CACHE INTERNAL ""
 	)
 
