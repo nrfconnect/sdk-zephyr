@@ -33,3 +33,6 @@ target_sources_ifdef(
 	app PRIVATE
 	src/irq_offload.c
 )
+if(CONFIG_SOC_NRF54H20_IRON)
+  target_sources(app PRIVATE periphconf_migrated_src/periphconf_migrated_from_uicr.c)
+endif()

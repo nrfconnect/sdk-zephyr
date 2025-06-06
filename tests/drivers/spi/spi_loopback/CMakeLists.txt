@@ -7,3 +7,6 @@ project(spi_loopback)
 
 target_sources(app PRIVATE src/spi.c)
 target_sources_ifdef(CONFIG_SPI_RTIO app PRIVATE src/spi_rtio.c)
+if(CONFIG_SOC_NRF54H20_IRON)
+  target_sources(app PRIVATE periphconf_migrated_src/periphconf_migrated_from_uicr.c)
+endif()
