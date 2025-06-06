@@ -186,7 +186,7 @@ int pthread_cond_timedwait(pthread_cond_t *cv, pthread_mutex_t *mut, const struc
 int pthread_cond_init(pthread_cond_t *cvar, const pthread_condattr_t *att)
 {
 	struct posix_cond *cv;
-	struct posix_condattr *attr = (struct posix_condattr *)attr;
+	struct posix_condattr *attr = (struct posix_condattr *)att;
 
 	*cvar = PTHREAD_COND_INITIALIZER;
 	cv = to_posix_cond(cvar);
@@ -276,36 +276,4 @@ int pthread_condattr_destroy(pthread_condattr_t *att)
 	return 0;
 }
 
-int pthread_condattr_getclock(const pthread_condattr_t *ZRESTRICT att,
-		clockid_t *ZRESTRICT clock_id)
-{
-	struct posix_condattr *const attr = (struct posix_condattr *)att;
-
-	if ((attr == NULL) || !attr->initialized) {
-		LOG_DBG("%s %s initialized", "attribute", "not");
-		return EINVAL;
-	}
-
-	*clock_id = attr->clock;
-
-	return 0;
-}
-
-int pthread_condattr_setclock(pthread_condattr_t *att, clockid_t clock_id)
-{
-	struct posix_condattr *const attr = (struct posix_condattr *)att;
-
-	if (clock_id != CLOCK_REALTIME && clock_id != CLOCK_MONOTONIC) {
-		return -EINVAL;
-	}
-
-	if ((attr == NULL) || !attr->initialized) {
-		LOG_DBG("%s %s initialized", "attribute", "not");
-		return EINVAL;
-	}
-
-	attr->clock = clock_id;
-
-	return 0;
-}
 SYS_INIT(pthread_cond_pool_init, PRE_KERNEL_1, 0);
