@@ -10,9 +10,6 @@
 #define PPIB130_ADDR (0x5f925000UL)
 #define PPIB133_ADDR (0x5f99d000UL)
 
-/* Map the interrupt for the UART instance used by default by the radio core. */
-UICR_IRQMAP_IRQ_SINK_SET(NRFX_IRQ_NUMBER_GET(NRF_UARTE135), NRF_PROCESSOR_RADIOCORE);
-
 /* Non-secure GRTC channels */
 UICR_SPU_FEATURE_GRTC_CC_SET(SPU133_ADDR, 8, false, NRF_OWNER_NONE);
 UICR_SPU_FEATURE_GRTC_CC_SET(SPU133_ADDR, 9, false, NRF_OWNER_NONE);
