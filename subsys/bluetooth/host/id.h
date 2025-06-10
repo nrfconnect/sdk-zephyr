@@ -60,3 +60,5 @@ void bt_id_pending_keys_update(void);
 void bt_id_pending_keys_update_set(struct bt_keys *keys, uint8_t flag);
 
 void bt_id_adv_limited_stopped(struct bt_le_ext_adv *adv);
+
+int bt_id_resolving_list_check_and_update(uint8_t id, const bt_addr_le_t *peer);
