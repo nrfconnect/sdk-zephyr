@@ -19,6 +19,9 @@ LOG_MODULE_DECLARE(net_shell);
 #if defined(CONFIG_NET_L2_VIRTUAL)
 #include <zephyr/net/virtual.h>
 #endif
+#if defined(CONFIG_NET_L2_WIFI_MGMT)
+#include <zephyr/net/wifi_mgmt.h>
+#endif
 #if defined(CONFIG_ETH_PHY_DRIVER)
 #include <zephyr/net/phy.h>
 #endif
@@ -690,6 +693,132 @@ static int cmd_net_iface(const struct shell *sh, size_t argc, char *argv[])
 	return 0;
 }
 
+static int cmd_net_default_iface(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = NULL;
+	int idx;
+
+	if (argc < 2) {
+		iface = net_if_get_default();
+		if (!iface) {
+			PR_WARNING("No default interface\n");
+			return -ENOEXEC;
+		}
+
+		idx = net_if_get_by_iface(iface);
+		PR("Default interface: %d\n", idx);
+	} else {
+		int new_idx;
+
+		idx = get_iface_idx(sh, argv[1]);
+		if (idx < 0) {
+			return -ENOEXEC;
+		}
+
+		net_if_set_default(net_if_get_by_index(idx));
+
+		new_idx = net_if_get_by_iface(net_if_get_default());
+		if (new_idx != idx) {
+			PR_WARNING("Failed to set default interface to %d\n", idx);
+			return -ENOEXEC;
+		}
+
+		PR("Default interface: %d\n", new_idx);
+	}
+
+	return 0;
+}
+
+#if defined(CONFIG_NET_PROMISCUOUS_MODE) || defined(CONFIG_NET_L2_ETHERNET)
+static int cmd_net_iface_mode(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface;
+	int idx, ret = 0;
+	const char *mode;
+	const char *action;
+
+	if (argc < 4) {
+		PR_WARNING("Usage: net iface mode <index> <mode> <enable|disable>\n");
+		PR_INFO("Available modes:\n");
+#if defined(CONFIG_NET_PROMISCUOUS_MODE)
+		PR_INFO("  promiscuous - Enable/disable promiscuous mode\n");
+#endif
+#if defined(CONFIG_NET_L2_ETHERNET)
+		PR_INFO("  tx_injection - Enable/disable TX injection mode (Ethernet only)\n");
+#endif
+		return -ENOEXEC;
+	}
+
+	idx = get_iface_idx(sh, argv[1]);
+	if (idx < 0) {
+		return -ENOEXEC;
+	}
+
+	iface = net_if_get_by_index(idx);
+	if (!iface) {
+		PR_WARNING("No such interface in index %d\n", idx);
+		return -ENOEXEC;
+	}
+
+	mode = argv[2];
+	action = argv[3];
+
+	if (strcmp(action, "enable") != 0 && strcmp(action, "disable") != 0) {
+		PR_WARNING("Action must be 'enable' or 'disable'\n");
+		return -ENOEXEC;
+	}
+
+	bool enable = (strcmp(action, "enable") == 0);
+
+#if defined(CONFIG_NET_PROMISCUOUS_MODE)
+	if (strcmp(mode, "promiscuous") == 0) {
+		if (enable) {
+			ret = net_if_set_promisc(iface);
+			if (ret < 0) {
+				PR_WARNING("Failed to enable promiscuous mode (%d)\n", ret);
+				return -ENOEXEC;
+			}
+			PR("Promiscuous mode enabled on interface %d\n", idx);
+		} else {
+			net_if_unset_promisc(iface);
+			PR("Promiscuous mode disabled on interface %d\n", idx);
+		}
+		return 0;
+	}
+#endif
+
+	if (strcmp(mode, "tx_injection") == 0) {
+#if defined(CONFIG_NET_L2_ETHERNET)
+		if (net_if_l2(iface) == &NET_L2_GET_NAME(ETHERNET)) {
+			ret = net_eth_txinjection_mode(iface, enable);
+			if (ret < 0) {
+				PR_WARNING("Failed to %s TX injection mode (%d)\n",
+					   enable ? "enable" : "disable", ret);
+				return -ENOEXEC;
+			}
+
+			PR("TX injection mode %s on interface %d\n",
+			   enable ? "enabled" : "disabled", idx);
+			return 0;
+		}
+#endif
+		PR_WARNING("TX injection mode is not supported on this interface type\n");
+		return -ENOEXEC;
+	}
+
+	PR_WARNING("Unknown mode: %s\n", mode);
+	PR_INFO("Available modes:\n");
+#if defined(CONFIG_NET_PROMISCUOUS_MODE)
+	PR_INFO("  promiscuous\n");
+#endif
+#if defined(CONFIG_NET_L2_ETHERNET)
+	PR_INFO("  tx_injection\n");
+#endif
+
+	return -ENOEXEC;
+}
+#endif /* CONFIG_NET_PROMISCUOUS_MODE || CONFIG_NET_L2_ETHERNET */
+
 #if defined(CONFIG_NET_SHELL_DYN_CMD_COMPLETION)
 
 #include "iface_dynamic.h"
@@ -711,6 +840,14 @@ SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_iface,
 	SHELL_CMD(set_mac, IFACE_DYN_CMD,
 		  "'net iface set_mac <index> <MAC>' sets MAC address for the network interface.",
 		  cmd_net_set_mac),
+	SHELL_CMD(default, IFACE_DYN_CMD,
+		  "'net iface default [<index>]' displays or sets the default network interface.",
+		  cmd_net_default_iface),
+#if defined(CONFIG_NET_PROMISCUOUS_MODE) || defined(CONFIG_NET_L2_ETHERNET)
+	SHELL_CMD(mode, IFACE_DYN_CMD,
+		  "'net iface mode <index> <mode> <enable|disable>' configures interface modes.",
+		  cmd_net_iface_mode),
+#endif
 	SHELL_SUBCMD_SET_END
 );
 
