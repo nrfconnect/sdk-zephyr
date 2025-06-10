@@ -36,6 +36,15 @@ enum bt_keys_type {
 enum {
 	BT_KEYS_ID_PENDING_ADD = BIT(0),
 	BT_KEYS_ID_ADDED = BIT(2),
+	/** Indicates that the keys are in conflict with existing keys.
+	 *
+	 * This is used to indicate that the keys being added conflict with
+	 * existing keys from different identity.
+	 *
+	 * This is runtime state (recomputed when keys are loaded), it is not stored. It must not
+	 * be kept in &bt_keys.flags, which is stored and has no free bits left.
+	 */
+	BT_KEYS_ID_CONFLICT = BIT(3),
 };
 
 enum {
