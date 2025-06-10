@@ -359,6 +359,9 @@ int nrf_wifi_if_send(const struct device *dev,
 	struct nrf_wifi_fmac_dev_ctx_def *def_dev_ctx = NULL;
 	struct rpu_host_stats *host_stats = NULL;
 	void *nbuf = NULL;
+#ifdef CONFIG_NRF70_RAW_DATA_TX
+	struct raw_tx_pkt_header raw_hdr;
+#endif /* CONFIG_NRF70_RAW_DATA_TX */
 
 	if (!dev || !pkt) {
 		LOG_ERR("%s: vif_ctx_zep is NULL", __func__);
@@ -393,11 +396,14 @@ int nrf_wifi_if_send(const struct device *dev,
 	}
 
 #ifdef CONFIG_NRF70_RAW_DATA_TX
-	if ((*(unsigned int *)pkt->frags->data) == NRF_WIFI_MAGIC_NUM_RAWTX) {
+	memcpy(&raw_hdr, net_pkt_data(pkt), sizeof(raw_hdr));
+	if (ntohl(raw_hdr.magic_num) == NRF_WIFI_MAGIC_NUM_RAWTX) {
 		if (vif_ctx_zep->if_carr_state != NRF_WIFI_FMAC_IF_CARR_STATE_ON) {
 			goto drop;
 		}
-
+		LOG_DBG("%s: Sending raw packet: len=%d, vif_idx=%d",
+			__func__, net_pkt_get_len(pkt),
+			vif_ctx_zep->vif_idx);
 		ret = nrf_wifi_fmac_start_rawpkt_xmit(rpu_ctx_zep->rpu_ctx,
 						      vif_ctx_zep->vif_idx,
 						      nbuf);
