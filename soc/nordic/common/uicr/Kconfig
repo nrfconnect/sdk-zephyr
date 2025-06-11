@@ -4,7 +4,6 @@
 config NRF_HALTIUM_GENERATE_UICR
 	bool "Generate UICR file"
 	depends on SOC_NRF54H20_CPUAPP
-	depends on SOC_NRF54H20_IRON
 	default y
 	help
 	  Generate UICR HEX file.
@@ -25,7 +24,7 @@ endif
 config NRF_PERIPHCONF_SECTION
 	bool "Populate global peripheral initialization section"
 	default y if SOC_NRF54H20_CPUAPP
-	depends on SOC_NRF54H20_IRON
+	depends on SOC_NRF54H20
 	depends on LINKER_DEVNULL_SUPPORT
 	imply LINKER_DEVNULL_MEMORY
 	help
