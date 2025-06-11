@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+
+
 &pinctrl {
 	spi120_default: spi120_default {
 		group1 {
@@ -23,6 +25,11 @@
 	};
 };
 
+&gpio7 {
+	status = "okay";
+	zephyr,pm-device-runtime-auto;
+};
+
 &spi120 {
 	status = "okay";
 	pinctrl-0 = <&spi120_default>;
@@ -31,6 +38,7 @@
 	overrun-character = <0x00>;
 	memory-regions = <&dma_fast_region>;
 	zephyr,pm-device-runtime-auto;
+	cs-gpios = <&gpio7 0 GPIO_ACTIVE_LOW>;
 	slow@0 {
 		compatible = "test-spi-loopback-slow";
 		reg = <0>;
@@ -39,6 +47,6 @@
 	fast@0 {
 		compatible = "test-spi-loopback-fast";
 		reg = <0>;
-		spi-max-frequency = <DT_FREQ_M(8)>;
+		spi-max-frequency = <DT_FREQ_M(10)>;
 	};
 };
