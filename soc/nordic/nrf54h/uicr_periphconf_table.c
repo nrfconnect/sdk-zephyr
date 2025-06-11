@@ -5,10 +5,18 @@
  */
 #include <uicr/uicr.h>
 
+#define SPU121_ADDR  (0x5f8d0000UL)
+#define SPU130_ADDR  (0x5f900000UL)
 #define SPU131_ADDR  (0x5F920000UL)
 #define SPU133_ADDR  (0x5F990000UL)
 #define PPIB130_ADDR (0x5f925000UL)
 #define PPIB133_ADDR (0x5f99d000UL)
+
+/* FLPR ownership */
+UICR_SPU_PERIPH_PERM_SET(SPU121_ADDR, 4, true, false, NRF_OWNER_APPLICATION);
+
+/* PPR ownership */
+UICR_SPU_PERIPH_PERM_SET(SPU130_ADDR, 8, true, false, NRF_OWNER_APPLICATION);
 
 /* Non-secure GRTC channels */
 UICR_SPU_FEATURE_GRTC_CC_SET(SPU133_ADDR, 8, false, NRF_OWNER_NONE);
