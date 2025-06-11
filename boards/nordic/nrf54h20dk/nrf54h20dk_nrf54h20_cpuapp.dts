@@ -195,6 +195,8 @@ ipc0: &cpuapp_cpurad_ipc {
 	status = "okay";
 };
 
+uicr: &cpuapp_uicr {};
+
 ironside_se_boot_report: &cpuapp_ironside_se_boot_report {};
 
 boot_partition: &cpuapp_boot_partition {
