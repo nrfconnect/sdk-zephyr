@@ -22,7 +22,7 @@ config FLASH_LOAD_OFFSET
 # This is meant to span 'cpuapp_boot_partition' and 'cpuapp_slot0_partition'
 # in the default memory map.
 config FLASH_LOAD_SIZE
-	default 0x64000
+	default 0x62000
 
 endif # !USE_DT_CODE_PARTITION
 
