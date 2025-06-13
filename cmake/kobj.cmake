@@ -23,6 +23,7 @@ function(gen_kobject_list)
     DEPENDS
       ${arg_DEPENDS}
       ${GEN_KOBJECT_LIST}
+      ${PARSE_SYSCALLS_TARGET}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
   add_custom_target(${arg_TARGET} DEPENDS ${arg_OUTPUTS})
@@ -34,7 +35,7 @@ function(gen_kobject_list_gperf)
   cmake_parse_arguments(PARSE_ARGV 0 arg
     ""
     "TARGET;OUTPUT;KERNEL_TARGET"
-    "INCLUDES;DEPENDS"
+    "INCLUDES"
   )
   gen_kobject_list(
     TARGET ${arg_TARGET}
@@ -43,9 +44,7 @@ function(gen_kobject_list_gperf)
       --kernel $<TARGET_FILE:${arg_KERNEL_TARGET}>
       --gperf-output ${arg_OUTPUT}
     INCLUDES ${arg_INCLUDES}
-    DEPENDS
-      ${arg_DEPENDS}
-      ${arg_KERNEL_TARGET}
+    DEPENDS ${arg_KERNEL_TARGET}
     )
 endfunction()
 
@@ -55,7 +54,7 @@ function(gen_kobject_list_headers)
   cmake_parse_arguments(PARSE_ARGV 0 arg
     ""
     "GEN_DIR_OUT_VAR"
-    "INCLUDES;DEPENDS"
+    "INCLUDES"
   )
   if (PROJECT_BINARY_DIR)
     set(gen_dir ${PROJECT_BINARY_DIR}/include/generated/zephyr)
@@ -77,9 +76,6 @@ function(gen_kobject_list_headers)
       --kobj-otype-output ${KOBJ_OTYPE}
       --kobj-size-output ${KOBJ_SIZE}
     INCLUDES ${arg_INCLUDES}
-    DEPENDS
-      ${arg_DEPENDS}
-      ${arg_KERNEL_TARGET}
   )
 
   if(arg_GEN_DIR_OUT_VAR)
