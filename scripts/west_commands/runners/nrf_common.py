@@ -308,7 +308,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
 
 
     def recover_target(self):
-        if self.family in ('nrf53', 'nrf54h', 'nrf92'):
+        if self.family in ('nrf53', 'nrf92'):
             self.logger.info(
                 'Recovering and erasing flash memory for both the network '
                 'and application cores.')
@@ -321,7 +321,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
         # keeps the debug access port open, recovering the network core last
         # would result in that small image being deleted from the app core.
         # In the case of the 54H, the order is indifferent.
-        if self.family in ('nrf53', 'nrf54h', 'nrf92'):
+        if self.family in ('nrf53', 'nrf92'):
             self.exec_op('recover', core='Network')
 
         self.exec_op('recover')
@@ -369,9 +369,9 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
         if self.family in ('nrf54h', 'nrf92'):
             erase_arg = 'ERASE_NONE'
 
-            generated_uicr = self.build_conf.getboolean('CONFIG_NRF_REGTOOL_GENERATE_UICR')
+            regtool_generated_uicr = self.build_conf.getboolean('CONFIG_NRF_REGTOOL_GENERATE_UICR')
 
-            if generated_uicr and not self.hex_get_uicrs().get(core):
+            if regtool_generated_uicr and not self.hex_get_uicrs().get(core):
                 raise RuntimeError(
                     f"Expected a UICR to be contained in: {self.hex_}\n"
                     "Please ensure that the correct version of nrf-regtool is "
@@ -379,7 +379,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                 )
 
             if self.erase:
-                if self.build_conf.get('CONFIG_SOC_NRF54H20_IRON'):
+                if self.family == 'nrf54h':
                     self.exec_op('erase', kind='all')
                 else:
                     self.exec_op('erase', core='Application', kind='all')
@@ -434,7 +434,27 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                             core='Application',
                         )
 
-            if not self.erase and generated_uicr:
+                if self.build_conf.getboolean("CONFIG_NRF_HALTIUM_GENERATE_UICR"):
+                    zephyr_build_dir = Path(self.cfg.build_dir) / 'zephyr'
+
+                    self.op_program(
+                        str(zephyr_build_dir / 'uicr.hex'),
+                        'ERASE_NONE',
+                        None,
+                        defer=True,
+                        core='Application',
+                    )
+
+                    if self.build_conf.getboolean("CONFIG_NRF_HALTIUM_UICR_PERIPHCONF"):
+                        self.op_program(
+                            str(zephyr_build_dir / 'periphconf.hex'),
+                            'ERASE_NONE',
+                            None,
+                            defer=True,
+                            core='Application',
+                        )
+
+            if not self.erase and regtool_generated_uicr:
                 self.exec_op('erase', core=core, kind='uicr')
         else:
             if self.erase:
@@ -465,7 +485,7 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                           f'{ext_mem_erase_opt}')
 
         # Temp hack while waiting for NRF54H20_IRON support for Network in nrfutil
-        if self.build_conf.get('CONFIG_SOC_NRF54H20_IRON') and core == "Network":
+        if self.family == 'nrf54h' and core == "Network":
             core = "Application"
 
         self.op_program(self.hex_, erase_arg, ext_mem_erase_opt, defer=True, core=core)
