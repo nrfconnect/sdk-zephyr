@@ -120,7 +120,7 @@ sys_slist_t bt_auth_info_cbs = SYS_SLIST_STATIC_INIT(&bt_auth_info_cbs);
 
 static sys_slist_t conn_cbs = SYS_SLIST_STATIC_INIT(&conn_cbs);
 
-static struct bt_conn_tx conn_tx[CONFIG_BT_CONN_TX_MAX];
+static struct bt_conn_tx conn_tx[CONFIG_BT_BUF_ACL_TX_COUNT];
 
 #if defined(CONFIG_BT_CLASSIC)
 static struct bt_conn sco_conns[CONFIG_BT_MAX_SCO_CONN];
@@ -543,7 +543,7 @@ static int send_acl(struct bt_conn *conn, struct net_buf *buf, uint8_t flags)
 	hdr->handle = sys_cpu_to_le16(bt_acl_handle_pack(conn->handle, flags));
 	hdr->len = sys_cpu_to_le16(buf->len - sizeof(*hdr));
 
-	bt_buf_set_type(buf, BT_BUF_ACL_OUT);
+	net_buf_push_u8(buf, BT_HCI_H4_ACL);
 
 	return bt_send(buf);
 }
@@ -601,7 +601,7 @@ static int send_iso(struct bt_conn *conn, struct net_buf *buf, uint8_t flags)
 	hdr->handle = sys_cpu_to_le16(bt_iso_handle_pack(conn->handle, flags, ts));
 	hdr->len = sys_cpu_to_le16(buf->len - sizeof(*hdr));
 
-	bt_buf_set_type(buf, BT_BUF_ISO_OUT);
+	net_buf_push_u8(buf, BT_HCI_H4_ISO);
 
 	return bt_send(buf);
 }

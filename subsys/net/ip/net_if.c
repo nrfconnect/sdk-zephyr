@@ -2862,6 +2862,16 @@ struct net_if_ipv6_prefix *net_if_ipv6_prefix_get(struct net_if *iface,
 	}
 
 out:
+	if (prefix != NULL) {
+		NET_DBG("Found prefix %s/%d for %s",
+			net_sprint_ipv6_addr(&prefix->prefix),
+			prefix->len,
+			net_sprint_ipv6_addr(addr));
+	} else {
+		NET_DBG("No prefix found for %s",
+			net_sprint_ipv6_addr(addr));
+	}
+
 	net_if_unlock(iface);
 
 	return prefix;
@@ -3085,10 +3095,12 @@ static uint8_t get_diff_ipv6(const struct in6_addr *src,
 
 static inline bool is_proper_ipv6_address(struct net_if_addr *addr)
 {
-	if (addr->is_used && addr->addr_state == NET_ADDR_PREFERRED &&
-	    addr->address.family == AF_INET6 &&
+	if (addr->is_used && addr->address.family == AF_INET6 &&
 	    !net_ipv6_is_ll_addr(&addr->address.in6_addr)) {
-		return true;
+		if (addr->addr_state == NET_ADDR_PREFERRED ||
+		    addr->addr_state == NET_ADDR_DEPRECATED) {
+			return true;
+		}
 	}
 
 	return false;
@@ -3122,6 +3134,7 @@ static struct in6_addr *net_if_ipv6_get_best_match(struct net_if *iface,
 						   uint8_t *best_so_far,
 						   int flags)
 {
+	enum net_addr_state addr_state = NET_ADDR_ANY_STATE;
 	struct net_if_ipv6 *ipv6 = iface->config.ip.ipv6;
 	struct net_if_addr *public_addr = NULL;
 	struct in6_addr *src = NULL;
@@ -3170,7 +3183,26 @@ static struct in6_addr *net_if_ipv6_get_best_match(struct net_if *iface,
 			len = prefix_len;
 		}
 
-		if (len >= *best_so_far) {
+		if (ipv6->unicast[i].addr_state == NET_ADDR_DEPRECATED &&
+		    addr_state == NET_ADDR_PREFERRED) {
+			/* We have a preferred address and a deprecated
+			 * address. We prefer always the preferred address
+			 * over the deprecated address.
+			 * See RFC 6724 chapter 5.
+			 */
+			NET_DBG("skipping deprecated address %s",
+				net_sprint_ipv6_addr(&ipv6->unicast[i].address.in6_addr));
+			continue;
+		}
+
+		if (len >= *best_so_far ||
+		    (ipv6->unicast[i].addr_state == NET_ADDR_PREFERRED &&
+		     addr_state == NET_ADDR_DEPRECATED)) {
+			/* Currently we have best deprecated address, but
+			 * should now choose the preferred address regardless
+			 * of the length.
+			 */
+
 			/* Mesh local address can only be selected for the same
 			 * subnet.
 			 */
@@ -3178,6 +3210,14 @@ static struct in6_addr *net_if_ipv6_get_best_match(struct net_if *iface,
 			    !net_ipv6_is_addr_mcast_mesh(dst)) {
 				continue;
 			}
+
+			addr_state = ipv6->unicast[i].addr_state;
+
+			NET_DBG("[%zd] Checking %s (%s) dst %s/%d", i,
+				net_sprint_ipv6_addr(&ipv6->unicast[i].address.in6_addr),
+				addr_state == NET_ADDR_PREFERRED ? "preferred" :
+				addr_state == NET_ADDR_DEPRECATED ? "deprecated" : "?",
+				net_sprint_ipv6_addr(dst), prefix_len);
 
 			ret = use_public_address(iface->pe_prefer_public,
 						 ipv6->unicast[i].is_temporary,
@@ -3227,6 +3267,14 @@ use_public:
 
 out:
 	net_if_unlock(iface);
+
+	if (src != NULL) {
+		NET_DBG("Selected %s (%s) dst %s/%d",
+			net_sprint_ipv6_addr(src),
+			addr_state == NET_ADDR_PREFERRED ? "preferred" :
+			addr_state == NET_ADDR_DEPRECATED ? "deprecated" : "?",
+			net_sprint_ipv6_addr(dst), prefix_len);
+	}
 
 	return src;
 }
@@ -5247,6 +5295,15 @@ out:
 
 	return ifaddr;
 }
+
+/* This helper function is used only in tests. */
+#if defined(CONFIG_NET_TEST)
+struct net_if_addr *net_if_ipv6_get_ifaddr(struct net_if *iface,
+					   const void *addr)
+{
+	return get_ifaddr(iface, AF_INET6, addr, NULL);
+}
+#endif /* CONFIG_NET_TEST */
 
 static void remove_ipv6_ifaddr(struct net_if *iface,
 			       struct net_if_addr *ifaddr,
