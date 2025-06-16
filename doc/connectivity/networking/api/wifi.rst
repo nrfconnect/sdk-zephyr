@@ -25,6 +25,21 @@ Currently, two types of Wi-Fi drivers are supported:
 * Networking or socket offloaded drivers
 * Native L2 Ethernet drivers
 
+Compiled Features
+*****************
+
+To support applications that only require a certain subset of Wi-Fi features, :kconfig:option:`CONFIG_WIFI_USAGE_MODE` can be used
+as a hint for drivers to limit the functionality that needs to be compiled in. The following usage hints are available:
+
+ * :kconfig:option:`CONFIG_WIFI_USAGE_MODE_STA` (Connecting to an access point)
+ * :kconfig:option:`CONFIG_WIFI_USAGE_MODE_AP` (Being an access point)
+ * :kconfig:option:`CONFIG_WIFI_USAGE_MODE_STA_AP` (Both being and connecting to an access point)
+ * :kconfig:option:`CONFIG_WIFI_USAGE_MODE_SCAN_ONLY` (Access point SSID scanning only)
+
+.. note::
+
+    Support for a requested usage mode is hardware dependent.
+
 Wi-Fi PSA crypto supported build
 ********************************
 
@@ -73,7 +88,7 @@ Run time certificates
 The Wi-Fi shell module uses TLS credentials subsystem to store and manage the certificates. The certificates can be added at runtime using the shell commands, see :ref:`tls_credentials_shell` for more details.
 The sample or application need to enable the :kconfig:option:`CONFIG_WIFI_SHELL_RUNTIME_CERTIFICATES` option to use this feature.
 
-To facilitate installation of the certificates, a helper script is provided in the ``samples/net/wifi/test_certs`` directory. The script can be used to install the certificates at runtime.
+To facilitate installation of the certificates, a helper script is provided, see below for usage.
 
 .. code-block:: bash
 
@@ -95,6 +110,10 @@ Any AAA server can be used for testing purposes, for example, ``FreeRADIUS`` or 
 
     The certificates are for testing purposes only and should not be used in production.
     They are generated using `FreeRADIUS raddb <https://github.com/FreeRADIUS/freeradius-server/tree/master/raddb/certs>`_ scripts.
+
+.. note::
+
+    When using TLS credentials subsystem, by default the volatile backend i.e., :kconfig:option:`CONFIG_TLS_CREDENTIALS_BACKEND_VOLATILE` is chosen. When using the volatile backend, the certificates are stored in RAM and are lost on reboot, so the certificates need to be installed again after reboot. As an alternative, the PS (protected storage) backend i.e., :kconfig:option:`CONFIG_TLS_CREDENTIALS_BACKEND_PROTECTED_STORAGE` can be used to store the certificates in the non-volatile storage.
 
 API Reference
 *************

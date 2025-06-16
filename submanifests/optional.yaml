@@ -60,14 +60,14 @@ manifest:
       groups:
         - optional
     - name: zephyr-lang-rust
-      revision: d4f9036a88e53080bf2b186afa5289f9c77a0f73
+      revision: 1cab77b436bccf2c84678e8825b586a093da0918
       path: modules/lang/rust
       remote: upstream
       groups:
         - optional
     - name: zscilib
       path: modules/lib/zscilib
-      revision: ee1b287d9dd07208d2cc52284240ac25bb66eae3
+      revision: ee3c0c405087e331aad16d167b6e4ec1c3452ba9
       remote: upstream
       groups:
         - optional

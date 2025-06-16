@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 NXP
+ * Copyright 2024  NXP
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <zephyr/init.h>
@@ -84,19 +84,6 @@ __ramfunc static void enable_cache64(void)
 }
 #endif
 
-static void unsecure_gpio(GPIO_Type * base)
-{
-	/* Enables CPU1 to access GPIO registers
-	 * Pins and interrupts can be configured in non-secure access
-	 */
-	base->PCNS = 0xFFFFFFFFU;
-	base->ICNS = GPIO_ICNS_NSE1_MASK | GPIO_ICNS_NSE0_MASK;
-
-	/* Pins and interrupts can be configured in non-privilege access */
-	base->PCNP = 0xFFFFFFFFU;
-	base->ICNP = GPIO_ICNP_NPE1_MASK | GPIO_ICNP_NPE0_MASK;
-}
-
 void board_early_init_hook(void)
 {
 	power_mode_od();
@@ -111,6 +98,11 @@ void board_early_init_hook(void)
 
 	/* Configure Flash wait-states to support 1.2V voltage level and 150000000Hz frequency */
 	FMU0->FCTRL = (FMU0->FCTRL & ~((uint32_t)FMU_FCTRL_RWSC_MASK)) | (FMU_FCTRL_RWSC(0x3U));
+
+#ifdef CONFIG_FLASH
+	/* Enable clock for internal FMU flash */
+	CLOCK_SetupClockCtrl(SYSCON_CLOCK_CTRL_FRO12MHZ_ENA_MASK);
+#endif
 
 	/* Enable FRO HF(48MHz) output */
 	CLOCK_SetupFROHFClocking(48000000U);
@@ -196,27 +188,22 @@ void board_early_init_hook(void)
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpio0))
 	CLOCK_EnableClock(kCLOCK_Gpio0);
-	unsecure_gpio(GPIO0);
 #endif
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpio1))
 	CLOCK_EnableClock(kCLOCK_Gpio1);
-	unsecure_gpio(GPIO1);
 #endif
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpio2))
 	CLOCK_EnableClock(kCLOCK_Gpio2);
-	unsecure_gpio(GPIO2);
 #endif
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpio3))
 	CLOCK_EnableClock(kCLOCK_Gpio3);
-	unsecure_gpio(GPIO3);
 #endif
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(gpio4))
 	CLOCK_EnableClock(kCLOCK_Gpio4);
-	unsecure_gpio(GPIO4);
 #endif
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(dac0))

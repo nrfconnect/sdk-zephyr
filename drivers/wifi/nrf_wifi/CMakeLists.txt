@@ -27,9 +27,11 @@ zephyr_library_sources_ifndef(CONFIG_NRF70_OFFLOADED_RAW_TX
   src/fmac_main.c
 )
 
-zephyr_library_sources_ifdef(CONFIG_NRF_WIFI_PATCHES_BUILTIN
-  src/fw_load.c
-)
+if(NOT CONFIG_NRF71_ON_IPC)
+  zephyr_library_sources_ifdef(CONFIG_NRF_WIFI_PATCHES_BUILTIN
+    src/fw_load.c
+  )
+endif()
 
 if(NOT CONFIG_NRF70_RADIO_TEST AND NOT CONFIG_NRF70_OFFLOADED_RAW_TX)
   zephyr_library_sources(
@@ -100,4 +102,8 @@ if (CONFIG_NRF_WIFI_PATCHES_BUILTIN)
     ${NRF70_PATCH}
     ${gen_dir}/nrf70.bin.inc
   )
+endif()
+
+if(CONFIG_WIFI_NRF7000 AND NOT CONFIG_WIFI_USAGE_MODE_SCAN_ONLY)
+  message(WARNING "nRF7000 only supports WIFI_USAGE_MODE_SCAN_ONLY")
 endif()
