@@ -11,7 +11,7 @@ toolchain:
   - zephyr
 sysbuild: true
 ram: 256
-flash: 392
+flash: 480
 supported:
   - adc
   - can
