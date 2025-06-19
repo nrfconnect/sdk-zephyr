@@ -24,8 +24,6 @@ static int nrf53_cpu_boost(void)
 		printk("Failed to set 128 MHz: %d", err);
 	}
 
-	printk("Starting %s with CPU frequency: %d MHz", CONFIG_BOARD, SystemCoreClock/MHZ(1));
-
 	return err;
 }
 

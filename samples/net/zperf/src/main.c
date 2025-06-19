@@ -16,6 +16,8 @@
 #endif
 int main(void)
 {
+	printk("Starting %s with CPU frequency: %d MHz", CONFIG_BOARD, SystemCoreClock/MHZ(1));
+
 #if defined(CONFIG_USB_DEVICE_STACK)
 	int ret;
 
