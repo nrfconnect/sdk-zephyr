@@ -7,7 +7,6 @@ project(zperf)
 
 target_sources(app PRIVATE
   src/main.c
-  src/nrf5340_cpu_boost.c
   )
 
 if (CONFIG_NET_SAMPLE_CODE_RELOCATE)
@@ -22,4 +21,10 @@ if (CONFIG_NET_L2_ETHERNET)
   zephyr_code_relocate(LIBRARY subsys__net__l2__ethernet
     LOCATION "${CONFIG_NET_SAMPLE_CODE_RAM_NAME}_TEXT" NOKEEP)
 endif()
+endif()
+
+if (CONFIG_SOC_NRF5340_CPUAPP)
+  target_sources(app PRIVATE
+    src/nrf5340_cpu_boost.c
+    )
 endif()
