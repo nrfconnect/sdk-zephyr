@@ -7,6 +7,7 @@ project(zperf)
 
 target_sources(app PRIVATE
   src/main.c
+  src/nrf5340_cpu_boost.c
   )
 
 if (CONFIG_NET_SAMPLE_CODE_RELOCATE)

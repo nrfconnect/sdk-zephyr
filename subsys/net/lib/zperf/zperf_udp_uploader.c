@@ -59,7 +59,7 @@ static inline int zperf_upload_fin(int sock,
 	struct zperf_client_hdr_v1 *hdr;
 	uint32_t secs = k_ticks_to_ms_ceil32(end_time) / 1000U;
 	uint32_t usecs = k_ticks_to_us_ceil32(end_time) - secs * USEC_PER_SEC;
-	int loop = 2;
+	int loop = 0;
 	int ret = 0;
 	struct timeval rcvtimeo = {
 		.tv_sec = 2,
