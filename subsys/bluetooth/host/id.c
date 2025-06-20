@@ -944,9 +944,33 @@ void bt_id_pending_keys_update(void)
 	}
 }
 
+static bool keys_conflict_check(struct bt_keys *candidate, struct bt_keys *resident)
+{
+	bool addr_conflict;
+	bool irk_conflict;
+
+	addr_conflict = bt_addr_le_eq(&candidate->addr, &resident->addr);
+
+	/* All-zero IRK is "no IRK", and does not conflict with other Zero-IRKs. */
+	irk_conflict = (!bt_irk_eq(&candidate->irk, &(struct bt_irk){}) &&
+			bt_irk_eq(&candidate->irk, &resident->irk));
+
+	if (addr_conflict || irk_conflict) {
+		LOG_DBG("Resident : addr %s and IRK %s", bt_addr_le_str(&resident->addr),
+			bt_hex(resident->irk.val, sizeof(resident->irk.val)));
+		LOG_DBG("Candidate: addr %s and IRK %s", bt_addr_le_str(&candidate->addr),
+			bt_hex(candidate->irk.val, sizeof(candidate->irk.val)));
+
+		return true;
+	}
+
+	return false;
+}
+
 struct bt_id_conflict {
 	struct bt_keys *candidate;
 	struct bt_keys *found;
+	bool all;
 };
 
 /* The Controller Resolve List is constrained by 7.8.38 "LE Add Device To
@@ -958,8 +982,6 @@ struct bt_id_conflict {
 void find_rl_conflict(struct bt_keys *resident, void *user_data)
 {
 	struct bt_id_conflict *conflict = user_data;
-	bool addr_conflict;
-	bool irk_conflict;
 
 	__ASSERT_NO_MSG(conflict != NULL);
 	__ASSERT_NO_MSG(conflict->candidate != NULL);
@@ -972,35 +994,103 @@ void find_rl_conflict(struct bt_keys *resident, void *user_data)
 	}
 
 	/* Test against committed bonds only. */
-	if ((resident->state & BT_KEYS_ID_ADDED) == 0) {
+	if (!conflict->all && (resident->state & BT_KEYS_ID_ADDED) == 0) {
+		/* If the resident bond is not committed, we cannot have a conflict. */
 		return;
 	}
 
-	addr_conflict = bt_addr_le_eq(&conflict->candidate->addr, &resident->addr);
+	if (resident->id == conflict->candidate->id) {
+		/* If the IDs are the same, we cannot have a conflict. */
+		return;
+	}
 
-	/* All-zero IRK is "no IRK", and does not conflict with other Zero-IRKs. */
-	irk_conflict = (!bt_irk_eq(&conflict->candidate->irk, &(struct bt_irk){}) &&
-			bt_irk_eq(&conflict->candidate->irk, &resident->irk));
-
-	if (addr_conflict || irk_conflict) {
-		LOG_DBG("Resident : addr %s and IRK %s", bt_addr_le_str(&resident->addr),
-			bt_hex(resident->irk.val, sizeof(resident->irk.val)));
-		LOG_DBG("Candidate: addr %s and IRK %s", bt_addr_le_str(&conflict->candidate->addr),
-			bt_hex(conflict->candidate->irk.val, sizeof(conflict->candidate->irk.val)));
-
+	if (keys_conflict_check(conflict->candidate, resident)) {
 		conflict->found = resident;
 	}
 }
 
-struct bt_keys *bt_id_find_conflict(struct bt_keys *candidate)
+/** * @brief Find a conflict in the resolving list for a candidate IRK.
+ *
+ * @param candidate The candidate keys to check for conflicts.
+ * @param all If true, check all IRKs, otherwise check only added keys.
+ *
+ * @return The conflicting key if there is one, or NULL if no conflict was found.
+ */
+struct bt_keys *bt_id_find_conflict(struct bt_keys *candidate, bool all)
 {
 	struct bt_id_conflict conflict = {
 		.candidate = candidate,
+		.all = all,
 	};
 
 	bt_keys_foreach_type(BT_KEYS_IRK, find_rl_conflict, &conflict);
 
 	return conflict.found;
+}
+
+struct bt_id_conflict_multiple {
+	struct bt_keys *candidate;
+	struct bt_keys *found;
+	bool found_multiple;
+};
+
+void find_rl_conflict_multiple(struct bt_keys *resident, void *user_data)
+{
+	struct bt_id_conflict_multiple *conflict = user_data;
+
+	__ASSERT_NO_MSG(conflict != NULL);
+	__ASSERT_NO_MSG(conflict->candidate != NULL);
+	__ASSERT_NO_MSG(resident != NULL);
+
+	if (conflict->found_multiple) {
+		/* If we already found enough conflicts, we can stop searching. */
+		return;
+	}
+
+	if (resident->id == conflict->candidate->id) {
+		/* If the IDs are the same, we cannot have a conflict. */
+		return;
+	}
+
+	if (keys_conflict_check(conflict->candidate, resident)) {
+		if (conflict->found) {
+			conflict->found_multiple = true;
+
+			LOG_WRN("Found multiple conflicts for %s: addr %s and IRK %s",
+				bt_addr_le_str(&conflict->candidate->addr),
+				bt_addr_le_str(&resident->addr),
+				bt_hex(resident->irk.val, sizeof(resident->irk.val)));
+		} else {
+			conflict->found = resident;
+		}
+	}
+}
+
+/** * @brief Find multiple conflicts in the resolving list for a candidate IRK.
+ *
+ * This function iterates over all keys (added and not added to the Resolving List). If there are
+ * multiple conflicts, this function will return true. Otherwise, it will return false.
+ *
+ * If @c firt_conflict is not NULL, it will be set to the first found conflict.
+ *
+ * @param candidate The candidate key to check for conflicts.
+ * @param first_conflict Pointer to store the first found conflict, if any. Can be NULL.
+ *
+ * @return True if there are multiple conflicts, otherwise it returns false.
+ */
+bool bt_id_find_conflict_multiple(struct bt_keys *candidate, struct bt_keys **first_conflict)
+{
+	struct bt_id_conflict_multiple conflict = {
+		.candidate = candidate,
+	};
+
+	bt_keys_foreach_type(BT_KEYS_IRK, find_rl_conflict_multiple, &conflict);
+
+	if (first_conflict != NULL) {
+		*first_conflict = conflict.found;
+	}
+
+	return conflict.found_multiple;
 }
 
 void bt_id_add(struct bt_keys *keys)
@@ -1253,6 +1343,151 @@ done:
 	if (IS_ENABLED(CONFIG_BT_BROADCASTER)) {
 		bt_le_ext_adv_foreach(adv_unpause_enabled, NULL);
 	}
+}
+
+static int conflict_check_and_replace(uint8_t id, struct bt_keys *keys)
+{
+	/* For the given key check if it has conflicts with other keys in the Resolving List
+	 * (such keys have BT_KEYS_ID_ADDED state and BT_KEYS_ID_CONFLICT flag set). If it does, we
+	 * need to remove the conflicting key from the Resolving List and add the new key.
+	 *
+	 * If the key is not in the Resolving List, we can add the new key right away.
+	 *
+	 * If advertiser for the conflicting key is enabled, we cannot remove the key from the
+	 * Resolving List, so we return an error.
+	 */
+
+	struct bt_keys *conflict;
+	struct bt_le_ext_adv *adv;
+
+	if (!(keys->flags & BT_KEYS_ID_CONFLICT)) {
+		LOG_DBG("Key has no conflicts for id %u addr %s", id,
+			bt_addr_le_str(&keys->addr));
+		return 0;
+	}
+
+	if (keys->state & BT_KEYS_ID_ADDED) {
+		LOG_DBG("Key is already added to resolving list for id %u addr %s",
+			id, bt_addr_le_str(&keys->addr));
+		return 0;
+	}
+
+	conflict = bt_id_find_conflict(keys, false);
+	if (conflict == NULL) {
+		/* bt_id_find_conflict returns only keys added to the Resolving List (state is
+		 * BT_KEYS_ID_ADDED). If the key has conflict, but no keys were added (for example,
+		 * if the last added key was removed after bt_unpair()), then this function will
+		 * return NULL.
+		 */
+		LOG_DBG("Conflicting key not in the Resolving List.");
+		goto add;
+	}
+
+	__ASSERT_NO_MSG((conflict->flags & BT_KEYS_ID_CONFLICT) != 0);
+
+	LOG_DBG("Found conflicting key with id %u addr %s", conflict->id,
+		bt_addr_le_str(&conflict->addr));
+
+	adv = bt_adv_lookup_by_id(conflict->id);
+	if (adv && atomic_test_bit(adv->flags, BT_ADV_ENABLED)) {
+		LOG_WRN("Cannot remove the conflicting key from the Resolving List while"
+			" advertising");
+		return -EPERM;
+	}
+
+	/* Drop BT_KEYS_ID_PENDING_DEL flag if we were about to delete the keys since we delete it
+	 * here.
+	 */
+	conflict->state &= ~BT_KEYS_ID_PENDING_DEL;
+	bt_id_del(conflict);
+
+add:
+	bt_id_add(keys);
+
+	return 0;
+}
+
+struct bt_id_resolve {
+	uint8_t id;
+	int err;
+};
+
+static void check_and_add_keys_for_id(struct bt_keys *keys, void *data)
+{
+	struct bt_id_resolve *resolve = data;
+
+	if (resolve->err) {
+		/* Skipping other keys because we got error. */
+		return;
+	}
+
+	if (resolve->id != keys->id) {
+		/* We are only interested in keys for the given id */
+		return;
+	}
+
+	resolve->err = conflict_check_and_replace(resolve->id, keys);
+}
+
+/**
+ * @brief Check and update the resolving list for a given identity.
+ *
+ * This function checks if the resolving list contains the keys for the given
+ * identity and peer address. If the keys are not present, it adds them to the
+ * resolving list. If the keys are present, it checks for conflicts with
+ * existing keys in the resolving list. If a conflict is found, it replaces
+ * the conflicting key with the new key.
+ *
+ * If the peer address is NULL, it updates the resolving list for all keys that belong to the given
+ * identity.
+ *
+ * If for any of the keys belonging to the given identity a conflict is found and the advertiser for
+ * that key is enabled, the function returns an error.
+ *
+ * @param id The identity ID to check and update.
+ * @param peer The peer address to check against the resolving list.
+ *
+ * @return 0 on success, or a negative error code on failure.
+ * @return -EPERM if a conflict is found and the advertiser for the conflicting key is enabled.
+ */
+int bt_id_resolving_list_check_and_update(uint8_t id, const bt_addr_le_t *peer)
+{
+	int err;
+
+	if (!IS_ENABLED(CONFIG_BT_ID_AUTO_SWAP_MATCHING_BONDS)) {
+		return 0;
+	}
+
+	if (peer == NULL) {
+		struct bt_id_resolve resolve = {
+			.id = id,
+		};
+
+		LOG_DBG("Updating resolving list for id %u without peer address", id);
+
+		bt_keys_foreach_type(BT_KEYS_IRK, check_and_add_keys_for_id, &resolve);
+		err = resolve.err;
+	} else {
+		struct bt_keys *keys;
+
+		LOG_DBG("Updating resolving list for id %u addr %s", id, bt_addr_le_str(peer));
+
+		keys = bt_keys_get_addr(id, peer);
+		if (!keys) {
+			LOG_DBG("No keys found for id %u addr %s", id, bt_addr_le_str(peer));
+			return -ENOENT;
+		}
+
+		err = conflict_check_and_replace(id, keys);
+	}
+
+	if (err) {
+		LOG_WRN("Failed to update resolving list for id %u addr %s (err %d)",
+			id, peer ? bt_addr_le_str(peer) : "NULL", err);
+		return err;
+	}
+
+	return err;
 }
 #endif /* defined(CONFIG_BT_SMP) */
 

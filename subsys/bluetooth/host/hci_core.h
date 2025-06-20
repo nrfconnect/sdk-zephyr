@@ -500,7 +500,8 @@ struct bt_keys;
 void bt_id_add(struct bt_keys *keys);
 void bt_id_del(struct bt_keys *keys);
 
-struct bt_keys *bt_id_find_conflict(struct bt_keys *candidate);
+struct bt_keys *bt_id_find_conflict(struct bt_keys *candidate, bool all);
+bool bt_id_find_conflict_multiple(struct bt_keys *candidate, struct bt_keys **first_conflict);
 
 int bt_setup_random_id_addr(void);
 int bt_setup_public_id_addr(void);

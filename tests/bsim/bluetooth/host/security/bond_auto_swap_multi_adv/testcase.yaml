@@ -1,0 +1,19 @@
+common:
+  build_only: true
+  tags:
+    - bluetooth
+  platform_allow:
+    - nrf52_bsim/native
+  harness: bsim
+
+tests:
+  bluetooth.host.security.bond_auto_swap_multi_adv.central:
+    harness_config:
+      bsim_exe_name: tests_bsim_bluetooth_host_security_bond_auto_swap_multi_adv_central_prj_conf
+    extra_configs:
+      - CONFIG_BT_CENTRAL=y
+  bluetooth.host.security.bond_auto_swap_multi_adv.peripheral:
+    harness_config:
+      bsim_exe_name: tests_bsim_bluetooth_host_security_bond_auto_swap_multi_adv_peripheral_prj_conf
+    extra_configs:
+      - CONFIG_BT_PERIPHERAL=y
