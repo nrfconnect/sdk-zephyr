@@ -28,7 +28,7 @@ BUILD_ASSERT(DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) == 1,
 #define LFCLK_MAX_OPTS 5
 #define LFCLK_DEF_OPTS 3
 
-#define NRFS_CLOCK_TIMEOUT K_MSEC(CONFIG_CLOCK_CONTROL_NRF2_NRFS_CLOCK_TIMEOUT_MS)
+#define NRFS_CLOCK_TIMEOUT K_MSEC(CONFIG_CLOCK_CONTROL_NRF_LFCLK_CLOCK_TIMEOUT_MS)
 
 #define BICR (NRF_BICR_Type *)DT_REG_ADDR(DT_NODELABEL(bicr))
 
@@ -68,6 +68,40 @@ struct lfclk_dev_data {
 struct lfclk_dev_config {
 	uint32_t fixed_frequency;
 };
+
+static int lfosc_get_accuracy(uint16_t *accuracy)
+{
+	switch (nrf_bicr_lfosc_accuracy_get(BICR)) {
+	case NRF_BICR_LFOSC_ACCURACY_500PPM:
+		*accuracy = 500U;
+		break;
+	case NRF_BICR_LFOSC_ACCURACY_250PPM:
+		*accuracy = 250U;
+		break;
+	case NRF_BICR_LFOSC_ACCURACY_150PPM:
+		*accuracy = 150U;
+		break;
+	case NRF_BICR_LFOSC_ACCURACY_100PPM:
+		*accuracy = 100U;
+		break;
+	case NRF_BICR_LFOSC_ACCURACY_75PPM:
+		*accuracy = 75U;
+		break;
+	case NRF_BICR_LFOSC_ACCURACY_50PPM:
+		*accuracy = 50U;
+		break;
+	case NRF_BICR_LFOSC_ACCURACY_30PPM:
+		*accuracy = 30U;
+		break;
+	case NRF_BICR_LFOSC_ACCURACY_20PPM:
+		*accuracy = 20U;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
 
 static void clock_evt_handler(nrfs_clock_evt_t const *p_evt, void *context)
 {

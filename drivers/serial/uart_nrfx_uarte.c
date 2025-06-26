@@ -129,10 +129,11 @@ LOG_MODULE_REGISTER(uart_nrfx_uarte, CONFIG_UART_LOG_LEVEL);
 			(0))), (0))
 
 #if UARTE_FOR_EACH_INSTANCE(INSTANCE_IS_FAST_PD, (||), (0))
-/* Instance in fast power domain (PD) requires special PM treatment so device runtime PM must
- * be enabled.
+/* Instance in fast power domain (PD) requires special PM treatment and clock control, so
+ * device runtime PM and clock control must be enabled.
  */
 BUILD_ASSERT(IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME));
+BUILD_ASSERT(IS_ENABLED(CONFIG_CLOCK_CONTROL));
 #define UARTE_ANY_FAST_PD 1
 #endif
 #endif
@@ -2587,7 +2588,7 @@ static int uarte_instance_init(const struct device *dev,
  */
 #define UARTE_INIT_PRIO(idx)								\
 	COND_CODE_1(INSTANCE_IS_FAST_PD(_, /*empty*/, idx, _),				\
-		    (UTIL_INC(CONFIG_CLOCK_CONTROL_NRF2_GLOBAL_HSFLL_INIT_PRIORITY)),	\
+		    (UTIL_INC(CONFIG_CLOCK_CONTROL_NRF_HSFLL_GLOBAL_INIT_PRIORITY)),	\
 		    (CONFIG_SERIAL_INIT_PRIORITY))
 
 /* Macro for setting nRF specific configuration structures. */
