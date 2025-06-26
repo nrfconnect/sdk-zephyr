@@ -31,8 +31,8 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/types.h>
 
-#define NAME_LEN 30
-#define PA_SYNC_SKIP         5
+#define NAME_LEN                          30
+#define PA_SYNC_SKIP                      5
 #define PA_SYNC_INTERVAL_TO_TIMEOUT_RATIO 20 /* Set the timeout relative to interval */
 /* Broadcast IDs are 24bit, so this is out of valid range */
 /* Default semaphore timeout when waiting for an action */
@@ -59,8 +59,7 @@ static bt_addr_le_t selected_addr;
 static struct bt_le_per_adv_sync *pa_sync;
 static uint8_t received_base[UINT8_MAX];
 static size_t received_base_size;
-static struct bt_bap_bass_subgroup
-	bass_subgroups[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS];
+static struct bt_bap_bass_subgroup bass_subgroups[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS];
 
 static bool scanning_for_broadcast_source;
 
@@ -194,8 +193,7 @@ static bool base_store(struct bt_data *data, void *user_data)
 }
 
 static void pa_recv(struct bt_le_per_adv_sync *sync,
-			 const struct bt_le_per_adv_sync_recv_info *info,
-			 struct net_buf_simple *buf)
+		    const struct bt_le_per_adv_sync_recv_info *info, struct net_buf_simple *buf)
 {
 	bt_data_parse(buf, base_store, NULL);
 }
@@ -300,8 +298,7 @@ static int pa_sync_create(void)
 	return bt_le_per_adv_sync_create(&create_params, &pa_sync);
 }
 
-static void scan_recv_cb(const struct bt_le_scan_recv_info *info,
-			 struct net_buf_simple *ad)
+static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf_simple *ad)
 {
 	int err;
 	struct scan_recv_info sr_info = {0};
@@ -312,8 +309,7 @@ static void scan_recv_cb(const struct bt_le_scan_recv_info *info,
 		sr_info.broadcast_id = BT_BAP_INVALID_BROADCAST_ID;
 
 		/* We are only interested in non-connectable periodic advertisers */
-		if ((info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE) != 0 ||
-		    info->interval == 0) {
+		if ((info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE) != 0 || info->interval == 0) {
 			return;
 		}
 
@@ -494,8 +490,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	k_sem_give(&sem_sink_disconnected);
 }
 
-static void security_changed_cb(struct bt_conn *conn, bt_security_t level,
-				enum bt_security_err err)
+static void security_changed_cb(struct bt_conn *conn, bt_security_t level, enum bt_security_err err)
 {
 	if (err == 0) {
 		printk("Security level changed: %u\n", level);
@@ -509,8 +504,7 @@ static void bap_broadcast_assistant_discover_cb(struct bt_conn *conn, int err,
 						uint8_t recv_state_count)
 {
 	if (err == 0) {
-		printk("BASS discover done with %u recv states\n",
-		       recv_state_count);
+		printk("BASS discover done with %u recv states\n", recv_state_count);
 		k_sem_give(&sem_bass_discovered);
 	} else {
 		printk("BASS discover failed (%d)\n", err);
@@ -612,11 +606,9 @@ static void reset(void)
 	k_sem_reset(&sem_received_base_subgroups);
 }
 
-BT_CONN_CB_DEFINE(conn_callbacks) = {
-	.connected = connected,
-	.disconnected = disconnected,
-	.security_changed = security_changed_cb
-};
+BT_CONN_CB_DEFINE(conn_callbacks) = {.connected = connected,
+				     .disconnected = disconnected,
+				     .security_changed = security_changed_cb};
 
 int main(void)
 {
