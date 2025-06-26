@@ -96,6 +96,8 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
                         raise subprocess.CalledProcessError(
                             jout['data']['error']['code'], cmd
                         )
+        if p.returncode != 0:
+            raise subprocess.CalledProcessError(p.returncode, cmd)
 
         return jout_all
 
@@ -145,6 +147,8 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
             cmd += ['--reset-kind', _op['kind']]
         elif op_type == 'erase':
             cmd.append(f'--{_op["kind"]}')
+        elif op_type == 'x-provision-keys':
+            cmd += ['--key-file', _op['keyfile']]
 
         cmd += ['--core', op['core']] if op.get('core') else []
         cmd += ['--x-family', f'{self.family}']

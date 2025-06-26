@@ -18,6 +18,7 @@ tests:
       - v2m_musca_s1/musca_s1/ns
       - stm32l562e_dk/stm32l562xx/ns
       - bl5340_dvk/nrf5340/cpuapp/ns
+      - max32657evkit/max32657/ns
     integration_platforms:
       - mps2/an521/cpu0/ns
     harness: console

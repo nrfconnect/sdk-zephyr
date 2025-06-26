@@ -92,6 +92,26 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_ZTEST), "Missing DT chosen property for HCI");
 #define BT_HCI_QUIRKS 0
 #endif
 
+/* These checks are added to warn if the number of ACL or ISO packets in Controller is not equal to
+ * the number of bt_conn_tx contexts allocated by Host. The inequality of these two values can lead
+ * to inefficient resources usage either on Host's or Controller's side.
+ */
+#define CHECK_NUM_OF_ACL_PKTS(_num) \
+	do { \
+		if (CONFIG_BT_BUF_ACL_TX_COUNT != (_num)) { \
+			LOG_WRN("Num of Controller's ACL packets != ACL bt_conn_tx contexts" \
+				" (%u != %u)", (_num), CONFIG_BT_BUF_ACL_TX_COUNT); \
+		} \
+	} while (0)
+
+#define CHECK_NUM_OF_ISO_PKTS(_num) \
+	do { \
+		if (CONFIG_BT_ISO_TX_BUF_COUNT != (_num)) { \
+			LOG_WRN("Num of Controller's ISO packets != ISO bt_conn_tx contexts" \
+				"(%u != %u)", (_num), CONFIG_BT_ISO_TX_BUF_COUNT); \
+		} \
+	} while (0)
+
 void bt_tx_irq_raise(void);
 
 #define HCI_CMD_TIMEOUT      K_SECONDS(10)
@@ -167,8 +187,7 @@ void bt_hci_cmd_state_set_init(struct net_buf *buf,
  * command complete or command status.
  */
 #define CMD_BUF_SIZE MAX(BT_BUF_EVT_RX_SIZE, BT_BUF_CMD_TX_SIZE)
-NET_BUF_POOL_FIXED_DEFINE(hci_cmd_pool, BT_BUF_CMD_TX_COUNT,
-			  CMD_BUF_SIZE, sizeof(struct bt_buf_data), NULL);
+NET_BUF_POOL_FIXED_DEFINE(hci_cmd_pool, BT_BUF_CMD_TX_COUNT, CMD_BUF_SIZE, 0, NULL);
 
 struct event_handler {
 	uint8_t event;
@@ -341,9 +360,7 @@ struct net_buf *bt_hci_cmd_create(uint16_t opcode, uint8_t param_len)
 
 	LOG_DBG("buf %p", buf);
 
-	net_buf_reserve(buf, BT_BUF_RESERVE);
-
-	bt_buf_set_type(buf, BT_BUF_CMD);
+	net_buf_add_u8(buf, BT_HCI_H4_CMD);
 
 	cmd(buf)->opcode = opcode;
 	cmd(buf)->sync = NULL;
@@ -610,8 +627,6 @@ static void hci_num_completed_packets(struct net_buf *buf)
 		while (count--) {
 			sys_snode_t *node;
 
-			k_sem_give(bt_conn_get_pkts(conn));
-
 			/* move the next TX context from the `pending` list to
 			 * the `complete` list.
 			 */
@@ -622,6 +637,8 @@ static void hci_num_completed_packets(struct net_buf *buf)
 				__ASSERT_NO_MSG(0);
 				break;
 			}
+
+			k_sem_give(bt_conn_get_pkts(conn));
 
 			sys_slist_append(&conn->tx_complete, node);
 
@@ -2463,8 +2480,6 @@ static void hci_cmd_done(uint16_t opcode, uint8_t status, struct net_buf *evt_bu
 	 */
 	if (evt_buf != buf) {
 		net_buf_reset(buf);
-		bt_buf_set_type(buf, BT_BUF_EVT);
-		net_buf_reserve(buf, BT_BUF_RESERVE);
 		net_buf_add_mem(buf, evt_buf->data, evt_buf->len);
 	}
 
@@ -3159,6 +3174,8 @@ static void le_read_buffer_size_complete(struct net_buf *buf)
 
 	LOG_DBG("ACL LE buffers: pkts %u mtu %u", rp->le_max_num, bt_dev.le.acl_mtu);
 
+	CHECK_NUM_OF_ACL_PKTS(rp->le_max_num);
+
 	k_sem_init(&bt_dev.le.acl_pkts, rp->le_max_num, rp->le_max_num);
 #endif /* CONFIG_BT_CONN */
 }
@@ -3178,6 +3195,8 @@ static void read_buffer_size_v2_complete(struct net_buf *buf)
 		LOG_DBG("ACL LE buffers: pkts %u mtu %u", rp->acl_max_num, bt_dev.le.acl_mtu);
 
 		k_sem_init(&bt_dev.le.acl_pkts, rp->acl_max_num, rp->acl_max_num);
+
+		CHECK_NUM_OF_ACL_PKTS(rp->acl_max_num);
 	}
 #endif /* CONFIG_BT_CONN */
 
@@ -3194,6 +3213,8 @@ static void read_buffer_size_v2_complete(struct net_buf *buf)
 
 	k_sem_init(&bt_dev.le.iso_pkts, rp->iso_max_num, rp->iso_max_num);
 	bt_dev.le.iso_limit = rp->iso_max_num;
+
+	CHECK_NUM_OF_ISO_PKTS(rp->iso_max_num);
 #endif /* CONFIG_BT_ISO */
 }
 
@@ -3813,6 +3834,7 @@ static void bt_dev_show_info(void)
 {
 	int i;
 
+	LOG_INF("HCI transport: %s", BT_HCI_NAME);
 	LOG_INF("Identity%s: %s", bt_dev.id_count > 1 ? "[0]" : "",
 		bt_addr_le_str(&bt_dev.id_addr[0]));
 
@@ -4054,9 +4076,12 @@ static int hci_init(void)
 
 int bt_send(struct net_buf *buf)
 {
-	LOG_DBG("buf %p len %u type %u", buf, buf->len, bt_buf_get_type(buf));
+	/* Only peek at the type, since it needs to be retained for bt_hci_send() */
+	uint8_t type = buf->data[0];
 
-	bt_monitor_send(bt_monitor_opcode(buf), buf->data, buf->len);
+	LOG_DBG("buf %p len %u type %u", buf, buf->len, type);
+
+	bt_monitor_send(bt_monitor_opcode(type, BT_MONITOR_TX), buf->data + 1, buf->len - 1);
 
 	return bt_hci_send(bt_dev.hci, buf);
 }
@@ -4087,6 +4112,9 @@ void hci_event_prio(struct net_buf *buf)
 	uint8_t evt_flags;
 
 	net_buf_simple_save(&buf->b, &state);
+
+	/* Remove buffer type byte */
+	net_buf_pull(buf, 1);
 
 	if (buf->len < sizeof(*hdr)) {
 		LOG_ERR("Invalid HCI event size (%u)", buf->len);
@@ -4123,19 +4151,22 @@ static void rx_queue_put(struct net_buf *buf)
 
 static int bt_recv_unsafe(struct net_buf *buf)
 {
-	bt_monitor_send(bt_monitor_opcode(buf), buf->data, buf->len);
+	/* Don't pull the type, snice we still need it in the rx queue */
+	uint8_t type = buf->data[0];
+
+	bt_monitor_send(bt_monitor_opcode(type, BT_MONITOR_RX), buf->data + 1, buf->len - 1);
 
 	LOG_DBG("buf %p len %u", buf, buf->len);
 
-	switch (bt_buf_get_type(buf)) {
+	switch (type) {
 #if defined(CONFIG_BT_CONN)
-	case BT_BUF_ACL_IN:
+	case BT_HCI_H4_ACL:
 		rx_queue_put(buf);
 		return 0;
 #endif /* BT_CONN */
-	case BT_BUF_EVT:
+	case BT_HCI_H4_EVT:
 	{
-		struct bt_hci_evt_hdr *hdr = (void *)buf->data;
+		struct bt_hci_evt_hdr *hdr = (void *)(buf->data + 1);
 		uint8_t evt_flags = bt_hci_evt_get_flags(hdr->evt);
 
 		if (evt_flags & BT_HCI_EVT_FLAG_RECV_PRIO) {
@@ -4149,12 +4180,12 @@ static int bt_recv_unsafe(struct net_buf *buf)
 		return 0;
 	}
 #if defined(CONFIG_BT_ISO)
-	case BT_BUF_ISO_IN:
+	case BT_HCI_H4_ISO:
 		rx_queue_put(buf);
 		return 0;
 #endif /* CONFIG_BT_ISO */
 	default:
-		LOG_ERR("Invalid buf type %u", bt_buf_get_type(buf));
+		LOG_ERR("Invalid buf type %u", type);
 		net_buf_unref(buf);
 		return -EINVAL;
 	}
@@ -4231,6 +4262,7 @@ static void init_work(struct k_work *work)
 
 static void rx_work_handler(struct k_work *work)
 {
+	uint8_t type;
 	int err;
 
 	struct net_buf *buf;
@@ -4241,24 +4273,26 @@ static void rx_work_handler(struct k_work *work)
 		return;
 	}
 
-	LOG_DBG("buf %p type %u len %u", buf, bt_buf_get_type(buf), buf->len);
+	type = net_buf_pull_u8(buf);
 
-	switch (bt_buf_get_type(buf)) {
+	LOG_DBG("buf %p type %u len %u", buf, type, buf->len);
+
+	switch (type) {
 #if defined(CONFIG_BT_CONN)
-	case BT_BUF_ACL_IN:
+	case BT_HCI_H4_ACL:
 		hci_acl(buf);
 		break;
 #endif /* CONFIG_BT_CONN */
 #if defined(CONFIG_BT_ISO)
-	case BT_BUF_ISO_IN:
+	case BT_HCI_H4_ISO:
 		hci_iso(buf);
 		break;
 #endif /* CONFIG_BT_ISO */
-	case BT_BUF_EVT:
+	case BT_HCI_H4_EVT:
 		hci_event(buf);
 		break;
 	default:
-		LOG_ERR("Unknown buf type %u", bt_buf_get_type(buf));
+		LOG_ERR("Unknown buf type %u", type);
 		net_buf_unref(buf);
 		break;
 	}

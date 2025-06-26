@@ -29,7 +29,6 @@
 #define LOG_LEVEL CONFIG_BT_HCI_CORE_LOG_LEVEL
 LOG_MODULE_REGISTER(bt_cs);
 
-#if defined(CONFIG_BT_CHANNEL_SOUNDING)
 #if defined(CONFIG_BT_CHANNEL_SOUNDING_TEST)
 static struct bt_le_cs_test_cb cs_test_callbacks;
 #endif
@@ -618,7 +617,7 @@ int bt_le_cs_start_test(const struct bt_le_cs_test_param *params)
 
 	cp->override_parameters_length = override_parameters_length;
 
-	struct bt_hci_cmd_hdr *hdr = (struct bt_hci_cmd_hdr *)buf->data;
+	struct bt_hci_cmd_hdr *hdr = (struct bt_hci_cmd_hdr *)&buf->data[1];
 
 	hdr->param_len += override_parameters_length;
 
@@ -1479,5 +1478,3 @@ int bt_le_cs_get_antenna_path(uint8_t n_ap,
 		return -EINVAL;
 	}
 }
-
-#endif /* CONFIG_BT_CHANNEL_SOUNDING */
