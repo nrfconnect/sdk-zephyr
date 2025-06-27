@@ -171,9 +171,6 @@ uint32_t z_nrf_clock_bt_ctlr_hf_get_startup_time_us(void);
 
 #endif /* defined(CONFIG_CLOCK_CONTROL_NRF) */
 
-
-#if defined(CONFIG_CLOCK_CONTROL_NRF2)
-
 /* Specifies to use the maximum available frequency for a given clock. */
 #define NRF_CLOCK_CONTROL_FREQUENCY_MAX UINT32_MAX
 
@@ -355,9 +352,10 @@ static inline int nrf_clock_control_resolve(const struct device *dev,
 }
 
 /**
- * @brief Get the startup timme of a clock.
+ * @brief Get the startup time of a clock.
  *
  * @param dev Device structure.
+ * @param spec Clock specification to get startup time for.
  * @param startup_time_us Destination for startup time in microseconds.
  *
  * @retval Successful if successful.
@@ -400,8 +398,6 @@ void nrf_clock_control_hfxo_request(void);
  * there are no more pending requests.
  */
 void nrf_clock_control_hfxo_release(void);
-
-#endif /* defined(CONFIG_CLOCK_CONTROL_NRF2) */
 
 #ifdef __cplusplus
 }
