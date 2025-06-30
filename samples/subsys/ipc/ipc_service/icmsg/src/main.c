@@ -42,36 +42,16 @@ static void ep_bound(void *priv)
 
 static void ep_recv(const void *data, size_t len, void *priv)
 {
-#if defined(CONFIG_ASSERT)
-	struct data_packet *packet = (struct data_packet *)data;
 
-	__ASSERT(packet->data[0] == expected_message, "Unexpected message. Expected %c, got %c",
-		expected_message, packet->data[0]);
-	__ASSERT(len == expected_len, "Unexpected length. Expected %zu, got %zu",
-		expected_len, len);
-#endif
-
-#ifndef CONFIG_MULTITHREADING
-	recv_sem = 0;
-#endif
 
 	received += len;
-	expected_message++;
-	expected_len++;
 
-	if (expected_message > 'Z') {
-		expected_message = 'A';
-	}
-
-	if (expected_len > sizeof(struct data_packet)) {
-		expected_len = PACKET_SIZE_START;
-	}
 }
 
 static int send_for_time(struct ipc_ept *ep, const int64_t sending_time_ms)
 {
 	struct data_packet msg = {.data[0] = 'a'};
-	size_t mlen = PACKET_SIZE_START;
+	size_t mlen = sizeof(msg);
 	size_t bytes_sent = 0;
 	int ret = 0;
 
@@ -101,11 +81,13 @@ static int send_for_time(struct ipc_ept *ep, const int64_t sending_time_ms)
 		}
 
 		bytes_sent += mlen;
+#if 0
 		mlen++;
 
 		if (mlen > sizeof(struct data_packet)) {
 			mlen = PACKET_SIZE_START;
 		}
+#endif
 
 #if defined(CONFIG_MULTITHREADING)
 		k_usleep(1);
@@ -160,20 +142,17 @@ int main(void)
 	while (bound_sem != 0) {
 	};
 #endif
-
+#if 0
 	ret = send_for_time(&ep, SENDING_TIME_MS);
 	if (ret < 0) {
 		LOG_ERR("send_for_time() failure");
 		return ret;
 	}
-
-	LOG_INF("Wait 500ms. Let remote core finish its sends");
-#if defined(CONFIG_MULTITHREADING)
-	k_msleep(500);
 #else
-	k_busy_wait(500000);
+	LOG_INF("Wait till remote Tx is done");
+	k_msleep(SENDING_TIME_MS);
 #endif
-
+	
 	LOG_INF("Received %zu [Bytes] in total", received);
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP)

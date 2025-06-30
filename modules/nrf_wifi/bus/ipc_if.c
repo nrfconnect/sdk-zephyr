@@ -43,6 +43,7 @@ static void event_recv(void *data, void *priv)
 	hal_dev_ctx = (struct nrf_wifi_hal_dev_ctx *) bal_dev_ctx->hal_dev_ctx;
 
 	hal_dev_ctx->ipc_msg = data;
+	LOG_DBG("Received event data: %p", data);
 	callback_func(priv);
 }
 

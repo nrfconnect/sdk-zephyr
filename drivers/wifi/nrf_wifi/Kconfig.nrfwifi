@@ -221,7 +221,7 @@ config NRF70_WORKQ_MAX_ITEMS
 
 config NRF70_MAX_TX_PENDING_QLEN
 	int "Maximum number of pending TX packets"
-	default 18
+	default 48
 
 config NRF70_UTIL
 	depends on SHELL

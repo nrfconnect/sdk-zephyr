@@ -119,18 +119,22 @@ static void zep_shim_qspi_cpy_to(void *priv, unsigned long addr, const void *src
 	dev->write(addr, src, count_aligned);
 }
 #endif /* !CONFIG_NRF71_ON_IPC */
+struct zep_shim_spinlock {
+	struct k_spinlock lock;
+	k_spinlock_key_t key;
+};
 
 static void *zep_shim_spinlock_alloc(void)
 {
-	struct k_mutex *lock = NULL;
+	struct zep_shim_spinlock *slock = NULL;
 
-	lock = k_malloc(sizeof(*lock));
+	slock = k_calloc(sizeof(*slock), sizeof(char));
 
-	if (!lock) {
+	if (!slock) {
 		LOG_ERR("%s: Unable to allocate memory for spinlock", __func__);
 	}
 
-	return lock;
+	return slock;
 }
 
 static void zep_shim_spinlock_free(void *lock)
@@ -140,29 +144,34 @@ static void zep_shim_spinlock_free(void *lock)
 
 static void zep_shim_spinlock_init(void *lock)
 {
-	k_mutex_init(lock);
+	/* No explicit initialization needed for k_spinlock_t */
+	ARG_UNUSED(lock);
 }
 
 static void zep_shim_spinlock_take(void *lock)
 {
-	k_mutex_lock(lock, K_FOREVER);
+	struct zep_shim_spinlock *slock = (struct zep_shim_spinlock *)lock;
+	slock->key = k_spin_lock(&slock->lock);
 }
 
 static void zep_shim_spinlock_rel(void *lock)
 {
-	k_mutex_unlock(lock);
+	struct zep_shim_spinlock *slock = (struct zep_shim_spinlock *)lock;
+	k_spin_unlock(&slock->lock, slock->key);
 }
 
 static void zep_shim_spinlock_irq_take(void *lock, unsigned long *flags)
 {
+	struct zep_shim_spinlock *slock = (struct zep_shim_spinlock *)lock;
 	ARG_UNUSED(flags);
-	k_mutex_lock(lock, K_FOREVER);
+	slock->key = k_spin_lock(&slock->lock);
 }
 
 static void zep_shim_spinlock_irq_rel(void *lock, unsigned long *flags)
 {
+	struct zep_shim_spinlock *slock = (struct zep_shim_spinlock *)lock;
 	ARG_UNUSED(flags);
-	k_mutex_unlock(lock);
+	k_spin_unlock(&slock->lock, slock->key);
 }
 
 static int zep_shim_pr_dbg(const char *fmt, va_list args)
@@ -618,7 +627,7 @@ static void zep_shim_work_kill(void *item)
 
 static unsigned long zep_shim_time_get_curr_us(void)
 {
-	return k_uptime_get() * USEC_PER_MSEC;
+	return k_ticks_to_us_floor64(k_uptime_ticks());
 }
 
 static unsigned int zep_shim_time_elapsed_us(unsigned long start_time_us)

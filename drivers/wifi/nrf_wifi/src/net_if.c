@@ -29,6 +29,7 @@ LOG_MODULE_DECLARE(wifi_nrf, CONFIG_WIFI_NRF70_LOG_LEVEL);
 #include "fmac_main.h"
 #include "wpa_supp_if.h"
 #include "net_if.h"
+ unsigned int tx_sent_dbg_1, tx_sent_dbg_2, tx_sent_dbg_3;
 
 extern char *net_sprint_ll_addr_buf(const uint8_t *ll, uint8_t ll_len,
 				    char *buf, int buflen);
@@ -253,6 +254,10 @@ void nrf_wifi_if_sniffer_rx_frm(void *os_vif_ctx, void *frm,
 
 	net_capture_pkt(iface, pkt);
 
+	LOG_INF("Received packet: len: %d, freq: %d, signal: %d, rate_flags: 0x%x, rate: %d",
+		net_pkt_get_len(pkt), raw_rx_hdr->frequency,
+		raw_rx_hdr->signal, raw_rx_hdr->rate_flags,
+		raw_rx_hdr->rate);
 	ret = net_recv_data(iface, pkt);
 	if (ret < 0) {
 		LOG_DBG("RCV Packet dropped by NET stack: %d", ret);
@@ -363,6 +368,8 @@ int nrf_wifi_if_send(const struct device *dev,
 	struct raw_tx_pkt_header raw_hdr;
 #endif /* CONFIG_NRF70_RAW_DATA_TX */
 
+	tx_sent_dbg_3++;
+
 	if (!dev || !pkt) {
 		LOG_ERR("%s: vif_ctx_zep is NULL", __func__);
 		goto out;
@@ -392,14 +399,19 @@ int nrf_wifi_if_send(const struct device *dev,
 	if (!nbuf) {
 		LOG_DBG("Failed to allocate net_pkt");
 		host_stats->total_tx_drop_pkts++;
+		tx_sent_dbg_1++;
 		goto out;
 	}
 
 #ifdef CONFIG_NRF70_RAW_DATA_TX
 	memcpy(&raw_hdr, net_pkt_data(pkt), sizeof(raw_hdr));
-	if ((ntohl(raw_hdr.magic_num) == NRF_WIFI_MAGIC_NUM_RAWTX) ||
-		ntohl(raw_hdr.magic_num) == ntohl(NRF_WIFI_MAGIC_NUM_RAWTX)) {
+	LOG_DBG("%s: raw_hdr.magic_num=0x%x, pkt_len=%d",
+		__func__, ntohl(raw_hdr.magic_num), net_pkt_get_len(pkt));
+	if (ntohl(raw_hdr.magic_num) == NRF_WIFI_MAGIC_NUM_RAWTX || 
+	    ntohl(raw_hdr.magic_num) == ntohl(NRF_WIFI_MAGIC_NUM_RAWTX)) {
 		if (vif_ctx_zep->if_carr_state != NRF_WIFI_FMAC_IF_CARR_STATE_ON) {
+			LOG_ERR("%s: Carrier state is not ON, dropping raw packet",
+				__func__);;
 			goto drop;
 		}
 		LOG_DBG("%s: Sending raw packet: len=%d, vif_idx=%d",
@@ -754,7 +766,6 @@ int nrf_wifi_if_start_zep(const struct device *dev)
 		fmac_dev_added = true;
 		LOG_DBG("%s: FMAC device added", __func__);
 	}
-
 	fmac_dev_ctx = rpu_ctx_zep->rpu_ctx;
 
 	memset(&add_vif_info,
