@@ -397,7 +397,8 @@ int nrf_wifi_if_send(const struct device *dev,
 
 #ifdef CONFIG_NRF70_RAW_DATA_TX
 	memcpy(&raw_hdr, net_pkt_data(pkt), sizeof(raw_hdr));
-	if (ntohl(raw_hdr.magic_num) == NRF_WIFI_MAGIC_NUM_RAWTX) {
+	if ((ntohl(raw_hdr.magic_num) == NRF_WIFI_MAGIC_NUM_RAWTX) ||
+		ntohl(raw_hdr.magic_num) == ntohl(NRF_WIFI_MAGIC_NUM_RAWTX)) {
 		if (vif_ctx_zep->if_carr_state != NRF_WIFI_FMAC_IF_CARR_STATE_ON) {
 			goto drop;
 		}
