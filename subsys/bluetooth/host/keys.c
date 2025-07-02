@@ -325,7 +325,8 @@ void bt_keys_clear(struct bt_keys *keys)
 
 	LOG_DBG("%s (keys 0x%04x)", bt_addr_le_str(&keys->addr), keys->keys);
 
-	if ((keys->flags & BT_KEYS_ID_CONFLICT) != 0) {
+	if (IS_ENABLED(CONFIG_BT_ID_AUTO_SWAP_MATCHING_BONDS) &&
+	    (keys->flags & BT_KEYS_ID_CONFLICT) != 0) {
 		/* We need to check how many conflicting keys left. If there is only one conflicting
 		 * key left, we can remove the BT_KEYS_ID_CONFLICT flag from it so that Host don't
 		 * need to check and update the Resolving List whenever this is needed. The key
