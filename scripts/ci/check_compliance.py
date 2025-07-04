@@ -1253,6 +1253,7 @@ class SysbuildKconfigCheck(KconfigCheck):
         "DTM_NO_DFE", # Used by DTM application
         "DTM_TRANSPORT_HCI", # Used by DTM application
         "INCLUDE_REMOTE_IMAGE", # Used by machine learning application
+        "MCUBOOT_FPROTECT_ALLOW_COMBINED_REGIONS", # Used in migration documentation
         "ML_APP_INCLUDE_REMOTE_IMAGE", # Used by machine learning application
         "ML_APP_REMOTE_BOARD", # Used by machine learning application
         "MY_APP_IMAGE_ABC", # Used in documentation
