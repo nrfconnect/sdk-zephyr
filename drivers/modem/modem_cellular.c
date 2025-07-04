@@ -14,7 +14,11 @@
 #include <zephyr/modem/pipe.h>
 #include <zephyr/modem/pipelink.h>
 #include <zephyr/modem/ppp.h>
+#if CONFIG_MODEM_CELLULAR_USE_MODEM_BACKEND_UART_SLM
+#include <zephyr/modem/backend/uart_slm.h>
+#else
 #include <zephyr/modem/backend/uart.h>
+#endif
 #include <zephyr/net/ppp.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/sys/atomic.h>
@@ -86,7 +90,13 @@ enum modem_cellular_event {
 struct modem_cellular_data {
 	/* UART backend */
 	struct modem_pipe *uart_pipe;
+#if CONFIG_MODEM_CELLULAR_USE_MODEM_BACKEND_UART_SLM
+#include <zephyr/modem/backend/uart_slm.h>
+	struct modem_backend_uart_slm uart_backend;
+#else
 	struct modem_backend_uart uart_backend;
+#endif
+
 	uint8_t uart_backend_receive_buf[CONFIG_MODEM_CELLULAR_UART_BUFFER_SIZES];
 	uint8_t uart_backend_transmit_buf[CONFIG_MODEM_CELLULAR_UART_BUFFER_SIZES];
 
@@ -1816,6 +1826,11 @@ static int modem_cellular_init(const struct device *dev)
 		gpio_pin_configure_dt(&config->reset_gpio, GPIO_OUTPUT_ACTIVE);
 	}
 
+#if CONFIG_MODEM_CELLULAR_USE_MODEM_BACKEND_UART_SLM
+	{
+		/* TODO modem_cellular_modem_backend_uart_slm_init() here */
+	}
+#else
 	{
 		const struct modem_backend_uart_config uart_backend_config = {
 			.uart = config->uart,
@@ -1830,6 +1845,7 @@ static int modem_cellular_init(const struct device *dev)
 
 		data->cmd_pipe = NULL;
 	}
+#endif
 
 	{
 		const struct modem_cmux_config cmux_config = {
