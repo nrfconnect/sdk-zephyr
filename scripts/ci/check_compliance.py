@@ -483,7 +483,21 @@ class KconfigCheck(ComplianceTest):
                     re.sub('[^a-zA-Z0-9]', '_', module).upper(),
                     modules_dir / module / 'Kconfig'
                 ))
+            # Add NRF as static entry as workaround for ext Kconfig root support
+            fp_module_file.write("ZEPHYR_NRF_KCONFIG = {}\n".format(
+                nrf_modules_dir / '..' / 'Kconfig.nrf'
+            ))
             fp_module_file.write(content)
+
+        with open(sysbuild_modules_file, 'r') as fp_sysbuild_module_file:
+            content = fp_sysbuild_module_file.read()
+
+        with open(sysbuild_modules_file, 'w') as fp_sysbuild_module_file:
+            # Add NRF as static entry as workaround for ext Kconfig root support
+            fp_sysbuild_module_file.write("SYSBUILD_NRF_KCONFIG = {}\n".format(
+                nrf_modules_dir / '..' / 'sysbuild' / 'Kconfig.sysbuild'
+            ))
+            fp_sysbuild_module_file.write(content)
 
     def get_kconfig_dts(self, kconfig_dts_file, settings_file):
         """
