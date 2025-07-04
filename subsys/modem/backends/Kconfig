@@ -63,4 +63,8 @@ endif # MODEM_BACKEND_UART_ASYNC_HWFC
 
 endif # MODEM_BACKEND_UART_ASYNC
 
+config MODEM_BACKEND_UART_SLM
+	bool "SLM optimized modem UART backend"
+	depends on UART_ASYNC_API
+
 endif # MODEM_BACKEND_UART

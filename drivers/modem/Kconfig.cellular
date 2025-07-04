@@ -64,4 +64,9 @@ config MODEM_CELLULAR_NEW_BAUDRATE_DELAY
 	default 100 if DT_HAS_U_BLOX_LARA_R6_ENABLED
 	default 300
 
+config MODEM_CELLULAR_USE_MODEM_BACKEND_UART_SLM
+	bool "Use the SLM optimized modem UART backend"
+	depends on MODEM_BACKEND_UART_SLM
+	default y
+
 endif
