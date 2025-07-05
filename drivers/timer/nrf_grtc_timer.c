@@ -491,7 +491,7 @@ static int sys_clock_driver_init(void)
 	}
 #endif /* CONFIG_NRF_GRTC_START_SYSCOUNTER */
 
-	last_count = sys_clock_tick_get() * CYC_PER_TICK;
+	last_count = (counter() / CYC_PER_TICK) * CYC_PER_TICK;
 	grtc_start_value = last_count;
 	int_mask = NRFX_GRTC_CONFIG_ALLOWED_CC_CHANNELS_MASK;
 	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
