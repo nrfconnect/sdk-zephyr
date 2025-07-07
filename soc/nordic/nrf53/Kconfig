@@ -208,7 +208,7 @@ config SOC_NRF53_CPUNET_MGMT
 
 config SOC_NRF53_CPUNET_ENABLE
 	bool "NRF53 Network MCU is enabled at boot time"
-	default y if NRF_802154_SER_HOST
+	default y if NRF_802154_SER_HOST || BT
 	select SOC_NRF53_CPUNET_MGMT
 	help
 	  This option enables releasing the Network 'force off' signal, which
