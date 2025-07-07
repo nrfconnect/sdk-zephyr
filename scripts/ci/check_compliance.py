@@ -1159,6 +1159,8 @@ Missing SoC names or CONFIG_SOC vs soc.yml out of sync:
         grep_stdout = git("grep", "--line-number", "-I", "--null",
                           "--perl-regexp", regex, "--", ":!/doc/releases",
                           ":!/doc/security/vulnerabilities.rst",
+                          ":!/doc/nrf/releases_and_maturity",
+                          ":!/doc/nrf/libraries/bin/lwm2m_carrier/CHANGELOG.rst",
                           cwd=GIT_TOP)
 
         # splitlines() supports various line terminators
