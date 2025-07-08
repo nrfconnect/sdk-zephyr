@@ -1239,6 +1239,49 @@ flagged.
                                  # documentation
         "ZTEST_FAIL_TEST_",  # regex in tests/ztest/fail/CMakeLists.txt
         # zephyr-keep-sorted-stop
+
+        # NCS-specific allow list
+        # zephyr-keep-sorted-start re(^\s+")
+        "BAR", # Example documentation
+        "BT_ADV_PROV_", # Documentation
+        "CHANNEL_FETCHED_DATA_MAX_SIZE", # NRF desktop
+        "CHANNEL_TRANSPORT_DISABLED", # NRF desktop
+        "CHANNEL_TRANSPORT_IDLE", # NRF desktop
+        "CHANNEL_TRANSPORT_RSP_READY", # NRF desktop
+        "CHANNEL_TRANSPORT_WAIT_RSP", # NRF desktop
+        "DESKTOP_DVFS_STATE_", # NRF desktop
+        "DESKTOP_DVFS_STATE_CONFIG_CHANNEL_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_INITIALIZING_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_LLPM_CONNECTED_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_SMP_TRANSFER_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_USB_CONNECTED_ENABLE", # NRF desktop
+        "MY_CUSTOM_CONFIG", # Example documentation
+        "MY_EXT_API_ENABLED", # Example documentation
+        "MY_EXT_API_REQUIRED", # Example documentation
+        "NCS_IS_VARIANT_IMAGE", # Build system defined symbol
+        "NCS_VARIANT_MERGE_KCONFIG", # Build system defined symbol
+        "NRF_MODEM_LIB_TRACE_BACKEND_MY_TRACE_BACKEND", # Documentation
+        "SOC_NRF54H20_CPUSEC", # Internal
+        "SSF_SERVER_PSA_CRYPTO_SERVICE_ENABLED", # Internal
+        "STATUS_", # NRF desktop
+        "STATUS_COUNT", # NRF desktop
+        "STATUS_DISCONNECTED", # NRF desktop
+        "STATUS_FETCH", # NRF desktop
+        "STATUS_GET_BOARD_NAME", # NRF desktop
+        "STATUS_GET_HWID", # NRF desktop
+        "STATUS_GET_MAX_MOD_ID", # NRF desktop
+        "STATUS_GET_PEER", # NRF desktop
+        "STATUS_GET_PEERS_CACHE", # NRF desktop
+        "STATUS_INDEX_PEERS", # NRF desktop
+        "STATUS_LIST", # NRF desktop
+        "STATUS_PENDING", # NRF desktop
+        "STATUS_POS", # NRF desktop
+        "STATUS_REJECT", # NRF desktop
+        "STATUS_SET", # NRF desktop
+        "STATUS_SUCCESS", # NRF desktop
+        "STATUS_TIMEOUT", # NRF desktop
+        "STATUS_WRITE_FAIL", # NRF desktop
+        # zephyr-keep-sorted-stop
     }
 
 
