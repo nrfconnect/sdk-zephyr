@@ -158,7 +158,7 @@ static int set_adv_randomness(uint8_t handle, int rand_us)
 	struct net_buf *buf;
 	sdc_hci_cmd_vs_set_adv_randomness_t *cmd_params;
 
-	buf = bt_hci_cmd_create(SDC_HCI_OPCODE_CMD_VS_SET_ADV_RANDOMNESS, sizeof(*cmd_params));
+	buf = bt_hci_cmd_alloc(K_FOREVER);
 	if (!buf) {
 		LOG_ERR("Could not allocate command buffer");
 		return -ENOMEM;
