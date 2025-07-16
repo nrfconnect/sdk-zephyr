@@ -341,14 +341,21 @@ zephyr_udc0: &usbhs {
 	status = "okay";
 };
 
-/* Trim this RAM block for making room on all run-time common S2RAM cpu context. */
+/* Trim this RAM block for power management related features. */
 &cpuapp_ram0 {
-	reg = <0x22000000 (DT_SIZE_K(32) - 52)>;
-	ranges = <0x0 0x22000000 (0x8000 - 0x34)>;
+	reg = <0x22000000 (DT_SIZE_K(32) - 52 - 128)>;
+	ranges = <0x0 0x22000000 (0x8000 - 0x34 - 0x80)>;
 };
 
 / {
 	soc {
+		/* cache control functions - must be executed from local SRAM */
+		pm_ramfunc: cpuapp_s2ram@22007f5c {
+			compatible = "zephyr,memory-region", "mmio-sram";
+			reg = <0x22007f5c 128>;
+			zephyr,memory-region = "PMLocalRamfunc";
+		};
+
 		/* temporary stack for S2RAM resume logic */
 		pm_s2ram_stack: cpuapp_s2ram_stack@22007fcc  {
 			compatible = "zephyr,memory-region", "mmio-sram";
