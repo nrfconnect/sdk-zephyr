@@ -19,7 +19,7 @@ source "subsys/shell/backends/Kconfig.backends"
 config SHELL_LOCAL
 	bool
 	depends on !SHELL_REMOTE_CLI
-	select EVENTS
+	select EVENTS if MULTITHREADING
 	default y
 	help
 	  Indicates that the shell is local, not remote client.
