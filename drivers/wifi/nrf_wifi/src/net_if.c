@@ -72,6 +72,8 @@ static void nrf_wifi_rpu_recovery_work_handler(struct k_work *work)
 								struct nrf_wifi_vif_ctx_zep,
 								nrf_wifi_rpu_recovery_work);
 	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
+	struct nrf_wifi_fmac_dev_ctx *fmac_dev_ctx = NULL;
+	struct nrf_wifi_hal_dev_ctx *hal_dev_ctx = NULL;
 	int ret;
 
 	if (!vif_ctx_zep) {
@@ -87,6 +89,18 @@ static void nrf_wifi_rpu_recovery_work_handler(struct k_work *work)
 	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
 	if (!rpu_ctx_zep || !rpu_ctx_zep->rpu_ctx) {
 		LOG_ERR("%s: rpu_ctx_zep is NULL", __func__);
+		return;
+	}
+
+	fmac_dev_ctx = rpu_ctx_zep->rpu_ctx;
+	if (!fmac_dev_ctx) {
+		LOG_ERR("%s: fmac_dev_ctx is NULL", __func__);
+		return;
+	}
+
+	hal_dev_ctx = fmac_dev_ctx->hal_dev_ctx;
+	if (!hal_dev_ctx) {
+		LOG_ERR("%s: hal_dev_ctx is NULL", __func__);
 		return;
 	}
 
@@ -134,6 +148,8 @@ static void nrf_wifi_rpu_recovery_work_handler(struct k_work *work)
 	}
 #endif
 	rpu_ctx_zep->rpu_recovery_in_progress = true;
+	rpu_ctx_zep->wdt_irq_received += hal_dev_ctx->wdt_irq_received;
+	rpu_ctx_zep->wdt_irq_ignored += hal_dev_ctx->wdt_irq_ignored;
 #ifdef CONFIG_NRF_WIFI_RPU_RECOVERY_DEBUG
 	LOG_ERR("%s: Bringing the interface down", __func__);
 #else
@@ -363,7 +379,7 @@ enum ethernet_hw_caps nrf_wifi_if_caps_get(const struct device *dev)
 int nrf_wifi_if_send(const struct device *dev,
 		     struct net_pkt *pkt)
 {
-	int ret = -1;
+	int ret = -EINVAL;
 #ifdef CONFIG_NRF70_DATA_TX
 	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = NULL;
 	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
@@ -404,6 +420,7 @@ int nrf_wifi_if_send(const struct device *dev,
 
 	if (nbuf == NULL) {
 		LOG_ERR("%s: allocation failed", __func__);
+		ret = -ENOMEM;
 		goto drop;
 	}
 
@@ -420,6 +437,7 @@ int nrf_wifi_if_send(const struct device *dev,
 #endif /* CONFIG_NRF70_RAW_DATA_TX */
 		if ((vif_ctx_zep->if_carr_state != NRF_WIFI_FMAC_IF_CARR_STATE_ON) ||
 		    (!vif_ctx_zep->authorized && !is_eapol(pkt))) {
+			ret = -EPERM;
 			goto drop;
 		}
 
@@ -429,6 +447,12 @@ int nrf_wifi_if_send(const struct device *dev,
 #ifdef CONFIG_NRF70_RAW_DATA_TX
 	}
 #endif /* CONFIG_NRF70_RAW_DATA_TX */
+	if (ret == NRF_WIFI_STATUS_FAIL) {
+		/* FMAC API takes care of freeing the nbuf */
+		host_stats->total_tx_drop_pkts++;
+		/* Could be many reasons, but likely no space in the queue */
+		ret = -ENOBUFS;
+	}
 	goto unlock;
 drop:
 	if (host_stats != NULL) {
