@@ -466,19 +466,22 @@ ZTEST(dns_addremove, test_dns_reconfigure_callback)
 			     "Timeout while waiting for DNS added callback");
 	}
 
-	ret = dns_resolve_reconfigure(&resv_ipv4, dns2_servers_str, NULL);
+	ret = dns_resolve_reconfigure(&resv_ipv4, dns2_servers_str, NULL,
+				      DNS_SOURCE_MANUAL);
 	zassert_equal(ret, 0, "Cannot reconfigure DNS server");
 
 	/* Wait for DNS removed callback after reconfiguring DNS */
-	if (k_sem_take(&dns_removed, WAIT_TIME)) {
-		zassert_true(false,
-			     "Timeout while waiting for DNS removed callback");
-	}
+	if (IS_ENABLED(CONFIG_DNS_RECONFIGURE_CLEANUP)) {
+		if (k_sem_take(&dns_removed, WAIT_TIME)) {
+			zassert_true(false,
+				     "Timeout while waiting for DNS removed callback");
+		}
 
-	/* Wait for DNS added callback after reconfiguring DNS */
-	if (k_sem_take(&dns_added, WAIT_TIME)) {
-		zassert_true(false,
-			     "Timeout while waiting for DNS added callback");
+		/* Wait for DNS added callback after reconfiguring DNS */
+		if (k_sem_take(&dns_added, WAIT_TIME)) {
+			zassert_true(false,
+				     "Timeout while waiting for DNS added callback");
+		}
 	}
 
 	ret = dns_resolve_close(&resv_ipv4);
