@@ -549,10 +549,6 @@ void sys_clock_set_timeout(int32_t ticks, bool idle)
 {
 	ARG_UNUSED(idle);
 
-	if (ticks == 0) {
-		return;
-	}
-
 	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
 		return;
 	}
@@ -561,6 +557,15 @@ void sys_clock_set_timeout(int32_t ticks, bool idle)
 
 	if ((cc_value == expired_cc) && (ticks < MAX_REL_TICKS)) {
 		uint32_t cyc = ticks * CYC_PER_TICK;
+
+		if (cyc == 0) {
+			/* GRTC will expire anyway since HW ensures that past value triggers an
+			 * event but we need to ensure to always progress the cc_value as this
+			 * if condition expects that cc_value will change after each call to
+			 * set_timeout function.
+			 */
+			cyc = 1;
+		}
 
 		/* If it's the first timeout setting after previous expiration and timeout
 		 * is short so fast method can be used which utilizes relative CC configuration.
