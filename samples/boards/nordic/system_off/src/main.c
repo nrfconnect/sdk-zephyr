@@ -17,11 +17,11 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/sys/poweroff.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/drivers/timer/nrf_grtc_timer.h>
 
 #define NON_WAKEUP_RESET_REASON (RESET_PIN | RESET_SOFTWARE | RESET_POR | RESET_DEBUG)
 
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
-#include <zephyr/drivers/timer/nrf_grtc_timer.h>
 #define DEEP_SLEEP_TIME_S 2
 #endif
 #if defined(CONFIG_GPIO_WAKEUP_ENABLE)
@@ -125,6 +125,7 @@ int main(void)
 	}
 
 	hwinfo_clear_reset_cause();
+	z_nrf_grtc_uninit();
 	sys_poweroff();
 
 	return 0;

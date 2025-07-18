@@ -200,6 +200,15 @@ int z_nrf_grtc_wakeup_prepare(uint64_t wake_time_us);
  */
 uint64_t z_nrf_grtc_timer_startup_value_get(void);
 
+/** @brief Uninitialize the GRTC timer.
+ *
+ * @note This function
+ *		 - Deinitializes the GRTC driver
+ *		 - Releases the request for the source clock (LFCLK)
+ *		 - Waits 1 ms to allow the source clock to be released
+ */
+void z_nrf_grtc_uninit(void);
+
 /**
  * @brief       Initialize the GRTC clock timer driver from an application-
  *              defined function.
