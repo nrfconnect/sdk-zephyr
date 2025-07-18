@@ -13,6 +13,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/drivers/comparator.h>
+#include <zephyr/drivers/timer/system_timer.h>
 #include <zephyr/kernel.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/sys/poweroff.h>
@@ -125,6 +126,7 @@ int main(void)
 	}
 
 	hwinfo_clear_reset_cause();
+	sys_clock_disable();
 	sys_poweroff();
 
 	return 0;
