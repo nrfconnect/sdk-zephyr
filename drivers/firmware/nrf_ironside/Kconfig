@@ -73,4 +73,10 @@ config NRF_IRONSIDE_DVFS_OPPOINT_CHANGE_MUTEX_TIMEOUT_MS
 
 endif # NRF_IRONSIDE_DVFS_SERVICE
 
+config NRF_IRONSIDE_RECOVER_SERVICE
+	bool "IronSide recovery service"
+	select NRF_IRONSIDE_CALL
+	help
+	  Service used to reboot the system into recovery mode.
+
 endmenu
