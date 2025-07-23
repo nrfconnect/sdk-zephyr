@@ -360,7 +360,6 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
 
     def program_hex(self):
         # Get the command use to actually program self.hex_.
-        self.logger.info(f'Flashing file: {self.hex_}')
 
         # What type of erase/core arguments should we pass to the tool?
         core = self._get_core()
@@ -491,6 +490,8 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
         return file
 
     def op_program(self, hex_file, erase, ext_mem_erase, defer=False, core=None):
+        self.logger.info(f'Flashing file: {hex_file}')
+
         args = self._op_program(hex_file, erase, ext_mem_erase)
         self.exec_op('program', defer, core, **args)
 
