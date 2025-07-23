@@ -384,55 +384,6 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                     self.exec_op('erase', core='Application', kind='all')
                     self.exec_op('erase', core='Network', kind='all')
 
-            # Manage SUIT artifacts.
-            # This logic should be executed only once per build.
-            # Use sysbuild board qualifiers to select the context,
-            # with which the artifacts will be programmed.
-            if self.build_conf.get('CONFIG_BOARD_QUALIFIERS') == self.sysbuild_conf.get(
-                'SB_CONFIG_BOARD_QUALIFIERS'
-            ):
-                mpi_hex_dir = Path(os.path.join(self.cfg.build_dir, 'zephyr'))
-
-                # Handle Manifest Provisioning Information
-                if self.sysbuild_conf.getboolean('SB_CONFIG_SUIT_MPI_GENERATE'):
-                    app_mpi_hex_file = os.fspath(
-                        mpi_hex_dir / self.sysbuild_conf.get('SB_CONFIG_SUIT_MPI_APP_AREA_PATH'))
-                    rad_mpi_hex_file = os.fspath(
-                        mpi_hex_dir / self.sysbuild_conf.get('SB_CONFIG_SUIT_MPI_RAD_AREA_PATH')
-                    )
-                    if os.path.exists(app_mpi_hex_file):
-                        self.op_program(
-                            app_mpi_hex_file,
-                            'ERASE_NONE',
-                            None,
-                            defer=True,
-                            core='Application',
-                        )
-                    if os.path.exists(rad_mpi_hex_file):
-                        self.op_program(
-                            rad_mpi_hex_file,
-                            'ERASE_NONE',
-                            None,
-                            defer=True,
-                            core='Network',
-                        )
-
-                # Handle SUIT root manifest if application manifests are not used.
-                # If an application firmware is built, the root envelope is merged
-                # with other application manifests as well as the output HEX file.
-                if core != 'Application' and self.sysbuild_conf.get('SB_CONFIG_SUIT_ENVELOPE'):
-                    app_root_envelope_hex_file = os.fspath(
-                        mpi_hex_dir / 'suit_installed_envelopes_application_merged.hex'
-                    )
-                    if os.path.exists(app_root_envelope_hex_file):
-                        self.op_program(
-                            app_root_envelope_hex_file,
-                            'ERASE_NONE',
-                            None,
-                            defer=True,
-                            core='Application',
-                        )
-
             if self.build_conf.getboolean("CONFIG_NRF_HALTIUM_GENERATE_UICR"):
                 zephyr_build_dir = Path(self.cfg.build_dir) / 'zephyr'
 
