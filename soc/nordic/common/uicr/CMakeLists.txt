@@ -20,6 +20,15 @@ if(CONFIG_NRF_HALTIUM_GENERATE_UICR)
     list(APPEND optional_byproducts ${periphconf_hex_file})
   endif()
 
+  set(out_periphconf_recovery_hex_arg)
+  if(CONFIG_NRF_HALTIUM_UICR_RECOVERY_PERIPHCONF)
+    set(periphconf_recovery_hex_file ${PROJECT_BINARY_DIR}/periphconf_recovery.hex)
+    set(out_periphconf_recovery_hex_arg
+      --out-periphconf-recovery-hex ${periphconf_recovery_hex_file}
+    )
+    list(APPEND optional_byproducts ${periphconf_recovery_hex_file})
+  endif()
+
   set(uicr_hex_file ${PROJECT_BINARY_DIR}/uicr.hex)
   set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
     COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${ZEPHYR_BASE}/scripts/dts/python-devicetree/src
@@ -28,6 +37,7 @@ if(CONFIG_NRF_HALTIUM_GENERATE_UICR)
     --in-edt-pickle ${EDT_PICKLE}
     ${in_periphconf_elf_arg}
     ${out_periphconf_hex_arg}
+    ${out_periphconf_recovery_hex_arg}
     --out-uicr-hex ${uicr_hex_file}
   )
   set_property(GLOBAL APPEND PROPERTY extra_post_build_byproducts

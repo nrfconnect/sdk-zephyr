@@ -25,6 +25,9 @@ PERIPHCONF_SECTION = "uicr_periphconf_entry"
 UICR_NODELABEL = "uicr"
 # Nodelabel of the PERIPHCONF devicetree node, used to extract its location from the devicetree.
 PERIPHCONF_NODELABEL = "periphconf_partition"
+# Nodelabel of the PERIPHCONF_RECOVERY devicetree node, used to extract its location
+# from the devicetree.
+PERIPHCONF_RECOVERY_NODELABEL = "periphconf_recovery_partition"
 
 # Common values for representing enabled/disabled in the UICR format.
 ENABLED_VALUE = 0xFFFF_FFFF
@@ -67,6 +70,15 @@ class Protectedmem(c.LittleEndianStructure):
     ]
 
 
+class Periphconf(c.LittleEndianStructure):
+    _pack_ = 1
+    _fields_ = [
+        ("ENABLE", c.c_uint32),
+        ("ADDRESS", c.c_uint32),
+        ("MAXCOUNT", c.c_uint32),
+    ]
+
+
 class Recovery(c.LittleEndianStructure):
     _pack_ = 1
     _fields_ = [
@@ -74,6 +86,7 @@ class Recovery(c.LittleEndianStructure):
         ("PROCESSOR", c.c_uint32),
         ("INITSVTOR", c.c_uint32),
         ("SIZE4KB", c.c_uint32),
+        ("PERIPHCONF", Periphconf),
     ]
 
 
@@ -84,15 +97,6 @@ class Its(c.LittleEndianStructure):
         ("ADDRESS", c.c_uint32),
         ("APPLICATIONSIZE", c.c_uint32),
         ("RADIOCORESIZE", c.c_uint32),
-    ]
-
-
-class Periphconf(c.LittleEndianStructure):
-    _pack_ = 1
-    _fields_ = [
-        ("ENABLE", c.c_uint32),
-        ("ADDRESS", c.c_uint32),
-        ("MAXCOUNT", c.c_uint32),
     ]
 
 
@@ -115,11 +119,13 @@ class Uicr(c.LittleEndianStructure):
         ("APPROTECT", Approtect),
         ("ERASEPROTECT", c.c_uint32),
         ("PROTECTEDMEM", Protectedmem),
-        ("RECOVERY", Recovery),
+        ("RESERVED2", c.c_uint32 * 4),
         ("ITS", Its),
-        ("RESERVED2", c.c_uint32 * 7),
+        ("RESERVED3", c.c_uint32 * 7),
         ("PERIPHCONF", Periphconf),
         ("MPCCONF", Mpcconf),
+        ("RESERVED4", c.c_uint32),
+        ("RECOVERY", Recovery),
     ]
 
 
@@ -169,6 +175,12 @@ def main() -> None:
         type=argparse.FileType("w", encoding="utf-8"),
         help="Path to write the generated PERIPHCONF HEX file to",
     )
+    parser.add_argument(
+        "--out-periphconf-recovery-hex",
+        default=None,
+        type=argparse.FileType("w", encoding="utf-8"),
+        help="Path to write the generated PERIPHCONF_RECOVERY HEX file to",
+    )
     args = parser.parse_args()
 
     try:
@@ -196,6 +208,36 @@ def main() -> None:
         padding_len = periphconf_size - len(periphconf_combined)
         periphconf_final = periphconf_combined + bytes([0xFF for _ in range(padding_len)])
 
+        # Handle recovery periphconf partition if enabled
+        periphconf_recovery_address = None
+        periphconf_recovery_size = None
+        periphconf_recovery_final = None
+
+        if kconfig.get("CONFIG_NRF_HALTIUM_UICR_RECOVERY_PERIPHCONF") == "y":
+            try:
+                periphconf_recovery_partition = edt.label2node[PERIPHCONF_RECOVERY_NODELABEL]
+            except LookupError as e:
+                raise ScriptError(
+                    "Failed to find a PERIPHCONF_RECOVERY partition in the devicetree. "
+                    f"Expected a DT node with label '{PERIPHCONF_RECOVERY_NODELABEL}'. "
+                    "This is required when "
+                    "CONFIG_NRF_HALTIUM_UICR_RECOVERY_PERIPHCONF is enabled."
+                ) from e
+
+            flash_base_address_recovery = periphconf_recovery_partition.flash_controller.regs[
+                0
+            ].addr
+            periphconf_recovery_address = (
+                flash_base_address_recovery + periphconf_recovery_partition.regs[0].addr
+            )
+            periphconf_recovery_size = periphconf_recovery_partition.regs[0].size
+
+            # Create a copy of the periphconf data for recovery at different location
+            padding_len_recovery = periphconf_recovery_size - len(periphconf_combined)
+            periphconf_recovery_final = periphconf_combined + bytes(
+                [0xFF for _ in range(padding_len_recovery)]
+            )
+
         if kconfig.get("CONFIG_NRF_HALTIUM_UICR_PERIPHCONF") == "y":
             uicr.PERIPHCONF.ENABLE = ENABLED_VALUE
             uicr.PERIPHCONF.ADDRESS = periphconf_address
@@ -222,6 +264,11 @@ def main() -> None:
             size4kb = int(kconfig.get("CONFIG_NRF_HALTIUM_UICR_RECOVERY_SIZE4KB"), 0)
             uicr.RECOVERY.SIZE4KB = size4kb
 
+            if kconfig.get("CONFIG_NRF_HALTIUM_UICR_RECOVERY_PERIPHCONF") == "y":
+                uicr.RECOVERY.PERIPHCONF.ENABLE = ENABLED_VALUE
+                uicr.RECOVERY.PERIPHCONF.ADDRESS = periphconf_recovery_address
+                uicr.RECOVERY.PERIPHCONF.MAXCOUNT = math.floor(periphconf_recovery_size / 8)
+
         try:
             uicr_node = edt.label2node[UICR_NODELABEL]
         except LookupError as e:
@@ -239,6 +286,13 @@ def main() -> None:
             periphconf_hex = IntelHex()
             periphconf_hex.frombytes(periphconf_final, offset=periphconf_address)
             periphconf_hex.write_hex_file(args.out_periphconf_hex)
+
+        if args.out_periphconf_recovery_hex is not None and periphconf_recovery_final is not None:
+            periphconf_recovery_hex = IntelHex()
+            periphconf_recovery_hex.frombytes(
+                periphconf_recovery_final, offset=periphconf_recovery_address
+            )
+            periphconf_recovery_hex.write_hex_file(args.out_periphconf_recovery_hex)
 
     except ScriptError as e:
         print(f"Error: {e!s}")
@@ -268,8 +322,8 @@ def extract_and_combine_periphconfs(elf_files: list[argparse.FileType]) -> bytes
             unique_values = {e.value for e in entries}
             if len(unique_values) > 1:
                 raise ScriptError(
-                    f"PERIPHCONF has conflicting values for register 0x{regptr:09_x}: "
-                    + ", ".join([f"0x{val:09_x}" for val in unique_values])
+                    f"PERIPHCONF has conflicting values for register "
+                    f"0x{regptr:09_x}: " + ", ".join([f"0x{val:09_x}" for val in unique_values])
                 )
         deduplicated_periphconf.append(entries[0])
 

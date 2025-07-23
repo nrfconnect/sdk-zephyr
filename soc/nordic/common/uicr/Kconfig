@@ -60,6 +60,14 @@ config NRF_HALTIUM_UICR_RECOVERY_SIZE4KB
 	help
 	  Size of the recovery firmware partition in 4KB blocks.
 
+config NRF_HALTIUM_UICR_RECOVERY_PERIPHCONF
+	bool "Recovery firmware global domain peripheral configuration"
+	help
+	  Generates a blob containing static global domain peripheral initialization
+	  values extracted from recovery firmware build artifacts, and configures
+	  UICR.RECOVERY.PERIPHCONF to point at the blob. The initialization values
+	  are then loaded ahead of the recovery firmware boot.
+
 endif # NRF_HALTIUM_UICR_RECOVERY
 
 endif

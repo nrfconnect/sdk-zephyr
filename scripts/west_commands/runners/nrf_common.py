@@ -404,6 +404,15 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                         core='Application',
                     )
 
+                if self.build_conf.getboolean("CONFIG_NRF_HALTIUM_UICR_RECOVERY_PERIPHCONF"):
+                    self.op_program(
+                        str(zephyr_build_dir / 'periphconf_recovery.hex'),
+                        'ERASE_NONE',
+                        None,
+                        defer=True,
+                        core='Application',
+                    )
+
             if not self.erase and regtool_generated_uicr:
                 self.exec_op('erase', core=core, kind='uicr')
         else:
