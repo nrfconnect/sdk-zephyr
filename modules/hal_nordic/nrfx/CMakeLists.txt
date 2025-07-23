@@ -6,7 +6,12 @@ zephyr_library()
 # The nrfx source directory can be override through the definition of the NRFX_DIR symbol
 # during the invocation of the build system
 if(NOT DEFINED NRFX_DIR)
-  set(NRFX_DIR ${ZEPHYR_CURRENT_MODULE_DIR}/nrfx CACHE PATH "nrfx Directory")
+  if(SYSBUILD)
+    zephyr_get(NRFX_DIR SYSBUILD GLOBAL)
+  endif()
+  if(NOT DEFINED NRFX_DIR)
+    set(NRFX_DIR ${ZEPHYR_CURRENT_MODULE_DIR}/nrfx CACHE PATH "nrfx Directory")
+  endif()
 endif()
 
 set(INC_DIR ${NRFX_DIR}/drivers/include)
