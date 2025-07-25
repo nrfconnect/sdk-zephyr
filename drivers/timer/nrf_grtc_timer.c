@@ -453,6 +453,18 @@ uint32_t sys_clock_elapsed(void)
 	return last_elapsed / CYC_PER_TICK;
 }
 
+void sys_clock_disable(void)
+{
+	int err;
+	struct onoff_manager *mgr =
+		z_nrf_clock_control_get_onoff((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_LFCLK);
+
+	nrfx_grtc_uninit();
+	err = onoff_release(mgr);
+	__ASSERT_NO_MSG(err >= 0);
+	nrfx_coredep_delay_us(1000);
+}
+
 static int sys_clock_driver_init(void)
 {
 	nrfx_err_t err_code;
