@@ -313,7 +313,6 @@ int supplicant_wps_config(const struct device *dev, struct wifi_wps_config_param
  */
 int supplicant_set_bss_max_idle_period(const struct device *dev,
 				       unsigned short bss_max_idle_period);
-
 #ifdef CONFIG_AP
 int set_ap_bandwidth(const struct device *dev, enum wifi_frequency_bandwidths bandwidth);
 
