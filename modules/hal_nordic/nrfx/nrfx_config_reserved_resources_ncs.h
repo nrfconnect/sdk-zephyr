@@ -121,7 +121,7 @@
 #endif /* CONFIG_NRF_802154_RADIO_DRIVER */
 
 #if defined(CONFIG_MPSL)
-#include <mpsl.h>
+#include <mpsl_hwres.h>
 #if defined(CONFIG_SOC_COMPATIBLE_NRF52X)
 #define NRFX_PPI_CHANNELS_USED_BY_MPSL MPSL_PPI_CHANNELS_USED_MASK
 #elif defined(CONFIG_SOC_COMPATIBLE_NRF53X)
