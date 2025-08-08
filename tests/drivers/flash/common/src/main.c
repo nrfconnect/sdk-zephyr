@@ -12,6 +12,8 @@
 
 #if defined(CONFIG_NORDIC_QSPI_NOR)
 #define TEST_AREA_DEV_NODE	DT_INST(0, nordic_qspi_nor)
+#elif defined(CONFIG_FLASH_RENESAS_RA_OSPI_B)
+#define TEST_AREA_DEV_NODE	DT_INST(0, renesas_ra_ospi_b_nor)
 #elif defined(CONFIG_SPI_NOR)
 #define TEST_AREA_DEV_NODE	DT_INST(0, jedec_spi_nor)
 #elif defined(CONFIG_FLASH_MSPI_NOR)
@@ -32,12 +34,18 @@
 #elif defined(TEST_AREA_DEV_NODE)
 
 #define TEST_AREA_DEVICE	DEVICE_DT_GET(TEST_AREA_DEV_NODE)
+#if defined CONFIG_FLASH_RENESAS_RA_OSPI_B
+#define TEST_AREA_OFFSET	0x40000
+#else
 #define TEST_AREA_OFFSET	0xff000
+#endif
 
 #if DT_NODE_HAS_PROP(TEST_AREA_DEV_NODE, size_in_bytes)
 #define TEST_AREA_MAX DT_PROP(TEST_AREA_DEV_NODE, size_in_bytes)
-#else
+#elif DT_NODE_HAS_PROP(TEST_AREA_DEV_NODE, size)
 #define TEST_AREA_MAX (DT_PROP(TEST_AREA_DEV_NODE, size) / 8)
+#else
+#define TEST_AREA_MAX DT_REG_SIZE(TEST_AREA_DEV_NODE)
 #endif
 
 #else
@@ -79,7 +87,8 @@ static void flash_driver_before(void *arg)
 		TC_PRINT("No devices with erase requirement present\n");
 		erase_value = 0x55;
 		page_info.start_offset = TEST_AREA_OFFSET;
-		page_info.size = TEST_AREA_MAX - TEST_AREA_OFFSET;
+		/* test_flash_copy uses 2 pages, so split the test area */
+		page_info.size = (TEST_AREA_MAX - TEST_AREA_OFFSET) / 2;
 	}
 
 
@@ -102,6 +111,10 @@ static void flash_driver_before(void *arg)
 	/* Check if tested region fits in flash */
 	zassert_true((TEST_AREA_OFFSET + EXPECTED_SIZE) <= TEST_AREA_MAX,
 		     "Test area exceeds flash size");
+
+	/* Check if test region is suitable for test_flash_copy */
+	zassert_true((TEST_AREA_OFFSET + 2 * page_info.size) <= TEST_AREA_MAX,
+		     "test_flash_copy needs 2 flash pages");
 
 	/* Check if flash is cleared */
 	if (IS_ENABLED(CONFIG_FLASH_HAS_EXPLICIT_ERASE) && ebw_required) {

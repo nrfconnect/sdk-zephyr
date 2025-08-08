@@ -618,15 +618,17 @@
 		};
 	};
 
-	netc: ethernet@60000000 {
-		reg = <0x60000000 0x1000000>;
+	netc: ethernet {
+		compatible = "nxp,imx-netc";
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
 
 		enetc_psi0: ethernet@60b00000 {
 			compatible = "nxp,imx-netc-psi";
-			reg = <0x60b00000 0x10000>;
+			reg = <0x60b00000 0x10000>,
+			      <0x60003000 0x1000>;
+			reg-names = "port", "pfconfig";
 			mac-index = <0>;
 			si-index = <0>;
 			status = "disabled";
@@ -634,7 +636,9 @@
 
 		enetc_psi1: ethernet@60b40000 {
 			compatible = "nxp,imx-netc-psi";
-			reg = <0x60b40000 0x10000>;
+			reg = <0x60b40000 0x10000>,
+			      <0x60004000 0x1000>;
+			reg-names = "port", "pfconfig";
 			mac-index = <1>;
 			si-index = <1>;
 			phy-connection-type = "internal";
@@ -643,7 +647,9 @@
 
 		emdio: mdio@60ba0000 {
 			compatible = "nxp,imx-netc-emdio";
-			reg = <0x60ba0000 0x1c44>;
+			reg = <0x60ba0000 0x1c44>,
+				<0x60001000 0x1000>;
+			reg-names = "basic", "pfconfig";
 			clocks = <&ccm IMX_CCM_NETC_CLK 0x0 0>;
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -746,6 +752,22 @@
 		prescaler = <1>;
 		clk-source = <0>;
 		resolution = <32>;
+		status = "disabled";
+	};
+
+	flexio1: flexio@25c0000{
+		compatible = "nxp,flexio";
+		reg = <0x25c0000 0x4000>;
+		interrupts = <53 0>;
+		clocks = <&ccm IMX_CCM_FLEXIO1_CLK 0 0>;
+		status = "disabled";
+	};
+
+	flexio2: flexio@25d0000 {
+		compatible = "nxp,flexio";
+		reg = <0x25d0000 0x4000>;
+		interrupts = <54 0>;
+		clocks = <&ccm IMX_CCM_FLEXIO2_CLK 0 0>;
 		status = "disabled";
 	};
 
@@ -1086,6 +1108,15 @@
 			 0x0C000000 0x0C000000 0x30000000 0x30000000
 			 0xC0000000 0xC0000000>;
 		status = "disabled";
+	};
+
+	ewm0: ewm@27b0000 {
+		compatible = "nxp,ewm";
+		reg = <0x27b0000 0x6>;
+		status = "disabled";
+		interrupts = <147 0>;
+		clk-sel = "lpo_clk[2]";
+		clk-divider = <0x2>;
 	};
 
 	lpspi1: spi@4360000 {
