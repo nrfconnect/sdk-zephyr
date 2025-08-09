@@ -10,7 +10,7 @@ from itertools import takewhile
 import json
 import logging
 import os
-from pathlib import Path
+from pathlib import Path, PurePath
 import platform
 import re
 import subprocess
@@ -21,6 +21,7 @@ import shlex
 import shutil
 import textwrap
 import unidiff
+import yaml
 
 from yamllint import config, linter
 
@@ -30,10 +31,39 @@ import magic
 from west.manifest import Manifest
 from west.manifest import ManifestProject
 
+try:
+    from yaml import CSafeLoader as SafeLoader
+except ImportError:
+    from yaml import SafeLoader
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from get_maintainer import Maintainers, MaintainersError
 import list_boards
 import list_hardware
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]
+                       / "scripts" / "dts" / "python-devicetree" / "src"))
+from devicetree import edtlib
+
+
+# Let the user run this script as ./scripts/ci/check_compliance.py without
+# making them set ZEPHYR_BASE.
+ZEPHYR_BASE = os.environ.get('ZEPHYR_BASE')
+if ZEPHYR_BASE:
+    ZEPHYR_BASE = Path(ZEPHYR_BASE)
+else:
+    ZEPHYR_BASE = Path(__file__).resolve().parents[2]
+    # Propagate this decision to child processes.
+    os.environ['ZEPHYR_BASE'] = str(ZEPHYR_BASE)
+
+# Initialize the property names allowlist
+BINDINGS_PROPERTIES_AL = None
+with open(Path(__file__).parents[1] / 'bindings_properties_allowlist.yaml') as f:
+    allowlist = yaml.safe_load(f.read())
+    if allowlist is not None:
+        BINDINGS_PROPERTIES_AL = set(allowlist)
+    else:
+        BINDINGS_PROPERTIES_AL = set()
 
 logger = None
 
@@ -380,32 +410,75 @@ class DevicetreeBindingsCheck(ComplianceTest):
     doc = "See https://docs.zephyrproject.org/latest/build/dts/bindings.html for more details."
 
     def run(self, full=True):
-        dts_bindings = self.parse_dt_bindings()
+        bindings_diff, bindings = self.get_yaml_bindings()
 
-        for dts_binding in dts_bindings:
-            self.required_false_check(dts_binding)
+        # If no bindings are changed, skip this check.
+        try:
+            subprocess.check_call(['git', 'diff', '--quiet', COMMIT_RANGE]
+                                  + bindings_diff)
+            nodiff = True
+        except subprocess.CalledProcessError:
+            nodiff = False
+        if nodiff:
+            self.skip('no changes to bindings were made')
 
-    def parse_dt_bindings(self):
+        for binding in bindings:
+            self.check(binding, self.check_yaml_property_name)
+            self.check(binding, self.required_false_check)
+
+    @staticmethod
+    def check(binding, callback):
+        while binding is not None:
+            callback(binding)
+            binding = binding.child_binding
+
+    def get_yaml_bindings(self):
         """
-        Returns a list of dts/bindings/**/*.yaml files
+        Returns a list of 'dts/bindings/**/*.yaml'
         """
+        from glob import glob
+        BINDINGS_PATH = 'dts/bindings/'
+        bindings_diff_dir, bindings = set(), []
 
-        dt_bindings = []
-        for file_name in get_files(filter="d"):
-            if 'dts/bindings/' in file_name and file_name.endswith('.yaml'):
-                dt_bindings.append(file_name)
+        for file_name in get_files(filter='d'):
+            if BINDINGS_PATH in file_name:
+                p = file_name.partition(BINDINGS_PATH)
+                bindings_diff_dir.add(os.path.join(p[0], p[1]))
 
-        return dt_bindings
+        for path in bindings_diff_dir:
+            yamls = glob(f'{os.fspath(path)}/**/*.yaml', recursive=True)
+            bindings.extend(yamls)
 
-    def required_false_check(self, dts_binding):
-        with open(dts_binding) as file:
-            for line_number, line in enumerate(file, 1):
-                if 'required: false' in line:
-                    self.fmtd_failure(
-                        'warning', 'Devicetree Bindings', dts_binding,
-                        line_number, col=None,
-                        desc="'required: false' is redundant, please remove")
+        bindings = edtlib.bindings_from_paths(bindings, ignore_errors=True)
+        return list(bindings_diff_dir), bindings
 
+    def check_yaml_property_name(self, binding):
+        """
+        Checks if the property names in the binding file contain underscores.
+        """
+        for prop_name in binding.prop2specs:
+            if '_' in prop_name and prop_name not in BINDINGS_PROPERTIES_AL:
+                better_prop = prop_name.replace('_', '-')
+                print(f"Required: In '{binding.path}', "
+                      f"the property '{prop_name}' "
+                      f"should be renamed to '{better_prop}'.")
+                self.failure(
+                    f"{binding.path}: property '{prop_name}' contains underscores.\n"
+                    f"\tUse '{better_prop}' instead unless this property name is from Linux.\n"
+                    "Or another authoritative upstream source of bindings for "
+                    f"compatible '{binding.compatible}'.\n"
+                    "\tHint: update 'bindings_properties_allowlist.yaml' if you need to "
+                    "override this check for this property."
+                )
+
+    def required_false_check(self, binding):
+        raw_props = binding.raw.get('properties', {})
+        for prop_name, raw_prop in raw_props.items():
+            if raw_prop.get('required') is False:
+                self.failure(
+                    f'{binding.path}: property "{prop_name}": '
+                    "'required: false' is redundant, please remove"
+                )
 
 class KconfigCheck(ComplianceTest):
     """
@@ -680,6 +753,61 @@ class KconfigCheck(ComplianceTest):
             # Clean up the temporary directory
             shutil.rmtree(kconfiglib_dir)
 
+    def module_kconfigs(self, regex):
+        manifest = Manifest.from_file()
+        kconfigs = ""
+
+        # Use hard coded paths for Zephyr for tests, samples and ext. module root
+        tmp_output = git("grep", "-I", "-h", "--perl-regexp", regex, "--", ":tests", ":samples",
+                         ":modules", cwd=ZEPHYR_BASE, ignore_non_zero=True)
+
+        if len(tmp_output) > 0:
+            kconfigs += tmp_output + "\n"
+
+        for project in manifest.get_projects([]):
+            if not manifest.is_active(project):
+                continue
+
+            if not project.is_cloned():
+                continue
+
+            module_path = PurePath(project.abspath)
+            module_yml = module_path.joinpath('zephyr/module.yml')
+
+            if not Path(module_yml).is_file():
+                module_yml = module_path.joinpath('zephyr/module.yaml')
+
+            if Path(module_yml).is_file():
+                dirs = []
+
+                with Path(module_yml).open('r', encoding='utf-8') as f:
+                    meta = yaml.load(f.read(), Loader=SafeLoader)
+
+                for folder_type in ['samples', 'tests']:
+                    if folder_type in meta:
+                        for path_ext in meta[folder_type]:
+                            path_full = module_path.joinpath(path_ext)
+
+                            if Path(path_full).is_dir():
+                                dirs.append(":" + path_ext)
+
+                # Add ext. module root, if one is defined
+                if 'build' in meta and 'settings' in meta['build'] and \
+                     'module_ext_root' in meta['build']['settings']:
+                    path_full = module_path.joinpath(meta['build']['settings']['module_ext_root'])
+
+                    if Path(path_full).is_dir():
+                        dirs.append(":" + meta['build']['settings']['module_ext_root'])
+
+                if len(dirs) > 0:
+                    tmp_output = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
+                                     *dirs, cwd=module_path, ignore_non_zero=True)
+
+                    if len(tmp_output) > 0:
+                        kconfigs += tmp_output + "\n"
+
+        return kconfigs
+
     def get_logging_syms(self, kconf):
         # Returns a set() with the names of the Kconfig symbols generated with
         # logging template in samples/tests folders. The Kconfig symbols doesn't
@@ -700,9 +828,8 @@ class KconfigCheck(ComplianceTest):
         # Warning: Needs to work with both --perl-regexp and the 're' module.
         regex = r"^\s*(?:module\s*=\s*)([A-Z0-9_]+)\s*(?:#|$)"
 
-        # Grep samples/ and tests/ for symbol definitions
-        grep_stdout = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
-                          ":samples", ":tests", cwd=ZEPHYR_BASE)
+        # Grep samples/ and tests/ for symbol definitions in all modules
+        grep_stdout = self.module_kconfigs(regex)
 
         names = re.findall(regex, grep_stdout, re.MULTILINE)
 
@@ -712,6 +839,23 @@ class KconfigCheck(ComplianceTest):
                 kconf_syms.append(f"{name}{suffix}")
 
         return set(kconf_syms)
+
+    def module_disallowed_check(self, module_path, type, folder, meta, regex):
+        # Returns a list with lines from git grep which includes Kconfigs from defconfig files
+        entry = type + '_root'
+        git_folder = ":" + folder
+
+        if entry in meta['build']['settings']:
+            tmp_path = module_path.joinpath(meta['build']['settings'][entry])
+
+            if Path(tmp_path.joinpath(folder)).is_dir():
+                tmp_output = git("grep", "--line-number", "-I", "--null",
+                                 "--perl-regexp", regex, "--", git_folder,
+                                 cwd=tmp_path, ignore_non_zero=True)
+
+                if len(tmp_output) > 0:
+                    return tmp_output.splitlines()
+        return []
 
     def check_disallowed_defconfigs(self, kconf):
         """
@@ -755,14 +899,41 @@ class KconfigCheck(ComplianceTest):
 
         grep_stdout_boards = git("grep", "--line-number", "-I", "--null",
                                  "--perl-regexp", regex_boards, "--", ":boards",
-                                 cwd=ZEPHYR_BASE)
+                                 cwd=ZEPHYR_BASE).splitlines()
         grep_stdout_socs = git("grep", "--line-number", "-I", "--null",
                                "--perl-regexp", regex_socs, "--", ":soc",
-                               cwd=ZEPHYR_BASE)
+                               cwd=ZEPHYR_BASE).splitlines()
+
+        manifest = Manifest.from_file()
+        for project in manifest.get_projects([]):
+            if not manifest.is_active(project):
+                continue
+
+            if not project.is_cloned():
+                continue
+
+            module_path = PurePath(project.abspath)
+            module_yml = module_path.joinpath('zephyr/module.yml')
+
+            if not Path(module_yml).is_file():
+                module_yml = module_path.joinpath('zephyr/module.yaml')
+
+            if Path(module_yml).is_file():
+                with Path(module_yml).open('r', encoding='utf-8') as f:
+                    meta = yaml.load(f.read(), Loader=SafeLoader)
+
+                    if 'build' in meta and 'settings' in meta['build']:
+                        grep_stdout_boards.extend(self.module_disallowed_check(module_path,
+                                                                               'board',
+                                                                               'boards', meta,
+                                                                               regex_boards))
+                        grep_stdout_socs.extend(self.module_disallowed_check(module_path, 'soc',
+                                                                             'soc', meta,
+                                                                             regex_socs))
 
         # Board processing
         # splitlines() supports various line terminators
-        for grep_line in grep_stdout_boards.splitlines():
+        for grep_line in grep_stdout_boards:
             path, lineno, line = grep_line.split("\0")
 
             # Extract symbol references (might be more than one) within the line
@@ -779,7 +950,7 @@ Found disallowed Kconfig symbol in board Kconfig files: CONFIG_{sym_name:35}
 
         # SoCs processing
         # splitlines() supports various line terminators
-        for grep_line in grep_stdout_socs.splitlines():
+        for grep_line in grep_stdout_socs:
             path, lineno, line = grep_line.split("\0")
 
             # Extract symbol references (might be more than one) within the line
@@ -805,9 +976,8 @@ Found disallowed Kconfig symbol in SoC Kconfig files: {sym_name:35}
         # (?:...) is a non-capturing group.
         regex = r"^\s*(?:menu)?config\s*([A-Z0-9_]+)\s*(?:#|$)"
 
-        # Grep samples/ and tests/ for symbol definitions
-        grep_stdout = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
-                          ":samples", ":tests", cwd=ZEPHYR_BASE)
+        # Grep samples/ and tests/ for symbol definitions in all modules
+        grep_stdout = self.module_kconfigs(regex)
 
         # Generate combined list of configs and choices from the main Kconfig tree.
         kconf_syms = kconf.unique_defined_syms + kconf.unique_choices
@@ -989,6 +1159,8 @@ Missing SoC names or CONFIG_SOC vs soc.yml out of sync:
         grep_stdout = git("grep", "--line-number", "-I", "--null",
                           "--perl-regexp", regex, "--", ":!/doc/releases",
                           ":!/doc/security/vulnerabilities.rst",
+                          ":!/doc/nrf/releases_and_maturity",
+                          ":!/doc/nrf/libraries/bin/lwm2m_carrier/CHANGELOG.rst",
                           cwd=GIT_TOP)
 
         # splitlines() supports various line terminators
@@ -1171,6 +1343,58 @@ flagged.
                                  # documentation
         "ZTEST_FAIL_TEST_",  # regex in tests/ztest/fail/CMakeLists.txt
         # zephyr-keep-sorted-stop
+
+        # NCS-specific allow list
+        # zephyr-keep-sorted-start re(^\s+")
+        "APPLICATION", # Example documentation
+        "BAR", # Example documentation
+        "BOOT_IMAGE_ACCESS_HOOK", # MCUboot setting used in documentation
+        "BT_ADV_PROV_", # Documentation
+        "CHANNEL_FETCHED_DATA_MAX_SIZE", # NRF desktop
+        "CHANNEL_TRANSPORT_DISABLED", # NRF desktop
+        "CHANNEL_TRANSPORT_IDLE", # NRF desktop
+        "CHANNEL_TRANSPORT_RSP_READY", # NRF desktop
+        "CHANNEL_TRANSPORT_WAIT_RSP", # NRF desktop
+        "DESKTOP_DVFS_STATE_", # NRF desktop
+        "DESKTOP_DVFS_STATE_CONFIG_CHANNEL_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_INITIALIZING_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_LLPM_CONNECTED_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_SMP_TRANSFER_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_USB_CONNECTED_ENABLE", # NRF desktop
+        "MEMFAULT_", # Documentation
+        "MEMFAULT_NCS", # Documentation
+        "MEMFAULT_NCS_", # Documentation
+        "MY_CUSTOM_CONFIG", # Example documentation
+        "MY_EXT_API_ENABLED", # Example documentation
+        "MY_EXT_API_REQUIRED", # Example documentation
+        "NCS_IS_VARIANT_IMAGE", # Build system defined symbol
+        "NCS_VARIANT_MERGE_KCONFIG", # Build system defined symbol
+        "NRF_MODEM_LIB_TRACE_BACKEND_MY_TRACE_BACKEND", # Documentation
+        "PM_PARTITION_SIZE", # Used in search link
+        "PM_PARTITION_SIZE_", # Used in documentation
+        "PM_PARTITION_SIZE_MEMFAULT_STORAGE", # Created by Kconfig template
+        "PM_PARTITION_SIZE_SETTINGS", # Created by Kconfig template
+        "SOC_NRF54H20_CPUSEC", # Internal
+        "SSF_SERVER_PSA_CRYPTO_SERVICE_ENABLED", # Internal
+        "STATUS_", # NRF desktop
+        "STATUS_COUNT", # NRF desktop
+        "STATUS_DISCONNECTED", # NRF desktop
+        "STATUS_FETCH", # NRF desktop
+        "STATUS_GET_BOARD_NAME", # NRF desktop
+        "STATUS_GET_HWID", # NRF desktop
+        "STATUS_GET_MAX_MOD_ID", # NRF desktop
+        "STATUS_GET_PEER", # NRF desktop
+        "STATUS_GET_PEERS_CACHE", # NRF desktop
+        "STATUS_INDEX_PEERS", # NRF desktop
+        "STATUS_LIST", # NRF desktop
+        "STATUS_PENDING", # NRF desktop
+        "STATUS_POS", # NRF desktop
+        "STATUS_REJECT", # NRF desktop
+        "STATUS_SET", # NRF desktop
+        "STATUS_SUCCESS", # NRF desktop
+        "STATUS_TIMEOUT", # NRF desktop
+        "STATUS_WRITE_FAIL", # NRF desktop
+        # zephyr-keep-sorted-stop
     }
 
 
@@ -1252,11 +1476,13 @@ class SysbuildKconfigCheck(KconfigCheck):
         "COMP_DATA_LAYOUT_SINGLE", # Used by test
         "DTM_NO_DFE", # Used by DTM application
         "DTM_TRANSPORT_HCI", # Used by DTM application
+        "FIRMWARE_LOADER_IMAGE_ABC", # Used in documentation
         "INCLUDE_REMOTE_IMAGE", # Used by machine learning application
         "MCUBOOT_FPROTECT_ALLOW_COMBINED_REGIONS", # Used in migration documentation
         "ML_APP_INCLUDE_REMOTE_IMAGE", # Used by machine learning application
         "ML_APP_REMOTE_BOARD", # Used by machine learning application
         "MY_APP_IMAGE_ABC", # Used in documentation
+        "NETCORE_ABC", # Used in documentation
         "REMOTE_GLOBAL_DOMAIN_CLOCK_FREQUENCY_SWITCHING", # Used in tests
         "SOC_FLASH_NRF_RADIO_SYNC_RPC", # Used in documentation
         "SUIT_ENVELOPE_", # Used by jinja
@@ -1983,17 +2209,6 @@ def parse_args(argv):
 def _main(args):
     # The "real" main(), which is wrapped to catch exceptions and report them
     # to GitHub. Returns the number of test failures.
-
-    global ZEPHYR_BASE
-    ZEPHYR_BASE = os.environ.get('ZEPHYR_BASE')
-    if not ZEPHYR_BASE:
-        # Let the user run this script as ./scripts/ci/check_compliance.py without
-        #  making them set ZEPHYR_BASE.
-        ZEPHYR_BASE = str(Path(__file__).resolve().parents[2])
-
-        # Propagate this decision to child processes.
-        os.environ['ZEPHYR_BASE'] = ZEPHYR_BASE
-    ZEPHYR_BASE = Path(ZEPHYR_BASE)
 
     # The absolute path of the top-level git directory. Initialize it here so
     # that issues running Git can be reported to GitHub.
