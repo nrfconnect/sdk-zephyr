@@ -10,10 +10,8 @@
 
 LOG_MODULE_REGISTER(test_log_ratelimited, CONFIG_LOG_DEFAULT_LEVEL);
 
-#ifndef CONFIG_LOG_RATELIMIT_FALLBACK_DROP
 /* Test data for hexdump */
 static uint8_t test_data[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
-#endif /* CONFIG_LOG_RATELIMIT_FALLBACK_DROP */
 
 /**
  * @brief Test compilation of all rate-limited macros.
@@ -34,27 +32,23 @@ ZTEST(log_ratelimited, test_compilation)
 	LOG_INF_RATELIMIT_RATE(100, "Compilation test: Info message with rate");
 	LOG_DBG_RATELIMIT_RATE(100, "Compilation test: Debug message with rate");
 
-	LOG_HEXDUMP_ERR_RATELIMIT(test_data, sizeof(test_data),
-					"Compilation test: Error hexdump");
+	LOG_HEXDUMP_ERR_RATELIMIT(test_data, sizeof(test_data), "Compilation test: Error hexdump");
 	LOG_HEXDUMP_WRN_RATELIMIT(test_data, sizeof(test_data),
-					"Compilation test: Warning hexdump");
-	LOG_HEXDUMP_INF_RATELIMIT(test_data, sizeof(test_data),
-					"Compilation test: Info hexdump");
-	LOG_HEXDUMP_DBG_RATELIMIT(test_data, sizeof(test_data),
-					"Compilation test: Debug hexdump");
+				  "Compilation test: Warning hexdump");
+	LOG_HEXDUMP_INF_RATELIMIT(test_data, sizeof(test_data), "Compilation test: Info hexdump");
+	LOG_HEXDUMP_DBG_RATELIMIT(test_data, sizeof(test_data), "Compilation test: Debug hexdump");
 
 	LOG_HEXDUMP_ERR_RATELIMIT_RATE(100, test_data, sizeof(test_data),
-									"Compilation test: Error hexdump with rate");
+				       "Compilation test: Error hexdump with rate");
 	LOG_HEXDUMP_WRN_RATELIMIT_RATE(100, test_data, sizeof(test_data),
-									"Compilation test: Warning hexdump with rate");
+				       "Compilation test: Warning hexdump with rate");
 	LOG_HEXDUMP_INF_RATELIMIT_RATE(100, test_data, sizeof(test_data),
-									"Compilation test: Info hexdump with rate");
+				       "Compilation test: Info hexdump with rate");
 	LOG_HEXDUMP_DBG_RATELIMIT_RATE(100, test_data, sizeof(test_data),
-									"Compilation test: Debug hexdump with rate");
+				       "Compilation test: Debug hexdump with rate");
 
 	zassert_true(true, "All rate-limited macros compile successfully");
 }
-
 
 /* Define the test suite and specify the setup function to be called before each
  * test case.

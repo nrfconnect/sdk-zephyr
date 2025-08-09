@@ -13,9 +13,6 @@
 # https://docs.zephyrproject.org/latest/develop/api/api_lifecycle.html#deprecated,
 # so these aliases are eventually removed
 
-set(adafruit_feather_DEPRECATED
-    adafruit_feather_nrf52840/nrf52840
-)
 set(arduino_uno_r4_minima_DEPRECATED
     arduino_uno_r4@minima
 )
@@ -63,4 +60,7 @@ set(esp32_devkitc_wroom/esp32/appcpu_DEPRECATED
 )
 set(esp32_devkitc_wrover/esp32/appcpu_DEPRECATED
     esp32_devkitc/esp32/appcpu
+)
+set(scobc_module1_DEPRECATED
+    scobc_a1
 )

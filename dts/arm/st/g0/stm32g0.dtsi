@@ -94,6 +94,18 @@
 		};
 	};
 
+	mcos {
+		mco1: mco1 {
+			compatible = "st,stm32-clock-mco";
+			status = "disabled";
+		};
+
+		mco2: mco2 {
+			compatible = "st,stm32-clock-mco";
+			status = "disabled";
+		};
+	};
+
 	soc {
 		flash: flash-controller@40022000 {
 			compatible = "st,stm32-flash-controller", "st,stm32g0-flash-controller";
@@ -131,7 +143,8 @@
 			#interrupt-cells = <1>;
 			#address-cells = <1>;
 			reg = <0x40021800 0x400>;
-			num-lines = <16>;
+			clocks = <&rcc STM32_CLOCK(APB1_2, 0)>;
+			num-lines = <32>;
 			interrupts = <5 0>, <6 0>, <7 0>;
 			interrupt-names = "line0-1", "line2-3", "line4-15";
 			line-ranges = <0 2>, <2 2>, <4 12>;

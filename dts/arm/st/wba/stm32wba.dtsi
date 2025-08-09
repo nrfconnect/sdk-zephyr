@@ -161,7 +161,8 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			reg = <0x46022000 0x400>;
-			num-lines = <16>;
+			clocks = <&rcc STM32_CLOCK(APB7, 1)>;
+			num-lines = <32>;
 			interrupts = <11 0>, <12 0>, <13 0>, <14 0>,
 				     <15 0>, <16 0>, <17 0>, <18 0>,
 				     <19 0>, <20 0>, <21 0>, <22 0>,
@@ -484,8 +485,6 @@
 
 	die_temp: dietemp {
 		compatible = "st,stm32-temp-cal";
-		ts-cal1-addr = <0x0BF90710>;
-		ts-cal2-addr = <0x0BF90742>;
 		ts-cal1-temp = <30>;
 		ts-cal2-temp = <130>;
 		ts-cal-vrefanalog = <3000>;

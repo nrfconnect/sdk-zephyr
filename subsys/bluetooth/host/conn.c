@@ -1516,8 +1516,11 @@ void bt_conn_unref(struct bt_conn *conn)
 
 	old = atomic_dec(&conn->ref);
 	/* Prevent from accessing connection object */
-	conn = NULL;
 	deallocated = (atomic_get(&old) == 1);
+	IF_ENABLED(CONFIG_BT_CONN_TX,
+		   (__ASSERT(!(deallocated && k_work_is_pending(&conn->tx_complete_work)),
+			     "tx_complete_work is pending when conn is deallocated")));
+	conn = NULL;
 
 	LOG_DBG("handle %u ref %ld -> %ld", conn_handle, old, (old - 1));
 
@@ -3699,6 +3702,21 @@ int bt_conn_le_phy_update(struct bt_conn *conn,
 
 	return bt_le_set_phy(conn, all_phys, param->pref_tx_phy,
 			     param->pref_rx_phy, phy_opts);
+}
+
+int bt_conn_le_set_default_phy(uint8_t pref_tx_phy, uint8_t pref_rx_phy)
+{
+	uint8_t all_phys = 0U;
+
+	if (pref_tx_phy == BT_GAP_LE_PHY_NONE) {
+		all_phys |= BT_HCI_LE_PHY_TX_ANY;
+	}
+
+	if (pref_rx_phy == BT_GAP_LE_PHY_NONE) {
+		all_phys |= BT_HCI_LE_PHY_RX_ANY;
+	}
+
+	return bt_le_set_default_phy(all_phys, pref_tx_phy, pref_rx_phy);
 }
 #endif
 
