@@ -807,4 +807,15 @@ config NRF70_PASSIVE_SCAN_ONLY
 	help
 	  Enable this configuration to force passive scan on all channels.
 	  This will override application-specified scan type.
+
+config NRF_WIFI_TWT_SETUP_TIMEOUT
+	int "TWT setup request timeout in ms"
+	range 100 10000
+	default 250
+	help
+	  Timeout duration (in milliseconds) for the TWT setup procedure.
+	  The STA will transmit a TWT setup request every 100 milliseconds,
+	  continuing until this timeout value is reached. If no response is received
+	  before the timeout expires, the TWT setup is considered failed.
+	  Note: This is only build time parameter, runtime configuration not supported.
 endif # WIFI_NRF70
