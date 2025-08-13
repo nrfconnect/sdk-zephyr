@@ -329,6 +329,18 @@ static void hfclk_stop(void)
 	nrfx_clock_hfclk_stop();
 }
 
+#if NRF_CLOCK_HAS_HFCLK24M
+static void hfclk24m_start(void)
+{
+	nrfx_clock_start(NRF_CLOCK_DOMAIN_HFCLK24M);
+}
+
+static void hfclk24m_stop(void)
+{
+	nrfx_clock_stop(NRF_CLOCK_DOMAIN_HFCLK24M);
+}
+#endif
+
 #if NRF_CLOCK_HAS_HFCLK192M
 static void hfclk192m_start(void)
 {
@@ -692,6 +704,10 @@ static void clock_event_handler(nrfx_clock_evt_type_t event)
 	case NRFX_CLOCK_EVT_XO_TUNED:
 		clkstarted_handle(dev, CLOCK_CONTROL_NRF_TYPE_HFCLK);
 		break;
+	case NRFX_CLOCK_EVT_XO_TUNE_ERROR:
+	case NRFX_CLOCK_EVT_XO_TUNE_FAILED:
+		/* No processing needed. */
+		break;
 	case NRFX_CLOCK_EVT_HFCLK_STARTED:
 		/* HFCLK is stable after XOTUNED event.
 		 * HFCLK_STARTED means only that clock has been started.
@@ -714,7 +730,11 @@ static void clock_event_handler(nrfx_clock_evt_type_t event)
 		break;
 	}
 #endif
-
+#if NRF_CLOCK_HAS_HFCLK24M
+	case NRFX_CLOCK_EVT_HFCLK24M_STARTED:
+		clkstarted_handle(dev, CLOCK_CONTROL_NRF_TYPE_HFCLK24M);
+		break;
+#endif
 #if NRF_CLOCK_HAS_HFCLK192M
 	case NRFX_CLOCK_EVT_HFCLK192M_STARTED:
 		clkstarted_handle(dev, CLOCK_CONTROL_NRF_TYPE_HFCLK192M);
@@ -731,7 +751,7 @@ static void clock_event_handler(nrfx_clock_evt_type_t event)
 		}
 		clkstarted_handle(dev, CLOCK_CONTROL_NRF_TYPE_LFCLK);
 		break;
-#if NRF_CLOCK_HAS_CALIBRATION
+#if NRF_CLOCK_HAS_CALIBRATION || NRF_LFRC_HAS_CALIBRATION
 	case NRFX_CLOCK_EVT_CAL_DONE:
 		if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_DRIVER_CALIBRATION)) {
 			z_nrf_clock_calibration_done_handler();
@@ -743,15 +763,9 @@ static void clock_event_handler(nrfx_clock_evt_type_t event)
 #endif
 #if NRF_CLOCK_HAS_PLL
 	case NRFX_CLOCK_EVT_PLL_STARTED:
-#endif
-#if NRF_CLOCK_HAS_XO_TUNE
-	case NRFX_CLOCK_EVT_XO_TUNE_ERROR:
-	case NRFX_CLOCK_EVT_XO_TUNE_FAILED:
-#endif
-	{
-		/* unhandled event */
+		/* No processing needed. */
 		break;
-	}
+#endif
 	default:
 		__ASSERT_NO_MSG(0);
 		break;
@@ -786,6 +800,10 @@ static int clk_init(const struct device *dev)
 		.start = onoff_start,
 		.stop = onoff_stop
 	};
+
+#if NRF_LFRC_HAS_CALIBRATION
+	IRQ_CONNECT(LFRC_IRQn, DT_INST_IRQ(0, priority), nrfx_isr, nrfx_power_clock_irq_handler, 0);
+#endif
 
 	IRQ_CONNECT(DT_INST_IRQN(0), DT_INST_IRQ(0, priority),
 		    nrfx_isr, nrfx_power_clock_irq_handler, 0);
@@ -843,6 +861,13 @@ static const struct nrf_clock_control_config config = {
 			.stop = lfclk_stop,
 			IF_ENABLED(CONFIG_LOG, (.name = "lfclk",))
 		},
+#if NRF_CLOCK_HAS_HFCLK24M
+		[CLOCK_CONTROL_NRF_TYPE_HFCLK24M] = {
+			.start = hfclk24m_start,
+			.stop = hfclk24m_stop,
+			IF_ENABLED(CONFIG_LOG, (.name = "hfclk24m",))
+		},
+#endif
 #if NRF_CLOCK_HAS_HFCLK192M
 		[CLOCK_CONTROL_NRF_TYPE_HFCLK192M] = {
 			.start = hfclk192m_start,

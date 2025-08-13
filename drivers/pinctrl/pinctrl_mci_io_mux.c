@@ -1,11 +1,13 @@
 /*
- * Copyright 2022 NXP
+ * Copyright 2022, 2025 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <zephyr/drivers/pinctrl.h>
 #include <soc.h>
+
+#define NO_FORCE_OUTPUT 2
 
 static MCI_IO_MUX_Type *mci_iomux =
 	(MCI_IO_MUX_Type *)DT_REG_ADDR(DT_NODELABEL(pinctrl));
@@ -62,10 +64,16 @@ static void configure_pin_props(uint32_t pin_mux, uint8_t gpio_idx)
 
 	/* Set sleep force enable bit */
 	mask = (0x1 << (gpio_idx & 0x1F));
-	set = (IOMUX_PAD_GET_SLEEP_FORCE_EN(pin_mux) << (gpio_idx & 0x1F));
-	*sleep_force_en = (*sleep_force_en & ~mask) | set;
-	set = (IOMUX_PAD_GET_SLEEP_FORCE_VAL(pin_mux) << (gpio_idx & 0x1F));
-	*sleep_force_val = (*sleep_force_val & ~mask) | set;
+	/* Check if we should force the pin to output in sleep mode */
+	if (IOMUX_PAD_GET_SLEEP_FORCE(pin_mux) == NO_FORCE_OUTPUT) {
+		/* Does not force output during sleep */
+		*sleep_force_en = (*sleep_force_en & ~mask);
+	} else {
+		/* Enable forcing output during sleep */
+		*sleep_force_en = (*sleep_force_en | mask);
+		set = (IOMUX_PAD_GET_SLEEP_FORCE_VAL(pin_mux) << (gpio_idx & 0x1F));
+		*sleep_force_val = (*sleep_force_val & ~mask) | set;
+	}
 }
 
 static void select_gpio_mode(uint8_t gpio_idx)

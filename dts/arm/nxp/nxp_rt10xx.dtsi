@@ -319,6 +319,7 @@
 			snvs_rtc: rtc {
 				compatible = "nxp,imx-snvs-rtc";
 				interrupts = <46 0>;
+				wakeup-source;
 			};
 		};
 
@@ -796,7 +797,7 @@
 				interrupts = <114 0>;
 				interrupt-names = "COMMON";
 				nxp,mdio = <&enet_mdio>;
-				nxp,ptp-clock = <&enet_ptp_clock>;
+				ptp-clock = <&enet_ptp_clock>;
 				status = "disabled";
 			};
 			enet_mdio: mdio {
