@@ -134,6 +134,7 @@ struct btp_gap_stop_advertising_rp {
 #define BTP_GAP_DISCOVERY_FLAG_LE_ACTIVE_SCAN	0x08
 #define BTP_GAP_DISCOVERY_FLAG_LE_OBSERVE	0x10
 #define BTP_GAP_DISCOVERY_FLAG_OWN_ID_ADDR	0x20
+#define BTP_GAP_DISCOVERY_FLAG_USE_FILTER_LIST	0x40
 
 #define BTP_GAP_START_DISCOVERY			0x0c
 struct btp_gap_start_discovery_cmd {
@@ -313,6 +314,8 @@ struct btp_gap_padv_sync_transfer_start_cmd {
 	uint16_t service_data;
 } __packed;
 
+#define BTP_GAP_PADV_SYNC_TRANSFER_RECV_FLAG_REPORTS_DISABLED	0x01
+
 #define BTP_GAP_PADV_SYNC_TRANSFER_RECV		0x29
 struct btp_gap_padv_sync_transfer_recv_cmd {
 	bt_addr_le_t address;
@@ -464,13 +467,10 @@ struct btp_gap_ev_periodic_report_ev {
 
 #define BTP_GAP_EV_PERIODIC_TRANSFER_RECEIVED	0x90
 struct btp_gap_ev_periodic_transfer_received_ev {
+	bt_addr_le_t adv_address;
 	uint16_t sync_handle;
-	uint8_t tx_power;
-	uint8_t rssi;
-	uint8_t cte_type;
-	uint8_t data_status;
-	uint8_t data_len;
-	uint8_t data[];
+	uint8_t status;
+	bt_addr_le_t peer_address;
 } __packed;
 
 #define BTP_GAP_EV_ENCRYPTION_CHANGE		0x91

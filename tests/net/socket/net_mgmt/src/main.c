@@ -52,10 +52,6 @@ struct eth_fake_context {
 	struct net_if *iface;
 	uint8_t mac_address[6];
 
-	bool auto_negotiation;
-	bool full_duplex;
-	bool link_10bt;
-	bool link_100bt;
 	bool promisc_mode;
 	struct {
 		bool qav_enabled;
@@ -91,16 +87,8 @@ static int eth_fake_send(const struct device *dev,
 
 static int eth_fake_get_total_bandwidth(struct eth_fake_context *ctx)
 {
-	if (ctx->link_100bt) {
-		return 100 * 1000 * 1000 / 8;
-	}
-
-	if (ctx->link_10bt) {
-		return 10 * 1000 * 1000 / 8;
-	}
-
-	/* No link */
-	return 0;
+	ARG_UNUSED(ctx);
+	return 100 * 1000 * 1000 / 8;
 }
 
 static void eth_fake_recalc_qav_delta_bandwidth(struct eth_fake_context *ctx)
@@ -234,9 +222,9 @@ static int eth_fake_get_config(const struct device *dev,
 
 static enum ethernet_hw_caps eth_fake_get_capabilities(const struct device *dev)
 {
-	return ETHERNET_AUTO_NEGOTIATION_SET | ETHERNET_LINK_10BASE |
-		ETHERNET_LINK_100BASE | ETHERNET_DUPLEX_SET | ETHERNET_QAV |
-		ETHERNET_PROMISC_MODE | ETHERNET_PRIORITY_QUEUES;
+	ARG_UNUSED(dev);
+	return ETHERNET_LINK_10BASE | ETHERNET_LINK_100BASE | ETHERNET_QAV |
+	       ETHERNET_PROMISC_MODE | ETHERNET_PRIORITY_QUEUES;
 }
 
 static struct ethernet_api eth_fake_api_funcs = {
@@ -252,11 +240,6 @@ static int eth_fake_init(const struct device *dev)
 {
 	struct eth_fake_context *ctx = dev->data;
 	int i;
-
-	ctx->auto_negotiation = true;
-	ctx->full_duplex = true;
-	ctx->link_10bt = true;
-	ctx->link_100bt = false;
 
 	memcpy(ctx->mac_address, mac_addr_init, 6);
 
@@ -282,8 +265,12 @@ ETH_NET_DEVICE_INIT(eth_fake, "eth_fake", eth_fake_init, NULL,
 		    &eth_fake_api_funcs, NET_ETH_MTU);
 
 /* A test thread that spits out events that we can catch and show to user */
-static void trigger_events(void)
+static void trigger_events(void *p1, void *p2, void *p3)
 {
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
 	int operation = 0;
 	struct net_if_addr *ifaddr_v6, *ifaddr_v4;
 	struct net_if *iface;

@@ -1198,10 +1198,25 @@ static uint8_t start_discovery(const void *cmd, uint16_t cmd_len,
 		return br_start_discovery(cp);
 	}
 
-	/* Start LE scanning */
-	if (bt_le_scan_start(cp->flags & BTP_GAP_DISCOVERY_FLAG_LE_ACTIVE_SCAN ?
-			     BT_LE_SCAN_ACTIVE : BT_LE_SCAN_PASSIVE,
-			     device_found) < 0) {
+	struct bt_le_scan_param scan_param = {
+		.type     = BT_LE_SCAN_TYPE_PASSIVE,
+		.options  = BT_LE_SCAN_OPT_FILTER_DUPLICATE,
+		.interval = BT_GAP_SCAN_FAST_INTERVAL,
+		.window   = BT_GAP_SCAN_FAST_WINDOW,
+		.timeout = 0,
+		.interval_coded = 0,
+		.window_coded = 0,
+	};
+
+	if (cp->flags & BTP_GAP_DISCOVERY_FLAG_LE_ACTIVE_SCAN) {
+		scan_param.type = BT_LE_SCAN_TYPE_ACTIVE;
+	}
+
+	if (cp->flags & BTP_GAP_DISCOVERY_FLAG_USE_FILTER_LIST) {
+		scan_param.options |= BT_LE_SCAN_OPT_FILTER_ACCEPT_LIST;
+	}
+
+	if (bt_le_scan_start(&scan_param, device_found) < 0) {
 		LOG_ERR("Failed to start scanning");
 		return BTP_STATUS_FAILED;
 	}
@@ -1873,6 +1888,30 @@ static void pa_sync_synced_cb(struct bt_le_per_adv_sync *sync,
 {
 	LOG_DBG("");
 
+	/* sync transfer received */
+	if (IS_ENABLED(CONFIG_BT_PER_ADV_SYNC_TRANSFER_RECEIVER) && info->conn != NULL) {
+		struct btp_gap_ev_periodic_transfer_received_ev ev;
+		struct bt_conn_info conn_info;
+
+		if (pa_sync != NULL) {
+			return;
+		}
+
+		pa_sync = sync;
+
+		bt_conn_get_info(info->conn, &conn_info);
+
+		bt_addr_le_copy(&ev.adv_address, &sync->addr);
+		ev.sync_handle = sys_cpu_to_le16(sync->handle);
+		ev.status = 0;
+		bt_addr_le_copy(&ev.peer_address, conn_info.le.dst);
+
+		tester_event(BTP_SERVICE_ID_GAP, BTP_GAP_EV_PERIODIC_TRANSFER_RECEIVED,
+			     &ev, sizeof(ev));
+		return;
+	}
+
+	/* locally initiated */
 	if (sync == pa_sync) {
 		struct btp_gap_ev_periodic_sync_established_ev ev;
 
@@ -1904,9 +1943,43 @@ static void pa_sync_terminated_cb(struct bt_le_per_adv_sync *sync,
 	}
 }
 
+static struct net_buf_simple *periodic_adv_buf =
+	NET_BUF_SIMPLE(sizeof(struct btp_gap_ev_periodic_report_ev) + UINT8_MAX);
+
+static void pa_sync_recv_cb(struct bt_le_per_adv_sync *sync,
+			    const struct bt_le_per_adv_sync_recv_info *info,
+			    struct net_buf_simple *buf)
+{
+	struct btp_gap_ev_periodic_report_ev *ev;
+
+	LOG_DBG("");
+
+	/* cleanup */
+	net_buf_simple_init(periodic_adv_buf, 0);
+
+	ev = net_buf_simple_add(periodic_adv_buf, sizeof(*ev));
+
+	ev->sync_handle = sys_cpu_to_le16(sync->handle);
+	ev->rssi = info->rssi;
+	ev->cte_type = info->cte_type;
+
+	/* TODO BTP has fragmented data (as in HCI) */
+	if (buf->len > UINT8_MAX) {
+		ev->data_len = UINT8_MAX;
+	} else {
+		ev->data_len = buf->len;
+	}
+
+	memcpy(net_buf_simple_add(periodic_adv_buf, ev->data_len), buf->data, ev->data_len);
+
+	tester_event(BTP_SERVICE_ID_GAP, BTP_GAP_EV_PERIODIC_REPORT,
+		     ev, sizeof(*ev) + ev->data_len);
+}
+
 static struct bt_le_per_adv_sync_cb pa_sync_cb = {
 	.synced = pa_sync_synced_cb,
 	.term = pa_sync_terminated_cb,
+	.recv = pa_sync_recv_cb,
 };
 
 #if defined(CONFIG_BT_PER_ADV)
@@ -2164,6 +2237,114 @@ static uint8_t padv_create_sync(const void *cmd, uint16_t cmd_len,
 
 	return BTP_STATUS_VAL(err);
 }
+
+#if defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_SENDER)
+static uint8_t padv_sync_transfer_set_info(const void *cmd, uint16_t cmd_len,
+					   void *rsp, uint16_t *rsp_len)
+{
+	const struct btp_gap_padv_sync_transfer_set_info_cmd *cp = cmd;
+	struct bt_le_ext_adv *ext_adv = tester_gap_ext_adv_get(0);
+	struct bt_conn *conn;
+	int err;
+
+	if (ext_adv == NULL) {
+		return BTP_STATUS_FAILED;
+	}
+
+	if (cp->address.type == BTP_BR_ADDRESS_TYPE) {
+		return BTP_STATUS_FAILED;
+	}
+
+	conn = bt_conn_lookup_addr_le(BT_ID_DEFAULT, &cp->address);
+	if (conn == NULL) {
+		return BTP_STATUS_FAILED;
+	}
+
+	err = bt_le_per_adv_set_info_transfer(ext_adv, conn,
+					      sys_le16_to_cpu(cp->service_data));
+
+	bt_conn_unref(conn);
+
+	if (err < 0) {
+		return BTP_STATUS_FAILED;
+	}
+
+	return BTP_STATUS_SUCCESS;
+}
+
+static uint8_t padv_padv_sync_transfer_start(const void *cmd, uint16_t cmd_len,
+					     void *rsp, uint16_t *rsp_len)
+{
+	const struct btp_gap_padv_sync_transfer_start_cmd *cp = cmd;
+	struct bt_conn *conn;
+	int err;
+
+	if (pa_sync == NULL) {
+		return BTP_STATUS_FAILED;
+	}
+
+	if (cp->address.type == BTP_BR_ADDRESS_TYPE) {
+		return BTP_STATUS_FAILED;
+	}
+
+	conn = bt_conn_lookup_addr_le(BT_ID_DEFAULT, &cp->address);
+	if (conn == NULL) {
+		return BTP_STATUS_FAILED;
+	}
+
+	err = bt_le_per_adv_sync_transfer(pa_sync, conn,
+					  sys_le16_to_cpu(cp->service_data));
+
+	bt_conn_unref(conn);
+
+	if (err < 0) {
+		return BTP_STATUS_FAILED;
+	}
+
+	return BTP_STATUS_SUCCESS;
+}
+#endif /* defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_SENDER) */
+
+#if defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_RECEIVER)
+static uint8_t padv_padv_sync_transfer_recv(const void *cmd, uint16_t cmd_len,
+					    void *rsp, uint16_t *rsp_len)
+{
+	const struct btp_gap_padv_sync_transfer_recv_cmd *cp = cmd;
+	struct bt_le_per_adv_sync_transfer_param param = {0};
+	struct bt_conn *conn;
+	int err;
+
+	if (pa_sync != NULL) {
+		return BTP_STATUS_FAILED;
+	}
+
+	if (cp->address.type == BTP_BR_ADDRESS_TYPE) {
+		return BTP_STATUS_FAILED;
+	}
+
+	conn = bt_conn_lookup_addr_le(BT_ID_DEFAULT, &cp->address);
+	if (conn == NULL) {
+		return BTP_STATUS_FAILED;
+	}
+
+	param.skip = sys_le16_to_cpu(cp->skip);
+	param.timeout = sys_le16_to_cpu(cp->sync_timeout);
+
+	if ((cp->flags & BTP_GAP_PADV_SYNC_TRANSFER_RECV_FLAG_REPORTS_DISABLED) != 0) {
+		param.options |= BT_LE_PER_ADV_SYNC_TRANSFER_OPT_REPORTING_INITIALLY_DISABLED;
+	}
+
+	err = bt_le_per_adv_sync_transfer_subscribe(conn, &param);
+
+	bt_conn_unref(conn);
+
+	if (err < 0) {
+		return BTP_STATUS_FAILED;
+	}
+
+	return BTP_STATUS_SUCCESS;
+}
+#endif /* defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_RECEIVER) */
 #endif /* defined(CONFIG_BT_PER_ADV) */
 
 #if defined(CONFIG_BT_RPA_TIMEOUT_DYNAMIC)
@@ -2350,6 +2531,25 @@ static const struct btp_handler handlers[] = {
 		.expect_len = sizeof(struct btp_gap_padv_create_sync_cmd),
 		.func = padv_create_sync,
 	},
+#if defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_SENDER)
+	{
+		.opcode = BTP_GAP_PADV_SYNC_TRANSFER_SET_INFO,
+		.expect_len = sizeof(struct btp_gap_padv_sync_transfer_set_info_cmd),
+		.func = padv_sync_transfer_set_info,
+	},
+	{
+		.opcode = BTP_GAP_PADV_SYNC_TRANSFER_START,
+		.expect_len = sizeof(struct btp_gap_padv_sync_transfer_start_cmd),
+		.func = padv_padv_sync_transfer_start,
+	},
+#endif /* defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_SENDER) */
+#if defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_RECEIVER)
+	{
+		.opcode = BTP_GAP_PADV_SYNC_TRANSFER_RECV,
+		.expect_len = sizeof(struct btp_gap_padv_sync_transfer_recv_cmd),
+		.func = padv_padv_sync_transfer_recv,
+	},
+#endif /* defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_RECEIVER) */
 #endif /* defined(CONFIG_BT_PER_ADV) */
 #endif /* defined(CONFIG_BT_EXT_ADV) */
 #if defined(CONFIG_BT_RPA_TIMEOUT_DYNAMIC)
