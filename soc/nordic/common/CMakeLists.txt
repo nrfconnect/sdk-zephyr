@@ -3,7 +3,7 @@
 
 add_subdirectory_ifdef(CONFIG_RISCV_CORE_NORDIC_VPR vpr)
 
-if(CONFIG_NRF_PERIPHCONF_SECTION OR CONFIG_NRF_HALTIUM_GENERATE_UICR)
+if(CONFIG_NRF_PERIPHCONF_SECTION)
   add_subdirectory(uicr)
 endif()
 
