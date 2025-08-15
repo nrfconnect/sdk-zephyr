@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+
+source "Kconfig.zephyr"
+
+menu "UICR generator options"
+
+config UICR_SAMPLE_GENERATE_PERIPHCONF
+	bool "Generate PERIPHCONF hex alongside UICR"
+	default y
+	help
+	  When enabled, the UICR generator will emit periphconf.hex in addition to uicr.hex.
+
+endmenu

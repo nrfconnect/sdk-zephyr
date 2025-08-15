@@ -8,10 +8,7 @@ from __future__ import annotations
 import argparse
 import ctypes as c
 import math
-import pickle
-import re
 import sys
-from collections import defaultdict
 from itertools import groupby
 
 from elftools.elf.elffile import ELFFile
@@ -24,11 +21,6 @@ UICR_FORMAT_VERSION_MINOR = 0
 # Name of the ELF section containing PERIPHCONF entries.
 # Must match the name used in the linker script.
 PERIPHCONF_SECTION = "uicr_periphconf_entry"
-
-# Expected nodelabel of the UICR devicetree node, used to extract its location from the devicetree.
-UICR_NODELABEL = "uicr"
-# Nodelabel of the PERIPHCONF devicetree node, used to extract its location from the devicetree.
-PERIPHCONF_NODELABEL = "periphconf_partition"
 
 # Common values for representing enabled/disabled in the UICR format.
 ENABLED_VALUE = 0xFFFF_FFFF
@@ -142,18 +134,6 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--in-config",
-        required=True,
-        type=argparse.FileType("r"),
-        help="Path to the .config file from the application build",
-    )
-    parser.add_argument(
-        "--in-edt-pickle",
-        required=True,
-        type=argparse.FileType("rb"),
-        help="Path to the edt.pickle file from the application build",
-    )
-    parser.add_argument(
         "--in-periphconf-elf",
         dest="in_periphconf_elfs",
         default=[],
@@ -169,13 +149,25 @@ def main() -> None:
         "--out-uicr-hex",
         required=True,
         type=argparse.FileType("w", encoding="utf-8"),
-        help="Path to write the generated UICR HEX file to",
+        help="Path to write the generated merged UICR+PERIPHCONF HEX file to (typically zephyr.hex)",
     )
     parser.add_argument(
-        "--out-periphconf-hex",
+        "--periphconf-address",
         default=None,
-        type=argparse.FileType("w", encoding="utf-8"),
-        help="Path to write the generated PERIPHCONF HEX file to",
+        type=lambda s: int(s, 0),
+        help="Absolute flash address of the PERIPHCONF partition (decimal or 0x-prefixed hex)",
+    )
+    parser.add_argument(
+        "--periphconf-size",
+        default=None,
+        type=lambda s: int(s, 0),
+        help="Size in bytes of the PERIPHCONF partition (decimal or 0x-prefixed hex)",
+    )
+    parser.add_argument(
+        "--uicr-address",
+        required=True,
+        type=lambda s: int(s, 0),
+        help="Absolute flash address of the UICR region (decimal or 0x-prefixed hex)",
     )
     args = parser.parse_args()
 
@@ -186,49 +178,27 @@ def main() -> None:
         uicr.VERSION.MAJOR = UICR_FORMAT_VERSION_MAJOR
         uicr.VERSION.MINOR = UICR_FORMAT_VERSION_MINOR
 
-        kconfig_str = args.in_config.read()
-        kconfig = parse_kconfig(kconfig_str)
+        # Create a single hex object that will contain both UICR and periphconf data
+        merged_hex = IntelHex()
 
-        edt = pickle.load(args.in_edt_pickle)
+        if args.in_periphconf_elfs:  # Check if periphconf data is provided
+            periphconf_combined = extract_and_combine_periphconfs(args.in_periphconf_elfs)
 
-        try:
-            periphconf_partition = edt.label2node[PERIPHCONF_NODELABEL]
-        except LookupError as e:
-            raise ScriptError(
-                "Failed to find a PERIPHCONF partition in the devicetree. "
-                f"Expected a DT node with label '{PERIPHCONF_NODELABEL}'."
-            ) from e
+            padding_len = args.periphconf_size - len(periphconf_combined)
+            periphconf_final = periphconf_combined + bytes([0xFF for _ in range(padding_len)])
 
-        flash_base_address = periphconf_partition.flash_controller.regs[0].addr
-        periphconf_address = flash_base_address + periphconf_partition.regs[0].addr
-        periphconf_size = periphconf_partition.regs[0].size
+            # Add periphconf data to the merged hex
+            merged_hex.frombytes(periphconf_final, offset=args.periphconf_address)
 
-        periphconf_combined = extract_and_combine_periphconfs(args.in_periphconf_elfs)
-        padding_len = periphconf_size - len(periphconf_combined)
-        periphconf_final = periphconf_combined + bytes([0xFF for _ in range(padding_len)])
-
-        if kconfig.get("CONFIG_NRF_HALTIUM_UICR_PERIPHCONF") == "y":
             uicr.PERIPHCONF.ENABLE = ENABLED_VALUE
-            uicr.PERIPHCONF.ADDRESS = periphconf_address
-            uicr.PERIPHCONF.MAXCOUNT = math.floor(periphconf_size / 8)
+            uicr.PERIPHCONF.ADDRESS = args.periphconf_address
+            uicr.PERIPHCONF.MAXCOUNT = math.floor(args.periphconf_size / 8)
 
-        try:
-            uicr_node = edt.label2node[UICR_NODELABEL]
-        except LookupError as e:
-            raise ScriptError(
-                "Failed to find UICR node in the devicetree. "
-                f"Expected a DT node with label '{UICR_NODELABEL}'."
-            ) from e
+        # Add UICR data to the merged hex
+        merged_hex.frombytes(bytes(uicr), offset=args.uicr_address)
 
-        uicr_hex = IntelHex()
-        uicr_hex.frombytes(bytes(uicr), offset=uicr_node.regs[0].addr)
-
-        uicr_hex.write_hex_file(args.out_uicr_hex)
-
-        if args.out_periphconf_hex is not None:
-            periphconf_hex = IntelHex()
-            periphconf_hex.frombytes(periphconf_final, offset=periphconf_address)
-            periphconf_hex.write_hex_file(args.out_periphconf_hex)
+        # Write the merged hex file containing both UICR and periphconf data
+        merged_hex.write_hex_file(args.out_uicr_hex)
 
     except ScriptError as e:
         print(f"Error: {e!s}")
@@ -268,17 +238,6 @@ def extract_and_combine_periphconfs(elf_files: list[argparse.FileType]) -> bytes
         final_periphconf[i] = entry
 
     return bytes(final_periphconf)
-
-
-def parse_kconfig(content: str) -> dict[str, str | None]:
-    result = defaultdict(None)
-    match_iter = re.finditer(
-        r"^(?P<config>(SB_)?CONFIG_[^=\s]+)=(?P<value>[^\s#])+$", content, re.MULTILINE
-    )
-    for match in match_iter:
-        result[match["config"]] = match["value"]
-
-    return result
 
 
 if __name__ == "__main__":
