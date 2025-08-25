@@ -588,8 +588,9 @@ ZTEST_F(zms, test_zms_gc_corrupt_close_ate)
 	memset(&empty_ate, 0, sizeof(struct zms_ate));
 	empty_ate.id = ZMS_HEAD_ID;
 	empty_ate.len = 0xffff;
-	empty_ate.metadata =
-		FIELD_PREP(ZMS_MAGIC_NUMBER_MASK, ZMS_MAGIC_NUMBER) | ZMS_DEFAULT_VERSION;
+	empty_ate.metadata = FIELD_PREP(ZMS_VERSION_MASK, ZMS_DEFAULT_VERSION) |
+			     FIELD_PREP(ZMS_MAGIC_NUMBER_MASK, ZMS_MAGIC_NUMBER) |
+			     FIELD_PREP(ZMS_ATE_FORMAT_MASK, ZMS_DEFAULT_ATE_FORMAT);
 	empty_ate.cycle_cnt = 1;
 	empty_ate.crc8 =
 		crc8_ccitt(0xff, (uint8_t *)&empty_ate + SIZEOF_FIELD(struct zms_ate, crc8),

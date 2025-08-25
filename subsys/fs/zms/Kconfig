@@ -63,6 +63,7 @@ config ZMS_CUSTOM_BLOCK_SIZE
 config ZMS_LOOKUP_CACHE_FOR_SETTINGS
 	bool "ZMS Storage lookup cache optimized for settings"
 	depends on ZMS_LOOKUP_CACHE && SETTINGS_ZMS
+	depends on !ZMS_ID_64BIT
 	help
 	  Enable usage of lookup cache based on hashes to get, the best ZMS performance,
 	  provided that the ZMS is used only for the purpose of providing the settings

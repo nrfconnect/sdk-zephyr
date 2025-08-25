@@ -63,6 +63,7 @@ static inline size_t zms_lookup_cache_pos(zms_id_t id)
 
 	uint32_t key_value_bit;
 	uint32_t key_value_ord;
+	uint32_t hash;
 
 	key_value_bit = (id >> LOG2(ZMS_NAME_ID_OFFSET)) & 1;
 	key_value_ord = id & (ZMS_NAME_ID_OFFSET - 1);
@@ -95,6 +96,7 @@ static inline size_t zms_lookup_cache_pos(zms_id_t id)
 
 	hash = (key_value_hash << 2) | (key_value_bit << 1) | key_value_ll;
 #endif /* CONFIG_SETTINGS_ZMS_LEGACY */
+
 #elif defined(CONFIG_ZMS_ID_64BIT)
 	/* 64-bit integer hash function found by https://github.com/skeeto/hash-prospector. */
 	uint64_t hash = id;
@@ -557,6 +559,18 @@ static bool zms_gc_done_ate_valid(struct zms_fs *fs, const struct zms_ate *entry
 		(entry->id == ZMS_HEAD_ID));
 }
 
+/* zms_sector_closed checks whether the current sector is closed, which would imply
+ * that the empty ATE and close ATE are both valid and have matching cycle counters
+ *
+ * return true if closed, false otherwise
+ */
+static bool zms_sector_closed(struct zms_fs *fs, struct zms_ate *empty_ate,
+			      struct zms_ate *close_ate)
+{
+	return (zms_empty_ate_valid(fs, empty_ate) && zms_close_ate_valid(fs, close_ate) &&
+		(empty_ate->cycle_cnt == close_ate->cycle_cnt));
+}
+
 /* Read empty and close ATE of the sector where belongs address "addr" and
  * validates that the sector is closed.
  * retval: 0 if sector is not close
@@ -574,8 +588,7 @@ static int zms_validate_closed_sector(struct zms_fs *fs, uint64_t addr, struct z
 		return rc;
 	}
 
-	if (zms_empty_ate_valid(fs, empty_ate) && zms_close_ate_valid(fs, close_ate) &&
-	    (empty_ate->cycle_cnt == close_ate->cycle_cnt)) {
+	if (zms_sector_closed(fs, empty_ate, close_ate)) {
 		/* Closed sector validated */
 		return 1;
 	}
@@ -603,7 +616,7 @@ static int zms_flash_write_entry(struct zms_fs *fs, zms_id_t id, const void *dat
 #endif
 		entry.offset = (uint32_t)SECTOR_OFFSET(fs->data_wra);
 	} else if ((len > 0) && (len <= ZMS_DATA_IN_ATE_SIZE)) {
-		/* Copy data into entry if data is sufficiently small */
+		/* Copy data into entry for small data (at most ZMS_DATA_IN_ATE_SIZE bytes) */
 		memcpy(&entry.data, data, len);
 	}
 
@@ -853,8 +866,9 @@ static int zms_add_empty_ate(struct zms_fs *fs, uint64_t addr)
 	LOG_DBG("Adding empty ate at %llx", (uint64_t)(addr + fs->sector_size - fs->ate_size));
 	empty_ate.id = ZMS_HEAD_ID;
 	empty_ate.len = 0xffff;
-	empty_ate.metadata =
-		FIELD_PREP(ZMS_MAGIC_NUMBER_MASK, ZMS_MAGIC_NUMBER) | ZMS_DEFAULT_VERSION;
+	empty_ate.metadata = FIELD_PREP(ZMS_VERSION_MASK, ZMS_DEFAULT_VERSION) |
+			     FIELD_PREP(ZMS_MAGIC_NUMBER_MASK, ZMS_MAGIC_NUMBER) |
+			     FIELD_PREP(ZMS_ATE_FORMAT_MASK, ZMS_DEFAULT_ATE_FORMAT);
 
 	rc = zms_get_sector_cycle(fs, addr, &cycle_cnt);
 	if (rc == -ENOENT) {
@@ -1101,7 +1115,7 @@ static int zms_gc(struct zms_fs *fs)
 			LOG_DBG("Moving %lld, len %d", (long long)gc_ate.id, gc_ate.len);
 
 			if (gc_ate.len > ZMS_DATA_IN_ATE_SIZE) {
-				/* Only copy Data with large enough len
+				/* Copy Data only when len > ZMS_DATA_IN_ATE_SIZE
 				 * Otherwise, Data is already inside ATE
 				 */
 				data_addr = (gc_prev_addr & ADDR_SECT_MASK);
@@ -1205,16 +1219,28 @@ static int zms_init(struct zms_fs *fs)
 	for (i = 0; i < fs->sector_count; i++) {
 		addr = zms_close_ate_addr(fs, ((uint64_t)i << ADDR_SECT_SHIFT));
 
-		/* verify if the sector is closed */
-		sec_closed = zms_validate_closed_sector(fs, addr, &empty_ate, &close_ate);
-		if (sec_closed < 0) {
-			rc = sec_closed;
+		/* read the header ATEs */
+		rc = zms_get_sector_header(fs, addr, &empty_ate, &close_ate);
+		if (rc) {
 			goto end;
 		}
 		/* update cycle count */
 		fs->sector_cycle = empty_ate.cycle_cnt;
 
-		if (sec_closed == 1) {
+		/* Check the ATE format indicator so that we know how to validate ATEs.
+		 * The metadata field has the same offset and size in all ATE formats
+		 * (the same is guaranteed for crc8 and cycle_cnt).
+		 * Currently, ZMS can only recognize one of its supported ATE formats
+		 * (the one chosen at build time), so their indicators are defined for
+		 * the possibility of a future extension.
+		 * If this indicator is unknown, then consider the header ATEs invalid,
+		 * because we might not be dealing with ZMS contents at all.
+		 */
+		if (ZMS_GET_ATE_FORMAT(empty_ate.metadata) != ZMS_DEFAULT_ATE_FORMAT) {
+			continue;
+		}
+
+		if (zms_sector_closed(fs, &empty_ate, &close_ate)) {
 			/* closed sector */
 			closed_sectors++;
 			/* Let's verify that this is a ZMS storage system */
@@ -1272,7 +1298,8 @@ static int zms_init(struct zms_fs *fs)
 			goto end;
 		}
 
-		if (zms_empty_ate_valid(fs, &empty_ate)) {
+		if ((ZMS_GET_ATE_FORMAT(empty_ate.metadata) == ZMS_DEFAULT_ATE_FORMAT) &&
+		    zms_empty_ate_valid(fs, &empty_ate)) {
 			/* Empty ATE is valid, let's verify that this is a ZMS storage system */
 			if (ZMS_GET_MAGIC_NUMBER(empty_ate.metadata) == ZMS_MAGIC_NUMBER) {
 				zms_magic_exist = true;

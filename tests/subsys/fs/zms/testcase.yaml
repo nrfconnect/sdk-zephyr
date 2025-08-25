@@ -32,5 +32,4 @@ tests:
       - CONFIG_ZMS_ID_64BIT=y
       - CONFIG_ZMS_LOOKUP_CACHE=y
       - CONFIG_ZMS_LOOKUP_CACHE_SIZE=64
-      - CONFIG_FLASH_SIMULATOR_DOUBLE_WRITES=y
     platform_allow: qemu_x86
