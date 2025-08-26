@@ -463,12 +463,13 @@ static void modem_cmux_on_cld_command(struct modem_cmux *cmux, struct modem_cmux
 static void modem_cmux_on_control_frame_ua(struct modem_cmux *cmux)
 {
 	if (cmux->state != MODEM_CMUX_STATE_CONNECTING) {
-		LOG_DBG("Unexpected UA frame");
+		LOG_DBG("Unexpected UA frame in state %d", cmux->state);
 		return;
 	}
 
 	LOG_DBG("CMUX connected");
 	cmux->state = MODEM_CMUX_STATE_CONNECTED;
+	cmux->initiator = true;
 	k_mutex_lock(&cmux->transmit_rb_lock, K_FOREVER);
 	cmux->flow_control_on = true;
 	k_mutex_unlock(&cmux->transmit_rb_lock);
@@ -595,8 +596,6 @@ static void modem_cmux_dm_response_transmit(struct modem_cmux *cmux)
 
 static void modem_cmux_on_control_frame_sabm(struct modem_cmux *cmux)
 {
-	modem_cmux_connect_response_transmit(cmux);
-
 	if ((cmux->state == MODEM_CMUX_STATE_CONNECTED) ||
 	    (cmux->state == MODEM_CMUX_STATE_DISCONNECTING)) {
 		LOG_DBG("Connect request not accepted");
@@ -604,7 +603,9 @@ static void modem_cmux_on_control_frame_sabm(struct modem_cmux *cmux)
 	}
 
 	LOG_DBG("CMUX connection request received");
+	cmux->initiator = false;
 	cmux->state = MODEM_CMUX_STATE_CONNECTED;
+	modem_cmux_connect_response_transmit(cmux);
 	k_mutex_lock(&cmux->transmit_rb_lock, K_FOREVER);
 	cmux->flow_control_on = true;
 	k_mutex_unlock(&cmux->transmit_rb_lock);
@@ -616,6 +617,11 @@ static void modem_cmux_on_control_frame_sabm(struct modem_cmux *cmux)
 static void modem_cmux_on_control_frame(struct modem_cmux *cmux)
 {
 	modem_cmux_log_received_frame(&cmux->frame);
+
+	if (cmux->state == MODEM_CMUX_STATE_CONNECTED && cmux->frame.cr == cmux->initiator) {
+		LOG_DBG("Received a response frame, dropping");
+		return;
+	}
 
 	switch (cmux->frame.type) {
 	case MODEM_CMUX_FRAME_TYPE_UA:
@@ -661,6 +667,12 @@ static void modem_cmux_on_dlci_frame_dm(struct modem_cmux_dlci *dlci)
 
 static void modem_cmux_on_dlci_frame_ua(struct modem_cmux_dlci *dlci)
 {
+	/* Drop invalid UA frames */
+	if (dlci->cmux->frame.cr != dlci->cmux->initiator) {
+		LOG_DBG("Received a response frame, dropping");
+		return;
+	}
+
 	switch (dlci->state) {
 	case MODEM_CMUX_DLCI_STATE_OPENING:
 		LOG_DBG("DLCI %u opened", dlci->dlci_address);
@@ -745,6 +757,11 @@ static void modem_cmux_on_dlci_frame(struct modem_cmux *cmux)
 	struct modem_cmux_dlci *dlci;
 
 	modem_cmux_log_received_frame(&cmux->frame);
+
+	if (cmux->state != MODEM_CMUX_STATE_CONNECTED) {
+		LOG_DBG("Unexpected DLCI frame in state %d", cmux->state);
+		return;
+	}
 
 	dlci = modem_cmux_find_dlci(cmux);
 	if (dlci == NULL) {
@@ -1087,6 +1104,7 @@ static void modem_cmux_connect_handler(struct k_work *item)
 	cmux = CONTAINER_OF(dwork, struct modem_cmux, connect_work);
 
 	cmux->state = MODEM_CMUX_STATE_CONNECTING;
+	cmux->initiator = true;
 
 	static const struct modem_cmux_frame frame = {
 		.dlci_address = 0,
@@ -1119,7 +1137,7 @@ static void modem_cmux_disconnect_handler(struct k_work *item)
 
 	struct modem_cmux_frame frame = {
 		.dlci_address = 0,
-		.cr = true,
+		.cr = cmux->initiator,
 		.pf = false,
 		.type = MODEM_CMUX_FRAME_TYPE_UIH,
 		.data = data,
@@ -1198,7 +1216,7 @@ static int modem_cmux_dlci_pipe_api_transmit(void *data, const uint8_t *buf, siz
 
 		struct modem_cmux_frame frame = {
 			.dlci_address = dlci->dlci_address,
-			.cr = true,
+			.cr = cmux->initiator,
 			.pf = false,
 			.type = MODEM_CMUX_FRAME_TYPE_UIH,
 			.data = buf,
@@ -1273,7 +1291,7 @@ static void modem_cmux_dlci_open_handler(struct k_work *item)
 
 	struct modem_cmux_frame frame = {
 		.dlci_address = dlci->dlci_address,
-		.cr = true,
+		.cr = dlci->cmux->initiator,
 		.pf = true,
 		.type = MODEM_CMUX_FRAME_TYPE_SABM,
 		.data = NULL,
@@ -1302,7 +1320,7 @@ static void modem_cmux_dlci_close_handler(struct k_work *item)
 
 	struct modem_cmux_frame frame = {
 		.dlci_address = dlci->dlci_address,
-		.cr = true,
+		.cr = dlci->cmux->initiator,
 		.pf = true,
 		.type = MODEM_CMUX_FRAME_TYPE_DISC,
 		.data = NULL,
