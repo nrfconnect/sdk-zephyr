@@ -5,6 +5,16 @@ set(flag_for_rom_report rom)
 set(flag_for_footprint all)
 set(report_depth 99)
 
+if(CONFIG_REPORT_LOWEST_LIMIT)
+  set(REPORT_LOWEST_LIMIT ${CONFIG_REPORT_LOWEST_LIMIT})
+else()
+  set(REPORT_LOWEST_LIMIT 0)
+endif()
+if(CONFIG_REPORT_MAX_ITEMS)
+  set(REPORT_MAX_ITEMS ${CONFIG_REPORT_MAX_ITEMS})
+else()
+  set(REPORT_MAX_ITEMS 0)
+endif()
 if(DEFINED ZEPHYR_WORKSPACE)
   set(workspace_arg "--workspace=${ZEPHYR_WORKSPACE}")
 elseif(DEFINED WEST_TOPDIR)
@@ -21,6 +31,8 @@ foreach(report ram_report rom_report)
     -o ${CMAKE_BINARY_DIR}
     ${workspace_arg}
     -d ${report_depth}
+    -l ${REPORT_LOWEST_LIMIT}
+    -m ${REPORT_MAX_ITEMS}
     ${flag_for_${report}}
     DEPENDS ${logical_target_for_zephyr_elf}
             $<TARGET_PROPERTY:zephyr_property_target,${report}_DEPENDENCIES>
