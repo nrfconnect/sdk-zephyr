@@ -515,7 +515,7 @@ class KconfigCheck(ComplianceTest):
         self.check_no_undef_outside_kconfig(kconf)
         self.check_disallowed_defconfigs(kconf)
 
-    def get_modules(self, modules_file, sysbuild_modules_file, settings_file):
+    def get_modules(self, _module_dirs_file, modules_file, sysbuild_modules_file, settings_file):
         """
         Get a list of modules and put them in a file that is parsed by
         Kconfig
@@ -730,13 +730,15 @@ class KconfigCheck(ComplianceTest):
         os.environ["KCONFIG_BINARY_DIR"] = kconfiglib_dir
         os.environ['DEVICETREE_CONF'] = "dummy"
         os.environ['TOOLCHAIN_HAS_NEWLIB'] = "y"
+        os.environ['ENV_FILE'] = os.path.join(kconfiglib_dir, "kconfig_module_dirs.env")
 
         # Older name for DEVICETREE_CONF, for compatibility with older Zephyr
         # versions that don't have the renaming
         os.environ["GENERATED_DTS_BOARD_CONF"] = "dummy"
 
         # For multi repo support
-        self.get_modules(os.path.join(kconfiglib_dir, "Kconfig.modules"),
+        self.get_modules(os.environ['ENV_FILE'],
+                         os.path.join(kconfiglib_dir, "Kconfig.modules"),
                          os.path.join(kconfiglib_dir, "Kconfig.sysbuild.modules"),
                          os.path.join(kconfiglib_dir, "settings_file.txt"))
         # For Kconfig.dts support
@@ -762,6 +764,61 @@ class KconfigCheck(ComplianceTest):
             # Clean up the temporary directory
             shutil.rmtree(kconfiglib_dir)
 
+    def module_kconfigs(self, regex):
+        manifest = Manifest.from_file()
+        kconfigs = ""
+
+        # Use hard coded paths for Zephyr for tests, samples and ext. module root
+        tmp_output = git("grep", "-I", "-h", "--perl-regexp", regex, "--", ":tests", ":samples",
+                         ":modules", cwd=ZEPHYR_BASE, ignore_non_zero=True)
+
+        if len(tmp_output) > 0:
+            kconfigs += tmp_output + "\n"
+
+        for project in manifest.get_projects([]):
+            if not manifest.is_active(project):
+                continue
+
+            if not project.is_cloned():
+                continue
+
+            module_path = PurePath(project.abspath)
+            module_yml = module_path.joinpath('zephyr/module.yml')
+
+            if not Path(module_yml).is_file():
+                module_yml = module_path.joinpath('zephyr/module.yaml')
+
+            if Path(module_yml).is_file():
+                dirs = []
+
+                with Path(module_yml).open('r', encoding='utf-8') as f:
+                    meta = yaml.load(f.read(), Loader=SafeLoader)
+
+                for folder_type in ['samples', 'tests']:
+                    if folder_type in meta:
+                        for path_ext in meta[folder_type]:
+                            path_full = module_path.joinpath(path_ext)
+
+                            if Path(path_full).is_dir():
+                                dirs.append(":" + path_ext)
+
+                # Add ext. module root, if one is defined
+                if 'build' in meta and 'settings' in meta['build'] and \
+                     'module_ext_root' in meta['build']['settings']:
+                    path_full = module_path.joinpath(meta['build']['settings']['module_ext_root'])
+
+                    if Path(path_full).is_dir():
+                        dirs.append(":" + meta['build']['settings']['module_ext_root'])
+
+                if len(dirs) > 0:
+                    tmp_output = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
+                                     *dirs, cwd=module_path, ignore_non_zero=True)
+
+                    if len(tmp_output) > 0:
+                        kconfigs += tmp_output + "\n"
+
+        return kconfigs
+
     def get_logging_syms(self, kconf):
         # Returns a set() with the names of the Kconfig symbols generated with
         # logging template in samples/tests folders. The Kconfig symbols doesn't
@@ -782,9 +839,8 @@ class KconfigCheck(ComplianceTest):
         # Warning: Needs to work with both --perl-regexp and the 're' module.
         regex = r"^\s*(?:module\s*=\s*)([A-Z0-9_]+)\s*(?:#|$)"
 
-        # Grep samples/ and tests/ for symbol definitions
-        grep_stdout = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
-                          ":samples", ":tests", cwd=ZEPHYR_BASE)
+        # Grep samples/ and tests/ for symbol definitions in all modules
+        grep_stdout = self.module_kconfigs(regex)
 
         names = re.findall(regex, grep_stdout, re.MULTILINE)
 
@@ -931,9 +987,8 @@ Found disallowed Kconfig symbol in SoC Kconfig files: {sym_name:35}
         # (?:...) is a non-capturing group.
         regex = r"^\s*(?:menu)?config\s*([A-Z0-9_]+)\s*(?:#|$)"
 
-        # Grep samples/ and tests/ for symbol definitions
-        grep_stdout = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
-                          ":samples", ":tests", cwd=ZEPHYR_BASE)
+        # Grep samples/ and tests/ for symbol definitions in all modules
+        grep_stdout = self.module_kconfigs(regex)
 
         # Generate combined list of configs and choices from the main Kconfig tree.
         kconf_syms = kconf.unique_defined_syms + kconf.unique_choices
@@ -1115,6 +1170,8 @@ Missing SoC names or CONFIG_SOC vs soc.yml out of sync:
         grep_stdout = git("grep", "--line-number", "-I", "--null",
                           "--perl-regexp", regex, "--", ":!/doc/releases",
                           ":!/doc/security/vulnerabilities.rst",
+                          ":!/doc/nrf/releases_and_maturity",
+                          ":!/doc/nrf/libraries/bin/lwm2m_carrier/CHANGELOG.rst",
                           cwd=GIT_TOP)
 
         # splitlines() supports various line terminators
@@ -1297,6 +1354,59 @@ flagged.
                                  # documentation
         "ZTEST_FAIL_TEST_",  # regex in tests/ztest/fail/CMakeLists.txt
         # zephyr-keep-sorted-stop
+
+        # NCS-specific allow list
+        # zephyr-keep-sorted-start re(^\s+")
+        "APPLICATION", # Example documentation
+        "BAR", # Example documentation
+        "BOOT_IMAGE_ACCESS_HOOK", # MCUboot setting used in documentation
+        "BT_ADV_PROV_", # Documentation
+        "CHANNEL", # NRF desktop
+        "CHANNEL_FETCHED_DATA_MAX_SIZE", # NRF desktop
+        "CHANNEL_TRANSPORT_DISABLED", # NRF desktop
+        "CHANNEL_TRANSPORT_IDLE", # NRF desktop
+        "CHANNEL_TRANSPORT_RSP_READY", # NRF desktop
+        "CHANNEL_TRANSPORT_WAIT_RSP", # NRF desktop
+        "DESKTOP_DVFS_STATE_", # NRF desktop
+        "DESKTOP_DVFS_STATE_CONFIG_CHANNEL_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_INITIALIZING_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_LLPM_CONNECTED_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_SMP_TRANSFER_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_USB_CONNECTED_ENABLE", # NRF desktop
+        "MEMFAULT_", # Documentation
+        "MEMFAULT_NCS", # Documentation
+        "MEMFAULT_NCS_", # Documentation
+        "MY_CUSTOM_CONFIG", # Example documentation
+        "MY_EXT_API_ENABLED", # Example documentation
+        "MY_EXT_API_REQUIRED", # Example documentation
+        "NCS_IS_VARIANT_IMAGE", # Build system defined symbol
+        "NCS_VARIANT_MERGE_KCONFIG", # Build system defined symbol
+        "NRF_MODEM_LIB_TRACE_BACKEND_MY_TRACE_BACKEND", # Documentation
+        "PM_PARTITION_SIZE", # Used in search link
+        "PM_PARTITION_SIZE_", # Used in documentation
+        "PM_PARTITION_SIZE_MEMFAULT_STORAGE", # Created by Kconfig template
+        "PM_PARTITION_SIZE_SETTINGS", # Created by Kconfig template
+        "SOC_NRF54H20_CPUSEC", # Internal
+        "SSF_SERVER_PSA_CRYPTO_SERVICE_ENABLED", # Internal
+        "STATUS_", # NRF desktop
+        "STATUS_COUNT", # NRF desktop
+        "STATUS_DISCONNECTED", # NRF desktop
+        "STATUS_FETCH", # NRF desktop
+        "STATUS_GET_BOARD_NAME", # NRF desktop
+        "STATUS_GET_HWID", # NRF desktop
+        "STATUS_GET_MAX_MOD_ID", # NRF desktop
+        "STATUS_GET_PEER", # NRF desktop
+        "STATUS_GET_PEERS_CACHE", # NRF desktop
+        "STATUS_INDEX_PEERS", # NRF desktop
+        "STATUS_LIST", # NRF desktop
+        "STATUS_PENDING", # NRF desktop
+        "STATUS_POS", # NRF desktop
+        "STATUS_REJECT", # NRF desktop
+        "STATUS_SET", # NRF desktop
+        "STATUS_SUCCESS", # NRF desktop
+        "STATUS_TIMEOUT", # NRF desktop
+        "STATUS_WRITE_FAIL", # NRF desktop
+        # zephyr-keep-sorted-stop
     }
 
 
@@ -1321,13 +1431,17 @@ class KconfigBasicNoModulesCheck(KconfigBasicCheck):
     """
     name = "KconfigBasicNoModules"
     path_hint = "<zephyr-base>"
+    EMPTY_FILE_CONTENTS = "# Empty\n"
 
-    def get_modules(self, modules_file, sysbuild_modules_file, settings_file):
+    def get_modules(self, module_dirs_file, modules_file, sysbuild_modules_file, settings_file):
+        with open(module_dirs_file, 'w') as fp_module_file:
+            fp_module_file.write(self.EMPTY_FILE_CONTENTS)
+
         with open(modules_file, 'w') as fp_module_file:
-            fp_module_file.write("# Empty\n")
+            fp_module_file.write(self.EMPTY_FILE_CONTENTS)
 
         with open(sysbuild_modules_file, 'w') as fp_module_file:
-            fp_module_file.write("# Empty\n")
+            fp_module_file.write(self.EMPTY_FILE_CONTENTS)
 
 
 class KconfigHWMv2Check(KconfigBasicCheck):
@@ -1378,11 +1492,13 @@ class SysbuildKconfigCheck(KconfigCheck):
         "COMP_DATA_LAYOUT_SINGLE", # Used by test
         "DTM_NO_DFE", # Used by DTM application
         "DTM_TRANSPORT_HCI", # Used by DTM application
+        "FIRMWARE_LOADER_IMAGE_ABC", # Used in documentation
         "INCLUDE_REMOTE_IMAGE", # Used by machine learning application
         "MCUBOOT_FPROTECT_ALLOW_COMBINED_REGIONS", # Used in migration documentation
         "ML_APP_INCLUDE_REMOTE_IMAGE", # Used by machine learning application
         "ML_APP_REMOTE_BOARD", # Used by machine learning application
         "MY_APP_IMAGE_ABC", # Used in documentation
+        "NETCORE_ABC", # Used in documentation
         "REMOTE_GLOBAL_DOMAIN_CLOCK_FREQUENCY_SWITCHING", # Used in tests
         "SOC_FLASH_NRF_RADIO_SYNC_RPC", # Used in documentation
         "SUIT_ENVELOPE_", # Used by jinja
@@ -1994,6 +2110,66 @@ class Ruff(ComplianceTest):
             except subprocess.CalledProcessError:
                 desc = f"Run 'ruff format {file}'"
                 self.fmtd_failure("error", "Python format error", file, desc=desc)
+
+class PythonCompatCheck(ComplianceTest):
+    """
+    Python Compatibility Check
+    """
+    name = "PythonCompat"
+    doc = "Check that Python files are compatible with Zephyr minimum supported Python version."
+
+    MAX_VERSION = (3, 10)
+    MAX_VERSION_STR = f"{MAX_VERSION[0]}.{MAX_VERSION[1]}"
+
+    def run(self):
+        py_files = [f for f in get_files(filter="d") if f.endswith(".py")]
+        if not py_files:
+            return
+        cmd = ["vermin", "-f", "parsable", "--violations",
+               f"-t={self.MAX_VERSION_STR}", "--no-make-paths-absolute"] + py_files
+        try:
+            result = subprocess.run(cmd,
+                                    check=False,
+                                    capture_output=True,
+                                    cwd=GIT_TOP)
+        except Exception as ex:
+            self.error(f"Failed to run vermin: {ex}")
+        output = result.stdout.decode("utf-8")
+        failed = False
+        for line in output.splitlines():
+            parts = line.split(":")
+            if len(parts) < 6:
+                continue
+            filename, line_number, column, _, py3ver, feature = parts[:6]
+            if not line_number:
+                # Ignore all file-level messages
+                continue
+
+            desc = None
+            if py3ver.startswith('!'):
+                desc = f"{feature} is known to be incompatible with Python 3."
+            elif py3ver.startswith('~'):
+                # "no known reason it won't work", just skip
+                continue
+            else:
+                major, minor = map(int, py3ver.split(".")[:2])
+                if (major, minor) > self.MAX_VERSION:
+                    desc = f"{feature} requires Python {major}.{minor}, which is higher than " \
+                           f"Zephyr's minimum supported Python version ({self.MAX_VERSION_STR})."
+
+            if desc is not None:
+                self.fmtd_failure(
+                    "error",
+                    "PythonCompat",
+                    filename,
+                    line=int(line_number),
+                    col=int(column) if column else None,
+                    desc=desc,
+                )
+                failed = True
+        if failed:
+            self.failure("Some Python files use features that are not compatible with Python " \
+                         f"{self.MAX_VERSION_STR}.")
 
 
 class TextEncoding(ComplianceTest):
