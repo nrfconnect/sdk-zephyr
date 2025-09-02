@@ -7,8 +7,9 @@
 /**
  * @file
  * @brief IA-32 specific kernel interface header
- * This header contains the IA-32 specific kernel interface.  It is included
- * by the generic kernel interface header (include/arch/cpu.h)
+ *
+ * This header contains the IA-32 portion of the X86 specific kernel
+ * interface (see include/zephyr/arch/x86/cpu.h).
  */
 
 #ifndef ZEPHYR_INCLUDE_ARCH_X86_IA32_ARCH_H_
@@ -19,7 +20,7 @@
 #include <zephyr/kernel_structs.h>
 #include <zephyr/arch/common/ffs.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/arch/x86/ia32/exception.h>
+#include <zephyr/arch/exception.h>
 #include <zephyr/arch/x86/ia32/gdbstub.h>
 #include <zephyr/arch/x86/ia32/thread.h>
 #include <zephyr/arch/x86/ia32/syscall.h>
@@ -361,7 +362,8 @@ extern struct task_state_segment _main_tss;
 		"int %[vector]\n\t" \
 		: \
 		: [vector] "i" (Z_X86_OOPS_VECTOR), \
-		  [reason] "i" (reason_p)); \
+		  [reason] "i" (reason_p) \
+		: "memory"); \
 	CODE_UNREACHABLE; /* LCOV_EXCL_LINE */ \
 } while (false)
 

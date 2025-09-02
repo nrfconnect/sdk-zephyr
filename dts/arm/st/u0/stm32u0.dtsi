@@ -34,6 +34,29 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 		};
+
+		power-states {
+			stop0: state0 {
+				compatible = "zephyr,power-state";
+				power-state-name = "suspend-to-idle";
+				substate-id = <1>;
+				min-residency-us = <100>;
+			};
+
+			stop1: state1 {
+				compatible = "zephyr,power-state";
+				power-state-name = "suspend-to-idle";
+				substate-id = <2>;
+				min-residency-us = <500>;
+			};
+
+			stop2: state2 {
+				compatible = "zephyr,power-state";
+				power-state-name = "suspend-to-idle";
+				substate-id = <3>;
+				min-residency-us = <900>;
+			};
+		};
 	};
 
 	sram0: memory@20000000 {
@@ -127,7 +150,8 @@
 			#interrupt-cells = <1>;
 			#address-cells = <1>;
 			reg = <0x40021800 0x400>;
-			num-lines = <16>;
+			clocks = <&rcc STM32_CLOCK(APB1_2, 0)>;
+			num-lines = <32>;
 			interrupts = <5 0>, <6 0>, <7 0>;
 			interrupt-names = "line0-1", "line2-3", "line4-15";
 			line-ranges = <0 2>, <2 2>, <4 12>;
@@ -229,7 +253,7 @@
 			reg = <0x40008000 0x400>;
 			clocks = <&rcc STM32_CLOCK(APB1, 20U)>;
 			resets = <&rctl STM32_RESET(APB1L, 20U)>;
-			interrupts = <28 0>;
+			interrupts = <29 0>;
 			status = "disabled";
 		};
 
@@ -238,7 +262,7 @@
 			reg = <0x40008400 0x400>;
 			clocks = <&rcc STM32_CLOCK(APB1, 7U)>;
 			resets = <&rctl STM32_RESET(APB1L, 7U)>;
-			interrupts = <29 0>;
+			interrupts = <28 0>;
 			status = "disabled";
 		};
 
@@ -401,7 +425,8 @@
 		timers1: timers@40012c00 {
 			compatible = "st,stm32-timers";
 			reg = <0x40012C00 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1_2, 11U)>;
+			clocks = <&rcc STM32_CLOCK(APB1_2, 11)>,
+				 <&rcc STM32_SRC_PCLK TIM1_SEL(0)>;
 			resets = <&rctl STM32_RESET(APB1H, 11U)>;
 			interrupts = <13 0>, <14 0>;
 			interrupt-names = "brk_up_trg_com", "cc";
@@ -423,7 +448,8 @@
 		timers2: timers@40000000 {
 			compatible = "st,stm32-timers";
 			reg = <0x40000000 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1, 0U)>;
+			clocks = <&rcc STM32_CLOCK(APB1, 0)>,
+				 <&rcc STM32_SRC_PCLK NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1L, 0U)>;
 			interrupts = <15 0>;
 			interrupt-names = "global";
@@ -445,7 +471,8 @@
 		timers3: timers@40000400 {
 			compatible = "st,stm32-timers";
 			reg = <0x40000400 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1, 1U)>;
+			clocks = <&rcc STM32_CLOCK(APB1, 1)>,
+				 <&rcc STM32_SRC_PCLK NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1L, 1U)>;
 			interrupts = <16 0>;
 			interrupt-names = "global";
@@ -467,7 +494,8 @@
 		timers6: timers@40001000 {
 			compatible = "st,stm32-timers";
 			reg = <0x40001000 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1, 4U)>;
+			clocks = <&rcc STM32_CLOCK(APB1, 4)>,
+				 <&rcc STM32_SRC_PCLK NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1L, 4U)>;
 			interrupts = <17 0>;
 			interrupt-names = "combined";
@@ -478,7 +506,8 @@
 		timers7: timers@40001400 {
 			compatible = "st,stm32-timers";
 			reg = <0x40001400 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1, 5U)>;
+			clocks = <&rcc STM32_CLOCK(APB1, 5)>,
+				 <&rcc STM32_SRC_PCLK NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1L, 5U)>;
 			interrupts = <18 0>;
 			interrupt-names = "combined";
@@ -489,7 +518,8 @@
 		timers15: timers@40014000 {
 			compatible = "st,stm32-timers";
 			reg = <0x40014000 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1_2, 16U)>;
+			clocks = <&rcc STM32_CLOCK(APB1_2, 16)>,
+				 <&rcc STM32_SRC_PCLK TIM15_SEL(0)>;
 			resets = <&rctl STM32_RESET(APB1H, 16U)>;
 			interrupts = <19 0>;
 			interrupt-names = "combined";
@@ -511,7 +541,8 @@
 		timers16: timers@40014400 {
 			compatible = "st,stm32-timers";
 			reg = <0x40014400 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1_2, 17U)>;
+			clocks = <&rcc STM32_CLOCK(APB1_2, 17)>,
+				 <&rcc STM32_SRC_PCLK NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1H, 17U)>;
 			interrupts = <20 0>;
 			interrupt-names = "global";
@@ -550,6 +581,7 @@
 			reg = <0x40009400 0x400>;
 			interrupts = <18 1>;
 			interrupt-names = "combined";
+			status = "disabled";
 		};
 
 		tsc: tsc@40024000 {

@@ -7,6 +7,13 @@
 #ifndef ZEPHYR_INCLUDE_DRIVERS_PTP_CLOCK_H_
 #define ZEPHYR_INCLUDE_DRIVERS_PTP_CLOCK_H_
 
+/**
+ * @brief PTP Clock Interface
+ * @defgroup ptp_clock_interface PTP Clock Interface
+ * @ingroup io_interfaces
+ * @{
+ */
+
 #include <zephyr/kernel.h>
 #include <stdint.h>
 #include <zephyr/device.h>
@@ -82,10 +89,10 @@ static inline int ptp_clock_adjust(const struct device *dev, int increment)
 }
 
 /**
- * @brief Adjust the PTP clock time change rate when compared to its neighbor.
+ * @brief Adjust the PTP clock rate ratio based on its nominal frequency
  *
  * @param dev PTP clock device
- * @param rate Rate of the clock time change
+ * @param rate Rate ratio based on its nominal frequency
  *
  * @return 0 if ok, <0 if error
  */
@@ -102,5 +109,9 @@ static inline int ptp_clock_rate_adjust(const struct device *dev, double rate)
 #endif
 
 #include <zephyr/syscalls/ptp_clock.h>
+
+/**
+ * @}
+ */
 
 #endif /* ZEPHYR_INCLUDE_DRIVERS_PTP_CLOCK_H_ */

@@ -94,6 +94,18 @@
 		};
 	};
 
+	mcos {
+		mco1: mco1 {
+			compatible = "st,stm32-clock-mco";
+			status = "disabled";
+		};
+
+		mco2: mco2 {
+			compatible = "st,stm32-clock-mco";
+			status = "disabled";
+		};
+	};
+
 	soc {
 		flash: flash-controller@40022000 {
 			compatible = "st,stm32-flash-controller", "st,stm32g0-flash-controller";
@@ -131,7 +143,8 @@
 			#interrupt-cells = <1>;
 			#address-cells = <1>;
 			reg = <0x40021800 0x400>;
-			num-lines = <16>;
+			clocks = <&rcc STM32_CLOCK(APB1_2, 0)>;
+			num-lines = <32>;
 			interrupts = <5 0>, <6 0>, <7 0>;
 			interrupt-names = "line0-1", "line2-3", "line4-15";
 			line-ranges = <0 2>, <2 2>, <4 12>;
@@ -253,7 +266,8 @@
 		timers1: timers@40012c00 {
 			compatible = "st,stm32-timers";
 			reg = <0x40012C00 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1_2, 11U)>;
+			clocks = <&rcc STM32_CLOCK(APB1_2, 11)>,
+				 <&rcc STM32_SRC_TIMPCLK1 NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1H, 11U)>;
 			interrupts = <13 0>, <14 0>;
 			interrupt-names = "brk_up_trg_com", "cc";
@@ -275,7 +289,8 @@
 		timers3: timers@40000400 {
 			compatible = "st,stm32-timers";
 			reg = <0x40000400 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1, 1U)>;
+			clocks = <&rcc STM32_CLOCK(APB1, 1)>,
+				 <&rcc STM32_SRC_TIMPCLK1 NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1L, 1U)>;
 			interrupts = <16 0>;
 			interrupt-names = "global";
@@ -297,7 +312,8 @@
 		timers14: timers@40002000 {
 			compatible = "st,stm32-timers";
 			reg = <0x40002000 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1_2, 15U)>;
+			clocks = <&rcc STM32_CLOCK(APB1_2, 15)>,
+				 <&rcc STM32_SRC_TIMPCLK1 NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1H, 15U)>;
 			interrupts = <19 0>;
 			interrupt-names = "global";
@@ -319,7 +335,8 @@
 		timers16: timers@40014400 {
 			compatible = "st,stm32-timers";
 			reg = <0x40014400 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1_2, 17U)>;
+			clocks = <&rcc STM32_CLOCK(APB1_2, 17)>,
+				 <&rcc STM32_SRC_TIMPCLK1 NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1H, 17U)>;
 			interrupts = <21 0>;
 			interrupt-names = "global";
@@ -341,7 +358,8 @@
 		timers17: timers@40014800 {
 			compatible = "st,stm32-timers";
 			reg = <0x40014800 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1_2, 18U)>;
+			clocks = <&rcc STM32_CLOCK(APB1_2, 18)>,
+				 <&rcc STM32_SRC_TIMPCLK1 NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1H, 18U)>;
 			interrupts = <22 0>;
 			interrupt-names = "global";

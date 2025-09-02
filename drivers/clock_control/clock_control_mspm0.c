@@ -37,6 +37,10 @@
 #define MSPM0_PLL_ENABLED 1
 #endif
 
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(hfxt), okay)
+#define MSPM0_HFCLK_ENABLED 1
+#endif
+
 #define DT_MCLK_CLOCKS_CTRL	DT_CLOCKS_CTLR(DT_NODELABEL(mclk))
 #define DT_LFCLK_CLOCKS_CTRL	DT_CLOCKS_CTLR(DT_NODELABEL(lfclk))
 #define DT_HSCLK_CLOCKS_CTRL	DT_CLOCKS_CTLR(DT_NODELABEL(hsclk))
@@ -152,7 +156,9 @@ static int clock_mspm0_init(const struct device *dev)
 	DL_SYSCTL_setSYSOSCFreq(DL_SYSCTL_SYSOSC_FREQ_BASE);
 
 	DL_SYSCTL_setMCLKDivider(mspm0_mclk_cfg.clk_div);
+#if DT_NODE_HAS_PROP(DT_NODELABEL(ulpclk), clk_div)
 	DL_SYSCTL_setULPCLKDivider(mspm0_ulpclk_cfg.clk_div);
+#endif
 
 #if MSPM0_PLL_ENABLED
 #if DT_SAME_NODE(DT_HSCLK_CLOCKS_CTRL, DT_NODELABEL(syspll0))
@@ -165,6 +171,7 @@ static int clock_mspm0_init(const struct device *dev)
 			(DL_SYSCTL_SYSPLLConfig *)&clock_mspm0_cfg_syspll);
 #endif
 
+#if MSPM0_HFCLK_ENABLED
 #if DT_SAME_NODE(DT_HFCLK_CLOCKS_CTRL, DT_NODELABEL(hfxt))
 	uint32_t hf_range;
 	uint32_t hfxt_freq = DT_PROP(DT_NODELABEL(hfxt),
@@ -194,6 +201,7 @@ static int clock_mspm0_init(const struct device *dev)
 				true);
 #else
 	DL_SYSCTL_setHFCLKSourceHFCLKIN();
+#endif
 #endif
 
 #if MSPM0_LFCLK_ENABLED
@@ -237,7 +245,7 @@ static int clock_mspm0_init(const struct device *dev)
 	return 0;
 }
 
-static const struct clock_control_driver_api clock_mspm0_driver_api = {
+static DEVICE_API(clock_control, clock_mspm0_driver_api) = {
 	.on = clock_mspm0_on,
 	.off = clock_mspm0_off,
 	.get_rate = clock_mspm0_get_rate,

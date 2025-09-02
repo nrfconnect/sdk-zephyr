@@ -107,6 +107,8 @@ config X86
 config RISCV
 	bool
 	select ARCH_IS_SET
+	select ATOMIC_OPERATIONS_C if !RISCV_ISA_EXT_A
+	select ATOMIC_OPERATIONS_BUILTIN if RISCV_ISA_EXT_A
 	select ARCH_SUPPORTS_COREDUMP
 	select ARCH_SUPPORTS_COREDUMP_PRIV_STACKS
 	select ARCH_SUPPORTS_ROM_START if !SOC_FAMILY_ESPRESSIF_ESP32
@@ -314,6 +316,16 @@ config USERSPACE
 	  privileged mode or handling a system call; to ensure these are always
 	  caught, enable CONFIG_HW_STACK_PROTECTION.
 
+config NOINIT_SNIPPET_FIRST
+	bool "Place the no-init linker script snippet first"
+	help
+	  By default the include/zephyr/linker/common-noinit.ld file inserts the
+	  snippets-noinit.ld file at the end of the section.  There are times when
+	  the directives in the snippets-noinit.ld file apply to the other directives
+	  in this file.  And in that case the include statement for the snippets-noinit.ld
+	  file needs to come at the start of the section.  This configuration option
+	  allows that to happen.
+
 config PRIVILEGED_STACK_SIZE
 	int "Size of privileged stack"
 	default 2048 if EMUL
@@ -440,15 +452,21 @@ config ARCH_STACKWALK_MAX_FRAMES
 
 menu "Interrupt Configuration"
 
+config TOOLCHAIN_SUPPORTS_ISR_TABLES_LOCAL_DECLARATION
+	bool
+	help
+	  Hidden option to signal that toolchain supports local declaration of
+	  interrupt tables.
+
 config ISR_TABLES_LOCAL_DECLARATION_SUPPORTED
 	bool
 	default y
 	# Userspace is currently not supported
 	depends on !USERSPACE
 	# List of currently supported architectures
-	depends on ARM || ARM64
+	depends on ARM || ARM64 || RISCV
 	# List of currently supported toolchains
-	depends on "$(ZEPHYR_TOOLCHAIN_VARIANT)" = "zephyr" || "$(ZEPHYR_TOOLCHAIN_VARIANT)" = "gnuarmemb"
+	depends on "$(ZEPHYR_TOOLCHAIN_VARIANT)" = "zephyr" || "$(ZEPHYR_TOOLCHAIN_VARIANT)" = "gnuarmemb" || "$(ZEPHYR_TOOLCHAIN_VARIANT)" = "llvm" || TOOLCHAIN_SUPPORTS_ISR_TABLES_LOCAL_DECLARATION
 
 config ISR_TABLES_LOCAL_DECLARATION
 	bool "ISR tables created locally and placed by linker"
@@ -464,6 +482,7 @@ config ISR_TABLES_LOCAL_DECLARATION
 
 config DYNAMIC_INTERRUPTS
 	bool "Installation of IRQs at runtime"
+	select SRAM_SW_ISR_TABLE
 	help
 	  Enable installation of interrupts at runtime, which will move some
 	  interrupt-related data structures to RAM instead of ROM, and
@@ -589,6 +608,12 @@ config SRAM_VECTOR_TABLE
 	help
 	  When XiP is enabled, this option will result in the vector table being
 	  relocated from Flash to SRAM.
+
+config SRAM_SW_ISR_TABLE
+	bool "Place the software ISR table in SRAM instead of flash"
+	help
+	  The option specifies that the software interrupts vector table will be
+	  placed inside SRAM instead of the flash.
 
 config IRQ_OFFLOAD_NESTED
 	bool "irq_offload() supports nested IRQs"
@@ -1173,3 +1198,9 @@ config ARCH_HAS_CUSTOM_CURRENT_IMPL
 	help
 	  Select when architecture implements arch_current_thread() &
 	  arch_current_thread_set().
+
+config ARCH_IPI_LAZY_COPROCESSORS_SAVE
+	bool
+	help
+	  Select when the architecture has multi-CPU lazy context switching
+	  of coprocessor registers.

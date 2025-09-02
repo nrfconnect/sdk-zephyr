@@ -8,16 +8,17 @@ Blackbox tests for twister's command line functions related to disable features.
 
 import importlib
 import pytest
-import mock
+from unittest import mock
 import os
 import sys
 import re
 
-from conftest import ZEPHYR_BASE, TEST_DATA, testsuite_filename_mock
+# pylint: disable=no-name-in-module
+from conftest import ZEPHYR_BASE, TEST_DATA, suite_filename_mock
 from twisterlib.testplan import TestPlan
 
 
-@mock.patch.object(TestPlan, 'TESTSUITE_FILENAME', testsuite_filename_mock)
+@mock.patch.object(TestPlan, 'TESTSUITE_FILENAME', suite_filename_mock)
 class TestDisable:
     TESTDATA_1 = [
         (
