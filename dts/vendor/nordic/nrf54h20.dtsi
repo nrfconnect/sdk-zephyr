@@ -136,6 +136,7 @@
 				min-residency-us = <700>;
 				exit-latency-us = <5>;
 			};
+
 			idle_cache_disabled: idle_cache_disabled {
 				compatible = "zephyr,power-state";
 				power-state-name = "suspend-to-idle";
@@ -500,6 +501,7 @@
 					compatible = "nordic,bt-hci-sdc";
 					status = "disabled";
 				};
+
 				bt_hci_controller: bt_hci_controller {
 					compatible = "zephyr,bt-hci-ll-sw-split";
 					status = "disabled";
