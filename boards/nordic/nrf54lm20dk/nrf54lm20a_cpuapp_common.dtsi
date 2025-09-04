@@ -20,6 +20,11 @@
 		zephyr,flash = &cpuapp_rram;
 		zephyr,ieee802154 = &ieee802154;
 	};
+
+	aliases {
+		mcuboot-button0 = &button0;
+		mcuboot-led0 = &led0;
+	};
 };
 
 &cpuapp_sram {
