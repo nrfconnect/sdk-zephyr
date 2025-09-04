@@ -435,7 +435,10 @@ static bool img_mgmt_state_encode_slot(struct smp_streamer *ctxt, uint32_t slot,
 	uint32_t flags;
 	char vers_str[IMG_MGMT_VER_MAX_STR_LEN];
 	uint8_t hash[IMAGE_SHA_LEN];
-	struct zcbor_string zhash = { .value = hash, .len = IMAGE_SHA_LEN};
+	struct zcbor_string zhash = {
+		.value = hash,
+		.len = IMAGE_SHA_LEN,
+	};
 	struct image_version ver;
 	bool ok;
 	int rc = img_mgmt_read_info(slot, &ver, hash, &flags);
