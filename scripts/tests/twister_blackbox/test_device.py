@@ -7,14 +7,14 @@ Blackbox tests for twister's command line functions related to test filtering.
 """
 
 import importlib
-import mock
+from unittest import mock
 import os
 import pytest
 import sys
 import re
 
 # pylint: disable=no-name-in-module
-from conftest import ZEPHYR_BASE, TEST_DATA, testsuite_filename_mock
+from conftest import ZEPHYR_BASE, TEST_DATA, suite_filename_mock
 from twisterlib.testplan import TestPlan
 
 
@@ -52,11 +52,11 @@ class TestDevice:
         ],
     )
 
-    @mock.patch.object(TestPlan, 'TESTSUITE_FILENAME', testsuite_filename_mock)
+    @mock.patch.object(TestPlan, 'TESTSUITE_FILENAME', suite_filename_mock)
     def test_seed(self, capfd, out_path, seed):
         test_platforms = ['native_sim']
         path = os.path.join(TEST_DATA, 'tests', 'seed_native_sim')
-        args = ['--outdir', out_path, '-i', '-T', path, '-vv',] + \
+        args = ['--detailed-test-id', '--outdir', out_path, '-i', '-T', path, '-vv',] + \
                ['--seed', f'{seed[0]}'] + \
                [val for pair in zip(
                    ['-p'] * len(test_platforms), test_platforms

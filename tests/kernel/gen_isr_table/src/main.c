@@ -12,13 +12,19 @@
 #include <zephyr/interrupt_util.h>
 #include <zephyr/sys/barrier.h>
 
-extern uintptr_t _irq_vector_table[];
+extern const uintptr_t _irq_vector_table[];
 
 #if defined(ARCH_IRQ_DIRECT_CONNECT) && defined(CONFIG_GEN_IRQ_VECTOR_TABLE)
 #define HAS_DIRECT_IRQS
 #endif
 
 #if defined(CONFIG_RISCV)
+
+/* litex_timer0 (drivers/timer/litex_timer.c) uses IRQ 1, so the test can't use it. */
+#if defined(CONFIG_LITEX_TIMER)
+#define IRQ1_USED
+#endif
+
 #if defined(CONFIG_NRFX_CLIC)
 
 #if defined(CONFIG_SOC_SERIES_NRF54LX) && defined(CONFIG_RISCV_CORE_NORDIC_VPR)
@@ -26,7 +32,12 @@ extern uintptr_t _irq_vector_table[];
 #define ISR3_OFFSET	17
 #define ISR5_OFFSET	18
 #define TRIG_CHECK_SIZE	19
-#elif defined(CONFIG_SOC_NRF54H20_CPUPPR) || defined(CONFIG_SOC_NRF54H20_CPUFLPR)
+#elif defined(CONFIG_SOC_SERIES_NRF54HX) && defined(CONFIG_RISCV_CORE_NORDIC_VPR)
+#define ISR1_OFFSET	14
+#define ISR3_OFFSET	15
+#define ISR5_OFFSET	16
+#define TRIG_CHECK_SIZE	17
+#elif defined(CONFIG_SOC_NRF9280_CPUPPR)
 #define ISR1_OFFSET	14
 #define ISR3_OFFSET	15
 #define ISR5_OFFSET	16
@@ -35,15 +46,22 @@ extern uintptr_t _irq_vector_table[];
 #error "Target not supported"
 #endif
 
-#elif defined(CONFIG_RISCV_HAS_CLIC)
+#elif defined(CONFIG_SOC_GD32VF103)
 #define ISR1_OFFSET	3
 #define ISR3_OFFSET	17
 #define ISR5_OFFSET	18
 #define TRIG_CHECK_SIZE	19
+#elif defined(CONFIG_SOC_ANDES_AE350_CLIC)
+#define ISR1_OFFSET	19
+#define ISR3_OFFSET	20
+#define ISR5_OFFSET	21
+#define TRIG_CHECK_SIZE	22
 #else
 
-/* RISC-V has very few IRQ lines which can be triggered from software */
+#if !defined(IRQ1_USED)
+/* RISC-V CLINT has very few IRQ lines which can be triggered from software */
 #define ISR3_OFFSET	1
+#endif
 
 /* Since we have so few lines we have to share the same line for two different
  * tests
@@ -243,7 +261,7 @@ static int check_vector(void *isr, int offset)
 #ifdef CONFIG_GEN_SW_ISR_TABLE
 static int check_sw_isr(void *isr, uintptr_t arg, int offset)
 {
-	struct _isr_table_entry *e = &_sw_isr_table[TABLE_INDEX(offset)];
+	const struct _isr_table_entry *e = &_sw_isr_table[TABLE_INDEX(offset)];
 
 	TC_PRINT("Checking _sw_isr_table entry %d for irq %d\n",
 		 TABLE_INDEX(offset), IRQ_LINE(offset));
