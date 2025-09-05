@@ -966,16 +966,6 @@ static int stm32_xspi_set_memorymap(const struct device *dev)
 	return 0;
 }
 
-/* Function to return true if the octoflash is in MemoryMapped else false */
-static bool stm32_xspi_is_memorymap(const struct device *dev)
-{
-	struct flash_stm32_xspi_data *dev_data = dev->data;
-
-	return ((READ_BIT(dev_data->hxspi.Instance->CR,
-			  XSPI_CR_FMODE) == XSPI_CR_FMODE) ?
-			  true : false);
-}
-
 static int stm32_xspi_abort(const struct device *dev)
 {
 	struct flash_stm32_xspi_data *dev_data = dev->data;
@@ -988,6 +978,17 @@ static int stm32_xspi_abort(const struct device *dev)
 	return 0;
 }
 #endif /* CONFIG_STM32_MEMMAP */
+
+
+#if defined(CONFIG_STM32_MEMMAP) || defined(CONFIG_STM32_APP_IN_EXT_FLASH)
+/* Function to return true if the octoflash is in MemoryMapped else false */
+static bool stm32_xspi_is_memorymap(const struct device *dev)
+{
+	struct flash_stm32_xspi_data *dev_data = dev->data;
+
+	return READ_BIT(dev_data->hxspi.Instance->CR, XSPI_CR_FMODE) == XSPI_CR_FMODE;
+}
+#endif
 
 /*
  * Function to erase the flash : chip or sector with possible OCTO/SPI and STR/DTR
@@ -1562,11 +1563,21 @@ static void flash_stm32_xspi_pages_layout(const struct device *dev,
 }
 #endif
 
+static int flash_stm32_xspi_get_size(const struct device *dev, uint64_t *size)
+{
+	const struct flash_stm32_xspi_config *dev_cfg = dev->config;
+
+	*size = (uint64_t)dev_cfg->flash_size;
+
+	return 0;
+}
+
 static DEVICE_API(flash, flash_stm32_xspi_driver_api) = {
 	.read = flash_stm32_xspi_read,
 	.write = flash_stm32_xspi_write,
 	.erase = flash_stm32_xspi_erase,
 	.get_parameters = flash_stm32_xspi_get_parameters,
+	.get_size = flash_stm32_xspi_get_size,
 #if defined(CONFIG_FLASH_PAGE_LAYOUT)
 	.page_layout = flash_stm32_xspi_pages_layout,
 #endif
@@ -2047,7 +2058,7 @@ static int flash_stm32_xspi_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-#ifdef CONFIG_STM32_MEMMAP
+#ifdef CONFIG_STM32_APP_IN_EXT_FLASH
 	/* If MemoryMapped then configure skip init
 	 * Check clock status first as reading CR register without bus clock doesn't work on N6
 	 * If clock is off, then MemoryMapped is off too and we do init
@@ -2056,13 +2067,13 @@ static int flash_stm32_xspi_init(const struct device *dev)
 				     (clock_control_subsys_t) &dev_cfg->pclken)
 				     == CLOCK_CONTROL_STATUS_ON) {
 		if (stm32_xspi_is_memorymap(dev)) {
-			LOG_ERR("NOR init'd in MemMapped mode");
+			LOG_DBG("NOR init'd in MemMapped mode");
 			/* Force HAL instance in correct state */
 			dev_data->hxspi.State = HAL_XSPI_STATE_BUSY_MEM_MAPPED;
 			return 0;
 		}
 	}
-#endif /* CONFIG_STM32_MEMMAP */
+#endif /* CONFIG_STM32_APP_IN_EXT_FLASH */
 
 	/* The SPI/DTR is not a valid config of data_mode/data_rate according to the DTS */
 	if ((dev_cfg->data_mode != XSPI_OCTO_MODE)

@@ -762,6 +762,61 @@ class KconfigCheck(ComplianceTest):
             # Clean up the temporary directory
             shutil.rmtree(kconfiglib_dir)
 
+    def module_kconfigs(self, regex):
+        manifest = Manifest.from_file()
+        kconfigs = ""
+
+        # Use hard coded paths for Zephyr for tests, samples and ext. module root
+        tmp_output = git("grep", "-I", "-h", "--perl-regexp", regex, "--", ":tests", ":samples",
+                         ":modules", cwd=ZEPHYR_BASE, ignore_non_zero=True)
+
+        if len(tmp_output) > 0:
+            kconfigs += tmp_output + "\n"
+
+        for project in manifest.get_projects([]):
+            if not manifest.is_active(project):
+                continue
+
+            if not project.is_cloned():
+                continue
+
+            module_path = PurePath(project.abspath)
+            module_yml = module_path.joinpath('zephyr/module.yml')
+
+            if not Path(module_yml).is_file():
+                module_yml = module_path.joinpath('zephyr/module.yaml')
+
+            if Path(module_yml).is_file():
+                dirs = []
+
+                with Path(module_yml).open('r', encoding='utf-8') as f:
+                    meta = yaml.load(f.read(), Loader=SafeLoader)
+
+                for folder_type in ['samples', 'tests']:
+                    if folder_type in meta:
+                        for path_ext in meta[folder_type]:
+                            path_full = module_path.joinpath(path_ext)
+
+                            if Path(path_full).is_dir():
+                                dirs.append(":" + path_ext)
+
+                # Add ext. module root, if one is defined
+                if 'build' in meta and 'settings' in meta['build'] and \
+                     'module_ext_root' in meta['build']['settings']:
+                    path_full = module_path.joinpath(meta['build']['settings']['module_ext_root'])
+
+                    if Path(path_full).is_dir():
+                        dirs.append(":" + meta['build']['settings']['module_ext_root'])
+
+                if len(dirs) > 0:
+                    tmp_output = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
+                                     *dirs, cwd=module_path, ignore_non_zero=True)
+
+                    if len(tmp_output) > 0:
+                        kconfigs += tmp_output + "\n"
+
+        return kconfigs
+
     def get_logging_syms(self, kconf):
         # Returns a set() with the names of the Kconfig symbols generated with
         # logging template in samples/tests folders. The Kconfig symbols doesn't
@@ -782,9 +837,8 @@ class KconfigCheck(ComplianceTest):
         # Warning: Needs to work with both --perl-regexp and the 're' module.
         regex = r"^\s*(?:module\s*=\s*)([A-Z0-9_]+)\s*(?:#|$)"
 
-        # Grep samples/ and tests/ for symbol definitions
-        grep_stdout = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
-                          ":samples", ":tests", cwd=ZEPHYR_BASE)
+        # Grep samples/ and tests/ for symbol definitions in all modules
+        grep_stdout = self.module_kconfigs(regex)
 
         names = re.findall(regex, grep_stdout, re.MULTILINE)
 
@@ -849,8 +903,14 @@ class KconfigCheck(ComplianceTest):
         disallowed_regex = "(" + "|".join(disallowed_symbols.keys()) + ")$"
 
         # Warning: Needs to work with both --perl-regexp and the 're' module
-        regex_boards = r"\bCONFIG_[A-Z0-9_]+\b(?!\s*##|[$@{(.*])"
-        regex_socs = r"\bconfig\s+[A-Z0-9_]+$"
+        # Windows
+        if os.name == 'nt':
+            # Remove word boundaries on Windows implementation
+            regex_boards = r"CONFIG_[A-Z0-9_]+(?!\s*##|[$@{(.*])"
+            regex_socs = r"config[ \t]+[A-Z0-9_]+"
+        else:
+            regex_boards = r"\bCONFIG_[A-Z0-9_]+\b(?!\s*##|[$@{(.*])"
+            regex_socs = r"\bconfig\s+[A-Z0-9_]+$"
 
         grep_stdout_boards = git("grep", "--line-number", "-I", "--null",
                                  "--perl-regexp", regex_boards, "--", ":boards",
@@ -931,9 +991,8 @@ Found disallowed Kconfig symbol in SoC Kconfig files: {sym_name:35}
         # (?:...) is a non-capturing group.
         regex = r"^\s*(?:menu)?config\s*([A-Z0-9_]+)\s*(?:#|$)"
 
-        # Grep samples/ and tests/ for symbol definitions
-        grep_stdout = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
-                          ":samples", ":tests", cwd=ZEPHYR_BASE)
+        # Grep samples/ and tests/ for symbol definitions in all modules
+        grep_stdout = self.module_kconfigs(regex)
 
         # Generate combined list of configs and choices from the main Kconfig tree.
         kconf_syms = kconf.unique_defined_syms + kconf.unique_choices
@@ -1176,19 +1235,26 @@ flagged.
         "BOARD_MPS2_AN521_CPUTEST", # Used for board and SoC extension feature tests
         "BOARD_NATIVE_SIM_NATIVE_64_TWO", # Used for board and SoC extension feature tests
         "BOARD_NATIVE_SIM_NATIVE_ONE", # Used for board and SoC extension feature tests
+        "BOARD_UNIT_TESTING",  # Used for tests/unit
         "BOOT_DIRECT_XIP", # Used in sysbuild for MCUboot configuration
         "BOOT_DIRECT_XIP_REVERT", # Used in sysbuild for MCUboot configuration
         "BOOT_ENCRYPTION_KEY_FILE", # Used in sysbuild
+        "BOOT_ENCRYPT_ALG_AES_128", # Used in sysbuild
+        "BOOT_ENCRYPT_ALG_AES_256", # Used in sysbuild
         "BOOT_ENCRYPT_IMAGE", # Used in sysbuild
         "BOOT_FIRMWARE_LOADER", # Used in sysbuild for MCUboot configuration
         "BOOT_FIRMWARE_LOADER_BOOT_MODE", # Used in sysbuild for MCUboot configuration
+        "BOOT_IMAGE_EXECUTABLE_RAM_SIZE", # MCUboot setting
+        "BOOT_IMAGE_EXECUTABLE_RAM_START", # MCUboot setting
         "BOOT_MAX_IMG_SECTORS_AUTO", # Used in sysbuild
         "BOOT_RAM_LOAD", # Used in sysbuild for MCUboot configuration
+        "BOOT_RAM_LOAD_REVERT", # Used in sysbuild for MCUboot configuration
         "BOOT_SERIAL_BOOT_MODE",     # Used in (sysbuild-based) test/
                                      # documentation
         "BOOT_SERIAL_CDC_ACM",       # Used in (sysbuild-based) test
         "BOOT_SERIAL_ENTRANCE_GPIO", # Used in (sysbuild-based) test
         "BOOT_SERIAL_IMG_GRP_HASH",  # Used in documentation
+        "BOOT_SERIAL_UART",          # Used in (sysbuild-based) test
         "BOOT_SHARE_BACKEND_RETENTION", # Used in Kconfig text
         "BOOT_SHARE_DATA",           # Used in Kconfig text
         "BOOT_SHARE_DATA_BOOTINFO", # Used in (sysbuild-based) test
@@ -1225,6 +1291,7 @@ flagged.
         "FOO_LOG_LEVEL",
         "FOO_SETTING_1",
         "FOO_SETTING_2",
+        "GEN_UICR_GENERATE_PERIPHCONF", # Used in specialized build tool, not part of main Kconfig
         "HEAP_MEM_POOL_ADD_SIZE_", # Used as an option matching prefix
         "HUGETLBFS",          # Linux, in boards/xtensa/intel_adsp_cavs25/doc
         "IAR_BUFFERED_WRITE",
@@ -1253,8 +1320,12 @@ flagged.
         "MCUBOOT_SERIAL",           # Used in (sysbuild-based) test/
                                     # documentation
         "MCUMGR_GRP_EXAMPLE_OTHER_HOOK", # Used in documentation
+        "MCUX_HW_CORE", # Used in modules/hal_nxp/mcux/mcux-sdk-ng/device/device.cmake.
+                        # It is a variable used by MCUX SDK CMake.
         "MCUX_HW_DEVICE_CORE", # Used in modules/hal_nxp/mcux/mcux-sdk-ng/device/device.cmake.
                                # It is a variable used by MCUX SDK CMake.
+        "MCUX_HW_FPU_TYPE", # Used in modules/hal_nxp/mcux/mcux-sdk-ng/device/device.cmake.
+                            # It is a variable used by MCUX SDK CMake.
         "MISSING",
         "MODULES",
         "MODVERSIONS",        # Linux, in boards/xtensa/intel_adsp_cavs25/doc
@@ -1285,6 +1356,9 @@ flagged.
         "STACK_SIZE",  # Used as an example in the Kconfig docs
         "STD_CPP",  # Referenced in CMake comment
         "TEST1",
+        "TOOLCHAIN", # Defined in modules/hal_nxp/mcux/mcux-sdk-ng/basic.cmake.
+                     # It is used by MCUX SDK cmake functions to add content
+                     # based on current toolchain.
         "TOOLCHAIN_ARCMWDT_SUPPORTS_THREAD_LOCAL_STORAGE", # The symbol is defined in the toolchain
                                                     # Kconfig which is sourced based on Zephyr
                                                     # toolchain variant and therefore not visible
@@ -1714,7 +1788,7 @@ class ImageSize(ComplianceTest):
 
         for file in get_files(filter="d"):
             full_path = GIT_TOP / file
-            mime_type = magic.from_file(full_path, mime=True)
+            mime_type = magic.from_file(os.fspath(full_path), mime=True)
 
             if not mime_type.startswith("image/"):
                 continue
@@ -1783,6 +1857,23 @@ class ModulesMaintainers(ComplianceTest):
                 self.failure(f"Missing {maintainers_file} entry for: \"{area}\"")
 
 
+class ZephyrModuleFile(ComplianceTest):
+    """
+    Check that no zephyr/module.yml file has been added to the Zephyr repository
+    """
+    name = "ZephyrModuleFile"
+    doc = "Check that no zephyr/module.yml file has been added to the Zephyr repository."
+
+    def run(self):
+        module_files = [ZEPHYR_BASE / 'zephyr' / 'module.yml',
+                        ZEPHYR_BASE / 'zephyr' / 'module.yaml']
+
+        for file in module_files:
+            if os.path.exists(file):
+                self.failure("A zephyr module file has been added to the Zephyr repository")
+                break
+
+
 class YAMLLint(ComplianceTest):
     """
     YAMLLint
@@ -1821,7 +1912,11 @@ class SphinxLint(ComplianceTest):
     doc = "Check Sphinx/reStructuredText files with sphinx-lint."
 
     # Checkers added/removed to sphinx-lint's default set
-    DISABLE_CHECKERS = ["horizontal-tab", "missing-space-before-default-role"]
+    DISABLE_CHECKERS = [
+        "horizontal-tab",
+        "missing-space-before-default-role",
+        "trailing-whitespace",
+    ]
     ENABLE_CHECKERS = ["default-role"]
 
     def run(self):
@@ -1863,7 +1958,7 @@ class KeepSorted(ComplianceTest):
 
     MARKER = "zephyr-keep-sorted"
 
-    def block_check_sorted(self, block_data, regex):
+    def block_check_sorted(self, block_data, *, regex, strip, fold):
         def _test_indent(txt: str):
             return txt.startswith((" ", "\t"))
 
@@ -1878,6 +1973,9 @@ class KeepSorted(ComplianceTest):
                 # Ignore blank lines
                 continue
 
+            if strip is not None:
+                line = line.strip(strip)
+
             if regex:
                 # check for regex
                 if not re.match(regex, line):
@@ -1886,9 +1984,10 @@ class KeepSorted(ComplianceTest):
                 if _test_indent(line):
                     continue
 
-                # Fold back indented lines after the current one
-                for cont in takewhile(_test_indent, lines[idx + 1:]):
-                    line += cont.strip()
+                if fold:
+                    # Fold back indented lines after the current one
+                    for cont in takewhile(_test_indent, lines[idx + 1:]):
+                        line += cont.strip()
 
             if line < last:
                 return idx
@@ -1898,7 +1997,7 @@ class KeepSorted(ComplianceTest):
         return -1
 
     def check_file(self, file, fp):
-        mime_type = magic.from_file(file, mime=True)
+        mime_type = magic.from_file(os.fspath(file), mime=True)
 
         if not mime_type.startswith("text/"):
             return
@@ -1908,9 +2007,13 @@ class KeepSorted(ComplianceTest):
 
         start_marker = f"{self.MARKER}-start"
         stop_marker = f"{self.MARKER}-stop"
-        regex_marker = r"re\((.+)\)"
+        regex_marker = r"re\(([^)]+)\)"
+        strip_marker = r"strip\(([^)]+)\)"
+        nofold_marker = "nofold"
         start_line = 0
         regex = None
+        strip = None
+        fold = True
 
         for line_num, line in enumerate(fp.readlines(), start=1):
             if start_marker in line:
@@ -1925,6 +2028,11 @@ class KeepSorted(ComplianceTest):
                 # Test for a regex block
                 match = re.search(regex_marker, line)
                 regex = match.group(1) if match else None
+
+                match = re.search(strip_marker, line)
+                strip = match.group(1) if match else None
+
+                fold = nofold_marker not in line
             elif stop_marker in line:
                 if not in_block:
                     desc = f"{stop_marker} without {start_marker}"
@@ -1932,7 +2040,7 @@ class KeepSorted(ComplianceTest):
                                      desc=desc)
                 in_block = False
 
-                idx = self.block_check_sorted(block_data, regex)
+                idx = self.block_check_sorted(block_data, regex=regex, strip=strip, fold=fold)
                 if idx >= 0:
                     desc = f"sorted block has out-of-order line at {start_line + idx}"
                     self.fmtd_failure("error", "KeepSorted", file, line_num,
@@ -1995,6 +2103,66 @@ class Ruff(ComplianceTest):
                 desc = f"Run 'ruff format {file}'"
                 self.fmtd_failure("error", "Python format error", file, desc=desc)
 
+class PythonCompatCheck(ComplianceTest):
+    """
+    Python Compatibility Check
+    """
+    name = "PythonCompat"
+    doc = "Check that Python files are compatible with Zephyr minimum supported Python version."
+
+    MAX_VERSION = (3, 10)
+    MAX_VERSION_STR = f"{MAX_VERSION[0]}.{MAX_VERSION[1]}"
+
+    def run(self):
+        py_files = [f for f in get_files(filter="d") if f.endswith(".py")]
+        if not py_files:
+            return
+        cmd = ["vermin", "-f", "parsable", "--violations",
+               f"-t={self.MAX_VERSION_STR}", "--no-make-paths-absolute"] + py_files
+        try:
+            result = subprocess.run(cmd,
+                                    check=False,
+                                    capture_output=True,
+                                    cwd=GIT_TOP)
+        except Exception as ex:
+            self.error(f"Failed to run vermin: {ex}")
+        output = result.stdout.decode("utf-8")
+        failed = False
+        for line in output.splitlines():
+            parts = line.split(":")
+            if len(parts) < 6:
+                continue
+            filename, line_number, column, _, py3ver, feature = parts[:6]
+            if not line_number:
+                # Ignore all file-level messages
+                continue
+
+            desc = None
+            if py3ver.startswith('!'):
+                desc = f"{feature} is known to be incompatible with Python 3."
+            elif py3ver.startswith('~'):
+                # "no known reason it won't work", just skip
+                continue
+            else:
+                major, minor = map(int, py3ver.split(".")[:2])
+                if (major, minor) > self.MAX_VERSION:
+                    desc = f"{feature} requires Python {major}.{minor}, which is higher than " \
+                           f"Zephyr's minimum supported Python version ({self.MAX_VERSION_STR})."
+
+            if desc is not None:
+                self.fmtd_failure(
+                    "error",
+                    "PythonCompat",
+                    filename,
+                    line=int(line_number),
+                    col=int(column) if column else None,
+                    desc=desc,
+                )
+                failed = True
+        if failed:
+            self.failure("Some Python files use features that are not compatible with Python " \
+                         f"{self.MAX_VERSION_STR}.")
+
 
 class TextEncoding(ComplianceTest):
     """
@@ -2010,7 +2178,7 @@ class TextEncoding(ComplianceTest):
 
         for file in get_files(filter="d"):
             full_path = GIT_TOP / file
-            mime_type = m.from_file(full_path)
+            mime_type = m.from_file(os.fspath(full_path))
 
             if not mime_type.startswith("text/"):
                 continue
@@ -2169,6 +2337,8 @@ def _main(args):
             test.run()
         except EndTest:
             pass
+        except BaseException:
+            test.failure(f"An exception occurred in {test.name}:\n{traceback.format_exc()}")
 
         # Annotate if required
         if args.annotate:
@@ -2184,6 +2354,7 @@ def _main(args):
         xml.write(args.output, pretty=True)
 
     failed_cases = []
+    warning_cases = []
     name2doc = {testcase.name: testcase.doc
                 for testcase in inheritors(ComplianceTest)}
 
@@ -2192,19 +2363,31 @@ def _main(args):
             if case.is_skipped:
                 logging.warning(f"Skipped {case.name}")
             else:
-                failed_cases.append(case)
+                if any(res.type in ('error', 'failure') for res in case.result):
+                    failed_cases.append(case)
+                else:
+                    warning_cases.append(case)
         else:
             # Some checks can produce no .result
             logging.info(f"No JUnit result for {case.name}")
 
     n_fails = len(failed_cases)
+    n_warnings = len(warning_cases)
 
-    if n_fails:
-        print(f"{n_fails} checks failed")
-        for case in failed_cases:
+    if n_fails or n_warnings:
+        if n_fails:
+            print(f"{n_fails} check(s) failed")
+        if n_warnings:
+            print(f"{n_warnings} check(s) with warnings only")
+
+        for case in failed_cases + warning_cases:
             for res in case.result:
                 errmsg = res.text.strip()
-                logging.error(f"Test {case.name} failed: \n{errmsg}")
+                if res.type in ('error', 'failure'):
+                    logging.error(f"Test {case.name} failed: \n{errmsg}")
+                else:
+                    logging.warning(f"Test {case.name} warning: \n{errmsg}")
+
             if args.no_case_output:
                 continue
             with open(f"{case.name}.txt", "w") as f:
@@ -2221,14 +2404,6 @@ def _main(args):
 
 def main(argv=None):
     args = parse_args(argv)
-
-    try:
-        # pylint: disable=unused-import
-        from lxml import etree
-    except ImportError:
-        print("\nERROR: Python module lxml not installed, unable to proceed")
-        print("See https://github.com/weiwei/junitparser/issues/99")
-        return 1
 
     try:
         n_fails = _main(args)

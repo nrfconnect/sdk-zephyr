@@ -31,12 +31,9 @@ zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF52810            NRF52810_XXAA)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF52811            NRF52811_XXAA)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF52820            NRF52820_XXAA)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF52832            NRF52832_XXAA)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF52833            NRF52833_XXAA)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_COMPATIBLE_NRF52833 NRF52833_XXAA)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF52840            NRF52840_XXAA)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF5340_CPUAPP      NRF5340_XXAA_APPLICATION)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_COMPATIBLE_NRF5340_CPUAPP NRF5340_XXAA_APPLICATION)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF5340_CPUNET      NRF5340_XXAA_NETWORK)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET NRF5340_XXAA_NETWORK)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54H20_CPUAPP     NRF54H20_XXAA
                                                                 NRF_APPLICATION)
@@ -50,21 +47,13 @@ zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L05            NRF54L05_XXAA
                                                                 DEVELOP_IN_NRF54L15)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L05_CPUAPP     NRF_APPLICATION)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L05_CPUFLPR    NRF_FLPR)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L09_ENGA       NRF54LV10A_ENGA_XXAA)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L09_ENGA_CPUAPP NRF_APPLICATION)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L09_ENGA_CPUFLPR NRF_FLPR)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L10            NRF54L10_XXAA
                                                                 DEVELOP_IN_NRF54L15)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L10_CPUAPP     NRF_APPLICATION)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L10_CPUFLPR    NRF_FLPR)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L15            NRF54L15_XXAA)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L15_CPUAPP     NRF_APPLICATION)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L15_CPUFLPR    NRF_FLPR)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_COMPATIBLE_NRF54L15 NRF54L15_XXAA)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_COMPATIBLE_NRF54L15_CPUAPP NRF_APPLICATION)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L20_ENGA       NRF54LM20A_ENGA_XXAA)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L20_ENGA_CPUAPP NRF_APPLICATION)
-zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L20_ENGA_CPUFLPR NRF_FLPR)
+zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54L15_CPUFLPR    NRF_FLPR)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LM20A_ENGA     NRF54LM20A_ENGA_XXAA)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LM20A_ENGA_CPUAPP NRF_APPLICATION)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LM20A_ENGA_CPUFLPR NRF_FLPR)
@@ -172,7 +161,7 @@ if(CONFIG_NRFX_TWI OR CONFIG_NRFX_TWIM)
   zephyr_library_sources(${SRC_DIR}/nrfx_twi_twim.c)
 endif()
 
-# Inject HAL "CONFIG_NFCT_PINS_AS_GPIOS" definition if user requests to
+# Inject HAL "NFCT_PINS_AS_GPIOS" definition if user requests to
 # configure the NFCT pins as GPIOS. Do the same with "CONFIG_GPIO_AS_PINRESET"
 # to configure the reset GPIO as nRESET. This way, the HAL will take care of
 # doing the proper configuration sequence during system init
@@ -182,7 +171,6 @@ if(DEFINED uicr_path)
   dt_prop(nfct_pins_as_gpios PATH ${uicr_path} PROPERTY "nfct-pins-as-gpios")
   if(${nfct_pins_as_gpios})
     zephyr_library_compile_definitions(
-      CONFIG_NFCT_PINS_AS_GPIOS
       NRF_CONFIG_NFCT_PINS_AS_GPIOS
     )
   endif()
@@ -206,12 +194,6 @@ zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LX_SKIP_CLOCK_CONFIG NRF_SKIP_C
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LX_DISABLE_FICR_TRIMCNF NRF_DISABLE_FICR_TRIMCNF)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LX_SKIP_GLITCHDETECTOR_DISABLE NRF_SKIP_GLITCHDETECTOR_DISABLE)
 zephyr_compile_definitions_ifndef(CONFIG_SOC_NRF54L_ANOMALY_56_WORKAROUND NRF54L_CONFIGURATION_56_ENABLE=0)
-
-# Inject code to skip TAMPC setup for nRF54L20 and nRF54L09. It is not supported for now.
-# It needs to be removed when support is provided.
-if(CONFIG_SOC_NRF54L20_ENGA_CPUAPP OR CONFIG_SOC_NRF54LM20A_ENGA_CPUAPP OR CONFIG_SOC_NRF54L09_ENGA_CPUAPP)
-	  zephyr_compile_definitions(NRF_SKIP_TAMPC_SETUP)
-endif()
 
 if(CONFIG_SOC_COMPATIBLE_NRF54LX AND CONFIG_NRFX_GPPI)
   zephyr_library_sources(${HELPERS_DIR}/nrfx_gppi_dppi_ppib_lumos.c)
@@ -247,14 +229,10 @@ mdk_svd_ifdef(CONFIG_SOC_NRF54H20_CPUFLPR     nrf54h20_flpr.svd)
 mdk_svd_ifdef(CONFIG_SOC_NRF54H20_CPURAD      nrf54h20_radiocore.svd)
 mdk_svd_ifdef(CONFIG_SOC_NRF54L05_CPUAPP      nrf54l05_application.svd)
 mdk_svd_ifdef(CONFIG_SOC_NRF54L05_CPUFLPR     nrf54l05_flpr.svd)
-mdk_svd_ifdef(CONFIG_SOC_NRF54L09_ENGA_CPUAPP nrf54lv10a_enga_application.svd)
-mdk_svd_ifdef(CONFIG_SOC_NRF54L09_ENGA_CPUFLPR nrf54lv10a_enga_flpr.svd)
 mdk_svd_ifdef(CONFIG_SOC_NRF54L10_CPUAPP      nrf54l10_application.svd)
 mdk_svd_ifdef(CONFIG_SOC_NRF54L10_CPUFLPR     nrf54l10_flpr.svd)
 mdk_svd_ifdef(CONFIG_SOC_NRF54L15_CPUAPP      nrf54l15_application.svd)
 mdk_svd_ifdef(CONFIG_SOC_NRF54L15_CPUFLPR     nrf54l15_flpr.svd)
-mdk_svd_ifdef(CONFIG_SOC_NRF54L20_ENGA_CPUAPP nrf54lm20a_enga_application.svd)
-mdk_svd_ifdef(CONFIG_SOC_NRF54L20_ENGA_CPUFLPR nrf54lm20a_enga_flpr.svd)
 mdk_svd_ifdef(CONFIG_SOC_NRF54LM20A_ENGA_CPUAPP nrf54lm20a_enga_application.svd)
 mdk_svd_ifdef(CONFIG_SOC_NRF54LM20A_ENGA_CPUFLPR nrf54lm20a_enga_flpr.svd)
 mdk_svd_ifdef(CONFIG_SOC_NRF9120              nrf9120.svd)

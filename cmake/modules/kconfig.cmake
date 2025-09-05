@@ -99,15 +99,9 @@ zephyr_file(CONF_FILES ${BOARD_EXTENSION_DIRS} KCONF board_extension_conf_files 
 # separated list instead.
 string(REPLACE ";" "?" DTS_ROOT_BINDINGS "${DTS_ROOT_BINDINGS}")
 
-# Export each `ZEPHYR_<module>_MODULE_DIR` to Kconfig.
-# This allows Kconfig files to refer relative from a modules root as:
-# source "$(ZEPHYR_FOO_MODULE_DIR)/Kconfig"
+# Export each `ZEPHYR_<module>_KCONFIG` to Kconfig.
 foreach(module_name ${ZEPHYR_MODULE_NAMES})
   zephyr_string(SANITIZE TOUPPER MODULE_NAME_UPPER ${module_name})
-  list(APPEND
-       ZEPHYR_KCONFIG_MODULES_DIR
-       "ZEPHYR_${MODULE_NAME_UPPER}_MODULE_DIR=${ZEPHYR_${MODULE_NAME_UPPER}_MODULE_DIR}"
-  )
 
   if(ZEPHYR_${MODULE_NAME_UPPER}_KCONFIG)
     list(APPEND
@@ -317,6 +311,18 @@ foreach(f ${merge_config_files})
   set(merge_config_files_checksum "${merge_config_files_checksum}${checksum}")
 endforeach()
 
+# Add to the checksum all the Kconfig files which were used last time
+set(merge_kconfig_checksum "")
+if(EXISTS ${PARSED_KCONFIG_SOURCES_TXT})
+  file(STRINGS ${PARSED_KCONFIG_SOURCES_TXT} parsed_kconfig_sources_list ENCODING UTF-8)
+  foreach(f ${parsed_kconfig_sources_list})
+    if(EXISTS ${f})
+      file(MD5 ${f} checksum)
+      set(merge_kconfig_checksum "${merge_kconfig_checksum}${checksum}")
+    endif()
+  endforeach()
+endif()
+
 # Create a new .config if it does not exists, or if the checksum of
 # the dependencies has changed
 set(merge_config_files_checksum_file ${PROJECT_BINARY_DIR}/.cmake.dotconfig.checksum)
@@ -330,7 +336,7 @@ if(EXISTS ${DOTCONFIG} AND EXISTS ${merge_config_files_checksum_file})
     merge_config_files_checksum_prev
     )
   if(
-      ${merge_config_files_checksum} STREQUAL
+      ${merge_config_files_checksum}${merge_kconfig_checksum} STREQUAL
       ${merge_config_files_checksum_prev}
       )
     # Checksum is the same as before
@@ -377,25 +383,33 @@ if(NOT "${ret}" STREQUAL "0")
   message(FATAL_ERROR "command failed with return code: ${ret}")
 endif()
 
-if(CREATE_NEW_DOTCONFIG)
-  # Write the new configuration fragment checksum. Only do this if kconfig.py
-  # succeeds, to avoid marking zephyr/.config as up-to-date when it hasn't been
-  # regenerated.
-  file(WRITE ${merge_config_files_checksum_file}
-             ${merge_config_files_checksum})
-endif()
-
 # Read out the list of 'Kconfig' sources that were used by the engine.
-file(STRINGS ${PARSED_KCONFIG_SOURCES_TXT} PARSED_KCONFIG_SOURCES_LIST ENCODING UTF-8)
+file(STRINGS ${PARSED_KCONFIG_SOURCES_TXT} parsed_kconfig_sources_list ENCODING UTF-8)
+
+# Recalculate the Kconfig files' checksum, since the list of files may have
+# changed.
+set(merge_kconfig_checksum "")
+foreach(f ${parsed_kconfig_sources_list})
+  file(MD5 ${f} checksum)
+  set(merge_kconfig_checksum "${merge_kconfig_checksum}${checksum}")
+endforeach()
 
 # Force CMAKE configure when the Kconfig sources or configuration files changes.
 foreach(kconfig_input
     ${merge_config_files}
     ${DOTCONFIG}
-    ${PARSED_KCONFIG_SOURCES_LIST}
+    ${parsed_kconfig_sources_list}
     )
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${kconfig_input})
 endforeach()
+
+if(CREATE_NEW_DOTCONFIG)
+  # Write the new configuration fragment checksum. Only do this if kconfig.py
+  # succeeds, to avoid marking zephyr/.config as up-to-date when it hasn't been
+  # regenerated.
+  file(WRITE ${merge_config_files_checksum_file}
+             ${merge_config_files_checksum}${merge_kconfig_checksum})
+endif()
 
 add_custom_target(config-twister DEPENDS ${DOTCONFIG})
 

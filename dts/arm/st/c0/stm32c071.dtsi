@@ -7,13 +7,24 @@
 #include <st/c0/stm32c031.dtsi>
 
 / {
+	clocks {
+		/* Node representing the HSIUSB48 generator */
+		clk_hsi48: clk-hsi48 {
+			#clock-cells = <0>;
+			compatible = "st,stm32-hsi48-clock";
+			clock-frequency = <DT_FREQ_M(48)>;
+			status = "disabled";
+		};
+	};
+
 	soc {
 		compatible = "st,stm32c071", "st,stm32c0", "simple-bus";
 
 		timers2: timers@40000000  {
 			compatible = "st,stm32-timers";
 			reg = <0x40000000 0x400>;
-			clocks = <&rcc STM32_CLOCK(APB1, 0U)>;
+			clocks = <&rcc STM32_CLOCK(APB1, 0)>,
+				 <&rcc STM32_SRC_TIMPCLK1 NO_SEL>;
 			resets = <&rctl STM32_RESET(APB1L, 0U)>;
 			interrupts = <15 0>;
 			interrupt-names = "global";
@@ -83,4 +94,8 @@
 		compatible = "usb-nop-xceiv";
 		#phy-cells = <0>;
 	};
+};
+
+&exti {
+	num-lines = <36>;
 };

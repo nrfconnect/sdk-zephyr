@@ -160,7 +160,7 @@ struct cmd_data {
 static struct cmd_data cmd_data[BT_BUF_CMD_TX_COUNT];
 
 #define cmd(buf) (&cmd_data[net_buf_id(buf)])
-#define acl(buf) ((struct acl_data *)net_buf_user_data(buf))
+#define acl(buf) ((struct bt_conn_rx *)net_buf_user_data(buf))
 
 static bool drv_quirk_no_reset(void)
 {
@@ -332,7 +332,7 @@ void bt_hci_host_num_completed_packets(struct net_buf *buf)
 	}
 
 	cp = net_buf_add(buf, sizeof(*cp));
-	cp->num_handles = sys_cpu_to_le16(1);
+	cp->num_handles = 1;
 
 	hc = net_buf_add(buf, sizeof(*hc));
 	hc->handle = sys_cpu_to_le16(handle);
@@ -1194,6 +1194,24 @@ static int hci_le_read_phy(struct bt_conn *conn)
 }
 #endif /* defined(CONFIG_BT_USER_PHY_UPDATE) */
 
+int bt_le_set_default_phy(uint8_t all_phys, uint8_t pref_tx_phy, uint8_t pref_rx_phy)
+{
+	struct bt_hci_cp_le_set_default_phy *cp;
+	struct net_buf *buf;
+
+	buf = bt_hci_cmd_alloc(K_FOREVER);
+	if (!buf) {
+		return -ENOBUFS;
+	}
+
+	cp = net_buf_add(buf, sizeof(*cp));
+	cp->all_phys = all_phys;
+	cp->tx_phys = pref_tx_phy;
+	cp->rx_phys = pref_rx_phy;
+
+	return bt_hci_cmd_send_sync(BT_HCI_OP_LE_SET_DEFAULT_PHY, buf, NULL);
+}
+
 int bt_le_set_phy(struct bt_conn *conn, uint8_t all_phys,
 		  uint8_t pref_tx_phy, uint8_t pref_rx_phy, uint8_t phy_opts)
 {
@@ -1424,18 +1442,6 @@ void bt_hci_le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 	translate_addrs(&peer_addr, &id_addr, evt, id);
 
 	conn = find_pending_connect(evt->role, &id_addr);
-
-	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
-	    evt->role == BT_HCI_ROLE_PERIPHERAL &&
-	    !(IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	      BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
-		struct bt_le_ext_adv *adv = bt_le_adv_lookup_legacy();
-		/* Clear advertising even if we are not able to add connection
-		 * object to keep host in sync with controller state.
-		 */
-		atomic_clear_bit(adv->flags, BT_ADV_ENABLED);
-		(void)bt_le_lim_adv_cancel_timeout(adv);
-	}
 
 	if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
 	    evt->role == BT_HCI_ROLE_CENTRAL) {
@@ -1794,7 +1800,7 @@ static void le_remote_feat_complete(struct net_buf *buf)
 	if (IS_ENABLED(CONFIG_BT_REMOTE_INFO) &&
 	    (!IS_ENABLED(CONFIG_BT_REMOTE_VERSION) ||
 	     atomic_test_bit(conn->flags, BT_CONN_AUTO_VERSION_INFO))) {
-		notify_remote_info(conn);
+		bt_conn_notify_remote_info(conn);
 	}
 
 	bt_conn_unref(conn);
@@ -1825,7 +1831,7 @@ static void le_read_all_remote_feat_complete(struct net_buf *buf)
 		params.features = evt->features;
 	}
 
-	notify_read_all_remote_feat_complete(conn, &params);
+	bt_conn_notify_read_all_remote_feat_complete(conn, &params);
 
 	bt_conn_unref(conn);
 }
@@ -1854,7 +1860,7 @@ static void le_frame_space_update_complete(struct net_buf *buf)
 		params.initiator = evt->initiator;
 	}
 
-	notify_frame_space_update_complete(conn, &params);
+	bt_conn_notify_frame_space_update_complete(conn, &params);
 }
 #endif /* CONFIG_BT_FRAME_SPACE_UPDATE */
 
@@ -1897,7 +1903,7 @@ static void le_data_len_change(struct net_buf *buf)
 	conn->le.data_len.tx_max_time = max_tx_time;
 	conn->le.data_len.rx_max_len = max_rx_octets;
 	conn->le.data_len.rx_max_time = max_rx_time;
-	notify_le_data_len_updated(conn);
+	bt_conn_notify_le_data_len_updated(conn);
 #endif
 
 	bt_conn_unref(conn);
@@ -1924,7 +1930,7 @@ static void le_phy_update_complete(struct net_buf *buf)
 #if defined(CONFIG_BT_USER_PHY_UPDATE)
 	conn->le.phy.tx_phy = bt_get_phy(evt->tx_phy);
 	conn->le.phy.rx_phy = bt_get_phy(evt->rx_phy);
-	notify_le_phy_updated(conn);
+	bt_conn_notify_le_phy_updated(conn);
 #endif
 
 	bt_conn_unref(conn);
@@ -2018,7 +2024,7 @@ static void le_conn_param_req(struct net_buf *buf)
 		return;
 	}
 
-	if (!le_param_req(conn, &param)) {
+	if (!bt_conn_le_param_req(conn, &param)) {
 		le_conn_param_neg_reply(handle, BT_HCI_ERR_INVALID_LL_PARAM);
 	} else {
 		le_conn_param_req_reply(handle, &param);
@@ -2097,7 +2103,7 @@ static void le_conn_update_complete(struct net_buf *buf)
 
 		}
 
-		notify_le_param_updated(conn);
+		bt_conn_notify_le_param_updated(conn);
 	}
 
 	bt_conn_unref(conn);
@@ -2434,7 +2440,7 @@ static void bt_hci_evt_read_remote_version_complete(struct net_buf *buf)
 	if (IS_ENABLED(CONFIG_BT_REMOTE_INFO) &&
 	    atomic_test_bit(conn->flags, BT_CONN_LE_FEATURES_EXCHANGED)) {
 		/* Remote features is already present */
-		notify_remote_info(conn);
+		bt_conn_notify_remote_info(conn);
 	}
 
 	bt_conn_unref(conn);
@@ -2708,7 +2714,7 @@ void bt_hci_le_transmit_power_report(struct net_buf *buf)
 	report.tx_power_level_flag = evt->tx_power_level_flag;
 	report.delta = evt->delta;
 
-	notify_tx_power_report(conn, report);
+	bt_conn_notify_tx_power_report(conn, report);
 
 	bt_conn_unref(conn);
 }
@@ -2744,7 +2750,7 @@ void bt_hci_le_path_loss_threshold_event(struct net_buf *buf)
 		report.path_loss = evt->current_path_loss;
 	}
 
-	notify_path_loss_threshold_report(conn, report);
+	bt_conn_notify_path_loss_threshold_report(conn, report);
 
 	bt_conn_unref(conn);
 }
@@ -2800,7 +2806,7 @@ void bt_hci_le_subrate_change_event(struct net_buf *buf)
 	params.peripheral_latency = conn->le.latency;
 	params.supervision_timeout = conn->le.timeout;
 
-	notify_subrate_change(conn, params);
+	bt_conn_notify_subrate_change(conn, params);
 
 	bt_conn_unref(conn);
 }
@@ -3105,7 +3111,6 @@ static const struct event_handler normal_events[] = {
 		      sizeof(struct bt_hci_evt_hardware_error)),
 };
 
-
 #define BT_HCI_EVT_FLAG_RECV_PRIO BIT(0)
 #define BT_HCI_EVT_FLAG_RECV      BIT(1)
 
@@ -3139,19 +3144,33 @@ static inline uint8_t bt_hci_evt_get_flags(uint8_t evt)
 	}
 }
 
+static inline uint8_t bt_hci_le_subevent_get_flags(uint8_t subevent)
+{
+	switch (subevent) {
+	case BT_HCI_EVT_LE_ENH_CONN_COMPLETE:
+	case BT_HCI_EVT_LE_CONN_COMPLETE:
+		return BT_HCI_EVT_FLAG_RECV | BT_HCI_EVT_FLAG_RECV_PRIO;
+	default:
+		return BT_HCI_EVT_FLAG_RECV;
+	}
+}
+
 static void hci_event(struct net_buf *buf)
 {
 	struct bt_hci_evt_hdr *hdr;
 
-	if (buf->len < sizeof(*hdr)) {
-		LOG_ERR("Invalid HCI event size (%u)", buf->len);
-		net_buf_unref(buf);
-		return;
-	}
-
 	hdr = net_buf_pull_mem(buf, sizeof(*hdr));
 	LOG_DBG("event 0x%02x", hdr->evt);
-	BT_ASSERT(bt_hci_evt_get_flags(hdr->evt) & BT_HCI_EVT_FLAG_RECV);
+
+	if (hdr->evt == BT_HCI_EVT_LE_META_EVENT) {
+		struct bt_hci_evt_le_meta_event *le_evt;
+
+		le_evt = (struct bt_hci_evt_le_meta_event *)buf->data;
+
+		BT_ASSERT(bt_hci_le_subevent_get_flags(le_evt->subevent) & BT_HCI_EVT_FLAG_RECV);
+	} else {
+		BT_ASSERT(bt_hci_evt_get_flags(hdr->evt) & BT_HCI_EVT_FLAG_RECV);
+	}
 
 	handle_event(hdr->evt, buf, normal_events, ARRAY_SIZE(normal_events));
 
@@ -4222,6 +4241,58 @@ int bt_send(struct net_buf *buf)
 	return bt_hci_send(bt_dev.hci, buf);
 }
 
+#if defined(CONFIG_BT_CONN)
+static void le_conn_complete_prio(uint8_t role)
+{
+	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
+	    role == BT_HCI_ROLE_PERIPHERAL &&
+	    !(IS_ENABLED(CONFIG_BT_EXT_ADV) &&
+	      BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features))) {
+		struct bt_le_ext_adv *adv = bt_le_adv_lookup_legacy();
+		/* Clear advertising even if we are not able to add connection
+		 * object to keep host in sync with controller state.
+		 */
+		atomic_clear_bit(adv->flags, BT_ADV_ENABLED);
+		(void)bt_le_lim_adv_cancel_timeout(adv);
+	}
+}
+
+static void le_legacy_conn_complete_prio(struct net_buf *buf)
+{
+	struct bt_hci_evt_le_conn_complete *evt = (void *)buf->data;
+
+	le_conn_complete_prio(evt->role);
+}
+
+static void le_enh_conn_complete_prio(struct net_buf *buf)
+{
+	struct bt_hci_evt_le_enh_conn_complete *evt =
+		(struct bt_hci_evt_le_enh_conn_complete *)buf->data;
+
+	le_conn_complete_prio(evt->role);
+}
+#endif
+
+static const struct event_handler meta_prio_events[] = {
+#if defined(CONFIG_BT_CONN)
+	EVENT_HANDLER(BT_HCI_EVT_LE_CONN_COMPLETE, le_legacy_conn_complete_prio,
+		      sizeof(struct bt_hci_evt_le_conn_complete)),
+	EVENT_HANDLER(BT_HCI_EVT_LE_ENH_CONN_COMPLETE, le_enh_conn_complete_prio,
+		      sizeof(struct bt_hci_evt_le_enh_conn_complete)),
+#endif /* CONFIG_BT_CONN */
+};
+
+static void hci_le_meta_prio_event(struct net_buf *buf)
+{
+	struct bt_hci_evt_le_meta_event *evt;
+
+	evt = net_buf_pull_mem(buf, sizeof(*evt));
+
+	LOG_DBG("subevent 0x%02x", evt->subevent);
+
+	handle_event(evt->subevent, buf, meta_prio_events, ARRAY_SIZE(meta_prio_events));
+}
+
 static const struct event_handler prio_events[] = {
 	EVENT_HANDLER(BT_HCI_EVT_CMD_COMPLETE, hci_cmd_complete,
 		      sizeof(struct bt_hci_evt_cmd_complete)),
@@ -4239,9 +4310,11 @@ static const struct event_handler prio_events[] = {
 		      hci_num_completed_packets,
 		      sizeof(struct bt_hci_evt_num_completed_packets)),
 #endif /* CONFIG_BT_CONN_TX */
+	EVENT_HANDLER(BT_HCI_EVT_LE_META_EVENT, hci_le_meta_prio_event,
+	      sizeof(struct bt_hci_evt_le_meta_event)),
 };
 
-void hci_event_prio(struct net_buf *buf)
+static void hci_event_prio(struct net_buf *buf)
 {
 	struct net_buf_simple_state state;
 	struct bt_hci_evt_hdr *hdr;
@@ -4252,14 +4325,18 @@ void hci_event_prio(struct net_buf *buf)
 	/* Remove buffer type byte */
 	net_buf_pull(buf, 1);
 
-	if (buf->len < sizeof(*hdr)) {
-		LOG_ERR("Invalid HCI event size (%u)", buf->len);
-		net_buf_unref(buf);
-		return;
+	hdr = net_buf_pull_mem(buf, sizeof(*hdr));
+
+	if (hdr->evt == BT_HCI_EVT_LE_META_EVENT) {
+		struct bt_hci_evt_le_meta_event *le_evt;
+
+		le_evt = (struct bt_hci_evt_le_meta_event *)buf->data;
+
+		evt_flags = bt_hci_le_subevent_get_flags(le_evt->subevent);
+	} else {
+		evt_flags = bt_hci_evt_get_flags(hdr->evt);
 	}
 
-	hdr = net_buf_pull_mem(buf, sizeof(*hdr));
-	evt_flags = bt_hci_evt_get_flags(hdr->evt);
 	BT_ASSERT(evt_flags & BT_HCI_EVT_FLAG_RECV_PRIO);
 
 	handle_event(hdr->evt, buf, prio_events, ARRAY_SIZE(prio_events));
@@ -4302,8 +4379,32 @@ static int bt_recv_unsafe(struct net_buf *buf)
 #endif /* BT_CONN */
 	case BT_HCI_H4_EVT:
 	{
-		struct bt_hci_evt_hdr *hdr = (void *)(buf->data + 1);
-		uint8_t evt_flags = bt_hci_evt_get_flags(hdr->evt);
+		struct bt_hci_evt_hdr *hdr;
+		uint8_t evt_flags;
+
+		if (buf->len < sizeof(*hdr) + 1) {
+			LOG_ERR("Invalid HCI event size (%u)", buf->len);
+			net_buf_unref(buf);
+			return 0;
+		}
+
+		hdr = (void *)(buf->data + 1);
+
+		if (hdr->evt == BT_HCI_EVT_LE_META_EVENT) {
+			struct bt_hci_evt_le_meta_event *le_evt;
+
+			if (buf->len < sizeof(*hdr) + 1 + sizeof(*le_evt)) {
+				LOG_ERR("Invalid LE meta event size (%u)", buf->len);
+				net_buf_unref(buf);
+				return 0;
+			}
+
+			le_evt = (struct bt_hci_evt_le_meta_event *)&buf->data[sizeof(*hdr) + 1];
+
+			evt_flags = bt_hci_le_subevent_get_flags(le_evt->subevent);
+		} else {
+			evt_flags = bt_hci_evt_get_flags(hdr->evt);
+		}
 
 		if (evt_flags & BT_HCI_EVT_FLAG_RECV_PRIO) {
 			hci_event_prio(buf);

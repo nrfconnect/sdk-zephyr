@@ -65,7 +65,7 @@ void udc_set_suspended(const struct device *dev, const bool value)
 	struct udc_data *data = dev->data;
 
 	if (value == udc_is_suspended(dev)) {
-		LOG_WRN("Spurious suspend/resume event");
+		LOG_WRN("Spurious %s event", value ? "suspend" : "resume");
 	}
 
 	atomic_set_bit_to(&data->status, UDC_STATUS_SUSPENDED, value);
@@ -981,12 +981,24 @@ void udc_ctrl_update_stage(const struct device *dev,
 	if (bi->setup && bi->ep == USB_CONTROL_EP_OUT) {
 		uint16_t length  = udc_data_stage_length(buf);
 
-		data->setup = buf;
-
 		if (data->stage != CTRL_PIPE_STAGE_SETUP) {
 			LOG_INF("Sequence %u not completed", data->stage);
+
+			if (data->stage == CTRL_PIPE_STAGE_DATA_OUT) {
+				/*
+				 * The last setup packet is "floating" because
+				 * DATA OUT stage was awaited. This setup
+				 * packet must be removed here because it will
+				 * never reach the stack.
+				 */
+				LOG_INF("Drop setup packet (%p)", (void *)data->setup);
+				net_buf_unref(data->setup);
+			}
+
 			data->stage = CTRL_PIPE_STAGE_SETUP;
 		}
+
+		data->setup = buf;
 
 		/*
 		 * Setup Stage has been completed (setup packet received),

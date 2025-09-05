@@ -42,7 +42,7 @@ config NET_SOCKETS_CONNECT_TIMEOUT
 config NET_SOCKETS_DNS_TIMEOUT
 	int "Timeout value in milliseconds for DNS queries"
 	default 2000
-	range 1000 300000
+	range 1000 300000 if !NET_TEST
 	depends on DNS_RESOLVER
 	help
 	  This variable specifies time in milliseconds after which DNS
@@ -236,12 +236,12 @@ config NET_SOCKETS_TLS_MAX_APP_PROTOCOLS
 	  By default, no supported application layer protocol is set.
 
 config NET_SOCKETS_TLS_MAX_CLIENT_SESSION_COUNT
-	  int "Maximum number of stored client TLS/DTLS sessions"
-	  default 1
-	  depends on NET_SOCKETS_SOCKOPT_TLS
-	  help
-	    This variable specifies maximum number of stored TLS/DTLS sessions,
-	    used for TLS/DTLS session resumption.
+	int "Maximum number of stored client TLS/DTLS sessions"
+	default 1
+	depends on NET_SOCKETS_SOCKOPT_TLS
+	help
+	  This variable specifies maximum number of stored TLS/DTLS sessions,
+	  used for TLS/DTLS session resumption.
 
 config NET_SOCKETS_TLS_CERT_VERIFY_CALLBACK
 	bool "TLS certificate verification callback support"

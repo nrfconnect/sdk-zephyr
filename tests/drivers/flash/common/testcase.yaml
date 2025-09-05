@@ -8,6 +8,18 @@ tests:
     extra_args: EXTRA_CONF_FILE=boards/nrf52840dk_nrf52840_qspi_nor.conf
     integration_platforms:
       - nrf52840dk/nrf52840
+  drivers.flash.common.max32_spixf_nor:
+    platform_allow: apard32690/max32690/m4
+    extra_args: DTC_OVERLAY_FILE=boards/apard32690_max32690_m4_spixf_nor.overlay
+    integration_platforms:
+      - apard32690/max32690/m4
+  drivers.flash.common.max32_spixf_nor_sfdp_runtime:
+    platform_allow: apard32690/max32690/m4
+    extra_args:
+      - EXTRA_CONF_FILE=boards/apard32690_max32690_m4_spixf_nor_sfdp_runtime.conf
+      - DTC_OVERLAY_FILE=boards/apard32690_max32690_m4_spixf_nor.overlay
+    integration_platforms:
+      - apard32690/max32690/m4
   drivers.flash.common.nrf_qspi_nor.size_in_bytes:
     platform_allow: nrf52840dk/nrf52840
     extra_args:
@@ -45,7 +57,6 @@ tests:
   drivers.flash.common.no_explicit_erase:
     platform_allow:
       - nrf54l15dk/nrf54l05/cpuapp
-      - nrf54l09pdk/nrf54l09/cpuapp
       - nrf54l15dk/nrf54l10/cpuapp
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
@@ -106,12 +117,14 @@ tests:
     platform_allow:
       - xg24_rb4187c
       - xg29_rb4412a
+      - bg29_rb4420a
     extra_configs:
       - CONFIG_DMA=y
   drivers.flash.common.silabs.dma.lpwrite:
     platform_allow:
       - xg24_rb4187c
       - xg29_rb4412a
+      - bg29_rb4420a
     extra_configs:
       - CONFIG_DMA=y
     extra_args:
@@ -120,6 +133,7 @@ tests:
     platform_allow:
       - xg24_rb4187c
       - xg29_rb4412a
+      - bg29_rb4420a
     extra_configs:
       - CONFIG_DMA=y
       - CONFIG_SOC_FLASH_SILABS_S2_DMA_READ=y
@@ -142,6 +156,8 @@ tests:
       - nrf5340dk/nrf5340/cpuapp
   drivers.flash.common.disable_spi_nor:
     filter: dt_compat_enabled("soc-nv-flash") and dt_compat_enabled("jedec,spi-nor")
+    platform_exclude:
+      - beagleconnect_freedom/cc1352p7
     extra_args:
       - CONFIG_SPI_NOR=n
   drivers.flash.common.ra_ospi_b_nor:
