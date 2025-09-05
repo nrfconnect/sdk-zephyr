@@ -349,11 +349,11 @@ zephyr_udc0: &usbhs {
 
 / {
 	soc {
-		/* run-time common S2RAM cpu context RAM */
-		pm_s2ram: cpuapp_s2ram@22007fe0  {
+		/* run-time common mcuboot S2RAM support section */
+		mcuboot_s2ram: cpuapp_s2ram@22007fe0  {
 			compatible = "zephyr,memory-region", "mmio-sram";
 			reg = <0x22007fe0 32>;
-			zephyr,memory-region = "pm_s2ram_context";
+			zephyr,memory-region = "mcuboot_s2ram_context";
 		};
 	};
 };
