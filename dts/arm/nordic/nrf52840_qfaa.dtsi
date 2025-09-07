@@ -19,7 +19,6 @@
 	soc {
 		compatible = "simple-bus";
 	};
-
 };
 
 /delete-node/ &usbd;
