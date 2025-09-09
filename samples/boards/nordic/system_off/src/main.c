@@ -74,14 +74,24 @@ int main(void)
 		return 0;
 	}
 
-	if (nrf_gpio_pin_latch_get(nrf_pin_sw1)) {
-		nrf_gpio_pin_latch_clear(nrf_pin_sw1);
-		do_poweroff = false;
-	}
+	/* TODO: this is always set and locks entering power off after gpio wakeup */
+	// if (nrf_gpio_pin_latch_get(nrf_pin_sw1)) {
+	// 	nrf_gpio_pin_latch_clear(nrf_pin_sw1);
+	// 	do_poweroff = false;
+	// }
 
 	printf("\n%s system off demo\n", CONFIG_BOARD);
 	hwinfo_get_reset_cause(&reset_cause);
 	rc = print_reset_cause(reset_cause);
+
+#if defined(CONFIG_SOC_NRF54H20_CPUAPP)
+/* Temporary set gpio default if sense is set, prevent 300uA additional current after wakeup */
+	for (int i = 0; i < 12; i++) {
+		if (nrf_gpio_pin_sense_get(i) != GPIO_PIN_CNF_SENSE_Disabled) {
+			nrf_gpio_cfg_default(i);
+		}
+	}
+#endif
 
 	if (rc < 0) {
 		printf("Reset cause not supported.\n");
@@ -109,6 +119,9 @@ int main(void)
 	} else {
 		printf("Retained data not supported\n");
 	}
+
+
+	k_sleep(K_MSEC(4000));
 
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
 	int err = z_nrf_grtc_wakeup_prepare(DEEP_SLEEP_TIME_S * USEC_PER_SEC);
@@ -168,7 +181,7 @@ int main(void)
 		retained_update();
 	}
 
-	k_sleep(K_MSEC(4000));
+
 	if (do_poweroff) {
 #if CONFIG_SOC_NRF54H20_CPUAPP
 		/* Local RAM0 (TCM) is currently not used so retention can be disabled. */

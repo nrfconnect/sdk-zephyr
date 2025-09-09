@@ -364,7 +364,8 @@ uint64_t z_nrf_grtc_timer_startup_value_get(void)
 	return grtc_start_value;
 }
 
-#if defined(CONFIG_POWEROFF) && defined(CONFIG_NRF_GRTC_START_SYSCOUNTER)
+#if defined(CONFIG_POWEROFF)
+#if defined(CONFIG_NRF_GRTC_START_SYSCOUNTER)
 int z_nrf_grtc_wakeup_prepare(uint64_t wake_time_us)
 {
 	nrfx_err_t err_code;
@@ -426,6 +427,91 @@ int z_nrf_grtc_wakeup_prepare(uint64_t wake_time_us)
 	k_spin_unlock(&lock, key);
 	return 0;
 }
+#else
+int z_nrf_grtc_wakeup_prepare(uint64_t wake_time_us)
+{
+	//nrfx_err_t err_code;
+	//static uint8_t systemoff_channel;
+	//uint64_t now = counter();
+	//nrfx_grtc_sleep_config_t sleep_cfg;
+	/* Minimum time that ensures valid execution of system-off procedure. */
+	//uint32_t minimum_latency_us;
+	uint32_t chan;
+	//int ret;
+
+	// nrfx_grtc_sleep_configuration_get(&sleep_cfg);
+	// minimum_latency_us =
+	// 	(sleep_cfg.waketime + sleep_cfg.timeout) * USEC_PER_SEC / LFCLK_FREQUENCY_HZ +
+	// 	CONFIG_NRF_GRTC_SYSCOUNTER_SLEEP_MINIMUM_LATENCY;
+	// sleep_cfg.auto_mode = false;
+	// nrfx_grtc_sleep_configure(&sleep_cfg);
+
+	// if (minimum_latency_us > wake_time_us) {
+	// 	return -EINVAL;
+	// }
+
+	//k_spinlock_key_t key = k_spin_lock(&lock);
+
+	// err_code = nrfx_grtc_channel_alloc(&systemoff_channel);
+	// if (err_code != NRFX_SUCCESS) {
+	// 	k_spin_unlock(&lock, key);
+	// 	return -ENOMEM;
+	// }
+	//(void)nrfx_grtc_syscounter_cc_int_disable(systemoff_channel);
+	// ret = compare_set(systemoff_channel,
+	// 		  now + wake_time_us * sys_clock_hw_cycles_per_sec() / USEC_PER_SEC, NULL,
+	// 		  NULL);
+	// if (ret < 0) {
+	// 	k_spin_unlock(&lock, key);
+	// 	return ret;
+	// }
+	// for (uint32_t grtc_chan_mask = NRFX_GRTC_CONFIG_ALLOWED_CC_CHANNELS_MASK;
+	for (uint32_t grtc_chan_mask = NRFX_GRTC_CONFIG_ALLOWED_CC_CHANNELS_MASK;
+	     grtc_chan_mask > 0; grtc_chan_mask &= ~BIT(chan)) {
+		/* Clear all GRTC channels except the systemoff_channel. */
+		chan = u32_count_trailing_zeros(grtc_chan_mask);
+		// if (chan != systemoff_channel) {
+		nrfx_grtc_syscounter_cc_disable(chan);
+		//}
+	}
+#if 0
+#if defined(CONFIG_SOC_NRF54H20_CPUAPP)
+	for (uint32_t grtc_chan_mask = 0x70;
+	     grtc_chan_mask > 0; grtc_chan_mask &= ~BIT(chan)) {
+		/* Clear all GRTC channels except the systemoff_channel. */
+		chan = u32_count_trailing_zeros(grtc_chan_mask);
+		// if (chan != systemoff_channel) {
+			nrfx_grtc_syscounter_cc_disable(chan);
+		// }
+	}
+#endif
+#if defined(CONFIG_SOC_NRF54H20_CPURAD)
+	//for (uint32_t grtc_chan_mask = NRFX_GRTC_CONFIG_ALLOWED_CC_CHANNELS_MASK;
+	for (uint32_t grtc_chan_mask = 0xFF80;
+	     grtc_chan_mask > 0; grtc_chan_mask &= ~BIT(chan)) {
+		/* Clear all GRTC channels except the systemoff_channel. */
+		chan = u32_count_trailing_zeros(grtc_chan_mask);
+		//if (chan != systemoff_channel) {
+			nrfx_grtc_syscounter_cc_disable(chan);
+		//}
+	}
+#endif
+#endif
+	// /* Make sure that wake_time_us was not triggered yet. */
+	// if (nrfx_grtc_syscounter_compare_event_check(systemoff_channel)) {
+	// 	k_spin_unlock(&lock, key);
+	// 	return -EINVAL;
+	// }
+
+	// /* This mechanism ensures that stored CC value is latched. */
+	//uint32_t wait_time =
+	//	nrfy_grtc_timeout_get(NRF_GRTC) * CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC / 32768 +
+	//	MAX_CC_LATCH_WAIT_TIME_US;
+	k_busy_wait(1000);
+	// k_spin_unlock(&lock, key);
+	return 0;
+}
+#endif /* CONFIG_NRF_GRTC_START_SYSCOUNTER */
 #endif /* CONFIG_POWEROFF */
 
 uint32_t sys_clock_cycle_get_32(void)
