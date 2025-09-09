@@ -9,3 +9,11 @@ config NRF_PERIPHCONF_SECTION
 	help
 	  Include static global domain peripheral initialization values from the
 	  build in a dedicated section in the devnull region.
+
+config NRF_HALTIUM_GENERATE_PERIPHCONF_ENTRIES
+	bool "Generate PERIPHCONF entries source file"
+	default y if SOC_NRF54H20_CPUAPP || SOC_NRF54H20_CPURAD
+	depends on NRF_PERIPHCONF_SECTION
+	help
+	  Generate a C file containing PERIPHCONF entries based on the
+	  device configuration in the devicetree.
