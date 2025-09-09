@@ -11,6 +11,7 @@
 #include <hal/nrf_resetinfo.h>
 #include <hal/nrf_memconf.h>
 #include <zephyr/cache.h>
+#include <zephyr/sys/reboot.h>
 #include <power.h>
 #include <soc_lrcconf.h>
 #include "soc.h"
@@ -87,7 +88,11 @@ void nrf_poweroff(void)
 	__set_BASEPRI(0);
 	__ISB();
 	__DSB();
+	__NOP();
+	__NOP();
 	__WFI();
+
+	sys_reboot(SYS_REBOOT_COLD);
 
 	CODE_UNREACHABLE;
 }

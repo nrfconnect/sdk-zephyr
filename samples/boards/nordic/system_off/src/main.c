@@ -61,8 +61,14 @@ int print_reset_cause(uint32_t reset_cause)
 	return 0;
 }
 
+#include "ppr_prl.h"
+
 int main(void)
 {
+	//k_msleep(3000);
+	//ppr_prl_configure(4096, 16000);
+	//ppr_prl_start();
+	//k_sleep(K_FOREVER);
 	int rc;
 	uint32_t reset_cause;
 	const struct device *const cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
@@ -109,7 +115,8 @@ int main(void)
 	} else {
 		printf("Retained data not supported\n");
 	}
-
+	k_sleep(K_MSEC(4000));
+	//ppr_prl_start();
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
 	int err = z_nrf_grtc_wakeup_prepare(DEEP_SLEEP_TIME_S * USEC_PER_SEC);
 
@@ -168,7 +175,7 @@ int main(void)
 		retained_update();
 	}
 
-	k_sleep(K_MSEC(4000));
+
 	if (do_poweroff) {
 #if CONFIG_SOC_NRF54H20_CPUAPP
 		/* Local RAM0 (TCM) is currently not used so retention can be disabled. */
