@@ -11,6 +11,7 @@
 
 __weak void nrf_802154_assert_handler(void)
 {
+	while(1) {}
 #ifdef CONFIG_USERSPACE
 	/* User threads aren't allowed to induce kernel panics; generate
 	 * an oops instead.
