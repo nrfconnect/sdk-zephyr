@@ -52,6 +52,11 @@ struct dmm_heap {
 	size_t blk_size;
 	const struct dmm_region *region;
 	sys_bitarray_t bitarray;
+#ifdef CONFIG_DMM_STATS
+	atomic_t curr_use;
+	uint32_t max_use;
+	struct k_spinlock lock;
+#endif
 };
 
 static const struct dmm_region dmm_regions[] = {
@@ -128,6 +133,15 @@ static void *dmm_buffer_alloc(struct dmm_heap *dh, size_t length)
 		return NULL;
 	}
 
+#ifdef CONFIG_DMM_STATS
+	k_spinlock_key_t key;
+
+	key = k_spin_lock(&dh->lock);
+	dh->curr_use += num_bits;
+	dh->max_use = MAX(dh->max_use, dh->curr_use);
+	k_spin_unlock(&dh->lock, key);
+#endif
+
 	if (num_bits > 1) {
 		size_t idx = off / 32;
 		size_t woff = off - 32 * idx;
@@ -152,6 +166,10 @@ static void dmm_buffer_free(struct dmm_heap *dh, void *buffer)
 		mask = BIT_MASK(num_bits - 1) << (woff + 1);
 		atomic_and(&dh->tail_mask[idx], ~mask);
 	}
+
+#ifdef CONFIG_DMM_STATS
+	atomic_sub(&dh->curr_use, num_bits);
+#endif
 
 	int rv = sys_bitarray_free(&dh->bitarray, num_bits, offset);
 
@@ -339,6 +357,34 @@ int dmm_buffer_in_release(void *region, void *user_buffer, size_t user_length, v
 	/* If no, no action is needed */
 
 	return 0;
+}
+
+int dmm_stats_get(void *region, uintptr_t *start_addr, uint32_t *curr_use, uint32_t *max_use)
+{
+#ifdef CONFIG_DMM_STATS
+	struct dmm_heap *dh;
+
+	dh = dmm_heap_find(region);
+	if (dh == NULL) {
+		return -EINVAL;
+	}
+
+	if (start_addr) {
+		*start_addr = dh->ptr;
+	}
+
+	if (curr_use) {
+		*curr_use = (100 * dh->curr_use) / dh->bitarray.num_bits;
+	}
+
+	if (max_use) {
+		*max_use = (100 * dh->max_use) / dh->bitarray.num_bits;
+	}
+
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
 }
 
 int dmm_init(void)
