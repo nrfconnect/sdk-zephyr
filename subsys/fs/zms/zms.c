@@ -1169,6 +1169,11 @@ int zms_clear(struct zms_fs *fs)
 	int rc;
 	uint64_t addr;
 
+	if (!fs) {
+		LOG_ERR("Invalid fs");
+		return -EINVAL;
+	}
+
 	if (!fs->ready) {
 		LOG_ERR("zms not initialized");
 		return -EACCES;
@@ -1476,6 +1481,11 @@ int zms_mount(struct zms_fs *fs)
 	struct flash_pages_info info;
 	size_t write_block_size;
 
+	if (!fs) {
+		LOG_ERR("Invalid fs");
+		return -EINVAL;
+	}
+
 	k_mutex_init(&fs->zms_lock);
 
 	fs->flash_parameters = flash_get_parameters(fs->flash_device);
@@ -1545,6 +1555,11 @@ ssize_t zms_write(struct zms_fs *fs, zms_id_t id, const void *data, size_t len)
 	size_t data_size;
 	uint32_t gc_count;
 	uint32_t required_space = 0U; /* no space, appropriate for delete ate */
+
+	if (!fs) {
+		LOG_ERR("Invalid fs");
+		return -EINVAL;
+	}
 
 	if (!fs->ready) {
 		LOG_ERR("zms not initialized");
@@ -1696,6 +1711,10 @@ ssize_t zms_read_hist(struct zms_fs *fs, zms_id_t id, void *data, size_t len, ui
 #ifdef CONFIG_ZMS_DATA_CRC
 	uint32_t computed_data_crc;
 #endif
+	if (!fs) {
+		LOG_ERR("Invalid fs");
+		return -EINVAL;
+	}
 
 	if (!fs->ready) {
 		LOG_ERR("zms not initialized");
@@ -1820,6 +1839,12 @@ ssize_t zms_calc_free_space(struct zms_fs *fs)
 	uint64_t data_wra = 0U;
 	uint8_t current_cycle;
 	ssize_t free_space = 0;
+
+	if (!fs) {
+		LOG_ERR("Invalid fs");
+		return -EINVAL;
+	}
+
 	const uint32_t second_to_last_offset = (2 * fs->ate_size);
 
 	if (!fs->ready) {
@@ -1918,8 +1943,13 @@ ssize_t zms_calc_free_space(struct zms_fs *fs)
 	return free_space;
 }
 
-size_t zms_active_sector_free_space(struct zms_fs *fs)
+ssize_t zms_active_sector_free_space(struct zms_fs *fs)
 {
+	if (!fs) {
+		LOG_ERR("Invalid fs");
+		return -EINVAL;
+	}
+
 	if (!fs->ready) {
 		LOG_ERR("ZMS not initialized");
 		return -EACCES;
@@ -1931,6 +1961,11 @@ size_t zms_active_sector_free_space(struct zms_fs *fs)
 int zms_sector_use_next(struct zms_fs *fs)
 {
 	int ret;
+
+	if (!fs) {
+		LOG_ERR("Invalid fs");
+		return -EINVAL;
+	}
 
 	if (!fs->ready) {
 		LOG_ERR("ZMS not initialized");

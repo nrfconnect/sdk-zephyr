@@ -69,9 +69,11 @@ config LOG_RATELIMIT_INTERVAL_MS
 	  This is used by the convenience macros LOG_*_RATELIMIT
 	  when no explicit rate is provided. Can be overridden per call
 	  using LOG_*_RATELIMIT_RATE macros.
+
 endif # LOG_RATELIMIT
 
 if !LOG_RATELIMIT
+
 choice LOG_RATELIMIT_FALLBACK
 	prompt "Fallback behavior for rate-limited logging macros"
 	default LOG_RATELIMIT_FALLBACK_DROP
@@ -97,6 +99,7 @@ config LOG_RATELIMIT_FALLBACK_DROP
 	  All log prints using rate-limited macros are dropped (no output).
 
 endchoice
+
 endif # !LOG_RATELIMIT
 
 endif # LOG

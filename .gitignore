@@ -55,6 +55,7 @@ doc/doc.warnings
 hide-defaults-note
 venv
 .venv
+.envrc
 .DS_Store
 .clangd
 new.info
@@ -110,3 +111,4 @@ SysbuildKconfigBasic.txt
 SysbuildKconfigBasicNoModules.txt
 TextEncoding.txt
 YAMLLint.txt
+ZephyrModuleFile.txt

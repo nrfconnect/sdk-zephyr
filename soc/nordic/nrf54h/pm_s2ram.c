@@ -271,5 +271,5 @@ bool pm_s2ram_mark_check_and_clear(void)
 	restore_valid = nrf_resetinfo_restore_valid_check(NRF_RESETINFO);
 	nrf_resetinfo_restore_valid_set(NRF_RESETINFO, false);
 
-	return restore_valid ? true : false;
+	return restore_valid;
 }
