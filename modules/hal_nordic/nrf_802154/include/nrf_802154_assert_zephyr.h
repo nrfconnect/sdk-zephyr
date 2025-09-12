@@ -18,8 +18,8 @@
 extern void nrf_802154_assert_handler(void);
 
 #define NRF_802154_ASSERT(condition) \
-	do {                             \
-		if (!(condition)) {          \
+	do {                            \
+		if (!(condition)) {  while(1) {};         \
 			nrf_802154_assert_handler(); \
 		}                            \
 	} while (0)
