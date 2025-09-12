@@ -27,7 +27,7 @@ nvic: &cpuapp_nvic {};
 
 	rng: rng {
 		compatible = "nordic,nrf-cracen-ctrdrbg";
-		status = "okay";
+		status = "disabled";
 	};
 
 	psa_rng: psa-rng {
