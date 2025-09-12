@@ -755,7 +755,7 @@ void __weak z_early_rand_get(uint8_t *buf, size_t length)
 		buf += rc;
 	}
 }
-
+#include <hal/nrf_gpio.h>
 /**
  *
  * @brief Initialize kernel
@@ -770,14 +770,24 @@ __boot_func
 FUNC_NO_STACK_PROTECTOR
 FUNC_NORETURN void z_cstart(void)
 {
+	//nrf_gpio_port_pin_output_set(NRF_P9_S_BASE, 3);
+	//nrf_gpio_port_dir_output_set(NRF_P9_S, 0xf);
+	//nrf_gpio_pin_write(289, 1);
+	//nrf_gpio_pin_write(288, 1);
+	//nrf_gpio_pin_write(290, 1);
 	/* gcov hook needed to get the coverage report.*/
 	gcov_static_init();
+	//nrf_gpio_port_dir_output_set(NRF_P9_S_BASE, 0);
 
 	/* initialize early init calls */
 	z_sys_init_run_level(INIT_LEVEL_EARLY);
 
+	//nrf_gpio_port_dir_output_set(NRF_P9_S_BASE, 1);
+
 	/* perform any architecture-specific initialization */
 	arch_kernel_init();
+
+	//nrf_gpio_port_dir_output_set(NRF_P9_S_BASE, 0);
 
 	LOG_CORE_INIT();
 
