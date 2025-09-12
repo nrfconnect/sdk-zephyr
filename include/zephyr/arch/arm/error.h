@@ -35,6 +35,7 @@ extern "C" {
  */
 #define ARCH_EXCEPT(reason_p) \
 do {\
+	while(1) {} \
 	arch_irq_unlock(0); \
 	__asm__ volatile( \
 		"mov r0, %[_reason]\n" \
