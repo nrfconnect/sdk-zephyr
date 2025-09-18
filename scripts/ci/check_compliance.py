@@ -768,6 +768,61 @@ class KconfigCheck(ComplianceTest):
             # Clean up the temporary directory
             shutil.rmtree(kconfiglib_dir)
 
+    def module_kconfigs(self, regex):
+        manifest = Manifest.from_file()
+        kconfigs = ""
+
+        # Use hard coded paths for Zephyr for tests, samples and ext. module root
+        tmp_output = git("grep", "-I", "-h", "--perl-regexp", regex, "--", ":tests", ":samples",
+                         ":modules", cwd=ZEPHYR_BASE, ignore_non_zero=True)
+
+        if len(tmp_output) > 0:
+            kconfigs += tmp_output + "\n"
+
+        for project in manifest.get_projects([]):
+            if not manifest.is_active(project):
+                continue
+
+            if not project.is_cloned():
+                continue
+
+            module_path = PurePath(project.abspath)
+            module_yml = module_path.joinpath('zephyr/module.yml')
+
+            if not Path(module_yml).is_file():
+                module_yml = module_path.joinpath('zephyr/module.yaml')
+
+            if Path(module_yml).is_file():
+                dirs = []
+
+                with Path(module_yml).open('r', encoding='utf-8') as f:
+                    meta = yaml.load(f.read(), Loader=SafeLoader)
+
+                for folder_type in ['samples', 'tests']:
+                    if folder_type in meta:
+                        for path_ext in meta[folder_type]:
+                            path_full = module_path.joinpath(path_ext)
+
+                            if Path(path_full).is_dir():
+                                dirs.append(":" + path_ext)
+
+                # Add ext. module root, if one is defined
+                if 'build' in meta and 'settings' in meta['build'] and \
+                     'module_ext_root' in meta['build']['settings']:
+                    path_full = module_path.joinpath(meta['build']['settings']['module_ext_root'])
+
+                    if Path(path_full).is_dir():
+                        dirs.append(":" + meta['build']['settings']['module_ext_root'])
+
+                if len(dirs) > 0:
+                    tmp_output = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
+                                     *dirs, cwd=module_path, ignore_non_zero=True)
+
+                    if len(tmp_output) > 0:
+                        kconfigs += tmp_output + "\n"
+
+        return kconfigs
+
     def get_logging_syms(self, kconf):
         # Returns a set() with the names of the Kconfig symbols generated with
         # logging template in samples/tests folders. The Kconfig symbols doesn't
@@ -788,9 +843,8 @@ class KconfigCheck(ComplianceTest):
         # Warning: Needs to work with both --perl-regexp and the 're' module.
         regex = r"^\s*(?:module\s*=\s*)([A-Z0-9_]+)\s*(?:#|$)"
 
-        # Grep samples/ and tests/ for symbol definitions
-        grep_stdout = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
-                          ":samples", ":tests", cwd=ZEPHYR_BASE)
+        # Grep samples/ and tests/ for symbol definitions in all modules
+        grep_stdout = self.module_kconfigs(regex)
 
         names = re.findall(regex, grep_stdout, re.MULTILINE)
 
@@ -937,9 +991,8 @@ Found disallowed Kconfig symbol in SoC Kconfig files: {sym_name:35}
         # (?:...) is a non-capturing group.
         regex = r"^\s*(?:menu)?config\s*([A-Z0-9_]+)\s*(?:#|$)"
 
-        # Grep samples/ and tests/ for symbol definitions
-        grep_stdout = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
-                          ":samples", ":tests", cwd=ZEPHYR_BASE)
+        # Grep samples/ and tests/ for symbol definitions in all modules
+        grep_stdout = self.module_kconfigs(regex)
 
         # Generate combined list of configs and choices from the main Kconfig tree.
         kconf_syms = kconf.unique_defined_syms + kconf.unique_choices
@@ -1121,6 +1174,9 @@ Missing SoC names or CONFIG_SOC vs soc.yml out of sync:
         grep_stdout = git("grep", "--line-number", "-I", "--null",
                           "--perl-regexp", regex, "--", ":!/doc/releases",
                           ":!/doc/security/vulnerabilities.rst",
+                          ":!/doc/nrf/releases_and_maturity",
+                          ":!/doc/nrf/libraries/bin/lwm2m_carrier/CHANGELOG.rst",
+                          ":!/doc/nrf/app_dev/device_guides/nrf70/wifi_advanced_security_modes.rst",
                           cwd=GIT_TOP)
 
         # splitlines() supports various line terminators
@@ -1303,6 +1359,81 @@ flagged.
                                  # documentation
         "ZTEST_FAIL_TEST_",  # regex in tests/ztest/fail/CMakeLists.txt
         # zephyr-keep-sorted-stop
+
+        # NCS-specific allow list
+        # zephyr-keep-sorted-start re(^\s+")
+        "APPLICATION", # Example documentation
+        "BAR", # Example documentation
+        "BOOT_IMAGE_ACCESS_HOOK", # MCUboot setting used in documentation
+        "BT_ADV_PROV_", # Documentation
+        "BT_CTLR_TX_PWR_MINUS", # CHIP documentation
+        "BT_CTLR_TX_PWR_MINUS_", # CHIP documentation
+        "BT_CTLR_TX_PWR_PLUS", # CHIP documentation
+        "BT_CTLR_TX_PWR_PLUS_", # CHIP documentation
+        "BT_SDC_ADDITIONAL_MEMORY", # From dragoon repo
+        "CHANNEL", # NRF desktop
+        "CHANNEL_FETCHED_DATA_MAX_SIZE", # NRF desktop
+        "CHANNEL_TRANSPORT_DISABLED", # NRF desktop
+        "CHANNEL_TRANSPORT_IDLE", # NRF desktop
+        "CHANNEL_TRANSPORT_RSP_READY", # NRF desktop
+        "CHANNEL_TRANSPORT_WAIT_RSP", # NRF desktop
+        "CHIP_DFU_OVER_BT_SMP", # CHIP module
+        "CHIP_LAST_FABRIC_REMOVED_ACTION_DELAY", # CHIP module
+        "CHIP_LAST_FABRIC_REMOVED_ERASE_AND_PAIRING_START", # CHIP module
+        "CHIP_LAST_FABRIC_REMOVED_ERASE_AND_REBOOT", # CHIP module
+        "CHIP_LAST_FABRIC_REMOVED_ERASE_ONLY", # CHIP module
+        "CHIP_LAST_FABRIC_REMOVED_NONE", # CHIP module
+        "CHIP_MEMORY_PROFILING", # CHIP module
+        "CHIP_NUS", # CHIP module
+        "CHIP_NUS_FIXED_PASSKEY", # CHIP module
+        "CHIP_NUS_MAX_COMMANDS", # CHIP module
+        "CHIP_NUS_MAX_COMMAND_LEN", # CHIP module
+        "CHIP_QSPI_NOR", # CHIP module
+        "CHIP_SPI_NOR", # CHIP module
+        "CHIP_WIFI", # CHIP module
+        "DESKTOP_DVFS_STATE_", # NRF desktop
+        "DESKTOP_DVFS_STATE_CONFIG_CHANNEL_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_INITIALIZING_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_LLPM_CONNECTED_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_SMP_TRANSFER_ENABLE", # NRF desktop
+        "DESKTOP_DVFS_STATE_USB_CONNECTED_ENABLE", # NRF desktop
+        "FACTORY_DATA_CUSTOM_BACKEND", # CHIP module
+        "MEMFAULT_", # Documentation
+        "MEMFAULT_NCS", # Documentation
+        "MEMFAULT_NCS_", # Documentation
+        "MY_CUSTOM_CONFIG", # Example documentation
+        "MY_EXT_API_ENABLED", # Example documentation
+        "MY_EXT_API_REQUIRED", # Example documentation
+        "NCS_IS_VARIANT_IMAGE", # Build system defined symbol
+        "NCS_MCUBOOT_UUID_CID_IMAGE_0_VALUE", # MCUboot
+        "NCS_MCUBOOT_UUID_CID_IMAGE_1_VALUE", # MCUboot
+        "NCS_VARIANT_MERGE_KCONFIG", # Build system defined symbol
+        "NRF_MODEM_LIB_TRACE_BACKEND_MY_TRACE_BACKEND", # Documentation
+        "PM_PARTITION_SIZE", # Used in search link
+        "PM_PARTITION_SIZE_", # Used in documentation
+        "PM_PARTITION_SIZE_MEMFAULT_STORAGE", # Created by Kconfig template
+        "PM_PARTITION_SIZE_SETTINGS", # Created by Kconfig template
+        "SOC_NRF54H20_CPUSEC", # Internal
+        "SSF_SERVER_PSA_CRYPTO_SERVICE_ENABLED", # Internal
+        "STATUS_", # NRF desktop
+        "STATUS_COUNT", # NRF desktop
+        "STATUS_DISCONNECTED", # NRF desktop
+        "STATUS_FETCH", # NRF desktop
+        "STATUS_GET_BOARD_NAME", # NRF desktop
+        "STATUS_GET_HWID", # NRF desktop
+        "STATUS_GET_MAX_MOD_ID", # NRF desktop
+        "STATUS_GET_PEER", # NRF desktop
+        "STATUS_GET_PEERS_CACHE", # NRF desktop
+        "STATUS_INDEX_PEERS", # NRF desktop
+        "STATUS_LIST", # NRF desktop
+        "STATUS_PENDING", # NRF desktop
+        "STATUS_POS", # NRF desktop
+        "STATUS_REJECT", # NRF desktop
+        "STATUS_SET", # NRF desktop
+        "STATUS_SUCCESS", # NRF desktop
+        "STATUS_TIMEOUT", # NRF desktop
+        "STATUS_WRITE_FAIL", # NRF desktop
+        # zephyr-keep-sorted-stop
     }
 
 
@@ -1388,11 +1519,13 @@ class SysbuildKconfigCheck(KconfigCheck):
         "COMP_DATA_LAYOUT_SINGLE", # Used by test
         "DTM_NO_DFE", # Used by DTM application
         "DTM_TRANSPORT_HCI", # Used by DTM application
+        "FIRMWARE_LOADER_IMAGE_ABC", # Used in documentation
         "INCLUDE_REMOTE_IMAGE", # Used by machine learning application
         "MCUBOOT_FPROTECT_ALLOW_COMBINED_REGIONS", # Used in migration documentation
         "ML_APP_INCLUDE_REMOTE_IMAGE", # Used by machine learning application
         "ML_APP_REMOTE_BOARD", # Used by machine learning application
         "MY_APP_IMAGE_ABC", # Used in documentation
+        "NETCORE_ABC", # Used in documentation
         "REMOTE_GLOBAL_DOMAIN_CLOCK_FREQUENCY_SWITCHING", # Used in tests
         "SOC_FLASH_NRF_RADIO_SYNC_RPC", # Used in documentation
         "SUIT_ENVELOPE_", # Used by jinja
