@@ -262,6 +262,15 @@ config RISCV_GENERIC_TOOLCHAIN
 	  Allow SOCs that have custom extended riscv ISA to still
 	  compile with generic riscv32 toolchain.
 
+config USE_ISR_WRAPPER
+	bool "Use isr_wrapper to handle interrupt and/or exception/fault"
+	default y if GEN_SW_ISR_TABLE
+	default y if MULTITHREADING
+	help
+	  This is helper config to be able to use exception handling
+	  when GEN_SW_ISR_TABLE is not used but multithreading is, which
+	  needs exception handling and thread entry/switch functions.
+
 config GEN_ISR_TABLES
 	default y
 
