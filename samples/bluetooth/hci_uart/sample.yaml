@@ -112,3 +112,14 @@ tests:
     tags:
       - uart
       - bluetooth
+  sample.bluetooth.hci_uart.nrf54lm20a.all:
+    harness: bluetooth
+    platform_allow: nrf54lm20dk/nrf54lm20a/cpuapp
+    integration_platforms:
+      - nrf54lm20dk/nrf54lm20a/cpuapp
+    extra_args:
+      - EXTRA_CONF_FILE=overlay-all-bt_ll_sw_split.conf
+      - DTC_OVERLAY_FILE=./boards/nrf54lm20dk_nrf54lm20a_cpuapp_df.overlay
+    tags:
+      - uart
+      - bluetooth

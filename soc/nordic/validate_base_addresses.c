@@ -89,6 +89,10 @@
 #endif
 #endif
 
+#if !defined(NRF_GPIOTE0) && defined(NRF_RADIOCORE_GPIOTE)
+#define NRF_GPIOTE0 NRF_RADIOCORE_GPIOTE
+#endif
+
 /**
  * Check that a devicetree node's "reg" base address matches the
  * correct value from the MDK.
@@ -271,6 +275,7 @@ CHECK_SPI_REG(spi2, 2);
 CHECK_DT_REG(spi3, NRF_SPIM3);
 CHECK_DT_REG(spi4, NRF_SPIM4);
 CHECK_DT_REG(spi00, NRF_SPIM00);
+CHECK_DT_REG(spi01, NRF_SPIM01);
 CHECK_DT_REG(spi20, NRF_SPIM20);
 CHECK_DT_REG(spi21, NRF_SPIM21);
 CHECK_DT_REG(spi22, NRF_SPIM22);

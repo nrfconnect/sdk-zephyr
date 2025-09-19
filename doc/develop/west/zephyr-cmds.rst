@@ -75,7 +75,7 @@ See :zephyr_file:`share/zephyr-package/cmake` for details.
 Software bill of materials: ``west spdx``
 *****************************************
 
-This command generates SPDX 2.3 tag-value documents, creating relationships
+This command generates SPDX 2.2 or 2.3 tag-value documents, creating relationships
 from source files to the corresponding generated build files.
 ``SPDX-License-Identifier`` comments in source files are scanned and filled
 into the SPDX documents.
@@ -104,6 +104,12 @@ To use this command:
    .. code-block:: bash
 
       west spdx -d BUILD_DIR
+
+   By default, this generates SPDX 2.3 documents. To generate SPDX 2.2 documents instead:
+
+   .. code-block:: bash
+
+      west spdx -d BUILD_DIR --spdx-version 2.2
 
 .. note::
 
@@ -151,6 +157,10 @@ source files that are compiled to generate the built library files.
 - ``-s SPDX_DIR``: specifies an alternate directory where the SPDX documents
   should be written instead of :file:`BUILD_DIR/spdx/`.
 
+- ``--spdx-version {2.2,2.3}``: specifies which SPDX specification version to use.
+  Defaults to ``2.3``. SPDX 2.3 includes additional fields like ``PrimaryPackagePurpose``
+  that are not available in SPDX 2.2.
+
 - ``--analyze-includes``: in addition to recording the compiled source code
   files (e.g. ``.c``, ``.S``) in the bills-of-materials, also attempt to
   determine the specific header files that are included for each ``.c`` file.
@@ -161,6 +171,10 @@ source files that are compiled to generate the built library files.
 
 - ``--include-sdk``: with ``--analyze-includes``, also create a fourth SPDX
   document, :file:`sdk.spdx`, which lists header files included from the SDK.
+
+.. warning::
+
+   The generation of SBOM documents for the ``native_sim`` platform is currently not supported.
 
 .. _SPDX specification clause 6:
    https://spdx.github.io/spdx-spec/v2.2.2/document-creation-information/
@@ -199,6 +213,12 @@ As does deleting them::
 Additionally the tool allows you to specify the modules you want to list,
 fetch or clean blobs for by typing the module names as a command-line
 parameter.
+
+The argument ``--allow-regex`` can be passed ``west blobs fetch`` to restrict
+the specific blobs that are fetched, by passing a regular expression::
+
+  # For example, only download esp32 blobs, skip the other variants
+  west blobs fetch hal_espressif --allow-regex 'lib/esp32/.*'
 
 .. _west-twister:
 

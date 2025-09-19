@@ -38,8 +38,16 @@ extern "C" {
 enum dns_query_type {
 	/** IPv4 query */
 	DNS_QUERY_TYPE_A = 1,
+	/** Canonical name query */
+	DNS_QUERY_TYPE_CNAME = 5,
+	/** Pointer query */
+	DNS_QUERY_TYPE_PTR = 12,
+	/** Text query */
+	DNS_QUERY_TYPE_TXT = 16,
 	/** IPv6 query */
-	DNS_QUERY_TYPE_AAAA = 28
+	DNS_QUERY_TYPE_AAAA = 28,
+	/** Service location query */
+	DNS_QUERY_TYPE_SRV = 33
 };
 
 /**
@@ -61,16 +69,29 @@ enum dns_server_source {
 };
 
 /** Max size of the resolved name. */
-#ifndef DNS_MAX_NAME_SIZE
+#if defined(CONFIG_DNS_RESOLVER_MAX_NAME_LEN)
+#define DNS_MAX_NAME_SIZE CONFIG_DNS_RESOLVER_MAX_NAME_LEN
+#else
 #define DNS_MAX_NAME_SIZE 20
-#endif
+#endif /* CONFIG_DNS_RESOLVER_MAX_NAME_LEN */
+
+/** Max size of the resolved txt record. */
+#if defined(CONFIG_DNS_RESOLVER_MAX_TEXT_LEN)
+#define DNS_MAX_TEXT_SIZE CONFIG_DNS_RESOLVER_MAX_TEXT_LEN
+#else
+#define DNS_MAX_TEXT_SIZE 64
+#endif /* CONFIG_DNS_RESOLVER_MAX_TEXT_LEN */
 
 /** @cond INTERNAL_HIDDEN */
 
 #define DNS_BUF_TIMEOUT K_MSEC(500) /* ms */
 
 /* This value is recommended by RFC 1035 */
-#define DNS_RESOLVER_MAX_BUF_SIZE	512
+#if defined(CONFIG_DNS_RESOLVER_MAX_ANSWER_SIZE)
+#define DNS_RESOLVER_MAX_BUF_SIZE CONFIG_DNS_RESOLVER_MAX_ANSWER_SIZE
+#else
+#define DNS_RESOLVER_MAX_BUF_SIZE 512
+#endif /* CONFIG_DNS_RESOLVER_MAX_ANSWER_SIZE */
 
 /* Make sure that we can compile things even if CONFIG_DNS_RESOLVER
  * is not enabled.
@@ -259,17 +280,56 @@ int dns_dispatcher_unregister(struct dns_socket_dispatcher *ctx);
 /** @endcond */
 
 /**
+ * Enumerate the extensions that are available in the address info
+ */
+enum dns_resolve_extension {
+	DNS_RESOLVE_NONE = 0,
+	DNS_RESOLVE_TXT,
+	DNS_RESOLVE_SRV,
+};
+
+struct dns_resolve_txt {
+	size_t textlen;
+	char   text[DNS_MAX_TEXT_SIZE + 1];
+};
+
+struct dns_resolve_srv {
+	uint16_t priority;
+	uint16_t weight;
+	uint16_t port;
+	size_t   targetlen;
+	char     target[DNS_MAX_NAME_SIZE + 1];
+};
+
+/**
  * Address info struct is passed to callback that gets all the results.
  */
 struct dns_addrinfo {
-	/** IP address information */
-	struct sockaddr ai_addr;
-	/** Length of the ai_addr field */
-	socklen_t       ai_addrlen;
-	/** Address family of the address information */
-	uint8_t         ai_family;
-	/** Canonical name of the address */
-	char            ai_canonname[DNS_MAX_NAME_SIZE + 1];
+	/** Address family of the address information and discriminator */
+	uint8_t ai_family;
+
+	union {
+		struct {
+			/** Length of the ai_addr field or ai_canonname */
+			socklen_t ai_addrlen;
+
+			/* AF_INET or AF_INET6 address info */
+			struct sockaddr ai_addr;
+
+			/** AF_LOCAL Canonical name of the address */
+			char ai_canonname[DNS_MAX_NAME_SIZE + 1];
+		};
+
+		/* AF_UNSPEC extensions */
+		struct {
+			enum dns_resolve_extension ai_extension;
+
+			union {
+				struct dns_resolve_txt ai_txt;
+				struct dns_resolve_srv ai_srv;
+			};
+		};
+	};
 };
 
 /**
@@ -663,6 +723,44 @@ int dns_resolve_name(struct dns_resolve_context *ctx,
 		     dns_resolve_cb_t cb,
 		     void *user_data,
 		     int32_t timeout);
+
+/**
+ * @brief Resolve DNS service.
+ *
+ * @details This function can be used to resolve service records needed in
+ * DNS-SD service discovery.
+ * Note that this is an asynchronous call, the function will return immediately
+ * and the system will call the callback after resolving has finished or a timeout
+ * has occurred.
+ * We might send the query to multiple servers (if there are more than one
+ * server configured), but we only use the result of the first received
+ * response.
+ *
+ * @param ctx DNS context
+ * @param query What the caller wants to resolve.
+ * @param dns_id DNS id is returned to the caller. This is needed if one
+ * wishes to cancel the query. This can be set to NULL if there is no need
+ * to cancel the query.
+ * @param cb Callback to call after the resolving has finished or timeout
+ * has happened.
+ * @param user_data The user data.
+ * @param timeout The timeout value for the query. Possible values:
+ * SYS_FOREVER_MS: the query is tried forever, user needs to cancel it
+ *            manually if it takes too long time to finish
+ * >0: start the query and let the system timeout it after specified ms
+ *
+ * @return 0 if resolving was started ok, < 0 otherwise
+ */
+static inline int dns_resolve_service(struct dns_resolve_context *ctx,
+				      const char *query,
+				      uint16_t *dns_id,
+				      dns_resolve_cb_t cb,
+				      void *user_data,
+				      int32_t timeout)
+{
+	return dns_resolve_name(ctx, query, DNS_QUERY_TYPE_PTR,
+				dns_id, cb, user_data, timeout);
+}
 
 /**
  * @brief Get default DNS context.

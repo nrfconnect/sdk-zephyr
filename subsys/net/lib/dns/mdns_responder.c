@@ -115,8 +115,9 @@ static int setup_dst_addr(int sock, sa_family_t family,
 #define DNS_RESOLVER_BUF_CTR	(DNS_RESOLVER_MIN_BUF + \
 				 CONFIG_MDNS_RESOLVER_ADDITIONAL_BUF_CTR)
 
+#define MDNS_RESOLVER_BUF_SIZE CONFIG_MDNS_RESOLVER_BUF_SIZE
 NET_BUF_POOL_DEFINE(mdns_msg_pool, DNS_RESOLVER_BUF_CTR,
-		    DNS_RESOLVER_MAX_BUF_SIZE, 0, NULL);
+		    MDNS_RESOLVER_BUF_SIZE, 0, NULL);
 
 static void create_ipv6_addr(struct sockaddr_in6 *addr)
 {
@@ -595,7 +596,7 @@ static int dns_read(int sock,
 	int queries;
 	int ret;
 
-	data_len = MIN(len, DNS_RESOLVER_MAX_BUF_SIZE);
+	data_len = MIN(len, MDNS_RESOLVER_BUF_SIZE);
 
 	/* Store the DNS query name into a temporary net_buf, which will be
 	 * eventually used to send a response
@@ -1089,7 +1090,7 @@ static void mdns_addr_event_handler(struct net_mgmt_event_callback *cb,
 			}
 
 			ret = k_work_reschedule_for_queue(&mdns_work_q,
-							  &v4_ctx[i].probe_timer,
+							  &v6_ctx[i].probe_timer,
 							  K_MSEC(probe_delay));
 			if (ret < 0) {
 				NET_DBG("Cannot schedule %s probe work (%d)", "IPv6", ret);
