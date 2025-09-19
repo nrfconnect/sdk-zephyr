@@ -82,7 +82,7 @@ SECTION_SUBSEC_FUNC(TEXT,_reset_section,__start)
 
 #endif /* CONFIG_INIT_ARCH_HW_AT_BOOT */
 
-#if defined(CONFIG_PM_S2RAM)
+#if defined(CONFIG_PM_S2RAM) || defined(CONFIG_PM_S2RAM_RESUME_INTERMEDIARY)
 #if DT_NODE_EXISTS(DT_NODELABEL(pm_s2ram_stack)) &&\
 	DT_NODE_HAS_COMPAT(DT_NODELABEL(pm_s2ram_stack), zephyr_memory_region)
     /* In certain scenarios, the interrupt stack is actually not safe to overwrite.
