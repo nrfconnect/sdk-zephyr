@@ -519,26 +519,62 @@ struct bt_conn_le_cs_fae_table {
 	int8_t *remote_fae_table;
 };
 
-/** Channel sounding main mode */
-enum bt_conn_le_cs_main_mode {
-	/** Mode-1 (RTT) */
-	BT_CONN_LE_CS_MAIN_MODE_1 = BT_HCI_OP_LE_CS_MAIN_MODE_1,
-	/** Mode-2 (PBR) */
-	BT_CONN_LE_CS_MAIN_MODE_2 = BT_HCI_OP_LE_CS_MAIN_MODE_2,
-	/** Mode-3 (RTT and PBR) */
-	BT_CONN_LE_CS_MAIN_MODE_3 = BT_HCI_OP_LE_CS_MAIN_MODE_3,
-};
+/** @brief Extract main mode part from @ref bt_conn_le_cs_mode
+ *
+ * @private
+ *
+ * @param x @ref bt_conn_le_cs_mode value
+ * @retval 1 Matches @ref BT_HCI_OP_LE_CS_MAIN_MODE_1 (0x01)
+ * @retval 2 Matches @ref BT_HCI_OP_LE_CS_MAIN_MODE_2 (0x02)
+ * @retval 3 Matches @ref BT_HCI_OP_LE_CS_MAIN_MODE_3 (0x03)
+ *
+ * @note Returned values match the HCI main mode values.
+ */
+#define BT_CONN_LE_CS_MODE_MAIN_MODE_PART(x) ((x) & 0x3)
 
-/** Channel sounding sub mode */
-enum bt_conn_le_cs_sub_mode {
-	/** Unused */
-	BT_CONN_LE_CS_SUB_MODE_UNUSED = BT_HCI_OP_LE_CS_SUB_MODE_UNUSED,
-	/** Mode-1 (RTT) */
-	BT_CONN_LE_CS_SUB_MODE_1 = BT_HCI_OP_LE_CS_SUB_MODE_1,
-	/** Mode-2 (PBR) */
-	BT_CONN_LE_CS_SUB_MODE_2 = BT_HCI_OP_LE_CS_SUB_MODE_2,
-	/** Mode-3 (RTT and PBR) */
-	BT_CONN_LE_CS_SUB_MODE_3 = BT_HCI_OP_LE_CS_SUB_MODE_3,
+/** @brief Extract sub-mode part from @ref bt_conn_le_cs_mode
+ *
+ * @private
+ *
+ * @param x @ref bt_conn_le_cs_mode value
+ * @retval 0 Internal encoding for @ref BT_HCI_OP_LE_CS_SUB_MODE_UNUSED (0xFF)
+ * @retval 1 Matches @ref BT_HCI_OP_LE_CS_SUB_MODE_1 (0x01)
+ * @retval 2 Matches @ref BT_HCI_OP_LE_CS_SUB_MODE_2 (0x02)
+ * @retval 3 Matches @ref BT_HCI_OP_LE_CS_SUB_MODE_3 (0x03)
+ *
+ * @note The value 0 encodes HCI 0xFF. This allows @ref bt_conn_le_cs_mode to
+ * fit in one byte. To obtain the HCI sub-mode value, use `(sub_mode == 0 ? 0xFF
+ * : sub_mode)`, where `sub_mode` is the value returned by this macro.
+ */
+#define BT_CONN_LE_CS_MODE_SUB_MODE_PART(x)  (((x) >> 4) & 0x3)
+
+/** @brief Channel sounding mode (main and sub-mode)
+ *
+ * Represents the combination of Channel Sounding (CS) main mode and sub-mode.
+ *
+ * @note The underlying numeric values are an internal encoding and are
+ * not stable API. Do not assume a direct concatenation of HCI values
+ * when inspecting the raw enum value.
+ *
+ * @sa BT_CONN_LE_CS_MODE_MAIN_MODE_PART
+ * @sa BT_CONN_LE_CS_MODE_SUB_MODE_PART
+ */
+enum bt_conn_le_cs_mode {
+	/** Main mode 1 (RTT), sub-mode: unused */
+	BT_CONN_LE_CS_MAIN_MODE_1_NO_SUB_MODE = BT_HCI_OP_LE_CS_MAIN_MODE_1,
+	/** Main mode 2 (PBR), sub-mode: unused */
+	BT_CONN_LE_CS_MAIN_MODE_2_NO_SUB_MODE = BT_HCI_OP_LE_CS_MAIN_MODE_2,
+	/** Main mode 3 (RTT and PBR), sub-mode: unused */
+	BT_CONN_LE_CS_MAIN_MODE_3_NO_SUB_MODE = BT_HCI_OP_LE_CS_MAIN_MODE_3,
+	/** Main mode 2 (PBR), sub-mode 1 (RTT) */
+	BT_CONN_LE_CS_MAIN_MODE_2_SUB_MODE_1 = BT_HCI_OP_LE_CS_MAIN_MODE_2 |
+					      (BT_HCI_OP_LE_CS_SUB_MODE_1 << 4),
+	/** Main mode 2 (PBR), sub-mode 3 (RTT and PBR) */
+	BT_CONN_LE_CS_MAIN_MODE_2_SUB_MODE_3 = BT_HCI_OP_LE_CS_MAIN_MODE_2 |
+					      (BT_HCI_OP_LE_CS_SUB_MODE_3 << 4),
+	/** Main mode 3 (RTT and PBR), sub-mode 2 (PBR) */
+	BT_CONN_LE_CS_MAIN_MODE_3_SUB_MODE_2 = BT_HCI_OP_LE_CS_MAIN_MODE_3 |
+					      (BT_HCI_OP_LE_CS_SUB_MODE_2 << 4),
 };
 
 /** Channel sounding role */
@@ -597,10 +633,8 @@ enum bt_conn_le_cs_ch3c_shape {
 struct bt_conn_le_cs_config {
 	/** CS configuration ID */
 	uint8_t id;
-	/** Main CS mode type */
-	enum bt_conn_le_cs_main_mode main_mode_type;
-	/** Sub CS mode type */
-	enum bt_conn_le_cs_sub_mode sub_mode_type;
+	/** CS main and sub mode */
+	enum bt_conn_le_cs_mode mode;
 	/** Minimum number of CS main mode steps to be executed before a submode step is executed */
 	uint8_t min_main_mode_steps;
 	/** Maximum number of CS main mode steps to be executed before a submode step is executed */
@@ -895,6 +929,12 @@ struct bt_conn_br_info {
 	const bt_addr_t *dst; /**< Destination (Remote) BR/EDR address */
 };
 
+/** SCO Connection Info Structure */
+struct bt_conn_sco_info {
+	uint8_t link_type; /**< SCO link type */
+	uint8_t air_mode;  /**< SCO air mode (codec type) */
+};
+
 enum {
 	BT_CONN_ROLE_CENTRAL = 0,
 	BT_CONN_ROLE_PERIPHERAL = 1,
@@ -961,6 +1001,8 @@ struct bt_conn_info {
 		struct bt_conn_le_info le;
 		/** BR/EDR Connection specific Info. */
 		struct bt_conn_br_info br;
+		/** SCO Connection specific Info. */
+		struct bt_conn_sco_info sco;
 	};
 	/** Connection state. */
 	enum bt_conn_state state;
@@ -1361,6 +1403,20 @@ int bt_conn_le_data_len_update(struct bt_conn *conn,
  */
 int bt_conn_le_phy_update(struct bt_conn *conn,
 			  const struct bt_conn_le_phy_param *param);
+
+/** @brief Update the default PHY parameters to be used for all subsequent
+ * connections over the LE transport.
+ *
+ *  Update the preferred transmit and receive PHYs of LE transport.
+ *  Use @ref BT_GAP_LE_PHY_NONE to indicate no preference.
+ *  For possible PHY values see @ref bt_gap_le_phy.
+ *
+ *  @param pref_tx_phy  Preferred transmitter phy prarameters.
+ *  @param pref_rx_phy  Preferred receiver phy prameters.
+ *
+ *  @return Zero on success or (negative) error code on failure.
+ */
+int bt_conn_le_set_default_phy(uint8_t pref_tx_phy, uint8_t pref_rx_phy);
 
 /** @brief Disconnect from a remote device or cancel pending connection.
  *
@@ -2161,8 +2217,10 @@ struct bt_conn_cb {
 	void (*role_changed)(struct bt_conn *conn, uint8_t status);
 #endif
 
+#if defined(CONFIG_BT_CONN_DYNAMIC_CALLBACKS)
 	/** @internal Internally used field for list handling */
 	sys_snode_t _node;
+#endif
 };
 
 /** @brief Register connection callbacks.

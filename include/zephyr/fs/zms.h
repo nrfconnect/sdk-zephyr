@@ -96,7 +96,7 @@ typedef uint32_t zms_id_t;
  * @retval 0 on success.
  * @retval -ENOTSUP if the detected file system is not ZMS.
  * @retval -EPROTONOSUPPORT if the ZMS version is not supported.
- * @retval -EINVAL if any of the flash parameters or the sector layout is invalid.
+ * @retval -EINVAL if `fs` is NULL or any of the flash parameters or the sector layout is invalid.
  * @retval -ENXIO if there is a device error.
  * @retval -EIO if there is a memory read/write error.
  */
@@ -112,6 +112,7 @@ int zms_mount(struct zms_fs *fs);
  * @retval -EACCES if `fs` is not mounted.
  * @retval -ENXIO if there is a device error.
  * @retval -EIO if there is a memory read/write error.
+ * @retval -EINVAL if `fs` is NULL.
  */
 int zms_clear(struct zms_fs *fs);
 
@@ -135,7 +136,7 @@ int zms_clear(struct zms_fs *fs);
  * @retval -EACCES if ZMS is still not initialized.
  * @retval -ENXIO if there is a device error.
  * @retval -EIO if there is a memory read/write error.
- * @retval -EINVAL if `len` is invalid.
+ * @retval -EINVAL if `fs` is NULL or `len` is invalid.
  * @retval -ENOSPC if no space is left on the device.
  */
 ssize_t zms_write(struct zms_fs *fs, zms_id_t id, const void *data, size_t len);
@@ -150,6 +151,7 @@ ssize_t zms_write(struct zms_fs *fs, zms_id_t id, const void *data, size_t len);
  * @retval -EACCES if ZMS is still not initialized.
  * @retval -ENXIO if there is a device error.
  * @retval -EIO if there is a memory read/write error.
+ * @retval -EINVAL if `fs` is NULL.
  */
 int zms_delete(struct zms_fs *fs, zms_id_t id);
 
@@ -168,6 +170,7 @@ int zms_delete(struct zms_fs *fs, zms_id_t id);
  * @retval -EACCES if ZMS is still not initialized.
  * @retval -EIO if there is a memory read/write error.
  * @retval -ENOENT if there is no entry with the given `id`.
+ * @retval -EINVAL if `fs` is NULL.
  */
 ssize_t zms_read(struct zms_fs *fs, zms_id_t id, void *data, size_t len);
 
@@ -188,6 +191,7 @@ ssize_t zms_read(struct zms_fs *fs, zms_id_t id, void *data, size_t len);
  * @retval -EACCES if ZMS is still not initialized.
  * @retval -EIO if there is a memory read/write error.
  * @retval -ENOENT if there is no entry with the given `id` and history counter.
+ * @retval -EINVAL if `fs` is NULL.
  */
 ssize_t zms_read_hist(struct zms_fs *fs, zms_id_t id, void *data, size_t len, uint32_t cnt);
 
@@ -202,7 +206,8 @@ ssize_t zms_read_hist(struct zms_fs *fs, zms_id_t id, void *data, size_t len, ui
  * @retval Length of the entry with the given `id` (> 0) on success.
  * @retval -EACCES if ZMS is still not initialized.
  * @retval -EIO if there is a memory read/write error.
- * @retval -ENOENT if there is no entry with the given id and history counter.
+ * @retval -ENOENT if there is no entry with the given id.
+ * @retval -EINVAL if `fs` is NULL.
  */
 ssize_t zms_get_data_length(struct zms_fs *fs, zms_id_t id);
 
@@ -218,6 +223,7 @@ ssize_t zms_get_data_length(struct zms_fs *fs, zms_id_t id);
  * @retval Number of free bytes (>= 0) on success.
  * @retval -EACCES if ZMS is still not initialized.
  * @retval -EIO if there is a memory read/write error.
+ * @retval -EINVAL if `fs` is NULL.
  */
 ssize_t zms_calc_free_space(struct zms_fs *fs);
 
@@ -228,8 +234,9 @@ ssize_t zms_calc_free_space(struct zms_fs *fs);
  *
  * @retval >=0 Number of free bytes in the currently active sector
  * @retval -EACCES if ZMS is still not initialized.
+ * @retval -EINVAL if `fs` is NULL.
  */
-size_t zms_active_sector_free_space(struct zms_fs *fs);
+ssize_t zms_active_sector_free_space(struct zms_fs *fs);
 
 /**
  * @brief Close the currently active sector and switch to the next one.
@@ -245,6 +252,7 @@ size_t zms_active_sector_free_space(struct zms_fs *fs);
  * @retval 0 on success.
  * @retval -EACCES if ZMS is still not initialized.
  * @retval -EIO if there is a memory read/write error.
+ * @retval -EINVAL if `fs` is NULL.
  */
 int zms_sector_use_next(struct zms_fs *fs);
 

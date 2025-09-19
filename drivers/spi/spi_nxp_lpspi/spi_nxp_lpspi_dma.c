@@ -191,7 +191,7 @@ static int lpspi_dma_rxtx_load(const struct device *dev)
 	return dma_size;
 }
 
-static void spi_mcux_dma_callback(const struct device *dev, void *arg, uint32_t channel, int status)
+static void lpspi_dma_callback(const struct device *dev, void *arg, uint32_t channel, int status)
 {
 	/* arg directly holds the spi device */
 	const struct device *spi_dev = arg;
@@ -308,7 +308,7 @@ static int transceive_dma(const struct device *dev, const struct spi_config *spi
 
 	spi_context_lock(ctx, asynchronous, cb, userdata, spi_cfg);
 
-	ret = spi_mcux_configure(dev, spi_cfg);
+	ret = lpspi_configure(dev, spi_cfg);
 	if (ret) {
 		goto out;
 	}
@@ -364,7 +364,7 @@ static int lpspi_dma_dev_ready(const struct device *dma_dev)
 	return true;
 }
 
-static int spi_mcux_dma_init(const struct device *dev)
+static int lpspi_dma_init(const struct device *dev)
 {
 	struct lpspi_data *data = dev->data;
 	struct spi_nxp_dma_data *dma_data = (struct spi_nxp_dma_data *)data->driver_data;
@@ -419,7 +419,7 @@ static void lpspi_isr(const struct device *dev)
 }
 
 #define LPSPI_DMA_COMMON_CFG(n)			\
-	.dma_callback = spi_mcux_dma_callback,	\
+	.dma_callback = lpspi_dma_callback,	\
 	.source_data_size = 1,			\
 	.dest_data_size = 1,			\
 	.block_count = 1
@@ -447,7 +447,7 @@ static void lpspi_isr(const struct device *dev)
 	static struct lpspi_data lpspi_data_##n = {.driver_data = &lpspi_dma_data##n,        \
 							 SPI_NXP_LPSPI_COMMON_DATA_INIT(n)};       \
                                                                                                    \
-	SPI_DEVICE_DT_INST_DEFINE(n, spi_mcux_dma_init, NULL, &lpspi_data_##n,                  \
+	SPI_DEVICE_DT_INST_DEFINE(n, lpspi_dma_init, NULL, &lpspi_data_##n,                  \
 				  &lpspi_config_##n, POST_KERNEL, CONFIG_SPI_INIT_PRIORITY,     \
 				  &lpspi_dma_driver_api);
 
