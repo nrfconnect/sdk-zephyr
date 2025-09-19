@@ -216,7 +216,7 @@ static void test_request_release_clock_spec(const struct device *clk_dev,
 	ret = clock_control_get_rate(clk_dev, NULL, &rate);
 	if (ret != -ENOSYS) {
 		zassert_ok(ret);
-		zassert_equal(rate, clk_spec->frequency);
+		zassert_equal(rate, clk_spec->frequency, "rate = %u, clk_spec->frequency = %u", rate, clk_spec->frequency);
 	}
 	k_msleep(1000);
 	ret = nrf_clock_control_release(clk_dev, clk_spec);
