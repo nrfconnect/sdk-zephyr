@@ -83,6 +83,7 @@ enum modem_cellular_event {
 	MODEM_CELLULAR_EVENT_SCRIPT_SUCCESS,
 	MODEM_CELLULAR_EVENT_SCRIPT_FAILED,
 	MODEM_CELLULAR_EVENT_CMUX_CONNECTED,
+	MODEM_CELLULAR_EVENT_CMUX_DISCONNECTED,
 	MODEM_CELLULAR_EVENT_DLCI1_OPENED,
 	MODEM_CELLULAR_EVENT_DLCI2_OPENED,
 	MODEM_CELLULAR_EVENT_TIMEOUT,
@@ -257,6 +258,8 @@ static const char *modem_cellular_event_str(enum modem_cellular_event event)
 		return "script failed";
 	case MODEM_CELLULAR_EVENT_CMUX_CONNECTED:
 		return "cmux connected";
+	case MODEM_CELLULAR_EVENT_CMUX_DISCONNECTED:
+		return "cmux disconnected";
 	case MODEM_CELLULAR_EVENT_DLCI1_OPENED:
 		return "dlci1 opened";
 	case MODEM_CELLULAR_EVENT_DLCI2_OPENED:
@@ -1377,6 +1380,7 @@ static int modem_cellular_on_dormant_state_leave(struct modem_cellular_data *dat
 
 static int modem_cellular_on_init_power_off_state_enter(struct modem_cellular_data *data)
 {
+	modem_cmux_disconnect_async(&data->cmux);
 	modem_cellular_start_timer(data, K_MSEC(2000));
 	return 0;
 }
@@ -1388,6 +1392,9 @@ static void modem_cellular_init_power_off_event_handler(struct modem_cellular_da
 		(const struct modem_cellular_config *)data->dev->config;
 
 	switch (evt) {
+	case MODEM_CELLULAR_EVENT_CMUX_DISCONNECTED:
+		modem_cellular_stop_timer(data);
+		__fallthrough;
 	case MODEM_CELLULAR_EVENT_TIMEOUT:
 		/* Shutdown script can only be used if cmd_pipe is available, i.e. we are not in
 		 * some intermediary state without a pipe for commands available
@@ -1775,7 +1782,9 @@ static void modem_cellular_cmux_handler(struct modem_cmux *cmux, enum modem_cmux
 	case MODEM_CMUX_EVENT_CONNECTED:
 		modem_cellular_delegate_event(data, MODEM_CELLULAR_EVENT_CMUX_CONNECTED);
 		break;
-
+	case MODEM_CMUX_EVENT_DISCONNECTED:
+		modem_cellular_delegate_event(data, MODEM_CELLULAR_EVENT_CMUX_DISCONNECTED);
+		break;
 	default:
 		break;
 	}
