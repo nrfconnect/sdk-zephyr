@@ -1008,11 +1008,6 @@ static int adv_start_legacy(struct bt_le_ext_adv *adv,
 	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) && (param->options & BT_LE_ADV_OPT_CONN)) {
 		err = le_adv_start_add_conn(adv, &conn);
 		if (err) {
-			if (err == -ENOMEM && !dir_adv &&
-			    !(param->options & _BT_LE_ADV_OPT_ONE_TIME)) {
-				goto set_adv_state;
-			}
-
 			return err;
 		}
 	}
@@ -1037,9 +1032,7 @@ static int adv_start_legacy(struct bt_le_ext_adv *adv,
 		bt_conn_unref(conn);
 	}
 
-set_adv_state:
-	atomic_set_bit_to(adv->flags, BT_ADV_PERSIST, !dir_adv &&
-			  !(param->options & _BT_LE_ADV_OPT_ONE_TIME));
+	atomic_set_bit_to(adv->flags, BT_ADV_PERSIST, false);
 
 	atomic_set_bit_to(adv->flags, BT_ADV_CONNECTABLE, param->options & BT_LE_ADV_OPT_CONN);
 
@@ -1278,11 +1271,6 @@ int bt_le_adv_start_ext(struct bt_le_ext_adv *adv,
 	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) && (param->options & BT_LE_ADV_OPT_CONN)) {
 		err = le_adv_start_add_conn(adv, &conn);
 		if (err) {
-			if (err == -ENOMEM && !dir_adv &&
-			    !(param->options & _BT_LE_ADV_OPT_ONE_TIME)) {
-				goto set_adv_state;
-			}
-
 			return err;
 		}
 	}
@@ -1307,10 +1295,8 @@ int bt_le_adv_start_ext(struct bt_le_ext_adv *adv,
 		bt_conn_unref(conn);
 	}
 
-set_adv_state:
 	/* Flag always set to false by le_ext_adv_param_set */
-	atomic_set_bit_to(adv->flags, BT_ADV_PERSIST, !dir_adv &&
-			  !(param->options & _BT_LE_ADV_OPT_ONE_TIME));
+	atomic_set_bit_to(adv->flags, BT_ADV_PERSIST, false);
 
 	return 0;
 }
@@ -1423,10 +1409,6 @@ int bt_le_adv_stop(void)
 static uint32_t adv_get_options(const struct bt_le_ext_adv *adv)
 {
 	uint32_t options = 0;
-
-	if (!atomic_test_bit(adv->flags, BT_ADV_PERSIST)) {
-		options |= _BT_LE_ADV_OPT_ONE_TIME;
-	}
 
 	if (atomic_test_bit(adv->flags, BT_ADV_CONNECTABLE)) {
 		options |= BT_LE_ADV_OPT_CONN;
