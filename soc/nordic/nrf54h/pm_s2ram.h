@@ -14,6 +14,7 @@
 
 struct mcuboot_resume_s {
 	uint32_t magic; /* magic value to identify valid structure */
+	uint32_t slot_info;
 };
 
 /**
