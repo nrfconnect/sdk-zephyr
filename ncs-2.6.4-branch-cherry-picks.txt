@@ -15,6 +15,7 @@
 # 161aadd5909 Bluetooth: Mesh: Return immediately if labels not supported
 # b782b11f16a Bluetooth: L2CAP: l2cap_create_le_sig_pdu() no longer uses buf
 f0032a369da Bluetooth: L2CAP: Fix leaking tx metadata
+
 # 56a59019559 Bluetooth: Controller: Add Kconfig for LE Power Control Request Feature
 # 93e5cf6e618 Bluetooth: Host: Add LE Power Control Request Procedure APIs
 # 2c9af855bc6 Bluetooth: Host: Add bt shell functions LE Power Control Request Feature
@@ -102,12 +103,13 @@ f0032a369da Bluetooth: L2CAP: Fix leaking tx metadata
 # 6c5fc658efc Bluetooth: Mesh: suspend/resume gatt advs
 # 3bfb2e3ab2d Bluetooth: Audio: Add implementation for PBP and dedicated sample apps.
 # 19da13313d5 Bluetooth: L2CAP: remove usage of `bt_l2cap_send_cb` by BR/EDR
-1e6ff5ff05d Bluetooth: L2CAP: separate BR/EDR and LE internal headers
+# 1e6ff5ff05d Bluetooth: L2CAP: separate BR/EDR and LE internal headers
 # 79af154ae7d tests: bsim: Bluetooth: CAP broadcast AC testing
 # 2b30259e9f0 Bluetooth: Controller: Fix ull_prepare_dequeue for skipped events
 # 7f99677aa6b Bluetooth: Controller: Add support for DYNAMIC_INTERRUPTS
 # 27b1f4eb7f9 Bluetooth: Mesh: Fix dereferencing before null pointer check
 75c2aeb8bd0 Bluetooth: L2CAP: stop stealing buffers from SDU pool
+
 # 234b322dc30 Bluetooth: Audio: Fix len check in ltv_set_val
 # a72da864e04 Bluetooth: BAP: Restrict application ASCS response codes
 # 13b0052cfae Bluetooth: MPL: Add notification to track change
@@ -115,7 +117,7 @@ f0032a369da Bluetooth: L2CAP: Fix leaking tx metadata
 # 400cdcaca4f Bluetooth: BAP: Fix invalid GATT error codes in scan delegator
 # 68f8c8ff29d Bluetooth: Audio: Fix off-by-one error in codec.c:ltv_set_val
 # 4e7d64b1b45 Bluetooth: Mesh: enable access responses randomization
-38c39af4df1 Bluetooth: L2CAP: Prepend SDU header immediately
+# 38c39af4df1 Bluetooth: L2CAP: Prepend SDU header immediately
 # f9c116ec73b Bluetooth: CAP: Shell: Fix channel allocation
 # 64adf0b0656 Bluetooth: BAP: Add log of err in bt_bap_stream_detach
 # 9fc630d303d Bluetooth: CSIP: Use bt_crypto_aes_cmac instead of own
@@ -124,7 +126,7 @@ f0032a369da Bluetooth: L2CAP: Fix leaking tx metadata
 # 06fa287d459 Bluetooth: Audio: Update audio location definitions
 # 60c0087555f Bluetooth: Controller: Fix ISO Sync Receiver time reservation calc
 # 2dcb91ab46b Bluetooth: L2CAP: extract LE part of `bt_l2cap_chan_send`
-81d524d0816 Bluetooth: L2CAP: always send from workqueue
+# 81d524d0816 Bluetooth: L2CAP: always send from workqueue
 # 056d5a354bc Bluetooth: controller: Handle peripheral CIS creation latency
 # 11175c3ad31 tf-m: Change NS include path for TF-M 2.0.0
 # 476e7b3fa33 Bluetooth: Audio: Ensure that read callbacks can handle conn == NULL
@@ -389,8 +391,8 @@ f0032a369da Bluetooth: L2CAP: Fix leaking tx metadata
 # 4dae6623bc1 Bluetooth: BT_HCI_RESERVE set to 1 if BT_SILABS_HCI
 # 6af7ad5a529 Bluetooth: Mesh: Prevent duplicate cdb appkeys
 # 0483d68334c Bluetooth: Mesh: Add missing model extensions
-76015745df1 Bluetooth: ATT: lock scheduler when sending from user thread
-e71b56e87ba [nrf fromlist] Bluetooth: ATT: lock scheduler when sending from user thread
+# 76015745df1 Bluetooth: ATT: lock scheduler when sending from user thread
+# e71b56e87ba [nrf fromlist] Bluetooth: ATT: lock scheduler when sending from user thread
 # 3a927a28339 Bluetooth: Host: Move BR/EDR files to host/classic
 # 081024b7fa3 Bluetooth: Host: Include full path of l2cap_br_interface.h
 # 83bfa4c91b2 Bluetooth: Host: Move BR headers to subfolder classic
@@ -429,7 +431,7 @@ e71b56e87ba [nrf fromlist] Bluetooth: ATT: lock scheduler when sending from user
 # 11bae5cfa95 Bluetooth: Controller: Fix missing radio timer comp and range delay
 # bd5e906f681 Bluetooth: Controller: Fix assertion establishing periodic sync
 # 4a55bc00f01 Bluetooth: Shell: Add support for EAD
-584f653de22 Bluetooth: conn: Don't deadlock on `BT_RECV_WORKQ_SYS`
+# 584f653de22 Bluetooth: conn: Don't deadlock on `BT_RECV_WORKQ_SYS`
 # 7845c0e3d64 Bluetooth: Controller: Ticker low latency with lazy skip
 # 14191f11fde Bluetooth: controller: Fix ISO Broadcast control subevent channel
 # 85b503e23b1 Bluetooth: controller: ISO Sync Receiver vendor data path fixes
@@ -495,7 +497,7 @@ e71b56e87ba [nrf fromlist] Bluetooth: ATT: lock scheduler when sending from user
 # 24f0a833268 Bluetooth: Audio: Shell: Fix chan alloc print for mono
 # dd7e77b77c2 Bluetooth: BAP: Shell: Fix bad PA sync ref for sink auto scan
 # 2b7f5dce258 Bluetooth: Audio: Shell: Runtime config of CAP/GMAP ACs
-0794b22c9c1 Bluetooth: l2cap: Fix SDU buffer leak
+# 0794b22c9c1 Bluetooth: l2cap: Fix SDU buffer leak
 # b4eac67b8b2 Bluetooth: BAP: Shell: Add support for decoding LC3 data
 # d96f98188c5 Bluetooth: CAP: Shell: Add cancel command
 # 7724b3e356f Bluetooth: controller: refactor of procedure init for mem optim
@@ -509,10 +511,11 @@ e71b56e87ba [nrf fromlist] Bluetooth: ATT: lock scheduler when sending from user
 # 1c132c90aa6 Bluetooth: Host: Document flags used for connection establishment
 # 237c59585ea Bluetooth: Host: Rename bt_conn_state_t states for clarity
 # baf3cc9fe0b bluetooth: OTS: Delay indications to system workqueue
-a5ae3b026b1 Bluetooth: conn: Don't wait for buf allocation in syswq
+# a5ae3b026b1 Bluetooth: conn: Don't wait for buf allocation in syswq
 # df1e4aa70fc Bluetooth: refactor add `is_host_managed_ccc`
-57b94080b2f Bluetooth: L2CAP: don't use NULL buf
+# 57b94080b2f Bluetooth: L2CAP: don't use NULL buf
 e4364413c26 Bluetooth: L2CAP: Don't try to send on disconnected channel
+
 # e7ee26d5ed4 Bluetooth: BAP: Shell: Moved RX and TX fields into a union
 # e56494634ab bluetooth: mesh: Adapt BLOB IO to RRAM write size
 # 9bcf275d8be Bluetooth: Controller: Ignore bit 1 set in Initiating_PHYs
@@ -557,7 +560,7 @@ e4364413c26 Bluetooth: L2CAP: Don't try to send on disconnected channel
 # 2dd987713b0 Bluetooth: Coverity fix dereference before null check
 # 44199f3a486 Bluetooth: Host: Fix auto-connect/sync establishment on Coded PHY
 # 9631cd14b0f Bluetooth: OTS: Fix calling obj_created callback with NULL conn
-24c7ad344f9 Bluetooth: conn: check `k_work_submit()` retcode
+# 24c7ad344f9 Bluetooth: conn: check `k_work_submit()` retcode
 # 28d7d145716 Bluetooth: ATT: add debug log for timeout override
 # d45b462f23f Bluetooth: CSIP: Set Coordinator move data to instances
 # 68ea1c4fe45 Bluetooth: CAP: Fix issue with parallel CAP discover
@@ -567,6 +570,7 @@ e4364413c26 Bluetooth: L2CAP: Don't try to send on disconnected channel
 # 6a0cdb4eaa5 Bluetooth: CAP: Commander Reception start procedure
 # b2e235d5305 Bluetooth: Remove legacy debug symbols
 aa30d075637 Bluetooth: host: handle not getting a buffer
+
 # 0d479a0091c Bluetoioth: CAP: Shell: Added qos config to unicast_start cmd
 # 425dcc46786 Bluetooth: controller: Sync ISO Establishment fixes
 # e4ea597a778 Bluetooth: Controller: BIG/CIG count based upon app configs
@@ -578,7 +582,7 @@ aa30d075637 Bluetooth: host: handle not getting a buffer
 # 2c6306d0995 Bluetooth: Controller: BT_CTLR_ISO_TX_BUFFER_SIZE from BT_ISO_TX_MTU
 # 76559f27fd6 Bluetooth: Host: Map HCI cmd disallowed to errno
 # 7d4c13f55f2 Bluetooth: CAP: Shell: Initiator fix chan_alloc
-b8fedfb6c16 bluetooth: host: conn: Fix assertion failure in wait_for_tx_work
+# b8fedfb6c16 bluetooth: host: conn: Fix assertion failure in wait_for_tx_work
 # 01b4f9d2637 Bluetooth: Controller: Fix BIS IRC range check
 # 36c1aeaf19e Bluetooth: BAP: Shell: Add support for USB audio in
 # 0cb828d4437 Bluetooth: CAP: Fix check for volume_mute_changed callback
@@ -599,6 +603,7 @@ b8fedfb6c16 bluetooth: host: conn: Fix assertion failure in wait_for_tx_work
 # f58ac3476fa Bluetooth: CAP: Add reference to the set member for CAP discover
 # c40856e5aab Bluetooth: ISO: Support bt_disable
 4a977463122 Bluetooth: Host: Guard set state in conn_destroy
+
 # 7c96743fae2 Bluetooth: ISO: Upgrade from experimental to unstable
 # edef1b7cf45 Bluetooth: controller: fixing rx node leak on CPR reject of parallel CPR
 # 806a4fcf92a Bluetooth: controller: fix node_rx retention mechanism
@@ -606,7 +611,7 @@ b8fedfb6c16 bluetooth: host: conn: Fix assertion failure in wait_for_tx_work
 # f8bbf753fca Bluetooth: Mesh: Change log lvl for element_model_recv
 # 274507fc52a Bluetooth: Controller: Add BT_CTLR_HCI Kconfig option
 # 261b358dc31 Bluetooth: Mesh: Shell: Update DFD start bool parse
-93d0eac8345 Bluetooth: Host: Forbid holding on to buf given to stack
+# 93d0eac8345 Bluetooth: Host: Forbid holding on to buf given to stack
 # 31c048f4e36 Bluetooth: Controller: Remove legacy LL optimize for speed dependency
 # 1b7fe792e0c Bluetooth: Controller: Support Link Time Optimizations (LTO)
 # 2adb4cac173 mbedtls: default enable USE_PSA_CRYPTO when CRYPTO_C
@@ -793,6 +798,7 @@ b8fedfb6c16 bluetooth: host: conn: Fix assertion failure in wait_for_tx_work
 # 4284f99870c bluetooth: host: hci_core: Safer checking of conn complete events
 32212bfb63a Bluetooth: host: extract sending of host num complete
 147ee3daaf4 Bluetooth: host: Send host num completes as early as possible
+
 # 8be6db67fc3 Bluetooth: ISO/BAP: Refactor BIS bitfield
 # 7ed8bb50200 Bluetooth: BAP: Add PAST Kconfig dependency for BASS
 # ad63ca284e9 kconfig: replace known integer constants with variables
@@ -834,6 +840,7 @@ b8fedfb6c16 bluetooth: host: conn: Fix assertion failure in wait_for_tx_work
 # 58ec51616da Bluetooth: host: fix incorrect ISO HCI fragmentation logic
 # 5a4fdfbf3e6 Bluetooth: hci_common: Add assert on `buf` allocation
 8a2fe27c00e Bluetooth: Host: Free ACL RX fragments on disconnection
+
 # 42c8732dda6 Bluetooth: Gatt: Make CCC_STORE_MAX configurable
 # e3da5c3d390 Bluetooth: Mesh: Fix build warning with gcc 13
 # ba62c8d8764 Bluetooth: BAP: Support setting different values per dir in CIG
@@ -874,7 +881,7 @@ b8fedfb6c16 bluetooth: host: conn: Fix assertion failure in wait_for_tx_work
 # 4bdca17e217 Bluetooth: OTS: Use proper kconfig log option
 # 0f7f6edcf65 Bluetooth: Mesh: Fix uninitialized field when cancelling transfer blob
 # 98ddf107fa1 mbedtls: rename CONFIG_MBEDTLS_ZEPHYR_ENTROPY and move it
-5736b71193f Bluetooth: Host: Fix incorrect build assert
+# 5736b71193f Bluetooth: Host: Fix incorrect build assert
 # d5da582e00a Bluetooth: Controller: Fix PA setup for ISO Broadcast
 # f05d16dabb7 Bluetooth: Controller: Fix missing Broadcast ISO Sync MIC failure
 # eaf92a1494c tests: Bluetooth: CAP: Initiator unicast start unittests
@@ -1068,7 +1075,7 @@ b8fedfb6c16 bluetooth: host: conn: Fix assertion failure in wait_for_tx_work
 # de14efef98d Bluetooth: BASS: add scan cb to scan delegator module.
 # f712bde1220 bluetooth: host: att: Implement disconnect on ATT timeout
 # f7e8a8717b1 tests: bsim: bluetooth: host: att: Add ATT timeout test
-74972e694b4 bluetooth: host: l2cap: Check conn state before queueing PDU
+# 74972e694b4 bluetooth: host: l2cap: Check conn state before queueing PDU
 # 257c5e6affb bluetooth: conn: increase log level of timeout ignore
 # 7f1589e23b9 Bluetooth: ISO: Add ISO BIS bitfield check macro
 # 405492f009b Bluetooth: Audio: Shell: Fix BIS sync bit field validity check
@@ -1171,6 +1178,7 @@ b8fedfb6c16 bluetooth: host: conn: Fix assertion failure in wait_for_tx_work
 # 1b8ad2cf404 Bluetooth: AVRCP: allow to parse unit info resposne.
 # a785548df63 bluetooth: CTS: Fix includes to avoid build error with some libCs
 b478ffe2ef7 Bluetooth: host: Fix bug in disconnected handling
+
 # b54f49cb8c1 Bluetooth: Mesh: Fix proxy advertising set sending Mesh messages
 # 665a555e756 Bluetooth: Mesh: Use relay bufs/pool for brg_cfg
 # b38773f14b9 Bluetooth: Mesh: Use net xmit params for bridge
@@ -1237,7 +1245,7 @@ b478ffe2ef7 Bluetooth: host: Fix bug in disconnected handling
 # aa1a38e2aa0 bluetooth: shell: refactor shell print to eliminate `ctx_shell` usage
 # a047113556b Bluetooth: Classic: SDP: Improve SDP discover
 # d37402f4477 Bluetooth: Shell: BR: Update command `sdp-find`
-b3ffaf4441e Bluetooth: Host: Cancel pending deferred work on disconnect
+# b3ffaf4441e Bluetooth: Host: Cancel pending deferred work on disconnect
 # e8bcb29f3f0 Bluetooth: ISO: Add BIG callbacks
 # ab9ee0817d1 Bluetooth: BAP: Add broadcast source callback structs
 # 0ae976166ff Bluetooth: CAP: Add broadcast source callback structs
@@ -1249,7 +1257,16 @@ b3ffaf4441e Bluetooth: Host: Cancel pending deferred work on disconnect
 # 2424bfd8699 Bluetooth: BR: improve br_sufficient_key_size
 # 69d415c9ce5 Bluetooth: SSP: Improve BR SC only mode
 # 0156a322b13 bluetooth: host: hci_core: fix `num_handles` assignment
-# c2488fdd302 bluetooth: buf: Add a callback for freed buffer in rx pool
+0ddb6aa82e3 Bluetooth: Host: Use actual user_data size
+1cb83a81f09 Bluetooth: Host: Remove use of `bt_buf_get_cmd_complete`
+b6a10516b0c Bluetooth: Host: Remove `bt_buf_get_cmd_complete`
+9426309dbe2 Bluetooth: Host: Refactor `bt_buf_get_evt`
+95533470803 Bluetooth: ISO: Add CONFIG_BT_ISO_{RX/TX}
+2a7adae6c13 Bluetooth: Rename `num_complete_pool` -> `sync_evt_pool`
+792ae681653 Bluetooth: host: Use correct user_data size for hci_rx_pool
+6d5cce662af Bluetooth: buf: Put command complete/status in sync buf pool
+c2488fdd302 bluetooth: buf: Add a callback for freed buffer in rx pool
+
 # 519f8889426 Bluetooth: Mesh: Fix gatt advertiser start in bt_mesh_resume
 # 1d7826c2ade bluetooth: host: conn.c fix Constant variable guards dead code issue
 # f279f61551e Bluetooth: SDP: Correct record length of service att rsp
@@ -1447,6 +1464,7 @@ b3ffaf4441e Bluetooth: Host: Cancel pending deferred work on disconnect
 # 17d695a5353 Bluetooth: Controller: Simplify required ISO PDU length and buffer count
 05b16b971bf Bluetoth: Host: Fix buffer allocation warnings in system workqueue
 6464ffa3f94 Bluetooth: Host: Fix deadlock when failing to alloc on BT RX thread
+
 # 3a996c570b4 Bluetooth: Controller: Fix BT_CTLR_LOW_LAT_ULL dependency
 # 65d69ec176d Bluetooth: Controller: Fix active mode extended scanning assert
 # f67a94f47a5 Bluetooth: Controller: Fix single timer end time capture
@@ -1566,7 +1584,7 @@ b3ffaf4441e Bluetooth: Host: Cancel pending deferred work on disconnect
 # 905aed99fa1 Bluetooth: Fixed null byte check in DIS UDI
 # c9240cc99f9 bluetooth: host: Report status of Channel Sounding complete events
 # 9ba60d3eb74 bluetooth: host: Apply callback changes of CS complete events
-39c26059305 Bluetooth: Fix deadlock with settings and bt_hci_cmd_send_sync()
+# 39c26059305 Bluetooth: Fix deadlock with settings and bt_hci_cmd_send_sync()
 # a3b8954ae9a Bluetooth: Controller: Fix assert when flushing multiple CISes
 # 384e31977f5 Bluetooth: Classic: L2CAP: Discard the response with a invalid `ident`
 # 18beac9c575 Bluetooth: Classic: L2CAP: Support `L2CAP_COMMAND_REJECT_RSP`
@@ -1709,7 +1727,7 @@ b3ffaf4441e Bluetooth: Host: Cancel pending deferred work on disconnect
 # cd43e03bbe2 Bluetooth: classic: shell: Support L2CAP channel `seg_recv`
 # 5b17b5b44f1 Bluetooth: Controller: Fix adv aux release on insufficient resources
 # 114bc8086d2 Bluetooth: ISO: fix hci_le_set_cig_params validation
-379eb7a0ff8 bluetooth: host: Fix premature semaphore giving
+# 379eb7a0ff8 bluetooth: host: Fix premature semaphore giving
 # b9ddaf7a5f0 Bluetooth: Audio: Shell: Fix includes
 # b04d6386dbe Bluetooth: Audio: Fix includes
 # 6abdc389d4d Bluetooth: CSIP: Remove bt_csip_set_member_get_sirk
@@ -1726,11 +1744,12 @@ b3ffaf4441e Bluetooth: Host: Cancel pending deferred work on disconnect
 # 9ecca872816 Bluetooth: Host make the long workqueue stack size configurable
 # af77efb77e9 Bluetooth: Host: Remove unnecessary ifdef from cs.c
 # 3c661a17659 Bluetooth: Controller: Fix LOW_LAT_ULL implementation for ISO support
-ddeeecd0b4f bluetooth: host: Add a check for num of bt_conn_tx and ACL/ISO bufs
-14b4e30cdf6 bluetooth: host: Deprecated BT_CONN_TX_MAX
+# ddeeecd0b4f bluetooth: host: Add a check for num of bt_conn_tx and ACL/ISO bufs
+# 14b4e30cdf6 bluetooth: host: Deprecated BT_CONN_TX_MAX
 # cc9279e3ce6 Bluetooth: Controller: Only select BT_TICKER_LAZY_GET for ZLL
 da9acbcf11a Revert "Bluetooth: host: Send host num completes as early as possible"
 971c2c94265 Revert "Bluetooth: host: extract sending of host num complete"
+
 # 70a97a8222c Bluetooth: BAP: Add control point cbs to BASS
 # 0e138cb7775 Bluetooth: Host: K_NO_WAIT in bt_att_req_alloc() in SYS WQ
 # 6887b58d4e3 Bluetooth: ISO: Remove BT_ISO_TX_FRAG_COUNT
@@ -1791,7 +1810,7 @@ da9acbcf11a Revert "Bluetooth: host: Send host num completes as early as possibl
 # 2d8cdbbd295 [nrf fromtree] bluetooth: host: rename bool scan_enabled -> scan_disabled
 # 3abc5c2cc2a [nrf fromtree] bluetooth: host: Do not try to set NRPA when scanning with identity
 # 6453478e6c8 [nrf fromtree] bluetooth: host: Handle failure to disable scan when updating own_addr
-720dc042525 [nrf fromtree] bluetooth: fix bug when destroying tx queue buffers on disconnect
+# 720dc042525 [nrf fromtree] bluetooth: fix bug when destroying tx queue buffers on disconnect
 # c61e3f3ce2b [nrf fromtree] Bluetooth: Decode Bluetooth 6.1 version number
 # 71c24b8a084 [nrf noup] Bluetooth: Mesh: zero randomization for friend's adv
 # 43189afa7ee [nrf noup] Bluetooth: Mesh: Fix adv randomness bug
