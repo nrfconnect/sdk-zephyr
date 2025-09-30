@@ -9,6 +9,8 @@
 
 #if defined(CONFIG_IRONSIDE_TE_CLIENT)
 #include <ironside_client/services/platform.h>
+#elif defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
+#include "tfm_platform_api.h"
 #elif defined(CONFIG_SOC_SERIES_NRF51) || defined(CONFIG_SOC_SERIES_NRF52)
 #include <hal/nrf_power.h>
 #elif defined(CONFIG_SOC_SERIES_NRF54H) || defined(CONFIG_SOC_SERIES_NRF92)
@@ -47,6 +49,9 @@ void z_sys_poweroff(void)
 	 * IronSide TE runs the whole sequence itself, RAM retention included.
 	 */
 	(void)ironside_platform_system_off();
+
+#elif defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
+	tfm_platform_system_off();
 #else
 
 #if defined(CONFIG_HAS_NORDIC_RAM_CTRL)
