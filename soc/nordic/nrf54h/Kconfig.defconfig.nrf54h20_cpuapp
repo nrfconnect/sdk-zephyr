@@ -5,6 +5,9 @@
 
 if SOC_NRF54H20_CPUAPP
 
+config PM
+	default y
+
 config NUM_IRQS
 	default 471
 
