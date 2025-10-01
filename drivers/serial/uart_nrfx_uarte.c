@@ -3640,8 +3640,8 @@ static int uarte_instance_deinit(const struct device *dev)
 		IF_ENABLED(CONFIG_UARTE_NRFX_UARTE_COUNT_BYTES_WITH_TIMER,     \
 			(UARTE_COUNT_BYTES_WITH_TIMER_CONFIG(idx)))	       \
 		IF_ENABLED(CONFIG_UART_##idx##_NRF_HW_ASYNC,		       \
-			(.timer = NRFX_TIMER_INSTANCE(			       \
-				CONFIG_UART_##idx##_NRF_HW_ASYNC_TIMER),))     \
+			(.timer = NRFX_TIMER_INSTANCE(NRF_TIMER_INST_GET(      \
+				CONFIG_UART_##idx##_NRF_HW_ASYNC_TIMER)),))    \
 		IF_ENABLED(INSTANCE_IS_FAST(_, /*empty*/, idx, _),	       \
 			(.clk_dev = DEVICE_DT_GET_OR_NULL(DT_CLOCKS_CTLR(UARTE(idx))), \
 			 .clk_spec = {					       \
