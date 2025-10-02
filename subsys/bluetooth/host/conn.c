@@ -356,7 +356,7 @@ static void bt_acl_recv(struct bt_conn *conn, struct net_buf *buf,
 		return;
 	}
 
-	if (conn->rx->len > acl_total_len) {
+	if ((conn->type != BT_CONN_TYPE_BR) && (conn->rx->len > acl_total_len)) {
 		LOG_ERR("ACL len mismatch (%u > %u)", conn->rx->len, acl_total_len);
 		bt_conn_reset_rx_state(conn);
 		return;
@@ -379,9 +379,7 @@ void bt_conn_recv(struct bt_conn *conn, struct net_buf *buf, uint8_t flags)
 
 	LOG_DBG("handle %u len %u flags %02x", conn->handle, buf->len, flags);
 
-	if ((IS_ENABLED(CONFIG_BT_ISO_UNICAST) ||
-	     IS_ENABLED(CONFIG_BT_ISO_SYNC_RECEIVER)) &&
-	    conn->type == BT_CONN_TYPE_ISO) {
+	if (IS_ENABLED(CONFIG_BT_ISO_RX) && conn->type == BT_CONN_TYPE_ISO) {
 		bt_iso_recv(conn, buf, flags);
 		return;
 	} else if (IS_ENABLED(CONFIG_BT_CONN)) {
@@ -800,7 +798,9 @@ static void conn_destroy(struct bt_conn *conn, void *data)
 		bt_conn_set_state(conn, BT_CONN_DISCONNECT_COMPLETE);
 	}
 
-	bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
+	if (conn->state != BT_CONN_DISCONNECTED) {
+		bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
+	}
 }
 
 void bt_conn_cleanup_all(void)
@@ -1092,6 +1092,8 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 		switch (old_state) {
 		case BT_CONN_DISCONNECT_COMPLETE:
 			tx_notify(conn);
+
+			bt_conn_reset_rx_state(conn);
 
 			/* Cancel Connection Update if it is pending */
 			if ((conn->type == BT_CONN_TYPE_LE) &&

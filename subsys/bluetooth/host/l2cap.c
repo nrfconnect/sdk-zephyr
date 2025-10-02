@@ -99,6 +99,20 @@ static void free_tx_meta_data(struct l2cap_tx_meta_data *data)
 
 static sys_slist_t servers;
 
+static void l2cap_tx_buf_destroy(struct bt_conn *conn, struct net_buf *buf, int err)
+{
+	struct l2cap_tx_meta_data *data = l2cap_tx_meta_data(buf);
+	bt_conn_tx_cb_t cb = data->cb;
+	void *cb_user_data = data->user_data;
+
+	free_tx_meta_data(data);
+	net_buf_unref(buf);
+
+	/* Make sure to call associated callback, if any */
+	if (cb) {
+		cb(conn, cb_user_data, err);
+	}
+}
 #endif /* CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */
 
 /* L2CAP signalling channel specific context */
@@ -642,6 +656,11 @@ struct net_buf *bt_l2cap_create_pdu_timeout(struct net_buf_pool *pool,
 					    size_t reserve,
 					    k_timeout_t timeout)
 {
+	if (!K_TIMEOUT_EQ(timeout, K_NO_WAIT) &&
+	    k_current_get() == k_work_queue_thread_get(&k_sys_work_q)) {
+		timeout = K_NO_WAIT;
+	}
+
 	return bt_conn_create_pdu_timeout(pool,
 					  sizeof(struct bt_l2cap_hdr) + reserve,
 					  timeout);
@@ -910,12 +929,33 @@ static struct net_buf *l2cap_chan_le_get_tx_buf(struct bt_l2cap_le_chan *ch)
 static int l2cap_chan_le_send_sdu(struct bt_l2cap_le_chan *ch,
 				  struct net_buf **buf, uint16_t sent);
 
+/** @brief Get @c chan->state.
+ *
+ * This field does not exist when @kconfig{CONFIG_BT_L2CAP_DYNAMIC_CHANNEL} is
+ * disabled. In that case, this function returns @ref BT_L2CAP_CONNECTED since
+ * the struct can only represent static channels in that case and static
+ * channels are always connected.
+ */
+static bt_l2cap_chan_state_t bt_l2cap_chan_get_state(struct bt_l2cap_chan *chan)
+{
+#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
+	return BT_L2CAP_LE_CHAN(chan)->state;
+#else
+	return BT_L2CAP_CONNECTED;
+#endif
+}
+
 static void l2cap_chan_tx_process(struct k_work *work)
 {
 	struct bt_l2cap_le_chan *ch;
 	struct net_buf *buf;
 
 	ch = CONTAINER_OF(k_work_delayable_from_work(work), struct bt_l2cap_le_chan, tx_work);
+
+	if (bt_l2cap_chan_get_state(&ch->chan) != BT_L2CAP_CONNECTED) {
+		LOG_DBG("Cannot send on non-connected channel");
+		return;
+	}
 
 	/* Resume tx in case there are buffers in the queue */
 	while ((buf = l2cap_chan_le_get_tx_buf(ch))) {
@@ -933,7 +973,7 @@ static void l2cap_chan_tx_process(struct k_work *work)
 				 */
 				k_work_schedule(&ch->tx_work, K_MSEC(CONFIG_BT_L2CAP_RESCHED_MS));
 			} else {
-				net_buf_unref(buf);
+				l2cap_tx_buf_destroy(ch->chan.conn, buf, sent);
 			}
 			break;
 		}
@@ -986,13 +1026,13 @@ static void l2cap_chan_destroy(struct bt_l2cap_chan *chan)
 	}
 
 	if (le_chan->tx_buf) {
-		net_buf_unref(le_chan->tx_buf);
+		l2cap_tx_buf_destroy(chan->conn, le_chan->tx_buf, -ESHUTDOWN);
 		le_chan->tx_buf = NULL;
 	}
 
 	/* Remove buffers on the TX queue */
 	while ((buf = net_buf_get(&le_chan->tx_queue, K_NO_WAIT))) {
-		net_buf_unref(buf);
+		l2cap_tx_buf_destroy(chan->conn, buf, -ESHUTDOWN);
 	}
 
 	/* Remove buffers on the RX queue */
@@ -1804,25 +1844,24 @@ static void le_disconn_rsp(struct bt_l2cap *l2cap, uint8_t ident,
 
 static inline struct net_buf *l2cap_alloc_seg(struct net_buf *buf, struct bt_l2cap_le_chan *ch)
 {
-	struct net_buf_pool *pool = net_buf_pool_get(buf->pool_id);
-	struct net_buf *seg;
+	struct net_buf *seg = NULL;
 
-	/* Use the dedicated segment callback if registered */
+	/* Use the user-defined allocator */
 	if (ch->chan.ops->alloc_seg) {
 		seg = ch->chan.ops->alloc_seg(&ch->chan);
 		__ASSERT_NO_MSG(seg);
-	} else {
-		/* Try to use original pool if possible */
-		seg = net_buf_alloc(pool, K_NO_WAIT);
+	}
+
+	/* Fallback to using global connection tx pool */
+	if (!seg) {
+		seg = bt_l2cap_create_pdu_timeout(NULL, 0, K_NO_WAIT);
 	}
 
 	if (seg) {
 		net_buf_reserve(seg, BT_L2CAP_CHAN_SEND_RESERVE);
-		return seg;
 	}
 
-	/* Fallback to using global connection tx pool */
-	return bt_l2cap_create_pdu_timeout(NULL, 0, K_NO_WAIT);
+	return seg;
 }
 
 static struct net_buf *l2cap_chan_create_seg(struct bt_l2cap_le_chan *ch,
@@ -1912,6 +1951,9 @@ static void l2cap_chan_sdu_sent(struct bt_conn *conn, void *user_data, int err)
 	chan = bt_l2cap_le_lookup_tx_cid(conn, cid);
 	if (!chan) {
 		/* Received SDU sent callback for disconnected channel */
+		if (cb) {
+			cb(conn, cb_user_data, -ESHUTDOWN);
+		}
 		return;
 	}
 
@@ -2259,13 +2301,13 @@ static void l2cap_chan_shutdown(struct bt_l2cap_chan *chan)
 
 	/* Cleanup outstanding request */
 	if (le_chan->tx_buf) {
-		net_buf_unref(le_chan->tx_buf);
+		l2cap_tx_buf_destroy(chan->conn, le_chan->tx_buf, -ESHUTDOWN);
 		le_chan->tx_buf = NULL;
 	}
 
 	/* Remove buffers on the TX queue */
 	while ((buf = net_buf_get(&le_chan->tx_queue, K_NO_WAIT))) {
-		net_buf_unref(buf);
+		l2cap_tx_buf_destroy(chan->conn, buf, -ESHUTDOWN);
 	}
 
 	/* Remove buffers on the RX queue */
@@ -2277,22 +2319,6 @@ static void l2cap_chan_shutdown(struct bt_l2cap_chan *chan)
 	if (chan->ops->status) {
 		chan->ops->status(chan, chan->status);
 	}
-}
-
-/** @brief Get @c chan->state.
- *
- * This field does not exist when @kconfig{CONFIG_BT_L2CAP_DYNAMIC_CHANNEL} is
- * disabled. In that case, this function returns @ref BT_L2CAP_CONNECTED since
- * the struct can only represent static channels in that case and static
- * channels are always connected.
- */
-static inline bt_l2cap_chan_state_t bt_l2cap_chan_get_state(struct bt_l2cap_chan *chan)
-{
-#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
-	return BT_L2CAP_LE_CHAN(chan)->state;
-#else
-	return BT_L2CAP_CONNECTED;
-#endif
 }
 
 static void l2cap_chan_send_credits(struct bt_l2cap_le_chan *chan,
