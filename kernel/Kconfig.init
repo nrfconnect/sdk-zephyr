@@ -6,6 +6,15 @@
 
 menu "SoC and Board Hooks"
 
+config SOC_PRE_RAM_HOOK
+	bool "Run early SoC pre-RAM reset hook"
+	help
+	  Run an early SoC reset hook, before RAM get initialize.
+
+	  A custom hook soc_pre_ram_hook() is executed at the beginning of the
+	  startup code (__start), even before any stack is initiated
+	  or RAM is accessed. soc_pre_ram_hook() must be implemented by the SoC.
+
 config SOC_RESET_HOOK
 	bool "Run early SoC reset hook"
 	help
