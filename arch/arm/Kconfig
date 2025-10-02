@@ -144,6 +144,13 @@ config ARM_ON_EXIT_CPU_IDLE
 	  observed on some SoCs caused by a memory access following WFI/WFE
 	  instructions.
 
+config SOC_PRE_RAM_HOOK
+	bool "include cpu start hook"
+	depends on CPU_CORTEX_M
+	help
+	  This hooks run almost after startup - even before any stack is initiated
+	  or RAM is accessed.
+
 rsource "core/Kconfig"
 rsource "core/Kconfig.vfp"
 
