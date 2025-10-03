@@ -712,10 +712,12 @@ static int send_buf(struct bt_conn *conn, struct net_buf *buf,
 	uint16_t frag_len = MIN(conn_mtu(conn), len);
 
 	/* If ATT sent callback is delayed until data transmission
-	 * is done by BLE controller, the transmitted buffer may
-	 * have an additional reference. The reference is used to
-	 * extend lifetime of the net buffer until the data
-	 * transmission is confirmed by ACK of the remote.
+	 * is done by BLE controller (CONFIG_BT_ATT_SENT_CB_AFTER_TX),
+	 * the `chan_send` function from `att.c` introduces an additional
+	 * reference. The reference is used to extend lifetime of the net
+	 * buffer until the data transmission is confirmed by ACK of the
+	 * remote (the reference is removed when the TX callback passed
+	 * to `bt_l2cap_send_pdu` is called).
 	 *
 	 * send_buf function can be called multiple times, if buffer
 	 * has to be fragmented over HCI. In that case, the callback

@@ -52,9 +52,6 @@ config BT_ATT_SENT_CB_AFTER_TX
 	  Zephyr fork). It is a temporary solution allowing to control flow of
 	  GATT notifications with HID reports for HID use-case.
 
-	  Enabling this option may require increasing CONFIG_BT_CONN_TX_MAX in
-	  configuration, because ATT would use additional TX contexts.
-
 config BT_EATT
 	bool "Enhanced ATT Bearers support [EXPERIMENTAL]"
 	depends on BT_L2CAP_ECRED
