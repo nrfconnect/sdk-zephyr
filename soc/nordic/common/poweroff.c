@@ -7,7 +7,9 @@
 #include <zephyr/toolchain.h>
 #include <zephyr/drivers/retained_mem/nrf_retained_mem.h>
 
-#if defined(CONFIG_SOC_SERIES_NRF51X) || defined(CONFIG_SOC_SERIES_NRF52X)
+#if defined(CONFIG_BUILD_WITH_TFM)
+#include "tfm_platform_api.h"
+#elif defined(CONFIG_SOC_SERIES_NRF51X) || defined(CONFIG_SOC_SERIES_NRF52X)
 #include <hal/nrf_power.h>
 #elif defined(CONFIG_SOC_SERIES_NRF54HX)
 #include <power.h>
@@ -65,12 +67,17 @@ void z_sys_poweroff(void)
 #endif
 
 #if defined(CONFIG_SOC_SERIES_NRF54LX)
+#if !defined(CONFIG_BUILD_WITH_TFM)
 	/* Set VPR to remain in its reset state when waking from OFF */
 	nrf_memconf_ramblock_ret_enable_set(NRF_MEMCONF, VPR_POWER_IDX, VPR_RET_BIT, false);
+#endif
 
 	nrfx_reset_reason_clear(UINT32_MAX);
 #endif
-#if defined(CONFIG_SOC_SERIES_NRF51X) || defined(CONFIG_SOC_SERIES_NRF52X)
+
+#if defined(CONFIG_BUILD_WITH_TFM)
+	tfm_platform_system_off();
+#elif defined(CONFIG_SOC_SERIES_NRF51X) || defined(CONFIG_SOC_SERIES_NRF52X)
 	nrf_power_system_off(NRF_POWER);
 #elif defined(CONFIG_SOC_SERIES_NRF54HX)
 	nrf_poweroff();
