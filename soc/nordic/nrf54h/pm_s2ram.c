@@ -5,6 +5,7 @@
 
 #include <zephyr/arch/cpu.h>
 #include <zephyr/arch/arm/mpu/arm_mpu.h>
+#include <zephyr/arch/arm/cortex_m/scb.h>
 #include <zephyr/arch/common/pm_s2ram.h>
 #include <zephyr/linker/sections.h>
 #include <zephyr/sys/util.h>
@@ -30,23 +31,6 @@ typedef struct {
 	uint8_t IPR[NVIC_MEMBER_SIZE(IPR)];
 } _nvic_context_t;
 
-typedef struct {
-	uint32_t ICSR;
-	uint32_t VTOR;
-	uint32_t AIRCR;
-	uint32_t SCR;
-	uint32_t CCR;
-	uint32_t SHPR[12U];
-	uint32_t SHCSR;
-	uint32_t CFSR;
-	uint32_t HFSR;
-	uint32_t DFSR;
-	uint32_t MMFAR;
-	uint32_t BFAR;
-	uint32_t AFSR;
-	uint32_t CPACR;
-} _scb_context_t;
-
 #if defined(CONFIG_FPU) && !defined(CONFIG_FPU_SHARING)
 typedef struct {
 	uint32_t FPCCR;
@@ -61,7 +45,7 @@ struct backup {
 #if defined(CONFIG_ARM_MPU)
 	struct z_mpu_context_retained mpu_context;
 #endif
-	_scb_context_t scb_context;
+	struct scb_context scb_context;
 #if defined(CONFIG_FPU) && !defined(CONFIG_FPU_SHARING)
 	_fpu_context_t fpu_context;
 #endif
@@ -81,42 +65,6 @@ static void nvic_restore(_nvic_context_t *backup)
 	memcpy((uint32_t *)NVIC->ISER, backup->ISER, sizeof(NVIC->ISER));
 	memcpy((uint32_t *)NVIC->ISPR, backup->ISPR, sizeof(NVIC->ISPR));
 	memcpy((uint32_t *)NVIC->IPR, backup->IPR, sizeof(NVIC->IPR));
-}
-
-static void scb_save(_scb_context_t *backup)
-{
-	backup->ICSR = SCB->ICSR;
-	backup->VTOR = SCB->VTOR;
-	backup->AIRCR = SCB->AIRCR;
-	backup->SCR = SCB->SCR;
-	backup->CCR = SCB->CCR;
-	memcpy(backup->SHPR, (uint32_t *)SCB->SHPR, sizeof(SCB->SHPR));
-	backup->SHCSR = SCB->SHCSR;
-	backup->CFSR = SCB->CFSR;
-	backup->HFSR = SCB->HFSR;
-	backup->DFSR = SCB->DFSR;
-	backup->MMFAR = SCB->MMFAR;
-	backup->BFAR = SCB->BFAR;
-	backup->AFSR = SCB->AFSR;
-	backup->CPACR = SCB->CPACR;
-}
-
-static void scb_restore(_scb_context_t *backup)
-{
-	SCB->ICSR = backup->ICSR;
-	SCB->VTOR = backup->VTOR;
-	SCB->AIRCR = backup->AIRCR;
-	SCB->SCR = backup->SCR;
-	SCB->CCR = backup->CCR;
-	memcpy((uint32_t *)SCB->SHPR, backup->SHPR, sizeof(SCB->SHPR));
-	SCB->SHCSR = backup->SHCSR;
-	SCB->CFSR = backup->CFSR;
-	SCB->HFSR = backup->HFSR;
-	SCB->DFSR = backup->DFSR;
-	SCB->MMFAR = backup->MMFAR;
-	SCB->BFAR = backup->BFAR;
-	SCB->AFSR = backup->AFSR;
-	SCB->CPACR = backup->CPACR;
 }
 
 #if defined(CONFIG_FPU)
@@ -175,7 +123,7 @@ int soc_s2ram_suspend(pm_s2ram_system_off_fn_t system_off)
 	int ret;
 
 	SET_MCUBOOT_RESUME_MAGIC();
-	scb_save(&backup_data.scb_context);
+	z_arm_save_scb_context(&backup_data.scb_context);
 #if defined(CONFIG_FPU)
 #if !defined(CONFIG_FPU_SHARING)
 	fpu_save(&backup_data.fpu_context);
@@ -204,7 +152,7 @@ int soc_s2ram_suspend(pm_s2ram_system_off_fn_t system_off)
 	z_arm_restore_mpu_context(&backup_data.mpu_context);
 #endif
 	nvic_restore(&backup_data.nvic_context);
-	scb_restore(&backup_data.scb_context);
+	z_arm_restore_scb_context(&backup_data.scb_context);
 
 	return ret;
 }
