@@ -6,6 +6,7 @@
 #include <zephyr/arch/cpu.h>
 #include <zephyr/arch/arm/mpu/arm_mpu.h>
 #include <zephyr/arch/arm/cortex_m/scb.h>
+#include <zephyr/arch/arm/cortex_m/fpu.h>
 #include <zephyr/arch/common/pm_s2ram.h>
 #include <zephyr/linker/sections.h>
 #include <zephyr/sys/util.h>
@@ -31,15 +32,6 @@ typedef struct {
 	uint8_t IPR[NVIC_MEMBER_SIZE(IPR)];
 } _nvic_context_t;
 
-#if defined(CONFIG_FPU) && !defined(CONFIG_FPU_SHARING)
-typedef struct {
-	uint32_t FPCCR;
-	uint32_t FPCAR;
-	uint32_t FPDSCR;
-	uint32_t S[32];
-} _fpu_context_t;
-#endif
-
 struct backup {
 	_nvic_context_t nvic_context;
 #if defined(CONFIG_ARM_MPU)
@@ -47,7 +39,7 @@ struct backup {
 #endif
 	struct scb_context scb_context;
 #if defined(CONFIG_FPU) && !defined(CONFIG_FPU_SHARING)
-	_fpu_context_t fpu_context;
+	struct fpu_ctx_full fpu_context;
 #endif
 };
 
@@ -83,26 +75,6 @@ static void fpu_power_up(void)
 	__DSB();
 	__ISB();
 }
-
-#if !defined(CONFIG_FPU_SHARING)
-static void fpu_save(_fpu_context_t *backup)
-{
-	backup->FPCCR = FPU->FPCCR;
-	backup->FPCAR = FPU->FPCAR;
-	backup->FPDSCR = FPU->FPDSCR;
-
-	__asm__ volatile("vstmia %0, {s0-s31}\n" : : "r"(backup->S) : "memory");
-}
-
-static void fpu_restore(_fpu_context_t *backup)
-{
-	FPU->FPCCR = backup->FPCCR;
-	FPU->FPCAR = backup->FPCAR;
-	FPU->FPDSCR = backup->FPDSCR;
-
-	__asm__ volatile("vldmia %0, {s0-s31}\n" : : "r"(backup->S) : "memory");
-}
-#endif /* !defined(CONFIG_FPU_SHARING) */
 #endif /* defined(CONFIG_FPU) */
 
 #if DT_NODE_EXISTS(DT_NODELABEL(mcuboot_s2ram)) &&\
@@ -126,7 +98,7 @@ int soc_s2ram_suspend(pm_s2ram_system_off_fn_t system_off)
 	z_arm_save_scb_context(&backup_data.scb_context);
 #if defined(CONFIG_FPU)
 #if !defined(CONFIG_FPU_SHARING)
-	fpu_save(&backup_data.fpu_context);
+	z_arm_save_fp_context(&backup_data.fpu_context);
 #endif
 	fpu_power_down();
 #endif
@@ -141,7 +113,7 @@ int soc_s2ram_suspend(pm_s2ram_system_off_fn_t system_off)
 	fpu_power_up();
 #if !defined(CONFIG_FPU_SHARING)
 	/* Also the FPU content might be lost. */
-	fpu_restore(&backup_data.fpu_context);
+	z_arm_restore_fp_context(&backup_data.fpu_context);
 #endif
 #endif
 	if (ret < 0) {
