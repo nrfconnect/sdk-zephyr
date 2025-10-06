@@ -273,6 +273,21 @@ static void l2cap_chan_del(struct bt_l2cap_chan *chan)
 	 * `l2cap_chan_destroy()` as it is not called for fixed channels.
 	 */
 	while ((buf = k_fifo_get(&le_chan->tx_queue, K_NO_WAIT))) {
+		bt_conn_tx_cb_t cb = closure_cb(buf->user_data);
+
+		if (cb) {
+			void *user_data = closure_data(buf->user_data);
+
+			/* When bt_l2cap_send_pdu() succeeds, the stack takes ownership
+			 * and must invoke the callback eventually. Since these PDUs will
+			 * never be transmitted, invoke the callback now with an error.
+			 * Note: We cannot use conn_tx_destroy() here because no bt_conn_tx
+			 * struct has been allocated yet - the closure is still in the
+			 * buf->user_data.
+			 */
+			cb(chan->conn, user_data, -ESHUTDOWN);
+		}
+
 		net_buf_unref(buf);
 	}
 
