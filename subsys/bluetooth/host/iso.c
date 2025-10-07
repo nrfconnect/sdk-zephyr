@@ -34,13 +34,25 @@ LOG_MODULE_REGISTER(bt_iso);
 
 #define iso_chan(_iso) ((_iso)->iso.chan);
 
-#if defined(CONFIG_BT_ISO_UNICAST) || defined(CONFIG_BT_ISO_SYNC_RECEIVER)
+#if defined(CONFIG_BT_ISO_RX)
+static bt_iso_buf_rx_freed_cb_t buf_rx_freed_cb;
+
+static void iso_rx_buf_destroy(struct net_buf *buf)
+{
+	net_buf_destroy(buf);
+
+	if (buf_rx_freed_cb) {
+		buf_rx_freed_cb();
+	}
+}
+
 NET_BUF_POOL_FIXED_DEFINE(iso_rx_pool, CONFIG_BT_ISO_RX_BUF_COUNT,
-			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_RX_MTU), 8, NULL);
+			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_RX_MTU), sizeof(struct iso_data),
+			  iso_rx_buf_destroy);
 
 static struct bt_iso_recv_info iso_info_data[CONFIG_BT_ISO_RX_BUF_COUNT];
 #define iso_info(buf) (&iso_info_data[net_buf_id(buf)])
-#endif /* CONFIG_BT_ISO_UNICAST || CONFIG_BT_ISO_SYNC_RECEIVER */
+#endif /* CONFIG_BT_ISO_RX */
 
 #if defined(CONFIG_BT_ISO_UNICAST) || defined(CONFIG_BT_ISO_BROADCAST)
 NET_BUF_POOL_FIXED_DEFINE(iso_tx_pool, CONFIG_BT_ISO_TX_BUF_COUNT,
@@ -79,7 +91,7 @@ struct bt_iso_big bigs[CONFIG_BT_ISO_MAX_BIG];
 static struct bt_iso_big *lookup_big_by_handle(uint8_t big_handle);
 #endif /* CONFIG_BT_ISO_BROADCAST */
 
-#if defined(CONFIG_BT_ISO_UNICAST) || defined(CONFIG_BT_ISO_BROADCASTER)
+#if defined(CONFIG_BT_ISO_TX)
 static void bt_iso_send_cb(struct bt_conn *iso, void *user_data, int err)
 {
 	struct bt_iso_chan *chan = iso->iso.chan;
@@ -93,8 +105,7 @@ static void bt_iso_send_cb(struct bt_conn *iso, void *user_data, int err)
 		ops->sent(chan);
 	}
 }
-#endif /* CONFIG_BT_ISO_UNICAST || CONFIG_BT_ISO_BROADCASTER */
-
+#endif /* CONFIG_BT_ISO_TX */
 
 void hci_iso(struct net_buf *buf)
 {
@@ -570,7 +581,7 @@ int bt_iso_chan_get_info(const struct bt_iso_chan *chan,
 	return 0;
 }
 
-#if defined(CONFIG_BT_ISO_UNICAST) || defined(CONFIG_BT_ISO_SYNC_RECEIVER)
+#if defined(CONFIG_BT_ISO_RX)
 struct net_buf *bt_iso_get_rx(k_timeout_t timeout)
 {
 	struct net_buf *buf = net_buf_alloc(&iso_rx_pool, timeout);
@@ -581,6 +592,11 @@ struct net_buf *bt_iso_get_rx(k_timeout_t timeout)
 	}
 
 	return buf;
+}
+
+void bt_iso_buf_rx_freed_cb_set(bt_iso_buf_rx_freed_cb_t cb)
+{
+	buf_rx_freed_cb = cb;
 }
 
 void bt_iso_recv(struct bt_conn *iso, struct net_buf *buf, uint8_t flags)
@@ -727,11 +743,10 @@ void bt_iso_recv(struct bt_conn *iso, struct net_buf *buf, uint8_t flags)
 
 	bt_conn_reset_rx_state(iso);
 }
-#endif /* CONFIG_BT_ISO_UNICAST) || defined(CONFIG_BT_ISO_SYNC_RECEIVER */
+#endif /* CONFIG_BT_ISO_RX */
 
-#if defined(CONFIG_BT_ISO_UNICAST) || defined(CONFIG_BT_ISO_BROADCASTER)
-static uint16_t iso_chan_max_data_len(const struct bt_iso_chan *chan,
-				      uint32_t ts)
+#if defined(CONFIG_BT_ISO_TX)
+static uint16_t iso_chan_max_data_len(const struct bt_iso_chan *chan)
 {
 	size_t max_controller_data_len;
 	uint16_t max_data_len;
@@ -786,7 +801,7 @@ int bt_iso_chan_send(struct bt_iso_chan *chan, struct net_buf *buf,
 		return -EMSGSIZE;
 	}
 
-	max_data_len = iso_chan_max_data_len(chan, ts);
+	max_data_len = iso_chan_max_data_len(chan);
 	if (buf->len > max_data_len) {
 		LOG_DBG("Cannot send %u octets, maximum %u", buf->len, max_data_len);
 		return -EMSGSIZE;
@@ -934,7 +949,7 @@ int bt_iso_chan_get_tx_sync(const struct bt_iso_chan *chan, struct bt_iso_tx_inf
 
 	return 0;
 }
-#endif /* CONFIG_BT_ISO_UNICAST) || CONFIG_BT_ISO_BROADCASTER */
+#endif /* CONFIG_BT_ISO_TX */
 
 #if defined(CONFIG_BT_ISO_UNICAST)
 int bt_iso_chan_disconnect(struct bt_iso_chan *chan)
