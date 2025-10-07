@@ -8,6 +8,7 @@
 #include <zephyr/toolchain.h>
 #include <zephyr/pm/policy.h>
 #include <zephyr/arch/common/pm_s2ram.h>
+#include <zephyr/drivers/timer/nrf_grtc_timer.h>
 #include <hal/nrf_resetinfo.h>
 #include <hal/nrf_memconf.h>
 #include <zephyr/cache.h>
@@ -82,6 +83,10 @@ void nrf_poweroff(void)
 #endif
 	common_suspend();
 
+	/* Disable all owned compare channels except the one used for wakeup from system-off. */
+	z_nrf_grtc_timer_disable_owned_cc_channels(z_nrf_grtc_timer_wakeup_channel_get());
+
+	/* Indicate that we are ready for system off. */
 	nrf_lrcconf_task_trigger(NRF_LRCCONF010, NRF_LRCCONF_TASK_SYSTEMOFFREADY);
 
 	__set_BASEPRI(0);
