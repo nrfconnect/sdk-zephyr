@@ -83,3 +83,4 @@ jobs:
           path:
             zephyr/twister-out/*/samples/hello_world/sample.basic.helloworld/build.log
             zephyr/twister-out/*/samples/cpp/hello_world/sample.cpp.helloworld/build.log
+            
