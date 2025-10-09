@@ -8,6 +8,7 @@
 #include <zephyr/toolchain.h>
 #include <zephyr/pm/policy.h>
 #include <zephyr/arch/common/pm_s2ram.h>
+#include <zephyr/drivers/timer/nrf_grtc_timer.h>
 #include <hal/nrf_resetinfo.h>
 #include <hal/nrf_memconf.h>
 #include <hal/nrf_cache.h>
@@ -71,13 +72,22 @@ void nrf_poweroff(void)
 	nrf_resetinfo_resetreas_local_set(NRF_RESETINFO, 0);
 	nrf_resetinfo_restore_valid_set(NRF_RESETINFO, false);
 
-#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
+#if defined(CONFIG_SOC_NRF54H20_CPURAD)
+	nrf_lrcconf_retain_set(NRF_LRCCONF010,
+			NRF_LRCCONF_POWER_DOMAIN_0 | NRF_LRCCONF_POWER_DOMAIN_1, false);
+	nrf_lrcconf_poweron_force_set(NRF_LRCCONF010,
+			NRF_LRCCONF_POWER_DOMAIN_0 | NRF_LRCCONF_POWER_DOMAIN_1, false);
+#else
 	/* Disable retention */
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_MAIN, false);
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, false);
 #endif
 	common_suspend();
 
+	/* Disable all owned compare channels except the one used for wakeup from system-off. */
+	z_nrf_grtc_timer_disable_owned_cc_channels(z_nrf_grtc_timer_wakeup_channel_get());
+
+	/* Indicate that we are ready for system off. */
 	nrf_lrcconf_task_trigger(NRF_LRCCONF010, NRF_LRCCONF_TASK_SYSTEMOFFREADY);
 
 	__set_BASEPRI(0);
