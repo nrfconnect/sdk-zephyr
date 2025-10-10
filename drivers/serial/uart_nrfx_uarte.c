@@ -306,6 +306,7 @@ struct uarte_nrfx_data {
 #endif
 #ifdef UARTE_ANY_ASYNC
 	struct uarte_async_cb *async;
+	nrfx_timer_t timer;
 #endif
 	atomic_val_t poll_out_lock;
 	atomic_t flags;
@@ -448,7 +449,6 @@ struct uarte_nrfx_config {
 	size_t bounce_buf_swap_len;
 	struct uarte_async_rx_cbwt *cbwt_data;
 #endif
-	nrfx_timer_t timer;
 	uint8_t *tx_cache;
 	uint8_t *rx_flush_buf;
 #endif
@@ -878,7 +878,7 @@ static void uarte_periph_enable(const struct device *dev)
 #ifdef UARTE_ANY_ASYNC
 	if (data->async) {
 		if (HW_RX_COUNTING_ENABLED(config)) {
-			const nrfx_timer_t *timer = &config->timer;
+			nrfx_timer_t *timer = &data->timer;
 
 			nrfx_timer_enable(timer);
 
@@ -1067,13 +1067,13 @@ static int uarte_nrfx_rx_counting_init(const struct device *dev)
 
 	if (HW_RX_COUNTING_ENABLED(cfg)) {
 		nrfx_timer_config_t tmr_config = NRFX_TIMER_DEFAULT_CONFIG(
-						NRF_TIMER_BASE_FREQUENCY_GET(cfg->timer.p_reg));
+						NRF_TIMER_BASE_FREQUENCY_GET(data->timer.p_reg));
 		uint32_t evt_addr = nrf_uarte_event_address_get(uarte, NRF_UARTE_EVENT_RXDRDY);
-		uint32_t tsk_addr = nrfx_timer_task_address_get(&cfg->timer, NRF_TIMER_TASK_COUNT);
+		uint32_t tsk_addr = nrfx_timer_task_address_get(&data->timer, NRF_TIMER_TASK_COUNT);
 
 		tmr_config.mode = NRF_TIMER_MODE_COUNTER;
 		tmr_config.bit_width = NRF_TIMER_BIT_WIDTH_32;
-		ret = nrfx_timer_init(&cfg->timer,
+		ret = nrfx_timer_init(&data->timer,
 				      &tmr_config,
 				      timer_handler);
 		if (ret != NRFX_SUCCESS) {
@@ -1081,12 +1081,12 @@ static int uarte_nrfx_rx_counting_init(const struct device *dev)
 			return -EINVAL;
 		}
 
-		nrfx_timer_clear(&cfg->timer);
+		nrfx_timer_clear(&data->timer);
 
 		ret = nrfx_gppi_channel_alloc(&data->async->rx.cnt.ppi);
 		if (ret != NRFX_SUCCESS) {
 			LOG_ERR("Failed to allocate PPI Channel");
-			nrfx_timer_uninit(&cfg->timer);
+			nrfx_timer_uninit(&data->timer);
 			return -EINVAL;
 		}
 
@@ -3202,7 +3202,6 @@ static void uarte_pm_resume(const struct device *dev)
 	const struct uarte_nrfx_config *cfg = dev->config;
 
 	if (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME) || !LOW_POWER_ENABLED(cfg)) {
-		(void)pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
 		uarte_periph_enable(dev);
 	}
 }
@@ -3640,8 +3639,8 @@ static int uarte_instance_deinit(const struct device *dev)
 		IF_ENABLED(CONFIG_UARTE_NRFX_UARTE_COUNT_BYTES_WITH_TIMER,     \
 			(UARTE_COUNT_BYTES_WITH_TIMER_CONFIG(idx)))	       \
 		IF_ENABLED(CONFIG_UART_##idx##_NRF_HW_ASYNC,		       \
-			(.timer = NRFX_TIMER_INSTANCE(			       \
-				CONFIG_UART_##idx##_NRF_HW_ASYNC_TIMER),))     \
+			(.timer = NRFX_TIMER_INSTANCE(NRF_TIMER_INST_GET(      \
+				CONFIG_UART_##idx##_NRF_HW_ASYNC_TIMER)),))    \
 		IF_ENABLED(INSTANCE_IS_FAST(_, /*empty*/, idx, _),	       \
 			(.clk_dev = DEVICE_DT_GET_OR_NULL(DT_CLOCKS_CTLR(UARTE(idx))), \
 			 .clk_spec = {					       \
