@@ -259,7 +259,6 @@
 		mram1x: mram@e000000 {
 			compatible = "nordic,mram";
 			reg = <0xe000000 DT_SIZE_K(2048)>;
-			power-domains = <&gdpwr_fast_active_0>;
 			erase-block-size = <4096>;
 			write-block-size = <16>;
 		};
@@ -622,7 +621,6 @@
 				reg = <0x86000 0x1000>, <0x2f700000 0x40000>;
 				reg-names = "wrapper", "core";
 				interrupts = <134 NRF_DEFAULT_IRQ_PRIORITY>;
-				power-domains = <&gdpwr_fast_active_0>;
 				num-in-eps = <8>;
 				num-out-eps = <10>;
 				ghwcfg1 = <0xaa555000>;
@@ -638,7 +636,6 @@
 				reg = <0x95000 0x500 0x95500 0xb00>;
 				reg-names = "wrapper", "core";
 				interrupts = <149 NRF_DEFAULT_IRQ_PRIORITY>;
-				power-domains = <&gdpwr_fast_active_0>;
 				clock-frequency = <DT_FREQ_M(400)>;
 				packet-data-limit = <65536>;
 				fifo-depth = <32>;
@@ -648,21 +645,18 @@
 			cpusec_bellboard: mailbox@99000 {
 				reg = <0x99000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_fast_active_0>;
 				#mbox-cells = <1>;
 			};
 
 			cpuapp_bellboard: mailbox@9a000 {
 				reg = <0x9a000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_fast_active_0>;
 				#mbox-cells = <1>;
 			};
 
 			cpurad_bellboard: mailbox@9b000 {
 				reg = <0x9b000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_fast_active_0>;
 				#mbox-cells = <1>;
 			};
 
@@ -703,7 +697,6 @@
 				compatible = "nordic,nrf-vpr-coprocessor";
 				reg = <0x8d4000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_fast_active_1>;
 				#address-cells = <1>;
 				#size-cells = <1>;
 				ranges = <0x0 0x8d4000 0x1000>;
@@ -725,7 +718,6 @@
 				interrupts = <216 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&canpll>, <&hsfll120>;
 				clock-names = "auxpll", "hsfll";
-				power-domains = <&gdpwr_fast_active_1>;
 				bosch,mram-cfg = <0x0 28 8 3 3 0 1 1>;
 				status = "disabled";
 			};
@@ -734,7 +726,6 @@
 				compatible = "nordic,nrf-dppic-global";
 				reg = <0x8e1000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_fast_active_1>;
 			};
 
 			timer120: timer@8e2000 {
@@ -743,7 +734,6 @@
 				status = "disabled";
 				cc-num = <6>;
 				interrupts = <226 NRF_DEFAULT_IRQ_PRIORITY>;
-				power-domains = <&gdpwr_fast_active_1>;
 				max-bit-width = <32>;
 				clocks = <&hsfll120>;
 				prescaler = <0>;
@@ -755,7 +745,6 @@
 				status = "disabled";
 				cc-num = <6>;
 				interrupts = <227 NRF_DEFAULT_IRQ_PRIORITY>;
-				power-domains = <&gdpwr_fast_active_1>;
 				max-bit-width = <32>;
 				clocks = <&hsfll120>;
 				prescaler = <0>;
@@ -767,7 +756,6 @@
 				status = "disabled";
 				interrupts = <228 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&hsfll120>;
-				power-domains = <&gdpwr_fast_active_1>;
 				#pwm-cells = <3>;
 				idleout-supported;
 			};
@@ -776,7 +764,6 @@
 				compatible = "nordic,nrf-spis";
 				reg = <0x8e5000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_fast_active_1>;
 				easydma-maxcnt-bits = <15>;
 				interrupts = <229 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&hsfll120>;
@@ -790,7 +777,6 @@
 				compatible = "nordic,nrf-spim";
 				reg = <0x8e6000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_fast_active_1>;
 				easydma-maxcnt-bits = <15>;
 				interrupts = <230 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&hsfll120>;
@@ -808,7 +794,6 @@
 				status = "disabled";
 				interrupts = <230 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&hsfll120>;
-				power-domains = <&gdpwr_fast_active_1>;
 				endtx-stoptx-supported;
 				frame-timeout-supported;
 				zephyr,pm-device-runtime-auto;
@@ -821,7 +806,6 @@
 				easydma-maxcnt-bits = <15>;
 				interrupts = <231 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&hsfll120>;
-				power-domains = <&gdpwr_fast_active_1>;
 				max-frequency = <DT_FREQ_M(32)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -837,7 +821,6 @@
 				#address-cells = <1>;
 				#size-cells = <1>;
 				ranges = <0x0 0x908000 0x1000>;
-				power-domains = <&gdpwr_slow_active>;
 
 				cpuppr_vevif_tx: mailbox@0 {
 					compatible = "nordic,nrf-vevif-task-tx";
@@ -853,7 +836,6 @@
 				compatible = "nordic,nrf-ipct-global";
 				reg = <0x921000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_slow_main>;
 				channels = <8>;
 				global-domain-id = <13>;
 			};
@@ -862,7 +844,6 @@
 				compatible = "nordic,nrf-dppic-global";
 				reg = <0x922000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_slow_main>;
 			};
 
 			rtc130: rtc@928000 {
@@ -872,7 +853,6 @@
 				cc-num = <4>;
 				clock-frequency = <32768>;
 				interrupts = <296 NRF_DEFAULT_IRQ_PRIORITY>;
-				power-domains = <&gdpwr_slow_main>;
 				clocks = <&lfclk>;
 				prescaler = <1>;
 			};
@@ -884,7 +864,6 @@
 				cc-num = <4>;
 				clock-frequency = <32768>;
 				interrupts = <297 NRF_DEFAULT_IRQ_PRIORITY>;
-				power-domains = <&gdpwr_slow_main>;
 				clocks = <&lfclk>;
 				prescaler = <1>;
 			};
@@ -895,7 +874,6 @@
 				status = "disabled";
 				interrupts = <299 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&lfclk>;
-				power-domains = <&gdpwr_slow_main>;
 			};
 
 			wdt132: watchdog@92c000 {
@@ -904,7 +882,6 @@
 				status = "disabled";
 				interrupts = <300 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&lfclk>;
-				power-domains = <&gdpwr_slow_main>;
 			};
 
 			egu130: egu@92d000 {
@@ -912,14 +889,12 @@
 				reg = <0x92d000 0x1000>;
 				status = "disabled";
 				interrupts = <301 NRF_DEFAULT_IRQ_PRIORITY>;
-				power-domains = <&gdpwr_slow_main>;
 			};
 
 			gpiote130: gpiote@934000 {
 				compatible = "nordic,nrf-gpiote";
 				reg = <0x934000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_slow_main>;
 				instance = <130>;
 			};
 
@@ -929,7 +904,6 @@
 				status = "disabled";
 				#gpio-cells = <2>;
 				gpio-controller;
-				power-domains = <&gdpwr_slow_main>;
 				gpiote-instance = <&gpiote130>;
 				ngpios = <12>;
 				port = <0>;
@@ -937,7 +911,6 @@
 
 				gpio_pad_group0: pad-group {
 					compatible = "nordic,nrf-gpio-pad-group";
-					power-domains = <&gdpwr_slow_main>;
 					retain-mask = <0xFFF>;
 					zephyr,pm-device-runtime-auto;
 					status = "disabled";
@@ -950,7 +923,6 @@
 				status = "disabled";
 				#gpio-cells = <2>;
 				gpio-controller;
-				power-domains = <&gdpwr_slow_main>;
 				gpiote-instance = <&gpiote130>;
 				ngpios = <12>;
 				port = <1>;
@@ -958,7 +930,6 @@
 
 				gpio_pad_group1: pad-group {
 					compatible = "nordic,nrf-gpio-pad-group";
-					power-domains = <&gdpwr_slow_main>;
 					retain-mask = <0xFFF>;
 					zephyr,pm-device-runtime-auto;
 					status = "disabled";
@@ -971,7 +942,6 @@
 				status = "disabled";
 				#gpio-cells = <2>;
 				gpio-controller;
-				power-domains = <&gdpwr_slow_main>;
 				gpiote-instance = <&gpiote130>;
 				ngpios = <12>;
 				port = <2>;
@@ -979,7 +949,6 @@
 
 				gpio_pad_group2: pad-group {
 					compatible = "nordic,nrf-gpio-pad-group";
-					power-domains = <&gdpwr_slow_main>;
 					retain-mask = <0xFFF>;
 					zephyr,pm-device-runtime-auto;
 					status = "disabled";
@@ -992,14 +961,12 @@
 				status = "disabled";
 				#gpio-cells = <2>;
 				gpio-controller;
-				power-domains = <&gdpwr_slow_main>;
 				ngpios = <14>;
 				port = <6>;
 				zephyr,pm-device-runtime-auto;
 
 				gpio_pad_group6: pad-group {
 					compatible = "nordic,nrf-gpio-pad-group";
-					power-domains = <&gdpwr_fast_active_1>;
 					retain-mask = <0x3FFF>;
 					zephyr,pm-device-runtime-auto;
 					status = "disabled";
@@ -1012,14 +979,12 @@
 				status = "disabled";
 				#gpio-cells = <2>;
 				gpio-controller;
-				power-domains = <&gdpwr_slow_main>;
 				ngpios = <8>;
 				port = <7>;
 				zephyr,pm-device-runtime-auto;
 
 				gpio_pad_group7: pad-group {
 					compatible = "nordic,nrf-gpio-pad-group";
-					power-domains = <&gdpwr_fast_active_1>;
 					retain-mask = <0xFF>;
 					zephyr,pm-device-runtime-auto;
 					status = "disabled";
@@ -1032,7 +997,6 @@
 				status = "disabled";
 				#gpio-cells = <2>;
 				gpio-controller;
-				power-domains = <&gdpwr_slow_main>;
 				gpiote-instance = <&gpiote130>;
 				ngpios = <6>;
 				port = <9>;
@@ -1040,7 +1004,6 @@
 
 				gpio_pad_group9: pad-group {
 					compatible = "nordic,nrf-gpio-pad-group";
-					power-domains = <&gdpwr_slow_main>;
 					retain-mask = <0x3F>;
 					zephyr,pm-device-runtime-auto;
 					status = "disabled";
@@ -1051,7 +1014,6 @@
 				compatible = "nordic,nrf-dppic-global";
 				reg = <0x981000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			adc: adc@982000 {
@@ -1066,7 +1028,6 @@
 				 * gdpwr_slow_main. Request gdpwr_slow_main and rely on the
 				 * device HW to force its own power domain on while ENABLED.
 				 */
-				power-domains = <&gdpwr_slow_main>;
 				zephyr,pm-device-runtime-auto;
 			};
 
@@ -1085,7 +1046,6 @@
 				 * gdpwr_slow_main. Request gdpwr_slow_main and rely on the
 				 * device HW to force its own power domain on while ENABLED.
 				 */
-				power-domains = <&gdpwr_slow_main>;
 			};
 
 			temp: temperature-sensor@984000 {
@@ -1093,7 +1053,6 @@
 				reg = <0x984000 0x1000>;
 				interrupts = <388 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			nfct: nfct@985000 {
@@ -1101,14 +1060,12 @@
 				reg = <0x985000 0x1000>;
 				status = "disabled";
 				interrupts = <389 NRF_DEFAULT_IRQ_PRIORITY>;
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			dppic132: dppic@991000 {
 				compatible = "nordic,nrf-dppic-global";
 				reg = <0x991000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			pdm0: pdm@993000 {
@@ -1117,7 +1074,6 @@
 				status = "disabled";
 				interrupts = <403 NRF_DEFAULT_IRQ_PRIORITY>;
 				nordic,clockpin-enable = <NRF_FUN_PDM_CLK>;
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			qdec130: qdec@994000 {
@@ -1125,7 +1081,6 @@
 				reg = <0x994000 0x1000>;
 				status = "disabled";
 				interrupts = <404 NRF_DEFAULT_IRQ_PRIORITY>;
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			qdec131: qdec@995000 {
@@ -1133,7 +1088,6 @@
 				reg = <0x995000 0x1000>;
 				status = "disabled";
 				interrupts = <405 NRF_DEFAULT_IRQ_PRIORITY>;
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			grtc: grtc@99c000 {
@@ -1143,14 +1097,12 @@
 				cc-num = <16>;
 				clocks = <&lfclk>, <&fll16m>;
 				clock-names = "lfclock", "hfclock";
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			dppic133: dppic@9a1000 {
 				compatible = "nordic,nrf-dppic-global";
 				reg = <0x9a1000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			timer130: timer@9a2000 {
@@ -1160,7 +1112,6 @@
 				cc-num = <6>;
 				interrupts = <418 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-bit-width = <32>;
 				prescaler = <0>;
 			};
@@ -1172,7 +1123,6 @@
 				cc-num = <6>;
 				interrupts = <419 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-bit-width = <32>;
 				prescaler = <0>;
 			};
@@ -1183,7 +1133,6 @@
 				status = "disabled";
 				interrupts = <420 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				#pwm-cells = <3>;
 				idleout-supported;
 			};
@@ -1194,7 +1143,6 @@
 				status = "disabled";
 				interrupts = <421 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				easydma-maxcnt-bits = <15>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1210,7 +1158,6 @@
 				easydma-maxcnt-bits = <15>;
 				interrupts = <421 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-frequency = <DT_FREQ_M(8)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1228,7 +1175,6 @@
 				status = "disabled";
 				interrupts = <421 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				nordic,clockpin-enable = <NRF_FUN_UART_TX>;
 				endtx-stoptx-supported;
 				frame-timeout-supported;
@@ -1241,7 +1187,6 @@
 				status = "disabled";
 				interrupts = <422 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				easydma-maxcnt-bits = <15>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1257,7 +1202,6 @@
 				easydma-maxcnt-bits = <15>;
 				interrupts = <422 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-frequency = <DT_FREQ_M(8)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1275,7 +1219,6 @@
 				status = "disabled";
 				interrupts = <422 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				nordic,clockpin-enable = <NRF_FUN_UART_TX>;
 				endtx-stoptx-supported;
 				frame-timeout-supported;
@@ -1286,7 +1229,6 @@
 				compatible = "nordic,nrf-dppic-global";
 				reg = <0x9b1000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			timer132: timer@9b2000 {
@@ -1296,7 +1238,6 @@
 				cc-num = <6>;
 				interrupts = <434 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-bit-width = <32>;
 				prescaler = <0>;
 			};
@@ -1308,7 +1249,6 @@
 				cc-num = <6>;
 				interrupts = <435 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-bit-width = <32>;
 				prescaler = <0>;
 			};
@@ -1319,7 +1259,6 @@
 				status = "disabled";
 				interrupts = <436 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				#pwm-cells = <3>;
 				idleout-supported;
 			};
@@ -1330,7 +1269,6 @@
 				status = "disabled";
 				interrupts = <437 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				easydma-maxcnt-bits = <15>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1346,7 +1284,6 @@
 				easydma-maxcnt-bits = <15>;
 				interrupts = <437 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-frequency = <DT_FREQ_M(8)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1364,7 +1301,6 @@
 				status = "disabled";
 				interrupts = <437 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				nordic,clockpin-enable = <NRF_FUN_UART_TX>;
 				endtx-stoptx-supported;
 				frame-timeout-supported;
@@ -1377,7 +1313,6 @@
 				status = "disabled";
 				interrupts = <438 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				easydma-maxcnt-bits = <15>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1393,7 +1328,6 @@
 				easydma-maxcnt-bits = <15>;
 				interrupts = <438 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-frequency = <DT_FREQ_M(8)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1411,7 +1345,6 @@
 				status = "disabled";
 				interrupts = <438 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				nordic,clockpin-enable = <NRF_FUN_UART_TX>;
 				endtx-stoptx-supported;
 				frame-timeout-supported;
@@ -1422,7 +1355,6 @@
 				compatible = "nordic,nrf-dppic-global";
 				reg = <0x9c1000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			timer134: timer@9c2000 {
@@ -1432,7 +1364,6 @@
 				cc-num = <6>;
 				interrupts = <450 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-bit-width = <32>;
 				prescaler = <0>;
 			};
@@ -1444,7 +1375,6 @@
 				cc-num = <6>;
 				interrupts = <451 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-bit-width = <32>;
 				prescaler = <0>;
 			};
@@ -1456,7 +1386,6 @@
 				interrupts = <452 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
 				#pwm-cells = <3>;
-				power-domains = <&gdpwr_slow_active>;
 				idleout-supported;
 			};
 
@@ -1466,7 +1395,6 @@
 				status = "disabled";
 				interrupts = <453 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				easydma-maxcnt-bits = <15>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1482,7 +1410,6 @@
 				easydma-maxcnt-bits = <15>;
 				interrupts = <453 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-frequency = <DT_FREQ_M(8)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1500,7 +1427,6 @@
 				status = "disabled";
 				interrupts = <453 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				nordic,clockpin-enable = <NRF_FUN_UART_TX>;
 				endtx-stoptx-supported;
 				frame-timeout-supported;
@@ -1513,7 +1439,6 @@
 				status = "disabled";
 				interrupts = <454 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				easydma-maxcnt-bits = <15>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1529,7 +1454,6 @@
 				easydma-maxcnt-bits = <15>;
 				interrupts = <454 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-frequency = <DT_FREQ_M(8)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1547,7 +1471,6 @@
 				status = "disabled";
 				interrupts = <454 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				nordic,clockpin-enable = <NRF_FUN_UART_TX>;
 				endtx-stoptx-supported;
 				frame-timeout-supported;
@@ -1558,7 +1481,6 @@
 				compatible = "nordic,nrf-dppic-global";
 				reg = <0x9d1000 0x1000>;
 				status = "disabled";
-				power-domains = <&gdpwr_slow_active>;
 			};
 
 			timer136: timer@9d2000 {
@@ -1568,7 +1490,6 @@
 				cc-num = <6>;
 				interrupts = <466 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-bit-width = <32>;
 				prescaler = <0>;
 			};
@@ -1580,7 +1501,6 @@
 				cc-num = <6>;
 				interrupts = <467 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-bit-width = <32>;
 				prescaler = <0>;
 			};
@@ -1592,7 +1512,6 @@
 				interrupts = <468 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
 				#pwm-cells = <3>;
-				power-domains = <&gdpwr_slow_active>;
 				idleout-supported;
 			};
 
@@ -1602,7 +1521,6 @@
 				status = "disabled";
 				interrupts = <469 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				easydma-maxcnt-bits = <15>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1618,7 +1536,6 @@
 				easydma-maxcnt-bits = <15>;
 				interrupts = <469 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-frequency = <DT_FREQ_M(8)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1636,7 +1553,6 @@
 				status = "disabled";
 				interrupts = <469 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				nordic,clockpin-enable = <NRF_FUN_UART_TX>;
 				endtx-stoptx-supported;
 				frame-timeout-supported;
@@ -1649,7 +1565,6 @@
 				status = "disabled";
 				interrupts = <470 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				easydma-maxcnt-bits = <15>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1665,7 +1580,6 @@
 				easydma-maxcnt-bits = <15>;
 				interrupts = <470 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				max-frequency = <DT_FREQ_M(8)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1683,7 +1597,6 @@
 				status = "disabled";
 				interrupts = <470 NRF_DEFAULT_IRQ_PRIORITY>;
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				nordic,clockpin-enable = <NRF_FUN_UART_TX>;
 				endtx-stoptx-supported;
 				frame-timeout-supported;
@@ -1699,7 +1612,6 @@
 				interrupts = <402 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				nordic,clockpin-enable = <NRF_FUN_TDM_SCK_M>,
 							 <NRF_FUN_TDM_MCK>;
 			};
@@ -1713,7 +1625,6 @@
 				interrupts = <407 NRF_DEFAULT_IRQ_PRIORITY>;
 				status = "disabled";
 				clocks = <&fll16m>;
-				power-domains = <&gdpwr_slow_active>;
 				nordic,clockpin-enable = <NRF_FUN_TDM_SCK_M>,
 							 <NRF_FUN_TDM_MCK>;
 			};
