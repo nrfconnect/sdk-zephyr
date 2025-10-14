@@ -139,6 +139,11 @@ static int configure_hsfll(const struct device *dev, bool on)
 	const struct can_nrf_config *config = mcan_config->custom;
 	struct nrf_clock_spec spec = { 0 };
 
+	if (config->hsfll == NULL) {
+		/* Frequency fixed at max */
+		return 0;
+	}
+
 	/* If CAN is on, HSFLL frequency >= AUXPLL frequency */
 	if (on) {
 		int ret;
@@ -158,7 +163,7 @@ static int can_nrf_init(const struct device *dev)
 	const struct can_nrf_config *config = mcan_config->custom;
 	int ret;
 
-	if (!device_is_ready(config->auxpll) || !device_is_ready(config->hsfll)) {
+	if (!device_is_ready(config->auxpll)) {
 		return -ENODEV;
 	}
 
@@ -215,7 +220,7 @@ static int can_nrf_init(const struct device *dev)
 		.mram = CAN_MCAN_DT_INST_MRAM_ADDR(n),                                             \
 		.auxpll = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR_BY_NAME(n, auxpll)),                   \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                         \
-		.hsfll = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR_BY_NAME(n, hsfll)),                     \
+		.hsfll = DEVICE_DT_GET_OR_NULL(DT_INST_CLOCKS_CTLR_BY_NAME(n, hsfll)),             \
 		.irq = DT_INST_IRQN(n),                                                            \
 		.irq_configure = can_nrf_irq_configure##n,                                         \
 	};                                                                                         \

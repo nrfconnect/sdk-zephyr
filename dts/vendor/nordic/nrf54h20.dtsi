@@ -734,7 +734,6 @@
 				cc-num = <6>;
 				interrupts = <226 NRF_DEFAULT_IRQ_PRIORITY>;
 				max-bit-width = <32>;
-				clocks = <&hsfll120>;
 				prescaler = <0>;
 			};
 
@@ -745,7 +744,6 @@
 				cc-num = <6>;
 				interrupts = <227 NRF_DEFAULT_IRQ_PRIORITY>;
 				max-bit-width = <32>;
-				clocks = <&hsfll120>;
 				prescaler = <0>;
 			};
 
@@ -754,7 +752,6 @@
 				reg = <0x8e4000 0x1000>;
 				status = "disabled";
 				interrupts = <228 NRF_DEFAULT_IRQ_PRIORITY>;
-				clocks = <&hsfll120>;
 				#pwm-cells = <3>;
 				idleout-supported;
 			};
@@ -765,7 +762,6 @@
 				status = "disabled";
 				easydma-maxcnt-bits = <15>;
 				interrupts = <229 NRF_DEFAULT_IRQ_PRIORITY>;
-				clocks = <&hsfll120>;
 				max-frequency = <DT_FREQ_M(32)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -778,7 +774,6 @@
 				status = "disabled";
 				easydma-maxcnt-bits = <15>;
 				interrupts = <230 NRF_DEFAULT_IRQ_PRIORITY>;
-				clocks = <&hsfll120>;
 				max-frequency = <DT_FREQ_M(32)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -792,7 +787,6 @@
 				reg = <0x8e6000 0x1000>;
 				status = "disabled";
 				interrupts = <230 NRF_DEFAULT_IRQ_PRIORITY>;
-				clocks = <&hsfll120>;
 				endtx-stoptx-supported;
 				frame-timeout-supported;
 				zephyr,pm-device-runtime-auto;
@@ -804,7 +798,6 @@
 				status = "disabled";
 				easydma-maxcnt-bits = <15>;
 				interrupts = <231 NRF_DEFAULT_IRQ_PRIORITY>;
-				clocks = <&hsfll120>;
 				max-frequency = <DT_FREQ_M(32)>;
 				#address-cells = <1>;
 				#size-cells = <0>;
