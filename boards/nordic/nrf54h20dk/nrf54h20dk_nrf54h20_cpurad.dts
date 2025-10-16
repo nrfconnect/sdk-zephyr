@@ -141,3 +141,5 @@ zephyr_udc0: &usbhs {
 		};
 	};
 };
+
+ironside_se_boot_report: &cpurad_ironside_se_boot_report {};
