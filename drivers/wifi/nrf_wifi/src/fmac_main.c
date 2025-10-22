@@ -43,6 +43,10 @@
 #include <radio_test/fmac_api.h>
 #endif /* !CONFIG_NRF70_RADIO_TEST */
 
+#ifdef WIFI_NRF71
+#include "nrf71_wifi_rf.h"
+#endif /* WIFI_NRF71 */
+
 #define DT_DRV_COMPAT nordic_wlan
 LOG_MODULE_DECLARE(wifi_nrf, CONFIG_WIFI_NRF70_LOG_LEVEL);
 
@@ -70,6 +74,7 @@ BUILD_ASSERT(CONFIG_NRF70_MAX_TX_AGGREGATION <= 15,
 BUILD_ASSERT(CONFIG_NRF70_RX_NUM_BUFS >= 1,
 	"At least one RX buffer is required");
 #ifdef CONFIG_WIFI_NRF71
+#define RPU_DATA_RAM_SIZE (RPU_ADDR_DATA_RAM_END - RPU_ADDR_DATA_RAM_START + 1)
 BUILD_ASSERT(RPU_DATA_RAM_SIZE - TOTAL_RX_SIZE >= TOTAL_TX_SIZE,
 #else
 BUILD_ASSERT(RPU_PKTRAM_SIZE - TOTAL_RX_SIZE >= TOTAL_TX_SIZE,
@@ -519,6 +524,7 @@ void configure_tx_pwr_settings(struct nrf_wifi_tx_pwr_ctrl_params *tx_pwr_ctrl_p
 	tx_pwr_ctrl_params->ant_gain_5g_band1 = CONFIG_NRF70_ANT_GAIN_5G_BAND1;
 	tx_pwr_ctrl_params->ant_gain_5g_band2 = CONFIG_NRF70_ANT_GAIN_5G_BAND2;
 	tx_pwr_ctrl_params->ant_gain_5g_band3 = CONFIG_NRF70_ANT_GAIN_5G_BAND3;
+#ifndef WIFI_NRF71
 	tx_pwr_ctrl_params->band_edge_2g_lo_dss = CONFIG_NRF70_BAND_2G_LOWER_EDGE_BACKOFF_DSSS;
 	tx_pwr_ctrl_params->band_edge_2g_lo_ht = CONFIG_NRF70_BAND_2G_LOWER_EDGE_BACKOFF_HT;
 	tx_pwr_ctrl_params->band_edge_2g_lo_he = CONFIG_NRF70_BAND_2G_LOWER_EDGE_BACKOFF_HE;
@@ -565,7 +571,7 @@ void configure_tx_pwr_settings(struct nrf_wifi_tx_pwr_ctrl_params *tx_pwr_ctrl_p
 		CONFIG_NRF70_BAND_UNII_4_UPPER_EDGE_BACKOFF_HT;
 	tx_pwr_ctrl_params->band_edge_5g_unii_4_hi_he =
 		CONFIG_NRF70_BAND_UNII_4_UPPER_EDGE_BACKOFF_HE;
-
+#endif /* !WIFI_NRF71 */
 
 	tx_pwr_ceil_params->max_pwr_2g_dsss = MAX_TX_PWR(wifi_max_tx_pwr_2g_dsss);
 	tx_pwr_ceil_params->max_pwr_2g_mcs7 = MAX_TX_PWR(wifi_max_tx_pwr_2g_mcs7);

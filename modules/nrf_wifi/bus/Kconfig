@@ -58,4 +58,14 @@ config WIFI_NRF71
 	select EXPERIMENTAL
 	help
 	  Enable to do system testn with nrf71 and fpga
+config NRF71_SOFT_HPQM
+	bool "Soft hpqm for nrf71 testing with fpga"
+	select EXPERIMENTAL
+	help
+	  Enable to do system test with nrf71 and fpga
+config NRF71_CMD_RX_BUFF
+	bool "RX BUFF Programming for nrf71 testing with fpga"
+	select EXPERIMENTAL
+	help
+	  Enable to do system test with nrf71 and fpga
 endif # NRF70_BUSLIB
