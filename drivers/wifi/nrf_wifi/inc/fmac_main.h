@@ -32,7 +32,10 @@
 #include <radio_test/fmac_api.h>
 #endif /* !CONFIG_NRF70_RADIO_TEST */
 
+#ifndef WIFI_NRF71
 #include <host_rpu_umac_if.h>
+#endif /* !WIFI_NRF71 */
+
 
 #define NRF70_DRIVER_VERSION "1."KERNEL_VERSION_STRING
 

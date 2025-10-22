@@ -25,3 +25,4 @@ zephyr_library_compile_definitions_ifdef(CONFIG_NRF71_ON_IPC
 )
 
 zephyr_library_link_libraries(nrf-wifi-osal)
+
