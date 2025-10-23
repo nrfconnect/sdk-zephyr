@@ -185,13 +185,13 @@ int main(void)
 	}
 
 	if (IS_ENABLED(CONFIG_PM_DEVICE) && IS_ENABLED(CONFIG_SERIAL)) {
-		static const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+		static const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 		int err;
 		enum pm_device_state state;
 
-		if (dev) {
+		if (cons) {
 			do {
-				err = pm_device_state_get(dev, &state);
+				err = pm_device_state_get(cons, &state);
 			} while ((err == 0) && (state == PM_DEVICE_STATE_ACTIVE));
 		}
 	}
