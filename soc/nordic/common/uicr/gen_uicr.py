@@ -436,11 +436,6 @@ def main() -> None:
         help="Enable UICR.LOCK to prevent modifications without ERASEALL",
     )
     parser.add_argument(
-        "--eraseprotect",
-        action="store_true",
-        help="Enable UICR.ERASEPROTECT to block ERASEALL operations",
-    )
-    parser.add_argument(
         "--protectedmem",
         action="store_true",
         help="Enable protected memory region in UICR",
@@ -610,9 +605,6 @@ def main() -> None:
         # Handle LOCK configuration
         if args.lock:
             uicr.LOCK = ENABLED_VALUE
-        # Handle ERASEPROTECT configuration
-        if args.eraseprotect:
-            uicr.ERASEPROTECT = ENABLED_VALUE
         # Handle protected memory configuration
         if args.protectedmem:
             if args.protectedmem_size_bytes % KB_4 != 0:
