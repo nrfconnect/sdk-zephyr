@@ -16,6 +16,8 @@
 extern "C" {
 #endif
 
+#include <stddef.h>
+
 /* When CONFIG_NET_SOCKETS_OFFLOAD is enabled, offloaded sockets take precedence
  * when creating a new socket. Combine this flag with a socket type when
  * creating a socket, to enforce native socket creation (e. g. SOCK_STREAM | SOCK_NATIVE).
@@ -115,6 +117,41 @@ extern "C" {
  *  This lets the modem stay in connected mode longer.
  */
 #define RAI_WAIT_MORE 5
+
+/** sockopt: set a callback to be called when a send request is acknowledged by the network and
+ * the data has been acknowledged by the peer, if required by the network protocol, or until the
+ * timeout, given by the SO_SNDTIMEO socket option, is reached. Valid timeout values are
+ * 1 to 600 seconds.
+ * This option takes a @ref socket_ncs_sendcb structure.
+ *
+ * @note The callback is executed in an interrupt context.
+ *	 Take care to offload any processing as appropriate.
+ *
+ * @note This is only supported by the following modem firmware:
+ *       - mfw_nrf9151-ntn
+ *
+ * This socket option cannot be used along with the @ref MSG_WAITACK send flag.
+ */
+#define SO_SENDCB (NET_SOCKET_NCS_BASE + 63)
+
+/** Parameters returned in the @ref socket_ncs_sendcb_t callback. */
+struct socket_ncs_sendcb_params {
+	/** Socket handle. */
+	int fd;
+	/** Status. Can be 0 on successful send or EAGAIN on timeout. */
+	int status;
+	/** Number of bytes that was sent. */
+	size_t bytes_sent;
+};
+
+/** Callback type in the @ref socket_ncs_sendcb structure. */
+typedef void (*socket_ncs_sendcb_t)(const struct socket_ncs_sendcb_params *params);
+
+/** Option value for the @ref SO_SENDCB socket option. */
+struct socket_ncs_sendcb {
+	/** Callback function. */
+	socket_ncs_sendcb_t callback;
+};
 
 /* NCS specific IPPROTO_ALL level socket options */
 
