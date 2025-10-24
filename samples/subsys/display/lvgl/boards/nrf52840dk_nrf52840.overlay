@@ -1,0 +1,112 @@
+/*
+ * Copyright (c) 2025, Picodev
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+ / {
+    chosen {
+        zephyr,display = &ili9341;
+    };
+
+    mipi_dbi_spi: mipi_dbi_spi {
+        compatible = "zephyr,mipi-dbi-spi";
+        dc-gpios = <&gpio1 11 GPIO_ACTIVE_HIGH>;      // DC/RS pin (P1.11)
+        reset-gpios = <&gpio1 10 GPIO_ACTIVE_LOW>;    // RESET pin (P1.10)
+
+        write-only;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        spi-dev = <&spi1>;
+
+        ili9341: ili9341@0 {
+            compatible = "ilitek,ili9341";
+            reg = <0>;
+            mipi-max-frequency = <8000000>;
+            width = <240>;
+            height = <320>;
+            rotation = <0>;
+            pixel-format = <1>; // 0: RGB565, 1: RGB888
+
+        };
+    };
+};
+
+&spi1 {
+    status = "okay";
+    pinctrl-names = "default", "sleep";
+    cs-gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;
+};
+
+&spi3 {
+    status = "disabled";
+};
+
+&spi2 {
+    status = "disabled";
+};
+
+&pinctrl {
+    spi1_default: spi1_default {
+
+        group3 {
+            psels = <NRF_PSEL(SPIM_MISO, 1, 14)>,
+                    <NRF_PSEL(SPIM_MOSI, 1, 13)>,
+                    <NRF_PSEL(SPIM_SCK, 1, 15)>;
+            nordic,drive-mode = <NRF_DRIVE_H0H1>;
+        };
+    };
+
+    spi1_sleep: spi1_sleep {
+        group1 {
+            // Sleep configuration (same pins, low-power mode)
+            psels = <NRF_PSEL(SPIM_SCK, 1, 15)>,
+                    <NRF_PSEL(SPIM_MOSI, 1, 13)>,
+                    <NRF_PSEL(SPIM_MISO, 1, 14)>;
+        };
+    };
+};
+
+&adc {
+    status = "okay";
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    channel@1 {
+        reg = <1>;
+        zephyr,gain = "ADC_GAIN_1_6";
+        zephyr,reference = "ADC_REF_INTERNAL";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,input-positive = <NRF_SAADC_AIN1>; /* P0.03 Y+ */
+        zephyr,resolution = <12>;
+    };
+
+    channel@2 {
+        reg = <2>;
+        zephyr,gain = "ADC_GAIN_1_6";
+        zephyr,reference = "ADC_REF_INTERNAL";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,input-positive = <NRF_SAADC_AIN2>; /* P0.04 X- */
+        zephyr,resolution = <12>;
+    };
+
+    channel@4 {
+        reg = <4>;
+        zephyr,gain = "ADC_GAIN_1_6";
+        zephyr,reference = "ADC_REF_INTERNAL";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,input-positive = <NRF_SAADC_AIN4>; /* P0.28 X+ */
+        zephyr,resolution = <12>;
+    };
+
+    channel@5 {
+        reg = <5>;
+        zephyr,gain = "ADC_GAIN_1_6";
+        zephyr,reference = "ADC_REF_INTERNAL";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,input-positive = <NRF_SAADC_AIN5>; /* P0.29 Y- */
+        zephyr,resolution = <12>;
+    };
+};
+
+
