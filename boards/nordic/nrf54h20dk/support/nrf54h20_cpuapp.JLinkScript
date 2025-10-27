@@ -155,6 +155,19 @@ int ConfigTargetSettings(void)
 	// Adjust trace sample delay to compensate for timing when using 320MHz
 	JLINK_ExecCommand("TraceSampleAdjust TD = 1000");
 
+	JLINK_ExecCommand("CORESIGHT_SetTPIUBaseAddr = 0xBF043000");
+
+	return 0;
+}
+
+int StartTPIU(void)
+{
+	/* We sort this ourselves in _SetupETMTPIUTrace, don't let JLink touch it */
+	return 0;
+}
+
+int StopTPIU(void)
+{
 	return 0;
 }
 
@@ -169,6 +182,11 @@ int OnTraceStart(void)
 	return 0;
 }
 
+int AfterResetTarget(void)
+{
+	_needCoresightSetup = 1;
+	return 0;
+}
 
 int SetupTarget(void)
 {
@@ -177,5 +195,10 @@ int SetupTarget(void)
 	// Disable CPU wait
 	JLINK_MEM_WriteU32(_CPUCONF_ADDR + _CPUCONF_CPUWAIT_OFFSET, 0);
 
+	return 0;
+}
+
+int InitEMU(void) {
+	JLINK_ExecCommand("EnableLowPowerHandlingMode");
 	return 0;
 }
