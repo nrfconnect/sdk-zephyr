@@ -22,6 +22,8 @@
 #include <zephyr/cache.h>
 #include <lib/nrfx_coredep.h>
 #include <soc.h>
+#include <helpers/nrfx_gppi.h>
+#include <soc/interconnect/nrfx_gppi_lumos.h>
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
 #if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
