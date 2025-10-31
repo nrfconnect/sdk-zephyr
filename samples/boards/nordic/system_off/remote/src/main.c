@@ -7,8 +7,8 @@
 #include <zephyr/device.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/device_runtime.h>
+#include <zephyr/pm/pm.h>
 #include <zephyr/sys/poweroff.h>
-#include <hal/nrf_memconf.h>
 #include <zephyr/drivers/timer/nrf_grtc_timer.h>
 
 int main(void)
@@ -18,7 +18,9 @@ int main(void)
 		printf("%s system off demo. Ready for system off.\n", CONFIG_BOARD);
 	}
 
-	sys_poweroff();
+	k_msleep(8000);
+	pm_state_force(0u, &(struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});
+	k_sleep(K_FOREVER);
 
 	return 0;
 }
