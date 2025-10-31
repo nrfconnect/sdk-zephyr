@@ -171,6 +171,17 @@ New APIs and options
 
     * :kconfig:option:`CONFIG_HAWKBIT_REBOOT_NONE`
 
+* Modem
+
+  * :kconfig:option:`CONFIG_MODEM_DEDICATED_WORKQUEUE`
+
+* Networking
+
+  * Sockets
+
+    * :c:func:`zsock_listen` now implements the ``backlog`` parameter support. The TCP server
+      socket will limit the number of pending incoming connections to that value.
+
 * Power management
 
    * :c:func:`pm_device_driver_deinit`
