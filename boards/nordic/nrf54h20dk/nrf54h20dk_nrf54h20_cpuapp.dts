@@ -111,11 +111,6 @@
 		};
 	};
 
-	prng: prng {
-		compatible = "nordic,entropy-prng";
-		status = "disabled";
-	};
-
 	psa_rng: psa-rng {
 		compatible = "zephyr,psa-crypto-rng";
 		status = "okay";
