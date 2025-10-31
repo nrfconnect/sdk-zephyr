@@ -19,6 +19,9 @@
 #include <zephyr/sys/util.h>
 
 #define NON_WAKEUP_RESET_REASON (RESET_PIN | RESET_SOFTWARE | RESET_POR | RESET_DEBUG)
+#include <zephyr/pm/device_runtime.h>
+#include <hal/nrf_gpio.h>
+#include <hal/nrf_memconf.h>
 
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
 #include <zephyr/drivers/timer/nrf_grtc_timer.h>
@@ -26,17 +29,21 @@
 #endif
 #if defined(CONFIG_GPIO_WAKEUP_ENABLE)
 static const struct gpio_dt_spec sw0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
+static const uint32_t port_sw0 = DT_PROP(DT_GPIO_CTLR_BY_IDX(DT_ALIAS(sw0), gpios, 0), port);
 #endif
 #if defined(CONFIG_LPCOMP_WAKEUP_ENABLE)
 static const struct device *comp_dev = DEVICE_DT_GET(DT_NODELABEL(comp));
 #endif
+
+static const struct gpio_dt_spec sw1 = GPIO_DT_SPEC_GET(DT_ALIAS(sw1), gpios);
+static const uint32_t port_sw1 = DT_PROP(DT_GPIO_CTLR_BY_IDX(DT_ALIAS(sw1), gpios, 0), port);
 
 int print_reset_cause(uint32_t reset_cause)
 {
 	int32_t ret;
 	uint32_t supported;
 
-	ret = hwinfo_get_supported_reset_cause((uint32_t *) &supported);
+	ret = hwinfo_get_supported_reset_cause((uint32_t *)&supported);
 
 	if (ret || !(reset_cause & supported)) {
 		return -ENOTSUP;
@@ -59,16 +66,39 @@ int main(void)
 {
 	int rc;
 	uint32_t reset_cause;
-	const struct device *const cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+	uint32_t nrf_pin_sw1 = 32 * port_sw1 + sw1.pin;
+	bool do_poweroff = true;
 
-	if (!device_is_ready(cons)) {
-		printf("%s: device not ready.\n", cons->name);
-		return 0;
+	if (nrf_gpio_pin_latch_get(nrf_pin_sw1)) {
+		nrf_gpio_pin_latch_clear(nrf_pin_sw1);
+#if defined(CONFIG_SOC_NRF54H20)
+		/* Set gpio default if sense is set, prevent 300uA additional current after wakeup
+		 * This is only needed for nrf54 series as PIN config is different from PAD config.
+		 * After wakeup from system-off, SENSE bit is not reset but INPUT is.
+		 */
+		if (nrf_gpio_pin_sense_get(nrf_pin_sw1) != GPIO_PIN_CNF_SENSE_Disabled) {
+			nrf_gpio_cfg_default(nrf_pin_sw1);
+		}
+#endif
+		do_poweroff = false;
 	}
 
 	printf("\n%s system off demo\n", CONFIG_BOARD);
 	hwinfo_get_reset_cause(&reset_cause);
 	rc = print_reset_cause(reset_cause);
+
+#if defined(CONFIG_SOC_NRF54H20)
+#if defined(CONFIG_GPIO_WAKEUP_ENABLE)
+	/* Set gpio default if sense is set, prevent 300uA additional current after wakeup
+	 * This is only needed for nrf54 series as PIN config is different from PAD config.
+	 * After wakeup from system-off, SENSE bit is not reset but INPUT is.
+	 */
+	uint32_t nrf_pin_sw0 = 32 * port_sw0 + sw0.pin;
+	if(nrf_gpio_pin_sense_get(nrf_pin_sw0) != GPIO_PIN_CNF_SENSE_Disabled) {
+		nrf_gpio_cfg_default(nrf_pin_sw0);
+	}
+#endif
+#endif
 
 	if (rc < 0) {
 		printf("Reset cause not supported.\n");
@@ -97,13 +127,16 @@ int main(void)
 		printf("Retained data not supported\n");
 	}
 
+	k_sleep(K_MSEC(4000));
+
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
+
 	int err = z_nrf_grtc_wakeup_prepare(DEEP_SLEEP_TIME_S * USEC_PER_SEC);
 
 	if (err < 0) {
-		printk("Unable to prepare GRTC as a wake up source (err = %d).\n", err);
+		printf("Unable to prepare GRTC as a wake up source (err = %d).\n", err);
 	} else {
-		printk("Entering system off; wait %u seconds to restart\n", DEEP_SLEEP_TIME_S);
+		printf("Entering system off; wait %u seconds to restart\n", DEEP_SLEEP_TIME_S);
 	}
 #endif
 #if defined(CONFIG_GPIO_WAKEUP_ENABLE)
@@ -120,24 +153,65 @@ int main(void)
 		return 0;
 	}
 
-	printf("Entering system off; press sw0 to restart\n");
+#if defined(CONFIG_SOC_NRF54H20)
+	nrf_gpio_pin_retain_disable(nrf_pin_sw0);
+#endif
 #endif
 #if defined(CONFIG_LPCOMP_WAKEUP_ENABLE)
 	comparator_set_trigger(comp_dev, COMPARATOR_TRIGGER_BOTH_EDGES);
 	comparator_trigger_is_pending(comp_dev);
 	printf("Entering system off; change signal level at comparator input to restart\n");
 #endif
-
-	rc = pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
+	rc = gpio_pin_configure_dt(&sw1, GPIO_INPUT);
 	if (rc < 0) {
-		printf("Could not suspend console (%d)\n", rc);
+		printf("Could not configure sw1 GPIO (%d)\n", rc);
 		return 0;
+	}
+
+	rc = gpio_pin_interrupt_configure_dt(&sw1, GPIO_INT_LEVEL_ACTIVE);
+	if (rc < 0) {
+		printf("Could not configure sw0 GPIO interrupt (%d)\n", rc);
+		return 0;
+	}
+
+#if defined(CONFIG_SOC_NRF54H20)
+	nrf_gpio_pin_retain_disable(nrf_pin_sw1);
+#endif
+
+	if (do_poweroff) {
+		printf("Entering system off; press sw0 or sw1 to restart\n");
+	} else {
+		printf("Button sw1 pressed, not entering system off\n");
+	}
+
+	if (IS_ENABLED(CONFIG_PM_DEVICE) && IS_ENABLED(CONFIG_SERIAL)) {
+		static const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+		int err;
+		enum pm_device_state state;
+
+		if (dev) {
+			do {
+				err = pm_device_state_get(dev, &state);
+			} while ((err == 0) && (state == PM_DEVICE_STATE_ACTIVE));
+		}
 	}
 
 	if (IS_ENABLED(CONFIG_APP_USE_RETAINED_MEM)) {
 		/* Update the retained state */
 		retained.off_count += 1;
 		retained_update();
+	}
+
+
+	if (do_poweroff) {
+#if CONFIG_SOC_NRF54H20_CPUAPP
+		/* Local RAM0 (TCM) is currently not used so retention can be disabled. */
+		nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 0, RAMBLOCK_RET_MASK, false);
+		nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 1, RAMBLOCK_RET_MASK, false);
+#endif
+		sys_poweroff();
+	} else {
+		k_sleep(K_FOREVER);
 	}
 
 	hwinfo_clear_reset_cause();
