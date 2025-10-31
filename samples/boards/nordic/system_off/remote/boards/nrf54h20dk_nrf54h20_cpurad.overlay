@@ -1,5 +1,23 @@
 &uart135 {
-	status = "disabled";
+	status = "okay";
 	zephyr,pm-device-runtime-auto;
 	disable-rx;
+};
+
+/ {
+	cpus {
+		power-states {
+			soft_off: soft_off {
+			compatible = "zephyr,power-state";
+			power-state-name = "soft-off";
+			min-residency-us = <0>;
+			exit-latency-us = <0>;
+			status = "disabled";
+			};
+		};
+	};
+};
+
+&cpurad {
+	cpu-power-states = <&idle_cache_disabled &soft_off>;
 };

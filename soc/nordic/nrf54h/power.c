@@ -83,9 +83,6 @@ void nrf_poweroff(void)
 #endif
 	common_suspend();
 
-	/* Disable all owned compare channels except the one used for wakeup from system-off. */
-	z_nrf_grtc_timer_disable_owned_cc_channels(z_nrf_grtc_timer_wakeup_channel_get());
-
 	/* Indicate that we are ready for system off. */
 	nrf_lrcconf_task_trigger(NRF_LRCCONF010, NRF_LRCCONF_TASK_SYSTEMOFFREADY);
 
@@ -140,10 +137,49 @@ static void s2idle_exit(uint8_t substate_id)
 	}
 }
 
+#if defined(CONFIG_SOC_NRF54H20_CPURAD)
+
+static void s2idle_ready_for_soft_off_enter(void)
+{
+#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
+	soc_lrcconf_poweron_request(&soc_node, NRF_LRCCONF_POWER_MAIN);
+#endif
+	common_suspend();
+	nrf_lrcconf_task_trigger(NRF_LRCCONF010, NRF_LRCCONF_TASK_SYSTEMOFFREADY);
+
+	__set_BASEPRI(0);
+	__ISB();
+	__DSB();
+	__WFI();
+}
+
+static void s2idle_ready_for_soft_off_exit(void)
+{
+	nrf_lrcconf_task_trigger(NRF_LRCCONF010, NRF_LRCCONF_TASK_SYSTEMOFFNOTREADY);
+
+	nrf_power_up_cache();
+	common_resume();
+#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
+	soc_lrcconf_poweron_release(&soc_node, NRF_LRCCONF_POWER_MAIN);
+#endif
+}
+#endif
+
 #if defined(CONFIG_PM_S2RAM)
 /* Resume domain after local suspend to RAM. */
 static void s2ram_exit(void)
 {
+	common_resume();
+#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
+	/* Re-enable domain retention. */
+	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, true);
+#endif
+}
+
+static void s2ram_ready_for_soft_off_exit(void)
+{
+	nrf_lrcconf_task_trigger(NRF_LRCCONF010, NRF_LRCCONF_TASK_SYSTEMOFFNOTREADY);
+
 	common_resume();
 #if !defined(CONFIG_SOC_NRF54H20_CPURAD)
 	/* Re-enable domain retention. */
@@ -178,6 +214,35 @@ static int sys_suspend_to_ram(void)
 	return -EBUSY;
 }
 
+/* Function called during local domain suspend to RAM with soft off readiness. */
+static int sys_suspend_to_ram_ready_for_soft_off(void)
+{
+	/* Set intormation which is used on domain wakeup to determine if resume from RAM shall
+	 * be performed.
+	 */
+	nrf_resetinfo_resetreas_local_set(NRF_RESETINFO,
+					  NRF_RESETINFO_RESETREAS_LOCAL_UNRETAINED_MASK);
+	nrf_resetinfo_restore_valid_set(NRF_RESETINFO, true);
+
+#if !defined(CONFIG_SOC_NRF54H20_CPURAD)
+	/* Disable retention */
+	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, false);
+#endif
+	common_suspend();
+
+	nrf_lrcconf_task_trigger(NRF_LRCCONF010, NRF_LRCCONF_TASK_SYSTEMOFFREADY);
+
+	__set_BASEPRI(0);
+	__ISB();
+	__DSB();
+	__WFI();
+	/*
+	 * We might reach this point is k_cpu_idle returns (there is a pre sleep hook that
+	 * can abort sleeping.
+	 */
+	return -EBUSY;
+}
+
 static void s2ram_enter(void)
 {
 	/*
@@ -185,6 +250,17 @@ static void s2ram_enter(void)
 	 * marker and power off the system.
 	 */
 	if (soc_s2ram_suspend(sys_suspend_to_ram)) {
+		return;
+	}
+}
+
+static void s2ram_ready_for_soft_off_enter(void)
+{
+	/*
+	 * Save the CPU context (including the return address),set the SRAM
+	 * marker and power off the system.
+	 */
+	if (soc_s2ram_suspend(sys_suspend_to_ram_ready_for_soft_off)) {
 		return;
 	}
 }
@@ -201,6 +277,17 @@ void pm_state_set(enum pm_state state, uint8_t substate_id)
 		sys_trace_idle_exit();
 		__enable_irq();
 	}
+#if defined(CONFIG_SOC_NRF54H20_CPURAD) && defined(CONFIG_POWEROFF)
+	else if (state == PM_STATE_SOFT_OFF) {
+		__disable_irq();
+		sys_trace_idle();
+		s2idle_ready_for_soft_off_enter();
+		/* On resuming or error we return exactly *HERE* */
+		s2idle_ready_for_soft_off_exit();
+		sys_trace_idle_exit();
+		__enable_irq();
+	}
+#endif
 #if defined(CONFIG_PM_S2RAM)
 	else if (state == PM_STATE_SUSPEND_TO_RAM) {
 		__disable_irq();
@@ -211,6 +298,17 @@ void pm_state_set(enum pm_state state, uint8_t substate_id)
 		sys_trace_idle_exit();
 		__enable_irq();
 	}
+#if defined(CONFIG_POWEROFF)
+	else if (state == PM_STATE_SOFT_OFF) {
+		__disable_irq();
+		sys_trace_idle();
+		s2ram_ready_for_soft_off_enter();
+		/* On resuming or error we return exactly *HERE* */
+		s2ram_ready_for_soft_off_exit();
+		sys_trace_idle_exit();
+		__enable_irq();
+	}
+#endif
 #endif
 	else {
 		k_cpu_idle();

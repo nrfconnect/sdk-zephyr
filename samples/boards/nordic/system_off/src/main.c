@@ -14,6 +14,7 @@
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/drivers/comparator.h>
 #include <zephyr/kernel.h>
+#include <zephyr/pm/pm.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/sys/poweroff.h>
 #include <zephyr/sys/util.h>
@@ -83,7 +84,7 @@ int main(void)
 		do_poweroff = false;
 	}
 
-	printf("\n%s system off demo\n", CONFIG_BOARD);
+	printf("\n%s system off demo\n", CONFIG_BOARD_QUALIFIERS);
 	hwinfo_get_reset_cause(&reset_cause);
 	rc = print_reset_cause(reset_cause);
 
@@ -209,13 +210,19 @@ int main(void)
 		nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 0, RAMBLOCK_RET_MASK, false);
 		nrf_memconf_ramblock_ret_mask_enable_set(NRF_MEMCONF, 1, RAMBLOCK_RET_MASK, false);
 #endif
-		sys_poweroff();
+
+		while (1) {
+			pm_state_force(0u, &(struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});
+			k_sleep(K_SECONDS(5));
+			printk("Woke up from system off with current context, retrying...\n");
+		}
 	} else {
 		k_sleep(K_FOREVER);
 	}
 
 	hwinfo_clear_reset_cause();
-	sys_poweroff();
+	pm_state_force(0u, &(struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});
+	k_sleep(K_FOREVER);
 
 	return 0;
 }
