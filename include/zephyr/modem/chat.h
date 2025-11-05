@@ -107,6 +107,7 @@ struct modem_chat_script_chat {
 	uint16_t timeout;
 };
 
+
 #define MODEM_CHAT_SCRIPT_CMD_RESP(_request, _response_match)                                      \
 	{                                                                                          \
 		.request = (uint8_t *)(_request),                                                  \

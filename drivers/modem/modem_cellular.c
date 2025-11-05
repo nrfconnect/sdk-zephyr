@@ -114,6 +114,7 @@ struct modem_cellular_data {
 	uint8_t iccid[MODEM_CELLULAR_DATA_ICCID_LEN];
 	uint8_t manufacturer[MODEM_CELLULAR_DATA_MANUFACTURER_LEN];
 	uint8_t fw_version[MODEM_CELLULAR_DATA_FW_VERSION_LEN];
+	struct modem_cellular_gnss gnss_data;
 
 	/* PPP */
 	struct modem_ppp *ppp;
@@ -130,6 +131,8 @@ struct modem_cellular_data {
 	uint8_t event_buf[8];
 	struct ring_buf event_rb;
 	struct k_mutex event_rb_lock;
+
+	struct modem_cell_profile s_profile;
 };
 
 struct modem_cellular_config {
@@ -145,6 +148,68 @@ struct modem_cellular_config {
 	const struct modem_chat_script *dial_chat_script;
 	const struct modem_chat_script *periodic_chat_script;
 };
+
+
+
+
+static void modem_cellular_apply_profile(struct modem_cellular_data *data);
+
+
+
+
+/* Hook débil para el backend PPP, si se usa auth */
+__attribute__((weak))
+void modem_cellular_ppp_set_auth(const char *user, const char *pass)
+{
+	ARG_UNUSED(user);
+	ARG_UNUSED(pass);
+}
+
+int modem_cellular_profile_set(const struct device *dev, struct modem_cell_profile *in)
+{
+if (!dev || !in) {
+		return -EINVAL;
+	}
+	struct modem_cellular_data *data = (struct modem_cellular_data *)dev->data;
+	
+
+    memcpy(data->s_profile.apn, in->apn, sizeof(data->s_profile.apn));
+    data->s_profile.apn[sizeof(data->s_profile.apn) - 1] = '\0';
+
+    memcpy(data->s_profile.user, in->user, sizeof(data->s_profile.user));
+    data->s_profile.user[sizeof(data->s_profile.user) - 1] = '\0';
+
+    memcpy(data->s_profile.pass, in->pass, sizeof(data->s_profile.pass));
+    data->s_profile.pass[sizeof(data->s_profile.pass) - 1] = '\0';
+
+    data->s_profile.use_auth = in->use_auth;
+
+    return 0;
+}
+
+int modem_cellular_profile_get(const struct device *dev, struct modem_cell_profile *out)
+{
+	if (!dev || !out) {
+		return -EINVAL;
+	}
+	struct modem_cellular_data *data = (struct modem_cellular_data *)dev->data;
+
+	memcpy(out, &data->s_profile, sizeof(struct modem_cell_profile));
+	// *out = data->s_profile;  /* copia estructurada directa */
+
+	return 0;
+}
+
+/* API de conveniencia para leer GNSS desde main */
+int modem_cellular_get_gnss(const struct device *dev, struct modem_cellular_gnss *out)
+{
+	if (!dev || !out) {
+		return -EINVAL;
+	}
+	struct modem_cellular_data *data = (struct modem_cellular_data *)dev->data;
+	*out = data->gnss_data;
+	return data->gnss_data.valid ? 0 : -ENODATA;
+}
 
 static const char *modem_cellular_state_str(enum modem_cellular_state state)
 {
@@ -293,6 +358,114 @@ static void modem_cellular_chat_callback_handler(struct modem_chat *chat,
 	}
 }
 
+static double nmea_degmin_to_decimal(const char *ddmmHemi)
+{
+	size_t n = strlen(ddmmHemi);
+	if (n < 3) {
+		return 0.0;
+	}
+
+	char hemi = ddmmHemi[n - 1]; // Last character: N/S/E/W
+	char buf[16];
+	if (n - 1 >= sizeof(buf)) {
+		return 0.0;
+	}
+
+	strncpy(buf, ddmmHemi, n - 1);
+	buf[n - 1] = '\0';
+
+	// Determine number of degree digits (2 for lat, 3 for lon)
+	int deg_digits = (n >= 10) ? 3 : 2;
+	char d[4] = {0};
+	memcpy(d, buf, deg_digits);
+
+	double deg = atof(d);
+	double min = atof(buf + deg_digits);
+	double dec = deg + (min / 60.0);
+
+	if (hemi == 'S' || hemi == 'W') {
+		dec = -dec;
+	}
+
+	return dec;
+}
+
+static void modem_cellular_chat_on_gnss_error(struct modem_chat *chat, void *user_data)
+{
+	struct modem_cellular_data *data = (struct modem_cellular_data *)user_data;
+	struct modem_cellular_gnss *gnss = &data->gnss_data;
+
+	gnss->valid = false;
+	LOG_WRN("GNSS: error en respuesta");
+}
+
+static void modem_cellular_chat_on_gnss(struct modem_chat *chat, char **argv, uint16_t argc, void *user_data)
+{
+    struct modem_cellular_data *data = (struct modem_cellular_data *)user_data;
+    struct modem_cellular_gnss *gnss = &data->gnss_data;
+
+    // Expected: +QGPSLOC: <UTC>,<lat>,<lon>,<HDOP>,<alt>,<fix>,<COG>,<spkm>,<spkn>,<date>,<nsat>
+    if (argc < 12) {
+        LOG_WRN("GNSS: respuesta muy corta (%d campos)", argc);
+        gnss->valid = false;
+        return;
+    }
+
+    LOG_INF("GNSS raw message (%d campos):", argc);
+    for (int i = 0; i < argc; i++) {
+        LOG_INF("  argv[%d] = '%s'", i, argv[i]);
+    }
+
+    // --- Parse fields ---
+    memset(gnss, 0, sizeof(*gnss));
+
+    // UTC time (hhmmss)
+    strncpy(gnss->time_utc, argv[1], sizeof(gnss->time_utc) - 1);
+    gnss->time_utc[sizeof(gnss->time_utc) - 1] = '\0';
+
+    // Latitude and Longitude with hemisphere
+    gnss->lat_deg = nmea_degmin_to_decimal(argv[2]);
+    gnss->lon_deg = nmea_degmin_to_decimal(argv[3]);
+
+    // Precision, altitude, and fix type
+    gnss->hdop  = atof(argv[4]);
+    gnss->alt_m = atof(argv[5]);
+    gnss->fix   = atoi(argv[6]);
+
+    // Course over ground and speed
+    gnss->cog_deg = atof(argv[7]);
+    gnss->spd_kmh = atof(argv[8]);
+    gnss->spd_knt = atof(argv[9]);
+
+    // Date (ddmmyy)
+    strncpy(gnss->date_utc, argv[10], sizeof(gnss->date_utc) - 1);
+    gnss->date_utc[sizeof(gnss->date_utc) - 1] = '\0';
+
+    // Number of satellites
+    gnss->nsat = atoi(argv[11]);
+
+    // Determine validity
+    gnss->valid = (gnss->fix > 0 && gnss->lat_deg != 0.0 && gnss->lon_deg != 0.0);
+
+	//PRINT ALL ARRAY ITEMS FOR DEBUGGING
+    LOG_INF("GNSS raw message (%d campos):", argc);
+    for (int i = 0; i < argc; i++) {
+	    LOG_INF("  argv[%d] = '%s'", i, argv[i]);
+    }
+
+    LOG_INF("GNSS fix: UTC=%s, date=%s, lat=%.6f, lon=%.6f, alt=%.2f m, fix=%d, sat=%d, hdop=%.2f, cog=%.2f°, spd=%.2f km/h",
+        gnss->time_utc,
+        gnss->date_utc,
+        gnss->lat_deg,
+        gnss->lon_deg,
+        gnss->alt_m,
+        gnss->fix,
+        gnss->nsat,
+        gnss->hdop,
+        gnss->cog_deg,
+        gnss->spd_kmh);
+}
+
 static void modem_cellular_chat_on_imei(struct modem_chat *chat, char **argv, uint16_t argc,
 					void *user_data)
 {
@@ -433,6 +606,10 @@ MODEM_CHAT_MATCH_DEFINE(ok_match, "OK", "", NULL);
 MODEM_CHAT_MATCHES_DEFINE(allow_match,
 			  MODEM_CHAT_MATCH("OK", "", NULL),
 			  MODEM_CHAT_MATCH("ERROR", "", NULL));
+
+MODEM_CHAT_MATCHES_DEFINE(qgpsloc_match,
+			MODEM_CHAT_MATCH("+QGPSLOC:", ",", modem_cellular_chat_on_gnss),
+			MODEM_CHAT_MATCH("+CME ERROR", "", modem_cellular_chat_on_gnss_error));
 
 MODEM_CHAT_MATCH_DEFINE(imei_match, "", "", modem_cellular_chat_on_imei);
 MODEM_CHAT_MATCH_DEFINE(cgmm_match, "", "", modem_cellular_chat_on_cgmm);
@@ -852,6 +1029,10 @@ static void modem_cellular_run_dial_script_event_handler(struct modem_cellular_d
 	switch (evt) {
 	case MODEM_CELLULAR_EVENT_TIMEOUT:
 		modem_chat_attach(&data->chat, data->dlci1_pipe);
+
+		// NEW: Apply profile settings (APN, auth) before dialing
+		modem_cellular_apply_profile(data);
+
 		modem_chat_run_script_async(&data->chat, config->dial_chat_script);
 		break;
 
@@ -1462,6 +1643,7 @@ const static struct cellular_driver_api modem_cellular_api = {
 	.get_signal = modem_cellular_get_signal,
 	.get_modem_info = modem_cellular_get_modem_info,
 	.get_registration_status = modem_cellular_get_registration_status,
+	//.get_gnss = modem_cellular_get_gnss,
 };
 
 #ifdef CONFIG_PM_DEVICE
@@ -1587,6 +1769,48 @@ static int modem_cellular_init(const struct device *dev)
 	return 0;
 }
 
+/* static void modem_cellular_apply_profile(struct modem_cellular_data *data)
+{
+	ARG_UNUSED(data);
+
+	if (data->s_profile.use_auth && data->s_profile.user[0] && data->s_profile.pass[0]) {
+		modem_cellular_ppp_set_auth(data->s_profile.user, data->s_profile.pass);
+	}
+
+	if (!data->s_profile.apn[0]) {
+		return;
+	}
+
+	char cmd[64];
+	snprintk(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"", data->s_profile.apn); */
+
+
+
+/* Enviar y consumir OK, pero ignorar errores para no bloquear el dial */ /* Usa tu infraestructura
+									     de chat; normalmente
+									     tienes 'data->chat' y
+									     'ok_match' */
+// #if defined(MODEM_CHAT_HAS_SEND_SYNC)
+// 	  (void)modem_chat_send_sync(&data->chat, cmd, &ok_match, K_SECONDS(2), data);
+// #else   
+// 	MODEM_CHAT_SCRIPT_CMDS_DEFINE(_cgdcont_script,
+// 				      MODEM_CHAT_SCRIPT_CMD_RESP_DYNAMIC(cmd, ok_match),
+// 				      MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match));
+
+	/* Copiar la string dinámica al primer comando */
+	// ((struct modem_chat_script_chat *)&_cgdcont_script_cmds[0]) = cmd;
+
+	/* static const struct modem_chat_script _cgdcont_script = {
+		.script_cmds = _cgdcont_script_cmds,
+		.abort_matches = NULL,
+		.callback = NULL,
+		.timeout = 3,
+	};
+ */
+	//(void)modem_chat_script_run(&data->chat, &_cgdcont_script);
+// #endif
+// }
+
 /*
  * Every modem uses two custom scripts to initialize the modem and dial out.
  *
@@ -1600,6 +1824,53 @@ static int modem_cellular_init(const struct device *dev)
  * script is sent on a DLCI channel in command mode, and must request the modem
  * dial out and put the DLCI channel into data mode.
  */
+
+
+
+
+
+/* Aplica el perfil PDP/APN de runtime antes del dial.
+ * - Si hay auth y backend lo soporta, la pasa via hook débil.
+ * - Envía AT+CGDCONT con APN dinámico y consume OK.
+ * - Errores se ignoran a propósito para no bloquear el dial.
+ */
+static void modem_cellular_apply_profile(struct modem_cellular_data *data)
+{
+    ARG_UNUSED(data);
+
+    /* 1) PPP auth (opcional) */
+    if (data->s_profile.use_auth && data->s_profile.user[0] && data->s_profile.pass[0]) {
+        modem_cellular_ppp_set_auth(data->s_profile.user, data->s_profile.pass);
+    }
+
+    /* 2) APN dinámico */
+    if (!data->s_profile.apn[0]) {
+        /* Sin APN => no tocamos CGDCONT */
+        return;
+    }
+
+    /* Construir AT+CGDCONT=1,"IP","<apn>" */
+    char cmd[128];
+    snprintk(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"", data->s_profile.apn);
+
+    /* 3) Script de un paso: enviar cmd y esperar OK (Zephyr 2.7 API) */
+    struct modem_chat_script_chat step;
+
+    modem_chat_script_chat_init(&step);
+    modem_chat_script_chat_set_request(&step, cmd);
+    modem_chat_script_chat_set_response_matches(&step, &ok_match, 1);
+
+    struct modem_chat_script script;
+	
+    modem_chat_script_init(&script);
+    modem_chat_script_set_script_chats(&script, &step, 1);
+    /* opcional: timeout corto para no demorar el dial si el módem no responde
+       // modem_chat_script_set_timeout(&script, 3);
+     */
+
+    /* 4) Ejecutar e ignorar retorno para no bloquear el flujo */
+    (void)modem_chat_run_script(&data->chat, &script);
+}
 
 #if DT_HAS_COMPAT_STATUS_OKAY(quectel_bg95)
 MODEM_CHAT_SCRIPT_CMDS_DEFINE(quectel_bg95_init_chat_script_cmds,
@@ -1652,7 +1923,8 @@ MODEM_CHAT_SCRIPT_DEFINE(quectel_bg95_periodic_chat_script,
 
 #if DT_HAS_COMPAT_STATUS_OKAY(quectel_eg25_g)
 MODEM_CHAT_SCRIPT_CMDS_DEFINE(
-	quectel_eg25_g_init_chat_script_cmds, MODEM_CHAT_SCRIPT_CMD_RESP("ATE0", ok_match),
+	quectel_eg25_g_init_chat_script_cmds, 
+	MODEM_CHAT_SCRIPT_CMD_RESP("ATE0", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CFUN=4", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CMEE=1", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CREG=1", ok_match),
@@ -1671,17 +1943,25 @@ MODEM_CHAT_SCRIPT_CMDS_DEFINE(
 	MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CIMI", cimi_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
+
+	// GNSS on cmd
+	MODEM_CHAT_SCRIPT_CMD_RESP("AT+QGPS=1", ok_match),
+
 	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT+CMUX=0,0,5,127,10,3,30,10,2", 100));
+
 
 MODEM_CHAT_SCRIPT_DEFINE(quectel_eg25_g_init_chat_script, quectel_eg25_g_init_chat_script_cmds,
 			 abort_matches, modem_cellular_chat_callback_handler, 10);
 
 MODEM_CHAT_SCRIPT_CMDS_DEFINE(quectel_eg25_g_dial_chat_script_cmds,
 			      MODEM_CHAT_SCRIPT_CMD_RESP_MULT("AT+CGACT=0,1", allow_match),
-			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGDCONT=1,\"IP\","
-							 "\""CONFIG_MODEM_CELLULAR_APN"\"",
-							 ok_match),
+			    //   MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGDCONT=1,\"IP\","
+				// 			 "\""CONFIG_MODEM_CELLULAR_APN"\"",
+				// 			 ok_match),
 			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CFUN=1", ok_match),
+
+				  MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGDCONT=1", ok_match),
+				  
 			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE("ATD*99***1#", 0),);
 
 MODEM_CHAT_SCRIPT_DEFINE(quectel_eg25_g_dial_chat_script, quectel_eg25_g_dial_chat_script_cmds,
@@ -1691,11 +1971,21 @@ MODEM_CHAT_SCRIPT_CMDS_DEFINE(quectel_eg25_g_periodic_chat_script_cmds,
 			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CREG?", ok_match),
 			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CEREG?", ok_match),
 			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGREG?", ok_match),
+
+				  // GNSS on cmd
+				 /* GNSS: pide localización y decodifica la línea +QGPSLOC: ... */
+				  MODEM_CHAT_SCRIPT_CMD_RESP("AT+QGPSLOC?", qgpsloc_match),
+
+				  MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
 			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CSQ", csq_match));
+				  
 
 MODEM_CHAT_SCRIPT_DEFINE(quectel_eg25_g_periodic_chat_script,
 			 quectel_eg25_g_periodic_chat_script_cmds, abort_matches,
 			 modem_cellular_chat_callback_handler, 4);
+
+
+
 #endif
 
 #if DT_HAS_COMPAT_STATUS_OKAY(zephyr_gsm_ppp)

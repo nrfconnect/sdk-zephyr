@@ -28,6 +28,29 @@
 extern "C" {
 #endif
 
+struct modem_cellular_gnss {
+ bool valid;
+ char time_utc[7];   /* hhmmss */
+ char date_utc[7];   /* ddmmyy */
+ double lat_deg;     /* decimal degrees */
+ double lon_deg;     /* decimal degrees */
+ float hdop;
+ float alt_m;
+ int   fix;          /* 1: no, 2: 2D, 3: 3D */
+ float cog_deg;
+ float spd_kmh;
+ float spd_knt;
+ int   nsat;
+};
+
+/* === Runtime PDP profile (APN/USER/PASS) ================================ */
+struct modem_cell_profile {
+	char apn[64];
+	char user[64];
+	char pass[64];
+	bool use_auth;
+};
+
 /** Cellular access technologies */
 enum cellular_access_technology {
 	CELLULAR_ACCESS_TECHNOLOGY_GSM = 0,
@@ -249,6 +272,17 @@ static inline int cellular_get_registration_status(const struct device *dev,
 
 	return api->get_registration_status(dev, tech, status);
 }
+
+//GNSS DATA FUNCTION
+int modem_cellular_get_gnss(const struct device *dev, struct modem_cellular_gnss *out);
+
+void modem_cellular_ppp_set_auth(const char *user, const char *pass);
+
+int modem_cellular_profile_set(const struct device *dev,
+                               struct modem_cell_profile *in);
+
+int modem_cellular_profile_get(const struct device *dev,
+                               struct modem_cell_profile *out);
 
 #ifdef __cplusplus
 }
