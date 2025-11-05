@@ -87,6 +87,8 @@
 
 "CI-ble-test":
   - any:
+      - "arch/arm/**/*"
+  - any:
       - "drivers/bluetooth/**/*"
   - any:
       - "dts/arm/nordic/nrf5*"
@@ -97,7 +99,12 @@
   - any:
       - "include/zephyr/bluetooth/**/*"
       - "!include/zephyr/bluetooth/mesh/**/*"
-  - "samples/bluetooth/hci_ipc/**/*"
+  - any:
+      - "boards/nordic/nrf5*"
+  - any:
+      - "soc/nordic/**/*"
+  - any:
+      - "subsys/pm/**/*"
 
 "CI-ble-samples-test":
   - any:
