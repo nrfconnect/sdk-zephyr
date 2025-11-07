@@ -1164,6 +1164,13 @@ class ZephyrDomain(Domain):
         "has_code_sample_listing": {},  # docname -> bool
         "has_board_catalog": {},  # docname -> bool
         "has_board": {},  # docname -> bool
+        # board catalog data (populated by load_board_catalog_into_domain)
+        "boards": {},
+        "shields": {},
+        "vendors": {},
+        "socs": {},
+        "archs": {},
+        "runners": {},
     }
 
     def clear_doc(self, docname: str) -> None:
@@ -1184,6 +1191,11 @@ class ZephyrDomain(Domain):
         self.data["has_code_sample_listing"].pop(docname, None)
         self.data["has_board_catalog"].pop(docname, None)
         self.data["has_board"].pop(docname, None)
+
+        # Clear board docnames for boards documented in this docname
+        for board_data in self.data.get("boards", {}).values():
+            if board_data.get("docname") == docname:
+                board_data.pop("docname", None)
 
     def merge_domaindata(self, docnames: list[str], otherdata: dict) -> None:
         self.data["code-samples"].update(otherdata["code-samples"])
@@ -1382,7 +1394,15 @@ def load_board_catalog_into_domain(app: Sphinx) -> None:
         ),
         hw_features_vendor_filter=app.config.zephyr_hw_features_vendor_filter,
     )
-    app.env.domaindata["zephyr"]["boards"] = board_catalog["boards"]
+
+    # Preserve existing docnames when reloading the catalog
+    existing_boards = app.env.domaindata.get("zephyr", {}).get("boards", {})
+    new_boards = board_catalog["boards"]
+    for board_name, board_data in new_boards.items():
+        if board_name in existing_boards and "docname" in existing_boards[board_name]:
+            board_data["docname"] = existing_boards[board_name]["docname"]
+
+    app.env.domaindata["zephyr"]["boards"] = new_boards
     app.env.domaindata["zephyr"]["shields"] = board_catalog["shields"]
     app.env.domaindata["zephyr"]["vendors"] = board_catalog["vendors"]
     app.env.domaindata["zephyr"]["socs"] = board_catalog["socs"]
