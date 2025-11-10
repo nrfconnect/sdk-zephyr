@@ -413,10 +413,9 @@ class Gcovr(CoverageTool):
         # We want to remove tests/* and tests/ztest/test/* but save tests/ztest
         cmd = ["gcovr", "-r", self.base_dir,
                "--gcov-ignore-parse-errors=negative_hits.warn_once_per_file",
+               "--gcov-ignore-parse-errors=suspicious_hits.warn_once_per_file",
                "--gcov-executable", self.gcov_tool,
                "-e", "tests/*"]
-        if self.version >= "7.0":
-            cmd += ["--gcov-object-directory", outdir]
         cmd += excludes + self.options + ["--json", "-o", coverage_file, outdir]
         cmd_str = " ".join(cmd)
         logger.debug(f"Running: {cmd_str}")
@@ -431,8 +430,6 @@ class Gcovr(CoverageTool):
         cmd += ["--gcov-executable", self.gcov_tool,
                 "-f", "tests/ztest", "-e", "tests/ztest/test/*",
                 "--json", "-o", ztest_file, outdir]
-        if self.version >= "7.0":
-            cmd += ["--gcov-object-directory", outdir]
 
         cmd_str = " ".join(cmd)
         logger.debug(f"Running: {cmd_str}")
