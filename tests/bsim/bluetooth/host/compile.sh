@@ -45,6 +45,7 @@ app=tests/bsim/bluetooth/host/gatt/authorization compile
 app=tests/bsim/bluetooth/host/gatt/caching compile
 app=tests/bsim/bluetooth/host/gatt/general compile
 app=tests/bsim/bluetooth/host/gatt/notify compile
+app=tests/bsim/bluetooth/host/gatt/notify_stress compile
 app=tests/bsim/bluetooth/host/gatt/notify_multiple compile
 app=tests/bsim/bluetooth/host/gatt/settings compile
 app=tests/bsim/bluetooth/host/gatt/settings conf_file=prj_2.conf compile

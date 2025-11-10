@@ -213,7 +213,7 @@ static struct bt_gatt_discover_params disc_params_long;
 static struct bt_gatt_subscribe_params sub_params_long = {
 	.notify = test_notify,
 	.subscribe = test_long_subscribed,
-	.ccc_handle = BT_GATT_AUTO_DISCOVER_CCC_HANDLE,
+	.ccc_handle = 0x0000,
 	.disc_params = &disc_params_long,
 	.end_handle = BT_ATT_LAST_ATTRIBUTE_HANDLE,
 	.value = BT_GATT_CCC_NOTIFY,
