@@ -5,15 +5,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/buf.h>
 #include <zephyr/bluetooth/l2cap.h>
-
-#include "common/hci_common_internal.h"
 
 #include "hci_core.h"
 #include "conn_internal.h"
 #include "iso_internal.h"
+
+#include <zephyr/bluetooth/hci.h>
 
 /* Events have a length field of 1 byte. This size fits all events.
  *
