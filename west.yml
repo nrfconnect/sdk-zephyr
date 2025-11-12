@@ -200,8 +200,7 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      url: https://github.com/nrfconnect/sdk-hal_nordic
-      revision: 7bd56e7c621a37f541ceae5bd5fb1978e46a03fa
+      revision: pull/326/head
       path: modules/hal/nordic
       groups:
         - hal
