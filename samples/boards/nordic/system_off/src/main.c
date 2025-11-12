@@ -46,7 +46,8 @@ int print_reset_cause(uint32_t reset_cause)
 
 	ret = hwinfo_get_supported_reset_cause((uint32_t *)&supported);
 
-	if (ret || !(reset_cause & supported)) {
+	if (ret) {
+		printk("Reset cause 0x%08X not supported ret %d.\n", reset_cause, ret);
 		return -ENOTSUP;
 	}
 
@@ -56,6 +57,12 @@ int print_reset_cause(uint32_t reset_cause)
 		printf("Wakeup from System OFF by GRTC.\n");
 	} else if (reset_cause & RESET_LOW_POWER_WAKE) {
 		printf("Wakeup from System OFF by GPIO.\n");
+	} else if (reset_cause & RESET_PIN) {
+		printf("Reset by external pin.\n");
+	} else if (reset_cause & RESET_SOFTWARE) {
+		printf("Reset by software.\n");
+	} else if (reset_cause & RESET_POR || reset_cause == 0) {
+		printf("Power on reset.\n");
 	} else  {
 		printf("Other wake up cause 0x%08X.\n", reset_cause);
 	}
@@ -213,7 +220,7 @@ int main(void)
 
 		while (1) {
 			pm_state_force(0u, &(struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});
-			k_sleep(K_SECONDS(5));
+			k_sleep(K_SECONDS(8));
 			printk("Woke up from system off with current context, retrying...\n");
 		}
 	} else {
