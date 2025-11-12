@@ -667,15 +667,12 @@ config NRF_WIFI_5G_BAND
 	depends on !NRF70_2_4G_ONLY
 
 config NRF_WIFI_OP_BAND
-	int "Options to set operation band"
+        int "Options to set operation band"
+	default 0
 	default 1 if NRF_WIFI_2G_BAND
 	default 2 if NRF_WIFI_5G_BAND
-	default 3
-	help
-	  Set this option to select frequency band
-	  1 - 2.4GHz
-	  2 - 5GHz
-	  3 - All ( 2.4GHz and 5GHz )
+	default 3 if NRF_WIFI_6G_BAND
+	default 4 if NRF_WIFI_DUAL_BAND
 endmenu
 
 config NRF_WIFI_IFACE_MTU
