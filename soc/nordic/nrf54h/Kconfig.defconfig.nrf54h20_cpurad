@@ -17,4 +17,22 @@ config POWER_DOMAIN
 config CODE_DATA_RELOCATION
 	default y if PM || POWEROFF
 
+# Support for firmware relocation pattern (load from MRAM, run from TCM)
+# If 'fw-to-relocate' chosen node exists, use it to calculate LMA adjustment
+# Otherwise, fall back to standard code-partition calculation
+DT_CHOSEN_FW_TO_RELOCATE = fw-to-relocate
+DT_CHOSEN_Z_CODE = zephyr,code-partition
+DT_CHOSEN_Z_SRAM = zephyr,sram
+
+config BUILD_OUTPUT_ADJUST_LMA
+	default "$(dt_chosen_partition_addr_hex,$(DT_CHOSEN_FW_TO_RELOCATE)) - \
+		 $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_CODE))" \
+		if "$(dt_chosen_enabled,$(DT_CHOSEN_FW_TO_RELOCATE))" = "y"
+	help
+	  Automatically calculate LMA adjustment for firmware relocation.
+	  If 'fw-to-relocate' chosen node exists, the firmware will be loaded
+	  from the MRAM partition it points to, but will run from the TCM region
+	  specified by 'zephyr,code-partition'.
+	  Otherwise, uses standard calculation: 'code-partition' - 'sram'.
+
 endif # SOC_NRF54H20_CPURAD
