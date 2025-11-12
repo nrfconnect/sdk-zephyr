@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if !defined(CONFIG_BT_HCI_RAW) || !defined(CONFIG_BT_CTLR) || \
+#if !defined(CONFIG_BT_HCI_RAW) || !defined(CONFIG_HAS_BT_CTLR) || \
 	!defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
 /* Following build configurations use configurable CONFIG_BT_BUF_CMD_TX_COUNT:
  * 1. Host + Controller build with and without Controller to Host data flow control, or
@@ -20,11 +20,11 @@
 #define BT_BUF_CMD_TX_AUTO_DATA_LEN_UPDATE COND_CODE_1(CONFIG_BT_AUTO_DATA_LEN_UPDATE, (1), (0))
 
 #else /* CONFIG_BT_HCI_RAW */
-#if defined(CONFIG_BT_CTLR)
+#if defined(CONFIG_HAS_BT_CTLR)
 /* Controller-only build need no additional HCI command buffers */
 BUILD_ASSERT((CONFIG_BT_BUF_CMD_TX_COUNT == CONFIG_BT_CTLR_HCI_NUM_CMD_PKT_MAX),
 	     "Mismatch in allocated HCI command buffers compared to Controller supported value.");
-#endif /* CONFIG_BT_CTLR */
+#endif /* CONFIG_HAS_BT_CTLR */
 
 /* Controller-only build do not enqueue auto initiated HCI commands */
 #define BT_BUF_CMD_TX_REMOTE_VERSION       0

@@ -203,11 +203,11 @@ config BT_BUF_CMD_TX_SIZE
 config BT_BUF_CMD_TX_COUNT
 	# This option is only visible for a user when Host and Controller are build together, or for
 	# Host-only builds.
-	int "Number of HCI command buffers" if !BT_HCI_RAW || !BT_CTLR
+	int "Number of HCI command buffers" if !BT_HCI_RAW || !HAS_BT_CTLR
 	# This option is present when Host and Controller are build together, or
 	# for Host only builds, or when Controller-to-Host ACL data flow control
 	# is disabled.
-	depends on !BT_HCI_RAW || !BT_CTLR || !BT_HCI_ACL_FLOW_CONTROL
+	depends on !BT_HCI_RAW || !HAS_BT_CTLR || !BT_HCI_ACL_FLOW_CONTROL
 	# The Mesh stack usage in applications and tests can start both advertising and scanning in
 	# parallel. Also, when BT_MESH_WORKQ_SYS is enabled, the Mesh stack is starting Extended
 	# Advertising in the receive callback run in the system work queue and as the Host also uses
