@@ -175,6 +175,24 @@ int z_nrf_grtc_timer_capture_prepare(int32_t chan);
  */
 int z_nrf_grtc_timer_capture_read(int32_t chan, uint64_t *captured_time);
 
+/** @brief Get the channel used for wakeup from system-off.
+ *
+ * @return Channel ID or -1 if no channel is reserved for that purpose.
+ */
+int32_t z_nrf_grtc_timer_wakeup_channel_get(void);
+
+/** @brief Disable all owned compare channels except the one specified.
+ *
+ * This function is used when preparing the system to enter system-off mode.
+ * It disables all compare channels owned by the driver except the one
+ * specified by @p reserved_channel. The reserved channel is typically used
+ * for wake-up from system-off.
+ * @param reserved_channel Channel ID to remain enabled.
+ *
+ * @note Set @p reserved_channel to -1 to disable all owned channels.
+ */
+void z_nrf_grtc_timer_disable_owned_cc_channels(int32_t reserved_channel);
+
 /** @brief Prepare GRTC as a source of wake up event and set the wake up time.
  *
  * @note Calling this function should be immediately followed by low-power mode enter

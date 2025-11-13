@@ -56,4 +56,11 @@ config NRF_GRTC_TIMER_AUTO_KEEP_ALIVE
 	  This feature prevents the SYSCOUNTER from sleeping when any core is in
 	  active state.
 
+config NRF_GRTC_TIMER_USE_SYSTEM_CHANNEL_TO_WAKEUP_FROM_SYSTEMOFF
+	bool
+	depends on POWEROFF
+	default y if SOC_NRF54H20
+	help
+	  Use system channel to schedule wake up time.
+
 endif # NRF_GRTC_TIMER

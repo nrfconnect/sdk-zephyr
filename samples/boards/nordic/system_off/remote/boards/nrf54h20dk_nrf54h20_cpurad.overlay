@@ -1,0 +1,5 @@
+&uart135 {
+	status = "disabled";
+	zephyr,pm-device-runtime-auto;
+	disable-rx;
+};

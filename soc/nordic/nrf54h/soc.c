@@ -155,7 +155,18 @@ void soc_early_init_hook(void)
 {
 	int err;
 
+	if (IS_ENABLED(CONFIG_ICACHE)) {
+		nrf_memconf_ramblock_control_enable_set(NRF_MEMCONF, RAMBLOCK_POWER_ID,
+						RAMBLOCK_CONTROL_BIT_ICACHE, true);
+	}
+
 	sys_cache_instr_enable();
+
+	if (IS_ENABLED(CONFIG_DCACHE)) {
+		nrf_memconf_ramblock_control_enable_set(NRF_MEMCONF, RAMBLOCK_POWER_ID,
+						RAMBLOCK_CONTROL_BIT_DCACHE, true);
+	}
+
 	sys_cache_data_enable();
 
 	power_domain_init();
