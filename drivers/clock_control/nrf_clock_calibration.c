@@ -7,7 +7,7 @@
 #include <zephyr/drivers/clock_control.h>
 #include "nrf_clock_calibration.h"
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
-#include <nrfx_clock.h>
+#include <nrfx_clock_lfclk.h>
 #include <zephyr/logging/log.h>
 #include <stdlib.h>
 
@@ -45,7 +45,6 @@ static void cal_lf_callback(struct onoff_manager *mgr,
 			    uint32_t state, int res);
 
 static struct onoff_client client;
-static struct onoff_manager *mgrs;
 
 /* Temperature sensor is only needed if
  * CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_MAX_SKIP > 0, since a value of 0
@@ -67,42 +66,47 @@ static int16_t prev_temperature; /* Previous temperature measurement. */
 static void timeout_handler(struct k_timer *timer);
 static K_TIMER_DEFINE(backoff_timer, timeout_handler, NULL);
 
-static void clk_request(struct onoff_manager *mgr, struct onoff_client *cli,
+static void clk_request(struct device *dev, struct onoff_client *cli,
 			onoff_client_callback callback)
 {
 	int err;
 
 	sys_notify_init_callback(&cli->notify, callback);
-	err = onoff_request(mgr, cli);
+	err = nrf_clock_control_request(dev, NULL, cli);
 	__ASSERT_NO_MSG(err >= 0);
 }
 
-static void clk_release(struct onoff_manager *mgr)
+static void clk_release(struct device *dev)
 {
 	int err;
 
-	err = onoff_release(mgr);
+	err = nrf_clock_control_release(dev, NULL);
 	__ASSERT_NO_MSG(err >= 0);
 }
 
 static void hf_request(void)
 {
-	clk_request(&mgrs[CLOCK_CONTROL_NRF_TYPE_HFCLK], &client, cal_hf_callback);
+	clk_request(DEVICE_DT_GET_ONE(COND_CODE_1((NRF_CLOCK_HAS_HFCLK),
+						  (nordic_nrf_clock_hfclk),
+						  (nordic_nrf_clock_xo))),
+		    &client, cal_hf_callback);
 }
 
 static void lf_request(void)
 {
-	clk_request(&mgrs[CLOCK_CONTROL_NRF_TYPE_LFCLK], &client, cal_lf_callback);
+	clk_request(DEVICE_DT_GET_ONE(nordic_nrf_clock_lfclk), &client, cal_lf_callback);
 }
 
 static void hf_release(void)
 {
-	clk_release(&mgrs[CLOCK_CONTROL_NRF_TYPE_HFCLK]);
+	clk_release(DEVICE_DT_GET_ONE(COND_CODE_1((NRF_CLOCK_HAS_HFCLK),
+						  (nordic_nrf_clock_hfclk),
+						  (nordic_nrf_clock_xo))));
 }
 
 static void lf_release(void)
 {
-	clk_release(&mgrs[CLOCK_CONTROL_NRF_TYPE_LFCLK]);
+	clk_release(DEVICE_DT_GET_ONE(nordic_nrf_clock_lfclk));
 }
 
 static void cal_lf_callback(struct onoff_manager *mgr,
@@ -115,7 +119,7 @@ static void cal_lf_callback(struct onoff_manager *mgr,
 /* Start actual HW calibration assuming that HFCLK XTAL is on. */
 static void start_hw_cal(void)
 {
-	nrfx_clock_calibration_start();
+	nrfx_clock_lfclk_calibration_start();
 	calib_skip_cnt = CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_MAX_SKIP;
 }
 
@@ -235,9 +239,8 @@ static void measure_temperature(struct k_work *work)
 }
 #endif /* USE_TEMP_SENSOR */
 
-void z_nrf_clock_calibration_init(struct onoff_manager *onoff_mgrs)
+void z_nrf_clock_calibration_init(void)
 {
-	mgrs = onoff_mgrs;
 	total_cnt = 0;
 	total_skips_cnt = 0;
 }

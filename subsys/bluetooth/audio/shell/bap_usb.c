@@ -36,7 +36,7 @@
 #include <zephyr/usb/usbd.h>
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP)
-#include <nrfx_clock.h>
+#include <nrfx_clock_hfclk.h>
 #include <drivers/nrfx_errors.h>
 #include <hal/nrf_clock.h>
 #endif /* CONFIG_SOC_NRF5340_CPUAPP */
@@ -736,7 +736,7 @@ int bap_usb_init(void)
 		 * This may not be required, but reduces the risk of not decoding fast enough
 		 * to keep up with USB
 		 */
-		err = nrfx_clock_divider_set(NRF_CLOCK_DOMAIN_HFCLK, NRF_CLOCK_HFCLK_DIV_1);
+		err = nrfx_clock_hfclk_divider_set(NRF_CLOCK_HFCLK_DIV_1);
 
 		if (err != 0) {
 			LOG_WRN("Failed to set 128 MHz: %d", err);

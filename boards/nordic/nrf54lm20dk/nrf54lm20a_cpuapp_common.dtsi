@@ -130,6 +130,18 @@
 	status = "okay";
 };
 
+&xo {
+	status = "okay";
+};
+
+&lfclk {
+	status = "okay";
+};
+
+&xo24m {
+	status = "okay";
+};
+
 &ieee802154 {
 	status = "okay";
 };
