@@ -80,20 +80,19 @@ static void supp_shell_connect_status(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(wpa_supp_status_work,
 		supp_shell_connect_status);
 
-#define wpa_cli_cmd_v(cmd, ...)	({					\
-	bool status;							\
-									\
-	if (zephyr_wpa_cli_cmd_v(cmd, ##__VA_ARGS__) < 0) {		\
-		wpa_printf(MSG_ERROR,					\
-			   "Failed to execute wpa_cli command: %s",	\
-			   cmd);					\
-		status = false;						\
-	} else {							\
-		status = true;						\
-	}								\
-									\
-	status;								\
-})
+#define wpa_cli_cmd_v(cmd, ...)                                                                    \
+	({                                                                                         \
+		bool status;                                                                       \
+                                                                                                   \
+		if (zephyr_wpa_cli_cmd_v(wpa_s->ctrl_conn, cmd, ##__VA_ARGS__) < 0) {              \
+			wpa_printf(MSG_ERROR, "Failed to execute wpa_cli command: %s", cmd);       \
+			status = false;                                                            \
+		} else {                                                                           \
+			status = true;                                                             \
+		}                                                                                  \
+                                                                                                   \
+		status;                                                                            \
+	})
 
 static struct wpa_supplicant *get_wpa_s_handle(const struct device *dev)
 {
@@ -626,7 +625,7 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 		goto out;
 	}
 
-	ret = z_wpa_ctrl_add_network(&resp);
+	ret = z_wpa_ctrl_add_network(wpa_s->ctrl_conn, &resp);
 	if (ret) {
 		wpa_printf(MSG_ERROR, "Failed to add network");
 		goto out;
@@ -968,6 +967,22 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 			if (!wpa_cli_cmd_v("set_network %d anonymous_identity \"%s\"",
 					   resp.network_id, params->anon_id)) {
 				goto out;
+			}
+
+			if (params->server_cert_domain_exact_len > 0) {
+				if (!wpa_cli_cmd_v("set_network %d domain_match \"%s\"",
+						   resp.network_id,
+						   params->server_cert_domain_exact)) {
+					goto out;
+				}
+			}
+
+			if (params->server_cert_domain_suffix_len > 0) {
+				if (!wpa_cli_cmd_v("set_network %d domain_suffix_match \"%s\"",
+						   resp.network_id,
+						   params->server_cert_domain_suffix)) {
+					goto out;
+				}
 			}
 
 			if (false == ((params->security == WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2 ||
@@ -1365,7 +1380,7 @@ int supplicant_status(const struct device *dev, struct wifi_iface_status *status
 		status->channel = channel;
 
 		if (ssid_len == 0) {
-			int _res = z_wpa_ctrl_status(&cli_status);
+			int _res = z_wpa_ctrl_status(wpa_s->ctrl_conn, &cli_status);
 
 			if (_res < 0) {
 				ssid_len = 0;
@@ -1394,7 +1409,7 @@ int supplicant_status(const struct device *dev, struct wifi_iface_status *status
 
 		status->rssi = -WPA_INVALID_NOISE;
 		if (status->iface_mode == WIFI_MODE_INFRA) {
-			ret = z_wpa_ctrl_signal_poll(&signal_poll);
+			ret = z_wpa_ctrl_signal_poll(wpa_s->ctrl_conn, &signal_poll);
 			if (!ret) {
 				status->rssi = signal_poll.rssi;
 				status->current_phy_tx_rate = signal_poll.current_txrate;
@@ -2007,7 +2022,7 @@ static int supplicant_wps_pin(const struct device *dev, struct wifi_wps_config_p
 	}
 
 	if (params->oper == WIFI_WPS_PIN_GET) {
-		if (zephyr_wpa_cli_cmd_resp(get_pin_cmd, params->pin)) {
+		if (zephyr_wpa_cli_cmd_resp(wpa_s->ctrl_conn, get_pin_cmd, params->pin)) {
 			goto out;
 		}
 	} else if (params->oper == WIFI_WPS_PIN_SET) {
@@ -2440,6 +2455,7 @@ int supplicant_dpp_dispatch(const struct device *dev, struct wifi_dpp_params *pa
 {
 	int ret;
 	char *cmd = NULL;
+	struct wpa_supplicant *wpa_s = get_wpa_s_handle(dev);
 
 	if (params == NULL) {
 		return -EINVAL;
@@ -2458,7 +2474,7 @@ int supplicant_dpp_dispatch(const struct device *dev, struct wifi_dpp_params *pa
 	}
 
 	wpa_printf(MSG_DEBUG, "wpa_cli %s", cmd);
-	if (zephyr_wpa_cli_cmd_resp(cmd, params->resp)) {
+	if (zephyr_wpa_cli_cmd_resp(wpa_s->ctrl_conn, cmd, params->resp)) {
 		os_free(cmd);
 		return -ENOEXEC;
 	}
