@@ -19,6 +19,10 @@
 #include <zephyr/sys/util_macro.h>
 #include <zephyr/toolchain.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** @cond INTERNAL_HIDDEN */
 
 enum bt_keys_type {
@@ -248,5 +252,9 @@ void bt_keys_link_key_update_usage(const bt_addr_t *addr);
 void bt_keys_show_sniffer_info(struct bt_keys *keys, void *data);
 
 /** @endcond */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ZEPHYR_SUBSYS_BLUETOOTH_HOST_KEYS_H_ */
