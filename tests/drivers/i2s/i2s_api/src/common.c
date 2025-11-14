@@ -8,9 +8,32 @@
 #include <zephyr/ztest.h>
 #include <zephyr/drivers/i2s.h>
 #include "i2s_api_test.h"
+#include <zephyr/linker/devicetree_regions.h>
 
-K_MEM_SLAB_DEFINE(rx_mem_slab, BLOCK_SIZE, NUM_RX_BLOCKS, 32);
-K_MEM_SLAB_DEFINE(tx_mem_slab, BLOCK_SIZE, NUM_TX_BLOCKS, 32);
+#define TDM(idx)                       DT_NODELABEL(tdm##idx)
+#define TDM_PROP(idx, prop)            DT_PROP(TDM(idx), prop)
+#define TDM_HAS_PROP(idx, prop)        DT_NODE_HAS_PROP(TDM(idx), prop)
+
+
+#define TDM_MEMORY_SECTION(idx)                                               \
+       COND_CODE_1(TDM_HAS_PROP(idx, memory_regions),                         \
+               (__attribute__((__section__(LINKER_DT_NODE_REGION_NAME(        \
+                       DT_PHANDLE(TDM(idx), memory_regions)))))),             \
+               ())
+
+#define BUFFER_MEM_REGION __attribute__((__section__("cpuapp_dma_region")))
+
+char  __aligned(WB_UP(32))
+       _k_mem_slab_buf_rx_mem_slab[(NUM_RX_BLOCKS + 2) * WB_UP(BLOCK_SIZE)] TDM_MEMORY_SECTION(130);
+STRUCT_SECTION_ITERABLE(k_mem_slab, rx_mem_slab) =
+       Z_MEM_SLAB_INITIALIZER(rx_mem_slab, _k_mem_slab_buf_rx_mem_slab,
+                               WB_UP(BLOCK_SIZE), NUM_RX_BLOCKS + 2);
+
+char  __aligned(WB_UP(32))
+       _k_mem_slab_buf_tx_mem_slab[(NUM_TX_BLOCKS) * WB_UP(BLOCK_SIZE)] TDM_MEMORY_SECTION(130);
+STRUCT_SECTION_ITERABLE(k_mem_slab, tx_mem_slab) =
+       Z_MEM_SLAB_INITIALIZER(tx_mem_slab, _k_mem_slab_buf_tx_mem_slab,
+                               WB_UP(BLOCK_SIZE), NUM_TX_BLOCKS);
 
 /* The data_l represent a sine wave */
 ZTEST_DMEM int16_t data_l[SAMPLE_NO] = {
