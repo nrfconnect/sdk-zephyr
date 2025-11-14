@@ -78,6 +78,16 @@ zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_WNM
   CONFIG_WNM
 )
 
+zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_BGSCAN
+  CONFIG_BGSCAN
+)
+zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_BGSCAN_SIMPLE
+  CONFIG_BGSCAN_SIMPLE
+)
+zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_BGSCAN_LEARN
+  CONFIG_BGSCAN_LEARN
+)
+
 zephyr_library_include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${HOSTAP_BASE}/
@@ -154,6 +164,16 @@ zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_MBO
 )
 zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_WNM
   ${WIFI_NM_WPA_SUPPLICANT_BASE}/wnm_sta.c
+)
+
+zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_BGSCAN
+  ${WIFI_NM_WPA_SUPPLICANT_BASE}/bgscan.c
+)
+zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_BGSCAN_SIMPLE
+  ${WIFI_NM_WPA_SUPPLICANT_BASE}/bgscan_simple.c
+)
+zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_BGSCAN_LEARN
+  ${WIFI_NM_WPA_SUPPLICANT_BASE}/bgscan_learn.c
 )
 
 zephyr_library_sources_ifdef(CONFIG_WPA_CLI
@@ -363,15 +383,8 @@ zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_WPS
   ${HOSTAP_SRC_BASE}/wps/wps_enrollee.c
   ${HOSTAP_SRC_BASE}/wps/wps_registrar.c
   ${HOSTAP_SRC_BASE}/crypto/dh_groups.c
+  ${HOSTAP_SRC_BASE}/eap_server/eap_server_wsc.c
 )
-
-if(NOT CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ALT)
-# dh_group5 is only needed if we are not using mbedtls, as mbedtls provides
-# its own definition
-zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_WPS
-  ${HOSTAP_SRC_BASE}/crypto/dh_group5.c
-)
-endif()
 
 zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
   CONFIG_P2P
@@ -382,6 +395,7 @@ zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
 zephyr_library_compile_definitions_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_WPS
   CONFIG_WPS
   EAP_WSC
+  EAP_SERVER_WSC
 )
 
 zephyr_library_sources_ifdef(CONFIG_WIFI_NM_HOSTAPD_WPS
@@ -570,6 +584,10 @@ zephyr_library_sources_ifdef(CONFIG_EAP_FAST
 
 zephyr_library_compile_definitions_ifdef(CONFIG_EAP_FAST
   EAP_FAST
+)
+
+zephyr_library_compile_definitions_ifdef(CONFIG_EAP_TLSV1_3
+  EAP_TLSV1_3
 )
 
 zephyr_library_sources_ifdef(CONFIG_WIFI_NM_WPA_SUPPLICANT_EAPOL
