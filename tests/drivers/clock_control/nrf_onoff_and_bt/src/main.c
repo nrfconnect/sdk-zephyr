@@ -9,6 +9,14 @@
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 #include <hal/nrf_clock.h>
 
+#if NRF_CLOCK_HAS_HFCLK
+#include <nrfx_clock_hfclk.h>
+#elif NRF_CLOCK_HAS_XO
+#include <nrfx_clock_xo.h>
+#else
+#error "HF clock not enabled"
+#endif
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(test);
 
@@ -19,8 +27,10 @@ LOG_MODULE_REGISTER(test);
 static bool test_end;
 
 static const struct device *const entropy = DEVICE_DT_GET(DT_CHOSEN(zephyr_entropy));
-static const struct device *const clock_dev = DEVICE_DT_GET_ONE(nordic_nrf_clock);
-static struct device *hf_dev;
+static const struct device *const clock_dev = DEVICE_DT_GET_ONE(
+					      COND_CODE_1((NRF_CLOCK_HAS_HFCLK),
+							  (nordic_nrf_clock_hfclk),
+							  (nordic_nrf_clock_xo)));
 static struct onoff_client cli;
 static uint32_t iteration;
 
@@ -28,11 +38,6 @@ static void *setup(void)
 {
 	zassert_true(device_is_ready(entropy));
 	zassert_true(device_is_ready(clock_dev));
-
-	hf_dev = DEVICE_DT_GET_ONE(COND_CODE_1((NRF_CLOCK_HAS_HFCLK),
-					       (nordic_nrf_clock_hfclk),
-					       (nordic_nrf_clock_xo)));
-	zassert_true(hf_dev);
 
 	return NULL;
 }
@@ -65,20 +70,21 @@ static void bt_timeout_handler(struct k_timer *timer)
 
 K_TIMER_DEFINE(timer1, bt_timeout_handler, NULL);
 
-static void check_hf_status(const struct device *dev, bool exp_on,
-			    bool sw_check)
+static void check_hf_status(bool exp_on, bool sw_check)
 {
 	nrf_clock_hfclk_t type;
 
-	nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_HFCLK, &type);
+	COND_CODE_1((NRF_CLOCK_HAS_HFCLK),
+		    (nrfx_clock_hfclk_running_check),
+		    (nrfx_clock_xo_running_check))(&type);
+
 	zassert_equal(type, exp_on ? NRF_CLOCK_HFCLK_HIGH_ACCURACY :
 				NRF_CLOCK_HFCLK_LOW_ACCURACY,
 			"%d: Clock expected to be %s",
 			iteration, exp_on ? "on" : "off");
 
 	if (sw_check) {
-		enum clock_control_status status =
-		     clock_control_get_status(dev, CLOCK_CONTROL_NRF_SUBSYS_HF);
+		enum clock_control_status status = clock_control_get_status(clock_dev, NULL);
 
 		zassert_equal(status, exp_on ? CLOCK_CONTROL_STATUS_ON :
 						CLOCK_CONTROL_STATUS_OFF,
@@ -117,16 +123,16 @@ ZTEST(nrf_onoff_and_bt, test_onoff_interrupted)
 		backoff = 3 * rand;
 
 		sys_notify_init_spinwait(&cli.notify);
-		err = nrf_clock_control_request(hf_dev, NULL, &cli);
+		err = nrf_clock_control_request(clock_dev, NULL, &cli);
 		zassert_true(err >= 0);
 
 		k_busy_wait(backoff);
 
 		if (backoff > HF_STARTUP_TIME_US) {
-			check_hf_status(clock_dev, true, true);
+			check_hf_status(true, true);
 		}
 
-		err = nrf_clock_control_cancel_or_release(hf_dev, NULL, &cli);
+		err = nrf_clock_control_cancel_or_release(clock_dev, NULL, &cli);
 		zassert_true(err >= 0);
 
 		elapsed = k_uptime_get() - start_time;
@@ -138,7 +144,7 @@ ZTEST(nrf_onoff_and_bt, test_onoff_interrupted)
 
 	test_end = true;
 	k_msleep(100);
-	check_hf_status(clock_dev, false, true);
+	check_hf_status(false, true);
 }
 
 static void onoff_timeout_handler(struct k_timer *timer)
@@ -209,7 +215,7 @@ ZTEST(nrf_onoff_and_bt, test_bt_interrupted)
 		k_busy_wait(backoff);
 
 		if (backoff > HF_STARTUP_TIME_US) {
-			check_hf_status(clock_dev, true, false);
+			check_hf_status(true, false);
 		}
 
 		z_nrf_clock_bt_ctlr_hf_release();
@@ -223,6 +229,6 @@ ZTEST(nrf_onoff_and_bt, test_bt_interrupted)
 
 	test_end = true;
 	k_msleep(100);
-	check_hf_status(clock_dev, false, true);
+	check_hf_status(false, true);
 }
 ZTEST_SUITE(nrf_onoff_and_bt, NULL, setup, NULL, NULL, NULL);

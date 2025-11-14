@@ -5,7 +5,6 @@
 
 #include "clock_control_nrf_common.h"
 #include <nrfx.h>
-#include <nrfx_clock.h>
 
 #if NRFX_CHECK(NRFX_POWER_ENABLED)
 #include <nrfx_power.h>
@@ -24,9 +23,6 @@ static void clock_irq_handler(void)
 	STRUCT_SECTION_FOREACH(clock_control_nrf_irq_handler, irq) {
 		irq->handler();
 	}
-
-	/* temporary fix, it will be removed when all the clocks are moved to their files */
-	nrfx_clock_irq_handler();
 }
 
 void clock_control_nrf_common_connect_irq(void)
