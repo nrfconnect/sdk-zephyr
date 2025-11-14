@@ -61,6 +61,8 @@ Removed APIs and options
 * The TinyCrypt library was removed as the upstream version is no longer maintained.
   PSA Crypto API is now the recommended cryptographic library for Zephyr.
 * The legacy pipe object API was removed. Use the new pipe API instead.
+* ``bt_le_set_auto_conn``
+* ``CONFIG_BT_BUF_ACL_RX_COUNT``
 
 Deprecated APIs and options
 ===========================

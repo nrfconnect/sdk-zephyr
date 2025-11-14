@@ -1068,7 +1068,7 @@ void bt_conn_tx_processor(void)
 	LOG_DBG("processing conn %p", conn);
 
 	if (conn->state != BT_CONN_CONNECTED) {
-		LOG_WRN("conn %p: not connected", conn);
+		LOG_DBG("conn %p: not connected: state %d", conn, conn->state);
 		goto raise_and_exit;
 	}
 
@@ -1514,43 +1514,46 @@ void bt_conn_unref(struct bt_conn *conn)
 {
 	atomic_val_t old;
 	bool deallocated;
-	enum bt_conn_type conn_type;
-	uint8_t conn_role;
 	uint16_t conn_handle;
+	/* Used only if CONFIG_ASSERT and CONFIG_BT_CONN_TX. */
+	__maybe_unused bool conn_tx_is_pending;
 
 	__ASSERT(conn, "Invalid connection reference");
 
-	/* Storing parameters of interest so we don't access the object
-	 * after decrementing its ref-count
+	/* If we're removing the last reference, the connection object will be
+	 * considered freed and possibly re-allocated by the Bluetooth Host stack
+	 * as soon as we decrement the counter.
+	 * To prevent inconsistencies when accessing the connection's state,
+	 * we store its properties of interest before decrementing the ref-count,
+	 * then unset the local pointer.
 	 */
-	conn_type = conn->type;
-	conn_role = conn->role;
 	conn_handle = conn->handle;
-
+#if CONFIG_BT_CONN_TX && CONFIG_ASSERT
+	conn_tx_is_pending = k_work_is_pending(&conn->tx_complete_work);
+#endif
 	old = atomic_dec(&conn->ref);
-	/* Prevent from accessing connection object */
-	deallocated = (atomic_get(&old) == 1);
-	IF_ENABLED(CONFIG_BT_CONN_TX,
-		   (__ASSERT(!(deallocated && k_work_is_pending(&conn->tx_complete_work)),
-			     "tx_complete_work is pending when conn is deallocated")));
 	conn = NULL;
 
 	LOG_DBG("handle %u ref %ld -> %ld", conn_handle, old, (old - 1));
 
 	__ASSERT(old > 0, "Conn reference counter is 0");
 
-	/* Slot has been freed and can be taken. No guarantees are made on requests
-	 * to claim connection object as only the first claim will be served.
-	 */
-	if (deallocated) {
-		k_sem_give(&pending_recycled_events);
-		k_work_submit(&recycled_work);
+	/* Whether we removed the last reference. */
+	deallocated = (old == 1);
+	if (!deallocated) {
+		return;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) && conn_type == BT_CONN_TYPE_LE &&
-	    conn_role == BT_CONN_ROLE_PERIPHERAL && deallocated) {
-		bt_le_adv_resume();
-	}
+	IF_ENABLED(CONFIG_BT_CONN_TX,
+		   (__ASSERT(!conn_tx_is_pending,
+			     "tx_complete_work is pending when conn is deallocated");))
+
+	/* Notify listeners that a slot has been freed and can be taken.
+	 * No guarantees are made on requests to claim connection object
+	 * as only the first claim will be served.
+	 */
+	k_sem_give(&pending_recycled_events);
+	k_work_submit(&recycled_work);
 }
 
 uint8_t bt_conn_index(const struct bt_conn *conn)
@@ -1560,23 +1563,20 @@ uint8_t bt_conn_index(const struct bt_conn *conn)
 	switch (conn->type) {
 #if defined(CONFIG_BT_ISO)
 	case BT_CONN_TYPE_ISO:
-		index = conn - iso_conns;
-		__ASSERT(index >= 0 && index < ARRAY_SIZE(iso_conns),
-			"Invalid bt_conn pointer");
+		__ASSERT(IS_ARRAY_ELEMENT(iso_conns, conn), "Invalid bt_conn pointer");
+		index = ARRAY_INDEX(iso_conns, conn);
 		break;
 #endif
 #if defined(CONFIG_BT_CLASSIC)
 	case BT_CONN_TYPE_SCO:
-		index = conn - sco_conns;
-		__ASSERT(index >= 0 && index < ARRAY_SIZE(sco_conns),
-			"Invalid bt_conn pointer");
+		__ASSERT(IS_ARRAY_ELEMENT(sco_conns, conn), "Invalid bt_conn pointer");
+		index = ARRAY_INDEX(sco_conns, conn);
 		break;
 #endif
 	default:
 #if defined(CONFIG_BT_CONN)
-		index = conn - acl_conns;
-		__ASSERT(index >= 0 && index < ARRAY_SIZE(acl_conns),
-			 "Invalid bt_conn pointer");
+		__ASSERT(IS_ARRAY_ELEMENT(acl_conns, conn), "Invalid bt_conn pointer");
+		index = ARRAY_INDEX(acl_conns, conn);
 #else
 		__ASSERT(false, "Invalid connection type %u", conn->type);
 #endif /* CONFIG_BT_CONN */
@@ -2249,7 +2249,10 @@ static void deferred_work(struct k_work *work)
 		 * auto connect flag if it was set, instead just cancel
 		 * connection directly
 		 */
-		bt_le_create_conn_cancel();
+		if (bt_le_create_conn_cancel() == -ENOBUFS) {
+			LOG_WRN("No buffers to cancel connection, retrying in 10 ms");
+			k_work_reschedule(dwork, K_MSEC(10));
+		}
 		return;
 	}
 
@@ -2289,6 +2292,10 @@ static void deferred_work(struct k_work *work)
 				err);
 		}
 #endif
+	} else {
+		/* Neither the application nor the configuration
+		 * set LE connection parameters.
+		 */
 	}
 
 	atomic_set_bit(conn->flags, BT_CONN_PERIPHERAL_PARAM_UPDATE);
@@ -2391,6 +2398,8 @@ struct bt_conn *bt_conn_add_sco(const bt_addr_t *peer, int link_type)
 	} else if (link_type == BT_HCI_ESCO) {
 		sco_conn->sco.pkt_type = (bt_dev.br.esco_pkt_type &
 					  ~EDR_ESCO_PKT_MASK);
+	} else {
+		/* Ignoring unexpected link type BT_HCI_ACL. */
 	}
 
 	return sco_conn;
@@ -3983,65 +3992,6 @@ int bt_conn_le_create_synced(const struct bt_le_ext_adv *adv,
 	*ret_conn = conn;
 	return 0;
 }
-
-#if !defined(CONFIG_BT_FILTER_ACCEPT_LIST)
-int bt_le_set_auto_conn(const bt_addr_le_t *addr,
-			const struct bt_le_conn_param *param)
-{
-	struct bt_conn *conn;
-
-	if (!atomic_test_bit(bt_dev.flags, BT_DEV_READY)) {
-		return -EAGAIN;
-	}
-
-	if (param && !bt_le_conn_params_valid(param)) {
-		return -EINVAL;
-	}
-
-	if (!bt_id_scan_random_addr_check()) {
-		return -EINVAL;
-	}
-
-	/* Only default identity is supported */
-	conn = bt_conn_lookup_addr_le(BT_ID_DEFAULT, addr);
-	if (!conn) {
-		conn = bt_conn_add_le(BT_ID_DEFAULT, addr);
-		if (!conn) {
-			return -ENOMEM;
-		}
-	}
-
-	if (param) {
-		bt_conn_set_param_le(conn, param);
-
-		if (!atomic_test_and_set_bit(conn->flags,
-					     BT_CONN_AUTO_CONNECT)) {
-			bt_conn_ref(conn);
-		}
-	} else {
-		if (atomic_test_and_clear_bit(conn->flags,
-					      BT_CONN_AUTO_CONNECT)) {
-			bt_conn_unref(conn);
-			if (conn->state == BT_CONN_SCAN_BEFORE_INITIATING) {
-				bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
-			}
-		}
-	}
-
-	int err = 0;
-	if (conn->state == BT_CONN_DISCONNECTED &&
-	    atomic_test_bit(bt_dev.flags, BT_DEV_READY)) {
-		if (param) {
-			bt_conn_set_state(conn, BT_CONN_SCAN_BEFORE_INITIATING);
-			err = bt_le_scan_user_add(BT_LE_SCAN_USER_CONN);
-		}
-	}
-
-	bt_conn_unref(conn);
-
-	return err;
-}
-#endif /* !defined(CONFIG_BT_FILTER_ACCEPT_LIST) */
 #endif /* CONFIG_BT_CENTRAL */
 
 int bt_conn_le_conn_update(struct bt_conn *conn,

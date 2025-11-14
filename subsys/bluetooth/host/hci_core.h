@@ -116,6 +116,10 @@ enum {
 	BT_ADV_PARAMS_SET,
 	/* Advertising data has been set in the controller. */
 	BT_ADV_DATA_SET,
+	/* Advertising random address has been updated in the controller before
+	 * enabling advertising.
+	 */
+	BT_ADV_RANDOM_ADDR_UPDATED,
 	/* Advertising random address pending to be set in the controller. */
 	BT_ADV_RANDOM_ADDR_PENDING,
 	/* The private random address of the advertiser is valid for this cycle
@@ -140,10 +144,6 @@ enum {
 	 * the identity address instead.
 	 */
 	BT_ADV_USE_IDENTITY,
-	/* Advertiser has been configured to keep advertising after a connection
-	 * has been established as long as there are connections available.
-	 */
-	BT_ADV_PERSIST,
 	/* Advertiser has been temporarily disabled. */
 	BT_ADV_PAUSED,
 	/* Periodic Advertising has been enabled in the controller. */
