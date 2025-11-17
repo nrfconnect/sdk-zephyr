@@ -128,14 +128,6 @@ int z_nrf_clock_calibration_skips_count(void);
  */
 bool z_nrf_clock_calibration_is_in_progress(void);
 
-/** @brief Get onoff service for given clock subsystem.
- *
- * @param sys Subsystem.
- *
- * @return Service handler or NULL.
- */
-struct onoff_manager *z_nrf_clock_control_get_onoff(clock_control_subsys_t sys);
-
 /** @brief Permanently enable low frequency clock.
  *
  * Low frequency clock is usually enabled during application lifetime because
