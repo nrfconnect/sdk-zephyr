@@ -14,7 +14,11 @@
 #include <zephyr/shell/shell.h>
 #include <zephyr/init.h>
 #include <ctype.h>
+#ifdef WIFI_NRF71
+#include <nrf71_wifi_ctrl.h>
+#else
 #include <host_rpu_sys_if.h>
+#endif /* WIFI_NRF71 */
 #include <common/fmac_structs_common.h>
 #include <queue.h>
 
