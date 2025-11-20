@@ -168,6 +168,7 @@ static void s2idle_exit(uint8_t substate_id)
 static void s2ram_exit(void)
 {
 	common_resume();
+	soc_lrcconf_poweron_release(&soc_node, NRF_LRCCONF_POWER_MAIN);
 #if !defined(CONFIG_SOC_NRF54H20_CPURAD)
 	/* Re-enable domain retention. */
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, true);
@@ -188,6 +189,7 @@ static int sys_suspend_to_ram(void)
 	/* Disable retention */
 	nrf_lrcconf_retain_set(NRF_LRCCONF010, NRF_LRCCONF_POWER_DOMAIN_0, false);
 #endif
+	soc_lrcconf_poweron_request(&soc_node, NRF_LRCCONF_POWER_MAIN);
 	common_suspend();
 
 	__set_BASEPRI(0);
