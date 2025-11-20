@@ -320,7 +320,7 @@ config NRFX_TWIS
 	bool "NRFX driver for TWIS peripheral"
 
 config NRFX_UART
-	bool
+	bool "NRFX driver for UART peripheral"
 
 config NRFX_UART0
 	bool "UART0 driver instance"
