@@ -3651,19 +3651,19 @@ static int cmd_wifi_p2p_find(const struct shell *sh, size_t argc, char *argv[])
 	if (argc > 1) {
 		int opt;
 		int opt_index = 0;
-		struct sys_getopt_state *state;
-		static const struct sys_getopt_option long_options[] = {
-			{"timeout", sys_getopt_required_argument, 0, 't'},
-			{"type", sys_getopt_required_argument, 0, 'T'},
-			{"iface", sys_getopt_required_argument, 0, 'i'},
-			{"help", sys_getopt_no_argument, 0, 'h'},
+		struct getopt_state *state;
+		static const struct option long_options[] = {
+			{"timeout", required_argument, 0, 't'},
+			{"type", required_argument, 0, 'T'},
+			{"iface", required_argument, 0, 'i'},
+			{"help", no_argument, 0, 'h'},
 			{0, 0, 0, 0}
 		};
 		long val;
 
-		while ((opt = sys_getopt_long(argc, argv, "t:T:i:h",
+		while ((opt = getopt_long(argc, argv, "t:T:i:h",
 						long_options, &opt_index)) != -1) {
-			state = sys_getopt_state_get();
+			state = getopt_state_get();
 			switch (opt) {
 			case 't':
 				if (!parse_number(sh, &val, state->optarg, "timeout", 0, 65535)) {
@@ -3735,12 +3735,12 @@ static int cmd_wifi_p2p_connect(const struct shell *sh, size_t argc, char *argv[
 	const char *method_arg = NULL;
 	int opt;
 	int opt_index = 0;
-	struct sys_getopt_state *state;
-	static const struct sys_getopt_option long_options[] = {
-		{"go-intent", sys_getopt_required_argument, 0, 'g'},
-		{"freq", sys_getopt_required_argument, 0, 'f'},
-		{"iface", sys_getopt_required_argument, 0, 'i'},
-		{"help", sys_getopt_no_argument, 0, 'h'},
+	struct getopt_state *state;
+	static const struct option long_options[] = {
+		{"go-intent", required_argument, 0, 'g'},
+		{"freq", required_argument, 0, 'f'},
+		{"iface", required_argument, 0, 'i'},
+		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
 	};
 	long val;
@@ -3784,8 +3784,8 @@ static int cmd_wifi_p2p_connect(const struct shell *sh, size_t argc, char *argv[
 	/* Set default frequency to 2462 MHz (channel 11, 2.4 GHz) */
 	params.connect.freq = 2462;
 
-	while ((opt = sys_getopt_long(argc, argv, "g:f:i:h", long_options, &opt_index)) != -1) {
-		state = sys_getopt_state_get();
+	while ((opt = getopt_long(argc, argv, "g:f:i:h", long_options, &opt_index)) != -1) {
+		state = getopt_state_get();
 		switch (opt) {
 		case 'g':
 			if (!parse_number(sh, &val, state->optarg, "go-intent", 0, 15)) {
@@ -3833,17 +3833,17 @@ static int cmd_wifi_p2p_group_add(const struct shell *sh, size_t argc, char *arg
 	struct wifi_p2p_params params = {0};
 	int opt;
 	int opt_index = 0;
-	struct sys_getopt_state *state;
-	static const struct sys_getopt_option long_options[] = {
-		{"freq", sys_getopt_required_argument, 0, 'f'},
-		{"persistent", sys_getopt_required_argument, 0, 'p'},
-		{"ht40", sys_getopt_no_argument, 0, 'h'},
-		{"vht", sys_getopt_no_argument, 0, 'v'},
-		{"he", sys_getopt_no_argument, 0, 'H'},
-		{"edmg", sys_getopt_no_argument, 0, 'e'},
-		{"go-bssid", sys_getopt_required_argument, 0, 'b'},
-		{"iface", sys_getopt_required_argument, 0, 'i'},
-		{"help", sys_getopt_no_argument, 0, '?'},
+	struct getopt_state *state;
+	static const struct option long_options[] = {
+		{"freq", required_argument, 0, 'f'},
+		{"persistent", required_argument, 0, 'p'},
+		{"ht40", no_argument, 0, 'h'},
+		{"vht", no_argument, 0, 'v'},
+		{"he", no_argument, 0, 'H'},
+		{"edmg", no_argument, 0, 'e'},
+		{"go-bssid", required_argument, 0, 'b'},
+		{"iface", required_argument, 0, 'i'},
+		{"help", no_argument, 0, '?'},
 		{0, 0, 0, 0}
 	};
 	long val;
@@ -3860,9 +3860,9 @@ static int cmd_wifi_p2p_group_add(const struct shell *sh, size_t argc, char *arg
 	params.group_add.edmg = false;
 	params.group_add.go_bssid_length = 0;
 
-	while ((opt = sys_getopt_long(argc, argv, "f:p:hvHeb:i:?", long_options,
+	while ((opt = getopt_long(argc, argv, "f:p:hvHeb:i:?", long_options,
 				      &opt_index)) != -1) {
-		state = sys_getopt_state_get();
+		state = getopt_state_get();
 		switch (opt) {
 		case 'f':
 			if (!parse_number(sh, &val, state->optarg, "freq", 0, 6000)) {
@@ -3951,15 +3951,15 @@ static int cmd_wifi_p2p_invite(const struct shell *sh, size_t argc, char *argv[]
 	uint8_t mac_addr[WIFI_MAC_ADDR_LEN];
 	int opt;
 	int opt_index = 0;
-	struct sys_getopt_state *state;
-	static const struct sys_getopt_option long_options[] = {
-		{"persistent", sys_getopt_required_argument, 0, 'p'},
-		{"group", sys_getopt_required_argument, 0, 'g'},
-		{"peer", sys_getopt_required_argument, 0, 'P'},
-		{"freq", sys_getopt_required_argument, 0, 'f'},
-		{"go-dev-addr", sys_getopt_required_argument, 0, 'd'},
-		{"iface", sys_getopt_required_argument, 0, 'i'},
-		{"help", sys_getopt_no_argument, 0, 'h'},
+	struct getopt_state *state;
+	static const struct option long_options[] = {
+		{"persistent", required_argument, 0, 'p'},
+		{"group", required_argument, 0, 'g'},
+		{"peer", required_argument, 0, 'P'},
+		{"freq", required_argument, 0, 'f'},
+		{"go-dev-addr", required_argument, 0, 'd'},
+		{"iface", required_argument, 0, 'i'},
+		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
 	};
 	long val;
@@ -3980,9 +3980,9 @@ static int cmd_wifi_p2p_invite(const struct shell *sh, size_t argc, char *argv[]
 		return -EINVAL;
 	}
 
-	while ((opt = sys_getopt_long(argc, argv, "p:g:P:f:d:i:h", long_options,
+	while ((opt = getopt_long(argc, argv, "p:g:P:f:d:i:h", long_options,
 				      &opt_index)) != -1) {
-		state = sys_getopt_state_get();
+		state = getopt_state_get();
 		switch (opt) {
 		case 'p':
 			if (!parse_number(sh, &val, state->optarg, "persistent", 0, 255)) {
@@ -4034,7 +4034,7 @@ static int cmd_wifi_p2p_invite(const struct shell *sh, size_t argc, char *argv[]
 		}
 	}
 
-	state = sys_getopt_state_get();
+	state = getopt_state_get();
 
 	if (params.invite.type == WIFI_P2P_INVITE_PERSISTENT &&
 	    params.invite.persistent_id >= 0 &&
