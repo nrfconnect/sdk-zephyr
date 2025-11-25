@@ -29,7 +29,7 @@
 #endif /* defined(CONFIG_BT_LL_SOFTDEVICE) */
 
 #if defined(CONFIG_MPSL)
-#include <mpsl_hwres_zephyr.h>
+#include <mpsl_hwres.h>
 #if defined(CONFIG_SOC_COMPATIBLE_NRF52X)
 #define NRFX_PPI_CHANNELS_USED_BY_MPSL MPSL_NRF52_PPI_CHANNELS_USED_MASK
 #elif defined(CONFIG_SOC_COMPATIBLE_NRF53X)
