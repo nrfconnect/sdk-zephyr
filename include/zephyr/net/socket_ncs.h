@@ -69,6 +69,27 @@ extern "C" {
 #define TLS_DTLS_HANDSHAKE_STATUS_FULL		0
 #define TLS_DTLS_HANDSHAKE_STATUS_CACHED	1
 
+/** Socket option to enable the DTLS fragmentation extension.
+ *  Accepted values for the option are: @ref DTLS_FRAG_EXT_DISABLED,
+ *  @ref DTLS_FRAG_EXT_512_ENABLED, @ref DTLS_FRAG_EXT_1024_ENABLED.
+ */
+#define TLS_DTLS_FRAG_EXT (NET_SOCKET_NCS_BASE + 22)
+
+/** Disabled - The DTLS fragmentation extension is not included in the Client Hello. */
+#define DTLS_FRAG_EXT_DISABLED 0
+/** Enabled - The DTLS fragmentation extension is included in the Client Hello with the fragment
+ *  size of 512 bytes.
+ *
+ *  @note The user data size in send requests also becomes limited to a maximum of 512 bytes.
+ */
+#define DTLS_FRAG_EXT_512_ENABLED 1
+/** Enabled - The DTLS fragmentation extension is included in the Client Hello with the fragment
+ *  size of 1024 bytes.
+ *
+ *  @note The user data size in send requests also becomes limited to a maximum of 1024 bytes.
+ */
+#define DTLS_FRAG_EXT_1024_ENABLED 2
+
 /* NCS specific socket options */
 
 /** sockopt: enable sending data as part of exceptional events */
