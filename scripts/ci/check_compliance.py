@@ -1401,10 +1401,10 @@ flagged.
         "SECURITY_LOADPIN",   # Linux, in boards/xtensa/intel_adsp_cavs25/doc
         "SEL",
         "SHIFT",
-        "SINGLE_APPLICATION_SLOT", # Used in sysbuild for MCUboot configuration
-        "SINGLE_APPLICATION_SLOT_RAM_LOAD", # Used in sysbuild for MCUboot configuration
-        "SOC_SDKNG_UNSUPPORTED", # Used in modules/hal_nxp/mcux/CMakeLists.txt
-        "SOC_SERIES_", # Used as regex in scripts/utils/board_v1_to_v2.py
+        "SINGLE_APPLICATION_SLOT",  # Used in sysbuild for MCUboot configuration
+        "SINGLE_APPLICATION_SLOT_RAM_LOAD",  # Used in sysbuild for MCUboot configuration
+        "SOC_SDKNG_UNSUPPORTED",  # Used in modules/hal_nxp/mcux/CMakeLists.txt
+        "SOC_SERIES_",  # Used as regex in scripts/utils/board_v1_to_v2.py
         "SOC_WATCH",  # Issue 13749
         "SOME_BOOL",
         "SOME_INT",
