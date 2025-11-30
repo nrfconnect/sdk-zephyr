@@ -17,7 +17,6 @@
 #include "common/fmac_util.h"
 #include "wifi_mgmt.h"
 #include "wpa_supp_if.h"
-#include <system/fmac_peer.h>
 
 LOG_MODULE_DECLARE(wifi_nrf, CONFIG_WIFI_NRF70_LOG_LEVEL);
 
@@ -1108,9 +1107,7 @@ int nrf_wifi_wpa_set_supp_port(void *if_priv, int authorized, char *bssid)
 	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = NULL;
 	struct nrf_wifi_umac_chg_sta_info chg_sta_info;
 	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
-	struct nrf_wifi_sys_fmac_dev_ctx *sys_dev_ctx = NULL;
 	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
-	int peer_id = -1;
 	int ret = -1;
 
 	if (!if_priv || !bssid) {
@@ -1141,6 +1138,8 @@ int nrf_wifi_wpa_set_supp_port(void *if_priv, int authorized, char *bssid)
 
 	memcpy(chg_sta_info.mac_addr, bssid, ETH_ALEN);
 
+	vif_ctx_zep->authorized = authorized;
+
 	if (authorized) {
 		/* BIT(NL80211_STA_FLAG_AUTHORIZED) */
 		chg_sta_info.sta_flags2.nrf_wifi_mask = 1 << 1;
@@ -1156,19 +1155,6 @@ int nrf_wifi_wpa_set_supp_port(void *if_priv, int authorized, char *bssid)
 		LOG_ERR("%s: nrf_wifi_sys_fmac_chg_sta failed", __func__);
 		ret = -1;
 		goto out;
-	}
-
-	sys_dev_ctx = wifi_dev_priv(rpu_ctx_zep->rpu_ctx);
-
-	peer_id = nrf_wifi_fmac_peer_get_id(rpu_ctx_zep->rpu_ctx, chg_sta_info.mac_addr);
-	if (peer_id == -1) {
-		nrf_wifi_osal_log_err("%s: Invalid peer",
-				      __func__);
-		goto out;
-	}
-
-	if (chg_sta_info.sta_flags2.nrf_wifi_set & NRF_WIFI_STA_FLAG_AUTHORIZED) {
-		sys_dev_ctx->tx_config.peers[peer_id].authorized = true;
 	}
 
 	ret = 0;
@@ -3003,9 +2989,7 @@ int nrf_wifi_wpa_supp_sta_set_flags(void *if_priv, const u8 *addr,
 	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = NULL;
 	struct nrf_wifi_umac_chg_sta_info chg_sta = {0};
 	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
-	struct nrf_wifi_sys_fmac_dev_ctx *sys_dev_ctx = NULL;
 	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
-	int peer_id = -1;
 	int ret = -1;
 
 	if (!if_priv || !addr) {
@@ -3038,19 +3022,6 @@ int nrf_wifi_wpa_supp_sta_set_flags(void *if_priv, const u8 *addr,
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
 		LOG_ERR("%s: nrf_wifi_sys_fmac_chg_sta failed", __func__);
 		goto out;
-	}
-
-	sys_dev_ctx = wifi_dev_priv(rpu_ctx_zep->rpu_ctx);
-
-	peer_id = nrf_wifi_fmac_peer_get_id(rpu_ctx_zep->rpu_ctx, chg_sta.mac_addr);
-	if (peer_id == -1) {
-		nrf_wifi_osal_log_err("%s: Invalid peer",
-				      __func__);
-		goto out;
-	}
-
-	if (chg_sta.sta_flags2.nrf_wifi_set & NRF_WIFI_STA_FLAG_AUTHORIZED) {
-		sys_dev_ctx->tx_config.peers[peer_id].authorized = true;
 	}
 
 	ret = 0;
