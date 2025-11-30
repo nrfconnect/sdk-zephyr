@@ -445,7 +445,7 @@ int nrf_wifi_if_send(const struct device *dev,
 		if (peer_id == -1) {
 			nrf_wifi_osal_log_dbg("%s: Invalid peer",
 				      __func__);
-			goto out;
+			goto drop;
 		}
 
 		if ((vif_ctx_zep->if_carr_state != NRF_WIFI_FMAC_IF_CARR_STATE_ON) ||
