@@ -4,6 +4,7 @@ on:
     types: [opened, synchronize, closed, reopened]
     branches:
       - main
+      - ncs-v3.2-branch
 
 permissions:
   contents: read
@@ -17,3 +18,4 @@ jobs:
         with:
           token: ${{ secrets.NCS_GITHUB_TOKEN }}
           manifest-pr-title-details: ${{ github.event.pull_request.title }}
+          base-branch: ${{ github.event.pull_request.base.ref == 'ncs-v3.2-branch' && 'v3.2-branch' || 'main' }}
