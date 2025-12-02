@@ -7,7 +7,11 @@
 #include <zephyr/drivers/clock_control.h>
 #include "nrf_clock_calibration.h"
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
+#if defined(CONFIG_CLOCK_CONTROL_NRF)
 #include <nrfx_clock.h>
+#else
+#include <nrfx_clock_lfclk.h>
+#endif
 #include <zephyr/logging/log.h>
 #include <stdlib.h>
 
@@ -50,12 +54,18 @@ static struct onoff_manager *mgrs;
 #endif
 
 /* Temperature sensor is only needed if
- * CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_MAX_SKIP > 0, since a value of 0
+ * CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_MAX_SKIP > 0, or
+ * CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_MAX_SKIP > 0, since a value of 0
  * indicates performing calibration periodically regardless of temperature
  * change.
  */
+#ifdef CONFIG_CLOCK_CONTROL_NRF
 #define USE_TEMP_SENSOR							\
 	(CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_MAX_SKIP > 0)
+#else
+#define USE_TEMP_SENSOR							\
+	(CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_MAX_SKIP > 0)
+#endif
 
 #if USE_TEMP_SENSOR
 static const struct device *const temp_sensor =
@@ -155,19 +165,31 @@ static void cal_lf_callback(struct onoff_manager *mgr,
 /* Start actual HW calibration assuming that HFCLK XTAL is on. */
 static void start_hw_cal(void)
 {
+#if defined(CONFIG_CLOCK_CONTROL_NRF)
 	nrfx_clock_calibration_start();
 	calib_skip_cnt = CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_MAX_SKIP;
+#else
+	nrfx_clock_lfclk_calibration_start();
+	calib_skip_cnt = CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_MAX_SKIP;
+#endif
 }
 
 /* Start cycle by starting backoff timer and releasing HFCLK XTAL. */
 static void start_cycle(void)
 {
 	k_timer_start(&backoff_timer,
+#if defined(CONFIG_CLOCK_CONTROL_NRF)
 		      K_MSEC(CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_PERIOD),
+#else
+		      K_MSEC(CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_PERIOD),
+#endif
 		      K_NO_WAIT);
 	hf_release();
-
+#if defined(CONFIG_CLOCK_CONTROL_NRF)
 	if (!IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_LF_ALWAYS_ON)) {
+#else
+	if (!IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_LF_ALWAYS_ON)) {
+#endif
 		lf_release();
 	}
 
@@ -180,7 +202,12 @@ static void start_cal_process(void)
 		return;
 	}
 
+
+#if defined(CONFIG_CLOCK_CONTROL_NRF)
 	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_LF_ALWAYS_ON)) {
+#else
+	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_LF_ALWAYS_ON)) {
+#endif
 		hf_request();
 	} else {
 		/* LF clock is probably running but it is requested to ensure
@@ -260,7 +287,11 @@ static void measure_temperature(struct k_work *work)
 	}
 
 	if ((calib_skip_cnt == 0) ||
+#if defined(CONFIG_CLOCK_CONTROL_NRF)
 		(diff >= CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_TEMP_DIFF)) {
+#else
+		(diff >= CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_TEMP_DIFF)) {
+#endif
 		prev_temperature = temperature;
 		started = true;
 		start_hw_cal();
@@ -325,7 +356,11 @@ void z_nrf_clock_calibration_done_handler(void)
 
 int z_nrf_clock_calibration_count(void)
 {
+#ifdef CONFIG_CLOCK_CONTROL_NRF
 	if (!IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_DEBUG)) {
+#else
+	if (!IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_DEBUG)) {
+#endif
 		return -1;
 	}
 
@@ -334,7 +369,11 @@ int z_nrf_clock_calibration_count(void)
 
 int z_nrf_clock_calibration_skips_count(void)
 {
+#ifdef CONFIG_CLOCK_CONTROL_NRF
 	if (!IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_DEBUG)) {
+#else
+	if (!IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_DEBUG)) {
+#endif
 		return -1;
 	}
 

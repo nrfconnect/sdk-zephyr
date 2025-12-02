@@ -165,7 +165,7 @@ static void xo_stop(void)
 	nrfx_clock_xo_stop();
 }
 
-#ifdef CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION
+#ifdef CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION
 
 static void nrf54l_errata_30_workaround(void)
 {
@@ -198,7 +198,7 @@ static void nrf54l_errata_30_workaround(void)
 	*((volatile uint32_t *)0x50120864UL) = 0;
 }
 
-#if CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION_PERIOD
+#if CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION_PERIOD
 
 static struct onoff_client hf_cal_cli;
 
@@ -230,19 +230,19 @@ static int calibration_init(void)
 {
 	k_timer_start(&calibration_timer,
 		      K_NO_WAIT,
-		      K_MSEC(CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION_PERIOD));
+		      K_MSEC(CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION_PERIOD));
 
 	return 0;
 }
 
 SYS_INIT(calibration_init, APPLICATION, 0);
 
-#endif /* CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION_PERIOD */
-#endif /* CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION */
+#endif /* CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION_PERIOD */
+#endif /* CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION */
 
 static void clkstarted_handle(const struct device *dev)
 {
-#if CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION
+#if CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION
 	if (nrf54l_errata_30()) {
 		nrf54l_errata_30_workaround();
 	}

@@ -6,6 +6,8 @@
 #include "clock_control_nrf_common.h"
 #include <nrfx.h>
 
+#ifndef CONFIG_CLOCK_CONTROL_NRF
+
 #if NRFX_CHECK(NRFX_POWER_ENABLED)
 #include <nrfx_power.h>
 #endif
@@ -38,3 +40,5 @@ void clock_control_nrf_common_connect_irq(void)
 
 	IRQ_CONNECT(DT_INST_IRQN(0), DT_INST_IRQ(0, priority), nrfx_isr, clock_irq_handler, 0);
 }
+
+#endif /* CONFIG_CLOCK_CONTROL_NRF */

@@ -20,20 +20,19 @@ LOG_MODULE_REGISTER(clock_control_lfclk, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
 #define DT_DRV_COMPAT nordic_nrf_clock_lfclk
 
-#define CTX_ONOFF		BIT(6)
-#define CTX_API			BIT(7)
-#define CTX_MASK (CTX_ONOFF | CTX_API)
+#define CTX_ONOFF BIT(6)
+#define CTX_API   BIT(7)
+#define CTX_MASK  (CTX_ONOFF | CTX_API)
 
-#define STATUS_MASK		0x7
-#define GET_STATUS(flags)	(flags & STATUS_MASK)
-#define GET_CTX(flags)		(flags & CTX_MASK)
+#define STATUS_MASK       0x7
+#define GET_STATUS(flags) (flags & STATUS_MASK)
+#define GET_CTX(flags)    (flags & CTX_MASK)
 
 /* Helper logging macros which prepends subsys name to the log. */
 #ifdef CONFIG_LOG
-#define CLOCK_LOG(lvl, dev, ...) \
-	LOG_##lvl("%s: " GET_ARG_N(1, __VA_ARGS__), \
-		"lfclk" \
-		COND_CODE_0(NUM_VA_ARGS_LESS_1(__VA_ARGS__),\
+#define CLOCK_LOG(lvl, dev, ...)                                                                   \
+	LOG_##lvl("%s: " GET_ARG_N(1, __VA_ARGS__),                                                \
+		  "lfclk" COND_CODE_0(NUM_VA_ARGS_LESS_1(__VA_ARGS__),\
 				(), (, GET_ARGS_LESS_N(1, __VA_ARGS__))))
 #else
 #define CLOCK_LOG(...)
@@ -49,6 +48,27 @@ LOG_MODULE_REGISTER(clock_control_lfclk, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 #define CLOCK_DEVICE_HF DEVICE_DT_GET_ONE(nordic_nrf_clock_hfclk)
 #else /* NRF_CLOCK_HAS_XO */
 #define CLOCK_DEVICE_HF DEVICE_DT_GET_ONE(nordic_nrf_clock_xo)
+#endif
+
+#define LFCLK_SRC (DT_STRING_TOKEN(DT_NODELABEL(lfclk), k32src))
+
+#if ((LFCLK_SRC != CLOCK_CONTROL_NRF_K32SRC_RC) && (LFCLK_SRC != CLOCK_CONTROL_NRF_K32SRC_XTAL) && \
+	(LFCLK_SRC != CLOCK_CONTROL_NRF_K32SRC_SYNTH) &&                                           \
+	(LFCLK_SRC != CLOCK_CONTROL_NRF_K32SRC_EXT_LOW_SWING) &&                                   \
+	(LFCLK_SRC != CLOCK_CONTROL_NRF_K32SRC_EXT_FULL_SWING))
+#error "Unsupported LFCLK source configured in devicetree"
+#endif
+
+#if (DT_STRING_TOKEN(DT_NODELABEL(lfclk), k32src) == CLOCK_CONTROL_NRF_K32SRC_RC)
+#define K32SRC NRF_CLOCK_LFCLK_RC
+#elif (DT_STRING_TOKEN(DT_NODELABEL(lfclk), k32src) == CLOCK_CONTROL_NRF_K32SRC_XTAL)
+#define K32SRC NRF_CLOCK_LFCLK_XTAL
+#elif (DT_STRING_TOKEN(DT_NODELABEL(lfclk), k32src) == CLOCK_CONTROL_NRF_K32SRC_SYNTH)
+#define K32SRC NRF_CLOCK_LFCLK_SYNTH
+#elif (DT_STRING_TOKEN(DT_NODELABEL(lfclk), k32src) == CLOCK_CONTROL_NRF_K32SRC_EXT_LOW_SWING)
+#define K32SRC NRF_CLOCK_LFCLK_XTAL_LOW_SWING
+#elif (DT_STRING_TOKEN(DT_NODELABEL(lfclk), k32src) == CLOCK_CONTROL_NRF_K32SRC_EXT_FULL_SWING)
+#define K32SRC NRF_CLOCK_LFCLK_XTAL_FULL_SWING
 #endif
 
 typedef void (*clk_ctrl_func_t)(void);
@@ -68,7 +88,7 @@ typedef struct {
 #endif
 } lfclk_config_t;
 
-#if CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH
+#if (LFCLK_SRC == CLOCK_CONTROL_NRF_K32SRC_SYNTH)
 /* Client to request HFXO to synthesize low frequency clock. */
 static struct onoff_client lfsynth_cli;
 #endif
@@ -149,7 +169,7 @@ static void lfclk_start(void)
 		anomaly_132_workaround();
 	}
 
-#if CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH
+#if (LFCLK_SRC == CLOCK_CONTROL_NRF_K32SRC_SYNTH)
 	sys_notify_init_spinwait(&lfsynth_cli.notify);
 
 	(void)nrf_clock_control_request(CLOCK_DEVICE_HF, NULL, &lfsynth_cli);
@@ -160,13 +180,13 @@ static void lfclk_start(void)
 
 static void lfclk_stop(void)
 {
-	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_DRIVER_CALIBRATION)) {
+	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_DRIVER_CALIBRATION)) {
 		z_nrf_clock_calibration_lfclk_stopped();
 	}
 
 	nrfx_clock_lfclk_stop();
 
-#if CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH
+#if (LFCLK_SRC == CLOCK_CONTROL_NRF_K32SRC_SYNTH)
 
 	(void)nrf_clock_control_cancel_or_release(CLOCK_DEVICE_HF, NULL, &lfsynth_cli);
 #endif
@@ -234,16 +254,16 @@ static void lfclk_spinwait(enum nrf_lfclk_start_mode mode)
 		/* For sources XTAL, EXT_LOW_SWING, and EXT_FULL_SWING,
 		 * NRF_CLOCK_LFCLK_XTAL is returned as the type of running clock.
 		 */
-		(IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL) ||
-		 IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_K32SRC_EXT_LOW_SWING) ||
-		 IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_K32SRC_EXT_FULL_SWING))
+		((LFCLK_SRC == CLOCK_CONTROL_NRF_K32SRC_XTAL) ||
+		 (LFCLK_SRC == CLOCK_CONTROL_NRF_K32SRC_EXT_LOW_SWING) ||
+		 (LFCLK_SRC == CLOCK_CONTROL_NRF_K32SRC_EXT_FULL_SWING))
 		? NRF_CLOCK_LFCLK_XTAL
-		: CLOCK_CONTROL_NRF_K32SRC;
+		: K32SRC;
 	nrf_clock_lfclk_t type;
 
 	if ((mode == CLOCK_CONTROL_NRF_LF_START_AVAILABLE) &&
 	    (target_type == NRF_CLOCK_LFCLK_XTAL) &&
-	    (nrf_clock_lf_srccopy_get(NRF_CLOCK) == CLOCK_CONTROL_NRF_K32SRC)) {
+	    (nrf_clock_lf_srccopy_get(NRF_CLOCK) == K32SRC)) {
 		/* If target clock source is using XTAL then due to two-stage
 		 * clock startup sequence, RC might already be running.
 		 * It can be determined by checking current LFCLK source. If it
@@ -266,7 +286,7 @@ static void lfclk_spinwait(enum nrf_lfclk_start_mode mode)
 		/* Synth source start is almost instant and LFCLKSTARTED may
 		 * happen before calling idle. That would lead to deadlock.
 		 */
-		if (!IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH)) {
+		if (LFCLK_SRC != CLOCK_CONTROL_NRF_K32SRC_SYNTH) {
 			if (isr_mode || !IS_ENABLED(CONFIG_MULTITHREADING)) {
 				k_cpu_atomic_idle(key);
 			} else {
@@ -277,12 +297,9 @@ static void lfclk_spinwait(enum nrf_lfclk_start_mode mode)
 		/* Clock interrupt is locked, LFCLKSTARTED is handled here. */
 		if ((target_type ==  NRF_CLOCK_LFCLK_XTAL)
 		    && (nrf_clock_lf_src_get(NRF_CLOCK) == NRF_CLOCK_LFCLK_RC)
-		    && nrf_clock_event_check(NRF_CLOCK,
-					     NRF_CLOCK_EVENT_LFCLKSTARTED)) {
-			nrf_clock_event_clear(NRF_CLOCK,
-					      NRF_CLOCK_EVENT_LFCLKSTARTED);
-			nrf_clock_lf_src_set(NRF_CLOCK,
-					     CLOCK_CONTROL_NRF_K32SRC);
+		    && nrf_clock_event_check(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED)) {
+			nrf_clock_event_clear(NRF_CLOCK, NRF_CLOCK_EVENT_LFCLKSTARTED);
+			nrf_clock_lf_src_set(NRF_CLOCK, K32SRC);
 
 			/* Clear pending interrupt, otherwise new clock event
 			 * would not wake up from idle.
@@ -306,14 +323,14 @@ static void clock_event_handler(nrfx_clock_lfclk_evt_type_t event)
 
 	switch (event) {
 	case NRFX_CLOCK_LFCLK_EVT_LFCLK_STARTED:
-		if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_DRIVER_CALIBRATION)) {
+		if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_DRIVER_CALIBRATION)) {
 			z_nrf_clock_calibration_lfclk_started();
 		}
 		clkstarted_handle(dev);
 		break;
 #if NRF_CLOCK_HAS_CALIBRATION || NRF_LFRC_HAS_CALIBRATION
 	case NRFX_CLOCK_LFCLK_EVT_CAL_DONE:
-		if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_DRIVER_CALIBRATION)) {
+		if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_DRIVER_CALIBRATION)) {
 			z_nrf_clock_calibration_done_handler();
 		} else {
 			/* Should not happen when calibration is disabled. */
@@ -476,7 +493,7 @@ static int clk_init(const struct device *dev)
 		return -EIO;
 	}
 
-	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_DRIVER_CALIBRATION)) {
+	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_DRIVER_CALIBRATION)) {
 		z_nrf_clock_calibration_init();
 	}
 
