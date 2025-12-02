@@ -254,7 +254,7 @@ static int api_stop(const struct device *dev, clock_control_subsys_t subsys)
 }
 
 static enum clock_control_status api_get_status(const struct device *dev,
-					    clock_control_subsys_t subsys)
+						clock_control_subsys_t subsys)
 {
 	ARG_UNUSED(subsys);
 
@@ -336,7 +336,5 @@ static const hfclkaudio_config_t config = {
 	.stop = hfclkaudio_stop,
 };
 
-DEVICE_DT_DEFINE(DT_NODELABEL(hfclkaudio), clk_init, NULL,
-		 &data, &config,
-		 PRE_KERNEL_1, CONFIG_CLOCK_CONTROL_INIT_PRIORITY,
-		 &clock_control_api);
+DEVICE_DT_DEFINE(DT_NODELABEL(hfclkaudio), clk_init, NULL, &data, &config, PRE_KERNEL_1,
+		 CONFIG_CLOCK_CONTROL_INIT_PRIORITY, &clock_control_api);
