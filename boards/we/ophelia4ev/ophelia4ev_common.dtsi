@@ -108,5 +108,10 @@
 	pinctrl-names = "default", "sleep";
 };
 
+&lfclk {
+	k32src = "CLOCK_CONTROL_NRF_K32SRC_RC";
+	k32-accuracy-ppm = <250>;
+};
+
 /* Get a node label for wi-fi spi to use in shield files */
 wifi_spi: &spi22 {};
