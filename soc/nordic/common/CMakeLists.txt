@@ -43,5 +43,6 @@ if(CONFIG_TFM_PARTITION_PLATFORM)
 endif()
 
 zephyr_library_sources_ifdef(CONFIG_NRF_SYS_EVENT nrf_sys_event.c)
+zephyr_library_sources_ifdef(CONFIG_SOC_NRF_FORCE_CONSTLAT nrf_constlat.c)
 zephyr_library_sources_ifdef(CONFIG_MRAM_LATENCY mram_latency.c)
 zephyr_library_sources(gpiote_nrfx.c)
