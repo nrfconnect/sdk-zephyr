@@ -14,7 +14,7 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/toolchain.h>
 #include <zephyr/dt-bindings/clock/nrf-auxpll.h>
-#include "clock_control_nrf2_common.h"
+#include "clock_control_nrfs_common.h"
 
 #include <hal/nrf_auxpll.h>
 

@@ -196,3 +196,8 @@ zephyr_udc0: &usbd {
 &ieee802154 {
 	status = "okay";
 };
+
+&lfclk {
+	k32src = "CLOCK_CONTROL_NRF_K32SRC_RC";
+	k32-accuracy-ppm = <500>;
+};

@@ -171,3 +171,8 @@
 		};
 	};
 };
+
+&lfclk {
+	k32src = "CLOCK_CONTROL_NRF_K32SRC_RC";
+	k32-accuracy-ppm = <500>;
+};
