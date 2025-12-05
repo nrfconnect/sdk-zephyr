@@ -27,6 +27,12 @@
 
 #ifdef CONFIG_REBOOT
 #include <zephyr/sys/reboot.h>
+#ifdef CONFIG_BT
+#include <zephyr/bluetooth/bluetooth.h>
+#endif
+#ifdef CONFIG_MPSL
+#include <mpsl.h>
+#endif
 #endif
 
 #ifdef CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS
@@ -362,6 +368,16 @@ static int os_mgmt_taskstat_read(struct smp_streamer *ctxt)
 #ifdef CONFIG_MULTITHREADING
 static void os_mgmt_reset_work_handler(struct k_work *work)
 {
+#ifdef CONFIG_BT
+	int ret = bt_disable();
+
+	if (ret) {
+		LOG_ERR("BT disable failed before reboot: %d\n", ret);
+	}
+#endif
+#ifdef CONFIG_MPSL
+	mpsl_uninit();
+#endif
 	ARG_UNUSED(work);
 
 	sys_reboot(SYS_REBOOT_WARM);
@@ -454,6 +470,16 @@ static int os_mgmt_reset(struct smp_streamer *ctxt)
 	/* Reboot the system from the system workqueue thread. */
 	k_work_schedule(&os_mgmt_reset_work, K_MSEC(CONFIG_MCUMGR_GRP_OS_RESET_MS));
 #else
+#ifdef CONFIG_BT
+	err_rc = bt_disable();
+	if (err_rc) {
+		LOG_ERR("BT disable failed before reboot: %d\n", err_rc);
+	}
+#endif
+#ifdef CONFIG_MPSL
+	mpsl_uninit();
+#endif
+
 	sys_reboot(SYS_REBOOT_WARM);
 #endif
 
