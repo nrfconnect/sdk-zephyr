@@ -141,3 +141,7 @@ zephyr_udc0: &usbhs {
 		};
 	};
 };
+
+&lfclk {
+	status = "okay";
+};
