@@ -11,6 +11,10 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/debug/gcov.h>
 
+#ifdef CONFIG_ZERO_LATENCY_IRQS
+#include <soc.h>
+#endif
+
 extern void sys_arch_reboot(int type);
 
 FUNC_NORETURN void sys_reboot(int type)
@@ -20,6 +24,14 @@ FUNC_NORETURN void sys_reboot(int type)
 #endif /* CONFIG_COVERAGE_DUMP */
 
 	(void)irq_lock();
+
+#ifdef CONFIG_ZERO_LATENCY_IRQS
+	/*
+	 * Disable all IRQs including zero latency interrupts. This ensures
+	 * nothing can interrupt the reboot procedure.
+	 */
+	__disable_irq();
+#endif
 
 	/* Disable caches to ensure all data is flushed */
 #if defined(CONFIG_ARCH_CACHE)
