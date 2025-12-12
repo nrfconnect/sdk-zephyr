@@ -16,6 +16,7 @@ string(TOUPPER SOC_FAMILY_${SOC_FAMILY}_DIR family_setting_dir)
 string(TOUPPER SOC_SERIES_${SOC_SERIES}_DIR series_setting_dir)
 string(TOUPPER SOC_${SOC_NAME}_DIR soc_setting_dir)
 
+message(WARNING "TEST" ${soc_setting_dir})
 if(DEFINED ${soc_setting_dir})
   add_subdirectory(${${soc_setting_dir}} soc/${SOC_NAME})
 elseif(DEFINED ${series_setting_dir})
