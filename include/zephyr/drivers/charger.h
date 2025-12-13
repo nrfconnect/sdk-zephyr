@@ -101,6 +101,9 @@ enum charger_property {
 	 * Value should be of type charger_online_notifier_t
 	 */
 	CHARGER_PROP_ONLINE_NOTIFICATION,
+	/** Disable NTC (Negative Temperature Coefficient) thermistor monitoring */
+	/** Value should be of type bool */
+	CHARGER_PROP_DISABLE_NTC_MONITORING,
 	/** Reserved to demark end of common charger properties */
 	CHARGER_PROP_COMMON_COUNT,
 	/**
@@ -297,6 +300,8 @@ union charger_propval {
 	charger_status_notifier_t status_notification;
 	/** CHARGER_PROP_ONLINE_NOTIFICATION */
 	charger_online_notifier_t online_notification;
+	/** CHARGER_PROP_DISABLE_NTC_MONITORING */
+	bool disable_ntc_monitoring;
 };
 
 /**

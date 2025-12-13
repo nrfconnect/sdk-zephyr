@@ -45,6 +45,8 @@ LOG_MODULE_REGISTER(bq25180, CONFIG_CHARGER_LOG_LEVEL);
 #define BQ25180_WATCHDOG_DISABLE 0x03
 #define BQ25180_DEVICE_ID_MSK GENMASK(3, 0)
 #define BQ25180_DEVICE_ID 0x00
+#define BQ25180_IC_CTRL_TS_EN                   BIT(7)
+#define BQ25180_MASK_ID_TS_INT_MASK             BIT(7)
 #define BQ25180_SHIP_RST_EN_RST_SHIP_MSK GENMASK(6, 5)
 #define BQ25180_SHIP_RST_EN_RST_SHIP_ADAPTER 0x20
 #define BQ25180_SHIP_RST_EN_RST_SHIP_BUTTON 0x40
@@ -211,6 +213,31 @@ static int bq25180_get_charge_voltage(const struct device *dev, uint32_t *const_
 	return 0;
 }
 
+static int bq25180_disable_ntc_monitoring(const struct device *dev)
+{
+	const struct bq25180_config *cfg = dev->config;
+	int ret;
+
+	/* Disable TS auto function in IC_CTRL register */
+	ret = i2c_reg_update_byte_dt(&cfg->i2c, BQ25180_IC_CTRL,
+				     BQ25180_IC_CTRL_TS_EN, 0);
+	if (ret < 0) {
+		LOG_ERR("Failed to disable TS_EN: %d", ret);
+		return ret;
+	}
+
+	/* Mask TS interrupt in MASK_ID register */
+	ret = i2c_reg_update_byte_dt(&cfg->i2c, BQ25180_MASK_ID,
+				     BQ25180_MASK_ID_TS_INT_MASK,
+				     BQ25180_MASK_ID_TS_INT_MASK);
+	if (ret < 0) {
+		LOG_ERR("Failed to mask TS interrupt: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int bq25180_get_online(const struct device *dev,
 			      enum charger_online *online)
 {
@@ -301,6 +328,8 @@ static int bq25180_set_prop(const struct device *dev, charger_prop_t prop,
 		return bq25180_set_charge_current(dev, val->const_charge_current_ua);
 	case CHARGER_PROP_CONSTANT_CHARGE_VOLTAGE_UV:
 		return bq25180_set_charge_voltage(dev, val->const_charge_voltage_uv);
+	case CHARGER_PROP_DISABLE_NTC_MONITORING:
+		return bq25180_disable_ntc_monitoring(dev);
 	default:
 		return -ENOTSUP;
 	}
