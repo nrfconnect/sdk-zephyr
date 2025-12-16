@@ -2,6 +2,7 @@
 
 &grtc {
 	interrupts = <228 2>;
+	extended-channels = <0>;
 };
 
 test_timer: &timer21 {

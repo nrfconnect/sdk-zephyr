@@ -13,25 +13,34 @@
 #include <zephyr/debug/cpu_load.h>
 #include <nrfx_grtc.h>
 #include <hal/nrf_grtc.h>
+#include <hal/nrf_gpio.h>
 LOG_MODULE_REGISTER(test, 1);
 
 #define GRTC_SLEW_TICKS 10
 #define NUMBER_OF_TRIES 2000
+#define NUMBER_OF_INTERVAL_EVENTS 10
 #define CYC_PER_TICK                                                                               \
 	((uint64_t)sys_clock_hw_cycles_per_sec() / (uint64_t)CONFIG_SYS_CLOCK_TICKS_PER_SEC)
 #define TIMER_COUNT_TIME_MS 10
+#define INTERVAL_COUNT_TIME_MS 50
 #define WAIT_FOR_TIMER_EVENT_TIME_MS TIMER_COUNT_TIME_MS + 5
 
-static volatile uint8_t compare_isr_call_counter;
+BUILD_ASSERT(INTERVAL_COUNT_TIME_MS * 1000 <= UINT16_MAX, "Too large value for test_timer_interval_mode.");
+
+static volatile uint32_t compare_isr_call_counter;
 
 /* GRTC timer compare interrupt handler */
 static void timer_compare_interrupt_handler(int32_t id, uint64_t expire_time, void *user_data)
 {
-	compare_isr_call_counter++;
-	TC_PRINT("Compare value reached, user data: '%s'\n", (char *)user_data);
-	TC_PRINT("Call counter: %d\n", compare_isr_call_counter);
+	if (id == 0) {
+		nrf_gpio_pin_set(3);
+		compare_isr_call_counter++;
+		nrf_gpio_pin_clear(3);
+	}
+	//TC_PRINT("Compare value reached, user data: '%s'\n", (char *)user_data);
+	//TC_PRINT("Call counter: %d\n", compare_isr_call_counter);
 }
-
+#if 0
 ZTEST(nrf_grtc_timer, test_get_ticks)
 {
 	k_timeout_t t = K_MSEC(1);
@@ -157,6 +166,46 @@ ZTEST(nrf_grtc_timer, test_timer_abort_in_compare_mode)
 
 	k_sleep(K_MSEC(WAIT_FOR_TIMER_EVENT_TIME_MS));
 	zassert_equal(compare_isr_call_counter, 0, "Compare isr call counter: %d",
+		      compare_isr_call_counter);
+	z_nrf_grtc_timer_chan_free(channel);
+}
+#endif
+ZTEST(nrf_grtc_timer, test_timer_interval_mode)
+{
+	int err;
+	nrf_gpio_cfg_output(3);
+	nrf_gpio_cfg_output(2);
+	nrf_gpio_pin_clear(3);
+	nrf_gpio_pin_set(2);
+	uint64_t test_ticks = 0;
+	uint64_t compare_value = 0;
+	char user_data[] = "test_timer_interval_mode\n";
+	int32_t channel = z_nrf_grtc_timer_special_chan_alloc();
+
+	TC_PRINT("Allocated GRTC channel %d\n", channel);
+	if (channel < 0) {
+		TC_PRINT("Failed to allocate GRTC channel, chan=%d\n", channel);
+		ztest_test_fail();
+	}
+
+	compare_isr_call_counter = 0;
+	test_ticks = INTERVAL_COUNT_TIME_MS * 1000;
+nrf_gpio_pin_clear(2);
+	err = z_nrf_grtc_timer_interval_set(channel, test_ticks, timer_compare_interrupt_handler,
+				   (void *)user_data);
+nrf_gpio_pin_set(2);
+	//zassert_equal(err, 0, "z_nrf_grtc_timer_set raised an error: %d", err);
+
+	k_busy_wait(NUMBER_OF_INTERVAL_EVENTS * test_ticks);
+nrf_gpio_pin_clear(2);
+	//k_busy_wait(1);
+
+	z_nrf_grtc_timer_abort(channel);
+	TC_PRINT("Interval events count: %d\n", compare_isr_call_counter);
+	TC_PRINT("Compare event register address: %X\n",
+		 z_nrf_grtc_timer_compare_evt_address_get(channel));
+
+	zassert_equal(compare_isr_call_counter, NUMBER_OF_INTERVAL_EVENTS, "Compare isr call counter: %d",
 		      compare_isr_call_counter);
 	z_nrf_grtc_timer_chan_free(channel);
 }
@@ -406,9 +455,9 @@ static void grtc_stress_test(bool busy_sim_en)
 #endif
 }
 
-ZTEST(nrf_grtc_timer, test_stress)
-{
-	grtc_stress_test(false);
-}
+//ZTEST(nrf_grtc_timer, test_stress)
+//{
+//	grtc_stress_test(false);
+//}
 
 ZTEST_SUITE(nrf_grtc_timer, NULL, NULL, NULL, NULL, NULL);

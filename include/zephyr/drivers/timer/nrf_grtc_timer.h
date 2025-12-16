@@ -36,6 +36,8 @@ typedef void (*z_nrf_grtc_timer_compare_handler_t)(int32_t id, uint64_t expire_t
  */
 int32_t z_nrf_grtc_timer_chan_alloc(void);
 
+int32_t z_nrf_grtc_timer_special_chan_alloc(void);
+
 /** @brief Free GRTC capture/compare channel.
  *
  * @param chan Previously allocated channel ID.
@@ -123,6 +125,9 @@ int z_nrf_grtc_timer_compare_read(int32_t chan, uint64_t *val);
  * @retval -EPERM if either channel is unavailable or SYSCOUNTER is not running.
  */
 int z_nrf_grtc_timer_set(int32_t chan, uint64_t target_time,
+			 z_nrf_grtc_timer_compare_handler_t handler, void *user_data);
+
+int z_nrf_grtc_timer_interval_set(int32_t chan, uint32_t interval_value,
 			 z_nrf_grtc_timer_compare_handler_t handler, void *user_data);
 
 /** @brief Abort a timer requested with z_nrf_grtc_timer_set().

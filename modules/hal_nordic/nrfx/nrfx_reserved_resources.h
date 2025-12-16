@@ -42,6 +42,9 @@
 #define NRFX_GRTC_CONFIG_NUM_OF_CC_CHANNELS \
 	(DT_PROP_LEN_OR(DT_INST(0, nordic_nrf_grtc), owned_channels, 0) - \
 	 DT_PROP_LEN_OR(DT_INST(0, nordic_nrf_grtc), child_owned_channels, 0))
+#define NRFX_GRTC_CONFIG_EXTENDED_CC_CHANNELS_MASK \
+	(NRFX_CONFIG_MASK_DT(DT_INST(0, nordic_nrf_grtc), extended_channels) & \
+	 ~NRFX_CONFIG_MASK_DT(DT_INST(0, nordic_nrf_grtc), child_owned_channels))
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_grtc) */
 
 /*
