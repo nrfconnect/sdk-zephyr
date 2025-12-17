@@ -6,6 +6,14 @@
  *  SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_DRIVERS_BLUETOOTH_H_
+
+#include <bluetooth/drivers/bluetooth.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /**
  * @file
  * @ingroup bt_hci_api
