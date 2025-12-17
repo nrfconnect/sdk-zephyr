@@ -2,6 +2,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/crypto/bt_crypto.h"
+#else
+
 #ifndef __BT_CRYPTO_H
 #define __BT_CRYPTO_H
 
@@ -148,3 +152,5 @@ int bt_crypto_h8(const uint8_t k[16], const uint8_t s[16], const uint8_t key_id[
 		 uint8_t res[16]);
 
 #endif /* __BT_CRYPTO_H */
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

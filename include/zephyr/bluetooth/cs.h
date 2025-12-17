@@ -2,6 +2,14 @@
  *  @brief Bluetooth Channel Sounding handling
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_CS_H_
+
+#include <bluetooth/host/cs.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2024 Nordic Semiconductor ASA
  *

@@ -3,6 +3,14 @@
  * @brief Bluetooth ISO handling
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_ISO_H_
+
+#include <bluetooth/host/iso.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2020 Intel Corporation
  * Copyright (c) 2021-2025 Nordic Semiconductor ASA

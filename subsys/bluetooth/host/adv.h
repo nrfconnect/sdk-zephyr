@@ -5,6 +5,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/adv.h"
+#else
+
 #include <stdbool.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
@@ -24,3 +28,5 @@ int bt_le_adv_set_enable_legacy(struct bt_le_ext_adv *adv, bool enable);
 int bt_le_lim_adv_cancel_timeout(struct bt_le_ext_adv *adv);
 void bt_adv_reset_adv_pool(void);
 struct bt_le_ext_adv *bt_adv_lookup_by_id(uint8_t id);
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

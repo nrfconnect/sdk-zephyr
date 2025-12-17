@@ -3,6 +3,10 @@
  * Security Manager Protocol implementation header
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/smp.h"
+#else
+
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  *
@@ -212,3 +216,4 @@ static inline const char *bt_smp_err_to_str(uint8_t smp_err)
 	return "";
 }
 #endif
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

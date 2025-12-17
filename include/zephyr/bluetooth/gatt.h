@@ -2,6 +2,14 @@
  *  @brief Generic Attribute Profile handling.
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_GATT_H_
+
+#include <bluetooth/host/gatt.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  *

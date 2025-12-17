@@ -2,6 +2,14 @@
  *  @brief Bluetooth Generic Access Profile defines and Assigned Numbers.
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_GAP_H_
+
+#include <bluetooth/host/gap.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *

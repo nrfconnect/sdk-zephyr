@@ -2,6 +2,14 @@
  *  @brief Bluetooth byteorder API
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_BYTEORDER_H_
+
+#include <bluetooth/host/byteorder.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2023 Nordic Semiconductor ASA
  *

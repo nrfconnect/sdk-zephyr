@@ -1,5 +1,9 @@
 /* keys.h - Bluetooth key handling */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/keys.h"
+#else
+
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  *
@@ -261,3 +265,5 @@ void bt_keys_show_sniffer_info(struct bt_keys *keys, void *data);
 /** @endcond */
 
 #endif /* ZEPHYR_SUBSYS_BLUETOOTH_HOST_KEYS_H_ */
+
+#endif /* !CONFIG_BT_HOST_NORDIC */

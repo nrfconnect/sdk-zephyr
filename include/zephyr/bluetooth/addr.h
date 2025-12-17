@@ -2,6 +2,14 @@
  *  @brief Bluetooth device address definitions and utilities.
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_ADDR_H_
+
+#include <bluetooth/host/addr.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *

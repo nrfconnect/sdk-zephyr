@@ -5,6 +5,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/scan.h"
+#else
+
 #ifndef SUBSYS_BLUETOOTH_HOST_SCAN_H_
 #define SUBSYS_BLUETOOTH_HOST_SCAN_H_
 
@@ -134,3 +138,5 @@ bool bt_le_explicit_scanner_running(void);
  */
 bool bt_le_explicit_scanner_uses_same_params(const struct bt_conn_le_create_param *create_param);
 #endif /* defined SUBSYS_BLUETOOTH_HOST_SCAN_H_ */
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

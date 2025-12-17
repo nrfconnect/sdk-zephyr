@@ -2,6 +2,14 @@
  *  @brief Bluetooth UUID handling
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_UUID_H_
+
+#include <bluetooth/host/uuid.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  *

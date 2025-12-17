@@ -4,6 +4,11 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/id.h"
+#else
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -83,3 +88,5 @@ void bt_id_adv_limited_stopped(struct bt_le_ext_adv *adv);
  * @return -EPERM if a conflict is found and the advertiser for the conflicting key is enabled.
  */
 int bt_id_resolving_list_check_and_update(uint8_t id, const bt_addr_le_t *peer);
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

@@ -2,6 +2,10 @@
  *  @brief Internal APIs for Bluetooth connection handling.
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/conn_internal.h"
+#else
+
 /*
  * Copyright (c) 2015 Intel Corporation
  * Copyright (c) 2021 Nordic Semiconductor ASA
@@ -648,3 +652,5 @@ void bt_conn_tx_processor(void);
  * - unref the conn when popping the conn from the slist
  */
 void bt_conn_data_ready(struct bt_conn *conn);
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

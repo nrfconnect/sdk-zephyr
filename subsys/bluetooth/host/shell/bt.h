@@ -4,6 +4,10 @@
  *  This is not to be included by the application.
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/shell/bt.h"
+#else
+
 /*
  * Copyright (c) 2017 Intel Corporation
  *
@@ -50,3 +54,5 @@ void conn_addr_str(struct bt_conn *conn, char *addr, size_t len);
 bool is_substring(const char *substr, const char *str);
 
 #endif /* __BT_H */
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

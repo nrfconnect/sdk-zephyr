@@ -3,6 +3,14 @@
  * @brief Bluetooth subsystem core APIs.
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_BLUETOOTH_H_
+
+#include <bluetooth/host/bluetooth.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2017 Nordic Semiconductor ASA
  * Copyright (c) 2015-2016 Intel Corporation
