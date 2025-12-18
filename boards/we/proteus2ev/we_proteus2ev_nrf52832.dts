@@ -127,3 +127,8 @@
 		};
 	};
 };
+
+&lfclk {
+	k32src = "rc";
+	k32-accuracy-ppm = <500>;
+};
