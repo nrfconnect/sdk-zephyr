@@ -404,13 +404,12 @@ static int clk_init(const struct device *dev)
 CLOCK_CONTROL_NRF_IRQ_HANDLERS_ITERABLE(clock_control_nrf_hfclk, &nrfx_clock_hfclk_irq_handler);
 
 static DEVICE_API(nrf_clock_control, clock_control_api) = {
-	.std_api =
-		{
-			.on = api_blocking_start,
-			.off = api_stop,
-			.async_on = api_start,
-			.get_status = api_get_status,
-		},
+	.std_api = {
+		.on = api_blocking_start,
+		.off = api_stop,
+		.async_on = api_start,
+		.get_status = api_get_status,
+	},
 	.request = api_request,
 	.release = api_release,
 	.cancel_or_release = api_cancel_or_release,
