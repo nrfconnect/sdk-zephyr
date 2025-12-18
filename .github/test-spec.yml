@@ -271,13 +271,19 @@
       - "!subsys/bluetooth/audio/**/*"
 
 "CI-find-my-test":
-  - "boards/nordic/**/*"
+  - "boards/nordic/nrf52840dk/**/*"
+  - "boards/nordic/nrf5340dk/**/*"
+  - "boards/nordic/nrf54l15dk/**/*"
   - "drivers/bluetooth/**/*"
   - "drivers/entropy/**/*"
   - "drivers/flash/**/*"
   - "drivers/usb/**/*"
   - "drivers/regulator/**/*"
-  - "soc/nordic/**/*"
+  - any:
+      - "soc/nordic/**/*"
+      - "!soc/nordic/nrf51*"
+      - "!soc/nordic/nrf54h*"
+      - "!soc/nordic/nrf9*"
   - "subsys/dfu/**/*"
   - "subsys/fs/**/*"
   - "subsys/ipc/**/*"
