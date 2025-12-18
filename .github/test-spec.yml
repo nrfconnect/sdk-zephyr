@@ -332,7 +332,7 @@
   - "drivers/serial/**/*"
   - "drivers/wifi/**/*"
   - "lib/posix/**/*"
-  - "soc/nordic/**/*"
+  - "soc/nordic/nrf9*/*"
   - "subsys/dfu/**/*"
   - "subsys/net/**/*"
   - "subsys/settings/**/*"
