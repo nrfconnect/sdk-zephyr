@@ -21,13 +21,13 @@ LOG_MODULE_REGISTER(clock_control_xo24m, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
 #define CLOCK_DEVICE_XO24M DEVICE_DT_GET(DT_NODELABEL(xo24m))
 
-#define CTX_ONOFF		BIT(6)
-#define CTX_API			BIT(7)
-#define CTX_MASK (CTX_ONOFF | CTX_API)
+#define CTX_ONOFF BIT(6)
+#define CTX_API   BIT(7)
+#define CTX_MASK  (CTX_ONOFF | CTX_API)
 
-#define STATUS_MASK		0x7
-#define GET_STATUS(flags)	(flags & STATUS_MASK)
-#define GET_CTX(flags)		(flags & CTX_MASK)
+#define STATUS_MASK       0x7
+#define GET_STATUS(flags) (flags & STATUS_MASK)
+#define GET_CTX(flags)    (flags & CTX_MASK)
 
 /* Helper logging macros which prepends subsys name to the log. */
 #ifdef CONFIG_LOG
