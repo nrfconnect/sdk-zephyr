@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef CLOCK_CONTROL_NRF_COMMON_H__
-#define CLOCK_CONTROL_NRF_COMMON_H__
+#ifndef CLOCK_CONTROL_NRFX_H__
+#define CLOCK_CONTROL_NRFX_H__
+
+#ifndef CONFIG_CLOCK_CONTROL_NRF
 
 struct clock_control_nrf_irq_handler {
 	void (*handler)(void); /* Clock interrupt handler */
@@ -17,4 +19,6 @@ struct clock_control_nrf_irq_handler {
 
 void clock_control_nrf_common_connect_irq(void);
 
-#endif /* CLOCK_CONTROL_NRF_COMMON_H__ */
+#endif /* CONFIG_CLOCK_CONTROL_NRF */
+
+#endif /* CLOCK_CONTROL_NRFX_H__ */
