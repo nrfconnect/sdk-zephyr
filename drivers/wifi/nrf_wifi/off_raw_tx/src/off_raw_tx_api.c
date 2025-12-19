@@ -34,6 +34,7 @@ static void configure_tx_pwr_settings(struct nrf_wifi_tx_pwr_ctrl_params *ctrl_p
 	ctrl_params->ant_gain_5g_band1 = CONFIG_NRF70_ANT_GAIN_5G_BAND1;
 	ctrl_params->ant_gain_5g_band2 = CONFIG_NRF70_ANT_GAIN_5G_BAND2;
 	ctrl_params->ant_gain_5g_band3 = CONFIG_NRF70_ANT_GAIN_5G_BAND3;
+#ifndef WIFI_NRF71
 	ctrl_params->band_edge_2g_lo_dss = CONFIG_NRF70_BAND_2G_LOWER_EDGE_BACKOFF_DSSS;
 	ctrl_params->band_edge_2g_lo_ht = CONFIG_NRF70_BAND_2G_LOWER_EDGE_BACKOFF_HT;
 	ctrl_params->band_edge_2g_lo_he = CONFIG_NRF70_BAND_2G_LOWER_EDGE_BACKOFF_HE;
@@ -80,6 +81,7 @@ static void configure_tx_pwr_settings(struct nrf_wifi_tx_pwr_ctrl_params *ctrl_p
 		CONFIG_NRF70_BAND_UNII_4_UPPER_EDGE_BACKOFF_HT;
 	ctrl_params->band_edge_5g_unii_4_hi_he =
 		CONFIG_NRF70_BAND_UNII_4_UPPER_EDGE_BACKOFF_HE;
+#endif /* WIFI_NRF71 */
 	ceil_params->max_pwr_2g_dsss = MAX_TX_PWR(wifi_max_tx_pwr_2g_dsss);
 	ceil_params->max_pwr_2g_mcs7 = MAX_TX_PWR(wifi_max_tx_pwr_2g_mcs7);
 	ceil_params->max_pwr_2g_mcs0 = MAX_TX_PWR(wifi_max_tx_pwr_2g_mcs0);
@@ -167,13 +169,13 @@ int nrf70_off_raw_tx_init(uint8_t *mac_addr, unsigned char *country_code)
 	}
 
 	rpu_ctx_zep->rpu_ctx = rpu_ctx;
-
+#ifndef WIFI_NRF71
 	status = nrf_wifi_fw_load(rpu_ctx);
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
 		LOG_ERR("%s: Failed to load the nRF70 firmware patch", __func__);
 		goto err;
 	}
-
+#endif /* WIFI_NRF71 */
 	status = nrf_wifi_fmac_ver_get(rpu_ctx,
 				       &fw_ver);
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
@@ -339,13 +341,20 @@ int nrf70_off_raw_tx_conf_update(struct nrf_wifi_off_raw_tx_conf *conf)
 				      conf->tput_mode, conf->rate);
 		goto out;
 	}
-
+#ifndef WIFI_NRF71
 	off_ctrl_params->channel_no = conf->chan;
+#else
+	off_ctrl_params->chan.primary_num = conf->chan;
+#endif /* !WIFI_NRF71 */
 	off_ctrl_params->period_in_us = conf->period_us;
 	off_ctrl_params->tx_pwr = conf->tx_pwr;
 	off_tx_params->he_gi_type = conf->he_gi;
 	off_tx_params->he_ltf = conf->he_ltf;
+#ifndef WIFI_NRF71
 	off_tx_params->pkt_ram_ptr = RPU_MEM_PKT_BASE;
+#else
+	off_tx_params->pkt_ram_ptr = RPU_MEM_DATA_RAM_BASE;
+#endif /* !WIFI_NRF71 */
 	off_tx_params->pkt_length = conf->pkt_len;
 	off_tx_params->rate_flags = conf->tput_mode;
 	off_tx_params->rate = valid_data_rates[conf->rate];
@@ -353,7 +362,11 @@ int nrf70_off_raw_tx_conf_update(struct nrf_wifi_off_raw_tx_conf *conf)
 	off_tx_params->rate_retries = conf->num_retries;
 
 	status = hal_rpu_mem_write(fmac_dev_ctx->hal_dev_ctx,
+#ifndef WIFI_NRF71
 				   RPU_MEM_PKT_BASE,
+#else
+				   RPU_MEM_DATA_RAM_BASE,
+#endif /* !WIFI_NRF71 */
 				   conf->pkt,
 				   conf->pkt_len);
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
