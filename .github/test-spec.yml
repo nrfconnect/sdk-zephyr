@@ -283,7 +283,12 @@
 "CI-matter-test":
   - "include/dfu/**/*"
   - "include/mgmt/mcumgr/**/*"
-  - "soc/nordic/**/*"
+  - any:
+      - "soc/nordic/**/*"
+      - "!soc/nordic/nrf51*"
+      - "!soc/nordic/nrf52*"
+      - "!soc/nordic/nrf54h*"
+      - "!soc/nordic/nrf9*"
   - "subsys/dfu/**/*"
   - "subsys/settings/**/*"
   - "subsys/net/**/*"
