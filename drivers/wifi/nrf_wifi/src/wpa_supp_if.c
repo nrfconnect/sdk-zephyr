@@ -851,7 +851,7 @@ int nrf_wifi_wpa_supp_authenticate(void *if_priv, struct wpa_driver_auth_params 
 	}
 
 	if (params->local_state_change) {
-		auth_info.nrf_wifi_flags |= NRF_WIFI_CMD_AUTHENTICATE_LOCAL_STATE_CHANGE;
+		auth_info.local_state_change = NRF_WIFI_CMD_MLME_LOCAL_STATE_CHANGE;
 	}
 
 	status = nrf_wifi_sys_fmac_auth(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx, &auth_info);
