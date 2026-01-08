@@ -108,6 +108,8 @@
       - "boards/nordic/nrf5*"
   - any:
       - "soc/nordic/**/*"
+      - "!soc/nordic/nrf51*"
+      - "!soc/nordic/nrf9*"
   - any:
       - "subsys/pm/**/*"
 
