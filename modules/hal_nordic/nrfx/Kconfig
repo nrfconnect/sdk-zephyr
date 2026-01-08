@@ -260,22 +260,7 @@ config NRFX_SAADC
 	depends on $(dt_nodelabel_exists,adc) && !SOC_SERIES_NRF51X
 
 config NRFX_SPI
-	bool
-
-config NRFX_SPI0
-	bool "SPI0 driver instance"
-	depends on $(dt_nodelabel_exists,spi0) && (SOC_SERIES_NRF51X || SOC_SERIES_NRF52X)
-	select NRFX_SPI
-
-config NRFX_SPI1
-	bool "SPI1 driver instance"
-	depends on $(dt_nodelabel_exists,spi1) && (SOC_SERIES_NRF51X || SOC_SERIES_NRF52X)
-	select NRFX_SPI
-
-config NRFX_SPI2
-	bool "SPI2 driver instance"
-	depends on $(dt_nodelabel_exists,spi2) && SOC_SERIES_NRF52X
-	select NRFX_SPI
+	bool "SPI driver"
 
 DT_COMPAT_NORDIC_NRF_SPIM := nordic,nrf-spim
 
@@ -305,17 +290,7 @@ config NRFX_TIMER
 	bool "TIMER driver"
 
 config NRFX_TWI
-	bool
-
-config NRFX_TWI0
-	bool "TWI0 driver instance"
-	depends on $(dt_nodelabel_exists,i2c0) && (SOC_SERIES_NRF51X || SOC_SERIES_NRF52X)
-	select NRFX_TWI
-
-config NRFX_TWI1
-	bool "TWI1 driver instance"
-	depends on $(dt_nodelabel_exists,i2c1) && (SOC_SERIES_NRF51X || SOC_SERIES_NRF52X)
-	select NRFX_TWI
+	bool "NRFX driver for TWI peripheral"
 
 config NRFX_TWIM
 	bool "NRFX driver for TWIM peripheral"
