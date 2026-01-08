@@ -39,7 +39,11 @@
 # Not necessary to run tests on changes to this repo.
 
 "CI-boot-test":
-  - "boards/nordic/**/*"
+  - "boards/nordic/nrf52840dk*"
+  - "boards/nordic/nrf5340dk*"
+  - "boards/nordic/nrf54h20dk*"
+  - "boards/nordic/nrf54l*"
+  - "boards/nordic/nrf9160dk*"
   - "subsys/mgmt/mcumgr/**/*"
   - "subsys/dfu/**/*"
   - "include/mgmt/mcumgr/**/*"
