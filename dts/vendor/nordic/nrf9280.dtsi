@@ -758,6 +758,7 @@
 				reg = <0x99c000 0x1000>;
 				status = "disabled";
 				cc-num = <16>;
+				extended-channels = <0>;
 			};
 
 			dppic133: dppic@9a1000 {
