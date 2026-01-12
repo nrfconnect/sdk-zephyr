@@ -317,15 +317,6 @@
 #ifdef CONFIG_NRFX_SPI_LOG
 #define NRFX_SPI_CONFIG_LOG_ENABLED 1
 #endif
-#ifdef CONFIG_NRFX_SPI0
-#define NRFX_SPI0_ENABLED 1
-#endif
-#ifdef CONFIG_NRFX_SPI1
-#define NRFX_SPI1_ENABLED 1
-#endif
-#ifdef CONFIG_NRFX_SPI2
-#define NRFX_SPI2_ENABLED 1
-#endif
 
 #ifdef CONFIG_NRFX_SPIM
 #define NRFX_SPIM_ENABLED 1
@@ -382,12 +373,6 @@
 #endif
 #ifdef CONFIG_NRFX_TWI_LOG
 #define NRFX_TWI_CONFIG_LOG_ENABLED 1
-#endif
-#ifdef CONFIG_NRFX_TWI0
-#define NRFX_TWI0_ENABLED 1
-#endif
-#ifdef CONFIG_NRFX_TWI1
-#define NRFX_TWI1_ENABLED 1
 #endif
 
 #ifdef CONFIG_NRFX_TWIM
