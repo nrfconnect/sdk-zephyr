@@ -493,7 +493,15 @@ static int sys_clock_driver_init(void)
 		return err_code;
 	}
 
+
 #if defined(CONFIG_NRF_GRTC_START_SYSCOUNTER)
+	nrfx_grtc_sleep_config_t sleep_cfg;
+
+	nrfx_grtc_sleep_configuration_get(&sleep_cfg);
+	sleep_cfg.timeout = 2;
+	sleep_cfg.waketime = 1;
+	nrfx_grtc_sleep_configure(&sleep_cfg);
+
 	err_code = nrfx_grtc_syscounter_start(true, &system_clock_channel_data.channel);
 	if (err_code < 0) {
 		return err_code;
