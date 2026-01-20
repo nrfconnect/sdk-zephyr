@@ -200,7 +200,8 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: 248eadcacf976bbd27f1c0bc0dd3f11d8ec8657e
+      url: https://github.com/nika-nordic/sdk-hal_nordic
+      revision: nrfx4.1.0rc1
       path: modules/hal/nordic
       groups:
         - hal
