@@ -42,12 +42,19 @@ LOG_MODULE_REGISTER(flash_nrf_mram, CONFIG_FLASH_LOG_LEVEL);
 #define IRONSIDE_SE_VER_MASK 0x000000FF /* This is the Mask for Ironside SE Seqnum */
 #define IRONSIDE_SE_SUPPORT_READY_VER 21
 
+#define MRAM_WRITE_MAX_RETRIES 3
+
 BUILD_ASSERT(MRAM_START > 0, "nordic,mram: start address expected to be non-zero");
 BUILD_ASSERT((ERASE_BLOCK_SIZE % WRITE_BLOCK_SIZE) == 0,
 	     "erase-block-size expected to be a multiple of write-block-size");
 
 struct nrf_mram_data_t {
 	uint8_t ironside_se_ver;
+};
+
+enum write_mode_t {
+	WRITE_WORD,
+	ERASE_WORD
 };
 
 static inline uint32_t nrf_mram_ready(uint32_t addr, uint8_t ironside_se_ver)
@@ -116,6 +123,237 @@ static void commit_changes(uintptr_t addr_end)
 	sys_write8(sys_read8(addr_end), addr_end);
 }
 
+static inline int nrf_mram_write_and_verify(uint32_t addr, void *data, size_t len,
+					    enum write_mode_t mode, uint8_t ironside_se_ver)
+{
+	int result = 0;
+
+	__asm__ volatile(
+		".globl nrf_mram_verif_start\n"
+		".globl nrf_mram_verif_end\n"
+
+		/* r8 = retry counter, r9 = addr, r10 = data_ptr, r11 = mode, r4 = len */
+		"mov r8, %[max_retries]\n"
+		"mov r9, %[addr_val]\n"
+		"mov r10, %[data_ptr]\n"
+		"mov r11, %[mode_val]\n"
+		"mov r4, %[len_val]\n"
+
+		"nrf_mram_verif_start:\n"
+		/* Check retries */
+		".L_retry_check:\n"
+		"cmp r8, %[max_retries]\n"  /* Is this first attempt? */
+		"beq .L_first_attempt\n"
+		/* Not first attempt - this is a retry after bus fault */
+		"subs r8, r8, #1\n"
+		"ble .L_return_eio\n"
+		"b .L_store_to_mram_retry\n"      /* Skip to store, data already in r0-r3 */
+		".L_first_attempt:\n"
+		"subs r8, r8, #1\n"
+
+		/* Wait until MRAM is ready */
+		"mov r12, %[se_ver]\n"
+		"cmp r12, %[support_ver]\n"
+		"blt .L_ready_done\n"
+		"cmp r9, %[bank11]\n"
+		"blt .L_use_ready0\n"
+		"mov r0, %[ready1]\n"
+		"b .L_poll_ready\n"
+		".L_use_ready0:\n"
+		"mov r0, %[ready0]\n"
+		".L_poll_ready:\n"
+		"ldr r1, [r0]\n"
+		"cmp r1, #0\n"
+		"beq .L_poll_ready\n"
+		".L_ready_done:\n"
+
+		/* Check mode: 0=WRITE_WORD, 1=ERASE_WORD */
+		"cmp r11, #0\n"
+		"beq .L_write_mode\n"
+		"cmp r11, #1\n"
+		"beq .L_erase_mode\n"
+		"b .L_return_einval\n"
+
+		/* WRITE_WORD mode: Handle partial or full writes */
+		".L_write_mode:\n"
+		"cmp r10, #0\n"
+		"beq .L_return_einval\n"
+		"cmp r4, %[word_size]\n"
+		"beq .L_write_full\n"
+
+		/* Partial write: load len bytes into r0-r3 */
+		"mov r0, #0\n"          /* Clear r0 */
+		"mov r1, #0\n"          /* Clear r1 */
+		"mov r2, #0\n"          /* Clear r2 */
+		"mov r3, #0\n"          /* Clear r3 */
+		"mov r5, #0\n"          /* r5 = byte counter */
+		".L_load_write_bytes:\n"
+		"cmp r5, r4\n"          /* if counter >= len, done */
+		"bge .L_write_load_msb\n"
+		"ldrb r6, [r10], #1\n"  /* Load byte from src, increment */
+		"and r12, r5, #3\n"     /* r12 = byte position in word (0-3) */
+		"lsl r12, r12, #3\n"    /* r12 = bit shift (0, 8, 16, 24) */
+		"lsl r6, r6, r12\n"     /* Shift byte to position */
+		"mov r12, r5\n"
+		"lsr r12, r12, #2\n"    /* r12 = word index (0-3) */
+		"cmp r12, #0\n"
+		"bne 1f\n"
+		"orr r0, r0, r6\n"      /* Store in r0 */
+		"b 2f\n"
+		"1: cmp r12, #1\n"
+		"bne 1f\n"
+		"orr r1, r1, r6\n"      /* Store in r1 */
+		"b 2f\n"
+		"1: cmp r12, #2\n"
+		"bne 1f\n"
+		"orr r2, r2, r6\n"      /* Store in r2 */
+		"b 2f\n"
+		"1: orr r3, r3, r6\n"   /* Store in r3 */
+		"2: add r5, r5, #1\n"
+		"b .L_load_write_bytes\n"
+
+		/* Load MSB from aligned MRAM word into r3 */
+		".L_write_load_msb:\n"
+		"mov r5, r9\n"          /* r5 = addr */
+		"orr r5, r5, #0xF\n"    /* Align to MRAM word MSB */
+		"ldrb r6, [r5]\n"       /* Load MSB byte */
+		/* Calculate bit position for MSB in r3 */
+		"mov r5, #15\n"         /* MSB is at byte 15 */
+		"and r7, r5, #3\n"      /* Byte position in word (15 & 3 = 3) */
+		"lsl r7, r7, #3\n"      /* Bit shift = 24 */
+		"lsl r6, r6, r7\n"      /* Shift MSB to position */
+		"orr r3, r3, r6\n"      /* Insert MSB into r3 */
+		"b .L_store_to_mram\n"
+
+		/* Full write: load 16 bytes from data into r0-r3 */
+		".L_write_full:\n"
+		"ldmia r10!, {r0, r1, r2, r3}\n"
+		"b .L_store_to_mram\n"
+
+		/* ERASE_WORD mode: Handle partial or full erase */
+		".L_erase_mode:\n"
+		"cmp r4, %[word_size]\n"
+		"beq .L_erase_full\n"
+
+		/* Partial erase: load 0xFF for len bytes into r0-r3 */
+		"mov r0, #0\n"          /* Clear r0 */
+		"mov r1, #0\n"          /* Clear r1 */
+		"mov r2, #0\n"          /* Clear r2 */
+		"mov r3, #0\n"          /* Clear r3 */
+		"mov r5, #0\n"          /* r5 = byte counter */
+		".L_load_erase_bytes:\n"
+		"cmp r5, r4\n"          /* if counter >= len, done */
+		"bge .L_erase_load_msb\n"
+		"mov r6, #0xFF\n"       /* Erase value */
+		"and r7, r5, #3\n"      /* r7 = byte position in word */
+		"lsl r7, r7, #3\n"      /* r7 = bit shift (0, 8, 16, 24) */
+		"lsl r6, r6, r7\n"      /* Shift 0xFF to position */
+		"mov r7, r5\n"
+		"lsr r7, r7, #2\n"      /* r7 = word index (0-3) */
+		"cmp r7, #0\n"
+		"bne 1f\n"
+		"orr r0, r0, r6\n"      /* Store in r0 */
+		"b 2f\n"
+		"1: cmp r7, #1\n"
+		"bne 1f\n"
+		"orr r1, r1, r6\n"      /* Store in r1 */
+		"b 2f\n"
+		"1: cmp r7, #2\n"
+		"bne 1f\n"
+		"orr r2, r2, r6\n"      /* Store in r2 */
+		"b 2f\n"
+		"1: orr r3, r3, r6\n"   /* Store in r3 */
+		"2: add r5, r5, #1\n"
+		"b .L_load_erase_bytes\n"
+
+		/* Load MSB from aligned MRAM word into r3 */
+		".L_erase_load_msb:\n"
+		"mov r5, r9\n"          /* r5 = addr */
+		"orr r5, r5, #0xF\n"    /* Align to MRAM word MSB */
+		"ldrb r6, [r5]\n"       /* Load MSB byte */
+		/* Calculate bit position for MSB in r3 */
+		"mov r5, #15\n"         /* MSB is at byte 15 */
+		"and r7, r5, #3\n"      /* Byte position in word (15 & 3 = 3) */
+		"lsl r7, r7, #3\n"      /* Bit shift = 24 */
+		"lsl r6, r6, r7\n"      /* Shift MSB to position */
+		"orr r3, r3, r6\n"      /* Insert MSB into r3 */
+		"b .L_store_to_mram\n"
+
+		/* Full erase: load 0xFFFFFFFF into r0-r3 */
+		".L_erase_full:\n"
+		"movw r0, #0xFFFF\n"
+		"movt r0, #0xFFFF\n"
+		"mov r1, r0\n"
+		"mov r2, r0\n"
+		"mov r3, r0\n"
+		"b .L_store_to_mram\n"
+
+		/* Wait until MRAM is ready */
+		".L_store_to_mram_retry:\n"
+		"mov r12, %[se_ver]\n"
+		"cmp r12, %[support_ver]\n"
+		"blt .L_ready_done_retry\n"
+		"cmp r9, %[bank11]\n"
+		"blt .L_use_ready0_retry\n"
+		"mov r0, %[ready1]\n"
+		"b .L_poll_ready_retry\n"
+		".L_use_ready0_retry:\n"
+		"mov r0, %[ready0]\n"
+		".L_poll_ready_retry:\n"
+		"ldr r1, [r0]\n"
+		"cmp r1, #0\n"
+		"beq .L_poll_ready_retry\n"
+		".L_ready_done_retry:\n"
+
+		/* Common store section: write r0-r3 to MRAM at addr (r9) */
+		".L_store_to_mram:\n"
+		"stmia r9!, {r0, r1, r2, r3}\n"
+		"dmb\n"
+		"sub r9, r9, #16\n"
+
+		/* Verify: Read back 16 bytes into r4-r7 */
+		".L_verify:\n"
+		"ldmia r9, {r4, r5, r6, r7}\n"
+		"dmb\n"
+
+		"nrf_mram_verif_end:\n"
+		/* Verification complete - return success */
+		"b .L_return_ok\n"
+
+		/* Return codes */
+		".L_return_eio:\n"
+		"mov %[result], %[eio_val]\n"
+		"b .L_done\n"
+
+		".L_return_einval:\n"
+		"mov %[result], %[einval_val]\n"
+		"b .L_done\n"
+
+		".L_return_ok:\n"
+		"mov %[result], #0\n"
+
+		".L_done:\n"
+
+		: [result] "=r" (result)
+		: [addr_val] "r" (addr),
+		  [data_ptr] "r" (data),
+		  [len_val] "r" (len),
+		  [mode_val] "r" (mode),
+		  [se_ver] "r" (ironside_se_ver),
+		  [support_ver] "i" (IRONSIDE_SE_SUPPORT_READY_VER),
+		  [bank11] "r" (SOC_NRF_MRAM_BANK_11_ADDRESS),
+		  [ready0] "r" (SOC_NRF_MRAMC_READY_REG_0),
+		  [ready1] "r" (SOC_NRF_MRAMC_READY_REG_1),
+		  [word_size] "i" (MRAM_WORD_SIZE),
+		  [max_retries] "i" (MRAM_WRITE_MAX_RETRIES),
+		  [eio_val] "r" (-EIO),
+		  [einval_val] "r" (-EINVAL)
+		: "memory", "cc"
+	);
+
+	return result;
+}
+
 static int nrf_mram_read(const struct device *dev, off_t offset, void *data, size_t len)
 {
 	ARG_UNUSED(dev);
@@ -152,21 +390,17 @@ static int nrf_mram_write(const struct device *dev, off_t offset, const void *da
 #endif
 	}
 	for (uint32_t i = 0; i < (len / MRAM_WORD_SIZE); i++) {
-		while (!nrf_mram_ready(addr + (i * MRAM_WORD_SIZE), ironside_se_ver)) {
-			/* Wait until MRAM controller is ready */
-		}
-		memcpy((void *)(addr + (i * MRAM_WORD_SIZE)),
-		       (void *)((uintptr_t)data + (i * MRAM_WORD_SIZE)), MRAM_WORD_SIZE);
+		nrf_mram_write_and_verify(addr + (i * MRAM_WORD_SIZE),
+					  (void *)((uintptr_t)data + (i * MRAM_WORD_SIZE)),
+					  MRAM_WORD_SIZE, WRITE_WORD, ironside_se_ver);
 	}
 
 	if (len % MRAM_WORD_SIZE) {
-		while (!nrf_mram_ready(addr + (len & ~MRAM_WORD_MASK), ironside_se_ver)) {
-			/* Wait until MRAM controller is ready */
-		}
-		memcpy((void *)(addr + (len & ~MRAM_WORD_MASK)),
-		       (void *)((uintptr_t)data + (len & ~MRAM_WORD_MASK)), len & MRAM_WORD_MASK);
+		nrf_mram_write_and_verify(addr + (len & ~MRAM_WORD_MASK),
+					  (void *)((uintptr_t)data + (len & ~MRAM_WORD_MASK)),
+					  len & MRAM_WORD_MASK, WRITE_WORD, ironside_se_ver);
 	}
-	commit_changes(addr + len);
+
 	if (ironside_se_ver >= IRONSIDE_SE_SUPPORT_READY_VER) {
 #if defined(CONFIG_MRAM_LATENCY)
 		mram_no_latency_sync_release();
@@ -196,19 +430,14 @@ static int nrf_mram_erase(const struct device *dev, off_t offset, size_t size)
 #endif
 	}
 	for (uint32_t i = 0; i < (size / MRAM_WORD_SIZE); i++) {
-		while (!nrf_mram_ready(addr + (i * MRAM_WORD_SIZE), ironside_se_ver)) {
-			/* Wait until MRAM controller is ready */
-		}
-		memset((void *)(addr + (i * MRAM_WORD_SIZE)), ERASE_VALUE, MRAM_WORD_SIZE);
+		nrf_mram_write_and_verify(addr + (i * MRAM_WORD_SIZE), NULL, MRAM_WORD_SIZE,
+					  ERASE_WORD, ironside_se_ver);
 	}
 	if (size % MRAM_WORD_SIZE) {
-		while (!nrf_mram_ready(addr + (size & ~MRAM_WORD_MASK), ironside_se_ver)) {
-			/* Wait until MRAM controller is ready */
-		}
-		memset((void *)(addr + (size & ~MRAM_WORD_MASK)), ERASE_VALUE,
-		       size & MRAM_WORD_MASK);
+		nrf_mram_write_and_verify(addr + (size & ~MRAM_WORD_MASK), NULL,
+					  size & MRAM_WORD_MASK, ERASE_WORD, ironside_se_ver);
 	}
-	commit_changes(addr + size);
+
 	if (ironside_se_ver >= IRONSIDE_SE_SUPPORT_READY_VER) {
 #if defined(CONFIG_MRAM_LATENCY)
 		mram_no_latency_sync_release();
@@ -285,11 +514,14 @@ static int nrf_mram_init(const struct device *dev)
 
 	nrf_mram_data->ironside_se_ver = FIELD_GET(IRONSIDE_SE_VER_MASK,
 						   report->ironside_se_version_int);
+	LOG_INF("Ironside SE version detected: %u",
+			nrf_mram_data->ironside_se_ver);
 #else
 	nrf_mram_data->ironside_se_ver = 0;
 #endif
 	LOG_DBG("Ironside SE version: %u", nrf_mram_data->ironside_se_ver);
 
+	LOG_INF("NRF MRAM flash driver initialized");
 	return 0;
 }
 
