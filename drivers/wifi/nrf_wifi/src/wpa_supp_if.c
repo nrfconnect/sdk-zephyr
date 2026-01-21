@@ -2684,13 +2684,13 @@ int nrf_wifi_wpa_supp_sta_add(void *if_priv, struct hostapd_sta_add_params *para
 		nrf_wifi_sta_flags_to_nrf(params->flags_mask);
 
 	if (params->ht_capabilities) {
-		memcpy(sta_info.ht_capability,
+		memcpy((unsigned char *)(&sta_info.ht_capability),
 			   params->ht_capabilities,
 			   sizeof(sta_info.ht_capability));
 	}
 
 	if (params->vht_capabilities) {
-		memcpy(sta_info.vht_capability,
+		memcpy((unsigned char *)(&sta_info.vht_capability),
 			   params->vht_capabilities,
 			   sizeof(sta_info.vht_capability));
 	}
