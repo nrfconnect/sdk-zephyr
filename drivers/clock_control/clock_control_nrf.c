@@ -19,18 +19,17 @@ LOG_MODULE_REGISTER(clock_control, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
 #define DT_DRV_COMPAT nordic_nrf_clock
 
+#define CTX_ONOFF BIT(6)
+#define CTX_API   BIT(7)
+#define CTX_MASK  (CTX_ONOFF | CTX_API)
 
-#define CTX_ONOFF		BIT(6)
-#define CTX_API			BIT(7)
-#define CTX_MASK (CTX_ONOFF | CTX_API)
-
-#define STATUS_MASK		0x7
-#define GET_STATUS(flags)	(flags & STATUS_MASK)
-#define GET_CTX(flags)		(flags & CTX_MASK)
+#define STATUS_MASK       0x7
+#define GET_STATUS(flags) (flags & STATUS_MASK)
+#define GET_CTX(flags)    (flags & CTX_MASK)
 
 /* Used only by HF clock */
-#define HF_USER_BT		BIT(0)
-#define HF_USER_GENERIC		BIT(1)
+#define HF_USER_BT      BIT(0)
+#define HF_USER_GENERIC BIT(1)
 
 /* Helper logging macros which prepends subsys name to the log. */
 #ifdef CONFIG_LOG
