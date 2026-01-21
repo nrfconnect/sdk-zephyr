@@ -1,0 +1,112 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# This file contains the list of tested platforms for CI.
+#
+# twister-lib reads this file to generate arguments for twister runs.
+# When new platforms are added, they can be tested with branches or forks
+# of sdk-zephyr before being merged, avoiding surprises at release time.
+#
+# File format
+# ###########
+#
+# platforms:
+#     List of platform identifiers to be tested in CI.
+#     Format: <board>/<soc>[/<cpucluster>][/<variant>][@<revision>]
+#
+# Categories are used to group platforms by type for different test scenarios:
+#   - default: Core platforms that are always tested
+#   - extended: Additional platforms tested in extended CI runs
+#   - simulation: Simulation platforms (native_sim, qemu, etc.)
+#
+# To add a new platform:
+#   1. Add the platform identifier to the appropriate category
+#   2. Create a branch/fork of sdk-zephyr to test the platform
+#   3. Once validated, merge the change
+#
+
+# Default platforms - core set always tested in CI
+default:
+  # nRF52 Series
+  - nrf52840dk/nrf52840
+  - nrf52dk/nrf52832
+  - nrf52833dk/nrf52833
+
+  # nRF53 Series
+  - nrf5340dk/nrf5340/cpuapp
+  - nrf5340dk/nrf5340/cpunet
+  - nrf5340dk/nrf5340/cpuapp/ns
+
+  # nRF54L Series
+  - nrf54l15dk/nrf54l15/cpuapp
+  - nrf54l15dk/nrf54l15/cpuapp/ns
+  - nrf54l15dk/nrf54l15/cpuflpr
+  - nrf54l15dk/nrf54l15/cpuflpr/xip
+  - nrf54l15dk/nrf54l10/cpuapp
+  - nrf54l15dk/nrf54l05/cpuapp
+
+  # nRF54H Series
+  - nrf54h20dk@0.9.0/nrf54h20/cpuapp
+  - nrf54h20dk@0.9.0/nrf54h20/cpurad
+
+  # nRF54LM Series
+  - nrf54lm20dk/nrf54lm20a/cpuapp
+
+  # nRF91 Series
+  - nrf9160dk/nrf9160
+  - nrf9160dk/nrf9160/ns
+  - nrf9151dk/nrf9151
+  - nrf9151dk/nrf9151/ns
+
+# Extended platforms - tested in extended CI runs
+extended:
+  # nRF52 Series additional boards
+  - nrf52840dongle/nrf52840
+  - nrf52840dk/nrf52811
+
+  # nRF53 Series additional boards
+  - nrf5340_audio_dk/nrf5340/cpuapp
+  - nrf5340_audio_dk/nrf5340/cpunet
+  - nrf7002dk/nrf5340/cpuapp
+  - nrf7002dk/nrf5340/cpunet
+  - thingy53/nrf5340/cpuapp
+  - thingy53/nrf5340/cpunet
+
+  # nRF54H Series additional variants
+  - nrf54h20dk@0.9.0/nrf54h20/cpuppr
+  - nrf54h20dk@0.9.0/nrf54h20/cpuppr/xip
+  - nrf54h20dk@0.9.0/nrf54h20/cpuflpr
+  - nrf54h20dk@0.9.0/nrf54h20/cpuflpr/xip
+
+  # nRF54LM Series additional variants
+  - nrf54lm20dk/nrf54lm20a/cpuflpr
+  - nrf54lm20dk/nrf54lm20a/cpuflpr/xip
+
+  # nRF91 Series additional boards
+  - nrf9161dk/nrf9161
+  - nrf9161dk/nrf9161/ns
+  - nrf9131ek/nrf9131
+  - nrf9131ek/nrf9131/ns
+  - nrf9160dk/nrf52840
+
+  # nRF92 Series (PDK)
+  - nrf9280pdk/nrf9280/cpuapp
+  - nrf9280pdk/nrf9280/cpurad
+
+  # Legacy boards
+  - nrf51dk/nrf51822
+  - nrf21540dk/nrf21540
+  - thingy52/nrf52832
+
+# Simulation platforms - for unit tests and build verification
+simulation:
+  - native_sim
+  - native_sim/native/64
+  - qemu_cortex_m3
+
+# Build-only platforms - platforms that are only build-tested (no runtime)
+build_only:
+  - nrf52840dk/nrf52840
+  - nrf5340dk/nrf5340/cpuapp
+  - nrf54l15dk/nrf54l15/cpuapp
+  - nrf54h20dk@0.9.0/nrf54h20/cpuapp
+  - nrf9160dk/nrf9160
