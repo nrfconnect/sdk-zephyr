@@ -1478,6 +1478,8 @@ flagged.
         "NCS_IS_VARIANT_IMAGE", # Build system defined symbol
         "NCS_MCUBOOT_UUID_CID_IMAGE_0_VALUE", # MCUboot
         "NCS_MCUBOOT_UUID_CID_IMAGE_1_VALUE", # MCUboot
+        "NCS_MCUBOOT_UUID_CID_IMAGE_0_SECONDARY_VALUE", # MCUboot
+        "NCS_MCUBOOT_UUID_CID_IMAGE_1_SECONDARY_VALUE", # MCUboot
         "NCS_VARIANT_MERGE_KCONFIG", # Build system defined symbol
         "NRF_MODEM_LIB_TRACE_BACKEND_MY_TRACE_BACKEND", # Documentation
         "PM_PARTITION_SIZE", # Used in search link
