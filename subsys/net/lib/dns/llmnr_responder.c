@@ -192,19 +192,23 @@ static void setup_dns_hdr(uint8_t *buf, uint16_t answers, uint16_t dns_id)
 
 static void add_question(struct net_buf *query, enum dns_rr_type qtype)
 {
-	char *dot = query->data + DNS_MSG_HEADER_SIZE + 1;
-	char *prev = query->data + DNS_MSG_HEADER_SIZE;
+	char *dot = query->data + DNS_MSG_HEADER_SIZE;
+	char *prev = NULL;
 	uint16_t offset;
 
-	/* For the length of the first label. */
-	query->len += 1;
+	while ((dot = strchr(dot, '.'))) {
+		if (!prev) {
+			prev = dot++;
+			continue;
+		}
 
-	while ((dot = strchr(dot, '.')) != NULL) {
 		*prev = dot - prev - 1;
 		prev = dot++;
 	}
 
-	*prev = strlen(prev + 1);
+	if (prev) {
+		*prev = strlen(prev) - 1;
+	}
 
 	offset = DNS_MSG_HEADER_SIZE + query->len + 1;
 	UNALIGNED_PUT(htons(qtype), (uint16_t *)(query->data+offset));
@@ -241,15 +245,14 @@ static int create_answer(enum dns_rr_type qtype,
 	/* Prepare the response into the query buffer: move the name
 	 * query buffer has to get enough free space: dns_hdr + query + answer
 	 */
-	if ((net_buf_max_len(query) - query->len) < (DNS_MSG_HEADER_SIZE + 1 +
+	if ((net_buf_max_len(query) - query->len) < (DNS_MSG_HEADER_SIZE +
 					  (DNS_QTYPE_LEN + DNS_QCLASS_LEN) * 2 +
 					  DNS_TTL_LEN + DNS_RDLENGTH_LEN +
 					  addr_len + query->len)) {
 		return -ENOBUFS;
 	}
 
-	/* +1 for the initial label length */
-	memmove(query->data + DNS_MSG_HEADER_SIZE + 1, query->data, query->len);
+	memmove(query->data + DNS_MSG_HEADER_SIZE, query->data, query->len);
 
 	setup_dns_hdr(query->data, 1, dns_id);
 
@@ -485,8 +488,8 @@ static int dns_read(int sock,
 			result->data, ret);
 
 		/* If the query matches to our hostname, then send reply */
-		if (!strncasecmp(hostname, result->data, hostname_len) &&
-		    (result->len) >= hostname_len) {
+		if (!strncasecmp(hostname, result->data + 1, hostname_len) &&
+		    (result->len - 1) >= hostname_len) {
 			NET_DBG("%s query to our hostname %s", "LLMNR",
 				hostname);
 			ret = send_response(sock, src_addr, addrlen, result, qtype,
