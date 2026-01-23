@@ -54,51 +54,11 @@ def get_additional_node_kwargs(node: Node) -> dict[str, Any]:
     return additional_kwargs
 
 
-class Family(enum.Enum):
-    """Families of SoCs supported by this script"""
-
-    SERIES_NRF54HX = "nrf54h"
-    SERIES_NRF92X = "nrf92"
-    SERIES_UNKNOWN = "unknown"
-
-    @classmethod
-    def family(cls, soc):
-        if soc.startswith("nrf54h") and len(soc) == 8:
-            return cls.SERIES_NRF54HX
-        elif soc.startswith("nrf92") and len(soc) == 7:
-            return cls.SERIES_NRF92X
-        else:
-            return cls.SERIES_UNKNOWN
-
-
 class Soc(enum.Enum):
     """Names of SoCs supported by this script"""
 
     NRF54H20 = "nrf54h20"
     NRF9280 = "nrf9280"
-    UNKNOWN = "unknown"
-
-    @classmethod
-    def soc(cls, soc):
-        if soc.startswith("nrf54h20") and len(soc) == 8:
-            return cls.NRF54H20
-        elif soc.startswith("nrf9280") and len(soc) == 7:
-            return cls.NRF9280
-        else:
-            return cls.UNKNOWN
-
-
-def validate_soc_choice(soc):
-    """Helper for argparse to validate soc parameter type"""
-
-    if (soc.startswith("nrf54h") and soc[6:].isdigit() and len(soc) == 8) or (
-        soc.startswith("nrf92") and soc[5:].isdigit() and len(soc) == 7
-    ):
-        return soc
-    else:
-        raise argparse.ArgumentTypeError(
-            f"Invalid soc '{soc}'. Must start with 'nrf54h' or 'nrf92' followed by 2 digits."
-        )
 
 
 def parse_args() -> argparse.Namespace:
@@ -118,8 +78,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--soc",
-        type=validate_soc_choice,
         required=True,
+        choices=[soc.value for soc in Soc],
         help=(
             "SoC to generate PERIPHCONF macros for. "
             "Used to look up soc specific hardware information"
@@ -144,7 +104,7 @@ def main() -> None:
     args = parse_args()
     dt = pickle.load(args.in_edt_pickle)
     processor = dt_processor_id(dt)
-    lookup_tables = lookup_tables_get(Soc.soc(args.soc), Family.family(args.soc))
+    lookup_tables = lookup_tables_get(Soc(args.soc))
     builder = PeriphconfBuilder(dt, lookup_tables)
 
     # Application local peripherals
@@ -178,7 +138,7 @@ def main() -> None:
     args.out_periphconf_source.write(generated_source)
 
 
-def lookup_tables_get(soc: Soc, family: Family) -> SocLookupTables:
+def lookup_tables_get(soc: Soc) -> SocLookupTables:
     if soc == Soc.NRF54H20:
         ctrlsel_lookup = {
             # CAN120
@@ -478,7 +438,7 @@ def lookup_tables_get(soc: Soc, family: Family) -> SocLookupTables:
                 NrfPsel(fun=NrfFun.TPIU_DATA3, port=7, pin=7): Ctrlsel.TND,
             },
         }
-    elif family == Family.SERIES_NRF92X:
+    elif soc == Soc.NRF9280:
         ctrlsel_lookup = {
             # PWM120
             0x5F8E_4000: {
