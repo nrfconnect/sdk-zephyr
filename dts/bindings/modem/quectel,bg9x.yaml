@@ -5,12 +5,15 @@ description: quectel BG9x modem
 
 compatible: "quectel,bg9x"
 
-include: zephyr,cellular-modem-device.yaml
+include: uart-device.yaml
 
 properties:
   mdm-power-gpios:
     type: phandle-array
     required: true
+
+  mdm-reset-gpios:
+    type: phandle-array
 
   mdm-dtr-gpios:
     type: phandle-array

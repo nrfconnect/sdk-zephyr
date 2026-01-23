@@ -5,9 +5,12 @@ description: u-blox LARA-R6 modem
 
 compatible: "u-blox,lara-r6"
 
-include: zephyr,cellular-modem-device.yaml
+include: uart-device.yaml
 
 properties:
   mdm-power-gpios:
     type: phandle-array
     required: true
+
+  mdm-reset-gpios:
+    type: phandle-array
