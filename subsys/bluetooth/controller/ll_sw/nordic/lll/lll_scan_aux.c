@@ -607,19 +607,12 @@ sync_aux_prepare_done:
 		static memq_link_t link;
 		static struct mayfly mfy_after_cen_offset_get = {
 			0U, 0U, &link, NULL, ull_sched_mfy_after_cen_offset_get};
-		struct lll_prepare_param *prepare_param;
 
-		/* Copy the required values to calculate the offsets
-		 *
-		 * NOTE: LLL scan instance passed, as done when
+		/* NOTE: LLL scan instance passed, as done when
 		 *       establishing legacy connections.
 		 */
-		prepare_param = &lll->prepare_param;
-		prepare_param->ticks_at_expire = p->ticks_at_expire;
-		prepare_param->remainder = p->remainder;
-		prepare_param->param = lll;
-
-		mfy_after_cen_offset_get.param = prepare_param;
+		p->param = lll;
+		mfy_after_cen_offset_get.param = p;
 
 		ret = mayfly_enqueue(TICKER_USER_ID_LLL, TICKER_USER_ID_ULL_LOW, 1U,
 				     &mfy_after_cen_offset_get);

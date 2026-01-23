@@ -509,19 +509,13 @@ static int common_prepare_cb(struct lll_prepare_param *p, bool is_resume)
 		static memq_link_t link;
 		static struct mayfly mfy_after_cen_offset_get = {
 			0U, 0U, &link, NULL, ull_sched_mfy_after_cen_offset_get};
-		struct lll_prepare_param *prepare_param;
+		uint32_t retval;
 
-		/* Copy the required values to calculate the offsets */
-		prepare_param = &lll->prepare_param;
-		prepare_param->ticks_at_expire = p->ticks_at_expire;
-		prepare_param->remainder = p->remainder;
-		prepare_param->param = lll;
+		mfy_after_cen_offset_get.param = p;
 
-		mfy_after_cen_offset_get.param = prepare_param;
-
-		ret = mayfly_enqueue(TICKER_USER_ID_LLL, TICKER_USER_ID_ULL_LOW, 1U,
-				     &mfy_after_cen_offset_get);
-		LL_ASSERT_ERR(!ret);
+		retval = mayfly_enqueue(TICKER_USER_ID_LLL, TICKER_USER_ID_ULL_LOW, 1U,
+					&mfy_after_cen_offset_get);
+		LL_ASSERT_ERR(!retval);
 	}
 #endif /* CONFIG_BT_CENTRAL && CONFIG_BT_CTLR_SCHED_ADVANCED */
 
