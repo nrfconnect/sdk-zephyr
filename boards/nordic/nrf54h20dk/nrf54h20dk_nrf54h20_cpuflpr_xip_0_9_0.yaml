@@ -12,4 +12,3 @@ ram: 46
 flash: 48
 supported:
   - gpio
-  - counter
