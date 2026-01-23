@@ -54,8 +54,7 @@
   - "tests/subsys/mgmt/mcumgr/**/*"
 
 "CI-dfu-test":
-  - "boards/nordic/nrf54h20dk*"
-  - "boards/nordic/nrf54l*"
+  - "boards/nordic/**/*"
   - "drivers/bluetooth/**/*"
   - "drivers/console/**/*"
   - "drivers/flash/**/*"
