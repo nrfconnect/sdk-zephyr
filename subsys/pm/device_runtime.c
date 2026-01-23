@@ -401,15 +401,10 @@ int pm_device_runtime_auto_enable(const struct device *dev)
 {
 	struct pm_device_base *pm = dev->pm_base;
 
-	if (!pm) {
+	/* No action needed if PM_DEVICE_FLAG_RUNTIME_AUTO is not enabled */
+	if (!pm || !atomic_test_bit(&pm->flags, PM_DEVICE_FLAG_RUNTIME_AUTO)) {
 		return 0;
 	}
-
-	if (!IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME_DEFAULT_ENABLE) &&
-	    !atomic_test_bit(&pm->flags, PM_DEVICE_FLAG_RUNTIME_AUTO)) {
-		return 0;
-	}
-
 	return pm_device_runtime_enable(dev);
 }
 
