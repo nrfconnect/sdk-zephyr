@@ -10,7 +10,7 @@ gitpython>=3.1.41
 plotly
 
 # helper for developers - check git commit messages
-gitlint-core
+gitlint
 
 # helper for developers
 junit2html
