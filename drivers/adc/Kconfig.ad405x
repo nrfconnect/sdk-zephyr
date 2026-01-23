@@ -13,6 +13,6 @@ config ADC_AD405X
 
 config AD405X_TRIGGER
 	bool "AD405X interrupts"
-	depends on ADC_AD405X
+	default n
 	help
 	  Enable interrupts for ADI AD405X.
