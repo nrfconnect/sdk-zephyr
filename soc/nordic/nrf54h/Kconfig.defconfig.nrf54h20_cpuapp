@@ -14,7 +14,4 @@ config SHELL_BACKEND_SERIAL
 config POWER_DOMAIN
 	default y
 
-config CODE_DATA_RELOCATION
-	default y if PM || POWEROFF
-
 endif # SOC_NRF54H20_CPUAPP
