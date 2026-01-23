@@ -75,7 +75,6 @@ endfunction()
 if(CMAKE_VERBOSE_MAKEFILE)
 endif()
 
-set(lock_args)
 set(protectedmem_args)
 set(periphconf_args)
 set(wdtstart_args)
@@ -115,11 +114,6 @@ if(CONFIG_GEN_UICR_SECURESTORAGE)
   list(APPEND securestorage_args --cpurad-its-address ${CPURAD_ITS_ADDRESS})
   list(APPEND securestorage_args --cpurad-its-size ${CPURAD_ITS_SIZE})
 endif(CONFIG_GEN_UICR_SECURESTORAGE)
-
-# Handle LOCK configuration
-if(CONFIG_GEN_UICR_LOCK)
-  list(APPEND lock_args --lock)
-endif()
 
 # Handle protected memory configuration
 if(CONFIG_GEN_UICR_PROTECTEDMEM)
@@ -249,7 +243,6 @@ add_custom_command(
           --uicr-address ${UICR_ADDRESS}
           --out-merged-hex ${merged_hex_file}
           --out-uicr-hex ${uicr_hex_file}
-          ${lock_args}
           ${wdtstart_args}
           ${periphconf_args}
           ${securestorage_args}
