@@ -242,10 +242,7 @@
   - "drivers/spi/**/*"
   - "lib/crc/**/*"
   - "modules/hal_nordic/**/*"
-  - any:
-      - "soc/nordic/**/*"
-      - "!soc/nordic/nrf51*"
-      - "!soc/nordic/nrf9*"
+  - "soc/nordic/**/*"
   - "subsys/ipc/ipc_service/**/*"
   - "subsys/fs/**/*"
   - "subsys/mem_mgmt/**/*"
