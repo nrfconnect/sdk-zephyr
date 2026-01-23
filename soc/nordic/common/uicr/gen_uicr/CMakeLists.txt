@@ -154,7 +154,6 @@ if(CONFIG_GEN_UICR_SECONDARY)
 
   list(APPEND secondary_args
     --secondary-address ${SECONDARY_ADDRESS}
-    --secondary-processor ${CONFIG_GEN_UICR_SECONDARY_PROCESSOR_VALUE}
     )
 
   if(CONFIG_GEN_UICR_SECONDARY_GENERATE_PERIPHCONF)
