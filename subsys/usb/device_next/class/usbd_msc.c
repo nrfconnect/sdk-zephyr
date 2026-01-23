@@ -214,31 +214,6 @@ static uint8_t msc_get_bulk_out(struct usbd_class_data *const c_data)
 	return desc->if0_out_ep.bEndpointAddress;
 }
 
-static void msc_stall_bulk_out_ep(struct usbd_class_data *const c_data)
-{
-	uint8_t ep;
-
-	ep = msc_get_bulk_out(c_data);
-	usbd_ep_set_halt(usbd_class_get_ctx(c_data), ep);
-}
-
-static void msc_stall_bulk_in_ep(struct usbd_class_data *const c_data)
-{
-	uint8_t ep;
-
-	ep = msc_get_bulk_in(c_data);
-	usbd_ep_set_halt(usbd_class_get_ctx(c_data), ep);
-}
-
-static void msc_stall_and_wait_for_recovery(struct msc_bot_ctx *ctx)
-{
-	atomic_set_bit(&ctx->bits, MSC_BULK_IN_WEDGED);
-	atomic_set_bit(&ctx->bits, MSC_BULK_OUT_WEDGED);
-	msc_stall_bulk_in_ep(ctx->class_node);
-	msc_stall_bulk_out_ep(ctx->class_node);
-	ctx->state = MSC_BBB_WAIT_FOR_RESET_RECOVERY;
-}
-
 static void msc_queue_bulk_out_ep(struct usbd_class_data *const c_data, bool data)
 {
 	struct msc_bot_ctx *ctx = usbd_class_get_private(c_data);
@@ -271,9 +246,23 @@ static void msc_queue_bulk_out_ep(struct usbd_class_data *const c_data, bool dat
 		LOG_ERR("Failed to enqueue net_buf for 0x%02x", ep);
 		net_buf_unref(buf);
 		atomic_clear_bit(&ctx->bits, MSC_BULK_OUT_QUEUED);
-		/* 6.6.2 Internal Device Error */
-		msc_stall_and_wait_for_recovery(ctx);
 	}
+}
+
+static void msc_stall_bulk_out_ep(struct usbd_class_data *const c_data)
+{
+	uint8_t ep;
+
+	ep = msc_get_bulk_out(c_data);
+	usbd_ep_set_halt(usbd_class_get_ctx(c_data), ep);
+}
+
+static void msc_stall_bulk_in_ep(struct usbd_class_data *const c_data)
+{
+	uint8_t ep;
+
+	ep = msc_get_bulk_in(c_data);
+	usbd_ep_set_halt(usbd_class_get_ctx(c_data), ep);
 }
 
 static void msc_reset_handler(struct usbd_class_data *c_data)
@@ -354,8 +343,6 @@ static void msc_process_read(struct msc_bot_ctx *ctx)
 		LOG_ERR("Failed to enqueue net_buf for 0x%02x", ep);
 		net_buf_unref(buf);
 		atomic_clear_bit(&ctx->bits, MSC_BULK_IN_QUEUED);
-		/* 6.6.2 Internal Device Error */
-		msc_stall_and_wait_for_recovery(ctx);
 	}
 }
 
@@ -513,7 +500,11 @@ static void msc_handle_bulk_out(struct msc_bot_ctx *ctx,
 		} else {
 			/* 6.6.1 CBW Not Valid */
 			LOG_INF("Invalid CBW");
-			msc_stall_and_wait_for_recovery(ctx);
+			atomic_set_bit(&ctx->bits, MSC_BULK_IN_WEDGED);
+			atomic_set_bit(&ctx->bits, MSC_BULK_OUT_WEDGED);
+			msc_stall_bulk_in_ep(ctx->class_node);
+			msc_stall_bulk_out_ep(ctx->class_node);
+			ctx->state = MSC_BBB_WAIT_FOR_RESET_RECOVERY;
 		}
 	} else if (ctx->state == MSC_BBB_PROCESS_WRITE) {
 		msc_process_write(ctx, buf, len);
@@ -576,11 +567,8 @@ static void msc_send_csw(struct msc_bot_ctx *ctx)
 		LOG_ERR("Failed to enqueue net_buf for 0x%02x", ep);
 		net_buf_unref(buf);
 		atomic_clear_bit(&ctx->bits, MSC_BULK_IN_QUEUED);
-		/* 6.6.2 Internal Device Error */
-		msc_stall_and_wait_for_recovery(ctx);
-	} else {
-		ctx->state = MSC_BBB_WAIT_FOR_CSW_SENT;
 	}
+	ctx->state = MSC_BBB_WAIT_FOR_CSW_SENT;
 }
 
 static void usbd_msc_handle_request(struct usbd_class_data *c_data,
