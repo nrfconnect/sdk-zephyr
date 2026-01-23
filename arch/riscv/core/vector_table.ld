@@ -5,8 +5,8 @@
  */
 
 #if LINKER_ZEPHYR_FINAL && defined(CONFIG_ISR_TABLES_LOCAL_DECLARATION)
-KEEP(*(.vectors.__start))
 INCLUDE isr_tables_vt.ld
+KEEP(*(.vectors.__start))
 #else
 KEEP(*(.vectors.*))
 #endif
