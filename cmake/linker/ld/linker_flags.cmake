@@ -22,8 +22,6 @@ check_set_linker_property(TARGET linker PROPERTY orphan_error
                           ${LINKERFLAGPREFIX},--orphan-handling=error
 )
 
-set_property(TARGET linker PROPERTY undefined ${LINKERFLAGPREFIX},--undefined=)
-
 check_set_linker_property(TARGET linker PROPERTY memusage "${LINKERFLAGPREFIX},--print-memory-usage")
 
 check_set_linker_property(TARGET linker PROPERTY sanitizer_undefined -fsanitize=undefined)
