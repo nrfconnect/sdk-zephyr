@@ -16,7 +16,6 @@
 #include <zephyr/pm/device_runtime.h>
 #include <dmm.h>
 #include <soc.h>
-#include <hal/nrf_gpio.h>
 
 LOG_MODULE_REGISTER(adc_nrfx_saadc, CONFIG_ADC_LOG_LEVEL);
 
@@ -201,10 +200,6 @@ static int input_assign(nrf_saadc_input_t *pin_p,
 
 	*pin_p = saadc_psels[channel_cfg->input_positive];
 
-#if NRF_GPIO_HAS_RETENTION_SETCLEAR
-	nrf_gpio_pin_retain_disable(saadc_psels[channel_cfg->input_positive]);
-#endif
-
 	if (channel_cfg->differential) {
 		if (channel_cfg->input_negative > ARRAY_SIZE(saadc_psels) ||
 		    (IS_ENABLED(CONFIG_NRF_PLATFORM_HALTIUM) &&
@@ -217,12 +212,6 @@ static int input_assign(nrf_saadc_input_t *pin_p,
 		*pin_n = channel_cfg->input_negative == NRF_SAADC_GND ?
 			 NRF_SAADC_INPUT_DISABLED :
 			 saadc_psels[channel_cfg->input_negative];
-
-#if NRF_GPIO_HAS_RETENTION_SETCLEAR
-		if (channel_cfg->input_negative != NRF_SAADC_GND) {
-			nrf_gpio_pin_retain_disable(saadc_psels[channel_cfg->input_negative]);
-		}
-#endif
 	} else {
 		*pin_n = NRF_SAADC_INPUT_DISABLED;
 	}
