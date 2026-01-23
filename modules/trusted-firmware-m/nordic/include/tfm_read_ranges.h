@@ -9,7 +9,7 @@
 
 #include <tfm_ioctl_core_api.h>
 
-#include <nrfx.h>
+#include <nrf.h>
 
 #ifdef NRF_FICR_S_BASE
 

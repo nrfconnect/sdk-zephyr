@@ -186,11 +186,11 @@ static int mramc_sys_init(const struct device *dev)
 	ARG_UNUSED(dev);
 
 	nrfx_mramc_config_t config = NRFX_MRAMC_DEFAULT_CONFIG();
-	int ret = nrfx_mramc_init(&config, NULL);
+	nrfx_err_t err = nrfx_mramc_init(&config, NULL);
 
-	if (ret != 0) {
-		LOG_ERR("Failed to initialize MRAMC: %d", ret);
-		return ret;
+	if (err != NRFX_SUCCESS) {
+		LOG_ERR("Failed to initialize MRAMC: %d", err);
+		return -EIO;
 	}
 	LOG_DBG("MRAMC initialized successfully");
 	return 0;

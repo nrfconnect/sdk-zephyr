@@ -23,10 +23,12 @@ static int nrf_cracen_get_entropy_isr(const struct device *dev, uint8_t *buf, ui
 
 	irq_unlock(key);
 
-	if (likely(ret == 0)) {
+	if (likely(ret == NRFX_SUCCESS)) {
 		return len;
+	} else if (ret == NRFX_ERROR_INVALID_PARAM) {
+		return -EINVAL;
 	} else {
-		return ret;
+		return -EAGAIN;
 	}
 }
 
@@ -45,7 +47,13 @@ static int nrf_cracen_cracen_init(const struct device *dev)
 {
 	(void)dev;
 
-	return nrfx_cracen_ctr_drbg_init();
+	int ret = nrfx_cracen_ctr_drbg_init();
+
+	if (ret == NRFX_SUCCESS) {
+		return 0;
+	} else {
+		return -EIO;
+	}
 }
 
 static DEVICE_API(entropy, nrf_cracen_api_funcs) = {

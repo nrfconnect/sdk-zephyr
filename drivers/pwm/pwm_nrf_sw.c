@@ -14,7 +14,6 @@
 #include <hal/nrf_gpio.h>
 #include <hal/nrf_rtc.h>
 #include <hal/nrf_timer.h>
-#include <gpiote_nrfx.h>
 
 #include <zephyr/logging/log.h>
 
@@ -63,7 +62,7 @@ struct pwm_config {
 		NRF_RTC_Type *rtc;
 		NRF_TIMER_Type *timer;
 	};
-	nrfx_gpiote_t *gpiote[PWM_0_MAP_SIZE];
+	nrfx_gpiote_t gpiote[PWM_0_MAP_SIZE];
 	uint8_t psel_ch[PWM_0_MAP_SIZE];
 	uint8_t initially_inverted;
 	uint8_t map_size;
@@ -73,9 +72,8 @@ struct pwm_config {
 struct pwm_data {
 	uint32_t period_cycles;
 	uint32_t pulse_cycles[PWM_0_MAP_SIZE];
-	nrfx_gppi_handle_t ppi_h[PWM_0_MAP_SIZE][PPI_PER_CH];
+	uint8_t ppi_ch[PWM_0_MAP_SIZE][PPI_PER_CH];
 	uint8_t gpiote_ch[PWM_0_MAP_SIZE];
-	uint32_t ppi_ch_mask[PWM_0_MAP_SIZE];
 };
 
 static inline NRF_RTC_Type *pwm_config_rtc(const struct pwm_config *config)
@@ -128,11 +126,11 @@ static int pwm_nrf_sw_set_cycles(const struct device *dev, uint32_t channel,
 	NRF_RTC_Type *rtc = pwm_config_rtc(config);
 	NRF_GPIOTE_Type *gpiote;
 	struct pwm_data *data = dev->data;
+	uint32_t ppi_mask;
 	uint8_t active_level;
 	uint8_t psel_ch;
 	uint8_t gpiote_ch;
-	const nrfx_gppi_handle_t *ppi_chs;
-	uint32_t src_d = nrfx_gppi_domain_id_get(USE_RTC ? (uint32_t)rtc : (uint32_t)timer);
+	const uint8_t *ppi_chs;
 	int ret;
 
 	if (channel >= config->map_size) {
@@ -165,16 +163,18 @@ static int pwm_nrf_sw_set_cycles(const struct device *dev, uint32_t channel,
 		}
 	}
 
-	gpiote = config->gpiote[channel]->p_reg;
+	gpiote = config->gpiote[channel].p_reg;
 	psel_ch = config->psel_ch[channel];
 	gpiote_ch = data->gpiote_ch[channel];
-	ppi_chs = data->ppi_h[channel];
+	ppi_chs = data->ppi_ch[channel];
 
 	LOG_DBG("channel %u, period %u, pulse %u",
 		channel, period_cycles, pulse_cycles);
 
-	/* disable PPI used */
-	nrfx_gppi_channels_disable(src_d, data->ppi_ch_mask[channel]);
+	/* clear PPI used */
+	ppi_mask = BIT(ppi_chs[0]) | BIT(ppi_chs[1]) |
+		   (PPI_PER_CH > 2 ? BIT(ppi_chs[2]) : 0);
+	nrfx_gppi_channels_disable(ppi_mask);
 
 	active_level = (flags & PWM_POLARITY_INVERTED) ? 0 : 1;
 
@@ -278,10 +278,12 @@ static int pwm_nrf_sw_set_cycles(const struct device *dev, uint32_t channel,
 				nrf_rtc_compare_event_get(0));
 
 #if PPI_FORK_AVAILABLE
-	nrfx_gppi_ep_attach(clear_task_address, ppi_chs[1]);
+		nrfx_gppi_fork_endpoint_setup(ppi_chs[1],
+					      clear_task_address);
 #else
-	nrfx_gppi_ep_attach(period_end_event_address, ppi_chs[2]);
-	nrfx_gppi_ep_attach(clear_task_address, ppi_chs[2]);
+		nrfx_gppi_channel_endpoints_setup(ppi_chs[2],
+						  period_end_event_address,
+						  clear_task_address);
 #endif
 	} else {
 		pulse_end_event_address =
@@ -292,13 +294,13 @@ static int pwm_nrf_sw_set_cycles(const struct device *dev, uint32_t channel,
 				nrf_timer_compare_event_get(0));
 	}
 
-	nrfx_gppi_ep_attach(pulse_end_event_address, ppi_chs[0]);
-	nrfx_gppi_ep_attach(pulse_end_task_address, ppi_chs[0]);
-
-	nrfx_gppi_ep_attach(period_end_event_address, ppi_chs[1]);
-	nrfx_gppi_ep_attach(period_end_task_address, ppi_chs[1]);
-
-	nrfx_gppi_channels_enable(src_d, data->ppi_ch_mask[channel]);
+	nrfx_gppi_channel_endpoints_setup(ppi_chs[0],
+					  pulse_end_event_address,
+					  pulse_end_task_address);
+	nrfx_gppi_channel_endpoints_setup(ppi_chs[1],
+					  period_end_event_address,
+					  period_end_task_address);
+	nrfx_gppi_channels_enable(ppi_mask);
 
 	/* start timer, hence PWM */
 	if (USE_RTC) {
@@ -349,37 +351,28 @@ static int pwm_nrf_sw_init(const struct device *dev)
 	NRF_RTC_Type *rtc = pwm_config_rtc(config);
 
 	for (uint32_t i = 0; i < config->map_size; i++) {
-		uint32_t src_d = nrfx_gppi_domain_id_get(USE_RTC ? (uint32_t)rtc : (uint32_t)timer);
-		uint32_t dst_d = nrfx_gppi_domain_id_get((uint32_t)config->gpiote[i]->p_reg);
-		int rv;
+		nrfx_err_t err;
 
 		/* Allocate resources. */
 		for (uint32_t j = 0; j < PPI_PER_CH; j++) {
-			int ch;
-
-			rv = nrfx_gppi_domain_conn_alloc(src_d, dst_d, &data->ppi_h[i][j]);
-			if (rv < 0) {
+			err = nrfx_gppi_channel_alloc(&data->ppi_ch[i][j]);
+			if (err != NRFX_SUCCESS) {
 				/* Do not free allocated resource. It is a fatal condition,
 				 * system requires reconfiguration.
 				 */
 				LOG_ERR("Failed to allocate PPI channel");
-				return rv;
+				return -ENOMEM;
 			}
-			/* Enable connection but at the end disable channel on the source domain. */
-			nrfx_gppi_conn_enable(data->ppi_h[i][j]);
-			ch = nrfx_gppi_domain_channel_get(data->ppi_h[i][j], src_d);
-			__ASSERT_NO_MSG(ch >= 0);
-			data->ppi_ch_mask[i] |= BIT(ch);
 		}
-		nrfx_gppi_channels_disable(src_d, data->ppi_ch_mask[i]);
 
-		rv  = nrfx_gpiote_channel_alloc(config->gpiote[i], &data->gpiote_ch[i]);
-		if (rv < 0) {
+		err = nrfx_gpiote_channel_alloc(&config->gpiote[i],
+						&data->gpiote_ch[i]);
+		if (err != NRFX_SUCCESS) {
 			/* Do not free allocated resource. It is a fatal condition,
 			 * system requires reconfiguration.
 			 */
 			LOG_ERR("Failed to allocate GPIOTE channel");
-			return rv;
+			return -ENOMEM;
 		}
 
 		/* Set initial state of the output pins. */
@@ -417,7 +410,7 @@ static int pwm_nrf_sw_init(const struct device *dev)
 	 ? BIT(_idx) : 0) |
 
 #define GPIOTE_AND_COMMA(_node_id, _prop, _idx) \
-	&GPIOTE_NRFX_INST_BY_NODE(NRF_DT_GPIOTE_NODE_BY_IDX(_node_id, _prop, _idx))
+	NRFX_GPIOTE_INSTANCE(NRF_DT_GPIOTE_INST_BY_IDX(_node_id, _prop, _idx)),
 
 static const struct pwm_config pwm_nrf_sw_0_config = {
 	COND_CODE_1(USE_RTC, (.rtc), (.timer)) = GENERATOR_ADDR,

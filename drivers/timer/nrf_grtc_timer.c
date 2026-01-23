@@ -94,12 +94,23 @@ static inline uint64_t counter_sub(uint64_t a, uint64_t b)
 
 static inline uint64_t counter(void)
 {
-	return nrfx_grtc_syscounter_get();
+	uint64_t now;
+	nrfx_grtc_syscounter_get(&now);
+	return now;
 }
 
 static inline int get_comparator(uint32_t chan, uint64_t *cc)
 {
-	return nrfx_grtc_syscounter_cc_value_read(chan, cc);
+	nrfx_err_t result;
+
+	result = nrfx_grtc_syscounter_cc_value_read(chan, cc);
+	if (result != NRFX_SUCCESS) {
+		if (result != NRFX_ERROR_INVALID_PARAM) {
+			return -EAGAIN;
+		}
+		return -EPERM;
+	}
+	return 0;
 }
 
 /*
@@ -166,14 +177,14 @@ static void sys_clock_timeout_handler(int32_t id, uint64_t cc_val, void *p_conte
 int32_t z_nrf_grtc_timer_chan_alloc(void)
 {
 	uint8_t chan;
-	int err_code;
+	nrfx_err_t err_code;
 
 	/* Prevent allocating all available channels - one must be left for system purposes. */
 	if (ext_channels_allocated >= EXT_CHAN_COUNT) {
 		return -ENOMEM;
 	}
 	err_code = nrfx_grtc_channel_alloc(&chan);
-	if (err_code < 0) {
+	if (err_code != NRFX_SUCCESS) {
 		return -ENOMEM;
 	}
 	ext_channels_allocated++;
@@ -183,9 +194,9 @@ int32_t z_nrf_grtc_timer_chan_alloc(void)
 void z_nrf_grtc_timer_chan_free(int32_t chan)
 {
 	IS_CHANNEL_ALLOWED_ASSERT(chan);
-	int err_code = nrfx_grtc_channel_free(chan);
+	nrfx_err_t err_code = nrfx_grtc_channel_free(chan);
 
-	if (err_code == 0) {
+	if (err_code == NRFX_SUCCESS) {
 		ext_channels_allocated--;
 	}
 }
@@ -242,13 +253,19 @@ int z_nrf_grtc_timer_compare_read(int32_t chan, uint64_t *val)
 static int compare_set_nolocks(int32_t chan, uint64_t target_time,
 			       z_nrf_grtc_timer_compare_handler_t handler, void *user_data)
 {
+	nrfx_err_t result;
+
 	__ASSERT_NO_MSG(target_time < COUNTER_SPAN);
 	nrfx_grtc_channel_t user_channel_data = {
 		.handler = handler,
 		.p_context = user_data,
 		.channel = chan,
 	};
-	return nrfx_grtc_syscounter_cc_absolute_set(&user_channel_data, target_time, true);
+	result = nrfx_grtc_syscounter_cc_absolute_set(&user_channel_data, target_time, true);
+	if (result != NRFX_SUCCESS) {
+		return -EPERM;
+	}
+	return 0;
 }
 
 static int compare_set(int32_t chan, uint64_t target_time,
@@ -301,6 +318,7 @@ int z_nrf_grtc_timer_capture_prepare(int32_t chan)
 		.p_context = NULL,
 		.channel = chan,
 	};
+	nrfx_err_t result;
 
 	IS_CHANNEL_ALLOWED_ASSERT(chan);
 
@@ -308,12 +326,19 @@ int z_nrf_grtc_timer_capture_prepare(int32_t chan)
 	 * (makes CCEN=1). COUNTER_SPAN is used so as not to fire an event unnecessarily
 	 * - it can be assumed that such a large value will never be reached.
 	 */
-	return nrfx_grtc_syscounter_cc_absolute_set(&user_channel_data, COUNTER_SPAN, false);
+	result = nrfx_grtc_syscounter_cc_absolute_set(&user_channel_data, COUNTER_SPAN, false);
+
+	if (result != NRFX_SUCCESS) {
+		return -EPERM;
+	}
+
+	return 0;
 }
 
 int z_nrf_grtc_timer_capture_read(int32_t chan, uint64_t *captured_time)
 {
-	int result;
+	uint64_t capt_time;
+	nrfx_err_t result;
 
 	IS_CHANNEL_ALLOWED_ASSERT(chan);
 
@@ -323,10 +348,16 @@ int z_nrf_grtc_timer_capture_read(int32_t chan, uint64_t *captured_time)
 		 */
 		return -EBUSY;
 	}
-	result = nrfx_grtc_syscounter_cc_value_read(chan, captured_time);
-	__ASSERT_NO_MSG(*captured_time < COUNTER_SPAN);
+	result = nrfx_grtc_syscounter_cc_value_read(chan, &capt_time);
+	if (result != NRFX_SUCCESS) {
+		return -EPERM;
+	}
 
-	return result;
+	__ASSERT_NO_MSG(capt_time < COUNTER_SPAN);
+
+	*captured_time = capt_time;
+
+	return 0;
 }
 
 uint64_t z_nrf_grtc_timer_startup_value_get(void)
@@ -341,7 +372,7 @@ int z_nrf_grtc_wakeup_prepare(uint64_t wake_time_us)
 		return -ENOTSUP;
 	}
 
-	int err_code;
+	nrfx_err_t err_code;
 	static struct k_spinlock lock;
 	static uint8_t systemoff_channel;
 	uint64_t now = counter();
@@ -365,9 +396,9 @@ int z_nrf_grtc_wakeup_prepare(uint64_t wake_time_us)
 	k_spinlock_key_t key = k_spin_lock(&lock);
 
 	err_code = nrfx_grtc_channel_alloc(&systemoff_channel);
-	if (err_code < 0) {
+	if (err_code != NRFX_SUCCESS) {
 		k_spin_unlock(&lock, key);
-		return err_code;
+		return -ENOMEM;
 	}
 	(void)nrfx_grtc_syscounter_cc_int_disable(systemoff_channel);
 	ret = compare_set(systemoff_channel,
@@ -450,7 +481,7 @@ void sys_clock_disable(void)
 
 static int sys_clock_driver_init(void)
 {
-	int err_code;
+	nrfx_err_t err_code;
 
 #if defined(CONFIG_GEN_SW_ISR_TABLE)
 	IRQ_CONNECT(DT_IRQN(GRTC_NODE), DT_IRQ(GRTC_NODE, priority), nrfx_isr,
@@ -475,19 +506,19 @@ static int sys_clock_driver_init(void)
 #endif
 
 	err_code = nrfx_grtc_init(0);
-	if (err_code < 0) {
-		return err_code;
+	if (err_code != NRFX_SUCCESS) {
+		return -EPERM;
 	}
 
 #if defined(CONFIG_NRF_GRTC_START_SYSCOUNTER)
 	err_code = nrfx_grtc_syscounter_start(true, &system_clock_channel_data.channel);
-	if (err_code < 0) {
-		return err_code;
+	if (err_code != NRFX_SUCCESS) {
+		return err_code == NRFX_ERROR_NO_MEM ? -ENOMEM : -EPERM;
 	}
 #else
 	err_code = nrfx_grtc_channel_alloc(&system_clock_channel_data.channel);
-	if (err_code < 0) {
-		return err_code;
+	if (err_code != NRFX_SUCCESS) {
+		return -ENOMEM;
 	}
 #endif /* CONFIG_NRF_GRTC_START_SYSCOUNTER */
 

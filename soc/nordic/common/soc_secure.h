@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <stdint.h>
-#include <nrfx.h>
+#include <nrf.h>
 #include <hal/nrf_gpio.h>
 #include <hal/nrf_ficr.h>
 

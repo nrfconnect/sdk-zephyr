@@ -355,9 +355,7 @@ static void grtc_stress_test(bool busy_sim_en)
 	}
 
 	if (busy_sim_en) {
-#ifdef CONFIG_TEST_BUSY_SIM
 		busy_sim_start(500, 200, 1000, 400, NULL);
-#endif
 	}
 
 	LOG_DBG("Starting test, will end at %d", test_end);
@@ -389,9 +387,7 @@ static void grtc_stress_test(bool busy_sim_en)
 	TC_PRINT("CPU load during test:%d.%d\n", load / 10, load % 10);
 
 	if (busy_sim_en) {
-#ifdef CONFIG_TEST_BUSY_SIM
 		busy_sim_stop();
-#endif
 	}
 
 	if (counter_dev) {
