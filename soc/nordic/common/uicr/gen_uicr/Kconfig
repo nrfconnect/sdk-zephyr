@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 menu "UICR generator options"
-	depends on IS_GEN_UICR_IMAGE
 
 config GEN_UICR_GENERATE_PERIPHCONF
 	bool "Generate PERIPHCONF hex alongside UICR"
@@ -12,7 +11,7 @@ config GEN_UICR_GENERATE_PERIPHCONF
 	  periphconf_partition partition.
 
 config GEN_UICR_SECURESTORAGE
-	bool "UICR.SECURESTORAGE"
+	bool "Enable UICR.SECURESTORAGE"
 	default y
 	depends on $(dt_nodelabel_enabled,secure_storage_partition)
 	help
@@ -34,7 +33,7 @@ config GEN_UICR_SECURESTORAGE
 	  - Combined subpartition sizes must equal secure_storage_partition size
 
 config GEN_UICR_LOCK
-	bool "UICR.LOCK"
+	bool "Enable UICR.LOCK"
 	help
 	  When enabled, locks the entire contents of the NVR0 page located in
 	  MRAM10. This includes all values in both the UICR and the BICR (Board
@@ -45,7 +44,7 @@ config GEN_UICR_LOCK
 	  unauthorized modification.
 
 config GEN_UICR_ERASEPROTECT
-	bool "UICR.ERASEPROTECT"
+	bool "Enable UICR.ERASEPROTECT"
 	depends on ! GEN_UICR_LOCK
 	help
 	  When enabled, ERASEALL operations are blocked.
@@ -81,7 +80,7 @@ config GEN_UICR_APPROTECT_CORESIGHT_PROTECTED
 endmenu
 
 config GEN_UICR_PROTECTEDMEM
-	bool "UICR.PROTECTEDMEM"
+	bool "Enable UICR.PROTECTEDMEM"
 	help
 	  When enabled, the UICR generator will configure the
 	  protected memory region.
@@ -95,7 +94,7 @@ config GEN_UICR_PROTECTEDMEM_SIZE_BYTES
 	  This value must be divisible by 4096 (4 kiB).
 
 config GEN_UICR_WDTSTART
-	bool "UICR.WDTSTART"
+	bool "Enable UICR.WDTSTART"
 	help
 	  When enabled, the UICR generator will configure an application
 	  domain watchdog timer to start automatically before the
@@ -138,7 +137,7 @@ config GEN_UICR_WDTSTART_CRV
 	  Default value 65535 creates a 2-second timeout.
 
 config GEN_UICR_SECONDARY_WDTSTART
-	bool "UICR.SECONDARY.WDTSTART"
+	bool "Enable UICR.SECONDARY.WDTSTART"
 	depends on GEN_UICR_SECONDARY
 	help
 	  When enabled, the UICR generator will configure the
@@ -182,7 +181,7 @@ config GEN_UICR_SECONDARY_WDTSTART_CRV
 	  Default value 65535 creates a 2-second timeout.
 
 config GEN_UICR_SECONDARY
-	bool "UICR.SECONDARY.ENABLE"
+	bool "Enable UICR.SECONDARY.ENABLE"
 
 if GEN_UICR_SECONDARY
 
@@ -217,7 +216,7 @@ config GEN_UICR_SECONDARY_PROCESSOR_VALUE
 	default 0x1730C77F if GEN_UICR_SECONDARY_PROCESSOR_RADIOCORE
 
 config GEN_UICR_SECONDARY_TRIGGER
-	bool "UICR.SECONDARY.TRIGGER"
+	bool "Enable UICR.SECONDARY.TRIGGER"
 	help
 	  When enabled, configures automatic triggers that cause IronSide SE
 	  to boot the secondary firmware instead of the primary firmware based
@@ -258,7 +257,7 @@ config GEN_UICR_SECONDARY_TRIGGER_RADIOCORELOCKUP
 endif # GEN_UICR_SECONDARY_TRIGGER
 
 config GEN_UICR_SECONDARY_PROTECTEDMEM
-	bool "UICR.SECONDARY.PROTECTEDMEM"
+	bool "Enable UICR.SECONDARY.PROTECTEDMEM"
 	depends on GEN_UICR_SECONDARY
 	help
 	  When enabled, the UICR generator will configure the
@@ -275,3 +274,5 @@ config GEN_UICR_SECONDARY_PROTECTEDMEM_SIZE_BYTES
 endif # GEN_UICR_SECONDARY
 
 endmenu
+
+source "Kconfig.zephyr"
