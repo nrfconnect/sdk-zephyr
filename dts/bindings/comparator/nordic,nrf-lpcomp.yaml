@@ -21,7 +21,7 @@ description: |
 
     &comp {
             status = "okay";
-            psel = <NRF_COMP_AIN0>;
+            psel = "AIN0";
             refsel = "VDD_4_8";
             enable-hyst;
     };
@@ -32,7 +32,7 @@ description: |
     &comp {
             ...
             refsel = "AREF";
-            extrefsel = <NRF_COMP_AIN1>;
+            extrefsel = "AIN1";
             ...
     };
 
@@ -42,10 +42,22 @@ include: base.yaml
 
 properties:
   psel:
-    type: int
+    type: string
+    enum:
+      - "AIN0"
+      - "AIN1"
+      - "AIN2"
+      - "AIN3"
+      - "AIN4"
+      - "AIN5"
+      - "AIN6"
+      - "AIN7"
 
   extrefsel:
-    type: int
+    type: string
+    enum:
+      - "AIN0"
+      - "AIN1"
 
   refsel:
     type: string
