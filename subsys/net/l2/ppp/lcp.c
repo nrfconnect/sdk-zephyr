@@ -163,12 +163,7 @@ static void lcp_open(struct ppp_context *ctx)
 static void lcp_close(struct ppp_context *ctx, const uint8_t *reason)
 {
 	if (ctx->phase != PPP_DEAD) {
-		if (ctx->phase == PPP_ESTABLISH) {
-			/* Link is not established yet, so we can go directly to DEAD */
-			ppp_change_phase(ctx, PPP_DEAD);
-		} else {
-			ppp_change_phase(ctx, PPP_TERMINATE);
-		}
+		ppp_change_phase(ctx, PPP_TERMINATE);
 	}
 
 	ppp_fsm_close(&ctx->lcp.fsm, reason);
