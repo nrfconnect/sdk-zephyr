@@ -64,12 +64,6 @@ New APIs and options
 
 .. zephyr-keep-sorted-start re(^\* \w)
 
-* Bluetooth
-
-  * Services
-
-    * Introduced Alert Notification Service (ANS) :kconfig:option:`CONFIG_BT_ANS`
-
 * Flash
 
   * :dtcompatible:`jedec,mspi-nor` now allows MSPI configuration of read, write and
@@ -101,8 +95,6 @@ New Drivers
 
 New Samples
 ***********
-
-* :zephyr:code-sample:`ble_peripheral_ans`
 
 ..
   Same as above, this will also be recomputed at the time of the release.
