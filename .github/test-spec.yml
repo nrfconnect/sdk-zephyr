@@ -204,11 +204,7 @@
   - "modules/trusted-firmware-m/**/*"
   - "samples/net/sockets/echo_*/**/*"
   - "share/**/*"
-  - any:
-      - "soc/nordic/**/*"
-      - "!soc/nordic/nrf51*"
-      - "!soc/nordic/nrf54h*"
-      - "!soc/nordic/nrf9*"
+  - "soc/nordic/**/*"
   - "subsys/net/**/*"
   - "subsys/settings/**/*"
   - "subsys/bluetooth/shell/**/*"
