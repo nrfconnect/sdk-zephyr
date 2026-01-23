@@ -134,8 +134,10 @@ def main():
                 cmake_prop = f'DT_PROP|{node.path}|{item}'
                 cmake_props.append(f'"{cmake_prop}" "{escape(cmake_value)}"')
 
-        for comp in node.compats:
-            compatible2paths[comp].append(node.path)
+                if item == 'compatible':
+                    # compatibles is always an array
+                    for comp in node.props[item].val:
+                        compatible2paths[comp].append(node.path)
 
         if node.regs is not None:
             cmake_props.append(f'"DT_REG|{node.path}|NUM" "{len(node.regs)}"')
