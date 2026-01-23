@@ -17,7 +17,6 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/sys/poweroff.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/drivers/timer/system_timer.h>
 
 #define NON_WAKEUP_RESET_REASON (RESET_PIN | RESET_SOFTWARE | RESET_POR | RESET_DEBUG)
 
@@ -98,15 +97,11 @@ int main(void)
 		printf("Retained data not supported\n");
 	}
 
-#if defined(CONFIG_SYS_CLOCK_DISABLE)
-	printf("System clock will be disabled\n");
-#endif
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
 	int err = z_nrf_grtc_wakeup_prepare(DEEP_SLEEP_TIME_S * USEC_PER_SEC);
 
 	if (err < 0) {
 		printk("Unable to prepare GRTC as a wake up source (err = %d).\n", err);
-		return 0;
 	} else {
 		printk("Entering system off; wait %u seconds to restart\n", DEEP_SLEEP_TIME_S);
 	}
@@ -146,9 +141,6 @@ int main(void)
 	}
 
 	hwinfo_clear_reset_cause();
-#if defined(CONFIG_SYS_CLOCK_DISABLE)
-	sys_clock_disable();
-#endif
 	sys_poweroff();
 
 	return 0;
