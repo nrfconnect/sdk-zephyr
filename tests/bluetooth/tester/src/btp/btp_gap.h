@@ -578,6 +578,7 @@ struct btp_gap_periodic_biginfo_ev {
 	uint8_t encryption;
 } __packed;
 
+#if defined(CONFIG_BT_EXT_ADV)
 struct bt_le_per_adv_param;
 struct bt_le_per_adv_sync_param;
 struct bt_le_adv_param;
@@ -598,3 +599,4 @@ int tester_gap_padv_start(struct bt_le_ext_adv *ext_adv);
 int tester_gap_padv_stop(struct bt_le_ext_adv *ext_adv);
 int tester_gap_padv_create_sync(struct bt_le_per_adv_sync_param *create_params);
 int tester_gap_padv_stop_sync(void);
+#endif /* defined(CONFIG_BT_EXT_ADV) */
