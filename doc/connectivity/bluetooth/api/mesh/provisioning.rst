@@ -124,9 +124,7 @@ provisionee:
 
 * **Static OOB:** An authentication value is assigned to the device in
   production, which the provisioner can query in some application specific
-  way. For secure provisioning with the BTM_ECDH_P256_HMAC_SHA256_AES_CCM
-  algorithm, the Static OOB value should contain more than 128 bits of entropy
-  to provide adequate security against attacks.
+  way.
 * **Input OOB:** The user inputs the authentication value. The available input
   actions are listed in :c:enum:`bt_mesh_input_action_t`.
 * **Output OOB:** Show the user the authentication value. The available output
