@@ -2328,7 +2328,6 @@ static int udc_dwc2_disable(const struct device *dev)
 	}
 
 	config->irq_disable_func(dev);
-	cancel_hibernation_request(priv);
 
 	if (priv->hibernated) {
 		dwc2_exit_hibernation(dev, false, true);
