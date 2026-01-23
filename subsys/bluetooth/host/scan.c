@@ -1841,10 +1841,11 @@ void bt_le_scan_cb_unregister(struct bt_le_scan_cb *cb)
 #if defined(CONFIG_BT_PER_ADV_SYNC)
 uint8_t bt_le_per_adv_sync_get_index(struct bt_le_per_adv_sync *per_adv_sync)
 {
-	__ASSERT(IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync),
-		 "Invalid per_adv_sync pointer");
+	ptrdiff_t index = per_adv_sync - per_adv_sync_pool;
 
-	return (uint8_t)ARRAY_INDEX(per_adv_sync_pool, per_adv_sync);
+	__ASSERT(index >= 0 && ARRAY_SIZE(per_adv_sync_pool) > index,
+		 "Invalid per_adv_sync pointer");
+	return (uint8_t)index;
 }
 
 struct bt_le_per_adv_sync *bt_le_per_adv_sync_lookup_index(uint8_t index)
