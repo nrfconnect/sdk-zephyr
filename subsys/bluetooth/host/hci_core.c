@@ -1856,8 +1856,6 @@ static void le_frame_space_update_complete(struct net_buf *buf)
 	}
 
 	bt_conn_notify_frame_space_update_complete(conn, &params);
-
-	bt_conn_unref(conn);
 }
 #endif /* CONFIG_BT_FRAME_SPACE_UPDATE */
 
