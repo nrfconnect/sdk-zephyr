@@ -666,9 +666,7 @@ static bool update_keys_check(struct bt_smp *smp, struct bt_keys *keys)
 	}
 
 	if ((keys->flags & BT_KEYS_AUTHENTICATED) &&
-	    ((smp->method == JUST_WORKS) ||
-	     (!atomic_test_bit(smp->flags, SMP_FLAG_SC) &&
-	      (smp->method == PASSKEY_DISPLAY || smp->method == PASSKEY_INPUT)))) {
+	     smp->method == JUST_WORKS) {
 		return false;
 	}
 
@@ -2493,12 +2491,11 @@ static uint8_t legacy_request_tk(struct bt_smp *smp)
 	 * Fail if we have keys that are stronger than keys that will be
 	 * distributed in new pairing. This is to avoid replacing authenticated
 	 * keys with unauthenticated ones.
-	 */
+	  */
 	keys = bt_keys_find_addr(conn->id, &conn->le.dst);
 	if (keys && (keys->flags & BT_KEYS_AUTHENTICATED) &&
-	    (smp->method == JUST_WORKS || smp->method == PASSKEY_DISPLAY ||
-	     smp->method == PASSKEY_INPUT)) {
-		LOG_ERR("Pairing failed, authenticated keys present");
+	    smp->method == JUST_WORKS) {
+		LOG_ERR("JustWorks failed, authenticated keys present");
 		return BT_SMP_ERR_UNSPECIFIED;
 	}
 
@@ -2986,9 +2983,7 @@ static uint8_t remote_sec_level_reachable(struct bt_smp *smp)
 		}
 		__fallthrough;
 	case BT_SECURITY_L3:
-		if (smp->method == JUST_WORKS ||
-		    (!atomic_test_bit(smp->flags, SMP_FLAG_SC) &&
-		     (smp->method == PASSKEY_DISPLAY || smp->method == PASSKEY_INPUT))) {
+		if (smp->method == JUST_WORKS) {
 			return BT_SMP_ERR_AUTH_REQUIREMENTS;
 		}
 
@@ -6324,16 +6319,12 @@ void bt_smp_update_keys(struct bt_conn *conn)
 	case LE_SC_OOB:
 	case LEGACY_OOB:
 		conn->le.keys->flags |= BT_KEYS_OOB;
-		conn->le.keys->flags |= BT_KEYS_AUTHENTICATED;
-		break;
+		/* fallthrough */
 	case PASSKEY_DISPLAY:
 	case PASSKEY_INPUT:
 	case PASSKEY_CONFIRM:
-		if (atomic_test_bit(smp->flags, SMP_FLAG_SC)) {
-			conn->le.keys->flags |= BT_KEYS_AUTHENTICATED;
-			break;
-		}
-		/* fallthrough */
+		conn->le.keys->flags |= BT_KEYS_AUTHENTICATED;
+		break;
 	case JUST_WORKS:
 	default:
 		/* unauthenticated key, clear it */
