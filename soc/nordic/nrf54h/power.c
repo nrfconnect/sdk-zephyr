@@ -88,12 +88,7 @@ void nrf_poweroff(void)
 	CODE_UNREACHABLE;
 }
 
-#if CONFIG_MCUBOOT
-static __ramfunc
-#else
-static __attribute__((__used__, noinline))
-#endif
-void cache_retain_and_sleep(void)
+static __attribute__((__used__, noinline)) void cache_retain_and_sleep(void)
 {
 	nrf_cache_task_trigger(NRF_DCACHE, NRF_CACHE_TASK_SAVE);
 	nrf_cache_task_trigger(NRF_ICACHE, NRF_CACHE_TASK_SAVE);
