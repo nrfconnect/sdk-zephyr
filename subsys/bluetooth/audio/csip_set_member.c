@@ -520,10 +520,8 @@ static void csip_security_changed(struct bt_conn *conn, bt_security_t level,
 			return;
 		}
 
-		/* Check if client has pending notifications */
-		if (atomic_test_bit(client->flags, FLAG_NOTIFY_LOCK) ||
-		    atomic_test_bit(client->flags, FLAG_NOTIFY_SIRK) ||
-		    atomic_test_bit(client->flags, FLAG_NOTIFY_SIZE)) {
+		/* Check if client is set with FLAG_NOTIFY_LOCK */
+		if (atomic_test_bit(client->flags, FLAG_NOTIFY_LOCK)) {
 			notify_work_reschedule(K_NO_WAIT);
 			break;
 		}
