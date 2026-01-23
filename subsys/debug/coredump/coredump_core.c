@@ -41,16 +41,8 @@ static struct coredump_backend_api
 #define DT_DRV_COMPAT zephyr_coredump
 #endif
 
-#if defined(CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP_LIMIT_FOR_CURRENT) &&                           \
-	CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP_LIMIT_FOR_CURRENT >= 0
-#define STACK_TOP_LIMIT_FOR_CURRENT                                                                \
-	((size_t)CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP_LIMIT_FOR_CURRENT)
-#else
-#define STACK_TOP_LIMIT_FOR_CURRENT SIZE_MAX
-#endif
-
 #if defined(CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP_LIMIT) &&                                       \
-	CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP_LIMIT >= 0
+	CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP_LIMIT > 0
 #define STACK_TOP_LIMIT ((size_t)CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP_LIMIT)
 #else
 #define STACK_TOP_LIMIT SIZE_MAX
@@ -88,11 +80,10 @@ static void dump_header(unsigned int reason)
 #if defined(CONFIG_DEBUG_COREDUMP_MEMORY_DUMP_MIN) ||                                              \
 	defined(CONFIG_DEBUG_COREDUMP_MEMORY_DUMP_THREADS)
 
-static inline void select_stack_region(const struct k_thread *thread, bool is_current,
-				       uintptr_t *start, uintptr_t *end)
+static inline void select_stack_region(const struct k_thread *thread, uintptr_t *start,
+				       uintptr_t *end)
 {
 	uintptr_t sp;
-	size_t limit;
 
 	*start = thread->stack_info.start;
 	*end = thread->stack_info.start + thread->stack_info.size;
@@ -108,12 +99,11 @@ static inline void select_stack_region(const struct k_thread *thread, bool is_cu
 		*start = sp;
 	}
 
-	/* Make sure no more than STACK_TOP_LIMIT[_FOR_CURRENT] bytes of the stack are dumped. */
-	limit = (is_current ? STACK_TOP_LIMIT_FOR_CURRENT : STACK_TOP_LIMIT);
-	*end = *start + MIN((size_t)(*end - *start), limit);
+	/* Make sure no more than STACK_TOP_LIMIT bytes of the stack are dumped. */
+	*end = *start + MIN((size_t)(*end - *start), STACK_TOP_LIMIT);
 }
 
-static void dump_thread(struct k_thread *thread, bool is_current)
+static void dump_thread(struct k_thread *thread)
 {
 	uintptr_t start_addr;
 	uintptr_t end_addr;
@@ -132,7 +122,7 @@ static void dump_thread(struct k_thread *thread, bool is_current)
 	end_addr = start_addr + sizeof(*thread);
 	coredump_memory_dump(start_addr, end_addr);
 
-	select_stack_region(thread, is_current, &start_addr, &end_addr);
+	select_stack_region(thread, &start_addr, &end_addr);
 	coredump_memory_dump(start_addr, end_addr);
 
 #if defined(CONFIG_DEBUG_COREDUMP_DUMP_THREAD_PRIV_STACK)
@@ -150,7 +140,7 @@ static void process_coredump_dev_memory(const struct device *dev)
 }
 #endif
 
-void process_memory_region_list(struct k_thread *current)
+void process_memory_region_list(void)
 {
 #ifdef CONFIG_DEBUG_COREDUMP_MEMORY_DUMP_LINKER_RAM
 	unsigned int idx = 0;
@@ -174,10 +164,10 @@ void process_memory_region_list(struct k_thread *current)
 	 * Content of _kernel.threads not being modified during dump
 	 * capture so no need to lock z_thread_monitor_lock.
 	 */
-	struct k_thread *thread;
+	struct k_thread *current;
 
-	for (thread = _kernel.threads; thread; thread = thread->next_thread) {
-		dump_thread(thread, thread == current);
+	for (current = _kernel.threads; current; current = current->next_thread) {
+		dump_thread(current);
 	}
 
 	/* Also add interrupt stack, in case error occurred in an interrupt */
@@ -226,11 +216,11 @@ void coredump(unsigned int reason, const struct arch_esf *esf,
 
 	if (thread != NULL) {
 #ifdef CONFIG_DEBUG_COREDUMP_MEMORY_DUMP_MIN
-		dump_thread(thread, /* is_current */ true);
+		dump_thread(thread);
 #endif
 	}
 
-	process_memory_region_list(thread);
+	process_memory_region_list();
 
 	z_coredump_end();
 }
