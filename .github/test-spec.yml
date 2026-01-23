@@ -248,11 +248,7 @@
   - "modules/mbedtls/**/*"
   - "modules/openthread/**/*"
   - "samples/net/openthread/**/*"
-  - any:
-      - "soc/nordic/**/*"
-      - "!soc/nordic/nrf51*"
-      - "!soc/nordic/nrf54h*"
-      - "!soc/nordic/nrf9*"
+  - "soc/nordic/**/*"
   - "subsys/net/**/*"
   - "subsys/settings/**/*"
 
