@@ -12,4 +12,3 @@ ram: 62
 flash: 64
 supported:
   - gpio
-  - spi
