@@ -7,12 +7,55 @@
 #ifndef ZEPHYR_INCLUDE_DRIVERS_COMP_NRF_COMP_H_
 #define ZEPHYR_INCLUDE_DRIVERS_COMP_NRF_COMP_H_
 
-#include <zephyr/dt-bindings/comparator/nrf-comp.h>
 #include <zephyr/drivers/comparator.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/** Positive input selection */
+enum comp_nrf_comp_psel {
+	/** AIN0 external input */
+	COMP_NRF_COMP_PSEL_AIN0,
+	/** AIN1 external input */
+	COMP_NRF_COMP_PSEL_AIN1,
+	/** AIN2 external input */
+	COMP_NRF_COMP_PSEL_AIN2,
+	/** AIN3 external input */
+	COMP_NRF_COMP_PSEL_AIN3,
+	/** AIN4 external input */
+	COMP_NRF_COMP_PSEL_AIN4,
+	/** AIN5 external input */
+	COMP_NRF_COMP_PSEL_AIN5,
+	/** AIN6 external input */
+	COMP_NRF_COMP_PSEL_AIN6,
+	/** AIN7 external input */
+	COMP_NRF_COMP_PSEL_AIN7,
+	/** VDD / 2 */
+	COMP_NRF_COMP_PSEL_VDD_DIV2,
+	/** VDDH / 5 */
+	COMP_NRF_COMP_PSEL_VDDH_DIV5,
+};
+
+/** External reference selection */
+enum comp_nrf_comp_extrefsel {
+	/** AIN0 external input */
+	COMP_NRF_COMP_EXTREFSEL_AIN0,
+	/** AIN1 external input */
+	COMP_NRF_COMP_EXTREFSEL_AIN1,
+	/** AIN2 external input */
+	COMP_NRF_COMP_EXTREFSEL_AIN2,
+	/** AIN3 external input */
+	COMP_NRF_COMP_EXTREFSEL_AIN3,
+	/** AIN4 external input */
+	COMP_NRF_COMP_EXTREFSEL_AIN4,
+	/** AIN5 external input */
+	COMP_NRF_COMP_EXTREFSEL_AIN5,
+	/** AIN6 external input */
+	COMP_NRF_COMP_EXTREFSEL_AIN6,
+	/** AIN7 external input */
+	COMP_NRF_COMP_EXTREFSEL_AIN7,
+};
 
 /** Reference selection */
 enum comp_nrf_comp_refsel {
@@ -60,14 +103,14 @@ enum comp_nrf_comp_isource {
  * @note Hysteresis up in volts = ((th_up + 1) / 64) * ref
  */
 struct comp_nrf_comp_se_config {
-	/** Positive input selection defined by the NRF_COMP_AIN defines */
-	uint8_t psel;
+	/** Positive input selection */
+	enum comp_nrf_comp_psel psel;
 	/** Speed mode selection */
 	enum comp_nrf_comp_sp_mode sp_mode;
 	/** Current source configuration */
 	enum comp_nrf_comp_isource isource;
-	/** External reference input selection defined by the NRF_COMP_AIN defines */
-	uint8_t extrefsel;
+	/** External reference selection */
+	enum comp_nrf_comp_extrefsel extrefsel;
 	/** Reference selection */
 	enum comp_nrf_comp_refsel refsel;
 	/** Hysteresis down threshold configuration */
@@ -90,14 +133,14 @@ int comp_nrf_comp_configure_se(const struct device *dev,
 
 /** Differential mode configuration structure */
 struct comp_nrf_comp_diff_config {
-	/** Positive input selection defined by the NRF_COMP_AIN defines */
-	uint8_t psel;
+	/** Positive input selection */
+	enum comp_nrf_comp_psel psel;
 	/** Speed mode selection */
 	enum comp_nrf_comp_sp_mode sp_mode;
 	/** Current source configuration */
 	enum comp_nrf_comp_isource isource;
-	/** Negative input selection defined by the NRF_COMP_AIN defines */
-	uint8_t extrefsel;
+	/** Negative input selection */
+	enum comp_nrf_comp_extrefsel extrefsel;
 	/** Hysteresis configuration */
 	bool enable_hyst;
 };

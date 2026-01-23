@@ -21,12 +21,14 @@
 #define SHIM_NRF_LPCOMP_DT_INST_REFSEL_IS_AREF(inst) \
 	DT_INST_ENUM_HAS_VALUE(inst, refsel, aref)
 
-#define SHIM_NRF_LPCOMP_DT_INST_EXTREFSEL(inst) DT_INST_PROP(inst, extrefsel)
+#define SHIM_NRF_LPCOMP_DT_INST_EXTREFSEL(inst) \
+	_CONCAT(COMP_NRF_LPCOMP_EXTREFSEL_, DT_INST_STRING_TOKEN(inst, extrefsel))
 
 #define SHIM_NRF_LPCOMP_DT_INST_ENABLE_HYST(inst) \
 	DT_INST_PROP(inst, enable_hyst)
 
-#define SHIM_NRF_LPCOMP_DT_INST_PSEL(inst) DT_INST_PROP(inst, psel)
+#define SHIM_NRF_LPCOMP_DT_INST_PSEL(inst) \
+	_CONCAT(COMP_NRF_LPCOMP_PSEL_, DT_INST_STRING_TOKEN(inst, psel))
 
 struct shim_nrf_lpcomp_data {
 	nrfx_lpcomp_config_t config;
@@ -38,20 +40,10 @@ struct shim_nrf_lpcomp_data {
 };
 
 #if (NRF_LPCOMP_HAS_AIN_AS_PIN)
-BUILD_ASSERT(NRF_COMP_AIN0 == 0);
-BUILD_ASSERT(NRF_COMP_AIN7 == 7);
-#else
-BUILD_ASSERT((NRF_COMP_AIN0 == NRF_LPCOMP_INPUT_0) &&
-	     (NRF_COMP_AIN1 == NRF_LPCOMP_INPUT_1) &&
-	     (NRF_COMP_AIN2 == NRF_LPCOMP_INPUT_2) &&
-	     (NRF_COMP_AIN3 == NRF_LPCOMP_INPUT_3) &&
-	     (NRF_COMP_AIN4 == NRF_LPCOMP_INPUT_4) &&
-	     (NRF_COMP_AIN5 == NRF_LPCOMP_INPUT_5) &&
-	     (NRF_COMP_AIN6 == NRF_LPCOMP_INPUT_6) &&
-	     (NRF_COMP_AIN7 == NRF_LPCOMP_INPUT_7) &&
-	     (NRF_COMP_AIN0 == NRF_LPCOMP_EXT_REF_REF0) &&
-	     (NRF_COMP_AIN1 == NRF_LPCOMP_EXT_REF_REF1),
-	     "Definitions from nrf-comp.h do not match those from HAL");
+BUILD_ASSERT(COMP_NRF_LPCOMP_PSEL_AIN0 == 0);
+BUILD_ASSERT(COMP_NRF_LPCOMP_PSEL_AIN7 == 7);
+BUILD_ASSERT(COMP_NRF_LPCOMP_EXTREFSEL_AIN0 == 0);
+BUILD_ASSERT(COMP_NRF_LPCOMP_EXTREFSEL_AIN1 == 1);
 #endif
 
 #if (LPCOMP_REFSEL_RESOLUTION == 8)
@@ -134,50 +126,50 @@ static int shim_nrf_lpcomp_pm_callback(const struct device *dev, enum pm_device_
 }
 
 #if (NRF_LPCOMP_HAS_AIN_AS_PIN)
-static int shim_nrf_lpcomp_psel_to_nrf(uint8_t shim,
+static int shim_nrf_lpcomp_psel_to_nrf(enum comp_nrf_lpcomp_psel shim,
 				       nrf_lpcomp_input_t *nrf)
 {
 	if (shim >= ARRAY_SIZE(shim_nrf_comp_ain_map)) {
 		return -EINVAL;
 	}
 
-	*nrf = shim_nrf_comp_ain_map[shim];
+	*nrf = shim_nrf_comp_ain_map[(uint32_t)shim];
 	return 0;
 }
 #else
-static int shim_nrf_lpcomp_psel_to_nrf(uint8_t shim,
+static int shim_nrf_lpcomp_psel_to_nrf(enum comp_nrf_lpcomp_psel shim,
 				       nrf_lpcomp_input_t *nrf)
 {
 	switch (shim) {
-	case  NRF_COMP_AIN0:
+	case COMP_NRF_LPCOMP_PSEL_AIN0:
 		*nrf = NRF_LPCOMP_INPUT_0;
 		break;
 
-	case  NRF_COMP_AIN1:
+	case COMP_NRF_LPCOMP_PSEL_AIN1:
 		*nrf = NRF_LPCOMP_INPUT_1;
 		break;
 
-	case  NRF_COMP_AIN2:
+	case COMP_NRF_LPCOMP_PSEL_AIN2:
 		*nrf = NRF_LPCOMP_INPUT_2;
 		break;
 
-	case  NRF_COMP_AIN3:
+	case COMP_NRF_LPCOMP_PSEL_AIN3:
 		*nrf = NRF_LPCOMP_INPUT_3;
 		break;
 
-	case  NRF_COMP_AIN4:
+	case COMP_NRF_LPCOMP_PSEL_AIN4:
 		*nrf = NRF_LPCOMP_INPUT_4;
 		break;
 
-	case  NRF_COMP_AIN5:
+	case COMP_NRF_LPCOMP_PSEL_AIN5:
 		*nrf = NRF_LPCOMP_INPUT_5;
 		break;
 
-	case  NRF_COMP_AIN6:
+	case COMP_NRF_LPCOMP_PSEL_AIN6:
 		*nrf = NRF_LPCOMP_INPUT_6;
 		break;
 
-	case  NRF_COMP_AIN7:
+	case COMP_NRF_LPCOMP_PSEL_AIN7:
 		*nrf = NRF_LPCOMP_INPUT_7;
 		break;
 
@@ -190,7 +182,7 @@ static int shim_nrf_lpcomp_psel_to_nrf(uint8_t shim,
 #endif
 
 #if (NRF_LPCOMP_HAS_AIN_AS_PIN)
-static int shim_nrf_lpcomp_extrefsel_to_nrf(uint8_t shim,
+static int shim_nrf_lpcomp_extrefsel_to_nrf(enum comp_nrf_lpcomp_extrefsel shim,
 					    nrf_lpcomp_ext_ref_t *nrf)
 {
 	if (shim >= ARRAY_SIZE(shim_nrf_comp_ain_map)) {
@@ -201,15 +193,15 @@ static int shim_nrf_lpcomp_extrefsel_to_nrf(uint8_t shim,
 	return 0;
 }
 #else
-static int shim_nrf_lpcomp_extrefsel_to_nrf(uint8_t shim,
+static int shim_nrf_lpcomp_extrefsel_to_nrf(enum comp_nrf_lpcomp_extrefsel shim,
 					    nrf_lpcomp_ext_ref_t *nrf)
 {
 	switch (shim) {
-	case  NRF_COMP_AIN0:
+	case COMP_NRF_LPCOMP_EXTREFSEL_AIN0:
 		*nrf = NRF_LPCOMP_EXT_REF_REF0;
 		break;
 
-	case  NRF_COMP_AIN1:
+	case COMP_NRF_LPCOMP_EXTREFSEL_AIN1:
 		*nrf = NRF_LPCOMP_EXT_REF_REF1;
 		break;
 
