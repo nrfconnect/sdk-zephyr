@@ -2832,35 +2832,27 @@ static void uarte_nrfx_irq_tx_enable(const struct device *dev)
 {
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
 	struct uarte_nrfx_data *data = dev->data;
-	bool already_enabled;
 
-	pm_device_runtime_get(dev);
+	if (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME)) {
+		pm_device_runtime_get(dev);
+	}
 
 	unsigned int key = irq_lock();
 
-	already_enabled = data->int_driven->tx_irq_enabled;
-	if (!already_enabled) {
-		data->int_driven->disable_tx_irq = false;
-		data->int_driven->tx_irq_enabled = true;
-		nrf_uarte_int_enable(uarte, NRF_UARTE_INT_TXSTOPPED_MASK);
-	}
+	data->int_driven->disable_tx_irq = false;
+	data->int_driven->tx_irq_enabled = true;
+	nrf_uarte_int_enable(uarte, NRF_UARTE_INT_TXSTOPPED_MASK);
 
 	irq_unlock(key);
-
-	if (already_enabled) {
-		pm_device_runtime_put(dev);
-	}
 }
 
 /** Interrupt driven transfer disabling function */
 static void uarte_nrfx_irq_tx_disable(const struct device *dev)
 {
 	struct uarte_nrfx_data *data = dev->data;
-	if (data->int_driven->tx_irq_enabled) {
-		/* TX IRQ will be disabled after current transmission is finished */
-		data->int_driven->disable_tx_irq = true;
-		data->int_driven->tx_irq_enabled = false;
-	}
+	/* TX IRQ will be disabled after current transmission is finished */
+	data->int_driven->disable_tx_irq = true;
+	data->int_driven->tx_irq_enabled = false;
 }
 
 /** Interrupt driven transfer ready function */
@@ -2896,11 +2888,7 @@ static void uarte_nrfx_irq_rx_enable(const struct device *dev)
 {
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
 
-	if (!nrf_uarte_int_enable_check(uarte, NRF_UARTE_INT_ENDRX_MASK)) {
-		pm_device_runtime_get(dev);
-
-		nrf_uarte_int_enable(uarte, NRF_UARTE_INT_ENDRX_MASK);
-	}
+	nrf_uarte_int_enable(uarte, NRF_UARTE_INT_ENDRX_MASK);
 }
 
 /** Interrupt driven receiver disabling function */
@@ -2908,11 +2896,7 @@ static void uarte_nrfx_irq_rx_disable(const struct device *dev)
 {
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
 
-	if (nrf_uarte_int_enable_check(uarte, NRF_UARTE_INT_ENDRX_MASK)) {
-		pm_device_runtime_put_async(dev, K_NO_WAIT);
-
-		nrf_uarte_int_disable(uarte, NRF_UARTE_INT_ENDRX_MASK);
-	}
+	nrf_uarte_int_disable(uarte, NRF_UARTE_INT_ENDRX_MASK);
 }
 
 /** Interrupt driven error enabling function */
