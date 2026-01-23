@@ -57,7 +57,6 @@ struct usbd_hid_descriptor {
 };
 
 enum {
-	HID_DEV_CLASS_INITIALIZED,
 	HID_DEV_CLASS_ENABLED,
 };
 
@@ -504,14 +503,7 @@ static int usbd_hid_init(struct usbd_class_data *const c_data)
 	const struct device *dev = usbd_class_get_private(c_data);
 	const struct hid_device_config *dcfg = dev->config;
 	struct usbd_hid_descriptor *const desc = dcfg->desc;
-	struct hid_device_data *const ddata = dev->data;
 
-	if (ddata->ops == NULL ||  ddata->rdesc == NULL || !ddata->rsize) {
-		LOG_ERR("HID device does not seem to be registered");
-		return -EINVAL;
-	}
-
-	atomic_set_bit(&ddata->state, HID_DEV_CLASS_INITIALIZED);
 	LOG_DBG("HID class %s init", c_data->name);
 
 	if (dcfg->if_desc_data != NULL && desc->if0.iInterface == 0) {
@@ -527,10 +519,6 @@ static int usbd_hid_init(struct usbd_class_data *const c_data)
 
 static void usbd_hid_shutdown(struct usbd_class_data *const c_data)
 {
-	const struct device *dev = usbd_class_get_private(c_data);
-	struct hid_device_data *const ddata = dev->data;
-
-	atomic_clear_bit(&ddata->state, HID_DEV_CLASS_INITIALIZED);
 	LOG_DBG("HID class %s shutdown", c_data->name);
 }
 
@@ -640,7 +628,7 @@ static int hid_dev_register(const struct device *dev,
 	struct hid_device_data *const ddata = dev->data;
 	struct usbd_hid_descriptor *const desc = dcfg->desc;
 
-	if (atomic_test_bit(&ddata->state, HID_DEV_CLASS_INITIALIZED)) {
+	if (atomic_test_bit(&ddata->state, HID_DEV_CLASS_ENABLED)) {
 		return -EALREADY;
 	}
 
