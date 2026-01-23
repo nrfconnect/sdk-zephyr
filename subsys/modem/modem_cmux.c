@@ -101,22 +101,6 @@ static int modem_cmux_wrap_command(struct modem_cmux_command **command, const ui
 	return 0;
 }
 
-static void set_state(struct modem_cmux *cmux, enum modem_cmux_state state)
-{
-	cmux->state = state;
-	k_event_set(&cmux->event, BIT(state));
-}
-
-static bool wait_state(struct modem_cmux *cmux, enum modem_cmux_state state, k_timeout_t timeout)
-{
-	return k_event_wait(&cmux->event, BIT(state), false, timeout) == BIT(state);
-}
-
-static bool is_connected(struct modem_cmux *cmux)
-{
-	return cmux->state == MODEM_CMUX_STATE_CONNECTED;
-}
-
 static struct modem_cmux_command *modem_cmux_command_wrap(const uint8_t *data)
 {
 	return (struct modem_cmux_command *)data;
@@ -466,12 +450,14 @@ static void modem_cmux_on_cld_command(struct modem_cmux *cmux, struct modem_cmux
 	}
 
 	LOG_DBG("CMUX disconnected");
-	set_state(cmux, MODEM_CMUX_STATE_DISCONNECTED);
+	cmux->state = MODEM_CMUX_STATE_DISCONNECTED;
 	k_mutex_lock(&cmux->transmit_rb_lock, K_FOREVER);
 	cmux->flow_control_on = false;
 	k_mutex_unlock(&cmux->transmit_rb_lock);
 
 	modem_cmux_raise_event(cmux, MODEM_CMUX_EVENT_DISCONNECTED);
+	k_event_clear(&cmux->event, MODEM_CMUX_EVENT_CONNECTED_BIT);
+	k_event_post(&cmux->event, MODEM_CMUX_EVENT_DISCONNECTED_BIT);
 }
 
 static void modem_cmux_on_control_frame_ua(struct modem_cmux *cmux)
@@ -482,13 +468,15 @@ static void modem_cmux_on_control_frame_ua(struct modem_cmux *cmux)
 	}
 
 	LOG_DBG("CMUX connected");
-	set_state(cmux, MODEM_CMUX_STATE_CONNECTED);
+	cmux->state = MODEM_CMUX_STATE_CONNECTED;
 	cmux->initiator = true;
 	k_mutex_lock(&cmux->transmit_rb_lock, K_FOREVER);
 	cmux->flow_control_on = true;
 	k_mutex_unlock(&cmux->transmit_rb_lock);
 	k_work_cancel_delayable(&cmux->connect_work);
 	modem_cmux_raise_event(cmux, MODEM_CMUX_EVENT_CONNECTED);
+	k_event_clear(&cmux->event, MODEM_CMUX_EVENT_DISCONNECTED_BIT);
+	k_event_post(&cmux->event, MODEM_CMUX_EVENT_CONNECTED_BIT);
 }
 
 static void modem_cmux_respond_unsupported_cmd(struct modem_cmux *cmux)
@@ -616,19 +604,21 @@ static void modem_cmux_on_control_frame_sabm(struct modem_cmux *cmux)
 
 	LOG_DBG("CMUX connection request received");
 	cmux->initiator = false;
-	set_state(cmux, MODEM_CMUX_STATE_CONNECTED);
+	cmux->state = MODEM_CMUX_STATE_CONNECTED;
 	modem_cmux_connect_response_transmit(cmux);
 	k_mutex_lock(&cmux->transmit_rb_lock, K_FOREVER);
 	cmux->flow_control_on = true;
 	k_mutex_unlock(&cmux->transmit_rb_lock);
 	modem_cmux_raise_event(cmux, MODEM_CMUX_EVENT_CONNECTED);
+	k_event_clear(&cmux->event, MODEM_CMUX_EVENT_DISCONNECTED_BIT);
+	k_event_post(&cmux->event, MODEM_CMUX_EVENT_CONNECTED_BIT);
 }
 
 static void modem_cmux_on_control_frame(struct modem_cmux *cmux)
 {
 	modem_cmux_log_received_frame(&cmux->frame);
 
-	if (is_connected(cmux) && cmux->frame.cr == cmux->initiator) {
+	if (cmux->state == MODEM_CMUX_STATE_CONNECTED && cmux->frame.cr == cmux->initiator) {
 		LOG_DBG("Received a response frame, dropping");
 		return;
 	}
@@ -1113,7 +1103,7 @@ static void modem_cmux_connect_handler(struct k_work *item)
 	dwork = k_work_delayable_from_work(item);
 	cmux = CONTAINER_OF(dwork, struct modem_cmux, connect_work);
 
-	set_state(cmux, MODEM_CMUX_STATE_CONNECTING);
+	cmux->state = MODEM_CMUX_STATE_CONNECTING;
 	cmux->initiator = true;
 
 	static const struct modem_cmux_frame frame = {
@@ -1136,7 +1126,7 @@ static void modem_cmux_disconnect_handler(struct k_work *item)
 	struct modem_cmux_command *command;
 	uint8_t data[2];
 
-	set_state(cmux, MODEM_CMUX_STATE_DISCONNECTING);
+	cmux->state = MODEM_CMUX_STATE_DISCONNECTING;
 
 	command = modem_cmux_command_wrap(data);
 	command->type.ea = 1;
@@ -1370,6 +1360,7 @@ void modem_cmux_init(struct modem_cmux *cmux, const struct modem_cmux_config *co
 	cmux->receive_buf = config->receive_buf;
 	cmux->receive_buf_size = config->receive_buf_size;
 	sys_slist_init(&cmux->dlcis);
+	cmux->state = MODEM_CMUX_STATE_DISCONNECTED;
 	ring_buf_init(&cmux->transmit_rb, config->transmit_buf_size, config->transmit_buf);
 	k_mutex_init(&cmux->transmit_rb_lock);
 	k_work_init_delayable(&cmux->receive_work, modem_cmux_receive_handler);
@@ -1377,7 +1368,8 @@ void modem_cmux_init(struct modem_cmux *cmux, const struct modem_cmux_config *co
 	k_work_init_delayable(&cmux->connect_work, modem_cmux_connect_handler);
 	k_work_init_delayable(&cmux->disconnect_work, modem_cmux_disconnect_handler);
 	k_event_init(&cmux->event);
-	set_state(cmux, MODEM_CMUX_STATE_DISCONNECTED);
+	k_event_clear(&cmux->event, MODEM_CMUX_EVENT_CONNECTED_BIT);
+	k_event_post(&cmux->event, MODEM_CMUX_EVENT_DISCONNECTED_BIT);
 
 #if CONFIG_MODEM_STATS
 	modem_cmux_init_buf_stats(cmux);
@@ -1439,7 +1431,8 @@ int modem_cmux_connect(struct modem_cmux *cmux)
 		return ret;
 	}
 
-	if (!wait_state(cmux, MODEM_CMUX_STATE_CONNECTED, MODEM_CMUX_T2_TIMEOUT)) {
+	if (k_event_wait(&cmux->event, MODEM_CMUX_EVENT_CONNECTED_BIT, false,
+			 MODEM_CMUX_T2_TIMEOUT) == 0) {
 		return -EAGAIN;
 	}
 
@@ -1450,7 +1443,7 @@ int modem_cmux_connect_async(struct modem_cmux *cmux)
 {
 	int ret = 0;
 
-	if (cmux->state != MODEM_CMUX_STATE_DISCONNECTED) {
+	if (k_event_test(&cmux->event, MODEM_CMUX_EVENT_CONNECTED_BIT)) {
 		return -EALREADY;
 	}
 
@@ -1477,7 +1470,8 @@ int modem_cmux_disconnect(struct modem_cmux *cmux)
 		return ret;
 	}
 
-	if (!wait_state(cmux, MODEM_CMUX_STATE_DISCONNECTED, MODEM_CMUX_T2_TIMEOUT)) {
+	if (k_event_wait(&cmux->event, MODEM_CMUX_EVENT_DISCONNECTED_BIT, false,
+			 MODEM_CMUX_T2_TIMEOUT) == 0) {
 		return -EAGAIN;
 	}
 
@@ -1488,7 +1482,7 @@ int modem_cmux_disconnect_async(struct modem_cmux *cmux)
 {
 	int ret = 0;
 
-	if (cmux->state == MODEM_CMUX_STATE_DISCONNECTED) {
+	if (k_event_test(&cmux->event, MODEM_CMUX_EVENT_DISCONNECTED_BIT)) {
 		return -EALREADY;
 	}
 
@@ -1535,6 +1529,7 @@ void modem_cmux_release(struct modem_cmux *cmux)
 	/* Unreference pipe */
 	cmux->pipe = NULL;
 
-	/* Reset state */
-	set_state(cmux, MODEM_CMUX_STATE_DISCONNECTED);
+	/* Reset events */
+	k_event_clear(&cmux->event, MODEM_CMUX_EVENT_CONNECTED_BIT);
+	k_event_post(&cmux->event, MODEM_CMUX_EVENT_DISCONNECTED_BIT);
 }
