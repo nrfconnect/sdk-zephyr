@@ -248,7 +248,7 @@ typedef struct {
 	size_t transfer_cnt;
 	/** Configured endpoint size. */
 	uint16_t max_packet_size;
-	/** NRF_USBD_COMMON_EP_* - this one is calculated. */
+	/** NRFX_SUCCESS or error code, never NRFX_ERROR_BUSY - this one is calculated. */
 	nrf_usbd_common_ep_status_t status;
 } usbd_ep_state_t;
 
@@ -1096,12 +1096,12 @@ void nrf_usbd_common_irq_handler(void)
 /** @} */
 /** @} */
 
-int nrf_usbd_common_init(nrf_usbd_common_event_handler_t event_handler)
+nrfx_err_t nrf_usbd_common_init(nrf_usbd_common_event_handler_t event_handler)
 {
 	__ASSERT_NO_MSG(event_handler);
 
 	if (m_drv_state != NRFX_DRV_STATE_UNINITIALIZED) {
-		return -EALREADY;
+		return NRFX_ERROR_INVALID_STATE;
 	}
 
 	m_event_handler = event_handler;
@@ -1132,7 +1132,7 @@ int nrf_usbd_common_init(nrf_usbd_common_event_handler_t event_handler)
 		p_state->transfer_cnt = 0;
 	}
 
-	return 0;
+	return NRFX_SUCCESS;
 }
 
 void nrf_usbd_common_uninit(void)
@@ -1458,10 +1458,10 @@ void nrf_usbd_common_ep_disable(nrf_usbd_common_ep_t ep)
 	usbd_int_rise();
 }
 
-int nrf_usbd_common_ep_transfer(nrf_usbd_common_ep_t ep,
+nrfx_err_t nrf_usbd_common_ep_transfer(nrf_usbd_common_ep_t ep,
 				       nrf_usbd_common_transfer_t const *p_transfer)
 {
-	int ret;
+	nrfx_err_t ret;
 	const uint8_t ep_bitpos = ep2bit(ep);
 	unsigned int irq_lock_key = irq_lock();
 
@@ -1469,7 +1469,7 @@ int nrf_usbd_common_ep_transfer(nrf_usbd_common_ep_t ep,
 
 	/* Setup data transaction can go only in one direction at a time */
 	if ((NRF_USBD_COMMON_EP_NUM(ep) == 0) && (ep != m_last_setup_dir)) {
-		ret = -EFAULT;
+		ret = NRFX_ERROR_INVALID_ADDR;
 		if (NRF_USBD_COMMON_FAILED_TRANSFERS_DEBUG &&
 		    (NRF_USBD_COMMON_ISO_DEBUG || (!NRF_USBD_COMMON_EP_IS_ISO(ep)))) {
 			LOG_DBG("Transfer failed: Invalid EPr\n");
@@ -1478,7 +1478,7 @@ int nrf_usbd_common_ep_transfer(nrf_usbd_common_ep_t ep,
 		   (1U << ep_bitpos)) {
 		/* IN (Device -> Host) transfer has to be transmitted out to allow new transmission
 		 */
-		ret = -EBUSY;
+		ret = NRFX_ERROR_BUSY;
 		if (NRF_USBD_COMMON_FAILED_TRANSFERS_DEBUG) {
 			LOG_DBG("Transfer failed: EP is busy");
 		}
@@ -1494,7 +1494,7 @@ int nrf_usbd_common_ep_transfer(nrf_usbd_common_ep_t ep,
 		p_state->transfer_cnt = 0;
 		p_state->status = NRF_USBD_COMMON_EP_OK;
 		m_ep_dma_waiting |= 1U << ep_bitpos;
-		ret = 0;
+		ret = NRFX_SUCCESS;
 		usbd_int_rise();
 	}
 

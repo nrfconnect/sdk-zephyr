@@ -36,17 +36,17 @@ struct i2c_nrfx_twi_config {
 	const struct pinctrl_dev_config *pcfg;
 };
 
-static inline int i2c_nrfx_twi_get_evt_result(nrfx_twi_evt_t const *p_event)
+static inline nrfx_err_t i2c_nrfx_twi_get_evt_result(nrfx_twi_evt_t const *p_event)
 {
 	switch (p_event->type) {
 	case NRFX_TWI_EVT_DONE:
-		return 0;
+		return NRFX_SUCCESS;
 	case NRFX_TWI_EVT_ADDRESS_NACK:
-		__fallthrough;
+		return NRFX_ERROR_DRV_TWI_ERR_ANACK;
 	case NRFX_TWI_EVT_DATA_NACK:
-		return -EIO;
+		return NRFX_ERROR_DRV_TWI_ERR_DNACK;
 	default:
-		return -EINVAL;
+		return NRFX_ERROR_INTERNAL;
 	}
 }
 

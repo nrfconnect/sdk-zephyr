@@ -90,7 +90,7 @@ static int i2c_nrfx_twi_transfer(const struct device *dev,
 			break;
 		}
 
-		if (data->res != 0) {
+		if (data->res != NRFX_SUCCESS) {
 			ret = -EIO;
 			break;
 		}
