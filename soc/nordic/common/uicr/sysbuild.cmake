@@ -8,8 +8,4 @@ ExternalZephyrProject_Add(
 
 # Ensure UICR is configured and built after the default image so EDT/ELFs exist.
 sysbuild_add_dependencies(CONFIGURE uicr ${DEFAULT_IMAGE})
-
 add_dependencies(uicr ${DEFAULT_IMAGE})
-if(DEFINED image)
-  add_dependencies(uicr ${image})
-endif()
