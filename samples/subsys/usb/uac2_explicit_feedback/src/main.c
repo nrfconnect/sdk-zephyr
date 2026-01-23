@@ -20,17 +20,14 @@ LOG_MODULE_REGISTER(uac2_sample, LOG_LEVEL_INF);
 
 #define HEADPHONES_OUT_TERMINAL_ID UAC2_ENTITY_ID(DT_NODELABEL(out_terminal))
 
-#define FS_SAMPLES_PER_SOF  48
-#define HS_SAMPLES_PER_SOF  6
-#define MAX_SAMPLES_PER_SOF MAX(FS_SAMPLES_PER_SOF, HS_SAMPLES_PER_SOF)
-#define SAMPLE_FREQUENCY    (FS_SAMPLES_PER_SOF * 1000)
+#define SAMPLE_FREQUENCY    (SAMPLES_PER_SOF * 1000)
 #define SAMPLE_BIT_WIDTH    16
 #define NUMBER_OF_CHANNELS  2
 #define BYTES_PER_SAMPLE    DIV_ROUND_UP(SAMPLE_BIT_WIDTH, 8)
 #define BYTES_PER_SLOT      (BYTES_PER_SAMPLE * NUMBER_OF_CHANNELS)
-#define MIN_BLOCK_SIZE      ((MAX_SAMPLES_PER_SOF - 1) * BYTES_PER_SLOT)
-#define BLOCK_SIZE          (MAX_SAMPLES_PER_SOF * BYTES_PER_SLOT)
-#define MAX_BLOCK_SIZE      ((MAX_SAMPLES_PER_SOF + 1) * BYTES_PER_SLOT)
+#define MIN_BLOCK_SIZE      ((SAMPLES_PER_SOF - 1) * BYTES_PER_SLOT)
+#define BLOCK_SIZE          (SAMPLES_PER_SOF * BYTES_PER_SLOT)
+#define MAX_BLOCK_SIZE      ((SAMPLES_PER_SOF + 1) * BYTES_PER_SLOT)
 
 /* Absolute minimum is 5 buffers (1 actively consumed by I2S, 2nd queued as next
  * buffer, 3rd acquired by USB stack to receive data to, and 2 to handle SOF/I2S
@@ -45,7 +42,6 @@ struct usb_i2s_ctx {
 	const struct device *i2s_dev;
 	bool terminal_enabled;
 	bool i2s_started;
-	bool microframes;
 	/* Number of blocks written, used to determine when to start I2S.
 	 * Overflows are not a problem becuse this variable is not necessary
 	 * after I2S is started.
@@ -64,15 +60,15 @@ static void uac2_terminal_update_cb(const struct device *dev, uint8_t terminal,
 	 * ignore the terminal variable.
 	 */
 	__ASSERT_NO_MSG(terminal == HEADPHONES_OUT_TERMINAL_ID);
-
-	ctx->microframes = microframes;
+	/* This sample is for Full-Speed only devices. */
+	__ASSERT_NO_MSG(microframes == false);
 
 	ctx->terminal_enabled = enabled;
 	if (ctx->i2s_started && !enabled) {
 		i2s_trigger(ctx->i2s_dev, I2S_DIR_TX, I2S_TRIGGER_DROP);
 		ctx->i2s_started = false;
 		ctx->i2s_blocks_written = 0;
-		feedback_reset_ctx(ctx->fb, ctx->microframes);
+		feedback_reset_ctx(ctx->fb);
 	}
 }
 
@@ -118,11 +114,7 @@ static void uac2_data_recv_cb(const struct device *dev, uint8_t terminal,
 		 * either disable terminal (or the cable will be disconnected)
 		 * which will stop I2S.
 		 */
-		if (USBD_SUPPORTS_HIGH_SPEED && ctx->microframes) {
-			size = HS_SAMPLES_PER_SOF * BYTES_PER_SLOT;
-		} else {
-			size = FS_SAMPLES_PER_SOF * BYTES_PER_SLOT;
-		}
+		size = BLOCK_SIZE;
 		memset(buf, 0, size);
 	}
 
@@ -132,7 +124,7 @@ static void uac2_data_recv_cb(const struct device *dev, uint8_t terminal,
 	if (ret < 0) {
 		ctx->i2s_started = false;
 		ctx->i2s_blocks_written = 0;
-		feedback_reset_ctx(ctx->fb, ctx->microframes);
+		feedback_reset_ctx(ctx->fb);
 
 		/* Most likely underrun occurred, prepare I2S restart */
 		i2s_trigger(ctx->i2s_dev, I2S_DIR_TX, I2S_TRIGGER_PREPARE);
@@ -244,7 +236,7 @@ static void uac2_sof(const struct device *dev, void *user_data)
 	    ctx->i2s_blocks_written >= 2) {
 		i2s_trigger(ctx->i2s_dev, I2S_DIR_TX, I2S_TRIGGER_START);
 		ctx->i2s_started = true;
-		feedback_start(ctx->fb, ctx->i2s_blocks_written, ctx->microframes);
+		feedback_start(ctx->fb, ctx->i2s_blocks_written);
 	}
 }
 
