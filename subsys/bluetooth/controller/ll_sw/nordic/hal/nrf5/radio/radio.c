@@ -2114,14 +2114,10 @@ static void *radio_ccm_ext_rx_pkt_set(struct ccm *cnf, uint8_t phy, uint8_t pdu_
 	NRF_CCM->ENABLE = CCM_ENABLE_ENABLE_Disabled;
 	NRF_CCM->ENABLE = CCM_ENABLE_ENABLE_Enabled;
 
-	/* Select the CCM decryption mode for the SoC */
-#if defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
-	/* NOTE: Use fast decryption as rx data is decrypt after payload is received, compared to
-	 *       decrypting in parallel with radio reception of address in nRF51/nRF52/nRF53.
-	 */
-	mode = (CCM_MODE_MODE_FastDecryption << CCM_MODE_MODE_Pos) &
+	mode = (CCM_MODE_MODE_Decryption << CCM_MODE_MODE_Pos) &
 	       CCM_MODE_MODE_Msk;
 
+#if defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
 	/* Enable CCM Protocol Mode Bluetooth LE */
 	mode |= (CCM_MODE_PROTOCOL_Ble << CCM_MODE_PROTOCOL_Pos) &
 		CCM_MODE_PROTOCOL_Msk;
@@ -2130,30 +2126,21 @@ static void *radio_ccm_ext_rx_pkt_set(struct ccm *cnf, uint8_t phy, uint8_t pdu_
 	mode |= (CCM_MODE_MACLEN_M4 << CCM_MODE_MACLEN_Pos) &
 		CCM_MODE_MACLEN_Msk;
 
-#elif defined(CONFIG_SOC_COMPATIBLE_NRF52X) || defined(CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET)
-	mode = (CCM_MODE_MODE_Decryption << CCM_MODE_MODE_Pos) &
-	       CCM_MODE_MODE_Msk;
-
+#elif !defined(CONFIG_SOC_SERIES_NRF51X)
 	/* Enable CCM support for 8-bit length field PDUs. */
 	mode |= (CCM_MODE_LENGTH_Extended << CCM_MODE_LENGTH_Pos) &
 		CCM_MODE_LENGTH_Msk;
-
-#elif defined(CONFIG_SOC_SERIES_NRF51X)
-	mode = (CCM_MODE_MODE_Decryption << CCM_MODE_MODE_Pos) &
-	       CCM_MODE_MODE_Msk;
-
-#else
-#error "H/w accelerated decryption unsupported."
-#endif
+#endif /* !CONFIG_SOC_SERIES_NRF51X */
 
 	/* Select CCM data rate based on current PHY in use. */
 	switch (phy) {
 	default:
 	case PHY_1M:
-#if !defined(CONFIG_SOC_SERIES_NRF51X) && !defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
-		mode |= (CCM_MODE_DATARATE_1Mbit << CCM_MODE_DATARATE_Pos) &
+#if !defined(CONFIG_SOC_SERIES_NRF51X)
+		mode |= (CCM_MODE_DATARATE_1Mbit <<
+			 CCM_MODE_DATARATE_Pos) &
 			CCM_MODE_DATARATE_Msk;
-#endif /* !CONFIG_SOC_SERIES_NRF51X && !CONFIG_SOC_COMPATIBLE_NRF54LX */
+#endif /* !CONFIG_SOC_SERIES_NRF51X */
 
 		if (false) {
 
@@ -2176,10 +2163,11 @@ static void *radio_ccm_ext_rx_pkt_set(struct ccm *cnf, uint8_t phy, uint8_t pdu_
 		break;
 
 	case PHY_2M:
-#if !defined(CONFIG_SOC_SERIES_NRF51X) && !defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
-		mode |= (CCM_MODE_DATARATE_2Mbit << CCM_MODE_DATARATE_Pos) &
+#if !defined(CONFIG_SOC_SERIES_NRF51X)
+		mode |= (CCM_MODE_DATARATE_2Mbit <<
+			 CCM_MODE_DATARATE_Pos) &
 			CCM_MODE_DATARATE_Msk;
-#endif /* !CONFIG_SOC_SERIES_NRF51X && !CONFIG_SOC_COMPATIBLE_NRF54LX */
+#endif /* !CONFIG_SOC_SERIES_NRF51X */
 
 		hal_trigger_crypt_ppi_config();
 		hal_radio_nrf_ppi_channels_enable(BIT(HAL_TRIGGER_CRYPT_PPI));
@@ -2189,10 +2177,9 @@ static void *radio_ccm_ext_rx_pkt_set(struct ccm *cnf, uint8_t phy, uint8_t pdu_
 #if defined(CONFIG_BT_CTLR_PHY_CODED)
 #if defined(CONFIG_HAS_HW_NRF_RADIO_BLE_CODED)
 	case PHY_CODED:
-#if !defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
-		mode |= (CCM_MODE_DATARATE_125Kbps << CCM_MODE_DATARATE_Pos) &
+		mode |= (CCM_MODE_DATARATE_125Kbps <<
+			 CCM_MODE_DATARATE_Pos) &
 			CCM_MODE_DATARATE_Msk;
-#endif /* !CONFIG_SOC_COMPATIBLE_NRF54LX */
 
 		NRF_CCM->RATEOVERRIDE =
 			(CCM_RATEOVERRIDE_RATEOVERRIDE_500Kbps <<
@@ -2359,11 +2346,22 @@ static void *radio_ccm_ext_tx_pkt_set(struct ccm *cnf, uint8_t pdu_type, void *p
 	NRF_CCM->ENABLE = CCM_ENABLE_ENABLE_Disabled;
 	NRF_CCM->ENABLE = CCM_ENABLE_ENABLE_Enabled;
 
-	/* Select the CCM encryption mode for the SoC */
-#if defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
 	mode = (CCM_MODE_MODE_Encryption << CCM_MODE_MODE_Pos) &
 	       CCM_MODE_MODE_Msk;
 
+#if defined(CONFIG_SOC_COMPATIBLE_NRF52X) || \
+	defined(CONFIG_SOC_COMPATIBLE_NRF53X)
+	/* Enable CCM support for 8-bit length field PDUs. */
+	mode |= (CCM_MODE_LENGTH_Extended << CCM_MODE_LENGTH_Pos) &
+		CCM_MODE_LENGTH_Msk;
+
+	/* NOTE: use fastest data rate as tx data needs to be prepared before
+	 * radio Tx on any PHY.
+	 */
+	mode |= (CCM_MODE_DATARATE_2Mbit << CCM_MODE_DATARATE_Pos) &
+		CCM_MODE_DATARATE_Msk;
+
+#elif defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
 	/* Enable CCM Protocol Mode Bluetooth LE */
 	mode |= (CCM_MODE_PROTOCOL_Ble << CCM_MODE_PROTOCOL_Pos) &
 		CCM_MODE_PROTOCOL_Msk;
@@ -2377,27 +2375,6 @@ static void *radio_ccm_ext_tx_pkt_set(struct ccm *cnf, uint8_t pdu_type, void *p
 	/* Enable CCM MAC Length 4 bytes */
 	mode |= (CCM_MODE_MACLEN_M4 << CCM_MODE_MACLEN_Pos) &
 		CCM_MODE_MACLEN_Msk;
-
-#elif defined(CONFIG_SOC_COMPATIBLE_NRF52X) || defined(CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET)
-	mode = (CCM_MODE_MODE_Encryption << CCM_MODE_MODE_Pos) &
-	       CCM_MODE_MODE_Msk;
-
-	/* Enable CCM support for 8-bit length field PDUs. */
-	mode |= (CCM_MODE_LENGTH_Extended << CCM_MODE_LENGTH_Pos) &
-		CCM_MODE_LENGTH_Msk;
-
-	/* NOTE: use fastest data rate as tx data needs to be prepared before
-	 * radio Tx on any PHY.
-	 */
-	mode |= (CCM_MODE_DATARATE_2Mbit << CCM_MODE_DATARATE_Pos) &
-		CCM_MODE_DATARATE_Msk;
-
-#elif defined(CONFIG_SOC_SERIES_NRF51X)
-	mode = (CCM_MODE_MODE_Encryption << CCM_MODE_MODE_Pos) &
-	       CCM_MODE_MODE_Msk;
-
-#else
-#error "H/w accelerated encryption unsupported."
 #endif
 
 	NRF_CCM->MODE = mode;
