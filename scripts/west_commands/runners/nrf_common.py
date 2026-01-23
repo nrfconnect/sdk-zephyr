@@ -75,10 +75,10 @@ class NrfBinaryRunner(ZephyrBinaryRunner):
                 self.tool_opt += opts
 
     @classmethod
-    def _capabilities(cls, mult_dev_ids=False, dry_run=False):
+    def _capabilities(cls, mult_dev_ids=False):
         return RunnerCaps(commands={'flash'}, dev_id=True,
                           mult_dev_ids=mult_dev_ids, erase=True, reset=True,
-                          tool_opt=True, dry_run=dry_run)
+                          tool_opt=True)
 
     @classmethod
     def _dev_id_help(cls) -> str:
