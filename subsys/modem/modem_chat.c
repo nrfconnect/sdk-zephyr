@@ -15,8 +15,6 @@ LOG_MODULE_REGISTER(modem_chat, CONFIG_MODEM_MODULES_LOG_LEVEL);
 
 #include <zephyr/modem/chat.h>
 
-#include "modem_workqueue.h"
-
 const struct modem_chat_match modem_chat_any_match = MODEM_CHAT_MATCH("", "", NULL);
 const struct modem_chat_match modem_chat_empty_matches[0];
 const struct modem_chat_script_chat modem_chat_empty_script_chats[0];
@@ -129,7 +127,7 @@ static void modem_chat_set_script_send_state(struct modem_chat *chat,
 static void modem_chat_script_send(struct modem_chat *chat)
 {
 	modem_chat_set_script_send_state(chat, MODEM_CHAT_SCRIPT_SEND_STATE_REQUEST);
-	modem_work_submit(&chat->script_send_work);
+	k_work_submit(&chat->script_send_work);
 }
 
 static void modem_chat_script_set_response_matches(struct modem_chat *chat)
@@ -180,7 +178,7 @@ static void modem_chat_script_chat_schedule_send_timeout(struct modem_chat *chat
 {
 	uint16_t timeout = modem_chat_script_chat_get_send_timeout(chat);
 
-	modem_work_schedule(&chat->script_send_timeout_work, K_MSEC(timeout));
+	k_work_schedule(&chat->script_send_timeout_work, K_MSEC(timeout));
 }
 
 static void modem_chat_script_next(struct modem_chat *chat, bool initial)
@@ -235,7 +233,7 @@ static void modem_chat_script_start(struct modem_chat *chat, const struct modem_
 
 	/* Start timeout work if script started */
 	if (chat->script != NULL) {
-		modem_work_schedule(&chat->script_timeout_work, K_SECONDS(chat->script->timeout));
+		k_work_schedule(&chat->script_timeout_work, K_SECONDS(chat->script->timeout));
 	}
 }
 
@@ -744,7 +742,7 @@ static void modem_chat_process_handler(struct k_work *item)
 
 	/* Process data */
 	modem_chat_process_bytes(chat);
-	modem_work_submit(&chat->receive_work);
+	k_work_submit(&chat->receive_work);
 }
 
 static void modem_chat_pipe_callback(struct modem_pipe *pipe, enum modem_pipe_event event,
@@ -754,11 +752,11 @@ static void modem_chat_pipe_callback(struct modem_pipe *pipe, enum modem_pipe_ev
 
 	switch (event) {
 	case MODEM_PIPE_EVENT_RECEIVE_READY:
-		modem_work_submit(&chat->receive_work);
+		k_work_submit(&chat->receive_work);
 		break;
 
 	case MODEM_PIPE_EVENT_TRANSMIT_IDLE:
-		modem_work_submit(&chat->script_send_work);
+		k_work_submit(&chat->script_send_work);
 		break;
 
 	default:
@@ -882,7 +880,7 @@ int modem_chat_run_script_async(struct modem_chat *chat, const struct modem_chat
 	k_sem_reset(&chat->script_stopped_sem);
 
 	chat->pending_script = script;
-	modem_work_submit(&chat->script_run_work);
+	k_work_submit(&chat->script_run_work);
 	return 0;
 }
 
@@ -905,7 +903,7 @@ int modem_chat_run_script(struct modem_chat *chat, const struct modem_chat_scrip
 
 void modem_chat_script_abort(struct modem_chat *chat)
 {
-	modem_work_submit(&chat->script_abort_work);
+	k_work_submit(&chat->script_abort_work);
 }
 
 void modem_chat_release(struct modem_chat *chat)

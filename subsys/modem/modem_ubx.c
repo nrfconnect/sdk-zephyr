@@ -9,8 +9,6 @@
 #include <zephyr/modem/ubx.h>
 #include <zephyr/sys/check.h>
 
-#include "modem_workqueue.h"
-
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(modem_ubx, CONFIG_MODEM_MODULES_LOG_LEVEL);
 
@@ -21,7 +19,7 @@ static void modem_ubx_pipe_callback(struct modem_pipe *pipe,
 	struct modem_ubx *ubx = (struct modem_ubx *)user_data;
 
 	if (event == MODEM_PIPE_EVENT_RECEIVE_READY) {
-		modem_work_submit(&ubx->process_work);
+		k_work_submit(&ubx->process_work);
 	}
 }
 
