@@ -180,11 +180,7 @@
   - "modules/mbedtls/**/*"
 
 "CI-fem-test":
-  - "boards/nordic/nrf21540dk*"
-  - "boards/nordic/nrf52833dk*"
-  - "boards/nordic/nrf52840dk*"
-  - "boards/nordic/nrf5340dk*"
-  - "boards/nordic/nrf54l*"
+  - "boards/nordic/**/*"
   - "drivers/bluetooth/hci/**/*"
   - "drivers/entropy/**/*"
   - "dts/bindings/**/*"
