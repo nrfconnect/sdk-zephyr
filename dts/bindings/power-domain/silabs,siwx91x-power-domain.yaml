@@ -1,5 +1,0 @@
-description: Silabs siwx91x soc power domain
-
-compatible: "silabs,siwx91x-power-domain"
-
-include: power-domain.yaml
