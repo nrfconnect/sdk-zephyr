@@ -525,7 +525,7 @@ static void state_transition_work_handler(struct k_work *work)
 		err = ase_state_notify(ase);
 		if (err == -ENOMEM) {
 			struct bt_conn_info info;
-			uint32_t retry_delay_us;
+			uint32_t retry_delay_ms;
 
 			/* Revert back to old state */
 			ase->ep.state = old_state;
@@ -533,14 +533,14 @@ static void state_transition_work_handler(struct k_work *work)
 			err = bt_conn_get_info(ase->conn, &info);
 			__ASSERT_NO_MSG(err == 0);
 
-			retry_delay_us = info.le.interval_us;
+			retry_delay_ms = BT_CONN_INTERVAL_TO_MS(info.le.interval);
 
 			/* Reschedule the state transition */
-			err = k_work_reschedule(d_work, K_USEC(retry_delay_us));
+			err = k_work_reschedule(d_work, K_MSEC(retry_delay_ms));
 			if (err >= 0) {
 				LOG_DBG("Out of buffers for ase state notification. "
-					"Will retry in %dus",
-					retry_delay_us);
+					"Will retry in %dms",
+					retry_delay_ms);
 				return;
 			}
 		}

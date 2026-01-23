@@ -1005,7 +1005,7 @@ fail:
 		LOG_DBG("Notify failed (%d), retrying next connection interval", err);
 reschedule:
 		err = k_work_reschedule(&inst->notify_work,
-					K_USEC(info.le.interval_us));
+					K_USEC(BT_CONN_INTERVAL_TO_US(info.le.interval)));
 		__ASSERT(err >= 0, "Failed to reschedule work: %d", err);
 	}
 
