@@ -9,7 +9,3 @@
 		sample-clock = &lfclk;
 	};
 };
-
-&lfclk {
-	status = "okay";
-};
