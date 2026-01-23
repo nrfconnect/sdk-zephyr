@@ -115,9 +115,7 @@
   - any:
       - "drivers/bluetooth/**/*"
   - any:
-      - "dts/arm/nordic/nrf52*"
-      - "dts/arm/nordic/nrf53*"
-      - "dts/arm/nordic/nrf54*"
+      - "dts/arm/nordic/nrf5*"
   - any:
       - "subsys/bluetooth/**/*"
       - "!subsys/bluetooth/mesh/**/*"
@@ -125,6 +123,7 @@
   - any:
       - "include/zephyr/bluetooth/**/*"
       - "!include/zephyr/bluetooth/mesh/**/*"
+  - "samples/bluetooth/**/*"
 
 "CI-mesh-test":
   - "subsys/bluetooth/mesh/**/*"
