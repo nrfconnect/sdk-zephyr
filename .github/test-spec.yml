@@ -345,12 +345,7 @@
   - "include/dfu/**/*"
   - "include/mgmt/mcumgr/**/*"
   - "samples/bluetooth/hci_ipc/**/*"
-  - any:
-      - "soc/nordic/**/*"
-      - "!soc/nordic/nrf51*"
-      - "!soc/nordic/nrf52*"
-      - "!soc/nordic/nrf54*"
-      - "!soc/nordic/nrf9*"
+  - "soc/nordic/**/*"
   - "subsys/bluetooth/audio/**/*"
   - "subsys/bluetooth/host/**/*"
   - "subsys/dfu/**/*"
