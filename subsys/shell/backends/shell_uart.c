@@ -13,7 +13,6 @@
 #include <zephyr/init.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net_buf.h>
-#include <zephyr/pm/device_runtime.h>
 
 #define LOG_MODULE_NAME shell_uart
 LOG_MODULE_REGISTER(shell_uart);
@@ -291,7 +290,6 @@ static int init(const struct shell_transport *transport,
 		void *context)
 {
 	struct shell_uart_common *common = (struct shell_uart_common *)transport->ctx;
-	int ret;
 
 	common->dev = (const struct device *)config;
 	common->handler = evt_handler;
@@ -301,11 +299,6 @@ static int init(const struct shell_transport *transport,
 	common->smp.buf_pool = &smp_shell_rx_pool;
 	k_fifo_init(&common->smp.buf_ready);
 #endif
-
-	ret = pm_device_runtime_get(common->dev);
-	if (ret < 0) {
-		return ret;
-	}
 
 	if (IS_ENABLED(CONFIG_SHELL_BACKEND_SERIAL_API_ASYNC)) {
 		async_init((struct shell_uart_async *)transport->ctx);
@@ -338,8 +331,6 @@ static void polling_uninit(struct shell_uart_polling *sh_uart)
 
 static int uninit(const struct shell_transport *transport)
 {
-	struct shell_uart_common *common = (struct shell_uart_common *)transport->ctx;
-
 	if (IS_ENABLED(CONFIG_SHELL_BACKEND_SERIAL_API_ASYNC)) {
 		async_uninit((struct shell_uart_async *)transport->ctx);
 	} else if (IS_ENABLED(CONFIG_SHELL_BACKEND_SERIAL_API_INTERRUPT_DRIVEN)) {
@@ -348,7 +339,7 @@ static int uninit(const struct shell_transport *transport)
 		polling_uninit((struct shell_uart_polling *)transport->ctx);
 	}
 
-	return pm_device_runtime_put(common->dev);
+	return 0;
 }
 
 static int enable(const struct shell_transport *transport, bool blocking_tx)
