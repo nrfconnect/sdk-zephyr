@@ -10,13 +10,9 @@
 
 #ifdef OOB_AUTH_ENABLE
 
-static int output_numeric(bt_mesh_output_action_t action, uint8_t *numeric, size_t size)
+static int output_number(bt_mesh_output_action_t action, uint32_t number)
 {
-	uint64_t number = 0ull;
-
-	sys_get_le(&number, numeric, size);
-
-	printk("OOB Number %06" PRIu64 "\n", number);
+	printk("OOB Number: %u\n", number);
 	return 0;
 }
 
@@ -46,7 +42,7 @@ static const struct bt_mesh_prov prov = {
 
 	.output_size = 6,
 	.output_actions = BT_MESH_DISPLAY_NUMBER | BT_MESH_DISPLAY_STRING,
-	.output_numeric = output_numeric,
+	.output_number = output_number,
 	.output_string = output_string,
 
 #endif
