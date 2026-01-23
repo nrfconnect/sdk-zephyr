@@ -57,15 +57,8 @@ typedef void (*modem_cmux_callback)(struct modem_cmux *cmux, enum modem_cmux_eve
  * @cond INTERNAL_HIDDEN
  */
 
-#if CONFIG_MODEM_CMUX_MTU > 127
-#define MODEM_CMUX_HEADER_SIZE			7
-#else
-#define MODEM_CMUX_HEADER_SIZE			6
-#endif
-
-
 /* Total size of the CMUX work buffers */
-#define MODEM_CMUX_WORK_BUFFER_SIZE (CONFIG_MODEM_CMUX_MTU + MODEM_CMUX_HEADER_SIZE + \
+#define MODEM_CMUX_WORK_BUFFER_SIZE (CONFIG_MODEM_CMUX_MTU + 7 + \
 				     CONFIG_MODEM_CMUX_WORK_BUFFER_SIZE_EXTRA)
 
 enum modem_cmux_state {
