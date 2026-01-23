@@ -200,9 +200,7 @@ if(DEFINED uicr_path)
 
   dt_prop(gpio_as_nreset PATH ${uicr_path} PROPERTY "gpio-as-nreset")
   if(${gpio_as_nreset})
-    zephyr_library_compile_definitions(
-      NRF_CONFIG_GPIO_AS_PINRESET
-    )
+    zephyr_library_compile_definitions(CONFIG_GPIO_AS_PINRESET)
   endif()
 endif()
 
