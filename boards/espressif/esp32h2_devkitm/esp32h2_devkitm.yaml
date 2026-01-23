@@ -6,9 +6,17 @@ arch: riscv
 toolchain:
   - zephyr
 supported:
+  - adc
   - gpio
   - watchdog
   - uart
+  - dma
+  - pwm
+  - spi
   - counter
   - entropy
-  - spi
+  - i2c
+  - i2s
+  - netif:openthread
+  - crypto
+  - retained_mem

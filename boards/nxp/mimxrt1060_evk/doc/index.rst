@@ -105,6 +105,19 @@ Supported Features
    Zephyr.  Therefore, the mimxrt1064_evk board may have additional features
    already supported, which can also be re-used on this mimxrt1060_evk board.
 
+Shields for Supported Features
+==============================
+
+Some features in the table above are tested with Zephyr shields.  These shields
+are tested on this board:
+
+- :ref:`nxp_m2_wifi_bt` - Rev C version is tested with this shield to attach any M.2 module
+  with BT HCI UART interface and Wi-Fi SDIO interface. The shield binds the required NXP
+  HCI driver or SDIO driver to perform firmware-load and other setup configurations
+  for NXP SoC IW416/IW612/IW610.
+- :ref:`rk043fn02h_ct` and :ref:`rk043fn66hs_ctg` - support the Display interface.
+- :ref:`dvp_fpc24_mt9m114` - supports the CSI video/camera interface.
+
 Connections and I/Os
 ====================
 
@@ -344,8 +357,7 @@ DFU jumper to boot the on board debugger to ISP mode.
   * Debugger choice jumper: JP5
   * DFU mode jumper: JP3
 
-.. include:: ../../common/rt1xxx-lpclink2-debug.rst
-   :start-after: rt1xxx-lpclink2-probes
+.. include:: ../../common/rt1xxx-lpclink2-debug.rst.inc
 
 See `Using J-Link with MIMXRT1060-EVK or MIMXRT1064-EVK`_ or `Using J-Link with
 MIMXRT1060-EVKB`_ for more details.
@@ -447,14 +459,6 @@ should see the following message in the terminal:
    ***** Booting Zephyr OS v1.14.0-rc1 *****
    Hello World! mimxrt1060_evk//qspi
 
-Shield for M.2 Wi-Fi and BT Interface
-=====================================
-
-Rev C version is tested with :ref:`nxp_m2_wifi_bt` shield to attach any M.2 module
-with BT HCI UART interface and Wi-Fi SDIO interface. The shield binds the required NXP
-HCI driver or SDIO driver to perform firmware-load and other setup configurations
-for NXP SoC IW416/IW612/IW610.
-
 Troubleshooting
 ===============
 
@@ -490,8 +494,7 @@ If the west flash or debug commands fail, and the command hangs while executing
 runners.jlink, confirm the J-Link debug probe is configured, powered, and
 connected to the EVK properly.
 
-.. include:: ../../common/board-footer.rst
-   :start-after: nxp-board-footer
+.. include:: ../../common/board-footer.rst.inc
 
 .. _MIMXRT1060-EVK Website:
    https://www.nxp.com/design/development-boards/i-mx-evaluation-and-development-boards/i-mx-rt1060-evaluation-kit:MIMXRT1060-EVKB

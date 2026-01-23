@@ -21,6 +21,11 @@
 	aliases {
 		i2c-0 = &i2c0;
 		watchdog0 = &wdt0;
+		uart-0 = &uart0;
+		sw0 = &button0;
+		led0 = &led0;
+		led-strip = &led_strip;
+		fuel-gauge0 = &max17048;
 	};
 
 	chosen {
@@ -32,17 +37,9 @@
 		zephyr,bt-hci = &esp32_bt_hci;
 	};
 
-	/* These aliases are provided for compatibility with samples */
-	aliases {
-		uart-0 = &uart0;
-		sw0 = &button0;
-		led0 = &led0;
-		led-strip = &led_strip;
-		fuel-gauge0 = &max17048;
-	};
-
 	buttons {
 		compatible = "gpio-keys";
+
 		button0: button_0 {
 			gpios = <&gpio0 0 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
 			label = "BOOT Button";
@@ -52,6 +49,7 @@
 
 	leds {
 		compatible = "gpio-leds";
+
 		led0: led_0 {
 			gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
 		};

@@ -27,23 +27,26 @@
 /* clang-format off */
 #define MCHP_PORT_ADDR_OR_NONE(nodelabel)                              \
 	IF_ENABLED(DT_NODE_EXISTS(DT_NODELABEL(nodelabel)),            \
-		(DT_REG_ADDR(DT_NODELABEL(nodelabel))))
-/* clang-format on */
+		(DT_REG_ADDR(DT_NODELABEL(nodelabel)),))
 
 /**
- * @brief Array of port addresses for the MCHP SAMD5x_E5x series.
+ * @brief Array of port addresses for the MCHP G1 series.
  *
  * This array contains the register addresses of the ports (PORTA, PORTB, PORTC, and PORTD)
- * for the MCHP SAMD5x_E5x series microcontrollers. The addresses are obtained using the
+ * for the MCHP G1 series port peripheral. The addresses are obtained using the
  * MCHP_PORT_ADDR_OR_NONE macro, which ensures that only existing ports are included.
- * This can be updated for other devices using conditional comiplation directives
+ * This can be updated for other devices using conditional compilation directives
  */
 static const uint32_t mchp_port_addrs[] = {
-	MCHP_PORT_ADDR_OR_NONE(porta),
-	MCHP_PORT_ADDR_OR_NONE(portb),
-	MCHP_PORT_ADDR_OR_NONE(portc),
-	MCHP_PORT_ADDR_OR_NONE(portd),
+	MCHP_PORT_ADDR_OR_NONE(porta)
+	MCHP_PORT_ADDR_OR_NONE(portb)
+	MCHP_PORT_ADDR_OR_NONE(portc)
+	MCHP_PORT_ADDR_OR_NONE(portd)
+	MCHP_PORT_ADDR_OR_NONE(porte)
+	MCHP_PORT_ADDR_OR_NONE(portf)
+	MCHP_PORT_ADDR_OR_NONE(portg)
 };
+/* clang-format on */
 
 /**
  * @brief Set pinmux registers using odd/even logic
@@ -130,13 +133,35 @@ static void pinctrl_set_flags(const pinctrl_soc_pin_t *pin)
 		} else {
 			pRegister->PORT_DIR &= ~(1 << pin_num);
 		}
+#ifdef CONFIG_PIN_OPEN_DRAIN
+		if ((pin->pinflag & MCHP_PINCTRL_OPENDRAIN) != 0) {
+			pRegister->PORT_PINCFG[pin_num] |= PORT_PINCFG_ODRAIN(1);
+		} else {
+			pRegister->PORT_PINCFG[pin_num] &= ~PORT_PINCFG_ODRAIN(1);
+		}
+#endif /* CONFIG_PIN_OPEN_DRAIN */
 
+#ifdef CONFIG_PIN_SLEW_RATE
+		uint8_t slewrate_val = 0U;
+
+		if ((pin->pinflag & MCHP_PINCTRL_SLEWRATE) != 0) {
+			/* Extract Slew Rate Value from pinflag and update the register */
+			slewrate_val =
+				(pin->pinflag & MCHP_PINCTRL_SLEWRATE) >> MCHP_PINCTRL_SLEWRATE_POS;
+		}
+		pRegister->PORT_PINCFG[pin_num] =
+			(pRegister->PORT_PINCFG[pin_num] & ~PORT_PINCFG_SLEWLIM_Msk) |
+			PORT_PINCFG_SLEWLIM(slewrate_val);
+#endif /* CONFIG_PIN_SLEW_RATE */
+
+#ifdef CONFIG_PIN_DRIVE_STRENGTH
 		/* if drive strength is enabled, set the corresponding bit in PORT_PINCFG reg */
 		if ((pin->pinflag & MCHP_PINCTRL_DRIVESTRENGTH) != 0) {
 			pRegister->PORT_PINCFG[pin_num] |= PORT_PINCFG_DRVSTR(1);
 		} else {
 			pRegister->PORT_PINCFG[pin_num] &= ~PORT_PINCFG_DRVSTR(1);
 		}
+#endif /* CONFIG_PIN_DRIVE_STRENGTH */
 	}
 }
 

@@ -26,7 +26,7 @@
  * @brief Interfaces for MIPI-DBI (Display Bus Interface).
  * @defgroup mipi_dbi_interface MIPI-DBI
  * @since 3.6
- * @version 0.8.0
+ * @version 1.0.0
  * @ingroup display_interface
  * @{
  */
@@ -40,6 +40,19 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/** @cond INTERNAL_HIDDEN */
+#define MIPI_DBI_DT_SPI_DEV(node_id)					\
+	DT_PHANDLE(DT_PARENT(node_id), spi_dev)
+
+#define MIPI_DBI_SPI_CS_GPIOS_DT_SPEC_GET(node_id)			\
+	GPIO_DT_SPEC_GET_BY_IDX_OR(MIPI_DBI_DT_SPI_DEV(node_id),	\
+		cs_gpios, DT_REG_ADDR_RAW(node_id), {})
+
+#define MIPI_DBI_SPI_CS_CONTROL_INIT_GPIO(node_id, delay_)		\
+	.gpio = MIPI_DBI_SPI_CS_GPIOS_DT_SPEC_GET(node_id),		\
+	.delay = delay_,
+/** @endcond */
 
 /**
  * @brief initialize a MIPI DBI SPI configuration struct from devicetree
@@ -61,13 +74,12 @@ extern "C" {
 			COND_CODE_1(DT_PROP(node_id, mipi_cpha), SPI_MODE_CPHA, (0)) |	\
 			COND_CODE_1(DT_PROP(node_id, mipi_hold_cs), SPI_HOLD_ON_CS, (0)),	\
 		.slave = DT_REG_ADDR(node_id),				\
-		.cs = {							\
-			.gpio = GPIO_DT_SPEC_GET_BY_IDX_OR(DT_PHANDLE(DT_PARENT(node_id), \
-							   spi_dev), cs_gpios, \
-							   DT_REG_ADDR_RAW(node_id), \
-							   {}),		\
-			.delay = (delay_),				\
-		},							\
+		.cs = {									\
+			COND_CODE_1(DT_SPI_HAS_CS_GPIOS(MIPI_DBI_DT_SPI_DEV(node_id)),	\
+			(MIPI_DBI_SPI_CS_CONTROL_INIT_GPIO(node_id, delay_)),		\
+			(SPI_CS_CONTROL_INIT_NATIVE(node_id)))				\
+			.cs_is_gpio = DT_SPI_HAS_CS_GPIOS(MIPI_DBI_DT_SPI_DEV(node_id)),\
+		},									\
 	}
 
 /**
@@ -145,6 +157,8 @@ extern "C" {
 struct mipi_dbi_config {
 	/** MIPI DBI mode */
 	uint8_t mode;
+	/** MIPI DBI color coding for Type A or Type B(6800/8080) interface. */
+	uint8_t color_coding;
 	/** SPI configuration */
 	struct spi_config config;
 };

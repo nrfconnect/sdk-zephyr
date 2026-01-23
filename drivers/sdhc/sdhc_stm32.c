@@ -6,6 +6,7 @@
 
 #define DT_DRV_COMPAT st_stm32_sdio
 
+#include <stm32_bitops.h>
 #include <zephyr/cache.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
@@ -333,6 +334,12 @@ static int sdhc_stm32_rw_extended(const struct device *dev, struct sdhc_command 
 	}
 
 	if (!IS_ENABLED(CONFIG_SDHC_STM32_POLLING_SUPPORT)) {
+		/* Only wait on semaphore if HAL function succeeded */
+		if (res != HAL_OK) {
+			k_free(dev_data->sdio_dma_buf);
+			return -EIO;
+		}
+
 		/* Wait for whole transfer to complete */
 		if (k_sem_take(&dev_data->device_sync_sem, K_MSEC(CONFIG_SD_CMD_TIMEOUT)) != 0) {
 			k_free(dev_data->sdio_dma_buf);
@@ -517,7 +524,8 @@ static int sdhc_stm32_set_io(const struct device *dev, struct sdhc_io *ios)
 			bus_width_reg_value = SDMMC_BUS_WIDE_1B;
 		}
 
-		MODIFY_REG(config->hsd->Instance->CLKCR, SDMMC_CLKCR_WIDBUS, bus_width_reg_value);
+		stm32_reg_modify_bits(&config->hsd->Instance->CLKCR, SDMMC_CLKCR_WIDBUS,
+				      bus_width_reg_value);
 		host_io->bus_width = ios->bus_width;
 	}
 

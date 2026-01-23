@@ -31,13 +31,13 @@ static void rtio_executor_sqe_signaled(struct rtio_iodev_sqe *iodev_sqe, void *u
 /**
  * @brief Executor handled submissions
  */
-static void rtio_executor_op(struct rtio_iodev_sqe *iodev_sqe)
+static void rtio_executor_op(struct rtio_iodev_sqe *iodev_sqe, int last_result)
 {
 	const struct rtio_sqe *sqe = &iodev_sqe->sqe;
 
 	switch (sqe->op) {
 	case RTIO_OP_CALLBACK:
-		sqe->callback.callback(iodev_sqe->r, sqe, sqe->callback.arg0);
+		sqe->callback.callback(iodev_sqe->r, sqe, last_result, sqe->callback.arg0);
 		rtio_iodev_sqe_ok(iodev_sqe, 0);
 		break;
 	case RTIO_OP_DELAY:
@@ -59,7 +59,7 @@ static void rtio_executor_op(struct rtio_iodev_sqe *iodev_sqe)
  *
  * @param iodev_sqe Submission to work on
  */
-static inline void rtio_iodev_submit(struct rtio_iodev_sqe *iodev_sqe)
+static inline void rtio_iodev_submit(struct rtio_iodev_sqe *iodev_sqe, int last_result)
 {
 	if (FIELD_GET(RTIO_SQE_CANCELED, iodev_sqe->sqe.flags)) {
 		rtio_iodev_sqe_err(iodev_sqe, -ECANCELED);
@@ -68,7 +68,7 @@ static inline void rtio_iodev_submit(struct rtio_iodev_sqe *iodev_sqe)
 
 	/* No iodev means its an executor specific operation */
 	if (iodev_sqe->sqe.iodev == NULL) {
-		rtio_executor_op(iodev_sqe);
+		rtio_executor_op(iodev_sqe, last_result);
 		return;
 	}
 
@@ -135,7 +135,7 @@ void rtio_executor_submit(struct rtio *r)
 		curr->next = NULL;
 		curr->r = r;
 
-		rtio_iodev_submit(iodev_sqe);
+		rtio_iodev_submit(iodev_sqe, 0);
 
 		node = mpsc_pop(&r->sq);
 	}
@@ -158,12 +158,6 @@ static inline void rtio_executor_handle_multishot(struct rtio_iodev_sqe *iodev_s
 	uint32_t cqe_flags = rtio_cqe_compute_flags(iodev_sqe);
 	void *userdata = iodev_sqe->sqe.userdata;
 
-	if (iodev_sqe->sqe.op == RTIO_OP_RX && uses_mempool) {
-		/* Reset the buffer info so the next request can get a new one */
-		iodev_sqe->sqe.rx.buf = NULL;
-		iodev_sqe->sqe.rx.buf_len = 0;
-	}
-
 	/** We're releasing reasources when erroring as an error handling scheme of multi-shot
 	 * submissions by requiring to stop re-submitting if something goes wrong. Let the
 	 * application decide what's best for handling the corresponding error: whether
@@ -176,6 +170,12 @@ static inline void rtio_executor_handle_multishot(struct rtio_iodev_sqe *iodev_s
 		rtio_sqe_pool_free(r->sqe_pool, iodev_sqe);
 	} else {
 		/* Request was not canceled, put the SQE back in the queue */
+		if (iodev_sqe->sqe.op == RTIO_OP_RX && uses_mempool) {
+			/* Reset the buffer info so the next request can get a new one */
+			iodev_sqe->sqe.rx.buf = NULL;
+			iodev_sqe->sqe.rx.buf_len = 0;
+		}
+
 		mpsc_push(&r->sq, &iodev_sqe->q);
 		rtio_executor_submit(r);
 	}
@@ -193,12 +193,13 @@ static inline void rtio_executor_handle_multishot(struct rtio_iodev_sqe *iodev_s
  * @param[in] is_ok Whether or not the SQE's result was successful
  */
 static inline void rtio_executor_handle_oneshot(struct rtio_iodev_sqe *iodev_sqe,
-						int result, bool is_ok)
+						int last_result, bool is_ok)
 {
 	const bool is_canceled = FIELD_GET(RTIO_SQE_CANCELED, iodev_sqe->sqe.flags) == 1;
 	struct rtio_iodev_sqe *curr = iodev_sqe;
 	struct rtio *r = iodev_sqe->r;
 	uint32_t sqe_flags;
+	int result = last_result;
 
 	/** Single-shot items may be linked as transactions or be chained together.
 	 * Untangle the set of SQEs and act accordingly on each one.
@@ -226,7 +227,7 @@ static inline void rtio_executor_handle_oneshot(struct rtio_iodev_sqe *iodev_sqe
 
 	/* curr should now be the last sqe in the transaction if that is what completed */
 	if (FIELD_GET(RTIO_SQE_CHAINED, sqe_flags) == 1) {
-		rtio_iodev_submit(curr);
+		rtio_iodev_submit(curr, last_result);
 	}
 }
 

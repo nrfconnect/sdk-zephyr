@@ -7,6 +7,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import collections
 import copy
+import glob
 import itertools
 import json
 import logging
@@ -15,6 +16,7 @@ import random
 import re
 import subprocess
 import sys
+import time
 from argparse import Namespace
 from collections import OrderedDict
 from itertools import islice
@@ -35,7 +37,6 @@ from twisterlib.quarantine import Quarantine
 from twisterlib.statuses import TwisterStatus
 from twisterlib.testinstance import TestInstance
 from twisterlib.testsuite import TestSuite, scan_testsuite_path
-from zephyr_module import parse_modules
 
 logger = logging.getLogger('twister')
 
@@ -175,7 +176,7 @@ class TestPlan:
         self.selected_platforms = []
         self.default_platforms = []
         self.load_errors = 0
-        self.instances = dict()
+        self.instances: dict[str, TestInstance] = {}
         self.instance_fail_count = 0
         self.warnings = 0
 
@@ -184,7 +185,7 @@ class TestPlan:
         self.hwm = env.hwm
         # used during creating shorter build paths
         self.link_dir_counter = 0
-        self.modules = []
+        self.modules = [module.get('name') for module in self.env.modules]
 
         self.run_individual_testsuite = []
         self.levels = []
@@ -208,7 +209,6 @@ class TestPlan:
                 raise TwisterRuntimeError("Tests not found")
 
     def discover(self):
-        self.handle_modules()
         self.test_config = TestConfiguration(self.env.test_config)
 
         self.add_configurations()
@@ -363,21 +363,11 @@ class TestPlan:
             self.instances.update(errors)
 
 
-    def handle_modules(self):
-        # get all enabled west projects
-        modules_meta = parse_modules(ZEPHYR_BASE)
-        self.modules = [module.meta.get('name') for module in modules_meta]
-
-
     def report(self):
         if self.options.test_tree:
-            if not self.options.detailed_test_id:
-                logger.info("Test tree is always shown with detailed test-id.")
             self.report_test_tree()
             return 0
         elif self.options.list_tests:
-            if not self.options.detailed_test_id:
-                logger.info("Test list is always shown with detailed test-id.")
             self.report_test_list()
             return 0
         elif self.options.list_tags:
@@ -499,18 +489,18 @@ class TestPlan:
             for _, ts in self.testsuites.items():
                 if ts.tags.intersection(tag_filter):
                     for case in ts.testcases:
-                        testcases.append(case.detailed_name)
+                        testcases.append(case.name)
         else:
             for _, ts in self.testsuites.items():
                 for case in ts.testcases:
-                    testcases.append(case.detailed_name)
+                    testcases.append(case.name)
 
         if exclude_tag := self.options.exclude_tag:
             for _, ts in self.testsuites.items():
                 if ts.tags.intersection(exclude_tag):
                     for case in ts.testcases:
-                        if case.detailed_name in testcases:
-                            testcases.remove(case.detailed_name)
+                        if case.name in testcases:
+                            testcases.remove(case.name)
         return testcases
 
     def _is_testsuite_selected(self, suite: TestSuite, testsuite_filter, testsuite_patterns_r):
@@ -587,6 +577,11 @@ class TestPlan:
                             detailed_test_id=self.options.detailed_test_id
                         )
 
+                        if not self._is_testsuite_selected(suite, testsuite_filter,
+                                                       testsuite_patterns_r):
+                            # skip testsuite if they were not selected directly by the user
+                            continue
+
                         # convert to fully qualified names
                         suite.integration_platforms = self.verify_platforms_existence(
                                 suite.integration_platforms,
@@ -606,10 +601,6 @@ class TestPlan:
                         else:
                             suite.add_subcases(suite_dict)
 
-                        if not self._is_testsuite_selected(suite, testsuite_filter,
-                                                       testsuite_patterns_r):
-                            # skip testsuite if they were not selected directly by the user
-                            continue
                         if suite.name in self.testsuites:
                             msg = (
                                 f"test suite '{suite.name}' in '{suite.yamlfile}' is already added"
@@ -744,6 +735,7 @@ class TestPlan:
         except FileNotFoundError as e:
             logger.error(f"{e}")
             return 1
+        self.apply_changes_for_required_applications()
 
     def check_platform(self, platform, platform_list):
         return any(p in platform.aliases for p in platform_list)
@@ -828,6 +820,7 @@ class TestPlan:
         integration_mode_list = test_config_options.get('integration_mode', [])
 
         logger.info("Building initial testsuite list...")
+        build_list_start = time.time()
 
         keyed_tests = {}
         for _, ts in self.testsuites.items():
@@ -1192,6 +1185,8 @@ class TestPlan:
             else:
                 self.add_instances(instance_list)
 
+        self.apply_changes_for_required_applications()
+
         for _, case in self.instances.items():
             # Do not create files for filtered instances
             if case.status == TwisterStatus.FILTER:
@@ -1215,6 +1210,137 @@ class TestPlan:
         for inst in filtered_and_skipped_instances:
             change_skip_to_error_if_integration(self.options, inst)
             inst.add_missing_case_status(inst.status)
+
+        build_list_duration = time.time() - build_list_start
+        logger.info(f"Built testsuite list in {build_list_duration:.2f} seconds")
+
+    def _should_instance_be_processed(self, instance: TestInstance) -> bool:
+        """Check if instance will be added to processing queue by runner."""
+        # Based on add_tasks_to_queue from runner.py,
+        # removed FILTER status to process HW with build_only
+        do_not_process = [
+            TwisterStatus.PASS,
+            TwisterStatus.SKIP,
+            TwisterStatus.NOTRUN
+        ]
+        if not self.options.retry_build_errors:
+            do_not_process.append(TwisterStatus.ERROR)
+
+        return instance.status not in do_not_process
+
+    def _find_required_instance(self, required_app, instance: TestInstance) -> TestInstance | None:
+        if req_platform := required_app.get("platform", None):
+            platform = self.get_platform(req_platform)
+            if not platform:
+                raise TwisterRuntimeError(
+                    f"Unknown platform {req_platform} in required application"
+                )
+            req_platform = platform.name
+        else:
+            req_platform = instance.platform.name
+
+        for inst in self.instances.values():
+            if required_app["name"] == inst.testsuite.id and req_platform == inst.platform.name:
+                if self._should_instance_be_processed(inst):
+                    return inst
+                break
+        return None
+
+    def _find_required_application_in_outdir(self, required_app,
+                                             instance: TestInstance) -> str | None:
+        """Check if required application exists in build directory."""
+        if not (
+            self.options.no_clean
+            or self.options.only_failed
+            or self.options.test_only
+            or self.options.report_summary
+        ):
+            return None
+
+        if platform := required_app.get("platform", None):
+            platform = self.get_platform(platform)
+        else:
+            platform = instance.platform
+        name = required_app["name"]
+        glob_pattern = f"{self.options.outdir}/{platform.normalized_name}/**/{name}"
+        build_dirs = glob.glob(glob_pattern, recursive=True)
+        if not build_dirs:
+            return None
+        if not os.path.exists(os.path.join(build_dirs[0], "zephyr")):
+            # application was only pre-built
+            return None
+        logger.debug(f"Found existing build directory for required app: {build_dirs[0]}")
+        return build_dirs[0]
+
+    def apply_changes_for_required_applications(self) -> None:
+        # check if required applications are in scope
+        for instance in self.instances.values():
+            if not instance.testsuite.required_applications:
+                continue
+            if instance.status == TwisterStatus.FILTER:
+                # do not proceed if the test is already filtered
+                continue
+
+            if self.options.subset:
+                instance.add_filter("Required applications are not supported with --subsets",
+                                    Filters.CMD_LINE)
+                continue
+
+            if self.options.runtime_artifact_cleanup:
+                instance.add_filter(
+                    "Required applications are not supported with --runtime-artifact-cleanup",
+                    Filters.CMD_LINE
+                )
+                continue
+
+            for required_app in instance.testsuite.required_applications:
+                req_instance = self._find_required_instance(required_app, instance)
+                if not req_instance:
+                    # check if required application exists in build directory
+                    if req_build_dir := self._find_required_application_in_outdir(
+                        required_app,
+                        instance
+                    ):
+                        # keep path to required build directory to use it in harness module
+                        instance.required_build_dirs.append(req_build_dir)
+                        continue
+
+                    instance.add_filter(f"Missing required application {required_app['name']}",
+                                        Filters.TESTSUITE)
+                    logger.debug(
+                        f"{instance.name}: Required application '{required_app['name']}' was not"
+                        " found. Please verify if required test is provided with --testsuite-root"
+                        " or build all required applications and rerun twister with --no-cleanup"
+                        " option."
+                    )
+                    break
+
+                if req_instance.status == TwisterStatus.FILTER:
+                    # check if required application is filtered because is not runnable
+                    if (
+                        self.options.device_testing
+                        and not req_instance.run
+                        and len(req_instance.filters) == 1
+                        and req_instance.reason == "Not runnable on device"
+                    ):
+                        # clear status flag to build required application
+                        self.instances[req_instance.name].status = TwisterStatus.NONE
+                    else:
+                        instance.add_filter(f"Required app {req_instance.name} is filtered",
+                                            Filters.TESTSUITE)
+                        logger.debug(f"{instance.name}: Required application '{req_instance.name}'"
+                                     " is filtered")
+                        break
+
+                if instance.testsuite.id in req_instance.testsuite.required_applications:
+                    instance.add_filter("Circular dependency in required applications",
+                                        Filters.TESTSUITE)
+                    logger.warning(f"{instance.name}: Circular dependency, current app also"
+                                   f" required by {req_instance.name}")
+                    break
+                # keep dependencies to use it in the runner module to synchronize
+                # building of applications
+                instance.required_applications.append(req_instance.name)
 
     def add_instances(self, instance_list):
         for instance in instance_list:

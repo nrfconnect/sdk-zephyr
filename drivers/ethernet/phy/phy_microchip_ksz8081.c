@@ -61,6 +61,7 @@ struct mc_ksz8081_config {
 #define KSZ8081_DO_AUTONEG_FLAG BIT(0)
 #define KSZ8081_SILENCE_DEBUG_LOGS BIT(1)
 #define KSZ8081_LINK_STATE_VALID BIT(2)
+#define KSZ8081_INITIALIZED BIT(3)
 
 #define USING_INTERRUPT_GPIO							\
 		UTIL_OR(DT_ALL_INST_HAS_PROP_STATUS_OKAY(int_gpios),		\
@@ -183,7 +184,11 @@ static void phy_mc_ksz8081_interrupt_handler(const struct device *port, struct g
 					     gpio_port_pins_t pins)
 {
 	struct mc_ksz8081_data *data = CONTAINER_OF(cb, struct mc_ksz8081_data, gpio_callback);
-	int ret = k_work_reschedule(&data->phy_monitor_work, K_NO_WAIT);
+	int ret = -ESRCH;
+
+	if (data->flags & KSZ8081_INITIALIZED) {
+		ret = k_work_reschedule(&data->phy_monitor_work, K_NO_WAIT);
+	}
 
 	if (ret < 0) {
 		LOG_ERR("Failed to schedule monitor_work from ISR");
@@ -402,12 +407,11 @@ static int phy_mc_ksz8081_reset_gpio(const struct mc_ksz8081_config *config)
 {
 	int ret;
 
-	if (!config->reset_gpio.port) {
+	if (!gpio_is_ready_dt(&config->reset_gpio)) {
 		return -ENODEV;
 	}
 
-	/* Start reset */
-	ret = gpio_pin_set_dt(&config->reset_gpio, 0);
+	ret = gpio_pin_configure_dt(&config->reset_gpio, GPIO_OUTPUT_ACTIVE);
 	if (ret) {
 		return ret;
 	}
@@ -415,8 +419,7 @@ static int phy_mc_ksz8081_reset_gpio(const struct mc_ksz8081_config *config)
 	/* Wait for at least 500 us as specified by datasheet */
 	k_busy_wait(1000);
 
-	/* Reset over */
-	ret = gpio_pin_set_dt(&config->reset_gpio, 1);
+	ret = gpio_pin_set_dt(&config->reset_gpio, 0);
 
 	/* After deasserting reset, must wait at least 100 us to use programming interface */
 	k_busy_wait(200);
@@ -648,21 +651,6 @@ done:
 #define ksz8081_init_int_gpios(dev) 0
 #endif
 
-#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
-static int ksz8081_init_reset_gpios(const struct device *dev)
-{
-	const struct mc_ksz8081_config *config = dev->config;
-
-	if (config->reset_gpio.port == NULL) {
-		return 0;
-	}
-
-	return gpio_pin_configure_dt(&config->reset_gpio, GPIO_OUTPUT_ACTIVE);
-}
-#else
-#define ksz8081_init_reset_gpios(dev) 0
-#endif
-
 static int phy_mc_ksz8081_init(const struct device *dev)
 {
 	const struct mc_ksz8081_config *config = dev->config;
@@ -671,21 +659,10 @@ static int phy_mc_ksz8081_init(const struct device *dev)
 
 	data->dev = dev;
 
-	k_busy_wait(100000);
-
 	ret = k_mutex_init(&data->mutex);
 	if (ret) {
 		return ret;
 	}
-
-	mdio_bus_enable(config->mdio_dev);
-	k_busy_wait(100000);
-
-	ret = ksz8081_init_reset_gpios(dev);
-	if (ret) {
-		return ret;
-	}
-	k_busy_wait(100000);
 
 	/* Reset PHY */
 	ret = phy_mc_ksz8081_reset(dev);
@@ -693,18 +670,20 @@ static int phy_mc_ksz8081_init(const struct device *dev)
 		return ret;
 	}
 
+	k_work_init_delayable(&data->phy_monitor_work,
+				phy_mc_ksz8081_monitor_work_handler);
+
+	/* Advertise default speeds */
+	phy_mc_ksz8081_cfg_link(dev, config->default_speeds, 0);
+
 	ret = ksz8081_init_int_gpios(dev);
 	if (ret < 0) {
 		return ret;
 	}
 
-	k_busy_wait(100000);
-	k_work_init_delayable(&data->phy_monitor_work,
-				phy_mc_ksz8081_monitor_work_handler);
+	data->flags |= KSZ8081_INITIALIZED;
 
-	/* Advertise default speeds */
-	k_busy_wait(100000);
-	phy_mc_ksz8081_cfg_link(dev, config->default_speeds, 0);
+	k_work_reschedule(&data->phy_monitor_work, K_MSEC(CONFIG_PHY_MONITOR_PERIOD));
 
 	return 0;
 }

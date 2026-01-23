@@ -20,6 +20,7 @@
 #include <zephyr/bluetooth/gap.h>
 #include <zephyr/bluetooth/hci_types.h>
 #include <zephyr/bluetooth/uuid.h>
+#include <zephyr/bluetooth/ead.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/util.h>
@@ -65,17 +66,48 @@ static struct bt_le_oob oob_sc_remote = { 0 };
 #define REJECT_LATENCY 0x0000
 #define REJECT_SUPERVISION_TIMEOUT 0x0C80
 
+/**
+ * Used to store CAR support status of bonded peer devices not every connected peer.
+ * So it is sufficient to have storage enough for CONFIG_BT_MAX_PAIRED.
+ * CAR status is only requested from peers that are bonded, because GATT CARR read is
+ * triggered in auth_pairing_complete callback.
+ * Thus GATT read callback calls add_to_peers_with_car and bond_deleted callback resets the
+ * CAR status when bond is deleted.
+ */
 static struct {
 	bt_addr_le_t addr;
 	bool supported;
-} cars[CONFIG_BT_MAX_PAIRED];
+} peers_with_car[CONFIG_BT_MAX_PAIRED];
+
+static void add_to_peers_with_car(const bt_addr_le_t *addr, bool supported)
+{
+	/* Check if the peer is already in the list, update the supported state */
+	for (int i = 0; i < CONFIG_BT_MAX_PAIRED; i++) {
+		if (bt_addr_le_eq(addr, &peers_with_car[i].addr)) {
+			peers_with_car[i].supported = supported;
+			return;
+		}
+	}
+
+	/* If the peer is not in the list, add it */
+	for (int i = 0; i < CONFIG_BT_MAX_PAIRED; i++) {
+		if (bt_addr_le_eq(&peers_with_car[i].addr, &bt_addr_le_any)) {
+			peers_with_car[i].supported = supported;
+			bt_addr_le_copy(&peers_with_car[i].addr, addr);
+			return;
+		}
+	}
+}
 
 static uint8_t read_car_cb(struct bt_conn *conn, uint8_t err,
 			  struct bt_gatt_read_params *params, const void *data,
 			  uint16_t length)
 {
+	struct btp_gap_peer_car_status_ev ev;
 	struct bt_conn_info info;
 	bool supported = false;
+
+	ev.car = 0x00;
 
 	if (!err && data && length == 1) {
 		const uint8_t *tmp = data;
@@ -83,17 +115,16 @@ static uint8_t read_car_cb(struct bt_conn *conn, uint8_t err,
 		/* only 0 or 1 are valid values */
 		if (tmp[0] == 1) {
 			supported = true;
+			ev.car = 0x01;
 		}
 	}
 
 	bt_conn_get_info(conn, &info);
 
-	for (int i = 0; i < CONFIG_BT_MAX_PAIRED; i++) {
-		if (bt_addr_le_eq(info.le.dst, &cars[i].addr)) {
-			cars[i].supported = supported;
-			break;
-		}
-	}
+	add_to_peers_with_car(info.le.dst, supported);
+
+	bt_addr_le_copy(&ev.address, info.le.dst);
+	tester_event(BTP_SERVICE_ID_GAP, BTP_GAP_EV_PEER_CAR_RECEIVED, &ev, sizeof(ev));
 
 	return BT_GATT_ITER_STOP;
 }
@@ -134,7 +165,7 @@ static void le_connected(struct bt_conn *conn, uint8_t err)
 
 	if (bt_conn_is_type(conn, BT_CONN_TYPE_LE)) {
 		bt_addr_le_copy(&ev.address, info.le.dst);
-		ev.interval = sys_cpu_to_le16(info.le.interval);
+		ev.interval = sys_cpu_to_le16(info.le.interval_us / BT_HCI_LE_INTERVAL_UNIT_US);
 		ev.latency = sys_cpu_to_le16(info.le.latency);
 		ev.timeout = sys_cpu_to_le16(info.le.timeout);
 	} else if (IS_ENABLED(CONFIG_BT_CLASSIC) && bt_conn_is_type(conn, BT_CONN_TYPE_BR)) {
@@ -600,6 +631,21 @@ static int tester_gap_ext_adv_idx_free_get(void)
 	return -ENOMEM;
 }
 
+static int tester_gap_ext_adv_idx_get(struct bt_le_ext_adv *ext_adv)
+{
+	if (!IS_ENABLED(CONFIG_BT_EXT_ADV)) {
+		return -ENOTSUP;
+	}
+
+	for (int i = 0; i < ARRAY_SIZE(ext_adv_sets); i++) {
+		if (ext_adv_sets[i] == ext_adv) {
+			return i;
+		}
+	}
+
+	return -EINVAL;
+}
+
 int tester_gap_start_ext_adv(struct bt_le_ext_adv *ext_adv)
 {
 	if (!IS_ENABLED(CONFIG_BT_EXT_ADV)) {
@@ -643,6 +689,8 @@ int tester_gap_stop_ext_adv(struct bt_le_ext_adv *ext_adv)
 
 		return -EINVAL;
 	}
+
+	tester_gap_clear_adv_instance(ext_adv);
 
 	atomic_clear_bit(&current_settings, BTP_GAP_SETTINGS_ADVERTISING);
 
@@ -748,6 +796,29 @@ static uint8_t set_bondable(const void *cmd, uint16_t cmd_len,
 	rp->current_settings = sys_cpu_to_le32(current_settings);
 	*rsp_len = sizeof(*rp);
 	return BTP_STATUS_SUCCESS;
+}
+
+int tester_gap_clear_adv_instance(struct bt_le_ext_adv *ext_adv)
+{
+	if (!IS_ENABLED(CONFIG_BT_EXT_ADV)) {
+		return -ENOTSUP;
+	}
+
+	if (ext_adv == NULL) {
+		LOG_ERR("Invalid ext_adv");
+		return -EINVAL;
+	}
+
+	int index = tester_gap_ext_adv_idx_get(ext_adv);
+
+	if (index < 0) {
+		LOG_ERR("Failed to get ext_adv index");
+		return -EINVAL;
+	}
+
+	ext_adv_sets[index] = NULL;
+
+	return 0;
 }
 
 int tester_gap_create_adv_instance(struct bt_le_adv_param *param,
@@ -926,30 +997,46 @@ static uint8_t start_advertising(const void *cmd, uint16_t cmd_len,
 	return BTP_STATUS_SUCCESS;
 }
 
+/**
+ * Start directed advertising with a peer address with or without RPA.
+ * If privacy is enabled and the peer does not support Central Address Resolution,
+ * the advertisement will be started as undirected with RPA.
+ */
 static uint8_t start_directed_advertising(const void *cmd, uint16_t cmd_len,
 					  void *rsp, uint16_t *rsp_len)
 {
 	const struct btp_gap_start_directed_adv_cmd *cp = cmd;
 	struct btp_gap_start_directed_adv_rp *rp = rsp;
-	struct bt_le_adv_param adv_param;
+	struct bt_le_adv_param adv_param = BT_LE_ADV_PARAM_INIT(
+		BT_LE_ADV_OPT_CONN, BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2, NULL);
 	uint16_t options = sys_le16_to_cpu(cp->options);
 
-	adv_param = *BT_LE_ADV_CONN_DIR(&cp->address);
-
-	if (!(options & BTP_GAP_START_DIRECTED_ADV_HD)) {
-		adv_param.options |= BT_LE_ADV_OPT_DIR_MODE_LOW_DUTY;
-		adv_param.interval_max = BT_GAP_ADV_FAST_INT_MAX_2;
-		adv_param.interval_min = BT_GAP_ADV_FAST_INT_MIN_2;
+	if (bt_addr_le_eq(&cp->address, &bt_addr_le_any)) {
+		LOG_ERR("Invalid peer address");
+		return BTP_STATUS_FAILED;
 	}
 
 	if (IS_ENABLED(CONFIG_BT_PRIVACY) && (options & BTP_GAP_START_DIRECTED_ADV_PEER_RPA)) {
-		/* check if peer supports Central Address Resolution */
+		/**
+		 * In accordance with the test spec for test case GAP/CONN/DCON/BV-05-C, if the peer
+		 * does not support Central Address Resolution, the advertisement will be started
+		 * as undirected.
+		 */
 		for (int i = 0; i < CONFIG_BT_MAX_PAIRED; i++) {
-			if (bt_addr_le_eq(&cp->address, &cars[i].addr)) {
-				if (cars[i].supported) {
-					adv_param.options |= BT_LE_ADV_OPT_DIR_ADDR_RPA;
+			if (bt_addr_le_eq(&cp->address, &peers_with_car[i].addr) &&
+			    peers_with_car[i].supported) {
+				adv_param.options |= BT_LE_ADV_OPT_DIR_ADDR_RPA;
+				adv_param.peer = &cp->address;
+				if ((options & BTP_GAP_START_DIRECTED_ADV_HD) == 0U) {
+					adv_param.options |= BT_LE_ADV_OPT_DIR_MODE_LOW_DUTY;
 				}
+				break;
 			}
+		}
+	} else {
+		adv_param.peer = &cp->address;
+		if ((options & BTP_GAP_START_DIRECTED_ADV_HD) == 0U) {
+			adv_param.options |= BT_LE_ADV_OPT_DIR_MODE_LOW_DUTY;
 		}
 	}
 
@@ -973,7 +1060,7 @@ static uint8_t stop_advertising(const void *cmd, uint16_t cmd_len,
 
 	if (IS_ENABLED(CONFIG_BT_EXT_ADV) &&
 	    atomic_test_bit(&current_settings, BTP_GAP_SETTINGS_EXTENDED_ADVERTISING)) {
-		err = bt_le_ext_adv_stop(gap_ext_adv);
+		err = tester_gap_stop_ext_adv(gap_ext_adv);
 	} else {
 		err = bt_le_adv_stop();
 	}
@@ -1196,6 +1283,48 @@ static uint8_t br_start_discovery(const struct btp_gap_start_discovery_cmd *cp)
 }
 #endif /* CONFIG_BT_CLASSIC */
 
+static struct bt_le_scan_param scan_param = {
+	.type = BT_LE_SCAN_TYPE_PASSIVE,
+	.options = BT_LE_SCAN_OPT_FILTER_DUPLICATE,
+	.interval = BT_GAP_SCAN_FAST_INTERVAL,
+	.window = BT_GAP_SCAN_FAST_WINDOW,
+	.timeout = 0,
+	.interval_coded = 0,
+	.window_coded = 0,
+};
+
+#define MIN_SCAN_WINDOW   0x04
+#define MIN_SCAN_INTERVAL 0x04
+#define MAX_SCAN_INTERVAL 0x4000
+#define MAX_SCAN_WINDOW   0x4000
+static uint8_t set_le_discovery_params(const void *cmd, uint16_t cmd_len, void *rsp,
+				       uint16_t *rsp_len)
+{
+	const struct btp_gap_le_set_discovery_params_cmd *cp = cmd;
+
+	if (!IN_RANGE(cp->interval, MIN_SCAN_INTERVAL, MAX_SCAN_INTERVAL) ||
+	    !IN_RANGE(cp->window, MIN_SCAN_WINDOW, MAX_SCAN_WINDOW)) {
+		LOG_ERR("Invalid discovery parameters interval %u window %u", cp->interval,
+			cp->window);
+		return BTP_STATUS_FAILED;
+	}
+
+	/* 1M default we do not need to test for it */
+	if ((cp->phy & ~(BTP_GAP_PHY_LE_1M | BTP_GAP_PHY_LE_CODED)) != 0) {
+		LOG_ERR("Invalid PHY %u", cp->phy);
+		return BTP_STATUS_FAILED;
+	}
+
+	scan_param.interval = cp->interval;
+	scan_param.window = cp->window;
+
+	if ((cp->phy & BTP_GAP_PHY_LE_CODED) != 0) {
+		scan_param.options |= BT_LE_SCAN_OPT_CODED;
+	}
+
+	return BTP_STATUS_SUCCESS;
+}
+
 static uint8_t start_discovery(const void *cmd, uint16_t cmd_len,
 			       void *rsp, uint16_t *rsp_len)
 {
@@ -1205,16 +1334,6 @@ static uint8_t start_discovery(const void *cmd, uint16_t cmd_len,
 		/* Start BR discovery*/
 		return br_start_discovery(cp);
 	}
-
-	struct bt_le_scan_param scan_param = {
-		.type     = BT_LE_SCAN_TYPE_PASSIVE,
-		.options  = BT_LE_SCAN_OPT_FILTER_DUPLICATE,
-		.interval = BT_GAP_SCAN_FAST_INTERVAL,
-		.window   = BT_GAP_SCAN_FAST_WINDOW,
-		.timeout = 0,
-		.interval_coded = 0,
-		.window_coded = 0,
-	};
 
 	if (cp->flags & BTP_GAP_DISCOVERY_FLAG_LE_ACTIVE_SCAN) {
 		scan_param.type = BT_LE_SCAN_TYPE_ACTIVE;
@@ -1502,9 +1621,21 @@ static void auth_pairing_complete(struct bt_conn *conn, bool bonded)
 	}
 }
 
+static void bond_deleted(uint8_t id, const bt_addr_le_t *peer)
+{
+	for (int i = 0; i < CONFIG_BT_MAX_PAIRED; i++) {
+		if (bt_addr_le_eq(peer, &peers_with_car[i].addr)) {
+			peers_with_car[i].supported = false;
+			bt_addr_le_copy(&peers_with_car[i].addr, &bt_addr_le_any);
+			return;
+		}
+	}
+}
+
 static struct bt_conn_auth_info_cb auth_info_cb = {
 	.pairing_failed = auth_pairing_failed,
 	.pairing_complete = auth_pairing_complete,
+	.bond_deleted = bond_deleted,
 };
 
 #if defined(CONFIG_BT_CLASSIC)
@@ -2411,6 +2542,7 @@ static int bt_iso_chan_get_index(struct bt_iso_chan *chan);
 
 #if defined(CONFIG_BT_ISO_SYNC_RECEIVER)
 static struct bt_iso_big *iso_sync_receiver_big;
+static bt_addr_le_t iso_sync_receiver_addr;
 
 static void iso_sync_receiver_big_started_cb(struct bt_iso_big *big)
 {
@@ -2446,7 +2578,7 @@ static void iso_sync_receiver_big_started_cb(struct bt_iso_big *big)
 		return;
 	}
 
-	bt_addr_le_copy(&ev.address, &pa_sync->addr);
+	bt_addr_le_copy(&ev.address, &iso_sync_receiver_addr);
 	ev.latency = sys_cpu_to_le32(info.sync_receiver.latency);
 	ev.nse = info.max_subevent;
 	ev.bn = info.sync_receiver.bn;
@@ -2466,12 +2598,13 @@ static void iso_sync_receiver_big_stopped_cb(struct bt_iso_big *big, uint8_t rea
 		return;
 	}
 
-	bt_addr_le_copy(&ev.address, &pa_sync->addr);
+	bt_addr_le_copy(&ev.address, &iso_sync_receiver_addr);
 	ev.reason = reason;
 
 	tester_event(BTP_SERVICE_ID_GAP, BTP_GAP_EV_BIG_SYNC_LOST, &ev, sizeof(ev));
 
 	iso_sync_receiver_big = NULL;
+	bt_addr_le_copy(&iso_sync_receiver_addr, BT_ADDR_LE_NONE);
 }
 
 static struct bt_iso_big_cb iso_sync_receiver_big_cb = {
@@ -2694,6 +2827,9 @@ static uint8_t big_create_sync(const void *cmd, uint16_t cmd_len, void *rsp, uin
 		return BTP_STATUS_FAILED;
 	}
 
+	/* PA may be terminated so just store addr here */
+	bt_addr_le_copy(&iso_sync_receiver_addr, &pa_sync->addr);
+
 	LOG_DBG("BIG syncing");
 
 	return BTP_STATUS_SUCCESS;
@@ -2831,6 +2967,85 @@ static uint8_t bis_broadcast(const void *cmd, uint16_t cmd_len, void *rsp, uint1
 }
 #endif /* defined(CONFIG_BT_ISO_BROADCASTER) */
 
+#if defined(CONFIG_BT_EAD)
+static struct ead_key_materials_s {
+	uint8_t session_key[BTP_GAP_EAD_SET_KEY_MATERIAL_KEY_SIZE];
+	uint8_t initialization_vector[BTP_GAP_EAD_SET_KEY_MATERIAL_IV_SIZE];
+} ead_key_materials;
+
+/*
+ * This command to be used by both central and peripheral.
+ * central side should get key material by reading them from the peripheral
+ * gatt database. Obviously key materials can be shared OOB as well.
+ */
+static uint8_t ead_set_key_material(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t *rsp_len)
+{
+	const struct btp_gap_ead_set_key_material_cmd *cp = cmd;
+
+	(void)memcpy(ead_key_materials.session_key, cp->session_key,
+		     sizeof(ead_key_materials.session_key));
+	(void)memcpy(ead_key_materials.initialization_vector, cp->initialization_vector,
+		     sizeof(ead_key_materials.initialization_vector));
+
+	return BTP_STATUS_SUCCESS;
+}
+
+static uint8_t ead_encrypt_data(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t *rsp_len)
+{
+	const struct btp_gap_ead_encrypt_adv_data_cmd *cp = cmd;
+	struct btp_gap_ead_encrypt_adv_data_rp *rp = rsp;
+	int err;
+	size_t encrypted_size;
+
+	if ((cmd_len < sizeof(*cp)) || (cmd_len != sizeof(*cp) + cp->adv_data_len)) {
+		return BTP_STATUS_FAILED;
+	}
+
+	encrypted_size = BT_EAD_ENCRYPTED_PAYLOAD_SIZE(cp->adv_data_len);
+	if (encrypted_size > BTP_GAP_EAD_MAX_DATA_LEN) {
+		LOG_ERR("Plain text data length exceeds max supported");
+		return BTP_STATUS_FAILED;
+	}
+
+	err = bt_ead_encrypt(ead_key_materials.session_key, ead_key_materials.initialization_vector,
+			     cp->adv_data, cp->adv_data_len, rp->encrypted_data);
+
+	if (err < 0) {
+		LOG_ERR("Failed to encrypt data: %d", err);
+		return BTP_STATUS_FAILED;
+	}
+
+	rp->encrypted_data_len = encrypted_size;
+	*rsp_len = sizeof(*rp) + rp->encrypted_data_len;
+
+	return BTP_STATUS_SUCCESS;
+}
+
+static uint8_t ead_decrypt_data(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t *rsp_len)
+{
+	const struct btp_gap_ead_decrypt_adv_data_cmd *cp = cmd;
+	struct btp_gap_decrypt_ead_adv_data_rp *rp = rsp;
+	int err;
+
+	if ((cmd_len < sizeof(*cp)) || (cmd_len != sizeof(*cp) + cp->encrypted_data_len)) {
+		return BTP_STATUS_FAILED;
+	}
+
+	err = bt_ead_decrypt(ead_key_materials.session_key, ead_key_materials.initialization_vector,
+			     cp->encrypted_data, cp->encrypted_data_len, rp->decrypted_data);
+
+	if (err < 0) {
+		LOG_ERR("Failed to decrypt data: %d", err);
+		return BTP_STATUS_FAILED;
+	}
+
+	rp->decrypted_data_len = BT_EAD_DECRYPTED_PAYLOAD_SIZE(cp->encrypted_data_len);
+	*rsp_len = sizeof(*rp) + rp->decrypted_data_len;
+
+	return BTP_STATUS_SUCCESS;
+}
+#endif /* defined(CONFIG_BT_EAD) */
+
 static const struct btp_handler handlers[] = {
 	{
 		.opcode = BTP_GAP_READ_SUPPORTED_COMMANDS,
@@ -2883,6 +3098,11 @@ static const struct btp_handler handlers[] = {
 		.opcode = BTP_GAP_STOP_ADVERTISING,
 		.expect_len = 0,
 		.func = stop_advertising,
+	},
+	{
+		.opcode = BTP_GAP_SET_DISCOVERY_PARAMS,
+		.expect_len = sizeof(struct btp_gap_le_set_discovery_params_cmd),
+		.func = set_le_discovery_params,
 	},
 	{
 		.opcode = BTP_GAP_START_DISCOVERY,
@@ -3045,6 +3265,23 @@ static const struct btp_handler handlers[] = {
 		.func = bis_broadcast,
 	},
 #endif /* defined(CONFIG_BT_ISO_BROADCASTER) */
+#if defined(CONFIG_BT_EAD)
+	{
+		.opcode = BTP_GAP_EAD_SET_KEY_MATERIAL,
+		.expect_len = sizeof(struct btp_gap_ead_set_key_material_cmd),
+		.func = ead_set_key_material,
+	},
+	{
+		.opcode = BTP_GAP_EAD_ENCRYPT_ADV_DATA,
+		.expect_len = BTP_HANDLER_LENGTH_VARIABLE,
+		.func = ead_encrypt_data,
+	},
+	{
+		.opcode = BTP_GAP_EAD_DECRYPT_ADV_DATA,
+		.expect_len = BTP_HANDLER_LENGTH_VARIABLE,
+		.func = ead_decrypt_data,
+	},
+#endif /* defined(CONFIG_BT_EAD) */
 };
 
 uint8_t tester_init_gap(void)

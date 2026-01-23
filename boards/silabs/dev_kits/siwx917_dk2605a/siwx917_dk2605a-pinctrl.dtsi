@@ -33,4 +33,9 @@
 		};
 	};
 
+	adc0_default: adc0_default {
+		group {
+			pinmux = <ADC_TOPGPIO_HP28>;
+		};
+	};
 };

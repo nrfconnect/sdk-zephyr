@@ -20,6 +20,17 @@ extern "C" {
  */
 
 /**
+ * MGMT event opcodes for settings management group.
+ */
+enum settings_mgmt_group_events {
+	/** Callback when a setting is read/written/deleted. */
+	MGMT_EVT_OP_SETTINGS_MGMT_ACCESS	= MGMT_DEF_EVT_OP_ID(MGMT_EVT_GRP_SETTINGS, 0),
+
+	/** Used to enable all settings_mgmt_group events. */
+	MGMT_EVT_OP_SETTINGS_MGMT_ALL		= MGMT_DEF_EVT_OP_ALL(MGMT_EVT_GRP_SETTINGS),
+};
+
+/**
  * @name Settings access types
  * @{
  */
@@ -44,11 +55,11 @@ struct settings_mgmt_access {
 	enum settings_mgmt_access_types access;
 
 	/**
-	 * Key name for accesses (only set for #SETTINGS_ACCESS_READ, #SETTINGS_ACCESS_WRITE and
-	 * #SETTINGS_ACCESS_DELETE). Note that this can be changed by handlers to redirect settings
-	 * access if needed (as long as it does not exceed the maximum setting string size) if
-	 * CONFIG_MCUMGR_GRP_SETTINGS_BUFFER_TYPE_STACK is selected, of maximum size
-	 * CONFIG_MCUMGR_GRP_SETTINGS_NAME_LEN.
+	 * Key name for accesses (only set for #SETTINGS_ACCESS_READ, #SETTINGS_ACCESS_WRITE,
+	 * #SETTINGS_ACCESS_DELETE and #SETTINGS_ACCESS_SAVE). Note that this can be changed by
+	 * handlers to redirect settings access if needed (as long as it does not exceed the maximum
+	 * setting string size) if CONFIG_MCUMGR_GRP_SETTINGS_BUFFER_TYPE_STACK is selected, of
+	 * maximum size CONFIG_MCUMGR_GRP_SETTINGS_NAME_LEN.
 	 *
 	 * Note: This string *must* be NULL terminated.
 	 */
@@ -58,10 +69,14 @@ struct settings_mgmt_access {
 	char *name;
 #endif
 
-	/** Data provided by the user (only set for SETTINGS_ACCESS_WRITE) */
+	/**
+	 * Data provided by the user (only set for SETTINGS_ACCESS_WRITE)
+	 */
 	const uint8_t *val;
 
-	/** Length of data provided by the user (only set for SETTINGS_ACCESS_WRITE) */
+	/**
+	 * Length of data provided by the user (only set for SETTINGS_ACCESS_WRITE)
+	 */
 	const size_t *val_length;
 };
 

@@ -25,6 +25,7 @@
 #include <zephyr/kernel/thread.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net_buf.h>
+#include <zephyr/spinlock.h>
 #include <zephyr/sys/__assert.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
@@ -143,11 +144,6 @@ static uint16_t bt_att_mtu(struct bt_att_chan *chan)
 	return MIN(chan->chan.rx.mtu, chan->chan.tx.mtu);
 }
 
-/* Descriptor of application-specific authorization callbacks that are used
- * with the CONFIG_BT_GATT_AUTHORIZATION_CUSTOM Kconfig enabled.
- */
-static const struct bt_gatt_authorization_cb *authorization_cb;
-
 /* ATT connection specific data */
 struct bt_att {
 	struct bt_conn		*conn;
@@ -253,10 +249,37 @@ const char *bt_att_err_to_str(uint8_t att_err)
 }
 #endif /* CONFIG_BT_ATT_ERR_TO_STR */
 
-static void att_tx_destroy(struct net_buf *buf)
+static void att_tx_destroy_work_handler(struct k_work *work);
+static K_WORK_DEFINE(att_tx_destroy_work, att_tx_destroy_work_handler);
+static struct k_spinlock tx_destroy_queue_lock;
+static sys_slist_t tx_destroy_queue = SYS_SLIST_STATIC_INIT(&tx_destroy_queue);
+
+static void att_tx_destroy_work_handler(struct k_work *work)
 {
-	struct bt_att_tx_meta_data *p_meta = att_get_tx_meta_data(buf);
+	struct net_buf *buf;
+	struct bt_att_tx_meta_data *p_meta;
 	struct bt_att_tx_meta_data meta;
+	sys_snode_t *buf_node;
+	k_spinlock_key_t key;
+	bool resubmit;
+
+	key = k_spin_lock(&tx_destroy_queue_lock);
+	buf_node = sys_slist_get(&tx_destroy_queue);
+	/* If there are more items in the queue, those likely have
+	 * been there before this handler started running and
+	 * coalesced into a single work submission, so we need to
+	 * resubmit.
+	 */
+	resubmit = !sys_slist_is_empty(&tx_destroy_queue);
+	k_spin_unlock(&tx_destroy_queue_lock, key);
+
+	/* Spurious wakeups can occur in with some thread interleavings. */
+	if (buf_node == NULL) {
+		return;
+	}
+
+	buf = CONTAINER_OF(buf_node, struct net_buf, node);
+	p_meta = att_get_tx_meta_data(buf);
 
 	LOG_DBG("%p", buf);
 
@@ -271,8 +294,8 @@ static void att_tx_destroy(struct net_buf *buf)
 	 */
 	memset(p_meta, 0x00, sizeof(*p_meta));
 
-	/* After this point, p_meta doesn't belong to us.
-	 * The user data will be memset to 0 on allocation.
+	/* After this point, p_meta doesn't belong to us. The user data will
+	 * be memset to 0 on allocation.
 	 */
 	net_buf_destroy(buf);
 
@@ -283,6 +306,51 @@ static void att_tx_destroy(struct net_buf *buf)
 	if (meta.opcode != 0) {
 		att_on_sent_cb(&meta);
 	}
+
+	/* We resubmit this work instead of looping to allow other work on
+	 * the work queue to run.
+	 */
+	if (resubmit) {
+		int err = k_work_submit_to_queue(NULL, work);
+
+		if (err < 0) {
+			LOG_ERR("Failed to re-submit %s: %d", __func__, err);
+			k_oops();
+		}
+	}
+}
+
+static void att_tx_destroy(struct net_buf *buf)
+{
+	int err;
+	k_spinlock_key_t key;
+
+	/* We need to invoke att_on_sent_cb, which may block. We
+	 * don't want to block in a net buf destroy callback, so we
+	 * defer to a sensible workqueue.
+	 *
+	 * bt_workq cannot be used because it currently forms a
+	 * deadlock with att_pool: bt_workq -> bt_att_recv ->
+	 * send_err_rsp waits for att pool.
+	 *
+	 * We use the system work queue to preserve earlier
+	 * behavior. The tx_processor used to run on the system work
+	 * queue, and it could end up here: tx_processor ->
+	 * bt_hci_send -> net_buf_unref.
+	 *
+	 * A possible alternative is tx_notify_workqueue_get() since
+	 * this workqueue is processing similar "completion" events.
+	 */
+	key = k_spin_lock(&tx_destroy_queue_lock);
+	sys_slist_append(&tx_destroy_queue, &buf->node);
+	k_spin_unlock(&tx_destroy_queue_lock, key);
+
+	err = k_work_submit(&att_tx_destroy_work);
+	if (err < 0) {
+		LOG_ERR("Failed to submit att_tx_destroy_work: %d", err);
+		k_oops();
+	}
+	/* Continues in att_tx_destroy_work_handler() */
 }
 
 NET_BUF_POOL_DEFINE(att_pool, CONFIG_BT_ATT_TX_COUNT,
@@ -1350,20 +1418,6 @@ struct read_type_data {
 typedef bool (*attr_read_cb)(struct net_buf *buf, ssize_t read,
 			     void *user_data);
 
-static bool attr_read_authorize(struct bt_conn *conn,
-				const struct bt_gatt_attr *attr)
-{
-	if (!IS_ENABLED(CONFIG_BT_GATT_AUTHORIZATION_CUSTOM)) {
-		return true;
-	}
-
-	if (!authorization_cb || !authorization_cb->read_authorize) {
-		return true;
-	}
-
-	return authorization_cb->read_authorize(conn, attr);
-}
-
 static bool attr_read_type_cb(struct net_buf *frag, ssize_t read,
 			      void *user_data)
 {
@@ -1474,7 +1528,7 @@ static uint8_t read_type_cb(const struct bt_gatt_attr *attr, uint16_t handle,
 	}
 
 	/* Check the attribute authorization logic */
-	if (!attr_read_authorize(conn, attr)) {
+	if (!bt_gatt_attr_read_authorize(conn, attr)) {
 		data->err = BT_ATT_ERR_AUTHORIZATION;
 		return BT_GATT_ITER_STOP;
 	}
@@ -1630,7 +1684,7 @@ static uint8_t read_cb(const struct bt_gatt_attr *attr, uint16_t handle,
 	}
 
 	/* Check the attribute authorization logic */
-	if (!attr_read_authorize(conn, attr)) {
+	if (!bt_gatt_attr_read_authorize(conn, attr)) {
 		data->err = BT_ATT_ERR_AUTHORIZATION;
 		return BT_GATT_ITER_STOP;
 	}
@@ -1801,7 +1855,7 @@ static uint8_t read_vl_cb(const struct bt_gatt_attr *attr, uint16_t handle,
 	}
 
 	/* Check the attribute authorization logic */
-	if (!attr_read_authorize(conn, attr)) {
+	if (!bt_gatt_attr_read_authorize(conn, attr)) {
 		data->err = BT_ATT_ERR_AUTHORIZATION;
 		return BT_GATT_ITER_STOP;
 	}
@@ -2050,20 +2104,6 @@ struct write_data {
 	uint8_t err;
 };
 
-static bool attr_write_authorize(struct bt_conn *conn,
-				 const struct bt_gatt_attr *attr)
-{
-	if (!IS_ENABLED(CONFIG_BT_GATT_AUTHORIZATION_CUSTOM)) {
-		return true;
-	}
-
-	if (!authorization_cb || !authorization_cb->write_authorize) {
-		return true;
-	}
-
-	return authorization_cb->write_authorize(conn, attr);
-}
-
 static uint8_t write_cb(const struct bt_gatt_attr *attr, uint16_t handle,
 			void *user_data)
 {
@@ -2081,7 +2121,7 @@ static uint8_t write_cb(const struct bt_gatt_attr *attr, uint16_t handle,
 	}
 
 	/* Check the attribute authorization logic */
-	if (!attr_write_authorize(data->conn, attr)) {
+	if (!bt_gatt_attr_write_authorize(data->conn, attr)) {
 		data->err = BT_ATT_ERR_AUTHORIZATION;
 		return BT_GATT_ITER_STOP;
 	}
@@ -2200,7 +2240,7 @@ static uint8_t prep_write_cb(const struct bt_gatt_attr *attr, uint16_t handle,
 	}
 
 	/* Check the attribute authorization logic */
-	if (!attr_write_authorize(data->conn, attr)) {
+	if (!bt_gatt_attr_write_authorize(data->conn, attr)) {
 		data->err = BT_ATT_ERR_AUTHORIZATION;
 		return BT_GATT_ITER_STOP;
 	}
@@ -3522,7 +3562,10 @@ static int bt_att_accept(struct bt_conn *conn, struct bt_l2cap_chan **ch)
  * placed as the last one to ensure that SMP channel is properly initialized before bt_att_connected
  * tries to send security request.
  */
-BT_L2CAP_CHANNEL_DEFINE(z_att_fixed_chan, BT_L2CAP_CID_ATT, bt_att_accept, NULL);
+BT_L2CAP_FIXED_CHANNEL_DEFINE(z_att_fixed_chan) = {
+	.cid = BT_L2CAP_CID_ATT,
+	.accept = bt_att_accept,
+};
 
 #if defined(CONFIG_BT_EATT)
 static k_timeout_t credit_based_connection_delay(struct bt_conn *conn)
@@ -3553,7 +3596,7 @@ static k_timeout_t credit_based_connection_delay(struct bt_conn *conn)
 		 * result in an overflow
 		 */
 		const uint32_t calculated_delay_us =
-			2 * (conn->le.latency + 1) * BT_CONN_INTERVAL_TO_US(conn->le.interval);
+			2 * (conn->le.latency + 1) * conn->le.interval_us;
 		const uint32_t calculated_delay_ms = calculated_delay_us / USEC_PER_MSEC;
 
 		return K_MSEC(MAX(100, calculated_delay_ms + rand_delay));
@@ -3708,7 +3751,8 @@ static void eatt_auto_connect(struct bt_conn *conn, bt_security_t level,
 {
 	int eatt_err;
 
-	if (err || level < BT_SECURITY_L2 || !bt_att_fixed_chan_only(conn)) {
+	if (!bt_conn_is_le(conn) || (err != 0) || level < BT_SECURITY_L2 ||
+	    !bt_att_fixed_chan_only(conn)) {
 		return;
 	}
 
@@ -4168,24 +4212,4 @@ bool bt_att_chan_opt_valid(struct bt_conn *conn, enum bt_att_chan_opt chan_opt)
 	}
 
 	return true;
-}
-
-int bt_gatt_authorization_cb_register(const struct bt_gatt_authorization_cb *cb)
-{
-	if (!IS_ENABLED(CONFIG_BT_GATT_AUTHORIZATION_CUSTOM)) {
-		return -ENOSYS;
-	}
-
-	if (!cb) {
-		authorization_cb = NULL;
-		return 0;
-	}
-
-	if (authorization_cb) {
-		return -EALREADY;
-	}
-
-	authorization_cb = cb;
-
-	return 0;
 }

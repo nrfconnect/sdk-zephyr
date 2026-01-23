@@ -26,7 +26,7 @@ rsource "*/Kconfig"
 
 config SOC_RA_ENABLE_START_SECOND_CORE
 	bool "Allows the primary core to start the secondary core"
-	depends on (SOC_SERIES_RA8P1 && CPU_CORTEX_M85)
+	depends on ((RENESAS_PN_NUMBER_OF_CORES = 2) && CPU_CORTEX_M85)
 	select SOC_LATE_INIT_HOOK
 	help
 	  Indicates the second core will be start in the soc_late_init_hook when enabled
@@ -43,5 +43,13 @@ config SOC_RA_SKIP_CLOCK_INIT
 	help
 	  With this option, the CPU clock frequency is not set during system
 	  initialization.
+
+config RENESAS_RA_BATTERY_BACKUP_MANUAL_CONFIGURE
+	bool "VBAT switching manual"
+	default y
+	depends on DT_HAS_RENESAS_RA_BATTERY_BACKUP_ENABLED && $(dt_compat_any_has_prop,$(DT_COMPAT_RENESAS_RA_BATTERY_BACKUP),manual-configure)
+	help
+	  Enable if this SoC's battery backup domain allows switching to VBAT manually.
+	  Leave disabled if switching is automatic.
 
 endif # SOC_FAMILY_RENESAS_RA

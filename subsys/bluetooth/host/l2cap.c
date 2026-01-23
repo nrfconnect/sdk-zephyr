@@ -3,6 +3,7 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  * Copyright (c) 2023 Nordic Semiconductor
+ * Copyright (c) 2025 Xiaomi Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -49,6 +50,11 @@ LOG_MODULE_REGISTER(bt_l2cap, CONFIG_BT_L2CAP_LOG_LEVEL);
 #define L2CAP_LE_MIN_MPS		23
 
 #define L2CAP_LE_MAX_CREDITS		(BT_BUF_ACL_RX_COUNT - 1)
+
+#define L2CAP_LE_CID_FIXED_START 0x0001
+#define L2CAP_LE_CID_FIXED_END   0x003f
+#define L2CAP_LE_CID_IS_FIXED(_cid) \
+	(_cid >= L2CAP_LE_CID_FIXED_START && _cid <= L2CAP_LE_CID_FIXED_END)
 
 #define L2CAP_LE_CID_DYN_START	0x0040
 #define L2CAP_LE_CID_DYN_END	0x007f
@@ -273,6 +279,14 @@ static void l2cap_chan_del(struct bt_l2cap_chan *chan)
 	 * `l2cap_chan_destroy()` as it is not called for fixed channels.
 	 */
 	while ((buf = k_fifo_get(&le_chan->tx_queue, K_NO_WAIT))) {
+		bt_conn_tx_cb_t cb = closure_cb(buf->user_data);
+
+		if (cb != NULL) {
+			void *user_data = closure_data(buf->user_data);
+
+			cb(chan->conn, user_data, -ESHUTDOWN);
+		}
+
 		net_buf_unref(buf);
 	}
 
@@ -401,14 +415,19 @@ void bt_l2cap_connected(struct bt_conn *conn)
 {
 	struct bt_l2cap_chan *chan;
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		bt_l2cap_br_connected(conn);
 		return;
 	}
 
 	STRUCT_SECTION_FOREACH(bt_l2cap_fixed_chan, fchan) {
 		struct bt_l2cap_le_chan *le_chan;
+
+		__ASSERT(L2CAP_LE_CID_IS_FIXED(fchan->cid),
+			 "CID %u is not in the fixed channel range", fchan->cid);
+
+		chan = bt_l2cap_le_lookup_tx_cid(conn, fchan->cid);
+		__ASSERT(chan == NULL, "Fixed channel with CID %u already exists", fchan->cid);
 
 		if (fchan->accept(conn, &chan) < 0) {
 			continue;
@@ -422,7 +441,7 @@ void bt_l2cap_connected(struct bt_conn *conn)
 		le_chan->rx.cid = fchan->cid;
 		le_chan->tx.cid = fchan->cid;
 
-		if (!l2cap_chan_add(conn, chan, fchan->destroy)) {
+		if (!l2cap_chan_add(conn, chan, NULL)) {
 			return;
 		}
 
@@ -445,8 +464,7 @@ void bt_l2cap_disconnected(struct bt_conn *conn)
 {
 	struct bt_l2cap_chan *chan, *next;
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		bt_l2cap_br_disconnected(conn);
 		return;
 	}
@@ -668,8 +686,7 @@ void bt_l2cap_security_changed(struct bt_conn *conn, uint8_t hci_status)
 {
 	struct bt_l2cap_chan *chan, *next;
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		l2cap_br_encrypt_change(conn, hci_status);
 		return;
 	}
@@ -2521,11 +2538,11 @@ int bt_l2cap_chan_recv_complete(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		return -ENOTCONN;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) && conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		return bt_l2cap_br_chan_recv_complete(chan);
 	}
 
-	if (conn->type != BT_CONN_TYPE_LE) {
+	if (!bt_conn_is_le(conn)) {
 		return -ENOTSUP;
 	}
 
@@ -2839,8 +2856,7 @@ void bt_l2cap_recv(struct bt_conn *conn, struct net_buf *buf, bool complete)
 	struct bt_l2cap_chan *chan;
 	uint16_t cid;
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		bt_l2cap_br_recv(conn, buf);
 		return;
 	}
@@ -2936,7 +2952,10 @@ static int l2cap_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)
 	return -ENOMEM;
 }
 
-BT_L2CAP_CHANNEL_DEFINE(le_fixed_chan, BT_L2CAP_CID_LE_SIG, l2cap_accept, NULL);
+BT_L2CAP_FIXED_CHANNEL_DEFINE(le_fixed_chan) = {
+	.cid = BT_L2CAP_CID_LE_SIG,
+	.accept = l2cap_accept,
+};
 
 void bt_l2cap_init(void)
 {
@@ -3106,7 +3125,7 @@ int bt_l2cap_ecred_chan_reconfigure(struct bt_l2cap_chan **chans, uint16_t mtu)
 		return -ENOTCONN;
 	}
 
-	if (conn->type != BT_CONN_TYPE_LE) {
+	if (!bt_conn_is_le(conn)) {
 		return -EINVAL;
 	}
 
@@ -3198,7 +3217,7 @@ int bt_l2cap_ecred_chan_reconfigure_explicit(struct bt_l2cap_chan **chans, size_
 		return -ENOTCONN;
 	}
 
-	if (conn->type != BT_CONN_TYPE_LE) {
+	if (!bt_conn_is_le(conn)) {
 		return -EINVAL;
 	}
 
@@ -3258,8 +3277,7 @@ int bt_l2cap_chan_connect(struct bt_conn *conn, struct bt_l2cap_chan *chan,
 		return -EINVAL;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		return bt_l2cap_br_chan_connect(conn, chan, psm);
 	}
 
@@ -3284,8 +3302,7 @@ int bt_l2cap_chan_disconnect(struct bt_l2cap_chan *chan)
 		return -ENOTCONN;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		return bt_l2cap_br_chan_disconnect(chan);
 	}
 
@@ -3394,6 +3411,16 @@ static int bt_l2cap_dyn_chan_send(struct bt_l2cap_le_chan *le_chan, struct net_b
 
 	return 0;
 }
+#endif /* CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */
+
+static void l2cap_fixed_chan_sent_cb(struct bt_conn *conn, void *user_data, int err)
+{
+	struct bt_l2cap_chan *chan = user_data;
+
+	if (chan->ops->sent) {
+		chan->ops->sent(chan);
+	}
+}
 
 int bt_l2cap_chan_send(struct bt_l2cap_chan *chan, struct net_buf *buf)
 {
@@ -3416,25 +3443,25 @@ int bt_l2cap_chan_send(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		return -ESHUTDOWN;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    chan->conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(chan->conn)) {
 		return bt_l2cap_br_chan_send_cb(chan, buf, NULL, NULL);
 	}
 
-	/* Sending over static channels is not supported by this fn. Use
-	 * `bt_l2cap_send_pdu()` instead.
-	 */
-	if (IS_ENABLED(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)) {
-		struct bt_l2cap_le_chan *le_chan = BT_L2CAP_LE_CHAN(chan);
+	struct bt_l2cap_le_chan *le_chan = BT_L2CAP_LE_CHAN(chan);
 
-		__ASSERT_NO_MSG(le_chan);
-		__ASSERT_NO_MSG(L2CAP_LE_CID_IS_DYN(le_chan->tx.cid));
+	__ASSERT_NO_MSG(le_chan);
 
+#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
+	if (L2CAP_LE_CID_IS_DYN(le_chan->tx.cid)) {
 		return bt_l2cap_dyn_chan_send(le_chan, buf);
+	}
+#endif
+
+	if (L2CAP_LE_CID_IS_FIXED(le_chan->tx.cid)) {
+		return bt_l2cap_send_pdu(le_chan, buf, l2cap_fixed_chan_sent_cb, (void *)chan);
 	}
 
 	LOG_DBG("Invalid channel type (chan %p)", chan);
 
 	return -EINVAL;
 }
-#endif /* CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */

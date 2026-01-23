@@ -101,10 +101,7 @@ SECTIONS
     {
 
 #include <zephyr/linker/rel-sections.ld>
-
-#ifdef CONFIG_LLEXT
 #include <zephyr/linker/llext-sections.ld>
-#endif
 
     /*
      * .plt and .iplt are here according to 'arm-zephyr-elf-ld --verbose',
@@ -140,6 +137,28 @@ SECTIONS
 #include <linker_relocate.ld>
 
 #endif /* CONFIG_CODE_DATA_RELOCATION */
+
+#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_itcm), okay)
+GROUP_START(ITCM)
+
+	SECTION_PROLOGUE(_ITCM_SECTION_NAME,,SUBALIGN(4))
+	{
+		__itcm_start = .;
+		*(.itcm)
+		*(".itcm.*")
+
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function. */
+#include <snippets-itcm-section.ld>
+
+		__itcm_end = .;
+	} GROUP_LINK_IN(ITCM AT> ROMABLE_REGION)
+
+	__itcm_size = __itcm_end - __itcm_start;
+	__itcm_load_start = LOADADDR(_ITCM_SECTION_NAME);
+
+GROUP_END(ITCM)
+#endif
 
     SECTION_PROLOGUE(_TEXT_SECTION_NAME,,)
 	{
@@ -241,6 +260,7 @@ SECTIONS
 	MPU_ALIGN(__rodata_region_end - ADDR(rom_start));
 #endif
 	__rom_region_end = __rom_region_start + . - ADDR(rom_start);
+	__rom_region_size = __rom_region_end - __rom_region_start;
 
     GROUP_END(ROMABLE_REGION)
 
@@ -319,28 +339,6 @@ SECTIONS
 #include <snippets-data-sections.ld>
 
     __data_region_end = .;
-
-#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_itcm), okay)
-GROUP_START(ITCM)
-
-	SECTION_PROLOGUE(_ITCM_SECTION_NAME,,SUBALIGN(4))
-	{
-		__itcm_start = .;
-		*(.itcm)
-		*(".itcm.*")
-
-/* Located in generated directory. This file is populated by the
- * zephyr_linker_sources() Cmake function. */
-#include <snippets-itcm-section.ld>
-
-		__itcm_end = .;
-	} GROUP_LINK_IN(ITCM AT> ROMABLE_REGION)
-
-	__itcm_size = __itcm_end - __itcm_start;
-	__itcm_load_start = LOADADDR(_ITCM_SECTION_NAME);
-
-GROUP_END(ITCM)
-#endif
 
 #if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_dtcm), okay)
 GROUP_START(DTCM)

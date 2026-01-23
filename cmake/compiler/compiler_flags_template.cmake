@@ -17,6 +17,9 @@ set_compiler_property(PROPERTY optimization_size_aggressive)
 
 set_compiler_property(PROPERTY optimization_fast)
 
+set_compiler_property(PROPERTY optimization_lto)
+set_compiler_property(PROPERTY optimization_lto_st)
+
 #######################################################
 # This section covers flags related to warning levels #
 #######################################################
@@ -171,3 +174,6 @@ set_compiler_property(PROPERTY no_function_sections)
 
 # Compiler flag for not placing variables in their own sections:
 set_compiler_property(PROPERTY no_data_sections)
+
+# Compiler flag to enable function instrumentation
+set_compiler_property(PROPERTY func_instrumentation)

@@ -95,6 +95,8 @@ SECTIONS
 	*(.text)
 	*(.text.*)
 
+	#include <snippets-text-sections.ld>
+
 	#include <zephyr/linker/kobject-text.ld>
 
 	MMU_PAGE_ALIGN_PERM
@@ -260,7 +262,5 @@ SECTION_PROLOGUE(.x86shadowstack.arr,,)
 	.shstrtab 0 : { *(.shstrtab) }
 #endif
 
-#ifdef CONFIG_LLEXT
-	#include <zephyr/linker/llext-sections.ld>
-#endif
+#include <zephyr/linker/llext-sections.ld>
 }

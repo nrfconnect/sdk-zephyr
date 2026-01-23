@@ -9,9 +9,19 @@ config NUM_IRQS
 	default 471
 
 config SHELL_BACKEND_SERIAL
-	default n if NRF_ETR_SHELL
+	default n if DEBUG_NRF_ETR_SHELL
 
 config POWER_DOMAIN
 	default y
+
+config CODE_DATA_RELOCATION
+	default y if (PM || POWEROFF) && !MCUBOOT
+
+config NRF_PERIPHCONF_SECTION
+	default y
+
+choice SEGGER_RTT_SECTION
+	default SEGGER_RTT_SECTION_CUSTOM_DTS_REGION
+endchoice
 
 endif # SOC_NRF54H20_CPUAPP

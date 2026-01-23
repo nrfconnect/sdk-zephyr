@@ -126,6 +126,48 @@ void pm_policy_state_lock_get(enum pm_state state, uint8_t substate_id);
 void pm_policy_state_lock_put(enum pm_state state, uint8_t substate_id);
 
 /**
+ * @brief Request to lock all power states.
+ *
+ * Requests use a reference counter.
+ */
+void pm_policy_state_all_lock_get(void);
+
+/**
+ * @brief Release locking of all power states.
+ */
+void pm_policy_state_all_lock_put(void);
+
+/**
+ * @brief Apply power state constraints by locking the specified states.
+ *
+ * This function locks all power states specified in the union of all constraints
+ * in the provided constraint list. Each constraint in the set contributes to
+ * determining which power states should be locked (not allowed), by increasing
+ * a reference count just as if pm_policy_state_lock_get was called on each constraints'
+ * states individually.
+ *
+ * @param constraints Pointer to the power state constraints set to apply.
+ *
+ * @see pm_policy_state_constraints_put()
+ */
+void pm_policy_state_constraints_get(struct pm_state_constraints *constraints);
+
+/**
+ * @brief Remove power state constraints by unlocking the specified states.
+ *
+ * This function unlocks all power states that were previously locked by a
+ * corresponding call to pm_policy_state_constraints_get() with the same
+ * constraint set. The function decreases the lock counter for each affected
+ * power state specified in the union of all constraints in the list, just as
+ * if pm_policy_state_put was called on all the constraints' states individually.
+ *
+ * @param constraints Pointer to the power state constraints set to remove.
+ *
+ * @see pm_policy_state_constraints_get()
+ */
+void pm_policy_state_constraints_put(struct pm_state_constraints *constraints);
+
+/**
  * @brief Check if a power state lock is active (not allowed).
  *
  * @param state Power state.
@@ -244,6 +286,14 @@ static inline void pm_policy_state_lock_put(enum pm_state state, uint8_t substat
 	ARG_UNUSED(substate_id);
 }
 
+static inline void pm_policy_state_all_lock_get(void)
+{
+}
+
+static inline void pm_policy_state_all_lock_put(void)
+{
+}
+
 static inline bool pm_policy_state_lock_is_active(enum pm_state state, uint8_t substate_id)
 {
 	ARG_UNUSED(state);
@@ -252,16 +302,16 @@ static inline bool pm_policy_state_lock_is_active(enum pm_state state, uint8_t s
 	return false;
 }
 
-static inline void pm_policy_event_register(struct pm_policy_event *evt, uint32_t cycle)
+static inline void pm_policy_event_register(struct pm_policy_event *evt, int64_t uptime_ticks)
 {
 	ARG_UNUSED(evt);
-	ARG_UNUSED(cycle);
+	ARG_UNUSED(uptime_ticks);
 }
 
-static inline void pm_policy_event_update(struct pm_policy_event *evt, uint32_t cycle)
+static inline void pm_policy_event_update(struct pm_policy_event *evt, int64_t uptime_ticks)
 {
 	ARG_UNUSED(evt);
-	ARG_UNUSED(cycle);
+	ARG_UNUSED(uptime_ticks);
 }
 
 static inline void pm_policy_event_unregister(struct pm_policy_event *evt)

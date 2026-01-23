@@ -514,9 +514,6 @@ static void esp32_clock_perip_init(void)
 	DPORT_SET_PERI_REG_MASK(DPORT_BT_LPCK_DIV_FRAC_REG, DPORT_LPCLK_SEL_RTC_SLOW);
 #endif
 
-	/* Enable RNG clock. */
-	periph_module_enable(PERIPH_RNG_MODULE);
-
 #if defined(CONFIG_SOC_SERIES_ESP32C2) || \
 	defined(CONFIG_SOC_SERIES_ESP32C3) || \
 	defined(CONFIG_SOC_SERIES_ESP32S3)
@@ -570,10 +567,16 @@ static int clock_control_esp32_get_rate(const struct device *dev, clock_control_
 
 	switch ((int)sys) {
 	case ESP32_CLOCK_CONTROL_SUBSYS_RTC_FAST:
-		*rate = esp_clk_tree_lp_fast_get_freq_hz(ESP_CLK_TREE_SRC_FREQ_PRECISION_APPROX);
+		*rate = esp_clk_tree_lp_fast_get_freq_hz(ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED);
 		break;
 	case ESP32_CLOCK_CONTROL_SUBSYS_RTC_SLOW:
-		*rate = clk_hal_lp_slow_get_freq_hz();
+		*rate = esp_clk_tree_lp_slow_get_freq_hz(ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED);
+		break;
+	case ESP32_CLOCK_CONTROL_SUBSYS_RTC_FAST_NOMINAL:
+		*rate = esp_clk_tree_lp_fast_get_freq_hz(ESP_CLK_TREE_SRC_FREQ_PRECISION_APPROX);
+		break;
+	case ESP32_CLOCK_CONTROL_SUBSYS_RTC_SLOW_NOMINAL:
+		*rate = esp_clk_tree_lp_slow_get_freq_hz(ESP_CLK_TREE_SRC_FREQ_PRECISION_APPROX);
 		break;
 	default:
 		*rate = clk_hal_cpu_get_freq_hz();

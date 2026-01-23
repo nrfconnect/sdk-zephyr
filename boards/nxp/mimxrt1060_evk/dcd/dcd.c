@@ -7,18 +7,9 @@
 
 #include "dcd.h"
 
-/* Component ID definition, used by tools. */
-#ifndef FSL_COMPONENT_ID
-#define FSL_COMPONENT_ID "platform.drivers.xip_board"
-#endif
-
-#if defined(XIP_BOOT_HEADER_ENABLE) && (XIP_BOOT_HEADER_ENABLE == 1)
-#if defined(XIP_BOOT_HEADER_DCD_ENABLE) && (XIP_BOOT_HEADER_DCD_ENABLE == 1)
-#if defined(__CC_ARM) || defined(__ARMCC_VERSION) || defined(__GNUC__)
+#if defined(CONFIG_NXP_IMXRT_BOOT_HEADER) && defined(CONFIG_BOOT_FLEXSPI_NOR)
+#if defined(CONFIG_NXP_IMXRT_BOOT_HEADER) && defined(CONFIG_DEVICE_CONFIGURATION_DATA)
 __attribute__((section(".boot_hdr.dcd_data"), used))
-#elif defined(__ICCARM__)
-#pragma location = ".boot_hdr.dcd_data"
-#endif
 
 const uint8_t dcd_data[] = {
 	/* HEADER */
@@ -624,5 +615,5 @@ const uint8_t dcd_data[] = {
 
 #else
 const uint8_t dcd_data[] = {0x00};
-#endif /* XIP_BOOT_HEADER_DCD_ENABLE */
-#endif /* XIP_BOOT_HEADER_ENABLE */
+#endif /* defined(CONFIG_NXP_IMXRT_BOOT_HEADER) && defined(CONFIG_DEVICE_CONFIGURATION_DATA) */
+#endif /* defined(CONFIG_NXP_IMXRT_BOOT_HEADER) && defined(CONFIG_BOOT_FLEXSPI_NOR) */

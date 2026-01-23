@@ -45,11 +45,13 @@
 #endif
 #elif defined(CONFIG_GIC)
 /*
- * For the platforms that use the ARM GIC, use the SGI (software generated
- * interrupt) lines 14 and 15 for testing.
+ * For platforms that use Arm's GIC, use the SGI (software generated
+ * interrupt) lines 6 and 7 for testing.
+ * SGI 0-2 are used by Zephyr for SMP IPIs.
+ * SGI 8-15 are unaccessible from Non-Secure state.
  */
-#define IRQ0_LINE	14
-#define IRQ1_LINE	15
+#define IRQ0_LINE	6
+#define IRQ1_LINE	7
 
 /*
  * Choose lower prio for IRQ0 and higher priority for IRQ1
@@ -60,16 +62,22 @@
  */
 #define IRQ0_PRIO	IRQ_DEFAULT_PRIORITY
 #define IRQ1_PRIO	0x0
-#elif (defined(CONFIG_SOC_SERIES_NRF54LX) || defined(CONFIG_SOC_NRF54H20_CPUFLPR)) && \
+#elif (defined(CONFIG_SOC_SERIES_NRF54L) || defined(CONFIG_SOC_NRF54H20_CPUFLPR)) && \
 	defined(CONFIG_RISCV_CORE_NORDIC_VPR)
 #define IRQ0_LINE	16
 #define IRQ1_LINE	17
 
 #define IRQ0_PRIO	1
 #define IRQ1_PRIO	2
-#elif defined(CONFIG_SOC_SERIES_NRF54HX) && defined(CONFIG_RISCV_CORE_NORDIC_VPR)
+#elif defined(CONFIG_SOC_SERIES_NRF54H) && defined(CONFIG_RISCV_CORE_NORDIC_VPR)
 #define IRQ0_LINE	14
 #define IRQ1_LINE	15
+
+#define IRQ0_PRIO	1
+#define IRQ1_PRIO	2
+#elif defined(CONFIG_SOC_SERIES_NRF71) && defined(CONFIG_RISCV_CORE_NORDIC_VPR)
+#define IRQ0_LINE	19
+#define IRQ1_LINE	20
 
 #define IRQ0_PRIO	1
 #define IRQ1_PRIO	2

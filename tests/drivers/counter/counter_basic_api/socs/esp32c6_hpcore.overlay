@@ -1,5 +1,12 @@
+/*
+ * Copyright (c) 2025 Espressif Systems (Shanghai) Co., Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 &timer0 {
 	status = "okay";
+
 	counter {
 		status = "okay";
 	};
@@ -7,7 +14,12 @@
 
 &timer1 {
 	status = "okay";
+
 	counter {
 		status = "okay";
 	};
+};
+
+&rtc_timer {
+	status = "okay";
 };

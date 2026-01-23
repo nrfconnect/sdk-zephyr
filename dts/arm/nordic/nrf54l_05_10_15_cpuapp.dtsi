@@ -5,13 +5,18 @@
  */
 
 cpu: &cpuapp {};
+
 systick: &cpuapp_systick {};
+
 nvic: &cpuapp_nvic {};
 
 /delete-node/ &cpuflpr;
+/delete-node/ &cpuflpr_clic;
+
+#ifndef USE_NON_SECURE_ADDRESS_MAP
 /delete-node/ &cpuflpr_rram;
 /delete-node/ &cpuflpr_sram;
-/delete-node/ &cpuflpr_clic;
+#endif
 
 / {
 	chosen {
@@ -72,7 +77,7 @@ nvic: &cpuapp_nvic {};
 #else
 	interrupts = <228 NRF_DEFAULT_IRQ_PRIORITY>,
 #endif
-		<229 NRF_DEFAULT_IRQ_PRIORITY>; /* reserved for Zero Latency IRQs */
+		     <229 NRF_DEFAULT_IRQ_PRIORITY>; /* reserved for Zero Latency IRQs */
 };
 
 &gpiote20 {

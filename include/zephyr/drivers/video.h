@@ -34,12 +34,6 @@
 extern "C" {
 #endif
 
-/*
- * Flag used by @ref video_caps structure to indicate endpoint operates on
- * buffers the size of the video frame
- */
-#define LINE_COUNT_HEIGHT (-1)
-
 struct video_control;
 
 /**
@@ -79,6 +73,17 @@ struct video_format {
 	 * the next row (>=width).
 	 */
 	uint32_t pitch;
+	/**
+	 * @brief size of the buffer in bytes, need to be set by the drivers
+	 *
+	 * For uncompressed formats, this is the size of the raw data buffer in bytes,
+	 * which could be the whole raw image or a portion of the raw image in cases
+	 * the receiver / dma supports it.
+	 *
+	 * For compressed formats, this is the maximum number of bytes required to
+	 * hold a complete compressed frame, estimated for the worst case.
+	 */
+	uint32_t size;
 };
 
 /**
@@ -117,22 +122,6 @@ struct video_caps {
 	 * the stream.
 	 */
 	uint8_t min_vbuf_count;
-	/** Denotes minimum line count of a video buffer that this endpoint
-	 * can fill or process. Each line is expected to consume the number
-	 * of bytes the selected video format's pitch uses, so the video
-	 * buffer must be at least `pitch` * `min_line_count` bytes.
-	 * `LINE_COUNT_HEIGHT` is a special value, indicating the endpoint
-	 * only supports video buffers with at least enough bytes to store
-	 * a full video frame
-	 */
-	int16_t min_line_count;
-	/**
-	 * Denotes maximum line count of a video buffer that this endpoint
-	 * can fill or process. Similar constraints to `min_line_count`,
-	 * but `LINE_COUNT_HEIGHT` indicates that the endpoint will never
-	 * fill or process more than a full video frame in one video buffer.
-	 */
-	int16_t max_line_count;
 };
 
 /**
@@ -881,7 +870,7 @@ static inline int video_get_selection(const struct device *dev, struct video_sel
  * @param align Alignment of the requested memory, must be a power of two.
  * @param timeout Timeout duration or K_NO_WAIT
  *
- * @retval pointer to allocated video buffer
+ * @return pointer to allocated video buffer
  */
 struct video_buffer *video_buffer_aligned_alloc(size_t size, size_t align, k_timeout_t timeout);
 
@@ -891,7 +880,7 @@ struct video_buffer *video_buffer_aligned_alloc(size_t size, size_t align, k_tim
  * @param size Size of the video buffer (in bytes).
  * @param timeout Timeout duration or K_NO_WAIT
  *
- * @retval pointer to allocated video buffer
+ * @return pointer to allocated video buffer
  */
 struct video_buffer *video_buffer_alloc(size_t size, k_timeout_t timeout);
 
@@ -976,6 +965,61 @@ void video_closest_frmival(const struct device *dev, struct video_frmival_enum *
  * @param lane_nb Number of CSI-2 lanes used
  */
 int64_t video_get_csi_link_freq(const struct device *dev, uint8_t bpp, uint8_t lane_nb);
+
+/**
+ * @brief Estimate the size and pitch in bytes of a @ref video_format
+ *
+ * This helper should only be used by drivers that support the whole image frame.
+ *
+ * For uncompressed formats, it gives the actual size and pitch of the
+ * whole raw image without any padding.
+ *
+ * For compressed formats, it gives a rough estimate size of a complete
+ * compressed frame.
+ *
+ * @param fmt Pointer to the video format structure
+ * @return 0 on success, otherwise a negative errno code
+ */
+int video_estimate_fmt_size(struct video_format *fmt);
+
+/**
+ * @brief Set compose rectangle (if applicable) prior to setting format
+ *
+ * Some devices expose compose capabilities, allowing them to apply a transformation
+ * (downscale / upscale) to the frame. For those devices, it is necessary to set the
+ * compose rectangle before being able to apply the frame format (which must have the
+ * same width / height as the compose rectangle width / height).
+ * In order to allow non-compose aware application to be able to control such devices,
+ * introduce a helper which, if available, will apply the compose rectangle prior to
+ * setting the format.
+ *
+ * @param dev Pointer to the video device struct to set format
+ * @param fmt Pointer to a video format struct.
+ *
+ * @retval 0 Is successful.
+ * @retval -EINVAL If parameters are invalid.
+ * @retval -ENOTSUP If format is not supported.
+ * @retval -EIO General input / output error.
+ */
+int video_set_compose_format(const struct device *dev, struct video_format *fmt);
+
+/**
+ * @brief Transfer a buffer between 2 video device
+ *
+ * Helper function which dequeues a buffer from a source device and enqueues it into a
+ * sink device, changing its buffer type between the two.
+ *
+ * @param src		Video device from where buffer is dequeued (source)
+ * @param sink		Video device into which the buffer is queued (sink)
+ * @param src_type	Video buffer type on the source device
+ * @param sink_type	Video buffer type on the sink device
+ * @param timeout	Timeout to be applied on dequeue
+ *
+ * @return 0 on success, otherwise a negative errno code
+ */
+int video_transfer_buffer(const struct device *src, const struct device *sink,
+			  enum video_buf_type src_type, enum video_buf_type sink_type,
+			  k_timeout_t timeout);
 
 /**
  * @defgroup video_pixel_formats Video pixel formats
@@ -1767,6 +1811,16 @@ int64_t video_get_csi_link_freq(const struct device *dev, uint8_t bpp, uint8_t l
  * Both JPEG (single frame) and Motion-JPEG (MJPEG, multiple JPEG frames concatenated)
  */
 #define VIDEO_PIX_FMT_JPEG VIDEO_FOURCC('J', 'P', 'E', 'G')
+
+/**
+ * H264 with start code
+ */
+#define VIDEO_PIX_FMT_H264 VIDEO_FOURCC('H', '2', '6', '4')
+
+/**
+ * H264 without start code
+ */
+#define VIDEO_PIX_FMT_H264_NO_SC VIDEO_FOURCC('A', 'V', 'C', '1')
 
 /**
  * @}

@@ -5,4 +5,9 @@
  */
 
 #include <bflb/bl61x.dtsi>
-#include <dt-bindings/pinctrl/bl618x-pinctrl.h>
+#include <zephyr/dt-bindings/pinctrl/bl618x-pinctrl.h>
+
+&psram {
+	status = "okay";
+	reg = <0xa8000000 DT_SIZE_M(4)>;
+};

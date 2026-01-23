@@ -386,10 +386,13 @@ def kconfig_snippet(meta, path, kconfig_file=None, blobs=False, taint_blobs=Fals
     return '\n'.join(snippet)
 
 
-def process_kconfig_module_dir(module, meta):
+def process_kconfig_module_dir(module, meta, cmake_output):
     module_path = PurePath(module)
     name_sanitized = meta['name-sanitized']
-    return f'ZEPHYR_{name_sanitized.upper()}_MODULE_DIR={module_path.as_posix()}\n'
+
+    if cmake_output is False:
+        return f'ZEPHYR_{name_sanitized.upper()}_MODULE_DIR={module_path.as_posix()}\n'
+    return f'list(APPEND kconfig_env_dirs ZEPHYR_{name_sanitized.upper()}_MODULE_DIR={module_path.as_posix()})\n'
 
 
 def process_kconfig(module, meta):
@@ -769,7 +772,7 @@ def parse_modules(zephyr_base, manifest=None, west_projs=None, modules=None,
             extra_module = os.environ.get(var, None)
             if not extra_module:
                 continue
-            extra_modules.extend(PurePosixPath(p) for p in extra_module.split(';'))
+            extra_modules.extend(PurePosixPath(p) for p in extra_module.split(';') if p)
 
     Module = namedtuple('Module', ['project', 'meta', 'depends'])
 
@@ -827,6 +830,14 @@ def parse_modules(zephyr_base, manifest=None, west_projs=None, modules=None,
 
     return sorted_modules
 
+def write_if_different(file, data):
+    if Path(file).is_file():
+        with open(file, encoding="utf-8") as fp:
+            if fp.read() == data:
+                return
+
+    with open(file, 'w', encoding="utf-8") as fp:
+        fp.write(data)
 
 def main():
     parser = argparse.ArgumentParser(description='''
@@ -870,19 +881,30 @@ def main():
     args = parser.parse_args()
 
     kconfig_module_dirs = ""
+    kconfig_module_dirs_cmake = "set(kconfig_env_dirs)\n"
     kconfig = ""
     cmake = ""
     sysbuild_kconfig = ""
     sysbuild_cmake = ""
-    settings = ""
     twister = ""
+    settings = '''\
+# WARNING. THIS FILE IS AUTO-GENERATED. DO NOT MODIFY!
+#
+# This file contains build system settings derived from your modules.
+#
+# Modules may be set via ZEPHYR_MODULES, ZEPHYR_EXTRA_MODULES,
+# and/or the west manifest file.
+#
+# See the Modules guide for more information.
+'''
 
     west_projs = west_projects()
     modules = parse_modules(args.zephyr_base, None, west_projs,
                             args.modules, args.extra_modules)
 
     for module in modules:
-        kconfig_module_dirs += process_kconfig_module_dir(module.project, module.meta)
+        kconfig_module_dirs += process_kconfig_module_dir(module.project, module.meta, False)
+        kconfig_module_dirs_cmake += process_kconfig_module_dir(module.project, module.meta, True)
         kconfig += process_kconfig(module.project, module.meta)
         cmake += process_cmake(module.project, module.meta)
         sysbuild_kconfig += process_sysbuildkconfig(
@@ -894,55 +916,42 @@ def main():
     if args.kconfig_out or args.sysbuild_kconfig_out:
         if args.kconfig_out:
             kconfig_module_dirs_out = PurePath(args.kconfig_out).parent / 'kconfig_module_dirs.env'
+            kconfig_module_dirs_cmake_out = PurePath(args.kconfig_out).parent / \
+                                            'kconfig_module_dirs.cmake'
         elif args.sysbuild_kconfig_out:
             kconfig_module_dirs_out = PurePath(args.sysbuild_kconfig_out).parent / \
                                       'kconfig_module_dirs.env'
+            kconfig_module_dirs_cmake_out = PurePath(args.sysbuild_kconfig_out).parent / \
+                                      'kconfig_module_dirs.cmake'
 
-        with open(kconfig_module_dirs_out, 'w', encoding="utf-8") as fp:
-            fp.write(kconfig_module_dirs)
+        write_if_different(kconfig_module_dirs_out, kconfig_module_dirs)
+        write_if_different(kconfig_module_dirs_cmake_out, kconfig_module_dirs_cmake)
 
     if args.kconfig_out:
-        with open(args.kconfig_out, 'w', encoding="utf-8") as fp:
-            fp.write(kconfig)
+        write_if_different(args.kconfig_out, kconfig)
 
     if args.cmake_out:
-        with open(args.cmake_out, 'w', encoding="utf-8") as fp:
-            fp.write(cmake)
+        write_if_different(args.cmake_out, cmake)
 
     if args.sysbuild_kconfig_out:
-        with open(args.sysbuild_kconfig_out, 'w', encoding="utf-8") as fp:
-            fp.write(sysbuild_kconfig)
+        write_if_different(args.sysbuild_kconfig_out, sysbuild_kconfig)
 
     if args.sysbuild_cmake_out:
-        with open(args.sysbuild_cmake_out, 'w', encoding="utf-8") as fp:
-            fp.write(sysbuild_cmake)
+        write_if_different(args.sysbuild_cmake_out, sysbuild_cmake)
 
     if args.settings_out:
-        with open(args.settings_out, 'w', encoding="utf-8") as fp:
-            fp.write('''\
-# WARNING. THIS FILE IS AUTO-GENERATED. DO NOT MODIFY!
-#
-# This file contains build system settings derived from your modules.
-#
-# Modules may be set via ZEPHYR_MODULES, ZEPHYR_EXTRA_MODULES,
-# and/or the west manifest file.
-#
-# See the Modules guide for more information.
-''')
-            fp.write(settings)
+        write_if_different(args.settings_out, settings)
 
     if args.twister_out:
-        with open(args.twister_out, 'w', encoding="utf-8") as fp:
-            fp.write(twister)
+        write_if_different(args.twister_out, twister)
 
     if args.meta_out:
         meta = process_meta(args.zephyr_base, west_projs, modules,
                             args.extra_modules, args.meta_state_propagate)
 
-        with open(args.meta_out, 'w', encoding="utf-8") as fp:
-            # Ignore references and insert data instead
-            yaml.Dumper.ignore_aliases = lambda self, data: True
-            fp.write(yaml.dump(meta))
+        # Ignore references and insert data instead
+        yaml.Dumper.ignore_aliases = lambda self, data: True
+        write_if_different(args.meta_out, yaml.dump(meta))
 
 
 if __name__ == "__main__":

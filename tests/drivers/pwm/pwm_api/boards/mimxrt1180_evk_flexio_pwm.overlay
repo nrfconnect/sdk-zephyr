@@ -6,7 +6,7 @@
 
 / {
 	aliases {
-		pwm-0 = &flexio2_pwm;
+		pwm-test = &flexio2_pwm;
 	};
 };
 
@@ -26,12 +26,14 @@
 
 &flexio2 {
 	status = "okay";
+
 	flexio2_pwm: flexio2_pwm {
 		compatible = "nxp,flexio-pwm";
 		#pwm-cells = <3>;
 		status = "okay";
 		pinctrl-0 = <&pinmux_flexio2_pwm_default>;
 		pinctrl-names = "default";
+
 		pwm_0 {
 			pin-id = <2>;
 			prescaler = <1>;

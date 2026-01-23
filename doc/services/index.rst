@@ -10,13 +10,14 @@ OS Services
    console.rst
    cpu_freq/index.rst
    cpu_load/index.rst
+   crc/index.rst
    crypto/index
    debugging/index.rst
    device_mgmt/index
    dsp/index.rst
-   file_system/index.rst
    formatted_output.rst
    input/index.rst
+   instrumentation/index.rst
    ipc/index.rst
    llext/index.rst
    logging/index.rst
@@ -38,7 +39,6 @@ OS Services
    task_wdt/index.rst
    tfm/index
    virtualization/index.rst
-   retention/index.rst
    rtio/index.rst
    zbus/index.rst
    misc.rst

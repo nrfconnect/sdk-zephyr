@@ -14,6 +14,7 @@
 #include <zephyr/drivers/spi.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/wifi/nrf_wifi/bus/qspi_if.h>
+#include <zephyr/pm/device_runtime.h>
 
 #include "spi_if.h"
 
@@ -24,10 +25,10 @@ LOG_MODULE_DECLARE(wifi_nrf_bus, CONFIG_WIFI_NRF70_BUSLIB_LOG_LEVEL);
 static struct qspi_config *spim_config;
 
 static const struct spi_dt_spec spi_spec =
-SPI_DT_SPEC_GET(NRF7002_NODE, SPI_WORD_SET(8) | SPI_TRANSFER_MSB, 0);
+SPI_DT_SPEC_GET(NRF7002_NODE, SPI_WORD_SET(8) | SPI_TRANSFER_MSB);
 
 static struct spi_dt_spec spi_spec_8mhz =
-SPI_DT_SPEC_GET(NRF7002_NODE, SPI_WORD_SET(8) | SPI_TRANSFER_MSB, 0);
+SPI_DT_SPEC_GET(NRF7002_NODE, SPI_WORD_SET(8) | SPI_TRANSFER_MSB);
 
 static int spim_xfer_tx(unsigned int addr, void *data, unsigned int len)
 {
@@ -286,11 +287,19 @@ int spim_init(struct qspi_config *config)
 		spi_spec.config.frequency / MHZ(1));
 	LOG_INF("SPIM %s: latency = %d", spi_spec.bus->name, spim_config->qspi_slave_latency);
 
+#ifdef CONFIG_NRF70_SPI_PM_CLAIM_WHILE_ACTIVE
+	return pm_device_runtime_get(spi_spec.bus);
+#else
 	return 0;
+#endif /* CONFIG_NRF70_SPI_PM_CLAIM_WHILE_ACTIVE */
 }
 
 int spim_deinit(void)
 {
+#ifdef CONFIG_NRF70_SPI_PM_CLAIM_WHILE_ACTIVE
+	(void)pm_device_runtime_put(spi_spec.bus);
+#endif /* CONFIG_NRF70_SPI_PM_CLAIM_WHILE_ACTIVE */
+
 	return spi_release_dt(&spi_spec);
 }
 

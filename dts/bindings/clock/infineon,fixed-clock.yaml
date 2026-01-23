@@ -7,23 +7,46 @@ description: Generic fixed-rate clock provider
 
 compatible: "infineon,fixed-clock"
 
-include: [base.yaml, clock-controller.yaml]
+include: fixed-clock.yaml
 
 properties:
-  clock-frequency:
+  system-clock:
     type: int
-    description: output clock frequency (Hz)
     required: true
+    description: |
+      The type of clock (refer to include/.../dt-bindings/clock/ifx_clock_source_common.h):
+      clk_iho  : system-clock = <IFX_IHO>
+      clk_pilo : system-clock = <IFX_PILO>
 
-  clock-block:
+  feedback-div:
     type: int
-    description: Clock HW block number (refer to ifx_cat1_clock_block in clock_control_ifx_cat1.h)
-    required: true
 
-  clock-instance:
+  reference-div:
     type: int
-    description: TEMP
-    required: true
 
-  "#clock-cells":
-    const: 0
+  output-div:
+    type: int
+
+  fraction-div:
+    type: int
+
+  dco-mode-enable:
+    type: boolean
+
+  div-p:
+    type: int
+
+  div-n:
+    type: int
+
+  div-k:
+    type: int
+
+  freq-mode-sel:
+    type: int
+
+  flock-enable-threshold:
+    type: int
+
+  lf-beta-value:
+    type: int

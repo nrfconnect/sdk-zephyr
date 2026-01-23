@@ -441,7 +441,7 @@ static DEVICE_API(gpio, gpio_max14906_api) = {
 
 #define GPIO_MAX14906_DEVICE(id)                                                                   \
 	static const struct max14906_config max14906_##id##_cfg = {                                \
-		.spi = SPI_DT_SPEC_INST_GET(id, SPI_OP_MODE_MASTER | SPI_WORD_SET(8U), 0U),        \
+		.spi = SPI_DT_SPEC_INST_GET(id, SPI_OP_MODE_MASTER | SPI_WORD_SET(8U)),            \
 		.ready_gpio = GPIO_DT_SPEC_INST_GET(id, drdy_gpios),                               \
 		.fault_gpio = GPIO_DT_SPEC_INST_GET(id, fault_gpios),                              \
 		.sync_gpio = GPIO_DT_SPEC_INST_GET(id, sync_gpios),                                \
@@ -471,9 +471,9 @@ static DEVICE_API(gpio, gpio_max14906_api) = {
 				.OW_OFF_EN3 = DT_INST_PROP_BY_IDX(id, ow_en, 2),                   \
 				.OW_OFF_EN4 = DT_INST_PROP_BY_IDX(id, ow_en, 3),                   \
 				.GDRV_EN1 = DT_INST_PROP_BY_IDX(id, gdrv_en, 0),                   \
-				.GDRV_EN1 = DT_INST_PROP_BY_IDX(id, gdrv_en, 1),                   \
-				.GDRV_EN2 = DT_INST_PROP_BY_IDX(id, gdrv_en, 2),                   \
-				.GDRV_EN3 = DT_INST_PROP_BY_IDX(id, gdrv_en, 3),                   \
+				.GDRV_EN2 = DT_INST_PROP_BY_IDX(id, gdrv_en, 1),                   \
+				.GDRV_EN3 = DT_INST_PROP_BY_IDX(id, gdrv_en, 2),                   \
+				.GDRV_EN4 = DT_INST_PROP_BY_IDX(id, gdrv_en, 3),                   \
 			},                                                                         \
 		.chan_en.sht_vdd_en.reg_bits =                                                     \
 			{                                                                          \
