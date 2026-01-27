@@ -200,7 +200,8 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: a83db66acbeca0bfef157a0c3482c07ddbb82555
+      url: https://github.com/mib1-nordic/hal_nordic
+      revision: 3ca95845238f32bd2f45707e6796f19030d77299
       path: modules/hal/nordic
       groups:
         - hal
