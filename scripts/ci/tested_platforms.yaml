@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Tested platforms for sdk-zephyr CI.
+#
+# twister-lib reads this file to generate arguments for twister runs.
+# When new platforms are added, they can be tested with branches or forks
+# of sdk-zephyr before being merged, avoiding surprises at release time.
+#
+# Platform identifier format: <board>/<soc>[/<cpucluster>][/<variant>][@<revision>]
+#
+
+# Platforms tested on every CI run (PR, commit, nightly, weekly)
+always:
+  - native_sim
+  - qemu_cortex_m3
+  - nrf52dk/nrf52832
+  - nrf54h20dk/nrf54h20/cpuapp
+  - nrf54h20dk/nrf54h20/cpurad
+  - nrf54h20dk/nrf54h20/cpuppr
+  - nrf54l15dk/nrf54l15/cpuapp
+  - nrf54l15dk/nrf54l15/cpuflpr
+  - nrf54lm20dk/nrf54lm20a/cpuapp
+
+# Additional platforms tested only on NIGHTLY and WEEKLY runs
+nightly:
+  - nrf5340dk/nrf5340/cpuapp
+  - nrf5340dk/nrf5340/cpuapp/ns
+  - nrf5340dk/nrf5340/cpunet
+  - nrf9160dk/nrf9160
+  - nrf9160dk/nrf9160/ns
+  - nrf52840dk/nrf52840
+  - mps2/an521/cpu0
+
+# Platforms not currently tested (can be re-enabled by moving to always or nightly)
+disabled:
