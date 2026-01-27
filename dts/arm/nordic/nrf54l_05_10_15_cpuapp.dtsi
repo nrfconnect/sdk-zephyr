@@ -31,7 +31,7 @@ nvic: &cpuapp_nvic {};
 	};
 
 	rng: rng {
-		status = "disabled";
+		status = "okay";
 		compatible = "nordic,nrf-cracen-ctrdrbg";
 	};
 
