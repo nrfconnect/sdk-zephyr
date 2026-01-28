@@ -1,5 +1,4 @@
 common:
-  tags: llext
   platform_allow:
     - qemu_cortex_a9          # ARM Cortex-A9 (ARMv7-A ISA)
     - qemu_cortex_r5          # ARM Cortex-R5 (ARMv7-R ISA)
