@@ -1,6 +1,5 @@
 common:
   tags:
-    - llext
     - edk
   arch_allow:
     - arm
@@ -13,4 +12,3 @@ tests:
     build_only: true
     tags:
       - edk
-      - llext
