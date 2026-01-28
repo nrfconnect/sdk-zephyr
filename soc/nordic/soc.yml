@@ -262,3 +262,10 @@ runners:
               - nrf9280/cpuapp
               - nrf9280/cpurad
               - nrf9280/cpuppr
+      - runners:
+          - nrfutil_next
+        run: last
+        groups:
+          - qualifiers:
+              - nrf7120/cpuapp
+              - nrf7120/cpuflpr
