@@ -771,9 +771,11 @@ class KconfigCheck(ComplianceTest):
                 self.blocked_module_dirs.append(modules_dir / module / 'Kconfig')
 
         if os.path.exists(nrf_modules_dir):
-            nrf_modules = [name for name in os.listdir(nrf_modules_dir) if
-                           os.path.exists(os.path.join(nrf_modules_dir, name,
-                                                       'Kconfig'))]
+            nrf_modules = [
+                name
+                for name in os.listdir(nrf_modules_dir)
+                if os.path.exists(os.path.join(nrf_modules_dir, name, 'Kconfig'))
+            ]
 
             for module in nrf_modules:
                 if module in self.external_module_name_block_list:
