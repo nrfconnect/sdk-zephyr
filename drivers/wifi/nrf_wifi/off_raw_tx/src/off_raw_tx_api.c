@@ -345,6 +345,7 @@ int nrf70_off_raw_tx_conf_update(struct nrf_wifi_off_raw_tx_conf *conf)
 	off_ctrl_params->channel_no = conf->chan;
 #else
 	off_ctrl_params->chan.primary_num = conf->chan;
+	off_ctrl_params->chan.op_band = conf->band;
 #endif /* !WIFI_NRF71 */
 	off_ctrl_params->period_in_us = conf->period_us;
 	off_ctrl_params->tx_pwr = conf->tx_pwr;

@@ -145,6 +145,10 @@ struct nrf_wifi_off_raw_tx_conf {
 	unsigned int tx_pwr;
 	/** Channel number on which to transmit */
 	unsigned int chan;
+#ifdef CONFIG_WIFI_NRF71
+	/** Opearting Band of the channel, 0: 2.4G, 1: 5G, 2: 6G */
+	unsigned int band;
+#endif /* CONFIG_WIFI_NRF71 */
 	/** Set to TRUE to use short preamble for FALSE to disable short preamble */
 	bool short_preamble;
 	/* Number of times a packet should be retried at each possible rate */
