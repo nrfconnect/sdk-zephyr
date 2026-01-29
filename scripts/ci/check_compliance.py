@@ -687,13 +687,37 @@ class KconfigCheck(ComplianceTest):
 
     # This block list contains a list of upstream Zephyr modules that should not be checked
     # DO NOT MERGE CHANGES TO THIS WITHOUT BUILD SYSTEM AND CODE OWNER APPROVAL!
-    external_module_name_block_list = ['canopennode', 'chre', 'cmsis', 'cmsis-dsp', 'cmsis-nn',
-                                       'cmsis_6', 'edtt', 'fatfs', 'hal_st', 'hal_tdk',
-                                       'hal_wurthelektronik', 'liblc3', 'libmetal', 'littlefs',
-                                       'loramac-node', 'lvgl', 'lz4', 'mipi-sys-t', 'nanopb',
-                                       'net-tools', 'nrf_hw_models', 'open-amp', 'percepio',
-                                       'picolibc', 'segger', 'tf-m-tests', 'tinycrypt',
-                                       'uoscore-uedhoc', 'zscilib']
+    external_module_name_block_list = [
+        'canopennode',
+        'chre',
+        'cmsis',
+        'cmsis-dsp',
+        'cmsis-nn',
+        'cmsis_6',
+        'edtt',
+        'fatfs',
+        'hal_st',
+        'hal_tdk',
+        'hal_wurthelektronik',
+        'liblc3',
+        'libmetal',
+        'littlefs',
+        'loramac-node',
+        'lvgl',
+        'lz4',
+        'mipi-sys-t',
+        'nanopb',
+        'net-tools',
+        'nrf_hw_models',
+        'open-amp',
+        'percepio',
+        'picolibc',
+        'segger',
+        'tf-m-tests',
+        'tinycrypt',
+        'uoscore-uedhoc',
+        'zscilib',
+    ]
 
     # Holds a list or directories/files which should not be checked
     blocked_module_dirs = []
@@ -1355,8 +1379,9 @@ Options must not be defined in defconfig files.
 
                 for module_name in self.external_module_name_block_list:
                     # Workaround for being unable to use full_match() due to python version
-                    if '/modules/' in str(normalised_file_name) and \
-                       ('/' + module_name + '/') in str(normalised_file_name):
+                    if '/modules/' in str(normalised_file_name) and (
+                        '/' + module_name + '/'
+                    ) in str(normalised_file_name):
                         skip_node = True
                         break
 
