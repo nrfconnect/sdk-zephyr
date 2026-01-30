@@ -12,9 +12,6 @@ class UVCCamera:
         self.res_x = config.get("res_x", 1280)
         self.res_y = config.get("res_y", 720)
         self.cap = cv2.VideoCapture(self.device_id)
-        self.prev_frame = None
-        self.current_alarms = 0
-        self.alarm_duration = 5  # Alarm duration in frames
         self.fingerprint_cache = {}  # Store video fingerprints
         self._original_wb = 0
 
@@ -168,7 +165,7 @@ class UVCCamera:
         print(f"  Color Balance - B Channel: {analysis['color_balance']['b_channel']:.2f}")
         print(f"  Sharpness: {analysis['sharpness']:.2f}")
 
-        # 在帧上显示分析结果
+        # show report
         if frame is not None:
             text_y = 30
             cv2.putText(
@@ -269,4 +266,13 @@ class UVCCamera:
 
     def release(self):
         self.cap.release()
-        cv2.destroyAllWindows()
+        try:
+            # compatible with openCV-headless mode
+            cv2.destroyAllWindows()
+        except Exception as e:
+            # Handle cv2.error and other potential exceptions
+            if "not implemented" in str(e) or "Rebuild the library" in str(e):
+                # This is expected in headless/no-GUI environments
+                pass
+            else:
+                print(f"Warning: Could not destroy windows: {e}")

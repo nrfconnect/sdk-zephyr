@@ -21,7 +21,7 @@ LOG_MODULE_REGISTER(dmic_nrfx_pdm, CONFIG_AUDIO_DMIC_LOG_LEVEL);
 #define NODE_AUDIO_AUXPLL DT_NODELABEL(audio_auxpll)
 #define NODE_AUDIOPLL     DT_NODELABEL(audiopll)
 
-#if CONFIG_SOC_SERIES_NRF54HX
+#if CONFIG_SOC_SERIES_NRF54H
 #define DMIC_NRFX_CLOCK_FREQ MHZ(16)
 #define DMIC_NRFX_AUDIO_CLOCK_FREQ DT_PROP_OR(NODE_AUDIOPLL, frequency, 0)
 #elif DT_NODE_HAS_STATUS_OKAY(NODE_AUDIO_AUXPLL)
@@ -340,16 +340,14 @@ static int start_transfer(struct dmic_nrfx_pdm_drv_data *drv_data)
 	}
 
 	LOG_ERR("Failed to start PDM: %d", err);
-	ret =  -EIO;
 
 	ret = release_clock(drv_data);
 	if (ret < 0) {
 		LOG_ERR("Failed to release clock: %d", ret);
-		return ret;
 	}
 
 	drv_data->active = false;
-	return ret;
+	return -EIO;
 }
 
 static void clock_started_callback(struct onoff_manager *mgr,

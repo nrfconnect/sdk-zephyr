@@ -32,12 +32,13 @@ def parse_args():
 
     argparser.add_argument("dbfile", help="Dictionary Logging Database file")
     argparser.add_argument("logfile", help="Log Data file")
-    argparser.add_argument("--hex", action="store_true",
-                           help="Log Data file is in hexadecimal strings")
-    argparser.add_argument("--rawhex", action="store_true",
-                           help="Log file only contains hexadecimal log data")
-    argparser.add_argument("--debug", action="store_true",
-                           help="Print extra debugging information")
+    argparser.add_argument(
+        "--hex", action="store_true", help="Log Data file is in hexadecimal strings"
+    )
+    argparser.add_argument(
+        "--rawhex", action="store_true", help="Log file only contains hexadecimal log data"
+    )
+    argparser.add_argument("--debug", action="store_true", help="Print extra debugging information")
 
     return argparser.parse_args()
 
@@ -96,7 +97,18 @@ def read_log_file(args):
                 sys.exit(1)
             logdata = logfile.read()
 
+        # RTT logs add header information to the logdata, the actual log comes
+        # after newline following "Process:" line in logdata
+        if b"Process:" in logdata:
+            process_idx = logdata.find(b"Process:")
+            newline_idx = logdata.find(b"\n", process_idx)
+            if newline_idx != -1:
+                # Keep only the data after this newline
+                logdata = logdata[newline_idx + 1 :]
+                logger.debug("Found 'Process:' in the RTT header, trimmed data")
+
     return logdata
+
 
 def main():
     """Main function of log parser"""
@@ -123,6 +135,7 @@ def main():
             len(logdata) - parsed_data_offset,
         )
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

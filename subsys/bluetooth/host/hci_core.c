@@ -4,6 +4,7 @@
  * Copyright (c) 2017-2025 Nordic Semiconductor ASA
  * Copyright (c) 2015-2016 Intel Corporation
  * Copyright 2025 NXP
+ * Copyright (c) 2025 Xiaomi Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -1068,9 +1069,9 @@ static void hci_disconn_complete(struct net_buf *buf)
 
 	bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
 
-	if (conn->type != BT_CONN_TYPE_LE) {
+	if (!bt_conn_is_le(conn)) {
 #if defined(CONFIG_BT_CLASSIC)
-		if (conn->type == BT_CONN_TYPE_SCO) {
+		if (bt_conn_is_sco(conn)) {
 			bt_sco_cleanup(conn);
 			return;
 		}
@@ -1078,7 +1079,7 @@ static void hci_disconn_complete(struct net_buf *buf)
 		 * If only for one connection session bond was set, clear keys
 		 * database row for this connection.
 		 */
-		if (conn->type == BT_CONN_TYPE_BR && conn->br.link_key != NULL) {
+		if (bt_conn_is_br(conn) && conn->br.link_key != NULL) {
 			/*
 			 * If the connection link is paired but not bond, remove
 			 * the link key upon disconnection.
@@ -2156,7 +2157,7 @@ static void unpair(uint8_t id, const bt_addr_le_t *addr)
 		 * and don't want any subsequent code (like disconnected
 		 * callbacks) accessing it.
 		 */
-		if (conn->type == BT_CONN_TYPE_LE) {
+		if (bt_conn_is_le(conn)) {
 			keys = conn->le.keys;
 			conn->le.keys = NULL;
 		}
@@ -2295,7 +2296,7 @@ static void hci_encrypt_change(struct net_buf *buf)
 	conn->encrypt = evt->encrypt;
 
 #if defined(CONFIG_BT_SMP)
-	if (conn->type == BT_CONN_TYPE_LE) {
+	if (bt_conn_is_le(conn)) {
 		/*
 		 * we update keys properties only on successful encryption to
 		 * avoid losing valid keys if encryption was not successful.
@@ -2314,7 +2315,7 @@ static void hci_encrypt_change(struct net_buf *buf)
 	}
 #endif /* CONFIG_BT_SMP */
 #if defined(CONFIG_BT_CLASSIC)
-	if (conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		if (!bt_br_update_sec_level(conn)) {
 			bt_conn_unref(conn);
 			return;
@@ -2375,7 +2376,7 @@ static void hci_encrypt_key_refresh_complete(struct net_buf *buf)
 	 * only security level based on available keys and encryption state.
 	 */
 #if defined(CONFIG_BT_SMP)
-	if (conn->type == BT_CONN_TYPE_LE) {
+	if (bt_conn_is_le(conn)) {
 		bt_smp_update_keys(conn);
 
 		if (!update_sec_level(conn)) {
@@ -2384,7 +2385,7 @@ static void hci_encrypt_key_refresh_complete(struct net_buf *buf)
 	}
 #endif /* CONFIG_BT_SMP */
 #if defined(CONFIG_BT_CLASSIC)
-	if (conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		if (!bt_br_update_sec_level(conn)) {
 			bt_conn_unref(conn);
 			return;
@@ -3157,6 +3158,10 @@ static const struct event_handler normal_events[] = {
 		      sizeof(struct bt_hci_evt_remote_ext_features)),
 	EVENT_HANDLER(BT_HCI_EVT_ROLE_CHANGE, bt_hci_role_change,
 		      sizeof(struct bt_hci_evt_role_change)),
+#if defined(CONFIG_BT_POWER_MODE_CONTROL)
+	EVENT_HANDLER(BT_HCI_EVT_MODE_CHANGE, bt_hci_link_mode_change,
+		      sizeof(struct bt_hci_evt_mode_change)),
+#endif /* CONFIG_BT_POWER_MODE_CONTROL */
 	EVENT_HANDLER(BT_HCI_EVT_SYNC_CONN_COMPLETE, bt_hci_synchronous_conn_complete,
 		      sizeof(struct bt_hci_evt_sync_conn_complete)),
 #endif /* CONFIG_BT_CLASSIC */
@@ -4114,7 +4119,8 @@ static const char *vs_hw_platform(uint16_t platform)
 {
 	static const char * const plat_str[] = {
 		"reserved", "Intel Corporation", "Nordic Semiconductor",
-		"NXP Semiconductors" };
+		"NXP Semiconductors", "Espressif Systems"
+	};
 
 	if (platform < ARRAY_SIZE(plat_str)) {
 		return plat_str[platform];
@@ -4125,17 +4131,26 @@ static const char *vs_hw_platform(uint16_t platform)
 
 static const char *vs_hw_variant(uint16_t platform, uint16_t variant)
 {
+#if defined(CONFIG_SOC_FAMILY_NORDIC_NRF)
 	static const char * const nordic_str[] = {
 		"reserved", "nRF51x", "nRF52x", "nRF53x", "nRF54Hx", "nRF54Lx"
 	};
 
-	if (platform != BT_HCI_VS_HW_PLAT_NORDIC) {
-		return "unknown";
-	}
-
-	if (variant < ARRAY_SIZE(nordic_str)) {
+	if (platform == BT_HCI_VS_HW_PLAT_NORDIC && variant < ARRAY_SIZE(nordic_str)) {
 		return nordic_str[variant];
 	}
+#endif
+#if defined(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32)
+	static const char * const esp32_str[] = {
+		"reserved", "ESP32", "ESP32-S3", "ESP32-C2", "ESP32-C3", "ESP32-C6", "ESP32-H2"
+	};
+
+	if (platform == BT_HCI_VS_HW_PLAT_ESPRESSIF && variant < ARRAY_SIZE(esp32_str)) {
+		return esp32_str[variant];
+	}
+#endif
+	ARG_UNUSED(platform);
+	ARG_UNUSED(variant);
 
 	return "unknown";
 }

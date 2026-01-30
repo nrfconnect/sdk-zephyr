@@ -197,17 +197,17 @@
 		status = "disabled";
 	};
 
-	main_gpio0: gpio@600000 {
+	main_gpio0: gpio@600010 {
 		compatible = "ti,davinci-gpio";
-		reg = <0x600000 0x100>;
+		reg = <0x600010 0x28>;
 		gpio-controller;
 		#gpio-cells = <2>;
 		status = "disabled";
 	};
 
-	main_gpio1: gpio@601000 {
+	main_gpio1: gpio@601010 {
 		compatible = "ti,davinci-gpio";
-		reg = <0x601000 0x100>;
+		reg = <0x601010 0x28>;
 		gpio-controller;
 		#gpio-cells = <2>;
 		status = "disabled";
@@ -216,6 +216,46 @@
 	main_mcspi0: spi@20100000 {
 		compatible = "ti,omap-mcspi";
 		reg = <0x20100000 0x400>;
+		clock-frequency = <DT_FREQ_M(50)>;
+		ti,spi-num-cs = <4>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	main_mcspi1: spi@20110000 {
+		compatible = "ti,omap-mcspi";
+		reg = <0x20110000 0x400>;
+		clock-frequency = <DT_FREQ_M(50)>;
+		ti,spi-num-cs = <4>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	main_mcspi2: spi@20120000 {
+		compatible = "ti,omap-mcspi";
+		reg = <0x20120000 0x400>;
+		clock-frequency = <DT_FREQ_M(50)>;
+		ti,spi-num-cs = <4>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	main_mcspi3: spi@20130000 {
+		compatible = "ti,omap-mcspi";
+		reg = <0x20130000 0x400>;
+		clock-frequency = <DT_FREQ_M(50)>;
+		ti,spi-num-cs = <4>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	main_mcspi4: spi@20140000 {
+		compatible = "ti,omap-mcspi";
+		reg = <0x20140000 0x400>;
 		clock-frequency = <DT_FREQ_M(50)>;
 		ti,spi-num-cs = <4>;
 		#address-cells = <1>;

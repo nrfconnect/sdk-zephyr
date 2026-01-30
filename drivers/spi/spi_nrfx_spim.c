@@ -71,8 +71,6 @@ static inline void finalize_spi_transaction(const struct device *dev, bool deact
 	if (NRF_SPIM_IS_320MHZ_SPIM(reg) && !(dev_data->ctx.config->operation & SPI_HOLD_ON_CS)) {
 		nrfy_spim_disable(reg);
 	}
-
-	pm_device_runtime_put_async(dev, K_NO_WAIT);
 }
 
 static inline uint32_t get_nrf_spim_frequency(uint32_t frequency)
@@ -230,12 +228,13 @@ static void finish_transaction(const struct device *dev, int error)
 	spi_context_complete(ctx, dev, error);
 	dev_data->busy = false;
 
-	if (dev_data->ctx.config->operation & SPI_LOCK_ON) {
-		/* Keep device resumed until call to spi_release() */
-		(void)pm_device_runtime_get(dev);
-	}
-
 	finalize_spi_transaction(dev, true);
+
+#ifdef CONFIG_SPI_ASYNC
+	if (ctx->asynchronous) {
+		pm_device_runtime_put_async(dev, K_NO_WAIT);
+	}
+#endif
 }
 
 static void transfer_next_chunk(const struct device *dev)
@@ -423,12 +422,12 @@ static int transceive(const struct device *dev,
 		} else if (error) {
 			finalize_spi_transaction(dev, true);
 		}
-	} else {
-		pm_device_runtime_put(dev);
 	}
 
 	spi_context_release(&dev_data->ctx, error);
-
+	if (error || !asynchronous) {
+		pm_device_runtime_put(dev);
+	}
 	return error;
 }
 
@@ -456,6 +455,12 @@ static int spi_nrfx_release(const struct device *dev,
 			    const struct spi_config *spi_cfg)
 {
 	struct spi_nrfx_data *dev_data = dev->data;
+
+#ifdef CONFIG_MULTITHREADING
+	if (dev_data->ctx.owner != spi_cfg) {
+		return -EALREADY;
+	}
+#endif
 
 	if (!spi_context_configured(&dev_data->ctx, spi_cfg)) {
 		return -EINVAL;
@@ -565,6 +570,7 @@ static int spi_nrfx_init(const struct device *dev)
 	return pm_device_driver_init(dev, spim_nrfx_pm_action);
 }
 
+#ifdef CONFIG_DEVICE_DEINIT_SUPPORT
 static int spi_nrfx_deinit(const struct device *dev)
 {
 #if defined(CONFIG_PM_DEVICE)
@@ -585,6 +591,7 @@ static int spi_nrfx_deinit(const struct device *dev)
 
 	return 0;
 }
+#endif
 
 #define SPI_NRFX_SPIM_EXTENDED_CONFIG(inst)				\
 	IF_ENABLED(NRFX_SPIM_EXTENDED_ENABLED,				\
@@ -617,10 +624,18 @@ static int spi_nrfx_deinit(const struct device *dev)
 		.dev  = DEVICE_DT_GET(DT_DRV_INST(inst)),		       \
 		.busy = false,						       \
 	};								       \
+	NRF_DT_INST_IRQ_DIRECT_DEFINE(					       \
+		inst,							       \
+		nrfx_spim_irq_handler,					       \
+		&CONCAT(spi_, inst, _data.spim)				       \
+	)								       \
 	static void irq_connect##inst(void)				       \
 	{								       \
-		IRQ_CONNECT(DT_INST_IRQN(inst), DT_INST_IRQ(inst, priority),   \
-			nrfx_spim_irq_handler, &spi_##inst##_data.spim, 0);    \
+		NRF_DT_INST_IRQ_CONNECT(				       \
+			inst,						       \
+			nrfx_spim_irq_handler,				       \
+			&CONCAT(spi_, inst, _data.spim)			       \
+		);							       \
 	}								       \
 	PINCTRL_DT_INST_DEFINE(inst);					       \
 	static const struct spi_nrfx_config spi_##inst##z_config = {	       \

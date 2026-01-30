@@ -52,7 +52,7 @@
 				read-only;
 			};
 
-			slot0_partition: partition@E000  {
+			slot0_partition: partition@E000 {
 				label = "image-0";
 				reg = <0x0000E000 (DT_SIZE_M(64) - DT_SIZE_K(56))>;
 				read-only;
@@ -86,5 +86,11 @@
 	pinctrl-0 = <&scif4_default>;
 	pinctrl-names = "default";
 	current-speed = <115200>;
+	status = "okay";
+};
+
+&adc {
+	pinctrl-0 = <&adc_default>;
+	pinctrl-names = "default";
 	status = "okay";
 };

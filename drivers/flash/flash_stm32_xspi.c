@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <zephyr/kernel.h>
 #include <soc.h>
+#include <stm32_bitops.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
 #include <zephyr/drivers/clock_control.h>
@@ -390,7 +391,9 @@ static int stm32_xspi_wait_auto_polling(const struct device *dev,
 
 	if (k_sem_take(&dev_data->sync, K_MSEC(timeout_ms)) != 0) {
 		LOG_ERR("XSPI AutoPoll wait failed");
-		HAL_XSPI_Abort(&dev_data->hxspi);
+		if (HAL_XSPI_Abort(&dev_data->hxspi) != HAL_OK) {
+			LOG_ERR("XSPI abort failed");
+		}
 		k_sem_reset(&dev_data->sync);
 		return -EIO;
 	}
@@ -565,6 +568,26 @@ static int stm32_xspi_write_enable(const struct device *dev,
 	s_config.AutomaticStop   = HAL_XSPI_AUTOMATIC_STOP_ENABLE;
 
 	return stm32_xspi_wait_auto_polling(dev, &s_config, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+}
+
+static int xspi_write_unprotect(const struct device *dev)
+{
+	int ret = 0;
+
+	/* This is a SPI/STR command to issue to the external Flash device */
+	XSPI_RegularCmdTypeDef cmd_unprotect = xspi_prepare_cmd(XSPI_SPI_MODE, XSPI_STR_TRANSFER);
+
+	cmd_unprotect.Instruction = SPI_NOR_CMD_ULBPR;
+	cmd_unprotect.InstructionMode = HAL_XSPI_INSTRUCTION_1_LINE;
+	cmd_unprotect.AddressMode = HAL_XSPI_ADDRESS_NONE;
+	cmd_unprotect.DataMode    = HAL_XSPI_DATA_NONE;
+
+	ret = stm32_xspi_write_enable(dev, XSPI_SPI_MODE, XSPI_STR_TRANSFER);
+	if (ret != 0) {
+		return ret;
+	}
+
+	return xspi_send_cmd(dev, &cmd_unprotect);
 }
 
 /* Write Flash configuration register 2 with new dummy cycles */
@@ -974,6 +997,7 @@ static int stm32_xspi_set_memorymap(const struct device *dev)
 	LOG_DBG("MemoryMap mode enabled");
 	return 0;
 }
+#endif /* CONFIG_STM32_MEMMAP */
 
 static int stm32_xspi_abort(const struct device *dev)
 {
@@ -986,18 +1010,14 @@ static int stm32_xspi_abort(const struct device *dev)
 
 	return 0;
 }
-#endif /* CONFIG_STM32_MEMMAP */
 
-
-#if defined(CONFIG_STM32_MEMMAP) || defined(CONFIG_STM32_APP_IN_EXT_FLASH)
 /* Function to return true if the octoflash is in MemoryMapped else false */
 static bool stm32_xspi_is_memorymap(const struct device *dev)
 {
 	struct flash_stm32_xspi_data *dev_data = dev->data;
 
-	return READ_BIT(dev_data->hxspi.Instance->CR, XSPI_CR_FMODE) == XSPI_CR_FMODE;
+	return stm32_reg_read_bits(&dev_data->hxspi.Instance->CR, XSPI_CR_FMODE) == XSPI_CR_FMODE;
 }
-#endif
 
 /*
  * Function to erase the flash : chip or sector with possible OCTO/SPI and STR/DTR
@@ -1195,7 +1215,7 @@ static int flash_stm32_xspi_read(const struct device *dev, off_t addr,
 		return 0;
 	}
 
-#if defined(CONFIG_STM32_MEMMAP) || defined(CONFIG_STM32_APP_IN_EXT_FLASH)
+#if defined(CONFIG_STM32_MEMMAP) || (defined(CONFIG_STM32_APP_IN_EXT_FLASH) && defined(CONFIG_XIP))
 	ARG_UNUSED(dev_cfg);
 	ARG_UNUSED(dev_data);
 	/*
@@ -1291,7 +1311,7 @@ static int flash_stm32_xspi_read(const struct device *dev, off_t addr,
 	xspi_unlock_thread(dev);
 
 	return ret;
-#endif /* CONFIG_STM32_MEMMAP || CONFIG_STM32_APP_IN_EXT_FLASH */
+#endif /* CONFIG_STM32_MEMMAP || (CONFIG_STM32_APP_IN_EXT_FLASH && CONFIG_XIP) */
 }
 
 /* Function to write the flash (page program) : with possible OCTO/SPI and STR/DTR */
@@ -1355,6 +1375,10 @@ static int flash_stm32_xspi_write(const struct device *dev, off_t addr,
 		case SPI_NOR_CMD_PP_1_4_4_4B:
 			__fallthrough;
 		case SPI_NOR_CMD_PP_1_4_4: {
+#if defined(CONFIG_USE_MICROCHIP_QSPI_FLASH_WITH_STM32)
+			/* Microchip QSPI flash uses PP_1_1_4 opcode for the PP_1_4_4 operation */
+			cmd_pp.Instruction = SPI_NOR_CMD_PP_1_1_4;
+#endif /* CONFIG_USE_MICROCHIP_QSPI_FLASH_WITH_STM32 */
 			cmd_pp.InstructionMode = HAL_XSPI_INSTRUCTION_1_LINE;
 			cmd_pp.AddressMode = HAL_XSPI_ADDRESS_4_LINES;
 			cmd_pp.DataMode = HAL_XSPI_DATA_4_LINES;
@@ -2066,7 +2090,7 @@ static int flash_stm32_xspi_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-#ifdef CONFIG_STM32_APP_IN_EXT_FLASH
+#if defined(CONFIG_STM32_APP_IN_EXT_FLASH) && defined(CONFIG_XIP)
 	/* If MemoryMapped then configure skip init
 	 * Check clock status first as reading CR register without bus clock doesn't work on N6
 	 * If clock is off, then MemoryMapped is off too and we do init
@@ -2081,7 +2105,7 @@ static int flash_stm32_xspi_init(const struct device *dev)
 			return 0;
 		}
 	}
-#endif /* CONFIG_STM32_APP_IN_EXT_FLASH */
+#endif /* CONFIG_STM32_APP_IN_EXT_FLASH && CONFIG_XIP */
 
 	/* The SPI/DTR is not a valid config of data_mode/data_rate according to the DTS */
 	if ((dev_cfg->data_mode != XSPI_OCTO_MODE)
@@ -2168,6 +2192,13 @@ static int flash_stm32_xspi_init(const struct device *dev)
 		dev_data->hxspi.Init.DelayHoldQuarterCycle = HAL_XSPI_DHQC_ENABLE;
 	}
 
+	if (stm32_xspi_is_memorymap(dev)) {
+		/* Memory-mapping could have been set by previous application.
+		 * Force HAL instance in correct state.
+		 */
+		dev_data->hxspi.State = HAL_XSPI_STATE_BUSY_MEM_MAPPED;
+	}
+
 	if (HAL_XSPI_Init(&dev_data->hxspi) != HAL_OK) {
 		LOG_ERR("XSPI Init failed");
 		return -EIO;
@@ -2240,6 +2271,18 @@ static int flash_stm32_xspi_init(const struct device *dev)
 
 	/* Run IRQ init */
 	dev_cfg->irq_config(dev);
+
+	if (stm32_xspi_is_memorymap(dev)) {
+		/* Memory-mapping could have been set by previous application.
+		 * Abort to allow following Jedec transactions, it will be
+		 * re-enabled afterwards if needed by the application.
+		 */
+		ret = stm32_xspi_abort(dev);
+		if (ret != 0) {
+			LOG_ERR("Failed to abort memory-mapped access before Jedec ops");
+			return ret;
+		}
+	}
 
 	/* Reset NOR flash memory : still with the SPI/STR config for the NOR */
 	if (stm32_xspi_mem_reset(dev) != 0) {
@@ -2372,6 +2415,15 @@ static int flash_stm32_xspi_init(const struct device *dev)
 	}
 #endif /* CONFIG_FLASH_PAGE_LAYOUT */
 
+	if (IS_ENABLED(DT_INST_PROP(0, requires_ulbpr))) {
+		ret = xspi_write_unprotect(dev);
+		if (ret != 0) {
+			LOG_ERR("write unprotect failed: %d", ret);
+			return -ENODEV;
+		}
+		LOG_DBG("Write Un-protected");
+	}
+
 #ifdef CONFIG_STM32_MEMMAP
 	ret = stm32_xspi_set_memorymap(dev);
 	if (ret != 0) {
@@ -2441,21 +2493,12 @@ static void flash_stm32_xspi_irq_config_func(const struct device *dev);
 PINCTRL_DT_DEFINE(STM32_XSPI_NODE);
 
 static const struct flash_stm32_xspi_config flash_stm32_xspi_cfg = {
-	.pclken = {
-		.bus = DT_CLOCKS_CELL_BY_NAME(STM32_XSPI_NODE, xspix, bus),
-		.enr = DT_CLOCKS_CELL_BY_NAME(STM32_XSPI_NODE, xspix, bits)
-	},
+	.pclken = STM32_CLOCK_INFO_BY_NAME(STM32_XSPI_NODE, xspix),
 #if DT_CLOCKS_HAS_NAME(STM32_XSPI_NODE, xspi_ker)
-	.pclken_ker = {
-		.bus = DT_CLOCKS_CELL_BY_NAME(STM32_XSPI_NODE, xspi_ker, bus),
-		.enr = DT_CLOCKS_CELL_BY_NAME(STM32_XSPI_NODE, xspi_ker, bits)
-	},
+	.pclken_ker = STM32_CLOCK_INFO_BY_NAME(STM32_XSPI_NODE, xspi_ker),
 #endif /* xspi_ker */
 #if DT_CLOCKS_HAS_NAME(STM32_XSPI_NODE, xspi_mgr)
-	.pclken_mgr = {
-		.bus = DT_CLOCKS_CELL_BY_NAME(STM32_XSPI_NODE, xspi_mgr, bus),
-		.enr = DT_CLOCKS_CELL_BY_NAME(STM32_XSPI_NODE, xspi_mgr, bits)
-	},
+	.pclken_mgr = STM32_CLOCK_INFO_BY_NAME(STM32_XSPI_NODE, xspi_mgr),
 #endif /* xspi_mgr */
 	.irq_config = flash_stm32_xspi_irq_config_func,
 	.flash_size = DT_INST_PROP(0, size) / 8, /* In Bytes */

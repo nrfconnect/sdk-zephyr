@@ -1531,6 +1531,8 @@ struct wifi_p2p_params {
 		uint8_t go_intent;
 		/** Frequency in MHz (0 = not specified, use default) */
 		unsigned int freq;
+		/** Join an existing group (as a client) instead of starting GO negotiation */
+		bool join;
 	} connect;
 	/** Group add specific parameters */
 	struct {

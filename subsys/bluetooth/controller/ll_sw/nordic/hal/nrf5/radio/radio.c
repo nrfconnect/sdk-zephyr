@@ -294,7 +294,7 @@ void radio_phy_set(uint8_t phy, uint8_t flags)
 
 	NRF_RADIO->MODE = (mode << RADIO_MODE_MODE_Pos) & RADIO_MODE_MODE_Msk;
 
-#if !defined(CONFIG_SOC_SERIES_NRF51X) && !defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
+#if !defined(CONFIG_SOC_SERIES_NRF51) && !defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
 #if defined(CONFIG_BT_CTLR_RADIO_ENABLE_FAST)
 	NRF_RADIO->MODECNF0 = ((RADIO_MODECNF0_DTX_Center <<
 				RADIO_MODECNF0_DTX_Pos) &
@@ -307,34 +307,19 @@ void radio_phy_set(uint8_t phy, uint8_t flags)
 			       RADIO_MODECNF0_DTX_Pos) &
 			      RADIO_MODECNF0_DTX_Msk;
 #endif /* !CONFIG_BT_CTLR_RADIO_ENABLE_FAST */
-#endif /* !CONFIG_SOC_SERIES_NRF51X && !CONFIG_SOC_COMPATIBLE_NRF54LX */
+#endif /* !CONFIG_SOC_SERIES_NRF51 && !CONFIG_SOC_COMPATIBLE_NRF54LX */
 }
 
 void radio_tx_power_set(int8_t power)
 {
-#if defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
 	uint32_t value;
 
 	value = hal_radio_tx_power_value(power);
 	NRF_RADIO->TXPOWER = value;
 
-#elif defined(CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET)
-	uint32_t value;
-
-	/* NOTE: TXPOWER register only accepts upto 0dBm, hence use the HAL
-	 * floor value for the TXPOWER register. Permit +3dBm by using high
-	 * voltage being set for radio.
-	 */
-	value = hal_radio_tx_power_floor(power);
-	NRF_RADIO->TXPOWER = value;
+#if defined(CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET)
 	hal_radio_tx_power_high_voltage_set(power);
-
-#else /* !CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET  && !CONFIG_SOC_COMPATIBLE_NRF54LX */
-
-	/* NOTE: valid value range is passed by Kconfig define. */
-	NRF_RADIO->TXPOWER = (uint32_t)power;
-
-#endif /* !CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET && !CONFIG_SOC_COMPATIBLE_NRF54LX */
+#endif /* CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET */
 }
 
 void radio_tx_power_max_set(void)
@@ -347,32 +332,17 @@ void radio_tx_power_max_set(void)
 
 int8_t radio_tx_power_min_get(void)
 {
-	return (int8_t)hal_radio_tx_power_min_get();
+	return hal_radio_tx_power_min_get();
 }
 
 int8_t radio_tx_power_max_get(void)
 {
-#if defined(CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET)
-	return RADIO_TXPOWER_TXPOWER_Pos3dBm;
-
-#else /* !CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET */
-	return (int8_t)hal_radio_tx_power_max_get();
-
-#endif /* !CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET */
+	return hal_radio_tx_power_max_get();
 }
 
 int8_t radio_tx_power_floor(int8_t power)
 {
-#if defined(CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET)
-	/* NOTE: TXPOWER register only accepts upto 0dBm, +3dBm permitted by
-	 * use of high voltage being set for radio when TXPOWER register is set.
-	 */
-	if (power >= (int8_t)RADIO_TXPOWER_TXPOWER_Pos3dBm) {
-		return RADIO_TXPOWER_TXPOWER_Pos3dBm;
-	}
-#endif /* CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET */
-
-	return (int8_t)hal_radio_tx_power_floor(power);
+	return hal_radio_tx_power_floor(power);
 }
 
 void radio_freq_chan_set(uint32_t chan)
@@ -415,7 +385,7 @@ void radio_pkt_configure(uint8_t bits_len, uint8_t max_len, uint8_t flags)
 	uint32_t extra;
 	uint8_t phy;
 
-#if defined(CONFIG_SOC_SERIES_NRF51X)
+#if defined(CONFIG_SOC_SERIES_NRF51)
 	ARG_UNUSED(phy);
 
 	extra = 0U;
@@ -1086,7 +1056,7 @@ void radio_rssi_measure(void)
 {
 	NRF_RADIO->SHORTS |=
 	    (RADIO_SHORTS_ADDRESS_RSSISTART_Msk |
-#if defined(CONFIG_SOC_SERIES_NRF51X) || \
+#if defined(CONFIG_SOC_SERIES_NRF51) || \
 	defined(CONFIG_SOC_COMPATIBLE_NRF52X) || \
 	defined(CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET)
 	     RADIO_SHORTS_DISABLED_RSSISTOP_Msk |
@@ -1101,7 +1071,7 @@ uint32_t radio_rssi_get(void)
 
 void radio_rssi_status_reset(void)
 {
-#if defined(CONFIG_SOC_SERIES_NRF51X) || \
+#if defined(CONFIG_SOC_SERIES_NRF51) || \
 	defined(CONFIG_SOC_COMPATIBLE_NRF52X) || \
 	defined(CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET)
 	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_RSSIEND);
@@ -1110,7 +1080,7 @@ void radio_rssi_status_reset(void)
 
 uint32_t radio_rssi_is_ready(void)
 {
-#if defined(CONFIG_SOC_SERIES_NRF51X) || \
+#if defined(CONFIG_SOC_SERIES_NRF51) || \
 	defined(CONFIG_SOC_COMPATIBLE_NRF52X) || \
 	defined(CONFIG_SOC_COMPATIBLE_NRF5340_CPUNET)
 	return (NRF_RADIO->EVENTS_RSSIEND != 0);
@@ -2139,7 +2109,7 @@ static void *radio_ccm_ext_rx_pkt_set(struct ccm *cnf, uint8_t phy, uint8_t pdu_
 	mode |= (CCM_MODE_LENGTH_Extended << CCM_MODE_LENGTH_Pos) &
 		CCM_MODE_LENGTH_Msk;
 
-#elif defined(CONFIG_SOC_SERIES_NRF51X)
+#elif defined(CONFIG_SOC_SERIES_NRF51)
 	mode = (CCM_MODE_MODE_Decryption << CCM_MODE_MODE_Pos) &
 	       CCM_MODE_MODE_Msk;
 
@@ -2151,10 +2121,10 @@ static void *radio_ccm_ext_rx_pkt_set(struct ccm *cnf, uint8_t phy, uint8_t pdu_
 	switch (phy) {
 	default:
 	case PHY_1M:
-#if !defined(CONFIG_SOC_SERIES_NRF51X) && !defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
+#if !defined(CONFIG_SOC_SERIES_NRF51) && !defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
 		mode |= (CCM_MODE_DATARATE_1Mbit << CCM_MODE_DATARATE_Pos) &
 			CCM_MODE_DATARATE_Msk;
-#endif /* !CONFIG_SOC_SERIES_NRF51X && !CONFIG_SOC_COMPATIBLE_NRF54LX */
+#endif /* !CONFIG_SOC_SERIES_NRF51 && !CONFIG_SOC_COMPATIBLE_NRF54LX */
 
 		if (false) {
 
@@ -2177,10 +2147,10 @@ static void *radio_ccm_ext_rx_pkt_set(struct ccm *cnf, uint8_t phy, uint8_t pdu_
 		break;
 
 	case PHY_2M:
-#if !defined(CONFIG_SOC_SERIES_NRF51X) && !defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
+#if !defined(CONFIG_SOC_SERIES_NRF51) && !defined(CONFIG_SOC_COMPATIBLE_NRF54LX)
 		mode |= (CCM_MODE_DATARATE_2Mbit << CCM_MODE_DATARATE_Pos) &
 			CCM_MODE_DATARATE_Msk;
-#endif /* !CONFIG_SOC_SERIES_NRF51X && !CONFIG_SOC_COMPATIBLE_NRF54LX */
+#endif /* !CONFIG_SOC_SERIES_NRF51 && !CONFIG_SOC_COMPATIBLE_NRF54LX */
 
 		hal_trigger_crypt_ppi_config();
 		hal_radio_nrf_ppi_channels_enable(BIT(HAL_TRIGGER_CRYPT_PPI));
@@ -2238,7 +2208,7 @@ static void *radio_ccm_ext_rx_pkt_set(struct ccm *cnf, uint8_t phy, uint8_t pdu_
 	* CONFIG_SOC_COMPATIBLE_NRF54LX
 	*/
 
-#if !defined(CONFIG_SOC_SERIES_NRF51X) && \
+#if !defined(CONFIG_SOC_SERIES_NRF51) && \
 	!defined(CONFIG_SOC_NRF52832) && \
 	!defined(CONFIG_SOC_COMPATIBLE_NRF54LX) && \
 	(!defined(CONFIG_BT_CTLR_DATA_LENGTH_MAX) || \
@@ -2393,7 +2363,7 @@ static void *radio_ccm_ext_tx_pkt_set(struct ccm *cnf, uint8_t pdu_type, void *p
 	mode |= (CCM_MODE_DATARATE_2Mbit << CCM_MODE_DATARATE_Pos) &
 		CCM_MODE_DATARATE_Msk;
 
-#elif defined(CONFIG_SOC_SERIES_NRF51X)
+#elif defined(CONFIG_SOC_SERIES_NRF51)
 	mode = (CCM_MODE_MODE_Encryption << CCM_MODE_MODE_Pos) &
 	       CCM_MODE_MODE_Msk;
 
@@ -2427,7 +2397,7 @@ static void *radio_ccm_ext_tx_pkt_set(struct ccm *cnf, uint8_t pdu_type, void *p
 	* CONFIG_SOC_COMPATIBLE_NRF54LX
 	*/
 
-#if !defined(CONFIG_SOC_SERIES_NRF51X) && \
+#if !defined(CONFIG_SOC_SERIES_NRF51) && \
 	!defined(CONFIG_SOC_NRF52832) && \
 	!defined(CONFIG_SOC_COMPATIBLE_NRF54LX) && \
 	(!defined(CONFIG_BT_CTLR_DATA_LENGTH_MAX) || \

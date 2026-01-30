@@ -4,13 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "soc_v5.h"
-
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/arch/riscv/csr.h>
 #include <zephyr/drivers/cache.h>
 #include <zephyr/logging/log.h>
+#include <andes_csr.h>
 
 LOG_MODULE_REGISTER(cache_andes, CONFIG_CACHE_LOG_LEVEL);
 
@@ -74,7 +73,7 @@ static ALWAYS_INLINE void nds_l2_cache_disable(void) { }
 static ALWAYS_INLINE int nds_l2_cache_range(void *addr, size_t size, int op) { return 0; }
 static ALWAYS_INLINE int nds_l2_cache_all(int op) { return 0; }
 static ALWAYS_INLINE int nds_l2_cache_is_inclusive(void) { return 0; }
-static ALWAYS_INLINE int nds_l2_cache_init(void) { return 0; }
+static ALWAYS_INLINE int nds_l2_cache_init(uint8_t line_size) { return 0; }
 #endif /* DT_NODE_HAS_COMPAT_STATUS(DT_INST(0, andestech_l2c), andestech_l2c, okay) */
 
 static ALWAYS_INLINE int nds_cctl_range_operations(void *addr, size_t size, int line_size, int cmd)
@@ -86,7 +85,7 @@ static ALWAYS_INLINE int nds_cctl_range_operations(void *addr, size_t size, int 
 	align_addr = ROUND_DOWN(addr, line_size);
 
 	/*
-	 * In memory access privilige U mode, applications should use ucctl CSRs
+	 * In memory access privilege U mode, applications should use ucctl CSRs
 	 * for VA type commands.
 	 */
 	if ((status & MSTATUS_MPRV) && !(status & MSTATUS_MPP)) {
@@ -113,7 +112,7 @@ static ALWAYS_INLINE int nds_l1i_cache_all(int op)
 
 	if (csr_read(NDS_MMSC_CFG) & MMSC_CFG_VCCTL_2) {
 		/*
-		 * In memory access privilige U mode, applications can only use
+		 * In memory access privilege U mode, applications can only use
 		 * VA type commands for specific range.
 		 */
 		if ((status & MSTATUS_MPRV) && !(status & MSTATUS_MPP)) {
@@ -141,7 +140,7 @@ static ALWAYS_INLINE int nds_l1d_cache_all(int op)
 
 	if (csr_read(NDS_MMSC_CFG) & MMSC_CFG_VCCTL_2) {
 		/*
-		 * In memory access privilige U mode, applications can only use
+		 * In memory access privilege U mode, applications can only use
 		 * VA type commands for specific range.
 		 */
 		if ((status & MSTATUS_MPRV) && !(status & MSTATUS_MPP)) {

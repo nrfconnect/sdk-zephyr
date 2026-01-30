@@ -8,7 +8,7 @@
 / {
 	model = "Silicon Labs EFR32BG22 Thunderboard (SLTB010A) using BRD4184B";
 	compatible = "silabs,efr32bg22c224f512im40", "silabs,sltb010a",
-		"silabs,efr32bg22";
+		     "silabs,efr32bg22";
 };
 
 &button0 {
@@ -25,6 +25,10 @@
 
 &sw_mic_enable {
 	enable-gpios = <&gpioc 7 GPIO_ACTIVE_HIGH>;
+};
+
+&timer0_default {
+	pins = <TIMER0_CC0_PA4>;
 };
 
 &exp_header {

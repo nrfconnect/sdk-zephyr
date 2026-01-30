@@ -3,6 +3,7 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  * Copyright (c) 2025 Nordic Semiconductor ASA
+ * Copyright (c) 2025 Xiaomi Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -1516,7 +1517,6 @@ void bt_conn_unref(struct bt_conn *conn)
 	conn_tx_is_pending = k_work_is_pending(&conn->tx_complete_work);
 #endif
 	old = atomic_dec(&conn->ref);
-	conn = NULL;
 
 	LOG_DBG("handle %u ref %ld -> %ld", conn_handle, old, (old - 1));
 
@@ -1679,26 +1679,85 @@ int bt_conn_disconnect(struct bt_conn *conn, uint8_t reason)
 /* Group Connected BT_CONN only in this */
 #if defined(CONFIG_BT_CONN)
 
-/* We don't want the application to get a PHY update callback upon connection
- * establishment on 2M PHY. Therefore we must prevent issuing LE Set PHY
- * in this scenario.
- *
- * It is ifdef'd because the struct fields don't exist in some configs.
- */
-static bool uses_symmetric_2mbit_phy(struct bt_conn *conn)
-{
-#if defined(CONFIG_BT_USER_PHY_UPDATE)
-	if (IS_ENABLED(CONFIG_BT_EXT_ADV)) {
-		if (conn->le.phy.tx_phy == BT_HCI_LE_PHY_2M &&
-		    conn->le.phy.rx_phy == BT_HCI_LE_PHY_2M) {
-			return true;
-		}
-	}
+#if defined(CONFIG_BT_AUTO_PHY_PERIPHERAL_1M)
+#define AUTO_PHY_PERIPHERAL                  BT_HCI_LE_PHY_1M
+#define AUTO_PHY_PERIPHERAL_PREF             BT_HCI_LE_PHY_PREFER_1M
+#define AUTO_PHY_PERIPHERAL_SUPPORTED(_feat) (true)
+#elif defined(CONFIG_BT_AUTO_PHY_PERIPHERAL_2M)
+#define AUTO_PHY_PERIPHERAL                  BT_HCI_LE_PHY_2M
+#define AUTO_PHY_PERIPHERAL_PREF             BT_HCI_LE_PHY_PREFER_2M
+#define AUTO_PHY_PERIPHERAL_SUPPORTED(feat)  BT_FEAT_LE_PHY_2M(feat)
+#elif defined(CONFIG_BT_AUTO_PHY_PERIPHERAL_CODED)
+#define AUTO_PHY_PERIPHERAL                  BT_HCI_LE_PHY_CODED
+#define AUTO_PHY_PERIPHERAL_PREF             BT_HCI_LE_PHY_PREFER_CODED
+#define AUTO_PHY_PERIPHERAL_SUPPORTED(feat)  BT_FEAT_LE_PHY_CODED(feat)
 #else
-	ARG_UNUSED(conn);
+/* Dummy values when there's no preference */
+#define AUTO_PHY_PERIPHERAL                  (0)
+#define AUTO_PHY_PERIPHERAL_PREF             (0)
+#define AUTO_PHY_PERIPHERAL_SUPPORTED(_feat) (false)
 #endif
 
-	return false;
+#if defined(CONFIG_BT_AUTO_PHY_CENTRAL_1M)
+#define AUTO_PHY_CENTRAL                  BT_HCI_LE_PHY_1M
+#define AUTO_PHY_CENTRAL_PREF             BT_HCI_LE_PHY_PREFER_1M
+#define AUTO_PHY_CENTRAL_SUPPORTED(_feat) (true)
+#elif defined(CONFIG_BT_AUTO_PHY_CENTRAL_2M)
+#define AUTO_PHY_CENTRAL                  BT_HCI_LE_PHY_2M
+#define AUTO_PHY_CENTRAL_PREF             BT_HCI_LE_PHY_PREFER_2M
+#define AUTO_PHY_CENTRAL_SUPPORTED(feat)  BT_FEAT_LE_PHY_2M(feat)
+#elif defined(CONFIG_BT_AUTO_PHY_CENTRAL_CODED)
+#define AUTO_PHY_CENTRAL                  BT_HCI_LE_PHY_CODED
+#define AUTO_PHY_CENTRAL_PREF             BT_HCI_LE_PHY_PREFER_CODED
+#define AUTO_PHY_CENTRAL_SUPPORTED(feat)  BT_FEAT_LE_PHY_CODED(feat)
+#else
+/* Dummy values when there's no preference */
+#define AUTO_PHY_CENTRAL                  (0)
+#define AUTO_PHY_CENTRAL_PREF             (0)
+#define AUTO_PHY_CENTRAL_SUPPORTED(_feat) (false)
+#endif
+
+static int do_phy_update(struct bt_conn *conn)
+{
+	uint8_t phy, pref;
+	bool supported;
+
+	switch (conn->role) {
+#if !defined(CONFIG_BT_AUTO_PHY_CENTRAL_NONE)
+	case BT_HCI_ROLE_CENTRAL:
+		phy = AUTO_PHY_CENTRAL;
+		pref = AUTO_PHY_CENTRAL_PREF;
+		supported = AUTO_PHY_CENTRAL_SUPPORTED(bt_dev.le.features);
+		break;
+#endif
+#if !defined(CONFIG_BT_AUTO_PHY_PERIPHERAL_NONE)
+	case BT_HCI_ROLE_PERIPHERAL:
+		phy = AUTO_PHY_PERIPHERAL;
+		pref = AUTO_PHY_PERIPHERAL_PREF;
+		supported = AUTO_PHY_PERIPHERAL_SUPPORTED(bt_dev.le.features);
+		break;
+#endif
+	default:
+		return 0;
+	}
+
+	if (!supported) {
+		LOG_WRN("PHY 0x%02x not supported", phy);
+		return 0;
+	}
+
+#if defined(CONFIG_BT_USER_PHY_UPDATE)
+	if (IS_ENABLED(CONFIG_BT_EXT_ADV)) {
+		/* If the current PHYs are already the preferred PHYs, no need to issue
+		 * a PHY update procedure.
+		 */
+		if (conn->le.phy.tx_phy == phy && conn->le.phy.rx_phy == phy) {
+			return 0;
+		}
+	}
+#endif
+
+	return bt_le_set_phy(conn, 0U, pref, pref, BT_HCI_LE_PHY_CODED_ANY);
 }
 
 static bool can_initiate_feature_exchange(struct bt_conn *conn)
@@ -1765,13 +1824,14 @@ static void perform_auto_initiated_procedures(struct bt_conn *conn, void *unused
 		}
 	}
 
-	if (IS_ENABLED(CONFIG_BT_AUTO_PHY_UPDATE) && BT_FEAT_LE_PHY_2M(bt_dev.le.features) &&
-	    !uses_symmetric_2mbit_phy(conn)) {
-		err = bt_le_set_phy(conn, 0U, BT_HCI_LE_PHY_PREFER_2M, BT_HCI_LE_PHY_PREFER_2M,
-				    BT_HCI_LE_PHY_CODED_ANY);
+	if (IS_ENABLED(CONFIG_BT_PHY_UPDATE) &&
+	    (!IS_ENABLED(CONFIG_BT_AUTO_PHY_CENTRAL_NONE) ||
+	     !IS_ENABLED(CONFIG_BT_AUTO_PHY_PERIPHERAL_NONE))) {
+		err = do_phy_update(conn);
 		if (err) {
 			LOG_ERR("Failed LE Set PHY (%d)", err);
 		}
+
 		if (conn->state != BT_CONN_CONNECTED) {
 			return;
 		}
@@ -2402,6 +2462,10 @@ struct bt_conn *bt_conn_add_br(const bt_addr_t *peer)
 	conn->tx_data_pull = l2cap_br_data_pull;
 	conn->get_and_clear_cb = acl_get_and_clear_cb;
 	conn->has_data = acl_has_data;
+
+#if defined(CONFIG_BT_POWER_MODE_CONTROL)
+	conn->br.mode = BT_ACTIVE_MODE;
+#endif /* CONFIG_BT_POWER_MODE_CONTROL */
 
 	return conn;
 }
@@ -4498,6 +4562,93 @@ void bt_hci_le_df_cte_req_failed(struct net_buf *buf)
 }
 #endif /* CONFIG_BT_DF_CONNECTION_CTE_REQ */
 
+#if defined(CONFIG_BT_POWER_MODE_CONTROL)
+int bt_conn_br_enter_sniff_mode(struct bt_conn *conn, uint16_t min_interval, uint16_t max_interval,
+			     uint16_t attempt, uint16_t timeout)
+{
+	struct bt_hci_cp_sniff_mode *cp;
+	struct net_buf *buf;
+
+	if (!bt_conn_is_type(conn, BT_CONN_TYPE_BR)) {
+		return -EINVAL;
+	}
+
+	if (conn->state != BT_CONN_CONNECTED) {
+		return -ENOTCONN;
+	}
+
+	if (conn->br.mode == BT_SNIFF_MODE) {
+		return -EBUSY;
+	}
+
+	/* Check if the parameters are valid */
+	if (min_interval < 0x0006 || min_interval > 0x0540 || max_interval < 0x0006 ||
+	    max_interval > 0x0540 || min_interval > max_interval || attempt == 0 ||
+	    attempt > 0x01F3 || timeout > 0x0028) {
+		return -EINVAL;
+	}
+
+	buf = bt_hci_cmd_alloc(K_FOREVER);
+	if (!buf) {
+		return -ENOBUFS;
+	}
+
+	cp = net_buf_add(buf, sizeof(*cp));
+	cp->handle = sys_cpu_to_le16(conn->handle);
+	cp->max_interval = sys_cpu_to_le16(max_interval);
+	cp->min_interval = sys_cpu_to_le16(min_interval);
+	cp->attempt = sys_cpu_to_le16(attempt);
+	cp->timeout = sys_cpu_to_le16(timeout);
+
+	return bt_hci_cmd_send_sync(BT_HCI_OP_SNIFF_MODE, buf, NULL);
+}
+
+int bt_conn_br_exit_sniff_mode(struct bt_conn *conn)
+{
+	struct bt_hci_cp_exit_sniff_mode *cp;
+	struct net_buf *buf;
+
+	if (!bt_conn_is_type(conn, BT_CONN_TYPE_BR)) {
+		return -EINVAL;
+	}
+
+	if (conn->state != BT_CONN_CONNECTED) {
+		return -ENOTCONN;
+	}
+
+	if (conn->br.mode == BT_ACTIVE_MODE) {
+		return -EBUSY;
+	}
+
+	buf = bt_hci_cmd_alloc(K_FOREVER);
+	if (!buf) {
+		return -ENOBUFS;
+	}
+
+	cp = net_buf_add(buf, sizeof(*cp));
+	cp->handle = sys_cpu_to_le16(conn->handle);
+
+	return bt_hci_cmd_send_sync(BT_HCI_OP_EXIT_SNIFF_MODE, buf, NULL);
+}
+
+void bt_conn_notify_mode_changed(struct bt_conn *conn, uint8_t mode, uint16_t interval)
+{
+	struct bt_conn_cb *callback;
+
+	SYS_SLIST_FOR_EACH_CONTAINER(&conn_cbs, callback, _node) {
+		if (callback->br_mode_changed) {
+			callback->br_mode_changed(conn, mode, interval);
+		}
+	}
+
+	STRUCT_SECTION_FOREACH(bt_conn_cb, cb) {
+		if (cb->br_mode_changed) {
+			cb->br_mode_changed(conn, mode, interval);
+		}
+	}
+}
+
+#endif /* CONFIG_BT_POWER_MODE_CONTROL */
 #endif /* CONFIG_BT_CONN */
 
 #if defined(CONFIG_BT_CONN_TX_NOTIFY_WQ)

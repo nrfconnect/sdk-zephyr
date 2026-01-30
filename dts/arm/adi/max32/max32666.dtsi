@@ -181,11 +181,13 @@
 			reg = <0x400b6000 0x1000>;
 			interrupts = <66 0>;
 			status = "disabled";
+
 			mmc {
 				compatible = "zephyr,sdmmc-disk";
 				status = "disabled";
 				disk-name = "SD";
 			};
+
 			power-delay-ms = <1500>;
 			clocks = <&gcr ADI_MAX32_CLOCK_BUS1 10>;
 		};
@@ -196,6 +198,7 @@
 			interrupts = <53 0>;
 			status = "disabled";
 			prescaler = <1>;
+
 			counter {
 				compatible = "adi,max32-wut";
 				status = "disabled";

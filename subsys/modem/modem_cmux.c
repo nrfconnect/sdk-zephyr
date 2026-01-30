@@ -37,9 +37,10 @@ LOG_MODULE_REGISTER(modem_cmux, CONFIG_MODEM_CMUX_LOG_LEVEL);
 #define MODEM_CMUX_CMD_FRAME_SIZE_MAX           (MODEM_CMUX_HEADER_SIZE +  \
 						MODEM_CMUX_CMD_DATA_SIZE_MAX)
 
-#define MODEM_CMUX_T1_TIMEOUT			(K_MSEC(330))
-#define MODEM_CMUX_T2_TIMEOUT			(K_MSEC(660))
+#define MODEM_CMUX_T1_TIMEOUT			(K_MSEC(CONFIG_MODEM_CMUX_T1_TIMEOUT))
+#define MODEM_CMUX_T2_TIMEOUT			(K_MSEC(CONFIG_MODEM_CMUX_T2_TIMEOUT))
 #define MODEM_CMUX_T3_TIMEOUT                   (K_SECONDS(CONFIG_MODEM_CMUX_T3_TIMEOUT))
+#define MODEM_CMUX_N2_RETRIES			3
 
 enum modem_cmux_frame_types {
 	MODEM_CMUX_FRAME_TYPE_RR = 0x01,
@@ -798,6 +799,7 @@ static void disconnect(struct modem_cmux *cmux)
 {
 	LOG_DBG("CMUX disconnected");
 	k_work_cancel_delayable(&cmux->disconnect_work);
+	k_work_cancel_delayable(&cmux->connect_work);
 	set_state(cmux, MODEM_CMUX_STATE_DISCONNECTED);
 	k_mutex_lock(&cmux->transmit_rb_lock, K_FOREVER);
 	cmux->flow_control_on = false;
@@ -821,6 +823,10 @@ static void modem_cmux_on_cld_command(struct modem_cmux *cmux, struct modem_cmux
 		disconnect(cmux);
 	} else {
 		set_state(cmux, MODEM_CMUX_STATE_DISCONNECTING);
+		/* We did not initiate the disconnect, so don't retry, just wait for our
+		 * response to be sent&handled, then close our side.
+		 */
+		cmux->retry_count = MODEM_CMUX_N2_RETRIES;
 		k_work_schedule(&cmux->disconnect_work, MODEM_CMUX_T1_TIMEOUT);
 	}
 }
@@ -1024,7 +1030,8 @@ static void modem_cmux_on_control_frame(struct modem_cmux *cmux)
 	modem_cmux_log_received_frame(&cmux->frame);
 
 	if (is_connected(cmux) && cmux->frame.cr == cmux->initiator) {
-		LOG_DBG("Received a response frame");
+		LOG_DBG("Drop a response frame");
+		return;
 	}
 
 	switch (cmux->frame.type) {
@@ -1062,11 +1069,17 @@ static struct modem_cmux_dlci *modem_cmux_find_dlci(struct modem_cmux *cmux, uin
 	return NULL;
 }
 
-static void modem_cmux_on_dlci_frame_dm(struct modem_cmux_dlci *dlci)
+static void dlci_close(struct modem_cmux_dlci *dlci)
 {
 	dlci->state = MODEM_CMUX_DLCI_STATE_CLOSED;
 	modem_pipe_notify_closed(&dlci->pipe);
 	k_work_cancel_delayable(&dlci->close_work);
+	k_work_cancel_delayable(&dlci->open_work);
+}
+
+static void modem_cmux_on_dlci_frame_dm(struct modem_cmux_dlci *dlci)
+{
+	return dlci_close(dlci);
 }
 
 static void modem_cmux_on_dlci_frame_ua(struct modem_cmux_dlci *dlci)
@@ -1096,7 +1109,7 @@ static void modem_cmux_on_dlci_frame_ua(struct modem_cmux_dlci *dlci)
 
 	case MODEM_CMUX_DLCI_STATE_CLOSING:
 		LOG_DBG("DLCI %u closed", dlci->dlci_address);
-		modem_cmux_on_dlci_frame_dm(dlci);
+		dlci_close(dlci);
 		break;
 
 	default:
@@ -1111,6 +1124,7 @@ static void modem_cmux_on_dlci_frame_uih(struct modem_cmux_dlci *dlci)
 {
 	struct modem_cmux *cmux = dlci->cmux;
 	uint32_t written;
+	bool previous_state = dlci->rx_full;
 
 	if (dlci->state != MODEM_CMUX_DLCI_STATE_OPEN) {
 		LOG_DBG("Unexpected UIH frame");
@@ -1120,14 +1134,18 @@ static void modem_cmux_on_dlci_frame_uih(struct modem_cmux_dlci *dlci)
 	k_mutex_lock(&dlci->receive_rb_lock, K_FOREVER);
 	written = ring_buf_put(&dlci->receive_rb, cmux->frame.data, cmux->frame.data_len);
 	k_mutex_unlock(&dlci->receive_rb_lock);
-	if (written != cmux->frame.data_len) {
-		LOG_WRN("DLCI %u receive buffer overrun (dropped %u out of %u bytes)",
+	if (written < cmux->frame.data_len) {
+		LOG_ERR("DLCI %u receive buffer overrun (dropped %u out of %u bytes)",
 			dlci->dlci_address, cmux->frame.data_len - written, cmux->frame.data_len);
-	}
-	if (written < cmux->frame.data_len ||
-	    ring_buf_space_get(&dlci->receive_rb) < MODEM_CMUX_DATA_FRAME_SIZE_MAX) {
-		LOG_WRN("DLCI %u receive buffer is full", dlci->dlci_address);
 		dlci->rx_full = true;
+	}
+	if ((CONFIG_MODEM_CMUX_MSC_FC_THRESHOLD > 0) &&
+	    (ring_buf_space_get(&dlci->receive_rb) < CONFIG_MODEM_CMUX_MSC_FC_THRESHOLD)) {
+		LOG_WRN("DLCI %u receive buffer low, set flow control", dlci->dlci_address);
+		dlci->rx_full = true;
+	}
+
+	if (previous_state != dlci->rx_full) {
 		modem_cmux_send_msc(cmux, dlci);
 	}
 	modem_pipe_notify_receive_ready(&dlci->pipe);
@@ -1558,8 +1576,7 @@ static bool powersave_wait_wakeup(struct modem_cmux *cmux)
 	if (is_waking_up(cmux)) {
 		if (sys_timepoint_expired(cmux->t3_timepoint)) {
 			LOG_ERR("Wake up timed out, link dead");
-			set_state(cmux, MODEM_CMUX_STATE_DISCONNECTED);
-			modem_cmux_raise_event(cmux, MODEM_CMUX_EVENT_DISCONNECTED);
+			disconnect(cmux);
 			return true;
 		}
 		if (cmux->receive_state != MODEM_CMUX_RECEIVE_STATE_RESYNC) {
@@ -1650,8 +1667,18 @@ static void modem_cmux_connect_handler(struct k_work *item)
 	dwork = k_work_delayable_from_work(item);
 	cmux = CONTAINER_OF(dwork, struct modem_cmux, connect_work);
 
-	set_state(cmux, MODEM_CMUX_STATE_CONNECTING);
-	cmux->initiator = true;
+	if (cmux->state == MODEM_CMUX_STATE_CONNECTING) {
+		cmux->retry_count++;
+		if (cmux->retry_count > MODEM_CMUX_N2_RETRIES) {
+			LOG_ERR("CMUX connection failed after %u retries", MODEM_CMUX_N2_RETRIES);
+			disconnect(cmux);
+			return;
+		}
+	} else {
+		set_state(cmux, MODEM_CMUX_STATE_CONNECTING);
+		cmux->initiator = true;
+		cmux->retry_count = 0;
+	}
 
 	static const struct modem_cmux_frame frame = {
 		.dlci_address = 0,
@@ -1672,10 +1699,20 @@ static void modem_cmux_disconnect_handler(struct k_work *item)
 	struct modem_cmux *cmux = CONTAINER_OF(dwork, struct modem_cmux, disconnect_work);
 
 	if (cmux->state == MODEM_CMUX_STATE_DISCONNECTING) {
-		disconnect(cmux);
-	} else {
+		cmux->retry_count++;
+		if (cmux->retry_count > MODEM_CMUX_N2_RETRIES) {
+			/* NOTE: We end up here also after responding to CLD, so this is not always
+			 * an error, so don't LOG_ERR
+			 */
+			disconnect(cmux);
+			return;
+		}
+	} else if (cmux->state != MODEM_CMUX_STATE_DISCONNECTED) {
 		set_state(cmux, MODEM_CMUX_STATE_DISCONNECTING);
-		k_work_schedule(&cmux->disconnect_work, MODEM_CMUX_T1_TIMEOUT);
+		cmux->retry_count = 0;
+	} else {
+		/* Already disconnected */
+		return;
 	}
 
 	struct modem_cmux_command command = {
@@ -1812,10 +1849,9 @@ static int modem_cmux_dlci_pipe_api_receive(void *data, uint8_t *buf, size_t siz
 
 	ret = ring_buf_get(&dlci->receive_rb, buf, size);
 	k_mutex_unlock(&dlci->receive_rb_lock);
-
 	/* Release FC if set */
 	if (dlci->rx_full &&
-	    ring_buf_space_get(&dlci->receive_rb) >= MODEM_CMUX_DATA_FRAME_SIZE_MAX) {
+	    ring_buf_space_get(&dlci->receive_rb) >= CONFIG_MODEM_CMUX_MTU) {
 		LOG_DBG("DLCI %u receive buffer is no longer full", dlci->dlci_address);
 		dlci->rx_full = false;
 		modem_cmux_send_msc(dlci->cmux, dlci);
@@ -1858,6 +1894,7 @@ static void modem_cmux_dlci_open_handler(struct k_work *item)
 {
 	struct k_work_delayable *dwork;
 	struct modem_cmux_dlci *dlci;
+	struct modem_cmux *cmux;
 
 	if (item == NULL) {
 		return;
@@ -1865,9 +1902,21 @@ static void modem_cmux_dlci_open_handler(struct k_work *item)
 
 	dwork = k_work_delayable_from_work(item);
 	dlci = CONTAINER_OF(dwork, struct modem_cmux_dlci, open_work);
+	cmux = dlci->cmux;
 
-	dlci->state = MODEM_CMUX_DLCI_STATE_OPENING;
-	dlci->msc_sent = false;
+	if (dlci->state == MODEM_CMUX_DLCI_STATE_OPENING) {
+		dlci->cmux->retry_count++;
+		if (dlci->cmux->retry_count > MODEM_CMUX_N2_RETRIES) {
+			LOG_ERR("DLCI %u open failed after %u retries", dlci->dlci_address,
+				MODEM_CMUX_N2_RETRIES);
+			dlci_close(dlci);
+			return;
+		}
+	} else {
+		dlci->state = MODEM_CMUX_DLCI_STATE_OPENING;
+		dlci->msc_sent = false;
+		cmux->retry_count = 0;
+	}
 
 	struct modem_cmux_frame frame = {
 		.dlci_address = dlci->dlci_address,
@@ -1878,6 +1927,7 @@ static void modem_cmux_dlci_open_handler(struct k_work *item)
 		.data_len = 0,
 	};
 
+	LOG_DBG("Opening: %d", dlci->dlci_address);
 	modem_cmux_transmit_cmd_frame(dlci->cmux, &frame);
 	modem_work_schedule(&dlci->open_work, MODEM_CMUX_T1_TIMEOUT);
 }
@@ -1896,7 +1946,21 @@ static void modem_cmux_dlci_close_handler(struct k_work *item)
 	dlci = CONTAINER_OF(dwork, struct modem_cmux_dlci, close_work);
 	cmux = dlci->cmux;
 
-	dlci->state = MODEM_CMUX_DLCI_STATE_CLOSING;
+	if (dlci->state == MODEM_CMUX_DLCI_STATE_CLOSING) {
+		cmux->retry_count++;
+		if (cmux->retry_count > MODEM_CMUX_N2_RETRIES) {
+			LOG_ERR("DLCI %u close failed after %u retries", dlci->dlci_address,
+				MODEM_CMUX_N2_RETRIES);
+			dlci_close(dlci);
+			return;
+		}
+	} else if (dlci->state == MODEM_CMUX_DLCI_STATE_OPEN) {
+		dlci->state = MODEM_CMUX_DLCI_STATE_CLOSING;
+		cmux->retry_count = 0;
+	} else {
+		/* DLCI already closed */
+		return;
+	}
 
 	struct modem_cmux_frame frame = {
 		.dlci_address = dlci->dlci_address,
@@ -1907,6 +1971,7 @@ static void modem_cmux_dlci_close_handler(struct k_work *item)
 		.data_len = 0,
 	};
 
+	LOG_DBG("Closing: %d", dlci->dlci_address);
 	modem_cmux_transmit_cmd_frame(cmux, &frame);
 	modem_work_schedule(&dlci->close_work, MODEM_CMUX_T1_TIMEOUT);
 }

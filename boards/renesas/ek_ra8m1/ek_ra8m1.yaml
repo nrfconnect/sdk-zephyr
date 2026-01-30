@@ -16,4 +16,7 @@ supported:
   - i2s
   - i3c
   - crc
+  - adc
+  - spi
+  - sdhc
 vendor: renesas

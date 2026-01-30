@@ -388,9 +388,50 @@ struct btp_gap_bis_broadcast_cmd {
 	uint8_t data[];
 } __packed;
 
+#define BTP_GAP_PHY_LE_1M            0x01
+#define BTP_GAP_PHY_LE_CODED         0x02
+#define BTP_GAP_SET_DISCOVERY_PARAMS 0x2f
+struct btp_gap_le_set_discovery_params_cmd {
+	uint16_t interval;
+	uint16_t window;
+	uint8_t phy;   /* 1M and Coded */
+	uint8_t flags; /* For future use */
+} __packed;
+
 #define BTP_GAP_SET_RPA_TIMEOUT                 0x30
 struct btp_gap_set_rpa_timeout_cmd {
 	uint16_t rpa_timeout;
+} __packed;
+
+#define BTP_GAP_EAD_SET_KEY_MATERIAL_KEY_SIZE 16
+#define BTP_GAP_EAD_SET_KEY_MATERIAL_IV_SIZE  8
+#define BTP_GAP_EAD_MAX_DATA_LEN              255
+#define BTP_GAP_EAD_SET_KEY_MATERIAL          0x31
+struct btp_gap_ead_set_key_material_cmd {
+	uint8_t session_key[BTP_GAP_EAD_SET_KEY_MATERIAL_KEY_SIZE];
+	uint8_t initialization_vector[BTP_GAP_EAD_SET_KEY_MATERIAL_IV_SIZE];
+} __packed;
+
+#define BTP_GAP_EAD_ENCRYPT_ADV_DATA 0x32
+struct btp_gap_ead_encrypt_adv_data_cmd {
+	uint8_t adv_data_len;
+	uint8_t adv_data[];
+} __packed;
+
+struct btp_gap_ead_encrypt_adv_data_rp {
+	uint8_t encrypted_data_len;
+	uint8_t encrypted_data[];
+} __packed;
+
+#define BTP_GAP_EAD_DECRYPT_ADV_DATA 0x33
+struct btp_gap_ead_decrypt_adv_data_cmd {
+	uint8_t encrypted_data_len;
+	uint8_t encrypted_data[];
+} __packed;
+
+struct btp_gap_decrypt_ead_adv_data_rp {
+	uint8_t decrypted_data_len;
+	uint8_t decrypted_data[];
 } __packed;
 
 /* events */
@@ -576,6 +617,12 @@ struct btp_gap_periodic_biginfo_ev {
 	uint8_t phy;
 	uint8_t framing;
 	uint8_t encryption;
+} __packed;
+
+#define BTP_GAP_EV_PEER_CAR_RECEIVED 0x98
+struct btp_gap_peer_car_status_ev {
+	bt_addr_le_t address;
+	uint8_t car;
 } __packed;
 
 struct bt_le_per_adv_param;

@@ -35,6 +35,7 @@ Peripherals
    gpio.rst
    haptics.rst
    hwinfo.rst
+   hwspinlock.rst
    i2c_eeprom_target.rst
    i3c.rst
    i2c.rst
@@ -43,6 +44,8 @@ Peripherals
    mdio.rst
    mspi.rst
    mbox.rst
+   opamp.rst
+   otp/index.rst
    pcie.rst
    peci.rst
    ps2.rst
@@ -56,7 +59,7 @@ Peripherals
    sensor/index.rst
    sent.rst
    spi.rst
-   stepper.rst
+   stepper/index.rst
    smbus.rst
    uart.rst
    usbc_vbus.rst

@@ -75,7 +75,7 @@ config BT_HCI_TX_PRIO
 
 choice BT_RECV_CONTEXT
 	prompt "BT RX Thread Selection"
-	default BT_RECV_WORKQ_SYS if SOC_SERIES_NRF51X
+	default BT_RECV_WORKQ_SYS if SOC_SERIES_NRF51
 	default BT_RECV_WORKQ_BT
 	help
 	  Selects in which context incoming low priority HCI packets are processed.
@@ -139,7 +139,7 @@ config BT_TX_PROCESSOR_THREAD
 	bool "TX processor thread. Disabling may cause deadlocks."
 	# This option is automatically selected for all platforms except nRF51
 	# due to limited RAM on nRF51 devices.
-	default y if !SOC_SERIES_NRF51X
+	default y if !SOC_SERIES_NRF51
 
 if BT_TX_PROCESSOR_THREAD
 
@@ -148,8 +148,12 @@ config BT_TX_PROCESSOR_THREAD_PRIO
 	default SYSTEM_WORKQUEUE_PRIORITY
 
 config BT_TX_PROCESSOR_STACK_SIZE
-	int
+	int "TX processor thread stack size"
 	default 1024
+	help
+	  Size of the TX processor thread stack. How much stack is needed depends on which
+	  and how many host features are enabled. One might try to decrease it to save RAM,
+	  or increase it if there are stack overflows.
 
 endif
 
@@ -404,9 +408,10 @@ config BT_CONN_CHECK_NULL_BEFORE_CREATE
 	  dereferencing, the connection object stays alive which can lead to an
 	  unpredictable behavior.
 
+if BT_PHY_UPDATE
+
 config BT_USER_PHY_UPDATE
 	bool "User control of PHY Update Procedure"
-	depends on BT_PHY_UPDATE
 	help
 	  Enable application access to initiate the PHY Update Procedure.
 	  The application can also register a callback to be notified about PHY
@@ -414,15 +419,57 @@ config BT_USER_PHY_UPDATE
 	  connection info.
 
 config BT_AUTO_PHY_UPDATE
-	bool "Auto-initiate PHY Update Procedure"
-	depends on BT_PHY_UPDATE
-	default y if !BT_USER_PHY_UPDATE
+	bool "Auto-initiate PHY Update Procedure [DEPRECATED]"
+	select DEPRECATED
 	help
-	  Initiate PHY Update Procedure on connection establishment.
+	  Initiate PHY Update Procedure on connection establishment. This will attempt
+	  to update the connection to use 2M PHY, however it doesn't actually guarantee
+	  that this is what will be used in the end.
 
-	  Disable this if you want the PHY Update Procedure feature supported
-	  but want to rely on the remote device to initiate the procedure at its
-	  discretion or want to initiate manually.
+	  This option has been deprecated in favor of role specific options. The equivalent
+	  behavior can be accomplished by enabling BT_AUTO_PHY_PERIPHERAL_2M and
+	  BT_AUTO_PHY_CENTRAL_2M.
+
+choice BT_AUTO_PHY_PERIPHERAL
+	prompt "Auto PHY update for peripheral role"
+	depends on BT_PERIPHERAL
+	default BT_AUTO_PHY_PERIPHERAL_2M if BT_AUTO_PHY_UPDATE
+	default BT_AUTO_PHY_PERIPHERAL_NONE
+
+config BT_AUTO_PHY_PERIPHERAL_NONE
+	bool "No PHY preference"
+
+config BT_AUTO_PHY_PERIPHERAL_1M
+	bool "1M PHY"
+
+config BT_AUTO_PHY_PERIPHERAL_2M
+	bool "2M PHY"
+
+config BT_AUTO_PHY_PERIPHERAL_CODED
+	bool "Coded PHY"
+
+endchoice # BT_AUTO_PHY_PERIPHERAL
+
+choice BT_AUTO_PHY_CENTRAL
+	prompt "Auto PHY update for central role"
+	depends on BT_CENTRAL
+	default BT_AUTO_PHY_CENTRAL_2M
+
+config BT_AUTO_PHY_CENTRAL_NONE
+	bool "No PHY preference"
+
+config BT_AUTO_PHY_CENTRAL_1M
+	bool "1M PHY"
+
+config BT_AUTO_PHY_CENTRAL_2M
+	bool "2M PHY"
+
+config BT_AUTO_PHY_CENTRAL_CODED
+	bool "Coded PHY"
+
+endchoice # BT_AUTO_PHY_CENTRAL
+
+endif # BT_PHY_UPDATE
 
 config BT_USER_DATA_LEN_UPDATE
 	bool "User control of Data Length Update Procedure"

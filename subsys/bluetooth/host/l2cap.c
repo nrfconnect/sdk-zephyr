@@ -3,6 +3,7 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  * Copyright (c) 2023 Nordic Semiconductor
+ * Copyright (c) 2025 Xiaomi Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -280,16 +281,9 @@ static void l2cap_chan_del(struct bt_l2cap_chan *chan)
 	while ((buf = k_fifo_get(&le_chan->tx_queue, K_NO_WAIT))) {
 		bt_conn_tx_cb_t cb = closure_cb(buf->user_data);
 
-		if (cb) {
+		if (cb != NULL) {
 			void *user_data = closure_data(buf->user_data);
 
-			/* When bt_l2cap_send_pdu() succeeds, the stack takes ownership
-			 * and must invoke the callback eventually. Since these PDUs will
-			 * never be transmitted, invoke the callback now with an error.
-			 * Note: We cannot use conn_tx_destroy() here because no bt_conn_tx
-			 * struct has been allocated yet - the closure is still in the
-			 * buf->user_data.
-			 */
 			cb(chan->conn, user_data, -ESHUTDOWN);
 		}
 
@@ -421,8 +415,7 @@ void bt_l2cap_connected(struct bt_conn *conn)
 {
 	struct bt_l2cap_chan *chan;
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		bt_l2cap_br_connected(conn);
 		return;
 	}
@@ -471,8 +464,7 @@ void bt_l2cap_disconnected(struct bt_conn *conn)
 {
 	struct bt_l2cap_chan *chan, *next;
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		bt_l2cap_br_disconnected(conn);
 		return;
 	}
@@ -694,8 +686,7 @@ void bt_l2cap_security_changed(struct bt_conn *conn, uint8_t hci_status)
 {
 	struct bt_l2cap_chan *chan, *next;
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		l2cap_br_encrypt_change(conn, hci_status);
 		return;
 	}
@@ -2553,11 +2544,11 @@ int bt_l2cap_chan_recv_complete(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		return -ENOTCONN;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) && conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		return bt_l2cap_br_chan_recv_complete(chan);
 	}
 
-	if (conn->type != BT_CONN_TYPE_LE) {
+	if (!bt_conn_is_le(conn)) {
 		return -ENOTSUP;
 	}
 
@@ -2871,8 +2862,7 @@ void bt_l2cap_recv(struct bt_conn *conn, struct net_buf *buf, bool complete)
 	struct bt_l2cap_chan *chan;
 	uint16_t cid;
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		bt_l2cap_br_recv(conn, buf);
 		return;
 	}
@@ -3141,7 +3131,7 @@ int bt_l2cap_ecred_chan_reconfigure(struct bt_l2cap_chan **chans, uint16_t mtu)
 		return -ENOTCONN;
 	}
 
-	if (conn->type != BT_CONN_TYPE_LE) {
+	if (!bt_conn_is_le(conn)) {
 		return -EINVAL;
 	}
 
@@ -3233,7 +3223,7 @@ int bt_l2cap_ecred_chan_reconfigure_explicit(struct bt_l2cap_chan **chans, size_
 		return -ENOTCONN;
 	}
 
-	if (conn->type != BT_CONN_TYPE_LE) {
+	if (!bt_conn_is_le(conn)) {
 		return -EINVAL;
 	}
 
@@ -3293,8 +3283,7 @@ int bt_l2cap_chan_connect(struct bt_conn *conn, struct bt_l2cap_chan *chan,
 		return -EINVAL;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		return bt_l2cap_br_chan_connect(conn, chan, psm);
 	}
 
@@ -3319,8 +3308,7 @@ int bt_l2cap_chan_disconnect(struct bt_l2cap_chan *chan)
 		return -ENOTCONN;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(conn)) {
 		return bt_l2cap_br_chan_disconnect(chan);
 	}
 
@@ -3461,8 +3449,7 @@ int bt_l2cap_chan_send(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		return -ESHUTDOWN;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_CLASSIC) &&
-	    chan->conn->type == BT_CONN_TYPE_BR) {
+	if (bt_conn_is_br(chan->conn)) {
 		return bt_l2cap_br_chan_send_cb(chan, buf, NULL, NULL);
 	}
 

@@ -19,7 +19,7 @@ if(CONFIG_ARM)
   zephyr_library_sources_ifdef(CONFIG_NRF_PLATFORM_HALTIUM soc_lrcconf.c)
 endif()
 
-if((CONFIG_SOC_SERIES_NRF54HX OR CONFIG_SOC_SERIES_NRF92X) AND CONFIG_CPU_HAS_CUSTOM_FIXED_SOC_MPU_REGIONS)
+if((CONFIG_SOC_SERIES_NRF54H OR CONFIG_SOC_SERIES_NRF92) AND CONFIG_CPU_HAS_CUSTOM_FIXED_SOC_MPU_REGIONS)
   zephyr_library_sources(nrf54hx_nrf92x_mpu_regions.c)
 endif()
 
@@ -41,5 +41,6 @@ if(CONFIG_TFM_PARTITION_PLATFORM)
 endif()
 
 zephyr_library_sources_ifdef(CONFIG_NRF_SYS_EVENT nrf_sys_event.c)
+zephyr_library_sources_ifdef(CONFIG_SOC_NRF_FORCE_CONSTLAT nrf_constlat.c)
 zephyr_library_sources_ifdef(CONFIG_MRAM_LATENCY mram_latency.c)
 zephyr_library_sources(gpiote_nrfx.c)

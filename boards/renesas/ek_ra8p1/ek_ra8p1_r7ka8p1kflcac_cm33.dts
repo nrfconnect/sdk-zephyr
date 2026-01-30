@@ -14,7 +14,8 @@
 
 	chosen {
 		zephyr,sram = &sram1;
-		zephyr,flash = &flash1;
+		zephyr,flash = &code_mram_cm33;
+		zephyr,flash-controller = &mram_ctrl;
 		zephyr,console = &uart9;
 		zephyr,shell-uart = &uart9;
 	};
@@ -23,6 +24,10 @@
 		led0 = &led2;
 		sw0 = &button1;
 	};
+};
+
+&button1 {
+	status = "okay";
 };
 
 &sci9 {

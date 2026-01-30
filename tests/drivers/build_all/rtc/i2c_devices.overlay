@@ -74,6 +74,7 @@
 				reg = <0x7>;
 				irq-frequency = <512>;
 			};
+
 			test_rx8130ce: rx8130ce-rtc@8 {
 				compatible = "epson,rx8130ce-rtc";
 				reg = <0x8>;
@@ -96,6 +97,35 @@
 					isw-gpios = <&test_gpio 0 0>;
 					freq-32khz-gpios = <&test_gpio 0 0>;
 				};
+			};
+
+			test_pcf85063a: pcf85063a@b {
+				compatible = "nxp,pcf85063a";
+				reg = <0xb>;
+				int1-gpios = <&test_gpio 0 0>;
+			};
+
+			test_rv3032: rv3032c7@c {
+				compatible = "microcrystal,rv3032-mfd";
+				reg = <0xc>;
+				int-gpios = <&test_gpio 0 0>;
+				evi-gpios = <&test_gpio 0 0>;
+				backup-switch-mode = "disabled";
+				always-on;
+				status = "okay";
+
+				test_rv3032_rtc: rv3032_rtc {
+					compatible = "microcrystal,rv3032";
+					trickle-resistor-ohms = <600>;
+					trickle-charger-mode = <1750>;
+					status = "okay";
+				};
+			};
+
+			test_max31331: max31331@d {
+				compatible = "adi,max31331";
+				reg = <0xd>;
+				interrupt-gpios = <&test_gpio 0 0>;
 			};
 		};
 	};

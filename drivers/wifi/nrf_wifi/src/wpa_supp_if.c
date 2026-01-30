@@ -551,7 +551,17 @@ int nrf_wifi_wpa_supp_scan2(void *if_priv, struct wpa_driver_scan_params *params
 		scan_info->scan_params.num_scan_channels = indx;
 	}
 
-	if (params->num_ssids) {
+	if (params->filter_ssids) {
+		scan_info->scan_params.num_scan_ssids = params->num_filter_ssids;
+		for (indx = 0; indx < params->num_filter_ssids; indx++) {
+			memcpy(scan_info->scan_params.scan_ssids[indx].nrf_wifi_ssid,
+			       params->filter_ssids[indx].ssid,
+			       params->filter_ssids[indx].ssid_len);
+
+			scan_info->scan_params.scan_ssids[indx].nrf_wifi_ssid_len =
+				params->filter_ssids[indx].ssid_len;
+		}
+	} else if (params->num_ssids) {
 		scan_info->scan_params.num_scan_ssids = params->num_ssids;
 
 		for (indx = 0; indx < params->num_ssids; indx++) {
@@ -1846,7 +1856,7 @@ int nrf_wifi_supp_register_frame(void *if_priv,
 	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
 	struct nrf_wifi_umac_mgmt_frame_info frame_info;
 
-	if (!if_priv) {
+	if (if_priv == NULL) {
 		LOG_ERR("%s: Invalid parameters", __func__);
 		return -1;
 	}
@@ -1868,7 +1878,7 @@ int nrf_wifi_supp_register_frame(void *if_priv,
 
 	frame_info.frame_type = type;
 	if (match_len > 0) {
-		if (!match) {
+		if (match == NULL) {
 			LOG_ERR("%s: Invalid match parameters", __func__);
 			goto out;
 		}
@@ -2146,14 +2156,14 @@ void nrf_wifi_supp_event_remain_on_channel(void *if_priv,
 {
 	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = NULL;
 
-	if (!if_priv) {
+	if (if_priv == NULL) {
 		LOG_ERR("%s: Missing interface context", __func__);
 		return;
 	}
 
 	vif_ctx_zep = if_priv;
 
-	if (!roc_complete) {
+	if (roc_complete == NULL) {
 		LOG_ERR("%s: Missing ROC complete event data", __func__);
 		return;
 	}
@@ -2176,14 +2186,14 @@ void nrf_wifi_supp_event_roc_cancel_complete(void *if_priv,
 {
 	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = NULL;
 
-	if (!if_priv) {
+	if (if_priv == NULL) {
 		LOG_ERR("%s: Missing interface context", __func__);
 		return;
 	}
 
 	vif_ctx_zep = if_priv;
 
-	if (!roc_cancel_complete) {
+	if (roc_cancel_complete == NULL) {
 		LOG_ERR("%s: Missing ROC cancel complete event data", __func__);
 		return;
 	}
@@ -2207,20 +2217,20 @@ int nrf_wifi_supp_remain_on_channel(void *if_priv, unsigned int freq,
 	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
 	struct remain_on_channel_info roc_info;
 
-	if (!if_priv) {
+	if (if_priv == NULL) {
 		LOG_ERR("%s: Invalid params", __func__);
 		return -1;
 	}
 
 	vif_ctx_zep = if_priv;
 	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
-	if (!rpu_ctx_zep) {
+	if (rpu_ctx_zep == NULL) {
 		LOG_ERR("%s: rpu_ctx_zep is NULL", __func__);
 		return -1;
 	}
 
 	k_mutex_lock(&vif_ctx_zep->vif_lock, K_FOREVER);
-	if (!rpu_ctx_zep->rpu_ctx) {
+	if (rpu_ctx_zep->rpu_ctx == NULL) {
 		LOG_DBG("%s: RPU context not initialized", __func__);
 		goto out;
 	}
@@ -2253,20 +2263,20 @@ int nrf_wifi_supp_cancel_remain_on_channel(void *if_priv, u64 cookie)
 	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = NULL;
 	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
 
-	if (!if_priv) {
+	if (if_priv == NULL) {
 		LOG_ERR("%s: Invalid params", __func__);
 		return -1;
 	}
 
 	vif_ctx_zep = if_priv;
 	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
-	if (!rpu_ctx_zep) {
+	if (rpu_ctx_zep == NULL) {
 		LOG_ERR("%s: rpu_ctx_zep is NULL", __func__);
 		return -1;
 	}
 
 	k_mutex_lock(&vif_ctx_zep->vif_lock, K_FOREVER);
-	if (!rpu_ctx_zep->rpu_ctx) {
+	if (rpu_ctx_zep->rpu_ctx == NULL) {
 		LOG_DBG("%s: RPU context not initialized", __func__);
 		goto out;
 	}
@@ -2289,18 +2299,18 @@ int nrf_wifi_supp_set_p2p_powersave(void *if_priv, int legacy_ps, int opp_ps, in
 	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = NULL;
 	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
 
-	if (!if_priv) {
+	if (if_priv == NULL) {
 		LOG_ERR("%s: Invalid params", __func__);
 		return -1;
 	}
 	vif_ctx_zep = if_priv;
 	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
-	if (!rpu_ctx_zep) {
+	if (rpu_ctx_zep == NULL) {
 		LOG_ERR("%s: rpu_ctx_zep is NULL", __func__);
 		return -1;
 	}
 	k_mutex_lock(&vif_ctx_zep->vif_lock, K_FOREVER);
-	if (!rpu_ctx_zep->rpu_ctx) {
+	if (rpu_ctx_zep->rpu_ctx == NULL) {
 		LOG_DBG("%s: RPU context not initialized", __func__);
 		goto out;
 	}
@@ -2441,6 +2451,7 @@ static int nrf_wifi_iftype_change(struct nrf_wifi_vif_ctx_zep *vif_ctx_zep, int 
 		goto out;
 	}
 
+	vif_ctx_zep->if_type = iftype;
 	ret = nrf_wifi_vif_state_change(vif_ctx_zep, NRF_WIFI_FMAC_IF_OP_STATE_UP);
 	if (ret) {
 		LOG_ERR("%s: Failed to set interface up", __func__);

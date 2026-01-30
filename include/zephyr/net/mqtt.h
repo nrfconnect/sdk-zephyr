@@ -766,15 +766,13 @@ struct mqtt_sec_config {
 	/** Indicates the preference for enabling TLS session caching. */
 	int session_cache;
 
-	/** Peer hostname for ceritificate verification.
-	 *  May be NULL to skip hostname verification.
-	 */
+	/** Peer hostname for certificate verification. */
 	const char *hostname;
 
 	/** Indicates the preference for copying certificates to the heap. */
 	int cert_nocopy;
 
-	/** Set socket to native TLS */
+	/** Set socket to use native TLS (used with socket offloading). */
 	bool set_native_tls;
 };
 
@@ -863,8 +861,8 @@ struct mqtt_transport {
 
 #if defined(CONFIG_SOCKS)
 	struct {
-		struct sockaddr addr;
-		socklen_t addrlen;
+		struct net_sockaddr addr;
+		net_socklen_t addrlen;
 	} proxy;
 #endif
 };
@@ -1055,8 +1053,8 @@ void mqtt_client_init(struct mqtt_client *client);
  * @note Must be called before calling mqtt_connect().
  */
 int mqtt_client_set_proxy(struct mqtt_client *client,
-			  struct sockaddr *proxy_addr,
-			  socklen_t addrlen);
+			  struct net_sockaddr *proxy_addr,
+			  net_socklen_t addrlen);
 #endif
 
 /**

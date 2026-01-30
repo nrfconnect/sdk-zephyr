@@ -136,6 +136,7 @@
 				min-residency-us = <700>;
 				exit-latency-us = <5>;
 			};
+
 			idle_cache_disabled: idle_cache_disabled {
 				compatible = "zephyr,power-state";
 				power-state-name = "suspend-to-idle";
@@ -143,6 +144,7 @@
 				min-residency-us = <1000>;
 				exit-latency-us = <7>;
 			};
+
 			s2ram: s2ram {
 				compatible = "zephyr,power-state";
 				power-state-name = "suspend-to-ram";
@@ -155,7 +157,7 @@
 	reserved-memory {
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges = <>;
+		ranges;
 	};
 
 	clocks {
@@ -201,7 +203,6 @@
 			status = "disabled";
 			#clock-cells = <0>;
 			clock-frequency = <32768>;
-			status = "okay";
 			lfrc-accuracy-ppm = <500>;
 			lflprc-accuracy-ppm = <1000>;
 			lfrc-startup-time-us = <200>; /* To be measured */
@@ -319,10 +320,12 @@
 				reg = <0xd000 0x1000>;
 				clocks = <&fll16m>;
 				clock-frequency = <DT_FREQ_M(320)>;
-				nordic,ficrs =
-					<&ficr NRF_FICR_TRIM_APPLICATION_HSFLL_TRIM_VSUP>,
-					<&ficr NRF_FICR_TRIM_APPLICATION_HSFLL_TRIM_COARSE_0>,
-					<&ficr NRF_FICR_TRIM_APPLICATION_HSFLL_TRIM_FINE_0>;
+				nordic,ficrs = <&ficr
+						NRF_FICR_TRIM_APPLICATION_HSFLL_TRIM_VSUP>,
+					       <&ficr
+						NRF_FICR_TRIM_APPLICATION_HSFLL_TRIM_COARSE_0>,
+					       <&ficr
+						NRF_FICR_TRIM_APPLICATION_HSFLL_TRIM_FINE_0>;
 				nordic,ficr-names = "vsup", "coarse", "fine";
 			};
 
@@ -374,10 +377,9 @@
 				status = "disabled";
 				clocks = <&fll16m>;
 				clock-frequency = <DT_FREQ_M(256)>;
-				nordic,ficrs =
-					<&ficr NRF_FICR_TRIM_RADIOCORE_HSFLL_TRIM_VSUP>,
-					<&ficr NRF_FICR_TRIM_RADIOCORE_HSFLL_TRIM_COARSE_1>,
-					<&ficr NRF_FICR_TRIM_RADIOCORE_HSFLL_TRIM_FINE_1>;
+				nordic,ficrs = <&ficr NRF_FICR_TRIM_RADIOCORE_HSFLL_TRIM_VSUP>,
+					       <&ficr NRF_FICR_TRIM_RADIOCORE_HSFLL_TRIM_COARSE_1>,
+					       <&ficr NRF_FICR_TRIM_RADIOCORE_HSFLL_TRIM_FINE_1>;
 				nordic,ficr-names = "vsup", "coarse", "fine";
 			};
 
@@ -485,7 +487,7 @@
 				status = "disabled";
 				ble-2mbps-supported;
 				ble-coded-phy-supported;
-				cs-supported;
+				ble-cs-supported;
 				dfe-supported;
 				ieee802154-supported;
 				interrupts = <44 NRF_DEFAULT_IRQ_PRIORITY>;
@@ -678,7 +680,7 @@
 				#mbox-cells = <1>;
 			};
 
-			canpll: clock-controller@8c2000{
+			canpll: clock-controller@8c2000 {
 				compatible = "nordic,nrf-auxpll";
 				reg = <0x8c2000 0x1000>;
 				interrupts = <194 NRF_DEFAULT_IRQ_PRIORITY>;
@@ -686,7 +688,7 @@
 				#clock-cells = <0>;
 				nordic,ficrs = <&ficr NRF_FICR_TRIM_GLOBAL_CANPLL_TRIM_CTUNE>;
 				nordic,frequency = <NRF_AUXPLL_FREQ_DIV_MIN>;
-				nordic,out-div = <2>;
+				nordic,out-div = <NRF_AUXPLL_OUT_DIV_2>;
 				nordic,out-drive = <0>;
 				nordic,current-tune = <6>;
 				nordic,sdm-disable;

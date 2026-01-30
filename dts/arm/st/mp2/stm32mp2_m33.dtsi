@@ -25,15 +25,17 @@
 	};
 
 	ddr_code: memory0@80100000 {
-		compatible = "mmio-sram";
+		compatible = "zephyr,memory-region", "mmio-sram";
+		zephyr,memory-region = "DDR_CODE";
 	};
 
 	ddr_sys: memory1@80a00000 {
-		compatible = "mmio-sram";
+		compatible = "zephyr,memory-region", "mmio-sram";
+		zephyr,memory-region = "DDR_SYS";
 	};
 
 	soc {
-		rcc: rcc@44200000  {
+		rcc: rcc@44200000 {
 			compatible = "st,stm32mp2-rcc";
 			clocks-controller;
 			#clock-cells = <2>;
@@ -49,13 +51,13 @@
 			compatible = "st,stm32-exti";
 			interrupt-controller;
 			#interrupt-cells = <1>;
-			#address-cells = <1>;
+			#address-cells = <0>;
 			reg = <0x46230000 DT_SIZE_K(1)>;
 			num-lines = <77>;
 			interrupts = <17 0>, <18 0>, <19 0>, <20 0>,
-					 <21 0>, <22 0>, <23 0>, <24 0>,
-					 <25 0>, <26 0>, <27 0>, <28 0>,
-					 <29 0>, <30 0>, <31 0>, <32 0>;
+				     <21 0>, <22 0>, <23 0>, <24 0>,
+				     <25 0>, <26 0>, <27 0>, <28 0>,
+				     <29 0>, <30 0>, <31 0>, <32 0>;
 			interrupt-names = "line0", "line1", "line2", "line3",
 					  "line4", "line5", "line6", "line7",
 					  "line8", "line9", "line10", "line11",
@@ -64,6 +66,14 @@
 				      <4 1>, <5 1>, <6 1>, <7 1>,
 				      <8 1>, <9 1>, <10 1>, <11 1>,
 				      <12 1>, <13 1>, <14 1>, <15 1>;
+		};
+
+		mailbox: ipcc1@40490000 {
+			compatible = "st,stm32-ipcc-mailbox";
+			reg = <0x40490000 0x400>;
+			interrupts = <171 0>, <172 0>;
+			interrupt-names = "rxo", "txf";
+			status = "disabled";
 		};
 
 		pinctrl: pin-controller@44240000 {
@@ -176,6 +186,7 @@
 			#size-cells = <0>;
 			clocks = <&rcc STM32_CLOCK(SPI1, STM32_CLK)>;
 			interrupts = <112 0>;
+			st,spi-data-width = "full-4-to-32-bit";
 			status = "disabled";
 		};
 
@@ -186,6 +197,7 @@
 			#size-cells = <0>;
 			clocks = <&rcc STM32_CLOCK(SPI2, STM32_CLK)>;
 			interrupts = <113 0>;
+			st,spi-data-width = "full-4-to-32-bit";
 			status = "disabled";
 		};
 
@@ -196,6 +208,7 @@
 			#size-cells = <0>;
 			clocks = <&rcc STM32_CLOCK(SPI3, STM32_CLK)>;
 			interrupts = <125 0>;
+			st,spi-data-width = "full-4-to-32-bit";
 			status = "disabled";
 		};
 
@@ -206,6 +219,7 @@
 			#size-cells = <0>;
 			clocks = <&rcc STM32_CLOCK(SPI4, STM32_CLK)>;
 			interrupts = <152 0>;
+			st,spi-data-width = "full-4-to-16-bit";
 			status = "disabled";
 		};
 
@@ -216,6 +230,7 @@
 			#size-cells = <0>;
 			clocks = <&rcc STM32_CLOCK(SPI5, STM32_CLK)>;
 			interrupts = <153 0>;
+			st,spi-data-width = "full-4-to-16-bit";
 			status = "disabled";
 		};
 
@@ -226,6 +241,7 @@
 			#size-cells = <0>;
 			clocks = <&rcc STM32_CLOCK(SPI6, STM32_CLK)>;
 			interrupts = <154 0>;
+			st,spi-data-width = "full-4-to-16-bit";
 			status = "disabled";
 		};
 
@@ -236,6 +252,7 @@
 			#size-cells = <0>;
 			clocks = <&rcc STM32_CLOCK(SPI7, STM32_CLK)>;
 			interrupts = <155 0>;
+			st,spi-data-width = "full-4-to-16-bit";
 			status = "disabled";
 		};
 
@@ -416,10 +433,23 @@
 			status = "disabled";
 		};
 
+		i3c4: i3c@46080000 {
+			compatible = "st,stm32-i3c";
+			reg = <0x46080000 DT_SIZE_K(1)>;
+			#address-cells = <3>;
+			#size-cells = <0>;
+			resets = <&rctl STM32_RESET(I3C4, STM32_RST)>;
+			clocks = <&rcc STM32_CLOCK(I3C4, STM32_CLK)>;
+			interrupts = <213 0>;
+			interrupt-names = "combined";
+			status = "disabled";
+		};
+
 		iwdg: iwdg4: watchdog@44040000 {
 			compatible = "st,stm32-watchdog";
 			reg = <0x44040000 DT_SIZE_K(1)>;
 			clocks = <&rcc STM32_CLOCK(IWDG4, STM32_CLK)>;
+			interrupts = <3 0>;
 			status = "disabled";
 		};
 
@@ -433,7 +463,6 @@
 	};
 
 	clocks {
-
 		clk_hse: clk-hse {
 			#clock-cells = <0>;
 			compatible = "fixed-clock";

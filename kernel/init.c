@@ -300,12 +300,10 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 	arch_irq_offload_init();
 #endif
 	z_sys_init_run_level(INIT_LEVEL_POST_KERNEL);
-#if CONFIG_SOC_LATE_INIT_HOOK
+
 	soc_late_init_hook();
-#endif
-#if CONFIG_BOARD_LATE_INIT_HOOK
+
 	board_late_init_hook();
-#endif
 
 #if defined(CONFIG_STACK_POINTER_RANDOM) && (CONFIG_STACK_POINTER_RANDOM != 0)
 	z_stack_adjust_initialized = 1;
@@ -322,7 +320,7 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 	z_init_static_threads();
 
 #ifdef CONFIG_KERNEL_COHERENCE
-	__ASSERT_NO_MSG(arch_mem_coherent(&_kernel));
+	__ASSERT_NO_MSG(sys_cache_is_mem_coherent(&_kernel));
 #endif /* CONFIG_KERNEL_COHERENCE */
 
 #ifdef CONFIG_SMP
@@ -355,6 +353,8 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 #ifdef CONFIG_COVERAGE_DUMP
 	/* Dump coverage data once the main() has exited. */
 	gcov_coverage_dump();
+#elif defined(CONFIG_COVERAGE_SEMIHOST)
+	gcov_coverage_semihost();
 #endif /* CONFIG_COVERAGE_DUMP */
 } /* LCOV_EXCL_LINE ... because we just dumped final coverage data */
 
@@ -515,7 +515,7 @@ void __weak z_early_rand_get(uint8_t *buf, size_t length)
 		state = state + k_cycle_get_32();
 		state = state * 2862933555777941757ULL + 3037000493ULL;
 		val = (uint32_t)(state >> 32);
-		rc = MIN(length, sizeof(val));
+		rc = min(length, sizeof(val));
 		arch_early_memcpy((void *)buf, &val, rc);
 
 		length -= rc;
@@ -554,12 +554,10 @@ FUNC_NORETURN void z_cstart(void)
 	/* do any necessary initialization of static devices */
 	z_device_state_init();
 
-#if CONFIG_SOC_EARLY_INIT_HOOK
 	soc_early_init_hook();
-#endif
-#if CONFIG_BOARD_EARLY_INIT_HOOK
+
 	board_early_init_hook();
-#endif
+
 	/* perform basic hardware initialization */
 	z_sys_init_run_level(INIT_LEVEL_PRE_KERNEL_1);
 #if defined(CONFIG_SMP)

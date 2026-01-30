@@ -1465,7 +1465,7 @@ static uint8_t start(const void *cmd, uint16_t cmd_len,
 	LOG_DBG("");
 
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		LOG_INF("Loading stored settings\n");
+		LOG_INF("Loading stored settings");
 		settings_load();
 	}
 
@@ -4486,7 +4486,7 @@ static int cmd_blob_target(uint16_t addr)
 
 	if (blob_cli_xfer.target_count == ARRAY_SIZE(blob_cli_xfer.targets)) {
 		LOG_ERR("No more room");
-		return 0;
+		return -ENOMEM;
 	}
 
 	t = &blob_cli_xfer.targets[blob_cli_xfer.target_count];

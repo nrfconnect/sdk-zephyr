@@ -119,7 +119,7 @@ static void data_ready_work_handler(struct rtio_iodev_sqe *iodev_sqe)
 						   0;
 
 	status = Argus_EvaluateData(data->platform.argus.handle, &edata->payload);
-	if (status != STATUS_OK || edata->payload.Status != STATUS_OK) {
+	if (status != STATUS_OK) {
 		LOG_ERR("Data not valid: %d, %d", status, edata->payload.Status);
 		handle_error_on_result(data, -EIO);
 	}
@@ -395,8 +395,7 @@ BUILD_ASSERT(CONFIG_MAIN_STACK_SIZE >= 4096,
 	SPI_DT_IODEV_DEFINE(afbr_s50_bus_##inst,						   \
 			    DT_DRV_INST(inst),							   \
 			    SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB |		   \
-			    SPI_MODE_CPOL | SPI_MODE_CPHA,					   \
-			    0U);								   \
+			    SPI_MODE_CPOL | SPI_MODE_CPHA);					   \
 												   \
 	static const struct afbr_s50_config afbr_s50_cfg_##inst = {				   \
 		.gpio = {									   \

@@ -239,7 +239,7 @@ static bool stress_test_action(int ctx, int id)
 static void stress_test_actions(int ctx)
 {
 	uint32_t r = sys_rand32_get();
-	int action_cnt = Z_MAX(r & 0x3, 1);
+	int action_cnt = max(r & 0x3, 1);
 	int tmr_id = (r >> 8) % ARRAY_SIZE(timers);
 
 	/* Occasionally wake thread context from which timer actions are also executed. */

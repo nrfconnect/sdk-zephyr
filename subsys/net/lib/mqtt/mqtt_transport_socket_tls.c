@@ -20,34 +20,46 @@ LOG_MODULE_REGISTER(net_mqtt_sock_tls, CONFIG_MQTT_LOG_LEVEL);
 
 int mqtt_client_tls_connect(struct mqtt_client *client)
 {
-	const struct sockaddr *broker = client->broker;
+	const struct net_sockaddr *broker = client->broker;
 	struct mqtt_sec_config *tls_config = &client->transport.tls.config;
-	int type = SOCK_STREAM;
+	int type = NET_SOCK_STREAM;
 	int ret;
 
-	if (tls_config->set_native_tls) {
+	if (!IS_ENABLED(CONFIG_NET_SOCKETS_OFFLOAD_DISPATCHER) && tls_config->set_native_tls) {
 		type |= SOCK_NATIVE_TLS;
 	}
 
 	client->transport.tls.sock = zsock_socket(broker->sa_family,
-						  type, IPPROTO_TLS_1_2);
+						  type, NET_IPPROTO_TLS_1_2);
 	if (client->transport.tls.sock < 0) {
 		return -errno;
 	}
 
 	NET_DBG("Created socket %d", client->transport.tls.sock);
 
+	if (IS_ENABLED(CONFIG_NET_SOCKETS_OFFLOAD_DISPATCHER) && tls_config->set_native_tls) {
+		int tls_native = 1;
+
+		ret = zsock_setsockopt(client->transport.tls.sock, ZSOCK_SOL_TLS,
+				       ZSOCK_TLS_NATIVE, &tls_native,
+				       sizeof(tls_native));
+		if (ret < 0) {
+			NET_ERR("Failed to set native TLS (%d)", -errno);
+			goto error;
+		}
+	}
+
 	if (client->transport.if_name != NULL) {
-		struct ifreq ifname = { 0 };
+		struct net_ifreq ifname = { 0 };
 
 		strncpy(ifname.ifr_name, client->transport.if_name,
 			sizeof(ifname.ifr_name) - 1);
 
-		ret = zsock_setsockopt(client->transport.tls.sock, SOL_SOCKET,
-				       SO_BINDTODEVICE, &ifname,
-				       sizeof(struct ifreq));
+		ret = zsock_setsockopt(client->transport.tls.sock, ZSOCK_SOL_SOCKET,
+				       ZSOCK_SO_BINDTODEVICE, &ifname,
+				       sizeof(struct net_ifreq));
 		if (ret < 0) {
-			NET_ERR("Failed to bind ot interface %s error (%d)",
+			NET_ERR("Failed to bind to interface %s (%d)",
 				ifname.ifr_name, -errno);
 			goto error;
 		}
@@ -58,7 +70,7 @@ int mqtt_client_tls_connect(struct mqtt_client *client)
 #if defined(CONFIG_SOCKS)
 	if (client->transport.proxy.addrlen != 0) {
 		ret = setsockopt(client->transport.tls.sock,
-				 SOL_SOCKET, SO_SOCKS5,
+				 ZSOCK_SOL_SOCKET, ZSOCK_SO_SOCKS5,
 				 &client->transport.proxy.addr,
 				 client->transport.proxy.addrlen);
 		if (ret < 0) {
@@ -67,7 +79,7 @@ int mqtt_client_tls_connect(struct mqtt_client *client)
 	}
 #endif
 	/* Set secure socket options. */
-	ret = zsock_setsockopt(client->transport.tls.sock, SOL_TLS, TLS_PEER_VERIFY,
+	ret = zsock_setsockopt(client->transport.tls.sock, ZSOCK_SOL_TLS, ZSOCK_TLS_PEER_VERIFY,
 			       &tls_config->peer_verify,
 			       sizeof(tls_config->peer_verify));
 	if (ret < 0) {
@@ -75,8 +87,8 @@ int mqtt_client_tls_connect(struct mqtt_client *client)
 	}
 
 	if (tls_config->cipher_list != NULL && tls_config->cipher_count > 0) {
-		ret = zsock_setsockopt(client->transport.tls.sock, SOL_TLS,
-				       TLS_CIPHERSUITE_LIST, tls_config->cipher_list,
+		ret = zsock_setsockopt(client->transport.tls.sock, ZSOCK_SOL_TLS,
+				       ZSOCK_TLS_CIPHERSUITE_LIST, tls_config->cipher_list,
 				       sizeof(int) * tls_config->cipher_count);
 		if (ret < 0) {
 			goto error;
@@ -84,8 +96,8 @@ int mqtt_client_tls_connect(struct mqtt_client *client)
 	}
 
 	if (tls_config->sec_tag_list != NULL && tls_config->sec_tag_count > 0) {
-		ret = zsock_setsockopt(client->transport.tls.sock, SOL_TLS,
-				       TLS_SEC_TAG_LIST, tls_config->sec_tag_list,
+		ret = zsock_setsockopt(client->transport.tls.sock, ZSOCK_SOL_TLS,
+				       ZSOCK_TLS_SEC_TAG_LIST, tls_config->sec_tag_list,
 				       sizeof(sec_tag_t) * tls_config->sec_tag_count);
 		if (ret < 0) {
 			goto error;
@@ -95,8 +107,8 @@ int mqtt_client_tls_connect(struct mqtt_client *client)
 #if defined(CONFIG_MQTT_LIB_TLS_USE_ALPN)
 	if (tls_config->alpn_protocol_name_list != NULL &&
 		tls_config->alpn_protocol_name_count > 0) {
-		ret = zsock_setsockopt(client->transport.tls.sock, SOL_TLS,
-				TLS_ALPN_LIST, tls_config->alpn_protocol_name_list,
+		ret = zsock_setsockopt(client->transport.tls.sock, ZSOCK_SOL_TLS,
+				ZSOCK_TLS_ALPN_LIST, tls_config->alpn_protocol_name_list,
 				sizeof(const char *) * tls_config->alpn_protocol_name_count);
 		if (ret < 0) {
 			goto error;
@@ -106,17 +118,17 @@ int mqtt_client_tls_connect(struct mqtt_client *client)
 #endif
 
 	if (tls_config->hostname) {
-		ret = zsock_setsockopt(client->transport.tls.sock, SOL_TLS,
-				       TLS_HOSTNAME, tls_config->hostname,
+		ret = zsock_setsockopt(client->transport.tls.sock, ZSOCK_SOL_TLS,
+				       ZSOCK_TLS_HOSTNAME, tls_config->hostname,
 				       strlen(tls_config->hostname) + 1);
 		if (ret < 0) {
 			goto error;
 		}
 	}
 
-	if (tls_config->session_cache == TLS_SESSION_CACHE_ENABLED) {
-		ret = zsock_setsockopt(client->transport.tls.sock, SOL_TLS,
-				       TLS_SESSION_CACHE,
+	if (tls_config->session_cache == ZSOCK_TLS_SESSION_CACHE_ENABLED) {
+		ret = zsock_setsockopt(client->transport.tls.sock, ZSOCK_SOL_TLS,
+				       ZSOCK_TLS_SESSION_CACHE,
 				       &tls_config->session_cache,
 				       sizeof(tls_config->session_cache));
 		if (ret < 0) {
@@ -124,19 +136,19 @@ int mqtt_client_tls_connect(struct mqtt_client *client)
 		}
 	}
 
-	if (tls_config->cert_nocopy != TLS_CERT_NOCOPY_NONE) {
-		ret = zsock_setsockopt(client->transport.tls.sock, SOL_TLS,
-				       TLS_CERT_NOCOPY, &tls_config->cert_nocopy,
+	if (tls_config->cert_nocopy != ZSOCK_TLS_CERT_NOCOPY_NONE) {
+		ret = zsock_setsockopt(client->transport.tls.sock, ZSOCK_SOL_TLS,
+				       ZSOCK_TLS_CERT_NOCOPY, &tls_config->cert_nocopy,
 				       sizeof(tls_config->cert_nocopy));
 		if (ret < 0) {
 			goto error;
 		}
 	}
 
-	size_t peer_addr_size = sizeof(struct sockaddr_in6);
+	size_t peer_addr_size = sizeof(struct net_sockaddr_in6);
 
-	if (broker->sa_family == AF_INET) {
-		peer_addr_size = sizeof(struct sockaddr_in);
+	if (broker->sa_family == NET_AF_INET) {
+		peer_addr_size = sizeof(struct net_sockaddr_in);
 	}
 
 	ret = zsock_connect(client->transport.tls.sock, client->broker,
@@ -173,7 +185,7 @@ int mqtt_client_tls_write(struct mqtt_client *client, const uint8_t *data,
 }
 
 int mqtt_client_tls_write_msg(struct mqtt_client *client,
-			      const struct msghdr *message)
+			      const struct net_msghdr *message)
 {
 	int ret, i;
 	size_t offset = 0;

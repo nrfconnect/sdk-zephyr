@@ -95,7 +95,7 @@ struct bt_spi_data {
 };
 
 static const struct spi_dt_spec bus = SPI_DT_SPEC_INST_GET(
-	0, SPI_OP_MODE_MASTER | SPI_TRANSFER_MSB | SPI_WORD_SET(8) | SPI_LOCK_ON, 0);
+	0, SPI_OP_MODE_MASTER | SPI_TRANSFER_MSB | SPI_WORD_SET(8) | SPI_LOCK_ON);
 
 static struct spi_buf spi_tx_buf;
 static struct spi_buf spi_rx_buf;
@@ -567,8 +567,7 @@ static int bt_spi_send(const struct device *dev, struct net_buf *buf)
 
 	LOG_DBG("");
 
-	/* Buffer needs an additional byte for type */
-	if (buf->len >= SPI_MAX_MSG_LEN) {
+	if (buf->len > SPI_MAX_MSG_LEN) {
 		LOG_ERR("Message too long (%d)", buf->len);
 		return -EINVAL;
 	}

@@ -1,13 +1,23 @@
-if(CONFIG_LIBSBC_ENCODER OR CONFIG_LIBSBC_DECODER)
+if(CONFIG_LIBSBC)
 
 zephyr_library_named(libsbc)
-zephyr_library_compile_options(-O3 -std=c11 -ffast-math -Wno-array-bounds)
+zephyr_library_compile_options(-O3 -std=c11 -ffast-math)
+# -Wno-stringop-overflow was added as otherwise gcc 13.3 produces multiple warnings in this library
+# Newer version of gcc do not produce them, and this code is taken from Android where it was
+# validated. So these warnings are presumed to be false positives.
+if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+  zephyr_library_compile_options(-Wno-stringop-overflow)
+endif()
 
-zephyr_compile_definitions(SBC_FOR_EMBEDDED_LINUX)
-zephyr_compile_definitions(SBC_NO_PCM_CPY_OPTION)
-zephyr_library_sources(sbc.c)
+zephyr_include_directories(
+    ${ZEPHYR_LIBSBC_MODULE_DIR}/encoder/include
+  )
 
-if(CONFIG_LIBSBC_ENCODER)
+zephyr_include_directories(
+  ${ZEPHYR_LIBSBC_MODULE_DIR}/decoder/include
+  ${ZEPHYR_LIBSBC_MODULE_DIR}/decoder/srce
+  )
+
 zephyr_library_sources(
   ${ZEPHYR_LIBSBC_MODULE_DIR}/encoder/srce/sbc_analysis.c
   ${ZEPHYR_LIBSBC_MODULE_DIR}/encoder/srce/sbc_dct.c
@@ -18,12 +28,7 @@ zephyr_library_sources(
   ${ZEPHYR_LIBSBC_MODULE_DIR}/encoder/srce/sbc_encoder.c
   ${ZEPHYR_LIBSBC_MODULE_DIR}/encoder/srce/sbc_packing.c
   )
-zephyr_include_directories(
-    ${ZEPHYR_LIBSBC_MODULE_DIR}/encoder/include
-  )
-endif()
 
-if(CONFIG_LIBSBC_DECODER)
 zephyr_library_sources(
   ${ZEPHYR_LIBSBC_MODULE_DIR}/decoder/srce/alloc.c
   ${ZEPHYR_LIBSBC_MODULE_DIR}/decoder/srce/bitalloc.c
@@ -41,9 +46,4 @@ zephyr_library_sources(
   ${ZEPHYR_LIBSBC_MODULE_DIR}/decoder/srce/synthesis-dct8.c
   ${ZEPHYR_LIBSBC_MODULE_DIR}/decoder/srce/synthesis-sbc.c
   )
-zephyr_include_directories(
-  ${ZEPHYR_LIBSBC_MODULE_DIR}/decoder/include
-  ${ZEPHYR_LIBSBC_MODULE_DIR}/decoder/srce
-  )
-endif()
 endif()

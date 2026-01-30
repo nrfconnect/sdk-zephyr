@@ -425,6 +425,16 @@ config BT_MESH_CDB_APP_KEY_COUNT
 	  This option specifies how many application keys that can at most
 	  be saved in the configuration database.
 
+config BT_MESH_CDB_KEY_SYNC
+	bool "Keys synchronization support"
+	default y
+	help
+	  Enable this option to have support for synchronizing keys between
+	  mesh stack and cdb.
+	  When this option is enabled, key operations (add, remove, update)
+	  performed on the mesh stack through Configuration Server messages
+	  are automatically mirrored to the CDB.
+
 endif # BT_MESH_CDB
 
 endmenu # Provisioning
@@ -800,11 +810,12 @@ config BT_MESH_ACCESS_LAYER_MSG
 	  might wear out persistent memory.
 
 config BT_MESH_MODEL_VND_MSG_CID_FORCE
-	bool "Force vendor model to use the corresponding CID field message"
-	default y
+	bool "Force vendor model to use opcodes with matching CID [DEPRECATED]"
+	default n
+	select DEPRECATED
 	help
-	  This option forces vendor model to use messages for the
-	  corresponding CID field.
+	  This option forces vendor models to only use opcodes with a CID field
+	  matching the models CID. It is deprecated and should no longer be used.
 
 config BT_MESH_MODEL_EXTENSIONS
 	bool "Support for Model extensions"
@@ -1520,17 +1531,10 @@ config BT_MESH_SECURE_STORAGE
 	bool
 	depends on SECURE_STORAGE
 
-choice BT_MESH_CRYPTO_LIB
-	prompt "Crypto library:"
-	default BT_MESH_USES_TFM_PSA if BUILD_WITH_TFM
-	default BT_MESH_USES_MBEDTLS_PSA
-	help
-	  Crypto library selection for mesh security.
-
-config BT_MESH_USES_MBEDTLS_PSA
-	bool "mbed TLS PSA"
-	select MBEDTLS
-	select MBEDTLS_PSA_CRYPTO_C
+config BT_MESH_CRYPTO_LIB
+	bool
+	default y
+	select PSA_CRYPTO
 	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
 	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_EXPORT
 	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_GENERATE
@@ -1544,19 +1548,10 @@ config BT_MESH_USES_MBEDTLS_PSA
 	select PSA_WANT_ALG_SHA_256
 	select PSA_WANT_ALG_ECDH
 	select PSA_WANT_ECC_SECP_R1_256
-	select BT_MESH_SECURE_STORAGE if BT_SETTINGS
-	imply MBEDTLS_AES_ROM_TABLES
+	select BT_MESH_SECURE_STORAGE if BT_SETTINGS && PSA_CRYPTO_PROVIDER_MBEDTLS
+	imply MBEDTLS_AES_ROM_TABLES if PSA_CRYPTO_PROVIDER_MBEDTLS
 	help
-	  Use Mbed TLS as PSA Crypto API provider.
-
-config BT_MESH_USES_TFM_PSA
-	bool "TF-M PSA"
-	depends on BUILD_WITH_TFM
-	help
-	  Use TF-M as PSA Crypto API provider. This is only possible on platforms
-	  that support TF-M.
-
-endchoice
+	  Crypto library support for mesh security.
 
 menu "Beacons"
 

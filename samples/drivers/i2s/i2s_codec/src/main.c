@@ -19,8 +19,8 @@
 #define I2S_CODEC_TX DT_ALIAS(i2s_codec_tx)
 
 #define SAMPLE_FREQUENCY CONFIG_SAMPLE_FREQ
-#define SAMPLE_BIT_WIDTH (16U)
-#define BYTES_PER_SAMPLE sizeof(int16_t)
+#define SAMPLE_BIT_WIDTH CONFIG_SAMPLE_WIDTH
+#define BYTES_PER_SAMPLE CONFIG_BYTES_PER_SAMPLE
 #if CONFIG_USE_DMIC
 #define NUMBER_OF_CHANNELS CONFIG_DMIC_CHANNELS
 #else
@@ -32,7 +32,7 @@
 #define TIMEOUT           (2000U)
 
 #define BLOCK_SIZE  (BYTES_PER_SAMPLE * SAMPLES_PER_BLOCK)
-#define BLOCK_COUNT (INITIAL_BLOCKS + 32)
+#define BLOCK_COUNT (INITIAL_BLOCKS + CONFIG_EXTRA_BLOCKS)
 
 K_MEM_SLAB_DEFINE_IN_SECT_STATIC(mem_slab, __nocache, BLOCK_SIZE, BLOCK_COUNT, 4);
 
@@ -132,7 +132,7 @@ int main(void)
 #if CONFIG_USE_DMIC
 	cfg.channel.req_num_chan = 2;
 	cfg.channel.req_chan_map_lo = dmic_build_channel_map(0, 0, PDM_CHAN_LEFT) |
-				      dmic_build_channel_map(1, 1, PDM_CHAN_RIGHT);
+				      dmic_build_channel_map(1, 0, PDM_CHAN_RIGHT);
 	cfg.streams[0].pcm_rate = SAMPLE_FREQUENCY;
 	cfg.streams[0].block_size = BLOCK_SIZE;
 

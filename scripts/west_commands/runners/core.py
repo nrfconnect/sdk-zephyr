@@ -304,6 +304,10 @@ class RunnerCaps:
 
     - rtt: whether the runner supports SEGGER RTT. This adds a --rtt-address
       option.
+
+    - skip_load: whether the runner supports the --load/--no-load option, which
+      allows skipping the load of image on target before starting a debug session
+      (this option only affects the 'debug' command)
     '''
 
     commands: set[str] = field(default_factory=lambda: set(_RUNNERCAPS_COMMANDS))
@@ -319,6 +323,12 @@ class RunnerCaps:
     rtt: bool = False  # This capability exists separately from the rtt command
                        # to allow other commands to use the rtt address
     dry_run: bool = False
+    skip_load: bool = False
+    batch_debug: bool = False # In batch mode, GDB exits with status 0 after loading;
+                              # for automated debugging, add --batch with 'monitor go',
+                              # 'disconnect', and 'quit' commands (named batch_debug in west),
+                              # unlike interactive debug mode (default),
+                              # which stops and waits for user input
 
     def __post_init__(self):
         if self.mult_dev_ids and not self.dev_id:
@@ -377,11 +387,6 @@ class _DTFlashAction(argparse.Action):
         else:
             namespace.dt_flash = False
 
-
-class _ToggleAction(argparse.Action):
-
-    def __call__(self, parser, args, ignored, option):
-        setattr(args, self.dest, not option.startswith('--no-'))
 
 class DeprecatedAction(argparse.Action):
 
@@ -614,14 +619,12 @@ class ZephyrBinaryRunner(abc.ABC):
                                 help='path to zephyr.mot'
                                 if not caps.file else 'Deprecated, use -f/--file instead.')
 
-        parser.add_argument('--erase', '--no-erase', nargs=0,
-                            action=_ToggleAction,
+        parser.add_argument('--erase', action=argparse.BooleanOptionalAction,
                             help=("mass erase flash before loading, or don't. "
                                   "Default action depends on each specific runner."
                                   if caps.erase else argparse.SUPPRESS))
 
-        parser.add_argument('--reset', '--no-reset', nargs=0,
-                            action=_ToggleAction,
+        parser.add_argument('--reset', action=argparse.BooleanOptionalAction,
                             help=("reset device after flashing, or don't. "
                                   "Default action depends on each specific runner."
                                   if caps.reset else argparse.SUPPRESS))
@@ -646,6 +649,16 @@ class ZephyrBinaryRunner(abc.ABC):
         parser.add_argument('--dry-run', action='store_true',
                             help=('''Print all the commands without actually
                             executing them''' if caps.dry_run else argparse.SUPPRESS))
+
+        # by default, 'west debug' is expected to flash before starting the session
+        parser.add_argument('--load', action=argparse.BooleanOptionalAction,
+                            help=("load image on target before 'west debug' session"
+                                  if caps.skip_load else argparse.SUPPRESS),
+                            default=True)
+
+        parser.add_argument('--batch', action=argparse.BooleanOptionalAction,
+                            help="enable west debug batch mode"
+                            if caps.batch_debug else argparse.SUPPRESS)
 
         # Runner-specific options.
         cls.do_add_parser(parser)

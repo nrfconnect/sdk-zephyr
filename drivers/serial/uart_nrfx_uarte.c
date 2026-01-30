@@ -3058,7 +3058,6 @@ static void uarte_pm_resume(const struct device *dev)
 	const struct uarte_nrfx_config *cfg = dev->config;
 
 	if (IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME) || !LOW_POWER_ENABLED(cfg)) {
-		(void)pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
 		uarte_periph_enable(dev);
 	}
 }
@@ -3236,10 +3235,12 @@ static int uarte_instance_init(const struct device *dev,
 	return pm_device_driver_init(dev, uarte_nrfx_pm_action);
 }
 
+#ifdef CONFIG_DEVICE_DEINIT_SUPPORT
 static int uarte_instance_deinit(const struct device *dev)
 {
 	return pm_device_driver_deinit(dev, uarte_nrfx_pm_action);
 }
+#endif
 
 #define UARTE_TIMER_REG(idx) (NRF_TIMER_Type *)DT_REG_ADDR(DT_PHANDLE(UARTE(idx), timer))
 
@@ -3278,6 +3279,7 @@ static int uarte_instance_deinit(const struct device *dev)
 			    UARTE_HAS_PROP(idx, timer)),					\
 		   ((DT_IRQ(UARTE(idx), priority) != DT_IRQ(DT_NODELABEL(grtc), priority)) ?	\
 		    UARTE_CFG_FLAG_VAR_IRQ : 0), (0))
+
 
 #define UARTE_GET_ISR(idx) \
 	COND_CODE_1(CONFIG_UART_##idx##_ASYNC, (uarte_nrfx_isr_async), (uarte_nrfx_isr_int))

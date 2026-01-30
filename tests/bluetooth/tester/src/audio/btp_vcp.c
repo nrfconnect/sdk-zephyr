@@ -508,10 +508,10 @@ struct bt_aics_cb aics_server_cb = {
 static void set_register_params(uint8_t gain_mode, uint8_t step,
 				bool muted, uint8_t volume)
 {
-	char input_desc[CONFIG_BT_VCP_VOL_REND_AICS_INSTANCE_COUNT]
-		       [BT_AICS_MAX_INPUT_DESCRIPTION_SIZE];
-	char output_desc[CONFIG_BT_VCP_VOL_REND_VOCS_INSTANCE_COUNT]
-			[BT_AICS_MAX_OUTPUT_DESCRIPTION_SIZE];
+	static char input_desc[CONFIG_BT_VCP_VOL_REND_AICS_INSTANCE_COUNT]
+			      [BT_AICS_MAX_INPUT_DESCRIPTION_SIZE];
+	static char output_desc[CONFIG_BT_VCP_VOL_REND_VOCS_INSTANCE_COUNT]
+			      [BT_AICS_MAX_OUTPUT_DESCRIPTION_SIZE];
 
 	memset(&vcp_register_param, 0, sizeof(vcp_register_param));
 

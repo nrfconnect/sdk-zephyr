@@ -11,7 +11,7 @@
 #include <nrfx_gppi_cpurad.h>
 #endif
 
-static int gppi_init(void)
+static int _gppi_init(void)
 {
 	static nrfx_gppi_t gppi_instance;
 
@@ -72,5 +72,5 @@ static int gppi_init(void)
 }
 
 #if defined(CONFIG_NRFX_GPPI) && !defined(CONFIG_NRFX_GPPI_V1)
-SYS_INIT(gppi_init, PRE_KERNEL_1, 0);
+SYS_INIT(_gppi_init, EARLY, 0);
 #endif

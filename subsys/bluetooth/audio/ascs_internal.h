@@ -352,7 +352,7 @@ int bt_ascs_init(const struct bt_bap_unicast_server_cb *cb);
 void bt_ascs_cleanup(void);
 
 int ascs_ep_set_state(struct bt_bap_ep *ep, enum bt_bap_ep_state state);
-bool bt_ascs_is_ase_ep(const struct bt_bap_ep *ep);
+bool bt_ascs_has_ep(const struct bt_bap_ep *ep);
 
 int bt_ascs_config_ase(struct bt_conn *conn, struct bt_bap_stream *stream,
 		       struct bt_audio_codec_cfg *codec_cfg,
@@ -364,5 +364,6 @@ void bt_ascs_foreach_ep(struct bt_conn *conn, bt_bap_ep_func_t func, void *user_
 
 int bt_ascs_register(uint8_t snk_cnt, uint8_t src_cnt);
 int bt_ascs_unregister(void);
+struct bt_conn *bt_ascs_ep_get_conn(const struct bt_bap_ep *ep);
 
 #endif /* BT_ASCS_INTERNAL_H */

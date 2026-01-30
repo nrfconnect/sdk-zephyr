@@ -2222,6 +2222,18 @@ struct bt_conn_cb {
 				      struct bt_conn_remote_info *remote_info);
 #endif /* defined(CONFIG_BT_REMOTE_INFO) */
 
+#if defined(CONFIG_BT_POWER_MODE_CONTROL)
+	/** @brief The connection mode change
+	 *
+	 *  This callback notifies the application that the sniff mode has changed
+	 *
+	 *  @param conn Connection object.
+	 *  @param mode Active/Sniff mode.
+	 *  @param interval Sniff interval.
+	 */
+	void (*br_mode_changed)(struct bt_conn *conn, uint8_t mode, uint16_t interval);
+#endif /* CONFIG_BT_POWER_MODE_CONTROL */
+
 #if defined(CONFIG_BT_USER_PHY_UPDATE)
 	/** @brief The PHY of the connection has changed.
 	 *
@@ -2605,7 +2617,8 @@ void bt_le_oob_set_legacy_flag(bool enable);
  *  callback provided that the legacy method is user pairing.
  *
  *  @param conn  @ref BT_CONN_TYPE_LE connection object.
- *  @param tk Pointer to 16 byte long TK array
+ *  @param tk Pointer to 16 byte long TK array. The TK value should be generated randomly for each
+ *            new pairing process.
  *
  *  @retval 0 Success
  *  @return -EINVAL @p conn is not a valid @ref BT_CONN_TYPE_LE connection.
@@ -3237,6 +3250,30 @@ int bt_conn_br_switch_role(const struct bt_conn *conn, uint8_t role);
  *  @return -EINVAL @p conn is not a valid @ref BT_CONN_TYPE_BR connection.
  */
 int bt_conn_br_set_role_switch_enable(const struct bt_conn *conn, bool enable);
+
+#if defined(CONFIG_BT_POWER_MODE_CONTROL)
+/** @brief bluetooth conn check and enter sniff mode
+ *
+ *  This function is used to identify which ACL link connection is to
+ *  be placed in Sniff mode
+ *
+ *  @param conn bt_conn conn
+ *  @param min_interval Minimum sniff interval.
+ *  @param max_interval Maxmum sniff interval.
+ *  @param attempt Number of Baseband receive slots for sniff attempt.
+ *  @param timeout Number of Baseband receive slots for sniff timeout.
+ */
+int bt_conn_br_enter_sniff_mode(struct bt_conn *conn, uint16_t min_interval,
+				 uint16_t max_interval, uint16_t attempt, uint16_t timeout);
+
+/** @brief bluetooth conn check and exit sniff mode
+ *
+ *  @param conn bt_conn conn
+ *
+ *  @return  Zero for success, non-zero otherwise.
+ */
+int bt_conn_br_exit_sniff_mode(struct bt_conn *conn);
+#endif /* CONFIG_BT_POWER_MODE_CONTROL */
 
 #ifdef __cplusplus
 }

@@ -9,6 +9,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/wifi_mgmt.h>
+#include <zephyr/sys/util.h>
 
 #include "includes.h"
 #include "common.h"
@@ -407,13 +408,17 @@ enum wifi_security_type wpas_key_mgmt_to_zephyr(bool is_hapd, void *config, int 
 	case WPA_KEY_MGMT_PSK_SHA256:
 		return WIFI_SECURITY_TYPE_PSK_SHA256;
 	case WPA_KEY_MGMT_SAE:
-		if (pwe == 1) {
-			return WIFI_SECURITY_TYPE_SAE_H2E;
-		} else if (pwe == 2) {
-			return WIFI_SECURITY_TYPE_SAE_AUTO;
-		} else {
-			return WIFI_SECURITY_TYPE_SAE_HNP;
+		if (IS_ENABLED(CONFIG_WIFI_NM_WPA_SUPPLICANT_WPA3)) {
+			if (pwe == 1) {
+				return WIFI_SECURITY_TYPE_SAE_H2E;
+			} else if (pwe == 2) {
+				return WIFI_SECURITY_TYPE_SAE_AUTO;
+			} else {
+				return WIFI_SECURITY_TYPE_SAE_HNP;
+			}
 		}
+		return WIFI_SECURITY_TYPE_UNKNOWN;
+	case WPA_KEY_MGMT_PSK_SHA256 | WPA_KEY_MGMT_PSK:
 	case WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_PSK:
 	case WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_PSK_SHA256:
 	case WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_PSK_SHA256 | WPA_KEY_MGMT_PSK:
@@ -421,7 +426,10 @@ enum wifi_security_type wpas_key_mgmt_to_zephyr(bool is_hapd, void *config, int 
 	case WPA_KEY_MGMT_FT_PSK:
 		return WIFI_SECURITY_TYPE_FT_PSK;
 	case WPA_KEY_MGMT_FT_SAE:
-		return WIFI_SECURITY_TYPE_FT_SAE;
+		if (IS_ENABLED(CONFIG_WIFI_NM_WPA_SUPPLICANT_WPA3)) {
+			return WIFI_SECURITY_TYPE_FT_SAE;
+		}
+		return WIFI_SECURITY_TYPE_UNKNOWN;
 	case WPA_KEY_MGMT_FT_IEEE8021X:
 		return WIFI_SECURITY_TYPE_FT_EAP;
 	case WPA_KEY_MGMT_DPP:
@@ -429,7 +437,10 @@ enum wifi_security_type wpas_key_mgmt_to_zephyr(bool is_hapd, void *config, int 
 	case WPA_KEY_MGMT_FT_IEEE8021X_SHA384:
 		return WIFI_SECURITY_TYPE_FT_EAP_SHA384;
 	case WPA_KEY_MGMT_SAE_EXT_KEY:
-		return WIFI_SECURITY_TYPE_SAE_EXT_KEY;
+		if (IS_ENABLED(CONFIG_WIFI_NM_WPA_SUPPLICANT_WPA3)) {
+			return WIFI_SECURITY_TYPE_SAE_EXT_KEY;
+		}
+		return WIFI_SECURITY_TYPE_UNKNOWN;
 	case WPA_KEY_MGMT_DPP | WPA_KEY_MGMT_PSK:
 		return WIFI_SECURITY_TYPE_DPP;
 	default:
@@ -515,7 +526,7 @@ static struct wifi_eap_config eap_config[] = {
 	{WIFI_SECURITY_TYPE_EAP_TTLS_MSCHAPV2, WIFI_EAP_TYPE_TTLS, WIFI_EAP_TYPE_NONE, "TTLS",
 	 "auth=MSCHAPV2"},
 	{WIFI_SECURITY_TYPE_EAP_PEAP_TLS, WIFI_EAP_TYPE_PEAP, WIFI_EAP_TYPE_TLS, "PEAP",
-	 "auth=TLS"},
+	 "auth=TLS tls_disable_tlsv1_3=1"},
 };
 
 int process_cipher_config(struct wifi_connect_req_params *params,
@@ -718,10 +729,11 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 			}
 		}
 
-		if (params->security == WIFI_SECURITY_TYPE_SAE_HNP ||
-		    params->security == WIFI_SECURITY_TYPE_SAE_H2E ||
-		    params->security == WIFI_SECURITY_TYPE_SAE_AUTO ||
-		    params->security == WIFI_SECURITY_TYPE_SAE_EXT_KEY) {
+		if (IS_ENABLED(CONFIG_WIFI_NM_WPA_SUPPLICANT_WPA3) &&
+		    (params->security == WIFI_SECURITY_TYPE_SAE_HNP ||
+		     params->security == WIFI_SECURITY_TYPE_SAE_H2E ||
+		     params->security == WIFI_SECURITY_TYPE_SAE_AUTO ||
+		     params->security == WIFI_SECURITY_TYPE_SAE_EXT_KEY)) {
 			if (params->sae_password) {
 				if ((params->sae_password_length < WIFI_PSK_MIN_LEN) ||
 				    (params->sae_password_length > WIFI_SAE_PSWD_MAX_LEN)) {
@@ -818,40 +830,48 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 				goto out;
 			}
 		} else if (params->security == WIFI_SECURITY_TYPE_WPA_AUTO_PERSONAL) {
-			if (params->sae_password) {
-				if ((params->sae_password_length < WIFI_PSK_MIN_LEN) ||
-				    (params->sae_password_length > WIFI_SAE_PSWD_MAX_LEN)) {
-					wpa_printf(MSG_ERROR,
-						"Passphrase should be in range (%d-%d) characters",
-						WIFI_PSK_MIN_LEN, WIFI_SAE_PSWD_MAX_LEN);
-					goto out;
-				}
-				strncpy(sae_null_terminated, params->sae_password,
-					WIFI_SAE_PSWD_MAX_LEN);
-				sae_null_terminated[params->sae_password_length] = '\0';
-				if (!wpa_cli_cmd_v("set_network %d sae_password \"%s\"",
-						   resp.network_id, sae_null_terminated)) {
-					goto out;
-				}
-			} else {
-				if (!wpa_cli_cmd_v("set_network %d sae_password \"%s\"",
-						   resp.network_id, psk_null_terminated)) {
-					goto out;
-				}
-			}
-
 			if (!wpa_cli_cmd_v("set_network %d psk \"%s\"", resp.network_id,
 					   psk_null_terminated)) {
 				goto out;
 			}
 
-			if (!wpa_cli_cmd_v("set sae_pwe 2")) {
-				goto out;
-			}
+			if (IS_ENABLED(CONFIG_WIFI_NM_WPA_SUPPLICANT_WPA3)) {
+				if (params->sae_password) {
+					if ((params->sae_password_length < WIFI_PSK_MIN_LEN) ||
+					    (params->sae_password_length > WIFI_SAE_PSWD_MAX_LEN)) {
+						wpa_printf(MSG_ERROR,
+							"Passphrase should be in range (%d-%d) characters",
+							WIFI_PSK_MIN_LEN, WIFI_SAE_PSWD_MAX_LEN);
+						goto out;
+					}
+					strncpy(sae_null_terminated, params->sae_password,
+						WIFI_SAE_PSWD_MAX_LEN);
+					sae_null_terminated[params->sae_password_length] = '\0';
+					if (!wpa_cli_cmd_v("set_network %d sae_password \"%s\"",
+							   resp.network_id, sae_null_terminated)) {
+						goto out;
+					}
+				} else {
+					if (!wpa_cli_cmd_v("set_network %d sae_password \"%s\"",
+							   resp.network_id, psk_null_terminated)) {
+						goto out;
+					}
+				}
 
-			if (!wpa_cli_cmd_v("set_network %d key_mgmt WPA-PSK WPA-PSK-SHA256 SAE",
-					   resp.network_id)) {
-				goto out;
+				if (!wpa_cli_cmd_v("set sae_pwe 2")) {
+					goto out;
+				}
+
+				if (!wpa_cli_cmd_v(
+					"set_network %d key_mgmt WPA-PSK WPA-PSK-SHA256 SAE",
+					resp.network_id)) {
+					goto out;
+				}
+			} else {
+				if (!wpa_cli_cmd_v("set_network %d key_mgmt WPA-PSK WPA-PSK-SHA256",
+						   resp.network_id)) {
+					goto out;
+				}
 			}
 
 			if (!wpa_cli_cmd_v("set_network %d proto WPA RSN", resp.network_id)) {
@@ -893,7 +913,8 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 						goto out;
 					}
 				} else if (params->TLS_cipher == WIFI_EAP_TLS_RSA_3K) {
-					snprintf(phase1, sizeof(phase1), "tls_suiteb=1");
+					snprintf(phase1, sizeof(phase1), "tls_suiteb=1 "
+						 "tls_disable_tlsv1_3=1");
 					if (!wpa_cli_cmd_v("set_network %d phase1 \"%s\"",
 							resp.network_id, &phase1[0])) {
 						goto out;
@@ -1622,6 +1643,13 @@ int supplicant_candidate_scan(const struct device *dev, struct wifi_scan_params 
 	char *pos = cmd;
 	char *end = pos + SUPPLICANT_CANDIDATE_SCAN_CMD_BUF_SIZE;
 	int freq = 0;
+	struct wpa_supplicant *wpa_s;
+
+	wpa_s = get_wpa_s_handle(dev);
+	if (!wpa_s) {
+		wpa_printf(MSG_ERROR, "Device %s not found", dev->name);
+		return -1;
+	}
 
 	strcpy(pos, "freq=");
 	pos += 5;
@@ -1746,6 +1774,15 @@ int supplicant_reg_domain(const struct device *dev,
 	if (reg_domain->oper == WIFI_MGMT_SET) {
 		k_mutex_lock(&wpa_supplicant_mutex, K_FOREVER);
 
+		if (IS_ENABLED(CONFIG_WIFI_NM_HOSTAPD_AP)) {
+			const struct device *dev2 = net_if_get_device(net_if_get_wifi_sap());
+
+			ret = hostapd_ap_reg_domain(dev2, reg_domain);
+			if (ret) {
+				goto out;
+			}
+		}
+
 		wpa_s = get_wpa_s_handle(dev);
 		if (!wpa_s) {
 			wpa_printf(MSG_ERROR, "Interface %s not found", dev->name);
@@ -1754,12 +1791,6 @@ int supplicant_reg_domain(const struct device *dev,
 
 		if (!wpa_cli_cmd_v("set country %s", reg_domain->country_code)) {
 			goto out;
-		}
-
-		if (IS_ENABLED(CONFIG_WIFI_NM_HOSTAPD_AP)) {
-			if (!hostapd_ap_reg_domain(dev, reg_domain)) {
-				goto out;
-			}
 		}
 
 		ret = 0;
@@ -2644,18 +2675,18 @@ static void parse_peer_info_response(const char *resp, const uint8_t *mac,
 
 	memset(info, 0, sizeof(*info));
 
-	if (mac) {
+	if (mac != NULL) {
 		memcpy(info->mac, mac, WIFI_MAC_ADDR_LEN);
 	}
 
-	while (line && *line) {
+	while (line != NULL && *line != '\0') {
 		if (*line == '\n') {
 			line++;
 			continue;
 		}
 		next_line = strchr(line, '\n');
 		parse_peer_info_line(line, info);
-		if (next_line) {
+		if (next_line != NULL) {
 			line = next_line + 1;
 		} else {
 			break;
@@ -2671,7 +2702,7 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 	int ret = -1;
 	const char *discovery_type_str = "";
 
-	if (!wpa_s || !wpa_s->ctrl_conn) {
+	if (wpa_s == NULL || wpa_s->ctrl_conn == NULL) {
 		wpa_printf(MSG_ERROR, "wpa_supplicant control interface not initialized");
 		return -ENOTSUP;
 	}
@@ -2736,7 +2767,7 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 		struct net_eth_addr peer_mac;
 		bool query_all_peers;
 
-		if (!params->peers) {
+		if (params->peers == NULL) {
 			wpa_printf(MSG_ERROR, "Peer info array not provided");
 			return -EINVAL;
 		}
@@ -2744,15 +2775,15 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 		memcpy(&peer_mac, params->peer_addr, WIFI_MAC_ADDR_LEN);
 		query_all_peers = net_eth_is_addr_broadcast(&peer_mac);
 
-		if (query_all_peers) {
-			os_strlcpy(cmd_buf, "P2P_PEER FIRST", sizeof(cmd_buf));
+		if (query_all_peers == true) {
+			snprintk(cmd_buf, sizeof(cmd_buf), "P2P_PEER FIRST");
 
 			while (peer_idx < params->peer_count) {
 				ret = zephyr_wpa_cli_cmd_resp_noprint(wpa_s->ctrl_conn,
 								      cmd_buf, resp_buf);
 
 				if (ret < 0 || resp_buf[0] == '\0' ||
-				    os_strncmp(resp_buf, "FAIL", 4) == 0) {
+				    strncmp(resp_buf, "FAIL", 4) == 0) {
 					if (peer_idx == 0) {
 						wpa_printf(MSG_DEBUG, "No P2P peers found");
 					}
@@ -2766,27 +2797,27 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 				}
 				addr[len] = '\0';
 
-				if (os_strncmp(addr, "00:00:00:00:00:00", 17) != 0 &&
+				if (strncmp(addr, "00:00:00:00:00:00", 17) != 0 &&
 				    sscanf(addr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
 					   &mac[0], &mac[1], &mac[2],
 					   &mac[3], &mac[4], &mac[5]) ==
 					   WIFI_MAC_ADDR_LEN) {
 
-					os_snprintf(cmd, sizeof(cmd), "P2P_PEER %s", addr);
+					snprintk(cmd, sizeof(cmd), "P2P_PEER %s", addr);
 					ret = zephyr_wpa_cli_cmd_resp_noprint(
 						wpa_s->ctrl_conn, cmd, peer_info);
 
 					if (ret >= 0 &&
 					    (!params->discovered_only ||
-					     os_strstr(peer_info,
-						       "[PROBE_REQ_ONLY]") == NULL)) {
+					     strstr(peer_info,
+						    "[PROBE_REQ_ONLY]") == NULL)) {
 						parse_peer_info_response(peer_info,
 									 mac,
 									 &params->peers[peer_idx]);
 						peer_idx++;
 					}
 				}
-				os_snprintf(cmd_buf, sizeof(cmd_buf), "P2P_PEER NEXT-%s", addr);
+				snprintk(cmd_buf, sizeof(cmd_buf), "P2P_PEER NEXT-%s", addr);
 			}
 			params->peer_count = peer_idx;
 		} else {
@@ -2809,7 +2840,7 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 				wpa_printf(MSG_ERROR, "P2P_PEER command failed: %d", ret);
 				return -EIO;
 			}
-			if (os_strncmp(peer_info, "FAIL", 4) == 0) {
+			if (strncmp(peer_info, "FAIL", 4) == 0) {
 				wpa_printf(MSG_ERROR, "Peer %s not found", addr_str);
 				return -ENODEV;
 			}
@@ -2825,8 +2856,9 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 		char addr_str[18];
 		const char *method_str = "";
 		char freq_str[32] = "";
+		const char *join_str = "";
 
-		if (!params) {
+		if (params == NULL) {
 			wpa_printf(MSG_ERROR, "P2P connect params are NULL");
 			return -EINVAL;
 		}
@@ -2840,16 +2872,23 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 			snprintk(freq_str, sizeof(freq_str), " freq=%u", params->connect.freq);
 		}
 
+		/* Add join parameter if specified */
+		if (params->connect.join) {
+			join_str = " join";
+		}
+
 		switch (params->connect.method) {
 		case WIFI_P2P_METHOD_PBC:
 			method_str = "pbc";
-			snprintk(cmd_buf, sizeof(cmd_buf), "P2P_CONNECT %s %s go_intent=%d%s",
-				 addr_str, method_str, params->connect.go_intent, freq_str);
+			snprintk(cmd_buf, sizeof(cmd_buf), "P2P_CONNECT %s %s go_intent=%d%s%s",
+				 addr_str, method_str, params->connect.go_intent, freq_str,
+				 join_str);
 			break;
 		case WIFI_P2P_METHOD_DISPLAY:
 			method_str = "pin";
-			snprintk(cmd_buf, sizeof(cmd_buf), "P2P_CONNECT %s %s go_intent=%d%s",
-				 addr_str, method_str, params->connect.go_intent, freq_str);
+			snprintk(cmd_buf, sizeof(cmd_buf), "P2P_CONNECT %s %s go_intent=%d%s%s",
+				 addr_str, method_str, params->connect.go_intent, freq_str,
+				 join_str);
 			break;
 		case WIFI_P2P_METHOD_KEYPAD:
 			method_str = "keypad";
@@ -2857,9 +2896,9 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 				wpa_printf(MSG_ERROR, "PIN required for keypad method");
 				return -EINVAL;
 			}
-			snprintk(cmd_buf, sizeof(cmd_buf), "P2P_CONNECT %s %s %s go_intent=%d%s",
+			snprintk(cmd_buf, sizeof(cmd_buf), "P2P_CONNECT %s %s %s go_intent=%d%s%s",
 				 addr_str, method_str, params->connect.pin,
-				 params->connect.go_intent, freq_str);
+				 params->connect.go_intent, freq_str, join_str);
 			break;
 		default:
 			wpa_printf(MSG_ERROR, "Unknown P2P connection method: %d",
@@ -2872,7 +2911,7 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 			wpa_printf(MSG_ERROR, "P2P_CONNECT command failed: %d", ret);
 			return -EIO;
 		}
-		if (os_strncmp(resp_buf, "FAIL", 4) == 0) {
+		if (strncmp(resp_buf, "FAIL", 4) == 0) {
 			wpa_printf(MSG_ERROR, "P2P connect failed: %s", resp_buf);
 			return -ENODEV;
 		}
@@ -2905,7 +2944,7 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 	case WIFI_P2P_GROUP_ADD: {
 		int len = 0;
 
-		if (!params) {
+		if (params == NULL) {
 			wpa_printf(MSG_ERROR, "P2P group add params are NULL");
 			return -EINVAL;
 		}
@@ -2922,19 +2961,19 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 					params->group_add.persistent);
 		}
 
-		if (params->group_add.ht40) {
+		if (params->group_add.ht40 != 0) {
 			len += snprintk(cmd_buf + len, sizeof(cmd_buf) - len, " ht40");
 		}
 
-		if (params->group_add.vht) {
+		if (params->group_add.vht != 0) {
 			len += snprintk(cmd_buf + len, sizeof(cmd_buf) - len, " vht");
 		}
 
-		if (params->group_add.he) {
+		if (params->group_add.he != 0) {
 			len += snprintk(cmd_buf + len, sizeof(cmd_buf) - len, " he");
 		}
 
-		if (params->group_add.edmg) {
+		if (params->group_add.edmg != 0) {
 			len += snprintk(cmd_buf + len, sizeof(cmd_buf) - len, " edmg");
 		}
 
@@ -2959,7 +2998,7 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 	}
 
 	case WIFI_P2P_GROUP_REMOVE:
-		if (!params) {
+		if (params == NULL) {
 			wpa_printf(MSG_ERROR, "P2P group remove params are NULL");
 			return -EINVAL;
 		}
@@ -2984,7 +3023,7 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 		char addr_str[18];
 		int len = 0;
 
-		if (!params) {
+		if (params == NULL) {
 			wpa_printf(MSG_ERROR, "P2P invite params are NULL");
 			return -EINVAL;
 		}
@@ -3050,7 +3089,7 @@ int supplicant_p2p_oper(const struct device *dev, struct wifi_p2p_params *params
 			wpa_printf(MSG_ERROR, "p2p_set ps command failed: %d", ret);
 			return -EIO;
 		}
-		if (os_strncmp(resp_buf, "FAIL", 4) == 0) {
+		if (strncmp(resp_buf, "FAIL", 4) == 0) {
 			wpa_printf(MSG_ERROR, "p2p_set ps command returned FAIL");
 			return -EIO;
 		}

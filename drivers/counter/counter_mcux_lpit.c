@@ -65,7 +65,7 @@ static int mcux_lpit_start(const struct device *dev)
 	uint8_t channel_id = LPIT_CHANNEL_ID(dev);
 
 	LOG_DBG("period is %d", mcux_lpit_get_top_value(dev));
-	LPIT_EnableInterrupts(config->base, (1U << channel_id));
+	LPIT_EnableInterrupts(config->base, BIT(channel_id));
 	LPIT_StartTimer(config->base, channel_id);
 	return 0;
 }
@@ -75,7 +75,7 @@ static int mcux_lpit_stop(const struct device *dev)
 	const struct mcux_lpit_config *config = dev->config;
 	uint8_t channel_id = LPIT_CHANNEL_ID(dev);
 
-	LPIT_DisableInterrupts(config->base, channel_id);
+	LPIT_DisableInterrupts(config->base, BIT(channel_id));
 	LPIT_StopTimer(config->base, channel_id);
 	return 0;
 }
@@ -150,12 +150,12 @@ static void mcux_lpit_isr(const struct device *dev)
 
 	for (int channel_index = 0; channel_index < config->num_channels; channel_index++) {
 
-		if ((flags & (1U << channel_index)) == 0) {
+		if ((flags & BIT(channel_index)) == 0) {
 			continue;
 		}
 
 		/* Clear interrupt flag */
-		LPIT_ClearStatusFlags(config->base, (1U << channel_index));
+		LPIT_ClearStatusFlags(config->base, BIT(channel_index));
 
 		struct mcux_lpit_channel_data *data =
 			LPIT_CHANNEL_DATA(config->channels[channel_index]);
@@ -221,13 +221,34 @@ static DEVICE_API(counter, mcux_lpit_driver_api) = {
 
 #define MCUX_LPIT_INSERT_CHANNEL_DEVICE_INTO_ARRAY(node) [DT_REG_ADDR(node)] = DEVICE_DT_GET(node),
 
-#define MCUX_LPIT_IRQ_CONFIG_DECLARATIONS(n)                                                       \
-	static void mcux_lpit_irq_config_func_##n(const struct device *dev)                        \
-	{                                                                                          \
-		IRQ_CONNECT(DT_INST_IRQ_BY_IDX(n, 0, irq), DT_INST_IRQ_BY_IDX(n, 0, priority),     \
-			    mcux_lpit_isr, DEVICE_DT_INST_GET(n), 0);                              \
-		irq_enable(DT_INST_IRQN(n));                                                       \
-	};
+#define LPIT_IRQ_CONNECT_IDX(idx, inst)                                                       \
+	do {                                                                                  \
+		IRQ_CONNECT(DT_INST_IRQ_BY_IDX(inst, idx, irq),                               \
+		DT_INST_IRQ_BY_IDX(inst, idx, priority),                        \
+			mcux_lpit_isr, DEVICE_DT_INST_GET(inst), 0);                    \
+		irq_enable(DT_INST_IRQ_BY_IDX(inst, idx, irq));                               \
+	} while (0)
+
+#define MCUX_LPIT_IRQ_CONFIG_DECLARATIONS(n)	\
+	static void mcux_lpit_irq_config_func_##n(const struct device *dev)	\
+	{	\
+		ARG_UNUSED(dev);	\
+		COND_CODE_1(	\
+			IS_EQ(DT_NUM_IRQS(DT_DRV_INST(n)), 1),	\
+			(/* single IRQ */	\
+				IRQ_CONNECT(DT_INST_IRQ_BY_IDX(n, 0, irq),	\
+						DT_INST_IRQ_BY_IDX(n, 0, priority),	\
+						mcux_lpit_isr,	\
+						DEVICE_DT_INST_GET(n), 0);	\
+				irq_enable(DT_INST_IRQN(n));	\
+			),	\
+			(/* multiple IRQs */	\
+				LISTIFY(DT_INST_NUM_IRQS(n),	\
+						LPIT_IRQ_CONNECT_IDX,	\
+						(;),	\
+						n);	\
+			));	\
+	}
 
 #define MCUX_LPIT_SETUP_IRQ_CONFIG(n) MCUX_LPIT_IRQ_CONFIG_DECLARATIONS(n);
 #define MCUX_LPIT_SETUP_IRQ_ARRAY(ignored)

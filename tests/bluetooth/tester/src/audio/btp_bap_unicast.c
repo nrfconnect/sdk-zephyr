@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2023 Codecoup
+ * Copyright (c) 2025 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -580,10 +581,10 @@ static void stream_enabled_cb(struct bt_bap_stream *stream)
 		 * the endpoint
 		 */
 		const bool start_stream =
-			(IS_ENABLED(CONFIG_BT_CENTRAL) && conn_info.role == BT_HCI_ROLE_CENTRAL &&
+			(IS_ENABLED(CONFIG_BT_CENTRAL) && conn_info.role == BT_CONN_ROLE_CENTRAL &&
 			 ep_info.dir == BT_AUDIO_DIR_SOURCE) ||
 			(IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
-			 conn_info.role == BT_HCI_ROLE_PERIPHERAL &&
+			 conn_info.role == BT_CONN_ROLE_PERIPHERAL &&
 			 ep_info.dir == BT_AUDIO_DIR_SINK);
 
 		if (start_stream) {
@@ -707,7 +708,7 @@ static void stream_connected_cb(struct bt_bap_stream *stream)
 
 	(void)bt_conn_get_info(stream->conn, &conn_info);
 
-	if (conn_info.role == BT_HCI_ROLE_CENTRAL) {
+	if (conn_info.role == BT_CONN_ROLE_CENTRAL) {
 		if (ep_info.dir == BT_AUDIO_DIR_SOURCE) {
 			if (ep_info.state == BT_BAP_EP_STATE_ENABLING) {
 				/* Automatically do the receiver start ready operation for source
@@ -1113,7 +1114,7 @@ uint8_t btp_bap_discover(const void *cmd, uint16_t cmd_len,
 	u_conn = &connections[bt_conn_index(conn)];
 	(void)bt_conn_get_info(conn, &conn_info);
 
-	if (u_conn->end_points_count > 0 || conn_info.role != BT_HCI_ROLE_CENTRAL) {
+	if (u_conn->end_points_count > 0 || conn_info.role != BT_CONN_ROLE_CENTRAL) {
 		bt_conn_unref(conn);
 
 		return BTP_STATUS_FAILED;
@@ -1447,7 +1448,7 @@ uint8_t btp_ascs_configure_codec(const void *cmd, uint16_t cmd_len, void *rsp, u
 		memcpy(codec_cfg.data, cp->cc_ltvs, cp->cc_ltvs_len);
 	}
 
-	if (conn_info.role == BT_HCI_ROLE_CENTRAL) {
+	if (conn_info.role == BT_CONN_ROLE_CENTRAL) {
 		err = client_configure_codec(u_conn, conn, cp->ase_id, &codec_cfg);
 	} else {
 		err = server_configure_codec(u_conn, conn, cp->ase_id, &codec_cfg);
@@ -1467,9 +1468,38 @@ uint8_t btp_ascs_preconfigure_qos(const void *cmd, uint16_t cmd_len,
 				  void *rsp, uint16_t *rsp_len)
 {
 	const struct btp_ascs_preconfigure_qos_cmd *cp = cmd;
+	const uint16_t latency = sys_le16_to_cpu(cp->max_transport_latency);
+	const uint32_t sdu_interval = sys_get_le24(cp->sdu_interval);
+	const uint32_t pd = sys_get_le24(cp->presentation_delay);
+	const uint16_t max_sdu = sys_le16_to_cpu(cp->max_sdu);
 	struct bt_bap_qos_cfg *qos;
 
 	LOG_DBG("");
+
+	if (cp->framing != BT_ISO_FRAMING_UNFRAMED && cp->framing != BT_ISO_FRAMING_FRAMED) {
+		LOG_DBG("Invalid framing %u", cp->framing);
+		return BTP_STATUS_FAILED;
+	}
+
+	if (!IN_RANGE(max_sdu, BT_ISO_MIN_SDU, BT_ISO_MAX_SDU)) {
+		LOG_DBG("Invalid SDU %u", max_sdu);
+		return BTP_STATUS_FAILED;
+	}
+
+	if (!IN_RANGE(latency, BT_ISO_LATENCY_MIN, BT_ISO_LATENCY_MAX)) {
+		LOG_DBG("Invalid latency %u", latency);
+		return BTP_STATUS_FAILED;
+	}
+
+	if (!IN_RANGE(sdu_interval, BT_ISO_SDU_INTERVAL_MIN, BT_ISO_SDU_INTERVAL_MAX)) {
+		LOG_DBG("Invalid SDU interval %u", sdu_interval);
+		return BTP_STATUS_FAILED;
+	}
+
+	if (pd > BT_AUDIO_PD_MAX) {
+		LOG_DBG("Invalid presentation delay %u", pd);
+		return BTP_STATUS_FAILED;
+	}
 
 	qos = &cigs[cp->cig_id].qos[cp->cis_id];
 	memset(qos, 0, sizeof(*qos));
@@ -1477,10 +1507,10 @@ uint8_t btp_ascs_preconfigure_qos(const void *cmd, uint16_t cmd_len,
 	qos->phy = BT_BAP_QOS_CFG_2M;
 	qos->framing = cp->framing;
 	qos->rtn = cp->retransmission_num;
-	qos->sdu = sys_le16_to_cpu(cp->max_sdu);
-	qos->latency = sys_le16_to_cpu(cp->max_transport_latency);
-	qos->interval = sys_get_le24(cp->sdu_interval);
-	qos->pd = sys_get_le24(cp->presentation_delay);
+	qos->sdu = max_sdu;
+	qos->latency = latency;
+	qos->interval = sdu_interval;
+	qos->pd = pd;
 
 	return BTP_STATUS_SUCCESS;
 }
@@ -1503,7 +1533,7 @@ uint8_t btp_ascs_configure_qos(const void *cmd, uint16_t cmd_len, void *rsp, uin
 	}
 
 	(void)bt_conn_get_info(conn, &conn_info);
-	if (conn_info.role == BT_HCI_ROLE_PERIPHERAL) {
+	if (conn_info.role == BT_CONN_ROLE_PERIPHERAL) {
 		bt_conn_unref(conn);
 
 		return BTP_STATUS_FAILED;
@@ -1607,7 +1637,7 @@ uint8_t btp_ascs_disable(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t 
 			return BTP_STATUS_FAILED;
 		}
 
-		if (conn_info.role == BT_HCI_ROLE_PERIPHERAL) {
+		if (conn_info.role == BT_CONN_ROLE_PERIPHERAL) {
 			/* The server the operation completes immediately */
 			btp_send_ascs_operation_completed_ev(conn, stream->ase_id,
 							     BT_ASCS_DISABLE_OP,
@@ -1644,7 +1674,7 @@ uint8_t btp_ascs_receiver_start_ready(const void *cmd, uint16_t cmd_len,
 		return BTP_STATUS_FAILED;
 	}
 
-	if (conn_info.role == BT_HCI_ROLE_PERIPHERAL) {
+	if (conn_info.role == BT_CONN_ROLE_PERIPHERAL) {
 		/* Cannot connect the CIS as the peripheral */
 		LOG_DBG("Cannot connect the CIS as the peripheral");
 		return BTP_STATUS_FAILED;
@@ -1732,7 +1762,7 @@ uint8_t btp_ascs_receiver_stop_ready(const void *cmd, uint16_t cmd_len,
 			return BTP_STATUS_FAILED;
 		}
 
-		if (conn_info.role == BT_HCI_ROLE_PERIPHERAL) {
+		if (conn_info.role == BT_CONN_ROLE_PERIPHERAL) {
 			/* The server the operation completes immediately */
 			btp_send_ascs_operation_completed_ev(conn, stream->ase_id, BT_ASCS_STOP_OP,
 							     BT_BAP_ASCS_RSP_CODE_SUCCESS);
@@ -1782,7 +1812,7 @@ uint8_t btp_ascs_release(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t 
 			return BTP_STATUS_FAILED;
 		}
 
-		if (conn_info.role == BT_HCI_ROLE_PERIPHERAL) {
+		if (conn_info.role == BT_CONN_ROLE_PERIPHERAL) {
 			/* The server the operation completes immediately */
 			btp_send_ascs_operation_completed_ev(conn, stream->ase_id,
 							     BT_ASCS_RELEASE_OP,
@@ -1838,7 +1868,7 @@ uint8_t btp_ascs_update_metadata(const void *cmd, uint16_t cmd_len,
 			return BTP_STATUS_FAILED;
 		}
 
-		if (conn_info.role == BT_HCI_ROLE_PERIPHERAL) {
+		if (conn_info.role == BT_CONN_ROLE_PERIPHERAL) {
 			/* The server the operation completes immediately */
 			btp_send_ascs_operation_completed_ev(conn, stream->ase_id,
 							     BT_ASCS_METADATA_OP,
@@ -1868,7 +1898,7 @@ uint8_t btp_ascs_add_ase_to_cis(const void *cmd, uint16_t cmd_len,
 	}
 
 	(void)bt_conn_get_info(conn, &conn_info);
-	if (conn_info.role == BT_HCI_ROLE_PERIPHERAL) {
+	if (conn_info.role == BT_CONN_ROLE_PERIPHERAL) {
 		bt_conn_unref(conn);
 
 		return BTP_STATUS_FAILED;

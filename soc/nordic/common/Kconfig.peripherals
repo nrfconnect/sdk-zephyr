@@ -14,7 +14,7 @@ config HAS_HW_NRF_BPROT
 
 config HAS_HW_NRF_CC310
 	def_bool $(dt_compat_enabled,$(DT_COMPAT_ARM_CRYPTOCELL_310)) || \
-		 ($(dt_nodelabel_enabled,psa_rng) && SOC_SERIES_NRF91X)
+		 ($(dt_nodelabel_enabled,psa_rng) && SOC_SERIES_NRF91)
 
 config HAS_HW_NRF_CC312
 	def_bool $(dt_compat_enabled,$(DT_COMPAT_ARM_CRYPTOCELL_312)) || \
@@ -140,7 +140,7 @@ config HAS_HW_NRF_RADIO_BLE_CODED
 	def_bool $(dt_nodelabel_bool_prop,radio,ble-coded-phy-supported)
 
 config HAS_HW_NRF_RADIO_CS
-	def_bool $(dt_nodelabel_bool_prop,radio,cs-supported)
+	def_bool $(dt_nodelabel_bool_prop,radio,ble-cs-supported)
 
 config HAS_HW_NRF_RADIO_DFE
 	def_bool $(dt_nodelabel_bool_prop,radio,dfe-supported)
@@ -149,7 +149,7 @@ config HAS_HW_NRF_RADIO_IEEE802154
 	def_bool $(dt_nodelabel_bool_prop,radio,ieee802154-supported)
 
 config HAS_HW_NRF_RADIO_TX_PWR_HIGH
-	def_bool $(dt_nodelabel_bool_prop,radio,tx-high-power-supported)
+	def_bool $(dt_nodelabel_bool_prop,radio,radio-tx-high-power-supported)
 
 config HAS_HW_NRF_REGULATORS
 	def_bool $(dt_compat_enabled,$(DT_COMPAT_NORDIC_NRF_REGULATORS))
@@ -159,6 +159,9 @@ config HAS_HW_NRF_RESET
 
 config HAS_HW_NRF_RNG
 	def_bool $(dt_compat_enabled,$(DT_COMPAT_NORDIC_NRF_RNG))
+
+config HAS_HW_NRF_RRAMC
+	def_bool $(dt_compat_enabled,$(DT_COMPAT_NORDIC_RRAM_CONTROLLER))
 
 config HAS_HW_NRF_RTC0
 	def_bool $(dt_nodelabel_enabled_with_compat,rtc0,$(DT_COMPAT_NORDIC_NRF_RTC))

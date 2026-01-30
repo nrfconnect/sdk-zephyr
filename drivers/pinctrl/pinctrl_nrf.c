@@ -151,10 +151,10 @@ static void port_pin_clock_set(uint16_t pin_number, bool enable)
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_hpf_mspi_controller) || \
 	defined(CONFIG_MSPI_HPF) || \
 	DT_ANY_COMPAT_HAS_PROP_STATUS_OKAY(nordic_nrf_vpr_coprocessor, pinctrl_0)
-#if defined(CONFIG_SOC_SERIES_NRF54LX)
+#if defined(CONFIG_SOC_SERIES_NRF54L)
 #define NRF_PSEL_SDP_MSPI(psel) \
 	nrf_gpio_pin_control_select(psel, NRF_GPIO_PIN_SEL_VPR);
-#elif defined(CONFIG_SOC_SERIES_NRF54HX)
+#elif defined(CONFIG_SOC_SERIES_NRF54H)
 /* On nRF54H, pin routing is controlled by secure domain, via UICR. */
 #define NRF_PSEL_SDP_MSPI(psel)
 #endif

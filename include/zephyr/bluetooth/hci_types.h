@@ -60,6 +60,7 @@ struct bt_hci_sco_hdr {
 struct bt_hci_evt_hdr {
 	uint8_t  evt;
 	uint8_t  len;
+	uint8_t  data[];
 } __packed;
 #define BT_HCI_EVT_HDR_SIZE             2
 
@@ -139,7 +140,7 @@ struct bt_hci_cmd_hdr {
 #define BT_CMD_TEST(cmd, octet, bit)            (cmd[octet] & BIT(bit))
 #define BT_CMD_LE_STATES(cmd)                   BT_CMD_TEST(cmd, 28, 3)
 
-#define BT_FEAT_TEST(feat, page, octet, bit)    (feat[page][octet] & BIT(bit))
+#define BT_FEAT_TEST(feat, page, octet, bit)    ((feat[page][octet] & BIT(bit)) != 0)
 
 #define BT_FEAT_BREDR(feat)                     !BT_FEAT_TEST(feat, 0, 4, 5)
 #define BT_FEAT_LE(feat)                        BT_FEAT_TEST(feat, 0, 4, 6)
@@ -432,6 +433,62 @@ struct bt_hci_cp_accept_conn_req {
 	uint8_t   role;
 } __packed;
 
+#define BT_HCI_VOICE_SETTING_AIR_CODING_FMT_CVSD        0x00
+#define BT_HCI_VOICE_SETTING_AIR_CODING_FMT_ULAW        0x01
+#define BT_HCI_VOICE_SETTING_AIR_CODING_FMT_ALAW        0x02
+#define BT_HCI_VOICE_SETTING_AIR_CODING_FMT_TRANSPARENT 0x03
+
+#define BT_HCI_VOICE_SETTING_PCM_BIT_POS_DEFAULT 0x00
+
+#define BT_HCI_VOICE_SETTING_SAMPLE_SIZE_8_BITS  0x00
+#define BT_HCI_VOICE_SETTING_SAMPLE_SIZE_16_BITS 0x01
+
+#define BT_HCI_VOICE_SETTING_DATA_FMT_1_COMPLEMENT 0x00
+#define BT_HCI_VOICE_SETTING_DATA_FMT_2_COMPLEMENT 0x01
+#define BT_HCI_VOICE_SETTING_DATA_FMT_SIGNED       0x02
+#define BT_HCI_VOICE_SETTING_DATA_FMT_UNSIGNED     0x03
+
+#define BT_HCI_VOICE_SETTING_CODING_FMT_LINEAR 0x00
+#define BT_HCI_VOICE_SETTING_CODING_FMT_ULAW   0x01
+#define BT_HCI_VOICE_SETTING_CODING_FMT_ALAW   0x02
+
+#define BT_HCI_VOICE_SETTING_AIR_CODING_FMT_MASK GENMASK(1, 0)
+#define BT_HCI_VOICE_SETTING_PCM_BIT_POS_MASK    GENMASK(2, 4)
+#define BT_HCI_VOICE_SETTING_SAMPLE_SIZE_MASK    GENMASK(5, 5)
+#define BT_HCI_VOICE_SETTING_DATA_FMT_MASK       GENMASK(7, 6)
+#define BT_HCI_VOICE_SETTING_CODING_FMT_MASK     GENMASK(9, 8)
+
+#define BT_HCI_VOICE_SETTING_AIR_CODING_FMT_PREP(val) \
+	FIELD_PREP(BT_HCI_VOICE_SETTING_AIR_CODING_FMT_MASK, val)
+#define BT_HCI_VOICE_SETTING_PCM_BIT_POS_PREP(val) \
+	FIELD_PREP(BT_HCI_VOICE_SETTING_PCM_BIT_POS_MASK, val)
+#define BT_HCI_VOICE_SETTING_SAMPLE_SIZE_PREP(val) \
+	FIELD_PREP(BT_HCI_VOICE_SETTING_SAMPLE_SIZE_MASK, val)
+#define BT_HCI_VOICE_SETTING_DATA_FMT_PREP(val) FIELD_PREP(BT_HCI_VOICE_SETTING_DATA_FMT_MASK, val)
+#define BT_HCI_VOICE_SETTING_CODING_FMT_PREP(val) \
+	FIELD_PREP(BT_HCI_VOICE_SETTING_CODING_FMT_MASK, val)
+
+#define BT_HCI_VOICE_SETTING_AIR_CODING_FMT_GET(val) \
+	FIELD_GET(BT_HCI_VOICE_SETTING_AIR_CODING_FMT_MASK, val)
+#define BT_HCI_VOICE_SETTING_PCM_BIT_POS_GET(val) \
+	FIELD_GET(BT_HCI_VOICE_SETTING_PCM_BIT_POS_MASK, val)
+#define BT_HCI_VOICE_SETTING_SAMPLE_SIZE_GET(val) \
+	FIELD_GET(BT_HCI_VOICE_SETTING_SAMPLE_SIZE_MASK, val)
+#define BT_HCI_VOICE_SETTING_DATA_FMT_GET(val) FIELD_GET(BT_HCI_VOICE_SETTING_DATA_FMT_MASK, val)
+#define BT_HCI_VOICE_SETTING_CODING_FMT_GET(val) \
+	FIELD_GET(BT_HCI_VOICE_SETTING_CODING_FMT_MASK, val)
+
+#define BT_HCI_VOICE_SETTINGS(air_coding_fmt, pcm_bit_pos, sample_size, data_fmt, coding_fmt) \
+	(BT_HCI_VOICE_SETTING_AIR_CODING_FMT_PREP(air_coding_fmt) | \
+	 BT_HCI_VOICE_SETTING_PCM_BIT_POS_PREP(pcm_bit_pos) | \
+	 BT_HCI_VOICE_SETTING_SAMPLE_SIZE_PREP(sample_size) | \
+	 BT_HCI_VOICE_SETTING_DATA_FMT_PREP(data_fmt) | \
+	 BT_HCI_VOICE_SETTING_CODING_FMT_PREP(coding_fmt))
+
+#define BT_HCI_SCO_MAX_LATENCY_DEFAULT 0xffff /* do not care about SCO link latency */
+
+#define BT_HCI_SCO_RETRANS_EFFORT_DEFAULT 0xff /* do not care about SCO retransmission effort */
+
 #define BT_HCI_OP_SETUP_SYNC_CONN               BT_OP(BT_OGF_LINK_CTRL, 0x0028) /* 0x0428 */
 struct bt_hci_cp_setup_sync_conn {
 	uint16_t  handle;
@@ -605,6 +662,20 @@ struct bt_hci_rp_read_default_link_policy_settings {
 #define BT_HCI_OP_WRITE_DEFAULT_LINK_POLICY_SETTINGS BT_OP(BT_OGF_LINK_POLICY, 0x000f)
 struct bt_hci_cp_write_default_link_policy_settings {
 	uint16_t default_link_policy_settings;
+} __packed;
+
+#define BT_HCI_OP_SNIFF_MODE                    BT_OP(BT_OGF_LINK_POLICY, 0x0003) /* 0x0803 */
+struct bt_hci_cp_sniff_mode {
+	uint16_t handle;
+	uint16_t max_interval;
+	uint16_t min_interval;
+	uint16_t attempt;
+	uint16_t timeout;
+} __packed;
+
+#define BT_HCI_OP_EXIT_SNIFF_MODE               BT_OP(BT_OGF_LINK_POLICY, 0x0004) /* 0x0804 */
+struct bt_hci_cp_exit_sniff_mode {
+	uint16_t handle;
 } __packed;
 
 #define BT_HCI_OP_SET_EVENT_MASK                BT_OP(BT_OGF_BASEBAND, 0x0001) /* 0x0c01 */
@@ -3030,6 +3101,19 @@ struct bt_hci_evt_num_completed_packets {
 	struct bt_hci_handle_count h[0];
 } __packed;
 
+/* Current mode */
+#define BT_ACTIVE_MODE 0x00
+#define BT_HOLD_MODE   0x01
+#define BT_SNIFF_MODE  0x02
+
+#define BT_HCI_EVT_MODE_CHANGE                  0x14
+struct bt_hci_evt_mode_change {
+	uint8_t  status;
+	uint16_t handle;
+	uint8_t  mode;
+	uint16_t interval;
+} __packed;
+
 #define BT_HCI_EVT_PIN_CODE_REQ                 0x16
 struct bt_hci_evt_pin_code_req {
 	bt_addr_t bdaddr;
@@ -3245,6 +3329,7 @@ struct bt_hci_evt_user_passkey_notify {
 #define BT_HCI_EVT_LE_META_EVENT                0x3e
 struct bt_hci_evt_le_meta_event {
 	uint8_t  subevent;
+	uint8_t  data[];
 } __packed;
 
 #define BT_HCI_EVT_AUTH_PAYLOAD_TIMEOUT_EXP     0x57

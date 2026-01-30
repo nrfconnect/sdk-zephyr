@@ -109,8 +109,8 @@ static int wait(struct shell_mqtt *sh, int timeout)
 static int get_mqtt_broker_addrinfo(struct shell_mqtt *sh)
 {
 	int rc;
-	struct zsock_addrinfo hints = { .ai_family = AF_INET,
-					.ai_socktype = SOCK_STREAM,
+	struct zsock_addrinfo hints = { .ai_family = NET_AF_INET,
+					.ai_socktype = NET_SOCK_STREAM,
 					.ai_protocol = 0 };
 
 	if (sh->haddr != NULL) {
@@ -162,10 +162,10 @@ static void sh_mqtt_close_and_cleanup(struct shell_mqtt *sh)
 
 static void broker_init(struct shell_mqtt *sh)
 {
-	struct sockaddr_in *broker4 = (struct sockaddr_in *)&sh->broker;
+	struct net_sockaddr_in *broker4 = (struct net_sockaddr_in *)&sh->broker;
 
-	broker4->sin_family = AF_INET;
-	broker4->sin_port = htons(CONFIG_SHELL_MQTT_SERVER_PORT);
+	broker4->sin_family = NET_AF_INET;
+	broker4->sin_port = net_htons(CONFIG_SHELL_MQTT_SERVER_PORT);
 
 	net_ipaddr_copy(&broker4->sin_addr, &net_sin(sh->haddr->ai_addr)->sin_addr);
 }
@@ -469,13 +469,12 @@ static void sh_mqtt_publish_handler(struct k_work *work)
 	sh_mqtt_context_unlock();
 }
 
-static void cancel_dworks_and_cleanup(struct shell_mqtt *sh)
+static void cancel_dworks(struct shell_mqtt *sh)
 {
 	(void)k_work_cancel_delayable(&sh->connect_dwork);
 	(void)k_work_cancel_delayable(&sh->subscribe_dwork);
 	(void)k_work_cancel_delayable(&sh->process_dwork);
 	(void)k_work_cancel_delayable(&sh->publish_dwork);
-	sh_mqtt_close_and_cleanup(sh);
 }
 
 static void net_disconnect_handler(struct k_work *work)
@@ -484,11 +483,10 @@ static void net_disconnect_handler(struct k_work *work)
 	struct shell_mqtt *sh = sh_mqtt;
 
 	LOG_WRN("Network %s", "disconnected");
-	sh->network_state = SHELL_MQTT_NETWORK_DISCONNECTED;
 
 	/* Stop all possible work */
 	(void)sh_mqtt_context_lock(K_FOREVER);
-	cancel_dworks_and_cleanup(sh);
+	sh_mqtt_close_and_cleanup(sh);
 	sh_mqtt_context_unlock();
 	/* If the transport was requested, the connect work will be rescheduled
 	 * when internet is connected again
@@ -501,13 +499,17 @@ static void network_evt_handler(struct net_mgmt_event_callback *cb, uint64_t mgm
 {
 	struct shell_mqtt *sh = sh_mqtt;
 
-	if ((mgmt_event == NET_EVENT_L4_CONNECTED) &&
-	    (sh->network_state == SHELL_MQTT_NETWORK_DISCONNECTED)) {
-		LOG_WRN("Network %s", "connected");
-		sh->network_state = SHELL_MQTT_NETWORK_CONNECTED;
-		(void)sh_mqtt_work_reschedule(&sh->connect_dwork, PROCESS_INTERVAL);
+	if (mgmt_event == NET_EVENT_L4_CONNECTED) {
+		(void)k_work_cancel(&sh->net_disconnected_work);
+		if (sh->network_state == SHELL_MQTT_NETWORK_DISCONNECTED) {
+			LOG_WRN("Network %s", "connected");
+			sh->network_state = SHELL_MQTT_NETWORK_CONNECTED;
+			(void)sh_mqtt_work_reschedule(&sh->connect_dwork, PROCESS_INTERVAL);
+		}
 	} else if ((mgmt_event == NET_EVENT_L4_DISCONNECTED) &&
 		   (sh->network_state == SHELL_MQTT_NETWORK_CONNECTED)) {
+		sh->network_state = SHELL_MQTT_NETWORK_DISCONNECTED;
+		cancel_dworks(sh);
 		(void)sh_mqtt_work_submit(&sh->net_disconnected_work);
 	}
 }

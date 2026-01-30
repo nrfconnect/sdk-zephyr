@@ -147,9 +147,19 @@ static int mpu_configure_regions_from_dt(uint8_t *reg_index)
 			region_conf = _BUILD_REGION_CONF(region[idx], REGION_IO_ATTR);
 			break;
 #endif
+#ifdef REGION_DEVICE_ATTR
+		case DT_MEM_ARM_MPU_DEVICE:
+			region_conf = _BUILD_REGION_CONF(region[idx], REGION_DEVICE_ATTR);
+			break;
+#endif
 #ifdef REGION_EXTMEM_ATTR
 		case DT_MEM_ARM_MPU_EXTMEM:
 			region_conf = _BUILD_REGION_CONF(region[idx], REGION_EXTMEM_ATTR);
+			break;
+#endif
+#ifdef REGION_RAM_WT_ATTR
+		case DT_MEM_ARM_MPU_RAM_WT:
+			region_conf = _BUILD_REGION_CONF(region[idx], REGION_RAM_WT_ATTR);
 			break;
 #endif
 		default:

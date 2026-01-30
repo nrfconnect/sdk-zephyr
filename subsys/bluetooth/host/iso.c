@@ -458,7 +458,7 @@ void bt_iso_connected(struct bt_conn *iso)
 
 static void bt_iso_chan_disconnected(struct bt_iso_chan *chan, uint8_t reason)
 {
-	const uint8_t conn_type = chan->iso->iso.info.type;
+	uint8_t conn_type;
 	struct net_buf *buf;
 
 	LOG_DBG("%p, reason 0x%02x", chan, reason);
@@ -482,6 +482,8 @@ static void bt_iso_chan_disconnected(struct bt_iso_chan *chan, uint8_t reason)
 		chan->ops->disconnected(chan, reason);
 	}
 
+	conn_type = chan->iso->iso.info.type;
+
 	/* The peripheral does not have the concept of a CIG, so once a CIS
 	 * disconnects it is completely freed by unref'ing it
 	 */
@@ -504,8 +506,7 @@ static void bt_iso_chan_disconnected(struct bt_iso_chan *chan, uint8_t reason)
 
 			is_chan_connected = false;
 			SYS_SLIST_FOR_EACH_CONTAINER(&cig->cis_channels, cis_chan, node) {
-				if (cis_chan->state == BT_ISO_STATE_CONNECTED ||
-				    cis_chan->state == BT_ISO_STATE_CONNECTING) {
+				if (cis_chan->state != BT_ISO_STATE_DISCONNECTED) {
 					is_chan_connected = true;
 					break;
 				}
@@ -971,7 +972,6 @@ int bt_iso_chan_send(struct bt_iso_chan *chan, struct net_buf *buf, uint16_t seq
 
 	iso_conn = chan->iso;
 
-	BT_ISO_DATA_DBG("send-iso (no ts)");
 	return conn_iso_send(iso_conn, buf, BT_ISO_TS_ABSENT);
 }
 
@@ -987,7 +987,7 @@ int bt_iso_chan_send_ts(struct bt_iso_chan *chan, struct net_buf *buf, uint16_t 
 		return err;
 	}
 
-	BT_ISO_DATA_DBG("chan %p len %zu", chan, net_buf_frags_len(buf));
+	BT_ISO_DATA_DBG("chan %p len %zu ts %u", chan, net_buf_frags_len(buf), ts);
 
 	hdr = net_buf_push(buf, sizeof(*hdr));
 	hdr->ts = sys_cpu_to_le32(ts);
@@ -997,7 +997,6 @@ int bt_iso_chan_send_ts(struct bt_iso_chan *chan, struct net_buf *buf, uint16_t 
 
 	iso_conn = chan->iso;
 
-	LOG_DBG("send-iso (ts)");
 	return conn_iso_send(iso_conn, buf, BT_ISO_TS_PRESENT);
 }
 
@@ -2052,6 +2051,11 @@ static bool valid_cig_param(const struct bt_iso_cig_param *param, bool advanced,
 
 		if (cis->qos->tx != NULL && cis->qos->tx->sdu != 0U) {
 			is_c_to_p = true;
+		}
+
+		if (!is_p_to_c && !is_c_to_p) {
+			LOG_DBG("Neither C to P nor P to C can be configured");
+			return false;
 		}
 	}
 

@@ -14,7 +14,6 @@
 #include <zephyr/drivers/spi.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
-#include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 
@@ -225,8 +224,8 @@ static int gpio_sn74hc595_init(const struct device *dev)
 			{                                                                          \
 				.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(n),               \
 			},                                                                         \
-		.bus = SPI_DT_SPEC_INST_GET(n, SN74HC595_SPI_OPERATION, 0),                        \
-		.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(n, reset_gpio, {0}),                        \
+		.bus = SPI_DT_SPEC_INST_GET(n, SN74HC595_SPI_OPERATION),                           \
+		.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(n, reset_gpios, {0}),                       \
 		.enable_gpio = GPIO_DT_SPEC_INST_GET_OR(n, enable_gpios, {0}),                     \
 		.num_registers = DT_INST_PROP(n, ngpios) / BITS_PER_BYTE,                          \
 	};                                                                                         \
