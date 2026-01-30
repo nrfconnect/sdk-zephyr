@@ -1,3 +1,4 @@
+# Just an attempt to force Zephyr West Command Tests run on CI
 # Keep the help strings in sync with the values in the .py files!
 west-commands:
   - file: scripts/west_commands/completion.py
