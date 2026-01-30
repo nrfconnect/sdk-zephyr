@@ -664,9 +664,9 @@ class Build(Forceable):
         if user_args:
             cmake_opts.extend(shlex.split(user_args))
 
-        config_sysbuild = config_getboolean('sysbuild', None)
+        config_sysbuild = config_getboolean('sysbuild', [])
 
-        if config_sysbuild is None:
+        if config_sysbuild == []:
             # If no option is set, then enable sysbuild globally
             config_sysbuild = True
 
