@@ -172,6 +172,11 @@ if(CONFIG_GEN_UICR_GENERATE_PERIPHCONF)
     endif()
 
     if(EXISTS ${_dir}/zephyr/zephyr.dts)
+      parse_kconfig_value(${_dir}/zephyr/.config CONFIG_NRF_PERIPHCONF_SECTION_KEEP keep_periphconf)
+      if(keep_periphconf STREQUAL "y")
+        continue()
+      endif()
+
       # Read CONFIG_KERNEL_BIN_NAME from the sibling's .config file
       parse_kconfig_value(${_dir}/zephyr/.config CONFIG_KERNEL_BIN_NAME kernel_bin_name)
       set(kernel_elf_path ${_dir}/zephyr/${kernel_bin_name}.elf)

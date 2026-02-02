@@ -50,12 +50,27 @@ endif # IRONSIDE_SE_DVFS
 menuconfig NRF_PERIPHCONF_SECTION
 	bool "Global peripheral initialization section"
 	depends on LINKER_DEVNULL_SUPPORT
-	imply LINKER_DEVNULL_MEMORY
 	help
 	  Include static global domain peripheral initialization values from the
-	  build in a dedicated section in the devnull region.
+	  build in a dedicated section. The section is either stripped from the
+	  firmware binary or kept as constant data, depending on how it will be
+	  loaded at runtime.
 
 if NRF_PERIPHCONF_SECTION
+
+config NRF_PERIPHCONF_SECTION_STRIP
+	bool
+	default y
+	depends on !NRF_PERIPHCONF_SECTION_KEEP
+	imply LINKER_DEVNULL_MEMORY
+	help
+	  Strip the PERIPHCONF section from the firmware binary.
+
+config NRF_PERIPHCONF_SECTION_KEEP
+	bool "Keep the section in the binary"
+	default y if NRF_PERIPHCONF_SECTION_KEEP_BY_DEFAULT
+	help
+	  Keep the PERIPHCONF section as data in the firmware binary.
 
 config NRF_PERIPHCONF_GENERATE_ENTRIES
 	bool "Generate PERIPHCONF entries source file"
@@ -66,11 +81,16 @@ config NRF_PERIPHCONF_GENERATE_ENTRIES
 
 config NRF_PERIPHCONF_GENERATE_ENTRIES_NO_LOCK
 	bool "Don't lock registers in PERIPHCONF"
-	depends on NRF_PERIPHCONF_GENERATE_ENTRIES
 	help
-	  Don't set the lock bit in registers that support it.
+	  Don't set the lock bit in registers that support it (SPU registers).
 	  This is needed when the registers are reconfigured after boot.
 
 endif # NRF_PERIPHCONF_SECTION
+
+config NRF_PERIPHCONF_SECTION_KEEP_BY_DEFAULT
+	bool "Keep the PERIPHCONF section by default (set by Sysbuild, do not change)"
+	help
+	  This is set by Sysbuild to change the default behavior for the image so that
+	  NRF_PERIPHCONF_SECTION_KEEP is set unless explicitly configured otherwise.
 
 endmenu # IronSide SE
