@@ -22,15 +22,18 @@ try:
 except ImportError:
     sys.exit("Missing dependency 'intelhex'")
 
-# The UICR format version produced by this script
-UICR_FORMAT_VERSION_MAJOR = 2
-UICR_FORMAT_VERSION_MINOR = 0
+# UICR format versions supported by this script
+UICR_VERSION_2_0 = 0x0002_0000
+UICR_VERSION_2_1 = 0x0002_0001
 
 # Common values for representing enabled/disabled in the UICR format.
 ENABLED_VALUE = 0xFFFF_FFFF
 DISABLED_VALUE = 0xBD23_28A8
 PROTECTED_VALUE = ENABLED_VALUE  # UICR_PROTECTED = UICR_ENABLED per uicr_defs.h
 UNPROTECTED_VALUE = DISABLED_VALUE  # Unprotected uses the default erased value
+
+# Value used to select POLICY_PERIPHCONFSTAGE=NORMAL
+UICR_POLICY_PERIPHCONFSTAGE_NORMAL = 0x1730_C77F
 
 KB_4 = 4096
 
@@ -55,14 +58,6 @@ class PeriphconfEntry(c.LittleEndianStructure):
 
 
 PERIPHCONF_ENTRY_SIZE = c.sizeof(PeriphconfEntry)
-
-
-class Version(c.LittleEndianStructure):
-    _pack_ = 1
-    _fields_ = [
-        ("MINOR", c.c_uint16),
-        ("MAJOR", c.c_uint16),
-    ]
 
 
 class Approtect(c.LittleEndianStructure):
@@ -197,7 +192,7 @@ class Secondary(c.LittleEndianStructure):
 class Uicr(c.LittleEndianStructure):
     _pack_ = 1
     _fields_ = [
-        ("VERSION", Version),
+        ("VERSION", c.c_uint32),
         ("RESERVED", c.c_uint32),
         ("LOCK", c.c_uint32),
         ("RESERVED1", c.c_uint32),
@@ -211,7 +206,10 @@ class Uicr(c.LittleEndianStructure):
         ("PERIPHCONF", Periphconf),
         ("MPCCONF", Mpcconf),
         ("SECONDARY", Secondary),
-        ("PADDING", c.c_uint32 * 15),
+        ("RESERVED4", c.c_uint32 * 78),
+        ("POLICY_PERIPHCONFSTAGE", c.c_uint32),
+        ("CUSTOMER", c.c_uint32 * 320),
+        ("RESERVED5", c.c_uint32 * 44),
     ]
 
 
@@ -326,6 +324,8 @@ def add_parser(subparsers: SubParsers) -> argparse.ArgumentParser:
             "Generate artifacts for the UICR and associated configuration blobs from application "
             "build outputs. The UICR is used to configure system resources, like memory and "
             "peripherals, and to enable device protection mechanisms."
+            "The UICR format version is set automatically to the minimum version "
+            "required to support the options used."
         ),
     )
     parser.add_argument(
@@ -600,8 +600,43 @@ def add_parser(subparsers: SubParsers) -> argparse.ArgumentParser:
         type=argparse.FileType("w", encoding="utf-8"),
         help="Path to write the secondary PERIPHCONF-only HEX file to",
     )
+    parser.add_argument(
+        "--policy-periphconf-stage",
+        default=None,
+        type=lambda s: int(s, 0),
+        help=(
+            "Set the stage of the PERIPHCONF API when IronSide SE starts the Application core: "
+            "0xBD2328A8 for Initialization, 0x1730C77F for Normal Operation. "
+            "Setting this to Initialization updates the UICR minimum version to 2.1"
+        ),
+    )
 
     return parser
+
+
+def get_min_uicr_version(args: argparse.Namespace) -> int:
+    """Deduce the minimum required UICR version based on the options used."""
+
+    min_version = UICR_VERSION_2_0
+
+    # We have some special handling here because:
+    # * If UICR version == 2.0, the default/only choice is NORMAL
+    # * If UICR version >= 2.1, the default in the erased UICR is INIT.
+    #
+    # The goal is to not force min_version >= 2.1 if the user selected NORMAL.
+    #
+    # If stage is set to INIT, we select min_version >= 2.1.
+    # This is required to enable the functionality.
+    #
+    # If stage is set to NORMAL, we don't select a min_version, but instead set the field in
+    # UICR depending on whether any other feature selects min_version >= 2.1.
+    # This makes it so if min_version == 2.0, we rely on the default IronSide behavior for 2.0,
+    # and if min_version >= 2.1, we explicitly set that value in UICR since it's non-default.
+    #
+    if args.policy_periphconf_stage not in (None, UICR_POLICY_PERIPHCONFSTAGE_NORMAL):
+        min_version = max(min_version, UICR_VERSION_2_1)
+
+    return min_version
 
 
 def cmd_handler(args: argparse.Namespace) -> None:
@@ -654,8 +689,8 @@ def cmd_handler(args: argparse.Namespace) -> None:
         init_values = DISABLED_VALUE.to_bytes(4, "little") * (c.sizeof(Uicr) // 4)
         uicr = Uicr.from_buffer_copy(init_values)
 
-        uicr.VERSION.MAJOR = UICR_FORMAT_VERSION_MAJOR
-        uicr.VERSION.MINOR = UICR_FORMAT_VERSION_MINOR
+        min_version = get_min_uicr_version(args)
+        uicr.VERSION = min_version
 
         # Handle secure storage configuration
         if args.securestorage:
@@ -805,6 +840,9 @@ def cmd_handler(args: argparse.Namespace) -> None:
                 uicr.SECONDARY.WDTSTART.ENABLE = ENABLED_VALUE
                 uicr.SECONDARY.WDTSTART.CRV = args.secondary_wdtstart_crv
                 uicr.SECONDARY.WDTSTART.INSTANCE = args.secondary_wdtstart_instance_code
+
+        if uicr.VERSION >= UICR_VERSION_2_1 and args.policy_periphconf_stage is not None:
+            uicr.POLICY_PERIPHCONFSTAGE = args.policy_periphconf_stage
 
         # Create UICR hex object with final UICR data
         uicr_hex = IntelHex()
