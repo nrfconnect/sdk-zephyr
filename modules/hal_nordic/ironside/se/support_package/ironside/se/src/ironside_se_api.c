@@ -9,6 +9,7 @@
 #include <ironside/se/call.h>
 #include <ironside/se/glue.h>
 #include <ironside/se/internal/api_serialization.h>
+#include <ironside/se/internal/bounce_buffer.h>
 
 int ironside_se_update(const struct ironside_se_update_blob *update)
 {
@@ -207,6 +208,202 @@ int ironside_se_counter_lock(enum ironside_se_counter counter_id)
 	status = buf->status;
 	if (status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
 		status = buf->args[IRONSIDE_SE_COUNTER_LOCK_RSP_IDX_RETCODE];
+	}
+
+	ironside_se_call_release(buf);
+
+	return status;
+}
+
+int ironside_se_events_enable(uint64_t event_mask)
+{
+	int status;
+	struct ironside_se_call_buf *buf = ironside_se_call_alloc();
+
+	buf->id = IRONSIDE_SE_CALL_ID_EVENTS_ENABLE_V1;
+	buf->args[IRONSIDE_SE_EVENTS_ENABLE_REQ_IDX_EVENT_MASK_0] =
+		(uint32_t)(event_mask & 0xFFFFFFFF);
+	buf->args[IRONSIDE_SE_EVENTS_ENABLE_REQ_IDX_EVENT_MASK_1] = (uint32_t)(event_mask >> 32);
+
+	ironside_se_call_dispatch(buf);
+
+	status = buf->status;
+	if (status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
+		status = buf->args[IRONSIDE_SE_EVENTS_ENABLE_RSP_IDX_RETCODE];
+	}
+
+	ironside_se_call_release(buf);
+
+	return status;
+}
+
+int ironside_se_events_disable(uint64_t event_mask)
+{
+	int status;
+	struct ironside_se_call_buf *buf = ironside_se_call_alloc();
+
+	buf->id = IRONSIDE_SE_CALL_ID_EVENTS_DISABLE_V1;
+	buf->args[IRONSIDE_SE_EVENTS_DISABLE_REQ_IDX_EVENT_MASK_0] =
+		(uint32_t)(event_mask & 0xFFFFFFFF);
+	buf->args[IRONSIDE_SE_EVENTS_DISABLE_REQ_IDX_EVENT_MASK_1] = (uint32_t)(event_mask >> 32);
+
+	ironside_se_call_dispatch(buf);
+
+	status = buf->status;
+	if (status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
+		status = buf->args[IRONSIDE_SE_EVENTS_DISABLE_RSP_IDX_RETCODE];
+	}
+
+	ironside_se_call_release(buf);
+
+	return status;
+}
+
+int ironside_se_snapshot_capture(enum ironside_se_snapshot_capture_mode mode)
+{
+	int status;
+	struct ironside_se_call_buf *buf = ironside_se_call_alloc();
+
+	buf->id = IRONSIDE_SE_CALL_ID_SNAPSHOT_CAPTURE_V1;
+	buf->args[IRONSIDE_SE_SNAPSHOT_CAPTURE_REQ_IDX_MODE] = mode;
+
+	ironside_se_call_dispatch(buf);
+
+	status = buf->status;
+	if (status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
+		status = buf->args[IRONSIDE_SE_SNAPSHOT_CAPTURE_RSP_IDX_RETCODE];
+	}
+
+	ironside_se_call_release(buf);
+
+	return status;
+}
+
+struct ironside_se_periphconf_status ironside_se_periphconf_read(struct periphconf_entry *entries,
+								 size_t count)
+{
+	struct ironside_se_periphconf_status status = { 0 };
+
+	const bool is_inline = count <= IRONSIDE_SE_PERIPHCONF_INLINE_READ_MAX_COUNT;
+
+	if (!is_inline &&
+	    ironside_se_bounce_buffer_is_needed(entries, sizeof(struct periphconf_entry) * count)) {
+		status.status = -IRONSIDE_SE_PERIPHCONF_ERROR_POINTER_UNALIGNED;
+		return status;
+	}
+
+	struct ironside_se_call_buf *buf = ironside_se_call_alloc();
+
+	if (is_inline) {
+		buf->id = IRONSIDE_SE_CALL_ID_PERIPHCONF_INLINE_READ_V1;
+		buf->args[IRONSIDE_SE_PERIPHCONF_INLINE_READ_REQ_IDX_COUNT] = count;
+
+		for (size_t i = 0; i < count; i++) {
+			buf->args[IRONSIDE_SE_PERIPHCONF_INLINE_READ_REQ_IDX_REGPTR_0 + i] =
+				entries[i].regptr;
+		}
+	} else {
+		buf->id = IRONSIDE_SE_CALL_ID_PERIPHCONF_BUFFER_READ_V1;
+		buf->args[IRONSIDE_SE_PERIPHCONF_BUFFER_READ_REQ_IDX_ADDRESS] = (uint32_t)entries;
+		buf->args[IRONSIDE_SE_PERIPHCONF_BUFFER_READ_REQ_IDX_COUNT] = count;
+
+		ironside_se_data_cache_writeback(entries, sizeof(struct periphconf_entry) * count);
+	}
+
+	ironside_se_call_dispatch(buf);
+
+	if (!is_inline) {
+		ironside_se_data_cache_writeback_invalidate(
+			entries, sizeof(struct periphconf_entry) * count);
+	}
+
+	status.status = buf->status;
+	if (status.status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
+		const uint32_t detail =
+			buf->args[IRONSIDE_SE_PERIPHCONF_INLINE_READ_RSP_IDX_DETAIL];
+
+		status.status =
+			(detail & IRONSIDE_SE_PERIPHCONF_INLINE_READ_RSP_DETAIL_STATUS_MASK) >>
+			IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_STATUS_OFFSET;
+		status.index =
+			(detail & IRONSIDE_SE_PERIPHCONF_INLINE_READ_RSP_DETAIL_INDEX_MASK) >>
+			IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_INDEX_OFFSET;
+
+		if (is_inline) {
+			for (size_t i = 0; i < count; i++) {
+				const size_t j =
+					IRONSIDE_SE_PERIPHCONF_INLINE_READ_RSP_IDX_VALUE_0 + i;
+
+				entries[i].value = buf->args[j];
+			}
+		}
+	}
+
+	ironside_se_call_release(buf);
+
+	return status;
+}
+
+struct ironside_se_periphconf_status
+ironside_se_periphconf_write(const struct periphconf_entry *entries, size_t count)
+{
+	struct ironside_se_periphconf_status status = { 0 };
+
+	const bool is_inline = count <= IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_MAX_COUNT;
+
+	struct ironside_se_call_buf *buf = ironside_se_call_alloc();
+
+	if (is_inline) {
+		buf->id = IRONSIDE_SE_CALL_ID_PERIPHCONF_INLINE_WRITE_V1;
+		buf->args[IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_REQ_IDX_COUNT] = count;
+		for (size_t i = 0; i < count; i++) {
+			buf->args[IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_REQ_IDX_REGPTR_0 + 2 * i] =
+				entries[i].regptr;
+			buf->args[IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_REQ_IDX_VALUE_0 + 2 * i] =
+				entries[i].value;
+		}
+	} else {
+		buf->id = IRONSIDE_SE_CALL_ID_PERIPHCONF_BUFFER_WRITE_V1;
+		buf->args[IRONSIDE_SE_PERIPHCONF_BUFFER_WRITE_REQ_IDX_ADDRESS] = (uint32_t)entries;
+		buf->args[IRONSIDE_SE_PERIPHCONF_BUFFER_WRITE_REQ_IDX_COUNT] = count;
+
+		ironside_se_data_cache_writeback((void *)entries,
+						 sizeof(struct periphconf_entry) * count);
+	}
+
+	ironside_se_call_dispatch(buf);
+
+	status.status = buf->status;
+	if (status.status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
+		const uint32_t detail =
+			buf->args[IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_RSP_IDX_DETAIL];
+
+		status.status =
+			(detail & IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_RSP_DETAIL_STATUS_MASK) >>
+			IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_RSP_DETAIL_STATUS_OFFSET;
+		status.index =
+			(detail & IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_RSP_DETAIL_INDEX_MASK) >>
+			IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_RSP_DETAIL_INDEX_OFFSET;
+	}
+
+	ironside_se_call_release(buf);
+
+	return status;
+}
+
+int ironside_se_periphconf_finish_init(void)
+{
+	int status;
+
+	struct ironside_se_call_buf *const buf = ironside_se_call_alloc();
+
+	buf->id = IRONSIDE_SE_CALL_ID_PERIPHCONF_FINISH_INIT_V1;
+
+	ironside_se_call_dispatch(buf);
+
+	status = buf->status;
+	if (status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
+		status = buf->args[IRONSIDE_SE_PERIPHCONF_FINISH_INIT_RSP_IDX_RETCODE];
 	}
 
 	ironside_se_call_release(buf);
