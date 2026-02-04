@@ -24,15 +24,6 @@ struct periphconf_entry {
 	uint32_t value;
 };
 
-/* Before the introduction of the PERIPHCONF API, certain field values were set implicitly.
- * These previously implicitly set fields have now been added to this macro interface.
- *
- * The macro PERIPHCONF_MACRO_EXPLICIT_FIELDS is used to select the new behavior.
- * Once code dependent on the old interface has been updated to use the new one,
- * the old interface will be removed.
- */
-
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a SPU PERIPH[n].PERM register value.
  *
  * @param _spu Global domain SPU instance address.
@@ -48,14 +39,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_SPU_PERIPH_PERM_REGPTR(_spu, _index),                         \
 		.value = PERIPHCONF_SPU_PERIPH_PERM_VALUE(_secattr, _dmasec, _ownerid, _lock),     \
 	}
-#else
-#define PERIPHCONF_SPU_PERIPH_PERM(_spu, _index, _secattr, _dmasec, _ownerid)                      \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_SPU_PERIPH_PERM_REGPTR(_spu, _index),                         \
-		.value = PERIPHCONF_SPU_PERIPH_PERM_VALUE(_secattr, _dmasec, _ownerid, 1),         \
-	}
-#endif
 
 /** @brief SPU PERIPH[n].PERM register pointer.
  *
@@ -82,7 +65,6 @@ struct periphconf_entry {
 		   (((_lock) ? SPU_PERIPH_PERM_LOCK_Locked : SPU_PERIPH_PERM_LOCK_Unlocked)        \
 		    << SPU_PERIPH_PERM_LOCK_Pos))
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a SPU FEATURE.IPCT.CH[n] register value.
  *
  * @param _spu Global domain SPU instance address.
@@ -97,14 +79,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_SPU_FEATURE_IPCT_CH_REGPTR(_spu, _index),                     \
 		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, _lock),                  \
 	}
-#else
-#define PERIPHCONF_SPU_FEATURE_IPCT_CH(_spu, _index, _secattr, _ownerid)                           \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_SPU_FEATURE_IPCT_CH_REGPTR(_spu, _index),                     \
-		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, 1),                      \
-	}
-#endif
 
 /** @brief SPU FEATURE.IPCT.CH[n] register pointer.
  *
@@ -114,7 +88,6 @@ struct periphconf_entry {
 #define PERIPHCONF_SPU_FEATURE_IPCT_CH_REGPTR(_spu, _index)                                        \
 	(uint32_t)&((NRF_SPU_Type *)(_spu))->FEATURE.IPCT.CH[_index]
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a SPU FEATURE.IPCT.INTERRUPT[n] register value.
  *
  * @param _spu Global domain SPU instance address.
@@ -129,14 +102,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_SPU_FEATURE_IPCT_INTERRUPT(_spu, _index),                     \
 		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, _lock),                  \
 	}
-#else
-#define PERIPHCONF_SPU_FEATURE_IPCT_INTERRUPT(_spu, _index, _secattr, _ownerid)                    \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_SPU_FEATURE_IPCT_INTERRUPT(_spu, _index),                     \
-		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, 1),                      \
-	}
-#endif
 
 /** @brief SPU FEATURE.IPCT.INTERRUPT[n] register pointer.
  *
@@ -146,7 +111,6 @@ struct periphconf_entry {
 #define PERIPHCONF_SPU_FEATURE_IPCT_INTERRUPT_REGPTR(_spu, _index)                                 \
 	(uint32_t)&((NRF_SPU_Type *)(_spu))->FEATURE.IPCT.INTERRUPT[_index]
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a SPU FEATURE.DPPIC.CH[n] register value.
  *
  * @param _spu Global domain SPU instance address.
@@ -161,14 +125,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_SPU_FEATURE_DPPIC_CH_REGPTR(_spu, _index),                    \
 		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, _lock),                  \
 	}
-#else
-#define PERIPHCONF_SPU_FEATURE_DPPIC_CH(_spu, _index, _secattr, _ownerid)                          \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_SPU_FEATURE_DPPIC_CH_REGPTR(_spu, _index),                    \
-		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, 1),                      \
-	}
-#endif
 
 /** @brief SPU FEATURE.DPPIC.CH[n] register pointer.
  *
@@ -178,7 +134,6 @@ struct periphconf_entry {
 #define PERIPHCONF_SPU_FEATURE_DPPIC_CH_REGPTR(_spu, _index)                                       \
 	(uint32_t)&((NRF_SPU_Type *)(_spu))->FEATURE.DPPIC.CH[_index]
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a SPU FEATURE.DPPIC.CHG[n] register value.
  *
  * @param _spu Global domain SPU instance address.
@@ -193,14 +148,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_SPU_FEATURE_DPPIC_CHG_REGPTR(_spu, _index),                   \
 		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, _lock),                  \
 	}
-#else
-#define PERIPHCONF_SPU_FEATURE_DPPIC_CHG(_spu, _index, _secattr, _ownerid)                         \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_SPU_FEATURE_DPPIC_CHG_REGPTR(_spu, _index),                   \
-		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, 1),                      \
-	}
-#endif
 
 /** @brief SPU FEATURE.DPPIC.CHG[n] register pointer.
  *
@@ -210,7 +157,6 @@ struct periphconf_entry {
 #define PERIPHCONF_SPU_FEATURE_DPPIC_CHG_REGPTR(_spu, _index)                                      \
 	(uint32_t)&((NRF_SPU_Type *)(_spu))->FEATURE.DPPIC.CHG[_index]
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a SPU FEATURE.GPIOTE[n].CH[m] register value.
  *
  * @param _spu Global domain SPU instance address.
@@ -226,14 +172,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_SPU_FEATURE_GPIOTE_CH_REGPTR(_spu, _index, _subindex),        \
 		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, _lock),                  \
 	}
-#else
-#define PERIPHCONF_SPU_FEATURE_GPIOTE_CH(_spu, _index, _subindex, _secattr, _ownerid)              \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_SPU_FEATURE_GPIOTE_CH_REGPTR(_spu, _index, _subindex),        \
-		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, 1),                      \
-	}
-#endif
 
 /** @brief SPU FEATURE.GPIOTE[n].CH[m] register pointer.
  *
@@ -244,7 +182,6 @@ struct periphconf_entry {
 #define PERIPHCONF_SPU_FEATURE_GPIOTE_CH_REGPTR(_spu, _index, _subindex)                           \
 	(uint32_t)&((NRF_SPU_Type *)(_spu))->FEATURE.GPIOTE[_index].CH[_subindex]
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a SPU FEATURE.GPIOTE.INTERRUPT[n] register value.
  *
  * @param _spu Global domain SPU instance address.
@@ -261,14 +198,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_SPU_FEATURE_GPIOTE_INTERRUPT_REGPTR(_spu, _index, _subindex), \
 		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, _lock),                  \
 	}
-#else
-#define PERIPHCONF_SPU_FEATURE_GPIOTE_INTERRUPT(_spu, _index, _subindex, _secattr, _ownerid)       \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_SPU_FEATURE_GPIOTE_INTERRUPT_REGPTR(_spu, _index, _subindex), \
-		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, 1),                      \
-	}
-#endif
 
 /** @brief SPU FEATURE.GPIOTE.INTERRUPT[n] register pointer.
  *
@@ -279,7 +208,6 @@ struct periphconf_entry {
 #define PERIPHCONF_SPU_FEATURE_GPIOTE_INTERRUPT_REGPTR(_spu, _index, _subindex)                    \
 	(uint32_t)&((NRF_SPU_Type *)(_spu))->FEATURE.GPIOTE[_index].INTERRUPT[_subindex]
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a SPU FEATURE.GPIO[n].PIN[m] register value.
  *
  * @param _spu Global domain SPU instance address.
@@ -295,14 +223,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_SPU_FEATURE_GPIO_PIN_REGPTR(_spu, _index, _subindex),         \
 		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, _lock),                  \
 	}
-#else
-#define PERIPHCONF_SPU_FEATURE_GPIO_PIN(_spu, _index, _subindex, _secattr, _ownerid)               \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_SPU_FEATURE_GPIO_PIN_REGPTR(_spu, _index, _subindex),         \
-		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, 1),                      \
-	}
-#endif
 
 /** @brief SPU FEATURE.GPIO[n].PIN[m] register pointer.
  *
@@ -313,7 +233,6 @@ struct periphconf_entry {
 #define PERIPHCONF_SPU_FEATURE_GPIO_PIN_REGPTR(_spu, _index, _subindex)                            \
 	(uint32_t)&((NRF_SPU_Type *)(_spu))->FEATURE.GPIO[_index].PIN[_subindex]
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a SPU FEATURE.GRTC.CC[n] register value.
  *
  * @param _spu Global domain SPU instance address.
@@ -328,14 +247,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_SPU_FEATURE_GRTC_CC_REGPTR(_spu, _index),                     \
 		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, _lock),                  \
 	}
-#else
-#define PERIPHCONF_SPU_FEATURE_GRTC_CC(_spu, _index, _secattr, _ownerid)                           \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_SPU_FEATURE_GRTC_CC_REGPTR(_spu, _index),                     \
-		.value = PERIPHCONF_SPU_FEATURE_VALUE(_secattr, _ownerid, 1),                      \
-	}
-#endif
 
 /** @brief SPU FEATURE.GRTC.CC[n] register pointer.
  *
@@ -363,7 +274,6 @@ struct periphconf_entry {
 			       SPU_FEATURE_IPCT_CH_LOCK_Unlocked)                                  \
 		    << SPU_FEATURE_IPCT_CH_LOCK_Pos))
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for configuring IPCMAP CHANNEL.SOURCE[n].
  *
  * @param _index CHANNEL.SOURCE[n] register index.
@@ -377,14 +287,6 @@ struct periphconf_entry {
 		.value = PERIPHCONF_IPCMAP_CHANNEL_SOURCE_VALUE(_source_domain, _source_ch,        \
 								_enable),                          \
 	}
-#else
-#define PERIPHCONF_IPCMAP_CHANNEL_SOURCE(_index, _source_domain, _source_ch)                       \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_IPCMAP_CHANNEL_SOURCE_REGPTR(_index),                         \
-		.value = PERIPHCONF_IPCMAP_CHANNEL_SOURCE_VALUE(_source_domain, _source_ch, 1),    \
-	}
-#endif
 
 /** @brief IPCMAP CHANNEL.SOURCE[n] register pointer.
  *
@@ -493,7 +395,6 @@ struct periphconf_entry {
 	((GPIO_PIN_CNF_ResetValue) |                                                               \
 	 (uint32_t)(((_ctrlsel) << GPIO_PIN_CNF_CTRLSEL_Pos) & GPIO_PIN_CNF_CTRLSEL_Msk))
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a PPIB SUBSCRIBE_SEND[n] register.
  *
  * @param _ppib Global domain PPIB instance address.
@@ -506,14 +407,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_PPIB_SUBSCRIBE_SEND_REGPTR(_ppib, _ppib_ch),                  \
 		.value = PERIPHCONF_PPIB_SUBSCRIBE_SEND_VALUE(_enable),                            \
 	}
-#else
-#define PERIPHCONF_PPIB_SUBSCRIBE_SEND(_ppib, _ppib_ch)                                            \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_PPIB_SUBSCRIBE_SEND_REGPTR(_ppib, _ppib_ch),                  \
-		.value = PERIPHCONF_PPIB_SUBSCRIBE_SEND_VALUE(1),                                  \
-	}
-#endif
 
 /** @brief PPIB SUBSCRIBE_SEND[n] register pointer.
  *
@@ -530,7 +423,6 @@ struct periphconf_entry {
 #define PERIPHCONF_PPIB_SUBSCRIBE_SEND_VALUE(_enable)                                              \
 	(uint32_t)((_enable) ? PPIB_SUBSCRIBE_SEND_EN_Msk : 0)
 
-#ifdef PERIPHCONF_MACRO_EXPLICIT_FIELDS
 /** @brief Initialize a PERIPHCONF entry for a PPIB PUBLISH_RECEIVE[n] register.
  *
  * @param _ppib Global domain PPIB instance address.
@@ -543,14 +435,6 @@ struct periphconf_entry {
 		.regptr = PERIPHCONF_PPIB_PUBLISH_RECEIVE_REGPTR(_ppib, _ppib_ch),                 \
 		.value = PERIPHCONF_PPIB_PUBLISH_RECEIVE_VALUE(_enable),                           \
 	}
-#else
-#define PERIPHCONF_PPIB_PUBLISH_RECEIVE(_ppib, _ppib_ch)                                           \
-	(struct periphconf_entry)                                                                  \
-	{                                                                                          \
-		.regptr = PERIPHCONF_PPIB_PUBLISH_RECEIVE_REGPTR(_ppib, _ppib_ch),                 \
-		.value = PERIPHCONF_PPIB_PUBLISH_RECEIVE_VALUE(1),                                 \
-	}
-#endif
 
 /** @brief PPIB PUBLISH_RECEIVE[n] register pointer.
  *
