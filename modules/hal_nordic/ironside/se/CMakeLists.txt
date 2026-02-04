@@ -11,6 +11,7 @@ zephyr_library_property(ALLOW_EMPTY TRUE)
 zephyr_library_sources_ifdef(CONFIG_IRONSIDE_SE_CALL
   ${IRONSIDE_SUPPORT_DIR}/se/src/ironside_se_api.c
   call.c
+  glue.c
 )
 zephyr_library_sources_ifdef(CONFIG_IRONSIDE_SE_DVFS dvfs.c)
 
