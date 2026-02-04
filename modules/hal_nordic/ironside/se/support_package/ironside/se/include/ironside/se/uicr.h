@@ -22,8 +22,10 @@ extern "C" {
 /* List of supported versions */
 /* UICR version 2.0 */
 #define UICR_VERSION_2_0 0x00020000UL
+/* UICR version 2.1 */
+#define UICR_VERSION_2_1 0x00020001UL
 /* Maximum UICR version supported by this header. */
-#define UICR_VERSION_MAX UICR_VERSION_2_0
+#define UICR_VERSION_MAX UICR_VERSION_2_1
 
 /* Common enum values */
 /* Default erased value for all UICR fields */
@@ -40,6 +42,10 @@ extern "C" {
  * Note that any value other than UICR_UNPROTECTED is interpreted as UICR_PROTECTED.
  */
 #define UICR_PROTECTED         UICR_ENABLED
+
+/* Common values for enumeration choices. */
+#define UICR_ENUM_CHOICE_0 UICR_MAGIC_ERASE_VALUE
+#define UICR_ENUM_CHOICE_1 (0x1730C77FUL)
 
 /**
  * @brief Access port protection.
@@ -90,9 +96,9 @@ struct UICR_WDTSTART {
 
 /* WDTSTART enum values */
 /* Start WDT0 in the domain of the processor being booted. */
-#define UICR_WDTSTART_INSTANCE_WDT0 UICR_MAGIC_ERASE_VALUE
+#define UICR_WDTSTART_INSTANCE_WDT0 UICR_ENUM_CHOICE_0
 /* Start WDT1 in the domain of the processor being booted. */
-#define UICR_WDTSTART_INSTANCE_WDT1 (0x1730C77FUL)
+#define UICR_WDTSTART_INSTANCE_WDT1 UICR_ENUM_CHOICE_1
 
 /* WDTSTART CRV validation */
 /* Minimum CRV value. */
@@ -206,9 +212,9 @@ struct UICR_SECONDARY {
 
 /* SECONDARY enum values */
 /* Boot the application core. */
-#define UICR_SECONDARY_PROCESSOR_APPLICATION UICR_MAGIC_ERASE_VALUE
+#define UICR_SECONDARY_PROCESSOR_APPLICATION UICR_ENUM_CHOICE_0
 /* Boot the radio core. */
-#define UICR_SECONDARY_PROCESSOR_RADIOCORE   (0x1730C77FUL)
+#define UICR_SECONDARY_PROCESSOR_RADIOCORE   UICR_ENUM_CHOICE_1
 
 /* SECONDARY field access macros */
 #define UICR_SECONDARY_ADDRESS_ADDRESS_Msk (0xFFFFF000UL)
@@ -224,6 +230,12 @@ struct UICR_SECONDARY {
 #define UICR_ERASEPROTECT_PALL_UNPROTECTED UICR_MAGIC_ERASE_VALUE
 /* Erase protection enabled */
 #define UICR_ERASEPROTECT_PALL_PROTECTED   UICR_PROTECTED
+
+/* POLICY_PERIPHCONFSTAGE enum values */
+/* PERIPHCONF API stage is set to initialization stage at application boot. */
+#define UICR_POLICY_PERIPHCONFSTAGE_INIT   UICR_ENUM_CHOICE_0
+/* PERIPHCONF API stage is set to normal stage at application boot. */
+#define UICR_POLICY_PERIPHCONFSTAGE_NORMAL UICR_ENUM_CHOICE_1
 
 /**
  * @brief User information configuration region.
@@ -256,8 +268,10 @@ struct UICR {
 	volatile struct UICR_MPCCONF MPCCONF;
 	/* Secondary firmware configuration */
 	volatile struct UICR_SECONDARY SECONDARY;
+	volatile const uint32_t RESERVED4[78];
+	/* PERIPHCONF API stage at application boot. */
+	volatile uint32_t POLICY_PERIPHCONFSTAGE;
 #if !defined(UICR_DEF_OMIT_CUSTOMER)
-	volatile const uint32_t RESERVED4[79];
 	/* Reserved for customer. */
 	volatile uint32_t CUSTOMER[320];
 	volatile const uint32_t RESERVED5[44];

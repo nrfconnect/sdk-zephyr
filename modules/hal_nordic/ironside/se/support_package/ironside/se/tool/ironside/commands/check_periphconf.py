@@ -628,8 +628,12 @@ def render_periphconf_table(entries: list[ConfEntry], style: str = "regs") -> st
     """Render validated PERIPHCONF entries in table form."""
     table = []
     for conf in entries:
-        error_char = "X" if conf.status != ValidationStatus.SUCCESS else ""
-        error_desc = ", ".join(str(s.name) for s in conf.status)
+        if conf.status != ValidationStatus.SUCCESS:
+            error_char = "X"
+            error_desc = ", ".join(str(s.name) for s in conf.status)
+        else:
+            error_char = ""
+            error_desc = ""
         index = str(conf.index)
         if style == "regs":
             reg_name = conf.name

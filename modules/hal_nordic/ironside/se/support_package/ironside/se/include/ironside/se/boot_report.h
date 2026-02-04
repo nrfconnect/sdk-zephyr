@@ -93,6 +93,19 @@ extern "C" {
 /** Index for RESETREAS.DOMAIN[NRF_DOMAIN_RADIOCORE]. */
 #define IRONSIDE_SE_SECONDARY_RESETREAS_RADIOCORE   1
 
+/** No snapshot operation occurred. */
+#define IRONSIDE_SE_SNAPSHOT_STATUS_NONE                0
+/** Snapshot capture was successful. */
+#define IRONSIDE_SE_SNAPSHOT_STATUS_CAPTURE_SUCCESSFUL  1
+/** Snapshot capture failed. */
+#define IRONSIDE_SE_SNAPSHOT_STATUS_CAPTURE_FAILED      2
+/** Snapshot recovery was performed. */
+#define IRONSIDE_SE_SNAPSHOT_STATUS_RECOVERY            3
+/** Snapshot recovery failed. */
+#define IRONSIDE_SE_SNAPSHOT_STATUS_RECOVERY_FAILED     4
+/** MRAM corruption was detected outside of a snapshot region. */
+#define IRONSIDE_SE_SNAPSHOT_STATUS_CORRUPTION_DETECTED 5
+
 /** Length of the local domain context buffer in bytes. */
 #define IRONSIDE_SE_BOOT_REPORT_LOCAL_DOMAIN_CONTEXT_SIZE (16UL)
 /** Length of the random data buffer in bytes. */
@@ -171,6 +184,35 @@ struct ironside_se_boot_report_random {
 	uint8_t data[IRONSIDE_SE_BOOT_REPORT_RANDOM_DATA_SIZE];
 };
 
+/** @brief Snapshot status and corruption information contained in the boot report. */
+struct ironside_se_boot_report_snapshot {
+	/** Whether snapshot is enabled on this device.
+	 *  0 = disabled, non-zero = enabled.
+	 */
+	uint8_t enabled;
+	/** Snapshot operation status.
+	 *  One of IRONSIDE_SE_SNAPSHOT_STATUS_* values.
+	 */
+	uint8_t status;
+	/** Snapshot operation failure information.
+	 *  Only valid when status is IRONSIDE_SE_SNAPSHOT_STATUS_*_FAILED.
+	 *  Contains the lowest 6 bits from BOOTSTATUS indicating where capture failed:
+	 *  - 0x3E: Operation failed during manifest processing
+	 *  - 0x3F: Operation failed during initialization
+	 *  - 0-15: Operation failed while capturing or recovering region with this index
+	 */
+	uint8_t failure_info;
+	/** Current capture counter value.
+	 *  The anti-rollback counter value from OTP (0-15).
+	 */
+	uint8_t capture_counter;
+	/** MRAM address where corruption was detected.
+	 *  Only valid when status is IRONSIDE_SE_SNAPSHOT_STATUS_CORRUPTION_DETECTED.
+	 *  Set to 0 otherwise.
+	 */
+	uint32_t corrupted_address;
+};
+
 /** @brief IronSide SE boot report. */
 struct ironside_se_boot_report {
 	/** Magic value used to identify valid boot report */
@@ -201,8 +243,10 @@ struct ironside_se_boot_report {
 #else
 	uint32_t unused1[4];
 #endif
+	/** Snapshot status and corruption information */
+	struct ironside_se_boot_report_snapshot snapshot;
 	/** Reserved for Future Use */
-	uint32_t rfu2[60];
+	uint32_t rfu2[58];
 };
 
 #ifdef __cplusplus
