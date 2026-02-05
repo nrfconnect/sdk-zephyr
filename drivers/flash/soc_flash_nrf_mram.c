@@ -16,6 +16,8 @@
 #if defined(CONFIG_NRF_IRONSIDE_BOOT_REPORT)
 #include "../soc/nordic/ironside/include/nrf_ironside/boot_report.h"
 #endif
+#include <hal/nrf_cache.h>
+#include <hal/nrf_mvdma.h>
 
 LOG_MODULE_REGISTER(flash_nrf_mram, CONFIG_FLASH_LOG_LEVEL);
 
@@ -46,9 +48,150 @@ BUILD_ASSERT(MRAM_START > 0, "nordic,mram: start address expected to be non-zero
 BUILD_ASSERT((ERASE_BLOCK_SIZE % WRITE_BLOCK_SIZE) == 0,
 	     "erase-block-size expected to be a multiple of write-block-size");
 
+/** Maximum number of retries for MRAM write/erase operations. */
+#define MAX_MRAM_RETRIES 3
+
+/** MVDMA Attribute field offset. */
+#define NRF_MVDMA_ATTR_OFF 24
+
+/** MVDMA Extended attribute field offset. */
+#define NRF_MVDMA_EXT_ATTR_OFF 30
+
+/** @brief Default transfer. */
+#define NRF_MVDMA_ATTR_DEFAULT 7
+
+#define NRF_MVDMA_JOB_ATTR(_size, _attr, _ext_attr)  \
+	(((_size) & 0xFFFFFF) | ((_attr) << NRF_MVDMA_ATTR_OFF) | \
+	((_ext_attr) << NRF_MVDMA_EXT_ATTR_OFF))
+
+#define NRF_MVDMA_BASIC_INIT(_src, _src_len, _src_attr, _src_ext_attr,			\
+			     _sink, _sink_len, _sink_attr, _sink_ext_attr)		\
+{											\
+	.source = (uint32_t)(_src),							\
+	.source_attr_len = NRF_MVDMA_JOB_ATTR((_src_len), _src_attr, _src_ext_attr),	\
+	.source_terminate = 0,								\
+	.source_padding = 0,								\
+	.sink = (uint32_t)(_sink),							\
+	.sink_attr_len = NRF_MVDMA_JOB_ATTR((_sink_len), _sink_attr, _sink_ext_attr),	\
+	.sink_terminate = 0,								\
+	.sink_padding = 0,								\
+}
+
+#define NRF_MVDMA_BASIC_MEMCPY_INIT(_dst, _src, _len)					\
+	NRF_MVDMA_BASIC_INIT(_src, _len, NRF_MVDMA_ATTR_DEFAULT, 0,			\
+			     _dst, _len, NRF_MVDMA_ATTR_DEFAULT, 0)
+
+struct mvdma_basic_desc {
+	uint32_t source;
+	uint32_t source_attr_len;
+	uint32_t source_terminate;
+	uint32_t source_padding;
+	uint32_t sink;
+	uint32_t sink_attr_len;
+	uint32_t sink_terminate;
+	uint32_t sink_padding;
+};
+
 struct nrf_mram_data_t {
 	uint8_t ironside_se_ver;
 };
+
+/**
+ * @param[in] addr_end  Last modified MRAM address (not inclusive).
+ */
+static void commit_changes(uintptr_t addr_end)
+{
+	/* Barrier following our last write. */
+	barrier_dmem_fence_full();
+
+	if ((WRITE_BLOCK_SIZE & MRAM_WORD_MASK) == 0 || (addr_end & MRAM_WORD_MASK) == 0) {
+		/* Our last operation was MRAM word-aligned, so we're done.
+		 * Note: if WRITE_BLOCK_SIZE is a multiple of MRAM_WORD_SIZE,
+		 * then this was already checked in validate_and_map_addr().
+		 */
+		return;
+	}
+
+	/* Get the most significant byte (MSB) of the last MRAM word we were modifying.
+	 * Writing to this byte makes the MRAM controller commit other pending writes to that word.
+	 */
+	addr_end |= MRAM_WORD_MASK;
+
+	/* Issue a dummy write, since we didn't have anything to write here.
+	 * Doing this lets us finalize our changes before we exit the driver API.
+	 */
+	sys_write8(sys_read8(addr_end), addr_end);
+}
+
+static int nrf_mram_mvdma_read(uint32_t addr)
+{
+	uint8_t rbuf[MRAM_WORD_SIZE] __aligned(CONFIG_DCACHE_LINE_SIZE);
+	struct mvdma_basic_desc desc __aligned(CONFIG_DCACHE_LINE_SIZE) =
+		NRF_MVDMA_BASIC_MEMCPY_INIT(rbuf, addr, MRAM_WORD_SIZE);
+
+	sys_cache_data_flush_range(&desc, sizeof(desc));
+	nrf_mvdma_event_clear(NRF_MVDMA, NRF_MVDMA_EVENT_COMPLETED0);
+	nrf_mvdma_source_list_ptr_set(NRF_MVDMA, (void *)&desc.source);
+	nrf_mvdma_sink_list_ptr_set(NRF_MVDMA, (void *)&desc.sink);
+	nrf_mvdma_task_trigger(NRF_MVDMA, NRF_MVDMA_TASK_START0);
+	while (!nrf_mvdma_event_check(NRF_MVDMA, NRF_MVDMA_EVENT_COMPLETED0)) {
+		/* Wait until transfer is complete */
+		if (nrf_mvdma_event_check(NRF_MVDMA, NRF_MVDMA_EVENT_SOURCEBUSERROR)) {
+			nrf_mvdma_event_clear(NRF_MVDMA, NRF_MVDMA_EVENT_SOURCEBUSERROR);
+			LOG_ERR("MVDMA source bus error");
+			return -EIO;
+		}
+
+		if (nrf_mvdma_event_check(NRF_MVDMA, NRF_MVDMA_EVENT_SINKBUSERROR)) {
+			nrf_mvdma_event_clear(NRF_MVDMA, NRF_MVDMA_EVENT_SINKBUSERROR);
+			LOG_ERR("MVDMA sink bus error");
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
+static int nrf_mram_write_and_verify(uint32_t addr, const void *data, size_t len)
+{
+	uint8_t retries = MAX_MRAM_RETRIES;
+
+	while (retries--) {
+		memcpy((void *)addr, data, len);
+		if (len % MRAM_WORD_SIZE) {
+			/* Ensure the last partial word is committed. */
+			commit_changes(addr + len);
+		}
+		if (!nrf_mram_mvdma_read(addr)) {
+			return 0;
+		}
+		LOG_DBG("MRAM write verification failed at address 0x%x, retrying... (%u retries left)",
+			addr, retries);
+	}
+
+	return -EIO;
+}
+
+static int nrf_mram_erase_and_verify(uint32_t addr, size_t len)
+{
+	uint8_t retries = MAX_MRAM_RETRIES;
+
+	while (retries--) {
+		memset((void *)addr, ERASE_VALUE, len);
+		if (len % MRAM_WORD_SIZE) {
+			/* Ensure the last partial word is committed. */
+			commit_changes(addr + len);
+		}
+
+		if (!nrf_mram_mvdma_read(addr)) {
+			return 0;
+		}
+		LOG_DBG("MRAM erase verification failed at address 0x%x, retrying... (%u retries left)",
+			addr, retries);
+	}
+
+	return -EIO;
+}
 
 static inline uint32_t nrf_mram_ready(uint32_t addr, uint8_t ironside_se_ver)
 {
@@ -89,33 +232,6 @@ static uintptr_t validate_and_map_addr(off_t offset, size_t len, bool must_align
 	return addr;
 }
 
-/**
- * @param[in] addr_end  Last modified MRAM address (not inclusive).
- */
-static void commit_changes(uintptr_t addr_end)
-{
-	/* Barrier following our last write. */
-	barrier_dmem_fence_full();
-
-	if ((WRITE_BLOCK_SIZE & MRAM_WORD_MASK) == 0 || (addr_end & MRAM_WORD_MASK) == 0) {
-		/* Our last operation was MRAM word-aligned, so we're done.
-		 * Note: if WRITE_BLOCK_SIZE is a multiple of MRAM_WORD_SIZE,
-		 * then this was already checked in validate_and_map_addr().
-		 */
-		return;
-	}
-
-	/* Get the most significant byte (MSB) of the last MRAM word we were modifying.
-	 * Writing to this byte makes the MRAM controller commit other pending writes to that word.
-	 */
-	addr_end |= MRAM_WORD_MASK;
-
-	/* Issue a dummy write, since we didn't have anything to write here.
-	 * Doing this lets us finalize our changes before we exit the driver API.
-	 */
-	sys_write8(sys_read8(addr_end), addr_end);
-}
-
 static int nrf_mram_read(const struct device *dev, off_t offset, void *data, size_t len)
 {
 	ARG_UNUSED(dev);
@@ -137,6 +253,7 @@ static int nrf_mram_write(const struct device *dev, off_t offset, const void *da
 {
 	struct nrf_mram_data_t *nrf_mram_data = dev->data;
 	uint8_t ironside_se_ver = nrf_mram_data->ironside_se_ver;
+	int ret = 0;
 
 	const uintptr_t addr = validate_and_map_addr(offset, len, true);
 
@@ -155,18 +272,26 @@ static int nrf_mram_write(const struct device *dev, off_t offset, const void *da
 		while (!nrf_mram_ready(addr + (i * MRAM_WORD_SIZE), ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
-		memcpy((void *)(addr + (i * MRAM_WORD_SIZE)),
-		       (void *)((uintptr_t)data + (i * MRAM_WORD_SIZE)), MRAM_WORD_SIZE);
+		ret = nrf_mram_write_and_verify(addr + (i * MRAM_WORD_SIZE),
+					 (void *)((uintptr_t)data + (i * MRAM_WORD_SIZE)),
+					 MRAM_WORD_SIZE);
+		if (ret) {
+			return ret;
+		}
 	}
 
 	if (len % MRAM_WORD_SIZE) {
 		while (!nrf_mram_ready(addr + (len & ~MRAM_WORD_MASK), ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
-		memcpy((void *)(addr + (len & ~MRAM_WORD_MASK)),
-		       (void *)((uintptr_t)data + (len & ~MRAM_WORD_MASK)), len & MRAM_WORD_MASK);
+		ret = nrf_mram_write_and_verify(addr + (len & ~MRAM_WORD_MASK),
+					 (void *)((uintptr_t)data + (len & ~MRAM_WORD_MASK)),
+					 len & MRAM_WORD_MASK);
+		if (ret) {
+			return ret;
+		}
 	}
-	commit_changes(addr + len);
+
 	if (ironside_se_ver >= IRONSIDE_SE_SUPPORT_READY_VER) {
 #if defined(CONFIG_MRAM_LATENCY)
 		mram_no_latency_sync_release();
@@ -180,6 +305,7 @@ static int nrf_mram_erase(const struct device *dev, off_t offset, size_t size)
 {
 	struct nrf_mram_data_t *nrf_mram_data = dev->data;
 	uint8_t ironside_se_ver = nrf_mram_data->ironside_se_ver;
+	int ret = 0;
 
 	const uintptr_t addr = validate_and_map_addr(offset, size, true);
 
@@ -199,16 +325,21 @@ static int nrf_mram_erase(const struct device *dev, off_t offset, size_t size)
 		while (!nrf_mram_ready(addr + (i * MRAM_WORD_SIZE), ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
-		memset((void *)(addr + (i * MRAM_WORD_SIZE)), ERASE_VALUE, MRAM_WORD_SIZE);
+		ret = nrf_mram_erase_and_verify(addr + (i * MRAM_WORD_SIZE), MRAM_WORD_SIZE);
+		if (ret) {
+			return ret;
+		}
 	}
 	if (size % MRAM_WORD_SIZE) {
 		while (!nrf_mram_ready(addr + (size & ~MRAM_WORD_MASK), ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
-		memset((void *)(addr + (size & ~MRAM_WORD_MASK)), ERASE_VALUE,
-		       size & MRAM_WORD_MASK);
+		ret = nrf_mram_erase_and_verify(addr + (size & ~MRAM_WORD_MASK), size & MRAM_WORD_MASK);
+		if (ret) {
+			return ret;
+		}
 	}
-	commit_changes(addr + size);
+
 	if (ironside_se_ver >= IRONSIDE_SE_SUPPORT_READY_VER) {
 #if defined(CONFIG_MRAM_LATENCY)
 		mram_no_latency_sync_release();
