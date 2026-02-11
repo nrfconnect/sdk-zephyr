@@ -3,6 +3,7 @@
 zephyr_get(IRONSIDE_SUPPORT_DIR SYSBUILD GLOBAL)
 if(NOT DEFINED IRONSIDE_SUPPORT_DIR)
   set(IRONSIDE_SUPPORT_DIR
-    ${ZEPHYR_HAL_NORDIC_MODULE_DIR}/ironside CACHE PATH "IronSide Support Directory"
+     ${ZEPHYR_BASE}/modules/hal_nordic/ironside/se/support_package/ironside
+     CACHE PATH "IronSide Support Directory"
   )
 endif()
