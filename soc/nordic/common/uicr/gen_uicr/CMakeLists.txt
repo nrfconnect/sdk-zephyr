@@ -17,6 +17,9 @@ find_package(Zephyr
   REQUIRED HINTS $ENV{ZEPHYR_BASE}
   )
 
+# Needed since the CMakeLists.txt that would normally set this is not run in this image.
+include(${ZEPHYR_BASE}/modules/hal_nordic/ironside/se/ironside_support_dir.cmake)
+
 project(uicr)
 
 # Function to parse a Kconfig value from a .config file
@@ -82,6 +85,7 @@ set(protectedmem_args)
 set(periphconf_args)
 set(wdtstart_args)
 set(periphconf_elfs)
+set(policy_args)
 set(merged_hex_file ${APPLICATION_BINARY_DIR}/zephyr/${CONFIG_KERNEL_BIN_NAME}.hex)
 set(secondary_periphconf_elfs)
 set(uicr_hex_file ${APPLICATION_BINARY_DIR}/zephyr/uicr.hex)
@@ -169,6 +173,11 @@ if(CONFIG_GEN_UICR_GENERATE_PERIPHCONF)
     endif()
 
     if(EXISTS ${_dir}/zephyr/zephyr.dts)
+      parse_kconfig_value(${_dir}/zephyr/.config CONFIG_NRF_PERIPHCONF_SECTION_KEEP keep_periphconf)
+      if(keep_periphconf STREQUAL "y")
+        continue()
+      endif()
+
       # Read CONFIG_KERNEL_BIN_NAME from the sibling's .config file
       parse_kconfig_value(${_dir}/zephyr/.config CONFIG_KERNEL_BIN_NAME kernel_bin_name)
       set(kernel_elf_path ${_dir}/zephyr/${kernel_bin_name}.elf)
@@ -261,14 +270,20 @@ if(CONFIG_GEN_UICR_SECONDARY)
   endif()
 endif()
 
+if(CONFIG_GEN_UICR_POLICY_PERIPHCONF_STAGE_INIT OR CONFIG_GEN_UICR_POLICY_PERIPHCONF_STAGE_NORMAL)
+  list(APPEND policy_args --policy-periphconf-stage ${CONFIG_GEN_UICR_POLICY_PERIPHCONF_STAGE_VALUE})
+endif()
+
 # Generate hex files (merged, uicr-only, periphconf-only, and secondary-periphconf-only)
 add_custom_command(
   OUTPUT ${merged_hex_file} ${uicr_hex_file} ${periphconf_hex_file} ${secondary_periphconf_hex_file}
-  COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${ZEPHYR_BASE}/scripts/dts/python-devicetree/src
-          ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/soc/nordic/common/uicr/gen_uicr.py
+  COMMAND ${PYTHON_EXECUTABLE} ${IRONSIDE_SUPPORT_DIR}/se/tool/ironside/__main__.py
+          gen-uicr
           --uicr-address ${UICR_ADDRESS}
           --out-merged-hex ${merged_hex_file}
           --out-uicr-hex ${uicr_hex_file}
+          --periphconf-section-name "periphconf_entry"
+          --periphconf-ipcmap-reallocate
           ${lock_args}
           ${eraseprotect_args}
           ${approtect_args}
@@ -277,6 +292,7 @@ add_custom_command(
           ${securestorage_args}
           ${protectedmem_args}
           ${secondary_args}
+          ${policy_args}
   DEPENDS ${periphconf_elfs} ${secondary_periphconf_elfs}
   WORKING_DIRECTORY ${APPLICATION_BINARY_DIR}
   COMMENT "Using gen_uicr.py to generate ${merged_hex_file}, ${uicr_hex_file}, ${periphconf_hex_file}, and ${secondary_periphconf_hex_file} from ${periphconf_elfs} ${secondary_periphconf_elfs}"
