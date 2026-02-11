@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <stddef.h>
 #include <nrf_ironside/counter.h>
 #include <nrf_ironside/call.h>
 
