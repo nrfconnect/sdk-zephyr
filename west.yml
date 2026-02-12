@@ -200,7 +200,11 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: d7dc801ab175e286205fd6229b0c05ec7886e2ac
+      # Temporarily set to this to avoid breaking due to not
+      # having nrfx 4.1 related changes in NCS yet
+      # revision: pull/340/head
+      url: https://github.com/jonathannilsen/hal_nordic
+      revision: ironside-support-25-no-nrfx
       path: modules/hal/nordic
       groups:
         - hal

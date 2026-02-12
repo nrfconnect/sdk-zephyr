@@ -1,14 +1,7 @@
 # Copyright (c) 2025 Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
 
-# The IronSide source directory can be overridden by setting
-# IRONSIDE_SUPPORT_DIR before invoking the build system.
-zephyr_get(IRONSIDE_SUPPORT_DIR SYSBUILD GLOBAL)
-if(NOT DEFINED IRONSIDE_SUPPORT_DIR)
-  set(IRONSIDE_SUPPORT_DIR
-    ${ZEPHYR_CURRENT_MODULE_DIR}/ironside CACHE PATH "IronSide Support Directory"
-  )
-endif()
+include(./ironside_support_dir.cmake)
 
 zephyr_include_directories(include)
 zephyr_include_directories(${IRONSIDE_SUPPORT_DIR}/se/include)
@@ -18,6 +11,7 @@ zephyr_library_property(ALLOW_EMPTY TRUE)
 zephyr_library_sources_ifdef(CONFIG_IRONSIDE_SE_CALL
   ${IRONSIDE_SUPPORT_DIR}/se/src/ironside_se_api.c
   call.c
+  glue.c
 )
 zephyr_library_sources_ifdef(CONFIG_IRONSIDE_SE_DVFS dvfs.c)
 
@@ -26,6 +20,10 @@ if(CONFIG_NRF_PERIPHCONF_SECTION)
 endif()
 
 if(CONFIG_NRF_PERIPHCONF_GENERATE_ENTRIES)
+  set(optional_args)
+  if(CONFIG_NRF_PERIPHCONF_GENERATE_ENTRIES_NO_LOCK)
+    list(APPEND optional_args --no-lock)
+  endif()
   set(periphconf_entries_c_file ${PROJECT_BINARY_DIR}/periphconf_entries_generated.c)
   execute_process(
     COMMAND
@@ -34,6 +32,7 @@ if(CONFIG_NRF_PERIPHCONF_GENERATE_ENTRIES)
       --soc ${CONFIG_SOC}
       --in-edt-pickle ${EDT_PICKLE}
       --out-periphconf-source ${periphconf_entries_c_file}
+      ${optional_args}
     WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
     COMMAND_ERROR_IS_FATAL ANY
   )
