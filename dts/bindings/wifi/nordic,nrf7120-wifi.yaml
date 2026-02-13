@@ -5,7 +5,7 @@ description: >
   This is a representation of the Wi-Fi parts of the nRF71 Series Wi-Fi and
   Bluetooth chip SoC.
 
-compatible: "nordic,nrf71-wifi"
+compatible: "nordic,nrf7120-wifi"
 
 include:
   - "wifi-tx-power-2g.yaml"
