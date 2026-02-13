@@ -828,6 +828,13 @@
 				#clock-cells = <0>;
 			};
 
+			lfclk: lfclk@10e000 {
+				compatible = "nordic,nrf-clock-lfclk";
+				reg = <0x10e000 0x1000>;
+				interrupts = <270 NRF_DEFAULT_IRQ_PRIORITY>;
+				status = "disabled";
+			};
+
 			power: power@10e000 {
 				compatible = "nordic,nrf-power";
 				reg = <0x10e000 0x1000>;
