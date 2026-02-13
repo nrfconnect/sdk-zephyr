@@ -6,6 +6,8 @@
 #include "clock_control_nrf_common.h"
 #include <nrfx.h>
 
+#if defined(CONFIG_CLOCK_CONTROL_NRFX) && !defined(CONFIG_CLOCK_CONTROL_NRF)
+
 #if NRFX_CHECK(NRFX_POWER_ENABLED)
 #include <nrfx_power.h>
 #endif
@@ -14,7 +16,10 @@
 
 static bool irq_connected;
 
-static void clock_irq_handler(void)
+/* This function should be treated as static.
+ * static keyword is not used so that it can be accessed by interrupt oriented tests.
+ */
+void clock_control_nrf_common_irq_handler(void)
 {
 #if NRFX_CHECK(NRFX_POWER_ENABLED)
 	nrfx_power_irq_handler();
@@ -33,8 +38,14 @@ void clock_control_nrf_common_connect_irq(void)
 	irq_connected = true;
 
 #if NRF_LFRC_HAS_CALIBRATION
-	IRQ_CONNECT(LFRC_IRQn, DT_INST_IRQ(0, priority), nrfx_isr, clock_irq_handler, 0);
+	IRQ_CONNECT(LFRC_IRQn, DT_INST_IRQ(0, priority), nrfx_isr,
+		    clock_control_nrf_common_irq_handler, 0);
+	irq_enable(LFRC_IRQn);
 #endif
 
-	IRQ_CONNECT(DT_INST_IRQN(0), DT_INST_IRQ(0, priority), nrfx_isr, clock_irq_handler, 0);
+	IRQ_CONNECT(DT_INST_IRQN(0), DT_INST_IRQ(0, priority), nrfx_isr,
+		    clock_control_nrf_common_irq_handler, 0);
+	irq_enable(DT_INST_IRQN(0));
 }
+
+#endif /* defined(CONFIG_CLOCK_CONTROL_NRFX) && !defined(CONFIG_CLOCK_CONTROL_NRF) */

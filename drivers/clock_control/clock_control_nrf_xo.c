@@ -22,17 +22,17 @@ LOG_MODULE_REGISTER(clock_control_xo, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
 #define CLOCK_DEVICE_XO DEVICE_DT_GET(DT_NODELABEL(xo))
 
-#define CTX_ONOFF		BIT(6)
-#define CTX_API			BIT(7)
-#define CTX_MASK (CTX_ONOFF | CTX_API)
+#define CTX_ONOFF BIT(6)
+#define CTX_API   BIT(7)
+#define CTX_MASK  (CTX_ONOFF | CTX_API)
 
-#define STATUS_MASK		0x7
-#define GET_STATUS(flags)	(flags & STATUS_MASK)
-#define GET_CTX(flags)		(flags & CTX_MASK)
+#define STATUS_MASK       0x7
+#define GET_STATUS(flags) (flags & STATUS_MASK)
+#define GET_CTX(flags)    (flags & CTX_MASK)
 
 /* Used only by HF clock */
-#define XO_USER_BT		BIT(0)
-#define XO_USER_GENERIC		BIT(1)
+#define XO_USER_BT      BIT(0)
+#define XO_USER_GENERIC BIT(1)
 
 /* Helper logging macros which prepends subsys name to the log. */
 #ifdef CONFIG_LOG
@@ -68,8 +68,6 @@ typedef struct {
 } xo_config_t;
 
 static atomic_t xo_users;
-static uint64_t xo_start_tstamp;
-static uint64_t xo_stop_tstamp;
 
 static int set_starting_state(uint32_t *flags, uint32_t ctx)
 {
@@ -146,25 +144,7 @@ static int stop(uint32_t ctx)
 	return 0;
 }
 
-static void xo_start(void)
-{
-	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_SHELL)) {
-		xo_start_tstamp = k_uptime_get();
-	}
-
-	nrfx_clock_xo_start();
-}
-
-static void xo_stop(void)
-{
-	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_SHELL)) {
-		xo_stop_tstamp = k_uptime_get();
-	}
-
-	nrfx_clock_xo_stop();
-}
-
-#ifdef CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION
+#ifdef CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION
 
 static void nrf54l_errata_30_workaround(void)
 {
@@ -197,7 +177,7 @@ static void nrf54l_errata_30_workaround(void)
 	*((volatile uint32_t *)0x50120864UL) = 0;
 }
 
-#if CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION_PERIOD
+#if CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION_PERIOD
 
 static struct onoff_client hf_cal_cli;
 
@@ -211,7 +191,7 @@ static void calibration_finished_callback(struct onoff_manager *mgr,
 
 static void calibration_handler(struct k_timer *timer)
 {
-	nrf_clock_xo_t clk_src;
+	nrf_clock_hfclk_t clk_src;
 
 	bool ret = nrfx_clock_xo_running_check(&clk_src);
 
@@ -229,19 +209,19 @@ static int calibration_init(void)
 {
 	k_timer_start(&calibration_timer,
 		      K_NO_WAIT,
-		      K_MSEC(CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION_PERIOD));
+		      K_MSEC(CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION_PERIOD));
 
 	return 0;
 }
 
 SYS_INIT(calibration_init, APPLICATION, 0);
 
-#endif /* CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION_PERIOD */
-#endif /* CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION */
+#endif /* CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION_PERIOD */
+#endif /* CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION */
 
 static void clkstarted_handle(void)
 {
-#if CONFIG_CLOCK_CONTROL_NRF_HFINT_CALIBRATION
+#if CONFIG_CLOCK_CONTROL_NRFX_HFINT_CALIBRATION
 	if (NRF_ERRATA_DYNAMIC_CHECK(54L, 30)) {
 		nrf54l_errata_30_workaround();
 	}
@@ -296,14 +276,14 @@ static void generic_xo_start(void)
 		return;
 	}
 
-	xo_start();
+	nrfx_clock_xo_start();
 }
 
 static void generic_xo_stop(void)
 {
 	/* It's not enough to use only atomic_and() here for synchronization,
 	 * as the thread could be preempted right after that function but
-	 * before xo_stop() is called and the preempting code could request
+	 * before nrfx_clock_xo_stop() is called and the preempting code could request
 	 * the XO again. Then, the XO would be stopped inappropriately
 	 * and xo_user would be left with an incorrect value.
 	 */
@@ -312,7 +292,7 @@ static void generic_xo_stop(void)
 	xo_users &= ~XO_USER_GENERIC;
 	/* Skip stopping if BT is still requesting the clock. */
 	if (!(xo_users & XO_USER_BT)) {
-		xo_stop();
+		nrfx_clock_xo_stop();
 	}
 
 	irq_unlock(key);
@@ -413,7 +393,7 @@ void z_nrf_clock_bt_ctlr_hf_request(void)
 		return;
 	}
 
-	xo_start();
+	nrfx_clock_xo_start();
 }
 
 void z_nrf_clock_bt_ctlr_hf_release(void)
@@ -426,7 +406,7 @@ void z_nrf_clock_bt_ctlr_hf_release(void)
 	xo_users &= ~XO_USER_BT;
 	/* Skip stopping if generic is still requesting the clock. */
 	if (!(xo_users & XO_USER_GENERIC)) {
-		xo_stop();
+		nrfx_clock_xo_stop();
 	}
 
 	irq_unlock(key);
