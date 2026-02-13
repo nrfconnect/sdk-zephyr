@@ -213,5 +213,10 @@ arduino_spi: &spi0 {
 	status = "okay";
 };
 
+&lfclk {
+	k32src = "rc";
+	k32-accuracy-ppm = <250>;
+};
+
 /* Include default shared RAM configuration file */
 #include <nordic/nrf5340_shared_sram_partition.dtsi>
