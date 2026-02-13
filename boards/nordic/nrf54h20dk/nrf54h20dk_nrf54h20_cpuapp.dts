@@ -348,3 +348,11 @@ zephyr_udc0: &usbhs {
 		zephyr,memory-region = "pm_s2ram_context";
 	};
 };
+
+&exmif {
+	status = "okay";
+};
+
+&mx25uw63 {
+	status = "okay";
+};
