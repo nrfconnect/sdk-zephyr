@@ -1,0 +1,11 @@
+# Copyright (c) 2025 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Nordic Expansion Board header
+
+compatible: "nordic,expansion-board-header"
+
+include:
+  - base.yaml
+  - gpio-nexus.yaml
