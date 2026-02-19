@@ -6,6 +6,7 @@
 
 #include <zephyr/devicetree.h>
 #include <zephyr/arch/arm/cortex_m/arm_mpu_mem_cfg.h>
+#include <ironside/se/memory_map.h>
 
 #define USBHS_BASE	DT_REG_ADDR_BY_NAME(DT_NODELABEL(usbhs), core)
 #define USBHS_SIZE	DT_REG_SIZE_BY_NAME(DT_NODELABEL(usbhs), core)
@@ -48,6 +49,11 @@ static struct arm_mpu_region mpu_regions[] = {
 #if DT_NODE_EXISTS(DT_NODELABEL(softperiph_ram))
 	MPU_REGION_ENTRY("SOFTPERIPH_RAM", SOFTPERIPH_BASE,
 			 REGION_RAM_NOCACHE_ATTR(SOFTPERIPH_BASE, SOFTPERIPH_SIZE)),
+#endif
+#if defined(CONFIG_IRONSIDE_SE_CALL_MINIMAL)
+	MPU_REGION_ENTRY("IRONSIDE_IPC", IRONSIDE_SE_IPC_BUFFER_ADDRESS,
+			 REGION_RAM_NOCACHE_ATTR(IRONSIDE_SE_IPC_BUFFER_ADDRESS,
+						 IRONSIDE_SE_IPC_BUFFER_SIZE)),
 #endif
 };
 
