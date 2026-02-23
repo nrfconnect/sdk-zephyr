@@ -15,6 +15,20 @@
 #include <zephyr/net/wifi_mgmt.h>
 
 #include "osal_api.h"
+
+#ifdef CONFIG_WIFI_NRF71
+//#ifdef SCAN_DB_GDRAM
+
+struct nrf_wifi_umac_event_new_scan_display_results {
+        /** Header nrf_wifi_umac_hdr */
+        struct nrf_wifi_umac_hdr umac_hdr;
+        /** Number of scan results in the current event */
+        unsigned char event_bss_count;
+        /** Display scan results info umac_display_results */
+        struct umac_display_results display_results[DISPLAY_BSS_TOHOST_PEREVNT];
+} __NRF_WIFI_PKD;
+#endif
+
 int nrf_wifi_disp_scan_zep(const struct device *dev, struct wifi_scan_params *params,
 			   scan_result_cb_t cb);
 

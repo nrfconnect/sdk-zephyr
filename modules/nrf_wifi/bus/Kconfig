@@ -68,4 +68,9 @@ config NRF71_CMD_RX_BUFF
 	select EXPERIMENTAL
 	help
 	  Enable to do system test with nrf71 and fpga
+config NRF71_PHY_RF_PARAM_GDRAM
+	bool "Pass RF Parameters and vtf buffer address"
+	select EXPERIMENTAL
+	help
+	  Enable to do system test with nrf71 and fpga
 endif # NRF70_BUSLIB
