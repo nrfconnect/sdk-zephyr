@@ -432,6 +432,14 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         if self.erase:
             lines.append('erase') # Erase all flash sectors
 
+        # If erase-only mode, skip flashing and return early
+        if self.erase:
+            # Only erase, don't flash
+            lines.append('q') # Close the connection and quit
+            self.logger.debug('JLink commander script (erase only):\n' +
+                              '\n'.join(lines))
+            return None, lines
+
         # Get the build artifact to flash
         if self.file is not None:
             # use file provided by the user
@@ -556,6 +564,8 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
 
         if flash_file:
             self.logger.info(f'Flashing file: {flash_file}')
+        else:
+            self.logger.info('Erasing flash only (no file will be flashed)')
         kwargs = {}
         if not self.logger.isEnabledFor(logging.DEBUG):
             kwargs['stdout'] = subprocess.DEVNULL
