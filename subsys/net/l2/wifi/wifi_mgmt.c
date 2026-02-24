@@ -407,7 +407,13 @@ static int wifi_connect(uint64_t mgmt_request, struct net_if *iface,
 		return -EINVAL;
 	}
 
-	if (params->psk_length && (params->psk_length < 8 || params->psk_length > 64)) {
+	if (params->security == WIFI_SECURITY_TYPE_WEP) {
+		if (params->psk_length &&
+		    params->psk_length != 5 && params->psk_length != 13 &&
+		    params->psk_length != 10 && params->psk_length != 26) {
+			return -EINVAL;
+		}
+	} else if (params->psk_length && (params->psk_length < 8 || params->psk_length > 64)) {
 		return -EINVAL;
 	}
 
@@ -434,6 +440,11 @@ static int wifi_connect(uint64_t mgmt_request, struct net_if *iface,
 	case WIFI_SECURITY_TYPE_SAE_AUTO:
 		if ((!params->psk_length || !params->psk) &&
 		    (!params->sae_password_length || !params->sae_password)) {
+			return -EINVAL;
+		}
+		break;
+	case WIFI_SECURITY_TYPE_WEP:
+		if (!params->psk_length || !params->psk) {
 			return -EINVAL;
 		}
 		break;
