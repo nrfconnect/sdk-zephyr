@@ -6253,7 +6253,7 @@ West:
     - Vge0rge
     - wearyzen
     - valeriosetti
-    - ithinuel
+    - JordanYates
   files: []
   labels:
     - "area: TF-M"
@@ -6276,7 +6276,7 @@ West:
     - Vge0rge
     - wearyzen
     - valeriosetti
-    - ithinuel
+    - JordanYates
   files: []
   labels:
     - "area: TF-M"
@@ -6326,7 +6326,7 @@ West:
     - Vge0rge
     - wearyzen
     - valeriosetti
-    - ithinuel
+    - JordanYates
   files:
     - modules/trusted-firmware-m/
     - samples/tfm_integration/
