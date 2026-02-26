@@ -1,7 +1,10 @@
 /*
- * Copyright (c) 2025 Nordic Semiconductor
+ * Copyright (c) 2026 Nordic Semiconductor
  *
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Uses expansion_board_spi and expansion_board_header nexus nodes.
+ * Supported on nRF54L15 DK and nRF54L(m)20 DK which both define these nodes.
  */
 
 / {
@@ -10,15 +13,20 @@
 	};
 };
 
-&wifi_spi {
+&expansion_board_spi {
 	status = "okay";
 
 	nrf70: nrf7002-spi@0 {
 		compatible = "nordic,nrf7002-spi";
 		status = "okay";
 
-		/* Include common nRF70 overlays */
 		#include "nrf7002eb2_common.dtsi"
 		#include "nrf7002eb2_common_5g.dtsi"
 	};
+};
+
+&nrf70 {
+	iovdd-ctrl-gpios = <&expansion_board_header 5 GPIO_ACTIVE_HIGH>;
+	bucken-gpios = <&expansion_board_header 4 GPIO_ACTIVE_HIGH>;
+	host-irq-gpios = <&expansion_board_header 14 GPIO_ACTIVE_HIGH>;
 };
