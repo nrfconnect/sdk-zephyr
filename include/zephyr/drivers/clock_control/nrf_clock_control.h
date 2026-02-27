@@ -15,10 +15,11 @@
 extern "C" {
 #endif
 
-#if defined(CONFIG_CLOCK_CONTROL_NRF)
+#if defined(CONFIG_CLOCK_CONTROL_NRFX)
 
 #include <hal/nrf_clock.h>
 
+#if defined(CONFIG_CLOCK_CONTROL_NRF)
 /** @brief Clocks handled by the CLOCK peripheral.
  *
  * Enum shall be used as a sys argument in clock_control API.
@@ -51,13 +52,6 @@ enum clock_control_nrf_type {
 	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_HFCLK192M)
 #define CLOCK_CONTROL_NRF_SUBSYS_HFAUDIO \
 	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_HFCLKAUDIO)
-
-/** @brief LF clock start modes. */
-enum nrf_lfclk_start_mode {
-	CLOCK_CONTROL_NRF_LF_START_NOWAIT,
-	CLOCK_CONTROL_NRF_LF_START_AVAILABLE,
-	CLOCK_CONTROL_NRF_LF_START_STABLE,
-};
 
 /* Define 32KHz clock source */
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC
@@ -102,12 +96,22 @@ enum nrf_lfclk_start_mode {
 #define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 7
 #endif
 
+#endif /* defined(CONFIG_CLOCK_CONTROL_NRF) */
+
+/** @brief LF clock start modes. */
+enum nrf_lfclk_start_mode {
+	CLOCK_CONTROL_NRF_LF_START_NOWAIT,
+	CLOCK_CONTROL_NRF_LF_START_AVAILABLE,
+	CLOCK_CONTROL_NRF_LF_START_STABLE,
+};
+
 /** @brief Force LF clock calibration. */
 void z_nrf_clock_calibration_force_start(void);
 
 /** @brief Return number of calibrations performed.
  *
- * Valid when @kconfig{CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_DEBUG} is set.
+ * Valid when @kconfig{CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_DEBUG} or
+ * @kconfig{CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_DEBUG} is set.
  *
  * @return Number of calibrations or -1 if feature is disabled.
  */
@@ -115,7 +119,8 @@ int z_nrf_clock_calibration_count(void);
 
 /** @brief Return number of attempts when calibration was skipped.
  *
- * Valid when @kconfig{CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_DEBUG} is set.
+ * Valid when @kconfig{CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_DEBUG} or
+ * @kconfig{CONFIG_CLOCK_CONTROL_NRFX_CALIBRATION_DEBUG} is set.
  *
  * @return Number of calibrations or -1 if feature is disabled.
  */
@@ -128,6 +133,7 @@ int z_nrf_clock_calibration_skips_count(void);
  */
 bool z_nrf_clock_calibration_is_in_progress(void);
 
+#if defined(CONFIG_CLOCK_CONTROL_NRF)
 /** @brief Get onoff service for given clock subsystem.
  *
  * @param sys Subsystem.
@@ -135,6 +141,7 @@ bool z_nrf_clock_calibration_is_in_progress(void);
  * @return Service handler or NULL.
  */
 struct onoff_manager *z_nrf_clock_control_get_onoff(clock_control_subsys_t sys);
+#endif
 
 /** @brief Permanently enable low frequency clock.
  *
@@ -173,7 +180,7 @@ void z_nrf_clock_bt_ctlr_hf_release(void);
  */
 uint32_t z_nrf_clock_bt_ctlr_hf_get_startup_time_us(void);
 
-#endif /* defined(CONFIG_CLOCK_CONTROL_NRF) */
+#endif /* CONFIG_CLOCK_CONTROL_NRFX */
 
 /* Specifies to use the maximum available frequency for a given clock. */
 #define NRF_CLOCK_CONTROL_FREQUENCY_MAX UINT32_MAX
