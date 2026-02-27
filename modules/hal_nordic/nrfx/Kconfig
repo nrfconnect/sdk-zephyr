@@ -22,31 +22,75 @@ if NRFX_CLOCK
 config NRFX_CLOCK_USE_LFRC_CALIBRATION
 	bool "Extend NRFX_CLOCK to use LFRC peripheral"
 
-config NRFX_CLOCK_LFXO_TWO_STAGE_ENABLED
-	bool "Two stage start sequence of the low frequency clock"
-
 config NRFX_CLOCK_LF_CAL_ENABLED
 	bool "LFRC Calibration enabled"
 
 config NRFX_CLOCK_LF_SRC_RC
 	bool "RC Oscillator"
+	default $(dt_node_str_prop_equals,$(dt_nodelabel_path,lfclk),k32src,\
+	CLOCK_CONTROL_NRF_K32SRC_RC) if (!CLOCK_CONTROL_NRF_FORCE_ALT && !CLOCK_CONTROL_NRF)
+	default n
 
 config NRFX_CLOCK_LF_SRC_XTAL
 	bool "Crystal Oscillator"
+	default $(dt_node_str_prop_equals,$(dt_nodelabel_path,lfclk),k32src, \
+	CLOCK_CONTROL_NRF_K32SRC_XTAL) if (!CLOCK_CONTROL_NRF_FORCE_ALT && !CLOCK_CONTROL_NRF)
+	default n
 
 config NRFX_CLOCK_LF_SRC_SYNTH
 	depends on !SOC_SERIES_NRF91
 	bool "Synthesized from HFCLK"
+	default $(dt_node_str_prop_equals,$(dt_nodelabel_path,lfclk),k32src, \
+	CLOCK_CONTROL_NRF_K32SRC_SYNTH) if (!CLOCK_CONTROL_NRF_FORCE_ALT && !CLOCK_CONTROL_NRF)
+	default n
 
 config NRFX_CLOCK_LF_SRC_LOW_SWING
 	depends on SOC_SERIES_NRF52
 	bool "External low swing"
+	default $(dt_node_str_prop_equals,$(dt_nodelabel_path,lfclk),k32src, \
+	CLOCK_CONTROL_NRF_K32SRC_EXT_LOW_SWING) if (!CLOCK_CONTROL_NRF_FORCE_ALT && \
+	!CLOCK_CONTROL_NRF)
+	default n
 
 config NRFX_CLOCK_LF_SRC_FULL_SWING
 	depends on SOC_SERIES_NRF52
 	bool "External full swing"
+	default $(dt_node_str_prop_equals,$(dt_nodelabel_path,lfclk),k32src, \
+	CLOCK_CONTROL_NRF_K32SRC_EXT_FULL_SWING) if (!CLOCK_CONTROL_NRF_FORCE_ALT && \
+	!CLOCK_CONTROL_NRF)
+	default n
+
+config NRFX_CLOCK_LFXO_TWO_STAGE_ENABLED
+	bool "Two stage start sequence of the low frequency clock"
+	default ((NRFX_CLOCK_LF_SRC_XTAL && !SOC_SERIES_BSIM_NRFXX) || \
+		NRFX_CLOCK_LF_SRC_LOW_SWING || NRFX_CLOCK_LF_SRC_FULL_SWING)
+	default n
 
 endif # NRFX_CLOCK
+
+config NRFX_CLOCK_HFCLK
+	bool "HFCLK driver"
+	depends on $(dt_nodelabel_exists,hfclk)
+
+config NRFX_CLOCK_HFCLK192M
+	bool "HFCLK192M driver"
+	depends on $(dt_nodelabel_exists,hfclk192m)
+
+config NRFX_CLOCK_HFCLKAUDIO
+	bool "HFCLKAUDIO driver"
+	depends on $(dt_nodelabel_exists,hfclkaudio)
+
+config NRFX_CLOCK_LFCLK
+	bool "LFCLK driver"
+	depends on $(dt_nodelabel_exists,lfclk)
+
+config NRFX_CLOCK_XO
+	bool "XO driver"
+	depends on $(dt_nodelabel_exists,xo)
+
+config NRFX_CLOCK_XO24M
+	bool "XO24M driver"
+	depends on $(dt_nodelabel_exists,xo24m)
 
 config NRFX_COMP
 	bool "COMP driver"
