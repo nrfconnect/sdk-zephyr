@@ -14,6 +14,7 @@
 		 * 96 kB are reserved for the FLPR MCU, so we have ~1940 kB available.
 		 */
 
+#ifdef WITH_FLPR_PARTITIONS
 		boot_partition: partition@0 {
 			label = "mcuboot";
 			reg = <0x0 DT_SIZE_K(64)>;
@@ -33,5 +34,26 @@
 			label = "storage";
 			reg = <0x1dc000 DT_SIZE_K(36)>;
 		};
+#else
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x0 DT_SIZE_K(64)>;
+		};
+
+		slot0_partition: partition@10000 {
+			label = "image-0";
+			reg = <0x10000 DT_SIZE_K(968)>;
+		};
+
+		slot1_partition: partition@102000 {
+			label = "image-1";
+			reg = <0x102000 DT_SIZE_K(968)>;
+		};
+
+		storage_partition: partition@1f4000 {
+			label = "storage";
+			reg = <0x1f4000 DT_SIZE_K(36)>;
+		};
+#endif
 	};
 };
