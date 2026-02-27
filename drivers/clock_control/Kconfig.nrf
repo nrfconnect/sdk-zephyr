@@ -16,6 +16,7 @@ menuconfig CLOCK_CONTROL_NRF
 	depends on DT_HAS_NORDIC_NRF_CLOCK_ENABLED
 	select NRFX_CLOCK if !CLOCK_CONTROL_NRF_FORCE_ALT
 	select NRFX_CLOCK_HFCLK if !CLOCK_CONTROL_NRF_FORCE_ALT && $(dt_nodelabel_exists,hfclk)
+	select NRFX_CLOCK_XO if !CLOCK_CONTROL_NRF_FORCE_ALT && $(dt_nodelabel_exists,xo)
 	select ONOFF
 	help
 	  Enable support for the Nordic Semiconductor nRFxx series SoC clock
@@ -216,6 +217,13 @@ config CLOCK_CONTROL_NRF_HFCLK
 	depends on DT_HAS_NORDIC_NRF_CLOCK_HFCLK_ENABLED
 	select CLOCK_CONTROL_NRF_COMMON
 	select NRFX_CLOCK_HFCLK if !CLOCK_CONTROL_NRF_FORCE_ALT
+	default y
+
+config CLOCK_CONTROL_NRF_XO
+	bool "NRF XO driver support"
+	depends on DT_HAS_NORDIC_NRF_CLOCK_XO_ENABLED
+	select CLOCK_CONTROL_NRF_COMMON
+	select NRFX_CLOCK_XO if !CLOCK_CONTROL_NRF_FORCE_ALT
 	default y
 
 endif # !CLOCK_CONTROL_NRF
