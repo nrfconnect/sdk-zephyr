@@ -21,7 +21,6 @@ tests:
       - ophelia4ev/nrf54l15/cpuapp
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_STABILITY=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL=y
     integration_platforms:
       - nrf51dk/nrf51822
 
@@ -40,7 +39,6 @@ tests:
       - ophelia4ev/nrf54l15/cpuapp
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_AVAILABILITY=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL=y
     integration_platforms:
       - nrf51dk/nrf51822
 
@@ -61,7 +59,6 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_NO_WAIT=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL=y
 
   drivers.clock.nrf5_lf_clock_start_rc_stable:
     platform_allow:
@@ -77,9 +74,8 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_STABILITY=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
     extra_args:
-      - EXTRA_DTC_OVERLAY_FILE="boards/nrf5_series.overlay"
+      - EXTRA_DTC_OVERLAY_FILE="boards/nrf5x_series.overlay"
 
   drivers.clock.nrf52_lf_clock_start_rc_stable:
     platform_allow:
@@ -89,7 +85,6 @@ tests:
       - nrf52dk/nrf52832
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_STABILITY=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
     extra_args:
       - EXTRA_DTC_OVERLAY_FILE="boards/nrf52_series.overlay"
 
@@ -107,9 +102,8 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_AVAILABILITY=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
     extra_args:
-      - EXTRA_DTC_OVERLAY_FILE="boards/nrf5_series.overlay"
+      - EXTRA_DTC_OVERLAY_FILE="boards/nrf5x_series.overlay"
 
   drivers.clock.nrf52_lf_clock_start_rc_available:
     platform_allow:
@@ -119,7 +113,6 @@ tests:
       - nrf52dk/nrf52832
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_AVAILABILITY=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
     extra_args:
       - EXTRA_DTC_OVERLAY_FILE="boards/nrf52_series.overlay"
 
@@ -137,9 +130,8 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_NO_WAIT=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
     extra_args:
-      - EXTRA_DTC_OVERLAY_FILE="boards/nrf5_series.overlay"
+      - EXTRA_DTC_OVERLAY_FILE="boards/nrf5x_series.overlay"
 
   drivers.clock.nrf52_lf_clock_start_rc_no_wait:
     platform_allow:
@@ -149,7 +141,6 @@ tests:
       - nrf52dk/nrf52832
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_NO_WAIT=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
     extra_args:
       - EXTRA_DTC_OVERLAY_FILE="boards/nrf52_series.overlay"
 
@@ -169,7 +160,8 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_STABILITY=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH=y
+    extra_args:
+      - EXTRA_DTC_OVERLAY_FILE="boards/nrf5x_series_synth.overlay"
 
   drivers.clock.nrf_lf_clock_start_synth_available:
     platform_allow:
@@ -187,7 +179,8 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_AVAILABILITY=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH=y
+    extra_args:
+      - EXTRA_DTC_OVERLAY_FILE="boards/nrf5x_series_synth.overlay"
 
   drivers.clock.nrf_lf_clock_start_synth_no_wait:
     platform_allow:
@@ -205,4 +198,5 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_SYSTEM_CLOCK_NO_WAIT=y
-      - CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH=y
+    extra_args:
+      - EXTRA_DTC_OVERLAY_FILE="boards/nrf5x_series_synth.overlay"
