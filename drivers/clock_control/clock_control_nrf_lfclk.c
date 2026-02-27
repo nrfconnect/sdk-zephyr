@@ -82,7 +82,7 @@ static void lfclk_start(void)
 
 static void lfclk_stop(void)
 {
-	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_DRIVER_CALIBRATION)) {
+	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_DRIVER_CALIBRATION)) {
 		z_nrf_clock_calibration_lfclk_stopped();
 	}
 
@@ -180,14 +180,14 @@ static void clock_event_handler(nrfx_clock_lfclk_evt_type_t event)
 {
 	switch (event) {
 	case NRFX_CLOCK_LFCLK_EVT_LFCLK_STARTED:
-		if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_DRIVER_CALIBRATION)) {
+		if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_DRIVER_CALIBRATION)) {
 			z_nrf_clock_calibration_lfclk_started();
 		}
 		common_clkstarted_handle(CLOCK_DEVICE_LFCLK);
 		break;
 #if NRF_CLOCK_HAS_CALIBRATION || NRF_LFRC_HAS_CALIBRATION
 	case NRFX_CLOCK_LFCLK_EVT_CAL_DONE:
-		if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_DRIVER_CALIBRATION)) {
+		if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_DRIVER_CALIBRATION)) {
 			z_nrf_clock_calibration_done_handler();
 		} else {
 			/* Should not happen when calibration is disabled. */
@@ -340,7 +340,7 @@ static int clk_init(const struct device *dev)
 		return -EIO;
 	}
 
-	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRF_DRIVER_CALIBRATION)) {
+	if (IS_ENABLED(CONFIG_CLOCK_CONTROL_NRFX_DRIVER_CALIBRATION)) {
 		z_nrf_clock_calibration_init();
 	}
 
