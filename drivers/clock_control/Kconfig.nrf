@@ -12,9 +12,10 @@ config CLOCK_CONTROL_NRF_FORCE_ALT
 
 menuconfig CLOCK_CONTROL_NRF
 	bool "NRF Clock controller support"
-	default y
+	default n
 	depends on DT_HAS_NORDIC_NRF_CLOCK_ENABLED
 	select NRFX_CLOCK if !CLOCK_CONTROL_NRF_FORCE_ALT
+	select NRFX_CLOCK_HFCLK if !CLOCK_CONTROL_NRF_FORCE_ALT && $(dt_nodelabel_exists,hfclk)
 	select ONOFF
 	help
 	  Enable support for the Nordic Semiconductor nRFxx series SoC clock
@@ -204,6 +205,20 @@ config CLOCK_CONTROL_NRF_ACCURACY
 	default 20 if CLOCK_CONTROL_NRF_K32SRC_20PPM
 
 endif # CLOCK_CONTROL_NRF
+
+if !CLOCK_CONTROL_NRF
+
+config CLOCK_CONTROL_NRF_COMMON
+	bool
+
+config CLOCK_CONTROL_NRF_HFCLK
+	bool "NRF HFCLK driver support"
+	depends on DT_HAS_NORDIC_NRF_CLOCK_HFCLK_ENABLED
+	select CLOCK_CONTROL_NRF_COMMON
+	select NRFX_CLOCK_HFCLK if !CLOCK_CONTROL_NRF_FORCE_ALT
+	default y
+
+endif # !CLOCK_CONTROL_NRF
 
 config CLOCK_CONTROL_NRF2_COMMON
 	bool
