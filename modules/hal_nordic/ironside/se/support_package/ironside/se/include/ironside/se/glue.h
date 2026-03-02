@@ -6,6 +6,10 @@
 #ifndef IRONSIDE_SE_GLUE_H_
 #define IRONSIDE_SE_GLUE_H_
 
+#ifdef IRONSIDE_SE_GLUE_EXT_FILE_PATH
+#include IRONSIDE_SE_GLUE_EXT_FILE_PATH
+#endif
+
 #include <stddef.h>
 
 #include <ironside/se/call.h>
@@ -15,6 +19,32 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#ifndef IRONSIDE_SE_ALWAYS_INLINE
+/* The default supports GCC / Clang */
+#define IRONSIDE_SE_ALWAYS_INLINE __attribute__((always_inline)) inline
+#endif
+
+/**
+ * @name Macros to set function attributes on IronSide SE API.
+ * @{
+ */
+
+#ifndef IRONSIDE_SE_MPCCONF_WRITE_FUNC_ATTR
+/** Function attributes to set for @ref ironside_se_mpcconf_write */
+#define IRONSIDE_SE_MPCCONF_WRITE_FUNC_ATTR
+#endif
+
+#ifndef IRONSIDE_SE_MPCCONF_FINISH_INIT_FUNC_ATTR
+/** Function attributes to set for @ref ironside_se_mpcconf_finish_init */
+#define IRONSIDE_SE_MPCCONF_FINISH_INIT_FUNC_ATTR
+#endif
+
+/**
+ * @}
+ */
+
+#if !defined(IRONSIDE_SE_CALL_MINIMAL)
 
 /**
  * @brief Allocate memory for an IronSide SE call.
@@ -45,6 +75,8 @@ void ironside_se_call_dispatch(struct ironside_se_call_buf *buf);
  * @param buf Buffer used to perform the call.
  */
 void ironside_se_call_release(struct ironside_se_call_buf *buf);
+
+#endif /* IRONSIDE_SE_CALL_MINIMAL */
 
 /** Data cache data unit size used for alignment requirements. */
 #define IRONSIDE_SE_CACHE_DATA_UNIT_SIZE (DCACHEDATA_DATAWIDTH * 4)
@@ -105,4 +137,4 @@ void ironside_se_data_cache_writeback_invalidate(void *addr, size_t size);
 #ifdef __cplusplus
 }
 #endif
-#endif /* NRF_IRONSIDE_SE_GLUE_H_ */
+#endif /* IRONSIDE_SE_GLUE_H_ */

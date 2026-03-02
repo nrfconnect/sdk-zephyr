@@ -16,6 +16,7 @@
 
 #include <ironside/se/boot_report.h>
 #include <ironside/se/periphconf.h>
+#include <ironside/se/mpcconf.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -619,7 +620,7 @@ struct ironside_se_periphconf_status {
  * The result status consists of an error code and an array index.
  * If the error code is set to -IRONSIDE_SE_PERIPHCONF_ERROR_REGISTER_NOT_PERMITTED,
  * the index points to the array index that caused the error.
- * If the index > 0 in this situtaion, entries up to but not including the reported index
+ * If the index > 0 in this situation, entries up to but not including the reported index
  * contain valid data.
  * For other error codes, the index is always set to 0.
  *
@@ -691,6 +692,109 @@ ironside_se_periphconf_write(const struct periphconf_entry *entries, size_t coun
  * @returns Positive error status if reported by IronSide call (see error codes in @ref call.h).
  */
 int ironside_se_periphconf_finish_init(void);
+
+/**
+ * @name MPCCONF configuration service error codes.
+ * @{
+ */
+
+/** Read/Write: Attempted to read/write an MPC register address that is not permitted. */
+#define IRONSIDE_SE_MPCCONF_ERROR_REGISTER_NOT_PERMITTED  (1)
+/** Write: Attempted to configure a memory address range that is not permitted. */
+#define IRONSIDE_SE_MPCCONF_ERROR_ADDRESSES_NOT_PERMITTED (2)
+/** Write: Mismatch between the value written to and read back from the register. */
+#define IRONSIDE_SE_MPCCONF_ERROR_READBACK_MISMATCH       (3)
+/** Read/Write: Buffer points to disallowed memory area. */
+#define IRONSIDE_SE_MPCCONF_ERROR_MEMORY_NOT_PERMITTED    (4)
+/** Read: Buffer pointer/size is not aligned to the cache data unit width. */
+#define IRONSIDE_SE_MPCCONF_ERROR_POINTER_UNALIGNED       (5)
+
+/**
+ * @}
+ */
+
+/** Result from an MPCCONF API call. */
+struct ironside_se_mpcconf_status {
+	/** Positive error status if reported by IronSide call,
+	 *  Negative IRONSIDE_SE_MPCCONF_ERROR_* if the MPCCONF API returned an error.
+	 *  Zero if successful.
+	 */
+	int16_t status;
+	/** Index of the MPCCONF entry that caused an error.
+	 *  Only valid if status is a negative error number.
+	 */
+	uint16_t index;
+};
+
+/**
+ * @brief Read register values from the MPC instances managed through MPCCONF.
+ *
+ * For each element in the entries list, the register pointer field must be initialized to
+ * specify which set of MPC registers to read. The API call will then overwrite the entry's
+ * other fields in place, based on the values read from the register set.
+ *
+ * The result status consists of an error code and an array index.
+ * If the error code is set to -IRONSIDE_SE_MPCCONF_ERROR_REGISTER_NOT_PERMITTED,
+ * the index points to the array index that caused the error.
+ * If the index > 0 in this situation, entries up to but not including the reported index
+ * contain valid data.
+ * For other error codes, the index is always set to 0.
+ *
+ * @note The API currently does not support bounce buffer allocations for the output buffer, because
+ * the alignment requirements of the entry structure should ensure that it is never needed.
+ *
+ * @param entries Pointer to a list of MPC configuration entries.
+ * @param count Number of entries to read.
+ * @returns A status structure with error details (see @ref struct ironside_se_mpcconf_status)
+ */
+struct ironside_se_mpcconf_status ironside_se_mpcconf_read(struct mpcconf_entry *entries,
+							   size_t count);
+
+/**
+ * @brief Write register values to the MPC instances managed through MPCCONF.
+ *
+ * The entries argument is used to specify the MPC configuration entries to apply.
+ * Note that unlike the UICR MPCCONF interface, the entry count must be exact,
+ * the processing does not terminate on an all-ones register pointer.
+ *
+ * The result status consists of an error code and an array index.
+ * If the error code is set to one of
+ * -IRONSIDE_SE_MPCCONF_ERROR_REGISTER_NOT_PERMITTED,
+ * -IRONSIDE_SE_MPCCONF_ERROR_ADDRESSES_NOT_PERMITTED or
+ * -IRONSIDE_SE_MPCCONF_ERROR_READBACK_MISMATCH,
+ * the index points to the array index that caused the error.
+ * If the index > 0 in this situation, entries up to but not including the reported index
+ * were written successfully.
+ * For other error codes, the index is always set to 0.
+ *
+ * @param entries Pointer to entries to write.
+ * @param count Number of entries to write.
+ * @returns A status structure with error details (see @ref struct ironside_se_mpcconf_status).
+ */
+struct ironside_se_mpcconf_status ironside_se_mpcconf_write(const struct mpcconf_entry *entries,
+							    size_t count);
+
+/**
+ * @brief Finish MPC initialization, restricting @ref ironside_se_mpcconf_write.
+ *
+ * Calling this API also locks all MPC registers in hardware, preventing the memory configuration
+ * from being modified in any way until the next reset.
+ *
+ * At system start the write interface is configured for initialization.
+ * In the initialization stage it is possible to modify the same set of registers as in the blob
+ * pointed to by the MPCCONF field in UICR.
+ *
+ * Once initialization is complete, this API should be called to enter the normal operation stage.
+ * The read API is not affected by finishing the initialization.
+ *
+ * Calling this API multiple times is allowed.
+ *
+ * @note A system reset is required to re-enter the initialization stage.
+ *
+ * @retval 0 on success.
+ * @returns Positive error status if reported by IronSide call (see error codes in @ref call.h).
+ */
+int ironside_se_mpcconf_finish_init(void);
 
 #ifdef __cplusplus
 }

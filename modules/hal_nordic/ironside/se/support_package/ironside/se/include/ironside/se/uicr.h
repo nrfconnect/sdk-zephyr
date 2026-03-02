@@ -24,8 +24,10 @@ extern "C" {
 #define UICR_VERSION_2_0 0x00020000UL
 /* UICR version 2.1 */
 #define UICR_VERSION_2_1 0x00020001UL
+/* UICR version 2.2 */
+#define UICR_VERSION_2_2 0x00020002UL
 /* Maximum UICR version supported by this header. */
-#define UICR_VERSION_MAX UICR_VERSION_2_1
+#define UICR_VERSION_MAX UICR_VERSION_2_2
 
 /* Common enum values */
 /* Default erased value for all UICR fields */
@@ -231,6 +233,12 @@ struct UICR_SECONDARY {
 /* Erase protection enabled */
 #define UICR_ERASEPROTECT_PALL_PROTECTED   UICR_PROTECTED
 
+/* POLICY_MPCCONFSTAGE enum values */
+/* MPCCONF API stage is set to initialization stage at application boot. */
+#define UICR_POLICY_MPCCONFSTAGE_INIT   UICR_ENUM_CHOICE_0
+/* MPCCONF API stage is set to normal stage at application boot. */
+#define UICR_POLICY_MPCCONFSTAGE_NORMAL UICR_ENUM_CHOICE_1
+
 /* POLICY_PERIPHCONFSTAGE enum values */
 /* PERIPHCONF API stage is set to initialization stage at application boot. */
 #define UICR_POLICY_PERIPHCONFSTAGE_INIT   UICR_ENUM_CHOICE_0
@@ -268,7 +276,9 @@ struct UICR {
 	volatile struct UICR_MPCCONF MPCCONF;
 	/* Secondary firmware configuration */
 	volatile struct UICR_SECONDARY SECONDARY;
-	volatile const uint32_t RESERVED4[78];
+	volatile const uint32_t RESERVED4[77];
+	/* MPCCONF API stage at application boot. */
+	volatile uint32_t POLICY_MPCCONFSTAGE;
 	/* PERIPHCONF API stage at application boot. */
 	volatile uint32_t POLICY_PERIPHCONFSTAGE;
 #if !defined(UICR_DEF_OMIT_CUSTOMER)

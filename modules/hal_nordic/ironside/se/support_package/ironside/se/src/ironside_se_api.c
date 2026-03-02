@@ -11,6 +11,10 @@
 #include <ironside/se/internal/api_serialization.h>
 #include <ironside/se/internal/bounce_buffer.h>
 
+#if defined(IRONSIDE_SE_CALL_MINIMAL)
+#include <ironside/se/internal/call_minimal.h>
+#endif
+
 int ironside_se_update(const struct ironside_se_update_blob *update)
 {
 	int status;
@@ -319,15 +323,12 @@ struct ironside_se_periphconf_status ironside_se_periphconf_read(struct periphco
 
 	status.status = buf->status;
 	if (status.status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
-		const uint32_t detail =
-			buf->args[IRONSIDE_SE_PERIPHCONF_INLINE_READ_RSP_IDX_DETAIL];
+		const uint32_t detail = buf->args[IRONSIDE_SE_PERIPHCONF_COMMON_RSP_IDX_DETAIL];
 
-		status.status =
-			(detail & IRONSIDE_SE_PERIPHCONF_INLINE_READ_RSP_DETAIL_STATUS_MASK) >>
-			IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_STATUS_OFFSET;
-		status.index =
-			(detail & IRONSIDE_SE_PERIPHCONF_INLINE_READ_RSP_DETAIL_INDEX_MASK) >>
-			IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_INDEX_OFFSET;
+		status.status = (detail & IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_STATUS_MASK) >>
+				IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_STATUS_OFFSET;
+		status.index = (detail & IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_INDEX_MASK) >>
+			       IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_INDEX_OFFSET;
 
 		if (is_inline) {
 			for (size_t i = 0; i < count; i++) {
@@ -375,15 +376,12 @@ ironside_se_periphconf_write(const struct periphconf_entry *entries, size_t coun
 
 	status.status = buf->status;
 	if (status.status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
-		const uint32_t detail =
-			buf->args[IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_RSP_IDX_DETAIL];
+		const uint32_t detail = buf->args[IRONSIDE_SE_PERIPHCONF_COMMON_RSP_IDX_DETAIL];
 
-		status.status =
-			(detail & IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_RSP_DETAIL_STATUS_MASK) >>
-			IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_RSP_DETAIL_STATUS_OFFSET;
-		status.index =
-			(detail & IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_RSP_DETAIL_INDEX_MASK) >>
-			IRONSIDE_SE_PERIPHCONF_INLINE_WRITE_RSP_DETAIL_INDEX_OFFSET;
+		status.status = (detail & IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_STATUS_MASK) >>
+				IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_STATUS_OFFSET;
+		status.index = (detail & IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_INDEX_MASK) >>
+			       IRONSIDE_SE_PERIPHCONF_COMMON_RSP_DETAIL_INDEX_OFFSET;
 	}
 
 	ironside_se_call_release(buf);
@@ -404,6 +402,93 @@ int ironside_se_periphconf_finish_init(void)
 	status = buf->status;
 	if (status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
 		status = buf->args[IRONSIDE_SE_PERIPHCONF_FINISH_INIT_RSP_IDX_RETCODE];
+	}
+
+	ironside_se_call_release(buf);
+
+	return status;
+}
+
+struct ironside_se_mpcconf_status ironside_se_mpcconf_read(struct mpcconf_entry *entries,
+							   size_t count)
+{
+	struct ironside_se_mpcconf_status status = { 0 };
+
+	if (ironside_se_bounce_buffer_is_needed(entries, sizeof(struct mpcconf_entry) * count)) {
+		status.status = -IRONSIDE_SE_MPCCONF_ERROR_POINTER_UNALIGNED;
+		return status;
+	}
+
+	struct ironside_se_call_buf *buf = ironside_se_call_alloc();
+
+	buf->id = IRONSIDE_SE_CALL_ID_MPCCONF_BUFFER_READ_V1;
+	buf->args[IRONSIDE_SE_MPCCONF_BUFFER_READ_REQ_IDX_ADDRESS] = (uint32_t)entries;
+	buf->args[IRONSIDE_SE_MPCCONF_BUFFER_READ_REQ_IDX_COUNT] = count;
+
+	ironside_se_data_cache_writeback(entries, sizeof(struct mpcconf_entry) * count);
+
+	ironside_se_call_dispatch(buf);
+
+	ironside_se_data_cache_writeback_invalidate(entries, sizeof(struct mpcconf_entry) * count);
+
+	status.status = buf->status;
+	if (status.status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
+		const uint32_t detail = buf->args[IRONSIDE_SE_MPCCONF_COMMON_RSP_IDX_DETAIL];
+
+		status.status = (detail & IRONSIDE_SE_MPCCONF_COMMON_RSP_DETAIL_STATUS_MASK) >>
+				IRONSIDE_SE_MPCCONF_COMMON_RSP_DETAIL_STATUS_OFFSET;
+		status.index = (detail & IRONSIDE_SE_MPCCONF_COMMON_RSP_DETAIL_INDEX_MASK) >>
+			       IRONSIDE_SE_MPCCONF_COMMON_RSP_DETAIL_INDEX_OFFSET;
+	}
+
+	ironside_se_call_release(buf);
+
+	return status;
+}
+
+IRONSIDE_SE_MPCCONF_WRITE_FUNC_ATTR struct ironside_se_mpcconf_status
+ironside_se_mpcconf_write(const struct mpcconf_entry *entries, size_t count)
+{
+	struct ironside_se_mpcconf_status status = { 0 };
+
+	struct ironside_se_call_buf *buf = ironside_se_call_alloc();
+
+	buf->id = IRONSIDE_SE_CALL_ID_MPCCONF_BUFFER_WRITE_V1;
+	buf->args[IRONSIDE_SE_MPCCONF_BUFFER_WRITE_REQ_IDX_ADDRESS] = (uint32_t)entries;
+	buf->args[IRONSIDE_SE_MPCCONF_BUFFER_WRITE_REQ_IDX_COUNT] = count;
+
+	ironside_se_data_cache_writeback((void *)entries, sizeof(struct mpcconf_entry) * count);
+
+	ironside_se_call_dispatch(buf);
+
+	status.status = buf->status;
+	if (status.status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
+		const uint32_t detail = buf->args[IRONSIDE_SE_MPCCONF_COMMON_RSP_IDX_DETAIL];
+
+		status.status = (detail & IRONSIDE_SE_MPCCONF_COMMON_RSP_DETAIL_STATUS_MASK) >>
+				IRONSIDE_SE_MPCCONF_COMMON_RSP_DETAIL_STATUS_OFFSET;
+		status.index = (detail & IRONSIDE_SE_MPCCONF_COMMON_RSP_DETAIL_INDEX_MASK) >>
+			       IRONSIDE_SE_MPCCONF_COMMON_RSP_DETAIL_INDEX_OFFSET;
+	}
+
+	ironside_se_call_release(buf);
+
+	return status;
+}
+
+int IRONSIDE_SE_MPCCONF_FINISH_INIT_FUNC_ATTR ironside_se_mpcconf_finish_init(void)
+{
+	int status;
+
+	struct ironside_se_call_buf *const buf = ironside_se_call_alloc();
+
+	buf->id = IRONSIDE_SE_CALL_ID_MPCCONF_FINISH_INIT_V1;
+
+	ironside_se_call_dispatch(buf);
+
+	status = buf->status;
+	if (status == IRONSIDE_SE_CALL_STATUS_RSP_SUCCESS) {
+		status = buf->args[IRONSIDE_SE_MPCCONF_FINISH_INIT_RSP_IDX_RETCODE];
 	}
 
 	ironside_se_call_release(buf);

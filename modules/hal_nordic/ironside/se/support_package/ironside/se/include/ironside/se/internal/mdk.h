@@ -175,6 +175,10 @@ typedef struct {
 #define MRAMC110_NMRAMWORDSIZE 128
 #endif
 
+#ifndef NRF_MPC110
+#define NRF_MPC110 ((NRF_MPC_Type *)0x5F081000UL)
+#endif
+
 #endif /* NRF_HALTIUM_XXAA */
 
 #ifdef __cplusplus

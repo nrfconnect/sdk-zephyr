@@ -7,9 +7,18 @@
 #define IRONSIDE_SE_CALL_H_
 
 #include <stdint.h>
+#include <ironside/se/memory_map.h>
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#if defined(IRONSIDE_SE_IPC_BUFFER_ADDRESS)
+/** IPC buffer for the current processor. */
+#define IRONSIDE_SE_IPC_BUFFER ((struct ironside_se_call_buf *)IRONSIDE_SE_IPC_BUFFER_ADDRESS)
+/** Number of slots in the IPC buffer. */
+#define IRONSIDE_SE_IPC_BUFFER_NUM_SLOTS                                                           \
+	(IRONSIDE_SE_IPC_BUFFER_SIZE / sizeof(struct ironside_se_call_buf))
 #endif
 
 /** @brief Maximum number of arguments to an IronSide SE call.
