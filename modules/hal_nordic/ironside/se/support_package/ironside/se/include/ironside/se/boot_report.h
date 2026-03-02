@@ -72,6 +72,15 @@ extern "C" {
 /** The readback of the value for a UICR.PERIPHCONF array entry did not match. */
 #define IRONSIDE_SE_UICR_PERIPHCONF_ERROR_READBACK_MISMATCH 3
 
+/** There was an unexpected error processing UICR.MPCCONF. */
+#define IRONSIDE_SE_UICR_MPCCONF_ERROR_UNEXPECTED              1
+/** The register pointer contained in a UICR.MPCCONF array entry is not permitted. */
+#define IRONSIDE_SE_UICR_MPCCONF_ERROR_REGISTER_NOT_PERMITTED  2
+/** The memory addresses contained in a UICR.MPCCONF array entry are not permitted. */
+#define IRONSIDE_SE_UICR_MPCCONF_ERROR_ADDRESSES_NOT_PERMITTED 3
+/** The readback of the value for a UICR.MPCCONF array entry did not match. */
+#define IRONSIDE_SE_UICR_MPCCONF_ERROR_READBACK_MISMATCH       4
+
 /** Booted in secondary mode. */
 #define IRONSIDE_SE_BOOT_MODE_FLAGS_SECONDARY_MASK 0x1
 
@@ -146,6 +155,13 @@ struct ironside_se_boot_report_init_status {
 			/** Index of the failing entry in the UICR.PERIPHCONF array. */
 			uint16_t index;
 		} periphconf;
+		/** UICR.MPCCONF error description. */
+		struct {
+			/** Reason that UICR.MPCCONF configuration failed. */
+			uint16_t status;
+			/** Index of the failing entry in the UICR.MPCCONF array. */
+			uint16_t index;
+		} mpcconf;
 	} uicr_detail;
 };
 

@@ -25,6 +25,7 @@ except ImportError:
 # UICR format versions supported by this script
 UICR_VERSION_2_0 = 0x0002_0000
 UICR_VERSION_2_1 = 0x0002_0001
+UICR_VERSION_2_2 = 0x0002_0002
 
 # Common values for representing enabled/disabled in the UICR format.
 ENABLED_VALUE = 0xFFFF_FFFF
@@ -34,6 +35,9 @@ UNPROTECTED_VALUE = DISABLED_VALUE  # Unprotected uses the default erased value
 
 # Value used to select POLICY_PERIPHCONFSTAGE=NORMAL
 UICR_POLICY_PERIPHCONFSTAGE_NORMAL = 0x1730_C77F
+
+# Value used to select POLICY_MPCCONFSTAGE=NORMAL
+UICR_POLICY_MPCCONFSTAGE_NORMAL = 0x1730_C77F
 
 KB_4 = 4096
 
@@ -206,7 +210,8 @@ class Uicr(c.LittleEndianStructure):
         ("PERIPHCONF", Periphconf),
         ("MPCCONF", Mpcconf),
         ("SECONDARY", Secondary),
-        ("RESERVED4", c.c_uint32 * 78),
+        ("RESERVED4", c.c_uint32 * 77),
+        ("POLICY_MPCCONFSTAGE", c.c_uint32),
         ("POLICY_PERIPHCONFSTAGE", c.c_uint32),
         ("CUSTOMER", c.c_uint32 * 320),
         ("RESERVED5", c.c_uint32 * 44),
@@ -375,6 +380,11 @@ def add_parser(subparsers: SubParsers) -> argparse.ArgumentParser:
         help="Path to write the PERIPHCONF-only HEX file to",
     )
     parser.add_argument(
+        "--periphconf",
+        action="store_true",
+        help="Enable PERIPHCONF support in UICR",
+    )
+    parser.add_argument(
         "--periphconf-address",
         default=None,
         type=lambda s: int(s, 0),
@@ -501,6 +511,44 @@ def add_parser(subparsers: SubParsers) -> argparse.ArgumentParser:
         help="Protected memory size in bytes (must be divisible by 4096)",
     )
     parser.add_argument(
+        "--in-mpcconf-elf",
+        dest="in_mpcconf_elfs",
+        default=[],
+        action="append",
+        type=argparse.FileType("rb"),
+        help="Path to an ELF file to extract MPCCONF data from.",
+    )
+    parser.add_argument(
+        "--mpcconf-section-name",
+        default=None,
+        help=(
+            "Name of the ELF section containing MPCCONF entries. "
+            "Must match the name used in the linker script."
+        ),
+    )
+    parser.add_argument(
+        "--mpcconf",
+        action="store_true",
+        help="Enable MPCCONF support in UICR",
+    )
+    parser.add_argument(
+        "--out-mpcconf-hex",
+        type=argparse.FileType("w", encoding="utf-8"),
+        help="Path to write the MPCCONF-only HEX file to",
+    )
+    parser.add_argument(
+        "--mpcconf-address",
+        default=None,
+        type=lambda s: int(s, 0),
+        help="Absolute flash address of the MPCCONF partition (decimal or 0x-prefixed hex)",
+    )
+    parser.add_argument(
+        "--mpcconf-size",
+        default=None,
+        type=lambda s: int(s, 0),
+        help="Size in bytes of the MPCCONF partition (decimal or 0x-prefixed hex)",
+    )
+    parser.add_argument(
         "--wdtstart",
         action="store_true",
         help="Enable watchdog timer start in UICR",
@@ -568,6 +616,11 @@ def add_parser(subparsers: SubParsers) -> argparse.ArgumentParser:
         help="Size in bytes of the secondary protected memory region (decimal or 0x-prefixed hex)",
     )
     parser.add_argument(
+        "--secondary-periphconf",
+        action="store_true",
+        help="Enable PERIPHCONF support in UICR.SECONDARY",
+    )
+    parser.add_argument(
         "--secondary-periphconf-address",
         default=None,
         type=lambda s: int(s, 0),
@@ -601,6 +654,38 @@ def add_parser(subparsers: SubParsers) -> argparse.ArgumentParser:
         help="Path to write the secondary PERIPHCONF-only HEX file to",
     )
     parser.add_argument(
+        "--secondary-mpcconf",
+        action="store_true",
+        help="Enable MPCCONF support in UICR.SECONDARY",
+    )
+    parser.add_argument(
+        "--in-secondary-mpcconf-elf",
+        dest="in_secondary_mpcconf_elfs",
+        default=[],
+        action="append",
+        type=argparse.FileType("rb"),
+        help="Path to an ELF file to extract secondary MPCCONF data from.",
+    )
+    parser.add_argument(
+        "--out-secondary-mpcconf-hex",
+        type=argparse.FileType("w", encoding="utf-8"),
+        help="Path to write the secondary MPCCONF-only HEX file to",
+    )
+    parser.add_argument(
+        "--secondary-mpcconf-address",
+        default=None,
+        type=lambda s: int(s, 0),
+        help=(
+            "Absolute flash address of the secondary MPCCONF partition (decimal or 0x-prefixed hex)"
+        ),
+    )
+    parser.add_argument(
+        "--secondary-mpcconf-size",
+        default=None,
+        type=lambda s: int(s, 0),
+        help="Size in bytes of the secondary MPCCONF partition (decimal or 0x-prefixed hex)",
+    )
+    parser.add_argument(
         "--policy-periphconf-stage",
         default=None,
         type=lambda s: int(s, 0),
@@ -608,6 +693,16 @@ def add_parser(subparsers: SubParsers) -> argparse.ArgumentParser:
             "Set the stage of the PERIPHCONF API when IronSide SE starts the Application core: "
             "0xBD2328A8 for Initialization, 0x1730C77F for Normal Operation. "
             "Setting this to Initialization updates the UICR minimum version to 2.1"
+        ),
+    )
+    parser.add_argument(
+        "--policy-mpcconf-stage",
+        default=None,
+        type=lambda s: int(s, 0),
+        help=(
+            "Set the stage of the MPCCONF API when IronSide SE starts the Application core: "
+            "0xBD2328A8 for Initialization, 0x1730C77F for Normal Operation. "
+            "Setting this to Initialization updates the UICR minimum version to 2.2"
         ),
     )
 
@@ -619,7 +714,10 @@ def get_min_uicr_version(args: argparse.Namespace) -> int:
 
     min_version = UICR_VERSION_2_0
 
-    # We have some special handling here because:
+    if args.mpcconf or args.secondary_mpcconf:
+        min_version = max(min_version, UICR_VERSION_2_2)
+
+    # We have some special handling for POLICY_PERIPHCONFSTAGE because:
     # * If UICR version == 2.0, the default/only choice is NORMAL
     # * If UICR version >= 2.1, the default in the erased UICR is INIT.
     #
@@ -636,6 +734,15 @@ def get_min_uicr_version(args: argparse.Namespace) -> int:
     if args.policy_periphconf_stage not in (None, UICR_POLICY_PERIPHCONFSTAGE_NORMAL):
         min_version = max(min_version, UICR_VERSION_2_1)
 
+    # POLICY_MPCCONFSTAGE works in much the same way, except:
+    # * If UICR version <= 2.1, the default/only choice is NORMAL
+    # * If UICR version >= 2.2, the default in the erased UICR is INIT.
+    #
+    # If stage is set to INIT, we select min_version >= 2.2.
+    #
+    if args.policy_mpcconf_stage not in (None, UICR_POLICY_MPCCONFSTAGE_NORMAL):
+        min_version = max(min_version, UICR_VERSION_2_2)
+
     return min_version
 
 
@@ -650,28 +757,62 @@ def cmd_handler(args: argparse.Namespace) -> None:
                 "--in-periphconf-elf/--in-secondary-periphconf-elf is used"
             )
 
-        if args.out_periphconf_hex:
+        if args.out_periphconf_hex and not args.periphconf:
+            raise ScriptError("--periphconf is required when --out-periphconf-hex is used")
+
+        if args.periphconf:
             if args.periphconf_address is None:
-                raise ScriptError(
-                    "--periphconf-address is required when --out-periphconf-hex is used"
-                )
+                raise ScriptError("--periphconf-address is required when --periphconf is used")
             if args.periphconf_size is None:
-                raise ScriptError("--periphconf-size is required when --out-periphconf-hex is used")
+                raise ScriptError("--periphconf-size is required when --periphconf is used")
+
+        if args.mpcconf:
+            if args.mpcconf_address is None:
+                raise ScriptError("--mpcconf-address is required when --mpcconf is used")
+            if args.mpcconf_size is None:
+                raise ScriptError("--mpcconf-size is required when --mpcconf is used")
+
+        if (
+            args.in_mpcconf_elfs or args.in_secondary_mpcconf_elfs
+        ) and args.mpcconf_section_name is None:
+            raise ScriptError(
+                "--mpcconf-section-name is required when "
+                "--in-mpcconf-elf/--in-secondary-mpcconf-elf is used"
+            )
+
+        if len(args.in_mpcconf_elfs) > 1:
+            raise ScriptError("currently only one --in-mpcconf-elf argument is supported")
+
+        if len(args.in_secondary_mpcconf_elfs) > 1:
+            raise ScriptError("currently only one --in-secondary-mpcconf-elf argument is supported")
 
         # Validate secondary argument dependencies
         if args.secondary and args.secondary_address is None:
             raise ScriptError("--secondary-address is required when --secondary is used")
 
-        if args.out_secondary_periphconf_hex:
+        if args.out_secondary_periphconf_hex and not args.secondary_periphconf:
+            raise ScriptError(
+                "--secondary-periphconf is required when --out-secondary-periphconf-hex is used"
+            )
+
+        if args.secondary_periphconf:
             if args.secondary_periphconf_address is None:
                 raise ScriptError(
-                    "--secondary-periphconf-address is required when "
-                    "--out-secondary-periphconf-hex is used"
+                    "--secondary-periphconf-address is required when --secondary-periphconf is used"
                 )
             if args.secondary_periphconf_size is None:
                 raise ScriptError(
-                    "--secondary-periphconf-size is required when "
-                    "--out-secondary-periphconf-hex is used"
+                    "--secondary-periphconf-size is required when --secondary-periphconf is used"
+                )
+
+        if args.secondary_mpcconf:
+            if args.secondary_mpcconf_address is None:
+                raise ScriptError(
+                    "--secondary-mpcconf-address is required when --secondary-mpcconf is used"
+                )
+            if args.secondary_mpcconf_size is None:
+                raise ScriptError(
+                    "--secondary-mpcconf-size is required when --secondary-mpcconf is used"
                 )
 
         # Validate secure storage argument dependencies
@@ -746,24 +887,36 @@ def cmd_handler(args: argparse.Namespace) -> None:
             uicr.WDTSTART.CRV = args.wdtstart_crv
             uicr.WDTSTART.INSTANCE = args.wdtstart_instance_code
 
-        # Process periphconf data first and configure UICR completely before creating hex objects
         periphconf_hex = IntelHex()
         secondary_periphconf_hex = IntelHex()
+        mpcconf_hex = IntelHex()
+        secondary_mpcconf_hex = IntelHex()
 
-        if args.out_periphconf_hex:
-            periphconf_combined = extract_and_combine_periphconfs(
-                args.in_periphconf_elfs,
-                args.periphconf_section_name,
-                args.periphconf_ipcmap_reallocate,
-            )
+        # Handle MPCCONF configuration
+        if args.mpcconf:
+            uicr.MPCCONF.ENABLE = ENABLED_VALUE
+            uicr.MPCCONF.ADDRESS = args.mpcconf_address
 
-            padding_len = args.periphconf_size - len(periphconf_combined)
-            periphconf_final = periphconf_combined + bytes([0xFF for _ in range(padding_len)])
+            # MAXCOUNT is given in number of 16-byte MPC
+            # configuration entries and mpcconf_size is given in
+            # bytes. When setting MAXCOUNT based on the
+            # mpcconf_size we must first assert that
+            # mpcconf_size has not been misconfigured.
+            if args.mpcconf_size % 16 != 0:
+                raise ScriptError(
+                    f"args.mpcconf_size was {args.mpcconf_size}, but must be divisible by 16"
+                )
 
-            # Add periphconf data to periphconf hex object
-            periphconf_hex.frombytes(periphconf_final, offset=args.periphconf_address)
+            uicr.MPCCONF.MAXCOUNT = args.mpcconf_size // 16
 
-            # Configure UICR with periphconf settings
+        if args.out_mpcconf_hex:
+            mpcconf = extract_mpcconf(args.in_mpcconf_elfs, args.mpcconf_section_name)
+            padding_len = args.mpcconf_size - len(mpcconf)
+            mpcconf_final = mpcconf + bytes([0xFF for _ in range(padding_len)])
+            mpcconf_hex.frombytes(mpcconf_final, offset=args.mpcconf_address)
+
+        # Handle PERIPHCONF configuration
+        if args.periphconf:
             uicr.PERIPHCONF.ENABLE = ENABLED_VALUE
             uicr.PERIPHCONF.ADDRESS = args.periphconf_address
 
@@ -778,6 +931,19 @@ def cmd_handler(args: argparse.Namespace) -> None:
                 )
 
             uicr.PERIPHCONF.MAXCOUNT = args.periphconf_size // 8
+
+        if args.out_periphconf_hex:
+            periphconf_combined = extract_and_combine_periphconfs(
+                args.in_periphconf_elfs,
+                args.periphconf_section_name,
+                args.periphconf_ipcmap_reallocate,
+            )
+
+            padding_len = args.periphconf_size - len(periphconf_combined)
+            periphconf_final = periphconf_combined + bytes([0xFF for _ in range(padding_len)])
+
+            # Add periphconf data to periphconf hex object
+            periphconf_hex.frombytes(periphconf_final, offset=args.periphconf_address)
 
         # Handle secondary firmware configuration
         if args.secondary:
@@ -800,7 +966,55 @@ def cmd_handler(args: argparse.Namespace) -> None:
                     )
                 uicr.SECONDARY.PROTECTEDMEM.SIZE4KB = args.secondary_protectedmem_size // 4096
 
-            # Handle secondary periphconf if provided
+            # Handle secondary MPCCONF configuration
+            if args.secondary_mpcconf:
+                uicr.SECONDARY.MPCCONF.ENABLE = ENABLED_VALUE
+                uicr.SECONDARY.MPCCONF.ADDRESS = args.secondary_mpcconf_address
+
+                # MAXCOUNT is given in number of 16-byte MPC
+                # configuration entries and secondary_mpcconf_size is given in
+                # bytes. When setting MAXCOUNT based on the
+                # secondary_mpcconf_size we must first assert that
+                # secondary_mpcconf_size has not been misconfigured.
+                if args.secondary_mpcconf_size % 16 != 0:
+                    raise ScriptError(
+                        f"args.secondary_mpcconf_size was {args.secondary_mpcconf_size}, "
+                        f"but must be divisible by 16"
+                    )
+
+                uicr.SECONDARY.MPCCONF.MAXCOUNT = args.secondary_mpcconf_size // 16
+
+            if args.out_secondary_mpcconf_hex:
+                secondary_mpcconf = extract_mpcconf(
+                    args.in_secondary_mpcconf_elfs, args.mpcconf_section_name
+                )
+                padding_len = args.secondary_mpcconf_size - len(secondary_mpcconf)
+                secondary_mpcconf_final = secondary_mpcconf + bytes(
+                    [0xFF for _ in range(padding_len)]
+                )
+                secondary_mpcconf_hex.frombytes(
+                    secondary_mpcconf_final, offset=args.secondary_mpcconf_address
+                )
+
+            # Handle secondary PERIPHCONF configuration
+            if args.secondary_periphconf:
+                uicr.SECONDARY.PERIPHCONF.ENABLE = ENABLED_VALUE
+                uicr.SECONDARY.PERIPHCONF.ADDRESS = args.secondary_periphconf_address
+
+                # MAXCOUNT is given in number of 8-byte peripheral
+                # configuration entries and secondary_periphconf_size is given in
+                # bytes. When setting MAXCOUNT based on the
+                # secondary_periphconf_size we must first assert that
+                # secondary_periphconf_size has not been misconfigured.
+                if args.secondary_periphconf_size % 8 != 0:
+                    raise ScriptError(
+                        f"args.secondary_periphconf_size was {args.secondary_periphconf_size}, "
+                        f"but must be divisible by 8"
+                    )
+
+                uicr.SECONDARY.PERIPHCONF.MAXCOUNT = args.secondary_periphconf_size // 8
+
+            # Generate secondary periphconf data
             if args.out_secondary_periphconf_hex:
                 secondary_periphconf_combined = extract_and_combine_periphconfs(
                     args.in_secondary_periphconf_elfs,
@@ -818,23 +1032,6 @@ def cmd_handler(args: argparse.Namespace) -> None:
                     secondary_periphconf_final, offset=args.secondary_periphconf_address
                 )
 
-                # Configure UICR with secondary periphconf settings
-                uicr.SECONDARY.PERIPHCONF.ENABLE = ENABLED_VALUE
-                uicr.SECONDARY.PERIPHCONF.ADDRESS = args.secondary_periphconf_address
-
-                # MAXCOUNT is given in number of 8-byte peripheral
-                # configuration entries and secondary_periphconf_size is given in
-                # bytes. When setting MAXCOUNT based on the
-                # secondary_periphconf_size we must first assert that
-                # secondary_periphconf_size has not been misconfigured.
-                if args.secondary_periphconf_size % 8 != 0:
-                    raise ScriptError(
-                        f"args.secondary_periphconf_size was {args.secondary_periphconf_size}, "
-                        f"but must be divisible by 8"
-                    )
-
-                uicr.SECONDARY.PERIPHCONF.MAXCOUNT = args.secondary_periphconf_size // 8
-
             # Handle secondary WDTSTART configuration
             if args.secondary_wdtstart:
                 uicr.SECONDARY.WDTSTART.ENABLE = ENABLED_VALUE
@@ -843,6 +1040,9 @@ def cmd_handler(args: argparse.Namespace) -> None:
 
         if uicr.VERSION >= UICR_VERSION_2_1 and args.policy_periphconf_stage is not None:
             uicr.POLICY_PERIPHCONFSTAGE = args.policy_periphconf_stage
+
+        if uicr.VERSION >= UICR_VERSION_2_2 and args.policy_mpcconf_stage is not None:
+            uicr.POLICY_MPCCONFSTAGE = args.policy_mpcconf_stage
 
         # Create UICR hex object with final UICR data
         uicr_hex = IntelHex()
@@ -860,12 +1060,37 @@ def cmd_handler(args: argparse.Namespace) -> None:
             secondary_periphconf_hex.write_hex_file(args.out_secondary_periphconf_hex)
             merged_hex.fromdict(secondary_periphconf_hex.todict())
 
+        if args.out_mpcconf_hex:
+            mpcconf_hex.write_hex_file(args.out_mpcconf_hex)
+            merged_hex.fromdict(mpcconf_hex.todict())
+
+        if args.out_secondary_mpcconf_hex:
+            secondary_mpcconf_hex.write_hex_file(args.out_secondary_mpcconf_hex)
+            merged_hex.fromdict(secondary_mpcconf_hex.todict())
+
         merged_hex.write_hex_file(args.out_merged_hex)
         uicr_hex.write_hex_file(args.out_uicr_hex)
 
     except ScriptError as e:
         print(f"Error: {e!s}")
         sys.exit(1)
+
+
+def extract_mpcconf(elf_files: list[argparse.FileType], mpcconf_section_name: str) -> bytes:
+    if not elf_files:
+        return b""
+    elf_file = elf_files[0]
+    elf = ELFFile(elf_file)
+    conf_section = elf.get_section_by_name(mpcconf_section_name)
+    if conf_section is None:
+        return b""
+    data = conf_section.data()
+    if len(data) % 16 != 0:
+        raise ScriptError(
+            f"{elf_file.name} MPCCONF section '{mpcconf_section_name}' has size "
+            f"{len(data)}, which is not aligned to the entry size of 16 bytes"
+        )
+    return data
 
 
 def extract_and_combine_periphconfs(
