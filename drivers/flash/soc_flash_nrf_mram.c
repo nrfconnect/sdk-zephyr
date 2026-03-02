@@ -142,22 +142,9 @@ static int nrf_mram_mvdma_read(uint32_t addr)
 	return 0;
 }
 
-static int nrf_mram_write_and_verify(uint32_t addr, const void *data, size_t len)
+static int nrf_mram_write_and_verify_word(uint32_t addr, const void *data, size_t len)
 {
 	uint8_t retries = CONFIG_NRF_MRAM_MAX_RETRIES;
-#if (WRITE_BLOCK_SIZE & MRAM_WORD_MASK)
-	uint8_t rbuf[MRAM_WORD_SIZE];
-
-	if (len % MRAM_WORD_SIZE) {
-		/* For partial word writes, we need to read the existing data first to avoid
-		 * overwriting the unwritten bytes in the same word.
-		 */
-		memcpy(rbuf + len, (void *)(addr + len), MRAM_WORD_SIZE - len);
-		memcpy(rbuf, data, len);
-		data = rbuf;
-		len = MRAM_WORD_SIZE;
-	}
-#endif
 
 	while (retries--) {
 		memcpy((void *)addr, data, len);
@@ -172,27 +159,29 @@ static int nrf_mram_write_and_verify(uint32_t addr, const void *data, size_t len
 	return -EIO;
 }
 
-static int nrf_mram_erase_and_verify(uint32_t addr, size_t len)
-{
-	uint8_t retries = CONFIG_NRF_MRAM_MAX_RETRIES;
 #if (WRITE_BLOCK_SIZE & MRAM_WORD_MASK)
+static int nrf_mram_write_and_verify_partial(uint32_t addr, const void *data, size_t len)
+{
 	uint8_t rbuf[MRAM_WORD_SIZE];
 
-	if (len % MRAM_WORD_SIZE) {
-		/* For partial word writes, we need to read the existing data first to avoid
-		 * overwriting the unwritten bytes in the same word.
-		 */
-		memcpy(rbuf, (void *)(addr + len), MRAM_WORD_SIZE - len);
-	}
+	/* For partial word writes, we need to read the existing data first to avoid
+	 * overwriting the unwritten bytes in the same word.
+	 */
+	memcpy(rbuf, (void *)(addr & ~MRAM_WORD_MASK), MRAM_WORD_SIZE);
+	memcpy(rbuf + (addr & MRAM_WORD_MASK), data, len);
+
+	return nrf_mram_write_and_verify_word(addr & ~MRAM_WORD_MASK, rbuf, MRAM_WORD_SIZE);
+}
 #endif
+
+static int nrf_mram_erase_and_verify_word(uint32_t addr, size_t len)
+{
+	uint8_t retries = CONFIG_NRF_MRAM_MAX_RETRIES;
 
 	while (retries--) {
 		memset((void *)addr, ERASE_VALUE, len);
-#if (WRITE_BLOCK_SIZE & MRAM_WORD_MASK)
-		if (len % MRAM_WORD_SIZE) {
-			memcpy((void *)addr, rbuf, MRAM_WORD_SIZE - len);
-		}
-#endif
+		/* before using MVDMA make sure that the cache is flushed */
+		sys_cache_data_flush_range((void *)addr, len);
 		if (!nrf_mram_mvdma_read(addr)) {
 			return 0;
 		}
@@ -203,6 +192,21 @@ static int nrf_mram_erase_and_verify(uint32_t addr, size_t len)
 
 	return -EIO;
 }
+
+#if (WRITE_BLOCK_SIZE & MRAM_WORD_MASK)
+static int nrf_mram_erase_and_verify_partial(uint32_t addr, size_t len)
+{
+	uint8_t rbuf[MRAM_WORD_SIZE];
+
+	/* For partial word erases, we need to read the existing data first to avoid
+	 * overwriting the unwritten bytes in the same word.
+	 */
+	memcpy(rbuf, (void *)(addr & ~MRAM_WORD_MASK), MRAM_WORD_SIZE);
+	memset(rbuf + (addr & MRAM_WORD_MASK), ERASE_VALUE, len);
+
+	return nrf_mram_write_and_verify_word(addr & ~MRAM_WORD_MASK, rbuf, MRAM_WORD_SIZE);
+}
+#endif
 
 #if defined(CONFIG_MRAM_LATENCY)
 static inline uint32_t nrf_mram_ready(uint32_t addr, uint8_t ironside_se_ver)
@@ -262,6 +266,50 @@ static int nrf_mram_read(const struct device *dev, off_t offset, void *data, siz
 	return 0;
 }
 
+#if (WRITE_BLOCK_SIZE & MRAM_WORD_MASK)
+/**
+ * @brief Structure to hold divided byte lengths for MRAM operations.
+ */
+struct nrf_mram_length_breakdown {
+	size_t first_word_bytes; /**< Number of bytes in the first partial MRAM word */
+	size_t aligned_bytes;    /**< Number of bytes in fully aligned MRAM words */
+	size_t last_word_bytes;  /**< Number of bytes in the last partial MRAM word */
+};
+
+/**
+ * @brief Divide operation length into first word, aligned words, and last word components.
+ *
+ * Calculates how many bytes belong to:
+ * - The first partial MRAM word (if offset is not word-aligned)
+ * - Fully aligned MRAM words in the middle
+ * - The last partial MRAM word (if total length doesn't end on word boundary)
+ *
+ * @param offset Relative offset into memory.
+ * @param len    Number of bytes for the intended operation.
+ *
+ * @return Structure containing the divided byte lengths.
+ */
+static inline struct nrf_mram_length_breakdown nrf_mram_divide_length(off_t offset, size_t len)
+{
+	struct nrf_mram_length_breakdown len_break = {0};
+	size_t first_word_bytes = MRAM_WORD_SIZE - (offset & MRAM_WORD_MASK);
+	size_t remaining = 0;
+
+	if (len > first_word_bytes) {
+		len_break.first_word_bytes = first_word_bytes;
+		remaining = len - first_word_bytes;
+		len_break.aligned_bytes = remaining & ~MRAM_WORD_MASK;
+		len_break.last_word_bytes = remaining & MRAM_WORD_MASK;
+	} else {
+		len_break.first_word_bytes = len;
+		len_break.aligned_bytes = 0;
+		len_break.last_word_bytes = 0;
+	}
+
+	return len_break;
+}
+#endif
+
 static int nrf_mram_write(const struct device *dev, off_t offset, const void *data, size_t len)
 {
 	struct nrf_mram_data_t *nrf_mram_data = dev->data;
@@ -288,29 +336,48 @@ static int nrf_mram_write(const struct device *dev, off_t offset, const void *da
 #endif
 	}
 
+#if (WRITE_BLOCK_SIZE & MRAM_WORD_MASK)
+	struct nrf_mram_length_breakdown len_break = nrf_mram_divide_length(offset, len);
+
+	/* First, write the partial bytes from the first word */
+	if (len_break.first_word_bytes) {
+		while (!nrf_mram_ready(addr, ironside_se_ver)) {
+			/* Wait until MRAM controller is ready */
+		}
+		ret = nrf_mram_write_and_verify_partial(addr, data, len_break.first_word_bytes);
+		if (ret) {
+			goto latency_release;
+		}
+		/* align to the next word boundary */
+		len = len_break.aligned_bytes;
+		data = (const void *)((uintptr_t)data + len_break.first_word_bytes);
+		addr += len_break.first_word_bytes;
+	}
+#endif
 	for (uint32_t i = 0; i < (len / MRAM_WORD_SIZE); i++) {
 #if defined(CONFIG_MRAM_LATENCY)
 		while (!nrf_mram_ready(addr + (i * MRAM_WORD_SIZE), ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
 #endif
-		ret = nrf_mram_write_and_verify(addr + (i * MRAM_WORD_SIZE),
-						(void *)((uintptr_t)data + (i * MRAM_WORD_SIZE)),
-						MRAM_WORD_SIZE);
+		ret = nrf_mram_write_and_verify_word(
+			addr + (i * MRAM_WORD_SIZE),
+			(void *)((uintptr_t)data + (i * MRAM_WORD_SIZE)), MRAM_WORD_SIZE);
 		if (ret) {
 			goto latency_release;
 		}
 	}
 #if (WRITE_BLOCK_SIZE & MRAM_WORD_MASK)
-	if (len % MRAM_WORD_SIZE) {
+	if (len_break.last_word_bytes) {
 #if defined(CONFIG_MRAM_LATENCY)
-		while (!nrf_mram_ready(addr + (len & ~MRAM_WORD_MASK), ironside_se_ver)) {
+		while (!nrf_mram_ready(addr + len_break.aligned_bytes, ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
 #endif
-		ret = nrf_mram_write_and_verify(addr + (len & ~MRAM_WORD_MASK),
-						(void *)((uintptr_t)data + (len & ~MRAM_WORD_MASK)),
-						len & MRAM_WORD_MASK);
+		ret = nrf_mram_write_and_verify_partial(
+			addr + len_break.aligned_bytes,
+			(void *)((uintptr_t)data + len_break.aligned_bytes),
+			len_break.last_word_bytes);
 		if (ret) {
 			goto latency_release;
 		}
@@ -359,27 +426,46 @@ static int nrf_mram_erase(const struct device *dev, off_t offset, size_t size)
 		}
 #endif
 	}
+
+#if (WRITE_BLOCK_SIZE & MRAM_WORD_MASK)
+	struct nrf_mram_length_breakdown len_break = nrf_mram_divide_length(offset, size);
+
+	/* First, erase the partial bytes from the first word */
+	if (len_break.first_word_bytes) {
+		while (!nrf_mram_ready(addr, ironside_se_ver)) {
+			/* Wait until MRAM controller is ready */
+		}
+		ret = nrf_mram_erase_and_verify_partial(addr, len_break.first_word_bytes);
+		if (ret) {
+			goto latency_release;
+		}
+		/* align to the next word boundary */
+		size = len_break.aligned_bytes;
+		addr += len_break.first_word_bytes;
+	}
+#endif
+
 	for (uint32_t i = 0; i < (size / MRAM_WORD_SIZE); i++) {
 #if defined(CONFIG_MRAM_LATENCY)
 		while (!nrf_mram_ready(addr + (i * MRAM_WORD_SIZE), ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
 #endif
-		ret = nrf_mram_erase_and_verify(addr + (i * MRAM_WORD_SIZE), MRAM_WORD_SIZE);
+		ret = nrf_mram_erase_and_verify_word(addr + (i * MRAM_WORD_SIZE), MRAM_WORD_SIZE);
 		if (ret) {
 			goto latency_release;
 		}
 	}
 
 #if (WRITE_BLOCK_SIZE & MRAM_WORD_MASK)
-	if (size % MRAM_WORD_SIZE) {
+	if (len_break.last_word_bytes) {
 #if defined(CONFIG_MRAM_LATENCY)
-		while (!nrf_mram_ready(addr + (size & ~MRAM_WORD_MASK), ironside_se_ver)) {
+		while (!nrf_mram_ready(addr + len_break.aligned_bytes, ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
 #endif
-		ret = nrf_mram_erase_and_verify(addr + (size & ~MRAM_WORD_MASK),
-						size & MRAM_WORD_MASK);
+		ret = nrf_mram_erase_and_verify_partial(addr + len_break.aligned_bytes,
+							len_break.last_word_bytes);
 		if (ret) {
 			goto latency_release;
 		}
