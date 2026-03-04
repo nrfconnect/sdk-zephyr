@@ -209,6 +209,18 @@ int nrf_wifi_disp_scan_zep(const struct device *dev, struct wifi_scan_params *pa
 	scan_info->scan_params.passive_scan = 1;
 #endif /* CONFIG_NRF70_PASSIVE_SCAN_ONLY */
 
+#ifdef WIFI_NRF71
+#ifdef NRF71_SCAN_DB_GDRAM
+        if (scan_info->scan_reason == SCAN_DISPLAY) {
+                struct soft_hpqm_info *hpqm_info = ((struct soft_hpqm_info *)HOST_RPU_SOFTHPQM_INFO_START);
+
+		scan_info->scan_db_addr = hpqm_info->scan_db;
+		scan_info->scan_db_len = SCAN_DB_LEN;
+                /*Reset the scan result */
+                rpu_ctx_zep->num_scan_res = 0;
+        }
+#endif
+#endif /* WIFI_NRF71 */
 	status = nrf_wifi_sys_fmac_scan(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx, scan_info);
 
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
@@ -231,11 +243,11 @@ out:
 	return ret;
 }
 
+#ifndef WIFI_NRF71
 enum nrf_wifi_status nrf_wifi_disp_scan_res_get_zep(struct nrf_wifi_vif_ctx_zep *vif_ctx_zep)
 {
 	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
 	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
-
 	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
 	if (!rpu_ctx_zep) {
 		LOG_ERR("%s: rpu_ctx_zep is NULL", __func__);
@@ -262,6 +274,7 @@ out:
 	k_mutex_unlock(&vif_ctx_zep->vif_lock);
 	return status;
 }
+#endif
 
 static inline enum wifi_mfp_options drv_to_wifi_mgmt_mfp(unsigned char mfp_flag)
 {
@@ -381,7 +394,138 @@ void nrf_wifi_event_proc_disp_scan_res_zep(void *vif_ctx,
 	}
 }
 
+#ifdef WIFI_NRF71
+enum nrf_wifi_status nrf_wifi_disp_scan_res_get_zep(struct nrf_wifi_vif_ctx_zep *vif_ctx_zep)
+{
+	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
+	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
+#ifdef NRF71_SCAN_DB_GDRAM
+        struct nrf_wifi_umac_event_new_scan_display_results *scan_display_results = NULL;
+        unsigned int scan_res_len = 0;
+        unsigned int event_len = 0;
+        unsigned int loop = 0, last_res_num = 0;
+        struct umac_display_results *display_results = NULL;
+        int i;
+#endif /* NRF71_SCAN_DB_GDRAM */
 
+	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
+	if (!rpu_ctx_zep) {
+		LOG_ERR("%s: rpu_ctx_zep is NULL", __func__);
+		return NRF_WIFI_STATUS_FAIL;
+	}
+
+	k_mutex_lock(&vif_ctx_zep->vif_lock, K_FOREVER);
+	if (!rpu_ctx_zep->rpu_ctx) {
+		LOG_DBG("%s: RPU context not initialized", __func__);
+		goto out;
+	}
+	/* Do not send get scan result command */
+#ifdef NRF71_SCAN_DB_GDRAM
+	/*Send scan result to application.Last scan rsult event with more_res 0 */
+	/*TODO: Send all theresults to appliation in a single event */
+
+        scan_res_len =  (sizeof(struct umac_display_results) * rpu_ctx_zep->num_scan_res);
+        display_results = nrf_wifi_osal_mem_zalloc(scan_res_len);
+
+        if (display_results) {
+		status = nrf_wifi_fmac_get_scan_result(rpu_ctx_zep->rpu_ctx,
+						       display_results,
+						       rpu_ctx_zep->scan_db_addr,
+						       scan_res_len);
+		if (status != NRF_WIFI_STATUS_SUCCESS) {
+			LOG_ERR("nrf_wifi_fmac_get_scan_result call failed\n");
+			goto out;
+		}
+	} else {
+		LOG_ERR("Unable to allocate memory for display_results\n");
+		goto out;
+	}
+
+	loop = (rpu_ctx_zep->num_scan_res / DISPLAY_BSS_TOHOST_PEREVNT);
+	last_res_num = (rpu_ctx_zep->num_scan_res % DISPLAY_BSS_TOHOST_PEREVNT);
+
+	if (rpu_ctx_zep->num_scan_res) {
+		for (i = 0; i < loop; i++ ) {
+			event_len = sizeof(struct nrf_wifi_umac_event_new_scan_display_results);
+
+			scan_display_results = nrf_wifi_osal_mem_zalloc(event_len);
+                        if (!scan_display_results) {
+				LOG_ERR("Unable to allocate memory for scan_display_results\n");
+				goto out;
+			}
+
+			scan_display_results->umac_hdr.cmd_evnt =  NRF_WIFI_UMAC_EVENT_SCAN_DISPLAY_RESULT;
+                        scan_display_results->umac_hdr.seq = 1;
+
+			/* Only the last scan result should set seq to 0 */
+			if ((last_res_num == 0) && (i == (loop - 1))) {
+				scan_display_results->umac_hdr.seq = 0;
+			}
+
+			scan_display_results->umac_hdr.ids.wdev_id = vif_ctx_zep->vif_idx;
+			scan_display_results->umac_hdr.ids.valid_fields |= NRF_WIFI_INDEX_IDS_WDEV_ID_VALID;
+			scan_display_results->event_bss_count = DISPLAY_BSS_TOHOST_PEREVNT;
+
+			memcpy(scan_display_results->display_results,
+			       display_results + (i * DISPLAY_BSS_TOHOST_PEREVNT),
+			       sizeof(scan_display_results->display_results));
+
+			nrf_wifi_event_proc_disp_scan_res_zep(vif_ctx_zep,
+							      scan_display_results,
+							      event_len,
+							      scan_display_results->umac_hdr.seq ? 1 : 0);
+			nrf_wifi_osal_mem_free(scan_display_results);
+		}
+
+		if (last_res_num > 0) {
+			event_len = sizeof(struct nrf_wifi_umac_event_new_scan_display_results);
+
+			scan_display_results = nrf_wifi_osal_mem_zalloc(event_len);
+
+			if (!scan_display_results) {
+				LOG_ERR("Unable to allocate memory for scan_display_results\n");
+				goto out;
+			}
+
+			scan_display_results->umac_hdr.cmd_evnt =  NRF_WIFI_UMAC_EVENT_SCAN_DISPLAY_RESULT;
+
+			/* Only the last scan result should set seq to 0 */
+			scan_display_results->umac_hdr.seq = 0;
+			scan_display_results->umac_hdr.ids.wdev_id = vif_ctx_zep->vif_idx;
+			scan_display_results->umac_hdr.ids.valid_fields |= NRF_WIFI_INDEX_IDS_WDEV_ID_VALID;
+			scan_display_results->event_bss_count = last_res_num;
+
+			memcpy(scan_display_results->display_results,
+			       display_results + (i * DISPLAY_BSS_TOHOST_PEREVNT),
+			       (sizeof(struct  umac_display_results) * last_res_num));
+
+			nrf_wifi_event_proc_disp_scan_res_zep(vif_ctx_zep,
+                                                              scan_display_results,
+                                                              event_len,
+							      0);
+			nrf_wifi_osal_mem_free(scan_display_results);
+		}
+
+		if (display_results)
+			nrf_wifi_osal_mem_free(display_results);
+	}
+#else
+	status = nrf_wifi_sys_fmac_scan_res_get(rpu_ctx_zep->rpu_ctx,
+					    vif_ctx_zep->vif_idx,
+					    SCAN_DISPLAY);
+
+	if (status != NRF_WIFI_STATUS_SUCCESS) {
+		LOG_ERR("%s: nrf_wifi_sys_fmac_scan failed", __func__);
+		goto out;
+	}
+#endif
+
+	status = NRF_WIFI_STATUS_SUCCESS;
+out:
+	k_mutex_unlock(&vif_ctx_zep->vif_lock);
+	return status;
+}
+#endif
 #ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS
 void nrf_wifi_rx_bcn_prb_resp_frm(void *vif_ctx,
 				  void *nwb,

@@ -127,10 +127,12 @@ struct nrf_wifi_ctx_zep {
 	int wdt_irq_received;
 	int wdt_irq_ignored;
 #endif /* CONFIG_NRF_WIFI_RPU_RECOVERY */
-#ifdef CONFIG_WIFI_NRF71
+#ifdef WIFI_NRF71
+#ifdef NRF71_SCAN_DB_GDRAM
 	unsigned int scan_db_addr;
 	unsigned int num_scan_res;
-#endif /* CONFIG_WIFI_NRF71 */
+#endif /* NRF71_SCAN_DB_GDRAM */
+#endif /* WIFI_NRF71 */
 };
 
 struct nrf_wifi_drv_priv_zep {

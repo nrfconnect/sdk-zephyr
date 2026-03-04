@@ -144,6 +144,7 @@ void nrf_wifi_wpa_supp_event_proc_scan_done(void *if_priv,
 		vif_ctx_zep->supp_callbk_fns.scan_done(vif_ctx_zep->supp_drv_if_ctx,
 			&event);
 	}
+
 	k_work_cancel_delayable(&vif_ctx_zep->scan_timeout_work);
 	vif_ctx_zep->scan_in_progress = false;
 	k_sem_give(&wait_for_scan_resp_sem);
@@ -566,7 +567,18 @@ int nrf_wifi_wpa_supp_scan2(void *if_priv, struct wpa_driver_scan_params *params
 			__func__, params->extra_ies_len, NRF_WIFI_MAX_IE_LEN);
 		goto out;
 	}
+#ifdef WIFI_NRF71
+#ifdef NRF71_SCAN_DB_GDRAM
+       if (scan_info->scan_reason == SCAN_CONNECT) {
+               struct soft_hpqm_info *hpqm_info = ((struct soft_hpqm_info *)HOST_RPU_SOFTHPQM_INFO_START);
 
+	       scan_info->scan_db_addr = hpqm_info->scan_db;
+	       scan_info->scan_db_len = SCAN_DB_LEN;
+               /*Reset the scan result */
+               rpu_ctx_zep->num_scan_res = 0;
+	}
+#endif /* NRF71_SCAN_DB_GDRAM */
+#endif /*WIFI_NRF71 */
 	status = nrf_wifi_sys_fmac_scan(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx, scan_info);
 
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
@@ -645,6 +657,16 @@ int nrf_wifi_wpa_supp_scan_results_get(void *if_priv)
 	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = NULL;
 	struct nrf_wifi_ctx_zep *rpu_ctx_zep = NULL;
 	int ret = -1;
+#ifdef WIFI_NRF71
+#ifdef NRF71_SCAN_DB_GDRAM
+	struct nrf_wifi_umac_event_new_scan_results *connect_scan_res_info = NULL;
+	unsigned int connect_scan_res_len = 0;
+	struct nrf_wifi_umac_event_new_scan_results event;
+	unsigned int event_addr;
+	unsigned int ies_len = 0, beacon_ies_len = 0, event_len = 0;
+	int i;
+#endif
+#endif
 
 	if (!if_priv) {
 		LOG_ERR("%s: Invalid params", __func__);
@@ -663,10 +685,93 @@ int nrf_wifi_wpa_supp_scan_results_get(void *if_priv)
 		LOG_DBG("%s: RPU context not initialized", __func__);
 		goto out;
 	}
+#ifdef WIFI_NRF71
+#ifdef NRF71_SCAN_DB_GDRAM
+	if (rpu_ctx_zep->num_scan_res > 0) {
+		unsigned int addr_offset = 0;
+		for (i = 0; i < rpu_ctx_zep->num_scan_res; i++) {
+			event_len = sizeof(struct nrf_wifi_umac_event_new_scan_results);
+			/* First read the the event structure to get the actual length
+			 * of the scan_result is variable depening upon ies_len + beacon_ies_len
+			 */
+                         /* First read the event structure to find ies_len + beacon_ies_len  of each event */
+			event_addr = (rpu_ctx_zep->scan_db_addr) + addr_offset;
 
+			status = nrf_wifi_fmac_get_scan_result(rpu_ctx_zep->rpu_ctx,
+                                                                &event,
+                                                                event_addr,
+                                                                event_len);
+			if (status != NRF_WIFI_STATUS_SUCCESS) {
+				LOG_ERR("nrf_wifi_fmac_get_scan_result call failed for event structure\n");
+				goto out;
+			}
+
+                        /* Now update the ies_len and beacon_ies_len for next event read */
+			ies_len = event.ies_len;
+                        beacon_ies_len = event.beacon_ies_len;
+
+                         /* read the total event including ies_len and beacon_ies_len */
+			connect_scan_res_len =  sizeof(struct nrf_wifi_umac_event_new_scan_results) +
+						event.ies_len + event.beacon_ies_len;
+
+			connect_scan_res_info = nrf_wifi_osal_mem_zalloc(connect_scan_res_len);
+
+			if (connect_scan_res_info) {
+				status = nrf_wifi_fmac_get_scan_result(rpu_ctx_zep->rpu_ctx,
+								       connect_scan_res_info,
+								       event_addr,
+								       connect_scan_res_len);
+				if (status != NRF_WIFI_STATUS_SUCCESS) {
+					LOG_ERR("nrf_wifi_fmac_get_scan_result call failed\n");
+					goto out;
+				}
+			} else {
+				LOG_ERR("Unable to allocate memory for connect scan_results\n");
+				status = NRF_WIFI_STATUS_FAIL;
+				goto out;
+			}
+
+			/* Now send the event to supplicant */
+                        connect_scan_res_info->umac_hdr.cmd_evnt = NRF_WIFI_UMAC_EVENT_SCAN_RESULT;
+
+                        /* Only the last scan result should set seq to 0 */
+                        connect_scan_res_info->umac_hdr.seq = 1;
+
+			if (i == (rpu_ctx_zep->num_scan_res - 1))
+				connect_scan_res_info->umac_hdr.seq = 0;
+
+			connect_scan_res_info->umac_hdr.ids.wdev_id = vif_ctx_zep->vif_idx;
+                        connect_scan_res_info->umac_hdr.ids.valid_fields |= NRF_WIFI_INDEX_IDS_WDEV_ID_VALID;
+
+			nrf_wifi_wpa_supp_event_proc_scan_res(if_priv,
+							      connect_scan_res_info,
+							      connect_scan_res_len,
+							      connect_scan_res_info->umac_hdr.seq);
+			addr_offset += connect_scan_res_len;
+		}
+	} else {
+		 /* Now send the event to supplicant */
+		connect_scan_res_info->umac_hdr.cmd_evnt = NRF_WIFI_UMAC_EVENT_SCAN_RESULT;
+
+                /* Only the last scan result should set seq to 0 */
+                connect_scan_res_info->umac_hdr.seq = 0;
+
+		connect_scan_res_info->umac_hdr.ids.wdev_id = vif_ctx_zep->vif_idx;
+		connect_scan_res_info->umac_hdr.ids.valid_fields |= NRF_WIFI_INDEX_IDS_WDEV_ID_VALID;
+
+                nrf_wifi_wpa_supp_event_proc_scan_res(if_priv,
+                                                      connect_scan_res_info,
+                                                      connect_scan_res_len,
+                                                      connect_scan_res_info->umac_hdr.seq);
+	}
+#else
 	status = nrf_wifi_sys_fmac_scan_res_get(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx,
 					    SCAN_CONNECT);
-
+#endif /* NRF71_SCAN_DB_GDRAM */
+#else
+	status = nrf_wifi_sys_fmac_scan_res_get(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx,
+					    SCAN_CONNECT);
+#endif
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
 		LOG_ERR("%s: nrf_wifi_sys_fmac_scan_res_get failed", __func__);
 		goto out;

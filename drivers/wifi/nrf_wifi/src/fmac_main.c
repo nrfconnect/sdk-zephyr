@@ -165,14 +165,13 @@ void nrf_wifi_event_proc_scan_start_zep(void *if_priv,
 #endif /* CONFIG_NRF70_STA_MODE */
 }
 
-#ifdef CONFIG_WIFI_NRF71 
-
+#ifdef WIFI_NRF71
 /** Comparator: sort by mbm_signal DESC (strongest first) */
 static int cmp_mbm_desc(const void *a, const void *b)
 {
     const struct umac_display_results *ra = a;
     const struct umac_display_results *rb = b;
-    s32 va = 0, vb = 0;
+    signed int va = 0, vb = 0;
 
     va = ra->signal.signal.mbm_signal;
 
@@ -229,16 +228,18 @@ void nrf_wifi_event_proc_scan_done_zep(void *vif_ctx,
 	switch (vif_ctx_zep->scan_type) {
 #ifdef CONFIG_NET_L2_WIFI_MGMT
 	case SCAN_DISPLAY:
+#ifdef NRF71_SCAN_DB_GDRAM
 		rpu_ctx_zep->scan_db_addr = scan_done_event->scan_db_addr;
                 rpu_ctx_zep->num_scan_res = scan_done_event->scan_results_cnt;
 
 		 if (scan_done_event->scan_results_cnt > 0) {
                         scan_res_len =  (sizeof(struct umac_display_results) * rpu_ctx_zep->num_scan_res);
 
-	                scan_result_info = nrf_wifi_osal_mem_alloc(scan_res_len);
+	                scan_result_info = nrf_wifi_osal_mem_zalloc(scan_res_len);
 
-	                if (scan_result_info == NULL) {
-        	                return -ENOBUFS;
+	                if (!scan_result_info) {
+				LOG_ERR("%s: No memory avaiable for scan_result_info", __func__);
+				return;
                 	}
 
 	                status = nrf_wifi_fmac_get_scan_result(fmac_dev_ctx,
@@ -255,56 +256,30 @@ void nrf_wifi_event_proc_scan_done_zep(void *vif_ctx,
                 	                                               rpu_ctx_zep->scan_db_addr,
                         	                                       scan_res_len);
                         }
-			
-			loop = (rpu_ctx_zep->num_scan_res / DISPLAY_BSS_TOHOST_PEREVNT);
-                        last_res_num = (rpu_ctx_zep->num_scan_res % DISPLAY_BSS_TOHOST_PEREVNT);
-
-			if (rpu_ctx_zep->num_scan_res) {
-                                for (i = 0; i < loop; i++ ) {
-                                        scan_res_event_len = sizeof(struct nrf_wifi_umac_event_new_scan_display_results);
-
-                                        scan_display_results = nrf_wifi_osal_mem_alloc(scan_res_event_len);
-                                        if (scan_display_results == NULL) {
-                                                return -ENOBUFS;
-                                        }
-                                        scan_display_results->umac_hdr.cmd_evnt =  NRF_WIFI_UMAC_EVENT_SCAN_DISPLAY_RESULT;
-                                        scan_display_results->umac_hdr.seq = 1;
-                                        /* Only the last scan result should set seq to 0 */
-                                        if ((last_res_num == 0) && (i == (loop - 1)))
-                                                scan_display_results->umac_hdr.seq = 0;
-                                        scan_display_results->umac_hdr.ids.wdev_id = 0;
-                                        scan_display_results->umac_hdr.ids.valid_fields |= NRF_WIFI_INDEX_IDS_WDEV_ID_VALID;
-                                        scan_display_results->event_bss_count = DISPLAY_BSS_TOHOST_PEREVNT;
-
-                                        memcpy(scan_display_results->display_results,
-                                               scan_result_info + (i * DISPLAY_BSS_TOHOST_PEREVNT),
-                                               sizeof(scan_display_results->display_results));
-
-					nrf_wifi_event_proc_disp_scan_res_zep(vif_ctx_zep,
-									      scan_display_results,
-									      scan_res_event_len,
-									      scan_display_results->umac_hdr.seq ? 1 : 0);
-                                        nrf_wifi_osal_mem_free(scan_display_results);
-                                }
-			}
-
-			nrf_wifi_osal_mem_free(scan_result_info);
-
+			if (scan_result_info)
+				nrf_wifi_osal_mem_free(scan_result_info);
                 } else {
                         LOG_ERR("%s:No scan result  scan_done_event->scan_results_cnt = %d\n",
                                 __func__, scan_done_event->scan_results_cnt);
                 }
-
-
+#endif
 		 /* Now send all the scan results */
-#if 0
 		/* Schedule scan result processing in system workqueue to avoid deadlock */
 		k_work_submit(&vif_ctx_zep->disp_scan_res_work);
-#endif
 		break;
 #endif /* CONFIG_NET_L2_WIFI_MGMT */
 #ifdef CONFIG_NRF70_STA_MODE
 	case SCAN_CONNECT:
+#ifdef NRF71_SCAN_DB_GDRAM
+        if ((!scan_done_event->status) &&
+            (scan_done_event->scan_type == SCAN_CONNECT)) {
+                struct nrf_wifi_ctx_zep *rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
+                /* Save the scan_db_addr and num_scan_res for later use during GET_SCAN_RES retrieve the data */
+                rpu_ctx_zep->scan_db_addr = scan_done_event->scan_db_addr;
+                rpu_ctx_zep->num_scan_res = scan_done_event->scan_results_cnt;
+        }
+#endif
+
 		nrf_wifi_wpa_supp_event_proc_scan_done(vif_ctx_zep,
 						       scan_done_event,
 						       event_len,
