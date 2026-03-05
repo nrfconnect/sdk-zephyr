@@ -50,6 +50,7 @@ struct nrf_mram_data_t {
 	uint8_t ironside_se_ver;
 };
 
+#if defined(CONFIG_MRAM_LATENCY)
 static inline uint32_t nrf_mram_ready(uint32_t addr, uint8_t ironside_se_ver)
 {
 	if (ironside_se_ver < IRONSIDE_SE_SUPPORT_READY_VER) {
@@ -62,6 +63,7 @@ static inline uint32_t nrf_mram_ready(uint32_t addr, uint8_t ironside_se_ver)
 		return sys_read32(SOC_NRF_MRAMC_READY_REG_1);
 	}
 }
+#endif
 
 /**
  * @param[in,out] offset      Relative offset into memory, from the driver API.
@@ -152,17 +154,21 @@ static int nrf_mram_write(const struct device *dev, off_t offset, const void *da
 #endif
 	}
 	for (uint32_t i = 0; i < (len / MRAM_WORD_SIZE); i++) {
+#if defined(CONFIG_MRAM_LATENCY)
 		while (!nrf_mram_ready(addr + (i * MRAM_WORD_SIZE), ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
+#endif
 		memcpy((void *)(addr + (i * MRAM_WORD_SIZE)),
 		       (void *)((uintptr_t)data + (i * MRAM_WORD_SIZE)), MRAM_WORD_SIZE);
 	}
 
 	if (len % MRAM_WORD_SIZE) {
+#if defined(CONFIG_MRAM_LATENCY)
 		while (!nrf_mram_ready(addr + (len & ~MRAM_WORD_MASK), ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
+#endif
 		memcpy((void *)(addr + (len & ~MRAM_WORD_MASK)),
 		       (void *)((uintptr_t)data + (len & ~MRAM_WORD_MASK)), len & MRAM_WORD_MASK);
 	}
@@ -196,15 +202,19 @@ static int nrf_mram_erase(const struct device *dev, off_t offset, size_t size)
 #endif
 	}
 	for (uint32_t i = 0; i < (size / MRAM_WORD_SIZE); i++) {
+#if defined(CONFIG_MRAM_LATENCY)
 		while (!nrf_mram_ready(addr + (i * MRAM_WORD_SIZE), ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
+#endif
 		memset((void *)(addr + (i * MRAM_WORD_SIZE)), ERASE_VALUE, MRAM_WORD_SIZE);
 	}
 	if (size % MRAM_WORD_SIZE) {
+#if defined(CONFIG_MRAM_LATENCY)
 		while (!nrf_mram_ready(addr + (size & ~MRAM_WORD_MASK), ironside_se_ver)) {
 			/* Wait until MRAM controller is ready */
 		}
+#endif
 		memset((void *)(addr + (size & ~MRAM_WORD_MASK)), ERASE_VALUE,
 		       size & MRAM_WORD_MASK);
 	}
