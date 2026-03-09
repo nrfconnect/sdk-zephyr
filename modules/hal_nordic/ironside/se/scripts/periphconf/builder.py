@@ -98,17 +98,20 @@ class PeriphconfBuilder:
         self,
         dt: EDT,
         lookup_tables: SocLookupTables,
+        lock_value: bool = True,
     ) -> None:
         """Builder class used to generate a PERIPHCONF C source file based on the devicetree.
 
         :param dt: Devicetree object.
         :param lookup_tables: Lookup table object containing soc-specific information.
+        :param lock_value: Lock bit value to set in the registers that support it.
         """
 
         self._dt = dt
         self._hw_tables = lookup_tables
         self._processor_id = dt_processor_id(dt)
         self._owner_id = self._processor_id.default_owner_id
+        self._lock_value = lock_value
 
         self._macros = []
         self._ipcmap_idx = 0
@@ -277,6 +280,7 @@ class PeriphconfBuilder:
                     secure,
                     dma_secure,
                     self._owner_id.c_enum,
+                    self._lock_value,
                 ],
                 comment=f"{spu_name}: {periph_label} permissions",
             )
@@ -346,6 +350,7 @@ class PeriphconfBuilder:
                         num,
                         secure,
                         self._owner_id.c_enum,
+                        self._lock_value,
                     ],
                     comment=f"{spu_name}: {instance_name} ch. {num} permissions",
                 )
@@ -376,6 +381,7 @@ class PeriphconfBuilder:
                         num,
                         secure,
                         self._owner_id.c_enum,
+                        self._lock_value,
                     ],
                     comment=f"{spu_name}: {instance_name} ch. {num} permissions",
                 )
@@ -390,6 +396,7 @@ class PeriphconfBuilder:
                         num,
                         secure,
                         self._owner_id.c_enum,
+                        self._lock_value,
                     ],
                     comment=f"{spu_name}: {instance_name} ch. group {num} permissions",
                 )
@@ -439,6 +446,7 @@ class PeriphconfBuilder:
                 [
                     Address(sub_ppib_addr),
                     sub_ppib_ch,
+                    True,
                 ],
                 comment=(
                     f"SUB: {sub_ppib_name} ch. {sub_ppib_ch} => {pub_ppib_name} ch. {pub_ppib_ch}"
@@ -451,6 +459,7 @@ class PeriphconfBuilder:
                 [
                     Address(pub_ppib_addr),
                     pub_ppib_ch,
+                    True,
                 ],
                 comment=(
                     f"PUB: {sub_ppib_name} ch. {sub_ppib_ch} => {pub_ppib_name} ch. {pub_ppib_ch}"
@@ -476,6 +485,7 @@ class PeriphconfBuilder:
                         num,
                         secure,
                         self._owner_id.c_enum,
+                        self._lock_value,
                     ],
                     comment=f"{spu_name}: {instance_name} ch. {num} permissions",
                 )
@@ -537,7 +547,7 @@ class PeriphconfBuilder:
         self._macros.append(
             MacroCall(
                 "PERIPHCONF_IPCMAP_CHANNEL_SOURCE",
-                [self._ipcmap_idx, source_domain.c_enum, source_ch],
+                [self._ipcmap_idx, source_domain.c_enum, source_ch, True],
                 comment=(
                     f"{source_domain.name} IPCT ch. {source_ch} => "
                     f"{sink_domain.name} IPCT ch. {sink_ch}"
@@ -573,6 +583,7 @@ class PeriphconfBuilder:
                         num,
                         secure,
                         self._owner_id.c_enum,
+                        self._lock_value,
                     ],
                     comment=f"{spu_name}: GRTC CC{num} permissions",
                 )
@@ -696,6 +707,7 @@ class PeriphconfBuilder:
                     num,
                     secure,
                     self._owner_id.c_enum,
+                    self._lock_value,
                 ],
                 comment=f"{spu_name}: P{gpio_port}.{num} permissions",
             )
@@ -1049,23 +1061,23 @@ class NrfFun(int, enum.Enum):
 
 class NrfSaadcChannel(int, enum.Enum):
     """Identifiers representing SAADC channels.
-    See include/zephyr/dt-bindings/adc/nrf-saadc-haltium.h.
+    See include/zephyr/dt-bindings/adc/nrf-saadc.h.
     """
 
-    AIN0 = 1
-    AIN1 = 2
-    AIN2 = 3
-    AIN3 = 4
-    AIN4 = 5
-    AIN5 = 6
-    AIN6 = 7
-    AIN7 = 8
-    AIN8 = 9
-    AIN9 = 10
-    AIN10 = 11
-    AIN11 = 12
-    AIN12 = 13
-    AIN13 = 14
+    AIN0 = 0
+    AIN1 = 1
+    AIN2 = 2
+    AIN3 = 3
+    AIN4 = 4
+    AIN5 = 5
+    AIN6 = 6
+    AIN7 = 7
+    AIN8 = 8
+    AIN9 = 9
+    AIN10 = 10
+    AIN11 = 11
+    AIN12 = 12
+    AIN13 = 13
 
 
 class NrfCompChannel(str, enum.Enum):

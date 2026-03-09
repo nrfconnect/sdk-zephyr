@@ -6,6 +6,7 @@
 #include <arm/armv7-r.dtsi>
 #include <mem.h>
 #include <freq.h>
+#include <zephyr/dt-bindings/adc/adc.h>
 #include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
 #include <zephyr/dt-bindings/gpio/renesas-rz-gpio.h>
 
@@ -47,7 +48,7 @@
 				     <GIC_PPI 14 IRQ_TYPE_EDGE IRQ_DEFAULT_PRIORITY>,
 				     <GIC_PPI 11 IRQ_TYPE_EDGE IRQ_DEFAULT_PRIORITY>,
 				     <GIC_PPI 10 IRQ_TYPE_EDGE IRQ_DEFAULT_PRIORITY>;
-			reg = <0x12c10200 0x1C>;
+			reg = <0x12c10200 0x1c>;
 			label = "arch_timer";
 		};
 
@@ -194,6 +195,18 @@
 				reg = <0xb00>;
 				status = "disabled";
 			};
+		};
+
+		adc0: adc0@11c00000 {
+			compatible = "renesas,rz-adc-e";
+			reg = <0x11c00000 0x400>;
+			unit = <0>;
+			interrupts = <GIC_SPI 403 IRQ_TYPE_EDGE IRQ_DEFAULT_PRIORITY>;
+			interrupt-names = "scanend";
+			#io-channel-cells = <1>;
+			vref-mv = <1800>;
+			channel-available-mask = <0xff>;
+			status = "disabled";
 		};
 
 		gpt0: gpt@13010000 {

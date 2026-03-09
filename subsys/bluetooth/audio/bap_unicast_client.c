@@ -1659,6 +1659,8 @@ static uint8_t unicast_client_cp_notify(struct bt_conn *conn,
 		stream = audio_stream_by_ep_id(conn, ase_rsp->id);
 		if (stream == NULL) {
 			LOG_DBG("Could not find stream by id %u", ase_rsp->id);
+
+			continue;
 		} else {
 			client_ep = CONTAINER_OF(stream->ep, struct bt_bap_unicast_client_ep, ep);
 			client_ep->cp_ntf_pending = false;
@@ -3080,7 +3082,7 @@ int bt_bap_unicast_group_reconfig(struct bt_bap_unicast_group *unicast_group,
 				CONTAINER_OF(tx_param->stream->iso, struct bt_bap_iso, chan);
 
 			unicast_group_set_iso_stream_param(unicast_group, bap_iso, tx_param->qos,
-							   BT_AUDIO_DIR_SOURCE);
+							   BT_AUDIO_DIR_SINK);
 		}
 	}
 

@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config SOC_SERIES_NRF71
+	select SOC_COMPATIBLE_NRF71
 	select HAS_NRFX
 	select HAS_NORDIC_DRIVERS
 	select HAS_SEGGER_RTT if ZEPHYR_SEGGER_MODULE
@@ -25,3 +26,12 @@ config SOC_NRF7120_ENGA_CPUAPP
 
 config SOC_NRF7120_ENGA_CPUFLPR
 	select RISCV_CORE_NORDIC_VPR
+
+if SOC_SERIES_NRF71
+
+config SOC_NRF71_WIFI_DAP
+	bool "nRF71 Wi-Fi Debug access port for debugging"
+	help
+	  This controls the Wi-Fi AHB Debug AP (DAP) for debugging nRF71 Wi-Fi cores.
+
+endif # SOC_SERIES_NRF71

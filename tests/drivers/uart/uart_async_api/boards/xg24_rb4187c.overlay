@@ -5,7 +5,7 @@
  */
 
 /*
- * Need to connect PC1 and PC2 of the Expension Pin header
+ * Need to connect PC1 and PA5 of the Expension Pin header
  */
 / {
 	chosen {
@@ -24,7 +24,7 @@
 		};
 
 		group1 {
-			pins = <USART0_RX_PC2>;
+			pins = <USART0_RX_PA5>;
 			input-enable;
 			silabs,input-filter;
 		};

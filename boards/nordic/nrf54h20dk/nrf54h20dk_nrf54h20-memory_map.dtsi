@@ -130,6 +130,7 @@
 		compatible = "fixed-partitions";
 		#address-cells = <1>;
 		#size-cells = <1>;
+		ranges;
 
 		cpuapp_boot_partition: partition@30000 {
 			reg = <0x30000 DT_SIZE_K(64)>;
@@ -173,6 +174,14 @@
 
 		secondary_periphconf_partition: partition@1c0000 {
 			reg = <0x1c0000 DT_SIZE_K(8)>;
+		};
+
+		mpcconf_partition: partition@1c2000 {
+			reg = <0x1c2000 512>;
+		};
+
+		secondary_mpcconf_partition: partition@1c2200 {
+			reg = <0x1c2200 512>;
 		};
 
 		/* NB: A gap has been left here for future partitions */

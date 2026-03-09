@@ -200,7 +200,7 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: a83db66acbeca0bfef157a0c3482c07ddbb82555
+      revision: 4dea410729da817a464f778533eb721473262e5b
       path: modules/hal/nordic
       groups:
         - hal
@@ -291,7 +291,7 @@ manifest:
         - hal
     - name: hostap
       path: modules/lib/hostap
-      revision: 1a2fbb7910f23822a785294eab9f4922c6119711
+      revision: f5708c522793b0de59f467080a33caac769cd525
     - name: liblc3
       revision: 48bbd3eacd36e99a57317a0a4867002e0b09e183
       path: modules/lib/liblc3
@@ -347,7 +347,7 @@ manifest:
       revision: 4d11a73d62bf999205f16de21a0ef675501f5b21
       path: modules/bsim_hw_models/nrf_hw_models
     - name: nrf_wifi
-      revision: 29afb11a512787bc68e2afd58c9dfde4bb4d5dc4
+      revision: 1e37ff7a739173cfe7adb248f9637d385a36c96b
       path: modules/lib/nrf_wifi
     - name: open-amp
       revision: 5efe7974f9546582e99f5a842a816ea4b65f5227
@@ -370,7 +370,7 @@ manifest:
         - testing
         - tee
     - name: segger
-      revision: 7c843ea24b9b4f100c226bce0b4eb807e50a42ac
+      revision: 50892fdbcf2f570e67baa72b8894a66b16946f72
       path: modules/debug/segger
       groups:
         - debug
@@ -386,7 +386,7 @@ manifest:
       groups:
         - tee
     - name: trusted-firmware-m
-      revision: 677e0565e030cbe4946ac0cbde5603eae7d6392f
+      revision: 3a128df2bdebedf5a01726e86de3880991d6bb63
       path: modules/tee/tf-m/trusted-firmware-m
       groups:
         - tee

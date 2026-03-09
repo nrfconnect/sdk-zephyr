@@ -7,6 +7,7 @@
 #include <mem.h>
 #include <arm/armv8-r.dtsi>
 #include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+#include <zephyr/dt-bindings/adc/adc.h>
 #include <zephyr/dt-bindings/gpio/renesas-rztn-gpio.h>
 
 / {
@@ -77,19 +78,19 @@
 
 				loader_param: partition@0 {
 					label = "loader-param";
-					reg = <0x00000000 0x4C>;
+					reg = <0x00000000 0x4c>;
 					read-only;
 				};
 
-				loader_program: partition@4C {
+				loader_program: partition@4c {
 					label = "loader-program";
-					reg = <0x0000004C (DT_SIZE_K(56) - 0x4C)>;
+					reg = <0x0000004c (DT_SIZE_K(56) - 0x4C)>;
 					read-only;
 				};
 
-				slot0_partition: partition@E000 {
+				slot0_partition: partition@e000 {
 					label = "image-0";
-					reg = <0x0000E000 (DT_SIZE_M(16) - DT_SIZE_K(56))>;
+					reg = <0x0000e000 (DT_SIZE_M(16) - DT_SIZE_K(56))>;
 					read-only;
 				};
 			};
@@ -476,6 +477,30 @@
 				reg = <0x1800>;
 				status = "disabled";
 			};
+		};
+
+		adc0: adc0@90004000 {
+			compatible = "renesas,rz-adc";
+			reg = <0x90004000 0x800>;
+			unit = <0>;
+			interrupts = <GIC_SPI 345 IRQ_TYPE_EDGE IRQ_DEFAULT_PRIORITY>;
+			interrupt-names = "scanend";
+			#io-channel-cells = <1>;
+			vref-mv = <1800>;
+			channel-available-mask = <0xf>;
+			status = "disabled";
+		};
+
+		adc1: adc1@90004800 {
+			compatible = "renesas,rz-adc";
+			reg = <0x90004800 0x800>;
+			unit = <1>;
+			interrupts = <GIC_SPI 350 IRQ_TYPE_EDGE IRQ_DEFAULT_PRIORITY>;
+			interrupt-names = "scanend";
+			#io-channel-cells = <1>;
+			vref-mv = <1800>;
+			channel-available-mask = <0xf>;
+			status = "disabled";
 		};
 
 		sci0: sci0@80001000 {

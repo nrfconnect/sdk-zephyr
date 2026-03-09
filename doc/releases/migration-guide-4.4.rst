@@ -96,6 +96,17 @@ Boards
 
 * ITE ``it515xx_evb`` is renamed to ``it51xxx_evb``.
 
+* Boards that have NVM devices must now correctly have their addresses set or inheritied when they
+  do not start at address 0x0. In previous zephyr releases, a ``partitions`` entry in DTS was
+  wrongly interpreted as starting in the flash device's address range even though the DTS file
+  does not describe this and instead describes flash partitions starting at absolute addresses
+  e.g. 0x0. If you build and get the deprecated Kconfig
+  :kconfig:option:`CONFIG_FLASH_CODE_PARTITION_ADDRESS_INVALID` being set then this means your
+  board, SoC or DTS files are wrong and need updating, a ``ranges <>;`` property should be used
+  by the flash nodes to specify the base address and size for child nodes, and
+  ``fixed-partitions``/``fixed-subpartitions`` nodes must have a ``ranges;`` property to pass the
+  parent's ranges on to child nodes.
+
 Device Drivers and Devicetree
 *****************************
 
@@ -791,3 +802,24 @@ Architectures
   the feature is cache related so move it under cache.
 
   * Use :c:func:`sys_cache_is_mem_coherent` instead of :c:func:`arch_mem_coherent`.
+
+* :kconfig:option:`CONFIG_RISCV` now requires, that the :dtcompatible:`riscv` is present in the
+  devicetree.
+
+* The ``riscv,isa-base`` and  ``riscv,isa-extensions`` devicetree properties of
+  :dtcompatible:`riscv` are now used to set the Base Integer Instruction Set and the RISC-V
+  extensions. They are no longer set by the SoC. The devicetree property ``riscv,isa`` has been
+  deprecated in favor of the two new properties. (:github:`97540`)
+
+  * ``CONFIG_SOC_CV64A6_IMAFDC`` and ``CONFIG_SOC_CV64A6_IMAC`` are now combined into
+    :kconfig:option:`CONFIG_SOC_CV64A6`, as the RISC-V extensions are now set by the devicetree.
+
+  * The following options of :kconfig:option:`CONFIG_SOC_SERIES_AE350` had been removed, as they
+    now can be set via the devicetree:
+
+    * ``CONFIG_RV32I_CPU``
+    * ``CONFIG_RV32E_CPU``
+    * ``CONFIG_RV64I_CPU``
+    * ``CONFIG_NO_FPU``
+    * ``CONFIG_SINGLE_PRECISION_FPU``
+    * ``CONFIG_DOUBLE_PRECISION_FPU``
