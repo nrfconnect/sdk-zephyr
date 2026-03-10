@@ -200,8 +200,8 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: 4dea410729da817a464f778533eb721473262e5b
-      path: modules/hal/nordic
+      url: https://github.com/mstasiaknordic/sdk-hal_nordic
+      revision: nrfx4.2.0rc1
       groups:
         - hal
     - name: hal_nuvoton
