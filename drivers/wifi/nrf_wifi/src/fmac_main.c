@@ -99,10 +99,14 @@ static const unsigned char reorder_buf_size = CONFIG_NRF70_RX_NUM_BUFS / 2;
 static const unsigned char max_rxampdu_size = MAX_RX_AMPDU_SIZE_64KB;
 
 static const unsigned char max_tx_aggregation = CONFIG_NRF70_MAX_TX_AGGREGATION;
+//static const unsigned int rx1_num_bufs = CONFIG_NRF70_RX_NUM_BUFS / MAX_RX_QUEUES;
+//static const unsigned int rx2_num_bufs = CONFIG_NRF70_RX_NUM_BUFS / MAX_RX_QUEUES;
+//static const unsigned int rx3_num_bufs = CONFIG_NRF70_RX_NUM_BUFS / MAX_RX_QUEUES;
 
-static const unsigned int rx1_num_bufs = CONFIG_NRF70_RX_NUM_BUFS / MAX_RX_QUEUES;
-static const unsigned int rx2_num_bufs = CONFIG_NRF70_RX_NUM_BUFS / MAX_RX_QUEUES;
-static const unsigned int rx3_num_bufs = CONFIG_NRF70_RX_NUM_BUFS / MAX_RX_QUEUES;
+static const unsigned int rx1_num_bufs = 21;
+static const unsigned int rx2_num_bufs = 21;
+static const unsigned int rx3_num_bufs = 21;
+
 
 static const unsigned int rx1_buf_sz = CONFIG_NRF70_RX_MAX_DATA_SIZE;
 static const unsigned int rx2_buf_sz = CONFIG_NRF70_RX_MAX_DATA_SIZE;
