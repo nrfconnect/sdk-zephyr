@@ -6,7 +6,7 @@
 #include <nrfx.h>
 #include <helpers/nrfx_gppi.h>
 #if defined(NRFX_GPPI_MULTI_DOMAIN) && !defined(NRFX_GPPI_FIXED_CONNECTIONS)
-#include <soc/interconnect/nrfx_gppi_lumos.h>
+#include <soc/interconnect/nrfx_gppi_d2ppi.h>
 #elif defined(CONFIG_SOC_NRF54H20_CPURAD)
 #include <nrfx_gppi_cpurad.h>
 #endif
