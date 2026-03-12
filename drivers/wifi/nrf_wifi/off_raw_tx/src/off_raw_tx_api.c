@@ -140,6 +140,12 @@ int nrf70_off_raw_tx_init(uint8_t *mac_addr, unsigned char *country_code)
 	struct nrf_wifi_board_params board_params;
 	unsigned int fw_ver = 0;
 	k_spinlock_key_t key;
+#ifdef CONFIG_WIFI_NRF71
+#ifdef CONFIG_NRF71_PHY_RF_PARAM_GDRAM
+        unsigned int rf_params_addr[NUM_WIFI_PARAMS];
+        unsigned int vtf_buffer_address = 0;
+#endif /* PHY_RF_PARAM_GDRAM */
+#endif /* CONFIG_WIFI_NRF71 */
 
 	/* The OSAL layer needs to be initialized before any other initialization
 	 * so that other layers (like FW IF,HW IF etc) have access to OS ops
@@ -183,6 +189,27 @@ int nrf70_off_raw_tx_init(uint8_t *mac_addr, unsigned char *country_code)
 		goto err;
 	}
 
+#ifdef CONFIG_WIFI_NRF71
+#ifdef CONFIG_NRF71_PHY_RF_PARAM_GDRAM
+        status = nrf_wifi_fmac_config_rf_params(rpu_ctx_zep->rpu_ctx,
+                                                rf_params_addr);
+        if (status != NRF_WIFI_STATUS_SUCCESS) {
+                LOG_ERR("%s: Setting RF parametrs failed\n", __func__);
+                goto err;
+        }
+
+        status = nrf_wifi_fmac_config_vtf_params(rpu_ctx_zep->rpu_ctx,
+                                                 243,
+                                                 25,
+                                                 0,
+                                                 &vtf_buffer_address);
+        if (status != NRF_WIFI_STATUS_SUCCESS) {
+                LOG_ERR("%s: Setting VTF after initilization failed\n", __func__);
+                goto err;
+        }
+#endif
+#endif /* WIFI_NRF71 */
+
 	LOG_DBG("nRF70 firmware (v%d.%d.%d.%d) booted successfully",
 		NRF_WIFI_UMAC_VER(fw_ver),
 		NRF_WIFI_UMAC_VER_MAJ(fw_ver),
@@ -200,6 +227,12 @@ int nrf70_off_raw_tx_init(uint8_t *mac_addr, unsigned char *country_code)
 	configure_board_dep_params(&board_params);
 
 	status = nrf_wifi_off_raw_tx_fmac_dev_init(rpu_ctx_zep->rpu_ctx,
+#ifdef WIFI_NRF71
+#ifdef PHY_RF_PARAM_GDRAM
+				                (unsigned char*)rf_params_addr,
+				                vtf_buffer_address,
+#endif  /* PHY_RF_PARAM_GDRAM */
+#endif  /* WIFI_NRF71 */
 #ifdef CONFIG_NRF_WIFI_LOW_POWER
 						   HW_SLEEP_ENABLE,
 #endif /* CONFIG_NRF_WIFI_LOW_POWER */
