@@ -95,6 +95,7 @@
       - "arch/arm/**/*"
   - any:
       - "drivers/bluetooth/**/*"
+      - "drivers/clock_control/**/*"
   - any:
       - "dts/arm/nordic/nrf5*"
   - any:
