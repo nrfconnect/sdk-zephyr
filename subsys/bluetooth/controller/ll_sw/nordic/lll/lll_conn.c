@@ -767,20 +767,24 @@ void lll_conn_isr_tx(void *param)
 	 *       use for Rx Chain Delay in BabbleSIM? or is there a bug in
 	 *       target implementation?
 	 */
-	hcto += radio_rx_chain_delay_get(lll->phy_tx, PHY_FLAGS_S8);
+#if defined(CONFIG_BT_CTLR_PHY)
+	hcto += radio_rx_address_delay_get(lll->phy_tx, PHY_FLAGS_S8);
+#else /* !CONFIG_BT_CTLR_PHY */
+	hcto += radio_rx_address_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
+#endif /* !CONFIG_BT_CTLR_PHY */
 #endif /* FIXME: Why different for BabbleSIM? */
 
 #if defined(CONFIG_BT_CTLR_DF_CONN_CTE_TX)
 	hcto += cte_len;
 #endif /* CONFIG_BT_CTLR_DF_CONN_CTE_TX */
 #if defined(CONFIG_BT_CTLR_PHY)
-	hcto += radio_rx_chain_delay_get(lll->phy_rx, 1);
+	hcto += radio_rx_address_delay_get(lll->phy_rx, PHY_FLAGS_S8);
 	hcto += addr_us_get(lll->phy_rx);
 	hcto -= radio_tx_chain_delay_get(lll->phy_tx, lll->phy_flags);
 #else /* !CONFIG_BT_CTLR_PHY */
-	hcto += radio_rx_chain_delay_get(0, 0);
-	hcto += addr_us_get(0);
-	hcto -= radio_tx_chain_delay_get(0, 0);
+	hcto += radio_rx_address_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
+	hcto += addr_us_get(PHY_LEGACY);
+	hcto -= radio_tx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 	radio_tmr_hcto_configure(hcto);
@@ -1060,11 +1064,9 @@ static void isr_done(void *param)
 			uint32_t preamble_to_addr_us;
 
 #if defined(CONFIG_BT_CTLR_PHY)
-			preamble_to_addr_us =
-				addr_us_get(lll->periph.phy_rx_event);
+			preamble_to_addr_us = addr_us_get(lll->periph.phy_rx_event);
 #else /* !CONFIG_BT_CTLR_PHY */
-			preamble_to_addr_us =
-				addr_us_get(0);
+			preamble_to_addr_us = addr_us_get(PHY_LEGACY);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 			e->drift.start_to_address_actual_us =
