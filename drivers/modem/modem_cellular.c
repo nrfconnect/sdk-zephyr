@@ -161,6 +161,11 @@ struct modem_cellular_data {
 	struct modem_ppp *ppp;
 	struct net_mgmt_event_callback net_mgmt_event_callback;
 
+	/* Set after the dial script swaps DLCI roles (e.g. AT#XCMUX=2 on nRF91-SLM
+	 * moves AT to DLCI 2 and PPP to DLCI 1). Cleared on full CMUX re-init.
+	 */
+	bool dlci_chat_on_dlci2;
+
 	enum modem_cellular_state state;
 	const struct device *dev;
 	struct k_work_delayable timeout_work;
@@ -206,6 +211,7 @@ struct modem_cellular_config {
 	k_timeout_t cmux_idle_timeout;
 	const struct modem_chat_script *init_chat_script;
 	const struct modem_chat_script *dial_chat_script;
+	const struct modem_chat_script *redial_chat_script;
 	const struct modem_chat_script *periodic_chat_script;
 	const struct modem_chat_script *shutdown_chat_script;
 	const struct modem_chat_script *set_baudrate_chat_script;
@@ -782,6 +788,7 @@ static int modem_cellular_on_idle_state_enter(struct modem_cellular_data *data)
 	modem_ppp_release(data->ppp);
 	modem_cmux_release(&data->cmux);
 	modem_pipe_close_async(data->uart_pipe);
+	data->dlci_chat_on_dlci2 = false;
 	k_sem_give(&data->suspended_sem);
 	return 0;
 }
@@ -1333,15 +1340,37 @@ static void modem_cellular_run_dial_script_event_handler(struct modem_cellular_d
 		(const struct modem_cellular_config *)data->dev->config;
 
 	switch (evt) {
-	case MODEM_CELLULAR_EVENT_TIMEOUT:
-		modem_chat_attach(&data->chat, data->dlci1_pipe);
-		modem_chat_run_script_async(&data->chat, config->dial_chat_script);
+	case MODEM_CELLULAR_EVENT_TIMEOUT: {
+		struct modem_pipe *chat_pipe = data->dlci_chat_on_dlci2
+					      ? data->dlci2_pipe
+					      : data->dlci1_pipe;
+		const struct modem_chat_script *script =
+			(data->dlci_chat_on_dlci2 && config->redial_chat_script)
+			? config->redial_chat_script
+			: config->dial_chat_script;
+
+		modem_chat_attach(&data->chat, chat_pipe);
+		modem_chat_run_script_async(&data->chat, script);
 		break;
+	}
 	case MODEM_CELLULAR_EVENT_SCRIPT_FAILED:
 		modem_cellular_script_failed(data);
 		if (modem_cellular_is_script_retry_exceeded(data)) {
-			modem_cellular_enter_state(data, MODEM_CELLULAR_STATE_IDLE);
-			modem_cellular_delegate_event(data, MODEM_CELLULAR_EVENT_RESUME);
+			if (modem_cellular_gpio_is_enabled(&config->reset_gpio) ||
+			    modem_cellular_gpio_is_enabled(&config->power_gpio)) {
+				modem_cellular_enter_state(data, MODEM_CELLULAR_STATE_IDLE);
+				modem_cellular_delegate_event(data,
+							     MODEM_CELLULAR_EVENT_RESUME);
+			} else {
+				/* No reset/power GPIO — keep retrying dial on existing
+				 * CMUX channel to avoid tearing down a session that
+				 * cannot be cleanly re-established without hardware reset.
+				 */
+				LOG_WRN("Dial script retries exceeded, "
+					"no reset GPIO, retrying");
+				modem_cellular_start_timer(data,
+					MODEM_CELLULAR_PERIODIC_SCRIPT_TIMEOUT);
+			}
 		} else {
 			modem_cellular_start_timer(data, MODEM_CELLULAR_PERIODIC_SCRIPT_TIMEOUT);
 		}
@@ -1374,6 +1403,9 @@ static int modem_cellular_on_await_registered_state_enter(struct modem_cellular_
 	if (modem_ppp_attach(data->ppp, data->dlci1_pipe) < 0) {
 		return -EAGAIN;
 	}
+
+	/* After dial succeeds, AT commands are on DLCI 2 (swapped by AT#XCMUX=2) */
+	data->dlci_chat_on_dlci2 = true;
 
 	modem_cellular_start_timer(data, MODEM_CELLULAR_PERIODIC_SCRIPT_TIMEOUT);
 	return modem_chat_attach(&data->chat, data->dlci2_pipe);
@@ -2990,6 +3022,16 @@ MODEM_CHAT_SCRIPT_CMDS_DEFINE(nordic_nrf91_slm_dial_chat_script_cmds,
 MODEM_CHAT_SCRIPT_DEFINE(nordic_nrf91_slm_dial_chat_script, nordic_nrf91_slm_dial_chat_script_cmds,
 			 dial_abort_matches, modem_cellular_chat_callback_handler, 10);
 
+/* Retry script: no AT#XCMUX=2 since DLCI roles were already swapped. */
+MODEM_CHAT_SCRIPT_CMDS_DEFINE(nordic_nrf91_slm_redial_chat_script_cmds,
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT#XPPP=0", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT#XPPP=1", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CFUN=1", ok_match));
+
+MODEM_CHAT_SCRIPT_DEFINE(nordic_nrf91_slm_redial_chat_script,
+			 nordic_nrf91_slm_redial_chat_script_cmds,
+			 dial_abort_matches, modem_cellular_chat_callback_handler, 10);
+
 MODEM_CHAT_SCRIPT_EMPTY_DEFINE(nordic_nrf91_slm_periodic_chat_script);
 
 #endif
@@ -3108,6 +3150,7 @@ MODEM_CHAT_SCRIPT_DEFINE(sqn_gm02s_periodic_chat_script,
 		.set_baudrate_chat_script = (set_baudrate_script),                                 \
 		.init_chat_script = (init_script),                                                 \
 		.dial_chat_script = (dial_script),                                                 \
+		.redial_chat_script = NULL,                                                        \
 		.periodic_chat_script = (periodic_script),                                         \
 		.shutdown_chat_script = (shutdown_script),                                         \
 		.user_pipes = MODEM_CELLULAR_GET_USER_PIPES(inst),                                 \
@@ -3344,12 +3387,39 @@ MODEM_CHAT_SCRIPT_DEFINE(sqn_gm02s_periodic_chat_script,
 	MODEM_CELLULAR_DEFINE_AND_INIT_USER_PIPES(inst,                                            \
 						  (gnss_pipe, 3))                                  \
                                                                                                    \
-	MODEM_CELLULAR_DEFINE_INSTANCE(inst, 100, 100, 2000, 10000, false,                         \
-				       NULL,                                                       \
-				       &nordic_nrf91_slm_init_chat_script,                         \
-				       &nordic_nrf91_slm_dial_chat_script,                         \
-				       &nordic_nrf91_slm_periodic_chat_script,                     \
-				       NULL)
+	static const struct modem_cellular_config MODEM_CELLULAR_INST_NAME(config, inst) = {       \
+		.uart = DEVICE_DT_GET(DT_INST_BUS(inst)),                                          \
+		.power_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, mdm_power_gpios, {}),                 \
+		.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, mdm_reset_gpios, {}),                 \
+		.wake_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, mdm_wake_gpios, {}),                   \
+		.ring_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, mdm_ring_gpios, {}),                   \
+		.dtr_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, mdm_dtr_gpios, {}),                     \
+		.power_pulse_duration_ms = 100,                                                    \
+		.reset_pulse_duration_ms = 100,                                                    \
+		.startup_time_ms = 2000,                                                           \
+		.shutdown_time_ms = 10000,                                                         \
+		.autostarts = DT_INST_PROP_OR(inst, autostarts, false),                            \
+		.cmux_enable_runtime_power_save =                                                  \
+			DT_INST_PROP_OR(inst, cmux_enable_runtime_power_save, 0),                  \
+		.cmux_close_pipe_on_power_save =                                                   \
+			DT_INST_PROP_OR(inst, cmux_close_pipe_on_power_save, 0),                   \
+		.cmux_idle_timeout = K_MSEC(DT_INST_PROP_OR(inst, cmux_idle_timeout_ms, 0)),       \
+		.set_baudrate_chat_script = NULL,                                                  \
+		.init_chat_script = &nordic_nrf91_slm_init_chat_script,                            \
+		.dial_chat_script = &nordic_nrf91_slm_dial_chat_script,                            \
+		.redial_chat_script = &nordic_nrf91_slm_redial_chat_script,                        \
+		.periodic_chat_script = &nordic_nrf91_slm_periodic_chat_script,                    \
+		.shutdown_chat_script = NULL,                                                      \
+		.user_pipes = MODEM_CELLULAR_GET_USER_PIPES(inst),                                 \
+		.user_pipes_size = ARRAY_SIZE(MODEM_CELLULAR_GET_USER_PIPES(inst)),                \
+	};                                                                                         \
+                                                                                                   \
+	PM_DEVICE_DT_INST_DEFINE(inst, modem_cellular_pm_action);                                  \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(inst, modem_cellular_init, PM_DEVICE_DT_INST_GET(inst),              \
+			      &MODEM_CELLULAR_INST_NAME(data, inst),                               \
+			      &MODEM_CELLULAR_INST_NAME(config, inst), POST_KERNEL,                \
+			      CONFIG_MODEM_CELLULAR_INIT_PRIORITY, &modem_cellular_api);
 
 #define MODEM_CELLULAR_DEVICE_SQN_GM02S(inst)                                                      \
 	MODEM_DT_INST_PPP_DEFINE(inst, MODEM_CELLULAR_INST_NAME(ppp, inst), NULL, 98, 1500, 64);   \
