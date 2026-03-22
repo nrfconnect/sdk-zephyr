@@ -1008,31 +1008,38 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 				}
 			}
 
-			if (wpas_config_process_blob(wpa_s->conf, "client_cert",
-					   enterprise_creds.client_cert,
-					   enterprise_creds.client_cert_len)) {
-				goto out;
-			}
+			/* Skip client cert/key for PEAP/TTLS - these methods
+			 * use only server-side certs. Sending a client cert
+			 * causes RADIUS servers (e.g. NPS) to reject PEAP.
+			 */
+			if (params->security != WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2 &&
+			    params->security != WIFI_SECURITY_TYPE_EAP_TTLS_MSCHAPV2) {
+				if (wpas_config_process_blob(wpa_s->conf, "client_cert",
+						   enterprise_creds.client_cert,
+						   enterprise_creds.client_cert_len)) {
+					goto out;
+				}
 
-			if (!wpa_cli_cmd_v("set_network %d client_cert \"blob://client_cert\"",
-					   resp.network_id)) {
-				goto out;
-			}
+				if (!wpa_cli_cmd_v("set_network %d client_cert \"blob://client_cert\"",
+						   resp.network_id)) {
+					goto out;
+				}
 
-			if (wpas_config_process_blob(wpa_s->conf, "private_key",
-					   enterprise_creds.client_key,
-					   enterprise_creds.client_key_len)) {
-				goto out;
-			}
+				if (wpas_config_process_blob(wpa_s->conf, "private_key",
+						   enterprise_creds.client_key,
+						   enterprise_creds.client_key_len)) {
+					goto out;
+				}
 
-			if (!wpa_cli_cmd_v("set_network %d private_key \"blob://private_key\"",
-					   resp.network_id)) {
-				goto out;
-			}
+				if (!wpa_cli_cmd_v("set_network %d private_key \"blob://private_key\"",
+						   resp.network_id)) {
+					goto out;
+				}
 
-			if (!wpa_cli_cmd_v("set_network %d private_key_passwd \"%s\"",
-					   resp.network_id, params->key_passwd)) {
-				goto out;
+				if (!wpa_cli_cmd_v("set_network %d private_key_passwd \"%s\"",
+						   resp.network_id, params->key_passwd)) {
+					goto out;
+				}
 			}
 
 			if (wpas_config_process_blob(wpa_s->conf, "ca_cert2",
@@ -1046,31 +1053,34 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 				goto out;
 			}
 
-			if (wpas_config_process_blob(wpa_s->conf, "client_cert2",
-						     enterprise_creds.client_cert2,
-						     enterprise_creds.client_cert2_len)) {
-				goto out;
-			}
+			if (params->security != WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2 &&
+			    params->security != WIFI_SECURITY_TYPE_EAP_TTLS_MSCHAPV2) {
+				if (wpas_config_process_blob(wpa_s->conf, "client_cert2",
+							     enterprise_creds.client_cert2,
+							     enterprise_creds.client_cert2_len)) {
+					goto out;
+				}
 
-			if (!wpa_cli_cmd_v("set_network %d client_cert2 \"blob://client_cert2\"",
-					   resp.network_id)) {
-				goto out;
-			}
+				if (!wpa_cli_cmd_v("set_network %d client_cert2 \"blob://client_cert2\"",
+						   resp.network_id)) {
+					goto out;
+				}
 
-			if (wpas_config_process_blob(wpa_s->conf, "private_key2",
-						     enterprise_creds.client_key2,
-						     enterprise_creds.client_key2_len)) {
-				goto out;
-			}
+				if (wpas_config_process_blob(wpa_s->conf, "private_key2",
+							     enterprise_creds.client_key2,
+							     enterprise_creds.client_key2_len)) {
+					goto out;
+				}
 
-			if (!wpa_cli_cmd_v("set_network %d private_key2 \"blob://private_key2\"",
-					   resp.network_id)) {
-				goto out;
-			}
+				if (!wpa_cli_cmd_v("set_network %d private_key2 \"blob://private_key2\"",
+						   resp.network_id)) {
+					goto out;
+				}
 
-			if (!wpa_cli_cmd_v("set_network %d private_key2_passwd \"%s\"",
-					   resp.network_id, params->key2_passwd)) {
-				goto out;
+				if (!wpa_cli_cmd_v("set_network %d private_key2_passwd \"%s\"",
+						   resp.network_id, params->key2_passwd)) {
+					goto out;
+				}
 			}
 #endif
 		} else {
