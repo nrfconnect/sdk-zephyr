@@ -73,7 +73,7 @@ _image_1_primary_slot_id = PM_S1_ID;
 #define ROM_END_OFFSET 0
 #endif
 
-#if defined(CONFIG_FLASH_USES_MAPPED_PARTITION)
+#if defined(CONFIG_FLASH_USES_MAPPED_PARTITION) && defined(CONFIG_XIP)
 #define ROM_ADDR (DT_REG_ADDR(DT_CHOSEN(zephyr_code_partition)))
 #define ROM_SIZE (DT_REG_SIZE(DT_CHOSEN(zephyr_code_partition)) - ROM_END_OFFSET)
 #else
