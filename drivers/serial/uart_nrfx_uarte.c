@@ -2723,22 +2723,24 @@ static void uarte_nrfx_irq_tx_enable(const struct device *dev)
 {
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
 	struct uarte_nrfx_data *data = dev->data;
-	bool already_enabled;
+	bool pm_put_needed;
 
 	pm_device_runtime_get(dev);
 
 	unsigned int key = irq_lock();
 
-	already_enabled = data->int_driven->tx_irq_enabled;
-	if (!already_enabled) {
+	if (!data->int_driven->tx_irq_enabled) {
+		pm_put_needed = data->int_driven->disable_tx_irq;
 		data->int_driven->disable_tx_irq = false;
 		data->int_driven->tx_irq_enabled = true;
 		nrf_uarte_int_enable(uarte, NRF_UARTE_INT_TXSTOPPED_MASK);
+	} else {
+		pm_put_needed = true;
 	}
 
 	irq_unlock(key);
 
-	if (already_enabled) {
+	if (pm_put_needed) {
 		pm_device_runtime_put(dev);
 	}
 }
@@ -2747,11 +2749,13 @@ static void uarte_nrfx_irq_tx_enable(const struct device *dev)
 static void uarte_nrfx_irq_tx_disable(const struct device *dev)
 {
 	struct uarte_nrfx_data *data = dev->data;
+	unsigned int key = irq_lock();
 	if (data->int_driven->tx_irq_enabled) {
 		/* TX IRQ will be disabled after current transmission is finished */
 		data->int_driven->disable_tx_irq = true;
 		data->int_driven->tx_irq_enabled = false;
 	}
+	irq_unlock(key);
 }
 
 /** Interrupt driven transfer ready function */
