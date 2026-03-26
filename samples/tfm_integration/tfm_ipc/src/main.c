@@ -62,6 +62,10 @@ void tfm_psa_crypto_rng(void)
 	uint8_t outbuf[256] = { 0 };
 
 	status = psa_generate_random(outbuf, 256);
+	if (status != PSA_SUCCESS) {
+		printk("psa_generate_random failed: %d\n", status);
+		return;
+	}
 	printk("Generating 256 bytes of random data:");
 	for (uint16_t i = 0; i < 256; i++) {
 		if (!(i % 16)) {
