@@ -23,6 +23,8 @@ manifest:
       url-base: https://github.com/zephyrproject-rtos
     - name: babblesim
       url-base: https://github.com/BabbleSim
+    - name: ncs
+      url-base: https://github.com/nrfconnect
 
   group-filter: [-babblesim, -optional, -testing]
 
@@ -200,7 +202,10 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: 7142bc9c3c94f06e3b520890dde93d363c0e67bf
+      # Those changes would not be needed in case of integrating a real external BSP
+      remote: ncs
+      repo-path: sdk-hal_nordic
+      revision: NRFX-8931-nrfx-without-nrf54lm20
       path: modules/hal/nordic
       groups:
         - hal
