@@ -639,7 +639,6 @@
 				clocks = <&lfxo>, <&pclk>;
 				clock-names = "lfclock", "hfclock";
 				status = "disabled";
-				extended-channels = <0>;
 			};
 
 			tdm: tdm@e8000 {
