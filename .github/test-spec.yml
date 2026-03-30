@@ -96,6 +96,8 @@
   - any:
       - "drivers/bluetooth/**/*"
       - "drivers/clock_control/**/*"
+      - "drivers/timer/Kconfig.nrf_grtc"
+      - "drivers/timer/nrf_grtc_timer.c"
   - any:
       - "dts/arm/nordic/nrf5*"
   - any:
@@ -105,6 +107,7 @@
   - any:
       - "include/zephyr/bluetooth/**/*"
       - "!include/zephyr/bluetooth/mesh/**/*"
+      - "include/zephyr/drivers/timer/nrf_grtc_timer.h"
   - any:
       - "boards/nordic/nrf5*"
   - any:
