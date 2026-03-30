@@ -22,6 +22,8 @@ void modem_pipelink_attach(struct modem_pipelink *link,
 	K_SPINLOCK(&link->spinlock) {
 		link->callback = callback;
 		link->user_data = user_data;
+		k_busy_wait(1000);
+
 	}
 }
 
@@ -31,6 +33,8 @@ bool modem_pipelink_is_connected(struct modem_pipelink *link)
 
 	K_SPINLOCK(&link->spinlock) {
 		connected = link->connected;
+		k_busy_wait(1000);
+
 	}
 
 	return connected;
@@ -46,6 +50,7 @@ void modem_pipelink_release(struct modem_pipelink *link)
 	K_SPINLOCK(&link->spinlock) {
 		link->callback = NULL;
 		link->user_data = NULL;
+		k_busy_wait(1000);
 	}
 }
 
@@ -66,6 +71,7 @@ void modem_pipelink_notify_connected(struct modem_pipelink *link)
 
 		link->connected = true;
 		try_callback(link, MODEM_PIPELINK_EVENT_CONNECTED);
+		k_busy_wait(1000);
 	}
 }
 
@@ -78,5 +84,6 @@ void modem_pipelink_notify_disconnected(struct modem_pipelink *link)
 
 		link->connected = false;
 		try_callback(link, MODEM_PIPELINK_EVENT_DISCONNECTED);
+		k_busy_wait(1000);
 	}
 }

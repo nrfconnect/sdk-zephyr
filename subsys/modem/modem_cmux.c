@@ -605,7 +605,10 @@ static int16_t modem_cmux_transmit_data_frame(struct modem_cmux *cmux,
 	uint16_t space;
 	int ret;
 
-	k_mutex_lock(&cmux->transmit_rb_lock, K_FOREVER);
+	if (k_mutex_lock(&cmux->transmit_rb_lock, K_NO_WAIT) != 0) {
+		printk("MARKUS\n");
+		return 0;
+	}
 
 	if (cmux->flow_control_on == false || is_transitioning_to_powersave(cmux)) {
 		k_mutex_unlock(&cmux->transmit_rb_lock);
@@ -1788,6 +1791,7 @@ static int modem_cmux_dlci_pipe_api_open(void *data)
 		}
 
 		modem_work_schedule(&dlci->open_work, K_NO_WAIT);
+		k_busy_wait(1000);
 	}
 
 	return ret;
@@ -1826,6 +1830,7 @@ static int modem_cmux_dlci_pipe_api_transmit(void *data, const uint8_t *buf, siz
 		};
 
 		ret = modem_cmux_transmit_data_frame(cmux, &frame);
+		k_busy_wait(1000);
 	}
 
 	return ret;
@@ -1874,6 +1879,7 @@ static int modem_cmux_dlci_pipe_api_close(void *data)
 		}
 
 		modem_work_schedule(&dlci->close_work, K_NO_WAIT);
+		k_busy_wait(1000);
 	}
 
 	return ret;
@@ -2055,6 +2061,7 @@ int modem_cmux_attach(struct modem_cmux *cmux, struct modem_pipe *pipe)
 
 	K_SPINLOCK(&cmux->work_lock) {
 		cmux->attached = true;
+		k_busy_wait(1000);
 	}
 
 	return 0;
@@ -2093,6 +2100,8 @@ int modem_cmux_connect_async(struct modem_cmux *cmux)
 		if (k_work_delayable_is_pending(&cmux->connect_work) == false) {
 			modem_work_schedule(&cmux->connect_work, K_NO_WAIT);
 		}
+		k_busy_wait(1000);
+
 	}
 
 	return ret;
@@ -2131,6 +2140,8 @@ int modem_cmux_disconnect_async(struct modem_cmux *cmux)
 		if (k_work_delayable_is_pending(&cmux->disconnect_work) == false) {
 			modem_work_schedule(&cmux->disconnect_work, K_NO_WAIT);
 		}
+		k_busy_wait(1000);
+
 	}
 
 	return ret;
@@ -2146,6 +2157,7 @@ void modem_cmux_release(struct modem_cmux *cmux)
 
 	K_SPINLOCK(&cmux->work_lock) {
 		cmux->attached = false;
+		k_busy_wait(1000);
 	}
 
 	/* Close DLCI pipes and cancel DLCI work */

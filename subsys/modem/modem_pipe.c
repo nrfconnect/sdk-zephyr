@@ -18,6 +18,8 @@ static void pipe_set_callback(struct modem_pipe *pipe,
 	K_SPINLOCK(&pipe->spinlock) {
 		pipe->callback = callback;
 		pipe->user_data = user_data;
+		k_busy_wait(1000);
+
 	}
 }
 
@@ -27,6 +29,7 @@ static void pipe_call_callback(struct modem_pipe *pipe, enum modem_pipe_event ev
 		if (pipe->callback != NULL) {
 			pipe->callback(pipe, event, pipe->user_data);
 		}
+		k_busy_wait(1000);
 	}
 }
 
