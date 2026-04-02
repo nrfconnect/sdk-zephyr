@@ -150,6 +150,7 @@ zephyr_interface_library_named(mbedTLS)
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_mac.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_pake.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_rsa.c
+        ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_random.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_se.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_crypto_storage.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/library/psa_its_file.c
