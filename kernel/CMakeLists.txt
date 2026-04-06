@@ -21,10 +21,6 @@ macro(kernel_sources)
     list(APPEND kernel_files ${ARGN})
 endmacro()
 
-if(NOT CONFIG_ERRNO_IN_TLS AND NOT CONFIG_LIBC_ERRNO)
-  zephyr_syscall_header(${ZEPHYR_BASE}/include/zephyr/sys/errno_private.h)
-endif()
-
 zephyr_syscall_header_ifdef(
   CONFIG_ATOMIC_OPERATIONS_C
   ${ZEPHYR_BASE}/include/zephyr/sys/atomic_c.h
@@ -63,7 +59,6 @@ kernel_sources(
   banner.c
   busy_wait.c
   device.c
-  errno.c
   fatal.c
   init.c
   kheap.c
