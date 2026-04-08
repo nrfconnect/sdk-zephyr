@@ -39,9 +39,11 @@ LOG_MODULE_REGISTER(flash_nrf);
 #define SOC_NV_FLASH_NODE SOC_NV_FLASH_CHILD_NODE(0)
 
 
-#if CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER
+#if CONFIG_TRUSTED_EXECUTION_NONSECURE
+#if USE_PARTITION_MANAGER
 #include <pm_config.h>
-#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER */
+#endif /* USE_PARTITION_MANAGER */
+#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 #ifndef CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE
 #define FLASH_SLOT_WRITE     7500
@@ -172,11 +174,17 @@ static int flash_nrf_read(const struct device *dev, off_t addr,
 	}
 #endif
 
-#if CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER && PM_APP_ADDRESS
+#if CONFIG_TRUSTED_EXECUTION_NONSECURE
+#if USE_PARTITION_MANAGER && PM_APP_ADDRESS
 	if (addr < PM_APP_ADDRESS) {
 		return soc_secure_mem_read(data, (void *)addr, len);
 	}
+#elif !USE_PARTITION_MANAGER && DT_NODE_EXISTS(DT_NODELABEL(slot0_ns_partition))
+	if ((uintptr_t)addr < DT_REG_ADDR(DT_NODELABEL(slot0_ns_partition))) {
+		return soc_secure_mem_read(data, (void *)addr, len);
+	}
 #endif
+#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 	if (soc_secure_flash_range_is_secure((uintptr_t)addr, len)) {
 		return soc_secure_mem_read(data, (void *)addr, len);
