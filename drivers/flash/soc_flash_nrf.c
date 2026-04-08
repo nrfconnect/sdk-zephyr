@@ -36,6 +36,10 @@ LOG_MODULE_REGISTER(flash_nrf);
 
 #define SOC_NV_FLASH_NODE DT_INST(0, soc_nv_flash)
 
+#if CONFIG_TRUSTED_EXECUTION_NONSECURE
+#include <soc_secure.h>
+#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
+
 #ifndef CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE
 #define FLASH_SLOT_WRITE     7500
 #if defined(CONFIG_SOC_FLASH_NRF_PARTIAL_ERASE)
@@ -162,6 +166,12 @@ static int flash_nrf_read(const struct device *dev, off_t addr,
 	if (within_uicr) {
 		nrf_buffer_read_91_uicr(data, (uint32_t)addr, len);
 		return 0;
+	}
+#endif
+
+#if CONFIG_TRUSTED_EXECUTION_NONSECURE && DT_NODE_EXISTS(DT_NODELABEL(slot0_ns_partition))
+	if ((uintptr_t)addr < DT_REG_ADDR(DT_NODELABEL(slot0_ns_partition))) {
+		return soc_secure_mem_read(data, (void *)addr, len);
 	}
 #endif
 
