@@ -27,7 +27,7 @@ jobs:
 
     steps:
     - name: Download artifacts
-      uses: dawidd6/action-download-artifact@ac66b43f0e6a346234dd65d4d0c8fbb31cb316e5 # v11
+      uses: dawidd6/action-download-artifact@8305c0f1062bb0d184d09ef4493ecb9288447732 # v20
       with:
         workflow: doc-build.yml
         run_id: ${{ github.event.workflow_run.id }}
@@ -40,7 +40,7 @@ jobs:
         fi
 
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # v5.1.0
+      uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
       with:
         aws-access-key-id: ${{ vars.AWS_DOCS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_DOCS_SECRET_ACCESS_KEY }}
