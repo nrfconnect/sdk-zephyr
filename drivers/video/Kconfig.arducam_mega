@@ -6,6 +6,7 @@
 config VIDEO_ARDUCAM_MEGA
 	bool "Arducam Mega CMOS digital image sensor"
 	select SPI
+	select EXPERIMENTAL
 	depends on DT_HAS_ARDUCAM_MEGA_ENABLED
 	default y
 	help
