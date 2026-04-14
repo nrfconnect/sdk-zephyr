@@ -39,7 +39,6 @@ void disable_mpu_rasr_xn(void)
 }
 #endif /* CONFIG_ARM_MPU */
 
-extern void function_in_ext_flash(void);
 extern void function_in_sram(void);
 
 int main(void)
@@ -50,7 +49,6 @@ int main(void)
 
 	printk("Address of %s function %p\n", __func__, &main);
 
-	function_in_ext_flash();
 	function_in_sram();
 
 	printk("Hello World! %s\n", CONFIG_BOARD);

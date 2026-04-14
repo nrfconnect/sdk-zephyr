@@ -73,9 +73,28 @@
 
 #endif
 
+#if defined(CONFIG_SOC_NRF54L15_CPUAPP)
+/*
+ * For nRF54L15, use a dedicated SRAM2 region for code relocation.
+ * This keeps the KMU section at the exact RAM start address 0x20000000.
+ * The board overlay reduces main RAM to 184KB, freeing up top 4KB for SRAM2.
+ * SRAM2 region is defined in the board overlay, not here, to avoid
+ * redefinition warning.
+ */
+
 MEMORY
 {
 	EXTFLASH (rx) : ORIGIN = EXTFLASH_ADDR, LENGTH = EXTFLASH_SIZE
 }
 
 #include <zephyr/arch/arm/cortex_m/scripts/linker.ld>
+
+#else
+/* For other platforms, use the original approach */
+MEMORY
+{
+	EXTFLASH (rx) : ORIGIN = EXTFLASH_ADDR, LENGTH = EXTFLASH_SIZE
+}
+
+#include <zephyr/arch/arm/cortex_m/scripts/linker.ld>
+#endif

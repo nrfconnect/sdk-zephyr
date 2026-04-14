@@ -1,0 +1,23 @@
+/*
+ * Overlay for nRF54L15 DK to carve out 4KB from SRAM for code relocation
+ * This reduces the default RAM region from 188KB to 184KB, freeing up
+ * a 4KB block at the top for SRAM2 region.
+ */
+/ {
+	soc {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		cpuapp_sram: memory@20000000 {
+			reg = <0x20000000 0x2E000>; /* 184KB instead of 188KB */
+		};
+
+		/* SRAM2 region at the top 4KB of SRAM */
+		sram2: memory@2002E000 {
+			compatible = "zephyr,memory-region", "mmio-sram";
+			reg = <0x2002E000 0x1000>; /* 4KB */
+			zephyr,memory-region = "SRAM2";
+		};
+	};
+};
