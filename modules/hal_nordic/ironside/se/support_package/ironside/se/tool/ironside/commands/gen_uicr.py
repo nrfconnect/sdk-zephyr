@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import ctypes as c
 import sys
+from pathlib import Path
 from itertools import groupby, pairwise
 from typing import NamedTuple
 
@@ -705,6 +706,18 @@ def add_parser(subparsers: SubParsers) -> argparse.ArgumentParser:
             "Setting this to Initialization updates the UICR minimum version to 2.2"
         ),
     )
+    parser.add_argument(
+        "--in-customer-hex",
+        dest="in_customer_hex",
+        default="",
+        # type=argparse.FileType("r"), # Dont need to open file, so no need in this
+        help="Path to an HEX file containing CUSTOMER data.",
+    )
+    parser.add_argument(
+        "--out-customer-hex",
+        type=argparse.FileType("w", encoding="utf-8"),
+        help="Path to write the CUSTOMER-only HEX file to",
+    )
 
     return parser
 
@@ -785,6 +798,9 @@ def cmd_handler(args: argparse.Namespace) -> None:
 
         if len(args.in_secondary_mpcconf_elfs) > 1:
             raise ScriptError("currently only one --in-secondary-mpcconf-elf argument is supported")
+
+        if args.out_customer_hex and not args.in_customer_hex:
+            raise ScriptError("--in-customer-hex is required when --out-customer-hex is used")
 
         # Validate secondary argument dependencies
         if args.secondary and args.secondary_address is None:
@@ -891,6 +907,7 @@ def cmd_handler(args: argparse.Namespace) -> None:
         secondary_periphconf_hex = IntelHex()
         mpcconf_hex = IntelHex()
         secondary_mpcconf_hex = IntelHex()
+        customer_hex = IntelHex()
 
         # Handle MPCCONF configuration
         if args.mpcconf:
@@ -944,6 +961,15 @@ def cmd_handler(args: argparse.Namespace) -> None:
 
             # Add periphconf data to periphconf hex object
             periphconf_hex.frombytes(periphconf_final, offset=args.periphconf_address)
+
+
+        if args.in_customer_hex:
+            if not Path(args.in_customer_hex).is_file():
+                raise ScriptError(
+                    f"args.in_customer_hex: The file {args.in_customer_hex} does not exist."
+                )
+            if args.out_customer_hex:
+                customer_hex.loadhex(args.in_customer_hex)
 
         # Handle secondary firmware configuration
         if args.secondary:
@@ -1067,6 +1093,10 @@ def cmd_handler(args: argparse.Namespace) -> None:
         if args.out_secondary_mpcconf_hex:
             secondary_mpcconf_hex.write_hex_file(args.out_secondary_mpcconf_hex)
             merged_hex.fromdict(secondary_mpcconf_hex.todict())
+
+        if args.out_customer_hex:
+            customer_hex.write_hex_file(args.out_customer_hex)
+            merged_hex.fromdict(customer_hex.todict())
 
         merged_hex.write_hex_file(args.out_merged_hex)
         uicr_hex.write_hex_file(args.out_uicr_hex)

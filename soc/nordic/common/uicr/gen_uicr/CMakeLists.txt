@@ -96,6 +96,9 @@ set(periphconf_hex_file ${APPLICATION_BINARY_DIR}/zephyr/periphconf.hex)
 set(secondary_periphconf_hex_file ${APPLICATION_BINARY_DIR}/zephyr/secondary_periphconf.hex)
 set(mpcconf_hex_file ${APPLICATION_BINARY_DIR}/zephyr/mpcconf.hex)
 set(secondary_mpcconf_hex_file ${APPLICATION_BINARY_DIR}/zephyr/secondary_mpcconf.hex)
+set(in_customer_hex_file ${CONFIG_GEN_UICR_CUSTOMER_FILE_FULL_PATH})
+set(out_customer_hex_file ${APPLICATION_BINARY_DIR}/zephyr/customer.hex)
+
 
 # Get UICR absolute address from this image's devicetree
 dt_nodelabel(uicr_path NODELABEL "uicr" REQUIRED)
@@ -181,6 +184,16 @@ if(CONFIG_GEN_UICR_PERIPHCONF)
 
   list(APPEND periphconf_args --periphconf-address ${PERIPHCONF_ADDRESS})
   list(APPEND periphconf_args --periphconf-size ${PERIPHCONF_SIZE})
+endif()
+
+if(CONFIG_GEN_UICR_CUSTOMER)
+  if("${CONFIG_GEN_UICR_CUSTOMER_FILE_FULL_PATH}" STREQUAL "")
+    message(FATAL_ERROR
+      "Error CONFIG_GEN_UICR_CUSTOMER_FILE_FULL_PATH is an empty string."
+    )
+  endif()
+  list(APPEND customer_args --in-customer-hex ${in_customer_hex_file})
+  list(APPEND customer_args --out-customer-hex ${out_customer_hex_file})
 endif()
 
 if(CONFIG_GEN_UICR_GENERATE_PERIPHCONF OR CONFIG_GEN_UICR_SECONDARY_GENERATE_PERIPHCONF OR
@@ -347,9 +360,11 @@ if(CONFIG_GEN_UICR_POLICY_MPCCONF_STAGE_INIT OR CONFIG_GEN_UICR_POLICY_MPCCONF_S
   list(APPEND policy_args --policy-mpcconf-stage ${CONFIG_GEN_UICR_POLICY_MPCCONF_STAGE_VALUE})
 endif()
 
+
 # Generate hex files (merged, uicr-only, periphconf-only, and secondary-periphconf-only)
 add_custom_command(
   OUTPUT ${merged_hex_file} ${uicr_hex_file} ${periphconf_hex_file} ${secondary_periphconf_hex_file}
+  ${out_customer_hex_file}
   COMMAND ${PYTHON_EXECUTABLE} ${IRONSIDE_SUPPORT_DIR}/se/tool/ironside/__main__.py
           gen-uicr
           --uicr-address ${UICR_ADDRESS}
@@ -368,7 +383,8 @@ add_custom_command(
           ${protectedmem_args}
           ${secondary_args}
           ${policy_args}
-  DEPENDS ${periphconf_elfs} ${secondary_periphconf_elfs}
+          ${customer_args}
+  DEPENDS ${periphconf_elfs} ${secondary_periphconf_elfs} ${in_customer_hex_file}
   WORKING_DIRECTORY ${APPLICATION_BINARY_DIR}
   COMMENT "Using gen_uicr.py to generate ${merged_hex_file}, ${uicr_hex_file}, ${periphconf_hex_file}, and ${secondary_periphconf_hex_file} from ${periphconf_elfs} ${secondary_periphconf_elfs}"
 )

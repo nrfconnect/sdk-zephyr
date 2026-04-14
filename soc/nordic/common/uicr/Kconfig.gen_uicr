@@ -123,6 +123,17 @@ config GEN_UICR_GENERATE_MPCCONF
 	  When enabled, the UICR generator will populate the
 	  mpcconf_partition partition.
 
+config GEN_UICR_CUSTOMER
+	bool "UICR.CUSTOMER"
+	default n
+	help
+	  When enabled, the UICR generator will use a customer-provided
+	  hex file for the CUSTOMER field.
+
+config GEN_UICR_CUSTOMER_FILE_FULL_PATH
+	string "Full path to hex file for UICR customer data."
+	depends on GEN_UICR_CUSTOMER
+
 config GEN_UICR_WDTSTART
 	bool "UICR.WDTSTART"
 	help
