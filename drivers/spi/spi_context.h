@@ -61,6 +61,8 @@ struct spi_context {
 	const struct spi_buf *current_rx;
 	size_t rx_count;
 
+	size_t max_count;
+
 	const uint8_t *tx_buf;
 	size_t tx_len;
 	uint8_t *rx_buf;
@@ -206,13 +208,8 @@ static inline int spi_context_wait_for_completion(struct spi_context *ctx)
 			timeout = K_FOREVER;
 			timeout_ms = UINT32_MAX;
 		} else {
-			uint32_t tx_len = spi_context_total_tx_len(ctx);
-			uint32_t rx_len = spi_context_total_rx_len(ctx);
-
-			timeout_ms = MAX(tx_len, rx_len) * 8 * 1000 /
-				     ctx->config->frequency;
+			timeout_ms = ctx->max_count * 8 * 1000 / ctx->config->frequency;
 			timeout_ms += CONFIG_SPI_COMPLETION_TIMEOUT_TOLERANCE;
-
 			timeout = K_MSEC(timeout_ms);
 		}
 #ifdef CONFIG_MULTITHREADING
@@ -483,6 +480,7 @@ void spi_context_buffers_setup(struct spi_context *ctx,
 					 &ctx->rx_len, dfs);
 
 	ctx->sync_status = 0;
+	ctx->max_count = MAX(spi_context_total_tx_len(ctx), spi_context_total_rx_len(ctx));
 
 #ifdef CONFIG_SPI_SLAVE
 	ctx->recv_frames = 0;
