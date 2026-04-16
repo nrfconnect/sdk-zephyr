@@ -4,11 +4,11 @@
  */
 
 /**
- * @file Common pm_s2ram.h include for Nordic SoCs.
+ * @file Common pm_s2ram.h include for Nordic nRF92 SoCs.
  */
 
-#ifndef _ZEPHYR_SOC_ARM_NORDIC_NRF_PM_S2RAM_H_
-#define _ZEPHYR_SOC_ARM_NORDIC_NRF_PM_S2RAM_H_
+#ifndef ZEPHYR_SOC_NORDIC_NRF92_SOC_PM_S2RAM_H_
+#define ZEPHYR_SOC_NORDIC_NRF92_SOC_PM_S2RAM_H_
 
 #define MCUBOOT_S2RAM_RESUME_MAGIC 0x75832419
 
@@ -35,4 +35,4 @@ struct mcuboot_resume_s {
  */
 int soc_s2ram_suspend(pm_s2ram_system_off_fn_t system_off);
 
-#endif /* _ZEPHYR_SOC_ARM_NORDIC_NRF_PM_S2RAM_H_ */
+#endif /* ZEPHYR_SOC_NORDIC_NRF92_SOC_PM_S2RAM_H_ */
