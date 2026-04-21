@@ -597,7 +597,7 @@ static int grtc_post_init(void)
 #endif
 
 #if DT_PROP(GRTC_NODE, clkout_32k)
-	nrfy_grtc_clkout_set(NRF_GRTC, NRF_GRTC_CLKOUT_32K, true);
+	//nrfy_grtc_clkout_set(NRF_GRTC, NRF_GRTC_CLKOUT_32K, true);
 #endif
 
 #if DT_NODE_HAS_PROP(GRTC_NODE, clkout_fast_frequency_hz)
@@ -608,12 +608,12 @@ static int grtc_post_init(void)
 #if DT_PROP(GRTC_NODE, clkout_fast_frequency_hz) > (DT_PROP(HFCLK_NODE, clock_frequency) / 2)
 #error "Invalid frequency value for fast clock output."
 #endif
-	uint32_t base_frequency = DT_PROP(HFCLK_NODE, clock_frequency);
-	uint32_t requested_frequency = DT_PROP(GRTC_NODE, clkout_fast_frequency_hz);
-	uint32_t grtc_div = base_frequency / (requested_frequency * 2);
-
-	nrfy_grtc_clkout_divider_set(NRF_GRTC, (uint8_t)grtc_div);
-	nrfy_grtc_clkout_set(NRF_GRTC, NRF_GRTC_CLKOUT_FAST, true);
+//	uint32_t base_frequency = DT_PROP(HFCLK_NODE, clock_frequency);
+//	uint32_t requested_frequency = DT_PROP(GRTC_NODE, clkout_fast_frequency_hz);
+//	uint32_t grtc_div = base_frequency / (requested_frequency * 2);
+//
+//	nrfy_grtc_clkout_divider_set(NRF_GRTC, (uint8_t)grtc_div);
+//	nrfy_grtc_clkout_set(NRF_GRTC, NRF_GRTC_CLKOUT_FAST, true);
 #endif
 
 #if DT_PROP(GRTC_NODE, clkout_32k) || DT_NODE_HAS_PROP(GRTC_NODE, clkout_fast_frequency_hz)
