@@ -141,6 +141,45 @@ void load_call_unload(const struct llext_test *test_case)
 
 	zassert_not_null(test_entry_fn, "test_entry should be an exported symbol");
 
+	/* #region agent log H1/H2/H4 */
+	printk("[DBG18e1e3] LOADED ext=%s buf=%p buf_len=%u test_entry=%p\n",
+	       test_case->name, test_case->buf, (unsigned int)test_case->buf_len, test_entry_fn);
+	for (int i = 0; i < LLEXT_MEM_PARTITIONS; i++) {
+		printk("[DBG18e1e3] LOADED ext=%s mem[%d]=%p mem_size=%u "
+#ifdef CONFIG_USERSPACE
+		       "part_start=0x%08lx part_size=%u "
+#endif
+		       "on_heap=%d\n",
+		       test_case->name, i, ext->mem[i], (unsigned int)ext->mem_size[i],
+#ifdef CONFIG_USERSPACE
+		       (unsigned long)ext->mem_parts[i].start,
+		       (unsigned int)ext->mem_parts[i].size,
+#endif
+		       (int)ext->mem_on_heap[i]);
+	}
+	if (ext->mem[LLEXT_MEM_TEXT] && ext->mem_size[LLEXT_MEM_TEXT] > 0) {
+		const uint32_t *p = (const uint32_t *)ext->mem[LLEXT_MEM_TEXT];
+		size_t words = MIN(16, ext->mem_size[LLEXT_MEM_TEXT] / 4);
+
+		printk("[DBG18e1e3] TEXT[%s] dump @%p:", test_case->name, p);
+		for (size_t i = 0; i < words; i++) {
+			printk(" %08lx", (unsigned long)p[i]);
+		}
+		printk("\n");
+	}
+	if (ext->mem[LLEXT_MEM_RODATA] && ext->mem_size[LLEXT_MEM_RODATA] > 0) {
+		const uint8_t *p = (const uint8_t *)ext->mem[LLEXT_MEM_RODATA];
+		size_t bytes = MIN(64, ext->mem_size[LLEXT_MEM_RODATA]);
+
+		printk("[DBG18e1e3] RODATA[%s] dump @%p (%u bytes):", test_case->name, p,
+		       (unsigned int)bytes);
+		for (size_t i = 0; i < bytes; i++) {
+			printk(" %02x", p[i]);
+		}
+		printk("\n");
+	}
+	/* #endregion */
+
 #ifdef CONFIG_USERSPACE
 	/*
 	 * Due to the number of MPU regions on some parts with MPU (USERSPACE)

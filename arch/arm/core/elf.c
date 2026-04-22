@@ -9,6 +9,7 @@
 #include <zephyr/llext/llext.h>
 #include <zephyr/llext/llext_internal.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 
 LOG_MODULE_REGISTER(elf, CONFIG_LLEXT_LOG_LEVEL);
@@ -351,6 +352,14 @@ int arch_elf_relocate(struct llext_loader *ldr, struct llext *ext, elf_rela_t *r
 	}
 
 	LOG_DBG("%d %lx %lx %s", reloc_type, loc, sym_base_addr, sym_name);
+	/* #region agent log H1 */
+	printk("[DBG18e1e3] reloc ext=%s type=%u loc=0x%08lx sym=%s sym_base=0x%08lx "
+	       "*loc(before)=0x%08lx\n",
+	       ext->name, (unsigned int)reloc_type,
+	       (unsigned long)loc, sym_name ? sym_name : "(noname)",
+	       (unsigned long)sym_base_addr,
+	       (unsigned long)(*(uint32_t *)loc));
+	/* #endregion */
 
 	switch (reloc_type) {
 	case R_ARM_NONE:
@@ -359,6 +368,10 @@ int arch_elf_relocate(struct llext_loader *ldr, struct llext *ext, elf_rela_t *r
 	case R_ARM_ABS32:
 	case R_ARM_TARGET1:
 		*(uint32_t *)loc += sym_base_addr;
+		/* #region agent log H1 */
+		printk("[DBG18e1e3] R_ARM_ABS32 patched: loc=0x%08lx new_val=0x%08lx\n",
+		       (unsigned long)loc, (unsigned long)(*(uint32_t *)loc));
+		/* #endregion */
 		break;
 
 	case R_ARM_PC24:

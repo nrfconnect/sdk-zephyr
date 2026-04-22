@@ -75,6 +75,11 @@ static void llext_init_mem_part(struct llext *ext, enum llext_mem mem_idx,
 #endif
 
 	LOG_DBG("region %d: start %#zx, size %zd", mem_idx, (size_t)start, len);
+	/* #region agent log H2/H3 */
+	printk("[DBG18e1e3] init_mem_part ext=%s mem_idx=%d start=0x%08lx end=0x%08lx size=%u\n",
+	       ext->name, (int)mem_idx, (unsigned long)start,
+	       (unsigned long)(start + len), (unsigned int)len);
+	/* #endregion */
 }
 
 static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
@@ -133,6 +138,19 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 		if (region->sh_type != SHT_NOBITS) {
 			/* Region has data in the file, check if peek() is supported */
 			ext->mem[mem_idx] = llext_peek(ldr, region->sh_offset);
+			/* #region agent log H1/H2 */
+			printk("[DBG18e1e3] copy_region ext=%s mem_idx=%d sh_offset=0x%lx "
+			       "sh_size=0x%lx sh_addralign=0x%lx region_alloc=0x%lx "
+			       "region_align=0x%lx peek=%p sh_flags=0x%lx\n",
+			       ext->name, (int)mem_idx,
+			       (unsigned long)region->sh_offset,
+			       (unsigned long)region->sh_size,
+			       (unsigned long)region->sh_addralign,
+			       (unsigned long)region_alloc,
+			       (unsigned long)region_align,
+			       ext->mem[mem_idx],
+			       (unsigned long)region->sh_flags);
+			/* #endregion */
 			if (ext->mem[mem_idx]) {
 				if ((IS_ALIGNED(ext->mem[mem_idx], region_align) ||
 				     ldr_parm->pre_located) &&
@@ -143,6 +161,10 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 							    (uintptr_t)ext->mem[mem_idx],
 							    region_alloc);
 					ext->mem_on_heap[mem_idx] = false;
+					/* #region agent log H1 */
+					printk("[DBG18e1e3] copy_region peeked: mem_idx=%d at %p\n",
+					       (int)mem_idx, ext->mem[mem_idx]);
+					/* #endregion */
 					return 0;
 				}
 
@@ -194,6 +216,10 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 
 	ext->alloc_size += region_alloc;
 
+	/* #region agent log H1 */
+	printk("[DBG18e1e3] copy_region allocated: mem_idx=%d at %p (size=0x%lx)\n",
+	       (int)mem_idx, ext->mem[mem_idx], (unsigned long)region_alloc);
+	/* #endregion */
 	llext_init_mem_part(ext, mem_idx, (uintptr_t)ext->mem[mem_idx],
 		region_alloc);
 
