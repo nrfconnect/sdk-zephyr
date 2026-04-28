@@ -2,6 +2,14 @@
  *  @brief Attribute Protocol handling.
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_ATT_H_
+
+#include <bluetooth/host/att.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2016 Intel Corporation
  *

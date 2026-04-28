@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/common/bt_shell_private.h"
+#else
+
 #ifndef __BT_SHELL_PRIVATE_H
 #define __BT_SHELL_PRIVATE_H
 
@@ -88,3 +92,5 @@ void bt_shell_hexdump(const uint8_t *data, size_t len);
 	bt_shell_fprintf_error(_ft "\n", ##__VA_ARGS__)
 
 #endif /* __BT_SHELL_PRIVATE_H */
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

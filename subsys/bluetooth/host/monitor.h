@@ -2,6 +2,10 @@
  *  @brief Custom monitor protocol logging over UART
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/monitor.h"
+#else
+
 /*
  * Copyright (c) 2016 Intel Corporation
  * Copyright (c) 2025 Silicon Laboratories Inc.
@@ -135,3 +139,5 @@ static inline void bt_monitor_new_index(uint8_t type, uint8_t bus, const bt_addr
 }
 
 #endif
+
+#endif /* !CONFIG_BT_HOST_NORDIC */

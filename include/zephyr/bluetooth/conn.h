@@ -2,6 +2,14 @@
  *  @brief Bluetooth connection handling
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_CONN_H_
+
+#include <bluetooth/host/conn.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  * Copyright (c) 2025 Nordic Semiconductor ASA

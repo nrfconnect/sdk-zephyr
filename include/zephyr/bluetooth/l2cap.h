@@ -2,6 +2,14 @@
  *  @brief Bluetooth L2CAP handling
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_L2CAP_H_
+
+#include <bluetooth/host/l2cap.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  * Copyright (c) 2023 Nordic Semiconductor

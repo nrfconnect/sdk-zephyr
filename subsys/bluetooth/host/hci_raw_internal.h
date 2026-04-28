@@ -3,6 +3,10 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/hci_raw_internal.h"
+#else
+
 #ifndef __BT_HCI_RAW_INTERNAL_H
 #define __BT_HCI_RAW_INTERNAL_H
 
@@ -26,3 +30,5 @@ extern struct bt_dev_raw bt_dev;
 #endif
 
 #endif /* __BT_HCI_RAW_INTERNAL_H */
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

@@ -2,6 +2,14 @@
  *  @brief Bluetooth subsystem crypto APIs.
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_CRYPTO_H_
+
+#include <bluetooth/host/crypto.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2017-2020 Nordic Semiconductor ASA
  * Copyright (c) 2015-2017 Intel Corporation

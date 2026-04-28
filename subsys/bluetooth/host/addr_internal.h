@@ -2,6 +2,10 @@
  * @brief Internal header for Bluetooth address functions
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/addr_internal.h"
+#else
+
 /*
  * Copyright (c) 2023 Nordic Semiconductor ASA
  *
@@ -48,3 +52,5 @@ void bt_addr_le_copy_resolved(bt_addr_le_t *dst, const bt_addr_le_t *src);
  * regular @ref bt_addr_le_t.
  */
 bool bt_addr_le_is_resolved(const bt_addr_le_t *hci_addr_field_value);
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

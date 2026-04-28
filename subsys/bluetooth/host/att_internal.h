@@ -1,5 +1,9 @@
 /* att_internal.h - Attribute protocol handling */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/att_internal.h"
+#else /* !defined(CONFIG_BT_HOST_NORDIC) */
+
 #include <stdint.h>
 #include <stddef.h>
 
@@ -359,3 +363,5 @@ bool bt_att_tx_meta_data_match(const struct net_buf *buf, bt_gatt_complete_func_
 bool bt_att_chan_opt_valid(struct bt_conn *conn, enum bt_att_chan_opt chan_opt);
 
 void bt_gatt_req_set_mtu(struct bt_att_req *req, uint16_t mtu);
+
+#endif /* !CONFIG_BT_HOST_NORDIC */

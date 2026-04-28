@@ -5,6 +5,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_EAD_H_
+
+#include <bluetooth/host/ead.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 #ifndef ZEPHYR_INCLUDE_BLUETOOTH_EAD_H_
 #define ZEPHYR_INCLUDE_BLUETOOTH_EAD_H_
 

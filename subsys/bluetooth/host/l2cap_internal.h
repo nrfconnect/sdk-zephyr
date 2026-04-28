@@ -2,6 +2,10 @@
  *  @brief Internal APIs for Bluetooth L2CAP handling.
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/l2cap_internal.h"
+#else
+
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  *
@@ -234,3 +238,5 @@ struct bt_l2cap_server *bt_l2cap_server_lookup_psm(uint16_t psm);
 struct net_buf *l2cap_data_pull(struct bt_conn *conn,
 				size_t amount,
 				size_t *length);
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

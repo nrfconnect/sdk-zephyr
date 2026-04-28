@@ -5,6 +5,15 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_HCI_H_
+
+#include <bluetooth/host/hci.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 #ifndef ZEPHYR_INCLUDE_BLUETOOTH_HCI_H_
 #define ZEPHYR_INCLUDE_BLUETOOTH_HCI_H_
 

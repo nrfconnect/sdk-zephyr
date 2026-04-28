@@ -114,6 +114,16 @@
   - any:
       - "subsys/pm/**/*"
 
+"CI-ble-host-test":
+  - "drivers/bluetooth/**/*"
+  - "include/zephyr/bluetooth/**/*"
+  - "subsys/bluetooth/host/**/*"
+  - "tests/bluetooth/**/*"
+  - "tests/bsim/bluetooth/host/**/*"
+  - "tests/bsim/bluetooth/ll/conn/**/*"
+  - "tests/bsim/bluetooth/ll/multiple_id/**/*"
+  - "tests/bsim/bluetooth/ll/throughput/**/*"
+
 "CI-ble-samples-test":
   - any:
       - "drivers/bluetooth/**/*"

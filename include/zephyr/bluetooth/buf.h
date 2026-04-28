@@ -2,6 +2,14 @@
  *  @brief Bluetooth data buffer API
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_BUF_H_
+
+#include <bluetooth/host/buf.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2016 Intel Corporation
  *

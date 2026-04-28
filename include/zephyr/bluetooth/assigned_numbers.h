@@ -2,6 +2,14 @@
  *  @brief Bluetooth Assigned Numbers, codes and identifiers.
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+
+#define ZEPHYR_INCLUDE_BLUETOOTH_ASSIGNED_NUMBERS_H_
+
+#include <bluetooth/host/assigned_numbers.h>
+
+#endif /* CONFIG_BT_HOST_NORDIC */
+
 /*
  * Copyright (c) 2015-2025 Intel Corporation
  * Copyright (c) 2017-2025 Nordic Semiconductor ASA

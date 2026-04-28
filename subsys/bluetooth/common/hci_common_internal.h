@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/common/hci_common_internal.h"
+#else /* !CONFIG_BT_HOST_NORDIC */
+
 #if !defined(CONFIG_BT_HCI_RAW) || !defined(CONFIG_HAS_BT_CTLR) || \
 	!defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
 /* Following build configurations use configurable CONFIG_BT_BUF_CMD_TX_COUNT:
@@ -100,3 +104,5 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_BT_CTLR_HCI_NUM_CMD_PKT_MAX),
 #define BT_BUF_CMD_TX_COUNT     (BT_BUF_RX_COUNT + CONFIG_BT_CTLR_HCI_NUM_CMD_PKT_MAX)
 
 #endif /* CONFIG_BT_HCI_ACL_FLOW_CONTROL */
+
+#endif /* !CONFIG_BT_HOST_NORDIC */

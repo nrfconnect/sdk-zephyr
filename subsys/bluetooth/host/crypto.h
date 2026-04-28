@@ -5,4 +5,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/crypto.h"
+#else
+
 int bt_crypto_init(void);
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

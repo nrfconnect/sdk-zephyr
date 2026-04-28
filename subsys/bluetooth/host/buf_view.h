@@ -2,6 +2,10 @@
  *  @brief Bluetooth "view" buffer abstraction
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "host/host/buf_view.h"
+#else
+
 /*
  * Copyright (c) 2024 Nordic Semiconductor ASA
  *
@@ -85,3 +89,5 @@ bool bt_buf_has_view(const struct net_buf *parent);
 void bt_buf_destroy_view(struct net_buf *view, struct bt_buf_view_meta *meta);
 
 #endif /* ZEPHYR_SUBSYS_BLUETOOTH_HOST_BUF_VIEW_H_ */
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */

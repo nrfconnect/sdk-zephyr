@@ -8,6 +8,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_BT_HOST_NORDIC)
+#include "gatt_internal.h"
+#else
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -71,3 +75,5 @@ uint8_t bt_gatt_check_perm(struct bt_conn *conn, const struct bt_gatt_attr *attr
 
 bool bt_gatt_attr_read_authorize(struct bt_conn *conn, const struct bt_gatt_attr *attr);
 bool bt_gatt_attr_write_authorize(struct bt_conn *conn, const struct bt_gatt_attr *attr);
+
+#endif /* !defined(CONFIG_BT_HOST_NORDIC) */
