@@ -216,6 +216,7 @@ if MBEDTLS_SOME_CIPHER_ENABLED
 
 config MBEDTLS_CIPHER_MODE_CBC_ENABLED
 	bool "Cipher Block Chaining mode (CBC) for symmetric ciphers"
+	default y if !NET_L2_OPENTHREAD
 
 config MBEDTLS_CIPHER_MODE_CTR_ENABLED
 	bool "Counter Block Cipher mode (CTR) for symmetric ciphers"
@@ -253,6 +254,7 @@ config MBEDTLS_SHA224
 
 config MBEDTLS_SHA256
 	bool "SHA-256 hash algorithm"
+	default y
 
 config MBEDTLS_SHA256_SMALLER
 	bool "Smaller SHA-256 implementation"
@@ -356,7 +358,7 @@ config MBEDTLS_HAVE_ASM
 
 config MBEDTLS_ENTROPY_C
 	bool "Mbed TLS entropy accumulator"
-	select MBEDTLS_SHA256 if !(MBEDTLS_SHA384 || MBEDTLS_SHA512)
+	depends on MBEDTLS_SHA256 || MBEDTLS_SHA384 || MBEDTLS_SHA512
 	help
 	  This module gathers entropy data from enabled entropy sources. It's
 	  mostly used in conjunction with CTR_DRBG or HMAC_DRBG to create
