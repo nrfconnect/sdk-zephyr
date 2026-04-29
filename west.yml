@@ -200,10 +200,14 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: c8f0c2b6ecf66b0a4af24b5272d879c305868feb
-      path: modules/hal/nordic
+      revision: nrfx-removed
+      path: modules/hal/nor
       groups:
         - hal
+    - name: nrfx
+      revision: pull/1209/head
+      path: modules/hal/nor/nrfx
+      url: https://github.com/nrfconnect/nrfx
     - name: hal_nuvoton
       revision: 8f1bf948a94cf59926ea7b686985e1d6c6f954c7
       path: modules/hal/nuvoton
