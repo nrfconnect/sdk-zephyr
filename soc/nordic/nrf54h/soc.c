@@ -15,6 +15,7 @@
 #include <zephyr/logging/log_frontend_stmesp.h>
 #endif
 
+#include <helpers/nrfx_hsfll_trim.h>
 #include <hal/nrf_gpio.h>
 #include <hal/nrf_hsfll.h>
 #include <hal/nrf_lrcconf.h>
@@ -114,7 +115,16 @@ void soc_early_init_hook(void)
 
 	nrf_power_domain_init();
 
-	trim_hsfll();
+	// trim_hsfll();
+#if defined(HSFLL_NODE)
+	uint32_t mul = DT_PROP(HSFLL_NODE, clock_frequency) /
+					 DT_PROP(DT_CLOCKS_CTLR(HSFLL_NODE), clock_frequency);
+#if defined(NRF_APPLICATION)
+	nrfx_hsfll_trim_apply(NRF_APPLICATION_HSFLL, 0, mul);
+#elif defined(NRF_RADIOCORE)
+	nrfx_hsfll_trim_apply(NRF_RADIOCORE_HSFLL, 1, mul);
+#endif // defined(NRF_APPLICATION) || defined(NRF_RADIOCORE)
+#endif // defined(HSFLL_NODE)
 
 	err = dmm_init();
 	__ASSERT_NO_MSG(err == 0);
