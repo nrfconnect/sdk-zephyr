@@ -1,0 +1,25 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Tags a memory-mapped flash/RRAM partition as ARM TrustZone Non-Secure data
+  (non-secure storage, settings, ZMS, ...). Peer of
+  "nordic,tz-nonsecure-code-partition".
+
+  Inherits from "zephyr,mapped-partition", so a node carrying this compat is
+  a fully-fledged memory-mapped NVM partition. The TF-M build sums both
+  peers to compute the total non-secure flash footprint
+  (FLASH_NONSECURE_TOTAL_SIZE) while keeping FLASH_NS_PARTITION_SIZE a
+  per-slot value.
+
+  Example:
+
+      storage_partition: partition@175000 {
+          compatible = "nordic,tz-nonsecure-data-partition";
+          label = "storage";
+          reg = <0x00175000 DT_SIZE_K(32)>;
+      };
+
+compatible: "nordic,tz-nonsecure-data-partition"
+
+include: [zephyr,mapped-partition.yaml]

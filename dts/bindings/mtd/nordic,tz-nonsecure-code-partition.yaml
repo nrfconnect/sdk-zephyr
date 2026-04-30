@@ -1,0 +1,25 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Tags a memory-mapped flash/RRAM partition as an ARM TrustZone Non-Secure
+  code slot. Peer of "nordic,tz-nonsecure-data-partition".
+
+  Inherits from "zephyr,mapped-partition", so a node carrying this compat is
+  a fully-fledged memory-mapped NVM partition. The TF-M build additionally
+  iterates this compat to compute FLASH_NS_PARTITION_SIZE, the size of a
+  single non-secure image slot. Multiple okay nodes are allowed for
+  multi-slot MCUboot layouts; a BUILD_ASSERT enforces equal reg size across
+  them.
+
+  Example:
+
+      slot0_ns_partition: partition@8a000 {
+          compatible = "nordic,tz-nonsecure-code-partition";
+          label = "image-0-nonsecure";
+          reg = <0x0008a000 DT_SIZE_K(940)>;
+      };
+
+compatible: "nordic,tz-nonsecure-code-partition"
+
+include: [zephyr,mapped-partition.yaml]
