@@ -48,31 +48,3 @@ ZTEST_BENCHMARK_TIMED(psa_crypto_cipher, aes_256_ecb, 1000U, setup_aes_256, tear
 			   in_buf, sizeof(in_buf),
 			   out_buf, sizeof(out_buf), &out_len);
 }
-
-static void setup_aria_256(void)
-{
-	setup_key(PSA_KEY_TYPE_ARIA);
-}
-
-ZTEST_BENCHMARK_TIMED(psa_crypto_cipher, aria_256_ecb, 1000U, setup_aria_256, teardown_key)
-{
-	size_t out_len;
-
-	psa_cipher_encrypt(key_id, PSA_ALG_ECB_NO_PADDING,
-			   in_buf, sizeof(in_buf),
-			   out_buf, sizeof(out_buf), &out_len);
-}
-
-static void setup_camellia_256(void)
-{
-	setup_key(PSA_KEY_TYPE_CAMELLIA);
-}
-
-ZTEST_BENCHMARK_TIMED(psa_crypto_cipher, camellia_256_ecb, 1000U, setup_camellia_256, teardown_key)
-{
-	size_t out_len;
-
-	psa_cipher_encrypt(key_id, PSA_ALG_ECB_NO_PADDING,
-			   in_buf, sizeof(in_buf),
-			   out_buf, sizeof(out_buf), &out_len);
-}
