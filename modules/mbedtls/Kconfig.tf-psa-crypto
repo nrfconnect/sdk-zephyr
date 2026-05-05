@@ -27,7 +27,6 @@ comment "Supported ciphers and cipher modes"
 config MBEDTLS_CIPHER_ALL_ENABLED
 	bool "All available ciphers and modes"
 	select PSA_WANT_KEY_TYPE_AES
-	select PSA_WANT_KEY_TYPE_CAMELLIA
 	select PSA_WANT_KEY_TYPE_CHACHA20
 	select PSA_WANT_ALG_GCM
 	select PSA_WANT_ALG_CCM
@@ -40,8 +39,7 @@ config MBEDTLS_SOME_AEAD_CIPHER_ENABLED
 	bool
 	default y
 	depends on \
-		PSA_WANT_KEY_TYPE_AES || \
-		PSA_WANT_KEY_TYPE_CAMELLIA
+		PSA_WANT_KEY_TYPE_AES
 
 config MBEDTLS_SOME_CIPHER_ENABLED
 	bool
