@@ -5,6 +5,7 @@
  */
 #include "nrfx_gppi_sd2ppi_global.h"
 #include <ironside/se/api.h>
+#include <stdio.h>
 
 static nrfx_atomic_t channels[NRFX_GPPI_NODE_COUNT];
 static nrfx_atomic_t group_channels[NRFX_GPPI_NODE_DPPI_COUNT];
@@ -420,8 +421,8 @@ static int actual_channel_mask(nrfx_gppi_node_id_t node_id, uint32_t *ch_mask, b
 		NRF_SPU133,
 		NRF_SPU134,
 		NRF_SPU135,
-		IF_ENABLED(NRFX_INSTANCE_PRESENT(SPU136), (NRF_SPU136,))
-		IF_ENABLED(NRFX_INSTANCE_PRESENT(SPU137), (NRF_SPU137,))
+		IF_ENABLED(DT_NODE_EXISTS(DT_NODELABEL(dppic135)), (NRF_SPU136,))
+		IF_ENABLED(DT_NODE_EXISTS(DT_NODELABEL(dppic136)), (NRF_SPU137,))
 		NRF_SPU122,
 	};
 	uint32_t out_mask = 0;
@@ -513,6 +514,14 @@ int nrfx_gppi_ext_ppib_write(volatile uint32_t *p_addr, uint32_t value)
 	}
 
 	status = ironside_se_periphconf_write(write_entries, write_entries_count);
+    if (status.status < 0) {
+        printf("write failed: %d\n", status.status);
+        for (int i = 0; i < write_entries_count; i++) {
+            printf("%d entry reg:%08x, val:%08x\n", i, (uint32_t)write_entries[i].regptr,
+                    (uint32_t)write_entries[i].value);
+        }
+    }
+
 	write_entries_count = 0;
 
 	return (status.status < 0) ? -EIO : 0;
