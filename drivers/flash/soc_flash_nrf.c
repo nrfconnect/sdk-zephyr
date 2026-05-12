@@ -38,7 +38,6 @@ LOG_MODULE_REGISTER(flash_nrf);
 #define SOC_NV_FLASH_NODE DT_INST(0, soc_nv_flash)
 
 #if CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER
-#include <soc_secure.h>
 #include <pm_config.h>
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER */
 

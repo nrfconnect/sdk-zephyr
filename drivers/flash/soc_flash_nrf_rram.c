@@ -56,7 +56,6 @@ LOG_MODULE_REGISTER(flash_nrf_rram, CONFIG_FLASH_LOG_LEVEL);
 #define ERASE_VALUE              0xFF
 
 #if CONFIG_TRUSTED_EXECUTION_NONSECURE
-#include <soc_secure.h>
 #if USE_PARTITION_MANAGER
 #include <pm_config.h>
 #endif /* USE_PARTITION_MANAGER */
