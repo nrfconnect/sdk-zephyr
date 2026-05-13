@@ -17,6 +17,7 @@ extern "C" {
 #endif
 
 #include <stddef.h>
+#include <stdbool.h>
 
 /* When CONFIG_NET_SOCKETS_OFFLOAD is enabled, offloaded sockets take precedence
  * when creating a new socket. Combine this flag with a socket type when
@@ -172,6 +173,37 @@ typedef void (*socket_ncs_sendcb_t)(const struct socket_ncs_sendcb_params *param
 struct socket_ncs_sendcb {
 	/** Callback function. */
 	socket_ncs_sendcb_t callback;
+};
+
+/** sockopt: set a callback to be called upon the selected poll events.
+ *  This option takes a @ref socket_ncs_pollcb structure.
+ *
+ * @note The callback is executed in an interrupt context.
+ *	 Take care to offload any processing as appropriate.
+ */
+#define SO_POLLCB (NET_SOCKET_NCS_BASE + 64)
+
+/** Parameters returned in the @ref socket_ncs_pollcb_t callback. */
+struct socket_ncs_pollcb_params {
+	/** Socket handle. */
+	int fd;
+	/** Requested events bitmask. */
+	short events;
+	/** Returned events bitmask. */
+	short revents;
+};
+
+/** Callback type in the @ref socket_ncs_pollcb structure. */
+typedef void (*socket_ncs_pollcb_t)(const struct socket_ncs_pollcb_params *params);
+
+/** Option value for the @ref SO_POLLCB socket option. */
+struct socket_ncs_pollcb {
+	/** Callback function. */
+	socket_ncs_pollcb_t callback;
+	/** Event mask to subscribe to (for example, ZSOCK_POLLIN | ZSOCK_POLLOUT). */
+	short events;
+	/** If set, the callback is automatically unset after first invocation. */
+	bool oneshot;
 };
 
 /* NCS specific IPPROTO_ALL level socket options */
