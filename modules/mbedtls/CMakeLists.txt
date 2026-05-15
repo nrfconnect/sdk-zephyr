@@ -39,7 +39,11 @@ if(CONFIG_MBEDTLS)
     # This creates 3 libraries: mbedtls, mbedx509 and tfpsacrypto.
     add_subdirectory(${ZEPHYR_MBEDTLS_MODULE_DIR} mbedtls)
 
-    foreach(lib mbedtls mbedx509 tfpsacrypto builtin p256-m everest pqcp extras platform utilities)
+    set(libs mbedtls mbedx509)
+    if(CONFIG_TF_PSA_CRYPTO_BUILTIN)
+      list(APPEND libs tfpsacrypto builtin p256-m everest pqcp extras platform utilities)
+    endif()
+    foreach(lib ${libs})
       # Mbed TLS libraries are normal CMake libraries.
       # To ensure Mbed TLS libraries are including Zephyr include directories and
       # Zephyr compile options we link those libraries with 'zephyr_interface'.
@@ -51,9 +55,11 @@ if(CONFIG_MBEDTLS)
       add_dependencies(${lib} zephyr_generated_headers)
     endforeach()
 
-    # Custom macro to tell that a TF-PSA-Crypto source file is being compiled.
-    # This is used by Secure Storage.
-    target_compile_definitions(tfpsacrypto PRIVATE BUILDING_MBEDTLS_CRYPTO)
+    if(CONFIG_TF_PSA_CRYPTO_BUILTIN)
+      # Custom macro to tell that a TF-PSA-Crypto source file is being compiled.
+      # This is used by Secure Storage.
+      target_compile_definitions(tfpsacrypto PRIVATE BUILDING_MBEDTLS_CRYPTO)
+    endif()
 
     # Add Mbed TLS libraries ("tfpsacrypto" and "mbedx509" are linked to "mbedtls")
     # to ZEPHYR_LIBS list.
@@ -70,19 +76,28 @@ if(CONFIG_MBEDTLS)
       ${CMAKE_CURRENT_LIST_DIR}/include
     )
 
-    # Add some support for legacy crypto that unfortunately is still required
-    # in some scenarios.
-    include(${CMAKE_CURRENT_LIST_DIR}/legacy_support.cmake)
+    if(CONFIG_TF_PSA_CRYPTO_BUILTIN)
+      # Add some support for legacy crypto that unfortunately is still required
+      # in some scenarios.
+      include(${CMAKE_CURRENT_LIST_DIR}/legacy_support.cmake)
+    endif()
 
     # Add another library to provide Zephyr-specific support
-    zephyr_library()
-    zephyr_library_sources(
-      ${CMAKE_CURRENT_LIST_DIR}/zephyr_init.c
+    list_append_ifdef(CONFIG_TF_PSA_CRYPTO_BUILTIN zephyr_mbedtls_src
       ${CMAKE_CURRENT_LIST_DIR}/zephyr_entropy.c
-      $<$<BOOL:${CONFIG_MBEDTLS_DEBUG}>:${CMAKE_CURRENT_LIST_DIR}/debug.c>
-      $<$<BOOL:${CONFIG_MBEDTLS_SHELL}>:${CMAKE_CURRENT_LIST_DIR}/shell.c>
+      ${CMAKE_CURRENT_LIST_DIR}/zephyr_init.c
     )
-    zephyr_library_link_libraries(mbedTLS)
+    list_append_ifdef(CONFIG_MBEDTLS_DEBUG zephyr_mbedtls_src
+      ${CMAKE_CURRENT_LIST_DIR}/debug.c
+    )
+    list_append_ifdef(CONFIG_MBEDTLS_SHELL zephyr_mbedtls_src
+      ${CMAKE_CURRENT_LIST_DIR}/shell.c
+    )
+    if(zephyr_mbedtls_src)
+      zephyr_library()
+      zephyr_library_sources(${zephyr_mbedtls_src})
+      zephyr_library_link_libraries(mbedTLS)
+    endif()
 
   endif()
 
