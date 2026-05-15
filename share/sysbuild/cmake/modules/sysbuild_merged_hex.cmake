@@ -42,6 +42,7 @@ function(create_merged_hex_files)
         # The order of files to use are (starting with highest priority):
         # * <BYPRODUCT_KERNEL_SIGNED_CONFIRMED_HEX_NAME>
         # * <BYPRODUCT_KERNEL_SIGNED_HEX_NAME>
+        # * <BYPRODUCT_KERNEL_HEX_NAME>
         # * <CONFIG_KERNEL_BIN_NAME>.hex
         #
         # This ensures that if the image has a signing script, that the signed image is used, the
@@ -49,10 +50,12 @@ function(create_merged_hex_files)
         # priority. If there is no byproduct signed file, then the normal zephyr hex file is used
         set(byproduct_signed_confirmed_hex)
         set(byproduct_signed_hex)
+        set(byproduct_hex)
         set(kernel_name)
         set(application_image_dir)
         sysbuild_get(byproduct_signed_confirmed_hex IMAGE ${image} VAR BYPRODUCT_KERNEL_SIGNED_CONFIRMED_HEX_NAME CACHE)
         sysbuild_get(byproduct_signed_hex IMAGE ${image} VAR BYPRODUCT_KERNEL_SIGNED_HEX_NAME CACHE)
+        sysbuild_get(byproduct_hex IMAGE ${image} VAR BYPRODUCT_KERNEL_HEX_NAME CACHE)
         sysbuild_get(kernel_name IMAGE ${image} VAR CONFIG_KERNEL_BIN_NAME KCONFIG)
         sysbuild_get(application_image_dir IMAGE ${image} VAR APPLICATION_BINARY_DIR CACHE)
         list(APPEND depends_list ${image}_extra_byproducts ${application_image_dir}/zephyr/.config)
@@ -61,6 +64,8 @@ function(create_merged_hex_files)
           list(APPEND input_list ${byproduct_signed_confirmed_hex})
         elseif(byproduct_signed_hex)
           list(APPEND input_list ${byproduct_signed_hex})
+        elseif(byproduct_hex)
+          list(APPEND input_list ${byproduct_hex})
         else()
           list(APPEND input_list ${application_image_dir}/zephyr/${kernel_name}.hex)
         endif()
