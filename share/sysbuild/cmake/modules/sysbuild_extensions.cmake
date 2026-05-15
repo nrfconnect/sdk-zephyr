@@ -739,14 +739,20 @@ function(ExternalZephyrProject_Cmake)
     zephyr_dt_import(EDT_PICKLE_FILE ${BINARY_DIR}/zephyr/edt.pickle TARGET ${ZCMAKE_APPLICATION})
   endif()
 
-  # This custom target informs CMake how the BYPRODUCTS are generated if a target
-  # depends directly on the BYPRODUCT instead of depending on the image target.
-  get_target_property(${ZCMAKE_APPLICATION}_byproducts ${ZCMAKE_APPLICATION}_cache EXTRA_BYPRODUCTS)
-  add_custom_target(${ZCMAKE_APPLICATION}_extra_byproducts
-                    COMMAND ${CMAKE_COMMAND} -E true
-                    BYPRODUCTS ${${ZCMAKE_APPLICATION}_byproducts}
-                    DEPENDS ${ZCMAKE_APPLICATION}
-  )
+  if(NOT ${ZCMAKE_APPLICATION}_SKIP_LOADING_BYPRODUCTS)
+    # This custom target informs CMake how the BYPRODUCTS are generated if a target
+    # depends directly on the BYPRODUCT instead of depending on the image target.
+    get_target_property(${ZCMAKE_APPLICATION}_byproducts ${ZCMAKE_APPLICATION}_cache EXTRA_BYPRODUCTS)
+    set(byproduct_command
+      COMMAND ${CMAKE_COMMAND} -E true
+      BYPRODUCTS ${${ZCMAKE_APPLICATION}_byproducts}
+      DEPENDS ${ZCMAKE_APPLICATION}
+    )
+  else()
+    set(byproduct_command)
+  endif()
+
+  add_custom_target(${ZCMAKE_APPLICATION}_extra_byproducts ${byproduct_command})
 
   get_target_property(${ZCMAKE_APPLICATION}_shared_targets
     ${ZCMAKE_APPLICATION}_cache
