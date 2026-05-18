@@ -460,7 +460,12 @@ static int tdm_nrf_configure(const struct device *dev, enum i2s_dir dir,
 	uint8_t extra_channels = 0;
 	uint8_t max_num_of_channels = NRFX_TDM_NUM_OF_CHANNELS;
 #if NRF_TDM_HAS_CONFIG_FSYNC_DURATION_ENUM
-	const nrf_tdm_fsync_duration_t fsync_duration = NRF_TDM_FSYNC_DURATION_CHANNEL;
+	i2s_fmt_t data_format = tdm_cfg->format & I2S_FMT_DATA_FORMAT_MASK;
+	const nrf_tdm_fsync_duration_t fsync_duration =
+		(data_format == I2S_FMT_DATA_FORMAT_PCM_SHORT ||
+		 data_format == I2S_FMT_DATA_FORMAT_PCM_LONG)
+			? NRF_TDM_FSYNC_DURATION_SCK
+			: NRF_TDM_FSYNC_DURATION_CHANNEL;
 #else
 	const nrf_tdm_fsync_duration_t fsync_duration = tdm_cfg->word_size;
 #endif
@@ -560,7 +565,7 @@ static int tdm_nrf_configure(const struct device *dev, enum i2s_dir dir,
 		return -EINVAL;
 	}
 
-	if (tdm_cfg->channels == 1) {
+	if (tdm_cfg->channels == 1 && nrfx_cfg.fsync_duration == NRF_TDM_FSYNC_DURATION_CHANNEL) {
 		/* For I2S mono standard, two channels are to be sent.
 		 * The unused half period of LRCK will contain zeros.
 		 */
