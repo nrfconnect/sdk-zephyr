@@ -179,7 +179,7 @@ config SIGNATURE_TYPE
 
 choice BOOT_SIGNATURE_TYPE
 	prompt "Signature type"
-	default BOOT_SIGNATURE_TYPE_RSA
+	default BOOT_SIGNATURE_TYPE_ECDSA_P256
 
 config BOOT_SIGNATURE_TYPE_NONE
 	bool "No signature; use only hash check"
