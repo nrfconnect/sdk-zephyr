@@ -135,7 +135,7 @@ int pbuf_write(struct pbuf *pb, const char *data, uint16_t len)
 	/* rd_idx shall always be aligned, but its value is received from the reader.
 	 * Can not assert.
 	 */
-	if (!IS_PTR_ALIGNED_BYTES(rd_idx, _PBUF_IDX_SIZE)) {
+	if (!IS_PTR_ALIGNED_BYTES(rd_idx, _PBUF_IDX_SIZE) || rd_idx >= blen) {
 		return -EINVAL;
 	}
 
