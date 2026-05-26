@@ -2,4 +2,5 @@
 
 &grtc {
 	owned-channels = <5 6>;
+	nonsecure-channels = <5 6>;
 };
