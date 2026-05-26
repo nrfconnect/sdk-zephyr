@@ -449,6 +449,7 @@ def lookup_tables_get(soc: Soc, family: Family) -> SocLookupTables:
             0x5F99_C000: {
                 NrfPsel(fun=NrfFun.GRTC_CLKOUT_FAST, port=1, pin=8): Ctrlsel.CAN_TDM_SERIAL2,
                 NrfPsel(fun=NrfFun.GRTC_CLKOUT_FAST, port=2, pin=5): Ctrlsel.CAN_TDM_SERIAL2,
+                NrfPsel(fun=NrfFun.GRTC_CLKOUT_FAST, port=1, pin=0): Ctrlsel.CAN_TDM_SERIAL2,
                 NrfPsel(fun=NrfFun.GRTC_CLKOUT_FAST, port=9, pin=0): Ctrlsel.SERIAL0,
             },
             # GPIOTE0 (RAD)
