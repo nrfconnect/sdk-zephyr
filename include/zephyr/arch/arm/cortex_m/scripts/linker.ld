@@ -56,7 +56,11 @@ _image_1_primary_slot_id = PM_S1_ID;
 #endif /* CONFIG_NCS_IS_VARIANT_IMAGE */
 
 #define ROM_ADDR PM_ADDRESS
+#if defined(CONFIG_ROM_END_OFFSET)
+#define ROM_SIZE (PM_SIZE - CONFIG_ROM_END_OFFSET)
+#else
 #define ROM_SIZE PM_SIZE
+#endif
 
 #if defined(CONFIG_PM_USE_CONFIG_SRAM_SIZE)
 #define RAM_SIZE CONFIG_PM_SRAM_SIZE
