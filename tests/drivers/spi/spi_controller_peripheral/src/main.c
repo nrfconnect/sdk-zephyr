@@ -170,6 +170,13 @@ static int check_buffers(struct spi_buf_set *tx_set, struct spi_buf_set *rx_set,
 		return -1;
 	}
 
+	TC_PRINT("rx_len = %d\n", rx_len);
+	TC_PRINT("tx_len = %d\n", tx_len);
+	TC_PRINT("same_size = %d\n", same_size);
+	TC_PRINT("TX\tRX\n");
+	for (int i = 0; i < rx_len; i++) {
+		TC_PRINT("%d\t%d\n", tx_data[i], rx_data[i]);
+	}
 	return memcmp(tx_data, rx_data, rx_len);
 }
 
@@ -250,7 +257,7 @@ static void run_test(bool m_same_size, bool s_same_size, bool async)
 	zassert_equal(rv, 0);
 
 	rv = check_buffers(tdata.stx_set, tdata.mrx_set, s_same_size);
-	zassert_equal(rv, 0);
+	zassert_equal(rv, 0, "Got unexpected %d", rv);
 }
 
 /** Basic test where SPI controller and SPI peripheral have RX and TX sets which contains only one
