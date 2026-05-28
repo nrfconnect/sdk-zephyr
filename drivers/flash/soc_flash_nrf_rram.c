@@ -387,6 +387,12 @@ static int nrf_rram_read(const struct device *dev, off_t addr, void *data, size_
 	}
 	addr += RRAM_START;
 
+#if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) && DT_NODE_EXISTS(DT_NODELABEL(slot0_ns_partition))
+	if ((uintptr_t)addr < DT_REG_ADDR(DT_NODELABEL(slot0_ns_partition))) {
+		return soc_secure_mem_read(data, (void *)addr, len);
+	}
+#endif
+
 	if (soc_secure_flash_range_is_secure((uintptr_t)addr, len)) {
 		return soc_secure_mem_read(data, (void *)addr, len);
 	}
