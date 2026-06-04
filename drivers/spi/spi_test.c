@@ -11,7 +11,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/spi.h>
-#include "spi_rtio.h"
+#include <zephyr/drivers/spi/rtio.h>
 
 #define DT_DRV_COMPAT vnd_spi
 
