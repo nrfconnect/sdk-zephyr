@@ -458,6 +458,26 @@ static void release_rx_buf(const struct device *dev, const uint8_t *rx_buf)
 }
 #endif /* SPI_NRFX_HAS_RAM_BUF || CONFIG_HAS_NORDIC_DMM */
 
+static void init_sck_pin(const struct device *dev, uint16_t operation)
+{
+	struct spi_nrfx_common_data *dev_data;
+	nrfx_spim_t *spim;
+	uint32_t sck_pin;
+	uint32_t initial_value;
+
+	dev_data = dev->data;
+	spim = &dev_data->spim;
+	sck_pin = nrfy_spim_sck_pin_get(spim->p_reg);
+
+	if (sck_pin == NRF_SPIM_PIN_NOT_CONNECTED) {
+		return;
+	}
+
+	initial_value = SPI_MODE_GET(operation) & SPI_MODE_CPOL ? 1 : 0;
+
+	nrf_gpio_pin_write(sck_pin, initial_value);
+}
+
 int spi_nrfx_spim_common_transfer_start(const struct device *dev,
 					const uint8_t *tx_buf,
 					size_t tx_buf_len,
@@ -558,6 +578,8 @@ int spi_nrfx_spim_common_configure(const struct device *dev, const struct spi_co
 		LOG_ERR("Frequencies lower than 125 kHz are not supported");
 		return -EINVAL;
 	}
+
+	init_sck_pin(dev, spi_cfg->operation);
 
 	spim_cfg.ss_pin = NRF_SPIM_PIN_NOT_CONNECTED;
 	spim_cfg.orc = dev_config->orc;
