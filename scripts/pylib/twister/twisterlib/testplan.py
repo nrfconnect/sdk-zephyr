@@ -312,6 +312,9 @@ class TestPlan:
 
             self.generate_subset(subset, int(sets))
 
+        elif self.options.shuffle_tests:
+            self._shuffle_instances()
+
     def generate_subset(self, subset, sets):
         # Test instances are sorted depending on the context. For CI runs
         # the execution order is: "plat1-testA, plat1-testB, ...,
@@ -326,15 +329,12 @@ class TestPlan:
             self.instances = OrderedDict(sorted(self.instances.items()))
 
         if self.options.shuffle_tests:
-            seed_value = int.from_bytes(os.urandom(8), byteorder="big")
-            if self.options.shuffle_tests_seed is not None:
-                seed_value = self.options.shuffle_tests_seed
-
-            logger.info(f"Shuffle tests with seed: {seed_value}")
-            random.seed(seed_value)
-            temp_list = list(self.instances.items())
-            random.shuffle(temp_list)
-            self.instances = OrderedDict(temp_list)
+            if sets > 1 and self.options.shuffle_tests_seed is None:
+                logger.warning(
+                    "Shuffling with a random seed across multiple subsets might not cover all "
+                    "tests. Consider providing a fixed seed with --shuffle-tests-seed."
+                )
+            self._shuffle_instances()
 
         # Do calculation based on what is actually going to be run and evaluated
         # at runtime, ignore the cases we already know going to be skipped.
@@ -366,6 +366,18 @@ class TestPlan:
             self.instances.update(skipped)
             self.instances.update(errors)
 
+    def _shuffle_instances(self):
+        """Shuffle test execution order to get randomly distributed tests."""
+        if self.options.shuffle_tests_seed is not None:
+            seed_value = self.options.shuffle_tests_seed
+        else:
+            seed_value = int.from_bytes(os.urandom(8), byteorder="big")
+
+        logger.info(f"Shuffle tests with seed: {seed_value}")
+        random.seed(seed_value)
+        temp_list = list(self.instances.items())
+        random.shuffle(temp_list)
+        self.instances = OrderedDict(temp_list)
 
     def report(self):
         if self.options.test_tree:
