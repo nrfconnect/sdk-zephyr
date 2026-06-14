@@ -328,6 +328,11 @@ static void frag_transport_package_callback(uint8_t port, uint8_t flags, int16_t
 				break;
 			}
 
+			if (frag_counter == 0U) {
+				LOG_DBG("Invalid fragment index 0");
+				break;
+			}
+
 			/* The decoder reads ctx.frag_size bytes from rx_buf[rx_pos].
 			 * Ensure the downlink payload is at least that long.
 			 */
