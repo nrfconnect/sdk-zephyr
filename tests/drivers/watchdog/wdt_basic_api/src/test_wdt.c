@@ -124,6 +124,24 @@
 #define WDT_TEST_BAD_MAX_WINDOW 0
 #define WDT_TEST_FINAL_DISABLE  1
 #endif
+#if DT_HAS_COMPAT_STATUS_OKAY(bflb_wdt)
+#define WDT_TEST_MAX_WINDOW 1999U
+#endif
+#if DT_HAS_COMPAT_STATUS_OKAY(andestech_atcwdt200)
+#define TIMEOUTS            0
+#define WDT_TEST_MAX_WINDOW 200U
+#endif
+#if DT_HAS_COMPAT_STATUS_OKAY(st_stm32_window_watchdog)
+#define TIMEOUTS            0
+#if defined(CONFIG_SOC_SERIES_STM32F7X)
+#define WDT_TEST_MAX_WINDOW 170
+#else
+#define WDT_TEST_MAX_WINDOW 200
+#endif
+#endif
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_gswdt) && !defined(CONFIG_NRFS_GSWDT_SERVICE_ENABLED)
+#define WDT_TEST_MAX_WINDOW 6000U
+#endif
 
 #define WDT_TEST_STATE_IDLE        0
 #define WDT_TEST_STATE_CHECK_RESET 1
