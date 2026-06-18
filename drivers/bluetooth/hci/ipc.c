@@ -20,8 +20,6 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_hci_driver);
 
-#include "util_hci_evt.h"
-
 BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_CONN) || IS_ENABLED(CONFIG_BT_HCI_ACL_FLOW_CONTROL),
 	     "HCI IPC driver can drop ACL data without Controller-to-Host ACL flow control");
 
@@ -44,9 +42,6 @@ struct ipc_data {
 	struct ipc_ept_cfg hci_ept_cfg;
 	struct k_sem bound_sem;
 	const struct device *ipc;
-#if defined(CONFIG_BT_EXT_ADV)
-	struct hci_ext_adv_discard_ctx ext_adv_discard;
-#endif
 };
 
 static bool is_hci_event_discardable(const uint8_t *evt_data)
@@ -240,17 +235,9 @@ static void bt_ipc_rx(const struct device *dev, const uint8_t *data, size_t len)
 	remaining -= sizeof(pkt_indicator);
 
 	switch (pkt_indicator) {
-	case BT_HCI_H4_EVT: {
-#if defined(CONFIG_BT_EXT_ADV)
-		struct ipc_data *ipc = dev->data;
-
-		if (hci_ext_adv_report_process(&ipc->ext_adv_discard, data, remaining, &buf)) {
-			break;
-		}
-#endif /* CONFIG_BT_EXT_ADV */
+	case BT_HCI_H4_EVT:
 		buf = bt_ipc_evt_recv(data, remaining);
 		break;
-	}
 
 	case BT_HCI_H4_ACL:
 		buf = bt_ipc_acl_recv(data, remaining);
