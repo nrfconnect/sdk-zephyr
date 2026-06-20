@@ -4,6 +4,36 @@
 config HAS_NORDIC_VPR_LAUNCHER_IMAGE
 	bool
 
+config HAS_NORDIC_COPROC_LAUNCHER_IMAGE
+	bool
+
+config NORDIC_COPROC_LAUNCHER
+	bool "Nordic coprocessor launcher"
+	default y
+	depends on HAS_NORDIC_COPROC_LAUNCHER_IMAGE
+
+config HAS_NORDIC_LOG_STM
+	bool
+
+choice NORDIC_LOG_STM_MODE
+	prompt "Nordic logging to coresigt STM mode"
+	default NORDIC_LOG_STM_DISABLED
+	depends on HAS_NORDIC_LOG_STM
+
+config NORDIC_LOG_STM_DISABLED
+	bool "Nordic logging to coresigt STM disabled"
+
+config NORDIC_LOG_STM
+	bool "Nordic logging to coresigt STM, output via UART"
+
+config NORDIC_LOG_STM_DICT
+	bool "Nordic dict-based logging to coresigt STM, output via UART"
+
+config NORDIC_LOG_STM_TPIU_DICT
+	bool "Nordic dict-based logging to coresigt STM, output via TPIU"
+
+endchoice # NORDIC_LOG_STM_MODE
+
 rsource "common/uicr/Kconfig.sysbuild"
 rsource "common/vpr/Kconfig.sysbuild"
 orsource "*/Kconfig.sysbuild"
