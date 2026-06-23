@@ -1461,11 +1461,12 @@ static int tls_set_private_key_psa(struct tls_context *tls,
 
 	memcpy(&key_id, priv_key->buf, sizeof(key_id));
 
-#if defined(MBEDTLS_PSA_CRYPTO_KEY_ID_ENCODES_OWNER)
+	/* mbedtls_svc_key_id_make() exists in both PSA build variants: when keys
+	 * encode an owner it builds the {owner, key_id} struct, otherwise it just
+	 * returns the plain key_id. Passing owner 0 (the local/default owner) is
+	 * correct either way, so no build-time branching is needed here.
+	 */
 	svc_key_id = mbedtls_svc_key_id_make(0, key_id);
-#else
-	svc_key_id = key_id;
-#endif
 
 	/* Build an opaque (MBEDTLS_PK_OPAQUE) PK context that only references
 	 * the PSA key. The private key material stays in PSA; handshake
