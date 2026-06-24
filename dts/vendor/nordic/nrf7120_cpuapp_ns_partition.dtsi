@@ -74,13 +74,116 @@
 	 * Default NVM layout on NRF7120 Application MCU without BL2:
 	 * This layout matches (by necessity) that in the TF-M repository:
 	 *
-	 * 0x0000_0000 Secure image primary (512 KB)
-	 * 0x0008_0000 Protected Storage Area (16 KB)
-	 * 0x0008_4000 Internal Trusted Storage Area (16 KB)
-	 * 0x0008_8000 OTP / NV counters area (8 KB)
-	 * 0x0008_A000 Non-secure image primary (844 KB)
-	 * 0x0015_D000 Non-secure storage, used when built with NRF_NS_STORAGE=ON,
-	 *             otherwise unused (32 KB)
+	 * 0x0000_0000 Boot Partition (64 KB)
+	 *
+	 * 0x0001_0000 Secure image primary (192 KB)
+     * 0x0004_0000 Non-secure image primary (1762 KB)
+     *
+     * 0x001E_8800 Secure image secondary (192 KB)
+     * 0x0021_8800 Non-secure image secondary (1762 KB)
+     *
+	 * 0x003C_1000 Protected Storage Area (16 KB)
+	 * 0x003C_5000 Internal Trusted Storage Area (16 KB)
+	 * 0x003C_9000 OTP / NV counters area (8 KB)
+     *
+	 * 0x003E_B000 Non-secure storage, used when built with NRF_NS_STORAGE=ON,
+	 *             otherwise unused (64 KB)
+	 */
+#ifdef WITH_MCUBOOT_PARTITIONS
+	partitions {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* This static layout needs to be the same with the upstream TF-M layout in the
+		 * header flash_layout.h of the relevant platform. Any updates in the layout
+		 * needs to happen both in the flash_layout.h and in this file at the same time.
+		 */
+
+		boot_partition: partition@0 {
+			compatible = "zephyr,mapped-partition";
+			label = "mcuboot";
+			reg = <0x00000000 DT_SIZE_K(64)>;
+		};
+
+		slot0_partition: partition@10000 {
+			compatible = "zephyr,mapped-partition";
+			label = "image-0";
+			reg = <0x00010000 DT_SIZE_K(1954)>;
+			ranges = <0x0 0x00010000 DT_SIZE_K(1954)>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			slot0_s_partition: partition@0 {
+				compatible = "zephyr,mapped-partition";
+				label = "image-0-secure";
+				reg = <0x0 DT_SIZE_K(192)>;
+			};
+
+			slot0_ns_partition: partition@30000 {
+				compatible = "zephyr,mapped-partition";
+				label = "image-0-nonsecure";
+				reg = <0x30000 DT_SIZE_K(1762)>;
+			};
+		};
+
+		slot1_partition: partition@1F8800 {
+			compatible = "zephyr,mapped-partition";
+			label = "image-1";
+			reg = <0x001F8800 DT_SIZE_K(1954)>;
+			ranges = <0x0 0x001F8800 DT_SIZE_K(1954)>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			slot1_s_partition: partition@0 {
+				compatible = "zephyr,mapped-partition";
+				label = "image-1-secure";
+				reg = <0x0 DT_SIZE_K(192)>;
+			};
+
+			slot1_ns_partition: partition@30000 {
+				compatible = "zephyr,mapped-partition";
+				label = "image-1-nonsecure";
+				reg = <0x30000 DT_SIZE_K(1762)>;
+			};
+		};
+
+		tfm_ps_partition: partition@3E1000 {
+			compatible = "zephyr,mapped-partition";
+			label = "tfm-ps";
+			reg = <0x003E1000 DT_SIZE_K(16)>;
+		};
+
+		tfm_its_partition: partition@3E5000 {
+			compatible = "zephyr,mapped-partition";
+			label = "tfm-its";
+			reg = <0x003E5000 DT_SIZE_K(16)>;
+		};
+
+		tfm_otp_partition: partition@3E9000 {
+			compatible = "zephyr,mapped-partition";
+			label = "tfm-otp";
+			reg = <0x003E9000 DT_SIZE_K(8)>;
+		};
+
+		storage_partition: partition@3EB000 {
+			compatible = "zephyr,mapped-partition";
+			label = "storage";
+			reg = <0x003EB000 DT_SIZE_K(64)>;
+		};
+	};
+#else
+	/*
+	 * Default NVM layout on NRF7120 Application MCU without BL2:
+	 * This layout matches (by necessity) that in the TF-M repository:
+	 *
+	 * 0x0000_0000 Secure image primary (192 KB)
+	 * 0x0003_0000 Protected Storage Area (16 KB)
+	 * 0x0003_4000 Internal Trusted Storage Area (16 KB)
+	 * 0x0003_8000 OTP / NV counters area (8 KB)
+	 * 0x0003_A000 Non-secure image primary (3780 KB)
+	 * 0x003E_B000 Non-secure storage, used when built with NRF_NS_STORAGE=ON,
+	 *             otherwise unused (64 KB)
 	 */
 	partitions {
 		#address-cells = <1>;
@@ -95,55 +198,38 @@
 		slot0_partition: partition@0 {
 			compatible = "zephyr,mapped-partition";
 			label = "image-0";
-			reg = <0x0000000 DT_SIZE_K(512)>;
+			reg = <0x0000000 DT_SIZE_K(192)>;
 		};
 
-		tfm_ps_partition: partition@80000 {
+		tfm_ps_partition: partition@30000 {
 			compatible = "zephyr,mapped-partition";
 			label = "tfm-ps";
-			reg = <0x00080000 DT_SIZE_K(16)>;
+			reg = <0x00030000 DT_SIZE_K(16)>;
 		};
 
-		tfm_its_partition: partition@84000 {
+		tfm_its_partition: partition@34000 {
 			compatible = "zephyr,mapped-partition";
 			label = "tfm-its";
-			reg = <0x00084000 DT_SIZE_K(16)>;
+			reg = <0x00034000 DT_SIZE_K(16)>;
 		};
 
-		tfm_otp_partition: partition@88000 {
+		tfm_otp_partition: partition@38000 {
 			compatible = "zephyr,mapped-partition";
 			label = "tfm-otp";
-			reg = <0x00088000 DT_SIZE_K(8)>;
+			reg = <0x00038000 DT_SIZE_K(8)>;
 		};
 
-		slot0_ns_partition: partition@8a000 {
+		slot0_ns_partition: partition@3a000 {
 			compatible = "zephyr,mapped-partition";
 			label = "image-0-nonsecure";
-			reg = <0x0008a000 DT_SIZE_K(844)>;
+			reg = <0x0003a000 DT_SIZE_K(3780)>;
 		};
 
-		storage_partition: partition@15d000 {
+		storage_partition: partition@3EB000 {
 			compatible = "zephyr,mapped-partition";
 			label = "storage";
-			reg = <0x00015d000 DT_SIZE_K(32)>;
-		};
-
-		/*
-		 * Reserved for Wi-Fi LMAC ROM patch.
-		 * Temporary FPGA/bring-up placement.
-		 */
-		wifi_lmac_patch_partition: partition@2e0000 {
-			compatible = "zephyr,mapped-partition";
-			reg = <0x002e0000 DT_SIZE_K(4)>;
-		};
-
-		/*
-		 * Reserved for Wi-Fi UMAC ROM patch.
-		 * Temporary FPGA/bring-up placement.
-		 */
-		wifi_umac_patch_partition: partition@2f0000 {
-			compatible = "zephyr,mapped-partition";
-			reg = <0x002f0000 DT_SIZE_K(4)>;
+			reg = <0x0003EB000 DT_SIZE_K(64)>;
 		};
 	};
+#endif /* WITH_MCUBOOT_PARTITIONS */
 };
